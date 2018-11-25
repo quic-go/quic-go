@@ -30,13 +30,13 @@ var _ = Describe("Packet packer", func() {
 		token           []byte
 	)
 
-	checkPayloadLen := func(data []byte) {
+	checkLength := func(data []byte) {
 		r := bytes.NewReader(data)
 		iHdr, err := wire.ParseInvariantHeader(r, 0)
 		Expect(err).ToNot(HaveOccurred())
 		hdr, err := iHdr.Parse(r, protocol.PerspectiveServer, protocol.VersionWhatever)
 		Expect(err).ToNot(HaveOccurred())
-		ExpectWithOffset(0, hdr.PayloadLen).To(BeEquivalentTo(r.Len()))
+		ExpectWithOffset(0, hdr.Length).To(BeEquivalentTo(r.Len() + int(hdr.PacketNumberLen)))
 	}
 
 	expectAppendStreamFrames := func(frames ...wire.Frame) {
@@ -665,7 +665,7 @@ var _ = Describe("Packet packer", func() {
 	})
 
 	Context("packing crypto packets", func() {
-		It("sets the payload length", func() {
+		It("sets the length", func() {
 			pnManager.EXPECT().PeekPacketNumber().Return(protocol.PacketNumber(0x42), protocol.PacketNumberLen2)
 			pnManager.EXPECT().PopPacketNumber().Return(protocol.PacketNumber(0x42))
 			f := &wire.CryptoFrame{
@@ -678,7 +678,7 @@ var _ = Describe("Packet packer", func() {
 			sealingManager.EXPECT().GetSealerWithEncryptionLevel(protocol.EncryptionInitial).Return(sealer, nil)
 			p, err := packer.PackPacket()
 			Expect(err).ToNot(HaveOccurred())
-			checkPayloadLen(p.raw)
+			checkLength(p.raw)
 		})
 
 		It("packs a maximum size crypto packet", func() {
@@ -701,7 +701,7 @@ var _ = Describe("Packet packer", func() {
 			expectedPacketLen := packer.maxPacketSize
 			Expect(p.raw).To(HaveLen(int(expectedPacketLen)))
 			Expect(p.header.IsLongHeader).To(BeTrue())
-			checkPayloadLen(p.raw)
+			checkLength(p.raw)
 		})
 
 		It("pads Initial packets to the required minimum packet size", func() {
@@ -723,7 +723,7 @@ var _ = Describe("Packet packer", func() {
 			Expect(cf.Data).To(Equal([]byte("foobar")))
 		})
 
-		It("sets the correct payload length for an Initial packet", func() {
+		It("sets the correct length for an Initial packet", func() {
 			pnManager.EXPECT().PeekPacketNumber().Return(protocol.PacketNumber(0x42), protocol.PacketNumberLen2)
 			pnManager.EXPECT().PopPacketNumber().Return(protocol.PacketNumber(0x42))
 			sealingManager.EXPECT().GetSealerWithEncryptionLevel(protocol.EncryptionInitial).Return(sealer, nil)
@@ -736,7 +736,7 @@ var _ = Describe("Packet packer", func() {
 			packer.perspective = protocol.PerspectiveClient
 			packet, err := packer.PackPacket()
 			Expect(err).ToNot(HaveOccurred())
-			checkPayloadLen(packet.raw)
+			checkLength(packet.raw)
 		})
 
 		It("adds an ACK frame", func() {

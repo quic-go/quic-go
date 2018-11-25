@@ -81,7 +81,7 @@ var _ = Describe("Header Parsing", func() {
 			data = append(data, srcConnID...)
 			data = append(data, encodeVarInt(6)...)      // token length
 			data = append(data, []byte("foobar")...)     // token
-			data = append(data, encodeVarInt(0x1337)...) // payload length
+			data = append(data, encodeVarInt(0x1337)...) // length
 			// packet number
 			data = appendPacketNumber(data, 0xbeef, protocol.PacketNumberLen4)
 
@@ -98,7 +98,7 @@ var _ = Describe("Header Parsing", func() {
 			Expect(hdr.DestConnectionID).To(Equal(destConnID))
 			Expect(hdr.SrcConnectionID).To(Equal(srcConnID))
 			Expect(hdr.Token).To(Equal([]byte("foobar")))
-			Expect(hdr.PayloadLen).To(Equal(protocol.ByteCount(0x1337)))
+			Expect(hdr.Length).To(Equal(protocol.ByteCount(0x1337)))
 			Expect(hdr.PacketNumber).To(Equal(protocol.PacketNumber(0xbeef)))
 			Expect(hdr.PacketNumberLen).To(Equal(protocol.PacketNumberLen4))
 			Expect(hdr.Version).To(Equal(protocol.VersionNumber(0x1020304)))
@@ -113,7 +113,7 @@ var _ = Describe("Header Parsing", func() {
 				0x01,                   // connection ID lengths
 				0xde, 0xad, 0xbe, 0xef, // source connection ID
 			}
-			data = append(data, encodeVarInt(0x42)...) // payload length
+			data = append(data, encodeVarInt(0x42)...) // length
 			data = append(data, []byte{0xde, 0xca, 0xfb, 0xad}...)
 			b := bytes.NewReader(data)
 			iHdr, err := ParseInvariantHeader(b, 0)
@@ -129,7 +129,7 @@ var _ = Describe("Header Parsing", func() {
 				0x70,                          // connection ID lengths
 				1, 2, 3, 4, 5, 6, 7, 8, 9, 10, // source connection ID
 			}
-			data = append(data, encodeVarInt(0x42)...) // payload length
+			data = append(data, encodeVarInt(0x42)...) // length
 			data = append(data, []byte{0xde, 0xca, 0xfb, 0xad}...)
 			b := bytes.NewReader(data)
 			iHdr, err := ParseInvariantHeader(b, 0)
@@ -145,7 +145,7 @@ var _ = Describe("Header Parsing", func() {
 				0x0, // connection ID lengths
 			}
 			data = append(data, encodeVarInt(0)...)    // token length
-			data = append(data, encodeVarInt(0x42)...) // payload length
+			data = append(data, encodeVarInt(0x42)...) // length
 			data = appendPacketNumber(data, 0x123, protocol.PacketNumberLen2)
 
 			b := bytes.NewReader(data)
@@ -202,7 +202,7 @@ var _ = Describe("Header Parsing", func() {
 				0x0, // connection ID lengths
 			}
 			data = append(data, encodeVarInt(4)...)                           // token length: 4 bytes (1 byte too long)
-			data = append(data, encodeVarInt(0x42)...)                        // payload length, 1 byte
+			data = append(data, encodeVarInt(0x42)...)                        // length, 1 byte
 			data = appendPacketNumber(data, 0x123, protocol.PacketNumberLen2) // 2 bytes
 
 			b := bytes.NewReader(data)

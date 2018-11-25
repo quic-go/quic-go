@@ -26,6 +26,7 @@ var _ = Describe("Packet Handler Map", func() {
 			Type:             protocol.PacketTypeHandshake,
 			DestConnectionID: connID,
 			PacketNumberLen:  protocol.PacketNumberLen1,
+			Length:           1,
 			Version:          protocol.VersionWhatever,
 		}).Write(buf, protocol.PerspectiveServer, protocol.VersionWhatever)
 		Expect(err).ToNot(HaveOccurred())
@@ -124,7 +125,7 @@ var _ = Describe("Packet Handler Map", func() {
 			Expect(err).To(MatchError("received a packet with an unexpected connection ID 0x0102030405060708"))
 		})
 
-		It("errors on packets that are smaller than the Payload Length in the packet header", func() {
+		It("errors on packets that are smaller than the length in the packet header", func() {
 			connID := protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8}
 			packetHandler := NewMockPacketHandler(mockCtrl)
 			packetHandler.EXPECT().GetVersion().Return(protocol.VersionWhatever)
@@ -133,33 +134,52 @@ var _ = Describe("Packet Handler Map", func() {
 			hdr := &wire.Header{
 				IsLongHeader:     true,
 				Type:             protocol.PacketTypeHandshake,
-				PayloadLen:       1000,
+				Length:           1000,
 				DestConnectionID: connID,
-				PacketNumberLen:  protocol.PacketNumberLen1,
+				PacketNumberLen:  protocol.PacketNumberLen2,
 				Version:          protocol.VersionWhatever,
 			}
 			buf := &bytes.Buffer{}
 			Expect(hdr.Write(buf, protocol.PerspectiveServer, protocol.VersionWhatever)).To(Succeed())
-			buf.Write(bytes.Repeat([]byte{0}, 500))
+			buf.Write(bytes.Repeat([]byte{0}, 500-2 /* for packet number length */))
 
 			err := handler.handlePacket(nil, buf.Bytes())
-			Expect(err).To(MatchError("packet payload (500 bytes) is smaller than the expected payload length (1000 bytes)"))
+			Expect(err).To(MatchError("packet length (500 bytes) is smaller than the expected length (1000 bytes)"))
 		})
 
-		It("cuts packets at the Payload Length", func() {
+		It("errors when receiving a packet that has a length smaller than the packet number length", func() {
+			connID := protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8}
+			packetHandler := NewMockPacketHandler(mockCtrl)
+			packetHandler.EXPECT().GetVersion().Return(protocol.VersionWhatever)
+			packetHandler.EXPECT().GetPerspective().Return(protocol.PerspectiveClient)
+			handler.Add(connID, packetHandler)
+			hdr := &wire.Header{
+				IsLongHeader:     true,
+				Type:             protocol.PacketTypeHandshake,
+				Length:           3,
+				DestConnectionID: connID,
+				PacketNumberLen:  protocol.PacketNumberLen4,
+				Version:          protocol.VersionWhatever,
+			}
+			buf := &bytes.Buffer{}
+			Expect(hdr.Write(buf, protocol.PerspectiveServer, protocol.VersionWhatever)).To(Succeed())
+			Expect(handler.handlePacket(nil, buf.Bytes())).To(MatchError("packet length (3 bytes) shorter than packet number (4 bytes)"))
+		})
+
+		It("cuts packets to the right length", func() {
 			connID := protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8}
 			packetHandler := NewMockPacketHandler(mockCtrl)
 			packetHandler.EXPECT().GetVersion().Return(protocol.VersionWhatever)
 			packetHandler.EXPECT().GetPerspective().Return(protocol.PerspectiveClient)
 			handler.Add(connID, packetHandler)
 			packetHandler.EXPECT().handlePacket(gomock.Any()).Do(func(p *receivedPacket) {
-				Expect(p.data).To(HaveLen(456))
+				Expect(p.data).To(HaveLen(456 - int(p.header.PacketNumberLen)))
 			})
 
 			hdr := &wire.Header{
 				IsLongHeader:     true,
 				Type:             protocol.PacketTypeHandshake,
-				PayloadLen:       456,
+				Length:           456,
 				DestConnectionID: connID,
 				PacketNumberLen:  protocol.PacketNumberLen1,
 				Version:          protocol.VersionWhatever,
@@ -167,8 +187,7 @@ var _ = Describe("Packet Handler Map", func() {
 			buf := &bytes.Buffer{}
 			Expect(hdr.Write(buf, protocol.PerspectiveServer, protocol.VersionWhatever)).To(Succeed())
 			buf.Write(bytes.Repeat([]byte{0}, 500))
-			err := handler.handlePacket(nil, buf.Bytes())
-			Expect(err).ToNot(HaveOccurred())
+			Expect(handler.handlePacket(nil, buf.Bytes())).To(Succeed())
 		})
 
 		It("closes the packet handlers when reading from the conn fails", func() {
