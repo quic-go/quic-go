@@ -321,21 +321,6 @@ var _ = Describe("Header", func() {
 			log.SetOutput(os.Stdout)
 		})
 
-		It("logs version negotiation packets", func() {
-			destConnID := protocol.ConnectionID{0xde, 0xad, 0xbe, 0xef, 0xca, 0xfe, 0x13, 0x37}
-			srcConnID := protocol.ConnectionID{0xde, 0xca, 0xfb, 0xad, 0x013, 0x37, 0x13, 0x37}
-			data, err := ComposeVersionNegotiation(destConnID, srcConnID, []protocol.VersionNumber{0x12345678, 0x87654321})
-			Expect(err).ToNot(HaveOccurred())
-			hdr, err := ParseHeader(bytes.NewReader(data), 4)
-			Expect(err).ToNot(HaveOccurred())
-			extHdr, err := hdr.Parse(bytes.NewReader(data), versionIETFHeader)
-			Expect(err).ToNot(HaveOccurred())
-			extHdr.Log(logger)
-			Expect(buf.String()).To(ContainSubstring("VersionNegotiationPacket{DestConnectionID: 0xdeadbeefcafe1337, SrcConnectionID: 0xdecafbad13371337"))
-			Expect(buf.String()).To(ContainSubstring("0x12345678"))
-			Expect(buf.String()).To(ContainSubstring("0x87654321"))
-		})
-
 		It("logs Long Headers", func() {
 			(&ExtendedHeader{
 				IsLongHeader:     true,

@@ -108,7 +108,7 @@ var _ = Describe("Server", func() {
 
 		It("drops Initial packets with a too short connection ID", func() {
 			serv.handlePacket(&receivedPacket{
-				header: &wire.ExtendedHeader{
+				extHdr: &wire.ExtendedHeader{
 					IsLongHeader:     true,
 					Type:             protocol.PacketTypeInitial,
 					DestConnectionID: protocol.ConnectionID{1, 2, 3, 4},
@@ -120,7 +120,7 @@ var _ = Describe("Server", func() {
 
 		It("drops too small Initial", func() {
 			serv.handlePacket(&receivedPacket{
-				header: &wire.ExtendedHeader{
+				extHdr: &wire.ExtendedHeader{
 					IsLongHeader:     true,
 					Type:             protocol.PacketTypeInitial,
 					DestConnectionID: protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8},
@@ -141,7 +141,7 @@ var _ = Describe("Server", func() {
 				PacketNumberLen:  protocol.PacketNumberLen1,
 			}
 			serv.handlePacket(&receivedPacket{
-				header: hdr,
+				extHdr: hdr,
 				data:   bytes.Repeat([]byte{0}, protocol.MinInitialPacketSize),
 			})
 			Consistently(conn.dataWritten.Len).Should(BeZero())
@@ -150,7 +150,7 @@ var _ = Describe("Server", func() {
 		It("drops non-Initial packets", func() {
 			serv.logger.SetLogLevel(utils.LogLevelDebug)
 			serv.handlePacket(&receivedPacket{
-				header: &wire.ExtendedHeader{
+				extHdr: &wire.ExtendedHeader{
 					Type:    protocol.PacketTypeHandshake,
 					Version: serv.config.Versions[0],
 				},
@@ -174,7 +174,7 @@ var _ = Describe("Server", func() {
 			Expect(err).ToNot(HaveOccurred())
 			serv.handlePacket(&receivedPacket{
 				remoteAddr: raddr,
-				header: &wire.ExtendedHeader{
+				extHdr: &wire.ExtendedHeader{
 					Type:    protocol.PacketTypeInitial,
 					Token:   token,
 					Version: serv.config.Versions[0],
@@ -198,7 +198,7 @@ var _ = Describe("Server", func() {
 			}
 			serv.handlePacket(&receivedPacket{
 				remoteAddr: raddr,
-				header: &wire.ExtendedHeader{
+				extHdr: &wire.ExtendedHeader{
 					Type:    protocol.PacketTypeInitial,
 					Token:   []byte("foobar"),
 					Version: serv.config.Versions[0],
@@ -212,7 +212,7 @@ var _ = Describe("Server", func() {
 			srcConnID := protocol.ConnectionID{1, 2, 3, 4, 5}
 			destConnID := protocol.ConnectionID{1, 2, 3, 4, 5, 6}
 			serv.handlePacket(&receivedPacket{
-				header: &wire.ExtendedHeader{
+				extHdr: &wire.ExtendedHeader{
 					IsLongHeader:     true,
 					SrcConnectionID:  srcConnID,
 					DestConnectionID: destConnID,
@@ -221,8 +221,9 @@ var _ = Describe("Server", func() {
 				},
 			})
 			Expect(conn.dataWritten.Len()).ToNot(BeZero())
-			hdr := parseHeader(conn.dataWritten.Bytes())
-			Expect(hdr.IsVersionNegotiation).To(BeTrue())
+			hdr, err := wire.ParseHeader(bytes.NewReader(conn.dataWritten.Bytes()), 0)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(hdr.IsVersionNegotiation()).To(BeTrue())
 			Expect(hdr.DestConnectionID).To(Equal(srcConnID))
 			Expect(hdr.SrcConnectionID).To(Equal(destConnID))
 			Expect(hdr.SupportedVersions).ToNot(ContainElement(protocol.VersionNumber(0x42)))
@@ -238,7 +239,7 @@ var _ = Describe("Server", func() {
 			}
 			serv.handleInitial(&receivedPacket{
 				remoteAddr: &net.UDPAddr{},
-				header:     hdr,
+				extHdr:     hdr,
 				data:       bytes.Repeat([]byte{0}, protocol.MinInitialPacketSize),
 			})
 			Expect(conn.dataWritten.Len()).ToNot(BeZero())
@@ -259,7 +260,7 @@ var _ = Describe("Server", func() {
 				Version:          protocol.VersionTLS,
 			}
 			p := &receivedPacket{
-				header: hdr,
+				extHdr: hdr,
 				data:   bytes.Repeat([]byte{0}, protocol.MinInitialPacketSize),
 			}
 			run := make(chan struct{})

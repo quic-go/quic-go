@@ -302,8 +302,8 @@ func (c *client) handlePacketImpl(p *receivedPacket) error {
 	defer c.mutex.Unlock()
 
 	// handle Version Negotiation Packets
-	if p.header.IsVersionNegotiation {
-		err := c.handleVersionNegotiationPacket(p.header)
+	if p.hdr.IsVersionNegotiation() {
+		err := c.handleVersionNegotiationPacket(p.hdr)
 		if err != nil {
 			c.session.destroy(err)
 		}
@@ -312,12 +312,12 @@ func (c *client) handlePacketImpl(p *receivedPacket) error {
 	}
 
 	// reject packets with the wrong connection ID
-	if !p.header.DestConnectionID.Equal(c.srcConnID) {
-		return fmt.Errorf("received a packet with an unexpected connection ID (%s, expected %s)", p.header.DestConnectionID, c.srcConnID)
+	if !p.hdr.DestConnectionID.Equal(c.srcConnID) {
+		return fmt.Errorf("received a packet with an unexpected connection ID (%s, expected %s)", p.hdr.DestConnectionID, c.srcConnID)
 	}
 
-	if p.header.Type == protocol.PacketTypeRetry {
-		c.handleRetryPacket(p.header)
+	if p.extHdr.Type == protocol.PacketTypeRetry {
+		c.handleRetryPacket(p.extHdr)
 		return nil
 	}
 
@@ -331,7 +331,7 @@ func (c *client) handlePacketImpl(p *receivedPacket) error {
 	return nil
 }
 
-func (c *client) handleVersionNegotiationPacket(hdr *wire.ExtendedHeader) error {
+func (c *client) handleVersionNegotiationPacket(hdr *wire.Header) error {
 	// ignore delayed / duplicated version negotiation packets
 	if c.receivedVersionNegotiationPacket || c.versionNegotiated {
 		c.logger.Debugf("Received a delayed Version Negotiation Packet.")

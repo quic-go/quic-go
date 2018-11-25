@@ -22,7 +22,7 @@ var _ = Describe("Server Session", func() {
 
 	It("handles packets", func() {
 		p := &receivedPacket{
-			header: &wire.ExtendedHeader{DestConnectionID: protocol.ConnectionID{1, 2, 3, 4, 5}},
+			extHdr: &wire.ExtendedHeader{DestConnectionID: protocol.ConnectionID{1, 2, 3, 4, 5}},
 		}
 		qsess.EXPECT().handlePacket(p)
 		sess.handlePacket(p)
@@ -32,7 +32,7 @@ var _ = Describe("Server Session", func() {
 		qsess.EXPECT().GetVersion().Return(protocol.VersionNumber(100))
 		// don't EXPECT any calls to handlePacket()
 		p := &receivedPacket{
-			header: &wire.ExtendedHeader{
+			extHdr: &wire.ExtendedHeader{
 				IsLongHeader:     true,
 				Version:          protocol.VersionNumber(123),
 				DestConnectionID: protocol.ConnectionID{0xde, 0xad, 0xbe, 0xef},
@@ -45,7 +45,7 @@ var _ = Describe("Server Session", func() {
 	It("ignores packets with the wrong Long Header type", func() {
 		qsess.EXPECT().GetVersion().Return(protocol.VersionNumber(100))
 		p := &receivedPacket{
-			header: &wire.ExtendedHeader{
+			extHdr: &wire.ExtendedHeader{
 				IsLongHeader:     true,
 				Type:             protocol.PacketTypeRetry,
 				Version:          protocol.VersionNumber(100),
@@ -58,7 +58,7 @@ var _ = Describe("Server Session", func() {
 
 	It("passes on Handshake packets", func() {
 		p := &receivedPacket{
-			header: &wire.ExtendedHeader{
+			extHdr: &wire.ExtendedHeader{
 				IsLongHeader:     true,
 				Type:             protocol.PacketTypeHandshake,
 				Version:          protocol.VersionNumber(100),

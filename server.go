@@ -306,7 +306,7 @@ func (s *server) handlePacket(p *receivedPacket) {
 }
 
 func (s *server) handlePacketImpl(p *receivedPacket) error {
-	hdr := p.header
+	hdr := p.extHdr
 
 	// send a Version Negotiation Packet if the client is speaking a different protocol version
 	if !protocol.IsSupportedVersion(s.config.Versions, hdr.Version) {
@@ -335,7 +335,7 @@ func (s *server) handleInitial(p *receivedPacket) {
 }
 
 func (s *server) handleInitialImpl(p *receivedPacket) (quicSession, protocol.ConnectionID, error) {
-	hdr := p.header
+	hdr := p.extHdr
 	if len(hdr.Token) == 0 && hdr.DestConnectionID.Len() < protocol.MinConnectionIDLenInitial {
 		return nil, nil, errors.New("dropping Initial packet with too short connection ID")
 	}
@@ -358,7 +358,7 @@ func (s *server) handleInitialImpl(p *receivedPacket) (quicSession, protocol.Con
 	if !s.config.AcceptCookie(p.remoteAddr, cookie) {
 		// Log the Initial packet now.
 		// If no Retry is sent, the packet will be logged by the session.
-		p.header.Log(s.logger)
+		p.extHdr.Log(s.logger)
 		return nil, nil, s.sendRetry(p.remoteAddr, hdr)
 	}
 
@@ -453,7 +453,7 @@ func (s *server) sendRetry(remoteAddr net.Addr, hdr *wire.ExtendedHeader) error 
 }
 
 func (s *server) sendVersionNegotiationPacket(p *receivedPacket) error {
-	hdr := p.header
+	hdr := p.extHdr
 	s.logger.Debugf("Client offered version %s, sending VersionNegotiationPacket", hdr.Version)
 
 	data, err := wire.ComposeVersionNegotiation(hdr.SrcConnectionID, hdr.DestConnectionID, s.config.Versions)

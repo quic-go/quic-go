@@ -52,7 +52,8 @@ type cryptoStreamHandler interface {
 
 type receivedPacket struct {
 	remoteAddr net.Addr
-	header     *wire.ExtendedHeader
+	hdr        *wire.Header
+	extHdr     *wire.ExtendedHeader
 	data       []byte
 	rcvTime    time.Time
 }
@@ -373,7 +374,7 @@ runLoop:
 			}
 			// This is a bit unclean, but works properly, since the packet always
 			// begins with the public header and we never copy it.
-			putPacketBuffer(&p.header.Raw)
+			putPacketBuffer(&p.extHdr.Raw)
 		case <-s.handshakeCompleteChan:
 			s.handleHandshakeComplete()
 		}
@@ -478,11 +479,11 @@ func (s *session) handleHandshakeComplete() {
 }
 
 func (s *session) handlePacketImpl(p *receivedPacket) error {
-	hdr := p.header
+	hdr := p.extHdr
 	// The server can change the source connection ID with the first Handshake packet.
 	// After this, all packets with a different source connection have to be ignored.
 	if s.receivedFirstPacket && hdr.IsLongHeader && !hdr.SrcConnectionID.Equal(s.destConnID) {
-		s.logger.Debugf("Dropping packet with unexpected source connection ID: %s (expected %s)", p.header.SrcConnectionID, s.destConnID)
+		s.logger.Debugf("Dropping packet with unexpected source connection ID: %s (expected %s)", p.extHdr.SrcConnectionID, s.destConnID)
 		return nil
 	}
 

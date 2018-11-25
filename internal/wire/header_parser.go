@@ -12,10 +12,11 @@ import (
 
 // The Header is the version independent part of the header
 type Header struct {
-	IsLongHeader     bool
 	Version          protocol.VersionNumber
 	SrcConnectionID  protocol.ConnectionID
 	DestConnectionID protocol.ConnectionID
+
+	SupportedVersions []protocol.VersionNumber // sent in a Version Negotiation Packet
 
 	typeByte byte
 	len      int // how many bytes were read while parsing this header
@@ -39,10 +40,9 @@ func parseHeaderImpl(b *bytes.Reader, shortHeaderConnIDLen int) (*Header, error)
 	}
 
 	h := &Header{typeByte: typeByte}
-	h.IsLongHeader = typeByte&0x80 > 0
 
 	// If this is not a Long Header, it could either be a Public Header or a Short Header.
-	if !h.IsLongHeader {
+	if !h.IsLongHeader() {
 		var err error
 		h.DestConnectionID, err = protocol.ReadConnectionID(b, shortHeaderConnIDLen)
 		if err != nil {
@@ -69,7 +69,30 @@ func parseHeaderImpl(b *bytes.Reader, shortHeaderConnIDLen int) (*Header, error)
 	if err != nil {
 		return nil, err
 	}
+	if h.Version == 0 {
+		if b.Len() == 0 {
+			return nil, qerr.Error(qerr.InvalidVersionNegotiationPacket, "empty version list")
+		}
+		h.SupportedVersions = make([]protocol.VersionNumber, b.Len()/4)
+		for i := 0; b.Len() > 0; i++ {
+			v, err := utils.BigEndian.ReadUint32(b)
+			if err != nil {
+				return nil, qerr.InvalidVersionNegotiationPacket
+			}
+			h.SupportedVersions[i] = protocol.VersionNumber(v)
+		}
+	}
 	return h, nil
+}
+
+// IsLongHeader says if this is a long header
+func (h *Header) IsLongHeader() bool {
+	return h.typeByte&0x80 > 0
+}
+
+// IsVersionNegotiation says if this a version negotiation packet
+func (h *Header) IsVersionNegotiation() bool {
+	return h.IsLongHeader() && h.Version == 0
 }
 
 // Parse parses the version dependent part of the header.
@@ -78,10 +101,7 @@ func (h *Header) Parse(b *bytes.Reader, ver protocol.VersionNumber) (*ExtendedHe
 	if _, err := b.Seek(int64(h.len), io.SeekCurrent); err != nil {
 		return nil, err
 	}
-	if h.IsLongHeader {
-		if h.Version == 0 { // Version Negotiation Packet
-			return h.parseVersionNegotiationPacket(b)
-		}
+	if h.IsLongHeader() {
 		return h.parseLongHeader(b, ver)
 	}
 	return h.parseShortHeader(b, ver)
@@ -89,28 +109,11 @@ func (h *Header) Parse(b *bytes.Reader, ver protocol.VersionNumber) (*ExtendedHe
 
 func (h *Header) toExtendedHeader() *ExtendedHeader {
 	return &ExtendedHeader{
-		IsLongHeader:     h.IsLongHeader,
+		IsLongHeader:     h.IsLongHeader(),
 		DestConnectionID: h.DestConnectionID,
 		SrcConnectionID:  h.SrcConnectionID,
 		Version:          h.Version,
 	}
-}
-
-func (h *Header) parseVersionNegotiationPacket(b *bytes.Reader) (*ExtendedHeader, error) {
-	eh := h.toExtendedHeader()
-	if b.Len() == 0 {
-		return nil, qerr.Error(qerr.InvalidVersionNegotiationPacket, "empty version list")
-	}
-	eh.IsVersionNegotiation = true
-	eh.SupportedVersions = make([]protocol.VersionNumber, b.Len()/4)
-	for i := 0; b.Len() > 0; i++ {
-		v, err := utils.BigEndian.ReadUint32(b)
-		if err != nil {
-			return nil, qerr.InvalidVersionNegotiationPacket
-		}
-		eh.SupportedVersions[i] = protocol.VersionNumber(v)
-	}
-	return eh, nil
 }
 
 func (h *Header) parseLongHeader(b *bytes.Reader, v protocol.VersionNumber) (*ExtendedHeader, error) {

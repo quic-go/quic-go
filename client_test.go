@@ -58,13 +58,14 @@ var _ = Describe("Client", func() {
 	}
 
 	composeVersionNegotiationPacket := func(connID protocol.ConnectionID, versions []protocol.VersionNumber) *receivedPacket {
+		data, err := wire.ComposeVersionNegotiation(connID, nil, versions)
+		Expect(err).ToNot(HaveOccurred())
+		hdr, err := wire.ParseHeader(bytes.NewReader(data), 0)
+		Expect(err).ToNot(HaveOccurred())
+		Expect(hdr.IsVersionNegotiation()).To(BeTrue())
 		return &receivedPacket{
 			rcvTime: time.Now(),
-			header: &wire.ExtendedHeader{
-				IsVersionNegotiation: true,
-				DestConnectionID:     connID,
-				SupportedVersions:    versions,
-			},
+			hdr:     hdr,
 		}
 	}
 
@@ -510,11 +511,14 @@ var _ = Describe("Client", func() {
 			manager := NewMockPacketHandlerManager(mockCtrl)
 			manager.EXPECT().Add(gomock.Any(), gomock.Any()).Do(func(id protocol.ConnectionID, handler packetHandler) {
 				go handler.handlePacket(&receivedPacket{
-					header: &wire.ExtendedHeader{
+					hdr: &wire.Header{
+						Version:          cl.version,
+						DestConnectionID: id,
+					},
+					extHdr: &wire.ExtendedHeader{
 						IsLongHeader:         true,
 						Type:                 protocol.PacketTypeRetry,
 						Token:                []byte("foobar"),
-						DestConnectionID:     id,
 						OrigDestConnectionID: connID,
 					},
 				})
@@ -570,12 +574,15 @@ var _ = Describe("Client", func() {
 			manager := NewMockPacketHandlerManager(mockCtrl)
 			manager.EXPECT().Add(gomock.Any(), gomock.Any()).Do(func(id protocol.ConnectionID, handler packetHandler) {
 				go handler.handlePacket(&receivedPacket{
-					header: &wire.ExtendedHeader{
+					hdr: &wire.Header{
+						SrcConnectionID:  protocol.ConnectionID{1, 2, 3, 4},
+						DestConnectionID: id,
+						Version:          cl.version,
+					},
+					extHdr: &wire.ExtendedHeader{
 						IsLongHeader:         true,
 						Type:                 protocol.PacketTypeRetry,
 						Token:                []byte("foobar"),
-						SrcConnectionID:      protocol.ConnectionID{1, 2, 3, 4},
-						DestConnectionID:     id,
 						OrigDestConnectionID: connID,
 						Version:              protocol.VersionTLS,
 					},
@@ -673,18 +680,22 @@ var _ = Describe("Client", func() {
 				Expect(err).To(MatchError(testErr))
 			})
 
-			It("recognizes that a packet without VersionFlag means that the server accepted the suggested version", func() {
+			It("recognizes that a non version negotiation packet means that the server accepted the suggested version", func() {
 				sess := NewMockQuicSession(mockCtrl)
 				sess.EXPECT().handlePacket(gomock.Any())
 				cl.session = sess
 				cl.config = &Config{}
-				ph := &wire.ExtendedHeader{
-					PacketNumber:     1,
-					PacketNumberLen:  protocol.PacketNumberLen2,
-					DestConnectionID: connID,
-					SrcConnectionID:  connID,
-				}
-				err := cl.handlePacketImpl(&receivedPacket{header: ph})
+				err := cl.handlePacketImpl(&receivedPacket{
+					hdr: &wire.Header{
+						DestConnectionID: connID,
+						SrcConnectionID:  connID,
+						Version:          cl.version,
+					},
+					extHdr: &wire.ExtendedHeader{
+						PacketNumber:    1,
+						PacketNumberLen: protocol.PacketNumberLen2,
+					},
+				})
 				Expect(err).ToNot(HaveOccurred())
 				Expect(cl.versionNegotiated).To(BeTrue())
 			})
@@ -738,16 +749,17 @@ var _ = Describe("Client", func() {
 		cl.session = NewMockQuicSession(mockCtrl) // don't EXPECT any handlePacket calls
 		connID2 := protocol.ConnectionID{8, 7, 6, 5, 4, 3, 2, 1}
 		Expect(connID).ToNot(Equal(connID2))
-		hdr := &wire.ExtendedHeader{
-			DestConnectionID: connID2,
-			SrcConnectionID:  connID,
-			PacketNumber:     1,
-			PacketNumberLen:  protocol.PacketNumberLen1,
-		}
-		err := cl.handlePacketImpl(&receivedPacket{
+		Expect(cl.handlePacketImpl(&receivedPacket{
 			remoteAddr: addr,
-			header:     hdr,
-		})
-		Expect(err).To(MatchError(fmt.Sprintf("received a packet with an unexpected connection ID (0x0807060504030201, expected %s)", connID)))
+			hdr: &wire.Header{
+				DestConnectionID: connID2,
+				SrcConnectionID:  connID,
+				Version:          cl.version,
+			},
+			extHdr: &wire.ExtendedHeader{
+				PacketNumber:    1,
+				PacketNumberLen: protocol.PacketNumberLen1,
+			},
+		})).To(MatchError(fmt.Sprintf("received a packet with an unexpected connection ID (0x0807060504030201, expected %s)", connID)))
 	})
 })

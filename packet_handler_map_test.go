@@ -57,12 +57,12 @@ var _ = Describe("Packet Handler Map", func() {
 			handledPacket1 := make(chan struct{})
 			handledPacket2 := make(chan struct{})
 			packetHandler1.EXPECT().handlePacket(gomock.Any()).Do(func(p *receivedPacket) {
-				Expect(p.header.DestConnectionID).To(Equal(connID1))
+				Expect(p.extHdr.DestConnectionID).To(Equal(connID1))
 				close(handledPacket1)
 			})
 			packetHandler1.EXPECT().GetVersion()
 			packetHandler2.EXPECT().handlePacket(gomock.Any()).Do(func(p *receivedPacket) {
-				Expect(p.header.DestConnectionID).To(Equal(connID2))
+				Expect(p.extHdr.DestConnectionID).To(Equal(connID2))
 				close(handledPacket2)
 			})
 			packetHandler2.EXPECT().GetVersion()
@@ -166,7 +166,7 @@ var _ = Describe("Packet Handler Map", func() {
 			packetHandler.EXPECT().GetVersion().Return(protocol.VersionWhatever)
 			handler.Add(connID, packetHandler)
 			packetHandler.EXPECT().handlePacket(gomock.Any()).Do(func(p *receivedPacket) {
-				Expect(p.data).To(HaveLen(456 - int(p.header.PacketNumberLen)))
+				Expect(p.data).To(HaveLen(456 - int(p.extHdr.PacketNumberLen)))
 			})
 
 			hdr := &wire.ExtendedHeader{
@@ -206,7 +206,7 @@ var _ = Describe("Packet Handler Map", func() {
 			handledPacket := make(chan struct{})
 			packetHandler.EXPECT().GetVersion()
 			packetHandler.EXPECT().handlePacket(gomock.Any()).Do(func(p *receivedPacket) {
-				Expect(p.header.DestConnectionID).To(Equal(connID))
+				Expect(p.extHdr.DestConnectionID).To(Equal(connID))
 				close(handledPacket)
 			})
 			conn.dataToRead <- getPacket(connID)
@@ -249,7 +249,7 @@ var _ = Describe("Packet Handler Map", func() {
 			p := getPacket(connID)
 			server := NewMockUnknownPacketHandler(mockCtrl)
 			server.EXPECT().handlePacket(gomock.Any()).Do(func(p *receivedPacket) {
-				Expect(p.header.DestConnectionID).To(Equal(connID))
+				Expect(p.extHdr.DestConnectionID).To(Equal(connID))
 			})
 			handler.SetServer(server)
 			Expect(handler.handlePacket(nil, p)).To(Succeed())

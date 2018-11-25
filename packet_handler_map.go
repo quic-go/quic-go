@@ -183,7 +183,7 @@ func (h *packetHandlerMap) handlePacket(addr net.Addr, data []byte) error {
 		handlePacket = handler.handlePacket
 	} else { // no session found
 		// this might be a stateless reset
-		if !hdr.IsLongHeader {
+		if !hdr.IsLongHeader() {
 			if len(data) >= protocol.MinStatelessResetSize {
 				var token [16]byte
 				copy(token[:], data[len(data)-16:])
@@ -205,28 +205,34 @@ func (h *packetHandlerMap) handlePacket(addr net.Addr, data []byte) error {
 	}
 	h.mutex.RUnlock()
 
-	r = bytes.NewReader(data)
-	extHdr, err := hdr.Parse(r, version)
-	if err != nil {
-		return fmt.Errorf("error parsing extended header: %s", err)
-	}
-	extHdr.Raw = data[:len(data)-r.Len()]
-	packetData := data[len(data)-r.Len():]
+	var extHdr *wire.ExtendedHeader
+	var packetData []byte
+	if !hdr.IsVersionNegotiation() {
+		r = bytes.NewReader(data)
+		var err error
+		extHdr, err = hdr.Parse(r, version)
+		if err != nil {
+			return fmt.Errorf("error parsing extended header: %s", err)
+		}
+		extHdr.Raw = data[:len(data)-r.Len()]
+		packetData = data[len(data)-r.Len():]
 
-	if extHdr.IsLongHeader {
-		if extHdr.Length < protocol.ByteCount(extHdr.PacketNumberLen) {
-			return fmt.Errorf("packet length (%d bytes) shorter than packet number (%d bytes)", extHdr.Length, extHdr.PacketNumberLen)
+		if hdr.IsLongHeader() {
+			if extHdr.Length < protocol.ByteCount(extHdr.PacketNumberLen) {
+				return fmt.Errorf("packet length (%d bytes) shorter than packet number (%d bytes)", extHdr.Length, extHdr.PacketNumberLen)
+			}
+			if protocol.ByteCount(len(packetData))+protocol.ByteCount(extHdr.PacketNumberLen) < extHdr.Length {
+				return fmt.Errorf("packet length (%d bytes) is smaller than the expected length (%d bytes)", len(packetData)+int(extHdr.PacketNumberLen), extHdr.Length)
+			}
+			packetData = packetData[:int(extHdr.Length)-int(extHdr.PacketNumberLen)]
+			// TODO(#1312): implement parsing of compound packets
 		}
-		if protocol.ByteCount(len(packetData))+protocol.ByteCount(extHdr.PacketNumberLen) < extHdr.Length {
-			return fmt.Errorf("packet length (%d bytes) is smaller than the expected length (%d bytes)", len(packetData)+int(extHdr.PacketNumberLen), extHdr.Length)
-		}
-		packetData = packetData[:int(extHdr.Length)-int(extHdr.PacketNumberLen)]
-		// TODO(#1312): implement parsing of compound packets
 	}
 
 	handlePacket(&receivedPacket{
 		remoteAddr: addr,
-		header:     extHdr,
+		hdr:        hdr,
+		extHdr:     extHdr,
 		data:       packetData,
 		rcvTime:    rcvTime,
 	})
