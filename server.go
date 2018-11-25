@@ -431,15 +431,14 @@ func (s *server) sendRetry(remoteAddr net.Addr, hdr *wire.ExtendedHeader) error 
 	if err != nil {
 		return err
 	}
-	replyHdr := &wire.ExtendedHeader{
-		IsLongHeader:         true,
-		Type:                 protocol.PacketTypeRetry,
-		Version:              hdr.Version,
-		SrcConnectionID:      connID,
-		DestConnectionID:     hdr.SrcConnectionID,
-		OrigDestConnectionID: hdr.DestConnectionID,
-		Token:                token,
-	}
+	replyHdr := &wire.ExtendedHeader{}
+	replyHdr.IsLongHeader = true
+	replyHdr.Type = protocol.PacketTypeRetry
+	replyHdr.Version = hdr.Version
+	replyHdr.SrcConnectionID = connID
+	replyHdr.DestConnectionID = hdr.SrcConnectionID
+	replyHdr.OrigDestConnectionID = hdr.DestConnectionID
+	replyHdr.Token = token
 	s.logger.Debugf("Changing connection ID to %s.\n-> Sending Retry", connID)
 	replyHdr.Log(s.logger)
 	buf := &bytes.Buffer{}

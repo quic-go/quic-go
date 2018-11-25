@@ -399,12 +399,11 @@ func (p *packetPacker) composeNextPacket(
 
 func (p *packetPacker) getHeader(encLevel protocol.EncryptionLevel) *wire.ExtendedHeader {
 	pn, pnLen := p.pnManager.PeekPacketNumber()
-	header := &wire.ExtendedHeader{
-		PacketNumber:     pn,
-		PacketNumberLen:  pnLen,
-		Version:          p.version,
-		DestConnectionID: p.destConnID,
-	}
+	header := &wire.ExtendedHeader{}
+	header.PacketNumber = pn
+	header.PacketNumberLen = pnLen
+	header.Version = p.version
+	header.DestConnectionID = p.destConnID
 
 	if encLevel != protocol.Encryption1RTT {
 		header.IsLongHeader = true

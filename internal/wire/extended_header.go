@@ -13,23 +13,22 @@ import (
 
 // ExtendedHeader is the header of a QUIC packet.
 type ExtendedHeader struct {
+	Header
+
 	Raw []byte
 
-	Version protocol.VersionNumber
-
-	DestConnectionID     protocol.ConnectionID
-	SrcConnectionID      protocol.ConnectionID
 	OrigDestConnectionID protocol.ConnectionID // only needed in the Retry packet
 
 	PacketNumberLen protocol.PacketNumberLen
 	PacketNumber    protocol.PacketNumber
 
-	typeByte     byte
-	Type         protocol.PacketType
-	IsLongHeader bool
-	KeyPhase     int
-	Length       protocol.ByteCount
-	Token        []byte
+	IsVersionNegotiation bool
+	SupportedVersions    []protocol.VersionNumber // Version Number sent in a Version Negotiation Packet by the server
+
+	Type     protocol.PacketType
+	KeyPhase int
+	Length   protocol.ByteCount
+	Token    []byte
 }
 
 func (h *ExtendedHeader) parse(b *bytes.Reader, v protocol.VersionNumber) (*ExtendedHeader, error) {

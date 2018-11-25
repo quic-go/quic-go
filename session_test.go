@@ -518,18 +518,22 @@ var _ = Describe("Session", func() {
 			unpacker.EXPECT().Unpack(gomock.Any(), gomock.Any(), gomock.Any()).Return(&unpackedPacket{}, nil)
 			err := sess.handlePacketImpl(&receivedPacket{
 				extHdr: &wire.ExtendedHeader{
-					IsLongHeader:     true,
-					DestConnectionID: sess.destConnID,
-					SrcConnectionID:  sess.srcConnID,
+					Header: wire.Header{
+						IsLongHeader:     true,
+						DestConnectionID: sess.destConnID,
+						SrcConnectionID:  sess.srcConnID,
+					},
 				},
 			})
 			Expect(err).ToNot(HaveOccurred())
 			// The next packet has to be ignored, since the source connection ID doesn't match.
 			err = sess.handlePacketImpl(&receivedPacket{
 				extHdr: &wire.ExtendedHeader{
-					IsLongHeader:     true,
-					DestConnectionID: sess.destConnID,
-					SrcConnectionID:  protocol.ConnectionID{0xde, 0xad, 0xbe, 0xef},
+					Header: wire.Header{
+						IsLongHeader:     true,
+						DestConnectionID: sess.destConnID,
+						SrcConnectionID:  protocol.ConnectionID{0xde, 0xad, 0xbe, 0xef},
+					},
 				},
 			})
 			Expect(err).ToNot(HaveOccurred())
@@ -1318,10 +1322,12 @@ var _ = Describe("Client Session", func() {
 		packer.EXPECT().ChangeDestConnectionID(newConnID)
 		err := sess.handlePacketImpl(&receivedPacket{
 			extHdr: &wire.ExtendedHeader{
-				IsLongHeader:     true,
-				Type:             protocol.PacketTypeHandshake,
-				SrcConnectionID:  newConnID,
-				DestConnectionID: sess.srcConnID,
+				Header: wire.Header{
+					IsLongHeader:     true,
+					SrcConnectionID:  newConnID,
+					DestConnectionID: sess.srcConnID,
+				},
+				Type: protocol.PacketTypeHandshake,
 			},
 			data: []byte{0},
 		})

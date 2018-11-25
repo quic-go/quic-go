@@ -17,8 +17,9 @@ type Header struct {
 
 	SupportedVersions []protocol.VersionNumber // sent in a Version Negotiation Packet
 
-	typeByte byte
-	len      int // how many bytes were read while parsing this header
+	IsLongHeader bool
+	typeByte     byte
+	len          int // how many bytes were read while parsing this header
 }
 
 // ParseHeader parses the version independent part of the header
@@ -38,10 +39,12 @@ func parseHeaderImpl(b *bytes.Reader, shortHeaderConnIDLen int) (*Header, error)
 		return nil, err
 	}
 
-	h := &Header{typeByte: typeByte}
+	h := &Header{
+		typeByte:     typeByte,
+		IsLongHeader: typeByte&0x80 > 0,
+	}
 
-	// If this is not a Long Header, it could either be a Public Header or a Short Header.
-	if !h.IsLongHeader() {
+	if !h.IsLongHeader {
 		var err error
 		h.DestConnectionID, err = protocol.ReadConnectionID(b, shortHeaderConnIDLen)
 		if err != nil {
@@ -84,14 +87,9 @@ func parseHeaderImpl(b *bytes.Reader, shortHeaderConnIDLen int) (*Header, error)
 	return h, nil
 }
 
-// IsLongHeader says if this is a long header
-func (h *Header) IsLongHeader() bool {
-	return h.typeByte&0x80 > 0
-}
-
 // IsVersionNegotiation says if this a version negotiation packet
 func (h *Header) IsVersionNegotiation() bool {
-	return h.IsLongHeader() && h.Version == 0
+	return h.IsLongHeader && h.Version == 0
 }
 
 // ParseExtended parses the version dependent part of the header.
@@ -104,11 +102,5 @@ func (h *Header) ParseExtended(b *bytes.Reader, ver protocol.VersionNumber) (*Ex
 }
 
 func (h *Header) toExtendedHeader() *ExtendedHeader {
-	return &ExtendedHeader{
-		IsLongHeader:     h.IsLongHeader(),
-		typeByte:         h.typeByte,
-		DestConnectionID: h.DestConnectionID,
-		SrcConnectionID:  h.SrcConnectionID,
-		Version:          h.Version,
-	}
+	return &ExtendedHeader{Header: *h}
 }

@@ -183,7 +183,7 @@ func (h *packetHandlerMap) handlePacket(addr net.Addr, data []byte) error {
 		handlePacket = handler.handlePacket
 	} else { // no session found
 		// this might be a stateless reset
-		if !hdr.IsLongHeader() {
+		if !hdr.IsLongHeader {
 			if len(data) >= protocol.MinStatelessResetSize {
 				var token [16]byte
 				copy(token[:], data[len(data)-16:])
@@ -217,7 +217,7 @@ func (h *packetHandlerMap) handlePacket(addr net.Addr, data []byte) error {
 		extHdr.Raw = data[:len(data)-r.Len()]
 		packetData = data[len(data)-r.Len():]
 
-		if hdr.IsLongHeader() {
+		if hdr.IsLongHeader {
 			if extHdr.Length < protocol.ByteCount(extHdr.PacketNumberLen) {
 				return fmt.Errorf("packet length (%d bytes) shorter than packet number (%d bytes)", extHdr.Length, extHdr.PacketNumberLen)
 			}
