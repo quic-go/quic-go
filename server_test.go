@@ -101,7 +101,7 @@ var _ = Describe("Server", func() {
 		parseHeader := func(data []byte) *wire.ExtendedHeader {
 			hdr, err := wire.ParseHeader(bytes.NewReader(data), 0)
 			Expect(err).ToNot(HaveOccurred())
-			extHdr, err := hdr.Parse(bytes.NewReader(data), protocol.VersionTLS)
+			extHdr, err := hdr.ParseExtended(bytes.NewReader(data), protocol.VersionTLS)
 			Expect(err).ToNot(HaveOccurred())
 			return extHdr
 		}

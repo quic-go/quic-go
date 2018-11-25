@@ -2,7 +2,6 @@ package wire
 
 import (
 	"bytes"
-	"fmt"
 	"io"
 
 	"github.com/lucas-clemente/quic-go/internal/protocol"
@@ -95,91 +94,21 @@ func (h *Header) IsVersionNegotiation() bool {
 	return h.IsLongHeader() && h.Version == 0
 }
 
-// Parse parses the version dependent part of the header.
+// ParseExtended parses the version dependent part of the header.
 // The Reader has to be set such that it points to the first byte of the header.
-func (h *Header) Parse(b *bytes.Reader, ver protocol.VersionNumber) (*ExtendedHeader, error) {
+func (h *Header) ParseExtended(b *bytes.Reader, ver protocol.VersionNumber) (*ExtendedHeader, error) {
 	if _, err := b.Seek(int64(h.len), io.SeekCurrent); err != nil {
 		return nil, err
 	}
-	if h.IsLongHeader() {
-		return h.parseLongHeader(b, ver)
-	}
-	return h.parseShortHeader(b, ver)
+	return h.toExtendedHeader().parse(b, ver)
 }
 
 func (h *Header) toExtendedHeader() *ExtendedHeader {
 	return &ExtendedHeader{
 		IsLongHeader:     h.IsLongHeader(),
+		typeByte:         h.typeByte,
 		DestConnectionID: h.DestConnectionID,
 		SrcConnectionID:  h.SrcConnectionID,
 		Version:          h.Version,
 	}
-}
-
-func (h *Header) parseLongHeader(b *bytes.Reader, v protocol.VersionNumber) (*ExtendedHeader, error) {
-	eh := h.toExtendedHeader()
-	eh.Type = protocol.PacketType(h.typeByte & 0x7f)
-
-	if eh.Type != protocol.PacketTypeInitial && eh.Type != protocol.PacketTypeRetry && eh.Type != protocol.PacketType0RTT && eh.Type != protocol.PacketTypeHandshake {
-		return nil, qerr.Error(qerr.InvalidPacketHeader, fmt.Sprintf("Received packet with invalid packet type: %d", eh.Type))
-	}
-
-	if eh.Type == protocol.PacketTypeRetry {
-		odcilByte, err := b.ReadByte()
-		if err != nil {
-			return nil, err
-		}
-		odcil := decodeSingleConnIDLen(odcilByte & 0xf)
-		eh.OrigDestConnectionID, err = protocol.ReadConnectionID(b, odcil)
-		if err != nil {
-			return nil, err
-		}
-		eh.Token = make([]byte, b.Len())
-		if _, err := io.ReadFull(b, eh.Token); err != nil {
-			return nil, err
-		}
-		return eh, nil
-	}
-
-	if eh.Type == protocol.PacketTypeInitial {
-		tokenLen, err := utils.ReadVarInt(b)
-		if err != nil {
-			return nil, err
-		}
-		if tokenLen > uint64(b.Len()) {
-			return nil, io.EOF
-		}
-		eh.Token = make([]byte, tokenLen)
-		if _, err := io.ReadFull(b, eh.Token); err != nil {
-			return nil, err
-		}
-	}
-
-	pl, err := utils.ReadVarInt(b)
-	if err != nil {
-		return nil, err
-	}
-	eh.Length = protocol.ByteCount(pl)
-	pn, pnLen, err := utils.ReadVarIntPacketNumber(b)
-	if err != nil {
-		return nil, err
-	}
-	eh.PacketNumber = pn
-	eh.PacketNumberLen = pnLen
-
-	return eh, nil
-}
-
-func (h *Header) parseShortHeader(b *bytes.Reader, v protocol.VersionNumber) (*ExtendedHeader, error) {
-	eh := h.toExtendedHeader()
-	eh.KeyPhase = int(h.typeByte&0x40) >> 6
-
-	pn, pnLen, err := utils.ReadVarIntPacketNumber(b)
-	if err != nil {
-		return nil, err
-	}
-	eh.PacketNumber = pn
-	eh.PacketNumberLen = pnLen
-
-	return eh, nil
 }

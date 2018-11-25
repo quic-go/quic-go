@@ -4,8 +4,10 @@ import (
 	"bytes"
 	"crypto/rand"
 	"fmt"
+	"io"
 
 	"github.com/lucas-clemente/quic-go/internal/protocol"
+	"github.com/lucas-clemente/quic-go/internal/qerr"
 	"github.com/lucas-clemente/quic-go/internal/utils"
 )
 
@@ -22,11 +24,85 @@ type ExtendedHeader struct {
 	PacketNumberLen protocol.PacketNumberLen
 	PacketNumber    protocol.PacketNumber
 
+	typeByte     byte
 	Type         protocol.PacketType
 	IsLongHeader bool
 	KeyPhase     int
 	Length       protocol.ByteCount
 	Token        []byte
+}
+
+func (h *ExtendedHeader) parse(b *bytes.Reader, v protocol.VersionNumber) (*ExtendedHeader, error) {
+	if h.IsLongHeader {
+		return h.parseLongHeader(b, v)
+	}
+	return h.parseShortHeader(b, v)
+}
+
+func (h *ExtendedHeader) parseLongHeader(b *bytes.Reader, v protocol.VersionNumber) (*ExtendedHeader, error) {
+	h.Type = protocol.PacketType(h.typeByte & 0x7f)
+
+	if h.Type != protocol.PacketTypeInitial && h.Type != protocol.PacketTypeRetry && h.Type != protocol.PacketType0RTT && h.Type != protocol.PacketTypeHandshake {
+		return nil, qerr.Error(qerr.InvalidPacketHeader, fmt.Sprintf("Received packet with invalid packet type: %d", h.Type))
+	}
+
+	if h.Type == protocol.PacketTypeRetry {
+		odcilByte, err := b.ReadByte()
+		if err != nil {
+			return nil, err
+		}
+		odcil := decodeSingleConnIDLen(odcilByte & 0xf)
+		h.OrigDestConnectionID, err = protocol.ReadConnectionID(b, odcil)
+		if err != nil {
+			return nil, err
+		}
+		h.Token = make([]byte, b.Len())
+		if _, err := io.ReadFull(b, h.Token); err != nil {
+			return nil, err
+		}
+		return h, nil
+	}
+
+	if h.Type == protocol.PacketTypeInitial {
+		tokenLen, err := utils.ReadVarInt(b)
+		if err != nil {
+			return nil, err
+		}
+		if tokenLen > uint64(b.Len()) {
+			return nil, io.EOF
+		}
+		h.Token = make([]byte, tokenLen)
+		if _, err := io.ReadFull(b, h.Token); err != nil {
+			return nil, err
+		}
+	}
+
+	pl, err := utils.ReadVarInt(b)
+	if err != nil {
+		return nil, err
+	}
+	h.Length = protocol.ByteCount(pl)
+	pn, pnLen, err := utils.ReadVarIntPacketNumber(b)
+	if err != nil {
+		return nil, err
+	}
+	h.PacketNumber = pn
+	h.PacketNumberLen = pnLen
+
+	return h, nil
+}
+
+func (h *ExtendedHeader) parseShortHeader(b *bytes.Reader, v protocol.VersionNumber) (*ExtendedHeader, error) {
+	h.KeyPhase = int(h.typeByte&0x40) >> 6
+
+	pn, pnLen, err := utils.ReadVarIntPacketNumber(b)
+	if err != nil {
+		return nil, err
+	}
+	h.PacketNumber = pn
+	h.PacketNumberLen = pnLen
+
+	return h, nil
 }
 
 // Write writes the Header.
