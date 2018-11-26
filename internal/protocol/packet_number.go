@@ -5,7 +5,6 @@ func InferPacketNumber(
 	packetNumberLength PacketNumberLen,
 	lastPacketNumber PacketNumber,
 	wirePacketNumber PacketNumber,
-	version VersionNumber,
 ) PacketNumber {
 	var epochDelta PacketNumber
 	switch packetNumberLength {
@@ -42,7 +41,7 @@ func delta(a, b PacketNumber) PacketNumber {
 
 // GetPacketNumberLengthForHeader gets the length of the packet number for the public header
 // it never chooses a PacketNumberLen of 1 byte, since this is too short under certain circumstances
-func GetPacketNumberLengthForHeader(packetNumber, leastUnacked PacketNumber, version VersionNumber) PacketNumberLen {
+func GetPacketNumberLengthForHeader(packetNumber, leastUnacked PacketNumber) PacketNumberLen {
 	diff := uint64(packetNumber - leastUnacked)
 	if diff < (1 << (14 - 1)) {
 		return PacketNumberLen2
