@@ -193,9 +193,21 @@ var _ = Describe("Header Parsing", func() {
 			data = append(data, encodeVarInt(0x42)...) // length, 1 byte
 			data = append(data, []byte{0x12, 0x34}...) // packet number
 
-			b := bytes.NewReader(data)
-			_, err := ParseHeader(b, 0)
+			_, err := ParseHeader(bytes.NewReader(data), 0)
 			Expect(err).To(MatchError(io.EOF))
+		})
+
+		It("errors if the 5th or 6th bit are set", func() {
+			data := []byte{0xc0 | 0x2<<4 | 0x8 /* set the 5th bit */}
+			data = appendVersion(data, versionIETFFrames)
+			data = append(data, 0x0)                // connection ID lengths
+			data = append(data, 0x42)               // packet number
+			data = append(data, encodeVarInt(1)...) // length
+			hdr, err := ParseHeader(bytes.NewReader(data), 0)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(hdr.Type).To(Equal(protocol.PacketTypeHandshake))
+			_, err = hdr.ParseExtended(bytes.NewReader(data), versionIETFFrames)
+			Expect(err).To(MatchError("5th and 6th bit must be 0"))
 		})
 
 		It("errors on EOF, when parsing the header", func() {
@@ -218,9 +230,10 @@ var _ = Describe("Header Parsing", func() {
 			hdrLen := len(data)
 			data = append(data, []byte{0xde, 0xad, 0xbe, 0xef}...) // packet number
 			for i := hdrLen; i < len(data); i++ {
-				b := bytes.NewReader(data[:i])
-				hdr, err := ParseHeader(b, 0)
+				data = data[:i]
+				hdr, err := ParseHeader(bytes.NewReader(data), 0)
 				Expect(err).ToNot(HaveOccurred())
+				b := bytes.NewReader(data)
 				_, err = hdr.ParseExtended(b, versionIETFFrames)
 				Expect(err).To(Equal(io.EOF))
 			}
@@ -234,9 +247,10 @@ var _ = Describe("Header Parsing", func() {
 			data = append(data, []byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}...) // source connection ID
 			hdrLen := len(data)
 			for i := hdrLen; i < len(data); i++ {
-				b := bytes.NewReader(data[:i])
-				hdr, err := ParseHeader(b, 0)
+				data = data[:i]
+				hdr, err := ParseHeader(bytes.NewReader(data), 0)
 				Expect(err).ToNot(HaveOccurred())
+				b := bytes.NewReader(data)
 				_, err = hdr.ParseExtended(b, versionIETFFrames)
 				Expect(err).To(Equal(io.EOF))
 			}

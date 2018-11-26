@@ -3,6 +3,7 @@ package wire
 import (
 	"bytes"
 	"crypto/rand"
+	"errors"
 	"fmt"
 	"io"
 
@@ -40,6 +41,9 @@ func (h *ExtendedHeader) parse(b *bytes.Reader, v protocol.VersionNumber) (*Exte
 }
 
 func (h *ExtendedHeader) parseLongHeader(b *bytes.Reader, v protocol.VersionNumber) (*ExtendedHeader, error) {
+	if h.typeByte&0xc != 0 {
+		return nil, errors.New("5th and 6th bit must be 0")
+	}
 	if err := h.readPacketNumber(b); err != nil {
 		return nil, err
 	}
