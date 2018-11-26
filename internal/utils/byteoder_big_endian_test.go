@@ -43,23 +43,6 @@ var _ = Describe("Big Endian encoding / decoding", func() {
 		})
 	})
 
-	Context("ReadUint64", func() {
-		It("reads a big endian", func() {
-			b := []byte{0x12, 0x35, 0xAB, 0xFF, 0xEF, 0xBE, 0xAD, 0xDE}
-			val, err := BigEndian.ReadUint64(bytes.NewReader(b))
-			Expect(err).ToNot(HaveOccurred())
-			Expect(val).To(Equal(uint64(0x1235ABFFEFBEADDE)))
-		})
-
-		It("throws an error if less than 8 bytes are passed", func() {
-			b := []byte{0x12, 0x35, 0xAB, 0xFF, 0xEF, 0xBE, 0xAD, 0xDE}
-			for i := 0; i < len(b); i++ {
-				_, err := BigEndian.ReadUint64(bytes.NewReader(b[:i]))
-				Expect(err).To(MatchError(io.EOF))
-			}
-		})
-	})
-
 	Context("WriteUint16", func() {
 		It("outputs 2 bytes", func() {
 			b := &bytes.Buffer{}
@@ -90,23 +73,7 @@ var _ = Describe("Big Endian encoding / decoding", func() {
 		})
 	})
 
-	Context("WriteUint64", func() {
-		It("outputs 8 bytes", func() {
-			b := &bytes.Buffer{}
-			BigEndian.WriteUint64(b, uint64(1))
-			Expect(b.Len()).To(Equal(8))
-		})
-
-		It("outputs a big endian", func() {
-			num := uint64(0xFFEEDDCCBBAA9988)
-			b := &bytes.Buffer{}
-			BigEndian.WriteUint64(b, num)
-			Expect(b.Bytes()).To(Equal([]byte{0xFF, 0xEE, 0xDD, 0xCC, 0xBB, 0xAA, 0x99, 0x88}))
-		})
-	})
-
 	Context("ReadUintN", func() {
-
 		It("reads n bytes", func() {
 			m := map[uint8]uint64{
 				0: 0x0,
