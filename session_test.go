@@ -156,8 +156,7 @@ var _ = Describe("Session", func() {
 				sph.EXPECT().ReceivedAck(f, protocol.PacketNumber(42), protocol.EncryptionHandshake, gomock.Any())
 				sph.EXPECT().GetLowestPacketNotConfirmedAcked()
 				sess.sentPacketHandler = sph
-				sess.lastRcvdPacketNumber = 42
-				err := sess.handleAckFrame(f, protocol.EncryptionHandshake)
+				err := sess.handleAckFrame(f, 42, protocol.EncryptionHandshake)
 				Expect(err).ToNot(HaveOccurred())
 			})
 
@@ -170,7 +169,7 @@ var _ = Describe("Session", func() {
 				rph := mockackhandler.NewMockReceivedPacketHandler(mockCtrl)
 				rph.EXPECT().IgnoreBelow(protocol.PacketNumber(0x42))
 				sess.receivedPacketHandler = rph
-				Expect(sess.handleAckFrame(ack, protocol.EncryptionInitial)).To(Succeed())
+				Expect(sess.handleAckFrame(ack, 0, protocol.EncryptionInitial)).To(Succeed())
 			})
 		})
 
@@ -203,11 +202,10 @@ var _ = Describe("Session", func() {
 
 			It("ignores RESET_STREAM frames for closed streams", func() {
 				streamManager.EXPECT().GetOrOpenReceiveStream(protocol.StreamID(3)).Return(nil, nil)
-				err := sess.handleFrames([]wire.Frame{&wire.ResetStreamFrame{
+				Expect(sess.handleFrames([]wire.Frame{&wire.ResetStreamFrame{
 					StreamID:  3,
 					ErrorCode: 42,
-				}}, protocol.EncryptionUnspecified)
-				Expect(err).NotTo(HaveOccurred())
+				}}, 0, protocol.EncryptionUnspecified)).To(Succeed())
 			})
 		})
 
@@ -242,7 +240,7 @@ var _ = Describe("Session", func() {
 				err := sess.handleFrames([]wire.Frame{&wire.MaxStreamDataFrame{
 					StreamID:   10,
 					ByteOffset: 1337,
-				}}, protocol.EncryptionUnspecified)
+				}}, 0, protocol.EncryptionUnspecified)
 				Expect(err).NotTo(HaveOccurred())
 			})
 		})
@@ -282,44 +280,43 @@ var _ = Describe("Session", func() {
 
 			It("ignores STOP_SENDING frames for a closed stream", func() {
 				streamManager.EXPECT().GetOrOpenSendStream(protocol.StreamID(3)).Return(nil, nil)
-				err := sess.handleFrames([]wire.Frame{&wire.StopSendingFrame{
+				Expect(sess.handleFrames([]wire.Frame{&wire.StopSendingFrame{
 					StreamID:  3,
 					ErrorCode: 1337,
-				}}, protocol.EncryptionUnspecified)
-				Expect(err).NotTo(HaveOccurred())
+				}}, 0, protocol.EncryptionUnspecified)).To(Succeed())
 			})
 		})
 
 		It("handles PING frames", func() {
-			err := sess.handleFrames([]wire.Frame{&wire.PingFrame{}}, protocol.EncryptionUnspecified)
+			err := sess.handleFrames([]wire.Frame{&wire.PingFrame{}}, 0, protocol.EncryptionUnspecified)
 			Expect(err).NotTo(HaveOccurred())
 		})
 
 		It("rejects PATH_RESPONSE frames", func() {
-			err := sess.handleFrames([]wire.Frame{&wire.PathResponseFrame{Data: [8]byte{1, 2, 3, 4, 5, 6, 7, 8}}}, protocol.EncryptionUnspecified)
+			err := sess.handleFrames([]wire.Frame{&wire.PathResponseFrame{Data: [8]byte{1, 2, 3, 4, 5, 6, 7, 8}}}, 0, protocol.EncryptionUnspecified)
 			Expect(err).To(MatchError("unexpected PATH_RESPONSE frame"))
 		})
 
 		It("handles PATH_CHALLENGE frames", func() {
 			data := [8]byte{1, 2, 3, 4, 5, 6, 7, 8}
-			err := sess.handleFrames([]wire.Frame{&wire.PathChallengeFrame{Data: data}}, protocol.EncryptionUnspecified)
+			err := sess.handleFrames([]wire.Frame{&wire.PathChallengeFrame{Data: data}}, 0, protocol.EncryptionUnspecified)
 			Expect(err).ToNot(HaveOccurred())
 			frames, _ := sess.framer.AppendControlFrames(nil, 1000)
 			Expect(frames).To(Equal([]wire.Frame{&wire.PathResponseFrame{Data: data}}))
 		})
 
 		It("handles BLOCKED frames", func() {
-			err := sess.handleFrames([]wire.Frame{&wire.DataBlockedFrame{}}, protocol.EncryptionUnspecified)
+			err := sess.handleFrames([]wire.Frame{&wire.DataBlockedFrame{}}, 0, protocol.EncryptionUnspecified)
 			Expect(err).NotTo(HaveOccurred())
 		})
 
 		It("handles STREAM_BLOCKED frames", func() {
-			err := sess.handleFrames([]wire.Frame{&wire.StreamDataBlockedFrame{}}, protocol.EncryptionUnspecified)
+			err := sess.handleFrames([]wire.Frame{&wire.StreamDataBlockedFrame{}}, 0, protocol.EncryptionUnspecified)
 			Expect(err).NotTo(HaveOccurred())
 		})
 
 		It("handles STREAM_ID_BLOCKED frames", func() {
-			err := sess.handleFrames([]wire.Frame{&wire.StreamsBlockedFrame{}}, protocol.EncryptionUnspecified)
+			err := sess.handleFrames([]wire.Frame{&wire.StreamsBlockedFrame{}}, 0, protocol.EncryptionUnspecified)
 			Expect(err).NotTo(HaveOccurred())
 		})
 
@@ -335,7 +332,7 @@ var _ = Describe("Session", func() {
 				err := sess.run()
 				Expect(err).To(MatchError(testErr))
 			}()
-			err := sess.handleFrames([]wire.Frame{&wire.ConnectionCloseFrame{ErrorCode: qerr.ProofInvalid, ReasonPhrase: "foobar"}}, protocol.EncryptionUnspecified)
+			err := sess.handleFrames([]wire.Frame{&wire.ConnectionCloseFrame{ErrorCode: qerr.ProofInvalid, ReasonPhrase: "foobar"}}, 0, protocol.EncryptionUnspecified)
 			Expect(err).NotTo(HaveOccurred())
 			Eventually(sess.Context().Done()).Should(BeClosed())
 		})
@@ -456,13 +453,12 @@ var _ = Describe("Session", func() {
 			hdr = &wire.Header{PacketNumberLen: protocol.PacketNumberLen4}
 		})
 
-		It("sets the {last,largest}RcvdPacketNumber", func() {
+		It("sets the largestRcvdPacketNumber", func() {
 			hdr.PacketNumber = 5
 			hdr.Raw = []byte("raw header")
 			unpacker.EXPECT().Unpack([]byte("raw header"), hdr, []byte("foobar")).Return(&unpackedPacket{}, nil)
 			err := sess.handlePacketImpl(&receivedPacket{header: hdr, data: []byte("foobar")})
 			Expect(err).ToNot(HaveOccurred())
-			Expect(sess.lastRcvdPacketNumber).To(Equal(protocol.PacketNumber(5)))
 			Expect(sess.largestRcvdPacketNumber).To(Equal(protocol.PacketNumber(5)))
 		})
 
@@ -509,27 +505,11 @@ var _ = Describe("Session", func() {
 			Eventually(done).Should(BeClosed())
 		})
 
-		It("sets the {last,largest}RcvdPacketNumber, for an out-of-order packet", func() {
-			unpacker.EXPECT().Unpack(gomock.Any(), gomock.Any(), gomock.Any()).Return(&unpackedPacket{}, nil).Times(2)
-			hdr.PacketNumber = 5
-			err := sess.handlePacketImpl(&receivedPacket{header: hdr})
-			Expect(err).ToNot(HaveOccurred())
-			Expect(sess.lastRcvdPacketNumber).To(Equal(protocol.PacketNumber(5)))
-			Expect(sess.largestRcvdPacketNumber).To(Equal(protocol.PacketNumber(5)))
-			hdr.PacketNumber = 3
-			err = sess.handlePacketImpl(&receivedPacket{header: hdr})
-			Expect(err).ToNot(HaveOccurred())
-			Expect(sess.lastRcvdPacketNumber).To(Equal(protocol.PacketNumber(3)))
-			Expect(sess.largestRcvdPacketNumber).To(Equal(protocol.PacketNumber(5)))
-		})
-
 		It("handles duplicate packets", func() {
 			unpacker.EXPECT().Unpack(gomock.Any(), gomock.Any(), gomock.Any()).Return(&unpackedPacket{}, nil).Times(2)
 			hdr.PacketNumber = 5
-			err := sess.handlePacketImpl(&receivedPacket{header: hdr})
-			Expect(err).ToNot(HaveOccurred())
-			err = sess.handlePacketImpl(&receivedPacket{header: hdr})
-			Expect(err).ToNot(HaveOccurred())
+			Expect(sess.handlePacketImpl(&receivedPacket{header: hdr})).To(Succeed())
+			Expect(sess.handlePacketImpl(&receivedPacket{header: hdr})).To(Succeed())
 		})
 
 		It("ignores packets with a different source connection ID", func() {

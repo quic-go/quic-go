@@ -113,7 +113,6 @@ type session struct {
 
 	receivedFirstPacket              bool // since packet numbers start at 0, we can't use largestRcvdPacketNumber != 0 for this
 	receivedFirstForwardSecurePacket bool
-	lastRcvdPacketNumber             protocol.PacketNumber
 	// Used to calculate the next packet number from the truncated wire
 	// representation, and sent back in public reset packets
 	largestRcvdPacketNumber protocol.PacketNumber
@@ -530,7 +529,6 @@ func (s *session) handlePacketImpl(p *receivedPacket) error {
 		}
 	}
 
-	s.lastRcvdPacketNumber = hdr.PacketNumber
 	// Only do this after decrypting, so we are sure the packet is not attacker-controlled
 	s.largestRcvdPacketNumber = utils.MaxPacketNumber(s.largestRcvdPacketNumber, hdr.PacketNumber)
 
@@ -543,10 +541,10 @@ func (s *session) handlePacketImpl(p *receivedPacket) error {
 		}
 	}
 
-	return s.handleFrames(packet.frames, packet.encryptionLevel)
+	return s.handleFrames(packet.frames, hdr.PacketNumber, packet.encryptionLevel)
 }
 
-func (s *session) handleFrames(fs []wire.Frame, encLevel protocol.EncryptionLevel) error {
+func (s *session) handleFrames(fs []wire.Frame, pn protocol.PacketNumber, encLevel protocol.EncryptionLevel) error {
 	for _, ff := range fs {
 		var err error
 		wire.LogFrame(s.logger, ff, false)
@@ -556,7 +554,7 @@ func (s *session) handleFrames(fs []wire.Frame, encLevel protocol.EncryptionLeve
 		case *wire.StreamFrame:
 			err = s.handleStreamFrame(frame, encLevel)
 		case *wire.AckFrame:
-			err = s.handleAckFrame(frame, encLevel)
+			err = s.handleAckFrame(frame, pn, encLevel)
 		case *wire.ConnectionCloseFrame:
 			s.closeRemote(qerr.Error(frame.ErrorCode, frame.ReasonPhrase))
 		case *wire.ResetStreamFrame:
@@ -702,8 +700,8 @@ func (s *session) handlePathChallengeFrame(frame *wire.PathChallengeFrame) {
 	s.queueControlFrame(&wire.PathResponseFrame{Data: frame.Data})
 }
 
-func (s *session) handleAckFrame(frame *wire.AckFrame, encLevel protocol.EncryptionLevel) error {
-	if err := s.sentPacketHandler.ReceivedAck(frame, s.lastRcvdPacketNumber, encLevel, s.lastNetworkActivityTime); err != nil {
+func (s *session) handleAckFrame(frame *wire.AckFrame, pn protocol.PacketNumber, encLevel protocol.EncryptionLevel) error {
+	if err := s.sentPacketHandler.ReceivedAck(frame, pn, encLevel, s.lastNetworkActivityTime); err != nil {
 		return err
 	}
 	s.receivedPacketHandler.IgnoreBelow(s.sentPacketHandler.GetLowestPacketNotConfirmedAcked())
