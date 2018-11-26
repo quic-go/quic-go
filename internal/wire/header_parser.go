@@ -62,12 +62,12 @@ func ParseInvariantHeader(b *bytes.Reader, shortHeaderConnIDLen int) (*Invariant
 }
 
 // Parse parses the version dependent part of the header
-func (iv *InvariantHeader) Parse(b *bytes.Reader, sentBy protocol.Perspective, ver protocol.VersionNumber) (*Header, error) {
+func (iv *InvariantHeader) Parse(b *bytes.Reader, ver protocol.VersionNumber) (*Header, error) {
 	if iv.IsLongHeader {
 		if iv.Version == 0 { // Version Negotiation Packet
 			return iv.parseVersionNegotiationPacket(b)
 		}
-		return iv.parseLongHeader(b, sentBy, ver)
+		return iv.parseLongHeader(b, ver)
 	}
 	return iv.parseShortHeader(b, ver)
 }
@@ -98,7 +98,7 @@ func (iv *InvariantHeader) parseVersionNegotiationPacket(b *bytes.Reader) (*Head
 	return h, nil
 }
 
-func (iv *InvariantHeader) parseLongHeader(b *bytes.Reader, sentBy protocol.Perspective, v protocol.VersionNumber) (*Header, error) {
+func (iv *InvariantHeader) parseLongHeader(b *bytes.Reader, v protocol.VersionNumber) (*Header, error) {
 	h := iv.toHeader()
 	h.Type = protocol.PacketType(iv.typeByte & 0x7f)
 

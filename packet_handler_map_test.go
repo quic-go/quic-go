@@ -62,13 +62,11 @@ var _ = Describe("Packet Handler Map", func() {
 				close(handledPacket1)
 			})
 			packetHandler1.EXPECT().GetVersion()
-			packetHandler1.EXPECT().GetPerspective().Return(protocol.PerspectiveClient)
 			packetHandler2.EXPECT().handlePacket(gomock.Any()).Do(func(p *receivedPacket) {
 				Expect(p.header.DestConnectionID).To(Equal(connID2))
 				close(handledPacket2)
 			})
 			packetHandler2.EXPECT().GetVersion()
-			packetHandler2.EXPECT().GetPerspective().Return(protocol.PerspectiveClient)
 			handler.Add(connID1, packetHandler1)
 			handler.Add(connID2, packetHandler2)
 
@@ -111,7 +109,6 @@ var _ = Describe("Packet Handler Map", func() {
 			connID := protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8}
 			packetHandler := NewMockPacketHandler(mockCtrl)
 			packetHandler.EXPECT().GetVersion().Return(protocol.VersionWhatever)
-			packetHandler.EXPECT().GetPerspective().Return(protocol.PerspectiveClient)
 			packetHandler.EXPECT().handlePacket(gomock.Any())
 			handler.Add(connID, packetHandler)
 			handler.Retire(connID)
@@ -129,7 +126,6 @@ var _ = Describe("Packet Handler Map", func() {
 			connID := protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8}
 			packetHandler := NewMockPacketHandler(mockCtrl)
 			packetHandler.EXPECT().GetVersion().Return(protocol.VersionWhatever)
-			packetHandler.EXPECT().GetPerspective().Return(protocol.PerspectiveClient)
 			handler.Add(connID, packetHandler)
 			hdr := &wire.Header{
 				IsLongHeader:     true,
@@ -151,7 +147,6 @@ var _ = Describe("Packet Handler Map", func() {
 			connID := protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8}
 			packetHandler := NewMockPacketHandler(mockCtrl)
 			packetHandler.EXPECT().GetVersion().Return(protocol.VersionWhatever)
-			packetHandler.EXPECT().GetPerspective().Return(protocol.PerspectiveClient)
 			handler.Add(connID, packetHandler)
 			hdr := &wire.Header{
 				IsLongHeader:     true,
@@ -170,7 +165,6 @@ var _ = Describe("Packet Handler Map", func() {
 			connID := protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8}
 			packetHandler := NewMockPacketHandler(mockCtrl)
 			packetHandler.EXPECT().GetVersion().Return(protocol.VersionWhatever)
-			packetHandler.EXPECT().GetPerspective().Return(protocol.PerspectiveClient)
 			handler.Add(connID, packetHandler)
 			packetHandler.EXPECT().handlePacket(gomock.Any()).Do(func(p *receivedPacket) {
 				Expect(p.data).To(HaveLen(456 - int(p.header.PacketNumberLen)))
@@ -211,7 +205,6 @@ var _ = Describe("Packet Handler Map", func() {
 			handler.AddWithResetToken(connID, packetHandler, token)
 			// first send a normal packet
 			handledPacket := make(chan struct{})
-			packetHandler.EXPECT().GetPerspective()
 			packetHandler.EXPECT().GetVersion()
 			packetHandler.EXPECT().handlePacket(gomock.Any()).Do(func(p *receivedPacket) {
 				Expect(p.header.DestConnectionID).To(Equal(connID))

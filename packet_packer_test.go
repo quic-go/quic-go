@@ -34,7 +34,7 @@ var _ = Describe("Packet packer", func() {
 		r := bytes.NewReader(data)
 		iHdr, err := wire.ParseInvariantHeader(r, 0)
 		Expect(err).ToNot(HaveOccurred())
-		hdr, err := iHdr.Parse(r, protocol.PerspectiveServer, protocol.VersionWhatever)
+		hdr, err := iHdr.Parse(r, protocol.VersionWhatever)
 		Expect(err).ToNot(HaveOccurred())
 		ExpectWithOffset(0, hdr.Length).To(BeEquivalentTo(r.Len() + int(hdr.PacketNumberLen)))
 	}

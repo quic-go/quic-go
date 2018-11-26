@@ -19,7 +19,7 @@ var _ = Describe("Version Negotiation Packets", func() {
 		b := bytes.NewReader(data)
 		iHdr, err := ParseInvariantHeader(b, 4)
 		Expect(err).ToNot(HaveOccurred())
-		hdr, err := iHdr.Parse(b, protocol.PerspectiveServer, versionIETFFrames)
+		hdr, err := iHdr.Parse(b, versionIETFFrames)
 		Expect(err).ToNot(HaveOccurred())
 		Expect(hdr.IsVersionNegotiation).To(BeTrue())
 		Expect(hdr.DestConnectionID).To(Equal(destConnID))
