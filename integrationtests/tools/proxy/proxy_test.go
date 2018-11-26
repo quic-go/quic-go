@@ -28,7 +28,7 @@ var _ = Describe("QUIC Proxy", func() {
 			DestConnectionID: protocol.ConnectionID{0xde, 0xad, 0xbe, 0xef, 0, 0, 0x13, 0x37},
 			SrcConnectionID:  protocol.ConnectionID{0xde, 0xad, 0xbe, 0xef, 0, 0, 0x13, 0x37},
 		}
-		hdr.Write(b, protocol.PerspectiveServer, protocol.VersionWhatever)
+		Expect(hdr.Write(b, protocol.VersionWhatever)).To(Succeed())
 		raw := b.Bytes()
 		raw = append(raw, payload...)
 		return raw

@@ -49,12 +49,11 @@ var _ = Describe("Client", func() {
 	// generate a packet sent by the server that accepts the QUIC version suggested by the client
 	acceptClientVersionPacket := func(connID protocol.ConnectionID) []byte {
 		b := &bytes.Buffer{}
-		err := (&wire.Header{
+		Expect((&wire.Header{
 			DestConnectionID: connID,
 			PacketNumber:     1,
 			PacketNumberLen:  1,
-		}).Write(b, protocol.PerspectiveServer, protocol.VersionWhatever)
-		Expect(err).ToNot(HaveOccurred())
+		}).Write(b, protocol.VersionWhatever)).To(Succeed())
 		return b.Bytes()
 	}
 

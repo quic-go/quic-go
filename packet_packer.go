@@ -450,7 +450,7 @@ func (p *packetPacker) writeAndSealPacket(
 		}
 	}
 
-	if err := header.Write(buffer, p.perspective, p.version); err != nil {
+	if err := header.Write(buffer, p.version); err != nil {
 		return nil, err
 	}
 	payloadStartIndex := buffer.Len()

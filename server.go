@@ -443,7 +443,7 @@ func (s *server) sendRetry(remoteAddr net.Addr, hdr *wire.Header) error {
 	s.logger.Debugf("Changing connection ID to %s.\n-> Sending Retry", connID)
 	replyHdr.Log(s.logger)
 	buf := &bytes.Buffer{}
-	if err := replyHdr.Write(buf, protocol.PerspectiveServer, hdr.Version); err != nil {
+	if err := replyHdr.Write(buf, hdr.Version); err != nil {
 		return err
 	}
 	if _, err := s.conn.WriteTo(buf.Bytes(), remoteAddr); err != nil {

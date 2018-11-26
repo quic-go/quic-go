@@ -21,15 +21,14 @@ var _ = Describe("Packet Handler Map", func() {
 
 	getPacket := func(connID protocol.ConnectionID) []byte {
 		buf := &bytes.Buffer{}
-		err := (&wire.Header{
+		Expect((&wire.Header{
 			IsLongHeader:     true,
 			Type:             protocol.PacketTypeHandshake,
 			DestConnectionID: connID,
 			PacketNumberLen:  protocol.PacketNumberLen1,
 			Length:           1,
 			Version:          protocol.VersionWhatever,
-		}).Write(buf, protocol.PerspectiveServer, protocol.VersionWhatever)
-		Expect(err).ToNot(HaveOccurred())
+		}).Write(buf, protocol.VersionWhatever)).To(Succeed())
 		return buf.Bytes()
 	}
 
@@ -136,7 +135,7 @@ var _ = Describe("Packet Handler Map", func() {
 				Version:          protocol.VersionWhatever,
 			}
 			buf := &bytes.Buffer{}
-			Expect(hdr.Write(buf, protocol.PerspectiveServer, protocol.VersionWhatever)).To(Succeed())
+			Expect(hdr.Write(buf, protocol.VersionWhatever)).To(Succeed())
 			buf.Write(bytes.Repeat([]byte{0}, 500-2 /* for packet number length */))
 
 			err := handler.handlePacket(nil, buf.Bytes())
@@ -157,7 +156,7 @@ var _ = Describe("Packet Handler Map", func() {
 				Version:          protocol.VersionWhatever,
 			}
 			buf := &bytes.Buffer{}
-			Expect(hdr.Write(buf, protocol.PerspectiveServer, protocol.VersionWhatever)).To(Succeed())
+			Expect(hdr.Write(buf, protocol.VersionWhatever)).To(Succeed())
 			Expect(handler.handlePacket(nil, buf.Bytes())).To(MatchError("packet length (3 bytes) shorter than packet number (4 bytes)"))
 		})
 
@@ -179,7 +178,7 @@ var _ = Describe("Packet Handler Map", func() {
 				Version:          protocol.VersionWhatever,
 			}
 			buf := &bytes.Buffer{}
-			Expect(hdr.Write(buf, protocol.PerspectiveServer, protocol.VersionWhatever)).To(Succeed())
+			Expect(hdr.Write(buf, protocol.VersionWhatever)).To(Succeed())
 			buf.Write(bytes.Repeat([]byte{0}, 500))
 			Expect(handler.handlePacket(nil, buf.Bytes())).To(Succeed())
 		})

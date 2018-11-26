@@ -33,7 +33,7 @@ type Header struct {
 }
 
 // Write writes the Header.
-func (h *Header) Write(b *bytes.Buffer, pers protocol.Perspective, ver protocol.VersionNumber) error {
+func (h *Header) Write(b *bytes.Buffer, ver protocol.VersionNumber) error {
 	if h.IsLongHeader {
 		return h.writeLongHeader(b, ver)
 	}
