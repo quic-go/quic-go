@@ -179,15 +179,14 @@ var _ = Describe("Header Parsing", func() {
 		It("rejects packets sent with an unknown packet type", func() {
 			srcConnID := protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8}
 			buf := &bytes.Buffer{}
-			err := (&Header{
+			Expect((&Header{
 				IsLongHeader:    true,
 				Type:            42,
 				SrcConnectionID: srcConnID,
 				Version:         0x10203040,
 				PacketNumber:    1,
 				PacketNumberLen: protocol.PacketNumberLen1,
-			}).Write(buf, protocol.PerspectiveClient, protocol.VersionTLS)
-			Expect(err).ToNot(HaveOccurred())
+			}).Write(buf, protocol.VersionTLS)).To(Succeed())
 			b := bytes.NewReader(buf.Bytes())
 			iHdr, err := ParseInvariantHeader(b, 0)
 			Expect(err).ToNot(HaveOccurred())
