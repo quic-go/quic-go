@@ -102,7 +102,7 @@ var _ = Describe("Server", func() {
 			b := bytes.NewReader(data)
 			iHdr, err := wire.ParseInvariantHeader(b, 0)
 			Expect(err).ToNot(HaveOccurred())
-			hdr, err := iHdr.Parse(b, protocol.PerspectiveServer, protocol.VersionTLS)
+			hdr, err := iHdr.Parse(b, protocol.VersionTLS)
 			Expect(err).ToNot(HaveOccurred())
 			return hdr
 		}

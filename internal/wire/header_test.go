@@ -344,7 +344,7 @@ var _ = Describe("Header", func() {
 			b := bytes.NewReader(data)
 			iHdr, err := ParseInvariantHeader(b, 4)
 			Expect(err).ToNot(HaveOccurred())
-			hdr, err := iHdr.Parse(b, protocol.PerspectiveServer, versionIETFHeader)
+			hdr, err := iHdr.Parse(b, versionIETFHeader)
 			Expect(err).ToNot(HaveOccurred())
 			hdr.Log(logger)
 			Expect(buf.String()).To(ContainSubstring("VersionNegotiationPacket{DestConnectionID: 0xdeadbeefcafe1337, SrcConnectionID: 0xdecafbad13371337"))

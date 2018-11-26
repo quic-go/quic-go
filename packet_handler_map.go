@@ -175,12 +175,10 @@ func (h *packetHandlerMap) handlePacket(addr net.Addr, data []byte) error {
 	handlerEntry, handlerFound := h.handlers[string(iHdr.DestConnectionID)]
 	server := h.server
 
-	var sentBy protocol.Perspective
 	var version protocol.VersionNumber
 	var handlePacket func(*receivedPacket)
 	if handlerFound { // existing session
 		handler := handlerEntry.handler
-		sentBy = handler.GetPerspective().Opposite()
 		version = handler.GetVersion()
 		handlePacket = handler.handlePacket
 	} else { // no session found
@@ -203,12 +201,11 @@ func (h *packetHandlerMap) handlePacket(addr net.Addr, data []byte) error {
 			return fmt.Errorf("received a packet with an unexpected connection ID %s", iHdr.DestConnectionID)
 		}
 		handlePacket = server.handlePacket
-		sentBy = protocol.PerspectiveClient
 		version = iHdr.Version
 	}
 	h.mutex.RUnlock()
 
-	hdr, err := iHdr.Parse(r, sentBy, version)
+	hdr, err := iHdr.Parse(r, version)
 	if err != nil {
 		return fmt.Errorf("error parsing header: %s", err)
 	}
