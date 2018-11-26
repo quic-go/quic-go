@@ -73,7 +73,7 @@ var _ = Describe("Header Parsing", func() {
 		It("parses a Long Header", func() {
 			destConnID := protocol.ConnectionID{9, 8, 7, 6, 5, 4, 3, 2, 1}
 			srcConnID := protocol.ConnectionID{0xde, 0xad, 0xbe, 0xef}
-			data := []byte{0x80 ^ uint8(protocol.PacketTypeInitial)}
+			data := []byte{0x80 ^ 0x7f}
 			data = appendVersion(data, versionIETFFrames)
 			data = append(data, 0x61) // connection ID lengths
 			data = append(data, destConnID...)
@@ -103,7 +103,7 @@ var _ = Describe("Header Parsing", func() {
 
 		It("stops parsing when encountering an unsupported version", func() {
 			data := []byte{
-				0x80 ^ uint8(protocol.PacketTypeInitial),
+				0x80 ^ 0x7f,
 				0xde, 0xad, 0xbe, 0xef,
 				0x55, // connection ID length
 				0x1, 0x2, 0x3, 0x4, 0x5, 0x6, 0x7, 0x8,
@@ -121,7 +121,7 @@ var _ = Describe("Header Parsing", func() {
 		})
 
 		It("parses a Long Header without a destination connection ID", func() {
-			data := []byte{0x80 ^ uint8(protocol.PacketTypeHandshake)}
+			data := []byte{0x80 ^ 0x7d}
 			data = appendVersion(data, versionIETFFrames)
 			data = append(data, 0x01)                              // connection ID lengths
 			data = append(data, []byte{0xde, 0xad, 0xbe, 0xef}...) // source connection ID
@@ -134,7 +134,7 @@ var _ = Describe("Header Parsing", func() {
 		})
 
 		It("parses a Long Header without a source connection ID", func() {
-			data := []byte{0x80 ^ uint8(protocol.PacketTypeHandshake)}
+			data := []byte{0x80 ^ 0x7d}
 			data = appendVersion(data, versionIETFFrames)
 			data = append(data, 0x70)                                     // connection ID lengths
 			data = append(data, []byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}...) // source connection ID
@@ -147,7 +147,7 @@ var _ = Describe("Header Parsing", func() {
 		})
 
 		It("parses a Long Header with a 2 byte packet number", func() {
-			data := []byte{0x80 ^ uint8(protocol.PacketTypeInitial)}
+			data := []byte{0x80 ^ 0x7f}
 			data = appendVersion(data, versionIETFFrames) // version number
 			data = append(data, 0x0)                      // connection ID lengths
 			data = append(data, encodeVarInt(0)...)       // token length
@@ -165,7 +165,7 @@ var _ = Describe("Header Parsing", func() {
 		})
 
 		It("parses a Retry packet", func() {
-			data := []byte{0x80 ^ uint8(protocol.PacketTypeRetry)}
+			data := []byte{0x80 ^ 0x7e}
 			data = appendVersion(data, versionIETFFrames)
 			data = append(data, 0x0)                                      // connection ID lengths
 			data = append(data, 0x97)                                     // Orig Destination Connection ID length
@@ -185,20 +185,22 @@ var _ = Describe("Header Parsing", func() {
 			Expect((&ExtendedHeader{
 				Header: Header{
 					IsLongHeader:    true,
-					Type:            42,
+					Type:            protocol.PacketTypeHandshake, // will be overwritten later
 					SrcConnectionID: srcConnID,
 					Version:         versionIETFFrames,
 				},
 				PacketNumber:    1,
 				PacketNumberLen: protocol.PacketNumberLen1,
 			}).Write(buf, protocol.VersionTLS)).To(Succeed())
-			b := bytes.NewReader(buf.Bytes())
+			data := buf.Bytes()
+			data[0] = 0x80 | 42
+			b := bytes.NewReader(data)
 			_, err := ParseHeader(b, 0)
 			Expect(err).To(MatchError("InvalidPacketHeader: Received packet with invalid packet type: 42"))
 		})
 
 		It("errors if the token length is too large", func() {
-			data := []byte{0x80 ^ uint8(protocol.PacketTypeInitial)}
+			data := []byte{0x80 ^ 0x7e}
 			data = appendVersion(data, versionIETFFrames)
 			data = append(data, 0x0)                                          // connection ID lengths
 			data = append(data, encodeVarInt(4)...)                           // token length: 4 bytes (1 byte too long)
@@ -211,7 +213,7 @@ var _ = Describe("Header Parsing", func() {
 		})
 
 		It("errors on EOF, when parsing the header", func() {
-			data := []byte{0x80 ^ uint8(protocol.PacketTypeInitial)}
+			data := []byte{0x80 ^ 0x7f}
 			data = appendVersion(data, versionIETFFrames)
 			data = append(data, 0x55)                                                      // connection ID lengths
 			data = append(data, []byte{0xde, 0xad, 0xbe, 0xef, 0xca, 0xfe, 0x13, 0x37}...) // destination connection ID
@@ -223,7 +225,7 @@ var _ = Describe("Header Parsing", func() {
 		})
 
 		It("errors on EOF, when parsing the extended header", func() {
-			data := []byte{0x80 ^ uint8(protocol.PacketTypeHandshake)}
+			data := []byte{0x80 ^ 0x7d}
 			data = appendVersion(data, versionIETFFrames)
 			data = append(data, 0x0) // connection ID lengths
 			data = append(data, encodeVarInt(0x1337)...)
@@ -239,7 +241,7 @@ var _ = Describe("Header Parsing", func() {
 		})
 
 		It("errors on EOF, for a Retry packet", func() {
-			data := []byte{0x80 ^ uint8(protocol.PacketTypeRetry)}
+			data := []byte{0x80 ^ 0x7e}
 			data = appendVersion(data, versionIETFFrames)
 			data = append(data, 0x0)                                      // connection ID lengths
 			data = append(data, 0x97)                                     // Orig Destination Connection ID length

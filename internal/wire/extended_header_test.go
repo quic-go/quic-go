@@ -38,13 +38,13 @@ var _ = Describe("Header", func() {
 						SrcConnectionID:  protocol.ConnectionID{0xde, 0xca, 0xfb, 0xad, 0x0, 0x0, 0x13, 0x37},
 						Version:          0x1020304,
 						Length:           0xcafe,
-						Type:             0x5,
+						Type:             protocol.PacketTypeHandshake,
 					},
 					PacketNumber:    0xdecaf,
 					PacketNumberLen: protocol.PacketNumberLen4,
 				}).Write(buf, versionIETFHeader)).To(Succeed())
 				expected := []byte{
-					0x80 ^ 0x5,
+					0x80 ^ 0x7d,
 					0x1, 0x2, 0x3, 0x4, // version number
 					0x35,                               // connection ID lengths
 					0xde, 0xad, 0xbe, 0xef, 0xca, 0xfe, // dest connection ID
@@ -127,7 +127,7 @@ var _ = Describe("Header", func() {
 					OrigDestConnectionID: protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8, 9},
 				}}).Write(buf, versionIETFHeader)).To(Succeed())
 				Expect(buf.Bytes()[:6]).To(Equal([]byte{
-					0x80 ^ uint8(protocol.PacketTypeRetry),
+					0x80 | 0x7e,
 					0x1, 0x2, 0x3, 0x4, // version number
 					0x0, // connection ID lengths))
 				}))
@@ -228,6 +228,7 @@ var _ = Describe("Header", func() {
 			h := &ExtendedHeader{
 				Header: Header{
 					IsLongHeader:     true,
+					Type:             protocol.PacketTypeHandshake,
 					DestConnectionID: protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8},
 					SrcConnectionID:  protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8},
 					Length:           1,
@@ -244,6 +245,7 @@ var _ = Describe("Header", func() {
 			h := &ExtendedHeader{
 				Header: Header{
 					IsLongHeader:     true,
+					Type:             protocol.PacketTypeHandshake,
 					DestConnectionID: protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8},
 					SrcConnectionID:  protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8},
 					Length:           1500,
@@ -260,10 +262,10 @@ var _ = Describe("Header", func() {
 			h := &ExtendedHeader{
 				Header: Header{
 					IsLongHeader:     true,
+					Type:             protocol.PacketTypeInitial,
 					DestConnectionID: protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8},
 					SrcConnectionID:  protocol.ConnectionID{1, 2, 3, 4},
 					Length:           1500,
-					Type:             protocol.PacketTypeInitial,
 				},
 				PacketNumberLen: protocol.PacketNumberLen2,
 			}

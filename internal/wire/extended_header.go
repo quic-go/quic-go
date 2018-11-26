@@ -59,7 +59,18 @@ func (h *ExtendedHeader) Write(b *bytes.Buffer, ver protocol.VersionNumber) erro
 }
 
 func (h *ExtendedHeader) writeLongHeader(b *bytes.Buffer, v protocol.VersionNumber) error {
-	b.WriteByte(byte(0x80 | h.Type))
+	var packetType uint8
+	switch h.Type {
+	case protocol.PacketTypeInitial:
+		packetType = 0x7f
+	case protocol.PacketTypeRetry:
+		packetType = 0x7e
+	case protocol.PacketTypeHandshake:
+		packetType = 0x7d
+	case protocol.PacketType0RTT:
+		packetType = 0x7c
+	}
+	b.WriteByte(0x80 | packetType)
 	utils.BigEndian.WriteUint32(b, uint32(h.Version))
 	connIDLen, err := encodeConnIDLen(h.DestConnectionID, h.SrcConnectionID)
 	if err != nil {

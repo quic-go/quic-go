@@ -99,9 +99,17 @@ func (h *Header) parseLongHeader(b *bytes.Reader) error {
 		return nil
 	}
 
-	h.Type = protocol.PacketType(h.typeByte & 0x7f)
-	if h.Type != protocol.PacketTypeInitial && h.Type != protocol.PacketTypeRetry && h.Type != protocol.PacketType0RTT && h.Type != protocol.PacketTypeHandshake {
-		return qerr.Error(qerr.InvalidPacketHeader, fmt.Sprintf("Received packet with invalid packet type: %d", h.Type))
+	switch h.typeByte & 0x7f {
+	case 0x7f:
+		h.Type = protocol.PacketTypeInitial
+	case 0x7e:
+		h.Type = protocol.PacketTypeRetry
+	case 0x7d:
+		h.Type = protocol.PacketTypeHandshake
+	case 0x7c:
+		h.Type = protocol.PacketType0RTT
+	default:
+		return qerr.Error(qerr.InvalidPacketHeader, fmt.Sprintf("Received packet with invalid packet type: %d", h.typeByte&0x7f))
 	}
 
 	if h.Type == protocol.PacketTypeRetry {
