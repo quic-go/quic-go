@@ -165,25 +165,23 @@ func (h *packetHandlerMap) handlePacket(addr net.Addr, data []byte) error {
 	rcvTime := time.Now()
 
 	r := bytes.NewReader(data)
-	iHdr, err := wire.ParseInvariantHeader(r, h.connIDLen)
+	hdr, err := wire.ParseHeader(r, h.connIDLen)
 	// drop the packet if we can't parse the header
 	if err != nil {
-		return fmt.Errorf("error parsing invariant header: %s", err)
+		return fmt.Errorf("error parsing header: %s", err)
 	}
 
 	h.mutex.RLock()
-	handlerEntry, handlerFound := h.handlers[string(iHdr.DestConnectionID)]
+	handlerEntry, handlerFound := h.handlers[string(hdr.DestConnectionID)]
 	server := h.server
 
-	var version protocol.VersionNumber
 	var handlePacket func(*receivedPacket)
 	if handlerFound { // existing session
 		handler := handlerEntry.handler
-		version = handler.GetVersion()
 		handlePacket = handler.handlePacket
 	} else { // no session found
 		// this might be a stateless reset
-		if !iHdr.IsLongHeader {
+		if !hdr.IsLongHeader {
 			if len(data) >= protocol.MinStatelessResetSize {
 				var token [16]byte
 				copy(token[:], data[len(data)-16:])
@@ -194,39 +192,20 @@ func (h *packetHandlerMap) handlePacket(addr net.Addr, data []byte) error {
 				}
 			}
 			// TODO(#943): send a stateless reset
-			return fmt.Errorf("received a short header packet with an unexpected connection ID %s", iHdr.DestConnectionID)
+			return fmt.Errorf("received a short header packet with an unexpected connection ID %s", hdr.DestConnectionID)
 		}
 		if server == nil { // no server set
 			h.mutex.RUnlock()
-			return fmt.Errorf("received a packet with an unexpected connection ID %s", iHdr.DestConnectionID)
+			return fmt.Errorf("received a packet with an unexpected connection ID %s", hdr.DestConnectionID)
 		}
 		handlePacket = server.handlePacket
-		version = iHdr.Version
 	}
 	h.mutex.RUnlock()
 
-	hdr, err := iHdr.Parse(r, version)
-	if err != nil {
-		return fmt.Errorf("error parsing header: %s", err)
-	}
-	hdr.Raw = data[:len(data)-r.Len()]
-	packetData := data[len(data)-r.Len():]
-
-	if hdr.IsLongHeader {
-		if hdr.Length < protocol.ByteCount(hdr.PacketNumberLen) {
-			return fmt.Errorf("packet length (%d bytes) shorter than packet number (%d bytes)", hdr.Length, hdr.PacketNumberLen)
-		}
-		if protocol.ByteCount(len(packetData))+protocol.ByteCount(hdr.PacketNumberLen) < hdr.Length {
-			return fmt.Errorf("packet length (%d bytes) is smaller than the expected length (%d bytes)", len(packetData)+int(hdr.PacketNumberLen), hdr.Length)
-		}
-		packetData = packetData[:int(hdr.Length)-int(hdr.PacketNumberLen)]
-		// TODO(#1312): implement parsing of compound packets
-	}
-
 	handlePacket(&receivedPacket{
 		remoteAddr: addr,
-		header:     hdr,
-		data:       packetData,
+		hdr:        hdr,
+		data:       data,
 		rcvTime:    rcvTime,
 	})
 	return nil

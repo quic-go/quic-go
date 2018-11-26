@@ -17,11 +17,9 @@ var _ = Describe("Version Negotiation Packets", func() {
 		Expect(err).ToNot(HaveOccurred())
 		Expect(data[0] & 0x80).ToNot(BeZero())
 		b := bytes.NewReader(data)
-		iHdr, err := ParseInvariantHeader(b, 4)
+		hdr, err := ParseHeader(b, 4)
 		Expect(err).ToNot(HaveOccurred())
-		hdr, err := iHdr.Parse(b, versionIETFFrames)
 		Expect(err).ToNot(HaveOccurred())
-		Expect(hdr.IsVersionNegotiation).To(BeTrue())
 		Expect(hdr.DestConnectionID).To(Equal(destConnID))
 		Expect(hdr.SrcConnectionID).To(Equal(srcConnID))
 		Expect(hdr.Version).To(BeZero())
@@ -30,5 +28,6 @@ var _ = Describe("Version Negotiation Packets", func() {
 		for _, version := range versions {
 			Expect(hdr.SupportedVersions).To(ContainElement(version))
 		}
+		Expect(b.Len()).To(BeZero())
 	})
 })

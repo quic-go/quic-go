@@ -31,12 +31,12 @@ var _ = Describe("Packet packer", func() {
 	)
 
 	checkLength := func(data []byte) {
+		hdr, err := wire.ParseHeader(bytes.NewReader(data), 0)
+		Expect(err).ToNot(HaveOccurred())
 		r := bytes.NewReader(data)
-		iHdr, err := wire.ParseInvariantHeader(r, 0)
+		extHdr, err := hdr.ParseExtended(r, protocol.VersionWhatever)
 		Expect(err).ToNot(HaveOccurred())
-		hdr, err := iHdr.Parse(r, protocol.VersionWhatever)
-		Expect(err).ToNot(HaveOccurred())
-		ExpectWithOffset(0, hdr.Length).To(BeEquivalentTo(r.Len() + int(hdr.PacketNumberLen)))
+		ExpectWithOffset(0, extHdr.Length).To(BeEquivalentTo(r.Len() + int(extHdr.PacketNumberLen)))
 	}
 
 	expectAppendStreamFrames := func(frames ...wire.Frame) {
@@ -57,7 +57,7 @@ var _ = Describe("Packet packer", func() {
 
 	BeforeEach(func() {
 		rand.Seed(GinkgoRandomSeed())
-		version := protocol.VersionWhatever
+		version := protocol.VersionTLS
 		mockSender := NewMockStreamSender(mockCtrl)
 		mockSender.EXPECT().onHasStreamData(gomock.Any()).AnyTimes()
 		initialStream = NewMockCryptoStream(mockCtrl)

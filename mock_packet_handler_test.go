@@ -58,18 +58,6 @@ func (mr *MockPacketHandlerMockRecorder) GetPerspective() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetPerspective", reflect.TypeOf((*MockPacketHandler)(nil).GetPerspective))
 }
 
-// GetVersion mocks base method
-func (m *MockPacketHandler) GetVersion() protocol.VersionNumber {
-	ret := m.ctrl.Call(m, "GetVersion")
-	ret0, _ := ret[0].(protocol.VersionNumber)
-	return ret0
-}
-
-// GetVersion indicates an expected call of GetVersion
-func (mr *MockPacketHandlerMockRecorder) GetVersion() *gomock.Call {
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetVersion", reflect.TypeOf((*MockPacketHandler)(nil).GetVersion))
-}
-
 // destroy mocks base method
 func (m *MockPacketHandler) destroy(arg0 error) {
 	m.ctrl.Call(m, "destroy", arg0)
