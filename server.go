@@ -21,7 +21,6 @@ type packetHandler interface {
 	handlePacket(*receivedPacket)
 	io.Closer
 	destroy(error)
-	GetVersion() protocol.VersionNumber
 	GetPerspective() protocol.Perspective
 }
 
@@ -306,7 +305,7 @@ func (s *server) handlePacket(p *receivedPacket) {
 }
 
 func (s *server) handlePacketImpl(p *receivedPacket) error {
-	hdr := p.extHdr
+	hdr := p.hdr
 
 	// send a Version Negotiation Packet if the client is speaking a different protocol version
 	if !protocol.IsSupportedVersion(s.config.Versions, hdr.Version) {
@@ -335,11 +334,11 @@ func (s *server) handleInitial(p *receivedPacket) {
 }
 
 func (s *server) handleInitialImpl(p *receivedPacket) (quicSession, protocol.ConnectionID, error) {
-	hdr := p.extHdr
+	hdr := p.hdr
 	if len(hdr.Token) == 0 && hdr.DestConnectionID.Len() < protocol.MinConnectionIDLenInitial {
 		return nil, nil, errors.New("dropping Initial packet with too short connection ID")
 	}
-	if len(hdr.Raw)+len(p.data) < protocol.MinInitialPacketSize {
+	if len(p.data) < protocol.MinInitialPacketSize {
 		return nil, nil, errors.New("dropping too small Initial packet")
 	}
 
@@ -358,7 +357,7 @@ func (s *server) handleInitialImpl(p *receivedPacket) (quicSession, protocol.Con
 	if !s.config.AcceptCookie(p.remoteAddr, cookie) {
 		// Log the Initial packet now.
 		// If no Retry is sent, the packet will be logged by the session.
-		p.extHdr.Log(s.logger)
+		(&wire.ExtendedHeader{Header: *p.hdr}).Log(s.logger)
 		return nil, nil, s.sendRetry(p.remoteAddr, hdr)
 	}
 
@@ -422,7 +421,7 @@ func (s *server) createNewSession(
 	return sess, nil
 }
 
-func (s *server) sendRetry(remoteAddr net.Addr, hdr *wire.ExtendedHeader) error {
+func (s *server) sendRetry(remoteAddr net.Addr, hdr *wire.Header) error {
 	token, err := s.cookieGenerator.NewToken(remoteAddr, hdr.DestConnectionID)
 	if err != nil {
 		return err
@@ -452,7 +451,7 @@ func (s *server) sendRetry(remoteAddr net.Addr, hdr *wire.ExtendedHeader) error 
 }
 
 func (s *server) sendVersionNegotiationPacket(p *receivedPacket) error {
-	hdr := p.extHdr
+	hdr := p.hdr
 	s.logger.Debugf("Client offered version %s, sending VersionNegotiationPacket", hdr.Version)
 
 	data, err := wire.ComposeVersionNegotiation(hdr.SrcConnectionID, hdr.DestConnectionID, s.config.Versions)

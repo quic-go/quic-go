@@ -106,43 +106,39 @@ var _ = Describe("Server", func() {
 
 		It("drops Initial packets with a too short connection ID", func() {
 			serv.handlePacket(&receivedPacket{
-				extHdr: &wire.ExtendedHeader{Header: wire.Header{
+				hdr: &wire.Header{
 					IsLongHeader:     true,
 					Type:             protocol.PacketTypeInitial,
 					DestConnectionID: protocol.ConnectionID{1, 2, 3, 4},
 					Version:          serv.config.Versions[0],
-				}},
+				},
 			})
 			Expect(conn.dataWritten.Len()).To(BeZero())
 		})
 
 		It("drops too small Initial", func() {
 			serv.handlePacket(&receivedPacket{
-				extHdr: &wire.ExtendedHeader{Header: wire.Header{
+				hdr: &wire.Header{
 					IsLongHeader:     true,
 					Type:             protocol.PacketTypeInitial,
 					DestConnectionID: protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8},
 					Version:          serv.config.Versions[0],
-				}},
+				},
 				data: bytes.Repeat([]byte{0}, protocol.MinInitialPacketSize-100),
 			})
 			Consistently(conn.dataWritten.Len).Should(BeZero())
 		})
 
 		It("drops packets with a too short connection ID", func() {
-			hdr := &wire.ExtendedHeader{
-				Header: wire.Header{
+			serv.handlePacket(&receivedPacket{
+				hdr: &wire.Header{
 					IsLongHeader:     true,
 					Type:             protocol.PacketTypeInitial,
 					SrcConnectionID:  protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8},
 					DestConnectionID: protocol.ConnectionID{1, 2, 3, 4},
 					Version:          serv.config.Versions[0],
 				},
-				PacketNumberLen: protocol.PacketNumberLen1,
-			}
-			serv.handlePacket(&receivedPacket{
-				extHdr: hdr,
-				data:   bytes.Repeat([]byte{0}, protocol.MinInitialPacketSize),
+				data: bytes.Repeat([]byte{0}, protocol.MinInitialPacketSize),
 			})
 			Consistently(conn.dataWritten.Len).Should(BeZero())
 		})
@@ -150,10 +146,10 @@ var _ = Describe("Server", func() {
 		It("drops non-Initial packets", func() {
 			serv.logger.SetLogLevel(utils.LogLevelDebug)
 			serv.handlePacket(&receivedPacket{
-				extHdr: &wire.ExtendedHeader{Header: wire.Header{
+				hdr: &wire.Header{
 					Type:    protocol.PacketTypeHandshake,
 					Version: serv.config.Versions[0],
-				}},
+				},
 				data: []byte("invalid"),
 			})
 		})
@@ -174,11 +170,11 @@ var _ = Describe("Server", func() {
 			Expect(err).ToNot(HaveOccurred())
 			serv.handlePacket(&receivedPacket{
 				remoteAddr: raddr,
-				extHdr: &wire.ExtendedHeader{Header: wire.Header{
+				hdr: &wire.Header{
 					Type:    protocol.PacketTypeInitial,
 					Token:   token,
 					Version: serv.config.Versions[0],
-				}},
+				},
 				data: bytes.Repeat([]byte{0}, protocol.MinInitialPacketSize),
 			})
 			Eventually(done).Should(BeClosed())
@@ -198,11 +194,11 @@ var _ = Describe("Server", func() {
 			}
 			serv.handlePacket(&receivedPacket{
 				remoteAddr: raddr,
-				extHdr: &wire.ExtendedHeader{Header: wire.Header{
+				hdr: &wire.Header{
 					Type:    protocol.PacketTypeInitial,
 					Token:   []byte("foobar"),
 					Version: serv.config.Versions[0],
-				}},
+				},
 				data: bytes.Repeat([]byte{0}, protocol.MinInitialPacketSize),
 			})
 			Eventually(done).Should(BeClosed())
@@ -212,13 +208,13 @@ var _ = Describe("Server", func() {
 			srcConnID := protocol.ConnectionID{1, 2, 3, 4, 5}
 			destConnID := protocol.ConnectionID{1, 2, 3, 4, 5, 6}
 			serv.handlePacket(&receivedPacket{
-				extHdr: &wire.ExtendedHeader{Header: wire.Header{
+				hdr: &wire.Header{
 					IsLongHeader:     true,
 					Type:             protocol.PacketTypeInitial,
 					SrcConnectionID:  srcConnID,
 					DestConnectionID: destConnID,
 					Version:          0x42,
-				}},
+				},
 			})
 			Expect(conn.dataWritten.Len()).ToNot(BeZero())
 			hdr, err := wire.ParseHeader(bytes.NewReader(conn.dataWritten.Bytes()), 0)
@@ -231,15 +227,15 @@ var _ = Describe("Server", func() {
 
 		It("replies with a Retry packet, if a Cookie is required", func() {
 			serv.config.AcceptCookie = func(_ net.Addr, _ *Cookie) bool { return false }
-			hdr := &wire.ExtendedHeader{Header: wire.Header{
+			hdr := &wire.Header{
 				Type:             protocol.PacketTypeInitial,
 				SrcConnectionID:  protocol.ConnectionID{5, 4, 3, 2, 1},
 				DestConnectionID: protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8, 9, 10},
 				Version:          protocol.VersionTLS,
-			}}
+			}
 			serv.handleInitial(&receivedPacket{
 				remoteAddr: &net.UDPAddr{},
-				extHdr:     hdr,
+				hdr:        hdr,
 				data:       bytes.Repeat([]byte{0}, protocol.MinInitialPacketSize),
 			})
 			Expect(conn.dataWritten.Len()).ToNot(BeZero())
@@ -253,15 +249,15 @@ var _ = Describe("Server", func() {
 
 		It("creates a session, if no Cookie is required", func() {
 			serv.config.AcceptCookie = func(_ net.Addr, _ *Cookie) bool { return true }
-			hdr := &wire.ExtendedHeader{Header: wire.Header{
+			hdr := &wire.Header{
 				Type:             protocol.PacketTypeInitial,
 				SrcConnectionID:  protocol.ConnectionID{5, 4, 3, 2, 1},
 				DestConnectionID: protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8, 9, 10},
 				Version:          protocol.VersionTLS,
-			}}
+			}
 			p := &receivedPacket{
-				extHdr: hdr,
-				data:   bytes.Repeat([]byte{0}, protocol.MinInitialPacketSize),
+				hdr:  hdr,
+				data: bytes.Repeat([]byte{0}, protocol.MinInitialPacketSize),
 			}
 			run := make(chan struct{})
 			serv.newSession = func(

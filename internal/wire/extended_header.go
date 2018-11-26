@@ -29,9 +29,6 @@ func (h *ExtendedHeader) parse(b *bytes.Reader, v protocol.VersionNumber) (*Exte
 }
 
 func (h *ExtendedHeader) parseLongHeader(b *bytes.Reader, v protocol.VersionNumber) (*ExtendedHeader, error) {
-	if h.Type == protocol.PacketTypeRetry {
-		return h, nil
-	}
 	pn, pnLen, err := utils.ReadVarIntPacketNumber(b)
 	if err != nil {
 		return nil, err

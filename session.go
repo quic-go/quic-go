@@ -1,6 +1,7 @@
 package quic
 
 import (
+	"bytes"
 	"context"
 	"crypto/tls"
 	"errors"
@@ -53,7 +54,6 @@ type cryptoStreamHandler interface {
 type receivedPacket struct {
 	remoteAddr net.Addr
 	hdr        *wire.Header
-	extHdr     *wire.ExtendedHeader
 	data       []byte
 	rcvTime    time.Time
 }
@@ -374,7 +374,7 @@ runLoop:
 			}
 			// This is a bit unclean, but works properly, since the packet always
 			// begins with the public header and we never copy it.
-			putPacketBuffer(&p.extHdr.Raw)
+			// TODO: putPacketBuffer(&p.extHdr.Raw)
 		case <-s.handshakeCompleteChan:
 			s.handleHandshakeComplete()
 		}
@@ -479,12 +479,31 @@ func (s *session) handleHandshakeComplete() {
 }
 
 func (s *session) handlePacketImpl(p *receivedPacket) error {
-	hdr := p.extHdr
 	// The server can change the source connection ID with the first Handshake packet.
 	// After this, all packets with a different source connection have to be ignored.
-	if s.receivedFirstPacket && hdr.IsLongHeader && !hdr.SrcConnectionID.Equal(s.destConnID) {
-		s.logger.Debugf("Dropping packet with unexpected source connection ID: %s (expected %s)", p.extHdr.SrcConnectionID, s.destConnID)
+	if s.receivedFirstPacket && p.hdr.IsLongHeader && !p.hdr.SrcConnectionID.Equal(s.destConnID) {
+		s.logger.Debugf("Dropping packet with unexpected source connection ID: %s (expected %s)", p.hdr.SrcConnectionID, s.destConnID)
 		return nil
+	}
+
+	data := p.data
+	r := bytes.NewReader(data)
+	hdr, err := p.hdr.ParseExtended(r, s.version)
+	if err != nil {
+		return fmt.Errorf("error parsing extended header: %s", err)
+	}
+	hdr.Raw = data[:len(data)-r.Len()]
+	data = data[len(data)-r.Len():]
+
+	if hdr.IsLongHeader {
+		if hdr.Length < protocol.ByteCount(hdr.PacketNumberLen) {
+			return fmt.Errorf("packet length (%d bytes) shorter than packet number (%d bytes)", hdr.Length, hdr.PacketNumberLen)
+		}
+		if protocol.ByteCount(len(data))+protocol.ByteCount(hdr.PacketNumberLen) < hdr.Length {
+			return fmt.Errorf("packet length (%d bytes) is smaller than the expected length (%d bytes)", len(data)+int(hdr.PacketNumberLen), hdr.Length)
+		}
+		data = data[:int(hdr.Length)-int(hdr.PacketNumberLen)]
+		// TODO(#1312): implement parsing of compound packets
 	}
 
 	p.rcvTime = time.Now()
@@ -496,7 +515,7 @@ func (s *session) handlePacketImpl(p *receivedPacket) error {
 		s.version,
 	)
 
-	packet, err := s.unpacker.Unpack(hdr.Raw, hdr, p.data)
+	packet, err := s.unpacker.Unpack(hdr.Raw, hdr, data)
 	if s.logger.Debug() {
 		if err != nil {
 			s.logger.Debugf("<- Reading packet 0x%x (%d bytes) for connection %s", hdr.PacketNumber, len(p.data)+len(hdr.Raw), hdr.DestConnectionID)

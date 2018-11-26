@@ -22,8 +22,8 @@ var _ = Describe("Server Session", func() {
 
 	It("handles packets", func() {
 		p := &receivedPacket{
-			extHdr: &wire.ExtendedHeader{
-				Header: wire.Header{DestConnectionID: protocol.ConnectionID{1, 2, 3, 4, 5}},
+			hdr: &wire.Header{
+				DestConnectionID: protocol.ConnectionID{1, 2, 3, 4, 5},
 			},
 		}
 		qsess.EXPECT().handlePacket(p)
@@ -34,12 +34,10 @@ var _ = Describe("Server Session", func() {
 		qsess.EXPECT().GetVersion().Return(protocol.VersionNumber(100))
 		// don't EXPECT any calls to handlePacket()
 		p := &receivedPacket{
-			extHdr: &wire.ExtendedHeader{
-				Header: wire.Header{
-					IsLongHeader:     true,
-					Version:          protocol.VersionNumber(123),
-					DestConnectionID: protocol.ConnectionID{0xde, 0xad, 0xbe, 0xef},
-				},
+			hdr: &wire.Header{
+				IsLongHeader:     true,
+				Version:          protocol.VersionNumber(123),
+				DestConnectionID: protocol.ConnectionID{0xde, 0xad, 0xbe, 0xef},
 			},
 		}
 		err := sess.handlePacketImpl(p)
@@ -49,12 +47,12 @@ var _ = Describe("Server Session", func() {
 	It("ignores packets with the wrong Long Header type", func() {
 		qsess.EXPECT().GetVersion().Return(protocol.VersionNumber(100))
 		p := &receivedPacket{
-			extHdr: &wire.ExtendedHeader{Header: wire.Header{
+			hdr: &wire.Header{
 				IsLongHeader:     true,
 				Type:             protocol.PacketTypeRetry,
 				Version:          protocol.VersionNumber(100),
 				DestConnectionID: protocol.ConnectionID{0xde, 0xad, 0xbe, 0xef},
-			}},
+			},
 		}
 		err := sess.handlePacketImpl(p)
 		Expect(err).To(MatchError("Received unsupported packet type: Retry"))
@@ -62,12 +60,12 @@ var _ = Describe("Server Session", func() {
 
 	It("passes on Handshake packets", func() {
 		p := &receivedPacket{
-			extHdr: &wire.ExtendedHeader{Header: wire.Header{
+			hdr: &wire.Header{
 				IsLongHeader:     true,
 				Type:             protocol.PacketTypeHandshake,
 				Version:          protocol.VersionNumber(100),
 				DestConnectionID: protocol.ConnectionID{0xde, 0xad, 0xbe, 0xef},
-			}},
+			},
 		}
 		qsess.EXPECT().GetVersion().Return(protocol.VersionNumber(100))
 		qsess.EXPECT().handlePacket(p)

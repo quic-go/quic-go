@@ -59,15 +59,13 @@ var _ = Describe("Packet Handler Map", func() {
 			handledPacket1 := make(chan struct{})
 			handledPacket2 := make(chan struct{})
 			packetHandler1.EXPECT().handlePacket(gomock.Any()).Do(func(p *receivedPacket) {
-				Expect(p.extHdr.DestConnectionID).To(Equal(connID1))
+				Expect(p.hdr.DestConnectionID).To(Equal(connID1))
 				close(handledPacket1)
 			})
-			packetHandler1.EXPECT().GetVersion()
 			packetHandler2.EXPECT().handlePacket(gomock.Any()).Do(func(p *receivedPacket) {
-				Expect(p.extHdr.DestConnectionID).To(Equal(connID2))
+				Expect(p.hdr.DestConnectionID).To(Equal(connID2))
 				close(handledPacket2)
 			})
-			packetHandler2.EXPECT().GetVersion()
 			handler.Add(connID1, packetHandler1)
 			handler.Add(connID2, packetHandler2)
 
@@ -109,7 +107,6 @@ var _ = Describe("Packet Handler Map", func() {
 			handler.deleteRetiredSessionsAfter = time.Hour
 			connID := protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8}
 			packetHandler := NewMockPacketHandler(mockCtrl)
-			packetHandler.EXPECT().GetVersion().Return(protocol.VersionWhatever)
 			packetHandler.EXPECT().handlePacket(gomock.Any())
 			handler.Add(connID, packetHandler)
 			handler.Retire(connID)
@@ -121,74 +118,6 @@ var _ = Describe("Packet Handler Map", func() {
 			connID := protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8}
 			err := handler.handlePacket(nil, getPacket(connID))
 			Expect(err).To(MatchError("received a packet with an unexpected connection ID 0x0102030405060708"))
-		})
-
-		It("errors on packets that are smaller than the length in the packet header", func() {
-			connID := protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8}
-			packetHandler := NewMockPacketHandler(mockCtrl)
-			packetHandler.EXPECT().GetVersion().Return(protocol.VersionWhatever)
-			handler.Add(connID, packetHandler)
-			hdr := &wire.ExtendedHeader{
-				Header: wire.Header{
-					IsLongHeader:     true,
-					Type:             protocol.PacketTypeHandshake,
-					Length:           1000,
-					DestConnectionID: connID,
-					Version:          protocol.VersionTLS,
-				},
-				PacketNumberLen: protocol.PacketNumberLen2,
-			}
-			buf := &bytes.Buffer{}
-			Expect(hdr.Write(buf, protocol.VersionWhatever)).To(Succeed())
-			buf.Write(bytes.Repeat([]byte{0}, 500-2 /* for packet number length */))
-
-			err := handler.handlePacket(nil, buf.Bytes())
-			Expect(err).To(MatchError("packet length (500 bytes) is smaller than the expected length (1000 bytes)"))
-		})
-
-		It("errors when receiving a packet that has a length smaller than the packet number length", func() {
-			connID := protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8}
-			packetHandler := NewMockPacketHandler(mockCtrl)
-			packetHandler.EXPECT().GetVersion().Return(protocol.VersionWhatever)
-			handler.Add(connID, packetHandler)
-			hdr := &wire.ExtendedHeader{
-				Header: wire.Header{
-					IsLongHeader:     true,
-					DestConnectionID: connID,
-					Type:             protocol.PacketTypeHandshake,
-					Length:           3,
-					Version:          protocol.VersionTLS,
-				},
-				PacketNumberLen: protocol.PacketNumberLen4,
-			}
-			buf := &bytes.Buffer{}
-			Expect(hdr.Write(buf, protocol.VersionWhatever)).To(Succeed())
-			Expect(handler.handlePacket(nil, buf.Bytes())).To(MatchError("packet length (3 bytes) shorter than packet number (4 bytes)"))
-		})
-
-		It("cuts packets to the right length", func() {
-			connID := protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8}
-			packetHandler := NewMockPacketHandler(mockCtrl)
-			packetHandler.EXPECT().GetVersion().Return(protocol.VersionWhatever)
-			handler.Add(connID, packetHandler)
-			packetHandler.EXPECT().handlePacket(gomock.Any()).Do(func(p *receivedPacket) {
-				Expect(p.data).To(HaveLen(456 - int(p.extHdr.PacketNumberLen)))
-			})
-
-			hdr := &wire.ExtendedHeader{
-				Header: wire.Header{
-					IsLongHeader:     true,
-					DestConnectionID: connID,
-					Type:             protocol.PacketTypeHandshake,
-					Length:           456,
-					Version:          protocol.VersionTLS,
-				},
-				PacketNumberLen: protocol.PacketNumberLen1,
-			}
-			buf := &bytes.Buffer{}
-			Expect(hdr.Write(buf, protocol.VersionWhatever)).To(Succeed())
-			buf.Write(bytes.Repeat([]byte{0}, 500))
-			Expect(handler.handlePacket(nil, buf.Bytes())).To(Succeed())
 		})
 
 		It("closes the packet handlers when reading from the conn fails", func() {
@@ -212,9 +141,8 @@ var _ = Describe("Packet Handler Map", func() {
 			handler.AddWithResetToken(connID, packetHandler, token)
 			// first send a normal packet
 			handledPacket := make(chan struct{})
-			packetHandler.EXPECT().GetVersion()
 			packetHandler.EXPECT().handlePacket(gomock.Any()).Do(func(p *receivedPacket) {
-				Expect(p.extHdr.DestConnectionID).To(Equal(connID))
+				Expect(p.hdr.DestConnectionID).To(Equal(connID))
 				close(handledPacket)
 			})
 			conn.dataToRead <- getPacket(connID)
@@ -257,7 +185,7 @@ var _ = Describe("Packet Handler Map", func() {
 			p := getPacket(connID)
 			server := NewMockUnknownPacketHandler(mockCtrl)
 			server.EXPECT().handlePacket(gomock.Any()).Do(func(p *receivedPacket) {
-				Expect(p.extHdr.DestConnectionID).To(Equal(connID))
+				Expect(p.hdr.DestConnectionID).To(Equal(connID))
 			})
 			handler.SetServer(server)
 			Expect(handler.handlePacket(nil, p)).To(Succeed())

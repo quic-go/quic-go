@@ -316,8 +316,8 @@ func (c *client) handlePacketImpl(p *receivedPacket) error {
 		return fmt.Errorf("received a packet with an unexpected connection ID (%s, expected %s)", p.hdr.DestConnectionID, c.srcConnID)
 	}
 
-	if p.extHdr.Type == protocol.PacketTypeRetry {
-		c.handleRetryPacket(p.extHdr)
+	if p.hdr.Type == protocol.PacketTypeRetry {
+		c.handleRetryPacket(p.hdr)
 		return nil
 	}
 
@@ -367,9 +367,9 @@ func (c *client) handleVersionNegotiationPacket(hdr *wire.Header) error {
 	return nil
 }
 
-func (c *client) handleRetryPacket(hdr *wire.ExtendedHeader) {
+func (c *client) handleRetryPacket(hdr *wire.Header) {
 	c.logger.Debugf("<- Received Retry")
-	hdr.Log(c.logger)
+	(&wire.ExtendedHeader{Header: *hdr}).Log(c.logger)
 	if !hdr.OrigDestConnectionID.Equal(c.destConnID) {
 		c.logger.Debugf("Ignoring spoofed Retry. Original Destination Connection ID: %s, expected: %s", hdr.OrigDestConnectionID, c.destConnID)
 		return

@@ -175,11 +175,9 @@ func (h *packetHandlerMap) handlePacket(addr net.Addr, data []byte) error {
 	handlerEntry, handlerFound := h.handlers[string(hdr.DestConnectionID)]
 	server := h.server
 
-	var version protocol.VersionNumber
 	var handlePacket func(*receivedPacket)
 	if handlerFound { // existing session
 		handler := handlerEntry.handler
-		version = handler.GetVersion()
 		handlePacket = handler.handlePacket
 	} else { // no session found
 		// this might be a stateless reset
@@ -201,39 +199,13 @@ func (h *packetHandlerMap) handlePacket(addr net.Addr, data []byte) error {
 			return fmt.Errorf("received a packet with an unexpected connection ID %s", hdr.DestConnectionID)
 		}
 		handlePacket = server.handlePacket
-		version = hdr.Version
 	}
 	h.mutex.RUnlock()
-
-	var extHdr *wire.ExtendedHeader
-	var packetData []byte
-	if !hdr.IsVersionNegotiation() {
-		r = bytes.NewReader(data)
-		var err error
-		extHdr, err = hdr.ParseExtended(r, version)
-		if err != nil {
-			return fmt.Errorf("error parsing extended header: %s", err)
-		}
-		extHdr.Raw = data[:len(data)-r.Len()]
-		packetData = data[len(data)-r.Len():]
-
-		if hdr.IsLongHeader {
-			if extHdr.Length < protocol.ByteCount(extHdr.PacketNumberLen) {
-				return fmt.Errorf("packet length (%d bytes) shorter than packet number (%d bytes)", extHdr.Length, extHdr.PacketNumberLen)
-			}
-			if protocol.ByteCount(len(packetData))+protocol.ByteCount(extHdr.PacketNumberLen) < extHdr.Length {
-				return fmt.Errorf("packet length (%d bytes) is smaller than the expected length (%d bytes)", len(packetData)+int(extHdr.PacketNumberLen), extHdr.Length)
-			}
-			packetData = packetData[:int(extHdr.Length)-int(extHdr.PacketNumberLen)]
-			// TODO(#1312): implement parsing of compound packets
-		}
-	}
 
 	handlePacket(&receivedPacket{
 		remoteAddr: addr,
 		hdr:        hdr,
-		extHdr:     extHdr,
-		data:       packetData,
+		data:       data,
 		rcvTime:    rcvTime,
 	})
 	return nil

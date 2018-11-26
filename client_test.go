@@ -512,15 +512,13 @@ var _ = Describe("Client", func() {
 			manager.EXPECT().Add(gomock.Any(), gomock.Any()).Do(func(id protocol.ConnectionID, handler packetHandler) {
 				go handler.handlePacket(&receivedPacket{
 					hdr: &wire.Header{
-						Version:          cl.version,
-						DestConnectionID: id,
-					},
-					extHdr: &wire.ExtendedHeader{Header: wire.Header{
 						IsLongHeader:         true,
 						Type:                 protocol.PacketTypeRetry,
+						Version:              cl.version,
 						Token:                []byte("foobar"),
 						OrigDestConnectionID: connID,
-					}},
+						DestConnectionID:     id,
+					},
 				})
 			})
 			manager.EXPECT().Add(gomock.Any(), gomock.Any())
@@ -575,17 +573,14 @@ var _ = Describe("Client", func() {
 			manager.EXPECT().Add(gomock.Any(), gomock.Any()).Do(func(id protocol.ConnectionID, handler packetHandler) {
 				go handler.handlePacket(&receivedPacket{
 					hdr: &wire.Header{
-						SrcConnectionID:  protocol.ConnectionID{1, 2, 3, 4},
-						DestConnectionID: id,
-						Version:          cl.version,
-					},
-					extHdr: &wire.ExtendedHeader{Header: wire.Header{
 						IsLongHeader:         true,
 						Type:                 protocol.PacketTypeRetry,
-						Token:                []byte("foobar"),
+						SrcConnectionID:      protocol.ConnectionID{1, 2, 3, 4},
+						DestConnectionID:     id,
 						OrigDestConnectionID: connID,
-						Version:              protocol.VersionTLS,
-					}},
+						Token:                []byte("foobar"),
+						Version:              cl.version,
+					},
 				})
 			}).AnyTimes()
 			manager.EXPECT().Add(gomock.Any(), gomock.Any()).AnyTimes()
@@ -691,10 +686,6 @@ var _ = Describe("Client", func() {
 						SrcConnectionID:  connID,
 						Version:          cl.version,
 					},
-					extHdr: &wire.ExtendedHeader{
-						PacketNumber:    1,
-						PacketNumberLen: protocol.PacketNumberLen2,
-					},
 				})
 				Expect(err).ToNot(HaveOccurred())
 				Expect(cl.versionNegotiated).To(BeTrue())
@@ -755,10 +746,6 @@ var _ = Describe("Client", func() {
 				DestConnectionID: connID2,
 				SrcConnectionID:  connID,
 				Version:          cl.version,
-			},
-			extHdr: &wire.ExtendedHeader{
-				PacketNumber:    1,
-				PacketNumberLen: protocol.PacketNumberLen1,
 			},
 		})).To(MatchError(fmt.Sprintf("received a packet with an unexpected connection ID (0x0807060504030201, expected %s)", connID)))
 	})
