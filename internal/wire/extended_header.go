@@ -51,6 +51,10 @@ func (h *ExtendedHeader) parseLongHeader(b *bytes.Reader, v protocol.VersionNumb
 }
 
 func (h *ExtendedHeader) parseShortHeader(b *bytes.Reader, v protocol.VersionNumber) (*ExtendedHeader, error) {
+	if h.typeByte&0x18 != 0 {
+		return nil, errors.New("4th and 5th bit must be 0")
+	}
+
 	h.KeyPhase = int(h.typeByte&0x4) >> 2
 
 	if err := h.readPacketNumber(b); err != nil {

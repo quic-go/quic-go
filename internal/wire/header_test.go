@@ -284,6 +284,16 @@ var _ = Describe("Header Parsing", func() {
 			Expect(err).To(MatchError("not a QUIC packet"))
 		})
 
+		It("errors if the 4th or 5th bit are set", func() {
+			connID := protocol.ConnectionID{1, 2, 3, 4, 5}
+			data := append([]byte{0x40 | 0x10 /* set the 4th bit */}, connID...)
+			hdr, err := ParseHeader(bytes.NewReader(data), 5)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(hdr.IsLongHeader).To(BeFalse())
+			_, err = hdr.ParseExtended(bytes.NewReader(data), versionIETFFrames)
+			Expect(err).To(MatchError("4th and 5th bit must be 0"))
+		})
+
 		It("reads a Short Header with a 5 byte connection ID", func() {
 			connID := protocol.ConnectionID{1, 2, 3, 4, 5}
 			data := append([]byte{0x40}, connID...)
@@ -357,7 +367,8 @@ var _ = Describe("Header Parsing", func() {
 				0xde, 0xad, 0xbe, 0xef, 0xca, 0xfe, 0x13, 0x37, // connection ID
 			}
 			for i := 0; i < len(data); i++ {
-				_, err := ParseHeader(bytes.NewReader(data[:i]), 8)
+				data = data[:i]
+				_, err := ParseHeader(bytes.NewReader(data), 8)
 				Expect(err).To(Equal(io.EOF))
 			}
 		})
@@ -370,10 +381,10 @@ var _ = Describe("Header Parsing", func() {
 			hdrLen := len(data)
 			data = append(data, []byte{0xde, 0xad, 0xbe, 0xef}...) // packet number
 			for i := hdrLen; i < len(data); i++ {
-				b := bytes.NewReader(data[:i])
-				hdr, err := ParseHeader(b, 6)
+				data = data[:i]
+				hdr, err := ParseHeader(bytes.NewReader(data), 6)
 				Expect(err).ToNot(HaveOccurred())
-				_, err = hdr.ParseExtended(b, versionIETFFrames)
+				_, err = hdr.ParseExtended(bytes.NewReader(data), versionIETFFrames)
 				Expect(err).To(Equal(io.EOF))
 			}
 		})
