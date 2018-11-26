@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"crypto/rand"
 	"fmt"
+	"io"
 
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/internal/utils"
@@ -13,7 +14,8 @@ import (
 type ExtendedHeader struct {
 	Header
 
-	Raw []byte
+	typeByte byte
+	Raw      []byte
 
 	PacketNumberLen protocol.PacketNumberLen
 	PacketNumber    protocol.PacketNumber
@@ -22,6 +24,15 @@ type ExtendedHeader struct {
 }
 
 func (h *ExtendedHeader) parse(b *bytes.Reader, v protocol.VersionNumber) (*ExtendedHeader, error) {
+	// read the (now unencrypted) first byte
+	var err error
+	h.typeByte, err = b.ReadByte()
+	if err != nil {
+		return nil, err
+	}
+	if _, err := b.Seek(int64(h.len)-1, io.SeekCurrent); err != nil {
+		return nil, err
+	}
 	if h.IsLongHeader {
 		return h.parseLongHeader(b, v)
 	}
@@ -29,25 +40,29 @@ func (h *ExtendedHeader) parse(b *bytes.Reader, v protocol.VersionNumber) (*Exte
 }
 
 func (h *ExtendedHeader) parseLongHeader(b *bytes.Reader, v protocol.VersionNumber) (*ExtendedHeader, error) {
-	pn, pnLen, err := utils.ReadVarIntPacketNumber(b)
-	if err != nil {
+	if err := h.readPacketNumber(b); err != nil {
 		return nil, err
 	}
-	h.PacketNumber = pn
-	h.PacketNumberLen = pnLen
 	return h, nil
 }
 
 func (h *ExtendedHeader) parseShortHeader(b *bytes.Reader, v protocol.VersionNumber) (*ExtendedHeader, error) {
 	h.KeyPhase = int(h.typeByte&0x4) >> 2
 
-	pn, pnLen, err := utils.ReadVarIntPacketNumber(b)
-	if err != nil {
+	if err := h.readPacketNumber(b); err != nil {
 		return nil, err
 	}
-	h.PacketNumber = pn
-	h.PacketNumberLen = pnLen
 	return h, nil
+}
+
+func (h *ExtendedHeader) readPacketNumber(b *bytes.Reader) error {
+	h.PacketNumberLen = protocol.PacketNumberLen(h.typeByte&0x3) + 1
+	pn, err := utils.BigEndian.ReadUintN(b, uint8(h.PacketNumberLen))
+	if err != nil {
+		return err
+	}
+	h.PacketNumber = protocol.PacketNumber(pn)
+	return nil
 }
 
 // Write writes the Header.
@@ -70,7 +85,11 @@ func (h *ExtendedHeader) writeLongHeader(b *bytes.Buffer, v protocol.VersionNumb
 	case protocol.PacketTypeRetry:
 		packetType = 0x3
 	}
-	b.WriteByte(0xc0 | packetType<<4)
+	firstByte := 0xc0 | packetType<<4
+	if h.Type != protocol.PacketTypeRetry { // Retry packets don't have a packet number
+		firstByte |= uint8(h.PacketNumberLen - 1)
+	}
+	b.WriteByte(firstByte)
 	utils.BigEndian.WriteUint32(b, uint32(h.Version))
 	connIDLen, err := encodeConnIDLen(h.DestConnectionID, h.SrcConnectionID)
 	if err != nil {
@@ -101,17 +120,25 @@ func (h *ExtendedHeader) writeLongHeader(b *bytes.Buffer, v protocol.VersionNumb
 	}
 
 	utils.WriteVarInt(b, uint64(h.Length))
-	return utils.WriteVarIntPacketNumber(b, h.PacketNumber, h.PacketNumberLen)
+	return h.writePacketNumber(b)
 }
 
 // TODO: add support for the key phase
 func (h *ExtendedHeader) writeShortHeader(b *bytes.Buffer, v protocol.VersionNumber) error {
-	typeByte := byte(0x40)
+	typeByte := 0x40 | uint8(h.PacketNumberLen-1)
 	typeByte |= byte(h.KeyPhase << 2)
 
 	b.WriteByte(typeByte)
 	b.Write(h.DestConnectionID.Bytes())
-	return utils.WriteVarIntPacketNumber(b, h.PacketNumber, h.PacketNumberLen)
+	return h.writePacketNumber(b)
+}
+
+func (h *ExtendedHeader) writePacketNumber(b *bytes.Buffer) error {
+	if h.PacketNumberLen == protocol.PacketNumberLenInvalid || h.PacketNumberLen > protocol.PacketNumberLen4 {
+		return fmt.Errorf("invalid packet number length: %d", h.PacketNumberLen)
+	}
+	utils.BigEndian.WriteUintN(b, uint8(h.PacketNumberLen), uint64(h.PacketNumber))
+	return nil
 }
 
 // GetLength determines the length of the Header.

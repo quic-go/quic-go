@@ -12,18 +12,12 @@ import (
 var _ = Describe("packet number calculation", func() {
 	Context("infering a packet number", func() {
 		getEpoch := func(len PacketNumberLen) uint64 {
-			switch len {
-			case PacketNumberLen1:
-				return uint64(1) << 7
-			case PacketNumberLen2:
-				return uint64(1) << 14
-			case PacketNumberLen4:
-				return uint64(1) << 30
-			default:
+			if len > 4 {
 				Fail("invalid packet number len")
 			}
 			return uint64(1) << (len * 8)
 		}
+
 		check := func(length PacketNumberLen, expected, last uint64) {
 			epoch := getEpoch(length)
 			epochMask := epoch - 1
@@ -151,8 +145,13 @@ var _ = Describe("packet number calculation", func() {
 							Expect(length).To(Equal(PacketNumberLen2))
 						})
 
-						It("sends out higher packet numbers as 4 bytes, if a lot of ACKs are missing", func() {
+						It("sends out higher packet numbers as 3 bytes, if a lot of ACKs are missing", func() {
 							length := GetPacketNumberLengthForHeader(40000, 2)
+							Expect(length).To(Equal(PacketNumberLen3))
+						})
+
+						It("sends out higher packet numbers as 4 bytes, if a lot of ACKs are missing", func() {
+							length := GetPacketNumberLengthForHeader(40000000, 2)
 							Expect(length).To(Equal(PacketNumberLen4))
 						})
 					})
@@ -223,6 +222,10 @@ var _ = Describe("packet number calculation", func() {
 
 		It("2 byte", func() {
 			Expect(GetPacketNumberLength(0xFFFF)).To(Equal(PacketNumberLen2))
+		})
+
+		It("3 byte", func() {
+			Expect(GetPacketNumberLength(0xFFFFFF)).To(Equal(PacketNumberLen3))
 		})
 
 		It("4 byte", func() {

@@ -178,9 +178,6 @@ func (h *Header) IsVersionNegotiation() bool {
 // ParseExtended parses the version dependent part of the header.
 // The Reader has to be set such that it points to the first byte of the header.
 func (h *Header) ParseExtended(b *bytes.Reader, ver protocol.VersionNumber) (*ExtendedHeader, error) {
-	if _, err := b.Seek(int64(h.len), io.SeekCurrent); err != nil {
-		return nil, err
-	}
 	return h.toExtendedHeader().parse(b, ver)
 }
 
