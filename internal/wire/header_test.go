@@ -101,6 +101,17 @@ var _ = Describe("Header Parsing", func() {
 			Expect(b.Len()).To(BeZero())
 		})
 
+		It("errors if 0x40 is not set", func() {
+			data := []byte{
+				0x80 | 0x2<<4,
+				0x11,                   // connection ID lengths
+				0xde, 0xca, 0xfb, 0xad, // dest conn ID
+				0xde, 0xad, 0xbe, 0xef, // src conn ID
+			}
+			_, err := ParseHeader(bytes.NewReader(data), 0)
+			Expect(err).To(MatchError("not a QUIC packet"))
+		})
+
 		It("stops parsing when encountering an unsupported version", func() {
 			data := []byte{
 				0xc0,
@@ -257,6 +268,13 @@ var _ = Describe("Header Parsing", func() {
 			Expect(extHdr.SrcConnectionID).To(BeEmpty())
 			Expect(extHdr.PacketNumber).To(Equal(protocol.PacketNumber(0x42)))
 			Expect(b.Len()).To(BeZero())
+		})
+
+		It("errors if 0x40 is not set", func() {
+			connID := protocol.ConnectionID{0xde, 0xad, 0xbe, 0xef, 0xca, 0xfe, 0x13, 0x37}
+			data := append([]byte{0x0}, connID...)
+			_, err := ParseHeader(bytes.NewReader(data), 8)
+			Expect(err).To(MatchError("not a QUIC packet"))
 		})
 
 		It("reads a Short Header with a 5 byte connection ID", func() {

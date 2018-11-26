@@ -2,6 +2,7 @@ package wire
 
 import (
 	"bytes"
+	"errors"
 	"io"
 
 	"github.com/lucas-clemente/quic-go/internal/protocol"
@@ -42,7 +43,6 @@ func ParseHeader(b *bytes.Reader, shortHeaderConnIDLen int) (*Header, error) {
 	return h, nil
 }
 
-// TODO: check that typeByte&0x40 == 0
 func parseHeaderImpl(b *bytes.Reader, shortHeaderConnIDLen int) (*Header, error) {
 	typeByte, err := b.ReadByte()
 	if err != nil {
@@ -55,6 +55,9 @@ func parseHeaderImpl(b *bytes.Reader, shortHeaderConnIDLen int) (*Header, error)
 	}
 
 	if !h.IsLongHeader {
+		if h.typeByte&0x40 == 0 {
+			return nil, errors.New("not a QUIC packet")
+		}
 		if err := h.parseShortHeader(b, shortHeaderConnIDLen); err != nil {
 			return nil, err
 		}
@@ -78,6 +81,9 @@ func (h *Header) parseLongHeader(b *bytes.Reader) error {
 		return err
 	}
 	h.Version = protocol.VersionNumber(v)
+	if !h.IsVersionNegotiation() && h.typeByte&0x40 == 0 {
+		return errors.New("not a QUIC packet")
+	}
 	connIDLenByte, err := b.ReadByte()
 	if err != nil {
 		return err
