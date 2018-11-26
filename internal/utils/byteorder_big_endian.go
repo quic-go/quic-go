@@ -57,6 +57,12 @@ func (bigEndian) ReadUint16(b io.ByteReader) (uint16, error) {
 	return uint16(b1) + uint16(b2)<<8, nil
 }
 
+func (bigEndian) WriteUintN(b *bytes.Buffer, length uint8, i uint64) {
+	for j := length; j > 0; j-- {
+		b.WriteByte(uint8(i >> (8 * (j - 1))))
+	}
+}
+
 // WriteUint32 writes a uint32
 func (bigEndian) WriteUint32(b *bytes.Buffer, i uint32) {
 	b.Write([]byte{uint8(i >> 24), uint8(i >> 16), uint8(i >> 8), uint8(i)})
