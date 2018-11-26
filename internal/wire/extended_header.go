@@ -39,7 +39,7 @@ func (h *ExtendedHeader) parseLongHeader(b *bytes.Reader, v protocol.VersionNumb
 }
 
 func (h *ExtendedHeader) parseShortHeader(b *bytes.Reader, v protocol.VersionNumber) (*ExtendedHeader, error) {
-	h.KeyPhase = int(h.typeByte&0x40) >> 6
+	h.KeyPhase = int(h.typeByte&0x4) >> 2
 
 	pn, pnLen, err := utils.ReadVarIntPacketNumber(b)
 	if err != nil {
@@ -62,15 +62,15 @@ func (h *ExtendedHeader) writeLongHeader(b *bytes.Buffer, v protocol.VersionNumb
 	var packetType uint8
 	switch h.Type {
 	case protocol.PacketTypeInitial:
-		packetType = 0x7f
-	case protocol.PacketTypeRetry:
-		packetType = 0x7e
-	case protocol.PacketTypeHandshake:
-		packetType = 0x7d
+		packetType = 0x0
 	case protocol.PacketType0RTT:
-		packetType = 0x7c
+		packetType = 0x1
+	case protocol.PacketTypeHandshake:
+		packetType = 0x2
+	case protocol.PacketTypeRetry:
+		packetType = 0x3
 	}
-	b.WriteByte(0x80 | packetType)
+	b.WriteByte(0xc0 | packetType<<4)
 	utils.BigEndian.WriteUint32(b, uint32(h.Version))
 	connIDLen, err := encodeConnIDLen(h.DestConnectionID, h.SrcConnectionID)
 	if err != nil {
@@ -106,8 +106,8 @@ func (h *ExtendedHeader) writeLongHeader(b *bytes.Buffer, v protocol.VersionNumb
 
 // TODO: add support for the key phase
 func (h *ExtendedHeader) writeShortHeader(b *bytes.Buffer, v protocol.VersionNumber) error {
-	typeByte := byte(0x30)
-	typeByte |= byte(h.KeyPhase << 6)
+	typeByte := byte(0x40)
+	typeByte |= byte(h.KeyPhase << 2)
 
 	b.WriteByte(typeByte)
 	b.Write(h.DestConnectionID.Bytes())

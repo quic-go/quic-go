@@ -2,7 +2,6 @@ package wire
 
 import (
 	"bytes"
-	"fmt"
 	"io"
 
 	"github.com/lucas-clemente/quic-go/internal/protocol"
@@ -43,6 +42,7 @@ func ParseHeader(b *bytes.Reader, shortHeaderConnIDLen int) (*Header, error) {
 	return h, nil
 }
 
+// TODO: check that typeByte&0x40 == 0
 func parseHeaderImpl(b *bytes.Reader, shortHeaderConnIDLen int) (*Header, error) {
 	typeByte, err := b.ReadByte()
 	if err != nil {
@@ -99,17 +99,15 @@ func (h *Header) parseLongHeader(b *bytes.Reader) error {
 		return nil
 	}
 
-	switch h.typeByte & 0x7f {
-	case 0x7f:
+	switch (h.typeByte & 0x30) >> 4 {
+	case 0x0:
 		h.Type = protocol.PacketTypeInitial
-	case 0x7e:
-		h.Type = protocol.PacketTypeRetry
-	case 0x7d:
-		h.Type = protocol.PacketTypeHandshake
-	case 0x7c:
+	case 0x1:
 		h.Type = protocol.PacketType0RTT
-	default:
-		return qerr.Error(qerr.InvalidPacketHeader, fmt.Sprintf("Received packet with invalid packet type: %d", h.typeByte&0x7f))
+	case 0x2:
+		h.Type = protocol.PacketTypeHandshake
+	case 0x3:
+		h.Type = protocol.PacketTypeRetry
 	}
 
 	if h.Type == protocol.PacketTypeRetry {
