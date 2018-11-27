@@ -98,7 +98,8 @@ var _ Listener = &server{}
 var _ unknownPacketHandler = &server{}
 
 // ListenAddr creates a QUIC server listening on a given address.
-// The tls.Config must not be nil, the quic.Config may be nil.
+// The tls.Config must not be nil and must contain a certificate configuration.
+// The quic.Config may be nil, in that case the default values will be used.
 func ListenAddr(addr string, tlsConf *tls.Config, config *Config) (Listener, error) {
 	udpAddr, err := net.ResolveUDPAddr("udp", addr)
 	if err != nil {
@@ -117,7 +118,11 @@ func ListenAddr(addr string, tlsConf *tls.Config, config *Config) (Listener, err
 }
 
 // Listen listens for QUIC connections on a given net.PacketConn.
-// The tls.Config must not be nil, the quic.Config may be nil.
+// A single PacketConn only be used for a single call to Listen.
+// The PacketConn can be used for simultaneous calls to Dial.
+// QUIC connection IDs are used for demultiplexing the different connections.
+// The tls.Config must not be nil and must contain a certificate configuration.
+// The quic.Config may be nil, in that case the default values will be used.
 func Listen(conn net.PacketConn, tlsConf *tls.Config, config *Config) (Listener, error) {
 	return listen(conn, tlsConf, config)
 }

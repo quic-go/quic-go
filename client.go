@@ -59,6 +59,7 @@ var (
 )
 
 // DialAddr establishes a new QUIC connection to a server.
+// It uses a new UDP connection and closes this connection when the QUIC session is closed.
 // The hostname for SNI is taken from the given address.
 func DialAddr(
 	addr string,
@@ -69,7 +70,7 @@ func DialAddr(
 }
 
 // DialAddrContext establishes a new QUIC connection to a server using the provided context.
-// The hostname for SNI is taken from the given address.
+// See DialAddr for details.
 func DialAddrContext(
 	ctx context.Context,
 	addr string,
@@ -88,6 +89,8 @@ func DialAddrContext(
 }
 
 // Dial establishes a new QUIC connection to a server using a net.PacketConn.
+// The same PacketConn can be used for multiple calls to Dial and Listen,
+// QUIC connection IDs are used for demultiplexing the different connections.
 // The host parameter is used for SNI.
 func Dial(
 	pconn net.PacketConn,
@@ -100,7 +103,7 @@ func Dial(
 }
 
 // DialContext establishes a new QUIC connection to a server using a net.PacketConn using the provided context.
-// The host parameter is used for SNI.
+// See Dial for details.
 func DialContext(
 	ctx context.Context,
 	pconn net.PacketConn,
