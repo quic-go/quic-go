@@ -295,9 +295,7 @@ func (c *client) handlePacket(p *receivedPacket) {
 	}
 
 	if p.hdr.Type == protocol.PacketTypeRetry {
-		c.mutex.Lock()
-		c.handleRetryPacket(p.hdr)
-		c.mutex.Unlock()
+		go c.handleRetryPacket(p.hdr)
 		return
 	}
 
@@ -347,6 +345,9 @@ func (c *client) handleVersionNegotiationPacket(hdr *wire.Header) {
 }
 
 func (c *client) handleRetryPacket(hdr *wire.Header) {
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
+
 	c.logger.Debugf("<- Received Retry")
 	(&wire.ExtendedHeader{Header: *hdr}).Log(c.logger)
 	if !hdr.OrigDestConnectionID.Equal(c.destConnID) {
