@@ -5,7 +5,6 @@ import (
 	"context"
 	"crypto/tls"
 	"errors"
-	"fmt"
 	"net"
 	"os"
 	"time"
@@ -734,19 +733,5 @@ var _ = Describe("Client", func() {
 	It("tells its version", func() {
 		Expect(cl.version).ToNot(BeZero())
 		Expect(cl.GetVersion()).To(Equal(cl.version))
-	})
-
-	It("ignores packets with the wrong destination connection ID", func() {
-		cl.session = NewMockQuicSession(mockCtrl) // don't EXPECT any handlePacket calls
-		connID2 := protocol.ConnectionID{8, 7, 6, 5, 4, 3, 2, 1}
-		Expect(connID).ToNot(Equal(connID2))
-		Expect(cl.handlePacketImpl(&receivedPacket{
-			remoteAddr: addr,
-			hdr: &wire.Header{
-				DestConnectionID: connID2,
-				SrcConnectionID:  connID,
-				Version:          cl.version,
-			},
-		})).To(MatchError(fmt.Sprintf("received a packet with an unexpected connection ID (0x0807060504030201, expected %s)", connID)))
 	})
 })

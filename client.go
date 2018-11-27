@@ -308,11 +308,6 @@ func (c *client) handlePacketImpl(p *receivedPacket) error {
 		return err
 	}
 
-	// reject packets with the wrong connection ID
-	if !p.hdr.DestConnectionID.Equal(c.srcConnID) {
-		return fmt.Errorf("received a packet with an unexpected connection ID (%s, expected %s)", p.hdr.DestConnectionID, c.srcConnID)
-	}
-
 	if p.hdr.Type == protocol.PacketTypeRetry {
 		c.handleRetryPacket(p.hdr)
 		return nil
