@@ -162,8 +162,6 @@ func (h *packetHandlerMap) listen() {
 }
 
 func (h *packetHandlerMap) handlePacket(addr net.Addr, data []byte) error {
-	rcvTime := time.Now()
-
 	r := bytes.NewReader(data)
 	hdr, err := wire.ParseHeader(r, h.connIDLen)
 	// drop the packet if we can't parse the header
@@ -171,42 +169,39 @@ func (h *packetHandlerMap) handlePacket(addr net.Addr, data []byte) error {
 		return fmt.Errorf("error parsing header: %s", err)
 	}
 
-	h.mutex.RLock()
-	handlerEntry, handlerFound := h.handlers[string(hdr.DestConnectionID)]
-	server := h.server
-
-	var handlePacket func(*receivedPacket)
-	if handlerFound { // existing session
-		handler := handlerEntry.handler
-		handlePacket = handler.handlePacket
-	} else { // no session found
-		// this might be a stateless reset
-		if !hdr.IsLongHeader {
-			if len(data) >= protocol.MinStatelessResetSize {
-				var token [16]byte
-				copy(token[:], data[len(data)-16:])
-				if sess, ok := h.resetTokens[token]; ok {
-					h.mutex.RUnlock()
-					sess.destroy(errors.New("received a stateless reset"))
-					return nil
-				}
-			}
-			// TODO(#943): send a stateless reset
-			return fmt.Errorf("received a short header packet with an unexpected connection ID %s", hdr.DestConnectionID)
-		}
-		if server == nil { // no server set
-			h.mutex.RUnlock()
-			return fmt.Errorf("received a packet with an unexpected connection ID %s", hdr.DestConnectionID)
-		}
-		handlePacket = server.handlePacket
-	}
-	h.mutex.RUnlock()
-
-	handlePacket(&receivedPacket{
+	p := &receivedPacket{
 		remoteAddr: addr,
 		hdr:        hdr,
 		data:       data,
-		rcvTime:    rcvTime,
-	})
+		rcvTime:    time.Now(),
+	}
+
+	h.mutex.RLock()
+	defer h.mutex.RUnlock()
+
+	handlerEntry, handlerFound := h.handlers[string(hdr.DestConnectionID)]
+
+	if handlerFound { // existing session
+		handlerEntry.handler.handlePacket(p)
+		return nil
+	}
+	// No session found.
+	// This might be a stateless reset.
+	if !hdr.IsLongHeader {
+		if len(data) >= protocol.MinStatelessResetSize {
+			var token [16]byte
+			copy(token[:], data[len(data)-16:])
+			if sess, ok := h.resetTokens[token]; ok {
+				sess.destroy(errors.New("received a stateless reset"))
+				return nil
+			}
+		}
+		// TODO(#943): send a stateless reset
+		return fmt.Errorf("received a short header packet with an unexpected connection ID %s", hdr.DestConnectionID)
+	}
+	if h.server == nil { // no server set
+		return fmt.Errorf("received a packet with an unexpected connection ID %s", hdr.DestConnectionID)
+	}
+	h.server.handlePacket(p)
 	return nil
 }
