@@ -164,7 +164,18 @@ func newClient(
 			}
 		}
 	}
+
+	srcConnID, err := generateConnectionID(config.ConnectionIDLength)
+	if err != nil {
+		return nil, err
+	}
+	destConnID, err := generateConnectionIDForInitial()
+	if err != nil {
+		return nil, err
+	}
 	c := &client{
+		srcConnID:         srcConnID,
+		destConnID:        destConnID,
 		conn:              &conn{pconn: pconn, currentAddr: remoteAddr},
 		createdPacketConn: createdPacketConn,
 		tlsConf:           tlsConf,
@@ -173,7 +184,7 @@ func newClient(
 		handshakeChan:     make(chan struct{}),
 		logger:            utils.DefaultLogger.WithPrefix("client"),
 	}
-	return c, c.generateConnectionIDs()
+	return c, nil
 }
 
 // populateClientConfig populates fields in the quic.Config with their default values, if none are set
@@ -232,20 +243,6 @@ func populateClientConfig(config *Config, createdPacketConn bool) *Config {
 		MaxIncomingUniStreams:                 maxIncomingUniStreams,
 		KeepAlive:                             config.KeepAlive,
 	}
-}
-
-func (c *client) generateConnectionIDs() error {
-	srcConnID, err := generateConnectionID(c.config.ConnectionIDLength)
-	if err != nil {
-		return err
-	}
-	destConnID, err := generateConnectionIDForInitial()
-	if err != nil {
-		return err
-	}
-	c.srcConnID = srcConnID
-	c.destConnID = destConnID
-	return nil
 }
 
 func (c *client) dial(ctx context.Context) error {
@@ -358,9 +355,6 @@ func (c *client) handleVersionNegotiationPacket(hdr *wire.Header) error {
 	// switch to negotiated version
 	c.initialVersion = c.version
 	c.version = newVersion
-	if err := c.generateConnectionIDs(); err != nil {
-		return err
-	}
 
 	c.logger.Infof("Switching to QUIC version %s. New connection ID: %s", newVersion, c.destConnID)
 	c.session.destroy(errCloseSessionForNewVersion)
