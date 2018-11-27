@@ -23,10 +23,13 @@ defaults: &defaults
         command: ginkgo -race -randomizeAllSpecs -trace benchmark -- -samples=1 -size=10
     - run:
         name: "Run tools tests"
-        command: ginkgo -r -v -randomizeAllSpecs -trace integrationtests/tools
+        command: ginkgo -race -r -v -randomizeAllSpecs -trace integrationtests/tools
     - run:
         name: "Run self integration tests"
         command: ginkgo -v -randomizeAllSpecs -trace integrationtests/self
+    - run:
+        name: "Run self integration tests with race detector"
+        command: ginkgo -race -v -randomizeAllSpecs -trace integrationtests/self
 
 version: 2
 jobs:
