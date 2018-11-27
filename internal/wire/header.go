@@ -2,7 +2,7 @@ package wire
 
 import (
 	"bytes"
-	"fmt"
+	"errors"
 	"io"
 
 	"github.com/lucas-clemente/quic-go/internal/protocol"
@@ -55,6 +55,9 @@ func parseHeaderImpl(b *bytes.Reader, shortHeaderConnIDLen int) (*Header, error)
 	}
 
 	if !h.IsLongHeader {
+		if h.typeByte&0x40 == 0 {
+			return nil, errors.New("not a QUIC packet")
+		}
 		if err := h.parseShortHeader(b, shortHeaderConnIDLen); err != nil {
 			return nil, err
 		}
@@ -78,6 +81,9 @@ func (h *Header) parseLongHeader(b *bytes.Reader) error {
 		return err
 	}
 	h.Version = protocol.VersionNumber(v)
+	if !h.IsVersionNegotiation() && h.typeByte&0x40 == 0 {
+		return errors.New("not a QUIC packet")
+	}
 	connIDLenByte, err := b.ReadByte()
 	if err != nil {
 		return err
@@ -99,17 +105,19 @@ func (h *Header) parseLongHeader(b *bytes.Reader) error {
 		return nil
 	}
 
-	h.Type = protocol.PacketType(h.typeByte & 0x7f)
-	if h.Type != protocol.PacketTypeInitial && h.Type != protocol.PacketTypeRetry && h.Type != protocol.PacketType0RTT && h.Type != protocol.PacketTypeHandshake {
-		return qerr.Error(qerr.InvalidPacketHeader, fmt.Sprintf("Received packet with invalid packet type: %d", h.Type))
+	switch (h.typeByte & 0x30) >> 4 {
+	case 0x0:
+		h.Type = protocol.PacketTypeInitial
+	case 0x1:
+		h.Type = protocol.PacketType0RTT
+	case 0x2:
+		h.Type = protocol.PacketTypeHandshake
+	case 0x3:
+		h.Type = protocol.PacketTypeRetry
 	}
 
 	if h.Type == protocol.PacketTypeRetry {
-		odcilByte, err := b.ReadByte()
-		if err != nil {
-			return err
-		}
-		odcil := decodeSingleConnIDLen(odcilByte & 0xf)
+		odcil := decodeSingleConnIDLen(h.typeByte & 0xf)
 		h.OrigDestConnectionID, err = protocol.ReadConnectionID(b, odcil)
 		if err != nil {
 			return err
@@ -166,9 +174,6 @@ func (h *Header) IsVersionNegotiation() bool {
 // ParseExtended parses the version dependent part of the header.
 // The Reader has to be set such that it points to the first byte of the header.
 func (h *Header) ParseExtended(b *bytes.Reader, ver protocol.VersionNumber) (*ExtendedHeader, error) {
-	if _, err := b.Seek(int64(h.len), io.SeekCurrent); err != nil {
-		return nil, err
-	}
 	return h.toExtendedHeader().parse(b, ver)
 }
 

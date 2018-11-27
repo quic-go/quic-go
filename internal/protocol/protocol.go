@@ -7,32 +7,18 @@ import (
 // A PacketNumber in QUIC
 type PacketNumber uint64
 
-// PacketNumberLen is the length of the packet number in bytes
-type PacketNumberLen uint8
-
-const (
-	// PacketNumberLenInvalid is the default value and not a valid length for a packet number
-	PacketNumberLenInvalid PacketNumberLen = 0
-	// PacketNumberLen1 is a packet number length of 1 byte
-	PacketNumberLen1 PacketNumberLen = 1
-	// PacketNumberLen2 is a packet number length of 2 bytes
-	PacketNumberLen2 PacketNumberLen = 2
-	// PacketNumberLen4 is a packet number length of 4 bytes
-	PacketNumberLen4 PacketNumberLen = 4
-)
-
 // The PacketType is the Long Header Type
 type PacketType uint8
 
 const (
 	// PacketTypeInitial is the packet type of an Initial packet
-	PacketTypeInitial PacketType = 0x7f
+	PacketTypeInitial PacketType = 1 + iota
 	// PacketTypeRetry is the packet type of a Retry packet
-	PacketTypeRetry PacketType = 0x7e
+	PacketTypeRetry
 	// PacketTypeHandshake is the packet type of a Handshake packet
-	PacketTypeHandshake PacketType = 0x7d
+	PacketTypeHandshake
 	// PacketType0RTT is the packet type of a 0-RTT packet
-	PacketType0RTT PacketType = 0x7c
+	PacketType0RTT
 )
 
 func (t PacketType) String() string {

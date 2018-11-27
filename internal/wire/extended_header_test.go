@@ -21,12 +21,6 @@ var _ = Describe("Header", func() {
 			buf = &bytes.Buffer{}
 		})
 
-		appendPacketNumber := func(data []byte, pn protocol.PacketNumber, pnLen protocol.PacketNumberLen) []byte {
-			buf := &bytes.Buffer{}
-			utils.WriteVarIntPacketNumber(buf, pn, pnLen)
-			return append(data, buf.Bytes()...)
-		}
-
 		Context("Long Header", func() {
 			srcConnID := protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8}
 
@@ -34,24 +28,24 @@ var _ = Describe("Header", func() {
 				Expect((&ExtendedHeader{
 					Header: Header{
 						IsLongHeader:     true,
+						Type:             protocol.PacketTypeHandshake,
 						DestConnectionID: protocol.ConnectionID{0xde, 0xad, 0xbe, 0xef, 0xca, 0xfe},
 						SrcConnectionID:  protocol.ConnectionID{0xde, 0xca, 0xfb, 0xad, 0x0, 0x0, 0x13, 0x37},
 						Version:          0x1020304,
 						Length:           0xcafe,
-						Type:             0x5,
 					},
 					PacketNumber:    0xdecaf,
-					PacketNumberLen: protocol.PacketNumberLen4,
+					PacketNumberLen: protocol.PacketNumberLen3,
 				}).Write(buf, versionIETFHeader)).To(Succeed())
 				expected := []byte{
-					0x80 ^ 0x5,
+					0xc0 | 0x2<<4 | 0x2,
 					0x1, 0x2, 0x3, 0x4, // version number
 					0x35,                               // connection ID lengths
 					0xde, 0xad, 0xbe, 0xef, 0xca, 0xfe, // dest connection ID
 					0xde, 0xca, 0xfb, 0xad, 0x0, 0x0, 0x13, 0x37, // source connection ID
 				}
-				expected = append(expected, encodeVarInt(0xcafe)...) // length
-				expected = appendPacketNumber(expected, 0xdecaf, protocol.PacketNumberLen4)
+				expected = append(expected, encodeVarInt(0xcafe)...)    // length
+				expected = append(expected, []byte{0xd, 0xec, 0xaf}...) // packet number
 				Expect(buf.Bytes()).To(Equal(expected))
 			})
 
@@ -126,14 +120,14 @@ var _ = Describe("Header", func() {
 					Token:                token,
 					OrigDestConnectionID: protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8, 9},
 				}}).Write(buf, versionIETFHeader)).To(Succeed())
-				Expect(buf.Bytes()[:6]).To(Equal([]byte{
-					0x80 ^ uint8(protocol.PacketTypeRetry),
-					0x1, 0x2, 0x3, 0x4, // version number
-					0x0, // connection ID lengths))
-				}))
-				Expect(buf.Bytes()[6] & 0xf).To(Equal(uint8(6)))
-				Expect(buf.Bytes()[7 : 7+9]).To(Equal([]byte{1, 2, 3, 4, 5, 6, 7, 8, 9})) // Orig Dest Connection ID
-				Expect(buf.Bytes()[7+9:]).To(Equal(token))
+				expected := []byte{
+					0xc0 | 0x3<<4 | 9 - 3, /* orig dest connection ID length */
+					0x1, 0x2, 0x3, 0x4,    // version number
+					0x0,                       // connection ID lengths))
+					1, 2, 3, 4, 5, 6, 7, 8, 9, // Orig Dest Connection ID
+				}
+				expected = append(expected, token...)
+				Expect(buf.Bytes()).To(Equal(expected))
 			})
 
 			It("refuses to write a Retry packet with an invalid Orig Destination Connection ID length", func() {
@@ -158,7 +152,7 @@ var _ = Describe("Header", func() {
 					PacketNumber:    0x42,
 				}).Write(buf, versionIETFHeader)).To(Succeed())
 				Expect(buf.Bytes()).To(Equal([]byte{
-					0x30,
+					0x40,
 					0xde, 0xad, 0xbe, 0xef, 0xca, 0xfe, 0x13, 0x37, // connection ID
 					0x42, // packet number
 				}))
@@ -170,7 +164,7 @@ var _ = Describe("Header", func() {
 					PacketNumber:    0x42,
 				}).Write(buf, versionIETFHeader)).To(Succeed())
 				Expect(buf.Bytes()).To(Equal([]byte{
-					0x30,
+					0x40,
 					0x42, // packet number
 				}))
 			})
@@ -180,27 +174,27 @@ var _ = Describe("Header", func() {
 					PacketNumberLen: protocol.PacketNumberLen2,
 					PacketNumber:    0x765,
 				}).Write(buf, versionIETFHeader)).To(Succeed())
-				expected := []byte{0x30}
-				expected = appendPacketNumber(expected, 0x765, protocol.PacketNumberLen2)
+				expected := []byte{0x40 | 0x1}
+				expected = append(expected, []byte{0x7, 0x65}...) // packet number
 				Expect(buf.Bytes()).To(Equal(expected))
 			})
 
 			It("writes a header with a 4 byte packet number", func() {
 				Expect((&ExtendedHeader{
 					PacketNumberLen: protocol.PacketNumberLen4,
-					PacketNumber:    0x123456,
+					PacketNumber:    0x12345678,
 				}).Write(buf, versionIETFHeader)).To(Succeed())
-				expected := []byte{0x30}
-				expected = appendPacketNumber(expected, 0x123456, protocol.PacketNumberLen4)
+				expected := []byte{0x40 | 0x3}
+				expected = append(expected, []byte{0x12, 0x34, 0x56, 0x78}...)
 				Expect(buf.Bytes()).To(Equal(expected))
 			})
 
 			It("errors when given an invalid packet number length", func() {
 				err := (&ExtendedHeader{
-					PacketNumberLen: 3,
+					PacketNumberLen: 5,
 					PacketNumber:    0xdecafbad,
 				}).Write(buf, versionIETFHeader)
-				Expect(err).To(MatchError("invalid packet number length: 3"))
+				Expect(err).To(MatchError("invalid packet number length: 5"))
 			})
 
 			It("writes the Key Phase Bit", func() {
@@ -210,7 +204,7 @@ var _ = Describe("Header", func() {
 					PacketNumber:    0x42,
 				}).Write(buf, versionIETFHeader)).To(Succeed())
 				Expect(buf.Bytes()).To(Equal([]byte{
-					0x30 | 0x40,
+					0x40 | 0x4,
 					0x42, // packet number
 				}))
 			})
@@ -228,6 +222,7 @@ var _ = Describe("Header", func() {
 			h := &ExtendedHeader{
 				Header: Header{
 					IsLongHeader:     true,
+					Type:             protocol.PacketTypeHandshake,
 					DestConnectionID: protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8},
 					SrcConnectionID:  protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8},
 					Length:           1,
@@ -244,6 +239,7 @@ var _ = Describe("Header", func() {
 			h := &ExtendedHeader{
 				Header: Header{
 					IsLongHeader:     true,
+					Type:             protocol.PacketTypeHandshake,
 					DestConnectionID: protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8},
 					SrcConnectionID:  protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8},
 					Length:           1500,
@@ -260,10 +256,10 @@ var _ = Describe("Header", func() {
 			h := &ExtendedHeader{
 				Header: Header{
 					IsLongHeader:     true,
+					Type:             protocol.PacketTypeInitial,
 					DestConnectionID: protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8},
 					SrcConnectionID:  protocol.ConnectionID{1, 2, 3, 4},
 					Length:           1500,
-					Type:             protocol.PacketTypeInitial,
 				},
 				PacketNumberLen: protocol.PacketNumberLen2,
 			}
