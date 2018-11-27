@@ -5,7 +5,6 @@ import (
 	"context"
 	"crypto/tls"
 	"errors"
-	"fmt"
 	"net"
 	"os"
 	"time"
@@ -680,33 +679,36 @@ var _ = Describe("Client", func() {
 				sess.EXPECT().handlePacket(gomock.Any())
 				cl.session = sess
 				cl.config = &Config{}
-				err := cl.handlePacketImpl(&receivedPacket{
+				cl.handlePacket(&receivedPacket{
 					hdr: &wire.Header{
 						DestConnectionID: connID,
 						SrcConnectionID:  connID,
 						Version:          cl.version,
 					},
 				})
-				Expect(err).ToNot(HaveOccurred())
-				Expect(cl.versionNegotiated).To(BeTrue())
+				Eventually(cl.versionNegotiated.Get()).Should(BeTrue())
 			})
 
 			It("errors if no matching version is found", func() {
 				sess := NewMockQuicSession(mockCtrl)
-				sess.EXPECT().destroy(qerr.InvalidVersion)
+				done := make(chan struct{})
+				sess.EXPECT().destroy(qerr.InvalidVersion).Do(func(error) { close(done) })
 				cl.session = sess
 				cl.config = &Config{Versions: protocol.SupportedVersions}
 				cl.handlePacket(composeVersionNegotiationPacket(connID, []protocol.VersionNumber{1}))
+				Eventually(done).Should(BeClosed())
 			})
 
 			It("errors if the version is supported by quic-go, but disabled by the quic.Config", func() {
 				sess := NewMockQuicSession(mockCtrl)
-				sess.EXPECT().destroy(qerr.InvalidVersion)
+				done := make(chan struct{})
+				sess.EXPECT().destroy(qerr.InvalidVersion).Do(func(error) { close(done) })
 				cl.session = sess
 				v := protocol.VersionNumber(1234)
 				Expect(v).ToNot(Equal(cl.version))
 				cl.config = &Config{Versions: protocol.SupportedVersions}
 				cl.handlePacket(composeVersionNegotiationPacket(connID, []protocol.VersionNumber{v}))
+				Eventually(done).Should(BeClosed())
 			})
 
 			It("changes to the version preferred by the quic.Config", func() {
@@ -714,11 +716,15 @@ var _ = Describe("Client", func() {
 				cl.packetHandlers = phm
 
 				sess := NewMockQuicSession(mockCtrl)
-				sess.EXPECT().destroy(errCloseSessionForNewVersion)
+				destroyed := make(chan struct{})
+				sess.EXPECT().destroy(errCloseSessionForNewVersion).Do(func(error) {
+					close(destroyed)
+				})
 				cl.session = sess
 				versions := []protocol.VersionNumber{1234, 4321}
 				cl.config = &Config{Versions: versions}
 				cl.handlePacket(composeVersionNegotiationPacket(connID, versions))
+				Eventually(destroyed).Should(BeClosed())
 				Expect(cl.version).To(Equal(protocol.VersionNumber(1234)))
 			})
 
@@ -734,19 +740,5 @@ var _ = Describe("Client", func() {
 	It("tells its version", func() {
 		Expect(cl.version).ToNot(BeZero())
 		Expect(cl.GetVersion()).To(Equal(cl.version))
-	})
-
-	It("ignores packets with the wrong destination connection ID", func() {
-		cl.session = NewMockQuicSession(mockCtrl) // don't EXPECT any handlePacket calls
-		connID2 := protocol.ConnectionID{8, 7, 6, 5, 4, 3, 2, 1}
-		Expect(connID).ToNot(Equal(connID2))
-		Expect(cl.handlePacketImpl(&receivedPacket{
-			remoteAddr: addr,
-			hdr: &wire.Header{
-				DestConnectionID: connID2,
-				SrcConnectionID:  connID,
-				Version:          cl.version,
-			},
-		})).To(MatchError(fmt.Sprintf("received a packet with an unexpected connection ID (0x0807060504030201, expected %s)", connID)))
 	})
 })

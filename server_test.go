@@ -113,7 +113,7 @@ var _ = Describe("Server", func() {
 					Version:          serv.config.Versions[0],
 				},
 			})
-			Expect(conn.dataWritten.Len()).To(BeZero())
+			Consistently(conn.dataWritten).ShouldNot(Receive())
 		})
 
 		It("drops too small Initial", func() {
@@ -126,7 +126,7 @@ var _ = Describe("Server", func() {
 				},
 				data: bytes.Repeat([]byte{0}, protocol.MinInitialPacketSize-100),
 			})
-			Consistently(conn.dataWritten.Len).Should(BeZero())
+			Consistently(conn.dataWritten).ShouldNot(Receive())
 		})
 
 		It("drops packets with a too short connection ID", func() {
@@ -140,7 +140,7 @@ var _ = Describe("Server", func() {
 				},
 				data: bytes.Repeat([]byte{0}, protocol.MinInitialPacketSize),
 			})
-			Consistently(conn.dataWritten.Len).Should(BeZero())
+			Consistently(conn.dataWritten).ShouldNot(Receive())
 		})
 
 		It("drops non-Initial packets", func() {
@@ -208,6 +208,7 @@ var _ = Describe("Server", func() {
 			srcConnID := protocol.ConnectionID{1, 2, 3, 4, 5}
 			destConnID := protocol.ConnectionID{1, 2, 3, 4, 5, 6}
 			serv.handlePacket(&receivedPacket{
+				remoteAddr: &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 1337},
 				hdr: &wire.Header{
 					IsLongHeader:     true,
 					Type:             protocol.PacketTypeInitial,
@@ -216,8 +217,10 @@ var _ = Describe("Server", func() {
 					Version:          0x42,
 				},
 			})
-			Expect(conn.dataWritten.Len()).ToNot(BeZero())
-			hdr, err := wire.ParseHeader(bytes.NewReader(conn.dataWritten.Bytes()), 0)
+			var write mockPacketConnWrite
+			Eventually(conn.dataWritten).Should(Receive(&write))
+			Expect(write.to.String()).To(Equal("127.0.0.1:1337"))
+			hdr, err := wire.ParseHeader(bytes.NewReader(write.data), 0)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(hdr.IsVersionNegotiation()).To(BeTrue())
 			Expect(hdr.DestConnectionID).To(Equal(srcConnID))
@@ -234,12 +237,14 @@ var _ = Describe("Server", func() {
 				Version:          protocol.VersionTLS,
 			}
 			serv.handleInitial(&receivedPacket{
-				remoteAddr: &net.UDPAddr{},
+				remoteAddr: &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 1337},
 				hdr:        hdr,
 				data:       bytes.Repeat([]byte{0}, protocol.MinInitialPacketSize),
 			})
-			Expect(conn.dataWritten.Len()).ToNot(BeZero())
-			replyHdr := parseHeader(conn.dataWritten.Bytes())
+			var write mockPacketConnWrite
+			Eventually(conn.dataWritten).Should(Receive(&write))
+			Expect(write.to.String()).To(Equal("127.0.0.1:1337"))
+			replyHdr := parseHeader(write.data)
 			Expect(replyHdr.Type).To(Equal(protocol.PacketTypeRetry))
 			Expect(replyHdr.SrcConnectionID).ToNot(Equal(hdr.DestConnectionID))
 			Expect(replyHdr.DestConnectionID).To(Equal(hdr.SrcConnectionID))
@@ -288,7 +293,7 @@ var _ = Describe("Server", func() {
 				defer GinkgoRecover()
 				serv.handlePacket(p)
 				// the Handshake packet is written by the session
-				Expect(conn.dataWritten.Len()).To(BeZero())
+				Consistently(conn.dataWritten).ShouldNot(Receive())
 				close(done)
 			}()
 			// make sure we're using a server-generated connection ID

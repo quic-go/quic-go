@@ -304,23 +304,17 @@ func (s *server) Addr() net.Addr {
 }
 
 func (s *server) handlePacket(p *receivedPacket) {
-	if err := s.handlePacketImpl(p); err != nil {
-		s.logger.Debugf("error handling packet from %s: %s", p.remoteAddr, err)
-	}
-}
-
-func (s *server) handlePacketImpl(p *receivedPacket) error {
 	hdr := p.hdr
 
 	// send a Version Negotiation Packet if the client is speaking a different protocol version
 	if !protocol.IsSupportedVersion(s.config.Versions, hdr.Version) {
-		return s.sendVersionNegotiationPacket(p)
+		go s.sendVersionNegotiationPacket(p)
+		return
 	}
 	if hdr.Type == protocol.PacketTypeInitial {
 		go s.handleInitial(p)
 	}
 	// TODO(#943): send Stateless Reset
-	return nil
 }
 
 func (s *server) handleInitial(p *receivedPacket) {
@@ -455,14 +449,15 @@ func (s *server) sendRetry(remoteAddr net.Addr, hdr *wire.Header) error {
 	return nil
 }
 
-func (s *server) sendVersionNegotiationPacket(p *receivedPacket) error {
+func (s *server) sendVersionNegotiationPacket(p *receivedPacket) {
 	hdr := p.hdr
-	s.logger.Debugf("Client offered version %s, sending VersionNegotiationPacket", hdr.Version)
-
+	s.logger.Debugf("Client offered version %s, sending Version Negotiation", hdr.Version)
 	data, err := wire.ComposeVersionNegotiation(hdr.SrcConnectionID, hdr.DestConnectionID, s.config.Versions)
 	if err != nil {
-		return err
+		s.logger.Debugf("Error composing Version Negotiation: %s", err)
+		return
 	}
-	_, err = s.conn.WriteTo(data, p.remoteAddr)
-	return err
+	if _, err := s.conn.WriteTo(data, p.remoteAddr); err != nil {
+		s.logger.Debugf("Error sending Version Negotiation: %s", err)
+	}
 }
