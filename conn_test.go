@@ -1,7 +1,6 @@
 package quic
 
 import (
-	"bytes"
 	"errors"
 	"net"
 	"time"
@@ -10,19 +9,24 @@ import (
 	. "github.com/onsi/gomega"
 )
 
+type mockPacketConnWrite struct {
+	data []byte
+	to   net.Addr
+}
+
 type mockPacketConn struct {
-	addr          net.Addr
-	dataToRead    chan []byte
-	dataReadFrom  net.Addr
-	readErr       error
-	dataWritten   bytes.Buffer
-	dataWrittenTo net.Addr
-	closed        bool
+	addr         net.Addr
+	dataToRead   chan []byte
+	dataReadFrom net.Addr
+	readErr      error
+	dataWritten  chan mockPacketConnWrite
+	closed       bool
 }
 
 func newMockPacketConn() *mockPacketConn {
 	return &mockPacketConn{
-		dataToRead: make(chan []byte, 1000),
+		dataToRead:  make(chan []byte, 1000),
+		dataWritten: make(chan mockPacketConnWrite, 1000),
 	}
 }
 
@@ -37,10 +41,16 @@ func (c *mockPacketConn) ReadFrom(b []byte) (int, net.Addr, error) {
 	n := copy(b, data)
 	return n, c.dataReadFrom, nil
 }
+
 func (c *mockPacketConn) WriteTo(b []byte, addr net.Addr) (n int, err error) {
-	c.dataWrittenTo = addr
-	return c.dataWritten.Write(b)
+	select {
+	case c.dataWritten <- mockPacketConnWrite{to: addr, data: b}:
+		return len(b), nil
+	default:
+		panic("channel full")
+	}
 }
+
 func (c *mockPacketConn) Close() error {
 	if !c.closed {
 		close(c.dataToRead)
@@ -72,10 +82,11 @@ var _ = Describe("Connection", func() {
 	})
 
 	It("writes", func() {
-		err := c.Write([]byte("foobar"))
-		Expect(err).ToNot(HaveOccurred())
-		Expect(packetConn.dataWritten.Bytes()).To(Equal([]byte("foobar")))
-		Expect(packetConn.dataWrittenTo.String()).To(Equal("192.168.100.200:1337"))
+		Expect(c.Write([]byte("foobar"))).To(Succeed())
+		var write mockPacketConnWrite
+		Expect(packetConn.dataWritten).To(Receive(&write))
+		Expect(write.to.String()).To(Equal("192.168.100.200:1337"))
+		Expect(write.data).To(Equal([]byte("foobar")))
 	})
 
 	It("reads", func() {
