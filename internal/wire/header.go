@@ -117,11 +117,7 @@ func (h *Header) parseLongHeader(b *bytes.Reader) error {
 	}
 
 	if h.Type == protocol.PacketTypeRetry {
-		odcilByte, err := b.ReadByte()
-		if err != nil {
-			return err
-		}
-		odcil := decodeSingleConnIDLen(odcilByte & 0xf)
+		odcil := decodeSingleConnIDLen(h.typeByte & 0xf)
 		h.OrigDestConnectionID, err = protocol.ReadConnectionID(b, odcil)
 		if err != nil {
 			return err

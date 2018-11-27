@@ -171,10 +171,9 @@ var _ = Describe("Header Parsing", func() {
 		})
 
 		It("parses a Retry packet", func() {
-			data := []byte{0xc0 ^ 0x3<<4}
+			data := []byte{0xc0 | 0x3<<4 | (10 - 3) /* connection ID length */}
 			data = appendVersion(data, versionIETFFrames)
 			data = append(data, 0x0)                                      // connection ID lengths
-			data = append(data, 0x97)                                     // Orig Destination Connection ID length
 			data = append(data, []byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}...) // source connection ID
 			data = append(data, []byte{'f', 'o', 'o', 'b', 'a', 'r'}...)  // token
 			b := bytes.NewReader(data)

@@ -120,14 +120,14 @@ var _ = Describe("Header", func() {
 					Token:                token,
 					OrigDestConnectionID: protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8, 9},
 				}}).Write(buf, versionIETFHeader)).To(Succeed())
-				Expect(buf.Bytes()[:6]).To(Equal([]byte{
-					0xc0 | 0x3<<4,
-					0x1, 0x2, 0x3, 0x4, // version number
-					0x0, // connection ID lengths))
-				}))
-				Expect(buf.Bytes()[6] & 0xf).To(Equal(uint8(6)))
-				Expect(buf.Bytes()[7 : 7+9]).To(Equal([]byte{1, 2, 3, 4, 5, 6, 7, 8, 9})) // Orig Dest Connection ID
-				Expect(buf.Bytes()[7+9:]).To(Equal(token))
+				expected := []byte{
+					0xc0 | 0x3<<4 | 9 - 3, /* orig dest connection ID length */
+					0x1, 0x2, 0x3, 0x4,    // version number
+					0x0,                       // connection ID lengths))
+					1, 2, 3, 4, 5, 6, 7, 8, 9, // Orig Dest Connection ID
+				}
+				expected = append(expected, token...)
+				Expect(buf.Bytes()).To(Equal(expected))
 			})
 
 			It("refuses to write a Retry packet with an invalid Orig Destination Connection ID length", func() {

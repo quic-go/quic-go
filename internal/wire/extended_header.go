@@ -2,7 +2,6 @@ package wire
 
 import (
 	"bytes"
-	"crypto/rand"
 	"errors"
 	"fmt"
 	"io"
@@ -94,9 +93,16 @@ func (h *ExtendedHeader) writeLongHeader(b *bytes.Buffer, v protocol.VersionNumb
 		packetType = 0x3
 	}
 	firstByte := 0xc0 | packetType<<4
-	if h.Type != protocol.PacketTypeRetry { // Retry packets don't have a packet number
+	if h.Type == protocol.PacketTypeRetry {
+		odcil, err := encodeSingleConnIDLen(h.OrigDestConnectionID)
+		if err != nil {
+			return err
+		}
+		firstByte |= odcil
+	} else { // Retry packets don't have a packet number
 		firstByte |= uint8(h.PacketNumberLen - 1)
 	}
+
 	b.WriteByte(firstByte)
 	utils.BigEndian.WriteUint32(b, uint32(h.Version))
 	connIDLen, err := encodeConnIDLen(h.DestConnectionID, h.SrcConnectionID)
@@ -107,24 +113,14 @@ func (h *ExtendedHeader) writeLongHeader(b *bytes.Buffer, v protocol.VersionNumb
 	b.Write(h.DestConnectionID.Bytes())
 	b.Write(h.SrcConnectionID.Bytes())
 
-	if h.Type == protocol.PacketTypeInitial {
-		utils.WriteVarInt(b, uint64(len(h.Token)))
-		b.Write(h.Token)
-	}
-
-	if h.Type == protocol.PacketTypeRetry {
-		odcil, err := encodeSingleConnIDLen(h.OrigDestConnectionID)
-		if err != nil {
-			return err
-		}
-		// randomize the first 4 bits
-		odcilByte := make([]byte, 1)
-		_, _ = rand.Read(odcilByte) // it's safe to ignore the error here
-		odcilByte[0] = (odcilByte[0] & 0xf0) | odcil
-		b.Write(odcilByte)
+	switch h.Type {
+	case protocol.PacketTypeRetry:
 		b.Write(h.OrigDestConnectionID.Bytes())
 		b.Write(h.Token)
 		return nil
+	case protocol.PacketTypeInitial:
+		utils.WriteVarInt(b, uint64(len(h.Token)))
+		b.Write(h.Token)
 	}
 
 	utils.WriteVarInt(b, uint64(h.Length))
