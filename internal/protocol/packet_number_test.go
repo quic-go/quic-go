@@ -10,8 +10,8 @@ import (
 
 // Tests taken and extended from chrome
 var _ = Describe("packet number calculation", func() {
-	PIt("works with the example from the draft", func() {
-		Expect(InferPacketNumber(PacketNumberLen2, 0xa82f30ea, 0x9b32)).To(Equal(PacketNumber(0xa8309b32)))
+	It("works with the example from the draft", func() {
+		Expect(InferPacketNumber(PacketNumberLen2, 0xa82f30ea, 0x9b32)).To(Equal(PacketNumber(0xa82f9b32)))
 	})
 
 	getEpoch := func(len PacketNumberLen) uint64 {
