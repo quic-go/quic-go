@@ -36,7 +36,7 @@ var _ = Describe("Handshake tests", func() {
 		}
 	})
 
-	runServer := func() {
+	runServer := func() quic.Listener {
 		var err error
 		// start the server
 		server, err = quic.ListenAddr("localhost:0", testdata.GetTLSConfig(), serverConfig)
@@ -46,12 +46,12 @@ var _ = Describe("Handshake tests", func() {
 			defer GinkgoRecover()
 			defer close(acceptStopped)
 			for {
-				_, err := server.Accept()
-				if err != nil {
+				if _, err := server.Accept(); err != nil {
 					return
 				}
 			}
 		}()
+		return server
 	}
 
 	Context("Version Negotiation", func() {
@@ -70,7 +70,8 @@ var _ = Describe("Handshake tests", func() {
 			// the server doesn't support the highest supported version, which is the first one the client will try
 			// but it supports a bunch of versions that the client doesn't speak
 			serverConfig.Versions = []protocol.VersionNumber{7, 8, protocol.SupportedVersions[0], 9}
-			runServer()
+			server := runServer()
+			defer server.Close()
 			sess, err := quic.DialAddr(server.Addr().String(), &tls.Config{InsecureSkipVerify: true}, nil)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(sess.(versioner).GetVersion()).To(Equal(protocol.SupportedVersions[0]))
@@ -80,7 +81,8 @@ var _ = Describe("Handshake tests", func() {
 			// the server doesn't support the highest supported version, which is the first one the client will try
 			// but it supports a bunch of versions that the client doesn't speak
 			serverConfig.Versions = supportedVersions
-			runServer()
+			server := runServer()
+			defer server.Close()
 			conf := &quic.Config{
 				Versions: []protocol.VersionNumber{7, 8, 9, protocol.SupportedVersions[0], 10},
 			}
