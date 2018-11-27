@@ -72,11 +72,5 @@ const DefaultTCPMSS ByteCount = 1460
 // MinInitialPacketSize is the minimum size an Initial packet is required to have.
 const MinInitialPacketSize = 1200
 
-// MaxClientHellos is the maximum number of times we'll send a client hello
-// The value 3 accounts for:
-// * one failure due to an incorrect or missing source-address token
-// * one failure due the server's certificate chain being unavailable and the server being unwilling to send it without a valid source-address token
-const MaxClientHellos = 3
-
 // MinConnectionIDLenInitial is the minimum length of the destination connection ID on an Initial packet.
 const MinConnectionIDLenInitial = 8
