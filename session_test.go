@@ -479,13 +479,16 @@ var _ = Describe("Session", func() {
 				PacketNumber:    5,
 				PacketNumberLen: protocol.PacketNumberLen4,
 			}
+			rcvTime := time.Now().Add(-10 * time.Second)
 			unpacker.EXPECT().Unpack(gomock.Any(), gomock.Any(), gomock.Any()).Return(&unpackedPacket{}, nil)
 			rph := mockackhandler.NewMockReceivedPacketHandler(mockCtrl)
-			rph.EXPECT().ReceivedPacket(protocol.PacketNumber(5), gomock.Any(), false).Do(func(_ protocol.PacketNumber, t time.Time, _ bool) {
-				Expect(t).To(BeTemporally("~", time.Now(), scaleDuration(25*time.Millisecond)))
-			})
+			rph.EXPECT().ReceivedPacket(protocol.PacketNumber(5), rcvTime, false)
 			sess.receivedPacketHandler = rph
-			Expect(sess.handlePacketImpl(&receivedPacket{hdr: &hdr.Header, data: getData(hdr)})).To(Succeed())
+			Expect(sess.handlePacketImpl(&receivedPacket{
+				rcvTime: rcvTime,
+				hdr:     &hdr.Header,
+				data:    getData(hdr),
+			})).To(Succeed())
 		})
 
 		It("closes when handling a packet fails", func() {

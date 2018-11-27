@@ -506,7 +506,6 @@ func (s *session) handlePacketImpl(p *receivedPacket) error {
 		// TODO(#1312): implement parsing of compound packets
 	}
 
-	p.rcvTime = time.Now()
 	// Calculate packet number
 	hdr.PacketNumber = protocol.InferPacketNumber(
 		hdr.PacketNumberLen,
