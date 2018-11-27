@@ -687,7 +687,7 @@ var _ = Describe("Client", func() {
 					},
 				})
 				Expect(err).ToNot(HaveOccurred())
-				Expect(cl.versionNegotiated).To(BeTrue())
+				Expect(cl.versionNegotiated.Get()).To(BeTrue())
 			})
 
 			It("errors if no matching version is found", func() {
