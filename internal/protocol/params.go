@@ -11,10 +11,6 @@ const MaxPacketSizeIPv6 = 1232
 // MinStatelessResetSize is the minimum size of a stateless reset packet
 const MinStatelessResetSize = 1 + 20 + 16
 
-// NonForwardSecurePacketSizeReduction is the number of bytes a non forward-secure packet has to be smaller than a forward-secure packet
-// This makes sure that those packets can always be retransmitted without splitting the contained StreamFrames
-const NonForwardSecurePacketSizeReduction = 50
-
 const defaultMaxCongestionWindowPackets = 1000
 
 // DefaultMaxCongestionWindow is the default for the max congestion window
