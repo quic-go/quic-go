@@ -23,8 +23,7 @@ const DefaultMaxCongestionWindow ByteCount = defaultMaxCongestionWindowPackets *
 // InitialCongestionWindow is the initial congestion window in QUIC packets
 const InitialCongestionWindow ByteCount = 32 * DefaultTCPMSS
 
-// MaxUndecryptablePackets limits the number of undecryptable packets that a
-// session queues for later until it sends a public reset.
+// MaxUndecryptablePackets limits the number of undecryptable packets that are queued in the session.
 const MaxUndecryptablePackets = 10
 
 // ConnectionFlowControlMultiplier determines how much larger the connection flow control windows needs to be relative to any stream's flow control window
