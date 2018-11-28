@@ -428,17 +428,6 @@ var _ = Describe("Packet packer", func() {
 				Expect(p.frames[2].(*wire.StreamFrame).Data).To(Equal([]byte("frame 3")))
 				Expect(p.frames[2].(*wire.StreamFrame).DataLenPresent).To(BeFalse())
 			})
-
-			It("doesn't send unencrypted stream data on a data stream", func() {
-				pnManager.EXPECT().PeekPacketNumber().Return(protocol.PacketNumber(0x42), protocol.PacketNumberLen2)
-				sealingManager.EXPECT().GetSealer().Return(protocol.EncryptionInitial, sealer)
-				ackFramer.EXPECT().GetAckFrame()
-				expectAppendControlFrames()
-				// don't expect a call to framer.PopStreamFrames
-				p, err := packer.PackPacket()
-				Expect(err).NotTo(HaveOccurred())
-				Expect(p).To(BeNil())
-			})
 		})
 
 		Context("retransmissions", func() {

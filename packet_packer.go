@@ -279,7 +279,7 @@ func (p *packetPacker) PackPacket() (*packedPacket, error) {
 	}
 
 	maxSize := p.maxPacketSize - protocol.ByteCount(sealer.Overhead()) - headerLen
-	frames, err := p.composeNextPacket(maxSize, p.canSendData(encLevel))
+	frames, err := p.composeNextPacket(maxSize)
 	if err != nil {
 		return nil, err
 	}
@@ -351,10 +351,7 @@ func (p *packetPacker) maybePackCryptoPacket() (*packedPacket, error) {
 	}, nil
 }
 
-func (p *packetPacker) composeNextPacket(
-	maxFrameSize protocol.ByteCount,
-	canSendStreamFrames bool,
-) ([]wire.Frame, error) {
+func (p *packetPacker) composeNextPacket(maxFrameSize protocol.ByteCount) ([]wire.Frame, error) {
 	var length protocol.ByteCount
 	var frames []wire.Frame
 
@@ -367,10 +364,6 @@ func (p *packetPacker) composeNextPacket(
 	var lengthAdded protocol.ByteCount
 	frames, lengthAdded = p.framer.AppendControlFrames(frames, maxFrameSize-length)
 	length += lengthAdded
-
-	if !canSendStreamFrames {
-		return frames, nil
-	}
 
 	// temporarily increase the maxFrameSize by the (minimum) length of the DataLen field
 	// this leads to a properly sized packet in all cases, since we do all the packet length calculations with STREAM frames that have the DataLen set
@@ -476,10 +469,6 @@ func (p *packetPacker) writeAndSealPacket(
 		return nil, errors.New("packetPacker BUG: Peeked and Popped packet numbers do not match")
 	}
 	return raw, nil
-}
-
-func (p *packetPacker) canSendData(encLevel protocol.EncryptionLevel) bool {
-	return encLevel == protocol.Encryption1RTT
 }
 
 func (p *packetPacker) ChangeDestConnectionID(connID protocol.ConnectionID) {
