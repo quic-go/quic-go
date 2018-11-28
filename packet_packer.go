@@ -429,7 +429,7 @@ func (p *packetPacker) writeAndSealPacket(
 	raw := *getPacketBuffer()
 	buffer := bytes.NewBuffer(raw[:0])
 
-	addPadding := p.perspective == protocol.PerspectiveClient && header.Type == protocol.PacketTypeInitial && !p.hasSentPacket
+	addPadding := p.perspective == protocol.PerspectiveClient && header.Type == protocol.PacketTypeInitial
 
 	// the length is only needed for Long Headers
 	if header.IsLongHeader {
