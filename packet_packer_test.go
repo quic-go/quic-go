@@ -88,7 +88,6 @@ var _ = Describe("Packet packer", func() {
 			protocol.PerspectiveServer,
 			version,
 		)
-		packer.hasSentPacket = true
 		packer.version = version
 		packer.maxPacketSize = maxPacketSize
 	})
@@ -712,7 +711,6 @@ var _ = Describe("Packet packer", func() {
 			ackFramer.EXPECT().GetAckFrame()
 			initialStream.EXPECT().HasData().Return(true)
 			initialStream.EXPECT().PopCryptoFrame(gomock.Any()).Return(f)
-			packer.hasSentPacket = false
 			packer.perspective = protocol.PerspectiveClient
 			packet, err := packer.PackPacket()
 			Expect(err).ToNot(HaveOccurred())
@@ -732,7 +730,6 @@ var _ = Describe("Packet packer", func() {
 			initialStream.EXPECT().PopCryptoFrame(gomock.Any()).Return(&wire.CryptoFrame{
 				Data: []byte("foobar"),
 			})
-			packer.hasSentPacket = false
 			packer.perspective = protocol.PerspectiveClient
 			packet, err := packer.PackPacket()
 			Expect(err).ToNot(HaveOccurred())
@@ -749,7 +746,6 @@ var _ = Describe("Packet packer", func() {
 			initialStream.EXPECT().HasData().Return(true)
 			initialStream.EXPECT().PopCryptoFrame(gomock.Any()).Return(f)
 			packer.version = protocol.VersionTLS
-			packer.hasSentPacket = false
 			packer.perspective = protocol.PerspectiveClient
 			packet, err := packer.PackPacket()
 			Expect(err).ToNot(HaveOccurred())
@@ -807,13 +803,15 @@ var _ = Describe("Packet packer", func() {
 					EncryptionLevel: protocol.EncryptionInitial,
 					Frames:          []wire.Frame{sf},
 				}
-				p, err := packer.PackRetransmission(packet)
+				packets, err := packer.PackRetransmission(packet)
 				Expect(err).ToNot(HaveOccurred())
-				Expect(p).To(HaveLen(1))
-				Expect(p[0].frames).To(Equal([]wire.Frame{sf}))
-				Expect(p[0].encryptionLevel).To(Equal(protocol.EncryptionInitial))
-				Expect(p[0].header.Type).To(Equal(protocol.PacketTypeInitial))
-				Expect(p[0].header.Token).To(Equal(token))
+				Expect(packets).To(HaveLen(1))
+				p := packets[0]
+				Expect(p.frames).To(Equal([]wire.Frame{sf}))
+				Expect(p.encryptionLevel).To(Equal(protocol.EncryptionInitial))
+				Expect(p.header.Type).To(Equal(protocol.PacketTypeInitial))
+				Expect(p.header.Token).To(Equal(token))
+				Expect(p.raw).To(HaveLen(protocol.MinInitialPacketSize))
 			})
 		})
 	})

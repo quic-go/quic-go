@@ -96,7 +96,6 @@ type packetPacker struct {
 	acks      ackFrameSource
 
 	maxPacketSize             protocol.ByteCount
-	hasSentPacket             bool // has the packetPacker already sent a packet
 	numNonRetransmittableAcks int
 }
 
@@ -250,10 +249,6 @@ func (p *packetPacker) packHandshakeRetransmission(packet *ackhandler.Packet) (*
 	if err != nil {
 		return nil, err
 	}
-	// make sure that the retransmission for an Initial packet is sent as an Initial packet
-	if packet.PacketType == protocol.PacketTypeInitial {
-		p.hasSentPacket = false
-	}
 	header := p.getHeader(packet.EncryptionLevel)
 	header.Type = packet.PacketType
 	raw, err := p.writeAndSealPacket(header, packet.Frames, sealer)
@@ -274,10 +269,6 @@ func (p *packetPacker) PackPacket() (*packedPacket, error) {
 	}
 	if packet != nil {
 		return packet, nil
-	}
-	// if this is the first packet to be send, make sure it contains stream data
-	if !p.hasSentPacket && packet == nil {
-		return nil, nil
 	}
 
 	encLevel, sealer := p.cryptoSetup.GetSealer()
@@ -484,7 +475,6 @@ func (p *packetPacker) writeAndSealPacket(
 	if num != header.PacketNumber {
 		return nil, errors.New("packetPacker BUG: Peeked and Popped packet numbers do not match")
 	}
-	p.hasSentPacket = true
 	return raw, nil
 }
 
