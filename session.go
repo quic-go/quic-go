@@ -903,12 +903,7 @@ func (s *session) maybeSendRetransmission() (bool, error) {
 		break
 	}
 
-	if retransmitPacket.EncryptionLevel != protocol.Encryption1RTT {
-		s.logger.Debugf("Dequeueing handshake retransmission for packet 0x%x", retransmitPacket.PacketNumber)
-	} else {
-		s.logger.Debugf("Dequeueing retransmission for packet 0x%x", retransmitPacket.PacketNumber)
-	}
-
+	s.logger.Debugf("Dequeueing retransmission for packet 0x%x", retransmitPacket.PacketNumber)
 	packets, err := s.packer.PackRetransmission(retransmitPacket)
 	if err != nil {
 		return false, err

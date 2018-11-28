@@ -167,13 +167,9 @@ func (p *packetPacker) MaybePackAckPacket() (*packedPacket, error) {
 // For packets sent after completion of the handshake, it might happen that 2 packets have to be sent.
 // This can happen e.g. when a longer packet number is used in the header.
 func (p *packetPacker) PackRetransmission(packet *ackhandler.Packet) ([]*packedPacket, error) {
-	if packet.EncryptionLevel != protocol.Encryption1RTT {
-		p, err := p.packHandshakeRetransmission(packet)
-		return []*packedPacket{p}, err
-	}
-
 	var controlFrames []wire.Frame
 	var streamFrames []*wire.StreamFrame
+	// TODO: treat CRYPTO frames separately
 	for _, f := range packet.Frames {
 		if sf, ok := f.(*wire.StreamFrame); ok {
 			sf.DataLenPresent = true
@@ -241,23 +237,6 @@ func (p *packetPacker) PackRetransmission(packet *ackhandler.Packet) ([]*packedP
 		})
 	}
 	return packets, nil
-}
-
-// packHandshakeRetransmission retransmits a handshake packet
-func (p *packetPacker) packHandshakeRetransmission(packet *ackhandler.Packet) (*packedPacket, error) {
-	sealer, err := p.cryptoSetup.GetSealerWithEncryptionLevel(packet.EncryptionLevel)
-	if err != nil {
-		return nil, err
-	}
-	header := p.getHeader(packet.EncryptionLevel)
-	header.Type = packet.PacketType
-	raw, err := p.writeAndSealPacket(header, packet.Frames, sealer)
-	return &packedPacket{
-		header:          header,
-		raw:             raw,
-		frames:          packet.Frames,
-		encryptionLevel: packet.EncryptionLevel,
-	}, err
 }
 
 // PackPacket packs a new packet
