@@ -169,8 +169,10 @@ func (p *packetPacker) MaybePackAckPacket() (*packedPacket, error) {
 func (p *packetPacker) PackRetransmission(packet *ackhandler.Packet) ([]*packedPacket, error) {
 	var controlFrames []wire.Frame
 	var streamFrames []*wire.StreamFrame
-	// TODO: treat CRYPTO frames separately
 	for _, f := range packet.Frames {
+		// CRYPTO frames are treated as control frames here.
+		// Since we're making sure that the header can never be larger for a retransmission,
+		// we never have to split CRYPTO frames.
 		if sf, ok := f.(*wire.StreamFrame); ok {
 			sf.DataLenPresent = true
 			streamFrames = append(streamFrames, sf)
@@ -370,6 +372,10 @@ func (p *packetPacker) getHeader(encLevel protocol.EncryptionLevel) *wire.Extend
 
 	if encLevel != protocol.Encryption1RTT {
 		header.IsLongHeader = true
+		// Always send Initial and Handshake packets with the maximum packet number length.
+		// This simplifies retransmissions: Since the header can't get any larger,
+		// we don't need to split CRYPTO frames.
+		header.PacketNumberLen = protocol.PacketNumberLen4
 		header.SrcConnectionID = p.srcConnID
 		// Set the length to the maximum packet size.
 		// Since it is encoded as a varint, this guarantees us that the header will end up at most as big as GetLength() returns.
