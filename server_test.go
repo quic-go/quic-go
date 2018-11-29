@@ -33,6 +33,7 @@ var _ = Describe("Server", func() {
 		conn    *mockPacketConn
 		config  *Config
 		udpAddr = &net.UDPAddr{IP: net.IPv4(192, 168, 100, 200), Port: 1337}
+		tlsConf = testdata.GetTLSConfig()
 	)
 
 	BeforeEach(func() {
@@ -279,7 +280,7 @@ var _ = Describe("Server", func() {
 			addr, err := net.ResolveUDPAddr("udp", "localhost:12345")
 			Expect(err).ToNot(HaveOccurred())
 
-			serv, err := ListenAddr("localhost:0", nil, nil)
+			serv, err := ListenAddr("localhost:0", tlsConf, nil)
 			Expect(err).ToNot(HaveOccurred())
 			// test that we can write on the packet conn
 			_, err = serv.(*server).conn.WriteTo([]byte("foobar"), addr)
@@ -416,7 +417,7 @@ var _ = Describe("Server", func() {
 			IdleTimeout:      42 * time.Minute,
 			KeepAlive:        true,
 		}
-		ln, err := Listen(conn, &tls.Config{}, &config)
+		ln, err := Listen(conn, tlsConf, &config)
 		Expect(err).ToNot(HaveOccurred())
 		server := ln.(*server)
 		Expect(server.sessionHandler).ToNot(BeNil())
@@ -432,12 +433,12 @@ var _ = Describe("Server", func() {
 
 	It("errors when the Config contains an invalid version", func() {
 		version := protocol.VersionNumber(0x1234)
-		_, err := Listen(conn, &tls.Config{}, &Config{Versions: []protocol.VersionNumber{version}})
+		_, err := Listen(conn, tlsConf, &Config{Versions: []protocol.VersionNumber{version}})
 		Expect(err).To(MatchError("0x1234 is not a valid QUIC version"))
 	})
 
 	It("fills in default values if options are not set in the Config", func() {
-		ln, err := Listen(conn, &tls.Config{}, &Config{})
+		ln, err := Listen(conn, tlsConf, &Config{})
 		Expect(err).ToNot(HaveOccurred())
 		server := ln.(*server)
 		Expect(server.config.Versions).To(Equal(protocol.SupportedVersions))
@@ -451,7 +452,7 @@ var _ = Describe("Server", func() {
 
 	It("listens on a given address", func() {
 		addr := "127.0.0.1:13579"
-		ln, err := ListenAddr(addr, nil, config)
+		ln, err := ListenAddr(addr, tlsConf, config)
 		Expect(err).ToNot(HaveOccurred())
 		serv := ln.(*server)
 		Expect(serv.Addr().String()).To(Equal(addr))
@@ -459,15 +460,25 @@ var _ = Describe("Server", func() {
 		Expect(ln.Close()).To(Succeed())
 	})
 
+	It("errors when given no tls.Config", func() {
+		_, err := ListenAddr("127.0.0.1:0", nil, nil)
+		Expect(err).To(MatchError("quic: neither Certificates nor GetCertificate set in tls.Config"))
+	})
+
+	It("errors when given no certificiates are configured in the tls.Config", func() {
+		_, err := ListenAddr("127.0.0.1:0", &tls.Config{}, nil)
+		Expect(err).To(MatchError("quic: neither Certificates nor GetCertificate set in tls.Config"))
+	})
+
 	It("errors if given an invalid address", func() {
 		addr := "127.0.0.1"
-		_, err := ListenAddr(addr, nil, config)
+		_, err := ListenAddr(addr, tlsConf, config)
 		Expect(err).To(BeAssignableToTypeOf(&net.AddrError{}))
 	})
 
 	It("errors if given an invalid address", func() {
 		addr := "1.1.1.1:1111"
-		_, err := ListenAddr(addr, nil, config)
+		_, err := ListenAddr(addr, tlsConf, config)
 		Expect(err).To(BeAssignableToTypeOf(&net.OpError{}))
 	})
 })
