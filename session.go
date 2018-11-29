@@ -112,9 +112,8 @@ type session struct {
 	handshakeCompleteChan chan struct{} // is closed when the handshake completes
 	handshakeComplete     bool
 
-	receivedFirstPacket              bool // since packet numbers start at 0, we can't use largestRcvdPacketNumber != 0 for this
+	receivedFirstPacket              bool
 	receivedFirstForwardSecurePacket bool
-	largestRcvdPacketNumber          protocol.PacketNumber // used to calculate the next packet number
 
 	sessionCreationTime     time.Time
 	lastNetworkActivityTime time.Time
@@ -504,13 +503,6 @@ func (s *session) handlePacketImpl(p *receivedPacket) error {
 		// TODO(#1312): implement parsing of compound packets
 	}
 
-	// Calculate packet number
-	hdr.PacketNumber = protocol.DecodePacketNumber(
-		hdr.PacketNumberLen,
-		s.largestRcvdPacketNumber,
-		hdr.PacketNumber,
-	)
-
 	packet, err := s.unpacker.Unpack(hdr.Raw, hdr, data)
 	if s.logger.Debug() {
 		if err != nil {
@@ -544,9 +536,6 @@ func (s *session) handlePacketImpl(p *receivedPacket) error {
 			s.sentPacketHandler.SetHandshakeComplete()
 		}
 	}
-
-	// Only do this after decrypting, so we are sure the packet is not attacker-controlled
-	s.largestRcvdPacketNumber = utils.MaxPacketNumber(s.largestRcvdPacketNumber, hdr.PacketNumber)
 
 	// If this is a Retry packet, there's no need to send an ACK.
 	// The session will be closed and recreated as soon as the crypto setup processed the HRR.

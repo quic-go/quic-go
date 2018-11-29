@@ -6,6 +6,7 @@ import (
 
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/internal/qerr"
+	"github.com/lucas-clemente/quic-go/internal/utils"
 	"github.com/lucas-clemente/quic-go/internal/wire"
 )
 
@@ -22,7 +23,10 @@ type quicAEAD interface {
 
 // The packetUnpacker unpacks QUIC packets.
 type packetUnpacker struct {
-	aead    quicAEAD
+	aead quicAEAD
+
+	largestRcvdPacketNumber protocol.PacketNumber
+
 	version protocol.VersionNumber
 }
 
@@ -36,6 +40,12 @@ func newPacketUnpacker(aead quicAEAD, version protocol.VersionNumber) unpacker {
 }
 
 func (u *packetUnpacker) Unpack(headerBinary []byte, hdr *wire.ExtendedHeader, data []byte) (*unpackedPacket, error) {
+	hdr.PacketNumber = protocol.DecodePacketNumber(
+		hdr.PacketNumberLen,
+		u.largestRcvdPacketNumber,
+		hdr.PacketNumber,
+	)
+
 	buf := *getPacketBuffer()
 	buf = buf[:0]
 	defer putPacketBuffer(&buf)
@@ -60,6 +70,9 @@ func (u *packetUnpacker) Unpack(headerBinary []byte, hdr *wire.ExtendedHeader, d
 	if err != nil {
 		return nil, qerr.Error(qerr.DecryptionFailure, err.Error())
 	}
+
+	// Only do this after decrypting, so we are sure the packet is not attacker-controlled
+	u.largestRcvdPacketNumber = utils.MaxPacketNumber(u.largestRcvdPacketNumber, hdr.PacketNumber)
 
 	fs, err := u.parseFrames(decrypted)
 	if err != nil {

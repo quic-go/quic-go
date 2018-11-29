@@ -461,18 +461,6 @@ var _ = Describe("Session", func() {
 			return buf.Bytes()
 		}
 
-		It("sets the largestRcvdPacketNumber", func() {
-			hdr := &wire.ExtendedHeader{
-				PacketNumber:    5,
-				PacketNumberLen: protocol.PacketNumberLen4,
-			}
-			hdrRaw := getData(hdr)
-			data := append(hdrRaw, []byte("foobar")...)
-			unpacker.EXPECT().Unpack(hdrRaw, gomock.Any(), []byte("foobar")).Return(&unpackedPacket{}, nil)
-			Expect(sess.handlePacketImpl(&receivedPacket{hdr: &hdr.Header, data: data})).To(Succeed())
-			Expect(sess.largestRcvdPacketNumber).To(Equal(protocol.PacketNumber(5)))
-		})
-
 		It("informs the ReceivedPacketHandler", func() {
 			hdr := &wire.ExtendedHeader{
 				Raw:             []byte("raw header"),

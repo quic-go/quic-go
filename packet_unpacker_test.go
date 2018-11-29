@@ -2,6 +2,7 @@ package quic
 
 import (
 	"bytes"
+	"errors"
 
 	"github.com/golang/mock/gomock"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
@@ -52,6 +53,33 @@ var _ = Describe("Packet Unpacker", func() {
 		packet, err := unpacker.Unpack(hdr.Raw, hdr, nil)
 		Expect(err).ToNot(HaveOccurred())
 		Expect(packet.encryptionLevel).To(Equal(protocol.EncryptionHandshake))
+	})
+
+	It("returns the error when unpacking fails", func() {
+		hdr.IsLongHeader = true
+		hdr.Type = protocol.PacketTypeHandshake
+		aead.EXPECT().OpenHandshake(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil, errors.New("test err"))
+		_, err := unpacker.Unpack(hdr.Raw, hdr, nil)
+		Expect(err).To(MatchError(qerr.Error(qerr.DecryptionFailure, "test err")))
+	})
+
+	It("decodes the packet number", func() {
+		firstHdr := &wire.ExtendedHeader{
+			PacketNumber:    0x1337,
+			PacketNumberLen: 2,
+		}
+		aead.EXPECT().Open1RTT(gomock.Any(), gomock.Any(), firstHdr.PacketNumber, gomock.Any()).Return([]byte{0}, nil)
+		_, err := unpacker.Unpack(firstHdr.Raw, firstHdr, nil)
+		Expect(err).ToNot(HaveOccurred())
+		// the real packet number is 0x1338, but only the last byte is sent
+		secondHdr := &wire.ExtendedHeader{
+			PacketNumber:    0x38,
+			PacketNumberLen: 1,
+		}
+		// expect the call with the decoded packet number
+		aead.EXPECT().Open1RTT(gomock.Any(), gomock.Any(), protocol.PacketNumber(0x1338), gomock.Any()).Return([]byte{0}, nil)
+		_, err = unpacker.Unpack(secondHdr.Raw, secondHdr, nil)
+		Expect(err).ToNot(HaveOccurred())
 	})
 
 	It("unpacks the frames", func() {
