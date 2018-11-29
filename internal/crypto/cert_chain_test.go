@@ -124,6 +124,19 @@ var _ = Describe("Proof", func() {
 			Expect(cert2).To(Equal(cert.Certificate[0]))
 		})
 
+		It("uses the originail config if GetConfigForClient returns nil", func() {
+			config.Certificates = []tls.Certificate{cert}
+			var called bool
+			config.GetConfigForClient = func(*tls.ClientHelloInfo) (*tls.Config, error) {
+				called = true
+				return nil, nil
+			}
+			cert2, err := cc.GetLeafCert("")
+			Expect(err).ToNot(HaveOccurred())
+			Expect(cert2).To(Equal(cert.Certificate[0]))
+			Expect(called).To(BeTrue())
+		})
+
 		It("errors when it can't retrieve a leaf certificate", func() {
 			_, err := cc.GetLeafCert("invalid domain")
 			Expect(err).To(MatchError(errNoMatchingCertificate))
