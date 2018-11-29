@@ -69,8 +69,9 @@ var _ = Describe("Packet Unpacker", func() {
 			PacketNumberLen: 2,
 		}
 		aead.EXPECT().Open1RTT(gomock.Any(), gomock.Any(), firstHdr.PacketNumber, gomock.Any()).Return([]byte{0}, nil)
-		_, err := unpacker.Unpack(firstHdr.Raw, firstHdr, nil)
+		packet, err := unpacker.Unpack(firstHdr.Raw, firstHdr, nil)
 		Expect(err).ToNot(HaveOccurred())
+		Expect(packet.packetNumber).To(Equal(protocol.PacketNumber(0x1337)))
 		// the real packet number is 0x1338, but only the last byte is sent
 		secondHdr := &wire.ExtendedHeader{
 			PacketNumber:    0x38,
@@ -78,8 +79,9 @@ var _ = Describe("Packet Unpacker", func() {
 		}
 		// expect the call with the decoded packet number
 		aead.EXPECT().Open1RTT(gomock.Any(), gomock.Any(), protocol.PacketNumber(0x1338), gomock.Any()).Return([]byte{0}, nil)
-		_, err = unpacker.Unpack(secondHdr.Raw, secondHdr, nil)
+		packet, err = unpacker.Unpack(secondHdr.Raw, secondHdr, nil)
 		Expect(err).ToNot(HaveOccurred())
+		Expect(packet.packetNumber).To(Equal(protocol.PacketNumber(0x1338)))
 	})
 
 	It("unpacks the frames", func() {

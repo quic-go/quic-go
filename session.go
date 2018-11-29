@@ -504,17 +504,14 @@ func (s *session) handlePacketImpl(p *receivedPacket) error {
 	}
 
 	packet, err := s.unpacker.Unpack(hdr.Raw, hdr, data)
-	if s.logger.Debug() {
-		if err != nil {
-			s.logger.Debugf("<- Reading packet 0x%x (%d bytes) for connection %s", hdr.PacketNumber, len(p.data), hdr.DestConnectionID)
-		} else {
-			s.logger.Debugf("<- Reading packet 0x%x (%d bytes) for connection %s, %s", hdr.PacketNumber, len(p.data), hdr.DestConnectionID, packet.encryptionLevel)
-		}
-		hdr.Log(s.logger)
-	}
 	// if the decryption failed, this might be a packet sent by an attacker
 	if err != nil {
 		return err
+	}
+
+	if s.logger.Debug() {
+		s.logger.Debugf("<- Reading packet %#x (%d bytes) for connection %s, %s", packet.packetNumber, len(p.data), p.hdr.DestConnectionID, packet.encryptionLevel)
+		hdr.Log(s.logger)
 	}
 
 	// The server can change the source connection ID with the first Handshake packet.
@@ -541,12 +538,12 @@ func (s *session) handlePacketImpl(p *receivedPacket) error {
 	// The session will be closed and recreated as soon as the crypto setup processed the HRR.
 	if hdr.Type != protocol.PacketTypeRetry {
 		isRetransmittable := ackhandler.HasRetransmittableFrames(packet.frames)
-		if err := s.receivedPacketHandler.ReceivedPacket(hdr.PacketNumber, p.rcvTime, isRetransmittable); err != nil {
+		if err := s.receivedPacketHandler.ReceivedPacket(packet.packetNumber, p.rcvTime, isRetransmittable); err != nil {
 			return err
 		}
 	}
 
-	return s.handleFrames(packet.frames, hdr.PacketNumber, packet.encryptionLevel)
+	return s.handleFrames(packet.frames, packet.packetNumber, packet.encryptionLevel)
 }
 
 func (s *session) handleFrames(fs []wire.Frame, pn protocol.PacketNumber, encLevel protocol.EncryptionLevel) error {

@@ -11,6 +11,7 @@ import (
 )
 
 type unpackedPacket struct {
+	packetNumber    protocol.PacketNumber
 	encryptionLevel protocol.EncryptionLevel
 	frames          []wire.Frame
 }
@@ -40,7 +41,7 @@ func newPacketUnpacker(aead quicAEAD, version protocol.VersionNumber) unpacker {
 }
 
 func (u *packetUnpacker) Unpack(headerBinary []byte, hdr *wire.ExtendedHeader, data []byte) (*unpackedPacket, error) {
-	hdr.PacketNumber = protocol.DecodePacketNumber(
+	pn := protocol.DecodePacketNumber(
 		hdr.PacketNumberLen,
 		u.largestRcvdPacketNumber,
 		hdr.PacketNumber,
@@ -55,16 +56,16 @@ func (u *packetUnpacker) Unpack(headerBinary []byte, hdr *wire.ExtendedHeader, d
 	var err error
 	switch hdr.Type {
 	case protocol.PacketTypeInitial:
-		decrypted, err = u.aead.OpenInitial(buf, data, hdr.PacketNumber, headerBinary)
+		decrypted, err = u.aead.OpenInitial(buf, data, pn, headerBinary)
 		encryptionLevel = protocol.EncryptionInitial
 	case protocol.PacketTypeHandshake:
-		decrypted, err = u.aead.OpenHandshake(buf, data, hdr.PacketNumber, headerBinary)
+		decrypted, err = u.aead.OpenHandshake(buf, data, pn, headerBinary)
 		encryptionLevel = protocol.EncryptionHandshake
 	default:
 		if hdr.IsLongHeader {
 			return nil, fmt.Errorf("unknown packet type: %s", hdr.Type)
 		}
-		decrypted, err = u.aead.Open1RTT(buf, data, hdr.PacketNumber, headerBinary)
+		decrypted, err = u.aead.Open1RTT(buf, data, pn, headerBinary)
 		encryptionLevel = protocol.Encryption1RTT
 	}
 	if err != nil {
@@ -72,7 +73,7 @@ func (u *packetUnpacker) Unpack(headerBinary []byte, hdr *wire.ExtendedHeader, d
 	}
 
 	// Only do this after decrypting, so we are sure the packet is not attacker-controlled
-	u.largestRcvdPacketNumber = utils.MaxPacketNumber(u.largestRcvdPacketNumber, hdr.PacketNumber)
+	u.largestRcvdPacketNumber = utils.MaxPacketNumber(u.largestRcvdPacketNumber, pn)
 
 	fs, err := u.parseFrames(decrypted)
 	if err != nil {
@@ -80,6 +81,7 @@ func (u *packetUnpacker) Unpack(headerBinary []byte, hdr *wire.ExtendedHeader, d
 	}
 
 	return &unpackedPacket{
+		packetNumber:    pn,
 		encryptionLevel: encryptionLevel,
 		frames:          fs,
 	}, nil

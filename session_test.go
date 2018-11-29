@@ -464,13 +464,13 @@ var _ = Describe("Session", func() {
 		It("informs the ReceivedPacketHandler", func() {
 			hdr := &wire.ExtendedHeader{
 				Raw:             []byte("raw header"),
-				PacketNumber:    5,
-				PacketNumberLen: protocol.PacketNumberLen4,
+				PacketNumber:    0x37,
+				PacketNumberLen: protocol.PacketNumberLen1,
 			}
 			rcvTime := time.Now().Add(-10 * time.Second)
-			unpacker.EXPECT().Unpack(gomock.Any(), gomock.Any(), gomock.Any()).Return(&unpackedPacket{}, nil)
+			unpacker.EXPECT().Unpack(gomock.Any(), gomock.Any(), gomock.Any()).Return(&unpackedPacket{packetNumber: 0x1337}, nil)
 			rph := mockackhandler.NewMockReceivedPacketHandler(mockCtrl)
-			rph.EXPECT().ReceivedPacket(protocol.PacketNumber(5), rcvTime, false)
+			rph.EXPECT().ReceivedPacket(protocol.PacketNumber(0x1337), rcvTime, false)
 			sess.receivedPacketHandler = rph
 			Expect(sess.handlePacketImpl(&receivedPacket{
 				rcvTime: rcvTime,
