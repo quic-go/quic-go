@@ -11,7 +11,7 @@ import (
 // Tests taken and extended from chrome
 var _ = Describe("packet number calculation", func() {
 	It("works with the example from the draft", func() {
-		Expect(InferPacketNumber(PacketNumberLen2, 0xa82f30ea, 0x9b32)).To(Equal(PacketNumber(0xa82f9b32)))
+		Expect(DecodePacketNumber(PacketNumberLen2, 0xa82f30ea, 0x9b32)).To(Equal(PacketNumber(0xa82f9b32)))
 	})
 
 	getEpoch := func(len PacketNumberLen) uint64 {
@@ -25,7 +25,7 @@ var _ = Describe("packet number calculation", func() {
 		epoch := getEpoch(length)
 		epochMask := epoch - 1
 		wirePacketNumber := expected & epochMask
-		Expect(InferPacketNumber(length, PacketNumber(last), PacketNumber(wirePacketNumber))).To(Equal(PacketNumber(expected)))
+		Expect(DecodePacketNumber(length, PacketNumber(last), PacketNumber(wirePacketNumber))).To(Equal(PacketNumber(expected)))
 	}
 
 	for _, l := range []PacketNumberLen{PacketNumberLen1, PacketNumberLen2, PacketNumberLen4} {
@@ -167,8 +167,8 @@ var _ = Describe("packet number calculation", func() {
 							length := GetPacketNumberLengthForHeader(packetNumber, leastUnacked)
 							wirePacketNumber := (uint64(packetNumber) << (64 - length*8)) >> (64 - length*8)
 
-							inferedPacketNumber := InferPacketNumber(length, leastUnacked, PacketNumber(wirePacketNumber))
-							Expect(inferedPacketNumber).To(Equal(packetNumber))
+							decodedPacketNumber := DecodePacketNumber(length, leastUnacked, PacketNumber(wirePacketNumber))
+							Expect(decodedPacketNumber).To(Equal(packetNumber))
 						}
 					})
 
@@ -180,8 +180,8 @@ var _ = Describe("packet number calculation", func() {
 							epochMask := getEpoch(length) - 1
 							wirePacketNumber := uint64(packetNumber) & epochMask
 
-							inferedPacketNumber := InferPacketNumber(length, leastUnacked, PacketNumber(wirePacketNumber))
-							Expect(inferedPacketNumber).To(Equal(packetNumber))
+							decodedPacketNumber := DecodePacketNumber(length, leastUnacked, PacketNumber(wirePacketNumber))
+							Expect(decodedPacketNumber).To(Equal(packetNumber))
 						}
 					})
 
@@ -194,8 +194,8 @@ var _ = Describe("packet number calculation", func() {
 							epochMask := getEpoch(length) - 1
 							wirePacketNumber := uint64(packetNumber) & epochMask
 
-							inferedPacketNumber := InferPacketNumber(length, leastUnacked, PacketNumber(wirePacketNumber))
-							Expect(inferedPacketNumber).To(Equal(packetNumber))
+							decodedPacketNumber := DecodePacketNumber(length, leastUnacked, PacketNumber(wirePacketNumber))
+							Expect(decodedPacketNumber).To(Equal(packetNumber))
 
 							increment = getEpoch(length) / 8
 						}
@@ -208,8 +208,8 @@ var _ = Describe("packet number calculation", func() {
 							length := GetPacketNumberLengthForHeader(packetNumber, leastUnacked)
 							wirePacketNumber := (uint64(packetNumber) << (64 - length*8)) >> (64 - length*8)
 
-							inferedPacketNumber := InferPacketNumber(length, leastUnacked, PacketNumber(wirePacketNumber))
-							Expect(inferedPacketNumber).To(Equal(packetNumber))
+							decodedPacketNumber := DecodePacketNumber(length, leastUnacked, PacketNumber(wirePacketNumber))
+							Expect(decodedPacketNumber).To(Equal(packetNumber))
 						}
 					})
 				})

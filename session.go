@@ -505,7 +505,7 @@ func (s *session) handlePacketImpl(p *receivedPacket) error {
 	}
 
 	// Calculate packet number
-	hdr.PacketNumber = protocol.InferPacketNumber(
+	hdr.PacketNumber = protocol.DecodePacketNumber(
 		hdr.PacketNumberLen,
 		s.largestRcvdPacketNumber,
 		hdr.PacketNumber,
