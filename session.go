@@ -22,7 +22,7 @@ import (
 )
 
 type unpacker interface {
-	Unpack(headerBinary []byte, hdr *wire.ExtendedHeader, data []byte) (*unpackedPacket, error)
+	Unpack(hdr *wire.ExtendedHeader, data []byte) (*unpackedPacket, error)
 }
 
 type streamGetter interface {
@@ -503,7 +503,7 @@ func (s *session) handlePacketImpl(p *receivedPacket) error {
 		// TODO(#1312): implement parsing of compound packets
 	}
 
-	packet, err := s.unpacker.Unpack(hdr.Raw, hdr, data)
+	packet, err := s.unpacker.Unpack(hdr, data)
 	// if the decryption failed, this might be a packet sent by an attacker
 	if err != nil {
 		return err

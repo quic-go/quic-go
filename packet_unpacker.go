@@ -40,7 +40,7 @@ func newPacketUnpacker(aead quicAEAD, version protocol.VersionNumber) unpacker {
 	}
 }
 
-func (u *packetUnpacker) Unpack(headerBinary []byte, hdr *wire.ExtendedHeader, data []byte) (*unpackedPacket, error) {
+func (u *packetUnpacker) Unpack(hdr *wire.ExtendedHeader, data []byte) (*unpackedPacket, error) {
 	pn := protocol.DecodePacketNumber(
 		hdr.PacketNumberLen,
 		u.largestRcvdPacketNumber,
@@ -56,16 +56,16 @@ func (u *packetUnpacker) Unpack(headerBinary []byte, hdr *wire.ExtendedHeader, d
 	var err error
 	switch hdr.Type {
 	case protocol.PacketTypeInitial:
-		decrypted, err = u.aead.OpenInitial(buf, data, pn, headerBinary)
+		decrypted, err = u.aead.OpenInitial(buf, data, pn, hdr.Raw)
 		encryptionLevel = protocol.EncryptionInitial
 	case protocol.PacketTypeHandshake:
-		decrypted, err = u.aead.OpenHandshake(buf, data, pn, headerBinary)
+		decrypted, err = u.aead.OpenHandshake(buf, data, pn, hdr.Raw)
 		encryptionLevel = protocol.EncryptionHandshake
 	default:
 		if hdr.IsLongHeader {
 			return nil, fmt.Errorf("unknown packet type: %s", hdr.Type)
 		}
-		decrypted, err = u.aead.Open1RTT(buf, data, pn, headerBinary)
+		decrypted, err = u.aead.Open1RTT(buf, data, pn, hdr.Raw)
 		encryptionLevel = protocol.Encryption1RTT
 	}
 	if err != nil {
