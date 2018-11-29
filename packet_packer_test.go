@@ -69,7 +69,7 @@ var _ = Describe("Packet packer", func() {
 		sealer = mocks.NewMockSealer(mockCtrl)
 		sealer.EXPECT().Overhead().Return(7).AnyTimes()
 		sealer.EXPECT().Seal(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(func(dst, src []byte, pn protocol.PacketNumber, associatedData []byte) []byte {
-			return append(src, bytes.Repeat([]byte{0}, 7)...)
+			return append(src, bytes.Repeat([]byte{0}, sealer.Overhead())...)
 		}).AnyTimes()
 
 		token = []byte("initial token")
@@ -709,6 +709,42 @@ var _ = Describe("Packet packer", func() {
 			Expect(packet.frames).To(HaveLen(1))
 			cf := packet.frames[0].(*wire.CryptoFrame)
 			Expect(cf.Data).To(Equal([]byte("foobar")))
+		})
+
+		It("pads if payload length + packet number length is smaller than 4", func() {
+			f := &wire.StreamFrame{
+				StreamID: 0x10, // small stream ID, such that only a single byte is consumed
+				FinBit:   true,
+			}
+			Expect(f.Length(packer.version)).To(BeEquivalentTo(2))
+			pnManager.EXPECT().PeekPacketNumber().Return(protocol.PacketNumber(0x42), protocol.PacketNumberLen1)
+			pnManager.EXPECT().PopPacketNumber().Return(protocol.PacketNumber(0x42))
+			sealingManager.EXPECT().GetSealer().Return(protocol.Encryption1RTT, sealer)
+			ackFramer.EXPECT().GetAckFrame()
+			initialStream.EXPECT().HasData()
+			handshakeStream.EXPECT().HasData()
+			framer.EXPECT().AppendControlFrames(gomock.Any(), gomock.Any())
+			framer.EXPECT().AppendStreamFrames(gomock.Any(), gomock.Any()).Return([]wire.Frame{f})
+			packet, err := packer.PackPacket()
+			Expect(err).ToNot(HaveOccurred())
+			// cut off the tag that the mock sealer added
+			packet.raw = packet.raw[:len(packet.raw)-sealer.Overhead()]
+			hdr, err := wire.ParseHeader(bytes.NewReader(packet.raw), len(packer.destConnID))
+			Expect(err).ToNot(HaveOccurred())
+			r := bytes.NewReader(packet.raw)
+			extHdr, err := hdr.ParseExtended(r, packer.version)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(extHdr.PacketNumberLen).To(Equal(protocol.PacketNumberLen1))
+			Expect(r.Len()).To(Equal(4 - 1 /* packet number length */))
+			// the first byte of the payload should be a PADDING frame...
+			firstPayloadByte, err := r.ReadByte()
+			Expect(err).ToNot(HaveOccurred())
+			Expect(firstPayloadByte).To(Equal(byte(0)))
+			// ... followed by the stream frame
+			frame, err := wire.ParseNextFrame(r, packer.version)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(frame).To(Equal(f))
+			Expect(r.Len()).To(BeZero())
 		})
 
 		It("sets the correct length for an Initial packet", func() {

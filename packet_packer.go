@@ -392,23 +392,24 @@ func (p *packetPacker) getHeader(encLevel protocol.EncryptionLevel) *wire.Extend
 }
 
 func (p *packetPacker) writeAndSealPacket(
-	header *wire.ExtendedHeader, frames []wire.Frame,
+	header *wire.ExtendedHeader,
+	frames []wire.Frame,
 	sealer handshake.Sealer,
 ) ([]byte, error) {
 	raw := *getPacketBuffer()
 	buffer := bytes.NewBuffer(raw[:0])
 
-	addPadding := p.perspective == protocol.PerspectiveClient && header.Type == protocol.PacketTypeInitial
+	addPaddingForInitial := p.perspective == protocol.PerspectiveClient && header.Type == protocol.PacketTypeInitial
 
-	// the length is only needed for Long Headers
 	if header.IsLongHeader {
 		if p.perspective == protocol.PerspectiveClient && header.Type == protocol.PacketTypeInitial {
 			header.Token = p.token
 		}
-		if addPadding {
+		if addPaddingForInitial {
 			headerLen := header.GetLength(p.version)
 			header.Length = protocol.ByteCount(header.PacketNumberLen) + protocol.MinInitialPacketSize - headerLen
 		} else {
+			// long header packets always use 4 byte packet number, so we never need to pad short payloads
 			length := protocol.ByteCount(sealer.Overhead()) + protocol.ByteCount(header.PacketNumberLen)
 			for _, frame := range frames {
 				length += frame.Length(p.version)
@@ -422,19 +423,31 @@ func (p *packetPacker) writeAndSealPacket(
 	}
 	payloadStartIndex := buffer.Len()
 
-	// the Initial packet needs to be padded, so the last STREAM frame must have the data length present
-	if p.perspective == protocol.PerspectiveClient && header.Type == protocol.PacketTypeInitial {
-		lastFrame := frames[len(frames)-1]
-		if sf, ok := lastFrame.(*wire.StreamFrame); ok {
-			sf.DataLenPresent = true
-		}
-	}
-	for _, frame := range frames {
+	// write all frames but the last one
+	for _, frame := range frames[:len(frames)-1] {
 		if err := frame.Write(buffer, p.version); err != nil {
 			return nil, err
 		}
 	}
-	if addPadding {
+	lastFrame := frames[len(frames)-1]
+	if addPaddingForInitial {
+		// when appending padding, we need to make sure that the last STREAM frames has the data length set
+		if sf, ok := lastFrame.(*wire.StreamFrame); ok {
+			sf.DataLenPresent = true
+		}
+	} else {
+		payloadLen := buffer.Len() - payloadStartIndex + int(lastFrame.Length(p.version))
+		if paddingLen := 4 - int(header.PacketNumberLen) - payloadLen; paddingLen > 0 {
+			// Pad the packet such that packet number length + payload length is 4 bytes.
+			// This is needed to enable the peer to get a 16 byte sample for header protection.
+			buffer.Write(bytes.Repeat([]byte{0}, paddingLen))
+		}
+	}
+	if err := lastFrame.Write(buffer, p.version); err != nil {
+		return nil, err
+	}
+
+	if addPaddingForInitial {
 		paddingLen := protocol.MinInitialPacketSize - sealer.Overhead() - buffer.Len()
 		if paddingLen > 0 {
 			buffer.Write(bytes.Repeat([]byte{0}, paddingLen))

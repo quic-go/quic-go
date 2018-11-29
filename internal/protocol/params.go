@@ -8,9 +8,6 @@ const MaxPacketSizeIPv4 = 1252
 // MaxPacketSizeIPv6 is the maximum packet size that we use for sending IPv6 packets.
 const MaxPacketSizeIPv6 = 1232
 
-// MinStatelessResetSize is the minimum size of a stateless reset packet
-const MinStatelessResetSize = 1 + 20 + 16
-
 const defaultMaxCongestionWindowPackets = 1000
 
 // DefaultMaxCongestionWindow is the default for the max congestion window
