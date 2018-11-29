@@ -167,14 +167,12 @@ func (p *packetPacker) MaybePackAckPacket() (*packedPacket, error) {
 // For packets sent after completion of the handshake, it might happen that 2 packets have to be sent.
 // This can happen e.g. when a longer packet number is used in the header.
 func (p *packetPacker) PackRetransmission(packet *ackhandler.Packet) ([]*packedPacket, error) {
-	if packet.EncryptionLevel != protocol.Encryption1RTT {
-		p, err := p.packHandshakeRetransmission(packet)
-		return []*packedPacket{p}, err
-	}
-
 	var controlFrames []wire.Frame
 	var streamFrames []*wire.StreamFrame
 	for _, f := range packet.Frames {
+		// CRYPTO frames are treated as control frames here.
+		// Since we're making sure that the header can never be larger for a retransmission,
+		// we never have to split CRYPTO frames.
 		if sf, ok := f.(*wire.StreamFrame); ok {
 			sf.DataLenPresent = true
 			streamFrames = append(streamFrames, sf)
@@ -241,23 +239,6 @@ func (p *packetPacker) PackRetransmission(packet *ackhandler.Packet) ([]*packedP
 		})
 	}
 	return packets, nil
-}
-
-// packHandshakeRetransmission retransmits a handshake packet
-func (p *packetPacker) packHandshakeRetransmission(packet *ackhandler.Packet) (*packedPacket, error) {
-	sealer, err := p.cryptoSetup.GetSealerWithEncryptionLevel(packet.EncryptionLevel)
-	if err != nil {
-		return nil, err
-	}
-	header := p.getHeader(packet.EncryptionLevel)
-	header.Type = packet.PacketType
-	raw, err := p.writeAndSealPacket(header, packet.Frames, sealer)
-	return &packedPacket{
-		header:          header,
-		raw:             raw,
-		frames:          packet.Frames,
-		encryptionLevel: packet.EncryptionLevel,
-	}, err
 }
 
 // PackPacket packs a new packet
@@ -391,6 +372,10 @@ func (p *packetPacker) getHeader(encLevel protocol.EncryptionLevel) *wire.Extend
 
 	if encLevel != protocol.Encryption1RTT {
 		header.IsLongHeader = true
+		// Always send Initial and Handshake packets with the maximum packet number length.
+		// This simplifies retransmissions: Since the header can't get any larger,
+		// we don't need to split CRYPTO frames.
+		header.PacketNumberLen = protocol.PacketNumberLen4
 		header.SrcConnectionID = p.srcConnID
 		// Set the length to the maximum packet size.
 		// Since it is encoded as a varint, this guarantees us that the header will end up at most as big as GetLength() returns.

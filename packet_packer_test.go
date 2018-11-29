@@ -115,7 +115,8 @@ var _ = Describe("Packet packer", func() {
 			h := packer.getHeader(protocol.EncryptionHandshake)
 			Expect(h.IsLongHeader).To(BeTrue())
 			Expect(h.PacketNumber).To(Equal(protocol.PacketNumber(0x42)))
-			Expect(h.PacketNumberLen).To(Equal(protocol.PacketNumberLen2))
+			// long headers always use 4 byte packet numbers, no matter what the packet number generator says
+			Expect(h.PacketNumberLen).To(Equal(protocol.PacketNumberLen4))
 			Expect(h.Version).To(Equal(packer.version))
 		})
 
@@ -748,38 +749,21 @@ var _ = Describe("Packet packer", func() {
 			sf := &wire.StreamFrame{Data: []byte("foobar")}
 
 			It("packs a retransmission with the right encryption level", func() {
+				f := &wire.CryptoFrame{Data: []byte("foo")}
 				pnManager.EXPECT().PeekPacketNumber().Return(protocol.PacketNumber(0x42), protocol.PacketNumberLen2)
 				pnManager.EXPECT().PopPacketNumber().Return(protocol.PacketNumber(0x42))
 				sealingManager.EXPECT().GetSealerWithEncryptionLevel(protocol.EncryptionInitial).Return(sealer, nil)
 				packet := &ackhandler.Packet{
 					PacketType:      protocol.PacketTypeHandshake,
 					EncryptionLevel: protocol.EncryptionInitial,
-					Frames:          []wire.Frame{sf},
+					Frames:          []wire.Frame{f},
 				}
 				p, err := packer.PackRetransmission(packet)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(p).To(HaveLen(1))
-				Expect(p[0].header.Type).To(Equal(protocol.PacketTypeHandshake))
-				Expect(p[0].frames).To(Equal([]wire.Frame{sf}))
+				Expect(p[0].header.Type).To(Equal(protocol.PacketTypeInitial))
+				Expect(p[0].frames).To(Equal([]wire.Frame{f}))
 				Expect(p[0].encryptionLevel).To(Equal(protocol.EncryptionInitial))
-			})
-
-			// this should never happen, since non forward-secure packets are limited to a size smaller than MaxPacketSize, such that it is always possible to retransmit them without splitting the StreamFrame
-			It("refuses to send a packet larger than MaxPacketSize", func() {
-				pnManager.EXPECT().PeekPacketNumber().Return(protocol.PacketNumber(0x42), protocol.PacketNumberLen2)
-				sealingManager.EXPECT().GetSealerWithEncryptionLevel(gomock.Any()).Return(sealer, nil)
-				packet := &ackhandler.Packet{
-					EncryptionLevel: protocol.EncryptionHandshake,
-					Frames: []wire.Frame{
-						&wire.StreamFrame{
-							StreamID: 1,
-							Data:     bytes.Repeat([]byte{'f'}, int(maxPacketSize)),
-						},
-					},
-				}
-				_, err := packer.PackRetransmission(packet)
-				Expect(err).To(HaveOccurred())
-				Expect(err.Error()).To(ContainSubstring("PacketPacker BUG: packet too large"))
 			})
 
 			It("packs a retransmission for an Initial packet", func() {
