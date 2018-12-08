@@ -33,12 +33,3 @@ func GetTLSConfig() *tls.Config {
 		Certificates: []tls.Certificate{cert},
 	}
 }
-
-// GetCertificate returns a certificate for quic.clemente.io
-func GetCertificate() tls.Certificate {
-	cert, err := tls.LoadX509KeyPair(GetCertificatePaths())
-	if err != nil {
-		panic(err)
-	}
-	return cert
-}
