@@ -1,6 +1,7 @@
 package self_test
 
 import (
+	"crypto/tls"
 	"fmt"
 	"io/ioutil"
 	"net"
@@ -46,8 +47,8 @@ var _ = Describe("Multiplexing", func() {
 				sess, err := quic.Dial(
 					conn,
 					addr,
-					fmt.Sprintf("quic.clemente.io:%d", addr.(*net.UDPAddr).Port),
-					nil,
+					fmt.Sprintf("localhost:%d", addr.(*net.UDPAddr).Port),
+					&tls.Config{RootCAs: testdata.GetRootCA()},
 					&quic.Config{Versions: []protocol.VersionNumber{version}},
 				)
 				Expect(err).ToNot(HaveOccurred())

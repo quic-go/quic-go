@@ -95,7 +95,7 @@ var _ = Describe("Handshake RTT tests", func() {
 		clientConfig = &quic.Config{Versions: []protocol.VersionNumber{protocol.VersionTLS}}
 		clientTLSConfig = &tls.Config{
 			InsecureSkipVerify: true,
-			ServerName:         "quic.clemente.io",
+			ServerName:         "localhost",
 		}
 	})
 

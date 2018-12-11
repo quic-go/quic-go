@@ -48,12 +48,21 @@ func (s *stream) Write(b []byte) (int, error) {
 }
 
 var _ = Describe("Crypto Setup TLS", func() {
+	var clientConf *tls.Config
+
 	initStreams := func() (chan chunk, *stream /* initial */, *stream /* handshake */) {
 		chunkChan := make(chan chunk, 100)
 		initialStream := newStream(chunkChan, protocol.EncryptionInitial)
 		handshakeStream := newStream(chunkChan, protocol.EncryptionHandshake)
 		return chunkChan, initialStream, handshakeStream
 	}
+
+	BeforeEach(func() {
+		clientConf = &tls.Config{
+			ServerName: "localhost",
+			RootCAs:    testdata.GetRootCA(),
+		}
+	})
 
 	It("returns Handshake() when an error occurs", func() {
 		_, sInitialStream, sHandshakeStream := initStreams()
@@ -231,7 +240,6 @@ var _ = Describe("Crypto Setup TLS", func() {
 		}
 
 		It("handshakes", func() {
-			clientConf := &tls.Config{ServerName: "quic.clemente.io"}
 			serverConf := testdata.GetTLSConfig()
 			clientErr, serverErr := handshakeWithTLSConf(clientConf, serverConf)
 			Expect(clientErr).ToNot(HaveOccurred())
@@ -239,10 +247,7 @@ var _ = Describe("Crypto Setup TLS", func() {
 		})
 
 		It("handshakes with client auth", func() {
-			clientConf := &tls.Config{
-				ServerName:   "quic.clemente.io",
-				Certificates: []tls.Certificate{generateCert()},
-			}
+			clientConf.Certificates = []tls.Certificate{generateCert()}
 			serverConf := testdata.GetTLSConfig()
 			serverConf.ClientAuth = qtls.RequireAnyClientCert
 			clientErr, serverErr := handshakeWithTLSConf(clientConf, serverConf)
@@ -299,7 +304,7 @@ var _ = Describe("Crypto Setup TLS", func() {
 				protocol.ConnectionID{},
 				cTransportParameters,
 				func(p *TransportParameters) { sTransportParametersRcvd = p },
-				&tls.Config{ServerName: "quic.clemente.io"},
+				clientConf,
 				protocol.VersionTLS,
 				[]protocol.VersionNumber{protocol.VersionTLS},
 				protocol.VersionTLS,

@@ -8,13 +8,11 @@ defaults: &defaults
           go get -t ./...
           go get github.com/onsi/ginkgo/ginkgo
           go get github.com/onsi/gomega
-          echo 127.0.0.1 quic.clemente.io | sudo tee -a /etc/hosts
     - run:
         name: "Build infos"
         command: |
           echo $GOARCH
           go version
-          printf "quic.clemente.io certificate valid until: " && openssl x509 -in example/fullchain.pem -enddate -noout | cut -d = -f 2
     - run:
         name: "Run benchmark tests"
         command: ginkgo -randomizeAllSpecs -trace benchmark -- -samples=1
