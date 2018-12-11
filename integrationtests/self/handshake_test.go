@@ -97,10 +97,14 @@ var _ = Describe("Handshake tests", func() {
 			version := v
 
 			Context(fmt.Sprintf("using %s", version), func() {
-				var clientConfig *quic.Config
+				var (
+					tlsConf      *tls.Config
+					clientConfig *quic.Config
+				)
 
 				BeforeEach(func() {
 					serverConfig.Versions = []protocol.VersionNumber{version}
+					tlsConf = &tls.Config{RootCAs: testdata.GetRootCA()}
 					clientConfig = &quic.Config{
 						Versions: []protocol.VersionNumber{version},
 					}
@@ -108,20 +112,32 @@ var _ = Describe("Handshake tests", func() {
 
 				It("accepts the certificate", func() {
 					runServer()
-					_, err := quic.DialAddr(fmt.Sprintf("quic.clemente.io:%d", server.Addr().(*net.UDPAddr).Port), nil, clientConfig)
+					_, err := quic.DialAddr(
+						fmt.Sprintf("localhost:%d", server.Addr().(*net.UDPAddr).Port),
+						tlsConf,
+						clientConfig,
+					)
 					Expect(err).ToNot(HaveOccurred())
 				})
 
 				It("errors if the server name doesn't match", func() {
 					runServer()
-					_, err := quic.DialAddr(fmt.Sprintf("127.0.0.1:%d", server.Addr().(*net.UDPAddr).Port), nil, clientConfig)
+					_, err := quic.DialAddr(
+						fmt.Sprintf("127.0.0.1:%d", server.Addr().(*net.UDPAddr).Port),
+						tlsConf,
+						clientConfig,
+					)
 					Expect(err).To(HaveOccurred())
 				})
 
 				It("uses the ServerName in the tls.Config", func() {
 					runServer()
-					conf := &tls.Config{ServerName: "quic.clemente.io"}
-					_, err := quic.DialAddr(fmt.Sprintf("127.0.0.1:%d", server.Addr().(*net.UDPAddr).Port), conf, clientConfig)
+					tlsConf.ServerName = "localhost"
+					_, err := quic.DialAddr(
+						fmt.Sprintf("127.0.0.1:%d", server.Addr().(*net.UDPAddr).Port),
+						tlsConf,
+						clientConfig,
+					)
 					Expect(err).ToNot(HaveOccurred())
 				})
 			})

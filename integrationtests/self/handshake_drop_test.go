@@ -1,6 +1,7 @@
 package self_test
 
 import (
+	"crypto/tls"
 	"fmt"
 	mrand "math/rand"
 	"net"
@@ -70,8 +71,8 @@ var _ = Describe("Handshake drop tests", func() {
 				serverSessionChan <- sess
 			}()
 			sess, err := quic.DialAddr(
-				fmt.Sprintf("quic.clemente.io:%d", proxy.LocalPort()),
-				nil,
+				fmt.Sprintf("localhost:%d", proxy.LocalPort()),
+				&tls.Config{RootCAs: testdata.GetRootCA()},
 				&quic.Config{Versions: []protocol.VersionNumber{version}},
 			)
 			Expect(err).ToNot(HaveOccurred())
@@ -102,8 +103,8 @@ var _ = Describe("Handshake drop tests", func() {
 				serverSessionChan <- sess
 			}()
 			sess, err := quic.DialAddr(
-				fmt.Sprintf("quic.clemente.io:%d", proxy.LocalPort()),
-				nil,
+				fmt.Sprintf("localhost:%d", proxy.LocalPort()),
+				&tls.Config{RootCAs: testdata.GetRootCA()},
 				&quic.Config{Versions: []protocol.VersionNumber{version}},
 			)
 			Expect(err).ToNot(HaveOccurred())
@@ -132,8 +133,8 @@ var _ = Describe("Handshake drop tests", func() {
 				serverSessionChan <- sess
 			}()
 			sess, err := quic.DialAddr(
-				fmt.Sprintf("quic.clemente.io:%d", proxy.LocalPort()),
-				nil,
+				fmt.Sprintf("localhost:%d", proxy.LocalPort()),
+				&tls.Config{RootCAs: testdata.GetRootCA()},
 				&quic.Config{Versions: []protocol.VersionNumber{version}},
 			)
 			Expect(err).ToNot(HaveOccurred())

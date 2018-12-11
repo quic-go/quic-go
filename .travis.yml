@@ -1,10 +1,6 @@
 dist: trusty
 group: travis_latest
 
-addons:
-  hosts:
-    - quic.clemente.io
-
 language: go
 
 go:
@@ -41,7 +37,6 @@ before_install:
   - go get github.com/onsi/gomega
   - export GOARCH=$TRAVIS_GOARCH
   - go env # for debugging
-  - "printf \"quic.clemente.io certificate valid until: \" && openssl x509 -in example/fullchain.pem -enddate -noout | cut -d = -f 2"
   - "export DISPLAY=:99.0"
   - "Xvfb $DISPLAY &> /dev/null &"
 

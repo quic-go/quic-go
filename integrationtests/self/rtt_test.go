@@ -1,6 +1,7 @@
 package self
 
 import (
+	"crypto/tls"
 	"fmt"
 	"io/ioutil"
 	"net"
@@ -63,8 +64,8 @@ var _ = Describe("non-zero RTT", func() {
 					defer proxy.Close()
 
 					sess, err := quic.DialAddr(
-						fmt.Sprintf("quic.clemente.io:%d", proxy.LocalPort()),
-						nil,
+						fmt.Sprintf("localhost:%d", proxy.LocalPort()),
+						&tls.Config{RootCAs: testdata.GetRootCA()},
 						&quic.Config{Versions: []protocol.VersionNumber{version}},
 					)
 					Expect(err).ToNot(HaveOccurred())

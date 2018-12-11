@@ -1,6 +1,7 @@
 package self_test
 
 import (
+	"crypto/tls"
 	"fmt"
 	"io/ioutil"
 	"net"
@@ -36,7 +37,7 @@ var _ = Describe("Bidirectional streams", func() {
 				}
 				server, err = quic.ListenAddr("localhost:0", testdata.GetTLSConfig(), qconf)
 				Expect(err).ToNot(HaveOccurred())
-				serverAddr = fmt.Sprintf("quic.clemente.io:%d", server.Addr().(*net.UDPAddr).Port)
+				serverAddr = fmt.Sprintf("localhost:%d", server.Addr().(*net.UDPAddr).Port)
 			})
 
 			AfterEach(func() {
@@ -98,7 +99,11 @@ var _ = Describe("Bidirectional streams", func() {
 					runReceivingPeer(sess)
 				}()
 
-				client, err := quic.DialAddr(serverAddr, nil, qconf)
+				client, err := quic.DialAddr(
+					serverAddr,
+					&tls.Config{RootCAs: testdata.GetRootCA()},
+					qconf,
+				)
 				Expect(err).ToNot(HaveOccurred())
 				runSendingPeer(client)
 			})
@@ -112,7 +117,11 @@ var _ = Describe("Bidirectional streams", func() {
 					sess.Close()
 				}()
 
-				client, err := quic.DialAddr(serverAddr, nil, qconf)
+				client, err := quic.DialAddr(
+					serverAddr,
+					&tls.Config{RootCAs: testdata.GetRootCA()},
+					qconf,
+				)
 				Expect(err).ToNot(HaveOccurred())
 				runReceivingPeer(client)
 				Eventually(client.Context().Done()).Should(BeClosed())
@@ -135,7 +144,11 @@ var _ = Describe("Bidirectional streams", func() {
 					close(done1)
 				}()
 
-				client, err := quic.DialAddr(serverAddr, nil, qconf)
+				client, err := quic.DialAddr(
+					serverAddr,
+					&tls.Config{RootCAs: testdata.GetRootCA()},
+					qconf,
+				)
 				Expect(err).ToNot(HaveOccurred())
 				done2 := make(chan struct{})
 				go func() {
