@@ -6,8 +6,9 @@ import (
 	"encoding/binary"
 )
 
+// HkdfExtract generates a pseudorandom key for use with Expand from an input secret and an optional independent salt.
 // copied from https://github.com/cloudflare/tls-tris/blob/master/hkdf.go
-func hkdfExtract(hash crypto.Hash, secret, salt []byte) []byte {
+func HkdfExtract(hash crypto.Hash, secret, salt []byte) []byte {
 	if salt == nil {
 		salt = make([]byte, hash.Size())
 	}
@@ -47,7 +48,7 @@ func hkdfExpand(hash crypto.Hash, prk, info []byte, l int) []byte {
 	return res
 }
 
-// hkdfExpandLabel HKDF expands a label
+// HkdfExpandLabel HKDF expands a label
 func HkdfExpandLabel(hash crypto.Hash, secret []byte, label string, length int) []byte {
 	const prefix = "quic "
 	qlabel := make([]byte, 2 /* length */ +1 /* length of label */ +len(prefix)+len(label)+1 /* length of context (empty) */)
