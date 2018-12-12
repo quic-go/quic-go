@@ -43,23 +43,21 @@ func newPacketUnpacker(aead quicAEAD, version protocol.VersionNumber) unpacker {
 
 func (u *packetUnpacker) Unpack(hdr *wire.Header, data []byte) (*unpackedPacket, error) {
 	r := bytes.NewReader(data)
+
+	if hdr.IsLongHeader {
+		if protocol.ByteCount(r.Len()) < hdr.Length {
+			return nil, fmt.Errorf("packet length (%d bytes) is smaller than the expected length (%d bytes)", len(data)-int(hdr.ParsedLen()), hdr.Length)
+		}
+		data = data[:int(hdr.ParsedLen()+hdr.Length)]
+		// TODO(#1312): implement parsing of compound packets
+	}
+
 	extHdr, err := hdr.ParseExtended(r, u.version)
 	if err != nil {
 		return nil, fmt.Errorf("error parsing extended header: %s", err)
 	}
 	extHdr.Raw = data[:len(data)-r.Len()]
 	data = data[len(data)-r.Len():]
-
-	if hdr.IsLongHeader {
-		if hdr.Length < protocol.ByteCount(extHdr.PacketNumberLen) {
-			return nil, fmt.Errorf("packet length (%d bytes) shorter than packet number (%d bytes)", extHdr.Length, extHdr.PacketNumberLen)
-		}
-		if protocol.ByteCount(len(data))+protocol.ByteCount(extHdr.PacketNumberLen) < extHdr.Length {
-			return nil, fmt.Errorf("packet length (%d bytes) is smaller than the expected length (%d bytes)", len(data)+int(extHdr.PacketNumberLen), extHdr.Length)
-		}
-		data = data[:int(extHdr.Length)-int(extHdr.PacketNumberLen)]
-		// TODO(#1312): implement parsing of compound packets
-	}
 
 	pn := protocol.DecodePacketNumber(
 		extHdr.PacketNumberLen,

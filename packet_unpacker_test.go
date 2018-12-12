@@ -103,22 +103,6 @@ var _ = Describe("Packet Unpacker", func() {
 		Expect(err).To(MatchError("packet length (500 bytes) is smaller than the expected length (1000 bytes)"))
 	})
 
-	It("errors when receiving a packet that has a length smaller than the packet number length", func() {
-		extHdr := &wire.ExtendedHeader{
-			Header: wire.Header{
-				IsLongHeader:     true,
-				DestConnectionID: connID,
-				Type:             protocol.PacketTypeHandshake,
-				Length:           3,
-				Version:          protocol.VersionTLS,
-			},
-			PacketNumberLen: protocol.PacketNumberLen4,
-		}
-		hdr, hdrRaw := getHeader(extHdr)
-		_, err := unpacker.Unpack(hdr, hdrRaw)
-		Expect(err).To(MatchError("packet length (3 bytes) shorter than packet number (4 bytes)"))
-	})
-
 	It("cuts packets to the right length", func() {
 		pnLen := protocol.PacketNumberLen2
 		extHdr := &wire.ExtendedHeader{
