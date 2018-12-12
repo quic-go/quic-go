@@ -533,62 +533,6 @@ var _ = Describe("Session", func() {
 			})).To(Succeed())
 		})
 
-		It("errors on packets that are smaller than the length in the packet header", func() {
-			connID := protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8}
-			hdr := &wire.ExtendedHeader{
-				Header: wire.Header{
-					IsLongHeader:     true,
-					Type:             protocol.PacketTypeHandshake,
-					Length:           1000,
-					DestConnectionID: connID,
-					Version:          protocol.VersionTLS,
-				},
-				PacketNumberLen: protocol.PacketNumberLen2,
-			}
-			data := getData(hdr)
-			data = append(data, make([]byte, 500-2 /* for packet number length */)...)
-			Expect(sess.handlePacketImpl(&receivedPacket{hdr: &hdr.Header, data: data})).To(MatchError("packet length (500 bytes) is smaller than the expected length (1000 bytes)"))
-		})
-
-		It("errors when receiving a packet that has a length smaller than the packet number length", func() {
-			connID := protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8}
-			hdr := &wire.ExtendedHeader{
-				Header: wire.Header{
-					IsLongHeader:     true,
-					DestConnectionID: connID,
-					Type:             protocol.PacketTypeHandshake,
-					Length:           3,
-					Version:          protocol.VersionTLS,
-				},
-				PacketNumberLen: protocol.PacketNumberLen4,
-			}
-			data := getData(hdr)
-			Expect(sess.handlePacketImpl(&receivedPacket{hdr: &hdr.Header, data: data})).To(MatchError("packet length (3 bytes) shorter than packet number (4 bytes)"))
-		})
-
-		It("cuts packets to the right length", func() {
-			connID := protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8}
-			pnLen := protocol.PacketNumberLen2
-			hdr := &wire.ExtendedHeader{
-				Header: wire.Header{
-					IsLongHeader:     true,
-					DestConnectionID: connID,
-					Type:             protocol.PacketTypeHandshake,
-					Length:           456,
-					Version:          protocol.VersionTLS,
-				},
-				PacketNumberLen: pnLen,
-			}
-			payloadLen := 456 - int(pnLen)
-			data := getData(hdr)
-			data = append(data, make([]byte, payloadLen)...)
-			unpacker.EXPECT().Unpack(gomock.Any(), gomock.Any()).DoAndReturn(func(_ *wire.ExtendedHeader, data []byte) (*unpackedPacket, error) {
-				Expect(data).To(HaveLen(payloadLen))
-				return &unpackedPacket{}, nil
-			})
-			Expect(sess.handlePacketImpl(&receivedPacket{hdr: &hdr.Header, data: data})).To(Succeed())
-		})
-
 		Context("updating the remote address", func() {
 			It("doesn't support connection migration", func() {
 				unpacker.EXPECT().Unpack(gomock.Any(), gomock.Any()).Return(&unpackedPacket{}, nil)

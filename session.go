@@ -1,7 +1,6 @@
 package quic
 
 import (
-	"bytes"
 	"context"
 	"crypto/tls"
 	"errors"
@@ -22,7 +21,7 @@ import (
 )
 
 type unpacker interface {
-	Unpack(hdr *wire.ExtendedHeader, data []byte) (*unpackedPacket, error)
+	Unpack(hdr *wire.Header, data []byte) (*unpackedPacket, error)
 }
 
 type streamGetter interface {
@@ -483,27 +482,7 @@ func (s *session) handlePacketImpl(p *receivedPacket) error {
 		return nil
 	}
 
-	data := p.data
-	r := bytes.NewReader(data)
-	hdr, err := p.hdr.ParseExtended(r, s.version)
-	if err != nil {
-		return fmt.Errorf("error parsing extended header: %s", err)
-	}
-	hdr.Raw = data[:len(data)-r.Len()]
-	data = data[len(data)-r.Len():]
-
-	if hdr.IsLongHeader {
-		if hdr.Length < protocol.ByteCount(hdr.PacketNumberLen) {
-			return fmt.Errorf("packet length (%d bytes) shorter than packet number (%d bytes)", hdr.Length, hdr.PacketNumberLen)
-		}
-		if protocol.ByteCount(len(data))+protocol.ByteCount(hdr.PacketNumberLen) < hdr.Length {
-			return fmt.Errorf("packet length (%d bytes) is smaller than the expected length (%d bytes)", len(data)+int(hdr.PacketNumberLen), hdr.Length)
-		}
-		data = data[:int(hdr.Length)-int(hdr.PacketNumberLen)]
-		// TODO(#1312): implement parsing of compound packets
-	}
-
-	packet, err := s.unpacker.Unpack(hdr, data)
+	packet, err := s.unpacker.Unpack(p.hdr, p.data)
 	// if the decryption failed, this might be a packet sent by an attacker
 	if err != nil {
 		return err
@@ -511,13 +490,13 @@ func (s *session) handlePacketImpl(p *receivedPacket) error {
 
 	if s.logger.Debug() {
 		s.logger.Debugf("<- Reading packet %#x (%d bytes) for connection %s, %s", packet.packetNumber, len(p.data), p.hdr.DestConnectionID, packet.encryptionLevel)
-		hdr.Log(s.logger)
+		packet.hdr.Log(s.logger)
 	}
 
 	// The server can change the source connection ID with the first Handshake packet.
-	if s.perspective == protocol.PerspectiveClient && !s.receivedFirstPacket && hdr.IsLongHeader && !hdr.SrcConnectionID.Equal(s.destConnID) {
-		s.logger.Debugf("Received first packet. Switching destination connection ID to: %s", hdr.SrcConnectionID)
-		s.destConnID = hdr.SrcConnectionID
+	if s.perspective == protocol.PerspectiveClient && !s.receivedFirstPacket && p.hdr.IsLongHeader && !p.hdr.SrcConnectionID.Equal(s.destConnID) {
+		s.logger.Debugf("Received first packet. Switching destination connection ID to: %s", p.hdr.SrcConnectionID)
+		s.destConnID = p.hdr.SrcConnectionID
 		s.packer.ChangeDestConnectionID(s.destConnID)
 	}
 
@@ -536,7 +515,7 @@ func (s *session) handlePacketImpl(p *receivedPacket) error {
 
 	// If this is a Retry packet, there's no need to send an ACK.
 	// The session will be closed and recreated as soon as the crypto setup processed the HRR.
-	if hdr.Type != protocol.PacketTypeRetry {
+	if p.hdr.Type != protocol.PacketTypeRetry {
 		isRetransmittable := ackhandler.HasRetransmittableFrames(packet.frames)
 		if err := s.receivedPacketHandler.ReceivedPacket(packet.packetNumber, p.rcvTime, isRetransmittable); err != nil {
 			return err
