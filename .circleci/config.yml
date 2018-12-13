@@ -1,47 +1,55 @@
-defaults: &defaults
-  working_directory: /go/src/github.com/lucas-clemente/quic-go
-  steps:
-    - checkout
-    - run:
-        name: "Setup build environment"
-        command: |
-          go get -t ./...
-          go get github.com/onsi/ginkgo/ginkgo
-          go get github.com/onsi/gomega
-    - run:
-        name: "Build infos"
-        command: |
-          echo $GOARCH
-          go version
-    - run:
-        name: "Run benchmark tests"
-        command: ginkgo -randomizeAllSpecs -trace benchmark -- -samples=1
-    - run:
-        name: "Run benchmark tests with race detector"
-        command: ginkgo -race -randomizeAllSpecs -trace benchmark -- -samples=1 -size=10
-    - run:
-        name: "Run tools tests"
-        command: ginkgo -race -r -v -randomizeAllSpecs -trace integrationtests/tools
-    - run:
-        name: "Run self integration tests"
-        command: ginkgo -v -randomizeAllSpecs -trace integrationtests/self
-    - run:
-        name: "Run self integration tests with race detector"
-        command: ginkgo -race -v -randomizeAllSpecs -trace integrationtests/self
-
-version: 2
+version: 2.1
 jobs:
-  build-go1.11:
-    docker:
-      - image: circleci/golang:1.11-stretch-browsers
-    <<: *defaults
-  build-go1.10:
-    docker:
-      - image: circleci/golang:1.10.4-stretch-browsers
-    <<: *defaults
-workflows:
-  version: 2
   build:
+    parameters:
+      image:
+        type: string
+        default: \"\"
+      runrace:
+        type: boolean
+        default: false
+    docker:
+      - image: << parameters.image >>
+    working_directory: /go/src/github.com/lucas-clemente/quic-go
+    steps:
+      - checkout
+      - run:
+          name: "Setup build environment"
+          command: |
+            go get -t ./...
+            go get github.com/onsi/ginkgo/ginkgo
+            go get github.com/onsi/gomega
+      - run:
+          name: "Build infos"
+          command: |
+            echo $GOARCH
+            go version
+      - run:
+          name: "Run benchmark tests"
+          command: ginkgo -randomizeAllSpecs -trace benchmark -- -samples=1
+      - run:
+          name: "Run benchmark tests with race detector"
+          command: ginkgo -race -randomizeAllSpecs -trace benchmark -- -samples=1 -size=10
+      - run:
+          name: "Run tools tests"
+          command: ginkgo -race -r -v -randomizeAllSpecs -trace integrationtests/tools
+      - run:
+          name: "Run self integration tests"
+          command: ginkgo -v -randomizeAllSpecs -trace integrationtests/self
+      - when:
+          condition: << parameters.runrace >>
+          steps:
+            - run:
+                name: "Run self integration tests with race detector"
+                command: ginkgo -race -v -randomizeAllSpecs -trace integrationtests/self
+workflows:
+  workflow:
     jobs:
-      - build-go1.10
-      - build-go1.11
+      - build:
+          name: "Go 1.11"
+          image: "circleci/golang:1.11-stretch-browsers"
+          runrace: true
+      - build:
+          name: "Go 1.10"
+          image: "circleci/golang:1.10-stretch-browsers"
+          runrace: false
