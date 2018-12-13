@@ -21,8 +21,8 @@ func newInitialAEAD(connID protocol.ConnectionID, pers protocol.Perspective) (Se
 		mySecret = serverSecret
 		otherSecret = clientSecret
 	}
-	myKey, myIV := computeInitialKeyAndIV(mySecret)
-	otherKey, otherIV := computeInitialKeyAndIV(otherSecret)
+	myKey, _, myIV := computeInitialKeyAndIV(mySecret)
+	otherKey, _, otherIV := computeInitialKeyAndIV(otherSecret)
 
 	encrypterCipher, err := aes.NewCipher(myKey)
 	if err != nil {
@@ -50,8 +50,9 @@ func computeSecrets(connID protocol.ConnectionID) (clientSecret, serverSecret []
 	return
 }
 
-func computeInitialKeyAndIV(secret []byte) (key, iv []byte) {
+func computeInitialKeyAndIV(secret []byte) (key, pnKey, iv []byte) {
 	key = crypto.HkdfExpandLabel(gocrypto.SHA256, secret, "key", 16)
+	pnKey = crypto.HkdfExpandLabel(gocrypto.SHA256, secret, "pn", 16)
 	iv = crypto.HkdfExpandLabel(gocrypto.SHA256, secret, "iv", 12)
 	return
 }
