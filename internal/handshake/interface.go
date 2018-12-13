@@ -35,10 +35,7 @@ type CryptoSetup interface {
 
 	GetSealer() (protocol.EncryptionLevel, Sealer)
 	GetSealerWithEncryptionLevel(protocol.EncryptionLevel) (Sealer, error)
-
-	OpenInitial(dst, src []byte, pn protocol.PacketNumber, ad []byte) ([]byte, error)
-	OpenHandshake(dst, src []byte, pn protocol.PacketNumber, ad []byte) ([]byte, error)
-	Open1RTT(dst, src []byte, pn protocol.PacketNumber, ad []byte) ([]byte, error)
+	GetOpener(protocol.EncryptionLevel) (Opener, error)
 }
 
 // ConnectionState records basic details about the QUIC connection.

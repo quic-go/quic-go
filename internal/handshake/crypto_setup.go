@@ -493,22 +493,23 @@ func (h *cryptoSetup) GetSealerWithEncryptionLevel(level protocol.EncryptionLeve
 	}
 }
 
-func (h *cryptoSetup) OpenInitial(dst, src []byte, pn protocol.PacketNumber, ad []byte) ([]byte, error) {
-	return h.initialOpener.Open(dst, src, pn, ad)
-}
-
-func (h *cryptoSetup) OpenHandshake(dst, src []byte, pn protocol.PacketNumber, ad []byte) ([]byte, error) {
-	if h.handshakeOpener == nil {
-		return nil, errors.New("no handshake opener")
+func (h *cryptoSetup) GetOpener(level protocol.EncryptionLevel) (Opener, error) {
+	switch level {
+	case protocol.EncryptionInitial:
+		return h.initialOpener, nil
+	case protocol.EncryptionHandshake:
+		if h.handshakeOpener == nil {
+			return nil, errors.New("CryptoSetup: no opener with encryption level Handshake")
+		}
+		return h.handshakeOpener, nil
+	case protocol.Encryption1RTT:
+		if h.opener == nil {
+			return nil, errors.New("CryptoSetup: no opener with encryption level 1-RTT")
+		}
+		return h.opener, nil
+	default:
+		return nil, fmt.Errorf("CryptoSetup: no opener with encryption level %s", level)
 	}
-	return h.handshakeOpener.Open(dst, src, pn, ad)
-}
-
-func (h *cryptoSetup) Open1RTT(dst, src []byte, pn protocol.PacketNumber, ad []byte) ([]byte, error) {
-	if h.opener == nil {
-		return nil, errors.New("no 1-RTT opener")
-	}
-	return h.opener.Open(dst, src, pn, ad)
 }
 
 func (h *cryptoSetup) ConnectionState() ConnectionState {

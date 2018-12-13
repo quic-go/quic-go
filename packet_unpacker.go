@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 
+	"github.com/lucas-clemente/quic-go/internal/handshake"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/internal/qerr"
 	"github.com/lucas-clemente/quic-go/internal/utils"
@@ -17,15 +18,9 @@ type unpackedPacket struct {
 	frames          []wire.Frame
 }
 
-type quicAEAD interface {
-	OpenInitial(dst, src []byte, pn protocol.PacketNumber, ad []byte) ([]byte, error)
-	OpenHandshake(dst, src []byte, pn protocol.PacketNumber, ad []byte) ([]byte, error)
-	Open1RTT(dst, src []byte, pn protocol.PacketNumber, ad []byte) ([]byte, error)
-}
-
 // The packetUnpacker unpacks QUIC packets.
 type packetUnpacker struct {
-	aead quicAEAD
+	cs handshake.CryptoSetup
 
 	largestRcvdPacketNumber protocol.PacketNumber
 
@@ -34,9 +29,9 @@ type packetUnpacker struct {
 
 var _ unpacker = &packetUnpacker{}
 
-func newPacketUnpacker(aead quicAEAD, version protocol.VersionNumber) unpacker {
+func newPacketUnpacker(cs handshake.CryptoSetup, version protocol.VersionNumber) unpacker {
 	return &packetUnpacker{
-		aead:    aead,
+		cs:      cs,
 		version: version,
 	}
 }
@@ -69,22 +64,23 @@ func (u *packetUnpacker) Unpack(hdr *wire.Header, data []byte) (*unpackedPacket,
 	buf = buf[:0]
 	defer putPacketBuffer(&buf)
 
-	var decrypted []byte
-	var encryptionLevel protocol.EncryptionLevel
+	var encLevel protocol.EncryptionLevel
 	switch hdr.Type {
 	case protocol.PacketTypeInitial:
-		decrypted, err = u.aead.OpenInitial(buf, data, pn, extHdr.Raw)
-		encryptionLevel = protocol.EncryptionInitial
+		encLevel = protocol.EncryptionInitial
 	case protocol.PacketTypeHandshake:
-		decrypted, err = u.aead.OpenHandshake(buf, data, pn, extHdr.Raw)
-		encryptionLevel = protocol.EncryptionHandshake
+		encLevel = protocol.EncryptionHandshake
 	default:
 		if hdr.IsLongHeader {
 			return nil, fmt.Errorf("unknown packet type: %s", hdr.Type)
 		}
-		decrypted, err = u.aead.Open1RTT(buf, data, pn, extHdr.Raw)
-		encryptionLevel = protocol.Encryption1RTT
+		encLevel = protocol.Encryption1RTT
 	}
+	opener, err := u.cs.GetOpener(encLevel)
+	if err != nil {
+		return nil, qerr.Error(qerr.DecryptionFailure, err.Error())
+	}
+	decrypted, err := opener.Open(buf, data, pn, extHdr.Raw)
 	if err != nil {
 		return nil, qerr.Error(qerr.DecryptionFailure, err.Error())
 	}
@@ -100,7 +96,7 @@ func (u *packetUnpacker) Unpack(hdr *wire.Header, data []byte) (*unpackedPacket,
 	return &unpackedPacket{
 		hdr:             extHdr,
 		packetNumber:    pn,
-		encryptionLevel: encryptionLevel,
+		encryptionLevel: encLevel,
 		frames:          fs,
 	}, nil
 }
