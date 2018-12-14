@@ -47,23 +47,6 @@ func (u *packetUnpacker) Unpack(hdr *wire.Header, data []byte) (*unpackedPacket,
 		// TODO(#1312): implement parsing of compound packets
 	}
 
-	extHdr, err := hdr.ParseExtended(r, u.version)
-	if err != nil {
-		return nil, fmt.Errorf("error parsing extended header: %s", err)
-	}
-	extHdr.Raw = data[:len(data)-r.Len()]
-	data = data[len(data)-r.Len():]
-
-	pn := protocol.DecodePacketNumber(
-		extHdr.PacketNumberLen,
-		u.largestRcvdPacketNumber,
-		extHdr.PacketNumber,
-	)
-
-	buf := *getPacketBuffer()
-	buf = buf[:0]
-	defer putPacketBuffer(&buf)
-
 	var encLevel protocol.EncryptionLevel
 	switch hdr.Type {
 	case protocol.PacketTypeInitial:
@@ -80,6 +63,40 @@ func (u *packetUnpacker) Unpack(hdr *wire.Header, data []byte) (*unpackedPacket,
 	if err != nil {
 		return nil, qerr.Error(qerr.DecryptionFailure, err.Error())
 	}
+	hdrLen := int(hdr.ParsedLen())
+	// The packet number can be up to 4 bytes long, but we won't know the length until we decrypt it.
+	// 1. save a copy of the 4 bytes
+	origPNBytes := make([]byte, 4)
+	copy(origPNBytes, data[hdrLen:hdrLen+4])
+	// 2. decrypt the header, assuming a 4 byte packet number
+	opener.DecryptHeader(
+		data[hdrLen+4:hdrLen+4+16],
+		&data[0],
+		data[hdrLen:hdrLen+4],
+	)
+
+	// 3. parse the header (and learn the actual length of the packet number)
+	extHdr, err := hdr.ParseExtended(r, u.version)
+	if err != nil {
+		return nil, fmt.Errorf("error parsing extended header: %s", err)
+	}
+	extHdr.Raw = data[:hdrLen+int(extHdr.PacketNumberLen)]
+	// 4. if the packet number is shorter than 4 bytes, replace the remaining bytes with the copy we saved earlier
+	if extHdr.PacketNumberLen != protocol.PacketNumberLen4 {
+		copy(data[hdrLen+int(extHdr.PacketNumberLen):hdrLen+4], origPNBytes[int(extHdr.PacketNumberLen):])
+	}
+	data = data[hdrLen+int(extHdr.PacketNumberLen):]
+
+	pn := protocol.DecodePacketNumber(
+		extHdr.PacketNumberLen,
+		u.largestRcvdPacketNumber,
+		extHdr.PacketNumber,
+	)
+
+	buf := *getPacketBuffer()
+	buf = buf[:0]
+	defer putPacketBuffer(&buf)
+
 	decrypted, err := opener.Open(buf, data, pn, extHdr.Raw)
 	if err != nil {
 		return nil, qerr.Error(qerr.DecryptionFailure, err.Error())
