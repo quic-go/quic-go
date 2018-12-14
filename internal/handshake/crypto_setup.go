@@ -1,6 +1,7 @@
 package handshake
 
 import (
+	"crypto/aes"
 	"crypto/tls"
 	"errors"
 	"fmt"
@@ -407,7 +408,17 @@ func (h *cryptoSetup) ReadHandshakeMessage() ([]byte, error) {
 func (h *cryptoSetup) SetReadKey(suite *qtls.CipherSuite, trafficSecret []byte) {
 	key := crypto.HkdfExpandLabel(suite.Hash(), trafficSecret, "key", suite.KeyLen())
 	iv := crypto.HkdfExpandLabel(suite.Hash(), trafficSecret, "iv", suite.IVLen())
-	opener := newOpener(suite.AEAD(key, iv), iv)
+	pnKey := crypto.HkdfExpandLabel(suite.Hash(), trafficSecret, "pn", suite.KeyLen())
+	pnDecrypter, err := aes.NewCipher(pnKey)
+	if err != nil {
+		panic(fmt.Sprintf("error creating new AES cipher: %s", err))
+	}
+	opener := newOpener(
+		suite.AEAD(key, iv),
+		iv,
+		pnDecrypter,
+		h.readEncLevel == protocol.Encryption1RTT,
+	)
 
 	switch h.readEncLevel {
 	case protocol.EncryptionInitial:
@@ -427,7 +438,17 @@ func (h *cryptoSetup) SetReadKey(suite *qtls.CipherSuite, trafficSecret []byte) 
 func (h *cryptoSetup) SetWriteKey(suite *qtls.CipherSuite, trafficSecret []byte) {
 	key := crypto.HkdfExpandLabel(suite.Hash(), trafficSecret, "key", suite.KeyLen())
 	iv := crypto.HkdfExpandLabel(suite.Hash(), trafficSecret, "iv", suite.IVLen())
-	sealer := newSealer(suite.AEAD(key, iv), iv)
+	pnKey := crypto.HkdfExpandLabel(suite.Hash(), trafficSecret, "pn", suite.KeyLen())
+	pnEncrypter, err := aes.NewCipher(pnKey)
+	if err != nil {
+		panic(fmt.Sprintf("error creating new AES cipher: %s", err))
+	}
+	sealer := newSealer(
+		suite.AEAD(key, iv),
+		iv,
+		pnEncrypter,
+		h.writeEncLevel == protocol.Encryption1RTT,
+	)
 
 	switch h.writeEncLevel {
 	case protocol.EncryptionInitial:
