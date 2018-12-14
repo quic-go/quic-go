@@ -57,11 +57,11 @@ var _ = Describe("HKDF", func() {
 		t := testcases[i]
 
 		It(fmt.Sprintf("case %s: extracts", t.name), func() {
-			Expect(hkdfExtract(t.hash, t.secret, t.salt)).To(Equal(t.extracted))
+			Expect(HkdfExtract(t.hash, t.secret, t.salt)).To(Equal(t.extracted))
 		})
 
 		It(fmt.Sprintf("case %s: expands", t.name), func() {
-			prk := hkdfExtract(t.hash, t.secret, t.salt)
+			prk := HkdfExtract(t.hash, t.secret, t.salt)
 			Expect(hkdfExpand(t.hash, prk, t.info, len(t.expanded))).To(Equal(t.expanded))
 		})
 	}

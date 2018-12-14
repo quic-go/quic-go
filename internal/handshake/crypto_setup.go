@@ -74,7 +74,8 @@ type cryptoSetup struct {
 	clientHelloWrittenChan chan struct{}
 
 	initialStream io.Writer
-	initialAEAD   crypto.AEAD
+	initialOpener Opener
+	initialSealer Sealer
 
 	handshakeStream io.Writer
 	handshakeOpener Opener
@@ -175,13 +176,14 @@ func newCryptoSetup(
 	logger utils.Logger,
 	perspective protocol.Perspective,
 ) (CryptoSetup, <-chan struct{} /* ClientHello written */, error) {
-	initialAEAD, err := crypto.NewNullAEAD(connID, perspective)
+	initialSealer, initialOpener, err := newInitialAEAD(connID, perspective)
 	if err != nil {
 		return nil, nil, err
 	}
 	cs := &cryptoSetup{
 		initialStream:           initialStream,
-		initialAEAD:             initialAEAD,
+		initialSealer:           initialSealer,
+		initialOpener:           initialOpener,
 		handshakeStream:         handshakeStream,
 		readEncLevel:            protocol.EncryptionInitial,
 		writeEncLevel:           protocol.EncryptionInitial,
@@ -467,7 +469,7 @@ func (h *cryptoSetup) GetSealer() (protocol.EncryptionLevel, Sealer) {
 	if h.handshakeSealer != nil {
 		return protocol.EncryptionHandshake, h.handshakeSealer
 	}
-	return protocol.EncryptionInitial, h.initialAEAD
+	return protocol.EncryptionInitial, h.initialSealer
 }
 
 func (h *cryptoSetup) GetSealerWithEncryptionLevel(level protocol.EncryptionLevel) (Sealer, error) {
@@ -475,7 +477,7 @@ func (h *cryptoSetup) GetSealerWithEncryptionLevel(level protocol.EncryptionLeve
 
 	switch level {
 	case protocol.EncryptionInitial:
-		return h.initialAEAD, nil
+		return h.initialSealer, nil
 	case protocol.EncryptionHandshake:
 		if h.handshakeSealer == nil {
 			return nil, errNoSealer
@@ -492,7 +494,7 @@ func (h *cryptoSetup) GetSealerWithEncryptionLevel(level protocol.EncryptionLeve
 }
 
 func (h *cryptoSetup) OpenInitial(dst, src []byte, pn protocol.PacketNumber, ad []byte) ([]byte, error) {
-	return h.initialAEAD.Open(dst, src, pn, ad)
+	return h.initialOpener.Open(dst, src, pn, ad)
 }
 
 func (h *cryptoSetup) OpenHandshake(dst, src []byte, pn protocol.PacketNumber, ad []byte) ([]byte, error) {
