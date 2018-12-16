@@ -1,6 +1,9 @@
 package utils
 
-import "time"
+import (
+	"math"
+	"time"
+)
 
 // A Timer wrapper that behaves correctly when resetting
 type Timer struct {
@@ -11,7 +14,7 @@ type Timer struct {
 
 // NewTimer creates a new timer that is not set
 func NewTimer() *Timer {
-	return &Timer{t: time.NewTimer(0)}
+	return &Timer{t: time.NewTimer(time.Duration(math.MaxInt64))}
 }
 
 // Chan returns the channel of the wrapped timer

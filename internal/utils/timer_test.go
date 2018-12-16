@@ -10,6 +10,11 @@ import (
 var _ = Describe("Timer", func() {
 	const d = 10 * time.Millisecond
 
+	It("doesn't fire a newly created timer", func() {
+		t := NewTimer()
+		Consistently(t.Chan()).ShouldNot(Receive())
+	})
+
 	It("works", func() {
 		t := NewTimer()
 		t.Reset(time.Now().Add(d))
