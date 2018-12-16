@@ -54,6 +54,12 @@ var _ = Describe("Timer", func() {
 		Eventually(t.Chan()).Should(Receive())
 	})
 
+	It("doesn't set a timer if the deadline is the zero value", func() {
+		t := NewTimer()
+		t.Reset(time.Time{})
+		Consistently(t.Chan()).ShouldNot(Receive())
+	})
+
 	It("fires the timer twice, if reset to the same deadline", func() {
 		deadline := time.Now().Add(-time.Millisecond)
 		t := NewTimer()
