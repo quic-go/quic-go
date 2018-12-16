@@ -74,6 +74,7 @@ var _ = Describe("Header Parsing", func() {
 			data = append(data, encodeVarInt(6)...)      // token length
 			data = append(data, []byte("foobar")...)     // token
 			data = append(data, encodeVarInt(0x1337)...) // length
+			hdrLen := len(data)
 			data = append(data, []byte{0, 0, 0xbe, 0xef}...)
 
 			hdr, err := ParseHeader(bytes.NewReader(data), 0)
@@ -92,6 +93,7 @@ var _ = Describe("Header Parsing", func() {
 			Expect(extHdr.PacketNumber).To(Equal(protocol.PacketNumber(0xbeef)))
 			Expect(extHdr.PacketNumberLen).To(Equal(protocol.PacketNumberLen4))
 			Expect(b.Len()).To(BeZero())
+			Expect(hdr.ParsedLen()).To(BeEquivalentTo(hdrLen))
 		})
 
 		It("errors if 0x40 is not set", func() {

@@ -461,28 +461,16 @@ var _ = Describe("Session", func() {
 			return buf.Bytes()
 		}
 
-		It("sets the largestRcvdPacketNumber", func() {
-			hdr := &wire.ExtendedHeader{
-				PacketNumber:    5,
-				PacketNumberLen: protocol.PacketNumberLen4,
-			}
-			hdrRaw := getData(hdr)
-			data := append(hdrRaw, []byte("foobar")...)
-			unpacker.EXPECT().Unpack(hdrRaw, gomock.Any(), []byte("foobar")).Return(&unpackedPacket{}, nil)
-			Expect(sess.handlePacketImpl(&receivedPacket{hdr: &hdr.Header, data: data})).To(Succeed())
-			Expect(sess.largestRcvdPacketNumber).To(Equal(protocol.PacketNumber(5)))
-		})
-
 		It("informs the ReceivedPacketHandler", func() {
 			hdr := &wire.ExtendedHeader{
 				Raw:             []byte("raw header"),
-				PacketNumber:    5,
-				PacketNumberLen: protocol.PacketNumberLen4,
+				PacketNumber:    0x37,
+				PacketNumberLen: protocol.PacketNumberLen1,
 			}
 			rcvTime := time.Now().Add(-10 * time.Second)
-			unpacker.EXPECT().Unpack(gomock.Any(), gomock.Any(), gomock.Any()).Return(&unpackedPacket{}, nil)
+			unpacker.EXPECT().Unpack(gomock.Any(), gomock.Any()).Return(&unpackedPacket{packetNumber: 0x1337}, nil)
 			rph := mockackhandler.NewMockReceivedPacketHandler(mockCtrl)
-			rph.EXPECT().ReceivedPacket(protocol.PacketNumber(5), rcvTime, false)
+			rph.EXPECT().ReceivedPacket(protocol.PacketNumber(0x1337), rcvTime, false)
 			sess.receivedPacketHandler = rph
 			Expect(sess.handlePacketImpl(&receivedPacket{
 				rcvTime: rcvTime,
@@ -493,7 +481,7 @@ var _ = Describe("Session", func() {
 
 		It("closes when handling a packet fails", func() {
 			testErr := errors.New("unpack error")
-			unpacker.EXPECT().Unpack(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil, testErr)
+			unpacker.EXPECT().Unpack(gomock.Any(), gomock.Any()).Return(nil, testErr)
 			streamManager.EXPECT().CloseWithError(gomock.Any())
 			cryptoSetup.EXPECT().Close()
 			packer.EXPECT().PackConnectionClose(gomock.Any()).Return(&packedPacket{}, nil)
@@ -511,7 +499,7 @@ var _ = Describe("Session", func() {
 		})
 
 		It("handles duplicate packets", func() {
-			unpacker.EXPECT().Unpack(gomock.Any(), gomock.Any(), gomock.Any()).Return(&unpackedPacket{}, nil).Times(2)
+			unpacker.EXPECT().Unpack(gomock.Any(), gomock.Any()).Return(&unpackedPacket{}, nil).Times(2)
 			hdr := &wire.ExtendedHeader{
 				PacketNumber:    5,
 				PacketNumberLen: protocol.PacketNumberLen1,
@@ -523,7 +511,7 @@ var _ = Describe("Session", func() {
 		It("ignores packets with a different source connection ID", func() {
 			// Send one packet, which might change the connection ID.
 			// only EXPECT one call to the unpacker
-			unpacker.EXPECT().Unpack(gomock.Any(), gomock.Any(), gomock.Any()).Return(&unpackedPacket{}, nil)
+			unpacker.EXPECT().Unpack(gomock.Any(), gomock.Any()).Return(&unpackedPacket{}, nil)
 			Expect(sess.handlePacketImpl(&receivedPacket{
 				hdr: &wire.Header{
 					IsLongHeader:     true,
@@ -545,65 +533,9 @@ var _ = Describe("Session", func() {
 			})).To(Succeed())
 		})
 
-		It("errors on packets that are smaller than the length in the packet header", func() {
-			connID := protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8}
-			hdr := &wire.ExtendedHeader{
-				Header: wire.Header{
-					IsLongHeader:     true,
-					Type:             protocol.PacketTypeHandshake,
-					Length:           1000,
-					DestConnectionID: connID,
-					Version:          protocol.VersionTLS,
-				},
-				PacketNumberLen: protocol.PacketNumberLen2,
-			}
-			data := getData(hdr)
-			data = append(data, make([]byte, 500-2 /* for packet number length */)...)
-			Expect(sess.handlePacketImpl(&receivedPacket{hdr: &hdr.Header, data: data})).To(MatchError("packet length (500 bytes) is smaller than the expected length (1000 bytes)"))
-		})
-
-		It("errors when receiving a packet that has a length smaller than the packet number length", func() {
-			connID := protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8}
-			hdr := &wire.ExtendedHeader{
-				Header: wire.Header{
-					IsLongHeader:     true,
-					DestConnectionID: connID,
-					Type:             protocol.PacketTypeHandshake,
-					Length:           3,
-					Version:          protocol.VersionTLS,
-				},
-				PacketNumberLen: protocol.PacketNumberLen4,
-			}
-			data := getData(hdr)
-			Expect(sess.handlePacketImpl(&receivedPacket{hdr: &hdr.Header, data: data})).To(MatchError("packet length (3 bytes) shorter than packet number (4 bytes)"))
-		})
-
-		It("cuts packets to the right length", func() {
-			connID := protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8}
-			pnLen := protocol.PacketNumberLen2
-			hdr := &wire.ExtendedHeader{
-				Header: wire.Header{
-					IsLongHeader:     true,
-					DestConnectionID: connID,
-					Type:             protocol.PacketTypeHandshake,
-					Length:           456,
-					Version:          protocol.VersionTLS,
-				},
-				PacketNumberLen: pnLen,
-			}
-			payloadLen := 456 - int(pnLen)
-			data := getData(hdr)
-			data = append(data, make([]byte, payloadLen)...)
-			unpacker.EXPECT().Unpack(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(func(_ []byte, _ *wire.ExtendedHeader, data []byte) (*unpackedPacket, error) {
-				Expect(data).To(HaveLen(payloadLen))
-				return &unpackedPacket{}, nil
-			})
-			Expect(sess.handlePacketImpl(&receivedPacket{hdr: &hdr.Header, data: data})).To(Succeed())
-		})
-
 		Context("updating the remote address", func() {
 			It("doesn't support connection migration", func() {
-				unpacker.EXPECT().Unpack(gomock.Any(), gomock.Any(), gomock.Any()).Return(&unpackedPacket{}, nil)
+				unpacker.EXPECT().Unpack(gomock.Any(), gomock.Any()).Return(&unpackedPacket{}, nil)
 				origAddr := sess.conn.(*mockConnection).remoteAddr
 				remoteIP := &net.IPAddr{IP: net.IPv4(192, 168, 0, 100)}
 				Expect(origAddr).ToNot(Equal(remoteIP))
@@ -1374,7 +1306,7 @@ var _ = Describe("Client Session", func() {
 
 	It("changes the connection ID when receiving the first packet from the server", func() {
 		unpacker := NewMockUnpacker(mockCtrl)
-		unpacker.EXPECT().Unpack(gomock.Any(), gomock.Any(), gomock.Any()).Return(&unpackedPacket{}, nil)
+		unpacker.EXPECT().Unpack(gomock.Any(), gomock.Any()).Return(&unpackedPacket{}, nil)
 		sess.unpacker = unpacker
 		go func() {
 			defer GinkgoRecover()

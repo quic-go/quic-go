@@ -421,7 +421,7 @@ func (p *packetPacker) writeAndSealPacket(
 	if err := header.Write(buffer, p.version); err != nil {
 		return nil, err
 	}
-	payloadStartIndex := buffer.Len()
+	payloadOffset := buffer.Len()
 
 	// write all frames but the last one
 	for _, frame := range frames[:len(frames)-1] {
@@ -436,7 +436,7 @@ func (p *packetPacker) writeAndSealPacket(
 			sf.DataLenPresent = true
 		}
 	} else {
-		payloadLen := buffer.Len() - payloadStartIndex + int(lastFrame.Length(p.version))
+		payloadLen := buffer.Len() - payloadOffset + int(lastFrame.Length(p.version))
 		if paddingLen := 4 - int(header.PacketNumberLen) - payloadLen; paddingLen > 0 {
 			// Pad the packet such that packet number length + payload length is 4 bytes.
 			// This is needed to enable the peer to get a 16 byte sample for header protection.
@@ -459,8 +459,15 @@ func (p *packetPacker) writeAndSealPacket(
 	}
 
 	raw = raw[0:buffer.Len()]
-	_ = sealer.Seal(raw[payloadStartIndex:payloadStartIndex], raw[payloadStartIndex:], header.PacketNumber, raw[:payloadStartIndex])
+	_ = sealer.Seal(raw[payloadOffset:payloadOffset], raw[payloadOffset:], header.PacketNumber, raw[:payloadOffset])
 	raw = raw[0 : buffer.Len()+sealer.Overhead()]
+
+	pnOffset := payloadOffset - int(header.PacketNumberLen)
+	sealer.EncryptHeader(
+		raw[pnOffset+4:pnOffset+4+16],
+		&raw[0],
+		raw[pnOffset:payloadOffset],
+	)
 
 	num := p.pnManager.PopPacketNumber()
 	if num != header.PacketNumber {

@@ -1,6 +1,8 @@
 package handshake
 
 import (
+	"math/rand"
+
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 
 	. "github.com/onsi/ginkgo"
@@ -30,10 +32,14 @@ var _ = Describe("Initial AEAD using AES-GCM", func() {
 
 		It("computes the client key and IV", func() {
 			clientSecret, _ := computeSecrets(connID)
-			key, iv := computeInitialKeyAndIV(clientSecret)
+			key, pnKey, iv := computeInitialKeyAndIV(clientSecret)
 			Expect(key).To(Equal([]byte{
 				0xf2, 0x92, 0x8f, 0x26, 0x14, 0xad, 0x6c, 0x20,
 				0xb9, 0xbd, 0x00, 0x8e, 0x9c, 0x89, 0x63, 0x1c,
+			}))
+			Expect(pnKey).To(Equal([]byte{
+				0x68, 0xc3, 0xf6, 0x4e, 0x2d, 0x66, 0x34, 0x41,
+				0x2b, 0x8e, 0x32, 0x94, 0x62, 0x8d, 0x76, 0xf1,
 			}))
 			Expect(iv).To(Equal([]byte{
 				0xab, 0x95, 0x0b, 0x01, 0x98, 0x63, 0x79, 0x78,
@@ -43,10 +49,14 @@ var _ = Describe("Initial AEAD using AES-GCM", func() {
 
 		It("computes the server key and IV", func() {
 			_, serverSecret := computeSecrets(connID)
-			key, iv := computeInitialKeyAndIV(serverSecret)
+			key, pnKey, iv := computeInitialKeyAndIV(serverSecret)
 			Expect(key).To(Equal([]byte{
 				0xf5, 0x68, 0x17, 0xd0, 0xfc, 0x59, 0x5c, 0xfc,
 				0x0a, 0x2b, 0x0b, 0xcf, 0xb1, 0x87, 0x35, 0xec,
+			}))
+			Expect(pnKey).To(Equal([]byte{
+				0xa3, 0x13, 0xc8, 0x6d, 0x13, 0x73, 0xec, 0xbc,
+				0xcb, 0x32, 0x94, 0xb1, 0x49, 0x74, 0x22, 0x6c,
 			}))
 			Expect(iv).To(Equal([]byte{
 				0x32, 0x05, 0x03, 0x5a, 0x3c, 0x93, 0x7c, 0x90,
@@ -56,7 +66,7 @@ var _ = Describe("Initial AEAD using AES-GCM", func() {
 	})
 
 	It("seals and opens", func() {
-		connectionID := protocol.ConnectionID([]byte{0x12, 0x34, 0x56, 0x78, 0x90, 0xab, 0xcd, 0xef})
+		connectionID := protocol.ConnectionID{0x12, 0x34, 0x56, 0x78, 0x90, 0xab, 0xcd, 0xef}
 		clientSealer, clientOpener, err := newInitialAEAD(connectionID, protocol.PerspectiveClient)
 		Expect(err).ToNot(HaveOccurred())
 		serverSealer, serverOpener, err := newInitialAEAD(connectionID, protocol.PerspectiveServer)
@@ -73,8 +83,8 @@ var _ = Describe("Initial AEAD using AES-GCM", func() {
 	})
 
 	It("doesn't work if initialized with different connection IDs", func() {
-		c1 := protocol.ConnectionID([]byte{0, 0, 0, 0, 0, 0, 0, 1})
-		c2 := protocol.ConnectionID([]byte{0, 0, 0, 0, 0, 0, 0, 2})
+		c1 := protocol.ConnectionID{0, 0, 0, 0, 0, 0, 0, 1}
+		c2 := protocol.ConnectionID{0, 0, 0, 0, 0, 0, 0, 2}
 		clientSealer, _, err := newInitialAEAD(c1, protocol.PerspectiveClient)
 		Expect(err).ToNot(HaveOccurred())
 		_, serverOpener, err := newInitialAEAD(c2, protocol.PerspectiveServer)
@@ -83,5 +93,37 @@ var _ = Describe("Initial AEAD using AES-GCM", func() {
 		clientMessage := clientSealer.Seal(nil, []byte("foobar"), 42, []byte("aad"))
 		_, err = serverOpener.Open(nil, clientMessage, 42, []byte("aad"))
 		Expect(err).To(MatchError("cipher: message authentication failed"))
+	})
+
+	It("encrypts und decrypts the header", func() {
+		connID := protocol.ConnectionID{0xde, 0xca, 0xfb, 0xad}
+		clientSealer, clientOpener, err := newInitialAEAD(connID, protocol.PerspectiveClient)
+		Expect(err).ToNot(HaveOccurred())
+		serverSealer, serverOpener, err := newInitialAEAD(connID, protocol.PerspectiveServer)
+		Expect(err).ToNot(HaveOccurred())
+
+		// the first byte and the last 4 bytes should be encrypted
+		header := []byte{0x5e, 0, 1, 2, 3, 4, 0xde, 0xad, 0xbe, 0xef}
+		sample := make([]byte, 16)
+		rand.Read(sample)
+		clientSealer.EncryptHeader(sample, &header[0], header[6:10])
+		// only the last 4 bits of the first byte are encrypted. Check that the first 4 bits are unmodified
+		Expect(header[0] & 0xf0).To(Equal(byte(0x5e & 0xf0)))
+		Expect(header[1:6]).To(Equal([]byte{0, 1, 2, 3, 4}))
+		Expect(header[6:10]).ToNot(Equal([]byte{0xde, 0xad, 0xbe, 0xef}))
+		serverOpener.DecryptHeader(sample, &header[0], header[6:10])
+		Expect(header[0]).To(Equal(byte(0x5e)))
+		Expect(header[1:6]).To(Equal([]byte{0, 1, 2, 3, 4}))
+		Expect(header[6:10]).To(Equal([]byte{0xde, 0xad, 0xbe, 0xef}))
+
+		serverSealer.EncryptHeader(sample, &header[0], header[6:10])
+		// only the last 4 bits of the first byte are encrypted. Check that the first 4 bits are unmodified
+		Expect(header[0] & 0xf0).To(Equal(byte(0x5e & 0xf0)))
+		Expect(header[1:6]).To(Equal([]byte{0, 1, 2, 3, 4}))
+		Expect(header[6:10]).ToNot(Equal([]byte{0xde, 0xad, 0xbe, 0xef}))
+		clientOpener.DecryptHeader(sample, &header[0], header[6:10])
+		Expect(header[0]).To(Equal(byte(0x5e)))
+		Expect(header[1:6]).To(Equal([]byte{0, 1, 2, 3, 4}))
+		Expect(header[6:10]).To(Equal([]byte{0xde, 0xad, 0xbe, 0xef}))
 	})
 })
