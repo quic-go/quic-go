@@ -96,10 +96,10 @@ func (s *sendStream) Write(p []byte) (int, error) {
 	}
 
 	s.dataForWriting = p
-	s.sender.onHasStreamData(s.streamID)
 
 	var bytesWritten int
 	var err error
+	var notifiedSender bool
 	for {
 		bytesWritten = len(p) - len(s.dataForWriting)
 		if !s.deadline.IsZero() && !time.Now().Before(s.deadline) {
@@ -112,6 +112,10 @@ func (s *sendStream) Write(p []byte) (int, error) {
 		}
 
 		s.mutex.Unlock()
+		if !notifiedSender {
+			s.sender.onHasStreamData(s.streamID) // must be called without holding the mutex
+			notifiedSender = true
+		}
 		if s.deadline.IsZero() {
 			<-s.writeChan
 		} else {
@@ -217,13 +221,14 @@ func (s *sendStream) getDataForWriting(maxBytes protocol.ByteCount) ([]byte, boo
 
 func (s *sendStream) Close() error {
 	s.mutex.Lock()
-	defer s.mutex.Unlock()
-
 	if s.canceledWrite {
+		s.mutex.Unlock()
 		return fmt.Errorf("Close called for canceled stream %d", s.streamID)
 	}
 	s.finishedWriting = true
-	s.sender.onHasStreamData(s.streamID) // need to send the FIN
+	s.mutex.Unlock()
+
+	s.sender.onHasStreamData(s.streamID) // need to send the FIN, must be called without holding the mutex
 	s.ctxCancel()
 	return nil
 }
@@ -234,7 +239,7 @@ func (s *sendStream) CancelWrite(errorCode protocol.ApplicationErrorCode) error 
 	s.mutex.Unlock()
 
 	if completed {
-		s.sender.onStreamCompleted(s.streamID)
+		s.sender.onStreamCompleted(s.streamID) // must be called without holding the mutex
 	}
 	return err
 }
@@ -267,12 +272,13 @@ func (s *sendStream) handleStopSendingFrame(frame *wire.StopSendingFrame) {
 }
 
 func (s *sendStream) handleMaxStreamDataFrame(frame *wire.MaxStreamDataFrame) {
-	s.flowController.UpdateSendWindow(frame.ByteOffset)
 	s.mutex.Lock()
-	if s.dataForWriting != nil {
+	hasStreamData := s.dataForWriting != nil
+	s.mutex.Unlock()
+	s.flowController.UpdateSendWindow(frame.ByteOffset)
+	if hasStreamData {
 		s.sender.onHasStreamData(s.streamID)
 	}
-	s.mutex.Unlock()
 }
 
 // must be called after locking the mutex
