@@ -96,10 +96,10 @@ func (s *sendStream) Write(p []byte) (int, error) {
 	}
 
 	s.dataForWriting = p
-	s.sender.onHasStreamData(s.streamID)
 
 	var bytesWritten int
 	var err error
+	var notifiedSender bool
 	for {
 		bytesWritten = len(p) - len(s.dataForWriting)
 		if !s.deadline.IsZero() && !time.Now().Before(s.deadline) {
@@ -112,6 +112,10 @@ func (s *sendStream) Write(p []byte) (int, error) {
 		}
 
 		s.mutex.Unlock()
+		if !notifiedSender {
+			s.sender.onHasStreamData(s.streamID) // must be called without holding the mutex
+			notifiedSender = true
+		}
 		if s.deadline.IsZero() {
 			<-s.writeChan
 		} else {
