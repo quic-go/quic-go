@@ -303,6 +303,33 @@ var _ = Describe("Receive Stream", func() {
 				Expect(err).To(MatchError(errDeadline))
 				Expect(time.Now()).To(BeTemporally("~", deadline2, scaleDuration(25*time.Millisecond)))
 			})
+
+			It("doesn't unblock if the deadline is removed", func() {
+				deadline := time.Now().Add(scaleDuration(50 * time.Millisecond))
+				str.SetReadDeadline(deadline)
+				deadlineUnset := make(chan struct{})
+				go func() {
+					defer GinkgoRecover()
+					time.Sleep(scaleDuration(20 * time.Millisecond))
+					str.SetReadDeadline(time.Time{})
+					// make sure that this was actually execute before the deadline expires
+					Expect(time.Now()).To(BeTemporally("<", deadline))
+					close(deadlineUnset)
+				}()
+				done := make(chan struct{})
+				go func() {
+					defer GinkgoRecover()
+					_, err := strWithTimeout.Read(make([]byte, 1))
+					Expect(err).To(MatchError("test done"))
+					close(done)
+				}()
+				runtime.Gosched()
+				Eventually(deadlineUnset).Should(BeClosed())
+				Consistently(done, scaleDuration(100*time.Millisecond)).ShouldNot(BeClosed())
+				// make the go routine return
+				str.closeForShutdown(errors.New("test done"))
+				Eventually(done).Should(BeClosed())
+			})
 		})
 
 		Context("closing", func() {

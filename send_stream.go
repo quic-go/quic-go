@@ -42,9 +42,8 @@ type sendStream struct {
 
 	dataForWriting []byte
 
-	writeChan     chan struct{}
-	deadline      time.Time
-	deadlineTimer *time.Timer // initialized by SetReadDeadline()
+	writeChan chan struct{}
+	deadline  time.Time
 
 	flowController flowcontrol.StreamFlowController
 
@@ -97,15 +96,23 @@ func (s *sendStream) Write(p []byte) (int, error) {
 
 	s.dataForWriting = p
 
-	var bytesWritten int
-	var err error
-	var notifiedSender bool
+	var (
+		deadlineTimer  *utils.Timer
+		bytesWritten   int
+		notifiedSender bool
+	)
 	for {
 		bytesWritten = len(p) - len(s.dataForWriting)
-		if !s.deadline.IsZero() && !time.Now().Before(s.deadline) {
-			s.dataForWriting = nil
-			err = errDeadline
-			break
+		deadline := s.deadline
+		if !deadline.IsZero() {
+			if !time.Now().Before(deadline) {
+				s.dataForWriting = nil
+				return bytesWritten, errDeadline
+			}
+			if deadlineTimer == nil {
+				deadlineTimer = utils.NewTimer()
+			}
+			deadlineTimer.Reset(deadline)
 		}
 		if s.dataForWriting == nil || s.canceledWrite || s.closedForShutdown {
 			break
@@ -116,23 +123,24 @@ func (s *sendStream) Write(p []byte) (int, error) {
 			s.sender.onHasStreamData(s.streamID) // must be called without holding the mutex
 			notifiedSender = true
 		}
-		if s.deadline.IsZero() {
+		if deadline.IsZero() {
 			<-s.writeChan
 		} else {
 			select {
 			case <-s.writeChan:
-			case <-s.deadlineTimer.C:
+			case <-deadlineTimer.Chan():
+				deadlineTimer.SetRead()
 			}
 		}
 		s.mutex.Lock()
 	}
 
 	if s.closeForShutdownErr != nil {
-		err = s.closeForShutdownErr
+		return bytesWritten, s.closeForShutdownErr
 	} else if s.cancelWriteErr != nil {
-		err = s.cancelWriteErr
+		return bytesWritten, s.cancelWriteErr
 	}
-	return bytesWritten, err
+	return bytesWritten, nil
 }
 
 // popStreamFrame returns the next STREAM frame that is supposed to be sent on this stream
@@ -301,22 +309,9 @@ func (s *sendStream) Context() context.Context {
 
 func (s *sendStream) SetWriteDeadline(t time.Time) error {
 	s.mutex.Lock()
-	defer s.mutex.Unlock()
 	s.deadline = t
-	if s.deadline.IsZero() { // skip if there's no deadline to set
-		s.signalWrite()
-		return nil
-	}
-	// Lazily initialize the deadline timer.
-	if s.deadlineTimer == nil {
-		s.deadlineTimer = time.NewTimer(time.Until(t))
-		return nil
-	}
-	// reset the timer to the new deadline
-	if !s.deadlineTimer.Stop() {
-		<-s.deadlineTimer.C
-	}
-	s.deadlineTimer.Reset(time.Until(t))
+	s.mutex.Unlock()
+	s.signalWrite()
 	return nil
 }
 
