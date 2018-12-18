@@ -95,8 +95,7 @@ func (s *sendStream) Write(p []byte) (int, error) {
 		return 0, nil
 	}
 
-	s.dataForWriting = make([]byte, len(p))
-	copy(s.dataForWriting, p)
+	s.dataForWriting = p
 	s.sender.onHasStreamData(s.streamID)
 
 	var bytesWritten int
@@ -202,10 +201,12 @@ func (s *sendStream) getDataForWriting(maxBytes protocol.ByteCount) ([]byte, boo
 
 	var ret []byte
 	if protocol.ByteCount(len(s.dataForWriting)) > maxBytes {
-		ret = s.dataForWriting[:maxBytes]
+		ret = make([]byte, int(maxBytes))
+		copy(ret, s.dataForWriting[:maxBytes])
 		s.dataForWriting = s.dataForWriting[maxBytes:]
 	} else {
-		ret = s.dataForWriting
+		ret = make([]byte, len(s.dataForWriting))
+		copy(ret, s.dataForWriting)
 		s.dataForWriting = nil
 		s.signalWrite()
 	}

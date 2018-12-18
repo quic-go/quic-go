@@ -149,9 +149,10 @@ var _ = Describe("Send Stream", func() {
 			waitForWrite()
 			frame, _ := str.popStreamFrame(frameHeaderSize + 1)
 			Expect(frame.Data).To(Equal([]byte("f")))
-			s[1] = 'e'
 			f, _ := str.popStreamFrame(100)
 			Expect(f).ToNot(BeNil())
+			Expect(f.Data).To(Equal([]byte("oo")))
+			s[1] = 'e'
 			Expect(f.Data).To(Equal([]byte("oo")))
 			Eventually(done).Should(BeClosed())
 		})
