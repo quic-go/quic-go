@@ -147,7 +147,7 @@ var _ = Describe("Packet Unpacker", func() {
 		opener.EXPECT().DecryptHeader(gomock.Any(), gomock.Any(), gomock.Any())
 		opener.EXPECT().Open(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil, errors.New("test err"))
 		_, err := unpacker.Unpack(hdr, hdrRaw)
-		Expect(err).To(MatchError(qerr.Error(qerr.DecryptionFailure, "test err")))
+		Expect(err).To(MatchError("test err"))
 	})
 
 	It("decrypts the header", func() {

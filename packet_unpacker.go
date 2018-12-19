@@ -99,7 +99,7 @@ func (u *packetUnpacker) Unpack(hdr *wire.Header, data []byte) (*unpackedPacket,
 
 	decrypted, err := opener.Open(buf, data, pn, extHdr.Raw)
 	if err != nil {
-		return nil, qerr.Error(qerr.DecryptionFailure, err.Error())
+		return nil, err
 	}
 
 	// Only do this after decrypting, so we are sure the packet is not attacker-controlled
