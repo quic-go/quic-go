@@ -821,7 +821,7 @@ sendLoop:
 			// There will only be a new ACK after receiving new packets.
 			// SendAck is only returned when we're congestion limited, so we don't need to set the pacingt timer.
 			return s.maybeSendAckOnlyPacket()
-		case ackhandler.SendTLP, ackhandler.SendRTO:
+		case ackhandler.SendPTO:
 			if err := s.sendProbePacket(); err != nil {
 				return err
 			}

@@ -697,7 +697,7 @@ var _ = Describe("Session", func() {
 			retransmittedPacket := getPacket(123)
 			sph := mockackhandler.NewMockSentPacketHandler(mockCtrl)
 			sph.EXPECT().TimeUntilSend()
-			sph.EXPECT().SendMode().Return(ackhandler.SendTLP)
+			sph.EXPECT().SendMode().Return(ackhandler.SendPTO)
 			sph.EXPECT().ShouldSendNumPackets().Return(1)
 			sph.EXPECT().DequeueProbePacket().Return(packetToRetransmit, nil)
 			packer.EXPECT().PackRetransmission(packetToRetransmit).Return([]*packedPacket{retransmittedPacket}, nil)
