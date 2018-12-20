@@ -47,6 +47,11 @@ func (m messageType) String() string {
 	}
 }
 
+// ErrOpenerNotYetAvailable is returned when an opener is requested for an encryption level,
+// but the corresponding opener has not yet been initialized
+// This can happen when packets arrive out of order.
+var ErrOpenerNotYetAvailable = errors.New("CryptoSetup: opener at this encryption level not yet available")
+
 type cryptoSetup struct {
 	tlsConf *qtls.Config
 
@@ -520,12 +525,12 @@ func (h *cryptoSetup) GetOpener(level protocol.EncryptionLevel) (Opener, error) 
 		return h.initialOpener, nil
 	case protocol.EncryptionHandshake:
 		if h.handshakeOpener == nil {
-			return nil, errors.New("CryptoSetup: no opener with encryption level Handshake")
+			return nil, ErrOpenerNotYetAvailable
 		}
 		return h.handshakeOpener, nil
 	case protocol.Encryption1RTT:
 		if h.opener == nil {
-			return nil, errors.New("CryptoSetup: no opener with encryption level 1-RTT")
+			return nil, ErrOpenerNotYetAvailable
 		}
 		return h.opener, nil
 	default:

@@ -5,6 +5,7 @@ import (
 	"errors"
 
 	"github.com/golang/mock/gomock"
+	"github.com/lucas-clemente/quic-go/internal/handshake"
 	"github.com/lucas-clemente/quic-go/internal/mocks"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/internal/qerr"
@@ -124,9 +125,9 @@ var _ = Describe("Packet Unpacker", func() {
 			PacketNumberLen: 2,
 		}
 		hdr, hdrRaw := getHeader(extHdr)
-		cs.EXPECT().GetOpener(protocol.Encryption1RTT).Return(nil, errors.New("test err"))
+		cs.EXPECT().GetOpener(protocol.Encryption1RTT).Return(nil, handshake.ErrOpenerNotYetAvailable)
 		_, err := unpacker.Unpack(hdr, hdrRaw)
-		Expect(err).To(MatchError(qerr.Error(qerr.DecryptionFailure, "test err")))
+		Expect(err).To(MatchError(handshake.ErrOpenerNotYetAvailable))
 	})
 
 	It("returns the error when unpacking fails", func() {

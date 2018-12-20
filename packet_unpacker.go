@@ -61,7 +61,7 @@ func (u *packetUnpacker) Unpack(hdr *wire.Header, data []byte) (*unpackedPacket,
 	}
 	opener, err := u.cs.GetOpener(encLevel)
 	if err != nil {
-		return nil, qerr.Error(qerr.DecryptionFailure, err.Error())
+		return nil, err
 	}
 	hdrLen := int(hdr.ParsedLen())
 	// The packet number can be up to 4 bytes long, but we won't know the length until we decrypt it.

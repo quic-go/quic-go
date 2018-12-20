@@ -358,13 +358,10 @@ runLoop:
 			// We do all the interesting stuff after the switch statement, so
 			// nothing to see here.
 		case p := <-s.receivedPackets:
-			err := s.handlePacketImpl(p)
-			if err != nil {
-				if qErr, ok := err.(*qerr.QuicError); ok && qErr.ErrorCode == qerr.DecryptionFailure {
-					s.tryQueueingUndecryptablePacket(p)
-					continue
-				}
-				s.closeLocal(err)
+			// Only reset the timers if this packet was actually processed.
+			// This avoids modifying any state when handling undecryptable packets,
+			// which could be injected by an attacker.
+			if wasProcessed := s.handlePacketImpl(p); !wasProcessed {
 				continue
 			}
 			// This is a bit unclean, but works properly, since the packet always
@@ -473,18 +470,24 @@ func (s *session) handleHandshakeComplete() {
 	}
 }
 
-func (s *session) handlePacketImpl(p *receivedPacket) error {
+func (s *session) handlePacketImpl(p *receivedPacket) bool /* was the packet successfully processed */ {
 	// The server can change the source connection ID with the first Handshake packet.
 	// After this, all packets with a different source connection have to be ignored.
 	if s.receivedFirstPacket && p.hdr.IsLongHeader && !p.hdr.SrcConnectionID.Equal(s.destConnID) {
 		s.logger.Debugf("Dropping packet with unexpected source connection ID: %s (expected %s)", p.hdr.SrcConnectionID, s.destConnID)
-		return nil
+		return false
 	}
 
 	packet, err := s.unpacker.Unpack(p.hdr, p.data)
 	// if the decryption failed, this might be a packet sent by an attacker
 	if err != nil {
-		return err
+		if err == handshake.ErrOpenerNotYetAvailable {
+			s.tryQueueingUndecryptablePacket(p)
+			return false
+		}
+		// TODO: don't close the connection when receiving 0-RTT packets
+		s.closeLocal(err)
+		return false
 	}
 
 	if s.logger.Debug() {
@@ -492,15 +495,23 @@ func (s *session) handlePacketImpl(p *receivedPacket) error {
 		packet.hdr.Log(s.logger)
 	}
 
+	if err := s.handleUnpackedPacket(packet, p.rcvTime); err != nil {
+		s.closeLocal(err)
+		return false
+	}
+	return true
+}
+
+func (s *session) handleUnpackedPacket(packet *unpackedPacket, rcvTime time.Time) error {
 	// The server can change the source connection ID with the first Handshake packet.
-	if s.perspective == protocol.PerspectiveClient && !s.receivedFirstPacket && p.hdr.IsLongHeader && !p.hdr.SrcConnectionID.Equal(s.destConnID) {
-		s.logger.Debugf("Received first packet. Switching destination connection ID to: %s", p.hdr.SrcConnectionID)
-		s.destConnID = p.hdr.SrcConnectionID
+	if s.perspective == protocol.PerspectiveClient && !s.receivedFirstPacket && packet.hdr.IsLongHeader && !packet.hdr.SrcConnectionID.Equal(s.destConnID) {
+		s.logger.Debugf("Received first packet. Switching destination connection ID to: %s", packet.hdr.SrcConnectionID)
+		s.destConnID = packet.hdr.SrcConnectionID
 		s.packer.ChangeDestConnectionID(s.destConnID)
 	}
 
 	s.receivedFirstPacket = true
-	s.lastNetworkActivityTime = p.rcvTime
+	s.lastNetworkActivityTime = rcvTime
 	s.keepAlivePingSent = false
 
 	// The client completes the handshake first (after sending the CFIN).
@@ -514,9 +525,9 @@ func (s *session) handlePacketImpl(p *receivedPacket) error {
 
 	// If this is a Retry packet, there's no need to send an ACK.
 	// The session will be closed and recreated as soon as the crypto setup processed the HRR.
-	if p.hdr.Type != protocol.PacketTypeRetry {
+	if packet.hdr.Type != protocol.PacketTypeRetry {
 		isRetransmittable := ackhandler.HasRetransmittableFrames(packet.frames)
-		if err := s.receivedPacketHandler.ReceivedPacket(packet.packetNumber, p.rcvTime, isRetransmittable); err != nil {
+		if err := s.receivedPacketHandler.ReceivedPacket(packet.packetNumber, rcvTime, isRetransmittable); err != nil {
 			return err
 		}
 	}
