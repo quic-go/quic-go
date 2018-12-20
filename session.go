@@ -477,6 +477,10 @@ func (s *session) handlePacketImpl(p *receivedPacket) bool /* was the packet suc
 		s.logger.Debugf("Dropping packet with unexpected source connection ID: %s (expected %s)", p.hdr.SrcConnectionID, s.destConnID)
 		return false
 	}
+	// drop 0-RTT packets
+	if p.hdr.Type == protocol.PacketType0RTT {
+		return false
+	}
 
 	packet, err := s.unpacker.Unpack(p.hdr, p.data)
 	// if the decryption failed, this might be a packet sent by an attacker
@@ -485,7 +489,6 @@ func (s *session) handlePacketImpl(p *receivedPacket) bool /* was the packet suc
 			s.tryQueueingUndecryptablePacket(p)
 			return false
 		}
-		// TODO: don't close the connection when receiving 0-RTT packets
 		s.closeLocal(err)
 		return false
 	}

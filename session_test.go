@@ -508,6 +508,16 @@ var _ = Describe("Session", func() {
 			Expect(sess.handlePacketImpl(&receivedPacket{hdr: &hdr.Header, data: getData(hdr)})).To(BeTrue())
 		})
 
+		It("ignores 0-RTT packets", func() {
+			Expect(sess.handlePacketImpl(&receivedPacket{
+				hdr: &wire.Header{
+					IsLongHeader:     true,
+					Type:             protocol.PacketType0RTT,
+					DestConnectionID: sess.srcConnID,
+				},
+			})).To(BeFalse())
+		})
+
 		It("ignores packets with a different source connection ID", func() {
 			hdr := &wire.Header{
 				IsLongHeader:     true,
