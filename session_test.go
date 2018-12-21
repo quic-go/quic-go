@@ -352,14 +352,26 @@ var _ = Describe("Session", func() {
 	})
 
 	Context("closing", func() {
+		var (
+			runErr         error
+			expectedRunErr error
+		)
+
 		BeforeEach(func() {
 			Eventually(areSessionsRunning).Should(BeFalse())
 			go func() {
 				defer GinkgoRecover()
 				cryptoSetup.EXPECT().RunHandshake().Do(func() { <-sess.Context().Done() })
-				sess.run()
+				runErr = sess.run()
 			}()
 			Eventually(areSessionsRunning).Should(BeTrue())
+			expectedRunErr = nil
+		})
+
+		AfterEach(func() {
+			if expectedRunErr != nil {
+				Expect(runErr).To(MatchError(expectedRunErr))
+			}
 		})
 
 		It("shuts down without error", func() {
@@ -397,13 +409,25 @@ var _ = Describe("Session", func() {
 			Expect(sess.Context().Done()).To(BeClosed())
 		})
 
-		It("closes the session in order to replace it with another QUIC version", func() {
+		It("closes the session in order to recreate it", func() {
 			streamManager.EXPECT().CloseWithError(gomock.Any())
 			sessionRunner.EXPECT().removeConnectionID(gomock.Any())
 			cryptoSetup.EXPECT().Close()
-			sess.destroy(errCloseSessionForNewVersion)
+			sess.closeForRecreating()
+			Expect(mconn.written).To(BeEmpty()) // no CONNECTION_CLOSE or PUBLIC_RESET sent
+			Eventually(areSessionsRunning).Should(BeFalse())
+			expectedRunErr = errCloseForRecreating
+		})
+
+		It("destroys the session", func() {
+			testErr := errors.New("close")
+			streamManager.EXPECT().CloseWithError(gomock.Any())
+			sessionRunner.EXPECT().removeConnectionID(gomock.Any())
+			cryptoSetup.EXPECT().Close()
+			sess.destroy(testErr)
 			Eventually(areSessionsRunning).Should(BeFalse())
 			Expect(mconn.written).To(BeEmpty()) // no CONNECTION_CLOSE or PUBLIC_RESET sent
+			expectedRunErr = testErr
 		})
 
 		It("cancels the context when the run loop exists", func() {

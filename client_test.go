@@ -530,8 +530,8 @@ var _ = Describe("Client", func() {
 			sess1.EXPECT().run().DoAndReturn(func() error {
 				return <-run1
 			})
-			sess1.EXPECT().destroy(errCloseSessionForRetry).Do(func(e error) {
-				run1 <- e
+			sess1.EXPECT().closeForRecreating().Do(func() {
+				run1 <- errCloseForRecreating
 			})
 			sess2 := NewMockQuicSession(mockCtrl)
 			sess2.EXPECT().run()
@@ -597,8 +597,8 @@ var _ = Describe("Client", func() {
 				Eventually(run).Should(Receive(&err))
 				return err
 			})
-			sess.EXPECT().destroy(gomock.Any()).Do(func(e error) {
-				run <- e
+			sess.EXPECT().closeForRecreating().Do(func() {
+				run <- errCloseForRecreating
 			})
 			sessions <- sess
 			doneErr := errors.New("nothing to do")
@@ -717,7 +717,7 @@ var _ = Describe("Client", func() {
 
 				sess := NewMockQuicSession(mockCtrl)
 				destroyed := make(chan struct{})
-				sess.EXPECT().destroy(errCloseSessionForNewVersion).Do(func(error) {
+				sess.EXPECT().closeForRecreating().Do(func() {
 					close(destroyed)
 				})
 				cl.session = sess

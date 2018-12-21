@@ -63,6 +63,8 @@ type closeError struct {
 	sendClose bool
 }
 
+var errCloseForRecreating = errors.New("closing session in order to recreate it")
+
 // A Session is a QUIC session
 type session struct {
 	sessionRunner sessionRunner
@@ -716,6 +718,10 @@ func (s *session) destroy(e error) {
 		s.sessionRunner.removeConnectionID(s.srcConnID)
 		s.closeChan <- closeError{err: e, sendClose: false, remote: false}
 	})
+}
+
+func (s *session) closeForRecreating() {
+	s.destroy(errCloseForRecreating)
 }
 
 func (s *session) closeRemote(e error) {
