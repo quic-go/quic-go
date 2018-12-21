@@ -149,9 +149,10 @@ var _ = Describe("Send Stream", func() {
 			waitForWrite()
 			frame, _ := str.popStreamFrame(frameHeaderSize + 1)
 			Expect(frame.Data).To(Equal([]byte("f")))
-			s[1] = 'e'
 			f, _ := str.popStreamFrame(100)
 			Expect(f).ToNot(BeNil())
+			Expect(f.Data).To(Equal([]byte("oo")))
+			s[1] = 'e'
 			Expect(f.Data).To(Equal([]byte("oo")))
 			Eventually(done).Should(BeClosed())
 		})
@@ -357,6 +358,34 @@ var _ = Describe("Send Stream", func() {
 				_, err := strWithTimeout.Write([]byte("foobar"))
 				Expect(err).To(MatchError(errDeadline))
 				Expect(time.Now()).To(BeTemporally("~", deadline2, scaleDuration(20*time.Millisecond)))
+				Eventually(done).Should(BeClosed())
+			})
+
+			It("doesn't unblock if the deadline is removed", func() {
+				mockSender.EXPECT().onHasStreamData(streamID)
+				deadline := time.Now().Add(scaleDuration(50 * time.Millisecond))
+				str.SetWriteDeadline(deadline)
+				deadlineUnset := make(chan struct{})
+				go func() {
+					defer GinkgoRecover()
+					time.Sleep(scaleDuration(20 * time.Millisecond))
+					str.SetWriteDeadline(time.Time{})
+					// make sure that this was actually execute before the deadline expires
+					Expect(time.Now()).To(BeTemporally("<", deadline))
+					close(deadlineUnset)
+				}()
+				done := make(chan struct{})
+				go func() {
+					defer GinkgoRecover()
+					_, err := strWithTimeout.Write([]byte("foobar"))
+					Expect(err).To(MatchError("test done"))
+					close(done)
+				}()
+				runtime.Gosched()
+				Eventually(deadlineUnset).Should(BeClosed())
+				Consistently(done, scaleDuration(100*time.Millisecond)).ShouldNot(BeClosed())
+				// make the go routine return
+				str.closeForShutdown(errors.New("test done"))
 				Eventually(done).Should(BeClosed())
 			})
 		})
