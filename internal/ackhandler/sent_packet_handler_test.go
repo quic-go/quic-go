@@ -146,7 +146,7 @@ var _ = Describe("SentPacketHandler", func() {
 				Expect(handler.largestAcked).To(Equal(protocol.PacketNumber(5)))
 			})
 
-			It("rejects duplicate ACKs", func() {
+			It("accepts multiple ACKs sent in the same packet", func() {
 				ack1 := &wire.AckFrame{AckRanges: []wire.AckRange{{Smallest: 0, Largest: 3}}}
 				ack2 := &wire.AckFrame{AckRanges: []wire.AckRange{{Smallest: 0, Largest: 4}}}
 				err := handler.ReceivedAck(ack1, 1337, protocol.Encryption1RTT, time.Now())
@@ -156,7 +156,7 @@ var _ = Describe("SentPacketHandler", func() {
 				// for testing purposes, we pretend send a different ACK frame in a duplicated packet, to be able to verify that it actually doesn't get processed
 				err = handler.ReceivedAck(ack2, 1337, protocol.Encryption1RTT, time.Now())
 				Expect(err).ToNot(HaveOccurred())
-				Expect(handler.largestAcked).To(Equal(protocol.PacketNumber(3)))
+				Expect(handler.largestAcked).To(Equal(protocol.PacketNumber(4)))
 			})
 
 			It("rejects out of order ACKs", func() {
