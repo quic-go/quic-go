@@ -10,6 +10,11 @@ import (
 var _ = Describe("Timer", func() {
 	const d = 10 * time.Millisecond
 
+	It("doesn't fire a newly created timer", func() {
+		t := NewTimer()
+		Consistently(t.Chan()).ShouldNot(Receive())
+	})
+
 	It("works", func() {
 		t := NewTimer()
 		t.Reset(time.Now().Add(d))
@@ -47,6 +52,12 @@ var _ = Describe("Timer", func() {
 		t := NewTimer()
 		t.Reset(time.Now().Add(-time.Second))
 		Eventually(t.Chan()).Should(Receive())
+	})
+
+	It("doesn't set a timer if the deadline is the zero value", func() {
+		t := NewTimer()
+		t.Reset(time.Time{})
+		Consistently(t.Chan()).ShouldNot(Receive())
 	})
 
 	It("fires the timer twice, if reset to the same deadline", func() {
