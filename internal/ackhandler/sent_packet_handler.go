@@ -88,7 +88,7 @@ func NewSentPacketHandler(rttStats *congestion.RTTStats, logger utils.Logger) Se
 	)
 
 	return &sentPacketHandler{
-		packetNumberGenerator: newPacketNumberGenerator(1, protocol.SkipPacketAveragePeriodLength),
+		packetNumberGenerator: newPacketNumberGenerator(0, protocol.SkipPacketAveragePeriodLength),
 		packetHistory:         newSentPacketHistory(),
 		rttStats:              rttStats,
 		congestion:            congestion,
