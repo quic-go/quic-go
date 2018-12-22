@@ -43,7 +43,7 @@ type quicSession interface {
 	GetVersion() protocol.VersionNumber
 	run() error
 	destroy(error)
-	closeForRecreating()
+	closeForRecreating() protocol.PacketNumber
 	closeRemote(error)
 }
 

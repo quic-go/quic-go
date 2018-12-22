@@ -200,8 +200,10 @@ func (mr *MockQuicSessionMockRecorder) RemoteAddr() *gomock.Call {
 }
 
 // closeForRecreating mocks base method
-func (m *MockQuicSession) closeForRecreating() {
-	m.ctrl.Call(m, "closeForRecreating")
+func (m *MockQuicSession) closeForRecreating() protocol.PacketNumber {
+	ret := m.ctrl.Call(m, "closeForRecreating")
+	ret0, _ := ret[0].(protocol.PacketNumber)
+	return ret0
 }
 
 // closeForRecreating indicates an expected call of closeForRecreating

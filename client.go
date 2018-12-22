@@ -37,6 +37,8 @@ type client struct {
 	destConnID     protocol.ConnectionID
 	origDestConnID protocol.ConnectionID // the destination conn ID used on the first Initial (before a Retry)
 
+	initialPacketNumber protocol.PacketNumber
+
 	initialVersion protocol.VersionNumber
 	version        protocol.VersionNumber
 
@@ -340,7 +342,7 @@ func (c *client) handleVersionNegotiationPacket(hdr *wire.Header) {
 	c.version = newVersion
 
 	c.logger.Infof("Switching to QUIC version %s. New connection ID: %s", newVersion, c.destConnID)
-	c.session.closeForRecreating()
+	c.initialPacketNumber = c.session.closeForRecreating()
 }
 
 func (c *client) handleRetryPacket(hdr *wire.Header) {
@@ -366,7 +368,7 @@ func (c *client) handleRetryPacket(hdr *wire.Header) {
 	c.origDestConnID = c.destConnID
 	c.destConnID = hdr.SrcConnectionID
 	c.token = hdr.Token
-	c.session.closeForRecreating()
+	c.initialPacketNumber = c.session.closeForRecreating()
 }
 
 func (c *client) createNewTLSSession(version protocol.VersionNumber) error {
@@ -397,6 +399,7 @@ func (c *client) createNewTLSSession(version protocol.VersionNumber) error {
 		c.srcConnID,
 		c.config,
 		c.tlsConf,
+		c.initialPacketNumber,
 		params,
 		c.initialVersion,
 		c.logger,
