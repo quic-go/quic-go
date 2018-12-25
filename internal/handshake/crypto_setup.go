@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/lucas-clemente/quic-go/internal/crypto"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/internal/utils"
 	"github.com/marten-seemann/qtls"
@@ -411,9 +410,9 @@ func (h *cryptoSetup) ReadHandshakeMessage() ([]byte, error) {
 }
 
 func (h *cryptoSetup) SetReadKey(suite *qtls.CipherSuite, trafficSecret []byte) {
-	key := crypto.HkdfExpandLabel(suite.Hash(), trafficSecret, "key", suite.KeyLen())
-	iv := crypto.HkdfExpandLabel(suite.Hash(), trafficSecret, "iv", suite.IVLen())
-	pnKey := crypto.HkdfExpandLabel(suite.Hash(), trafficSecret, "pn", suite.KeyLen())
+	key := qtls.HkdfExpandLabel(suite.Hash(), trafficSecret, []byte{}, "key", suite.KeyLen())
+	iv := qtls.HkdfExpandLabel(suite.Hash(), trafficSecret, []byte{}, "iv", suite.IVLen())
+	pnKey := qtls.HkdfExpandLabel(suite.Hash(), trafficSecret, []byte{}, "pn", suite.KeyLen())
 	pnDecrypter, err := aes.NewCipher(pnKey)
 	if err != nil {
 		panic(fmt.Sprintf("error creating new AES cipher: %s", err))
@@ -441,9 +440,9 @@ func (h *cryptoSetup) SetReadKey(suite *qtls.CipherSuite, trafficSecret []byte) 
 }
 
 func (h *cryptoSetup) SetWriteKey(suite *qtls.CipherSuite, trafficSecret []byte) {
-	key := crypto.HkdfExpandLabel(suite.Hash(), trafficSecret, "key", suite.KeyLen())
-	iv := crypto.HkdfExpandLabel(suite.Hash(), trafficSecret, "iv", suite.IVLen())
-	pnKey := crypto.HkdfExpandLabel(suite.Hash(), trafficSecret, "pn", suite.KeyLen())
+	key := qtls.HkdfExpandLabel(suite.Hash(), trafficSecret, []byte{}, "key", suite.KeyLen())
+	iv := qtls.HkdfExpandLabel(suite.Hash(), trafficSecret, []byte{}, "iv", suite.IVLen())
+	pnKey := qtls.HkdfExpandLabel(suite.Hash(), trafficSecret, []byte{}, "pn", suite.KeyLen())
 	pnEncrypter, err := aes.NewCipher(pnKey)
 	if err != nil {
 		panic(fmt.Sprintf("error creating new AES cipher: %s", err))

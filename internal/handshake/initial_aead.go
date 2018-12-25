@@ -1,15 +1,15 @@
 package handshake
 
 import (
-	gocrypto "crypto"
+	"crypto"
 	"crypto/aes"
 	"crypto/cipher"
 
-	"github.com/lucas-clemente/quic-go/internal/crypto"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
+	"github.com/marten-seemann/qtls"
 )
 
-var quicVersion1Salt = []byte{0x9c, 0x10, 0x8f, 0x98, 0x52, 0x0a, 0x5c, 0x5c, 0x32, 0x96, 0x8e, 0x95, 0x0e, 0x8a, 0x2c, 0x5f, 0xe0, 0x6d, 0x6c, 0x38}
+var quicVersion1Salt = []byte{0xef, 0x4f, 0xb0, 0xab, 0xb4, 0x74, 0x70, 0xc4, 0x1b, 0xef, 0xcf, 0x80, 0x31, 0x33, 0x4f, 0xae, 0x48, 0x5e, 0x09, 0xa0}
 
 func newInitialAEAD(connID protocol.ConnectionID, pers protocol.Perspective) (Sealer, Opener, error) {
 	clientSecret, serverSecret := computeSecrets(connID)
@@ -52,15 +52,15 @@ func newInitialAEAD(connID protocol.ConnectionID, pers protocol.Perspective) (Se
 }
 
 func computeSecrets(connID protocol.ConnectionID) (clientSecret, serverSecret []byte) {
-	initialSecret := crypto.HkdfExtract(gocrypto.SHA256, connID, quicVersion1Salt)
-	clientSecret = crypto.HkdfExpandLabel(gocrypto.SHA256, initialSecret, "client in", gocrypto.SHA256.Size())
-	serverSecret = crypto.HkdfExpandLabel(gocrypto.SHA256, initialSecret, "server in", gocrypto.SHA256.Size())
+	initialSecret := qtls.HkdfExtract(crypto.SHA256, connID, quicVersion1Salt)
+	clientSecret = qtls.HkdfExpandLabel(crypto.SHA256, initialSecret, []byte{}, "client in", crypto.SHA256.Size())
+	serverSecret = qtls.HkdfExpandLabel(crypto.SHA256, initialSecret, []byte{}, "server in", crypto.SHA256.Size())
 	return
 }
 
 func computeInitialKeyAndIV(secret []byte) (key, pnKey, iv []byte) {
-	key = crypto.HkdfExpandLabel(gocrypto.SHA256, secret, "key", 16)
-	pnKey = crypto.HkdfExpandLabel(gocrypto.SHA256, secret, "pn", 16)
-	iv = crypto.HkdfExpandLabel(gocrypto.SHA256, secret, "iv", 12)
+	key = qtls.HkdfExpandLabel(crypto.SHA256, secret, []byte{}, "quic key", 16)
+	pnKey = qtls.HkdfExpandLabel(crypto.SHA256, secret, []byte{}, "quic hp", 16)
+	iv = qtls.HkdfExpandLabel(crypto.SHA256, secret, []byte{}, "quic iv", 12)
 	return
 }
