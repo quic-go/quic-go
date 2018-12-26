@@ -28,6 +28,8 @@ type packedPacket struct {
 	header *wire.ExtendedHeader
 	raw    []byte
 	frames []wire.Frame
+
+	buffer *packetBuffer
 }
 
 func (p *packedPacket) EncryptionLevel() protocol.EncryptionLevel {
@@ -374,8 +376,8 @@ func (p *packetPacker) writeAndSealPacket(
 	frames []wire.Frame,
 	sealer handshake.Sealer,
 ) (*packedPacket, error) {
-	raw := *getPacketBuffer()
-	buffer := bytes.NewBuffer(raw[:0])
+	packetBuffer := getPacketBuffer()
+	buffer := bytes.NewBuffer(packetBuffer.Slice[:0])
 
 	addPaddingForInitial := p.perspective == protocol.PerspectiveClient && header.Type == protocol.PacketTypeInitial
 
@@ -436,7 +438,7 @@ func (p *packetPacker) writeAndSealPacket(
 		return nil, fmt.Errorf("PacketPacker BUG: packet too large (%d bytes, allowed %d bytes)", size, p.maxPacketSize)
 	}
 
-	raw = raw[0:buffer.Len()]
+	raw := buffer.Bytes()
 	_ = sealer.Seal(raw[payloadOffset:payloadOffset], raw[payloadOffset:], header.PacketNumber, raw[:payloadOffset])
 	raw = raw[0 : buffer.Len()+sealer.Overhead()]
 
@@ -455,6 +457,7 @@ func (p *packetPacker) writeAndSealPacket(
 		header: header,
 		raw:    raw,
 		frames: frames,
+		buffer: packetBuffer,
 	}, nil
 }
 

@@ -6,22 +6,42 @@ import (
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 )
 
-var bufferPool sync.Pool
+type packetBuffer struct {
+	Slice []byte
 
-func getPacketBuffer() *[]byte {
-	return bufferPool.Get().(*[]byte)
+	// refCount counts how many packets the Slice is used in.
+	// It doesn't support concurrent use.
+	// It is > 1 when used for coalesced packet.
+	refCount int
 }
 
-func putPacketBuffer(buf *[]byte) {
-	if cap(*buf) != int(protocol.MaxReceivePacketSize) {
+var bufferPool sync.Pool
+
+func getPacketBuffer() *packetBuffer {
+	buf := bufferPool.Get().(*packetBuffer)
+	buf.refCount = 1
+	buf.Slice = buf.Slice[:protocol.MaxReceivePacketSize]
+	return buf
+}
+
+func putPacketBuffer(buf *packetBuffer) {
+	if cap(buf.Slice) != int(protocol.MaxReceivePacketSize) {
 		panic("putPacketBuffer called with packet of wrong size!")
 	}
-	bufferPool.Put(buf)
+	buf.refCount--
+	if buf.refCount < 0 {
+		panic("negative packetBuffer refCount")
+	}
+	// only put the packetBuffer back if it's not used any more
+	if buf.refCount == 0 {
+		bufferPool.Put(buf)
+	}
 }
 
 func init() {
 	bufferPool.New = func() interface{} {
-		b := make([]byte, 0, protocol.MaxReceivePacketSize)
-		return &b
+		return &packetBuffer{
+			Slice: make([]byte, 0, protocol.MaxReceivePacketSize),
+		}
 	}
 }

@@ -144,8 +144,8 @@ func (h *packetHandlerMap) close(e error) error {
 
 func (h *packetHandlerMap) listen() {
 	for {
-		data := *getPacketBuffer()
-		data = data[:protocol.MaxReceivePacketSize]
+		buffer := getPacketBuffer()
+		data := buffer.Slice
 		// The packet size should not exceed protocol.MaxReceivePacketSize bytes
 		// If it does, we only read a truncated packet, which will then end up undecryptable
 		n, addr, err := h.conn.ReadFrom(data)
@@ -155,13 +155,17 @@ func (h *packetHandlerMap) listen() {
 		}
 		data = data[:n]
 
-		if err := h.handlePacket(addr, data); err != nil {
+		if err := h.handlePacket(addr, buffer, data); err != nil {
 			h.logger.Debugf("error handling packet from %s: %s", addr, err)
 		}
 	}
 }
 
-func (h *packetHandlerMap) handlePacket(addr net.Addr, data []byte) error {
+func (h *packetHandlerMap) handlePacket(
+	addr net.Addr,
+	buffer *packetBuffer,
+	data []byte,
+) error {
 	r := bytes.NewReader(data)
 	hdr, err := wire.ParseHeader(r, h.connIDLen)
 	// drop the packet if we can't parse the header
@@ -172,8 +176,9 @@ func (h *packetHandlerMap) handlePacket(addr net.Addr, data []byte) error {
 	p := &receivedPacket{
 		remoteAddr: addr,
 		hdr:        hdr,
-		data:       data,
 		rcvTime:    time.Now(),
+		data:       data,
+		buffer:     buffer,
 	}
 
 	h.mutex.RLock()

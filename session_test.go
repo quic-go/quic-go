@@ -61,6 +61,11 @@ func areSessionsRunning() bool {
 	return strings.Contains(b.String(), "quic-go.(*session).run")
 }
 
+func insertPacketBuffer(p *receivedPacket) *receivedPacket {
+	p.buffer = getPacketBuffer()
+	return p
+}
+
 var _ = Describe("Session", func() {
 	var (
 		sess          *session
@@ -496,11 +501,11 @@ var _ = Describe("Session", func() {
 			rph := mockackhandler.NewMockReceivedPacketHandler(mockCtrl)
 			rph.EXPECT().ReceivedPacket(protocol.PacketNumber(0x1337), rcvTime, false)
 			sess.receivedPacketHandler = rph
-			Expect(sess.handlePacketImpl(&receivedPacket{
+			Expect(sess.handlePacketImpl(insertPacketBuffer(&receivedPacket{
 				rcvTime: rcvTime,
 				hdr:     &hdr.Header,
 				data:    getData(hdr),
-			})).To(BeTrue())
+			}))).To(BeTrue())
 		})
 
 		It("closes when handling a packet fails", func() {
@@ -518,7 +523,10 @@ var _ = Describe("Session", func() {
 				close(done)
 			}()
 			sessionRunner.EXPECT().retireConnectionID(gomock.Any())
-			sess.handlePacket(&receivedPacket{hdr: &wire.Header{}, data: getData(&wire.ExtendedHeader{PacketNumberLen: protocol.PacketNumberLen1})})
+			sess.handlePacket(insertPacketBuffer(&receivedPacket{
+				hdr:  &wire.Header{},
+				data: getData(&wire.ExtendedHeader{PacketNumberLen: protocol.PacketNumberLen1}),
+			}))
 			Eventually(done).Should(BeClosed())
 		})
 
@@ -528,18 +536,18 @@ var _ = Describe("Session", func() {
 				PacketNumberLen: protocol.PacketNumberLen1,
 			}
 			unpacker.EXPECT().Unpack(gomock.Any(), gomock.Any()).Return(&unpackedPacket{hdr: hdr}, nil).Times(2)
-			Expect(sess.handlePacketImpl(&receivedPacket{hdr: &hdr.Header, data: getData(hdr)})).To(BeTrue())
-			Expect(sess.handlePacketImpl(&receivedPacket{hdr: &hdr.Header, data: getData(hdr)})).To(BeTrue())
+			Expect(sess.handlePacketImpl(insertPacketBuffer(&receivedPacket{hdr: &hdr.Header, data: getData(hdr)}))).To(BeTrue())
+			Expect(sess.handlePacketImpl(insertPacketBuffer(&receivedPacket{hdr: &hdr.Header, data: getData(hdr)}))).To(BeTrue())
 		})
 
 		It("ignores 0-RTT packets", func() {
-			Expect(sess.handlePacketImpl(&receivedPacket{
+			Expect(sess.handlePacketImpl(insertPacketBuffer(&receivedPacket{
 				hdr: &wire.Header{
 					IsLongHeader:     true,
 					Type:             protocol.PacketType0RTT,
 					DestConnectionID: sess.srcConnID,
 				},
-			})).To(BeFalse())
+			}))).To(BeFalse())
 		})
 
 		It("ignores packets with a different source connection ID", func() {
@@ -552,12 +560,12 @@ var _ = Describe("Session", func() {
 			// Send one packet, which might change the connection ID.
 			// only EXPECT one call to the unpacker
 			unpacker.EXPECT().Unpack(gomock.Any(), gomock.Any()).Return(&unpackedPacket{hdr: &wire.ExtendedHeader{Header: *hdr}}, nil)
-			Expect(sess.handlePacketImpl(&receivedPacket{
+			Expect(sess.handlePacketImpl(insertPacketBuffer(&receivedPacket{
 				hdr:  hdr,
 				data: getData(&wire.ExtendedHeader{PacketNumberLen: protocol.PacketNumberLen1}),
-			})).To(BeTrue())
+			}))).To(BeTrue())
 			// The next packet has to be ignored, since the source connection ID doesn't match.
-			Expect(sess.handlePacketImpl(&receivedPacket{
+			Expect(sess.handlePacketImpl(insertPacketBuffer(&receivedPacket{
 				hdr: &wire.Header{
 					IsLongHeader:     true,
 					DestConnectionID: sess.destConnID,
@@ -565,7 +573,7 @@ var _ = Describe("Session", func() {
 					Length:           1,
 				},
 				data: getData(&wire.ExtendedHeader{PacketNumberLen: protocol.PacketNumberLen1}),
-			})).To(BeFalse())
+			}))).To(BeFalse())
 		})
 
 		Context("updating the remote address", func() {
@@ -574,12 +582,11 @@ var _ = Describe("Session", func() {
 				origAddr := sess.conn.(*mockConnection).remoteAddr
 				remoteIP := &net.IPAddr{IP: net.IPv4(192, 168, 0, 100)}
 				Expect(origAddr).ToNot(Equal(remoteIP))
-				p := receivedPacket{
+				Expect(sess.handlePacketImpl(insertPacketBuffer(&receivedPacket{
 					remoteAddr: remoteIP,
 					hdr:        &wire.Header{},
 					data:       getData(&wire.ExtendedHeader{PacketNumberLen: protocol.PacketNumberLen1}),
-				}
-				Expect(sess.handlePacketImpl(&p)).To(BeTrue())
+				}))).To(BeTrue())
 				Expect(sess.conn.(*mockConnection).remoteAddr).To(Equal(origAddr))
 			})
 		})
@@ -587,10 +594,12 @@ var _ = Describe("Session", func() {
 
 	Context("sending packets", func() {
 		getPacket := func(pn protocol.PacketNumber) *packedPacket {
-			data := *getPacketBuffer()
+			buffer := getPacketBuffer()
+			data := buffer.Slice[:0]
 			data = append(data, []byte("foobar")...)
 			return &packedPacket{
 				raw:    data,
+				buffer: buffer,
 				header: &wire.ExtendedHeader{PacketNumber: pn},
 			}
 		}
@@ -963,7 +972,7 @@ var _ = Describe("Session", func() {
 				defer close(done)
 				return &packedPacket{
 					header: &wire.ExtendedHeader{},
-					raw:    *getPacketBuffer(),
+					buffer: getPacketBuffer(),
 				}, nil
 			}),
 			packer.EXPECT().PackPacket().AnyTimes(),
@@ -1352,7 +1361,7 @@ var _ = Describe("Client Session", func() {
 		}()
 		newConnID := protocol.ConnectionID{1, 3, 3, 7, 1, 3, 3, 7}
 		packer.EXPECT().ChangeDestConnectionID(newConnID)
-		Expect(sess.handlePacketImpl(&receivedPacket{
+		Expect(sess.handlePacketImpl(insertPacketBuffer(&receivedPacket{
 			hdr: &wire.Header{
 				IsLongHeader:     true,
 				Type:             protocol.PacketTypeHandshake,
@@ -1361,7 +1370,7 @@ var _ = Describe("Client Session", func() {
 				Length:           1,
 			},
 			data: []byte{0},
-		})).To(BeTrue())
+		}))).To(BeTrue())
 		// make sure the go routine returns
 		packer.EXPECT().PackConnectionClose(gomock.Any()).Return(&packedPacket{}, nil)
 		sessionRunner.EXPECT().retireConnectionID(gomock.Any())
