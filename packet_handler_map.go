@@ -173,6 +173,14 @@ func (h *packetHandlerMap) handlePacket(
 		return fmt.Errorf("error parsing header: %s", err)
 	}
 
+	if hdr.IsLongHeader {
+		if protocol.ByteCount(r.Len()) < hdr.Length {
+			return fmt.Errorf("packet length (%d bytes) is smaller than the expected length (%d bytes)", len(data)-int(hdr.ParsedLen()), hdr.Length)
+		}
+		data = data[:int(hdr.ParsedLen()+hdr.Length)]
+		// TODO(#1312): implement parsing of compound packets
+	}
+
 	p := &receivedPacket{
 		remoteAddr: addr,
 		hdr:        hdr,

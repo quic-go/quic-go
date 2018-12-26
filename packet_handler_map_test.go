@@ -19,19 +19,23 @@ var _ = Describe("Packet Handler Map", func() {
 		conn    *mockPacketConn
 	)
 
-	getPacket := func(connID protocol.ConnectionID) []byte {
+	getPacketWithLength := func(connID protocol.ConnectionID, length protocol.ByteCount) []byte {
 		buf := &bytes.Buffer{}
 		Expect((&wire.ExtendedHeader{
 			Header: wire.Header{
 				IsLongHeader:     true,
 				Type:             protocol.PacketTypeHandshake,
 				DestConnectionID: connID,
-				Length:           1,
+				Length:           length,
 				Version:          protocol.VersionTLS,
 			},
-			PacketNumberLen: protocol.PacketNumberLen1,
+			PacketNumberLen: protocol.PacketNumberLen2,
 		}).Write(buf, protocol.VersionWhatever)).To(Succeed())
 		return buf.Bytes()
+	}
+
+	getPacket := func(connID protocol.ConnectionID) []byte {
+		return getPacketWithLength(connID, 1)
 	}
 
 	BeforeEach(func() {
@@ -130,6 +134,24 @@ var _ = Describe("Packet Handler Map", func() {
 			handler.Add(protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8}, packetHandler)
 			conn.Close()
 			Eventually(done).Should(BeClosed())
+		})
+
+		It("errors on packets that are smaller than the length in the packet header", func() {
+			connID := protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8}
+			data := append(getPacketWithLength(connID, 1000), make([]byte, 500-2 /* for packet number length */)...)
+			err := handler.handlePacket(nil, nil, data)
+			Expect(err).To(MatchError("packet length (500 bytes) is smaller than the expected length (1000 bytes)"))
+		})
+
+		It("cuts packets to the right length", func() {
+			connID := protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8}
+			data := append(getPacketWithLength(connID, 456), make([]byte, 1000)...)
+			packetHandler := NewMockPacketHandler(mockCtrl)
+			packetHandler.EXPECT().handlePacket(gomock.Any()).Do(func(p *receivedPacket) {
+				Expect(p.data).To(HaveLen(456 + int(p.hdr.ParsedLen())))
+			})
+			handler.Add(connID, packetHandler)
+			Expect(handler.handlePacket(nil, nil, data)).To(Succeed())
 		})
 	})
 
