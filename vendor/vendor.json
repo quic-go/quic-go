@@ -9,9 +9,45 @@
 			"revisionTime": "2017-03-28T20:00:08Z"
 		},
 		{
-			"checksumSHA1": "tMUbiAxGypX/0kCJpIFg31Q6vOU=",
+			"checksumSHA1": "o1fBq89SBd9XtPcfITMTP7dlRb0=",
+			"path": "github.com/cloudflare/sidh/internal/arith",
+			"revision": "fc8e6378752b38efe6d5814630911b5fc654c223",
+			"revisionTime": "2018-11-11T22:04:28Z"
+		},
+		{
+			"checksumSHA1": "7Dq4DKECbuGfYX+LeAuyXYdJX9I=",
+			"path": "github.com/cloudflare/sidh/internal/isogeny",
+			"revision": "fc8e6378752b38efe6d5814630911b5fc654c223",
+			"revisionTime": "2018-11-11T22:04:28Z"
+		},
+		{
+			"checksumSHA1": "nAn6v6Na1QbPqHR7rXDJHEpk4yY=",
+			"path": "github.com/cloudflare/sidh/internal/utils",
+			"revision": "fc8e6378752b38efe6d5814630911b5fc654c223",
+			"revisionTime": "2018-11-11T22:04:28Z"
+		},
+		{
+			"checksumSHA1": "A8gZPRCJpvjEgBjngS3AsM0Nmi8=",
+			"path": "github.com/cloudflare/sidh/p503",
+			"revision": "fc8e6378752b38efe6d5814630911b5fc654c223",
+			"revisionTime": "2018-11-11T22:04:28Z"
+		},
+		{
+			"checksumSHA1": "DbGWMXcesJFeGMRI0YkfZz1Oh70=",
+			"path": "github.com/cloudflare/sidh/p751",
+			"revision": "fc8e6378752b38efe6d5814630911b5fc654c223",
+			"revisionTime": "2018-11-11T22:04:28Z"
+		},
+		{
+			"checksumSHA1": "QZnw5kSuiRZLA5z47X/RpBfLgks=",
+			"path": "github.com/cloudflare/sidh/sidh",
+			"revision": "fc8e6378752b38efe6d5814630911b5fc654c223",
+			"revisionTime": "2018-11-11T22:04:28Z"
+		},
+		{
+			"checksumSHA1": "uFoImp0yipfjtMPgqBVX/ANxgv8=",
 			"path": "github.com/marten-seemann/qtls",
-			"revision": "c50a91d48284ab31c39389e64f7c57e475bb0633",
+			"revision": "f6f31023778222dcf2b2ca83a6f5880ee94741c3",
 			"revisionTime": "2018-09-29T20:20:13Z"
 		},
 		{
