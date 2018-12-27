@@ -116,9 +116,9 @@ func (ks *keySchedule13) setSecret(secret []byte) {
 	salt := ks.secret
 	if salt != nil {
 		h0 := hash.New().Sum(nil)
-		salt = hkdfExpandLabel(hash, salt, h0, "derived", hash.Size())
+		salt = HkdfExpandLabel(hash, salt, h0, "derived", hash.Size())
 	}
-	ks.secret = hkdfExtract(hash, secret, salt)
+	ks.secret = HkdfExtract(hash, secret, salt)
 }
 
 // Depending on role returns pair of key variant to be used by
@@ -168,7 +168,7 @@ func (ks *keySchedule13) deriveSecret(secretLabel secretLabel) []byte {
 		ks.handshakeCtx = ks.transcriptHash.Sum(nil)
 	}
 	hash := hashForSuite(ks.suite)
-	secret := hkdfExpandLabel(hash, ks.secret, ks.handshakeCtx, label, hash.Size())
+	secret := HkdfExpandLabel(hash, ks.secret, ks.handshakeCtx, label, hash.Size())
 	if keylogType != "" && ks.config != nil {
 		ks.config.writeKeyLog(keylogType, ks.clientRandom, secret)
 	}
@@ -177,8 +177,8 @@ func (ks *keySchedule13) deriveSecret(secretLabel secretLabel) []byte {
 
 func (ks *keySchedule13) prepareCipher(trafficSecret []byte) cipher.AEAD {
 	hash := hashForSuite(ks.suite)
-	key := hkdfExpandLabel(hash, trafficSecret, nil, "key", ks.suite.keyLen)
-	iv := hkdfExpandLabel(hash, trafficSecret, nil, "iv", ks.suite.ivLen)
+	key := HkdfExpandLabel(hash, trafficSecret, nil, "key", ks.suite.keyLen)
+	iv := HkdfExpandLabel(hash, trafficSecret, nil, "iv", ks.suite.ivLen)
 	return ks.suite.aead(key, iv)
 }
 
@@ -256,8 +256,8 @@ CurvePreferenceLoop:
 	hsServerTrafficSecret := hs.keySchedule.deriveSecret(secretHandshakeServer)
 	c.out.setKey(c.vers, hs.keySchedule.suite, hsServerTrafficSecret)
 
-	serverFinishedKey := hkdfExpandLabel(hash, hsServerTrafficSecret, nil, "finished", hashSize)
-	hs.clientFinishedKey = hkdfExpandLabel(hash, hs.hsClientTrafficSecret, nil, "finished", hashSize)
+	serverFinishedKey := HkdfExpandLabel(hash, hsServerTrafficSecret, nil, "finished", hashSize)
+	hs.clientFinishedKey = HkdfExpandLabel(hash, hs.hsClientTrafficSecret, nil, "finished", hashSize)
 
 	// EncryptedExtensions
 	hs.keySchedule.write(hs.hello13Enc.marshal())
@@ -616,7 +616,8 @@ func (c *Conn) deriveDHESecret(ks keyShare, secretKey []byte) []byte {
 	return nil
 }
 
-func hkdfExpandLabel(hash crypto.Hash, secret, hashValue []byte, label string, L int) []byte {
+// HkdfExpandLabel HKDF expands a label
+func HkdfExpandLabel(hash crypto.Hash, secret, hashValue []byte, label string, L int) []byte {
 	prefix := "tls13 "
 	hkdfLabel := make([]byte, 4+len(prefix)+len(label)+len(hashValue))
 	hkdfLabel[0] = byte(L >> 8)
@@ -709,7 +710,7 @@ func (hs *serverHandshakeState) checkPSK() (isResumed bool, alert alert) {
 
 		hs.keySchedule.setSecret(s.pskSecret)
 		binderKey := hs.keySchedule.deriveSecret(secretResumptionPskBinder)
-		binderFinishedKey := hkdfExpandLabel(hash, binderKey, nil, "finished", hashSize)
+		binderFinishedKey := HkdfExpandLabel(hash, binderKey, nil, "finished", hashSize)
 		chHash := hash.New()
 		chHash.Write(hs.clientHello.rawTruncated)
 		expectedBinder := hmacOfSum(hash, chHash, binderFinishedKey)
@@ -780,7 +781,7 @@ func (hs *serverHandshakeState) sendSessionTicket13() error {
 		// tickets might have the same PSK which could be a problem if
 		// one of them is compromised.
 		ticketNonce := []byte{byte(i)}
-		sessionState.pskSecret = hkdfExpandLabel(hash, resumptionMasterSecret, ticketNonce, "resumption", hash.Size())
+		sessionState.pskSecret = HkdfExpandLabel(hash, resumptionMasterSecret, ticketNonce, "resumption", hash.Size())
 		ticket := sessionState.marshal()
 		var err error
 		if c.config.SessionTicketSealer != nil {
@@ -1010,8 +1011,8 @@ func (hs *clientHandshakeState) doTLS13Handshake() error {
 	c.in.setKey(c.vers, hs.keySchedule.suite, serverHandshakeSecret)
 
 	// Calculate MAC key for Finished messages.
-	serverFinishedKey := hkdfExpandLabel(hash, serverHandshakeSecret, nil, "finished", hashSize)
-	clientFinishedKey := hkdfExpandLabel(hash, clientHandshakeSecret, nil, "finished", hashSize)
+	serverFinishedKey := HkdfExpandLabel(hash, serverHandshakeSecret, nil, "finished", hashSize)
+	clientFinishedKey := HkdfExpandLabel(hash, clientHandshakeSecret, nil, "finished", hashSize)
 
 	msg, err := c.readHandshake()
 	if err != nil {
