@@ -38,6 +38,7 @@ var _ = Describe("Client", func() {
 			srcConnID protocol.ConnectionID,
 			conf *Config,
 			tlsConf *tls.Config,
+			initialPacketNumber protocol.PacketNumber,
 			params *handshake.TransportParameters,
 			initialVersion protocol.VersionNumber,
 			logger utils.Logger,
@@ -142,6 +143,7 @@ var _ = Describe("Client", func() {
 				_ protocol.ConnectionID,
 				_ *Config,
 				_ *tls.Config,
+				_ protocol.PacketNumber,
 				_ *handshake.TransportParameters,
 				_ protocol.VersionNumber,
 				_ utils.Logger,
@@ -172,6 +174,7 @@ var _ = Describe("Client", func() {
 				_ protocol.ConnectionID,
 				_ *Config,
 				tlsConf *tls.Config,
+				_ protocol.PacketNumber,
 				_ *handshake.TransportParameters,
 				_ protocol.VersionNumber,
 				_ utils.Logger,
@@ -202,6 +205,7 @@ var _ = Describe("Client", func() {
 				_ protocol.ConnectionID,
 				_ *Config,
 				_ *tls.Config,
+				_ protocol.PacketNumber,
 				_ *handshake.TransportParameters,
 				_ protocol.VersionNumber,
 				_ utils.Logger,
@@ -239,6 +243,7 @@ var _ = Describe("Client", func() {
 				_ protocol.ConnectionID,
 				_ *Config,
 				_ *tls.Config,
+				_ protocol.PacketNumber,
 				_ *handshake.TransportParameters,
 				_ protocol.VersionNumber,
 				_ utils.Logger,
@@ -279,6 +284,7 @@ var _ = Describe("Client", func() {
 				_ protocol.ConnectionID,
 				_ *Config,
 				_ *tls.Config,
+				_ protocol.PacketNumber,
 				_ *handshake.TransportParameters,
 				_ protocol.VersionNumber,
 				_ utils.Logger,
@@ -324,6 +330,7 @@ var _ = Describe("Client", func() {
 				_ protocol.ConnectionID,
 				_ *Config,
 				_ *tls.Config,
+				_ protocol.PacketNumber,
 				_ *handshake.TransportParameters,
 				_ protocol.VersionNumber,
 				_ utils.Logger,
@@ -369,6 +376,7 @@ var _ = Describe("Client", func() {
 				_ protocol.ConnectionID,
 				_ *Config,
 				_ *tls.Config,
+				_ protocol.PacketNumber,
 				_ *handshake.TransportParameters,
 				_ protocol.VersionNumber,
 				_ utils.Logger,
@@ -484,6 +492,7 @@ var _ = Describe("Client", func() {
 				_ protocol.ConnectionID,
 				configP *Config,
 				_ *tls.Config,
+				_ protocol.PacketNumber,
 				params *handshake.TransportParameters,
 				_ protocol.VersionNumber, /* initial version */
 				_ utils.Logger,
@@ -530,8 +539,9 @@ var _ = Describe("Client", func() {
 			sess1.EXPECT().run().DoAndReturn(func() error {
 				return <-run1
 			})
-			sess1.EXPECT().destroy(errCloseSessionForRetry).Do(func(e error) {
-				run1 <- e
+			sess1.EXPECT().closeForRecreating().DoAndReturn(func() protocol.PacketNumber {
+				run1 <- errCloseForRecreating
+				return 42
 			})
 			sess2 := NewMockQuicSession(mockCtrl)
 			sess2.EXPECT().run()
@@ -547,6 +557,7 @@ var _ = Describe("Client", func() {
 				_ protocol.ConnectionID,
 				_ *Config,
 				_ *tls.Config,
+				initialPacketNumber protocol.PacketNumber,
 				_ *handshake.TransportParameters,
 				_ protocol.VersionNumber,
 				_ utils.Logger,
@@ -554,9 +565,11 @@ var _ = Describe("Client", func() {
 			) (quicSession, error) {
 				switch len(sessions) {
 				case 2: // for the first session
+					Expect(initialPacketNumber).To(BeZero())
 					Expect(origDestConnID).To(BeNil())
 					Expect(destConnID).ToNot(BeNil())
 				case 1: // for the second session
+					Expect(initialPacketNumber).To(Equal(protocol.PacketNumber(42)))
 					Expect(origDestConnID).To(Equal(connID))
 					Expect(destConnID).ToNot(Equal(connID))
 				}
@@ -597,8 +610,8 @@ var _ = Describe("Client", func() {
 				Eventually(run).Should(Receive(&err))
 				return err
 			})
-			sess.EXPECT().destroy(gomock.Any()).Do(func(e error) {
-				run <- e
+			sess.EXPECT().closeForRecreating().Do(func() {
+				run <- errCloseForRecreating
 			})
 			sessions <- sess
 			doneErr := errors.New("nothing to do")
@@ -615,6 +628,7 @@ var _ = Describe("Client", func() {
 				_ protocol.ConnectionID,
 				_ *Config,
 				_ *tls.Config,
+				_ protocol.PacketNumber,
 				_ *handshake.TransportParameters,
 				_ protocol.VersionNumber,
 				_ utils.Logger,
@@ -654,6 +668,7 @@ var _ = Describe("Client", func() {
 					_ protocol.ConnectionID,
 					_ *Config,
 					_ *tls.Config,
+					_ protocol.PacketNumber,
 					_ *handshake.TransportParameters,
 					_ protocol.VersionNumber,
 					_ utils.Logger,
@@ -717,7 +732,7 @@ var _ = Describe("Client", func() {
 
 				sess := NewMockQuicSession(mockCtrl)
 				destroyed := make(chan struct{})
-				sess.EXPECT().destroy(errCloseSessionForNewVersion).Do(func(error) {
+				sess.EXPECT().closeForRecreating().Do(func() {
 					close(destroyed)
 				})
 				cl.session = sess

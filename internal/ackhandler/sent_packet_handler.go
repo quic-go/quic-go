@@ -78,7 +78,11 @@ type sentPacketHandler struct {
 }
 
 // NewSentPacketHandler creates a new sentPacketHandler
-func NewSentPacketHandler(rttStats *congestion.RTTStats, logger utils.Logger) SentPacketHandler {
+func NewSentPacketHandler(
+	initialPacketNumber protocol.PacketNumber,
+	rttStats *congestion.RTTStats,
+	logger utils.Logger,
+) SentPacketHandler {
 	congestion := congestion.NewCubicSender(
 		congestion.DefaultClock{},
 		rttStats,
@@ -88,7 +92,7 @@ func NewSentPacketHandler(rttStats *congestion.RTTStats, logger utils.Logger) Se
 	)
 
 	return &sentPacketHandler{
-		packetNumberGenerator: newPacketNumberGenerator(1, protocol.SkipPacketAveragePeriodLength),
+		packetNumberGenerator: newPacketNumberGenerator(initialPacketNumber, protocol.SkipPacketAveragePeriodLength),
 		packetHistory:         newSentPacketHistory(),
 		rttStats:              rttStats,
 		congestion:            congestion,
@@ -144,8 +148,10 @@ func (h *sentPacketHandler) SentPacketsAsRetransmission(packets []*Packet, retra
 }
 
 func (h *sentPacketHandler) sentPacketImpl(packet *Packet) bool /* isRetransmittable */ {
-	for p := h.lastSentPacketNumber + 1; p < packet.PacketNumber; p++ {
-		h.logger.Debugf("Skipping packet number %#x", p)
+	if h.logger.Debug() && h.lastSentPacketNumber != 0 {
+		for p := h.lastSentPacketNumber + 1; p < packet.PacketNumber; p++ {
+			h.logger.Debugf("Skipping packet number %#x", p)
+		}
 	}
 
 	h.lastSentPacketNumber = packet.PacketNumber

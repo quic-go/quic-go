@@ -63,6 +63,8 @@ type closeError struct {
 	sendClose bool
 }
 
+var errCloseForRecreating = errors.New("closing session in order to recreate it")
+
 // A Session is a QUIC session
 type session struct {
 	sessionRunner sessionRunner
@@ -156,6 +158,7 @@ var newSession = func(
 		version:               v,
 	}
 	s.preSetup()
+	s.sentPacketHandler = ackhandler.NewSentPacketHandler(0, s.rttStats, s.logger)
 	initialStream := newCryptoStream()
 	handshakeStream := newCryptoStream()
 	s.streamsMap = newStreamsMap(
@@ -216,6 +219,7 @@ var newClientSession = func(
 	srcConnID protocol.ConnectionID,
 	conf *Config,
 	tlsConf *tls.Config,
+	initialPacketNumber protocol.PacketNumber,
 	params *handshake.TransportParameters,
 	initialVersion protocol.VersionNumber,
 	logger utils.Logger,
@@ -233,6 +237,7 @@ var newClientSession = func(
 		version:               v,
 	}
 	s.preSetup()
+	s.sentPacketHandler = ackhandler.NewSentPacketHandler(initialPacketNumber, s.rttStats, s.logger)
 	initialStream := newCryptoStream()
 	handshakeStream := newCryptoStream()
 	cs, clientHelloWritten, err := handshake.NewCryptoSetupClient(
@@ -284,7 +289,6 @@ var newClientSession = func(
 
 func (s *session) preSetup() {
 	s.rttStats = &congestion.RTTStats{}
-	s.sentPacketHandler = ackhandler.NewSentPacketHandler(s.rttStats, s.logger)
 	s.receivedPacketHandler = ackhandler.NewReceivedPacketHandler(s.rttStats, s.logger, s.version)
 	s.connFlowController = flowcontrol.NewConnectionFlowController(
 		protocol.InitialMaxData,
@@ -716,6 +720,14 @@ func (s *session) destroy(e error) {
 		s.sessionRunner.removeConnectionID(s.srcConnID)
 		s.closeChan <- closeError{err: e, sendClose: false, remote: false}
 	})
+}
+
+// closeForRecreating closes the session in order to recreate it immediately afterwards
+// It returns the first packet number that should be used in the new session.
+func (s *session) closeForRecreating() protocol.PacketNumber {
+	s.destroy(errCloseForRecreating)
+	nextPN, _ := s.sentPacketHandler.PeekPacketNumber()
+	return nextPN
 }
 
 func (s *session) closeRemote(e error) {

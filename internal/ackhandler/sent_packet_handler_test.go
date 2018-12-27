@@ -49,7 +49,7 @@ var _ = Describe("SentPacketHandler", func() {
 
 	BeforeEach(func() {
 		rttStats := &congestion.RTTStats{}
-		handler = NewSentPacketHandler(rttStats, utils.DefaultLogger).(*sentPacketHandler)
+		handler = NewSentPacketHandler(42, rttStats, utils.DefaultLogger).(*sentPacketHandler)
 		handler.SetHandshakeComplete()
 		streamFrame = wire.StreamFrame{
 			StreamID: 5,
@@ -960,6 +960,19 @@ var _ = Describe("SentPacketHandler", func() {
 			Expect(handler.packetHistory.Len()).To(BeZero())
 			packet := handler.DequeuePacketForRetransmission()
 			Expect(packet).To(BeNil())
+		})
+	})
+
+	Context("peeking and popping packet number", func() {
+		It("peeks and pops the initial packet number", func() {
+			pn, _ := handler.PeekPacketNumber()
+			Expect(pn).To(Equal(protocol.PacketNumber(42)))
+			Expect(handler.PopPacketNumber()).To(Equal(protocol.PacketNumber(42)))
+		})
+
+		It("peeks and pops beyond the initial packet number", func() {
+			Expect(handler.PopPacketNumber()).To(Equal(protocol.PacketNumber(42)))
+			Expect(handler.PopPacketNumber()).To(BeNumerically(">", 42))
 		})
 	})
 })

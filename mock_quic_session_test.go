@@ -199,6 +199,18 @@ func (mr *MockQuicSessionMockRecorder) RemoteAddr() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RemoteAddr", reflect.TypeOf((*MockQuicSession)(nil).RemoteAddr))
 }
 
+// closeForRecreating mocks base method
+func (m *MockQuicSession) closeForRecreating() protocol.PacketNumber {
+	ret := m.ctrl.Call(m, "closeForRecreating")
+	ret0, _ := ret[0].(protocol.PacketNumber)
+	return ret0
+}
+
+// closeForRecreating indicates an expected call of closeForRecreating
+func (mr *MockQuicSessionMockRecorder) closeForRecreating() *gomock.Call {
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "closeForRecreating", reflect.TypeOf((*MockQuicSession)(nil).closeForRecreating))
+}
+
 // closeRemote mocks base method
 func (m *MockQuicSession) closeRemote(arg0 error) {
 	m.ctrl.Call(m, "closeRemote", arg0)
