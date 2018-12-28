@@ -109,10 +109,6 @@ var _ = Describe("Request", func() {
 		req.AddCookie(cookie2)
 		rw.WriteRequest(req, 11, true, false)
 		_, headerFields := decode(headerStream.dataWritten.Bytes())
-		// TODO(lclemente): Remove Or() once we drop support for Go 1.8.
-		Expect(headerFields).To(Or(
-			HaveKeyWithValue("cookie", "Cookie #1=Value #1; Cookie #2=Value #2"),
-			HaveKeyWithValue("cookie", `Cookie #1="Value #1"; Cookie #2="Value #2"`),
-		))
+		Expect(headerFields).To(HaveKeyWithValue("cookie", `Cookie #1="Value #1"; Cookie #2="Value #2"`))
 	})
 })
