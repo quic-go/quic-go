@@ -390,6 +390,38 @@ var _ = Describe("Server", func() {
 			close(completeHandshake)
 			Eventually(done).Should(BeClosed())
 		})
+
+		It("never blocks when calling the onHandshakeComplete callback", func() {
+			const num = 50
+
+			done := make(chan struct{}, num)
+			serv.newSession = func(
+				_ connection,
+				runner sessionRunner,
+				_ protocol.ConnectionID,
+				_ protocol.ConnectionID,
+				_ protocol.ConnectionID,
+				_ *Config,
+				_ *tls.Config,
+				_ *handshake.TransportParameters,
+				_ utils.Logger,
+				_ protocol.VersionNumber,
+			) (quicSession, error) {
+				sess := NewMockQuicSession(mockCtrl)
+				runner.onHandshakeComplete(sess)
+				sess.EXPECT().run().Do(func() {})
+				done <- struct{}{}
+				return sess, nil
+			}
+
+			go func() {
+				for i := 0; i < num; i++ {
+					_, err := serv.createNewSession(&net.UDPAddr{}, nil, nil, nil, nil, protocol.VersionWhatever)
+					Expect(err).ToNot(HaveOccurred())
+				}
+			}()
+			Eventually(done).Should(HaveLen(num))
+		})
 	})
 })
 

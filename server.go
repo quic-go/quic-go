@@ -149,7 +149,7 @@ func listen(conn net.PacketConn, tlsConf *tls.Config, config *Config) (*server, 
 		tlsConf:        tlsConf,
 		config:         config,
 		sessionHandler: sessionHandler,
-		sessionQueue:   make(chan Session, 5),
+		sessionQueue:   make(chan Session),
 		errorChan:      make(chan struct{}),
 		newSession:     newSession,
 		logger:         utils.DefaultLogger.WithPrefix("server"),
@@ -164,7 +164,7 @@ func listen(conn net.PacketConn, tlsConf *tls.Config, config *Config) (*server, 
 
 func (s *server) setup() error {
 	s.sessionRunner = &runner{
-		onHandshakeCompleteImpl: func(sess Session) { s.sessionQueue <- sess },
+		onHandshakeCompleteImpl: func(sess Session) { go func() { s.sessionQueue <- sess }() },
 		retireConnectionIDImpl:  s.sessionHandler.Retire,
 		removeConnectionIDImpl:  s.sessionHandler.Remove,
 	}
