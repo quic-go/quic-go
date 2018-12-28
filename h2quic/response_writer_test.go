@@ -22,7 +22,7 @@ type mockStream struct {
 	id            protocol.StreamID
 	dataToRead    bytes.Buffer
 	dataWritten   bytes.Buffer
-	reset         bool
+	canceledRead  bool
 	canceledWrite bool
 	closed        bool
 	remoteClosed  bool
@@ -44,7 +44,7 @@ func newMockStream(id protocol.StreamID) *mockStream {
 }
 
 func (s *mockStream) Close() error                          { s.closed = true; s.ctxCancel(); return nil }
-func (s *mockStream) CancelRead(quic.ErrorCode) error       { s.reset = true; return nil }
+func (s *mockStream) CancelRead(quic.ErrorCode) error       { s.canceledRead = true; return nil }
 func (s *mockStream) CancelWrite(quic.ErrorCode) error      { s.canceledWrite = true; return nil }
 func (s *mockStream) CloseRemote(offset protocol.ByteCount) { s.remoteClosed = true; s.ctxCancel() }
 func (s mockStream) StreamID() protocol.StreamID            { return s.id }
