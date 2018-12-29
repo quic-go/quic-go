@@ -15,6 +15,13 @@ type packetBuffer struct {
 	refCount int
 }
 
+// Split increases the refCount.
+// It must be called when a packet buffer is used for more than one packet,
+// e.g. when splitting coalesced packets.
+func (b *packetBuffer) Split() {
+	b.refCount++
+}
+
 var bufferPool sync.Pool
 
 func getPacketBuffer() *packetBuffer {

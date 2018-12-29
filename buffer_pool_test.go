@@ -29,4 +29,15 @@ var _ = Describe("Buffer Pool", func() {
 		putPacketBuffer(buf)
 		Expect(func() { putPacketBuffer(buf) }).To(Panic())
 	})
+
+	It("waits until all parts have been put back", func() {
+		buf := getPacketBuffer()
+		buf.Split()
+		buf.Split()
+		// now we have 3 parts
+		putPacketBuffer(buf)
+		putPacketBuffer(buf)
+		putPacketBuffer(buf)
+		Expect(func() { putPacketBuffer(buf) }).To(Panic())
+	})
 })
