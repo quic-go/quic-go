@@ -35,7 +35,14 @@ func newSealer(aead cipher.AEAD, iv []byte, pnEncrypter cipher.Block, is1RTT boo
 
 func (s *sealer) Seal(dst, src []byte, pn protocol.PacketNumber, ad []byte) []byte {
 	binary.BigEndian.PutUint64(s.nonceBuf[len(s.nonceBuf)-8:], uint64(pn))
-	return s.aead.Seal(dst, s.nonceBuf, src, ad)
+	for i := 0; i < len(s.nonceBuf); i++ {
+		s.nonceBuf[i] ^= s.iv[i]
+	}
+	sealed := s.aead.Seal(dst, s.nonceBuf, src, ad)
+	for i := 0; i < len(s.nonceBuf); i++ {
+		s.nonceBuf[i] = 0
+	}
+	return sealed
 }
 
 func (s *sealer) EncryptHeader(sample []byte, firstByte *byte, pnBytes []byte) {
@@ -85,7 +92,14 @@ func newOpener(aead cipher.AEAD, iv []byte, pnDecrypter cipher.Block, is1RTT boo
 
 func (o *opener) Open(dst, src []byte, pn protocol.PacketNumber, ad []byte) ([]byte, error) {
 	binary.BigEndian.PutUint64(o.nonceBuf[len(o.nonceBuf)-8:], uint64(pn))
-	return o.aead.Open(dst, o.nonceBuf, src, ad)
+	for i := 0; i < len(o.nonceBuf); i++ {
+		o.nonceBuf[i] ^= o.iv[i]
+	}
+	opened, err := o.aead.Open(dst, o.nonceBuf, src, ad)
+	for i := 0; i < len(o.nonceBuf); i++ {
+		o.nonceBuf[i] = 0
+	}
+	return opened, err
 }
 
 func (o *opener) DecryptHeader(sample []byte, firstByte *byte, pnBytes []byte) {
