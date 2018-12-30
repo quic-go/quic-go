@@ -976,7 +976,7 @@ func (s *session) logPacket(packet *packedPacket) {
 		// We don't need to allocate the slices for calling the format functions
 		return
 	}
-	s.logger.Debugf("-> Sending packet 0x%x (%d bytes) for connection %s, %s", packet.header.PacketNumber, len(packet.raw), s.srcConnID, packet.encryptionLevel)
+	s.logger.Debugf("-> Sending packet 0x%x (%d bytes) for connection %s, %s", packet.header.PacketNumber, len(packet.raw), s.srcConnID, packet.EncryptionLevel())
 	packet.header.Log(s.logger)
 	for _, frame := range packet.frames {
 		wire.LogFrame(s.logger, frame, true)

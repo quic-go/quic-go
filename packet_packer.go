@@ -25,10 +25,23 @@ type packer interface {
 }
 
 type packedPacket struct {
-	header          *wire.ExtendedHeader
-	raw             []byte
-	frames          []wire.Frame
-	encryptionLevel protocol.EncryptionLevel
+	header *wire.ExtendedHeader
+	raw    []byte
+	frames []wire.Frame
+}
+
+func (p *packedPacket) EncryptionLevel() protocol.EncryptionLevel {
+	if !p.header.IsLongHeader {
+		return protocol.Encryption1RTT
+	}
+	switch p.header.Type {
+	case protocol.PacketTypeInitial:
+		return protocol.EncryptionInitial
+	case protocol.PacketTypeHandshake:
+		return protocol.EncryptionHandshake
+	default:
+		return protocol.EncryptionUnspecified
+	}
 }
 
 func (p *packedPacket) ToAckHandlerPacket() *ackhandler.Packet {
@@ -37,7 +50,7 @@ func (p *packedPacket) ToAckHandlerPacket() *ackhandler.Packet {
 		PacketType:      p.header.Type,
 		Frames:          p.frames,
 		Length:          protocol.ByteCount(len(p.raw)),
-		EncryptionLevel: p.encryptionLevel,
+		EncryptionLevel: p.EncryptionLevel(),
 		SendTime:        time.Now(),
 	}
 }
@@ -138,10 +151,9 @@ func (p *packetPacker) PackConnectionClose(ccf *wire.ConnectionCloseFrame) (*pac
 	header := p.getHeader(encLevel)
 	raw, err := p.writeAndSealPacket(header, frames, sealer)
 	return &packedPacket{
-		header:          header,
-		raw:             raw,
-		frames:          frames,
-		encryptionLevel: encLevel,
+		header: header,
+		raw:    raw,
+		frames: frames,
 	}, err
 }
 
@@ -156,10 +168,9 @@ func (p *packetPacker) MaybePackAckPacket() (*packedPacket, error) {
 	frames := []wire.Frame{ack}
 	raw, err := p.writeAndSealPacket(header, frames, sealer)
 	return &packedPacket{
-		header:          header,
-		raw:             raw,
-		frames:          frames,
-		encryptionLevel: encLevel,
+		header: header,
+		raw:    raw,
+		frames: frames,
 	}, err
 }
 
@@ -232,10 +243,9 @@ func (p *packetPacker) PackRetransmission(packet *ackhandler.Packet) ([]*packedP
 			return nil, err
 		}
 		packets = append(packets, &packedPacket{
-			header:          header,
-			raw:             raw,
-			frames:          frames,
-			encryptionLevel: encLevel,
+			header: header,
+			raw:    raw,
+			frames: frames,
 		})
 	}
 	return packets, nil
@@ -286,10 +296,9 @@ func (p *packetPacker) PackPacket() (*packedPacket, error) {
 		return nil, err
 	}
 	return &packedPacket{
-		header:          header,
-		raw:             raw,
-		frames:          frames,
-		encryptionLevel: encLevel,
+		header: header,
+		raw:    raw,
+		frames: frames,
 	}, nil
 }
 
@@ -325,10 +334,9 @@ func (p *packetPacker) maybePackCryptoPacket() (*packedPacket, error) {
 		return nil, err
 	}
 	return &packedPacket{
-		header:          hdr,
-		raw:             raw,
-		frames:          frames,
-		encryptionLevel: encLevel,
+		header: hdr,
+		raw:    raw,
+		frames: frames,
 	}, nil
 }
 
