@@ -149,12 +149,7 @@ func (p *packetPacker) PackConnectionClose(ccf *wire.ConnectionCloseFrame) (*pac
 	frames := []wire.Frame{ccf}
 	encLevel, sealer := p.cryptoSetup.GetSealer()
 	header := p.getHeader(encLevel)
-	raw, err := p.writeAndSealPacket(header, frames, sealer)
-	return &packedPacket{
-		header: header,
-		raw:    raw,
-		frames: frames,
-	}, err
+	return p.writeAndSealPacket(header, frames, sealer)
 }
 
 func (p *packetPacker) MaybePackAckPacket() (*packedPacket, error) {
@@ -166,12 +161,7 @@ func (p *packetPacker) MaybePackAckPacket() (*packedPacket, error) {
 	encLevel, sealer := p.cryptoSetup.GetSealer()
 	header := p.getHeader(encLevel)
 	frames := []wire.Frame{ack}
-	raw, err := p.writeAndSealPacket(header, frames, sealer)
-	return &packedPacket{
-		header: header,
-		raw:    raw,
-		frames: frames,
-	}, err
+	return p.writeAndSealPacket(header, frames, sealer)
 }
 
 // PackRetransmission packs a retransmission
@@ -238,15 +228,11 @@ func (p *packetPacker) PackRetransmission(packet *ackhandler.Packet) ([]*packedP
 		if sf, ok := frames[len(frames)-1].(*wire.StreamFrame); ok {
 			sf.DataLenPresent = false
 		}
-		raw, err := p.writeAndSealPacket(header, frames, sealer)
+		p, err := p.writeAndSealPacket(header, frames, sealer)
 		if err != nil {
 			return nil, err
 		}
-		packets = append(packets, &packedPacket{
-			header: header,
-			raw:    raw,
-			frames: frames,
-		})
+		packets = append(packets, p)
 	}
 	return packets, nil
 }
@@ -291,15 +277,7 @@ func (p *packetPacker) PackPacket() (*packedPacket, error) {
 		p.numNonRetransmittableAcks = 0
 	}
 
-	raw, err := p.writeAndSealPacket(header, frames, sealer)
-	if err != nil {
-		return nil, err
-	}
-	return &packedPacket{
-		header: header,
-		raw:    raw,
-		frames: frames,
-	}, nil
+	return p.writeAndSealPacket(header, frames, sealer)
 }
 
 func (p *packetPacker) maybePackCryptoPacket() (*packedPacket, error) {
@@ -329,15 +307,7 @@ func (p *packetPacker) maybePackCryptoPacket() (*packedPacket, error) {
 	}
 	cf := s.PopCryptoFrame(p.maxPacketSize - hdrLen - protocol.ByteCount(sealer.Overhead()) - length)
 	frames = append(frames, cf)
-	raw, err := p.writeAndSealPacket(hdr, frames, sealer)
-	if err != nil {
-		return nil, err
-	}
-	return &packedPacket{
-		header: hdr,
-		raw:    raw,
-		frames: frames,
-	}, nil
+	return p.writeAndSealPacket(hdr, frames, sealer)
 }
 
 func (p *packetPacker) composeNextPacket(maxFrameSize protocol.ByteCount) ([]wire.Frame, error) {
@@ -403,7 +373,7 @@ func (p *packetPacker) writeAndSealPacket(
 	header *wire.ExtendedHeader,
 	frames []wire.Frame,
 	sealer handshake.Sealer,
-) ([]byte, error) {
+) (*packedPacket, error) {
 	raw := *getPacketBuffer()
 	buffer := bytes.NewBuffer(raw[:0])
 
@@ -481,7 +451,11 @@ func (p *packetPacker) writeAndSealPacket(
 	if num != header.PacketNumber {
 		return nil, errors.New("packetPacker BUG: Peeked and Popped packet numbers do not match")
 	}
-	return raw, nil
+	return &packedPacket{
+		header: header,
+		raw:    raw,
+		frames: frames,
+	}, nil
 }
 
 func (p *packetPacker) ChangeDestConnectionID(connID protocol.ConnectionID) {
