@@ -479,7 +479,7 @@ func (s *session) handlePacketImpl(p *receivedPacket) bool /* was the packet suc
 	defer func() {
 		// Put back the packet buffer if the packet wasn't queued for later decryption.
 		if !wasQueued {
-			putPacketBuffer(p.buffer)
+			p.buffer.Release()
 		}
 	}()
 
@@ -962,7 +962,7 @@ func (s *session) sendPacket() (bool, error) {
 }
 
 func (s *session) sendPackedPacket(packet *packedPacket) error {
-	defer putPacketBuffer(packet.buffer)
+	defer packet.buffer.Release()
 	s.logPacket(packet)
 	return s.conn.Write(packet.raw)
 }

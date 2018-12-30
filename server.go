@@ -321,20 +321,20 @@ func (s *server) handlePacket(p *receivedPacket) {
 		return
 	}
 
-	putPacketBuffer(p.buffer)
 	// TODO(#943): send Stateless Reset
+	p.buffer.Release()
 }
 
 func (s *server) handleInitial(p *receivedPacket) {
 	s.logger.Debugf("<- Received Initial packet.")
 	sess, connID, err := s.handleInitialImpl(p)
 	if err != nil {
-		putPacketBuffer(p.buffer)
+		p.buffer.Release()
 		s.logger.Errorf("Error occurred handling initial packet: %s", err)
 		return
 	}
 	if sess == nil { // a retry was done
-		putPacketBuffer(p.buffer)
+		p.buffer.Release()
 		return
 	}
 	// Don't put the packet buffer back if a new session was created.
@@ -461,7 +461,7 @@ func (s *server) sendRetry(remoteAddr net.Addr, hdr *wire.Header) error {
 }
 
 func (s *server) sendVersionNegotiationPacket(p *receivedPacket) {
-	defer putPacketBuffer(p.buffer)
+	defer p.buffer.Release()
 	hdr := p.hdr
 	s.logger.Debugf("Client offered version %s, sending Version Negotiation", hdr.Version)
 	data, err := wire.ComposeVersionNegotiation(hdr.SrcConnectionID, hdr.DestConnectionID, s.config.Versions)

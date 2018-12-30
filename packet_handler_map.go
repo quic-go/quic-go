@@ -169,7 +169,7 @@ func (h *packetHandlerMap) handlePacket(
 		// We still need to process the packets that were successfully parsed before.
 	}
 	if len(packets) == 0 {
-		putPacketBuffer(buffer)
+		buffer.Release()
 		return
 	}
 	h.handleParsedPackets(packets)

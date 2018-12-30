@@ -13,31 +13,31 @@ var _ = Describe("Buffer Pool", func() {
 		Expect(buf.Slice).To(HaveCap(int(protocol.MaxReceivePacketSize)))
 	})
 
-	It("puts buffers back", func() {
+	It("releases buffers", func() {
 		buf := getPacketBuffer()
-		putPacketBuffer(buf)
+		buf.Release()
 	})
 
 	It("panics if wrong-sized buffers are passed", func() {
 		buf := getPacketBuffer()
 		buf.Slice = make([]byte, 10)
-		Expect(func() { putPacketBuffer(buf) }).To(Panic())
+		Expect(func() { buf.Release() }).To(Panic())
 	})
 
-	It("panics if it is put pack twice", func() {
+	It("panics if it is released twice", func() {
 		buf := getPacketBuffer()
-		putPacketBuffer(buf)
-		Expect(func() { putPacketBuffer(buf) }).To(Panic())
+		buf.Release()
+		Expect(func() { buf.Release() }).To(Panic())
 	})
 
-	It("waits until all parts have been put back", func() {
+	It("waits until all parts have been released", func() {
 		buf := getPacketBuffer()
 		buf.Split()
 		buf.Split()
 		// now we have 3 parts
-		putPacketBuffer(buf)
-		putPacketBuffer(buf)
-		putPacketBuffer(buf)
-		Expect(func() { putPacketBuffer(buf) }).To(Panic())
+		buf.Release()
+		buf.Release()
+		buf.Release()
+		Expect(func() { buf.Release() }).To(Panic())
 	})
 })

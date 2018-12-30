@@ -22,6 +22,23 @@ func (b *packetBuffer) Split() {
 	b.refCount++
 }
 
+// Release decreases the refCount.
+// It should be called when processing the packet is finished.
+// When the refCount reaches 0, the packet buffer is put back into the pool.
+func (b *packetBuffer) Release() {
+	if cap(b.Slice) != int(protocol.MaxReceivePacketSize) {
+		panic("putPacketBuffer called with packet of wrong size!")
+	}
+	b.refCount--
+	if b.refCount < 0 {
+		panic("negative packetBuffer refCount")
+	}
+	// only put the packetBuffer back if it's not used any more
+	if b.refCount == 0 {
+		bufferPool.Put(b)
+	}
+}
+
 var bufferPool sync.Pool
 
 func getPacketBuffer() *packetBuffer {
@@ -29,20 +46,6 @@ func getPacketBuffer() *packetBuffer {
 	buf.refCount = 1
 	buf.Slice = buf.Slice[:protocol.MaxReceivePacketSize]
 	return buf
-}
-
-func putPacketBuffer(buf *packetBuffer) {
-	if cap(buf.Slice) != int(protocol.MaxReceivePacketSize) {
-		panic("putPacketBuffer called with packet of wrong size!")
-	}
-	buf.refCount--
-	if buf.refCount < 0 {
-		panic("negative packetBuffer refCount")
-	}
-	// only put the packetBuffer back if it's not used any more
-	if buf.refCount == 0 {
-		bufferPool.Put(buf)
-	}
 }
 
 func init() {
