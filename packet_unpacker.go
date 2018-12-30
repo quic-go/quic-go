@@ -93,11 +93,7 @@ func (u *packetUnpacker) Unpack(hdr *wire.Header, data []byte) (*unpackedPacket,
 		extHdr.PacketNumber,
 	)
 
-	buf := *getPacketBuffer()
-	buf = buf[:0]
-	defer putPacketBuffer(&buf)
-
-	decrypted, err := opener.Open(buf, data, pn, extHdr.Raw)
+	decrypted, err := opener.Open(data[:0], data, pn, extHdr.Raw)
 	if err != nil {
 		return nil, err
 	}
