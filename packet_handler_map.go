@@ -202,7 +202,7 @@ func (h *packetHandlerMap) parsePacket(
 
 		var rest []byte
 		if hdr.IsLongHeader {
-			if protocol.ByteCount(len(data)) < hdr.Length {
+			if protocol.ByteCount(len(data)) < hdr.ParsedLen()+hdr.Length {
 				return packets, fmt.Errorf("packet length (%d bytes) is smaller than the expected length (%d bytes)", len(data)-int(hdr.ParsedLen()), hdr.Length)
 			}
 			packetLen := int(hdr.ParsedLen() + hdr.Length)
