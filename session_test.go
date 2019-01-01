@@ -533,26 +533,25 @@ var _ = Describe("Session", func() {
 			}))).To(BeTrue())
 		})
 
-		It("closes when handling a packet fails", func() {
-			testErr := errors.New("unpack error")
-			unpacker.EXPECT().Unpack(gomock.Any(), gomock.Any()).Return(nil, testErr)
+		It("drops a packet when unpacking fails", func() {
+			unpacker.EXPECT().Unpack(gomock.Any(), gomock.Any()).Return(nil, errors.New("unpack error"))
 			streamManager.EXPECT().CloseWithError(gomock.Any())
 			cryptoSetup.EXPECT().Close()
 			packer.EXPECT().PackConnectionClose(gomock.Any()).Return(&packedPacket{}, nil)
-			done := make(chan struct{})
 			go func() {
 				defer GinkgoRecover()
 				cryptoSetup.EXPECT().RunHandshake().Do(func() { <-sess.Context().Done() })
-				err := sess.run()
-				Expect(err).To(MatchError(testErr))
-				close(done)
+				sess.run()
 			}()
 			sessionRunner.EXPECT().retireConnectionID(gomock.Any())
 			sess.handlePacket(insertPacketBuffer(&receivedPacket{
 				hdr:  &wire.Header{},
 				data: getData(&wire.ExtendedHeader{PacketNumberLen: protocol.PacketNumberLen1}),
 			}))
-			Eventually(done).Should(BeClosed())
+			Consistently(sess.Context().Done()).ShouldNot(BeClosed())
+			// make the go routine return
+			sess.closeLocal(errors.New("close"))
+			Eventually(sess.Context().Done()).Should(BeClosed())
 		})
 
 		It("rejects packets with empty payload", func() {

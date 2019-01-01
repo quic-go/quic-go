@@ -497,14 +497,17 @@ func (s *session) handlePacketImpl(p *receivedPacket) bool /* was the packet suc
 	}
 
 	packet, err := s.unpacker.Unpack(p.hdr, p.data)
-	// if the decryption failed, this might be a packet sent by an attacker
 	if err != nil {
 		if err == handshake.ErrOpenerNotYetAvailable {
+			// Sealer for this encryption level not yet available.
+			// Try again later.
 			wasQueued = true
 			s.tryQueueingUndecryptablePacket(p)
 			return false
 		}
-		s.closeLocal(err)
+		// This might be a packet injected by an attacker.
+		// Drop it.
+		s.logger.Debugf("Dropping packet that could not be unpacked. Unpack error: %s", err)
 		return false
 	}
 
