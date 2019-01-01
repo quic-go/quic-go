@@ -539,13 +539,9 @@ func (s *session) handleUnpackedPacket(packet *unpackedPacket, rcvTime time.Time
 		}
 	}
 
-	// If this is a Retry packet, there's no need to send an ACK.
-	// The session will be closed and recreated as soon as the crypto setup processed the HRR.
-	if packet.hdr.Type != protocol.PacketTypeRetry {
-		isRetransmittable := ackhandler.HasRetransmittableFrames(packet.frames)
-		if err := s.receivedPacketHandler.ReceivedPacket(packet.packetNumber, rcvTime, isRetransmittable); err != nil {
-			return err
-		}
+	isRetransmittable := ackhandler.HasRetransmittableFrames(packet.frames)
+	if err := s.receivedPacketHandler.ReceivedPacket(packet.packetNumber, rcvTime, isRetransmittable); err != nil {
+		return err
 	}
 
 	return s.handleFrames(packet.frames, packet.packetNumber, packet.encryptionLevel)
