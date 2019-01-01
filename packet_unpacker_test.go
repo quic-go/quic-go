@@ -8,7 +8,6 @@ import (
 	"github.com/lucas-clemente/quic-go/internal/handshake"
 	"github.com/lucas-clemente/quic-go/internal/mocks"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
-	"github.com/lucas-clemente/quic-go/internal/qerr"
 	"github.com/lucas-clemente/quic-go/internal/wire"
 
 	. "github.com/onsi/ginkgo"
@@ -35,22 +34,6 @@ var _ = Describe("Packet Unpacker", func() {
 	BeforeEach(func() {
 		cs = mocks.NewMockCryptoSetup(mockCtrl)
 		unpacker = newPacketUnpacker(cs, version).(*packetUnpacker)
-	})
-
-	It("errors if the packet doesn't contain any payload", func() {
-		extHdr := &wire.ExtendedHeader{
-			Header:          wire.Header{DestConnectionID: connID},
-			PacketNumber:    42,
-			PacketNumberLen: protocol.PacketNumberLen2,
-		}
-		hdr, hdrRaw := getHeader(extHdr)
-		// return an empty (unencrypted) payload
-		opener := mocks.NewMockOpener(mockCtrl)
-		cs.EXPECT().GetOpener(protocol.Encryption1RTT).Return(opener, nil)
-		opener.EXPECT().DecryptHeader(gomock.Any(), gomock.Any(), gomock.Any())
-		opener.EXPECT().Open(gomock.Any(), payload, extHdr.PacketNumber, hdrRaw).Return([]byte{}, nil)
-		_, err := unpacker.Unpack(hdr, append(hdrRaw, payload...))
-		Expect(err).To(MatchError(qerr.MissingPayload))
 	})
 
 	It("errors when the packet is too small to obtain the header decryption sample", func() {
@@ -83,10 +66,11 @@ var _ = Describe("Packet Unpacker", func() {
 		opener := mocks.NewMockOpener(mockCtrl)
 		cs.EXPECT().GetOpener(protocol.EncryptionInitial).Return(opener, nil)
 		opener.EXPECT().DecryptHeader(gomock.Any(), gomock.Any(), gomock.Any())
-		opener.EXPECT().Open(gomock.Any(), payload, extHdr.PacketNumber, hdrRaw).Return([]byte{0}, nil)
+		opener.EXPECT().Open(gomock.Any(), payload, extHdr.PacketNumber, hdrRaw).Return([]byte("decrypted"), nil)
 		packet, err := unpacker.Unpack(hdr, append(hdrRaw, payload...))
 		Expect(err).ToNot(HaveOccurred())
 		Expect(packet.encryptionLevel).To(Equal(protocol.EncryptionInitial))
+		Expect(packet.data).To(Equal([]byte("decrypted")))
 	})
 
 	It("returns the error when getting the sealer fails", func() {
@@ -192,24 +176,5 @@ var _ = Describe("Packet Unpacker", func() {
 		packet, err = unpacker.Unpack(hdr, append(hdrRaw, payload...))
 		Expect(err).ToNot(HaveOccurred())
 		Expect(packet.packetNumber).To(Equal(protocol.PacketNumber(0x1338)))
-	})
-
-	It("unpacks the frames", func() {
-		extHdr := &wire.ExtendedHeader{
-			Header:          wire.Header{DestConnectionID: connID},
-			PacketNumber:    0x1337,
-			PacketNumberLen: 2,
-		}
-		buf := &bytes.Buffer{}
-		(&wire.PingFrame{}).Write(buf, protocol.VersionWhatever)
-		(&wire.DataBlockedFrame{}).Write(buf, protocol.VersionWhatever)
-		hdr, hdrRaw := getHeader(extHdr)
-		opener := mocks.NewMockOpener(mockCtrl)
-		opener.EXPECT().DecryptHeader(gomock.Any(), gomock.Any(), gomock.Any())
-		cs.EXPECT().GetOpener(protocol.Encryption1RTT).Return(opener, nil)
-		opener.EXPECT().Open(gomock.Any(), gomock.Any(), extHdr.PacketNumber, hdrRaw).Return(buf.Bytes(), nil)
-		packet, err := unpacker.Unpack(hdr, append(hdrRaw, payload...))
-		Expect(err).ToNot(HaveOccurred())
-		Expect(packet.frames).To(Equal([]wire.Frame{&wire.PingFrame{}, &wire.DataBlockedFrame{}}))
 	})
 })
