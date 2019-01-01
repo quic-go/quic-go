@@ -56,6 +56,9 @@ func (u *packetUnpacker) Unpack(hdr *wire.Header, data []byte) (*unpackedPacket,
 		return nil, err
 	}
 	hdrLen := int(hdr.ParsedLen())
+	if len(data) < hdrLen+4+16 {
+		return nil, fmt.Errorf("Packet too small. Expected at least 20 bytes after the header, got %d", len(data)-hdrLen)
+	}
 	// The packet number can be up to 4 bytes long, but we won't know the length until we decrypt it.
 	// 1. save a copy of the 4 bytes
 	origPNBytes := make([]byte, 4)
