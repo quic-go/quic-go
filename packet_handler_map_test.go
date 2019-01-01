@@ -3,6 +3,7 @@ package quic
 import (
 	"bytes"
 	"errors"
+	"net"
 	"time"
 
 	"github.com/golang/mock/gomock"
@@ -19,19 +20,23 @@ var _ = Describe("Packet Handler Map", func() {
 		conn    *mockPacketConn
 	)
 
-	getPacket := func(connID protocol.ConnectionID) []byte {
+	getPacketWithLength := func(connID protocol.ConnectionID, length protocol.ByteCount) []byte {
 		buf := &bytes.Buffer{}
 		Expect((&wire.ExtendedHeader{
 			Header: wire.Header{
 				IsLongHeader:     true,
 				Type:             protocol.PacketTypeHandshake,
 				DestConnectionID: connID,
-				Length:           1,
+				Length:           length,
 				Version:          protocol.VersionTLS,
 			},
-			PacketNumberLen: protocol.PacketNumberLen1,
+			PacketNumberLen: protocol.PacketNumberLen2,
 		}).Write(buf, protocol.VersionWhatever)).To(Succeed())
 		return buf.Bytes()
+	}
+
+	getPacket := func(connID protocol.ConnectionID) []byte {
+		return getPacketWithLength(connID, 2)
 	}
 
 	BeforeEach(func() {
@@ -81,7 +86,7 @@ var _ = Describe("Packet Handler Map", func() {
 		})
 
 		It("drops unparseable packets", func() {
-			err := handler.handlePacket(nil, []byte{0, 1, 2, 3})
+			_, err := handler.parsePacket(nil, nil, []byte{0, 1, 2, 3})
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(ContainSubstring("error parsing header:"))
 		})
@@ -91,7 +96,8 @@ var _ = Describe("Packet Handler Map", func() {
 			connID := protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8}
 			handler.Add(connID, NewMockPacketHandler(mockCtrl))
 			handler.Remove(connID)
-			Expect(handler.handlePacket(nil, getPacket(connID))).To(MatchError("received a packet with an unexpected connection ID 0x0102030405060708"))
+			handler.handlePacket(nil, nil, getPacket(connID))
+			// don't EXPECT any calls to handlePacket of the MockPacketHandler
 		})
 
 		It("deletes retired session entries after a wait time", func() {
@@ -100,7 +106,8 @@ var _ = Describe("Packet Handler Map", func() {
 			handler.Add(connID, NewMockPacketHandler(mockCtrl))
 			handler.Retire(connID)
 			time.Sleep(scaleDuration(30 * time.Millisecond))
-			Expect(handler.handlePacket(nil, getPacket(connID))).To(MatchError("received a packet with an unexpected connection ID 0x0102030405060708"))
+			handler.handlePacket(nil, nil, getPacket(connID))
+			// don't EXPECT any calls to handlePacket of the MockPacketHandler
 		})
 
 		It("passes packets arriving late for closed sessions to that session", func() {
@@ -110,14 +117,12 @@ var _ = Describe("Packet Handler Map", func() {
 			packetHandler.EXPECT().handlePacket(gomock.Any())
 			handler.Add(connID, packetHandler)
 			handler.Retire(connID)
-			err := handler.handlePacket(nil, getPacket(connID))
-			Expect(err).ToNot(HaveOccurred())
+			handler.handlePacket(nil, nil, getPacket(connID))
 		})
 
 		It("drops packets for unknown receivers", func() {
 			connID := protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8}
-			err := handler.handlePacket(nil, getPacket(connID))
-			Expect(err).To(MatchError("received a packet with an unexpected connection ID 0x0102030405060708"))
+			handler.handlePacket(nil, nil, getPacket(connID))
 		})
 
 		It("closes the packet handlers when reading from the conn fails", func() {
@@ -130,6 +135,75 @@ var _ = Describe("Packet Handler Map", func() {
 			handler.Add(protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8}, packetHandler)
 			conn.Close()
 			Eventually(done).Should(BeClosed())
+		})
+
+		Context("coalesced packets", func() {
+			It("errors on packets that are smaller than the length in the packet header", func() {
+				connID := protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8}
+				data := append(getPacketWithLength(connID, 1000), make([]byte, 500-2 /* for packet number length */)...)
+				_, err := handler.parsePacket(nil, nil, data)
+				Expect(err).To(MatchError("packet length (500 bytes) is smaller than the expected length (1000 bytes)"))
+			})
+
+			It("cuts packets to the right length", func() {
+				connID := protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8}
+				data := append(getPacketWithLength(connID, 456), make([]byte, 1000)...)
+				packetHandler := NewMockPacketHandler(mockCtrl)
+				packetHandler.EXPECT().handlePacket(gomock.Any()).Do(func(p *receivedPacket) {
+					Expect(p.data).To(HaveLen(456 + int(p.hdr.ParsedLen())))
+				})
+				handler.Add(connID, packetHandler)
+				handler.handlePacket(nil, nil, data)
+			})
+
+			It("handles coalesced packets", func() {
+				connID := protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8}
+				packetHandler := NewMockPacketHandler(mockCtrl)
+				handledPackets := make(chan *receivedPacket, 3)
+				packetHandler.EXPECT().handlePacket(gomock.Any()).Do(func(p *receivedPacket) {
+					handledPackets <- p
+				}).Times(3)
+				handler.Add(connID, packetHandler)
+
+				buffer := getPacketBuffer()
+				packet := buffer.Slice[:0]
+				packet = append(packet, append(getPacketWithLength(connID, 10), make([]byte, 10-2 /* packet number len */)...)...)
+				packet = append(packet, append(getPacketWithLength(connID, 20), make([]byte, 20-2 /* packet number len */)...)...)
+				packet = append(packet, append(getPacketWithLength(connID, 30), make([]byte, 30-2 /* packet number len */)...)...)
+				conn.dataToRead <- packet
+
+				now := time.Now()
+				for i := 1; i <= 3; i++ {
+					var p *receivedPacket
+					Eventually(handledPackets).Should(Receive(&p))
+					Expect(p.hdr.DestConnectionID).To(Equal(connID))
+					Expect(p.hdr.Length).To(BeEquivalentTo(10 * i))
+					Expect(p.data).To(HaveLen(int(p.hdr.ParsedLen() + p.hdr.Length)))
+					Expect(p.rcvTime).To(BeTemporally("~", now, scaleDuration(20*time.Millisecond)))
+					Expect(p.buffer.refCount).To(Equal(3))
+				}
+
+				// makes the listen go routine return
+				packetHandler.EXPECT().destroy(gomock.Any()).AnyTimes()
+				close(conn.dataToRead)
+			})
+
+			It("ignores coalesced packet parts if the connection IDs don't match", func() {
+				connID1 := protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8}
+				connID2 := protocol.ConnectionID{8, 7, 6, 5, 4, 3, 2, 1}
+
+				buffer := getPacketBuffer()
+				packet := buffer.Slice[:0]
+				// var packet []byte
+				packet = append(packet, getPacket(connID1)...)
+				packet = append(packet, getPacket(connID2)...)
+
+				packets, err := handler.parsePacket(&net.UDPAddr{}, buffer, packet)
+				Expect(err).To(MatchError("coalesced packet has different destination connection ID: 0x0807060504030201, expected 0x0102030405060708"))
+				Expect(packets).To(HaveLen(1))
+				Expect(packets[0].hdr.DestConnectionID).To(Equal(connID1))
+				Expect(packets[0].buffer.refCount).To(Equal(1))
+			})
 		})
 	})
 
@@ -164,6 +238,24 @@ var _ = Describe("Packet Handler Map", func() {
 			Eventually(destroyed).Should(BeClosed())
 		})
 
+		It("detects a stateless that is coalesced with another packet", func() {
+			packetHandler := NewMockPacketHandler(mockCtrl)
+			connID := protocol.ConnectionID{0xde, 0xca, 0xfb, 0xad}
+			token := [16]byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16}
+			handler.AddWithResetToken(connID, packetHandler, token)
+			fakeConnID := protocol.ConnectionID{1, 2, 3, 4, 5}
+			packet := getPacket(fakeConnID)
+			reset := append([]byte{0x40} /* short header packet */, fakeConnID...)
+			reset = append(reset, make([]byte, 50)...) // add some "random" data
+			reset = append(reset, token[:]...)
+			destroyed := make(chan struct{})
+			packetHandler.EXPECT().destroy(errors.New("received a stateless reset")).Do(func(error) {
+				close(destroyed)
+			})
+			conn.dataToRead <- append(packet, reset...)
+			Eventually(destroyed).Should(BeClosed())
+		})
+
 		It("deletes reset tokens when the session is retired", func() {
 			handler.deleteRetiredSessionsAfter = scaleDuration(10 * time.Millisecond)
 			connID := protocol.ConnectionID{0xde, 0xad, 0xbe, 0xef, 0x42}
@@ -171,10 +263,12 @@ var _ = Describe("Packet Handler Map", func() {
 			handler.AddWithResetToken(connID, NewMockPacketHandler(mockCtrl), token)
 			handler.Retire(connID)
 			time.Sleep(scaleDuration(30 * time.Millisecond))
-			Expect(handler.handlePacket(nil, getPacket(connID))).To(MatchError("received a packet with an unexpected connection ID 0xdeadbeef42"))
+			handler.handlePacket(nil, nil, getPacket(connID))
+			// don't EXPECT any calls to handlePacket of the MockPacketHandler
 			packet := append([]byte{0x40, 0xde, 0xca, 0xfb, 0xad, 0x99} /* short header packet */, make([]byte, 50)...)
 			packet = append(packet, token[:]...)
-			Expect(handler.handlePacket(nil, packet)).To(MatchError("received a short header packet with an unexpected connection ID 0xdecafbad99"))
+			handler.handlePacket(nil, nil, packet)
+			// don't EXPECT any calls to handlePacket of the MockPacketHandler
 			Expect(handler.resetTokens).To(BeEmpty())
 		})
 	})
@@ -188,7 +282,7 @@ var _ = Describe("Packet Handler Map", func() {
 				Expect(p.hdr.DestConnectionID).To(Equal(connID))
 			})
 			handler.SetServer(server)
-			Expect(handler.handlePacket(nil, p)).To(Succeed())
+			handler.handlePacket(nil, nil, p)
 		})
 
 		It("closes all server sessions", func() {
@@ -207,9 +301,10 @@ var _ = Describe("Packet Handler Map", func() {
 			connID := protocol.ConnectionID{0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88}
 			p := getPacket(connID)
 			server := NewMockUnknownPacketHandler(mockCtrl)
+			// don't EXPECT any calls to server.handlePacket
 			handler.SetServer(server)
 			handler.CloseServer()
-			Expect(handler.handlePacket(nil, p)).To(MatchError("received a packet with an unexpected connection ID 0x1122334455667788"))
+			handler.handlePacket(nil, nil, p)
 		})
 	})
 })

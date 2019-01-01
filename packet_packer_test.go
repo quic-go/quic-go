@@ -253,7 +253,7 @@ var _ = Describe("Packet packer", func() {
 				})
 				p, err := packer.PackPacket()
 				Expect(err).ToNot(HaveOccurred())
-				Expect(p.encryptionLevel).To(Equal(protocol.Encryption1RTT))
+				Expect(p.EncryptionLevel()).To(Equal(protocol.Encryption1RTT))
 			})
 
 			It("packs a single ACK", func() {
@@ -494,7 +494,7 @@ var _ = Describe("Packet packer", func() {
 					Expect(err).ToNot(HaveOccurred())
 					Expect(packets).To(HaveLen(1))
 					p := packets[0]
-					Expect(p.encryptionLevel).To(Equal(protocol.Encryption1RTT))
+					Expect(p.EncryptionLevel()).To(Equal(protocol.Encryption1RTT))
 					Expect(p.frames).To(Equal(frames))
 				})
 
@@ -846,7 +846,7 @@ var _ = Describe("Packet packer", func() {
 					Expect(p).To(HaveLen(1))
 					Expect(p[0].header.Type).To(Equal(protocol.PacketTypeInitial))
 					Expect(p[0].frames).To(Equal([]wire.Frame{f}))
-					Expect(p[0].encryptionLevel).To(Equal(protocol.EncryptionInitial))
+					Expect(p[0].EncryptionLevel()).To(Equal(protocol.EncryptionInitial))
 				})
 
 				It("packs a retransmission for an Initial packet", func() {
@@ -864,7 +864,7 @@ var _ = Describe("Packet packer", func() {
 					Expect(packets).To(HaveLen(1))
 					p := packets[0]
 					Expect(p.frames).To(Equal([]wire.Frame{sf}))
-					Expect(p.encryptionLevel).To(Equal(protocol.EncryptionInitial))
+					Expect(p.EncryptionLevel()).To(Equal(protocol.EncryptionInitial))
 					Expect(p.header.Type).To(Equal(protocol.PacketTypeInitial))
 					Expect(p.header.Token).To(Equal(token))
 					Expect(p.raw).To(HaveLen(protocol.MinInitialPacketSize))

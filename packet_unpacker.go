@@ -39,14 +39,6 @@ func newPacketUnpacker(cs handshake.CryptoSetup, version protocol.VersionNumber)
 func (u *packetUnpacker) Unpack(hdr *wire.Header, data []byte) (*unpackedPacket, error) {
 	r := bytes.NewReader(data)
 
-	if hdr.IsLongHeader {
-		if protocol.ByteCount(r.Len()) < hdr.Length {
-			return nil, fmt.Errorf("packet length (%d bytes) is smaller than the expected length (%d bytes)", len(data)-int(hdr.ParsedLen()), hdr.Length)
-		}
-		data = data[:int(hdr.ParsedLen()+hdr.Length)]
-		// TODO(#1312): implement parsing of compound packets
-	}
-
 	var encLevel protocol.EncryptionLevel
 	switch hdr.Type {
 	case protocol.PacketTypeInitial:
@@ -93,11 +85,7 @@ func (u *packetUnpacker) Unpack(hdr *wire.Header, data []byte) (*unpackedPacket,
 		extHdr.PacketNumber,
 	)
 
-	buf := *getPacketBuffer()
-	buf = buf[:0]
-	defer putPacketBuffer(&buf)
-
-	decrypted, err := opener.Open(buf, data, pn, extHdr.Raw)
+	decrypted, err := opener.Open(data[:0], data, pn, extHdr.Raw)
 	if err != nil {
 		return nil, err
 	}

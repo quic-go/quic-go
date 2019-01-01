@@ -75,49 +75,6 @@ var _ = Describe("Packet Unpacker", func() {
 		Expect(packet.encryptionLevel).To(Equal(protocol.EncryptionInitial))
 	})
 
-	It("errors on packets that are smaller than the length in the packet header", func() {
-		extHdr := &wire.ExtendedHeader{
-			Header: wire.Header{
-				IsLongHeader:     true,
-				Type:             protocol.PacketTypeHandshake,
-				Length:           1000,
-				DestConnectionID: connID,
-				Version:          version,
-			},
-			PacketNumberLen: protocol.PacketNumberLen2,
-		}
-		hdr, hdrRaw := getHeader(extHdr)
-		data := append(hdrRaw, make([]byte, 500-2 /* for packet number length */)...)
-		_, err := unpacker.Unpack(hdr, data)
-		Expect(err).To(MatchError("packet length (500 bytes) is smaller than the expected length (1000 bytes)"))
-	})
-
-	It("cuts packets to the right length", func() {
-		pnLen := protocol.PacketNumberLen2
-		extHdr := &wire.ExtendedHeader{
-			Header: wire.Header{
-				IsLongHeader:     true,
-				DestConnectionID: connID,
-				Type:             protocol.PacketTypeHandshake,
-				Length:           456,
-				Version:          protocol.VersionTLS,
-			},
-			PacketNumberLen: pnLen,
-		}
-		payloadLen := 456 - int(pnLen)
-		hdr, hdrRaw := getHeader(extHdr)
-		data := append(hdrRaw, make([]byte, payloadLen)...)
-		opener := mocks.NewMockOpener(mockCtrl)
-		cs.EXPECT().GetOpener(protocol.EncryptionHandshake).Return(opener, nil)
-		opener.EXPECT().DecryptHeader(gomock.Any(), gomock.Any(), gomock.Any())
-		opener.EXPECT().Open(gomock.Any(), gomock.Any(), extHdr.PacketNumber, hdrRaw).DoAndReturn(func(_, payload []byte, _ protocol.PacketNumber, _ []byte) ([]byte, error) {
-			Expect(payload).To(HaveLen(payloadLen))
-			return []byte{0}, nil
-		})
-		_, err := unpacker.Unpack(hdr, data)
-		Expect(err).ToNot(HaveOccurred())
-	})
-
 	It("returns the error when getting the sealer fails", func() {
 		extHdr := &wire.ExtendedHeader{
 			Header:          wire.Header{DestConnectionID: connID},

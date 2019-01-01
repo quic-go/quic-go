@@ -122,19 +122,19 @@ var _ = Describe("Server", func() {
 		}
 
 		It("drops Initial packets with a too short connection ID", func() {
-			serv.handlePacket(&receivedPacket{
+			serv.handlePacket(insertPacketBuffer(&receivedPacket{
 				hdr: &wire.Header{
 					IsLongHeader:     true,
 					Type:             protocol.PacketTypeInitial,
 					DestConnectionID: protocol.ConnectionID{1, 2, 3, 4},
 					Version:          serv.config.Versions[0],
 				},
-			})
+			}))
 			Consistently(conn.dataWritten).ShouldNot(Receive())
 		})
 
 		It("drops too small Initial", func() {
-			serv.handlePacket(&receivedPacket{
+			serv.handlePacket(insertPacketBuffer(&receivedPacket{
 				hdr: &wire.Header{
 					IsLongHeader:     true,
 					Type:             protocol.PacketTypeInitial,
@@ -142,12 +142,12 @@ var _ = Describe("Server", func() {
 					Version:          serv.config.Versions[0],
 				},
 				data: bytes.Repeat([]byte{0}, protocol.MinInitialPacketSize-100),
-			})
+			}))
 			Consistently(conn.dataWritten).ShouldNot(Receive())
 		})
 
 		It("drops packets with a too short connection ID", func() {
-			serv.handlePacket(&receivedPacket{
+			serv.handlePacket(insertPacketBuffer(&receivedPacket{
 				hdr: &wire.Header{
 					IsLongHeader:     true,
 					Type:             protocol.PacketTypeInitial,
@@ -156,19 +156,19 @@ var _ = Describe("Server", func() {
 					Version:          serv.config.Versions[0],
 				},
 				data: bytes.Repeat([]byte{0}, protocol.MinInitialPacketSize),
-			})
+			}))
 			Consistently(conn.dataWritten).ShouldNot(Receive())
 		})
 
 		It("drops non-Initial packets", func() {
 			serv.logger.SetLogLevel(utils.LogLevelDebug)
-			serv.handlePacket(&receivedPacket{
+			serv.handlePacket(insertPacketBuffer(&receivedPacket{
 				hdr: &wire.Header{
 					Type:    protocol.PacketTypeHandshake,
 					Version: serv.config.Versions[0],
 				},
 				data: []byte("invalid"),
-			})
+			}))
 		})
 
 		It("decodes the cookie from the Token field", func() {
@@ -185,7 +185,7 @@ var _ = Describe("Server", func() {
 			}
 			token, err := serv.cookieGenerator.NewToken(raddr, nil)
 			Expect(err).ToNot(HaveOccurred())
-			serv.handlePacket(&receivedPacket{
+			serv.handlePacket(insertPacketBuffer(&receivedPacket{
 				remoteAddr: raddr,
 				hdr: &wire.Header{
 					Type:    protocol.PacketTypeInitial,
@@ -193,7 +193,7 @@ var _ = Describe("Server", func() {
 					Version: serv.config.Versions[0],
 				},
 				data: bytes.Repeat([]byte{0}, protocol.MinInitialPacketSize),
-			})
+			}))
 			Eventually(done).Should(BeClosed())
 		})
 
@@ -209,7 +209,7 @@ var _ = Describe("Server", func() {
 				close(done)
 				return false
 			}
-			serv.handlePacket(&receivedPacket{
+			serv.handlePacket(insertPacketBuffer(&receivedPacket{
 				remoteAddr: raddr,
 				hdr: &wire.Header{
 					Type:    protocol.PacketTypeInitial,
@@ -217,14 +217,14 @@ var _ = Describe("Server", func() {
 					Version: serv.config.Versions[0],
 				},
 				data: bytes.Repeat([]byte{0}, protocol.MinInitialPacketSize),
-			})
+			}))
 			Eventually(done).Should(BeClosed())
 		})
 
 		It("sends a Version Negotiation Packet for unsupported versions", func() {
 			srcConnID := protocol.ConnectionID{1, 2, 3, 4, 5}
 			destConnID := protocol.ConnectionID{1, 2, 3, 4, 5, 6}
-			serv.handlePacket(&receivedPacket{
+			serv.handlePacket(insertPacketBuffer(&receivedPacket{
 				remoteAddr: &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 1337},
 				hdr: &wire.Header{
 					IsLongHeader:     true,
@@ -233,7 +233,7 @@ var _ = Describe("Server", func() {
 					DestConnectionID: destConnID,
 					Version:          0x42,
 				},
-			})
+			}))
 			var write mockPacketConnWrite
 			Eventually(conn.dataWritten).Should(Receive(&write))
 			Expect(write.to.String()).To(Equal("127.0.0.1:1337"))
@@ -253,11 +253,11 @@ var _ = Describe("Server", func() {
 				DestConnectionID: protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8, 9, 10},
 				Version:          protocol.VersionTLS,
 			}
-			serv.handleInitial(&receivedPacket{
+			serv.handleInitial(insertPacketBuffer(&receivedPacket{
 				remoteAddr: &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 1337},
 				hdr:        hdr,
 				data:       bytes.Repeat([]byte{0}, protocol.MinInitialPacketSize),
-			})
+			}))
 			var write mockPacketConnWrite
 			Eventually(conn.dataWritten).Should(Receive(&write))
 			Expect(write.to.String()).To(Equal("127.0.0.1:1337"))
@@ -308,7 +308,7 @@ var _ = Describe("Server", func() {
 			done := make(chan struct{})
 			go func() {
 				defer GinkgoRecover()
-				serv.handlePacket(p)
+				serv.handlePacket(insertPacketBuffer(p))
 				// the Handshake packet is written by the session
 				Consistently(conn.dataWritten).ShouldNot(Receive())
 				close(done)
