@@ -7,8 +7,8 @@ import (
 	"net"
 	"time"
 
-	"github.com/lucas-clemente/quic-go"
-	"github.com/lucas-clemente/quic-go/integrationtests/tools/proxy"
+	quic "github.com/lucas-clemente/quic-go"
+	quicproxy "github.com/lucas-clemente/quic-go/integrationtests/tools/proxy"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/internal/testdata"
 
@@ -150,7 +150,7 @@ var _ = Describe("Handshake drop tests", func() {
 		Expect(proxy.Close()).To(Succeed())
 	})
 
-	for _, v := range append(protocol.SupportedVersions, protocol.VersionTLS) {
+	for _, v := range protocol.SupportedVersions {
 		version := v
 
 		Context(fmt.Sprintf("with QUIC version %s", version), func() {
