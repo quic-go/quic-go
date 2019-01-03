@@ -66,18 +66,16 @@ func (u *packetUnpacker) Unpack(hdr *wire.Header, data []byte) (*unpackedPacket,
 		&data[0],
 		data[hdrLen:hdrLen+4],
 	)
-
 	// 3. parse the header (and learn the actual length of the packet number)
 	extHdr, err := hdr.ParseExtended(r, u.version)
 	if err != nil {
 		return nil, fmt.Errorf("error parsing extended header: %s", err)
 	}
-	extHdr.Raw = data[:hdrLen+int(extHdr.PacketNumberLen)]
+	extHdrLen := hdrLen + int(extHdr.PacketNumberLen)
 	// 4. if the packet number is shorter than 4 bytes, replace the remaining bytes with the copy we saved earlier
 	if extHdr.PacketNumberLen != protocol.PacketNumberLen4 {
-		copy(data[hdrLen+int(extHdr.PacketNumberLen):hdrLen+4], origPNBytes[int(extHdr.PacketNumberLen):])
+		copy(data[extHdrLen:hdrLen+4], origPNBytes[int(extHdr.PacketNumberLen):])
 	}
-	data = data[hdrLen+int(extHdr.PacketNumberLen):]
 
 	pn := protocol.DecodePacketNumber(
 		extHdr.PacketNumberLen,
@@ -85,7 +83,7 @@ func (u *packetUnpacker) Unpack(hdr *wire.Header, data []byte) (*unpackedPacket,
 		extHdr.PacketNumber,
 	)
 
-	decrypted, err := opener.Open(data[:0], data, pn, extHdr.Raw)
+	decrypted, err := opener.Open(data[extHdrLen:extHdrLen], data[extHdrLen:], pn, data[:extHdrLen])
 	if err != nil {
 		return nil, err
 	}

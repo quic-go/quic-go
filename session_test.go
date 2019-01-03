@@ -492,7 +492,6 @@ var _ = Describe("Session", func() {
 
 		It("informs the ReceivedPacketHandler", func() {
 			hdr := &wire.ExtendedHeader{
-				Raw:             []byte("raw header"),
 				PacketNumber:    0x37,
 				PacketNumberLen: protocol.PacketNumberLen1,
 			}
