@@ -85,8 +85,6 @@ type Opts struct {
 type QuicProxy struct {
 	mutex sync.Mutex
 
-	version protocol.VersionNumber
-
 	conn       *net.UDPConn
 	serverAddr *net.UDPAddr
 
@@ -100,7 +98,7 @@ type QuicProxy struct {
 }
 
 // NewQuicProxy creates a new UDP proxy
-func NewQuicProxy(local string, version protocol.VersionNumber, opts *Opts) (*QuicProxy, error) {
+func NewQuicProxy(local string, opts *Opts) (*QuicProxy, error) {
 	if opts == nil {
 		opts = &Opts{}
 	}
@@ -133,7 +131,6 @@ func NewQuicProxy(local string, version protocol.VersionNumber, opts *Opts) (*Qu
 		serverAddr:  raddr,
 		dropPacket:  packetDropper,
 		delayPacket: packetDelayer,
-		version:     version,
 		logger:      utils.DefaultLogger.WithPrefix("proxy"),
 	}
 
