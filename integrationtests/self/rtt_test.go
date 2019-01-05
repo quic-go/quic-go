@@ -1,4 +1,4 @@
-package self
+package self_test
 
 import (
 	"crypto/tls"
@@ -8,7 +8,7 @@ import (
 	"time"
 
 	quic "github.com/lucas-clemente/quic-go"
-	"github.com/lucas-clemente/quic-go/integrationtests/tools/proxy"
+	quicproxy "github.com/lucas-clemente/quic-go/integrationtests/tools/proxy"
 	"github.com/lucas-clemente/quic-go/integrationtests/tools/testserver"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/internal/testdata"
