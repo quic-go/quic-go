@@ -75,6 +75,7 @@ var _ = Describe("Handshake tests", func() {
 			sess, err := quic.DialAddr(server.Addr().String(), &tls.Config{InsecureSkipVerify: true}, nil)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(sess.(versioner).GetVersion()).To(Equal(protocol.SupportedVersions[0]))
+			Expect(sess.Close()).To(Succeed())
 		})
 
 		It("when the client supports more versions than the server supports", func() {
@@ -89,6 +90,7 @@ var _ = Describe("Handshake tests", func() {
 			sess, err := quic.DialAddr(server.Addr().String(), &tls.Config{InsecureSkipVerify: true}, conf)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(sess.(versioner).GetVersion()).To(Equal(protocol.SupportedVersions[0]))
+			Expect(sess.Close()).To(Succeed())
 		})
 	})
 
