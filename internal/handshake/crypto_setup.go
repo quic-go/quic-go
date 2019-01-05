@@ -410,9 +410,9 @@ func (h *cryptoSetup) ReadHandshakeMessage() ([]byte, error) {
 }
 
 func (h *cryptoSetup) SetReadKey(suite *qtls.CipherSuite, trafficSecret []byte) {
-	key := qtls.HkdfExpandLabel(suite.Hash(), trafficSecret, []byte{}, "key", suite.KeyLen())
-	iv := qtls.HkdfExpandLabel(suite.Hash(), trafficSecret, []byte{}, "iv", suite.IVLen())
-	hpKey := qtls.HkdfExpandLabel(suite.Hash(), trafficSecret, []byte{}, "pn", suite.KeyLen())
+	key := qtls.HkdfExpandLabel(suite.Hash(), trafficSecret, []byte{}, "quic key", suite.KeyLen())
+	iv := qtls.HkdfExpandLabel(suite.Hash(), trafficSecret, []byte{}, "quic iv", suite.IVLen())
+	hpKey := qtls.HkdfExpandLabel(suite.Hash(), trafficSecret, []byte{}, "quic hp", suite.KeyLen())
 	hpDecrypter, err := aes.NewCipher(hpKey)
 	if err != nil {
 		panic(fmt.Sprintf("error creating new AES cipher: %s", err))
@@ -440,9 +440,9 @@ func (h *cryptoSetup) SetReadKey(suite *qtls.CipherSuite, trafficSecret []byte) 
 }
 
 func (h *cryptoSetup) SetWriteKey(suite *qtls.CipherSuite, trafficSecret []byte) {
-	key := qtls.HkdfExpandLabel(suite.Hash(), trafficSecret, []byte{}, "key", suite.KeyLen())
-	iv := qtls.HkdfExpandLabel(suite.Hash(), trafficSecret, []byte{}, "iv", suite.IVLen())
-	hpKey := qtls.HkdfExpandLabel(suite.Hash(), trafficSecret, []byte{}, "pn", suite.KeyLen())
+	key := qtls.HkdfExpandLabel(suite.Hash(), trafficSecret, []byte{}, "quic key", suite.KeyLen())
+	iv := qtls.HkdfExpandLabel(suite.Hash(), trafficSecret, []byte{}, "quic iv", suite.IVLen())
+	hpKey := qtls.HkdfExpandLabel(suite.Hash(), trafficSecret, []byte{}, "quic hp", suite.KeyLen())
 	hpEncrypter, err := aes.NewCipher(hpKey)
 	if err != nil {
 		panic(fmt.Sprintf("error creating new AES cipher: %s", err))
