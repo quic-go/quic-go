@@ -254,11 +254,11 @@ func (h *packetHandlerMap) handleParsedPackets(packets []*receivedPacket) {
 			// TODO(#943): send a stateless reset
 			h.logger.Debugf("received a short header packet with an unexpected connection ID %s", p.hdr.DestConnectionID)
 			break // a short header packet is always the last in a coalesced packet
-
 		}
-		if h.server != nil { // no server set
-			h.server.handlePacket(p)
+		if h.server == nil { // no server set
+			h.logger.Debugf("received a packet with an unexpected connection ID %s", p.hdr.DestConnectionID)
+			continue
 		}
-		h.logger.Debugf("received a packet with an unexpected connection ID %s", p.hdr.DestConnectionID)
+		h.server.handlePacket(p)
 	}
 }
