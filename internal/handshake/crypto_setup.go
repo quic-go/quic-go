@@ -419,7 +419,6 @@ func (h *cryptoSetup) SetReadKey(suite *qtls.CipherSuite, trafficSecret []byte) 
 	}
 	opener := newOpener(
 		suite.AEAD(key, iv),
-		iv,
 		hpDecrypter,
 		h.readEncLevel == protocol.Encryption1RTT,
 	)
@@ -449,7 +448,6 @@ func (h *cryptoSetup) SetWriteKey(suite *qtls.CipherSuite, trafficSecret []byte)
 	}
 	sealer := newSealer(
 		suite.AEAD(key, iv),
-		iv,
 		hpEncrypter,
 		h.writeEncLevel == protocol.Encryption1RTT,
 	)

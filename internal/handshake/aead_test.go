@@ -12,19 +12,19 @@ import (
 var _ = Describe("AEAD", func() {
 	getSealerAndOpener := func(is1RTT bool) (Sealer, Opener) {
 		key := make([]byte, 16)
-		pnKey := make([]byte, 16)
+		hpKey := make([]byte, 16)
 		rand.Read(key)
-		rand.Read(pnKey)
+		rand.Read(hpKey)
 		block, err := aes.NewCipher(key)
 		Expect(err).ToNot(HaveOccurred())
 		aead, err := cipher.NewGCM(block)
 		Expect(err).ToNot(HaveOccurred())
-		pnBlock, err := aes.NewCipher(pnKey)
+		hpBlock, err := aes.NewCipher(hpKey)
 		Expect(err).ToNot(HaveOccurred())
 
 		iv := make([]byte, 12)
 		rand.Read(iv)
-		return newSealer(aead, iv, pnBlock, is1RTT), newOpener(aead, iv, pnBlock, is1RTT)
+		return newSealer(aead, hpBlock, is1RTT), newOpener(aead, hpBlock, is1RTT)
 	}
 
 	Context("message encryption", func() {

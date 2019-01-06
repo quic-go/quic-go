@@ -3,7 +3,6 @@ package handshake
 import (
 	"crypto"
 	"crypto/aes"
-	"crypto/cipher"
 
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/marten-seemann/qtls"
@@ -25,31 +24,17 @@ func NewInitialAEAD(connID protocol.ConnectionID, pers protocol.Perspective) (Se
 	myKey, myHPKey, myIV := computeInitialKeyAndIV(mySecret)
 	otherKey, otherHPKey, otherIV := computeInitialKeyAndIV(otherSecret)
 
-	encrypterCipher, err := aes.NewCipher(myKey)
-	if err != nil {
-		return nil, nil, err
-	}
-	encrypter, err := cipher.NewGCM(encrypterCipher)
-	if err != nil {
-		return nil, nil, err
-	}
+	encrypter := qtls.AEADAESGCM13(myKey, myIV)
 	hpEncrypter, err := aes.NewCipher(myHPKey)
 	if err != nil {
 		return nil, nil, err
 	}
-	decrypterCipher, err := aes.NewCipher(otherKey)
-	if err != nil {
-		return nil, nil, err
-	}
-	decrypter, err := cipher.NewGCM(decrypterCipher)
-	if err != nil {
-		return nil, nil, err
-	}
+	decrypter := qtls.AEADAESGCM13(otherKey, otherIV)
 	hpDecrypter, err := aes.NewCipher(otherHPKey)
 	if err != nil {
 		return nil, nil, err
 	}
-	return newSealer(encrypter, myIV, hpEncrypter, false), newOpener(decrypter, otherIV, hpDecrypter, false), nil
+	return newSealer(encrypter, hpEncrypter, false), newOpener(decrypter, hpDecrypter, false), nil
 }
 
 func computeSecrets(connID protocol.ConnectionID) (clientSecret, serverSecret []byte) {
