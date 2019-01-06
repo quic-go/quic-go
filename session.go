@@ -802,11 +802,7 @@ func (s *session) handleCloseError(closeErr closeError) error {
 	if closeErr.remote {
 		return nil
 	}
-
-	if quicErr.ErrorCode == qerr.DecryptionFailure {
-		// TODO(#943): send a stateless reset
-		return nil
-	}
+	// otherwise send a CONNECTION_CLOSE
 	return s.sendConnectionClose(quicErr)
 }
 
