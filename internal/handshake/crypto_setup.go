@@ -181,7 +181,7 @@ func newCryptoSetup(
 	logger utils.Logger,
 	perspective protocol.Perspective,
 ) (CryptoSetup, <-chan struct{} /* ClientHello written */, error) {
-	initialSealer, initialOpener, err := newInitialAEAD(connID, perspective)
+	initialSealer, initialOpener, err := NewInitialAEAD(connID, perspective)
 	if err != nil {
 		return nil, nil, err
 	}

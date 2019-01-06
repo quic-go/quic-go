@@ -4,9 +4,11 @@ import (
 	"crypto/tls"
 	"fmt"
 	"net"
+	"time"
 
 	quic "github.com/lucas-clemente/quic-go"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
+	"github.com/lucas-clemente/quic-go/internal/qerr"
 	"github.com/lucas-clemente/quic-go/internal/testdata"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -142,5 +144,51 @@ var _ = Describe("Handshake tests", func() {
 				})
 			})
 		}
+	})
+
+	Context("rate limiting", func() {
+		It("rejects new connection attempts if connections don't get accepted", func() {
+			// start the server, but don't call Accept
+			serverConfig.AcceptCookie = func(net.Addr, *quic.Cookie) bool {
+				return true
+			}
+			server, err := quic.ListenAddr("localhost:0", testdata.GetTLSConfig(), serverConfig)
+			Expect(err).ToNot(HaveOccurred())
+			defer server.Close()
+
+			dial := func() (quic.Session, error) {
+				return quic.DialAddr(
+					fmt.Sprintf("localhost:%d", server.Addr().(*net.UDPAddr).Port),
+					&tls.Config{RootCAs: testdata.GetRootCA()},
+					nil,
+				)
+			}
+
+			for i := 0; i < protocol.MaxAcceptQueueSize; i++ {
+				sess, err := dial()
+				Expect(err).ToNot(HaveOccurred())
+				defer sess.Close()
+			}
+			time.Sleep(25 * time.Millisecond) // wait a bit for the sessions to be queued
+
+			_, err = dial()
+			Expect(err).To(HaveOccurred())
+			// TODO(#1567): use the SERVER_BUSY error code
+			Expect(err.(*qerr.QuicError).ErrorCode).To(Equal(qerr.PeerGoingAway))
+
+			// now accept one session, freeing one spot in the queue
+			_, err = server.Accept()
+			Expect(err).ToNot(HaveOccurred())
+			// dial again, and expect that this dial succeeds
+			sess, err := dial()
+			Expect(err).ToNot(HaveOccurred())
+			defer sess.Close()
+			time.Sleep(25 * time.Millisecond) // wait a bit for the session to be queued
+
+			_, err = dial()
+			Expect(err).To(HaveOccurred())
+			// TODO(#1567): use the SERVER_BUSY error code
+			Expect(err.(*qerr.QuicError).ErrorCode).To(Equal(qerr.PeerGoingAway))
+		})
 	})
 })

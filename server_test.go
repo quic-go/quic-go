@@ -6,6 +6,7 @@ import (
 	"errors"
 	"net"
 	"reflect"
+	"sync"
 	"time"
 
 	"github.com/lucas-clemente/quic-go/internal/handshake"
@@ -316,6 +317,63 @@ var _ = Describe("Server", func() {
 			// make sure we're using a server-generated connection ID
 			Eventually(run).Should(BeClosed())
 			Eventually(done).Should(BeClosed())
+		})
+
+		It("rejects new connection attempts if the accept queue is full", func() {
+			serv.config.AcceptCookie = func(_ net.Addr, _ *Cookie) bool { return true }
+			senderAddr := &net.UDPAddr{IP: net.IPv4(1, 2, 3, 4), Port: 42}
+
+			hdr := &wire.Header{
+				Type:             protocol.PacketTypeInitial,
+				SrcConnectionID:  protocol.ConnectionID{5, 4, 3, 2, 1},
+				DestConnectionID: protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8, 9, 10},
+				Version:          protocol.VersionTLS,
+			}
+			p := &receivedPacket{
+				remoteAddr: senderAddr,
+				hdr:        hdr,
+				data:       bytes.Repeat([]byte{0}, protocol.MinInitialPacketSize),
+			}
+			serv.newSession = func(
+				_ connection,
+				runner sessionRunner,
+				_ protocol.ConnectionID,
+				_ protocol.ConnectionID,
+				_ protocol.ConnectionID,
+				_ *Config,
+				_ *tls.Config,
+				_ *handshake.TransportParameters,
+				_ utils.Logger,
+				_ protocol.VersionNumber,
+			) (quicSession, error) {
+				sess := NewMockQuicSession(mockCtrl)
+				sess.EXPECT().handlePacket(p)
+				sess.EXPECT().run()
+				runner.onHandshakeComplete(sess)
+				return sess, nil
+			}
+
+			var wg sync.WaitGroup
+			wg.Add(protocol.MaxAcceptQueueSize)
+			for i := 0; i < protocol.MaxAcceptQueueSize; i++ {
+				go func() {
+					defer GinkgoRecover()
+					defer wg.Done()
+					serv.handlePacket(insertPacketBuffer(p))
+					Consistently(conn.dataWritten).ShouldNot(Receive())
+				}()
+			}
+			wg.Wait()
+			serv.handlePacket(insertPacketBuffer(p))
+			var reject mockPacketConnWrite
+			Eventually(conn.dataWritten).Should(Receive(&reject))
+			Expect(reject.to).To(Equal(senderAddr))
+			rejectHdr, err := wire.ParseHeader(bytes.NewReader(reject.data), 0)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(rejectHdr.Type).To(Equal(protocol.PacketTypeInitial))
+			Expect(rejectHdr.Version).To(Equal(hdr.Version))
+			Expect(rejectHdr.DestConnectionID).To(Equal(hdr.SrcConnectionID))
+			Expect(rejectHdr.SrcConnectionID).To(Equal(hdr.DestConnectionID))
 		})
 	})
 
