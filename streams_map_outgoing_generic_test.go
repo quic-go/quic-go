@@ -2,6 +2,7 @@ package quic
 
 import (
 	"errors"
+	"net"
 
 	"github.com/golang/mock/gomock"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
@@ -46,7 +47,12 @@ var _ = Describe("Streams Map (outgoing)", func() {
 			testErr := errors.New("close")
 			m.CloseWithError(testErr)
 			_, err := m.OpenStream()
-			Expect(err).To(MatchError(testErr))
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(Equal(testErr.Error()))
+			nerr, ok := err.(net.Error)
+			Expect(ok).To(BeTrue())
+			Expect(nerr.Timeout()).To(BeFalse())
+			Expect(nerr.Temporary()).To(BeFalse())
 		})
 
 		It("gets streams", func() {
@@ -104,7 +110,7 @@ var _ = Describe("Streams Map (outgoing)", func() {
 		It("errors when no stream can be opened immediately", func() {
 			mockSender.EXPECT().queueControlFrame(gomock.Any())
 			_, err := m.OpenStream()
-			Expect(err).To(MatchError(qerr.TooManyOpenStreams))
+			expectTooManyStreamsError(err)
 		})
 
 		It("blocks until a stream can be opened synchronously", func() {
@@ -149,7 +155,8 @@ var _ = Describe("Streams Map (outgoing)", func() {
 			go func() {
 				defer GinkgoRecover()
 				_, err := m.OpenStreamSync()
-				Expect(err).To(MatchError(testErr))
+				Expect(err).To(HaveOccurred())
+				Expect(err.Error()).To(Equal(testErr.Error()))
 				close(done)
 			}()
 
@@ -180,7 +187,8 @@ var _ = Describe("Streams Map (outgoing)", func() {
 				Expect(f.(*wire.StreamsBlockedFrame).StreamLimit).To(BeEquivalentTo(6))
 			})
 			_, err := m.OpenStream()
-			Expect(err).To(MatchError(qerr.TooManyOpenStreams))
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(Equal(errTooManyOpenStreams.Error()))
 		})
 
 		It("only sends one STREAM_ID_BLOCKED frame for one stream ID", func() {
@@ -192,9 +200,9 @@ var _ = Describe("Streams Map (outgoing)", func() {
 			Expect(err).ToNot(HaveOccurred())
 			// try to open a stream twice, but expect only one STREAM_ID_BLOCKED to be sent
 			_, err = m.OpenStream()
-			Expect(err).To(MatchError(qerr.TooManyOpenStreams))
+			expectTooManyStreamsError(err)
 			_, err = m.OpenStream()
-			Expect(err).To(MatchError(qerr.TooManyOpenStreams))
+			expectTooManyStreamsError(err)
 		})
 	})
 })
