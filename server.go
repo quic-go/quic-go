@@ -170,8 +170,13 @@ func (s *server) setup() error {
 		onHandshakeCompleteImpl: func(sess Session) {
 			go func() {
 				atomic.AddInt32(&s.sessionQueueLen, 1)
-				s.sessionQueue <- sess // blocks until the session is accepted
-				atomic.AddInt32(&s.sessionQueueLen, -1)
+				defer atomic.AddInt32(&s.sessionQueueLen, -1)
+				select {
+				case s.sessionQueue <- sess:
+					// blocks until the session is accepted
+				case <-sess.Context().Done():
+					// don't pass sessions that were already closed to Accept()
+				}
 			}()
 		},
 		retireConnectionIDImpl: s.sessionHandler.Retire,
