@@ -10,11 +10,11 @@ import (
 type sealer struct {
 	iv          []byte
 	aead        cipher.AEAD
-	pnEncrypter cipher.Block
+	hpEncrypter cipher.Block
 
 	// use a single slice to avoid allocations
 	nonceBuf []byte
-	pnMask   []byte
+	hpMask   []byte
 
 	// short headers protect 5 bits in the first byte, long headers only 4
 	is1RTT bool
@@ -22,14 +22,14 @@ type sealer struct {
 
 var _ Sealer = &sealer{}
 
-func newSealer(aead cipher.AEAD, iv []byte, pnEncrypter cipher.Block, is1RTT bool) Sealer {
+func newSealer(aead cipher.AEAD, iv []byte, hpEncrypter cipher.Block, is1RTT bool) Sealer {
 	return &sealer{
 		iv:          iv,
 		aead:        aead,
 		nonceBuf:    make([]byte, aead.NonceSize()),
 		is1RTT:      is1RTT,
-		pnEncrypter: pnEncrypter,
-		pnMask:      make([]byte, pnEncrypter.BlockSize()),
+		hpEncrypter: hpEncrypter,
+		hpMask:      make([]byte, hpEncrypter.BlockSize()),
 	}
 }
 
@@ -46,17 +46,17 @@ func (s *sealer) Seal(dst, src []byte, pn protocol.PacketNumber, ad []byte) []by
 }
 
 func (s *sealer) EncryptHeader(sample []byte, firstByte *byte, pnBytes []byte) {
-	if len(sample) != s.pnEncrypter.BlockSize() {
+	if len(sample) != s.hpEncrypter.BlockSize() {
 		panic("invalid sample size")
 	}
-	s.pnEncrypter.Encrypt(s.pnMask, sample)
+	s.hpEncrypter.Encrypt(s.hpMask, sample)
 	if s.is1RTT {
-		*firstByte ^= s.pnMask[0] & 0x1f
+		*firstByte ^= s.hpMask[0] & 0x1f
 	} else {
-		*firstByte ^= s.pnMask[0] & 0xf
+		*firstByte ^= s.hpMask[0] & 0xf
 	}
 	for i := range pnBytes {
-		pnBytes[i] ^= s.pnMask[i+1]
+		pnBytes[i] ^= s.hpMask[i+1]
 	}
 }
 
@@ -71,7 +71,7 @@ type opener struct {
 
 	// use a single slice to avoid allocations
 	nonceBuf []byte
-	pnMask   []byte
+	hpMask   []byte
 
 	// short headers protect 5 bits in the first byte, long headers only 4
 	is1RTT bool
@@ -86,7 +86,7 @@ func newOpener(aead cipher.AEAD, iv []byte, pnDecrypter cipher.Block, is1RTT boo
 		nonceBuf:    make([]byte, aead.NonceSize()),
 		is1RTT:      is1RTT,
 		pnDecrypter: pnDecrypter,
-		pnMask:      make([]byte, pnDecrypter.BlockSize()),
+		hpMask:      make([]byte, pnDecrypter.BlockSize()),
 	}
 }
 
@@ -106,13 +106,13 @@ func (o *opener) DecryptHeader(sample []byte, firstByte *byte, pnBytes []byte) {
 	if len(sample) != o.pnDecrypter.BlockSize() {
 		panic("invalid sample size")
 	}
-	o.pnDecrypter.Encrypt(o.pnMask, sample)
+	o.pnDecrypter.Encrypt(o.hpMask, sample)
 	if o.is1RTT {
-		*firstByte ^= o.pnMask[0] & 0x1f
+		*firstByte ^= o.hpMask[0] & 0x1f
 	} else {
-		*firstByte ^= o.pnMask[0] & 0xf
+		*firstByte ^= o.hpMask[0] & 0xf
 	}
 	for i := range pnBytes {
-		pnBytes[i] ^= o.pnMask[i+1]
+		pnBytes[i] ^= o.hpMask[i+1]
 	}
 }

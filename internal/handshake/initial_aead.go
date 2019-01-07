@@ -21,8 +21,8 @@ func newInitialAEAD(connID protocol.ConnectionID, pers protocol.Perspective) (Se
 		mySecret = serverSecret
 		otherSecret = clientSecret
 	}
-	myKey, myPNKey, myIV := computeInitialKeyAndIV(mySecret)
-	otherKey, otherPNKey, otherIV := computeInitialKeyAndIV(otherSecret)
+	myKey, myHPKey, myIV := computeInitialKeyAndIV(mySecret)
+	otherKey, otherHPKey, otherIV := computeInitialKeyAndIV(otherSecret)
 
 	encrypterCipher, err := aes.NewCipher(myKey)
 	if err != nil {
@@ -32,7 +32,7 @@ func newInitialAEAD(connID protocol.ConnectionID, pers protocol.Perspective) (Se
 	if err != nil {
 		return nil, nil, err
 	}
-	pnEncrypter, err := aes.NewCipher(myPNKey)
+	hpEncrypter, err := aes.NewCipher(myHPKey)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -44,11 +44,11 @@ func newInitialAEAD(connID protocol.ConnectionID, pers protocol.Perspective) (Se
 	if err != nil {
 		return nil, nil, err
 	}
-	pnDecrypter, err := aes.NewCipher(otherPNKey)
+	hpDecrypter, err := aes.NewCipher(otherHPKey)
 	if err != nil {
 		return nil, nil, err
 	}
-	return newSealer(encrypter, myIV, pnEncrypter, false), newOpener(decrypter, otherIV, pnDecrypter, false), nil
+	return newSealer(encrypter, myIV, hpEncrypter, false), newOpener(decrypter, otherIV, hpDecrypter, false), nil
 }
 
 func computeSecrets(connID protocol.ConnectionID) (clientSecret, serverSecret []byte) {
@@ -58,9 +58,9 @@ func computeSecrets(connID protocol.ConnectionID) (clientSecret, serverSecret []
 	return
 }
 
-func computeInitialKeyAndIV(secret []byte) (key, pnKey, iv []byte) {
+func computeInitialKeyAndIV(secret []byte) (key, hpKey, iv []byte) {
 	key = qtls.HkdfExpandLabel(crypto.SHA256, secret, []byte{}, "quic key", 16)
-	pnKey = qtls.HkdfExpandLabel(crypto.SHA256, secret, []byte{}, "quic hp", 16)
+	hpKey = qtls.HkdfExpandLabel(crypto.SHA256, secret, []byte{}, "quic hp", 16)
 	iv = qtls.HkdfExpandLabel(crypto.SHA256, secret, []byte{}, "quic iv", 12)
 	return
 }
