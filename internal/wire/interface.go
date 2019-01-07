@@ -11,3 +11,8 @@ type Frame interface {
 	Write(b *bytes.Buffer, version protocol.VersionNumber) error
 	Length(version protocol.VersionNumber) protocol.ByteCount
 }
+
+// A FrameParser parses QUIC frames, one by one.
+type FrameParser interface {
+	ParseNext(r *bytes.Reader) (Frame, error)
+}

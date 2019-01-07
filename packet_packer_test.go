@@ -821,7 +821,8 @@ var _ = Describe("Packet packer", func() {
 				Expect(err).ToNot(HaveOccurred())
 				Expect(firstPayloadByte).To(Equal(byte(0)))
 				// ... followed by the stream frame
-				frame, err := wire.ParseNextFrame(r, packer.version)
+				frameParser := wire.NewFrameParser(packer.version)
+				frame, err := frameParser.ParseNext(r)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(frame).To(Equal(f))
 				Expect(r.Len()).To(BeZero())
