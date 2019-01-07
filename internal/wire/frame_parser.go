@@ -46,7 +46,7 @@ func (p *frameParser) parseFrame(r *bytes.Reader, typeByte byte) (Frame, error) 
 	case 0x1:
 		frame, err = parsePingFrame(r, p.version)
 	case 0x2, 0x3:
-		frame, err = parseAckFrame(r, p.version)
+		frame, err = parseAckFrame(r, protocol.AckDelayExponent, p.version)
 	case 0x4:
 		frame, err = parseResetStreamFrame(r, p.version)
 	case 0x5:
