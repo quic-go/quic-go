@@ -38,7 +38,7 @@ var _ = Describe("Drop Tests", func() {
 		)
 		Expect(err).ToNot(HaveOccurred())
 		serverPort := ln.Addr().(*net.UDPAddr).Port
-		proxy, err = quicproxy.NewQuicProxy("localhost:0", version, &quicproxy.Opts{
+		proxy, err = quicproxy.NewQuicProxy("localhost:0", &quicproxy.Opts{
 			RemoteAddr: fmt.Sprintf("localhost:%d", serverPort),
 			DelayPacket: func(dir quicproxy.Direction, packetCount uint64) time.Duration {
 				return 5 * time.Millisecond // 10ms RTT
