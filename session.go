@@ -553,7 +553,7 @@ func (s *session) handleUnpackedPacket(packet *unpackedPacket, rcvTime time.Time
 	r := bytes.NewReader(packet.data)
 	var isRetransmittable bool
 	for {
-		frame, err := s.frameParser.ParseNext(r)
+		frame, err := s.frameParser.ParseNext(r, packet.encryptionLevel)
 		if err != nil {
 			return err
 		}
@@ -814,6 +814,7 @@ func (s *session) processTransportParameters(params *handshake.TransportParamete
 	s.peerParams = params
 	s.streamsMap.UpdateLimits(params)
 	s.packer.HandleTransportParameters(params)
+	s.frameParser.SetAckDelayExponent(params.AckDelayExponent)
 	s.connFlowController.UpdateSendWindow(params.InitialMaxData)
 	// the crypto stream is the only open stream at this moment
 	// so we don't need to update stream flow control windows

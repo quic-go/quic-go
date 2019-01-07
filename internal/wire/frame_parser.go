@@ -9,6 +9,8 @@ import (
 )
 
 type frameParser struct {
+	ackDelayExponent uint8
+
 	version protocol.VersionNumber
 }
 
@@ -19,7 +21,7 @@ func NewFrameParser(v protocol.VersionNumber) FrameParser {
 
 // ParseNextFrame parses the next frame
 // It skips PADDING frames.
-func (p *frameParser) ParseNext(r *bytes.Reader) (Frame, error) {
+func (p *frameParser) ParseNext(r *bytes.Reader, encLevel protocol.EncryptionLevel) (Frame, error) {
 	for r.Len() != 0 {
 		typeByte, _ := r.ReadByte()
 		if typeByte == 0x0 { // PADDING frame
@@ -27,12 +29,12 @@ func (p *frameParser) ParseNext(r *bytes.Reader) (Frame, error) {
 		}
 		r.UnreadByte()
 
-		return p.parseFrame(r, typeByte)
+		return p.parseFrame(r, typeByte, encLevel)
 	}
 	return nil, nil
 }
 
-func (p *frameParser) parseFrame(r *bytes.Reader, typeByte byte) (Frame, error) {
+func (p *frameParser) parseFrame(r *bytes.Reader, typeByte byte, encLevel protocol.EncryptionLevel) (Frame, error) {
 	var frame Frame
 	var err error
 	if typeByte&0xf8 == 0x8 {
@@ -46,7 +48,11 @@ func (p *frameParser) parseFrame(r *bytes.Reader, typeByte byte) (Frame, error) 
 	case 0x1:
 		frame, err = parsePingFrame(r, p.version)
 	case 0x2, 0x3:
-		frame, err = parseAckFrame(r, protocol.AckDelayExponent, p.version)
+		ackDelayExponent := p.ackDelayExponent
+		if encLevel != protocol.Encryption1RTT {
+			ackDelayExponent = protocol.DefaultAckDelayExponent
+		}
+		frame, err = parseAckFrame(r, ackDelayExponent, p.version)
 	case 0x4:
 		frame, err = parseResetStreamFrame(r, p.version)
 	case 0x5:
@@ -84,4 +90,8 @@ func (p *frameParser) parseFrame(r *bytes.Reader, typeByte byte) (Frame, error) 
 		return nil, qerr.Error(qerr.InvalidFrameData, err.Error())
 	}
 	return frame, nil
+}
+
+func (p *frameParser) SetAckDelayExponent(exp uint8) {
+	p.ackDelayExponent = exp
 }

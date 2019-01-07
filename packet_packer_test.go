@@ -822,7 +822,7 @@ var _ = Describe("Packet packer", func() {
 				Expect(firstPayloadByte).To(Equal(byte(0)))
 				// ... followed by the stream frame
 				frameParser := wire.NewFrameParser(packer.version)
-				frame, err := frameParser.ParseNext(r)
+				frame, err := frameParser.ParseNext(r, protocol.Encryption1RTT)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(frame).To(Equal(f))
 				Expect(r.Len()).To(BeZero())

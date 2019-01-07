@@ -14,5 +14,6 @@ type Frame interface {
 
 // A FrameParser parses QUIC frames, one by one.
 type FrameParser interface {
-	ParseNext(r *bytes.Reader) (Frame, error)
+	ParseNext(*bytes.Reader, protocol.EncryptionLevel) (Frame, error)
+	SetAckDelayExponent(uint8)
 }
