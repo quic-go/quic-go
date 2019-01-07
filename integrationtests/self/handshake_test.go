@@ -4,9 +4,11 @@ import (
 	"crypto/tls"
 	"fmt"
 	"net"
+	"time"
 
 	quic "github.com/lucas-clemente/quic-go"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
+	"github.com/lucas-clemente/quic-go/internal/qerr"
 	"github.com/lucas-clemente/quic-go/internal/testdata"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -144,5 +146,89 @@ var _ = Describe("Handshake tests", func() {
 				})
 			})
 		}
+	})
+
+	Context("rate limiting", func() {
+		var server quic.Listener
+
+		dial := func() (quic.Session, error) {
+			return quic.DialAddr(
+				fmt.Sprintf("localhost:%d", server.Addr().(*net.UDPAddr).Port),
+				&tls.Config{RootCAs: testdata.GetRootCA()},
+				nil,
+			)
+		}
+
+		BeforeEach(func() {
+			serverConfig.AcceptCookie = func(net.Addr, *quic.Cookie) bool { return true }
+			var err error
+			// start the server, but don't call Accept
+			server, err = quic.ListenAddr("localhost:0", testdata.GetTLSConfig(), serverConfig)
+			Expect(err).ToNot(HaveOccurred())
+		})
+
+		AfterEach(func() {
+			Expect(server.Close()).To(Succeed())
+		})
+
+		It("rejects new connection attempts if connections don't get accepted", func() {
+			for i := 0; i < protocol.MaxAcceptQueueSize; i++ {
+				sess, err := dial()
+				Expect(err).ToNot(HaveOccurred())
+				defer sess.Close()
+			}
+			time.Sleep(25 * time.Millisecond) // wait a bit for the sessions to be queued
+
+			_, err := dial()
+			Expect(err).To(HaveOccurred())
+			// TODO(#1567): use the SERVER_BUSY error code
+			Expect(err.(*qerr.QuicError).ErrorCode).To(Equal(qerr.PeerGoingAway))
+
+			// now accept one session, freeing one spot in the queue
+			_, err = server.Accept()
+			Expect(err).ToNot(HaveOccurred())
+			// dial again, and expect that this dial succeeds
+			sess, err := dial()
+			Expect(err).ToNot(HaveOccurred())
+			defer sess.Close()
+			time.Sleep(25 * time.Millisecond) // wait a bit for the session to be queued
+
+			_, err = dial()
+			Expect(err).To(HaveOccurred())
+			// TODO(#1567): use the SERVER_BUSY error code
+			Expect(err.(*qerr.QuicError).ErrorCode).To(Equal(qerr.PeerGoingAway))
+		})
+
+		It("rejects new connection attempts if connections don't get accepted", func() {
+			firstSess, err := dial()
+			Expect(err).ToNot(HaveOccurred())
+
+			for i := 1; i < protocol.MaxAcceptQueueSize; i++ {
+				sess, err := dial()
+				Expect(err).ToNot(HaveOccurred())
+				defer sess.Close()
+			}
+			time.Sleep(25 * time.Millisecond) // wait a bit for the sessions to be queued
+
+			_, err = dial()
+			Expect(err).To(HaveOccurred())
+			// TODO(#1567): use the SERVER_BUSY error code
+			Expect(err.(*qerr.QuicError).ErrorCode).To(Equal(qerr.PeerGoingAway))
+
+			// Now close the one of the session that are waiting to be accepted.
+			// This should free one spot in the queue.
+			Expect(firstSess.Close())
+			time.Sleep(25 * time.Millisecond)
+
+			// dial again, and expect that this dial succeeds
+			_, err = dial()
+			Expect(err).ToNot(HaveOccurred())
+			time.Sleep(25 * time.Millisecond) // wait a bit for the session to be queued
+
+			_, err = dial()
+			// TODO(#1567): use the SERVER_BUSY error code
+			Expect(err.(*qerr.QuicError).ErrorCode).To(Equal(qerr.PeerGoingAway))
+		})
+
 	})
 })

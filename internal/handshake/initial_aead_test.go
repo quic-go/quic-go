@@ -67,9 +67,9 @@ var _ = Describe("Initial AEAD using AES-GCM", func() {
 
 	It("seals and opens", func() {
 		connectionID := protocol.ConnectionID{0x12, 0x34, 0x56, 0x78, 0x90, 0xab, 0xcd, 0xef}
-		clientSealer, clientOpener, err := newInitialAEAD(connectionID, protocol.PerspectiveClient)
+		clientSealer, clientOpener, err := NewInitialAEAD(connectionID, protocol.PerspectiveClient)
 		Expect(err).ToNot(HaveOccurred())
-		serverSealer, serverOpener, err := newInitialAEAD(connectionID, protocol.PerspectiveServer)
+		serverSealer, serverOpener, err := NewInitialAEAD(connectionID, protocol.PerspectiveServer)
 		Expect(err).ToNot(HaveOccurred())
 
 		clientMessage := clientSealer.Seal(nil, []byte("foobar"), 42, []byte("aad"))
@@ -85,9 +85,9 @@ var _ = Describe("Initial AEAD using AES-GCM", func() {
 	It("doesn't work if initialized with different connection IDs", func() {
 		c1 := protocol.ConnectionID{0, 0, 0, 0, 0, 0, 0, 1}
 		c2 := protocol.ConnectionID{0, 0, 0, 0, 0, 0, 0, 2}
-		clientSealer, _, err := newInitialAEAD(c1, protocol.PerspectiveClient)
+		clientSealer, _, err := NewInitialAEAD(c1, protocol.PerspectiveClient)
 		Expect(err).ToNot(HaveOccurred())
-		_, serverOpener, err := newInitialAEAD(c2, protocol.PerspectiveServer)
+		_, serverOpener, err := NewInitialAEAD(c2, protocol.PerspectiveServer)
 		Expect(err).ToNot(HaveOccurred())
 
 		clientMessage := clientSealer.Seal(nil, []byte("foobar"), 42, []byte("aad"))
@@ -97,9 +97,9 @@ var _ = Describe("Initial AEAD using AES-GCM", func() {
 
 	It("encrypts und decrypts the header", func() {
 		connID := protocol.ConnectionID{0xde, 0xca, 0xfb, 0xad}
-		clientSealer, clientOpener, err := newInitialAEAD(connID, protocol.PerspectiveClient)
+		clientSealer, clientOpener, err := NewInitialAEAD(connID, protocol.PerspectiveClient)
 		Expect(err).ToNot(HaveOccurred())
-		serverSealer, serverOpener, err := newInitialAEAD(connID, protocol.PerspectiveServer)
+		serverSealer, serverOpener, err := NewInitialAEAD(connID, protocol.PerspectiveServer)
 		Expect(err).ToNot(HaveOccurred())
 
 		// the first byte and the last 4 bytes should be encrypted
