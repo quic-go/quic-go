@@ -95,17 +95,17 @@ var _ = Describe("receivedPacketHandler", func() {
 			}
 
 			It("always queues an ACK for the first packet", func() {
-				err := handler.ReceivedPacket(1, time.Time{}, false)
-				Expect(err).ToNot(HaveOccurred())
+				Expect(handler.ReceivedPacket(1, time.Now(), false)).To(Succeed())
 				Expect(handler.ackQueued).To(BeTrue())
 				Expect(handler.GetAlarmTimeout()).To(BeZero())
+				Expect(handler.GetAckFrame().DelayTime).To(BeNumerically("~", 0, time.Second))
 			})
 
 			It("works with packet number 0", func() {
-				err := handler.ReceivedPacket(0, time.Time{}, false)
-				Expect(err).ToNot(HaveOccurred())
+				Expect(handler.ReceivedPacket(0, time.Now(), false)).To(Succeed())
 				Expect(handler.ackQueued).To(BeTrue())
 				Expect(handler.GetAlarmTimeout()).To(BeZero())
+				Expect(handler.GetAckFrame().DelayTime).To(BeNumerically("~", 0, time.Second))
 			})
 
 			It("queues an ACK for every second retransmittable packet at the beginning", func() {
