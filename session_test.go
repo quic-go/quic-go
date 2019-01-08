@@ -1232,10 +1232,10 @@ var _ = Describe("Session", func() {
 			sess.peerParams = &handshake.TransportParameters{IdleTimeout: remoteIdleTimeout}
 		})
 
-		It("sends a PING", func() {
+		It("sends a PING as a keep-alive", func() {
 			sess.handshakeComplete = true
 			sess.config.KeepAlive = true
-			sess.lastNetworkActivityTime = time.Now().Add(-remoteIdleTimeout / 2)
+			sess.lastPacketReceivedTime = time.Now().Add(-remoteIdleTimeout / 2)
 			sent := make(chan struct{})
 			packer.EXPECT().PackPacket().Do(func() (*packedPacket, error) {
 				close(sent)
@@ -1261,7 +1261,7 @@ var _ = Describe("Session", func() {
 		It("doesn't send a PING packet if keep-alive is disabled", func() {
 			sess.handshakeComplete = true
 			sess.config.KeepAlive = false
-			sess.lastNetworkActivityTime = time.Now().Add(-remoteIdleTimeout / 2)
+			sess.lastPacketReceivedTime = time.Now().Add(-remoteIdleTimeout / 2)
 			done := make(chan struct{})
 			go func() {
 				defer GinkgoRecover()
@@ -1282,7 +1282,7 @@ var _ = Describe("Session", func() {
 		It("doesn't send a PING if the handshake isn't completed yet", func() {
 			sess.handshakeComplete = false
 			sess.config.KeepAlive = true
-			sess.lastNetworkActivityTime = time.Now().Add(-remoteIdleTimeout / 2)
+			sess.lastPacketReceivedTime = time.Now().Add(-remoteIdleTimeout / 2)
 			done := make(chan struct{})
 			go func() {
 				defer GinkgoRecover()
@@ -1309,7 +1309,7 @@ var _ = Describe("Session", func() {
 		It("times out due to no network activity", func() {
 			sessionRunner.EXPECT().removeConnectionID(gomock.Any())
 			sess.handshakeComplete = true
-			sess.lastNetworkActivityTime = time.Now().Add(-time.Hour)
+			sess.lastPacketReceivedTime = time.Now().Add(-time.Hour)
 			done := make(chan struct{})
 			cryptoSetup.EXPECT().Close()
 			go func() {
@@ -1345,7 +1345,7 @@ var _ = Describe("Session", func() {
 
 		It("does not use the idle timeout before the handshake complete", func() {
 			sess.config.IdleTimeout = 9999 * time.Second
-			sess.lastNetworkActivityTime = time.Now().Add(-time.Minute)
+			sess.lastPacketReceivedTime = time.Now().Add(-time.Minute)
 			packer.EXPECT().PackConnectionClose(gomock.Any()).DoAndReturn(func(f *wire.ConnectionCloseFrame) (*packedPacket, error) {
 				Expect(f.ErrorCode).To(Equal(qerr.NoError))
 				return &packedPacket{}, nil
@@ -1383,6 +1383,25 @@ var _ = Describe("Session", func() {
 				close(done)
 			}()
 			Eventually(done).Should(BeClosed())
+		})
+
+		It("doesn't time out when it just sent a packet", func() {
+			sess.handshakeComplete = true
+			sess.lastPacketReceivedTime = time.Now().Add(-time.Hour)
+			sess.firstRetransmittablePacketAfterIdleSentTime = time.Now().Add(-time.Second)
+			sess.config.IdleTimeout = 30 * time.Second
+			go func() {
+				defer GinkgoRecover()
+				cryptoSetup.EXPECT().RunHandshake().Do(func() { <-sess.Context().Done() })
+				sess.run()
+			}()
+			Consistently(sess.Context().Done()).ShouldNot(BeClosed())
+			// make the go routine return
+			packer.EXPECT().PackConnectionClose(gomock.Any()).Return(&packedPacket{}, nil)
+			sessionRunner.EXPECT().retireConnectionID(gomock.Any())
+			cryptoSetup.EXPECT().Close()
+			sess.Close()
+			Eventually(sess.Context().Done()).Should(BeClosed())
 		})
 	})
 

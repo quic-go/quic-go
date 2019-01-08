@@ -47,6 +47,10 @@ func (p *packedPacket) EncryptionLevel() protocol.EncryptionLevel {
 	}
 }
 
+func (p *packedPacket) IsRetransmittable() bool {
+	return ackhandler.HasRetransmittableFrames(p.frames)
+}
+
 func (p *packedPacket) ToAckHandlerPacket() *ackhandler.Packet {
 	return &ackhandler.Packet{
 		PacketNumber:    p.header.PacketNumber,
