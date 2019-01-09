@@ -159,7 +159,6 @@ var _ = Describe("Session", func() {
 				f := &wire.AckFrame{AckRanges: []wire.AckRange{{Smallest: 2, Largest: 3}}}
 				sph := mockackhandler.NewMockSentPacketHandler(mockCtrl)
 				sph.EXPECT().ReceivedAck(f, protocol.PacketNumber(42), protocol.EncryptionHandshake, gomock.Any())
-				sph.EXPECT().GetLowestPacketNotConfirmedAcked()
 				sess.sentPacketHandler = sph
 				err := sess.handleAckFrame(f, 42, protocol.EncryptionHandshake)
 				Expect(err).ToNot(HaveOccurred())
@@ -174,7 +173,7 @@ var _ = Describe("Session", func() {
 				rph := mockackhandler.NewMockReceivedPacketHandler(mockCtrl)
 				rph.EXPECT().IgnoreBelow(protocol.PacketNumber(0x42))
 				sess.receivedPacketHandler = rph
-				Expect(sess.handleAckFrame(ack, 0, protocol.EncryptionInitial)).To(Succeed())
+				Expect(sess.handleAckFrame(ack, 0, protocol.Encryption1RTT)).To(Succeed())
 			})
 		})
 

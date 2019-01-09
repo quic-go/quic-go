@@ -27,6 +27,7 @@ type SentPacketHandler interface {
 	// Before sending any packet, SendingAllowed() must be called to learn if we can actually send it.
 	ShouldSendNumPackets() int
 
+	// only to be called once the handshake is complete
 	GetLowestPacketNotConfirmedAcked() protocol.PacketNumber
 	DequeuePacketForRetransmission() *Packet
 	DequeueProbePacket() (*Packet, error)
