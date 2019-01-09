@@ -417,20 +417,15 @@ func (h *cryptoSetup) SetReadKey(suite *qtls.CipherSuite, trafficSecret []byte) 
 	if err != nil {
 		panic(fmt.Sprintf("error creating new AES cipher: %s", err))
 	}
-	opener := newOpener(
-		suite.AEAD(key, iv),
-		hpDecrypter,
-		h.readEncLevel == protocol.Encryption1RTT,
-	)
 
 	switch h.readEncLevel {
 	case protocol.EncryptionInitial:
 		h.readEncLevel = protocol.EncryptionHandshake
-		h.handshakeOpener = opener
+		h.handshakeOpener = newOpener(suite.AEAD(key, iv), hpDecrypter, false)
 		h.logger.Debugf("Installed Handshake Read keys")
 	case protocol.EncryptionHandshake:
 		h.readEncLevel = protocol.Encryption1RTT
-		h.opener = opener
+		h.opener = newOpener(suite.AEAD(key, iv), hpDecrypter, true)
 		h.logger.Debugf("Installed 1-RTT Read keys")
 	default:
 		panic("unexpected read encryption level")
@@ -446,20 +441,15 @@ func (h *cryptoSetup) SetWriteKey(suite *qtls.CipherSuite, trafficSecret []byte)
 	if err != nil {
 		panic(fmt.Sprintf("error creating new AES cipher: %s", err))
 	}
-	sealer := newSealer(
-		suite.AEAD(key, iv),
-		hpEncrypter,
-		h.writeEncLevel == protocol.Encryption1RTT,
-	)
 
 	switch h.writeEncLevel {
 	case protocol.EncryptionInitial:
 		h.writeEncLevel = protocol.EncryptionHandshake
-		h.handshakeSealer = sealer
+		h.handshakeSealer = newSealer(suite.AEAD(key, iv), hpEncrypter, false)
 		h.logger.Debugf("Installed Handshake Write keys")
 	case protocol.EncryptionHandshake:
 		h.writeEncLevel = protocol.Encryption1RTT
-		h.sealer = sealer
+		h.sealer = newSealer(suite.AEAD(key, iv), hpEncrypter, true)
 		h.logger.Debugf("Installed 1-RTT Write keys")
 	default:
 		panic("unexpected write encryption level")
