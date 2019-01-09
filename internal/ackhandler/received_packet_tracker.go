@@ -9,7 +9,7 @@ import (
 	"github.com/lucas-clemente/quic-go/internal/wire"
 )
 
-type receivedPacketHandler struct {
+type receivedPacketTracker struct {
 	largestObserved             protocol.PacketNumber
 	ignoreBelow                 protocol.PacketNumber
 	largestObservedReceivedTime time.Time
@@ -59,7 +59,7 @@ func NewReceivedPacketHandler(
 	logger utils.Logger,
 	version protocol.VersionNumber,
 ) ReceivedPacketHandler {
-	return &receivedPacketHandler{
+	return &receivedPacketTracker{
 		packetHistory: newReceivedPacketHistory(),
 		ackSendDelay:  ackSendDelay,
 		rttStats:      rttStats,
@@ -68,7 +68,7 @@ func NewReceivedPacketHandler(
 	}
 }
 
-func (h *receivedPacketHandler) ReceivedPacket(packetNumber protocol.PacketNumber, rcvTime time.Time, shouldInstigateAck bool) error {
+func (h *receivedPacketTracker) ReceivedPacket(packetNumber protocol.PacketNumber, rcvTime time.Time, shouldInstigateAck bool) error {
 	if packetNumber < h.ignoreBelow {
 		return nil
 	}
@@ -88,7 +88,7 @@ func (h *receivedPacketHandler) ReceivedPacket(packetNumber protocol.PacketNumbe
 
 // IgnoreBelow sets a lower limit for acking packets.
 // Packets with packet numbers smaller than p will not be acked.
-func (h *receivedPacketHandler) IgnoreBelow(p protocol.PacketNumber) {
+func (h *receivedPacketTracker) IgnoreBelow(p protocol.PacketNumber) {
 	if p <= h.ignoreBelow {
 		return
 	}
@@ -100,14 +100,14 @@ func (h *receivedPacketHandler) IgnoreBelow(p protocol.PacketNumber) {
 }
 
 // isMissing says if a packet was reported missing in the last ACK.
-func (h *receivedPacketHandler) isMissing(p protocol.PacketNumber) bool {
+func (h *receivedPacketTracker) isMissing(p protocol.PacketNumber) bool {
 	if h.lastAck == nil || p < h.ignoreBelow {
 		return false
 	}
 	return p < h.lastAck.LargestAcked() && !h.lastAck.AcksPacket(p)
 }
 
-func (h *receivedPacketHandler) hasNewMissingPackets() bool {
+func (h *receivedPacketTracker) hasNewMissingPackets() bool {
 	if h.lastAck == nil {
 		return false
 	}
@@ -118,7 +118,7 @@ func (h *receivedPacketHandler) hasNewMissingPackets() bool {
 // maybeQueueAck queues an ACK, if necessary.
 // It is implemented analogously to Chrome's QuicConnection::MaybeQueueAck()
 // in ACK_DECIMATION_WITH_REORDERING mode.
-func (h *receivedPacketHandler) maybeQueueAck(packetNumber protocol.PacketNumber, rcvTime time.Time, shouldInstigateAck, wasMissing bool) {
+func (h *receivedPacketTracker) maybeQueueAck(packetNumber protocol.PacketNumber, rcvTime time.Time, shouldInstigateAck, wasMissing bool) {
 	h.packetsReceivedSinceLastAck++
 
 	// always ack the first packet
@@ -190,7 +190,7 @@ func (h *receivedPacketHandler) maybeQueueAck(packetNumber protocol.PacketNumber
 	}
 }
 
-func (h *receivedPacketHandler) GetAckFrame() *wire.AckFrame {
+func (h *receivedPacketTracker) GetAckFrame() *wire.AckFrame {
 	now := time.Now()
 	if !h.ackQueued && (h.ackAlarm.IsZero() || h.ackAlarm.After(now)) {
 		return nil
@@ -212,4 +212,4 @@ func (h *receivedPacketHandler) GetAckFrame() *wire.AckFrame {
 	return ack
 }
 
-func (h *receivedPacketHandler) GetAlarmTimeout() time.Time { return h.ackAlarm }
+func (h *receivedPacketTracker) GetAlarmTimeout() time.Time { return h.ackAlarm }
