@@ -33,10 +33,6 @@ var _ = Describe("Version", func() {
 		Expect(VersionNumber(0x01234567).String()).To(Equal("0x1234567"))
 	})
 
-	It("has the right representation for the H2 Alt-Svc tag", func() {
-		Expect(VersionTLS.ToAltSvc()).To(Equal("101"))
-	})
-
 	It("recognizes supported versions", func() {
 		Expect(IsSupportedVersion(SupportedVersions, 0)).To(BeFalse())
 		Expect(IsSupportedVersion(SupportedVersions, SupportedVersions[0])).To(BeTrue())
