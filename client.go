@@ -79,11 +79,27 @@ func DialAddrContext(
 	tlsConf *tls.Config,
 	config *Config,
 ) (Session, error) {
-	udpAddr, err := net.ResolveUDPAddr("udp", addr)
+	network := "udp"
+	udpip := net.IPv4zero
+	if config.ClientPreferIPv6 {
+		if addrs, err := net.InterfaceAddrs(); err == nil {
+			for _, addr := range addrs {
+				if ip, _, err := net.ParseCIDR(addr.String()); err == nil && ip.IsGlobalUnicast() && ip.To4() == nil {
+					network = "udp6"
+					udpip = net.IPv6zero
+					break
+				}
+			}
+		}
+	}
+	udpAddr, err := net.ResolveUDPAddr(network, addr)
+	if _, ok := err.(*net.AddrError); ok && config.ClientPreferIPv6 && network == "udp6" {
+		udpAddr, err = net.ResolveUDPAddr("udp4", addr)
+	}
 	if err != nil {
 		return nil, err
 	}
-	udpConn, err := net.ListenUDP("udp", &net.UDPAddr{IP: net.IPv4zero, Port: 0})
+	udpConn, err := net.ListenUDP("udp", &net.UDPAddr{IP: udpip, Port: 0})
 	if err != nil {
 		return nil, err
 	}

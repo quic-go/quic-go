@@ -208,6 +208,8 @@ type Config struct {
 	MaxIncomingUniStreams int
 	// KeepAlive defines whether this peer will periodically send PING frames to keep the connection alive.
 	KeepAlive bool
+	// ClientPreferIPv6 defines whether the client will prefer to use IPv6 network when host has global-unique IPv6 addresses.
+	ClientPreferIPv6 bool
 }
 
 // A Listener for incoming QUIC connections
