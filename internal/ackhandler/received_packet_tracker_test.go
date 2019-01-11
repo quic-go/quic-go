@@ -20,7 +20,7 @@ var _ = Describe("Received Packet Tracker", func() {
 
 	BeforeEach(func() {
 		rttStats = &congestion.RTTStats{}
-		tracker = NewReceivedPacketHandler(rttStats, utils.DefaultLogger, protocol.VersionWhatever).(*receivedPacketTracker)
+		tracker = newReceivedPacketTracker(rttStats, utils.DefaultLogger, protocol.VersionWhatever)
 	})
 
 	Context("accepting packets", func() {

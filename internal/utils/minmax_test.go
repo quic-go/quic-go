@@ -95,6 +95,16 @@ var _ = Describe("Min / Max", func() {
 			Expect(MinTime(a, b)).To(Equal(a))
 			Expect(MinTime(b, a)).To(Equal(a))
 		})
+
+		It("returns the minium non-zero time", func() {
+			a := time.Time{}
+			b := time.Now()
+			Expect(MinNonZeroTime(time.Time{}, time.Time{})).To(Equal(time.Time{}))
+			Expect(MinNonZeroTime(a, b)).To(Equal(b))
+			Expect(MinNonZeroTime(b, a)).To(Equal(b))
+			Expect(MinNonZeroTime(b, b.Add(time.Second))).To(Equal(b))
+			Expect(MinNonZeroTime(b.Add(time.Second), b)).To(Equal(b))
+		})
 	})
 
 	It("returns the abs time", func() {

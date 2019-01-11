@@ -30,35 +30,11 @@ type receivedPacketTracker struct {
 	version protocol.VersionNumber
 }
 
-const (
-	// maximum delay that can be applied to an ACK for a retransmittable packet
-	ackSendDelay = 25 * time.Millisecond
-	// initial maximum number of retransmittable packets received before sending an ack.
-	initialRetransmittablePacketsBeforeAck = 2
-	// number of retransmittable that an ACK is sent for
-	retransmittablePacketsBeforeAck = 10
-	// 1/5 RTT delay when doing ack decimation
-	ackDecimationDelay = 1.0 / 4
-	// 1/8 RTT delay when doing ack decimation
-	shortAckDecimationDelay = 1.0 / 8
-	// Minimum number of packets received before ack decimation is enabled.
-	// This intends to avoid the beginning of slow start, when CWNDs may be
-	// rapidly increasing.
-	minReceivedBeforeAckDecimation = 100
-	// Maximum number of packets to ack immediately after a missing packet for
-	// fast retransmission to kick in at the sender.  This limit is created to
-	// reduce the number of acks sent that have no benefit for fast retransmission.
-	// Set to the number of nacks needed for fast retransmit plus one for protection
-	// against an ack loss
-	maxPacketsAfterNewMissing = 4
-)
-
-// NewReceivedPacketHandler creates a new receivedPacketHandler
-func NewReceivedPacketHandler(
+func newReceivedPacketTracker(
 	rttStats *congestion.RTTStats,
 	logger utils.Logger,
 	version protocol.VersionNumber,
-) ReceivedPacketHandler {
+) *receivedPacketTracker {
 	return &receivedPacketTracker{
 		packetHistory: newReceivedPacketHistory(),
 		ackSendDelay:  ackSendDelay,
