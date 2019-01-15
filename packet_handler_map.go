@@ -1,7 +1,6 @@
 package quic
 
 import (
-	"bytes"
 	"errors"
 	"fmt"
 	"net"
@@ -199,25 +198,15 @@ func (h *packetHandlerMap) parsePacket(
 	var counter int
 	var lastConnID protocol.ConnectionID
 	for len(data) > 0 {
-		hdr, err := wire.ParseHeader(bytes.NewReader(data), h.connIDLen)
-		// drop the packet if we can't parse the header
+		hdr, packetData, rest, err := wire.ParsePacket(data, h.connIDLen)
 		if err != nil {
-			return packets, fmt.Errorf("error parsing header: %s", err)
+			return packets, fmt.Errorf("error parsing packet: %s", err)
 		}
+
 		if counter > 0 && !hdr.DestConnectionID.Equal(lastConnID) {
 			return packets, fmt.Errorf("coalesced packet has different destination connection ID: %s, expected %s", hdr.DestConnectionID, lastConnID)
 		}
 		lastConnID = hdr.DestConnectionID
-
-		var rest []byte
-		if hdr.IsLongHeader {
-			if protocol.ByteCount(len(data)) < hdr.ParsedLen()+hdr.Length {
-				return packets, fmt.Errorf("packet length (%d bytes) is smaller than the expected length (%d bytes)", len(data)-int(hdr.ParsedLen()), hdr.Length)
-			}
-			packetLen := int(hdr.ParsedLen() + hdr.Length)
-			rest = data[packetLen:]
-			data = data[:packetLen]
-		}
 
 		if counter > 0 {
 			buffer.Split()
@@ -227,7 +216,7 @@ func (h *packetHandlerMap) parsePacket(
 			remoteAddr: addr,
 			hdr:        hdr,
 			rcvTime:    rcvTime,
-			data:       data,
+			data:       packetData,
 			buffer:     buffer,
 		})
 

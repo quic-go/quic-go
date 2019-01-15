@@ -107,7 +107,7 @@ var _ = Describe("Packet Handler Map", func() {
 		It("drops unparseable packets", func() {
 			_, err := handler.parsePacket(nil, nil, []byte{0, 1, 2, 3})
 			Expect(err).To(HaveOccurred())
-			Expect(err.Error()).To(ContainSubstring("error parsing header:"))
+			Expect(err.Error()).To(ContainSubstring("error parsing packet:"))
 		})
 
 		It("deletes removed session immediately", func() {
@@ -161,20 +161,6 @@ var _ = Describe("Packet Handler Map", func() {
 		})
 
 		Context("coalesced packets", func() {
-			It("errors on packets that are smaller than the length in the packet header, for too small packet number", func() {
-				connID := protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8}
-				data := getPacketWithLength(connID, 3) // gets a packet with a 2 byte packet number
-				_, err := handler.parsePacket(nil, nil, data)
-				Expect(err).To(MatchError("packet length (2 bytes) is smaller than the expected length (3 bytes)"))
-			})
-
-			It("errors on packets that are smaller than the length in the packet header, for too small payload", func() {
-				connID := protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8}
-				data := append(getPacketWithLength(connID, 1000), make([]byte, 500-2 /* for packet number length */)...)
-				_, err := handler.parsePacket(nil, nil, data)
-				Expect(err).To(MatchError("packet length (500 bytes) is smaller than the expected length (1000 bytes)"))
-			})
-
 			It("cuts packets to the right length", func() {
 				connID := protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8}
 				data := append(getPacketWithLength(connID, 456), make([]byte, 1000)...)

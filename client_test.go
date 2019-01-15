@@ -58,7 +58,7 @@ var _ = Describe("Client", func() {
 	composeVersionNegotiationPacket := func(connID protocol.ConnectionID, versions []protocol.VersionNumber) *receivedPacket {
 		data, err := wire.ComposeVersionNegotiation(connID, nil, versions)
 		Expect(err).ToNot(HaveOccurred())
-		hdr, err := wire.ParseHeader(bytes.NewReader(data), 0)
+		hdr, _, _, err := wire.ParsePacket(data, 0)
 		Expect(err).ToNot(HaveOccurred())
 		Expect(hdr.IsVersionNegotiation()).To(BeTrue())
 		return &receivedPacket{

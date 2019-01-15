@@ -336,8 +336,14 @@ func (s *server) handlePacket(p *receivedPacket) {
 		return
 	}
 
-	// TODO(#943): send Stateless Reset
-	p.buffer.Release()
+	defer p.buffer.Release()
+	// Drop long header packets.
+	// There's litte point in sending a Stateless Reset, since the client
+	// might not have received the token yet.
+	if hdr.IsLongHeader {
+		return
+	}
+
 }
 
 func (s *server) handleInitial(p *receivedPacket) {

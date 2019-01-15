@@ -3,12 +3,15 @@ package wire
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"io"
 
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/internal/qerr"
 	"github.com/lucas-clemente/quic-go/internal/utils"
 )
+
+var errUnsupportedVersion = errors.New("unsupported version")
 
 // The Header is the version independent part of the header
 type Header struct {
@@ -28,19 +31,43 @@ type Header struct {
 	parsedLen protocol.ByteCount // how many bytes were read while parsing this header
 }
 
+// ParsePacket parses a packet.
+// If the packet has a long header, the packet is cut according to the length field.
+// If we understand the version, the packet is header up unto the packet number.
+// Otherwise, only the invariant part of the header is parsed.
+func ParsePacket(data []byte, shortHeaderConnIDLen int) (*Header, []byte /* packet data */, []byte /* rest */, error) {
+	hdr, err := parseHeader(bytes.NewReader(data), shortHeaderConnIDLen)
+	if err != nil {
+		if err == errUnsupportedVersion {
+			return hdr, nil, nil, nil
+		}
+		return nil, nil, nil, err
+	}
+	var rest []byte
+	if hdr.IsLongHeader {
+		if protocol.ByteCount(len(data)) < hdr.ParsedLen()+hdr.Length {
+			return nil, nil, nil, fmt.Errorf("packet length (%d bytes) is smaller than the expected length (%d bytes)", len(data)-int(hdr.ParsedLen()), hdr.Length)
+		}
+		packetLen := int(hdr.ParsedLen() + hdr.Length)
+		rest = data[packetLen:]
+		data = data[:packetLen]
+	}
+	return hdr, data, rest, nil
+}
+
 // ParseHeader parses the header.
 // For short header packets: up to the packet number.
 // For long header packets:
 // * if we understand the version: up to the packet number
 // * if not, only the invariant part of the header
-func ParseHeader(b *bytes.Reader, shortHeaderConnIDLen int) (*Header, error) {
+func parseHeader(b *bytes.Reader, shortHeaderConnIDLen int) (*Header, error) {
 	startLen := b.Len()
 	h, err := parseHeaderImpl(b, shortHeaderConnIDLen)
 	if err != nil {
-		return nil, err
+		return h, err
 	}
 	h.parsedLen = protocol.ByteCount(startLen - b.Len())
-	return h, nil
+	return h, err
 }
 
 func parseHeaderImpl(b *bytes.Reader, shortHeaderConnIDLen int) (*Header, error) {
@@ -63,10 +90,7 @@ func parseHeaderImpl(b *bytes.Reader, shortHeaderConnIDLen int) (*Header, error)
 		}
 		return h, nil
 	}
-	if err := h.parseLongHeader(b); err != nil {
-		return nil, err
-	}
-	return h, nil
+	return h, h.parseLongHeader(b)
 }
 
 func (h *Header) parseShortHeader(b *bytes.Reader, shortHeaderConnIDLen int) error {
@@ -102,7 +126,7 @@ func (h *Header) parseLongHeader(b *bytes.Reader) error {
 	}
 	// If we don't understand the version, we have no idea how to interpret the rest of the bytes
 	if !protocol.IsSupportedVersion(protocol.SupportedVersions, h.Version) {
-		return nil
+		return errUnsupportedVersion
 	}
 
 	switch (h.typeByte & 0x30) >> 4 {

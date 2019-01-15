@@ -496,7 +496,7 @@ var _ = Describe("Session", func() {
 			buf := &bytes.Buffer{}
 			Expect(extHdr.Write(buf, sess.version)).To(Succeed())
 			// need to set extHdr.Header, since the wire.Header contains the parsed length
-			hdr, err := wire.ParseHeader(bytes.NewReader(buf.Bytes()), 0)
+			hdr, _, _, err := wire.ParsePacket(buf.Bytes(), 0)
 			Expect(err).ToNot(HaveOccurred())
 			extHdr.Header = *hdr
 			return buf.Bytes()

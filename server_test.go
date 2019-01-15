@@ -118,7 +118,7 @@ var _ = Describe("Server", func() {
 		})
 
 		parseHeader := func(data []byte) *wire.Header {
-			hdr, err := wire.ParseHeader(bytes.NewReader(data), 0)
+			hdr, _, _, err := wire.ParsePacket(data, 0)
 			Expect(err).ToNot(HaveOccurred())
 			return hdr
 		}
@@ -239,8 +239,7 @@ var _ = Describe("Server", func() {
 			var write mockPacketConnWrite
 			Eventually(conn.dataWritten).Should(Receive(&write))
 			Expect(write.to.String()).To(Equal("127.0.0.1:1337"))
-			hdr, err := wire.ParseHeader(bytes.NewReader(write.data), 0)
-			Expect(err).ToNot(HaveOccurred())
+			hdr := parseHeader(write.data)
 			Expect(hdr.IsVersionNegotiation()).To(BeTrue())
 			Expect(hdr.DestConnectionID).To(Equal(srcConnID))
 			Expect(hdr.SrcConnectionID).To(Equal(destConnID))
@@ -370,8 +369,7 @@ var _ = Describe("Server", func() {
 			var reject mockPacketConnWrite
 			Eventually(conn.dataWritten).Should(Receive(&reject))
 			Expect(reject.to).To(Equal(senderAddr))
-			rejectHdr, err := wire.ParseHeader(bytes.NewReader(reject.data), 0)
-			Expect(err).ToNot(HaveOccurred())
+			rejectHdr := parseHeader(reject.data)
 			Expect(rejectHdr.Type).To(Equal(protocol.PacketTypeInitial))
 			Expect(rejectHdr.Version).To(Equal(hdr.Version))
 			Expect(rejectHdr.DestConnectionID).To(Equal(hdr.SrcConnectionID))
