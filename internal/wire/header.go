@@ -11,6 +11,30 @@ import (
 	"github.com/lucas-clemente/quic-go/internal/utils"
 )
 
+// ParseConnectionID parses the destination connection ID of a packet.
+// It uses the data slice for the connection ID.
+// That means that the connection ID must not be used after the packet buffer is released.
+func ParseConnectionID(data []byte, shortHeaderConnIDLen int) (protocol.ConnectionID, error) {
+	if len(data) == 0 {
+		return nil, io.EOF
+	}
+	isLongHeader := data[0]&0x80 > 0
+	if !isLongHeader {
+		if len(data) < shortHeaderConnIDLen+1 {
+			return nil, io.EOF
+		}
+		return protocol.ConnectionID(data[1 : 1+shortHeaderConnIDLen]), nil
+	}
+	if len(data) < 6 {
+		return nil, io.EOF
+	}
+	destConnIDLen, _ := decodeConnIDLen(data[5])
+	if len(data) < 6+destConnIDLen {
+		return nil, io.EOF
+	}
+	return protocol.ConnectionID(data[6 : 6+destConnIDLen]), nil
+}
+
 var errUnsupportedVersion = errors.New("unsupported version")
 
 // The Header is the version independent part of the header

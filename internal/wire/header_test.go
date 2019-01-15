@@ -19,6 +19,81 @@ var _ = Describe("Header Parsing", func() {
 		return data
 	}
 
+	Context("Parsing the Connection ID", func() {
+		It("parses the connection ID of a long header packet", func() {
+			buf := &bytes.Buffer{}
+			Expect((&ExtendedHeader{
+				Header: Header{
+					IsLongHeader:     true,
+					Type:             protocol.PacketTypeHandshake,
+					DestConnectionID: protocol.ConnectionID{0xde, 0xca, 0xfb, 0xad},
+					SrcConnectionID:  protocol.ConnectionID{1, 2, 3, 4, 5, 6},
+					Version:          versionIETFFrames,
+				},
+				PacketNumberLen: 2,
+			}).Write(buf, versionIETFFrames)).To(Succeed())
+			connID, err := ParseConnectionID(buf.Bytes(), 8)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(connID).To(Equal(protocol.ConnectionID{0xde, 0xca, 0xfb, 0xad}))
+		})
+
+		It("parses the connection ID of a short header packet", func() {
+			buf := &bytes.Buffer{}
+			Expect((&ExtendedHeader{
+				Header: Header{
+					DestConnectionID: protocol.ConnectionID{0xde, 0xca, 0xfb, 0xad},
+				},
+				PacketNumberLen: 2,
+			}).Write(buf, versionIETFFrames)).To(Succeed())
+			buf.Write([]byte("foobar"))
+			connID, err := ParseConnectionID(buf.Bytes(), 4)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(connID).To(Equal(protocol.ConnectionID{0xde, 0xca, 0xfb, 0xad}))
+		})
+
+		It("errors on EOF, for short header packets", func() {
+			buf := &bytes.Buffer{}
+			Expect((&ExtendedHeader{
+				Header: Header{
+					DestConnectionID: protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8},
+				},
+				PacketNumberLen: 2,
+			}).Write(buf, versionIETFFrames)).To(Succeed())
+			data := buf.Bytes()[:buf.Len()-2] // cut the packet number
+			_, err := ParseConnectionID(data, 8)
+			Expect(err).ToNot(HaveOccurred())
+			for i := 0; i < len(data); i++ {
+				b := make([]byte, i)
+				copy(b, data[:i])
+				_, err := ParseConnectionID(b, 8)
+				Expect(err).To(MatchError(io.EOF))
+			}
+		})
+
+		It("errors on EOF, for long header packets", func() {
+			buf := &bytes.Buffer{}
+			Expect((&ExtendedHeader{
+				Header: Header{
+					IsLongHeader:     true,
+					Type:             protocol.PacketTypeHandshake,
+					DestConnectionID: protocol.ConnectionID{0xde, 0xca, 0xfb, 0xad, 0x13, 0x37},
+					SrcConnectionID:  protocol.ConnectionID{1, 2, 3, 4, 5, 6, 8, 9},
+					Version:          versionIETFFrames,
+				},
+				PacketNumberLen: 2,
+			}).Write(buf, versionIETFFrames)).To(Succeed())
+			data := buf.Bytes()[:buf.Len()-2] // cut the packet number
+			_, err := ParseConnectionID(data, 8)
+			Expect(err).ToNot(HaveOccurred())
+			for i := 0; i < 1 /* first byte */ +4 /* version */ +1 /* conn ID lengths */ +6; /* dest conn ID */ i++ {
+				b := make([]byte, i)
+				copy(b, data[:i])
+				_, err := ParseConnectionID(b, 8)
+				Expect(err).To(MatchError(io.EOF))
+			}
+		})
+	})
+
 	Context("Version Negotiation Packets", func() {
 		It("parses", func() {
 			srcConnID := protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12}
