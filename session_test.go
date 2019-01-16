@@ -159,7 +159,6 @@ var _ = Describe("Session", func() {
 				f := &wire.AckFrame{AckRanges: []wire.AckRange{{Smallest: 2, Largest: 3}}}
 				sph := mockackhandler.NewMockSentPacketHandler(mockCtrl)
 				sph.EXPECT().ReceivedAck(f, protocol.PacketNumber(42), protocol.EncryptionHandshake, gomock.Any())
-				sph.EXPECT().GetLowestPacketNotConfirmedAcked()
 				sess.sentPacketHandler = sph
 				err := sess.handleAckFrame(f, 42, protocol.EncryptionHandshake)
 				Expect(err).ToNot(HaveOccurred())
@@ -174,7 +173,7 @@ var _ = Describe("Session", func() {
 				rph := mockackhandler.NewMockReceivedPacketHandler(mockCtrl)
 				rph.EXPECT().IgnoreBelow(protocol.PacketNumber(0x42))
 				sess.receivedPacketHandler = rph
-				Expect(sess.handleAckFrame(ack, 0, protocol.EncryptionInitial)).To(Succeed())
+				Expect(sess.handleAckFrame(ack, 0, protocol.Encryption1RTT)).To(Succeed())
 			})
 		})
 
@@ -496,12 +495,13 @@ var _ = Describe("Session", func() {
 			}
 			rcvTime := time.Now().Add(-10 * time.Second)
 			unpacker.EXPECT().Unpack(gomock.Any(), gomock.Any()).Return(&unpackedPacket{
-				packetNumber: 0x1337,
-				hdr:          hdr,
-				data:         []byte{0}, // one PADDING frame
+				packetNumber:    0x1337,
+				encryptionLevel: protocol.EncryptionInitial,
+				hdr:             hdr,
+				data:            []byte{0}, // one PADDING frame
 			}, nil)
 			rph := mockackhandler.NewMockReceivedPacketHandler(mockCtrl)
-			rph.EXPECT().ReceivedPacket(protocol.PacketNumber(0x1337), rcvTime, false)
+			rph.EXPECT().ReceivedPacket(protocol.PacketNumber(0x1337), protocol.EncryptionInitial, rcvTime, false)
 			sess.receivedPacketHandler = rph
 			Expect(sess.handlePacketImpl(insertPacketBuffer(&receivedPacket{
 				rcvTime: rcvTime,
@@ -519,12 +519,13 @@ var _ = Describe("Session", func() {
 			buf := &bytes.Buffer{}
 			Expect((&wire.PingFrame{}).Write(buf, sess.version)).To(Succeed())
 			unpacker.EXPECT().Unpack(gomock.Any(), gomock.Any()).Return(&unpackedPacket{
-				packetNumber: 0x1337,
-				hdr:          hdr,
-				data:         buf.Bytes(),
+				packetNumber:    0x1337,
+				encryptionLevel: protocol.EncryptionHandshake,
+				hdr:             hdr,
+				data:            buf.Bytes(),
 			}, nil)
 			rph := mockackhandler.NewMockReceivedPacketHandler(mockCtrl)
-			rph.EXPECT().ReceivedPacket(protocol.PacketNumber(0x1337), rcvTime, true)
+			rph.EXPECT().ReceivedPacket(protocol.PacketNumber(0x1337), protocol.EncryptionHandshake, rcvTime, true)
 			sess.receivedPacketHandler = rph
 			Expect(sess.handlePacketImpl(insertPacketBuffer(&receivedPacket{
 				rcvTime: rcvTime,
@@ -584,8 +585,9 @@ var _ = Describe("Session", func() {
 				PacketNumberLen: protocol.PacketNumberLen1,
 			}
 			unpacker.EXPECT().Unpack(gomock.Any(), gomock.Any()).Return(&unpackedPacket{
-				hdr:  hdr,
-				data: []byte{0}, // one PADDING frame
+				encryptionLevel: protocol.Encryption1RTT,
+				hdr:             hdr,
+				data:            []byte{0}, // one PADDING frame
 			}, nil).Times(2)
 			Expect(sess.handlePacketImpl(insertPacketBuffer(&receivedPacket{hdr: &hdr.Header, data: getData(hdr)}))).To(BeTrue())
 			Expect(sess.handlePacketImpl(insertPacketBuffer(&receivedPacket{hdr: &hdr.Header, data: getData(hdr)}))).To(BeTrue())
@@ -611,8 +613,9 @@ var _ = Describe("Session", func() {
 			// Send one packet, which might change the connection ID.
 			// only EXPECT one call to the unpacker
 			unpacker.EXPECT().Unpack(gomock.Any(), gomock.Any()).Return(&unpackedPacket{
-				hdr:  &wire.ExtendedHeader{Header: *hdr},
-				data: []byte{0}, // one PADDING frame
+				encryptionLevel: protocol.Encryption1RTT,
+				hdr:             &wire.ExtendedHeader{Header: *hdr},
+				data:            []byte{0}, // one PADDING frame
 			}, nil)
 			Expect(sess.handlePacketImpl(insertPacketBuffer(&receivedPacket{
 				hdr:  hdr,
@@ -633,8 +636,9 @@ var _ = Describe("Session", func() {
 		Context("updating the remote address", func() {
 			It("doesn't support connection migration", func() {
 				unpacker.EXPECT().Unpack(gomock.Any(), gomock.Any()).Return(&unpackedPacket{
-					hdr:  &wire.ExtendedHeader{},
-					data: []byte{0}, // one PADDING frame
+					encryptionLevel: protocol.Encryption1RTT,
+					hdr:             &wire.ExtendedHeader{},
+					data:            []byte{0}, // one PADDING frame
 				}, nil)
 				origAddr := sess.conn.(*mockConnection).remoteAddr
 				remoteIP := &net.IPAddr{IP: net.IPv4(192, 168, 0, 100)}
@@ -663,8 +667,7 @@ var _ = Describe("Session", func() {
 
 		It("sends packets", func() {
 			packer.EXPECT().PackPacket().Return(getPacket(1), nil)
-			err := sess.receivedPacketHandler.ReceivedPacket(0x035e, time.Now(), true)
-			Expect(err).ToNot(HaveOccurred())
+			Expect(sess.receivedPacketHandler.ReceivedPacket(0x035e, protocol.Encryption1RTT, time.Now(), true)).To(Succeed())
 			sent, err := sess.sendPacket()
 			Expect(err).NotTo(HaveOccurred())
 			Expect(sent).To(BeTrue())
@@ -672,8 +675,7 @@ var _ = Describe("Session", func() {
 
 		It("doesn't send packets if there's nothing to send", func() {
 			packer.EXPECT().PackPacket().Return(getPacket(2), nil)
-			err := sess.receivedPacketHandler.ReceivedPacket(0x035e, time.Now(), true)
-			Expect(err).ToNot(HaveOccurred())
+			Expect(sess.receivedPacketHandler.ReceivedPacket(0x035e, protocol.Encryption1RTT, time.Now(), true)).To(Succeed())
 			sent, err := sess.sendPacket()
 			Expect(err).NotTo(HaveOccurred())
 			Expect(sent).To(BeTrue())
@@ -1409,8 +1411,9 @@ var _ = Describe("Client Session", func() {
 		unpacker := NewMockUnpacker(mockCtrl)
 		unpacker.EXPECT().Unpack(gomock.Any(), gomock.Any()).DoAndReturn(func(hdr *wire.Header, data []byte) (*unpackedPacket, error) {
 			return &unpackedPacket{
-				hdr:  &wire.ExtendedHeader{Header: *hdr},
-				data: []byte{0}, // one PADDING frame
+				encryptionLevel: protocol.Encryption1RTT,
+				hdr:             &wire.ExtendedHeader{Header: *hdr},
+				data:            []byte{0}, // one PADDING frame
 			}, nil
 		})
 		sess.unpacker = unpacker

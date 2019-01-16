@@ -8,6 +8,7 @@ import (
 	reflect "reflect"
 
 	gomock "github.com/golang/mock/gomock"
+	protocol "github.com/lucas-clemente/quic-go/internal/protocol"
 	wire "github.com/lucas-clemente/quic-go/internal/wire"
 )
 
@@ -35,13 +36,13 @@ func (m *MockAckFrameSource) EXPECT() *MockAckFrameSourceMockRecorder {
 }
 
 // GetAckFrame mocks base method
-func (m *MockAckFrameSource) GetAckFrame() *wire.AckFrame {
-	ret := m.ctrl.Call(m, "GetAckFrame")
+func (m *MockAckFrameSource) GetAckFrame(arg0 protocol.EncryptionLevel) *wire.AckFrame {
+	ret := m.ctrl.Call(m, "GetAckFrame", arg0)
 	ret0, _ := ret[0].(*wire.AckFrame)
 	return ret0
 }
 
 // GetAckFrame indicates an expected call of GetAckFrame
-func (mr *MockAckFrameSourceMockRecorder) GetAckFrame() *gomock.Call {
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetAckFrame", reflect.TypeOf((*MockAckFrameSource)(nil).GetAckFrame))
+func (mr *MockAckFrameSourceMockRecorder) GetAckFrame(arg0 interface{}) *gomock.Call {
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetAckFrame", reflect.TypeOf((*MockAckFrameSource)(nil).GetAckFrame), arg0)
 }
