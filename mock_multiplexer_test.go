@@ -46,3 +46,15 @@ func (m *MockMultiplexer) AddConn(arg0 net.PacketConn, arg1 int) (packetHandlerM
 func (mr *MockMultiplexerMockRecorder) AddConn(arg0, arg1 interface{}) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddConn", reflect.TypeOf((*MockMultiplexer)(nil).AddConn), arg0, arg1)
 }
+
+// RemoveConn mocks base method
+func (m *MockMultiplexer) RemoveConn(arg0 net.PacketConn) error {
+	ret := m.ctrl.Call(m, "RemoveConn", arg0)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// RemoveConn indicates an expected call of RemoveConn
+func (mr *MockMultiplexerMockRecorder) RemoveConn(arg0 interface{}) *gomock.Call {
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RemoveConn", reflect.TypeOf((*MockMultiplexer)(nil).RemoveConn), arg0)
+}

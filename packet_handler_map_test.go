@@ -45,6 +45,16 @@ var _ = Describe("Packet Handler Map", func() {
 	})
 
 	It("closes", func() {
+		getMultiplexer() // make the sync.Once execute
+		// replace the clientMuxer. getClientMultiplexer will now return the MockMultiplexer
+		mockMultiplexer := NewMockMultiplexer(mockCtrl)
+		origMultiplexer := connMuxer
+		connMuxer = mockMultiplexer
+
+		defer func() {
+			connMuxer = origMultiplexer
+		}()
+
 		testErr := errors.New("test error	")
 		sess1 := NewMockPacketHandler(mockCtrl)
 		sess1.EXPECT().destroy(testErr)
@@ -52,6 +62,7 @@ var _ = Describe("Packet Handler Map", func() {
 		sess2.EXPECT().destroy(testErr)
 		handler.Add(protocol.ConnectionID{1, 1, 1, 1}, sess1)
 		handler.Add(protocol.ConnectionID{2, 2, 2, 2}, sess2)
+		mockMultiplexer.EXPECT().RemoveConn(gomock.Any())
 		handler.close(testErr)
 	})
 
