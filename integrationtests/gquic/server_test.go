@@ -90,7 +90,7 @@ var _ = Describe("Server tests", func() {
 				"--quic_response_cache_dir="+filepath.Join(tmpDir, "quic.clemente.io"),
 				"--key_file="+filepath.Join(tmpDir, "key.pkcs8"),
 				"--certificate_file="+filepath.Join(tmpDir, "cert.pem"),
-				"--quic-version="+strconv.Itoa(int(version)),
+				"--quic-version="+version.ToAltSvc(),
 				"--port="+serverPort,
 			)
 			session, err = Start(command, nil, GinkgoWriter)
