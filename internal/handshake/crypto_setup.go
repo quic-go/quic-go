@@ -327,7 +327,6 @@ func (h *cryptoSetup) handleMessageForServer(msgType messageType) bool {
 			return false
 		}
 		// get the handshake read key
-		// TODO: check that the initial stream doesn't have any more data
 		select {
 		case <-h.receivedReadKey:
 		case <-h.handshakeErrChan:
