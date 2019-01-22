@@ -9,8 +9,8 @@
     "deadcode",
     "goimports",
     "ineffassign",
-    "megacheck",
     "misspell",
+    "staticcheck",
     "structcheck",
     "unconvert",
     "varcheck",
@@ -19,6 +19,6 @@
   "Linters": {
     "vet": "go tool vet -printfuncs=Infof,Debugf,Warningf,Errorf:PATH:LINE:MESSAGE",
     "misspell": "misspell -i ect:PATH:LINE:COL:MESSAGE",
-    "megacheck": "megacheck -ignore github.com/lucas-clemente/quic-go/h2quic/response_writer_closenotifier.go:SA1019:PATH:LINE:COL:MESSAGE"
+    "staticcheck": "staticcheck -ignore github.com/lucas-clemente/quic-go/h2quic/response_writer_closenotifier.go:SA1019:PATH:LINE:COL:MESSAGE"
   }
 }
