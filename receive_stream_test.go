@@ -481,30 +481,37 @@ var _ = Describe("Receive Stream", func() {
 				Expect(err).To(MatchError("Read on stream 1337 canceled with error code 1234"))
 			})
 
-			It("doesn't send a RESET_STREAM frame, if the FIN was already read", func() {
-				mockFC.EXPECT().UpdateHighestReceived(protocol.ByteCount(6), true)
-				mockFC.EXPECT().AddBytesRead(protocol.ByteCount(6))
-				// no calls to mockSender.queueControlFrame
-				err := str.handleStreamFrame(&wire.StreamFrame{
-					StreamID: streamID,
-					Data:     []byte("foobar"),
-					FinBit:   true,
-				})
-				Expect(err).ToNot(HaveOccurred())
-				mockSender.EXPECT().onStreamCompleted(streamID)
-				_, err = strWithTimeout.Read(make([]byte, 100))
-				Expect(err).To(MatchError(io.EOF))
-				err = str.CancelRead(1234)
-				Expect(err).ToNot(HaveOccurred())
-			})
-
 			It("queues a STOP_SENDING frame", func() {
 				mockSender.EXPECT().queueControlFrame(&wire.StopSendingFrame{
 					StreamID:  streamID,
 					ErrorCode: 1234,
 				})
-				err := str.CancelRead(1234)
-				Expect(err).ToNot(HaveOccurred())
+				Expect(str.CancelRead(1234)).To(Succeed())
+			})
+
+			It("doesn't send a STOP_SENDING frame, if the FIN was already read", func() {
+				mockFC.EXPECT().UpdateHighestReceived(protocol.ByteCount(6), true)
+				mockFC.EXPECT().AddBytesRead(protocol.ByteCount(6))
+				// no calls to mockSender.queueControlFrame
+				Expect(str.handleStreamFrame(&wire.StreamFrame{
+					StreamID: streamID,
+					Data:     []byte("foobar"),
+					FinBit:   true,
+				})).To(Succeed())
+				mockSender.EXPECT().onStreamCompleted(streamID)
+				_, err := strWithTimeout.Read(make([]byte, 100))
+				Expect(err).To(MatchError(io.EOF))
+				Expect(str.CancelRead(1234)).To(Succeed())
+			})
+
+			It("doesn't send a STOP_SENDING frame, if the stream was already reset", func() {
+				mockFC.EXPECT().UpdateHighestReceived(protocol.ByteCount(42), true)
+				mockSender.EXPECT().onStreamCompleted(streamID)
+				Expect(str.handleResetStreamFrame(&wire.ResetStreamFrame{
+					StreamID:   streamID,
+					ByteOffset: 42,
+				})).To(Succeed())
+				Expect(str.CancelRead(1234)).To(Succeed())
 			})
 		})
 

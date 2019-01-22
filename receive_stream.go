@@ -190,10 +190,7 @@ func (s *receiveStream) CancelRead(errorCode protocol.ApplicationErrorCode) erro
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
 
-	if s.finRead {
-		return nil
-	}
-	if s.canceledRead {
+	if s.finRead || s.canceledRead || s.resetRemotely {
 		return nil
 	}
 	s.canceledRead = true
