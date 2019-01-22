@@ -172,8 +172,6 @@ func (s *receiveStream) readImpl(p []byte) (bool /*stream completed */, int, err
 		if !s.resetRemotely {
 			s.flowController.AddBytesRead(protocol.ByteCount(m))
 		}
-		// increase the flow control window, if necessary
-		s.flowController.MaybeQueueWindowUpdate()
 
 		if s.readPosInFrame >= len(s.currentFrame) && s.currentFrameIsLast {
 			s.finRead = true

@@ -34,6 +34,16 @@ func (m *MockStreamFlowController) EXPECT() *MockStreamFlowControllerMockRecorde
 	return m.recorder
 }
 
+// Abandon mocks base method
+func (m *MockStreamFlowController) Abandon() {
+	m.ctrl.Call(m, "Abandon")
+}
+
+// Abandon indicates an expected call of Abandon
+func (mr *MockStreamFlowControllerMockRecorder) Abandon() *gomock.Call {
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Abandon", reflect.TypeOf((*MockStreamFlowController)(nil).Abandon))
+}
+
 // AddBytesRead mocks base method
 func (m *MockStreamFlowController) AddBytesRead(arg0 protocol.ByteCount) {
 	m.ctrl.Call(m, "AddBytesRead", arg0)
@@ -77,16 +87,6 @@ func (m *MockStreamFlowController) IsNewlyBlocked() (bool, protocol.ByteCount) {
 // IsNewlyBlocked indicates an expected call of IsNewlyBlocked
 func (mr *MockStreamFlowControllerMockRecorder) IsNewlyBlocked() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IsNewlyBlocked", reflect.TypeOf((*MockStreamFlowController)(nil).IsNewlyBlocked))
-}
-
-// MaybeQueueWindowUpdate mocks base method
-func (m *MockStreamFlowController) MaybeQueueWindowUpdate() {
-	m.ctrl.Call(m, "MaybeQueueWindowUpdate")
-}
-
-// MaybeQueueWindowUpdate indicates an expected call of MaybeQueueWindowUpdate
-func (mr *MockStreamFlowControllerMockRecorder) MaybeQueueWindowUpdate() *gomock.Call {
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MaybeQueueWindowUpdate", reflect.TypeOf((*MockStreamFlowController)(nil).MaybeQueueWindowUpdate))
 }
 
 // SendWindowSize mocks base method

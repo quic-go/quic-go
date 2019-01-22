@@ -10,7 +10,6 @@ type flowController interface {
 	// for receiving
 	AddBytesRead(protocol.ByteCount)
 	GetWindowUpdate() protocol.ByteCount // returns 0 if no update is necessary
-	MaybeQueueWindowUpdate()             //  queues a window update, if necessary
 	IsNewlyBlocked() (bool, protocol.ByteCount)
 }
 
