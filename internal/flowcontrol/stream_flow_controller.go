@@ -93,6 +93,12 @@ func (c *streamFlowController) AddBytesRead(n protocol.ByteCount) {
 	c.connection.AddBytesRead(n)
 }
 
+func (c *streamFlowController) Abandon() {
+	if unread := c.highestReceived - c.bytesRead; unread > 0 {
+		c.connection.AddBytesRead(unread)
+	}
+}
+
 func (c *streamFlowController) AddBytesSent(n protocol.ByteCount) {
 	c.baseFlowController.AddBytesSent(n)
 	c.connection.AddBytesSent(n)
