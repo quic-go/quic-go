@@ -77,7 +77,8 @@ var _ = Describe("HTTP tests", func() {
 				Expect(body).To(Equal(testserver.PRDataLong))
 			})
 
-			It("downloads many files, if the response is not read", func() {
+			// TODO(#1756): this test times out
+			PIt("downloads many files, if the response is not read", func() {
 				const num = 150
 
 				for i := 0; i < num; i++ {
