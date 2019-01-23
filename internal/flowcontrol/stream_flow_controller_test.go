@@ -5,7 +5,6 @@ import (
 
 	"github.com/lucas-clemente/quic-go/internal/congestion"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
-	"github.com/lucas-clemente/quic-go/internal/qerr"
 	"github.com/lucas-clemente/quic-go/internal/utils"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -61,7 +60,7 @@ var _ = Describe("Stream Flow controller", func() {
 
 	Context("receiving data", func() {
 		Context("registering received offsets", func() {
-			var receiveWindow protocol.ByteCount = 10000
+			var receiveWindow protocol.ByteCount = 0x10000
 			var receiveWindowSize protocol.ByteCount = 600
 
 			BeforeEach(func() {
@@ -71,83 +70,67 @@ var _ = Describe("Stream Flow controller", func() {
 
 			It("updates the highestReceived", func() {
 				controller.highestReceived = 1337
-				err := controller.UpdateHighestReceived(1338, false)
-				Expect(err).ToNot(HaveOccurred())
+				Expect(controller.UpdateHighestReceived(1338, false)).To(Succeed())
 				Expect(controller.highestReceived).To(Equal(protocol.ByteCount(1338)))
 			})
 
 			It("informs the connection flow controller about received data", func() {
 				controller.highestReceived = 10
 				controller.connection.(*connectionFlowController).highestReceived = 100
-				err := controller.UpdateHighestReceived(20, false)
-				Expect(err).ToNot(HaveOccurred())
+				Expect(controller.UpdateHighestReceived(20, false)).To(Succeed())
 				Expect(controller.connection.(*connectionFlowController).highestReceived).To(Equal(protocol.ByteCount(100 + 10)))
 			})
 
 			It("does not decrease the highestReceived", func() {
 				controller.highestReceived = 1337
-				err := controller.UpdateHighestReceived(1000, false)
-				Expect(err).ToNot(HaveOccurred())
+				Expect(controller.UpdateHighestReceived(1000, false)).To(Succeed())
 				Expect(controller.highestReceived).To(Equal(protocol.ByteCount(1337)))
 			})
 
 			It("does nothing when setting the same byte offset", func() {
 				controller.highestReceived = 1337
-				err := controller.UpdateHighestReceived(1337, false)
-				Expect(err).ToNot(HaveOccurred())
+				Expect(controller.UpdateHighestReceived(1337, false)).To(Succeed())
 			})
 
 			It("does not give a flow control violation when using the window completely", func() {
 				controller.connection.(*connectionFlowController).receiveWindow = receiveWindow
-				err := controller.UpdateHighestReceived(receiveWindow, false)
-				Expect(err).ToNot(HaveOccurred())
+				Expect(controller.UpdateHighestReceived(receiveWindow, false)).To(Succeed())
 			})
 
 			It("detects a flow control violation", func() {
-				err := controller.UpdateHighestReceived(receiveWindow+1, false)
-				Expect(err).To(MatchError("FlowControlReceivedTooMuchData: Received 10001 bytes on stream 10, allowed 10000 bytes"))
+				Expect(controller.UpdateHighestReceived(receiveWindow+1, false)).To(MatchError("FlowControlReceivedTooMuchData: Received 0x10001 bytes on stream 10, allowed 0x10000 bytes"))
 			})
 
 			It("accepts a final offset higher than the highest received", func() {
-				controller.highestReceived = 100
-				err := controller.UpdateHighestReceived(101, true)
-				Expect(err).ToNot(HaveOccurred())
+				Expect(controller.UpdateHighestReceived(100, false)).To(Succeed())
+				Expect(controller.UpdateHighestReceived(101, true)).To(Succeed())
 				Expect(controller.highestReceived).To(Equal(protocol.ByteCount(101)))
 			})
 
 			It("errors when receiving a final offset smaller than the highest offset received so far", func() {
-				controller.highestReceived = 100
-				err := controller.UpdateHighestReceived(99, true)
-				Expect(err).To(MatchError(qerr.StreamDataAfterTermination))
+				controller.UpdateHighestReceived(0x100, false)
+				Expect(controller.UpdateHighestReceived(0xff, true)).To(MatchError("StreamDataAfterTermination: Received final offset 0xff for stream 10, but already received offset 0x100 before"))
 			})
 
 			It("accepts delayed data after receiving a final offset", func() {
-				err := controller.UpdateHighestReceived(300, true)
-				Expect(err).ToNot(HaveOccurred())
-				err = controller.UpdateHighestReceived(250, false)
-				Expect(err).ToNot(HaveOccurred())
+				Expect(controller.UpdateHighestReceived(300, true)).To(Succeed())
+				Expect(controller.UpdateHighestReceived(250, false)).To(Succeed())
 			})
 
 			It("errors when receiving a higher offset after receiving a final offset", func() {
-				err := controller.UpdateHighestReceived(200, true)
-				Expect(err).ToNot(HaveOccurred())
-				err = controller.UpdateHighestReceived(250, false)
-				Expect(err).To(MatchError(qerr.StreamDataAfterTermination))
+				Expect(controller.UpdateHighestReceived(0x200, true)).To(Succeed())
+				Expect(controller.UpdateHighestReceived(0x250, false)).To(MatchError("StreamDataAfterTermination: Received offset 0x250 for stream 10. Final offset was already received at 0x200"))
 			})
 
 			It("accepts duplicate final offsets", func() {
-				err := controller.UpdateHighestReceived(200, true)
-				Expect(err).ToNot(HaveOccurred())
-				err = controller.UpdateHighestReceived(200, true)
-				Expect(err).ToNot(HaveOccurred())
+				Expect(controller.UpdateHighestReceived(200, true)).To(Succeed())
+				Expect(controller.UpdateHighestReceived(200, true)).To(Succeed())
 				Expect(controller.highestReceived).To(Equal(protocol.ByteCount(200)))
 			})
 
 			It("errors when receiving inconsistent final offsets", func() {
-				err := controller.UpdateHighestReceived(200, true)
-				Expect(err).ToNot(HaveOccurred())
-				err = controller.UpdateHighestReceived(201, true)
-				Expect(err).To(MatchError("StreamDataAfterTermination: Received inconsistent final offset for stream 10 (old: 200, new: 201 bytes)"))
+				Expect(controller.UpdateHighestReceived(0x200, true)).To(Succeed())
+				Expect(controller.UpdateHighestReceived(0x201, true)).To(MatchError("StreamDataAfterTermination: Received inconsistent final offset for stream 10 (old: 0x200, new: 0x201 bytes)"))
 			})
 
 			It("tells the connection flow controller when a stream is abandoned", func() {

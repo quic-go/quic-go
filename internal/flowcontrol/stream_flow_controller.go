@@ -49,40 +49,42 @@ func NewStreamFlowController(
 	}
 }
 
-// UpdateHighestReceived updates the highestReceived value, if the byteOffset is higher
-// it returns an ErrReceivedSmallerByteOffset if the received byteOffset is smaller than any byteOffset received before
-func (c *streamFlowController) UpdateHighestReceived(byteOffset protocol.ByteCount, final bool) error {
+// UpdateHighestReceived updates the highestReceived value, if the offset is higher.
+func (c *streamFlowController) UpdateHighestReceived(offset protocol.ByteCount, final bool) error {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
 
-	// when receiving a final offset, check that this final offset is consistent with a final offset we might have received earlier
-	if final && c.receivedFinalOffset && byteOffset != c.highestReceived {
-		return qerr.Error(qerr.StreamDataAfterTermination, fmt.Sprintf("Received inconsistent final offset for stream %d (old: %d, new: %d bytes)", c.streamID, c.highestReceived, byteOffset))
+	// If the final offset for this stream is already known, check for consistency.
+	if c.receivedFinalOffset {
+		// If we receive another final offset, check that it's the same.
+		if final && offset != c.highestReceived {
+			return qerr.Error(qerr.StreamDataAfterTermination, fmt.Sprintf("Received inconsistent final offset for stream %d (old: %#x, new: %#x bytes)", c.streamID, c.highestReceived, offset))
+		}
+		// Check that the offset is below the final offset.
+		if offset > c.highestReceived {
+			return qerr.Error(qerr.StreamDataAfterTermination, fmt.Sprintf("Received offset %#x for stream %d. Final offset was already received at %#x", offset, c.streamID, c.highestReceived))
+		}
 	}
-	// if we already received a final offset, check that the offset in the STREAM frames is below the final offset
-	if c.receivedFinalOffset && byteOffset > c.highestReceived {
-		return qerr.StreamDataAfterTermination
-	}
+
 	if final {
 		c.receivedFinalOffset = true
 	}
-	if byteOffset == c.highestReceived {
+	if offset == c.highestReceived {
 		return nil
 	}
-	if byteOffset <= c.highestReceived {
-		// a STREAM_FRAME with a higher offset was received before.
+	// A higher offset was received before.
+	// This can happen due to reordering.
+	if offset <= c.highestReceived {
 		if final {
-			// If the current byteOffset is smaller than the offset in that STREAM_FRAME, this STREAM_FRAME contained data after the end of the stream
-			return qerr.StreamDataAfterTermination
+			return qerr.Error(qerr.StreamDataAfterTermination, fmt.Sprintf("Received final offset %#x for stream %d, but already received offset %#x before", offset, c.streamID, c.highestReceived))
 		}
-		// this is a reordered STREAM_FRAME
 		return nil
 	}
 
-	increment := byteOffset - c.highestReceived
-	c.highestReceived = byteOffset
+	increment := offset - c.highestReceived
+	c.highestReceived = offset
 	if c.checkFlowControlViolation() {
-		return qerr.Error(qerr.FlowControlReceivedTooMuchData, fmt.Sprintf("Received %d bytes on stream %d, allowed %d bytes", byteOffset, c.streamID, c.receiveWindow))
+		return qerr.Error(qerr.FlowControlReceivedTooMuchData, fmt.Sprintf("Received %#x bytes on stream %d, allowed %#x bytes", offset, c.streamID, c.receiveWindow))
 	}
 	return c.connection.IncrementHighestReceived(increment)
 }

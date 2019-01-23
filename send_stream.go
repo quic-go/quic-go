@@ -157,7 +157,7 @@ func (s *sendStream) popStreamFrameImpl(maxBytes protocol.ByteCount) (bool /* co
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
 
-	if s.closeForShutdownErr != nil {
+	if s.canceledWrite || s.closeForShutdownErr != nil {
 		return false, nil, false
 	}
 
@@ -273,12 +273,6 @@ func (s *sendStream) cancelWriteImpl(errorCode protocol.ApplicationErrorCode, wr
 	return true, nil
 }
 
-func (s *sendStream) handleStopSendingFrame(frame *wire.StopSendingFrame) {
-	if completed := s.handleStopSendingFrameImpl(frame); completed {
-		s.sender.onStreamCompleted(s.streamID)
-	}
-}
-
 func (s *sendStream) handleMaxStreamDataFrame(frame *wire.MaxStreamDataFrame) {
 	s.mutex.Lock()
 	hasStreamData := s.dataForWriting != nil
@@ -286,6 +280,12 @@ func (s *sendStream) handleMaxStreamDataFrame(frame *wire.MaxStreamDataFrame) {
 	s.flowController.UpdateSendWindow(frame.ByteOffset)
 	if hasStreamData {
 		s.sender.onHasStreamData(s.streamID)
+	}
+}
+
+func (s *sendStream) handleStopSendingFrame(frame *wire.StopSendingFrame) {
+	if completed := s.handleStopSendingFrameImpl(frame); completed {
+		s.sender.onStreamCompleted(s.streamID)
 	}
 }
 
