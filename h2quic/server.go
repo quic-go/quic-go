@@ -54,6 +54,8 @@ type Server struct {
 
 	supportedVersionsAsString string
 
+	highestAcceptedStream protocol.StreamID
+
 	logger utils.Logger // will be set by Server.serveImpl()
 }
 
@@ -188,9 +190,17 @@ func (s *Server) handleRequest(session streamCreator, headerStream quic.Stream, 
 		s.logger.Infof("%s %s%s", req.Method, req.Host, req.RequestURI)
 	}
 
-	dataStream, err := session.GetOrOpenStream(protocol.StreamID(h2headersFrame.StreamID))
+	id := protocol.StreamID(h2headersFrame.StreamID)
+	dataStream, err := session.GetOrOpenStream(id)
 	if err != nil {
 		return err
+	}
+	for s.highestAcceptedStream <= id {
+		str, err := session.AcceptStream()
+		if err != nil {
+			return err
+		}
+		s.highestAcceptedStream = str.StreamID()
 	}
 	// this can happen if the client immediately closes the data stream after sending the request and the runtime processes the reset before the request
 	if dataStream == nil {
