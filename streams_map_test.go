@@ -158,6 +158,17 @@ var _ = Describe("Streams Map", func() {
 					Expect(dstr).To(BeNil())
 				})
 
+				It("accepts bidirectional streams after they have been deleted", func() {
+					id := ids.firstIncomingBidiStream
+					_, err := m.GetOrOpenReceiveStream(id)
+					Expect(err).ToNot(HaveOccurred())
+					Expect(m.DeleteStream(id)).To(Succeed())
+					str, err := m.AcceptStream()
+					Expect(err).ToNot(HaveOccurred())
+					Expect(str).ToNot(BeNil())
+					Expect(str.StreamID()).To(Equal(id))
+				})
+
 				It("deletes outgoing unidirectional streams", func() {
 					id := ids.firstOutgoingUniStream
 					str, err := m.OpenUniStream()
@@ -178,6 +189,17 @@ var _ = Describe("Streams Map", func() {
 					dstr, err := m.GetOrOpenReceiveStream(id)
 					Expect(err).ToNot(HaveOccurred())
 					Expect(dstr).To(BeNil())
+				})
+
+				It("accepts unirectional streams after they have been deleted", func() {
+					id := ids.firstIncomingUniStream
+					_, err := m.GetOrOpenReceiveStream(id)
+					Expect(err).ToNot(HaveOccurred())
+					Expect(m.DeleteStream(id)).To(Succeed())
+					str, err := m.AcceptUniStream()
+					Expect(err).ToNot(HaveOccurred())
+					Expect(str).ToNot(BeNil())
+					Expect(str.StreamID()).To(Equal(id))
 				})
 			})
 
@@ -340,6 +362,8 @@ var _ = Describe("Streams Map", func() {
 				It("sends a MAX_STREAMS frame for bidirectional streams", func() {
 					_, err := m.GetOrOpenReceiveStream(ids.firstIncomingBidiStream)
 					Expect(err).ToNot(HaveOccurred())
+					_, err = m.AcceptStream()
+					Expect(err).ToNot(HaveOccurred())
 					mockSender.EXPECT().queueControlFrame(&wire.MaxStreamsFrame{
 						Type:       protocol.StreamTypeBidi,
 						MaxStreams: maxBidiStreams + 1,
@@ -349,6 +373,8 @@ var _ = Describe("Streams Map", func() {
 
 				It("sends a MAX_STREAMS frame for unidirectional streams", func() {
 					_, err := m.GetOrOpenReceiveStream(ids.firstIncomingUniStream)
+					Expect(err).ToNot(HaveOccurred())
+					_, err = m.AcceptUniStream()
 					Expect(err).ToNot(HaveOccurred())
 					mockSender.EXPECT().queueControlFrame(&wire.MaxStreamsFrame{
 						Type:       protocol.StreamTypeUni,

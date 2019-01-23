@@ -157,13 +157,44 @@ var _ = Describe("Streams Map (incoming)", func() {
 
 	It("deletes streams", func() {
 		mockSender.EXPECT().queueControlFrame(gomock.Any())
-		_, err := m.GetOrOpenStream(initialMaxStream)
+		_, err := m.GetOrOpenStream(firstNewStream)
 		Expect(err).ToNot(HaveOccurred())
-		err = m.DeleteStream(initialMaxStream)
+		str, err := m.AcceptStream()
 		Expect(err).ToNot(HaveOccurred())
-		str, err := m.GetOrOpenStream(initialMaxStream)
+		Expect(str.(*mockGenericStream).id).To(Equal(firstNewStream))
+		Expect(m.DeleteStream(firstNewStream)).To(Succeed())
+		str, err = m.GetOrOpenStream(firstNewStream)
 		Expect(err).ToNot(HaveOccurred())
 		Expect(str).To(BeNil())
+	})
+
+	It("waits until a stream is accepted before actually deleting it", func() {
+		_, err := m.GetOrOpenStream(firstNewStream + 4)
+		Expect(err).ToNot(HaveOccurred())
+		Expect(m.DeleteStream(firstNewStream + 4)).To(Succeed())
+		str, err := m.AcceptStream()
+		Expect(err).ToNot(HaveOccurred())
+		Expect(str.(*mockGenericStream).id).To(Equal(firstNewStream))
+		// when accepting this stream, it will get deleted, and a MAX_STREAMS frame is queued
+		mockSender.EXPECT().queueControlFrame(gomock.Any())
+		str, err = m.AcceptStream()
+		Expect(err).ToNot(HaveOccurred())
+		Expect(str.(*mockGenericStream).id).To(Equal(firstNewStream + 4))
+	})
+
+	It("doesn't return a stream queued for deleting from GetOrOpenStream", func() {
+		str, err := m.GetOrOpenStream(firstNewStream)
+		Expect(err).ToNot(HaveOccurred())
+		Expect(str).ToNot(BeNil())
+		Expect(m.DeleteStream(firstNewStream)).To(Succeed())
+		str, err = m.GetOrOpenStream(firstNewStream)
+		Expect(err).ToNot(HaveOccurred())
+		Expect(str).To(BeNil())
+		// when accepting this stream, it will get deleted, and a MAX_STREAMS frame is queued
+		mockSender.EXPECT().queueControlFrame(gomock.Any())
+		str, err = m.AcceptStream()
+		Expect(err).ToNot(HaveOccurred())
+		Expect(str).ToNot(BeNil())
 	})
 
 	It("errors when deleting a non-existing stream", func() {
@@ -175,6 +206,11 @@ var _ = Describe("Streams Map (incoming)", func() {
 		// open a bunch of streams
 		_, err := m.GetOrOpenStream(firstNewStream + 4*4)
 		Expect(err).ToNot(HaveOccurred())
+		// accept all streams
+		for i := 0; i < 5; i++ {
+			_, err := m.AcceptStream()
+			Expect(err).ToNot(HaveOccurred())
+		}
 		mockSender.EXPECT().queueControlFrame(gomock.Any()).Do(func(f wire.Frame) {
 			Expect(f.(*wire.MaxStreamsFrame).MaxStreams).To(Equal(maxNumStreams + 1))
 		})
