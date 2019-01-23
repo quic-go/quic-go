@@ -54,7 +54,12 @@ func (c *connectionFlowController) IncrementHighestReceived(increment protocol.B
 	return nil
 }
 
-func (c *connectionFlowController) MaybeQueueWindowUpdate() {
+func (c *connectionFlowController) AddBytesRead(n protocol.ByteCount) {
+	c.baseFlowController.AddBytesRead(n)
+	c.maybeQueueWindowUpdate()
+}
+
+func (c *connectionFlowController) maybeQueueWindowUpdate() {
 	c.mutex.Lock()
 	hasWindowUpdate := c.hasWindowUpdate()
 	c.mutex.Unlock()

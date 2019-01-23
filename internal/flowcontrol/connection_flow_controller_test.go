@@ -23,6 +23,7 @@ var _ = Describe("Connection Flow controller", func() {
 	}
 
 	BeforeEach(func() {
+		queuedWindowUpdate = false
 		controller = &connectionFlowController{}
 		controller.rttStats = &congestion.RTTStats{}
 		controller.logger = utils.DefaultLogger
@@ -58,14 +59,13 @@ var _ = Describe("Connection Flow controller", func() {
 			})
 
 			It("queues window updates", func() {
-				controller.MaybeQueueWindowUpdate()
+				controller.AddBytesRead(1)
 				Expect(queuedWindowUpdate).To(BeFalse())
-				controller.AddBytesRead(30)
-				controller.MaybeQueueWindowUpdate()
+				controller.AddBytesRead(29)
 				Expect(queuedWindowUpdate).To(BeTrue())
 				Expect(controller.GetWindowUpdate()).ToNot(BeZero())
 				queuedWindowUpdate = false
-				controller.MaybeQueueWindowUpdate()
+				controller.AddBytesRead(1)
 				Expect(queuedWindowUpdate).To(BeFalse())
 			})
 

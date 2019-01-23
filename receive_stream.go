@@ -28,8 +28,9 @@ type receiveStream struct {
 
 	sender streamSender
 
-	frameQueue *frameSorter
-	readOffset protocol.ByteCount
+	frameQueue  *frameSorter
+	readOffset  protocol.ByteCount
+	finalOffset protocol.ByteCount
 
 	currentFrame       []byte
 	currentFrameIsLast bool // is the currentFrame the last frame on this stream
@@ -66,6 +67,7 @@ func newReceiveStream(
 		flowController: flowController,
 		frameQueue:     newFrameSorter(),
 		readChan:       make(chan struct{}, 1),
+		finalOffset:    protocol.MaxByteCount,
 		version:        version,
 	}
 }
@@ -78,7 +80,7 @@ func (s *receiveStream) StreamID() protocol.StreamID {
 func (s *receiveStream) Read(p []byte) (int, error) {
 	completed, n, err := s.readImpl(p)
 	if completed {
-		s.sender.onStreamCompleted(s.streamID)
+		s.streamCompleted()
 	}
 	return n, err
 }
@@ -172,8 +174,6 @@ func (s *receiveStream) readImpl(p []byte) (bool /*stream completed */, int, err
 		if !s.resetRemotely {
 			s.flowController.AddBytesRead(protocol.ByteCount(m))
 		}
-		// increase the flow control window, if necessary
-		s.flowController.MaybeQueueWindowUpdate()
 
 		if s.readPosInFrame >= len(s.currentFrame) && s.currentFrameIsLast {
 			s.finRead = true
@@ -184,7 +184,9 @@ func (s *receiveStream) readImpl(p []byte) (bool /*stream completed */, int, err
 }
 
 func (s *receiveStream) dequeueNextFrame() {
-	s.currentFrame, s.currentFrameIsLast = s.frameQueue.Pop()
+	var offset protocol.ByteCount
+	offset, s.currentFrame = s.frameQueue.Pop()
+	s.currentFrameIsLast = offset+protocol.ByteCount(len(s.currentFrame)) >= s.finalOffset
 	s.readPosInFrame = 0
 }
 
@@ -192,11 +194,11 @@ func (s *receiveStream) CancelRead(errorCode protocol.ApplicationErrorCode) erro
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
 
-	if s.finRead {
+	if s.finRead || s.canceledRead || s.resetRemotely {
 		return nil
 	}
-	if s.canceledRead {
-		return nil
+	if s.finalOffset != protocol.MaxByteCount { // final offset was already received
+		s.streamCompleted()
 	}
 	s.canceledRead = true
 	s.cancelReadErr = fmt.Errorf("Read on stream %d canceled with error code %d", s.streamID, errorCode)
@@ -210,14 +212,27 @@ func (s *receiveStream) CancelRead(errorCode protocol.ApplicationErrorCode) erro
 
 func (s *receiveStream) handleStreamFrame(frame *wire.StreamFrame) error {
 	maxOffset := frame.Offset + frame.DataLen()
-	if err := s.flowController.UpdateHighestReceived(maxOffset, frame.FinBit); err != nil {
-		return err
-	}
 
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
-	if err := s.frameQueue.Push(frame.Data, frame.Offset, frame.FinBit); err != nil {
+
+	if err := s.flowController.UpdateHighestReceived(maxOffset, frame.FinBit); err != nil {
 		return err
+	}
+	if frame.FinBit {
+		s.finalOffset = maxOffset
+	}
+	if s.canceledRead {
+		if frame.FinBit {
+			s.streamCompleted()
+		}
+		return nil
+	}
+	if err := s.frameQueue.Push(frame.Data, frame.Offset); err != nil {
+		return err
+	}
+	if frame.FinBit {
+		s.finalOffset = maxOffset
 	}
 	s.signalRead()
 	return nil
@@ -226,7 +241,7 @@ func (s *receiveStream) handleStreamFrame(frame *wire.StreamFrame) error {
 func (s *receiveStream) handleResetStreamFrame(frame *wire.ResetStreamFrame) error {
 	completed, err := s.handleResetStreamFrameImpl(frame)
 	if completed {
-		s.sender.onStreamCompleted(s.streamID)
+		s.streamCompleted()
 	}
 	return err
 }
@@ -241,6 +256,7 @@ func (s *receiveStream) handleResetStreamFrameImpl(frame *wire.ResetStreamFrame)
 	if err := s.flowController.UpdateHighestReceived(frame.ByteOffset, true); err != nil {
 		return false, err
 	}
+	s.finalOffset = frame.ByteOffset
 
 	// ignore duplicate RESET_STREAM frames for this stream (after checking their final offset)
 	if s.resetRemotely {
@@ -280,6 +296,13 @@ func (s *receiveStream) closeForShutdown(err error) {
 
 func (s *receiveStream) getWindowUpdate() protocol.ByteCount {
 	return s.flowController.GetWindowUpdate()
+}
+
+func (s *receiveStream) streamCompleted() {
+	if !s.finRead {
+		s.flowController.Abandon()
+	}
+	s.sender.onStreamCompleted(s.streamID)
 }
 
 // signalRead performs a non-blocking send on the readChan
