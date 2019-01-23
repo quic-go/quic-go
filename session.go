@@ -1046,11 +1046,6 @@ func (s *session) OpenUniStreamSync() (SendStream, error) {
 	return s.streamsMap.OpenUniStreamSync()
 }
 
-func (s *session) newStream(id protocol.StreamID) streamI {
-	flowController := s.newFlowController(id)
-	return newStream(id, s, flowController, s.version)
-}
-
 func (s *session) newFlowController(id protocol.StreamID) flowcontrol.StreamFlowController {
 	var initialSendWindow protocol.ByteCount
 	if s.peerParams != nil {
