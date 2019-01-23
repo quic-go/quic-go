@@ -19,7 +19,7 @@ import (
 	"github.com/onsi/gomega/gbytes"
 )
 
-var _ = Describe("Client tests", func() {
+var _ = Describe("HTTP tests", func() {
 	var client *http.Client
 
 	versions := protocol.SupportedVersions
@@ -43,7 +43,8 @@ var _ = Describe("Client tests", func() {
 							RootCAs: testdata.GetRootCA(),
 						},
 						QuicConfig: &quic.Config{
-							Versions: []protocol.VersionNumber{version},
+							Versions:    []protocol.VersionNumber{version},
+							IdleTimeout: 10 * time.Second,
 						},
 					},
 				}
@@ -74,6 +75,17 @@ var _ = Describe("Client tests", func() {
 				body, err := ioutil.ReadAll(gbytes.TimeoutReader(resp.Body, 20*time.Second))
 				Expect(err).ToNot(HaveOccurred())
 				Expect(body).To(Equal(testserver.PRDataLong))
+			})
+
+			It("downloads many files, if the response is not read", func() {
+				const num = 150
+
+				for i := 0; i < num; i++ {
+					resp, err := client.Get("https://localhost:" + testserver.Port() + "/prdata")
+					Expect(err).ToNot(HaveOccurred())
+					Expect(resp.StatusCode).To(Equal(200))
+					Expect(resp.Body.Close()).To(Succeed())
+				}
 			})
 
 			It("uploads a file", func() {

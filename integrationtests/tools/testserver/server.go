@@ -40,32 +40,27 @@ func init() {
 			var err error
 			l, err := strconv.Atoi(sl)
 			Expect(err).NotTo(HaveOccurred())
-			_, err = w.Write(GeneratePRData(l))
-			Expect(err).NotTo(HaveOccurred())
+			w.Write(GeneratePRData(l)) // don't check the error here. Stream may be reset.
 		} else {
-			_, err := w.Write(PRData)
-			Expect(err).NotTo(HaveOccurred())
+			w.Write(PRData) // don't check the error here. Stream may be reset.
 		}
 	})
 
 	http.HandleFunc("/prdatalong", func(w http.ResponseWriter, r *http.Request) {
 		defer GinkgoRecover()
-		_, err := w.Write(PRDataLong)
-		Expect(err).NotTo(HaveOccurred())
+		w.Write(PRDataLong) // don't check the error here. Stream may be reset.
 	})
 
 	http.HandleFunc("/hello", func(w http.ResponseWriter, r *http.Request) {
 		defer GinkgoRecover()
-		_, err := io.WriteString(w, "Hello, World!\n")
-		Expect(err).NotTo(HaveOccurred())
+		io.WriteString(w, "Hello, World!\n") // don't check the error here. Stream may be reset.
 	})
 
 	http.HandleFunc("/echo", func(w http.ResponseWriter, r *http.Request) {
 		defer GinkgoRecover()
 		body, err := ioutil.ReadAll(r.Body)
 		Expect(err).NotTo(HaveOccurred())
-		_, err = w.Write(body)
-		Expect(err).NotTo(HaveOccurred())
+		w.Write(body) // don't check the error here. Stream may be reset.
 	})
 }
 
