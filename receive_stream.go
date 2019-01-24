@@ -190,12 +190,12 @@ func (s *receiveStream) dequeueNextFrame() {
 	s.readPosInFrame = 0
 }
 
-func (s *receiveStream) CancelRead(errorCode protocol.ApplicationErrorCode) error {
+func (s *receiveStream) CancelRead(errorCode protocol.ApplicationErrorCode) {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
 
 	if s.finRead || s.canceledRead || s.resetRemotely {
-		return nil
+		return
 	}
 	if s.finalOffset != protocol.MaxByteCount { // final offset was already received
 		s.streamCompleted()
@@ -207,7 +207,6 @@ func (s *receiveStream) CancelRead(errorCode protocol.ApplicationErrorCode) erro
 		StreamID:  s.streamID,
 		ErrorCode: errorCode,
 	})
-	return nil
 }
 
 func (s *receiveStream) handleStreamFrame(frame *wire.StreamFrame) error {

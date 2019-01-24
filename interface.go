@@ -58,7 +58,7 @@ type Stream interface {
 	// It will ask the peer to stop transmitting stream data.
 	// Read will unblock immediately, and future Read calls will fail.
 	// When called multiple times or after reading the io.EOF it is a no-op.
-	CancelRead(ErrorCode) error
+	CancelRead(ErrorCode)
 	// The context is canceled as soon as the write-side of the stream is closed.
 	// This happens when Close() is called, or when the stream is reset (either locally or remotely).
 	// Warning: This API should not be considered stable and might change soon.
@@ -86,7 +86,7 @@ type ReceiveStream interface {
 	// see Stream.Read
 	io.Reader
 	// see Stream.CancelRead
-	CancelRead(ErrorCode) error
+	CancelRead(ErrorCode)
 	// see Stream.SetReadDealine
 	SetReadDeadline(t time.Time) error
 }

@@ -44,7 +44,7 @@ func newMockStream(id protocol.StreamID) *mockStream {
 }
 
 func (s *mockStream) Close() error                          { s.closed = true; s.ctxCancel(); return nil }
-func (s *mockStream) CancelRead(quic.ErrorCode) error       { s.canceledRead = true; return nil }
+func (s *mockStream) CancelRead(quic.ErrorCode)             { s.canceledRead = true }
 func (s *mockStream) CancelWrite(quic.ErrorCode) error      { s.canceledWrite = true; return nil }
 func (s *mockStream) CloseRemote(offset protocol.ByteCount) { s.remoteClosed = true; s.ctxCancel() }
 func (s mockStream) StreamID() protocol.StreamID            { return s.id }
