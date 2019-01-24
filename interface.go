@@ -53,7 +53,7 @@ type Stream interface {
 	// Data already written, but not yet delivered to the peer is not guaranteed to be delivered reliably.
 	// Write will unblock immediately, and future calls to Write will fail.
 	// When called multiple times or after closing the stream it is a no-op.
-	CancelWrite(ErrorCode) error
+	CancelWrite(ErrorCode)
 	// CancelRead aborts receiving on this stream.
 	// It will ask the peer to stop transmitting stream data.
 	// Read will unblock immediately, and future Read calls will fail.
@@ -100,7 +100,7 @@ type SendStream interface {
 	// see Stream.Close
 	io.Closer
 	// see Stream.CancelWrite
-	CancelWrite(ErrorCode) error
+	CancelWrite(ErrorCode)
 	// see Stream.Context
 	Context() context.Context
 	// see Stream.SetWriteDeadline

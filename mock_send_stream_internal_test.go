@@ -38,10 +38,8 @@ func (m *MockSendStreamI) EXPECT() *MockSendStreamIMockRecorder {
 }
 
 // CancelWrite mocks base method
-func (m *MockSendStreamI) CancelWrite(arg0 protocol.ApplicationErrorCode) error {
-	ret := m.ctrl.Call(m, "CancelWrite", arg0)
-	ret0, _ := ret[0].(error)
-	return ret0
+func (m *MockSendStreamI) CancelWrite(arg0 protocol.ApplicationErrorCode) {
+	m.ctrl.Call(m, "CancelWrite", arg0)
 }
 
 // CancelWrite indicates an expected call of CancelWrite
