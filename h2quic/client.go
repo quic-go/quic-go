@@ -241,7 +241,7 @@ func (c *client) RoundTrip(req *http.Request) (*http.Response, error) {
 	if streamEnded || isHead {
 		res.Body = noBody
 	} else {
-		res.Body = &responseBody{dataStream: dataStream}
+		res.Body = &responseBody{dataStream}
 		if requestedGzip && res.Header.Get("Content-Encoding") == "gzip" {
 			res.Header.Del("Content-Encoding")
 			res.Header.Del("Content-Length")
