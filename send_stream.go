@@ -146,7 +146,10 @@ func (s *sendStream) Write(p []byte) (int, error) {
 // popStreamFrame returns the next STREAM frame that is supposed to be sent on this stream
 // maxBytes is the maximum length this frame (including frame header) will have.
 func (s *sendStream) popStreamFrame(maxBytes protocol.ByteCount) (*wire.StreamFrame, bool /* has more data to send */) {
+	s.mutex.Lock()
 	completed, frame, hasMoreData := s.popStreamFrameImpl(maxBytes)
+	s.mutex.Unlock()
+
 	if completed {
 		s.sender.onStreamCompleted(s.streamID)
 	}
@@ -154,9 +157,6 @@ func (s *sendStream) popStreamFrame(maxBytes protocol.ByteCount) (*wire.StreamFr
 }
 
 func (s *sendStream) popStreamFrameImpl(maxBytes protocol.ByteCount) (bool /* completed */, *wire.StreamFrame, bool /* has more data to send */) {
-	s.mutex.Lock()
-	defer s.mutex.Unlock()
-
 	if s.canceledWrite || s.closeForShutdownErr != nil {
 		return false, nil, false
 	}
@@ -273,6 +273,7 @@ func (s *sendStream) handleMaxStreamDataFrame(frame *wire.MaxStreamDataFrame) {
 	s.mutex.Lock()
 	hasStreamData := s.dataForWriting != nil
 	s.mutex.Unlock()
+
 	s.flowController.UpdateSendWindow(frame.ByteOffset)
 	if hasStreamData {
 		s.sender.onHasStreamData(s.streamID)
@@ -280,16 +281,17 @@ func (s *sendStream) handleMaxStreamDataFrame(frame *wire.MaxStreamDataFrame) {
 }
 
 func (s *sendStream) handleStopSendingFrame(frame *wire.StopSendingFrame) {
-	if completed := s.handleStopSendingFrameImpl(frame); completed {
+	s.mutex.Lock()
+	completed := s.handleStopSendingFrameImpl(frame)
+	s.mutex.Unlock()
+
+	if completed {
 		s.sender.onStreamCompleted(s.streamID)
 	}
 }
 
 // must be called after locking the mutex
 func (s *sendStream) handleStopSendingFrameImpl(frame *wire.StopSendingFrame) bool /*completed*/ {
-	s.mutex.Lock()
-	defer s.mutex.Unlock()
-
 	writeErr := streamCanceledError{
 		errorCode: frame.ErrorCode,
 		error:     fmt.Errorf("Stream %d was reset with error code %d", s.streamID, frame.ErrorCode),
