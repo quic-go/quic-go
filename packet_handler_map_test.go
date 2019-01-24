@@ -44,6 +44,19 @@ var _ = Describe("Packet Handler Map", func() {
 		handler = newPacketHandlerMap(conn, 5, utils.DefaultLogger).(*packetHandlerMap)
 	})
 
+	AfterEach(func() {
+		// delete sessions and the server before closing
+		// They might be mock implementations, and we'd have to register the expected calls before otherwise.
+		handler.mutex.Lock()
+		for connID := range handler.handlers {
+			delete(handler.handlers, connID)
+		}
+		handler.server = nil
+		handler.mutex.Unlock()
+		handler.Close()
+		Eventually(handler.listening).Should(BeClosed())
+	})
+
 	It("closes", func() {
 		getMultiplexer() // make the sync.Once execute
 		// replace the clientMuxer. getClientMultiplexer will now return the MockMultiplexer
@@ -89,11 +102,6 @@ var _ = Describe("Packet Handler Map", func() {
 			conn.dataToRead <- getPacket(connID2)
 			Eventually(handledPacket1).Should(BeClosed())
 			Eventually(handledPacket2).Should(BeClosed())
-
-			// makes the listen go routine return
-			packetHandler1.EXPECT().destroy(gomock.Any()).AnyTimes()
-			packetHandler2.EXPECT().destroy(gomock.Any()).AnyTimes()
-			close(conn.dataToRead)
 		})
 
 		It("drops unparseable packets", func() {
@@ -125,10 +133,14 @@ var _ = Describe("Packet Handler Map", func() {
 			handler.deleteRetiredSessionsAfter = time.Hour
 			connID := protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8}
 			packetHandler := NewMockPacketHandler(mockCtrl)
-			packetHandler.EXPECT().handlePacket(gomock.Any())
+			handled := make(chan struct{})
+			packetHandler.EXPECT().handlePacket(gomock.Any()).Do(func(p *receivedPacket) {
+				close(handled)
+			})
 			handler.Add(connID, packetHandler)
 			handler.Retire(connID)
 			handler.handlePacket(nil, nil, getPacket(connID))
+			Eventually(handled).Should(BeClosed())
 		})
 
 		It("drops packets for unknown receivers", func() {
@@ -200,10 +212,6 @@ var _ = Describe("Packet Handler Map", func() {
 					Expect(p.rcvTime).To(BeTemporally("~", now, scaleDuration(20*time.Millisecond)))
 					Expect(p.buffer.refCount).To(Equal(3))
 				}
-
-				// makes the listen go routine return
-				packetHandler.EXPECT().destroy(gomock.Any()).AnyTimes()
-				close(conn.dataToRead)
 			})
 
 			It("ignores coalesced packet parts if the connection IDs don't match", func() {
