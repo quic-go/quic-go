@@ -254,11 +254,8 @@ func (s *sendStream) CancelWrite(errorCode protocol.ApplicationErrorCode) error 
 
 // must be called after locking the mutex
 func (s *sendStream) cancelWriteImpl(errorCode protocol.ApplicationErrorCode, writeErr error) (bool /*completed */, error) {
-	if s.canceledWrite {
+	if s.canceledWrite || s.finishedWriting {
 		return false, nil
-	}
-	if s.finishedWriting {
-		return false, fmt.Errorf("CancelWrite for closed stream %d", s.streamID)
 	}
 	s.canceledWrite = true
 	s.cancelWriteErr = writeErr

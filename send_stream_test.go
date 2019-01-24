@@ -589,27 +589,23 @@ var _ = Describe("Send Stream", func() {
 			It("doesn't allow further calls to Write", func() {
 				mockSender.EXPECT().queueControlFrame(gomock.Any())
 				mockSender.EXPECT().onStreamCompleted(streamID)
-				err := str.CancelWrite(1234)
-				Expect(err).ToNot(HaveOccurred())
-				_, err = strWithTimeout.Write([]byte("foobar"))
+				Expect(str.CancelWrite(1234)).To(Succeed())
+				_, err := strWithTimeout.Write([]byte("foobar"))
 				Expect(err).To(MatchError("Write on stream 1337 canceled with error code 1234"))
 			})
 
 			It("only cancels once", func() {
-				mockSender.EXPECT().queueControlFrame(gomock.Any())
+				mockSender.EXPECT().queueControlFrame(&wire.ResetStreamFrame{StreamID: streamID, ErrorCode: 1234})
 				mockSender.EXPECT().onStreamCompleted(streamID)
-				err := str.CancelWrite(1234)
-				Expect(err).ToNot(HaveOccurred())
-				err = str.CancelWrite(4321)
-				Expect(err).ToNot(HaveOccurred())
+				Expect(str.CancelWrite(1234)).To(Succeed())
+				Expect(str.CancelWrite(4321)).To(Succeed())
 			})
 
-			It("doesn't cancel when the stream was already closed", func() {
+			It("doesn't do anything when the stream was already closed", func() {
 				mockSender.EXPECT().onHasStreamData(streamID)
-				err := str.Close()
-				Expect(err).ToNot(HaveOccurred())
-				err = str.CancelWrite(123)
-				Expect(err).To(MatchError("CancelWrite for closed stream 1337"))
+				Expect(str.Close()).To(Succeed())
+				// don't EXPECT any calls to queueControlFrame
+				Expect(str.CancelWrite(123)).To(Succeed())
 			})
 		})
 
