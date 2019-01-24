@@ -37,10 +37,8 @@ func (m *MockReceiveStreamI) EXPECT() *MockReceiveStreamIMockRecorder {
 }
 
 // CancelRead mocks base method
-func (m *MockReceiveStreamI) CancelRead(arg0 protocol.ApplicationErrorCode) error {
-	ret := m.ctrl.Call(m, "CancelRead", arg0)
-	ret0, _ := ret[0].(error)
-	return ret0
+func (m *MockReceiveStreamI) CancelRead(arg0 protocol.ApplicationErrorCode) {
+	m.ctrl.Call(m, "CancelRead", arg0)
 }
 
 // CancelRead indicates an expected call of CancelRead

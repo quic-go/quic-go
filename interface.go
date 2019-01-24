@@ -50,14 +50,15 @@ type Stream interface {
 	// It must not be called after calling CancelWrite.
 	io.Closer
 	// CancelWrite aborts sending on this stream.
-	// It must not be called after Close.
 	// Data already written, but not yet delivered to the peer is not guaranteed to be delivered reliably.
 	// Write will unblock immediately, and future calls to Write will fail.
-	CancelWrite(ErrorCode) error
+	// When called multiple times or after closing the stream it is a no-op.
+	CancelWrite(ErrorCode)
 	// CancelRead aborts receiving on this stream.
 	// It will ask the peer to stop transmitting stream data.
 	// Read will unblock immediately, and future Read calls will fail.
-	CancelRead(ErrorCode) error
+	// When called multiple times or after reading the io.EOF it is a no-op.
+	CancelRead(ErrorCode)
 	// The context is canceled as soon as the write-side of the stream is closed.
 	// This happens when Close() is called, or when the stream is reset (either locally or remotely).
 	// Warning: This API should not be considered stable and might change soon.
@@ -85,7 +86,7 @@ type ReceiveStream interface {
 	// see Stream.Read
 	io.Reader
 	// see Stream.CancelRead
-	CancelRead(ErrorCode) error
+	CancelRead(ErrorCode)
 	// see Stream.SetReadDealine
 	SetReadDeadline(t time.Time) error
 }
@@ -99,7 +100,7 @@ type SendStream interface {
 	// see Stream.Close
 	io.Closer
 	// see Stream.CancelWrite
-	CancelWrite(ErrorCode) error
+	CancelWrite(ErrorCode)
 	// see Stream.Context
 	Context() context.Context
 	// see Stream.SetWriteDeadline

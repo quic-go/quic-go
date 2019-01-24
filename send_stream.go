@@ -241,24 +241,20 @@ func (s *sendStream) Close() error {
 	return nil
 }
 
-func (s *sendStream) CancelWrite(errorCode protocol.ApplicationErrorCode) error {
+func (s *sendStream) CancelWrite(errorCode protocol.ApplicationErrorCode) {
 	s.mutex.Lock()
-	completed, err := s.cancelWriteImpl(errorCode, fmt.Errorf("Write on stream %d canceled with error code %d", s.streamID, errorCode))
+	completed := s.cancelWriteImpl(errorCode, fmt.Errorf("Write on stream %d canceled with error code %d", s.streamID, errorCode))
 	s.mutex.Unlock()
 
 	if completed {
 		s.sender.onStreamCompleted(s.streamID) // must be called without holding the mutex
 	}
-	return err
 }
 
 // must be called after locking the mutex
-func (s *sendStream) cancelWriteImpl(errorCode protocol.ApplicationErrorCode, writeErr error) (bool /*completed */, error) {
-	if s.canceledWrite {
-		return false, nil
-	}
-	if s.finishedWriting {
-		return false, fmt.Errorf("CancelWrite for closed stream %d", s.streamID)
+func (s *sendStream) cancelWriteImpl(errorCode protocol.ApplicationErrorCode, writeErr error) bool /*completed */ {
+	if s.canceledWrite || s.finishedWriting {
+		return false
 	}
 	s.canceledWrite = true
 	s.cancelWriteErr = writeErr
@@ -270,7 +266,7 @@ func (s *sendStream) cancelWriteImpl(errorCode protocol.ApplicationErrorCode, wr
 	})
 	// TODO(#991): cancel retransmissions for this stream
 	s.ctxCancel()
-	return true, nil
+	return true
 }
 
 func (s *sendStream) handleMaxStreamDataFrame(frame *wire.MaxStreamDataFrame) {
@@ -298,9 +294,7 @@ func (s *sendStream) handleStopSendingFrameImpl(frame *wire.StopSendingFrame) bo
 		errorCode: frame.ErrorCode,
 		error:     fmt.Errorf("Stream %d was reset with error code %d", s.streamID, frame.ErrorCode),
 	}
-	errorCode := errorCodeStopping
-	completed, _ := s.cancelWriteImpl(errorCode, writeErr)
-	return completed
+	return s.cancelWriteImpl(errorCodeStopping, writeErr)
 }
 
 func (s *sendStream) Context() context.Context {

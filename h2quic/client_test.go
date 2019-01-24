@@ -221,7 +221,7 @@ var _ = Describe("Client", func() {
 				Expect(err).ToNot(HaveOccurred())
 				Expect(rsp).To(Equal(teapot))
 				Expect(rsp.Body).To(BeAssignableToTypeOf(&responseBody{}))
-				Expect(rsp.Body.(*responseBody).dataStream).To(Equal(dataStream))
+				Expect(rsp.Body.(*responseBody).Stream).To(Equal(dataStream))
 				Expect(rsp.ContentLength).To(BeEquivalentTo(-1))
 				Expect(rsp.Request).To(Equal(request))
 				close(done)

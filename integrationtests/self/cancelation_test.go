@@ -82,7 +82,7 @@ var _ = Describe("Stream Cancelations", func() {
 					// cancel around 2/3 of the streams
 					if rand.Int31()%3 != 0 {
 						atomic.AddInt32(&canceledCounter, 1)
-						Expect(str.CancelRead(quic.ErrorCode(str.StreamID()))).To(Succeed())
+						str.CancelRead(quic.ErrorCode(str.StreamID()))
 						return
 					}
 					data, err := ioutil.ReadAll(str)
@@ -128,7 +128,7 @@ var _ = Describe("Stream Cancelations", func() {
 						length := int(rand.Int31n(int32(len(testserver.PRData) - 1)))
 						data, err := ioutil.ReadAll(io.LimitReader(str, int64(length)))
 						Expect(err).ToNot(HaveOccurred())
-						Expect(str.CancelRead(quic.ErrorCode(str.StreamID()))).To(Succeed())
+						str.CancelRead(quic.ErrorCode(str.StreamID()))
 						Expect(data).To(Equal(testserver.PRData[:length]))
 						atomic.AddInt32(&canceledCounter, 1)
 						return
@@ -207,7 +207,7 @@ var _ = Describe("Stream Cancelations", func() {
 						Expect(err).ToNot(HaveOccurred())
 						// cancel about 2/3 of the streams
 						if rand.Int31()%3 != 0 {
-							Expect(str.CancelWrite(quic.ErrorCode(str.StreamID()))).To(Succeed())
+							str.CancelWrite(quic.ErrorCode(str.StreamID()))
 							atomic.AddInt32(&canceledCounter, 1)
 							return
 						}
@@ -241,7 +241,7 @@ var _ = Describe("Stream Cancelations", func() {
 							length := int(rand.Int31n(int32(len(testserver.PRData) - 1)))
 							_, err = str.Write(testserver.PRData[:length])
 							Expect(err).ToNot(HaveOccurred())
-							Expect(str.CancelWrite(quic.ErrorCode(str.StreamID()))).To(Succeed())
+							str.CancelWrite(quic.ErrorCode(str.StreamID()))
 							atomic.AddInt32(&canceledCounter, 1)
 							return
 						}
@@ -277,7 +277,7 @@ var _ = Describe("Stream Cancelations", func() {
 						Expect(err).ToNot(HaveOccurred())
 						// cancel about half of the streams
 						if rand.Int31()%2 == 0 {
-							Expect(str.CancelWrite(quic.ErrorCode(str.StreamID()))).To(Succeed())
+							str.CancelWrite(quic.ErrorCode(str.StreamID()))
 							return
 						}
 						if _, err = str.Write(testserver.PRData); err != nil {
@@ -309,7 +309,7 @@ var _ = Describe("Stream Cancelations", func() {
 					Expect(err).ToNot(HaveOccurred())
 					// cancel around half of the streams
 					if rand.Int31()%2 == 0 {
-						Expect(str.CancelRead(quic.ErrorCode(str.StreamID()))).To(Succeed())
+						str.CancelRead(quic.ErrorCode(str.StreamID()))
 						return
 					}
 					data, err := ioutil.ReadAll(str)
@@ -359,7 +359,7 @@ var _ = Describe("Stream Cancelations", func() {
 							return
 						}
 						if length < len(testserver.PRData) {
-							Expect(str.CancelWrite(quic.ErrorCode(str.StreamID()))).To(Succeed())
+							str.CancelWrite(quic.ErrorCode(str.StreamID()))
 						} else {
 							Expect(str.Close()).To(Succeed())
 						}
@@ -401,7 +401,7 @@ var _ = Describe("Stream Cancelations", func() {
 					}
 					Expect(data).To(Equal(testserver.PRData[:length]))
 					if length < len(testserver.PRData) {
-						Expect(str.CancelRead(quic.ErrorCode(str.StreamID()))).To(Succeed())
+						str.CancelRead(quic.ErrorCode(str.StreamID()))
 						return
 					}
 

@@ -458,21 +458,21 @@ var _ = Describe("Receive Stream", func() {
 					close(done)
 				}()
 				Consistently(done).ShouldNot(BeClosed())
-				Expect(str.CancelRead(1234)).To(Succeed())
+				str.CancelRead(1234)
 				Eventually(done).Should(BeClosed())
 			})
 
 			It("doesn't allow further calls to Read", func() {
 				mockSender.EXPECT().queueControlFrame(gomock.Any())
-				Expect(str.CancelRead(1234)).To(Succeed())
+				str.CancelRead(1234)
 				_, err := strWithTimeout.Read([]byte{0})
 				Expect(err).To(MatchError("Read on stream 1337 canceled with error code 1234"))
 			})
 
 			It("does nothing when CancelRead is called twice", func() {
 				mockSender.EXPECT().queueControlFrame(gomock.Any())
-				Expect(str.CancelRead(1234)).To(Succeed())
-				Expect(str.CancelRead(1234)).To(Succeed())
+				str.CancelRead(1234)
+				str.CancelRead(1234)
 				_, err := strWithTimeout.Read([]byte{0})
 				Expect(err).To(MatchError("Read on stream 1337 canceled with error code 1234"))
 			})
@@ -482,7 +482,7 @@ var _ = Describe("Receive Stream", func() {
 					StreamID:  streamID,
 					ErrorCode: 1234,
 				})
-				Expect(str.CancelRead(1234)).To(Succeed())
+				str.CancelRead(1234)
 			})
 
 			It("doesn't send a STOP_SENDING frame, if the FIN was already read", func() {
@@ -497,7 +497,7 @@ var _ = Describe("Receive Stream", func() {
 				mockSender.EXPECT().onStreamCompleted(streamID)
 				_, err := strWithTimeout.Read(make([]byte, 100))
 				Expect(err).To(MatchError(io.EOF))
-				Expect(str.CancelRead(1234)).To(Succeed())
+				str.CancelRead(1234)
 			})
 
 			It("doesn't send a STOP_SENDING frame, if the stream was already reset", func() {
@@ -510,7 +510,7 @@ var _ = Describe("Receive Stream", func() {
 					StreamID:   streamID,
 					ByteOffset: 42,
 				})).To(Succeed())
-				Expect(str.CancelRead(1234)).To(Succeed())
+				str.CancelRead(1234)
 			})
 
 			It("sends a STOP_SENDING and completes the stream after receiving the final offset", func() {
@@ -522,12 +522,12 @@ var _ = Describe("Receive Stream", func() {
 				mockFC.EXPECT().Abandon()
 				mockSender.EXPECT().queueControlFrame(gomock.Any())
 				mockSender.EXPECT().onStreamCompleted(streamID)
-				Expect(str.CancelRead(1234)).To(Succeed())
+				str.CancelRead(1234)
 			})
 
 			It("completes the stream when receiving the FinBit after the stream was canceled", func() {
 				mockSender.EXPECT().queueControlFrame(gomock.Any())
-				Expect(str.CancelRead(1234)).To(Succeed())
+				str.CancelRead(1234)
 				gomock.InOrder(
 					mockFC.EXPECT().UpdateHighestReceived(protocol.ByteCount(1000), true),
 					mockFC.EXPECT().Abandon(),
