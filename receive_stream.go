@@ -78,7 +78,10 @@ func (s *receiveStream) StreamID() protocol.StreamID {
 
 // Read implements io.Reader. It is not thread safe!
 func (s *receiveStream) Read(p []byte) (int, error) {
+	s.mutex.Lock()
 	completed, n, err := s.readImpl(p)
+	s.mutex.Unlock()
+
 	if completed {
 		s.streamCompleted()
 	}
@@ -86,9 +89,6 @@ func (s *receiveStream) Read(p []byte) (int, error) {
 }
 
 func (s *receiveStream) readImpl(p []byte) (bool /*stream completed */, int, error) {
-	s.mutex.Lock()
-	defer s.mutex.Unlock()
-
 	if s.finRead {
 		return false, 0, io.EOF
 	}
@@ -191,15 +191,16 @@ func (s *receiveStream) dequeueNextFrame() {
 }
 
 func (s *receiveStream) CancelRead(errorCode protocol.ApplicationErrorCode) {
-	if completed := s.cancelReadImpl(errorCode); completed {
+	s.mutex.Lock()
+	completed := s.cancelReadImpl(errorCode)
+	s.mutex.Unlock()
+
+	if completed {
 		s.streamCompleted()
 	}
 }
 
 func (s *receiveStream) cancelReadImpl(errorCode protocol.ApplicationErrorCode) bool /* completed */ {
-	s.mutex.Lock()
-	defer s.mutex.Unlock()
-
 	if s.finRead || s.canceledRead || s.resetRemotely {
 		return false
 	}
@@ -215,7 +216,10 @@ func (s *receiveStream) cancelReadImpl(errorCode protocol.ApplicationErrorCode) 
 }
 
 func (s *receiveStream) handleStreamFrame(frame *wire.StreamFrame) error {
+	s.mutex.Lock()
 	completed, err := s.handleStreamFrameImpl(frame)
+	s.mutex.Unlock()
+
 	if completed {
 		s.streamCompleted()
 	}
@@ -223,9 +227,6 @@ func (s *receiveStream) handleStreamFrame(frame *wire.StreamFrame) error {
 }
 
 func (s *receiveStream) handleStreamFrameImpl(frame *wire.StreamFrame) (bool /* completed */, error) {
-	s.mutex.Lock()
-	defer s.mutex.Unlock()
-
 	maxOffset := frame.Offset + frame.DataLen()
 	if err := s.flowController.UpdateHighestReceived(maxOffset, frame.FinBit); err != nil {
 		return false, err
@@ -244,7 +245,10 @@ func (s *receiveStream) handleStreamFrameImpl(frame *wire.StreamFrame) (bool /* 
 }
 
 func (s *receiveStream) handleResetStreamFrame(frame *wire.ResetStreamFrame) error {
+	s.mutex.Lock()
 	completed, err := s.handleResetStreamFrameImpl(frame)
+	s.mutex.Unlock()
+
 	if completed {
 		s.streamCompleted()
 	}
@@ -252,9 +256,6 @@ func (s *receiveStream) handleResetStreamFrame(frame *wire.ResetStreamFrame) err
 }
 
 func (s *receiveStream) handleResetStreamFrameImpl(frame *wire.ResetStreamFrame) (bool /*completed */, error) {
-	s.mutex.Lock()
-	defer s.mutex.Unlock()
-
 	if s.closedForShutdown {
 		return false, nil
 	}
