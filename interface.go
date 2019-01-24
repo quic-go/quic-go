@@ -57,6 +57,7 @@ type Stream interface {
 	// CancelRead aborts receiving on this stream.
 	// It will ask the peer to stop transmitting stream data.
 	// Read will unblock immediately, and future Read calls will fail.
+	// When called multiple times or after reading the io.EOF it is a no-op.
 	CancelRead(ErrorCode) error
 	// The context is canceled as soon as the write-side of the stream is closed.
 	// This happens when Close() is called, or when the stream is reset (either locally or remotely).
