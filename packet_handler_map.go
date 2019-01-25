@@ -31,7 +31,9 @@ type packetHandlerMap struct {
 	handlers    map[string] /* string(ConnectionID)*/ packetHandlerEntry
 	resetTokens map[[16]byte] /* stateless reset token */ packetHandler
 	server      unknownPacketHandler
-	closed      bool
+
+	listening chan struct{} // is closed when listen returns
+	closed    bool
 
 	deleteRetiredSessionsAfter time.Duration
 
@@ -44,6 +46,7 @@ func newPacketHandlerMap(conn net.PacketConn, connIDLen int, logger utils.Logger
 	m := &packetHandlerMap{
 		conn:                       conn,
 		connIDLen:                  connIDLen,
+		listening:                  make(chan struct{}),
 		handlers:                   make(map[string]packetHandlerEntry),
 		resetTokens:                make(map[[16]byte]packetHandler),
 		deleteRetiredSessionsAfter: protocol.RetiredConnectionIDDeleteTimeout,
@@ -117,6 +120,15 @@ func (h *packetHandlerMap) CloseServer() {
 	wg.Wait()
 }
 
+// Close the underlying connection and wait until listen() has returned.
+func (h *packetHandlerMap) Close() error {
+	if err := h.conn.Close(); err != nil {
+		return err
+	}
+	<-h.listening // wait until listening returns
+	return nil
+}
+
 func (h *packetHandlerMap) close(e error) error {
 	h.mutex.Lock()
 	if h.closed {
@@ -143,6 +155,7 @@ func (h *packetHandlerMap) close(e error) error {
 }
 
 func (h *packetHandlerMap) listen() {
+	defer close(h.listening)
 	for {
 		buffer := getPacketBuffer()
 		data := buffer.Slice
