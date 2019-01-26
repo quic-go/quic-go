@@ -37,6 +37,9 @@ func (m *cryptoStreamManager) HandleCryptoFrame(frame *wire.CryptoFrame, encLeve
 		str = m.initialStream
 	case protocol.EncryptionHandshake:
 		str = m.handshakeStream
+	case protocol.Encryption1RTT:
+		// TODO(#981): process session tickets
+		return false, nil
 	default:
 		return false, fmt.Errorf("received CRYPTO frame with unexpected encryption level: %s", encLevel)
 	}
