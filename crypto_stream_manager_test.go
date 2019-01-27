@@ -98,8 +98,15 @@ var _ = Describe("Crypto Stream Manager", func() {
 		Expect(err).To(MatchError(err))
 	})
 
+	It("ignores post-handshake crypto data", func() {
+		changed, err := csm.HandleCryptoFrame(&wire.CryptoFrame{}, protocol.Encryption1RTT)
+		Expect(err).ToNot(HaveOccurred())
+		Expect(changed).To(BeFalse())
+	})
+
 	It("errors for unknown encryption levels", func() {
-		_, err := csm.HandleCryptoFrame(&wire.CryptoFrame{}, protocol.Encryption1RTT)
-		Expect(err).To(MatchError("received CRYPTO frame with unexpected encryption level: 1-RTT"))
+		_, err := csm.HandleCryptoFrame(&wire.CryptoFrame{}, 42)
+		Expect(err).To(HaveOccurred())
+		Expect(err.Error()).To(ContainSubstring("received CRYPTO frame with unexpected encryption level"))
 	})
 })
