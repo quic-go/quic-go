@@ -66,3 +66,6 @@ const MinConnectionIDLenInitial = 8
 
 // DefaultAckDelayExponent is the default ack delay exponent
 const DefaultAckDelayExponent = 3
+
+// MaxAckDelayExponent is the maximum ack delay exponent
+const MaxAckDelayExponent = 20

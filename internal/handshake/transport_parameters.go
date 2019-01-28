@@ -152,8 +152,8 @@ func (p *TransportParameters) readNumericTransportParameter(
 		}
 		p.MaxPacketSize = protocol.ByteCount(val)
 	case ackDelayExponentParameterID:
-		if val > 20 {
-			return fmt.Errorf("invalid value for ack_delay_exponent: %d (maximum 20)", val)
+		if val > protocol.MaxAckDelayExponent {
+			return fmt.Errorf("invalid value for ack_delay_exponent: %d (maximum %d)", val, protocol.MaxAckDelayExponent)
 		}
 		p.AckDelayExponent = uint8(val)
 	default:
