@@ -182,6 +182,8 @@ func (s *Server) handleRequest(session streamCreator, headerStream quic.Stream, 
 		return err
 	}
 
+	req.TLS.PeerCertificates = session.ConnectionState().PeerCertificates
+
 	if s.logger.Debug() {
 		s.logger.Infof("%s %s%s, on data stream %d", req.Method, req.Host, req.RequestURI, h2headersFrame.StreamID)
 	} else {

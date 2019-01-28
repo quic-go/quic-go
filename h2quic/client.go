@@ -142,6 +142,15 @@ func (c *client) readResponse(h2framer *http2.Framer, decoder *hpack.Decoder) er
 	if err != nil {
 		return err
 	}
+
+	// Return the peer cert - rsp.TLS should be left nil for unencrypted connections
+	cs := c.session.ConnectionState()
+	if cs.PeerCertificates != nil && len(cs.PeerCertificates) > 0 {
+		rsp.TLS = &tls.ConnectionState{
+			PeerCertificates: cs.PeerCertificates,
+		}
+	}
+
 	responseChan <- rsp
 	return nil
 }
