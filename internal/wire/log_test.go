@@ -6,6 +6,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/internal/utils"
 
 	. "github.com/onsi/ginkgo"
@@ -84,5 +85,14 @@ var _ = Describe("Frame logging", func() {
 		}
 		LogFrame(logger, frame, false)
 		Expect(buf.String()).To(ContainSubstring("\t<- &wire.AckFrame{LargestAcked: 0x8, LowestAcked: 0x2, AckRanges: {{Largest: 0x8, Smallest: 0x5}, {Largest: 0x3, Smallest: 0x2}}, DelayTime: 12ms}\n"))
+	})
+
+	It("logs NEW_CONNECTION_ID frames", func() {
+		LogFrame(logger, &NewConnectionIDFrame{
+			SequenceNumber:      42,
+			ConnectionID:        protocol.ConnectionID{0xde, 0xad, 0xbe, 0xef},
+			StatelessResetToken: [16]byte{0x1, 0x2, 0x3, 0x4, 0x5, 0x6, 0x7, 0x8, 0x9, 0xa, 0xb, 0xc, 0xd, 0xe, 0xf, 0x10},
+		}, false)
+		Expect(buf.String()).To(ContainSubstring("\t<- &wire.NewConnectionIDFrame{SequenceNumber: 42, ConnectionID: 0xdeadbeef, StatelessResetToken: 0x0102030405060708090a0b0c0d0e0f10}"))
 	})
 })
