@@ -95,4 +95,11 @@ var _ = Describe("Frame logging", func() {
 		}, false)
 		Expect(buf.String()).To(ContainSubstring("\t<- &wire.NewConnectionIDFrame{SequenceNumber: 42, ConnectionID: 0xdeadbeef, StatelessResetToken: 0x0102030405060708090a0b0c0d0e0f10}"))
 	})
+
+	It("logs NEW_TOKEN frames", func() {
+		LogFrame(logger, &NewTokenFrame{
+			Token: []byte{0xde, 0xad, 0xbe, 0xef},
+		}, true)
+		Expect(buf.String()).To(ContainSubstring("\t-> &wire.NewTokenFrame{Token: 0xdeadbeef"))
+	})
 })
