@@ -117,3 +117,6 @@ const MinPacingDelay time.Duration = 100 * time.Microsecond
 // DefaultConnectionIDLength is the connection ID length that is used for multiplexed connections
 // if no other value is configured.
 const DefaultConnectionIDLength = 4
+
+// AckDelayExponent is the ack delay exponent used when sending ACKs.
+const AckDelayExponent = 3

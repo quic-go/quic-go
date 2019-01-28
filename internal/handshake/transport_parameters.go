@@ -25,6 +25,7 @@ const (
 	initialMaxStreamDataUniParameterID        transportParameterID = 0x7
 	initialMaxStreamsBidiParameterID          transportParameterID = 0x8
 	initialMaxStreamsUniParameterID           transportParameterID = 0x9
+	ackDelayExponentParameterID               transportParameterID = 0xa
 	disableMigrationParameterID               transportParameterID = 0xc
 )
 
@@ -34,6 +35,8 @@ type TransportParameters struct {
 	InitialMaxStreamDataBidiRemote protocol.ByteCount
 	InitialMaxStreamDataUni        protocol.ByteCount
 	InitialMaxData                 protocol.ByteCount
+
+	AckDelayExponent uint8
 
 	MaxPacketSize protocol.ByteCount
 
@@ -65,7 +68,8 @@ func (p *TransportParameters) unmarshal(data []byte, sentBy protocol.Perspective
 			initialMaxStreamsBidiParameterID,
 			initialMaxStreamsUniParameterID,
 			idleTimeoutParameterID,
-			maxPacketSizeParameterID:
+			maxPacketSizeParameterID,
+			ackDelayExponentParameterID:
 			if err := p.readNumericTransportParameter(r, paramID, int(paramLen)); err != nil {
 				return err
 			}
@@ -147,6 +151,11 @@ func (p *TransportParameters) readNumericTransportParameter(
 			return fmt.Errorf("invalid value for max_packet_size: %d (minimum 1200)", val)
 		}
 		p.MaxPacketSize = protocol.ByteCount(val)
+	case ackDelayExponentParameterID:
+		if val > protocol.MaxAckDelayExponent {
+			return fmt.Errorf("invalid value for ack_delay_exponent: %d (maximum %d)", val, protocol.MaxAckDelayExponent)
+		}
+		p.AckDelayExponent = uint8(val)
 	default:
 		return fmt.Errorf("TransportParameter BUG: transport parameter %d not found", paramID)
 	}
@@ -186,6 +195,13 @@ func (p *TransportParameters) marshal(b *bytes.Buffer) {
 	utils.BigEndian.WriteUint16(b, uint16(maxPacketSizeParameterID))
 	utils.BigEndian.WriteUint16(b, uint16(utils.VarIntLen(uint64(protocol.MaxReceivePacketSize))))
 	utils.WriteVarInt(b, uint64(protocol.MaxReceivePacketSize))
+	// ack_delay_exponent
+	// Only send it if is different from the default value.
+	if p.AckDelayExponent != protocol.DefaultAckDelayExponent {
+		utils.BigEndian.WriteUint16(b, uint16(ackDelayExponentParameterID))
+		utils.BigEndian.WriteUint16(b, uint16(utils.VarIntLen(uint64(p.AckDelayExponent))))
+		utils.WriteVarInt(b, uint64(p.AckDelayExponent))
+	}
 	// disable_migration
 	if p.DisableMigration {
 		utils.BigEndian.WriteUint16(b, uint16(disableMigrationParameterID))
@@ -206,5 +222,5 @@ func (p *TransportParameters) marshal(b *bytes.Buffer) {
 
 // String returns a string representation, intended for logging.
 func (p *TransportParameters) String() string {
-	return fmt.Sprintf("&handshake.TransportParameters{OriginalConnectionID: %s, InitialMaxStreamDataBidiLocal: %#x, InitialMaxStreamDataBidiRemote: %#x, InitialMaxStreamDataUni: %#x, InitialMaxData: %#x, MaxBidiStreams: %d, MaxUniStreams: %d, IdleTimeout: %s}", p.OriginalConnectionID, p.InitialMaxStreamDataBidiLocal, p.InitialMaxStreamDataBidiRemote, p.InitialMaxStreamDataUni, p.InitialMaxData, p.MaxBidiStreams, p.MaxUniStreams, p.IdleTimeout)
+	return fmt.Sprintf("&handshake.TransportParameters{OriginalConnectionID: %s, InitialMaxStreamDataBidiLocal: %#x, InitialMaxStreamDataBidiRemote: %#x, InitialMaxStreamDataUni: %#x, InitialMaxData: %#x, MaxBidiStreams: %d, MaxUniStreams: %d, IdleTimeout: %s, AckDelayExponent: %d}", p.OriginalConnectionID, p.InitialMaxStreamDataBidiLocal, p.InitialMaxStreamDataBidiRemote, p.InitialMaxStreamDataUni, p.InitialMaxData, p.MaxBidiStreams, p.MaxUniStreams, p.IdleTimeout, p.AckDelayExponent)
 }

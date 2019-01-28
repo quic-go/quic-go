@@ -2,6 +2,7 @@ package wire
 
 import (
 	"bytes"
+	"time"
 
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/internal/qerr"
@@ -10,14 +11,18 @@ import (
 )
 
 var _ = Describe("Frame parsing", func() {
-	var buf *bytes.Buffer
+	var (
+		buf    *bytes.Buffer
+		parser FrameParser
+	)
 
 	BeforeEach(func() {
 		buf = &bytes.Buffer{}
+		parser = NewFrameParser(versionIETFFrames)
 	})
 
 	It("returns nil if there's nothing more to read", func() {
-		f, err := ParseNextFrame(bytes.NewReader(nil), protocol.VersionWhatever)
+		f, err := parser.ParseNext(bytes.NewReader(nil), protocol.Encryption1RTT)
 		Expect(err).ToNot(HaveOccurred())
 		Expect(f).To(BeNil())
 	})
@@ -25,14 +30,14 @@ var _ = Describe("Frame parsing", func() {
 	It("skips PADDING frames", func() {
 		buf.Write([]byte{0}) // PADDING frame
 		(&PingFrame{}).Write(buf, versionIETFFrames)
-		f, err := ParseNextFrame(bytes.NewReader(buf.Bytes()), versionIETFFrames)
+		f, err := parser.ParseNext(bytes.NewReader(buf.Bytes()), protocol.Encryption1RTT)
 		Expect(err).ToNot(HaveOccurred())
 		Expect(f).To(Equal(&PingFrame{}))
 	})
 
 	It("handles PADDING at the end", func() {
 		r := bytes.NewReader([]byte{0, 0, 0})
-		f, err := ParseNextFrame(r, versionIETFFrames)
+		f, err := parser.ParseNext(r, protocol.Encryption1RTT)
 		Expect(err).ToNot(HaveOccurred())
 		Expect(f).To(BeNil())
 		Expect(r.Len()).To(BeZero())
@@ -42,11 +47,37 @@ var _ = Describe("Frame parsing", func() {
 		f := &AckFrame{AckRanges: []AckRange{{Smallest: 1, Largest: 0x13}}}
 		err := f.Write(buf, versionIETFFrames)
 		Expect(err).ToNot(HaveOccurred())
-		frame, err := ParseNextFrame(bytes.NewReader(buf.Bytes()), versionIETFFrames)
+		frame, err := parser.ParseNext(bytes.NewReader(buf.Bytes()), protocol.Encryption1RTT)
 		Expect(err).ToNot(HaveOccurred())
 		Expect(frame).ToNot(BeNil())
 		Expect(frame).To(BeAssignableToTypeOf(f))
 		Expect(frame.(*AckFrame).LargestAcked()).To(Equal(protocol.PacketNumber(0x13)))
+	})
+
+	It("uses the custom ack delay exponent for 1RTT packets", func() {
+		parser.SetAckDelayExponent(protocol.AckDelayExponent + 2)
+		f := &AckFrame{
+			AckRanges: []AckRange{{Smallest: 1, Largest: 1}},
+			DelayTime: time.Second,
+		}
+		Expect(f.Write(buf, versionIETFFrames)).To(Succeed())
+		frame, err := parser.ParseNext(bytes.NewReader(buf.Bytes()), protocol.Encryption1RTT)
+		Expect(err).ToNot(HaveOccurred())
+		// The ACK frame is always written using the protocol.AckDelayExponent.
+		// That's why we expect a different value when parsing.
+		Expect(frame.(*AckFrame).DelayTime).To(Equal(4 * time.Second))
+	})
+
+	It("uses the default ack delay exponent for non-1RTT packets", func() {
+		parser.SetAckDelayExponent(protocol.AckDelayExponent + 2)
+		f := &AckFrame{
+			AckRanges: []AckRange{{Smallest: 1, Largest: 1}},
+			DelayTime: time.Second,
+		}
+		Expect(f.Write(buf, versionIETFFrames)).To(Succeed())
+		frame, err := parser.ParseNext(bytes.NewReader(buf.Bytes()), protocol.EncryptionHandshake)
+		Expect(err).ToNot(HaveOccurred())
+		Expect(frame.(*AckFrame).DelayTime).To(Equal(time.Second))
 	})
 
 	It("unpacks RESET_STREAM frames", func() {
@@ -57,7 +88,7 @@ var _ = Describe("Frame parsing", func() {
 		}
 		err := f.Write(buf, versionIETFFrames)
 		Expect(err).ToNot(HaveOccurred())
-		frame, err := ParseNextFrame(bytes.NewReader(buf.Bytes()), versionIETFFrames)
+		frame, err := parser.ParseNext(bytes.NewReader(buf.Bytes()), protocol.Encryption1RTT)
 		Expect(err).ToNot(HaveOccurred())
 		Expect(frame).To(Equal(f))
 	})
@@ -67,7 +98,7 @@ var _ = Describe("Frame parsing", func() {
 		buf := &bytes.Buffer{}
 		err := f.Write(buf, versionIETFFrames)
 		Expect(err).ToNot(HaveOccurred())
-		frame, err := ParseNextFrame(bytes.NewReader(buf.Bytes()), versionIETFFrames)
+		frame, err := parser.ParseNext(bytes.NewReader(buf.Bytes()), protocol.Encryption1RTT)
 		Expect(err).ToNot(HaveOccurred())
 		Expect(frame).To(Equal(f))
 	})
@@ -79,7 +110,7 @@ var _ = Describe("Frame parsing", func() {
 		}
 		err := f.Write(buf, versionIETFFrames)
 		Expect(err).ToNot(HaveOccurred())
-		frame, err := ParseNextFrame(bytes.NewReader(buf.Bytes()), versionIETFFrames)
+		frame, err := parser.ParseNext(bytes.NewReader(buf.Bytes()), protocol.Encryption1RTT)
 		Expect(err).ToNot(HaveOccurred())
 		Expect(frame).ToNot(BeNil())
 		Expect(frame).To(Equal(f))
@@ -89,7 +120,7 @@ var _ = Describe("Frame parsing", func() {
 		f := &NewTokenFrame{Token: []byte("foobar")}
 		err := f.Write(buf, versionIETFFrames)
 		Expect(err).ToNot(HaveOccurred())
-		frame, err := ParseNextFrame(bytes.NewReader(buf.Bytes()), versionIETFFrames)
+		frame, err := parser.ParseNext(bytes.NewReader(buf.Bytes()), protocol.Encryption1RTT)
 		Expect(err).ToNot(HaveOccurred())
 		Expect(frame).ToNot(BeNil())
 		Expect(frame).To(Equal(f))
@@ -104,7 +135,7 @@ var _ = Describe("Frame parsing", func() {
 		}
 		err := f.Write(buf, versionIETFFrames)
 		Expect(err).ToNot(HaveOccurred())
-		frame, err := ParseNextFrame(bytes.NewReader(buf.Bytes()), versionIETFFrames)
+		frame, err := parser.ParseNext(bytes.NewReader(buf.Bytes()), protocol.Encryption1RTT)
 		Expect(err).ToNot(HaveOccurred())
 		Expect(frame).ToNot(BeNil())
 		Expect(frame).To(Equal(f))
@@ -117,7 +148,7 @@ var _ = Describe("Frame parsing", func() {
 		buf := &bytes.Buffer{}
 		err := f.Write(buf, versionIETFFrames)
 		Expect(err).ToNot(HaveOccurred())
-		frame, err := ParseNextFrame(bytes.NewReader(buf.Bytes()), versionIETFFrames)
+		frame, err := parser.ParseNext(bytes.NewReader(buf.Bytes()), protocol.Encryption1RTT)
 		Expect(err).ToNot(HaveOccurred())
 		Expect(frame).To(Equal(f))
 	})
@@ -130,7 +161,7 @@ var _ = Describe("Frame parsing", func() {
 		buf := &bytes.Buffer{}
 		err := f.Write(buf, versionIETFFrames)
 		Expect(err).ToNot(HaveOccurred())
-		frame, err := ParseNextFrame(bytes.NewReader(buf.Bytes()), versionIETFFrames)
+		frame, err := parser.ParseNext(bytes.NewReader(buf.Bytes()), protocol.Encryption1RTT)
 		Expect(err).ToNot(HaveOccurred())
 		Expect(frame).To(Equal(f))
 	})
@@ -143,7 +174,7 @@ var _ = Describe("Frame parsing", func() {
 		buf := &bytes.Buffer{}
 		err := f.Write(buf, versionIETFFrames)
 		Expect(err).ToNot(HaveOccurred())
-		frame, err := ParseNextFrame(bytes.NewReader(buf.Bytes()), versionIETFFrames)
+		frame, err := parser.ParseNext(bytes.NewReader(buf.Bytes()), protocol.Encryption1RTT)
 		Expect(err).ToNot(HaveOccurred())
 		Expect(frame).To(Equal(f))
 	})
@@ -153,7 +184,7 @@ var _ = Describe("Frame parsing", func() {
 		buf := &bytes.Buffer{}
 		err := f.Write(buf, versionIETFFrames)
 		Expect(err).ToNot(HaveOccurred())
-		frame, err := ParseNextFrame(bytes.NewReader(buf.Bytes()), versionIETFFrames)
+		frame, err := parser.ParseNext(bytes.NewReader(buf.Bytes()), protocol.Encryption1RTT)
 		Expect(err).ToNot(HaveOccurred())
 		Expect(frame).To(Equal(f))
 	})
@@ -165,7 +196,7 @@ var _ = Describe("Frame parsing", func() {
 		}
 		err := f.Write(buf, versionIETFFrames)
 		Expect(err).ToNot(HaveOccurred())
-		frame, err := ParseNextFrame(bytes.NewReader(buf.Bytes()), versionIETFFrames)
+		frame, err := parser.ParseNext(bytes.NewReader(buf.Bytes()), protocol.Encryption1RTT)
 		Expect(err).ToNot(HaveOccurred())
 		Expect(frame).To(Equal(f))
 	})
@@ -178,7 +209,7 @@ var _ = Describe("Frame parsing", func() {
 		buf := &bytes.Buffer{}
 		err := f.Write(buf, versionIETFFrames)
 		Expect(err).ToNot(HaveOccurred())
-		frame, err := ParseNextFrame(bytes.NewReader(buf.Bytes()), versionIETFFrames)
+		frame, err := parser.ParseNext(bytes.NewReader(buf.Bytes()), protocol.Encryption1RTT)
 		Expect(err).ToNot(HaveOccurred())
 		Expect(frame).To(Equal(f))
 	})
@@ -191,7 +222,7 @@ var _ = Describe("Frame parsing", func() {
 		}
 		buf := &bytes.Buffer{}
 		Expect(f.Write(buf, versionIETFFrames)).To(Succeed())
-		frame, err := ParseNextFrame(bytes.NewReader(buf.Bytes()), versionIETFFrames)
+		frame, err := parser.ParseNext(bytes.NewReader(buf.Bytes()), protocol.Encryption1RTT)
 		Expect(err).ToNot(HaveOccurred())
 		Expect(frame).To(Equal(f))
 	})
@@ -200,7 +231,7 @@ var _ = Describe("Frame parsing", func() {
 		f := &RetireConnectionIDFrame{SequenceNumber: 0x1337}
 		buf := &bytes.Buffer{}
 		Expect(f.Write(buf, versionIETFFrames)).To(Succeed())
-		frame, err := ParseNextFrame(bytes.NewReader(buf.Bytes()), versionIETFFrames)
+		frame, err := parser.ParseNext(bytes.NewReader(buf.Bytes()), protocol.Encryption1RTT)
 		Expect(err).ToNot(HaveOccurred())
 		Expect(frame).To(Equal(f))
 	})
@@ -209,7 +240,7 @@ var _ = Describe("Frame parsing", func() {
 		f := &PathChallengeFrame{Data: [8]byte{1, 2, 3, 4, 5, 6, 7, 8}}
 		err := f.Write(buf, versionIETFFrames)
 		Expect(err).ToNot(HaveOccurred())
-		frame, err := ParseNextFrame(bytes.NewReader(buf.Bytes()), versionIETFFrames)
+		frame, err := parser.ParseNext(bytes.NewReader(buf.Bytes()), protocol.Encryption1RTT)
 		Expect(err).ToNot(HaveOccurred())
 		Expect(frame).ToNot(BeNil())
 		Expect(frame).To(BeAssignableToTypeOf(f))
@@ -220,7 +251,7 @@ var _ = Describe("Frame parsing", func() {
 		f := &PathResponseFrame{Data: [8]byte{1, 2, 3, 4, 5, 6, 7, 8}}
 		err := f.Write(buf, versionIETFFrames)
 		Expect(err).ToNot(HaveOccurred())
-		frame, err := ParseNextFrame(bytes.NewReader(buf.Bytes()), versionIETFFrames)
+		frame, err := parser.ParseNext(bytes.NewReader(buf.Bytes()), protocol.Encryption1RTT)
 		Expect(err).ToNot(HaveOccurred())
 		Expect(frame).ToNot(BeNil())
 		Expect(frame).To(BeAssignableToTypeOf(f))
@@ -235,13 +266,13 @@ var _ = Describe("Frame parsing", func() {
 		buf := &bytes.Buffer{}
 		err := f.Write(buf, versionIETFFrames)
 		Expect(err).ToNot(HaveOccurred())
-		frame, err := ParseNextFrame(bytes.NewReader(buf.Bytes()), versionIETFFrames)
+		frame, err := parser.ParseNext(bytes.NewReader(buf.Bytes()), protocol.Encryption1RTT)
 		Expect(err).ToNot(HaveOccurred())
 		Expect(frame).To(Equal(f))
 	})
 
 	It("errors on invalid type", func() {
-		_, err := ParseNextFrame(bytes.NewReader([]byte{0x42}), versionIETFFrames)
+		_, err := parser.ParseNext(bytes.NewReader([]byte{0x42}), protocol.Encryption1RTT)
 		Expect(err).To(MatchError("InvalidFrameData: unknown type byte 0x42"))
 	})
 
@@ -252,7 +283,7 @@ var _ = Describe("Frame parsing", func() {
 		}
 		b := &bytes.Buffer{}
 		f.Write(b, versionIETFFrames)
-		_, err := ParseNextFrame(bytes.NewReader(b.Bytes()[:b.Len()-2]), versionIETFFrames)
+		_, err := parser.ParseNext(bytes.NewReader(b.Bytes()[:b.Len()-2]), protocol.Encryption1RTT)
 		Expect(err).To(HaveOccurred())
 		Expect(err.(*qerr.QuicError).ErrorCode).To(Equal(qerr.InvalidFrameData))
 	})

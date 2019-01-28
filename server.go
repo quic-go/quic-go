@@ -427,6 +427,7 @@ func (s *server) createNewSession(
 		IdleTimeout:                    s.config.IdleTimeout,
 		MaxBidiStreams:                 uint64(s.config.MaxIncomingStreams),
 		MaxUniStreams:                  uint64(s.config.MaxIncomingUniStreams),
+		AckDelayExponent:               protocol.AckDelayExponent,
 		DisableMigration:               true,
 		// TODO(#855): generate a real token
 		StatelessResetToken:  bytes.Repeat([]byte{42}, 16),

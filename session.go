@@ -93,8 +93,9 @@ type session struct {
 	windowUpdateQueue     *windowUpdateQueue
 	connFlowController    flowcontrol.ConnectionFlowController
 
-	unpacker unpacker
-	packer   packer
+	unpacker    unpacker
+	frameParser wire.FrameParser
+	packer      packer
 
 	cryptoStreamHandler cryptoStreamHandler
 
@@ -292,6 +293,7 @@ var newClientSession = func(
 }
 
 func (s *session) preSetup() {
+	s.frameParser = wire.NewFrameParser(s.version)
 	s.rttStats = &congestion.RTTStats{}
 	s.receivedPacketHandler = ackhandler.NewReceivedPacketHandler(s.rttStats, s.logger, s.version)
 	s.connFlowController = flowcontrol.NewConnectionFlowController(
@@ -551,7 +553,7 @@ func (s *session) handleUnpackedPacket(packet *unpackedPacket, rcvTime time.Time
 	r := bytes.NewReader(packet.data)
 	var isRetransmittable bool
 	for {
-		frame, err := wire.ParseNextFrame(r, s.version)
+		frame, err := s.frameParser.ParseNext(r, packet.encryptionLevel)
 		if err != nil {
 			return err
 		}
@@ -812,6 +814,7 @@ func (s *session) processTransportParameters(params *handshake.TransportParamete
 	s.peerParams = params
 	s.streamsMap.UpdateLimits(params)
 	s.packer.HandleTransportParameters(params)
+	s.frameParser.SetAckDelayExponent(params.AckDelayExponent)
 	s.connFlowController.UpdateSendWindow(params.InitialMaxData)
 	// the crypto stream is the only open stream at this moment
 	// so we don't need to update stream flow control windows
