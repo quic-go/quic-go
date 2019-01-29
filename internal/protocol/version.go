@@ -18,7 +18,7 @@ const (
 
 // The version numbers, making grepping easier
 const (
-	VersionTLS      VersionNumber = 0x51474fff
+	VersionTLS      VersionNumber = 0xff000014
 	VersionWhatever VersionNumber = 1 // for when the version doesn't matter
 	VersionUnknown  VersionNumber = math.MaxUint32
 )
