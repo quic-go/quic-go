@@ -73,12 +73,14 @@ var errCloseForRecreating = errors.New("closing session in order to recreate it"
 type session struct {
 	sessionRunner sessionRunner
 
-	destConnID protocol.ConnectionID
-	srcConnID  protocol.ConnectionID
+	destConnID     protocol.ConnectionID
+	origDestConnID protocol.ConnectionID // if the server sends a Retry, this is the connection ID we used initially
+	srcConnID      protocol.ConnectionID
 
-	perspective protocol.Perspective
-	version     protocol.VersionNumber
-	config      *Config
+	perspective    protocol.Perspective
+	initialVersion protocol.VersionNumber // if version negotiation is performed, this is the version we initially tried
+	version        protocol.VersionNumber
+	config         *Config
 
 	conn connection
 
@@ -175,17 +177,19 @@ var newSession = func(
 		s.version,
 	)
 	s.framer = newFramer(s.streamsMap, s.version)
+	eetp := &handshake.EncryptedExtensionsTransportParameters{
+		NegotiatedVersion: s.version,
+		SupportedVersions: protocol.GetGreasedVersions(conf.Versions),
+		Parameters:        *params,
+	}
 	cs, err := handshake.NewCryptoSetupServer(
 		initialStream,
 		handshakeStream,
 		clientDestConnID,
-		params,
+		eetp,
 		s.processTransportParameters,
 		tlsConf,
-		conf.Versions,
-		v,
 		logger,
-		protocol.PerspectiveServer,
 	)
 	if err != nil {
 		return nil, err
@@ -236,28 +240,29 @@ var newClientSession = func(
 		config:                conf,
 		srcConnID:             srcConnID,
 		destConnID:            destConnID,
+		origDestConnID:        origDestConnID,
 		perspective:           protocol.PerspectiveClient,
 		handshakeCompleteChan: make(chan struct{}),
 		logger:                logger,
+		initialVersion:        initialVersion,
 		version:               v,
 	}
 	s.preSetup()
 	s.sentPacketHandler = ackhandler.NewSentPacketHandler(initialPacketNumber, s.rttStats, s.logger)
 	initialStream := newCryptoStream()
 	handshakeStream := newCryptoStream()
+	chtp := &handshake.ClientHelloTransportParameters{
+		InitialVersion: initialVersion,
+		Parameters:     *params,
+	}
 	cs, clientHelloWritten, err := handshake.NewCryptoSetupClient(
 		initialStream,
 		handshakeStream,
-		origDestConnID,
 		s.destConnID,
-		params,
+		chtp,
 		s.processTransportParameters,
 		tlsConf,
-		initialVersion,
-		conf.Versions,
-		v,
 		logger,
-		protocol.PerspectiveClient,
 	)
 	if err != nil {
 		return nil, err
@@ -810,14 +815,73 @@ func (s *session) handleCloseError(closeErr closeError) error {
 	return s.sendConnectionClose(quicErr)
 }
 
-func (s *session) processTransportParameters(params *handshake.TransportParameters) {
+func (s *session) processTransportParameters(data []byte) {
+	var params *handshake.TransportParameters
+	var err error
+	switch s.perspective {
+	case protocol.PerspectiveClient:
+		params, err = s.processTransportParametersForClient(data)
+	case protocol.PerspectiveServer:
+		params, err = s.processTransportParametersForServer(data)
+	}
+	if err != nil {
+		s.closeLocal(err)
+		return
+	}
+	s.logger.Debugf("Received Transport Parameters: %s", params)
 	s.peerParams = params
 	s.streamsMap.UpdateLimits(params)
 	s.packer.HandleTransportParameters(params)
 	s.frameParser.SetAckDelayExponent(params.AckDelayExponent)
 	s.connFlowController.UpdateSendWindow(params.InitialMaxData)
-	// the crypto stream is the only open stream at this moment
-	// so we don't need to update stream flow control windows
+}
+
+func (s *session) processTransportParametersForClient(data []byte) (*handshake.TransportParameters, error) {
+	eetp := handshake.EncryptedExtensionsTransportParameters{}
+	if err := eetp.Unmarshal(data); err != nil {
+		return nil, err
+	}
+	// check that the negotiated_version is the current version
+	if eetp.NegotiatedVersion != s.version {
+		return nil, qerr.Error(qerr.VersionNegotiationMismatch, "current version doesn't match negotiated_version")
+	}
+	// check that the current version is included in the supported versions
+	if !protocol.IsSupportedVersion(eetp.SupportedVersions, s.version) {
+		return nil, qerr.Error(qerr.VersionNegotiationMismatch, "current version not included in the supported versions")
+	}
+	// if version negotiation was performed, check that we would have selected the current version based on the supported versions sent by the server
+	if s.version != s.initialVersion {
+		negotiatedVersion, ok := protocol.ChooseSupportedVersion(s.config.Versions, eetp.SupportedVersions)
+		if !ok || s.version != negotiatedVersion {
+			return nil, qerr.Error(qerr.VersionNegotiationMismatch, "would have picked a different version")
+		}
+	}
+
+	params := &eetp.Parameters
+	// check that the server sent a stateless reset token
+	if len(params.StatelessResetToken) == 0 {
+		return nil, errors.New("server didn't send stateless_reset_token")
+	}
+	// check the Retry token
+	if !params.OriginalConnectionID.Equal(s.origDestConnID) {
+		return nil, fmt.Errorf("expected original_connection_id to equal %s, is %s", s.origDestConnID, params.OriginalConnectionID)
+	}
+
+	return params, nil
+}
+
+func (s *session) processTransportParametersForServer(data []byte) (*handshake.TransportParameters, error) {
+	chtp := handshake.ClientHelloTransportParameters{}
+	if err := chtp.Unmarshal(data); err != nil {
+		return nil, err
+	}
+	// perform the stateless version negotiation validation:
+	// make sure that we would have sent a Version Negotiation Packet if the client offered the initial version
+	// this is the case if and only if the initial version is not contained in the supported versions
+	if chtp.InitialVersion != s.version && protocol.IsSupportedVersion(s.config.Versions, chtp.InitialVersion) {
+		return nil, qerr.Error(qerr.VersionNegotiationMismatch, "Client should have used the initial version")
+	}
+	return &chtp.Parameters, nil
 }
 
 func (s *session) sendPackets() error {

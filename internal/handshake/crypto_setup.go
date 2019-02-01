@@ -62,7 +62,7 @@ type cryptoSetup struct {
 
 	extHandler tlsExtensionHandler
 
-	handleParamsCallback func(*TransportParameters)
+	handleParamsCallback func([]byte)
 
 	// There are two ways that an error can occur during the handshake:
 	// 1. as a return value from qtls.Handshake()
@@ -106,34 +106,21 @@ var _ CryptoSetup = &cryptoSetup{}
 func NewCryptoSetupClient(
 	initialStream io.Writer,
 	handshakeStream io.Writer,
-	origConnID protocol.ConnectionID,
 	connID protocol.ConnectionID,
-	params *TransportParameters,
-	handleParams func(*TransportParameters),
+	chtp *ClientHelloTransportParameters,
+	handleParams func([]byte),
 	tlsConf *tls.Config,
-	initialVersion protocol.VersionNumber,
-	supportedVersions []protocol.VersionNumber,
-	currentVersion protocol.VersionNumber,
 	logger utils.Logger,
-	perspective protocol.Perspective,
 ) (CryptoSetup, <-chan struct{} /* ClientHello written */, error) {
-	extHandler := newExtensionHandlerClient(
-		params,
-		origConnID,
-		initialVersion,
-		supportedVersions,
-		currentVersion,
-		logger,
-	)
 	cs, clientHelloWritten, err := newCryptoSetup(
 		initialStream,
 		handshakeStream,
 		connID,
-		extHandler,
+		chtp.Marshal(),
 		handleParams,
 		tlsConf,
 		logger,
-		perspective,
+		protocol.PerspectiveClient,
 	)
 	if err != nil {
 		return nil, nil, err
@@ -147,29 +134,20 @@ func NewCryptoSetupServer(
 	initialStream io.Writer,
 	handshakeStream io.Writer,
 	connID protocol.ConnectionID,
-	params *TransportParameters,
-	handleParams func(*TransportParameters),
+	eetp *EncryptedExtensionsTransportParameters,
+	handleParams func([]byte),
 	tlsConf *tls.Config,
-	supportedVersions []protocol.VersionNumber,
-	currentVersion protocol.VersionNumber,
 	logger utils.Logger,
-	perspective protocol.Perspective,
 ) (CryptoSetup, error) {
-	extHandler := newExtensionHandlerServer(
-		params,
-		supportedVersions,
-		currentVersion,
-		logger,
-	)
 	cs, _, err := newCryptoSetup(
 		initialStream,
 		handshakeStream,
 		connID,
-		extHandler,
+		eetp.Marshal(),
 		handleParams,
 		tlsConf,
 		logger,
-		perspective,
+		protocol.PerspectiveServer,
 	)
 	if err != nil {
 		return nil, err
@@ -182,8 +160,8 @@ func newCryptoSetup(
 	initialStream io.Writer,
 	handshakeStream io.Writer,
 	connID protocol.ConnectionID,
-	extHandler tlsExtensionHandler,
-	handleParams func(*TransportParameters),
+	paramBytes []byte, // the marshaled transport parameters
+	handleParams func([]byte),
 	tlsConf *tls.Config,
 	logger utils.Logger,
 	perspective protocol.Perspective,
@@ -192,6 +170,7 @@ func newCryptoSetup(
 	if err != nil {
 		return nil, nil, err
 	}
+	extHandler := newExtensionHandler(paramBytes, perspective)
 	cs := &cryptoSetup{
 		initialStream:          initialStream,
 		initialSealer:          initialSealer,
@@ -309,8 +288,8 @@ func (h *cryptoSetup) handleMessageForServer(msgType messageType) bool {
 	switch msgType {
 	case typeClientHello:
 		select {
-		case params := <-h.extHandler.TransportParameters():
-			h.handleParamsCallback(&params)
+		case data := <-h.extHandler.TransportParameters():
+			h.handleParamsCallback(data)
 		case <-h.handshakeErrChan:
 			return false
 		}
@@ -367,8 +346,8 @@ func (h *cryptoSetup) handleMessageForClient(msgType messageType) bool {
 		return true
 	case typeEncryptedExtensions:
 		select {
-		case params := <-h.extHandler.TransportParameters():
-			h.handleParamsCallback(&params)
+		case data := <-h.extHandler.TransportParameters():
+			h.handleParamsCallback(data)
 		case <-h.handshakeErrChan:
 			return false
 		}
