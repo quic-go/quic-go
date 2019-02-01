@@ -26,7 +26,6 @@ var _ = Describe("Packet packer", func() {
 		handshakeStream *MockCryptoStream
 		sealingManager  *MockSealingManager
 		pnManager       *mockackhandler.MockSentPacketHandler
-		token           []byte
 	)
 
 	checkLength := func(data []byte) {
@@ -57,7 +56,6 @@ var _ = Describe("Packet packer", func() {
 	BeforeEach(func() {
 		rand.Seed(GinkgoRandomSeed())
 		version := protocol.VersionTLS
-		token = []byte("initial token")
 		mockSender := NewMockStreamSender(mockCtrl)
 		mockSender.EXPECT().onHasStreamData(gomock.Any()).AnyTimes()
 		initialStream = NewMockCryptoStream(mockCtrl)
@@ -74,7 +72,6 @@ var _ = Describe("Packet packer", func() {
 			handshakeStream,
 			pnManager,
 			&net.TCPAddr{},
-			token, // token
 			sealingManager,
 			framer,
 			ackFramer,
@@ -772,6 +769,8 @@ var _ = Describe("Packet packer", func() {
 			})
 
 			It("pads Initial packets to the required minimum packet size", func() {
+				token := []byte("initial token")
+				packer.SetToken(token)
 				f := &wire.CryptoFrame{Data: []byte("foobar")}
 				pnManager.EXPECT().PeekPacketNumber().Return(protocol.PacketNumber(0x42), protocol.PacketNumberLen2)
 				pnManager.EXPECT().PopPacketNumber().Return(protocol.PacketNumber(0x42))
@@ -856,7 +855,6 @@ var _ = Describe("Packet packer", func() {
 				packer.perspective = protocol.PerspectiveClient
 				packet, err := packer.PackPacket()
 				Expect(err).ToNot(HaveOccurred())
-				Expect(packet.header.Token).To(Equal(token))
 				Expect(packet.raw).To(HaveLen(protocol.MinInitialPacketSize))
 				Expect(packet.frames).To(HaveLen(2))
 				Expect(packet.frames[0]).To(Equal(ack))
@@ -884,6 +882,8 @@ var _ = Describe("Packet packer", func() {
 				})
 
 				It("packs a retransmission for an Initial packet", func() {
+					token := []byte("initial token")
+					packer.SetToken(token)
 					pnManager.EXPECT().PeekPacketNumber().Return(protocol.PacketNumber(0x42), protocol.PacketNumberLen2)
 					pnManager.EXPECT().PopPacketNumber().Return(protocol.PacketNumber(0x42))
 					sealingManager.EXPECT().GetSealerWithEncryptionLevel(protocol.EncryptionInitial).Return(sealer, nil)

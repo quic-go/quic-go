@@ -108,3 +108,13 @@ func (m *MockPacker) PackRetransmission(arg0 *ackhandler.Packet) ([]*packedPacke
 func (mr *MockPackerMockRecorder) PackRetransmission(arg0 interface{}) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PackRetransmission", reflect.TypeOf((*MockPacker)(nil).PackRetransmission), arg0)
 }
+
+// SetToken mocks base method
+func (m *MockPacker) SetToken(arg0 []byte) {
+	m.ctrl.Call(m, "SetToken", arg0)
+}
+
+// SetToken indicates an expected call of SetToken
+func (mr *MockPackerMockRecorder) SetToken(arg0 interface{}) *gomock.Call {
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetToken", reflect.TypeOf((*MockPacker)(nil).SetToken), arg0)
+}

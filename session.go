@@ -202,7 +202,6 @@ var newSession = func(
 		handshakeStream,
 		s.sentPacketHandler,
 		s.RemoteAddr(),
-		nil, // no token
 		cs,
 		s.framer,
 		s.receivedPacketHandler,
@@ -287,13 +286,13 @@ var newClientSession = func(
 		handshakeStream,
 		s.sentPacketHandler,
 		s.RemoteAddr(),
-		token,
 		cs,
 		s.framer,
 		s.receivedPacketHandler,
 		s.perspective,
 		s.version,
 	)
+	s.packer.SetToken(token)
 	return s, s.postSetup()
 }
 
