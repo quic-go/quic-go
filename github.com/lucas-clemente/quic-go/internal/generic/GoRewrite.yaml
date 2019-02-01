@@ -1,0 +1,16 @@
+spec:
+    - name: result
+      import: github.com/lucas-clemente/quic-go/internal/generic
+      typeMap:
+        Type:
+          expr: protocol.ByteCount
+        TypeTime:
+          expr: RoundTripCount
+        TypeTimeDelta:
+          expr: RoundTripCount
+        TypeWindowedFilter:
+          expr: MaxAckHeightFilter
+        TypeSample:
+         expr: ackHeightSample
+        TypeCompare:
+         expr: AckHeightCompare
