@@ -12,14 +12,11 @@ import (
 )
 
 var _ = Describe("TLS Extension Handler, for the server", func() {
-	var (
-		handler    *extensionHandlerServer
-		paramsChan <-chan TransportParameters
-	)
+	var handler *extensionHandlerServer
 
 	BeforeEach(func() {
 		var h tlsExtensionHandler
-		h, paramsChan = newExtensionHandlerServer(
+		h = newExtensionHandlerServer(
 			&TransportParameters{},
 			nil,
 			protocol.VersionWhatever,
@@ -79,7 +76,7 @@ var _ = Describe("TLS Extension Handler, for the server", func() {
 			}()
 			var params TransportParameters
 			Consistently(done).ShouldNot(BeClosed())
-			Expect(paramsChan).To(Receive(&params))
+			Expect(handler.TransportParameters()).To(Receive(&params))
 			Expect(params.IdleTimeout).To(Equal(0x1337 * time.Second))
 			Eventually(done).Should(BeClosed())
 		})
@@ -103,7 +100,7 @@ var _ = Describe("TLS Extension Handler, for the server", func() {
 				done := make(chan struct{})
 				go func() {
 					defer GinkgoRecover()
-					<-paramsChan
+					<-handler.TransportParameters()
 					close(done)
 				}()
 				handler.version = 42
@@ -123,7 +120,7 @@ var _ = Describe("TLS Extension Handler, for the server", func() {
 				done := make(chan struct{})
 				go func() {
 					defer GinkgoRecover()
-					<-paramsChan
+					<-handler.TransportParameters()
 					close(done)
 				}()
 				handler.version = 42

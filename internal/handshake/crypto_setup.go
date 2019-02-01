@@ -60,6 +60,8 @@ type cryptoSetup struct {
 	readEncLevel  protocol.EncryptionLevel
 	writeEncLevel protocol.EncryptionLevel
 
+	extHandler tlsExtensionHandler
+
 	handleParamsCallback func(*TransportParameters)
 
 	// There are two ways that an error can occur during the handshake:
@@ -71,8 +73,6 @@ type cryptoSetup struct {
 	messageErrChan chan error
 	// handshakeDone is closed as soon as the go routine running qtls.Handshake() returns
 	handshakeDone chan struct{}
-	// transport parameters are sent on the receivedTransportParams, as soon as they are received
-	receivedTransportParams <-chan TransportParameters
 	// is closed when Close() is called
 	closeChan chan struct{}
 
@@ -117,7 +117,7 @@ func NewCryptoSetupClient(
 	logger utils.Logger,
 	perspective protocol.Perspective,
 ) (CryptoSetup, <-chan struct{} /* ClientHello written */, error) {
-	extHandler, receivedTransportParams := newExtensionHandlerClient(
+	extHandler := newExtensionHandlerClient(
 		params,
 		origConnID,
 		initialVersion,
@@ -130,7 +130,6 @@ func NewCryptoSetupClient(
 		handshakeStream,
 		connID,
 		extHandler,
-		receivedTransportParams,
 		handleParams,
 		tlsConf,
 		logger,
@@ -156,7 +155,7 @@ func NewCryptoSetupServer(
 	logger utils.Logger,
 	perspective protocol.Perspective,
 ) (CryptoSetup, error) {
-	extHandler, receivedTransportParams := newExtensionHandlerServer(
+	extHandler := newExtensionHandlerServer(
 		params,
 		supportedVersions,
 		currentVersion,
@@ -167,7 +166,6 @@ func NewCryptoSetupServer(
 		handshakeStream,
 		connID,
 		extHandler,
-		receivedTransportParams,
 		handleParams,
 		tlsConf,
 		logger,
@@ -185,7 +183,6 @@ func newCryptoSetup(
 	handshakeStream io.Writer,
 	connID protocol.ConnectionID,
 	extHandler tlsExtensionHandler,
-	transportParamChan <-chan TransportParameters,
 	handleParams func(*TransportParameters),
 	tlsConf *tls.Config,
 	logger utils.Logger,
@@ -196,24 +193,24 @@ func newCryptoSetup(
 		return nil, nil, err
 	}
 	cs := &cryptoSetup{
-		initialStream:           initialStream,
-		initialSealer:           initialSealer,
-		initialOpener:           initialOpener,
-		handshakeStream:         handshakeStream,
-		readEncLevel:            protocol.EncryptionInitial,
-		writeEncLevel:           protocol.EncryptionInitial,
-		handleParamsCallback:    handleParams,
-		receivedTransportParams: transportParamChan,
-		logger:                  logger,
-		perspective:             perspective,
-		handshakeDone:           make(chan struct{}),
-		handshakeErrChan:        make(chan struct{}),
-		messageErrChan:          make(chan error, 1),
-		clientHelloWrittenChan:  make(chan struct{}),
-		messageChan:             make(chan []byte, 100),
-		receivedReadKey:         make(chan struct{}),
-		receivedWriteKey:        make(chan struct{}),
-		closeChan:               make(chan struct{}),
+		initialStream:          initialStream,
+		initialSealer:          initialSealer,
+		initialOpener:          initialOpener,
+		handshakeStream:        handshakeStream,
+		readEncLevel:           protocol.EncryptionInitial,
+		writeEncLevel:          protocol.EncryptionInitial,
+		handleParamsCallback:   handleParams,
+		extHandler:             extHandler,
+		logger:                 logger,
+		perspective:            perspective,
+		handshakeDone:          make(chan struct{}),
+		handshakeErrChan:       make(chan struct{}),
+		messageErrChan:         make(chan error, 1),
+		clientHelloWrittenChan: make(chan struct{}),
+		messageChan:            make(chan []byte, 100),
+		receivedReadKey:        make(chan struct{}),
+		receivedWriteKey:       make(chan struct{}),
+		closeChan:              make(chan struct{}),
 	}
 	qtlsConf := tlsConfigToQtlsConfig(tlsConf)
 	qtlsConf.AlternativeRecordLayer = cs
@@ -312,7 +309,7 @@ func (h *cryptoSetup) handleMessageForServer(msgType messageType) bool {
 	switch msgType {
 	case typeClientHello:
 		select {
-		case params := <-h.receivedTransportParams:
+		case params := <-h.extHandler.TransportParameters():
 			h.handleParamsCallback(&params)
 		case <-h.handshakeErrChan:
 			return false
@@ -370,7 +367,7 @@ func (h *cryptoSetup) handleMessageForClient(msgType messageType) bool {
 		return true
 	case typeEncryptedExtensions:
 		select {
-		case params := <-h.receivedTransportParams:
+		case params := <-h.extHandler.TransportParameters():
 			h.handleParamsCallback(&params)
 		case <-h.handshakeErrChan:
 			return false

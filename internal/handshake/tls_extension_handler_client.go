@@ -12,7 +12,7 @@ import (
 
 type extensionHandlerClient struct {
 	ourParams  *TransportParameters
-	paramsChan chan<- TransportParameters
+	paramsChan chan TransportParameters
 
 	origConnID        protocol.ConnectionID
 	initialVersion    protocol.VersionNumber
@@ -32,20 +32,16 @@ func newExtensionHandlerClient(
 	supportedVersions []protocol.VersionNumber,
 	version protocol.VersionNumber,
 	logger utils.Logger,
-) (tlsExtensionHandler, <-chan TransportParameters) {
-	// The client reads the transport parameters from the Encrypted Extensions message.
-	// The paramsChan is used in the session's run loop's select statement.
-	// We have to use an unbuffered channel here to make sure that the session actually processes the transport parameters immediately.
-	paramsChan := make(chan TransportParameters)
+) tlsExtensionHandler {
 	return &extensionHandlerClient{
 		ourParams:         params,
-		paramsChan:        paramsChan,
+		paramsChan:        make(chan TransportParameters),
 		origConnID:        origConnID,
 		initialVersion:    initialVersion,
 		supportedVersions: supportedVersions,
 		version:           version,
 		logger:            logger,
-	}, paramsChan
+	}
 }
 
 func (h *extensionHandlerClient) GetExtensions(msgType uint8) []qtls.Extension {
@@ -110,4 +106,8 @@ func (h *extensionHandlerClient) ReceivedExtensions(msgType uint8, exts []qtls.E
 	h.logger.Debugf("Received Transport Parameters: %s", &params)
 	h.paramsChan <- params
 	return nil
+}
+
+func (h *extensionHandlerClient) TransportParameters() <-chan TransportParameters {
+	return h.paramsChan
 }

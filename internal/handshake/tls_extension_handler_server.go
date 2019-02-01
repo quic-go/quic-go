@@ -11,7 +11,7 @@ import (
 
 type extensionHandlerServer struct {
 	ourParams  *TransportParameters
-	paramsChan chan<- TransportParameters
+	paramsChan chan TransportParameters
 
 	version           protocol.VersionNumber
 	supportedVersions []protocol.VersionNumber
@@ -27,17 +27,14 @@ func newExtensionHandlerServer(
 	supportedVersions []protocol.VersionNumber,
 	version protocol.VersionNumber,
 	logger utils.Logger,
-) (tlsExtensionHandler, <-chan TransportParameters) {
-	// Processing the ClientHello is performed statelessly (and from a single go-routine).
-	// Therefore, we have to use a buffered chan to pass the transport parameters to that go routine.
-	paramsChan := make(chan TransportParameters)
+) tlsExtensionHandler {
 	return &extensionHandlerServer{
 		ourParams:         params,
-		paramsChan:        paramsChan,
+		paramsChan:        make(chan TransportParameters),
 		supportedVersions: supportedVersions,
 		version:           version,
 		logger:            logger,
-	}, paramsChan
+	}
 }
 
 func (h *extensionHandlerServer) GetExtensions(msgType uint8) []qtls.Extension {
@@ -83,4 +80,8 @@ func (h *extensionHandlerServer) ReceivedExtensions(msgType uint8, exts []qtls.E
 	h.logger.Debugf("Received Transport Parameters: %s", &chtp.Parameters)
 	h.paramsChan <- chtp.Parameters
 	return nil
+}
+
+func (h *extensionHandlerServer) TransportParameters() <-chan TransportParameters {
+	return h.paramsChan
 }
