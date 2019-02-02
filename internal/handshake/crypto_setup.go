@@ -199,6 +199,16 @@ func newCryptoSetup(
 	return cs, cs.clientHelloWrittenChan, nil
 }
 
+func (h *cryptoSetup) ChangeConnectionID(id protocol.ConnectionID) error {
+	initialSealer, initialOpener, err := NewInitialAEAD(id, h.perspective)
+	if err != nil {
+		return err
+	}
+	h.initialSealer = initialSealer
+	h.initialOpener = initialOpener
+	return nil
+}
+
 func (h *cryptoSetup) RunHandshake() error {
 	// Handle errors that might occur when HandleData() is called.
 	handshakeErrChan := make(chan error, 1)

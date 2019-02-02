@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"errors"
-	"fmt"
 	"net"
 	"runtime/pprof"
 	"strings"
@@ -353,6 +352,20 @@ var _ = Describe("Session", func() {
 		str, err := sess.AcceptStream()
 		Expect(err).ToNot(HaveOccurred())
 		Expect(str).To(Equal(mstr))
+	})
+
+	It("drops Retry packets", func() {
+		hdr := wire.Header{
+			IsLongHeader: true,
+			Type:         protocol.PacketTypeRetry,
+		}
+		buf := &bytes.Buffer{}
+		(&wire.ExtendedHeader{Header: hdr}).Write(buf, sess.version)
+		Expect(sess.handlePacketImpl(&receivedPacket{
+			hdr:    &hdr,
+			data:   buf.Bytes(),
+			buffer: getPacketBuffer(),
+		})).To(BeFalse())
 	})
 
 	Context("closing", func() {
@@ -1431,10 +1444,8 @@ var _ = Describe("Client Session", func() {
 		sessP, err := newClientSession(
 			mconn,
 			sessionRunner,
-			[]byte("token"),
 			protocol.ConnectionID{8, 7, 6, 5, 4, 3, 2, 1},
-			protocol.ConnectionID{8, 7, 6, 5, 4, 3, 2, 1},
-			protocol.ConnectionID{8, 7, 6, 5, 4, 3, 2, 1},
+			protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8},
 			populateClientConfig(&Config{}, true),
 			nil, // tls.Config
 			42,  // initial packet number
@@ -1486,6 +1497,60 @@ var _ = Describe("Client Session", func() {
 		Eventually(sess.Context().Done()).Should(BeClosed())
 	})
 
+	Context("handling Retry", func() {
+		var validRetryHdr *wire.Header
+
+		BeforeEach(func() {
+			validRetryHdr = &wire.Header{
+				IsLongHeader:         true,
+				Type:                 protocol.PacketTypeRetry,
+				SrcConnectionID:      protocol.ConnectionID{0xde, 0xad, 0xbe, 0xef},
+				DestConnectionID:     protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8},
+				OrigDestConnectionID: protocol.ConnectionID{8, 7, 6, 5, 4, 3, 2, 1},
+				Token:                []byte("foobar"),
+			}
+		})
+
+		getPacket := func(hdr *wire.Header) *receivedPacket {
+			buf := &bytes.Buffer{}
+			(&wire.ExtendedHeader{Header: *hdr}).Write(buf, sess.version)
+			return &receivedPacket{
+				hdr:    hdr,
+				data:   buf.Bytes(),
+				buffer: getPacketBuffer(),
+			}
+		}
+
+		It("handles Retry packets", func() {
+			cryptoSetup.EXPECT().ChangeConnectionID(protocol.ConnectionID{0xde, 0xad, 0xbe, 0xef})
+			packer.EXPECT().SetToken([]byte("foobar"))
+			packer.EXPECT().ChangeDestConnectionID(protocol.ConnectionID{0xde, 0xad, 0xbe, 0xef})
+			Expect(sess.handlePacketImpl(getPacket(validRetryHdr))).To(BeTrue())
+		})
+
+		It("ignores Retry packets after receiving a regular packet", func() {
+			sess.receivedFirstPacket = true
+			Expect(sess.handlePacketImpl(getPacket(validRetryHdr))).To(BeFalse())
+		})
+
+		It("ignores Retry packets if the server didn't change the connection ID", func() {
+			validRetryHdr.SrcConnectionID = sess.destConnID
+			Expect(sess.handlePacketImpl(getPacket(validRetryHdr))).To(BeFalse())
+		})
+
+		It("ignores Retry packets with the wrong original destination connection ID", func() {
+			hdr := &wire.Header{
+				IsLongHeader:         true,
+				Type:                 protocol.PacketTypeRetry,
+				SrcConnectionID:      protocol.ConnectionID{0xde, 0xad, 0xbe, 0xef},
+				DestConnectionID:     protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8},
+				OrigDestConnectionID: protocol.ConnectionID{1, 2, 3, 4},
+				Token:                []byte("foobar"),
+			}
+			Expect(sess.handlePacketImpl(getPacket(hdr))).To(BeFalse())
+		})
+	})
+
 	Context("transport parameters", func() {
 		It("errors if it can't unmarshal the TransportParameters", func() {
 			go func() {
@@ -1522,7 +1587,7 @@ var _ = Describe("Client Session", func() {
 				},
 			}
 			_, err := sess.processTransportParametersForClient(eetp.Marshal())
-			Expect(err).To(MatchError(fmt.Sprintf("expected original_connection_id to equal %s, is 0xdecafbad", sess.destConnID)))
+			Expect(err).To(MatchError("expected original_connection_id to equal (empty), is 0xdecafbad"))
 		})
 
 		It("errors if the TransportParameters contain an original_connection_id, although no Retry was performed", func() {

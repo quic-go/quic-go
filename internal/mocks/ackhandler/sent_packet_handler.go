@@ -135,6 +135,18 @@ func (mr *MockSentPacketHandlerMockRecorder) ReceivedAck(arg0, arg1, arg2, arg3 
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReceivedAck", reflect.TypeOf((*MockSentPacketHandler)(nil).ReceivedAck), arg0, arg1, arg2, arg3)
 }
 
+// ResetForRetry mocks base method
+func (m *MockSentPacketHandler) ResetForRetry() error {
+	ret := m.ctrl.Call(m, "ResetForRetry")
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// ResetForRetry indicates an expected call of ResetForRetry
+func (mr *MockSentPacketHandlerMockRecorder) ResetForRetry() *gomock.Call {
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ResetForRetry", reflect.TypeOf((*MockSentPacketHandler)(nil).ResetForRetry))
+}
+
 // SendMode mocks base method
 func (m *MockSentPacketHandler) SendMode() ackhandler.SendMode {
 	ret := m.ctrl.Call(m, "SendMode")

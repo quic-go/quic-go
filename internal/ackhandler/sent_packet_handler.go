@@ -578,3 +578,22 @@ func (h *sentPacketHandler) computePTOTimeout() time.Duration {
 	duration := utils.MaxDuration(h.rttStats.SmoothedOrInitialRTT()+4*h.rttStats.MeanDeviation(), granularity)
 	return duration << h.ptoCount
 }
+
+func (h *sentPacketHandler) ResetForRetry() error {
+	h.cryptoCount = 0
+	h.bytesInFlight = 0
+	var packets []*Packet
+	h.packetHistory.Iterate(func(p *Packet) (bool, error) {
+		if p.canBeRetransmitted {
+			packets = append(packets, p)
+		}
+		return true, nil
+	})
+	for _, p := range packets {
+		h.logger.Debugf("Queueing packet %#x for retransmission.", p.PacketNumber)
+		h.retransmissionQueue = append(h.retransmissionQueue, p)
+	}
+	h.packetHistory = newSentPacketHistory()
+	h.updateLossDetectionAlarm()
+	return nil
+}

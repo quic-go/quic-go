@@ -32,8 +32,6 @@ var _ = Describe("Client", func() {
 		originalClientSessConstructor func(
 			conn connection,
 			runner sessionRunner,
-			token []byte,
-			origDestConnID protocol.ConnectionID,
 			destConnID protocol.ConnectionID,
 			srcConnID protocol.ConnectionID,
 			conf *Config,
@@ -138,8 +136,6 @@ var _ = Describe("Client", func() {
 			newClientSession = func(
 				conn connection,
 				_ sessionRunner,
-				_ []byte, // token
-				_ protocol.ConnectionID,
 				_ protocol.ConnectionID,
 				_ protocol.ConnectionID,
 				_ *Config,
@@ -170,8 +166,6 @@ var _ = Describe("Client", func() {
 			newClientSession = func(
 				_ connection,
 				_ sessionRunner,
-				_ []byte, // token
-				_ protocol.ConnectionID,
 				_ protocol.ConnectionID,
 				_ protocol.ConnectionID,
 				_ *Config,
@@ -201,8 +195,6 @@ var _ = Describe("Client", func() {
 			newClientSession = func(
 				_ connection,
 				runner sessionRunner,
-				_ []byte, // token
-				_ protocol.ConnectionID,
 				_ protocol.ConnectionID,
 				_ protocol.ConnectionID,
 				_ *Config,
@@ -239,8 +231,6 @@ var _ = Describe("Client", func() {
 			newClientSession = func(
 				_ connection,
 				_ sessionRunner,
-				_ []byte, // token
-				_ protocol.ConnectionID,
 				_ protocol.ConnectionID,
 				_ protocol.ConnectionID,
 				_ *Config,
@@ -280,8 +270,6 @@ var _ = Describe("Client", func() {
 			newClientSession = func(
 				_ connection,
 				_ sessionRunner,
-				_ []byte, // token
-				_ protocol.ConnectionID,
 				_ protocol.ConnectionID,
 				_ protocol.ConnectionID,
 				_ *Config,
@@ -326,8 +314,6 @@ var _ = Describe("Client", func() {
 			newClientSession = func(
 				_ connection,
 				runnerP sessionRunner,
-				_ []byte, // token
-				_ protocol.ConnectionID,
 				_ protocol.ConnectionID,
 				_ protocol.ConnectionID,
 				_ *Config,
@@ -372,8 +358,6 @@ var _ = Describe("Client", func() {
 			newClientSession = func(
 				connP connection,
 				_ sessionRunner,
-				_ []byte, // token
-				_ protocol.ConnectionID,
 				_ protocol.ConnectionID,
 				_ protocol.ConnectionID,
 				_ *Config,
@@ -485,8 +469,6 @@ var _ = Describe("Client", func() {
 			newClientSession = func(
 				connP connection,
 				_ sessionRunner,
-				tokenP []byte,
-				_ protocol.ConnectionID,
 				_ protocol.ConnectionID,
 				_ protocol.ConnectionID,
 				configP *Config,
@@ -514,132 +496,6 @@ var _ = Describe("Client", func() {
 			Expect(conf.Versions).To(Equal(config.Versions))
 		})
 
-		It("creates a new session when the server performs a retry", func() {
-			manager := NewMockPacketHandlerManager(mockCtrl)
-			manager.EXPECT().Add(gomock.Any(), gomock.Any()).Do(func(id protocol.ConnectionID, handler packetHandler) {
-				go handler.handlePacket(&receivedPacket{
-					hdr: &wire.Header{
-						IsLongHeader:         true,
-						Type:                 protocol.PacketTypeRetry,
-						Version:              cl.version,
-						Token:                []byte("foobar"),
-						OrigDestConnectionID: connID,
-						DestConnectionID:     id,
-					},
-				})
-			})
-			manager.EXPECT().Add(gomock.Any(), gomock.Any())
-			mockMultiplexer.EXPECT().AddConn(packetConn, gomock.Any()).Return(manager, nil)
-
-			config := &Config{Versions: []protocol.VersionNumber{protocol.VersionTLS}}
-			cl.config = config
-			run1 := make(chan error)
-			sess1 := NewMockQuicSession(mockCtrl)
-			sess1.EXPECT().run().DoAndReturn(func() error {
-				return <-run1
-			})
-			sess1.EXPECT().closeForRecreating().DoAndReturn(func() protocol.PacketNumber {
-				run1 <- errCloseForRecreating
-				return 42
-			})
-			sess2 := NewMockQuicSession(mockCtrl)
-			sess2.EXPECT().run()
-			sessions := make(chan quicSession, 2)
-			sessions <- sess1
-			sessions <- sess2
-			newClientSession = func(
-				conn connection,
-				_ sessionRunner,
-				_ []byte, // token
-				origDestConnID protocol.ConnectionID,
-				destConnID protocol.ConnectionID,
-				_ protocol.ConnectionID,
-				_ *Config,
-				_ *tls.Config,
-				initialPacketNumber protocol.PacketNumber,
-				_ *handshake.TransportParameters,
-				_ protocol.VersionNumber,
-				_ utils.Logger,
-				_ protocol.VersionNumber,
-			) (quicSession, error) {
-				switch len(sessions) {
-				case 2: // for the first session
-					Expect(initialPacketNumber).To(BeZero())
-					Expect(origDestConnID).To(BeNil())
-					Expect(destConnID).ToNot(BeNil())
-				case 1: // for the second session
-					Expect(initialPacketNumber).To(Equal(protocol.PacketNumber(42)))
-					Expect(origDestConnID).To(Equal(connID))
-					Expect(destConnID).ToNot(Equal(connID))
-				}
-				return <-sessions, nil
-			}
-			_, err := Dial(packetConn, addr, "localhost:1337", nil, config)
-			Expect(err).ToNot(HaveOccurred())
-			Expect(sessions).To(BeEmpty())
-		})
-
-		It("only accepts a single retry", func() {
-			manager := NewMockPacketHandlerManager(mockCtrl)
-			manager.EXPECT().Add(gomock.Any(), gomock.Any()).Do(func(id protocol.ConnectionID, handler packetHandler) {
-				go handler.handlePacket(&receivedPacket{
-					hdr: &wire.Header{
-						IsLongHeader:         true,
-						Type:                 protocol.PacketTypeRetry,
-						SrcConnectionID:      protocol.ConnectionID{1, 2, 3, 4},
-						DestConnectionID:     id,
-						OrigDestConnectionID: connID,
-						Token:                []byte("foobar"),
-						Version:              cl.version,
-					},
-				})
-			}).AnyTimes()
-			manager.EXPECT().Add(gomock.Any(), gomock.Any()).AnyTimes()
-			mockMultiplexer.EXPECT().AddConn(packetConn, gomock.Any()).Return(manager, nil)
-
-			config := &Config{Versions: []protocol.VersionNumber{protocol.VersionTLS}}
-			cl.config = config
-
-			sessions := make(chan quicSession, 2)
-			run := make(chan error)
-			sess := NewMockQuicSession(mockCtrl)
-			sess.EXPECT().run().DoAndReturn(func() error {
-				defer GinkgoRecover()
-				var err error
-				Eventually(run).Should(Receive(&err))
-				return err
-			})
-			sess.EXPECT().closeForRecreating().Do(func() {
-				run <- errCloseForRecreating
-			})
-			sessions <- sess
-			doneErr := errors.New("nothing to do")
-			sess = NewMockQuicSession(mockCtrl)
-			sess.EXPECT().run().Return(doneErr)
-			sessions <- sess
-
-			newClientSession = func(
-				conn connection,
-				_ sessionRunner,
-				_ []byte, // token
-				_ protocol.ConnectionID,
-				_ protocol.ConnectionID,
-				_ protocol.ConnectionID,
-				_ *Config,
-				_ *tls.Config,
-				_ protocol.PacketNumber,
-				_ *handshake.TransportParameters,
-				_ protocol.VersionNumber,
-				_ utils.Logger,
-				_ protocol.VersionNumber,
-			) (quicSession, error) {
-				return <-sessions, nil
-			}
-			_, err := Dial(packetConn, addr, "localhost:1337", nil, config)
-			Expect(err).To(MatchError(doneErr))
-			Expect(sessions).To(BeEmpty())
-		})
-
 		Context("version negotiation", func() {
 			var origSupportedVersions []protocol.VersionNumber
 
@@ -661,8 +517,6 @@ var _ = Describe("Client", func() {
 				newClientSession = func(
 					conn connection,
 					_ sessionRunner,
-					_ []byte, // token
-					_ protocol.ConnectionID,
 					_ protocol.ConnectionID,
 					_ protocol.ConnectionID,
 					_ *Config,

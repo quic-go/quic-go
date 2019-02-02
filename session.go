@@ -48,6 +48,7 @@ type streamManager interface {
 
 type cryptoStreamHandler interface {
 	RunHandshake() error
+	ChangeConnectionID(protocol.ConnectionID) error
 	io.Closer
 	ConnectionState() handshake.ConnectionState
 }
@@ -120,6 +121,7 @@ type session struct {
 	handshakeCompleteChan chan struct{} // is closed when the handshake completes
 	handshakeComplete     bool
 
+	receivedRetry                    bool
 	receivedFirstPacket              bool
 	receivedFirstForwardSecurePacket bool
 
@@ -221,8 +223,6 @@ var newSession = func(
 var newClientSession = func(
 	conn connection,
 	runner sessionRunner,
-	token []byte,
-	origDestConnID protocol.ConnectionID,
 	destConnID protocol.ConnectionID,
 	srcConnID protocol.ConnectionID,
 	conf *Config,
@@ -239,7 +239,6 @@ var newClientSession = func(
 		config:                conf,
 		srcConnID:             srcConnID,
 		destConnID:            destConnID,
-		origDestConnID:        origDestConnID,
 		perspective:           protocol.PerspectiveClient,
 		handshakeCompleteChan: make(chan struct{}),
 		logger:                logger,
@@ -292,7 +291,6 @@ var newClientSession = func(
 		s.perspective,
 		s.version,
 	)
-	s.packer.SetToken(token)
 	return s, s.postSetup()
 }
 
@@ -491,6 +489,10 @@ func (s *session) handlePacketImpl(p *receivedPacket) bool /* was the packet suc
 		}
 	}()
 
+	if p.hdr.Type == protocol.PacketTypeRetry {
+		return s.handleRetryPacket(p)
+	}
+
 	// The server can change the source connection ID with the first Handshake packet.
 	// After this, all packets with a different source connection have to be ignored.
 	if s.receivedFirstPacket && p.hdr.IsLongHeader && !p.hdr.SrcConnectionID.Equal(s.destConnID) {
@@ -526,6 +528,47 @@ func (s *session) handlePacketImpl(p *receivedPacket) bool /* was the packet suc
 		s.closeLocal(err)
 		return false
 	}
+	return true
+}
+
+func (s *session) handleRetryPacket(p *receivedPacket) bool /* was this a valid Retry */ {
+	if s.perspective == protocol.PerspectiveServer {
+		s.logger.Debugf("Ignoring Retry.")
+		return false
+	}
+	if s.receivedFirstPacket {
+		s.logger.Debugf("Ignoring Retry, since we already received a packet.")
+		return false
+	}
+	hdr := p.hdr
+	(&wire.ExtendedHeader{Header: *hdr}).Log(s.logger)
+	if !hdr.OrigDestConnectionID.Equal(s.destConnID) {
+		s.logger.Debugf("Ignoring spoofed Retry. Original Destination Connection ID: %s, expected: %s", hdr.OrigDestConnectionID, s.destConnID)
+		return false
+	}
+	if hdr.SrcConnectionID.Equal(s.destConnID) {
+		s.logger.Debugf("Ignoring Retry, since the server didn't change the Source Connection ID.")
+		return false
+	}
+	// If a token is already set, this means that we already received a Retry from the server.
+	// Ignore this Retry packet.
+	if s.receivedRetry {
+		s.logger.Debugf("Ignoring Retry, since a Retry was already received.")
+		return false
+	}
+	s.logger.Debugf("<- Received Retry")
+	s.logger.Debugf("Switching destination connection ID to: %s", hdr.SrcConnectionID)
+	s.origDestConnID = s.destConnID
+	s.destConnID = hdr.SrcConnectionID
+	s.receivedRetry = true
+	if err := s.sentPacketHandler.ResetForRetry(); err != nil {
+		s.closeLocal(err)
+		return false
+	}
+	s.cryptoStreamHandler.ChangeConnectionID(s.destConnID)
+	s.packer.SetToken(hdr.Token)
+	s.packer.ChangeDestConnectionID(s.destConnID)
+	s.scheduleSending()
 	return true
 }
 

@@ -32,6 +32,7 @@ type tlsExtensionHandler interface {
 type CryptoSetup interface {
 	RunHandshake() error
 	io.Closer
+	ChangeConnectionID(protocol.ConnectionID) error
 
 	HandleMessage([]byte, protocol.EncryptionLevel) bool
 	ConnectionState() ConnectionState
