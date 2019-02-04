@@ -94,6 +94,24 @@ var _ = Describe("Header Parsing", func() {
 		})
 	})
 
+	Context("Identifying Version Negotiation Packets", func() {
+		It("identifies version negotiation packets", func() {
+			Expect(IsVersionNegotiationPacket([]byte{0x80 | 0x56, 0, 0, 0, 0})).To(BeTrue())
+			Expect(IsVersionNegotiationPacket([]byte{0x56, 0, 0, 0, 0})).To(BeFalse())
+			Expect(IsVersionNegotiationPacket([]byte{0x80, 1, 0, 0, 0})).To(BeFalse())
+			Expect(IsVersionNegotiationPacket([]byte{0x80, 0, 1, 0, 0})).To(BeFalse())
+			Expect(IsVersionNegotiationPacket([]byte{0x80, 0, 0, 1, 0})).To(BeFalse())
+			Expect(IsVersionNegotiationPacket([]byte{0x80, 0, 0, 0, 1})).To(BeFalse())
+		})
+
+		It("returns false on EOF", func() {
+			vnp := []byte{0x80, 0, 0, 0, 0}
+			for i := range vnp {
+				Expect(IsVersionNegotiationPacket(vnp[:i])).To(BeFalse())
+			}
+		})
+	})
+
 	Context("Version Negotiation Packets", func() {
 		It("parses", func() {
 			srcConnID := protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12}
@@ -101,12 +119,12 @@ var _ = Describe("Header Parsing", func() {
 			versions := []protocol.VersionNumber{0x22334455, 0x33445566}
 			vnp, err := ComposeVersionNegotiation(destConnID, srcConnID, versions)
 			Expect(err).ToNot(HaveOccurred())
+			Expect(IsVersionNegotiationPacket(vnp)).To(BeTrue())
 			hdr, _, rest, err := ParsePacket(vnp, 0)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(hdr.DestConnectionID).To(Equal(destConnID))
 			Expect(hdr.SrcConnectionID).To(Equal(srcConnID))
 			Expect(hdr.IsLongHeader).To(BeTrue())
-			Expect(hdr.IsVersionNegotiation()).To(BeTrue())
 			Expect(hdr.Version).To(BeZero())
 			for _, v := range versions {
 				Expect(hdr.SupportedVersions).To(ContainElement(v))
@@ -150,12 +168,12 @@ var _ = Describe("Header Parsing", func() {
 			hdrLen := len(data)
 			data = append(data, []byte{0, 0, 0xbe, 0xef}...) // packet number
 			data = append(data, []byte("foobar")...)
+			Expect(IsVersionNegotiationPacket(data)).To(BeFalse())
 
 			hdr, pdata, rest, err := ParsePacket(data, 0)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(pdata).To(Equal(data))
 			Expect(hdr.IsLongHeader).To(BeTrue())
-			Expect(hdr.IsVersionNegotiation()).To(BeFalse())
 			Expect(hdr.DestConnectionID).To(Equal(destConnID))
 			Expect(hdr.SrcConnectionID).To(Equal(srcConnID))
 			Expect(hdr.Type).To(Equal(protocol.PacketTypeInitial))
@@ -399,10 +417,11 @@ var _ = Describe("Header Parsing", func() {
 			connID := protocol.ConnectionID{0xde, 0xad, 0xbe, 0xef, 0xca, 0xfe, 0x13, 0x37}
 			data := append([]byte{0x40}, connID...)
 			data = append(data, 0x42) // packet number
+			Expect(IsVersionNegotiationPacket(data)).To(BeFalse())
+
 			hdr, pdata, rest, err := ParsePacket(data, 8)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(hdr.IsLongHeader).To(BeFalse())
-			Expect(hdr.IsVersionNegotiation()).To(BeFalse())
 			Expect(hdr.DestConnectionID).To(Equal(connID))
 			b := bytes.NewReader(data)
 			extHdr, err := hdr.ParseExtended(b, versionIETFFrames)

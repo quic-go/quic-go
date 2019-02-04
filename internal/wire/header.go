@@ -35,6 +35,14 @@ func ParseConnectionID(data []byte, shortHeaderConnIDLen int) (protocol.Connecti
 	return protocol.ConnectionID(data[6 : 6+destConnIDLen]), nil
 }
 
+// IsVersionNegotiationPacket says if this is a version negotiation packet
+func IsVersionNegotiationPacket(b []byte) bool {
+	if len(b) < 5 {
+		return false
+	}
+	return b[0]&0x80 > 0 && b[1] == 0 && b[2] == 0 && b[3] == 0 && b[4] == 0
+}
+
 var errUnsupportedVersion = errors.New("unsupported version")
 
 // The Header is the version independent part of the header
@@ -129,7 +137,7 @@ func (h *Header) parseLongHeader(b *bytes.Reader) error {
 		return err
 	}
 	h.Version = protocol.VersionNumber(v)
-	if !h.IsVersionNegotiation() && h.typeByte&0x40 == 0 {
+	if h.Version != 0 && h.typeByte&0x40 == 0 {
 		return errors.New("not a QUIC packet")
 	}
 	connIDLenByte, err := b.ReadByte()
@@ -212,11 +220,6 @@ func (h *Header) parseVersionNegotiationPacket(b *bytes.Reader) error {
 		h.SupportedVersions[i] = protocol.VersionNumber(v)
 	}
 	return nil
-}
-
-// IsVersionNegotiation says if this a version negotiation packet
-func (h *Header) IsVersionNegotiation() bool {
-	return h.IsLongHeader && h.Version == 0
 }
 
 // ParsedLen returns the number of bytes that were consumed when parsing the header

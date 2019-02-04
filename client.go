@@ -287,7 +287,7 @@ func (c *client) establishSecureConnection(ctx context.Context) error {
 }
 
 func (c *client) handlePacket(p *receivedPacket) {
-	if p.hdr.IsVersionNegotiation() {
+	if wire.IsVersionNegotiationPacket(p.data) {
 		go c.handleVersionNegotiationPacket(p.hdr)
 		return
 	}

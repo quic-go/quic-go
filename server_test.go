@@ -239,8 +239,8 @@ var _ = Describe("Server", func() {
 			var write mockPacketConnWrite
 			Eventually(conn.dataWritten).Should(Receive(&write))
 			Expect(write.to.String()).To(Equal("127.0.0.1:1337"))
+			Expect(wire.IsVersionNegotiationPacket(write.data)).To(BeTrue())
 			hdr := parseHeader(write.data)
-			Expect(hdr.IsVersionNegotiation()).To(BeTrue())
 			Expect(hdr.DestConnectionID).To(Equal(srcConnID))
 			Expect(hdr.SrcConnectionID).To(Equal(destConnID))
 			Expect(hdr.SupportedVersions).ToNot(ContainElement(protocol.VersionNumber(0x42)))

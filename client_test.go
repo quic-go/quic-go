@@ -60,10 +60,11 @@ var _ = Describe("Client", func() {
 		Expect(err).ToNot(HaveOccurred())
 		hdr, _, _, err := wire.ParsePacket(data, 0)
 		Expect(err).ToNot(HaveOccurred())
-		Expect(hdr.IsVersionNegotiation()).To(BeTrue())
+		Expect(wire.IsVersionNegotiationPacket(data)).To(BeTrue())
 		return &receivedPacket{
 			rcvTime: time.Now(),
 			hdr:     hdr,
+			data:    data,
 		}
 	}
 
