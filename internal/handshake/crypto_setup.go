@@ -87,8 +87,9 @@ type cryptoSetup struct {
 	handshakeOpener Opener
 	handshakeSealer Sealer
 
-	opener Opener
-	sealer Sealer
+	oneRTTStream io.Writer
+	opener       Opener
+	sealer       Sealer
 	// TODO: add a 1-RTT stream (used for session tickets)
 
 	receivedWriteKey chan struct{}
@@ -106,6 +107,7 @@ var _ CryptoSetup = &cryptoSetup{}
 func NewCryptoSetupClient(
 	initialStream io.Writer,
 	handshakeStream io.Writer,
+	oneRTTStream io.Writer,
 	connID protocol.ConnectionID,
 	chtp *ClientHelloTransportParameters,
 	handleParams func([]byte),
@@ -115,6 +117,7 @@ func NewCryptoSetupClient(
 	cs, clientHelloWritten, err := newCryptoSetup(
 		initialStream,
 		handshakeStream,
+		oneRTTStream,
 		connID,
 		chtp.Marshal(),
 		handleParams,
@@ -133,6 +136,7 @@ func NewCryptoSetupClient(
 func NewCryptoSetupServer(
 	initialStream io.Writer,
 	handshakeStream io.Writer,
+	oneRTTStream io.Writer,
 	connID protocol.ConnectionID,
 	eetp *EncryptedExtensionsTransportParameters,
 	handleParams func([]byte),
@@ -142,6 +146,7 @@ func NewCryptoSetupServer(
 	cs, _, err := newCryptoSetup(
 		initialStream,
 		handshakeStream,
+		oneRTTStream,
 		connID,
 		eetp.Marshal(),
 		handleParams,
@@ -159,6 +164,7 @@ func NewCryptoSetupServer(
 func newCryptoSetup(
 	initialStream io.Writer,
 	handshakeStream io.Writer,
+	oneRTTStream io.Writer,
 	connID protocol.ConnectionID,
 	paramBytes []byte, // the marshaled transport parameters
 	handleParams func([]byte),
@@ -176,6 +182,7 @@ func newCryptoSetup(
 		initialSealer:          initialSealer,
 		initialOpener:          initialOpener,
 		handshakeStream:        handshakeStream,
+		oneRTTStream:           oneRTTStream,
 		readEncLevel:           protocol.EncryptionInitial,
 		writeEncLevel:          protocol.EncryptionInitial,
 		handleParamsCallback:   handleParams,
@@ -458,8 +465,10 @@ func (h *cryptoSetup) WriteRecord(p []byte) (int, error) {
 		return n, err
 	case protocol.EncryptionHandshake:
 		return h.handshakeStream.Write(p)
+	case protocol.Encryption1RTT:
+		return h.oneRTTStream.Write(p)
 	default:
-		return 0, fmt.Errorf("unexpected write encryption level: %s", h.writeEncLevel)
+		panic(fmt.Sprintf("unexpected write encryption level: %s", h.writeEncLevel))
 	}
 }
 
