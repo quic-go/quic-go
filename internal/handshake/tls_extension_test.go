@@ -13,14 +13,14 @@ import (
 var _ = Describe("QUIC TLS Extension", func() {
 	Context("Client Hello Transport Parameters", func() {
 		It("marshals and unmarshals", func() {
-			chtp := &clientHelloTransportParameters{
+			chtp := &ClientHelloTransportParameters{
 				InitialVersion: 0x123456,
 				Parameters: TransportParameters{
 					InitialMaxStreamDataUni: 0x42,
 					IdleTimeout:             0x1337 * time.Second,
 				},
 			}
-			chtp2 := &clientHelloTransportParameters{}
+			chtp2 := &ClientHelloTransportParameters{}
 			Expect(chtp2.Unmarshal(chtp.Marshal())).To(Succeed())
 			Expect(chtp2.InitialVersion).To(Equal(chtp.InitialVersion))
 			Expect(chtp2.Parameters.InitialMaxStreamDataUni).To(Equal(chtp.Parameters.InitialMaxStreamDataUni))
@@ -32,7 +32,7 @@ var _ = Describe("QUIC TLS Extension", func() {
 			b := make([]byte, 100)
 			for i := 0; i < 1000; i++ {
 				rand.Read(b)
-				chtp := &clientHelloTransportParameters{}
+				chtp := &ClientHelloTransportParameters{}
 				chtp.Unmarshal(b[:int(rand.Int31n(100))])
 			}
 		})
@@ -40,7 +40,7 @@ var _ = Describe("QUIC TLS Extension", func() {
 
 	Context("Encrypted Extensions Transport Parameters", func() {
 		It("marshals and unmarshals", func() {
-			eetp := &encryptedExtensionsTransportParameters{
+			eetp := &EncryptedExtensionsTransportParameters{
 				NegotiatedVersion: 0x123456,
 				SupportedVersions: []protocol.VersionNumber{0x42, 0x4242},
 				Parameters: TransportParameters{
@@ -48,7 +48,7 @@ var _ = Describe("QUIC TLS Extension", func() {
 					IdleTimeout:                   0x1337 * time.Second,
 				},
 			}
-			eetp2 := &encryptedExtensionsTransportParameters{}
+			eetp2 := &EncryptedExtensionsTransportParameters{}
 			Expect(eetp2.Unmarshal(eetp.Marshal())).To(Succeed())
 			Expect(eetp2.NegotiatedVersion).To(Equal(eetp.NegotiatedVersion))
 			Expect(eetp2.SupportedVersions).To(Equal(eetp.SupportedVersions))
@@ -61,7 +61,7 @@ var _ = Describe("QUIC TLS Extension", func() {
 			b := make([]byte, 100)
 			for i := 0; i < 1000; i++ {
 				rand.Read(b)
-				chtp := &encryptedExtensionsTransportParameters{}
+				chtp := &EncryptedExtensionsTransportParameters{}
 				chtp.Unmarshal(b[:int(rand.Int31n(100))])
 			}
 		})

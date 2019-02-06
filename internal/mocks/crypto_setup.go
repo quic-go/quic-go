@@ -35,6 +35,18 @@ func (m *MockCryptoSetup) EXPECT() *MockCryptoSetupMockRecorder {
 	return m.recorder
 }
 
+// ChangeConnectionID mocks base method
+func (m *MockCryptoSetup) ChangeConnectionID(arg0 protocol.ConnectionID) error {
+	ret := m.ctrl.Call(m, "ChangeConnectionID", arg0)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// ChangeConnectionID indicates an expected call of ChangeConnectionID
+func (mr *MockCryptoSetupMockRecorder) ChangeConnectionID(arg0 interface{}) *gomock.Call {
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ChangeConnectionID", reflect.TypeOf((*MockCryptoSetup)(nil).ChangeConnectionID), arg0)
+}
+
 // Close mocks base method
 func (m *MockCryptoSetup) Close() error {
 	ret := m.ctrl.Call(m, "Close")

@@ -25,12 +25,14 @@ type Sealer interface {
 type tlsExtensionHandler interface {
 	GetExtensions(msgType uint8) []qtls.Extension
 	ReceivedExtensions(msgType uint8, exts []qtls.Extension) error
+	TransportParameters() <-chan []byte
 }
 
 // CryptoSetup handles the handshake and protecting / unprotecting packets
 type CryptoSetup interface {
 	RunHandshake() error
 	io.Closer
+	ChangeConnectionID(protocol.ConnectionID) error
 
 	HandleMessage([]byte, protocol.EncryptionLevel) bool
 	ConnectionState() ConnectionState

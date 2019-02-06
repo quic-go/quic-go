@@ -21,6 +21,7 @@ type packer interface {
 	PackConnectionClose(*wire.ConnectionCloseFrame) (*packedPacket, error)
 
 	HandleTransportParameters(*handshake.TransportParameters)
+	SetToken([]byte)
 	ChangeDestConnectionID(protocol.ConnectionID)
 }
 
@@ -123,7 +124,6 @@ func newPacketPacker(
 	handshakeStream cryptoStream,
 	packetNumberManager packetNumberManager,
 	remoteAddr net.Addr, // only used for determining the max packet size
-	token []byte,
 	cryptoSetup sealingManager,
 	framer frameSource,
 	acks ackFrameSource,
@@ -132,7 +132,6 @@ func newPacketPacker(
 ) *packetPacker {
 	return &packetPacker{
 		cryptoSetup:     cryptoSetup,
-		token:           token,
 		destConnID:      destConnID,
 		srcConnID:       srcConnID,
 		initialStream:   initialStream,
@@ -474,6 +473,10 @@ func (p *packetPacker) writeAndSealPacket(
 
 func (p *packetPacker) ChangeDestConnectionID(connID protocol.ConnectionID) {
 	p.destConnID = connID
+}
+
+func (p *packetPacker) SetToken(token []byte) {
+	p.token = token
 }
 
 func (p *packetPacker) HandleTransportParameters(params *handshake.TransportParameters) {

@@ -12,12 +12,14 @@ import (
 
 const quicTLSExtensionType = 0xffa5
 
-type clientHelloTransportParameters struct {
+// The ClientHelloTransportParameters are the transport parameters sent in the ClientHello.
+type ClientHelloTransportParameters struct {
 	InitialVersion protocol.VersionNumber
 	Parameters     TransportParameters
 }
 
-func (p *clientHelloTransportParameters) Marshal() []byte {
+// Marshal the transport parameters
+func (p *ClientHelloTransportParameters) Marshal() []byte {
 	const lenOffset = 4
 	b := &bytes.Buffer{}
 	utils.BigEndian.WriteUint32(b, uint32(p.InitialVersion))
@@ -28,7 +30,8 @@ func (p *clientHelloTransportParameters) Marshal() []byte {
 	return data
 }
 
-func (p *clientHelloTransportParameters) Unmarshal(data []byte) error {
+// Unmarshal the transport parameters
+func (p *ClientHelloTransportParameters) Unmarshal(data []byte) error {
 	if len(data) < 6 {
 		return errors.New("transport parameter data too short")
 	}
@@ -41,13 +44,15 @@ func (p *clientHelloTransportParameters) Unmarshal(data []byte) error {
 	return p.Parameters.unmarshal(data, protocol.PerspectiveClient)
 }
 
-type encryptedExtensionsTransportParameters struct {
+// EncryptedExtensionsTransportParameters are the transport parameters sent in the EncryptedExtensions.
+type EncryptedExtensionsTransportParameters struct {
 	NegotiatedVersion protocol.VersionNumber
 	SupportedVersions []protocol.VersionNumber
 	Parameters        TransportParameters
 }
 
-func (p *encryptedExtensionsTransportParameters) Marshal() []byte {
+// Marshal the transport parameters
+func (p *EncryptedExtensionsTransportParameters) Marshal() []byte {
 	b := &bytes.Buffer{}
 	utils.BigEndian.WriteUint32(b, uint32(p.NegotiatedVersion))
 	b.WriteByte(uint8(4 * len(p.SupportedVersions)))
@@ -62,7 +67,8 @@ func (p *encryptedExtensionsTransportParameters) Marshal() []byte {
 	return data
 }
 
-func (p *encryptedExtensionsTransportParameters) Unmarshal(data []byte) error {
+// Unmarshal the transport parameters
+func (p *EncryptedExtensionsTransportParameters) Unmarshal(data []byte) error {
 	if len(data) < 5 {
 		return errors.New("transport parameter data too short")
 	}

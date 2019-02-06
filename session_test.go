@@ -91,7 +91,7 @@ var _ = Describe("Session", func() {
 			protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8},
 			populateServerConfig(&Config{}),
 			nil, // tls.Config
-			nil, // handshake.TransportParameters,
+			&handshake.TransportParameters{},
 			utils.DefaultLogger,
 			protocol.VersionTLS,
 		)
@@ -352,6 +352,20 @@ var _ = Describe("Session", func() {
 		str, err := sess.AcceptStream()
 		Expect(err).ToNot(HaveOccurred())
 		Expect(str).To(Equal(mstr))
+	})
+
+	It("drops Retry packets", func() {
+		hdr := wire.Header{
+			IsLongHeader: true,
+			Type:         protocol.PacketTypeRetry,
+		}
+		buf := &bytes.Buffer{}
+		(&wire.ExtendedHeader{Header: hdr}).Write(buf, sess.version)
+		Expect(sess.handlePacketImpl(&receivedPacket{
+			hdr:    &hdr,
+			data:   buf.Bytes(),
+			buffer: getPacketBuffer(),
+		})).To(BeFalse())
 	})
 
 	Context("closing", func() {
@@ -1085,28 +1099,71 @@ var _ = Describe("Session", func() {
 		Eventually(done).Should(BeClosed())
 	})
 
-	It("process transport parameters received from the peer", func() {
-		go func() {
-			defer GinkgoRecover()
-			cryptoSetup.EXPECT().RunHandshake().Do(func() { <-sess.Context().Done() })
-			sess.run()
-		}()
-		params := &handshake.TransportParameters{
-			IdleTimeout:                   90 * time.Second,
-			InitialMaxStreamDataBidiLocal: 0x5000,
-			InitialMaxData:                0x5000,
-			MaxPacketSize:                 0x42,
-		}
-		streamManager.EXPECT().UpdateLimits(params)
-		packer.EXPECT().HandleTransportParameters(params)
-		sess.processTransportParameters(params)
-		// make the go routine return
-		streamManager.EXPECT().CloseWithError(gomock.Any())
-		sessionRunner.EXPECT().retireConnectionID(gomock.Any())
-		packer.EXPECT().PackConnectionClose(gomock.Any()).Return(&packedPacket{}, nil)
-		cryptoSetup.EXPECT().Close()
-		sess.Close()
-		Eventually(sess.Context().Done()).Should(BeClosed())
+	Context("transport parameters", func() {
+		It("errors if it can't unmarshal the TransportParameters", func() {
+			go func() {
+				defer GinkgoRecover()
+				cryptoSetup.EXPECT().RunHandshake().Do(func() { <-sess.Context().Done() })
+				err := sess.run()
+				Expect(err).To(HaveOccurred())
+				Expect(err.Error()).To(ContainSubstring("transport parameter"))
+			}()
+			streamManager.EXPECT().CloseWithError(gomock.Any())
+			sessionRunner.EXPECT().retireConnectionID(gomock.Any())
+			packer.EXPECT().PackConnectionClose(gomock.Any()).Return(&packedPacket{}, nil)
+			cryptoSetup.EXPECT().Close()
+			sess.processTransportParameters([]byte("invalid"))
+			Eventually(sess.Context().Done()).Should(BeClosed())
+		})
+
+		It("process transport parameters received from the client", func() {
+			go func() {
+				defer GinkgoRecover()
+				cryptoSetup.EXPECT().RunHandshake().Do(func() { <-sess.Context().Done() })
+				sess.run()
+			}()
+			params := &handshake.TransportParameters{
+				IdleTimeout:                   90 * time.Second,
+				InitialMaxStreamDataBidiLocal: 0x5000,
+				InitialMaxData:                0x5000,
+				// marshaling always sets it to this value
+				MaxPacketSize: protocol.MaxReceivePacketSize,
+			}
+			chtp := &handshake.ClientHelloTransportParameters{
+				InitialVersion: sess.version,
+				Parameters:     *params,
+			}
+			streamManager.EXPECT().UpdateLimits(params)
+			packer.EXPECT().HandleTransportParameters(params)
+			sess.processTransportParameters(chtp.Marshal())
+			// make the go routine return
+			streamManager.EXPECT().CloseWithError(gomock.Any())
+			sessionRunner.EXPECT().retireConnectionID(gomock.Any())
+			packer.EXPECT().PackConnectionClose(gomock.Any()).Return(&packedPacket{}, nil)
+			cryptoSetup.EXPECT().Close()
+			sess.Close()
+			Eventually(sess.Context().Done()).Should(BeClosed())
+		})
+
+		It("accepts a valid version negotiation", func() {
+			sess.version = 42
+			sess.config.Versions = []protocol.VersionNumber{13, 37, 42}
+			chtp := &handshake.ClientHelloTransportParameters{
+				InitialVersion: 22, // this must be an unsupported version
+			}
+			_, err := sess.processTransportParametersForServer(chtp.Marshal())
+			Expect(err).ToNot(HaveOccurred())
+		})
+
+		It("erros when a version negotiation was performed, although we already support the initial version", func() {
+			sess.version = 42
+			sess.config.Versions = []protocol.VersionNumber{13, 37, 42}
+			chtp := &handshake.ClientHelloTransportParameters{
+				InitialVersion: 13, // this must be a supported version
+			}
+			_, err := sess.processTransportParametersForServer(chtp.Marshal())
+			Expect(err).To(MatchError("VersionNegotiationMismatch: Client should have used the initial version"))
+		})
 	})
 
 	Context("keep-alives", func() {
@@ -1387,14 +1444,12 @@ var _ = Describe("Client Session", func() {
 		sessP, err := newClientSession(
 			mconn,
 			sessionRunner,
-			[]byte("token"),
 			protocol.ConnectionID{8, 7, 6, 5, 4, 3, 2, 1},
-			protocol.ConnectionID{8, 7, 6, 5, 4, 3, 2, 1},
-			protocol.ConnectionID{8, 7, 6, 5, 4, 3, 2, 1},
+			protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8},
 			populateClientConfig(&Config{}, true),
 			nil, // tls.Config
 			42,  // initial packet number
-			nil, // transport parameters
+			&handshake.TransportParameters{},
 			protocol.VersionWhatever,
 			utils.DefaultLogger,
 			protocol.VersionWhatever,
@@ -1440,5 +1495,198 @@ var _ = Describe("Client Session", func() {
 		cryptoSetup.EXPECT().Close()
 		Expect(sess.Close()).To(Succeed())
 		Eventually(sess.Context().Done()).Should(BeClosed())
+	})
+
+	Context("handling Retry", func() {
+		var validRetryHdr *wire.Header
+
+		BeforeEach(func() {
+			validRetryHdr = &wire.Header{
+				IsLongHeader:         true,
+				Type:                 protocol.PacketTypeRetry,
+				SrcConnectionID:      protocol.ConnectionID{0xde, 0xad, 0xbe, 0xef},
+				DestConnectionID:     protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8},
+				OrigDestConnectionID: protocol.ConnectionID{8, 7, 6, 5, 4, 3, 2, 1},
+				Token:                []byte("foobar"),
+			}
+		})
+
+		getPacket := func(hdr *wire.Header) *receivedPacket {
+			buf := &bytes.Buffer{}
+			(&wire.ExtendedHeader{Header: *hdr}).Write(buf, sess.version)
+			return &receivedPacket{
+				hdr:    hdr,
+				data:   buf.Bytes(),
+				buffer: getPacketBuffer(),
+			}
+		}
+
+		It("handles Retry packets", func() {
+			cryptoSetup.EXPECT().ChangeConnectionID(protocol.ConnectionID{0xde, 0xad, 0xbe, 0xef})
+			packer.EXPECT().SetToken([]byte("foobar"))
+			packer.EXPECT().ChangeDestConnectionID(protocol.ConnectionID{0xde, 0xad, 0xbe, 0xef})
+			Expect(sess.handlePacketImpl(getPacket(validRetryHdr))).To(BeTrue())
+		})
+
+		It("ignores Retry packets after receiving a regular packet", func() {
+			sess.receivedFirstPacket = true
+			Expect(sess.handlePacketImpl(getPacket(validRetryHdr))).To(BeFalse())
+		})
+
+		It("ignores Retry packets if the server didn't change the connection ID", func() {
+			validRetryHdr.SrcConnectionID = sess.destConnID
+			Expect(sess.handlePacketImpl(getPacket(validRetryHdr))).To(BeFalse())
+		})
+
+		It("ignores Retry packets with the wrong original destination connection ID", func() {
+			hdr := &wire.Header{
+				IsLongHeader:         true,
+				Type:                 protocol.PacketTypeRetry,
+				SrcConnectionID:      protocol.ConnectionID{0xde, 0xad, 0xbe, 0xef},
+				DestConnectionID:     protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8},
+				OrigDestConnectionID: protocol.ConnectionID{1, 2, 3, 4},
+				Token:                []byte("foobar"),
+			}
+			Expect(sess.handlePacketImpl(getPacket(hdr))).To(BeFalse())
+		})
+	})
+
+	Context("transport parameters", func() {
+		It("errors if it can't unmarshal the TransportParameters", func() {
+			go func() {
+				defer GinkgoRecover()
+				cryptoSetup.EXPECT().RunHandshake().Do(func() { <-sess.Context().Done() })
+				err := sess.run()
+				Expect(err).To(HaveOccurred())
+				Expect(err.Error()).To(ContainSubstring("transport parameter"))
+			}()
+			// streamManager.EXPECT().CloseWithError(gomock.Any())
+			sessionRunner.EXPECT().retireConnectionID(gomock.Any())
+			packer.EXPECT().PackConnectionClose(gomock.Any()).Return(&packedPacket{}, nil)
+			cryptoSetup.EXPECT().Close()
+			sess.processTransportParameters([]byte("invalid"))
+			Eventually(sess.Context().Done()).Should(BeClosed())
+		})
+
+		It("errors if the TransportParameters don't contain the stateless reset token", func() {
+			eetp := &handshake.EncryptedExtensionsTransportParameters{
+				NegotiatedVersion: sess.version,
+				SupportedVersions: []protocol.VersionNumber{sess.version},
+			}
+			_, err := sess.processTransportParametersForClient(eetp.Marshal())
+			Expect(err).To(MatchError("server didn't send stateless_reset_token"))
+		})
+
+		It("errors if the TransportParameters contain an original_connection_id, although no Retry was performed", func() {
+			eetp := &handshake.EncryptedExtensionsTransportParameters{
+				NegotiatedVersion: sess.version,
+				SupportedVersions: []protocol.VersionNumber{sess.version},
+				Parameters: handshake.TransportParameters{
+					OriginalConnectionID: protocol.ConnectionID{0xde, 0xca, 0xfb, 0xad},
+					StatelessResetToken:  []byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16},
+				},
+			}
+			_, err := sess.processTransportParametersForClient(eetp.Marshal())
+			Expect(err).To(MatchError("expected original_connection_id to equal (empty), is 0xdecafbad"))
+		})
+
+		It("errors if the TransportParameters contain an original_connection_id, although no Retry was performed", func() {
+			sess.origDestConnID = protocol.ConnectionID{0xde, 0xad, 0xbe, 0xef}
+			eetp := &handshake.EncryptedExtensionsTransportParameters{
+				NegotiatedVersion: sess.version,
+				SupportedVersions: []protocol.VersionNumber{sess.version},
+				Parameters: handshake.TransportParameters{
+					OriginalConnectionID: protocol.ConnectionID{0xde, 0xca, 0xfb, 0xad},
+					StatelessResetToken:  []byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16},
+				},
+			}
+			_, err := sess.processTransportParametersForClient(eetp.Marshal())
+			Expect(err).To(MatchError("expected original_connection_id to equal 0xdeadbeef, is 0xdecafbad"))
+		})
+
+		Context("Version Negotiation", func() {
+			var params handshake.TransportParameters
+
+			BeforeEach(func() {
+				params = handshake.TransportParameters{
+					StatelessResetToken:  []byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16},
+					OriginalConnectionID: sess.origDestConnID,
+				}
+			})
+
+			It("accepts a valid version negotiation", func() {
+				sess.initialVersion = 13
+				sess.version = 37
+				sess.config.Versions = []protocol.VersionNumber{13, 37, 42}
+				eetp := &handshake.EncryptedExtensionsTransportParameters{
+					NegotiatedVersion: 37,
+					SupportedVersions: []protocol.VersionNumber{36, 37, 38},
+					Parameters:        params,
+				}
+				_, err := sess.processTransportParametersForClient(eetp.Marshal())
+				Expect(err).ToNot(HaveOccurred())
+			})
+
+			It("errors if the current version doesn't match negotiated_version", func() {
+				sess.initialVersion = 13
+				sess.version = 37
+				sess.config.Versions = []protocol.VersionNumber{13, 37, 42}
+				eetp := &handshake.EncryptedExtensionsTransportParameters{
+					NegotiatedVersion: 38,
+					SupportedVersions: []protocol.VersionNumber{36, 37, 38},
+					Parameters:        params,
+				}
+				_, err := sess.processTransportParametersForClient(eetp.Marshal())
+				Expect(err).To(MatchError("VersionNegotiationMismatch: current version doesn't match negotiated_version"))
+			})
+
+			It("errors if the current version is not contained in the server's supported versions", func() {
+				sess.version = 42
+				eetp := &handshake.EncryptedExtensionsTransportParameters{
+					NegotiatedVersion: 42,
+					SupportedVersions: []protocol.VersionNumber{43, 44},
+					Parameters:        params,
+				}
+				_, err := sess.processTransportParametersForClient(eetp.Marshal())
+				Expect(err).To(MatchError("VersionNegotiationMismatch: current version not included in the supported versions"))
+			})
+
+			It("errors if version negotiation was performed, but would have picked a different version based on the supported version list", func() {
+				sess.version = 42
+				sess.initialVersion = 41
+				sess.config.Versions = []protocol.VersionNumber{43, 42, 41}
+				serverSupportedVersions := []protocol.VersionNumber{42, 43}
+				// check that version negotiation would have led us to pick version 43
+				ver, ok := protocol.ChooseSupportedVersion(sess.config.Versions, serverSupportedVersions)
+				Expect(ok).To(BeTrue())
+				Expect(ver).To(Equal(protocol.VersionNumber(43)))
+				eetp := &handshake.EncryptedExtensionsTransportParameters{
+					NegotiatedVersion: 42,
+					SupportedVersions: serverSupportedVersions,
+					Parameters:        params,
+				}
+				_, err := sess.processTransportParametersForClient(eetp.Marshal())
+				Expect(err).To(MatchError("VersionNegotiationMismatch: would have picked a different version"))
+			})
+
+			It("doesn't error if it would have picked a different version based on the supported version list, if no version negotiation was performed", func() {
+				sess.version = 42
+				sess.initialVersion = 42 // version == initialVersion means no version negotiation was performed
+				sess.config.Versions = []protocol.VersionNumber{43, 42, 41}
+				serverSupportedVersions := []protocol.VersionNumber{42, 43}
+				// check that version negotiation would have led us to pick version 43
+				ver, ok := protocol.ChooseSupportedVersion(sess.config.Versions, serverSupportedVersions)
+				Expect(ok).To(BeTrue())
+				Expect(ver).To(Equal(protocol.VersionNumber(43)))
+				eetp := &handshake.EncryptedExtensionsTransportParameters{
+					NegotiatedVersion: 42,
+					SupportedVersions: serverSupportedVersions,
+					Parameters:        params,
+				}
+				_, err := sess.processTransportParametersForClient(eetp.Marshal())
+				Expect(err).ToNot(HaveOccurred())
+			})
+		})
+
 	})
 })

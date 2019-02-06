@@ -873,4 +873,28 @@ var _ = Describe("SentPacketHandler", func() {
 			Expect(handler.PopPacketNumber()).To(BeNumerically(">", 42))
 		})
 	})
+
+	Context("resetting for retry", func() {
+		It("queues outstanding packets for retransmission and cancels alarms", func() {
+			packet := &Packet{
+				PacketNumber:    42,
+				EncryptionLevel: protocol.EncryptionInitial,
+				Frames:          []wire.Frame{&wire.CryptoFrame{Data: []byte("foobar")}},
+				Length:          100,
+			}
+			handler.SentPacket(packet)
+			Expect(handler.GetAlarmTimeout()).ToNot(BeZero())
+			Expect(handler.bytesInFlight).ToNot(BeZero())
+			Expect(handler.DequeuePacketForRetransmission()).To(BeNil())
+			Expect(handler.SendMode()).To(Equal(SendAny))
+			// now receive a Retry
+			Expect(handler.ResetForRetry()).To(Succeed())
+			Expect(handler.bytesInFlight).To(BeZero())
+			Expect(handler.GetAlarmTimeout()).To(BeZero())
+			Expect(handler.SendMode()).To(Equal(SendRetransmission))
+			p := handler.DequeuePacketForRetransmission()
+			Expect(p.PacketNumber).To(Equal(packet.PacketNumber))
+			Expect(p.Frames).To(Equal(packet.Frames))
+		})
+	})
 })

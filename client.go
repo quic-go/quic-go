@@ -24,8 +24,6 @@ type client struct {
 
 	packetHandlers packetHandlerManager
 
-	token []byte
-
 	versionNegotiated                utils.AtomicBool // has the server accepted our version
 	receivedVersionNegotiationPacket bool
 	negotiatedVersions               []protocol.VersionNumber // the list of versions from the version negotiation packet
@@ -33,9 +31,8 @@ type client struct {
 	tlsConf *tls.Config
 	config  *Config
 
-	srcConnID      protocol.ConnectionID
-	destConnID     protocol.ConnectionID
-	origDestConnID protocol.ConnectionID // the destination conn ID used on the first Initial (before a Retry)
+	srcConnID  protocol.ConnectionID
+	destConnID protocol.ConnectionID
 
 	initialPacketNumber protocol.PacketNumber
 
@@ -262,7 +259,7 @@ func (c *client) dial(ctx context.Context) error {
 
 // establishSecureConnection runs the session, and tries to establish a secure connection
 // It returns:
-// - errCloseSessionRecreating when the server sends a version negotiation packet, or a stateless retry is performed
+// - errCloseForRecreating when the server sends a version negotiation packet
 // - any other error that might occur
 // - when the connection is forward-secure
 func (c *client) establishSecureConnection(ctx context.Context) error {
@@ -292,11 +289,6 @@ func (c *client) establishSecureConnection(ctx context.Context) error {
 func (c *client) handlePacket(p *receivedPacket) {
 	if p.hdr.IsVersionNegotiation() {
 		go c.handleVersionNegotiationPacket(p.hdr)
-		return
-	}
-
-	if p.hdr.Type == protocol.PacketTypeRetry {
-		go c.handleRetryPacket(p.hdr)
 		return
 	}
 
@@ -345,32 +337,6 @@ func (c *client) handleVersionNegotiationPacket(hdr *wire.Header) {
 	c.initialPacketNumber = c.session.closeForRecreating()
 }
 
-func (c *client) handleRetryPacket(hdr *wire.Header) {
-	c.mutex.Lock()
-	defer c.mutex.Unlock()
-
-	c.logger.Debugf("<- Received Retry")
-	(&wire.ExtendedHeader{Header: *hdr}).Log(c.logger)
-	if !hdr.OrigDestConnectionID.Equal(c.destConnID) {
-		c.logger.Debugf("Ignoring spoofed Retry. Original Destination Connection ID: %s, expected: %s", hdr.OrigDestConnectionID, c.destConnID)
-		return
-	}
-	if hdr.SrcConnectionID.Equal(c.destConnID) {
-		c.logger.Debugf("Ignoring Retry, since the server didn't change the Source Connection ID.")
-		return
-	}
-	// If a token is already set, this means that we already received a Retry from the server.
-	// Ignore this Retry packet.
-	if len(c.token) > 0 {
-		c.logger.Debugf("Ignoring Retry, since a Retry was already received.")
-		return
-	}
-	c.origDestConnID = c.destConnID
-	c.destConnID = hdr.SrcConnectionID
-	c.token = hdr.Token
-	c.initialPacketNumber = c.session.closeForRecreating()
-}
-
 func (c *client) createNewTLSSession(version protocol.VersionNumber) error {
 	params := &handshake.TransportParameters{
 		InitialMaxStreamDataBidiRemote: protocol.InitialMaxStreamData,
@@ -394,8 +360,6 @@ func (c *client) createNewTLSSession(version protocol.VersionNumber) error {
 	sess, err := newClientSession(
 		c.conn,
 		runner,
-		c.token,
-		c.origDestConnID,
 		c.destConnID,
 		c.srcConnID,
 		c.config,
