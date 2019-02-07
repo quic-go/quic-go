@@ -52,7 +52,7 @@ var _ = Describe("TLS Extension Handler, for the server", func() {
 			It("sends the extension on the channel", func() {
 				go func() {
 					defer GinkgoRecover()
-					Expect(handlerServer.ReceivedExtensions(uint8(typeClientHello), chExts)).To(Succeed())
+					handlerServer.ReceivedExtensions(uint8(typeClientHello), chExts)
 				}()
 
 				var data []byte
@@ -63,7 +63,7 @@ var _ = Describe("TLS Extension Handler, for the server", func() {
 			It("sends nil on the channel if the extension is missing", func() {
 				go func() {
 					defer GinkgoRecover()
-					Expect(handlerServer.ReceivedExtensions(uint8(typeClientHello), nil)).To(Succeed())
+					handlerServer.ReceivedExtensions(uint8(typeClientHello), nil)
 				}()
 
 				var data []byte
@@ -75,7 +75,7 @@ var _ = Describe("TLS Extension Handler, for the server", func() {
 				go func() {
 					defer GinkgoRecover()
 					exts := []qtls.Extension{{Type: 0x1337, Data: []byte("invalid")}}
-					Expect(handlerServer.ReceivedExtensions(uint8(typeClientHello), exts)).To(Succeed())
+					handlerServer.ReceivedExtensions(uint8(typeClientHello), exts)
 				}()
 
 				var data []byte
@@ -86,7 +86,7 @@ var _ = Describe("TLS Extension Handler, for the server", func() {
 			It("ignores extensions that are not sent with the ClientHello", func() {
 				go func() {
 					defer GinkgoRecover()
-					Expect(handlerServer.ReceivedExtensions(uint8(typeFinished), chExts)).To(Succeed())
+					handlerServer.ReceivedExtensions(uint8(typeFinished), chExts)
 				}()
 
 				Consistently(handlerServer.TransportParameters()).ShouldNot(Receive())
@@ -121,7 +121,7 @@ var _ = Describe("TLS Extension Handler, for the server", func() {
 			It("sends the extension on the channel", func() {
 				go func() {
 					defer GinkgoRecover()
-					Expect(handlerClient.ReceivedExtensions(uint8(typeEncryptedExtensions), chExts)).To(Succeed())
+					handlerClient.ReceivedExtensions(uint8(typeEncryptedExtensions), chExts)
 				}()
 
 				var data []byte
@@ -132,7 +132,7 @@ var _ = Describe("TLS Extension Handler, for the server", func() {
 			It("sends nil on the channel if the extension is missing", func() {
 				go func() {
 					defer GinkgoRecover()
-					Expect(handlerClient.ReceivedExtensions(uint8(typeEncryptedExtensions), nil)).To(Succeed())
+					handlerClient.ReceivedExtensions(uint8(typeEncryptedExtensions), nil)
 				}()
 
 				var data []byte
@@ -144,7 +144,7 @@ var _ = Describe("TLS Extension Handler, for the server", func() {
 				go func() {
 					defer GinkgoRecover()
 					exts := []qtls.Extension{{Type: 0x1337, Data: []byte("invalid")}}
-					Expect(handlerClient.ReceivedExtensions(uint8(typeEncryptedExtensions), exts)).To(Succeed())
+					handlerClient.ReceivedExtensions(uint8(typeEncryptedExtensions), exts)
 				}()
 
 				var data []byte
@@ -155,7 +155,7 @@ var _ = Describe("TLS Extension Handler, for the server", func() {
 			It("ignores extensions that are not sent with the EncryptedExtensions", func() {
 				go func() {
 					defer GinkgoRecover()
-					Expect(handlerClient.ReceivedExtensions(uint8(typeFinished), chExts)).To(Succeed())
+					handlerClient.ReceivedExtensions(uint8(typeFinished), chExts)
 				}()
 
 				Consistently(handlerClient.TransportParameters()).ShouldNot(Receive())
