@@ -168,8 +168,6 @@ var newSession = func(
 	}
 	s.preSetup()
 	s.sentPacketHandler = ackhandler.NewSentPacketHandler(0, s.rttStats, s.logger)
-	initialStream := newCryptoStream()
-	handshakeStream := newCryptoStream()
 	s.streamsMap = newStreamsMap(
 		s,
 		s.newFlowController,
@@ -179,6 +177,9 @@ var newSession = func(
 		s.version,
 	)
 	s.framer = newFramer(s.streamsMap, s.version)
+	initialStream := newCryptoStream()
+	handshakeStream := newCryptoStream()
+	oneRTTStream := newPostHandshakeCryptoStream(s.framer)
 	eetp := &handshake.EncryptedExtensionsTransportParameters{
 		NegotiatedVersion: s.version,
 		SupportedVersions: protocol.GetGreasedVersions(conf.Versions),
@@ -187,6 +188,7 @@ var newSession = func(
 	cs, err := handshake.NewCryptoSetupServer(
 		initialStream,
 		handshakeStream,
+		oneRTTStream,
 		clientDestConnID,
 		eetp,
 		s.processTransportParameters,
@@ -249,6 +251,7 @@ var newClientSession = func(
 	s.sentPacketHandler = ackhandler.NewSentPacketHandler(initialPacketNumber, s.rttStats, s.logger)
 	initialStream := newCryptoStream()
 	handshakeStream := newCryptoStream()
+	oneRTTStream := newPostHandshakeCryptoStream(s.framer)
 	chtp := &handshake.ClientHelloTransportParameters{
 		InitialVersion: initialVersion,
 		Parameters:     *params,
@@ -256,6 +259,7 @@ var newClientSession = func(
 	cs, clientHelloWritten, err := handshake.NewCryptoSetupClient(
 		initialStream,
 		handshakeStream,
+		oneRTTStream,
 		s.destConnID,
 		chtp,
 		s.processTransportParameters,

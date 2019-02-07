@@ -7,6 +7,7 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"crypto/x509/pkix"
+	"io/ioutil"
 	"math/big"
 	"time"
 
@@ -69,6 +70,7 @@ var _ = Describe("Crypto Setup TLS", func() {
 		server, err := NewCryptoSetupServer(
 			sInitialStream,
 			sHandshakeStream,
+			ioutil.Discard,
 			protocol.ConnectionID{},
 			&EncryptedExtensionsTransportParameters{
 				NegotiatedVersion: protocol.VersionTLS,
@@ -99,6 +101,7 @@ var _ = Describe("Crypto Setup TLS", func() {
 		server, err := NewCryptoSetupServer(
 			sInitialStream,
 			sHandshakeStream,
+			ioutil.Discard,
 			protocol.ConnectionID{},
 			&EncryptedExtensionsTransportParameters{
 				NegotiatedVersion: protocol.VersionTLS,
@@ -128,6 +131,7 @@ var _ = Describe("Crypto Setup TLS", func() {
 		server, err := NewCryptoSetupServer(
 			sInitialStream,
 			sHandshakeStream,
+			ioutil.Discard,
 			protocol.ConnectionID{},
 			&EncryptedExtensionsTransportParameters{
 				NegotiatedVersion: protocol.VersionTLS,
@@ -208,6 +212,7 @@ var _ = Describe("Crypto Setup TLS", func() {
 			client, _, err := NewCryptoSetupClient(
 				cInitialStream,
 				cHandshakeStream,
+				ioutil.Discard,
 				protocol.ConnectionID{},
 				&ClientHelloTransportParameters{
 					InitialVersion: protocol.VersionTLS,
@@ -222,6 +227,7 @@ var _ = Describe("Crypto Setup TLS", func() {
 			server, err := NewCryptoSetupServer(
 				sInitialStream,
 				sHandshakeStream,
+				ioutil.Discard,
 				protocol.ConnectionID{},
 				&EncryptedExtensionsTransportParameters{
 					NegotiatedVersion: protocol.VersionTLS,
@@ -258,6 +264,7 @@ var _ = Describe("Crypto Setup TLS", func() {
 			client, chChan, err := NewCryptoSetupClient(
 				cInitialStream,
 				cHandshakeStream,
+				ioutil.Discard,
 				protocol.ConnectionID{},
 				&ClientHelloTransportParameters{
 					InitialVersion: protocol.VersionTLS,
@@ -288,58 +295,56 @@ var _ = Describe("Crypto Setup TLS", func() {
 			Eventually(done).Should(BeClosed())
 		})
 
-		// It("receives transport parameters", func() {
-		// 	var cTransportParametersRcvd, sTransportParametersRcvd *TransportParameters
-		// 	cChunkChan, cInitialStream, cHandshakeStream := initStreams()
-		// 	cTransportParameters := &TransportParameters{IdleTimeout: 0x42 * time.Second}
-		// 	client, _, err := NewCryptoSetupClient(
-		// 		cInitialStream,
-		// 		cHandshakeStream,
-		// 		nil,
-		// 		protocol.ConnectionID{},
-		// 		cTransportParameters,
-		// 		func(p *TransportParameters) { sTransportParametersRcvd = p },
-		// 		clientConf,
-		// 		protocol.VersionTLS,
-		// 		[]protocol.VersionNumber{protocol.VersionTLS},
-		// 		protocol.VersionTLS,
-		// 		utils.DefaultLogger.WithPrefix("client"),
-		// 		protocol.PerspectiveClient,
-		// 	)
-		// 	Expect(err).ToNot(HaveOccurred())
+		It("receives transport parameters", func() {
+			var cTransportParametersRcvd, sTransportParametersRcvd []byte
+			cChunkChan, cInitialStream, cHandshakeStream := initStreams()
+			cTransportParameters := &TransportParameters{IdleTimeout: 0x42 * time.Second}
+			client, _, err := NewCryptoSetupClient(
+				cInitialStream,
+				cHandshakeStream,
+				ioutil.Discard,
+				protocol.ConnectionID{},
+				&ClientHelloTransportParameters{Parameters: *cTransportParameters},
+				func(p []byte) { sTransportParametersRcvd = p },
+				clientConf,
+				utils.DefaultLogger.WithPrefix("client"),
+			)
+			Expect(err).ToNot(HaveOccurred())
 
-		// 	sChunkChan, sInitialStream, sHandshakeStream := initStreams()
-		// 	sTransportParameters := &TransportParameters{
-		// 		IdleTimeout:         0x1337 * time.Second,
-		// 		StatelessResetToken: bytes.Repeat([]byte{42}, 16),
-		// 	}
-		// 	server, err := NewCryptoSetupServer(
-		// 		sInitialStream,
-		// 		sHandshakeStream,
-		// 		protocol.ConnectionID{},
-		// 		sTransportParameters,
-		// 		func(p *TransportParameters) { cTransportParametersRcvd = p },
-		// 		testdata.GetTLSConfig(),
-		// 		[]protocol.VersionNumber{protocol.VersionTLS},
-		// 		protocol.VersionTLS,
-		// 		utils.DefaultLogger.WithPrefix("server"),
-		// 		protocol.PerspectiveServer,
-		// 	)
-		// 	Expect(err).ToNot(HaveOccurred())
+			sChunkChan, sInitialStream, sHandshakeStream := initStreams()
+			sTransportParameters := &TransportParameters{
+				IdleTimeout:         0x1337 * time.Second,
+				StatelessResetToken: bytes.Repeat([]byte{42}, 16),
+			}
+			server, err := NewCryptoSetupServer(
+				sInitialStream,
+				sHandshakeStream,
+				ioutil.Discard,
+				protocol.ConnectionID{},
+				&EncryptedExtensionsTransportParameters{Parameters: *sTransportParameters},
+				func(p []byte) { cTransportParametersRcvd = p },
+				testdata.GetTLSConfig(),
+				utils.DefaultLogger.WithPrefix("server"),
+			)
+			Expect(err).ToNot(HaveOccurred())
 
-		// 	done := make(chan struct{})
-		// 	go func() {
-		// 		defer GinkgoRecover()
-		// 		clientErr, serverErr := handshake(client, cChunkChan, server, sChunkChan)
-		// 		Expect(clientErr).ToNot(HaveOccurred())
-		// 		Expect(serverErr).ToNot(HaveOccurred())
-		// 		close(done)
-		// 	}()
-		// 	Eventually(done).Should(BeClosed())
-		// 	Expect(cTransportParametersRcvd).ToNot(BeNil())
-		// 	Expect(cTransportParametersRcvd.IdleTimeout).To(Equal(cTransportParameters.IdleTimeout))
-		// 	Expect(sTransportParametersRcvd).ToNot(BeNil())
-		// 	Expect(sTransportParametersRcvd.IdleTimeout).To(Equal(sTransportParameters.IdleTimeout))
-		// })
+			done := make(chan struct{})
+			go func() {
+				defer GinkgoRecover()
+				clientErr, serverErr := handshake(client, cChunkChan, server, sChunkChan)
+				Expect(clientErr).ToNot(HaveOccurred())
+				Expect(serverErr).ToNot(HaveOccurred())
+				close(done)
+			}()
+			Eventually(done).Should(BeClosed())
+			Expect(cTransportParametersRcvd).ToNot(BeNil())
+			chtp := &ClientHelloTransportParameters{}
+			Expect(chtp.Unmarshal(cTransportParametersRcvd)).To(Succeed())
+			Expect(chtp.Parameters.IdleTimeout).To(Equal(cTransportParameters.IdleTimeout))
+			Expect(sTransportParametersRcvd).ToNot(BeNil())
+			eetp := &EncryptedExtensionsTransportParameters{}
+			Expect(eetp.Unmarshal(sTransportParametersRcvd)).To(Succeed())
+			Expect(eetp.Parameters.IdleTimeout).To(Equal(sTransportParameters.IdleTimeout))
+		})
 	})
 })
