@@ -261,10 +261,7 @@ Curves:
 		hs.hello.compressionMethod = compressionNone
 	} else {
 		if hs.c.config.ReceivedExtensions != nil {
-			if err := hs.c.config.ReceivedExtensions(typeClientHello, hs.clientHello.additionalExtensions); err != nil {
-				c.sendAlert(alertInternalError)
-				return false, err
-			}
+			hs.c.config.ReceivedExtensions(typeClientHello, hs.clientHello.additionalExtensions)
 		}
 		hs.hello = new(serverHelloMsg)
 		hs.hello13Enc = new(encryptedExtensionsMsg)

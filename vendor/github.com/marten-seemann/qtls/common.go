@@ -631,7 +631,7 @@ type Config struct {
 	// Currently only implemented for the ClientHello message (sent by the
 	// client) and for the EncryptedExtensions message (sent by the server).
 	// Only valid for TLS 1.3.
-	ReceivedExtensions func(handshakeMessageType uint8, exts []Extension) error
+	ReceivedExtensions func(handshakeMessageType uint8, exts []Extension)
 
 	serverInitOnce sync.Once // guards calling (*Config).serverInit
 

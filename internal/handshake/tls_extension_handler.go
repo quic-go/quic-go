@@ -34,10 +34,10 @@ func (h *extensionHandler) GetExtensions(msgType uint8) []qtls.Extension {
 	}}
 }
 
-func (h *extensionHandler) ReceivedExtensions(msgType uint8, exts []qtls.Extension) error {
+func (h *extensionHandler) ReceivedExtensions(msgType uint8, exts []qtls.Extension) {
 	if (h.perspective == protocol.PerspectiveClient && messageType(msgType) != typeEncryptedExtensions) ||
 		(h.perspective == protocol.PerspectiveServer && messageType(msgType) != typeClientHello) {
-		return nil
+		return
 	}
 
 	var data []byte
@@ -49,7 +49,6 @@ func (h *extensionHandler) ReceivedExtensions(msgType uint8, exts []qtls.Extensi
 	}
 
 	h.paramsChan <- data
-	return nil
 }
 
 func (h *extensionHandler) TransportParameters() <-chan []byte {
