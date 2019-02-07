@@ -21,9 +21,7 @@ jobs:
             go get github.com/onsi/gomega
       - run:
           name: "Build infos"
-          command: |
-            echo $GOARCH
-            go version
+          command: go version
       - run:
           name: "Run benchmark tests"
           command: ginkgo -randomizeAllSpecs -trace benchmark -- -samples=1
@@ -46,10 +44,6 @@ workflows:
   workflow:
     jobs:
       - build:
-          name: "Go 1.11"
-          image: "circleci/golang:1.11-stretch-browsers"
+          name: "Go 1.12rc1"
+          image: "circleci/golang:1.12rc1"
           runrace: true
-      - build:
-          name: "Go 1.10"
-          image: "circleci/golang:1.10-stretch-browsers"
-          runrace: false
