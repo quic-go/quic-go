@@ -7,6 +7,7 @@ import (
 	"time"
 
 	quic "github.com/lucas-clemente/quic-go"
+	"github.com/lucas-clemente/quic-go/integrationtests/tools/israce"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/internal/qerr"
 	"github.com/lucas-clemente/quic-go/internal/testdata"
@@ -62,6 +63,10 @@ var _ = Describe("Handshake tests", func() {
 		BeforeEach(func() {
 			supportedVersions = protocol.SupportedVersions
 			protocol.SupportedVersions = append(protocol.SupportedVersions, []protocol.VersionNumber{7, 8, 9, 10}...)
+
+			if israce.Enabled {
+				Skip("This test modifies protocol.SupportedVersions, and can't be run with race detector.")
+			}
 		})
 
 		AfterEach(func() {
