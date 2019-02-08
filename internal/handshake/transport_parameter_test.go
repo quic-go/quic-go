@@ -108,6 +108,14 @@ var _ = Describe("Transport Parameters", func() {
 		Expect(b.Len()).To(Equal(defaultLen + 2 /* parameter ID */ + 2 /* length field */ + 1 /* value */))
 	})
 
+	It("sets the default value for the ack_delay_exponent, when no value was sent", func() {
+		b := &bytes.Buffer{}
+		(&TransportParameters{AckDelayExponent: protocol.DefaultAckDelayExponent}).marshal(b)
+		p := &TransportParameters{}
+		Expect(p.unmarshal(b.Bytes(), protocol.PerspectiveServer)).To(Succeed())
+		Expect(p.AckDelayExponent).To(BeEquivalentTo(protocol.DefaultAckDelayExponent))
+	})
+
 	It("errors when the varint value has the wrong length", func() {
 		b := &bytes.Buffer{}
 		utils.BigEndian.WriteUint16(b, uint16(initialMaxStreamDataBidiLocalParameterID))
