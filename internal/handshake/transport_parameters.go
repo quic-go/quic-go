@@ -54,6 +54,8 @@ func (p *TransportParameters) unmarshal(data []byte, sentBy protocol.Perspective
 	// needed to check that every parameter is only sent at most once
 	var parameterIDs []transportParameterID
 
+	var readAckDelayExponent bool
+
 	r := bytes.NewReader(data)
 	for r.Len() >= 4 {
 		paramIDInt, _ := utils.BigEndian.ReadUint16(r)
@@ -61,6 +63,9 @@ func (p *TransportParameters) unmarshal(data []byte, sentBy protocol.Perspective
 		paramLen, _ := utils.BigEndian.ReadUint16(r)
 		parameterIDs = append(parameterIDs, paramID)
 		switch paramID {
+		case ackDelayExponentParameterID:
+			readAckDelayExponent = true
+			fallthrough
 		case initialMaxStreamDataBidiLocalParameterID,
 			initialMaxStreamDataBidiRemoteParameterID,
 			initialMaxStreamDataUniParameterID,
@@ -68,8 +73,7 @@ func (p *TransportParameters) unmarshal(data []byte, sentBy protocol.Perspective
 			initialMaxStreamsBidiParameterID,
 			initialMaxStreamsUniParameterID,
 			idleTimeoutParameterID,
-			maxPacketSizeParameterID,
-			ackDelayExponentParameterID:
+			maxPacketSizeParameterID:
 			if err := p.readNumericTransportParameter(r, paramID, int(paramLen)); err != nil {
 				return err
 			}
@@ -102,6 +106,10 @@ func (p *TransportParameters) unmarshal(data []byte, sentBy protocol.Perspective
 				r.Seek(int64(paramLen), io.SeekCurrent)
 			}
 		}
+	}
+
+	if !readAckDelayExponent {
+		p.AckDelayExponent = protocol.DefaultAckDelayExponent
 	}
 
 	// check that every transport parameter was sent at most once
