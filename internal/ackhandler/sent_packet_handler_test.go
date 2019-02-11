@@ -159,19 +159,6 @@ var _ = Describe("SentPacketHandler", func() {
 				Expect(handler.largestAcked).To(Equal(protocol.PacketNumber(4)))
 			})
 
-			It("rejects out of order ACKs", func() {
-				// acks packets 0, 1, 2, 3
-				ack1 := &wire.AckFrame{AckRanges: []wire.AckRange{{Smallest: 0, Largest: 3}}}
-				ack2 := &wire.AckFrame{AckRanges: []wire.AckRange{{Smallest: 0, Largest: 4}}}
-				err := handler.ReceivedAck(ack1, 1337, protocol.Encryption1RTT, time.Now())
-				Expect(err).ToNot(HaveOccurred())
-				// this wouldn't happen in practive
-				// a receiver wouldn't send an ACK for a lower largest acked in a packet sent later
-				err = handler.ReceivedAck(ack2, 1337-1, protocol.Encryption1RTT, time.Now())
-				Expect(err).ToNot(HaveOccurred())
-				Expect(handler.largestAcked).To(Equal(protocol.PacketNumber(3)))
-			})
-
 			It("rejects ACKs with a too high LargestAcked packet number", func() {
 				ack := &wire.AckFrame{AckRanges: []wire.AckRange{{Smallest: 0, Largest: 9999}}}
 				err := handler.ReceivedAck(ack, 1, protocol.Encryption1RTT, time.Now())

@@ -30,8 +30,7 @@ type sentPacketHandler struct {
 
 	nextSendTime time.Time
 
-	largestAcked           protocol.PacketNumber
-	largestReceivedWithAck protocol.PacketNumber
+	largestAcked protocol.PacketNumber
 	// lowestNotConfirmedAcked is the lowest packet number that we sent an ACK for, but haven't received confirmation, that this ACK actually arrived
 	// example: we send an ACK for packets 90-100 with packet number 20
 	// once we receive an ACK from the peer for packet 20, the lowestNotConfirmedAcked is 101
@@ -176,12 +175,6 @@ func (h *sentPacketHandler) ReceivedAck(ackFrame *wire.AckFrame, withPacketNumbe
 		return qerr.Error(qerr.InvalidAckData, "Received ACK for an unsent package")
 	}
 
-	// duplicate or out of order ACK
-	if withPacketNumber != 0 && withPacketNumber < h.largestReceivedWithAck {
-		h.logger.Debugf("Ignoring ACK frame (duplicate or out of order).")
-		return nil
-	}
-	h.largestReceivedWithAck = withPacketNumber
 	h.largestAcked = utils.MaxPacketNumber(h.largestAcked, largestAcked)
 
 	if !h.packetNumberGenerator.Validate(ackFrame) {
