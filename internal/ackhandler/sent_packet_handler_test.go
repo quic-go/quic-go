@@ -93,16 +93,16 @@ var _ = Describe("SentPacketHandler", func() {
 		It("accepts two consecutive packets", func() {
 			handler.SentPacket(retransmittablePacket(&Packet{PacketNumber: 1}))
 			handler.SentPacket(retransmittablePacket(&Packet{PacketNumber: 2}))
-			Expect(handler.lastSentPacketNumber).To(Equal(protocol.PacketNumber(2)))
+			Expect(handler.largestSent).To(Equal(protocol.PacketNumber(2)))
 			expectInPacketHistory([]protocol.PacketNumber{1, 2})
 			Expect(handler.bytesInFlight).To(Equal(protocol.ByteCount(2)))
 		})
 
 		It("accepts packet number 0", func() {
 			handler.SentPacket(retransmittablePacket(&Packet{PacketNumber: 0}))
-			Expect(handler.lastSentPacketNumber).To(BeZero())
+			Expect(handler.largestSent).To(BeZero())
 			handler.SentPacket(retransmittablePacket(&Packet{PacketNumber: 1}))
-			Expect(handler.lastSentPacketNumber).To(Equal(protocol.PacketNumber(1)))
+			Expect(handler.largestSent).To(Equal(protocol.PacketNumber(1)))
 			expectInPacketHistory([]protocol.PacketNumber{0, 1})
 			Expect(handler.bytesInFlight).To(Equal(protocol.ByteCount(2)))
 		})
