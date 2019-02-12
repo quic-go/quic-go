@@ -33,8 +33,8 @@ type SentPacketHandler interface {
 	DequeuePacketForRetransmission() *Packet
 	DequeueProbePacket() (*Packet, error)
 
-	PeekPacketNumber() (protocol.PacketNumber, protocol.PacketNumberLen)
-	PopPacketNumber() protocol.PacketNumber
+	PeekPacketNumber(protocol.EncryptionLevel) (protocol.PacketNumber, protocol.PacketNumberLen)
+	PopPacketNumber(protocol.EncryptionLevel) protocol.PacketNumber
 
 	GetAlarmTimeout() time.Time
 	OnAlarm() error

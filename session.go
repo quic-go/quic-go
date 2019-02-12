@@ -805,7 +805,7 @@ func (s *session) destroy(e error) {
 // It returns the first packet number that should be used in the new session.
 func (s *session) closeForRecreating() protocol.PacketNumber {
 	s.destroy(errCloseForRecreating)
-	nextPN, _ := s.sentPacketHandler.PeekPacketNumber()
+	nextPN, _ := s.sentPacketHandler.PeekPacketNumber(protocol.EncryptionInitial)
 	return nextPN
 }
 
@@ -1028,7 +1028,7 @@ func (s *session) maybeSendRetransmission() (bool, error) {
 		break
 	}
 
-	s.logger.Debugf("Dequeueing retransmission for packet 0x%x", retransmitPacket.PacketNumber)
+	s.logger.Debugf("Dequeueing retransmission for packet 0x%x (%s)", retransmitPacket.PacketNumber, retransmitPacket.EncryptionLevel)
 	packets, err := s.packer.PackRetransmission(retransmitPacket)
 	if err != nil {
 		return false, err

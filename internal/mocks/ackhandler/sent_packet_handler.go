@@ -99,28 +99,28 @@ func (mr *MockSentPacketHandlerMockRecorder) OnAlarm() *gomock.Call {
 }
 
 // PeekPacketNumber mocks base method
-func (m *MockSentPacketHandler) PeekPacketNumber() (protocol.PacketNumber, protocol.PacketNumberLen) {
-	ret := m.ctrl.Call(m, "PeekPacketNumber")
+func (m *MockSentPacketHandler) PeekPacketNumber(arg0 protocol.EncryptionLevel) (protocol.PacketNumber, protocol.PacketNumberLen) {
+	ret := m.ctrl.Call(m, "PeekPacketNumber", arg0)
 	ret0, _ := ret[0].(protocol.PacketNumber)
 	ret1, _ := ret[1].(protocol.PacketNumberLen)
 	return ret0, ret1
 }
 
 // PeekPacketNumber indicates an expected call of PeekPacketNumber
-func (mr *MockSentPacketHandlerMockRecorder) PeekPacketNumber() *gomock.Call {
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PeekPacketNumber", reflect.TypeOf((*MockSentPacketHandler)(nil).PeekPacketNumber))
+func (mr *MockSentPacketHandlerMockRecorder) PeekPacketNumber(arg0 interface{}) *gomock.Call {
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PeekPacketNumber", reflect.TypeOf((*MockSentPacketHandler)(nil).PeekPacketNumber), arg0)
 }
 
 // PopPacketNumber mocks base method
-func (m *MockSentPacketHandler) PopPacketNumber() protocol.PacketNumber {
-	ret := m.ctrl.Call(m, "PopPacketNumber")
+func (m *MockSentPacketHandler) PopPacketNumber(arg0 protocol.EncryptionLevel) protocol.PacketNumber {
+	ret := m.ctrl.Call(m, "PopPacketNumber", arg0)
 	ret0, _ := ret[0].(protocol.PacketNumber)
 	return ret0
 }
 
 // PopPacketNumber indicates an expected call of PopPacketNumber
-func (mr *MockSentPacketHandlerMockRecorder) PopPacketNumber() *gomock.Call {
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PopPacketNumber", reflect.TypeOf((*MockSentPacketHandler)(nil).PopPacketNumber))
+func (mr *MockSentPacketHandlerMockRecorder) PopPacketNumber(arg0 interface{}) *gomock.Call {
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PopPacketNumber", reflect.TypeOf((*MockSentPacketHandler)(nil).PopPacketNumber), arg0)
 }
 
 // ReceivedAck mocks base method
