@@ -70,7 +70,7 @@ var _ = Describe("PRR sender", func() {
 	})
 
 	It("burst loss results in slow start", func() {
-		bytesInFlight := protocol.ByteCount(20 * protocol.DefaultTCPMSS)
+		bytesInFlight := 20 * protocol.DefaultTCPMSS
 		const numPacketsLost = 13
 		const ssthreshAfterLoss = 10
 		const congestionWindow = ssthreshAfterLoss * protocol.DefaultTCPMSS
