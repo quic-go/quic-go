@@ -183,7 +183,7 @@ var _ = Describe("Stream Flow controller", func() {
 				controller.epochStartTime = time.Now().Add(-time.Millisecond)
 				controller.AddBytesRead(55)
 				offset := controller.GetWindowUpdate()
-				Expect(offset).To(Equal(protocol.ByteCount(oldOffset + 55 + 2*oldWindowSize)))
+				Expect(offset).To(Equal(oldOffset + 55 + 2*oldWindowSize))
 				Expect(controller.receiveWindowSize).To(Equal(2 * oldWindowSize))
 				Expect(controller.connection.(*connectionFlowController).receiveWindowSize).To(Equal(protocol.ByteCount(float64(controller.receiveWindowSize) * protocol.ConnectionFlowControlMultiplier)))
 			})
