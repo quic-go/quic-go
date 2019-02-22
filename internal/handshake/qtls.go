@@ -44,7 +44,7 @@ func tlsConfigToQtlsConfig(c *tls.Config) *qtls.Config {
 		MaxVersion:                  maxVersion,
 		CurvePreferences:            c.CurvePreferences,
 		DynamicRecordSizingDisabled: c.DynamicRecordSizingDisabled,
-		Renegotiation:               c.Renegotiation,
-		KeyLogWriter:                c.KeyLogWriter,
+		// Renegotiation is not supported by TLS 1.3
+		KeyLogWriter: c.KeyLogWriter,
 	}
 }

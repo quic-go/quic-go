@@ -24,12 +24,12 @@ func NewInitialAEAD(connID protocol.ConnectionID, pers protocol.Perspective) (Se
 	myKey, myHPKey, myIV := computeInitialKeyAndIV(mySecret)
 	otherKey, otherHPKey, otherIV := computeInitialKeyAndIV(otherSecret)
 
-	encrypter := qtls.AEADAESGCM13(myKey, myIV)
+	encrypter := qtls.AEADAESGCMTLS13(myKey, myIV)
 	hpEncrypter, err := aes.NewCipher(myHPKey)
 	if err != nil {
 		return nil, nil, err
 	}
-	decrypter := qtls.AEADAESGCM13(otherKey, otherIV)
+	decrypter := qtls.AEADAESGCMTLS13(otherKey, otherIV)
 	hpDecrypter, err := aes.NewCipher(otherHPKey)
 	if err != nil {
 		return nil, nil, err

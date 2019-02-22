@@ -310,6 +310,12 @@ func (h *cryptoSetup) handleMessageForServer(msgType messageType) bool {
 		case <-h.handshakeErrChan:
 			return false
 		}
+		// get the handshake read key
+		select {
+		case <-h.receivedReadKey:
+		case <-h.handshakeErrChan:
+			return false
+		}
 		// get the handshake write key
 		select {
 		case <-h.receivedWriteKey:
@@ -319,12 +325,6 @@ func (h *cryptoSetup) handleMessageForServer(msgType messageType) bool {
 		// get the 1-RTT write key
 		select {
 		case <-h.receivedWriteKey:
-		case <-h.handshakeErrChan:
-			return false
-		}
-		// get the handshake read key
-		select {
-		case <-h.receivedReadKey:
 		case <-h.handshakeErrChan:
 			return false
 		}
@@ -348,15 +348,15 @@ func (h *cryptoSetup) handleMessageForServer(msgType messageType) bool {
 func (h *cryptoSetup) handleMessageForClient(msgType messageType) bool {
 	switch msgType {
 	case typeServerHello:
-		// get the handshake read key
-		select {
-		case <-h.receivedReadKey:
-		case <-h.handshakeErrChan:
-			return false
-		}
 		// get the handshake write key
 		select {
 		case <-h.receivedWriteKey:
+		case <-h.handshakeErrChan:
+			return false
+		}
+		// get the handshake read key
+		select {
+		case <-h.receivedReadKey:
 		case <-h.handshakeErrChan:
 			return false
 		}
@@ -373,17 +373,15 @@ func (h *cryptoSetup) handleMessageForClient(msgType messageType) bool {
 		// nothing to do
 		return false
 	case typeFinished:
-		// While the order of these two is not defined by the TLS spec,
-		// we have to do it on the same order as our TLS library does it.
-		// get the handshake write key
-		select {
-		case <-h.receivedWriteKey:
-		case <-h.handshakeErrChan:
-			return false
-		}
 		// get the 1-RTT read key
 		select {
 		case <-h.receivedReadKey:
+		case <-h.handshakeErrChan:
+			return false
+		}
+		// get the handshake write key
+		select {
+		case <-h.receivedWriteKey:
 		case <-h.handshakeErrChan:
 			return false
 		}
