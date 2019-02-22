@@ -20,12 +20,11 @@ func tlsConfigToQtlsConfig(c *tls.Config) *qtls.Config {
 		maxVersion = qtls.VersionTLS13
 	}
 	return &qtls.Config{
-		Rand:              c.Rand,
-		Time:              c.Time,
-		Certificates:      c.Certificates,
-		NameToCertificate: c.NameToCertificate,
-		// TODO: make GetCertificate work
-		// GetCertificate:              c.GetCertificate,
+		Rand:                 c.Rand,
+		Time:                 c.Time,
+		Certificates:         c.Certificates,
+		NameToCertificate:    c.NameToCertificate,
+		GetCertificate:       c.GetCertificate,
 		GetClientCertificate: c.GetClientCertificate,
 		// TODO: make GetConfigForClient work
 		// GetConfigForClient:          c.GetConfigForClient,
