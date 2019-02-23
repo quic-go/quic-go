@@ -7,6 +7,7 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"crypto/x509/pkix"
+	"errors"
 	"io/ioutil"
 	"math/big"
 	"time"
@@ -63,6 +64,47 @@ var _ = Describe("Crypto Setup TLS", func() {
 			ServerName: "localhost",
 			RootCAs:    testdata.GetRootCA(),
 		}
+	})
+
+	It("creates a qtls.Config", func() {
+		tlsConf := &tls.Config{
+			ServerName: "quic.clemente.io",
+			GetCertificate: func(*tls.ClientHelloInfo) (*tls.Certificate, error) {
+				return nil, errors.New("GetCertificate")
+			},
+			GetClientCertificate: func(*tls.CertificateRequestInfo) (*tls.Certificate, error) {
+				return nil, errors.New("GetClientCertificate")
+			},
+			GetConfigForClient: func(ch *tls.ClientHelloInfo) (*tls.Config, error) {
+				return &tls.Config{ServerName: ch.ServerName}, nil
+			},
+		}
+		server, err := NewCryptoSetupServer(
+			&bytes.Buffer{},
+			&bytes.Buffer{},
+			ioutil.Discard,
+			protocol.ConnectionID{},
+			&EncryptedExtensionsTransportParameters{
+				NegotiatedVersion: protocol.VersionTLS,
+				SupportedVersions: []protocol.VersionNumber{protocol.VersionTLS},
+			},
+			func([]byte) {},
+			tlsConf,
+			utils.DefaultLogger.WithPrefix("server"),
+		)
+		Expect(err).ToNot(HaveOccurred())
+		qtlsConf := server.(*cryptoSetup).tlsConf
+		Expect(qtlsConf.ServerName).To(Equal(tlsConf.ServerName))
+		_, getCertificateErr := qtlsConf.GetCertificate(nil)
+		Expect(getCertificateErr).To(MatchError("GetCertificate"))
+		_, getClientCertificateErr := qtlsConf.GetClientCertificate(nil)
+		Expect(getClientCertificateErr).To(MatchError("GetClientCertificate"))
+		cconf, err := qtlsConf.GetConfigForClient(&tls.ClientHelloInfo{ServerName: "foo.bar"})
+		Expect(err).ToNot(HaveOccurred())
+		Expect(cconf.ServerName).To(Equal("foo.bar"))
+		Expect(cconf.AlternativeRecordLayer).ToNot(BeNil())
+		Expect(cconf.GetExtensions).ToNot(BeNil())
+		Expect(cconf.ReceivedExtensions).ToNot(BeNil())
 	})
 
 	It("returns Handshake() when an error occurs", func() {

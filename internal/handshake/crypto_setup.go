@@ -198,10 +198,7 @@ func newCryptoSetup(
 		receivedWriteKey:       make(chan struct{}),
 		closeChan:              make(chan struct{}),
 	}
-	qtlsConf := tlsConfigToQtlsConfig(tlsConf)
-	qtlsConf.AlternativeRecordLayer = cs
-	qtlsConf.GetExtensions = extHandler.GetExtensions
-	qtlsConf.ReceivedExtensions = extHandler.ReceivedExtensions
+	qtlsConf := cs.tlsConfigToQtlsConfig(tlsConf)
 	cs.tlsConf = qtlsConf
 	return cs, cs.clientHelloWrittenChan, nil
 }
@@ -526,5 +523,62 @@ func (h *cryptoSetup) ConnectionState() ConnectionState {
 		HandshakeComplete: connState.HandshakeComplete,
 		ServerName:        connState.ServerName,
 		PeerCertificates:  connState.PeerCertificates,
+	}
+}
+
+func (h *cryptoSetup) tlsConfigToQtlsConfig(c *tls.Config) *qtls.Config {
+	if c == nil {
+		c = &tls.Config{}
+	}
+	// QUIC requires TLS 1.3 or newer
+	minVersion := c.MinVersion
+	if minVersion < qtls.VersionTLS13 {
+		minVersion = qtls.VersionTLS13
+	}
+	maxVersion := c.MaxVersion
+	if maxVersion < qtls.VersionTLS13 {
+		maxVersion = qtls.VersionTLS13
+	}
+	var getConfigForClient func(ch *tls.ClientHelloInfo) (*qtls.Config, error)
+	if c.GetConfigForClient != nil {
+		getConfigForClient = func(ch *tls.ClientHelloInfo) (*qtls.Config, error) {
+			tlsConf, err := c.GetConfigForClient(ch)
+			if err != nil {
+				return nil, err
+			}
+			if tlsConf == nil {
+				return nil, nil
+			}
+			return h.tlsConfigToQtlsConfig(tlsConf), nil
+		}
+	}
+	return &qtls.Config{
+		Rand:                        c.Rand,
+		Time:                        c.Time,
+		Certificates:                c.Certificates,
+		NameToCertificate:           c.NameToCertificate,
+		GetCertificate:              c.GetCertificate,
+		GetClientCertificate:        c.GetClientCertificate,
+		GetConfigForClient:          getConfigForClient,
+		VerifyPeerCertificate:       c.VerifyPeerCertificate,
+		RootCAs:                     c.RootCAs,
+		NextProtos:                  c.NextProtos,
+		ServerName:                  c.ServerName,
+		ClientAuth:                  c.ClientAuth,
+		ClientCAs:                   c.ClientCAs,
+		InsecureSkipVerify:          c.InsecureSkipVerify,
+		CipherSuites:                c.CipherSuites,
+		PreferServerCipherSuites:    c.PreferServerCipherSuites,
+		SessionTicketsDisabled:      c.SessionTicketsDisabled,
+		SessionTicketKey:            c.SessionTicketKey,
+		MinVersion:                  minVersion,
+		MaxVersion:                  maxVersion,
+		CurvePreferences:            c.CurvePreferences,
+		DynamicRecordSizingDisabled: c.DynamicRecordSizingDisabled,
+		// no need to copy Renegotiation, it's not supported by TLS 1.3
+		KeyLogWriter:           c.KeyLogWriter,
+		AlternativeRecordLayer: h,
+		GetExtensions:          h.extHandler.GetExtensions,
+		ReceivedExtensions:     h.extHandler.ReceivedExtensions,
 	}
 }
