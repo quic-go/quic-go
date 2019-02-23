@@ -55,7 +55,6 @@ type cryptoStreamHandler interface {
 
 type receivedPacket struct {
 	remoteAddr net.Addr
-	hdr        *wire.Header
 	rcvTime    time.Time
 	data       []byte
 
@@ -483,7 +482,43 @@ func (s *session) handleHandshakeComplete() {
 	}
 }
 
-func (s *session) handlePacketImpl(p *receivedPacket) bool /* was the packet successfully processed */ {
+func (s *session) handlePacketImpl(p *receivedPacket) bool {
+	var counter uint8
+	var lastConnID protocol.ConnectionID
+	var processed bool
+	for len(p.data) > 0 {
+		hdr, packetData, rest, err := wire.ParsePacket(p.data, s.srcConnID.Len())
+		if err != nil {
+			s.logger.Debugf("error parsing packet: %s", err)
+			break
+		}
+
+		if counter > 0 && !hdr.DestConnectionID.Equal(lastConnID) {
+			s.logger.Debugf("coalesced packet has different destination connection ID: %s, expected %s", hdr.DestConnectionID, lastConnID)
+			break
+		}
+		lastConnID = hdr.DestConnectionID
+
+		if counter > 0 {
+			p.buffer.Split()
+		}
+		counter++
+
+		// only log if this actually a coalesced packet
+		if s.logger.Debug() && (counter > 1 || len(rest) > 0) {
+			s.logger.Debugf("Parsed a coalesced packet. Part %d: %d bytes. Remaining: %d bytes.", counter, len(packetData), len(rest))
+		}
+		p.data = packetData
+		pr := s.handleSinglePacket(p, hdr)
+		if pr {
+			processed = pr
+		}
+		p.data = rest
+	}
+	return processed
+}
+
+func (s *session) handleSinglePacket(p *receivedPacket, hdr *wire.Header) bool /* was the packet successfully processed */ {
 	var wasQueued bool
 
 	defer func() {
@@ -493,22 +528,22 @@ func (s *session) handlePacketImpl(p *receivedPacket) bool /* was the packet suc
 		}
 	}()
 
-	if p.hdr.Type == protocol.PacketTypeRetry {
-		return s.handleRetryPacket(p)
+	if hdr.Type == protocol.PacketTypeRetry {
+		return s.handleRetryPacket(p, hdr)
 	}
 
 	// The server can change the source connection ID with the first Handshake packet.
 	// After this, all packets with a different source connection have to be ignored.
-	if s.receivedFirstPacket && p.hdr.IsLongHeader && !p.hdr.SrcConnectionID.Equal(s.destConnID) {
-		s.logger.Debugf("Dropping packet with unexpected source connection ID: %s (expected %s)", p.hdr.SrcConnectionID, s.destConnID)
+	if s.receivedFirstPacket && hdr.IsLongHeader && !hdr.SrcConnectionID.Equal(s.destConnID) {
+		s.logger.Debugf("Dropping packet with unexpected source connection ID: %s (expected %s)", hdr.SrcConnectionID, s.destConnID)
 		return false
 	}
 	// drop 0-RTT packets
-	if p.hdr.Type == protocol.PacketType0RTT {
+	if hdr.Type == protocol.PacketType0RTT {
 		return false
 	}
 
-	packet, err := s.unpacker.Unpack(p.hdr, p.data)
+	packet, err := s.unpacker.Unpack(hdr, p.data)
 	if err != nil {
 		if err == handshake.ErrOpenerNotYetAvailable {
 			// Sealer for this encryption level not yet available.
@@ -524,7 +559,7 @@ func (s *session) handlePacketImpl(p *receivedPacket) bool /* was the packet suc
 	}
 
 	if s.logger.Debug() {
-		s.logger.Debugf("<- Reading packet %#x (%d bytes) for connection %s, %s", packet.packetNumber, len(p.data), p.hdr.DestConnectionID, packet.encryptionLevel)
+		s.logger.Debugf("<- Reading packet %#x (%d bytes) for connection %s, %s", packet.packetNumber, len(p.data), hdr.DestConnectionID, packet.encryptionLevel)
 		packet.hdr.Log(s.logger)
 	}
 
@@ -535,7 +570,7 @@ func (s *session) handlePacketImpl(p *receivedPacket) bool /* was the packet suc
 	return true
 }
 
-func (s *session) handleRetryPacket(p *receivedPacket) bool /* was this a valid Retry */ {
+func (s *session) handleRetryPacket(p *receivedPacket, hdr *wire.Header) bool /* was this a valid Retry */ {
 	if s.perspective == protocol.PerspectiveServer {
 		s.logger.Debugf("Ignoring Retry.")
 		return false
@@ -544,7 +579,6 @@ func (s *session) handleRetryPacket(p *receivedPacket) bool /* was this a valid 
 		s.logger.Debugf("Ignoring Retry, since we already received a packet.")
 		return false
 	}
-	hdr := p.hdr
 	(&wire.ExtendedHeader{Header: *hdr}).Log(s.logger)
 	if !hdr.OrigDestConnectionID.Equal(s.destConnID) {
 		s.logger.Debugf("Ignoring spoofed Retry. Original Destination Connection ID: %s, expected: %s", hdr.OrigDestConnectionID, s.destConnID)
@@ -1244,6 +1278,10 @@ func (s *session) LocalAddr() net.Addr {
 
 func (s *session) RemoteAddr() net.Addr {
 	return s.conn.RemoteAddr()
+}
+
+func (s *session) getPerspective() protocol.Perspective {
+	return s.perspective
 }
 
 func (s *session) GetVersion() protocol.VersionNumber {

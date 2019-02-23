@@ -46,18 +46,6 @@ func (mr *MockPacketHandlerMockRecorder) Close() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Close", reflect.TypeOf((*MockPacketHandler)(nil).Close))
 }
 
-// GetPerspective mocks base method
-func (m *MockPacketHandler) GetPerspective() protocol.Perspective {
-	ret := m.ctrl.Call(m, "GetPerspective")
-	ret0, _ := ret[0].(protocol.Perspective)
-	return ret0
-}
-
-// GetPerspective indicates an expected call of GetPerspective
-func (mr *MockPacketHandlerMockRecorder) GetPerspective() *gomock.Call {
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetPerspective", reflect.TypeOf((*MockPacketHandler)(nil).GetPerspective))
-}
-
 // destroy mocks base method
 func (m *MockPacketHandler) destroy(arg0 error) {
 	m.ctrl.Call(m, "destroy", arg0)
@@ -66,6 +54,18 @@ func (m *MockPacketHandler) destroy(arg0 error) {
 // destroy indicates an expected call of destroy
 func (mr *MockPacketHandlerMockRecorder) destroy(arg0 interface{}) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "destroy", reflect.TypeOf((*MockPacketHandler)(nil).destroy), arg0)
+}
+
+// getPerspective mocks base method
+func (m *MockPacketHandler) getPerspective() protocol.Perspective {
+	ret := m.ctrl.Call(m, "getPerspective")
+	ret0, _ := ret[0].(protocol.Perspective)
+	return ret0
+}
+
+// getPerspective indicates an expected call of getPerspective
+func (mr *MockPacketHandlerMockRecorder) getPerspective() *gomock.Call {
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "getPerspective", reflect.TypeOf((*MockPacketHandler)(nil).getPerspective))
 }
 
 // handlePacket mocks base method

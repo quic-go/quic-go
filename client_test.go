@@ -58,12 +58,9 @@ var _ = Describe("Client", func() {
 	composeVersionNegotiationPacket := func(connID protocol.ConnectionID, versions []protocol.VersionNumber) *receivedPacket {
 		data, err := wire.ComposeVersionNegotiation(connID, nil, versions)
 		Expect(err).ToNot(HaveOccurred())
-		hdr, _, _, err := wire.ParsePacket(data, 0)
-		Expect(err).ToNot(HaveOccurred())
 		Expect(wire.IsVersionNegotiationPacket(data)).To(BeTrue())
 		return &receivedPacket{
 			rcvTime: time.Now(),
-			hdr:     hdr,
 			data:    data,
 		}
 	}
@@ -543,19 +540,22 @@ var _ = Describe("Client", func() {
 				Expect(err).To(MatchError(testErr))
 			})
 
-			It("recognizes that a non version negotiation packet means that the server accepted the suggested version", func() {
+			It("recognizes that a non Version Negotiation packet means that the server accepted the suggested version", func() {
 				sess := NewMockQuicSession(mockCtrl)
 				sess.EXPECT().handlePacket(gomock.Any())
 				cl.session = sess
 				cl.config = &Config{}
-				cl.handlePacket(&receivedPacket{
-					hdr: &wire.Header{
+				buf := &bytes.Buffer{}
+				Expect((&wire.ExtendedHeader{
+					Header: wire.Header{
 						DestConnectionID: connID,
 						SrcConnectionID:  connID,
 						Version:          cl.version,
 					},
-				})
-				Eventually(cl.versionNegotiated.Get()).Should(BeTrue())
+					PacketNumberLen: protocol.PacketNumberLen3,
+				}).Write(buf, protocol.VersionTLS)).To(Succeed())
+				cl.handlePacket(&receivedPacket{data: buf.Bytes()})
+				Eventually(cl.versionNegotiated.Get).Should(BeTrue())
 			})
 
 			It("errors if no matching version is found", func() {
