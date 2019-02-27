@@ -62,11 +62,6 @@ func areSessionsRunning() bool {
 	return strings.Contains(b.String(), "quic-go.(*session).run")
 }
 
-func insertPacketBuffer(p *receivedPacket) *receivedPacket {
-	p.buffer = getPacketBuffer()
-	return p
-}
-
 var _ = Describe("Session", func() {
 	var (
 		sess          *session
