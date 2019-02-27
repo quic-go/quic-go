@@ -153,7 +153,7 @@ func (p *TransportParameters) readNumericTransportParameter(
 	case initialMaxStreamsUniParameterID:
 		p.MaxUniStreams = val
 	case idleTimeoutParameterID:
-		p.IdleTimeout = utils.MaxDuration(protocol.MinRemoteIdleTimeout, time.Duration(val)*time.Second)
+		p.IdleTimeout = utils.MaxDuration(protocol.MinRemoteIdleTimeout, time.Duration(val)*time.Millisecond)
 	case maxPacketSizeParameterID:
 		if val < 1200 {
 			return fmt.Errorf("invalid value for max_packet_size: %d (minimum 1200)", val)
@@ -196,9 +196,10 @@ func (p *TransportParameters) marshal(b *bytes.Buffer) {
 	utils.BigEndian.WriteUint16(b, uint16(utils.VarIntLen(p.MaxUniStreams)))
 	utils.WriteVarInt(b, p.MaxUniStreams)
 	// idle_timeout
+	idleTimeout := uint64(p.IdleTimeout / time.Millisecond)
 	utils.BigEndian.WriteUint16(b, uint16(idleTimeoutParameterID))
-	utils.BigEndian.WriteUint16(b, uint16(utils.VarIntLen(uint64(p.IdleTimeout/time.Second))))
-	utils.WriteVarInt(b, uint64(p.IdleTimeout/time.Second))
+	utils.BigEndian.WriteUint16(b, uint16(utils.VarIntLen(idleTimeout)))
+	utils.WriteVarInt(b, idleTimeout)
 	// max_packet_size
 	utils.BigEndian.WriteUint16(b, uint16(maxPacketSizeParameterID))
 	utils.BigEndian.WriteUint16(b, uint16(utils.VarIntLen(uint64(protocol.MaxReceivePacketSize))))
