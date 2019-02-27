@@ -231,6 +231,18 @@ func (mr *MockQuicSessionMockRecorder) destroy(arg0 interface{}) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "destroy", reflect.TypeOf((*MockQuicSession)(nil).destroy), arg0)
 }
 
+// getPerspective mocks base method
+func (m *MockQuicSession) getPerspective() protocol.Perspective {
+	ret := m.ctrl.Call(m, "getPerspective")
+	ret0, _ := ret[0].(protocol.Perspective)
+	return ret0
+}
+
+// getPerspective indicates an expected call of getPerspective
+func (mr *MockQuicSessionMockRecorder) getPerspective() *gomock.Call {
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "getPerspective", reflect.TypeOf((*MockQuicSession)(nil).getPerspective))
+}
+
 // handlePacket mocks base method
 func (m *MockQuicSession) handlePacket(arg0 *receivedPacket) {
 	m.ctrl.Call(m, "handlePacket", arg0)

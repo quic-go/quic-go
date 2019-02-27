@@ -25,10 +25,14 @@ var _ = Describe("Packet Unpacker", func() {
 
 	getHeader := func(extHdr *wire.ExtendedHeader) (*wire.Header, []byte) {
 		buf := &bytes.Buffer{}
-		Expect(extHdr.Write(buf, protocol.VersionWhatever)).To(Succeed())
-		hdr, err := wire.ParseHeader(bytes.NewReader(buf.Bytes()), connID.Len())
-		Expect(err).ToNot(HaveOccurred())
-		return hdr, buf.Bytes()
+		ExpectWithOffset(1, extHdr.Write(buf, protocol.VersionWhatever)).To(Succeed())
+		hdrLen := buf.Len()
+		if extHdr.Length > protocol.ByteCount(extHdr.PacketNumberLen) {
+			buf.Write(make([]byte, int(extHdr.Length)-int(extHdr.PacketNumberLen)))
+		}
+		hdr, _, _, err := wire.ParsePacket(buf.Bytes(), connID.Len())
+		ExpectWithOffset(1, err).ToNot(HaveOccurred())
+		return hdr, buf.Bytes()[:hdrLen]
 	}
 
 	BeforeEach(func() {

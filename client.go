@@ -287,8 +287,8 @@ func (c *client) establishSecureConnection(ctx context.Context) error {
 }
 
 func (c *client) handlePacket(p *receivedPacket) {
-	if p.hdr.IsVersionNegotiation() {
-		go c.handleVersionNegotiationPacket(p.hdr)
+	if wire.IsVersionNegotiationPacket(p.data) {
+		go c.handleVersionNegotiationPacket(p)
 		return
 	}
 
@@ -301,9 +301,15 @@ func (c *client) handlePacket(p *receivedPacket) {
 	c.session.handlePacket(p)
 }
 
-func (c *client) handleVersionNegotiationPacket(hdr *wire.Header) {
+func (c *client) handleVersionNegotiationPacket(p *receivedPacket) {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
+
+	hdr, _, _, err := wire.ParsePacket(p.data, 0)
+	if err != nil {
+		c.logger.Debugf("Error parsing Version Negotiation packet: %s", err)
+		return
+	}
 
 	// ignore delayed / duplicated version negotiation packets
 	if c.receivedVersionNegotiationPacket || c.versionNegotiated.Get() {
@@ -403,6 +409,6 @@ func (c *client) GetVersion() protocol.VersionNumber {
 	return v
 }
 
-func (c *client) GetPerspective() protocol.Perspective {
+func (c *client) getPerspective() protocol.Perspective {
 	return protocol.PerspectiveClient
 }

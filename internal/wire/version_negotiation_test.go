@@ -1,8 +1,6 @@
 package wire
 
 import (
-	"bytes"
-
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -16,9 +14,7 @@ var _ = Describe("Version Negotiation Packets", func() {
 		data, err := ComposeVersionNegotiation(destConnID, srcConnID, versions)
 		Expect(err).ToNot(HaveOccurred())
 		Expect(data[0] & 0x80).ToNot(BeZero())
-		b := bytes.NewReader(data)
-		hdr, err := ParseHeader(b, 4)
-		Expect(err).ToNot(HaveOccurred())
+		hdr, _, rest, err := ParsePacket(data, 4)
 		Expect(err).ToNot(HaveOccurred())
 		Expect(hdr.DestConnectionID).To(Equal(destConnID))
 		Expect(hdr.SrcConnectionID).To(Equal(srcConnID))
@@ -28,6 +24,6 @@ var _ = Describe("Version Negotiation Packets", func() {
 		for _, version := range versions {
 			Expect(hdr.SupportedVersions).To(ContainElement(version))
 		}
-		Expect(b.Len()).To(BeZero())
+		Expect(rest).To(BeEmpty())
 	})
 })

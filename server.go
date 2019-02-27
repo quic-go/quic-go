@@ -23,7 +23,7 @@ type packetHandler interface {
 	handlePacket(*receivedPacket)
 	io.Closer
 	destroy(error)
-	GetPerspective() protocol.Perspective
+	getPerspective() protocol.Perspective
 }
 
 type unknownPacketHandler interface {
@@ -44,6 +44,7 @@ type quicSession interface {
 	Session
 	handlePacket(*receivedPacket)
 	GetVersion() protocol.VersionNumber
+	getPerspective() protocol.Perspective
 	run() error
 	destroy(error)
 	closeForRecreating() protocol.PacketNumber
@@ -324,47 +325,60 @@ func (s *server) Addr() net.Addr {
 }
 
 func (s *server) handlePacket(p *receivedPacket) {
-	hdr := p.hdr
-
-	// send a Version Negotiation Packet if the client is speaking a different protocol version
-	if !protocol.IsSupportedVersion(s.config.Versions, hdr.Version) {
-		go s.sendVersionNegotiationPacket(p)
-		return
-	}
-	if hdr.Type == protocol.PacketTypeInitial {
-		go s.handleInitial(p)
-		return
-	}
-
-	// TODO(#943): send Stateless Reset
-	p.buffer.Release()
+	go func() {
+		if shouldReleaseBuffer := s.handlePacketImpl(p); !shouldReleaseBuffer {
+			p.buffer.Release()
+		}
+	}()
 }
 
-func (s *server) handleInitial(p *receivedPacket) {
-	s.logger.Debugf("<- Received Initial packet.")
-	sess, connID, err := s.handleInitialImpl(p)
+func (s *server) handlePacketImpl(p *receivedPacket) bool /* was the packet passed on to a session */ {
+	if len(p.data) < protocol.MinInitialPacketSize {
+		s.logger.Debugf("Dropping a packet that is too small to be a valid Initial (%d bytes)", len(p.data))
+		return false
+	}
+	// If we're creating a new session, the packet will be passed to the session.
+	// The header will then be parsed again.
+	hdr, _, _, err := wire.ParsePacket(p.data, s.config.ConnectionIDLength)
 	if err != nil {
-		p.buffer.Release()
+		s.logger.Debugf("Error parsing packet: %s", err)
+		return false
+	}
+	if !hdr.IsLongHeader {
+		// TODO: send a stateless reset
+		return false
+	}
+	// send a Version Negotiation Packet if the client is speaking a different protocol version
+	if !protocol.IsSupportedVersion(s.config.Versions, hdr.Version) {
+		s.sendVersionNegotiationPacket(p, hdr)
+		return false
+	}
+	if hdr.IsLongHeader && hdr.Type != protocol.PacketTypeInitial {
+		// Drop long header packets.
+		// There's litte point in sending a Stateless Reset, since the client
+		// might not have received the token yet.
+		return false
+	}
+
+	s.logger.Debugf("<- Received Initial packet.")
+
+	sess, connID, err := s.handleInitialImpl(p, hdr)
+	if err != nil {
 		s.logger.Errorf("Error occurred handling initial packet: %s", err)
-		return
+		return false
 	}
 	if sess == nil { // a retry was done, or the connection attempt was rejected
-		p.buffer.Release()
-		return
+		return false
 	}
 	// Don't put the packet buffer back if a new session was created.
 	// The session will handle the packet and take of that.
-	serverSession := newServerSession(sess, s.config, s.logger)
-	s.sessionHandler.Add(connID, serverSession)
+	s.sessionHandler.Add(connID, sess)
+	return true
 }
 
-func (s *server) handleInitialImpl(p *receivedPacket) (quicSession, protocol.ConnectionID, error) {
-	hdr := p.hdr
+func (s *server) handleInitialImpl(p *receivedPacket, hdr *wire.Header) (quicSession, protocol.ConnectionID, error) {
 	if len(hdr.Token) == 0 && hdr.DestConnectionID.Len() < protocol.MinConnectionIDLenInitial {
-		return nil, nil, errors.New("dropping Initial packet with too short connection ID")
-	}
-	if len(p.data) < protocol.MinInitialPacketSize {
-		return nil, nil, errors.New("dropping too small Initial packet")
+		return nil, nil, errors.New("too short connection ID")
 	}
 
 	var cookie *Cookie
@@ -382,7 +396,7 @@ func (s *server) handleInitialImpl(p *receivedPacket) (quicSession, protocol.Con
 	if !s.config.AcceptCookie(p.remoteAddr, cookie) {
 		// Log the Initial packet now.
 		// If no Retry is sent, the packet will be logged by the session.
-		(&wire.ExtendedHeader{Header: *p.hdr}).Log(s.logger)
+		(&wire.ExtendedHeader{Header: *hdr}).Log(s.logger)
 		return nil, nil, s.sendRetry(p.remoteAddr, hdr)
 	}
 
@@ -529,9 +543,7 @@ func (s *server) sendServerBusy(remoteAddr net.Addr, hdr *wire.Header) error {
 	return nil
 }
 
-func (s *server) sendVersionNegotiationPacket(p *receivedPacket) {
-	defer p.buffer.Release()
-	hdr := p.hdr
+func (s *server) sendVersionNegotiationPacket(p *receivedPacket, hdr *wire.Header) {
 	s.logger.Debugf("Client offered version %s, sending Version Negotiation", hdr.Version)
 	data, err := wire.ComposeVersionNegotiation(hdr.SrcConnectionID, hdr.DestConnectionID, s.config.Versions)
 	if err != nil {
