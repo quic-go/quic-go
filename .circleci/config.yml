@@ -10,13 +10,14 @@ jobs:
         default: false
     docker:
       - image: << parameters.image >>
+        environment:
+          GO111MODULE: "on"
     working_directory: /go/src/github.com/lucas-clemente/quic-go
     steps:
       - checkout
       - run:
           name: "Setup build environment"
           command: |
-            go get -t ./...
             go get github.com/onsi/ginkgo/ginkgo
             go get github.com/onsi/gomega
       - run:
