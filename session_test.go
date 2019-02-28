@@ -62,11 +62,6 @@ func areSessionsRunning() bool {
 	return strings.Contains(b.String(), "quic-go.(*session).run")
 }
 
-func insertPacketBuffer(p *receivedPacket) *receivedPacket {
-	p.buffer = getPacketBuffer()
-	return p
-}
-
 var _ = Describe("Session", func() {
 	var (
 		sess          *session
@@ -678,7 +673,7 @@ var _ = Describe("Session", func() {
 			It("cuts packets to the right length", func() {
 				hdrLen, packet := getPacketWithLength(sess.srcConnID, 456)
 				unpacker.EXPECT().Unpack(gomock.Any(), gomock.Any()).DoAndReturn(func(_ *wire.Header, data []byte) (*unpackedPacket, error) {
-					Expect(data).To(HaveLen(int(hdrLen + 456 - 3)))
+					Expect(data).To(HaveLen(hdrLen + 456 - 3))
 					return &unpackedPacket{
 						encryptionLevel: protocol.EncryptionHandshake,
 						data:            []byte{0},
@@ -690,7 +685,7 @@ var _ = Describe("Session", func() {
 			It("handles coalesced packets", func() {
 				hdrLen1, packet1 := getPacketWithLength(sess.srcConnID, 456)
 				unpacker.EXPECT().Unpack(gomock.Any(), gomock.Any()).DoAndReturn(func(_ *wire.Header, data []byte) (*unpackedPacket, error) {
-					Expect(data).To(HaveLen(int(hdrLen1 + 456 - 3)))
+					Expect(data).To(HaveLen(hdrLen1 + 456 - 3))
 					return &unpackedPacket{
 						encryptionLevel: protocol.EncryptionHandshake,
 						data:            []byte{0},
@@ -698,7 +693,7 @@ var _ = Describe("Session", func() {
 				})
 				hdrLen2, packet2 := getPacketWithLength(sess.srcConnID, 123)
 				unpacker.EXPECT().Unpack(gomock.Any(), gomock.Any()).DoAndReturn(func(_ *wire.Header, data []byte) (*unpackedPacket, error) {
-					Expect(data).To(HaveLen(int(hdrLen2 + 123 - 3)))
+					Expect(data).To(HaveLen(hdrLen2 + 123 - 3))
 					return &unpackedPacket{
 						encryptionLevel: protocol.EncryptionHandshake,
 						data:            []byte{0},
@@ -713,7 +708,7 @@ var _ = Describe("Session", func() {
 				Expect(sess.srcConnID).ToNot(Equal(wrongConnID))
 				hdrLen1, packet1 := getPacketWithLength(sess.srcConnID, 456)
 				unpacker.EXPECT().Unpack(gomock.Any(), gomock.Any()).DoAndReturn(func(_ *wire.Header, data []byte) (*unpackedPacket, error) {
-					Expect(data).To(HaveLen(int(hdrLen1 + 456 - 3)))
+					Expect(data).To(HaveLen(hdrLen1 + 456 - 3))
 					return &unpackedPacket{
 						encryptionLevel: protocol.EncryptionHandshake,
 						data:            []byte{0},

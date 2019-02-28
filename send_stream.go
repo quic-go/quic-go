@@ -323,10 +323,6 @@ func (s *sendStream) closeForShutdown(err error) {
 	s.ctxCancel()
 }
 
-func (s *sendStream) getWriteOffset() protocol.ByteCount {
-	return s.writeOffset
-}
-
 // signalWrite performs a non-blocking send on the writeChan
 func (s *sendStream) signalWrite() {
 	select {

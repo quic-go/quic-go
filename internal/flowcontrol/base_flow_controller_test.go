@@ -167,7 +167,7 @@ var _ = Describe("Base Flow controller", func() {
 				newWindowSize := controller.receiveWindowSize
 				Expect(newWindowSize).To(Equal(2 * oldWindowSize))
 				// check that the new window size was used to increase the offset
-				Expect(offset).To(Equal(protocol.ByteCount(bytesRead + dataRead + newWindowSize)))
+				Expect(offset).To(Equal(bytesRead + dataRead + newWindowSize))
 			})
 
 			It("doesn't increase the window size if data is read so fast that the window would be consumed in less than 4 RTTs, but less than half the window has been read", func() {
@@ -188,7 +188,7 @@ var _ = Describe("Base Flow controller", func() {
 				newWindowSize := controller.receiveWindowSize
 				Expect(newWindowSize).To(Equal(oldWindowSize))
 				// check that the new window size was used to increase the offset
-				Expect(offset).To(Equal(protocol.ByteCount(bytesRead + dataRead + newWindowSize)))
+				Expect(offset).To(Equal(bytesRead + dataRead + newWindowSize))
 			})
 
 			It("doesn't increase the window size if read too slowly", func() {
@@ -206,7 +206,7 @@ var _ = Describe("Base Flow controller", func() {
 				// check that the window size was not increased
 				Expect(controller.receiveWindowSize).To(Equal(oldWindowSize))
 				// check that the new window size was used to increase the offset
-				Expect(offset).To(Equal(protocol.ByteCount(bytesRead + dataRead + oldWindowSize)))
+				Expect(offset).To(Equal(bytesRead + dataRead + oldWindowSize))
 			})
 
 			It("doesn't increase the window size to a value higher than the maxReceiveWindowSize", func() {

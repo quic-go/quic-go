@@ -62,10 +62,10 @@ var _ = Describe("Stream Framer", func() {
 			for i := 0; i < numFrames+1; i++ {
 				framer.QueueControlFrame(bf)
 			}
-			frames, length := framer.AppendControlFrames(nil, protocol.ByteCount(maxSize))
+			frames, length := framer.AppendControlFrames(nil, maxSize)
 			Expect(frames).To(HaveLen(numFrames))
 			Expect(length).To(BeNumerically(">", maxSize-bfLen))
-			frames, length = framer.AppendControlFrames(nil, protocol.ByteCount(maxSize))
+			frames, length = framer.AppendControlFrames(nil, maxSize)
 			Expect(frames).To(HaveLen(1))
 			Expect(length).To(Equal(bfLen))
 		})

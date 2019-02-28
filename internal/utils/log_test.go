@@ -80,7 +80,7 @@ var _ = Describe("Log", func() {
 		DefaultLogger.SetLogTimeFormat(format)
 		DefaultLogger.SetLogLevel(LogLevelInfo)
 		DefaultLogger.Infof("info")
-		t, err := time.Parse(format, string(b.String()[:b.Len()-6]))
+		t, err := time.Parse(format, b.String()[:b.Len()-6])
 		Expect(err).ToNot(HaveOccurred())
 		Expect(t).To(BeTemporally("~", time.Now(), 25*time.Hour))
 	})
