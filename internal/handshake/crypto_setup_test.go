@@ -128,13 +128,18 @@ var _ = Describe("Crypto Setup TLS", func() {
 		go func() {
 			defer GinkgoRecover()
 			err := server.RunHandshake()
-			Expect(err).To(HaveOccurred())
-			Expect(err.Error()).To(ContainSubstring("received unexpected handshake message"))
+			Expect(err).To(MatchError("TLS alert: 10"))
 			close(done)
 		}()
 
 		fakeCH := append([]byte{byte(typeClientHello), 0, 0, 6}, []byte("foobar")...)
-		server.HandleMessage(fakeCH, protocol.EncryptionInitial)
+		handledMessage := make(chan struct{})
+		go func() {
+			defer GinkgoRecover()
+			server.HandleMessage(fakeCH, protocol.EncryptionInitial)
+			close(handledMessage)
+		}()
+		Eventually(handledMessage).Should(BeClosed())
 		Eventually(done).Should(BeClosed())
 	})
 
