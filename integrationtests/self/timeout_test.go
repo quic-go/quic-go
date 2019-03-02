@@ -1,6 +1,7 @@
 package self_test
 
 import (
+	"context"
 	"crypto/tls"
 	"fmt"
 	"net"
@@ -21,6 +22,40 @@ var _ = Describe("Timeout tests", func() {
 		ExpectWithOffset(1, ok).To(BeTrue())
 		ExpectWithOffset(1, nerr.Timeout()).To(BeTrue())
 	}
+
+	It("returns net.Error timeout errors when dialing", func() {
+		errChan := make(chan error)
+		go func() {
+			_, err := quic.DialAddr(
+				"localhost:12345",
+				&tls.Config{RootCAs: testdata.GetRootCA()},
+				&quic.Config{HandshakeTimeout: 10 * time.Millisecond},
+			)
+			errChan <- err
+		}()
+		var err error
+		Eventually(errChan).Should(Receive(&err))
+		checkTimeoutError(err)
+	})
+
+	It("returns the context error when the context expires", func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
+		defer cancel()
+		errChan := make(chan error)
+		go func() {
+			_, err := quic.DialAddrContext(
+				ctx,
+				"localhost:12345",
+				&tls.Config{RootCAs: testdata.GetRootCA()},
+				nil,
+			)
+			errChan <- err
+		}()
+		var err error
+		Eventually(errChan).Should(Receive(&err))
+		// This is not a net.Error timeout error
+		Expect(err).To(MatchError(context.DeadlineExceeded))
+	})
 
 	It("returns net.Error timeout errors when an idle timeout occurs", func() {
 		const idleTimeout = 100 * time.Millisecond
