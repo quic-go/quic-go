@@ -57,49 +57,47 @@ var _ = Describe("Handshake tests", func() {
 		return server
 	}
 
-	Context("Version Negotiation", func() {
-		var supportedVersions []protocol.VersionNumber
+	if !israce.Enabled {
+		Context("Version Negotiation", func() {
+			var supportedVersions []protocol.VersionNumber
 
-		BeforeEach(func() {
-			supportedVersions = protocol.SupportedVersions
-			protocol.SupportedVersions = append(protocol.SupportedVersions, []protocol.VersionNumber{7, 8, 9, 10}...)
+			BeforeEach(func() {
+				supportedVersions = protocol.SupportedVersions
+				protocol.SupportedVersions = append(protocol.SupportedVersions, []protocol.VersionNumber{7, 8, 9, 10}...)
+			})
 
-			if israce.Enabled {
-				Skip("This test modifies protocol.SupportedVersions, and can't be run with race detector.")
-			}
+			AfterEach(func() {
+				protocol.SupportedVersions = supportedVersions
+			})
+
+			It("when the server supports more versions than the client", func() {
+				// the server doesn't support the highest supported version, which is the first one the client will try
+				// but it supports a bunch of versions that the client doesn't speak
+				serverConfig.Versions = []protocol.VersionNumber{7, 8, protocol.SupportedVersions[0], 9}
+				server := runServer()
+				defer server.Close()
+				sess, err := quic.DialAddr(server.Addr().String(), &tls.Config{InsecureSkipVerify: true}, nil)
+				Expect(err).ToNot(HaveOccurred())
+				Expect(sess.(versioner).GetVersion()).To(Equal(protocol.SupportedVersions[0]))
+				Expect(sess.Close()).To(Succeed())
+			})
+
+			It("when the client supports more versions than the server supports", func() {
+				// the server doesn't support the highest supported version, which is the first one the client will try
+				// but it supports a bunch of versions that the client doesn't speak
+				serverConfig.Versions = supportedVersions
+				server := runServer()
+				defer server.Close()
+				conf := &quic.Config{
+					Versions: []protocol.VersionNumber{7, 8, 9, protocol.SupportedVersions[0], 10},
+				}
+				sess, err := quic.DialAddr(server.Addr().String(), &tls.Config{InsecureSkipVerify: true}, conf)
+				Expect(err).ToNot(HaveOccurred())
+				Expect(sess.(versioner).GetVersion()).To(Equal(protocol.SupportedVersions[0]))
+				Expect(sess.Close()).To(Succeed())
+			})
 		})
-
-		AfterEach(func() {
-			protocol.SupportedVersions = supportedVersions
-		})
-
-		It("when the server supports more versions than the client", func() {
-			// the server doesn't support the highest supported version, which is the first one the client will try
-			// but it supports a bunch of versions that the client doesn't speak
-			serverConfig.Versions = []protocol.VersionNumber{7, 8, protocol.SupportedVersions[0], 9}
-			server := runServer()
-			defer server.Close()
-			sess, err := quic.DialAddr(server.Addr().String(), &tls.Config{InsecureSkipVerify: true}, nil)
-			Expect(err).ToNot(HaveOccurred())
-			Expect(sess.(versioner).GetVersion()).To(Equal(protocol.SupportedVersions[0]))
-			Expect(sess.Close()).To(Succeed())
-		})
-
-		It("when the client supports more versions than the server supports", func() {
-			// the server doesn't support the highest supported version, which is the first one the client will try
-			// but it supports a bunch of versions that the client doesn't speak
-			serverConfig.Versions = supportedVersions
-			server := runServer()
-			defer server.Close()
-			conf := &quic.Config{
-				Versions: []protocol.VersionNumber{7, 8, 9, protocol.SupportedVersions[0], 10},
-			}
-			sess, err := quic.DialAddr(server.Addr().String(), &tls.Config{InsecureSkipVerify: true}, conf)
-			Expect(err).ToNot(HaveOccurred())
-			Expect(sess.(versioner).GetVersion()).To(Equal(protocol.SupportedVersions[0]))
-			Expect(sess.Close()).To(Succeed())
-		})
-	})
+	}
 
 	Context("Certifiate validation", func() {
 		for _, v := range protocol.SupportedVersions {
