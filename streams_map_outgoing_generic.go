@@ -47,6 +47,10 @@ func (m *outgoingItemsMap) OpenStream() (item, error) {
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
 
+	if m.closeErr != nil {
+		return nil, m.closeErr
+	}
+
 	str, err := m.openStreamImpl()
 	if err != nil {
 		return nil, streamOpenErr{err}
@@ -59,6 +63,9 @@ func (m *outgoingItemsMap) OpenStreamSync() (item, error) {
 	defer m.mutex.Unlock()
 
 	for {
+		if m.closeErr != nil {
+			return nil, m.closeErr
+		}
 		str, err := m.openStreamImpl()
 		if err == nil {
 			return str, nil
@@ -71,9 +78,6 @@ func (m *outgoingItemsMap) OpenStreamSync() (item, error) {
 }
 
 func (m *outgoingItemsMap) openStreamImpl() (item, error) {
-	if m.closeErr != nil {
-		return nil, m.closeErr
-	}
 	if !m.maxStreamSet || m.nextStream > m.maxStream {
 		if !m.blockedSent {
 			if m.maxStreamSet {
