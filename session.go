@@ -410,11 +410,11 @@ runLoop:
 		}
 
 		if !s.handshakeComplete && now.Sub(s.sessionCreationTime) >= s.config.HandshakeTimeout {
-			s.closeLocal(qerr.Error(qerr.HandshakeTimeout, "Crypto handshake did not complete in time."))
+			s.destroy(qerr.Error(qerr.HandshakeTimeout, "Crypto handshake did not complete in time."))
 			continue
 		}
 		if s.handshakeComplete && now.Sub(s.lastNetworkActivityTime) >= s.config.IdleTimeout {
-			s.closeLocal(qerr.Error(qerr.NetworkIdleTimeout, "No recent network activity."))
+			s.destroy(qerr.Error(qerr.NetworkIdleTimeout, "No recent network activity."))
 			continue
 		}
 

@@ -1305,15 +1305,11 @@ var _ = Describe("Session", func() {
 		})
 
 		It("times out due to no network activity", func() {
-			sessionRunner.EXPECT().retireConnectionID(gomock.Any())
+			sessionRunner.EXPECT().removeConnectionID(gomock.Any())
 			sess.handshakeComplete = true
 			sess.lastNetworkActivityTime = time.Now().Add(-time.Hour)
 			done := make(chan struct{})
 			cryptoSetup.EXPECT().Close()
-			packer.EXPECT().PackConnectionClose(gomock.Any()).DoAndReturn(func(f *wire.ConnectionCloseFrame) (*packedPacket, error) {
-				Expect(f.ErrorCode).To(Equal(qerr.NetworkIdleTimeout))
-				return &packedPacket{}, nil
-			})
 			go func() {
 				defer GinkgoRecover()
 				cryptoSetup.EXPECT().RunHandshake().Do(func() { <-sess.Context().Done() })
@@ -1326,12 +1322,8 @@ var _ = Describe("Session", func() {
 
 		It("times out due to non-completed handshake", func() {
 			sess.sessionCreationTime = time.Now().Add(-protocol.DefaultHandshakeTimeout).Add(-time.Second)
-			sessionRunner.EXPECT().retireConnectionID(gomock.Any())
+			sessionRunner.EXPECT().removeConnectionID(gomock.Any())
 			cryptoSetup.EXPECT().Close()
-			packer.EXPECT().PackConnectionClose(gomock.Any()).DoAndReturn(func(f *wire.ConnectionCloseFrame) (*packedPacket, error) {
-				Expect(f.ErrorCode).To(Equal(qerr.HandshakeTimeout))
-				return &packedPacket{}, nil
-			})
 			done := make(chan struct{})
 			go func() {
 				defer GinkgoRecover()
@@ -1367,12 +1359,8 @@ var _ = Describe("Session", func() {
 
 		It("closes the session due to the idle timeout after handshake", func() {
 			packer.EXPECT().PackPacket().AnyTimes()
-			sessionRunner.EXPECT().retireConnectionID(gomock.Any())
+			sessionRunner.EXPECT().removeConnectionID(gomock.Any())
 			cryptoSetup.EXPECT().Close()
-			packer.EXPECT().PackConnectionClose(gomock.Any()).DoAndReturn(func(f *wire.ConnectionCloseFrame) (*packedPacket, error) {
-				Expect(f.ErrorCode).To(Equal(qerr.NetworkIdleTimeout))
-				return &packedPacket{}, nil
-			})
 			sess.config.IdleTimeout = 0
 			done := make(chan struct{})
 			go func() {
