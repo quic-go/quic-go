@@ -64,11 +64,7 @@ type cryptoSetup struct {
 
 	handleParamsCallback func([]byte)
 
-	// There are two ways that an error can occur during the handshake:
-	// 1. as a return value from qtls.Handshake()
-	// 2. when new data is passed to the crypto setup via HandleData()
-	// handshakeErrChan is closed when qtls.Handshake() errors
-	handshakeErrChan chan struct{}
+	alertChan chan error
 	// HandleData() sends errors on the messageErrChan
 	messageErrChan chan error
 	// handshakeDone is closed as soon as the go routine running qtls.Handshake() returns
@@ -190,7 +186,7 @@ func newCryptoSetup(
 		logger:                 logger,
 		perspective:            perspective,
 		handshakeDone:          make(chan struct{}),
-		handshakeErrChan:       make(chan struct{}),
+		alertChan:              make(chan error),
 		messageErrChan:         make(chan error, 1),
 		clientHelloWrittenChan: make(chan struct{}),
 		messageChan:            make(chan []byte, 100),
@@ -215,12 +211,11 @@ func (h *cryptoSetup) ChangeConnectionID(id protocol.ConnectionID) error {
 
 func (h *cryptoSetup) RunHandshake() error {
 	// Handle errors that might occur when HandleData() is called.
-	handshakeErrChan := make(chan error, 1)
 	handshakeComplete := make(chan struct{})
 	go func() {
 		defer close(h.handshakeDone)
 		if err := h.conn.Handshake(); err != nil {
-			handshakeErrChan <- err
+			h.logger.Debugf("qlts.Handshake error: %s", err)
 			return
 		}
 		close(handshakeComplete)
@@ -230,13 +225,11 @@ func (h *cryptoSetup) RunHandshake() error {
 	case <-h.closeChan:
 		close(h.messageChan)
 		// wait until the Handshake() go routine has returned
-		<-handshakeErrChan
 		return errors.New("Handshake aborted")
 	case <-handshakeComplete: // return when the handshake is done
 		return nil
-	case err := <-handshakeErrChan:
-		// if handleMessageFor{server,client} are waiting for some qtls action, make them return
-		close(h.handshakeErrChan)
+	case err := <-h.alertChan:
+		<-h.handshakeDone
 		return err
 	case err := <-h.messageErrChan:
 		// If the handshake errored because of an error that occurred during HandleData(),
@@ -304,25 +297,25 @@ func (h *cryptoSetup) handleMessageForServer(msgType messageType) bool {
 		select {
 		case data := <-h.extHandler.TransportParameters():
 			h.handleParamsCallback(data)
-		case <-h.handshakeErrChan:
+		case <-h.handshakeDone:
 			return false
 		}
 		// get the handshake read key
 		select {
 		case <-h.receivedReadKey:
-		case <-h.handshakeErrChan:
+		case <-h.handshakeDone:
 			return false
 		}
 		// get the handshake write key
 		select {
 		case <-h.receivedWriteKey:
-		case <-h.handshakeErrChan:
+		case <-h.handshakeDone:
 			return false
 		}
 		// get the 1-RTT write key
 		select {
 		case <-h.receivedWriteKey:
-		case <-h.handshakeErrChan:
+		case <-h.handshakeDone:
 			return false
 		}
 		return true
@@ -333,7 +326,7 @@ func (h *cryptoSetup) handleMessageForServer(msgType messageType) bool {
 		// get the 1-RTT read key
 		select {
 		case <-h.receivedReadKey:
-		case <-h.handshakeErrChan:
+		case <-h.handshakeDone:
 			return false
 		}
 		return true
@@ -348,13 +341,13 @@ func (h *cryptoSetup) handleMessageForClient(msgType messageType) bool {
 		// get the handshake write key
 		select {
 		case <-h.receivedWriteKey:
-		case <-h.handshakeErrChan:
+		case <-h.handshakeDone:
 			return false
 		}
 		// get the handshake read key
 		select {
 		case <-h.receivedReadKey:
-		case <-h.handshakeErrChan:
+		case <-h.handshakeDone:
 			return false
 		}
 		return true
@@ -362,7 +355,7 @@ func (h *cryptoSetup) handleMessageForClient(msgType messageType) bool {
 		select {
 		case data := <-h.extHandler.TransportParameters():
 			h.handleParamsCallback(data)
-		case <-h.handshakeErrChan:
+		case <-h.handshakeDone:
 			return false
 		}
 		return false
@@ -373,13 +366,13 @@ func (h *cryptoSetup) handleMessageForClient(msgType messageType) bool {
 		// get the 1-RTT read key
 		select {
 		case <-h.receivedReadKey:
-		case <-h.handshakeErrChan:
+		case <-h.handshakeDone:
 			return false
 		}
 		// get the handshake write key
 		select {
 		case <-h.receivedWriteKey:
-		case <-h.handshakeErrChan:
+		case <-h.handshakeDone:
 			return false
 		}
 		return true
@@ -465,6 +458,11 @@ func (h *cryptoSetup) WriteRecord(p []byte) (int, error) {
 	default:
 		panic(fmt.Sprintf("unexpected write encryption level: %s", h.writeEncLevel))
 	}
+}
+
+func (h *cryptoSetup) SendAlert(alert uint8) {
+	// TODO(#1567): send the correct IETF QUIC error code
+	h.alertChan <- fmt.Errorf("TLS alert: %d", alert)
 }
 
 func (h *cryptoSetup) GetSealer() (protocol.EncryptionLevel, Sealer) {
