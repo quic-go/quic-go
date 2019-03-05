@@ -204,7 +204,7 @@ var _ = Describe("Client", func() {
 			) (quicSession, error) {
 				sess := NewMockQuicSession(mockCtrl)
 				sess.EXPECT().run().Do(func() { close(run) })
-				runner.onHandshakeComplete(sess)
+				runner.OnHandshakeComplete(sess)
 				return sess, nil
 			}
 			s, err := Dial(
@@ -325,7 +325,7 @@ var _ = Describe("Client", func() {
 				return sess, nil
 			}
 			sess.EXPECT().run().Do(func() {
-				runner.retireConnectionID(connID)
+				runner.Retire(connID)
 			})
 
 			_, err := DialContext(

@@ -473,7 +473,7 @@ func (s *session) idleTimeoutStartTime() time.Time {
 func (s *session) handleHandshakeComplete() {
 	s.handshakeComplete = true
 	s.handshakeCompleteChan = nil // prevent this case from ever being selected again
-	s.sessionRunner.onHandshakeComplete(s)
+	s.sessionRunner.OnHandshakeComplete(s)
 
 	// The client completes the handshake first (after sending the CFIN).
 	// We need to make sure they learn about the peer completing the handshake,
@@ -835,7 +835,7 @@ func (s *session) closeLocal(e error) {
 		} else {
 			s.logger.Errorf("Closing session with error: %s", e)
 		}
-		s.sessionRunner.retireConnectionID(s.srcConnID)
+		s.sessionRunner.Retire(s.srcConnID)
 		s.closeChan <- closeError{err: e, sendClose: true, remote: false}
 	})
 }
@@ -848,7 +848,7 @@ func (s *session) destroy(e error) {
 		} else {
 			s.logger.Errorf("Destroying session with error: %s", e)
 		}
-		s.sessionRunner.removeConnectionID(s.srcConnID)
+		s.sessionRunner.Remove(s.srcConnID)
 		s.closeChan <- closeError{err: e, sendClose: false, remote: false}
 	})
 }
@@ -864,7 +864,7 @@ func (s *session) closeForRecreating() protocol.PacketNumber {
 func (s *session) closeRemote(e error) {
 	s.closeOnce.Do(func() {
 		s.logger.Errorf("Peer closed session with error: %s", e)
-		s.sessionRunner.removeConnectionID(s.srcConnID)
+		s.sessionRunner.Remove(s.srcConnID)
 		s.closeChan <- closeError{err: e, remote: true}
 	})
 }

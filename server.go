@@ -52,20 +52,18 @@ type quicSession interface {
 }
 
 type sessionRunner interface {
-	onHandshakeComplete(Session)
-	retireConnectionID(protocol.ConnectionID)
-	removeConnectionID(protocol.ConnectionID)
+	OnHandshakeComplete(Session)
+	Retire(protocol.ConnectionID)
+	Remove(protocol.ConnectionID)
 }
 
 type runner struct {
+	packetHandlerManager
+
 	onHandshakeCompleteImpl func(Session)
-	retireConnectionIDImpl  func(protocol.ConnectionID)
-	removeConnectionIDImpl  func(protocol.ConnectionID)
 }
 
-func (r *runner) onHandshakeComplete(s Session)              { r.onHandshakeCompleteImpl(s) }
-func (r *runner) retireConnectionID(c protocol.ConnectionID) { r.retireConnectionIDImpl(c) }
-func (r *runner) removeConnectionID(c protocol.ConnectionID) { r.removeConnectionIDImpl(c) }
+func (r *runner) OnHandshakeComplete(s Session) { r.onHandshakeCompleteImpl(s) }
 
 var _ sessionRunner = &runner{}
 
@@ -169,6 +167,7 @@ func listen(conn net.PacketConn, tlsConf *tls.Config, config *Config) (*server, 
 
 func (s *server) setup() error {
 	s.sessionRunner = &runner{
+		packetHandlerManager: s.sessionHandler,
 		onHandshakeCompleteImpl: func(sess Session) {
 			go func() {
 				atomic.AddInt32(&s.sessionQueueLen, 1)
@@ -181,8 +180,6 @@ func (s *server) setup() error {
 				}
 			}()
 		},
-		retireConnectionIDImpl: s.sessionHandler.Retire,
-		removeConnectionIDImpl: s.sessionHandler.Remove,
 	}
 	cookieGenerator, err := handshake.NewCookieGenerator()
 	if err != nil {

@@ -346,7 +346,7 @@ var _ = Describe("Server", func() {
 				sess.EXPECT().handlePacket(p)
 				sess.EXPECT().run()
 				sess.EXPECT().Context().Return(context.Background())
-				runner.onHandshakeComplete(sess)
+				runner.OnHandshakeComplete(sess)
 				return sess, nil
 			}
 
@@ -403,7 +403,7 @@ var _ = Describe("Server", func() {
 				sess.EXPECT().handlePacket(p)
 				sess.EXPECT().run()
 				sess.EXPECT().Context().Return(ctx)
-				runner.onHandshakeComplete(sess)
+				runner.OnHandshakeComplete(sess)
 				close(sessionCreated)
 				return sess, nil
 			}
@@ -489,7 +489,7 @@ var _ = Describe("Server", func() {
 			) (quicSession, error) {
 				go func() {
 					<-completeHandshake
-					runner.onHandshakeComplete(sess)
+					runner.OnHandshakeComplete(sess)
 				}()
 				sess.EXPECT().run().Do(func() {})
 				sess.EXPECT().Context().Return(context.Background())
@@ -521,7 +521,7 @@ var _ = Describe("Server", func() {
 				sess := NewMockQuicSession(mockCtrl)
 				sess.EXPECT().run().Do(func() {})
 				sess.EXPECT().Context().Return(context.Background())
-				runner.onHandshakeComplete(sess)
+				runner.OnHandshakeComplete(sess)
 				done <- struct{}{}
 				return sess, nil
 			}
