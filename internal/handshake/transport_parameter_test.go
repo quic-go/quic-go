@@ -24,9 +24,9 @@ var _ = Describe("Transport Parameters", func() {
 			IdleTimeout:                    42 * time.Second,
 			OriginalConnectionID:           protocol.ConnectionID{0xde, 0xad, 0xbe, 0xef},
 			AckDelayExponent:               14,
-			StatelessResetToken:            []byte{0xde, 0xad, 0xbe, 0xef, 0xca, 0xfe},
+			StatelessResetToken:            &[16]byte{0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88, 0x99, 0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff, 0x00},
 		}
-		Expect(p.String()).To(Equal("&handshake.TransportParameters{OriginalConnectionID: 0xdeadbeef, InitialMaxStreamDataBidiLocal: 0x1234, InitialMaxStreamDataBidiRemote: 0x2345, InitialMaxStreamDataUni: 0x3456, InitialMaxData: 0x4567, MaxBidiStreams: 1337, MaxUniStreams: 7331, IdleTimeout: 42s, AckDelayExponent: 14, StatelessResetToken: 0xdeadbeefcafe}"))
+		Expect(p.String()).To(Equal("&handshake.TransportParameters{OriginalConnectionID: 0xdeadbeef, InitialMaxStreamDataBidiLocal: 0x1234, InitialMaxStreamDataBidiRemote: 0x2345, InitialMaxStreamDataUni: 0x3456, InitialMaxData: 0x4567, MaxBidiStreams: 1337, MaxUniStreams: 7331, IdleTimeout: 42s, AckDelayExponent: 14, StatelessResetToken: 0x112233445566778899aabbccddeeff00}"))
 	})
 
 	getRandomValue := func() uint64 {
@@ -36,6 +36,8 @@ var _ = Describe("Transport Parameters", func() {
 	}
 
 	It("marshals und unmarshals", func() {
+		var token [16]byte
+		rand.Read(token[:])
 		params := &TransportParameters{
 			InitialMaxStreamDataBidiLocal:  protocol.ByteCount(getRandomValue()),
 			InitialMaxStreamDataBidiRemote: protocol.ByteCount(getRandomValue()),
@@ -45,7 +47,7 @@ var _ = Describe("Transport Parameters", func() {
 			MaxBidiStreams:                 getRandomValue(),
 			MaxUniStreams:                  getRandomValue(),
 			DisableMigration:               true,
-			StatelessResetToken:            bytes.Repeat([]byte{100}, 16),
+			StatelessResetToken:            &token,
 			OriginalConnectionID:           protocol.ConnectionID{0xde, 0xad, 0xbe, 0xef},
 			AckDelayExponent:               13,
 		}
@@ -68,9 +70,10 @@ var _ = Describe("Transport Parameters", func() {
 	})
 
 	It("errors when the stateless_reset_token has the wrong length", func() {
-		params := &TransportParameters{StatelessResetToken: bytes.Repeat([]byte{100}, 15)}
 		b := &bytes.Buffer{}
-		params.marshal(b)
+		utils.BigEndian.WriteUint16(b, uint16(statelessResetTokenParameterID))
+		utils.BigEndian.WriteUint16(b, 15)
+		b.Write(make([]byte, 15))
 		p := &TransportParameters{}
 		Expect(p.unmarshal(b.Bytes(), protocol.PerspectiveServer)).To(MatchError("wrong length for stateless_reset_token: 15 (expected 16)"))
 	})
@@ -190,9 +193,8 @@ var _ = Describe("Transport Parameters", func() {
 	})
 
 	It("errors if the client sent a stateless_reset_token", func() {
-		params := &TransportParameters{
-			StatelessResetToken: make([]byte, 16),
-		}
+		var token [16]byte
+		params := &TransportParameters{StatelessResetToken: &token}
 		b := &bytes.Buffer{}
 		params.marshal(b)
 		p := &TransportParameters{}

@@ -46,7 +46,7 @@ type TransportParameters struct {
 	IdleTimeout      time.Duration
 	DisableMigration bool
 
-	StatelessResetToken  []byte
+	StatelessResetToken  *[16]byte
 	OriginalConnectionID protocol.ConnectionID
 }
 
@@ -94,9 +94,9 @@ func (p *TransportParameters) unmarshal(data []byte, sentBy protocol.Perspective
 				if paramLen != 16 {
 					return fmt.Errorf("wrong length for stateless_reset_token: %d (expected 16)", paramLen)
 				}
-				b := make([]byte, 16)
-				r.Read(b)
-				p.StatelessResetToken = b
+				var token [16]byte
+				r.Read(token[:])
+				p.StatelessResetToken = &token
 			case originalConnectionIDParameterID:
 				if sentBy == protocol.PerspectiveClient {
 					return errors.New("client sent an original_connection_id")
@@ -216,10 +216,10 @@ func (p *TransportParameters) marshal(b *bytes.Buffer) {
 		utils.BigEndian.WriteUint16(b, uint16(disableMigrationParameterID))
 		utils.BigEndian.WriteUint16(b, 0)
 	}
-	if len(p.StatelessResetToken) > 0 {
+	if p.StatelessResetToken != nil {
 		utils.BigEndian.WriteUint16(b, uint16(statelessResetTokenParameterID))
-		utils.BigEndian.WriteUint16(b, uint16(len(p.StatelessResetToken))) // should always be 16 bytes
-		b.Write(p.StatelessResetToken)
+		utils.BigEndian.WriteUint16(b, 16)
+		b.Write(p.StatelessResetToken[:])
 	}
 	// original_connection_id
 	if p.OriginalConnectionID.Len() > 0 {
@@ -232,9 +232,9 @@ func (p *TransportParameters) marshal(b *bytes.Buffer) {
 // String returns a string representation, intended for logging.
 func (p *TransportParameters) String() string {
 	logString := "&handshake.TransportParameters{OriginalConnectionID: %s, InitialMaxStreamDataBidiLocal: %#x, InitialMaxStreamDataBidiRemote: %#x, InitialMaxStreamDataUni: %#x, InitialMaxData: %#x, MaxBidiStreams: %d, MaxUniStreams: %d, IdleTimeout: %s, AckDelayExponent: %d"
-	if len(p.StatelessResetToken) > 0 { // the client never sends a stateless reset token
+	if p.StatelessResetToken != nil { // the client never sends a stateless reset token
 		logString += ", StatelessResetToken: %#x"
 	}
 	logString += "}"
-	return fmt.Sprintf(logString, p.OriginalConnectionID, p.InitialMaxStreamDataBidiLocal, p.InitialMaxStreamDataBidiRemote, p.InitialMaxStreamDataUni, p.InitialMaxData, p.MaxBidiStreams, p.MaxUniStreams, p.IdleTimeout, p.AckDelayExponent, p.StatelessResetToken)
+	return fmt.Sprintf(logString, p.OriginalConnectionID, p.InitialMaxStreamDataBidiLocal, p.InitialMaxStreamDataBidiRemote, p.InitialMaxStreamDataUni, p.InitialMaxData, p.MaxBidiStreams, p.MaxUniStreams, p.IdleTimeout, p.AckDelayExponent, *p.StatelessResetToken)
 }

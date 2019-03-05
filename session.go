@@ -952,7 +952,7 @@ func (s *session) processTransportParametersForClient(data []byte) (*handshake.T
 
 	params := &eetp.Parameters
 	// check that the server sent a stateless reset token
-	if len(params.StatelessResetToken) == 0 {
+	if params.StatelessResetToken == nil {
 		return nil, errors.New("server didn't send stateless_reset_token")
 	}
 	// check the Retry token

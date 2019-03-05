@@ -430,6 +430,8 @@ func (s *server) createNewSession(
 	srcConnID protocol.ConnectionID,
 	version protocol.VersionNumber,
 ) (quicSession, error) {
+	// TODO(#855): generate a real token
+	token := [16]byte{42, 42, 42, 42, 42, 42, 42, 42, 42, 42, 42, 42, 42, 42, 42, 42}
 	params := &handshake.TransportParameters{
 		InitialMaxStreamDataBidiLocal:  protocol.InitialMaxStreamData,
 		InitialMaxStreamDataBidiRemote: protocol.InitialMaxStreamData,
@@ -440,9 +442,8 @@ func (s *server) createNewSession(
 		MaxUniStreams:                  uint64(s.config.MaxIncomingUniStreams),
 		AckDelayExponent:               protocol.AckDelayExponent,
 		DisableMigration:               true,
-		// TODO(#855): generate a real token
-		StatelessResetToken:  bytes.Repeat([]byte{42}, 16),
-		OriginalConnectionID: origDestConnID,
+		StatelessResetToken:            &token,
+		OriginalConnectionID:           origDestConnID,
 	}
 	sess, err := s.newSession(
 		&conn{pconn: s.conn, currentAddr: remoteAddr},

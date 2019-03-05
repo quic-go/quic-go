@@ -271,6 +271,7 @@ var _ = Describe("Crypto Setup TLS", func() {
 			Expect(err).ToNot(HaveOccurred())
 
 			sChunkChan, sInitialStream, sHandshakeStream := initStreams()
+			var token [16]byte
 			server, err := NewCryptoSetupServer(
 				sInitialStream,
 				sHandshakeStream,
@@ -279,7 +280,7 @@ var _ = Describe("Crypto Setup TLS", func() {
 				&EncryptedExtensionsTransportParameters{
 					NegotiatedVersion: protocol.VersionTLS,
 					SupportedVersions: []protocol.VersionNumber{protocol.VersionTLS},
-					Parameters:        TransportParameters{StatelessResetToken: bytes.Repeat([]byte{42}, 16)},
+					Parameters:        TransportParameters{StatelessResetToken: &token},
 				},
 				func([]byte) {},
 				serverConf,
@@ -359,9 +360,10 @@ var _ = Describe("Crypto Setup TLS", func() {
 			Expect(err).ToNot(HaveOccurred())
 
 			sChunkChan, sInitialStream, sHandshakeStream := initStreams()
+			var token [16]byte
 			sTransportParameters := &TransportParameters{
 				IdleTimeout:         0x1337 * time.Second,
-				StatelessResetToken: bytes.Repeat([]byte{42}, 16),
+				StatelessResetToken: &token,
 			}
 			server, err := NewCryptoSetupServer(
 				sInitialStream,
