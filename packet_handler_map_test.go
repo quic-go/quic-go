@@ -163,28 +163,10 @@ var _ = Describe("Packet Handler Map", func() {
 	})
 
 	Context("stateless reset handling", func() {
-		It("handles packets for connections added with a reset token", func() {
-			packetHandler := NewMockPacketHandler(mockCtrl)
-			connID := protocol.ConnectionID{0xde, 0xca, 0xfb, 0xad}
-			token := [16]byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16}
-			handler.AddWithResetToken(connID, packetHandler, token)
-			// first send a normal packet
-			handledPacket := make(chan struct{})
-			packetHandler.EXPECT().handlePacket(gomock.Any()).Do(func(p *receivedPacket) {
-				cid, err := wire.ParseConnectionID(p.data, 0)
-				Expect(err).ToNot(HaveOccurred())
-				Expect(cid).To(Equal(connID))
-				close(handledPacket)
-			})
-			conn.dataToRead <- getPacket(connID)
-			Eventually(handledPacket).Should(BeClosed())
-		})
-
 		It("handles stateless resets", func() {
 			packetHandler := NewMockPacketHandler(mockCtrl)
-			connID := protocol.ConnectionID{0xde, 0xca, 0xfb, 0xad}
 			token := [16]byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16}
-			handler.AddWithResetToken(connID, packetHandler, token)
+			handler.AddResetToken(token, packetHandler)
 			packet := append([]byte{0x40} /* short header packet */, make([]byte, 50)...)
 			packet = append(packet, token[:]...)
 			destroyed := make(chan struct{})
@@ -199,7 +181,7 @@ var _ = Describe("Packet Handler Map", func() {
 			handler.connIDLen = 0
 			packetHandler := NewMockPacketHandler(mockCtrl)
 			token := [16]byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16}
-			handler.AddWithResetToken(protocol.ConnectionID{}, packetHandler, token)
+			handler.AddResetToken(token, packetHandler)
 			packet := append([]byte{0x40} /* short header packet */, make([]byte, 50)...)
 			packet = append(packet, token[:]...)
 			destroyed := make(chan struct{})
@@ -210,13 +192,12 @@ var _ = Describe("Packet Handler Map", func() {
 			Eventually(destroyed).Should(BeClosed())
 		})
 
-		It("deletes reset tokens when the session is retired", func() {
+		It("deletes reset tokens", func() {
 			handler.deleteRetiredSessionsAfter = scaleDuration(10 * time.Millisecond)
 			connID := protocol.ConnectionID{0xde, 0xad, 0xbe, 0xef, 0x42}
 			token := [16]byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16}
-			handler.AddWithResetToken(connID, NewMockPacketHandler(mockCtrl), token)
-			handler.Retire(connID)
-			time.Sleep(scaleDuration(30 * time.Millisecond))
+			handler.AddResetToken(token, NewMockPacketHandler(mockCtrl))
+			handler.RemoveResetToken(token)
 			handler.handlePacket(nil, nil, getPacket(connID))
 			// don't EXPECT any calls to handlePacket of the MockPacketHandler
 			packet := append([]byte{0x40, 0xde, 0xca, 0xfb, 0xad, 0x99} /* short header packet */, make([]byte, 50)...)

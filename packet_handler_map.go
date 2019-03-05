@@ -11,11 +11,6 @@ import (
 	"github.com/lucas-clemente/quic-go/internal/wire"
 )
 
-type packetHandlerEntry struct {
-	handler    packetHandler
-	resetToken *[16]byte
-}
-
 // The packetHandlerMap stores packetHandlers, identified by connection ID.
 // It is used:
 // * by the server to store sessions
@@ -26,7 +21,7 @@ type packetHandlerMap struct {
 	conn      net.PacketConn
 	connIDLen int
 
-	handlers    map[string] /* string(ConnectionID)*/ packetHandlerEntry
+	handlers    map[string] /* string(ConnectionID)*/ packetHandler
 	resetTokens map[[16]byte] /* stateless reset token */ packetHandler
 	server      unknownPacketHandler
 
@@ -45,7 +40,7 @@ func newPacketHandlerMap(conn net.PacketConn, connIDLen int, logger utils.Logger
 		conn:                       conn,
 		connIDLen:                  connIDLen,
 		listening:                  make(chan struct{}),
-		handlers:                   make(map[string]packetHandlerEntry),
+		handlers:                   make(map[string]packetHandler),
 		resetTokens:                make(map[[16]byte]packetHandler),
 		deleteRetiredSessionsAfter: protocol.RetiredConnectionIDDeleteTimeout,
 		logger:                     logger,
@@ -56,14 +51,7 @@ func newPacketHandlerMap(conn net.PacketConn, connIDLen int, logger utils.Logger
 
 func (h *packetHandlerMap) Add(id protocol.ConnectionID, handler packetHandler) {
 	h.mutex.Lock()
-	h.handlers[string(id)] = packetHandlerEntry{handler: handler}
-	h.mutex.Unlock()
-}
-
-func (h *packetHandlerMap) AddWithResetToken(id protocol.ConnectionID, handler packetHandler, token [16]byte) {
-	h.mutex.Lock()
-	h.handlers[string(id)] = packetHandlerEntry{handler: handler, resetToken: &token}
-	h.resetTokens[token] = handler
+	h.handlers[string(id)] = handler
 	h.mutex.Unlock()
 }
 
@@ -73,12 +61,7 @@ func (h *packetHandlerMap) Remove(id protocol.ConnectionID) {
 
 func (h *packetHandlerMap) removeByConnectionIDAsString(id string) {
 	h.mutex.Lock()
-	if handlerEntry, ok := h.handlers[id]; ok {
-		if token := handlerEntry.resetToken; token != nil {
-			delete(h.resetTokens, *token)
-		}
-		delete(h.handlers, id)
-	}
+	delete(h.handlers, id)
 	h.mutex.Unlock()
 }
 
@@ -92,6 +75,18 @@ func (h *packetHandlerMap) retireByConnectionIDAsString(id string) {
 	})
 }
 
+func (h *packetHandlerMap) AddResetToken(token [16]byte, handler packetHandler) {
+	h.mutex.Lock()
+	h.resetTokens[token] = handler
+	h.mutex.Unlock()
+}
+
+func (h *packetHandlerMap) RemoveResetToken(token [16]byte) {
+	h.mutex.Lock()
+	delete(h.resetTokens, token)
+	h.mutex.Unlock()
+}
+
 func (h *packetHandlerMap) SetServer(s unknownPacketHandler) {
 	h.mutex.Lock()
 	h.server = s
@@ -102,8 +97,7 @@ func (h *packetHandlerMap) CloseServer() {
 	h.mutex.Lock()
 	h.server = nil
 	var wg sync.WaitGroup
-	for id, handlerEntry := range h.handlers {
-		handler := handlerEntry.handler
+	for id, handler := range h.handlers {
 		if handler.getPerspective() == protocol.PerspectiveServer {
 			wg.Add(1)
 			go func(id string, handler packetHandler) {
@@ -136,12 +130,12 @@ func (h *packetHandlerMap) close(e error) error {
 	h.closed = true
 
 	var wg sync.WaitGroup
-	for _, handlerEntry := range h.handlers {
+	for _, handler := range h.handlers {
 		wg.Add(1)
-		go func(handlerEntry packetHandlerEntry) {
-			handlerEntry.handler.destroy(e)
+		go func(handler packetHandler) {
+			handler.destroy(e)
 			wg.Done()
-		}(handlerEntry)
+		}(handler)
 	}
 
 	if h.server != nil {
@@ -187,7 +181,7 @@ func (h *packetHandlerMap) handlePacket(
 		return
 	}
 
-	handlerEntry, handlerFound := h.handlers[string(connID)]
+	handler, handlerFound := h.handlers[string(connID)]
 
 	p := &receivedPacket{
 		remoteAddr: addr,
@@ -196,7 +190,7 @@ func (h *packetHandlerMap) handlePacket(
 		data:       data,
 	}
 	if handlerFound { // existing session
-		handlerEntry.handler.handlePacket(p)
+		handler.handlePacket(p)
 		return
 	}
 	if data[0]&0x80 == 0 {
