@@ -30,14 +30,20 @@ var _ = Describe("Buffer Pool", func() {
 		Expect(func() { buf.Release() }).To(Panic())
 	})
 
+	It("panics if it is decremented too many times", func() {
+		buf := getPacketBuffer()
+		buf.Decrement()
+		Expect(func() { buf.Decrement() }).To(Panic())
+	})
+
 	It("waits until all parts have been released", func() {
 		buf := getPacketBuffer()
 		buf.Split()
 		buf.Split()
 		// now we have 3 parts
-		buf.Release()
-		buf.Release()
-		buf.Release()
-		Expect(func() { buf.Release() }).To(Panic())
+		buf.Decrement()
+		buf.Decrement()
+		buf.Decrement()
+		Expect(func() { buf.Decrement() }).To(Panic())
 	})
 })

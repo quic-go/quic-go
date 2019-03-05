@@ -22,21 +22,39 @@ func (b *packetBuffer) Split() {
 	b.refCount++
 }
 
-// Release decreases the refCount.
-// It should be called when processing the packet is finished.
-// When the refCount reaches 0, the packet buffer is put back into the pool.
-func (b *packetBuffer) Release() {
-	if cap(b.Slice) != int(protocol.MaxReceivePacketSize) {
-		panic("putPacketBuffer called with packet of wrong size!")
-	}
+// Decrement decrements the reference counter.
+// It doesn't put the buffer back into the pool.
+func (b *packetBuffer) Decrement() {
 	b.refCount--
 	if b.refCount < 0 {
 		panic("negative packetBuffer refCount")
 	}
+}
+
+// MaybeRelease puts the packet buffer back into the pool,
+// if the reference counter already reached 0.
+func (b *packetBuffer) MaybeRelease() {
 	// only put the packetBuffer back if it's not used any more
 	if b.refCount == 0 {
-		bufferPool.Put(b)
+		b.putBack()
 	}
+}
+
+// Release puts back the packet buffer into the pool.
+// It should be called when processing is definitely finished.
+func (b *packetBuffer) Release() {
+	b.Decrement()
+	if b.refCount != 0 {
+		panic("packetBuffer refCount not zero")
+	}
+	b.putBack()
+}
+
+func (b *packetBuffer) putBack() {
+	if cap(b.Slice) != int(protocol.MaxReceivePacketSize) {
+		panic("putPacketBuffer called with packet of wrong size!")
+	}
+	bufferPool.Put(b)
 }
 
 var bufferPool sync.Pool
