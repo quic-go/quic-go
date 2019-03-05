@@ -38,16 +38,19 @@ func (m *MockReceiveStreamI) EXPECT() *MockReceiveStreamIMockRecorder {
 
 // CancelRead mocks base method
 func (m *MockReceiveStreamI) CancelRead(arg0 protocol.ApplicationErrorCode) {
+	m.ctrl.T.Helper()
 	m.ctrl.Call(m, "CancelRead", arg0)
 }
 
 // CancelRead indicates an expected call of CancelRead
 func (mr *MockReceiveStreamIMockRecorder) CancelRead(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CancelRead", reflect.TypeOf((*MockReceiveStreamI)(nil).CancelRead), arg0)
 }
 
 // Read mocks base method
 func (m *MockReceiveStreamI) Read(arg0 []byte) (int, error) {
+	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Read", arg0)
 	ret0, _ := ret[0].(int)
 	ret1, _ := ret[1].(error)
@@ -56,11 +59,13 @@ func (m *MockReceiveStreamI) Read(arg0 []byte) (int, error) {
 
 // Read indicates an expected call of Read
 func (mr *MockReceiveStreamIMockRecorder) Read(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Read", reflect.TypeOf((*MockReceiveStreamI)(nil).Read), arg0)
 }
 
 // SetReadDeadline mocks base method
 func (m *MockReceiveStreamI) SetReadDeadline(arg0 time.Time) error {
+	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "SetReadDeadline", arg0)
 	ret0, _ := ret[0].(error)
 	return ret0
@@ -68,11 +73,13 @@ func (m *MockReceiveStreamI) SetReadDeadline(arg0 time.Time) error {
 
 // SetReadDeadline indicates an expected call of SetReadDeadline
 func (mr *MockReceiveStreamIMockRecorder) SetReadDeadline(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetReadDeadline", reflect.TypeOf((*MockReceiveStreamI)(nil).SetReadDeadline), arg0)
 }
 
 // StreamID mocks base method
 func (m *MockReceiveStreamI) StreamID() protocol.StreamID {
+	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "StreamID")
 	ret0, _ := ret[0].(protocol.StreamID)
 	return ret0
@@ -80,21 +87,25 @@ func (m *MockReceiveStreamI) StreamID() protocol.StreamID {
 
 // StreamID indicates an expected call of StreamID
 func (mr *MockReceiveStreamIMockRecorder) StreamID() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "StreamID", reflect.TypeOf((*MockReceiveStreamI)(nil).StreamID))
 }
 
 // closeForShutdown mocks base method
 func (m *MockReceiveStreamI) closeForShutdown(arg0 error) {
+	m.ctrl.T.Helper()
 	m.ctrl.Call(m, "closeForShutdown", arg0)
 }
 
 // closeForShutdown indicates an expected call of closeForShutdown
 func (mr *MockReceiveStreamIMockRecorder) closeForShutdown(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "closeForShutdown", reflect.TypeOf((*MockReceiveStreamI)(nil).closeForShutdown), arg0)
 }
 
 // getWindowUpdate mocks base method
 func (m *MockReceiveStreamI) getWindowUpdate() protocol.ByteCount {
+	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "getWindowUpdate")
 	ret0, _ := ret[0].(protocol.ByteCount)
 	return ret0
@@ -102,11 +113,13 @@ func (m *MockReceiveStreamI) getWindowUpdate() protocol.ByteCount {
 
 // getWindowUpdate indicates an expected call of getWindowUpdate
 func (mr *MockReceiveStreamIMockRecorder) getWindowUpdate() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "getWindowUpdate", reflect.TypeOf((*MockReceiveStreamI)(nil).getWindowUpdate))
 }
 
 // handleResetStreamFrame mocks base method
 func (m *MockReceiveStreamI) handleResetStreamFrame(arg0 *wire.ResetStreamFrame) error {
+	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "handleResetStreamFrame", arg0)
 	ret0, _ := ret[0].(error)
 	return ret0
@@ -114,11 +127,13 @@ func (m *MockReceiveStreamI) handleResetStreamFrame(arg0 *wire.ResetStreamFrame)
 
 // handleResetStreamFrame indicates an expected call of handleResetStreamFrame
 func (mr *MockReceiveStreamIMockRecorder) handleResetStreamFrame(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "handleResetStreamFrame", reflect.TypeOf((*MockReceiveStreamI)(nil).handleResetStreamFrame), arg0)
 }
 
 // handleStreamFrame mocks base method
 func (m *MockReceiveStreamI) handleStreamFrame(arg0 *wire.StreamFrame) error {
+	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "handleStreamFrame", arg0)
 	ret0, _ := ret[0].(error)
 	return ret0
@@ -126,5 +141,6 @@ func (m *MockReceiveStreamI) handleStreamFrame(arg0 *wire.StreamFrame) error {
 
 // handleStreamFrame indicates an expected call of handleStreamFrame
 func (mr *MockReceiveStreamIMockRecorder) handleStreamFrame(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "handleStreamFrame", reflect.TypeOf((*MockReceiveStreamI)(nil).handleStreamFrame), arg0)
 }

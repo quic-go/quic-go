@@ -36,16 +36,19 @@ func (m *MockOpener) EXPECT() *MockOpenerMockRecorder {
 
 // DecryptHeader mocks base method
 func (m *MockOpener) DecryptHeader(arg0 []byte, arg1 *byte, arg2 []byte) {
+	m.ctrl.T.Helper()
 	m.ctrl.Call(m, "DecryptHeader", arg0, arg1, arg2)
 }
 
 // DecryptHeader indicates an expected call of DecryptHeader
 func (mr *MockOpenerMockRecorder) DecryptHeader(arg0, arg1, arg2 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DecryptHeader", reflect.TypeOf((*MockOpener)(nil).DecryptHeader), arg0, arg1, arg2)
 }
 
 // Open mocks base method
 func (m *MockOpener) Open(arg0, arg1 []byte, arg2 protocol.PacketNumber, arg3 []byte) ([]byte, error) {
+	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Open", arg0, arg1, arg2, arg3)
 	ret0, _ := ret[0].([]byte)
 	ret1, _ := ret[1].(error)
@@ -54,5 +57,6 @@ func (m *MockOpener) Open(arg0, arg1 []byte, arg2 protocol.PacketNumber, arg3 []
 
 // Open indicates an expected call of Open
 func (mr *MockOpenerMockRecorder) Open(arg0, arg1, arg2, arg3 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Open", reflect.TypeOf((*MockOpener)(nil).Open), arg0, arg1, arg2, arg3)
 }

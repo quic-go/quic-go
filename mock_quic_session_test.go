@@ -39,6 +39,7 @@ func (m *MockQuicSession) EXPECT() *MockQuicSessionMockRecorder {
 
 // AcceptStream mocks base method
 func (m *MockQuicSession) AcceptStream() (Stream, error) {
+	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "AcceptStream")
 	ret0, _ := ret[0].(Stream)
 	ret1, _ := ret[1].(error)
@@ -47,11 +48,13 @@ func (m *MockQuicSession) AcceptStream() (Stream, error) {
 
 // AcceptStream indicates an expected call of AcceptStream
 func (mr *MockQuicSessionMockRecorder) AcceptStream() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AcceptStream", reflect.TypeOf((*MockQuicSession)(nil).AcceptStream))
 }
 
 // AcceptUniStream mocks base method
 func (m *MockQuicSession) AcceptUniStream() (ReceiveStream, error) {
+	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "AcceptUniStream")
 	ret0, _ := ret[0].(ReceiveStream)
 	ret1, _ := ret[1].(error)
@@ -60,11 +63,13 @@ func (m *MockQuicSession) AcceptUniStream() (ReceiveStream, error) {
 
 // AcceptUniStream indicates an expected call of AcceptUniStream
 func (mr *MockQuicSessionMockRecorder) AcceptUniStream() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AcceptUniStream", reflect.TypeOf((*MockQuicSession)(nil).AcceptUniStream))
 }
 
 // Close mocks base method
 func (m *MockQuicSession) Close() error {
+	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Close")
 	ret0, _ := ret[0].(error)
 	return ret0
@@ -72,11 +77,13 @@ func (m *MockQuicSession) Close() error {
 
 // Close indicates an expected call of Close
 func (mr *MockQuicSessionMockRecorder) Close() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Close", reflect.TypeOf((*MockQuicSession)(nil).Close))
 }
 
 // CloseWithError mocks base method
 func (m *MockQuicSession) CloseWithError(arg0 protocol.ApplicationErrorCode, arg1 error) error {
+	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "CloseWithError", arg0, arg1)
 	ret0, _ := ret[0].(error)
 	return ret0
@@ -84,11 +91,13 @@ func (m *MockQuicSession) CloseWithError(arg0 protocol.ApplicationErrorCode, arg
 
 // CloseWithError indicates an expected call of CloseWithError
 func (mr *MockQuicSessionMockRecorder) CloseWithError(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CloseWithError", reflect.TypeOf((*MockQuicSession)(nil).CloseWithError), arg0, arg1)
 }
 
 // ConnectionState mocks base method
 func (m *MockQuicSession) ConnectionState() handshake.ConnectionState {
+	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ConnectionState")
 	ret0, _ := ret[0].(handshake.ConnectionState)
 	return ret0
@@ -96,11 +105,13 @@ func (m *MockQuicSession) ConnectionState() handshake.ConnectionState {
 
 // ConnectionState indicates an expected call of ConnectionState
 func (mr *MockQuicSessionMockRecorder) ConnectionState() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ConnectionState", reflect.TypeOf((*MockQuicSession)(nil).ConnectionState))
 }
 
 // Context mocks base method
 func (m *MockQuicSession) Context() context.Context {
+	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Context")
 	ret0, _ := ret[0].(context.Context)
 	return ret0
@@ -108,11 +119,13 @@ func (m *MockQuicSession) Context() context.Context {
 
 // Context indicates an expected call of Context
 func (mr *MockQuicSessionMockRecorder) Context() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Context", reflect.TypeOf((*MockQuicSession)(nil).Context))
 }
 
 // GetVersion mocks base method
 func (m *MockQuicSession) GetVersion() protocol.VersionNumber {
+	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetVersion")
 	ret0, _ := ret[0].(protocol.VersionNumber)
 	return ret0
@@ -120,11 +133,13 @@ func (m *MockQuicSession) GetVersion() protocol.VersionNumber {
 
 // GetVersion indicates an expected call of GetVersion
 func (mr *MockQuicSessionMockRecorder) GetVersion() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetVersion", reflect.TypeOf((*MockQuicSession)(nil).GetVersion))
 }
 
 // LocalAddr mocks base method
 func (m *MockQuicSession) LocalAddr() net.Addr {
+	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "LocalAddr")
 	ret0, _ := ret[0].(net.Addr)
 	return ret0
@@ -132,11 +147,13 @@ func (m *MockQuicSession) LocalAddr() net.Addr {
 
 // LocalAddr indicates an expected call of LocalAddr
 func (mr *MockQuicSessionMockRecorder) LocalAddr() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "LocalAddr", reflect.TypeOf((*MockQuicSession)(nil).LocalAddr))
 }
 
 // OpenStream mocks base method
 func (m *MockQuicSession) OpenStream() (Stream, error) {
+	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "OpenStream")
 	ret0, _ := ret[0].(Stream)
 	ret1, _ := ret[1].(error)
@@ -145,11 +162,13 @@ func (m *MockQuicSession) OpenStream() (Stream, error) {
 
 // OpenStream indicates an expected call of OpenStream
 func (mr *MockQuicSessionMockRecorder) OpenStream() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "OpenStream", reflect.TypeOf((*MockQuicSession)(nil).OpenStream))
 }
 
 // OpenStreamSync mocks base method
 func (m *MockQuicSession) OpenStreamSync() (Stream, error) {
+	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "OpenStreamSync")
 	ret0, _ := ret[0].(Stream)
 	ret1, _ := ret[1].(error)
@@ -158,11 +177,13 @@ func (m *MockQuicSession) OpenStreamSync() (Stream, error) {
 
 // OpenStreamSync indicates an expected call of OpenStreamSync
 func (mr *MockQuicSessionMockRecorder) OpenStreamSync() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "OpenStreamSync", reflect.TypeOf((*MockQuicSession)(nil).OpenStreamSync))
 }
 
 // OpenUniStream mocks base method
 func (m *MockQuicSession) OpenUniStream() (SendStream, error) {
+	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "OpenUniStream")
 	ret0, _ := ret[0].(SendStream)
 	ret1, _ := ret[1].(error)
@@ -171,11 +192,13 @@ func (m *MockQuicSession) OpenUniStream() (SendStream, error) {
 
 // OpenUniStream indicates an expected call of OpenUniStream
 func (mr *MockQuicSessionMockRecorder) OpenUniStream() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "OpenUniStream", reflect.TypeOf((*MockQuicSession)(nil).OpenUniStream))
 }
 
 // OpenUniStreamSync mocks base method
 func (m *MockQuicSession) OpenUniStreamSync() (SendStream, error) {
+	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "OpenUniStreamSync")
 	ret0, _ := ret[0].(SendStream)
 	ret1, _ := ret[1].(error)
@@ -184,11 +207,13 @@ func (m *MockQuicSession) OpenUniStreamSync() (SendStream, error) {
 
 // OpenUniStreamSync indicates an expected call of OpenUniStreamSync
 func (mr *MockQuicSessionMockRecorder) OpenUniStreamSync() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "OpenUniStreamSync", reflect.TypeOf((*MockQuicSession)(nil).OpenUniStreamSync))
 }
 
 // RemoteAddr mocks base method
 func (m *MockQuicSession) RemoteAddr() net.Addr {
+	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "RemoteAddr")
 	ret0, _ := ret[0].(net.Addr)
 	return ret0
@@ -196,11 +221,13 @@ func (m *MockQuicSession) RemoteAddr() net.Addr {
 
 // RemoteAddr indicates an expected call of RemoteAddr
 func (mr *MockQuicSessionMockRecorder) RemoteAddr() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RemoteAddr", reflect.TypeOf((*MockQuicSession)(nil).RemoteAddr))
 }
 
 // closeForRecreating mocks base method
 func (m *MockQuicSession) closeForRecreating() protocol.PacketNumber {
+	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "closeForRecreating")
 	ret0, _ := ret[0].(protocol.PacketNumber)
 	return ret0
@@ -208,31 +235,37 @@ func (m *MockQuicSession) closeForRecreating() protocol.PacketNumber {
 
 // closeForRecreating indicates an expected call of closeForRecreating
 func (mr *MockQuicSessionMockRecorder) closeForRecreating() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "closeForRecreating", reflect.TypeOf((*MockQuicSession)(nil).closeForRecreating))
 }
 
 // closeRemote mocks base method
 func (m *MockQuicSession) closeRemote(arg0 error) {
+	m.ctrl.T.Helper()
 	m.ctrl.Call(m, "closeRemote", arg0)
 }
 
 // closeRemote indicates an expected call of closeRemote
 func (mr *MockQuicSessionMockRecorder) closeRemote(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "closeRemote", reflect.TypeOf((*MockQuicSession)(nil).closeRemote), arg0)
 }
 
 // destroy mocks base method
 func (m *MockQuicSession) destroy(arg0 error) {
+	m.ctrl.T.Helper()
 	m.ctrl.Call(m, "destroy", arg0)
 }
 
 // destroy indicates an expected call of destroy
 func (mr *MockQuicSessionMockRecorder) destroy(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "destroy", reflect.TypeOf((*MockQuicSession)(nil).destroy), arg0)
 }
 
 // getPerspective mocks base method
 func (m *MockQuicSession) getPerspective() protocol.Perspective {
+	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "getPerspective")
 	ret0, _ := ret[0].(protocol.Perspective)
 	return ret0
@@ -240,21 +273,25 @@ func (m *MockQuicSession) getPerspective() protocol.Perspective {
 
 // getPerspective indicates an expected call of getPerspective
 func (mr *MockQuicSessionMockRecorder) getPerspective() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "getPerspective", reflect.TypeOf((*MockQuicSession)(nil).getPerspective))
 }
 
 // handlePacket mocks base method
 func (m *MockQuicSession) handlePacket(arg0 *receivedPacket) {
+	m.ctrl.T.Helper()
 	m.ctrl.Call(m, "handlePacket", arg0)
 }
 
 // handlePacket indicates an expected call of handlePacket
 func (mr *MockQuicSessionMockRecorder) handlePacket(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "handlePacket", reflect.TypeOf((*MockQuicSession)(nil).handlePacket), arg0)
 }
 
 // run mocks base method
 func (m *MockQuicSession) run() error {
+	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "run")
 	ret0, _ := ret[0].(error)
 	return ret0
@@ -262,5 +299,6 @@ func (m *MockQuicSession) run() error {
 
 // run indicates an expected call of run
 func (mr *MockQuicSessionMockRecorder) run() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "run", reflect.TypeOf((*MockQuicSession)(nil).run))
 }

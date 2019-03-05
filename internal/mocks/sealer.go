@@ -36,16 +36,19 @@ func (m *MockSealer) EXPECT() *MockSealerMockRecorder {
 
 // EncryptHeader mocks base method
 func (m *MockSealer) EncryptHeader(arg0 []byte, arg1 *byte, arg2 []byte) {
+	m.ctrl.T.Helper()
 	m.ctrl.Call(m, "EncryptHeader", arg0, arg1, arg2)
 }
 
 // EncryptHeader indicates an expected call of EncryptHeader
 func (mr *MockSealerMockRecorder) EncryptHeader(arg0, arg1, arg2 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "EncryptHeader", reflect.TypeOf((*MockSealer)(nil).EncryptHeader), arg0, arg1, arg2)
 }
 
 // Overhead mocks base method
 func (m *MockSealer) Overhead() int {
+	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Overhead")
 	ret0, _ := ret[0].(int)
 	return ret0
@@ -53,11 +56,13 @@ func (m *MockSealer) Overhead() int {
 
 // Overhead indicates an expected call of Overhead
 func (mr *MockSealerMockRecorder) Overhead() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Overhead", reflect.TypeOf((*MockSealer)(nil).Overhead))
 }
 
 // Seal mocks base method
 func (m *MockSealer) Seal(arg0, arg1 []byte, arg2 protocol.PacketNumber, arg3 []byte) []byte {
+	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Seal", arg0, arg1, arg2, arg3)
 	ret0, _ := ret[0].([]byte)
 	return ret0
@@ -65,5 +70,6 @@ func (m *MockSealer) Seal(arg0, arg1 []byte, arg2 protocol.PacketNumber, arg3 []
 
 // Seal indicates an expected call of Seal
 func (mr *MockSealerMockRecorder) Seal(arg0, arg1, arg2, arg3 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Seal", reflect.TypeOf((*MockSealer)(nil).Seal), arg0, arg1, arg2, arg3)
 }

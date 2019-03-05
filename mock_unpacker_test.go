@@ -36,6 +36,7 @@ func (m *MockUnpacker) EXPECT() *MockUnpackerMockRecorder {
 
 // Unpack mocks base method
 func (m *MockUnpacker) Unpack(arg0 *wire.Header, arg1 []byte) (*unpackedPacket, error) {
+	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Unpack", arg0, arg1)
 	ret0, _ := ret[0].(*unpackedPacket)
 	ret1, _ := ret[1].(error)
@@ -44,5 +45,6 @@ func (m *MockUnpacker) Unpack(arg0 *wire.Header, arg1 []byte) (*unpackedPacket, 
 
 // Unpack indicates an expected call of Unpack
 func (mr *MockUnpackerMockRecorder) Unpack(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Unpack", reflect.TypeOf((*MockUnpacker)(nil).Unpack), arg0, arg1)
 }
