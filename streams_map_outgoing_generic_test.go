@@ -2,7 +2,6 @@ package quic
 
 import (
 	"errors"
-	"net"
 
 	"github.com/golang/mock/gomock"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
@@ -47,12 +46,7 @@ var _ = Describe("Streams Map (outgoing)", func() {
 			testErr := errors.New("close")
 			m.CloseWithError(testErr)
 			_, err := m.OpenStream()
-			Expect(err).To(HaveOccurred())
-			Expect(err.Error()).To(Equal(testErr.Error()))
-			nerr, ok := err.(net.Error)
-			Expect(ok).To(BeTrue())
-			Expect(nerr.Timeout()).To(BeFalse())
-			Expect(nerr.Temporary()).To(BeFalse())
+			Expect(err).To(MatchError(testErr))
 		})
 
 		It("gets streams", func() {
@@ -155,8 +149,7 @@ var _ = Describe("Streams Map (outgoing)", func() {
 			go func() {
 				defer GinkgoRecover()
 				_, err := m.OpenStreamSync()
-				Expect(err).To(HaveOccurred())
-				Expect(err.Error()).To(Equal(testErr.Error()))
+				Expect(err).To(MatchError(testErr))
 				close(done)
 			}()
 

@@ -37,12 +37,16 @@ type Stream interface {
 	// after a fixed time limit; see SetDeadline and SetReadDeadline.
 	// If the stream was canceled by the peer, the error implements the StreamError
 	// interface, and Canceled() == true.
+	// If the session was closed due to a timeout, the error satisfies
+	// the net.Error interface, and Timeout() will be true.
 	io.Reader
 	// Write writes data to the stream.
 	// Write can be made to time out and return a net.Error with Timeout() == true
 	// after a fixed time limit; see SetDeadline and SetWriteDeadline.
 	// If the stream was canceled by the peer, the error implements the StreamError
 	// interface, and Canceled() == true.
+	// If the session was closed due to a timeout, the error satisfies
+	// the net.Error interface, and Timeout() will be true.
 	io.Writer
 	// Close closes the write-direction of the stream.
 	// Future calls to Write are not permitted after calling Close.
@@ -117,26 +121,34 @@ type StreamError interface {
 // A Session is a QUIC connection between two peers.
 type Session interface {
 	// AcceptStream returns the next stream opened by the peer, blocking until one is available.
+	// If the session was closed due to a timeout, the error satisfies
+	// the net.Error interface, and Timeout() will be true.
 	AcceptStream() (Stream, error)
 	// AcceptUniStream returns the next unidirectional stream opened by the peer, blocking until one is available.
+	// If the session was closed due to a timeout, the error satisfies
+	// the net.Error interface, and Timeout() will be true.
 	AcceptUniStream() (ReceiveStream, error)
 	// OpenStream opens a new bidirectional QUIC stream.
 	// There is no signaling to the peer about new streams:
 	// The peer can only accept the stream after data has been sent on the stream.
 	// If the error is non-nil, it satisfies the net.Error interface.
 	// When reaching the peer's stream limit, err.Temporary() will be true.
+	// If the session was closed due to a timeout, Timeout() will be true.
 	OpenStream() (Stream, error)
 	// OpenStreamSync opens a new bidirectional QUIC stream.
 	// It blocks until a new stream can be opened.
 	// If the error is non-nil, it satisfies the net.Error interface.
+	// If the session was closed due to a timeout, Timeout() will be true.
 	OpenStreamSync() (Stream, error)
 	// OpenUniStream opens a new outgoing unidirectional QUIC stream.
 	// If the error is non-nil, it satisfies the net.Error interface.
 	// When reaching the peer's stream limit, Temporary() will be true.
+	// If the session was closed due to a timeout, Timeout() will be true.
 	OpenUniStream() (SendStream, error)
 	// OpenUniStreamSync opens a new outgoing unidirectional QUIC stream.
 	// It blocks until a new stream can be opened.
 	// If the error is non-nil, it satisfies the net.Error interface.
+	// If the session was closed due to a timeout, Timeout() will be true.
 	OpenUniStreamSync() (SendStream, error)
 	// LocalAddr returns the local address.
 	LocalAddr() net.Addr

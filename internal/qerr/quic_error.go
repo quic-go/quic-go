@@ -2,6 +2,7 @@ package qerr
 
 import (
 	"fmt"
+	"net"
 )
 
 // ErrorCode can be used as a normal error without reason.
@@ -17,6 +18,8 @@ type QuicError struct {
 	ErrorMessage string
 }
 
+var _ net.Error = &QuicError{}
+
 // Error creates a new QuicError instance
 func Error(errorCode ErrorCode, errorMessage string) *QuicError {
 	return &QuicError{
@@ -27,6 +30,11 @@ func Error(errorCode ErrorCode, errorMessage string) *QuicError {
 
 func (e *QuicError) Error() string {
 	return fmt.Sprintf("%s: %s", e.ErrorCode.String(), e.ErrorMessage)
+}
+
+// Temporary says if the error is temporary.
+func (e *QuicError) Temporary() bool {
+	return false
 }
 
 // Timeout says if this error is a timeout.
