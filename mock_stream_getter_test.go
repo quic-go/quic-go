@@ -36,6 +36,7 @@ func (m *MockStreamGetter) EXPECT() *MockStreamGetterMockRecorder {
 
 // GetOrOpenReceiveStream mocks base method
 func (m *MockStreamGetter) GetOrOpenReceiveStream(arg0 protocol.StreamID) (receiveStreamI, error) {
+	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetOrOpenReceiveStream", arg0)
 	ret0, _ := ret[0].(receiveStreamI)
 	ret1, _ := ret[1].(error)
@@ -44,11 +45,13 @@ func (m *MockStreamGetter) GetOrOpenReceiveStream(arg0 protocol.StreamID) (recei
 
 // GetOrOpenReceiveStream indicates an expected call of GetOrOpenReceiveStream
 func (mr *MockStreamGetterMockRecorder) GetOrOpenReceiveStream(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetOrOpenReceiveStream", reflect.TypeOf((*MockStreamGetter)(nil).GetOrOpenReceiveStream), arg0)
 }
 
 // GetOrOpenSendStream mocks base method
 func (m *MockStreamGetter) GetOrOpenSendStream(arg0 protocol.StreamID) (sendStreamI, error) {
+	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetOrOpenSendStream", arg0)
 	ret0, _ := ret[0].(sendStreamI)
 	ret1, _ := ret[1].(error)
@@ -57,5 +60,6 @@ func (m *MockStreamGetter) GetOrOpenSendStream(arg0 protocol.StreamID) (sendStre
 
 // GetOrOpenSendStream indicates an expected call of GetOrOpenSendStream
 func (mr *MockStreamGetterMockRecorder) GetOrOpenSendStream(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetOrOpenSendStream", reflect.TypeOf((*MockStreamGetter)(nil).GetOrOpenSendStream), arg0)
 }

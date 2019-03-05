@@ -37,6 +37,7 @@ func (m *MockSendAlgorithm) EXPECT() *MockSendAlgorithmMockRecorder {
 
 // GetCongestionWindow mocks base method
 func (m *MockSendAlgorithm) GetCongestionWindow() protocol.ByteCount {
+	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetCongestionWindow")
 	ret0, _ := ret[0].(protocol.ByteCount)
 	return ret0
@@ -44,91 +45,109 @@ func (m *MockSendAlgorithm) GetCongestionWindow() protocol.ByteCount {
 
 // GetCongestionWindow indicates an expected call of GetCongestionWindow
 func (mr *MockSendAlgorithmMockRecorder) GetCongestionWindow() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetCongestionWindow", reflect.TypeOf((*MockSendAlgorithm)(nil).GetCongestionWindow))
 }
 
 // MaybeExitSlowStart mocks base method
 func (m *MockSendAlgorithm) MaybeExitSlowStart() {
+	m.ctrl.T.Helper()
 	m.ctrl.Call(m, "MaybeExitSlowStart")
 }
 
 // MaybeExitSlowStart indicates an expected call of MaybeExitSlowStart
 func (mr *MockSendAlgorithmMockRecorder) MaybeExitSlowStart() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MaybeExitSlowStart", reflect.TypeOf((*MockSendAlgorithm)(nil).MaybeExitSlowStart))
 }
 
 // OnConnectionMigration mocks base method
 func (m *MockSendAlgorithm) OnConnectionMigration() {
+	m.ctrl.T.Helper()
 	m.ctrl.Call(m, "OnConnectionMigration")
 }
 
 // OnConnectionMigration indicates an expected call of OnConnectionMigration
 func (mr *MockSendAlgorithmMockRecorder) OnConnectionMigration() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "OnConnectionMigration", reflect.TypeOf((*MockSendAlgorithm)(nil).OnConnectionMigration))
 }
 
 // OnPacketAcked mocks base method
 func (m *MockSendAlgorithm) OnPacketAcked(arg0 protocol.PacketNumber, arg1, arg2 protocol.ByteCount, arg3 time.Time) {
+	m.ctrl.T.Helper()
 	m.ctrl.Call(m, "OnPacketAcked", arg0, arg1, arg2, arg3)
 }
 
 // OnPacketAcked indicates an expected call of OnPacketAcked
 func (mr *MockSendAlgorithmMockRecorder) OnPacketAcked(arg0, arg1, arg2, arg3 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "OnPacketAcked", reflect.TypeOf((*MockSendAlgorithm)(nil).OnPacketAcked), arg0, arg1, arg2, arg3)
 }
 
 // OnPacketLost mocks base method
 func (m *MockSendAlgorithm) OnPacketLost(arg0 protocol.PacketNumber, arg1, arg2 protocol.ByteCount) {
+	m.ctrl.T.Helper()
 	m.ctrl.Call(m, "OnPacketLost", arg0, arg1, arg2)
 }
 
 // OnPacketLost indicates an expected call of OnPacketLost
 func (mr *MockSendAlgorithmMockRecorder) OnPacketLost(arg0, arg1, arg2 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "OnPacketLost", reflect.TypeOf((*MockSendAlgorithm)(nil).OnPacketLost), arg0, arg1, arg2)
 }
 
 // OnPacketSent mocks base method
 func (m *MockSendAlgorithm) OnPacketSent(arg0 time.Time, arg1 protocol.ByteCount, arg2 protocol.PacketNumber, arg3 protocol.ByteCount, arg4 bool) {
+	m.ctrl.T.Helper()
 	m.ctrl.Call(m, "OnPacketSent", arg0, arg1, arg2, arg3, arg4)
 }
 
 // OnPacketSent indicates an expected call of OnPacketSent
 func (mr *MockSendAlgorithmMockRecorder) OnPacketSent(arg0, arg1, arg2, arg3, arg4 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "OnPacketSent", reflect.TypeOf((*MockSendAlgorithm)(nil).OnPacketSent), arg0, arg1, arg2, arg3, arg4)
 }
 
 // OnRetransmissionTimeout mocks base method
 func (m *MockSendAlgorithm) OnRetransmissionTimeout(arg0 bool) {
+	m.ctrl.T.Helper()
 	m.ctrl.Call(m, "OnRetransmissionTimeout", arg0)
 }
 
 // OnRetransmissionTimeout indicates an expected call of OnRetransmissionTimeout
 func (mr *MockSendAlgorithmMockRecorder) OnRetransmissionTimeout(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "OnRetransmissionTimeout", reflect.TypeOf((*MockSendAlgorithm)(nil).OnRetransmissionTimeout), arg0)
 }
 
 // SetNumEmulatedConnections mocks base method
 func (m *MockSendAlgorithm) SetNumEmulatedConnections(arg0 int) {
+	m.ctrl.T.Helper()
 	m.ctrl.Call(m, "SetNumEmulatedConnections", arg0)
 }
 
 // SetNumEmulatedConnections indicates an expected call of SetNumEmulatedConnections
 func (mr *MockSendAlgorithmMockRecorder) SetNumEmulatedConnections(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetNumEmulatedConnections", reflect.TypeOf((*MockSendAlgorithm)(nil).SetNumEmulatedConnections), arg0)
 }
 
 // SetSlowStartLargeReduction mocks base method
 func (m *MockSendAlgorithm) SetSlowStartLargeReduction(arg0 bool) {
+	m.ctrl.T.Helper()
 	m.ctrl.Call(m, "SetSlowStartLargeReduction", arg0)
 }
 
 // SetSlowStartLargeReduction indicates an expected call of SetSlowStartLargeReduction
 func (mr *MockSendAlgorithmMockRecorder) SetSlowStartLargeReduction(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetSlowStartLargeReduction", reflect.TypeOf((*MockSendAlgorithm)(nil).SetSlowStartLargeReduction), arg0)
 }
 
 // TimeUntilSend mocks base method
 func (m *MockSendAlgorithm) TimeUntilSend(arg0 protocol.ByteCount) time.Duration {
+	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "TimeUntilSend", arg0)
 	ret0, _ := ret[0].(time.Duration)
 	return ret0
@@ -136,5 +155,6 @@ func (m *MockSendAlgorithm) TimeUntilSend(arg0 protocol.ByteCount) time.Duration
 
 // TimeUntilSend indicates an expected call of TimeUntilSend
 func (mr *MockSendAlgorithmMockRecorder) TimeUntilSend(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "TimeUntilSend", reflect.TypeOf((*MockSendAlgorithm)(nil).TimeUntilSend), arg0)
 }

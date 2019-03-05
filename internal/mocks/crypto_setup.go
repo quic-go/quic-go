@@ -37,6 +37,7 @@ func (m *MockCryptoSetup) EXPECT() *MockCryptoSetupMockRecorder {
 
 // ChangeConnectionID mocks base method
 func (m *MockCryptoSetup) ChangeConnectionID(arg0 protocol.ConnectionID) error {
+	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ChangeConnectionID", arg0)
 	ret0, _ := ret[0].(error)
 	return ret0
@@ -44,11 +45,13 @@ func (m *MockCryptoSetup) ChangeConnectionID(arg0 protocol.ConnectionID) error {
 
 // ChangeConnectionID indicates an expected call of ChangeConnectionID
 func (mr *MockCryptoSetupMockRecorder) ChangeConnectionID(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ChangeConnectionID", reflect.TypeOf((*MockCryptoSetup)(nil).ChangeConnectionID), arg0)
 }
 
 // Close mocks base method
 func (m *MockCryptoSetup) Close() error {
+	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Close")
 	ret0, _ := ret[0].(error)
 	return ret0
@@ -56,11 +59,13 @@ func (m *MockCryptoSetup) Close() error {
 
 // Close indicates an expected call of Close
 func (mr *MockCryptoSetupMockRecorder) Close() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Close", reflect.TypeOf((*MockCryptoSetup)(nil).Close))
 }
 
 // ConnectionState mocks base method
 func (m *MockCryptoSetup) ConnectionState() handshake.ConnectionState {
+	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ConnectionState")
 	ret0, _ := ret[0].(handshake.ConnectionState)
 	return ret0
@@ -68,11 +73,13 @@ func (m *MockCryptoSetup) ConnectionState() handshake.ConnectionState {
 
 // ConnectionState indicates an expected call of ConnectionState
 func (mr *MockCryptoSetupMockRecorder) ConnectionState() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ConnectionState", reflect.TypeOf((*MockCryptoSetup)(nil).ConnectionState))
 }
 
 // GetOpener mocks base method
 func (m *MockCryptoSetup) GetOpener(arg0 protocol.EncryptionLevel) (handshake.Opener, error) {
+	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetOpener", arg0)
 	ret0, _ := ret[0].(handshake.Opener)
 	ret1, _ := ret[1].(error)
@@ -81,11 +88,13 @@ func (m *MockCryptoSetup) GetOpener(arg0 protocol.EncryptionLevel) (handshake.Op
 
 // GetOpener indicates an expected call of GetOpener
 func (mr *MockCryptoSetupMockRecorder) GetOpener(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetOpener", reflect.TypeOf((*MockCryptoSetup)(nil).GetOpener), arg0)
 }
 
 // GetSealer mocks base method
 func (m *MockCryptoSetup) GetSealer() (protocol.EncryptionLevel, handshake.Sealer) {
+	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetSealer")
 	ret0, _ := ret[0].(protocol.EncryptionLevel)
 	ret1, _ := ret[1].(handshake.Sealer)
@@ -94,11 +103,13 @@ func (m *MockCryptoSetup) GetSealer() (protocol.EncryptionLevel, handshake.Seale
 
 // GetSealer indicates an expected call of GetSealer
 func (mr *MockCryptoSetupMockRecorder) GetSealer() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetSealer", reflect.TypeOf((*MockCryptoSetup)(nil).GetSealer))
 }
 
 // GetSealerWithEncryptionLevel mocks base method
 func (m *MockCryptoSetup) GetSealerWithEncryptionLevel(arg0 protocol.EncryptionLevel) (handshake.Sealer, error) {
+	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetSealerWithEncryptionLevel", arg0)
 	ret0, _ := ret[0].(handshake.Sealer)
 	ret1, _ := ret[1].(error)
@@ -107,11 +118,13 @@ func (m *MockCryptoSetup) GetSealerWithEncryptionLevel(arg0 protocol.EncryptionL
 
 // GetSealerWithEncryptionLevel indicates an expected call of GetSealerWithEncryptionLevel
 func (mr *MockCryptoSetupMockRecorder) GetSealerWithEncryptionLevel(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetSealerWithEncryptionLevel", reflect.TypeOf((*MockCryptoSetup)(nil).GetSealerWithEncryptionLevel), arg0)
 }
 
 // HandleMessage mocks base method
 func (m *MockCryptoSetup) HandleMessage(arg0 []byte, arg1 protocol.EncryptionLevel) bool {
+	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "HandleMessage", arg0, arg1)
 	ret0, _ := ret[0].(bool)
 	return ret0
@@ -119,11 +132,13 @@ func (m *MockCryptoSetup) HandleMessage(arg0 []byte, arg1 protocol.EncryptionLev
 
 // HandleMessage indicates an expected call of HandleMessage
 func (mr *MockCryptoSetupMockRecorder) HandleMessage(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HandleMessage", reflect.TypeOf((*MockCryptoSetup)(nil).HandleMessage), arg0, arg1)
 }
 
 // RunHandshake mocks base method
 func (m *MockCryptoSetup) RunHandshake() error {
+	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "RunHandshake")
 	ret0, _ := ret[0].(error)
 	return ret0
@@ -131,5 +146,6 @@ func (m *MockCryptoSetup) RunHandshake() error {
 
 // RunHandshake indicates an expected call of RunHandshake
 func (mr *MockCryptoSetupMockRecorder) RunHandshake() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RunHandshake", reflect.TypeOf((*MockCryptoSetup)(nil).RunHandshake))
 }

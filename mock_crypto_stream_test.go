@@ -37,6 +37,7 @@ func (m *MockCryptoStream) EXPECT() *MockCryptoStreamMockRecorder {
 
 // Finish mocks base method
 func (m *MockCryptoStream) Finish() error {
+	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Finish")
 	ret0, _ := ret[0].(error)
 	return ret0
@@ -44,11 +45,13 @@ func (m *MockCryptoStream) Finish() error {
 
 // Finish indicates an expected call of Finish
 func (mr *MockCryptoStreamMockRecorder) Finish() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Finish", reflect.TypeOf((*MockCryptoStream)(nil).Finish))
 }
 
 // GetCryptoData mocks base method
 func (m *MockCryptoStream) GetCryptoData() []byte {
+	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetCryptoData")
 	ret0, _ := ret[0].([]byte)
 	return ret0
@@ -56,11 +59,13 @@ func (m *MockCryptoStream) GetCryptoData() []byte {
 
 // GetCryptoData indicates an expected call of GetCryptoData
 func (mr *MockCryptoStreamMockRecorder) GetCryptoData() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetCryptoData", reflect.TypeOf((*MockCryptoStream)(nil).GetCryptoData))
 }
 
 // HandleCryptoFrame mocks base method
 func (m *MockCryptoStream) HandleCryptoFrame(arg0 *wire.CryptoFrame) error {
+	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "HandleCryptoFrame", arg0)
 	ret0, _ := ret[0].(error)
 	return ret0
@@ -68,11 +73,13 @@ func (m *MockCryptoStream) HandleCryptoFrame(arg0 *wire.CryptoFrame) error {
 
 // HandleCryptoFrame indicates an expected call of HandleCryptoFrame
 func (mr *MockCryptoStreamMockRecorder) HandleCryptoFrame(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HandleCryptoFrame", reflect.TypeOf((*MockCryptoStream)(nil).HandleCryptoFrame), arg0)
 }
 
 // HasData mocks base method
 func (m *MockCryptoStream) HasData() bool {
+	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "HasData")
 	ret0, _ := ret[0].(bool)
 	return ret0
@@ -80,11 +87,13 @@ func (m *MockCryptoStream) HasData() bool {
 
 // HasData indicates an expected call of HasData
 func (mr *MockCryptoStreamMockRecorder) HasData() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HasData", reflect.TypeOf((*MockCryptoStream)(nil).HasData))
 }
 
 // PopCryptoFrame mocks base method
 func (m *MockCryptoStream) PopCryptoFrame(arg0 protocol.ByteCount) *wire.CryptoFrame {
+	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "PopCryptoFrame", arg0)
 	ret0, _ := ret[0].(*wire.CryptoFrame)
 	return ret0
@@ -92,11 +101,13 @@ func (m *MockCryptoStream) PopCryptoFrame(arg0 protocol.ByteCount) *wire.CryptoF
 
 // PopCryptoFrame indicates an expected call of PopCryptoFrame
 func (mr *MockCryptoStreamMockRecorder) PopCryptoFrame(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PopCryptoFrame", reflect.TypeOf((*MockCryptoStream)(nil).PopCryptoFrame), arg0)
 }
 
 // Write mocks base method
 func (m *MockCryptoStream) Write(arg0 []byte) (int, error) {
+	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Write", arg0)
 	ret0, _ := ret[0].(int)
 	ret1, _ := ret[1].(error)
@@ -105,5 +116,6 @@ func (m *MockCryptoStream) Write(arg0 []byte) (int, error) {
 
 // Write indicates an expected call of Write
 func (mr *MockCryptoStreamMockRecorder) Write(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Write", reflect.TypeOf((*MockCryptoStream)(nil).Write), arg0)
 }
