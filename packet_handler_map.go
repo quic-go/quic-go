@@ -183,6 +183,10 @@ func (h *packetHandlerMap) handlePacket(
 	h.mutex.RLock()
 	defer h.mutex.RUnlock()
 
+	if isStatelessReset := h.maybeHandleStatelessReset(data); isStatelessReset {
+		return
+	}
+
 	handlerEntry, handlerFound := h.handlers[string(connID)]
 
 	p := &receivedPacket{
@@ -195,17 +199,7 @@ func (h *packetHandlerMap) handlePacket(
 		handlerEntry.handler.handlePacket(p)
 		return
 	}
-	// No session found.
-	// This might be a stateless reset.
-	if data[0]&0x80 == 0 { // stateless resets are always short header packets
-		if len(p.data) >= protocol.MinStatelessResetSize {
-			var token [16]byte
-			copy(token[:], p.data[len(p.data)-16:])
-			if sess, ok := h.resetTokens[token]; ok {
-				sess.destroy(errors.New("received a stateless reset"))
-				return
-			}
-		}
+	if data[0]&0x80 == 0 {
 		// TODO(#943): send a stateless reset
 		h.logger.Debugf("received a short header packet with an unexpected connection ID %s", connID)
 		return
@@ -215,4 +209,22 @@ func (h *packetHandlerMap) handlePacket(
 		return
 	}
 	h.server.handlePacket(p)
+}
+
+func (h *packetHandlerMap) maybeHandleStatelessReset(data []byte) bool {
+	// stateless resets are always short header packets
+	if data[0]&0x80 != 0 {
+		return false
+	}
+	if len(data) < protocol.MinStatelessResetSize {
+		return false
+	}
+
+	var token [16]byte
+	copy(token[:], data[len(data)-16:])
+	if sess, ok := h.resetTokens[token]; ok {
+		sess.destroy(errors.New("received a stateless reset"))
+		return true
+	}
+	return false
 }

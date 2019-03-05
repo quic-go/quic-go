@@ -195,6 +195,21 @@ var _ = Describe("Packet Handler Map", func() {
 			Eventually(destroyed).Should(BeClosed())
 		})
 
+		It("handles stateless resets for 0-length connection IDs", func() {
+			handler.connIDLen = 0
+			packetHandler := NewMockPacketHandler(mockCtrl)
+			token := [16]byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16}
+			handler.AddWithResetToken(protocol.ConnectionID{}, packetHandler, token)
+			packet := append([]byte{0x40} /* short header packet */, make([]byte, 50)...)
+			packet = append(packet, token[:]...)
+			destroyed := make(chan struct{})
+			packetHandler.EXPECT().destroy(errors.New("received a stateless reset")).Do(func(error) {
+				close(destroyed)
+			})
+			conn.dataToRead <- packet
+			Eventually(destroyed).Should(BeClosed())
+		})
+
 		It("deletes reset tokens when the session is retired", func() {
 			handler.deleteRetiredSessionsAfter = scaleDuration(10 * time.Millisecond)
 			connID := protocol.ConnectionID{0xde, 0xad, 0xbe, 0xef, 0x42}
