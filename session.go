@@ -515,6 +515,7 @@ func (s *session) handlePacketImpl(p *receivedPacket) bool {
 		}
 		p.data = rest
 	}
+	p.buffer.MaybeRelease()
 	return processed
 }
 
@@ -524,7 +525,7 @@ func (s *session) handleSinglePacket(p *receivedPacket, hdr *wire.Header) bool /
 	defer func() {
 		// Put back the packet buffer if the packet wasn't queued for later decryption.
 		if !wasQueued {
-			p.buffer.Release()
+			p.buffer.Decrement()
 		}
 	}()
 
