@@ -98,7 +98,7 @@ var _ = Describe("Stream Flow controller", func() {
 			})
 
 			It("detects a flow control violation", func() {
-				Expect(controller.UpdateHighestReceived(receiveWindow+1, false)).To(MatchError("FlowControlReceivedTooMuchData: Received 0x10001 bytes on stream 10, allowed 0x10000 bytes"))
+				Expect(controller.UpdateHighestReceived(receiveWindow+1, false)).To(MatchError("FLOW_CONTROL_ERROR: Received 0x10001 bytes on stream 10, allowed 0x10000 bytes"))
 			})
 
 			It("accepts a final offset higher than the highest received", func() {
@@ -109,7 +109,7 @@ var _ = Describe("Stream Flow controller", func() {
 
 			It("errors when receiving a final offset smaller than the highest offset received so far", func() {
 				controller.UpdateHighestReceived(0x100, false)
-				Expect(controller.UpdateHighestReceived(0xff, true)).To(MatchError("StreamDataAfterTermination: Received final offset 0xff for stream 10, but already received offset 0x100 before"))
+				Expect(controller.UpdateHighestReceived(0xff, true)).To(MatchError("FINAL_SIZE_ERROR: Received final offset 0xff for stream 10, but already received offset 0x100 before"))
 			})
 
 			It("accepts delayed data after receiving a final offset", func() {
@@ -119,7 +119,7 @@ var _ = Describe("Stream Flow controller", func() {
 
 			It("errors when receiving a higher offset after receiving a final offset", func() {
 				Expect(controller.UpdateHighestReceived(0x200, true)).To(Succeed())
-				Expect(controller.UpdateHighestReceived(0x250, false)).To(MatchError("StreamDataAfterTermination: Received offset 0x250 for stream 10. Final offset was already received at 0x200"))
+				Expect(controller.UpdateHighestReceived(0x250, false)).To(MatchError("FINAL_SIZE_ERROR: Received offset 0x250 for stream 10. Final offset was already received at 0x200"))
 			})
 
 			It("accepts duplicate final offsets", func() {
@@ -130,7 +130,7 @@ var _ = Describe("Stream Flow controller", func() {
 
 			It("errors when receiving inconsistent final offsets", func() {
 				Expect(controller.UpdateHighestReceived(0x200, true)).To(Succeed())
-				Expect(controller.UpdateHighestReceived(0x201, true)).To(MatchError("StreamDataAfterTermination: Received inconsistent final offset for stream 10 (old: 0x200, new: 0x201 bytes)"))
+				Expect(controller.UpdateHighestReceived(0x201, true)).To(MatchError("FINAL_SIZE_ERROR: Received inconsistent final offset for stream 10 (old: 0x200, new: 0x201 bytes)"))
 			})
 
 			It("tells the connection flow controller when a stream is abandoned", func() {

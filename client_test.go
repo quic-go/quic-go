@@ -12,7 +12,6 @@ import (
 	"github.com/golang/mock/gomock"
 	"github.com/lucas-clemente/quic-go/internal/handshake"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
-	"github.com/lucas-clemente/quic-go/internal/qerr"
 	"github.com/lucas-clemente/quic-go/internal/utils"
 	"github.com/lucas-clemente/quic-go/internal/wire"
 
@@ -561,17 +560,27 @@ var _ = Describe("Client", func() {
 			It("errors if no matching version is found", func() {
 				sess := NewMockQuicSession(mockCtrl)
 				done := make(chan struct{})
-				sess.EXPECT().destroy(qerr.InvalidVersion).Do(func(error) { close(done) })
+				sess.EXPECT().destroy(gomock.Any()).Do(func(err error) {
+					defer GinkgoRecover()
+					Expect(err).To(HaveOccurred())
+					Expect(err.Error()).To(ContainSubstring("No compatible QUIC version found."))
+					close(done)
+				})
 				cl.session = sess
 				cl.config = &Config{Versions: protocol.SupportedVersions}
-				cl.handlePacket(composeVersionNegotiationPacket(connID, []protocol.VersionNumber{1}))
+				cl.handlePacket(composeVersionNegotiationPacket(connID, []protocol.VersionNumber{1337}))
 				Eventually(done).Should(BeClosed())
 			})
 
 			It("errors if the version is supported by quic-go, but disabled by the quic.Config", func() {
 				sess := NewMockQuicSession(mockCtrl)
 				done := make(chan struct{})
-				sess.EXPECT().destroy(qerr.InvalidVersion).Do(func(error) { close(done) })
+				sess.EXPECT().destroy(gomock.Any()).Do(func(err error) {
+					defer GinkgoRecover()
+					Expect(err).To(HaveOccurred())
+					Expect(err.Error()).To(ContainSubstring("No compatible QUIC version found."))
+					close(done)
+				})
 				cl.session = sess
 				v := protocol.VersionNumber(1234)
 				Expect(v).ToNot(Equal(cl.version))

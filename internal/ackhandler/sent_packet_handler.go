@@ -198,13 +198,13 @@ func (h *sentPacketHandler) ReceivedAck(ackFrame *wire.AckFrame, withPacketNumbe
 
 	largestAcked := ackFrame.LargestAcked()
 	if largestAcked > pnSpace.largestSent {
-		return qerr.Error(qerr.InvalidAckData, "Received ACK for an unsent packet")
+		return qerr.Error(qerr.ProtocolViolation, "Received ACK for an unsent packet")
 	}
 
 	pnSpace.largestAcked = utils.MaxPacketNumber(pnSpace.largestAcked, largestAcked)
 
 	if !pnSpace.pns.Validate(ackFrame) {
-		return qerr.Error(qerr.InvalidAckData, "Received an ACK for a skipped packet number")
+		return qerr.Error(qerr.ProtocolViolation, "Received an ACK for a skipped packet number")
 	}
 
 	// maybe update the RTT

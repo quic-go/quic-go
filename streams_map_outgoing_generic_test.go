@@ -59,7 +59,7 @@ var _ = Describe("Streams Map (outgoing)", func() {
 
 		It("errors when trying to get a stream that has not yet been opened", func() {
 			_, err := m.GetStream(firstNewStream)
-			Expect(err).To(MatchError(qerr.Error(qerr.InvalidStreamID, "peer attempted to open stream 3")))
+			Expect(err).To(MatchError(qerr.Error(qerr.StreamStateError, "peer attempted to open stream 3")))
 		})
 
 		It("deletes streams", func() {

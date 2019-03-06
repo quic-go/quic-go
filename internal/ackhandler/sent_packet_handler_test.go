@@ -161,7 +161,7 @@ var _ = Describe("SentPacketHandler", func() {
 			It("rejects ACKs with a too high LargestAcked packet number", func() {
 				ack := &wire.AckFrame{AckRanges: []wire.AckRange{{Smallest: 0, Largest: 9999}}}
 				err := handler.ReceivedAck(ack, 1, protocol.Encryption1RTT, time.Now())
-				Expect(err).To(MatchError("InvalidAckData: Received ACK for an unsent packet"))
+				Expect(err).To(MatchError("PROTOCOL_VIOLATION: Received ACK for an unsent packet"))
 				Expect(handler.bytesInFlight).To(Equal(protocol.ByteCount(10)))
 			})
 
@@ -809,7 +809,7 @@ var _ = Describe("SentPacketHandler", func() {
 			})
 			ack := &wire.AckFrame{AckRanges: []wire.AckRange{{Smallest: 13, Largest: 13}}}
 			err := handler.ReceivedAck(ack, 1, protocol.EncryptionHandshake, time.Now())
-			Expect(err).To(MatchError("InvalidAckData: Received ACK for an unsent packet"))
+			Expect(err).To(MatchError("PROTOCOL_VIOLATION: Received ACK for an unsent packet"))
 		})
 
 		It("deletes crypto packets when the handshake completes", func() {

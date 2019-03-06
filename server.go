@@ -504,8 +504,7 @@ func (s *server) sendServerBusy(remoteAddr net.Addr, hdr *wire.Header) error {
 	defer packetBuffer.Release()
 	buf := bytes.NewBuffer(packetBuffer.Slice[:0])
 
-	// TODO(#1567): use the SERVER_BUSY error code
-	ccf := &wire.ConnectionCloseFrame{ErrorCode: qerr.PeerGoingAway}
+	ccf := &wire.ConnectionCloseFrame{ErrorCode: qerr.ServerBusy}
 
 	replyHdr := &wire.ExtendedHeader{}
 	replyHdr.IsLongHeader = true

@@ -306,7 +306,7 @@ var _ = Describe("Client", func() {
 			}()
 
 			Eventually(done).Should(BeClosed())
-			Expect(client.headerErr.ErrorCode).To(Equal(qerr.InvalidHeadersStreamData))
+			Expect(client.headerErr.ErrorCode).To(Equal(qerr.InternalError))
 			Expect(client.session.(*mockSession).closedWithError).To(MatchError(client.headerErr))
 		})
 
@@ -315,7 +315,7 @@ var _ = Describe("Client", func() {
 			headerStream.dataToRead.Write(bytes.Repeat([]byte{0}, 100))
 			_, err := client.RoundTrip(request)
 			Expect(err).To(BeAssignableToTypeOf(&qerr.QuicError{}))
-			Expect(err.(*qerr.QuicError).ErrorCode).To(Equal(qerr.InvalidHeadersStreamData))
+			Expect(err.(*qerr.QuicError).ErrorCode).To(Equal(qerr.InternalError))
 			// now that the first request failed due to an error on the header stream, try another request
 			_, nextErr := client.RoundTrip(request)
 			Expect(nextErr).To(MatchError(err))
@@ -605,7 +605,7 @@ var _ = Describe("Client", func() {
 				h2framer.WritePing(true, [8]byte{0, 0, 0, 0, 0, 0, 0, 0})
 				client.handleHeaderStream()
 				Eventually(client.headerErrored).Should(BeClosed())
-				Expect(client.headerErr).To(MatchError(qerr.Error(qerr.InvalidHeadersStreamData, "not a headers frame")))
+				Expect(client.headerErr).To(MatchError(qerr.Error(qerr.InternalError, "not a headers frame")))
 			})
 
 			It("errors if it can't read the HPACK encoded header fields", func() {
@@ -616,7 +616,7 @@ var _ = Describe("Client", func() {
 				})
 				client.handleHeaderStream()
 				Eventually(client.headerErrored).Should(BeClosed())
-				Expect(client.headerErr.ErrorCode).To(Equal(qerr.InvalidHeadersStreamData))
+				Expect(client.headerErr.ErrorCode).To(Equal(qerr.InternalError))
 				Expect(client.headerErr.ErrorMessage).To(ContainSubstring("cannot read header fields"))
 			})
 
@@ -632,7 +632,7 @@ var _ = Describe("Client", func() {
 				Expect(err).ToNot(HaveOccurred())
 				client.handleHeaderStream()
 				Eventually(client.headerErrored).Should(BeClosed())
-				Expect(client.headerErr.ErrorCode).To(Equal(qerr.InvalidHeadersStreamData))
+				Expect(client.headerErr.ErrorCode).To(Equal(qerr.InternalError))
 				Expect(client.headerErr.ErrorMessage).To(ContainSubstring("response channel for stream 1337 not found"))
 			})
 		})

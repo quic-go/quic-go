@@ -107,7 +107,7 @@ func (m *outgoingUniStreamsMap) GetStream(id protocol.StreamID) (sendStreamI, er
 	m.mutex.RLock()
 	if id >= m.nextStream {
 		m.mutex.RUnlock()
-		return nil, qerr.Error(qerr.InvalidStreamID, fmt.Sprintf("peer attempted to open stream %d", id))
+		return nil, qerr.Error(qerr.StreamStateError, fmt.Sprintf("peer attempted to open stream %d", id))
 	}
 	s := m.streams[id]
 	m.mutex.RUnlock()
