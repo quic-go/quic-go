@@ -40,7 +40,7 @@ func (p *frameParser) parseFrame(r *bytes.Reader, typeByte byte, encLevel protoc
 	if typeByte&0xf8 == 0x8 {
 		frame, err = parseStreamFrame(r, p.version)
 		if err != nil {
-			return nil, qerr.Error(qerr.InvalidFrameData, err.Error())
+			return nil, qerr.Error(qerr.FrameEncodingError, err.Error())
 		}
 		return frame, nil
 	}
@@ -87,7 +87,7 @@ func (p *frameParser) parseFrame(r *bytes.Reader, typeByte byte, encLevel protoc
 		err = fmt.Errorf("unknown type byte 0x%x", typeByte)
 	}
 	if err != nil {
-		return nil, qerr.Error(qerr.InvalidFrameData, err.Error())
+		return nil, qerr.Error(qerr.FrameEncodingError, err.Error())
 	}
 	return frame, nil
 }

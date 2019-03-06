@@ -146,7 +146,7 @@ var _ = Describe("Session", func() {
 					StreamID: 3,
 					Data:     []byte("foobar"),
 				}, protocol.EncryptionHandshake)
-				Expect(err).To(MatchError(qerr.Error(qerr.UnencryptedStreamData, "received unencrypted stream data on stream 3")))
+				Expect(err).To(MatchError(qerr.Error(qerr.ProtocolViolation, "received unencrypted stream data on stream 3")))
 			})
 		})
 
@@ -320,7 +320,7 @@ var _ = Describe("Session", func() {
 		})
 
 		It("handles CONNECTION_CLOSE frames", func() {
-			testErr := qerr.Error(qerr.ProofInvalid, "foobar")
+			testErr := qerr.Error(qerr.StreamLimitError, "foobar")
 			streamManager.EXPECT().CloseWithError(testErr)
 			sessionRunner.EXPECT().removeConnectionID(gomock.Any())
 			cryptoSetup.EXPECT().Close()
@@ -328,11 +328,13 @@ var _ = Describe("Session", func() {
 			go func() {
 				defer GinkgoRecover()
 				cryptoSetup.EXPECT().RunHandshake().Do(func() { <-sess.Context().Done() })
-				err := sess.run()
-				Expect(err).To(MatchError(testErr))
+				Expect(sess.run()).To(MatchError(testErr))
 			}()
-			err := sess.handleFrame(&wire.ConnectionCloseFrame{ErrorCode: qerr.ProofInvalid, ReasonPhrase: "foobar"}, 0, protocol.EncryptionUnspecified)
-			Expect(err).NotTo(HaveOccurred())
+			ccf := &wire.ConnectionCloseFrame{
+				ErrorCode:    qerr.StreamLimitError,
+				ReasonPhrase: "foobar",
+			}
+			Expect(sess.handleFrame(ccf, 0, protocol.EncryptionUnspecified)).To(Succeed())
 			Eventually(sess.Context().Done()).Should(BeClosed())
 		})
 	})
@@ -374,7 +376,7 @@ var _ = Describe("Session", func() {
 		})
 
 		It("shuts down without error", func() {
-			streamManager.EXPECT().CloseWithError(qerr.Error(qerr.PeerGoingAway, ""))
+			streamManager.EXPECT().CloseWithError(qerr.Error(qerr.NoError, ""))
 			sessionRunner.EXPECT().retireConnectionID(gomock.Any())
 			cryptoSetup.EXPECT().Close()
 			packer.EXPECT().PackConnectionClose(gomock.Any()).Return(&packedPacket{raw: []byte("connection close")}, nil)
@@ -386,7 +388,7 @@ var _ = Describe("Session", func() {
 		})
 
 		It("only closes once", func() {
-			streamManager.EXPECT().CloseWithError(qerr.Error(qerr.PeerGoingAway, ""))
+			streamManager.EXPECT().CloseWithError(qerr.Error(qerr.NoError, ""))
 			sessionRunner.EXPECT().retireConnectionID(gomock.Any())
 			cryptoSetup.EXPECT().Close()
 			packer.EXPECT().PackConnectionClose(gomock.Any()).Return(&packedPacket{}, nil)
@@ -569,7 +571,7 @@ var _ = Describe("Session", func() {
 				defer GinkgoRecover()
 				cryptoSetup.EXPECT().RunHandshake().Do(func() { <-sess.Context().Done() })
 				err := sess.run()
-				Expect(err).To(MatchError(qerr.MissingPayload))
+				Expect(err).To(MatchError("ProtocolViolation: empty packet"))
 				close(done)
 			}()
 			sessionRunner.EXPECT().retireConnectionID(gomock.Any())
@@ -1217,7 +1219,7 @@ var _ = Describe("Session", func() {
 				InitialVersion: 13, // this must be a supported version
 			}
 			_, err := sess.processTransportParametersForServer(chtp.Marshal())
-			Expect(err).To(MatchError("VersionNegotiationMismatch: Client should have used the initial version"))
+			Expect(err).To(MatchError("VersionNegotiationError: Client should have used the initial version"))
 		})
 	})
 
@@ -1314,7 +1316,10 @@ var _ = Describe("Session", func() {
 				defer GinkgoRecover()
 				cryptoSetup.EXPECT().RunHandshake().Do(func() { <-sess.Context().Done() })
 				err := sess.run()
-				Expect(err.(*qerr.QuicError).ErrorCode).To(Equal(qerr.NetworkIdleTimeout))
+				nerr, ok := err.(net.Error)
+				Expect(ok).To(BeTrue())
+				Expect(nerr.Timeout()).To(BeTrue())
+				Expect(err.Error()).To(ContainSubstring("No recent network activity"))
 				close(done)
 			}()
 			Eventually(done).Should(BeClosed())
@@ -1329,7 +1334,10 @@ var _ = Describe("Session", func() {
 				defer GinkgoRecover()
 				cryptoSetup.EXPECT().RunHandshake().Do(func() { <-sess.Context().Done() })
 				err := sess.run()
-				Expect(err.(*qerr.QuicError).ErrorCode).To(Equal(qerr.HandshakeTimeout))
+				nerr, ok := err.(net.Error)
+				Expect(ok).To(BeTrue())
+				Expect(nerr.Timeout()).To(BeTrue())
+				Expect(err.Error()).To(ContainSubstring("Handshake did not complete in time"))
 				close(done)
 			}()
 			Eventually(done).Should(BeClosed())
@@ -1339,7 +1347,7 @@ var _ = Describe("Session", func() {
 			sess.config.IdleTimeout = 9999 * time.Second
 			sess.lastNetworkActivityTime = time.Now().Add(-time.Minute)
 			packer.EXPECT().PackConnectionClose(gomock.Any()).DoAndReturn(func(f *wire.ConnectionCloseFrame) (*packedPacket, error) {
-				Expect(f.ErrorCode).To(Equal(qerr.PeerGoingAway))
+				Expect(f.ErrorCode).To(Equal(qerr.NoError))
 				return &packedPacket{}, nil
 			})
 			// the handshake timeout is irrelevant here, since it depends on the time the session was created,
@@ -1368,7 +1376,10 @@ var _ = Describe("Session", func() {
 				sessionRunner.EXPECT().onHandshakeComplete(sess)
 				cryptoSetup.EXPECT().RunHandshake()
 				err := sess.run()
-				Expect(err.(*qerr.QuicError).ErrorCode).To(Equal(qerr.NetworkIdleTimeout))
+				nerr, ok := err.(net.Error)
+				Expect(ok).To(BeTrue())
+				Expect(nerr.Timeout()).To(BeTrue())
+				Expect(err.Error()).To(ContainSubstring("No recent network activity"))
 				close(done)
 			}()
 			Eventually(done).Should(BeClosed())
@@ -1685,7 +1696,7 @@ var _ = Describe("Client Session", func() {
 					Parameters:        params,
 				}
 				_, err := sess.processTransportParametersForClient(eetp.Marshal())
-				Expect(err).To(MatchError("VersionNegotiationMismatch: current version doesn't match negotiated_version"))
+				Expect(err).To(MatchError("VersionNegotiationError: current version doesn't match negotiated_version"))
 			})
 
 			It("errors if the current version is not contained in the server's supported versions", func() {
@@ -1696,7 +1707,7 @@ var _ = Describe("Client Session", func() {
 					Parameters:        params,
 				}
 				_, err := sess.processTransportParametersForClient(eetp.Marshal())
-				Expect(err).To(MatchError("VersionNegotiationMismatch: current version not included in the supported versions"))
+				Expect(err).To(MatchError("VersionNegotiationError: current version not included in the supported versions"))
 			})
 
 			It("errors if version negotiation was performed, but would have picked a different version based on the supported version list", func() {
@@ -1714,7 +1725,7 @@ var _ = Describe("Client Session", func() {
 					Parameters:        params,
 				}
 				_, err := sess.processTransportParametersForClient(eetp.Marshal())
-				Expect(err).To(MatchError("VersionNegotiationMismatch: would have picked a different version"))
+				Expect(err).To(MatchError("VersionNegotiationError: would have picked a different version"))
 			})
 
 			It("doesn't error if it would have picked a different version based on the supported version list, if no version negotiation was performed", func() {

@@ -29,10 +29,9 @@ var _ = Describe("error codes", func() {
 		for _, c := range constSpecs {
 			name := c.(*ast.ValueSpec).Names[0].Name
 			valString := c.(*ast.ValueSpec).Values[0].(*ast.BasicLit).Value
-			val, err := strconv.Atoi(valString)
+			val, err := strconv.ParseInt(valString, 0, 64)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(ErrorCode(val).String()).To(Equal(name))
 		}
-		Expect(ErrorCode(0).String()).To(Equal("ErrorCode(0)"))
 	})
 })

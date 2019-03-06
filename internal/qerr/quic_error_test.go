@@ -7,37 +7,30 @@ import (
 	. "github.com/onsi/gomega"
 )
 
-var _ = Describe("Quic error", func() {
+var _ = Describe("QUIC Transport Errors", func() {
 	Context("QuicError", func() {
 		It("has a string representation", func() {
-			err := Error(DecryptionFailure, "foobar")
-			Expect(err.Error()).To(Equal("DecryptionFailure: foobar"))
+			err := Error(FlowControlError, "foobar")
+			Expect(err.Error()).To(Equal("FlowControlError: foobar"))
 		})
 	})
 
 	Context("ErrorCode", func() {
 		It("works as error", func() {
-			var err error = DecryptionFailure
-			Expect(err).To(MatchError("DecryptionFailure"))
-		})
-	})
-
-	Context("TimeoutError", func() {
-		It("works as timeout error", func() {
-			err := Error(HandshakeTimeout, "handshake timeout")
-			Expect(err.Timeout()).Should(BeTrue())
+			var err error = StreamStateError
+			Expect(err).To(MatchError("StreamStateError"))
 		})
 	})
 
 	Context("ToQuicError", func() {
 		It("leaves QuicError unchanged", func() {
-			err := Error(DecryptionFailure, "foo")
+			err := Error(TransportParameterError, "foo")
 			Expect(ToQuicError(err)).To(Equal(err))
 		})
 
 		It("wraps ErrorCode properly", func() {
-			var err error = DecryptionFailure
-			Expect(ToQuicError(err)).To(Equal(Error(DecryptionFailure, "")))
+			var err error = FinalSizeError
+			Expect(ToQuicError(err)).To(Equal(Error(FinalSizeError, "")))
 		})
 
 		It("changes default errors to InternalError", func() {

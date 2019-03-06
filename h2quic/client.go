@@ -108,10 +108,10 @@ func (c *client) handleHeaderStream() {
 	for err == nil {
 		err = c.readResponse(h2framer, decoder)
 	}
-	if quicErr, ok := err.(*qerr.QuicError); !ok || quicErr.ErrorCode != qerr.PeerGoingAway {
+	if quicErr, ok := err.(*qerr.QuicError); !ok || quicErr.ErrorCode != qerr.NoError {
 		c.logger.Debugf("Error handling header stream: %s", err)
 	}
-	c.headerErr = qerr.Error(qerr.InvalidHeadersStreamData, err.Error())
+	c.headerErr = qerr.Error(qerr.InternalError, err.Error())
 	// stop all running request
 	close(c.headerErrored)
 }

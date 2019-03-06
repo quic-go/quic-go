@@ -461,7 +461,7 @@ func (h *cryptoSetup) WriteRecord(p []byte) (int, error) {
 }
 
 func (h *cryptoSetup) SendAlert(alert uint8) {
-	// TODO(#1567): send the correct IETF QUIC error code
+	// TODO(#1804): send the correct IETF QUIC error code
 	h.alertChan <- fmt.Errorf("TLS alert: %d", alert)
 }
 

@@ -286,7 +286,7 @@ var _ = Describe("H2 server", func() {
 				'f', 'o', 'o', 'b', 'a', 'r',
 			})
 			err := s.handleRequest(session, headerStream, &sync.Mutex{}, hpackDecoder, h2framer)
-			Expect(err).To(MatchError("InvalidHeadersStreamData: expected a header frame"))
+			Expect(err).To(MatchError("ProtocolViolation: expected a header frame"))
 		})
 
 		It("Cancels the request context when the datstream is closed", func() {
@@ -340,7 +340,7 @@ var _ = Describe("H2 server", func() {
 		go s.handleHeaderStream(session)
 		Consistently(func() bool { return handlerCalled }).Should(BeFalse())
 		Eventually(func() bool { return session.closed }).Should(BeTrue())
-		Expect(session.closedWithError).To(MatchError(qerr.Error(qerr.HeadersStreamDataDecompressFailure, "cannot read frame")))
+		Expect(session.closedWithError).To(MatchError(qerr.Error(qerr.InternalError, "cannot read frame")))
 	})
 
 	It("supports closing after first request", func() {

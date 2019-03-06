@@ -16,6 +16,7 @@ func (e ErrorCode) Error() string {
 type QuicError struct {
 	ErrorCode    ErrorCode
 	ErrorMessage string
+	isTimeout    bool
 }
 
 var _ net.Error = &QuicError{}
@@ -25,6 +26,14 @@ func Error(errorCode ErrorCode, errorMessage string) *QuicError {
 	return &QuicError{
 		ErrorCode:    errorCode,
 		ErrorMessage: errorMessage,
+	}
+}
+
+// TimeoutError creates a new QuicError instance for a timeout error
+func TimeoutError(errorMessage string) *QuicError {
+	return &QuicError{
+		ErrorMessage: errorMessage,
+		isTimeout:    true,
 	}
 }
 
@@ -39,13 +48,7 @@ func (e *QuicError) Temporary() bool {
 
 // Timeout says if this error is a timeout.
 func (e *QuicError) Timeout() bool {
-	switch e.ErrorCode {
-	case NetworkIdleTimeout,
-		HandshakeTimeout,
-		TimeoutsWithOpenStreams:
-		return true
-	}
-	return false
+	return e.isTimeout
 }
 
 // ToQuicError converts an arbitrary error to a QuicError. It leaves QuicErrors

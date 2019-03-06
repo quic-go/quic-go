@@ -410,11 +410,11 @@ runLoop:
 		}
 
 		if !s.handshakeComplete && now.Sub(s.sessionCreationTime) >= s.config.HandshakeTimeout {
-			s.destroy(qerr.Error(qerr.HandshakeTimeout, "Crypto handshake did not complete in time."))
+			s.destroy(qerr.TimeoutError("Handshake did not complete in time"))
 			continue
 		}
 		if s.handshakeComplete && now.Sub(s.lastNetworkActivityTime) >= s.config.IdleTimeout {
-			s.destroy(qerr.Error(qerr.NetworkIdleTimeout, "No recent network activity."))
+			s.destroy(qerr.TimeoutError("No recent network activity"))
 			continue
 		}
 
@@ -613,7 +613,7 @@ func (s *session) handleRetryPacket(p *receivedPacket, hdr *wire.Header) bool /*
 
 func (s *session) handleUnpackedPacket(packet *unpackedPacket, rcvTime time.Time) error {
 	if len(packet.data) == 0 {
-		return qerr.MissingPayload
+		return qerr.Error(qerr.ProtocolViolation, "empty packet")
 	}
 
 	// The server can change the source connection ID with the first Handshake packet.
@@ -745,8 +745,9 @@ func (s *session) handleCryptoFrame(frame *wire.CryptoFrame, encLevel protocol.E
 }
 
 func (s *session) handleStreamFrame(frame *wire.StreamFrame, encLevel protocol.EncryptionLevel) error {
+	// TODO(#1261): implement strict rules for frames types in unencrypted packets
 	if encLevel < protocol.Encryption1RTT {
-		return qerr.Error(qerr.UnencryptedStreamData, fmt.Sprintf("received unencrypted stream data on stream %d", frame.StreamID))
+		return qerr.Error(qerr.ProtocolViolation, fmt.Sprintf("received unencrypted stream data on stream %d", frame.StreamID))
 	}
 	str, err := s.streamsMap.GetOrOpenReceiveStream(frame.StreamID)
 	if err != nil {
@@ -851,7 +852,7 @@ func (s *session) closeRemote(e error) {
 	})
 }
 
-// Close the connection. It sends a qerr.PeerGoingAway.
+// Close the connection. It sends a qerr.NoError.
 // It waits until the run loop has stopped before returning
 func (s *session) Close() error {
 	s.closeLocal(nil)
@@ -867,7 +868,7 @@ func (s *session) CloseWithError(code protocol.ApplicationErrorCode, e error) er
 
 func (s *session) handleCloseError(closeErr closeError) error {
 	if closeErr.err == nil {
-		closeErr.err = qerr.PeerGoingAway
+		closeErr.err = qerr.NoError
 	}
 
 	var quicErr *qerr.QuicError
@@ -875,8 +876,8 @@ func (s *session) handleCloseError(closeErr closeError) error {
 	if quicErr, ok = closeErr.err.(*qerr.QuicError); !ok {
 		quicErr = qerr.ToQuicError(closeErr.err)
 	}
-	// Don't log 'normal' reasons
-	if quicErr.ErrorCode == qerr.PeerGoingAway || quicErr.ErrorCode == qerr.NetworkIdleTimeout {
+	// Don't log timeout errors
+	if quicErr.Timeout() {
 		s.logger.Infof("Closing connection %s.", s.srcConnID)
 	} else {
 		s.logger.Errorf("Closing session with error: %s", closeErr.err.Error())
@@ -924,17 +925,17 @@ func (s *session) processTransportParametersForClient(data []byte) (*handshake.T
 	}
 	// check that the negotiated_version is the current version
 	if eetp.NegotiatedVersion != s.version {
-		return nil, qerr.Error(qerr.VersionNegotiationMismatch, "current version doesn't match negotiated_version")
+		return nil, qerr.Error(qerr.VersionNegotiationError, "current version doesn't match negotiated_version")
 	}
 	// check that the current version is included in the supported versions
 	if !protocol.IsSupportedVersion(eetp.SupportedVersions, s.version) {
-		return nil, qerr.Error(qerr.VersionNegotiationMismatch, "current version not included in the supported versions")
+		return nil, qerr.Error(qerr.VersionNegotiationError, "current version not included in the supported versions")
 	}
 	// if version negotiation was performed, check that we would have selected the current version based on the supported versions sent by the server
 	if s.version != s.initialVersion {
 		negotiatedVersion, ok := protocol.ChooseSupportedVersion(s.config.Versions, eetp.SupportedVersions)
 		if !ok || s.version != negotiatedVersion {
-			return nil, qerr.Error(qerr.VersionNegotiationMismatch, "would have picked a different version")
+			return nil, qerr.Error(qerr.VersionNegotiationError, "would have picked a different version")
 		}
 	}
 
@@ -960,7 +961,7 @@ func (s *session) processTransportParametersForServer(data []byte) (*handshake.T
 	// make sure that we would have sent a Version Negotiation Packet if the client offered the initial version
 	// this is the case if and only if the initial version is not contained in the supported versions
 	if chtp.InitialVersion != s.version && protocol.IsSupportedVersion(s.config.Versions, chtp.InitialVersion) {
-		return nil, qerr.Error(qerr.VersionNegotiationMismatch, "Client should have used the initial version")
+		return nil, qerr.Error(qerr.VersionNegotiationError, "Client should have used the initial version")
 	}
 	return &chtp.Parameters, nil
 }

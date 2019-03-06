@@ -4,7 +4,6 @@ import (
 	"bytes"
 
 	"github.com/lucas-clemente/quic-go/internal/protocol"
-	"github.com/lucas-clemente/quic-go/internal/qerr"
 	"github.com/lucas-clemente/quic-go/internal/utils"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -76,7 +75,7 @@ var _ = Describe("STREAM frame", func() {
 			data = append(data, []byte("foobar")...)
 			r := bytes.NewReader(data)
 			_, err := parseStreamFrame(r, versionIETFFrames)
-			Expect(err).To(MatchError(qerr.Error(qerr.InvalidStreamData, "data overflows maximum offset")))
+			Expect(err).To(MatchError("FrameEncodingError: stream data overflows maximum offset"))
 		})
 
 		It("errors on EOFs", func() {

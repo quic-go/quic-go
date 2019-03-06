@@ -69,7 +69,7 @@ func parseStreamFrame(r *bytes.Reader, version protocol.VersionNumber) (*StreamF
 		}
 	}
 	if frame.Offset+frame.DataLen() > protocol.MaxByteCount {
-		return nil, qerr.Error(qerr.InvalidStreamData, "data overflows maximum offset")
+		return nil, qerr.Error(qerr.FrameEncodingError, "stream data overflows maximum offset")
 	}
 	return frame, nil
 }

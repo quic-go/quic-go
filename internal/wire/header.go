@@ -7,7 +7,6 @@ import (
 	"io"
 
 	"github.com/lucas-clemente/quic-go/internal/protocol"
-	"github.com/lucas-clemente/quic-go/internal/qerr"
 	"github.com/lucas-clemente/quic-go/internal/utils"
 )
 
@@ -209,13 +208,16 @@ func (h *Header) parseLongHeader(b *bytes.Reader) error {
 
 func (h *Header) parseVersionNegotiationPacket(b *bytes.Reader) error {
 	if b.Len() == 0 {
-		return qerr.Error(qerr.InvalidVersionNegotiationPacket, "empty version list")
+		return errors.New("Version Negoation packet has empty version list")
+	}
+	if b.Len()%4 != 0 {
+		return errors.New("Version Negotation packet has a version list with an invalid length")
 	}
 	h.SupportedVersions = make([]protocol.VersionNumber, b.Len()/4)
 	for i := 0; b.Len() > 0; i++ {
 		v, err := utils.BigEndian.ReadUint32(b)
 		if err != nil {
-			return qerr.InvalidVersionNegotiationPacket
+			return err
 		}
 		h.SupportedVersions[i] = protocol.VersionNumber(v)
 	}

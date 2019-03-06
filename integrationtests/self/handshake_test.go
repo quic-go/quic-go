@@ -184,8 +184,7 @@ var _ = Describe("Handshake tests", func() {
 
 			_, err := dial()
 			Expect(err).To(HaveOccurred())
-			// TODO(#1567): use the SERVER_BUSY error code
-			Expect(err.(*qerr.QuicError).ErrorCode).To(Equal(qerr.PeerGoingAway))
+			Expect(err.(*qerr.QuicError).ErrorCode).To(Equal(qerr.ServerBusy))
 
 			// now accept one session, freeing one spot in the queue
 			_, err = server.Accept()
@@ -198,8 +197,7 @@ var _ = Describe("Handshake tests", func() {
 
 			_, err = dial()
 			Expect(err).To(HaveOccurred())
-			// TODO(#1567): use the SERVER_BUSY error code
-			Expect(err.(*qerr.QuicError).ErrorCode).To(Equal(qerr.PeerGoingAway))
+			Expect(err.(*qerr.QuicError).ErrorCode).To(Equal(qerr.ServerBusy))
 		})
 
 		It("rejects new connection attempts if connections don't get accepted", func() {
@@ -215,8 +213,7 @@ var _ = Describe("Handshake tests", func() {
 
 			_, err = dial()
 			Expect(err).To(HaveOccurred())
-			// TODO(#1567): use the SERVER_BUSY error code
-			Expect(err.(*qerr.QuicError).ErrorCode).To(Equal(qerr.PeerGoingAway))
+			Expect(err.(*qerr.QuicError).ErrorCode).To(Equal(qerr.ServerBusy))
 
 			// Now close the one of the session that are waiting to be accepted.
 			// This should free one spot in the queue.
@@ -229,8 +226,7 @@ var _ = Describe("Handshake tests", func() {
 			time.Sleep(25 * time.Millisecond) // wait a bit for the session to be queued
 
 			_, err = dial()
-			// TODO(#1567): use the SERVER_BUSY error code
-			Expect(err.(*qerr.QuicError).ErrorCode).To(Equal(qerr.PeerGoingAway))
+			Expect(err.(*qerr.QuicError).ErrorCode).To(Equal(qerr.ServerBusy))
 		})
 
 	})
