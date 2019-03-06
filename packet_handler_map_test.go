@@ -229,6 +229,13 @@ var _ = Describe("Packet Handler Map", func() {
 			Expect(reset.data[0] & 0x80).To(BeZero()) // short header packet
 			Expect(reset.data).To(HaveLen(protocol.MinStatelessResetSize))
 		})
+
+		It("doesn't send stateless resets for small packets", func() {
+			addr := &net.UDPAddr{IP: net.IPv4(192, 168, 0, 1), Port: 1337}
+			p := append([]byte{40}, make([]byte, protocol.MinStatelessResetSize-2)...)
+			handler.handlePacket(addr, getPacketBuffer(), p)
+			Consistently(conn.dataWritten).ShouldNot(Receive())
+		})
 	})
 
 	Context("running a server", func() {

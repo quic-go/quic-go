@@ -245,6 +245,11 @@ func (h *packetHandlerMap) GetStatelessResetToken(connID protocol.ConnectionID) 
 
 func (h *packetHandlerMap) maybeSendStatelessReset(p *receivedPacket, connID protocol.ConnectionID) {
 	defer p.buffer.Release()
+	// Don't send a stateless reset in response to very small packets.
+	// This includes packets that could be stateless resets.
+	if len(p.data) <= protocol.MinStatelessResetSize {
+		return
+	}
 	token := h.GetStatelessResetToken(connID)
 	h.logger.Debugf("Sending stateless reset to %s (connection ID: %s). Token: %#x", p.remoteAddr, connID, token)
 	data := make([]byte, 23)
