@@ -1,11 +1,11 @@
 package qerr
 
-// The error codes defined by QUIC
-// Remember to run `go generate ./...` whenever the error codes change.
-// This uses the Go stringer tool, which can be installed by running
-// go get -u golang.org/x/tools/cmd/stringer
+import "fmt"
 
-//go:generate stringer -type=ErrorCode
+// ErrorCode can be used as a normal error without reason.
+type ErrorCode uint16
+
+// The error codes defined by QUIC
 const (
 	NoError                 ErrorCode = 0x0
 	InternalError           ErrorCode = 0x1
@@ -21,3 +21,40 @@ const (
 	InvalidMigration        ErrorCode = 0xc
 	CryptoError             ErrorCode = 0x100
 )
+
+func (e ErrorCode) Error() string {
+	return e.String()
+}
+
+func (e ErrorCode) String() string {
+	switch e {
+	case NoError:
+		return "NO_ERROR"
+	case InternalError:
+		return "INTERNAL_ERROR"
+	case ServerBusy:
+		return "SERVER_BUSY"
+	case FlowControlError:
+		return "FLOW_CONTROL_ERROR"
+	case StreamLimitError:
+		return "STREAM_LIMIT_ERROR"
+	case StreamStateError:
+		return "STREAM_STATE_ERROR"
+	case FinalSizeError:
+		return "FINAL_SIZE_ERROR"
+	case FrameEncodingError:
+		return "FRAME_ENCODING_ERROR"
+	case TransportParameterError:
+		return "TRANSPORT_PARAMETER_ERROR"
+	case VersionNegotiationError:
+		return "VERSION_NEGOTIATION_ERROR"
+	case ProtocolViolation:
+		return "PROTOCOL_VIOLATION"
+	case InvalidMigration:
+		return "INVALID_MIGRATION"
+	case CryptoError:
+		return "CRYPTO_ERROR"
+	default:
+		return fmt.Sprintf("unknown error code: %d", e)
+	}
+}

@@ -571,7 +571,7 @@ var _ = Describe("Session", func() {
 				defer GinkgoRecover()
 				cryptoSetup.EXPECT().RunHandshake().Do(func() { <-sess.Context().Done() })
 				err := sess.run()
-				Expect(err).To(MatchError("ProtocolViolation: empty packet"))
+				Expect(err).To(MatchError("PROTOCOL_VIOLATION: empty packet"))
 				close(done)
 			}()
 			sessionRunner.EXPECT().retireConnectionID(gomock.Any())
@@ -1219,7 +1219,7 @@ var _ = Describe("Session", func() {
 				InitialVersion: 13, // this must be a supported version
 			}
 			_, err := sess.processTransportParametersForServer(chtp.Marshal())
-			Expect(err).To(MatchError("VersionNegotiationError: Client should have used the initial version"))
+			Expect(err).To(MatchError("VERSION_NEGOTIATION_ERROR: Client should have used the initial version"))
 		})
 	})
 
@@ -1696,7 +1696,7 @@ var _ = Describe("Client Session", func() {
 					Parameters:        params,
 				}
 				_, err := sess.processTransportParametersForClient(eetp.Marshal())
-				Expect(err).To(MatchError("VersionNegotiationError: current version doesn't match negotiated_version"))
+				Expect(err).To(MatchError("VERSION_NEGOTIATION_ERROR: current version doesn't match negotiated_version"))
 			})
 
 			It("errors if the current version is not contained in the server's supported versions", func() {
@@ -1707,7 +1707,7 @@ var _ = Describe("Client Session", func() {
 					Parameters:        params,
 				}
 				_, err := sess.processTransportParametersForClient(eetp.Marshal())
-				Expect(err).To(MatchError("VersionNegotiationError: current version not included in the supported versions"))
+				Expect(err).To(MatchError("VERSION_NEGOTIATION_ERROR: current version not included in the supported versions"))
 			})
 
 			It("errors if version negotiation was performed, but would have picked a different version based on the supported version list", func() {
@@ -1725,7 +1725,7 @@ var _ = Describe("Client Session", func() {
 					Parameters:        params,
 				}
 				_, err := sess.processTransportParametersForClient(eetp.Marshal())
-				Expect(err).To(MatchError("VersionNegotiationError: would have picked a different version"))
+				Expect(err).To(MatchError("VERSION_NEGOTIATION_ERROR: would have picked a different version"))
 			})
 
 			It("doesn't error if it would have picked a different version based on the supported version list, if no version negotiation was performed", func() {

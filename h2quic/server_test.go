@@ -286,7 +286,7 @@ var _ = Describe("H2 server", func() {
 				'f', 'o', 'o', 'b', 'a', 'r',
 			})
 			err := s.handleRequest(session, headerStream, &sync.Mutex{}, hpackDecoder, h2framer)
-			Expect(err).To(MatchError("ProtocolViolation: expected a header frame"))
+			Expect(err).To(MatchError("PROTOCOL_VIOLATION: expected a header frame"))
 		})
 
 		It("Cancels the request context when the datstream is closed", func() {

@@ -11,14 +11,14 @@ var _ = Describe("QUIC Transport Errors", func() {
 	Context("QuicError", func() {
 		It("has a string representation", func() {
 			err := Error(FlowControlError, "foobar")
-			Expect(err.Error()).To(Equal("FlowControlError: foobar"))
+			Expect(err.Error()).To(Equal("FLOW_CONTROL_ERROR: foobar"))
 		})
 	})
 
 	Context("ErrorCode", func() {
 		It("works as error", func() {
 			var err error = StreamStateError
-			Expect(err).To(MatchError("StreamStateError"))
+			Expect(err).To(MatchError("STREAM_STATE_ERROR"))
 		})
 	})
 

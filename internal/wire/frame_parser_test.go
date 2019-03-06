@@ -273,7 +273,7 @@ var _ = Describe("Frame parsing", func() {
 
 	It("errors on invalid type", func() {
 		_, err := parser.ParseNext(bytes.NewReader([]byte{0x42}), protocol.Encryption1RTT)
-		Expect(err).To(MatchError("FrameEncodingError: unknown type byte 0x42"))
+		Expect(err).To(MatchError("FRAME_ENCODING_ERROR: unknown type byte 0x42"))
 	})
 
 	It("errors on invalid frames", func() {

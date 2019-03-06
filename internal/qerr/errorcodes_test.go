@@ -24,14 +24,17 @@ var _ = Describe("error codes", func() {
 		filename := path.Join(path.Dir(thisfile), "error_codes.go")
 		fileAst, err := parser.ParseFile(token.NewFileSet(), filename, nil, 0)
 		Expect(err).NotTo(HaveOccurred())
-		constSpecs := fileAst.Decls[0].(*ast.GenDecl).Specs
+		constSpecs := fileAst.Decls[2].(*ast.GenDecl).Specs
 		Expect(len(constSpecs)).To(BeNumerically(">", 4)) // at time of writing
 		for _, c := range constSpecs {
-			name := c.(*ast.ValueSpec).Names[0].Name
 			valString := c.(*ast.ValueSpec).Values[0].(*ast.BasicLit).Value
 			val, err := strconv.ParseInt(valString, 0, 64)
 			Expect(err).NotTo(HaveOccurred())
-			Expect(ErrorCode(val).String()).To(Equal(name))
+			Expect(ErrorCode(val).String()).ToNot(Equal("unknown error code"))
 		}
+	})
+
+	It("has a string representation for unknown error codes", func() {
+		Expect(ErrorCode(1337).String()).To(Equal("unknown error code: 1337"))
 	})
 })
