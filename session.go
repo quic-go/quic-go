@@ -927,6 +927,9 @@ func (s *session) processTransportParameters(data []byte) {
 	s.packer.HandleTransportParameters(params)
 	s.frameParser.SetAckDelayExponent(params.AckDelayExponent)
 	s.connFlowController.UpdateSendWindow(params.InitialMaxData)
+	if params.StatelessResetToken != nil {
+		s.sessionRunner.AddResetToken(*params.StatelessResetToken, s)
+	}
 }
 
 func (s *session) processTransportParametersForClient(data []byte) (*handshake.TransportParameters, error) {

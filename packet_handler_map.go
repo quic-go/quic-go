@@ -1,7 +1,11 @@
 package quic
 
 import (
+	"crypto/hmac"
+	"crypto/rand"
+	"crypto/sha256"
 	"errors"
+	"hash"
 	"net"
 	"sync"
 	"time"
@@ -30,12 +34,19 @@ type packetHandlerMap struct {
 
 	deleteRetiredSessionsAfter time.Duration
 
+	statelessResetHasher hash.Hash
+
 	logger utils.Logger
 }
 
 var _ packetHandlerManager = &packetHandlerMap{}
 
-func newPacketHandlerMap(conn net.PacketConn, connIDLen int, logger utils.Logger) packetHandlerManager {
+func newPacketHandlerMap(
+	conn net.PacketConn,
+	connIDLen int,
+	statelessResetKey []byte,
+	logger utils.Logger,
+) packetHandlerManager {
 	m := &packetHandlerMap{
 		conn:                       conn,
 		connIDLen:                  connIDLen,
@@ -43,6 +54,7 @@ func newPacketHandlerMap(conn net.PacketConn, connIDLen int, logger utils.Logger
 		handlers:                   make(map[string]packetHandler),
 		resetTokens:                make(map[[16]byte]packetHandler),
 		deleteRetiredSessionsAfter: protocol.RetiredConnectionIDDeleteTimeout,
+		statelessResetHasher:       hmac.New(sha256.New, statelessResetKey),
 		logger:                     logger,
 	}
 	go m.listen()
@@ -194,8 +206,7 @@ func (h *packetHandlerMap) handlePacket(
 		return
 	}
 	if data[0]&0x80 == 0 {
-		// TODO(#943): send a stateless reset
-		h.logger.Debugf("received a short header packet with an unexpected connection ID %s", connID)
+		go h.maybeSendStatelessReset(p, connID)
 		return
 	}
 	if h.server == nil { // no server set
@@ -217,8 +228,30 @@ func (h *packetHandlerMap) maybeHandleStatelessReset(data []byte) bool {
 	var token [16]byte
 	copy(token[:], data[len(data)-16:])
 	if sess, ok := h.resetTokens[token]; ok {
-		sess.destroy(errors.New("received a stateless reset"))
+		h.logger.Debugf("Received a stateless retry with token %#x. Closing session.", token)
+		go sess.destroy(errors.New("received a stateless reset"))
 		return true
 	}
 	return false
+}
+
+func (h *packetHandlerMap) GetStatelessResetToken(connID protocol.ConnectionID) [16]byte {
+	h.statelessResetHasher.Write(connID.Bytes())
+	var token [16]byte
+	copy(token[:], h.statelessResetHasher.Sum(nil))
+	h.statelessResetHasher.Reset()
+	return token
+}
+
+func (h *packetHandlerMap) maybeSendStatelessReset(p *receivedPacket, connID protocol.ConnectionID) {
+	defer p.buffer.Release()
+	token := h.GetStatelessResetToken(connID)
+	h.logger.Debugf("Sending stateless reset to %s (connection ID: %s). Token: %#x", p.remoteAddr, connID, token)
+	data := make([]byte, 23)
+	rand.Read(data)
+	data[0] = (data[0] & 0x7f) | 0x40
+	data = append(data, token[:]...)
+	if _, err := h.conn.WriteTo(data, p.remoteAddr); err != nil {
+		h.logger.Debugf("Error sending Stateless Reset: %s", err)
+	}
 }

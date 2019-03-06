@@ -36,6 +36,9 @@ type packetHandlerManager interface {
 	Add(protocol.ConnectionID, packetHandler)
 	Retire(protocol.ConnectionID)
 	Remove(protocol.ConnectionID)
+	AddResetToken([16]byte, packetHandler)
+	RemoveResetToken([16]byte)
+	GetStatelessResetToken(protocol.ConnectionID) [16]byte
 	SetServer(unknownPacketHandler)
 	CloseServer()
 }
@@ -55,6 +58,8 @@ type sessionRunner interface {
 	OnHandshakeComplete(Session)
 	Retire(protocol.ConnectionID)
 	Remove(protocol.ConnectionID)
+	AddResetToken([16]byte, packetHandler)
+	RemoveResetToken([16]byte)
 }
 
 type runner struct {
@@ -143,7 +148,7 @@ func listen(conn net.PacketConn, tlsConf *tls.Config, config *Config) (*server, 
 		}
 	}
 
-	sessionHandler, err := getMultiplexer().AddConn(conn, config.ConnectionIDLength)
+	sessionHandler, err := getMultiplexer().AddConn(conn, config.ConnectionIDLength, config.StatelessResetKey)
 	if err != nil {
 		return nil, err
 	}
@@ -266,6 +271,7 @@ func populateServerConfig(config *Config) *Config {
 		MaxIncomingStreams:                    maxIncomingStreams,
 		MaxIncomingUniStreams:                 maxIncomingUniStreams,
 		ConnectionIDLength:                    connIDLen,
+		StatelessResetKey:                     config.StatelessResetKey,
 	}
 }
 
@@ -341,8 +347,8 @@ func (s *server) handlePacketImpl(p *receivedPacket) bool /* was the packet pass
 		s.logger.Debugf("Error parsing packet: %s", err)
 		return false
 	}
+	// Short header packets should never end up here in the first place
 	if !hdr.IsLongHeader {
-		// TODO: send a stateless reset
 		return false
 	}
 	// send a Version Negotiation Packet if the client is speaking a different protocol version
@@ -430,8 +436,7 @@ func (s *server) createNewSession(
 	srcConnID protocol.ConnectionID,
 	version protocol.VersionNumber,
 ) (quicSession, error) {
-	// TODO(#855): generate a real token
-	token := [16]byte{42, 42, 42, 42, 42, 42, 42, 42, 42, 42, 42, 42, 42, 42, 42, 42}
+	token := s.sessionHandler.GetStatelessResetToken(srcConnID)
 	params := &handshake.TransportParameters{
 		InitialMaxStreamDataBidiLocal:  protocol.InitialMaxStreamData,
 		InitialMaxStreamDataBidiRemote: protocol.InitialMaxStreamData,

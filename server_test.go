@@ -79,11 +79,12 @@ var _ = Describe("Server", func() {
 		supportedVersions := []protocol.VersionNumber{protocol.VersionTLS}
 		acceptCookie := func(_ net.Addr, _ *Cookie) bool { return true }
 		config := Config{
-			Versions:         supportedVersions,
-			AcceptCookie:     acceptCookie,
-			HandshakeTimeout: 1337 * time.Hour,
-			IdleTimeout:      42 * time.Minute,
-			KeepAlive:        true,
+			Versions:          supportedVersions,
+			AcceptCookie:      acceptCookie,
+			HandshakeTimeout:  1337 * time.Hour,
+			IdleTimeout:       42 * time.Minute,
+			KeepAlive:         true,
+			StatelessResetKey: []byte("foobar"),
 		}
 		ln, err := Listen(conn, tlsConf, &config)
 		Expect(err).ToNot(HaveOccurred())
@@ -94,6 +95,7 @@ var _ = Describe("Server", func() {
 		Expect(server.config.IdleTimeout).To(Equal(42 * time.Minute))
 		Expect(reflect.ValueOf(server.config.AcceptCookie)).To(Equal(reflect.ValueOf(acceptCookie)))
 		Expect(server.config.KeepAlive).To(BeTrue())
+		Expect(server.config.StatelessResetKey).To(Equal([]byte("foobar")))
 		// stop the listener
 		Expect(ln.Close()).To(Succeed())
 	})
