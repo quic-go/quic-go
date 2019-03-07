@@ -34,7 +34,8 @@ type packetHandlerMap struct {
 
 	deleteRetiredSessionsAfter time.Duration
 
-	statelessResetHasher hash.Hash
+	statelessResetEnabled bool
+	statelessResetHasher  hash.Hash
 
 	logger utils.Logger
 }
@@ -54,6 +55,7 @@ func newPacketHandlerMap(
 		handlers:                   make(map[string]packetHandler),
 		resetTokens:                make(map[[16]byte]packetHandler),
 		deleteRetiredSessionsAfter: protocol.RetiredConnectionIDDeleteTimeout,
+		statelessResetEnabled:      len(statelessResetKey) > 0,
 		statelessResetHasher:       hmac.New(sha256.New, statelessResetKey),
 		logger:                     logger,
 	}
@@ -236,8 +238,15 @@ func (h *packetHandlerMap) maybeHandleStatelessReset(data []byte) bool {
 }
 
 func (h *packetHandlerMap) GetStatelessResetToken(connID protocol.ConnectionID) [16]byte {
-	h.statelessResetHasher.Write(connID.Bytes())
 	var token [16]byte
+	if !h.statelessResetEnabled {
+		// Return a random stateless reset token.
+		// This token will be sent in the server's transport parameters.
+		// By using a random token, an off-path attacker won't be able to disrupt the connection.
+		rand.Read(token[:])
+		return token
+	}
+	h.statelessResetHasher.Write(connID.Bytes())
 	copy(token[:], h.statelessResetHasher.Sum(nil))
 	h.statelessResetHasher.Reset()
 	return token
@@ -245,6 +254,9 @@ func (h *packetHandlerMap) GetStatelessResetToken(connID protocol.ConnectionID) 
 
 func (h *packetHandlerMap) maybeSendStatelessReset(p *receivedPacket, connID protocol.ConnectionID) {
 	defer p.buffer.Release()
+	if !h.statelessResetEnabled {
+		return
+	}
 	// Don't send a stateless reset in response to very small packets.
 	// This includes packets that could be stateless resets.
 	if len(p.data) <= protocol.MinStatelessResetSize {
