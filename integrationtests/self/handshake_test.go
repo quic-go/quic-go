@@ -138,8 +138,7 @@ var _ = Describe("Handshake tests", func() {
 						tlsConf,
 						clientConfig,
 					)
-					// TODO: check the error returned locally here
-					Expect(err).To(HaveOccurred())
+					Expect(err).To(MatchError("CRYPTO_ERROR: x509: cannot validate certificate for 127.0.0.1 because it doesn't contain any IP SANs"))
 				})
 
 				It("fails the handshake if the client fails to provide the requested client cert", func() {

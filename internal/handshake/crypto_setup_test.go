@@ -128,7 +128,7 @@ var _ = Describe("Crypto Setup TLS", func() {
 		go func() {
 			defer GinkgoRecover()
 			err := server.RunHandshake()
-			Expect(err).To(MatchError("CRYPTO_ERROR: tls: unexpected message"))
+			Expect(err).To(MatchError("CRYPTO_ERROR: local error: tls: unexpected message"))
 			close(done)
 		}()
 

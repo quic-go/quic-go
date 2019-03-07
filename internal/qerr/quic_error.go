@@ -45,6 +45,11 @@ func (e *QuicError) Error() string {
 	return fmt.Sprintf("%s: %s", e.ErrorCode.String(), e.ErrorMessage)
 }
 
+// IsCryptoError says if this error is a crypto error
+func (e *QuicError) IsCryptoError() bool {
+	return e.ErrorCode.isCryptoError()
+}
+
 // Temporary says if the error is temporary.
 func (e *QuicError) Temporary() bool {
 	return false
