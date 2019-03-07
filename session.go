@@ -822,6 +822,11 @@ func (s *session) handleAckFrame(frame *wire.AckFrame, pn protocol.PacketNumber,
 // closeLocal closes the session and send a CONNECTION_CLOSE containing the error
 func (s *session) closeLocal(e error) {
 	s.closeOnce.Do(func() {
+		if e == nil {
+			s.logger.Infof("Closing session.")
+		} else {
+			s.logger.Errorf("Closing session with error: %s", e)
+		}
 		s.sessionRunner.retireConnectionID(s.srcConnID)
 		s.closeChan <- closeError{err: e, sendClose: true, remote: false}
 	})
@@ -830,6 +835,11 @@ func (s *session) closeLocal(e error) {
 // destroy closes the session without sending the error on the wire
 func (s *session) destroy(e error) {
 	s.closeOnce.Do(func() {
+		if nerr, ok := e.(net.Error); ok && nerr.Timeout() {
+			s.logger.Errorf("Destroying session: %s", e)
+		} else {
+			s.logger.Errorf("Destroying session with error: %s", e)
+		}
 		s.sessionRunner.removeConnectionID(s.srcConnID)
 		s.closeChan <- closeError{err: e, sendClose: false, remote: false}
 	})
@@ -845,6 +855,7 @@ func (s *session) closeForRecreating() protocol.PacketNumber {
 
 func (s *session) closeRemote(e error) {
 	s.closeOnce.Do(func() {
+		s.logger.Errorf("Peer closed session with error: %s", e)
 		s.sessionRunner.removeConnectionID(s.srcConnID)
 		s.closeChan <- closeError{err: e, remote: true}
 	})
@@ -873,12 +884,6 @@ func (s *session) handleCloseError(closeErr closeError) {
 	var ok bool
 	if quicErr, ok = closeErr.err.(*qerr.QuicError); !ok {
 		quicErr = qerr.ToQuicError(closeErr.err)
-	}
-	// Don't log timeout errors
-	if quicErr.Timeout() {
-		s.logger.Infof("Closing connection %s.", s.srcConnID)
-	} else {
-		s.logger.Errorf("Closing session with error: %s", closeErr.err.Error())
 	}
 
 	s.streamsMap.CloseWithError(quicErr)
