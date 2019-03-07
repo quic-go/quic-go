@@ -8,6 +8,7 @@ import (
 	"io"
 
 	"github.com/lucas-clemente/quic-go/internal/protocol"
+	"github.com/lucas-clemente/quic-go/internal/qerr"
 	"github.com/lucas-clemente/quic-go/internal/utils"
 	"github.com/marten-seemann/qtls"
 )
@@ -461,8 +462,7 @@ func (h *cryptoSetup) WriteRecord(p []byte) (int, error) {
 }
 
 func (h *cryptoSetup) SendAlert(alert uint8) {
-	// TODO(#1804): send the correct IETF QUIC error code
-	h.alertChan <- fmt.Errorf("TLS alert: %d", alert)
+	h.alertChan <- qerr.CryptoError(alert)
 }
 
 func (h *cryptoSetup) GetSealer() (protocol.EncryptionLevel, Sealer) {

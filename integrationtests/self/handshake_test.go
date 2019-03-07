@@ -24,12 +24,14 @@ var _ = Describe("Handshake tests", func() {
 		server        quic.Listener
 		serverConfig  *quic.Config
 		acceptStopped chan struct{}
+		tlsServerConf *tls.Config
 	)
 
 	BeforeEach(func() {
 		server = nil
 		acceptStopped = make(chan struct{})
 		serverConfig = &quic.Config{}
+		tlsServerConf = testdata.GetTLSConfig()
 	})
 
 	AfterEach(func() {
@@ -42,7 +44,7 @@ var _ = Describe("Handshake tests", func() {
 	runServer := func() quic.Listener {
 		var err error
 		// start the server
-		server, err = quic.ListenAddr("localhost:0", testdata.GetTLSConfig(), serverConfig)
+		server, err = quic.ListenAddr("localhost:0", tlsServerConf, serverConfig)
 		Expect(err).ToNot(HaveOccurred())
 
 		go func() {
@@ -117,8 +119,11 @@ var _ = Describe("Handshake tests", func() {
 					}
 				})
 
-				It("accepts the certificate", func() {
+				JustBeforeEach(func() {
 					runServer()
+				})
+
+				It("accepts the certificate", func() {
 					_, err := quic.DialAddr(
 						fmt.Sprintf("localhost:%d", server.Addr().(*net.UDPAddr).Port),
 						tlsConf,
@@ -128,17 +133,34 @@ var _ = Describe("Handshake tests", func() {
 				})
 
 				It("errors if the server name doesn't match", func() {
-					runServer()
 					_, err := quic.DialAddr(
 						fmt.Sprintf("127.0.0.1:%d", server.Addr().(*net.UDPAddr).Port),
 						tlsConf,
 						clientConfig,
 					)
+					// TODO: check the error returned locally here
 					Expect(err).To(HaveOccurred())
 				})
 
+				It("fails the handshake if the client fails to provide the requested client cert", func() {
+					tlsServerConf.ClientAuth = tls.RequireAndVerifyClientCert
+					sess, err := quic.DialAddr(
+						fmt.Sprintf("localhost:%d", server.Addr().(*net.UDPAddr).Port),
+						tlsConf,
+						clientConfig,
+					)
+					Expect(err).ToNot(HaveOccurred())
+					// The error will occur after the client already finished the handshake.
+					errChan := make(chan error)
+					go func() {
+						defer GinkgoRecover()
+						_, err := sess.AcceptStream()
+						errChan <- err
+					}()
+					Eventually(errChan).Should(Receive(MatchError("CRYPTO_ERROR: tls: bad certificate")))
+				})
+
 				It("uses the ServerName in the tls.Config", func() {
-					runServer()
 					tlsConf.ServerName = "localhost"
 					_, err := quic.DialAddr(
 						fmt.Sprintf("127.0.0.1:%d", server.Addr().(*net.UDPAddr).Port),
