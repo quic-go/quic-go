@@ -30,6 +30,13 @@ func TimeoutError(errorMessage string) *QuicError {
 	}
 }
 
+// CryptoError create a new QuicError instance for a crypto error
+func CryptoError(tlsAlert uint8) *QuicError {
+	return &QuicError{
+		ErrorCode: 0x100 + ErrorCode(tlsAlert),
+	}
+}
+
 func (e *QuicError) Error() string {
 	if len(e.ErrorMessage) == 0 {
 		return e.ErrorCode.String()

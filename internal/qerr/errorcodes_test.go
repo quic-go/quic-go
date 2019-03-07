@@ -35,6 +35,6 @@ var _ = Describe("error codes", func() {
 	})
 
 	It("has a string representation for unknown error codes", func() {
-		Expect(ErrorCode(1337).String()).To(Equal("unknown error code: 1337"))
+		Expect(ErrorCode(0x1337).String()).To(Equal("unknown error code: 0x1337"))
 	})
 })

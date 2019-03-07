@@ -25,10 +25,20 @@ var _ = Describe("QUIC Transport Errors", func() {
 		Expect(err.Error()).To(Equal("NO_ERROR: foobar"))
 	})
 
+	It("has a string representation for crypto errors", func() {
+		err := CryptoError(42)
+		Expect(err.Error()).To(Equal("CRYPTO_ERROR 42"))
+	})
+
 	Context("ErrorCode", func() {
 		It("works as error", func() {
 			var err error = StreamStateError
 			Expect(err).To(MatchError("STREAM_STATE_ERROR"))
+		})
+
+		It("recognizes crypto errors", func() {
+			err := ErrorCode(0x100 + 42)
+			Expect(err.Error()).To(Equal("CRYPTO_ERROR 42"))
 		})
 	})
 

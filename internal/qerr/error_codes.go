@@ -19,7 +19,6 @@ const (
 	VersionNegotiationError ErrorCode = 0x9
 	ProtocolViolation       ErrorCode = 0xa
 	InvalidMigration        ErrorCode = 0xc
-	CryptoError             ErrorCode = 0x100
 )
 
 func (e ErrorCode) Error() string {
@@ -52,9 +51,10 @@ func (e ErrorCode) String() string {
 		return "PROTOCOL_VIOLATION"
 	case InvalidMigration:
 		return "INVALID_MIGRATION"
-	case CryptoError:
-		return "CRYPTO_ERROR"
 	default:
-		return fmt.Sprintf("unknown error code: %d", e)
+		if e >= 0x100 && e < 0x200 {
+			return fmt.Sprintf("CRYPTO_ERROR %d", e-0x100)
+		}
+		return fmt.Sprintf("unknown error code: %#x", uint16(e))
 	}
 }
