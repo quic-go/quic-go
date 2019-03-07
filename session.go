@@ -423,9 +423,7 @@ runLoop:
 		}
 	}
 
-	if err := s.handleCloseError(closeErr); err != nil {
-		s.logger.Infof("Handling close error failed: %s", err)
-	}
+	s.handleCloseError(closeErr)
 	s.closed.Set(true)
 	s.logger.Infof("Connection %s closed.", s.srcConnID)
 	s.cryptoStreamHandler.Close()
@@ -866,7 +864,7 @@ func (s *session) CloseWithError(code protocol.ApplicationErrorCode, e error) er
 	return nil
 }
 
-func (s *session) handleCloseError(closeErr closeError) error {
+func (s *session) handleCloseError(closeErr closeError) {
 	if closeErr.err == nil {
 		closeErr.err = qerr.NoError
 	}
@@ -886,15 +884,15 @@ func (s *session) handleCloseError(closeErr closeError) error {
 	s.streamsMap.CloseWithError(quicErr)
 
 	if !closeErr.sendClose {
-		return nil
+		return
 	}
-
 	// If this is a remote close we're done here
 	if closeErr.remote {
-		return nil
+		return
 	}
-	// otherwise send a CONNECTION_CLOSE
-	return s.sendConnectionClose(quicErr)
+	if err := s.sendConnectionClose(quicErr); err != nil {
+		s.logger.Debugf("Error sending CONNECTION_CLOSE: %s", err)
+	}
 }
 
 func (s *session) processTransportParameters(data []byte) {
