@@ -462,7 +462,7 @@ func (h *cryptoSetup) WriteRecord(p []byte) (int, error) {
 }
 
 func (h *cryptoSetup) SendAlert(alert uint8) {
-	h.alertChan <- qerr.CryptoError(alert)
+	h.alertChan <- qerr.CryptoError(alert, "")
 }
 
 func (h *cryptoSetup) GetSealer() (protocol.EncryptionLevel, Sealer) {

@@ -25,8 +25,13 @@ var _ = Describe("QUIC Transport Errors", func() {
 		Expect(err.Error()).To(Equal("NO_ERROR: foobar"))
 	})
 
-	It("has a string representation for crypto errors", func() {
-		err := CryptoError(42)
+	It("has a string representation for crypto errors with a message", func() {
+		err := CryptoError(42, "foobar")
+		Expect(err.Error()).To(Equal("CRYPTO_ERROR: foobar"))
+	})
+
+	It("has a string representation for crypto errors without a message", func() {
+		err := CryptoError(42, "")
 		Expect(err.Error()).To(Equal("CRYPTO_ERROR: tls: bad certificate"))
 	})
 
