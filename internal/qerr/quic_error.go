@@ -31,6 +31,9 @@ func TimeoutError(errorMessage string) *QuicError {
 }
 
 func (e *QuicError) Error() string {
+	if len(e.ErrorMessage) == 0 {
+		return e.ErrorCode.String()
+	}
 	return fmt.Sprintf("%s: %s", e.ErrorCode.String(), e.ErrorMessage)
 }
 

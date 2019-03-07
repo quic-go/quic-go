@@ -8,11 +8,21 @@ import (
 )
 
 var _ = Describe("QUIC Transport Errors", func() {
-	Context("QuicError", func() {
-		It("has a string representation", func() {
-			err := Error(FlowControlError, "foobar")
-			Expect(err.Error()).To(Equal("FLOW_CONTROL_ERROR: foobar"))
-		})
+	It("has a string representation", func() {
+		err := Error(FlowControlError, "foobar")
+		Expect(err.Timeout()).To(BeFalse())
+		Expect(err.Error()).To(Equal("FLOW_CONTROL_ERROR: foobar"))
+	})
+
+	It("has a string representation for empty error phrases", func() {
+		err := Error(FlowControlError, "")
+		Expect(err.Error()).To(Equal("FLOW_CONTROL_ERROR"))
+	})
+
+	It("has a string representation for timeout errors", func() {
+		err := TimeoutError("foobar")
+		Expect(err.Timeout()).To(BeTrue())
+		Expect(err.Error()).To(Equal("NO_ERROR: foobar"))
 	})
 
 	Context("ErrorCode", func() {
