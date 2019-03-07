@@ -1,6 +1,10 @@
 package qerr
 
-import "fmt"
+import (
+	"fmt"
+
+	"github.com/marten-seemann/qtls"
+)
 
 // ErrorCode can be used as a normal error without reason.
 type ErrorCode uint16
@@ -21,7 +25,14 @@ const (
 	InvalidMigration        ErrorCode = 0xc
 )
 
+func (e ErrorCode) isCryptoError() bool {
+	return e >= 0x100 && e < 0x200
+}
+
 func (e ErrorCode) Error() string {
+	if e.isCryptoError() {
+		return fmt.Sprintf("%s: %s", e.String(), qtls.Alert(e-0x100).Error())
+	}
 	return e.String()
 }
 
@@ -52,8 +63,8 @@ func (e ErrorCode) String() string {
 	case InvalidMigration:
 		return "INVALID_MIGRATION"
 	default:
-		if e >= 0x100 && e < 0x200 {
-			return fmt.Sprintf("CRYPTO_ERROR %d", e-0x100)
+		if e.isCryptoError() {
+			return "CRYPTO_ERROR"
 		}
 		return fmt.Sprintf("unknown error code: %#x", uint16(e))
 	}
