@@ -79,11 +79,12 @@ var _ = Describe("Server", func() {
 		supportedVersions := []protocol.VersionNumber{protocol.VersionTLS}
 		acceptCookie := func(_ net.Addr, _ *Cookie) bool { return true }
 		config := Config{
-			Versions:         supportedVersions,
-			AcceptCookie:     acceptCookie,
-			HandshakeTimeout: 1337 * time.Hour,
-			IdleTimeout:      42 * time.Minute,
-			KeepAlive:        true,
+			Versions:          supportedVersions,
+			AcceptCookie:      acceptCookie,
+			HandshakeTimeout:  1337 * time.Hour,
+			IdleTimeout:       42 * time.Minute,
+			KeepAlive:         true,
+			StatelessResetKey: []byte("foobar"),
 		}
 		ln, err := Listen(conn, tlsConf, &config)
 		Expect(err).ToNot(HaveOccurred())
@@ -94,6 +95,7 @@ var _ = Describe("Server", func() {
 		Expect(server.config.IdleTimeout).To(Equal(42 * time.Minute))
 		Expect(reflect.ValueOf(server.config.AcceptCookie)).To(Equal(reflect.ValueOf(acceptCookie)))
 		Expect(server.config.KeepAlive).To(BeTrue())
+		Expect(server.config.StatelessResetKey).To(Equal([]byte("foobar")))
 		// stop the listener
 		Expect(ln.Close()).To(Succeed())
 	})
@@ -346,7 +348,7 @@ var _ = Describe("Server", func() {
 				sess.EXPECT().handlePacket(p)
 				sess.EXPECT().run()
 				sess.EXPECT().Context().Return(context.Background())
-				runner.onHandshakeComplete(sess)
+				runner.OnHandshakeComplete(sess)
 				return sess, nil
 			}
 
@@ -403,7 +405,7 @@ var _ = Describe("Server", func() {
 				sess.EXPECT().handlePacket(p)
 				sess.EXPECT().run()
 				sess.EXPECT().Context().Return(ctx)
-				runner.onHandshakeComplete(sess)
+				runner.OnHandshakeComplete(sess)
 				close(sessionCreated)
 				return sess, nil
 			}
@@ -489,7 +491,7 @@ var _ = Describe("Server", func() {
 			) (quicSession, error) {
 				go func() {
 					<-completeHandshake
-					runner.onHandshakeComplete(sess)
+					runner.OnHandshakeComplete(sess)
 				}()
 				sess.EXPECT().run().Do(func() {})
 				sess.EXPECT().Context().Return(context.Background())
@@ -521,7 +523,7 @@ var _ = Describe("Server", func() {
 				sess := NewMockQuicSession(mockCtrl)
 				sess.EXPECT().run().Do(func() {})
 				sess.EXPECT().Context().Return(context.Background())
-				runner.onHandshakeComplete(sess)
+				runner.OnHandshakeComplete(sess)
 				done <- struct{}{}
 				return sess, nil
 			}

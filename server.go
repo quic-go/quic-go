@@ -36,6 +36,9 @@ type packetHandlerManager interface {
 	Add(protocol.ConnectionID, packetHandler)
 	Retire(protocol.ConnectionID)
 	Remove(protocol.ConnectionID)
+	AddResetToken([16]byte, packetHandler)
+	RemoveResetToken([16]byte)
+	GetStatelessResetToken(protocol.ConnectionID) [16]byte
 	SetServer(unknownPacketHandler)
 	CloseServer()
 }
@@ -52,20 +55,20 @@ type quicSession interface {
 }
 
 type sessionRunner interface {
-	onHandshakeComplete(Session)
-	retireConnectionID(protocol.ConnectionID)
-	removeConnectionID(protocol.ConnectionID)
+	OnHandshakeComplete(Session)
+	Retire(protocol.ConnectionID)
+	Remove(protocol.ConnectionID)
+	AddResetToken([16]byte, packetHandler)
+	RemoveResetToken([16]byte)
 }
 
 type runner struct {
+	packetHandlerManager
+
 	onHandshakeCompleteImpl func(Session)
-	retireConnectionIDImpl  func(protocol.ConnectionID)
-	removeConnectionIDImpl  func(protocol.ConnectionID)
 }
 
-func (r *runner) onHandshakeComplete(s Session)              { r.onHandshakeCompleteImpl(s) }
-func (r *runner) retireConnectionID(c protocol.ConnectionID) { r.retireConnectionIDImpl(c) }
-func (r *runner) removeConnectionID(c protocol.ConnectionID) { r.removeConnectionIDImpl(c) }
+func (r *runner) OnHandshakeComplete(s Session) { r.onHandshakeCompleteImpl(s) }
 
 var _ sessionRunner = &runner{}
 
@@ -145,7 +148,7 @@ func listen(conn net.PacketConn, tlsConf *tls.Config, config *Config) (*server, 
 		}
 	}
 
-	sessionHandler, err := getMultiplexer().AddConn(conn, config.ConnectionIDLength)
+	sessionHandler, err := getMultiplexer().AddConn(conn, config.ConnectionIDLength, config.StatelessResetKey)
 	if err != nil {
 		return nil, err
 	}
@@ -169,6 +172,7 @@ func listen(conn net.PacketConn, tlsConf *tls.Config, config *Config) (*server, 
 
 func (s *server) setup() error {
 	s.sessionRunner = &runner{
+		packetHandlerManager: s.sessionHandler,
 		onHandshakeCompleteImpl: func(sess Session) {
 			go func() {
 				atomic.AddInt32(&s.sessionQueueLen, 1)
@@ -181,8 +185,6 @@ func (s *server) setup() error {
 				}
 			}()
 		},
-		retireConnectionIDImpl: s.sessionHandler.Retire,
-		removeConnectionIDImpl: s.sessionHandler.Remove,
 	}
 	cookieGenerator, err := handshake.NewCookieGenerator()
 	if err != nil {
@@ -269,6 +271,7 @@ func populateServerConfig(config *Config) *Config {
 		MaxIncomingStreams:                    maxIncomingStreams,
 		MaxIncomingUniStreams:                 maxIncomingUniStreams,
 		ConnectionIDLength:                    connIDLen,
+		StatelessResetKey:                     config.StatelessResetKey,
 	}
 }
 
@@ -344,8 +347,8 @@ func (s *server) handlePacketImpl(p *receivedPacket) bool /* was the packet pass
 		s.logger.Debugf("Error parsing packet: %s", err)
 		return false
 	}
+	// Short header packets should never end up here in the first place
 	if !hdr.IsLongHeader {
-		// TODO: send a stateless reset
 		return false
 	}
 	// send a Version Negotiation Packet if the client is speaking a different protocol version
@@ -433,6 +436,7 @@ func (s *server) createNewSession(
 	srcConnID protocol.ConnectionID,
 	version protocol.VersionNumber,
 ) (quicSession, error) {
+	token := s.sessionHandler.GetStatelessResetToken(srcConnID)
 	params := &handshake.TransportParameters{
 		InitialMaxStreamDataBidiLocal:  protocol.InitialMaxStreamData,
 		InitialMaxStreamDataBidiRemote: protocol.InitialMaxStreamData,
@@ -443,9 +447,8 @@ func (s *server) createNewSession(
 		MaxUniStreams:                  uint64(s.config.MaxIncomingUniStreams),
 		AckDelayExponent:               protocol.AckDelayExponent,
 		DisableMigration:               true,
-		// TODO(#855): generate a real token
-		StatelessResetToken:  bytes.Repeat([]byte{42}, 16),
-		OriginalConnectionID: origDestConnID,
+		StatelessResetToken:            &token,
+		OriginalConnectionID:           origDestConnID,
 	}
 	sess, err := s.newSession(
 		&conn{pconn: s.conn, currentAddr: remoteAddr},

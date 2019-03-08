@@ -120,7 +120,7 @@ func dialContext(
 	createdPacketConn bool,
 ) (Session, error) {
 	config = populateClientConfig(config, createdPacketConn)
-	packetHandlers, err := getMultiplexer().AddConn(pconn, config.ConnectionIDLength)
+	packetHandlers, err := getMultiplexer().AddConn(pconn, config.ConnectionIDLength, config.StatelessResetKey)
 	if err != nil {
 		return nil, err
 	}
@@ -240,6 +240,7 @@ func populateClientConfig(config *Config, createdPacketConn bool) *Config {
 		MaxIncomingStreams:                    maxIncomingStreams,
 		MaxIncomingUniStreams:                 maxIncomingUniStreams,
 		KeepAlive:                             config.KeepAlive,
+		StatelessResetKey:                     config.StatelessResetKey,
 	}
 }
 
@@ -358,9 +359,8 @@ func (c *client) createNewTLSSession(version protocol.VersionNumber) error {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
 	runner := &runner{
+		packetHandlerManager:    c.packetHandlers,
 		onHandshakeCompleteImpl: func(_ Session) { close(c.handshakeChan) },
-		retireConnectionIDImpl:  c.packetHandlers.Retire,
-		removeConnectionIDImpl:  c.packetHandlers.Remove,
 	}
 	sess, err := newClientSession(
 		c.conn,

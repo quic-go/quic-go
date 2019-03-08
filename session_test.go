@@ -322,7 +322,7 @@ var _ = Describe("Session", func() {
 		It("handles CONNECTION_CLOSE frames", func() {
 			testErr := qerr.Error(qerr.StreamLimitError, "foobar")
 			streamManager.EXPECT().CloseWithError(testErr)
-			sessionRunner.EXPECT().removeConnectionID(gomock.Any())
+			sessionRunner.EXPECT().Remove(gomock.Any())
 			cryptoSetup.EXPECT().Close()
 
 			go func() {
@@ -377,7 +377,7 @@ var _ = Describe("Session", func() {
 
 		It("shuts down without error", func() {
 			streamManager.EXPECT().CloseWithError(qerr.Error(qerr.NoError, ""))
-			sessionRunner.EXPECT().retireConnectionID(gomock.Any())
+			sessionRunner.EXPECT().Retire(gomock.Any())
 			cryptoSetup.EXPECT().Close()
 			packer.EXPECT().PackConnectionClose(gomock.Any()).Return(&packedPacket{raw: []byte("connection close")}, nil)
 			Expect(sess.Close()).To(Succeed())
@@ -389,7 +389,7 @@ var _ = Describe("Session", func() {
 
 		It("only closes once", func() {
 			streamManager.EXPECT().CloseWithError(qerr.Error(qerr.NoError, ""))
-			sessionRunner.EXPECT().retireConnectionID(gomock.Any())
+			sessionRunner.EXPECT().Retire(gomock.Any())
 			cryptoSetup.EXPECT().Close()
 			packer.EXPECT().PackConnectionClose(gomock.Any()).Return(&packedPacket{}, nil)
 			Expect(sess.Close()).To(Succeed())
@@ -402,7 +402,7 @@ var _ = Describe("Session", func() {
 		It("closes streams with proper error", func() {
 			testErr := errors.New("test error")
 			streamManager.EXPECT().CloseWithError(qerr.Error(0x1337, testErr.Error()))
-			sessionRunner.EXPECT().retireConnectionID(gomock.Any())
+			sessionRunner.EXPECT().Retire(gomock.Any())
 			cryptoSetup.EXPECT().Close()
 			packer.EXPECT().PackConnectionClose(gomock.Any()).Return(&packedPacket{}, nil)
 			sess.CloseWithError(0x1337, testErr)
@@ -412,7 +412,7 @@ var _ = Describe("Session", func() {
 
 		It("closes the session in order to recreate it", func() {
 			streamManager.EXPECT().CloseWithError(gomock.Any())
-			sessionRunner.EXPECT().removeConnectionID(gomock.Any())
+			sessionRunner.EXPECT().Remove(gomock.Any())
 			cryptoSetup.EXPECT().Close()
 			sess.closeForRecreating()
 			Expect(mconn.written).To(BeEmpty()) // no CONNECTION_CLOSE or PUBLIC_RESET sent
@@ -423,7 +423,7 @@ var _ = Describe("Session", func() {
 		It("destroys the session", func() {
 			testErr := errors.New("close")
 			streamManager.EXPECT().CloseWithError(gomock.Any())
-			sessionRunner.EXPECT().removeConnectionID(gomock.Any())
+			sessionRunner.EXPECT().Remove(gomock.Any())
 			cryptoSetup.EXPECT().Close()
 			sess.destroy(testErr)
 			Eventually(areSessionsRunning).Should(BeFalse())
@@ -433,7 +433,7 @@ var _ = Describe("Session", func() {
 
 		It("cancels the context when the run loop exists", func() {
 			streamManager.EXPECT().CloseWithError(gomock.Any())
-			sessionRunner.EXPECT().retireConnectionID(gomock.Any())
+			sessionRunner.EXPECT().Retire(gomock.Any())
 			cryptoSetup.EXPECT().Close()
 			packer.EXPECT().PackConnectionClose(gomock.Any()).Return(&packedPacket{}, nil)
 			returned := make(chan struct{})
@@ -451,7 +451,7 @@ var _ = Describe("Session", func() {
 
 		It("retransmits the CONNECTION_CLOSE packet if packets are arriving late", func() {
 			streamManager.EXPECT().CloseWithError(gomock.Any())
-			sessionRunner.EXPECT().retireConnectionID(gomock.Any())
+			sessionRunner.EXPECT().Retire(gomock.Any())
 			cryptoSetup.EXPECT().Close()
 			packer.EXPECT().PackConnectionClose(gomock.Any()).Return(&packedPacket{raw: []byte("foobar")}, nil)
 			sess.Close()
@@ -547,7 +547,7 @@ var _ = Describe("Session", func() {
 				cryptoSetup.EXPECT().RunHandshake().Do(func() { <-sess.Context().Done() })
 				sess.run()
 			}()
-			sessionRunner.EXPECT().retireConnectionID(gomock.Any())
+			sessionRunner.EXPECT().Retire(gomock.Any())
 			sess.handlePacket(getPacket(&wire.ExtendedHeader{
 				Header:          wire.Header{DestConnectionID: sess.srcConnID},
 				PacketNumberLen: protocol.PacketNumberLen1,
@@ -574,7 +574,7 @@ var _ = Describe("Session", func() {
 				Expect(err).To(MatchError("PROTOCOL_VIOLATION: empty packet"))
 				close(done)
 			}()
-			sessionRunner.EXPECT().retireConnectionID(gomock.Any())
+			sessionRunner.EXPECT().Retire(gomock.Any())
 			sess.handlePacket(getPacket(&wire.ExtendedHeader{
 				Header:          wire.Header{DestConnectionID: sess.srcConnID},
 				PacketNumberLen: protocol.PacketNumberLen1,
@@ -887,7 +887,7 @@ var _ = Describe("Session", func() {
 				Consistently(mconn.written).Should(HaveLen(2))
 				// make the go routine return
 				packer.EXPECT().PackConnectionClose(gomock.Any()).Return(&packedPacket{}, nil)
-				sessionRunner.EXPECT().retireConnectionID(gomock.Any())
+				sessionRunner.EXPECT().Retire(gomock.Any())
 				cryptoSetup.EXPECT().Close()
 				sess.Close()
 				Eventually(done).Should(BeClosed())
@@ -914,7 +914,7 @@ var _ = Describe("Session", func() {
 				Consistently(mconn.written).Should(HaveLen(1))
 				// make the go routine return
 				packer.EXPECT().PackConnectionClose(gomock.Any()).Return(&packedPacket{}, nil)
-				sessionRunner.EXPECT().retireConnectionID(gomock.Any())
+				sessionRunner.EXPECT().Retire(gomock.Any())
 				cryptoSetup.EXPECT().Close()
 				sess.Close()
 				Eventually(done).Should(BeClosed())
@@ -943,7 +943,7 @@ var _ = Describe("Session", func() {
 				Eventually(mconn.written, 2*pacingDelay).Should(HaveLen(2))
 				// make the go routine return
 				packer.EXPECT().PackConnectionClose(gomock.Any()).Return(&packedPacket{}, nil)
-				sessionRunner.EXPECT().retireConnectionID(gomock.Any())
+				sessionRunner.EXPECT().Retire(gomock.Any())
 				cryptoSetup.EXPECT().Close()
 				sess.Close()
 				Eventually(done).Should(BeClosed())
@@ -969,7 +969,7 @@ var _ = Describe("Session", func() {
 				Eventually(mconn.written).Should(HaveLen(3))
 				// make the go routine return
 				packer.EXPECT().PackConnectionClose(gomock.Any()).Return(&packedPacket{}, nil)
-				sessionRunner.EXPECT().retireConnectionID(gomock.Any())
+				sessionRunner.EXPECT().Retire(gomock.Any())
 				cryptoSetup.EXPECT().Close()
 				sess.Close()
 				Eventually(done).Should(BeClosed())
@@ -990,7 +990,7 @@ var _ = Describe("Session", func() {
 				sess.scheduleSending() // no packet will get sent
 				Consistently(mconn.written).ShouldNot(Receive())
 				// make the go routine return
-				sessionRunner.EXPECT().retireConnectionID(gomock.Any())
+				sessionRunner.EXPECT().Retire(gomock.Any())
 				packer.EXPECT().PackConnectionClose(gomock.Any()).Return(&packedPacket{}, nil)
 				cryptoSetup.EXPECT().Close()
 				sess.Close()
@@ -1018,7 +1018,7 @@ var _ = Describe("Session", func() {
 				sess.scheduleSending()
 				Eventually(mconn.written).Should(Receive())
 				// make the go routine return
-				sessionRunner.EXPECT().retireConnectionID(gomock.Any())
+				sessionRunner.EXPECT().Retire(gomock.Any())
 				streamManager.EXPECT().CloseWithError(gomock.Any())
 				packer.EXPECT().PackConnectionClose(gomock.Any()).Return(&packedPacket{}, nil)
 				cryptoSetup.EXPECT().Close()
@@ -1052,7 +1052,7 @@ var _ = Describe("Session", func() {
 				Eventually(mconn.written).Should(Receive())
 				// make sure the go routine returns
 				packer.EXPECT().PackConnectionClose(gomock.Any()).Return(&packedPacket{}, nil)
-				sessionRunner.EXPECT().retireConnectionID(gomock.Any())
+				sessionRunner.EXPECT().Retire(gomock.Any())
 				streamManager.EXPECT().CloseWithError(gomock.Any())
 				cryptoSetup.EXPECT().Close()
 				sess.Close()
@@ -1064,7 +1064,7 @@ var _ = Describe("Session", func() {
 	It("closes when RunHandshake() errors", func() {
 		testErr := errors.New("crypto setup error")
 		streamManager.EXPECT().CloseWithError(qerr.Error(qerr.InternalError, testErr.Error()))
-		sessionRunner.EXPECT().retireConnectionID(gomock.Any())
+		sessionRunner.EXPECT().Retire(gomock.Any())
 		cryptoSetup.EXPECT().Close()
 		packer.EXPECT().PackConnectionClose(gomock.Any()).Return(&packedPacket{}, nil)
 		go func() {
@@ -1080,13 +1080,13 @@ var _ = Describe("Session", func() {
 		packer.EXPECT().PackPacket().AnyTimes()
 		go func() {
 			defer GinkgoRecover()
-			sessionRunner.EXPECT().onHandshakeComplete(gomock.Any())
+			sessionRunner.EXPECT().OnHandshakeComplete(gomock.Any())
 			cryptoSetup.EXPECT().RunHandshake()
 			sess.run()
 		}()
 		Consistently(sess.Context().Done()).ShouldNot(BeClosed())
 		// make sure the go routine returns
-		sessionRunner.EXPECT().retireConnectionID(gomock.Any())
+		sessionRunner.EXPECT().Retire(gomock.Any())
 		streamManager.EXPECT().CloseWithError(gomock.Any())
 		packer.EXPECT().PackConnectionClose(gomock.Any()).Return(&packedPacket{}, nil)
 		cryptoSetup.EXPECT().Close()
@@ -1097,7 +1097,7 @@ var _ = Describe("Session", func() {
 	It("sends a forward-secure packet when the handshake completes", func() {
 		done := make(chan struct{})
 		gomock.InOrder(
-			sessionRunner.EXPECT().onHandshakeComplete(gomock.Any()),
+			sessionRunner.EXPECT().OnHandshakeComplete(gomock.Any()),
 			packer.EXPECT().PackPacket().DoAndReturn(func() (*packedPacket, error) {
 				defer close(done)
 				return &packedPacket{
@@ -1115,7 +1115,7 @@ var _ = Describe("Session", func() {
 		Eventually(done).Should(BeClosed())
 		//make sure the go routine returns
 		streamManager.EXPECT().CloseWithError(gomock.Any())
-		sessionRunner.EXPECT().retireConnectionID(gomock.Any())
+		sessionRunner.EXPECT().Retire(gomock.Any())
 		packer.EXPECT().PackConnectionClose(gomock.Any()).Return(&packedPacket{}, nil)
 		cryptoSetup.EXPECT().Close()
 		Expect(sess.Close()).To(Succeed())
@@ -1131,7 +1131,7 @@ var _ = Describe("Session", func() {
 			close(done)
 		}()
 		streamManager.EXPECT().CloseWithError(gomock.Any())
-		sessionRunner.EXPECT().retireConnectionID(gomock.Any())
+		sessionRunner.EXPECT().Retire(gomock.Any())
 		packer.EXPECT().PackConnectionClose(gomock.Any()).Return(&packedPacket{}, nil)
 		cryptoSetup.EXPECT().Close()
 		Expect(sess.Close()).To(Succeed())
@@ -1149,7 +1149,7 @@ var _ = Describe("Session", func() {
 			close(done)
 		}()
 		streamManager.EXPECT().CloseWithError(gomock.Any())
-		sessionRunner.EXPECT().retireConnectionID(gomock.Any())
+		sessionRunner.EXPECT().Retire(gomock.Any())
 		packer.EXPECT().PackConnectionClose(gomock.Any()).Return(&packedPacket{}, nil)
 		cryptoSetup.EXPECT().Close()
 		Expect(sess.CloseWithError(0x1337, testErr)).To(Succeed())
@@ -1166,7 +1166,7 @@ var _ = Describe("Session", func() {
 				Expect(err.Error()).To(ContainSubstring("transport parameter"))
 			}()
 			streamManager.EXPECT().CloseWithError(gomock.Any())
-			sessionRunner.EXPECT().retireConnectionID(gomock.Any())
+			sessionRunner.EXPECT().Retire(gomock.Any())
 			packer.EXPECT().PackConnectionClose(gomock.Any()).Return(&packedPacket{}, nil)
 			cryptoSetup.EXPECT().Close()
 			sess.processTransportParameters([]byte("invalid"))
@@ -1195,7 +1195,7 @@ var _ = Describe("Session", func() {
 			sess.processTransportParameters(chtp.Marshal())
 			// make the go routine return
 			streamManager.EXPECT().CloseWithError(gomock.Any())
-			sessionRunner.EXPECT().retireConnectionID(gomock.Any())
+			sessionRunner.EXPECT().Retire(gomock.Any())
 			packer.EXPECT().PackConnectionClose(gomock.Any()).Return(&packedPacket{}, nil)
 			cryptoSetup.EXPECT().Close()
 			sess.Close()
@@ -1250,7 +1250,7 @@ var _ = Describe("Session", func() {
 			}()
 			Eventually(sent).Should(BeClosed())
 			// make the go routine return
-			sessionRunner.EXPECT().retireConnectionID(gomock.Any())
+			sessionRunner.EXPECT().Retire(gomock.Any())
 			streamManager.EXPECT().CloseWithError(gomock.Any())
 			packer.EXPECT().PackConnectionClose(gomock.Any()).Return(&packedPacket{}, nil)
 			cryptoSetup.EXPECT().Close()
@@ -1271,7 +1271,7 @@ var _ = Describe("Session", func() {
 			}()
 			Consistently(mconn.written).ShouldNot(Receive())
 			// make the go routine return
-			sessionRunner.EXPECT().retireConnectionID(gomock.Any())
+			sessionRunner.EXPECT().Retire(gomock.Any())
 			streamManager.EXPECT().CloseWithError(gomock.Any())
 			packer.EXPECT().PackConnectionClose(gomock.Any()).Return(&packedPacket{}, nil)
 			cryptoSetup.EXPECT().Close()
@@ -1292,7 +1292,7 @@ var _ = Describe("Session", func() {
 			}()
 			Consistently(mconn.written).ShouldNot(Receive())
 			// make the go routine return
-			sessionRunner.EXPECT().retireConnectionID(gomock.Any())
+			sessionRunner.EXPECT().Retire(gomock.Any())
 			streamManager.EXPECT().CloseWithError(gomock.Any())
 			packer.EXPECT().PackConnectionClose(gomock.Any()).Return(&packedPacket{}, nil)
 			cryptoSetup.EXPECT().Close()
@@ -1307,7 +1307,7 @@ var _ = Describe("Session", func() {
 		})
 
 		It("times out due to no network activity", func() {
-			sessionRunner.EXPECT().removeConnectionID(gomock.Any())
+			sessionRunner.EXPECT().Remove(gomock.Any())
 			sess.handshakeComplete = true
 			sess.lastPacketReceivedTime = time.Now().Add(-time.Hour)
 			done := make(chan struct{})
@@ -1327,7 +1327,7 @@ var _ = Describe("Session", func() {
 
 		It("times out due to non-completed handshake", func() {
 			sess.sessionCreationTime = time.Now().Add(-protocol.DefaultHandshakeTimeout).Add(-time.Second)
-			sessionRunner.EXPECT().removeConnectionID(gomock.Any())
+			sessionRunner.EXPECT().Remove(gomock.Any())
 			cryptoSetup.EXPECT().Close()
 			done := make(chan struct{})
 			go func() {
@@ -1359,7 +1359,7 @@ var _ = Describe("Session", func() {
 			}()
 			Consistently(sess.Context().Done()).ShouldNot(BeClosed())
 			// make the go routine return
-			sessionRunner.EXPECT().retireConnectionID(gomock.Any())
+			sessionRunner.EXPECT().Retire(gomock.Any())
 			cryptoSetup.EXPECT().Close()
 			sess.Close()
 			Eventually(sess.Context().Done()).Should(BeClosed())
@@ -1367,13 +1367,13 @@ var _ = Describe("Session", func() {
 
 		It("closes the session due to the idle timeout after handshake", func() {
 			packer.EXPECT().PackPacket().AnyTimes()
-			sessionRunner.EXPECT().removeConnectionID(gomock.Any())
+			sessionRunner.EXPECT().Remove(gomock.Any())
 			cryptoSetup.EXPECT().Close()
 			sess.config.IdleTimeout = 0
 			done := make(chan struct{})
 			go func() {
 				defer GinkgoRecover()
-				sessionRunner.EXPECT().onHandshakeComplete(sess)
+				sessionRunner.EXPECT().OnHandshakeComplete(sess)
 				cryptoSetup.EXPECT().RunHandshake()
 				err := sess.run()
 				nerr, ok := err.(net.Error)
@@ -1398,7 +1398,7 @@ var _ = Describe("Session", func() {
 			Consistently(sess.Context().Done()).ShouldNot(BeClosed())
 			// make the go routine return
 			packer.EXPECT().PackConnectionClose(gomock.Any()).Return(&packedPacket{}, nil)
-			sessionRunner.EXPECT().retireConnectionID(gomock.Any())
+			sessionRunner.EXPECT().Retire(gomock.Any())
 			cryptoSetup.EXPECT().Close()
 			sess.Close()
 			Eventually(sess.Context().Done()).Should(BeClosed())
@@ -1573,7 +1573,7 @@ var _ = Describe("Client Session", func() {
 		}, []byte{0}))).To(BeTrue())
 		// make sure the go routine returns
 		packer.EXPECT().PackConnectionClose(gomock.Any()).Return(&packedPacket{}, nil)
-		sessionRunner.EXPECT().retireConnectionID(gomock.Any())
+		sessionRunner.EXPECT().Retire(gomock.Any())
 		cryptoSetup.EXPECT().Close()
 		Expect(sess.Close()).To(Succeed())
 		Eventually(sess.Context().Done()).Should(BeClosed())
@@ -1639,7 +1639,7 @@ var _ = Describe("Client Session", func() {
 				Expect(err.Error()).To(ContainSubstring("transport parameter"))
 			}()
 			// streamManager.EXPECT().CloseWithError(gomock.Any())
-			sessionRunner.EXPECT().retireConnectionID(gomock.Any())
+			sessionRunner.EXPECT().Retire(gomock.Any())
 			packer.EXPECT().PackConnectionClose(gomock.Any()).Return(&packedPacket{}, nil)
 			cryptoSetup.EXPECT().Close()
 			sess.processTransportParameters([]byte("invalid"))
@@ -1661,7 +1661,7 @@ var _ = Describe("Client Session", func() {
 				SupportedVersions: []protocol.VersionNumber{sess.version},
 				Parameters: handshake.TransportParameters{
 					OriginalConnectionID: protocol.ConnectionID{0xde, 0xca, 0xfb, 0xad},
-					StatelessResetToken:  []byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16},
+					StatelessResetToken:  &[16]byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16},
 				},
 			}
 			_, err := sess.processTransportParametersForClient(eetp.Marshal())
@@ -1675,7 +1675,7 @@ var _ = Describe("Client Session", func() {
 				SupportedVersions: []protocol.VersionNumber{sess.version},
 				Parameters: handshake.TransportParameters{
 					OriginalConnectionID: protocol.ConnectionID{0xde, 0xca, 0xfb, 0xad},
-					StatelessResetToken:  []byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16},
+					StatelessResetToken:  &[16]byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16},
 				},
 			}
 			_, err := sess.processTransportParametersForClient(eetp.Marshal())
@@ -1687,7 +1687,7 @@ var _ = Describe("Client Session", func() {
 
 			BeforeEach(func() {
 				params = handshake.TransportParameters{
-					StatelessResetToken:  []byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16},
+					StatelessResetToken:  &[16]byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16},
 					OriginalConnectionID: sess.origDestConnID,
 				}
 			})
