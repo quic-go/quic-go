@@ -148,15 +148,19 @@ var _ = Describe("Handshake tests", func() {
 						tlsConf,
 						clientConfig,
 					)
-					Expect(err).ToNot(HaveOccurred())
-					// The error will occur after the client already finished the handshake.
-					errChan := make(chan error)
-					go func() {
-						defer GinkgoRecover()
-						_, err := sess.AcceptStream()
-						errChan <- err
-					}()
-					Eventually(errChan).Should(Receive(MatchError("CRYPTO_ERROR: tls: bad certificate")))
+					// Usually, the error will occur after the client already finished the handshake.
+					// However, there's a race condition here. The server's CONNECTION_CLOSE might be
+					// received before the session is returned, so we might already get the error while dialing.
+					if err == nil {
+						errChan := make(chan error)
+						go func() {
+							defer GinkgoRecover()
+							_, err := sess.AcceptStream()
+							errChan <- err
+						}()
+						Eventually(errChan).Should(Receive(&err))
+					}
+					Expect(err).To(MatchError("CRYPTO_ERROR: tls: bad certificate"))
 				})
 
 				It("uses the ServerName in the tls.Config", func() {
