@@ -8,10 +8,37 @@ import (
 )
 
 var _ = Describe("QUIC Transport Errors", func() {
-	Context("QuicError", func() {
-		It("has a string representation", func() {
-			err := Error(FlowControlError, "foobar")
-			Expect(err.Error()).To(Equal("FLOW_CONTROL_ERROR: foobar"))
+	It("has a string representation", func() {
+		err := Error(FlowControlError, "foobar")
+		Expect(err.Timeout()).To(BeFalse())
+		Expect(err.Error()).To(Equal("FLOW_CONTROL_ERROR: foobar"))
+	})
+
+	It("has a string representation for empty error phrases", func() {
+		err := Error(FlowControlError, "")
+		Expect(err.Error()).To(Equal("FLOW_CONTROL_ERROR"))
+	})
+
+	It("has a string representation for timeout errors", func() {
+		err := TimeoutError("foobar")
+		Expect(err.Timeout()).To(BeTrue())
+		Expect(err.Error()).To(Equal("NO_ERROR: foobar"))
+	})
+
+	Context("crypto errors", func() {
+		It("has a string representation for crypto errors with a message", func() {
+			err := CryptoError(42, "foobar")
+			Expect(err.Error()).To(Equal("CRYPTO_ERROR: foobar"))
+		})
+
+		It("has a string representation for crypto errors without a message", func() {
+			err := CryptoError(42, "")
+			Expect(err.Error()).To(Equal("CRYPTO_ERROR: tls: bad certificate"))
+		})
+
+		It("says if an error is a crypto error", func() {
+			Expect(Error(FlowControlError, "").IsCryptoError()).To(BeFalse())
+			Expect(CryptoError(42, "").IsCryptoError()).To(BeTrue())
 		})
 	})
 
@@ -19,6 +46,11 @@ var _ = Describe("QUIC Transport Errors", func() {
 		It("works as error", func() {
 			var err error = StreamStateError
 			Expect(err).To(MatchError("STREAM_STATE_ERROR"))
+		})
+
+		It("recognizes crypto errors", func() {
+			err := ErrorCode(0x100 + 42)
+			Expect(err.Error()).To(Equal("CRYPTO_ERROR: tls: bad certificate"))
 		})
 	})
 

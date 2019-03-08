@@ -1144,9 +1144,14 @@ func (s *session) sendPackedPacket(packet *packedPacket) error {
 }
 
 func (s *session) sendConnectionClose(quicErr *qerr.QuicError) error {
+	var reason string
+	// don't send details of crypto errors
+	if !quicErr.IsCryptoError() {
+		reason = quicErr.ErrorMessage
+	}
 	packet, err := s.packer.PackConnectionClose(&wire.ConnectionCloseFrame{
 		ErrorCode:    quicErr.ErrorCode,
-		ReasonPhrase: quicErr.ErrorMessage,
+		ReasonPhrase: reason,
 	})
 	if err != nil {
 		return err
