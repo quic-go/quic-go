@@ -208,13 +208,13 @@ type Config struct {
 	// If not set, it will default to 100.
 	// If set to a negative value, it doesn't allow any unidirectional streams.
 	MaxIncomingUniStreams int
-	// KeepAlive defines whether this peer will periodically send PING frames to keep the connection alive.
+	// KeepAlive defines whether this peer will periodically send a packet to keep the connection alive.
 	KeepAlive bool
 }
 
 // A Listener for incoming QUIC connections
 type Listener interface {
-	// Close the server, sending CONNECTION_CLOSE frames to each peer.
+	// Close the server. All active sessions will be closed.
 	Close() error
 	// Addr returns the local network addr that the server is listening on.
 	Addr() net.Addr
