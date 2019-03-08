@@ -423,9 +423,7 @@ runLoop:
 		}
 	}
 
-	if err := s.handleCloseError(closeErr); err != nil {
-		s.logger.Infof("Handling close error failed: %s", err)
-	}
+	s.handleCloseError(closeErr)
 	s.closed.Set(true)
 	s.logger.Infof("Connection %s closed.", s.srcConnID)
 	s.cryptoStreamHandler.Close()
@@ -824,6 +822,11 @@ func (s *session) handleAckFrame(frame *wire.AckFrame, pn protocol.PacketNumber,
 // closeLocal closes the session and send a CONNECTION_CLOSE containing the error
 func (s *session) closeLocal(e error) {
 	s.closeOnce.Do(func() {
+		if e == nil {
+			s.logger.Infof("Closing session.")
+		} else {
+			s.logger.Errorf("Closing session with error: %s", e)
+		}
 		s.sessionRunner.retireConnectionID(s.srcConnID)
 		s.closeChan <- closeError{err: e, sendClose: true, remote: false}
 	})
@@ -832,6 +835,11 @@ func (s *session) closeLocal(e error) {
 // destroy closes the session without sending the error on the wire
 func (s *session) destroy(e error) {
 	s.closeOnce.Do(func() {
+		if nerr, ok := e.(net.Error); ok && nerr.Timeout() {
+			s.logger.Errorf("Destroying session: %s", e)
+		} else {
+			s.logger.Errorf("Destroying session with error: %s", e)
+		}
 		s.sessionRunner.removeConnectionID(s.srcConnID)
 		s.closeChan <- closeError{err: e, sendClose: false, remote: false}
 	})
@@ -847,6 +855,7 @@ func (s *session) closeForRecreating() protocol.PacketNumber {
 
 func (s *session) closeRemote(e error) {
 	s.closeOnce.Do(func() {
+		s.logger.Errorf("Peer closed session with error: %s", e)
 		s.sessionRunner.removeConnectionID(s.srcConnID)
 		s.closeChan <- closeError{err: e, remote: true}
 	})
@@ -866,7 +875,7 @@ func (s *session) CloseWithError(code protocol.ApplicationErrorCode, e error) er
 	return nil
 }
 
-func (s *session) handleCloseError(closeErr closeError) error {
+func (s *session) handleCloseError(closeErr closeError) {
 	if closeErr.err == nil {
 		closeErr.err = qerr.NoError
 	}
@@ -876,25 +885,19 @@ func (s *session) handleCloseError(closeErr closeError) error {
 	if quicErr, ok = closeErr.err.(*qerr.QuicError); !ok {
 		quicErr = qerr.ToQuicError(closeErr.err)
 	}
-	// Don't log timeout errors
-	if quicErr.Timeout() {
-		s.logger.Infof("Closing connection %s.", s.srcConnID)
-	} else {
-		s.logger.Errorf("Closing session with error: %s", closeErr.err.Error())
-	}
 
 	s.streamsMap.CloseWithError(quicErr)
 
 	if !closeErr.sendClose {
-		return nil
+		return
 	}
-
 	// If this is a remote close we're done here
 	if closeErr.remote {
-		return nil
+		return
 	}
-	// otherwise send a CONNECTION_CLOSE
-	return s.sendConnectionClose(quicErr)
+	if err := s.sendConnectionClose(quicErr); err != nil {
+		s.logger.Debugf("Error sending CONNECTION_CLOSE: %s", err)
+	}
 }
 
 func (s *session) processTransportParameters(data []byte) {
