@@ -5,6 +5,8 @@ import (
 	"crypto/tls"
 	"fmt"
 	"net"
+	"os"
+	"strconv"
 	"time"
 
 	quic "github.com/lucas-clemente/quic-go"
@@ -120,5 +122,113 @@ var _ = Describe("Timeout tests", func() {
 		checkTimeoutError(err)
 		_, err = sess.AcceptUniStream()
 		checkTimeoutError(err)
+	})
+
+	Context("timing out at the right time", func() {
+		var idleTimeout time.Duration
+
+		scaleDuration := func(d time.Duration) time.Duration {
+			scaleFactor := 1
+			if f, err := strconv.Atoi(os.Getenv("TIMESCALE_FACTOR")); err == nil { // parsing "" errors, so this works fine if the env is not set
+				scaleFactor = f
+			}
+			Expect(scaleFactor).ToNot(BeZero())
+			return time.Duration(scaleFactor) * d
+		}
+
+		BeforeEach(func() {
+			idleTimeout = scaleDuration(100 * time.Millisecond)
+		})
+
+		It("times out after inactivity", func() {
+			server, err := quic.ListenAddr("localhost:0", testdata.GetTLSConfig(), nil)
+			Expect(err).ToNot(HaveOccurred())
+			defer server.Close()
+
+			serverSessionClosed := make(chan struct{})
+			go func() {
+				defer GinkgoRecover()
+				sess, err := server.Accept()
+				Expect(err).ToNot(HaveOccurred())
+				sess.AcceptStream() // blocks until the session is closed
+				close(serverSessionClosed)
+			}()
+
+			sess, err := quic.DialAddr(
+				fmt.Sprintf("localhost:%d", server.Addr().(*net.UDPAddr).Port),
+				&tls.Config{RootCAs: testdata.GetRootCA()},
+				&quic.Config{IdleTimeout: idleTimeout},
+			)
+			Expect(err).ToNot(HaveOccurred())
+			startTime := time.Now()
+			done := make(chan struct{})
+			go func() {
+				defer GinkgoRecover()
+				_, err := sess.AcceptStream()
+				checkTimeoutError(err)
+				close(done)
+			}()
+			Eventually(done, 2*idleTimeout).Should(BeClosed())
+			dur := time.Since(startTime)
+			Expect(dur).To(And(
+				BeNumerically(">=", idleTimeout),
+				BeNumerically("<", idleTimeout*6/5),
+			))
+			Consistently(serverSessionClosed).ShouldNot(BeClosed())
+
+			// make the go routine return
+			Expect(server.Close()).To(Succeed())
+			Eventually(serverSessionClosed).Should(BeClosed())
+		})
+
+		It("times out after sending a packet", func() {
+			server, err := quic.ListenAddr("localhost:0", testdata.GetTLSConfig(), nil)
+			Expect(err).ToNot(HaveOccurred())
+			defer server.Close()
+
+			serverSessionClosed := make(chan struct{})
+			go func() {
+				defer GinkgoRecover()
+				sess, err := server.Accept()
+				Expect(err).ToNot(HaveOccurred())
+				sess.AcceptStream() // blocks until the session is closed
+				close(serverSessionClosed)
+			}()
+
+			sess, err := quic.DialAddr(
+				fmt.Sprintf("localhost:%d", server.Addr().(*net.UDPAddr).Port),
+				&tls.Config{RootCAs: testdata.GetRootCA()},
+				&quic.Config{IdleTimeout: idleTimeout},
+			)
+			Expect(err).ToNot(HaveOccurred())
+
+			// wait half the idle timeout, then send a packet
+			time.Sleep(idleTimeout / 2)
+			str, err := sess.OpenUniStream()
+			Expect(err).ToNot(HaveOccurred())
+			_, err = str.Write([]byte("foobar"))
+			Expect(err).ToNot(HaveOccurred())
+
+			// now make sure that the idle timeout is based on this packet
+			startTime := time.Now()
+			done := make(chan struct{})
+			go func() {
+				defer GinkgoRecover()
+				_, err := sess.AcceptStream()
+				checkTimeoutError(err)
+				close(done)
+			}()
+			Eventually(done, 2*idleTimeout).Should(BeClosed())
+			dur := time.Since(startTime)
+			Expect(dur).To(And(
+				BeNumerically(">=", idleTimeout),
+				BeNumerically("<", idleTimeout*12/10),
+			))
+			Consistently(serverSessionClosed).ShouldNot(BeClosed())
+
+			// make the go routine return
+			Expect(server.Close()).To(Succeed())
+			Eventually(serverSessionClosed).Should(BeClosed())
+		})
 	})
 })
