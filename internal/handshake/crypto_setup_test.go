@@ -298,6 +298,14 @@ var _ = Describe("Crypto Setup TLS", func() {
 			Expect(serverErr).ToNot(HaveOccurred())
 		})
 
+		It("performs a HelloRetryRequst", func() {
+			serverConf := testdata.GetTLSConfig()
+			serverConf.CurvePreferences = []tls.CurveID{tls.CurveP384}
+			clientErr, serverErr := handshakeWithTLSConf(clientConf, serverConf)
+			Expect(clientErr).ToNot(HaveOccurred())
+			Expect(serverErr).ToNot(HaveOccurred())
+		})
+
 		It("handshakes with client auth", func() {
 			clientConf.Certificates = []tls.Certificate{generateCert()}
 			serverConf := testdata.GetTLSConfig()

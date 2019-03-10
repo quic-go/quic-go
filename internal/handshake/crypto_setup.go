@@ -91,6 +91,12 @@ type cryptoSetup struct {
 
 	receivedWriteKey chan struct{}
 	receivedReadKey  chan struct{}
+	// WriteRecord does a non-blocking send on this channel.
+	// This way, handleMessage can see if qtls tries to write a message.
+	// This is necessary:
+	// for servers: to see if a HelloRetryRequest should be sent in response to a ClientHello
+	// for clients: to see if a ServerHello is a HelloRetryRequest
+	writeRecord chan struct{}
 
 	logger utils.Logger
 
@@ -193,6 +199,7 @@ func newCryptoSetup(
 		messageChan:            make(chan []byte, 100),
 		receivedReadKey:        make(chan struct{}),
 		receivedWriteKey:       make(chan struct{}),
+		writeRecord:            make(chan struct{}),
 		closeChan:              make(chan struct{}),
 	}
 	qtlsConf := cs.tlsConfigToQtlsConfig(tlsConf)
@@ -297,6 +304,11 @@ func (h *cryptoSetup) handleMessageForServer(msgType messageType) bool {
 	switch msgType {
 	case typeClientHello:
 		select {
+		case <-h.writeRecord:
+			// If qtls sends a HelloRetryRequest, it will only write the record.
+			// If it accepts the ClientHello, it will first read the transport parameters.
+			h.logger.Debugf("Sending HelloRetryRequest")
+			return false
 		case data := <-h.extHandler.TransportParameters():
 			h.handleParamsCallback(data)
 		case <-h.handshakeDone:
@@ -342,6 +354,12 @@ func (h *cryptoSetup) handleMessageForClient(msgType messageType) bool {
 	case typeServerHello:
 		// get the handshake write key
 		select {
+		case <-h.writeRecord:
+			// If qtls writes in response to a ServerHello, this means that this ServerHello
+			// is a HelloRetryRequest.
+			// Otherwise, we'd just wait for the Certificate message.
+			h.logger.Debugf("ServerHello is a HelloRetryRequest")
+			return false
 		case <-h.receivedWriteKey:
 		case <-h.handshakeDone:
 			return false
@@ -444,6 +462,13 @@ func (h *cryptoSetup) SetWriteKey(suite *qtls.CipherSuite, trafficSecret []byte)
 
 // WriteRecord is called when TLS writes data
 func (h *cryptoSetup) WriteRecord(p []byte) (int, error) {
+	defer func() {
+		select {
+		case h.writeRecord <- struct{}{}:
+		default:
+		}
+	}()
+
 	switch h.writeEncLevel {
 	case protocol.EncryptionInitial:
 		// assume that the first WriteRecord call contains the ClientHello
