@@ -1,6 +1,6 @@
 run:
   skip-files:
-    - h2quic/response_writer_closenotifier.go
+    - http3/response_writer_closenotifier.go
     - internal/handshake/unsafe_test.go
 
 linters-settings:

@@ -9,7 +9,7 @@ import (
 	"time"
 
 	quic "github.com/lucas-clemente/quic-go"
-	"github.com/lucas-clemente/quic-go/h2quic"
+	"github.com/lucas-clemente/quic-go/http3"
 	"github.com/lucas-clemente/quic-go/integrationtests/tools/testserver"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/internal/testdata"
@@ -38,7 +38,7 @@ var _ = Describe("HTTP tests", func() {
 		Context(fmt.Sprintf("with QUIC version %s", version), func() {
 			BeforeEach(func() {
 				client = &http.Client{
-					Transport: &h2quic.RoundTripper{
+					Transport: &http3.RoundTripper{
 						TLSClientConfig: &tls.Config{
 							RootCAs: testdata.GetRootCA(),
 						},
@@ -77,8 +77,20 @@ var _ = Describe("HTTP tests", func() {
 				Expect(body).To(Equal(testserver.PRDataLong))
 			})
 
-			// TODO(#1756): this test times out
-			PIt("downloads many files, if the response is not read", func() {
+			It("downloads many hellos", func() {
+				const num = 150
+
+				for i := 0; i < num; i++ {
+					resp, err := client.Get("https://localhost:" + testserver.Port() + "/hello")
+					Expect(err).ToNot(HaveOccurred())
+					Expect(resp.StatusCode).To(Equal(200))
+					body, err := ioutil.ReadAll(gbytes.TimeoutReader(resp.Body, 3*time.Second))
+					Expect(err).ToNot(HaveOccurred())
+					Expect(string(body)).To(Equal("Hello, World!\n"))
+				}
+			})
+
+			It("downloads many files, if the response is not read", func() {
 				const num = 150
 
 				for i := 0; i < num; i++ {
@@ -87,6 +99,19 @@ var _ = Describe("HTTP tests", func() {
 					Expect(resp.StatusCode).To(Equal(200))
 					Expect(resp.Body.Close()).To(Succeed())
 				}
+			})
+
+			It("posts a small message", func() {
+				resp, err := client.Post(
+					"https://localhost:"+testserver.Port()+"/echo",
+					"text/plain",
+					bytes.NewReader([]byte("Hello, world!")),
+				)
+				Expect(err).ToNot(HaveOccurred())
+				Expect(resp.StatusCode).To(Equal(200))
+				body, err := ioutil.ReadAll(gbytes.TimeoutReader(resp.Body, 5*time.Second))
+				Expect(err).ToNot(HaveOccurred())
+				Expect(body).To(Equal([]byte("Hello, world!")))
 			})
 
 			It("uploads a file", func() {
@@ -99,7 +124,7 @@ var _ = Describe("HTTP tests", func() {
 				Expect(resp.StatusCode).To(Equal(200))
 				body, err := ioutil.ReadAll(gbytes.TimeoutReader(resp.Body, 5*time.Second))
 				Expect(err).ToNot(HaveOccurred())
-				Expect(bytes.Equal(body, testserver.PRData)).To(BeTrue())
+				Expect(body).To(Equal(testserver.PRData))
 			})
 		})
 	}

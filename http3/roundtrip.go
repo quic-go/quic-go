@@ -1,4 +1,4 @@
-package h2quic
+package http3
 
 import (
 	"crypto/tls"
@@ -61,42 +61,42 @@ type RoundTripOpt struct {
 var _ roundTripCloser = &RoundTripper{}
 
 // ErrNoCachedConn is returned when RoundTripper.OnlyCachedConn is set
-var ErrNoCachedConn = errors.New("h2quic: no cached connection was available")
+var ErrNoCachedConn = errors.New("http3: no cached connection was available")
 
 // RoundTripOpt is like RoundTrip, but takes options.
 func (r *RoundTripper) RoundTripOpt(req *http.Request, opt RoundTripOpt) (*http.Response, error) {
 	if req.URL == nil {
 		closeRequestBody(req)
-		return nil, errors.New("quic: nil Request.URL")
+		return nil, errors.New("http3: nil Request.URL")
 	}
 	if req.URL.Host == "" {
 		closeRequestBody(req)
-		return nil, errors.New("quic: no Host in request URL")
+		return nil, errors.New("http3: no Host in request URL")
 	}
 	if req.Header == nil {
 		closeRequestBody(req)
-		return nil, errors.New("quic: nil Request.Header")
+		return nil, errors.New("http3: nil Request.Header")
 	}
 
 	if req.URL.Scheme == "https" {
 		for k, vv := range req.Header {
 			if !httpguts.ValidHeaderFieldName(k) {
-				return nil, fmt.Errorf("quic: invalid http header field name %q", k)
+				return nil, fmt.Errorf("http3: invalid http header field name %q", k)
 			}
 			for _, v := range vv {
 				if !httpguts.ValidHeaderFieldValue(v) {
-					return nil, fmt.Errorf("quic: invalid http header field value %q for key %v", v, k)
+					return nil, fmt.Errorf("http3: invalid http header field value %q for key %v", v, k)
 				}
 			}
 		}
 	} else {
 		closeRequestBody(req)
-		return nil, fmt.Errorf("quic: unsupported protocol scheme: %s", req.URL.Scheme)
+		return nil, fmt.Errorf("http3: unsupported protocol scheme: %s", req.URL.Scheme)
 	}
 
 	if req.Method != "" && !validMethod(req.Method) {
 		closeRequestBody(req)
-		return nil, fmt.Errorf("quic: invalid method %q", req.Method)
+		return nil, fmt.Errorf("http3: invalid method %q", req.Method)
 	}
 
 	hostname := authorityAddr("https", hostnameFromRequest(req))

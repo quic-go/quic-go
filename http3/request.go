@@ -1,4 +1,4 @@
-package h2quic
+package http3
 
 import (
 	"crypto/tls"
@@ -8,10 +8,10 @@ import (
 	"strconv"
 	"strings"
 
-	"golang.org/x/net/http2/hpack"
+	"github.com/marten-seemann/qpack"
 )
 
-func requestFromHeaders(headers []hpack.HeaderField) (*http.Request, error) {
+func requestFromHeaders(headers []qpack.HeaderField) (*http.Request, error) {
 	var path, authority, method, contentLengthStr string
 	httpHeaders := http.Header{}
 
@@ -57,8 +57,8 @@ func requestFromHeaders(headers []hpack.HeaderField) (*http.Request, error) {
 	return &http.Request{
 		Method:        method,
 		URL:           u,
-		Proto:         "HTTP/2.0",
-		ProtoMajor:    2,
+		Proto:         "HTTP/3",
+		ProtoMajor:    3,
 		ProtoMinor:    0,
 		Header:        httpHeaders,
 		Body:          nil,

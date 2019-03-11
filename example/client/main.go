@@ -8,7 +8,7 @@ import (
 	"net/http"
 	"sync"
 
-	"github.com/lucas-clemente/quic-go/h2quic"
+	"github.com/lucas-clemente/quic-go/http3"
 	"github.com/lucas-clemente/quic-go/internal/testdata"
 	"github.com/lucas-clemente/quic-go/internal/utils"
 )
@@ -28,7 +28,7 @@ func main() {
 	}
 	logger.SetLogTimeFormat("")
 
-	roundTripper := &h2quic.RoundTripper{
+	roundTripper := &http3.RoundTripper{
 		TLSClientConfig: &tls.Config{
 			RootCAs: testdata.GetRootCA(),
 		},

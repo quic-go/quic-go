@@ -15,7 +15,7 @@ import (
 
 	_ "net/http/pprof"
 
-	"github.com/lucas-clemente/quic-go/h2quic"
+	"github.com/lucas-clemente/quic-go/http3"
 	"github.com/lucas-clemente/quic-go/internal/testdata"
 	"github.com/lucas-clemente/quic-go/internal/utils"
 )
@@ -135,9 +135,9 @@ func main() {
 			var err error
 			if *tcp {
 				certFile, keyFile := testdata.GetCertificatePaths()
-				err = h2quic.ListenAndServe(bCap, certFile, keyFile, nil)
+				err = http3.ListenAndServe(bCap, certFile, keyFile, nil)
 			} else {
-				server := h2quic.Server{
+				server := http3.Server{
 					Server: &http.Server{Addr: bCap},
 				}
 				err = server.ListenAndServeTLS(testdata.GetCertificatePaths())

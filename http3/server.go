@@ -1,9 +1,10 @@
-package h2quic
+package http3
 
 import (
 	"crypto/tls"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"runtime"
@@ -12,22 +13,11 @@ import (
 	"sync/atomic"
 	"time"
 
-	quic "github.com/lucas-clemente/quic-go"
+	"github.com/lucas-clemente/quic-go"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
-	"github.com/lucas-clemente/quic-go/internal/qerr"
 	"github.com/lucas-clemente/quic-go/internal/utils"
-	"golang.org/x/net/http2"
-	"golang.org/x/net/http2/hpack"
+	"github.com/marten-seemann/qpack"
 )
-
-type streamCreator interface {
-	quic.Session
-	GetOrOpenStream(protocol.StreamID) (quic.Stream, error)
-}
-
-type remoteCloser interface {
-	CloseRemote(protocol.ByteCount)
-}
 
 // allows mocking of quic.Listen and quic.ListenAddr
 var (
@@ -43,9 +33,6 @@ type Server struct {
 	// If nil, it uses reasonable default values.
 	QuicConfig *quic.Config
 
-	// Private flag for demo, do not use
-	CloseAfterFirstRequest bool
-
 	port uint32 // used atomically
 
 	listenerMutex sync.Mutex
@@ -54,18 +41,18 @@ type Server struct {
 
 	supportedVersionsAsString string
 
-	logger utils.Logger // will be set by Server.serveImpl()
+	logger utils.Logger
 }
 
-// ListenAndServe listens on the UDP address s.Addr and calls s.Handler to handle HTTP/2 requests on incoming connections.
+// ListenAndServe listens on the UDP address s.Addr and calls s.Handler to handle HTTP/3 requests on incoming connections.
 func (s *Server) ListenAndServe() error {
 	if s.Server == nil {
-		return errors.New("use of h2quic.Server without http.Server")
+		return errors.New("use of http3.Server without http.Server")
 	}
 	return s.serveImpl(s.TLSConfig, nil)
 }
 
-// ListenAndServeTLS listens on the UDP address s.Addr and calls s.Handler to handle HTTP/2 requests on incoming connections.
+// ListenAndServeTLS listens on the UDP address s.Addr and calls s.Handler to handle HTTP/3 requests on incoming connections.
 func (s *Server) ListenAndServeTLS(certFile, keyFile string) error {
 	var err error
 	certs := make([]tls.Certificate, 1)
@@ -88,7 +75,7 @@ func (s *Server) Serve(conn net.PacketConn) error {
 
 func (s *Server) serveImpl(tlsConfig *tls.Config, conn net.PacketConn) error {
 	if s.Server == nil {
-		return errors.New("use of h2quic.Server without http.Server")
+		return errors.New("use of http3.Server without http.Server")
 	}
 	s.logger = utils.DefaultLogger.WithPrefix("server")
 	s.listenerMutex.Lock()
@@ -120,138 +107,104 @@ func (s *Server) serveImpl(tlsConfig *tls.Config, conn net.PacketConn) error {
 		if err != nil {
 			return err
 		}
-		go s.handleHeaderStream(sess.(streamCreator))
+		go s.handleConn(sess)
 	}
 }
 
-func (s *Server) handleHeaderStream(session streamCreator) {
-	stream, err := session.AcceptStream()
-	if err != nil {
-		session.CloseWithError(quic.ErrorCode(qerr.InternalError), err)
-		return
-	}
+func (s *Server) handleConn(sess quic.Session) {
+	// TODO: accept control streams
+	decoder := qpack.NewDecoder(nil)
 
-	hpackDecoder := hpack.NewDecoder(4096, nil)
-	h2framer := http2.NewFramer(nil, stream)
-
-	var headerStreamMutex sync.Mutex // Protects concurrent calls to Write()
 	for {
-		if err := s.handleRequest(session, stream, &headerStreamMutex, hpackDecoder, h2framer); err != nil {
-			// QuicErrors must originate from stream.Read() returning an error.
-			// In this case, the session has already logged the error, so we don't
-			// need to log it again.
-			errorCode := qerr.InternalError
-			if qerr, ok := err.(*qerr.QuicError); ok {
-				errorCode = qerr.ErrorCode
-				s.logger.Errorf("error handling h2 request: %s", err.Error())
-			}
-			session.CloseWithError(quic.ErrorCode(errorCode), err)
+		str, err := sess.AcceptStream()
+		if err != nil {
+			s.logger.Debugf("Accepting stream failed: %s", err)
 			return
 		}
+		// TODO: handle error
+		go func() {
+			if err := s.handleRequest(str, decoder); err != nil {
+				s.logger.Debugf("Handling request failed: %s", err)
+				str.CancelWrite(quic.ErrorCode(errorGeneralProtocolError))
+				return
+			}
+			str.Close()
+		}()
 	}
 }
 
-func (s *Server) handleRequest(session streamCreator, headerStream quic.Stream, headerStreamMutex *sync.Mutex, hpackDecoder *hpack.Decoder, h2framer *http2.Framer) error {
-	h2frame, err := h2framer.ReadFrame()
+// TODO: improve error handling.
+// Most (but not all) of the errors occurring here are connection-level erros.
+func (s *Server) handleRequest(str quic.Stream, decoder *qpack.Decoder) error {
+	frame, err := parseNextFrame(str)
 	if err != nil {
-		return qerr.Error(qerr.InternalError, "cannot read frame")
-	}
-	var h2headersFrame *http2.HeadersFrame
-	switch f := h2frame.(type) {
-	case *http2.PriorityFrame:
-		// ignore PRIORITY frames
-		s.logger.Debugf("Ignoring H2 PRIORITY frame: %#v", f)
-		return nil
-	case *http2.HeadersFrame:
-		h2headersFrame = f
-	default:
-		return qerr.Error(qerr.ProtocolViolation, "expected a header frame")
-	}
-
-	if !h2headersFrame.HeadersEnded() {
-		return errors.New("http2 header continuation not implemented")
-	}
-	headers, err := hpackDecoder.DecodeFull(h2headersFrame.HeaderBlockFragment())
-	if err != nil {
-		s.logger.Errorf("invalid http2 headers encoding: %s", err.Error())
+		str.CancelWrite(quic.ErrorCode(errorRequestCanceled))
 		return err
 	}
-
-	req, err := requestFromHeaders(headers)
+	hf, ok := frame.(*headersFrame)
+	if !ok {
+		str.CancelWrite(quic.ErrorCode(errorUnexpectedFrame))
+		return errors.New("expected first frame to be a headers frame")
+	}
+	// TODO: check length
+	headerBlock := make([]byte, hf.Length)
+	if _, err := io.ReadFull(str, headerBlock); err != nil {
+		str.CancelWrite(quic.ErrorCode(errorIncompleteRequest))
+		return err
+	}
+	hfs, err := decoder.DecodeFull(headerBlock)
+	if err != nil {
+		// TODO: use the right error code
+		str.CancelWrite(quic.ErrorCode(errorGeneralProtocolError))
+		return err
+	}
+	req, err := requestFromHeaders(hfs)
 	if err != nil {
 		return err
 	}
+	req.Body = newRequestBody(str)
 
 	if s.logger.Debug() {
-		s.logger.Infof("%s %s%s, on data stream %d", req.Method, req.Host, req.RequestURI, h2headersFrame.StreamID)
+		s.logger.Infof("%s %s%s, on stream %d", req.Method, req.Host, req.RequestURI, str.StreamID())
 	} else {
 		s.logger.Infof("%s %s%s", req.Method, req.Host, req.RequestURI)
 	}
 
-	dataStream, err := session.GetOrOpenStream(protocol.StreamID(h2headersFrame.StreamID))
-	if err != nil {
-		return err
-	}
-	// this can happen if the client immediately closes the data stream after sending the request and the runtime processes the reset before the request
-	if dataStream == nil {
-		return nil
+	req = req.WithContext(str.Context())
+	responseWriter := newResponseWriter(str, s.logger)
+	handler := s.Handler
+	if handler == nil {
+		handler = http.DefaultServeMux
 	}
 
-	// handleRequest should be as non-blocking as possible to minimize
-	// head-of-line blocking. Potentially blocking code is run in a separate
-	// goroutine, enabling handleRequest to return before the code is executed.
-	go func() {
-		streamEnded := h2headersFrame.StreamEnded()
-		if streamEnded {
-			dataStream.(remoteCloser).CloseRemote(0)
-			streamEnded = true
-			_, _ = dataStream.Read([]byte{0}) // read the eof
-		}
-
-		req = req.WithContext(dataStream.Context())
-		reqBody := newRequestBody(dataStream)
-		req.Body = reqBody
-
-		req.RemoteAddr = session.RemoteAddr().String()
-
-		responseWriter := newResponseWriter(headerStream, headerStreamMutex, dataStream, protocol.StreamID(h2headersFrame.StreamID), s.logger)
-
-		handler := s.Handler
-		if handler == nil {
-			handler = http.DefaultServeMux
-		}
-		panicked := false
-		func() {
-			defer func() {
-				if p := recover(); p != nil {
-					// Copied from net/http/server.go
-					const size = 64 << 10
-					buf := make([]byte, size)
-					buf = buf[:runtime.Stack(buf, false)]
-					s.logger.Errorf("http: panic serving: %v\n%s", p, buf)
-					panicked = true
-				}
-			}()
-			handler.ServeHTTP(responseWriter, req)
-		}()
-		if panicked {
-			responseWriter.WriteHeader(500)
-		} else {
-			responseWriter.WriteHeader(200)
-		}
-		if responseWriter.dataStream != nil {
-			if !streamEnded && !reqBody.requestRead {
-				// in gQUIC, the error code doesn't matter, so just use 0 here
-				responseWriter.dataStream.CancelRead(0)
+	var panicked, readEOF bool
+	func() {
+		defer func() {
+			if p := recover(); p != nil {
+				// Copied from net/http/server.go
+				const size = 64 << 10
+				buf := make([]byte, size)
+				buf = buf[:runtime.Stack(buf, false)]
+				s.logger.Errorf("http: panic serving: %v\n%s", p, buf)
+				panicked = true
 			}
-			responseWriter.dataStream.Close()
-		}
-		if s.CloseAfterFirstRequest {
-			time.Sleep(100 * time.Millisecond)
-			session.Close()
+		}()
+		handler.ServeHTTP(responseWriter, req)
+		// read the eof
+		if _, err = str.Read([]byte{}); err == io.EOF {
+			readEOF = true
 		}
 	}()
 
+	if panicked {
+		responseWriter.WriteHeader(500)
+	} else {
+		responseWriter.WriteHeader(200)
+	}
+
+	if !readEOF {
+		str.CancelRead(quic.ErrorCode(errorEarlyResponse))
+	}
 	return nil
 }
 
@@ -310,7 +263,7 @@ func (s *Server) SetQuicHeaders(hdr http.Header) error {
 }
 
 // ListenAndServeQUIC listens on the UDP network address addr and calls the
-// handler for HTTP/2 requests on incoming connections. http.DefaultServeMux is
+// handler for HTTP/3 requests on incoming connections. http.DefaultServeMux is
 // used when handler is nil.
 func ListenAndServeQUIC(addr, certFile, keyFile string, handler http.Handler) error {
 	server := &Server{
