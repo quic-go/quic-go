@@ -61,6 +61,15 @@ type receivedPacket struct {
 	buffer *packetBuffer
 }
 
+func (p *receivedPacket) Clone() *receivedPacket {
+	return &receivedPacket{
+		remoteAddr: p.remoteAddr,
+		rcvTime:    p.rcvTime,
+		data:       p.data,
+		buffer:     p.buffer,
+	}
+}
+
 type closeError struct {
 	err       error
 	remote    bool
@@ -487,11 +496,18 @@ func (s *session) handleHandshakeComplete() {
 	}
 }
 
-func (s *session) handlePacketImpl(p *receivedPacket) bool {
+func (s *session) handlePacketImpl(rp *receivedPacket) bool {
 	var counter uint8
 	var lastConnID protocol.ConnectionID
 	var processed bool
-	for len(p.data) > 0 {
+	data := rp.data
+	p := rp
+	for len(data) > 0 {
+		if counter > 0 {
+			p = p.Clone()
+			p.data = data
+		}
+
 		hdr, packetData, rest, err := wire.ParsePacket(p.data, s.srcConnID.Len())
 		if err != nil {
 			s.logger.Debugf("error parsing packet: %s", err)
@@ -514,11 +530,10 @@ func (s *session) handlePacketImpl(p *receivedPacket) bool {
 			s.logger.Debugf("Parsed a coalesced packet. Part %d: %d bytes. Remaining: %d bytes.", counter, len(packetData), len(rest))
 		}
 		p.data = packetData
-		pr := s.handleSinglePacket(p, hdr)
-		if pr {
-			processed = pr
+		if wasProcessed := s.handleSinglePacket(p, hdr); wasProcessed {
+			processed = true
 		}
-		p.data = rest
+		data = rest
 	}
 	p.buffer.MaybeRelease()
 	return processed
@@ -744,6 +759,7 @@ func (s *session) handleCryptoFrame(frame *wire.CryptoFrame, encLevel protocol.E
 	if err != nil {
 		return err
 	}
+	s.logger.Debugf("Handled crypto frame at level %s. encLevelChanged: %t", encLevel, encLevelChanged)
 	if encLevelChanged {
 		s.tryDecryptingQueuedPackets()
 	}

@@ -632,6 +632,25 @@ var _ = Describe("Session", func() {
 			Expect(sess.handlePacketImpl(getPacket(hdr2, nil))).To(BeFalse())
 		})
 
+		It("queues undecryptable packets", func() {
+			hdr := &wire.ExtendedHeader{
+				Header: wire.Header{
+					IsLongHeader:     true,
+					Type:             protocol.PacketTypeHandshake,
+					DestConnectionID: sess.destConnID,
+					SrcConnectionID:  sess.srcConnID,
+					Length:           1,
+					Version:          sess.version,
+				},
+				PacketNumberLen: protocol.PacketNumberLen1,
+				PacketNumber:    1,
+			}
+			unpacker.EXPECT().Unpack(gomock.Any(), gomock.Any()).Return(nil, handshake.ErrOpenerNotYetAvailable)
+			packet := getPacket(hdr, nil)
+			Expect(sess.handlePacketImpl(packet)).To(BeFalse())
+			Expect(sess.undecryptablePackets).To(Equal([]*receivedPacket{packet}))
+		})
+
 		Context("updating the remote address", func() {
 			It("doesn't support connection migration", func() {
 				unpacker.EXPECT().Unpack(gomock.Any(), gomock.Any()).Return(&unpackedPacket{
@@ -703,6 +722,26 @@ var _ = Describe("Session", func() {
 				})
 				packet1.data = append(packet1.data, packet2.data...)
 				Expect(sess.handlePacketImpl(packet1)).To(BeTrue())
+			})
+
+			It("works with undecryptable packets", func() {
+				hdrLen1, packet1 := getPacketWithLength(sess.srcConnID, 456)
+				hdrLen2, packet2 := getPacketWithLength(sess.srcConnID, 123)
+				gomock.InOrder(
+					unpacker.EXPECT().Unpack(gomock.Any(), gomock.Any()).Return(nil, handshake.ErrOpenerNotYetAvailable),
+					unpacker.EXPECT().Unpack(gomock.Any(), gomock.Any()).DoAndReturn(func(_ *wire.Header, data []byte) (*unpackedPacket, error) {
+						Expect(data).To(HaveLen(hdrLen2 + 123 - 3))
+						return &unpackedPacket{
+							encryptionLevel: protocol.EncryptionHandshake,
+							data:            []byte{0},
+						}, nil
+					}),
+				)
+				packet1.data = append(packet1.data, packet2.data...)
+				Expect(sess.handlePacketImpl(packet1)).To(BeTrue())
+
+				Expect(sess.undecryptablePackets).To(HaveLen(1))
+				Expect(sess.undecryptablePackets[0].data).To(HaveLen(hdrLen1 + 456 - 3))
 			})
 
 			It("ignores coalesced packet parts if the destination connection IDs don't match", func() {
