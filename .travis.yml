@@ -18,20 +18,10 @@ env:
   global:
     - TIMESCALE_FACTOR=20
   matrix:
-    - TRAVIS_GOARCH=amd64 TESTMODE=lint
     - TRAVIS_GOARCH=amd64 TESTMODE=unit
     - TRAVIS_GOARCH=amd64 TESTMODE=integration
     - TRAVIS_GOARCH=386 TESTMODE=unit
     - TRAVIS_GOARCH=386 TESTMODE=integration
-
-# Linters might work differently in different Go versions.
-# Only run them in the most recent one.
-matrix:
-  exclude:
-  - go: "1.10.4"
-    env: TRAVIS_GOARCH=amd64 TESTMODE=lint
-  - go: "1.10.4"
-    env: TRAVIS_GOARCH=386 TESTMODE=lint
 
 # second part of the GOARCH workaround
 # now actually set the GOARCH env variable to the value of the temporary variable set earlier
