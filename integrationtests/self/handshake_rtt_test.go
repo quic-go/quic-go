@@ -2,7 +2,6 @@ package self_test
 
 import (
 	"crypto/tls"
-	"fmt"
 	"net"
 	"time"
 
@@ -17,11 +16,12 @@ import (
 
 var _ = Describe("Handshake RTT tests", func() {
 	var (
-		proxy         *quicproxy.QuicProxy
-		server        quic.Listener
-		serverConfig  *quic.Config
-		testStartedAt time.Time
-		acceptStopped chan struct{}
+		proxy           *quicproxy.QuicProxy
+		server          quic.Listener
+		serverConfig    *quic.Config
+		serverTLSConfig *tls.Config
+		testStartedAt   time.Time
+		acceptStopped   chan struct{}
 	)
 
 	rtt := 400 * time.Millisecond
@@ -29,6 +29,7 @@ var _ = Describe("Handshake RTT tests", func() {
 	BeforeEach(func() {
 		acceptStopped = make(chan struct{})
 		serverConfig = &quic.Config{}
+		serverTLSConfig = testdata.GetTLSConfig()
 	})
 
 	AfterEach(func() {
@@ -40,7 +41,7 @@ var _ = Describe("Handshake RTT tests", func() {
 	runServerAndProxy := func() {
 		var err error
 		// start the server
-		server, err = quic.ListenAddr("localhost:0", testdata.GetTLSConfig(), serverConfig)
+		server, err = quic.ListenAddr("localhost:0", serverTLSConfig, serverConfig)
 		Expect(err).ToNot(HaveOccurred())
 		// start the proxy
 		proxy, err = quicproxy.NewQuicProxy("localhost:0", &quicproxy.Opts{
@@ -83,7 +84,6 @@ var _ = Describe("Handshake RTT tests", func() {
 		}
 		_, err := quic.DialAddr(proxy.LocalAddr().String(), nil, clientConfig)
 		Expect(err).To(HaveOccurred())
-		fmt.Println(err)
 		// Expect(err.(qerr.ErrorCode)).To(Equal(qerr.InvalidVersion))
 		expectDurationInRTTs(1)
 	})
@@ -113,7 +113,7 @@ var _ = Describe("Handshake RTT tests", func() {
 		expectDurationInRTTs(2)
 	})
 
-	It("is forward-secure after 1 RTTs when the server doesn't require a Cookie", func() {
+	It("establishes a connection in 1 RTT when the server doesn't require a Cookie", func() {
 		serverConfig.AcceptCookie = func(_ net.Addr, _ *quic.Cookie) bool {
 			return true
 		}
@@ -125,6 +125,21 @@ var _ = Describe("Handshake RTT tests", func() {
 		)
 		Expect(err).ToNot(HaveOccurred())
 		expectDurationInRTTs(1)
+	})
+
+	It("establishes a connection in 2 RTTs if a HelloRetryRequest is performed", func() {
+		serverConfig.AcceptCookie = func(_ net.Addr, _ *quic.Cookie) bool {
+			return true
+		}
+		serverTLSConfig.CurvePreferences = []tls.CurveID{tls.CurveP384}
+		runServerAndProxy()
+		_, err := quic.DialAddr(
+			proxy.LocalAddr().String(),
+			clientTLSConfig,
+			clientConfig,
+		)
+		Expect(err).ToNot(HaveOccurred())
+		expectDurationInRTTs(2)
 	})
 
 	It("doesn't complete the handshake when the server never accepts the Cookie", func() {
