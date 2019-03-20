@@ -29,6 +29,21 @@ var _ = Describe("Transport Parameters", func() {
 		Expect(p.String()).To(Equal("&handshake.TransportParameters{OriginalConnectionID: 0xdeadbeef, InitialMaxStreamDataBidiLocal: 0x1234, InitialMaxStreamDataBidiRemote: 0x2345, InitialMaxStreamDataUni: 0x3456, InitialMaxData: 0x4567, MaxBidiStreams: 1337, MaxUniStreams: 7331, IdleTimeout: 42s, AckDelayExponent: 14, StatelessResetToken: 0x112233445566778899aabbccddeeff00}"))
 	})
 
+	It("has a string representation, if there's no stateless reset token", func() {
+		p := &TransportParameters{
+			InitialMaxStreamDataBidiLocal:  0x1234,
+			InitialMaxStreamDataBidiRemote: 0x2345,
+			InitialMaxStreamDataUni:        0x3456,
+			InitialMaxData:                 0x4567,
+			MaxBidiStreams:                 1337,
+			MaxUniStreams:                  7331,
+			IdleTimeout:                    42 * time.Second,
+			OriginalConnectionID:           protocol.ConnectionID{0xde, 0xad, 0xbe, 0xef},
+			AckDelayExponent:               14,
+		}
+		Expect(p.String()).To(Equal("&handshake.TransportParameters{OriginalConnectionID: 0xdeadbeef, InitialMaxStreamDataBidiLocal: 0x1234, InitialMaxStreamDataBidiRemote: 0x2345, InitialMaxStreamDataUni: 0x3456, InitialMaxData: 0x4567, MaxBidiStreams: 1337, MaxUniStreams: 7331, IdleTimeout: 42s, AckDelayExponent: 14}"))
+	})
+
 	getRandomValue := func() uint64 {
 		maxVals := []int64{math.MaxUint8 / 4, math.MaxUint16 / 4, math.MaxUint32 / 4, math.MaxUint64 / 4}
 		rand.Seed(GinkgoRandomSeed())
