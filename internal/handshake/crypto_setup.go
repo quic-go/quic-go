@@ -112,7 +112,7 @@ func NewCryptoSetupClient(
 	handshakeStream io.Writer,
 	oneRTTStream io.Writer,
 	connID protocol.ConnectionID,
-	chtp *ClientHelloTransportParameters,
+	tp *TransportParameters,
 	handleParams func([]byte),
 	tlsConf *tls.Config,
 	logger utils.Logger,
@@ -122,7 +122,7 @@ func NewCryptoSetupClient(
 		handshakeStream,
 		oneRTTStream,
 		connID,
-		chtp.Marshal(),
+		tp,
 		handleParams,
 		tlsConf,
 		logger,
@@ -141,7 +141,7 @@ func NewCryptoSetupServer(
 	handshakeStream io.Writer,
 	oneRTTStream io.Writer,
 	connID protocol.ConnectionID,
-	eetp *EncryptedExtensionsTransportParameters,
+	tp *TransportParameters,
 	handleParams func([]byte),
 	tlsConf *tls.Config,
 	logger utils.Logger,
@@ -151,7 +151,7 @@ func NewCryptoSetupServer(
 		handshakeStream,
 		oneRTTStream,
 		connID,
-		eetp.Marshal(),
+		tp,
 		handleParams,
 		tlsConf,
 		logger,
@@ -169,7 +169,7 @@ func newCryptoSetup(
 	handshakeStream io.Writer,
 	oneRTTStream io.Writer,
 	connID protocol.ConnectionID,
-	paramBytes []byte, // the marshaled transport parameters
+	tp *TransportParameters,
 	handleParams func([]byte),
 	tlsConf *tls.Config,
 	logger utils.Logger,
@@ -179,7 +179,7 @@ func newCryptoSetup(
 	if err != nil {
 		return nil, nil, err
 	}
-	extHandler := newExtensionHandler(paramBytes, perspective)
+	extHandler := newExtensionHandler(tp.Marshal(), perspective)
 	cs := &cryptoSetup{
 		initialStream:          initialStream,
 		initialSealer:          initialSealer,

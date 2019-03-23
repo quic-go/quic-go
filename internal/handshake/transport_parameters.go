@@ -2,6 +2,7 @@ package handshake
 
 import (
 	"bytes"
+	"encoding/binary"
 	"errors"
 	"fmt"
 	"io"
@@ -50,13 +51,22 @@ type TransportParameters struct {
 	OriginalConnectionID protocol.ConnectionID
 }
 
-func (p *TransportParameters) unmarshal(data []byte, sentBy protocol.Perspective) error {
+// Unmarshal the transport parameters
+func (p *TransportParameters) Unmarshal(data []byte, sentBy protocol.Perspective) error {
+	if len(data) < 2 {
+		return errors.New("transport parameter data too short")
+	}
+	length := binary.BigEndian.Uint16(data[:2])
+	if len(data)-2 < int(length) {
+		return fmt.Errorf("expected transport parameters to be %d bytes long, have %d", length, len(data)-2)
+	}
+
 	// needed to check that every parameter is only sent at most once
 	var parameterIDs []transportParameterID
 
 	var readAckDelayExponent bool
 
-	r := bytes.NewReader(data)
+	r := bytes.NewReader(data[2:])
 	for r.Len() >= 4 {
 		paramIDInt, _ := utils.BigEndian.ReadUint16(r)
 		paramID := transportParameterID(paramIDInt)
@@ -170,7 +180,11 @@ func (p *TransportParameters) readNumericTransportParameter(
 	return nil
 }
 
-func (p *TransportParameters) marshal(b *bytes.Buffer) {
+// Marshal the transport parameters
+func (p *TransportParameters) Marshal() []byte {
+	b := &bytes.Buffer{}
+	b.Write([]byte{0, 0}) // length. Will be replaced later
+
 	// initial_max_stream_data_bidi_local
 	utils.BigEndian.WriteUint16(b, uint16(initialMaxStreamDataBidiLocalParameterID))
 	utils.BigEndian.WriteUint16(b, uint16(utils.VarIntLen(uint64(p.InitialMaxStreamDataBidiLocal))))
@@ -227,6 +241,10 @@ func (p *TransportParameters) marshal(b *bytes.Buffer) {
 		utils.BigEndian.WriteUint16(b, uint16(p.OriginalConnectionID.Len()))
 		b.Write(p.OriginalConnectionID.Bytes())
 	}
+
+	data := b.Bytes()
+	binary.BigEndian.PutUint16(data[:2], uint16(b.Len()-2))
+	return data
 }
 
 // String returns a string representation, intended for logging.

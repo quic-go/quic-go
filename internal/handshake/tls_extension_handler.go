@@ -5,6 +5,8 @@ import (
 	"github.com/marten-seemann/qtls"
 )
 
+const quicTLSExtensionType = 0xffa5
+
 type extensionHandler struct {
 	ourParams  []byte
 	paramsChan chan []byte
