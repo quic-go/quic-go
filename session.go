@@ -1240,9 +1240,9 @@ func (s *session) newFlowController(id protocol.StreamID) flowcontrol.StreamFlow
 			initialSendWindow = s.peerParams.InitialMaxStreamDataUni
 		} else {
 			if id.InitiatedBy() == s.perspective {
-				initialSendWindow = s.peerParams.InitialMaxStreamDataBidiLocal
-			} else {
 				initialSendWindow = s.peerParams.InitialMaxStreamDataBidiRemote
+			} else {
+				initialSendWindow = s.peerParams.InitialMaxStreamDataBidiLocal
 			}
 		}
 	}
