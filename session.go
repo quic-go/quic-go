@@ -1077,21 +1077,9 @@ func (s *session) maybeSendAckOnlyPacket() error {
 // maybeSendRetransmission sends retransmissions for at most one packet.
 // It takes care that Initials aren't retransmitted, if a packet from the server was already received.
 func (s *session) maybeSendRetransmission() (bool, error) {
-	var retransmitPacket *ackhandler.Packet
-	for {
-		retransmitPacket = s.sentPacketHandler.DequeuePacketForRetransmission()
-		if retransmitPacket == nil {
-			return false, nil
-		}
-
-		// Don't retransmit Initial packets if we already received a response.
-		// An Initial might have been retransmitted multiple times before we receive a response.
-		// As soon as we receive one response, we don't need to send any more Initials.
-		if s.perspective == protocol.PerspectiveClient && s.receivedFirstPacket && retransmitPacket.PacketType == protocol.PacketTypeInitial {
-			s.logger.Debugf("Skipping retransmission of packet %d. Already received a response to an Initial.", retransmitPacket.PacketNumber)
-			continue
-		}
-		break
+	retransmitPacket := s.sentPacketHandler.DequeuePacketForRetransmission()
+	if retransmitPacket == nil {
+		return false, nil
 	}
 
 	s.logger.Debugf("Dequeueing retransmission for packet 0x%x (%s)", retransmitPacket.PacketNumber, retransmitPacket.EncryptionLevel)
