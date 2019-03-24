@@ -191,17 +191,12 @@ var newSession = func(
 	initialStream := newCryptoStream()
 	handshakeStream := newCryptoStream()
 	oneRTTStream := newPostHandshakeCryptoStream(s.framer)
-	eetp := &handshake.EncryptedExtensionsTransportParameters{
-		NegotiatedVersion: s.version,
-		SupportedVersions: protocol.GetGreasedVersions(conf.Versions),
-		Parameters:        *params,
-	}
 	cs, err := handshake.NewCryptoSetupServer(
 		initialStream,
 		handshakeStream,
 		oneRTTStream,
 		clientDestConnID,
-		eetp,
+		params,
 		s.processTransportParameters,
 		tlsConf,
 		logger,
@@ -263,16 +258,12 @@ var newClientSession = func(
 	initialStream := newCryptoStream()
 	handshakeStream := newCryptoStream()
 	oneRTTStream := newPostHandshakeCryptoStream(s.framer)
-	chtp := &handshake.ClientHelloTransportParameters{
-		InitialVersion: initialVersion,
-		Parameters:     *params,
-	}
 	cs, clientHelloWritten, err := handshake.NewCryptoSetupClient(
 		initialStream,
 		handshakeStream,
 		oneRTTStream,
 		s.destConnID,
-		chtp,
+		params,
 		s.processTransportParameters,
 		tlsConf,
 		logger,
@@ -949,27 +940,11 @@ func (s *session) processTransportParameters(data []byte) {
 }
 
 func (s *session) processTransportParametersForClient(data []byte) (*handshake.TransportParameters, error) {
-	eetp := handshake.EncryptedExtensionsTransportParameters{}
-	if err := eetp.Unmarshal(data); err != nil {
+	params := &handshake.TransportParameters{}
+	if err := params.Unmarshal(data, s.perspective.Opposite()); err != nil {
 		return nil, err
 	}
-	// check that the negotiated_version is the current version
-	if eetp.NegotiatedVersion != s.version {
-		return nil, qerr.Error(qerr.VersionNegotiationError, "current version doesn't match negotiated_version")
-	}
-	// check that the current version is included in the supported versions
-	if !protocol.IsSupportedVersion(eetp.SupportedVersions, s.version) {
-		return nil, qerr.Error(qerr.VersionNegotiationError, "current version not included in the supported versions")
-	}
-	// if version negotiation was performed, check that we would have selected the current version based on the supported versions sent by the server
-	if s.version != s.initialVersion {
-		negotiatedVersion, ok := protocol.ChooseSupportedVersion(s.config.Versions, eetp.SupportedVersions)
-		if !ok || s.version != negotiatedVersion {
-			return nil, qerr.Error(qerr.VersionNegotiationError, "would have picked a different version")
-		}
-	}
 
-	params := &eetp.Parameters
 	// check that the server sent a stateless reset token
 	if params.StatelessResetToken == nil {
 		return nil, errors.New("server didn't send stateless_reset_token")
@@ -983,17 +958,11 @@ func (s *session) processTransportParametersForClient(data []byte) (*handshake.T
 }
 
 func (s *session) processTransportParametersForServer(data []byte) (*handshake.TransportParameters, error) {
-	chtp := handshake.ClientHelloTransportParameters{}
-	if err := chtp.Unmarshal(data); err != nil {
+	params := &handshake.TransportParameters{}
+	if err := params.Unmarshal(data, s.perspective.Opposite()); err != nil {
 		return nil, err
 	}
-	// perform the stateless version negotiation validation:
-	// make sure that we would have sent a Version Negotiation Packet if the client offered the initial version
-	// this is the case if and only if the initial version is not contained in the supported versions
-	if chtp.InitialVersion != s.version && protocol.IsSupportedVersion(s.config.Versions, chtp.InitialVersion) {
-		return nil, qerr.Error(qerr.VersionNegotiationError, "Client should have used the initial version")
-	}
-	return &chtp.Parameters, nil
+	return params, nil
 }
 
 func (s *session) sendPackets() error {
