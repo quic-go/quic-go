@@ -945,10 +945,6 @@ func (s *session) processTransportParametersForClient(data []byte) (*handshake.T
 		return nil, err
 	}
 
-	// check that the server sent a stateless reset token
-	if params.StatelessResetToken == nil {
-		return nil, errors.New("server didn't send stateless_reset_token")
-	}
 	// check the Retry token
 	if !params.OriginalConnectionID.Equal(s.origDestConnID) {
 		return nil, fmt.Errorf("expected original_connection_id to equal %s, is %s", s.origDestConnID, params.OriginalConnectionID)
