@@ -1661,12 +1661,6 @@ var _ = Describe("Client Session", func() {
 			Eventually(sess.Context().Done()).Should(BeClosed())
 		})
 
-		It("errors if the TransportParameters don't contain the stateless reset token", func() {
-			params := &handshake.TransportParameters{}
-			_, err := sess.processTransportParametersForClient(params.Marshal())
-			Expect(err).To(MatchError("server didn't send stateless_reset_token"))
-		})
-
 		It("errors if the TransportParameters contain an original_connection_id, although no Retry was performed", func() {
 			params := &handshake.TransportParameters{
 				OriginalConnectionID: protocol.ConnectionID{0xde, 0xca, 0xfb, 0xad},
