@@ -2,11 +2,11 @@ package quic
 
 import (
 	"context"
+	"crypto/tls"
 	"io"
 	"net"
 	"time"
 
-	"github.com/lucas-clemente/quic-go/internal/handshake"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 )
 
@@ -21,9 +21,6 @@ type Cookie struct {
 	RemoteAddr string
 	SentTime   time.Time
 }
-
-// ConnectionState records basic details about the QUIC connection.
-type ConnectionState = handshake.ConnectionState
 
 // An ErrorCode is an application-defined error code.
 type ErrorCode = protocol.ApplicationErrorCode
@@ -164,7 +161,7 @@ type Session interface {
 	Context() context.Context
 	// ConnectionState returns basic details about the QUIC connection.
 	// Warning: This API should not be considered stable and might change soon.
-	ConnectionState() ConnectionState
+	ConnectionState() tls.ConnectionState
 }
 
 // Config contains all configuration data needed for a QUIC server or client.

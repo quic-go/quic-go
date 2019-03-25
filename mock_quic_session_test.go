@@ -6,11 +6,11 @@ package quic
 
 import (
 	context "context"
+	tls "crypto/tls"
 	net "net"
 	reflect "reflect"
 
 	gomock "github.com/golang/mock/gomock"
-	handshake "github.com/lucas-clemente/quic-go/internal/handshake"
 	protocol "github.com/lucas-clemente/quic-go/internal/protocol"
 )
 
@@ -96,10 +96,10 @@ func (mr *MockQuicSessionMockRecorder) CloseWithError(arg0, arg1 interface{}) *g
 }
 
 // ConnectionState mocks base method
-func (m *MockQuicSession) ConnectionState() handshake.ConnectionState {
+func (m *MockQuicSession) ConnectionState() tls.ConnectionState {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ConnectionState")
-	ret0, _ := ret[0].(handshake.ConnectionState)
+	ret0, _ := ret[0].(tls.ConnectionState)
 	return ret0
 }
 

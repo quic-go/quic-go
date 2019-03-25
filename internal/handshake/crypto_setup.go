@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"unsafe"
 
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/internal/qerr"
@@ -541,13 +542,14 @@ func (h *cryptoSetup) GetOpener(level protocol.EncryptionLevel) (Opener, error) 
 	}
 }
 
-func (h *cryptoSetup) ConnectionState() ConnectionState {
-	connState := h.conn.ConnectionState()
-	return ConnectionState{
-		HandshakeComplete: connState.HandshakeComplete,
-		ServerName:        connState.ServerName,
-		PeerCertificates:  connState.PeerCertificates,
-	}
+func (h *cryptoSetup) ConnectionState() tls.ConnectionState {
+	cs := h.conn.ConnectionState()
+	// h.conn is a qtls.Conn, which returns a qtls.ConnectionState.
+	// qtls.ConnectionState is identical to the tls.ConnectionState.
+	// It contains an unexported field which is used ExportKeyingMaterial().
+	// The only way to return a tls.ConnectionState is to use unsafe.
+	// In unsafe.go we check that the two objects are actually identical.
+	return *(*tls.ConnectionState)(unsafe.Pointer(&cs))
 }
 
 func (h *cryptoSetup) tlsConfigToQtlsConfig(c *tls.Config) *qtls.Config {

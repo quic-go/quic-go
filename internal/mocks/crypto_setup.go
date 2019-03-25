@@ -5,6 +5,7 @@
 package mocks
 
 import (
+	tls "crypto/tls"
 	reflect "reflect"
 
 	gomock "github.com/golang/mock/gomock"
@@ -64,10 +65,10 @@ func (mr *MockCryptoSetupMockRecorder) Close() *gomock.Call {
 }
 
 // ConnectionState mocks base method
-func (m *MockCryptoSetup) ConnectionState() handshake.ConnectionState {
+func (m *MockCryptoSetup) ConnectionState() tls.ConnectionState {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ConnectionState")
-	ret0, _ := ret[0].(handshake.ConnectionState)
+	ret0, _ := ret[0].(tls.ConnectionState)
 	return ret0
 }
 

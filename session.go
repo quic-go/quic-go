@@ -50,7 +50,7 @@ type cryptoStreamHandler interface {
 	RunHandshake() error
 	ChangeConnectionID(protocol.ConnectionID) error
 	io.Closer
-	ConnectionState() handshake.ConnectionState
+	ConnectionState() tls.ConnectionState
 }
 
 type receivedPacket struct {
@@ -437,7 +437,7 @@ func (s *session) Context() context.Context {
 	return s.ctx
 }
 
-func (s *session) ConnectionState() ConnectionState {
+func (s *session) ConnectionState() tls.ConnectionState {
 	return s.cryptoStreamHandler.ConnectionState()
 }
 
