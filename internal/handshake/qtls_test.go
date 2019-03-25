@@ -24,6 +24,21 @@ func (h *mockExtensionHandler) ReceivedExtensions(msgType uint8, exts []qtls.Ext
 }
 func (*mockExtensionHandler) TransportParameters() <-chan []byte { panic("not implemented") }
 
+type mockClientSessionCache struct {
+	get, put string
+	session  *tls.ClientSessionState
+}
+
+var _ tls.ClientSessionCache = &mockClientSessionCache{}
+
+func (c *mockClientSessionCache) Get(sessionKey string) (session *tls.ClientSessionState, ok bool) {
+	c.get = sessionKey
+	return c.session, false
+}
+func (c *mockClientSessionCache) Put(sessionKey string, cs *tls.ClientSessionState) {
+	c.put = sessionKey
+}
+
 var _ = Describe("qtls.Config generation", func() {
 	It("sets MinVersion and MaxVersion", func() {
 		tlsConf := &tls.Config{MinVersion: tls.VersionTLS11, MaxVersion: tls.VersionTLS12}
@@ -94,6 +109,41 @@ var _ = Describe("qtls.Config generation", func() {
 			}
 			qtlsConf := tlsConfigToQtlsConfig(tlsConf, nil, &mockExtensionHandler{})
 			Expect(qtlsConf.GetConfigForClient(nil)).To(BeNil())
+		})
+	})
+
+	Context("ClientSessionCache", func() {
+		It("doesn't set if absent", func() {
+			qtlsConf := tlsConfigToQtlsConfig(&tls.Config{}, nil, &mockExtensionHandler{})
+			Expect(qtlsConf.ClientSessionCache).To(BeNil())
+		})
+
+		It("sets it, and puts and gets session states", func() {
+			state := &qtls.ClientSessionState{}
+			csc := &mockClientSessionCache{session: &tls.ClientSessionState{}}
+			tlsConf := &tls.Config{ClientSessionCache: csc}
+			qtlsConf := tlsConfigToQtlsConfig(tlsConf, nil, &mockExtensionHandler{})
+			Expect(qtlsConf.ClientSessionCache).ToNot(BeNil())
+			Expect(csc.put).To(BeEmpty())
+			qtlsConf.ClientSessionCache.Put("foobar", state)
+			Expect(csc.put).To(Equal("foobar"))
+			Expect(csc.get).To(BeEmpty())
+			sess, _ := qtlsConf.ClientSessionCache.Get("raboof")
+			Expect(csc.get).To(Equal("raboof"))
+			Expect(sess).To(Equal(state))
+		})
+
+		It("sets it, and gets nil session states for unknown keys", func() {
+			csc := &mockClientSessionCache{}
+			tlsConf := &tls.Config{
+				ClientSessionCache: csc,
+			}
+			qtlsConf := tlsConfigToQtlsConfig(tlsConf, nil, &mockExtensionHandler{})
+			Expect(qtlsConf.ClientSessionCache).ToNot(BeNil())
+			Expect(csc.get).To(BeEmpty())
+			sess, _ := qtlsConf.ClientSessionCache.Get("raboof")
+			Expect(csc.get).To(Equal("raboof"))
+			Expect(sess).To(BeNil())
 		})
 	})
 })

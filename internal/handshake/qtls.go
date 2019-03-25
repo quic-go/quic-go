@@ -2,9 +2,44 @@ package handshake
 
 import (
 	"crypto/tls"
+	"unsafe"
 
 	"github.com/marten-seemann/qtls"
 )
+
+type clientSessionCache struct {
+	tls.ClientSessionCache
+}
+
+var _ qtls.ClientSessionCache = &clientSessionCache{}
+
+func (c *clientSessionCache) Get(sessionKey string) (*qtls.ClientSessionState, bool) {
+	sess, ok := c.ClientSessionCache.Get(sessionKey)
+	if sess == nil {
+		return nil, ok
+	}
+	// qtls.ClientSessionState is identical to the tls.ClientSessionState.
+	// In order to allow users of quic-go to use a tls.Config,
+	// we need this workaround to use the ClientSessionCache.
+	// In unsafe.go we check that the two structs are actually identical.
+	usess := (*[unsafe.Sizeof(*sess)]byte)(unsafe.Pointer(sess))[:]
+	var session qtls.ClientSessionState
+	usession := (*[unsafe.Sizeof(session)]byte)(unsafe.Pointer(&session))[:]
+	copy(usession, usess)
+	return &session, ok
+}
+
+func (c *clientSessionCache) Put(sessionKey string, cs *qtls.ClientSessionState) {
+	// qtls.ClientSessionState is identical to the tls.ClientSessionState.
+	// In order to allow users of quic-go to use a tls.Config,
+	// we need this workaround to use the ClientSessionCache.
+	// In unsafe.go we check that the two structs are actually identical.
+	usess := (*[unsafe.Sizeof(*cs)]byte)(unsafe.Pointer(cs))[:]
+	var session tls.ClientSessionState
+	usession := (*[unsafe.Sizeof(session)]byte)(unsafe.Pointer(&session))[:]
+	copy(usession, usess)
+	c.ClientSessionCache.Put(sessionKey, &session)
+}
 
 func tlsConfigToQtlsConfig(
 	c *tls.Config,
@@ -36,6 +71,10 @@ func tlsConfigToQtlsConfig(
 			return tlsConfigToQtlsConfig(tlsConf, recordLayer, extHandler), nil
 		}
 	}
+	var csc qtls.ClientSessionCache
+	if c.ClientSessionCache != nil {
+		csc = &clientSessionCache{c.ClientSessionCache}
+	}
 	return &qtls.Config{
 		Rand:                        c.Rand,
 		Time:                        c.Time,
@@ -55,6 +94,7 @@ func tlsConfigToQtlsConfig(
 		PreferServerCipherSuites:    c.PreferServerCipherSuites,
 		SessionTicketsDisabled:      c.SessionTicketsDisabled,
 		SessionTicketKey:            c.SessionTicketKey,
+		ClientSessionCache:          csc,
 		MinVersion:                  minVersion,
 		MaxVersion:                  maxVersion,
 		CurvePreferences:            c.CurvePreferences,
