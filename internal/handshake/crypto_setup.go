@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"unsafe"
 
 	"github.com/lucas-clemente/quic-go/internal/protocol"
@@ -112,6 +113,7 @@ func NewCryptoSetupClient(
 	handshakeStream io.Writer,
 	oneRTTStream io.Writer,
 	connID protocol.ConnectionID,
+	remoteAddr net.Addr,
 	tp *TransportParameters,
 	handleParams func([]byte),
 	tlsConf *tls.Config,
@@ -131,7 +133,7 @@ func NewCryptoSetupClient(
 	if err != nil {
 		return nil, nil, err
 	}
-	cs.conn = qtls.Client(nil, cs.tlsConf)
+	cs.conn = qtls.Client(newConn(remoteAddr), cs.tlsConf)
 	return cs, clientHelloWritten, nil
 }
 
@@ -141,6 +143,7 @@ func NewCryptoSetupServer(
 	handshakeStream io.Writer,
 	oneRTTStream io.Writer,
 	connID protocol.ConnectionID,
+	remoteAddr net.Addr,
 	tp *TransportParameters,
 	handleParams func([]byte),
 	tlsConf *tls.Config,
@@ -160,7 +163,7 @@ func NewCryptoSetupServer(
 	if err != nil {
 		return nil, err
 	}
-	cs.conn = qtls.Server(nil, cs.tlsConf)
+	cs.conn = qtls.Server(newConn(remoteAddr), cs.tlsConf)
 	return cs, nil
 }
 
