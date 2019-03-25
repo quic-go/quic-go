@@ -62,8 +62,7 @@ type cryptoSetup struct {
 	readEncLevel  protocol.EncryptionLevel
 	writeEncLevel protocol.EncryptionLevel
 
-	extHandler tlsExtensionHandler
-
+	paramsChan           <-chan []byte
 	handleParamsCallback func([]byte)
 
 	alertChan chan uint8
@@ -190,7 +189,7 @@ func newCryptoSetup(
 		readEncLevel:           protocol.EncryptionInitial,
 		writeEncLevel:          protocol.EncryptionInitial,
 		handleParamsCallback:   handleParams,
-		extHandler:             extHandler,
+		paramsChan:             extHandler.TransportParameters(),
 		logger:                 logger,
 		perspective:            perspective,
 		handshakeDone:          make(chan struct{}),
@@ -203,7 +202,7 @@ func newCryptoSetup(
 		writeRecord:            make(chan struct{}),
 		closeChan:              make(chan struct{}),
 	}
-	qtlsConf := cs.tlsConfigToQtlsConfig(tlsConf)
+	qtlsConf := tlsConfigToQtlsConfig(tlsConf, cs, extHandler)
 	cs.tlsConf = qtlsConf
 	return cs, cs.clientHelloWrittenChan, nil
 }
@@ -310,7 +309,7 @@ func (h *cryptoSetup) handleMessageForServer(msgType messageType) bool {
 			// If it accepts the ClientHello, it will first read the transport parameters.
 			h.logger.Debugf("Sending HelloRetryRequest")
 			return false
-		case data := <-h.extHandler.TransportParameters():
+		case data := <-h.paramsChan:
 			h.handleParamsCallback(data)
 		case <-h.handshakeDone:
 			return false
@@ -374,7 +373,7 @@ func (h *cryptoSetup) handleMessageForClient(msgType messageType) bool {
 		return true
 	case typeEncryptedExtensions:
 		select {
-		case data := <-h.extHandler.TransportParameters():
+		case data := <-h.paramsChan:
 			h.handleParamsCallback(data)
 		case <-h.handshakeDone:
 			return false
@@ -550,61 +549,4 @@ func (h *cryptoSetup) ConnectionState() tls.ConnectionState {
 	// The only way to return a tls.ConnectionState is to use unsafe.
 	// In unsafe.go we check that the two objects are actually identical.
 	return *(*tls.ConnectionState)(unsafe.Pointer(&cs))
-}
-
-func (h *cryptoSetup) tlsConfigToQtlsConfig(c *tls.Config) *qtls.Config {
-	if c == nil {
-		c = &tls.Config{}
-	}
-	// QUIC requires TLS 1.3 or newer
-	minVersion := c.MinVersion
-	if minVersion < qtls.VersionTLS13 {
-		minVersion = qtls.VersionTLS13
-	}
-	maxVersion := c.MaxVersion
-	if maxVersion < qtls.VersionTLS13 {
-		maxVersion = qtls.VersionTLS13
-	}
-	var getConfigForClient func(ch *tls.ClientHelloInfo) (*qtls.Config, error)
-	if c.GetConfigForClient != nil {
-		getConfigForClient = func(ch *tls.ClientHelloInfo) (*qtls.Config, error) {
-			tlsConf, err := c.GetConfigForClient(ch)
-			if err != nil {
-				return nil, err
-			}
-			if tlsConf == nil {
-				return nil, nil
-			}
-			return h.tlsConfigToQtlsConfig(tlsConf), nil
-		}
-	}
-	return &qtls.Config{
-		Rand:                        c.Rand,
-		Time:                        c.Time,
-		Certificates:                c.Certificates,
-		NameToCertificate:           c.NameToCertificate,
-		GetCertificate:              c.GetCertificate,
-		GetClientCertificate:        c.GetClientCertificate,
-		GetConfigForClient:          getConfigForClient,
-		VerifyPeerCertificate:       c.VerifyPeerCertificate,
-		RootCAs:                     c.RootCAs,
-		NextProtos:                  c.NextProtos,
-		ServerName:                  c.ServerName,
-		ClientAuth:                  c.ClientAuth,
-		ClientCAs:                   c.ClientCAs,
-		InsecureSkipVerify:          c.InsecureSkipVerify,
-		CipherSuites:                c.CipherSuites,
-		PreferServerCipherSuites:    c.PreferServerCipherSuites,
-		SessionTicketsDisabled:      c.SessionTicketsDisabled,
-		SessionTicketKey:            c.SessionTicketKey,
-		MinVersion:                  minVersion,
-		MaxVersion:                  maxVersion,
-		CurvePreferences:            c.CurvePreferences,
-		DynamicRecordSizingDisabled: c.DynamicRecordSizingDisabled,
-		// no need to copy Renegotiation, it's not supported by TLS 1.3
-		KeyLogWriter:           c.KeyLogWriter,
-		AlternativeRecordLayer: h,
-		GetExtensions:          h.extHandler.GetExtensions,
-		ReceivedExtensions:     h.extHandler.ReceivedExtensions,
-	}
 }
