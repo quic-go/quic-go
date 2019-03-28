@@ -21,6 +21,7 @@ type messageType uint8
 const (
 	typeClientHello         messageType = 1
 	typeServerHello         messageType = 2
+	typeNewSessionTicket    messageType = 4
 	typeEncryptedExtensions messageType = 8
 	typeCertificate         messageType = 11
 	typeCertificateRequest  messageType = 13
@@ -34,6 +35,8 @@ func (m messageType) String() string {
 		return "ClientHello"
 	case typeServerHello:
 		return "ServerHello"
+	case typeNewSessionTicket:
+		return "NewSessionTicket"
 	case typeEncryptedExtensions:
 		return "EncryptedExtensions"
 	case typeCertificate:
@@ -294,6 +297,8 @@ func (h *cryptoSetup) checkEncryptionLevel(msgType messageType, encLevel protoco
 		typeCertificateVerify,
 		typeFinished:
 		expected = protocol.EncryptionHandshake
+	case typeNewSessionTicket:
+		expected = protocol.Encryption1RTT
 	default:
 		return fmt.Errorf("unexpected handshake message: %d", msgType)
 	}
@@ -399,6 +404,10 @@ func (h *cryptoSetup) handleMessageForClient(msgType messageType) bool {
 			return false
 		}
 		return true
+	case typeNewSessionTicket:
+		<-h.handshakeDone // don't process session tickets before the handshake has completed
+		h.conn.HandlePostHandshakeMessage()
+		return false
 	default:
 		panic("unexpected handshake message: ")
 	}
