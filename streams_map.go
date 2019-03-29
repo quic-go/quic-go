@@ -8,6 +8,7 @@ import (
 	"github.com/lucas-clemente/quic-go/internal/flowcontrol"
 	"github.com/lucas-clemente/quic-go/internal/handshake"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
+	"github.com/lucas-clemente/quic-go/internal/qerr"
 	"github.com/lucas-clemente/quic-go/internal/wire"
 )
 
@@ -159,6 +160,9 @@ func (m *streamsMap) GetOrOpenSendStream(id protocol.StreamID) (sendStreamI, err
 }
 
 func (m *streamsMap) HandleMaxStreamsFrame(f *wire.MaxStreamsFrame) error {
+	if f.MaxStreams > protocol.MaxStreamCount {
+		return qerr.StreamLimitError
+	}
 	id := protocol.MaxStreamID(f.Type, f.MaxStreams, m.perspective)
 	switch id.Type() {
 	case protocol.StreamTypeUni:
