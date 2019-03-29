@@ -295,32 +295,42 @@ var _ = Describe("Streams Map", func() {
 			})
 
 			Context("updating stream ID limits", func() {
-				BeforeEach(func() {
-					mockSender.EXPECT().queueControlFrame(gomock.Any())
-				})
-
 				It("processes the parameter for outgoing streams, as a server", func() {
+					mockSender.EXPECT().queueControlFrame(gomock.Any())
 					m.perspective = protocol.PerspectiveServer
 					_, err := m.OpenStream()
 					expectTooManyStreamsError(err)
-					m.UpdateLimits(&handshake.TransportParameters{
+					Expect(m.UpdateLimits(&handshake.TransportParameters{
 						MaxBidiStreams: 5,
 						MaxUniStreams:  5,
-					})
+					})).To(Succeed())
 					Expect(m.outgoingBidiStreams.maxStream).To(Equal(protocol.StreamID(17)))
 					Expect(m.outgoingUniStreams.maxStream).To(Equal(protocol.StreamID(19)))
 				})
 
 				It("processes the parameter for outgoing streams, as a client", func() {
+					mockSender.EXPECT().queueControlFrame(gomock.Any())
 					m.perspective = protocol.PerspectiveClient
 					_, err := m.OpenUniStream()
 					expectTooManyStreamsError(err)
-					m.UpdateLimits(&handshake.TransportParameters{
+					Expect(m.UpdateLimits(&handshake.TransportParameters{
 						MaxBidiStreams: 5,
 						MaxUniStreams:  5,
-					})
+					})).To(Succeed())
 					Expect(m.outgoingBidiStreams.maxStream).To(Equal(protocol.StreamID(16)))
 					Expect(m.outgoingUniStreams.maxStream).To(Equal(protocol.StreamID(18)))
+				})
+
+				It("rejects parameters with too large unidirectional stream counts", func() {
+					Expect(m.UpdateLimits(&handshake.TransportParameters{
+						MaxUniStreams: protocol.MaxStreamCount + 1,
+					})).To(MatchError(qerr.StreamLimitError))
+				})
+
+				It("rejects parameters with too large unidirectional stream counts", func() {
+					Expect(m.UpdateLimits(&handshake.TransportParameters{
+						MaxBidiStreams: protocol.MaxStreamCount + 1,
+					})).To(MatchError(qerr.StreamLimitError))
 				})
 			})
 

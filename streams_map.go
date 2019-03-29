@@ -174,10 +174,14 @@ func (m *streamsMap) HandleMaxStreamsFrame(f *wire.MaxStreamsFrame) error {
 	return nil
 }
 
-func (m *streamsMap) UpdateLimits(p *handshake.TransportParameters) {
+func (m *streamsMap) UpdateLimits(p *handshake.TransportParameters) error {
+	if p.MaxBidiStreams > protocol.MaxStreamCount || p.MaxUniStreams > protocol.MaxStreamCount {
+		return qerr.StreamLimitError
+	}
 	// Max{Uni,Bidi}StreamID returns the highest stream ID that the peer is allowed to open.
 	m.outgoingBidiStreams.SetMaxStream(protocol.MaxStreamID(protocol.StreamTypeBidi, p.MaxBidiStreams, m.perspective))
 	m.outgoingUniStreams.SetMaxStream(protocol.MaxStreamID(protocol.StreamTypeUni, p.MaxUniStreams, m.perspective))
+	return nil
 }
 
 func (m *streamsMap) CloseWithError(err error) {
