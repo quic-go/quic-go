@@ -15,7 +15,7 @@ func ComposeVersionNegotiation(destConnID, srcConnID protocol.ConnectionID, vers
 	buf := bytes.NewBuffer(make([]byte, 0, expectedLen))
 	r := make([]byte, 1)
 	_, _ = rand.Read(r) // ignore the error here. It is not critical to have perfect random here.
-	buf.WriteByte(r[0] | 0x80)
+	buf.WriteByte(r[0] | 0xc0)
 	utils.BigEndian.WriteUint32(buf, 0) // version 0
 	connIDLen, err := encodeConnIDLen(destConnID, srcConnID)
 	if err != nil {
