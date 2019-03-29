@@ -70,6 +70,9 @@ func tlsConfigToQtlsConfig(
 	if c == nil {
 		c = &tls.Config{}
 	}
+	// Clone the config first. This executes the tls.Config.serverInit().
+	// This sets the SessionTicketKey, if the user didn't supply one.
+	c = c.Clone()
 	// QUIC requires TLS 1.3 or newer
 	minVersion := c.MinVersion
 	if minVersion < qtls.VersionTLS13 {

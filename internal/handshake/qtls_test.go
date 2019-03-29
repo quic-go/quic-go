@@ -63,6 +63,14 @@ var _ = Describe("qtls.Config generation", func() {
 		Expect(extHandler.received).To(BeTrue())
 	})
 
+	It("initializes such that the session ticket key remains constant", func() {
+		tlsConf := &tls.Config{}
+		qtlsConf1 := tlsConfigToQtlsConfig(tlsConf, nil, &mockExtensionHandler{})
+		qtlsConf2 := tlsConfigToQtlsConfig(tlsConf, nil, &mockExtensionHandler{})
+		Expect(qtlsConf1.SessionTicketKey).ToNot(BeZero()) // should now contain a random value
+		Expect(qtlsConf1.SessionTicketKey).To(Equal(qtlsConf2.SessionTicketKey))
+	})
+
 	Context("GetConfigForClient callback", func() {
 		It("doesn't set it if absent", func() {
 			qtlsConf := tlsConfigToQtlsConfig(&tls.Config{}, nil, &mockExtensionHandler{})
