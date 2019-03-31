@@ -1,9 +1,11 @@
 package testlog
 
 import (
+	"bytes"
 	"flag"
 	"log"
 	"os"
+	"sync"
 
 	"github.com/lucas-clemente/quic-go/internal/utils"
 
@@ -11,9 +13,12 @@ import (
 	. "github.com/onsi/gomega"
 )
 
+const logBufSize = 100 * 1 << 20 // initial size of the log buffer: 100 MB
+
 var (
 	logFileName string // the log file set in the ginkgo flags
-	logFile     *os.File
+	logBufOnce  sync.Once
+	logBuf      *bytes.Buffer
 )
 
 // read the logfile command line flag
@@ -25,18 +30,22 @@ func init() {
 var _ = BeforeEach(func() {
 	log.SetFlags(log.Ldate | log.Ltime | log.Lmicroseconds)
 
-	if len(logFileName) > 0 {
-		var err error
-		logFile, err = os.Create(logFileName)
-		Expect(err).ToNot(HaveOccurred())
-		log.SetOutput(logFile)
+	if Debug() {
+		logBufOnce.Do(func() {
+			logBuf = bytes.NewBuffer(make([]byte, 0, logBufSize))
+		})
 		utils.DefaultLogger.SetLogLevel(utils.LogLevelDebug)
+		log.SetOutput(logBuf)
 	}
 })
 
 var _ = AfterEach(func() {
-	if len(logFileName) > 0 {
-		_ = logFile.Close()
+	if Debug() {
+		logFile, err := os.Create(logFileName)
+		Expect(err).ToNot(HaveOccurred())
+		logFile.Write(logBuf.Bytes())
+		logFile.Close()
+		logBuf.Reset()
 	}
 })
 
