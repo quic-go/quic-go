@@ -1,6 +1,7 @@
 package handshake
 
 import (
+	"crypto/tls"
 	"crypto/x509"
 	"io"
 
@@ -35,7 +36,7 @@ type CryptoSetup interface {
 	ChangeConnectionID(protocol.ConnectionID) error
 
 	HandleMessage([]byte, protocol.EncryptionLevel) bool
-	ConnectionState() ConnectionState
+	ConnectionState() tls.ConnectionState
 
 	GetSealer() (protocol.EncryptionLevel, Sealer)
 	GetSealerWithEncryptionLevel(protocol.EncryptionLevel) (Sealer, error)
