@@ -196,6 +196,7 @@ var newSession = func(
 		handshakeStream,
 		oneRTTStream,
 		clientDestConnID,
+		conn.RemoteAddr(),
 		params,
 		s.processTransportParameters,
 		tlsConf,
@@ -218,7 +219,7 @@ var newSession = func(
 		s.perspective,
 		s.version,
 	)
-	s.cryptoStreamManager = newCryptoStreamManager(cs, initialStream, handshakeStream)
+	s.cryptoStreamManager = newCryptoStreamManager(cs, initialStream, handshakeStream, oneRTTStream)
 
 	if err := s.postSetup(); err != nil {
 		return nil, err
@@ -263,6 +264,7 @@ var newClientSession = func(
 		handshakeStream,
 		oneRTTStream,
 		s.destConnID,
+		conn.RemoteAddr(),
 		params,
 		s.processTransportParameters,
 		tlsConf,
@@ -273,7 +275,7 @@ var newClientSession = func(
 	}
 	s.clientHelloWritten = clientHelloWritten
 	s.cryptoStreamHandler = cs
-	s.cryptoStreamManager = newCryptoStreamManager(cs, initialStream, handshakeStream)
+	s.cryptoStreamManager = newCryptoStreamManager(cs, initialStream, handshakeStream, oneRTTStream)
 	s.unpacker = newPacketUnpacker(cs, s.version)
 	s.streamsMap = newStreamsMap(
 		s,

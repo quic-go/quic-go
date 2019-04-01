@@ -18,13 +18,15 @@ var _ = Describe("Crypto Stream Manager", func() {
 
 		initialStream   *MockCryptoStream
 		handshakeStream *MockCryptoStream
+		oneRTTStream    *MockCryptoStream
 	)
 
 	BeforeEach(func() {
 		initialStream = NewMockCryptoStream(mockCtrl)
 		handshakeStream = NewMockCryptoStream(mockCtrl)
+		oneRTTStream = NewMockCryptoStream(mockCtrl)
 		cs = NewMockCryptoDataHandler(mockCtrl)
-		csm = newCryptoStreamManager(cs, initialStream, handshakeStream)
+		csm = newCryptoStreamManager(cs, initialStream, handshakeStream, oneRTTStream)
 	})
 
 	It("passes messages to the initial stream", func() {
@@ -45,6 +47,17 @@ var _ = Describe("Crypto Stream Manager", func() {
 		handshakeStream.EXPECT().GetCryptoData()
 		cs.EXPECT().HandleMessage([]byte("foobar"), protocol.EncryptionHandshake)
 		encLevelChanged, err := csm.HandleCryptoFrame(cf, protocol.EncryptionHandshake)
+		Expect(err).ToNot(HaveOccurred())
+		Expect(encLevelChanged).To(BeFalse())
+	})
+
+	It("passes messages to the 1-RTT stream", func() {
+		cf := &wire.CryptoFrame{Data: []byte("foobar")}
+		oneRTTStream.EXPECT().HandleCryptoFrame(cf)
+		oneRTTStream.EXPECT().GetCryptoData().Return([]byte("foobar"))
+		oneRTTStream.EXPECT().GetCryptoData()
+		cs.EXPECT().HandleMessage([]byte("foobar"), protocol.Encryption1RTT)
+		encLevelChanged, err := csm.HandleCryptoFrame(cf, protocol.Encryption1RTT)
 		Expect(err).ToNot(HaveOccurred())
 		Expect(encLevelChanged).To(BeFalse())
 	})
@@ -96,12 +109,6 @@ var _ = Describe("Crypto Stream Manager", func() {
 		)
 		_, err := csm.HandleCryptoFrame(cf, protocol.EncryptionHandshake)
 		Expect(err).To(MatchError(err))
-	})
-
-	It("ignores post-handshake crypto data", func() {
-		changed, err := csm.HandleCryptoFrame(&wire.CryptoFrame{}, protocol.Encryption1RTT)
-		Expect(err).ToNot(HaveOccurred())
-		Expect(changed).To(BeFalse())
 	})
 
 	It("errors for unknown encryption levels", func() {

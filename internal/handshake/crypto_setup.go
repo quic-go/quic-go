@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"unsafe"
 
 	"github.com/lucas-clemente/quic-go/internal/protocol"
@@ -20,6 +21,7 @@ type messageType uint8
 const (
 	typeClientHello         messageType = 1
 	typeServerHello         messageType = 2
+	typeNewSessionTicket    messageType = 4
 	typeEncryptedExtensions messageType = 8
 	typeCertificate         messageType = 11
 	typeCertificateRequest  messageType = 13
@@ -33,6 +35,8 @@ func (m messageType) String() string {
 		return "ClientHello"
 	case typeServerHello:
 		return "ServerHello"
+	case typeNewSessionTicket:
+		return "NewSessionTicket"
 	case typeEncryptedExtensions:
 		return "EncryptedExtensions"
 	case typeCertificate:
@@ -62,8 +66,7 @@ type cryptoSetup struct {
 	readEncLevel  protocol.EncryptionLevel
 	writeEncLevel protocol.EncryptionLevel
 
-	extHandler tlsExtensionHandler
-
+	paramsChan           <-chan []byte
 	handleParamsCallback func([]byte)
 
 	alertChan chan uint8
@@ -113,6 +116,7 @@ func NewCryptoSetupClient(
 	handshakeStream io.Writer,
 	oneRTTStream io.Writer,
 	connID protocol.ConnectionID,
+	remoteAddr net.Addr,
 	tp *TransportParameters,
 	handleParams func([]byte),
 	tlsConf *tls.Config,
@@ -132,7 +136,7 @@ func NewCryptoSetupClient(
 	if err != nil {
 		return nil, nil, err
 	}
-	cs.conn = qtls.Client(nil, cs.tlsConf)
+	cs.conn = qtls.Client(newConn(remoteAddr), cs.tlsConf)
 	return cs, clientHelloWritten, nil
 }
 
@@ -142,6 +146,7 @@ func NewCryptoSetupServer(
 	handshakeStream io.Writer,
 	oneRTTStream io.Writer,
 	connID protocol.ConnectionID,
+	remoteAddr net.Addr,
 	tp *TransportParameters,
 	handleParams func([]byte),
 	tlsConf *tls.Config,
@@ -161,7 +166,7 @@ func NewCryptoSetupServer(
 	if err != nil {
 		return nil, err
 	}
-	cs.conn = qtls.Server(nil, cs.tlsConf)
+	cs.conn = qtls.Server(newConn(remoteAddr), cs.tlsConf)
 	return cs, nil
 }
 
@@ -190,7 +195,7 @@ func newCryptoSetup(
 		readEncLevel:           protocol.EncryptionInitial,
 		writeEncLevel:          protocol.EncryptionInitial,
 		handleParamsCallback:   handleParams,
-		extHandler:             extHandler,
+		paramsChan:             extHandler.TransportParameters(),
 		logger:                 logger,
 		perspective:            perspective,
 		handshakeDone:          make(chan struct{}),
@@ -203,7 +208,7 @@ func newCryptoSetup(
 		writeRecord:            make(chan struct{}),
 		closeChan:              make(chan struct{}),
 	}
-	qtlsConf := cs.tlsConfigToQtlsConfig(tlsConf)
+	qtlsConf := tlsConfigToQtlsConfig(tlsConf, cs, extHandler)
 	cs.tlsConf = qtlsConf
 	return cs, cs.clientHelloWrittenChan, nil
 }
@@ -292,6 +297,8 @@ func (h *cryptoSetup) checkEncryptionLevel(msgType messageType, encLevel protoco
 		typeCertificateVerify,
 		typeFinished:
 		expected = protocol.EncryptionHandshake
+	case typeNewSessionTicket:
+		expected = protocol.Encryption1RTT
 	default:
 		return fmt.Errorf("unexpected handshake message: %d", msgType)
 	}
@@ -310,7 +317,7 @@ func (h *cryptoSetup) handleMessageForServer(msgType messageType) bool {
 			// If it accepts the ClientHello, it will first read the transport parameters.
 			h.logger.Debugf("Sending HelloRetryRequest")
 			return false
-		case data := <-h.extHandler.TransportParameters():
+		case data := <-h.paramsChan:
 			h.handleParamsCallback(data)
 		case <-h.handshakeDone:
 			return false
@@ -374,7 +381,7 @@ func (h *cryptoSetup) handleMessageForClient(msgType messageType) bool {
 		return true
 	case typeEncryptedExtensions:
 		select {
-		case data := <-h.extHandler.TransportParameters():
+		case data := <-h.paramsChan:
 			h.handleParamsCallback(data)
 		case <-h.handshakeDone:
 			return false
@@ -397,6 +404,10 @@ func (h *cryptoSetup) handleMessageForClient(msgType messageType) bool {
 			return false
 		}
 		return true
+	case typeNewSessionTicket:
+		<-h.handshakeDone // don't process session tickets before the handshake has completed
+		h.conn.HandlePostHandshakeMessage()
+		return false
 	default:
 		panic("unexpected handshake message: ")
 	}
@@ -550,61 +561,4 @@ func (h *cryptoSetup) ConnectionState() tls.ConnectionState {
 	// The only way to return a tls.ConnectionState is to use unsafe.
 	// In unsafe.go we check that the two objects are actually identical.
 	return *(*tls.ConnectionState)(unsafe.Pointer(&cs))
-}
-
-func (h *cryptoSetup) tlsConfigToQtlsConfig(c *tls.Config) *qtls.Config {
-	if c == nil {
-		c = &tls.Config{}
-	}
-	// QUIC requires TLS 1.3 or newer
-	minVersion := c.MinVersion
-	if minVersion < qtls.VersionTLS13 {
-		minVersion = qtls.VersionTLS13
-	}
-	maxVersion := c.MaxVersion
-	if maxVersion < qtls.VersionTLS13 {
-		maxVersion = qtls.VersionTLS13
-	}
-	var getConfigForClient func(ch *tls.ClientHelloInfo) (*qtls.Config, error)
-	if c.GetConfigForClient != nil {
-		getConfigForClient = func(ch *tls.ClientHelloInfo) (*qtls.Config, error) {
-			tlsConf, err := c.GetConfigForClient(ch)
-			if err != nil {
-				return nil, err
-			}
-			if tlsConf == nil {
-				return nil, nil
-			}
-			return h.tlsConfigToQtlsConfig(tlsConf), nil
-		}
-	}
-	return &qtls.Config{
-		Rand:                        c.Rand,
-		Time:                        c.Time,
-		Certificates:                c.Certificates,
-		NameToCertificate:           c.NameToCertificate,
-		GetCertificate:              c.GetCertificate,
-		GetClientCertificate:        c.GetClientCertificate,
-		GetConfigForClient:          getConfigForClient,
-		VerifyPeerCertificate:       c.VerifyPeerCertificate,
-		RootCAs:                     c.RootCAs,
-		NextProtos:                  c.NextProtos,
-		ServerName:                  c.ServerName,
-		ClientAuth:                  c.ClientAuth,
-		ClientCAs:                   c.ClientCAs,
-		InsecureSkipVerify:          c.InsecureSkipVerify,
-		CipherSuites:                c.CipherSuites,
-		PreferServerCipherSuites:    c.PreferServerCipherSuites,
-		SessionTicketsDisabled:      c.SessionTicketsDisabled,
-		SessionTicketKey:            c.SessionTicketKey,
-		MinVersion:                  minVersion,
-		MaxVersion:                  maxVersion,
-		CurvePreferences:            c.CurvePreferences,
-		DynamicRecordSizingDisabled: c.DynamicRecordSizingDisabled,
-		// no need to copy Renegotiation, it's not supported by TLS 1.3
-		KeyLogWriter:           c.KeyLogWriter,
-		AlternativeRecordLayer: h,
-		GetExtensions:          h.extHandler.GetExtensions,
-		ReceivedExtensions:     h.extHandler.ReceivedExtensions,
-	}
 }
