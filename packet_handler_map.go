@@ -33,11 +33,16 @@ type packetHandlerMap struct {
 	closed    bool
 
 	deleteRetiredSessionsAfter time.Duration
+	self                       **packetHandlerMap
 
 	statelessResetEnabled bool
 	statelessResetHasher  hash.Hash
 
 	logger utils.Logger
+}
+
+type packetHandlerMapWeakPtr struct {
+	m *packetHandlerMap
 }
 
 var _ packetHandlerManager = &packetHandlerMap{}
@@ -59,6 +64,7 @@ func newPacketHandlerMap(
 		statelessResetHasher:       hmac.New(sha256.New, statelessResetKey),
 		logger:                     logger,
 	}
+	m.self = &m
 	go m.listen()
 	return m
 }
@@ -84,8 +90,12 @@ func (h *packetHandlerMap) Retire(id protocol.ConnectionID) {
 }
 
 func (h *packetHandlerMap) retireByConnectionIDAsString(id string) {
+	weakPtr := h.self
 	time.AfterFunc(h.deleteRetiredSessionsAfter, func() {
-		h.removeByConnectionIDAsString(id)
+		m := *weakPtr
+		if m != nil {
+			m.removeByConnectionIDAsString(id)
+		}
 	})
 }
 
@@ -142,6 +152,7 @@ func (h *packetHandlerMap) close(e error) error {
 		return nil
 	}
 	h.closed = true
+	*h.self = nil
 
 	var wg sync.WaitGroup
 	for _, handler := range h.handlers {
