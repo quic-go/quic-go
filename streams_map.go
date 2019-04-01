@@ -8,6 +8,7 @@ import (
 	"github.com/lucas-clemente/quic-go/internal/flowcontrol"
 	"github.com/lucas-clemente/quic-go/internal/handshake"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
+	"github.com/lucas-clemente/quic-go/internal/qerr"
 	"github.com/lucas-clemente/quic-go/internal/wire"
 )
 
@@ -159,6 +160,9 @@ func (m *streamsMap) GetOrOpenSendStream(id protocol.StreamID) (sendStreamI, err
 }
 
 func (m *streamsMap) HandleMaxStreamsFrame(f *wire.MaxStreamsFrame) error {
+	if f.MaxStreams > protocol.MaxStreamCount {
+		return qerr.StreamLimitError
+	}
 	id := protocol.MaxStreamID(f.Type, f.MaxStreams, m.perspective)
 	switch id.Type() {
 	case protocol.StreamTypeUni:
@@ -170,10 +174,14 @@ func (m *streamsMap) HandleMaxStreamsFrame(f *wire.MaxStreamsFrame) error {
 	return nil
 }
 
-func (m *streamsMap) UpdateLimits(p *handshake.TransportParameters) {
+func (m *streamsMap) UpdateLimits(p *handshake.TransportParameters) error {
+	if p.MaxBidiStreams > protocol.MaxStreamCount || p.MaxUniStreams > protocol.MaxStreamCount {
+		return qerr.StreamLimitError
+	}
 	// Max{Uni,Bidi}StreamID returns the highest stream ID that the peer is allowed to open.
 	m.outgoingBidiStreams.SetMaxStream(protocol.MaxStreamID(protocol.StreamTypeBidi, p.MaxBidiStreams, m.perspective))
 	m.outgoingUniStreams.SetMaxStream(protocol.MaxStreamID(protocol.StreamTypeUni, p.MaxUniStreams, m.perspective))
+	return nil
 }
 
 func (m *streamsMap) CloseWithError(err error) {

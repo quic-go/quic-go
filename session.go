@@ -41,7 +41,7 @@ type streamManager interface {
 	AcceptStream() (Stream, error)
 	AcceptUniStream() (ReceiveStream, error)
 	DeleteStream(protocol.StreamID) error
-	UpdateLimits(*handshake.TransportParameters)
+	UpdateLimits(*handshake.TransportParameters) error
 	HandleMaxStreamsFrame(*wire.MaxStreamsFrame) error
 	CloseWithError(error)
 }
@@ -932,7 +932,10 @@ func (s *session) processTransportParameters(data []byte) {
 	}
 	s.logger.Debugf("Received Transport Parameters: %s", params)
 	s.peerParams = params
-	s.streamsMap.UpdateLimits(params)
+	if err := s.streamsMap.UpdateLimits(params); err != nil {
+		s.closeLocal(err)
+		return
+	}
 	s.packer.HandleTransportParameters(params)
 	s.frameParser.SetAckDelayExponent(params.AckDelayExponent)
 	s.connFlowController.UpdateSendWindow(params.InitialMaxData)

@@ -64,6 +64,10 @@ const MinStatelessResetSize = 1 /* first byte */ + 22 /* random bytes */ + 16 /*
 // MinConnectionIDLenInitial is the minimum length of the destination connection ID on an Initial packet.
 const MinConnectionIDLenInitial = 8
 
+// MaxStreamCount is the maximum stream count value that can be sent in MAX_STREAMS frames
+// and as the stream count in the transport parameters
+const MaxStreamCount = 1 << 60
+
 // DefaultAckDelayExponent is the default ack delay exponent
 const DefaultAckDelayExponent = 3
 
