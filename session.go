@@ -853,9 +853,9 @@ func (s *session) closeLocal(e error) {
 func (s *session) destroy(e error) {
 	s.closeOnce.Do(func() {
 		if nerr, ok := e.(net.Error); ok && nerr.Timeout() {
-			s.logger.Errorf("Destroying session: %s", e)
+			s.logger.Errorf("Destroying session %s: %s", s.destConnID, e)
 		} else {
-			s.logger.Errorf("Destroying session with error: %s", e)
+			s.logger.Errorf("Destroying session %s with error: %s", s.destConnID, e)
 		}
 		s.sessionRunner.Remove(s.srcConnID)
 		s.closeChan <- closeError{err: e, sendClose: false, remote: false}
