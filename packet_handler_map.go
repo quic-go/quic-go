@@ -41,10 +41,6 @@ type packetHandlerMap struct {
 	logger utils.Logger
 }
 
-type packetHandlerMapWeakPtr struct {
-	m *packetHandlerMap
-}
-
 var _ packetHandlerManager = &packetHandlerMap{}
 
 func newPacketHandlerMap(
