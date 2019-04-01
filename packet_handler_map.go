@@ -33,7 +33,7 @@ type packetHandlerMap struct {
 	closed    bool
 
 	deleteRetiredSessionsAfter time.Duration
-	self                       **packetHandlerMap
+	deletionTimers             map[string]*time.Timer
 
 	statelessResetEnabled bool
 	statelessResetHasher  hash.Hash
@@ -60,11 +60,11 @@ func newPacketHandlerMap(
 		handlers:                   make(map[string]packetHandler),
 		resetTokens:                make(map[[16]byte]packetHandler),
 		deleteRetiredSessionsAfter: protocol.RetiredConnectionIDDeleteTimeout,
+		deletionTimers:             make(map[string]*time.Timer),
 		statelessResetEnabled:      len(statelessResetKey) > 0,
 		statelessResetHasher:       hmac.New(sha256.New, statelessResetKey),
 		logger:                     logger,
 	}
-	m.self = &m
 	go m.listen()
 	return m
 }
@@ -90,13 +90,12 @@ func (h *packetHandlerMap) Retire(id protocol.ConnectionID) {
 }
 
 func (h *packetHandlerMap) retireByConnectionIDAsString(id string) {
-	weakPtr := h.self
-	time.AfterFunc(h.deleteRetiredSessionsAfter, func() {
-		m := *weakPtr
-		if m != nil {
-			m.removeByConnectionIDAsString(id)
-		}
+	timer := time.AfterFunc(h.deleteRetiredSessionsAfter, func() {
+		h.removeByConnectionIDAsString(id)
 	})
+	h.mutex.Lock()
+	h.deletionTimers[id] = timer
+	h.mutex.Unlock()
 }
 
 func (h *packetHandlerMap) AddResetToken(token [16]byte, handler packetHandler) {
@@ -152,7 +151,10 @@ func (h *packetHandlerMap) close(e error) error {
 		return nil
 	}
 	h.closed = true
-	*h.self = nil
+
+	for _, timer := range h.deletionTimers {
+		timer.Stop()
+	}
 
 	var wg sync.WaitGroup
 	for _, handler := range h.handlers {
