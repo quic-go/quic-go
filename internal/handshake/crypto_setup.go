@@ -91,7 +91,6 @@ type cryptoSetup struct {
 	oneRTTStream io.Writer
 	opener       Opener
 	sealer       Sealer
-	// TODO: add a 1-RTT stream (used for session tickets)
 
 	receivedWriteKey chan struct{}
 	receivedReadKey  chan struct{}
@@ -416,7 +415,6 @@ func (h *cryptoSetup) handleMessageForClient(msgType messageType) bool {
 // ReadHandshakeMessage is called by TLS.
 // It blocks until a new handshake message is available.
 func (h *cryptoSetup) ReadHandshakeMessage() ([]byte, error) {
-	// TODO: add some error handling here (when the session is closed)
 	msg, ok := <-h.messageChan
 	if !ok {
 		return nil, errors.New("error while handling the handshake message")
