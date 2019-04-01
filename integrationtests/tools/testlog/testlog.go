@@ -1,9 +1,11 @@
 package testlog
 
 import (
+	"bytes"
 	"flag"
 	"log"
 	"os"
+	"sync"
 
 	"github.com/lucas-clemente/quic-go/internal/utils"
 
@@ -11,9 +13,38 @@ import (
 	. "github.com/onsi/gomega"
 )
 
+const logBufSize = 100 * 1 << 20 // initial size of the log buffer: 100 MB
+
+type syncedBuffer struct {
+	mutex sync.Mutex
+
+	*bytes.Buffer
+}
+
+func (b *syncedBuffer) Write(p []byte) (int, error) {
+	b.mutex.Lock()
+	n, err := b.Buffer.Write(p)
+	b.mutex.Unlock()
+	return n, err
+}
+
+func (b *syncedBuffer) Bytes() []byte {
+	b.mutex.Lock()
+	p := b.Buffer.Bytes()
+	b.mutex.Unlock()
+	return p
+}
+
+func (b *syncedBuffer) Reset() {
+	b.mutex.Lock()
+	b.Buffer.Reset()
+	b.mutex.Unlock()
+}
+
 var (
 	logFileName string // the log file set in the ginkgo flags
-	logFile     *os.File
+	logBufOnce  sync.Once
+	logBuf      *syncedBuffer
 )
 
 // read the logfile command line flag
@@ -25,18 +56,22 @@ func init() {
 var _ = BeforeEach(func() {
 	log.SetFlags(log.Ldate | log.Ltime | log.Lmicroseconds)
 
-	if len(logFileName) > 0 {
-		var err error
-		logFile, err = os.Create(logFileName)
-		Expect(err).ToNot(HaveOccurred())
-		log.SetOutput(logFile)
+	if Debug() {
+		logBufOnce.Do(func() {
+			logBuf = &syncedBuffer{Buffer: bytes.NewBuffer(make([]byte, 0, logBufSize))}
+		})
 		utils.DefaultLogger.SetLogLevel(utils.LogLevelDebug)
+		log.SetOutput(logBuf)
 	}
 })
 
 var _ = AfterEach(func() {
-	if len(logFileName) > 0 {
-		_ = logFile.Close()
+	if Debug() {
+		logFile, err := os.Create(logFileName)
+		Expect(err).ToNot(HaveOccurred())
+		logFile.Write(logBuf.Bytes())
+		logFile.Close()
+		logBuf.Reset()
 	}
 })
 
