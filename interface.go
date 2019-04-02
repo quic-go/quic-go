@@ -61,7 +61,8 @@ type Stream interface {
 	// When called multiple times or after reading the io.EOF it is a no-op.
 	CancelRead(ErrorCode)
 	// The context is canceled as soon as the write-side of the stream is closed.
-	// This happens when Close() is called, or when the stream is reset (either locally or remotely).
+	// This happens when Close() or CancelWrite() is called, or when the peer
+	// cancels the read-side of their stream.
 	// Warning: This API should not be considered stable and might change soon.
 	Context() context.Context
 	// SetReadDeadline sets the deadline for future Read calls and
