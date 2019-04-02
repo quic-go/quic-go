@@ -78,6 +78,7 @@ func (h *packetHandlerMap) Remove(id protocol.ConnectionID) {
 func (h *packetHandlerMap) removeByConnectionIDAsString(id string) {
 	h.mutex.Lock()
 	delete(h.handlers, id)
+	delete(h.deletionTimers, id)
 	h.mutex.Unlock()
 }
 
@@ -86,10 +87,10 @@ func (h *packetHandlerMap) Retire(id protocol.ConnectionID) {
 }
 
 func (h *packetHandlerMap) retireByConnectionIDAsString(id string) {
+	h.mutex.Lock()
 	timer := time.AfterFunc(h.deleteRetiredSessionsAfter, func() {
 		h.removeByConnectionIDAsString(id)
 	})
-	h.mutex.Lock()
 	h.deletionTimers[id] = timer
 	h.mutex.Unlock()
 }
