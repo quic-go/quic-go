@@ -507,7 +507,8 @@ var _ = Describe("Server", func() {
 		It("never blocks when calling the onHandshakeComplete callback", func() {
 			const num = 50
 
-			done := make(chan struct{}, num)
+			runs := make(chan struct{}, num)
+			contexts := make(chan struct{}, num)
 			serv.newSession = func(
 				_ connection,
 				runner sessionRunner,
@@ -521,10 +522,9 @@ var _ = Describe("Server", func() {
 				_ protocol.VersionNumber,
 			) (quicSession, error) {
 				sess := NewMockQuicSession(mockCtrl)
-				sess.EXPECT().run().Do(func() {})
-				sess.EXPECT().Context().Return(context.Background())
+				sess.EXPECT().run().Do(func() { runs <- struct{}{} })
+				sess.EXPECT().Context().Do(func() { contexts <- struct{}{} }).Return(context.Background())
 				runner.OnHandshakeComplete(sess)
-				done <- struct{}{}
 				return sess, nil
 			}
 
@@ -534,7 +534,8 @@ var _ = Describe("Server", func() {
 					Expect(err).ToNot(HaveOccurred())
 				}
 			}()
-			Eventually(done).Should(HaveLen(num))
+			Eventually(runs).Should(HaveLen(num))
+			Eventually(contexts).Should(HaveLen(num))
 		})
 	})
 })
