@@ -87,6 +87,10 @@ func (h *packetHandlerMap) Retire(id protocol.ConnectionID) {
 }
 
 func (h *packetHandlerMap) retireByConnectionIDAsString(id string) {
+	// Acquire lock before creating timer to ensure that it can be inserted into
+	// deletionTimers map before the corresponding delete in
+	// removeByConnectionIDAsString is executed. Otherwise, this could leak if
+	// deleteRetiredSessionsAfter is 0.
 	h.mutex.Lock()
 	timer := time.AfterFunc(h.deleteRetiredSessionsAfter, func() {
 		h.removeByConnectionIDAsString(id)
