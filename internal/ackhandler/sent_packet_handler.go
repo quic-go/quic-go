@@ -670,3 +670,13 @@ func (h *sentPacketHandler) ResetForRetry() error {
 	h.updateLossDetectionAlarm()
 	return nil
 }
+
+func (h *sentPacketHandler) GetStats() *State {
+	return &State{
+		MinRTT:           h.rttStats.MinRTT(),
+		SmoothedRTT:      h.rttStats.SmoothedOrInitialRTT(),
+		LatestRTT:        h.rttStats.LatestRTT(),
+		BytesInFlight:    h.bytesInFlight,
+		CongestionWindow: h.congestion.GetCongestionWindow(),
+	}
+}
