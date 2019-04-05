@@ -76,6 +76,8 @@ type sentPacketHandler struct {
 	// The alarm timeout
 	alarm time.Time
 
+	traceCallback func(quictrace.Event)
+
 	logger utils.Logger
 }
 
@@ -83,6 +85,7 @@ type sentPacketHandler struct {
 func NewSentPacketHandler(
 	initialPacketNumber protocol.PacketNumber,
 	rttStats *congestion.RTTStats,
+	traceCallback func(quictrace.Event),
 	logger utils.Logger,
 ) SentPacketHandler {
 	congestion := congestion.NewCubicSender(
@@ -99,6 +102,7 @@ func NewSentPacketHandler(
 		oneRTTPackets:    newPacketNumberSpace(0),
 		rttStats:         rttStats,
 		congestion:       congestion,
+		traceCallback:    traceCallback,
 		logger:           logger,
 	}
 }
@@ -404,6 +408,17 @@ func (h *sentPacketHandler) detectLostPackets(
 			}
 		}
 		pnSpace.history.Remove(p.PacketNumber)
+		if h.traceCallback != nil {
+			h.traceCallback(quictrace.Event{
+				Time:            now,
+				EventType:       quictrace.PacketLost,
+				EncryptionLevel: p.EncryptionLevel,
+				PacketNumber:    p.PacketNumber,
+				PacketSize:      p.Length,
+				Frames:          p.Frames,
+				TransportState:  h.GetStats(),
+			})
+		}
 	}
 	return nil
 }
