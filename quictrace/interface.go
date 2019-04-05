@@ -3,7 +3,6 @@ package quictrace
 import (
 	"time"
 
-	"github.com/lucas-clemente/quic-go/internal/ackhandler"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/internal/wire"
 )
@@ -31,9 +30,19 @@ type Event struct {
 	Time      time.Time
 	EventType EventType
 
-	TransportState  *ackhandler.State
+	TransportState  *TransportState
 	EncryptionLevel protocol.EncryptionLevel
 	PacketNumber    protocol.PacketNumber
 	PacketSize      protocol.ByteCount
 	Frames          []wire.Frame
+}
+
+// TransportState contains some transport and congestion statistics
+type TransportState struct {
+	MinRTT      time.Duration
+	SmoothedRTT time.Duration
+	LatestRTT   time.Duration
+
+	BytesInFlight    protocol.ByteCount
+	CongestionWindow protocol.ByteCount
 }

@@ -6,7 +6,6 @@ import (
 
 	"github.com/golang/protobuf/proto"
 
-	"github.com/lucas-clemente/quic-go/internal/ackhandler"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/internal/wire"
 	"github.com/lucas-clemente/quic-go/quictrace/pb"
@@ -171,7 +170,7 @@ func getFrames(wframes []wire.Frame) []*pb.Frame {
 	return frames
 }
 
-func getTransportState(state *ackhandler.State) *pb.TransportState {
+func getTransportState(state *TransportState) *pb.TransportState {
 	bytesInFlight := uint64(state.BytesInFlight)
 	congestionWindow := uint64(state.CongestionWindow)
 	return &pb.TransportState{

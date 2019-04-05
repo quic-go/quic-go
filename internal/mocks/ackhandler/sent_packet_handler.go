@@ -12,6 +12,7 @@ import (
 	ackhandler "github.com/lucas-clemente/quic-go/internal/ackhandler"
 	protocol "github.com/lucas-clemente/quic-go/internal/protocol"
 	wire "github.com/lucas-clemente/quic-go/internal/wire"
+	quictrace "github.com/lucas-clemente/quic-go/quictrace"
 )
 
 // MockSentPacketHandler is a mock of SentPacketHandler interface
@@ -107,10 +108,10 @@ func (mr *MockSentPacketHandlerMockRecorder) GetLowestPacketNotConfirmedAcked() 
 }
 
 // GetStats mocks base method
-func (m *MockSentPacketHandler) GetStats() *ackhandler.State {
+func (m *MockSentPacketHandler) GetStats() *quictrace.TransportState {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetStats")
-	ret0, _ := ret[0].(*ackhandler.State)
+	ret0, _ := ret[0].(*quictrace.TransportState)
 	return ret0
 }
 

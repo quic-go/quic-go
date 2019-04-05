@@ -11,6 +11,7 @@ import (
 	"github.com/lucas-clemente/quic-go/internal/qerr"
 	"github.com/lucas-clemente/quic-go/internal/utils"
 	"github.com/lucas-clemente/quic-go/internal/wire"
+	"github.com/lucas-clemente/quic-go/quictrace"
 )
 
 const (
@@ -671,8 +672,8 @@ func (h *sentPacketHandler) ResetForRetry() error {
 	return nil
 }
 
-func (h *sentPacketHandler) GetStats() *State {
-	return &State{
+func (h *sentPacketHandler) GetStats() *quictrace.TransportState {
+	return &quictrace.TransportState{
 		MinRTT:           h.rttStats.MinRTT(),
 		SmoothedRTT:      h.rttStats.SmoothedOrInitialRTT(),
 		LatestRTT:        h.rttStats.LatestRTT(),
