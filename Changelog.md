@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.11.0 (2019-04-05)
+
+- Drop support for gQUIC. For qQUIC support, please switch to the *gquic* branch.
+- Implement QUIC WG draft-19.
+- Use [qtls](https://github.com/marten-seemann/qtls) for TLS 1.3.
+- Return a `tls.ConnectionState` from `quic.Session.ConnectionState()`.
+- Remove the error return values from `quic.Stream.CancelRead()` and `quic.Stream.CancelWrite()`
+
 ## v0.10.0 (2018-08-28)
 
 - Add support for QUIC 44, drop support for QUIC 42.
