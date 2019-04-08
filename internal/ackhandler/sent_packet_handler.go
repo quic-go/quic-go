@@ -694,5 +694,7 @@ func (h *sentPacketHandler) GetStats() *quictrace.TransportState {
 		LatestRTT:        h.rttStats.LatestRTT(),
 		BytesInFlight:    h.bytesInFlight,
 		CongestionWindow: h.congestion.GetCongestionWindow(),
+		InSlowStart:      h.congestion.InSlowStart(),
+		InRecovery:       h.congestion.InRecovery(),
 	}
 }

@@ -173,12 +173,14 @@ func getFrames(wframes []wire.Frame) []*pb.Frame {
 func getTransportState(state *TransportState) *pb.TransportState {
 	bytesInFlight := uint64(state.BytesInFlight)
 	congestionWindow := uint64(state.CongestionWindow)
+	ccs := fmt.Sprintf("InSlowStart: %t, InRecovery: %t", state.InSlowStart, state.InRecovery)
 	return &pb.TransportState{
-		MinRttUs:      durationToUs(state.MinRTT),
-		SmoothedRttUs: durationToUs(state.SmoothedRTT),
-		LastRttUs:     durationToUs(state.LatestRTT),
-		InFlightBytes: &bytesInFlight,
-		CwndBytes:     &congestionWindow,
+		MinRttUs:               durationToUs(state.MinRTT),
+		SmoothedRttUs:          durationToUs(state.SmoothedRTT),
+		LastRttUs:              durationToUs(state.LatestRTT),
+		InFlightBytes:          &bytesInFlight,
+		CwndBytes:              &congestionWindow,
+		CongestionControlState: &ccs,
 	}
 }
 

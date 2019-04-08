@@ -45,4 +45,6 @@ type TransportState struct {
 
 	BytesInFlight    protocol.ByteCount
 	CongestionWindow protocol.ByteCount
+	InSlowStart      bool
+	InRecovery       bool
 }
