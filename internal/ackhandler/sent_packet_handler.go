@@ -465,6 +465,8 @@ func (h *sentPacketHandler) onPacketAcked(p *Packet, rcvTime time.Time) error {
 	}
 	h.rtoCount = 0
 	h.tlpCount = 0
+	h.numRTOs = 0
+	h.allowTLP = false
 	h.handshakeCount = 0
 	return h.packetHistory.Remove(p.PacketNumber)
 }
