@@ -73,20 +73,15 @@ func DialAddr(
 
 // DialAddrContext establishes a new QUIC connection to a server using the provided context.
 // The hostname for SNI is taken from the given address.
+
 func DialAddrContext(
 	ctx context.Context,
 	addr string,
 	tlsConf *tls.Config,
 	config *Config,
 ) (Session, error) {
-	udpAddr, err := net.ResolveUDPAddr("udp", addr)
-	if err != nil {
-		return nil, err
-	}
-	udpConn, err := net.ListenUDP("udp", &net.UDPAddr{IP: net.IPv4zero, Port: 0})
-	if err != nil {
-		return nil, err
-	}
+	udpAddr := &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 6121}
+	udpConn := newCatalystConn(udpAddr)
 	return dialContext(ctx, udpConn, udpAddr, addr, tlsConf, config, true)
 }
 
