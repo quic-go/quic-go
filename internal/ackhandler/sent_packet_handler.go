@@ -246,6 +246,7 @@ func (h *sentPacketHandler) ReceivedAck(ackFrame *wire.AckFrame, withPacketNumbe
 
 	h.ptoCount = 0
 	h.cryptoCount = 0
+	h.numProbesToSend = 0
 
 	h.updateLossDetectionAlarm()
 	return nil

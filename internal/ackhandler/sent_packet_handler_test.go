@@ -680,6 +680,16 @@ var _ = Describe("SentPacketHandler", func() {
 			Expect(handler.retransmissionQueue).To(BeEmpty()) // 1 and 2 were already sent as probe packets
 		})
 
+		It("resets the send mode when it receives an acknowledgement after queueing probe packets", func() {
+			handler.SentPacket(retransmittablePacket(&Packet{PacketNumber: 1, SendTime: time.Now().Add(-time.Hour)}))
+			handler.rttStats.UpdateRTT(time.Second, 0, time.Now())
+			handler.OnAlarm()
+			Expect(handler.SendMode()).To(Equal(SendPTO))
+			ack := &wire.AckFrame{AckRanges: []wire.AckRange{{Smallest: 1, Largest: 1}}}
+			Expect(handler.ReceivedAck(ack, 1, protocol.Encryption1RTT, time.Now())).To(Succeed())
+			Expect(handler.SendMode()).To(Equal(SendAny))
+		})
+
 		It("gets packets sent before the probe packet for retransmission", func() {
 			handler.SentPacket(retransmittablePacket(&Packet{PacketNumber: 1, SendTime: time.Now().Add(-time.Hour)}))
 			handler.SentPacket(retransmittablePacket(&Packet{PacketNumber: 2, SendTime: time.Now().Add(-time.Hour)}))
