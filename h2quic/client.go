@@ -26,7 +26,7 @@ type roundTripperOpts struct {
 
 var dialAddr = quic.DialAddr
 
-// client is a HTTP2 client doing QUIC requests
+// client is a HTTP2 RoundTriper doing QUIC requests
 type client struct {
 	mutex sync.RWMutex
 
