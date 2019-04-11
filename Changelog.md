@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.12.0 (unreleased)
+
+- Implement HTTP/3.
+
 ## v0.11.0 (2019-04-05)
 
 - Drop support for gQUIC. For qQUIC support, please switch to the *gquic* branch.
