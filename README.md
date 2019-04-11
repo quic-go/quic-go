@@ -34,11 +34,7 @@ Running tests:
 
     go test ./...
 
-### HTTP mapping
-
-We're currently not implementing the HTTP mapping as described in the [QUIC over HTTP draft](https://quicwg.org/base-drafts/draft-ietf-quic-http.html). The HTTP mapping here is a leftover from Google QUIC.
-
-### QUIC without HTTP/2
+### QUIC without HTTP/3
 
 Take a look at [this echo example](example/echo/echo.go).
 
@@ -50,16 +46,16 @@ See the [example server](example/main.go). Starting a QUIC server is very simila
 
 ```go
 http.Handle("/", http.FileServer(http.Dir(wwwDir)))
-h2quic.ListenAndServeQUIC("localhost:4242", "/path/to/cert/chain.pem", "/path/to/privkey.pem", nil)
+http3.ListenAndServeQUIC("localhost:4242", "/path/to/cert/chain.pem", "/path/to/privkey.pem", nil)
 ```
 
 ### As a client
 
-See the [example client](example/client/main.go). Use a `h2quic.RoundTripper` as a `Transport` in a `http.Client`.
+See the [example client](example/client/main.go). Use a `http3.RoundTripper` as a `Transport` in a `http.Client`.
 
 ```go
 http.Client{
-  Transport: &h2quic.RoundTripper{},
+  Transport: &http3.RoundTripper{},
 }
 ```
 

@@ -1,25 +1,18 @@
-package h2quic
+package http3
 
 import (
 	"bytes"
+	"io"
 	"net/http"
 	"strconv"
 	"strings"
-	"sync"
 
-	quic "github.com/lucas-clemente/quic-go"
-	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/internal/utils"
-	"golang.org/x/net/http2"
-	"golang.org/x/net/http2/hpack"
+	"github.com/marten-seemann/qpack"
 )
 
 type responseWriter struct {
-	dataStreamID protocol.StreamID
-	dataStream   quic.Stream
-
-	headerStream      quic.Stream
-	headerStreamMutex *sync.Mutex
+	stream io.Writer
 
 	header        http.Header
 	status        int // status code passed to WriteHeader
@@ -28,20 +21,13 @@ type responseWriter struct {
 	logger utils.Logger
 }
 
-func newResponseWriter(
-	headerStream quic.Stream,
-	headerStreamMutex *sync.Mutex,
-	dataStream quic.Stream,
-	dataStreamID protocol.StreamID,
-	logger utils.Logger,
-) *responseWriter {
+var _ http.ResponseWriter = &responseWriter{}
+
+func newResponseWriter(stream io.Writer, logger utils.Logger) *responseWriter {
 	return &responseWriter{
-		header:            http.Header{},
-		headerStream:      headerStream,
-		headerStreamMutex: headerStreamMutex,
-		dataStream:        dataStream,
-		dataStreamID:      dataStreamID,
-		logger:            logger,
+		header: http.Header{},
+		stream: stream,
+		logger: logger,
 	}
 }
 
@@ -57,26 +43,23 @@ func (w *responseWriter) WriteHeader(status int) {
 	w.status = status
 
 	var headers bytes.Buffer
-	enc := hpack.NewEncoder(&headers)
-	enc.WriteField(hpack.HeaderField{Name: ":status", Value: strconv.Itoa(status)})
+	enc := qpack.NewEncoder(&headers)
+	enc.WriteField(qpack.HeaderField{Name: ":status", Value: strconv.Itoa(status)})
 
 	for k, v := range w.header {
 		for index := range v {
-			enc.WriteField(hpack.HeaderField{Name: strings.ToLower(k), Value: v[index]})
+			enc.WriteField(qpack.HeaderField{Name: strings.ToLower(k), Value: v[index]})
 		}
 	}
 
+	buf := &bytes.Buffer{}
+	(&headersFrame{Length: uint64(headers.Len())}).Write(buf)
 	w.logger.Infof("Responding with %d", status)
-	w.headerStreamMutex.Lock()
-	defer w.headerStreamMutex.Unlock()
-	h2framer := http2.NewFramer(w.headerStream, nil)
-	err := h2framer.WriteHeaders(http2.HeadersFrameParam{
-		StreamID:      uint32(w.dataStreamID),
-		EndHeaders:    true,
-		BlockFragment: headers.Bytes(),
-	})
-	if err != nil {
-		w.logger.Errorf("could not write h2 header: %s", err.Error())
+	if _, err := w.stream.Write(buf.Bytes()); err != nil {
+		w.logger.Errorf("could not write headers frame: %s", err.Error())
+	}
+	if _, err := w.stream.Write(headers.Bytes()); err != nil {
+		w.logger.Errorf("could not write header frame payload: %s", err.Error())
 	}
 }
 
@@ -87,7 +70,13 @@ func (w *responseWriter) Write(p []byte) (int, error) {
 	if !bodyAllowedForStatus(w.status) {
 		return 0, http.ErrBodyNotAllowed
 	}
-	return w.dataStream.Write(p)
+	df := &dataFrame{Length: uint64(len(p))}
+	buf := &bytes.Buffer{}
+	df.Write(buf)
+	if _, err := w.stream.Write(buf.Bytes()); err != nil {
+		return 0, err
+	}
+	return w.stream.Write(p)
 }
 
 func (w *responseWriter) Flush() {}

@@ -1,7 +1,8 @@
-package h2quic
+package http3
 
 import (
-	"bytes"
+	"github.com/golang/mock/gomock"
+	mockquic "github.com/lucas-clemente/quic-go/internal/mocks/quic"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -9,21 +10,17 @@ import (
 
 var _ = Describe("Response Body", func() {
 	var (
-		stream *mockStream
+		stream *mockquic.MockStream
 		body   *responseBody
 	)
 
 	BeforeEach(func() {
-		stream = newMockStream(42)
+		stream = mockquic.NewMockStream(mockCtrl)
 		body = &responseBody{stream}
 	})
 
 	It("calls CancelRead when closing", func() {
-		stream.dataToRead = *bytes.NewBuffer([]byte("foobar"))
-		n, err := body.Read(make([]byte, 3))
-		Expect(err).ToNot(HaveOccurred())
-		Expect(n).To(Equal(3))
+		stream.EXPECT().CancelRead(gomock.Any())
 		Expect(body.Close()).To(Succeed())
-		Expect(stream.canceledRead).To(BeTrue())
 	})
 })

@@ -8,7 +8,7 @@ import (
 	"strconv"
 
 	quic "github.com/lucas-clemente/quic-go"
-	"github.com/lucas-clemente/quic-go/h2quic"
+	"github.com/lucas-clemente/quic-go/http3"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/internal/testdata"
 
@@ -27,7 +27,7 @@ var (
 	// PRDataLong contains dataLenLong bytes of pseudo-random data.
 	PRDataLong = GeneratePRData(dataLenLong)
 
-	server         *h2quic.Server
+	server         *http3.Server
 	stoppedServing chan struct{}
 	port           string
 )
@@ -75,10 +75,10 @@ func GeneratePRData(l int) []byte {
 	return res
 }
 
-// StartQuicServer starts a h2quic.Server.
+// StartQuicServer starts a http3.Server.
 // versions is a slice of supported QUIC versions. It may be nil, then all supported versions are used.
 func StartQuicServer(versions []protocol.VersionNumber) {
-	server = &h2quic.Server{
+	server = &http3.Server{
 		Server: &http.Server{
 			TLSConfig: testdata.GetTLSConfig(),
 		},
@@ -102,7 +102,7 @@ func StartQuicServer(versions []protocol.VersionNumber) {
 	}()
 }
 
-// StopQuicServer stops the h2quic.Server.
+// StopQuicServer stops the http3.Server.
 func StopQuicServer() {
 	Expect(server.Close()).NotTo(HaveOccurred())
 	Eventually(stoppedServing).Should(BeClosed())

@@ -1,4 +1,4 @@
-package h2quic
+package http3
 
 import "net/http"
 
