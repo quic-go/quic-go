@@ -1095,12 +1095,17 @@ func (s *session) sendProbePacket() error {
 }
 
 func (s *session) sendPacket() (bool, error) {
-	if isBlocked, offset := s.connFlowController.IsNewlyBlocked(); isBlocked {
-		s.framer.QueueControlFrame(&wire.DataBlockedFrame{DataLimit: offset})
+	var packet *packedPacket
+	var err error
+	if !s.handshakeComplete {
+		packet, err = s.packer.PackCryptoPacket()
+	} else {
+		if isBlocked, offset := s.connFlowController.IsNewlyBlocked(); isBlocked {
+			s.framer.QueueControlFrame(&wire.DataBlockedFrame{DataLimit: offset})
+		}
+		s.windowUpdateQueue.QueueAll()
+		packet, err = s.packer.PackPacket()
 	}
-	s.windowUpdateQueue.QueueAll()
-
-	packet, err := s.packer.PackPacket()
 	if err != nil || packet == nil {
 		return false, err
 	}

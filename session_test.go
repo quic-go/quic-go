@@ -775,6 +775,10 @@ var _ = Describe("Session", func() {
 			}
 		}
 
+		BeforeEach(func() {
+			sess.handshakeComplete = true
+		})
+
 		It("sends packets", func() {
 			packer.EXPECT().PackPacket().Return(getPacket(1), nil)
 			Expect(sess.receivedPacketHandler.ReceivedPacket(0x035e, protocol.Encryption1RTT, time.Now(), true)).To(Succeed())
@@ -1381,6 +1385,7 @@ var _ = Describe("Session", func() {
 		})
 
 		It("closes the session due to the idle timeout after handshake", func() {
+			sess.handshakeComplete = true
 			packer.EXPECT().PackPacket().AnyTimes()
 			sessionRunner.EXPECT().Remove(gomock.Any())
 			cryptoSetup.EXPECT().Close()
@@ -1388,7 +1393,7 @@ var _ = Describe("Session", func() {
 			done := make(chan struct{})
 			go func() {
 				defer GinkgoRecover()
-				sessionRunner.EXPECT().OnHandshakeComplete(sess)
+				sessionRunner.EXPECT().OnHandshakeComplete(sess).MaxTimes(1)
 				cryptoSetup.EXPECT().RunHandshake()
 				err := sess.run()
 				nerr, ok := err.(net.Error)

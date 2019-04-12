@@ -16,6 +16,7 @@ import (
 
 type packer interface {
 	PackPacket() (*packedPacket, error)
+	PackCryptoPacket() (*packedPacket, error)
 	MaybePackAckPacket() (*packedPacket, error)
 	PackRetransmission(packet *ackhandler.Packet) ([]*packedPacket, error)
 	PackConnectionClose(*wire.ConnectionCloseFrame) (*packedPacket, error)
@@ -245,20 +246,9 @@ func (p *packetPacker) PackRetransmission(packet *ackhandler.Packet) ([]*packedP
 // PackPacket packs a new packet
 // the other controlFrames are sent in the next packet, but might be queued and sent in the next packet if the packet would overflow MaxPacketSize otherwise
 func (p *packetPacker) PackPacket() (*packedPacket, error) {
-	packet, err := p.maybePackCryptoPacket()
-	if err != nil {
-		return nil, err
-	}
-	if packet != nil {
-		return packet, nil
-	}
-
 	encLevel, sealer := p.cryptoSetup.GetSealer()
 	header := p.getHeader(encLevel)
 	headerLen := header.GetLength(p.version)
-	if err != nil {
-		return nil, err
-	}
 
 	maxSize := p.maxPacketSize - protocol.ByteCount(sealer.Overhead()) - headerLen
 	frames, err := p.composeNextPacket(maxSize)
@@ -285,7 +275,7 @@ func (p *packetPacker) PackPacket() (*packedPacket, error) {
 	return p.writeAndSealPacket(header, frames, encLevel, sealer)
 }
 
-func (p *packetPacker) maybePackCryptoPacket() (*packedPacket, error) {
+func (p *packetPacker) PackCryptoPacket() (*packedPacket, error) {
 	var s cryptoStream
 	var encLevel protocol.EncryptionLevel
 

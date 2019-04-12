@@ -91,6 +91,21 @@ func (mr *MockPackerMockRecorder) PackConnectionClose(arg0 interface{}) *gomock.
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PackConnectionClose", reflect.TypeOf((*MockPacker)(nil).PackConnectionClose), arg0)
 }
 
+// PackCryptoPacket mocks base method
+func (m *MockPacker) PackCryptoPacket() (*packedPacket, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "PackCryptoPacket")
+	ret0, _ := ret[0].(*packedPacket)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// PackCryptoPacket indicates an expected call of PackCryptoPacket
+func (mr *MockPackerMockRecorder) PackCryptoPacket() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PackCryptoPacket", reflect.TypeOf((*MockPacker)(nil).PackCryptoPacket))
+}
+
 // PackPacket mocks base method
 func (m *MockPacker) PackPacket() (*packedPacket, error) {
 	m.ctrl.T.Helper()
