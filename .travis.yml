@@ -16,6 +16,7 @@ go:
 env:
   global:
     - TIMESCALE_FACTOR=20
+    - GO111MODULE=on
   matrix:
     - TRAVIS_GOARCH=amd64 TESTMODE=unit
     - TRAVIS_GOARCH=amd64 TESTMODE=integration
