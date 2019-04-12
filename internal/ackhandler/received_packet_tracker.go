@@ -19,11 +19,11 @@ type receivedPacketTracker struct {
 	ackSendDelay time.Duration
 	rttStats     *congestion.RTTStats
 
-	packetsReceivedSinceLastAck                int
-	retransmittablePacketsReceivedSinceLastAck int
-	ackQueued                                  bool
-	ackAlarm                                   time.Time
-	lastAck                                    *wire.AckFrame
+	packetsReceivedSinceLastAck             int
+	ackElicitingPacketsReceivedSinceLastAck int
+	ackQueued                               bool
+	ackAlarm                                time.Time
+	lastAck                                 *wire.AckFrame
 
 	logger utils.Logger
 
@@ -115,14 +115,14 @@ func (h *receivedPacketTracker) maybeQueueAck(packetNumber protocol.PacketNumber
 	}
 
 	if !h.ackQueued && shouldInstigateAck {
-		h.retransmittablePacketsReceivedSinceLastAck++
+		h.ackElicitingPacketsReceivedSinceLastAck++
 
 		if packetNumber > minReceivedBeforeAckDecimation {
 			// ack up to 10 packets at once
-			if h.retransmittablePacketsReceivedSinceLastAck >= retransmittablePacketsBeforeAck {
+			if h.ackElicitingPacketsReceivedSinceLastAck >= ackElicitingPacketsBeforeAck {
 				h.ackQueued = true
 				if h.logger.Debug() {
-					h.logger.Debugf("\tQueueing ACK because packet %d packets were received after the last ACK (using threshold: %d).", h.retransmittablePacketsReceivedSinceLastAck, retransmittablePacketsBeforeAck)
+					h.logger.Debugf("\tQueueing ACK because packet %d packets were received after the last ACK (using threshold: %d).", h.ackElicitingPacketsReceivedSinceLastAck, ackElicitingPacketsBeforeAck)
 				}
 			} else if h.ackAlarm.IsZero() {
 				// wait for the minimum of the ack decimation delay or the delayed ack time before sending an ack
@@ -133,10 +133,10 @@ func (h *receivedPacketTracker) maybeQueueAck(packetNumber protocol.PacketNumber
 				}
 			}
 		} else {
-			// send an ACK every 2 retransmittable packets
-			if h.retransmittablePacketsReceivedSinceLastAck >= initialRetransmittablePacketsBeforeAck {
+			// send an ACK every 2 ack-eliciting packets
+			if h.ackElicitingPacketsReceivedSinceLastAck >= initialAckElicitingPacketsBeforeAck {
 				if h.logger.Debug() {
-					h.logger.Debugf("\tQueueing ACK because packet %d packets were received after the last ACK (using initial threshold: %d).", h.retransmittablePacketsReceivedSinceLastAck, initialRetransmittablePacketsBeforeAck)
+					h.logger.Debugf("\tQueueing ACK because packet %d packets were received after the last ACK (using initial threshold: %d).", h.ackElicitingPacketsReceivedSinceLastAck, initialAckElicitingPacketsBeforeAck)
 				}
 				h.ackQueued = true
 			} else if h.ackAlarm.IsZero() {
@@ -184,7 +184,7 @@ func (h *receivedPacketTracker) GetAckFrame() *wire.AckFrame {
 	h.ackAlarm = time.Time{}
 	h.ackQueued = false
 	h.packetsReceivedSinceLastAck = 0
-	h.retransmittablePacketsReceivedSinceLastAck = 0
+	h.ackElicitingPacketsReceivedSinceLastAck = 0
 	return ack
 }
 

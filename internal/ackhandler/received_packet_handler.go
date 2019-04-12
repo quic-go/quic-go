@@ -11,12 +11,12 @@ import (
 )
 
 const (
-	// maximum delay that can be applied to an ACK for a retransmittable packet
+	// maximum delay that can be applied to an ACK for an ack-eliciting packet
 	ackSendDelay = 25 * time.Millisecond
-	// initial maximum number of retransmittable packets received before sending an ack.
-	initialRetransmittablePacketsBeforeAck = 2
-	// number of retransmittable that an ACK is sent for
-	retransmittablePacketsBeforeAck = 10
+	// initial maximum number of ack-eliciting packets received before sending an ack.
+	initialAckElicitingPacketsBeforeAck = 2
+	// number of ack-eliciting that an ACK is sent for
+	ackElicitingPacketsBeforeAck = 10
 	// 1/5 RTT delay when doing ack decimation
 	ackDecimationDelay = 1.0 / 4
 	// 1/8 RTT delay when doing ack decimation

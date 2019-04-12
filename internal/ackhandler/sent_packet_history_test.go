@@ -208,7 +208,7 @@ var _ = Describe("SentPacketHistory", func() {
 			Expect(hist.HasOutstandingPackets()).To(BeTrue())
 		})
 
-		It("doesn't consider non-retransmittable packets as outstanding", func() {
+		It("doesn't consider non-ack-eliciting packets as outstanding", func() {
 			hist.SentPacket(&Packet{
 				EncryptionLevel: protocol.EncryptionInitial,
 			})
@@ -227,7 +227,7 @@ var _ = Describe("SentPacketHistory", func() {
 			Expect(hist.HasOutstandingPackets()).To(BeFalse())
 		})
 
-		It("doesn't count packets marked as non-retransmittable", func() {
+		It("doesn't count packets marked as non-ack-eliciting", func() {
 			hist.SentPacket(&Packet{
 				PacketNumber:       10,
 				EncryptionLevel:    protocol.Encryption1RTT,

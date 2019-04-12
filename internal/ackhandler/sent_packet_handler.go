@@ -37,8 +37,8 @@ func newPacketNumberSpace(initialPN protocol.PacketNumber) *packetNumberSpace {
 }
 
 type sentPacketHandler struct {
-	lastSentRetransmittablePacketTime time.Time // only applies to the application-data packet number space
-	lastSentCryptoPacketTime          time.Time
+	lastSentAckElicitingPacketTime time.Time // only applies to the application-data packet number space
+	lastSentCryptoPacketTime       time.Time
 
 	nextSendTime time.Time
 
@@ -125,7 +125,7 @@ func (h *sentPacketHandler) SetHandshakeComplete() {
 }
 
 func (h *sentPacketHandler) SentPacket(packet *Packet) {
-	if isRetransmittable := h.sentPacketImpl(packet); isRetransmittable {
+	if isAckEliciting := h.sentPacketImpl(packet); isAckEliciting {
 		h.getPacketNumberSpace(packet.EncryptionLevel).history.SentPacket(packet)
 		h.updateLossDetectionAlarm()
 	}
@@ -134,7 +134,7 @@ func (h *sentPacketHandler) SentPacket(packet *Packet) {
 func (h *sentPacketHandler) SentPacketsAsRetransmission(packets []*Packet, retransmissionOf protocol.PacketNumber) {
 	var p []*Packet
 	for _, packet := range packets {
-		if isRetransmittable := h.sentPacketImpl(packet); isRetransmittable {
+		if isAckEliciting := h.sentPacketImpl(packet); isAckEliciting {
 			p = append(p, packet)
 		}
 	}
@@ -155,7 +155,7 @@ func (h *sentPacketHandler) getPacketNumberSpace(encLevel protocol.EncryptionLev
 	}
 }
 
-func (h *sentPacketHandler) sentPacketImpl(packet *Packet) bool /* isRetransmittable */ {
+func (h *sentPacketHandler) sentPacketImpl(packet *Packet) bool /* is ack-eliciting */ {
 	pnSpace := h.getPacketNumberSpace(packet.EncryptionLevel)
 
 	if h.logger.Debug() && pnSpace.largestSent != 0 {
@@ -172,14 +172,14 @@ func (h *sentPacketHandler) sentPacketImpl(packet *Packet) bool /* isRetransmitt
 		}
 	}
 
-	packet.Frames = stripNonRetransmittableFrames(packet.Frames)
-	isRetransmittable := len(packet.Frames) != 0
+	packet.Frames = stripNonAckElicitingFrames(packet.Frames)
+	isAckEliciting := len(packet.Frames) != 0
 
-	if isRetransmittable {
+	if isAckEliciting {
 		if packet.EncryptionLevel != protocol.Encryption1RTT {
 			h.lastSentCryptoPacketTime = packet.SendTime
 		}
-		h.lastSentRetransmittablePacketTime = packet.SendTime
+		h.lastSentAckElicitingPacketTime = packet.SendTime
 		packet.includedInBytesInFlight = true
 		h.bytesInFlight += packet.Length
 		packet.canBeRetransmitted = true
@@ -187,10 +187,10 @@ func (h *sentPacketHandler) sentPacketImpl(packet *Packet) bool /* isRetransmitt
 			h.numProbesToSend--
 		}
 	}
-	h.congestion.OnPacketSent(packet.SendTime, h.bytesInFlight, packet.PacketNumber, packet.Length, isRetransmittable)
+	h.congestion.OnPacketSent(packet.SendTime, h.bytesInFlight, packet.PacketNumber, packet.Length, isAckEliciting)
 
 	h.nextSendTime = utils.MaxTime(h.nextSendTime, packet.SendTime).Add(h.congestion.TimeUntilSend(h.bytesInFlight))
-	return isRetransmittable
+	return isAckEliciting
 }
 
 func (h *sentPacketHandler) ReceivedAck(ackFrame *wire.AckFrame, withPacketNumber protocol.PacketNumber, encLevel protocol.EncryptionLevel, rcvTime time.Time) error {
@@ -325,7 +325,7 @@ func (h *sentPacketHandler) updateLossDetectionAlarm() {
 		// Early retransmit timer or time loss detection.
 		h.alarm = h.lossTime
 	} else { // PTO alarm
-		h.alarm = h.lastSentRetransmittablePacketTime.Add(h.computePTOTimeout())
+		h.alarm = h.lastSentAckElicitingPacketTime.Add(h.computePTOTimeout())
 	}
 }
 
@@ -438,7 +438,7 @@ func (h *sentPacketHandler) onPacketAcked(p *Packet, rcvTime time.Time) error {
 	}
 
 	// only report the acking of this packet to the congestion controller if:
-	// * it is a retransmittable packet
+	// * it is an ack-eliciting packet
 	// * this packet wasn't retransmitted yet
 	if p.isRetransmission {
 		// that the parent doesn't exist is expected to happen every time the original packet was already acked

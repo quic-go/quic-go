@@ -493,7 +493,7 @@ var _ = Describe("Session", func() {
 			Expect(sess.handlePacketImpl(getPacket(&wire.ExtendedHeader{Header: hdr}, nil))).To(BeFalse())
 		})
 
-		It("informs the ReceivedPacketHandler about non-retransmittable packets", func() {
+		It("informs the ReceivedPacketHandler about non-ack-eliciting packets", func() {
 			hdr := &wire.ExtendedHeader{
 				Header:          wire.Header{DestConnectionID: sess.srcConnID},
 				PacketNumber:    0x37,
@@ -514,7 +514,7 @@ var _ = Describe("Session", func() {
 			Expect(sess.handlePacketImpl(packet)).To(BeTrue())
 		})
 
-		It("informs the ReceivedPacketHandler about retransmittable packets", func() {
+		It("informs the ReceivedPacketHandler about ack-eliciting packets", func() {
 			hdr := &wire.ExtendedHeader{
 				Header:          wire.Header{DestConnectionID: sess.srcConnID},
 				PacketNumber:    0x37,
@@ -1403,7 +1403,7 @@ var _ = Describe("Session", func() {
 		It("doesn't time out when it just sent a packet", func() {
 			sess.handshakeComplete = true
 			sess.lastPacketReceivedTime = time.Now().Add(-time.Hour)
-			sess.firstRetransmittablePacketAfterIdleSentTime = time.Now().Add(-time.Second)
+			sess.firstAckElicitingPacketAfterIdleSentTime = time.Now().Add(-time.Second)
 			sess.config.IdleTimeout = 30 * time.Second
 			go func() {
 				defer GinkgoRecover()
