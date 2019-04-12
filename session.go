@@ -360,8 +360,6 @@ runLoop:
 		select {
 		case closeErr = <-s.closeChan:
 			break runLoop
-		case <-s.handshakeCompleteChan:
-			s.handleHandshakeComplete()
 		default:
 		}
 
