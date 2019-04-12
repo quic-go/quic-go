@@ -6,6 +6,7 @@ environment:
   GOPATH: c:\gopath
   CGO_ENABLED: 0
   TIMESCALE_FACTOR: 20
+  GO111MODULE: on
   matrix:
     - GOARCH: 386
     - GOARCH: amd64
