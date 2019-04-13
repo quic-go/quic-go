@@ -47,8 +47,8 @@ func (p *packedPacket) EncryptionLevel() protocol.EncryptionLevel {
 	}
 }
 
-func (p *packedPacket) IsRetransmittable() bool {
-	return ackhandler.HasRetransmittableFrames(p.frames)
+func (p *packedPacket) IsAckEliciting() bool {
+	return ackhandler.HasAckElicitingFrames(p.frames)
 }
 
 func (p *packedPacket) ToAckHandlerPacket() *ackhandler.Packet {
@@ -115,8 +115,8 @@ type packetPacker struct {
 	framer    frameSource
 	acks      ackFrameSource
 
-	maxPacketSize             protocol.ByteCount
-	numNonRetransmittableAcks int
+	maxPacketSize          protocol.ByteCount
+	numNonAckElicitingAcks int
 }
 
 var _ packer = &packetPacker{}
@@ -271,15 +271,15 @@ func (p *packetPacker) PackPacket() (*packedPacket, error) {
 		return nil, nil
 	}
 	// check if this packet only contains an ACK
-	if !ackhandler.HasRetransmittableFrames(frames) {
-		if p.numNonRetransmittableAcks >= protocol.MaxNonRetransmittableAcks {
+	if !ackhandler.HasAckElicitingFrames(frames) {
+		if p.numNonAckElicitingAcks >= protocol.MaxNonAckElicitingAcks {
 			frames = append(frames, &wire.PingFrame{})
-			p.numNonRetransmittableAcks = 0
+			p.numNonAckElicitingAcks = 0
 		} else {
-			p.numNonRetransmittableAcks++
+			p.numNonAckElicitingAcks++
 		}
 	} else {
-		p.numNonRetransmittableAcks = 0
+		p.numNonAckElicitingAcks = 0
 	}
 
 	return p.writeAndSealPacket(header, frames, encLevel, sealer)

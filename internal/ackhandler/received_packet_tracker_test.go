@@ -108,7 +108,7 @@ var _ = Describe("Received Packet Tracker", func() {
 				Expect(tracker.GetAckFrame().DelayTime).To(BeNumerically("~", 0, time.Second))
 			})
 
-			It("queues an ACK for every second retransmittable packet at the beginning", func() {
+			It("queues an ACK for every second ack-eliciting packet at the beginning", func() {
 				receiveAndAck10Packets()
 				p := protocol.PacketNumber(11)
 				for i := 0; i <= 20; i++ {
@@ -125,7 +125,7 @@ var _ = Describe("Received Packet Tracker", func() {
 				}
 			})
 
-			It("queues an ACK for every 10 retransmittable packet, if they are arriving fast", func() {
+			It("queues an ACK for every 10 ack-eliciting packet, if they are arriving fast", func() {
 				receiveAndAck10Packets()
 				p := protocol.PacketNumber(10000)
 				for i := 0; i < 9; i++ {
@@ -141,7 +141,7 @@ var _ = Describe("Received Packet Tracker", func() {
 				Expect(tracker.GetAlarmTimeout()).To(BeZero())
 			})
 
-			It("only sets the timer when receiving a retransmittable packets", func() {
+			It("only sets the timer when receiving a ack-eliciting packets", func() {
 				receiveAndAck10Packets()
 				err := tracker.ReceivedPacket(11, time.Now(), false)
 				Expect(err).ToNot(HaveOccurred())
@@ -350,7 +350,7 @@ var _ = Describe("Received Packet Tracker", func() {
 				Expect(tracker.GetAckFrame()).ToNot(BeNil())
 				Expect(tracker.packetsReceivedSinceLastAck).To(BeZero())
 				Expect(tracker.GetAlarmTimeout()).To(BeZero())
-				Expect(tracker.retransmittablePacketsReceivedSinceLastAck).To(BeZero())
+				Expect(tracker.ackElicitingPacketsReceivedSinceLastAck).To(BeZero())
 				Expect(tracker.ackQueued).To(BeFalse())
 			})
 

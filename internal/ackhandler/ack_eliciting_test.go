@@ -8,7 +8,7 @@ import (
 	. "github.com/onsi/gomega"
 )
 
-var _ = Describe("retransmittable frames", func() {
+var _ = Describe("ack-eliciting frames", func() {
 	for fl, el := range map[wire.Frame]bool{
 		&wire.AckFrame{}:             false,
 		&wire.DataBlockedFrame{}:     true,
@@ -24,20 +24,20 @@ var _ = Describe("retransmittable frames", func() {
 		fName := reflect.ValueOf(f).Elem().Type().Name()
 
 		It("works for "+fName, func() {
-			Expect(IsFrameRetransmittable(f)).To(Equal(e))
+			Expect(IsFrameAckEliciting(f)).To(Equal(e))
 		})
 
-		It("stripping non-retransmittable frames works for "+fName, func() {
+		It("stripping non-ack-elicinting frames works for "+fName, func() {
 			s := []wire.Frame{f}
 			if e {
-				Expect(stripNonRetransmittableFrames(s)).To(Equal([]wire.Frame{f}))
+				Expect(stripNonAckElicitingFrames(s)).To(Equal([]wire.Frame{f}))
 			} else {
-				Expect(stripNonRetransmittableFrames(s)).To(BeEmpty())
+				Expect(stripNonAckElicitingFrames(s)).To(BeEmpty())
 			}
 		})
 
-		It("HasRetransmittableFrames works for "+fName, func() {
-			Expect(HasRetransmittableFrames([]wire.Frame{f})).To(Equal(e))
+		It("HasAckElicitingFrames works for "+fName, func() {
+			Expect(HasAckElicitingFrames([]wire.Frame{f})).To(Equal(e))
 		})
 	}
 })

@@ -136,8 +136,8 @@ type session struct {
 	sessionCreationTime time.Time
 	// The idle timeout is set based on the max of the time we received the last packet...
 	lastPacketReceivedTime time.Time
-	// ... and the time we sent a new retransmittable packet after receiving a packet.
-	firstRetransmittablePacketAfterIdleSentTime time.Time
+	// ... and the time we sent a new ack-eliciting packet after receiving a packet.
+	firstAckElicitingPacketAfterIdleSentTime time.Time
 	// pacingDeadline is the time when the next packet should be sent
 	pacingDeadline time.Time
 
@@ -401,7 +401,7 @@ runLoop:
 		if s.pacingDeadline.IsZero() { // the timer didn't have a pacing deadline set
 			pacingDeadline = s.sentPacketHandler.TimeUntilSend()
 		}
-		if s.config.KeepAlive && !s.keepAlivePingSent && s.handshakeComplete && s.firstRetransmittablePacketAfterIdleSentTime.IsZero() && time.Since(s.lastPacketReceivedTime) >= s.peerParams.IdleTimeout/2 {
+		if s.config.KeepAlive && !s.keepAlivePingSent && s.handshakeComplete && s.firstAckElicitingPacketAfterIdleSentTime.IsZero() && time.Since(s.lastPacketReceivedTime) >= s.peerParams.IdleTimeout/2 {
 			// send a PING frame since there is no activity in the session
 			s.logger.Debugf("Sending a keep-alive ping to keep the connection alive.")
 			s.framer.QueueControlFrame(&wire.PingFrame{})
@@ -469,7 +469,7 @@ func (s *session) maybeResetTimer() {
 }
 
 func (s *session) idleTimeoutStartTime() time.Time {
-	return utils.MaxTime(s.lastPacketReceivedTime, s.firstRetransmittablePacketAfterIdleSentTime)
+	return utils.MaxTime(s.lastPacketReceivedTime, s.firstAckElicitingPacketAfterIdleSentTime)
 }
 
 func (s *session) handleHandshakeComplete() {
@@ -481,7 +481,7 @@ func (s *session) handleHandshakeComplete() {
 	// We need to make sure they learn about the peer completing the handshake,
 	// in order to stop retransmitting handshake packets.
 	// They will stop retransmitting handshake packets when receiving the first forward-secure packet.
-	// We need to make sure that a retransmittable forward-secure packet is sent,
+	// We need to make sure that an ack-eliciting 1-RTT packet is sent,
 	// independent from the application protocol.
 	if s.perspective == protocol.PerspectiveServer {
 		s.queueControlFrame(&wire.PingFrame{})
@@ -638,7 +638,7 @@ func (s *session) handleUnpackedPacket(packet *unpackedPacket, rcvTime time.Time
 
 	s.receivedFirstPacket = true
 	s.lastPacketReceivedTime = rcvTime
-	s.firstRetransmittablePacketAfterIdleSentTime = time.Time{}
+	s.firstAckElicitingPacketAfterIdleSentTime = time.Time{}
 	s.keepAlivePingSent = false
 
 	// The client completes the handshake first (after sending the CFIN).
@@ -651,7 +651,7 @@ func (s *session) handleUnpackedPacket(packet *unpackedPacket, rcvTime time.Time
 	}
 
 	r := bytes.NewReader(packet.data)
-	var isRetransmittable bool
+	var isAckEliciting bool
 	for {
 		frame, err := s.frameParser.ParseNext(r, packet.encryptionLevel)
 		if err != nil {
@@ -660,15 +660,15 @@ func (s *session) handleUnpackedPacket(packet *unpackedPacket, rcvTime time.Time
 		if frame == nil {
 			break
 		}
-		if ackhandler.IsFrameRetransmittable(frame) {
-			isRetransmittable = true
+		if ackhandler.IsFrameAckEliciting(frame) {
+			isAckEliciting = true
 		}
 		if err := s.handleFrame(frame, packet.packetNumber, packet.encryptionLevel); err != nil {
 			return err
 		}
 	}
 
-	if err := s.receivedPacketHandler.ReceivedPacket(packet.packetNumber, packet.encryptionLevel, rcvTime, isRetransmittable); err != nil {
+	if err := s.receivedPacketHandler.ReceivedPacket(packet.packetNumber, packet.encryptionLevel, rcvTime, isAckEliciting); err != nil {
 		return err
 	}
 	return nil
@@ -1113,8 +1113,8 @@ func (s *session) sendPacket() (bool, error) {
 
 func (s *session) sendPackedPacket(packet *packedPacket) error {
 	defer packet.buffer.Release()
-	if s.firstRetransmittablePacketAfterIdleSentTime.IsZero() && packet.IsRetransmittable() {
-		s.firstRetransmittablePacketAfterIdleSentTime = time.Now()
+	if s.firstAckElicitingPacketAfterIdleSentTime.IsZero() && packet.IsAckEliciting() {
+		s.firstAckElicitingPacketAfterIdleSentTime = time.Now()
 	}
 	s.logPacket(packet)
 	return s.conn.Write(packet.raw)

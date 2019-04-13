@@ -73,8 +73,9 @@ const MaxTrackedSentPackets = MaxOutstandingSentPackets * 5 / 4
 // MaxTrackedReceivedAckRanges is the maximum number of ACK ranges tracked
 const MaxTrackedReceivedAckRanges = defaultMaxCongestionWindowPackets
 
-// MaxNonRetransmittableAcks is the maximum number of packets containing an ACK, but no retransmittable frames, that we send in a row
-const MaxNonRetransmittableAcks = 19
+// MaxNonAckElicitingAcks is the maximum number of packets containing an ACK,
+// but no ack-eliciting frames, that we send in a row
+const MaxNonAckElicitingAcks = 19
 
 // MaxStreamFrameSorterGaps is the maximum number of gaps between received StreamFrames
 // prevents DoS attacks against the streamFrameSorter

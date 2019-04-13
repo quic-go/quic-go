@@ -340,9 +340,9 @@ var _ = Describe("Packet packer", func() {
 				})
 			})
 
-			Context("making ACK packets retransmittable", func() {
-				sendMaxNumNonRetransmittableAcks := func() {
-					for i := 0; i < protocol.MaxNonRetransmittableAcks; i++ {
+			Context("making ACK packets ack-eliciting", func() {
+				sendMaxNumNonAckElicitingAcks := func() {
+					for i := 0; i < protocol.MaxNonAckElicitingAcks; i++ {
 						pnManager.EXPECT().PeekPacketNumber(protocol.Encryption1RTT).Return(protocol.PacketNumber(0x42), protocol.PacketNumberLen2)
 						pnManager.EXPECT().PopPacketNumber(protocol.Encryption1RTT).Return(protocol.PacketNumber(0x42))
 						sealingManager.EXPECT().GetSealer().Return(protocol.Encryption1RTT, sealer)
@@ -356,8 +356,8 @@ var _ = Describe("Packet packer", func() {
 					}
 				}
 
-				It("adds a PING frame when it's supposed to send a retransmittable packet", func() {
-					sendMaxNumNonRetransmittableAcks()
+				It("adds a PING frame when it's supposed to send a ack-eliciting packet", func() {
+					sendMaxNumNonAckElicitingAcks()
 					pnManager.EXPECT().PeekPacketNumber(protocol.Encryption1RTT).Return(protocol.PacketNumber(0x42), protocol.PacketNumberLen2)
 					pnManager.EXPECT().PopPacketNumber(protocol.Encryption1RTT).Return(protocol.PacketNumber(0x42))
 					sealingManager.EXPECT().GetSealer().Return(protocol.Encryption1RTT, sealer)
@@ -382,7 +382,7 @@ var _ = Describe("Packet packer", func() {
 				})
 
 				It("waits until there's something to send before adding a PING frame", func() {
-					sendMaxNumNonRetransmittableAcks()
+					sendMaxNumNonAckElicitingAcks()
 					// nothing to send
 					pnManager.EXPECT().PeekPacketNumber(protocol.Encryption1RTT).Return(protocol.PacketNumber(0x42), protocol.PacketNumberLen2)
 					sealingManager.EXPECT().GetSealer().Return(protocol.Encryption1RTT, sealer)
@@ -405,8 +405,8 @@ var _ = Describe("Packet packer", func() {
 					Expect(p.frames).To(ContainElement(&wire.PingFrame{}))
 				})
 
-				It("doesn't send a PING if it already sent another retransmittable frame", func() {
-					sendMaxNumNonRetransmittableAcks()
+				It("doesn't send a PING if it already sent another ack-elicitng frame", func() {
+					sendMaxNumNonAckElicitingAcks()
 					pnManager.EXPECT().PeekPacketNumber(protocol.Encryption1RTT).Return(protocol.PacketNumber(0x42), protocol.PacketNumberLen2)
 					pnManager.EXPECT().PopPacketNumber(protocol.Encryption1RTT).Return(protocol.PacketNumber(0x42))
 					sealingManager.EXPECT().GetSealer().Return(protocol.Encryption1RTT, sealer)
