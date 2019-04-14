@@ -59,6 +59,20 @@ var _ = Describe("HTTP tests", func() {
 				Expect(string(body)).To(Equal("Hello, World!\n"))
 			})
 
+			It("sets and gets response headers", func() {
+				http.HandleFunc("/headers", func(w http.ResponseWriter, r *http.Request) {
+					defer GinkgoRecover()
+					w.Header().Set("foo", "bar")
+					w.Header().Set("lorem", "ipsum")
+				})
+
+				resp, err := client.Get("https://localhost:" + testserver.Port() + "/headers")
+				Expect(err).ToNot(HaveOccurred())
+				Expect(resp.StatusCode).To(Equal(200))
+				Expect(resp.Header.Get("foo")).To(Equal("bar"))
+				Expect(resp.Header.Get("lorem")).To(Equal("ipsum"))
+			})
+
 			It("downloads a small file", func() {
 				resp, err := client.Get("https://localhost:" + testserver.Port() + "/prdata")
 				Expect(err).ToNot(HaveOccurred())
