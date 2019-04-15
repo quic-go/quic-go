@@ -2,9 +2,11 @@ package http3
 
 import (
 	"bytes"
+	"compress/gzip"
 	"crypto/tls"
 	"errors"
 	"io"
+	"io/ioutil"
 	"net/http"
 	"time"
 
@@ -266,6 +268,98 @@ var _ = Describe("Client", func() {
 				})
 				_, err := client.RoundTrip(request)
 				Expect(err).To(MatchError("test done"))
+			})
+		})
+
+		Context("gzip compression", func() {
+			var gzippedData []byte // a gzipped foobar
+			var response *http.Response
+
+			BeforeEach(func() {
+				var b bytes.Buffer
+				w := gzip.NewWriter(&b)
+				w.Write([]byte("foobar"))
+				w.Close()
+				gzippedData = b.Bytes()
+				response = &http.Response{
+					StatusCode: 200,
+					Header:     http.Header{"Content-Length": []string{"1000"}},
+				}
+				_ = gzippedData
+				_ = response
+			})
+
+			It("adds the gzip header to requests", func() {
+				sess.EXPECT().OpenStreamSync().Return(str, nil)
+				buf := &bytes.Buffer{}
+				str.EXPECT().Write(gomock.Any()).DoAndReturn(func(p []byte) (int, error) {
+					return buf.Write(p)
+				})
+				str.EXPECT().Close()
+				str.EXPECT().Read(gomock.Any()).Return(0, errors.New("test done"))
+				_, err := client.RoundTrip(request)
+				Expect(err).To(MatchError("test done"))
+				hfs := decodeHeader(buf)
+				Expect(hfs).To(HaveKeyWithValue("accept-encoding", "gzip"))
+			})
+
+			It("doesn't add gzip if the header disable it", func() {
+				client = newClient("quic.clemente.io:1337", nil, &roundTripperOpts{DisableCompression: true}, nil, nil)
+				sess.EXPECT().OpenStreamSync().Return(str, nil)
+				buf := &bytes.Buffer{}
+				str.EXPECT().Write(gomock.Any()).DoAndReturn(func(p []byte) (int, error) {
+					return buf.Write(p)
+				})
+				str.EXPECT().Close()
+				str.EXPECT().Read(gomock.Any()).Return(0, errors.New("test done"))
+				_, err := client.RoundTrip(request)
+				Expect(err).To(MatchError("test done"))
+				hfs := decodeHeader(buf)
+				Expect(hfs).ToNot(HaveKey("accept-encoding"))
+			})
+
+			It("decompresses the response", func() {
+				sess.EXPECT().OpenStreamSync().Return(str, nil)
+				buf := &bytes.Buffer{}
+				rw := newResponseWriter(buf, utils.DefaultLogger)
+				rw.Header().Set("Content-Encoding", "gzip")
+				gz := gzip.NewWriter(rw)
+				gz.Write([]byte("gzipped response"))
+				gz.Close()
+				str.EXPECT().Write(gomock.Any()).AnyTimes()
+				str.EXPECT().Read(gomock.Any()).DoAndReturn(func(p []byte) (int, error) {
+					return buf.Read(p)
+				}).AnyTimes()
+				str.EXPECT().Close()
+
+				rsp, err := client.RoundTrip(request)
+				Expect(err).ToNot(HaveOccurred())
+				data, err := ioutil.ReadAll(rsp.Body)
+				Expect(err).ToNot(HaveOccurred())
+				Expect(rsp.ContentLength).To(BeEquivalentTo(-1))
+				Expect(string(data)).To(Equal("gzipped response"))
+				Expect(rsp.Header.Get("Content-Encoding")).To(BeEmpty())
+				Expect(rsp.Uncompressed).To(BeTrue())
+			})
+
+			It("only decompresses the response if the response contains the right content-encoding header", func() {
+				sess.EXPECT().OpenStreamSync().Return(str, nil)
+				buf := &bytes.Buffer{}
+				rw := newResponseWriter(buf, utils.DefaultLogger)
+				rw.Write([]byte("not gzipped"))
+				str.EXPECT().Write(gomock.Any()).AnyTimes()
+				str.EXPECT().Read(gomock.Any()).DoAndReturn(func(p []byte) (int, error) {
+					return buf.Read(p)
+				}).AnyTimes()
+				str.EXPECT().Close()
+
+				rsp, err := client.RoundTrip(request)
+				Expect(err).ToNot(HaveOccurred())
+				data, err := ioutil.ReadAll(rsp.Body)
+				Expect(err).ToNot(HaveOccurred())
+				Expect(rsp.ContentLength).ToNot(BeEquivalentTo(-1))
+				Expect(string(data)).To(Equal("not gzipped"))
+				Expect(rsp.Header.Get("Content-Encoding")).To(BeEmpty())
 			})
 		})
 	})
