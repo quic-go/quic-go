@@ -4,7 +4,9 @@ import (
   "fmt"
   "net/http"
   "crypto/tls"
+  "strconv"
   "time"
+  //"io/ioutil"
 
   quic "github.com/lucas-clemente/quic-go"
   "github.com/lucas-clemente/quic-go/h2quic"
@@ -12,7 +14,6 @@ import (
 )
 
 func main() {
-  url := "https://localhost:6121/demo/tiles"
   versions := protocol.SupportedVersions
 
   roundTripper := &h2quic.RoundTripper{
@@ -22,15 +23,27 @@ func main() {
   hclient := &http.Client{
     Transport: roundTripper,
   }
-  start := time.Now()
-  _, err := hclient.Get(url)
-  if err != nil {
-    fmt.Println(err)
-    panic("failed")
-  } else {
-    t := time.Now()
-    elapsed := t.Sub(start)
-    fmt.Println(elapsed)
+  p := true
+  start := 0
+  stop := 1
+  for i := start; i < stop; i++ {
+    t0 := time.Now()
+    url := "https://stalepopcorn.club/static/files/file"+strconv.Itoa(i)+".html"
+    //url := "https://stalepopcorn.club/random"
+    fmt.Println(url)
+    _, err := hclient.Get(url)
+    if err != nil {
+      fmt.Println(err)
+      panic("failed")
+    } else {
+      t1 := time.Now()
+      elapsed := t1.Sub(t0)
+      if (p) {
+        fmt.Println(elapsed)
+      }
+      p = true
+    }
   }
+  fmt.Println("Done!")
   roundTripper.Close()
 }
