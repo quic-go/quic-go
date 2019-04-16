@@ -82,13 +82,6 @@ var _ = Describe("Server", func() {
 			str.EXPECT().Close().Do(func() { close(closed) })
 			rw := newRequestWriter(utils.DefaultLogger)
 			Expect(rw.WriteRequest(str, req)).To(Succeed())
-			if req.Body != nil {
-				b := make([]byte, 1000)
-				n, err := io.ReadFull(req.Body, b)
-				Expect(err).To(Equal(io.ErrUnexpectedEOF)) // otherwise b is too small for this test
-				(&dataFrame{Length: uint64(n)}).Write(buf)
-				buf.Write(b[:n])
-			}
 			Eventually(closed).Should(BeClosed())
 			return buf.Bytes()
 		}
