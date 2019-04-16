@@ -15,8 +15,8 @@ import (
 
 const (
 	// Maximum reordering in time space before time based loss detection considers a packet lost.
-	// In fraction of an RTT.
-	timeReorderingFraction = 1.0 / 8
+	// Specified as an RTT multiplier.
+	timeThreshold = 9.0 / 8
 	// Timer granularity. The timer will not be set to a value smaller than granularity.
 	granularity = time.Millisecond
 )
@@ -340,7 +340,10 @@ func (h *sentPacketHandler) detectLostPackets(
 	pnSpace := h.getPacketNumberSpace(encLevel)
 
 	maxRTT := float64(utils.MaxDuration(h.rttStats.LatestRTT(), h.rttStats.SmoothedRTT()))
-	delayUntilLost := time.Duration((1.0 + timeReorderingFraction) * maxRTT)
+	lossDelay := time.Duration(timeThreshold * maxRTT)
+
+	// Minimum time of granularity before packets are deemed lost.
+	lossDelay = utils.MaxDuration(lossDelay, granularity)
 
 	var lostPackets []*Packet
 	pnSpace.history.Iterate(func(packet *Packet) (bool, error) {
@@ -349,14 +352,14 @@ func (h *sentPacketHandler) detectLostPackets(
 		}
 
 		timeSinceSent := now.Sub(packet.SendTime)
-		if timeSinceSent > delayUntilLost {
+		if timeSinceSent > lossDelay {
 			lostPackets = append(lostPackets, packet)
 		} else if h.lossTime.IsZero() && encLevel == protocol.Encryption1RTT {
 			if h.logger.Debug() {
-				h.logger.Debugf("\tsetting loss timer for packet %#x to %s (in %s)", packet.PacketNumber, delayUntilLost, delayUntilLost-timeSinceSent)
+				h.logger.Debugf("\tsetting loss timer for packet %#x to %s (in %s)", packet.PacketNumber, lossDelay, lossDelay-timeSinceSent)
 			}
 			// Note: This conditional is only entered once per call
-			h.lossTime = now.Add(delayUntilLost - timeSinceSent)
+			h.lossTime = now.Add(lossDelay - timeSinceSent)
 		}
 		return true, nil
 	})
