@@ -15,8 +15,8 @@ import (
 
 const (
 	// Maximum reordering in time space before time based loss detection considers a packet lost.
-	// In fraction of an RTT.
-	timeReorderingFraction = 1.0 / 8
+	// Specified as an RTT multiplier.
+	timeThreshold = 9.0 / 8
 	// Timer granularity. The timer will not be set to a value smaller than granularity.
 	granularity = time.Millisecond
 )
@@ -340,7 +340,7 @@ func (h *sentPacketHandler) detectLostPackets(
 	pnSpace := h.getPacketNumberSpace(encLevel)
 
 	maxRTT := float64(utils.MaxDuration(h.rttStats.LatestRTT(), h.rttStats.SmoothedRTT()))
-	lossDelay := time.Duration((1.0 + timeReorderingFraction) * maxRTT)
+	lossDelay := time.Duration(timeThreshold * maxRTT)
 
 	var lostPackets []*Packet
 	pnSpace.history.Iterate(func(packet *Packet) (bool, error) {
