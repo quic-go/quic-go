@@ -1,4 +1,6 @@
 defaults: &defaults
+  environment:
+    GO111MODULE: "on"
   working_directory: /go/src/github.com/lucas-clemente/quic-go
   steps:
     - checkout
@@ -37,17 +39,12 @@ defaults: &defaults
 
 version: 2
 jobs:
-  build-go1.11:
+  build-go1.12:
     docker:
-      - image: circleci/golang:1.11-stretch-browsers
-    <<: *defaults
-  build-go1.10:
-    docker:
-      - image: circleci/golang:1.10.4-stretch-browsers
+      - image: circleci/golang:1.12-stretch-browsers
     <<: *defaults
 workflows:
   version: 2
   build:
     jobs:
-      - build-go1.10
-      - build-go1.11
+      - build-go1.12
