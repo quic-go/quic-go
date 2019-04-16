@@ -342,6 +342,9 @@ func (h *sentPacketHandler) detectLostPackets(
 	maxRTT := float64(utils.MaxDuration(h.rttStats.LatestRTT(), h.rttStats.SmoothedRTT()))
 	lossDelay := time.Duration(timeThreshold * maxRTT)
 
+	// Minimum time of granularity before packets are deemed lost.
+	lossDelay = utils.MaxDuration(lossDelay, granularity)
+
 	var lostPackets []*Packet
 	pnSpace.history.Iterate(func(packet *Packet) (bool, error) {
 		if packet.PacketNumber > pnSpace.largestAcked {
