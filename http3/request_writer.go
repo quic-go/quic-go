@@ -36,8 +36,8 @@ func newRequestWriter(logger utils.Logger) *requestWriter {
 	}
 }
 
-func (w *requestWriter) WriteRequest(str quic.Stream, req *http.Request) error {
-	headers, err := w.getHeaders(req)
+func (w *requestWriter) WriteRequest(str quic.Stream, req *http.Request, gzip bool) error {
+	headers, err := w.getHeaders(req, gzip)
 	if err != nil {
 		return err
 	}
@@ -62,12 +62,12 @@ func (w *requestWriter) WriteRequest(str quic.Stream, req *http.Request) error {
 	return nil
 }
 
-func (w *requestWriter) getHeaders(req *http.Request) ([]byte, error) {
+func (w *requestWriter) getHeaders(req *http.Request, gzip bool) ([]byte, error) {
 	w.mutex.Lock()
 	defer w.mutex.Unlock()
 	defer w.encoder.Close()
 
-	if err := w.encodeHeaders(req, false, "", actualContentLength(req)); err != nil {
+	if err := w.encodeHeaders(req, gzip, "", actualContentLength(req)); err != nil {
 		return nil, err
 	}
 

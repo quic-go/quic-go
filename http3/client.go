@@ -29,6 +29,7 @@ type roundTripperOpts struct {
 type client struct {
 	tlsConf *tls.Config
 	config  *quic.Config
+	opts    *roundTripperOpts
 
 	dialOnce     sync.Once
 	dialer       func(network, addr string, tlsCfg *tls.Config, cfg *quic.Config) (quic.Session, error)
@@ -47,7 +48,7 @@ type client struct {
 func newClient(
 	hostname string,
 	tlsConf *tls.Config,
-	_ *roundTripperOpts, // TODO: implement gzip compression
+	opts *roundTripperOpts,
 	quicConfig *quic.Config,
 	dialer func(network, addr string, tlsCfg *tls.Config, cfg *quic.Config) (quic.Session, error),
 ) *client {
@@ -67,6 +68,7 @@ func newClient(
 		requestWriter: newRequestWriter(logger),
 		decoder:       qpack.NewDecoder(func(hf qpack.HeaderField) {}),
 		config:        quicConfig,
+		opts:          opts,
 		dialer:        dialer,
 		logger:        logger,
 	}
@@ -138,7 +140,11 @@ func (c *client) RoundTrip(req *http.Request) (*http.Response, error) {
 		return nil, err
 	}
 
-	if err := c.requestWriter.WriteRequest(str, req); err != nil {
+	var requestGzip bool
+	if !c.opts.DisableCompression && req.Method != "HEAD" && req.Header.Get("Accept-Encoding") == "" && req.Header.Get("Range") == "" {
+		requestGzip = true
+	}
+	if err := c.requestWriter.WriteRequest(str, req, requestGzip); err != nil {
 		return nil, err
 	}
 
@@ -163,7 +169,6 @@ func (c *client) RoundTrip(req *http.Request) (*http.Response, error) {
 		Proto:      "HTTP/3",
 		ProtoMajor: 3,
 		Header:     http.Header{},
-		Body:       newResponseBody(&responseBody{str}),
 	}
 	for _, hf := range hfs {
 		switch hf.Name {
@@ -178,5 +183,16 @@ func (c *client) RoundTrip(req *http.Request) (*http.Response, error) {
 			res.Header.Add(hf.Name, hf.Value)
 		}
 	}
+	respBody := newResponseBody(&responseBody{str})
+	if requestGzip && res.Header.Get("Content-Encoding") == "gzip" {
+		res.Header.Del("Content-Encoding")
+		res.Header.Del("Content-Length")
+		res.ContentLength = -1
+		res.Body = newGzipReader(respBody)
+		res.Uncompressed = true
+	} else {
+		res.Body = respBody
+	}
+
 	return res, nil
 }

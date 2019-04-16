@@ -2,6 +2,7 @@ package self_test
 
 import (
 	"bytes"
+	"compress/gzip"
 	"crypto/tls"
 	"fmt"
 	"io/ioutil"
@@ -42,6 +43,7 @@ var _ = Describe("HTTP tests", func() {
 						TLSClientConfig: &tls.Config{
 							RootCAs: testdata.GetRootCA(),
 						},
+						DisableCompression: true,
 						QuicConfig: &quic.Config{
 							Versions:    []protocol.VersionNumber{version},
 							IdleTimeout: 10 * time.Second,
@@ -158,6 +160,29 @@ var _ = Describe("HTTP tests", func() {
 				body, err := ioutil.ReadAll(gbytes.TimeoutReader(resp.Body, 5*time.Second))
 				Expect(err).ToNot(HaveOccurred())
 				Expect(body).To(Equal(testserver.PRData))
+			})
+
+			It("uses gzip compression", func() {
+				http.HandleFunc("/gzipped/hello", func(w http.ResponseWriter, r *http.Request) {
+					defer GinkgoRecover()
+					Expect(r.Header.Get("Accept-Encoding")).To(Equal("gzip"))
+					w.Header().Set("Content-Encoding", "gzip")
+					w.Header().Set("foo", "bar")
+
+					gw := gzip.NewWriter(w)
+					defer gw.Close()
+					gw.Write([]byte("Hello, World!\n"))
+				})
+
+				client.Transport.(*http3.RoundTripper).DisableCompression = false
+				resp, err := client.Get("https://localhost:" + testserver.Port() + "/gzipped/hello")
+				Expect(err).ToNot(HaveOccurred())
+				Expect(resp.StatusCode).To(Equal(200))
+				Expect(resp.Uncompressed).To(BeTrue())
+
+				body, err := ioutil.ReadAll(gbytes.TimeoutReader(resp.Body, 3*time.Second))
+				Expect(err).ToNot(HaveOccurred())
+				Expect(string(body)).To(Equal("Hello, World!\n"))
 			})
 		})
 	}
