@@ -1,11 +1,10 @@
 package crypto
 
 import (
+	"crypto/aes"
 	"crypto/cipher"
 	"encoding/binary"
 	"errors"
-
-	"github.com/lucas-clemente/aes12"
 
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 )
@@ -17,30 +16,28 @@ type aeadAESGCM12 struct {
 	decrypter cipher.AEAD
 }
 
+const gcmTagSize = 12
+
 var _ AEAD = &aeadAESGCM12{}
 
 // NewAEADAESGCM12 creates a AEAD using AES-GCM with 12 bytes tag size
-//
-// AES-GCM support is a bit hacky, since the go stdlib does not support 12 byte
-// tag size, and couples the cipher and aes packages closely.
-// See https://github.com/lucas-clemente/aes12.
 func NewAEADAESGCM12(otherKey []byte, myKey []byte, otherIV []byte, myIV []byte) (AEAD, error) {
 	if len(myKey) != 16 || len(otherKey) != 16 || len(myIV) != 4 || len(otherIV) != 4 {
 		return nil, errors.New("AES-GCM: expected 16-byte keys and 4-byte IVs")
 	}
-	encrypterCipher, err := aes12.NewCipher(myKey)
+	encrypterCipher, err := aes.NewCipher(myKey)
 	if err != nil {
 		return nil, err
 	}
-	encrypter, err := aes12.NewGCM(encrypterCipher)
+	encrypter, err := cipher.NewGCMWithTagSize(encrypterCipher, gcmTagSize)
 	if err != nil {
 		return nil, err
 	}
-	decrypterCipher, err := aes12.NewCipher(otherKey)
+	decrypterCipher, err := aes.NewCipher(otherKey)
 	if err != nil {
 		return nil, err
 	}
-	decrypter, err := aes12.NewGCM(decrypterCipher)
+	decrypter, err := cipher.NewGCMWithTagSize(decrypterCipher, gcmTagSize)
 	if err != nil {
 		return nil, err
 	}
