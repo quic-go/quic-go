@@ -52,10 +52,24 @@ func (p *packedPacket) IsAckEliciting() bool {
 }
 
 func (p *packedPacket) ToAckHandlerPacket() *ackhandler.Packet {
+	var frames []wire.Frame
+	var ack *wire.AckFrame
+	if len(p.frames) > 0 {
+		var ok bool
+		ack, ok = p.frames[0].(*wire.AckFrame)
+		if ok {
+			// make a copy, so that the ACK can be garbage collected
+			frames = make([]wire.Frame, len(p.frames)-1)
+			copy(frames, p.frames[1:])
+		} else {
+			frames = p.frames
+		}
+	}
 	return &ackhandler.Packet{
 		PacketNumber:    p.header.PacketNumber,
 		PacketType:      p.header.Type,
-		Frames:          p.frames,
+		Ack:             ack,
+		Frames:          frames,
 		Length:          protocol.ByteCount(len(p.raw)),
 		EncryptionLevel: p.EncryptionLevel(),
 		SendTime:        time.Now(),
@@ -330,7 +344,7 @@ func (p *packetPacker) composeNextPacket(maxFrameSize protocol.ByteCount) ([]wir
 	var length protocol.ByteCount
 	var frames []wire.Frame
 
-	// ACKs need to go first, so that the sentPacketHandler will recognize them
+	// ACKs need to go first, so we recognize them in packedPacket.ToAckHandlerPacket()
 	if ack := p.acks.GetAckFrame(protocol.Encryption1RTT); ack != nil {
 		frames = append(frames, ack)
 		length += ack.Length(p.version)

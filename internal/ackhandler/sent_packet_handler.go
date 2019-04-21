@@ -166,14 +166,12 @@ func (h *sentPacketHandler) sentPacketImpl(packet *Packet) bool /* is ack-elicit
 
 	pnSpace.largestSent = packet.PacketNumber
 
-	if len(packet.Frames) > 0 {
-		if ackFrame, ok := packet.Frames[0].(*wire.AckFrame); ok {
-			packet.largestAcked = ackFrame.LargestAcked()
-		}
+	if packet.Ack != nil {
+		packet.largestAcked = packet.Ack.LargestAcked()
 	}
+	packet.Ack = nil // no need to save the ACK
 
-	packet.Frames = stripNonAckElicitingFrames(packet.Frames)
-	isAckEliciting := len(packet.Frames) != 0
+	isAckEliciting := len(packet.Frames) > 0
 
 	if isAckEliciting {
 		if packet.EncryptionLevel != protocol.Encryption1RTT {
