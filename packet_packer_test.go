@@ -34,7 +34,7 @@ var _ = Describe("Packet packer", func() {
 		r := bytes.NewReader(data)
 		extHdr, err := hdr.ParseExtended(r, protocol.VersionWhatever)
 		Expect(err).ToNot(HaveOccurred())
-		ExpectWithOffset(0, extHdr.Length).To(BeEquivalentTo(r.Len() + int(extHdr.PacketNumberLen)))
+		ExpectWithOffset(1, extHdr.Length).To(BeEquivalentTo(r.Len() + int(extHdr.PacketNumberLen)))
 	}
 
 	appendFrames := func(fs, frames []wire.Frame) ([]wire.Frame, protocol.ByteCount) {
@@ -823,7 +823,7 @@ var _ = Describe("Packet packer", func() {
 				firstPayloadByte, err := r.ReadByte()
 				Expect(err).ToNot(HaveOccurred())
 				Expect(firstPayloadByte).To(Equal(byte(0)))
-				// ... followed by the stream frame
+				// ... followed by the STREAM frame
 				frameParser := wire.NewFrameParser(packer.version)
 				frame, err := frameParser.ParseNext(r, protocol.Encryption1RTT)
 				Expect(err).ToNot(HaveOccurred())
@@ -865,23 +865,22 @@ var _ = Describe("Packet packer", func() {
 			})
 
 			Context("retransmitions", func() {
-				sf := &wire.StreamFrame{Data: []byte("foobar")}
+				cf := &wire.CryptoFrame{Data: []byte("foo")}
 
 				It("packs a retransmission with the right encryption level", func() {
-					f := &wire.CryptoFrame{Data: []byte("foo")}
 					pnManager.EXPECT().PeekPacketNumber(protocol.EncryptionInitial).Return(protocol.PacketNumber(0x42), protocol.PacketNumberLen2)
 					pnManager.EXPECT().PopPacketNumber(protocol.EncryptionInitial).Return(protocol.PacketNumber(0x42))
 					sealingManager.EXPECT().GetSealerWithEncryptionLevel(protocol.EncryptionInitial).Return(sealer, nil)
 					packet := &ackhandler.Packet{
 						PacketType:      protocol.PacketTypeHandshake,
 						EncryptionLevel: protocol.EncryptionInitial,
-						Frames:          []wire.Frame{f},
+						Frames:          []wire.Frame{cf},
 					}
 					p, err := packer.PackRetransmission(packet)
 					Expect(err).ToNot(HaveOccurred())
 					Expect(p).To(HaveLen(1))
 					Expect(p[0].header.Type).To(Equal(protocol.PacketTypeInitial))
-					Expect(p[0].frames).To(Equal([]wire.Frame{f}))
+					Expect(p[0].frames).To(Equal([]wire.Frame{cf}))
 					Expect(p[0].EncryptionLevel()).To(Equal(protocol.EncryptionInitial))
 				})
 
@@ -895,13 +894,13 @@ var _ = Describe("Packet packer", func() {
 					packet := &ackhandler.Packet{
 						PacketType:      protocol.PacketTypeInitial,
 						EncryptionLevel: protocol.EncryptionInitial,
-						Frames:          []wire.Frame{sf},
+						Frames:          []wire.Frame{cf},
 					}
 					packets, err := packer.PackRetransmission(packet)
 					Expect(err).ToNot(HaveOccurred())
 					Expect(packets).To(HaveLen(1))
 					p := packets[0]
-					Expect(p.frames).To(Equal([]wire.Frame{sf}))
+					Expect(p.frames).To(Equal([]wire.Frame{cf}))
 					Expect(p.EncryptionLevel()).To(Equal(protocol.EncryptionInitial))
 					Expect(p.header.Type).To(Equal(protocol.PacketTypeInitial))
 					Expect(p.header.Token).To(Equal(token))
