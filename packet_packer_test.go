@@ -37,19 +37,23 @@ var _ = Describe("Packet packer", func() {
 		ExpectWithOffset(0, extHdr.Length).To(BeEquivalentTo(r.Len() + int(extHdr.PacketNumberLen)))
 	}
 
+	appendFrames := func(fs, frames []wire.Frame) ([]wire.Frame, protocol.ByteCount) {
+		var length protocol.ByteCount
+		for _, f := range frames {
+			length += f.Length(packer.version)
+		}
+		return append(fs, frames...), length
+	}
+
 	expectAppendStreamFrames := func(frames ...wire.Frame) {
-		framer.EXPECT().AppendStreamFrames(gomock.Any(), gomock.Any()).DoAndReturn(func(fs []wire.Frame, _ protocol.ByteCount) []wire.Frame {
-			return append(fs, frames...)
+		framer.EXPECT().AppendStreamFrames(gomock.Any(), gomock.Any()).DoAndReturn(func(fs []wire.Frame, _ protocol.ByteCount) ([]wire.Frame, protocol.ByteCount) {
+			return appendFrames(fs, frames)
 		})
 	}
 
 	expectAppendControlFrames := func(frames ...wire.Frame) {
 		framer.EXPECT().AppendControlFrames(gomock.Any(), gomock.Any()).DoAndReturn(func(fs []wire.Frame, _ protocol.ByteCount) ([]wire.Frame, protocol.ByteCount) {
-			var length protocol.ByteCount
-			for _, f := range frames {
-				length += f.Length(packer.version)
-			}
-			return append(fs, frames...), length
+			return appendFrames(fs, frames)
 		})
 	}
 
@@ -311,9 +315,9 @@ var _ = Describe("Packet packer", func() {
 						maxSize = maxLen
 						return fs, 444
 					}),
-					framer.EXPECT().AppendStreamFrames(gomock.Any(), gomock.Any()).Do(func(_ []wire.Frame, maxLen protocol.ByteCount) []wire.Frame {
+					framer.EXPECT().AppendStreamFrames(gomock.Any(), gomock.Any()).Do(func(fs []wire.Frame, maxLen protocol.ByteCount) ([]wire.Frame, protocol.ByteCount) {
 						Expect(maxLen).To(Equal(maxSize - 444 + 1 /* data length of the STREAM frame */))
-						return nil
+						return fs, 0
 					}),
 				)
 				_, err := packer.PackPacket()
@@ -803,7 +807,7 @@ var _ = Describe("Packet packer", func() {
 				initialStream.EXPECT().HasData()
 				handshakeStream.EXPECT().HasData()
 				framer.EXPECT().AppendControlFrames(gomock.Any(), gomock.Any())
-				framer.EXPECT().AppendStreamFrames(gomock.Any(), gomock.Any()).Return([]wire.Frame{f})
+				framer.EXPECT().AppendStreamFrames(gomock.Any(), gomock.Any()).Return([]wire.Frame{f}, f.Length(packer.version))
 				packet, err := packer.PackPacket()
 				Expect(err).ToNot(HaveOccurred())
 				// cut off the tag that the mock sealer added
