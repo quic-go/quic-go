@@ -272,7 +272,7 @@ var _ = Describe("Packet packer", func() {
 				p, err := packer.PackPacket()
 				Expect(err).NotTo(HaveOccurred())
 				Expect(p).ToNot(BeNil())
-				Expect(p.frames[0]).To(Equal(ack))
+				Expect(p.ack).To(Equal(ack))
 			})
 
 			It("packs a CONNECTION_CLOSE", func() {
@@ -340,7 +340,7 @@ var _ = Describe("Packet packer", func() {
 					ackFramer.EXPECT().GetAckFrame(protocol.Encryption1RTT).Return(ack)
 					p, err := packer.MaybePackAckPacket()
 					Expect(err).NotTo(HaveOccurred())
-					Expect(p.frames).To(Equal([]wire.Frame{ack}))
+					Expect(p.ack).To(Equal(ack))
 				})
 			})
 
@@ -356,7 +356,8 @@ var _ = Describe("Packet packer", func() {
 						p, err := packer.PackPacket()
 						Expect(p).ToNot(BeNil())
 						Expect(err).ToNot(HaveOccurred())
-						Expect(p.frames).To(HaveLen(1))
+						Expect(p.ack).ToNot(BeNil())
+						Expect(p.frames).To(BeEmpty())
 					}
 				}
 
@@ -382,7 +383,8 @@ var _ = Describe("Packet packer", func() {
 					p, err = packer.PackPacket()
 					Expect(p).ToNot(BeNil())
 					Expect(err).ToNot(HaveOccurred())
-					Expect(p.frames).To(HaveLen(1))
+					Expect(p.ack).ToNot(BeNil())
+					Expect(p.frames).To(BeEmpty())
 				})
 
 				It("waits until there's something to send before adding a PING frame", func() {
@@ -402,14 +404,15 @@ var _ = Describe("Packet packer", func() {
 					pnManager.EXPECT().PeekPacketNumber(protocol.Encryption1RTT).Return(protocol.PacketNumber(0x42), protocol.PacketNumberLen2)
 					pnManager.EXPECT().PopPacketNumber(protocol.Encryption1RTT).Return(protocol.PacketNumber(0x42))
 					sealingManager.EXPECT().GetSealer().Return(protocol.Encryption1RTT, sealer)
-					ackFramer.EXPECT().GetAckFrame(protocol.Encryption1RTT).Return(&wire.AckFrame{AckRanges: []wire.AckRange{{Smallest: 1, Largest: 1}}})
+					ack := &wire.AckFrame{AckRanges: []wire.AckRange{{Smallest: 1, Largest: 1}}}
+					ackFramer.EXPECT().GetAckFrame(protocol.Encryption1RTT).Return(ack)
 					p, err = packer.PackPacket()
 					Expect(err).ToNot(HaveOccurred())
-					Expect(p.frames).To(HaveLen(2))
-					Expect(p.frames).To(ContainElement(&wire.PingFrame{}))
+					Expect(p.ack).To(Equal(ack))
+					Expect(p.frames).To(Equal([]wire.Frame{&wire.PingFrame{}}))
 				})
 
-				It("doesn't send a PING if it already sent another ack-elicitng frame", func() {
+				It("doesn't send a PING if it already sent another ack-eliciting frame", func() {
 					sendMaxNumNonAckElicitingAcks()
 					pnManager.EXPECT().PeekPacketNumber(protocol.Encryption1RTT).Return(protocol.PacketNumber(0x42), protocol.PacketNumberLen2)
 					pnManager.EXPECT().PopPacketNumber(protocol.Encryption1RTT).Return(protocol.PacketNumber(0x42))
@@ -746,7 +749,7 @@ var _ = Describe("Packet packer", func() {
 				checkLength(p.raw)
 			})
 
-			It("sends a Initial packet containing only an ACK", func() {
+			It("sends an Initial packet containing only an ACK", func() {
 				ack := &wire.AckFrame{AckRanges: []wire.AckRange{{Smallest: 10, Largest: 20}}}
 				ackFramer.EXPECT().GetAckFrame(protocol.EncryptionInitial).Return(ack)
 				initialStream.EXPECT().HasData()
@@ -755,7 +758,7 @@ var _ = Describe("Packet packer", func() {
 				pnManager.EXPECT().PopPacketNumber(protocol.EncryptionInitial).Return(protocol.PacketNumber(0x42))
 				p, err := packer.PackPacket()
 				Expect(err).ToNot(HaveOccurred())
-				Expect(p.frames).To(Equal([]wire.Frame{ack}))
+				Expect(p.ack).To(Equal(ack))
 			})
 
 			It("sends a Handshake packet containing only an ACK", func() {
@@ -769,7 +772,7 @@ var _ = Describe("Packet packer", func() {
 				pnManager.EXPECT().PopPacketNumber(protocol.EncryptionHandshake).Return(protocol.PacketNumber(0x42))
 				p, err := packer.PackPacket()
 				Expect(err).ToNot(HaveOccurred())
-				Expect(p.frames).To(Equal([]wire.Frame{ack}))
+				Expect(p.ack).To(Equal(ack))
 			})
 
 			It("pads Initial packets to the required minimum packet size", func() {
@@ -860,8 +863,8 @@ var _ = Describe("Packet packer", func() {
 				packet, err := packer.PackPacket()
 				Expect(err).ToNot(HaveOccurred())
 				Expect(packet.raw).To(HaveLen(protocol.MinInitialPacketSize))
-				Expect(packet.frames).To(HaveLen(2))
-				Expect(packet.frames[0]).To(Equal(ack))
+				Expect(packet.ack).To(Equal(ack))
+				Expect(packet.frames).To(HaveLen(1))
 			})
 
 			Context("retransmitions", func() {
