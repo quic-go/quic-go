@@ -6,6 +6,12 @@ import (
 	"math"
 	"time"
 
+	"os"
+
+	"log"
+
+	"strings"
+
 	"github.com/lucas-clemente/quic-go/internal/congestion"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/internal/qerr"
@@ -84,20 +90,31 @@ func NewSentPacketHandler(
 	rttStats *congestion.RTTStats,
 	logger utils.Logger,
 ) SentPacketHandler {
-	congestion := congestion.NewCubicSender(
-		congestion.DefaultClock{},
-		rttStats,
-		false, /* don't use reno since chromium doesn't (why?) */
-		protocol.InitialCongestionWindow,
-		protocol.DefaultMaxCongestionWindow,
-	)
+	var cc congestion.SendAlgorithm
+
+	if strings.Contains(os.Getenv("GODEBUG"), "bbr=1") {
+		log.Printf("quic-go: bbr is enabled.")
+		cc = congestion.NewBBRSender(congestion.DefaultClock{},
+			rttStats,
+			protocol.InitialCongestionWindow,
+			protocol.DefaultMaxCongestionWindow,
+		)
+	} else {
+		cc = congestion.NewCubicSender(
+			congestion.DefaultClock{},
+			rttStats,
+			false, /* don't use reno since chromium doesn't (why?) */
+			protocol.InitialCongestionWindow,
+			protocol.DefaultMaxCongestionWindow,
+		)
+	}
 
 	return &sentPacketHandler{
 		initialPackets:   newPacketNumberSpace(initialPacketNumber),
 		handshakePackets: newPacketNumberSpace(0),
 		oneRTTPackets:    newPacketNumberSpace(0),
 		rttStats:         rttStats,
-		congestion:       congestion,
+		congestion:       cc,
 		logger:           logger,
 	}
 }
