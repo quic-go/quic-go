@@ -41,7 +41,7 @@ func requestFromHeaders(headers []hpack.HeaderField) (*http.Request, error) {
 		return nil, errors.New(":path, :authority and :method must not be empty")
 	}
 
-	u, err := url.Parse(path)
+	u, err := url.ParseRequestURI(path)
 	if err != nil {
 		return nil, err
 	}
