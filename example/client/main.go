@@ -25,10 +25,15 @@ func main() {
   }
   p := true
   start := 0
-  stop := 1
+  stop := 1000
   for i := start; i < stop; i++ {
+    if i == 99 {
+      fmt.Println("READY")
+      //time.Sleep(time.Second * 10) 
+    }
     t0 := time.Now()
     url := "https://stalepopcorn.club/static/files/file"+strconv.Itoa(i)+".html"
+    //url := "https://stalepopcorn.club/static/files/file0.html"
     //url := "https://stalepopcorn.club/random"
     fmt.Println(url)
     _, err := hclient.Get(url)
