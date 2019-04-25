@@ -223,13 +223,13 @@ func (s *BandwidthSampler) OnPacketSent(sentTime time.Time, lastSentPacket proto
 // OnPacketAcked Notifies the sampler that the |lastAckedPacket| is acknowledged. Returns a
 // bandwidth sample. If no bandwidth sample is available,
 // QuicBandwidth::Zero() is returned.
-func (s *BandwidthSampler) OnPacketAcked(ackTime time.Time, lastAckedPacket protocol.PacketNumber, ackedBytes protocol.ByteCount) *BandwidthSample {
+func (s *BandwidthSampler) OnPacketAcked(ackTime time.Time, lastAckedPacket protocol.PacketNumber) *BandwidthSample {
 	sentPacketState := s.connectionStats.Get(lastAckedPacket)
 	if sentPacketState == nil {
 		return NewBandwidthSample()
 	}
 
-	sample := s.onPacketAckedInner(ackTime, lastAckedPacket, ackedBytes, sentPacketState)
+	sample := s.onPacketAckedInner(ackTime, lastAckedPacket, sentPacketState)
 	s.connectionStats.Remove(lastAckedPacket)
 
 	return sample
@@ -237,7 +237,7 @@ func (s *BandwidthSampler) OnPacketAcked(ackTime time.Time, lastAckedPacket prot
 
 // onPacketAckedInner Handles the actual bandwidth calculations, whereas the outer method handles
 // retrieving and removing |sentPacket|.
-func (s *BandwidthSampler) onPacketAckedInner(ackTime time.Time, lastAckedPacket protocol.PacketNumber, ackedBytes protocol.ByteCount, sentPacket *ConnectionStateOnSentPacket) *BandwidthSample {
+func (s *BandwidthSampler) onPacketAckedInner(ackTime time.Time, lastAckedPacket protocol.PacketNumber, sentPacket *ConnectionStateOnSentPacket) *BandwidthSample {
 	s.totalBytesAcked += sentPacket.size
 
 	s.totalBytesSentAtLastAckedPacket = sentPacket.sendTimeState.totalBytesSent
@@ -310,9 +310,11 @@ func (s *BandwidthSampler) OnPacketLost(packetNumber protocol.PacketNumber) Send
 	return sendTimeState
 }
 
-// Remove all the packets lower than the specified packet number.
-func (s *BandwidthSampler) RemoveObsoletePackets(leastUnacked protocol.PacketNumber) {
-	s.connectionStats.Remove(leastUnacked)
+// Remove packets.
+func (s *BandwidthSampler) RemoveObsoletePackets(packets []*protocol.Packet) {
+	for _, packet := range packets {
+		s.connectionStats.Remove(packet.PacketNumber)
+	}
 }
 
 // OnAppLimited Informs the sampler that the connection is currently app-limited, causing
@@ -337,23 +339,19 @@ func SentPacketToSendTimeState(sentPacket *ConnectionStateOnSentPacket, sendTime
 // sent, indexed by the packet number.
 // FIXME: using LinkedList replace map to fast remove all the packets lower than the specified packet number.
 type ConnectionStates struct {
-	stats       map[protocol.PacketNumber]*ConnectionStateOnSentPacket
-	lastPacket  protocol.PacketNumber
-	firstPacket protocol.PacketNumber
+	stats map[protocol.PacketNumber]*ConnectionStateOnSentPacket
 }
 
 func (s *ConnectionStates) Insert(packetNumber protocol.PacketNumber, sentTime time.Time, bytes protocol.ByteCount, sampler *BandwidthSampler) bool {
 	if len(s.stats) == 0 {
 		s.stats[packetNumber] = NewConnectionStateOnSentPacket(packetNumber, sentTime, bytes, sampler)
-		s.firstPacket, s.lastPacket = packetNumber, packetNumber
 	}
 
-	if packetNumber <= s.lastPacket {
+	if _, ok := s.stats[packetNumber]; ok {
 		return false
 	}
 
 	s.stats[packetNumber] = NewConnectionStateOnSentPacket(packetNumber, sentTime, bytes, sampler)
-	s.lastPacket = packetNumber
 	return true
 }
 
@@ -362,16 +360,10 @@ func (s *ConnectionStates) Get(packetNumber protocol.PacketNumber) *ConnectionSt
 }
 
 func (s *ConnectionStates) Remove(packetNumber protocol.PacketNumber) (bool, *ConnectionStateOnSentPacket) {
-	if s.firstPacket > packetNumber {
-		return false, nil
-	}
-
-	if s.firstPacket == packetNumber {
-		s.firstPacket++
-	}
-
 	state, ok := s.stats[packetNumber]
-	delete(s.stats, packetNumber)
+	if ok {
+		delete(s.stats, packetNumber)
+	}
 	return ok, state
 }
 
