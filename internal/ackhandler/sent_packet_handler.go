@@ -97,7 +97,7 @@ func NewSentPacketHandler(
 		cc = congestion.NewBBRSender(congestion.DefaultClock{},
 			rttStats,
 			protocol.InitialCongestionWindow,
-			protocol.DefaultMaxCongestionWindow,
+			protocol.DefaultBBRMaxCongestionWindow,
 		)
 	} else {
 		cc = congestion.NewCubicSender(

@@ -13,62 +13,6 @@ import (
 )
 
 var (
-	// Default maximum packet size used in the Linux TCP implementation.
-	// Used in QUIC for congestion window computations in bytes.
-	MaxSegmentSize = protocol.DefaultTCPMSS
-
-	// Constants based on TCP defaults.
-	// The minimum CWND to ensure delayed acks don't reduce bandwidth measurements.
-	// Does not inflate the pacing rate.
-	defaultMiniumCongestionWindow = 4 * protocol.DefaultTCPMSS
-
-	// The gain used for the STARTUP, equal to 2/ln(2).
-	defaultHighGain = 2.885
-
-	// The newly derived gain for STARTUP, equal to 4 * ln(2)
-	derivedHighGain = 2.773
-
-	// The newly derived CWND gain for STARTUP, 2.
-	derivedHighCWNDGain = 2.773
-
-	// The gain used in STARTUP after loss has been detected.
-	// 1.5 is enough to allow for 25% exogenous loss and still observe a 25% growth
-	// in measured bandwidth.
-	StartupAfterLossGain = 1.5
-
-	// The cycle of gains used during the PROBE_BW stage.
-	pacingGain = []float64{1.25, 0.75, 1, 1, 1, 1, 1, 1}
-
-	// The length of the gain cycle.
-	gainCycleLength = len(pacingGain)
-
-	// The size of the bandwidth filter window, in round-trips.
-	bandwidthWindowSize = len(pacingGain) + 2
-
-	// The time after which the current min_rtt value expires.
-	minRttExpiry = 10 * time.Second
-
-	// The minimum time the connection can spend in PROBE_RTT mode.
-	minProbeRttTime = 200 * time.Millisecond
-
-	// If the bandwidth does not increase by the factor of |startupGrowthTarget|
-	// within |roundTripsWithoutGrowthBeforeExitingStartup| rounds, the connection
-	// will exit the STARTUP mode.
-	startGrowthTarget                           = 1.25
-	roundTripsWithoutGrowthBeforeExitingStartup = int64(3)
-
-	// Coefficient of target congestion window to use when basing PROBE_RTT on BDP.
-	moderateProbeRttMultiplier = 0.75
-
-	// Coefficient to determine if a new RTT is sufficiently similar to min_rtt that
-	// we don't need to enter PROBE_RTT.
-	similarMinRttThreshold = 1.125
-
-	// If the bandwidth does not increase by the factor of |kStartupGrowthTarget|
-	// within |kRoundTripsWithoutGrowthBeforeExitingStartup| rounds, the connection
-	// will exit the STARTUP mode.
-	startupGrowthTarget = 1.25
-
 	// The maximum outgoing packet size allowed.
 	// The maximum packet size of any QUIC packet over IPv6, based on ethernet's max
 	// size, minus the IP and UDP headers. IPv6 has a 40 byte header, UDP adds an
@@ -76,11 +20,53 @@ var (
 	// max packet size is 1500 bytes,  1500 - 48 = 1452.
 	MaxOutgoingPacketSize = protocol.ByteCount(1452)
 
+	// Default maximum packet size used in the Linux TCP implementation.
+	// Used in QUIC for congestion window computations in bytes.
+	MaxSegmentSize = protocol.DefaultTCPMSS
+
+	// Constants based on TCP defaults.
+	// The minimum CWND to ensure delayed acks don't reduce bandwidth measurements.
+	// Does not inflate the pacing rate.
+	DefaultMinimumCongestionWindow = 4 * protocol.DefaultTCPMSS
+
+	// The gain used for the STARTUP, equal to 2/ln(2).
+	DefaultHighGain = 2.885
+
+	// The gain used in STARTUP after loss has been detected.
+	// 1.5 is enough to allow for 25% exogenous loss and still observe a 25% growth
+	// in measured bandwidth.
+	StartupAfterLossGain = 1.5
+
+	// The cycle of gains used during the PROBE_BW stage.
+	PacingGain = []float64{1.25, 0.75, 1, 1, 1, 1, 1, 1}
+
+	// The length of the gain cycle.
+	GainCycleLength = len(PacingGain)
+
+	// The size of the bandwidth filter window, in round-trips.
+	BandwidthWindowSize = GainCycleLength + 2
+
+	// The time after which the current min_rtt value expires.
+	MinRttExpiry = 10 * time.Second
+
 	// The minimum time the connection can spend in PROBE_RTT mode.
 	ProbeRttTime = time.Millisecond * 200
 
+	// If the bandwidth does not increase by the factor of |kStartupGrowthTarget|
+	// within |kRoundTripsWithoutGrowthBeforeExitingStartup| rounds, the connection
+	// will exit the STARTUP mode.
+	StartupGrowthTarget                         = 1.25
+	RoundTripsWithoutGrowthBeforeExitingStartup = int64(3)
+
 	// Coefficient of target congestion window to use when basing PROBE_RTT on BDP.
 	ModerateProbeRttMultiplier = 0.75
+
+	// Coefficient to determine if a new RTT is sufficiently similar to min_rtt that
+	// we don't need to enter PROBE_RTT.
+	SimilarMinRttThreshold = 1.125
+
+	// Congestion window gain for QUIC BBR during PROBE_BW phase.
+	DefaultCongestionWindowGainConst = 2.0
 )
 
 type bbrMode int
@@ -113,104 +99,155 @@ const (
 )
 
 type bbrSender struct {
-	mode                          bbrMode
-	clock                         Clock
-	rttStats                      *RTTStats
-	initialCongestionWindow       protocol.ByteCount
-	maxCongestionDinwow           protocol.ByteCount
-	minCongestionWindow           protocol.ByteCount
-	congestionWindow              protocol.ByteCount
-	recoveryWindow                protocol.ByteCount
-	lastSendPacket                protocol.PacketNumber
-	bytesInFlight                 protocol.ByteCount
-	endRecoveryAt                 protocol.PacketNumber
-	aggregationEpochStartTime     time.Time
-	aggregationEpochBytes         protocol.ByteCount
-	rateBasedStartup              bool
-	recoveryState                 bbrRecoveryState
-	pacingGain                    float64
-	congestionWindowGain          float64
-	congestionWindowGainConst     float64
-	highGain                      float64
-	highCwndGain                  float64
-	drainGain                     float64
-	cycleCurrentOffset            int
-	lastCycleStart                time.Time
-	drainToTarget                 bool
-	currentRoundTripEnd           protocol.PacketNumber
-	roundTripCount                int64
-	alwaysGetBwSampleWhenAcked    bool
-	sampler                       *BandwidthSampler
-	lastSampleIsAppLimited        bool
-	hasNoAppLimitedSample         bool
-	isAppLimitedRecovery          bool
-	minRtt                        time.Duration
-	minRttSinceLastProbeRtt       time.Duration
-	minRttTimestamp               time.Time
-	maxBandwidth                  *WindowedFilter
-	maxAckHeight                  *WindowedFilter
-	appLimitedSinceLastProbeRtt   bool
-	isAtFullBandwidth             bool
-	bandwidthAtLastRound          Bandwidth
-	roundsWithoutBandwidthGain    int64
-	expireAckAggregationInStartup bool
-	numStartupRtts                int64
-	exitStartupOnLoss             bool
-
+	mode     bbrMode
+	clock    Clock
+	rttStats *RTTStats
+	// total bytes of unacked packets. ref to const QuicUnackedPacketMap* unacked_packets_;
+	bytesInFlight protocol.ByteCount
+	// Bandwidth sampler provides BBR with the bandwidth measurements at
+	// individual points.
+	sampler *BandwidthSampler
+	// The number of the round trips that have occurred during the connection.
+	roundTripCount int64
+	// The packet number of the most recently sent packet.
+	lastSendPacket protocol.PacketNumber
+	// Acknowledgement of any packet after |current_round_trip_end_| will cause
+	// the round trip counter to advance.
+	currentRoundTripEnd protocol.PacketNumber
+	// The filter that tracks the maximum bandwidth over the multiple recent
+	// round-trips.
+	maxBandwidth *WindowedFilter
+	// Tracks the maximum number of bytes acked faster than the sending rate.
+	maxAckHeight *WindowedFilter
+	// The time this aggregation started and the number of bytes acked during it.
+	aggregationEpochStartTime time.Time
+	aggregationEpochBytes     protocol.ByteCount
+	// Minimum RTT estimate.  Automatically expires within 10 seconds (and
+	// triggers PROBE_RTT mode) if no new value is sampled during that period.
+	minRtt time.Duration
+	// The time at which the current value of |min_rtt_| was assigned.
+	minRttTimestamp time.Time
+	// The maximum allowed number of bytes in flight.
+	congestionWindow protocol.ByteCount
+	// The initial value of the |congestion_window_|.
+	initialCongestionWindow protocol.ByteCount
+	// The largest value the |congestion_window_| can achieve.
+	maxCongestionWindow protocol.ByteCount
+	// The smallest value the |congestion_window_| can achieve.
+	minCongestionWindow protocol.ByteCount
+	// The pacing gain applied during the STARTUP phase.
+	highGain float64
+	// The CWND gain applied during the STARTUP phase.
+	highCwndGain float64
+	// The pacing gain applied during the DRAIN phase.
+	drainGain float64
+	// The current pacing rate of the connection.
+	pacingRate Bandwidth
+	// The gain currently applied to the pacing rate.
+	pacingGain float64
+	// The gain currently applied to the congestion window.
+	congestionWindowGain float64
+	// The gain used for the congestion window during PROBE_BW.  Latched from
+	// quic_bbr_cwnd_gain flag.
+	congestionWindowGainConst float64
+	// The number of RTTs to stay in STARTUP mode.  Defaults to 3.
+	numStartupRtts int64
+	// If true, exit startup if 1RTT has passed with no bandwidth increase and
+	// the connection is in recovery.
+	exitStartupOnLoss bool
+	// Number of round-trips in PROBE_BW mode, used for determining the current
+	// pacing gain cycle.
+	cycleCurrentOffset int
+	// The time at which the last pacing gain cycle was started.
+	lastCycleStart time.Time
+	// Indicates whether the connection has reached the full bandwidth mode.
+	isAtFullBandwidth bool
+	// Number of rounds during which there was no significant bandwidth increase.
+	roundsWithoutBandwidthGain int64
+	// The bandwidth compared to which the increase is measured.
+	bandwidthAtLastRound Bandwidth
 	// Set to true upon exiting quiescence.
 	exitingQuiescence bool
-
 	// Time at which PROBE_RTT has to be exited.  Setting it to zero indicates
 	// that the time is yet unknown as the number of packets in flight has not
 	// reached the required value.
 	exitProbeRttAt time.Time
-
 	// Indicates whether a round-trip has passed since PROBE_RTT became active.
 	probeRttRoundPassed bool
-
-	// If true, use a CWND of 0.75*BDP during probe_rtt instead of 4 packets.
-	probeRttBasedOnBdp bool
-
+	// Indicates whether the most recent bandwidth sample was marked as
+	// app-limited.
+	lastSampleIsAppLimited bool
+	// Indicates whether any non app-limited samples have been recorded.
+	hasNoAppLimitedSample bool
+	// Indicates app-limited calls should be ignored as long as there's
+	// enough data inflight to see more bandwidth when necessary.
+	flexibleAppLimited bool
+	// Current state of recovery.
+	recoveryState bbrRecoveryState
+	// Receiving acknowledgement of a packet after |end_recovery_at_| will cause
+	// BBR to exit the recovery mode.  A value above zero indicates at least one
+	// loss has been detected, so it must not be set back to zero.
+	endRecoveryAt protocol.PacketNumber
+	// A window used to limit the number of bytes in flight during loss recovery.
+	recoveryWindow protocol.ByteCount
+	// If true, consider all samples in recovery app-limited.
+	isAppLimitedRecovery bool
+	// When true, pace at 1.5x and disable packet conservation in STARTUP.
+	slowerStartup bool
+	// When true, disables packet conservation in STARTUP.
+	rateBasedStartup bool
 	// When non-zero, decreases the rate in STARTUP by the total number of bytes
 	// lost in STARTUP divided by CWND.
 	startupRateReductionMultiplier int64
-
 	// Sum of bytes lost in STARTUP.
 	startupBytesLost protocol.ByteCount
-
-	// The current pacing rate of the connection.
-	pacingRate Bandwidth
-
-	// When true, pace at 1.5x and disable packet conservation in STARTUP.
-	slowerStartup bool
-
 	// When true, add the most recent ack aggregation measurement during STARTUP.
-	enableAckAggerationDuringStartup bool
+	enableAckAggregationDuringStartup bool
+	// When true, expire the windowed ack aggregation values in STARTUP when
+	// bandwidth increases more than 25%.
+	expireAckAggregationInStartup bool
+	// If true, will not exit low gain mode until bytes_in_flight drops below BDP
+	// or it's time for high gain mode.
+	drainToTarget bool
+	// If true, use a CWND of 0.75*BDP during probe_rtt instead of 4 packets.
+	probeRttBasedOnBdp bool
+	// If true, skip probe_rtt and update the timestamp of the existing min_rtt to
+	// now if min_rtt over the last cycle is within 12.5% of the current min_rtt.
+	// Even if the min_rtt is 12.5% too low, the 25% gain cycling and 2x CWND gain
+	// should overcome an overly small min_rtt.
+	probeRttSkippedIfSimilarRtt bool
+	// If true, disable PROBE_RTT entirely as long as the connection was recently
+	// app limited.
+	probeRttDisabledIfAppLimited bool
+	appLimitedSinceLastProbeRtt  bool
+	minRttSinceLastProbeRtt      time.Duration
+	// Latched value of --quic_always_get_bw_sample_when_acked.
+	alwaysGetBwSampleWhenAcked bool
 }
 
-func NewBBRSender(clock Clock, rttStats *RTTStats, initialCongestionWindow, initialMaxCongestionWindow protocol.ByteCount) SendAlgorithmWithDebugInfo {
+func NewBBRSender(clock Clock, rttStats *RTTStats, initialCongestionWindow, maxCongestionWindow protocol.ByteCount) SendAlgorithmWithDebugInfo {
 	return &bbrSender{
+		rttStats:                  rttStats,
+		bytesInFlight:             0,
 		mode:                      STARTUP,
 		clock:                     clock,
-		rttStats:                  rttStats,
-		initialCongestionWindow:   initialCongestionWindow,
-		maxCongestionDinwow:       initialMaxCongestionWindow,
-		minCongestionWindow:       defaultMinimumCongestionWindow,
+		sampler:                   NewBandwidthSampler(),
+		maxBandwidth:              NewWindowedFilter(int64(BandwidthWindowSize), MaxFilter),
+		maxAckHeight:              NewWindowedFilter(int64(BandwidthWindowSize), MaxFilter),
 		congestionWindow:          initialCongestionWindow,
-		highGain:                  defaultHighGain,
-		highCwndGain:              defaultHighGain,
-		drainGain:                 1.0 / defaultHighGain,
+		initialCongestionWindow:   initialCongestionWindow,
+		maxCongestionWindow:       maxCongestionWindow,
+		minCongestionWindow:       DefaultMinimumCongestionWindow,
+		highGain:                  DefaultHighGain,
+		highCwndGain:              DefaultHighGain,
+		drainGain:                 1.0 / DefaultHighGain,
 		pacingGain:                1.0,
 		congestionWindowGain:      1.0,
-		congestionWindowGainConst: 2.0,
+		congestionWindowGainConst: DefaultCongestionWindowGainConst,
+		numStartupRtts:            RoundTripsWithoutGrowthBeforeExitingStartup,
 		recoveryState:             NOT_IN_RECOVERY,
-		recoveryWindow:            initialMaxCongestionWindow,
-		sampler:                   NewBandwidthSampler(),
-		maxBandwidth:              NewWindowedFilter(int64(bandwidthWindowSize), MaxFilter),
-		maxAckHeight:              NewWindowedFilter(int64(bandwidthWindowSize), MaxFilter),
-		minRtt:                    InfiniteRTT,
+		recoveryWindow:            maxCongestionWindow,
 		minRttSinceLastProbeRtt:   InfiniteRTT,
-		numStartupRtts:            roundTripsWithoutGrowthBeforeExitingStartup,
 	}
 }
 
@@ -387,14 +424,15 @@ func (b *bbrSender) UpdateBandwidthAndMinRtt(now time.Time, lastAckedPacket prot
 	b.minRttSinceLastProbeRtt = minRtt(b.minRttSinceLastProbeRtt, sampleMinRtt)
 
 	// Do not expire min_rtt if none was ever available.
-	minRttExpired := b.minRtt != InfiniteRTT && (now.After(b.minRttTimestamp.Add(minRttExpiry)))
-	if minRttExpired || sampleMinRtt < b.minRtt || b.minRtt == InfiniteRTT {
+	minRttExpired := b.minRtt != 0 && (now.After(b.minRttTimestamp.Add(MinRttExpiry)))
+	if minRttExpired || sampleMinRtt < b.minRtt || b.minRtt == 0 {
 		if minRttExpired && b.ShouldExtendMinRttExpiry() {
 			minRttExpired = false
 		} else {
 			b.minRtt = sampleMinRtt
 		}
 		b.minRttTimestamp = now
+		// Reset since_last_probe_rtt fields.
 		b.minRttSinceLastProbeRtt = InfiniteRTT
 		b.appLimitedSinceLastProbeRtt = false
 	}
@@ -403,6 +441,19 @@ func (b *bbrSender) UpdateBandwidthAndMinRtt(now time.Time, lastAckedPacket prot
 }
 
 func (b *bbrSender) ShouldExtendMinRttExpiry() bool {
+	if b.probeRttDisabledIfAppLimited && b.appLimitedSinceLastProbeRtt {
+		// Extend the current min_rtt if we've been app limited recently.
+		return true
+	}
+
+	minRttIncreasedSinceLastProbe := b.minRttSinceLastProbeRtt > time.Duration(float64(b.minRtt)*SimilarMinRttThreshold)
+	if b.probeRttSkippedIfSimilarRtt && b.appLimitedSinceLastProbeRtt && !minRttIncreasedSinceLastProbe {
+		// Extend the current min_rtt if we've been app limited recently and an rtt
+		// has been measured in that time that's less than 12.5% more than the
+		// current min_rtt.
+		return true
+	}
+
 	return false
 }
 
@@ -481,13 +532,13 @@ func (b *bbrSender) UpdateGainCyclePhase(now time.Time, priorInFlight protocol.B
 	}
 
 	if shouldAdvanceGainCycling {
-		b.cycleCurrentOffset = (b.cycleCurrentOffset + 1) % gainCycleLength
+		b.cycleCurrentOffset = (b.cycleCurrentOffset + 1) % GainCycleLength
 		b.lastCycleStart = now
 
-		if b.drainToTarget && b.pacingGain < 1.0 && pacingGain[b.cycleCurrentOffset] == 1.0 && bytesInFlight > b.GetTargetCongestionWindow(1.0) {
+		if b.drainToTarget && b.pacingGain < 1.0 && PacingGain[b.cycleCurrentOffset] == 1.0 && bytesInFlight > b.GetTargetCongestionWindow(1.0) {
 			return
 		}
-		b.pacingGain = pacingGain[b.cycleCurrentOffset]
+		b.pacingGain = PacingGain[b.cycleCurrentOffset]
 	}
 }
 
@@ -507,7 +558,7 @@ func (b *bbrSender) CheckIfFullBandwidthReached() {
 		return
 	}
 
-	target := Bandwidth(float64(b.bandwidthAtLastRound) * startupGrowthTarget)
+	target := Bandwidth(float64(b.bandwidthAtLastRound) * StartupGrowthTarget)
 	if b.BandwidthEstimate() >= target {
 		b.bandwidthAtLastRound = b.BandwidthEstimate()
 		b.roundsWithoutBandwidthGain = 0
@@ -543,13 +594,13 @@ func (b *bbrSender) EnterProbeBandwidthMode(now time.Time) {
 	// Pick a random offset for the gain cycle out of {0, 2..7} range. 1 is
 	// excluded because in that case increased gain and decreased gain would not
 	// follow each other.
-	b.cycleCurrentOffset = rand.Intn(gainCycleLength - 1)
+	b.cycleCurrentOffset = rand.Intn(GainCycleLength - 1)
 	if b.cycleCurrentOffset >= 1 {
 		b.cycleCurrentOffset += 1
 	}
 
 	b.lastCycleStart = now
-	b.pacingGain = pacingGain[b.cycleCurrentOffset]
+	b.pacingGain = PacingGain[b.cycleCurrentOffset]
 }
 
 func (b *bbrSender) MaybeEnterOrExitProbeRtt(now time.Time, isRoundStart, minRttExpired bool) {
@@ -646,7 +697,7 @@ func (b *bbrSender) CalculatePacingRate() {
 		b.pacingRate = Bandwidth((1.0 - (float64(b.startupBytesLost) * float64(b.startupRateReductionMultiplier) / float64(b.congestionWindow))) * float64(targetRate))
 		// Ensure the pacing rate doesn't drop below the startup growth target times
 		// the bandwidth estimate.
-		b.pacingRate = maxBandwidth(b.pacingRate, Bandwidth(StartupAfterLossGain*float64(b.BandwidthEstimate())))
+		b.pacingRate = maxBandwidth(b.pacingRate, Bandwidth(StartupGrowthTarget*float64(b.BandwidthEstimate())))
 		return
 	}
 
@@ -663,7 +714,7 @@ func (b *bbrSender) CalculateCongestionWindow(ackedBytes, excessAcked protocol.B
 	if b.isAtFullBandwidth {
 		// Add the max recently measured ack aggregation to CWND.
 		targetWindow += protocol.ByteCount(b.maxAckHeight.GetBest())
-	} else if b.enableAckAggerationDuringStartup {
+	} else if b.enableAckAggregationDuringStartup {
 		// Add the most recent excess acked.  Because CWND never decreases in
 		// STARTUP, this will automatically create a very localized max filter.
 		targetWindow += excessAcked
@@ -683,7 +734,7 @@ func (b *bbrSender) CalculateCongestionWindow(ackedBytes, excessAcked protocol.B
 
 	// Enforce the limits on the congestion window.
 	b.congestionWindow = maxByteCount(b.congestionWindow, b.minCongestionWindow)
-	b.congestionWindow = minByteCount(b.congestionWindow, b.maxCongestionDinwow)
+	b.congestionWindow = minByteCount(b.congestionWindow, b.maxCongestionWindow)
 }
 
 func (b *bbrSender) CalculateRecoveryWindow(ackedBytes, lostBytes protocol.ByteCount) {
@@ -722,7 +773,7 @@ func (b *bbrSender) CalculateRecoveryWindow(ackedBytes, lostBytes protocol.ByteC
 }
 
 func (b *bbrSender) GetMinRtt() time.Duration {
-	if b.minRtt != InfiniteRTT {
+	if b.minRtt != 0 {
 		return b.minRtt
 	} else {
 		return b.rttStats.MinRTT()
