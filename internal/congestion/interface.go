@@ -22,6 +22,10 @@ type SendAlgorithm interface {
 	SetSlowStartLargeReduction(enabled bool)
 }
 
+type CongestionEvent interface {
+	OnCongestionEvent(priorInFlight protocol.ByteCount, eventTime time.Time, ackedPackets, lostPackets []*protocol.Packet)
+}
+
 // SendAlgorithmWithDebugInfo adds some debug functions to SendAlgorithm
 type SendAlgorithmWithDebugInfo interface {
 	SendAlgorithm

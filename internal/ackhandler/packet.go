@@ -27,3 +27,12 @@ type Packet struct {
 	isRetransmission        bool // we need a separate bool here because 0 is a valid packet number
 	retransmissionOf        protocol.PacketNumber
 }
+
+func (p *Packet) ToPacket() *protocol.Packet {
+	return &protocol.Packet{
+		PacketNumber: p.PacketNumber,
+		PacketType:   p.PacketType,
+		Length:       p.Length,
+		SendTime:     p.SendTime,
+	}
+}
