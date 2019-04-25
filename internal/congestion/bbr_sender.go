@@ -102,8 +102,8 @@ type bbrSender struct {
 	mode     bbrMode
 	clock    Clock
 	rttStats *RTTStats
-	// total bytes of unacked packets. ref to const QuicUnackedPacketMap* unacked_packets_;
-	bytesInFlight protocol.ByteCount
+	// return total bytes of unacked packets.
+	GetBytesInFlight func() protocol.ByteCount
 	// Bandwidth sampler provides BBR with the bandwidth measurements at
 	// individual points.
 	sampler *BandwidthSampler
@@ -225,10 +225,10 @@ type bbrSender struct {
 	alwaysGetBwSampleWhenAcked bool
 }
 
-func NewBBRSender(clock Clock, rttStats *RTTStats, initialCongestionWindow, maxCongestionWindow protocol.ByteCount) SendAlgorithmWithDebugInfo {
+func NewBBRSender(clock Clock, rttStats *RTTStats, initialCongestionWindow, maxCongestionWindow protocol.ByteCount, getBytesInFlight func() protocol.ByteCount) SendAlgorithmWithDebugInfo {
 	return &bbrSender{
 		rttStats:                  rttStats,
-		bytesInFlight:             0,
+		GetBytesInFlight:          getBytesInFlight,
 		mode:                      STARTUP,
 		clock:                     clock,
 		sampler:                   NewBandwidthSampler(),
@@ -257,7 +257,6 @@ func (b *bbrSender) TimeUntilSend(bytesInFlight protocol.ByteCount) time.Duratio
 
 func (b *bbrSender) OnPacketSent(sentTime time.Time, bytesInFlight protocol.ByteCount, packetNumber protocol.PacketNumber, bytes protocol.ByteCount, isRetransmittable bool) {
 	b.lastSendPacket = packetNumber
-	b.bytesInFlight = bytesInFlight
 
 	if bytesInFlight == 0 && b.sampler.isAppLimited {
 		b.exitingQuiescence = true
@@ -270,17 +269,17 @@ func (b *bbrSender) OnPacketSent(sentTime time.Time, bytesInFlight protocol.Byte
 	b.sampler.OnPacketSent(sentTime, packetNumber, bytes, bytesInFlight, isRetransmittable)
 }
 
+func (b *bbrSender) CanSend(bytesInFlight protocol.ByteCount) bool {
+	return bytesInFlight < b.GetCongestionWindow()
+}
+
 func (b *bbrSender) GetCongestionWindow() protocol.ByteCount {
 	if b.mode == PROBE_RTT {
 		return b.ProbeRttCongestionWindow()
 	}
 
 	if b.InRecovery() && !(b.rateBasedStartup && b.mode == STARTUP) {
-		if b.congestionWindow < b.recoveryWindow {
-			return b.congestionWindow
-		} else {
-			return b.recoveryWindow
-		}
+		return minByteCount(b.congestionWindow, b.recoveryWindow)
 	}
 
 	return b.congestionWindow
@@ -291,14 +290,18 @@ func (b *bbrSender) MaybeExitSlowStart() {
 }
 
 func (b *bbrSender) OnPacketAcked(number protocol.PacketNumber, ackedBytes protocol.ByteCount, priorInFlight protocol.ByteCount, eventTime time.Time) {
-	b.OnCongestionEvent(number, ackedBytes, 0, priorInFlight, eventTime)
+	b.OnCongestionEventOld(number, ackedBytes, 0, priorInFlight, eventTime)
 }
 
 func (b *bbrSender) OnPacketLost(number protocol.PacketNumber, lostBytes protocol.ByteCount, priorInFlight protocol.ByteCount) {
-	b.OnCongestionEvent(number, 0, lostBytes, priorInFlight, b.clock.Now())
+	b.OnCongestionEventOld(number, 0, lostBytes, priorInFlight, b.clock.Now())
 }
 
-func (b *bbrSender) OnCongestionEvent(number protocol.PacketNumber, ackedBytes protocol.ByteCount, lostBytes protocol.ByteCount, priorInFlight protocol.ByteCount, eventTime time.Time) {
+func (b *bbrSender) OnCongestionEvent(priorInFlight protocol.ByteCount, eventTime time.Time, ackedPackets, lostPackets []*protocol.Packet) {
+
+}
+
+func (b *bbrSender) OnCongestionEventOld(number protocol.PacketNumber, ackedBytes protocol.ByteCount, lostBytes protocol.ByteCount, priorInFlight protocol.ByteCount, eventTime time.Time) {
 	isRoundStart, minRttExpired := false, false
 
 	if lostBytes > 0 {
@@ -380,7 +383,37 @@ func (b *bbrSender) InSlowStart() bool {
 }
 
 func (b *bbrSender) ShouldSendProbingPacket() bool {
-	return b.pacingGain <= 1
+	if b.pacingGain <= 1 {
+		return false
+	}
+	// TODO(b/77975811): If the pipe is highly under-utilized, consider not
+	// sending a probing transmission, because the extra bandwidth is not needed.
+	// If flexible_app_limited is enabled, check if the pipe is sufficiently full.
+	if b.flexibleAppLimited {
+		return !b.IsPipeSufficientlyFull()
+	} else {
+		return true
+	}
+}
+
+func (b *bbrSender) IsPipeSufficientlyFull() bool {
+	// See if we need more bytes in flight to see more bandwidth.
+	if b.mode == STARTUP {
+		// STARTUP exits if it doesn't observe a 25% bandwidth increase, so the CWND
+		// must be more than 25% above the target.
+		return b.GetBytesInFlight() >= b.GetTargetCongestionWindow(1.5)
+	}
+	if b.pacingGain > 1 {
+		// Super-unity PROBE_BW doesn't exit until 1.25 * BDP is achieved.
+		return b.GetBytesInFlight() >= b.GetTargetCongestionWindow(b.pacingGain)
+	}
+	// If bytes_in_flight are above the target congestion window, it should be
+	// possible to observe the same or more bandwidth if it's available.
+	return b.GetBytesInFlight() >= b.GetTargetCongestionWindow(1.1)
+}
+
+func (b *bbrSender) SetFromConfig() {
+	// TODO: not impl.
 }
 
 func (b *bbrSender) UpdateRoundTripCounter(lastAckedPacket protocol.PacketNumber) bool {
@@ -520,7 +553,7 @@ func (b *bbrSender) UpdateAckAggregationBytes(ackTime time.Time, ackedBytes prot
 }
 
 func (b *bbrSender) UpdateGainCyclePhase(now time.Time, priorInFlight protocol.ByteCount, hasLossed bool) {
-	bytesInFlight := b.bytesInFlight
+	bytesInFlight := b.GetBytesInFlight()
 	shouldAdvanceGainCycling := now.Sub(b.lastCycleStart) > b.GetMinRtt()
 
 	if b.pacingGain > 1.0 && !hasLossed && priorInFlight < b.GetTargetCongestionWindow(b.pacingGain) {
@@ -582,7 +615,7 @@ func (b *bbrSender) MaybeExitStartupOrDrain(now time.Time) {
 		b.pacingGain = b.drainGain
 		b.congestionWindowGain = b.highCwndGain
 	}
-	if b.mode == DRAIN && b.bytesInFlight <= b.GetTargetCongestionWindow(1) {
+	if b.mode == DRAIN && b.GetBytesInFlight() <= b.GetTargetCongestionWindow(1) {
 		b.EnterProbeBandwidthMode(now)
 	}
 }
@@ -623,7 +656,7 @@ func (b *bbrSender) MaybeEnterOrExitProbeRtt(now time.Time, isRoundStart, minRtt
 			// PROBE_RTT.  The CWND during PROBE_RTT is kMinimumCongestionWindow, but
 			// we allow an extra packet since QUIC checks CWND before sending a
 			// packet.
-			if b.bytesInFlight < b.ProbeRttCongestionWindow()+MaxOutgoingPacketSize {
+			if b.GetBytesInFlight() < b.ProbeRttCongestionWindow()+MaxOutgoingPacketSize {
 				b.exitProbeRttAt = now.Add(ProbeRttTime)
 				b.probeRttRoundPassed = false
 			}
@@ -748,7 +781,7 @@ func (b *bbrSender) CalculateRecoveryWindow(ackedBytes, lostBytes protocol.ByteC
 
 	// Set up the initial recovery window.
 	if b.recoveryWindow == 0 {
-		b.recoveryWindow = maxByteCount(b.bytesInFlight+ackedBytes, b.minCongestionWindow)
+		b.recoveryWindow = maxByteCount(b.GetBytesInFlight()+ackedBytes, b.minCongestionWindow)
 		return
 	}
 
@@ -768,7 +801,7 @@ func (b *bbrSender) CalculateRecoveryWindow(ackedBytes, lostBytes protocol.ByteC
 
 	// Sanity checks.  Ensure that we always allow to send at least an MSS or
 	// |bytes_acked| in response, whichever is larger.
-	b.recoveryWindow = maxByteCount(b.recoveryWindow, b.bytesInFlight+ackedBytes)
+	b.recoveryWindow = maxByteCount(b.recoveryWindow, b.GetBytesInFlight()+ackedBytes)
 	b.recoveryWindow = maxByteCount(b.recoveryWindow, b.minCongestionWindow)
 }
 

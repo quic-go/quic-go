@@ -90,14 +90,24 @@ func NewSentPacketHandler(
 	rttStats *congestion.RTTStats,
 	logger utils.Logger,
 ) SentPacketHandler {
-	var cc congestion.SendAlgorithm
+	handler := &sentPacketHandler{
+		initialPackets:   newPacketNumberSpace(initialPacketNumber),
+		handshakePackets: newPacketNumberSpace(0),
+		oneRTTPackets:    newPacketNumberSpace(0),
+		rttStats:         rttStats,
+		logger:           logger,
+	}
 
+	var cc congestion.SendAlgorithm
 	if strings.Contains(os.Getenv("GODEBUG"), "bbr=1") {
 		log.Printf("quic-go: bbr is enabled.")
 		cc = congestion.NewBBRSender(congestion.DefaultClock{},
 			rttStats,
 			protocol.InitialCongestionWindow,
 			protocol.DefaultBBRMaxCongestionWindow,
+			func() protocol.ByteCount {
+				return handler.bytesInFlight
+			},
 		)
 	} else {
 		cc = congestion.NewCubicSender(
@@ -109,14 +119,9 @@ func NewSentPacketHandler(
 		)
 	}
 
-	return &sentPacketHandler{
-		initialPackets:   newPacketNumberSpace(initialPacketNumber),
-		handshakePackets: newPacketNumberSpace(0),
-		oneRTTPackets:    newPacketNumberSpace(0),
-		rttStats:         rttStats,
-		congestion:       cc,
-		logger:           logger,
-	}
+	handler.congestion = cc
+	return handler
+
 }
 
 func (h *sentPacketHandler) SetHandshakeComplete() {
