@@ -270,12 +270,12 @@ func (s *BandwidthSampler) onPacketAckedInner(ackTime time.Time, lastAckedPacket
 	if !ackTime.After(sentPacket.lastAckedPacketAckTime) {
 		// TODO(wub): Compare this code count before and after fixing clock jitter
 		// issue.
-		if sentPacket.lastAckedPacketAckTime.Equal(sentPacket.sendTime) {
-			// This is the 1st packet after quiescense.
-			// QUIC_CODE_COUNT_N(quic_prev_ack_time_larger_than_current_ack_time, 1, 2);
-			// } else {
-			//   QUIC_CODE_COUNT_N(quic_prev_ack_time_larger_than_current_ack_time, 2, 2);
-		}
+		// if sentPacket.lastAckedPacketAckTime.Equal(sentPacket.sendTime) {
+		// This is the 1st packet after quiescense.
+		// QUIC_CODE_COUNT_N(quic_prev_ack_time_larger_than_current_ack_time, 1, 2);
+		// } else {
+		//   QUIC_CODE_COUNT_N(quic_prev_ack_time_larger_than_current_ack_time, 2, 2);
+		// }
 
 		return NewBandwidthSample()
 	}

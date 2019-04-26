@@ -426,9 +426,9 @@ func (b *bbrSender) UpdateRoundTripCounter(lastAckedPacket protocol.PacketNumber
 	if b.currentRoundTripEnd == 0 || lastAckedPacket > b.currentRoundTripEnd {
 		b.currentRoundTripEnd = lastAckedPacket
 		b.roundTripCount++
-		if b.rttStats != nil && b.InSlowStart() {
-			// TODO: ++stats_->slowstart_num_rtts;
-		}
+		// if b.rttStats != nil && b.InSlowStart() {
+		// TODO: ++stats_->slowstart_num_rtts;
+		// }
 		return true
 	}
 	return false
@@ -506,9 +506,9 @@ func (b *bbrSender) DiscardLostPackets(lostPackets []*protocol.Packet) {
 	for _, packet := range lostPackets {
 		b.sampler.OnPacketLost(packet.PacketNumber)
 		if b.mode == STARTUP {
-			if b.rttStats != nil {
-				// TODO: slow start.
-			}
+			// if b.rttStats != nil {
+			// TODO: slow start.
+			// }
 			if b.startupRateReductionMultiplier != 0 {
 				b.startupBytesLost += packet.Length
 			}
@@ -723,9 +723,9 @@ func (b *bbrSender) ProbeRttCongestionWindow() protocol.ByteCount {
 }
 
 func (b *bbrSender) EnterStartupMode(now time.Time) {
-	if b.rttStats != nil {
-		// TODO: slow start.
-	}
+	// if b.rttStats != nil {
+	// TODO: slow start.
+	// }
 	b.mode = STARTUP
 	b.pacingGain = b.highGain
 	b.congestionWindowGain = b.highCwndGain
