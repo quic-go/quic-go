@@ -25,9 +25,16 @@ type packer interface {
 	ChangeDestConnectionID(protocol.ConnectionID)
 }
 
+type payload struct {
+	frames []wire.Frame
+	ack    *wire.AckFrame
+	length protocol.ByteCount
+}
+
 type packedPacket struct {
 	header *wire.ExtendedHeader
 	raw    []byte
+	ack    *wire.AckFrame
 	frames []wire.Frame
 
 	buffer *packetBuffer
@@ -55,6 +62,7 @@ func (p *packedPacket) ToAckHandlerPacket() *ackhandler.Packet {
 	return &ackhandler.Packet{
 		PacketNumber:    p.header.PacketNumber,
 		PacketType:      p.header.Type,
+		Ack:             p.ack,
 		Frames:          p.frames,
 		Length:          protocol.ByteCount(len(p.raw)),
 		EncryptionLevel: p.EncryptionLevel(),
@@ -90,7 +98,7 @@ type sealingManager interface {
 }
 
 type frameSource interface {
-	AppendStreamFrames([]wire.Frame, protocol.ByteCount) []wire.Frame
+	AppendStreamFrames([]wire.Frame, protocol.ByteCount) ([]wire.Frame, protocol.ByteCount)
 	AppendControlFrames([]wire.Frame, protocol.ByteCount) ([]wire.Frame, protocol.ByteCount)
 }
 
@@ -151,10 +159,13 @@ func newPacketPacker(
 
 // PackConnectionClose packs a packet that ONLY contains a ConnectionCloseFrame
 func (p *packetPacker) PackConnectionClose(ccf *wire.ConnectionCloseFrame) (*packedPacket, error) {
-	frames := []wire.Frame{ccf}
+	payload := payload{
+		frames: []wire.Frame{ccf},
+		length: ccf.Length(p.version),
+	}
 	encLevel, sealer := p.cryptoSetup.GetSealer()
 	header := p.getHeader(encLevel)
-	return p.writeAndSealPacket(header, frames, encLevel, sealer)
+	return p.writeAndSealPacket(header, payload, encLevel, sealer)
 }
 
 func (p *packetPacker) MaybePackAckPacket() (*packedPacket, error) {
@@ -162,11 +173,14 @@ func (p *packetPacker) MaybePackAckPacket() (*packedPacket, error) {
 	if ack == nil {
 		return nil, nil
 	}
+	payload := payload{
+		ack:    ack,
+		length: ack.Length(p.version),
+	}
 	// TODO(#1534): only pack ACKs with the right encryption level
 	encLevel, sealer := p.cryptoSetup.GetSealer()
 	header := p.getHeader(encLevel)
-	frames := []wire.Frame{ack}
-	return p.writeAndSealPacket(header, frames, encLevel, sealer)
+	return p.writeAndSealPacket(header, payload, encLevel, sealer)
 }
 
 // PackRetransmission packs a retransmission
@@ -233,7 +247,7 @@ func (p *packetPacker) PackRetransmission(packet *ackhandler.Packet) ([]*packedP
 		if sf, ok := frames[len(frames)-1].(*wire.StreamFrame); ok {
 			sf.DataLenPresent = false
 		}
-		p, err := p.writeAndSealPacket(header, frames, encLevel, sealer)
+		p, err := p.writeAndSealPacket(header, payload{frames: frames, length: length}, encLevel, sealer)
 		if err != nil {
 			return nil, err
 		}
@@ -261,19 +275,20 @@ func (p *packetPacker) PackPacket() (*packedPacket, error) {
 	}
 
 	maxSize := p.maxPacketSize - protocol.ByteCount(sealer.Overhead()) - headerLen
-	frames, err := p.composeNextPacket(maxSize)
+	payload, err := p.composeNextPacket(maxSize)
 	if err != nil {
 		return nil, err
 	}
 
-	// Check if we have enough frames to send
-	if len(frames) == 0 {
+	// check if we have anything to send
+	if len(payload.frames) == 0 && payload.ack == nil {
 		return nil, nil
 	}
-	// check if this packet only contains an ACK
-	if !ackhandler.HasAckElicitingFrames(frames) {
+	if len(payload.frames) == 0 { // the packet only contains an ACK
 		if p.numNonAckElicitingAcks >= protocol.MaxNonAckElicitingAcks {
-			frames = append(frames, &wire.PingFrame{})
+			ping := &wire.PingFrame{}
+			payload.frames = append(payload.frames, ping)
+			payload.length += ping.Length(p.version)
 			p.numNonAckElicitingAcks = 0
 		} else {
 			p.numNonAckElicitingAcks++
@@ -282,7 +297,7 @@ func (p *packetPacker) PackPacket() (*packedPacket, error) {
 		p.numNonAckElicitingAcks = 0
 	}
 
-	return p.writeAndSealPacket(header, frames, encLevel, sealer)
+	return p.writeAndSealPacket(header, payload, encLevel, sealer)
 }
 
 func (p *packetPacker) maybePackCryptoPacket() (*packedPacket, error) {
@@ -311,34 +326,32 @@ func (p *packetPacker) maybePackCryptoPacket() (*packedPacket, error) {
 		return nil, err
 	}
 
+	var payload payload
+	if ack != nil {
+		payload.ack = ack
+		payload.length = ack.Length(p.version)
+	}
 	hdr := p.getHeader(encLevel)
 	hdrLen := hdr.GetLength(p.version)
-	var length protocol.ByteCount
-	frames := make([]wire.Frame, 0, 2)
-	if ack != nil {
-		frames = append(frames, ack)
-		length += ack.Length(p.version)
-	}
 	if hasData {
-		cf := s.PopCryptoFrame(p.maxPacketSize - hdrLen - protocol.ByteCount(sealer.Overhead()) - length)
-		frames = append(frames, cf)
+		cf := s.PopCryptoFrame(p.maxPacketSize - hdrLen - protocol.ByteCount(sealer.Overhead()) - payload.length)
+		payload.frames = []wire.Frame{cf}
+		payload.length += cf.Length(p.version)
 	}
-	return p.writeAndSealPacket(hdr, frames, encLevel, sealer)
+	return p.writeAndSealPacket(hdr, payload, encLevel, sealer)
 }
 
-func (p *packetPacker) composeNextPacket(maxFrameSize protocol.ByteCount) ([]wire.Frame, error) {
-	var length protocol.ByteCount
-	var frames []wire.Frame
+func (p *packetPacker) composeNextPacket(maxFrameSize protocol.ByteCount) (payload, error) {
+	var payload payload
 
-	// ACKs need to go first, so that the sentPacketHandler will recognize them
+	// ACKs need to go first, so we recognize them in packedPacket.ToAckHandlerPacket()
 	if ack := p.acks.GetAckFrame(protocol.Encryption1RTT); ack != nil {
-		frames = append(frames, ack)
-		length += ack.Length(p.version)
+		payload.ack = ack
+		payload.length += ack.Length(p.version)
 	}
 
-	var lengthAdded protocol.ByteCount
-	frames, lengthAdded = p.framer.AppendControlFrames(frames, maxFrameSize-length)
-	length += lengthAdded
+	frames, lengthAdded := p.framer.AppendControlFrames(payload.frames, maxFrameSize-payload.length)
+	payload.length += lengthAdded
 
 	// temporarily increase the maxFrameSize by the (minimum) length of the DataLen field
 	// this leads to a properly sized packet in all cases, since we do all the packet length calculations with STREAM frames that have the DataLen set
@@ -346,14 +359,16 @@ func (p *packetPacker) composeNextPacket(maxFrameSize protocol.ByteCount) ([]wir
 	// the length is encoded to either 1 or 2 bytes
 	maxFrameSize++
 
-	frames = p.framer.AppendStreamFrames(frames, maxFrameSize-length)
+	frames, lengthAdded = p.framer.AppendStreamFrames(frames, maxFrameSize-payload.length)
 	if len(frames) > 0 {
 		lastFrame := frames[len(frames)-1]
 		if sf, ok := lastFrame.(*wire.StreamFrame); ok {
 			sf.DataLenPresent = false
 		}
+		payload.frames = append(payload.frames, frames...)
+		payload.length += lengthAdded
 	}
-	return frames, nil
+	return payload, nil
 }
 
 func (p *packetPacker) getHeader(encLevel protocol.EncryptionLevel) *wire.ExtendedHeader {
@@ -387,65 +402,54 @@ func (p *packetPacker) getHeader(encLevel protocol.EncryptionLevel) *wire.Extend
 
 func (p *packetPacker) writeAndSealPacket(
 	header *wire.ExtendedHeader,
-	frames []wire.Frame,
+	payload payload,
+	encLevel protocol.EncryptionLevel,
+	sealer handshake.Sealer,
+) (*packedPacket, error) {
+	var paddingLen protocol.ByteCount
+	pnLen := protocol.ByteCount(header.PacketNumberLen)
+
+	if encLevel != protocol.Encryption1RTT {
+		if p.perspective == protocol.PerspectiveClient && header.Type == protocol.PacketTypeInitial {
+			header.Token = p.token
+			headerLen := header.GetLength(p.version)
+			header.Length = pnLen + protocol.MinInitialPacketSize - headerLen
+			paddingLen = protocol.ByteCount(protocol.MinInitialPacketSize-sealer.Overhead()) - headerLen - payload.length
+		} else {
+			header.Length = pnLen + protocol.ByteCount(sealer.Overhead()) + payload.length
+		}
+	} else if payload.length < 4-pnLen {
+		paddingLen = 4 - pnLen - payload.length
+	}
+	return p.writeAndSealPacketWithPadding(header, payload, paddingLen, encLevel, sealer)
+}
+
+func (p *packetPacker) writeAndSealPacketWithPadding(
+	header *wire.ExtendedHeader,
+	payload payload,
+	paddingLen protocol.ByteCount,
 	encLevel protocol.EncryptionLevel,
 	sealer handshake.Sealer,
 ) (*packedPacket, error) {
 	packetBuffer := getPacketBuffer()
 	buffer := bytes.NewBuffer(packetBuffer.Slice[:0])
 
-	addPaddingForInitial := p.perspective == protocol.PerspectiveClient && header.Type == protocol.PacketTypeInitial
-
-	if header.IsLongHeader {
-		if p.perspective == protocol.PerspectiveClient && header.Type == protocol.PacketTypeInitial {
-			header.Token = p.token
-		}
-		if addPaddingForInitial {
-			headerLen := header.GetLength(p.version)
-			header.Length = protocol.ByteCount(header.PacketNumberLen) + protocol.MinInitialPacketSize - headerLen
-		} else {
-			// long header packets always use 4 byte packet number, so we never need to pad short payloads
-			length := protocol.ByteCount(sealer.Overhead()) + protocol.ByteCount(header.PacketNumberLen)
-			for _, frame := range frames {
-				length += frame.Length(p.version)
-			}
-			header.Length = length
-		}
-	}
-
 	if err := header.Write(buffer, p.version); err != nil {
 		return nil, err
 	}
 	payloadOffset := buffer.Len()
 
-	// write all frames but the last one
-	for _, frame := range frames[:len(frames)-1] {
-		if err := frame.Write(buffer, p.version); err != nil {
+	if payload.ack != nil {
+		if err := payload.ack.Write(buffer, p.version); err != nil {
 			return nil, err
 		}
 	}
-	lastFrame := frames[len(frames)-1]
-	if addPaddingForInitial {
-		// when appending padding, we need to make sure that the last STREAM frames has the data length set
-		if sf, ok := lastFrame.(*wire.StreamFrame); ok {
-			sf.DataLenPresent = true
-		}
-	} else {
-		payloadLen := buffer.Len() - payloadOffset + int(lastFrame.Length(p.version))
-		if paddingLen := 4 - int(header.PacketNumberLen) - payloadLen; paddingLen > 0 {
-			// Pad the packet such that packet number length + payload length is 4 bytes.
-			// This is needed to enable the peer to get a 16 byte sample for header protection.
-			buffer.Write(bytes.Repeat([]byte{0}, paddingLen))
-		}
+	if paddingLen > 0 {
+		buffer.Write(bytes.Repeat([]byte{0}, int(paddingLen)))
 	}
-	if err := lastFrame.Write(buffer, p.version); err != nil {
-		return nil, err
-	}
-
-	if addPaddingForInitial {
-		paddingLen := protocol.MinInitialPacketSize - sealer.Overhead() - buffer.Len()
-		if paddingLen > 0 {
-			buffer.Write(bytes.Repeat([]byte{0}, paddingLen))
+	for _, frame := range payload.frames {
+		if err := frame.Write(buffer, p.version); err != nil {
+			return nil, err
 		}
 	}
 
@@ -471,7 +475,8 @@ func (p *packetPacker) writeAndSealPacket(
 	return &packedPacket{
 		header: header,
 		raw:    raw,
-		frames: frames,
+		ack:    payload.ack,
+		frames: payload.frames,
 		buffer: packetBuffer,
 	}, nil
 }

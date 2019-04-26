@@ -27,15 +27,6 @@ var _ = Describe("ack-eliciting frames", func() {
 			Expect(IsFrameAckEliciting(f)).To(Equal(e))
 		})
 
-		It("stripping non-ack-elicinting frames works for "+fName, func() {
-			s := []wire.Frame{f}
-			if e {
-				Expect(stripNonAckElicitingFrames(s)).To(Equal([]wire.Frame{f}))
-			} else {
-				Expect(stripNonAckElicitingFrames(s)).To(BeEmpty())
-			}
-		})
-
 		It("HasAckElicitingFrames works for "+fName, func() {
 			Expect(HasAckElicitingFrames([]wire.Frame{f})).To(Equal(e))
 		})

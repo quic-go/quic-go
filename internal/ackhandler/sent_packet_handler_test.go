@@ -29,9 +29,8 @@ func ackElicitingPacket(p *Packet) *Packet {
 
 func nonAckElicitingPacket(p *Packet) *Packet {
 	p = ackElicitingPacket(p)
-	p.Frames = []wire.Frame{
-		&wire.AckFrame{AckRanges: []wire.AckRange{{Smallest: 1, Largest: 1}}},
-	}
+	p.Frames = nil
+	p.Ack = &wire.AckFrame{AckRanges: []wire.AckRange{{Smallest: 1, Largest: 1}}}
 	return p
 }
 
@@ -313,8 +312,8 @@ var _ = Describe("SentPacketHandler", func() {
 				ack1 := &wire.AckFrame{AckRanges: []wire.AckRange{{Smallest: 80, Largest: 100}}}
 				ack2 := &wire.AckFrame{AckRanges: []wire.AckRange{{Smallest: 50, Largest: 200}}}
 				morePackets := []*Packet{
-					{PacketNumber: 13, Frames: []wire.Frame{ack1, &streamFrame}, Length: 1, EncryptionLevel: protocol.Encryption1RTT},
-					{PacketNumber: 14, Frames: []wire.Frame{ack2, &streamFrame}, Length: 1, EncryptionLevel: protocol.Encryption1RTT},
+					{PacketNumber: 13, Ack: ack1, Frames: []wire.Frame{&streamFrame}, Length: 1, EncryptionLevel: protocol.Encryption1RTT},
+					{PacketNumber: 14, Ack: ack2, Frames: []wire.Frame{&streamFrame}, Length: 1, EncryptionLevel: protocol.Encryption1RTT},
 					{PacketNumber: 15, Frames: []wire.Frame{&streamFrame}, Length: 1, EncryptionLevel: protocol.Encryption1RTT},
 				}
 				for _, packet := range morePackets {
