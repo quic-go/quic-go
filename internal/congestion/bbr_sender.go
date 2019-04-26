@@ -345,10 +345,6 @@ func (b *bbrSender) OnCongestionEvent(priorInFlight protocol.ByteCount, eventTim
 	b.CalculatePacingRate()
 	b.CalculateCongestionWindow(bytesAcked, excessAcked)
 	b.CalculateRecoveryWindow(bytesAcked, bytesLost)
-
-	// Cleanup internal state.
-	b.sampler.RemoveObsoletePackets(ackedPackets)
-	b.sampler.RemoveObsoletePackets(lostPackets)
 }
 
 func (b *bbrSender) SetNumEmulatedConnections(n int) {

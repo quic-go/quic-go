@@ -310,13 +310,6 @@ func (s *BandwidthSampler) OnPacketLost(packetNumber protocol.PacketNumber) Send
 	return sendTimeState
 }
 
-// Remove packets.
-func (s *BandwidthSampler) RemoveObsoletePackets(packets []*protocol.Packet) {
-	for _, packet := range packets {
-		s.connectionStats.Remove(packet.PacketNumber)
-	}
-}
-
 // OnAppLimited Informs the sampler that the connection is currently app-limited, causing
 // the sampler to enter the app-limited phase.  The phase will expire by
 // itself.
@@ -343,10 +336,6 @@ type ConnectionStates struct {
 }
 
 func (s *ConnectionStates) Insert(packetNumber protocol.PacketNumber, sentTime time.Time, bytes protocol.ByteCount, sampler *BandwidthSampler) bool {
-	if len(s.stats) == 0 {
-		s.stats[packetNumber] = NewConnectionStateOnSentPacket(packetNumber, sentTime, bytes, sampler)
-	}
-
 	if _, ok := s.stats[packetNumber]; ok {
 		return false
 	}
