@@ -48,6 +48,11 @@ func (s *serverSession) handlePacketImpl(p *receivedPacket) error {
 		switch hdr.Type {
 		case protocol.PacketTypeHandshake, protocol.PacketType0RTT: // 0-RTT accepted for gQUIC 44
 			// nothing to do here. Packet will be passed to the session.
+		case protocol.PacketTypeInitial:
+			if hdr.Version == protocol.Version44 {
+				break
+			}
+			fallthrough
 		default:
 			// Note that this also drops 0-RTT packets.
 			return fmt.Errorf("Received unsupported packet type: %s", hdr.Type)
