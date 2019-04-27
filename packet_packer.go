@@ -353,18 +353,8 @@ func (p *packetPacker) composeNextPacket(maxFrameSize protocol.ByteCount) (paylo
 	frames, lengthAdded := p.framer.AppendControlFrames(payload.frames, maxFrameSize-payload.length)
 	payload.length += lengthAdded
 
-	// temporarily increase the maxFrameSize by the (minimum) length of the DataLen field
-	// this leads to a properly sized packet in all cases, since we do all the packet length calculations with STREAM frames that have the DataLen set
-	// however, for the last STREAM frame in the packet, we can omit the DataLen, thus yielding a packet of exactly the correct size
-	// the length is encoded to either 1 or 2 bytes
-	maxFrameSize++
-
 	frames, lengthAdded = p.framer.AppendStreamFrames(frames, maxFrameSize-payload.length)
 	if len(frames) > 0 {
-		lastFrame := frames[len(frames)-1]
-		if sf, ok := lastFrame.(*wire.StreamFrame); ok {
-			sf.DataLenPresent = false
-		}
 		payload.frames = append(payload.frames, frames...)
 		payload.length += lengthAdded
 	}

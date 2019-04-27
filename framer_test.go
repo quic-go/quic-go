@@ -7,11 +7,12 @@ import (
 
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/internal/wire"
+
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 )
 
-var _ = Describe("Stream Framer", func() {
+var _ = Describe("Framer", func() {
 	const (
 		id1 = protocol.StreamID(10)
 		id2 = protocol.StreamID(11)
@@ -216,9 +217,63 @@ var _ = Describe("Stream Framer", func() {
 			Expect(length).To(BeZero())
 		})
 
-		It("pops frames that have the minimum size", func() {
+		It("pops maximum size STREAM frames", func() {
+			for i := protocol.MinStreamFrameSize; i < 2000; i++ {
+				streamGetter.EXPECT().GetOrOpenSendStream(id1).Return(stream1, nil)
+				stream1.EXPECT().popStreamFrame(gomock.Any()).DoAndReturn(func(size protocol.ByteCount) (*wire.StreamFrame, bool) {
+					f := &wire.StreamFrame{
+						StreamID:       id1,
+						DataLenPresent: true,
+					}
+					f.Data = make([]byte, f.MaxDataLen(size, version))
+					Expect(f.Length(version)).To(Equal(size))
+					return f, false
+				})
+				framer.AddActiveStream(id1)
+				frames, _ := framer.AppendStreamFrames(nil, i)
+				Expect(frames).To(HaveLen(1))
+				f := frames[0].(*wire.StreamFrame)
+				Expect(f.DataLenPresent).To(BeFalse())
+				Expect(f.Length(version)).To(Equal(i))
+			}
+		})
+
+		It("pops multiple STREAM frames", func() {
+			for i := 2 * protocol.MinStreamFrameSize; i < 2000; i++ {
+				streamGetter.EXPECT().GetOrOpenSendStream(id1).Return(stream1, nil)
+				streamGetter.EXPECT().GetOrOpenSendStream(id2).Return(stream2, nil)
+				stream1.EXPECT().popStreamFrame(gomock.Any()).DoAndReturn(func(size protocol.ByteCount) (*wire.StreamFrame, bool) {
+					f := &wire.StreamFrame{
+						StreamID:       id2,
+						DataLenPresent: true,
+					}
+					f.Data = make([]byte, f.MaxDataLen(protocol.MinStreamFrameSize, version))
+					return f, false
+				})
+				stream2.EXPECT().popStreamFrame(gomock.Any()).DoAndReturn(func(size protocol.ByteCount) (*wire.StreamFrame, bool) {
+					f := &wire.StreamFrame{
+						StreamID:       id2,
+						DataLenPresent: true,
+					}
+					f.Data = make([]byte, f.MaxDataLen(size, version))
+					Expect(f.Length(version)).To(Equal(size))
+					return f, false
+				})
+				framer.AddActiveStream(id1)
+				framer.AddActiveStream(id2)
+				frames, _ := framer.AppendStreamFrames(nil, i)
+				Expect(frames).To(HaveLen(2))
+				f1 := frames[0].(*wire.StreamFrame)
+				f2 := frames[1].(*wire.StreamFrame)
+				Expect(f1.DataLenPresent).To(BeTrue())
+				Expect(f2.DataLenPresent).To(BeFalse())
+				Expect(f1.Length(version) + f2.Length(version)).To(Equal(i))
+			}
+		})
+
+		It("pops frames that when asked for the the minimum STREAM frame size", func() {
 			streamGetter.EXPECT().GetOrOpenSendStream(id1).Return(stream1, nil)
-			stream1.EXPECT().popStreamFrame(protocol.MinStreamFrameSize).Return(&wire.StreamFrame{Data: []byte("foobar")}, false)
+			stream1.EXPECT().popStreamFrame(gomock.Any()).Return(&wire.StreamFrame{Data: []byte("foobar")}, false)
 			framer.AddActiveStream(id1)
 			framer.AppendStreamFrames(nil, protocol.MinStreamFrameSize)
 		})
@@ -235,7 +290,7 @@ var _ = Describe("Stream Framer", func() {
 				StreamID: id1,
 				Data:     bytes.Repeat([]byte("f"), int(500-protocol.MinStreamFrameSize)),
 			}
-			stream1.EXPECT().popStreamFrame(protocol.ByteCount(500)).Return(f, false)
+			stream1.EXPECT().popStreamFrame(gomock.Any()).Return(f, false)
 			framer.AddActiveStream(id1)
 			fs, length := framer.AppendStreamFrames(nil, 500)
 			Expect(fs).To(Equal([]wire.Frame{f}))
