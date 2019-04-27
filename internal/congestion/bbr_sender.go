@@ -540,12 +540,7 @@ func (b *bbrSender) UpdateRecoveryState(lastAckedPacket protocol.PacketNumber, h
 		if isRoundStart {
 			b.recoveryState = GROWTH
 		}
-
-		// Exit recovery if appropriate.
-		if !hasLosses && b.lastSendPacket > b.endRecoveryAt {
-			b.recoveryState = NOT_IN_RECOVERY
-			b.isAppLimitedRecovery = false
-		}
+		fallthrough
 	case GROWTH:
 		// Exit recovery if appropriate.
 		if !hasLosses && b.lastSendPacket > b.endRecoveryAt {
