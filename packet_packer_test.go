@@ -316,7 +316,7 @@ var _ = Describe("Packet packer", func() {
 						return fs, 444
 					}),
 					framer.EXPECT().AppendStreamFrames(gomock.Any(), gomock.Any()).Do(func(fs []wire.Frame, maxLen protocol.ByteCount) ([]wire.Frame, protocol.ByteCount) {
-						Expect(maxLen).To(Equal(maxSize - 444 + 1 /* data length of the STREAM frame */))
+						Expect(maxLen).To(Equal(maxSize - 444))
 						return fs, 0
 					}),
 				)
@@ -435,9 +435,8 @@ var _ = Describe("Packet packer", func() {
 					sealingManager.EXPECT().GetSealer().Return(protocol.Encryption1RTT, sealer)
 					expectAppendControlFrames()
 					sf := &wire.StreamFrame{
-						Offset:         1,
-						StreamID:       5,
-						DataLenPresent: true,
+						Offset:   1,
+						StreamID: 5,
 					}
 					framer.EXPECT().AppendStreamFrames(gomock.Any(), gomock.Any()).DoAndReturn(func(_ []wire.Frame, maxSize protocol.ByteCount) ([]wire.Frame, protocol.ByteCount) {
 						sf.Data = bytes.Repeat([]byte{'f'}, int(maxSize-sf.Length(packer.version)))
@@ -478,11 +477,8 @@ var _ = Describe("Packet packer", func() {
 					Expect(err).ToNot(HaveOccurred())
 					Expect(p.frames).To(HaveLen(3))
 					Expect(p.frames[0].(*wire.StreamFrame).Data).To(Equal([]byte("frame 1")))
-					Expect(p.frames[0].(*wire.StreamFrame).DataLenPresent).To(BeTrue())
 					Expect(p.frames[1].(*wire.StreamFrame).Data).To(Equal([]byte("frame 2")))
-					Expect(p.frames[1].(*wire.StreamFrame).DataLenPresent).To(BeTrue())
 					Expect(p.frames[2].(*wire.StreamFrame).Data).To(Equal([]byte("frame 3")))
-					Expect(p.frames[2].(*wire.StreamFrame).DataLenPresent).To(BeFalse())
 				})
 			})
 
