@@ -18,6 +18,7 @@ enum FrameType {
   BLOCKED = 8;
   STREAM_BLOCKED = 9;
   PADDING = 10;
+  CRYPTO = 11;
 };
 
 // Metadata for STREAM frames.
@@ -27,6 +28,12 @@ message StreamFrameInfo {
   optional uint64 length = 3;
   optional uint64 offset = 4;
 };
+
+// Metadata for CRYPTO frames.
+message CryptoFrameInfo {
+  optional uint64 length = 1;
+  optional uint64 offset = 2;
+}
 
 // The intervals are closed, i.e. the interval represented here is
 // [first_packet, last_packet].
@@ -48,10 +55,22 @@ message ResetStreamInfo {
   optional uint64 final_offset = 3;
 };
 
+// Metadata for CONNECTION_CLOSE frames.
+// Close_type will indicate whether the close is a Google QUIC close,
+// IETF QUIC Transport CONNECTION CLOSE, or IETF QUIC Application
+// Connection Close, frame.
+enum CloseType {
+  GOOGLE_QUIC_CONNECTION_CLOSE = 0;
+  IETF_QUIC_TRANSPORT_CONNECTION_CLOSE = 1;
+  IETF_QUIC_APPLICATION_CONNECTION_CLOSE = 2;
+};
+
 // Metadata for CONNECTION_CLOSE/APPLICATION_CLOSE frames.
 message CloseInfo {
   optional uint32 error_code = 1;
   optional string reason_phrase = 2;
+  optional CloseType close_type = 3;
+  optional uint64 transport_close_frame_type = 4;
 };
 
 // Metadata for MAX_DATA/MAX_STREAM_DATA frames.
@@ -69,6 +88,7 @@ message Frame {
   optional ResetStreamInfo reset_stream_info = 4;
   optional CloseInfo close_info = 5;
   optional FlowControlInfo flow_control_info = 6;
+  optional CryptoFrameInfo crypto_frame_info = 7;
 };
 
 // Metadata that represents transport stack's understanding of the current state

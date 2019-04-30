@@ -132,10 +132,21 @@ func getEncryptionLevel(encLevel protocol.EncryptionLevel) *pb.EncryptionLevel {
 
 func getFrames(wframes []wire.Frame) []*pb.Frame {
 	streamFrameType := pb.FrameType_STREAM
+	cryptoFrameType := pb.FrameType_CRYPTO
 	ackFrameType := pb.FrameType_ACK
 	var frames []*pb.Frame
 	for _, frame := range wframes {
 		switch f := frame.(type) {
+		case *wire.CryptoFrame:
+			offset := uint64(f.Offset)
+			length := uint64(len(f.Data))
+			frames = append(frames, &pb.Frame{
+				FrameType: &cryptoFrameType,
+				CryptoFrameInfo: &pb.CryptoFrameInfo{
+					Offset: &offset,
+					Length: &length,
+				},
+			})
 		case *wire.StreamFrame:
 			streamID := uint64(f.StreamID)
 			offset := uint64(f.Offset)
