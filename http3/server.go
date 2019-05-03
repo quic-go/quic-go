@@ -293,6 +293,13 @@ func ListenAndServe(addr, certFile, keyFile string, handler http.Handler) error 
 		Certificates: certs,
 	}
 
+	return ListenAndServeTLSConfig(addr, config, handler)
+}
+
+// ListenAndServeTLSConfig does the same as ListenAndServe (listens on the
+// given network address for both, TLS and QUIC connetions in parallel)
+// but it takes a *tls.Config instead of the path to certificate and key files.
+func ListenAndServeTLSConfig(addr string, config *tls.Config, handler http.Handler) error {
 	// Open the listeners
 	udpAddr, err := net.ResolveUDPAddr("udp", addr)
 	if err != nil {
