@@ -352,6 +352,7 @@ func (c *client) createNewTLSSession(version protocol.VersionNumber) error {
 		IdleTimeout:                    c.config.IdleTimeout,
 		MaxBidiStreams:                 uint64(c.config.MaxIncomingStreams),
 		MaxUniStreams:                  uint64(c.config.MaxIncomingUniStreams),
+		MaxAckDelay:                    protocol.MaxAckDelay,
 		AckDelayExponent:               protocol.AckDelayExponent,
 		DisableMigration:               true,
 	}

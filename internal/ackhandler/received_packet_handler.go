@@ -11,8 +11,6 @@ import (
 )
 
 const (
-	// maximum delay that can be applied to an ACK for an ack-eliciting packet
-	ackSendDelay = 25 * time.Millisecond
 	// initial maximum number of ack-eliciting packets received before sending an ack.
 	initialAckElicitingPacketsBeforeAck = 2
 	// number of ack-eliciting that an ACK is sent for

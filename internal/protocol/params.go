@@ -125,3 +125,6 @@ const DefaultConnectionIDLength = 4
 
 // AckDelayExponent is the ack delay exponent used when sending ACKs.
 const AckDelayExponent = 3
+
+// MaxAckDelay is the maximum time by which we delay sending ACKs.
+const MaxAckDelay = 25 * time.Millisecond
