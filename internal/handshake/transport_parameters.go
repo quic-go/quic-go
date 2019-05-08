@@ -27,6 +27,7 @@ const (
 	initialMaxStreamsBidiParameterID          transportParameterID = 0x8
 	initialMaxStreamsUniParameterID           transportParameterID = 0x9
 	ackDelayExponentParameterID               transportParameterID = 0xa
+	maxAckDelayParameterID                    transportParameterID = 0xb
 	disableMigrationParameterID               transportParameterID = 0xc
 )
 
@@ -37,6 +38,7 @@ type TransportParameters struct {
 	InitialMaxStreamDataUni        protocol.ByteCount
 	InitialMaxData                 protocol.ByteCount
 
+	MaxAckDelay      time.Duration
 	AckDelayExponent uint8
 
 	MaxPacketSize protocol.ByteCount
@@ -65,6 +67,7 @@ func (p *TransportParameters) Unmarshal(data []byte, sentBy protocol.Perspective
 	var parameterIDs []transportParameterID
 
 	var readAckDelayExponent bool
+	var readMaxAckDelay bool
 
 	r := bytes.NewReader(data[2:])
 	for r.Len() >= 4 {
@@ -75,7 +78,14 @@ func (p *TransportParameters) Unmarshal(data []byte, sentBy protocol.Perspective
 		switch paramID {
 		case ackDelayExponentParameterID:
 			readAckDelayExponent = true
-			fallthrough
+			if err := p.readNumericTransportParameter(r, paramID, int(paramLen)); err != nil {
+				return err
+			}
+		case maxAckDelayParameterID:
+			readMaxAckDelay = true
+			if err := p.readNumericTransportParameter(r, paramID, int(paramLen)); err != nil {
+				return err
+			}
 		case initialMaxStreamDataBidiLocalParameterID,
 			initialMaxStreamDataBidiRemoteParameterID,
 			initialMaxStreamDataUniParameterID,
@@ -120,6 +130,9 @@ func (p *TransportParameters) Unmarshal(data []byte, sentBy protocol.Perspective
 
 	if !readAckDelayExponent {
 		p.AckDelayExponent = protocol.DefaultAckDelayExponent
+	}
+	if !readMaxAckDelay {
+		p.MaxAckDelay = protocol.DefaultMaxAckDelay
 	}
 
 	// check that every transport parameter was sent at most once
@@ -174,6 +187,12 @@ func (p *TransportParameters) readNumericTransportParameter(
 			return fmt.Errorf("invalid value for ack_delay_exponent: %d (maximum %d)", val, protocol.MaxAckDelayExponent)
 		}
 		p.AckDelayExponent = uint8(val)
+	case maxAckDelayParameterID:
+		maxAckDelay := time.Duration(val) * time.Millisecond
+		if maxAckDelay >= protocol.MaxMaxAckDelay {
+			return fmt.Errorf("invalid value for max_ack_delay: %dms (maximum %dms)", maxAckDelay/time.Millisecond, (protocol.MaxMaxAckDelay-time.Millisecond)/time.Millisecond)
+		}
+		p.MaxAckDelay = maxAckDelay
 	default:
 		return fmt.Errorf("TransportParameter BUG: transport parameter %d not found", paramID)
 	}
@@ -218,6 +237,13 @@ func (p *TransportParameters) Marshal() []byte {
 	utils.BigEndian.WriteUint16(b, uint16(maxPacketSizeParameterID))
 	utils.BigEndian.WriteUint16(b, uint16(utils.VarIntLen(uint64(protocol.MaxReceivePacketSize))))
 	utils.WriteVarInt(b, uint64(protocol.MaxReceivePacketSize))
+	// max_ack_delay
+	// Only send it if is different from the default value.
+	if p.MaxAckDelay != protocol.DefaultMaxAckDelay {
+		utils.BigEndian.WriteUint16(b, uint16(maxAckDelayParameterID))
+		utils.BigEndian.WriteUint16(b, uint16(utils.VarIntLen(uint64(p.MaxAckDelay/time.Millisecond))))
+		utils.WriteVarInt(b, uint64(p.MaxAckDelay/time.Millisecond))
+	}
 	// ack_delay_exponent
 	// Only send it if is different from the default value.
 	if p.AckDelayExponent != protocol.DefaultAckDelayExponent {
@@ -249,8 +275,8 @@ func (p *TransportParameters) Marshal() []byte {
 
 // String returns a string representation, intended for logging.
 func (p *TransportParameters) String() string {
-	logString := "&handshake.TransportParameters{OriginalConnectionID: %s, InitialMaxStreamDataBidiLocal: %#x, InitialMaxStreamDataBidiRemote: %#x, InitialMaxStreamDataUni: %#x, InitialMaxData: %#x, MaxBidiStreams: %d, MaxUniStreams: %d, IdleTimeout: %s, AckDelayExponent: %d"
-	logParams := []interface{}{p.OriginalConnectionID, p.InitialMaxStreamDataBidiLocal, p.InitialMaxStreamDataBidiRemote, p.InitialMaxStreamDataUni, p.InitialMaxData, p.MaxBidiStreams, p.MaxUniStreams, p.IdleTimeout, p.AckDelayExponent}
+	logString := "&handshake.TransportParameters{OriginalConnectionID: %s, InitialMaxStreamDataBidiLocal: %#x, InitialMaxStreamDataBidiRemote: %#x, InitialMaxStreamDataUni: %#x, InitialMaxData: %#x, MaxBidiStreams: %d, MaxUniStreams: %d, IdleTimeout: %s, AckDelayExponent: %d, MaxAckDelay: %s"
+	logParams := []interface{}{p.OriginalConnectionID, p.InitialMaxStreamDataBidiLocal, p.InitialMaxStreamDataBidiRemote, p.InitialMaxStreamDataUni, p.InitialMaxData, p.MaxBidiStreams, p.MaxUniStreams, p.IdleTimeout, p.AckDelayExponent, p.MaxAckDelay}
 	if p.StatelessResetToken != nil { // the client never sends a stateless reset token
 		logString += ", StatelessResetToken: %#x"
 		logParams = append(logParams, *p.StatelessResetToken)
