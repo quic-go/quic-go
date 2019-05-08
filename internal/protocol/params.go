@@ -126,5 +126,13 @@ const DefaultConnectionIDLength = 4
 // AckDelayExponent is the ack delay exponent used when sending ACKs.
 const AckDelayExponent = 3
 
+// Estimated timer granularity.
+// The loss detection timer will not be set to a value smaller than granularity.
+const TimerGranularity = time.Millisecond
+
 // MaxAckDelay is the maximum time by which we delay sending ACKs.
 const MaxAckDelay = 25 * time.Millisecond
+
+// MaxAckDelayInclGranularity is the max_ack_delay including the timer granularity.
+// This is the value that should be advertised to the peer.
+const MaxAckDelayInclGranularity = MaxAckDelay + TimerGranularity

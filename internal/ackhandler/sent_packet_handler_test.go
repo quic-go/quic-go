@@ -593,7 +593,7 @@ var _ = Describe("SentPacketHandler", func() {
 		It("uses the granularity for short RTTs", func() {
 			rtt := time.Microsecond
 			updateRTT(rtt)
-			Expect(handler.computePTOTimeout()).To(Equal(granularity))
+			Expect(handler.computePTOTimeout()).To(Equal(protocol.TimerGranularity))
 		})
 
 		It("implements exponential backoff", func() {
