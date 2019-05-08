@@ -53,13 +53,13 @@ var _ = Describe("Transport Parameters", func() {
 		Expect(p.String()).To(Equal("&handshake.TransportParameters{OriginalConnectionID: 0xdeadbeef, InitialMaxStreamDataBidiLocal: 0x1234, InitialMaxStreamDataBidiRemote: 0x2345, InitialMaxStreamDataUni: 0x3456, InitialMaxData: 0x4567, MaxBidiStreams: 1337, MaxUniStreams: 7331, IdleTimeout: 42s, AckDelayExponent: 14, MaxAckDelay: 37s}"))
 	})
 
-	getRandomValue := func() uint64 {
-		maxVals := []int64{math.MaxUint8 / 4, math.MaxUint16 / 4, math.MaxUint32 / 4, math.MaxUint64 / 4}
-		rand.Seed(GinkgoRandomSeed())
-		return uint64(rand.Int63n(maxVals[int(rand.Int31n(4))]))
-	}
-
 	It("marshals and unmarshals", func() {
+		rand.Seed(GinkgoRandomSeed())
+		getRandomValue := func() uint64 {
+			maxVals := []int64{math.MaxUint8 / 4, math.MaxUint16 / 4, math.MaxUint32 / 4, math.MaxUint64 / 4}
+			return uint64(rand.Int63n(maxVals[int(rand.Int31n(4))]))
+		}
+
 		var token [16]byte
 		rand.Read(token[:])
 		params := &TransportParameters{
