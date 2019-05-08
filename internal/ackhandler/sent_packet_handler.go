@@ -205,7 +205,12 @@ func (h *sentPacketHandler) ReceivedAck(ackFrame *wire.AckFrame, withPacketNumbe
 
 	// maybe update the RTT
 	if p := pnSpace.history.GetPacket(ackFrame.LargestAcked()); p != nil {
-		h.rttStats.UpdateRTT(rcvTime.Sub(p.SendTime), ackFrame.DelayTime, rcvTime)
+		// don't use the ack delay for Initial and Handshake packets
+		var ackDelay time.Duration
+		if encLevel == protocol.Encryption1RTT {
+			ackDelay = ackFrame.DelayTime
+		}
+		h.rttStats.UpdateRTT(rcvTime.Sub(p.SendTime), ackDelay, rcvTime)
 		if h.logger.Debug() {
 			h.logger.Debugf("\tupdated RTT: %s (σ: %s)", h.rttStats.SmoothedRTT(), h.rttStats.MeanDeviation())
 		}

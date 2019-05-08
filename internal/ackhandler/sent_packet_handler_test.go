@@ -292,6 +292,20 @@ var _ = Describe("SentPacketHandler", func() {
 				Expect(handler.rttStats.LatestRTT()).To(BeNumerically("~", 1*time.Minute, 1*time.Second))
 			})
 
+			It("ignores the DelayTime for Initial and Handshake packets", func() {
+				handler.SentPacket(cryptoPacket(&Packet{PacketNumber: 1}))
+				now := time.Now()
+				// make sure the rttStats have a min RTT, so that the delay is used
+				handler.rttStats.UpdateRTT(5*time.Minute, 0, time.Now())
+				getPacket(1, protocol.EncryptionInitial).SendTime = now.Add(-10 * time.Minute)
+				ack := &wire.AckFrame{
+					AckRanges: []wire.AckRange{{Smallest: 1, Largest: 1}},
+					DelayTime: 5 * time.Minute,
+				}
+				Expect(handler.ReceivedAck(ack, 1, protocol.EncryptionInitial, time.Now())).To(Succeed())
+				Expect(handler.rttStats.LatestRTT()).To(BeNumerically("~", 10*time.Minute, 1*time.Second))
+			})
+
 			It("uses the DelayTime in the ACK frame", func() {
 				now := time.Now()
 				// make sure the rttStats have a min RTT, so that the delay is used
@@ -301,8 +315,7 @@ var _ = Describe("SentPacketHandler", func() {
 					AckRanges: []wire.AckRange{{Smallest: 1, Largest: 1}},
 					DelayTime: 5 * time.Minute,
 				}
-				err := handler.ReceivedAck(ack, 1, protocol.Encryption1RTT, time.Now())
-				Expect(err).NotTo(HaveOccurred())
+				Expect(handler.ReceivedAck(ack, 1, protocol.Encryption1RTT, time.Now())).To(Succeed())
 				Expect(handler.rttStats.LatestRTT()).To(BeNumerically("~", 5*time.Minute, 1*time.Second))
 			})
 		})
