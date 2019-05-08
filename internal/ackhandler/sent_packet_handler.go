@@ -631,8 +631,7 @@ func (h *sentPacketHandler) computeCryptoTimeout() time.Duration {
 }
 
 func (h *sentPacketHandler) computePTOTimeout() time.Duration {
-	// TODO(#1236): include the max_ack_delay
-	duration := utils.MaxDuration(h.rttStats.SmoothedOrInitialRTT()+4*h.rttStats.MeanDeviation(), protocol.TimerGranularity)
+	duration := h.rttStats.SmoothedOrInitialRTT() + utils.MaxDuration(4*h.rttStats.MeanDeviation(), protocol.TimerGranularity) + h.maxAckDelay
 	return duration << h.ptoCount
 }
 
