@@ -58,6 +58,7 @@ type sentPacketHandler struct {
 	rttStats   *congestion.RTTStats
 
 	handshakeComplete bool
+	maxAckDelay       time.Duration
 
 	// The number of times the crypto packets have been retransmitted without receiving an ack.
 	cryptoCount uint32
@@ -120,6 +121,10 @@ func (h *sentPacketHandler) SetHandshakeComplete() {
 	}
 	h.retransmissionQueue = queue
 	h.handshakeComplete = true
+}
+
+func (h *sentPacketHandler) SetMaxAckDelay(mad time.Duration) {
+	h.maxAckDelay = mad
 }
 
 func (h *sentPacketHandler) SentPacket(packet *Packet) {
@@ -208,7 +213,7 @@ func (h *sentPacketHandler) ReceivedAck(ackFrame *wire.AckFrame, withPacketNumbe
 		// don't use the ack delay for Initial and Handshake packets
 		var ackDelay time.Duration
 		if encLevel == protocol.Encryption1RTT {
-			ackDelay = ackFrame.DelayTime
+			ackDelay = utils.MinDuration(ackFrame.DelayTime, h.maxAckDelay)
 		}
 		h.rttStats.UpdateRTT(rcvTime.Sub(p.SendTime), ackDelay, rcvTime)
 		if h.logger.Debug() {

@@ -294,10 +294,10 @@ var _ = Describe("SentPacketHandler", func() {
 
 			It("ignores the DelayTime for Initial and Handshake packets", func() {
 				handler.SentPacket(cryptoPacket(&Packet{PacketNumber: 1}))
-				now := time.Now()
+				handler.SetMaxAckDelay(time.Hour)
 				// make sure the rttStats have a min RTT, so that the delay is used
 				handler.rttStats.UpdateRTT(5*time.Minute, 0, time.Now())
-				getPacket(1, protocol.EncryptionInitial).SendTime = now.Add(-10 * time.Minute)
+				getPacket(1, protocol.EncryptionInitial).SendTime = time.Now().Add(-10 * time.Minute)
 				ack := &wire.AckFrame{
 					AckRanges: []wire.AckRange{{Smallest: 1, Largest: 1}},
 					DelayTime: 5 * time.Minute,
@@ -307,16 +307,29 @@ var _ = Describe("SentPacketHandler", func() {
 			})
 
 			It("uses the DelayTime in the ACK frame", func() {
-				now := time.Now()
+				handler.SetMaxAckDelay(time.Hour)
 				// make sure the rttStats have a min RTT, so that the delay is used
 				handler.rttStats.UpdateRTT(5*time.Minute, 0, time.Now())
-				getPacket(1, protocol.Encryption1RTT).SendTime = now.Add(-10 * time.Minute)
+				getPacket(1, protocol.Encryption1RTT).SendTime = time.Now().Add(-10 * time.Minute)
 				ack := &wire.AckFrame{
 					AckRanges: []wire.AckRange{{Smallest: 1, Largest: 1}},
 					DelayTime: 5 * time.Minute,
 				}
 				Expect(handler.ReceivedAck(ack, 1, protocol.Encryption1RTT, time.Now())).To(Succeed())
 				Expect(handler.rttStats.LatestRTT()).To(BeNumerically("~", 5*time.Minute, 1*time.Second))
+			})
+
+			It("limits the DelayTime in the ACK frame to max_ack_delay", func() {
+				handler.SetMaxAckDelay(time.Minute)
+				// make sure the rttStats have a min RTT, so that the delay is used
+				handler.rttStats.UpdateRTT(5*time.Minute, 0, time.Now())
+				getPacket(1, protocol.Encryption1RTT).SendTime = time.Now().Add(-10 * time.Minute)
+				ack := &wire.AckFrame{
+					AckRanges: []wire.AckRange{{Smallest: 1, Largest: 1}},
+					DelayTime: 5 * time.Minute,
+				}
+				Expect(handler.ReceivedAck(ack, 1, protocol.Encryption1RTT, time.Now())).To(Succeed())
+				Expect(handler.rttStats.LatestRTT()).To(BeNumerically("~", 9*time.Minute, 1*time.Second))
 			})
 		})
 
