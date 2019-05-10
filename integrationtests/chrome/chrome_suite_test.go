@@ -147,7 +147,7 @@ var prng = new Uint8Array(buf);
 var seed = 1;
 for (var i = 0; i < LENGTH; i++) {
 	// https://en.wikipedia.org/wiki/Lehmer_random_number_generator
-	seed = seed * 48271 % 2147483647;
+	seed = seed * 75 % 65537;
 	prng[i] = seed;
 }
 `
