@@ -28,7 +28,7 @@ type packetHandler interface {
 
 type unknownPacketHandler interface {
 	handlePacket(*receivedPacket)
-	closeWithError(error) error
+	setCloseError(error)
 }
 
 type packetHandlerManager interface {
@@ -293,10 +293,6 @@ func (s *server) Close() error {
 	if s.closed {
 		return nil
 	}
-	return s.closeWithMutex()
-}
-
-func (s *server) closeWithMutex() error {
 	s.sessionHandler.CloseServer()
 	if s.serverError == nil {
 		s.serverError = errors.New("server closed")
@@ -312,14 +308,15 @@ func (s *server) closeWithMutex() error {
 	return err
 }
 
-func (s *server) closeWithError(e error) error {
+func (s *server) setCloseError(e error) {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
 	if s.closed {
-		return nil
+		return
 	}
+	s.closed = true
 	s.serverError = e
-	return s.closeWithMutex()
+	close(s.errorChan)
 }
 
 // Addr returns the server's network address
