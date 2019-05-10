@@ -415,11 +415,11 @@ runLoop:
 		}
 
 		if !s.handshakeComplete && now.Sub(s.sessionCreationTime) >= s.config.HandshakeTimeout {
-			s.destroy(qerr.TimeoutError("Handshake did not complete in time"))
+			s.destroyImpl(qerr.TimeoutError("Handshake did not complete in time"))
 			continue
 		}
 		if s.handshakeComplete && now.Sub(s.idleTimeoutStartTime()) >= s.config.IdleTimeout {
-			s.destroy(qerr.TimeoutError("No recent network activity"))
+			s.destroyImpl(qerr.TimeoutError("No recent network activity"))
 			continue
 		}
 
@@ -851,6 +851,11 @@ func (s *session) closeLocal(e error) {
 
 // destroy closes the session without sending the error on the wire
 func (s *session) destroy(e error) {
+	s.destroyImpl(e)
+	<-s.ctx.Done()
+}
+
+func (s *session) destroyImpl(e error) {
 	s.closeOnce.Do(func() {
 		if nerr, ok := e.(net.Error); ok && nerr.Timeout() {
 			s.logger.Errorf("Destroying session %s: %s", s.destConnID, e)
