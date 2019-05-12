@@ -74,7 +74,7 @@ func GeneratePRData(l int) []byte {
 	res := make([]byte, l)
 	seed := uint64(1)
 	for i := 0; i < l; i++ {
-		seed = seed * 48271 % 2147483647
+		seed = seed * 75 % 65537
 		res[i] = byte(seed)
 	}
 	return res
