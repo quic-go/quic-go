@@ -11,8 +11,6 @@ import (
 )
 
 const (
-	// maximum delay that can be applied to an ACK for an ack-eliciting packet
-	ackSendDelay = 25 * time.Millisecond
 	// initial maximum number of ack-eliciting packets received before sending an ack.
 	initialAckElicitingPacketsBeforeAck = 2
 	// number of ack-eliciting that an ACK is sent for
@@ -85,14 +83,21 @@ func (h *receivedPacketHandler) GetAlarmTimeout() time.Time {
 }
 
 func (h *receivedPacketHandler) GetAckFrame(encLevel protocol.EncryptionLevel) *wire.AckFrame {
+	var ack *wire.AckFrame
 	switch encLevel {
 	case protocol.EncryptionInitial:
-		return h.initialPackets.GetAckFrame()
+		ack = h.initialPackets.GetAckFrame()
 	case protocol.EncryptionHandshake:
-		return h.handshakePackets.GetAckFrame()
+		ack = h.handshakePackets.GetAckFrame()
 	case protocol.Encryption1RTT:
 		return h.oneRTTPackets.GetAckFrame()
 	default:
 		return nil
 	}
+	// For Initial and Handshake ACKs, the delay time is ignored by the receiver.
+	// Set it to 0 in order to save bytes.
+	if ack != nil {
+		ack.DelayTime = 0
+	}
+	return ack
 }

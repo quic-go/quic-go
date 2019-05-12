@@ -215,6 +215,18 @@ func (mr *MockSentPacketHandlerMockRecorder) SetHandshakeComplete() *gomock.Call
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetHandshakeComplete", reflect.TypeOf((*MockSentPacketHandler)(nil).SetHandshakeComplete))
 }
 
+// SetMaxAckDelay mocks base method
+func (m *MockSentPacketHandler) SetMaxAckDelay(arg0 time.Duration) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "SetMaxAckDelay", arg0)
+}
+
+// SetMaxAckDelay indicates an expected call of SetMaxAckDelay
+func (mr *MockSentPacketHandlerMockRecorder) SetMaxAckDelay(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetMaxAckDelay", reflect.TypeOf((*MockSentPacketHandler)(nil).SetMaxAckDelay), arg0)
+}
+
 // ShouldSendNumPackets mocks base method
 func (m *MockSentPacketHandler) ShouldSendNumPackets() int {
 	m.ctrl.T.Helper()

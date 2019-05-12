@@ -442,6 +442,7 @@ func (s *server) createNewSession(
 		IdleTimeout:                    s.config.IdleTimeout,
 		MaxBidiStreams:                 uint64(s.config.MaxIncomingStreams),
 		MaxUniStreams:                  uint64(s.config.MaxIncomingUniStreams),
+		MaxAckDelay:                    protocol.MaxAckDelayInclGranularity,
 		AckDelayExponent:               protocol.AckDelayExponent,
 		DisableMigration:               true,
 		StatelessResetToken:            &token,

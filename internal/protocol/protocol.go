@@ -2,6 +2,7 @@ package protocol
 
 import (
 	"fmt"
+	"time"
 )
 
 // A PacketNumber in QUIC
@@ -73,3 +74,9 @@ const DefaultAckDelayExponent = 3
 
 // MaxAckDelayExponent is the maximum ack delay exponent
 const MaxAckDelayExponent = 20
+
+// DefaultMaxAckDelay is the default max_ack_delay
+const DefaultMaxAckDelay = 25 * time.Millisecond
+
+// MaxMaxAckDelay is the maximum max_ack_delay
+const MaxMaxAckDelay = 1 << 14 * time.Millisecond

@@ -17,8 +17,6 @@ const (
 	// Maximum reordering in time space before time based loss detection considers a packet lost.
 	// Specified as an RTT multiplier.
 	timeThreshold = 9.0 / 8
-	// Timer granularity. The timer will not be set to a value smaller than granularity.
-	granularity = time.Millisecond
 )
 
 type packetNumberSpace struct {
@@ -60,6 +58,7 @@ type sentPacketHandler struct {
 	rttStats   *congestion.RTTStats
 
 	handshakeComplete bool
+	maxAckDelay       time.Duration
 
 	// The number of times the crypto packets have been retransmitted without receiving an ack.
 	cryptoCount uint32
@@ -122,6 +121,10 @@ func (h *sentPacketHandler) SetHandshakeComplete() {
 	}
 	h.retransmissionQueue = queue
 	h.handshakeComplete = true
+}
+
+func (h *sentPacketHandler) SetMaxAckDelay(mad time.Duration) {
+	h.maxAckDelay = mad
 }
 
 func (h *sentPacketHandler) SentPacket(packet *Packet) {
@@ -207,7 +210,12 @@ func (h *sentPacketHandler) ReceivedAck(ackFrame *wire.AckFrame, withPacketNumbe
 
 	// maybe update the RTT
 	if p := pnSpace.history.GetPacket(ackFrame.LargestAcked()); p != nil {
-		h.rttStats.UpdateRTT(rcvTime.Sub(p.SendTime), ackFrame.DelayTime, rcvTime)
+		// don't use the ack delay for Initial and Handshake packets
+		var ackDelay time.Duration
+		if encLevel == protocol.Encryption1RTT {
+			ackDelay = utils.MinDuration(ackFrame.DelayTime, h.maxAckDelay)
+		}
+		h.rttStats.UpdateRTT(rcvTime.Sub(p.SendTime), ackDelay, rcvTime)
 		if h.logger.Debug() {
 			h.logger.Debugf("\tupdated RTT: %s (σ: %s)", h.rttStats.SmoothedRTT(), h.rttStats.MeanDeviation())
 		}
@@ -341,7 +349,7 @@ func (h *sentPacketHandler) detectLostPackets(
 	lossDelay := time.Duration(timeThreshold * maxRTT)
 
 	// Minimum time of granularity before packets are deemed lost.
-	lossDelay = utils.MaxDuration(lossDelay, granularity)
+	lossDelay = utils.MaxDuration(lossDelay, protocol.TimerGranularity)
 
 	var lostPackets []*Packet
 	pnSpace.history.Iterate(func(packet *Packet) (bool, error) {
@@ -616,15 +624,14 @@ func (h *sentPacketHandler) queuePacketForRetransmission(p *Packet, pnSpace *pac
 }
 
 func (h *sentPacketHandler) computeCryptoTimeout() time.Duration {
-	duration := utils.MaxDuration(2*h.rttStats.SmoothedOrInitialRTT(), granularity)
+	duration := utils.MaxDuration(2*h.rttStats.SmoothedOrInitialRTT(), protocol.TimerGranularity)
 	// exponential backoff
 	// There's an implicit limit to this set by the crypto timeout.
 	return duration << h.cryptoCount
 }
 
 func (h *sentPacketHandler) computePTOTimeout() time.Duration {
-	// TODO(#1236): include the max_ack_delay
-	duration := utils.MaxDuration(h.rttStats.SmoothedOrInitialRTT()+4*h.rttStats.MeanDeviation(), granularity)
+	duration := h.rttStats.SmoothedOrInitialRTT() + utils.MaxDuration(4*h.rttStats.MeanDeviation(), protocol.TimerGranularity) + h.maxAckDelay
 	return duration << h.ptoCount
 }
 
