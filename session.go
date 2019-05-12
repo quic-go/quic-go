@@ -891,8 +891,8 @@ func (s *session) Close() error {
 	return nil
 }
 
-func (s *session) CloseWithError(code protocol.ApplicationErrorCode, e error) error {
-	s.closeLocal(qerr.Error(qerr.ErrorCode(code), e.Error()))
+func (s *session) CloseWithError(code protocol.ApplicationErrorCode, desc string) error {
+	s.closeLocal(qerr.Error(qerr.ErrorCode(code), desc))
 	<-s.ctx.Done()
 	return nil
 }
