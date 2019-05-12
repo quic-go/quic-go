@@ -191,7 +191,7 @@ func (s *Server) handleRequest(str quic.Stream, decoder *qpack.Decoder) error {
 		}()
 		handler.ServeHTTP(responseWriter, req)
 		// read the eof
-		if _, err = str.Read([]byte{}); err == io.EOF {
+		if _, err = str.Read([]byte{0}); err == io.EOF {
 			readEOF = true
 		}
 	}()
