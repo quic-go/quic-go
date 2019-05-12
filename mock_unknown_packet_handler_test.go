@@ -33,20 +33,6 @@ func (m *MockUnknownPacketHandler) EXPECT() *MockUnknownPacketHandlerMockRecorde
 	return m.recorder
 }
 
-// closeWithError mocks base method
-func (m *MockUnknownPacketHandler) closeWithError(arg0 error) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "closeWithError", arg0)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// closeWithError indicates an expected call of closeWithError
-func (mr *MockUnknownPacketHandlerMockRecorder) closeWithError(arg0 interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "closeWithError", reflect.TypeOf((*MockUnknownPacketHandler)(nil).closeWithError), arg0)
-}
-
 // handlePacket mocks base method
 func (m *MockUnknownPacketHandler) handlePacket(arg0 *receivedPacket) {
 	m.ctrl.T.Helper()
@@ -57,4 +43,16 @@ func (m *MockUnknownPacketHandler) handlePacket(arg0 *receivedPacket) {
 func (mr *MockUnknownPacketHandlerMockRecorder) handlePacket(arg0 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "handlePacket", reflect.TypeOf((*MockUnknownPacketHandler)(nil).handlePacket), arg0)
+}
+
+// setCloseError mocks base method
+func (m *MockUnknownPacketHandler) setCloseError(arg0 error) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "setCloseError", arg0)
+}
+
+// setCloseError indicates an expected call of setCloseError
+func (mr *MockUnknownPacketHandlerMockRecorder) setCloseError(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "setCloseError", reflect.TypeOf((*MockUnknownPacketHandler)(nil).setCloseError), arg0)
 }
