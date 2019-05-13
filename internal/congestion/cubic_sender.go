@@ -63,7 +63,6 @@ type cubicSender struct {
 }
 
 var _ SendAlgorithm = &cubicSender{}
-var _ SendAlgorithmWithDebugInfo = &cubicSender{}
 
 // NewCubicSender makes a new cubic sender
 func NewCubicSender(clock Clock, rttStats *RTTStats, reno bool, initialCongestionWindow, initialMaxCongestionWindow protocol.ByteCount) *cubicSender {

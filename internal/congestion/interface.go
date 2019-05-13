@@ -16,16 +16,3 @@ type SendAlgorithm interface {
 	OnPacketLost(number protocol.PacketNumber, lostBytes protocol.ByteCount, priorInFlight protocol.ByteCount)
 	OnRetransmissionTimeout(packetsRetransmitted bool)
 }
-
-// SendAlgorithmWithDebugInfo adds some debug functions to SendAlgorithm
-type SendAlgorithmWithDebugInfo interface {
-	SendAlgorithm
-	BandwidthEstimate() Bandwidth
-
-	// Stuff only used in testing
-
-	HybridSlowStart() *HybridSlowStart
-	SlowstartThreshold() protocol.ByteCount
-	RenoBeta() float32
-	InRecovery() bool
-}
