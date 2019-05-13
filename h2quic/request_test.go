@@ -28,9 +28,25 @@ var _ = Describe("Request", func() {
 		Expect(req.ContentLength).To(Equal(int64(42)))
 		Expect(req.Header).To(BeEmpty())
 		Expect(req.Body).To(BeNil())
+		Expect(req.URL.Host).To(BeEmpty())
 		Expect(req.Host).To(Equal("quic.clemente.io"))
 		Expect(req.RequestURI).To(Equal("/foo"))
 		Expect(req.TLS).ToNot(BeNil())
+	})
+
+	It("parses path with leading double slashes", func() {
+		headers := []hpack.HeaderField{
+			{Name: ":path", Value: "//foo"},
+			{Name: ":authority", Value: "quic.clemente.io"},
+			{Name: ":method", Value: "GET"},
+		}
+		req, err := requestFromHeaders(headers)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(req.Header).To(BeEmpty())
+		Expect(req.Body).To(BeNil())
+		Expect(req.URL.Host).To(BeEmpty())
+		Expect(req.Host).To(Equal("quic.clemente.io"))
+		Expect(req.RequestURI).To(Equal("//foo"))
 	})
 
 	It("concatenates the cookie headers", func() {
