@@ -26,7 +26,7 @@ const MaxCongestionWindow protocol.ByteCount = 200 * protocol.DefaultTCPMSS
 
 var _ = Describe("Cubic Sender", func() {
 	var (
-		sender            SendAlgorithmWithDebugInfo
+		sender            *cubicSender
 		clock             mockClock
 		bytesInFlight     protocol.ByteCount
 		packetNumber      protocol.PacketNumber

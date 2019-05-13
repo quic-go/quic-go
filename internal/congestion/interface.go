@@ -14,12 +14,7 @@ type SendAlgorithm interface {
 	MaybeExitSlowStart()
 	OnPacketAcked(number protocol.PacketNumber, ackedBytes protocol.ByteCount, priorInFlight protocol.ByteCount, eventTime time.Time)
 	OnPacketLost(number protocol.PacketNumber, lostBytes protocol.ByteCount, priorInFlight protocol.ByteCount)
-	SetNumEmulatedConnections(n int)
 	OnRetransmissionTimeout(packetsRetransmitted bool)
-	OnConnectionMigration()
-
-	// Experiments
-	SetSlowStartLargeReduction(enabled bool)
 }
 
 // SendAlgorithmWithDebugInfo adds some debug functions to SendAlgorithm

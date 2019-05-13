@@ -61,18 +61,6 @@ func (mr *MockSendAlgorithmMockRecorder) MaybeExitSlowStart() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MaybeExitSlowStart", reflect.TypeOf((*MockSendAlgorithm)(nil).MaybeExitSlowStart))
 }
 
-// OnConnectionMigration mocks base method
-func (m *MockSendAlgorithm) OnConnectionMigration() {
-	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "OnConnectionMigration")
-}
-
-// OnConnectionMigration indicates an expected call of OnConnectionMigration
-func (mr *MockSendAlgorithmMockRecorder) OnConnectionMigration() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "OnConnectionMigration", reflect.TypeOf((*MockSendAlgorithm)(nil).OnConnectionMigration))
-}
-
 // OnPacketAcked mocks base method
 func (m *MockSendAlgorithm) OnPacketAcked(arg0 protocol.PacketNumber, arg1, arg2 protocol.ByteCount, arg3 time.Time) {
 	m.ctrl.T.Helper()
@@ -119,30 +107,6 @@ func (m *MockSendAlgorithm) OnRetransmissionTimeout(arg0 bool) {
 func (mr *MockSendAlgorithmMockRecorder) OnRetransmissionTimeout(arg0 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "OnRetransmissionTimeout", reflect.TypeOf((*MockSendAlgorithm)(nil).OnRetransmissionTimeout), arg0)
-}
-
-// SetNumEmulatedConnections mocks base method
-func (m *MockSendAlgorithm) SetNumEmulatedConnections(arg0 int) {
-	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "SetNumEmulatedConnections", arg0)
-}
-
-// SetNumEmulatedConnections indicates an expected call of SetNumEmulatedConnections
-func (mr *MockSendAlgorithmMockRecorder) SetNumEmulatedConnections(arg0 interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetNumEmulatedConnections", reflect.TypeOf((*MockSendAlgorithm)(nil).SetNumEmulatedConnections), arg0)
-}
-
-// SetSlowStartLargeReduction mocks base method
-func (m *MockSendAlgorithm) SetSlowStartLargeReduction(arg0 bool) {
-	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "SetSlowStartLargeReduction", arg0)
-}
-
-// SetSlowStartLargeReduction indicates an expected call of SetSlowStartLargeReduction
-func (mr *MockSendAlgorithmMockRecorder) SetSlowStartLargeReduction(arg0 interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetSlowStartLargeReduction", reflect.TypeOf((*MockSendAlgorithm)(nil).SetSlowStartLargeReduction), arg0)
 }
 
 // TimeUntilSend mocks base method
