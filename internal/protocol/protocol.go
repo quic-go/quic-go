@@ -5,9 +5,6 @@ import (
 	"time"
 )
 
-// A PacketNumber in QUIC
-type PacketNumber uint64
-
 // The PacketType is the Long Header Type
 type PacketType uint8
 

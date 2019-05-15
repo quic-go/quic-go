@@ -29,8 +29,10 @@ type packetNumberSpace struct {
 
 func newPacketNumberSpace(initialPN protocol.PacketNumber) *packetNumberSpace {
 	return &packetNumberSpace{
-		history: newSentPacketHistory(),
-		pns:     newPacketNumberGenerator(initialPN, protocol.SkipPacketAveragePeriodLength),
+		history:      newSentPacketHistory(),
+		pns:          newPacketNumberGenerator(initialPN, protocol.SkipPacketAveragePeriodLength),
+		largestSent:  protocol.InvalidPacketNumber,
+		largestAcked: protocol.InvalidPacketNumber,
 	}
 }
 
@@ -161,14 +163,15 @@ func (h *sentPacketHandler) getPacketNumberSpace(encLevel protocol.EncryptionLev
 func (h *sentPacketHandler) sentPacketImpl(packet *Packet) bool /* is ack-eliciting */ {
 	pnSpace := h.getPacketNumberSpace(packet.EncryptionLevel)
 
-	if h.logger.Debug() && pnSpace.largestSent != 0 {
-		for p := pnSpace.largestSent + 1; p < packet.PacketNumber; p++ {
+	if h.logger.Debug() {
+		for p := utils.MaxPacketNumber(0, pnSpace.largestSent+1); p < packet.PacketNumber; p++ {
 			h.logger.Debugf("Skipping packet number %#x", p)
 		}
 	}
 
 	pnSpace.largestSent = packet.PacketNumber
 
+	packet.largestAcked = protocol.InvalidPacketNumber
 	if packet.Ack != nil {
 		packet.largestAcked = packet.Ack.LargestAcked()
 	}
@@ -232,10 +235,7 @@ func (h *sentPacketHandler) ReceivedAck(ackFrame *wire.AckFrame, withPacketNumbe
 
 	priorInFlight := h.bytesInFlight
 	for _, p := range ackedPackets {
-		// largestAcked == 0 either means that the packet didn't contain an ACK, or it just acked packet 0
-		// It is safe to ignore the corner case of packets that just acked packet 0, because
-		// the lowestPacketNotConfirmedAcked is only used to limit the number of ACK ranges we will send.
-		if p.largestAcked != 0 && encLevel == protocol.Encryption1RTT {
+		if p.largestAcked != protocol.InvalidPacketNumber && encLevel == protocol.Encryption1RTT {
 			h.lowestNotConfirmedAcked = utils.MaxPacketNumber(h.lowestNotConfirmedAcked, p.largestAcked+1)
 		}
 		if err := h.onPacketAcked(p, rcvTime); err != nil {
