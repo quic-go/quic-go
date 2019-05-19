@@ -676,6 +676,10 @@ func (s *session) handleUnpackedPacket(packet *unpackedPacket, rcvTime time.Time
 	// Only used for tracing.
 	// If we're not tracing, this slice will always remain empty.
 	var frames []wire.Frame
+	var transportState *quictrace.TransportState
+	if s.traceCallback != nil {
+		transportState = s.sentPacketHandler.GetStats()
+	}
 
 	r := bytes.NewReader(packet.data)
 	var isAckEliciting bool
@@ -702,7 +706,7 @@ func (s *session) handleUnpackedPacket(packet *unpackedPacket, rcvTime time.Time
 		s.traceCallback(quictrace.Event{
 			Time:            time.Now(),
 			EventType:       quictrace.PacketReceived,
-			TransportState:  s.sentPacketHandler.GetStats(),
+			TransportState:  transportState,
 			EncryptionLevel: packet.encryptionLevel,
 			PacketNumber:    packet.packetNumber,
 			PacketSize:      protocol.ByteCount(len(packet.data)),
