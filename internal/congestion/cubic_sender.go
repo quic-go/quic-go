@@ -63,6 +63,7 @@ type cubicSender struct {
 }
 
 var _ SendAlgorithm = &cubicSender{}
+var _ SendAlgorithmWithDebugInfos = &cubicSender{}
 
 // NewCubicSender makes a new cubic sender
 func NewCubicSender(clock Clock, rttStats *RTTStats, reno bool, initialCongestionWindow, initialMaxCongestionWindow protocol.ByteCount) *cubicSender {
@@ -110,6 +111,13 @@ func (c *cubicSender) OnPacketSent(
 	}
 	c.largestSentPacketNumber = packetNumber
 	c.hybridSlowStart.OnPacketSent(packetNumber)
+}
+
+func (c *cubicSender) CanSend(bytesInFlight protocol.ByteCount) bool {
+	if c.InRecovery() {
+		return c.prr.CanSend(c.GetCongestionWindow(), bytesInFlight, c.GetSlowStartThreshold())
+	}
+	return bytesInFlight < c.GetCongestionWindow()
 }
 
 func (c *cubicSender) InRecovery() bool {

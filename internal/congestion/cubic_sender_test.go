@@ -43,13 +43,9 @@ var _ = Describe("Cubic Sender", func() {
 		sender = NewCubicSender(&clock, rttStats, true /*reno*/, initialCongestionWindowPackets*protocol.DefaultTCPMSS, MaxCongestionWindow)
 	})
 
-	canSend := func() bool {
-		return bytesInFlight < sender.GetCongestionWindow()
-	}
-
 	SendAvailableSendWindowLen := func(packetLength protocol.ByteCount) int {
 		packetsSent := 0
-		for canSend() {
+		for sender.CanSend(bytesInFlight) {
 			sender.OnPacketSent(clock.Now(), bytesInFlight, packetNumber, packetLength, true)
 			packetNumber++
 			packetsSent++
@@ -92,13 +88,13 @@ var _ = Describe("Cubic Sender", func() {
 		Expect(sender.GetCongestionWindow()).To(Equal(defaultWindowTCP))
 		// Make sure we can send.
 		Expect(sender.TimeUntilSend(0)).To(BeZero())
-		Expect(canSend()).To(BeTrue())
+		Expect(sender.CanSend(bytesInFlight)).To(BeTrue())
 		// And that window is un-affected.
 		Expect(sender.GetCongestionWindow()).To(Equal(defaultWindowTCP))
 
 		// Fill the send window with data, then verify that we can't send.
 		SendAvailableSendWindow()
-		Expect(canSend()).To(BeFalse())
+		Expect(sender.CanSend(bytesInFlight)).To(BeFalse())
 	})
 
 	It("paces", func() {
@@ -115,8 +111,7 @@ var _ = Describe("Cubic Sender", func() {
 		// Send exactly 10 packets and ensure the CWND ends at 14 packets.
 		const numberOfAcks = 5
 		// At startup make sure we can send.
-		Expect(sender.TimeUntilSend(0)).To(BeZero())
-		// Make sure we can send.
+		Expect(sender.CanSend(0)).To(BeTrue())
 		Expect(sender.TimeUntilSend(0)).To(BeZero())
 
 		SendAvailableSendWindow()
@@ -132,6 +127,7 @@ var _ = Describe("Cubic Sender", func() {
 	It("exponential slow start", func() {
 		const numberOfAcks = 20
 		// At startup make sure we can send.
+		Expect(sender.CanSend(0)).To(BeTrue())
 		Expect(sender.TimeUntilSend(0)).To(BeZero())
 		Expect(sender.BandwidthEstimate()).To(BeZero())
 		// Make sure we can send.
@@ -268,8 +264,7 @@ var _ = Describe("Cubic Sender", func() {
 		Expect(sender.GetCongestionWindow()).To(Equal(expectedSendWindow))
 	})
 
-	// this test doesn't work any more after introducing the pacing needed for QUIC
-	PIt("no PRR when less than one packet in flight", func() {
+	It("no PRR when less than one packet in flight", func() {
 		SendAvailableSendWindow()
 		LoseNPackets(int(initialCongestionWindowPackets) - 1)
 		AckNPackets(1)
@@ -278,7 +273,7 @@ var _ = Describe("Cubic Sender", func() {
 		// Simulate abandoning all packets by supplying a bytes_in_flight of 0.
 		// PRR should now allow a packet to be sent, even though prr's state
 		// variables believe it has sent enough packets.
-		Expect(sender.TimeUntilSend(0)).To(BeZero())
+		Expect(sender.CanSend(0)).To(BeTrue())
 	})
 
 	It("slow start packet loss PRR", func() {
@@ -351,7 +346,7 @@ var _ = Describe("Cubic Sender", func() {
 		LoseNPackets(int(numPacketsToLose))
 		// Immediately after the loss, ensure at least one packet can be sent.
 		// Losses without subsequent acks can occur with timer based loss detection.
-		Expect(sender.TimeUntilSend(bytesInFlight)).To(BeZero())
+		Expect(sender.CanSend(bytesInFlight)).To(BeTrue())
 		AckNPackets(1)
 
 		// We should now have fallen out of slow start with a reduced window.
