@@ -99,6 +99,9 @@ func getChromePath() string {
 	if path, err := exec.LookPath("chromium-browser"); err == nil {
 		return path
 	}
+	if path, err := exec.LookPath("chromium"); err == nil {
+		return path
+	}
 	Fail("No Chrome executable found.")
 	return ""
 }
