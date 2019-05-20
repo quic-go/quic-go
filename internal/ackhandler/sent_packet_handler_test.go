@@ -423,10 +423,10 @@ var _ = Describe("SentPacketHandler", func() {
 	})
 
 	Context("congestion", func() {
-		var cong *mocks.MockSendAlgorithm
+		var cong *mocks.MockSendAlgorithmWithDebugInfos
 
 		BeforeEach(func() {
-			cong = mocks.NewMockSendAlgorithm(mockCtrl)
+			cong = mocks.NewMockSendAlgorithmWithDebugInfos(mockCtrl)
 			handler.congestion = cong
 		})
 
@@ -511,16 +511,21 @@ var _ = Describe("SentPacketHandler", func() {
 			Expect(err).ToNot(HaveOccurred())
 		})
 
-		It("only allows sending of ACKs when congestion limited", func() {
-			handler.bytesInFlight = 100
-			cong.EXPECT().GetCongestionWindow().Return(protocol.ByteCount(200))
+		It("passes the bytes in flight to CanSend", func() {
+			handler.bytesInFlight = 42
+			cong.EXPECT().CanSend(protocol.ByteCount(42))
+			handler.SendMode()
+		})
+
+		It("allows sending of ACKs when congestion limited", func() {
+			cong.EXPECT().CanSend(gomock.Any()).Return(true)
 			Expect(handler.SendMode()).To(Equal(SendAny))
-			cong.EXPECT().GetCongestionWindow().Return(protocol.ByteCount(75))
+			cong.EXPECT().CanSend(gomock.Any()).Return(false)
 			Expect(handler.SendMode()).To(Equal(SendAck))
 		})
 
-		It("only allows sending of ACKs when we're keeping track of MaxOutstandingSentPackets packets", func() {
-			cong.EXPECT().GetCongestionWindow().Return(protocol.MaxByteCount).AnyTimes()
+		It("allows sending of ACKs when we're keeping track of MaxOutstandingSentPackets packets", func() {
+			cong.EXPECT().CanSend(gomock.Any()).Return(true).AnyTimes()
 			cong.EXPECT().TimeUntilSend(gomock.Any()).AnyTimes()
 			cong.EXPECT().OnPacketSent(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
 			for i := protocol.PacketNumber(1); i < protocol.MaxOutstandingSentPackets; i++ {
@@ -531,21 +536,20 @@ var _ = Describe("SentPacketHandler", func() {
 			Expect(handler.SendMode()).To(Equal(SendAck))
 		})
 
-		It("doesn't allow retransmission if congestion limited", func() {
-			handler.bytesInFlight = 100
+		It("doesn't allow retransmissions if congestion limited", func() {
 			handler.retransmissionQueue = []*Packet{{PacketNumber: 3}}
-			cong.EXPECT().GetCongestionWindow().Return(protocol.ByteCount(50))
+			cong.EXPECT().CanSend(gomock.Any()).Return(false)
 			Expect(handler.SendMode()).To(Equal(SendAck))
 		})
 
 		It("allows sending retransmissions", func() {
-			cong.EXPECT().GetCongestionWindow().Return(protocol.MaxByteCount)
+			cong.EXPECT().CanSend(gomock.Any()).Return(true)
 			handler.retransmissionQueue = []*Packet{{PacketNumber: 3}}
 			Expect(handler.SendMode()).To(Equal(SendRetransmission))
 		})
 
-		It("allow retransmissions, if we're keeping track of between MaxOutstandingSentPackets and MaxTrackedSentPackets packets", func() {
-			cong.EXPECT().GetCongestionWindow().Return(protocol.MaxByteCount)
+		It("allows retransmissions, if we're keeping track of between MaxOutstandingSentPackets and MaxTrackedSentPackets packets", func() {
+			cong.EXPECT().CanSend(gomock.Any()).Return(true)
 			Expect(protocol.MaxOutstandingSentPackets).To(BeNumerically("<", protocol.MaxTrackedSentPackets))
 			handler.retransmissionQueue = make([]*Packet, protocol.MaxOutstandingSentPackets+10)
 			Expect(handler.SendMode()).To(Equal(SendRetransmission))

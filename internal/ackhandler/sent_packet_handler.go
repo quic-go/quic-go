@@ -56,7 +56,7 @@ type sentPacketHandler struct {
 
 	bytesInFlight protocol.ByteCount
 
-	congestion congestion.SendAlgorithm
+	congestion congestion.SendAlgorithmWithDebugInfos
 	rttStats   *congestion.RTTStats
 
 	handshakeComplete bool
@@ -552,9 +552,9 @@ func (h *sentPacketHandler) SendMode() SendMode {
 		return SendPTO
 	}
 	// Only send ACKs if we're congestion limited.
-	if cwnd := h.congestion.GetCongestionWindow(); h.bytesInFlight > cwnd {
+	if !h.congestion.CanSend(h.bytesInFlight) {
 		if h.logger.Debug() {
-			h.logger.Debugf("Congestion limited: bytes in flight %d, window %d", h.bytesInFlight, cwnd)
+			h.logger.Debugf("Congestion limited: bytes in flight %d, window %d", h.bytesInFlight, h.congestion.GetCongestionWindow())
 		}
 		return SendAck
 	}
