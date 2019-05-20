@@ -55,7 +55,9 @@ func newClient(
 	if tlsConf == nil {
 		tlsConf = &tls.Config{}
 	}
-	tlsConf.NextProtos = []string{"h3-19"}
+	if !strSliceContains(tlsConf.NextProtos, nextProtoH3) {
+		tlsConf.NextProtos = append(tlsConf.NextProtos, nextProtoH3)
+	}
 	if quicConfig == nil {
 		quicConfig = defaultQuicConfig
 	}

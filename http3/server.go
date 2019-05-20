@@ -25,6 +25,8 @@ var (
 	quicListenAddr = quic.ListenAddr
 )
 
+const nextProtoH3 = "h3-20"
+
 // Server is a HTTP2 server listening for QUIC connections.
 type Server struct {
 	*http.Server
@@ -86,6 +88,14 @@ func (s *Server) serveImpl(tlsConfig *tls.Config, conn net.PacketConn) error {
 	if s.listener != nil {
 		s.listenerMutex.Unlock()
 		return errors.New("ListenAndServe may only be called once")
+	}
+
+	if tlsConfig == nil {
+		tlsConfig = &tls.Config{}
+	}
+
+	if !strSliceContains(tlsConfig.NextProtos, nextProtoH3) {
+		tlsConfig.NextProtos = append(tlsConfig.NextProtos, nextProtoH3)
 	}
 
 	var ln quic.Listener
@@ -352,4 +362,13 @@ func ListenAndServe(addr, certFile, keyFile string, handler http.Handler) error 
 		// Cannot close the HTTP server or wait for requests to complete properly :/
 		return err
 	}
+}
+
+func strSliceContains(ss []string, s string) bool {
+	for _, v := range ss {
+		if v == s {
+			return true
+		}
+	}
+	return false
 }
