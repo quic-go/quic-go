@@ -10,12 +10,14 @@ import (
 	"log"
 	"mime/multipart"
 	"net/http"
+	"strconv"
 	"strings"
 	"sync"
 
 	_ "net/http/pprof"
 
 	"github.com/lucas-clemente/quic-go/http3"
+	"github.com/lucas-clemente/quic-go/integrationtests/tools/testserver"
 	"github.com/lucas-clemente/quic-go/internal/testdata"
 	"github.com/lucas-clemente/quic-go/internal/utils"
 )
@@ -122,6 +124,15 @@ func main() {
 	logger.SetLogTimeFormat("")
 
 	http.Handle("/", http.FileServer(http.Dir(*www)))
+	http.HandleFunc("/dynamic/", func(w http.ResponseWriter, r *http.Request) {
+		const maxSize = 1 << 30 // 1 GB
+		num, err := strconv.ParseInt(strings.ReplaceAll(r.RequestURI, "/dynamic/", ""), 10, 64)
+		if err != nil || num <= 0 || num > maxSize {
+			w.WriteHeader(400)
+			return
+		}
+		w.Write(testserver.GeneratePRData(int(num)))
+	})
 
 	if len(bs) == 0 {
 		bs = binds{"localhost:6121"}
