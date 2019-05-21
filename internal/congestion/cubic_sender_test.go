@@ -553,6 +553,20 @@ var _ = Describe("Cubic Sender", func() {
 		Expect(sender.GetCongestionWindow()).To(Equal(expectedSendWindow))
 	})
 
+	It("no PRR", func() {
+		sender.SetNumEmulatedConnections(1)
+		sender.noPRR = true
+
+		SendAvailableSendWindow()
+		LoseNPackets(9)
+		AckNPackets(1)
+
+		Expect(sender.GetCongestionWindow()).To(Equal(protocol.ByteCount(renoBeta * float32(defaultWindowTCP))))
+		windowInPackets := renoBeta * float32(defaultWindowTCP) / float32(protocol.DefaultTCPMSS)
+		numSent := SendAvailableSendWindow()
+		Expect(numSent).To(BeEquivalentTo(windowInPackets))
+	})
+
 	It("reset after connection migration", func() {
 		Expect(sender.GetCongestionWindow()).To(Equal(defaultWindowTCP))
 		Expect(sender.SlowstartThreshold()).To(Equal(MaxCongestionWindow))
