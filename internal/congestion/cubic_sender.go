@@ -20,7 +20,8 @@ type cubicSender struct {
 	stats           connectionStats
 	cubic           *Cubic
 
-	reno bool
+	noPRR bool
+	reno  bool
 
 	// Track the largest packet that has been sent.
 	largestSentPacketNumber protocol.PacketNumber
@@ -86,7 +87,7 @@ func NewCubicSender(clock Clock, rttStats *RTTStats, reno bool, initialCongestio
 
 // TimeUntilSend returns when the next packet should be sent.
 func (c *cubicSender) TimeUntilSend(bytesInFlight protocol.ByteCount) time.Duration {
-	if c.InRecovery() {
+	if !c.noPRR && c.InRecovery() {
 		// PRR is used when in recovery.
 		if c.prr.CanSend(c.GetCongestionWindow(), bytesInFlight, c.GetSlowStartThreshold()) {
 			return 0
@@ -114,7 +115,7 @@ func (c *cubicSender) OnPacketSent(
 }
 
 func (c *cubicSender) CanSend(bytesInFlight protocol.ByteCount) bool {
-	if c.InRecovery() {
+	if !c.noPRR && c.InRecovery() {
 		return c.prr.CanSend(c.GetCongestionWindow(), bytesInFlight, c.GetSlowStartThreshold())
 	}
 	return bytesInFlight < c.GetCongestionWindow()
@@ -159,7 +160,9 @@ func (c *cubicSender) OnPacketAcked(
 	c.largestAckedPacketNumber = utils.MaxPacketNumber(ackedPacketNumber, c.largestAckedPacketNumber)
 	if c.InRecovery() {
 		// PRR is used when in recovery.
-		c.prr.OnPacketAcked(ackedBytes)
+		if !c.noPRR {
+			c.prr.OnPacketAcked(ackedBytes)
+		}
 		return
 	}
 	c.maybeIncreaseCwnd(ackedPacketNumber, ackedBytes, priorInFlight, eventTime)
@@ -192,7 +195,9 @@ func (c *cubicSender) OnPacketLost(
 		c.stats.slowstartPacketsLost++
 	}
 
-	c.prr.OnPacketLost(priorInFlight)
+	if !c.noPRR {
+		c.prr.OnPacketLost(priorInFlight)
+	}
 
 	// TODO(chromium): Separate out all of slow start into a separate class.
 	if c.slowStartLargeReduction && c.InSlowStart() {
