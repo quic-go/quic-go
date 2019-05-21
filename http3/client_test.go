@@ -42,11 +42,12 @@ var _ = Describe("Client", func() {
 		dialAddr = origDialAddr
 	})
 
-	It("uses the default QUIC config if none is give", func() {
+	It("uses the default QUIC and TLS config if none is give", func() {
 		client = newClient("localhost:1337", nil, &roundTripperOpts{}, nil, nil)
 		var dialAddrCalled bool
-		dialAddr = func(_ string, _ *tls.Config, quicConf *quic.Config) (quic.Session, error) {
+		dialAddr = func(_ string, tlsConf *tls.Config, quicConf *quic.Config) (quic.Session, error) {
 			Expect(quicConf).To(Equal(defaultQuicConfig))
+			Expect(tlsConf.NextProtos).To(Equal([]string{nextProtoH3}))
 			dialAddrCalled = true
 			return nil, errors.New("test done")
 		}
@@ -69,7 +70,10 @@ var _ = Describe("Client", func() {
 	})
 
 	It("uses the TLS config and QUIC config", func() {
-		tlsConf := &tls.Config{ServerName: "foo.bar"}
+		tlsConf := &tls.Config{
+			ServerName: "foo.bar",
+			NextProtos: []string{"proto foo", "proto bar"},
+		}
 		quicConf := &quic.Config{IdleTimeout: time.Nanosecond}
 		client = newClient("localhost:1337", tlsConf, &roundTripperOpts{}, quicConf, nil)
 		var dialAddrCalled bool
@@ -79,7 +83,8 @@ var _ = Describe("Client", func() {
 			quicConfP *quic.Config,
 		) (quic.Session, error) {
 			Expect(hostname).To(Equal("localhost:1337"))
-			Expect(tlsConfP).To(Equal(tlsConf))
+			Expect(tlsConfP.ServerName).To(Equal(tlsConf.ServerName))
+			Expect(tlsConfP.NextProtos).To(Equal([]string{"proto foo", "proto bar", nextProtoH3}))
 			Expect(quicConfP.IdleTimeout).To(Equal(quicConf.IdleTimeout))
 			dialAddrCalled = true
 			return nil, errors.New("test done")
