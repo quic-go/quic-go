@@ -1,6 +1,7 @@
 package http3
 
 import (
+	"bytes"
 	"crypto/tls"
 	"errors"
 	"fmt"
@@ -124,6 +125,16 @@ func (s *Server) serveImpl(tlsConfig *tls.Config, conn net.PacketConn) error {
 func (s *Server) handleConn(sess quic.Session) {
 	// TODO: accept control streams
 	decoder := qpack.NewDecoder(nil)
+
+	// send a SETTINGS frame
+	str, err := sess.OpenUniStreamSync()
+	if err != nil {
+		s.logger.Debugf("Opening the control stream failed.")
+		return
+	}
+	buf := bytes.NewBuffer([]byte{0})
+	(&settingsFrame{}).Write(buf)
+	str.Write(buf.Bytes())
 
 	for {
 		str, err := sess.AcceptStream()
