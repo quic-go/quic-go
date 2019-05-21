@@ -151,7 +151,7 @@ var _ = Describe("Received Packet Tracker", func() {
 				err = tracker.ReceivedPacket(12, rcvTime, true)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(tracker.ackQueued).To(BeFalse())
-				Expect(tracker.GetAlarmTimeout()).To(Equal(rcvTime.Add(ackSendDelay)))
+				Expect(tracker.GetAlarmTimeout()).To(Equal(rcvTime.Add(protocol.MaxAckDelay)))
 			})
 
 			It("queues an ACK if it was reported missing before", func() {

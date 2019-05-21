@@ -87,7 +87,8 @@ func (c *client) dial() error {
 
 	go func() {
 		if err := c.setupSession(); err != nil {
-			c.session.CloseWithError(quic.ErrorCode(errorInternalError), err)
+			c.logger.Debugf("Setting up session failed: %s", err)
+			c.session.CloseWithError(quic.ErrorCode(errorInternalError), "")
 		}
 	}()
 

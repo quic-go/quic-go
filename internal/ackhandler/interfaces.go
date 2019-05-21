@@ -13,6 +13,7 @@ type SentPacketHandler interface {
 	SentPacket(packet *Packet)
 	SentPacketsAsRetransmission(packets []*Packet, retransmissionOf protocol.PacketNumber)
 	ReceivedAck(ackFrame *wire.AckFrame, withPacketNumber protocol.PacketNumber, encLevel protocol.EncryptionLevel, recvTime time.Time) error
+	SetMaxAckDelay(time.Duration)
 	SetHandshakeComplete()
 	ResetForRetry() error
 

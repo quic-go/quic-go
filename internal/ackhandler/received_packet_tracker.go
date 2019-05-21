@@ -16,8 +16,8 @@ type receivedPacketTracker struct {
 
 	packetHistory *receivedPacketHistory
 
-	ackSendDelay time.Duration
-	rttStats     *congestion.RTTStats
+	maxAckDelay time.Duration
+	rttStats    *congestion.RTTStats
 
 	packetsReceivedSinceLastAck             int
 	ackElicitingPacketsReceivedSinceLastAck int
@@ -37,7 +37,7 @@ func newReceivedPacketTracker(
 ) *receivedPacketTracker {
 	return &receivedPacketTracker{
 		packetHistory: newReceivedPacketHistory(),
-		ackSendDelay:  ackSendDelay,
+		maxAckDelay:   protocol.MaxAckDelay,
 		rttStats:      rttStats,
 		logger:        logger,
 		version:       version,
@@ -126,7 +126,7 @@ func (h *receivedPacketTracker) maybeQueueAck(packetNumber protocol.PacketNumber
 				}
 			} else if h.ackAlarm.IsZero() {
 				// wait for the minimum of the ack decimation delay or the delayed ack time before sending an ack
-				ackDelay := utils.MinDuration(ackSendDelay, time.Duration(float64(h.rttStats.MinRTT())*float64(ackDecimationDelay)))
+				ackDelay := utils.MinDuration(h.maxAckDelay, time.Duration(float64(h.rttStats.MinRTT())*float64(ackDecimationDelay)))
 				h.ackAlarm = rcvTime.Add(ackDelay)
 				if h.logger.Debug() {
 					h.logger.Debugf("\tSetting ACK timer to min(1/4 min-RTT, max ack delay): %s (%s from now)", ackDelay, time.Until(h.ackAlarm))
@@ -141,9 +141,9 @@ func (h *receivedPacketTracker) maybeQueueAck(packetNumber protocol.PacketNumber
 				h.ackQueued = true
 			} else if h.ackAlarm.IsZero() {
 				if h.logger.Debug() {
-					h.logger.Debugf("\tSetting ACK timer to max ack delay: %s", ackSendDelay)
+					h.logger.Debugf("\tSetting ACK timer to max ack delay: %s", h.maxAckDelay)
 				}
-				h.ackAlarm = rcvTime.Add(ackSendDelay)
+				h.ackAlarm = rcvTime.Add(h.maxAckDelay)
 			}
 		}
 		// If there are new missing packets to report, set a short timer to send an ACK.

@@ -155,8 +155,8 @@ type Session interface {
 	// Close the connection.
 	io.Closer
 	// Close the connection with an error.
-	// The error must not be nil.
-	CloseWithError(ErrorCode, error) error
+	// The error string will be sent to the peer.
+	CloseWithError(ErrorCode, string) error
 	// The context is cancelled when the session is closed.
 	// Warning: This API should not be considered stable and might change soon.
 	Context() context.Context

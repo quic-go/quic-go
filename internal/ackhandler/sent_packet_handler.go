@@ -23,8 +23,6 @@ const (
 	// Maximum reordering in time space before time based loss detection considers a packet lost.
 	// Specified as an RTT multiplier.
 	timeThreshold = 9.0 / 8
-	// Timer granularity. The timer will not be set to a value smaller than granularity.
-	granularity = time.Millisecond
 )
 
 type packetNumberSpace struct {
@@ -37,8 +35,10 @@ type packetNumberSpace struct {
 
 func newPacketNumberSpace(initialPN protocol.PacketNumber) *packetNumberSpace {
 	return &packetNumberSpace{
-		history: newSentPacketHistory(),
-		pns:     newPacketNumberGenerator(initialPN, protocol.SkipPacketAveragePeriodLength),
+		history:      newSentPacketHistory(),
+		pns:          newPacketNumberGenerator(initialPN, protocol.SkipPacketAveragePeriodLength),
+		largestSent:  protocol.InvalidPacketNumber,
+		largestAcked: protocol.InvalidPacketNumber,
 	}
 }
 
@@ -62,10 +62,11 @@ type sentPacketHandler struct {
 
 	bytesInFlight protocol.ByteCount
 
-	congestion congestion.SendAlgorithm
+	congestion congestion.SendAlgorithmWithDebugInfos
 	rttStats   *congestion.RTTStats
 
 	handshakeComplete bool
+	maxAckDelay       time.Duration
 
 	// The number of times the crypto packets have been retransmitted without receiving an ack.
 	cryptoCount uint32
@@ -98,7 +99,7 @@ func NewSentPacketHandler(
 		logger:           logger,
 	}
 
-	var cc congestion.SendAlgorithm
+	var cc congestion.SendAlgorithmWithDebugInfos
 	if strings.Contains(os.Getenv("GODEBUG"), "bbr=1") {
 		log.Printf("quic-go: bbr is enabled.")
 		cc = congestion.NewBBRSender(congestion.DefaultClock{},
@@ -113,7 +114,7 @@ func NewSentPacketHandler(
 		cc = congestion.NewCubicSender(
 			congestion.DefaultClock{},
 			rttStats,
-			false, /* don't use reno since chromium doesn't (why?) */
+			true, // use Reno
 			protocol.InitialCongestionWindow,
 			protocol.DefaultMaxCongestionWindow,
 		)
@@ -144,6 +145,10 @@ func (h *sentPacketHandler) SetHandshakeComplete() {
 	}
 	h.retransmissionQueue = queue
 	h.handshakeComplete = true
+}
+
+func (h *sentPacketHandler) SetMaxAckDelay(mad time.Duration) {
+	h.maxAckDelay = mad
 }
 
 func (h *sentPacketHandler) SentPacket(packet *Packet) {
@@ -180,14 +185,15 @@ func (h *sentPacketHandler) getPacketNumberSpace(encLevel protocol.EncryptionLev
 func (h *sentPacketHandler) sentPacketImpl(packet *Packet) bool /* is ack-eliciting */ {
 	pnSpace := h.getPacketNumberSpace(packet.EncryptionLevel)
 
-	if h.logger.Debug() && pnSpace.largestSent != 0 {
-		for p := pnSpace.largestSent + 1; p < packet.PacketNumber; p++ {
+	if h.logger.Debug() {
+		for p := utils.MaxPacketNumber(0, pnSpace.largestSent+1); p < packet.PacketNumber; p++ {
 			h.logger.Debugf("Skipping packet number %#x", p)
 		}
 	}
 
 	pnSpace.largestSent = packet.PacketNumber
 
+	packet.largestAcked = protocol.InvalidPacketNumber
 	if packet.Ack != nil {
 		packet.largestAcked = packet.Ack.LargestAcked()
 	}
@@ -229,7 +235,12 @@ func (h *sentPacketHandler) ReceivedAck(ackFrame *wire.AckFrame, withPacketNumbe
 
 	// maybe update the RTT
 	if p := pnSpace.history.GetPacket(ackFrame.LargestAcked()); p != nil {
-		h.rttStats.UpdateRTT(rcvTime.Sub(p.SendTime), ackFrame.DelayTime, rcvTime)
+		// don't use the ack delay for Initial and Handshake packets
+		var ackDelay time.Duration
+		if encLevel == protocol.Encryption1RTT {
+			ackDelay = utils.MinDuration(ackFrame.DelayTime, h.maxAckDelay)
+		}
+		h.rttStats.UpdateRTT(rcvTime.Sub(p.SendTime), ackDelay, rcvTime)
 		if h.logger.Debug() {
 			h.logger.Debugf("\tupdated RTT: %s (σ: %s)", h.rttStats.SmoothedRTT(), h.rttStats.MeanDeviation())
 		}
@@ -250,10 +261,7 @@ func (h *sentPacketHandler) ReceivedAck(ackFrame *wire.AckFrame, withPacketNumbe
 
 	priorInFlight := h.bytesInFlight
 	for _, p := range ackedPackets {
-		// largestAcked == 0 either means that the packet didn't contain an ACK, or it just acked packet 0
-		// It is safe to ignore the corner case of packets that just acked packet 0, because
-		// the lowestPacketNotConfirmedAcked is only used to limit the number of ACK ranges we will send.
-		if p.largestAcked != 0 && encLevel == protocol.Encryption1RTT {
+		if p.largestAcked != protocol.InvalidPacketNumber && encLevel == protocol.Encryption1RTT {
 			h.lowestNotConfirmedAcked = utils.MaxPacketNumber(h.lowestNotConfirmedAcked, p.largestAcked+1)
 		}
 		if err := h.onPacketAcked(p, rcvTime); err != nil {
@@ -382,7 +390,7 @@ func (h *sentPacketHandler) detectLostPackets(
 	lossDelay := time.Duration(timeThreshold * maxRTT)
 
 	// Minimum time of granularity before packets are deemed lost.
-	lossDelay = utils.MaxDuration(lossDelay, granularity)
+	lossDelay = utils.MaxDuration(lossDelay, protocol.TimerGranularity)
 
 	var lostPackets []*Packet
 	pnSpace.history.Iterate(func(packet *Packet) (bool, error) {
@@ -601,9 +609,9 @@ func (h *sentPacketHandler) SendMode() SendMode {
 		return SendPTO
 	}
 	// Only send ACKs if we're congestion limited.
-	if cwnd := h.congestion.GetCongestionWindow(); h.bytesInFlight > cwnd {
+	if !h.congestion.CanSend(h.bytesInFlight) {
 		if h.logger.Debug() {
-			h.logger.Debugf("Congestion limited: bytes in flight %d, window %d", h.bytesInFlight, cwnd)
+			h.logger.Debugf("Congestion limited: bytes in flight %d, window %d", h.bytesInFlight, h.congestion.GetCongestionWindow())
 		}
 		return SendAck
 	}
@@ -673,15 +681,14 @@ func (h *sentPacketHandler) queuePacketForRetransmission(p *Packet, pnSpace *pac
 }
 
 func (h *sentPacketHandler) computeCryptoTimeout() time.Duration {
-	duration := utils.MaxDuration(2*h.rttStats.SmoothedOrInitialRTT(), granularity)
+	duration := utils.MaxDuration(2*h.rttStats.SmoothedOrInitialRTT(), protocol.TimerGranularity)
 	// exponential backoff
 	// There's an implicit limit to this set by the crypto timeout.
 	return duration << h.cryptoCount
 }
 
 func (h *sentPacketHandler) computePTOTimeout() time.Duration {
-	// TODO(#1236): include the max_ack_delay
-	duration := utils.MaxDuration(h.rttStats.SmoothedOrInitialRTT()+4*h.rttStats.MeanDeviation(), granularity)
+	duration := h.rttStats.SmoothedOrInitialRTT() + utils.MaxDuration(4*h.rttStats.MeanDeviation(), protocol.TimerGranularity) + h.maxAckDelay
 	return duration << h.ptoCount
 }
 

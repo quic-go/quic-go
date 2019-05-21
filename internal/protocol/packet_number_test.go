@@ -2,7 +2,6 @@ package protocol
 
 import (
 	"fmt"
-	"math"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -10,6 +9,10 @@ import (
 
 // Tests taken and extended from chrome
 var _ = Describe("packet number calculation", func() {
+	It("InvalidPacketNumber is smaller than all valid packet numbers", func() {
+		Expect(InvalidPacketNumber).To(BeNumerically("<", 0))
+	})
+
 	It("works with the example from the draft", func() {
 		Expect(DecodePacketNumber(PacketNumberLen2, 0xa82f30ea, 0x9b32)).To(Equal(PacketNumber(0xa82f9b32)))
 	})
@@ -25,10 +28,10 @@ var _ = Describe("packet number calculation", func() {
 		epoch := getEpoch(length)
 		epochMask := epoch - 1
 		wirePacketNumber := expected & epochMask
-		Expect(DecodePacketNumber(length, PacketNumber(last), PacketNumber(wirePacketNumber))).To(Equal(PacketNumber(expected)))
+		ExpectWithOffset(1, DecodePacketNumber(length, PacketNumber(last), PacketNumber(wirePacketNumber))).To(Equal(PacketNumber(expected)))
 	}
 
-	for _, l := range []PacketNumberLen{PacketNumberLen1, PacketNumberLen2, PacketNumberLen4} {
+	for _, l := range []PacketNumberLen{PacketNumberLen1, PacketNumberLen2, PacketNumberLen3, PacketNumberLen4} {
 		length := l
 
 		Context(fmt.Sprintf("with %d bytes", length), func() {
@@ -109,29 +112,6 @@ var _ = Describe("packet number calculation", func() {
 					for j := uint64(0); j < 10; j++ {
 						num := epoch - 1 - j
 						check(length, curEpoch+num, last)
-					}
-				}
-			})
-
-			It("works near next max", func() {
-				maxNumber := uint64(math.MaxUint64)
-				maxEpoch := maxNumber & ^epochMask
-
-				// Cases where the last number was close to the end of the range
-				for i := uint64(0); i < 10; i++ {
-					// Subtract 1, because the expected next packet number is 1 more than the
-					// last packet number.
-					last := maxNumber - i - 1
-
-					// Small numbers should not wrap, because they have nowhere to go.
-					for j := uint64(0); j < 10; j++ {
-						check(length, maxEpoch+j, last)
-					}
-
-					// Large numbers should not wrap either.
-					for j := uint64(0); j < 10; j++ {
-						num := epoch - 1 - j
-						check(length, maxEpoch+num, last)
 					}
 				}
 			})

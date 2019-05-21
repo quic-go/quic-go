@@ -451,13 +451,13 @@ var _ = Describe("Server", func() {
 				close(done)
 			}()
 
-			Expect(serv.closeWithError(testErr)).To(Succeed())
+			serv.setCloseError(testErr)
 			Eventually(done).Should(BeClosed())
 		})
 
 		It("returns immediately, if an error occurred before", func() {
 			testErr := errors.New("test err")
-			Expect(serv.closeWithError(testErr)).To(Succeed())
+			serv.setCloseError(testErr)
 			for i := 0; i < 3; i++ {
 				_, err := serv.Accept()
 				Expect(err).To(MatchError(testErr))

@@ -405,7 +405,7 @@ var _ = Describe("Session", func() {
 			sessionRunner.EXPECT().Retire(gomock.Any())
 			cryptoSetup.EXPECT().Close()
 			packer.EXPECT().PackConnectionClose(gomock.Any()).Return(&packedPacket{}, nil)
-			sess.CloseWithError(0x1337, testErr)
+			sess.CloseWithError(0x1337, testErr.Error())
 			Eventually(areSessionsRunning).Should(BeFalse())
 			Expect(sess.Context().Done()).To(BeClosed())
 		})
@@ -1191,7 +1191,7 @@ var _ = Describe("Session", func() {
 		sessionRunner.EXPECT().Retire(gomock.Any())
 		packer.EXPECT().PackConnectionClose(gomock.Any()).Return(&packedPacket{}, nil)
 		cryptoSetup.EXPECT().Close()
-		Expect(sess.CloseWithError(0x1337, testErr)).To(Succeed())
+		Expect(sess.CloseWithError(0x1337, testErr.Error())).To(Succeed())
 		Eventually(done).Should(BeClosed())
 	})
 

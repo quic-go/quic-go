@@ -228,7 +228,7 @@ type bbrSender struct {
 	alwaysGetBwSampleWhenAcked bool
 }
 
-func NewBBRSender(clock Clock, rttStats *RTTStats, initialCongestionWindow, maxCongestionWindow protocol.ByteCount, getBytesInFlight func() protocol.ByteCount) SendAlgorithmWithDebugInfo {
+func NewBBRSender(clock Clock, rttStats *RTTStats, initialCongestionWindow, maxCongestionWindow protocol.ByteCount, getBytesInFlight func() protocol.ByteCount) *bbrSender {
 	return &bbrSender{
 		rttStats:                  rttStats,
 		GetBytesInFlight:          getBytesInFlight,

@@ -82,7 +82,7 @@ func (mr *MockQuicSessionMockRecorder) Close() *gomock.Call {
 }
 
 // CloseWithError mocks base method
-func (m *MockQuicSession) CloseWithError(arg0 protocol.ApplicationErrorCode, arg1 error) error {
+func (m *MockQuicSession) CloseWithError(arg0 protocol.ApplicationErrorCode, arg1 string) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "CloseWithError", arg0, arg1)
 	ret0, _ := ret[0].(error)
