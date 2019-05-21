@@ -1151,6 +1151,9 @@ func (s *session) logPacket(packet *packedPacket) {
 	}
 	s.logger.Debugf("-> Sending packet 0x%x (%d bytes) for connection %s, %s", packet.header.PacketNumber, len(packet.raw), s.srcConnID, packet.EncryptionLevel())
 	packet.header.Log(s.logger)
+	if packet.ack != nil {
+		wire.LogFrame(s.logger, packet.ack, true)
+	}
 	for _, frame := range packet.frames {
 		wire.LogFrame(s.logger, frame, true)
 	}
