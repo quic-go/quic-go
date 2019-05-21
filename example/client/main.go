@@ -16,6 +16,7 @@ import (
 func main() {
 	verbose := flag.Bool("v", false, "verbose")
 	quiet := flag.Bool("q", false, "don't print the data")
+	insecure := flag.Bool("insecure", false, "skip certificate verification")
 	flag.Parse()
 	urls := flag.Args()
 
@@ -30,7 +31,8 @@ func main() {
 
 	roundTripper := &http3.RoundTripper{
 		TLSClientConfig: &tls.Config{
-			RootCAs: testdata.GetRootCA(),
+			RootCAs:            testdata.GetRootCA(),
+			InsecureSkipVerify: *insecure,
 		},
 	}
 	defer roundTripper.Close()
