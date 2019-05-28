@@ -127,11 +127,11 @@ type Session interface {
 	// AcceptStream returns the next stream opened by the peer, blocking until one is available.
 	// If the session was closed due to a timeout, the error satisfies
 	// the net.Error interface, and Timeout() will be true.
-	AcceptStream() (Stream, error)
+	AcceptStream(context.Context) (Stream, error)
 	// AcceptUniStream returns the next unidirectional stream opened by the peer, blocking until one is available.
 	// If the session was closed due to a timeout, the error satisfies
 	// the net.Error interface, and Timeout() will be true.
-	AcceptUniStream() (ReceiveStream, error)
+	AcceptUniStream(context.Context) (ReceiveStream, error)
 	// OpenStream opens a new bidirectional QUIC stream.
 	// There is no signaling to the peer about new streams:
 	// The peer can only accept the stream after data has been sent on the stream.

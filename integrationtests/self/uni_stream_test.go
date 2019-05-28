@@ -57,7 +57,7 @@ var _ = Describe("Unidirectional Streams", func() {
 		var wg sync.WaitGroup
 		wg.Add(numStreams)
 		for i := 0; i < numStreams; i++ {
-			str, err := sess.AcceptUniStream()
+			str, err := sess.AcceptUniStream(context.Background())
 			Expect(err).ToNot(HaveOccurred())
 			go func() {
 				defer GinkgoRecover()

@@ -5,6 +5,7 @@
 package quic
 
 import (
+	context "context"
 	reflect "reflect"
 
 	gomock "github.com/golang/mock/gomock"
@@ -37,33 +38,33 @@ func (m *MockStreamManager) EXPECT() *MockStreamManagerMockRecorder {
 }
 
 // AcceptStream mocks base method
-func (m *MockStreamManager) AcceptStream() (Stream, error) {
+func (m *MockStreamManager) AcceptStream(arg0 context.Context) (Stream, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "AcceptStream")
+	ret := m.ctrl.Call(m, "AcceptStream", arg0)
 	ret0, _ := ret[0].(Stream)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // AcceptStream indicates an expected call of AcceptStream
-func (mr *MockStreamManagerMockRecorder) AcceptStream() *gomock.Call {
+func (mr *MockStreamManagerMockRecorder) AcceptStream(arg0 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AcceptStream", reflect.TypeOf((*MockStreamManager)(nil).AcceptStream))
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AcceptStream", reflect.TypeOf((*MockStreamManager)(nil).AcceptStream), arg0)
 }
 
 // AcceptUniStream mocks base method
-func (m *MockStreamManager) AcceptUniStream() (ReceiveStream, error) {
+func (m *MockStreamManager) AcceptUniStream(arg0 context.Context) (ReceiveStream, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "AcceptUniStream")
+	ret := m.ctrl.Call(m, "AcceptUniStream", arg0)
 	ret0, _ := ret[0].(ReceiveStream)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // AcceptUniStream indicates an expected call of AcceptUniStream
-func (mr *MockStreamManagerMockRecorder) AcceptUniStream() *gomock.Call {
+func (mr *MockStreamManagerMockRecorder) AcceptUniStream(arg0 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AcceptUniStream", reflect.TypeOf((*MockStreamManager)(nil).AcceptUniStream))
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AcceptUniStream", reflect.TypeOf((*MockStreamManager)(nil).AcceptUniStream), arg0)
 }
 
 // CloseWithError mocks base method

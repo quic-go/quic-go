@@ -138,7 +138,7 @@ func (s *Server) handleConn(sess quic.Session) {
 	str.Write(buf.Bytes())
 
 	for {
-		str, err := sess.AcceptStream()
+		str, err := sess.AcceptStream(context.Background())
 		if err != nil {
 			s.logger.Debugf("Accepting stream failed: %s", err)
 			return

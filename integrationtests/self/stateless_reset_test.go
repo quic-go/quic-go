@@ -64,7 +64,7 @@ var _ = Describe("Stateless Resets", func() {
 				},
 			)
 			Expect(err).ToNot(HaveOccurred())
-			str, err := sess.AcceptStream()
+			str, err := sess.AcceptStream(context.Background())
 			Expect(err).ToNot(HaveOccurred())
 			data := make([]byte, 6)
 			_, err = str.Read(data)

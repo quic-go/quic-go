@@ -39,33 +39,33 @@ func (m *MockSession) EXPECT() *MockSessionMockRecorder {
 }
 
 // AcceptStream mocks base method
-func (m *MockSession) AcceptStream() (quic_go.Stream, error) {
+func (m *MockSession) AcceptStream(arg0 context.Context) (quic_go.Stream, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "AcceptStream")
+	ret := m.ctrl.Call(m, "AcceptStream", arg0)
 	ret0, _ := ret[0].(quic_go.Stream)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // AcceptStream indicates an expected call of AcceptStream
-func (mr *MockSessionMockRecorder) AcceptStream() *gomock.Call {
+func (mr *MockSessionMockRecorder) AcceptStream(arg0 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AcceptStream", reflect.TypeOf((*MockSession)(nil).AcceptStream))
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AcceptStream", reflect.TypeOf((*MockSession)(nil).AcceptStream), arg0)
 }
 
 // AcceptUniStream mocks base method
-func (m *MockSession) AcceptUniStream() (quic_go.ReceiveStream, error) {
+func (m *MockSession) AcceptUniStream(arg0 context.Context) (quic_go.ReceiveStream, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "AcceptUniStream")
+	ret := m.ctrl.Call(m, "AcceptUniStream", arg0)
 	ret0, _ := ret[0].(quic_go.ReceiveStream)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // AcceptUniStream indicates an expected call of AcceptUniStream
-func (mr *MockSessionMockRecorder) AcceptUniStream() *gomock.Call {
+func (mr *MockSessionMockRecorder) AcceptUniStream(arg0 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AcceptUniStream", reflect.TypeOf((*MockSession)(nil).AcceptUniStream))
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AcceptUniStream", reflect.TypeOf((*MockSession)(nil).AcceptUniStream), arg0)
 }
 
 // Close mocks base method

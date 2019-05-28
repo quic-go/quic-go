@@ -1,6 +1,7 @@
 package quic
 
 import (
+	"context"
 	"sync"
 
 	"github.com/lucas-clemente/quic-go/internal/protocol"
@@ -48,24 +49,28 @@ func newIncomingItemsMap(
 	}
 }
 
-func (m *incomingItemsMap) AcceptStream() (item, error) {
+func (m *incomingItemsMap) AcceptStream(ctx context.Context) (item, error) {
 	m.mutex.Lock()
-	defer m.mutex.Unlock()
 
 	var num protocol.StreamNum
 	var str item
 	for {
 		num = m.nextStreamToAccept
-		var ok bool
 		if m.closeErr != nil {
+			m.mutex.Unlock()
 			return nil, m.closeErr
 		}
+		var ok bool
 		str, ok = m.streams[num]
 		if ok {
 			break
 		}
 		m.mutex.Unlock()
-		<-m.newStreamChan
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-m.newStreamChan:
+		}
 		m.mutex.Lock()
 	}
 	m.nextStreamToAccept++
@@ -73,9 +78,11 @@ func (m *incomingItemsMap) AcceptStream() (item, error) {
 	if _, ok := m.streamsToDelete[num]; ok {
 		delete(m.streamsToDelete, num)
 		if err := m.deleteStream(num); err != nil {
+			m.mutex.Unlock()
 			return nil, err
 		}
 	}
+	m.mutex.Unlock()
 	return str, nil
 }
 

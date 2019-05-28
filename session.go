@@ -39,8 +39,8 @@ type streamManager interface {
 	OpenUniStream() (SendStream, error)
 	OpenStreamSync() (Stream, error)
 	OpenUniStreamSync() (SendStream, error)
-	AcceptStream() (Stream, error)
-	AcceptUniStream() (ReceiveStream, error)
+	AcceptStream(context.Context) (Stream, error)
+	AcceptUniStream(context.Context) (ReceiveStream, error)
 	DeleteStream(protocol.StreamID) error
 	UpdateLimits(*handshake.TransportParameters) error
 	HandleMaxStreamsFrame(*wire.MaxStreamsFrame) error
@@ -1233,12 +1233,12 @@ func (s *session) logPacket(packet *packedPacket) {
 }
 
 // AcceptStream returns the next stream openend by the peer
-func (s *session) AcceptStream() (Stream, error) {
-	return s.streamsMap.AcceptStream()
+func (s *session) AcceptStream(ctx context.Context) (Stream, error) {
+	return s.streamsMap.AcceptStream(ctx)
 }
 
-func (s *session) AcceptUniStream() (ReceiveStream, error) {
-	return s.streamsMap.AcceptUniStream()
+func (s *session) AcceptUniStream(ctx context.Context) (ReceiveStream, error) {
+	return s.streamsMap.AcceptUniStream(ctx)
 }
 
 // OpenStream opens a stream

@@ -67,7 +67,7 @@ func init() {
 					)
 					Expect(err).ToNot(HaveOccurred())
 					close(handshakeChan)
-					str, err := sess.AcceptStream()
+					str, err := sess.AcceptStream(context.Background())
 					Expect(err).ToNot(HaveOccurred())
 
 					buf := &bytes.Buffer{}

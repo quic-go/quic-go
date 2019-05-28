@@ -159,7 +159,7 @@ var _ = Describe("Handshake tests", func() {
 						errChan := make(chan error)
 						go func() {
 							defer GinkgoRecover()
-							_, err := sess.AcceptStream()
+							_, err := sess.AcceptStream(context.Background())
 							errChan <- err
 						}()
 						Eventually(errChan).Should(Receive(&err))

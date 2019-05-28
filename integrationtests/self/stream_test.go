@@ -71,7 +71,7 @@ var _ = Describe("Bidirectional streams", func() {
 				var wg sync.WaitGroup
 				wg.Add(numStreams)
 				for i := 0; i < numStreams; i++ {
-					str, err := sess.AcceptStream()
+					str, err := sess.AcceptStream(context.Background())
 					Expect(err).ToNot(HaveOccurred())
 					go func() {
 						defer GinkgoRecover()

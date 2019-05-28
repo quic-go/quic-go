@@ -30,7 +30,7 @@ var _ = Describe("Stream deadline tests", func() {
 			defer GinkgoRecover()
 			sess, err := server.Accept(context.Background())
 			Expect(err).ToNot(HaveOccurred())
-			serverStr, err = sess.AcceptStream()
+			serverStr, err = sess.AcceptStream(context.Background())
 			Expect(err).ToNot(HaveOccurred())
 			_, err = serverStr.Read([]byte{0})
 			Expect(err).ToNot(HaveOccurred())

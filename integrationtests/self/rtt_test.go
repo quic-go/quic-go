@@ -68,7 +68,7 @@ var _ = Describe("non-zero RTT", func() {
 						&quic.Config{Versions: []protocol.VersionNumber{version}},
 					)
 					Expect(err).ToNot(HaveOccurred())
-					str, err := sess.AcceptStream()
+					str, err := sess.AcceptStream(context.Background())
 					Expect(err).ToNot(HaveOccurred())
 					data, err := ioutil.ReadAll(str)
 					Expect(err).ToNot(HaveOccurred())

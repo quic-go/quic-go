@@ -110,7 +110,7 @@ var _ = Describe("Drop Tests", func() {
 						)
 						Expect(err).ToNot(HaveOccurred())
 						defer sess.Close()
-						str, err := sess.AcceptStream()
+						str, err := sess.AcceptStream(context.Background())
 						Expect(err).ToNot(HaveOccurred())
 						for i := uint8(1); i <= numMessages; i++ {
 							b := []byte{0}

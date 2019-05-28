@@ -40,7 +40,7 @@ func echoServer() error {
 	if err != nil {
 		return err
 	}
-	stream, err := sess.AcceptStream()
+	stream, err := sess.AcceptStream(context.Background())
 	if err != nil {
 		panic(err)
 	}
