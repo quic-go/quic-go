@@ -40,6 +40,13 @@ func LogFrame(logger utils.Logger, frame Frame, sent bool) {
 		case protocol.StreamTypeBidi:
 			logger.Debugf("\t%s &wire.MaxStreamsFrame{Type: bidi, MaxStreams: %d}", dir, f.MaxStreams)
 		}
+	case *StreamsBlockedFrame:
+		switch f.Type {
+		case protocol.StreamTypeUni:
+			logger.Debugf("\t%s &wire.StreamsBlockedFrame{Type: uni, MaxStreams: %d}", dir, f.StreamLimit)
+		case protocol.StreamTypeBidi:
+			logger.Debugf("\t%s &wire.StreamsBlockedFrame{Type: bidi, MaxStreams: %d}", dir, f.StreamLimit)
+		}
 	case *NewConnectionIDFrame:
 		logger.Debugf("\t%s &wire.NewConnectionIDFrame{SequenceNumber: %d, ConnectionID: %s, StatelessResetToken: %#x}", dir, f.SequenceNumber, f.ConnectionID, f.StatelessResetToken)
 	case *NewTokenFrame:

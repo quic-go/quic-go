@@ -96,6 +96,15 @@ var _ = Describe("Frame logging", func() {
 		Expect(buf.String()).To(ContainSubstring("\t<- &wire.MaxStreamsFrame{Type: bidi, MaxStreams: 42}\n"))
 	})
 
+	It("logs STREAMS_BLOCKED frames", func() {
+		frame := &StreamsBlockedFrame{
+			Type:        protocol.StreamTypeBidi,
+			StreamLimit: 42,
+		}
+		LogFrame(logger, frame, false)
+		Expect(buf.String()).To(ContainSubstring("\t<- &wire.StreamsBlockedFrame{Type: bidi, MaxStreams: 42}\n"))
+	})
+
 	It("logs NEW_CONNECTION_ID frames", func() {
 		LogFrame(logger, &NewConnectionIDFrame{
 			SequenceNumber:      42,
