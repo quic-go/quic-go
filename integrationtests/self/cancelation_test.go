@@ -1,6 +1,7 @@
 package self_test
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -33,7 +34,7 @@ var _ = Describe("Stream Cancelations", func() {
 				defer GinkgoRecover()
 				var wg sync.WaitGroup
 				wg.Add(numStreams)
-				sess, err := server.Accept()
+				sess, err := server.Accept(context.Background())
 				Expect(err).ToNot(HaveOccurred())
 				for i := 0; i < numStreams; i++ {
 					go func() {
@@ -196,7 +197,7 @@ var _ = Describe("Stream Cancelations", func() {
 			var canceledCounter int32
 			go func() {
 				defer GinkgoRecover()
-				sess, err := server.Accept()
+				sess, err := server.Accept(context.Background())
 				Expect(err).ToNot(HaveOccurred())
 				for i := 0; i < numStreams; i++ {
 					go func() {
@@ -227,7 +228,7 @@ var _ = Describe("Stream Cancelations", func() {
 			var canceledCounter int32
 			go func() {
 				defer GinkgoRecover()
-				sess, err := server.Accept()
+				sess, err := server.Accept(context.Background())
 				Expect(err).ToNot(HaveOccurred())
 				for i := 0; i < numStreams; i++ {
 					go func() {
@@ -265,7 +266,7 @@ var _ = Describe("Stream Cancelations", func() {
 				defer GinkgoRecover()
 				var wg sync.WaitGroup
 				wg.Add(numStreams)
-				sess, err := server.Accept()
+				sess, err := server.Accept(context.Background())
 				Expect(err).ToNot(HaveOccurred())
 				for i := 0; i < numStreams; i++ {
 					go func() {
@@ -339,7 +340,7 @@ var _ = Describe("Stream Cancelations", func() {
 				defer GinkgoRecover()
 				var wg sync.WaitGroup
 				wg.Add(numStreams)
-				sess, err := server.Accept()
+				sess, err := server.Accept(context.Background())
 				Expect(err).ToNot(HaveOccurred())
 				for i := 0; i < numStreams; i++ {
 					go func() {

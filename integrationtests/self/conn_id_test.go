@@ -1,6 +1,7 @@
 package self_test
 
 import (
+	"context"
 	"fmt"
 	"io/ioutil"
 	"math/rand"
@@ -25,7 +26,7 @@ var _ = Describe("Connection ID lengths tests", func() {
 		go func() {
 			defer GinkgoRecover()
 			for {
-				sess, err := ln.Accept()
+				sess, err := ln.Accept(context.Background())
 				if err != nil {
 					return
 				}

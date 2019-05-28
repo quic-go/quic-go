@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/tls"
@@ -35,7 +36,7 @@ func echoServer() error {
 	if err != nil {
 		return err
 	}
-	sess, err := listener.Accept()
+	sess, err := listener.Accept(context.Background())
 	if err != nil {
 		return err
 	}

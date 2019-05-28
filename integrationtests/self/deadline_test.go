@@ -1,6 +1,7 @@
 package self_test
 
 import (
+	"context"
 	"fmt"
 	"io/ioutil"
 	"net"
@@ -27,7 +28,7 @@ var _ = Describe("Stream deadline tests", func() {
 		acceptedStream := make(chan struct{})
 		go func() {
 			defer GinkgoRecover()
-			sess, err := server.Accept()
+			sess, err := server.Accept(context.Background())
 			Expect(err).ToNot(HaveOccurred())
 			serverStr, err = sess.AcceptStream()
 			Expect(err).ToNot(HaveOccurred())

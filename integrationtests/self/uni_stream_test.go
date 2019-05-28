@@ -1,6 +1,7 @@
 package self_test
 
 import (
+	"context"
 	"fmt"
 	"io/ioutil"
 	"net"
@@ -72,7 +73,7 @@ var _ = Describe("Unidirectional Streams", func() {
 	It(fmt.Sprintf("client opening %d streams to a server", numStreams), func() {
 		go func() {
 			defer GinkgoRecover()
-			sess, err := server.Accept()
+			sess, err := server.Accept(context.Background())
 			Expect(err).ToNot(HaveOccurred())
 			runReceivingPeer(sess)
 			sess.Close()
@@ -91,7 +92,7 @@ var _ = Describe("Unidirectional Streams", func() {
 	It(fmt.Sprintf("server opening %d streams to a client", numStreams), func() {
 		go func() {
 			defer GinkgoRecover()
-			sess, err := server.Accept()
+			sess, err := server.Accept(context.Background())
 			Expect(err).ToNot(HaveOccurred())
 			runSendingPeer(sess)
 		}()
@@ -109,7 +110,7 @@ var _ = Describe("Unidirectional Streams", func() {
 		done1 := make(chan struct{})
 		go func() {
 			defer GinkgoRecover()
-			sess, err := server.Accept()
+			sess, err := server.Accept(context.Background())
 			Expect(err).ToNot(HaveOccurred())
 			done := make(chan struct{})
 			go func() {

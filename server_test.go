@@ -434,7 +434,7 @@ var _ = Describe("Server", func() {
 			done := make(chan struct{})
 			go func() {
 				defer GinkgoRecover()
-				serv.Accept()
+				serv.Accept(context.Background())
 				close(done)
 			}()
 			Consistently(done).ShouldNot(BeClosed())
@@ -461,7 +461,7 @@ var _ = Describe("Server", func() {
 			done := make(chan struct{})
 			go func() {
 				defer GinkgoRecover()
-				_, err := serv.Accept()
+				_, err := serv.Accept(context.Background())
 				Expect(err).To(MatchError(testErr))
 				close(done)
 			}()
@@ -474,9 +474,24 @@ var _ = Describe("Server", func() {
 			testErr := errors.New("test err")
 			serv.setCloseError(testErr)
 			for i := 0; i < 3; i++ {
-				_, err := serv.Accept()
+				_, err := serv.Accept(context.Background())
 				Expect(err).To(MatchError(testErr))
 			}
+		})
+
+		It("returns when the context is canceled", func() {
+			ctx, cancel := context.WithCancel(context.Background())
+			done := make(chan struct{})
+			go func() {
+				defer GinkgoRecover()
+				_, err := serv.Accept(ctx)
+				Expect(err).To(MatchError("context canceled"))
+				close(done)
+			}()
+
+			Consistently(done).ShouldNot(BeClosed())
+			cancel()
+			Eventually(done).Should(BeClosed())
 		})
 
 		It("accepts new sessions when the handshake completes", func() {
@@ -485,7 +500,7 @@ var _ = Describe("Server", func() {
 			done := make(chan struct{})
 			go func() {
 				defer GinkgoRecover()
-				s, err := serv.Accept()
+				s, err := serv.Accept(context.Background())
 				Expect(err).ToNot(HaveOccurred())
 				Expect(s).To(Equal(sess))
 				close(done)

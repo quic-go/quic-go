@@ -232,5 +232,5 @@ type Listener interface {
 	// Addr returns the local network addr that the server is listening on.
 	Addr() net.Addr
 	// Accept returns new sessions. It should be called in a loop.
-	Accept() (Session, error)
+	Accept(context.Context) (Session, error)
 }

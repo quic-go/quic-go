@@ -2,6 +2,7 @@ package http3
 
 import (
 	"bytes"
+	"context"
 	"crypto/tls"
 	"errors"
 	"fmt"
@@ -114,7 +115,7 @@ func (s *Server) serveImpl(tlsConfig *tls.Config, conn net.PacketConn) error {
 	s.listenerMutex.Unlock()
 
 	for {
-		sess, err := ln.Accept()
+		sess, err := ln.Accept(context.Background())
 		if err != nil {
 			return err
 		}

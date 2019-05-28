@@ -2,6 +2,7 @@ package benchmark
 
 import (
 	"bytes"
+	"context"
 	"crypto/tls"
 	"fmt"
 	"io"
@@ -44,7 +45,7 @@ func init() {
 						)
 						Expect(err).ToNot(HaveOccurred())
 						serverAddr <- ln.Addr()
-						sess, err := ln.Accept()
+						sess, err := ln.Accept(context.Background())
 						Expect(err).ToNot(HaveOccurred())
 						// wait for the client to complete the handshake before sending the data
 						// this should not be necessary, but due to timing issues on the CIs, this is necessary to avoid sending too many undecryptable packets

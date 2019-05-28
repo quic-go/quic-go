@@ -1,6 +1,7 @@
 package self_test
 
 import (
+	"context"
 	"crypto/tls"
 	"fmt"
 	"net"
@@ -56,8 +57,7 @@ var _ = Describe("Handshake RTT tests", func() {
 			defer GinkgoRecover()
 			defer close(acceptStopped)
 			for {
-				_, err := server.Accept()
-				if err != nil {
+				if _, err := server.Accept(context.Background()); err != nil {
 					return
 				}
 			}

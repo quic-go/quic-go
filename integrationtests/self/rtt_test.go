@@ -1,6 +1,7 @@
 package self_test
 
 import (
+	"context"
 	"fmt"
 	"io/ioutil"
 	"net"
@@ -42,7 +43,7 @@ var _ = Describe("non-zero RTT", func() {
 					done := make(chan struct{})
 					go func() {
 						defer GinkgoRecover()
-						sess, err := ln.Accept()
+						sess, err := ln.Accept(context.Background())
 						Expect(err).ToNot(HaveOccurred())
 						str, err := sess.OpenStream()
 						Expect(err).ToNot(HaveOccurred())

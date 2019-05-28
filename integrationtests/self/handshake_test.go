@@ -1,6 +1,7 @@
 package self_test
 
 import (
+	"context"
 	"crypto/tls"
 	"fmt"
 	"net"
@@ -50,7 +51,7 @@ var _ = Describe("Handshake tests", func() {
 			defer GinkgoRecover()
 			defer close(acceptStopped)
 			for {
-				if _, err := server.Accept(); err != nil {
+				if _, err := server.Accept(context.Background()); err != nil {
 					return
 				}
 			}
@@ -236,7 +237,7 @@ var _ = Describe("Handshake tests", func() {
 			Expect(err.(*qerr.QuicError).ErrorCode).To(Equal(qerr.ServerBusy))
 
 			// now accept one session, freeing one spot in the queue
-			_, err = server.Accept()
+			_, err = server.Accept(context.Background())
 			Expect(err).ToNot(HaveOccurred())
 			// dial again, and expect that this dial succeeds
 			sess, err := dial()
@@ -289,7 +290,7 @@ var _ = Describe("Handshake tests", func() {
 			done := make(chan struct{})
 			go func() {
 				defer GinkgoRecover()
-				sess, err := ln.Accept()
+				sess, err := ln.Accept(context.Background())
 				Expect(err).ToNot(HaveOccurred())
 				cs := sess.ConnectionState()
 				Expect(cs.NegotiatedProtocol).To(Equal(alpn))

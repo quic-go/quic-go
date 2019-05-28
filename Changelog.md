@@ -8,6 +8,7 @@
 - Enforce application protocol negotiation (via `tls.Config.NextProtos`).
 - Use a varint for error codes.
 - Add support for [quic-trace](https://github.com/google/quic-trace).
+- Add a context to `Listener.Accept`.
 
 ## v0.11.0 (2019-04-05)
 
