@@ -860,11 +860,13 @@ var _ = Describe("SentPacketHandler", func() {
 				p := ackElicitingPacket(&Packet{PacketNumber: i, EncryptionLevel: protocol.EncryptionHandshake})
 				handler.SentPacket(p)
 			}
+			Expect(handler.bytesInFlight).ToNot(BeZero())
 			handler.queuePacketForRetransmission(getPacket(1, protocol.EncryptionInitial), handler.getPacketNumberSpace(protocol.EncryptionInitial))
 			handler.queuePacketForRetransmission(getPacket(3, protocol.EncryptionHandshake), handler.getPacketNumberSpace(protocol.EncryptionHandshake))
 			handler.SetHandshakeComplete()
 			Expect(handler.initialPackets.history.Len()).To(BeZero())
 			Expect(handler.handshakePackets.history.Len()).To(BeZero())
+			Expect(handler.bytesInFlight).To(BeZero())
 			packet := handler.DequeuePacketForRetransmission()
 			Expect(packet).To(BeNil())
 		})

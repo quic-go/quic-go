@@ -114,6 +114,9 @@ func (h *sentPacketHandler) SetHandshakeComplete() {
 	for _, pnSpace := range []*packetNumberSpace{h.initialPackets, h.handshakePackets} {
 		var cryptoPackets []*Packet
 		pnSpace.history.Iterate(func(p *Packet) (bool, error) {
+			if p.includedInBytesInFlight {
+				h.bytesInFlight -= p.Length
+			}
 			cryptoPackets = append(cryptoPackets, p)
 			return true, nil
 		})
