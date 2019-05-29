@@ -808,10 +808,6 @@ var _ = Describe("SentPacketHandler", func() {
 	})
 
 	Context("crypto packets", func() {
-		BeforeEach(func() {
-			handler.handshakeComplete = false
-		})
-
 		It("detects the crypto timeout", func() {
 			now := time.Now()
 			sendTime := now.Add(-time.Minute)

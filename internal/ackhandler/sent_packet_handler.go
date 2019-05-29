@@ -59,8 +59,7 @@ type sentPacketHandler struct {
 	congestion congestion.SendAlgorithmWithDebugInfos
 	rttStats   *congestion.RTTStats
 
-	handshakeComplete bool
-	maxAckDelay       time.Duration
+	maxAckDelay time.Duration
 
 	// The number of times the crypto packets have been retransmitted without receiving an ack.
 	cryptoCount uint32
@@ -125,7 +124,6 @@ func (h *sentPacketHandler) SetHandshakeComplete() {
 		}
 	}
 	h.retransmissionQueue = queue
-	h.handshakeComplete = true
 }
 
 func (h *sentPacketHandler) SetMaxAckDelay(mad time.Duration) {
