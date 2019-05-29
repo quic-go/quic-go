@@ -344,7 +344,6 @@ func (p *packetPacker) maybePackCryptoPacket() (*packedPacket, error) {
 func (p *packetPacker) composeNextPacket(maxFrameSize protocol.ByteCount) (payload, error) {
 	var payload payload
 
-	// ACKs need to go first, so we recognize them in packedPacket.ToAckHandlerPacket()
 	if ack := p.acks.GetAckFrame(protocol.Encryption1RTT); ack != nil {
 		payload.ack = ack
 		payload.length += ack.Length(p.version)
