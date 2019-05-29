@@ -19,10 +19,9 @@ type outgoingBidiStreamsMap struct {
 
 	streams map[protocol.StreamID]streamI
 
-	nextStream   protocol.StreamID // stream ID of the stream returned by OpenStream(Sync)
-	maxStream    protocol.StreamID // the maximum stream ID we're allowed to open
-	maxStreamSet bool              // was maxStream set. If not, it's not possible to any stream (also works for stream 0)
-	blockedSent  bool              // was a STREAMS_BLOCKED sent for the current maxStream
+	nextStream  protocol.StreamID // stream ID of the stream returned by OpenStream(Sync)
+	maxStream   protocol.StreamID // the maximum stream ID we're allowed to open
+	blockedSent bool              // was a STREAMS_BLOCKED sent for the current maxStream
 
 	newStream            func(protocol.StreamID) streamI
 	queueStreamIDBlocked func(*wire.StreamsBlockedFrame)
@@ -38,6 +37,7 @@ func newOutgoingBidiStreamsMap(
 	m := &outgoingBidiStreamsMap{
 		streams:              make(map[protocol.StreamID]streamI),
 		nextStream:           nextStream,
+		maxStream:            protocol.InvalidStreamID,
 		newStream:            newStream,
 		queueStreamIDBlocked: func(f *wire.StreamsBlockedFrame) { queueControlFrame(f) },
 	}
@@ -80,9 +80,9 @@ func (m *outgoingBidiStreamsMap) OpenStreamSync() (streamI, error) {
 }
 
 func (m *outgoingBidiStreamsMap) openStreamImpl() (streamI, error) {
-	if !m.maxStreamSet || m.nextStream > m.maxStream {
+	if m.nextStream > m.maxStream {
 		if !m.blockedSent {
-			if m.maxStreamSet {
+			if m.maxStream != protocol.InvalidStreamID {
 				m.queueStreamIDBlocked(&wire.StreamsBlockedFrame{
 					Type:        protocol.StreamTypeBidi,
 					StreamLimit: m.maxStream.StreamNum(),
@@ -127,9 +127,8 @@ func (m *outgoingBidiStreamsMap) DeleteStream(id protocol.StreamID) error {
 
 func (m *outgoingBidiStreamsMap) SetMaxStream(id protocol.StreamID) {
 	m.mutex.Lock()
-	if !m.maxStreamSet || id > m.maxStream {
+	if id > m.maxStream {
 		m.maxStream = id
-		m.maxStreamSet = true
 		m.blockedSent = false
 		m.cond.Broadcast()
 	}

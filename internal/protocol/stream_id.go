@@ -1,7 +1,11 @@
 package protocol
 
 // A StreamID in QUIC
-type StreamID uint64
+type StreamID int64
+
+// InvalidPacketNumber is a stream ID that is invalid.
+// The first valid stream ID in QUIC is 0.
+const InvalidStreamID = -1
 
 // StreamType encodes if this is a unidirectional or bidirectional stream
 type StreamType uint8

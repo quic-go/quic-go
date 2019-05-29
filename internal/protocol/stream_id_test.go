@@ -6,6 +6,10 @@ import (
 )
 
 var _ = Describe("Stream ID", func() {
+	It("InvalidStreamID is smaller than all valid stream IDs", func() {
+		Expect(InvalidStreamID).To(BeNumerically("<", 0))
+	})
+
 	It("says who initiated a stream", func() {
 		Expect(StreamID(4).InitiatedBy()).To(Equal(PerspectiveClient))
 		Expect(StreamID(5).InitiatedBy()).To(Equal(PerspectiveServer))
