@@ -485,7 +485,8 @@ func (s *session) handleHandshakeComplete() {
 	// independent from the application protocol.
 	if s.perspective == protocol.PerspectiveServer {
 		s.queueControlFrame(&wire.PingFrame{})
-		s.sentPacketHandler.SetHandshakeComplete()
+		s.sentPacketHandler.DropPackets(protocol.EncryptionInitial)
+		s.sentPacketHandler.DropPackets(protocol.EncryptionHandshake)
 	}
 }
 
@@ -646,7 +647,8 @@ func (s *session) handleUnpackedPacket(packet *unpackedPacket, rcvTime time.Time
 	if s.perspective == protocol.PerspectiveClient {
 		if !s.receivedFirstForwardSecurePacket && packet.encryptionLevel == protocol.Encryption1RTT {
 			s.receivedFirstForwardSecurePacket = true
-			s.sentPacketHandler.SetHandshakeComplete()
+			s.sentPacketHandler.DropPackets(protocol.EncryptionInitial)
+			s.sentPacketHandler.DropPackets(protocol.EncryptionHandshake)
 		}
 	}
 

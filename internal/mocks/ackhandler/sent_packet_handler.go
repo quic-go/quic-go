@@ -66,6 +66,18 @@ func (mr *MockSentPacketHandlerMockRecorder) DequeueProbePacket() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DequeueProbePacket", reflect.TypeOf((*MockSentPacketHandler)(nil).DequeueProbePacket))
 }
 
+// DropPackets mocks base method
+func (m *MockSentPacketHandler) DropPackets(arg0 protocol.EncryptionLevel) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "DropPackets", arg0)
+}
+
+// DropPackets indicates an expected call of DropPackets
+func (mr *MockSentPacketHandlerMockRecorder) DropPackets(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DropPackets", reflect.TypeOf((*MockSentPacketHandler)(nil).DropPackets), arg0)
+}
+
 // GetAlarmTimeout mocks base method
 func (m *MockSentPacketHandler) GetAlarmTimeout() time.Time {
 	m.ctrl.T.Helper()
@@ -201,18 +213,6 @@ func (m *MockSentPacketHandler) SentPacketsAsRetransmission(arg0 []*ackhandler.P
 func (mr *MockSentPacketHandlerMockRecorder) SentPacketsAsRetransmission(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SentPacketsAsRetransmission", reflect.TypeOf((*MockSentPacketHandler)(nil).SentPacketsAsRetransmission), arg0, arg1)
-}
-
-// SetHandshakeComplete mocks base method
-func (m *MockSentPacketHandler) SetHandshakeComplete() {
-	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "SetHandshakeComplete")
-}
-
-// SetHandshakeComplete indicates an expected call of SetHandshakeComplete
-func (mr *MockSentPacketHandlerMockRecorder) SetHandshakeComplete() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetHandshakeComplete", reflect.TypeOf((*MockSentPacketHandler)(nil).SetHandshakeComplete))
 }
 
 // SetMaxAckDelay mocks base method

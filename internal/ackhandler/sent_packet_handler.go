@@ -102,25 +102,25 @@ func NewSentPacketHandler(
 	}
 }
 
-func (h *sentPacketHandler) SetHandshakeComplete() {
-	h.logger.Debugf("Handshake complete. Discarding all outstanding crypto packets.")
+func (h *sentPacketHandler) DropPackets(encLevel protocol.EncryptionLevel) {
+	// remove outstanding packets from bytes_in_flight
+	pnSpace := h.getPacketNumberSpace(encLevel)
+	var packets []*Packet
+	pnSpace.history.Iterate(func(p *Packet) (bool, error) {
+		packets = append(packets, p)
+		if p.includedInBytesInFlight {
+			h.bytesInFlight -= p.Length
+		}
+		return true, nil
+	})
+	for _, p := range packets {
+		pnSpace.history.Remove(p.PacketNumber)
+	}
+	// remove packets from the retransmission queue
 	var queue []*Packet
 	for _, packet := range h.retransmissionQueue {
-		if packet.EncryptionLevel == protocol.Encryption1RTT {
+		if packet.EncryptionLevel != encLevel {
 			queue = append(queue, packet)
-		}
-	}
-	for _, pnSpace := range []*packetNumberSpace{h.initialPackets, h.handshakePackets} {
-		var cryptoPackets []*Packet
-		pnSpace.history.Iterate(func(p *Packet) (bool, error) {
-			if p.includedInBytesInFlight {
-				h.bytesInFlight -= p.Length
-			}
-			cryptoPackets = append(cryptoPackets, p)
-			return true, nil
-		})
-		for _, p := range cryptoPackets {
-			pnSpace.history.Remove(p.PacketNumber)
 		}
 	}
 	h.retransmissionQueue = queue
