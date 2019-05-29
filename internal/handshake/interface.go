@@ -36,6 +36,7 @@ type CryptoSetup interface {
 	ChangeConnectionID(protocol.ConnectionID) error
 
 	HandleMessage([]byte, protocol.EncryptionLevel) bool
+	Received1RTTAck()
 	ConnectionState() tls.ConnectionState
 
 	GetSealer() (protocol.EncryptionLevel, Sealer)

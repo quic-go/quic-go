@@ -161,6 +161,7 @@ var _ = Describe("Session", func() {
 			})
 
 			It("tells the ReceivedPacketHandler to ignore low ranges", func() {
+				cryptoSetup.EXPECT().Received1RTTAck()
 				ack := &wire.AckFrame{AckRanges: []wire.AckRange{{Smallest: 2, Largest: 3}}}
 				sph := mockackhandler.NewMockSentPacketHandler(mockCtrl)
 				sph.EXPECT().ReceivedAck(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any())

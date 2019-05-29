@@ -87,6 +87,7 @@ var _ = Describe("Crypto Setup TLS", func() {
 			nil,
 			&TransportParameters{},
 			func([]byte) {},
+			func(protocol.EncryptionLevel) {},
 			tlsConf,
 			utils.DefaultLogger.WithPrefix("server"),
 		)
@@ -115,6 +116,7 @@ var _ = Describe("Crypto Setup TLS", func() {
 			nil,
 			&TransportParameters{},
 			func([]byte) {},
+			func(protocol.EncryptionLevel) {},
 			testdata.GetTLSConfig(),
 			utils.DefaultLogger.WithPrefix("server"),
 		)
@@ -149,6 +151,7 @@ var _ = Describe("Crypto Setup TLS", func() {
 			nil,
 			&TransportParameters{},
 			func([]byte) {},
+			func(protocol.EncryptionLevel) {},
 			testdata.GetTLSConfig(),
 			utils.DefaultLogger.WithPrefix("server"),
 		)
@@ -177,6 +180,7 @@ var _ = Describe("Crypto Setup TLS", func() {
 			nil,
 			&TransportParameters{},
 			func([]byte) {},
+			func(protocol.EncryptionLevel) {},
 			testdata.GetTLSConfig(),
 			utils.DefaultLogger.WithPrefix("server"),
 		)
@@ -256,6 +260,7 @@ var _ = Describe("Crypto Setup TLS", func() {
 				nil,
 				&TransportParameters{},
 				func([]byte) {},
+				func(protocol.EncryptionLevel) {},
 				clientConf,
 				utils.DefaultLogger.WithPrefix("client"),
 			)
@@ -271,6 +276,7 @@ var _ = Describe("Crypto Setup TLS", func() {
 				nil,
 				&TransportParameters{StatelessResetToken: &token},
 				func([]byte) {},
+				func(protocol.EncryptionLevel) {},
 				serverConf,
 				utils.DefaultLogger.WithPrefix("server"),
 			)
@@ -313,6 +319,7 @@ var _ = Describe("Crypto Setup TLS", func() {
 				nil,
 				&TransportParameters{},
 				func([]byte) {},
+				func(protocol.EncryptionLevel) {},
 				&tls.Config{InsecureSkipVerify: true},
 				utils.DefaultLogger.WithPrefix("client"),
 			)
@@ -350,6 +357,7 @@ var _ = Describe("Crypto Setup TLS", func() {
 				nil,
 				cTransportParameters,
 				func(p []byte) { sTransportParametersRcvd = p },
+				func(protocol.EncryptionLevel) {},
 				clientConf,
 				utils.DefaultLogger.WithPrefix("client"),
 			)
@@ -369,6 +377,7 @@ var _ = Describe("Crypto Setup TLS", func() {
 				nil,
 				sTransportParameters,
 				func(p []byte) { cTransportParametersRcvd = p },
+				func(protocol.EncryptionLevel) {},
 				testdata.GetTLSConfig(),
 				utils.DefaultLogger.WithPrefix("server"),
 			)
