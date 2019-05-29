@@ -1159,21 +1159,6 @@ func (s *session) logPacket(packet *packedPacket) {
 	}
 }
 
-// GetOrOpenStream either returns an existing stream, a newly opened stream, or nil if a stream with the provided ID is already closed.
-// It is *only* needed for gQUIC's H2.
-// It will be removed as soon as gQUIC moves towards the IETF H2/QUIC stream mapping.
-func (s *session) GetOrOpenStream(id protocol.StreamID) (Stream, error) {
-	str, err := s.streamsMap.GetOrOpenSendStream(id)
-	if str != nil {
-		if bstr, ok := str.(Stream); ok {
-			return bstr, err
-		}
-		return nil, fmt.Errorf("Stream %d is not a bidirectional stream", id)
-	}
-	// make sure to return an actual nil value here, not an Stream with value nil
-	return nil, err
-}
-
 // AcceptStream returns the next stream openend by the peer
 func (s *session) AcceptStream() (Stream, error) {
 	return s.streamsMap.AcceptStream()

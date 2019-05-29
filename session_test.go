@@ -1429,30 +1429,6 @@ var _ = Describe("Session", func() {
 	}, 0.5)
 
 	Context("getting streams", func() {
-		It("returns a new stream", func() {
-			mstr := NewMockStreamI(mockCtrl)
-			streamManager.EXPECT().GetOrOpenSendStream(protocol.StreamID(11)).Return(mstr, nil)
-			str, err := sess.GetOrOpenStream(11)
-			Expect(err).ToNot(HaveOccurred())
-			Expect(str).To(Equal(mstr))
-		})
-
-		It("returns a nil-value (not an interface with value nil) for closed streams", func() {
-			strI := Stream(nil)
-			streamManager.EXPECT().GetOrOpenSendStream(protocol.StreamID(1337)).Return(strI, nil)
-			str, err := sess.GetOrOpenStream(1337)
-			Expect(err).ToNot(HaveOccurred())
-			// make sure that the returned value is a plain nil, not an Stream with value nil
-			_, ok := str.(Stream)
-			Expect(ok).To(BeFalse())
-		})
-
-		It("errors when trying to get a unidirectional stream", func() {
-			streamManager.EXPECT().GetOrOpenSendStream(protocol.StreamID(100)).Return(&sendStream{}, nil)
-			_, err := sess.GetOrOpenStream(100)
-			Expect(err).To(MatchError("Stream 100 is not a bidirectional stream"))
-		})
-
 		It("opens streams", func() {
 			mstr := NewMockStreamI(mockCtrl)
 			streamManager.EXPECT().OpenStream().Return(mstr, nil)
