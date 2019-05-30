@@ -45,6 +45,7 @@ type SentPacketHandler interface {
 type ReceivedPacketHandler interface {
 	ReceivedPacket(pn protocol.PacketNumber, encLevel protocol.EncryptionLevel, rcvTime time.Time, shouldInstigateAck bool) error
 	IgnoreBelow(protocol.PacketNumber)
+	DropPackets(protocol.EncryptionLevel)
 
 	GetAlarmTimeout() time.Time
 	GetAckFrame(protocol.EncryptionLevel) *wire.AckFrame
