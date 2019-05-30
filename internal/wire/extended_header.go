@@ -19,7 +19,7 @@ type ExtendedHeader struct {
 	PacketNumberLen protocol.PacketNumberLen
 	PacketNumber    protocol.PacketNumber
 
-	KeyPhase int
+	KeyPhase protocol.KeyPhase
 }
 
 func (h *ExtendedHeader) parse(b *bytes.Reader, v protocol.VersionNumber) (*ExtendedHeader, error) {
@@ -53,7 +53,10 @@ func (h *ExtendedHeader) parseShortHeader(b *bytes.Reader, v protocol.VersionNum
 		return nil, errors.New("4th and 5th bit must be 0")
 	}
 
-	h.KeyPhase = int(h.typeByte&0x4) >> 2
+	h.KeyPhase = protocol.KeyPhaseZero
+	if h.typeByte&0x4 > 0 {
+		h.KeyPhase = protocol.KeyPhaseOne
+	}
 
 	if err := h.readPacketNumber(b); err != nil {
 		return nil, err
@@ -129,7 +132,9 @@ func (h *ExtendedHeader) writeLongHeader(b *bytes.Buffer, v protocol.VersionNumb
 // TODO: add support for the key phase
 func (h *ExtendedHeader) writeShortHeader(b *bytes.Buffer, v protocol.VersionNumber) error {
 	typeByte := 0x40 | uint8(h.PacketNumberLen-1)
-	typeByte |= byte(h.KeyPhase << 2)
+	if h.KeyPhase == protocol.KeyPhaseOne {
+		typeByte |= byte(1 << 2)
+	}
 
 	b.WriteByte(typeByte)
 	b.Write(h.DestConnectionID.Bytes())
@@ -176,7 +181,7 @@ func (h *ExtendedHeader) Log(logger utils.Logger) {
 		}
 		logger.Debugf("\tLong Header{Type: %s, DestConnectionID: %s, SrcConnectionID: %s, %sPacketNumber: %#x, PacketNumberLen: %d, Length: %d, Version: %s}", h.Type, h.DestConnectionID, h.SrcConnectionID, token, h.PacketNumber, h.PacketNumberLen, h.Length, h.Version)
 	} else {
-		logger.Debugf("\tShort Header{DestConnectionID: %s, PacketNumber: %#x, PacketNumberLen: %d, KeyPhase: %d}", h.DestConnectionID, h.PacketNumber, h.PacketNumberLen, h.KeyPhase)
+		logger.Debugf("\tShort Header{DestConnectionID: %s, PacketNumber: %#x, PacketNumberLen: %d, KeyPhase: %s}", h.DestConnectionID, h.PacketNumber, h.PacketNumberLen, h.KeyPhase)
 	}
 }
 
