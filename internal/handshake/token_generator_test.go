@@ -11,64 +11,64 @@ import (
 	. "github.com/onsi/gomega"
 )
 
-var _ = Describe("Cookie Generator", func() {
-	var cookieGen *CookieGenerator
+var _ = Describe("Token Generator", func() {
+	var tokenGen *TokenGenerator
 
 	BeforeEach(func() {
 		var err error
-		cookieGen, err = NewCookieGenerator()
+		tokenGen, err = NewTokenGenerator()
 		Expect(err).ToNot(HaveOccurred())
 	})
 
-	It("generates a Cookie", func() {
+	It("generates a token", func() {
 		ip := net.IPv4(127, 0, 0, 1)
-		token, err := cookieGen.NewToken(&net.UDPAddr{IP: ip, Port: 1337}, nil)
+		token, err := tokenGen.NewToken(&net.UDPAddr{IP: ip, Port: 1337}, nil)
 		Expect(err).ToNot(HaveOccurred())
 		Expect(token).ToNot(BeEmpty())
 	})
 
 	It("works with nil tokens", func() {
-		cookie, err := cookieGen.DecodeToken(nil)
+		token, err := tokenGen.DecodeToken(nil)
 		Expect(err).ToNot(HaveOccurred())
-		Expect(cookie).To(BeNil())
+		Expect(token).To(BeNil())
 	})
 
-	It("accepts a valid cookie", func() {
+	It("accepts a valid token", func() {
 		ip := net.IPv4(192, 168, 0, 1)
-		token, err := cookieGen.NewToken(
+		tokenEnc, err := tokenGen.NewToken(
 			&net.UDPAddr{IP: ip, Port: 1337},
 			nil,
 		)
 		Expect(err).ToNot(HaveOccurred())
-		cookie, err := cookieGen.DecodeToken(token)
+		token, err := tokenGen.DecodeToken(tokenEnc)
 		Expect(err).ToNot(HaveOccurred())
-		Expect(cookie.RemoteAddr).To(Equal("192.168.0.1"))
-		// the time resolution of the Cookie is just 1 second
-		// if Cookie generation and this check happen in "different seconds", the difference will be between 1 and 2 seconds
-		Expect(cookie.SentTime).To(BeTemporally("~", time.Now(), 2*time.Second))
-		Expect(cookie.OriginalDestConnectionID).To(BeNil())
+		Expect(token.RemoteAddr).To(Equal("192.168.0.1"))
+		// the time resolution of the token is just 1 second
+		// if token generation and this check happen in "different seconds", the difference will be between 1 and 2 seconds
+		Expect(token.SentTime).To(BeTemporally("~", time.Now(), 2*time.Second))
+		Expect(token.OriginalDestConnectionID).To(BeNil())
 	})
 
 	It("saves the connection ID", func() {
-		token, err := cookieGen.NewToken(
+		tokenEnc, err := tokenGen.NewToken(
 			&net.UDPAddr{},
 			protocol.ConnectionID{0xde, 0xad, 0xbe, 0xef},
 		)
 		Expect(err).ToNot(HaveOccurred())
-		cookie, err := cookieGen.DecodeToken(token)
+		token, err := tokenGen.DecodeToken(tokenEnc)
 		Expect(err).ToNot(HaveOccurred())
-		Expect(cookie.OriginalDestConnectionID).To(Equal(protocol.ConnectionID{0xde, 0xad, 0xbe, 0xef}))
+		Expect(token.OriginalDestConnectionID).To(Equal(protocol.ConnectionID{0xde, 0xad, 0xbe, 0xef}))
 	})
 
 	It("rejects invalid tokens", func() {
-		_, err := cookieGen.DecodeToken([]byte("invalid token"))
+		_, err := tokenGen.DecodeToken([]byte("invalid token"))
 		Expect(err).To(HaveOccurred())
 	})
 
 	It("rejects tokens that cannot be decoded", func() {
-		token, err := cookieGen.cookieProtector.NewToken([]byte("foobar"))
+		token, err := tokenGen.tokenProtector.NewToken([]byte("foobar"))
 		Expect(err).ToNot(HaveOccurred())
-		_, err = cookieGen.DecodeToken(token)
+		_, err = tokenGen.DecodeToken(token)
 		Expect(err).To(HaveOccurred())
 	})
 
@@ -76,9 +76,9 @@ var _ = Describe("Cookie Generator", func() {
 		t, err := asn1.Marshal(token{RemoteAddr: []byte("foobar")})
 		Expect(err).ToNot(HaveOccurred())
 		t = append(t, []byte("rest")...)
-		enc, err := cookieGen.cookieProtector.NewToken(t)
+		enc, err := tokenGen.tokenProtector.NewToken(t)
 		Expect(err).ToNot(HaveOccurred())
-		_, err = cookieGen.DecodeToken(enc)
+		_, err = tokenGen.DecodeToken(enc)
 		Expect(err).To(MatchError("rest when unpacking token: 4"))
 	})
 
@@ -86,9 +86,9 @@ var _ = Describe("Cookie Generator", func() {
 	It("doesn't panic if a tokens has no data", func() {
 		t, err := asn1.Marshal(token{RemoteAddr: []byte("")})
 		Expect(err).ToNot(HaveOccurred())
-		enc, err := cookieGen.cookieProtector.NewToken(t)
+		enc, err := tokenGen.tokenProtector.NewToken(t)
 		Expect(err).ToNot(HaveOccurred())
-		_, err = cookieGen.DecodeToken(enc)
+		_, err = tokenGen.DecodeToken(enc)
 		Expect(err).ToNot(HaveOccurred())
 	})
 
@@ -103,26 +103,26 @@ var _ = Describe("Cookie Generator", func() {
 			ip := net.ParseIP(addr)
 			Expect(ip).ToNot(BeNil())
 			raddr := &net.UDPAddr{IP: ip, Port: 1337}
-			token, err := cookieGen.NewToken(raddr, nil)
+			tokenEnc, err := tokenGen.NewToken(raddr, nil)
 			Expect(err).ToNot(HaveOccurred())
-			cookie, err := cookieGen.DecodeToken(token)
+			token, err := tokenGen.DecodeToken(tokenEnc)
 			Expect(err).ToNot(HaveOccurred())
-			Expect(cookie.RemoteAddr).To(Equal(ip.String()))
-			// the time resolution of the Cookie is just 1 second
-			// if Cookie generation and this check happen in "different seconds", the difference will be between 1 and 2 seconds
-			Expect(cookie.SentTime).To(BeTemporally("~", time.Now(), 2*time.Second))
+			Expect(token.RemoteAddr).To(Equal(ip.String()))
+			// the time resolution of the token is just 1 second
+			// if token generation and this check happen in "different seconds", the difference will be between 1 and 2 seconds
+			Expect(token.SentTime).To(BeTemporally("~", time.Now(), 2*time.Second))
 		}
 	})
 
 	It("uses the string representation an address that is not a UDP address", func() {
 		raddr := &net.TCPAddr{IP: net.IPv4(192, 168, 13, 37), Port: 1337}
-		token, err := cookieGen.NewToken(raddr, nil)
+		tokenEnc, err := tokenGen.NewToken(raddr, nil)
 		Expect(err).ToNot(HaveOccurred())
-		cookie, err := cookieGen.DecodeToken(token)
+		token, err := tokenGen.DecodeToken(tokenEnc)
 		Expect(err).ToNot(HaveOccurred())
-		Expect(cookie.RemoteAddr).To(Equal("192.168.13.37:1337"))
-		// the time resolution of the Cookie is just 1 second
-		// if Cookie generation and this check happen in "different seconds", the difference will be between 1 and 2 seconds
-		Expect(cookie.SentTime).To(BeTemporally("~", time.Now(), 2*time.Second))
+		Expect(token.RemoteAddr).To(Equal("192.168.13.37:1337"))
+		// the time resolution of the token is just 1 second
+		// if token generation and this check happen in "different seconds", the difference will be between 1 and 2 seconds
+		Expect(token.SentTime).To(BeTemporally("~", time.Now(), 2*time.Second))
 	})
 })

@@ -196,7 +196,7 @@ var _ = Describe("Handshake tests", func() {
 		}
 
 		BeforeEach(func() {
-			serverConfig.AcceptCookie = func(net.Addr, *quic.Cookie) bool { return true }
+			serverConfig.AcceptToken = func(net.Addr, *quic.Token) bool { return true }
 			var err error
 			// start the server, but don't call Accept
 			server, err = quic.ListenAddr("localhost:0", testdata.GetTLSConfig(), serverConfig)
