@@ -177,11 +177,19 @@ var _ = Describe("Handshake tests", func() {
 	})
 
 	Context("rate limiting", func() {
-		var server quic.Listener
+		var (
+			server quic.Listener
+			pconn  net.PacketConn
+		)
 
 		dial := func() (quic.Session, error) {
-			return quic.DialAddr(
-				fmt.Sprintf("localhost:%d", server.Addr().(*net.UDPAddr).Port),
+			remoteAddr := fmt.Sprintf("localhost:%d", server.Addr().(*net.UDPAddr).Port)
+			raddr, err := net.ResolveUDPAddr("udp", remoteAddr)
+			Expect(err).ToNot(HaveOccurred())
+			return quic.Dial(
+				pconn,
+				raddr,
+				remoteAddr,
 				&tls.Config{RootCAs: testdata.GetRootCA()},
 				nil,
 			)
@@ -193,10 +201,17 @@ var _ = Describe("Handshake tests", func() {
 			// start the server, but don't call Accept
 			server, err = quic.ListenAddr("localhost:0", testdata.GetTLSConfig(), serverConfig)
 			Expect(err).ToNot(HaveOccurred())
+
+			// prepare a (single) packet conn for dialing to the server
+			laddr, err := net.ResolveUDPAddr("udp", "localhost:0")
+			Expect(err).ToNot(HaveOccurred())
+			pconn, err = net.ListenUDP("udp", laddr)
+			Expect(err).ToNot(HaveOccurred())
 		})
 
 		AfterEach(func() {
 			Expect(server.Close()).To(Succeed())
+			Expect(pconn.Close()).To(Succeed())
 		})
 
 		It("rejects new connection attempts if connections don't get accepted", func() {
@@ -225,7 +240,7 @@ var _ = Describe("Handshake tests", func() {
 			Expect(err.(*qerr.QuicError).ErrorCode).To(Equal(qerr.ServerBusy))
 		})
 
-		It("rejects new connection attempts if connections don't get accepted", func() {
+		It("removes closed connections from the accept queue", func() {
 			firstSess, err := dial()
 			Expect(err).ToNot(HaveOccurred())
 
@@ -251,6 +266,7 @@ var _ = Describe("Handshake tests", func() {
 			time.Sleep(25 * time.Millisecond) // wait a bit for the session to be queued
 
 			_, err = dial()
+			Expect(err).To(HaveOccurred())
 			Expect(err.(*qerr.QuicError).ErrorCode).To(Equal(qerr.ServerBusy))
 		})
 
