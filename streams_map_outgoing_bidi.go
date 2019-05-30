@@ -15,7 +15,8 @@ import (
 
 type outgoingBidiStreamsMap struct {
 	mutex sync.RWMutex
-	cond  sync.Cond
+
+	openQueue []chan struct{}
 
 	streams map[protocol.StreamID]streamI
 
@@ -34,52 +35,52 @@ func newOutgoingBidiStreamsMap(
 	newStream func(protocol.StreamID) streamI,
 	queueControlFrame func(wire.Frame),
 ) *outgoingBidiStreamsMap {
-	m := &outgoingBidiStreamsMap{
+	return &outgoingBidiStreamsMap{
 		streams:              make(map[protocol.StreamID]streamI),
 		nextStream:           nextStream,
 		maxStream:            protocol.InvalidStreamID,
 		newStream:            newStream,
 		queueStreamIDBlocked: func(f *wire.StreamsBlockedFrame) { queueControlFrame(f) },
 	}
-	m.cond.L = &m.mutex
-	return m
 }
 
 func (m *outgoingBidiStreamsMap) OpenStream() (streamI, error) {
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
 
-	if m.closeErr != nil {
-		return nil, m.closeErr
-	}
-
-	str, err := m.openStreamImpl()
-	if err != nil {
-		return nil, streamOpenErr{err}
-	}
-	return str, nil
+	return m.openStreamImpl()
 }
 
 func (m *outgoingBidiStreamsMap) OpenStreamSync() (streamI, error) {
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
 
-	for {
-		if m.closeErr != nil {
-			return nil, m.closeErr
-		}
-		str, err := m.openStreamImpl()
-		if err == nil {
-			return str, nil
-		}
-		if err != nil && err != errTooManyOpenStreams {
-			return nil, streamOpenErr{err}
-		}
-		m.cond.Wait()
+	str, err := m.openStreamImpl()
+	if err == nil {
+		return str, nil
 	}
+	if err != errTooManyOpenStreams {
+		return nil, err
+	}
+	waitChan := make(chan struct{})
+	m.openQueue = append(m.openQueue, waitChan)
+	m.mutex.Unlock()
+
+	<-waitChan
+	m.mutex.Lock()
+	str, err = m.openStreamImpl()
+	if err != nil {
+		return nil, err
+	}
+	m.triggerOpenSync()
+	return str, nil
 }
 
 func (m *outgoingBidiStreamsMap) openStreamImpl() (streamI, error) {
+	if m.closeErr != nil {
+		return nil, m.closeErr
+	}
+
 	if m.nextStream > m.maxStream {
 		if !m.blockedSent {
 			var streamNum uint64
@@ -124,12 +125,23 @@ func (m *outgoingBidiStreamsMap) DeleteStream(id protocol.StreamID) error {
 
 func (m *outgoingBidiStreamsMap) SetMaxStream(id protocol.StreamID) {
 	m.mutex.Lock()
-	if id > m.maxStream {
-		m.maxStream = id
-		m.blockedSent = false
-		m.cond.Broadcast()
+	defer m.mutex.Unlock()
+
+	if id <= m.maxStream {
+		return
 	}
-	m.mutex.Unlock()
+	m.maxStream = id
+	m.blockedSent = false
+	m.triggerOpenSync()
+}
+
+// needs to be called with the mutex called
+func (m *outgoingBidiStreamsMap) triggerOpenSync() {
+	if len(m.openQueue) == 0 || m.nextStream > m.maxStream {
+		return
+	}
+	close(m.openQueue[0])
+	m.openQueue = m.openQueue[1:]
 }
 
 func (m *outgoingBidiStreamsMap) CloseWithError(err error) {
@@ -138,6 +150,8 @@ func (m *outgoingBidiStreamsMap) CloseWithError(err error) {
 	for _, str := range m.streams {
 		str.closeForShutdown(err)
 	}
-	m.cond.Broadcast()
+	for _, c := range m.openQueue {
+		close(c)
+	}
 	m.mutex.Unlock()
 }

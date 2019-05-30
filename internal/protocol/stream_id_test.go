@@ -32,6 +32,7 @@ var _ = Describe("Stream ID", func() {
 	})
 
 	It("tells the stream number", func() {
+		Expect(InvalidStreamID.StreamNum()).To(BeZero())
 		Expect(StreamID(0).StreamNum()).To(BeEquivalentTo(1))
 		Expect(StreamID(1).StreamNum()).To(BeEquivalentTo(1))
 		Expect(StreamID(2).StreamNum()).To(BeEquivalentTo(1))

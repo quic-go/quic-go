@@ -2,6 +2,7 @@ package quic
 
 import (
 	"errors"
+	"fmt"
 
 	"github.com/golang/mock/gomock"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
@@ -121,6 +122,36 @@ var _ = Describe("Streams Map (outgoing)", func() {
 			Consistently(done).ShouldNot(BeClosed())
 			m.SetMaxStream(firstNewStream)
 			Eventually(done).Should(BeClosed())
+		})
+
+		It("opens streams in the right order", func() {
+			mockSender.EXPECT().queueControlFrame(gomock.Any()).AnyTimes()
+			done1 := make(chan struct{})
+			go func() {
+				defer GinkgoRecover()
+				str, err := m.OpenStreamSync()
+				Expect(err).ToNot(HaveOccurred())
+				Expect(str.(*mockGenericStream).id).To(Equal(firstNewStream))
+				close(done1)
+			}()
+			Consistently(done1).ShouldNot(BeClosed())
+			done2 := make(chan struct{})
+			go func() {
+				defer GinkgoRecover()
+				str, err := m.OpenStreamSync()
+				Expect(err).ToNot(HaveOccurred())
+				Expect(str.(*mockGenericStream).id).To(Equal(firstNewStream + 4))
+				close(done2)
+			}()
+			Consistently(done2).ShouldNot(BeClosed())
+
+			fmt.Println("first")
+			m.SetMaxStream(firstNewStream)
+			Eventually(done1).Should(BeClosed())
+			Consistently(done2).ShouldNot(BeClosed())
+			fmt.Println("second")
+			m.SetMaxStream(firstNewStream + 4)
+			Eventually(done2).Should(BeClosed())
 		})
 
 		It("works with stream 0", func() {

@@ -5,7 +5,7 @@ type StreamID int64
 
 // InvalidPacketNumber is a stream ID that is invalid.
 // The first valid stream ID in QUIC is 0.
-const InvalidStreamID = -1
+const InvalidStreamID StreamID = -1
 
 // StreamType encodes if this is a unidirectional or bidirectional stream
 type StreamType uint8
@@ -36,6 +36,9 @@ func (s StreamID) Type() StreamType {
 // StreamNum returns how many streams in total are below this
 // Example: for stream 9 it returns 3 (i.e. streams 1, 5 and 9)
 func (s StreamID) StreamNum() uint64 {
+	if s < 0 {
+		return 0
+	}
 	return uint64(s/4) + 1
 }
 

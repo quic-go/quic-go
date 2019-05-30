@@ -13,7 +13,8 @@ import (
 //go:generate genny -in $GOFILE -out streams_map_outgoing_uni.go gen "item=sendStreamI Item=UniStream streamTypeGeneric=protocol.StreamTypeUni"
 type outgoingItemsMap struct {
 	mutex sync.RWMutex
-	cond  sync.Cond
+
+	openQueue []chan struct{}
 
 	streams map[protocol.StreamID]item
 
@@ -32,52 +33,52 @@ func newOutgoingItemsMap(
 	newStream func(protocol.StreamID) item,
 	queueControlFrame func(wire.Frame),
 ) *outgoingItemsMap {
-	m := &outgoingItemsMap{
+	return &outgoingItemsMap{
 		streams:              make(map[protocol.StreamID]item),
 		nextStream:           nextStream,
 		maxStream:            protocol.InvalidStreamID,
 		newStream:            newStream,
 		queueStreamIDBlocked: func(f *wire.StreamsBlockedFrame) { queueControlFrame(f) },
 	}
-	m.cond.L = &m.mutex
-	return m
 }
 
 func (m *outgoingItemsMap) OpenStream() (item, error) {
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
 
-	if m.closeErr != nil {
-		return nil, m.closeErr
-	}
-
-	str, err := m.openStreamImpl()
-	if err != nil {
-		return nil, streamOpenErr{err}
-	}
-	return str, nil
+	return m.openStreamImpl()
 }
 
 func (m *outgoingItemsMap) OpenStreamSync() (item, error) {
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
 
-	for {
-		if m.closeErr != nil {
-			return nil, m.closeErr
-		}
-		str, err := m.openStreamImpl()
-		if err == nil {
-			return str, nil
-		}
-		if err != nil && err != errTooManyOpenStreams {
-			return nil, streamOpenErr{err}
-		}
-		m.cond.Wait()
+	str, err := m.openStreamImpl()
+	if err == nil {
+		return str, nil
 	}
+	if err != errTooManyOpenStreams {
+		return nil, err
+	}
+	waitChan := make(chan struct{})
+	m.openQueue = append(m.openQueue, waitChan)
+	m.mutex.Unlock()
+
+	<-waitChan
+	m.mutex.Lock()
+	str, err = m.openStreamImpl()
+	if err != nil {
+		return nil, err
+	}
+	m.triggerOpenSync()
+	return str, nil
 }
 
 func (m *outgoingItemsMap) openStreamImpl() (item, error) {
+	if m.closeErr != nil {
+		return nil, m.closeErr
+	}
+
 	if m.nextStream > m.maxStream {
 		if !m.blockedSent {
 			var streamNum uint64
@@ -122,12 +123,23 @@ func (m *outgoingItemsMap) DeleteStream(id protocol.StreamID) error {
 
 func (m *outgoingItemsMap) SetMaxStream(id protocol.StreamID) {
 	m.mutex.Lock()
-	if id > m.maxStream {
-		m.maxStream = id
-		m.blockedSent = false
-		m.cond.Broadcast()
+	defer m.mutex.Unlock()
+
+	if id <= m.maxStream {
+		return
 	}
-	m.mutex.Unlock()
+	m.maxStream = id
+	m.blockedSent = false
+	m.triggerOpenSync()
+}
+
+// needs to be called with the mutex called
+func (m *outgoingItemsMap) triggerOpenSync() {
+	if len(m.openQueue) == 0 || m.nextStream > m.maxStream {
+		return
+	}
+	close(m.openQueue[0])
+	m.openQueue = m.openQueue[1:]
 }
 
 func (m *outgoingItemsMap) CloseWithError(err error) {
@@ -136,6 +148,8 @@ func (m *outgoingItemsMap) CloseWithError(err error) {
 	for _, str := range m.streams {
 		str.closeForShutdown(err)
 	}
-	m.cond.Broadcast()
+	for _, c := range m.openQueue {
+		close(c)
+	}
 	m.mutex.Unlock()
 }

@@ -16,11 +16,11 @@ type streamOpenErr struct{ error }
 
 var _ net.Error = &streamOpenErr{}
 
-func (e streamOpenErr) Temporary() bool { return e.error == errTooManyOpenStreams }
+func (e streamOpenErr) Temporary() bool { return true }
 func (streamOpenErr) Timeout() bool     { return false }
 
 // errTooManyOpenStreams is used internally by the outgoing streams maps.
-var errTooManyOpenStreams = errors.New("too many open streams")
+var errTooManyOpenStreams = streamOpenErr{errors.New("too many open streams")}
 
 type streamsMap struct {
 	perspective protocol.Perspective
