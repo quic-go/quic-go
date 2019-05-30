@@ -43,9 +43,7 @@ var _ = Describe("Token Generator", func() {
 		token, err := tokenGen.DecodeToken(tokenEnc)
 		Expect(err).ToNot(HaveOccurred())
 		Expect(token.RemoteAddr).To(Equal("192.168.0.1"))
-		// the time resolution of the token is just 1 second
-		// if token generation and this check happen in "different seconds", the difference will be between 1 and 2 seconds
-		Expect(token.SentTime).To(BeTemporally("~", time.Now(), 2*time.Second))
+		Expect(token.SentTime).To(BeTemporally("~", time.Now(), 10*time.Millisecond))
 		Expect(token.OriginalDestConnectionID).To(BeNil())
 	})
 
@@ -108,9 +106,7 @@ var _ = Describe("Token Generator", func() {
 			token, err := tokenGen.DecodeToken(tokenEnc)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(token.RemoteAddr).To(Equal(ip.String()))
-			// the time resolution of the token is just 1 second
-			// if token generation and this check happen in "different seconds", the difference will be between 1 and 2 seconds
-			Expect(token.SentTime).To(BeTemporally("~", time.Now(), 2*time.Second))
+			Expect(token.SentTime).To(BeTemporally("~", time.Now(), 10*time.Millisecond))
 		}
 	})
 
@@ -121,8 +117,6 @@ var _ = Describe("Token Generator", func() {
 		token, err := tokenGen.DecodeToken(tokenEnc)
 		Expect(err).ToNot(HaveOccurred())
 		Expect(token.RemoteAddr).To(Equal("192.168.13.37:1337"))
-		// the time resolution of the token is just 1 second
-		// if token generation and this check happen in "different seconds", the difference will be between 1 and 2 seconds
-		Expect(token.SentTime).To(BeTemporally("~", time.Now(), 2*time.Second))
+		Expect(token.SentTime).To(BeTemporally("~", time.Now(), 10*time.Millisecond))
 	})
 })
