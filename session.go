@@ -685,7 +685,7 @@ func (s *session) handleFrame(f wire.Frame, pn protocol.PacketNumber, encLevel p
 	case *wire.AckFrame:
 		err = s.handleAckFrame(frame, pn, encLevel)
 	case *wire.ConnectionCloseFrame:
-		s.closeRemote(qerr.Error(frame.ErrorCode, frame.ReasonPhrase))
+		s.handleConnectionCloseFrame(frame)
 	case *wire.ResetStreamFrame:
 		err = s.handleResetStreamFrame(frame)
 	case *wire.MaxDataFrame:
@@ -745,6 +745,16 @@ func (s *session) handlePacketAfterClosed(p *receivedPacket) {
 	if err := s.conn.Write(s.connectionClosePacket.raw); err != nil {
 		s.logger.Debugf("Error retransmitting CONNECTION_CLOSE: %s", err)
 	}
+}
+
+func (s *session) handleConnectionCloseFrame(frame *wire.ConnectionCloseFrame) {
+	var e error
+	if frame.IsApplicationError {
+		e = qerr.ApplicationError(frame.ErrorCode, frame.ReasonPhrase)
+	} else {
+		e = qerr.Error(frame.ErrorCode, frame.ReasonPhrase)
+	}
+	s.closeRemote(e)
 }
 
 func (s *session) handleCryptoFrame(frame *wire.CryptoFrame, encLevel protocol.EncryptionLevel) error {

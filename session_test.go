@@ -319,7 +319,7 @@ var _ = Describe("Session", func() {
 			Expect(err).NotTo(HaveOccurred())
 		})
 
-		It("handles CONNECTION_CLOSE frames", func() {
+		It("handles CONNECTION_CLOSE frames, with a transport error code", func() {
 			testErr := qerr.Error(qerr.StreamLimitError, "foobar")
 			streamManager.EXPECT().CloseWithError(testErr)
 			sessionRunner.EXPECT().Remove(gomock.Any())
@@ -333,6 +333,26 @@ var _ = Describe("Session", func() {
 			ccf := &wire.ConnectionCloseFrame{
 				ErrorCode:    qerr.StreamLimitError,
 				ReasonPhrase: "foobar",
+			}
+			Expect(sess.handleFrame(ccf, 0, protocol.EncryptionUnspecified)).To(Succeed())
+			Eventually(sess.Context().Done()).Should(BeClosed())
+		})
+
+		It("handles CONNECTION_CLOSE frames, with an application error code", func() {
+			testErr := qerr.ApplicationError(0x1337, "foobar")
+			streamManager.EXPECT().CloseWithError(testErr)
+			sessionRunner.EXPECT().Remove(gomock.Any())
+			cryptoSetup.EXPECT().Close()
+
+			go func() {
+				defer GinkgoRecover()
+				cryptoSetup.EXPECT().RunHandshake().Do(func() { <-sess.Context().Done() })
+				Expect(sess.run()).To(MatchError(testErr))
+			}()
+			ccf := &wire.ConnectionCloseFrame{
+				ErrorCode:          0x1337,
+				ReasonPhrase:       "foobar",
+				IsApplicationError: true,
 			}
 			Expect(sess.handleFrame(ccf, 0, protocol.EncryptionUnspecified)).To(Succeed())
 			Eventually(sess.Context().Done()).Should(BeClosed())
