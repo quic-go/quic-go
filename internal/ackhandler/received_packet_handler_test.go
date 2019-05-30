@@ -47,4 +47,24 @@ var _ = Describe("Received Packet Handler", func() {
 		Expect(oneRTTAck.AckRanges[0]).To(Equal(wire.AckRange{Smallest: 4, Largest: 5}))
 		Expect(oneRTTAck.DelayTime).To(BeNumerically("~", time.Second, 50*time.Millisecond))
 	})
+
+	It("drops Initial packets", func() {
+		sendTime := time.Now().Add(-time.Second)
+		Expect(handler.ReceivedPacket(2, protocol.EncryptionInitial, sendTime, true)).To(Succeed())
+		Expect(handler.ReceivedPacket(1, protocol.EncryptionHandshake, sendTime, true)).To(Succeed())
+		Expect(handler.GetAckFrame(protocol.EncryptionInitial)).ToNot(BeNil())
+		handler.DropPackets(protocol.EncryptionInitial)
+		Expect(handler.GetAckFrame(protocol.EncryptionInitial)).To(BeNil())
+		Expect(handler.GetAckFrame(protocol.EncryptionHandshake)).ToNot(BeNil())
+	})
+
+	It("drops Handshake packets", func() {
+		sendTime := time.Now().Add(-time.Second)
+		Expect(handler.ReceivedPacket(1, protocol.EncryptionHandshake, sendTime, true)).To(Succeed())
+		Expect(handler.ReceivedPacket(2, protocol.Encryption1RTT, sendTime, true)).To(Succeed())
+		Expect(handler.GetAckFrame(protocol.EncryptionHandshake)).ToNot(BeNil())
+		handler.DropPackets(protocol.EncryptionInitial)
+		Expect(handler.GetAckFrame(protocol.EncryptionHandshake)).To(BeNil())
+		Expect(handler.GetAckFrame(protocol.Encryption1RTT)).ToNot(BeNil())
+	})
 })

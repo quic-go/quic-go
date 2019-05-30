@@ -59,8 +59,7 @@ type sentPacketHandler struct {
 	congestion congestion.SendAlgorithmWithDebugInfos
 	rttStats   *congestion.RTTStats
 
-	handshakeComplete bool
-	maxAckDelay       time.Duration
+	maxAckDelay time.Duration
 
 	// The number of times the crypto packets have been retransmitted without receiving an ack.
 	cryptoCount uint32
@@ -103,29 +102,32 @@ func NewSentPacketHandler(
 	}
 }
 
-func (h *sentPacketHandler) SetHandshakeComplete() {
-	h.logger.Debugf("Handshake complete. Discarding all outstanding crypto packets.")
+func (h *sentPacketHandler) DropPackets(encLevel protocol.EncryptionLevel) {
+	// remove outstanding packets from bytes_in_flight
+	pnSpace := h.getPacketNumberSpace(encLevel)
+	pnSpace.history.Iterate(func(p *Packet) (bool, error) {
+		if p.includedInBytesInFlight {
+			h.bytesInFlight -= p.Length
+		}
+		return true, nil
+	})
+	// remove packets from the retransmission queue
 	var queue []*Packet
 	for _, packet := range h.retransmissionQueue {
-		if packet.EncryptionLevel == protocol.Encryption1RTT {
+		if packet.EncryptionLevel != encLevel {
 			queue = append(queue, packet)
 		}
 	}
-	for _, pnSpace := range []*packetNumberSpace{h.initialPackets, h.handshakePackets} {
-		var cryptoPackets []*Packet
-		pnSpace.history.Iterate(func(p *Packet) (bool, error) {
-			if p.includedInBytesInFlight {
-				h.bytesInFlight -= p.Length
-			}
-			cryptoPackets = append(cryptoPackets, p)
-			return true, nil
-		})
-		for _, p := range cryptoPackets {
-			pnSpace.history.Remove(p.PacketNumber)
-		}
-	}
 	h.retransmissionQueue = queue
-	h.handshakeComplete = true
+	// drop the packet history
+	switch encLevel {
+	case protocol.EncryptionInitial:
+		h.initialPackets = nil
+	case protocol.EncryptionHandshake:
+		h.handshakePackets = nil
+	default:
+		panic(fmt.Sprintf("Cannot drop keys for encryption level %s", encLevel))
+	}
 }
 
 func (h *sentPacketHandler) SetMaxAckDelay(mad time.Duration) {
@@ -314,7 +316,14 @@ func (h *sentPacketHandler) determineNewlyAckedPackets(
 }
 
 func (h *sentPacketHandler) hasOutstandingCryptoPackets() bool {
-	return h.initialPackets.history.HasOutstandingPackets() || h.handshakePackets.history.HasOutstandingPackets()
+	var hasInitial, hasHandshake bool
+	if h.initialPackets != nil {
+		hasInitial = h.initialPackets.history.HasOutstandingPackets()
+	}
+	if h.handshakePackets != nil {
+		hasHandshake = h.handshakePackets.history.HasOutstandingPackets()
+	}
+	return hasInitial || hasHandshake
 }
 
 func (h *sentPacketHandler) hasOutstandingPackets() bool {
@@ -538,8 +547,13 @@ func (h *sentPacketHandler) PopPacketNumber(encLevel protocol.EncryptionLevel) p
 }
 
 func (h *sentPacketHandler) SendMode() SendMode {
-	numTrackedPackets := len(h.retransmissionQueue) + h.initialPackets.history.Len() +
-		h.handshakePackets.history.Len() + h.oneRTTPackets.history.Len()
+	numTrackedPackets := len(h.retransmissionQueue) + h.oneRTTPackets.history.Len()
+	if h.initialPackets != nil {
+		numTrackedPackets += h.initialPackets.history.Len()
+	}
+	if h.handshakePackets != nil {
+		numTrackedPackets += h.handshakePackets.history.Len()
+	}
 
 	// Don't send any packets if we're keeping track of the maximum number of packets.
 	// Note that since MaxOutstandingSentPackets is smaller than MaxTrackedSentPackets,

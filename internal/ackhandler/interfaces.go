@@ -14,7 +14,7 @@ type SentPacketHandler interface {
 	SentPacketsAsRetransmission(packets []*Packet, retransmissionOf protocol.PacketNumber)
 	ReceivedAck(ackFrame *wire.AckFrame, withPacketNumber protocol.PacketNumber, encLevel protocol.EncryptionLevel, recvTime time.Time) error
 	SetMaxAckDelay(time.Duration)
-	SetHandshakeComplete()
+	DropPackets(protocol.EncryptionLevel)
 	ResetForRetry() error
 
 	// The SendMode determines if and what kind of packets can be sent.
@@ -45,6 +45,7 @@ type SentPacketHandler interface {
 type ReceivedPacketHandler interface {
 	ReceivedPacket(pn protocol.PacketNumber, encLevel protocol.EncryptionLevel, rcvTime time.Time, shouldInstigateAck bool) error
 	IgnoreBelow(protocol.PacketNumber)
+	DropPackets(protocol.EncryptionLevel)
 
 	GetAlarmTimeout() time.Time
 	GetAckFrame(protocol.EncryptionLevel) *wire.AckFrame

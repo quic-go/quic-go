@@ -36,6 +36,18 @@ func (m *MockReceivedPacketHandler) EXPECT() *MockReceivedPacketHandlerMockRecor
 	return m.recorder
 }
 
+// DropPackets mocks base method
+func (m *MockReceivedPacketHandler) DropPackets(arg0 protocol.EncryptionLevel) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "DropPackets", arg0)
+}
+
+// DropPackets indicates an expected call of DropPackets
+func (mr *MockReceivedPacketHandlerMockRecorder) DropPackets(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DropPackets", reflect.TypeOf((*MockReceivedPacketHandler)(nil).DropPackets), arg0)
+}
+
 // GetAckFrame mocks base method
 func (m *MockReceivedPacketHandler) GetAckFrame(arg0 protocol.EncryptionLevel) *wire.AckFrame {
 	m.ctrl.T.Helper()

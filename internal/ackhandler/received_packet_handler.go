@@ -75,9 +75,25 @@ func (h *receivedPacketHandler) IgnoreBelow(pn protocol.PacketNumber) {
 	h.oneRTTPackets.IgnoreBelow(pn)
 }
 
+func (h *receivedPacketHandler) DropPackets(encLevel protocol.EncryptionLevel) {
+	switch encLevel {
+	case protocol.EncryptionInitial:
+		h.initialPackets = nil
+	case protocol.EncryptionHandshake:
+		h.handshakePackets = nil
+	default:
+		panic(fmt.Sprintf("Cannot drop keys for encryption level %s", encLevel))
+	}
+}
+
 func (h *receivedPacketHandler) GetAlarmTimeout() time.Time {
-	initialAlarm := h.initialPackets.GetAlarmTimeout()
-	handshakeAlarm := h.handshakePackets.GetAlarmTimeout()
+	var initialAlarm, handshakeAlarm time.Time
+	if h.initialPackets != nil {
+		initialAlarm = h.initialPackets.GetAlarmTimeout()
+	}
+	if h.handshakePackets != nil {
+		handshakeAlarm = h.handshakePackets.GetAlarmTimeout()
+	}
 	oneRTTAlarm := h.oneRTTPackets.GetAlarmTimeout()
 	return utils.MinNonZeroTime(utils.MinNonZeroTime(initialAlarm, handshakeAlarm), oneRTTAlarm)
 }
@@ -86,9 +102,13 @@ func (h *receivedPacketHandler) GetAckFrame(encLevel protocol.EncryptionLevel) *
 	var ack *wire.AckFrame
 	switch encLevel {
 	case protocol.EncryptionInitial:
-		ack = h.initialPackets.GetAckFrame()
+		if h.initialPackets != nil {
+			ack = h.initialPackets.GetAckFrame()
+		}
 	case protocol.EncryptionHandshake:
-		ack = h.handshakePackets.GetAckFrame()
+		if h.handshakePackets != nil {
+			ack = h.handshakePackets.GetAckFrame()
+		}
 	case protocol.Encryption1RTT:
 		return h.oneRTTPackets.GetAckFrame()
 	default:

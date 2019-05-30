@@ -53,10 +53,15 @@ func (m messageType) String() string {
 	}
 }
 
-// ErrOpenerNotYetAvailable is returned when an opener is requested for an encryption level,
-// but the corresponding opener has not yet been initialized
-// This can happen when packets arrive out of order.
-var ErrOpenerNotYetAvailable = errors.New("CryptoSetup: opener at this encryption level not yet available")
+var (
+	// ErrOpenerNotYetAvailable is returned when an opener is requested for an encryption level,
+	// but the corresponding opener has not yet been initialized
+	// This can happen when packets arrive out of order.
+	ErrOpenerNotYetAvailable = errors.New("CryptoSetup: opener at this encryption level not yet available")
+	// ErrKeysDropped is returned when an opener or a sealer is requested for an encryption level,
+	// but the corresponding keys have already been dropped.
+	ErrKeysDropped = errors.New("CryptoSetup: keys were already dropped")
+)
 
 type cryptoSetup struct {
 	tlsConf *qtls.Config
@@ -66,6 +71,8 @@ type cryptoSetup struct {
 
 	paramsChan           <-chan []byte
 	handleParamsCallback func([]byte)
+
+	dropKeyCallback func(protocol.EncryptionLevel)
 
 	alertChan chan uint8
 	// HandleData() sends errors on the messageErrChan
@@ -121,6 +128,7 @@ func NewCryptoSetupClient(
 	remoteAddr net.Addr,
 	tp *TransportParameters,
 	handleParams func([]byte),
+	dropKeys func(protocol.EncryptionLevel),
 	tlsConf *tls.Config,
 	logger utils.Logger,
 ) (CryptoSetup, <-chan struct{} /* ClientHello written */, error) {
@@ -131,6 +139,7 @@ func NewCryptoSetupClient(
 		connID,
 		tp,
 		handleParams,
+		dropKeys,
 		tlsConf,
 		logger,
 		protocol.PerspectiveClient,
@@ -151,6 +160,7 @@ func NewCryptoSetupServer(
 	remoteAddr net.Addr,
 	tp *TransportParameters,
 	handleParams func([]byte),
+	dropKeys func(protocol.EncryptionLevel),
 	tlsConf *tls.Config,
 	logger utils.Logger,
 ) (CryptoSetup, error) {
@@ -161,6 +171,7 @@ func NewCryptoSetupServer(
 		connID,
 		tp,
 		handleParams,
+		dropKeys,
 		tlsConf,
 		logger,
 		protocol.PerspectiveServer,
@@ -179,6 +190,7 @@ func newCryptoSetup(
 	connID protocol.ConnectionID,
 	tp *TransportParameters,
 	handleParams func([]byte),
+	dropKeys func(protocol.EncryptionLevel),
 	tlsConf *tls.Config,
 	logger utils.Logger,
 	perspective protocol.Perspective,
@@ -197,6 +209,7 @@ func newCryptoSetup(
 		readEncLevel:           protocol.EncryptionInitial,
 		writeEncLevel:          protocol.EncryptionInitial,
 		handleParamsCallback:   handleParams,
+		dropKeyCallback:        dropKeys,
 		paramsChan:             extHandler.TransportParameters(),
 		logger:                 logger,
 		perspective:            perspective,
@@ -223,6 +236,24 @@ func (h *cryptoSetup) ChangeConnectionID(id protocol.ConnectionID) error {
 	h.initialSealer = initialSealer
 	h.initialOpener = initialOpener
 	return nil
+}
+
+func (h *cryptoSetup) Received1RTTAck() {
+	// drop initial keys
+	// TODO: do this earlier
+	if h.initialOpener != nil {
+		h.initialOpener = nil
+		h.initialSealer = nil
+		h.dropKeyCallback(protocol.EncryptionInitial)
+		h.logger.Debugf("Dropping Initial keys.")
+	}
+	// drop handshake keys
+	if h.handshakeOpener != nil {
+		h.handshakeOpener = nil
+		h.handshakeSealer = nil
+		h.logger.Debugf("Dropping Handshake keys.")
+		h.dropKeyCallback(protocol.EncryptionHandshake)
+	}
 }
 
 func (h *cryptoSetup) RunHandshake() error {
@@ -554,10 +585,17 @@ func (h *cryptoSetup) GetOpener(level protocol.EncryptionLevel) (Opener, error) 
 
 	switch level {
 	case protocol.EncryptionInitial:
+		if h.initialOpener == nil {
+			return nil, ErrKeysDropped
+		}
 		return h.initialOpener, nil
 	case protocol.EncryptionHandshake:
 		if h.handshakeOpener == nil {
-			return nil, ErrOpenerNotYetAvailable
+			if h.initialOpener != nil {
+				return nil, ErrOpenerNotYetAvailable
+			}
+			// if the initial opener is also not available, the keys were already dropped
+			return nil, ErrKeysDropped
 		}
 		return h.handshakeOpener, nil
 	case protocol.Encryption1RTT:

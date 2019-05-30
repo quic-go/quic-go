@@ -49,7 +49,6 @@ var _ = Describe("SentPacketHandler", func() {
 	BeforeEach(func() {
 		rttStats := &congestion.RTTStats{}
 		handler = NewSentPacketHandler(42, rttStats, utils.DefaultLogger).(*sentPacketHandler)
-		handler.SetHandshakeComplete()
 		streamFrame = wire.StreamFrame{
 			StreamID: 5,
 			Data:     []byte{0x13, 0x37},
@@ -808,10 +807,6 @@ var _ = Describe("SentPacketHandler", func() {
 	})
 
 	Context("crypto packets", func() {
-		BeforeEach(func() {
-			handler.handshakeComplete = false
-		})
-
 		It("detects the crypto timeout", func() {
 			now := time.Now()
 			sendTime := now.Add(-time.Minute)
@@ -851,24 +846,45 @@ var _ = Describe("SentPacketHandler", func() {
 			Expect(err).To(MatchError("PROTOCOL_VIOLATION: Received ACK for an unsent packet"))
 		})
 
-		It("deletes crypto packets when the handshake completes", func() {
+		It("deletes Initial packets", func() {
 			for i := protocol.PacketNumber(0); i < 6; i++ {
 				p := ackElicitingPacket(&Packet{PacketNumber: i, EncryptionLevel: protocol.EncryptionInitial})
 				handler.SentPacket(p)
 			}
-			for i := protocol.PacketNumber(0); i <= 6; i++ {
+			for i := protocol.PacketNumber(0); i < 10; i++ {
 				p := ackElicitingPacket(&Packet{PacketNumber: i, EncryptionLevel: protocol.EncryptionHandshake})
 				handler.SentPacket(p)
 			}
-			Expect(handler.bytesInFlight).ToNot(BeZero())
+			Expect(handler.bytesInFlight).To(Equal(protocol.ByteCount(16)))
 			handler.queuePacketForRetransmission(getPacket(1, protocol.EncryptionInitial), handler.getPacketNumberSpace(protocol.EncryptionInitial))
-			handler.queuePacketForRetransmission(getPacket(3, protocol.EncryptionHandshake), handler.getPacketNumberSpace(protocol.EncryptionHandshake))
-			handler.SetHandshakeComplete()
-			Expect(handler.initialPackets.history.Len()).To(BeZero())
-			Expect(handler.handshakePackets.history.Len()).To(BeZero())
-			Expect(handler.bytesInFlight).To(BeZero())
+			lostPacket := getPacket(3, protocol.EncryptionHandshake)
+			handler.queuePacketForRetransmission(lostPacket, handler.getPacketNumberSpace(protocol.EncryptionHandshake))
+			handler.DropPackets(protocol.EncryptionInitial)
+			Expect(handler.bytesInFlight).To(Equal(protocol.ByteCount(10)))
+			Expect(handler.initialPackets).To(BeNil())
+			Expect(handler.handshakePackets.history.Len()).ToNot(BeZero())
 			packet := handler.DequeuePacketForRetransmission()
-			Expect(packet).To(BeNil())
+			Expect(packet).To(Equal(lostPacket))
+		})
+
+		It("deletes Handshake packets", func() {
+			for i := protocol.PacketNumber(0); i < 6; i++ {
+				p := ackElicitingPacket(&Packet{PacketNumber: i, EncryptionLevel: protocol.EncryptionHandshake})
+				handler.SentPacket(p)
+			}
+			for i := protocol.PacketNumber(0); i < 10; i++ {
+				p := ackElicitingPacket(&Packet{PacketNumber: i, EncryptionLevel: protocol.Encryption1RTT})
+				handler.SentPacket(p)
+			}
+			Expect(handler.bytesInFlight).To(Equal(protocol.ByteCount(16)))
+			handler.queuePacketForRetransmission(getPacket(1, protocol.EncryptionHandshake), handler.getPacketNumberSpace(protocol.EncryptionInitial))
+			lostPacket := getPacket(3, protocol.Encryption1RTT)
+			handler.queuePacketForRetransmission(lostPacket, handler.getPacketNumberSpace(protocol.EncryptionHandshake))
+			handler.DropPackets(protocol.EncryptionHandshake)
+			Expect(handler.bytesInFlight).To(Equal(protocol.ByteCount(10)))
+			Expect(handler.handshakePackets).To(BeNil())
+			packet := handler.DequeuePacketForRetransmission()
+			Expect(packet).To(Equal(lostPacket))
 		})
 	})
 

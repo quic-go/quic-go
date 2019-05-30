@@ -49,6 +49,7 @@ type streamManager interface {
 type cryptoStreamHandler interface {
 	RunHandshake() error
 	ChangeConnectionID(protocol.ConnectionID) error
+	Received1RTTAck()
 	io.Closer
 	ConnectionState() tls.ConnectionState
 }
@@ -129,9 +130,8 @@ type session struct {
 	handshakeCompleteChan chan struct{} // is closed when the handshake completes
 	handshakeComplete     bool
 
-	receivedRetry                    bool
-	receivedFirstPacket              bool
-	receivedFirstForwardSecurePacket bool
+	receivedRetry       bool
+	receivedFirstPacket bool
 
 	sessionCreationTime time.Time
 	// The idle timeout is set based on the max of the time we received the last packet...
@@ -199,6 +199,7 @@ var newSession = func(
 		conn.RemoteAddr(),
 		params,
 		s.processTransportParameters,
+		s.dropEncryptionLevel,
 		tlsConf,
 		logger,
 	)
@@ -267,6 +268,7 @@ var newClientSession = func(
 		conn.RemoteAddr(),
 		params,
 		s.processTransportParameters,
+		s.dropEncryptionLevel,
 		tlsConf,
 		logger,
 	)
@@ -485,7 +487,6 @@ func (s *session) handleHandshakeComplete() {
 	// independent from the application protocol.
 	if s.perspective == protocol.PerspectiveServer {
 		s.queueControlFrame(&wire.PingFrame{})
-		s.sentPacketHandler.SetHandshakeComplete()
 	}
 }
 
@@ -559,16 +560,19 @@ func (s *session) handleSinglePacket(p *receivedPacket, hdr *wire.Header) bool /
 
 	packet, err := s.unpacker.Unpack(hdr, p.data)
 	if err != nil {
-		if err == handshake.ErrOpenerNotYetAvailable {
+		switch err {
+		case handshake.ErrKeysDropped:
+			s.logger.Debugf("Dropping packet because we already dropped the keys.")
+		case handshake.ErrOpenerNotYetAvailable:
 			// Sealer for this encryption level not yet available.
 			// Try again later.
 			wasQueued = true
 			s.tryQueueingUndecryptablePacket(p)
-			return false
+		default:
+			// This might be a packet injected by an attacker.
+			// Drop it.
+			s.logger.Debugf("Dropping packet that could not be unpacked. Unpack error: %s", err)
 		}
-		// This might be a packet injected by an attacker.
-		// Drop it.
-		s.logger.Debugf("Dropping packet that could not be unpacked. Unpack error: %s", err)
 		return false
 	}
 
@@ -640,15 +644,6 @@ func (s *session) handleUnpackedPacket(packet *unpackedPacket, rcvTime time.Time
 	s.lastPacketReceivedTime = rcvTime
 	s.firstAckElicitingPacketAfterIdleSentTime = time.Time{}
 	s.keepAlivePingSent = false
-
-	// The client completes the handshake first (after sending the CFIN).
-	// We know that the server completed the handshake as soon as we receive a forward-secure packet.
-	if s.perspective == protocol.PerspectiveClient {
-		if !s.receivedFirstForwardSecurePacket && packet.encryptionLevel == protocol.Encryption1RTT {
-			s.receivedFirstForwardSecurePacket = true
-			s.sentPacketHandler.SetHandshakeComplete()
-		}
-	}
 
 	r := bytes.NewReader(packet.data)
 	var isAckEliciting bool
@@ -842,6 +837,7 @@ func (s *session) handleAckFrame(frame *wire.AckFrame, pn protocol.PacketNumber,
 	}
 	if encLevel == protocol.Encryption1RTT {
 		s.receivedPacketHandler.IgnoreBelow(s.sentPacketHandler.GetLowestPacketNotConfirmedAcked())
+		s.cryptoStreamHandler.Received1RTTAck()
 	}
 	return nil
 }
@@ -930,6 +926,11 @@ func (s *session) handleCloseError(closeErr closeError) {
 	if err := s.sendConnectionClose(quicErr); err != nil {
 		s.logger.Debugf("Error sending CONNECTION_CLOSE: %s", err)
 	}
+}
+
+func (s *session) dropEncryptionLevel(encLevel protocol.EncryptionLevel) {
+	s.sentPacketHandler.DropPackets(encLevel)
+	s.receivedPacketHandler.DropPackets(encLevel)
 }
 
 func (s *session) processTransportParameters(data []byte) {
