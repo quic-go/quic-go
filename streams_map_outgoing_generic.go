@@ -17,10 +17,9 @@ type outgoingItemsMap struct {
 
 	streams map[protocol.StreamID]item
 
-	nextStream   protocol.StreamID // stream ID of the stream returned by OpenStream(Sync)
-	maxStream    protocol.StreamID // the maximum stream ID we're allowed to open
-	maxStreamSet bool              // was maxStream set. If not, it's not possible to any stream (also works for stream 0)
-	blockedSent  bool              // was a STREAMS_BLOCKED sent for the current maxStream
+	nextStream  protocol.StreamID // stream ID of the stream returned by OpenStream(Sync)
+	maxStream   protocol.StreamID // the maximum stream ID we're allowed to open
+	blockedSent bool              // was a STREAMS_BLOCKED sent for the current maxStream
 
 	newStream            func(protocol.StreamID) item
 	queueStreamIDBlocked func(*wire.StreamsBlockedFrame)
@@ -36,6 +35,7 @@ func newOutgoingItemsMap(
 	m := &outgoingItemsMap{
 		streams:              make(map[protocol.StreamID]item),
 		nextStream:           nextStream,
+		maxStream:            protocol.InvalidStreamID,
 		newStream:            newStream,
 		queueStreamIDBlocked: func(f *wire.StreamsBlockedFrame) { queueControlFrame(f) },
 	}
@@ -78,19 +78,16 @@ func (m *outgoingItemsMap) OpenStreamSync() (item, error) {
 }
 
 func (m *outgoingItemsMap) openStreamImpl() (item, error) {
-	if !m.maxStreamSet || m.nextStream > m.maxStream {
+	if m.nextStream > m.maxStream {
 		if !m.blockedSent {
-			if m.maxStreamSet {
-				m.queueStreamIDBlocked(&wire.StreamsBlockedFrame{
-					Type:        streamTypeGeneric,
-					StreamLimit: m.maxStream.StreamNum(),
-				})
-			} else {
-				m.queueStreamIDBlocked(&wire.StreamsBlockedFrame{
-					Type:        streamTypeGeneric,
-					StreamLimit: 0,
-				})
+			var streamNum uint64
+			if m.maxStream != protocol.InvalidStreamID {
+				streamNum = m.maxStream.StreamNum()
 			}
+			m.queueStreamIDBlocked(&wire.StreamsBlockedFrame{
+				Type:        streamTypeGeneric,
+				StreamLimit: streamNum,
+			})
 			m.blockedSent = true
 		}
 		return nil, errTooManyOpenStreams
@@ -125,9 +122,8 @@ func (m *outgoingItemsMap) DeleteStream(id protocol.StreamID) error {
 
 func (m *outgoingItemsMap) SetMaxStream(id protocol.StreamID) {
 	m.mutex.Lock()
-	if !m.maxStreamSet || id > m.maxStream {
+	if id > m.maxStream {
 		m.maxStream = id
-		m.maxStreamSet = true
 		m.blockedSent = false
 		m.cond.Broadcast()
 	}

@@ -38,12 +38,12 @@ var _ = Describe("Frame logging", func() {
 
 	It("logs sent frames", func() {
 		LogFrame(logger, &ResetStreamFrame{}, true)
-		Expect(buf.Bytes()).To(ContainSubstring("\t-> &wire.ResetStreamFrame{StreamID:0x0, ErrorCode:0x0, ByteOffset:0x0}\n"))
+		Expect(buf.Bytes()).To(ContainSubstring("\t-> &wire.ResetStreamFrame{StreamID:0, ErrorCode:0x0, ByteOffset:0x0}\n"))
 	})
 
 	It("logs received frames", func() {
 		LogFrame(logger, &ResetStreamFrame{}, false)
-		Expect(buf.Bytes()).To(ContainSubstring("\t<- &wire.ResetStreamFrame{StreamID:0x0, ErrorCode:0x0, ByteOffset:0x0}\n"))
+		Expect(buf.Bytes()).To(ContainSubstring("\t<- &wire.ResetStreamFrame{StreamID:0, ErrorCode:0x0, ByteOffset:0x0}\n"))
 	})
 
 	It("logs CRYPTO frames", func() {
