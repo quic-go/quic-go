@@ -80,17 +80,14 @@ func (m *outgoingItemsMap) OpenStreamSync() (item, error) {
 func (m *outgoingItemsMap) openStreamImpl() (item, error) {
 	if m.nextStream > m.maxStream {
 		if !m.blockedSent {
+			var streamNum uint64
 			if m.maxStream != protocol.InvalidStreamID {
-				m.queueStreamIDBlocked(&wire.StreamsBlockedFrame{
-					Type:        streamTypeGeneric,
-					StreamLimit: m.maxStream.StreamNum(),
-				})
-			} else {
-				m.queueStreamIDBlocked(&wire.StreamsBlockedFrame{
-					Type:        streamTypeGeneric,
-					StreamLimit: 0,
-				})
+				streamNum = m.maxStream.StreamNum()
 			}
+			m.queueStreamIDBlocked(&wire.StreamsBlockedFrame{
+				Type:        streamTypeGeneric,
+				StreamLimit: streamNum,
+			})
 			m.blockedSent = true
 		}
 		return nil, errTooManyOpenStreams
