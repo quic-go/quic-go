@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/lucas-clemente/quic-go/internal/protocol"
+	"github.com/lucas-clemente/quic-go/internal/qerr"
 	"github.com/lucas-clemente/quic-go/internal/testdata"
 	"github.com/lucas-clemente/quic-go/internal/utils"
 	"github.com/marten-seemann/qtls"
@@ -141,6 +142,39 @@ var _ = Describe("Crypto Setup TLS", func() {
 		Eventually(done).Should(BeClosed())
 	})
 
+	It("returns Handshake() when a message is received at the wrong encryption level", func() {
+		_, sInitialStream, sHandshakeStream := initStreams()
+		server, err := NewCryptoSetupServer(
+			sInitialStream,
+			sHandshakeStream,
+			ioutil.Discard,
+			protocol.ConnectionID{},
+			nil,
+			&TransportParameters{},
+			func([]byte) {},
+			func(protocol.EncryptionLevel) {},
+			testdata.GetTLSConfig(),
+			utils.DefaultLogger.WithPrefix("server"),
+		)
+		Expect(err).ToNot(HaveOccurred())
+
+		done := make(chan struct{})
+		go func() {
+			defer GinkgoRecover()
+			err := server.RunHandshake()
+			Expect(err).To(BeAssignableToTypeOf(&qerr.QuicError{}))
+			qerr := err.(*qerr.QuicError)
+			Expect(qerr.IsCryptoError()).To(BeTrue())
+			Expect(qerr.ErrorCode).To(BeEquivalentTo(0x100 + int(alertUnexpectedMessage)))
+			Expect(err.Error()).To(ContainSubstring("expected handshake message ClientHello to have encryption level Initial, has Handshake"))
+			close(done)
+		}()
+
+		fakeCH := append([]byte{byte(typeClientHello), 0, 0, 6}, []byte("foobar")...)
+		server.HandleMessage(fakeCH, protocol.EncryptionHandshake) // wrong encryption level
+		Eventually(done).Should(BeClosed())
+	})
+
 	It("returns Handshake() when handling a message fails", func() {
 		_, sInitialStream, sHandshakeStream := initStreams()
 		server, err := NewCryptoSetupServer(
@@ -161,12 +195,16 @@ var _ = Describe("Crypto Setup TLS", func() {
 		go func() {
 			defer GinkgoRecover()
 			err := server.RunHandshake()
-			Expect(err).To(MatchError("expected handshake message ClientHello to have encryption level Initial, has Handshake"))
+			Expect(err).To(BeAssignableToTypeOf(&qerr.QuicError{}))
+			qerr := err.(*qerr.QuicError)
+			Expect(qerr.IsCryptoError()).To(BeTrue())
+			Expect(qerr.ErrorCode).To(BeEquivalentTo(0x100 + int(alertUnexpectedMessage)))
+			Expect(err.Error()).To(ContainSubstring("unexpected handshake message"))
 			close(done)
 		}()
 
-		fakeCH := append([]byte{byte(typeClientHello), 0, 0, 6}, []byte("foobar")...)
-		server.HandleMessage(fakeCH, protocol.EncryptionHandshake) // wrong encryption level
+		fakeCH := append([]byte{byte(typeServerHello), 0, 0, 6}, []byte("foobar")...)
+		server.HandleMessage(fakeCH, protocol.EncryptionInitial) // wrong encryption level
 		Eventually(done).Should(BeClosed())
 	})
 

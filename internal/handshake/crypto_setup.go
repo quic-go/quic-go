@@ -16,6 +16,9 @@ import (
 	"github.com/marten-seemann/qtls"
 )
 
+// TLS unexpected_message alert
+const alertUnexpectedMessage uint8 = 10
+
 type messageType uint8
 
 // TLS handshake message types.
@@ -333,10 +336,10 @@ func (h *cryptoSetup) checkEncryptionLevel(msgType messageType, encLevel protoco
 	case typeNewSessionTicket:
 		expected = protocol.Encryption1RTT
 	default:
-		return fmt.Errorf("unexpected handshake message: %d", msgType)
+		return qerr.CryptoError(alertUnexpectedMessage, fmt.Sprintf("unexpected handshake message: %d", msgType))
 	}
 	if encLevel != expected {
-		return fmt.Errorf("expected handshake message %s to have encryption level %s, has %s", msgType, expected, encLevel)
+		return qerr.CryptoError(alertUnexpectedMessage, fmt.Sprintf("expected handshake message %s to have encryption level %s, has %s", msgType, expected, encLevel))
 	}
 	return nil
 }
@@ -386,7 +389,8 @@ func (h *cryptoSetup) handleMessageForServer(msgType messageType) bool {
 		}
 		return true
 	default:
-		panic("unexpected handshake message")
+		h.messageErrChan <- qerr.CryptoError(alertUnexpectedMessage, fmt.Sprintf("unexpected handshake message: %d", msgType))
+		return false
 	}
 }
 
@@ -442,7 +446,8 @@ func (h *cryptoSetup) handleMessageForClient(msgType messageType) bool {
 		h.conn.HandlePostHandshakeMessage()
 		return false
 	default:
-		panic("unexpected handshake message: ")
+		h.messageErrChan <- qerr.CryptoError(alertUnexpectedMessage, fmt.Sprintf("unexpected handshake message: %d", msgType))
+		return false
 	}
 }
 
