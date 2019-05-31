@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/lucas-clemente/quic-go/internal/protocol"
+	"github.com/lucas-clemente/quic-go/internal/qerr"
 	"github.com/lucas-clemente/quic-go/internal/testdata"
 	"github.com/lucas-clemente/quic-go/internal/utils"
 	"github.com/marten-seemann/qtls"
@@ -161,7 +162,11 @@ var _ = Describe("Crypto Setup TLS", func() {
 		go func() {
 			defer GinkgoRecover()
 			err := server.RunHandshake()
-			Expect(err).To(MatchError("expected handshake message ClientHello to have encryption level Initial, has Handshake"))
+			Expect(err).To(BeAssignableToTypeOf(&qerr.QuicError{}))
+			qerr := err.(*qerr.QuicError)
+			Expect(qerr.IsCryptoError()).To(BeTrue())
+			Expect(qerr.ErrorCode).To(BeEquivalentTo(0x100 + int(alertUnexpectedMessage)))
+			Expect(err.Error()).To(ContainSubstring("expected handshake message ClientHello to have encryption level Initial, has Handshake"))
 			close(done)
 		}()
 
