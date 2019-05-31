@@ -328,7 +328,7 @@ var _ = Describe("Session", func() {
 
 			go func() {
 				defer GinkgoRecover()
-				cryptoSetup.EXPECT().RunHandshake().Do(func() { <-sess.Context().Done() })
+				cryptoSetup.EXPECT().RunHandshake().MaxTimes(1)
 				Expect(sess.run()).To(MatchError(testErr))
 			}()
 			ccf := &wire.ConnectionCloseFrame{
@@ -347,7 +347,7 @@ var _ = Describe("Session", func() {
 
 			go func() {
 				defer GinkgoRecover()
-				cryptoSetup.EXPECT().RunHandshake().Do(func() { <-sess.Context().Done() })
+				cryptoSetup.EXPECT().RunHandshake().MaxTimes(1)
 				Expect(sess.run()).To(MatchError(testErr))
 			}()
 			ccf := &wire.ConnectionCloseFrame{
@@ -383,7 +383,7 @@ var _ = Describe("Session", func() {
 			Eventually(areSessionsRunning).Should(BeFalse())
 			go func() {
 				defer GinkgoRecover()
-				cryptoSetup.EXPECT().RunHandshake().Do(func() { <-sess.Context().Done() })
+				cryptoSetup.EXPECT().RunHandshake().MaxTimes(1)
 				runErr = sess.run()
 			}()
 			Eventually(areSessionsRunning).Should(BeTrue())
@@ -565,7 +565,7 @@ var _ = Describe("Session", func() {
 			packer.EXPECT().PackConnectionClose(gomock.Any()).Return(&packedPacket{}, nil)
 			go func() {
 				defer GinkgoRecover()
-				cryptoSetup.EXPECT().RunHandshake().Do(func() { <-sess.Context().Done() })
+				cryptoSetup.EXPECT().RunHandshake().MaxTimes(1)
 				sess.run()
 			}()
 			sessionRunner.EXPECT().Retire(gomock.Any())
@@ -590,7 +590,7 @@ var _ = Describe("Session", func() {
 			done := make(chan struct{})
 			go func() {
 				defer GinkgoRecover()
-				cryptoSetup.EXPECT().RunHandshake().Do(func() { <-sess.Context().Done() })
+				cryptoSetup.EXPECT().RunHandshake().MaxTimes(1)
 				err := sess.run()
 				Expect(err).To(MatchError("PROTOCOL_VIOLATION: empty packet"))
 				close(done)
@@ -938,7 +938,7 @@ var _ = Describe("Session", func() {
 				done := make(chan struct{})
 				go func() {
 					defer GinkgoRecover()
-					cryptoSetup.EXPECT().RunHandshake().Do(func() { <-sess.Context().Done() })
+					cryptoSetup.EXPECT().RunHandshake().MaxTimes(1)
 					sess.run()
 					close(done)
 				}()
@@ -965,7 +965,7 @@ var _ = Describe("Session", func() {
 				done := make(chan struct{})
 				go func() {
 					defer GinkgoRecover()
-					cryptoSetup.EXPECT().RunHandshake().Do(func() { <-sess.Context().Done() })
+					cryptoSetup.EXPECT().RunHandshake().MaxTimes(1)
 					sess.run()
 					close(done)
 				}()
@@ -993,7 +993,7 @@ var _ = Describe("Session", func() {
 				done := make(chan struct{})
 				go func() {
 					defer GinkgoRecover()
-					cryptoSetup.EXPECT().RunHandshake().Do(func() { <-sess.Context().Done() })
+					cryptoSetup.EXPECT().RunHandshake().MaxTimes(1)
 					sess.run()
 					close(done)
 				}()
@@ -1021,7 +1021,7 @@ var _ = Describe("Session", func() {
 				done := make(chan struct{})
 				go func() {
 					defer GinkgoRecover()
-					cryptoSetup.EXPECT().RunHandshake().Do(func() { <-sess.Context().Done() })
+					cryptoSetup.EXPECT().RunHandshake().MaxTimes(1)
 					sess.run()
 					close(done)
 				}()
@@ -1043,7 +1043,7 @@ var _ = Describe("Session", func() {
 				done := make(chan struct{})
 				go func() {
 					defer GinkgoRecover()
-					cryptoSetup.EXPECT().RunHandshake().Do(func() { <-sess.Context().Done() })
+					cryptoSetup.EXPECT().RunHandshake().MaxTimes(1)
 					sess.run()
 					close(done)
 				}()
@@ -1071,7 +1071,7 @@ var _ = Describe("Session", func() {
 
 				go func() {
 					defer GinkgoRecover()
-					cryptoSetup.EXPECT().RunHandshake().Do(func() { <-sess.Context().Done() })
+					cryptoSetup.EXPECT().RunHandshake().MaxTimes(1)
 					sess.run()
 				}()
 				Consistently(mconn.written).ShouldNot(Receive())
@@ -1106,7 +1106,7 @@ var _ = Describe("Session", func() {
 
 				go func() {
 					defer GinkgoRecover()
-					cryptoSetup.EXPECT().RunHandshake().Do(func() { <-sess.Context().Done() })
+					cryptoSetup.EXPECT().RunHandshake().MaxTimes(1)
 					sess.run()
 				}()
 				Eventually(mconn.written).Should(Receive())
@@ -1121,40 +1121,7 @@ var _ = Describe("Session", func() {
 		})
 	})
 
-	It("closes when RunHandshake() errors", func() {
-		testErr := errors.New("crypto setup error")
-		streamManager.EXPECT().CloseWithError(qerr.Error(qerr.InternalError, testErr.Error()))
-		sessionRunner.EXPECT().Retire(gomock.Any())
-		cryptoSetup.EXPECT().Close()
-		packer.EXPECT().PackConnectionClose(gomock.Any()).Return(&packedPacket{}, nil)
-		go func() {
-			defer GinkgoRecover()
-			cryptoSetup.EXPECT().RunHandshake().Return(testErr)
-			err := sess.run()
-			Expect(err).To(MatchError(testErr))
-		}()
-		Eventually(sess.Context().Done()).Should(BeClosed())
-	})
-
-	It("calls the onHandshakeComplete callback when the handshake completes", func() {
-		packer.EXPECT().PackPacket().AnyTimes()
-		go func() {
-			defer GinkgoRecover()
-			sessionRunner.EXPECT().OnHandshakeComplete(gomock.Any())
-			cryptoSetup.EXPECT().RunHandshake()
-			sess.run()
-		}()
-		Consistently(sess.Context().Done()).ShouldNot(BeClosed())
-		// make sure the go routine returns
-		sessionRunner.EXPECT().Retire(gomock.Any())
-		streamManager.EXPECT().CloseWithError(gomock.Any())
-		packer.EXPECT().PackConnectionClose(gomock.Any()).Return(&packedPacket{}, nil)
-		cryptoSetup.EXPECT().Close()
-		Expect(sess.Close()).To(Succeed())
-		Eventually(sess.Context().Done()).Should(BeClosed())
-	})
-
-	It("sends a forward-secure packet when the handshake completes", func() {
+	It("sends a 1-RTT packet when the handshake completes", func() {
 		done := make(chan struct{})
 		gomock.InOrder(
 			sessionRunner.EXPECT().OnHandshakeComplete(gomock.Any()),
@@ -1170,6 +1137,7 @@ var _ = Describe("Session", func() {
 		go func() {
 			defer GinkgoRecover()
 			cryptoSetup.EXPECT().RunHandshake()
+			close(sess.handshakeCompleteChan)
 			sess.run()
 		}()
 		Eventually(done).Should(BeClosed())
@@ -1186,7 +1154,7 @@ var _ = Describe("Session", func() {
 		done := make(chan struct{})
 		go func() {
 			defer GinkgoRecover()
-			cryptoSetup.EXPECT().RunHandshake().Do(func() { <-sess.Context().Done() })
+			cryptoSetup.EXPECT().RunHandshake().MaxTimes(1)
 			Expect(sess.run()).To(Succeed())
 			close(done)
 		}()
@@ -1203,7 +1171,7 @@ var _ = Describe("Session", func() {
 		done := make(chan struct{})
 		go func() {
 			defer GinkgoRecover()
-			cryptoSetup.EXPECT().RunHandshake().Do(func() { <-sess.Context().Done() })
+			cryptoSetup.EXPECT().RunHandshake().MaxTimes(1)
 			err := sess.run()
 			Expect(err).To(MatchError(qerr.Error(0x1337, testErr.Error())))
 			close(done)
@@ -1220,7 +1188,7 @@ var _ = Describe("Session", func() {
 		It("errors if it can't unmarshal the TransportParameters", func() {
 			go func() {
 				defer GinkgoRecover()
-				cryptoSetup.EXPECT().RunHandshake().Do(func() { <-sess.Context().Done() })
+				cryptoSetup.EXPECT().RunHandshake().MaxTimes(1)
 				err := sess.run()
 				Expect(err).To(HaveOccurred())
 				Expect(err.Error()).To(ContainSubstring("transport parameter"))
@@ -1236,7 +1204,7 @@ var _ = Describe("Session", func() {
 		It("process transport parameters received from the client", func() {
 			go func() {
 				defer GinkgoRecover()
-				cryptoSetup.EXPECT().RunHandshake().Do(func() { <-sess.Context().Done() })
+				cryptoSetup.EXPECT().RunHandshake().MaxTimes(1)
 				sess.run()
 			}()
 			params := &handshake.TransportParameters{
@@ -1280,7 +1248,7 @@ var _ = Describe("Session", func() {
 			done := make(chan struct{})
 			go func() {
 				defer GinkgoRecover()
-				cryptoSetup.EXPECT().RunHandshake().Do(func() { <-sess.Context().Done() })
+				cryptoSetup.EXPECT().RunHandshake().MaxTimes(1)
 				sess.run()
 				close(done)
 			}()
@@ -1301,7 +1269,7 @@ var _ = Describe("Session", func() {
 			done := make(chan struct{})
 			go func() {
 				defer GinkgoRecover()
-				cryptoSetup.EXPECT().RunHandshake().Do(func() { <-sess.Context().Done() })
+				cryptoSetup.EXPECT().RunHandshake().MaxTimes(1)
 				sess.run()
 				close(done)
 			}()
@@ -1322,7 +1290,7 @@ var _ = Describe("Session", func() {
 			done := make(chan struct{})
 			go func() {
 				defer GinkgoRecover()
-				cryptoSetup.EXPECT().RunHandshake().Do(func() { <-sess.Context().Done() })
+				cryptoSetup.EXPECT().RunHandshake().MaxTimes(1)
 				sess.run()
 				close(done)
 			}()
@@ -1350,7 +1318,7 @@ var _ = Describe("Session", func() {
 			cryptoSetup.EXPECT().Close()
 			go func() {
 				defer GinkgoRecover()
-				cryptoSetup.EXPECT().RunHandshake().Do(func() { <-sess.Context().Done() })
+				cryptoSetup.EXPECT().RunHandshake().MaxTimes(1)
 				err := sess.run()
 				nerr, ok := err.(net.Error)
 				Expect(ok).To(BeTrue())
@@ -1368,7 +1336,7 @@ var _ = Describe("Session", func() {
 			done := make(chan struct{})
 			go func() {
 				defer GinkgoRecover()
-				cryptoSetup.EXPECT().RunHandshake().Do(func() { <-sess.Context().Done() })
+				cryptoSetup.EXPECT().RunHandshake().MaxTimes(1)
 				err := sess.run()
 				nerr, ok := err.(net.Error)
 				Expect(ok).To(BeTrue())
@@ -1390,7 +1358,7 @@ var _ = Describe("Session", func() {
 			// and not on the last network activity
 			go func() {
 				defer GinkgoRecover()
-				cryptoSetup.EXPECT().RunHandshake().Do(func() { <-sess.Context().Done() })
+				cryptoSetup.EXPECT().RunHandshake().MaxTimes(1)
 				sess.run()
 			}()
 			Consistently(sess.Context().Done()).ShouldNot(BeClosed())
@@ -1411,6 +1379,7 @@ var _ = Describe("Session", func() {
 				defer GinkgoRecover()
 				sessionRunner.EXPECT().OnHandshakeComplete(sess)
 				cryptoSetup.EXPECT().RunHandshake()
+				close(sess.handshakeCompleteChan)
 				err := sess.run()
 				nerr, ok := err.(net.Error)
 				Expect(ok).To(BeTrue())
@@ -1428,7 +1397,7 @@ var _ = Describe("Session", func() {
 			sess.config.IdleTimeout = 30 * time.Second
 			go func() {
 				defer GinkgoRecover()
-				cryptoSetup.EXPECT().RunHandshake().Do(func() { <-sess.Context().Done() })
+				cryptoSetup.EXPECT().RunHandshake().MaxTimes(1)
 				sess.run()
 			}()
 			Consistently(sess.Context().Done()).ShouldNot(BeClosed())
@@ -1568,7 +1537,7 @@ var _ = Describe("Client Session", func() {
 		sess.unpacker = unpacker
 		go func() {
 			defer GinkgoRecover()
-			cryptoSetup.EXPECT().RunHandshake().Do(func() { <-sess.Context().Done() }).AnyTimes()
+			cryptoSetup.EXPECT().RunHandshake().MaxTimes(1)
 			sess.run()
 		}()
 		newConnID := protocol.ConnectionID{1, 3, 3, 7, 1, 3, 3, 7}
@@ -1645,7 +1614,7 @@ var _ = Describe("Client Session", func() {
 		It("errors if it can't unmarshal the TransportParameters", func() {
 			go func() {
 				defer GinkgoRecover()
-				cryptoSetup.EXPECT().RunHandshake().Do(func() { <-sess.Context().Done() })
+				cryptoSetup.EXPECT().RunHandshake().MaxTimes(1)
 				err := sess.run()
 				Expect(err).To(HaveOccurred())
 				Expect(err.Error()).To(ContainSubstring("transport parameter"))

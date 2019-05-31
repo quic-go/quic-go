@@ -150,11 +150,9 @@ func (mr *MockCryptoSetupMockRecorder) Received1RTTAck() *gomock.Call {
 }
 
 // RunHandshake mocks base method
-func (m *MockCryptoSetup) RunHandshake() error {
+func (m *MockCryptoSetup) RunHandshake() {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "RunHandshake")
-	ret0, _ := ret[0].(error)
-	return ret0
+	m.ctrl.Call(m, "RunHandshake")
 }
 
 // RunHandshake indicates an expected call of RunHandshake

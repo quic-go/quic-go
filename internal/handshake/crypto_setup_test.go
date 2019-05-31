@@ -12,6 +12,7 @@ import (
 	"math/big"
 	"time"
 
+	gomock "github.com/golang/mock/gomock"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/internal/qerr"
 	"github.com/lucas-clemente/quic-go/internal/testdata"
@@ -87,8 +88,7 @@ var _ = Describe("Crypto Setup TLS", func() {
 			protocol.ConnectionID{},
 			nil,
 			&TransportParameters{},
-			func([]byte) {},
-			func(protocol.EncryptionLevel) {},
+			NewMockHandshakeRunner(mockCtrl),
 			tlsConf,
 			utils.DefaultLogger.WithPrefix("server"),
 		)
@@ -108,6 +108,9 @@ var _ = Describe("Crypto Setup TLS", func() {
 	})
 
 	It("returns Handshake() when an error occurs", func() {
+		sErrChan := make(chan error, 1)
+		runner := NewMockHandshakeRunner(mockCtrl)
+		runner.EXPECT().OnError(gomock.Any()).Do(func(e error) { sErrChan <- e })
 		_, sInitialStream, sHandshakeStream := initStreams()
 		server, err := NewCryptoSetupServer(
 			sInitialStream,
@@ -116,8 +119,7 @@ var _ = Describe("Crypto Setup TLS", func() {
 			protocol.ConnectionID{},
 			nil,
 			&TransportParameters{},
-			func([]byte) {},
-			func(protocol.EncryptionLevel) {},
+			runner,
 			testdata.GetTLSConfig(),
 			utils.DefaultLogger.WithPrefix("server"),
 		)
@@ -126,8 +128,8 @@ var _ = Describe("Crypto Setup TLS", func() {
 		done := make(chan struct{})
 		go func() {
 			defer GinkgoRecover()
-			err := server.RunHandshake()
-			Expect(err).To(MatchError("CRYPTO_ERROR: local error: tls: unexpected message"))
+			server.RunHandshake()
+			Expect(sErrChan).To(Receive(MatchError("CRYPTO_ERROR: local error: tls: unexpected message")))
 			close(done)
 		}()
 
@@ -143,7 +145,10 @@ var _ = Describe("Crypto Setup TLS", func() {
 	})
 
 	It("returns Handshake() when a message is received at the wrong encryption level", func() {
+		sErrChan := make(chan error, 1)
 		_, sInitialStream, sHandshakeStream := initStreams()
+		runner := NewMockHandshakeRunner(mockCtrl)
+		runner.EXPECT().OnError(gomock.Any()).Do(func(e error) { sErrChan <- e })
 		server, err := NewCryptoSetupServer(
 			sInitialStream,
 			sHandshakeStream,
@@ -151,8 +156,7 @@ var _ = Describe("Crypto Setup TLS", func() {
 			protocol.ConnectionID{},
 			nil,
 			&TransportParameters{},
-			func([]byte) {},
-			func(protocol.EncryptionLevel) {},
+			runner,
 			testdata.GetTLSConfig(),
 			utils.DefaultLogger.WithPrefix("server"),
 		)
@@ -161,7 +165,9 @@ var _ = Describe("Crypto Setup TLS", func() {
 		done := make(chan struct{})
 		go func() {
 			defer GinkgoRecover()
-			err := server.RunHandshake()
+			server.RunHandshake()
+			var err error
+			Expect(sErrChan).To(Receive(&err))
 			Expect(err).To(BeAssignableToTypeOf(&qerr.QuicError{}))
 			qerr := err.(*qerr.QuicError)
 			Expect(qerr.IsCryptoError()).To(BeTrue())
@@ -176,7 +182,10 @@ var _ = Describe("Crypto Setup TLS", func() {
 	})
 
 	It("returns Handshake() when handling a message fails", func() {
+		sErrChan := make(chan error, 1)
 		_, sInitialStream, sHandshakeStream := initStreams()
+		runner := NewMockHandshakeRunner(mockCtrl)
+		runner.EXPECT().OnError(gomock.Any()).Do(func(e error) { sErrChan <- e })
 		server, err := NewCryptoSetupServer(
 			sInitialStream,
 			sHandshakeStream,
@@ -184,8 +193,7 @@ var _ = Describe("Crypto Setup TLS", func() {
 			protocol.ConnectionID{},
 			nil,
 			&TransportParameters{},
-			func([]byte) {},
-			func(protocol.EncryptionLevel) {},
+			runner,
 			testdata.GetTLSConfig(),
 			utils.DefaultLogger.WithPrefix("server"),
 		)
@@ -194,7 +202,9 @@ var _ = Describe("Crypto Setup TLS", func() {
 		done := make(chan struct{})
 		go func() {
 			defer GinkgoRecover()
-			err := server.RunHandshake()
+			server.RunHandshake()
+			var err error
+			Expect(sErrChan).To(Receive(&err))
 			Expect(err).To(BeAssignableToTypeOf(&qerr.QuicError{}))
 			qerr := err.(*qerr.QuicError)
 			Expect(qerr.IsCryptoError()).To(BeTrue())
@@ -217,8 +227,7 @@ var _ = Describe("Crypto Setup TLS", func() {
 			protocol.ConnectionID{},
 			nil,
 			&TransportParameters{},
-			func([]byte) {},
-			func(protocol.EncryptionLevel) {},
+			NewMockHandshakeRunner(mockCtrl),
 			testdata.GetTLSConfig(),
 			utils.DefaultLogger.WithPrefix("server"),
 		)
@@ -227,8 +236,7 @@ var _ = Describe("Crypto Setup TLS", func() {
 		done := make(chan struct{})
 		go func() {
 			defer GinkgoRecover()
-			err := server.RunHandshake()
-			Expect(err).To(MatchError("Handshake aborted"))
+			server.RunHandshake()
 			close(done)
 		}()
 		Expect(server.Close()).To(Succeed())
@@ -255,13 +263,9 @@ var _ = Describe("Crypto Setup TLS", func() {
 			}
 		}
 
-		handshake := func(
-			client CryptoSetup,
-			cChunkChan <-chan chunk,
-			server CryptoSetup,
-			sChunkChan <-chan chunk) (error /* client error */, error /* server error */) {
+		handshake := func(client CryptoSetup, cChunkChan <-chan chunk,
+			server CryptoSetup, sChunkChan <-chan chunk) {
 			done := make(chan struct{})
-			defer close(done)
 			go func() {
 				defer GinkgoRecover()
 				for {
@@ -276,20 +280,24 @@ var _ = Describe("Crypto Setup TLS", func() {
 				}
 			}()
 
-			serverErrChan := make(chan error)
 			go func() {
 				defer GinkgoRecover()
-				serverErrChan <- server.RunHandshake()
+				server.RunHandshake()
+				close(done)
 			}()
 
-			clientErr := client.RunHandshake()
-			var serverErr error
-			Eventually(serverErrChan).Should(Receive(&serverErr))
-			return clientErr, serverErr
+			client.RunHandshake()
+			Eventually(done).Should(BeClosed())
 		}
 
 		handshakeWithTLSConf := func(clientConf, serverConf *tls.Config) (error /* client error */, error /* server error */) {
+			var cHandshakeComplete bool
 			cChunkChan, cInitialStream, cHandshakeStream := initStreams()
+			cErrChan := make(chan error, 1)
+			cRunner := NewMockHandshakeRunner(mockCtrl)
+			cRunner.EXPECT().OnReceivedParams(gomock.Any())
+			cRunner.EXPECT().OnError(gomock.Any()).Do(func(e error) { cErrChan <- e }).MaxTimes(1)
+			cRunner.EXPECT().OnHandshakeComplete().Do(func() { cHandshakeComplete = true }).MaxTimes(1)
 			client, _, err := NewCryptoSetupClient(
 				cInitialStream,
 				cHandshakeStream,
@@ -297,14 +305,19 @@ var _ = Describe("Crypto Setup TLS", func() {
 				protocol.ConnectionID{},
 				nil,
 				&TransportParameters{},
-				func([]byte) {},
-				func(protocol.EncryptionLevel) {},
+				cRunner,
 				clientConf,
 				utils.DefaultLogger.WithPrefix("client"),
 			)
 			Expect(err).ToNot(HaveOccurred())
 
+			var sHandshakeComplete bool
 			sChunkChan, sInitialStream, sHandshakeStream := initStreams()
+			sErrChan := make(chan error, 1)
+			sRunner := NewMockHandshakeRunner(mockCtrl)
+			sRunner.EXPECT().OnReceivedParams(gomock.Any())
+			sRunner.EXPECT().OnError(gomock.Any()).Do(func(e error) { sErrChan <- e }).MaxTimes(1)
+			sRunner.EXPECT().OnHandshakeComplete().Do(func() { sHandshakeComplete = true }).MaxTimes(1)
 			var token [16]byte
 			server, err := NewCryptoSetupServer(
 				sInitialStream,
@@ -313,14 +326,25 @@ var _ = Describe("Crypto Setup TLS", func() {
 				protocol.ConnectionID{},
 				nil,
 				&TransportParameters{StatelessResetToken: &token},
-				func([]byte) {},
-				func(protocol.EncryptionLevel) {},
+				sRunner,
 				serverConf,
 				utils.DefaultLogger.WithPrefix("server"),
 			)
 			Expect(err).ToNot(HaveOccurred())
 
-			return handshake(client, cChunkChan, server, sChunkChan)
+			handshake(client, cChunkChan, server, sChunkChan)
+			var cErr, sErr error
+			select {
+			case sErr = <-sErrChan:
+			default:
+				Expect(sHandshakeComplete).To(BeTrue())
+			}
+			select {
+			case cErr = <-cErrChan:
+			default:
+				Expect(cHandshakeComplete).To(BeTrue())
+			}
+			return cErr, sErr
 		}
 
 		It("handshakes", func() {
@@ -348,6 +372,7 @@ var _ = Describe("Crypto Setup TLS", func() {
 		})
 
 		It("signals when it has written the ClientHello", func() {
+			runner := NewMockHandshakeRunner(mockCtrl)
 			cChunkChan, cInitialStream, cHandshakeStream := initStreams()
 			client, chChan, err := NewCryptoSetupClient(
 				cInitialStream,
@@ -356,8 +381,7 @@ var _ = Describe("Crypto Setup TLS", func() {
 				protocol.ConnectionID{},
 				nil,
 				&TransportParameters{},
-				func([]byte) {},
-				func(protocol.EncryptionLevel) {},
+				runner,
 				&tls.Config{InsecureSkipVerify: true},
 				utils.DefaultLogger.WithPrefix("client"),
 			)
@@ -379,6 +403,7 @@ var _ = Describe("Crypto Setup TLS", func() {
 			Expect(len(ch.data) - 4).To(Equal(length))
 
 			// make the go routine return
+			runner.EXPECT().OnError(gomock.Any())
 			client.HandleMessage([]byte{42 /* unknown handshake message type */, 0, 0, 1, 0}, protocol.EncryptionInitial)
 			Eventually(done).Should(BeClosed())
 		})
@@ -387,6 +412,9 @@ var _ = Describe("Crypto Setup TLS", func() {
 			var cTransportParametersRcvd, sTransportParametersRcvd []byte
 			cChunkChan, cInitialStream, cHandshakeStream := initStreams()
 			cTransportParameters := &TransportParameters{IdleTimeout: 0x42 * time.Second}
+			cRunner := NewMockHandshakeRunner(mockCtrl)
+			cRunner.EXPECT().OnReceivedParams(gomock.Any()).Do(func(b []byte) { sTransportParametersRcvd = b })
+			cRunner.EXPECT().OnHandshakeComplete()
 			client, _, err := NewCryptoSetupClient(
 				cInitialStream,
 				cHandshakeStream,
@@ -394,8 +422,7 @@ var _ = Describe("Crypto Setup TLS", func() {
 				protocol.ConnectionID{},
 				nil,
 				cTransportParameters,
-				func(p []byte) { sTransportParametersRcvd = p },
-				func(protocol.EncryptionLevel) {},
+				cRunner,
 				clientConf,
 				utils.DefaultLogger.WithPrefix("client"),
 			)
@@ -403,6 +430,9 @@ var _ = Describe("Crypto Setup TLS", func() {
 
 			sChunkChan, sInitialStream, sHandshakeStream := initStreams()
 			var token [16]byte
+			sRunner := NewMockHandshakeRunner(mockCtrl)
+			sRunner.EXPECT().OnReceivedParams(gomock.Any()).Do(func(b []byte) { cTransportParametersRcvd = b })
+			sRunner.EXPECT().OnHandshakeComplete()
 			sTransportParameters := &TransportParameters{
 				IdleTimeout:         0x1337 * time.Second,
 				StatelessResetToken: &token,
@@ -414,8 +444,7 @@ var _ = Describe("Crypto Setup TLS", func() {
 				protocol.ConnectionID{},
 				nil,
 				sTransportParameters,
-				func(p []byte) { cTransportParametersRcvd = p },
-				func(protocol.EncryptionLevel) {},
+				sRunner,
 				testdata.GetTLSConfig(),
 				utils.DefaultLogger.WithPrefix("server"),
 			)
@@ -424,9 +453,7 @@ var _ = Describe("Crypto Setup TLS", func() {
 			done := make(chan struct{})
 			go func() {
 				defer GinkgoRecover()
-				clientErr, serverErr := handshake(client, cChunkChan, server, sChunkChan)
-				Expect(clientErr).ToNot(HaveOccurred())
-				Expect(serverErr).ToNot(HaveOccurred())
+				handshake(client, cChunkChan, server, sChunkChan)
 				close(done)
 			}()
 			Eventually(done).Should(BeClosed())

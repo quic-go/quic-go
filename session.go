@@ -47,7 +47,7 @@ type streamManager interface {
 }
 
 type cryptoStreamHandler interface {
-	RunHandshake() error
+	RunHandshake()
 	ChangeConnectionID(protocol.ConnectionID) error
 	Received1RTTAck()
 	io.Closer
@@ -70,6 +70,18 @@ func (p *receivedPacket) Clone() *receivedPacket {
 		buffer:     p.buffer,
 	}
 }
+
+type handshakeRunner struct {
+	onReceivedParams    func([]byte)
+	onError             func(error)
+	dropKeys            func(protocol.EncryptionLevel)
+	onHandshakeComplete func()
+}
+
+func (r *handshakeRunner) OnReceivedParams(b []byte)            { r.onReceivedParams(b) }
+func (r *handshakeRunner) OnError(e error)                      { r.onError(e) }
+func (r *handshakeRunner) DropKeys(el protocol.EncryptionLevel) { r.dropKeys(el) }
+func (r *handshakeRunner) OnHandshakeComplete()                 { r.onHandshakeComplete() }
 
 type closeError struct {
 	err       error
@@ -198,8 +210,12 @@ var newSession = func(
 		clientDestConnID,
 		conn.RemoteAddr(),
 		params,
-		s.processTransportParameters,
-		s.dropEncryptionLevel,
+		&handshakeRunner{
+			onReceivedParams:    s.processTransportParameters,
+			onError:             s.closeLocal,
+			dropKeys:            s.dropEncryptionLevel,
+			onHandshakeComplete: func() { close(s.handshakeCompleteChan) },
+		},
 		tlsConf,
 		logger,
 	)
@@ -267,8 +283,12 @@ var newClientSession = func(
 		s.destConnID,
 		conn.RemoteAddr(),
 		params,
-		s.processTransportParameters,
-		s.dropEncryptionLevel,
+		&handshakeRunner{
+			onReceivedParams:    s.processTransportParameters,
+			onError:             s.closeLocal,
+			dropKeys:            s.dropEncryptionLevel,
+			onHandshakeComplete: func() { close(s.handshakeCompleteChan) },
+		},
 		tlsConf,
 		logger,
 	)
@@ -337,13 +357,8 @@ func (s *session) postSetup() error {
 func (s *session) run() error {
 	defer s.ctxCancel()
 
-	go func() {
-		if err := s.cryptoStreamHandler.RunHandshake(); err != nil {
-			s.closeLocal(err)
-			return
-		}
-		close(s.handshakeCompleteChan)
-	}()
+	go s.cryptoStreamHandler.RunHandshake()
+
 	if s.perspective == protocol.PerspectiveClient {
 		select {
 		case <-s.clientHelloWritten:

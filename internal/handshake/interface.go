@@ -28,9 +28,16 @@ type tlsExtensionHandler interface {
 	TransportParameters() <-chan []byte
 }
 
+type handshakeRunner interface {
+	OnReceivedParams([]byte)
+	OnHandshakeComplete()
+	OnError(error)
+	DropKeys(protocol.EncryptionLevel)
+}
+
 // CryptoSetup handles the handshake and protecting / unprotecting packets
 type CryptoSetup interface {
-	RunHandshake() error
+	RunHandshake()
 	io.Closer
 	ChangeConnectionID(protocol.ConnectionID) error
 
