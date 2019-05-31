@@ -71,6 +71,16 @@ func (p *receivedPacket) Clone() *receivedPacket {
 	}
 }
 
+type handshakeRunner struct {
+	onReceivedParams func([]byte)
+	onError          func(error)
+	dropKeys         func(protocol.EncryptionLevel)
+}
+
+func (r *handshakeRunner) OnReceivedParams(b []byte)            { r.onReceivedParams(b) }
+func (r *handshakeRunner) OnError(e error)                      { r.onError(e) }
+func (r *handshakeRunner) DropKeys(el protocol.EncryptionLevel) { r.dropKeys(el) }
+
 type closeError struct {
 	err       error
 	remote    bool
@@ -198,9 +208,11 @@ var newSession = func(
 		clientDestConnID,
 		conn.RemoteAddr(),
 		params,
-		s.processTransportParameters,
-		s.dropEncryptionLevel,
-		s.closeLocal,
+		&handshakeRunner{
+			onReceivedParams: s.processTransportParameters,
+			onError:          s.closeLocal,
+			dropKeys:         s.dropEncryptionLevel,
+		},
 		tlsConf,
 		logger,
 	)
@@ -268,9 +280,11 @@ var newClientSession = func(
 		s.destConnID,
 		conn.RemoteAddr(),
 		params,
-		s.processTransportParameters,
-		s.dropEncryptionLevel,
-		s.closeLocal,
+		&handshakeRunner{
+			onReceivedParams: s.processTransportParameters,
+			onError:          s.closeLocal,
+			dropKeys:         s.dropEncryptionLevel,
+		},
 		tlsConf,
 		logger,
 	)
