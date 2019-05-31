@@ -30,6 +30,7 @@ type tlsExtensionHandler interface {
 
 type handshakeRunner interface {
 	OnReceivedParams([]byte)
+	OnHandshakeComplete()
 	OnError(error)
 	DropKeys(protocol.EncryptionLevel)
 }

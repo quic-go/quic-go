@@ -72,14 +72,16 @@ func (p *receivedPacket) Clone() *receivedPacket {
 }
 
 type handshakeRunner struct {
-	onReceivedParams func([]byte)
-	onError          func(error)
-	dropKeys         func(protocol.EncryptionLevel)
+	onReceivedParams    func([]byte)
+	onError             func(error)
+	dropKeys            func(protocol.EncryptionLevel)
+	onHandshakeComplete func()
 }
 
 func (r *handshakeRunner) OnReceivedParams(b []byte)            { r.onReceivedParams(b) }
 func (r *handshakeRunner) OnError(e error)                      { r.onError(e) }
 func (r *handshakeRunner) DropKeys(el protocol.EncryptionLevel) { r.dropKeys(el) }
+func (r *handshakeRunner) OnHandshakeComplete()                 { r.onHandshakeComplete() }
 
 type closeError struct {
 	err       error
@@ -209,9 +211,10 @@ var newSession = func(
 		conn.RemoteAddr(),
 		params,
 		&handshakeRunner{
-			onReceivedParams: s.processTransportParameters,
-			onError:          s.closeLocal,
-			dropKeys:         s.dropEncryptionLevel,
+			onReceivedParams:    s.processTransportParameters,
+			onError:             s.closeLocal,
+			dropKeys:            s.dropEncryptionLevel,
+			onHandshakeComplete: func() { close(s.handshakeCompleteChan) },
 		},
 		tlsConf,
 		logger,
@@ -281,9 +284,10 @@ var newClientSession = func(
 		conn.RemoteAddr(),
 		params,
 		&handshakeRunner{
-			onReceivedParams: s.processTransportParameters,
-			onError:          s.closeLocal,
-			dropKeys:         s.dropEncryptionLevel,
+			onReceivedParams:    s.processTransportParameters,
+			onError:             s.closeLocal,
+			dropKeys:            s.dropEncryptionLevel,
+			onHandshakeComplete: func() { close(s.handshakeCompleteChan) },
 		},
 		tlsConf,
 		logger,
@@ -353,11 +357,8 @@ func (s *session) postSetup() error {
 func (s *session) run() error {
 	defer s.ctxCancel()
 
-	go func() {
-		s.cryptoStreamHandler.RunHandshake()
-		// If an error occurred during the handshake, the crypto setup will already have called the close callback.
-		close(s.handshakeCompleteChan)
-	}()
+	go s.cryptoStreamHandler.RunHandshake()
+
 	if s.perspective == protocol.PerspectiveClient {
 		select {
 		case <-s.clientHelloWritten:

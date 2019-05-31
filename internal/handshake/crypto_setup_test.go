@@ -291,11 +291,13 @@ var _ = Describe("Crypto Setup TLS", func() {
 		}
 
 		handshakeWithTLSConf := func(clientConf, serverConf *tls.Config) (error /* client error */, error /* server error */) {
+			var cHandshakeComplete bool
 			cChunkChan, cInitialStream, cHandshakeStream := initStreams()
 			cErrChan := make(chan error, 1)
 			cRunner := NewMockHandshakeRunner(mockCtrl)
 			cRunner.EXPECT().OnReceivedParams(gomock.Any())
 			cRunner.EXPECT().OnError(gomock.Any()).Do(func(e error) { cErrChan <- e }).MaxTimes(1)
+			cRunner.EXPECT().OnHandshakeComplete().Do(func() { cHandshakeComplete = true }).MaxTimes(1)
 			client, _, err := NewCryptoSetupClient(
 				cInitialStream,
 				cHandshakeStream,
@@ -309,11 +311,13 @@ var _ = Describe("Crypto Setup TLS", func() {
 			)
 			Expect(err).ToNot(HaveOccurred())
 
+			var sHandshakeComplete bool
 			sChunkChan, sInitialStream, sHandshakeStream := initStreams()
 			sErrChan := make(chan error, 1)
 			sRunner := NewMockHandshakeRunner(mockCtrl)
 			sRunner.EXPECT().OnReceivedParams(gomock.Any())
 			sRunner.EXPECT().OnError(gomock.Any()).Do(func(e error) { sErrChan <- e }).MaxTimes(1)
+			sRunner.EXPECT().OnHandshakeComplete().Do(func() { sHandshakeComplete = true }).MaxTimes(1)
 			var token [16]byte
 			server, err := NewCryptoSetupServer(
 				sInitialStream,
@@ -333,10 +337,12 @@ var _ = Describe("Crypto Setup TLS", func() {
 			select {
 			case sErr = <-sErrChan:
 			default:
+				Expect(sHandshakeComplete).To(BeTrue())
 			}
 			select {
 			case cErr = <-cErrChan:
 			default:
+				Expect(cHandshakeComplete).To(BeTrue())
 			}
 			return cErr, sErr
 		}
@@ -408,6 +414,7 @@ var _ = Describe("Crypto Setup TLS", func() {
 			cTransportParameters := &TransportParameters{IdleTimeout: 0x42 * time.Second}
 			cRunner := NewMockHandshakeRunner(mockCtrl)
 			cRunner.EXPECT().OnReceivedParams(gomock.Any()).Do(func(b []byte) { sTransportParametersRcvd = b })
+			cRunner.EXPECT().OnHandshakeComplete()
 			client, _, err := NewCryptoSetupClient(
 				cInitialStream,
 				cHandshakeStream,
@@ -425,6 +432,7 @@ var _ = Describe("Crypto Setup TLS", func() {
 			var token [16]byte
 			sRunner := NewMockHandshakeRunner(mockCtrl)
 			sRunner.EXPECT().OnReceivedParams(gomock.Any()).Do(func(b []byte) { cTransportParametersRcvd = b })
+			sRunner.EXPECT().OnHandshakeComplete()
 			sTransportParameters := &TransportParameters{
 				IdleTimeout:         0x1337 * time.Second,
 				StatelessResetToken: &token,

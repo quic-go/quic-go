@@ -58,6 +58,18 @@ func (mr *MockHandshakeRunnerMockRecorder) OnError(arg0 interface{}) *gomock.Cal
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "OnError", reflect.TypeOf((*MockHandshakeRunner)(nil).OnError), arg0)
 }
 
+// OnHandshakeComplete mocks base method
+func (m *MockHandshakeRunner) OnHandshakeComplete() {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "OnHandshakeComplete")
+}
+
+// OnHandshakeComplete indicates an expected call of OnHandshakeComplete
+func (mr *MockHandshakeRunnerMockRecorder) OnHandshakeComplete() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "OnHandshakeComplete", reflect.TypeOf((*MockHandshakeRunner)(nil).OnHandshakeComplete))
+}
+
 // OnReceivedParams mocks base method
 func (m *MockHandshakeRunner) OnReceivedParams(arg0 []byte) {
 	m.ctrl.T.Helper()

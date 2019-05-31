@@ -267,6 +267,7 @@ func (h *cryptoSetup) RunHandshake() {
 
 	select {
 	case <-handshakeComplete: // return when the handshake is done
+		h.runner.OnHandshakeComplete()
 	case <-h.closeChan:
 		// wait until the Handshake() go routine has returned
 		close(h.messageChan)
