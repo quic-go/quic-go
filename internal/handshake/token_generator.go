@@ -17,17 +17,15 @@ const (
 // A Token is derived from the client address and can be used to verify the ownership of this address.
 type Token struct {
 	RemoteAddr               string
+	SentTime                 time.Time
 	OriginalDestConnectionID protocol.ConnectionID
-	// The time that the Token was issued (resolution 1 second)
-	SentTime time.Time
 }
 
 // token is the struct that is used for ASN1 serialization and deserialization
 type token struct {
 	RemoteAddr               []byte
+	Timestamp                int64
 	OriginalDestConnectionID []byte
-
-	Timestamp int64
 }
 
 // A TokenGenerator generates tokens
@@ -51,7 +49,7 @@ func (g *TokenGenerator) NewToken(raddr net.Addr, origConnID protocol.Connection
 	data, err := asn1.Marshal(token{
 		RemoteAddr:               encodeRemoteAddr(raddr),
 		OriginalDestConnectionID: origConnID,
-		Timestamp:                time.Now().Unix(),
+		Timestamp:                time.Now().UnixNano(),
 	})
 	if err != nil {
 		return nil, err
@@ -80,7 +78,7 @@ func (g *TokenGenerator) DecodeToken(encrypted []byte) (*Token, error) {
 	}
 	token := &Token{
 		RemoteAddr: decodeRemoteAddr(t.RemoteAddr),
-		SentTime:   time.Unix(t.Timestamp, 0),
+		SentTime:   time.Unix(0, t.Timestamp),
 	}
 	if len(t.OriginalDestConnectionID) > 0 {
 		token.OriginalDestConnectionID = protocol.ConnectionID(t.OriginalDestConnectionID)
