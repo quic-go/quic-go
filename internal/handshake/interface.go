@@ -30,7 +30,7 @@ type tlsExtensionHandler interface {
 
 // CryptoSetup handles the handshake and protecting / unprotecting packets
 type CryptoSetup interface {
-	RunHandshake() error
+	RunHandshake()
 	io.Closer
 	ChangeConnectionID(protocol.ConnectionID) error
 

@@ -1121,21 +1121,6 @@ var _ = Describe("Session", func() {
 		})
 	})
 
-	It("closes when RunHandshake() errors", func() {
-		testErr := errors.New("crypto setup error")
-		streamManager.EXPECT().CloseWithError(qerr.Error(qerr.InternalError, testErr.Error()))
-		sessionRunner.EXPECT().Retire(gomock.Any())
-		cryptoSetup.EXPECT().Close()
-		packer.EXPECT().PackConnectionClose(gomock.Any()).Return(&packedPacket{}, nil)
-		go func() {
-			defer GinkgoRecover()
-			cryptoSetup.EXPECT().RunHandshake().Return(testErr)
-			err := sess.run()
-			Expect(err).To(MatchError(testErr))
-		}()
-		Eventually(sess.Context().Done()).Should(BeClosed())
-	})
-
 	It("calls the onHandshakeComplete callback when the handshake completes", func() {
 		packer.EXPECT().PackPacket().AnyTimes()
 		go func() {

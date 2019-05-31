@@ -47,7 +47,7 @@ type streamManager interface {
 }
 
 type cryptoStreamHandler interface {
-	RunHandshake() error
+	RunHandshake()
 	ChangeConnectionID(protocol.ConnectionID) error
 	Received1RTTAck()
 	io.Closer
@@ -200,6 +200,7 @@ var newSession = func(
 		params,
 		s.processTransportParameters,
 		s.dropEncryptionLevel,
+		s.closeLocal,
 		tlsConf,
 		logger,
 	)
@@ -269,6 +270,7 @@ var newClientSession = func(
 		params,
 		s.processTransportParameters,
 		s.dropEncryptionLevel,
+		s.closeLocal,
 		tlsConf,
 		logger,
 	)
@@ -338,10 +340,8 @@ func (s *session) run() error {
 	defer s.ctxCancel()
 
 	go func() {
-		if err := s.cryptoStreamHandler.RunHandshake(); err != nil {
-			s.closeLocal(err)
-			return
-		}
+		s.cryptoStreamHandler.RunHandshake()
+		// If an error occurred during the handshake, the crypto setup will already have called the close callback.
 		close(s.handshakeCompleteChan)
 	}()
 	if s.perspective == protocol.PerspectiveClient {

@@ -89,6 +89,7 @@ var _ = Describe("Crypto Setup TLS", func() {
 			&TransportParameters{},
 			func([]byte) {},
 			func(protocol.EncryptionLevel) {},
+			func(err error) { Fail("error callback called") },
 			tlsConf,
 			utils.DefaultLogger.WithPrefix("server"),
 		)
@@ -108,6 +109,7 @@ var _ = Describe("Crypto Setup TLS", func() {
 	})
 
 	It("returns Handshake() when an error occurs", func() {
+		sErrChan := make(chan error, 1)
 		_, sInitialStream, sHandshakeStream := initStreams()
 		server, err := NewCryptoSetupServer(
 			sInitialStream,
@@ -118,6 +120,7 @@ var _ = Describe("Crypto Setup TLS", func() {
 			&TransportParameters{},
 			func([]byte) {},
 			func(protocol.EncryptionLevel) {},
+			func(e error) { sErrChan <- e },
 			testdata.GetTLSConfig(),
 			utils.DefaultLogger.WithPrefix("server"),
 		)
@@ -126,8 +129,8 @@ var _ = Describe("Crypto Setup TLS", func() {
 		done := make(chan struct{})
 		go func() {
 			defer GinkgoRecover()
-			err := server.RunHandshake()
-			Expect(err).To(MatchError("CRYPTO_ERROR: local error: tls: unexpected message"))
+			server.RunHandshake()
+			Expect(sErrChan).To(Receive(MatchError("CRYPTO_ERROR: local error: tls: unexpected message")))
 			close(done)
 		}()
 
@@ -143,6 +146,7 @@ var _ = Describe("Crypto Setup TLS", func() {
 	})
 
 	It("returns Handshake() when a message is received at the wrong encryption level", func() {
+		sErrChan := make(chan error, 1)
 		_, sInitialStream, sHandshakeStream := initStreams()
 		server, err := NewCryptoSetupServer(
 			sInitialStream,
@@ -153,6 +157,7 @@ var _ = Describe("Crypto Setup TLS", func() {
 			&TransportParameters{},
 			func([]byte) {},
 			func(protocol.EncryptionLevel) {},
+			func(e error) { sErrChan <- e },
 			testdata.GetTLSConfig(),
 			utils.DefaultLogger.WithPrefix("server"),
 		)
@@ -161,7 +166,9 @@ var _ = Describe("Crypto Setup TLS", func() {
 		done := make(chan struct{})
 		go func() {
 			defer GinkgoRecover()
-			err := server.RunHandshake()
+			server.RunHandshake()
+			var err error
+			Expect(sErrChan).To(Receive(&err))
 			Expect(err).To(BeAssignableToTypeOf(&qerr.QuicError{}))
 			qerr := err.(*qerr.QuicError)
 			Expect(qerr.IsCryptoError()).To(BeTrue())
@@ -176,6 +183,7 @@ var _ = Describe("Crypto Setup TLS", func() {
 	})
 
 	It("returns Handshake() when handling a message fails", func() {
+		sErrChan := make(chan error, 1)
 		_, sInitialStream, sHandshakeStream := initStreams()
 		server, err := NewCryptoSetupServer(
 			sInitialStream,
@@ -186,6 +194,7 @@ var _ = Describe("Crypto Setup TLS", func() {
 			&TransportParameters{},
 			func([]byte) {},
 			func(protocol.EncryptionLevel) {},
+			func(e error) { sErrChan <- e },
 			testdata.GetTLSConfig(),
 			utils.DefaultLogger.WithPrefix("server"),
 		)
@@ -194,7 +203,9 @@ var _ = Describe("Crypto Setup TLS", func() {
 		done := make(chan struct{})
 		go func() {
 			defer GinkgoRecover()
-			err := server.RunHandshake()
+			server.RunHandshake()
+			var err error
+			Expect(sErrChan).To(Receive(&err))
 			Expect(err).To(BeAssignableToTypeOf(&qerr.QuicError{}))
 			qerr := err.(*qerr.QuicError)
 			Expect(qerr.IsCryptoError()).To(BeTrue())
@@ -209,6 +220,7 @@ var _ = Describe("Crypto Setup TLS", func() {
 	})
 
 	It("returns Handshake() when it is closed", func() {
+		sErrChan := make(chan error, 1)
 		_, sInitialStream, sHandshakeStream := initStreams()
 		server, err := NewCryptoSetupServer(
 			sInitialStream,
@@ -219,6 +231,7 @@ var _ = Describe("Crypto Setup TLS", func() {
 			&TransportParameters{},
 			func([]byte) {},
 			func(protocol.EncryptionLevel) {},
+			func(e error) { sErrChan <- e },
 			testdata.GetTLSConfig(),
 			utils.DefaultLogger.WithPrefix("server"),
 		)
@@ -227,8 +240,8 @@ var _ = Describe("Crypto Setup TLS", func() {
 		done := make(chan struct{})
 		go func() {
 			defer GinkgoRecover()
-			err := server.RunHandshake()
-			Expect(err).To(MatchError("Handshake aborted"))
+			server.RunHandshake()
+			Consistently(sErrChan).ShouldNot(Receive())
 			close(done)
 		}()
 		Expect(server.Close()).To(Succeed())
@@ -255,13 +268,9 @@ var _ = Describe("Crypto Setup TLS", func() {
 			}
 		}
 
-		handshake := func(
-			client CryptoSetup,
-			cChunkChan <-chan chunk,
-			server CryptoSetup,
-			sChunkChan <-chan chunk) (error /* client error */, error /* server error */) {
+		handshake := func(client CryptoSetup, cChunkChan <-chan chunk,
+			server CryptoSetup, sChunkChan <-chan chunk) {
 			done := make(chan struct{})
-			defer close(done)
 			go func() {
 				defer GinkgoRecover()
 				for {
@@ -276,20 +285,19 @@ var _ = Describe("Crypto Setup TLS", func() {
 				}
 			}()
 
-			serverErrChan := make(chan error)
 			go func() {
 				defer GinkgoRecover()
-				serverErrChan <- server.RunHandshake()
+				server.RunHandshake()
+				close(done)
 			}()
 
-			clientErr := client.RunHandshake()
-			var serverErr error
-			Eventually(serverErrChan).Should(Receive(&serverErr))
-			return clientErr, serverErr
+			client.RunHandshake()
+			Eventually(done).Should(BeClosed())
 		}
 
 		handshakeWithTLSConf := func(clientConf, serverConf *tls.Config) (error /* client error */, error /* server error */) {
 			cChunkChan, cInitialStream, cHandshakeStream := initStreams()
+			cErrChan := make(chan error, 1)
 			client, _, err := NewCryptoSetupClient(
 				cInitialStream,
 				cHandshakeStream,
@@ -299,12 +307,14 @@ var _ = Describe("Crypto Setup TLS", func() {
 				&TransportParameters{},
 				func([]byte) {},
 				func(protocol.EncryptionLevel) {},
+				func(e error) { cErrChan <- e },
 				clientConf,
 				utils.DefaultLogger.WithPrefix("client"),
 			)
 			Expect(err).ToNot(HaveOccurred())
 
 			sChunkChan, sInitialStream, sHandshakeStream := initStreams()
+			sErrChan := make(chan error, 1)
 			var token [16]byte
 			server, err := NewCryptoSetupServer(
 				sInitialStream,
@@ -315,12 +325,23 @@ var _ = Describe("Crypto Setup TLS", func() {
 				&TransportParameters{StatelessResetToken: &token},
 				func([]byte) {},
 				func(protocol.EncryptionLevel) {},
+				func(e error) { sErrChan <- e },
 				serverConf,
 				utils.DefaultLogger.WithPrefix("server"),
 			)
 			Expect(err).ToNot(HaveOccurred())
 
-			return handshake(client, cChunkChan, server, sChunkChan)
+			handshake(client, cChunkChan, server, sChunkChan)
+			var cErr, sErr error
+			select {
+			case sErr = <-sErrChan:
+			default:
+			}
+			select {
+			case cErr = <-cErrChan:
+			default:
+			}
+			return cErr, sErr
 		}
 
 		It("handshakes", func() {
@@ -358,6 +379,7 @@ var _ = Describe("Crypto Setup TLS", func() {
 				&TransportParameters{},
 				func([]byte) {},
 				func(protocol.EncryptionLevel) {},
+				func(error) {},
 				&tls.Config{InsecureSkipVerify: true},
 				utils.DefaultLogger.WithPrefix("client"),
 			)
@@ -396,6 +418,7 @@ var _ = Describe("Crypto Setup TLS", func() {
 				cTransportParameters,
 				func(p []byte) { sTransportParametersRcvd = p },
 				func(protocol.EncryptionLevel) {},
+				func(error) { Fail("error callback called") },
 				clientConf,
 				utils.DefaultLogger.WithPrefix("client"),
 			)
@@ -416,6 +439,7 @@ var _ = Describe("Crypto Setup TLS", func() {
 				sTransportParameters,
 				func(p []byte) { cTransportParametersRcvd = p },
 				func(protocol.EncryptionLevel) {},
+				func(error) { Fail("error callback called") },
 				testdata.GetTLSConfig(),
 				utils.DefaultLogger.WithPrefix("server"),
 			)
@@ -424,9 +448,7 @@ var _ = Describe("Crypto Setup TLS", func() {
 			done := make(chan struct{})
 			go func() {
 				defer GinkgoRecover()
-				clientErr, serverErr := handshake(client, cChunkChan, server, sChunkChan)
-				Expect(clientErr).ToNot(HaveOccurred())
-				Expect(serverErr).ToNot(HaveOccurred())
+				handshake(client, cChunkChan, server, sChunkChan)
 				close(done)
 			}()
 			Eventually(done).Should(BeClosed())
