@@ -3,6 +3,7 @@
 ## v0.12.0 (unreleased)
 
 - Implement HTTP/3.
+- Rename `quic.Cookie` to `quic.Token` and `quic.Config.AcceptCookie` to `quic.Config.AcceptToken`.
 
 ## v0.11.0 (2019-04-05)
 

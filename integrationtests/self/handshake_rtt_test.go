@@ -113,8 +113,8 @@ var _ = Describe("Handshake RTT tests", func() {
 		expectDurationInRTTs(2)
 	})
 
-	It("establishes a connection in 1 RTT when the server doesn't require a Cookie", func() {
-		serverConfig.AcceptCookie = func(_ net.Addr, _ *quic.Cookie) bool {
+	It("establishes a connection in 1 RTT when the server doesn't require a token", func() {
+		serverConfig.AcceptToken = func(_ net.Addr, _ *quic.Token) bool {
 			return true
 		}
 		runServerAndProxy()
@@ -128,7 +128,7 @@ var _ = Describe("Handshake RTT tests", func() {
 	})
 
 	It("establishes a connection in 2 RTTs if a HelloRetryRequest is performed", func() {
-		serverConfig.AcceptCookie = func(_ net.Addr, _ *quic.Cookie) bool {
+		serverConfig.AcceptToken = func(_ net.Addr, _ *quic.Token) bool {
 			return true
 		}
 		serverTLSConfig.CurvePreferences = []tls.CurveID{tls.CurveP384}
@@ -142,8 +142,8 @@ var _ = Describe("Handshake RTT tests", func() {
 		expectDurationInRTTs(2)
 	})
 
-	It("doesn't complete the handshake when the server never accepts the Cookie", func() {
-		serverConfig.AcceptCookie = func(_ net.Addr, _ *quic.Cookie) bool {
+	It("doesn't complete the handshake when the server never accepts the token", func() {
+		serverConfig.AcceptToken = func(_ net.Addr, _ *quic.Token) bool {
 			return false
 		}
 		clientConfig.HandshakeTimeout = 500 * time.Millisecond

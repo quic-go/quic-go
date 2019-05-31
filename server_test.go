@@ -69,7 +69,7 @@ var _ = Describe("Server", func() {
 		Expect(server.config.Versions).To(Equal(protocol.SupportedVersions))
 		Expect(server.config.HandshakeTimeout).To(Equal(protocol.DefaultHandshakeTimeout))
 		Expect(server.config.IdleTimeout).To(Equal(protocol.DefaultIdleTimeout))
-		Expect(reflect.ValueOf(server.config.AcceptCookie)).To(Equal(reflect.ValueOf(defaultAcceptCookie)))
+		Expect(reflect.ValueOf(server.config.AcceptToken)).To(Equal(reflect.ValueOf(defaultAcceptToken)))
 		Expect(server.config.KeepAlive).To(BeFalse())
 		// stop the listener
 		Expect(ln.Close()).To(Succeed())
@@ -77,10 +77,10 @@ var _ = Describe("Server", func() {
 
 	It("setups with the right values", func() {
 		supportedVersions := []protocol.VersionNumber{protocol.VersionTLS}
-		acceptCookie := func(_ net.Addr, _ *Cookie) bool { return true }
+		acceptToken := func(_ net.Addr, _ *Token) bool { return true }
 		config := Config{
 			Versions:          supportedVersions,
-			AcceptCookie:      acceptCookie,
+			AcceptToken:       acceptToken,
 			HandshakeTimeout:  1337 * time.Hour,
 			IdleTimeout:       42 * time.Minute,
 			KeepAlive:         true,
@@ -93,7 +93,7 @@ var _ = Describe("Server", func() {
 		Expect(server.config.Versions).To(Equal(supportedVersions))
 		Expect(server.config.HandshakeTimeout).To(Equal(1337 * time.Hour))
 		Expect(server.config.IdleTimeout).To(Equal(42 * time.Minute))
-		Expect(reflect.ValueOf(server.config.AcceptCookie)).To(Equal(reflect.ValueOf(acceptCookie)))
+		Expect(reflect.ValueOf(server.config.AcceptToken)).To(Equal(reflect.ValueOf(acceptToken)))
 		Expect(server.config.KeepAlive).To(BeTrue())
 		Expect(server.config.StatelessResetKey).To(Equal([]byte("foobar")))
 		// stop the listener
@@ -179,19 +179,19 @@ var _ = Describe("Server", func() {
 			))
 		})
 
-		It("decodes the cookie from the Token field", func() {
+		It("decodes the token from the Token field", func() {
 			raddr := &net.UDPAddr{
 				IP:   net.IPv4(192, 168, 13, 37),
 				Port: 1337,
 			}
 			done := make(chan struct{})
-			serv.config.AcceptCookie = func(addr net.Addr, cookie *Cookie) bool {
+			serv.config.AcceptToken = func(addr net.Addr, token *Token) bool {
 				Expect(addr).To(Equal(raddr))
-				Expect(cookie).ToNot(BeNil())
+				Expect(token).ToNot(BeNil())
 				close(done)
 				return false
 			}
-			token, err := serv.cookieGenerator.NewToken(raddr, nil)
+			token, err := serv.tokenGenerator.NewToken(raddr, nil)
 			Expect(err).ToNot(HaveOccurred())
 			packet := getPacket(&wire.Header{
 				IsLongHeader: true,
@@ -204,15 +204,15 @@ var _ = Describe("Server", func() {
 			Eventually(done).Should(BeClosed())
 		})
 
-		It("passes an empty cookie to the callback, if decoding fails", func() {
+		It("passes an empty token to the callback, if decoding fails", func() {
 			raddr := &net.UDPAddr{
 				IP:   net.IPv4(192, 168, 13, 37),
 				Port: 1337,
 			}
 			done := make(chan struct{})
-			serv.config.AcceptCookie = func(addr net.Addr, cookie *Cookie) bool {
+			serv.config.AcceptToken = func(addr net.Addr, token *Token) bool {
 				Expect(addr).To(Equal(raddr))
-				Expect(cookie).To(BeNil())
+				Expect(token).To(BeNil())
 				close(done)
 				return false
 			}
@@ -249,8 +249,8 @@ var _ = Describe("Server", func() {
 			Expect(hdr.SupportedVersions).ToNot(ContainElement(protocol.VersionNumber(0x42)))
 		})
 
-		It("replies with a Retry packet, if a Cookie is required", func() {
-			serv.config.AcceptCookie = func(_ net.Addr, _ *Cookie) bool { return false }
+		It("replies with a Retry packet, if a Token is required", func() {
+			serv.config.AcceptToken = func(_ net.Addr, _ *Token) bool { return false }
 			hdr := &wire.Header{
 				IsLongHeader:     true,
 				Type:             protocol.PacketTypeInitial,
@@ -272,8 +272,8 @@ var _ = Describe("Server", func() {
 			Expect(replyHdr.Token).ToNot(BeEmpty())
 		})
 
-		It("creates a session, if no Cookie is required", func() {
-			serv.config.AcceptCookie = func(_ net.Addr, _ *Cookie) bool { return true }
+		It("creates a session, if no Token is required", func() {
+			serv.config.AcceptToken = func(_ net.Addr, _ *Token) bool { return true }
 			hdr := &wire.Header{
 				IsLongHeader:     true,
 				Type:             protocol.PacketTypeInitial,
@@ -320,7 +320,7 @@ var _ = Describe("Server", func() {
 		})
 
 		It("rejects new connection attempts if the accept queue is full", func() {
-			serv.config.AcceptCookie = func(_ net.Addr, _ *Cookie) bool { return true }
+			serv.config.AcceptToken = func(_ net.Addr, _ *Token) bool { return true }
 			senderAddr := &net.UDPAddr{IP: net.IPv4(1, 2, 3, 4), Port: 42}
 
 			hdr := &wire.Header{
@@ -375,7 +375,7 @@ var _ = Describe("Server", func() {
 		})
 
 		It("doesn't accept new sessions if they were closed in the mean time", func() {
-			serv.config.AcceptCookie = func(_ net.Addr, _ *Cookie) bool { return true }
+			serv.config.AcceptToken = func(_ net.Addr, _ *Token) bool { return true }
 			senderAddr := &net.UDPAddr{IP: net.IPv4(1, 2, 3, 4), Port: 42}
 
 			hdr := &wire.Header{
@@ -543,51 +543,51 @@ var _ = Describe("Server", func() {
 var _ = Describe("default source address verification", func() {
 	It("accepts a token", func() {
 		remoteAddr := &net.UDPAddr{IP: net.IPv4(192, 168, 0, 1)}
-		cookie := &Cookie{
+		token := &Token{
 			RemoteAddr: "192.168.0.1",
-			SentTime:   time.Now().Add(-protocol.CookieExpiryTime).Add(time.Second), // will expire in 1 second
+			SentTime:   time.Now().Add(-protocol.TokenExpiryTime).Add(time.Second), // will expire in 1 second
 		}
-		Expect(defaultAcceptCookie(remoteAddr, cookie)).To(BeTrue())
+		Expect(defaultAcceptToken(remoteAddr, token)).To(BeTrue())
 	})
 
 	It("requests verification if no token is provided", func() {
 		remoteAddr := &net.UDPAddr{IP: net.IPv4(192, 168, 0, 1)}
-		Expect(defaultAcceptCookie(remoteAddr, nil)).To(BeFalse())
+		Expect(defaultAcceptToken(remoteAddr, nil)).To(BeFalse())
 	})
 
 	It("rejects a token if the address doesn't match", func() {
 		remoteAddr := &net.UDPAddr{IP: net.IPv4(192, 168, 0, 1)}
-		cookie := &Cookie{
+		token := &Token{
 			RemoteAddr: "127.0.0.1",
 			SentTime:   time.Now(),
 		}
-		Expect(defaultAcceptCookie(remoteAddr, cookie)).To(BeFalse())
+		Expect(defaultAcceptToken(remoteAddr, token)).To(BeFalse())
 	})
 
 	It("accepts a token for a remote address is not a UDP address", func() {
 		remoteAddr := &net.TCPAddr{IP: net.IPv4(192, 168, 0, 1), Port: 1337}
-		cookie := &Cookie{
+		token := &Token{
 			RemoteAddr: "192.168.0.1:1337",
 			SentTime:   time.Now(),
 		}
-		Expect(defaultAcceptCookie(remoteAddr, cookie)).To(BeTrue())
+		Expect(defaultAcceptToken(remoteAddr, token)).To(BeTrue())
 	})
 
 	It("rejects an invalid token for a remote address is not a UDP address", func() {
 		remoteAddr := &net.TCPAddr{IP: net.IPv4(192, 168, 0, 1), Port: 1337}
-		cookie := &Cookie{
+		token := &Token{
 			RemoteAddr: "192.168.0.1:7331", // mismatching port
 			SentTime:   time.Now(),
 		}
-		Expect(defaultAcceptCookie(remoteAddr, cookie)).To(BeFalse())
+		Expect(defaultAcceptToken(remoteAddr, token)).To(BeFalse())
 	})
 
 	It("rejects an expired token", func() {
 		remoteAddr := &net.UDPAddr{IP: net.IPv4(192, 168, 0, 1)}
-		cookie := &Cookie{
+		token := &Token{
 			RemoteAddr: "192.168.0.1",
-			SentTime:   time.Now().Add(-protocol.CookieExpiryTime).Add(-time.Second), // expired 1 second ago
+			SentTime:   time.Now().Add(-protocol.TokenExpiryTime).Add(-time.Second), // expired 1 second ago
 		}
-		Expect(defaultAcceptCookie(remoteAddr, cookie)).To(BeFalse())
+		Expect(defaultAcceptToken(remoteAddr, token)).To(BeFalse())
 	})
 })
