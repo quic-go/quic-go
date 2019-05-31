@@ -2,7 +2,6 @@ package handshake
 
 import (
 	"crypto/tls"
-	"crypto/x509"
 	"io"
 
 	"github.com/lucas-clemente/quic-go/internal/protocol"
@@ -42,12 +41,4 @@ type CryptoSetup interface {
 	GetSealer() (protocol.EncryptionLevel, Sealer)
 	GetSealerWithEncryptionLevel(protocol.EncryptionLevel) (Sealer, error)
 	GetOpener(protocol.EncryptionLevel) (Opener, error)
-}
-
-// ConnectionState records basic details about the QUIC connection.
-// Warning: This API should not be considered stable and might change soon.
-type ConnectionState struct {
-	HandshakeComplete bool                // handshake is complete
-	ServerName        string              // server name requested by client, if any (server side only)
-	PeerCertificates  []*x509.Certificate // certificate chain presented by remote peer
 }
