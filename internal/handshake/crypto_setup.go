@@ -358,7 +358,8 @@ func (h *cryptoSetup) handleMessageForServer(msgType messageType) bool {
 		}
 		return true
 	default:
-		panic("unexpected handshake message")
+		h.messageErrChan <- qerr.CryptoError(alertUnexpectedMessage, fmt.Sprintf("unexpected handshake message: %d", msgType))
+		return false
 	}
 }
 
@@ -414,7 +415,8 @@ func (h *cryptoSetup) handleMessageForClient(msgType messageType) bool {
 		h.conn.HandlePostHandshakeMessage()
 		return false
 	default:
-		panic("unexpected handshake message: ")
+		h.messageErrChan <- qerr.CryptoError(alertUnexpectedMessage, fmt.Sprintf("unexpected handshake message: %d", msgType))
+		return false
 	}
 }
 
