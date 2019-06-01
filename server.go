@@ -141,6 +141,9 @@ func listen(conn net.PacketConn, tlsConf *tls.Config, config *Config) (*server, 
 	if tlsConf == nil || len(tlsConf.Certificates) == 0 {
 		return nil, errors.New("quic: Certificates not set in tls.Config")
 	}
+	if len(tlsConf.NextProtos) == 0 {
+		return nil, errors.New("quic: NextProtos not set in tls.Config")
+	}
 	config = populateServerConfig(config)
 	for _, v := range config.Versions {
 		if !protocol.IsValidVersion(v) {
