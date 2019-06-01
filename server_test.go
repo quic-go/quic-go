@@ -292,6 +292,7 @@ var _ = Describe("Server", func() {
 				_ *Config,
 				_ *tls.Config,
 				_ *handshake.TransportParameters,
+				_ *handshake.TokenGenerator,
 				_ utils.Logger,
 				_ protocol.VersionNumber,
 			) (quicSession, error) {
@@ -341,6 +342,7 @@ var _ = Describe("Server", func() {
 				_ *Config,
 				_ *tls.Config,
 				_ *handshake.TransportParameters,
+				_ *handshake.TokenGenerator,
 				_ utils.Logger,
 				_ protocol.VersionNumber,
 			) (quicSession, error) {
@@ -399,6 +401,7 @@ var _ = Describe("Server", func() {
 				_ *Config,
 				_ *tls.Config,
 				_ *handshake.TransportParameters,
+				_ *handshake.TokenGenerator,
 				_ utils.Logger,
 				_ protocol.VersionNumber,
 			) (quicSession, error) {
@@ -486,6 +489,7 @@ var _ = Describe("Server", func() {
 				_ *Config,
 				_ *tls.Config,
 				_ *handshake.TransportParameters,
+				_ *handshake.TokenGenerator,
 				_ utils.Logger,
 				_ protocol.VersionNumber,
 			) (quicSession, error) {
@@ -518,6 +522,7 @@ var _ = Describe("Server", func() {
 				_ *Config,
 				_ *tls.Config,
 				_ *handshake.TransportParameters,
+				_ *handshake.TokenGenerator,
 				_ utils.Logger,
 				_ protocol.VersionNumber,
 			) (quicSession, error) {
@@ -544,8 +549,9 @@ var _ = Describe("default source address verification", func() {
 	It("accepts a token", func() {
 		remoteAddr := &net.UDPAddr{IP: net.IPv4(192, 168, 0, 1)}
 		token := &Token{
-			RemoteAddr: "192.168.0.1",
-			SentTime:   time.Now().Add(-protocol.RetryTokenValidity).Add(time.Second), // will expire in 1 second
+			IsRetryToken: true,
+			RemoteAddr:   "192.168.0.1",
+			SentTime:     time.Now().Add(-protocol.RetryTokenValidity).Add(time.Second), // will expire in 1 second
 		}
 		Expect(defaultAcceptToken(remoteAddr, token)).To(BeTrue())
 	})
@@ -558,8 +564,9 @@ var _ = Describe("default source address verification", func() {
 	It("rejects a token if the address doesn't match", func() {
 		remoteAddr := &net.UDPAddr{IP: net.IPv4(192, 168, 0, 1)}
 		token := &Token{
-			RemoteAddr: "127.0.0.1",
-			SentTime:   time.Now(),
+			IsRetryToken: true,
+			RemoteAddr:   "127.0.0.1",
+			SentTime:     time.Now(),
 		}
 		Expect(defaultAcceptToken(remoteAddr, token)).To(BeFalse())
 	})
@@ -567,8 +574,9 @@ var _ = Describe("default source address verification", func() {
 	It("accepts a token for a remote address is not a UDP address", func() {
 		remoteAddr := &net.TCPAddr{IP: net.IPv4(192, 168, 0, 1), Port: 1337}
 		token := &Token{
-			RemoteAddr: "192.168.0.1:1337",
-			SentTime:   time.Now(),
+			IsRetryToken: true,
+			RemoteAddr:   "192.168.0.1:1337",
+			SentTime:     time.Now(),
 		}
 		Expect(defaultAcceptToken(remoteAddr, token)).To(BeTrue())
 	})
@@ -576,8 +584,9 @@ var _ = Describe("default source address verification", func() {
 	It("rejects an invalid token for a remote address is not a UDP address", func() {
 		remoteAddr := &net.TCPAddr{IP: net.IPv4(192, 168, 0, 1), Port: 1337}
 		token := &Token{
-			RemoteAddr: "192.168.0.1:7331", // mismatching port
-			SentTime:   time.Now(),
+			IsRetryToken: true,
+			RemoteAddr:   "192.168.0.1:7331", // mismatching port
+			SentTime:     time.Now(),
 		}
 		Expect(defaultAcceptToken(remoteAddr, token)).To(BeFalse())
 	})
@@ -585,9 +594,22 @@ var _ = Describe("default source address verification", func() {
 	It("rejects an expired token", func() {
 		remoteAddr := &net.UDPAddr{IP: net.IPv4(192, 168, 0, 1)}
 		token := &Token{
-			RemoteAddr: "192.168.0.1",
-			SentTime:   time.Now().Add(-protocol.RetryTokenValidity).Add(-time.Second), // expired 1 second ago
+			IsRetryToken: true,
+			RemoteAddr:   "192.168.0.1",
+			SentTime:     time.Now().Add(-protocol.RetryTokenValidity).Add(-time.Second), // expired 1 second ago
 		}
 		Expect(defaultAcceptToken(remoteAddr, token)).To(BeFalse())
+	})
+
+	It("accepts a non-retry token", func() {
+		Expect(protocol.RetryTokenValidity).To(BeNumerically("<", protocol.TokenValidity))
+		remoteAddr := &net.UDPAddr{IP: net.IPv4(192, 168, 0, 1)}
+		token := &Token{
+			IsRetryToken: false,
+			RemoteAddr:   "192.168.0.1",
+			// if this was a retry token, it would have expired one second ago
+			SentTime: time.Now().Add(-protocol.RetryTokenValidity).Add(-time.Second),
+		}
+		Expect(defaultAcceptToken(remoteAddr, token)).To(BeTrue())
 	})
 })

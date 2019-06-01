@@ -116,6 +116,7 @@ type session struct {
 	framer                framer
 	windowUpdateQueue     *windowUpdateQueue
 	connFlowController    flowcontrol.ConnectionFlowController
+	tokenGenerator        *handshake.TokenGenerator // only set for the server
 
 	unpacker    unpacker
 	frameParser wire.FrameParser
@@ -175,6 +176,7 @@ var newSession = func(
 	conf *Config,
 	tlsConf *tls.Config,
 	params *handshake.TransportParameters,
+	tokenGenerator *handshake.TokenGenerator,
 	logger utils.Logger,
 	v protocol.VersionNumber,
 ) (quicSession, error) {
@@ -184,6 +186,7 @@ var newSession = func(
 		config:                conf,
 		srcConnID:             srcConnID,
 		destConnID:            destConnID,
+		tokenGenerator:        tokenGenerator,
 		perspective:           protocol.PerspectiveServer,
 		handshakeCompleteChan: make(chan struct{}),
 		logger:                logger,
@@ -495,13 +498,15 @@ func (s *session) handleHandshakeComplete() {
 	s.sessionRunner.OnHandshakeComplete(s)
 
 	// The client completes the handshake first (after sending the CFIN).
-	// We need to make sure they learn about the peer completing the handshake,
+	// We need to make sure it learns about the server completing the handshake,
 	// in order to stop retransmitting handshake packets.
-	// They will stop retransmitting handshake packets when receiving the first forward-secure packet.
-	// We need to make sure that an ack-eliciting 1-RTT packet is sent,
-	// independent from the application protocol.
+	// They will stop retransmitting handshake packets when receiving the first 1-RTT packet.
 	if s.perspective == protocol.PerspectiveServer {
-		s.queueControlFrame(&wire.PingFrame{})
+		token, err := s.tokenGenerator.NewToken(s.conn.RemoteAddr())
+		if err != nil {
+			s.closeLocal(err)
+		}
+		s.queueControlFrame(&wire.NewTokenFrame{Token: token})
 	}
 }
 

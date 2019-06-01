@@ -57,6 +57,9 @@ const MaxTrackedSkippedPackets = 10
 // If the queue is full, new connection attempts will be rejected.
 const MaxAcceptQueueSize = 32
 
+// TokenValidity is the duration that a (non-retry) token is considered valid
+const TokenValidity = 24 * time.Hour
+
 // RetryTokenValidity is the duration that a retry token is considered valid
 const RetryTokenValidity = 10 * time.Second
 
