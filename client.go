@@ -3,6 +3,7 @@ package quic
 import (
 	"context"
 	"crypto/tls"
+	"errors"
 	"fmt"
 	"net"
 	"sync"
@@ -119,6 +120,9 @@ func dialContext(
 	config *Config,
 	createdPacketConn bool,
 ) (Session, error) {
+	if tlsConf == nil || len(tlsConf.NextProtos) == 0 {
+		return nil, errors.New("quic: NextProtos not set in tls.Config")
+	}
 	config = populateClientConfig(config, createdPacketConn)
 	packetHandlers, err := getMultiplexer().AddConn(pconn, config.ConnectionIDLength, config.StatelessResetKey)
 	if err != nil {
