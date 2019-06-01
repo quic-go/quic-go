@@ -434,11 +434,33 @@ func (h *cryptoSetup) handleMessageForClient(msgType messageType) bool {
 		return true
 	case typeNewSessionTicket:
 		<-h.handshakeDone // don't process session tickets before the handshake has completed
-		h.conn.HandlePostHandshakeMessage()
+		h.handleNewSessionTicket()
 		return false
 	default:
 		h.messageErrChan <- qerr.CryptoError(alertUnexpectedMessage, fmt.Sprintf("unexpected handshake message: %d", msgType))
 		return false
+	}
+}
+
+func (h *cryptoSetup) handleNewSessionTicket() {
+	done := make(chan struct{})
+	defer close(done)
+
+	// h.alertChan is an unbuffered channel.
+	// If an error occurs during conn.HandlePostHandshakeMessage,
+	// it will be sent on this channel.
+	// Read it from a go-routine so that HandlePostHandshakeMessage doesn't deadlock.
+	alertChan := make(chan uint8, 1)
+	go func() {
+		select {
+		case alert := <-h.alertChan:
+			alertChan <- alert
+		case <-done:
+		}
+	}()
+
+	if err := h.conn.HandlePostHandshakeMessage(); err != nil {
+		h.runner.OnError(qerr.CryptoError(<-alertChan, err.Error()))
 	}
 }
 

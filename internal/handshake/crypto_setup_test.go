@@ -466,5 +466,58 @@ var _ = Describe("Crypto Setup TLS", func() {
 			Expect(srvTP.Unmarshal(sTransportParametersRcvd, protocol.PerspectiveServer)).To(Succeed())
 			Expect(srvTP.IdleTimeout).To(Equal(sTransportParameters.IdleTimeout))
 		})
+
+		It("errors when handling the NewSessionTicket fails", func() {
+			cChunkChan, cInitialStream, cHandshakeStream := initStreams()
+			cRunner := NewMockHandshakeRunner(mockCtrl)
+			cRunner.EXPECT().OnReceivedParams(gomock.Any())
+			cRunner.EXPECT().OnHandshakeComplete()
+			client, _, err := NewCryptoSetupClient(
+				cInitialStream,
+				cHandshakeStream,
+				ioutil.Discard,
+				protocol.ConnectionID{},
+				nil,
+				&TransportParameters{},
+				cRunner,
+				clientConf,
+				utils.DefaultLogger.WithPrefix("client"),
+			)
+			Expect(err).ToNot(HaveOccurred())
+
+			sChunkChan, sInitialStream, sHandshakeStream := initStreams()
+			sRunner := NewMockHandshakeRunner(mockCtrl)
+			sRunner.EXPECT().OnReceivedParams(gomock.Any())
+			sRunner.EXPECT().OnHandshakeComplete()
+			server, err := NewCryptoSetupServer(
+				sInitialStream,
+				sHandshakeStream,
+				ioutil.Discard,
+				protocol.ConnectionID{},
+				nil,
+				&TransportParameters{},
+				sRunner,
+				testdata.GetTLSConfig(),
+				utils.DefaultLogger.WithPrefix("server"),
+			)
+			Expect(err).ToNot(HaveOccurred())
+
+			done := make(chan struct{})
+			go func() {
+				defer GinkgoRecover()
+				handshake(client, cChunkChan, server, sChunkChan)
+				close(done)
+			}()
+			Eventually(done).Should(BeClosed())
+
+			// inject an invalid session ticket
+			cRunner.EXPECT().OnError(gomock.Any()).Do(func(err error) {
+				Expect(err).To(BeAssignableToTypeOf(&qerr.QuicError{}))
+				qerr := err.(*qerr.QuicError)
+				Expect(qerr.IsCryptoError()).To(BeTrue())
+			})
+			b := append([]byte{uint8(typeNewSessionTicket), 0, 0, 6}, []byte("foobar")...)
+			client.HandleMessage(b, protocol.Encryption1RTT)
+		})
 	})
 })
