@@ -280,4 +280,51 @@ var _ = Describe("Handshake tests", func() {
 		})
 
 	})
+
+	Context("ALPN", func() {
+		It("negotiates an application protocol", func() {
+			ln, err := quic.ListenAddr("localhost:0", tlsServerConf, serverConfig)
+			Expect(err).ToNot(HaveOccurred())
+
+			done := make(chan struct{})
+			go func() {
+				defer GinkgoRecover()
+				sess, err := ln.Accept()
+				Expect(err).ToNot(HaveOccurred())
+				cs := sess.ConnectionState()
+				Expect(cs.NegotiatedProtocol).To(Equal(alpn))
+				Expect(cs.NegotiatedProtocolIsMutual).To(BeTrue())
+				close(done)
+			}()
+
+			sess, err := quic.DialAddr(
+				fmt.Sprintf("localhost:%d", ln.Addr().(*net.UDPAddr).Port),
+				getTLSClientConfig(),
+				nil,
+			)
+			Expect(err).ToNot(HaveOccurred())
+			defer sess.Close()
+			cs := sess.ConnectionState()
+			Expect(cs.NegotiatedProtocol).To(Equal(alpn))
+			Expect(cs.NegotiatedProtocolIsMutual).To(BeTrue())
+			Eventually(done).Should(BeClosed())
+			Expect(ln.Close()).To(Succeed())
+		})
+
+		It("errors if application protocol negotiation fails", func() {
+			server := runServer()
+
+			tlsConf := getTLSClientConfig()
+			tlsConf.NextProtos = []string{"foobar"}
+			_, err := quic.DialAddr(
+				fmt.Sprintf("localhost:%d", server.Addr().(*net.UDPAddr).Port),
+				tlsConf,
+				nil,
+			)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("CRYPTO_ERROR"))
+			Expect(err.Error()).To(ContainSubstring("no application protocol"))
+			Expect(server.Close()).To(Succeed())
+		})
+	})
 })
