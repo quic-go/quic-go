@@ -107,7 +107,7 @@ var _ = Describe("Crypto Setup TLS", func() {
 		Expect(cconf.ReceivedExtensions).ToNot(BeNil())
 	})
 
-	It("returns Handshake() when an error occurs", func() {
+	It("returns Handshake() when an error occurs in qtls", func() {
 		sErrChan := make(chan error, 1)
 		runner := NewMockHandshakeRunner(mockCtrl)
 		runner.EXPECT().OnError(gomock.Any()).Do(func(e error) { sErrChan <- e })
@@ -144,7 +144,7 @@ var _ = Describe("Crypto Setup TLS", func() {
 		Eventually(done).Should(BeClosed())
 	})
 
-	It("returns Handshake() when a message is received at the wrong encryption level", func() {
+	It("errors when a message is received at the wrong encryption level", func() {
 		sErrChan := make(chan error, 1)
 		_, sInitialStream, sHandshakeStream := initStreams()
 		runner := NewMockHandshakeRunner(mockCtrl)
@@ -166,18 +166,20 @@ var _ = Describe("Crypto Setup TLS", func() {
 		go func() {
 			defer GinkgoRecover()
 			server.RunHandshake()
-			var err error
-			Expect(sErrChan).To(Receive(&err))
-			Expect(err).To(BeAssignableToTypeOf(&qerr.QuicError{}))
-			qerr := err.(*qerr.QuicError)
-			Expect(qerr.IsCryptoError()).To(BeTrue())
-			Expect(qerr.ErrorCode).To(BeEquivalentTo(0x100 + int(alertUnexpectedMessage)))
-			Expect(err.Error()).To(ContainSubstring("expected handshake message ClientHello to have encryption level Initial, has Handshake"))
 			close(done)
 		}()
 
 		fakeCH := append([]byte{byte(typeClientHello), 0, 0, 6}, []byte("foobar")...)
 		server.HandleMessage(fakeCH, protocol.EncryptionHandshake) // wrong encryption level
+		Expect(sErrChan).To(Receive(&err))
+		Expect(err).To(BeAssignableToTypeOf(&qerr.QuicError{}))
+		qerr := err.(*qerr.QuicError)
+		Expect(qerr.IsCryptoError()).To(BeTrue())
+		Expect(qerr.ErrorCode).To(BeEquivalentTo(0x100 + int(alertUnexpectedMessage)))
+		Expect(err.Error()).To(ContainSubstring("expected handshake message ClientHello to have encryption level Initial, has Handshake"))
+
+		// make the go routine return
+		Expect(server.Close()).To(Succeed())
 		Eventually(done).Should(BeClosed())
 	})
 
@@ -209,7 +211,6 @@ var _ = Describe("Crypto Setup TLS", func() {
 			qerr := err.(*qerr.QuicError)
 			Expect(qerr.IsCryptoError()).To(BeTrue())
 			Expect(qerr.ErrorCode).To(BeEquivalentTo(0x100 + int(alertUnexpectedMessage)))
-			Expect(err.Error()).To(ContainSubstring("unexpected handshake message"))
 			close(done)
 		}()
 
@@ -403,8 +404,7 @@ var _ = Describe("Crypto Setup TLS", func() {
 			Expect(len(ch.data) - 4).To(Equal(length))
 
 			// make the go routine return
-			runner.EXPECT().OnError(gomock.Any())
-			client.HandleMessage([]byte{42 /* unknown handshake message type */, 0, 0, 1, 0}, protocol.EncryptionInitial)
+			Expect(client.Close()).To(Succeed())
 			Eventually(done).Should(BeClosed())
 		})
 
@@ -465,6 +465,61 @@ var _ = Describe("Crypto Setup TLS", func() {
 			srvTP := &TransportParameters{}
 			Expect(srvTP.Unmarshal(sTransportParametersRcvd, protocol.PerspectiveServer)).To(Succeed())
 			Expect(srvTP.IdleTimeout).To(Equal(sTransportParameters.IdleTimeout))
+		})
+
+		It("errors when the NewSessionTicket is sent at the wrong encryption level", func() {
+			cChunkChan, cInitialStream, cHandshakeStream := initStreams()
+			cRunner := NewMockHandshakeRunner(mockCtrl)
+			cRunner.EXPECT().OnReceivedParams(gomock.Any())
+			cRunner.EXPECT().OnHandshakeComplete()
+			client, _, err := NewCryptoSetupClient(
+				cInitialStream,
+				cHandshakeStream,
+				ioutil.Discard,
+				protocol.ConnectionID{},
+				nil,
+				&TransportParameters{},
+				cRunner,
+				clientConf,
+				utils.DefaultLogger.WithPrefix("client"),
+			)
+			Expect(err).ToNot(HaveOccurred())
+
+			sChunkChan, sInitialStream, sHandshakeStream := initStreams()
+			sRunner := NewMockHandshakeRunner(mockCtrl)
+			sRunner.EXPECT().OnReceivedParams(gomock.Any())
+			sRunner.EXPECT().OnHandshakeComplete()
+			server, err := NewCryptoSetupServer(
+				sInitialStream,
+				sHandshakeStream,
+				ioutil.Discard,
+				protocol.ConnectionID{},
+				nil,
+				&TransportParameters{},
+				sRunner,
+				testdata.GetTLSConfig(),
+				utils.DefaultLogger.WithPrefix("server"),
+			)
+			Expect(err).ToNot(HaveOccurred())
+
+			done := make(chan struct{})
+			go func() {
+				defer GinkgoRecover()
+				handshake(client, cChunkChan, server, sChunkChan)
+				close(done)
+			}()
+			Eventually(done).Should(BeClosed())
+
+			// inject an invalid session ticket
+			cRunner.EXPECT().OnError(gomock.Any()).Do(func(err error) {
+				Expect(err).To(BeAssignableToTypeOf(&qerr.QuicError{}))
+				qerr := err.(*qerr.QuicError)
+				Expect(qerr.IsCryptoError()).To(BeTrue())
+				Expect(qerr.ErrorCode).To(BeEquivalentTo(0x100 + int(alertUnexpectedMessage)))
+				Expect(qerr.Error()).To(ContainSubstring("expected handshake message NewSessionTicket to have encryption level 1-RTT, has Handshake"))
+			})
+			b := append([]byte{uint8(typeNewSessionTicket), 0, 0, 6}, []byte("foobar")...)
+			client.HandleMessage(b, protocol.EncryptionHandshake)
 		})
 
 		It("errors when handling the NewSessionTicket fails", func() {
