@@ -198,7 +198,7 @@ var defaultAcceptToken = func(clientAddr net.Addr, token *Token) bool {
 	if token == nil {
 		return false
 	}
-	if time.Now().After(token.SentTime.Add(protocol.TokenExpiryTime)) {
+	if time.Now().After(token.SentTime.Add(protocol.RetryTokenValidity)) {
 		return false
 	}
 	var sourceAddr string

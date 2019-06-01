@@ -189,7 +189,7 @@ type Config struct {
 	IdleTimeout time.Duration
 	// AcceptToken determines if a Token is accepted.
 	// It is called with token = nil if the client didn't send a token.
-	// If not set, it verifies that the address matches, and that the token was issued within the last 24 hours.
+	// If not set, it verifies that the address matches, and that the token was issued within the last 5 seconds.
 	// This option is only valid for the server.
 	AcceptToken func(clientAddr net.Addr, token *Token) bool
 	// MaxReceiveStreamFlowControlWindow is the maximum stream-level flow control window for receiving data.
