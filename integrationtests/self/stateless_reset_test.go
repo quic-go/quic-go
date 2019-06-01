@@ -1,7 +1,6 @@
-package self
+package self_test
 
 import (
-	"crypto/tls"
 	"fmt"
 	"math/rand"
 	"net"
@@ -9,8 +8,8 @@ import (
 
 	quic "github.com/lucas-clemente/quic-go"
 	quicproxy "github.com/lucas-clemente/quic-go/integrationtests/tools/proxy"
-	"github.com/lucas-clemente/quic-go/internal/testdata"
 	"github.com/lucas-clemente/quic-go/internal/utils"
+
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 )
@@ -26,7 +25,7 @@ var _ = Describe("Stateless Resets", func() {
 			rand.Read(statelessResetKey)
 			serverConfig := &quic.Config{StatelessResetKey: statelessResetKey}
 
-			ln, err := quic.ListenAddr("localhost:0", testdata.GetTLSConfig(), serverConfig)
+			ln, err := quic.ListenAddr("localhost:0", getTLSConfig(), serverConfig)
 			Expect(err).ToNot(HaveOccurred())
 			serverPort := ln.Addr().(*net.UDPAddr).Port
 
@@ -57,7 +56,7 @@ var _ = Describe("Stateless Resets", func() {
 
 			sess, err := quic.DialAddr(
 				fmt.Sprintf("localhost:%d", proxy.LocalPort()),
-				&tls.Config{RootCAs: testdata.GetRootCA()},
+				getTLSClientConfig(),
 				&quic.Config{
 					ConnectionIDLength: connIDLen,
 					IdleTimeout:        2 * time.Second,
@@ -78,7 +77,7 @@ var _ = Describe("Stateless Resets", func() {
 
 			ln2, err := quic.ListenAddr(
 				fmt.Sprintf("localhost:%d", serverPort),
-				testdata.GetTLSConfig(),
+				getTLSConfig(),
 				serverConfig,
 			)
 			Expect(err).ToNot(HaveOccurred())

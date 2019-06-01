@@ -110,6 +110,7 @@ func tlsConfigToQtlsConfig(
 		VerifyPeerCertificate:       c.VerifyPeerCertificate,
 		RootCAs:                     c.RootCAs,
 		NextProtos:                  c.NextProtos,
+		EnforceNextProtoSelection:   true,
 		ServerName:                  c.ServerName,
 		ClientAuth:                  c.ClientAuth,
 		ClientCAs:                   c.ClientCAs,

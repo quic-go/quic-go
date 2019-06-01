@@ -1,7 +1,6 @@
 package self_test
 
 import (
-	"crypto/tls"
 	"fmt"
 	"io/ioutil"
 	"net"
@@ -11,7 +10,6 @@ import (
 	quicproxy "github.com/lucas-clemente/quic-go/integrationtests/tools/proxy"
 	"github.com/lucas-clemente/quic-go/integrationtests/tools/testserver"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
-	"github.com/lucas-clemente/quic-go/internal/testdata"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -35,7 +33,7 @@ var _ = Describe("non-zero RTT", func() {
 				It(fmt.Sprintf("downloads a message with %s RTT", rtt), func() {
 					ln, err := quic.ListenAddr(
 						"localhost:0",
-						testdata.GetTLSConfig(),
+						getTLSConfig(),
 						&quic.Config{
 							Versions: []protocol.VersionNumber{version},
 						},
@@ -65,7 +63,7 @@ var _ = Describe("non-zero RTT", func() {
 
 					sess, err := quic.DialAddr(
 						fmt.Sprintf("localhost:%d", proxy.LocalPort()),
-						&tls.Config{RootCAs: testdata.GetRootCA()},
+						getTLSClientConfig(),
 						&quic.Config{Versions: []protocol.VersionNumber{version}},
 					)
 					Expect(err).ToNot(HaveOccurred())

@@ -2,7 +2,6 @@ package self_test
 
 import (
 	"context"
-	"crypto/tls"
 	"fmt"
 	"net"
 	"os"
@@ -11,7 +10,6 @@ import (
 
 	quic "github.com/lucas-clemente/quic-go"
 	quicproxy "github.com/lucas-clemente/quic-go/integrationtests/tools/proxy"
-	"github.com/lucas-clemente/quic-go/internal/testdata"
 	"github.com/lucas-clemente/quic-go/internal/utils"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -30,7 +28,7 @@ var _ = Describe("Timeout tests", func() {
 		go func() {
 			_, err := quic.DialAddr(
 				"localhost:12345",
-				&tls.Config{RootCAs: testdata.GetRootCA()},
+				getTLSClientConfig(),
 				&quic.Config{HandshakeTimeout: 10 * time.Millisecond},
 			)
 			errChan <- err
@@ -48,7 +46,7 @@ var _ = Describe("Timeout tests", func() {
 			_, err := quic.DialAddrContext(
 				ctx,
 				"localhost:12345",
-				&tls.Config{RootCAs: testdata.GetRootCA()},
+				getTLSClientConfig(),
 				nil,
 			)
 			errChan <- err
@@ -64,7 +62,7 @@ var _ = Describe("Timeout tests", func() {
 
 		server, err := quic.ListenAddr(
 			"localhost:0",
-			testdata.GetTLSConfig(),
+			getTLSConfig(),
 			nil,
 		)
 		Expect(err).ToNot(HaveOccurred())
@@ -93,7 +91,7 @@ var _ = Describe("Timeout tests", func() {
 
 		sess, err := quic.DialAddr(
 			fmt.Sprintf("localhost:%d", proxy.LocalPort()),
-			&tls.Config{RootCAs: testdata.GetRootCA()},
+			getTLSClientConfig(),
 			&quic.Config{IdleTimeout: idleTimeout},
 		)
 		Expect(err).ToNot(HaveOccurred())
@@ -141,7 +139,7 @@ var _ = Describe("Timeout tests", func() {
 		})
 
 		It("times out after inactivity", func() {
-			server, err := quic.ListenAddr("localhost:0", testdata.GetTLSConfig(), nil)
+			server, err := quic.ListenAddr("localhost:0", getTLSConfig(), nil)
 			Expect(err).ToNot(HaveOccurred())
 			defer server.Close()
 
@@ -156,7 +154,7 @@ var _ = Describe("Timeout tests", func() {
 
 			sess, err := quic.DialAddr(
 				fmt.Sprintf("localhost:%d", server.Addr().(*net.UDPAddr).Port),
-				&tls.Config{RootCAs: testdata.GetRootCA()},
+				getTLSClientConfig(),
 				&quic.Config{IdleTimeout: idleTimeout},
 			)
 			Expect(err).ToNot(HaveOccurred())
@@ -182,7 +180,7 @@ var _ = Describe("Timeout tests", func() {
 		})
 
 		It("times out after sending a packet", func() {
-			server, err := quic.ListenAddr("localhost:0", testdata.GetTLSConfig(), nil)
+			server, err := quic.ListenAddr("localhost:0", getTLSConfig(), nil)
 			Expect(err).ToNot(HaveOccurred())
 			defer server.Close()
 
@@ -197,7 +195,7 @@ var _ = Describe("Timeout tests", func() {
 
 			sess, err := quic.DialAddr(
 				fmt.Sprintf("localhost:%d", server.Addr().(*net.UDPAddr).Port),
-				&tls.Config{RootCAs: testdata.GetRootCA()},
+				getTLSClientConfig(),
 				&quic.Config{IdleTimeout: idleTimeout},
 			)
 			Expect(err).ToNot(HaveOccurred())

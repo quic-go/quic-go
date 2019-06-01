@@ -1,7 +1,6 @@
 package self_test
 
 import (
-	"crypto/tls"
 	"fmt"
 	mrand "math/rand"
 	"net"
@@ -10,7 +9,6 @@ import (
 	quic "github.com/lucas-clemente/quic-go"
 	quicproxy "github.com/lucas-clemente/quic-go/integrationtests/tools/proxy"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
-	"github.com/lucas-clemente/quic-go/internal/testdata"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -34,7 +32,7 @@ var _ = Describe("Handshake drop tests", func() {
 		var err error
 		ln, err = quic.ListenAddr(
 			"localhost:0",
-			testdata.GetTLSConfig(),
+			getTLSConfig(),
 			&quic.Config{
 				Versions: []protocol.VersionNumber{version},
 			},
@@ -72,7 +70,7 @@ var _ = Describe("Handshake drop tests", func() {
 			}()
 			sess, err := quic.DialAddr(
 				fmt.Sprintf("localhost:%d", proxy.LocalPort()),
-				&tls.Config{RootCAs: testdata.GetRootCA()},
+				getTLSClientConfig(),
 				&quic.Config{Versions: []protocol.VersionNumber{version}},
 			)
 			Expect(err).ToNot(HaveOccurred())
@@ -104,7 +102,7 @@ var _ = Describe("Handshake drop tests", func() {
 			}()
 			sess, err := quic.DialAddr(
 				fmt.Sprintf("localhost:%d", proxy.LocalPort()),
-				&tls.Config{RootCAs: testdata.GetRootCA()},
+				getTLSClientConfig(),
 				&quic.Config{Versions: []protocol.VersionNumber{version}},
 			)
 			Expect(err).ToNot(HaveOccurred())
@@ -134,7 +132,7 @@ var _ = Describe("Handshake drop tests", func() {
 			}()
 			sess, err := quic.DialAddr(
 				fmt.Sprintf("localhost:%d", proxy.LocalPort()),
-				&tls.Config{RootCAs: testdata.GetRootCA()},
+				getTLSClientConfig(),
 				&quic.Config{Versions: []protocol.VersionNumber{version}},
 			)
 			Expect(err).ToNot(HaveOccurred())

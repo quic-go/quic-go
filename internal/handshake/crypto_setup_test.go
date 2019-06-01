@@ -52,7 +52,7 @@ func (s *stream) Write(b []byte) (int, error) {
 }
 
 var _ = Describe("Crypto Setup TLS", func() {
-	var clientConf *tls.Config
+	var clientConf, serverConf *tls.Config
 
 	initStreams := func() (chan chunk, *stream /* initial */, *stream /* handshake */) {
 		chunkChan := make(chan chunk, 100)
@@ -62,9 +62,12 @@ var _ = Describe("Crypto Setup TLS", func() {
 	}
 
 	BeforeEach(func() {
+		serverConf = testdata.GetTLSConfig()
+		serverConf.NextProtos = []string{"crypto-setup"}
 		clientConf = &tls.Config{
 			ServerName: "localhost",
 			RootCAs:    testdata.GetRootCA(),
+			NextProtos: []string{"crypto-setup"},
 		}
 	})
 
@@ -196,7 +199,7 @@ var _ = Describe("Crypto Setup TLS", func() {
 			nil,
 			&TransportParameters{},
 			runner,
-			testdata.GetTLSConfig(),
+			serverConf,
 			utils.DefaultLogger.WithPrefix("server"),
 		)
 		Expect(err).ToNot(HaveOccurred())
@@ -229,7 +232,7 @@ var _ = Describe("Crypto Setup TLS", func() {
 			nil,
 			&TransportParameters{},
 			NewMockHandshakeRunner(mockCtrl),
-			testdata.GetTLSConfig(),
+			serverConf,
 			utils.DefaultLogger.WithPrefix("server"),
 		)
 		Expect(err).ToNot(HaveOccurred())
@@ -349,14 +352,12 @@ var _ = Describe("Crypto Setup TLS", func() {
 		}
 
 		It("handshakes", func() {
-			serverConf := testdata.GetTLSConfig()
 			clientErr, serverErr := handshakeWithTLSConf(clientConf, serverConf)
 			Expect(clientErr).ToNot(HaveOccurred())
 			Expect(serverErr).ToNot(HaveOccurred())
 		})
 
 		It("performs a HelloRetryRequst", func() {
-			serverConf := testdata.GetTLSConfig()
 			serverConf.CurvePreferences = []tls.CurveID{tls.CurveP384}
 			clientErr, serverErr := handshakeWithTLSConf(clientConf, serverConf)
 			Expect(clientErr).ToNot(HaveOccurred())
@@ -365,7 +366,6 @@ var _ = Describe("Crypto Setup TLS", func() {
 
 		It("handshakes with client auth", func() {
 			clientConf.Certificates = []tls.Certificate{generateCert()}
-			serverConf := testdata.GetTLSConfig()
 			serverConf.ClientAuth = qtls.RequireAnyClientCert
 			clientErr, serverErr := handshakeWithTLSConf(clientConf, serverConf)
 			Expect(clientErr).ToNot(HaveOccurred())
@@ -445,7 +445,7 @@ var _ = Describe("Crypto Setup TLS", func() {
 				nil,
 				sTransportParameters,
 				sRunner,
-				testdata.GetTLSConfig(),
+				serverConf,
 				utils.DefaultLogger.WithPrefix("server"),
 			)
 			Expect(err).ToNot(HaveOccurred())
@@ -497,7 +497,7 @@ var _ = Describe("Crypto Setup TLS", func() {
 				nil,
 				&TransportParameters{},
 				sRunner,
-				testdata.GetTLSConfig(),
+				serverConf,
 				utils.DefaultLogger.WithPrefix("server"),
 			)
 			Expect(err).ToNot(HaveOccurred())
@@ -552,7 +552,7 @@ var _ = Describe("Crypto Setup TLS", func() {
 				nil,
 				&TransportParameters{},
 				sRunner,
-				testdata.GetTLSConfig(),
+				serverConf,
 				utils.DefaultLogger.WithPrefix("server"),
 			)
 			Expect(err).ToNot(HaveOccurred())

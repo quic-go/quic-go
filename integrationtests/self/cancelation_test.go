@@ -1,7 +1,6 @@
 package self_test
 
 import (
-	"crypto/tls"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -12,7 +11,6 @@ import (
 
 	quic "github.com/lucas-clemente/quic-go"
 	"github.com/lucas-clemente/quic-go/integrationtests/tools/testserver"
-	"github.com/lucas-clemente/quic-go/internal/testdata"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -27,7 +25,7 @@ var _ = Describe("Stream Cancelations", func() {
 		runServer := func() <-chan int32 {
 			numCanceledStreamsChan := make(chan int32)
 			var err error
-			server, err = quic.ListenAddr("localhost:0", testdata.GetTLSConfig(), nil)
+			server, err = quic.ListenAddr("localhost:0", getTLSConfig(), nil)
 			Expect(err).ToNot(HaveOccurred())
 
 			var canceledCounter int32
@@ -65,7 +63,7 @@ var _ = Describe("Stream Cancelations", func() {
 			serverCanceledCounterChan := runServer()
 			sess, err := quic.DialAddr(
 				fmt.Sprintf("localhost:%d", server.Addr().(*net.UDPAddr).Port),
-				&tls.Config{RootCAs: testdata.GetRootCA()},
+				getTLSClientConfig(),
 				&quic.Config{MaxIncomingUniStreams: numStreams / 2},
 			)
 			Expect(err).ToNot(HaveOccurred())
@@ -109,7 +107,7 @@ var _ = Describe("Stream Cancelations", func() {
 
 			sess, err := quic.DialAddr(
 				fmt.Sprintf("localhost:%d", server.Addr().(*net.UDPAddr).Port),
-				&tls.Config{RootCAs: testdata.GetRootCA()},
+				getTLSClientConfig(),
 				&quic.Config{MaxIncomingUniStreams: numStreams / 2},
 			)
 			Expect(err).ToNot(HaveOccurred())
@@ -157,7 +155,7 @@ var _ = Describe("Stream Cancelations", func() {
 		runClient := func(server quic.Listener) int32 /* number of canceled streams */ {
 			sess, err := quic.DialAddr(
 				fmt.Sprintf("localhost:%d", server.Addr().(*net.UDPAddr).Port),
-				&tls.Config{RootCAs: testdata.GetRootCA()},
+				getTLSClientConfig(),
 				&quic.Config{MaxIncomingUniStreams: numStreams / 2},
 			)
 			Expect(err).ToNot(HaveOccurred())
@@ -192,7 +190,7 @@ var _ = Describe("Stream Cancelations", func() {
 		}
 
 		It("downloads when the server cancels some streams immediately", func() {
-			server, err := quic.ListenAddr("localhost:0", testdata.GetTLSConfig(), nil)
+			server, err := quic.ListenAddr("localhost:0", getTLSConfig(), nil)
 			Expect(err).ToNot(HaveOccurred())
 
 			var canceledCounter int32
@@ -223,7 +221,7 @@ var _ = Describe("Stream Cancelations", func() {
 		})
 
 		It("downloads when the server cancels some streams after sending some data", func() {
-			server, err := quic.ListenAddr("localhost:0", testdata.GetTLSConfig(), nil)
+			server, err := quic.ListenAddr("localhost:0", getTLSConfig(), nil)
 			Expect(err).ToNot(HaveOccurred())
 
 			var canceledCounter int32
@@ -259,7 +257,7 @@ var _ = Describe("Stream Cancelations", func() {
 
 	Context("canceling both read and write side", func() {
 		It("downloads data when both sides cancel streams immediately", func() {
-			server, err := quic.ListenAddr("localhost:0", testdata.GetTLSConfig(), nil)
+			server, err := quic.ListenAddr("localhost:0", getTLSConfig(), nil)
 			Expect(err).ToNot(HaveOccurred())
 
 			done := make(chan struct{})
@@ -293,7 +291,7 @@ var _ = Describe("Stream Cancelations", func() {
 
 			sess, err := quic.DialAddr(
 				fmt.Sprintf("localhost:%d", server.Addr().(*net.UDPAddr).Port),
-				&tls.Config{RootCAs: testdata.GetRootCA()},
+				getTLSClientConfig(),
 				&quic.Config{MaxIncomingUniStreams: numStreams / 2},
 			)
 			Expect(err).ToNot(HaveOccurred())
@@ -333,7 +331,7 @@ var _ = Describe("Stream Cancelations", func() {
 		})
 
 		It("downloads data when both sides cancel streams after a while", func() {
-			server, err := quic.ListenAddr("localhost:0", testdata.GetTLSConfig(), nil)
+			server, err := quic.ListenAddr("localhost:0", getTLSConfig(), nil)
 			Expect(err).ToNot(HaveOccurred())
 
 			done := make(chan struct{})
@@ -371,7 +369,7 @@ var _ = Describe("Stream Cancelations", func() {
 
 			sess, err := quic.DialAddr(
 				fmt.Sprintf("localhost:%d", server.Addr().(*net.UDPAddr).Port),
-				&tls.Config{RootCAs: testdata.GetRootCA()},
+				getTLSClientConfig(),
 				&quic.Config{MaxIncomingUniStreams: numStreams / 2},
 			)
 			Expect(err).ToNot(HaveOccurred())

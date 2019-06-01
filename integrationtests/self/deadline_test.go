@@ -1,7 +1,6 @@
 package self_test
 
 import (
-	"crypto/tls"
 	"fmt"
 	"io/ioutil"
 	"net"
@@ -9,7 +8,6 @@ import (
 
 	quic "github.com/lucas-clemente/quic-go"
 	"github.com/lucas-clemente/quic-go/integrationtests/tools/testserver"
-	"github.com/lucas-clemente/quic-go/internal/testdata"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -24,7 +22,7 @@ var _ = Describe("Stream deadline tests", func() {
 
 	BeforeEach(func() {
 		var err error
-		server, err = quic.ListenAddr("localhost:0", testdata.GetTLSConfig(), nil)
+		server, err = quic.ListenAddr("localhost:0", getTLSConfig(), nil)
 		Expect(err).ToNot(HaveOccurred())
 		acceptedStream := make(chan struct{})
 		go func() {
@@ -40,7 +38,7 @@ var _ = Describe("Stream deadline tests", func() {
 
 		sess, err := quic.DialAddr(
 			fmt.Sprintf("localhost:%d", server.Addr().(*net.UDPAddr).Port),
-			&tls.Config{RootCAs: testdata.GetRootCA()},
+			getTLSClientConfig(),
 			nil,
 		)
 		Expect(err).ToNot(HaveOccurred())
