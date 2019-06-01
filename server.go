@@ -468,7 +468,7 @@ func (s *server) createNewSession(
 }
 
 func (s *server) sendRetry(remoteAddr net.Addr, hdr *wire.Header) error {
-	token, err := s.tokenGenerator.NewToken(remoteAddr, hdr.DestConnectionID)
+	token, err := s.tokenGenerator.NewRetryToken(remoteAddr, hdr.DestConnectionID)
 	if err != nil {
 		return err
 	}

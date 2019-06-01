@@ -191,7 +191,7 @@ var _ = Describe("Server", func() {
 				close(done)
 				return false
 			}
-			token, err := serv.tokenGenerator.NewToken(raddr, nil)
+			token, err := serv.tokenGenerator.NewRetryToken(raddr, nil)
 			Expect(err).ToNot(HaveOccurred())
 			packet := getPacket(&wire.Header{
 				IsLongHeader: true,

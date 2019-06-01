@@ -45,7 +45,7 @@ func NewTokenGenerator() (*TokenGenerator, error) {
 }
 
 // NewToken generates a new token for a given source address
-func (g *TokenGenerator) NewToken(raddr net.Addr, origConnID protocol.ConnectionID) ([]byte, error) {
+func (g *TokenGenerator) NewRetryToken(raddr net.Addr, origConnID protocol.ConnectionID) ([]byte, error) {
 	data, err := asn1.Marshal(token{
 		RemoteAddr:               encodeRemoteAddr(raddr),
 		OriginalDestConnectionID: origConnID,

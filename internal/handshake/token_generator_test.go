@@ -22,7 +22,7 @@ var _ = Describe("Token Generator", func() {
 
 	It("generates a token", func() {
 		ip := net.IPv4(127, 0, 0, 1)
-		token, err := tokenGen.NewToken(&net.UDPAddr{IP: ip, Port: 1337}, nil)
+		token, err := tokenGen.NewRetryToken(&net.UDPAddr{IP: ip, Port: 1337}, nil)
 		Expect(err).ToNot(HaveOccurred())
 		Expect(token).ToNot(BeEmpty())
 	})
@@ -35,7 +35,7 @@ var _ = Describe("Token Generator", func() {
 
 	It("accepts a valid token", func() {
 		ip := net.IPv4(192, 168, 0, 1)
-		tokenEnc, err := tokenGen.NewToken(
+		tokenEnc, err := tokenGen.NewRetryToken(
 			&net.UDPAddr{IP: ip, Port: 1337},
 			nil,
 		)
@@ -48,7 +48,7 @@ var _ = Describe("Token Generator", func() {
 	})
 
 	It("saves the connection ID", func() {
-		tokenEnc, err := tokenGen.NewToken(
+		tokenEnc, err := tokenGen.NewRetryToken(
 			&net.UDPAddr{},
 			protocol.ConnectionID{0xde, 0xad, 0xbe, 0xef},
 		)
@@ -101,7 +101,7 @@ var _ = Describe("Token Generator", func() {
 			ip := net.ParseIP(addr)
 			Expect(ip).ToNot(BeNil())
 			raddr := &net.UDPAddr{IP: ip, Port: 1337}
-			tokenEnc, err := tokenGen.NewToken(raddr, nil)
+			tokenEnc, err := tokenGen.NewRetryToken(raddr, nil)
 			Expect(err).ToNot(HaveOccurred())
 			token, err := tokenGen.DecodeToken(tokenEnc)
 			Expect(err).ToNot(HaveOccurred())
@@ -112,7 +112,7 @@ var _ = Describe("Token Generator", func() {
 
 	It("uses the string representation an address that is not a UDP address", func() {
 		raddr := &net.TCPAddr{IP: net.IPv4(192, 168, 13, 37), Port: 1337}
-		tokenEnc, err := tokenGen.NewToken(raddr, nil)
+		tokenEnc, err := tokenGen.NewRetryToken(raddr, nil)
 		Expect(err).ToNot(HaveOccurred())
 		token, err := tokenGen.DecodeToken(tokenEnc)
 		Expect(err).ToNot(HaveOccurred())
