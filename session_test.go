@@ -77,8 +77,9 @@ var _ = Describe("Session", func() {
 
 		sessionRunner = NewMockSessionRunner(mockCtrl)
 		mconn = newMockConnection()
+		tokenGenerator, err := handshake.NewTokenGenerator()
+		Expect(err).ToNot(HaveOccurred())
 		var pSess Session
-		var err error
 		pSess, err = newSession(
 			mconn,
 			sessionRunner,
@@ -88,6 +89,7 @@ var _ = Describe("Session", func() {
 			populateServerConfig(&Config{}),
 			nil, // tls.Config
 			&handshake.TransportParameters{},
+			tokenGenerator,
 			utils.DefaultLogger,
 			protocol.VersionTLS,
 		)

@@ -196,7 +196,12 @@ var _ = Describe("Handshake tests", func() {
 		}
 
 		BeforeEach(func() {
-			serverConfig.AcceptToken = func(net.Addr, *quic.Token) bool { return true }
+			serverConfig.AcceptToken = func(addr net.Addr, token *quic.Token) bool {
+				if token != nil {
+					Expect(token.IsRetryToken).To(BeFalse())
+				}
+				return true
+			}
 			var err error
 			// start the server, but don't call Accept
 			server, err = quic.ListenAddr("localhost:0", testdata.GetTLSConfig(), serverConfig)

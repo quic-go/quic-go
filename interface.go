@@ -18,8 +18,12 @@ type VersionNumber = protocol.VersionNumber
 
 // A Token can be used to verify the ownership of the client address.
 type Token struct {
-	RemoteAddr string
-	SentTime   time.Time
+	// IsRetryToken encodes how the client received the token. There are two ways:
+	// * In a Retry packet sent when trying to establish a new connection.
+	// * In a NEW_TOKEN frame on a previous connection.
+	IsRetryToken bool
+	RemoteAddr   string
+	SentTime     time.Time
 }
 
 // An ErrorCode is an application-defined error code.
@@ -189,7 +193,10 @@ type Config struct {
 	IdleTimeout time.Duration
 	// AcceptToken determines if a Token is accepted.
 	// It is called with token = nil if the client didn't send a token.
-	// If not set, it verifies that the address matches, and that the token was issued within the last 5 seconds.
+	// If not set, a default verification function is used:
+	// * it verifies that the address matches, and
+	//   * if the token is a retry token, that it was issued within the last 5 seconds
+	//   * else, that it was issued within the last 24 hours.
 	// This option is only valid for the server.
 	AcceptToken func(clientAddr net.Addr, token *Token) bool
 	// MaxReceiveStreamFlowControlWindow is the maximum stream-level flow control window for receiving data.

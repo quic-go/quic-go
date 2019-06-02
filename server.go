@@ -89,7 +89,7 @@ type server struct {
 	sessionHandler packetHandlerManager
 
 	// set as a member, so they can be set in the tests
-	newSession func(connection, sessionRunner, protocol.ConnectionID /* original connection ID */, protocol.ConnectionID /* destination connection ID */, protocol.ConnectionID /* source connection ID */, *Config, *tls.Config, *handshake.TransportParameters, utils.Logger, protocol.VersionNumber) (quicSession, error)
+	newSession func(connection, sessionRunner, protocol.ConnectionID /* original connection ID */, protocol.ConnectionID /* destination connection ID */, protocol.ConnectionID /* source connection ID */, *Config, *tls.Config, *handshake.TransportParameters, *handshake.TokenGenerator, utils.Logger, protocol.VersionNumber) (quicSession, error)
 
 	serverError error
 	errorChan   chan struct{}
@@ -198,7 +198,11 @@ var defaultAcceptToken = func(clientAddr net.Addr, token *Token) bool {
 	if token == nil {
 		return false
 	}
-	if time.Now().After(token.SentTime.Add(protocol.RetryTokenValidity)) {
+	validity := protocol.TokenValidity
+	if token.IsRetryToken {
+		validity = protocol.RetryTokenValidity
+	}
+	if time.Now().After(token.SentTime.Add(validity)) {
 		return false
 	}
 	var sourceAddr string
@@ -387,8 +391,9 @@ func (s *server) handleInitialImpl(p *receivedPacket, hdr *wire.Header) (quicSes
 		c, err := s.tokenGenerator.DecodeToken(hdr.Token)
 		if err == nil {
 			token = &Token{
-				RemoteAddr: c.RemoteAddr,
-				SentTime:   c.SentTime,
+				IsRetryToken: c.IsRetryToken,
+				RemoteAddr:   c.RemoteAddr,
+				SentTime:     c.SentTime,
 			}
 			origDestConnectionID = c.OriginalDestConnectionID
 		}
@@ -457,6 +462,7 @@ func (s *server) createNewSession(
 		s.config,
 		s.tlsConf,
 		params,
+		s.tokenGenerator,
 		s.logger,
 		version,
 	)
@@ -468,7 +474,7 @@ func (s *server) createNewSession(
 }
 
 func (s *server) sendRetry(remoteAddr net.Addr, hdr *wire.Header) error {
-	token, err := s.tokenGenerator.NewToken(remoteAddr, hdr.DestConnectionID)
+	token, err := s.tokenGenerator.NewRetryToken(remoteAddr, hdr.DestConnectionID)
 	if err != nil {
 		return err
 	}

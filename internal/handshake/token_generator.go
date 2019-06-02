@@ -16,13 +16,16 @@ const (
 
 // A Token is derived from the client address and can be used to verify the ownership of this address.
 type Token struct {
-	RemoteAddr               string
-	SentTime                 time.Time
+	IsRetryToken bool
+	RemoteAddr   string
+	SentTime     time.Time
+	// only set for retry tokens
 	OriginalDestConnectionID protocol.ConnectionID
 }
 
 // token is the struct that is used for ASN1 serialization and deserialization
 type token struct {
+	IsRetryToken             bool
 	RemoteAddr               []byte
 	Timestamp                int64
 	OriginalDestConnectionID []byte
@@ -44,12 +47,25 @@ func NewTokenGenerator() (*TokenGenerator, error) {
 	}, nil
 }
 
-// NewToken generates a new token for a given source address
-func (g *TokenGenerator) NewToken(raddr net.Addr, origConnID protocol.ConnectionID) ([]byte, error) {
+// NewRetryToken generates a new token for a Retry for a given source address
+func (g *TokenGenerator) NewRetryToken(raddr net.Addr, origConnID protocol.ConnectionID) ([]byte, error) {
 	data, err := asn1.Marshal(token{
+		IsRetryToken:             true,
 		RemoteAddr:               encodeRemoteAddr(raddr),
 		OriginalDestConnectionID: origConnID,
 		Timestamp:                time.Now().UnixNano(),
+	})
+	if err != nil {
+		return nil, err
+	}
+	return g.tokenProtector.NewToken(data)
+}
+
+// NewToken generates a new token to be sent in a NEW_TOKEN frame
+func (g *TokenGenerator) NewToken(raddr net.Addr) ([]byte, error) {
+	data, err := asn1.Marshal(token{
+		RemoteAddr: encodeRemoteAddr(raddr),
+		Timestamp:  time.Now().UnixNano(),
 	})
 	if err != nil {
 		return nil, err
@@ -77,8 +93,9 @@ func (g *TokenGenerator) DecodeToken(encrypted []byte) (*Token, error) {
 		return nil, fmt.Errorf("rest when unpacking token: %d", len(rest))
 	}
 	token := &Token{
-		RemoteAddr: decodeRemoteAddr(t.RemoteAddr),
-		SentTime:   time.Unix(0, t.Timestamp),
+		IsRetryToken: t.IsRetryToken,
+		RemoteAddr:   decodeRemoteAddr(t.RemoteAddr),
+		SentTime:     time.Unix(0, t.Timestamp),
 	}
 	if len(t.OriginalDestConnectionID) > 0 {
 		token.OriginalDestConnectionID = protocol.ConnectionID(t.OriginalDestConnectionID)
