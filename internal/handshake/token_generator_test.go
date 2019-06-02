@@ -43,7 +43,7 @@ var _ = Describe("Token Generator", func() {
 		token, err := tokenGen.DecodeToken(tokenEnc)
 		Expect(err).ToNot(HaveOccurred())
 		Expect(token.RemoteAddr).To(Equal("192.168.0.1"))
-		Expect(token.SentTime).To(BeTemporally("~", time.Now(), 10*time.Millisecond))
+		Expect(token.SentTime).To(BeTemporally("~", time.Now(), 100*time.Millisecond))
 		Expect(token.OriginalDestConnectionID).To(BeNil())
 	})
 
@@ -106,7 +106,7 @@ var _ = Describe("Token Generator", func() {
 			token, err := tokenGen.DecodeToken(tokenEnc)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(token.RemoteAddr).To(Equal(ip.String()))
-			Expect(token.SentTime).To(BeTemporally("~", time.Now(), 10*time.Millisecond))
+			Expect(token.SentTime).To(BeTemporally("~", time.Now(), 100*time.Millisecond))
 		}
 	})
 
@@ -117,6 +117,6 @@ var _ = Describe("Token Generator", func() {
 		token, err := tokenGen.DecodeToken(tokenEnc)
 		Expect(err).ToNot(HaveOccurred())
 		Expect(token.RemoteAddr).To(Equal("192.168.13.37:1337"))
-		Expect(token.SentTime).To(BeTemporally("~", time.Now(), 10*time.Millisecond))
+		Expect(token.SentTime).To(BeTemporally("~", time.Now(), 100*time.Millisecond))
 	})
 })
