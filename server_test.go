@@ -545,7 +545,7 @@ var _ = Describe("default source address verification", func() {
 		remoteAddr := &net.UDPAddr{IP: net.IPv4(192, 168, 0, 1)}
 		token := &Token{
 			RemoteAddr: "192.168.0.1",
-			SentTime:   time.Now().Add(-protocol.TokenExpiryTime).Add(time.Second), // will expire in 1 second
+			SentTime:   time.Now().Add(-protocol.RetryTokenValidity).Add(time.Second), // will expire in 1 second
 		}
 		Expect(defaultAcceptToken(remoteAddr, token)).To(BeTrue())
 	})
@@ -586,7 +586,7 @@ var _ = Describe("default source address verification", func() {
 		remoteAddr := &net.UDPAddr{IP: net.IPv4(192, 168, 0, 1)}
 		token := &Token{
 			RemoteAddr: "192.168.0.1",
-			SentTime:   time.Now().Add(-protocol.TokenExpiryTime).Add(-time.Second), // expired 1 second ago
+			SentTime:   time.Now().Add(-protocol.RetryTokenValidity).Add(-time.Second), // expired 1 second ago
 		}
 		Expect(defaultAcceptToken(remoteAddr, token)).To(BeFalse())
 	})
