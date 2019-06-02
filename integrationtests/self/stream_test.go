@@ -1,7 +1,6 @@
 package self_test
 
 import (
-	"crypto/tls"
 	"fmt"
 	"io/ioutil"
 	"net"
@@ -10,7 +9,6 @@ import (
 	quic "github.com/lucas-clemente/quic-go"
 	"github.com/lucas-clemente/quic-go/integrationtests/tools/testserver"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
-	"github.com/lucas-clemente/quic-go/internal/testdata"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -35,7 +33,7 @@ var _ = Describe("Bidirectional streams", func() {
 					Versions:           []protocol.VersionNumber{version},
 					MaxIncomingStreams: 0,
 				}
-				server, err = quic.ListenAddr("localhost:0", testdata.GetTLSConfig(), qconf)
+				server, err = quic.ListenAddr("localhost:0", getTLSConfig(), qconf)
 				Expect(err).ToNot(HaveOccurred())
 				serverAddr = fmt.Sprintf("localhost:%d", server.Addr().(*net.UDPAddr).Port)
 			})
@@ -101,7 +99,7 @@ var _ = Describe("Bidirectional streams", func() {
 
 				client, err := quic.DialAddr(
 					serverAddr,
-					&tls.Config{RootCAs: testdata.GetRootCA()},
+					getTLSClientConfig(),
 					qconf,
 				)
 				Expect(err).ToNot(HaveOccurred())
@@ -119,7 +117,7 @@ var _ = Describe("Bidirectional streams", func() {
 
 				client, err := quic.DialAddr(
 					serverAddr,
-					&tls.Config{RootCAs: testdata.GetRootCA()},
+					getTLSClientConfig(),
 					qconf,
 				)
 				Expect(err).ToNot(HaveOccurred())
@@ -146,7 +144,7 @@ var _ = Describe("Bidirectional streams", func() {
 
 				client, err := quic.DialAddr(
 					serverAddr,
-					&tls.Config{RootCAs: testdata.GetRootCA()},
+					getTLSClientConfig(),
 					qconf,
 				)
 				Expect(err).ToNot(HaveOccurred())

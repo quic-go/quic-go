@@ -42,6 +42,7 @@ var _ = Describe("Server", func() {
 		conn = newMockPacketConn()
 		conn.addr = &net.UDPAddr{}
 		tlsConf = testdata.GetTLSConfig()
+		tlsConf.NextProtos = []string{"proto1"}
 	})
 
 	It("errors when no tls.Config is given", func() {
@@ -54,6 +55,13 @@ var _ = Describe("Server", func() {
 		_, err := ListenAddr("localhost:0", &tls.Config{}, nil)
 		Expect(err).To(HaveOccurred())
 		Expect(err.Error()).To(ContainSubstring("quic: Certificates not set in tls.Config"))
+	})
+
+	It("errors when NextProtos is not set in the tls.Config", func() {
+		tlsConf.NextProtos = nil
+		_, err := ListenAddr("localhost:0", tlsConf, nil)
+		Expect(err).To(HaveOccurred())
+		Expect(err.Error()).To(ContainSubstring("quic: NextProtos not set in tls.Config"))
 	})
 
 	It("errors when the Config contains an invalid version", func() {

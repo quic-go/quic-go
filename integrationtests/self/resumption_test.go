@@ -7,7 +7,6 @@ import (
 	"sync"
 
 	quic "github.com/lucas-clemente/quic-go"
-	"github.com/lucas-clemente/quic-go/internal/testdata"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -48,7 +47,7 @@ func (c *clientSessionCache) Put(sessionKey string, cs *tls.ClientSessionState) 
 
 var _ = Describe("TLS session resumption", func() {
 	It("uses session resumption", func() {
-		server, err := quic.ListenAddr("localhost:0", testdata.GetTLSConfig(), nil)
+		server, err := quic.ListenAddr("localhost:0", getTLSConfig(), nil)
 		Expect(err).ToNot(HaveOccurred())
 		defer server.Close()
 
@@ -68,10 +67,8 @@ var _ = Describe("TLS session resumption", func() {
 		gets := make(chan string, 100)
 		puts := make(chan string, 100)
 		cache := newClientSessionCache(gets, puts)
-		tlsConf := &tls.Config{
-			RootCAs:            testdata.GetRootCA(),
-			ClientSessionCache: cache,
-		}
+		tlsConf := getTLSClientConfig()
+		tlsConf.ClientSessionCache = cache
 		sess, err := quic.DialAddr(
 			fmt.Sprintf("localhost:%d", server.Addr().(*net.UDPAddr).Port),
 			tlsConf,

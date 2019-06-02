@@ -35,9 +35,11 @@ func init() {
 					go func() {
 						defer GinkgoRecover()
 						var err error
+						tlsConf := testdata.GetTLSConfig()
+						tlsConf.NextProtos = []string{"benchmark"}
 						ln, err = quic.ListenAddr(
 							"localhost:0",
-							testdata.GetTLSConfig(),
+							tlsConf,
 							&quic.Config{Versions: []protocol.VersionNumber{version}},
 						)
 						Expect(err).ToNot(HaveOccurred())
@@ -59,7 +61,7 @@ func init() {
 					addr := <-serverAddr
 					sess, err := quic.DialAddr(
 						addr.String(),
-						&tls.Config{InsecureSkipVerify: true},
+						&tls.Config{InsecureSkipVerify: true, NextProtos: []string{"benchmark"}},
 						&quic.Config{Versions: []protocol.VersionNumber{version}},
 					)
 					Expect(err).ToNot(HaveOccurred())

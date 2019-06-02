@@ -2,6 +2,7 @@ package self_test
 
 import (
 	"crypto/tls"
+	"fmt"
 	"net"
 	"time"
 
@@ -9,7 +10,6 @@ import (
 	quicproxy "github.com/lucas-clemente/quic-go/integrationtests/tools/proxy"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 
-	"github.com/lucas-clemente/quic-go/internal/testdata"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 )
@@ -29,7 +29,7 @@ var _ = Describe("Handshake RTT tests", func() {
 	BeforeEach(func() {
 		acceptStopped = make(chan struct{})
 		serverConfig = &quic.Config{}
-		serverTLSConfig = testdata.GetTLSConfig()
+		serverTLSConfig = getTLSConfig()
 	})
 
 	AfterEach(func() {
@@ -82,22 +82,23 @@ var _ = Describe("Handshake RTT tests", func() {
 		clientConfig := &quic.Config{
 			Versions: protocol.SupportedVersions[1:2],
 		}
-		_, err := quic.DialAddr(proxy.LocalAddr().String(), nil, clientConfig)
+		_, err := quic.DialAddr(
+			proxy.LocalAddr().String(),
+			getTLSClientConfig(),
+			clientConfig,
+		)
 		Expect(err).To(HaveOccurred())
 		// Expect(err.(qerr.ErrorCode)).To(Equal(qerr.InvalidVersion))
 		expectDurationInRTTs(1)
 	})
 
 	var clientConfig *quic.Config
-	var clientTLSConfig *tls.Config
 
 	BeforeEach(func() {
 		serverConfig.Versions = []protocol.VersionNumber{protocol.VersionTLS}
 		clientConfig = &quic.Config{Versions: []protocol.VersionNumber{protocol.VersionTLS}}
-		clientTLSConfig = &tls.Config{
-			InsecureSkipVerify: true,
-			ServerName:         "localhost",
-		}
+		clientConfig := getTLSClientConfig()
+		clientConfig.InsecureSkipVerify = true
 	})
 
 	// 1 RTT for verifying the source address
@@ -105,8 +106,8 @@ var _ = Describe("Handshake RTT tests", func() {
 	It("is forward-secure after 2 RTTs", func() {
 		runServerAndProxy()
 		_, err := quic.DialAddr(
-			proxy.LocalAddr().String(),
-			clientTLSConfig,
+			fmt.Sprintf("localhost:%d", proxy.LocalAddr().(*net.UDPAddr).Port),
+			getTLSClientConfig(),
 			clientConfig,
 		)
 		Expect(err).ToNot(HaveOccurred())
@@ -119,8 +120,8 @@ var _ = Describe("Handshake RTT tests", func() {
 		}
 		runServerAndProxy()
 		_, err := quic.DialAddr(
-			proxy.LocalAddr().String(),
-			clientTLSConfig,
+			fmt.Sprintf("localhost:%d", proxy.LocalAddr().(*net.UDPAddr).Port),
+			getTLSClientConfig(),
 			clientConfig,
 		)
 		Expect(err).ToNot(HaveOccurred())
@@ -134,8 +135,8 @@ var _ = Describe("Handshake RTT tests", func() {
 		serverTLSConfig.CurvePreferences = []tls.CurveID{tls.CurveP384}
 		runServerAndProxy()
 		_, err := quic.DialAddr(
-			proxy.LocalAddr().String(),
-			clientTLSConfig,
+			fmt.Sprintf("localhost:%d", proxy.LocalAddr().(*net.UDPAddr).Port),
+			getTLSClientConfig(),
 			clientConfig,
 		)
 		Expect(err).ToNot(HaveOccurred())
@@ -149,8 +150,8 @@ var _ = Describe("Handshake RTT tests", func() {
 		clientConfig.HandshakeTimeout = 500 * time.Millisecond
 		runServerAndProxy()
 		_, err := quic.DialAddr(
-			proxy.LocalAddr().String(),
-			clientTLSConfig,
+			fmt.Sprintf("localhost:%d", proxy.LocalAddr().(*net.UDPAddr).Port),
+			getTLSClientConfig(),
 			clientConfig,
 		)
 		Expect(err).To(HaveOccurred())
