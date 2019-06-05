@@ -168,8 +168,8 @@ var _ = Describe("Frame parsing", func() {
 
 	It("unpacks MAX_STREAMS frames", func() {
 		f := &MaxStreamsFrame{
-			Type:       protocol.StreamTypeBidi,
-			MaxStreams: 0x1337,
+			Type:         protocol.StreamTypeBidi,
+			MaxStreamNum: 0x1337,
 		}
 		buf := &bytes.Buffer{}
 		err := f.Write(buf, versionIETFFrames)

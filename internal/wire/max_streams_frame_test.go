@@ -18,7 +18,7 @@ var _ = Describe("MAX_STREAMS frame", func() {
 			f, err := parseMaxStreamsFrame(b, protocol.VersionWhatever)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(f.Type).To(Equal(protocol.StreamTypeBidi))
-			Expect(f.MaxStreams).To(BeEquivalentTo(0xdecaf))
+			Expect(f.MaxStreamNum).To(BeEquivalentTo(0xdecaf))
 			Expect(b.Len()).To(BeZero())
 		})
 
@@ -29,7 +29,7 @@ var _ = Describe("MAX_STREAMS frame", func() {
 			f, err := parseMaxStreamsFrame(b, protocol.VersionWhatever)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(f.Type).To(Equal(protocol.StreamTypeUni))
-			Expect(f.MaxStreams).To(BeEquivalentTo(0xdecaf))
+			Expect(f.MaxStreamNum).To(BeEquivalentTo(0xdecaf))
 			Expect(b.Len()).To(BeZero())
 		})
 
@@ -48,8 +48,8 @@ var _ = Describe("MAX_STREAMS frame", func() {
 	Context("writing", func() {
 		It("for a bidirectional stream", func() {
 			f := &MaxStreamsFrame{
-				Type:       protocol.StreamTypeBidi,
-				MaxStreams: 0xdeadbeef,
+				Type:         protocol.StreamTypeBidi,
+				MaxStreamNum: 0xdeadbeef,
 			}
 			b := &bytes.Buffer{}
 			Expect(f.Write(b, protocol.VersionWhatever)).To(Succeed())
@@ -60,8 +60,8 @@ var _ = Describe("MAX_STREAMS frame", func() {
 
 		It("for a unidirectional stream", func() {
 			f := &MaxStreamsFrame{
-				Type:       protocol.StreamTypeUni,
-				MaxStreams: 0xdecafbad,
+				Type:         protocol.StreamTypeUni,
+				MaxStreamNum: 0xdecafbad,
 			}
 			b := &bytes.Buffer{}
 			Expect(f.Write(b, protocol.VersionWhatever)).To(Succeed())
@@ -71,7 +71,7 @@ var _ = Describe("MAX_STREAMS frame", func() {
 		})
 
 		It("has the correct min length", func() {
-			frame := MaxStreamsFrame{MaxStreams: 0x1337}
+			frame := MaxStreamsFrame{MaxStreamNum: 0x1337}
 			Expect(frame.Length(protocol.VersionWhatever)).To(Equal(1 + utils.VarIntLen(0x1337)))
 		})
 	})
