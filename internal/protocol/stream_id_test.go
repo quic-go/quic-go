@@ -44,10 +44,10 @@ var _ = Describe("Stream ID", func() {
 
 	Context("maximum stream IDs", func() {
 		It("doesn't allow any", func() {
-			Expect(MaxStreamID(StreamTypeBidi, 0, PerspectiveClient)).To(Equal(StreamID(0)))
-			Expect(MaxStreamID(StreamTypeBidi, 0, PerspectiveServer)).To(Equal(StreamID(0)))
-			Expect(MaxStreamID(StreamTypeUni, 0, PerspectiveClient)).To(Equal(StreamID(0)))
-			Expect(MaxStreamID(StreamTypeUni, 0, PerspectiveServer)).To(Equal(StreamID(0)))
+			Expect(MaxStreamID(StreamTypeBidi, 0, PerspectiveClient)).To(Equal(InvalidStreamID))
+			Expect(MaxStreamID(StreamTypeBidi, 0, PerspectiveServer)).To(Equal(InvalidStreamID))
+			Expect(MaxStreamID(StreamTypeUni, 0, PerspectiveClient)).To(Equal(InvalidStreamID))
+			Expect(MaxStreamID(StreamTypeUni, 0, PerspectiveServer)).To(Equal(InvalidStreamID))
 		})
 
 		It("allows one", func() {

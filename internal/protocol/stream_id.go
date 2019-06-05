@@ -5,7 +5,7 @@ type StreamID int64
 
 // InvalidPacketNumber is a stream ID that is invalid.
 // The first valid stream ID in QUIC is 0.
-const InvalidStreamID = -1
+const InvalidStreamID StreamID = -1
 
 // StreamType encodes if this is a unidirectional or bidirectional stream
 type StreamType uint8
@@ -43,7 +43,7 @@ func (s StreamID) StreamNum() uint64 {
 // when it is allowed to open numStreams.
 func MaxStreamID(stype StreamType, numStreams uint64, pers Perspective) StreamID {
 	if numStreams == 0 {
-		return 0
+		return InvalidStreamID
 	}
 	var first StreamID
 	switch stype {
