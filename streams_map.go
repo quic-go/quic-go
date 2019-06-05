@@ -168,7 +168,6 @@ func (m *streamsMap) HandleMaxStreamsFrame(f *wire.MaxStreamsFrame) error {
 	case protocol.StreamTypeUni:
 		m.outgoingUniStreams.SetMaxStream(id)
 	case protocol.StreamTypeBidi:
-		fmt.Printf("")
 		m.outgoingBidiStreams.SetMaxStream(id)
 	}
 	return nil
