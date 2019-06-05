@@ -144,8 +144,8 @@ func (m *incomingUniStreamsMap) deleteStream(id protocol.StreamID) error {
 		numNewStreams := m.maxNumStreams - uint64(len(m.streams))
 		m.maxStream = m.nextStreamToOpen + protocol.StreamID((numNewStreams-1)*4)
 		m.queueMaxStreamID(&wire.MaxStreamsFrame{
-			Type:       protocol.StreamTypeUni,
-			MaxStreams: m.maxStream.StreamNum(),
+			Type:         protocol.StreamTypeUni,
+			MaxStreamNum: m.maxStream.StreamNum(),
 		})
 	}
 	return nil

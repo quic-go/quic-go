@@ -43,8 +43,8 @@ type TransportParameters struct {
 
 	MaxPacketSize protocol.ByteCount
 
-	MaxUniStreams  uint64
-	MaxBidiStreams uint64
+	MaxUniStreamNum  protocol.StreamNum
+	MaxBidiStreamNum protocol.StreamNum
 
 	IdleTimeout      time.Duration
 	DisableMigration bool
@@ -172,9 +172,9 @@ func (p *TransportParameters) readNumericTransportParameter(
 	case initialMaxDataParameterID:
 		p.InitialMaxData = protocol.ByteCount(val)
 	case initialMaxStreamsBidiParameterID:
-		p.MaxBidiStreams = val
+		p.MaxBidiStreamNum = protocol.StreamNum(val)
 	case initialMaxStreamsUniParameterID:
-		p.MaxUniStreams = val
+		p.MaxUniStreamNum = protocol.StreamNum(val)
 	case idleTimeoutParameterID:
 		p.IdleTimeout = utils.MaxDuration(protocol.MinRemoteIdleTimeout, time.Duration(val)*time.Millisecond)
 	case maxPacketSizeParameterID:
@@ -213,9 +213,9 @@ func (p *TransportParameters) Marshal() []byte {
 	// initial_max_data
 	p.marshalVarintParam(b, initialMaxDataParameterID, uint64(p.InitialMaxData))
 	// initial_max_bidi_streams
-	p.marshalVarintParam(b, initialMaxStreamsBidiParameterID, p.MaxBidiStreams)
+	p.marshalVarintParam(b, initialMaxStreamsBidiParameterID, uint64(p.MaxBidiStreamNum))
 	// initial_max_uni_streams
-	p.marshalVarintParam(b, initialMaxStreamsUniParameterID, p.MaxUniStreams)
+	p.marshalVarintParam(b, initialMaxStreamsUniParameterID, uint64(p.MaxUniStreamNum))
 	// idle_timeout
 	p.marshalVarintParam(b, idleTimeoutParameterID, uint64(p.IdleTimeout/time.Millisecond))
 	// max_packet_size
@@ -260,8 +260,8 @@ func (p *TransportParameters) marshalVarintParam(b *bytes.Buffer, id transportPa
 
 // String returns a string representation, intended for logging.
 func (p *TransportParameters) String() string {
-	logString := "&handshake.TransportParameters{OriginalConnectionID: %s, InitialMaxStreamDataBidiLocal: %#x, InitialMaxStreamDataBidiRemote: %#x, InitialMaxStreamDataUni: %#x, InitialMaxData: %#x, MaxBidiStreams: %d, MaxUniStreams: %d, IdleTimeout: %s, AckDelayExponent: %d, MaxAckDelay: %s"
-	logParams := []interface{}{p.OriginalConnectionID, p.InitialMaxStreamDataBidiLocal, p.InitialMaxStreamDataBidiRemote, p.InitialMaxStreamDataUni, p.InitialMaxData, p.MaxBidiStreams, p.MaxUniStreams, p.IdleTimeout, p.AckDelayExponent, p.MaxAckDelay}
+	logString := "&handshake.TransportParameters{OriginalConnectionID: %s, InitialMaxStreamDataBidiLocal: %#x, InitialMaxStreamDataBidiRemote: %#x, InitialMaxStreamDataUni: %#x, InitialMaxData: %#x, MaxBidiStreamNum: %d, MaxUniStreamNum: %d, IdleTimeout: %s, AckDelayExponent: %d, MaxAckDelay: %s"
+	logParams := []interface{}{p.OriginalConnectionID, p.InitialMaxStreamDataBidiLocal, p.InitialMaxStreamDataBidiRemote, p.InitialMaxStreamDataUni, p.InitialMaxData, p.MaxBidiStreamNum, p.MaxUniStreamNum, p.IdleTimeout, p.AckDelayExponent, p.MaxAckDelay}
 	if p.StatelessResetToken != nil { // the client never sends a stateless reset token
 		logString += ", StatelessResetToken: %#x"
 		logParams = append(logParams, *p.StatelessResetToken)

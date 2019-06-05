@@ -250,8 +250,8 @@ var _ = Describe("Session", func() {
 		Context("handling MAX_STREAM_ID frames", func() {
 			It("passes the frame to the streamsMap", func() {
 				f := &wire.MaxStreamsFrame{
-					Type:       protocol.StreamTypeUni,
-					MaxStreams: 10,
+					Type:         protocol.StreamTypeUni,
+					MaxStreamNum: 10,
 				}
 				streamManager.EXPECT().HandleMaxStreamsFrame(f)
 				err := sess.handleMaxStreamsFrame(f)
@@ -259,7 +259,7 @@ var _ = Describe("Session", func() {
 			})
 
 			It("returns errors", func() {
-				f := &wire.MaxStreamsFrame{MaxStreams: 10}
+				f := &wire.MaxStreamsFrame{MaxStreamNum: 10}
 				testErr := errors.New("test error")
 				streamManager.EXPECT().HandleMaxStreamsFrame(f).Return(testErr)
 				err := sess.handleMaxStreamsFrame(f)

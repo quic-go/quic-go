@@ -7,6 +7,13 @@ type StreamID int64
 // The first valid stream ID in QUIC is 0.
 const InvalidStreamID StreamID = -1
 
+// StreamNum is the stream number
+type StreamNum int64
+
+// MaxStreamCount is the maximum stream count value that can be sent in MAX_STREAMS frames
+// and as the stream count in the transport parameters
+const MaxStreamCount StreamNum = 1 << 60
+
 // StreamType encodes if this is a unidirectional or bidirectional stream
 type StreamType uint8
 
@@ -35,13 +42,13 @@ func (s StreamID) Type() StreamType {
 
 // StreamNum returns how many streams in total are below this
 // Example: for stream 9 it returns 3 (i.e. streams 1, 5 and 9)
-func (s StreamID) StreamNum() uint64 {
-	return uint64(s/4) + 1
+func (s StreamID) StreamNum() StreamNum {
+	return StreamNum(s/4) + 1
 }
 
 // MaxStreamID is the highest stream ID that a peer is allowed to open,
 // when it is allowed to open numStreams.
-func MaxStreamID(stype StreamType, numStreams uint64, pers Perspective) StreamID {
+func MaxStreamID(stype StreamType, numStreams StreamNum, pers Perspective) StreamID {
 	if numStreams == 0 {
 		return InvalidStreamID
 	}

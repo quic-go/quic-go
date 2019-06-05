@@ -36,9 +36,9 @@ func LogFrame(logger utils.Logger, frame Frame, sent bool) {
 	case *MaxStreamsFrame:
 		switch f.Type {
 		case protocol.StreamTypeUni:
-			logger.Debugf("\t%s &wire.MaxStreamsFrame{Type: uni, MaxStreams: %d}", dir, f.MaxStreams)
+			logger.Debugf("\t%s &wire.MaxStreamsFrame{Type: uni, MaxStreamNum: %d}", dir, f.MaxStreamNum)
 		case protocol.StreamTypeBidi:
-			logger.Debugf("\t%s &wire.MaxStreamsFrame{Type: bidi, MaxStreams: %d}", dir, f.MaxStreams)
+			logger.Debugf("\t%s &wire.MaxStreamsFrame{Type: bidi, MaxStreamNum: %d}", dir, f.MaxStreamNum)
 		}
 	case *StreamsBlockedFrame:
 		switch f.Type {

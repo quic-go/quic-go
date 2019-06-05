@@ -82,7 +82,7 @@ func (m *outgoingUniStreamsMap) OpenStreamSync() (sendStreamI, error) {
 func (m *outgoingUniStreamsMap) openStreamImpl() (sendStreamI, error) {
 	if m.nextStream > m.maxStream {
 		if !m.blockedSent {
-			var streamNum uint64
+			var streamNum protocol.StreamNum
 			if m.maxStream != protocol.InvalidStreamID {
 				streamNum = m.maxStream.StreamNum()
 			}

@@ -10,7 +10,7 @@ import (
 // A StreamsBlockedFrame is a STREAMS_BLOCKED frame
 type StreamsBlockedFrame struct {
 	Type        protocol.StreamType
-	StreamLimit uint64
+	StreamLimit protocol.StreamNum
 }
 
 func parseStreamsBlockedFrame(r *bytes.Reader, _ protocol.VersionNumber) (*StreamsBlockedFrame, error) {
@@ -30,7 +30,7 @@ func parseStreamsBlockedFrame(r *bytes.Reader, _ protocol.VersionNumber) (*Strea
 	if err != nil {
 		return nil, err
 	}
-	f.StreamLimit = streamLimit
+	f.StreamLimit = protocol.StreamNum(streamLimit)
 
 	return f, nil
 }
@@ -42,11 +42,11 @@ func (f *StreamsBlockedFrame) Write(b *bytes.Buffer, _ protocol.VersionNumber) e
 	case protocol.StreamTypeUni:
 		b.WriteByte(0x17)
 	}
-	utils.WriteVarInt(b, f.StreamLimit)
+	utils.WriteVarInt(b, uint64(f.StreamLimit))
 	return nil
 }
 
 // Length of a written frame
 func (f *StreamsBlockedFrame) Length(_ protocol.VersionNumber) protocol.ByteCount {
-	return 1 + utils.VarIntLen(f.StreamLimit)
+	return 1 + utils.VarIntLen(uint64(f.StreamLimit))
 }

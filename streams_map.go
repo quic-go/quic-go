@@ -39,7 +39,7 @@ var _ streamManager = &streamsMap{}
 func newStreamsMap(
 	sender streamSender,
 	newFlowController func(protocol.StreamID) flowcontrol.StreamFlowController,
-	maxIncomingStreams uint64,
+	maxIncomingBidiStreams uint64,
 	maxIncomingUniStreams uint64,
 	perspective protocol.Perspective,
 	version protocol.VersionNumber,
@@ -65,8 +65,8 @@ func newStreamsMap(
 	)
 	m.incomingBidiStreams = newIncomingBidiStreamsMap(
 		protocol.FirstStream(protocol.StreamTypeBidi, perspective.Opposite()),
-		protocol.MaxStreamID(protocol.StreamTypeBidi, maxIncomingStreams, perspective.Opposite()),
-		maxIncomingStreams,
+		protocol.MaxStreamID(protocol.StreamTypeBidi, protocol.StreamNum(maxIncomingBidiStreams), perspective.Opposite()),
+		maxIncomingBidiStreams,
 		sender.queueControlFrame,
 		newBidiStream,
 	)
@@ -77,7 +77,7 @@ func newStreamsMap(
 	)
 	m.incomingUniStreams = newIncomingUniStreamsMap(
 		protocol.FirstStream(protocol.StreamTypeUni, perspective.Opposite()),
-		protocol.MaxStreamID(protocol.StreamTypeUni, maxIncomingUniStreams, perspective.Opposite()),
+		protocol.MaxStreamID(protocol.StreamTypeUni, protocol.StreamNum(maxIncomingUniStreams), perspective.Opposite()),
 		maxIncomingUniStreams,
 		sender.queueControlFrame,
 		newUniReceiveStream,
@@ -160,10 +160,10 @@ func (m *streamsMap) GetOrOpenSendStream(id protocol.StreamID) (sendStreamI, err
 }
 
 func (m *streamsMap) HandleMaxStreamsFrame(f *wire.MaxStreamsFrame) error {
-	if f.MaxStreams > protocol.MaxStreamCount {
+	if f.MaxStreamNum > protocol.MaxStreamCount {
 		return qerr.StreamLimitError
 	}
-	id := protocol.MaxStreamID(f.Type, f.MaxStreams, m.perspective)
+	id := protocol.MaxStreamID(f.Type, f.MaxStreamNum, m.perspective)
 	switch id.Type() {
 	case protocol.StreamTypeUni:
 		m.outgoingUniStreams.SetMaxStream(id)
@@ -174,12 +174,13 @@ func (m *streamsMap) HandleMaxStreamsFrame(f *wire.MaxStreamsFrame) error {
 }
 
 func (m *streamsMap) UpdateLimits(p *handshake.TransportParameters) error {
-	if p.MaxBidiStreams > protocol.MaxStreamCount || p.MaxUniStreams > protocol.MaxStreamCount {
+	if p.MaxBidiStreamNum > protocol.MaxStreamCount ||
+		p.MaxUniStreamNum > protocol.MaxStreamCount {
 		return qerr.StreamLimitError
 	}
 	// Max{Uni,Bidi}StreamID returns the highest stream ID that the peer is allowed to open.
-	m.outgoingBidiStreams.SetMaxStream(protocol.MaxStreamID(protocol.StreamTypeBidi, p.MaxBidiStreams, m.perspective))
-	m.outgoingUniStreams.SetMaxStream(protocol.MaxStreamID(protocol.StreamTypeUni, p.MaxUniStreams, m.perspective))
+	m.outgoingBidiStreams.SetMaxStream(protocol.MaxStreamID(protocol.StreamTypeBidi, p.MaxBidiStreamNum, m.perspective))
+	m.outgoingUniStreams.SetMaxStream(protocol.MaxStreamID(protocol.StreamTypeUni, p.MaxUniStreamNum, m.perspective))
 	return nil
 }
 

@@ -89,11 +89,11 @@ var _ = Describe("Frame logging", func() {
 
 	It("logs MAX_STREAMS frames", func() {
 		frame := &MaxStreamsFrame{
-			Type:       protocol.StreamTypeBidi,
-			MaxStreams: 42,
+			Type:         protocol.StreamTypeBidi,
+			MaxStreamNum: 42,
 		}
 		LogFrame(logger, frame, false)
-		Expect(buf.String()).To(ContainSubstring("\t<- &wire.MaxStreamsFrame{Type: bidi, MaxStreams: 42}\n"))
+		Expect(buf.String()).To(ContainSubstring("\t<- &wire.MaxStreamsFrame{Type: bidi, MaxStreamNum: 42}\n"))
 	})
 
 	It("logs STREAMS_BLOCKED frames", func() {

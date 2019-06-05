@@ -80,7 +80,7 @@ func (m *outgoingItemsMap) OpenStreamSync() (item, error) {
 func (m *outgoingItemsMap) openStreamImpl() (item, error) {
 	if m.nextStream > m.maxStream {
 		if !m.blockedSent {
-			var streamNum uint64
+			var streamNum protocol.StreamNum
 			if m.maxStream != protocol.InvalidStreamID {
 				streamNum = m.maxStream.StreamNum()
 			}

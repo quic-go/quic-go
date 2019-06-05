@@ -3,7 +3,6 @@ package quic
 import (
 	"errors"
 	"fmt"
-	"math"
 	"net"
 
 	"github.com/golang/mock/gomock"
@@ -68,20 +67,20 @@ var _ = Describe("Streams Map", func() {
 			)
 
 			const (
-				maxBidiStreams = 111
-				maxUniStreams  = 222
+				MaxBidiStreamNum = 111
+				MaxUniStreamNum  = 222
 			)
 
 			allowUnlimitedStreams := func() {
 				m.UpdateLimits(&handshake.TransportParameters{
-					MaxBidiStreams: math.MaxUint16,
-					MaxUniStreams:  math.MaxUint16,
+					MaxBidiStreamNum: protocol.MaxStreamCount,
+					MaxUniStreamNum:  protocol.MaxStreamCount,
 				})
 			}
 
 			BeforeEach(func() {
 				mockSender = NewMockStreamSender(mockCtrl)
-				m = newStreamsMap(mockSender, newFlowController, maxBidiStreams, maxUniStreams, perspective, protocol.VersionWhatever).(*streamsMap)
+				m = newStreamsMap(mockSender, newFlowController, MaxBidiStreamNum, MaxUniStreamNum, perspective, protocol.VersionWhatever).(*streamsMap)
 			})
 
 			Context("opening", func() {
@@ -301,8 +300,8 @@ var _ = Describe("Streams Map", func() {
 					_, err := m.OpenStream()
 					expectTooManyStreamsError(err)
 					Expect(m.UpdateLimits(&handshake.TransportParameters{
-						MaxBidiStreams: 5,
-						MaxUniStreams:  5,
+						MaxBidiStreamNum: 5,
+						MaxUniStreamNum:  5,
 					})).To(Succeed())
 					Expect(m.outgoingBidiStreams.maxStream).To(Equal(protocol.StreamID(17)))
 					Expect(m.outgoingUniStreams.maxStream).To(Equal(protocol.StreamID(19)))
@@ -314,8 +313,8 @@ var _ = Describe("Streams Map", func() {
 					_, err := m.OpenUniStream()
 					expectTooManyStreamsError(err)
 					Expect(m.UpdateLimits(&handshake.TransportParameters{
-						MaxBidiStreams: 5,
-						MaxUniStreams:  5,
+						MaxBidiStreamNum: 5,
+						MaxUniStreamNum:  5,
 					})).To(Succeed())
 					Expect(m.outgoingBidiStreams.maxStream).To(Equal(protocol.StreamID(16)))
 					Expect(m.outgoingUniStreams.maxStream).To(Equal(protocol.StreamID(18)))
@@ -323,13 +322,13 @@ var _ = Describe("Streams Map", func() {
 
 				It("rejects parameters with too large unidirectional stream counts", func() {
 					Expect(m.UpdateLimits(&handshake.TransportParameters{
-						MaxUniStreams: protocol.MaxStreamCount + 1,
+						MaxUniStreamNum: protocol.MaxStreamCount + 1,
 					})).To(MatchError(qerr.StreamLimitError))
 				})
 
 				It("rejects parameters with too large unidirectional stream counts", func() {
 					Expect(m.UpdateLimits(&handshake.TransportParameters{
-						MaxBidiStreams: protocol.MaxStreamCount + 1,
+						MaxBidiStreamNum: protocol.MaxStreamCount + 1,
 					})).To(MatchError(qerr.StreamLimitError))
 				})
 			})
@@ -343,8 +342,8 @@ var _ = Describe("Streams Map", func() {
 					_, err := m.OpenStream()
 					expectTooManyStreamsError(err)
 					Expect(m.HandleMaxStreamsFrame(&wire.MaxStreamsFrame{
-						Type:       protocol.StreamTypeBidi,
-						MaxStreams: 1,
+						Type:         protocol.StreamTypeBidi,
+						MaxStreamNum: 1,
 					})).To(Succeed())
 					str, err := m.OpenStream()
 					Expect(err).ToNot(HaveOccurred())
@@ -357,8 +356,8 @@ var _ = Describe("Streams Map", func() {
 					_, err := m.OpenUniStream()
 					expectTooManyStreamsError(err)
 					Expect(m.HandleMaxStreamsFrame(&wire.MaxStreamsFrame{
-						Type:       protocol.StreamTypeUni,
-						MaxStreams: 1,
+						Type:         protocol.StreamTypeUni,
+						MaxStreamNum: 1,
 					})).To(Succeed())
 					str, err := m.OpenUniStream()
 					Expect(err).ToNot(HaveOccurred())
@@ -369,8 +368,8 @@ var _ = Describe("Streams Map", func() {
 
 				It("rejects MAX_STREAMS frames with too large values", func() {
 					Expect(m.HandleMaxStreamsFrame(&wire.MaxStreamsFrame{
-						Type:       protocol.StreamTypeBidi,
-						MaxStreams: protocol.MaxStreamCount + 1,
+						Type:         protocol.StreamTypeBidi,
+						MaxStreamNum: protocol.MaxStreamCount + 1,
 					})).To(MatchError(qerr.StreamLimitError))
 				})
 			})
@@ -382,8 +381,8 @@ var _ = Describe("Streams Map", func() {
 					_, err = m.AcceptStream()
 					Expect(err).ToNot(HaveOccurred())
 					mockSender.EXPECT().queueControlFrame(&wire.MaxStreamsFrame{
-						Type:       protocol.StreamTypeBidi,
-						MaxStreams: maxBidiStreams + 1,
+						Type:         protocol.StreamTypeBidi,
+						MaxStreamNum: MaxBidiStreamNum + 1,
 					})
 					Expect(m.DeleteStream(ids.firstIncomingBidiStream)).To(Succeed())
 				})
@@ -394,8 +393,8 @@ var _ = Describe("Streams Map", func() {
 					_, err = m.AcceptUniStream()
 					Expect(err).ToNot(HaveOccurred())
 					mockSender.EXPECT().queueControlFrame(&wire.MaxStreamsFrame{
-						Type:       protocol.StreamTypeUni,
-						MaxStreams: maxUniStreams + 1,
+						Type:         protocol.StreamTypeUni,
+						MaxStreamNum: MaxUniStreamNum + 1,
 					})
 					Expect(m.DeleteStream(ids.firstIncomingUniStream)).To(Succeed())
 				})

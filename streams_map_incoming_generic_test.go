@@ -212,11 +212,11 @@ var _ = Describe("Streams Map (incoming)", func() {
 			Expect(err).ToNot(HaveOccurred())
 		}
 		mockSender.EXPECT().queueControlFrame(gomock.Any()).Do(func(f wire.Frame) {
-			Expect(f.(*wire.MaxStreamsFrame).MaxStreams).To(Equal(maxNumStreams + 1))
+			Expect(f.(*wire.MaxStreamsFrame).MaxStreamNum).To(Equal(protocol.StreamNum(maxNumStreams + 1)))
 		})
 		Expect(m.DeleteStream(firstNewStream + 2*4)).To(Succeed())
 		mockSender.EXPECT().queueControlFrame(gomock.Any()).Do(func(f wire.Frame) {
-			Expect(f.(*wire.MaxStreamsFrame).MaxStreams).To(Equal(maxNumStreams + 2))
+			Expect(f.(*wire.MaxStreamsFrame).MaxStreamNum).To(Equal(protocol.StreamNum(maxNumStreams + 2)))
 		})
 		Expect(m.DeleteStream(firstNewStream + 3*4)).To(Succeed())
 	})
