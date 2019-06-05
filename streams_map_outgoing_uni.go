@@ -13,7 +13,8 @@ import (
 
 type outgoingUniStreamsMap struct {
 	mutex sync.RWMutex
-	cond  sync.Cond
+
+	openQueue []chan struct{}
 
 	streams map[protocol.StreamNum]sendStreamI
 
@@ -31,15 +32,13 @@ func newOutgoingUniStreamsMap(
 	newStream func(protocol.StreamNum) sendStreamI,
 	queueControlFrame func(wire.Frame),
 ) *outgoingUniStreamsMap {
-	m := &outgoingUniStreamsMap{
+	return &outgoingUniStreamsMap{
 		streams:              make(map[protocol.StreamNum]sendStreamI),
 		maxStream:            protocol.InvalidStreamNum,
 		nextStream:           1,
 		newStream:            newStream,
 		queueStreamIDBlocked: func(f *wire.StreamsBlockedFrame) { queueControlFrame(f) },
 	}
-	m.cond.L = &m.mutex
-	return m
 }
 
 func (m *outgoingUniStreamsMap) OpenStream() (sendStreamI, error) {
@@ -50,51 +49,70 @@ func (m *outgoingUniStreamsMap) OpenStream() (sendStreamI, error) {
 		return nil, m.closeErr
 	}
 
-	str, err := m.openStreamImpl()
-	if err != nil {
-		return nil, streamOpenErr{err}
+	// if there are OpenStreamSync calls waiting, return an error here
+	if len(m.openQueue) > 0 || m.nextStream > m.maxStream {
+		m.maybeSendBlockedFrame()
+		return nil, streamOpenErr{errTooManyOpenStreams}
 	}
-	return str, nil
+	return m.openStream(), nil
 }
 
 func (m *outgoingUniStreamsMap) OpenStreamSync() (sendStreamI, error) {
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
 
+	if m.closeErr != nil {
+		return nil, m.closeErr
+	}
+
+	if len(m.openQueue) == 0 && m.nextStream <= m.maxStream {
+		return m.openStream(), nil
+	}
+
+	waitChan := make(chan struct{}, 1)
+	m.openQueue = append(m.openQueue, waitChan)
+	m.maybeSendBlockedFrame()
+
 	for {
+		m.mutex.Unlock()
+		<-waitChan
+		m.mutex.Lock()
+
 		if m.closeErr != nil {
 			return nil, m.closeErr
 		}
-		str, err := m.openStreamImpl()
-		if err == nil {
-			return str, nil
+		if m.nextStream > m.maxStream {
+			// no stream available. Continue waiting
+			continue
 		}
-		if err != nil && err != errTooManyOpenStreams {
-			return nil, streamOpenErr{err}
-		}
-		m.cond.Wait()
+		str := m.openStream()
+		m.openQueue = m.openQueue[1:]
+		m.unblockOpenSync()
+		return str, nil
 	}
 }
 
-func (m *outgoingUniStreamsMap) openStreamImpl() (sendStreamI, error) {
-	if m.nextStream > m.maxStream {
-		if !m.blockedSent {
-			var streamNum protocol.StreamNum
-			if m.maxStream != protocol.InvalidStreamNum {
-				streamNum = m.maxStream
-			}
-			m.queueStreamIDBlocked(&wire.StreamsBlockedFrame{
-				Type:        protocol.StreamTypeUni,
-				StreamLimit: streamNum,
-			})
-			m.blockedSent = true
-		}
-		return nil, errTooManyOpenStreams
-	}
+func (m *outgoingUniStreamsMap) openStream() sendStreamI {
 	s := m.newStream(m.nextStream)
 	m.streams[m.nextStream] = s
 	m.nextStream++
-	return s, nil
+	return s
+}
+
+func (m *outgoingUniStreamsMap) maybeSendBlockedFrame() {
+	if m.blockedSent {
+		return
+	}
+
+	var streamNum protocol.StreamNum
+	if m.maxStream != protocol.InvalidStreamNum {
+		streamNum = m.maxStream
+	}
+	m.queueStreamIDBlocked(&wire.StreamsBlockedFrame{
+		Type:        protocol.StreamTypeUni,
+		StreamLimit: streamNum,
+	})
+	m.blockedSent = true
 }
 
 func (m *outgoingUniStreamsMap) GetStream(num protocol.StreamNum) (sendStreamI, error) {
@@ -127,12 +145,24 @@ func (m *outgoingUniStreamsMap) DeleteStream(num protocol.StreamNum) error {
 
 func (m *outgoingUniStreamsMap) SetMaxStream(num protocol.StreamNum) {
 	m.mutex.Lock()
-	if num > m.maxStream {
-		m.maxStream = num
-		m.blockedSent = false
-		m.cond.Broadcast()
+	defer m.mutex.Unlock()
+
+	if num <= m.maxStream {
+		return
 	}
-	m.mutex.Unlock()
+	m.maxStream = num
+	m.blockedSent = false
+	m.unblockOpenSync()
+}
+
+func (m *outgoingUniStreamsMap) unblockOpenSync() {
+	if len(m.openQueue) == 0 {
+		return
+	}
+	select {
+	case m.openQueue[0] <- struct{}{}:
+	default:
+	}
 }
 
 func (m *outgoingUniStreamsMap) CloseWithError(err error) {
@@ -141,6 +171,8 @@ func (m *outgoingUniStreamsMap) CloseWithError(err error) {
 	for _, str := range m.streams {
 		str.closeForShutdown(err)
 	}
-	m.cond.Broadcast()
+	for _, c := range m.openQueue {
+		close(c)
+	}
 	m.mutex.Unlock()
 }

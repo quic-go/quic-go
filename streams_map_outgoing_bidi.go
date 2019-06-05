@@ -13,7 +13,8 @@ import (
 
 type outgoingBidiStreamsMap struct {
 	mutex sync.RWMutex
-	cond  sync.Cond
+
+	openQueue []chan struct{}
 
 	streams map[protocol.StreamNum]streamI
 
@@ -31,15 +32,13 @@ func newOutgoingBidiStreamsMap(
 	newStream func(protocol.StreamNum) streamI,
 	queueControlFrame func(wire.Frame),
 ) *outgoingBidiStreamsMap {
-	m := &outgoingBidiStreamsMap{
+	return &outgoingBidiStreamsMap{
 		streams:              make(map[protocol.StreamNum]streamI),
 		maxStream:            protocol.InvalidStreamNum,
 		nextStream:           1,
 		newStream:            newStream,
 		queueStreamIDBlocked: func(f *wire.StreamsBlockedFrame) { queueControlFrame(f) },
 	}
-	m.cond.L = &m.mutex
-	return m
 }
 
 func (m *outgoingBidiStreamsMap) OpenStream() (streamI, error) {
@@ -50,51 +49,70 @@ func (m *outgoingBidiStreamsMap) OpenStream() (streamI, error) {
 		return nil, m.closeErr
 	}
 
-	str, err := m.openStreamImpl()
-	if err != nil {
-		return nil, streamOpenErr{err}
+	// if there are OpenStreamSync calls waiting, return an error here
+	if len(m.openQueue) > 0 || m.nextStream > m.maxStream {
+		m.maybeSendBlockedFrame()
+		return nil, streamOpenErr{errTooManyOpenStreams}
 	}
-	return str, nil
+	return m.openStream(), nil
 }
 
 func (m *outgoingBidiStreamsMap) OpenStreamSync() (streamI, error) {
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
 
+	if m.closeErr != nil {
+		return nil, m.closeErr
+	}
+
+	if len(m.openQueue) == 0 && m.nextStream <= m.maxStream {
+		return m.openStream(), nil
+	}
+
+	waitChan := make(chan struct{}, 1)
+	m.openQueue = append(m.openQueue, waitChan)
+	m.maybeSendBlockedFrame()
+
 	for {
+		m.mutex.Unlock()
+		<-waitChan
+		m.mutex.Lock()
+
 		if m.closeErr != nil {
 			return nil, m.closeErr
 		}
-		str, err := m.openStreamImpl()
-		if err == nil {
-			return str, nil
+		if m.nextStream > m.maxStream {
+			// no stream available. Continue waiting
+			continue
 		}
-		if err != nil && err != errTooManyOpenStreams {
-			return nil, streamOpenErr{err}
-		}
-		m.cond.Wait()
+		str := m.openStream()
+		m.openQueue = m.openQueue[1:]
+		m.unblockOpenSync()
+		return str, nil
 	}
 }
 
-func (m *outgoingBidiStreamsMap) openStreamImpl() (streamI, error) {
-	if m.nextStream > m.maxStream {
-		if !m.blockedSent {
-			var streamNum protocol.StreamNum
-			if m.maxStream != protocol.InvalidStreamNum {
-				streamNum = m.maxStream
-			}
-			m.queueStreamIDBlocked(&wire.StreamsBlockedFrame{
-				Type:        protocol.StreamTypeBidi,
-				StreamLimit: streamNum,
-			})
-			m.blockedSent = true
-		}
-		return nil, errTooManyOpenStreams
-	}
+func (m *outgoingBidiStreamsMap) openStream() streamI {
 	s := m.newStream(m.nextStream)
 	m.streams[m.nextStream] = s
 	m.nextStream++
-	return s, nil
+	return s
+}
+
+func (m *outgoingBidiStreamsMap) maybeSendBlockedFrame() {
+	if m.blockedSent {
+		return
+	}
+
+	var streamNum protocol.StreamNum
+	if m.maxStream != protocol.InvalidStreamNum {
+		streamNum = m.maxStream
+	}
+	m.queueStreamIDBlocked(&wire.StreamsBlockedFrame{
+		Type:        protocol.StreamTypeBidi,
+		StreamLimit: streamNum,
+	})
+	m.blockedSent = true
 }
 
 func (m *outgoingBidiStreamsMap) GetStream(num protocol.StreamNum) (streamI, error) {
@@ -127,12 +145,24 @@ func (m *outgoingBidiStreamsMap) DeleteStream(num protocol.StreamNum) error {
 
 func (m *outgoingBidiStreamsMap) SetMaxStream(num protocol.StreamNum) {
 	m.mutex.Lock()
-	if num > m.maxStream {
-		m.maxStream = num
-		m.blockedSent = false
-		m.cond.Broadcast()
+	defer m.mutex.Unlock()
+
+	if num <= m.maxStream {
+		return
 	}
-	m.mutex.Unlock()
+	m.maxStream = num
+	m.blockedSent = false
+	m.unblockOpenSync()
+}
+
+func (m *outgoingBidiStreamsMap) unblockOpenSync() {
+	if len(m.openQueue) == 0 {
+		return
+	}
+	select {
+	case m.openQueue[0] <- struct{}{}:
+	default:
+	}
 }
 
 func (m *outgoingBidiStreamsMap) CloseWithError(err error) {
@@ -141,6 +171,8 @@ func (m *outgoingBidiStreamsMap) CloseWithError(err error) {
 	for _, str := range m.streams {
 		str.closeForShutdown(err)
 	}
-	m.cond.Broadcast()
+	for _, c := range m.openQueue {
+		close(c)
+	}
 	m.mutex.Unlock()
 }
