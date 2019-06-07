@@ -143,7 +143,7 @@ type Session interface {
 	// It blocks until a new stream can be opened.
 	// If the error is non-nil, it satisfies the net.Error interface.
 	// If the session was closed due to a timeout, Timeout() will be true.
-	OpenStreamSync() (Stream, error)
+	OpenStreamSync(context.Context) (Stream, error)
 	// OpenUniStream opens a new outgoing unidirectional QUIC stream.
 	// If the error is non-nil, it satisfies the net.Error interface.
 	// When reaching the peer's stream limit, Temporary() will be true.
@@ -153,7 +153,7 @@ type Session interface {
 	// It blocks until a new stream can be opened.
 	// If the error is non-nil, it satisfies the net.Error interface.
 	// If the session was closed due to a timeout, Timeout() will be true.
-	OpenUniStreamSync() (SendStream, error)
+	OpenUniStreamSync(context.Context) (SendStream, error)
 	// LocalAddr returns the local address.
 	LocalAddr() net.Addr
 	// RemoteAddr returns the address of the peer.

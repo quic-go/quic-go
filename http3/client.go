@@ -2,6 +2,7 @@ package http3
 
 import (
 	"bytes"
+	"context"
 	"crypto/tls"
 	"errors"
 	"fmt"
@@ -100,7 +101,7 @@ func (c *client) dial() error {
 
 func (c *client) setupSession() error {
 	// open the control stream
-	str, err := c.session.OpenUniStreamSync()
+	str, err := c.session.OpenUniStream()
 	if err != nil {
 		return err
 	}
@@ -138,7 +139,7 @@ func (c *client) RoundTrip(req *http.Request) (*http.Response, error) {
 		return nil, c.handshakeErr
 	}
 
-	str, err := c.session.OpenStreamSync()
+	str, err := c.session.OpenStreamSync(context.Background())
 	if err != nil {
 		return nil, err
 	}

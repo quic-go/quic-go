@@ -47,7 +47,7 @@ var _ = Describe("Bidirectional streams", func() {
 				var wg sync.WaitGroup
 				wg.Add(numStreams)
 				for i := 0; i < numStreams; i++ {
-					str, err := sess.OpenStreamSync()
+					str, err := sess.OpenStreamSync(context.Background())
 					Expect(err).ToNot(HaveOccurred())
 					data := testserver.GeneratePRData(25 * i)
 					go func() {

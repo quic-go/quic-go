@@ -1423,8 +1423,8 @@ var _ = Describe("Session", func() {
 
 		It("opens streams synchronously", func() {
 			mstr := NewMockStreamI(mockCtrl)
-			streamManager.EXPECT().OpenStreamSync().Return(mstr, nil)
-			str, err := sess.OpenStreamSync()
+			streamManager.EXPECT().OpenStreamSync(context.Background()).Return(mstr, nil)
+			str, err := sess.OpenStreamSync(context.Background())
 			Expect(err).ToNot(HaveOccurred())
 			Expect(str).To(Equal(mstr))
 		})
@@ -1439,8 +1439,8 @@ var _ = Describe("Session", func() {
 
 		It("opens unidirectional streams synchronously", func() {
 			mstr := NewMockSendStreamI(mockCtrl)
-			streamManager.EXPECT().OpenUniStreamSync().Return(mstr, nil)
-			str, err := sess.OpenUniStreamSync()
+			streamManager.EXPECT().OpenUniStreamSync(context.Background()).Return(mstr, nil)
+			str, err := sess.OpenUniStreamSync(context.Background())
 			Expect(err).ToNot(HaveOccurred())
 			Expect(str).To(Equal(mstr))
 		})

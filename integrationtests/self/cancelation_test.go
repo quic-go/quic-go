@@ -41,7 +41,7 @@ var _ = Describe("Stream Cancelations", func() {
 					go func() {
 						defer GinkgoRecover()
 						defer wg.Done()
-						str, err := sess.OpenUniStreamSync()
+						str, err := sess.OpenUniStreamSync(context.Background())
 						Expect(err).ToNot(HaveOccurred())
 						if _, err = str.Write(testserver.PRData); err != nil {
 							Expect(err).To(MatchError(fmt.Sprintf("Stream %d was reset with error code %d", str.StreamID(), str.StreamID())))
@@ -203,7 +203,7 @@ var _ = Describe("Stream Cancelations", func() {
 				for i := 0; i < numStreams; i++ {
 					go func() {
 						defer GinkgoRecover()
-						str, err := sess.OpenUniStreamSync()
+						str, err := sess.OpenUniStreamSync(context.Background())
 						Expect(err).ToNot(HaveOccurred())
 						// cancel about 2/3 of the streams
 						if rand.Int31()%3 != 0 {
@@ -234,7 +234,7 @@ var _ = Describe("Stream Cancelations", func() {
 				for i := 0; i < numStreams; i++ {
 					go func() {
 						defer GinkgoRecover()
-						str, err := sess.OpenUniStreamSync()
+						str, err := sess.OpenUniStreamSync(context.Background())
 						Expect(err).ToNot(HaveOccurred())
 						// only write some data from about 1/3 of the streams, then cancel
 						if rand.Int31()%3 != 0 {
@@ -273,7 +273,7 @@ var _ = Describe("Stream Cancelations", func() {
 					go func() {
 						defer GinkgoRecover()
 						defer wg.Done()
-						str, err := sess.OpenUniStreamSync()
+						str, err := sess.OpenUniStreamSync(context.Background())
 						Expect(err).ToNot(HaveOccurred())
 						// cancel about half of the streams
 						if rand.Int31()%2 == 0 {
@@ -347,7 +347,7 @@ var _ = Describe("Stream Cancelations", func() {
 					go func() {
 						defer GinkgoRecover()
 						defer wg.Done()
-						str, err := sess.OpenUniStreamSync()
+						str, err := sess.OpenUniStreamSync(context.Background())
 						Expect(err).ToNot(HaveOccurred())
 						// cancel about half of the streams
 						length := len(testserver.PRData)

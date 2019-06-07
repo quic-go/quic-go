@@ -1,6 +1,7 @@
 package quic
 
 import (
+	"context"
 	"errors"
 
 	"github.com/golang/mock/gomock"
@@ -106,12 +107,19 @@ var _ = Describe("Streams Map (outgoing)", func() {
 			expectTooManyStreamsError(err)
 		})
 
+		It("returns immediately when called with a canceled context", func() {
+			ctx, cancel := context.WithCancel(context.Background())
+			cancel()
+			_, err := m.OpenStreamSync(ctx)
+			Expect(err).To(MatchError("context canceled"))
+		})
+
 		It("blocks until a stream can be opened synchronously", func() {
 			mockSender.EXPECT().queueControlFrame(gomock.Any())
 			done := make(chan struct{})
 			go func() {
 				defer GinkgoRecover()
-				str, err := m.OpenStreamSync()
+				str, err := m.OpenStreamSync(context.Background())
 				Expect(err).ToNot(HaveOccurred())
 				Expect(str.(*mockGenericStream).num).To(Equal(protocol.StreamNum(1)))
 				close(done)
@@ -122,12 +130,34 @@ var _ = Describe("Streams Map (outgoing)", func() {
 			Eventually(done).Should(BeClosed())
 		})
 
+		It("unblocks when the context is canceled", func() {
+			mockSender.EXPECT().queueControlFrame(gomock.Any())
+			ctx, cancel := context.WithCancel(context.Background())
+			done := make(chan struct{})
+			go func() {
+				defer GinkgoRecover()
+				_, err := m.OpenStreamSync(ctx)
+				Expect(err).To(MatchError("context canceled"))
+				close(done)
+			}()
+
+			Consistently(done).ShouldNot(BeClosed())
+			cancel()
+			Eventually(done).Should(BeClosed())
+
+			// make sure that the next stream openend is stream 1
+			m.SetMaxStream(1000)
+			str, err := m.OpenStream()
+			Expect(err).ToNot(HaveOccurred())
+			Expect(str.(*mockGenericStream).num).To(Equal(protocol.StreamNum(1)))
+		})
+
 		It("opens streams in the right order", func() {
 			mockSender.EXPECT().queueControlFrame(gomock.Any()).AnyTimes()
 			done1 := make(chan struct{})
 			go func() {
 				defer GinkgoRecover()
-				str, err := m.OpenStreamSync()
+				str, err := m.OpenStreamSync(context.Background())
 				Expect(err).ToNot(HaveOccurred())
 				Expect(str.(*mockGenericStream).num).To(Equal(protocol.StreamNum(1)))
 				close(done1)
@@ -136,7 +166,7 @@ var _ = Describe("Streams Map (outgoing)", func() {
 			done2 := make(chan struct{})
 			go func() {
 				defer GinkgoRecover()
-				str, err := m.OpenStreamSync()
+				str, err := m.OpenStreamSync(context.Background())
 				Expect(err).ToNot(HaveOccurred())
 				Expect(str.(*mockGenericStream).num).To(Equal(protocol.StreamNum(2)))
 				close(done2)
@@ -155,20 +185,20 @@ var _ = Describe("Streams Map (outgoing)", func() {
 			done := make(chan struct{})
 			go func() {
 				defer GinkgoRecover()
-				_, err := m.OpenStreamSync()
+				_, err := m.OpenStreamSync(context.Background())
 				Expect(err).ToNot(HaveOccurred())
 				done <- struct{}{}
 			}()
 			go func() {
 				defer GinkgoRecover()
-				_, err := m.OpenStreamSync()
+				_, err := m.OpenStreamSync(context.Background())
 				Expect(err).ToNot(HaveOccurred())
 				done <- struct{}{}
 			}()
 			Consistently(done).ShouldNot(Receive())
 			go func() {
 				defer GinkgoRecover()
-				_, err := m.OpenStreamSync()
+				_, err := m.OpenStreamSync(context.Background())
 				Expect(err).To(MatchError("test done"))
 				done <- struct{}{}
 			}()
@@ -188,7 +218,7 @@ var _ = Describe("Streams Map (outgoing)", func() {
 			openedSync := make(chan struct{})
 			go func() {
 				defer GinkgoRecover()
-				str, err := m.OpenStreamSync()
+				str, err := m.OpenStreamSync(context.Background())
 				Expect(err).ToNot(HaveOccurred())
 				Expect(str.(*mockGenericStream).num).To(Equal(protocol.StreamNum(1)))
 				close(openedSync)
@@ -229,7 +259,7 @@ var _ = Describe("Streams Map (outgoing)", func() {
 			done := make(chan struct{})
 			go func() {
 				defer GinkgoRecover()
-				_, err := m.OpenStreamSync()
+				_, err := m.OpenStreamSync(context.Background())
 				Expect(err).To(MatchError(testErr))
 				close(done)
 			}()

@@ -59,7 +59,7 @@ func clientMain() error {
 		return err
 	}
 
-	stream, err := session.OpenStreamSync()
+	stream, err := session.OpenStreamSync(context.Background())
 	if err != nil {
 		return err
 	}

@@ -42,7 +42,7 @@ var _ = Describe("Unidirectional Streams", func() {
 
 	runSendingPeer := func(sess quic.Session) {
 		for i := 0; i < numStreams; i++ {
-			str, err := sess.OpenUniStreamSync()
+			str, err := sess.OpenUniStreamSync(context.Background())
 			Expect(err).ToNot(HaveOccurred())
 			go func() {
 				defer GinkgoRecover()

@@ -128,7 +128,7 @@ func (s *Server) handleConn(sess quic.Session) {
 	decoder := qpack.NewDecoder(nil)
 
 	// send a SETTINGS frame
-	str, err := sess.OpenUniStreamSync()
+	str, err := sess.OpenUniStream()
 	if err != nil {
 		s.logger.Debugf("Opening the control stream failed.")
 		return

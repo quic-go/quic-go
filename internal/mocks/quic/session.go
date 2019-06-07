@@ -154,18 +154,18 @@ func (mr *MockSessionMockRecorder) OpenStream() *gomock.Call {
 }
 
 // OpenStreamSync mocks base method
-func (m *MockSession) OpenStreamSync() (quic_go.Stream, error) {
+func (m *MockSession) OpenStreamSync(arg0 context.Context) (quic_go.Stream, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "OpenStreamSync")
+	ret := m.ctrl.Call(m, "OpenStreamSync", arg0)
 	ret0, _ := ret[0].(quic_go.Stream)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // OpenStreamSync indicates an expected call of OpenStreamSync
-func (mr *MockSessionMockRecorder) OpenStreamSync() *gomock.Call {
+func (mr *MockSessionMockRecorder) OpenStreamSync(arg0 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "OpenStreamSync", reflect.TypeOf((*MockSession)(nil).OpenStreamSync))
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "OpenStreamSync", reflect.TypeOf((*MockSession)(nil).OpenStreamSync), arg0)
 }
 
 // OpenUniStream mocks base method
@@ -184,18 +184,18 @@ func (mr *MockSessionMockRecorder) OpenUniStream() *gomock.Call {
 }
 
 // OpenUniStreamSync mocks base method
-func (m *MockSession) OpenUniStreamSync() (quic_go.SendStream, error) {
+func (m *MockSession) OpenUniStreamSync(arg0 context.Context) (quic_go.SendStream, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "OpenUniStreamSync")
+	ret := m.ctrl.Call(m, "OpenUniStreamSync", arg0)
 	ret0, _ := ret[0].(quic_go.SendStream)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // OpenUniStreamSync indicates an expected call of OpenUniStreamSync
-func (mr *MockSessionMockRecorder) OpenUniStreamSync() *gomock.Call {
+func (mr *MockSessionMockRecorder) OpenUniStreamSync(arg0 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "OpenUniStreamSync", reflect.TypeOf((*MockSession)(nil).OpenUniStreamSync))
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "OpenUniStreamSync", reflect.TypeOf((*MockSession)(nil).OpenUniStreamSync), arg0)
 }
 
 // RemoteAddr mocks base method
