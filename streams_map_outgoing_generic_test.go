@@ -122,6 +122,107 @@ var _ = Describe("Streams Map (outgoing)", func() {
 			Eventually(done).Should(BeClosed())
 		})
 
+		It("opens streams in the right order", func() {
+			mockSender.EXPECT().queueControlFrame(gomock.Any()).AnyTimes()
+			done1 := make(chan struct{})
+			go func() {
+				defer GinkgoRecover()
+				str, err := m.OpenStreamSync()
+				Expect(err).ToNot(HaveOccurred())
+				Expect(str.(*mockGenericStream).num).To(Equal(protocol.StreamNum(1)))
+				close(done1)
+			}()
+			Consistently(done1).ShouldNot(BeClosed())
+			done2 := make(chan struct{})
+			go func() {
+				defer GinkgoRecover()
+				str, err := m.OpenStreamSync()
+				Expect(err).ToNot(HaveOccurred())
+				Expect(str.(*mockGenericStream).num).To(Equal(protocol.StreamNum(2)))
+				close(done2)
+			}()
+			Consistently(done2).ShouldNot(BeClosed())
+
+			m.SetMaxStream(1)
+			Eventually(done1).Should(BeClosed())
+			Consistently(done2).ShouldNot(BeClosed())
+			m.SetMaxStream(2)
+			Eventually(done2).Should(BeClosed())
+		})
+
+		It("unblocks multiple OpenStreamSync calls at the same time", func() {
+			mockSender.EXPECT().queueControlFrame(gomock.Any()).AnyTimes()
+			done := make(chan struct{})
+			go func() {
+				defer GinkgoRecover()
+				_, err := m.OpenStreamSync()
+				Expect(err).ToNot(HaveOccurred())
+				done <- struct{}{}
+			}()
+			go func() {
+				defer GinkgoRecover()
+				_, err := m.OpenStreamSync()
+				Expect(err).ToNot(HaveOccurred())
+				done <- struct{}{}
+			}()
+			Consistently(done).ShouldNot(Receive())
+			go func() {
+				defer GinkgoRecover()
+				_, err := m.OpenStreamSync()
+				Expect(err).To(MatchError("test done"))
+				done <- struct{}{}
+			}()
+			Consistently(done).ShouldNot(Receive())
+
+			m.SetMaxStream(2)
+			Eventually(done).Should(Receive())
+			Eventually(done).Should(Receive())
+			Consistently(done).ShouldNot(Receive())
+
+			m.CloseWithError(errors.New("test done"))
+			Eventually(done).Should(Receive())
+		})
+
+		It("returns an error for OpenStream while an OpenStreamSync call is blocking", func() {
+			mockSender.EXPECT().queueControlFrame(gomock.Any()).MaxTimes(2)
+			openedSync := make(chan struct{})
+			go func() {
+				defer GinkgoRecover()
+				str, err := m.OpenStreamSync()
+				Expect(err).ToNot(HaveOccurred())
+				Expect(str.(*mockGenericStream).num).To(Equal(protocol.StreamNum(1)))
+				close(openedSync)
+			}()
+			Consistently(openedSync).ShouldNot(BeClosed())
+
+			start := make(chan struct{})
+			openend := make(chan struct{})
+			go func() {
+				defer GinkgoRecover()
+				var hasStarted bool
+				for {
+					str, err := m.OpenStream()
+					if err == nil {
+						Expect(str.(*mockGenericStream).num).To(Equal(protocol.StreamNum(2)))
+						close(openend)
+						return
+					}
+					expectTooManyStreamsError(err)
+					if !hasStarted {
+						close(start)
+						hasStarted = true
+					}
+				}
+			}()
+
+			Eventually(start).Should(BeClosed())
+			m.SetMaxStream(1)
+			Eventually(openedSync).Should(BeClosed())
+			Consistently(openend).ShouldNot(BeClosed())
+			m.SetMaxStream(2)
+			Eventually(openend).Should(BeClosed())
+		})
+
 		It("stops opening synchronously when it is closed", func() {
 			mockSender.EXPECT().queueControlFrame(gomock.Any())
 			testErr := errors.New("test error")
