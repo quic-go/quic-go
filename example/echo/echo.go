@@ -49,7 +49,11 @@ func echoServer() error {
 }
 
 func clientMain() error {
-	session, err := quic.DialAddr(addr, &tls.Config{InsecureSkipVerify: true}, nil)
+	tlsConf := &tls.Config{
+		InsecureSkipVerify: true,
+		NextProtos:         []string{"quic-echo-example"},
+	}
+	session, err := quic.DialAddr(addr, tlsConf, nil)
 	if err != nil {
 		return err
 	}
@@ -101,5 +105,8 @@ func generateTLSConfig() *tls.Config {
 	if err != nil {
 		panic(err)
 	}
-	return &tls.Config{Certificates: []tls.Certificate{tlsCert}}
+	return &tls.Config{
+		Certificates: []tls.Certificate{tlsCert},
+		NextProtos:   []string{"quic-echo-example"},
+	}
 }
