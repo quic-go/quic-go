@@ -94,10 +94,10 @@ func (mr *MockCryptoSetupMockRecorder) Get1RTTOpener() *gomock.Call {
 }
 
 // Get1RTTSealer mocks base method
-func (m *MockCryptoSetup) Get1RTTSealer() (handshake.Sealer, error) {
+func (m *MockCryptoSetup) Get1RTTSealer() (handshake.ShortHeaderSealer, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Get1RTTSealer")
-	ret0, _ := ret[0].(handshake.Sealer)
+	ret0, _ := ret[0].(handshake.ShortHeaderSealer)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -124,10 +124,10 @@ func (mr *MockCryptoSetupMockRecorder) GetHandshakeOpener() *gomock.Call {
 }
 
 // GetHandshakeSealer mocks base method
-func (m *MockCryptoSetup) GetHandshakeSealer() (handshake.Sealer, error) {
+func (m *MockCryptoSetup) GetHandshakeSealer() (handshake.LongHeaderSealer, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetHandshakeSealer")
-	ret0, _ := ret[0].(handshake.Sealer)
+	ret0, _ := ret[0].(handshake.LongHeaderSealer)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -154,10 +154,10 @@ func (mr *MockCryptoSetupMockRecorder) GetInitialOpener() *gomock.Call {
 }
 
 // GetInitialSealer mocks base method
-func (m *MockCryptoSetup) GetInitialSealer() (handshake.Sealer, error) {
+func (m *MockCryptoSetup) GetInitialSealer() (handshake.LongHeaderSealer, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetInitialSealer")
-	ret0, _ := ret[0].(handshake.Sealer)
+	ret0, _ := ret[0].(handshake.LongHeaderSealer)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }

@@ -19,9 +19,10 @@ type sealer struct {
 	is1RTT bool
 }
 
-var _ Sealer = &sealer{}
+var _ LongHeaderSealer = &sealer{}
+var _ ShortHeaderSealer = &sealer{}
 
-func newSealer(aead cipher.AEAD, hpEncrypter cipher.Block, is1RTT bool) Sealer {
+func newSealer(aead cipher.AEAD, hpEncrypter cipher.Block, is1RTT bool) ShortHeaderSealer {
 	return &sealer{
 		aead:        aead,
 		nonceBuf:    make([]byte, aead.NonceSize()),
@@ -55,6 +56,10 @@ func (s *sealer) EncryptHeader(sample []byte, firstByte *byte, pnBytes []byte) {
 
 func (s *sealer) Overhead() int {
 	return s.aead.Overhead()
+}
+
+func (s *sealer) KeyPhase() protocol.KeyPhase {
+	return protocol.KeyPhaseZero
 }
 
 type opener struct {

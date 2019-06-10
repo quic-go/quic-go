@@ -10,7 +10,7 @@ import (
 )
 
 var _ = Describe("AEAD", func() {
-	getSealerAndOpener := func(is1RTT bool) (Sealer, Opener) {
+	getSealerAndOpener := func(is1RTT bool) (ShortHeaderSealer, Opener) {
 		key := make([]byte, 16)
 		hpKey := make([]byte, 16)
 		rand.Read(key)
@@ -29,7 +29,7 @@ var _ = Describe("AEAD", func() {
 
 	Context("message encryption", func() {
 		var (
-			sealer Sealer
+			sealer ShortHeaderSealer
 			opener Opener
 		)
 

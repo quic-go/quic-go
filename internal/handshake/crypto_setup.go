@@ -106,15 +106,15 @@ type cryptoSetup struct {
 
 	initialStream io.Writer
 	initialOpener Opener
-	initialSealer Sealer
+	initialSealer LongHeaderSealer
 
 	handshakeStream io.Writer
 	handshakeOpener Opener
-	handshakeSealer Sealer
+	handshakeSealer LongHeaderSealer
 
 	oneRTTStream io.Writer
 	opener       Opener
-	sealer       Sealer
+	sealer       ShortHeaderSealer
 }
 
 var _ qtls.RecordLayer = &cryptoSetup{}
@@ -564,14 +564,14 @@ func (h *cryptoSetup) SendAlert(alert uint8) {
 	h.alertChan <- alert
 }
 
-func (h *cryptoSetup) GetInitialSealer() (Sealer, error) {
+func (h *cryptoSetup) GetInitialSealer() (LongHeaderSealer, error) {
 	h.mutex.Lock()
 	defer h.mutex.Unlock()
 
 	return h.initialSealer, nil
 }
 
-func (h *cryptoSetup) GetHandshakeSealer() (Sealer, error) {
+func (h *cryptoSetup) GetHandshakeSealer() (LongHeaderSealer, error) {
 	h.mutex.Lock()
 	defer h.mutex.Unlock()
 
@@ -581,7 +581,7 @@ func (h *cryptoSetup) GetHandshakeSealer() (Sealer, error) {
 	return h.handshakeSealer, nil
 }
 
-func (h *cryptoSetup) Get1RTTSealer() (Sealer, error) {
+func (h *cryptoSetup) Get1RTTSealer() (ShortHeaderSealer, error) {
 	h.mutex.Lock()
 	defer h.mutex.Unlock()
 

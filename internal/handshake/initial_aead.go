@@ -11,7 +11,7 @@ import (
 var quicVersion1Salt = []byte{0xef, 0x4f, 0xb0, 0xab, 0xb4, 0x74, 0x70, 0xc4, 0x1b, 0xef, 0xcf, 0x80, 0x31, 0x33, 0x4f, 0xae, 0x48, 0x5e, 0x09, 0xa0}
 
 // NewInitialAEAD creates a new AEAD for Initial encryption / decryption.
-func NewInitialAEAD(connID protocol.ConnectionID, pers protocol.Perspective) (Sealer, Opener, error) {
+func NewInitialAEAD(connID protocol.ConnectionID, pers protocol.Perspective) (LongHeaderSealer, Opener, error) {
 	clientSecret, serverSecret := computeSecrets(connID)
 	var mySecret, otherSecret []byte
 	if pers == protocol.PerspectiveClient {

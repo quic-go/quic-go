@@ -106,7 +106,7 @@ var _ = Describe("Packet packer", func() {
 	Context("generating a packet header", func() {
 		It("uses the Long Header format", func() {
 			pnManager.EXPECT().PeekPacketNumber(protocol.EncryptionHandshake).Return(protocol.PacketNumber(0x42), protocol.PacketNumberLen2)
-			h := packer.getHeader(protocol.EncryptionHandshake)
+			h := packer.getLongHeader(protocol.EncryptionHandshake)
 			Expect(h.IsLongHeader).To(BeTrue())
 			Expect(h.PacketNumber).To(Equal(protocol.PacketNumber(0x42)))
 			// long headers always use 4 byte packet numbers, no matter what the packet number generator says
@@ -120,7 +120,7 @@ var _ = Describe("Packet packer", func() {
 			destConnID := protocol.ConnectionID{8, 7, 6, 5, 4, 3, 2, 1}
 			packer.srcConnID = srcConnID
 			packer.destConnID = destConnID
-			h := packer.getHeader(protocol.EncryptionHandshake)
+			h := packer.getLongHeader(protocol.EncryptionHandshake)
 			Expect(h.SrcConnectionID).To(Equal(srcConnID))
 			Expect(h.DestConnectionID).To(Equal(destConnID))
 		})
@@ -132,21 +132,22 @@ var _ = Describe("Packet packer", func() {
 			dest1 := protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8}
 			dest2 := protocol.ConnectionID{8, 7, 6, 5, 4, 3, 2, 1}
 			packer.ChangeDestConnectionID(dest1)
-			h := packer.getHeader(protocol.EncryptionInitial)
+			h := packer.getLongHeader(protocol.EncryptionInitial)
 			Expect(h.SrcConnectionID).To(Equal(srcConnID))
 			Expect(h.DestConnectionID).To(Equal(dest1))
 			packer.ChangeDestConnectionID(dest2)
-			h = packer.getHeader(protocol.EncryptionInitial)
+			h = packer.getLongHeader(protocol.EncryptionInitial)
 			Expect(h.SrcConnectionID).To(Equal(srcConnID))
 			Expect(h.DestConnectionID).To(Equal(dest2))
 		})
 
-		It("uses the Short Header format for 1-RTT packets", func() {
+		It("gets a short header", func() {
 			pnManager.EXPECT().PeekPacketNumber(protocol.Encryption1RTT).Return(protocol.PacketNumber(0x1337), protocol.PacketNumberLen4)
-			h := packer.getHeader(protocol.Encryption1RTT)
+			h := packer.getShortHeader(protocol.KeyPhaseOne)
 			Expect(h.IsLongHeader).To(BeFalse())
 			Expect(h.PacketNumber).To(Equal(protocol.PacketNumber(0x1337)))
 			Expect(h.PacketNumberLen).To(Equal(protocol.PacketNumberLen4))
+			Expect(h.KeyPhase).To(Equal(protocol.KeyPhaseOne))
 		})
 	})
 
@@ -156,10 +157,11 @@ var _ = Describe("Packet packer", func() {
 			handshakeStream.EXPECT().HasData()
 			pnManager.EXPECT().PeekPacketNumber(protocol.Encryption1RTT).Return(protocol.PacketNumber(0x1337), protocol.PacketNumberLen2)
 			pnManager.EXPECT().PopPacketNumber(protocol.Encryption1RTT).Return(protocol.PacketNumber(0x1337))
-			sealer := mocks.NewMockSealer(mockCtrl)
+			sealer := mocks.NewMockShortHeaderSealer(mockCtrl)
 			sealer.EXPECT().Overhead().Return(4).AnyTimes()
 			var hdrRaw []byte
 			gomock.InOrder(
+				sealer.EXPECT().KeyPhase().Return(protocol.KeyPhaseOne),
 				sealer.EXPECT().Seal(gomock.Any(), gomock.Any(), protocol.PacketNumber(0x1337), gomock.Any()).DoAndReturn(func(_, src []byte, _ protocol.PacketNumber, aad []byte) []byte {
 					hdrRaw = append([]byte{}, aad...)
 					return append(src, []byte{0xde, 0xca, 0xfb, 0xad}...)
@@ -195,10 +197,11 @@ var _ = Describe("Packet packer", func() {
 	})
 
 	Context("packing packets", func() {
-		var sealer *mocks.MockSealer
+		var sealer *mocks.MockShortHeaderSealer
 
 		BeforeEach(func() {
-			sealer = mocks.NewMockSealer(mockCtrl)
+			sealer = mocks.NewMockShortHeaderSealer(mockCtrl)
+			sealer.EXPECT().KeyPhase().Return(protocol.KeyPhaseOne).AnyTimes()
 			sealer.EXPECT().Overhead().Return(7).AnyTimes()
 			sealer.EXPECT().EncryptHeader(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
 			sealer.EXPECT().Seal(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(func(dst, src []byte, pn protocol.PacketNumber, associatedData []byte) []byte {
@@ -505,7 +508,7 @@ var _ = Describe("Packet packer", func() {
 				It("packs two packets for retransmission if the original packet contained many control frames", func() {
 					pnManager.EXPECT().PeekPacketNumber(protocol.Encryption1RTT).Return(protocol.PacketNumber(0x42), protocol.PacketNumberLen2).Times(2)
 					pnManager.EXPECT().PopPacketNumber(protocol.Encryption1RTT).Return(protocol.PacketNumber(0x42)).Times(2)
-					sealingManager.EXPECT().Get1RTTSealer().Return(sealer, nil)
+					sealingManager.EXPECT().Get1RTTSealer().Return(sealer, nil).Times(2)
 					var frames []wire.Frame
 					var totalLen protocol.ByteCount
 					// pack a bunch of control frames, such that the packet is way bigger than a single packet
@@ -533,7 +536,7 @@ var _ = Describe("Packet packer", func() {
 				It("splits a STREAM frame that doesn't fit", func() {
 					pnManager.EXPECT().PeekPacketNumber(protocol.Encryption1RTT).Return(protocol.PacketNumber(0x42), protocol.PacketNumberLen2).Times(2)
 					pnManager.EXPECT().PopPacketNumber(protocol.Encryption1RTT).Return(protocol.PacketNumber(0x42)).Times(2)
-					sealingManager.EXPECT().Get1RTTSealer().Return(sealer, nil)
+					sealingManager.EXPECT().Get1RTTSealer().Return(sealer, nil).Times(2)
 					packets, err := packer.PackRetransmission(&ackhandler.Packet{
 						EncryptionLevel: protocol.Encryption1RTT,
 						Frames: []wire.Frame{&wire.StreamFrame{
@@ -598,7 +601,7 @@ var _ = Describe("Packet packer", func() {
 				It("packs two packets for retransmission if the original packet contained many STREAM frames", func() {
 					pnManager.EXPECT().PeekPacketNumber(protocol.Encryption1RTT).Return(protocol.PacketNumber(0x42), protocol.PacketNumberLen2).Times(2)
 					pnManager.EXPECT().PopPacketNumber(protocol.Encryption1RTT).Return(protocol.PacketNumber(0x42)).Times(2)
-					sealingManager.EXPECT().Get1RTTSealer().Return(sealer, nil)
+					sealingManager.EXPECT().Get1RTTSealer().Return(sealer, nil).Times(2)
 					var frames []wire.Frame
 					var totalLen protocol.ByteCount
 					// pack a bunch of control frames, such that the packet is way bigger than a single packet

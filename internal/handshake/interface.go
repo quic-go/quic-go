@@ -14,11 +14,17 @@ type Opener interface {
 	DecryptHeader(sample []byte, firstByte *byte, pnBytes []byte)
 }
 
-// Sealer seals a packet
-type Sealer interface {
+// LongHeaderSealer seals a long header packet
+type LongHeaderSealer interface {
 	Seal(dst, src []byte, packetNumber protocol.PacketNumber, associatedData []byte) []byte
 	EncryptHeader(sample []byte, firstByte *byte, pnBytes []byte)
 	Overhead() int
+}
+
+// ShortHeaderSealer seals a short header packet
+type ShortHeaderSealer interface {
+	LongHeaderSealer
+	KeyPhase() protocol.KeyPhase
 }
 
 // A tlsExtensionHandler sends and received the QUIC TLS extension.
@@ -49,7 +55,7 @@ type CryptoSetup interface {
 	GetHandshakeOpener() (Opener, error)
 	Get1RTTOpener() (Opener, error)
 
-	GetInitialSealer() (Sealer, error)
-	GetHandshakeSealer() (Sealer, error)
-	Get1RTTSealer() (Sealer, error)
+	GetInitialSealer() (LongHeaderSealer, error)
+	GetHandshakeSealer() (LongHeaderSealer, error)
+	Get1RTTSealer() (ShortHeaderSealer, error)
 }

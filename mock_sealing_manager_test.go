@@ -35,10 +35,10 @@ func (m *MockSealingManager) EXPECT() *MockSealingManagerMockRecorder {
 }
 
 // Get1RTTSealer mocks base method
-func (m *MockSealingManager) Get1RTTSealer() (handshake.Sealer, error) {
+func (m *MockSealingManager) Get1RTTSealer() (handshake.ShortHeaderSealer, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Get1RTTSealer")
-	ret0, _ := ret[0].(handshake.Sealer)
+	ret0, _ := ret[0].(handshake.ShortHeaderSealer)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -50,10 +50,10 @@ func (mr *MockSealingManagerMockRecorder) Get1RTTSealer() *gomock.Call {
 }
 
 // GetHandshakeSealer mocks base method
-func (m *MockSealingManager) GetHandshakeSealer() (handshake.Sealer, error) {
+func (m *MockSealingManager) GetHandshakeSealer() (handshake.LongHeaderSealer, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetHandshakeSealer")
-	ret0, _ := ret[0].(handshake.Sealer)
+	ret0, _ := ret[0].(handshake.LongHeaderSealer)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -65,10 +65,10 @@ func (mr *MockSealingManagerMockRecorder) GetHandshakeSealer() *gomock.Call {
 }
 
 // GetInitialSealer mocks base method
-func (m *MockSealingManager) GetInitialSealer() (handshake.Sealer, error) {
+func (m *MockSealingManager) GetInitialSealer() (handshake.LongHeaderSealer, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetInitialSealer")
-	ret0, _ := ret[0].(handshake.Sealer)
+	ret0, _ := ret[0].(handshake.LongHeaderSealer)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
