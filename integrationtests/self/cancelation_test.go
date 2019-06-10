@@ -487,5 +487,76 @@ var _ = Describe("Stream Cancelations", func() {
 			Expect(sess.Close()).To(Succeed())
 			Expect(server.Close()).To(Succeed())
 		})
+
+		It("downloads data when the sending peer cancels the context for opening streams", func() {
+			server, err := quic.ListenAddr("localhost:0", getTLSConfig(), nil)
+			Expect(err).ToNot(HaveOccurred())
+
+			var numCanceled int32
+			go func() {
+				defer GinkgoRecover()
+				sess, err := server.Accept(context.Background())
+				Expect(err).ToNot(HaveOccurred())
+
+				var numOpened int
+				ticker := time.NewTicker(250 * time.Microsecond)
+				for numOpened < numStreams {
+					<-ticker.C
+					ctx, cancel := context.WithCancel(context.Background())
+					defer cancel()
+					// cancel accepting half of the streams
+					shouldCancel := rand.Int31()%2 == 0
+
+					if shouldCancel {
+						time.AfterFunc(5*time.Millisecond, cancel)
+					}
+					str, err := sess.OpenUniStreamSync(ctx)
+					if err != nil {
+						atomic.AddInt32(&numCanceled, 1)
+						Expect(err).To(MatchError("context canceled"))
+						continue
+					}
+					numOpened++
+					go func(str quic.SendStream) {
+						defer GinkgoRecover()
+						_, err = str.Write(testserver.PRData)
+						Expect(err).ToNot(HaveOccurred())
+						Expect(str.Close()).To(Succeed())
+					}(str)
+				}
+			}()
+
+			sess, err := quic.DialAddr(
+				fmt.Sprintf("localhost:%d", server.Addr().(*net.UDPAddr).Port),
+				getTLSClientConfig(),
+				&quic.Config{
+					MaxIncomingUniStreams: 5,
+				},
+			)
+			Expect(err).ToNot(HaveOccurred())
+
+			var wg sync.WaitGroup
+			wg.Add(numStreams)
+			ticker := time.NewTicker(10 * time.Millisecond)
+			for i := 0; i < numStreams; i++ {
+				<-ticker.C
+				go func() {
+					defer GinkgoRecover()
+					str, err := sess.AcceptUniStream(context.Background())
+					Expect(err).ToNot(HaveOccurred())
+					data, err := ioutil.ReadAll(str)
+					Expect(err).ToNot(HaveOccurred())
+					Expect(data).To(Equal(testserver.PRData))
+					wg.Done()
+				}()
+			}
+			wg.Wait()
+
+			count := atomic.LoadInt32(&numCanceled)
+			fmt.Fprintf(GinkgoWriter, "Canceled OpenStreamSync %d times\n", count)
+			Expect(count).To(BeNumerically(">", numStreams/5))
+			Expect(sess.Close()).To(Succeed())
+			Expect(server.Close()).To(Succeed())
+		})
 	})
 })
