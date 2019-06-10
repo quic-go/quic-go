@@ -49,6 +49,7 @@ type CryptoSetup interface {
 	GetHandshakeOpener() (Opener, error)
 	Get1RTTOpener() (Opener, error)
 
-	GetSealer() (protocol.EncryptionLevel, Sealer)
-	GetSealerWithEncryptionLevel(protocol.EncryptionLevel) (Sealer, error)
+	GetInitialSealer() (Sealer, error)
+	GetHandshakeSealer() (Sealer, error)
+	Get1RTTSealer() (Sealer, error)
 }

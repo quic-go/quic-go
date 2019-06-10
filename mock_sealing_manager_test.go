@@ -9,7 +9,6 @@ import (
 
 	gomock "github.com/golang/mock/gomock"
 	handshake "github.com/lucas-clemente/quic-go/internal/handshake"
-	protocol "github.com/lucas-clemente/quic-go/internal/protocol"
 )
 
 // MockSealingManager is a mock of SealingManager interface
@@ -35,32 +34,47 @@ func (m *MockSealingManager) EXPECT() *MockSealingManagerMockRecorder {
 	return m.recorder
 }
 
-// GetSealer mocks base method
-func (m *MockSealingManager) GetSealer() (protocol.EncryptionLevel, handshake.Sealer) {
+// Get1RTTSealer mocks base method
+func (m *MockSealingManager) Get1RTTSealer() (handshake.Sealer, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetSealer")
-	ret0, _ := ret[0].(protocol.EncryptionLevel)
-	ret1, _ := ret[1].(handshake.Sealer)
-	return ret0, ret1
-}
-
-// GetSealer indicates an expected call of GetSealer
-func (mr *MockSealingManagerMockRecorder) GetSealer() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetSealer", reflect.TypeOf((*MockSealingManager)(nil).GetSealer))
-}
-
-// GetSealerWithEncryptionLevel mocks base method
-func (m *MockSealingManager) GetSealerWithEncryptionLevel(arg0 protocol.EncryptionLevel) (handshake.Sealer, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetSealerWithEncryptionLevel", arg0)
+	ret := m.ctrl.Call(m, "Get1RTTSealer")
 	ret0, _ := ret[0].(handshake.Sealer)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
-// GetSealerWithEncryptionLevel indicates an expected call of GetSealerWithEncryptionLevel
-func (mr *MockSealingManagerMockRecorder) GetSealerWithEncryptionLevel(arg0 interface{}) *gomock.Call {
+// Get1RTTSealer indicates an expected call of Get1RTTSealer
+func (mr *MockSealingManagerMockRecorder) Get1RTTSealer() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetSealerWithEncryptionLevel", reflect.TypeOf((*MockSealingManager)(nil).GetSealerWithEncryptionLevel), arg0)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Get1RTTSealer", reflect.TypeOf((*MockSealingManager)(nil).Get1RTTSealer))
+}
+
+// GetHandshakeSealer mocks base method
+func (m *MockSealingManager) GetHandshakeSealer() (handshake.Sealer, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetHandshakeSealer")
+	ret0, _ := ret[0].(handshake.Sealer)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetHandshakeSealer indicates an expected call of GetHandshakeSealer
+func (mr *MockSealingManagerMockRecorder) GetHandshakeSealer() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetHandshakeSealer", reflect.TypeOf((*MockSealingManager)(nil).GetHandshakeSealer))
+}
+
+// GetInitialSealer mocks base method
+func (m *MockSealingManager) GetInitialSealer() (handshake.Sealer, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetInitialSealer")
+	ret0, _ := ret[0].(handshake.Sealer)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetInitialSealer indicates an expected call of GetInitialSealer
+func (mr *MockSealingManagerMockRecorder) GetInitialSealer() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetInitialSealer", reflect.TypeOf((*MockSealingManager)(nil).GetInitialSealer))
 }
