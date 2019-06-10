@@ -105,15 +105,15 @@ type cryptoSetup struct {
 	writeEncLevel protocol.EncryptionLevel
 
 	initialStream io.Writer
-	initialOpener Opener
+	initialOpener LongHeaderOpener
 	initialSealer LongHeaderSealer
 
 	handshakeStream io.Writer
-	handshakeOpener Opener
+	handshakeOpener LongHeaderOpener
 	handshakeSealer LongHeaderSealer
 
 	oneRTTStream io.Writer
-	opener       Opener
+	opener       ShortHeaderOpener
 	sealer       ShortHeaderSealer
 }
 
@@ -493,11 +493,11 @@ func (h *cryptoSetup) SetReadKey(suite *qtls.CipherSuite, trafficSecret []byte) 
 	switch h.readEncLevel {
 	case protocol.EncryptionInitial:
 		h.readEncLevel = protocol.EncryptionHandshake
-		h.handshakeOpener = newOpener(suite.AEAD(key, iv), hpDecrypter, false)
+		h.handshakeOpener = newLongHeaderOpener(suite.AEAD(key, iv), hpDecrypter)
 		h.logger.Debugf("Installed Handshake Read keys")
 	case protocol.EncryptionHandshake:
 		h.readEncLevel = protocol.Encryption1RTT
-		h.opener = newOpener(suite.AEAD(key, iv), hpDecrypter, true)
+		h.opener = newShortHeaderOpener(suite.AEAD(key, iv), hpDecrypter)
 		h.logger.Debugf("Installed 1-RTT Read keys")
 	default:
 		panic("unexpected read encryption level")
@@ -591,7 +591,7 @@ func (h *cryptoSetup) Get1RTTSealer() (ShortHeaderSealer, error) {
 	return h.sealer, nil
 }
 
-func (h *cryptoSetup) GetInitialOpener() (Opener, error) {
+func (h *cryptoSetup) GetInitialOpener() (LongHeaderOpener, error) {
 	h.mutex.Lock()
 	defer h.mutex.Unlock()
 
@@ -601,7 +601,7 @@ func (h *cryptoSetup) GetInitialOpener() (Opener, error) {
 	return h.initialOpener, nil
 }
 
-func (h *cryptoSetup) GetHandshakeOpener() (Opener, error) {
+func (h *cryptoSetup) GetHandshakeOpener() (LongHeaderOpener, error) {
 	h.mutex.Lock()
 	defer h.mutex.Unlock()
 
@@ -615,7 +615,7 @@ func (h *cryptoSetup) GetHandshakeOpener() (Opener, error) {
 	return h.handshakeOpener, nil
 }
 
-func (h *cryptoSetup) Get1RTTOpener() (Opener, error) {
+func (h *cryptoSetup) Get1RTTOpener() (ShortHeaderOpener, error) {
 	h.mutex.Lock()
 	defer h.mutex.Unlock()
 

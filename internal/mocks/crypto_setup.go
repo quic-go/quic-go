@@ -79,10 +79,10 @@ func (mr *MockCryptoSetupMockRecorder) ConnectionState() *gomock.Call {
 }
 
 // Get1RTTOpener mocks base method
-func (m *MockCryptoSetup) Get1RTTOpener() (handshake.Opener, error) {
+func (m *MockCryptoSetup) Get1RTTOpener() (handshake.ShortHeaderOpener, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Get1RTTOpener")
-	ret0, _ := ret[0].(handshake.Opener)
+	ret0, _ := ret[0].(handshake.ShortHeaderOpener)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -109,10 +109,10 @@ func (mr *MockCryptoSetupMockRecorder) Get1RTTSealer() *gomock.Call {
 }
 
 // GetHandshakeOpener mocks base method
-func (m *MockCryptoSetup) GetHandshakeOpener() (handshake.Opener, error) {
+func (m *MockCryptoSetup) GetHandshakeOpener() (handshake.LongHeaderOpener, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetHandshakeOpener")
-	ret0, _ := ret[0].(handshake.Opener)
+	ret0, _ := ret[0].(handshake.LongHeaderOpener)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -139,10 +139,10 @@ func (mr *MockCryptoSetupMockRecorder) GetHandshakeSealer() *gomock.Call {
 }
 
 // GetInitialOpener mocks base method
-func (m *MockCryptoSetup) GetInitialOpener() (handshake.Opener, error) {
+func (m *MockCryptoSetup) GetInitialOpener() (handshake.LongHeaderOpener, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetInitialOpener")
-	ret0, _ := ret[0].(handshake.Opener)
+	ret0, _ := ret[0].(handshake.LongHeaderOpener)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }

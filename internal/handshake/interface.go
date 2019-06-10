@@ -8,10 +8,20 @@ import (
 	"github.com/marten-seemann/qtls"
 )
 
-// Opener opens a packet
-type Opener interface {
-	Open(dst, src []byte, packetNumber protocol.PacketNumber, associatedData []byte) ([]byte, error)
+type headerDecryptor interface {
 	DecryptHeader(sample []byte, firstByte *byte, pnBytes []byte)
+}
+
+// LongHeaderOpener opens a long header packet
+type LongHeaderOpener interface {
+	headerDecryptor
+	Open(dst, src []byte, pn protocol.PacketNumber, associatedData []byte) ([]byte, error)
+}
+
+// ShortHeaderOpener opens a short header packet
+type ShortHeaderOpener interface {
+	headerDecryptor
+	Open(dst, src []byte, pn protocol.PacketNumber, kp protocol.KeyPhase, associatedData []byte) ([]byte, error)
 }
 
 // LongHeaderSealer seals a long header packet
@@ -51,9 +61,9 @@ type CryptoSetup interface {
 	Received1RTTAck()
 	ConnectionState() tls.ConnectionState
 
-	GetInitialOpener() (Opener, error)
-	GetHandshakeOpener() (Opener, error)
-	Get1RTTOpener() (Opener, error)
+	GetInitialOpener() (LongHeaderOpener, error)
+	GetHandshakeOpener() (LongHeaderOpener, error)
+	Get1RTTOpener() (ShortHeaderOpener, error)
 
 	GetInitialSealer() (LongHeaderSealer, error)
 	GetHandshakeSealer() (LongHeaderSealer, error)
