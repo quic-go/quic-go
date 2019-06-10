@@ -601,33 +601,38 @@ func (h *cryptoSetup) GetSealerWithEncryptionLevel(level protocol.EncryptionLeve
 	}
 }
 
-func (h *cryptoSetup) GetOpener(level protocol.EncryptionLevel) (Opener, error) {
+func (h *cryptoSetup) GetInitialOpener() (Opener, error) {
 	h.mutex.Lock()
 	defer h.mutex.Unlock()
 
-	switch level {
-	case protocol.EncryptionInitial:
-		if h.initialOpener == nil {
-			return nil, ErrKeysDropped
-		}
-		return h.initialOpener, nil
-	case protocol.EncryptionHandshake:
-		if h.handshakeOpener == nil {
-			if h.initialOpener != nil {
-				return nil, ErrOpenerNotYetAvailable
-			}
-			// if the initial opener is also not available, the keys were already dropped
-			return nil, ErrKeysDropped
-		}
-		return h.handshakeOpener, nil
-	case protocol.Encryption1RTT:
-		if h.opener == nil {
+	if h.initialOpener == nil {
+		return nil, ErrKeysDropped
+	}
+	return h.initialOpener, nil
+}
+
+func (h *cryptoSetup) GetHandshakeOpener() (Opener, error) {
+	h.mutex.Lock()
+	defer h.mutex.Unlock()
+
+	if h.handshakeOpener == nil {
+		if h.initialOpener != nil {
 			return nil, ErrOpenerNotYetAvailable
 		}
-		return h.opener, nil
-	default:
-		return nil, fmt.Errorf("CryptoSetup: no opener with encryption level %s", level)
+		// if the initial opener is also not available, the keys were already dropped
+		return nil, ErrKeysDropped
 	}
+	return h.handshakeOpener, nil
+}
+
+func (h *cryptoSetup) Get1RTTOpener() (Opener, error) {
+	h.mutex.Lock()
+	defer h.mutex.Unlock()
+
+	if h.opener == nil {
+		return nil, ErrOpenerNotYetAvailable
+	}
+	return h.opener, nil
 }
 
 func (h *cryptoSetup) ConnectionState() tls.ConnectionState {

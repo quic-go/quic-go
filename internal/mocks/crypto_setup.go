@@ -78,19 +78,49 @@ func (mr *MockCryptoSetupMockRecorder) ConnectionState() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ConnectionState", reflect.TypeOf((*MockCryptoSetup)(nil).ConnectionState))
 }
 
-// GetOpener mocks base method
-func (m *MockCryptoSetup) GetOpener(arg0 protocol.EncryptionLevel) (handshake.Opener, error) {
+// Get1RTTOpener mocks base method
+func (m *MockCryptoSetup) Get1RTTOpener() (handshake.Opener, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetOpener", arg0)
+	ret := m.ctrl.Call(m, "Get1RTTOpener")
 	ret0, _ := ret[0].(handshake.Opener)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
-// GetOpener indicates an expected call of GetOpener
-func (mr *MockCryptoSetupMockRecorder) GetOpener(arg0 interface{}) *gomock.Call {
+// Get1RTTOpener indicates an expected call of Get1RTTOpener
+func (mr *MockCryptoSetupMockRecorder) Get1RTTOpener() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetOpener", reflect.TypeOf((*MockCryptoSetup)(nil).GetOpener), arg0)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Get1RTTOpener", reflect.TypeOf((*MockCryptoSetup)(nil).Get1RTTOpener))
+}
+
+// GetHandshakeOpener mocks base method
+func (m *MockCryptoSetup) GetHandshakeOpener() (handshake.Opener, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetHandshakeOpener")
+	ret0, _ := ret[0].(handshake.Opener)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetHandshakeOpener indicates an expected call of GetHandshakeOpener
+func (mr *MockCryptoSetupMockRecorder) GetHandshakeOpener() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetHandshakeOpener", reflect.TypeOf((*MockCryptoSetup)(nil).GetHandshakeOpener))
+}
+
+// GetInitialOpener mocks base method
+func (m *MockCryptoSetup) GetInitialOpener() (handshake.Opener, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetInitialOpener")
+	ret0, _ := ret[0].(handshake.Opener)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetInitialOpener indicates an expected call of GetInitialOpener
+func (mr *MockCryptoSetupMockRecorder) GetInitialOpener() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetInitialOpener", reflect.TypeOf((*MockCryptoSetup)(nil).GetInitialOpener))
 }
 
 // GetSealer mocks base method

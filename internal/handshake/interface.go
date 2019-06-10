@@ -45,7 +45,10 @@ type CryptoSetup interface {
 	Received1RTTAck()
 	ConnectionState() tls.ConnectionState
 
+	GetInitialOpener() (Opener, error)
+	GetHandshakeOpener() (Opener, error)
+	Get1RTTOpener() (Opener, error)
+
 	GetSealer() (protocol.EncryptionLevel, Sealer)
 	GetSealerWithEncryptionLevel(protocol.EncryptionLevel) (Sealer, error)
-	GetOpener(protocol.EncryptionLevel) (Opener, error)
 }

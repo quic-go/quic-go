@@ -38,19 +38,23 @@ func newPacketUnpacker(cs handshake.CryptoSetup, version protocol.VersionNumber)
 func (u *packetUnpacker) Unpack(hdr *wire.Header, data []byte) (*unpackedPacket, error) {
 	r := bytes.NewReader(data)
 
+	var opener handshake.Opener
 	var encLevel protocol.EncryptionLevel
+	var err error
 	switch hdr.Type {
 	case protocol.PacketTypeInitial:
 		encLevel = protocol.EncryptionInitial
+		opener, err = u.cs.GetInitialOpener()
 	case protocol.PacketTypeHandshake:
 		encLevel = protocol.EncryptionHandshake
+		opener, err = u.cs.GetHandshakeOpener()
 	default:
 		if hdr.IsLongHeader {
 			return nil, fmt.Errorf("unknown packet type: %s", hdr.Type)
 		}
 		encLevel = protocol.Encryption1RTT
+		opener, err = u.cs.Get1RTTOpener()
 	}
-	opener, err := u.cs.GetOpener(encLevel)
 	if err != nil {
 		return nil, err
 	}
