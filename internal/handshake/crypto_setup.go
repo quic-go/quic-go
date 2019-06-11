@@ -112,9 +112,10 @@ type cryptoSetup struct {
 	handshakeOpener LongHeaderOpener
 	handshakeSealer LongHeaderSealer
 
-	oneRTTStream io.Writer
-	opener       ShortHeaderOpener
-	sealer       ShortHeaderSealer
+	oneRTTStream  io.Writer
+	aead          *updatableAEAD
+	has1RTTSealer bool
+	has1RTTOpener bool
 }
 
 var _ qtls.RecordLayer = &cryptoSetup{}
@@ -202,6 +203,7 @@ func newCryptoSetup(
 		initialOpener:          initialOpener,
 		handshakeStream:        handshakeStream,
 		oneRTTStream:           oneRTTStream,
+		aead:                   newUpdatableAEAD(),
 		readEncLevel:           protocol.EncryptionInitial,
 		writeEncLevel:          protocol.EncryptionInitial,
 		runner:                 runner,
@@ -497,7 +499,8 @@ func (h *cryptoSetup) SetReadKey(suite *qtls.CipherSuite, trafficSecret []byte) 
 		h.logger.Debugf("Installed Handshake Read keys")
 	case protocol.EncryptionHandshake:
 		h.readEncLevel = protocol.Encryption1RTT
-		h.opener = newShortHeaderOpener(suite.AEAD(key, iv), hpDecrypter)
+		h.aead.SetReadKey(suite.AEAD(key, iv), hpDecrypter)
+		h.has1RTTOpener = true
 		h.logger.Debugf("Installed 1-RTT Read keys")
 	default:
 		panic("unexpected read encryption level")
@@ -519,11 +522,12 @@ func (h *cryptoSetup) SetWriteKey(suite *qtls.CipherSuite, trafficSecret []byte)
 	switch h.writeEncLevel {
 	case protocol.EncryptionInitial:
 		h.writeEncLevel = protocol.EncryptionHandshake
-		h.handshakeSealer = newSealer(suite.AEAD(key, iv), hpEncrypter, false)
+		h.handshakeSealer = newLongHeaderSealer(suite.AEAD(key, iv), hpEncrypter)
 		h.logger.Debugf("Installed Handshake Write keys")
 	case protocol.EncryptionHandshake:
 		h.writeEncLevel = protocol.Encryption1RTT
-		h.sealer = newSealer(suite.AEAD(key, iv), hpEncrypter, true)
+		h.aead.SetWriteKey(suite.AEAD(key, iv), hpEncrypter)
+		h.has1RTTSealer = true
 		h.logger.Debugf("Installed 1-RTT Write keys")
 	default:
 		panic("unexpected write encryption level")
@@ -585,10 +589,10 @@ func (h *cryptoSetup) Get1RTTSealer() (ShortHeaderSealer, error) {
 	h.mutex.Lock()
 	defer h.mutex.Unlock()
 
-	if h.sealer == nil {
+	if !h.has1RTTSealer {
 		return nil, errors.New("CryptoSetup: no sealer with encryption level 1-RTT")
 	}
-	return h.sealer, nil
+	return h.aead, nil
 }
 
 func (h *cryptoSetup) GetInitialOpener() (LongHeaderOpener, error) {
@@ -619,10 +623,10 @@ func (h *cryptoSetup) Get1RTTOpener() (ShortHeaderOpener, error) {
 	h.mutex.Lock()
 	defer h.mutex.Unlock()
 
-	if h.opener == nil {
+	if !h.has1RTTOpener {
 		return nil, ErrOpenerNotYetAvailable
 	}
-	return h.opener, nil
+	return h.aead, nil
 }
 
 func (h *cryptoSetup) ConnectionState() tls.ConnectionState {
