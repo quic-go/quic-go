@@ -1,10 +1,13 @@
 package handshake
 
 import (
+	"crypto/aes"
 	"crypto/cipher"
 	"encoding/binary"
+	"fmt"
 
 	"github.com/lucas-clemente/quic-go/internal/protocol"
+	"github.com/marten-seemann/qtls"
 )
 
 type sealer struct {
@@ -85,4 +88,15 @@ func (o *longHeaderOpener) DecryptHeader(sample []byte, firstByte *byte, pnBytes
 	for i := range pnBytes {
 		pnBytes[i] ^= o.hpMask[i+1]
 	}
+}
+
+func createAEAD(suite cipherSuite, trafficSecret []byte) (cipher.AEAD, cipher.Block) {
+	key := qtls.HkdfExpandLabel(suite.Hash(), trafficSecret, []byte{}, "quic key", suite.KeyLen())
+	iv := qtls.HkdfExpandLabel(suite.Hash(), trafficSecret, []byte{}, "quic iv", suite.IVLen())
+	hpKey := qtls.HkdfExpandLabel(suite.Hash(), trafficSecret, []byte{}, "quic hp", suite.KeyLen())
+	hpDecrypter, err := aes.NewCipher(hpKey)
+	if err != nil {
+		panic(fmt.Sprintf("error creating new AES cipher: %s", err))
+	}
+	return suite.AEAD(key, iv), hpDecrypter
 }

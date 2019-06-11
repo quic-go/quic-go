@@ -1,6 +1,7 @@
 package handshake
 
 import (
+	"crypto"
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/rand"
@@ -10,25 +11,29 @@ import (
 	. "github.com/onsi/gomega"
 )
 
+type mockCipherSuite struct{}
+
+var _ cipherSuite = &mockCipherSuite{}
+
+func (c *mockCipherSuite) Hash() crypto.Hash { return crypto.SHA256 }
+func (c *mockCipherSuite) KeyLen() int       { return 16 }
+func (c *mockCipherSuite) IVLen() int        { return 12 }
+func (c *mockCipherSuite) AEAD(key, _ []byte) cipher.AEAD {
+	block, err := aes.NewCipher(key)
+	Expect(err).ToNot(HaveOccurred())
+	gcm, err := cipher.NewGCM(block)
+	Expect(err).ToNot(HaveOccurred())
+	return gcm
+}
+
 var _ = Describe("Updatable AEAD", func() {
 	getAEAD := func() *updatableAEAD {
-		key := make([]byte, 16)
-		hpKey := make([]byte, 16)
-		rand.Read(key)
-		rand.Read(hpKey)
-		block, err := aes.NewCipher(key)
-		Expect(err).ToNot(HaveOccurred())
-		aead, err := cipher.NewGCM(block)
-		Expect(err).ToNot(HaveOccurred())
-		hpBlock, err := aes.NewCipher(hpKey)
-		Expect(err).ToNot(HaveOccurred())
-
-		iv := make([]byte, 12)
-		rand.Read(iv)
+		trafficSecret := make([]byte, 16)
+		rand.Read(trafficSecret)
 
 		u := newUpdatableAEAD()
-		u.SetReadKey(aead, hpBlock)
-		u.SetWriteKey(aead, hpBlock)
+		u.SetReadKey(&mockCipherSuite{}, trafficSecret)
+		u.SetWriteKey(&mockCipherSuite{}, trafficSecret)
 		return u
 	}
 

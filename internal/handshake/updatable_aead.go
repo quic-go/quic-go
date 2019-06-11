@@ -84,10 +84,10 @@ func newUpdatableAEAD() *updatableAEAD {
 	return &updatableAEAD{}
 }
 
-func (a *updatableAEAD) SetReadKey(aead cipher.AEAD, hpDecrypter cipher.Block) {
-	a.ShortHeaderOpener = newShortHeaderOpener(aead, hpDecrypter)
+func (a *updatableAEAD) SetReadKey(suite cipherSuite, trafficSecret []byte) {
+	a.ShortHeaderOpener = newShortHeaderOpener(createAEAD(suite, trafficSecret))
 }
 
-func (a *updatableAEAD) SetWriteKey(aead cipher.AEAD, hpDecrypter cipher.Block) {
-	a.ShortHeaderSealer = newShortHeaderSealer(aead, hpDecrypter)
+func (a *updatableAEAD) SetWriteKey(suite cipherSuite, trafficSecret []byte) {
+	a.ShortHeaderSealer = newShortHeaderSealer(createAEAD(suite, trafficSecret))
 }

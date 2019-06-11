@@ -1,7 +1,6 @@
 package handshake
 
 import (
-	"crypto/aes"
 	"crypto/tls"
 	"errors"
 	"fmt"
@@ -483,23 +482,15 @@ func (h *cryptoSetup) ReadHandshakeMessage() ([]byte, error) {
 }
 
 func (h *cryptoSetup) SetReadKey(suite *qtls.CipherSuite, trafficSecret []byte) {
-	key := qtls.HkdfExpandLabel(suite.Hash(), trafficSecret, []byte{}, "quic key", suite.KeyLen())
-	iv := qtls.HkdfExpandLabel(suite.Hash(), trafficSecret, []byte{}, "quic iv", suite.IVLen())
-	hpKey := qtls.HkdfExpandLabel(suite.Hash(), trafficSecret, []byte{}, "quic hp", suite.KeyLen())
-	hpDecrypter, err := aes.NewCipher(hpKey)
-	if err != nil {
-		panic(fmt.Sprintf("error creating new AES cipher: %s", err))
-	}
-
 	h.mutex.Lock()
 	switch h.readEncLevel {
 	case protocol.EncryptionInitial:
 		h.readEncLevel = protocol.EncryptionHandshake
-		h.handshakeOpener = newLongHeaderOpener(suite.AEAD(key, iv), hpDecrypter)
+		h.handshakeOpener = newLongHeaderOpener(createAEAD(suite, trafficSecret))
 		h.logger.Debugf("Installed Handshake Read keys")
 	case protocol.EncryptionHandshake:
 		h.readEncLevel = protocol.Encryption1RTT
-		h.aead.SetReadKey(suite.AEAD(key, iv), hpDecrypter)
+		h.aead.SetReadKey(suite, trafficSecret)
 		h.has1RTTOpener = true
 		h.logger.Debugf("Installed 1-RTT Read keys")
 	default:
@@ -510,23 +501,15 @@ func (h *cryptoSetup) SetReadKey(suite *qtls.CipherSuite, trafficSecret []byte) 
 }
 
 func (h *cryptoSetup) SetWriteKey(suite *qtls.CipherSuite, trafficSecret []byte) {
-	key := qtls.HkdfExpandLabel(suite.Hash(), trafficSecret, []byte{}, "quic key", suite.KeyLen())
-	iv := qtls.HkdfExpandLabel(suite.Hash(), trafficSecret, []byte{}, "quic iv", suite.IVLen())
-	hpKey := qtls.HkdfExpandLabel(suite.Hash(), trafficSecret, []byte{}, "quic hp", suite.KeyLen())
-	hpEncrypter, err := aes.NewCipher(hpKey)
-	if err != nil {
-		panic(fmt.Sprintf("error creating new AES cipher: %s", err))
-	}
-
 	h.mutex.Lock()
 	switch h.writeEncLevel {
 	case protocol.EncryptionInitial:
 		h.writeEncLevel = protocol.EncryptionHandshake
-		h.handshakeSealer = newLongHeaderSealer(suite.AEAD(key, iv), hpEncrypter)
+		h.handshakeSealer = newLongHeaderSealer(createAEAD(suite, trafficSecret))
 		h.logger.Debugf("Installed Handshake Write keys")
 	case protocol.EncryptionHandshake:
 		h.writeEncLevel = protocol.Encryption1RTT
-		h.aead.SetWriteKey(suite.AEAD(key, iv), hpEncrypter)
+		h.aead.SetWriteKey(suite, trafficSecret)
 		h.has1RTTSealer = true
 		h.logger.Debugf("Installed 1-RTT Write keys")
 	default:
