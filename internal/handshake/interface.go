@@ -2,10 +2,23 @@ package handshake
 
 import (
 	"crypto/tls"
+	"errors"
 	"io"
 
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/marten-seemann/qtls"
+)
+
+var (
+	// ErrOpenerNotYetAvailable is returned when an opener is requested for an encryption level,
+	// but the corresponding opener has not yet been initialized
+	// This can happen when packets arrive out of order.
+	ErrOpenerNotYetAvailable = errors.New("CryptoSetup: opener at this encryption level not yet available")
+	// ErrKeysDropped is returned when an opener or a sealer is requested for an encryption level,
+	// but the corresponding keys have already been dropped.
+	ErrKeysDropped = errors.New("CryptoSetup: keys were already dropped")
+	// ErrDecryptionFailed is returned when the AEAD fails to open the packet.
+	ErrDecryptionFailed = errors.New("decryption failed")
 )
 
 type headerDecryptor interface {

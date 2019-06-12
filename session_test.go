@@ -553,7 +553,7 @@ var _ = Describe("Session", func() {
 		})
 
 		It("drops a packet when unpacking fails", func() {
-			unpacker.EXPECT().Unpack(gomock.Any(), gomock.Any()).Return(nil, errors.New("unpack error"))
+			unpacker.EXPECT().Unpack(gomock.Any(), gomock.Any()).Return(nil, handshake.ErrDecryptionFailed)
 			streamManager.EXPECT().CloseWithError(gomock.Any())
 			cryptoSetup.EXPECT().Close()
 			packer.EXPECT().PackConnectionClose(gomock.Any()).Return(&packedPacket{}, nil)
@@ -570,6 +570,27 @@ var _ = Describe("Session", func() {
 			Consistently(sess.Context().Done()).ShouldNot(BeClosed())
 			// make the go routine return
 			sess.closeLocal(errors.New("close"))
+			Eventually(sess.Context().Done()).Should(BeClosed())
+		})
+
+		It("closes the session when unpacking fails for any other reason than a decryption error", func() {
+			testErr := errors.New("test error")
+			unpacker.EXPECT().Unpack(gomock.Any(), gomock.Any()).Return(nil, testErr)
+			streamManager.EXPECT().CloseWithError(gomock.Any())
+			cryptoSetup.EXPECT().Close()
+			packer.EXPECT().PackConnectionClose(gomock.Any()).Return(&packedPacket{}, nil)
+			done := make(chan struct{})
+			go func() {
+				defer GinkgoRecover()
+				cryptoSetup.EXPECT().RunHandshake().MaxTimes(1)
+				Expect(sess.run()).To(MatchError(testErr))
+				close(done)
+			}()
+			sessionRunner.EXPECT().Retire(gomock.Any())
+			sess.handlePacket(getPacket(&wire.ExtendedHeader{
+				Header:          wire.Header{DestConnectionID: sess.srcConnID},
+				PacketNumberLen: protocol.PacketNumberLen1,
+			}, nil))
 			Eventually(sess.Context().Done()).Should(BeClosed())
 		})
 

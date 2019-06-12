@@ -76,7 +76,11 @@ func (o *longHeaderOpener) Open(dst, src []byte, pn protocol.PacketNumber, ad []
 	binary.BigEndian.PutUint64(o.nonceBuf[len(o.nonceBuf)-8:], uint64(pn))
 	// The AEAD we're using here will be the qtls.aeadAESGCM13.
 	// It uses the nonce provided here and XOR it with the IV.
-	return o.aead.Open(dst, o.nonceBuf, src, ad)
+	dec, err := o.aead.Open(dst, o.nonceBuf, src, ad)
+	if err != nil {
+		err = ErrDecryptionFailed
+	}
+	return dec, err
 }
 
 func (o *longHeaderOpener) DecryptHeader(sample []byte, firstByte *byte, pnBytes []byte) {

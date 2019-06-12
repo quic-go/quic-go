@@ -43,14 +43,14 @@ var _ = Describe("AEAD", func() {
 			sealer, opener := getSealerAndOpener()
 			encrypted := sealer.Seal(nil, msg, 0x1337, ad)
 			_, err := opener.Open(nil, encrypted, 0x1337, []byte("wrong ad"))
-			Expect(err).To(MatchError("cipher: message authentication failed"))
+			Expect(err).To(MatchError(ErrDecryptionFailed))
 		})
 
 		It("fails to open a message if the packet number is not the same", func() {
 			sealer, opener := getSealerAndOpener()
 			encrypted := sealer.Seal(nil, msg, 0x1337, ad)
 			_, err := opener.Open(nil, encrypted, 0x42, ad)
-			Expect(err).To(MatchError("cipher: message authentication failed"))
+			Expect(err).To(MatchError(ErrDecryptionFailed))
 		})
 	})
 

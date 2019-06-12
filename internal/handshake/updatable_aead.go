@@ -96,11 +96,17 @@ func (a *updatableAEAD) Open(dst, src []byte, pn protocol.PacketNumber, kp proto
 		if a.firstRcvdWithCurrentKey == protocol.InvalidPacketNumber || pn < a.firstRcvdWithCurrentKey {
 			// TODO: check that prevRcv actually exists
 			// we updated the key, but the peer hasn't updated yet
-			return a.prevRcvAEAD.Open(dst, a.nonceBuf, src, ad)
+			dec, err := a.prevRcvAEAD.Open(dst, a.nonceBuf, src, ad)
+			if err != nil {
+				err = ErrDecryptionFailed
+			}
+			return dec, err
 		}
 		// try opening the packet with the next key phase
 		dec, err := a.nextRcvAEAD.Open(dst, a.nonceBuf, src, ad)
-		if err == nil {
+		if err != nil {
+			err = ErrDecryptionFailed
+		} else {
 			// if opening succeeds, roll over to the next key phase
 			a.rollKeys()
 			a.firstRcvdWithCurrentKey = pn
@@ -110,7 +116,9 @@ func (a *updatableAEAD) Open(dst, src []byte, pn protocol.PacketNumber, kp proto
 	// The AEAD we're using here will be the qtls.aeadAESGCM13.
 	// It uses the nonce provided here and XOR it with the IV.
 	dec, err := a.rcvAEAD.Open(dst, a.nonceBuf, src, ad)
-	if err == nil && a.firstRcvdWithCurrentKey == protocol.InvalidPacketNumber {
+	if err != nil {
+		err = ErrDecryptionFailed
+	} else if a.firstRcvdWithCurrentKey == protocol.InvalidPacketNumber {
 		a.firstRcvdWithCurrentKey = pn
 	}
 	return dec, err

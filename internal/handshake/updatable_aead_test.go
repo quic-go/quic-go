@@ -84,13 +84,13 @@ var _ = Describe("Updatable AEAD", func() {
 		It("fails to open a message if the associated data is not the same", func() {
 			encrypted := client.Seal(nil, msg, 0x1337, ad)
 			_, err := server.Open(nil, encrypted, 0x1337, protocol.KeyPhaseZero, []byte("wrong ad"))
-			Expect(err).To(MatchError("cipher: message authentication failed"))
+			Expect(err).To(MatchError(ErrDecryptionFailed))
 		})
 
 		It("fails to open a message if the packet number is not the same", func() {
 			encrypted := server.Seal(nil, msg, 0x1337, ad)
 			_, err := client.Open(nil, encrypted, 0x42, protocol.KeyPhaseZero, ad)
-			Expect(err).To(MatchError("cipher: message authentication failed"))
+			Expect(err).To(MatchError(ErrDecryptionFailed))
 		})
 
 		Context("key updates", func() {
@@ -103,7 +103,7 @@ var _ = Describe("Updatable AEAD", func() {
 				Expect(encrypted0).ToNot(Equal(encrypted1))
 				// expect opening to fail. The client didn't roll keys yet
 				_, err := client.Open(nil, encrypted1, 0x1337, protocol.KeyPhaseZero, ad)
-				Expect(err).To(MatchError("cipher: message authentication failed"))
+				Expect(err).To(MatchError(ErrDecryptionFailed))
 				client.rollKeys()
 				decrypted, err := client.Open(nil, encrypted1, 0x1337, protocol.KeyPhaseOne, ad)
 				Expect(err).ToNot(HaveOccurred())
