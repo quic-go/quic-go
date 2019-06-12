@@ -143,6 +143,13 @@ var _ = Describe("Updatable AEAD", func() {
 				Expect(decrypted).To(Equal(msg))
 				Expect(server.KeyPhase()).To(Equal(protocol.KeyPhaseOne))
 			})
+
+			It("errors when the peer starts with key phase 1", func() {
+				client.rollKeys()
+				encrypted := client.Seal(nil, msg, 0x1337, ad)
+				_, err := server.Open(nil, encrypted, 0x1337, protocol.KeyPhaseOne, ad)
+				Expect(err).To(MatchError("PROTOCOL_VIOLATION: wrong initial keyphase"))
+			})
 		})
 	})
 })

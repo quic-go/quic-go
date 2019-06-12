@@ -5,6 +5,8 @@ import (
 	"crypto/cipher"
 	"encoding/binary"
 
+	"github.com/lucas-clemente/quic-go/internal/qerr"
+
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/marten-seemann/qtls"
 )
@@ -94,7 +96,12 @@ func (a *updatableAEAD) Open(dst, src []byte, pn protocol.PacketNumber, kp proto
 	binary.BigEndian.PutUint64(a.nonceBuf[len(a.nonceBuf)-8:], uint64(pn))
 	if kp != a.keyPhase {
 		if a.firstRcvdWithCurrentKey == protocol.InvalidPacketNumber || pn < a.firstRcvdWithCurrentKey {
-			// TODO: check that prevRcv actually exists
+			if a.prevRcvAEAD == nil {
+				// This can only occur when the first packet received has key phase 1.
+				// This is an error, since the key phase starts at 0,
+				// and peers are only allowed to update keys after the handshake is confirmed.
+				return nil, qerr.Error(qerr.ProtocolViolation, "wrong initial keyphase")
+			}
 			// we updated the key, but the peer hasn't updated yet
 			dec, err := a.prevRcvAEAD.Open(dst, a.nonceBuf, src, ad)
 			if err != nil {
