@@ -182,18 +182,6 @@ func (mr *MockCryptoSetupMockRecorder) HandleMessage(arg0, arg1 interface{}) *go
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HandleMessage", reflect.TypeOf((*MockCryptoSetup)(nil).HandleMessage), arg0, arg1)
 }
 
-// Received1RTTAck mocks base method
-func (m *MockCryptoSetup) Received1RTTAck() {
-	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "Received1RTTAck")
-}
-
-// Received1RTTAck indicates an expected call of Received1RTTAck
-func (mr *MockCryptoSetupMockRecorder) Received1RTTAck() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Received1RTTAck", reflect.TypeOf((*MockCryptoSetup)(nil).Received1RTTAck))
-}
-
 // RunHandshake mocks base method
 func (m *MockCryptoSetup) RunHandshake() {
 	m.ctrl.T.Helper()
@@ -204,4 +192,16 @@ func (m *MockCryptoSetup) RunHandshake() {
 func (mr *MockCryptoSetupMockRecorder) RunHandshake() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RunHandshake", reflect.TypeOf((*MockCryptoSetup)(nil).RunHandshake))
+}
+
+// SetLargest1RTTAcked mocks base method
+func (m *MockCryptoSetup) SetLargest1RTTAcked(arg0 protocol.PacketNumber) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "SetLargest1RTTAcked", arg0)
+}
+
+// SetLargest1RTTAcked indicates an expected call of SetLargest1RTTAcked
+func (mr *MockCryptoSetupMockRecorder) SetLargest1RTTAcked(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetLargest1RTTAcked", reflect.TypeOf((*MockCryptoSetup)(nil).SetLargest1RTTAcked), arg0)
 }
