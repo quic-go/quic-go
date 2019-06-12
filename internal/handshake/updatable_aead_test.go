@@ -111,13 +111,17 @@ var _ = Describe("Updatable AEAD", func() {
 			})
 
 			It("updates the keys when receiving a packet with the next key phase", func() {
+				// receive the first packet at key phase zero
 				encrypted0 := client.Seal(nil, msg, 0x42, ad)
 				decrypted, err := server.Open(nil, encrypted0, 0x42, protocol.KeyPhaseZero, ad)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(decrypted).To(Equal(msg))
+				// send one packet at key phase zero
+				Expect(server.KeyPhase()).To(Equal(protocol.KeyPhaseZero))
+				_ = server.Seal(nil, msg, 0x1, ad)
+				// now received a message at key phase one
 				client.rollKeys()
 				encrypted1 := client.Seal(nil, msg, 0x43, ad)
-				Expect(server.KeyPhase()).To(Equal(protocol.KeyPhaseZero))
 				decrypted, err = server.Open(nil, encrypted1, 0x43, protocol.KeyPhaseOne, ad)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(decrypted).To(Equal(msg))
@@ -130,6 +134,8 @@ var _ = Describe("Updatable AEAD", func() {
 				// receive the first packet with key phase 0
 				_, err := server.Open(nil, encrypted01, 0x42, protocol.KeyPhaseZero, ad)
 				Expect(err).ToNot(HaveOccurred())
+				// send one packet at key phase zero
+				_ = server.Seal(nil, msg, 0x1, ad)
 				// now receive a packet with key phase 1
 				client.rollKeys()
 				encrypted1 := client.Seal(nil, msg, 0x44, ad)
@@ -149,6 +155,18 @@ var _ = Describe("Updatable AEAD", func() {
 				encrypted := client.Seal(nil, msg, 0x1337, ad)
 				_, err := server.Open(nil, encrypted, 0x1337, protocol.KeyPhaseOne, ad)
 				Expect(err).To(MatchError("PROTOCOL_VIOLATION: wrong initial keyphase"))
+			})
+
+			It("errors when the peer updates keys too frequently", func() {
+				// receive the first packet at key phase zero
+				encrypted0 := client.Seal(nil, msg, 0x42, ad)
+				_, err := server.Open(nil, encrypted0, 0x42, protocol.KeyPhaseZero, ad)
+				Expect(err).ToNot(HaveOccurred())
+				// now receive a packet at key phase one, before having sent any packets
+				client.rollKeys()
+				encrypted1 := client.Seal(nil, msg, 0x42, ad)
+				_, err = server.Open(nil, encrypted1, 0x42, protocol.KeyPhaseOne, ad)
+				Expect(err).To(MatchError("PROTOCOL_VIOLATION: keys updated too quickly"))
 			})
 		})
 	})

@@ -112,12 +112,14 @@ func (a *updatableAEAD) Open(dst, src []byte, pn protocol.PacketNumber, kp proto
 		// try opening the packet with the next key phase
 		dec, err := a.nextRcvAEAD.Open(dst, a.nonceBuf, src, ad)
 		if err != nil {
-			err = ErrDecryptionFailed
-		} else {
-			// if opening succeeds, roll over to the next key phase
-			a.rollKeys()
-			a.firstRcvdWithCurrentKey = pn
+			return nil, ErrDecryptionFailed
 		}
+		// Opening succeeded. Check if the peer was allowed to update.
+		if a.firstSentWithCurrentKey == protocol.InvalidPacketNumber {
+			return nil, qerr.Error(qerr.ProtocolViolation, "keys updated too quickly")
+		}
+		a.rollKeys()
+		a.firstRcvdWithCurrentKey = pn
 		return dec, err
 	}
 	// The AEAD we're using here will be the qtls.aeadAESGCM13.
