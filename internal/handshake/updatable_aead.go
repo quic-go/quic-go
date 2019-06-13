@@ -61,8 +61,8 @@ func (a *updatableAEAD) rollKeys() {
 
 	a.nextRcvTrafficSecret = a.getNextTrafficSecret(a.suite.Hash(), a.nextRcvTrafficSecret)
 	a.nextSendTrafficSecret = a.getNextTrafficSecret(a.suite.Hash(), a.nextSendTrafficSecret)
-	a.nextRcvAEAD, _ = createAEAD(a.suite, a.nextRcvTrafficSecret)
-	a.nextSendAEAD, _ = createAEAD(a.suite, a.nextSendTrafficSecret)
+	a.nextRcvAEAD = createAEAD(a.suite, a.nextRcvTrafficSecret)
+	a.nextSendAEAD = createAEAD(a.suite, a.nextSendTrafficSecret)
 }
 
 func (a *updatableAEAD) getNextTrafficSecret(hash crypto.Hash, ts []byte) []byte {
@@ -72,7 +72,8 @@ func (a *updatableAEAD) getNextTrafficSecret(hash crypto.Hash, ts []byte) []byte
 // For the client, this function is called before SetWriteKey.
 // For the server, this function is called after SetWriteKey.
 func (a *updatableAEAD) SetReadKey(suite cipherSuite, trafficSecret []byte) {
-	a.rcvAEAD, a.hpDecrypter = createAEAD(suite, trafficSecret)
+	a.rcvAEAD = createAEAD(suite, trafficSecret)
+	a.hpDecrypter = createHeaderProtector(suite, trafficSecret)
 	if a.suite == nil {
 		a.nonceBuf = make([]byte, a.rcvAEAD.NonceSize())
 		a.hpMask = make([]byte, a.hpDecrypter.BlockSize())
@@ -80,13 +81,14 @@ func (a *updatableAEAD) SetReadKey(suite cipherSuite, trafficSecret []byte) {
 	}
 
 	a.nextRcvTrafficSecret = a.getNextTrafficSecret(suite.Hash(), trafficSecret)
-	a.nextRcvAEAD, _ = createAEAD(suite, a.nextRcvTrafficSecret)
+	a.nextRcvAEAD = createAEAD(suite, a.nextRcvTrafficSecret)
 }
 
 // For the client, this function is called after SetReadKey.
 // For the server, this function is called before SetWriteKey.
 func (a *updatableAEAD) SetWriteKey(suite cipherSuite, trafficSecret []byte) {
-	a.sendAEAD, a.hpEncrypter = createAEAD(suite, trafficSecret)
+	a.sendAEAD = createAEAD(suite, trafficSecret)
+	a.hpEncrypter = createHeaderProtector(suite, trafficSecret)
 	if a.suite == nil {
 		a.nonceBuf = make([]byte, a.sendAEAD.NonceSize())
 		a.hpMask = make([]byte, a.hpEncrypter.BlockSize())
@@ -94,7 +96,7 @@ func (a *updatableAEAD) SetWriteKey(suite cipherSuite, trafficSecret []byte) {
 	}
 
 	a.nextSendTrafficSecret = a.getNextTrafficSecret(suite.Hash(), trafficSecret)
-	a.nextSendAEAD, _ = createAEAD(suite, a.nextSendTrafficSecret)
+	a.nextSendAEAD = createAEAD(suite, a.nextSendTrafficSecret)
 }
 
 func (a *updatableAEAD) Open(dst, src []byte, pn protocol.PacketNumber, kp protocol.KeyPhase, ad []byte) ([]byte, error) {

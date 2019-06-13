@@ -476,7 +476,10 @@ func (h *cryptoSetup) SetReadKey(suite *qtls.CipherSuite, trafficSecret []byte) 
 	switch h.readEncLevel {
 	case protocol.EncryptionInitial:
 		h.readEncLevel = protocol.EncryptionHandshake
-		h.handshakeOpener = newLongHeaderOpener(createAEAD(suite, trafficSecret))
+		h.handshakeOpener = newLongHeaderOpener(
+			createAEAD(suite, trafficSecret),
+			createHeaderProtector(suite, trafficSecret),
+		)
 		h.logger.Debugf("Installed Handshake Read keys")
 	case protocol.EncryptionHandshake:
 		h.readEncLevel = protocol.Encryption1RTT
@@ -495,7 +498,10 @@ func (h *cryptoSetup) SetWriteKey(suite *qtls.CipherSuite, trafficSecret []byte)
 	switch h.writeEncLevel {
 	case protocol.EncryptionInitial:
 		h.writeEncLevel = protocol.EncryptionHandshake
-		h.handshakeSealer = newLongHeaderSealer(createAEAD(suite, trafficSecret))
+		h.handshakeSealer = newLongHeaderSealer(
+			createAEAD(suite, trafficSecret),
+			createHeaderProtector(suite, trafficSecret),
+		)
 		h.logger.Debugf("Installed Handshake Write keys")
 	case protocol.EncryptionHandshake:
 		h.writeEncLevel = protocol.Encryption1RTT

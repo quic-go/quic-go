@@ -94,13 +94,17 @@ func (o *longHeaderOpener) DecryptHeader(sample []byte, firstByte *byte, pnBytes
 	}
 }
 
-func createAEAD(suite cipherSuite, trafficSecret []byte) (cipher.AEAD, cipher.Block) {
+func createAEAD(suite cipherSuite, trafficSecret []byte) cipher.AEAD {
 	key := qtls.HkdfExpandLabel(suite.Hash(), trafficSecret, []byte{}, "quic key", suite.KeyLen())
 	iv := qtls.HkdfExpandLabel(suite.Hash(), trafficSecret, []byte{}, "quic iv", suite.IVLen())
+	return suite.AEAD(key, iv)
+}
+
+func createHeaderProtector(suite cipherSuite, trafficSecret []byte) cipher.Block {
 	hpKey := qtls.HkdfExpandLabel(suite.Hash(), trafficSecret, []byte{}, "quic hp", suite.KeyLen())
-	hpDecrypter, err := aes.NewCipher(hpKey)
+	hp, err := aes.NewCipher(hpKey)
 	if err != nil {
 		panic(fmt.Sprintf("error creating new AES cipher: %s", err))
 	}
-	return suite.AEAD(key, iv), hpDecrypter
+	return hp
 }
