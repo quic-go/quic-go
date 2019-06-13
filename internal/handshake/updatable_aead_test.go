@@ -7,6 +7,7 @@ import (
 	"crypto/rand"
 
 	"github.com/lucas-clemente/quic-go/internal/protocol"
+	"github.com/lucas-clemente/quic-go/internal/utils"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 )
@@ -33,8 +34,8 @@ var _ = Describe("Updatable AEAD", func() {
 		rand.Read(trafficSecret1)
 		rand.Read(trafficSecret2)
 
-		client = newUpdatableAEAD()
-		server = newUpdatableAEAD()
+		client = newUpdatableAEAD(utils.DefaultLogger)
+		server = newUpdatableAEAD(utils.DefaultLogger)
 		client.SetReadKey(&mockCipherSuite{}, trafficSecret2)
 		client.SetWriteKey(&mockCipherSuite{}, trafficSecret1)
 		server.SetReadKey(&mockCipherSuite{}, trafficSecret1)

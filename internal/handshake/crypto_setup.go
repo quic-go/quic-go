@@ -192,7 +192,7 @@ func newCryptoSetup(
 		initialOpener:          initialOpener,
 		handshakeStream:        handshakeStream,
 		oneRTTStream:           oneRTTStream,
-		aead:                   newUpdatableAEAD(),
+		aead:                   newUpdatableAEAD(logger),
 		readEncLevel:           protocol.EncryptionInitial,
 		writeEncLevel:          protocol.EncryptionInitial,
 		runner:                 runner,

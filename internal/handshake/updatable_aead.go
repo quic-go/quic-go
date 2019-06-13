@@ -6,6 +6,7 @@ import (
 	"encoding/binary"
 
 	"github.com/lucas-clemente/quic-go/internal/qerr"
+	"github.com/lucas-clemente/quic-go/internal/utils"
 
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/marten-seemann/qtls"
@@ -31,6 +32,8 @@ type updatableAEAD struct {
 	hpDecrypter cipher.Block
 	hpEncrypter cipher.Block
 
+	logger utils.Logger
+
 	// use a single slice to avoid allocations
 	nonceBuf []byte
 	hpMask   []byte
@@ -39,17 +42,19 @@ type updatableAEAD struct {
 var _ ShortHeaderOpener = &updatableAEAD{}
 var _ ShortHeaderSealer = &updatableAEAD{}
 
-func newUpdatableAEAD() *updatableAEAD {
+func newUpdatableAEAD(logger utils.Logger) *updatableAEAD {
 	return &updatableAEAD{
 		firstRcvdWithCurrentKey: protocol.InvalidPacketNumber,
 		firstSentWithCurrentKey: protocol.InvalidPacketNumber,
+		logger:                  logger,
 	}
 }
 
 func (a *updatableAEAD) rollKeys() {
+	a.keyPhase = a.keyPhase.Next()
+	a.logger.Debugf("Updating keys to the next key phase: %s", a.keyPhase)
 	a.firstRcvdWithCurrentKey = protocol.InvalidPacketNumber
 	a.firstSentWithCurrentKey = protocol.InvalidPacketNumber
-	a.keyPhase = a.keyPhase.Next()
 	a.prevRcvAEAD = a.rcvAEAD
 	a.rcvAEAD = a.nextRcvAEAD
 	a.sendAEAD = a.nextSendAEAD
