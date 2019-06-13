@@ -223,7 +223,8 @@ func (h *cryptoSetup) ChangeConnectionID(id protocol.ConnectionID) error {
 	return nil
 }
 
-func (h *cryptoSetup) SetLargest1RTTAcked(_ protocol.PacketNumber) {
+func (h *cryptoSetup) SetLargest1RTTAcked(pn protocol.PacketNumber) {
+	h.aead.SetLargestAcked(pn)
 	// drop initial keys
 	// TODO: do this earlier
 	if h.initialOpener != nil {

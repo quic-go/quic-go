@@ -9,7 +9,7 @@
 - Use a varint for error codes.
 - Add support for [quic-trace](https://github.com/google/quic-trace).
 - Add a context to `Listener.Accept`, `Session.Accept{Uni}Stream` and `Session.Open{Uni}StreamSync`.
-- Implement receiving of TLS key updates.
+- Implement TLS key updates.
 
 ## v0.11.0 (2019-04-05)
 

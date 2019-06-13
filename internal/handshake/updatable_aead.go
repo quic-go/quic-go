@@ -15,12 +15,16 @@ import (
 type updatableAEAD struct {
 	suite cipherSuite
 
-	keyPhase protocol.KeyPhase
+	keyPhase          protocol.KeyPhase
+	largestAcked      protocol.PacketNumber
+	keyUpdateInterval uint64
 
 	prevRcvAEAD cipher.AEAD
 
 	firstRcvdWithCurrentKey protocol.PacketNumber
 	firstSentWithCurrentKey protocol.PacketNumber
+	numRcvdWithCurrentKey   uint64
+	numSentWithCurrentKey   uint64
 	rcvAEAD                 cipher.AEAD
 	sendAEAD                cipher.AEAD
 
@@ -44,17 +48,20 @@ var _ ShortHeaderSealer = &updatableAEAD{}
 
 func newUpdatableAEAD(logger utils.Logger) *updatableAEAD {
 	return &updatableAEAD{
+		largestAcked:            protocol.InvalidPacketNumber,
 		firstRcvdWithCurrentKey: protocol.InvalidPacketNumber,
 		firstSentWithCurrentKey: protocol.InvalidPacketNumber,
+		keyUpdateInterval:       protocol.KeyUpdateInterval,
 		logger:                  logger,
 	}
 }
 
 func (a *updatableAEAD) rollKeys() {
 	a.keyPhase = a.keyPhase.Next()
-	a.logger.Debugf("Updating keys to the next key phase: %s", a.keyPhase)
 	a.firstRcvdWithCurrentKey = protocol.InvalidPacketNumber
 	a.firstSentWithCurrentKey = protocol.InvalidPacketNumber
+	a.numRcvdWithCurrentKey = 0
+	a.numSentWithCurrentKey = 0
 	a.prevRcvAEAD = a.rcvAEAD
 	a.rcvAEAD = a.nextRcvAEAD
 	a.sendAEAD = a.nextSendAEAD
@@ -126,6 +133,7 @@ func (a *updatableAEAD) Open(dst, src []byte, pn protocol.PacketNumber, kp proto
 			return nil, qerr.Error(qerr.ProtocolViolation, "keys updated too quickly")
 		}
 		a.rollKeys()
+		a.logger.Debugf("Peer updated keys to %s", a.keyPhase)
 		a.firstRcvdWithCurrentKey = pn
 		return dec, err
 	}
@@ -134,8 +142,11 @@ func (a *updatableAEAD) Open(dst, src []byte, pn protocol.PacketNumber, kp proto
 	dec, err := a.rcvAEAD.Open(dst, a.nonceBuf, src, ad)
 	if err != nil {
 		err = ErrDecryptionFailed
-	} else if a.firstRcvdWithCurrentKey == protocol.InvalidPacketNumber {
-		a.firstRcvdWithCurrentKey = pn
+	} else {
+		a.numRcvdWithCurrentKey++
+		if a.firstRcvdWithCurrentKey == protocol.InvalidPacketNumber {
+			a.firstRcvdWithCurrentKey = pn
+		}
 	}
 	return dec, err
 }
@@ -144,13 +155,42 @@ func (a *updatableAEAD) Seal(dst, src []byte, pn protocol.PacketNumber, ad []byt
 	if a.firstSentWithCurrentKey == protocol.InvalidPacketNumber {
 		a.firstSentWithCurrentKey = pn
 	}
+	a.numSentWithCurrentKey++
 	binary.BigEndian.PutUint64(a.nonceBuf[len(a.nonceBuf)-8:], uint64(pn))
 	// The AEAD we're using here will be the qtls.aeadAESGCM13.
 	// It uses the nonce provided here and XOR it with the IV.
 	return a.sendAEAD.Seal(dst, a.nonceBuf, src, ad)
 }
 
+func (a *updatableAEAD) SetLargestAcked(pn protocol.PacketNumber) {
+	a.largestAcked = pn
+}
+
+func (a *updatableAEAD) updateAllowed() bool {
+	return a.firstSentWithCurrentKey != protocol.InvalidPacketNumber &&
+		a.largestAcked != protocol.InvalidPacketNumber &&
+		a.largestAcked >= a.firstSentWithCurrentKey
+}
+
+func (a *updatableAEAD) shouldInitiateKeyUpdate() bool {
+	if !a.updateAllowed() {
+		return false
+	}
+	if a.numRcvdWithCurrentKey >= a.keyUpdateInterval {
+		a.logger.Debugf("Received %d packets with current key phase. Initiating key update to the next key phase: %s", a.numRcvdWithCurrentKey, a.keyPhase.Next())
+		return true
+	}
+	if a.numSentWithCurrentKey >= a.keyUpdateInterval {
+		a.logger.Debugf("Sent %d packets with current key phase. Initiating key update to the next key phase: %s", a.numSentWithCurrentKey, a.keyPhase.Next())
+		return true
+	}
+	return false
+}
+
 func (a *updatableAEAD) KeyPhase() protocol.KeyPhase {
+	if a.shouldInitiateKeyUpdate() {
+		a.rollKeys()
+	}
 	return a.keyPhase
 }
 
