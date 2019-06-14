@@ -41,7 +41,7 @@ type ByteCount uint64
 const MaxByteCount = ByteCount(1<<62 - 1)
 
 // An ApplicationErrorCode is an application-defined error code.
-type ApplicationErrorCode uint16
+type ApplicationErrorCode uint64
 
 // MaxReceivePacketSize maximum packet size of any QUIC packet, based on
 // ethernet's max size, minus the IP and UDP headers. IPv6 has a 40 byte header,
