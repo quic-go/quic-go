@@ -7,7 +7,7 @@ import (
 )
 
 // ErrorCode can be used as a normal error without reason.
-type ErrorCode uint16
+type ErrorCode uint64
 
 // The error codes defined by QUIC
 const (

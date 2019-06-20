@@ -27,6 +27,7 @@ type Token struct {
 }
 
 // An ErrorCode is an application-defined error code.
+// Valid values range between 0 and MAX_UINT62.
 type ErrorCode = protocol.ApplicationErrorCode
 
 // Stream is the interface implemented by QUIC streams

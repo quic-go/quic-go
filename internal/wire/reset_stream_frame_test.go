@@ -14,7 +14,7 @@ var _ = Describe("RESET_STREAM frame", func() {
 		It("accepts sample frame", func() {
 			data := []byte{0x4}
 			data = append(data, encodeVarInt(0xdeadbeef)...)  // stream ID
-			data = append(data, []byte{0x13, 0x37}...)        // error code
+			data = append(data, encodeVarInt(0x1337)...)      // error code
 			data = append(data, encodeVarInt(0x987654321)...) // byte offset
 			b := bytes.NewReader(data)
 			frame, err := parseResetStreamFrame(b, versionIETFFrames)
@@ -27,7 +27,7 @@ var _ = Describe("RESET_STREAM frame", func() {
 		It("errors on EOFs", func() {
 			data := []byte{0x4}
 			data = append(data, encodeVarInt(0xdeadbeef)...)  // stream ID
-			data = append(data, []byte{0x13, 0x37}...)        // error code
+			data = append(data, encodeVarInt(0x1337)...)      // error code
 			data = append(data, encodeVarInt(0x987654321)...) // byte offset
 			_, err := parseResetStreamFrame(bytes.NewReader(data), versionIETFFrames)
 			Expect(err).NotTo(HaveOccurred())
@@ -50,7 +50,7 @@ var _ = Describe("RESET_STREAM frame", func() {
 			Expect(err).ToNot(HaveOccurred())
 			expected := []byte{0x4}
 			expected = append(expected, encodeVarInt(0x1337)...)
-			expected = append(expected, []byte{0xca, 0xfe}...)
+			expected = append(expected, encodeVarInt(0xcafe)...)
 			expected = append(expected, encodeVarInt(0x11223344decafbad)...)
 			Expect(b.Bytes()).To(Equal(expected))
 		})
