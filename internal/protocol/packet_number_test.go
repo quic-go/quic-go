@@ -17,6 +17,11 @@ var _ = Describe("packet number calculation", func() {
 		Expect(DecodePacketNumber(PacketNumberLen2, 0xa82f30ea, 0x9b32)).To(Equal(PacketNumber(0xa82f9b32)))
 	})
 
+	It("works with the examples from the draft", func() {
+		Expect(GetPacketNumberLengthForHeader(0xac5c02, 0xabe8bc)).To(Equal(PacketNumberLen2))
+		Expect(GetPacketNumberLengthForHeader(0xace8fe, 0xabe8bc)).To(Equal(PacketNumberLen3))
+	})
+
 	getEpoch := func(len PacketNumberLen) uint64 {
 		if len > 4 {
 			Fail("invalid packet number len")
@@ -196,27 +201,4 @@ var _ = Describe("packet number calculation", func() {
 			})
 		})
 	}
-
-	Context("determining the minimum length of a packet number", func() {
-		It("works with the examples from the draft", func() {
-			Expect(GetPacketNumberLengthForHeader(0xac5c02, 0xabe8bc)).To(Equal(PacketNumberLen2))
-			Expect(GetPacketNumberLengthForHeader(0xace8fe, 0xabe8bc)).To(Equal(PacketNumberLen3))
-		})
-
-		It("1 byte", func() {
-			Expect(GetPacketNumberLength(0xFF)).To(Equal(PacketNumberLen1))
-		})
-
-		It("2 byte", func() {
-			Expect(GetPacketNumberLength(0xFFFF)).To(Equal(PacketNumberLen2))
-		})
-
-		It("3 byte", func() {
-			Expect(GetPacketNumberLength(0xFFFFFF)).To(Equal(PacketNumberLen3))
-		})
-
-		It("4 byte", func() {
-			Expect(GetPacketNumberLength(0xFFFFFFFF)).To(Equal(PacketNumberLen4))
-		})
-	})
 })

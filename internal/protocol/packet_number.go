@@ -79,17 +79,3 @@ func GetPacketNumberLengthForHeader(packetNumber, leastUnacked PacketNumber) Pac
 	}
 	return PacketNumberLen4
 }
-
-// GetPacketNumberLength gets the minimum length needed to fully represent the packet number
-func GetPacketNumberLength(packetNumber PacketNumber) PacketNumberLen {
-	if packetNumber < (1 << (uint8(PacketNumberLen1) * 8)) {
-		return PacketNumberLen1
-	}
-	if packetNumber < (1 << (uint8(PacketNumberLen2) * 8)) {
-		return PacketNumberLen2
-	}
-	if packetNumber < (1 << (uint8(PacketNumberLen3) * 8)) {
-		return PacketNumberLen3
-	}
-	return PacketNumberLen4
-}
