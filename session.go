@@ -20,6 +20,7 @@ import (
 	"github.com/lucas-clemente/quic-go/internal/qerr"
 	"github.com/lucas-clemente/quic-go/internal/utils"
 	"github.com/lucas-clemente/quic-go/internal/wire"
+	"github.com/lucas-clemente/quic-go/quictrace"
 )
 
 type unpacker interface {
@@ -161,6 +162,8 @@ type session struct {
 	// it is reset as soon as we receive a packet from the peer
 	keepAlivePingSent bool
 
+	traceCallback func(quictrace.Event)
+
 	logger utils.Logger
 }
 
@@ -193,7 +196,7 @@ var newSession = func(
 		version:               v,
 	}
 	s.preSetup()
-	s.sentPacketHandler = ackhandler.NewSentPacketHandler(0, s.rttStats, s.logger)
+	s.sentPacketHandler = ackhandler.NewSentPacketHandler(0, s.rttStats, s.traceCallback, s.logger)
 	s.streamsMap = newStreamsMap(
 		s,
 		s.newFlowController,
@@ -275,7 +278,7 @@ var newClientSession = func(
 		version:               v,
 	}
 	s.preSetup()
-	s.sentPacketHandler = ackhandler.NewSentPacketHandler(initialPacketNumber, s.rttStats, s.logger)
+	s.sentPacketHandler = ackhandler.NewSentPacketHandler(initialPacketNumber, s.rttStats, s.traceCallback, s.logger)
 	initialStream := newCryptoStream()
 	handshakeStream := newCryptoStream()
 	oneRTTStream := newPostHandshakeCryptoStream(s.framer)
@@ -338,6 +341,11 @@ func (s *session) preSetup() {
 		s.rttStats,
 		s.logger,
 	)
+	if s.config.QuicTracer != nil {
+		s.traceCallback = func(ev quictrace.Event) {
+			s.config.QuicTracer.Trace(s.origDestConnID, ev)
+		}
+	}
 }
 
 func (s *session) postSetup() error {
@@ -665,6 +673,14 @@ func (s *session) handleUnpackedPacket(packet *unpackedPacket, rcvTime time.Time
 	s.firstAckElicitingPacketAfterIdleSentTime = time.Time{}
 	s.keepAlivePingSent = false
 
+	// Only used for tracing.
+	// If we're not tracing, this slice will always remain empty.
+	var frames []wire.Frame
+	var transportState *quictrace.TransportState
+	if s.traceCallback != nil {
+		transportState = s.sentPacketHandler.GetStats()
+	}
+
 	r := bytes.NewReader(packet.data)
 	var isAckEliciting bool
 	for {
@@ -678,9 +694,24 @@ func (s *session) handleUnpackedPacket(packet *unpackedPacket, rcvTime time.Time
 		if ackhandler.IsFrameAckEliciting(frame) {
 			isAckEliciting = true
 		}
+		if s.traceCallback != nil {
+			frames = append(frames, frame)
+		}
 		if err := s.handleFrame(frame, packet.packetNumber, packet.encryptionLevel); err != nil {
 			return err
 		}
+	}
+
+	if s.traceCallback != nil {
+		s.traceCallback(quictrace.Event{
+			Time:            time.Now(),
+			EventType:       quictrace.PacketReceived,
+			TransportState:  transportState,
+			EncryptionLevel: packet.encryptionLevel,
+			PacketNumber:    packet.packetNumber,
+			PacketSize:      protocol.ByteCount(len(packet.data)),
+			Frames:          frames,
+		})
 	}
 
 	if err := s.receivedPacketHandler.ReceivedPacket(packet.packetNumber, packet.encryptionLevel, rcvTime, isAckEliciting); err != nil {
@@ -1152,6 +1183,17 @@ func (s *session) sendPackedPacket(packet *packedPacket) error {
 	defer packet.buffer.Release()
 	if s.firstAckElicitingPacketAfterIdleSentTime.IsZero() && packet.IsAckEliciting() {
 		s.firstAckElicitingPacketAfterIdleSentTime = time.Now()
+	}
+	if s.traceCallback != nil {
+		s.traceCallback(quictrace.Event{
+			Time:            time.Now(),
+			EventType:       quictrace.PacketSent,
+			TransportState:  s.sentPacketHandler.GetStats(),
+			EncryptionLevel: packet.EncryptionLevel(),
+			PacketNumber:    packet.header.PacketNumber,
+			PacketSize:      protocol.ByteCount(len(packet.raw)),
+			Frames:          packet.frames,
+		})
 	}
 	s.logPacket(packet)
 	return s.conn.Write(packet.raw)

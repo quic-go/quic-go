@@ -63,6 +63,34 @@ func (mr *MockSendAlgorithmWithDebugInfosMockRecorder) GetCongestionWindow() *go
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetCongestionWindow", reflect.TypeOf((*MockSendAlgorithmWithDebugInfos)(nil).GetCongestionWindow))
 }
 
+// InRecovery mocks base method
+func (m *MockSendAlgorithmWithDebugInfos) InRecovery() bool {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "InRecovery")
+	ret0, _ := ret[0].(bool)
+	return ret0
+}
+
+// InRecovery indicates an expected call of InRecovery
+func (mr *MockSendAlgorithmWithDebugInfosMockRecorder) InRecovery() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "InRecovery", reflect.TypeOf((*MockSendAlgorithmWithDebugInfos)(nil).InRecovery))
+}
+
+// InSlowStart mocks base method
+func (m *MockSendAlgorithmWithDebugInfos) InSlowStart() bool {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "InSlowStart")
+	ret0, _ := ret[0].(bool)
+	return ret0
+}
+
+// InSlowStart indicates an expected call of InSlowStart
+func (mr *MockSendAlgorithmWithDebugInfosMockRecorder) InSlowStart() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "InSlowStart", reflect.TypeOf((*MockSendAlgorithmWithDebugInfos)(nil).InSlowStart))
+}
+
 // MaybeExitSlowStart mocks base method
 func (m *MockSendAlgorithmWithDebugInfos) MaybeExitSlowStart() {
 	m.ctrl.T.Helper()

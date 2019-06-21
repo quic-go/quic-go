@@ -11,6 +11,7 @@ import (
 	"github.com/lucas-clemente/quic-go/internal/qerr"
 	"github.com/lucas-clemente/quic-go/internal/utils"
 	"github.com/lucas-clemente/quic-go/internal/wire"
+	"github.com/lucas-clemente/quic-go/quictrace"
 )
 
 const (
@@ -75,6 +76,8 @@ type sentPacketHandler struct {
 	// The alarm timeout
 	alarm time.Time
 
+	traceCallback func(quictrace.Event)
+
 	logger utils.Logger
 }
 
@@ -82,6 +85,7 @@ type sentPacketHandler struct {
 func NewSentPacketHandler(
 	initialPacketNumber protocol.PacketNumber,
 	rttStats *congestion.RTTStats,
+	traceCallback func(quictrace.Event),
 	logger utils.Logger,
 ) SentPacketHandler {
 	congestion := congestion.NewCubicSender(
@@ -98,6 +102,7 @@ func NewSentPacketHandler(
 		oneRTTPackets:    newPacketNumberSpace(0),
 		rttStats:         rttStats,
 		congestion:       congestion,
+		traceCallback:    traceCallback,
 		logger:           logger,
 	}
 }
@@ -403,6 +408,17 @@ func (h *sentPacketHandler) detectLostPackets(
 			}
 		}
 		pnSpace.history.Remove(p.PacketNumber)
+		if h.traceCallback != nil {
+			h.traceCallback(quictrace.Event{
+				Time:            now,
+				EventType:       quictrace.PacketLost,
+				EncryptionLevel: p.EncryptionLevel,
+				PacketNumber:    p.PacketNumber,
+				PacketSize:      p.Length,
+				Frames:          p.Frames,
+				TransportState:  h.GetStats(),
+			})
+		}
 	}
 	return nil
 }
@@ -669,4 +685,16 @@ func (h *sentPacketHandler) ResetForRetry() error {
 	h.initialPackets = newPacketNumberSpace(h.initialPackets.pns.Pop())
 	h.updateLossDetectionAlarm()
 	return nil
+}
+
+func (h *sentPacketHandler) GetStats() *quictrace.TransportState {
+	return &quictrace.TransportState{
+		MinRTT:           h.rttStats.MinRTT(),
+		SmoothedRTT:      h.rttStats.SmoothedOrInitialRTT(),
+		LatestRTT:        h.rttStats.LatestRTT(),
+		BytesInFlight:    h.bytesInFlight,
+		CongestionWindow: h.congestion.GetCongestionWindow(),
+		InSlowStart:      h.congestion.InSlowStart(),
+		InRecovery:       h.congestion.InRecovery(),
+	}
 }

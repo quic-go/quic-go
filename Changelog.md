@@ -7,6 +7,7 @@
 - Distinguish between Retry tokens and tokens sent in NEW_TOKEN frames.
 - Enforce application protocol negotiation (via `tls.Config.NextProtos`).
 - Use a varint for error codes.
+- Add support for [quic-trace](https://github.com/google/quic-trace).
 
 ## v0.11.0 (2019-04-05)
 

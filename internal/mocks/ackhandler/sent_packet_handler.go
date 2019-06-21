@@ -12,6 +12,7 @@ import (
 	ackhandler "github.com/lucas-clemente/quic-go/internal/ackhandler"
 	protocol "github.com/lucas-clemente/quic-go/internal/protocol"
 	wire "github.com/lucas-clemente/quic-go/internal/wire"
+	quictrace "github.com/lucas-clemente/quic-go/quictrace"
 )
 
 // MockSentPacketHandler is a mock of SentPacketHandler interface
@@ -104,6 +105,20 @@ func (m *MockSentPacketHandler) GetLowestPacketNotConfirmedAcked() protocol.Pack
 func (mr *MockSentPacketHandlerMockRecorder) GetLowestPacketNotConfirmedAcked() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetLowestPacketNotConfirmedAcked", reflect.TypeOf((*MockSentPacketHandler)(nil).GetLowestPacketNotConfirmedAcked))
+}
+
+// GetStats mocks base method
+func (m *MockSentPacketHandler) GetStats() *quictrace.TransportState {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetStats")
+	ret0, _ := ret[0].(*quictrace.TransportState)
+	return ret0
+}
+
+// GetStats indicates an expected call of GetStats
+func (mr *MockSentPacketHandlerMockRecorder) GetStats() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetStats", reflect.TypeOf((*MockSentPacketHandler)(nil).GetStats))
 }
 
 // OnAlarm mocks base method

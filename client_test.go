@@ -14,6 +14,7 @@ import (
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/internal/utils"
 	"github.com/lucas-clemente/quic-go/internal/wire"
+	"github.com/lucas-clemente/quic-go/quictrace"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -398,6 +399,7 @@ var _ = Describe("Client", func() {
 
 		Context("quic.Config", func() {
 			It("setups with the right values", func() {
+				tracer := quictrace.NewTracer()
 				config := &Config{
 					HandshakeTimeout:      1337 * time.Minute,
 					IdleTimeout:           42 * time.Hour,
@@ -405,6 +407,7 @@ var _ = Describe("Client", func() {
 					MaxIncomingUniStreams: 4321,
 					ConnectionIDLength:    13,
 					StatelessResetKey:     []byte("foobar"),
+					QuicTracer:            tracer,
 				}
 				c := populateClientConfig(config, false)
 				Expect(c.HandshakeTimeout).To(Equal(1337 * time.Minute))
@@ -413,6 +416,7 @@ var _ = Describe("Client", func() {
 				Expect(c.MaxIncomingUniStreams).To(Equal(4321))
 				Expect(c.ConnectionIDLength).To(Equal(13))
 				Expect(c.StatelessResetKey).To(Equal([]byte("foobar")))
+				Expect(c.QuicTracer).To(Equal(tracer))
 			})
 
 			It("errors when the Config contains an invalid version", func() {

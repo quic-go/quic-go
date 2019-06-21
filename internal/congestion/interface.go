@@ -20,5 +20,7 @@ type SendAlgorithm interface {
 // A SendAlgorithmWithDebugInfos is a SendAlgorithm that exposes some debug infos
 type SendAlgorithmWithDebugInfos interface {
 	SendAlgorithm
+	InSlowStart() bool
+	InRecovery() bool
 	GetCongestionWindow() protocol.ByteCount
 }

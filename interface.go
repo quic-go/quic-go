@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/lucas-clemente/quic-go/internal/protocol"
+	"github.com/lucas-clemente/quic-go/quictrace"
 )
 
 // The StreamID is the ID of a QUIC stream.
@@ -219,6 +220,9 @@ type Config struct {
 	StatelessResetKey []byte
 	// KeepAlive defines whether this peer will periodically send a packet to keep the connection alive.
 	KeepAlive bool
+	// QUIC Event Tracer.
+	// Warning: Experimental. This API should not be considered stable and will change soon.
+	QuicTracer quictrace.Tracer
 }
 
 // A Listener for incoming QUIC connections
