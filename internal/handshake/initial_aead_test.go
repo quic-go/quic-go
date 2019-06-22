@@ -114,7 +114,7 @@ var _ = Describe("Initial AEAD using AES-GCM", func() {
 
 		clientMessage := clientSealer.Seal(nil, []byte("foobar"), 42, []byte("aad"))
 		_, err = serverOpener.Open(nil, clientMessage, 42, []byte("aad"))
-		Expect(err).To(MatchError("cipher: message authentication failed"))
+		Expect(err).To(MatchError(ErrDecryptionFailed))
 	})
 
 	It("encrypts und decrypts the header", func() {

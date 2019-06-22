@@ -78,49 +78,94 @@ func (mr *MockCryptoSetupMockRecorder) ConnectionState() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ConnectionState", reflect.TypeOf((*MockCryptoSetup)(nil).ConnectionState))
 }
 
-// GetOpener mocks base method
-func (m *MockCryptoSetup) GetOpener(arg0 protocol.EncryptionLevel) (handshake.Opener, error) {
+// Get1RTTOpener mocks base method
+func (m *MockCryptoSetup) Get1RTTOpener() (handshake.ShortHeaderOpener, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetOpener", arg0)
-	ret0, _ := ret[0].(handshake.Opener)
+	ret := m.ctrl.Call(m, "Get1RTTOpener")
+	ret0, _ := ret[0].(handshake.ShortHeaderOpener)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
-// GetOpener indicates an expected call of GetOpener
-func (mr *MockCryptoSetupMockRecorder) GetOpener(arg0 interface{}) *gomock.Call {
+// Get1RTTOpener indicates an expected call of Get1RTTOpener
+func (mr *MockCryptoSetupMockRecorder) Get1RTTOpener() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetOpener", reflect.TypeOf((*MockCryptoSetup)(nil).GetOpener), arg0)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Get1RTTOpener", reflect.TypeOf((*MockCryptoSetup)(nil).Get1RTTOpener))
 }
 
-// GetSealer mocks base method
-func (m *MockCryptoSetup) GetSealer() (protocol.EncryptionLevel, handshake.Sealer) {
+// Get1RTTSealer mocks base method
+func (m *MockCryptoSetup) Get1RTTSealer() (handshake.ShortHeaderSealer, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetSealer")
-	ret0, _ := ret[0].(protocol.EncryptionLevel)
-	ret1, _ := ret[1].(handshake.Sealer)
-	return ret0, ret1
-}
-
-// GetSealer indicates an expected call of GetSealer
-func (mr *MockCryptoSetupMockRecorder) GetSealer() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetSealer", reflect.TypeOf((*MockCryptoSetup)(nil).GetSealer))
-}
-
-// GetSealerWithEncryptionLevel mocks base method
-func (m *MockCryptoSetup) GetSealerWithEncryptionLevel(arg0 protocol.EncryptionLevel) (handshake.Sealer, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetSealerWithEncryptionLevel", arg0)
-	ret0, _ := ret[0].(handshake.Sealer)
+	ret := m.ctrl.Call(m, "Get1RTTSealer")
+	ret0, _ := ret[0].(handshake.ShortHeaderSealer)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
-// GetSealerWithEncryptionLevel indicates an expected call of GetSealerWithEncryptionLevel
-func (mr *MockCryptoSetupMockRecorder) GetSealerWithEncryptionLevel(arg0 interface{}) *gomock.Call {
+// Get1RTTSealer indicates an expected call of Get1RTTSealer
+func (mr *MockCryptoSetupMockRecorder) Get1RTTSealer() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetSealerWithEncryptionLevel", reflect.TypeOf((*MockCryptoSetup)(nil).GetSealerWithEncryptionLevel), arg0)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Get1RTTSealer", reflect.TypeOf((*MockCryptoSetup)(nil).Get1RTTSealer))
+}
+
+// GetHandshakeOpener mocks base method
+func (m *MockCryptoSetup) GetHandshakeOpener() (handshake.LongHeaderOpener, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetHandshakeOpener")
+	ret0, _ := ret[0].(handshake.LongHeaderOpener)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetHandshakeOpener indicates an expected call of GetHandshakeOpener
+func (mr *MockCryptoSetupMockRecorder) GetHandshakeOpener() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetHandshakeOpener", reflect.TypeOf((*MockCryptoSetup)(nil).GetHandshakeOpener))
+}
+
+// GetHandshakeSealer mocks base method
+func (m *MockCryptoSetup) GetHandshakeSealer() (handshake.LongHeaderSealer, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetHandshakeSealer")
+	ret0, _ := ret[0].(handshake.LongHeaderSealer)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetHandshakeSealer indicates an expected call of GetHandshakeSealer
+func (mr *MockCryptoSetupMockRecorder) GetHandshakeSealer() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetHandshakeSealer", reflect.TypeOf((*MockCryptoSetup)(nil).GetHandshakeSealer))
+}
+
+// GetInitialOpener mocks base method
+func (m *MockCryptoSetup) GetInitialOpener() (handshake.LongHeaderOpener, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetInitialOpener")
+	ret0, _ := ret[0].(handshake.LongHeaderOpener)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetInitialOpener indicates an expected call of GetInitialOpener
+func (mr *MockCryptoSetupMockRecorder) GetInitialOpener() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetInitialOpener", reflect.TypeOf((*MockCryptoSetup)(nil).GetInitialOpener))
+}
+
+// GetInitialSealer mocks base method
+func (m *MockCryptoSetup) GetInitialSealer() (handshake.LongHeaderSealer, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetInitialSealer")
+	ret0, _ := ret[0].(handshake.LongHeaderSealer)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetInitialSealer indicates an expected call of GetInitialSealer
+func (mr *MockCryptoSetupMockRecorder) GetInitialSealer() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetInitialSealer", reflect.TypeOf((*MockCryptoSetup)(nil).GetInitialSealer))
 }
 
 // HandleMessage mocks base method

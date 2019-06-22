@@ -1,6 +1,8 @@
 package handshake
 
 import (
+	"crypto"
+	"crypto/cipher"
 	"crypto/tls"
 	"net"
 	"time"
@@ -8,6 +10,13 @@ import (
 
 	"github.com/marten-seemann/qtls"
 )
+
+type cipherSuite interface {
+	Hash() crypto.Hash
+	KeyLen() int
+	IVLen() int
+	AEAD(key, nonce []byte) cipher.AEAD
+}
 
 type conn struct {
 	remoteAddr net.Addr

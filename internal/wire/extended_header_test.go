@@ -199,7 +199,7 @@ var _ = Describe("Header", func() {
 
 			It("writes the Key Phase Bit", func() {
 				Expect((&ExtendedHeader{
-					KeyPhase:        1,
+					KeyPhase:        protocol.KeyPhaseOne,
 					PacketNumberLen: protocol.PacketNumberLen1,
 					PacketNumber:    0x42,
 				}).Write(buf, versionIETFHeader)).To(Succeed())
@@ -407,7 +407,7 @@ var _ = Describe("Header", func() {
 				Header: Header{
 					DestConnectionID: protocol.ConnectionID{0xde, 0xad, 0xbe, 0xef, 0xca, 0xfe, 0x13, 0x37},
 				},
-				KeyPhase:        1,
+				KeyPhase:        protocol.KeyPhaseOne,
 				PacketNumber:    0x1337,
 				PacketNumberLen: 4,
 			}).Log(logger)
