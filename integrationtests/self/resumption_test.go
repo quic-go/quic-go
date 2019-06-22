@@ -1,6 +1,7 @@
 package self_test
 
 import (
+	"context"
 	"crypto/tls"
 	"fmt"
 	"net"
@@ -55,11 +56,11 @@ var _ = Describe("TLS session resumption", func() {
 		go func() {
 			defer close(done)
 			defer GinkgoRecover()
-			sess, err := server.Accept()
+			sess, err := server.Accept(context.Background())
 			Expect(err).ToNot(HaveOccurred())
 			Expect(sess.ConnectionState().DidResume).To(BeFalse())
 
-			sess, err = server.Accept()
+			sess, err = server.Accept(context.Background())
 			Expect(err).ToNot(HaveOccurred())
 			Expect(sess.ConnectionState().DidResume).To(BeTrue())
 		}()

@@ -5,6 +5,7 @@
 package quic
 
 import (
+	context "context"
 	reflect "reflect"
 
 	gomock "github.com/golang/mock/gomock"
@@ -37,33 +38,33 @@ func (m *MockStreamManager) EXPECT() *MockStreamManagerMockRecorder {
 }
 
 // AcceptStream mocks base method
-func (m *MockStreamManager) AcceptStream() (Stream, error) {
+func (m *MockStreamManager) AcceptStream(arg0 context.Context) (Stream, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "AcceptStream")
+	ret := m.ctrl.Call(m, "AcceptStream", arg0)
 	ret0, _ := ret[0].(Stream)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // AcceptStream indicates an expected call of AcceptStream
-func (mr *MockStreamManagerMockRecorder) AcceptStream() *gomock.Call {
+func (mr *MockStreamManagerMockRecorder) AcceptStream(arg0 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AcceptStream", reflect.TypeOf((*MockStreamManager)(nil).AcceptStream))
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AcceptStream", reflect.TypeOf((*MockStreamManager)(nil).AcceptStream), arg0)
 }
 
 // AcceptUniStream mocks base method
-func (m *MockStreamManager) AcceptUniStream() (ReceiveStream, error) {
+func (m *MockStreamManager) AcceptUniStream(arg0 context.Context) (ReceiveStream, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "AcceptUniStream")
+	ret := m.ctrl.Call(m, "AcceptUniStream", arg0)
 	ret0, _ := ret[0].(ReceiveStream)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // AcceptUniStream indicates an expected call of AcceptUniStream
-func (mr *MockStreamManagerMockRecorder) AcceptUniStream() *gomock.Call {
+func (mr *MockStreamManagerMockRecorder) AcceptUniStream(arg0 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AcceptUniStream", reflect.TypeOf((*MockStreamManager)(nil).AcceptUniStream))
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AcceptUniStream", reflect.TypeOf((*MockStreamManager)(nil).AcceptUniStream), arg0)
 }
 
 // CloseWithError mocks base method
@@ -152,18 +153,18 @@ func (mr *MockStreamManagerMockRecorder) OpenStream() *gomock.Call {
 }
 
 // OpenStreamSync mocks base method
-func (m *MockStreamManager) OpenStreamSync() (Stream, error) {
+func (m *MockStreamManager) OpenStreamSync(arg0 context.Context) (Stream, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "OpenStreamSync")
+	ret := m.ctrl.Call(m, "OpenStreamSync", arg0)
 	ret0, _ := ret[0].(Stream)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // OpenStreamSync indicates an expected call of OpenStreamSync
-func (mr *MockStreamManagerMockRecorder) OpenStreamSync() *gomock.Call {
+func (mr *MockStreamManagerMockRecorder) OpenStreamSync(arg0 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "OpenStreamSync", reflect.TypeOf((*MockStreamManager)(nil).OpenStreamSync))
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "OpenStreamSync", reflect.TypeOf((*MockStreamManager)(nil).OpenStreamSync), arg0)
 }
 
 // OpenUniStream mocks base method
@@ -182,18 +183,18 @@ func (mr *MockStreamManagerMockRecorder) OpenUniStream() *gomock.Call {
 }
 
 // OpenUniStreamSync mocks base method
-func (m *MockStreamManager) OpenUniStreamSync() (SendStream, error) {
+func (m *MockStreamManager) OpenUniStreamSync(arg0 context.Context) (SendStream, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "OpenUniStreamSync")
+	ret := m.ctrl.Call(m, "OpenUniStreamSync", arg0)
 	ret0, _ := ret[0].(SendStream)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // OpenUniStreamSync indicates an expected call of OpenUniStreamSync
-func (mr *MockStreamManagerMockRecorder) OpenUniStreamSync() *gomock.Call {
+func (mr *MockStreamManagerMockRecorder) OpenUniStreamSync(arg0 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "OpenUniStreamSync", reflect.TypeOf((*MockStreamManager)(nil).OpenUniStreamSync))
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "OpenUniStreamSync", reflect.TypeOf((*MockStreamManager)(nil).OpenUniStreamSync), arg0)
 }
 
 // UpdateLimits mocks base method

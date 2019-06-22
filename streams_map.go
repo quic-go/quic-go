@@ -1,6 +1,7 @@
 package quic
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"net"
@@ -108,8 +109,8 @@ func (m *streamsMap) OpenStream() (Stream, error) {
 	return str, convertStreamError(err, protocol.StreamTypeBidi, m.perspective)
 }
 
-func (m *streamsMap) OpenStreamSync() (Stream, error) {
-	str, err := m.outgoingBidiStreams.OpenStreamSync()
+func (m *streamsMap) OpenStreamSync(ctx context.Context) (Stream, error) {
+	str, err := m.outgoingBidiStreams.OpenStreamSync(ctx)
 	return str, convertStreamError(err, protocol.StreamTypeBidi, m.perspective)
 }
 
@@ -118,18 +119,18 @@ func (m *streamsMap) OpenUniStream() (SendStream, error) {
 	return str, convertStreamError(err, protocol.StreamTypeBidi, m.perspective)
 }
 
-func (m *streamsMap) OpenUniStreamSync() (SendStream, error) {
-	str, err := m.outgoingUniStreams.OpenStreamSync()
+func (m *streamsMap) OpenUniStreamSync(ctx context.Context) (SendStream, error) {
+	str, err := m.outgoingUniStreams.OpenStreamSync(ctx)
 	return str, convertStreamError(err, protocol.StreamTypeUni, m.perspective)
 }
 
-func (m *streamsMap) AcceptStream() (Stream, error) {
-	str, err := m.incomingBidiStreams.AcceptStream()
+func (m *streamsMap) AcceptStream(ctx context.Context) (Stream, error) {
+	str, err := m.incomingBidiStreams.AcceptStream(ctx)
 	return str, convertStreamError(err, protocol.StreamTypeBidi, m.perspective.Opposite())
 }
 
-func (m *streamsMap) AcceptUniStream() (ReceiveStream, error) {
-	str, err := m.incomingUniStreams.AcceptStream()
+func (m *streamsMap) AcceptUniStream(ctx context.Context) (ReceiveStream, error) {
+	str, err := m.incomingUniStreams.AcceptStream(ctx)
 	return str, convertStreamError(err, protocol.StreamTypeUni, m.perspective.Opposite())
 }
 

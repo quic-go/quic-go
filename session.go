@@ -37,10 +37,10 @@ type streamManager interface {
 	GetOrOpenReceiveStream(protocol.StreamID) (receiveStreamI, error)
 	OpenStream() (Stream, error)
 	OpenUniStream() (SendStream, error)
-	OpenStreamSync() (Stream, error)
-	OpenUniStreamSync() (SendStream, error)
-	AcceptStream() (Stream, error)
-	AcceptUniStream() (ReceiveStream, error)
+	OpenStreamSync(context.Context) (Stream, error)
+	OpenUniStreamSync(context.Context) (SendStream, error)
+	AcceptStream(context.Context) (Stream, error)
+	AcceptUniStream(context.Context) (ReceiveStream, error)
 	DeleteStream(protocol.StreamID) error
 	UpdateLimits(*handshake.TransportParameters) error
 	HandleMaxStreamsFrame(*wire.MaxStreamsFrame) error
@@ -1233,12 +1233,12 @@ func (s *session) logPacket(packet *packedPacket) {
 }
 
 // AcceptStream returns the next stream openend by the peer
-func (s *session) AcceptStream() (Stream, error) {
-	return s.streamsMap.AcceptStream()
+func (s *session) AcceptStream(ctx context.Context) (Stream, error) {
+	return s.streamsMap.AcceptStream(ctx)
 }
 
-func (s *session) AcceptUniStream() (ReceiveStream, error) {
-	return s.streamsMap.AcceptUniStream()
+func (s *session) AcceptUniStream(ctx context.Context) (ReceiveStream, error) {
+	return s.streamsMap.AcceptUniStream(ctx)
 }
 
 // OpenStream opens a stream
@@ -1246,16 +1246,16 @@ func (s *session) OpenStream() (Stream, error) {
 	return s.streamsMap.OpenStream()
 }
 
-func (s *session) OpenStreamSync() (Stream, error) {
-	return s.streamsMap.OpenStreamSync()
+func (s *session) OpenStreamSync(ctx context.Context) (Stream, error) {
+	return s.streamsMap.OpenStreamSync(ctx)
 }
 
 func (s *session) OpenUniStream() (SendStream, error) {
 	return s.streamsMap.OpenUniStream()
 }
 
-func (s *session) OpenUniStreamSync() (SendStream, error) {
-	return s.streamsMap.OpenUniStreamSync()
+func (s *session) OpenUniStreamSync(ctx context.Context) (SendStream, error) {
+	return s.streamsMap.OpenUniStreamSync(ctx)
 }
 
 func (s *session) newFlowController(id protocol.StreamID) flowcontrol.StreamFlowController {

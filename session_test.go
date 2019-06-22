@@ -367,14 +367,6 @@ var _ = Describe("Session", func() {
 		Expect(sess.GetVersion()).To(Equal(protocol.VersionNumber(4242)))
 	})
 
-	It("accepts new streams", func() {
-		mstr := NewMockStreamI(mockCtrl)
-		streamManager.EXPECT().AcceptStream().Return(mstr, nil)
-		str, err := sess.AcceptStream()
-		Expect(err).ToNot(HaveOccurred())
-		Expect(str).To(Equal(mstr))
-	})
-
 	Context("closing", func() {
 		var (
 			runErr         error
@@ -1431,8 +1423,8 @@ var _ = Describe("Session", func() {
 
 		It("opens streams synchronously", func() {
 			mstr := NewMockStreamI(mockCtrl)
-			streamManager.EXPECT().OpenStreamSync().Return(mstr, nil)
-			str, err := sess.OpenStreamSync()
+			streamManager.EXPECT().OpenStreamSync(context.Background()).Return(mstr, nil)
+			str, err := sess.OpenStreamSync(context.Background())
 			Expect(err).ToNot(HaveOccurred())
 			Expect(str).To(Equal(mstr))
 		})
@@ -1447,24 +1439,28 @@ var _ = Describe("Session", func() {
 
 		It("opens unidirectional streams synchronously", func() {
 			mstr := NewMockSendStreamI(mockCtrl)
-			streamManager.EXPECT().OpenUniStreamSync().Return(mstr, nil)
-			str, err := sess.OpenUniStreamSync()
+			streamManager.EXPECT().OpenUniStreamSync(context.Background()).Return(mstr, nil)
+			str, err := sess.OpenUniStreamSync(context.Background())
 			Expect(err).ToNot(HaveOccurred())
 			Expect(str).To(Equal(mstr))
 		})
 
 		It("accepts streams", func() {
+			ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+			defer cancel()
 			mstr := NewMockStreamI(mockCtrl)
-			streamManager.EXPECT().AcceptStream().Return(mstr, nil)
-			str, err := sess.AcceptStream()
+			streamManager.EXPECT().AcceptStream(ctx).Return(mstr, nil)
+			str, err := sess.AcceptStream(ctx)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(str).To(Equal(mstr))
 		})
 
 		It("accepts unidirectional streams", func() {
+			ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+			defer cancel()
 			mstr := NewMockReceiveStreamI(mockCtrl)
-			streamManager.EXPECT().AcceptUniStream().Return(mstr, nil)
-			str, err := sess.AcceptUniStream()
+			streamManager.EXPECT().AcceptUniStream(ctx).Return(mstr, nil)
+			str, err := sess.AcceptUniStream(ctx)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(str).To(Equal(mstr))
 		})

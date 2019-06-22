@@ -1,6 +1,7 @@
 package quic
 
 import (
+	"context"
 	"sync"
 
 	"github.com/lucas-clemente/quic-go/internal/protocol"
@@ -10,8 +11,8 @@ import (
 //go:generate genny -in $GOFILE -out streams_map_incoming_bidi.go gen "item=streamI Item=BidiStream streamTypeGeneric=protocol.StreamTypeBidi"
 //go:generate genny -in $GOFILE -out streams_map_incoming_uni.go gen "item=receiveStreamI Item=UniStream streamTypeGeneric=protocol.StreamTypeUni"
 type incomingItemsMap struct {
-	mutex sync.RWMutex
-	cond  sync.Cond
+	mutex         sync.RWMutex
+	newStreamChan chan struct{}
 
 	streams map[protocol.StreamNum]item
 	// When a stream is deleted before it was accepted, we can't delete it immediately.
@@ -34,9 +35,9 @@ func newIncomingItemsMap(
 	newStream func(protocol.StreamNum) item,
 	maxStreams uint64,
 	queueControlFrame func(wire.Frame),
-	// streamNumToID func(protocol.StreamNum) protocol.StreamID,
 ) *incomingItemsMap {
-	m := &incomingItemsMap{
+	return &incomingItemsMap{
+		newStreamChan:      make(chan struct{}),
 		streams:            make(map[protocol.StreamNum]item),
 		streamsToDelete:    make(map[protocol.StreamNum]struct{}),
 		maxStream:          protocol.StreamNum(maxStreams),
@@ -45,38 +46,43 @@ func newIncomingItemsMap(
 		nextStreamToOpen:   1,
 		nextStreamToAccept: 1,
 		queueMaxStreamID:   func(f *wire.MaxStreamsFrame) { queueControlFrame(f) },
-		// streamNumToID:      streamNumToID,
 	}
-	m.cond.L = &m.mutex
-	return m
 }
 
-func (m *incomingItemsMap) AcceptStream() (item, error) {
+func (m *incomingItemsMap) AcceptStream(ctx context.Context) (item, error) {
 	m.mutex.Lock()
-	defer m.mutex.Unlock()
 
 	var num protocol.StreamNum
 	var str item
 	for {
 		num = m.nextStreamToAccept
-		var ok bool
 		if m.closeErr != nil {
+			m.mutex.Unlock()
 			return nil, m.closeErr
 		}
+		var ok bool
 		str, ok = m.streams[num]
 		if ok {
 			break
 		}
-		m.cond.Wait()
+		m.mutex.Unlock()
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-m.newStreamChan:
+		}
+		m.mutex.Lock()
 	}
 	m.nextStreamToAccept++
 	// If this stream was completed before being accepted, we can delete it now.
 	if _, ok := m.streamsToDelete[num]; ok {
 		delete(m.streamsToDelete, num)
 		if err := m.deleteStream(num); err != nil {
+			m.mutex.Unlock()
 			return nil, err
 		}
 	}
+	m.mutex.Unlock()
 	return str, nil
 }
 
@@ -109,7 +115,10 @@ func (m *incomingItemsMap) GetOrOpenStream(num protocol.StreamNum) (item, error)
 	// * highestStream is only modified by this function
 	for newNum := m.nextStreamToOpen; newNum <= num; newNum++ {
 		m.streams[newNum] = m.newStream(newNum)
-		m.cond.Signal()
+		select {
+		case m.newStreamChan <- struct{}{}:
+		default:
+		}
 	}
 	m.nextStreamToOpen = num + 1
 	s := m.streams[num]
@@ -165,5 +174,5 @@ func (m *incomingItemsMap) CloseWithError(err error) {
 		str.closeForShutdown(err)
 	}
 	m.mutex.Unlock()
-	m.cond.Broadcast()
+	close(m.newStreamChan)
 }

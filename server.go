@@ -2,6 +2,7 @@ package quic
 
 import (
 	"bytes"
+	"context"
 	"crypto/tls"
 	"errors"
 	"fmt"
@@ -284,9 +285,11 @@ func populateServerConfig(config *Config) *Config {
 }
 
 // Accept returns newly openend sessions
-func (s *server) Accept() (Session, error) {
+func (s *server) Accept(ctx context.Context) (Session, error) {
 	var sess Session
 	select {
+	case <-ctx.Done():
+		return nil, ctx.Err()
 	case sess = <-s.sessionQueue:
 		return sess, nil
 	case <-s.errorChan:

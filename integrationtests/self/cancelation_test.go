@@ -1,6 +1,7 @@
 package self_test
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -8,6 +9,7 @@ import (
 	"net"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	quic "github.com/lucas-clemente/quic-go"
 	"github.com/lucas-clemente/quic-go/integrationtests/tools/testserver"
@@ -33,13 +35,13 @@ var _ = Describe("Stream Cancelations", func() {
 				defer GinkgoRecover()
 				var wg sync.WaitGroup
 				wg.Add(numStreams)
-				sess, err := server.Accept()
+				sess, err := server.Accept(context.Background())
 				Expect(err).ToNot(HaveOccurred())
 				for i := 0; i < numStreams; i++ {
 					go func() {
 						defer GinkgoRecover()
 						defer wg.Done()
-						str, err := sess.OpenUniStreamSync()
+						str, err := sess.OpenUniStreamSync(context.Background())
 						Expect(err).ToNot(HaveOccurred())
 						if _, err = str.Write(testserver.PRData); err != nil {
 							Expect(err).To(MatchError(fmt.Sprintf("Stream %d was reset with error code %d", str.StreamID(), str.StreamID())))
@@ -75,7 +77,7 @@ var _ = Describe("Stream Cancelations", func() {
 				go func() {
 					defer GinkgoRecover()
 					defer wg.Done()
-					str, err := sess.AcceptUniStream()
+					str, err := sess.AcceptUniStream(context.Background())
 					Expect(err).ToNot(HaveOccurred())
 					// cancel around 2/3 of the streams
 					if rand.Int31()%3 != 0 {
@@ -119,7 +121,7 @@ var _ = Describe("Stream Cancelations", func() {
 				go func() {
 					defer GinkgoRecover()
 					defer wg.Done()
-					str, err := sess.AcceptUniStream()
+					str, err := sess.AcceptUniStream(context.Background())
 					Expect(err).ToNot(HaveOccurred())
 					// only read some data from about 1/3 of the streams
 					if rand.Int31()%3 != 0 {
@@ -167,7 +169,7 @@ var _ = Describe("Stream Cancelations", func() {
 				go func() {
 					defer GinkgoRecover()
 					defer wg.Done()
-					str, err := sess.AcceptUniStream()
+					str, err := sess.AcceptUniStream(context.Background())
 					Expect(err).ToNot(HaveOccurred())
 					data, err := ioutil.ReadAll(str)
 					if err != nil {
@@ -196,12 +198,12 @@ var _ = Describe("Stream Cancelations", func() {
 			var canceledCounter int32
 			go func() {
 				defer GinkgoRecover()
-				sess, err := server.Accept()
+				sess, err := server.Accept(context.Background())
 				Expect(err).ToNot(HaveOccurred())
 				for i := 0; i < numStreams; i++ {
 					go func() {
 						defer GinkgoRecover()
-						str, err := sess.OpenUniStreamSync()
+						str, err := sess.OpenUniStreamSync(context.Background())
 						Expect(err).ToNot(HaveOccurred())
 						// cancel about 2/3 of the streams
 						if rand.Int31()%3 != 0 {
@@ -227,12 +229,12 @@ var _ = Describe("Stream Cancelations", func() {
 			var canceledCounter int32
 			go func() {
 				defer GinkgoRecover()
-				sess, err := server.Accept()
+				sess, err := server.Accept(context.Background())
 				Expect(err).ToNot(HaveOccurred())
 				for i := 0; i < numStreams; i++ {
 					go func() {
 						defer GinkgoRecover()
-						str, err := sess.OpenUniStreamSync()
+						str, err := sess.OpenUniStreamSync(context.Background())
 						Expect(err).ToNot(HaveOccurred())
 						// only write some data from about 1/3 of the streams, then cancel
 						if rand.Int31()%3 != 0 {
@@ -265,13 +267,13 @@ var _ = Describe("Stream Cancelations", func() {
 				defer GinkgoRecover()
 				var wg sync.WaitGroup
 				wg.Add(numStreams)
-				sess, err := server.Accept()
+				sess, err := server.Accept(context.Background())
 				Expect(err).ToNot(HaveOccurred())
 				for i := 0; i < numStreams; i++ {
 					go func() {
 						defer GinkgoRecover()
 						defer wg.Done()
-						str, err := sess.OpenUniStreamSync()
+						str, err := sess.OpenUniStreamSync(context.Background())
 						Expect(err).ToNot(HaveOccurred())
 						// cancel about half of the streams
 						if rand.Int31()%2 == 0 {
@@ -303,7 +305,7 @@ var _ = Describe("Stream Cancelations", func() {
 				go func() {
 					defer GinkgoRecover()
 					defer wg.Done()
-					str, err := sess.AcceptUniStream()
+					str, err := sess.AcceptUniStream(context.Background())
 					Expect(err).ToNot(HaveOccurred())
 					// cancel around half of the streams
 					if rand.Int31()%2 == 0 {
@@ -339,13 +341,13 @@ var _ = Describe("Stream Cancelations", func() {
 				defer GinkgoRecover()
 				var wg sync.WaitGroup
 				wg.Add(numStreams)
-				sess, err := server.Accept()
+				sess, err := server.Accept(context.Background())
 				Expect(err).ToNot(HaveOccurred())
 				for i := 0; i < numStreams; i++ {
 					go func() {
 						defer GinkgoRecover()
 						defer wg.Done()
-						str, err := sess.OpenUniStreamSync()
+						str, err := sess.OpenUniStreamSync(context.Background())
 						Expect(err).ToNot(HaveOccurred())
 						// cancel about half of the streams
 						length := len(testserver.PRData)
@@ -382,7 +384,7 @@ var _ = Describe("Stream Cancelations", func() {
 					defer GinkgoRecover()
 					defer wg.Done()
 
-					str, err := sess.AcceptUniStream()
+					str, err := sess.AcceptUniStream(context.Background())
 					Expect(err).ToNot(HaveOccurred())
 
 					r := io.Reader(str)
@@ -415,6 +417,145 @@ var _ = Describe("Stream Cancelations", func() {
 
 			Expect(sess.Close()).To(Succeed())
 			Eventually(done).Should(BeClosed())
+			Expect(server.Close()).To(Succeed())
+		})
+	})
+
+	Context("canceling the context", func() {
+		It("downloads data when the receiving peer cancels the context for accepting streams", func() {
+			server, err := quic.ListenAddr("localhost:0", getTLSConfig(), nil)
+			Expect(err).ToNot(HaveOccurred())
+
+			go func() {
+				defer GinkgoRecover()
+				sess, err := server.Accept(context.Background())
+				Expect(err).ToNot(HaveOccurred())
+				ticker := time.NewTicker(5 * time.Millisecond)
+				for i := 0; i < numStreams; i++ {
+					<-ticker.C
+					go func() {
+						defer GinkgoRecover()
+						str, err := sess.OpenUniStreamSync(context.Background())
+						Expect(err).ToNot(HaveOccurred())
+						_, err = str.Write(testserver.PRData)
+						Expect(err).ToNot(HaveOccurred())
+						Expect(str.Close()).To(Succeed())
+					}()
+				}
+			}()
+
+			sess, err := quic.DialAddr(
+				fmt.Sprintf("localhost:%d", server.Addr().(*net.UDPAddr).Port),
+				getTLSClientConfig(),
+				&quic.Config{MaxIncomingUniStreams: numStreams / 3},
+			)
+			Expect(err).ToNot(HaveOccurred())
+
+			var numToAccept int32
+			var counter int32
+			var wg sync.WaitGroup
+			wg.Add(numStreams)
+			for atomic.LoadInt32(&numToAccept) < numStreams {
+				ctx, cancel := context.WithCancel(context.Background())
+				// cancel accepting half of the streams
+				if rand.Int31()%2 == 0 {
+					cancel()
+				} else {
+					atomic.AddInt32(&numToAccept, 1)
+					defer cancel()
+				}
+
+				go func() {
+					defer GinkgoRecover()
+					str, err := sess.AcceptUniStream(ctx)
+					if err != nil {
+						atomic.AddInt32(&counter, 1)
+						Expect(err).To(MatchError("context canceled"))
+						return
+					}
+					data, err := ioutil.ReadAll(str)
+					Expect(err).ToNot(HaveOccurred())
+					Expect(data).To(Equal(testserver.PRData))
+					wg.Done()
+				}()
+			}
+			wg.Wait()
+
+			count := atomic.LoadInt32(&counter)
+			fmt.Fprintf(GinkgoWriter, "Canceled AcceptStream %d times\n", count)
+			Expect(count).To(BeNumerically(">", numStreams/2))
+			Expect(sess.Close()).To(Succeed())
+			Expect(server.Close()).To(Succeed())
+		})
+
+		It("downloads data when the sending peer cancels the context for opening streams", func() {
+			server, err := quic.ListenAddr("localhost:0", getTLSConfig(), nil)
+			Expect(err).ToNot(HaveOccurred())
+
+			var numCanceled int32
+			go func() {
+				defer GinkgoRecover()
+				sess, err := server.Accept(context.Background())
+				Expect(err).ToNot(HaveOccurred())
+
+				var numOpened int
+				ticker := time.NewTicker(250 * time.Microsecond)
+				for numOpened < numStreams {
+					<-ticker.C
+					ctx, cancel := context.WithCancel(context.Background())
+					defer cancel()
+					// cancel accepting half of the streams
+					shouldCancel := rand.Int31()%2 == 0
+
+					if shouldCancel {
+						time.AfterFunc(5*time.Millisecond, cancel)
+					}
+					str, err := sess.OpenUniStreamSync(ctx)
+					if err != nil {
+						atomic.AddInt32(&numCanceled, 1)
+						Expect(err).To(MatchError("context canceled"))
+						continue
+					}
+					numOpened++
+					go func(str quic.SendStream) {
+						defer GinkgoRecover()
+						_, err = str.Write(testserver.PRData)
+						Expect(err).ToNot(HaveOccurred())
+						Expect(str.Close()).To(Succeed())
+					}(str)
+				}
+			}()
+
+			sess, err := quic.DialAddr(
+				fmt.Sprintf("localhost:%d", server.Addr().(*net.UDPAddr).Port),
+				getTLSClientConfig(),
+				&quic.Config{
+					MaxIncomingUniStreams: 5,
+				},
+			)
+			Expect(err).ToNot(HaveOccurred())
+
+			var wg sync.WaitGroup
+			wg.Add(numStreams)
+			ticker := time.NewTicker(10 * time.Millisecond)
+			for i := 0; i < numStreams; i++ {
+				<-ticker.C
+				go func() {
+					defer GinkgoRecover()
+					str, err := sess.AcceptUniStream(context.Background())
+					Expect(err).ToNot(HaveOccurred())
+					data, err := ioutil.ReadAll(str)
+					Expect(err).ToNot(HaveOccurred())
+					Expect(data).To(Equal(testserver.PRData))
+					wg.Done()
+				}()
+			}
+			wg.Wait()
+
+			count := atomic.LoadInt32(&numCanceled)
+			fmt.Fprintf(GinkgoWriter, "Canceled OpenStreamSync %d times\n", count)
+			Expect(count).To(BeNumerically(">", numStreams/5))
+			Expect(sess.Close()).To(Succeed())
 			Expect(server.Close()).To(Succeed())
 		})
 	})

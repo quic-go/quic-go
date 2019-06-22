@@ -1,6 +1,7 @@
 package self_test
 
 import (
+	"context"
 	"fmt"
 	"io/ioutil"
 	"net"
@@ -46,7 +47,7 @@ var _ = Describe("Bidirectional streams", func() {
 				var wg sync.WaitGroup
 				wg.Add(numStreams)
 				for i := 0; i < numStreams; i++ {
-					str, err := sess.OpenStreamSync()
+					str, err := sess.OpenStreamSync(context.Background())
 					Expect(err).ToNot(HaveOccurred())
 					data := testserver.GeneratePRData(25 * i)
 					go func() {
@@ -70,7 +71,7 @@ var _ = Describe("Bidirectional streams", func() {
 				var wg sync.WaitGroup
 				wg.Add(numStreams)
 				for i := 0; i < numStreams; i++ {
-					str, err := sess.AcceptStream()
+					str, err := sess.AcceptStream(context.Background())
 					Expect(err).ToNot(HaveOccurred())
 					go func() {
 						defer GinkgoRecover()
@@ -92,7 +93,7 @@ var _ = Describe("Bidirectional streams", func() {
 				go func() {
 					defer GinkgoRecover()
 					var err error
-					sess, err = server.Accept()
+					sess, err = server.Accept(context.Background())
 					Expect(err).ToNot(HaveOccurred())
 					runReceivingPeer(sess)
 				}()
@@ -109,7 +110,7 @@ var _ = Describe("Bidirectional streams", func() {
 			It(fmt.Sprintf("server opening %d streams to a client", numStreams), func() {
 				go func() {
 					defer GinkgoRecover()
-					sess, err := server.Accept()
+					sess, err := server.Accept(context.Background())
 					Expect(err).ToNot(HaveOccurred())
 					runSendingPeer(sess)
 					sess.Close()
@@ -129,7 +130,7 @@ var _ = Describe("Bidirectional streams", func() {
 				done1 := make(chan struct{})
 				go func() {
 					defer GinkgoRecover()
-					sess, err := server.Accept()
+					sess, err := server.Accept(context.Background())
 					Expect(err).ToNot(HaveOccurred())
 					done := make(chan struct{})
 					go func() {

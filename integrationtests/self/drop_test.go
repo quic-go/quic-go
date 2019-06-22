@@ -1,6 +1,7 @@
 package self_test
 
 import (
+	"context"
 	"fmt"
 	"math/rand"
 	"net"
@@ -88,7 +89,7 @@ var _ = Describe("Drop Tests", func() {
 						done := make(chan struct{})
 						go func() {
 							defer GinkgoRecover()
-							sess, err := ln.Accept()
+							sess, err := ln.Accept(context.Background())
 							Expect(err).ToNot(HaveOccurred())
 							str, err := sess.OpenStream()
 							Expect(err).ToNot(HaveOccurred())
@@ -109,7 +110,7 @@ var _ = Describe("Drop Tests", func() {
 						)
 						Expect(err).ToNot(HaveOccurred())
 						defer sess.Close()
-						str, err := sess.AcceptStream()
+						str, err := sess.AcceptStream(context.Background())
 						Expect(err).ToNot(HaveOccurred())
 						for i := uint8(1); i <= numMessages; i++ {
 							b := []byte{0}

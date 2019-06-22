@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/tls"
@@ -35,11 +36,11 @@ func echoServer() error {
 	if err != nil {
 		return err
 	}
-	sess, err := listener.Accept()
+	sess, err := listener.Accept(context.Background())
 	if err != nil {
 		return err
 	}
-	stream, err := sess.AcceptStream()
+	stream, err := sess.AcceptStream(context.Background())
 	if err != nil {
 		panic(err)
 	}
@@ -58,7 +59,7 @@ func clientMain() error {
 		return err
 	}
 
-	stream, err := session.OpenStreamSync()
+	stream, err := session.OpenStreamSync(context.Background())
 	if err != nil {
 		return err
 	}

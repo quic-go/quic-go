@@ -127,11 +127,11 @@ type Session interface {
 	// AcceptStream returns the next stream opened by the peer, blocking until one is available.
 	// If the session was closed due to a timeout, the error satisfies
 	// the net.Error interface, and Timeout() will be true.
-	AcceptStream() (Stream, error)
+	AcceptStream(context.Context) (Stream, error)
 	// AcceptUniStream returns the next unidirectional stream opened by the peer, blocking until one is available.
 	// If the session was closed due to a timeout, the error satisfies
 	// the net.Error interface, and Timeout() will be true.
-	AcceptUniStream() (ReceiveStream, error)
+	AcceptUniStream(context.Context) (ReceiveStream, error)
 	// OpenStream opens a new bidirectional QUIC stream.
 	// There is no signaling to the peer about new streams:
 	// The peer can only accept the stream after data has been sent on the stream.
@@ -143,7 +143,7 @@ type Session interface {
 	// It blocks until a new stream can be opened.
 	// If the error is non-nil, it satisfies the net.Error interface.
 	// If the session was closed due to a timeout, Timeout() will be true.
-	OpenStreamSync() (Stream, error)
+	OpenStreamSync(context.Context) (Stream, error)
 	// OpenUniStream opens a new outgoing unidirectional QUIC stream.
 	// If the error is non-nil, it satisfies the net.Error interface.
 	// When reaching the peer's stream limit, Temporary() will be true.
@@ -153,7 +153,7 @@ type Session interface {
 	// It blocks until a new stream can be opened.
 	// If the error is non-nil, it satisfies the net.Error interface.
 	// If the session was closed due to a timeout, Timeout() will be true.
-	OpenUniStreamSync() (SendStream, error)
+	OpenUniStreamSync(context.Context) (SendStream, error)
 	// LocalAddr returns the local address.
 	LocalAddr() net.Addr
 	// RemoteAddr returns the address of the peer.
@@ -232,5 +232,5 @@ type Listener interface {
 	// Addr returns the local network addr that the server is listening on.
 	Addr() net.Addr
 	// Accept returns new sessions. It should be called in a loop.
-	Accept() (Session, error)
+	Accept(context.Context) (Session, error)
 }

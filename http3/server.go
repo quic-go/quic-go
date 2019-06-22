@@ -2,6 +2,7 @@ package http3
 
 import (
 	"bytes"
+	"context"
 	"crypto/tls"
 	"errors"
 	"fmt"
@@ -114,7 +115,7 @@ func (s *Server) serveImpl(tlsConfig *tls.Config, conn net.PacketConn) error {
 	s.listenerMutex.Unlock()
 
 	for {
-		sess, err := ln.Accept()
+		sess, err := ln.Accept(context.Background())
 		if err != nil {
 			return err
 		}
@@ -127,7 +128,7 @@ func (s *Server) handleConn(sess quic.Session) {
 	decoder := qpack.NewDecoder(nil)
 
 	// send a SETTINGS frame
-	str, err := sess.OpenUniStreamSync()
+	str, err := sess.OpenUniStream()
 	if err != nil {
 		s.logger.Debugf("Opening the control stream failed.")
 		return
@@ -137,7 +138,7 @@ func (s *Server) handleConn(sess quic.Session) {
 	str.Write(buf.Bytes())
 
 	for {
-		str, err := sess.AcceptStream()
+		str, err := sess.AcceptStream(context.Background())
 		if err != nil {
 			s.logger.Debugf("Accepting stream failed: %s", err)
 			return

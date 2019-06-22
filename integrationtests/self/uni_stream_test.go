@@ -1,6 +1,7 @@
 package self_test
 
 import (
+	"context"
 	"fmt"
 	"io/ioutil"
 	"net"
@@ -41,7 +42,7 @@ var _ = Describe("Unidirectional Streams", func() {
 
 	runSendingPeer := func(sess quic.Session) {
 		for i := 0; i < numStreams; i++ {
-			str, err := sess.OpenUniStreamSync()
+			str, err := sess.OpenUniStreamSync(context.Background())
 			Expect(err).ToNot(HaveOccurred())
 			go func() {
 				defer GinkgoRecover()
@@ -56,7 +57,7 @@ var _ = Describe("Unidirectional Streams", func() {
 		var wg sync.WaitGroup
 		wg.Add(numStreams)
 		for i := 0; i < numStreams; i++ {
-			str, err := sess.AcceptUniStream()
+			str, err := sess.AcceptUniStream(context.Background())
 			Expect(err).ToNot(HaveOccurred())
 			go func() {
 				defer GinkgoRecover()
@@ -72,7 +73,7 @@ var _ = Describe("Unidirectional Streams", func() {
 	It(fmt.Sprintf("client opening %d streams to a server", numStreams), func() {
 		go func() {
 			defer GinkgoRecover()
-			sess, err := server.Accept()
+			sess, err := server.Accept(context.Background())
 			Expect(err).ToNot(HaveOccurred())
 			runReceivingPeer(sess)
 			sess.Close()
@@ -91,7 +92,7 @@ var _ = Describe("Unidirectional Streams", func() {
 	It(fmt.Sprintf("server opening %d streams to a client", numStreams), func() {
 		go func() {
 			defer GinkgoRecover()
-			sess, err := server.Accept()
+			sess, err := server.Accept(context.Background())
 			Expect(err).ToNot(HaveOccurred())
 			runSendingPeer(sess)
 		}()
@@ -109,7 +110,7 @@ var _ = Describe("Unidirectional Streams", func() {
 		done1 := make(chan struct{})
 		go func() {
 			defer GinkgoRecover()
-			sess, err := server.Accept()
+			sess, err := server.Accept(context.Background())
 			Expect(err).ToNot(HaveOccurred())
 			done := make(chan struct{})
 			go func() {

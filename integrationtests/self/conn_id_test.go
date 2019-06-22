@@ -1,6 +1,7 @@
 package self_test
 
 import (
+	"context"
 	"fmt"
 	"io/ioutil"
 	"math/rand"
@@ -25,7 +26,7 @@ var _ = Describe("Connection ID lengths tests", func() {
 		go func() {
 			defer GinkgoRecover()
 			for {
-				sess, err := ln.Accept()
+				sess, err := ln.Accept(context.Background())
 				if err != nil {
 					return
 				}
@@ -51,7 +52,7 @@ var _ = Describe("Connection ID lengths tests", func() {
 		)
 		Expect(err).ToNot(HaveOccurred())
 		defer cl.Close()
-		str, err := cl.AcceptStream()
+		str, err := cl.AcceptStream(context.Background())
 		Expect(err).ToNot(HaveOccurred())
 		data, err := ioutil.ReadAll(str)
 		Expect(err).ToNot(HaveOccurred())
