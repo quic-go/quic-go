@@ -48,6 +48,16 @@ var _ = Describe("Received Packet Handler", func() {
 		Expect(oneRTTAck.DelayTime).To(BeNumerically("~", time.Second, 50*time.Millisecond))
 	})
 
+	It("uses the same packet number space for 0-RTT and 1-RTT packets", func() {
+		sendTime := time.Now().Add(-time.Second)
+		handler.ReceivedPacket(2, protocol.Encryption0RTT, sendTime, true)
+		handler.ReceivedPacket(3, protocol.Encryption1RTT, sendTime, true)
+		ack := handler.GetAckFrame(protocol.Encryption1RTT)
+		Expect(ack).ToNot(BeNil())
+		Expect(ack.AckRanges).To(HaveLen(1))
+		Expect(ack.AckRanges[0]).To(Equal(wire.AckRange{Smallest: 2, Largest: 3}))
+	})
+
 	It("drops Initial packets", func() {
 		sendTime := time.Now().Add(-time.Second)
 		handler.ReceivedPacket(2, protocol.EncryptionInitial, sendTime, true)
