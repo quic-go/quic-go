@@ -328,9 +328,6 @@ func (p *packetPacker) PackPacket() (*packedPacket, error) {
 	}
 	header := p.getShortHeader(sealer.KeyPhase())
 	headerLen := header.GetLength(p.version)
-	if err != nil {
-		return nil, err
-	}
 
 	maxSize := p.maxPacketSize - protocol.ByteCount(sealer.Overhead()) - headerLen
 	payload, err := p.composeNextPacket(maxSize)
