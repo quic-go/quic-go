@@ -46,7 +46,7 @@ type sentPacketHandler struct {
 
 	initialPackets   *packetNumberSpace
 	handshakePackets *packetNumberSpace
-	oneRTTPackets    *packetNumberSpace
+	appDataPackets   *packetNumberSpace
 
 	handshakeComplete bool
 
@@ -94,7 +94,7 @@ func NewSentPacketHandler(
 	return &sentPacketHandler{
 		initialPackets:   newPacketNumberSpace(initialPacketNumber),
 		handshakePackets: newPacketNumberSpace(0),
-		oneRTTPackets:    newPacketNumberSpace(0),
+		appDataPackets:   newPacketNumberSpace(0),
 		rttStats:         rttStats,
 		congestion:       congestion,
 		traceCallback:    traceCallback,
@@ -137,8 +137,8 @@ func (h *sentPacketHandler) getPacketNumberSpace(encLevel protocol.EncryptionLev
 		return h.initialPackets
 	case protocol.EncryptionHandshake:
 		return h.handshakePackets
-	case protocol.Encryption1RTT:
-		return h.oneRTTPackets
+	case protocol.Encryption0RTT, protocol.Encryption1RTT:
+		return h.appDataPackets
 	default:
 		panic("invalid packet number space")
 	}
@@ -295,8 +295,8 @@ func (h *sentPacketHandler) getEarliestLossTimeAndSpace() (time.Time, protocol.E
 		encLevel = protocol.EncryptionHandshake
 	}
 	if h.handshakeComplete &&
-		(lossTime.IsZero() || (!h.oneRTTPackets.lossTime.IsZero() && h.oneRTTPackets.lossTime.Before(lossTime))) {
-		lossTime = h.oneRTTPackets.lossTime
+		(lossTime.IsZero() || (!h.appDataPackets.lossTime.IsZero() && h.appDataPackets.lossTime.Before(lossTime))) {
+		lossTime = h.appDataPackets.lossTime
 		encLevel = protocol.Encryption1RTT
 	}
 	return lossTime, encLevel
@@ -316,8 +316,8 @@ func (h *sentPacketHandler) getEarliestSentTimeAndSpace() (time.Time, protocol.E
 		encLevel = protocol.EncryptionHandshake
 	}
 	if h.handshakeComplete &&
-		(sentTime.IsZero() || (!h.oneRTTPackets.lastSentAckElicitingPacketTime.IsZero() && h.oneRTTPackets.lastSentAckElicitingPacketTime.Before(sentTime))) {
-		sentTime = h.oneRTTPackets.lastSentAckElicitingPacketTime
+		(sentTime.IsZero() || (!h.appDataPackets.lastSentAckElicitingPacketTime.IsZero() && h.appDataPackets.lastSentAckElicitingPacketTime.Before(sentTime))) {
+		sentTime = h.appDataPackets.lastSentAckElicitingPacketTime
 		encLevel = protocol.Encryption1RTT
 	}
 	return sentTime, encLevel
@@ -337,7 +337,7 @@ func (h *sentPacketHandler) hasOutstandingCryptoPackets() bool {
 func (h *sentPacketHandler) hasOutstandingPackets() bool {
 	// We only send application data probe packets once the handshake completes,
 	// because before that, we don't have the keys to decrypt ACKs sent in 1-RTT packets.
-	return (h.handshakeComplete && h.oneRTTPackets.history.HasOutstandingPackets()) ||
+	return (h.handshakeComplete && h.appDataPackets.history.HasOutstandingPackets()) ||
 		h.hasOutstandingCryptoPackets()
 }
 
@@ -514,7 +514,7 @@ func (h *sentPacketHandler) PopPacketNumber(encLevel protocol.EncryptionLevel) p
 }
 
 func (h *sentPacketHandler) SendMode() SendMode {
-	numTrackedPackets := h.oneRTTPackets.history.Len()
+	numTrackedPackets := h.appDataPackets.history.Len()
 	if h.initialPackets != nil {
 		numTrackedPackets += h.initialPackets.history.Len()
 	}
