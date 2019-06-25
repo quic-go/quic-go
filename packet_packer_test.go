@@ -2,6 +2,7 @@ package quic
 
 import (
 	"bytes"
+	"errors"
 	"math/rand"
 	"net"
 
@@ -176,6 +177,8 @@ var _ = Describe("Packet packer", func() {
 					}
 				}),
 			)
+			sealingManager.EXPECT().GetInitialSealer().Return(nil, nil)
+			sealingManager.EXPECT().GetHandshakeSealer().Return(nil, nil)
 			sealingManager.EXPECT().Get1RTTSealer().Return(sealer, nil)
 			ackFramer.EXPECT().GetAckFrame(protocol.EncryptionInitial)
 			ackFramer.EXPECT().GetAckFrame(protocol.EncryptionHandshake)
@@ -211,6 +214,8 @@ var _ = Describe("Packet packer", func() {
 
 		Context("packing normal packets", func() {
 			BeforeEach(func() {
+				sealingManager.EXPECT().GetInitialSealer().Return(nil, nil).AnyTimes()
+				sealingManager.EXPECT().GetHandshakeSealer().Return(nil, nil).AnyTimes()
 				initialStream.EXPECT().HasData().AnyTimes()
 				ackFramer.EXPECT().GetAckFrame(protocol.EncryptionInitial).AnyTimes()
 				handshakeStream.EXPECT().HasData().AnyTimes()
@@ -325,6 +330,41 @@ var _ = Describe("Packet packer", func() {
 				)
 				_, err := packer.PackPacket()
 				Expect(err).ToNot(HaveOccurred())
+			})
+
+			It("pads if payload length + packet number length is smaller than 4", func() {
+				f := &wire.StreamFrame{
+					StreamID: 0x10, // small stream ID, such that only a single byte is consumed
+					FinBit:   true,
+				}
+				Expect(f.Length(packer.version)).To(BeEquivalentTo(2))
+				pnManager.EXPECT().PeekPacketNumber(protocol.Encryption1RTT).Return(protocol.PacketNumber(0x42), protocol.PacketNumberLen1)
+				pnManager.EXPECT().PopPacketNumber(protocol.Encryption1RTT).Return(protocol.PacketNumber(0x42))
+				sealingManager.EXPECT().Get1RTTSealer().Return(sealer, nil)
+				ackFramer.EXPECT().GetAckFrame(protocol.Encryption1RTT)
+				framer.EXPECT().AppendControlFrames(gomock.Any(), gomock.Any())
+				framer.EXPECT().AppendStreamFrames(gomock.Any(), gomock.Any()).Return([]wire.Frame{f}, f.Length(packer.version))
+				packet, err := packer.PackPacket()
+				Expect(err).ToNot(HaveOccurred())
+				// cut off the tag that the mock sealer added
+				packet.raw = packet.raw[:len(packet.raw)-sealer.Overhead()]
+				hdr, _, _, err := wire.ParsePacket(packet.raw, len(packer.destConnID))
+				Expect(err).ToNot(HaveOccurred())
+				r := bytes.NewReader(packet.raw)
+				extHdr, err := hdr.ParseExtended(r, packer.version)
+				Expect(err).ToNot(HaveOccurred())
+				Expect(extHdr.PacketNumberLen).To(Equal(protocol.PacketNumberLen1))
+				Expect(r.Len()).To(Equal(4 - 1 /* packet number length */))
+				// the first byte of the payload should be a PADDING frame...
+				firstPayloadByte, err := r.ReadByte()
+				Expect(err).ToNot(HaveOccurred())
+				Expect(firstPayloadByte).To(Equal(byte(0)))
+				// ... followed by the STREAM frame
+				frameParser := wire.NewFrameParser(packer.version)
+				frame, err := frameParser.ParseNext(r, protocol.Encryption1RTT)
+				Expect(err).ToNot(HaveOccurred())
+				Expect(frame).To(Equal(f))
+				Expect(r.Len()).To(BeZero())
 			})
 
 			Context("packing ACK packets", func() {
@@ -719,6 +759,7 @@ var _ = Describe("Packet packer", func() {
 				initialStream.EXPECT().HasData().Return(true)
 				initialStream.EXPECT().PopCryptoFrame(gomock.Any()).Return(f)
 				sealingManager.EXPECT().GetInitialSealer().Return(sealer, nil)
+				sealingManager.EXPECT().GetHandshakeSealer().Return(nil, errors.New("no sealer"))
 				p, err := packer.PackPacket()
 				Expect(err).ToNot(HaveOccurred())
 				checkLength(p.raw)
@@ -728,6 +769,7 @@ var _ = Describe("Packet packer", func() {
 				var f *wire.CryptoFrame
 				pnManager.EXPECT().PeekPacketNumber(protocol.EncryptionHandshake).Return(protocol.PacketNumber(0x42), protocol.PacketNumberLen2)
 				pnManager.EXPECT().PopPacketNumber(protocol.EncryptionHandshake).Return(protocol.PacketNumber(0x42))
+				sealingManager.EXPECT().GetInitialSealer().Return(nil, errors.New("no sealer"))
 				sealingManager.EXPECT().GetHandshakeSealer().Return(sealer, nil)
 				ackFramer.EXPECT().GetAckFrame(protocol.EncryptionInitial)
 				ackFramer.EXPECT().GetAckFrame(protocol.EncryptionHandshake)
@@ -753,6 +795,7 @@ var _ = Describe("Packet packer", func() {
 				ackFramer.EXPECT().GetAckFrame(protocol.EncryptionInitial).Return(ack)
 				initialStream.EXPECT().HasData()
 				sealingManager.EXPECT().GetInitialSealer().Return(sealer, nil)
+				sealingManager.EXPECT().GetHandshakeSealer().Return(nil, errors.New("no sealer"))
 				pnManager.EXPECT().PeekPacketNumber(protocol.EncryptionInitial).Return(protocol.PacketNumber(0x42), protocol.PacketNumberLen2)
 				pnManager.EXPECT().PopPacketNumber(protocol.EncryptionInitial).Return(protocol.PacketNumber(0x42))
 				p, err := packer.PackPacket()
@@ -766,6 +809,7 @@ var _ = Describe("Packet packer", func() {
 				ackFramer.EXPECT().GetAckFrame(protocol.EncryptionHandshake).Return(ack)
 				initialStream.EXPECT().HasData()
 				handshakeStream.EXPECT().HasData()
+				sealingManager.EXPECT().GetInitialSealer().Return(nil, errors.New("no sealer"))
 				sealingManager.EXPECT().GetHandshakeSealer().Return(sealer, nil)
 				pnManager.EXPECT().PeekPacketNumber(protocol.EncryptionHandshake).Return(protocol.PacketNumber(0x42), protocol.PacketNumberLen2)
 				pnManager.EXPECT().PopPacketNumber(protocol.EncryptionHandshake).Return(protocol.PacketNumber(0x42))
@@ -781,6 +825,7 @@ var _ = Describe("Packet packer", func() {
 				pnManager.EXPECT().PeekPacketNumber(protocol.EncryptionInitial).Return(protocol.PacketNumber(0x42), protocol.PacketNumberLen2)
 				pnManager.EXPECT().PopPacketNumber(protocol.EncryptionInitial).Return(protocol.PacketNumber(0x42))
 				sealingManager.EXPECT().GetInitialSealer().Return(sealer, nil)
+				sealingManager.EXPECT().GetHandshakeSealer().Return(nil, errors.New("no sealer"))
 				ackFramer.EXPECT().GetAckFrame(protocol.EncryptionInitial)
 				initialStream.EXPECT().HasData().Return(true)
 				initialStream.EXPECT().PopCryptoFrame(gomock.Any()).Return(f)
@@ -794,49 +839,11 @@ var _ = Describe("Packet packer", func() {
 				Expect(cf.Data).To(Equal([]byte("foobar")))
 			})
 
-			It("pads if payload length + packet number length is smaller than 4", func() {
-				f := &wire.StreamFrame{
-					StreamID: 0x10, // small stream ID, such that only a single byte is consumed
-					FinBit:   true,
-				}
-				Expect(f.Length(packer.version)).To(BeEquivalentTo(2))
-				pnManager.EXPECT().PeekPacketNumber(protocol.Encryption1RTT).Return(protocol.PacketNumber(0x42), protocol.PacketNumberLen1)
-				pnManager.EXPECT().PopPacketNumber(protocol.Encryption1RTT).Return(protocol.PacketNumber(0x42))
-				sealingManager.EXPECT().Get1RTTSealer().Return(sealer, nil)
-				ackFramer.EXPECT().GetAckFrame(protocol.EncryptionInitial)
-				ackFramer.EXPECT().GetAckFrame(protocol.EncryptionHandshake)
-				ackFramer.EXPECT().GetAckFrame(protocol.Encryption1RTT)
-				initialStream.EXPECT().HasData()
-				handshakeStream.EXPECT().HasData()
-				framer.EXPECT().AppendControlFrames(gomock.Any(), gomock.Any())
-				framer.EXPECT().AppendStreamFrames(gomock.Any(), gomock.Any()).Return([]wire.Frame{f}, f.Length(packer.version))
-				packet, err := packer.PackPacket()
-				Expect(err).ToNot(HaveOccurred())
-				// cut off the tag that the mock sealer added
-				packet.raw = packet.raw[:len(packet.raw)-sealer.Overhead()]
-				hdr, _, _, err := wire.ParsePacket(packet.raw, len(packer.destConnID))
-				Expect(err).ToNot(HaveOccurred())
-				r := bytes.NewReader(packet.raw)
-				extHdr, err := hdr.ParseExtended(r, packer.version)
-				Expect(err).ToNot(HaveOccurred())
-				Expect(extHdr.PacketNumberLen).To(Equal(protocol.PacketNumberLen1))
-				Expect(r.Len()).To(Equal(4 - 1 /* packet number length */))
-				// the first byte of the payload should be a PADDING frame...
-				firstPayloadByte, err := r.ReadByte()
-				Expect(err).ToNot(HaveOccurred())
-				Expect(firstPayloadByte).To(Equal(byte(0)))
-				// ... followed by the STREAM frame
-				frameParser := wire.NewFrameParser(packer.version)
-				frame, err := frameParser.ParseNext(r, protocol.Encryption1RTT)
-				Expect(err).ToNot(HaveOccurred())
-				Expect(frame).To(Equal(f))
-				Expect(r.Len()).To(BeZero())
-			})
-
 			It("sets the correct length for an Initial packet", func() {
 				pnManager.EXPECT().PeekPacketNumber(protocol.EncryptionInitial).Return(protocol.PacketNumber(0x42), protocol.PacketNumberLen2)
 				pnManager.EXPECT().PopPacketNumber(protocol.EncryptionInitial).Return(protocol.PacketNumber(0x42))
 				sealingManager.EXPECT().GetInitialSealer().Return(sealer, nil)
+				sealingManager.EXPECT().GetHandshakeSealer().Return(nil, errors.New("no sealer"))
 				ackFramer.EXPECT().GetAckFrame(protocol.EncryptionInitial)
 				initialStream.EXPECT().HasData().Return(true)
 				initialStream.EXPECT().PopCryptoFrame(gomock.Any()).Return(&wire.CryptoFrame{
@@ -854,6 +861,7 @@ var _ = Describe("Packet packer", func() {
 				pnManager.EXPECT().PeekPacketNumber(protocol.EncryptionInitial).Return(protocol.PacketNumber(0x42), protocol.PacketNumberLen2)
 				pnManager.EXPECT().PopPacketNumber(protocol.EncryptionInitial).Return(protocol.PacketNumber(0x42))
 				sealingManager.EXPECT().GetInitialSealer().Return(sealer, nil)
+				sealingManager.EXPECT().GetHandshakeSealer().Return(nil, errors.New("no sealer"))
 				ackFramer.EXPECT().GetAckFrame(protocol.EncryptionInitial).Return(ack)
 				initialStream.EXPECT().HasData().Return(true)
 				initialStream.EXPECT().PopCryptoFrame(gomock.Any()).Return(f)
@@ -864,6 +872,35 @@ var _ = Describe("Packet packer", func() {
 				Expect(packet.raw).To(HaveLen(protocol.MinInitialPacketSize))
 				Expect(packet.ack).To(Equal(ack))
 				Expect(packet.frames).To(HaveLen(1))
+			})
+
+			It("stops packing crypto packets when the keys are dropped", func() {
+				sealingManager.EXPECT().GetInitialSealer().Return(nil, handshake.ErrKeysDropped)
+				sealingManager.EXPECT().GetHandshakeSealer().Return(nil, handshake.ErrKeysDropped)
+				initialStream.EXPECT().HasData()
+				handshakeStream.EXPECT().HasData()
+				sealingManager.EXPECT().Get1RTTSealer().Return(sealer, nil)
+				ackFramer.EXPECT().GetAckFrame(protocol.EncryptionInitial)
+				ackFramer.EXPECT().GetAckFrame(protocol.EncryptionHandshake)
+				pnManager.EXPECT().PeekPacketNumber(protocol.Encryption1RTT).Return(protocol.PacketNumber(0x42), protocol.PacketNumberLen2)
+				pnManager.EXPECT().PopPacketNumber(protocol.Encryption1RTT).Return(protocol.PacketNumber(0x42))
+				ackFramer.EXPECT().GetAckFrame(protocol.Encryption1RTT)
+				expectAppendControlFrames(&wire.PingFrame{})
+				expectAppendStreamFrames()
+				packet, err := packer.PackPacket()
+				Expect(err).ToNot(HaveOccurred())
+				Expect(packet).ToNot(BeNil())
+
+				// now the packer should have realized that the handshake is confirmed
+				sealingManager.EXPECT().Get1RTTSealer().Return(sealer, nil)
+				pnManager.EXPECT().PeekPacketNumber(protocol.Encryption1RTT).Return(protocol.PacketNumber(0x43), protocol.PacketNumberLen2)
+				pnManager.EXPECT().PopPacketNumber(protocol.Encryption1RTT).Return(protocol.PacketNumber(0x43))
+				ackFramer.EXPECT().GetAckFrame(protocol.Encryption1RTT)
+				expectAppendControlFrames(&wire.PingFrame{})
+				expectAppendStreamFrames()
+				packet, err = packer.PackPacket()
+				Expect(err).ToNot(HaveOccurred())
+				Expect(packet).ToNot(BeNil())
 			})
 
 			Context("retransmitions", func() {

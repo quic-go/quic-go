@@ -119,6 +119,9 @@ type packetPacker struct {
 	version     protocol.VersionNumber
 	cryptoSetup sealingManager
 
+	// Once the handshake is confirmed, we only need to send 1-RTT packets.
+	handshakeConfirmed bool
+
 	initialStream   cryptoStream
 	handshakeStream cryptoStream
 
@@ -313,12 +316,14 @@ func (p *packetPacker) PackRetransmission(packet *ackhandler.Packet) ([]*packedP
 // PackPacket packs a new packet
 // the other controlFrames are sent in the next packet, but might be queued and sent in the next packet if the packet would overflow MaxPacketSize otherwise
 func (p *packetPacker) PackPacket() (*packedPacket, error) {
-	packet, err := p.maybePackCryptoPacket()
-	if err != nil {
-		return nil, err
-	}
-	if packet != nil {
-		return packet, nil
+	if !p.handshakeConfirmed {
+		packet, err := p.maybePackCryptoPacket()
+		if err != nil {
+			return nil, err
+		}
+		if packet != nil {
+			return packet, nil
+		}
 	}
 
 	sealer, err := p.cryptoSetup.Get1RTTSealer()
@@ -362,25 +367,35 @@ func (p *packetPacker) maybePackCryptoPacket() (*packedPacket, error) {
 	var s cryptoStream
 	var encLevel protocol.EncryptionLevel
 
+	initialSealer, errInitialSealer := p.cryptoSetup.GetInitialSealer()
+	handshakeSealer, errHandshakeSealer := p.cryptoSetup.GetHandshakeSealer()
+
+	if errInitialSealer == handshake.ErrKeysDropped &&
+		errHandshakeSealer == handshake.ErrKeysDropped {
+		p.handshakeConfirmed = true
+	}
+
 	hasData := p.initialStream.HasData()
 	ack := p.acks.GetAckFrame(protocol.EncryptionInitial)
 	var sealer handshake.LongHeaderSealer
-	var err error
 	if hasData || ack != nil {
 		s = p.initialStream
 		encLevel = protocol.EncryptionInitial
-		sealer, err = p.cryptoSetup.GetInitialSealer()
+		sealer = initialSealer
+		if errInitialSealer != nil {
+			return nil, fmt.Errorf("PacketPacker BUG: no Initial sealer: %s", errInitialSealer)
+		}
 	} else {
 		hasData = p.handshakeStream.HasData()
 		ack = p.acks.GetAckFrame(protocol.EncryptionHandshake)
 		if hasData || ack != nil {
 			s = p.handshakeStream
 			encLevel = protocol.EncryptionHandshake
-			sealer, err = p.cryptoSetup.GetHandshakeSealer()
+			sealer = handshakeSealer
+			if errHandshakeSealer != nil {
+				return nil, fmt.Errorf("PacketPacker BUG: no Handshake sealer: %s", errHandshakeSealer)
+			}
 		}
-	}
-	if err != nil {
-		return nil, err
 	}
 	if s == nil {
 		return nil, nil
