@@ -551,6 +551,9 @@ func (h *cryptoSetup) GetInitialSealer() (LongHeaderSealer, error) {
 	h.mutex.Lock()
 	defer h.mutex.Unlock()
 
+	if h.initialSealer == nil {
+		return nil, ErrKeysDropped
+	}
 	return h.initialSealer, nil
 }
 
@@ -559,6 +562,9 @@ func (h *cryptoSetup) GetHandshakeSealer() (LongHeaderSealer, error) {
 	defer h.mutex.Unlock()
 
 	if h.handshakeSealer == nil {
+		if h.initialSealer == nil {
+			return nil, ErrKeysDropped
+		}
 		return nil, errors.New("CryptoSetup: no sealer with encryption level Handshake")
 	}
 	return h.handshakeSealer, nil
