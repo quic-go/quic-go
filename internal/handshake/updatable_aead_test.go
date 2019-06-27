@@ -5,6 +5,7 @@ import (
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/rand"
+	"os"
 
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/internal/utils"
@@ -205,6 +206,29 @@ var _ = Describe("Updatable AEAD", func() {
 					server.Seal(nil, msg, 1, ad)
 					server.SetLargestAcked(1)
 					Expect(server.KeyPhase()).To(Equal(protocol.KeyPhaseOne))
+				})
+			})
+
+			Context("reading the key update env", func() {
+				AfterEach(func() {
+					os.Setenv(keyUpdateEnv, "")
+					setKeyUpdateInterval()
+				})
+
+				It("uses the default value if the env is not set", func() {
+					setKeyUpdateInterval()
+					Expect(keyUpdateInterval).To(BeEquivalentTo(protocol.KeyUpdateInterval))
+				})
+
+				It("uses the env", func() {
+					os.Setenv(keyUpdateEnv, "1337")
+					setKeyUpdateInterval()
+					Expect(keyUpdateInterval).To(BeEquivalentTo(1337))
+				})
+
+				It("panics when it can't parse the env", func() {
+					os.Setenv(keyUpdateEnv, "foobar")
+					Expect(setKeyUpdateInterval).To(Panic())
 				})
 			})
 		})

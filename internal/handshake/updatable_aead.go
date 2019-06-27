@@ -4,6 +4,9 @@ import (
 	"crypto"
 	"crypto/cipher"
 	"encoding/binary"
+	"fmt"
+	"os"
+	"strconv"
 
 	"github.com/lucas-clemente/quic-go/internal/qerr"
 	"github.com/lucas-clemente/quic-go/internal/utils"
@@ -11,6 +14,31 @@ import (
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/marten-seemann/qtls"
 )
+
+// By setting this environment variable, the key update interval can be adjusted.
+// This is not needed in production, but useful for integration and interop testing.
+// Note that no mattter what value is set, a key update is only initiated once it is
+// permitted (i.e. once an ACK for a packet sent at the current key phase has been received).
+const keyUpdateEnv = "QUIC_GO_KEY_UPDATE_INTERVAL"
+
+var keyUpdateInterval uint64
+
+func init() {
+	setKeyUpdateInterval()
+}
+
+func setKeyUpdateInterval() {
+	env := os.Getenv(keyUpdateEnv)
+	if env == "" {
+		keyUpdateInterval = protocol.KeyUpdateInterval
+		return
+	}
+	interval, err := strconv.ParseUint(env, 10, 64)
+	if err != nil {
+		panic(fmt.Sprintf("Cannot parse %s: %s", keyUpdateEnv, err))
+	}
+	keyUpdateInterval = interval
+}
 
 type updatableAEAD struct {
 	suite cipherSuite
@@ -51,7 +79,7 @@ func newUpdatableAEAD(logger utils.Logger) *updatableAEAD {
 		largestAcked:            protocol.InvalidPacketNumber,
 		firstRcvdWithCurrentKey: protocol.InvalidPacketNumber,
 		firstSentWithCurrentKey: protocol.InvalidPacketNumber,
-		keyUpdateInterval:       protocol.KeyUpdateInterval,
+		keyUpdateInterval:       keyUpdateInterval,
 		logger:                  logger,
 	}
 }
