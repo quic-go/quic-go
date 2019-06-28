@@ -139,3 +139,6 @@ const MaxAckDelay = 25 * time.Millisecond
 // MaxAckDelayInclGranularity is the max_ack_delay including the timer granularity.
 // This is the value that should be advertised to the peer.
 const MaxAckDelayInclGranularity = MaxAckDelay + TimerGranularity
+
+// KeyUpdateInterval is the maximum number of packets we send or receive before initiating a key udpate.
+const KeyUpdateInterval = 100 * 1000

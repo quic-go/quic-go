@@ -5,6 +5,7 @@ import (
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/rand"
+	"os"
 
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/internal/utils"
@@ -95,79 +96,140 @@ var _ = Describe("Updatable AEAD", func() {
 		})
 
 		Context("key updates", func() {
-			It("updates keys", func() {
-				Expect(server.KeyPhase()).To(Equal(protocol.KeyPhaseZero))
-				encrypted0 := server.Seal(nil, msg, 0x1337, ad)
-				server.rollKeys()
-				Expect(server.KeyPhase()).To(Equal(protocol.KeyPhaseOne))
-				encrypted1 := server.Seal(nil, msg, 0x1337, ad)
-				Expect(encrypted0).ToNot(Equal(encrypted1))
-				// expect opening to fail. The client didn't roll keys yet
-				_, err := client.Open(nil, encrypted1, 0x1337, protocol.KeyPhaseZero, ad)
-				Expect(err).To(MatchError(ErrDecryptionFailed))
-				client.rollKeys()
-				decrypted, err := client.Open(nil, encrypted1, 0x1337, protocol.KeyPhaseOne, ad)
-				Expect(err).ToNot(HaveOccurred())
-				Expect(decrypted).To(Equal(msg))
+			Context("receiving key updates", func() {
+				It("updates keys", func() {
+					Expect(server.KeyPhase()).To(Equal(protocol.KeyPhaseZero))
+					encrypted0 := server.Seal(nil, msg, 0x1337, ad)
+					server.rollKeys()
+					Expect(server.KeyPhase()).To(Equal(protocol.KeyPhaseOne))
+					encrypted1 := server.Seal(nil, msg, 0x1337, ad)
+					Expect(encrypted0).ToNot(Equal(encrypted1))
+					// expect opening to fail. The client didn't roll keys yet
+					_, err := client.Open(nil, encrypted1, 0x1337, protocol.KeyPhaseZero, ad)
+					Expect(err).To(MatchError(ErrDecryptionFailed))
+					client.rollKeys()
+					decrypted, err := client.Open(nil, encrypted1, 0x1337, protocol.KeyPhaseOne, ad)
+					Expect(err).ToNot(HaveOccurred())
+					Expect(decrypted).To(Equal(msg))
+				})
+
+				It("updates the keys when receiving a packet with the next key phase", func() {
+					// receive the first packet at key phase zero
+					encrypted0 := client.Seal(nil, msg, 0x42, ad)
+					decrypted, err := server.Open(nil, encrypted0, 0x42, protocol.KeyPhaseZero, ad)
+					Expect(err).ToNot(HaveOccurred())
+					Expect(decrypted).To(Equal(msg))
+					// send one packet at key phase zero
+					Expect(server.KeyPhase()).To(Equal(protocol.KeyPhaseZero))
+					_ = server.Seal(nil, msg, 0x1, ad)
+					// now received a message at key phase one
+					client.rollKeys()
+					encrypted1 := client.Seal(nil, msg, 0x43, ad)
+					decrypted, err = server.Open(nil, encrypted1, 0x43, protocol.KeyPhaseOne, ad)
+					Expect(err).ToNot(HaveOccurred())
+					Expect(decrypted).To(Equal(msg))
+					Expect(server.KeyPhase()).To(Equal(protocol.KeyPhaseOne))
+				})
+
+				It("opens a reordered packet with the old keys after an update", func() {
+					encrypted01 := client.Seal(nil, msg, 0x42, ad)
+					encrypted02 := client.Seal(nil, msg, 0x43, ad)
+					// receive the first packet with key phase 0
+					_, err := server.Open(nil, encrypted01, 0x42, protocol.KeyPhaseZero, ad)
+					Expect(err).ToNot(HaveOccurred())
+					// send one packet at key phase zero
+					_ = server.Seal(nil, msg, 0x1, ad)
+					// now receive a packet with key phase 1
+					client.rollKeys()
+					encrypted1 := client.Seal(nil, msg, 0x44, ad)
+					Expect(server.KeyPhase()).To(Equal(protocol.KeyPhaseZero))
+					_, err = server.Open(nil, encrypted1, 0x44, protocol.KeyPhaseOne, ad)
+					Expect(err).ToNot(HaveOccurred())
+					Expect(server.KeyPhase()).To(Equal(protocol.KeyPhaseOne))
+					// now receive a reordered packet with key phase 0
+					decrypted, err := server.Open(nil, encrypted02, 0x43, protocol.KeyPhaseZero, ad)
+					Expect(err).ToNot(HaveOccurred())
+					Expect(decrypted).To(Equal(msg))
+					Expect(server.KeyPhase()).To(Equal(protocol.KeyPhaseOne))
+				})
+
+				It("errors when the peer starts with key phase 1", func() {
+					client.rollKeys()
+					encrypted := client.Seal(nil, msg, 0x1337, ad)
+					_, err := server.Open(nil, encrypted, 0x1337, protocol.KeyPhaseOne, ad)
+					Expect(err).To(MatchError("PROTOCOL_VIOLATION: wrong initial keyphase"))
+				})
+
+				It("errors when the peer updates keys too frequently", func() {
+					// receive the first packet at key phase zero
+					encrypted0 := client.Seal(nil, msg, 0x42, ad)
+					_, err := server.Open(nil, encrypted0, 0x42, protocol.KeyPhaseZero, ad)
+					Expect(err).ToNot(HaveOccurred())
+					// now receive a packet at key phase one, before having sent any packets
+					client.rollKeys()
+					encrypted1 := client.Seal(nil, msg, 0x42, ad)
+					_, err = server.Open(nil, encrypted1, 0x42, protocol.KeyPhaseOne, ad)
+					Expect(err).To(MatchError("PROTOCOL_VIOLATION: keys updated too quickly"))
+				})
 			})
 
-			It("updates the keys when receiving a packet with the next key phase", func() {
-				// receive the first packet at key phase zero
-				encrypted0 := client.Seal(nil, msg, 0x42, ad)
-				decrypted, err := server.Open(nil, encrypted0, 0x42, protocol.KeyPhaseZero, ad)
-				Expect(err).ToNot(HaveOccurred())
-				Expect(decrypted).To(Equal(msg))
-				// send one packet at key phase zero
-				Expect(server.KeyPhase()).To(Equal(protocol.KeyPhaseZero))
-				_ = server.Seal(nil, msg, 0x1, ad)
-				// now received a message at key phase one
-				client.rollKeys()
-				encrypted1 := client.Seal(nil, msg, 0x43, ad)
-				decrypted, err = server.Open(nil, encrypted1, 0x43, protocol.KeyPhaseOne, ad)
-				Expect(err).ToNot(HaveOccurred())
-				Expect(decrypted).To(Equal(msg))
-				Expect(server.KeyPhase()).To(Equal(protocol.KeyPhaseOne))
+			Context("initiating key updates", func() {
+				const keyUpdateInterval = 20
+
+				BeforeEach(func() {
+					Expect(server.keyUpdateInterval).To(BeEquivalentTo(protocol.KeyUpdateInterval))
+					server.keyUpdateInterval = keyUpdateInterval
+				})
+
+				It("initiates a key update after sealing the maximum number of packets", func() {
+					for i := 0; i < keyUpdateInterval; i++ {
+						pn := protocol.PacketNumber(i)
+						Expect(server.KeyPhase()).To(Equal(protocol.KeyPhaseZero))
+						server.Seal(nil, msg, pn, ad)
+					}
+					// no update allowed before receiving an acknowledgement for the current key phase
+					Expect(server.KeyPhase()).To(Equal(protocol.KeyPhaseZero))
+					server.SetLargestAcked(0)
+					Expect(server.KeyPhase()).To(Equal(protocol.KeyPhaseOne))
+				})
+
+				It("initiates a key update after opening the maximum number of packets", func() {
+					for i := 0; i < keyUpdateInterval; i++ {
+						pn := protocol.PacketNumber(i)
+						Expect(server.KeyPhase()).To(Equal(protocol.KeyPhaseZero))
+						encrypted := client.Seal(nil, msg, pn, ad)
+						_, err := server.Open(nil, encrypted, pn, protocol.KeyPhaseZero, ad)
+						Expect(err).ToNot(HaveOccurred())
+					}
+					// no update allowed before receiving an acknowledgement for the current key phase
+					Expect(server.KeyPhase()).To(Equal(protocol.KeyPhaseZero))
+					server.Seal(nil, msg, 1, ad)
+					server.SetLargestAcked(1)
+					Expect(server.KeyPhase()).To(Equal(protocol.KeyPhaseOne))
+				})
 			})
 
-			It("opens a reordered packet with the old keys after an update", func() {
-				encrypted01 := client.Seal(nil, msg, 0x42, ad)
-				encrypted02 := client.Seal(nil, msg, 0x43, ad)
-				// receive the first packet with key phase 0
-				_, err := server.Open(nil, encrypted01, 0x42, protocol.KeyPhaseZero, ad)
-				Expect(err).ToNot(HaveOccurred())
-				// send one packet at key phase zero
-				_ = server.Seal(nil, msg, 0x1, ad)
-				// now receive a packet with key phase 1
-				client.rollKeys()
-				encrypted1 := client.Seal(nil, msg, 0x44, ad)
-				Expect(server.KeyPhase()).To(Equal(protocol.KeyPhaseZero))
-				_, err = server.Open(nil, encrypted1, 0x44, protocol.KeyPhaseOne, ad)
-				Expect(err).ToNot(HaveOccurred())
-				Expect(server.KeyPhase()).To(Equal(protocol.KeyPhaseOne))
-				// now receive a reordered packet with key phase 0
-				decrypted, err := server.Open(nil, encrypted02, 0x43, protocol.KeyPhaseZero, ad)
-				Expect(err).ToNot(HaveOccurred())
-				Expect(decrypted).To(Equal(msg))
-				Expect(server.KeyPhase()).To(Equal(protocol.KeyPhaseOne))
-			})
+			Context("reading the key update env", func() {
+				AfterEach(func() {
+					os.Setenv(keyUpdateEnv, "")
+					setKeyUpdateInterval()
+				})
 
-			It("errors when the peer starts with key phase 1", func() {
-				client.rollKeys()
-				encrypted := client.Seal(nil, msg, 0x1337, ad)
-				_, err := server.Open(nil, encrypted, 0x1337, protocol.KeyPhaseOne, ad)
-				Expect(err).To(MatchError("PROTOCOL_VIOLATION: wrong initial keyphase"))
-			})
+				It("uses the default value if the env is not set", func() {
+					setKeyUpdateInterval()
+					Expect(keyUpdateInterval).To(BeEquivalentTo(protocol.KeyUpdateInterval))
+				})
 
-			It("errors when the peer updates keys too frequently", func() {
-				// receive the first packet at key phase zero
-				encrypted0 := client.Seal(nil, msg, 0x42, ad)
-				_, err := server.Open(nil, encrypted0, 0x42, protocol.KeyPhaseZero, ad)
-				Expect(err).ToNot(HaveOccurred())
-				// now receive a packet at key phase one, before having sent any packets
-				client.rollKeys()
-				encrypted1 := client.Seal(nil, msg, 0x42, ad)
-				_, err = server.Open(nil, encrypted1, 0x42, protocol.KeyPhaseOne, ad)
-				Expect(err).To(MatchError("PROTOCOL_VIOLATION: keys updated too quickly"))
+				It("uses the env", func() {
+					os.Setenv(keyUpdateEnv, "1337")
+					setKeyUpdateInterval()
+					Expect(keyUpdateInterval).To(BeEquivalentTo(1337))
+				})
+
+				It("panics when it can't parse the env", func() {
+					os.Setenv(keyUpdateEnv, "foobar")
+					Expect(setKeyUpdateInterval).To(Panic())
+				})
 			})
 		})
 	})
