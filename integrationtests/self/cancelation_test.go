@@ -451,17 +451,17 @@ var _ = Describe("Stream Cancelations", func() {
 			)
 			Expect(err).ToNot(HaveOccurred())
 
-			var numToAccept int32
+			var numToAccept int
 			var counter int32
 			var wg sync.WaitGroup
 			wg.Add(numStreams)
-			for atomic.LoadInt32(&numToAccept) < numStreams {
+			for numToAccept < numStreams {
 				ctx, cancel := context.WithCancel(context.Background())
 				// cancel accepting half of the streams
 				if rand.Int31()%2 == 0 {
 					cancel()
 				} else {
-					atomic.AddInt32(&numToAccept, 1)
+					numToAccept++
 					defer cancel()
 				}
 
@@ -469,8 +469,9 @@ var _ = Describe("Stream Cancelations", func() {
 					defer GinkgoRecover()
 					str, err := sess.AcceptUniStream(ctx)
 					if err != nil {
-						atomic.AddInt32(&counter, 1)
-						Expect(err).To(MatchError("context canceled"))
+						if err.Error() == "context canceled" {
+							atomic.AddInt32(&counter, 1)
+						}
 						return
 					}
 					data, err := ioutil.ReadAll(str)
