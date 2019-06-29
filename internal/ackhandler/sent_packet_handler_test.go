@@ -626,13 +626,16 @@ var _ = Describe("SentPacketHandler", func() {
 		})
 
 		It("implements exponential backoff", func() {
-			handler.ptoCount = 0
-			timeout := handler.computePTOTimeout()
-			Expect(timeout).ToNot(BeZero())
+			sendTime := time.Now().Add(-time.Hour)
+			handler.SentPacket(ackElicitingPacket(&Packet{PacketNumber: 1, SendTime: sendTime}))
+			timeout := handler.GetAlarmTimeout().Sub(sendTime)
+			Expect(handler.GetAlarmTimeout().Sub(sendTime)).To(Equal(timeout))
 			handler.ptoCount = 1
-			Expect(handler.computePTOTimeout()).To(Equal(2 * timeout))
+			handler.updateLossDetectionAlarm()
+			Expect(handler.GetAlarmTimeout().Sub(sendTime)).To(Equal(2 * timeout))
 			handler.ptoCount = 2
-			Expect(handler.computePTOTimeout()).To(Equal(4 * timeout))
+			handler.updateLossDetectionAlarm()
+			Expect(handler.GetAlarmTimeout().Sub(sendTime)).To(Equal(4 * timeout))
 		})
 
 		It("sets the TPO send mode until two  packets is sent", func() {
