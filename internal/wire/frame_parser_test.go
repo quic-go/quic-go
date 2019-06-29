@@ -287,4 +287,71 @@ var _ = Describe("Frame parsing", func() {
 		Expect(err).To(HaveOccurred())
 		Expect(err.(*qerr.QuicError).ErrorCode).To(Equal(qerr.FrameEncodingError))
 	})
+
+	Context("encryption level check", func() {
+		frames := []Frame{
+			&PingFrame{},
+			&AckFrame{AckRanges: []AckRange{{Smallest: 1, Largest: 42}}},
+			&ResetStreamFrame{},
+			&StopSendingFrame{},
+			&CryptoFrame{},
+			&NewTokenFrame{},
+			&StreamFrame{Data: []byte("foobar")},
+			&MaxDataFrame{},
+			&MaxStreamDataFrame{},
+			&MaxStreamsFrame{},
+			&DataBlockedFrame{},
+			&StreamDataBlockedFrame{},
+			&StreamsBlockedFrame{},
+			&NewConnectionIDFrame{ConnectionID: protocol.ConnectionID{0xde, 0xad, 0xbe, 0xef}},
+			&RetireConnectionIDFrame{},
+			&PathChallengeFrame{},
+			&PathResponseFrame{},
+			&ConnectionCloseFrame{},
+		}
+
+		var framesSerialized [][]byte
+
+		BeforeEach(func() {
+			framesSerialized = nil
+			for _, frame := range frames {
+				buf := &bytes.Buffer{}
+				Expect(frame.Write(buf, versionIETFFrames)).To(Succeed())
+				framesSerialized = append(framesSerialized, buf.Bytes())
+			}
+		})
+
+		It("rejects all frames but ACK, CRYPTO and CONNECTION_CLOSE in Initial packets", func() {
+			for i, b := range framesSerialized {
+				_, err := parser.ParseNext(bytes.NewReader(b), protocol.EncryptionInitial)
+				switch frames[i].(type) {
+				case *AckFrame, *ConnectionCloseFrame, *CryptoFrame:
+					Expect(err).ToNot(HaveOccurred())
+				default:
+					Expect(err).To(HaveOccurred())
+					Expect(err.Error()).To(ContainSubstring("not allowed at encryption level Initial"))
+				}
+			}
+		})
+
+		It("rejects all frames but ACK, CRYPTO and CONNECTION_CLOSE in Handshake packets", func() {
+			for i, b := range framesSerialized {
+				_, err := parser.ParseNext(bytes.NewReader(b), protocol.EncryptionHandshake)
+				switch frames[i].(type) {
+				case *AckFrame, *ConnectionCloseFrame, *CryptoFrame:
+					Expect(err).ToNot(HaveOccurred())
+				default:
+					Expect(err).To(HaveOccurred())
+					Expect(err.Error()).To(ContainSubstring("not allowed at encryption level Handshake"))
+				}
+			}
+		})
+
+		It("accepts all frame types in 1-RTT packets", func() {
+			for _, b := range framesSerialized {
+				_, err := parser.ParseNext(bytes.NewReader(b), protocol.Encryption1RTT)
+				Expect(err).ToNot(HaveOccurred())
+			}
+		})
+	})
 })
