@@ -11,8 +11,12 @@ var _ = Describe("Key Phases", func() {
 		Expect(KeyPhaseOne.String()).To(Equal("1"))
 	})
 
-	It("returns the next key phase", func() {
-		Expect(KeyPhaseZero.Next()).To(Equal(KeyPhaseOne))
-		Expect(KeyPhaseOne.Next()).To(Equal(KeyPhaseZero))
+	It("converts the key phase to the key phase bit", func() {
+		Expect(KeyPhase(0).Bit()).To(Equal(KeyPhaseZero))
+		Expect(KeyPhase(2).Bit()).To(Equal(KeyPhaseZero))
+		Expect(KeyPhase(4).Bit()).To(Equal(KeyPhaseZero))
+		Expect(KeyPhase(1).Bit()).To(Equal(KeyPhaseOne))
+		Expect(KeyPhase(3).Bit()).To(Equal(KeyPhaseOne))
+		Expect(KeyPhase(5).Bit()).To(Equal(KeyPhaseOne))
 	})
 })

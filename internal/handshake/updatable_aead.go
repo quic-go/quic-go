@@ -43,7 +43,7 @@ func setKeyUpdateInterval() {
 type updatableAEAD struct {
 	suite cipherSuite
 
-	keyPhase          protocol.KeyPhaseBit
+	keyPhase          protocol.KeyPhase
 	largestAcked      protocol.PacketNumber
 	keyUpdateInterval uint64
 
@@ -85,7 +85,7 @@ func newUpdatableAEAD(logger utils.Logger) *updatableAEAD {
 }
 
 func (a *updatableAEAD) rollKeys() {
-	a.keyPhase = a.keyPhase.Next()
+	a.keyPhase++
 	a.firstRcvdWithCurrentKey = protocol.InvalidPacketNumber
 	a.firstSentWithCurrentKey = protocol.InvalidPacketNumber
 	a.numRcvdWithCurrentKey = 0
@@ -136,7 +136,7 @@ func (a *updatableAEAD) SetWriteKey(suite cipherSuite, trafficSecret []byte) {
 
 func (a *updatableAEAD) Open(dst, src []byte, pn protocol.PacketNumber, kp protocol.KeyPhaseBit, ad []byte) ([]byte, error) {
 	binary.BigEndian.PutUint64(a.nonceBuf[len(a.nonceBuf)-8:], uint64(pn))
-	if kp != a.keyPhase {
+	if kp != a.keyPhase.Bit() {
 		if a.firstRcvdWithCurrentKey == protocol.InvalidPacketNumber || pn < a.firstRcvdWithCurrentKey {
 			if a.prevRcvAEAD == nil {
 				// This can only occur when the first packet received has key phase 1.
@@ -205,11 +205,11 @@ func (a *updatableAEAD) shouldInitiateKeyUpdate() bool {
 		return false
 	}
 	if a.numRcvdWithCurrentKey >= a.keyUpdateInterval {
-		a.logger.Debugf("Received %d packets with current key phase. Initiating key update to the next key phase: %s", a.numRcvdWithCurrentKey, a.keyPhase.Next())
+		a.logger.Debugf("Received %d packets with current key phase. Initiating key update to the next key phase: %s", a.numRcvdWithCurrentKey, a.keyPhase+1)
 		return true
 	}
 	if a.numSentWithCurrentKey >= a.keyUpdateInterval {
-		a.logger.Debugf("Sent %d packets with current key phase. Initiating key update to the next key phase: %s", a.numSentWithCurrentKey, a.keyPhase.Next())
+		a.logger.Debugf("Sent %d packets with current key phase. Initiating key update to the next key phase: %s", a.numSentWithCurrentKey, a.keyPhase+1)
 		return true
 	}
 	return false
@@ -219,7 +219,7 @@ func (a *updatableAEAD) KeyPhase() protocol.KeyPhaseBit {
 	if a.shouldInitiateKeyUpdate() {
 		a.rollKeys()
 	}
-	return a.keyPhase
+	return a.keyPhase.Bit()
 }
 
 func (a *updatableAEAD) Overhead() int {

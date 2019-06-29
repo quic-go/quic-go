@@ -1,5 +1,12 @@
 package protocol
 
+// KeyPhase is the key phase
+type KeyPhase uint64
+
+func (p KeyPhase) Bit() KeyPhaseBit {
+	return p%2 == 1
+}
+
 // KeyPhaseBit is the key phase bit
 type KeyPhaseBit bool
 
@@ -15,8 +22,4 @@ func (p KeyPhaseBit) String() string {
 		return "0"
 	}
 	return "1"
-}
-
-func (p KeyPhaseBit) Next() KeyPhaseBit {
-	return !p
 }
