@@ -342,7 +342,7 @@ func (h *sentPacketHandler) updateLossDetectionAlarm() {
 		// Early retransmit timer or time loss detection.
 		h.alarm = h.lossTime
 	} else { // PTO alarm
-		h.alarm = h.lastSentAckElicitingPacketTime.Add(h.computePTOTimeout() << h.ptoCount)
+		h.alarm = h.lastSentAckElicitingPacketTime.Add(h.rttStats.PTO() << h.ptoCount)
 	}
 }
 
@@ -655,10 +655,6 @@ func (h *sentPacketHandler) computeCryptoTimeout() time.Duration {
 	// exponential backoff
 	// There's an implicit limit to this set by the crypto timeout.
 	return duration << h.cryptoCount
-}
-
-func (h *sentPacketHandler) computePTOTimeout() time.Duration {
-	return h.rttStats.SmoothedOrInitialRTT() + utils.MaxDuration(4*h.rttStats.MeanDeviation(), protocol.TimerGranularity) + h.rttStats.MaxAckDelay()
 }
 
 func (h *sentPacketHandler) ResetForRetry() error {

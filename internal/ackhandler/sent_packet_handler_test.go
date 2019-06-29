@@ -611,20 +611,6 @@ var _ = Describe("SentPacketHandler", func() {
 	})
 
 	Context("probe packets", func() {
-		It("uses the RTT from RTT stats", func() {
-			rtt := 2 * time.Second
-			updateRTT(rtt)
-			Expect(handler.rttStats.SmoothedOrInitialRTT()).To(Equal(2 * time.Second))
-			Expect(handler.rttStats.MeanDeviation()).To(Equal(time.Second))
-			Expect(handler.computePTOTimeout()).To(Equal(time.Duration(2+4) * time.Second))
-		})
-
-		It("uses the granularity for short RTTs", func() {
-			rtt := time.Microsecond
-			updateRTT(rtt)
-			Expect(handler.computePTOTimeout()).To(Equal(rtt + protocol.TimerGranularity))
-		})
-
 		It("implements exponential backoff", func() {
 			sendTime := time.Now().Add(-time.Hour)
 			handler.SentPacket(ackElicitingPacket(&Packet{PacketNumber: 1, SendTime: sendTime}))

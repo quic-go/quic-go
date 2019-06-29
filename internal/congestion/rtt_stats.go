@@ -3,6 +3,7 @@ package congestion
 import (
 	"time"
 
+	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/internal/utils"
 )
 
@@ -55,6 +56,10 @@ func (r *RTTStats) SmoothedOrInitialRTT() time.Duration {
 func (r *RTTStats) MeanDeviation() time.Duration { return r.meanDeviation }
 
 func (r *RTTStats) MaxAckDelay() time.Duration { return r.maxAckDelay }
+
+func (r *RTTStats) PTO() time.Duration {
+	return r.SmoothedOrInitialRTT() + utils.MaxDuration(4*r.MeanDeviation(), protocol.TimerGranularity) + r.MaxAckDelay()
+}
 
 // UpdateRTT updates the RTT based on a new sample.
 func (r *RTTStats) UpdateRTT(sendDelta, ackDelay time.Duration, now time.Time) {
