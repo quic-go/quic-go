@@ -34,27 +34,6 @@ func (t PacketType) String() string {
 	}
 }
 
-// KeyPhase is the key phase
-type KeyPhase bool
-
-const (
-	// KeyPhaseZero is key phase 0
-	KeyPhaseZero KeyPhase = false
-	// KeyPhaseOne is key phase 1
-	KeyPhaseOne KeyPhase = true
-)
-
-func (p KeyPhase) String() string {
-	if p == KeyPhaseZero {
-		return "0"
-	}
-	return "1"
-}
-
-func (p KeyPhase) Next() KeyPhase {
-	return !p
-}
-
 // A ByteCount in QUIC
 type ByteCount uint64
 

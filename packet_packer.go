@@ -432,7 +432,7 @@ func (p *packetPacker) composeNextPacket(maxFrameSize protocol.ByteCount) (paylo
 	return payload, nil
 }
 
-func (p *packetPacker) getShortHeader(kp protocol.KeyPhase) *wire.ExtendedHeader {
+func (p *packetPacker) getShortHeader(kp protocol.KeyPhaseBit) *wire.ExtendedHeader {
 	pn, pnLen := p.pnManager.PeekPacketNumber(protocol.Encryption1RTT)
 	hdr := &wire.ExtendedHeader{}
 	hdr.PacketNumber = pn

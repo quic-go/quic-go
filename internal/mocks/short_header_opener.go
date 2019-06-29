@@ -47,7 +47,7 @@ func (mr *MockShortHeaderOpenerMockRecorder) DecryptHeader(arg0, arg1, arg2 inte
 }
 
 // Open mocks base method
-func (m *MockShortHeaderOpener) Open(arg0, arg1 []byte, arg2 protocol.PacketNumber, arg3 protocol.KeyPhase, arg4 []byte) ([]byte, error) {
+func (m *MockShortHeaderOpener) Open(arg0, arg1 []byte, arg2 protocol.PacketNumber, arg3 protocol.KeyPhaseBit, arg4 []byte) ([]byte, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Open", arg0, arg1, arg2, arg3, arg4)
 	ret0, _ := ret[0].([]byte)

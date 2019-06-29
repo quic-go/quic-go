@@ -43,7 +43,7 @@ func setKeyUpdateInterval() {
 type updatableAEAD struct {
 	suite cipherSuite
 
-	keyPhase          protocol.KeyPhase
+	keyPhase          protocol.KeyPhaseBit
 	largestAcked      protocol.PacketNumber
 	keyUpdateInterval uint64
 
@@ -134,7 +134,7 @@ func (a *updatableAEAD) SetWriteKey(suite cipherSuite, trafficSecret []byte) {
 	a.nextSendAEAD = createAEAD(suite, a.nextSendTrafficSecret)
 }
 
-func (a *updatableAEAD) Open(dst, src []byte, pn protocol.PacketNumber, kp protocol.KeyPhase, ad []byte) ([]byte, error) {
+func (a *updatableAEAD) Open(dst, src []byte, pn protocol.PacketNumber, kp protocol.KeyPhaseBit, ad []byte) ([]byte, error) {
 	binary.BigEndian.PutUint64(a.nonceBuf[len(a.nonceBuf)-8:], uint64(pn))
 	if kp != a.keyPhase {
 		if a.firstRcvdWithCurrentKey == protocol.InvalidPacketNumber || pn < a.firstRcvdWithCurrentKey {
@@ -215,7 +215,7 @@ func (a *updatableAEAD) shouldInitiateKeyUpdate() bool {
 	return false
 }
 
-func (a *updatableAEAD) KeyPhase() protocol.KeyPhase {
+func (a *updatableAEAD) KeyPhase() protocol.KeyPhaseBit {
 	if a.shouldInitiateKeyUpdate() {
 		a.rollKeys()
 	}

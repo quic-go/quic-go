@@ -25,7 +25,7 @@ type ExtendedHeader struct {
 	PacketNumberLen protocol.PacketNumberLen
 	PacketNumber    protocol.PacketNumber
 
-	KeyPhase protocol.KeyPhase
+	KeyPhase protocol.KeyPhaseBit
 }
 
 func (h *ExtendedHeader) parse(b *bytes.Reader, v protocol.VersionNumber) (*ExtendedHeader, error) {
