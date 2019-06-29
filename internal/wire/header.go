@@ -208,10 +208,10 @@ func (h *Header) parseLongHeader(b *bytes.Reader) error {
 
 func (h *Header) parseVersionNegotiationPacket(b *bytes.Reader) error {
 	if b.Len() == 0 {
-		return errors.New("Version Negoation packet has empty version list")
+		return errors.New("Version Negotiation packet has empty version list")
 	}
 	if b.Len()%4 != 0 {
-		return errors.New("Version Negotation packet has a version list with an invalid length")
+		return errors.New("Version Negotiation packet has a version list with an invalid length")
 	}
 	h.SupportedVersions = make([]protocol.VersionNumber, b.Len()/4)
 	for i := 0; b.Len() > 0; i++ {

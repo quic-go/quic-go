@@ -137,7 +137,7 @@ var _ = Describe("Header Parsing", func() {
 			data, err := ComposeVersionNegotiation(connID, connID, versions)
 			Expect(err).ToNot(HaveOccurred())
 			_, _, _, err = ParsePacket(data[:len(data)-2], 0)
-			Expect(err).To(MatchError("Version Negotation packet has a version list with an invalid length"))
+			Expect(err).To(MatchError("Version Negotiation packet has a version list with an invalid length"))
 		})
 
 		It("errors if the version list is empty", func() {
@@ -148,7 +148,7 @@ var _ = Describe("Header Parsing", func() {
 			// remove 8 bytes (two versions), since ComposeVersionNegotiation also added a reserved version number
 			data = data[:len(data)-8]
 			_, _, _, err = ParsePacket(data, 0)
-			Expect(err).To(MatchError("Version Negoation packet has empty version list"))
+			Expect(err).To(MatchError("Version Negotiation packet has empty version list"))
 		})
 	})
 
