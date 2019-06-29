@@ -13,6 +13,7 @@ import (
 	"time"
 
 	gomock "github.com/golang/mock/gomock"
+	"github.com/lucas-clemente/quic-go/internal/congestion"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/internal/qerr"
 	"github.com/lucas-clemente/quic-go/internal/testdata"
@@ -93,6 +94,7 @@ var _ = Describe("Crypto Setup TLS", func() {
 			&TransportParameters{},
 			NewMockHandshakeRunner(mockCtrl),
 			tlsConf,
+			&congestion.RTTStats{},
 			utils.DefaultLogger.WithPrefix("server"),
 		)
 		Expect(err).ToNot(HaveOccurred())
@@ -124,6 +126,7 @@ var _ = Describe("Crypto Setup TLS", func() {
 			&TransportParameters{},
 			runner,
 			testdata.GetTLSConfig(),
+			&congestion.RTTStats{},
 			utils.DefaultLogger.WithPrefix("server"),
 		)
 		Expect(err).ToNot(HaveOccurred())
@@ -161,6 +164,7 @@ var _ = Describe("Crypto Setup TLS", func() {
 			&TransportParameters{},
 			runner,
 			testdata.GetTLSConfig(),
+			&congestion.RTTStats{},
 			utils.DefaultLogger.WithPrefix("server"),
 		)
 		Expect(err).ToNot(HaveOccurred())
@@ -200,6 +204,7 @@ var _ = Describe("Crypto Setup TLS", func() {
 			&TransportParameters{},
 			runner,
 			serverConf,
+			&congestion.RTTStats{},
 			utils.DefaultLogger.WithPrefix("server"),
 		)
 		Expect(err).ToNot(HaveOccurred())
@@ -233,6 +238,7 @@ var _ = Describe("Crypto Setup TLS", func() {
 			&TransportParameters{},
 			NewMockHandshakeRunner(mockCtrl),
 			serverConf,
+			&congestion.RTTStats{},
 			utils.DefaultLogger.WithPrefix("server"),
 		)
 		Expect(err).ToNot(HaveOccurred())
@@ -311,6 +317,7 @@ var _ = Describe("Crypto Setup TLS", func() {
 				&TransportParameters{},
 				cRunner,
 				clientConf,
+				&congestion.RTTStats{},
 				utils.DefaultLogger.WithPrefix("client"),
 			)
 			Expect(err).ToNot(HaveOccurred())
@@ -332,6 +339,7 @@ var _ = Describe("Crypto Setup TLS", func() {
 				&TransportParameters{StatelessResetToken: &token},
 				sRunner,
 				serverConf,
+				&congestion.RTTStats{},
 				utils.DefaultLogger.WithPrefix("server"),
 			)
 			Expect(err).ToNot(HaveOccurred())
@@ -384,6 +392,7 @@ var _ = Describe("Crypto Setup TLS", func() {
 				&TransportParameters{},
 				runner,
 				&tls.Config{InsecureSkipVerify: true},
+				&congestion.RTTStats{},
 				utils.DefaultLogger.WithPrefix("client"),
 			)
 			Expect(err).ToNot(HaveOccurred())
@@ -424,6 +433,7 @@ var _ = Describe("Crypto Setup TLS", func() {
 				cTransportParameters,
 				cRunner,
 				clientConf,
+				&congestion.RTTStats{},
 				utils.DefaultLogger.WithPrefix("client"),
 			)
 			Expect(err).ToNot(HaveOccurred())
@@ -446,6 +456,7 @@ var _ = Describe("Crypto Setup TLS", func() {
 				sTransportParameters,
 				sRunner,
 				serverConf,
+				&congestion.RTTStats{},
 				utils.DefaultLogger.WithPrefix("server"),
 			)
 			Expect(err).ToNot(HaveOccurred())
@@ -481,6 +492,7 @@ var _ = Describe("Crypto Setup TLS", func() {
 				&TransportParameters{},
 				cRunner,
 				clientConf,
+				&congestion.RTTStats{},
 				utils.DefaultLogger.WithPrefix("client"),
 			)
 			Expect(err).ToNot(HaveOccurred())
@@ -498,6 +510,7 @@ var _ = Describe("Crypto Setup TLS", func() {
 				&TransportParameters{},
 				sRunner,
 				serverConf,
+				&congestion.RTTStats{},
 				utils.DefaultLogger.WithPrefix("server"),
 			)
 			Expect(err).ToNot(HaveOccurred())
@@ -536,6 +549,7 @@ var _ = Describe("Crypto Setup TLS", func() {
 				&TransportParameters{},
 				cRunner,
 				clientConf,
+				&congestion.RTTStats{},
 				utils.DefaultLogger.WithPrefix("client"),
 			)
 			Expect(err).ToNot(HaveOccurred())
@@ -553,6 +567,7 @@ var _ = Describe("Crypto Setup TLS", func() {
 				&TransportParameters{},
 				sRunner,
 				serverConf,
+				&congestion.RTTStats{},
 				utils.DefaultLogger.WithPrefix("server"),
 			)
 			Expect(err).ToNot(HaveOccurred())

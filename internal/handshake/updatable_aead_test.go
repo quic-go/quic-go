@@ -6,7 +6,9 @@ import (
 	"crypto/cipher"
 	"crypto/rand"
 	"os"
+	"time"
 
+	"github.com/lucas-clemente/quic-go/internal/congestion"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/internal/utils"
 	. "github.com/onsi/ginkgo"
@@ -29,14 +31,14 @@ func (c *mockCipherSuite) AEAD(key, _ []byte) cipher.AEAD {
 }
 
 var _ = Describe("Updatable AEAD", func() {
-	getPeers := func() (client, server *updatableAEAD) {
+	getPeers := func(rttStats *congestion.RTTStats) (client, server *updatableAEAD) {
 		trafficSecret1 := make([]byte, 16)
 		trafficSecret2 := make([]byte, 16)
 		rand.Read(trafficSecret1)
 		rand.Read(trafficSecret2)
 
-		client = newUpdatableAEAD(utils.DefaultLogger)
-		server = newUpdatableAEAD(utils.DefaultLogger)
+		client = newUpdatableAEAD(rttStats, utils.DefaultLogger)
+		server = newUpdatableAEAD(rttStats, utils.DefaultLogger)
 		client.SetReadKey(&mockCipherSuite{}, trafficSecret2)
 		client.SetWriteKey(&mockCipherSuite{}, trafficSecret1)
 		server.SetReadKey(&mockCipherSuite{}, trafficSecret1)
@@ -46,7 +48,7 @@ var _ = Describe("Updatable AEAD", func() {
 
 	Context("header protection", func() {
 		It("encrypts and decrypts the header", func() {
-			server, client := getPeers()
+			server, client := getPeers(&congestion.RTTStats{})
 			var lastFiveBitsDifferent int
 			for i := 0; i < 100; i++ {
 				sample := make([]byte, 16)
@@ -69,9 +71,11 @@ var _ = Describe("Updatable AEAD", func() {
 	Context("message encryption", func() {
 		var msg, ad []byte
 		var server, client *updatableAEAD
+		var rttStats *congestion.RTTStats
 
 		BeforeEach(func() {
-			server, client = getPeers()
+			rttStats = &congestion.RTTStats{}
+			server, client = getPeers(rttStats)
 			msg = []byte("Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.")
 			ad = []byte("Donec in velit neque.")
 		})
@@ -132,6 +136,7 @@ var _ = Describe("Updatable AEAD", func() {
 				})
 
 				It("opens a reordered packet with the old keys after an update", func() {
+					rttStats.UpdateRTT(time.Hour, 0, time.Time{}) // make sure the keys don't get dropped yet
 					encrypted01 := client.Seal(nil, msg, 0x42, ad)
 					encrypted02 := client.Seal(nil, msg, 0x43, ad)
 					// receive the first packet with key phase 0
@@ -151,6 +156,30 @@ var _ = Describe("Updatable AEAD", func() {
 					Expect(err).ToNot(HaveOccurred())
 					Expect(decrypted).To(Equal(msg))
 					Expect(server.KeyPhase()).To(Equal(protocol.KeyPhaseOne))
+				})
+
+				It("drops keys 3 PTOs after a key update", func() {
+					rttStats.UpdateRTT(10*time.Millisecond, 0, time.Now())
+					pto := rttStats.PTO()
+					Expect(pto).To(BeNumerically("<", 50*time.Millisecond))
+					encrypted01 := client.Seal(nil, msg, 0x42, ad)
+					encrypted02 := client.Seal(nil, msg, 0x43, ad)
+					// receive the first packet with key phase 0
+					_, err := server.Open(nil, encrypted01, 0x42, protocol.KeyPhaseZero, ad)
+					Expect(err).ToNot(HaveOccurred())
+					// send one packet at key phase zero
+					_ = server.Seal(nil, msg, 0x1, ad)
+					// now receive a packet with key phase 1
+					client.rollKeys()
+					encrypted1 := client.Seal(nil, msg, 0x44, ad)
+					Expect(server.KeyPhase()).To(Equal(protocol.KeyPhaseZero))
+					_, err = server.Open(nil, encrypted1, 0x44, protocol.KeyPhaseOne, ad)
+					Expect(err).ToNot(HaveOccurred())
+					Expect(server.KeyPhase()).To(Equal(protocol.KeyPhaseOne))
+					// now receive a reordered packet with key phase 0
+					time.Sleep(3 * pto)
+					_, err = server.Open(nil, encrypted02, 0x43, protocol.KeyPhaseZero, ad)
+					Expect(err).To(MatchError(ErrKeysDropped))
 				})
 
 				It("errors when the peer starts with key phase 1", func() {

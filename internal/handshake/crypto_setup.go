@@ -9,6 +9,7 @@ import (
 	"sync"
 	"unsafe"
 
+	"github.com/lucas-clemente/quic-go/internal/congestion"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/internal/qerr"
 	"github.com/lucas-clemente/quic-go/internal/utils"
@@ -120,6 +121,7 @@ func NewCryptoSetupClient(
 	tp *TransportParameters,
 	runner handshakeRunner,
 	tlsConf *tls.Config,
+	rttStats *congestion.RTTStats,
 	logger utils.Logger,
 ) (CryptoSetup, <-chan struct{} /* ClientHello written */, error) {
 	cs, clientHelloWritten, err := newCryptoSetup(
@@ -130,6 +132,7 @@ func NewCryptoSetupClient(
 		tp,
 		runner,
 		tlsConf,
+		rttStats,
 		logger,
 		protocol.PerspectiveClient,
 	)
@@ -150,6 +153,7 @@ func NewCryptoSetupServer(
 	tp *TransportParameters,
 	runner handshakeRunner,
 	tlsConf *tls.Config,
+	rttStats *congestion.RTTStats,
 	logger utils.Logger,
 ) (CryptoSetup, error) {
 	cs, _, err := newCryptoSetup(
@@ -160,6 +164,7 @@ func NewCryptoSetupServer(
 		tp,
 		runner,
 		tlsConf,
+		rttStats,
 		logger,
 		protocol.PerspectiveServer,
 	)
@@ -178,6 +183,7 @@ func newCryptoSetup(
 	tp *TransportParameters,
 	runner handshakeRunner,
 	tlsConf *tls.Config,
+	rttStats *congestion.RTTStats,
 	logger utils.Logger,
 	perspective protocol.Perspective,
 ) (*cryptoSetup, <-chan struct{} /* ClientHello written */, error) {
@@ -192,7 +198,7 @@ func newCryptoSetup(
 		initialOpener:          initialOpener,
 		handshakeStream:        handshakeStream,
 		oneRTTStream:           oneRTTStream,
-		aead:                   newUpdatableAEAD(logger),
+		aead:                   newUpdatableAEAD(rttStats, logger),
 		readEncLevel:           protocol.EncryptionInitial,
 		writeEncLevel:          protocol.EncryptionInitial,
 		runner:                 runner,
