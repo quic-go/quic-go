@@ -60,8 +60,6 @@ type sentPacketHandler struct {
 	congestion congestion.SendAlgorithmWithDebugInfos
 	rttStats   *congestion.RTTStats
 
-	maxAckDelay time.Duration
-
 	// The number of times the crypto packets have been retransmitted without receiving an ack.
 	cryptoCount uint32
 	// The number of times a PTO has been sent without receiving an ack.
@@ -133,10 +131,6 @@ func (h *sentPacketHandler) DropPackets(encLevel protocol.EncryptionLevel) {
 	default:
 		panic(fmt.Sprintf("Cannot drop keys for encryption level %s", encLevel))
 	}
-}
-
-func (h *sentPacketHandler) SetMaxAckDelay(mad time.Duration) {
-	h.maxAckDelay = mad
 }
 
 func (h *sentPacketHandler) SentPacket(packet *Packet) {
@@ -226,7 +220,7 @@ func (h *sentPacketHandler) ReceivedAck(ackFrame *wire.AckFrame, withPacketNumbe
 		// don't use the ack delay for Initial and Handshake packets
 		var ackDelay time.Duration
 		if encLevel == protocol.Encryption1RTT {
-			ackDelay = utils.MinDuration(ackFrame.DelayTime, h.maxAckDelay)
+			ackDelay = utils.MinDuration(ackFrame.DelayTime, h.rttStats.MaxAckDelay())
 		}
 		h.rttStats.UpdateRTT(rcvTime.Sub(p.SendTime), ackDelay, rcvTime)
 		if h.logger.Debug() {
@@ -664,7 +658,7 @@ func (h *sentPacketHandler) computeCryptoTimeout() time.Duration {
 }
 
 func (h *sentPacketHandler) computePTOTimeout() time.Duration {
-	duration := h.rttStats.SmoothedOrInitialRTT() + utils.MaxDuration(4*h.rttStats.MeanDeviation(), protocol.TimerGranularity) + h.maxAckDelay
+	duration := h.rttStats.SmoothedOrInitialRTT() + utils.MaxDuration(4*h.rttStats.MeanDeviation(), protocol.TimerGranularity) + h.rttStats.MaxAckDelay()
 	return duration << h.ptoCount
 }
 

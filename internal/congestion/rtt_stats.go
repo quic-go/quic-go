@@ -21,6 +21,8 @@ type RTTStats struct {
 	latestRTT     time.Duration
 	smoothedRTT   time.Duration
 	meanDeviation time.Duration
+
+	maxAckDelay time.Duration
 }
 
 // NewRTTStats makes a properly initialized RTTStats object
@@ -52,6 +54,8 @@ func (r *RTTStats) SmoothedOrInitialRTT() time.Duration {
 // MeanDeviation gets the mean deviation
 func (r *RTTStats) MeanDeviation() time.Duration { return r.meanDeviation }
 
+func (r *RTTStats) MaxAckDelay() time.Duration { return r.maxAckDelay }
+
 // UpdateRTT updates the RTT based on a new sample.
 func (r *RTTStats) UpdateRTT(sendDelta, ackDelay time.Duration, now time.Time) {
 	if sendDelta == utils.InfDuration || sendDelta <= 0 {
@@ -82,6 +86,10 @@ func (r *RTTStats) UpdateRTT(sendDelta, ackDelay time.Duration, now time.Time) {
 		r.meanDeviation = time.Duration(oneMinusBeta*float32(r.meanDeviation/time.Microsecond)+rttBeta*float32(utils.AbsDuration(r.smoothedRTT-sample)/time.Microsecond)) * time.Microsecond
 		r.smoothedRTT = time.Duration((float32(r.smoothedRTT/time.Microsecond)*oneMinusAlpha)+(float32(sample/time.Microsecond)*rttAlpha)) * time.Microsecond
 	}
+}
+
+func (r *RTTStats) SetMaxAckDelay(mad time.Duration) {
+	r.maxAckDelay = mad
 }
 
 // OnConnectionMigration is called when connection migrates and rtt measurement needs to be reset.

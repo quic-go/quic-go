@@ -59,6 +59,11 @@ var _ = Describe("RTT stats", func() {
 		Expect(rttStats.MinRTT()).To(Equal((7 * time.Millisecond)))
 	})
 
+	It("MaxAckDelay", func() {
+		rttStats.SetMaxAckDelay(42 * time.Minute)
+		Expect(rttStats.MaxAckDelay()).To(Equal(42 * time.Minute))
+	})
+
 	It("ExpireSmoothedMetrics", func() {
 		initialRtt := (10 * time.Millisecond)
 		rttStats.UpdateRTT(initialRtt, 0, time.Time{})
