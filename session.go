@@ -598,12 +598,12 @@ func (s *session) handleSinglePacket(p *receivedPacket, hdr *wire.Header) bool /
 			// Try again later.
 			wasQueued = true
 			s.tryQueueingUndecryptablePacket(p)
-		case handshake.ErrDecryptionFailed:
+		case wire.ErrInvalidReservedBits:
+			s.closeLocal(qerr.Error(qerr.ProtocolViolation, err.Error()))
+		default:
 			// This might be a packet injected by an attacker.
 			// Drop it.
-			s.logger.Debugf("Dropping packet that could not be unpacked.")
-		default:
-			s.closeLocal(err)
+			s.logger.Debugf("Dropping packet that could not be unpacked. Error: %s", err)
 		}
 		return false
 	}
