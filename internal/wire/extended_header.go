@@ -10,6 +10,12 @@ import (
 	"github.com/lucas-clemente/quic-go/internal/utils"
 )
 
+// ErrInvalidReservedBits is returned when the reserved bits are incorrect.
+// When this error is returned, parsing continues, and an ExtendedHeader is returned.
+// This is necessary because we need to decrypt the packet in that case,
+// in order to avoid a timing side-channel.
+var ErrInvalidReservedBits = errors.New("invalid reserved bits")
+
 // ExtendedHeader is the header of a QUIC packet.
 type ExtendedHeader struct {
 	Header
@@ -39,20 +45,17 @@ func (h *ExtendedHeader) parse(b *bytes.Reader, v protocol.VersionNumber) (*Exte
 }
 
 func (h *ExtendedHeader) parseLongHeader(b *bytes.Reader, v protocol.VersionNumber) (*ExtendedHeader, error) {
-	if h.typeByte&0xc != 0 {
-		return nil, errors.New("5th and 6th bit must be 0")
-	}
 	if err := h.readPacketNumber(b); err != nil {
 		return nil, err
 	}
-	return h, nil
+	var err error
+	if h.typeByte&0xc != 0 {
+		err = ErrInvalidReservedBits
+	}
+	return h, err
 }
 
 func (h *ExtendedHeader) parseShortHeader(b *bytes.Reader, v protocol.VersionNumber) (*ExtendedHeader, error) {
-	if h.typeByte&0x18 != 0 {
-		return nil, errors.New("4th and 5th bit must be 0")
-	}
-
 	h.KeyPhase = protocol.KeyPhaseZero
 	if h.typeByte&0x4 > 0 {
 		h.KeyPhase = protocol.KeyPhaseOne
@@ -61,7 +64,11 @@ func (h *ExtendedHeader) parseShortHeader(b *bytes.Reader, v protocol.VersionNum
 	if err := h.readPacketNumber(b); err != nil {
 		return nil, err
 	}
-	return h, nil
+	var err error
+	if h.typeByte&0x18 != 0 {
+		err = ErrInvalidReservedBits
+	}
+	return h, err
 }
 
 func (h *ExtendedHeader) readPacketNumber(b *bytes.Reader) error {
