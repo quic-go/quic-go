@@ -393,7 +393,7 @@ func (s *server) handleInitialImpl(p *receivedPacket, hdr *wire.Header) (quicSes
 	}
 
 	var token *Token
-	var origDestConnectionID protocol.ConnectionID
+	var origDestConnectionID, connID protocol.ConnectionID
 	if len(hdr.Token) > 0 {
 		c, err := s.tokenGenerator.DecodeToken(hdr.Token)
 		if err == nil {
@@ -403,6 +403,7 @@ func (s *server) handleInitialImpl(p *receivedPacket, hdr *wire.Header) (quicSes
 				SentTime:     c.SentTime,
 			}
 			origDestConnectionID = c.OriginalDestConnectionID
+			connID = c.NextConnectionID
 		}
 	}
 	if !s.config.AcceptToken(p.remoteAddr, token) {
@@ -417,9 +418,12 @@ func (s *server) handleInitialImpl(p *receivedPacket, hdr *wire.Header) (quicSes
 		return nil, nil, s.sendServerBusy(p.remoteAddr, hdr)
 	}
 
-	connID, err := protocol.GenerateConnectionID(s.config.ConnectionIDLength)
-	if err != nil {
-		return nil, nil, err
+	if connID == nil {
+		var err error
+		connID, err = protocol.GenerateConnectionID(s.config.ConnectionIDLength)
+		if err != nil {
+			return nil, nil, err
+		}
 	}
 	s.logger.Debugf("Changing connection ID to %s.", connID)
 	sess, err := s.createNewSession(
@@ -481,7 +485,11 @@ func (s *server) createNewSession(
 }
 
 func (s *server) sendRetry(remoteAddr net.Addr, hdr *wire.Header) error {
-	token, err := s.tokenGenerator.NewRetryToken(remoteAddr, hdr.DestConnectionID)
+	nextConnID, err := protocol.GenerateConnectionID(s.config.ConnectionIDLength)
+	if err != nil {
+		return err
+	}
+	token, err := s.tokenGenerator.NewRetryToken(remoteAddr, hdr.DestConnectionID, nextConnID)
 	if err != nil {
 		return err
 	}
@@ -497,7 +505,8 @@ func (s *server) sendRetry(remoteAddr net.Addr, hdr *wire.Header) error {
 	replyHdr.DestConnectionID = hdr.SrcConnectionID
 	replyHdr.OrigDestConnectionID = hdr.DestConnectionID
 	replyHdr.Token = token
-	s.logger.Debugf("Changing connection ID to %s.\n-> Sending Retry", connID)
+	s.logger.Debugf("Changing connection ID to %s.", connID)
+	s.logger.Debugf("-> Sending Retry. Next connection ID will be: %s", nextConnID)
 	replyHdr.Log(s.logger)
 	buf := &bytes.Buffer{}
 	if err := replyHdr.Write(buf, hdr.Version); err != nil {

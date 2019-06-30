@@ -191,19 +191,39 @@ var _ = Describe("Server", func() {
 			))
 		})
 
-		It("decodes the token from the Token field", func() {
+		It("decodes the token from the Token field, and uses the connection ID", func() {
+			nextConnID := protocol.ConnectionID{0xde, 0xad, 0xbe, 0xef, 0xca, 0xfe}
 			raddr := &net.UDPAddr{
 				IP:   net.IPv4(192, 168, 13, 37),
 				Port: 1337,
 			}
-			done := make(chan struct{})
 			serv.config.AcceptToken = func(addr net.Addr, token *Token) bool {
 				Expect(addr).To(Equal(raddr))
 				Expect(token).ToNot(BeNil())
-				close(done)
-				return false
+				return true
 			}
-			token, err := serv.tokenGenerator.NewRetryToken(raddr, nil)
+			done := make(chan struct{})
+			var connID protocol.ConnectionID
+			serv.newSession = func(
+				_ connection,
+				_ sessionRunner,
+				_ protocol.ConnectionID,
+				_ protocol.ConnectionID,
+				connIDP protocol.ConnectionID,
+				_ *Config,
+				_ *tls.Config,
+				_ *handshake.TransportParameters,
+				_ *handshake.TokenGenerator,
+				_ utils.Logger,
+				_ protocol.VersionNumber,
+			) (quicSession, error) {
+				defer GinkgoRecover()
+				connID = connIDP
+				close(done)
+				return nil, errors.New("test err")
+			}
+
+			token, err := serv.tokenGenerator.NewRetryToken(raddr, nil, nextConnID)
 			Expect(err).ToNot(HaveOccurred())
 			packet := getPacket(&wire.Header{
 				IsLongHeader: true,
@@ -214,6 +234,7 @@ var _ = Describe("Server", func() {
 			packet.remoteAddr = raddr
 			serv.handlePacket(packet)
 			Eventually(done).Should(BeClosed())
+			Expect(connID).To(Equal(nextConnID))
 		})
 
 		It("passes an empty token to the callback, if decoding fails", func() {

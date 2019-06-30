@@ -510,7 +510,11 @@ func (s *session) handleHandshakeComplete() {
 	// in order to stop retransmitting handshake packets.
 	// They will stop retransmitting handshake packets when receiving the first 1-RTT packet.
 	if s.perspective == protocol.PerspectiveServer {
-		token, err := s.tokenGenerator.NewToken(s.conn.RemoteAddr())
+		nextConnID, err := protocol.GenerateConnectionID(s.config.ConnectionIDLength)
+		if err != nil {
+			s.closeLocal(err)
+		}
+		token, err := s.tokenGenerator.NewToken(s.conn.RemoteAddr(), nextConnID)
 		if err != nil {
 			s.closeLocal(err)
 		}
