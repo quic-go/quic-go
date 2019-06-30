@@ -223,6 +223,7 @@ var newSession = func(
 			onHandshakeComplete: func() { close(s.handshakeCompleteChan) },
 		},
 		tlsConf,
+		s.rttStats,
 		logger,
 	)
 	if err != nil {
@@ -296,6 +297,7 @@ var newClientSession = func(
 			onHandshakeComplete: func() { close(s.handshakeCompleteChan) },
 		},
 		tlsConf,
+		s.rttStats,
 		logger,
 	)
 	if err != nil {

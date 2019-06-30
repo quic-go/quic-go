@@ -34,7 +34,7 @@ type LongHeaderOpener interface {
 // ShortHeaderOpener opens a short header packet
 type ShortHeaderOpener interface {
 	headerDecryptor
-	Open(dst, src []byte, pn protocol.PacketNumber, kp protocol.KeyPhase, associatedData []byte) ([]byte, error)
+	Open(dst, src []byte, pn protocol.PacketNumber, kp protocol.KeyPhaseBit, associatedData []byte) ([]byte, error)
 }
 
 // LongHeaderSealer seals a long header packet
@@ -47,7 +47,7 @@ type LongHeaderSealer interface {
 // ShortHeaderSealer seals a short header packet
 type ShortHeaderSealer interface {
 	LongHeaderSealer
-	KeyPhase() protocol.KeyPhase
+	KeyPhase() protocol.KeyPhaseBit
 }
 
 // A tlsExtensionHandler sends and received the QUIC TLS extension.

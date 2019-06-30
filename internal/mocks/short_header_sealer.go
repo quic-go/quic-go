@@ -47,10 +47,10 @@ func (mr *MockShortHeaderSealerMockRecorder) EncryptHeader(arg0, arg1, arg2 inte
 }
 
 // KeyPhase mocks base method
-func (m *MockShortHeaderSealer) KeyPhase() protocol.KeyPhase {
+func (m *MockShortHeaderSealer) KeyPhase() protocol.KeyPhaseBit {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "KeyPhase")
-	ret0, _ := ret[0].(protocol.KeyPhase)
+	ret0, _ := ret[0].(protocol.KeyPhaseBit)
 	return ret0
 }
 
