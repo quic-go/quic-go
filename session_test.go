@@ -142,14 +142,6 @@ var _ = Describe("Session", func() {
 				}, protocol.Encryption1RTT)
 				Expect(err).ToNot(HaveOccurred())
 			})
-
-			It("does not accept STREAM frames in non-1RTT packets", func() {
-				err := sess.handleStreamFrame(&wire.StreamFrame{
-					StreamID: 3,
-					Data:     []byte("foobar"),
-				}, protocol.EncryptionHandshake)
-				Expect(err).To(MatchError(qerr.Error(qerr.ProtocolViolation, "received unencrypted stream data on stream 3")))
-			})
 		})
 
 		Context("handling ACK frames", func() {
@@ -540,12 +532,12 @@ var _ = Describe("Session", func() {
 			Expect((&wire.PingFrame{}).Write(buf, sess.version)).To(Succeed())
 			unpacker.EXPECT().Unpack(gomock.Any(), gomock.Any()).Return(&unpackedPacket{
 				packetNumber:    0x1337,
-				encryptionLevel: protocol.EncryptionHandshake,
+				encryptionLevel: protocol.Encryption1RTT,
 				hdr:             hdr,
 				data:            buf.Bytes(),
 			}, nil)
 			rph := mockackhandler.NewMockReceivedPacketHandler(mockCtrl)
-			rph.EXPECT().ReceivedPacket(protocol.PacketNumber(0x1337), protocol.EncryptionHandshake, rcvTime, true)
+			rph.EXPECT().ReceivedPacket(protocol.PacketNumber(0x1337), protocol.Encryption1RTT, rcvTime, true)
 			sess.receivedPacketHandler = rph
 			packet := getPacket(hdr, nil)
 			packet.rcvTime = rcvTime
