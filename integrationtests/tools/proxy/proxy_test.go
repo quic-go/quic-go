@@ -124,6 +124,7 @@ var _ = Describe("QUIC Proxy", func() {
 			serverReceivedPackets chan packetData
 			clientConn            *net.UDPConn
 			proxy                 *QuicProxy
+			stoppedReading        chan struct{}
 		)
 
 		startProxy := func(opts *Opts) {
@@ -146,6 +147,7 @@ var _ = Describe("QUIC Proxy", func() {
 		}
 
 		BeforeEach(func() {
+			stoppedReading = make(chan struct{})
 			serverReceivedPackets = make(chan packetData, 100)
 			atomic.StoreInt32(&serverNumPacketsSent, 0)
 
@@ -157,6 +159,8 @@ var _ = Describe("QUIC Proxy", func() {
 			Expect(err).ToNot(HaveOccurred())
 
 			go func() {
+				defer GinkgoRecover()
+				defer close(stoppedReading)
 				for {
 					buf := make([]byte, protocol.MaxReceivePacketSize)
 					// the ReadFromUDP will error as soon as the UDP conn is closed
@@ -174,13 +178,10 @@ var _ = Describe("QUIC Proxy", func() {
 		})
 
 		AfterEach(func() {
-			err := proxy.Close()
-			Expect(err).ToNot(HaveOccurred())
-			err = serverConn.Close()
-			Expect(err).ToNot(HaveOccurred())
-			err = clientConn.Close()
-			Expect(err).ToNot(HaveOccurred())
-			time.Sleep(200 * time.Millisecond)
+			Expect(proxy.Close()).To(Succeed())
+			Expect(serverConn.Close()).To(Succeed())
+			Expect(clientConn.Close()).To(Succeed())
+			Eventually(stoppedReading).Should(BeClosed())
 		})
 
 		Context("no packet drop", func() {
