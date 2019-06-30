@@ -212,6 +212,46 @@ var _ = Describe("Packet packer", func() {
 			}).AnyTimes()
 		})
 
+		Context("packing ACK packets", func() {
+			It("doesn't pack a packet if there's no ACK to send", func() {
+				ackFramer.EXPECT().GetAckFrame(protocol.EncryptionInitial)
+				ackFramer.EXPECT().GetAckFrame(protocol.EncryptionHandshake)
+				ackFramer.EXPECT().GetAckFrame(protocol.Encryption1RTT)
+				p, err := packer.MaybePackAckPacket()
+				Expect(err).ToNot(HaveOccurred())
+				Expect(p).To(BeNil())
+			})
+
+			It("packs Handshake ACK-only packets", func() {
+				pnManager.EXPECT().PeekPacketNumber(protocol.EncryptionHandshake).Return(protocol.PacketNumber(0x42), protocol.PacketNumberLen2)
+				pnManager.EXPECT().PopPacketNumber(protocol.EncryptionHandshake).Return(protocol.PacketNumber(0x42))
+				sealingManager.EXPECT().GetHandshakeSealer().Return(sealer, nil)
+				ack := &wire.AckFrame{AckRanges: []wire.AckRange{{Smallest: 1, Largest: 10}}}
+				ackFramer.EXPECT().GetAckFrame(protocol.EncryptionInitial)
+				ackFramer.EXPECT().GetAckFrame(protocol.EncryptionHandshake).Return(ack)
+				p, err := packer.MaybePackAckPacket()
+				Expect(err).NotTo(HaveOccurred())
+				Expect(p).ToNot(BeNil())
+				Expect(p.EncryptionLevel()).To(Equal(protocol.EncryptionHandshake))
+				Expect(p.ack).To(Equal(ack))
+			})
+
+			It("packs 1-RTT ACK-only packets", func() {
+				pnManager.EXPECT().PeekPacketNumber(protocol.Encryption1RTT).Return(protocol.PacketNumber(0x42), protocol.PacketNumberLen2)
+				pnManager.EXPECT().PopPacketNumber(protocol.Encryption1RTT).Return(protocol.PacketNumber(0x42))
+				sealingManager.EXPECT().Get1RTTSealer().Return(sealer, nil)
+				ack := &wire.AckFrame{AckRanges: []wire.AckRange{{Smallest: 1, Largest: 10}}}
+				ackFramer.EXPECT().GetAckFrame(protocol.EncryptionInitial)
+				ackFramer.EXPECT().GetAckFrame(protocol.EncryptionHandshake)
+				ackFramer.EXPECT().GetAckFrame(protocol.Encryption1RTT).Return(ack)
+				p, err := packer.MaybePackAckPacket()
+				Expect(err).NotTo(HaveOccurred())
+				Expect(p).ToNot(BeNil())
+				Expect(p.EncryptionLevel()).To(Equal(protocol.Encryption1RTT))
+				Expect(p.ack).To(Equal(ack))
+			})
+		})
+
 		Context("packing normal packets", func() {
 			BeforeEach(func() {
 				sealingManager.EXPECT().GetInitialSealer().Return(nil, nil).AnyTimes()
@@ -365,26 +405,6 @@ var _ = Describe("Packet packer", func() {
 				Expect(err).ToNot(HaveOccurred())
 				Expect(frame).To(Equal(f))
 				Expect(r.Len()).To(BeZero())
-			})
-
-			Context("packing ACK packets", func() {
-				It("doesn't pack a packet if there's no ACK to send", func() {
-					ackFramer.EXPECT().GetAckFrame(protocol.Encryption1RTT)
-					p, err := packer.MaybePackAckPacket()
-					Expect(err).ToNot(HaveOccurred())
-					Expect(p).To(BeNil())
-				})
-
-				It("packs ACK packets", func() {
-					pnManager.EXPECT().PeekPacketNumber(protocol.Encryption1RTT).Return(protocol.PacketNumber(0x42), protocol.PacketNumberLen2)
-					pnManager.EXPECT().PopPacketNumber(protocol.Encryption1RTT).Return(protocol.PacketNumber(0x42))
-					sealingManager.EXPECT().Get1RTTSealer().Return(sealer, nil)
-					ack := &wire.AckFrame{AckRanges: []wire.AckRange{{Smallest: 1, Largest: 10}}}
-					ackFramer.EXPECT().GetAckFrame(protocol.Encryption1RTT).Return(ack)
-					p, err := packer.MaybePackAckPacket()
-					Expect(err).NotTo(HaveOccurred())
-					Expect(p.ack).To(Equal(ack))
-				})
 			})
 
 			Context("making ACK packets ack-eliciting", func() {
