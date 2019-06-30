@@ -3,6 +3,7 @@ package congestion
 import (
 	"time"
 
+	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/internal/utils"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -57,6 +58,27 @@ var _ = Describe("RTT stats", func() {
 		// Verify that ack_delay does not go into recording of MinRTT_.
 		rttStats.UpdateRTT((7 * time.Millisecond), (2 * time.Millisecond), time.Time{}.Add((50 * time.Millisecond)))
 		Expect(rttStats.MinRTT()).To(Equal((7 * time.Millisecond)))
+	})
+
+	It("MaxAckDelay", func() {
+		rttStats.SetMaxAckDelay(42 * time.Minute)
+		Expect(rttStats.MaxAckDelay()).To(Equal(42 * time.Minute))
+	})
+
+	It("computes the PTO", func() {
+		maxAckDelay := 42 * time.Minute
+		rttStats.SetMaxAckDelay(maxAckDelay)
+		rtt := time.Second
+		rttStats.UpdateRTT(rtt, 0, time.Time{})
+		Expect(rttStats.SmoothedRTT()).To(Equal(rtt))
+		Expect(rttStats.MeanDeviation()).To(Equal(rtt / 2))
+		Expect(rttStats.PTO()).To(Equal(rtt + 4*(rtt/2) + maxAckDelay))
+	})
+
+	It("uses the granularity for computing the PTO for short RTTs", func() {
+		rtt := time.Microsecond
+		rttStats.UpdateRTT(rtt, 0, time.Time{})
+		Expect(rttStats.PTO()).To(Equal(rtt + protocol.TimerGranularity))
 	})
 
 	It("ExpireSmoothedMetrics", func() {

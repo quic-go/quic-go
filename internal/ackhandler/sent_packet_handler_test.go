@@ -293,7 +293,7 @@ var _ = Describe("SentPacketHandler", func() {
 
 			It("ignores the DelayTime for Initial and Handshake packets", func() {
 				handler.SentPacket(cryptoPacket(&Packet{PacketNumber: 1}))
-				handler.SetMaxAckDelay(time.Hour)
+				handler.rttStats.SetMaxAckDelay(time.Hour)
 				// make sure the rttStats have a min RTT, so that the delay is used
 				handler.rttStats.UpdateRTT(5*time.Minute, 0, time.Now())
 				getPacket(1, protocol.EncryptionInitial).SendTime = time.Now().Add(-10 * time.Minute)
@@ -306,7 +306,7 @@ var _ = Describe("SentPacketHandler", func() {
 			})
 
 			It("uses the DelayTime in the ACK frame", func() {
-				handler.SetMaxAckDelay(time.Hour)
+				handler.rttStats.SetMaxAckDelay(time.Hour)
 				// make sure the rttStats have a min RTT, so that the delay is used
 				handler.rttStats.UpdateRTT(5*time.Minute, 0, time.Now())
 				getPacket(1, protocol.Encryption1RTT).SendTime = time.Now().Add(-10 * time.Minute)
@@ -319,7 +319,7 @@ var _ = Describe("SentPacketHandler", func() {
 			})
 
 			It("limits the DelayTime in the ACK frame to max_ack_delay", func() {
-				handler.SetMaxAckDelay(time.Minute)
+				handler.rttStats.SetMaxAckDelay(time.Minute)
 				// make sure the rttStats have a min RTT, so that the delay is used
 				handler.rttStats.UpdateRTT(5*time.Minute, 0, time.Now())
 				getPacket(1, protocol.Encryption1RTT).SendTime = time.Now().Add(-10 * time.Minute)
@@ -611,28 +611,17 @@ var _ = Describe("SentPacketHandler", func() {
 	})
 
 	Context("probe packets", func() {
-		It("uses the RTT from RTT stats", func() {
-			rtt := 2 * time.Second
-			updateRTT(rtt)
-			Expect(handler.rttStats.SmoothedOrInitialRTT()).To(Equal(2 * time.Second))
-			Expect(handler.rttStats.MeanDeviation()).To(Equal(time.Second))
-			Expect(handler.computePTOTimeout()).To(Equal(time.Duration(2+4) * time.Second))
-		})
-
-		It("uses the granularity for short RTTs", func() {
-			rtt := time.Microsecond
-			updateRTT(rtt)
-			Expect(handler.computePTOTimeout()).To(Equal(rtt + protocol.TimerGranularity))
-		})
-
 		It("implements exponential backoff", func() {
-			handler.ptoCount = 0
-			timeout := handler.computePTOTimeout()
-			Expect(timeout).ToNot(BeZero())
+			sendTime := time.Now().Add(-time.Hour)
+			handler.SentPacket(ackElicitingPacket(&Packet{PacketNumber: 1, SendTime: sendTime}))
+			timeout := handler.GetAlarmTimeout().Sub(sendTime)
+			Expect(handler.GetAlarmTimeout().Sub(sendTime)).To(Equal(timeout))
 			handler.ptoCount = 1
-			Expect(handler.computePTOTimeout()).To(Equal(2 * timeout))
+			handler.updateLossDetectionAlarm()
+			Expect(handler.GetAlarmTimeout().Sub(sendTime)).To(Equal(2 * timeout))
 			handler.ptoCount = 2
-			Expect(handler.computePTOTimeout()).To(Equal(4 * timeout))
+			handler.updateLossDetectionAlarm()
+			Expect(handler.GetAlarmTimeout().Sub(sendTime)).To(Equal(4 * timeout))
 		})
 
 		It("sets the TPO send mode until two  packets is sent", func() {
