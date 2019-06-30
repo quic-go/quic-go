@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net"
-	"os"
+	"runtime"
 	"time"
 
 	quic "github.com/lucas-clemente/quic-go"
@@ -164,8 +164,8 @@ var _ = Describe("Multiplexing", func() {
 				})
 
 				It("runs a server and client on the same conn", func() {
-					if os.Getenv("CI") == "true" {
-						Skip("This test is flaky on CIs, see see https://github.com/golang/go/issues/17677.")
+					if runtime.GOOS == "linux" {
+						Skip("This test would require setting of iptables rules, see https://stackoverflow.com/questions/23859164/linux-udp-socket-sendto-operation-not-permitted.")
 					}
 					addr1, err := net.ResolveUDPAddr("udp", "localhost:0")
 					Expect(err).ToNot(HaveOccurred())
