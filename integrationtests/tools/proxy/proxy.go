@@ -3,7 +3,6 @@ package quicproxy
 import (
 	"net"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/lucas-clemente/quic-go/internal/protocol"
@@ -14,9 +13,6 @@ import (
 type connection struct {
 	ClientAddr *net.UDPAddr // Address of the client
 	ServerConn *net.UDPConn // UDP connection to server
-
-	incomingPacketCounter uint64
-	outgoingPacketCounter uint64
 }
 
 // Direction is the direction a packet is sent.
@@ -54,18 +50,18 @@ func (d Direction) Is(dir Direction) bool {
 }
 
 // DropCallback is a callback that determines which packet gets dropped.
-type DropCallback func(dir Direction, packetCount uint64) bool
+type DropCallback func(dir Direction, packet []byte) bool
 
 // NoDropper doesn't drop packets.
-var NoDropper DropCallback = func(Direction, uint64) bool {
+var NoDropper DropCallback = func(Direction, []byte) bool {
 	return false
 }
 
 // DelayCallback is a callback that determines how much delay to apply to a packet.
-type DelayCallback func(dir Direction, packetCount uint64) time.Duration
+type DelayCallback func(dir Direction, packet []byte) time.Duration
 
 // NoDelay doesn't apply a delay.
-var NoDelay DelayCallback = func(Direction, uint64) time.Duration {
+var NoDelay DelayCallback = func(Direction, []byte) time.Duration {
 	return 0
 }
 
@@ -197,20 +193,18 @@ func (p *QuicProxy) runProxy() error {
 		}
 		p.mutex.Unlock()
 
-		packetCount := atomic.AddUint64(&conn.incomingPacketCounter, 1)
-
-		if p.dropPacket(DirectionIncoming, packetCount) {
+		if p.dropPacket(DirectionIncoming, raw) {
 			if p.logger.Debug() {
-				p.logger.Debugf("dropping incoming packet %d (%d bytes)", packetCount, n)
+				p.logger.Debugf("dropping incoming packet(%d bytes)", n)
 			}
 			continue
 		}
 
 		// Send the packet to the server
-		delay := p.delayPacket(DirectionIncoming, packetCount)
+		delay := p.delayPacket(DirectionIncoming, raw)
 		if delay != 0 {
 			if p.logger.Debug() {
-				p.logger.Debugf("delaying incoming packet %d (%d bytes) to %s by %s", packetCount, n, conn.ServerConn.RemoteAddr(), delay)
+				p.logger.Debugf("delaying incoming packet (%d bytes) to %s by %s", n, conn.ServerConn.RemoteAddr(), delay)
 			}
 			time.AfterFunc(delay, func() {
 				// TODO: handle error
@@ -218,7 +212,7 @@ func (p *QuicProxy) runProxy() error {
 			})
 		} else {
 			if p.logger.Debug() {
-				p.logger.Debugf("forwarding incoming packet %d (%d bytes) to %s", packetCount, n, conn.ServerConn.RemoteAddr())
+				p.logger.Debugf("forwarding incoming packet (%d bytes) to %s", n, conn.ServerConn.RemoteAddr())
 			}
 			if _, err := conn.ServerConn.Write(raw); err != nil {
 				return err
@@ -237,19 +231,17 @@ func (p *QuicProxy) runConnection(conn *connection) error {
 		}
 		raw := buffer[0:n]
 
-		packetCount := atomic.AddUint64(&conn.outgoingPacketCounter, 1)
-
-		if p.dropPacket(DirectionOutgoing, packetCount) {
+		if p.dropPacket(DirectionOutgoing, raw) {
 			if p.logger.Debug() {
-				p.logger.Debugf("dropping outgoing packet %d (%d bytes)", packetCount, n)
+				p.logger.Debugf("dropping outgoing packet(%d bytes)", n)
 			}
 			continue
 		}
 
-		delay := p.delayPacket(DirectionOutgoing, packetCount)
+		delay := p.delayPacket(DirectionOutgoing, raw)
 		if delay != 0 {
 			if p.logger.Debug() {
-				p.logger.Debugf("delaying outgoing packet %d (%d bytes) to %s by %s", packetCount, n, conn.ClientAddr, delay)
+				p.logger.Debugf("delaying outgoing packet (%d bytes) to %s by %s", n, conn.ClientAddr, delay)
 			}
 			time.AfterFunc(delay, func() {
 				// TODO: handle error
@@ -257,7 +249,7 @@ func (p *QuicProxy) runConnection(conn *connection) error {
 			})
 		} else {
 			if p.logger.Debug() {
-				p.logger.Debugf("forwarding outgoing packet %d (%d bytes) to %s", packetCount, n, conn.ClientAddr)
+				p.logger.Debugf("forwarding outgoing packet (%d bytes) to %s", n, conn.ClientAddr)
 			}
 			if _, err := p.conn.WriteToUDP(raw, conn.ClientAddr); err != nil {
 				return err

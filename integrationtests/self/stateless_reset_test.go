@@ -48,7 +48,7 @@ var _ = Describe("Stateless Resets", func() {
 
 			proxy, err := quicproxy.NewQuicProxy("localhost:0", &quicproxy.Opts{
 				RemoteAddr: fmt.Sprintf("localhost:%d", serverPort),
-				DropPacket: func(d quicproxy.Direction, p uint64) bool {
+				DropPacket: func(quicproxy.Direction, []byte) bool {
 					return drop.Get()
 				},
 			})

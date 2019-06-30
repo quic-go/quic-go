@@ -82,7 +82,7 @@ var _ = Describe("Timeout tests", func() {
 
 		proxy, err := quicproxy.NewQuicProxy("localhost:0", &quicproxy.Opts{
 			RemoteAddr: fmt.Sprintf("localhost:%d", server.Addr().(*net.UDPAddr).Port),
-			DropPacket: func(d quicproxy.Direction, p uint64) bool {
+			DropPacket: func(quicproxy.Direction, []byte) bool {
 				return drop.Get()
 			},
 		})

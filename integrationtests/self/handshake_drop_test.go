@@ -5,6 +5,7 @@ import (
 	"fmt"
 	mrand "math/rand"
 	"net"
+	"sync/atomic"
 	"time"
 
 	quic "github.com/lucas-clemente/quic-go"
@@ -161,21 +162,37 @@ var _ = Describe("Handshake drop tests", func() {
 
 					Context(app.name, func() {
 						It(fmt.Sprintf("establishes a connection when the first packet is lost in %s direction", d), func() {
-							startListenerAndProxy(func(d quicproxy.Direction, p uint64) bool {
+							var incoming, outgoing int32
+							startListenerAndProxy(func(d quicproxy.Direction, _ []byte) bool {
+								var p int32
+								switch d {
+								case quicproxy.DirectionIncoming:
+									p = atomic.AddInt32(&incoming, 1)
+								case quicproxy.DirectionOutgoing:
+									p = atomic.AddInt32(&outgoing, 1)
+								}
 								return p == 1 && d.Is(direction)
 							}, version)
 							app.run(version)
 						})
 
 						It(fmt.Sprintf("establishes a connection when the second packet is lost in %s direction", d), func() {
-							startListenerAndProxy(func(d quicproxy.Direction, p uint64) bool {
+							var incoming, outgoing int32
+							startListenerAndProxy(func(d quicproxy.Direction, _ []byte) bool {
+								var p int32
+								switch d {
+								case quicproxy.DirectionIncoming:
+									p = atomic.AddInt32(&incoming, 1)
+								case quicproxy.DirectionOutgoing:
+									p = atomic.AddInt32(&outgoing, 1)
+								}
 								return p == 2 && d.Is(direction)
 							}, version)
 							app.run(version)
 						})
 
 						It(fmt.Sprintf("establishes a connection when 1/5 of the packets are lost in %s direction", d), func() {
-							startListenerAndProxy(func(d quicproxy.Direction, p uint64) bool {
+							startListenerAndProxy(func(d quicproxy.Direction, _ []byte) bool {
 								return d.Is(direction) && stochasticDropper(5)
 							}, version)
 							app.run(version)

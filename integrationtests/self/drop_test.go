@@ -39,7 +39,7 @@ var _ = Describe("Drop Tests", func() {
 		serverPort := ln.Addr().(*net.UDPAddr).Port
 		proxy, err = quicproxy.NewQuicProxy("localhost:0", &quicproxy.Opts{
 			RemoteAddr: fmt.Sprintf("localhost:%d", serverPort),
-			DelayPacket: func(dir quicproxy.Direction, packetCount uint64) time.Duration {
+			DelayPacket: func(dir quicproxy.Direction, _ []byte) time.Duration {
 				return 5 * time.Millisecond // 10ms RTT
 			},
 			DropPacket: dropCallback,
@@ -75,7 +75,7 @@ var _ = Describe("Drop Tests", func() {
 						startTime := time.Now()
 
 						var numDroppedPackets int32
-						startListenerAndProxy(func(d quicproxy.Direction, p uint64) bool {
+						startListenerAndProxy(func(d quicproxy.Direction, _ []byte) bool {
 							if !d.Is(direction) {
 								return false
 							}
