@@ -565,9 +565,8 @@ var _ = Describe("Session", func() {
 			Eventually(sess.Context().Done()).Should(BeClosed())
 		})
 
-		It("closes the session when unpacking fails for any other reason than a decryption error", func() {
-			testErr := errors.New("test error")
-			unpacker.EXPECT().Unpack(gomock.Any(), gomock.Any()).Return(nil, testErr)
+		It("closes the session when unpacking fails because the reserved bits were incorrect", func() {
+			unpacker.EXPECT().Unpack(gomock.Any(), gomock.Any()).Return(nil, wire.ErrInvalidReservedBits)
 			streamManager.EXPECT().CloseWithError(gomock.Any())
 			cryptoSetup.EXPECT().Close()
 			packer.EXPECT().PackConnectionClose(gomock.Any()).Return(&packedPacket{}, nil)
@@ -575,7 +574,9 @@ var _ = Describe("Session", func() {
 			go func() {
 				defer GinkgoRecover()
 				cryptoSetup.EXPECT().RunHandshake().MaxTimes(1)
-				Expect(sess.run()).To(MatchError(testErr))
+				err := sess.run()
+				Expect(err).To(HaveOccurred())
+				Expect(err.(*qerr.QuicError).ErrorCode).To(Equal(qerr.ProtocolViolation))
 				close(done)
 			}()
 			sessionRunner.EXPECT().Retire(gomock.Any())
@@ -583,6 +584,29 @@ var _ = Describe("Session", func() {
 				Header:          wire.Header{DestConnectionID: sess.srcConnID},
 				PacketNumberLen: protocol.PacketNumberLen1,
 			}, nil))
+			Eventually(sess.Context().Done()).Should(BeClosed())
+		})
+
+		It("ignores packets when unpacking fails for any other reason", func() {
+			testErr := errors.New("test err")
+			unpacker.EXPECT().Unpack(gomock.Any(), gomock.Any()).Return(nil, testErr)
+			streamManager.EXPECT().CloseWithError(gomock.Any())
+			cryptoSetup.EXPECT().Close()
+			packer.EXPECT().PackConnectionClose(gomock.Any()).Return(&packedPacket{}, nil)
+			runErr := make(chan error)
+			go func() {
+				defer GinkgoRecover()
+				cryptoSetup.EXPECT().RunHandshake().MaxTimes(1)
+				runErr <- sess.run()
+			}()
+			sessionRunner.EXPECT().Retire(gomock.Any())
+			sess.handlePacket(getPacket(&wire.ExtendedHeader{
+				Header:          wire.Header{DestConnectionID: sess.srcConnID},
+				PacketNumberLen: protocol.PacketNumberLen1,
+			}, nil))
+			Consistently(runErr).ShouldNot(Receive())
+			// make the go routine return
+			sess.Close()
 			Eventually(sess.Context().Done()).Should(BeClosed())
 		})
 
