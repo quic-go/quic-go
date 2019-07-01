@@ -24,11 +24,11 @@ The *master* branch **only** supports IETF QUIC. For Google QUIC support, please
 
 ## Guides
 
-We currently support Go 1.12+.
+We currently support Go 1.12+, with [Go modules](https://github.com/golang/go/wiki/Modules) support enabled.
 
 Installing and updating dependencies:
 
-    go get -t -u ./...
+    go get -u ./...
 
 Running tests:
 
