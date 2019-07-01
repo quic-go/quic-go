@@ -357,6 +357,19 @@ var _ = Describe("Frame parsing", func() {
 			}
 		})
 
+		It("rejects all frames but ACK, CRYPTO, CONNECTION_CLOSE, NEW_TOKEN, PATH_RESPONSE and RETIRE_CONNECTION_ID in 0-RTT packets", func() {
+			for i, b := range framesSerialized {
+				_, err := parser.ParseNext(bytes.NewReader(b), protocol.Encryption0RTT)
+				switch frames[i].(type) {
+				case *AckFrame, *ConnectionCloseFrame, *CryptoFrame, *NewTokenFrame, *PathResponseFrame, *RetireConnectionIDFrame:
+					Expect(err).To(HaveOccurred())
+					Expect(err.Error()).To(ContainSubstring("not allowed at encryption level 0-RTT"))
+				default:
+					Expect(err).ToNot(HaveOccurred())
+				}
+			}
+		})
+
 		It("accepts all frame types in 1-RTT packets", func() {
 			for _, b := range framesSerialized {
 				_, err := parser.ParseNext(bytes.NewReader(b), protocol.Encryption1RTT)
