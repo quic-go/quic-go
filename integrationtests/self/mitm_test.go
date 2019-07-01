@@ -29,9 +29,10 @@ var _ = Describe("MITM test", func() {
 			var (
 				proxy                  *quicproxy.QuicProxy
 				serverConn, clientConn *net.UDPConn
+				serverSess             quic.Session
 			)
 
-			startServerAndProxy := func(delayCb quicproxy.DelayCallback) {
+			startServerAndProxy := func(delayCb quicproxy.DelayCallback, dropCb quicproxy.DropCallback) {
 				addr, err := net.ResolveUDPAddr("udp", "localhost:0")
 				Expect(err).ToNot(HaveOccurred())
 				serverConn, err = net.ListenUDP("udp", addr)
@@ -47,9 +48,10 @@ var _ = Describe("MITM test", func() {
 				Expect(err).ToNot(HaveOccurred())
 				go func() {
 					defer GinkgoRecover()
-					sess, err := ln.Accept(context.Background())
+					var err error
+					serverSess, err = ln.Accept(context.Background())
 					Expect(err).ToNot(HaveOccurred())
-					str, err := sess.OpenUniStream()
+					str, err := serverSess.OpenUniStream()
 					Expect(err).ToNot(HaveOccurred())
 					_, err = str.Write(testserver.PRData)
 					Expect(err).ToNot(HaveOccurred())
@@ -59,6 +61,7 @@ var _ = Describe("MITM test", func() {
 				proxy, err = quicproxy.NewQuicProxy("localhost:0", &quicproxy.Opts{
 					RemoteAddr:  fmt.Sprintf("localhost:%d", serverPort),
 					DelayPacket: delayCb,
+					DropPacket:  dropCb,
 				})
 				Expect(err).ToNot(HaveOccurred())
 			}
@@ -71,6 +74,7 @@ var _ = Describe("MITM test", func() {
 			})
 
 			AfterEach(func() {
+				Eventually(serverSess.Context().Done()).Should(BeClosed())
 				// Test shutdown is tricky due to the proxy. Just wait for a bit.
 				time.Sleep(50 * time.Millisecond)
 				Expect(clientConn.Close()).To(Succeed())
@@ -115,7 +119,7 @@ var _ = Describe("MITM test", func() {
 				}
 
 				runTest := func(delayCb quicproxy.DelayCallback) {
-					startServerAndProxy(delayCb)
+					startServerAndProxy(delayCb, nil)
 					raddr, err := net.ResolveUDPAddr("udp", fmt.Sprintf("localhost:%d", proxy.LocalPort()))
 					Expect(err).ToNot(HaveOccurred())
 					sess, err := quic.Dial(
@@ -157,6 +161,55 @@ var _ = Describe("MITM test", func() {
 						return rtt / 2
 					}
 					runTest(delayCb)
+				})
+			})
+
+			Context("duplicating packets", func() {
+				runTest := func(dropCb quicproxy.DropCallback) {
+					startServerAndProxy(nil, dropCb)
+					raddr, err := net.ResolveUDPAddr("udp", fmt.Sprintf("localhost:%d", proxy.LocalPort()))
+					Expect(err).ToNot(HaveOccurred())
+					sess, err := quic.Dial(
+						clientConn,
+						raddr,
+						fmt.Sprintf("localhost:%d", proxy.LocalPort()),
+						getTLSClientConfig(),
+						&quic.Config{
+							Versions:           []protocol.VersionNumber{version},
+							ConnectionIDLength: connIDLen,
+						},
+					)
+					Expect(err).ToNot(HaveOccurred())
+					str, err := sess.AcceptUniStream(context.Background())
+					Expect(err).ToNot(HaveOccurred())
+					data, err := ioutil.ReadAll(str)
+					Expect(err).ToNot(HaveOccurred())
+					Expect(data).To(Equal(testserver.PRData))
+					Expect(sess.Close()).To(Succeed())
+				}
+
+				It("downloads a message when packets are duplicated towards the server", func() {
+					dropCb := func(dir quicproxy.Direction, raw []byte) bool {
+						defer GinkgoRecover()
+						if dir == quicproxy.DirectionIncoming {
+							_, err := clientConn.WriteTo(raw, serverConn.LocalAddr())
+							Expect(err).ToNot(HaveOccurred())
+						}
+						return false
+					}
+					runTest(dropCb)
+				})
+
+				It("downloads a message when packets are duplicated towards the client", func() {
+					dropCb := func(dir quicproxy.Direction, raw []byte) bool {
+						defer GinkgoRecover()
+						if dir == quicproxy.DirectionOutgoing {
+							_, err := serverConn.WriteTo(raw, clientConn.LocalAddr())
+							Expect(err).ToNot(HaveOccurred())
+						}
+						return false
+					}
+					runTest(dropCb)
 				})
 			})
 		})
