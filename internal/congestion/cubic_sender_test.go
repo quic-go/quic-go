@@ -107,6 +107,12 @@ var _ = Describe("Cubic Sender", func() {
 		Expect(delay).ToNot(Equal(utils.InfDuration))
 	})
 
+	It("stops pacing when congestion limited", func() {
+		bytesInFlight := sender.GetCongestionWindow()
+		Expect(sender.CanSend(bytesInFlight)).To(BeFalse())
+		Expect(sender.TimeUntilSend(bytesInFlight)).To(Equal(utils.InfDuration))
+	})
+
 	It("application limited slow start", func() {
 		// Send exactly 10 packets and ensure the CWND ends at 14 packets.
 		const numberOfAcks = 5
