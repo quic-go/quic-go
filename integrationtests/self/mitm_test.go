@@ -8,6 +8,7 @@ import (
 	"math"
 	mrand "math/rand"
 	"net"
+	"sync/atomic"
 	"time"
 
 	quic "github.com/lucas-clemente/quic-go"
@@ -30,6 +31,7 @@ var _ = Describe("MITM test", func() {
 				proxy                  *quicproxy.QuicProxy
 				serverConn, clientConn *net.UDPConn
 				serverSess             quic.Session
+				serverConfig           *quic.Config
 			)
 
 			startServerAndProxy := func(delayCb quicproxy.DelayCallback, dropCb quicproxy.DropCallback) {
@@ -37,14 +39,7 @@ var _ = Describe("MITM test", func() {
 				Expect(err).ToNot(HaveOccurred())
 				serverConn, err = net.ListenUDP("udp", addr)
 				Expect(err).ToNot(HaveOccurred())
-				ln, err := quic.Listen(
-					serverConn,
-					getTLSConfig(),
-					&quic.Config{
-						Versions:           []protocol.VersionNumber{version},
-						ConnectionIDLength: connIDLen,
-					},
-				)
+				ln, err := quic.Listen(serverConn, getTLSConfig(), serverConfig)
 				Expect(err).ToNot(HaveOccurred())
 				go func() {
 					defer GinkgoRecover()
@@ -67,6 +62,10 @@ var _ = Describe("MITM test", func() {
 			}
 
 			BeforeEach(func() {
+				serverConfig = &quic.Config{
+					Versions:           []protocol.VersionNumber{version},
+					ConnectionIDLength: connIDLen,
+				}
 				addr, err := net.ResolveUDPAddr("udp", "localhost:0")
 				Expect(err).ToNot(HaveOccurred())
 				clientConn, err = net.ListenUDP("udp", addr)
@@ -164,30 +163,30 @@ var _ = Describe("MITM test", func() {
 				})
 			})
 
-			Context("duplicating packets", func() {
-				runTest := func(dropCb quicproxy.DropCallback) {
-					startServerAndProxy(nil, dropCb)
-					raddr, err := net.ResolveUDPAddr("udp", fmt.Sprintf("localhost:%d", proxy.LocalPort()))
-					Expect(err).ToNot(HaveOccurred())
-					sess, err := quic.Dial(
-						clientConn,
-						raddr,
-						fmt.Sprintf("localhost:%d", proxy.LocalPort()),
-						getTLSClientConfig(),
-						&quic.Config{
-							Versions:           []protocol.VersionNumber{version},
-							ConnectionIDLength: connIDLen,
-						},
-					)
-					Expect(err).ToNot(HaveOccurred())
-					str, err := sess.AcceptUniStream(context.Background())
-					Expect(err).ToNot(HaveOccurred())
-					data, err := ioutil.ReadAll(str)
-					Expect(err).ToNot(HaveOccurred())
-					Expect(data).To(Equal(testserver.PRData))
-					Expect(sess.Close()).To(Succeed())
-				}
+			runTest := func(dropCb quicproxy.DropCallback) {
+				startServerAndProxy(nil, dropCb)
+				raddr, err := net.ResolveUDPAddr("udp", fmt.Sprintf("localhost:%d", proxy.LocalPort()))
+				Expect(err).ToNot(HaveOccurred())
+				sess, err := quic.Dial(
+					clientConn,
+					raddr,
+					fmt.Sprintf("localhost:%d", proxy.LocalPort()),
+					getTLSClientConfig(),
+					&quic.Config{
+						Versions:           []protocol.VersionNumber{version},
+						ConnectionIDLength: connIDLen,
+					},
+				)
+				Expect(err).ToNot(HaveOccurred())
+				str, err := sess.AcceptUniStream(context.Background())
+				Expect(err).ToNot(HaveOccurred())
+				data, err := ioutil.ReadAll(str)
+				Expect(err).ToNot(HaveOccurred())
+				Expect(data).To(Equal(testserver.PRData))
+				Expect(sess.Close()).To(Succeed())
+			}
 
+			Context("duplicating packets", func() {
 				It("downloads a message when packets are duplicated towards the server", func() {
 					dropCb := func(dir quicproxy.Direction, raw []byte) bool {
 						defer GinkgoRecover()
@@ -206,6 +205,60 @@ var _ = Describe("MITM test", func() {
 						if dir == quicproxy.DirectionOutgoing {
 							_, err := serverConn.WriteTo(raw, clientConn.LocalAddr())
 							Expect(err).ToNot(HaveOccurred())
+						}
+						return false
+					}
+					runTest(dropCb)
+				})
+			})
+
+			Context("corrupting packets", func() {
+				const interval = 10 // corrupt every 10th packet (stochastically)
+				const idleTimeout = time.Second
+
+				var numCorrupted int32
+
+				BeforeEach(func() {
+					numCorrupted = 0
+					serverConfig.IdleTimeout = idleTimeout
+				})
+
+				AfterEach(func() {
+					num := atomic.LoadInt32(&numCorrupted)
+					fmt.Fprintf(GinkgoWriter, "Corrupted %d packets.", num)
+					Expect(num).To(BeNumerically(">=", 1))
+					// If the packet containing the CONNECTION_CLOSE is corrupted,
+					// we have to wait for the session to time out.
+					Eventually(serverSess.Context().Done(), 3*idleTimeout).Should(BeClosed())
+				})
+
+				It("downloads a message when packet are corrupted towards the server", func() {
+					dropCb := func(dir quicproxy.Direction, raw []byte) bool {
+						defer GinkgoRecover()
+						if dir == quicproxy.DirectionIncoming && mrand.Intn(interval) == 0 {
+							pos := mrand.Intn(len(raw))
+							raw[pos] = byte(mrand.Intn(256))
+							_, err := clientConn.WriteTo(raw, serverConn.LocalAddr())
+							Expect(err).ToNot(HaveOccurred())
+							atomic.AddInt32(&numCorrupted, 1)
+							return true
+						}
+						return false
+					}
+					runTest(dropCb)
+				})
+
+				It("downloads a message when packet are corrupted towards the client", func() {
+					dropCb := func(dir quicproxy.Direction, raw []byte) bool {
+						defer GinkgoRecover()
+						isRetry := raw[0]&0xc0 == 0xc0 // don't corrupt Retry packets
+						if dir == quicproxy.DirectionOutgoing && mrand.Intn(interval) == 0 && !isRetry {
+							pos := mrand.Intn(len(raw))
+							raw[pos] = byte(mrand.Intn(256))
+							_, err := serverConn.WriteTo(raw, clientConn.LocalAddr())
+							Expect(err).ToNot(HaveOccurred())
+							atomic.AddInt32(&numCorrupted, 1)
+							return true
 						}
 						return false
 					}
