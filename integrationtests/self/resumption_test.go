@@ -52,19 +52,6 @@ var _ = Describe("TLS session resumption", func() {
 		Expect(err).ToNot(HaveOccurred())
 		defer server.Close()
 
-		done := make(chan struct{})
-		go func() {
-			defer close(done)
-			defer GinkgoRecover()
-			sess, err := server.Accept(context.Background())
-			Expect(err).ToNot(HaveOccurred())
-			Expect(sess.ConnectionState().DidResume).To(BeFalse())
-
-			sess, err = server.Accept(context.Background())
-			Expect(err).ToNot(HaveOccurred())
-			Expect(sess.ConnectionState().DidResume).To(BeTrue())
-		}()
-
 		gets := make(chan string, 100)
 		puts := make(chan string, 100)
 		cache := newClientSessionCache(gets, puts)
@@ -80,6 +67,10 @@ var _ = Describe("TLS session resumption", func() {
 		Eventually(puts).Should(Receive(&sessionKey))
 		Expect(sess.ConnectionState().DidResume).To(BeFalse())
 
+		serverSess, err := server.Accept(context.Background())
+		Expect(err).ToNot(HaveOccurred())
+		Expect(serverSess.ConnectionState().DidResume).To(BeFalse())
+
 		sess, err = quic.DialAddr(
 			fmt.Sprintf("localhost:%d", server.Addr().(*net.UDPAddr).Port),
 			tlsConf,
@@ -89,6 +80,8 @@ var _ = Describe("TLS session resumption", func() {
 		Expect(gets).To(Receive(Equal(sessionKey)))
 		Expect(sess.ConnectionState().DidResume).To(BeTrue())
 
-		Eventually(done).Should(BeClosed())
+		serverSess, err = server.Accept(context.Background())
+		Expect(err).ToNot(HaveOccurred())
+		Expect(serverSess.ConnectionState().DidResume).To(BeTrue())
 	})
 })
