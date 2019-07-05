@@ -478,17 +478,17 @@ func (h *cryptoSetup) ReadHandshakeMessage() ([]byte, error) {
 	return msg, nil
 }
 
-func (h *cryptoSetup) SetReadKey(suite *qtls.CipherSuite, trafficSecret []byte) {
+func (h *cryptoSetup) SetReadKey(encLevel qtls.EncryptionLevel, suite *qtls.CipherSuite, trafficSecret []byte) {
 	h.mutex.Lock()
-	switch h.readEncLevel {
-	case protocol.EncryptionInitial:
+	switch encLevel {
+	case qtls.EncryptionHandshake:
 		h.readEncLevel = protocol.EncryptionHandshake
 		h.handshakeOpener = newLongHeaderOpener(
 			createAEAD(suite, trafficSecret),
 			createHeaderProtector(suite, trafficSecret),
 		)
 		h.logger.Debugf("Installed Handshake Read keys")
-	case protocol.EncryptionHandshake:
+	case qtls.EncryptionApplication:
 		h.readEncLevel = protocol.Encryption1RTT
 		h.aead.SetReadKey(suite, trafficSecret)
 		h.has1RTTOpener = true
@@ -500,17 +500,17 @@ func (h *cryptoSetup) SetReadKey(suite *qtls.CipherSuite, trafficSecret []byte) 
 	h.receivedReadKey <- struct{}{}
 }
 
-func (h *cryptoSetup) SetWriteKey(suite *qtls.CipherSuite, trafficSecret []byte) {
+func (h *cryptoSetup) SetWriteKey(encLevel qtls.EncryptionLevel, suite *qtls.CipherSuite, trafficSecret []byte) {
 	h.mutex.Lock()
-	switch h.writeEncLevel {
-	case protocol.EncryptionInitial:
+	switch encLevel {
+	case qtls.EncryptionHandshake:
 		h.writeEncLevel = protocol.EncryptionHandshake
 		h.handshakeSealer = newLongHeaderSealer(
 			createAEAD(suite, trafficSecret),
 			createHeaderProtector(suite, trafficSecret),
 		)
 		h.logger.Debugf("Installed Handshake Write keys")
-	case protocol.EncryptionHandshake:
+	case qtls.EncryptionApplication:
 		h.writeEncLevel = protocol.Encryption1RTT
 		h.aead.SetWriteKey(suite, trafficSecret)
 		h.has1RTTSealer = true
