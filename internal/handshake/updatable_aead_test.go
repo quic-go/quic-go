@@ -177,7 +177,7 @@ var _ = Describe("Updatable AEAD", func() {
 					Expect(err).ToNot(HaveOccurred())
 					Expect(server.KeyPhase()).To(Equal(protocol.KeyPhaseOne))
 					// now receive a reordered packet with key phase 0
-					time.Sleep(3 * pto)
+					time.Sleep(3*pto + 5*time.Millisecond)
 					_, err = server.Open(nil, encrypted02, 0x43, protocol.KeyPhaseZero, ad)
 					Expect(err).To(MatchError(ErrKeysDropped))
 				})
