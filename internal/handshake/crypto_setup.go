@@ -16,8 +16,12 @@ import (
 	"github.com/marten-seemann/qtls"
 )
 
-// TLS unexpected_message alert
-const alertUnexpectedMessage uint8 = 10
+const (
+	// TLS unexpected_message alert
+	alertUnexpectedMessage uint8 = 10
+	// TLS internal error
+	alertInternalError uint8 = 80
+)
 
 type messageType uint8
 
@@ -264,6 +268,10 @@ func (h *cryptoSetup) RunHandshake() {
 	select {
 	case <-handshakeComplete: // return when the handshake is done
 		h.runner.OnHandshakeComplete()
+		// send a session ticket
+		if h.perspective == protocol.PerspectiveServer {
+			h.maybeSendSessionTicket()
+		}
 	case <-h.closeChan:
 		close(h.messageChan)
 		// wait until the Handshake() go routine has returned
@@ -443,6 +451,18 @@ func (h *cryptoSetup) handleMessageForClient(msgType messageType) bool {
 	}
 }
 
+// only valid for the server
+func (h *cryptoSetup) maybeSendSessionTicket() {
+	ticket, err := h.conn.GetSessionTicket()
+	if err != nil {
+		h.onError(alertInternalError, err.Error())
+		return
+	}
+	if ticket != nil {
+		h.oneRTTStream.Write(ticket)
+	}
+}
+
 func (h *cryptoSetup) handlePostHandshakeMessage(data []byte) {
 	// make sure the handshake has already completed
 	<-h.handshakeDone
@@ -543,8 +563,6 @@ func (h *cryptoSetup) WriteRecord(p []byte) (int, error) {
 		return n, err
 	case protocol.EncryptionHandshake:
 		return h.handshakeStream.Write(p)
-	case protocol.Encryption1RTT:
-		return h.oneRTTStream.Write(p)
 	default:
 		panic(fmt.Sprintf("unexpected write encryption level: %s", h.writeEncLevel))
 	}
