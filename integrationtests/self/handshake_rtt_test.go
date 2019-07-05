@@ -47,7 +47,7 @@ var _ = Describe("Handshake RTT tests", func() {
 		// start the proxy
 		proxy, err = quicproxy.NewQuicProxy("localhost:0", &quicproxy.Opts{
 			RemoteAddr:  server.Addr().String(),
-			DelayPacket: func(_ quicproxy.Direction, _ uint64) time.Duration { return rtt / 2 },
+			DelayPacket: func(_ quicproxy.Direction, _ []byte) time.Duration { return rtt / 2 },
 		})
 		Expect(err).ToNot(HaveOccurred())
 

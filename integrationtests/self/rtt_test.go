@@ -55,7 +55,7 @@ var _ = Describe("non-zero RTT", func() {
 					serverPort := ln.Addr().(*net.UDPAddr).Port
 					proxy, err := quicproxy.NewQuicProxy("localhost:0", &quicproxy.Opts{
 						RemoteAddr: fmt.Sprintf("localhost:%d", serverPort),
-						DelayPacket: func(d quicproxy.Direction, p uint64) time.Duration {
+						DelayPacket: func(quicproxy.Direction, []byte) time.Duration {
 							return rtt / 2
 						},
 					})
