@@ -369,6 +369,51 @@ func (p *TransportParameters) marshalVarintParam(b *bytes.Buffer, id transportPa
 	utils.WriteVarInt(b, val)
 }
 
+// MarshalForSessionTicket marshals the transport parameters we save in the session ticket.
+// When sending a 0-RTT enabled TLS session tickets, we need to save the transport parameters.
+// The client will remember the transport parameters used in the last session,
+// and apply those to the 0-RTT data it sends.
+// Saving the transport parameters in the ticket gives the server the option to reject 0-RTT
+// if the transport parameters changed.
+// Since the session ticket is encrypted, the serialization format is defined by the server.
+// For convenience, we use the same format that we also use for sending the transport parameters.
+func (p *TransportParameters) MarshalForSessionTicket() []byte {
+	b := &bytes.Buffer{}
+	b.Write([]byte{0, 0}) // length. Will be replaced later
+
+	// initial_max_stream_data_bidi_local
+	p.marshalVarintParam(b, initialMaxStreamDataBidiLocalParameterID, uint64(p.InitialMaxStreamDataBidiLocal))
+	// initial_max_stream_data_bidi_remote
+	p.marshalVarintParam(b, initialMaxStreamDataBidiRemoteParameterID, uint64(p.InitialMaxStreamDataBidiRemote))
+	// initial_max_stream_data_uni
+	p.marshalVarintParam(b, initialMaxStreamDataUniParameterID, uint64(p.InitialMaxStreamDataUni))
+	// initial_max_data
+	p.marshalVarintParam(b, initialMaxDataParameterID, uint64(p.InitialMaxData))
+	// initial_max_bidi_streams
+	p.marshalVarintParam(b, initialMaxStreamsBidiParameterID, uint64(p.MaxBidiStreamNum))
+	// initial_max_uni_streams
+	p.marshalVarintParam(b, initialMaxStreamsUniParameterID, uint64(p.MaxUniStreamNum))
+
+	data := b.Bytes()
+	binary.BigEndian.PutUint16(data[:2], uint16(b.Len()-2))
+	return data
+}
+
+// ValidFromSessionTicket checks if the transport parameters match those saved in the session ticket.
+func (p *TransportParameters) ValidFromSessionTicket(data []byte) bool {
+	tp := &TransportParameters{}
+	if err := tp.Unmarshal(data, protocol.PerspectiveServer); err != nil {
+		return false
+	}
+
+	return p.InitialMaxStreamDataBidiLocal == tp.InitialMaxStreamDataBidiLocal &&
+		p.InitialMaxStreamDataBidiRemote == tp.InitialMaxStreamDataBidiRemote &&
+		p.InitialMaxStreamDataUni == tp.InitialMaxStreamDataUni &&
+		p.InitialMaxData == tp.InitialMaxData &&
+		p.MaxBidiStreamNum == tp.MaxBidiStreamNum &&
+		p.MaxUniStreamNum == tp.MaxUniStreamNum
+}
+
 // String returns a string representation, intended for logging.
 func (p *TransportParameters) String() string {
 	logString := "&handshake.TransportParameters{OriginalConnectionID: %s, InitialMaxStreamDataBidiLocal: %#x, InitialMaxStreamDataBidiRemote: %#x, InitialMaxStreamDataUni: %#x, InitialMaxData: %#x, MaxBidiStreamNum: %d, MaxUniStreamNum: %d, MaxIdleTimeout: %s, AckDelayExponent: %d, MaxAckDelay: %s, ActiveConnectionIDLimit: %d"
