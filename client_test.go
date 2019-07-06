@@ -187,6 +187,41 @@ var _ = Describe("Client", func() {
 			Eventually(hostnameChan).Should(Receive(Equal("foobar")))
 		})
 
+		It("allows passing host without port as server name", func() {
+			manager := NewMockPacketHandlerManager(mockCtrl)
+			manager.EXPECT().Add(gomock.Any(), gomock.Any())
+			mockMultiplexer.EXPECT().AddConn(packetConn, gomock.Any(), gomock.Any()).Return(manager, nil)
+
+			hostnameChan := make(chan string, 1)
+			newClientSession = func(
+				_ connection,
+				_ sessionRunner,
+				_ protocol.ConnectionID,
+				_ protocol.ConnectionID,
+				_ *Config,
+				tlsConf *tls.Config,
+				_ protocol.PacketNumber,
+				_ *handshake.TransportParameters,
+				_ protocol.VersionNumber,
+				_ utils.Logger,
+				_ protocol.VersionNumber,
+			) (quicSession, error) {
+				hostnameChan <- tlsConf.ServerName
+				sess := NewMockQuicSession(mockCtrl)
+				sess.EXPECT().run()
+				return sess, nil
+			}
+			_, err := Dial(
+				packetConn,
+				addr,
+				"test.com",
+				tlsConf,
+				&Config{},
+			)
+			Expect(err).ToNot(HaveOccurred())
+			Eventually(hostnameChan).Should(Receive(Equal("test.com")))
+		})
+
 		It("returns after the handshake is complete", func() {
 			manager := NewMockPacketHandlerManager(mockCtrl)
 			manager.EXPECT().Add(gomock.Any(), gomock.Any())
