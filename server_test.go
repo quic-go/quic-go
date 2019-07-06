@@ -303,6 +303,8 @@ var _ = Describe("Server", func() {
 				sess := NewMockQuicSession(mockCtrl)
 				sess.EXPECT().handlePacket(p)
 				sess.EXPECT().run().Do(func() { close(run) })
+				sess.EXPECT().Context().Return(context.Background())
+				sess.EXPECT().HandshakeComplete().Return(context.Background())
 				return sess, nil
 			}
 
@@ -349,7 +351,9 @@ var _ = Describe("Server", func() {
 				sess.EXPECT().handlePacket(p)
 				sess.EXPECT().run()
 				sess.EXPECT().Context().Return(context.Background())
-				runner.OnHandshakeComplete(sess)
+				ctx, cancel := context.WithCancel(context.Background())
+				cancel()
+				sess.EXPECT().HandshakeComplete().Return(ctx)
 				return sess, nil
 			}
 
@@ -407,7 +411,9 @@ var _ = Describe("Server", func() {
 				sess.EXPECT().handlePacket(p)
 				sess.EXPECT().run()
 				sess.EXPECT().Context().Return(ctx)
-				runner.OnHandshakeComplete(sess)
+				ctx, cancel := context.WithCancel(context.Background())
+				cancel()
+				sess.EXPECT().HandshakeComplete().Return(ctx)
 				close(sessionCreated)
 				return sess, nil
 			}
@@ -493,7 +499,7 @@ var _ = Describe("Server", func() {
 				close(done)
 			}()
 
-			completeHandshake := make(chan struct{})
+			ctx, cancel := context.WithCancel(context.Background()) // handshake context
 			serv.newSession = func(
 				_ connection,
 				runner sessionRunner,
@@ -507,10 +513,7 @@ var _ = Describe("Server", func() {
 				_ utils.Logger,
 				_ protocol.VersionNumber,
 			) (quicSession, error) {
-				go func() {
-					<-completeHandshake
-					runner.OnHandshakeComplete(sess)
-				}()
+				sess.EXPECT().HandshakeComplete().Return(ctx)
 				sess.EXPECT().run().Do(func() {})
 				sess.EXPECT().Context().Return(context.Background())
 				return sess, nil
@@ -518,43 +521,8 @@ var _ = Describe("Server", func() {
 			_, err := serv.createNewSession(&net.UDPAddr{}, nil, nil, nil, nil, protocol.VersionWhatever)
 			Expect(err).ToNot(HaveOccurred())
 			Consistently(done).ShouldNot(BeClosed())
-			close(completeHandshake)
+			cancel() // complete the handshake
 			Eventually(done).Should(BeClosed())
-		})
-
-		It("never blocks when calling the onHandshakeComplete callback", func() {
-			const num = 50
-
-			runs := make(chan struct{}, num)
-			contexts := make(chan struct{}, num)
-			serv.newSession = func(
-				_ connection,
-				runner sessionRunner,
-				_ protocol.ConnectionID,
-				_ protocol.ConnectionID,
-				_ protocol.ConnectionID,
-				_ *Config,
-				_ *tls.Config,
-				_ *handshake.TransportParameters,
-				_ *handshake.TokenGenerator,
-				_ utils.Logger,
-				_ protocol.VersionNumber,
-			) (quicSession, error) {
-				sess := NewMockQuicSession(mockCtrl)
-				sess.EXPECT().run().Do(func() { runs <- struct{}{} })
-				sess.EXPECT().Context().Do(func() { contexts <- struct{}{} }).Return(context.Background())
-				runner.OnHandshakeComplete(sess)
-				return sess, nil
-			}
-
-			go func() {
-				for i := 0; i < num; i++ {
-					_, err := serv.createNewSession(&net.UDPAddr{}, nil, nil, nil, nil, protocol.VersionWhatever)
-					Expect(err).ToNot(HaveOccurred())
-				}
-			}()
-			Eventually(runs).Should(HaveLen(num))
-			Eventually(contexts).Should(HaveLen(num))
 		})
 	})
 })

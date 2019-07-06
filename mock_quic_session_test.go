@@ -137,6 +137,20 @@ func (mr *MockQuicSessionMockRecorder) GetVersion() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetVersion", reflect.TypeOf((*MockQuicSession)(nil).GetVersion))
 }
 
+// HandshakeComplete mocks base method
+func (m *MockQuicSession) HandshakeComplete() context.Context {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "HandshakeComplete")
+	ret0, _ := ret[0].(context.Context)
+	return ret0
+}
+
+// HandshakeComplete indicates an expected call of HandshakeComplete
+func (mr *MockQuicSessionMockRecorder) HandshakeComplete() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HandshakeComplete", reflect.TypeOf((*MockQuicSession)(nil).HandshakeComplete))
+}
+
 // LocalAddr mocks base method
 func (m *MockQuicSession) LocalAddr() net.Addr {
 	m.ctrl.T.Helper()

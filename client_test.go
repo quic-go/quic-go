@@ -149,6 +149,7 @@ var _ = Describe("Client", func() {
 				remoteAddrChan <- conn.RemoteAddr().String()
 				sess := NewMockQuicSession(mockCtrl)
 				sess.EXPECT().run()
+				sess.EXPECT().HandshakeComplete().Return(context.Background())
 				return sess, nil
 			}
 			_, err := DialAddr("localhost:17890", tlsConf, &Config{HandshakeTimeout: time.Millisecond})
@@ -179,6 +180,7 @@ var _ = Describe("Client", func() {
 				hostnameChan <- tlsConf.ServerName
 				sess := NewMockQuicSession(mockCtrl)
 				sess.EXPECT().run()
+				sess.EXPECT().HandshakeComplete().Return(context.Background())
 				return sess, nil
 			}
 			tlsConf.ServerName = "foobar"
@@ -208,6 +210,7 @@ var _ = Describe("Client", func() {
 			) (quicSession, error) {
 				hostnameChan <- tlsConf.ServerName
 				sess := NewMockQuicSession(mockCtrl)
+				sess.EXPECT().HandshakeComplete().Return(context.Background())
 				sess.EXPECT().run()
 				return sess, nil
 			}
@@ -243,7 +246,9 @@ var _ = Describe("Client", func() {
 			) (quicSession, error) {
 				sess := NewMockQuicSession(mockCtrl)
 				sess.EXPECT().run().Do(func() { close(run) })
-				runner.OnHandshakeComplete(sess)
+				ctx, cancel := context.WithCancel(context.Background())
+				cancel()
+				sess.EXPECT().HandshakeComplete().Return(ctx)
 				return sess, nil
 			}
 			s, err := Dial(
@@ -258,7 +263,7 @@ var _ = Describe("Client", func() {
 			Eventually(run).Should(BeClosed())
 		})
 
-		It("returns an error that occurs while waiting for the connection to become secure", func() {
+		It("returns an error that occurs while waiting for the handshake to complete", func() {
 			manager := NewMockPacketHandlerManager(mockCtrl)
 			manager.EXPECT().Add(gomock.Any(), gomock.Any())
 			mockMultiplexer.EXPECT().AddConn(packetConn, gomock.Any(), gomock.Any()).Return(manager, nil)
@@ -279,6 +284,7 @@ var _ = Describe("Client", func() {
 			) (quicSession, error) {
 				sess := NewMockQuicSession(mockCtrl)
 				sess.EXPECT().run().Return(testErr)
+				sess.EXPECT().HandshakeComplete().Return(context.Background())
 				return sess, nil
 			}
 			packetConn.dataToRead <- acceptClientVersionPacket(cl.srcConnID)
@@ -303,6 +309,7 @@ var _ = Describe("Client", func() {
 			sess.EXPECT().run().Do(func() {
 				<-sessionRunning
 			})
+			sess.EXPECT().HandshakeComplete().Return(context.Background())
 			newClientSession = func(
 				_ connection,
 				_ sessionRunner,
@@ -366,6 +373,7 @@ var _ = Describe("Client", func() {
 			sess.EXPECT().run().Do(func() {
 				runner.Retire(connID)
 			})
+			sess.EXPECT().HandshakeComplete().Return(context.Background())
 
 			_, err := DialContext(
 				context.Background(),
@@ -411,6 +419,7 @@ var _ = Describe("Client", func() {
 			sess.EXPECT().run().Do(func() {
 				<-run
 			})
+			sess.EXPECT().HandshakeComplete().Return(context.Background())
 
 			done := make(chan struct{})
 			go func() {
@@ -497,7 +506,7 @@ var _ = Describe("Client", func() {
 			})
 		})
 
-		It("creates new TLS sessions with the right parameters", func() {
+		It("creates new sessions with the right parameters", func() {
 			manager := NewMockPacketHandlerManager(mockCtrl)
 			manager.EXPECT().Add(connID, gomock.Any())
 			mockMultiplexer.EXPECT().AddConn(packetConn, gomock.Any(), gomock.Any()).Return(manager, nil)
@@ -527,6 +536,7 @@ var _ = Describe("Client", func() {
 				// TODO: check connection IDs?
 				sess := NewMockQuicSession(mockCtrl)
 				sess.EXPECT().run()
+				sess.EXPECT().HandshakeComplete().Return(context.Background())
 				return sess, nil
 			}
 			_, err := Dial(packetConn, addr, "localhost:1337", tlsConf, config)
@@ -571,6 +581,7 @@ var _ = Describe("Client", func() {
 					Expect(conn.Write([]byte("0 fake CHLO"))).To(Succeed())
 					sess := NewMockQuicSession(mockCtrl)
 					sess.EXPECT().run().Return(testErr)
+					sess.EXPECT().HandshakeComplete().Return(context.Background())
 					return sess, nil
 				}
 				_, err := Dial(
