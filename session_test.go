@@ -1153,6 +1153,48 @@ var _ = Describe("Session", func() {
 		})
 	})
 
+	It("cancels the HandshakeComplete context when the handshake completes", func() {
+		sessionRunner.EXPECT().OnHandshakeComplete(gomock.Any())
+		packer.EXPECT().PackPacket().AnyTimes()
+		finishHandshake := make(chan struct{})
+		go func() {
+			defer GinkgoRecover()
+			<-finishHandshake
+			cryptoSetup.EXPECT().RunHandshake()
+			close(sess.handshakeCompleteChan)
+			sess.run()
+		}()
+		handshakeCtx := sess.HandshakeComplete()
+		Consistently(handshakeCtx.Done()).ShouldNot(BeClosed())
+		close(finishHandshake)
+		Eventually(handshakeCtx.Done()).Should(BeClosed())
+		//make sure the go routine returns
+		streamManager.EXPECT().CloseWithError(gomock.Any())
+		sessionRunner.EXPECT().Retire(gomock.Any())
+		packer.EXPECT().PackConnectionClose(gomock.Any()).Return(&packedPacket{}, nil)
+		cryptoSetup.EXPECT().Close()
+		Expect(sess.Close()).To(Succeed())
+		Eventually(sess.Context().Done()).Should(BeClosed())
+	})
+
+	It("doesn't cancel the HandshakeComplete context when the handshake fails", func() {
+		packer.EXPECT().PackPacket().AnyTimes()
+		streamManager.EXPECT().CloseWithError(gomock.Any())
+		sessionRunner.EXPECT().Retire(gomock.Any())
+		packer.EXPECT().PackConnectionClose(gomock.Any()).Return(&packedPacket{}, nil)
+		cryptoSetup.EXPECT().Close()
+		go func() {
+			defer GinkgoRecover()
+			cryptoSetup.EXPECT().RunHandshake()
+			sess.run()
+		}()
+		handshakeCtx := sess.HandshakeComplete()
+		Consistently(handshakeCtx.Done()).ShouldNot(BeClosed())
+		sess.closeLocal(errors.New("handshake error"))
+		Consistently(handshakeCtx.Done()).ShouldNot(BeClosed())
+		Eventually(sess.Context().Done()).Should(BeClosed())
+	})
+
 	It("sends a 1-RTT packet when the handshake completes", func() {
 		done := make(chan struct{})
 		gomock.InOrder(

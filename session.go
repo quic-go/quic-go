@@ -135,8 +135,10 @@ type session struct {
 	connectionClosePacket     *packedPacket
 	packetsReceivedAfterClose int
 
-	ctx       context.Context
-	ctxCancel context.CancelFunc
+	ctx                context.Context
+	ctxCancel          context.CancelFunc
+	handshakeCtx       context.Context
+	handshakeCtxCancel context.CancelFunc
 
 	undecryptablePackets []*receivedPacket
 
@@ -356,6 +358,7 @@ func (s *session) postSetup() error {
 	s.sendingScheduled = make(chan struct{}, 1)
 	s.undecryptablePackets = make([]*receivedPacket, 0, protocol.MaxUndecryptablePackets)
 	s.ctx, s.ctxCancel = context.WithCancel(context.Background())
+	s.handshakeCtx, s.handshakeCtxCancel = context.WithCancel(context.Background())
 
 	s.timer = utils.NewTimer()
 	now := time.Now()
@@ -465,6 +468,10 @@ runLoop:
 	return closeErr.err
 }
 
+func (s *session) HandshakeComplete() context.Context {
+	return s.handshakeCtx
+}
+
 func (s *session) Context() context.Context {
 	return s.ctx
 }
@@ -505,6 +512,7 @@ func (s *session) idleTimeoutStartTime() time.Time {
 func (s *session) handleHandshakeComplete() {
 	s.handshakeComplete = true
 	s.handshakeCompleteChan = nil // prevent this case from ever being selected again
+	s.handshakeCtxCancel()
 	s.sessionRunner.OnHandshakeComplete(s)
 
 	// The client completes the handshake first (after sending the CFIN).
