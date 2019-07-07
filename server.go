@@ -154,25 +154,21 @@ func listen(conn net.PacketConn, tlsConf *tls.Config, config *Config) (*server, 
 	if err != nil {
 		return nil, err
 	}
+	tokenGenerator, err := handshake.NewTokenGenerator()
+	if err != nil {
+		return nil, err
+	}
 	s := &server{
 		conn:           conn,
 		tlsConf:        tlsConf,
 		config:         config,
+		tokenGenerator: tokenGenerator,
 		sessionHandler: sessionHandler,
 		sessionQueue:   make(chan Session),
 		errorChan:      make(chan struct{}),
 		newSession:     newSession,
 		logger:         utils.DefaultLogger.WithPrefix("server"),
 	}
-	if err := s.setup(); err != nil {
-		return nil, err
-	}
-	sessionHandler.SetServer(s)
-	s.logger.Debugf("Listening for %s connections on %s", conn.LocalAddr().Network(), conn.LocalAddr().String())
-	return s, nil
-}
-
-func (s *server) setup() error {
 	s.sessionRunner = &runner{
 		packetHandlerManager: s.sessionHandler,
 		onHandshakeCompleteImpl: func(sess Session) {
@@ -188,12 +184,9 @@ func (s *server) setup() error {
 			}()
 		},
 	}
-	tokenGenerator, err := handshake.NewTokenGenerator()
-	if err != nil {
-		return err
-	}
-	s.tokenGenerator = tokenGenerator
-	return nil
+	sessionHandler.SetServer(s)
+	s.logger.Debugf("Listening for %s connections on %s", conn.LocalAddr().Network(), conn.LocalAddr().String())
+	return s, nil
 }
 
 var defaultAcceptToken = func(clientAddr net.Addr, token *Token) bool {
