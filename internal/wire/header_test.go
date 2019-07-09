@@ -158,8 +158,9 @@ var _ = Describe("Header Parsing", func() {
 			srcConnID := protocol.ConnectionID{0xde, 0xad, 0xbe, 0xef}
 			data := []byte{0xc0 ^ 0x3}
 			data = appendVersion(data, versionIETFFrames)
-			data = append(data, 0x61) // connection ID lengths
+			data = append(data, 0x9) // dest conn id length
 			data = append(data, destConnID...)
+			data = append(data, 0x4) // src conn id length
 			data = append(data, srcConnID...)
 			data = append(data, encodeVarInt(6)...)  // token length
 			data = append(data, []byte("foobar")...) // token
@@ -204,9 +205,10 @@ var _ = Describe("Header Parsing", func() {
 			data := []byte{
 				0xc0,
 				0xde, 0xad, 0xbe, 0xef,
-				0x55, // connection ID length
-				0x1, 0x2, 0x3, 0x4, 0x5, 0x6, 0x7, 0x8,
-				0x8, 0x7, 0x6, 0x5, 0x4, 0x3, 0x2, 0x1,
+				0x8,                                    // dest conn ID len
+				0x1, 0x2, 0x3, 0x4, 0x5, 0x6, 0x7, 0x8, // dest conn ID
+				0x8,                                    // src conn ID len
+				0x8, 0x7, 0x6, 0x5, 0x4, 0x3, 0x2, 0x1, // src conn ID
 				'f', 'o', 'o', 'b', 'a', 'r', // unspecified bytes
 			}
 			hdr, _, rest, err := ParsePacket(data, 0)
@@ -221,7 +223,8 @@ var _ = Describe("Header Parsing", func() {
 		It("parses a Long Header without a destination connection ID", func() {
 			data := []byte{0xc0 ^ 0x1<<4}
 			data = appendVersion(data, versionIETFFrames)
-			data = append(data, 0x01)                              // connection ID lengths
+			data = append(data, 0x0)                               // dest conn ID len
+			data = append(data, 0x4)                               // src conn ID len
 			data = append(data, []byte{0xde, 0xad, 0xbe, 0xef}...) // source connection ID
 			data = append(data, encodeVarInt(0)...)                // length
 			data = append(data, []byte{0xde, 0xca, 0xfb, 0xad}...)
@@ -235,8 +238,9 @@ var _ = Describe("Header Parsing", func() {
 		It("parses a Long Header without a source connection ID", func() {
 			data := []byte{0xc0 ^ 0x2<<4}
 			data = appendVersion(data, versionIETFFrames)
-			data = append(data, 0x70)                                     // connection ID lengths
-			data = append(data, []byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}...) // source connection ID
+			data = append(data, 0xa)                                      // dest conn ID len
+			data = append(data, []byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}...) // dest connection ID
+			data = append(data, 0x0)                                      // src conn ID len
 			data = append(data, encodeVarInt(0)...)                       // length
 			data = append(data, []byte{0xde, 0xca, 0xfb, 0xad}...)
 			hdr, _, _, err := ParsePacket(data, 0)
@@ -248,7 +252,7 @@ var _ = Describe("Header Parsing", func() {
 		It("parses a Long Header with a 2 byte packet number", func() {
 			data := []byte{0xc0 ^ 0x1}
 			data = appendVersion(data, versionIETFFrames) // version number
-			data = append(data, 0x0)                      // connection ID lengths
+			data = append(data, []byte{0x0, 0x0}...)      // connection ID lengths
 			data = append(data, encodeVarInt(0)...)       // token length
 			data = append(data, encodeVarInt(0)...)       // length
 			data = append(data, []byte{0x1, 0x23}...)
@@ -266,7 +270,8 @@ var _ = Describe("Header Parsing", func() {
 		It("parses a Retry packet", func() {
 			data := []byte{0xc0 | 0x3<<4 | (10 - 3) /* connection ID length */}
 			data = appendVersion(data, versionIETFFrames)
-			data = append(data, 0x0)                                      // connection ID lengths
+			data = append(data, []byte{0x0, 0x0}...)                      // dest and src conn ID lengths
+			data = append(data, 0xa)                                      // orig dest conn ID len
 			data = append(data, []byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}...) // source connection ID
 			data = append(data, []byte{'f', 'o', 'o', 'b', 'a', 'r'}...)  // token
 			hdr, pdata, rest, err := ParsePacket(data, 0)
@@ -293,7 +298,7 @@ var _ = Describe("Header Parsing", func() {
 		It("errors if the 5th or 6th bit are set", func() {
 			data := []byte{0xc0 | 0x2<<4 | 0x8 /* set the 5th bit */ | 0x1 /* 2 byte packet number */}
 			data = appendVersion(data, versionIETFFrames)
-			data = append(data, 0x0)                   // connection ID lengths
+			data = append(data, []byte{0x0, 0x0}...)   // connection ID lengths
 			data = append(data, encodeVarInt(2)...)    // length
 			data = append(data, []byte{0x12, 0x34}...) // packet number
 			hdr, _, _, err := ParsePacket(data, 0)
@@ -308,9 +313,10 @@ var _ = Describe("Header Parsing", func() {
 		It("errors on EOF, when parsing the header", func() {
 			data := []byte{0xc0 ^ 0x2<<4}
 			data = appendVersion(data, versionIETFFrames)
-			data = append(data, 0x55)                                                      // connection ID lengths
-			data = append(data, []byte{0xde, 0xad, 0xbe, 0xef, 0xca, 0xfe, 0x13, 0x37}...) // destination connection ID
-			data = append(data, []byte{0xde, 0xad, 0xbe, 0xef, 0xca, 0xfe, 0x13, 0x37}...) // source connection ID
+			data = append(data, 0x8)                                                       // dest conn ID len
+			data = append(data, []byte{0xde, 0xad, 0xbe, 0xef, 0xca, 0xfe, 0x13, 0x37}...) // dest conn ID
+			data = append(data, 0x8)                                                       // src conn ID len
+			data = append(data, []byte{0xde, 0xad, 0xbe, 0xef, 0xca, 0xfe, 0x13, 0x37}...) // src conn ID
 			for i := 0; i < len(data); i++ {
 				_, _, _, err := ParsePacket(data[:i], 0)
 				Expect(err).To(Equal(io.EOF))
@@ -320,8 +326,8 @@ var _ = Describe("Header Parsing", func() {
 		It("errors on EOF, when parsing the extended header", func() {
 			data := []byte{0xc0 | 0x2<<4 | 0x3}
 			data = appendVersion(data, versionIETFFrames)
-			data = append(data, 0x0)                // connection ID lengths
-			data = append(data, encodeVarInt(0)...) // length
+			data = append(data, []byte{0x0, 0x0}...) // connection ID lengths
+			data = append(data, encodeVarInt(0)...)  // length
 			hdrLen := len(data)
 			data = append(data, []byte{0xde, 0xad, 0xbe, 0xef}...) // packet number
 			for i := hdrLen; i < len(data); i++ {
@@ -337,8 +343,8 @@ var _ = Describe("Header Parsing", func() {
 		It("errors on EOF, for a Retry packet", func() {
 			data := []byte{0xc0 ^ 0x3<<4}
 			data = appendVersion(data, versionIETFFrames)
-			data = append(data, 0x0)                                      // connection ID lengths
-			data = append(data, 0x97)                                     // Orig Destination Connection ID length
+			data = append(data, []byte{0x0, 0x0}...)                      // connection ID lengths
+			data = append(data, 0xa)                                      // Orig Destination Connection ID length
 			data = append(data, []byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}...) // source connection ID
 			hdrLen := len(data)
 			for i := hdrLen; i < len(data); i++ {

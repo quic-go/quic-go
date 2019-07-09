@@ -40,8 +40,9 @@ var _ = Describe("Header", func() {
 				expected := []byte{
 					0xc0 | 0x2<<4 | 0x2,
 					0x1, 0x2, 0x3, 0x4, // version number
-					0x35,                               // connection ID lengths
+					0x6,                                // dest connection ID length
 					0xde, 0xad, 0xbe, 0xef, 0xca, 0xfe, // dest connection ID
+					0x8,                                          // src connection ID length
 					0xde, 0xca, 0xfb, 0xad, 0x0, 0x0, 0x13, 0x37, // source connection ID
 				}
 				expected = append(expected, encodeVarInt(0xcafe)...)    // length
@@ -49,42 +50,27 @@ var _ = Describe("Header", func() {
 				Expect(buf.Bytes()).To(Equal(expected))
 			})
 
-			It("refuses to write a header with a too short connection ID", func() {
-				err := (&ExtendedHeader{
-					Header: Header{
-						IsLongHeader:     true,
-						SrcConnectionID:  srcConnID,
-						DestConnectionID: protocol.ConnectionID{1, 2, 3}, // connection IDs must be at least 4 bytes long
-						Version:          0x1020304,
-						Type:             0x5,
-					},
-					PacketNumber:    0xdecafbad,
-					PacketNumberLen: protocol.PacketNumberLen4,
-				}).Write(buf, versionIETFHeader)
-				Expect(err).To(MatchError("invalid connection ID length: 3 bytes"))
-			})
-
 			It("refuses to write a header with a too long connection ID", func() {
 				err := (&ExtendedHeader{
 					Header: Header{
 						IsLongHeader:     true,
 						SrcConnectionID:  srcConnID,
-						DestConnectionID: protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19}, // connection IDs must be at most 18 bytes long
+						DestConnectionID: protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21}, // connection IDs must be at most 20 bytes long
 						Version:          0x1020304,
 						Type:             0x5,
 					},
 					PacketNumber:    0xdecafbad,
 					PacketNumberLen: protocol.PacketNumberLen4,
 				}).Write(buf, versionIETFHeader)
-				Expect(err).To(MatchError("invalid connection ID length: 19 bytes"))
+				Expect(err).To(MatchError("invalid connection ID length: 21 bytes"))
 			})
 
-			It("writes a header with an 18 byte connection ID", func() {
+			It("writes a header with a 20 byte connection ID", func() {
 				err := (&ExtendedHeader{
 					Header: Header{
 						IsLongHeader:     true,
 						SrcConnectionID:  srcConnID,
-						DestConnectionID: protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18}, // connection IDs must be at most 18 bytes long
+						DestConnectionID: protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20}, // connection IDs must be at most 20 bytes long
 						Version:          0x1020304,
 						Type:             0x5,
 					},
@@ -92,7 +78,7 @@ var _ = Describe("Header", func() {
 					PacketNumberLen: protocol.PacketNumberLen4,
 				}).Write(buf, versionIETFHeader)
 				Expect(err).ToNot(HaveOccurred())
-				Expect(buf.Bytes()).To(ContainSubstring(string([]byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18})))
+				Expect(buf.Bytes()).To(ContainSubstring(string([]byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20})))
 			})
 
 			It("writes an Initial containing a token", func() {
@@ -121,9 +107,11 @@ var _ = Describe("Header", func() {
 					OrigDestConnectionID: protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8, 9},
 				}}).Write(buf, versionIETFHeader)).To(Succeed())
 				expected := []byte{
-					0xc0 | 0x3<<4 | 9 - 3, /* orig dest connection ID length */
-					0x1, 0x2, 0x3, 0x4,    // version number
-					0x0,                       // connection ID lengths))
+					0xc0 | 0x3<<4,
+					0x1, 0x2, 0x3, 0x4, // version number
+					0x0,                       // dest connection ID length
+					0x0,                       // src connection ID length
+					0x9,                       // orig dest connection ID length
 					1, 2, 3, 4, 5, 6, 7, 8, 9, // Orig Dest Connection ID
 				}
 				expected = append(expected, token...)
@@ -136,9 +124,9 @@ var _ = Describe("Header", func() {
 					Version:              0x1020304,
 					Type:                 protocol.PacketTypeRetry,
 					Token:                []byte("foobar"),
-					OrigDestConnectionID: protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19}, // connection IDs must be at most 18 bytes long
+					OrigDestConnectionID: protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21}, // connection IDs must be at most 20 bytes long
 				}}).Write(buf, versionIETFHeader)
-				Expect(err).To(MatchError("invalid connection ID length: 19 bytes"))
+				Expect(err).To(MatchError("invalid connection ID length: 21 bytes"))
 			})
 		})
 
@@ -229,7 +217,7 @@ var _ = Describe("Header", func() {
 				},
 				PacketNumberLen: protocol.PacketNumberLen1,
 			}
-			expectedLen := 1 /* type byte */ + 4 /* version */ + 1 /* conn ID len */ + 8 /* dest conn id */ + 8 /* src conn id */ + 1 /* short len */ + 1 /* packet number */
+			expectedLen := 1 /* type byte */ + 4 /* version */ + 1 /* dest conn ID len */ + 8 /* dest conn id */ + 1 /* src conn ID len */ + 8 /* src conn id */ + 1 /* short len */ + 1 /* packet number */
 			Expect(h.GetLength(versionIETFHeader)).To(BeEquivalentTo(expectedLen))
 			Expect(h.Write(buf, versionIETFHeader)).To(Succeed())
 			Expect(buf.Len()).To(Equal(expectedLen))
@@ -246,7 +234,7 @@ var _ = Describe("Header", func() {
 				},
 				PacketNumberLen: protocol.PacketNumberLen2,
 			}
-			expectedLen := 1 /* type byte */ + 4 /* version */ + 1 /* conn ID len */ + 8 /* dest conn id */ + 8 /* src conn id */ + 2 /* long len */ + 2 /* packet number */
+			expectedLen := 1 /* type byte */ + 4 /* version */ + 1 /* dest conn id len */ + 8 /* dest conn id */ + 1 /* src conn ID len */ + 8 /* src conn id */ + 2 /* long len */ + 2 /* packet number */
 			Expect(h.GetLength(versionIETFHeader)).To(BeEquivalentTo(expectedLen))
 			Expect(h.Write(buf, versionIETFHeader)).To(Succeed())
 			Expect(buf.Len()).To(Equal(expectedLen))
@@ -263,7 +251,7 @@ var _ = Describe("Header", func() {
 				},
 				PacketNumberLen: protocol.PacketNumberLen2,
 			}
-			expectedLen := 1 /* type byte */ + 4 /* version */ + 1 /* conn ID len */ + 8 /* dest conn id */ + 4 /* src conn id */ + 1 /* token length */ + 2 /* long len */ + 2 /* packet number */
+			expectedLen := 1 /* type byte */ + 4 /* version */ + 1 /* dest conn id len */ + 8 /* dest conn id */ + 1 /* src conn ID len */ + 4 /* src conn id */ + 1 /* token length */ + 2 /* long len */ + 2 /* packet number */
 			Expect(h.GetLength(versionIETFHeader)).To(BeEquivalentTo(expectedLen))
 			Expect(h.Write(buf, versionIETFHeader)).To(Succeed())
 			Expect(buf.Len()).To(Equal(expectedLen))
@@ -281,7 +269,7 @@ var _ = Describe("Header", func() {
 				},
 				PacketNumberLen: protocol.PacketNumberLen2,
 			}
-			expectedLen := 1 /* type byte */ + 4 /* version */ + 1 /* conn ID len */ + 8 /* dest conn id */ + 4 /* src conn id */ + 1 /* token length */ + 3 /* token */ + 2 /* long len */ + 2 /* packet number */
+			expectedLen := 1 /* type byte */ + 4 /* version */ + 1 /* dest conn id len */ + 8 /* dest conn id */ + 1 /* src conn id len */ + 4 /* src conn id */ + 1 /* token length */ + 3 /* token */ + 2 /* long len */ + 2 /* packet number */
 			Expect(h.GetLength(versionIETFHeader)).To(BeEquivalentTo(expectedLen))
 			Expect(h.Write(buf, versionIETFHeader)).To(Succeed())
 			Expect(buf.Len()).To(Equal(expectedLen))
