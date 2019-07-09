@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"strings"
 	"sync"
 
 	"github.com/lucas-clemente/quic-go/internal/handshake"
@@ -151,11 +152,16 @@ func newClient(
 		tlsConf = &tls.Config{}
 	}
 	if tlsConf.ServerName == "" {
-		var err error
-		tlsConf.ServerName, _, err = net.SplitHostPort(host)
-		if err != nil {
-			return nil, err
+		sni := host
+		if strings.IndexByte(sni, ':') != -1 {
+			var err error
+			sni, _, err = net.SplitHostPort(sni)
+			if err != nil {
+				return nil, err
+			}
 		}
+
+		tlsConf.ServerName = sni
 	}
 
 	// check that all versions are actually supported
