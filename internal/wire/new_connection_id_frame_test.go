@@ -15,6 +15,7 @@ var _ = Describe("NEW_CONNECTION_ID frame", func() {
 		It("accepts a sample frame", func() {
 			data := []byte{0x18}
 			data = append(data, encodeVarInt(0xdeadbeef)...)              // sequence number
+			data = append(data, encodeVarInt(0xcafe)...)                  // retire prior to
 			data = append(data, 10)                                       // connection ID length
 			data = append(data, []byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}...) // connection ID
 			data = append(data, []byte("deadbeefdecafbad")...)            // stateless reset token
@@ -22,6 +23,7 @@ var _ = Describe("NEW_CONNECTION_ID frame", func() {
 			frame, err := parseNewConnectionIDFrame(b, versionIETFFrames)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(frame.SequenceNumber).To(Equal(uint64(0xdeadbeef)))
+			Expect(frame.RetirePriorTo).To(Equal(uint64(0xcafe)))
 			Expect(frame.ConnectionID).To(Equal(protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}))
 			Expect(string(frame.StatelessResetToken[:])).To(Equal("deadbeefdecafbad"))
 		})
@@ -29,6 +31,7 @@ var _ = Describe("NEW_CONNECTION_ID frame", func() {
 		It("errors when the connection ID has an invalid length", func() {
 			data := []byte{0x18}
 			data = append(data, encodeVarInt(0xdeadbeef)...)   // sequence number
+			data = append(data, encodeVarInt(0xcafe)...)       // retire prior to
 			data = append(data, 3)                             // connection ID length
 			data = append(data, []byte{1, 2, 3}...)            // connection ID
 			data = append(data, []byte("deadbeefdecafbad")...) // stateless reset token
@@ -40,6 +43,7 @@ var _ = Describe("NEW_CONNECTION_ID frame", func() {
 		It("errors on EOFs", func() {
 			data := []byte{0x18}
 			data = append(data, encodeVarInt(0xdeadbeef)...)              // sequence number
+			data = append(data, encodeVarInt(0xcafe1234)...)              // retire prior to
 			data = append(data, 10)                                       // connection ID length
 			data = append(data, []byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}...) // connection ID
 			data = append(data, []byte("deadbeefdecafbad")...)            // stateless reset token
@@ -57,6 +61,7 @@ var _ = Describe("NEW_CONNECTION_ID frame", func() {
 			token := [16]byte{0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15}
 			frame := &NewConnectionIDFrame{
 				SequenceNumber:      0x1337,
+				RetirePriorTo:       0x42,
 				ConnectionID:        protocol.ConnectionID{1, 2, 3, 4, 5, 6},
 				StatelessResetToken: token,
 			}
@@ -64,6 +69,7 @@ var _ = Describe("NEW_CONNECTION_ID frame", func() {
 			Expect(frame.Write(b, versionIETFFrames)).To(Succeed())
 			expected := []byte{0x18}
 			expected = append(expected, encodeVarInt(0x1337)...)
+			expected = append(expected, encodeVarInt(0x42)...)
 			expected = append(expected, 6)
 			expected = append(expected, []byte{1, 2, 3, 4, 5, 6}...)
 			expected = append(expected, token[:]...)
@@ -74,6 +80,7 @@ var _ = Describe("NEW_CONNECTION_ID frame", func() {
 			token := [16]byte{0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15}
 			frame := &NewConnectionIDFrame{
 				SequenceNumber:      0xdecafbad,
+				RetirePriorTo:       0xdeadbeefcafe,
 				ConnectionID:        protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8},
 				StatelessResetToken: token,
 			}
