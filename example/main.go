@@ -143,7 +143,7 @@ func setupHandler(www string, trace bool) http.Handler {
 			</form></body></html>`)
 	})
 
-	http.HandleFunc("/dynamic/", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/dynamic/", func(w http.ResponseWriter, r *http.Request) {
 		const maxSize = 1 << 30 // 1 GB
 		num, err := strconv.ParseInt(strings.ReplaceAll(r.RequestURI, "/dynamic/", ""), 10, 64)
 		if err != nil || num <= 0 || num > maxSize {
