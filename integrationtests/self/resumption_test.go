@@ -84,4 +84,42 @@ var _ = Describe("TLS session resumption", func() {
 		Expect(err).ToNot(HaveOccurred())
 		Expect(serverSess.ConnectionState().DidResume).To(BeTrue())
 	})
+
+	It("doesn't use session resumption, if the config disables it", func() {
+		sConf := getTLSConfig()
+		sConf.SessionTicketsDisabled = true
+		server, err := quic.ListenAddr("localhost:0", sConf, nil)
+		Expect(err).ToNot(HaveOccurred())
+		defer server.Close()
+
+		gets := make(chan string, 100)
+		puts := make(chan string, 100)
+		cache := newClientSessionCache(gets, puts)
+		tlsConf := getTLSClientConfig()
+		tlsConf.ClientSessionCache = cache
+		sess, err := quic.DialAddr(
+			fmt.Sprintf("localhost:%d", server.Addr().(*net.UDPAddr).Port),
+			tlsConf,
+			nil,
+		)
+		Expect(err).ToNot(HaveOccurred())
+		Consistently(puts).ShouldNot(Receive())
+		Expect(sess.ConnectionState().DidResume).To(BeFalse())
+
+		serverSess, err := server.Accept(context.Background())
+		Expect(err).ToNot(HaveOccurred())
+		Expect(serverSess.ConnectionState().DidResume).To(BeFalse())
+
+		sess, err = quic.DialAddr(
+			fmt.Sprintf("localhost:%d", server.Addr().(*net.UDPAddr).Port),
+			tlsConf,
+			nil,
+		)
+		Expect(err).ToNot(HaveOccurred())
+		Expect(sess.ConnectionState().DidResume).To(BeFalse())
+
+		serverSess, err = server.Accept(context.Background())
+		Expect(err).ToNot(HaveOccurred())
+		Expect(serverSess.ConnectionState().DidResume).To(BeFalse())
+	})
 })
