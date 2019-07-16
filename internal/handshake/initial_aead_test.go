@@ -31,7 +31,8 @@ var _ = Describe("Initial AEAD using AES-GCM", func() {
 	})
 
 	// values taken from https://github.com/quicwg/base-drafts/wiki/Test-Vector-for-the-Clear-Text-AEAD-key-derivation
-	Context("using the test vector from the QUIC draft", func() {
+	// The draft didn't update the test vectors for -22.
+	PContext("using the test vector from the QUIC draft", func() {
 		var connID protocol.ConnectionID
 
 		BeforeEach(func() {
