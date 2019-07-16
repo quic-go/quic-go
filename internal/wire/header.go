@@ -27,7 +27,7 @@ func ParseConnectionID(data []byte, shortHeaderConnIDLen int) (protocol.Connecti
 	if len(data) < 6 {
 		return nil, io.EOF
 	}
-	destConnIDLen, _ := decodeConnIDLen(data[5])
+	destConnIDLen := int(data[5])
 	if len(data) < 6+destConnIDLen {
 		return nil, io.EOF
 	}
@@ -139,16 +139,19 @@ func (h *Header) parseLongHeader(b *bytes.Reader) error {
 	if h.Version != 0 && h.typeByte&0x40 == 0 {
 		return errors.New("not a QUIC packet")
 	}
-	connIDLenByte, err := b.ReadByte()
+	destConnIDLen, err := b.ReadByte()
 	if err != nil {
 		return err
 	}
-	dcil, scil := decodeConnIDLen(connIDLenByte)
-	h.DestConnectionID, err = protocol.ReadConnectionID(b, dcil)
+	h.DestConnectionID, err = protocol.ReadConnectionID(b, int(destConnIDLen))
 	if err != nil {
 		return err
 	}
-	h.SrcConnectionID, err = protocol.ReadConnectionID(b, scil)
+	srcConnIDLen, err := b.ReadByte()
+	if err != nil {
+		return err
+	}
+	h.SrcConnectionID, err = protocol.ReadConnectionID(b, int(srcConnIDLen))
 	if err != nil {
 		return err
 	}
@@ -172,8 +175,11 @@ func (h *Header) parseLongHeader(b *bytes.Reader) error {
 	}
 
 	if h.Type == protocol.PacketTypeRetry {
-		odcil := decodeSingleConnIDLen(h.typeByte & 0xf)
-		h.OrigDestConnectionID, err = protocol.ReadConnectionID(b, odcil)
+		origDestConnIDLen, err := b.ReadByte()
+		if err != nil {
+			return err
+		}
+		h.OrigDestConnectionID, err = protocol.ReadConnectionID(b, int(origDestConnIDLen))
 		if err != nil {
 			return err
 		}
@@ -237,15 +243,4 @@ func (h *Header) ParseExtended(b *bytes.Reader, ver protocol.VersionNumber) (*Ex
 
 func (h *Header) toExtendedHeader() *ExtendedHeader {
 	return &ExtendedHeader{Header: *h}
-}
-
-func decodeConnIDLen(enc byte) (int /*dest conn id len*/, int /*src conn id len*/) {
-	return decodeSingleConnIDLen(enc >> 4), decodeSingleConnIDLen(enc & 0xf)
-}
-
-func decodeSingleConnIDLen(enc uint8) int {
-	if enc == 0 {
-		return 0
-	}
-	return int(enc) + 3
 }

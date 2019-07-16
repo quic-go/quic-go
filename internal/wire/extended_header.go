@@ -83,6 +83,15 @@ func (h *ExtendedHeader) readPacketNumber(b *bytes.Reader) error {
 
 // Write writes the Header.
 func (h *ExtendedHeader) Write(b *bytes.Buffer, ver protocol.VersionNumber) error {
+	if h.DestConnectionID.Len() > protocol.MaxConnIDLen {
+		return fmt.Errorf("invalid connection ID length: %d bytes", h.DestConnectionID.Len())
+	}
+	if h.SrcConnectionID.Len() > protocol.MaxConnIDLen {
+		return fmt.Errorf("invalid connection ID length: %d bytes", h.SrcConnectionID.Len())
+	}
+	if h.OrigDestConnectionID.Len() > protocol.MaxConnIDLen {
+		return fmt.Errorf("invalid connection ID length: %d bytes", h.OrigDestConnectionID.Len())
+	}
 	if h.IsLongHeader {
 		return h.writeLongHeader(b, ver)
 	}
@@ -102,28 +111,21 @@ func (h *ExtendedHeader) writeLongHeader(b *bytes.Buffer, v protocol.VersionNumb
 		packetType = 0x3
 	}
 	firstByte := 0xc0 | packetType<<4
-	if h.Type == protocol.PacketTypeRetry {
-		odcil, err := encodeSingleConnIDLen(h.OrigDestConnectionID)
-		if err != nil {
-			return err
-		}
-		firstByte |= odcil
-	} else { // Retry packets don't have a packet number
+	if h.Type != protocol.PacketTypeRetry {
+		// Retry packets don't have a packet number
 		firstByte |= uint8(h.PacketNumberLen - 1)
 	}
 
 	b.WriteByte(firstByte)
 	utils.BigEndian.WriteUint32(b, uint32(h.Version))
-	connIDLen, err := encodeConnIDLen(h.DestConnectionID, h.SrcConnectionID)
-	if err != nil {
-		return err
-	}
-	b.WriteByte(connIDLen)
+	b.WriteByte(uint8(h.DestConnectionID.Len()))
 	b.Write(h.DestConnectionID.Bytes())
+	b.WriteByte(uint8(h.SrcConnectionID.Len()))
 	b.Write(h.SrcConnectionID.Bytes())
 
 	switch h.Type {
 	case protocol.PacketTypeRetry:
+		b.WriteByte(uint8(h.OrigDestConnectionID.Len()))
 		b.Write(h.OrigDestConnectionID.Bytes())
 		b.Write(h.Token)
 		return nil
@@ -159,7 +161,7 @@ func (h *ExtendedHeader) writePacketNumber(b *bytes.Buffer) error {
 // GetLength determines the length of the Header.
 func (h *ExtendedHeader) GetLength(v protocol.VersionNumber) protocol.ByteCount {
 	if h.IsLongHeader {
-		length := 1 /* type byte */ + 4 /* version */ + 1 /* conn id len byte */ + protocol.ByteCount(h.DestConnectionID.Len()+h.SrcConnectionID.Len()) + protocol.ByteCount(h.PacketNumberLen) + utils.VarIntLen(uint64(h.Length))
+		length := 1 /* type byte */ + 4 /* version */ + 1 /* dest conn ID len */ + protocol.ByteCount(h.DestConnectionID.Len()) + 1 /* src conn ID len */ + protocol.ByteCount(h.SrcConnectionID.Len()) + protocol.ByteCount(h.PacketNumberLen) + utils.VarIntLen(uint64(h.Length))
 		if h.Type == protocol.PacketTypeInitial {
 			length += utils.VarIntLen(uint64(len(h.Token))) + protocol.ByteCount(len(h.Token))
 		}
@@ -190,27 +192,4 @@ func (h *ExtendedHeader) Log(logger utils.Logger) {
 	} else {
 		logger.Debugf("\tShort Header{DestConnectionID: %s, PacketNumber: %#x, PacketNumberLen: %d, KeyPhase: %s}", h.DestConnectionID, h.PacketNumber, h.PacketNumberLen, h.KeyPhase)
 	}
-}
-
-func encodeConnIDLen(dest, src protocol.ConnectionID) (byte, error) {
-	dcil, err := encodeSingleConnIDLen(dest)
-	if err != nil {
-		return 0, err
-	}
-	scil, err := encodeSingleConnIDLen(src)
-	if err != nil {
-		return 0, err
-	}
-	return scil | dcil<<4, nil
-}
-
-func encodeSingleConnIDLen(id protocol.ConnectionID) (byte, error) {
-	len := id.Len()
-	if len == 0 {
-		return 0, nil
-	}
-	if len < 4 || len > 18 {
-		return 0, fmt.Errorf("invalid connection ID length: %d bytes", len)
-	}
-	return byte(len - 3), nil
 }
