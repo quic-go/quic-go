@@ -27,7 +27,7 @@ var (
 	quicListenAddr = quic.ListenAddr
 )
 
-const nextProtoH3 = "h3-20"
+const nextProtoH3 = "h3-22"
 
 // Server is a HTTP2 server listening for QUIC connections.
 type Server struct {
