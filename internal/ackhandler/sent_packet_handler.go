@@ -24,6 +24,7 @@ type packetNumberSpace struct {
 	history *sentPacketHistory
 	pns     *packetNumberGenerator
 
+	lossTime     time.Time
 	largestAcked protocol.PacketNumber
 	largestSent  protocol.PacketNumber
 }
@@ -67,9 +68,6 @@ type sentPacketHandler struct {
 	// The number of PTO probe packets that should be sent.
 	// Only applies to the application-data packet number space.
 	numProbesToSend int
-
-	// The time at which the next packet will be considered lost based on early transmit or exceeding the reordering window in time.
-	lossTime time.Time
 
 	// The alarm timeout
 	alarm time.Time
@@ -314,6 +312,25 @@ func (h *sentPacketHandler) determineNewlyAckedPackets(
 	return ackedPackets, err
 }
 
+func (h *sentPacketHandler) getEarliestLossTime() (time.Time, protocol.EncryptionLevel) {
+	var encLevel protocol.EncryptionLevel
+	var lossTime time.Time
+
+	if h.initialPackets != nil {
+		lossTime = h.initialPackets.lossTime
+		encLevel = protocol.EncryptionInitial
+	}
+	if h.handshakePackets != nil && (lossTime.IsZero() || h.handshakePackets.lossTime.Before(lossTime)) {
+		lossTime = h.handshakePackets.lossTime
+		encLevel = protocol.EncryptionHandshake
+	}
+	if lossTime.IsZero() || h.oneRTTPackets.lossTime.Before(lossTime) {
+		lossTime = h.oneRTTPackets.lossTime
+		encLevel = protocol.Encryption1RTT
+	}
+	return lossTime, encLevel
+}
+
 func (h *sentPacketHandler) hasOutstandingCryptoPackets() bool {
 	var hasInitial, hasHandshake bool
 	if h.initialPackets != nil {
@@ -336,11 +353,13 @@ func (h *sentPacketHandler) setLossDetectionTimer() {
 		return
 	}
 
+	lossTime, _ := h.getEarliestLossTime()
+
 	if h.hasOutstandingCryptoPackets() {
 		h.alarm = h.lastSentCryptoPacketTime.Add(h.computeCryptoTimeout())
-	} else if !h.lossTime.IsZero() {
+	} else if !lossTime.IsZero() {
 		// Early retransmit timer or time loss detection.
-		h.alarm = h.lossTime
+		h.alarm = lossTime
 	} else { // PTO alarm
 		h.alarm = h.lastSentAckElicitingPacketTime.Add(h.rttStats.PTO() << h.ptoCount)
 	}
@@ -351,10 +370,8 @@ func (h *sentPacketHandler) detectLostPackets(
 	encLevel protocol.EncryptionLevel,
 	priorInFlight protocol.ByteCount,
 ) error {
-	if encLevel == protocol.Encryption1RTT {
-		h.lossTime = time.Time{}
-	}
 	pnSpace := h.getPacketNumberSpace(encLevel)
+	pnSpace.lossTime = time.Time{}
 
 	maxRTT := float64(utils.MaxDuration(h.rttStats.LatestRTT(), h.rttStats.SmoothedRTT()))
 	lossDelay := time.Duration(timeThreshold * maxRTT)
@@ -371,12 +388,12 @@ func (h *sentPacketHandler) detectLostPackets(
 		timeSinceSent := now.Sub(packet.SendTime)
 		if timeSinceSent > lossDelay {
 			lostPackets = append(lostPackets, packet)
-		} else if h.lossTime.IsZero() && encLevel == protocol.Encryption1RTT {
+		} else if pnSpace.lossTime.IsZero() && encLevel == protocol.Encryption1RTT {
 			if h.logger.Debug() {
 				h.logger.Debugf("\tsetting loss timer for packet %#x to %s (in %s)", packet.PacketNumber, lossDelay, lossDelay-timeSinceSent)
 			}
 			// Note: This conditional is only entered once per call
-			h.lossTime = now.Add(lossDelay - timeSinceSent)
+			pnSpace.lossTime = now.Add(lossDelay - timeSinceSent)
 		}
 		return true, nil
 	})
@@ -433,18 +450,19 @@ func (h *sentPacketHandler) OnLossDetectionTimeout() error {
 
 func (h *sentPacketHandler) onVerifiedLossDetectionTimeout() error {
 	var err error
-	if h.hasOutstandingCryptoPackets() {
+	lossTime, encLevel := h.getEarliestLossTime()
+	if !lossTime.IsZero() {
+		if h.logger.Debug() {
+			h.logger.Debugf("Loss detection alarm fired in loss timer mode. Loss time: %s", lossTime)
+		}
+		// Early retransmit or time loss detection
+		err = h.detectLostPackets(time.Now(), encLevel, h.bytesInFlight)
+	} else if h.hasOutstandingCryptoPackets() {
 		if h.logger.Debug() {
 			h.logger.Debugf("Loss detection alarm fired in crypto mode. Crypto count: %d", h.cryptoCount)
 		}
 		h.cryptoCount++
 		err = h.queueCryptoPacketsForRetransmission()
-	} else if !h.lossTime.IsZero() {
-		if h.logger.Debug() {
-			h.logger.Debugf("Loss detection alarm fired in loss timer mode. Loss time: %s", h.lossTime)
-		}
-		// Early retransmit or time loss detection
-		err = h.detectLostPackets(time.Now(), protocol.Encryption1RTT, h.bytesInFlight)
 	} else { // PTO
 		if h.logger.Debug() {
 			h.logger.Debugf("Loss detection alarm fired in PTO mode. PTO count: %d", h.ptoCount)
