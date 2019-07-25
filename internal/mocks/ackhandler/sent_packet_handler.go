@@ -79,18 +79,18 @@ func (mr *MockSentPacketHandlerMockRecorder) DropPackets(arg0 interface{}) *gomo
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DropPackets", reflect.TypeOf((*MockSentPacketHandler)(nil).DropPackets), arg0)
 }
 
-// GetAlarmTimeout mocks base method
-func (m *MockSentPacketHandler) GetAlarmTimeout() time.Time {
+// GetLossDetectionTimeout mocks base method
+func (m *MockSentPacketHandler) GetLossDetectionTimeout() time.Time {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetAlarmTimeout")
+	ret := m.ctrl.Call(m, "GetLossDetectionTimeout")
 	ret0, _ := ret[0].(time.Time)
 	return ret0
 }
 
-// GetAlarmTimeout indicates an expected call of GetAlarmTimeout
-func (mr *MockSentPacketHandlerMockRecorder) GetAlarmTimeout() *gomock.Call {
+// GetLossDetectionTimeout indicates an expected call of GetLossDetectionTimeout
+func (mr *MockSentPacketHandlerMockRecorder) GetLossDetectionTimeout() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetAlarmTimeout", reflect.TypeOf((*MockSentPacketHandler)(nil).GetAlarmTimeout))
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetLossDetectionTimeout", reflect.TypeOf((*MockSentPacketHandler)(nil).GetLossDetectionTimeout))
 }
 
 // GetLowestPacketNotConfirmedAcked mocks base method
@@ -121,18 +121,18 @@ func (mr *MockSentPacketHandlerMockRecorder) GetStats() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetStats", reflect.TypeOf((*MockSentPacketHandler)(nil).GetStats))
 }
 
-// OnAlarm mocks base method
-func (m *MockSentPacketHandler) OnAlarm() error {
+// OnLossDetectionTimeout mocks base method
+func (m *MockSentPacketHandler) OnLossDetectionTimeout() error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "OnAlarm")
+	ret := m.ctrl.Call(m, "OnLossDetectionTimeout")
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
-// OnAlarm indicates an expected call of OnAlarm
-func (mr *MockSentPacketHandlerMockRecorder) OnAlarm() *gomock.Call {
+// OnLossDetectionTimeout indicates an expected call of OnLossDetectionTimeout
+func (mr *MockSentPacketHandlerMockRecorder) OnLossDetectionTimeout() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "OnAlarm", reflect.TypeOf((*MockSentPacketHandler)(nil).OnAlarm))
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "OnLossDetectionTimeout", reflect.TypeOf((*MockSentPacketHandler)(nil).OnLossDetectionTimeout))
 }
 
 // PeekPacketNumber mocks base method

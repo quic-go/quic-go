@@ -136,7 +136,7 @@ func (h *sentPacketHandler) DropPackets(encLevel protocol.EncryptionLevel) {
 func (h *sentPacketHandler) SentPacket(packet *Packet) {
 	if isAckEliciting := h.sentPacketImpl(packet); isAckEliciting {
 		h.getPacketNumberSpace(packet.EncryptionLevel).history.SentPacket(packet)
-		h.updateLossDetectionAlarm()
+		h.setLossDetectionTimer()
 	}
 }
 
@@ -148,7 +148,7 @@ func (h *sentPacketHandler) SentPacketsAsRetransmission(packets []*Packet, retra
 		}
 	}
 	h.getPacketNumberSpace(p[0].EncryptionLevel).history.SentPacketsAsRetransmission(p, retransmissionOf)
-	h.updateLossDetectionAlarm()
+	h.setLossDetectionTimer()
 }
 
 func (h *sentPacketHandler) getPacketNumberSpace(encLevel protocol.EncryptionLevel) *packetNumberSpace {
@@ -258,7 +258,7 @@ func (h *sentPacketHandler) ReceivedAck(ackFrame *wire.AckFrame, withPacketNumbe
 	h.cryptoCount = 0
 	h.numProbesToSend = 0
 
-	h.updateLossDetectionAlarm()
+	h.setLossDetectionTimer()
 	return nil
 }
 
@@ -329,7 +329,7 @@ func (h *sentPacketHandler) hasOutstandingPackets() bool {
 	return h.oneRTTPackets.history.HasOutstandingPackets() || h.hasOutstandingCryptoPackets()
 }
 
-func (h *sentPacketHandler) updateLossDetectionAlarm() {
+func (h *sentPacketHandler) setLossDetectionTimer() {
 	// Cancel the alarm if no packets are outstanding
 	if !h.hasOutstandingPackets() {
 		h.alarm = time.Time{}
@@ -417,21 +417,21 @@ func (h *sentPacketHandler) detectLostPackets(
 	return nil
 }
 
-func (h *sentPacketHandler) OnAlarm() error {
+func (h *sentPacketHandler) OnLossDetectionTimeout() error {
 	// When all outstanding are acknowledged, the alarm is canceled in
 	// updateLossDetectionAlarm. This doesn't reset the timer in the session though.
 	// When OnAlarm is called, we therefore need to make sure that there are
 	// actually packets outstanding.
 	if h.hasOutstandingPackets() {
-		if err := h.onVerifiedAlarm(); err != nil {
+		if err := h.onVerifiedLossDetectionTimeout(); err != nil {
 			return err
 		}
 	}
-	h.updateLossDetectionAlarm()
+	h.setLossDetectionTimer()
 	return nil
 }
 
-func (h *sentPacketHandler) onVerifiedAlarm() error {
+func (h *sentPacketHandler) onVerifiedLossDetectionTimeout() error {
 	var err error
 	if h.hasOutstandingCryptoPackets() {
 		if h.logger.Debug() {
@@ -455,7 +455,7 @@ func (h *sentPacketHandler) onVerifiedAlarm() error {
 	return err
 }
 
-func (h *sentPacketHandler) GetAlarmTimeout() time.Time {
+func (h *sentPacketHandler) GetLossDetectionTimeout() time.Time {
 	return h.alarm
 }
 
@@ -672,7 +672,7 @@ func (h *sentPacketHandler) ResetForRetry() error {
 		h.retransmissionQueue = append(h.retransmissionQueue, p)
 	}
 	h.initialPackets = newPacketNumberSpace(h.initialPackets.pns.Pop())
-	h.updateLossDetectionAlarm()
+	h.setLossDetectionTimer()
 	return nil
 }
 

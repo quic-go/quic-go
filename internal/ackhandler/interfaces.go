@@ -37,8 +37,8 @@ type SentPacketHandler interface {
 	PeekPacketNumber(protocol.EncryptionLevel) (protocol.PacketNumber, protocol.PacketNumberLen)
 	PopPacketNumber(protocol.EncryptionLevel) protocol.PacketNumber
 
-	GetAlarmTimeout() time.Time
-	OnAlarm() error
+	GetLossDetectionTimeout() time.Time
+	OnLossDetectionTimeout() error
 
 	// report some congestion statistics. For tracing only.
 	GetStats() *quictrace.TransportState
