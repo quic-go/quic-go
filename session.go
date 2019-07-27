@@ -143,6 +143,7 @@ type session struct {
 	undecryptablePackets []*receivedPacket
 
 	clientHelloWritten    <-chan struct{}
+	earlySessionReadyChan chan struct{}
 	handshakeCompleteChan chan struct{} // is closed when the handshake completes
 	handshakeComplete     bool
 
@@ -345,6 +346,7 @@ func (s *session) preSetup() {
 		s.rttStats,
 		s.logger,
 	)
+	s.earlySessionReadyChan = make(chan struct{})
 	if s.config.QuicTracer != nil {
 		s.traceCallback = func(ev quictrace.Event) {
 			s.config.QuicTracer.Trace(s.origDestConnID, ev)
@@ -466,6 +468,11 @@ runLoop:
 	s.logger.Infof("Connection %s closed.", s.srcConnID)
 	s.cryptoStreamHandler.Close()
 	return closeErr.err
+}
+
+// blocks until the early session can be used
+func (s *session) earlySessionReady() <-chan struct{} {
+	return s.earlySessionReadyChan
 }
 
 func (s *session) HandshakeComplete() context.Context {
@@ -1013,6 +1020,9 @@ func (s *session) processTransportParameters(data []byte) {
 	if params.StatelessResetToken != nil {
 		s.sessionRunner.AddResetToken(*params.StatelessResetToken, s)
 	}
+	// On the server side, the early session is ready as soon as we processed
+	// the client's transport parameters.
+	close(s.earlySessionReadyChan)
 }
 
 func (s *session) processTransportParametersForClient(data []byte) (*handshake.TransportParameters, error) {

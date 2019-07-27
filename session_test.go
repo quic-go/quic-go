@@ -1286,7 +1286,10 @@ var _ = Describe("Session", func() {
 			}
 			streamManager.EXPECT().UpdateLimits(params)
 			packer.EXPECT().HandleTransportParameters(params)
+			Expect(sess.earlySessionReady()).ToNot(BeClosed())
 			sess.processTransportParameters(params.Marshal())
+			Expect(sess.earlySessionReady()).To(BeClosed())
+
 			// make the go routine return
 			streamManager.EXPECT().CloseWithError(gomock.Any())
 			sessionRunner.EXPECT().Retire(gomock.Any())
