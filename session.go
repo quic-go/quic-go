@@ -171,6 +171,7 @@ type session struct {
 }
 
 var _ Session = &session{}
+var _ EarlySession = &session{}
 var _ streamSender = &session{}
 
 var newSession = func(

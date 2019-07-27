@@ -277,6 +277,20 @@ func (mr *MockQuicSessionMockRecorder) destroy(arg0 interface{}) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "destroy", reflect.TypeOf((*MockQuicSession)(nil).destroy), arg0)
 }
 
+// earlySessionReady mocks base method
+func (m *MockQuicSession) earlySessionReady() <-chan struct{} {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "earlySessionReady")
+	ret0, _ := ret[0].(<-chan struct{})
+	return ret0
+}
+
+// earlySessionReady indicates an expected call of earlySessionReady
+func (mr *MockQuicSessionMockRecorder) earlySessionReady() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "earlySessionReady", reflect.TypeOf((*MockQuicSession)(nil).earlySessionReady))
+}
+
 // getPerspective mocks base method
 func (m *MockQuicSession) getPerspective() protocol.Perspective {
 	m.ctrl.T.Helper()
