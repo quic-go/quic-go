@@ -49,20 +49,7 @@ var _ = Describe("Server", func() {
 	It("errors when no tls.Config is given", func() {
 		_, err := ListenAddr("localhost:0", nil, nil)
 		Expect(err).To(HaveOccurred())
-		Expect(err.Error()).To(ContainSubstring("quic: Certificates not set in tls.Config"))
-	})
-
-	It("errors when no certificates are set in the tls.Config is given", func() {
-		_, err := ListenAddr("localhost:0", &tls.Config{}, nil)
-		Expect(err).To(HaveOccurred())
-		Expect(err.Error()).To(ContainSubstring("quic: Certificates not set in tls.Config"))
-	})
-
-	It("errors when NextProtos is not set in the tls.Config", func() {
-		tlsConf.NextProtos = nil
-		_, err := ListenAddr("localhost:0", tlsConf, nil)
-		Expect(err).To(HaveOccurred())
-		Expect(err.Error()).To(ContainSubstring("quic: NextProtos not set in tls.Config"))
+		Expect(err.Error()).To(ContainSubstring("quic: tls.Config not set"))
 	})
 
 	It("errors when the Config contains an invalid version", func() {

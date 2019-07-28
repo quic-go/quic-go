@@ -463,11 +463,6 @@ var _ = Describe("Client", func() {
 				Expect(err).To(MatchError("0x1234 is not a valid QUIC version"))
 			})
 
-			It("erros when the tls.Config doesn't contain NextProtos", func() {
-				_, err := Dial(packetConn, nil, "localhost:1234", &tls.Config{}, nil)
-				Expect(err).To(MatchError("quic: NextProtos not set in tls.Config"))
-			})
-
 			It("disables bidirectional streams", func() {
 				config := &Config{
 					MaxIncomingStreams:    -1,
