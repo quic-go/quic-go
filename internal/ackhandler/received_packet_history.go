@@ -13,7 +13,7 @@ import (
 type receivedPacketHistory struct {
 	ranges *utils.PacketIntervalList
 
-	lowestInReceivedPacketNumbers protocol.PacketNumber
+	deletedBelow protocol.PacketNumber
 }
 
 var errTooManyOutstandingReceivedAckRanges = qerr.Error(qerr.InternalError, "Too many outstanding received ACK ranges")
@@ -27,6 +27,10 @@ func newReceivedPacketHistory() *receivedPacketHistory {
 
 // ReceivedPacket registers a packet with PacketNumber p and updates the ranges
 func (h *receivedPacketHistory) ReceivedPacket(p protocol.PacketNumber) error {
+	// ignore delayed packets, if we already deleted the range
+	if p < h.deletedBelow {
+		return nil
+	}
 	if h.ranges.Len() >= protocol.MaxTrackedReceivedAckRanges {
 		return errTooManyOutstandingReceivedAckRanges
 	}
@@ -77,19 +81,20 @@ func (h *receivedPacketHistory) ReceivedPacket(p protocol.PacketNumber) error {
 
 // DeleteBelow deletes all entries below (but not including) p
 func (h *receivedPacketHistory) DeleteBelow(p protocol.PacketNumber) {
-	if p <= h.lowestInReceivedPacketNumbers {
+	if p < h.deletedBelow {
 		return
 	}
-	h.lowestInReceivedPacketNumbers = p
+	h.deletedBelow = p
 
 	nextEl := h.ranges.Front()
 	for el := h.ranges.Front(); nextEl != nil; el = nextEl {
 		nextEl = el.Next()
 
-		if p > el.Value.Start && p <= el.Value.End {
-			el.Value.Start = p
-		} else if el.Value.End < p { // delete a whole range
+		if el.Value.End < p { // delete a whole range
 			h.ranges.Remove(el)
+		} else if p > el.Value.Start && p <= el.Value.End {
+			el.Value.Start = p
+			return
 		} else { // no ranges affected. Nothing to do
 			return
 		}
