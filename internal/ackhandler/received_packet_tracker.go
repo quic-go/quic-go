@@ -44,9 +44,9 @@ func newReceivedPacketTracker(
 	}
 }
 
-func (h *receivedPacketTracker) ReceivedPacket(packetNumber protocol.PacketNumber, rcvTime time.Time, shouldInstigateAck bool) error {
+func (h *receivedPacketTracker) ReceivedPacket(packetNumber protocol.PacketNumber, rcvTime time.Time, shouldInstigateAck bool) {
 	if packetNumber < h.ignoreBelow {
-		return nil
+		return
 	}
 
 	isMissing := h.isMissing(packetNumber)
@@ -55,11 +55,8 @@ func (h *receivedPacketTracker) ReceivedPacket(packetNumber protocol.PacketNumbe
 		h.largestObservedReceivedTime = rcvTime
 	}
 
-	if err := h.packetHistory.ReceivedPacket(packetNumber); err != nil {
-		return err
-	}
+	h.packetHistory.ReceivedPacket(packetNumber)
 	h.maybeQueueAck(packetNumber, rcvTime, shouldInstigateAck, isMissing)
-	return nil
 }
 
 // IgnoreBelow sets a lower limit for acking packets.

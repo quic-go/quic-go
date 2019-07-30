@@ -25,12 +25,12 @@ var _ = Describe("Received Packet Handler", func() {
 
 	It("generates ACKs for different packet number spaces", func() {
 		sendTime := time.Now().Add(-time.Second)
-		Expect(handler.ReceivedPacket(2, protocol.EncryptionInitial, sendTime, true)).To(Succeed())
-		Expect(handler.ReceivedPacket(1, protocol.EncryptionHandshake, sendTime, true)).To(Succeed())
-		Expect(handler.ReceivedPacket(5, protocol.Encryption1RTT, sendTime, true)).To(Succeed())
-		Expect(handler.ReceivedPacket(3, protocol.EncryptionInitial, sendTime, true)).To(Succeed())
-		Expect(handler.ReceivedPacket(2, protocol.EncryptionHandshake, sendTime, true)).To(Succeed())
-		Expect(handler.ReceivedPacket(4, protocol.Encryption1RTT, sendTime, true)).To(Succeed())
+		handler.ReceivedPacket(2, protocol.EncryptionInitial, sendTime, true)
+		handler.ReceivedPacket(1, protocol.EncryptionHandshake, sendTime, true)
+		handler.ReceivedPacket(5, protocol.Encryption1RTT, sendTime, true)
+		handler.ReceivedPacket(3, protocol.EncryptionInitial, sendTime, true)
+		handler.ReceivedPacket(2, protocol.EncryptionHandshake, sendTime, true)
+		handler.ReceivedPacket(4, protocol.Encryption1RTT, sendTime, true)
 		initialAck := handler.GetAckFrame(protocol.EncryptionInitial)
 		Expect(initialAck).ToNot(BeNil())
 		Expect(initialAck.AckRanges).To(HaveLen(1))
@@ -50,8 +50,8 @@ var _ = Describe("Received Packet Handler", func() {
 
 	It("drops Initial packets", func() {
 		sendTime := time.Now().Add(-time.Second)
-		Expect(handler.ReceivedPacket(2, protocol.EncryptionInitial, sendTime, true)).To(Succeed())
-		Expect(handler.ReceivedPacket(1, protocol.EncryptionHandshake, sendTime, true)).To(Succeed())
+		handler.ReceivedPacket(2, protocol.EncryptionInitial, sendTime, true)
+		handler.ReceivedPacket(1, protocol.EncryptionHandshake, sendTime, true)
 		Expect(handler.GetAckFrame(protocol.EncryptionInitial)).ToNot(BeNil())
 		handler.DropPackets(protocol.EncryptionInitial)
 		Expect(handler.GetAckFrame(protocol.EncryptionInitial)).To(BeNil())
@@ -60,8 +60,8 @@ var _ = Describe("Received Packet Handler", func() {
 
 	It("drops Handshake packets", func() {
 		sendTime := time.Now().Add(-time.Second)
-		Expect(handler.ReceivedPacket(1, protocol.EncryptionHandshake, sendTime, true)).To(Succeed())
-		Expect(handler.ReceivedPacket(2, protocol.Encryption1RTT, sendTime, true)).To(Succeed())
+		handler.ReceivedPacket(1, protocol.EncryptionHandshake, sendTime, true)
+		handler.ReceivedPacket(2, protocol.Encryption1RTT, sendTime, true)
 		Expect(handler.GetAckFrame(protocol.EncryptionHandshake)).ToNot(BeNil())
 		handler.DropPackets(protocol.EncryptionInitial)
 		Expect(handler.GetAckFrame(protocol.EncryptionHandshake)).To(BeNil())

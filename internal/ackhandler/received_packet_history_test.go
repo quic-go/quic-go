@@ -188,13 +188,11 @@ var _ = Describe("receivedPacketHistory", func() {
 
 		It("doesn't create more than MaxNumAckRanges ranges", func() {
 			for i := protocol.PacketNumber(0); i < protocol.MaxNumAckRanges; i++ {
-				err := hist.ReceivedPacket(2 * i)
-				Expect(err).ToNot(HaveOccurred())
+				hist.ReceivedPacket(2 * i)
 			}
 			Expect(hist.ranges.Len()).To(Equal(protocol.MaxNumAckRanges))
 			Expect(hist.ranges.Front().Value).To(Equal(utils.PacketInterval{Start: 0, End: 0}))
-			err := hist.ReceivedPacket(2*protocol.MaxNumAckRanges + 1000)
-			Expect(err).ToNot(HaveOccurred())
+			hist.ReceivedPacket(2*protocol.MaxNumAckRanges + 1000)
 			// check that the oldest ACK range was deleted
 			Expect(hist.ranges.Len()).To(Equal(protocol.MaxNumAckRanges))
 			Expect(hist.ranges.Front().Value).To(Equal(utils.PacketInterval{Start: 2, End: 2}))

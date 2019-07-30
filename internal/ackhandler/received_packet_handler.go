@@ -57,16 +57,16 @@ func (h *receivedPacketHandler) ReceivedPacket(
 	encLevel protocol.EncryptionLevel,
 	rcvTime time.Time,
 	shouldInstigateAck bool,
-) error {
+) {
 	switch encLevel {
 	case protocol.EncryptionInitial:
-		return h.initialPackets.ReceivedPacket(pn, rcvTime, shouldInstigateAck)
+		h.initialPackets.ReceivedPacket(pn, rcvTime, shouldInstigateAck)
 	case protocol.EncryptionHandshake:
-		return h.handshakePackets.ReceivedPacket(pn, rcvTime, shouldInstigateAck)
+		h.handshakePackets.ReceivedPacket(pn, rcvTime, shouldInstigateAck)
 	case protocol.Encryption1RTT:
-		return h.oneRTTPackets.ReceivedPacket(pn, rcvTime, shouldInstigateAck)
+		h.oneRTTPackets.ReceivedPacket(pn, rcvTime, shouldInstigateAck)
 	default:
-		return fmt.Errorf("received packet with unknown encryption level: %s", encLevel)
+		panic(fmt.Sprintf("received packet with unknown encryption level: %s", encLevel))
 	}
 }
 
