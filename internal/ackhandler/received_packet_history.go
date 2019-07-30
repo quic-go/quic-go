@@ -12,8 +12,6 @@ import (
 // It does not store packet contents.
 type receivedPacketHistory struct {
 	ranges *utils.PacketIntervalList
-
-	lowestInReceivedPacketNumbers protocol.PacketNumber
 }
 
 var errTooManyOutstandingReceivedAckRanges = qerr.Error(qerr.InternalError, "Too many outstanding received ACK ranges")
@@ -77,11 +75,6 @@ func (h *receivedPacketHistory) ReceivedPacket(p protocol.PacketNumber) error {
 
 // DeleteBelow deletes all entries below (but not including) p
 func (h *receivedPacketHistory) DeleteBelow(p protocol.PacketNumber) {
-	if p <= h.lowestInReceivedPacketNumbers {
-		return
-	}
-	h.lowestInReceivedPacketNumbers = p
-
 	nextEl := h.ranges.Front()
 	for el := h.ranges.Front(); nextEl != nil; el = nextEl {
 		nextEl = el.Next()
