@@ -419,10 +419,10 @@ runLoop:
 		}
 
 		now := time.Now()
-		if timeout := s.sentPacketHandler.GetAlarmTimeout(); !timeout.IsZero() && timeout.Before(now) {
+		if timeout := s.sentPacketHandler.GetLossDetectionTimeout(); !timeout.IsZero() && timeout.Before(now) {
 			// This could cause packets to be retransmitted.
 			// Check it before trying to send packets.
-			if err := s.sentPacketHandler.OnAlarm(); err != nil {
+			if err := s.sentPacketHandler.OnLossDetectionTimeout(); err != nil {
 				s.closeLocal(err)
 			}
 		}
@@ -484,7 +484,7 @@ func (s *session) maybeResetTimer() {
 	if ackAlarm := s.receivedPacketHandler.GetAlarmTimeout(); !ackAlarm.IsZero() {
 		deadline = utils.MinTime(deadline, ackAlarm)
 	}
-	if lossTime := s.sentPacketHandler.GetAlarmTimeout(); !lossTime.IsZero() {
+	if lossTime := s.sentPacketHandler.GetLossDetectionTimeout(); !lossTime.IsZero() {
 		deadline = utils.MinTime(deadline, lossTime)
 	}
 	if !s.handshakeComplete {

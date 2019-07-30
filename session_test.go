@@ -845,7 +845,7 @@ var _ = Describe("Session", func() {
 
 		It("sends ACK only packets", func() {
 			sph := mockackhandler.NewMockSentPacketHandler(mockCtrl)
-			sph.EXPECT().GetAlarmTimeout().AnyTimes()
+			sph.EXPECT().GetLossDetectionTimeout().AnyTimes()
 			sph.EXPECT().SendMode().Return(ackhandler.SendAck)
 			sph.EXPECT().ShouldSendNumPackets().Return(1000)
 			packer.EXPECT().MaybePackAckPacket()
@@ -952,7 +952,7 @@ var _ = Describe("Session", func() {
 
 			BeforeEach(func() {
 				sph = mockackhandler.NewMockSentPacketHandler(mockCtrl)
-				sph.EXPECT().GetAlarmTimeout().AnyTimes()
+				sph.EXPECT().GetLossDetectionTimeout().AnyTimes()
 				sph.EXPECT().DequeuePacketForRetransmission().AnyTimes()
 				sess.sentPacketHandler = sph
 				streamManager.EXPECT().CloseWithError(gomock.Any())
@@ -1092,7 +1092,7 @@ var _ = Describe("Session", func() {
 		Context("scheduling sending", func() {
 			It("sends when scheduleSending is called", func() {
 				sph := mockackhandler.NewMockSentPacketHandler(mockCtrl)
-				sph.EXPECT().GetAlarmTimeout().AnyTimes()
+				sph.EXPECT().GetLossDetectionTimeout().AnyTimes()
 				sph.EXPECT().TimeUntilSend().AnyTimes()
 				sph.EXPECT().SendMode().Return(ackhandler.SendAny).AnyTimes()
 				sph.EXPECT().ShouldSendNumPackets().AnyTimes().Return(1)
@@ -1122,7 +1122,7 @@ var _ = Describe("Session", func() {
 				sph := mockackhandler.NewMockSentPacketHandler(mockCtrl)
 				sph.EXPECT().TimeUntilSend().Return(time.Now())
 				sph.EXPECT().TimeUntilSend().Return(time.Now().Add(time.Hour))
-				sph.EXPECT().GetAlarmTimeout().AnyTimes()
+				sph.EXPECT().GetLossDetectionTimeout().AnyTimes()
 				sph.EXPECT().SendMode().Return(ackhandler.SendAny).AnyTimes()
 				sph.EXPECT().ShouldSendNumPackets().Return(1)
 				sph.EXPECT().SentPacket(gomock.Any()).Do(func(p *ackhandler.Packet) {
