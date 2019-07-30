@@ -174,6 +174,18 @@ var _ = Describe("receivedPacketHistory", func() {
 			Expect(hist.ranges.Front().Value).To(Equal(utils.PacketInterval{Start: 4, End: 4}))
 		})
 
+		It("doesn't add delayed packets below deleted ranges", func() {
+			hist.ReceivedPacket(4)
+			hist.ReceivedPacket(5)
+			hist.ReceivedPacket(6)
+			hist.DeleteBelow(5)
+			Expect(hist.ranges.Len()).To(Equal(1))
+			Expect(hist.ranges.Front().Value).To(Equal(utils.PacketInterval{Start: 5, End: 6}))
+			hist.ReceivedPacket(2)
+			Expect(hist.ranges.Len()).To(Equal(1))
+			Expect(hist.ranges.Front().Value).To(Equal(utils.PacketInterval{Start: 5, End: 6}))
+		})
+
 		Context("DoS protection", func() {
 			It("doesn't create more than MaxTrackedReceivedAckRanges ranges", func() {
 				for i := protocol.PacketNumber(1); i <= protocol.MaxTrackedReceivedAckRanges; i++ {
