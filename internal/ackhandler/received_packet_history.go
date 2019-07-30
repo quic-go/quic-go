@@ -2,7 +2,6 @@ package ackhandler
 
 import (
 	"github.com/lucas-clemente/quic-go/internal/protocol"
-	"github.com/lucas-clemente/quic-go/internal/qerr"
 	"github.com/lucas-clemente/quic-go/internal/utils"
 	"github.com/lucas-clemente/quic-go/internal/wire"
 )
@@ -16,9 +15,6 @@ type receivedPacketHistory struct {
 	deletedBelow protocol.PacketNumber
 }
 
-var errTooManyOutstandingReceivedAckRanges = qerr.Error(qerr.InternalError, "Too many outstanding received ACK ranges")
-
-// newReceivedPacketHistory creates a new received packet history
 func newReceivedPacketHistory() *receivedPacketHistory {
 	return &receivedPacketHistory{
 		ranges: utils.NewPacketIntervalList(),
@@ -31,10 +27,14 @@ func (h *receivedPacketHistory) ReceivedPacket(p protocol.PacketNumber) error {
 	if p < h.deletedBelow {
 		return nil
 	}
-	if h.ranges.Len() >= protocol.MaxTrackedReceivedAckRanges {
-		return errTooManyOutstandingReceivedAckRanges
+	if err := h.addToRanges(p); err != nil {
+		return err
 	}
+	h.maybeDeleteOldRanges()
+	return nil
+}
 
+func (h *receivedPacketHistory) addToRanges(p protocol.PacketNumber) error {
 	if h.ranges.Len() == 0 {
 		h.ranges.PushBack(utils.PacketInterval{Start: p, End: p})
 		return nil
@@ -75,8 +75,15 @@ func (h *receivedPacketHistory) ReceivedPacket(p protocol.PacketNumber) error {
 
 	// create a new range at the beginning
 	h.ranges.InsertBefore(utils.PacketInterval{Start: p, End: p}, h.ranges.Front())
-
 	return nil
+}
+
+// Delete old ranges, if we're tracking more than 500 of them.
+// This is a DoS defense against a peer that sends us too many gaps.
+func (h *receivedPacketHistory) maybeDeleteOldRanges() {
+	for h.ranges.Len() > protocol.MaxNumAckRanges {
+		h.ranges.Remove(h.ranges.Front())
+	}
 }
 
 // DeleteBelow deletes all entries below (but not including) p

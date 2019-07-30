@@ -59,19 +59,6 @@ var _ = Describe("Received Packet Tracker", func() {
 			Expect(tracker.largestObserved).To(Equal(protocol.PacketNumber(5)))
 			Expect(tracker.largestObservedReceivedTime).To(Equal(timestamp))
 		})
-
-		It("passes on errors from receivedPacketHistory", func() {
-			var err error
-			for i := protocol.PacketNumber(0); i < 5*protocol.MaxTrackedReceivedAckRanges; i++ {
-				err = tracker.ReceivedPacket(2*i+1, time.Time{}, true)
-				// this will eventually return an error
-				// details about when exactly the receivedPacketHistory errors are tested there
-				if err != nil {
-					break
-				}
-			}
-			Expect(err).To(MatchError(errTooManyOutstandingReceivedAckRanges))
-		})
 	})
 
 	Context("ACKs", func() {
