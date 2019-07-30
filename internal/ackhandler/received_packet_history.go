@@ -86,10 +86,11 @@ func (h *receivedPacketHistory) DeleteBelow(p protocol.PacketNumber) {
 	for el := h.ranges.Front(); nextEl != nil; el = nextEl {
 		nextEl = el.Next()
 
-		if p > el.Value.Start && p <= el.Value.End {
-			el.Value.Start = p
-		} else if el.Value.End < p { // delete a whole range
+		if el.Value.End < p { // delete a whole range
 			h.ranges.Remove(el)
+		} else if p > el.Value.Start && p <= el.Value.End {
+			el.Value.Start = p
+			return
 		} else { // no ranges affected. Nothing to do
 			return
 		}
