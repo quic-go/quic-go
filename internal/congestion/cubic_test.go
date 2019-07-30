@@ -24,6 +24,7 @@ var _ = Describe("Cubic", func() {
 	BeforeEach(func() {
 		clock = mockClock{}
 		cubic = NewCubic(&clock)
+		cubic.SetNumConnections(int(numConnections))
 	})
 
 	renoCwnd := func(currentCwnd protocol.ByteCount) protocol.ByteCount {
