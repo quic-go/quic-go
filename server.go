@@ -128,10 +128,11 @@ func ListenAddr(addr string, tlsConf *tls.Config, config *Config) (Listener, err
 }
 
 // Listen listens for QUIC connections on a given net.PacketConn.
-// A single PacketConn only be used for a single call to Listen.
+// A single net.PacketConn only be used for a single call to Listen.
 // The PacketConn can be used for simultaneous calls to Dial.
 // QUIC connection IDs are used for demultiplexing the different connections.
 // The tls.Config must not be nil and must contain a certificate configuration.
+// Furthermore, it must define an application control (using NextProtos).
 // The quic.Config may be nil, in that case the default values will be used.
 func Listen(conn net.PacketConn, tlsConf *tls.Config, config *Config) (Listener, error) {
 	return listen(conn, tlsConf, config)
@@ -139,11 +140,8 @@ func Listen(conn net.PacketConn, tlsConf *tls.Config, config *Config) (Listener,
 
 func listen(conn net.PacketConn, tlsConf *tls.Config, config *Config) (*server, error) {
 	// TODO(#1655): only require that tls.Config.Certificates or tls.Config.GetCertificate is set
-	if tlsConf == nil || len(tlsConf.Certificates) == 0 {
-		return nil, errors.New("quic: Certificates not set in tls.Config")
-	}
-	if len(tlsConf.NextProtos) == 0 {
-		return nil, errors.New("quic: NextProtos not set in tls.Config")
+	if tlsConf == nil {
+		return nil, errors.New("quic: tls.Config not set")
 	}
 	config = populateServerConfig(config)
 	for _, v := range config.Versions {

@@ -89,6 +89,7 @@ func DialAddrContext(
 // The same PacketConn can be used for multiple calls to Dial and Listen,
 // QUIC connection IDs are used for demultiplexing the different connections.
 // The host parameter is used for SNI.
+// The tls.Config must define an application protocol (using NextProtos).
 func Dial(
 	pconn net.PacketConn,
 	remoteAddr net.Addr,
@@ -121,8 +122,8 @@ func dialContext(
 	config *Config,
 	createdPacketConn bool,
 ) (Session, error) {
-	if tlsConf == nil || len(tlsConf.NextProtos) == 0 {
-		return nil, errors.New("quic: NextProtos not set in tls.Config")
+	if tlsConf == nil {
+		return nil, errors.New("quic: tls.Config not set")
 	}
 	config = populateClientConfig(config, createdPacketConn)
 	packetHandlers, err := getMultiplexer().AddConn(pconn, config.ConnectionIDLength, config.StatelessResetKey)
