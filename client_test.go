@@ -663,4 +663,53 @@ var _ = Describe("Client", func() {
 		Expect(cl.version).ToNot(BeZero())
 		Expect(cl.GetVersion()).To(Equal(cl.version))
 	})
+
+	Context("handling potentially injected packets", func() {
+		// NOTE: We hope these tests as written will fail once mitigations for injection adversaries are put in place.
+
+		// Illustrates that adversary who injects any packet quickly can
+		// cause a real version negotiation packet to be ignored.
+		It("version negotiation packets ignored if any other packet is received", func() {
+			// Copy of existing test "recognizes that a non Version Negotiation packet means that the server accepted the suggested version"
+			sess := NewMockQuicSession(mockCtrl)
+			sess.EXPECT().handlePacket(gomock.Any())
+			cl.session = sess
+			cl.config = &Config{}
+			buf := &bytes.Buffer{}
+			Expect((&wire.ExtendedHeader{
+				Header: wire.Header{
+					DestConnectionID: connID,
+					SrcConnectionID:  connID,
+					Version:          cl.version,
+				},
+				PacketNumberLen: protocol.PacketNumberLen3,
+			}).Write(buf, protocol.VersionTLS)).To(Succeed())
+			cl.handlePacket(&receivedPacket{data: buf.Bytes()})
+
+			// Version negotiation is now ignored
+			cl.config = &Config{}
+			ver := cl.version
+			cl.handlePacket(composeVersionNegotiationPacket(connID, []protocol.VersionNumber{1234}))
+			Expect(cl.version).To(Equal(ver))
+		})
+
+		// Illustrates that adversary that injects a version negotiation packet
+		// with no supported versions can break a connection.
+		It("connection fails if no supported versions are found in version negotation packet", func() {
+			// Copy of existing test "errors if no matching version is found"
+			sess := NewMockQuicSession(mockCtrl)
+			done := make(chan struct{})
+			sess.EXPECT().destroy(gomock.Any()).Do(func(err error) {
+				defer GinkgoRecover()
+				Expect(err).To(HaveOccurred())
+				Expect(err.Error()).To(ContainSubstring("No compatible QUIC version found."))
+				close(done)
+			})
+			cl.session = sess
+			cl.config = &Config{Versions: protocol.SupportedVersions}
+			cl.handlePacket(composeVersionNegotiationPacket(connID, []protocol.VersionNumber{1337}))
+			Eventually(done).Should(BeClosed())
+		})
+
+	})
 })
