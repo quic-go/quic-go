@@ -11,29 +11,18 @@ import (
 // Utilities for simulating packet injection and man-in-the-middle (MITM) attacker tests.
 // Do not use for non-testing purposes.
 
-// CryptoFrameType types copied from unexported messageType in crypto_setup.go
+// CryptoFrameType uses same types as messageType in crypto_setup.go
 type CryptoFrameType uint8
 
-const (
-	//typeClientHello         CryptoFrameType = 1
-	typeServerHello CryptoFrameType = 2
-	//typeNewSessionTicket    CryptoFrameType = 4
-	//typeEncryptedExtensions CryptoFrameType = 8
-	//typeCertificate         CryptoFrameType = 11
-	//typeCertificateRequest  CryptoFrameType = 13
-	//typeCertificateVerify   CryptoFrameType = 15
-	//typeFinished            CryptoFrameType = 20
-)
-
-// getRawPacket returns a new raw packet with the specified header and payload
-func getRawPacket(hdr *wire.ExtendedHeader, data []byte) []byte {
+// writePacket returns a new raw packet with the specified header and payload
+func writePacket(hdr *wire.ExtendedHeader, data []byte) []byte {
 	buf := &bytes.Buffer{}
 	hdr.Write(buf, protocol.VersionTLS)
 	return append(buf.Bytes(), data...)
 }
 
 // packRawPayload returns a new raw payload containing given frames
-func packRawPayload(version protocol.VersionNumber, frames ...wire.Frame) []byte {
+func packRawPayload(version protocol.VersionNumber, frames []wire.Frame) []byte {
 	buf := new(bytes.Buffer)
 	for _, cf := range frames {
 		cf.Write(buf, version)
@@ -61,7 +50,7 @@ func ComposeConnCloseFrame() *wire.ConnectionCloseFrame {
 	}
 }
 
-// ComposeAckFrame returns a new Ack Frame that ACKs packet 0
+// ComposeAckFrame returns a new Ack Frame that acknowledges all packets between smallest and largest
 func ComposeAckFrame(smallest protocol.PacketNumber, largest protocol.PacketNumber) *wire.AckFrame {
 	ackRange := wire.AckRange{
 		Smallest: smallest,
@@ -73,36 +62,17 @@ func ComposeAckFrame(smallest protocol.PacketNumber, largest protocol.PacketNumb
 	}
 }
 
-// InitialContents enumerates possible frames to include in forged Initial packets
-type InitialContents int
-
-const (
-	ServerHelloFrame InitialContents = iota + 1
-	AckFrame
-	ConnectionCloseFrame
-	NoFrame
-)
-
 // ComposeInitialPacket returns an Initial packet encrypted under key
-// (the original destination connection ID)
-// contains frame of specified type
-func ComposeInitialPacket(srcConnID protocol.ConnectionID, destConnID protocol.ConnectionID, version protocol.VersionNumber, key protocol.ConnectionID, frameType InitialContents) []byte {
+// (the original destination connection ID) containing specified frames
+func ComposeInitialPacket(srcConnID protocol.ConnectionID, destConnID protocol.ConnectionID, version protocol.VersionNumber, key protocol.ConnectionID, frames []wire.Frame) []byte {
 	sealer, _, _ := handshake.NewInitialAEAD(key, protocol.PerspectiveServer)
 
 	// compose payload
 	var payload []byte
-	switch frameType {
-	case ServerHelloFrame:
-		cf := ComposeCryptoFrame(typeServerHello, 20)
-		payload = packRawPayload(version, cf)
-	case AckFrame:
-		ack := ComposeAckFrame(2, 2) // ack packet 2
-		payload = packRawPayload(version, ack)
-	case ConnectionCloseFrame:
-		ccf := ComposeConnCloseFrame()
-		payload = packRawPayload(version, ccf)
-	case NoFrame:
+	if len(frames) == 0 {
 		payload = make([]byte, protocol.MinInitialPacketSize)
+	} else {
+		payload = packRawPayload(version, frames)
 	}
 
 	// compose Initial header
@@ -122,7 +92,7 @@ func ComposeInitialPacket(srcConnID protocol.ConnectionID, destConnID protocol.C
 		PacketNumber:    0x0,
 	}
 
-	raw := getRawPacket(hdr, payload)
+	raw := writePacket(hdr, payload)
 
 	// encrypt payload and header
 	payloadOffset := len(raw) - payloadSize
@@ -152,5 +122,5 @@ func ComposeRetryPacket(srcConnID protocol.ConnectionID, destConnID protocol.Con
 			Version:              version,
 		},
 	}
-	return getRawPacket(hdr, nil)
+	return writePacket(hdr, nil)
 }

@@ -287,7 +287,7 @@ var _ = Describe("MITM test", func() {
 				// sendForgedVersionNegotiationPacket sends a fake VN packet with no supported versions
 				// from serverConn to client's remoteAddr
 				// expects hdr from an Initial packet intercepted from client
-				sendForgedVersionNegotationPacket := func(serverConn net.PacketConn, remoteAddr net.Addr, hdr *wire.Header) {
+				sendForgedVersionNegotationPacket := func(conn net.PacketConn, remoteAddr net.Addr, hdr *wire.Header) {
 					defer GinkgoRecover()
 
 					// Create fake version negotiation packet with no supported versions
@@ -295,24 +295,22 @@ var _ = Describe("MITM test", func() {
 					packet, _ := wire.ComposeVersionNegotiation(hdr.SrcConnectionID, hdr.DestConnectionID, versions)
 
 					// Send the packet
-					if _, err := serverConn.WriteTo(packet, remoteAddr); err != nil {
-						return
-					}
+					_, err := conn.WriteTo(packet, remoteAddr)
+					Expect(err).ToNot(HaveOccurred())
 				}
 
 				// sendForgedRetryPacket sends a fake Retry packet with a modified srcConnID
 				// from serverConn to client's remoteAddr
 				// expects hdr from an Initial packet intercepted from client
-				sendForgedRetryPacket := func(serverConn net.PacketConn, remoteAddr net.Addr, hdr *wire.Header) {
+				sendForgedRetryPacket := func(conn net.PacketConn, remoteAddr net.Addr, hdr *wire.Header) {
 					defer GinkgoRecover()
 
 					var x byte = 0x12
 					fakeSrcConnID := protocol.ConnectionID{x, x, x, x, x, x, x, x}
 					retryPacket := testutils.ComposeRetryPacket(fakeSrcConnID, hdr.SrcConnectionID, hdr.DestConnectionID, []byte("token"), hdr.Version)
 
-					if _, err := serverConn.WriteTo(retryPacket, remoteAddr); err != nil {
-						return
-					}
+					_, err := conn.WriteTo(retryPacket, remoteAddr)
+					Expect(err).ToNot(HaveOccurred())
 				}
 
 				// Send a forged Initial packet with no frames to client
@@ -320,10 +318,9 @@ var _ = Describe("MITM test", func() {
 				sendForgedInitialPacket := func(conn net.PacketConn, remoteAddr net.Addr, hdr *wire.Header) {
 					defer GinkgoRecover()
 
-					initialPacket := testutils.ComposeInitialPacket(hdr.DestConnectionID, hdr.SrcConnectionID, hdr.Version, hdr.DestConnectionID, testutils.NoFrame)
-					if _, err := conn.WriteTo(initialPacket, remoteAddr); err != nil {
-						return
-					}
+					initialPacket := testutils.ComposeInitialPacket(hdr.DestConnectionID, hdr.SrcConnectionID, hdr.Version, hdr.DestConnectionID, nil)
+					_, err := conn.WriteTo(initialPacket, remoteAddr)
+					Expect(err).ToNot(HaveOccurred())
 				}
 
 				// Send a forged Initial packet with ACK for random packet to client
@@ -332,10 +329,10 @@ var _ = Describe("MITM test", func() {
 					defer GinkgoRecover()
 
 					// Fake Initial with ACK for packet 2 (unsent)
-					initialPacket := testutils.ComposeInitialPacket(hdr.DestConnectionID, hdr.SrcConnectionID, hdr.Version, hdr.DestConnectionID, testutils.AckFrame)
-					if _, err := conn.WriteTo(initialPacket, remoteAddr); err != nil {
-						return
-					}
+					ackFrame := testutils.ComposeAckFrame(2, 2)
+					initialPacket := testutils.ComposeInitialPacket(hdr.DestConnectionID, hdr.SrcConnectionID, hdr.Version, hdr.DestConnectionID, []wire.Frame{ackFrame})
+					_, err := conn.WriteTo(initialPacket, remoteAddr)
+					Expect(err).ToNot(HaveOccurred())
 				}
 
 				// runTestFail succeeds if an error occurs in dialing
@@ -367,7 +364,7 @@ var _ = Describe("MITM test", func() {
 							hdr, _, _, err := wire.ParsePacket(raw, connIDLen)
 							Expect(err).ToNot(HaveOccurred())
 
-							if !(hdr.Type == protocol.PacketTypeInitial) {
+							if hdr.Type != protocol.PacketTypeInitial {
 								return 0
 							}
 
@@ -383,7 +380,6 @@ var _ = Describe("MITM test", func() {
 				// TODO: determine behavior when server does not send Retry packets
 				initialPacketIntercepted := false
 				It("fails when a forged retry packet with modified srcConnID is sent to client", func() {
-					// serverConfig.AcceptToken = func(net.Addr, *quic.Token) bool { return true }
 					delayCb := func(dir quicproxy.Direction, raw []byte) time.Duration {
 						if dir == quicproxy.DirectionIncoming && !initialPacketIntercepted {
 							defer GinkgoRecover()
@@ -407,7 +403,6 @@ var _ = Describe("MITM test", func() {
 				// it has already accepted an initial.
 				// TODO: determine behavior when server does not send Retry packets
 				It("fails when a forged initial packet is sent to client", func() {
-					// serverConfig.AcceptToken = func(net.Addr, *quic.Token) bool { return true }
 					delayCb := func(dir quicproxy.Direction, raw []byte) time.Duration {
 						if dir == quicproxy.DirectionIncoming {
 							defer GinkgoRecover()
@@ -415,7 +410,7 @@ var _ = Describe("MITM test", func() {
 							hdr, _, _, err := wire.ParsePacket(raw, connIDLen)
 							Expect(err).ToNot(HaveOccurred())
 
-							if !(hdr.Type == protocol.PacketTypeInitial) {
+							if hdr.Type != protocol.PacketTypeInitial {
 								return 0
 							}
 
@@ -435,7 +430,7 @@ var _ = Describe("MITM test", func() {
 							hdr, _, _, err := wire.ParsePacket(raw, connIDLen)
 							Expect(err).ToNot(HaveOccurred())
 
-							if !(hdr.Type == protocol.PacketTypeInitial) {
+							if hdr.Type != protocol.PacketTypeInitial {
 								return 0
 							}
 

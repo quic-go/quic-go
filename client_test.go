@@ -601,6 +601,8 @@ var _ = Describe("Client", func() {
 				Eventually(cl.versionNegotiated.Get).Should(BeTrue())
 			})
 
+			// Illustrates that adversary that injects a version negotiation packet
+			// with no supported versions can break a connection.
 			It("errors if no matching version is found", func() {
 				sess := NewMockQuicSession(mockCtrl)
 				done := make(chan struct{})
@@ -692,24 +694,5 @@ var _ = Describe("Client", func() {
 			cl.handlePacket(composeVersionNegotiationPacket(connID, []protocol.VersionNumber{1234}))
 			Expect(cl.version).To(Equal(ver))
 		})
-
-		// Illustrates that adversary that injects a version negotiation packet
-		// with no supported versions can break a connection.
-		It("connection fails if no supported versions are found in version negotation packet", func() {
-			// Copy of existing test "errors if no matching version is found"
-			sess := NewMockQuicSession(mockCtrl)
-			done := make(chan struct{})
-			sess.EXPECT().destroy(gomock.Any()).Do(func(err error) {
-				defer GinkgoRecover()
-				Expect(err).To(HaveOccurred())
-				Expect(err.Error()).To(ContainSubstring("No compatible QUIC version found."))
-				close(done)
-			})
-			cl.session = sess
-			cl.config = &Config{Versions: protocol.SupportedVersions}
-			cl.handlePacket(composeVersionNegotiationPacket(connID, []protocol.VersionNumber{1337}))
-			Eventually(done).Should(BeClosed())
-		})
-
 	})
 })
