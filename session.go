@@ -274,6 +274,7 @@ var newSession = func(
 			},
 		},
 		tlsConf,
+		true, // TODO: make 0-RTT support configurable
 		s.rttStats,
 		logger,
 	)
@@ -370,6 +371,7 @@ var newClientSession = func(
 			onHandshakeComplete: func() { close(s.handshakeCompleteChan) },
 		},
 		tlsConf,
+		true, // TODO: make 0-RTT support configurable
 		s.rttStats,
 		logger,
 	)

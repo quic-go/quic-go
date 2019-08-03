@@ -66,6 +66,7 @@ type cryptoSetup struct {
 
 	messageChan chan []byte
 
+	ourParams  *TransportParameters
 	paramsChan <-chan []byte
 
 	runner handshakeRunner
@@ -124,6 +125,7 @@ func NewCryptoSetupClient(
 	tp *TransportParameters,
 	runner handshakeRunner,
 	tlsConf *tls.Config,
+	enable0RTT bool,
 	rttStats *congestion.RTTStats,
 	logger utils.Logger,
 ) (CryptoSetup, <-chan struct{} /* ClientHello written */) {
@@ -135,6 +137,7 @@ func NewCryptoSetupClient(
 		tp,
 		runner,
 		tlsConf,
+		enable0RTT,
 		rttStats,
 		logger,
 		protocol.PerspectiveClient,
@@ -153,6 +156,7 @@ func NewCryptoSetupServer(
 	tp *TransportParameters,
 	runner handshakeRunner,
 	tlsConf *tls.Config,
+	enable0RTT bool,
 	rttStats *congestion.RTTStats,
 	logger utils.Logger,
 ) CryptoSetup {
@@ -164,6 +168,7 @@ func NewCryptoSetupServer(
 		tp,
 		runner,
 		tlsConf,
+		enable0RTT,
 		rttStats,
 		logger,
 		protocol.PerspectiveServer,
@@ -180,6 +185,7 @@ func newCryptoSetup(
 	tp *TransportParameters,
 	runner handshakeRunner,
 	tlsConf *tls.Config,
+	enable0RTT bool,
 	rttStats *congestion.RTTStats,
 	logger utils.Logger,
 	perspective protocol.Perspective,
@@ -196,6 +202,7 @@ func newCryptoSetup(
 		readEncLevel:           protocol.EncryptionInitial,
 		writeEncLevel:          protocol.EncryptionInitial,
 		runner:                 runner,
+		ourParams:              tp,
 		paramsChan:             extHandler.TransportParameters(),
 		logger:                 logger,
 		perspective:            perspective,
@@ -208,7 +215,7 @@ func newCryptoSetup(
 		writeRecord:            make(chan struct{}, 1),
 		closeChan:              make(chan struct{}),
 	}
-	qtlsConf := tlsConfigToQtlsConfig(tlsConf, cs, extHandler)
+	qtlsConf := tlsConfigToQtlsConfig(tlsConf, cs, extHandler, cs.accept0RTT, enable0RTT)
 	cs.tlsConf = qtlsConf
 	return cs, cs.clientHelloWrittenChan
 }
@@ -423,7 +430,7 @@ func (h *cryptoSetup) handleMessageForClient(msgType messageType) bool {
 
 // only valid for the server
 func (h *cryptoSetup) maybeSendSessionTicket() {
-	ticket, err := h.conn.GetSessionTicket()
+	ticket, err := h.conn.GetSessionTicket(h.ourParams.MarshalForSessionTicket())
 	if err != nil {
 		h.onError(alertInternalError, err.Error())
 		return
@@ -431,6 +438,10 @@ func (h *cryptoSetup) maybeSendSessionTicket() {
 	if ticket != nil {
 		h.oneRTTStream.Write(ticket)
 	}
+}
+
+func (h *cryptoSetup) accept0RTT(sessionTicketData []byte) bool {
+	return h.ourParams.ValidFromSessionTicket(sessionTicketData)
 }
 
 func (h *cryptoSetup) handlePostHandshakeMessage() {

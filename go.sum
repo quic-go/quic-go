@@ -15,8 +15,8 @@ github.com/marten-seemann/chacha20 v0.2.0 h1:f40vqzzx+3GdOmzQoItkLX5WLvHgPgyYqFF
 github.com/marten-seemann/chacha20 v0.2.0/go.mod h1:HSdjFau7GzYRj+ahFNwsO3ouVJr1HFkWoEwNDb4TMtE=
 github.com/marten-seemann/qpack v0.1.0 h1:/0M7lkda/6mus9B8u34Asqm8ZhHAAt9Ho0vniNuVSVg=
 github.com/marten-seemann/qpack v0.1.0/go.mod h1:LFt1NU/Ptjip0C2CPkhimBz5CGE3WGDAUWqna+CNTrI=
-github.com/marten-seemann/qtls v0.4.1 h1:YlT8QP3WCCvvok7MGEZkMldXbyqgr8oFg5/n8Gtbkks=
-github.com/marten-seemann/qtls v0.4.1/go.mod h1:pxVXcHHw1pNIt8Qo0pwSYQEoZ8yYOOPXTCZLQQunvRc=
+github.com/marten-seemann/qtls v0.5.0 h1:psje4bHl6372lku0pTIt2PZ9HcVJyBIuW9pZn+u2vhY=
+github.com/marten-seemann/qtls v0.5.0/go.mod h1:pxVXcHHw1pNIt8Qo0pwSYQEoZ8yYOOPXTCZLQQunvRc=
 github.com/onsi/ginkgo v1.6.0/go.mod h1:lLunBs/Ym6LB5Z9jYTR76FiuTmxDTDusOGeTQH+WWjE=
 github.com/onsi/ginkgo v1.7.0 h1:WSHQ+IS43OoUrWtD1/bbclrwK8TTH5hzp+umCiuxHgs=
 github.com/onsi/ginkgo v1.7.0/go.mod h1:lLunBs/Ym6LB5Z9jYTR76FiuTmxDTDusOGeTQH+WWjE=
@@ -34,6 +34,7 @@ golang.org/x/sync v0.0.0-20180314180146-1d60e4601c6f h1:wMNYb4v58l5UBM7MYRLPG6Zh
 golang.org/x/sync v0.0.0-20180314180146-1d60e4601c6f/go.mod h1:RxMgew5VJxzue5/jJTE5uejpjVlOe/izrB70Jof72aM=
 golang.org/x/sys v0.0.0-20180909124046-d0be0721c37e/go.mod h1:STP8DvDyc/dI5b8T5hshtkjS+E42TnysNCUPdjciGhY=
 golang.org/x/sys v0.0.0-20190215142949-d0b11bdaac8a/go.mod h1:STP8DvDyc/dI5b8T5hshtkjS+E42TnysNCUPdjciGhY=
+golang.org/x/sys v0.0.0-20190412213103-97732733099d h1:+R4KGOnez64A81RvjARKc4UT5/tI9ujCIVX+P5KiHuI=
 golang.org/x/sys v0.0.0-20190412213103-97732733099d/go.mod h1:h1NjWce9XRLGQEsW7wpKNCjG9DtNlClVuFLEZdDNbEs=
 golang.org/x/sys v0.0.0-20190904154756-749cb33beabd h1:DBH9mDw0zluJT/R+nGuV3jWFWLFaHyYZWD4tOT+cjn0=
 golang.org/x/sys v0.0.0-20190904154756-749cb33beabd/go.mod h1:h1NjWce9XRLGQEsW7wpKNCjG9DtNlClVuFLEZdDNbEs=

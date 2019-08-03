@@ -70,6 +70,8 @@ func tlsConfigToQtlsConfig(
 	c *tls.Config,
 	recordLayer qtls.RecordLayer,
 	extHandler tlsExtensionHandler,
+	accept0RTT func([]byte) bool,
+	enable0RTT bool,
 ) *qtls.Config {
 	if c == nil {
 		c = &tls.Config{}
@@ -96,14 +98,14 @@ func tlsConfigToQtlsConfig(
 			if tlsConf == nil {
 				return nil, nil
 			}
-			return tlsConfigToQtlsConfig(tlsConf, recordLayer, extHandler), nil
+			return tlsConfigToQtlsConfig(tlsConf, recordLayer, extHandler, accept0RTT, enable0RTT), nil
 		}
 	}
 	var csc qtls.ClientSessionCache
 	if c.ClientSessionCache != nil {
 		csc = &clientSessionCache{c.ClientSessionCache}
 	}
-	return &qtls.Config{
+	conf := &qtls.Config{
 		Rand:                        c.Rand,
 		Time:                        c.Time,
 		Certificates:                c.Certificates,
@@ -133,7 +135,13 @@ func tlsConfigToQtlsConfig(
 		AlternativeRecordLayer: recordLayer,
 		GetExtensions:          extHandler.GetExtensions,
 		ReceivedExtensions:     extHandler.ReceivedExtensions,
+		Accept0RTT:             accept0RTT,
 	}
+	if enable0RTT {
+		conf.Enable0RTT = true
+		conf.MaxEarlyData = 0xffffffff
+	}
+	return conf
 }
 
 func cipherSuiteName(id uint16) string {
