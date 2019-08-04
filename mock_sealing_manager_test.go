@@ -34,6 +34,21 @@ func (m *MockSealingManager) EXPECT() *MockSealingManagerMockRecorder {
 	return m.recorder
 }
 
+// Get0RTTSealer mocks base method
+func (m *MockSealingManager) Get0RTTSealer() (handshake.LongHeaderSealer, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Get0RTTSealer")
+	ret0, _ := ret[0].(handshake.LongHeaderSealer)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// Get0RTTSealer indicates an expected call of Get0RTTSealer
+func (mr *MockSealingManagerMockRecorder) Get0RTTSealer() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Get0RTTSealer", reflect.TypeOf((*MockSealingManager)(nil).Get0RTTSealer))
+}
+
 // Get1RTTSealer mocks base method
 func (m *MockSealingManager) Get1RTTSealer() (handshake.ShortHeaderSealer, error) {
 	m.ctrl.T.Helper()
