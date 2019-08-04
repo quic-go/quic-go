@@ -61,8 +61,6 @@ type sentPacketHandler struct {
 	congestion congestion.SendAlgorithmWithDebugInfos
 	rttStats   *congestion.RTTStats
 
-	// The number of times the crypto packets have been retransmitted without receiving an ack.
-	cryptoCount uint32
 	// The number of times a PTO has been sent without receiving an ack.
 	ptoCount uint32
 	// The number of PTO probe packets that should be sent.
@@ -253,7 +251,6 @@ func (h *sentPacketHandler) ReceivedAck(ackFrame *wire.AckFrame, withPacketNumbe
 	}
 
 	h.ptoCount = 0
-	h.cryptoCount = 0
 	h.numProbesToSend = 0
 
 	h.setLossDetectionTimer()
@@ -347,22 +344,19 @@ func (h *sentPacketHandler) hasOutstandingPackets() bool {
 }
 
 func (h *sentPacketHandler) setLossDetectionTimer() {
+	if lossTime, _ := h.getEarliestLossTime(); !lossTime.IsZero() {
+		// Early retransmit timer or time loss detection.
+		h.alarm = lossTime
+	}
+
 	// Cancel the alarm if no packets are outstanding
 	if !h.hasOutstandingPackets() {
 		h.alarm = time.Time{}
 		return
 	}
 
-	lossTime, _ := h.getEarliestLossTime()
-
-	if h.hasOutstandingCryptoPackets() {
-		h.alarm = h.lastSentCryptoPacketTime.Add(h.computeCryptoTimeout())
-	} else if !lossTime.IsZero() {
-		// Early retransmit timer or time loss detection.
-		h.alarm = lossTime
-	} else { // PTO alarm
-		h.alarm = h.lastSentAckElicitingPacketTime.Add(h.rttStats.PTO() << h.ptoCount)
-	}
+	// PTO alarm
+	h.alarm = h.lastSentAckElicitingPacketTime.Add(h.rttStats.PTO() << h.ptoCount)
 }
 
 func (h *sentPacketHandler) detectLostPackets(
@@ -449,28 +443,22 @@ func (h *sentPacketHandler) OnLossDetectionTimeout() error {
 }
 
 func (h *sentPacketHandler) onVerifiedLossDetectionTimeout() error {
-	var err error
 	lossTime, encLevel := h.getEarliestLossTime()
 	if !lossTime.IsZero() {
 		if h.logger.Debug() {
 			h.logger.Debugf("Loss detection alarm fired in loss timer mode. Loss time: %s", lossTime)
 		}
 		// Early retransmit or time loss detection
-		err = h.detectLostPackets(time.Now(), encLevel, h.bytesInFlight)
-	} else if h.hasOutstandingCryptoPackets() {
-		if h.logger.Debug() {
-			h.logger.Debugf("Loss detection alarm fired in crypto mode. Crypto count: %d", h.cryptoCount)
-		}
-		h.cryptoCount++
-		err = h.queueCryptoPacketsForRetransmission()
-	} else { // PTO
-		if h.logger.Debug() {
-			h.logger.Debugf("Loss detection alarm fired in PTO mode. PTO count: %d", h.ptoCount)
-		}
-		h.ptoCount++
-		h.numProbesToSend += 2
+		return h.detectLostPackets(time.Now(), encLevel, h.bytesInFlight)
 	}
-	return err
+
+	// PTO
+	if h.logger.Debug() {
+		h.logger.Debugf("Loss detection alarm fired in PTO mode. PTO count: %d", h.ptoCount)
+	}
+	h.ptoCount++
+	h.numProbesToSend += 2
+	return nil
 }
 
 func (h *sentPacketHandler) GetLossDetectionTimeout() time.Time {
@@ -543,15 +531,29 @@ func (h *sentPacketHandler) DequeuePacketForRetransmission() *Packet {
 }
 
 func (h *sentPacketHandler) DequeueProbePacket() (*Packet, error) {
-	pnSpace := h.getPacketNumberSpace(protocol.Encryption1RTT)
-	if len(h.retransmissionQueue) == 0 {
-		p := pnSpace.history.FirstOutstanding()
-		if p == nil {
-			return nil, errors.New("cannot dequeue a probe packet. No outstanding packets")
-		}
-		if err := h.queuePacketForRetransmission(p, pnSpace); err != nil {
-			return nil, err
-		}
+	if len(h.retransmissionQueue) > 0 {
+		return h.DequeuePacketForRetransmission(), nil
+	}
+
+	var pnSpace *packetNumberSpace
+	var p *Packet
+	if h.initialPackets != nil {
+		pnSpace = h.initialPackets
+		p = h.initialPackets.history.FirstOutstanding()
+	}
+	if p == nil && h.handshakePackets != nil {
+		pnSpace = h.handshakePackets
+		p = h.handshakePackets.history.FirstOutstanding()
+	}
+	if p == nil {
+		pnSpace = h.oneRTTPackets
+		p = h.oneRTTPackets.history.FirstOutstanding()
+	}
+	if p == nil {
+		return nil, errors.New("cannot dequeue a probe packet. No outstanding packets")
+	}
+	if err := h.queuePacketForRetransmission(p, pnSpace); err != nil {
+		return nil, err
 	}
 	return h.DequeuePacketForRetransmission(), nil
 }
@@ -632,31 +634,6 @@ func (h *sentPacketHandler) ShouldSendNumPackets() int {
 	return int(math.Ceil(float64(protocol.MinPacingDelay) / float64(delay)))
 }
 
-func (h *sentPacketHandler) queueCryptoPacketsForRetransmission() error {
-	if err := h.queueAllPacketsForRetransmission(protocol.EncryptionInitial); err != nil {
-		return err
-	}
-	return h.queueAllPacketsForRetransmission(protocol.EncryptionHandshake)
-}
-
-func (h *sentPacketHandler) queueAllPacketsForRetransmission(encLevel protocol.EncryptionLevel) error {
-	var packets []*Packet
-	pnSpace := h.getPacketNumberSpace(encLevel)
-	pnSpace.history.Iterate(func(p *Packet) (bool, error) {
-		if p.canBeRetransmitted {
-			packets = append(packets, p)
-		}
-		return true, nil
-	})
-	for _, p := range packets {
-		h.logger.Debugf("Queueing packet %#x (%s) as a crypto retransmission", p.PacketNumber, encLevel)
-		if err := h.queuePacketForRetransmission(p, pnSpace); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
 func (h *sentPacketHandler) queuePacketForRetransmission(p *Packet, pnSpace *packetNumberSpace) error {
 	if !p.canBeRetransmitted {
 		return fmt.Errorf("sent packet handler BUG: packet %d already queued for retransmission", p.PacketNumber)
@@ -668,15 +645,7 @@ func (h *sentPacketHandler) queuePacketForRetransmission(p *Packet, pnSpace *pac
 	return nil
 }
 
-func (h *sentPacketHandler) computeCryptoTimeout() time.Duration {
-	duration := utils.MaxDuration(2*h.rttStats.SmoothedOrInitialRTT(), protocol.TimerGranularity)
-	// exponential backoff
-	// There's an implicit limit to this set by the crypto timeout.
-	return duration << h.cryptoCount
-}
-
 func (h *sentPacketHandler) ResetForRetry() error {
-	h.cryptoCount = 0
 	h.bytesInFlight = 0
 	var packets []*Packet
 	h.initialPackets.history.Iterate(func(p *Packet) (bool, error) {
