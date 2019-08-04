@@ -312,7 +312,7 @@ var _ = Describe("Crypto Setup TLS", func() {
 			Eventually(done).Should(BeClosed())
 		}
 
-		handshakeWithTLSConf := func(clientConf, serverConf *tls.Config) (CryptoSetup /* client */, error /* client error */, CryptoSetup /* server */, error /* server error */) {
+		handshakeWithTLSConf := func(clientConf, serverConf *tls.Config, enable0RTT bool) (CryptoSetup /* client */, error /* client error */, CryptoSetup /* server */, error /* server error */) {
 			var cHandshakeComplete bool
 			cChunkChan, cInitialStream, cHandshakeStream, cOneRTTStream := initStreams()
 			cErrChan := make(chan error, 1)
@@ -329,7 +329,7 @@ var _ = Describe("Crypto Setup TLS", func() {
 				&TransportParameters{},
 				cRunner,
 				clientConf,
-				false,
+				enable0RTT,
 				&congestion.RTTStats{},
 				utils.DefaultLogger.WithPrefix("client"),
 			)
@@ -351,7 +351,7 @@ var _ = Describe("Crypto Setup TLS", func() {
 				&TransportParameters{StatelessResetToken: &token},
 				sRunner,
 				serverConf,
-				false,
+				enable0RTT,
 				&congestion.RTTStats{},
 				utils.DefaultLogger.WithPrefix("server"),
 			)
@@ -372,14 +372,14 @@ var _ = Describe("Crypto Setup TLS", func() {
 		}
 
 		It("handshakes", func() {
-			_, clientErr, _, serverErr := handshakeWithTLSConf(clientConf, serverConf)
+			_, clientErr, _, serverErr := handshakeWithTLSConf(clientConf, serverConf, false)
 			Expect(clientErr).ToNot(HaveOccurred())
 			Expect(serverErr).ToNot(HaveOccurred())
 		})
 
 		It("performs a HelloRetryRequst", func() {
 			serverConf.CurvePreferences = []tls.CurveID{tls.CurveP384}
-			_, clientErr, _, serverErr := handshakeWithTLSConf(clientConf, serverConf)
+			_, clientErr, _, serverErr := handshakeWithTLSConf(clientConf, serverConf, false)
 			Expect(clientErr).ToNot(HaveOccurred())
 			Expect(serverErr).ToNot(HaveOccurred())
 		})
@@ -387,7 +387,7 @@ var _ = Describe("Crypto Setup TLS", func() {
 		It("handshakes with client auth", func() {
 			clientConf.Certificates = []tls.Certificate{generateCert()}
 			serverConf.ClientAuth = qtls.RequireAnyClientCert
-			_, clientErr, _, serverErr := handshakeWithTLSConf(clientConf, serverConf)
+			_, clientErr, _, serverErr := handshakeWithTLSConf(clientConf, serverConf, false)
 			Expect(clientErr).ToNot(HaveOccurred())
 			Expect(serverErr).ToNot(HaveOccurred())
 		})
@@ -613,7 +613,7 @@ var _ = Describe("Crypto Setup TLS", func() {
 					close(receivedSessionTicket)
 				})
 				clientConf.ClientSessionCache = csc
-				client, clientErr, server, serverErr := handshakeWithTLSConf(clientConf, serverConf)
+				client, clientErr, server, serverErr := handshakeWithTLSConf(clientConf, serverConf, false)
 				Expect(clientErr).ToNot(HaveOccurred())
 				Expect(serverErr).ToNot(HaveOccurred())
 				Eventually(receivedSessionTicket).Should(BeClosed())
@@ -622,7 +622,7 @@ var _ = Describe("Crypto Setup TLS", func() {
 
 				csc.EXPECT().Get(gomock.Any()).Return(state, true)
 				csc.EXPECT().Put(gomock.Any(), gomock.Any()).MaxTimes(1)
-				client, clientErr, server, serverErr = handshakeWithTLSConf(clientConf, serverConf)
+				client, clientErr, server, serverErr = handshakeWithTLSConf(clientConf, serverConf, false)
 				Expect(clientErr).ToNot(HaveOccurred())
 				Expect(serverErr).ToNot(HaveOccurred())
 				Eventually(receivedSessionTicket).Should(BeClosed())
@@ -640,7 +640,7 @@ var _ = Describe("Crypto Setup TLS", func() {
 					close(receivedSessionTicket)
 				})
 				clientConf.ClientSessionCache = csc
-				client, clientErr, server, serverErr := handshakeWithTLSConf(clientConf, serverConf)
+				client, clientErr, server, serverErr := handshakeWithTLSConf(clientConf, serverConf, false)
 				Expect(clientErr).ToNot(HaveOccurred())
 				Expect(serverErr).ToNot(HaveOccurred())
 				Eventually(receivedSessionTicket).Should(BeClosed())
@@ -649,12 +649,51 @@ var _ = Describe("Crypto Setup TLS", func() {
 
 				serverConf.SessionTicketsDisabled = true
 				csc.EXPECT().Get(gomock.Any()).Return(state, true)
-				client, clientErr, server, serverErr = handshakeWithTLSConf(clientConf, serverConf)
+				client, clientErr, server, serverErr = handshakeWithTLSConf(clientConf, serverConf, false)
 				Expect(clientErr).ToNot(HaveOccurred())
 				Expect(serverErr).ToNot(HaveOccurred())
 				Eventually(receivedSessionTicket).Should(BeClosed())
 				Expect(server.ConnectionState().DidResume).To(BeFalse())
 				Expect(client.ConnectionState().DidResume).To(BeFalse())
+			})
+
+			It("uses 0-RTT", func() {
+				csc := NewMockClientSessionCache(mockCtrl)
+				var state *tls.ClientSessionState
+				receivedSessionTicket := make(chan struct{})
+				csc.EXPECT().Get(gomock.Any())
+				csc.EXPECT().Put(gomock.Any(), gomock.Any()).Do(func(_ string, css *tls.ClientSessionState) {
+					state = css
+					close(receivedSessionTicket)
+				})
+				clientConf.ClientSessionCache = csc
+				client, clientErr, server, serverErr := handshakeWithTLSConf(clientConf, serverConf, true)
+				Expect(clientErr).ToNot(HaveOccurred())
+				Expect(serverErr).ToNot(HaveOccurred())
+				Eventually(receivedSessionTicket).Should(BeClosed())
+				Expect(server.ConnectionState().DidResume).To(BeFalse())
+				Expect(client.ConnectionState().DidResume).To(BeFalse())
+
+				csc.EXPECT().Get(gomock.Any()).Return(state, true)
+				csc.EXPECT().Put(gomock.Any(), gomock.Any()).MaxTimes(1)
+				client, clientErr, server, serverErr = handshakeWithTLSConf(clientConf, serverConf, true)
+				Expect(clientErr).ToNot(HaveOccurred())
+				Expect(serverErr).ToNot(HaveOccurred())
+				Eventually(receivedSessionTicket).Should(BeClosed())
+				Expect(server.ConnectionState().DidResume).To(BeTrue())
+				Expect(client.ConnectionState().DidResume).To(BeTrue())
+				opener, err := server.Get0RTTOpener()
+				Expect(err).ToNot(HaveOccurred())
+				Expect(opener).ToNot(BeNil())
+				sealer, err := client.Get0RTTSealer()
+				Expect(err).ToNot(HaveOccurred())
+				Expect(sealer).ToNot(BeNil())
+				// use the 0-RTT sealer and opener to encrypt and decrypt a message
+				plaintext := []byte("Lorem ipsum dolor sit amet")
+				msg := sealer.Seal(nil, plaintext, 0x1337, []byte("foobar"))
+				decrypted, err := opener.Open(nil, msg, 0x1337, []byte("foobar"))
+				Expect(err).ToNot(HaveOccurred())
+				Expect(decrypted).To(Equal(plaintext))
 			})
 		})
 	})
