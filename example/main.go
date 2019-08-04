@@ -82,7 +82,21 @@ func (h *tracingHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 func setupHandler(www string, trace bool) http.Handler {
 	mux := http.NewServeMux()
 
-	mux.Handle("/", http.FileServer(http.Dir(www)))
+	if len(www) > 0 {
+		mux.Handle("/", http.FileServer(http.Dir(www)))
+	} else {
+		mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+			fmt.Printf("%#v\n", r)
+			const maxSize = 1 << 30 // 1 GB
+			num, err := strconv.ParseInt(strings.ReplaceAll(r.RequestURI, "/", ""), 10, 64)
+			if err != nil || num <= 0 || num > maxSize {
+				w.WriteHeader(400)
+				return
+			}
+			w.Write(testserver.GeneratePRData(int(num)))
+		})
+	}
+
 	mux.HandleFunc("/demo/tile", func(w http.ResponseWriter, r *http.Request) {
 		// Small 40x40 png
 		w.Write([]byte{
@@ -143,16 +157,6 @@ func setupHandler(www string, trace bool) http.Handler {
 			</form></body></html>`)
 	})
 
-	mux.HandleFunc("/dynamic/", func(w http.ResponseWriter, r *http.Request) {
-		const maxSize = 1 << 30 // 1 GB
-		num, err := strconv.ParseInt(strings.ReplaceAll(r.RequestURI, "/dynamic/", ""), 10, 64)
-		if err != nil || num <= 0 || num > maxSize {
-			w.WriteHeader(400)
-			return
-		}
-		w.Write(testserver.GeneratePRData(int(num)))
-	})
-
 	if !trace {
 		return mux
 	}
@@ -169,7 +173,7 @@ func main() {
 	verbose := flag.Bool("v", false, "verbose")
 	bs := binds{}
 	flag.Var(&bs, "bind", "bind to")
-	www := flag.String("www", "/var/www", "www data")
+	www := flag.String("www", "", "www data")
 	tcp := flag.Bool("tcp", false, "also listen on TCP")
 	trace := flag.Bool("trace", false, "enable quic-trace")
 	flag.Parse()
