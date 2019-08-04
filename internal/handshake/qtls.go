@@ -4,7 +4,6 @@ import (
 	"crypto/tls"
 	"net"
 	"time"
-	"unsafe"
 
 	"github.com/marten-seemann/qtls"
 )
@@ -27,44 +26,6 @@ func (c *conn) LocalAddr() net.Addr              { return nil }
 func (c *conn) SetReadDeadline(time.Time) error  { return nil }
 func (c *conn) SetWriteDeadline(time.Time) error { return nil }
 func (c *conn) SetDeadline(time.Time) error      { return nil }
-
-type clientSessionCache struct {
-	tls.ClientSessionCache
-}
-
-var _ qtls.ClientSessionCache = &clientSessionCache{}
-
-func (c *clientSessionCache) Get(sessionKey string) (*qtls.ClientSessionState, bool) {
-	sess, ok := c.ClientSessionCache.Get(sessionKey)
-	if sess == nil {
-		return nil, ok
-	}
-	// qtls.ClientSessionState is identical to the tls.ClientSessionState.
-	// In order to allow users of quic-go to use a tls.Config,
-	// we need this workaround to use the ClientSessionCache.
-	// In unsafe.go we check that the two structs are actually identical.
-	usess := (*[unsafe.Sizeof(*sess)]byte)(unsafe.Pointer(sess))[:]
-	var session qtls.ClientSessionState
-	usession := (*[unsafe.Sizeof(session)]byte)(unsafe.Pointer(&session))[:]
-	copy(usession, usess)
-	return &session, ok
-}
-
-func (c *clientSessionCache) Put(sessionKey string, cs *qtls.ClientSessionState) {
-	if cs == nil {
-		c.ClientSessionCache.Put(sessionKey, nil)
-		return
-	}
-	// qtls.ClientSessionState is identical to the tls.ClientSessionState.
-	// In order to allow users of quic-go to use a tls.Config,
-	// we need this workaround to use the ClientSessionCache.
-	// In unsafe.go we check that the two structs are actually identical.
-	usess := (*[unsafe.Sizeof(*cs)]byte)(unsafe.Pointer(cs))[:]
-	var session tls.ClientSessionState
-	usession := (*[unsafe.Sizeof(session)]byte)(unsafe.Pointer(&session))[:]
-	copy(usession, usess)
-	c.ClientSessionCache.Put(sessionKey, &session)
-}
 
 func tlsConfigToQtlsConfig(
 	c *tls.Config,
@@ -103,7 +64,11 @@ func tlsConfigToQtlsConfig(
 	}
 	var csc qtls.ClientSessionCache
 	if c.ClientSessionCache != nil {
-		csc = &clientSessionCache{c.ClientSessionCache}
+		csc = newClientSessionCache(
+			c.ClientSessionCache,
+			func() []byte { return nil },
+			func([]byte) {},
+		)
 	}
 	conf := &qtls.Config{
 		Rand:                        c.Rand,
