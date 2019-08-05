@@ -178,11 +178,11 @@ func (s *server) setup() error {
 		onHandshakeCompleteImpl: func(sess Session) {
 			go func() {
 				atomic.AddInt32(&s.sessionQueueLen, 1)
-				defer atomic.AddInt32(&s.sessionQueueLen, -1)
 				select {
 				case s.sessionQueue <- sess:
 					// blocks until the session is accepted
 				case <-sess.Context().Done():
+					atomic.AddInt32(&s.sessionQueueLen, -1)
 					// don't pass sessions that were already closed to Accept()
 				}
 			}()
@@ -289,6 +289,7 @@ func (s *server) Accept(ctx context.Context) (Session, error) {
 	case <-ctx.Done():
 		return nil, ctx.Err()
 	case sess = <-s.sessionQueue:
+		atomic.AddInt32(&s.sessionQueueLen, -1)
 		return sess, nil
 	case <-s.errorChan:
 		return nil, s.serverError
