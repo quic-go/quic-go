@@ -71,7 +71,7 @@ func (mr *MockHandshakeRunnerMockRecorder) OnHandshakeComplete() *gomock.Call {
 }
 
 // OnReceivedParams mocks base method
-func (m *MockHandshakeRunner) OnReceivedParams(arg0 []byte) {
+func (m *MockHandshakeRunner) OnReceivedParams(arg0 *TransportParameters) {
 	m.ctrl.T.Helper()
 	m.ctrl.Call(m, "OnReceivedParams", arg0)
 }
