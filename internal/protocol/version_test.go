@@ -12,6 +12,7 @@ var _ = Describe("Version", func() {
 
 	It("says if a version is valid", func() {
 		Expect(IsValidVersion(VersionTLS)).To(BeTrue())
+		Expect(IsValidVersion(VersionMilestone0_18)).To(BeTrue())
 		Expect(IsValidVersion(VersionWhatever)).To(BeFalse())
 		Expect(IsValidVersion(VersionUnknown)).To(BeFalse())
 		Expect(IsValidVersion(1234)).To(BeFalse())
@@ -22,7 +23,7 @@ var _ = Describe("Version", func() {
 	})
 
 	It("has the right string representation", func() {
-		Expect(VersionTLS.String()).To(ContainSubstring("TLS"))
+		Expect(VersionMilestone0_18.String()).To(ContainSubstring("QUIC WG draft-29"))
 		Expect(VersionWhatever.String()).To(Equal("whatever"))
 		Expect(VersionUnknown.String()).To(Equal("unknown"))
 		// check with unsupported version numbers from the wiki
