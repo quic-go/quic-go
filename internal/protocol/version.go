@@ -18,14 +18,16 @@ const (
 
 // The version numbers, making grepping easier
 const (
-	VersionTLS      VersionNumber = 0x51474fff
-	VersionWhatever VersionNumber = 1 // for when the version doesn't matter
+	VersionTLS      VersionNumber = 0xff00001c // draft-28
+	VersionWhatever VersionNumber = 1          // for when the version doesn't matter
 	VersionUnknown  VersionNumber = math.MaxUint32
+
+	VersionMilestone0_16 VersionNumber = 0xff00001c // QUIC WG draft-28
 )
 
 // SupportedVersions lists the versions that the server supports
 // must be in sorted descending order
-var SupportedVersions = []VersionNumber{VersionTLS}
+var SupportedVersions = []VersionNumber{VersionMilestone0_16}
 
 // IsValidVersion says if the version is known to quic-go
 func IsValidVersion(v VersionNumber) bool {
@@ -38,8 +40,8 @@ func (vn VersionNumber) String() string {
 		return "whatever"
 	case VersionUnknown:
 		return "unknown"
-	case VersionTLS:
-		return "TLS dev version (WIP)"
+	case VersionMilestone0_16:
+		return "QUIC WG draft-28"
 	default:
 		if vn.isGQUIC() {
 			return fmt.Sprintf("gQUIC %d", vn.toGQUICVersion())
