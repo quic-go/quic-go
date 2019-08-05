@@ -14,9 +14,9 @@ var _ = Describe("Version", func() {
 		Expect(IsValidVersion(VersionTLS)).To(BeTrue())
 		Expect(IsValidVersion(VersionWhatever)).To(BeFalse())
 		Expect(IsValidVersion(VersionUnknown)).To(BeFalse())
-		Expect(IsValidVersion(VersionDraft29)).To(BeFalse())
-		Expect(IsValidVersion(VersionDraft32)).To(BeFalse())
-		Expect(IsValidVersion(VersionDraft34)).To(BeFalse())
+		Expect(IsValidVersion(VersionDraft29)).To(BeTrue())
+		Expect(IsValidVersion(VersionDraft32)).To(BeTrue())
+		Expect(IsValidVersion(VersionDraft34)).To(BeTrue())
 		Expect(IsValidVersion(1234)).To(BeFalse())
 	})
 
@@ -25,7 +25,6 @@ var _ = Describe("Version", func() {
 	})
 
 	It("has the right string representation", func() {
-		Expect(VersionTLS.String()).To(ContainSubstring("TLS"))
 		Expect(VersionWhatever.String()).To(Equal("whatever"))
 		Expect(VersionUnknown.String()).To(Equal("unknown"))
 		Expect(VersionDraft29.String()).To(Equal("draft-29"))
@@ -45,8 +44,9 @@ var _ = Describe("Version", func() {
 		Expect(IsSupportedVersion(SupportedVersions, SupportedVersions[len(SupportedVersions)-1])).To(BeTrue())
 	})
 
-	It("has supported versions in sorted order", func() {
-		for i := 0; i < len(SupportedVersions)-1; i++ {
+	It("defaults to draft-29, and has additional supported versions in sorted order", func() {
+		Expect(SupportedVersions[0]).To(Equal(VersionDraft29))
+		for i := 1; i < len(SupportedVersions)-1; i++ {
 			Expect(SupportedVersions[i]).To(BeNumerically(">", SupportedVersions[i+1]))
 		}
 	})
