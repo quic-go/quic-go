@@ -68,7 +68,10 @@ func runTestcase(testcase string) error {
 	if err != nil {
 		return err
 	}
-	quicConf := &quic.Config{Tracer: qlog.NewTracer(getLogWriter)}
+	quicConf := &quic.Config{
+		Tracer:   qlog.NewTracer(getLogWriter),
+		Versions: []quic.VersionNumber{quic.VersionDraft29},
+	}
 
 	if testcase == "http3" {
 		r := &http3.RoundTripper{
