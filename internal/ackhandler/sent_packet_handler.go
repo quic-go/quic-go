@@ -18,6 +18,8 @@ const (
 	// Maximum reordering in time space before time based loss detection considers a packet lost.
 	// Specified as an RTT multiplier.
 	timeThreshold = 9.0 / 8
+	// Maximum reordering in packets before packet threshold loss detection considers a packet lost.
+	packetThreshold = 3
 )
 
 type packetNumberSpace struct {
@@ -382,7 +384,7 @@ func (h *sentPacketHandler) detectLostPackets(
 			return false, nil
 		}
 
-		if packet.SendTime.Before(lostSendTime) {
+		if packet.SendTime.Before(lostSendTime) || pnSpace.largestAcked >= packet.PacketNumber+packetThreshold {
 			lostPackets = append(lostPackets, packet)
 		} else if pnSpace.lossTime.IsZero() {
 			// Note: This conditional is only entered once per call
