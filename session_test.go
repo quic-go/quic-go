@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/rand"
+	"crypto/tls"
 	"errors"
 	"net"
 	"runtime/pprof"
@@ -298,6 +299,13 @@ var _ = Describe("Session", func() {
 			Expect(err).ToNot(HaveOccurred())
 			frames, _ := sess.framer.AppendControlFrames(nil, 1000)
 			Expect(frames).To(Equal([]wire.Frame{&wire.PathResponseFrame{Data: data}}))
+		})
+
+		It("rejects NEW_TOKEN frames", func() {
+			err := sess.handleNewTokenFrame(&wire.NewTokenFrame{})
+			Expect(err).To(HaveOccurred())
+			Expect(err).To(BeAssignableToTypeOf(&qerr.QuicError{}))
+			Expect(err.(*qerr.QuicError).ErrorCode).To(Equal(qerr.ProtocolViolation))
 		})
 
 		It("handles BLOCKED frames", func() {
@@ -1564,6 +1572,8 @@ var _ = Describe("Client Session", func() {
 		packer        *MockPacker
 		mconn         *mockConnection
 		cryptoSetup   *mocks.MockCryptoSetup
+		tlsConf       *tls.Config
+		quicConf      *Config
 	)
 
 	getPacket := func(hdr *wire.ExtendedHeader, data []byte) *receivedPacket {
@@ -1576,8 +1586,15 @@ var _ = Describe("Client Session", func() {
 	}
 
 	BeforeEach(func() {
+		quicConf = populateClientConfig(&Config{}, true)
+	})
+
+	JustBeforeEach(func() {
 		Eventually(areSessionsRunning).Should(BeFalse())
 
+		if tlsConf == nil {
+			tlsConf = &tls.Config{}
+		}
 		mconn = newMockConnection()
 		sessionRunner = NewMockSessionRunner(mockCtrl)
 		sessP, err := newClientSession(
@@ -1585,9 +1602,9 @@ var _ = Describe("Client Session", func() {
 			sessionRunner,
 			protocol.ConnectionID{8, 7, 6, 5, 4, 3, 2, 1},
 			protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8},
-			populateClientConfig(&Config{}, true),
-			nil, // tls.Config
-			42,  // initial packet number
+			quicConf,
+			tlsConf,
+			42, // initial packet number
 			&handshake.TransportParameters{},
 			protocol.VersionTLS,
 			utils.DefaultLogger,
@@ -1636,10 +1653,25 @@ var _ = Describe("Client Session", func() {
 		Eventually(sess.Context().Done()).Should(BeClosed())
 	})
 
+	Context("handling tokens", func() {
+		var mockTokenStore *MockTokenStore
+
+		BeforeEach(func() {
+			mockTokenStore = NewMockTokenStore(mockCtrl)
+			tlsConf = &tls.Config{ServerName: "server"}
+			quicConf.TokenStore = mockTokenStore
+		})
+
+		It("handles NEW_TOKEN frames", func() {
+			mockTokenStore.EXPECT().Put("server", &ClientToken{data: []byte("foobar")})
+			Expect(sess.handleNewTokenFrame(&wire.NewTokenFrame{Token: []byte("foobar")})).To(Succeed())
+		})
+	})
+
 	Context("handling Retry", func() {
 		var validRetryHdr *wire.ExtendedHeader
 
-		BeforeEach(func() {
+		JustBeforeEach(func() {
 			validRetryHdr = &wire.ExtendedHeader{
 				Header: wire.Header{
 					IsLongHeader:         true,

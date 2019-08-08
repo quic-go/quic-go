@@ -253,6 +253,7 @@ func populateClientConfig(config *Config, createdPacketConn bool) *Config {
 		KeepAlive:                             config.KeepAlive,
 		StatelessResetKey:                     config.StatelessResetKey,
 		QuicTracer:                            config.QuicTracer,
+		TokenStore:                            config.TokenStore,
 	}
 }
 

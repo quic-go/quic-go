@@ -231,6 +231,11 @@ type Config struct {
 	//   * else, that it was issued within the last 24 hours.
 	// This option is only valid for the server.
 	AcceptToken func(clientAddr net.Addr, token *Token) bool
+	// The TokenStore stores tokens received from the server.
+	// Tokens are used to skip address validation on future connection attempts.
+	// The key used to store tokens is the ServerName from the tls.Config, if set
+	// otherwise the token is associated with the server's IP address.
+	TokenStore TokenStore
 	// MaxReceiveStreamFlowControlWindow is the maximum stream-level flow control window for receiving data.
 	// If this value is zero, it will default to 1 MB for the server and 6 MB for the client.
 	MaxReceiveStreamFlowControlWindow uint64
