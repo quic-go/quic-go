@@ -317,11 +317,11 @@ func (h *sentPacketHandler) getEarliestLossTime() (time.Time, protocol.Encryptio
 		lossTime = h.initialPackets.lossTime
 		encLevel = protocol.EncryptionInitial
 	}
-	if h.handshakePackets != nil && (lossTime.IsZero() || h.handshakePackets.lossTime.Before(lossTime)) {
+	if h.handshakePackets != nil && (lossTime.IsZero() || (!h.handshakePackets.lossTime.IsZero() && h.handshakePackets.lossTime.Before(lossTime))) {
 		lossTime = h.handshakePackets.lossTime
 		encLevel = protocol.EncryptionHandshake
 	}
-	if lossTime.IsZero() || h.oneRTTPackets.lossTime.Before(lossTime) {
+	if lossTime.IsZero() || (!h.oneRTTPackets.lossTime.IsZero() && h.oneRTTPackets.lossTime.Before(lossTime)) {
 		lossTime = h.oneRTTPackets.lossTime
 		encLevel = protocol.Encryption1RTT
 	}
@@ -382,11 +382,11 @@ func (h *sentPacketHandler) detectLostPackets(
 		timeSinceSent := now.Sub(packet.SendTime)
 		if timeSinceSent > lossDelay {
 			lostPackets = append(lostPackets, packet)
-		} else if pnSpace.lossTime.IsZero() && encLevel == protocol.Encryption1RTT {
-			if h.logger.Debug() {
-				h.logger.Debugf("\tsetting loss timer for packet %#x to %s (in %s)", packet.PacketNumber, lossDelay, lossDelay-timeSinceSent)
-			}
+		} else if pnSpace.lossTime.IsZero() {
 			// Note: This conditional is only entered once per call
+			if h.logger.Debug() {
+				h.logger.Debugf("\tsetting loss timer for packet %#x (%s) to %s (in %s)", packet.PacketNumber, encLevel, lossDelay, lossDelay-timeSinceSent)
+			}
 			pnSpace.lossTime = now.Add(lossDelay - timeSinceSent)
 		}
 		return true, nil
