@@ -1660,6 +1660,8 @@ var _ = Describe("Client Session", func() {
 			mockTokenStore = NewMockTokenStore(mockCtrl)
 			tlsConf = &tls.Config{ServerName: "server"}
 			quicConf.TokenStore = mockTokenStore
+			mockTokenStore.EXPECT().Pop(gomock.Any())
+			quicConf.TokenStore = mockTokenStore
 		})
 
 		It("handles NEW_TOKEN frames", func() {

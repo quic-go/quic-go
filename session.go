@@ -339,6 +339,11 @@ var newClientSession = func(
 	} else {
 		s.tokenStoreKey = conn.RemoteAddr().String()
 	}
+	if s.config.TokenStore != nil {
+		if token := s.config.TokenStore.Pop(s.tokenStoreKey); token != nil {
+			s.packer.SetToken(token.data)
+		}
+	}
 	return s, s.postSetup()
 }
 
