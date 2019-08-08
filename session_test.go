@@ -20,6 +20,7 @@ import (
 	mockackhandler "github.com/lucas-clemente/quic-go/internal/mocks/ackhandler"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/internal/qerr"
+	"github.com/lucas-clemente/quic-go/internal/testutils"
 	"github.com/lucas-clemente/quic-go/internal/utils"
 	"github.com/lucas-clemente/quic-go/internal/wire"
 )
@@ -1680,5 +1681,103 @@ var _ = Describe("Client Session", func() {
 			_, err := sess.processTransportParametersForClient(params.Marshal())
 			Expect(err).To(MatchError("expected original_connection_id to equal 0xdeadbeef, is 0xdecafbad"))
 		})
+	})
+
+	Context("handling potentially injected packets", func() {
+		var unpacker *MockUnpacker
+
+		getPacket := func(extHdr *wire.ExtendedHeader, data []byte) *receivedPacket {
+			buf := &bytes.Buffer{}
+			Expect(extHdr.Write(buf, sess.version)).To(Succeed())
+			return &receivedPacket{
+				data:   append(buf.Bytes(), data...),
+				buffer: getPacketBuffer(),
+			}
+		}
+
+		// Convert an already packed raw packet into a receivedPacket
+		wrapPacket := func(packet []byte) *receivedPacket {
+			return &receivedPacket{
+				data:   packet,
+				buffer: getPacketBuffer(),
+			}
+		}
+
+		// Illustrates that attacker may inject an Initial packet with a different
+		// source connection ID, causing endpoint to ignore a subsequent real Initial packets.
+		It("ignores Initial packets with a different source connection ID", func() {
+			// Modified from test "ignores packets with a different source connection ID"
+			unpacker = NewMockUnpacker(mockCtrl)
+			sess.unpacker = unpacker
+
+			hdr1 := &wire.ExtendedHeader{
+				Header: wire.Header{
+					IsLongHeader:     true,
+					Type:             protocol.PacketTypeInitial,
+					DestConnectionID: sess.destConnID,
+					SrcConnectionID:  sess.srcConnID,
+					Length:           1,
+					Version:          sess.version,
+				},
+				PacketNumberLen: protocol.PacketNumberLen1,
+				PacketNumber:    1,
+			}
+			hdr2 := &wire.ExtendedHeader{
+				Header: wire.Header{
+					IsLongHeader:     true,
+					Type:             protocol.PacketTypeInitial,
+					DestConnectionID: sess.destConnID,
+					SrcConnectionID:  protocol.ConnectionID{0xde, 0xad, 0xbe, 0xef},
+					Length:           1,
+					Version:          sess.version,
+				},
+				PacketNumberLen: protocol.PacketNumberLen1,
+				PacketNumber:    2,
+			}
+			Expect(sess.srcConnID).ToNot(Equal(hdr2.SrcConnectionID))
+			// Send one packet, which might change the connection ID.
+			packer.EXPECT().ChangeDestConnectionID(sess.srcConnID).MaxTimes(1)
+			// only EXPECT one call to the unpacker
+			unpacker.EXPECT().Unpack(gomock.Any(), gomock.Any()).Return(&unpackedPacket{
+				encryptionLevel: protocol.EncryptionInitial,
+				hdr:             hdr1,
+				data:            []byte{0}, // one PADDING frame
+			}, nil)
+			Expect(sess.handlePacketImpl(getPacket(hdr1, nil))).To(BeTrue())
+			// The next packet has to be ignored, since the source connection ID doesn't match.
+			Expect(sess.handlePacketImpl(getPacket(hdr2, nil))).To(BeFalse())
+		})
+
+		// Illustrates that an injected Initial with an ACK frame for an unsent packet causes
+		// the connection to immediately break down
+		It("fails on Initial-level ACK for unsent packet", func() {
+			sessionRunner.EXPECT().Retire(gomock.Any())
+			ackFrame := testutils.ComposeAckFrame(0, 0)
+			initialPacket := testutils.ComposeInitialPacket(sess.destConnID, sess.srcConnID, sess.version, sess.destConnID, []wire.Frame{ackFrame})
+			Expect(sess.handlePacketImpl(wrapPacket(initialPacket))).To(BeFalse())
+		})
+
+		// Illustrates that an injected Initial with a CONNECTION_CLOSE frame causes
+		// the connection to immediately break down
+		It("fails on Initial-level CONNECTION_CLOSE frame", func() {
+			sessionRunner.EXPECT().Remove(gomock.Any())
+			connCloseFrame := testutils.ComposeConnCloseFrame()
+			initialPacket := testutils.ComposeInitialPacket(sess.destConnID, sess.srcConnID, sess.version, sess.destConnID, []wire.Frame{connCloseFrame})
+			Expect(sess.handlePacketImpl(wrapPacket(initialPacket))).To(BeTrue())
+		})
+
+		// Illustrates that attacker who injects a Retry packet and changes the connection ID
+		// can cause subsequent real Initial packets to be ignored
+		It("ignores Initial packets which use original source id, after accepting a Retry", func() {
+			newSrcConnID := protocol.ConnectionID{0xde, 0xad, 0xbe, 0xef}
+			cryptoSetup.EXPECT().ChangeConnectionID(newSrcConnID)
+			packer.EXPECT().SetToken([]byte("foobar"))
+			packer.EXPECT().ChangeDestConnectionID(newSrcConnID)
+
+			sess.handlePacketImpl(wrapPacket(testutils.ComposeRetryPacket(newSrcConnID, sess.destConnID, sess.destConnID, []byte("foobar"), sess.version)))
+			initialPacket := testutils.ComposeInitialPacket(sess.destConnID, sess.srcConnID, sess.version, sess.destConnID, nil)
+			Expect(sess.handlePacketImpl(wrapPacket(initialPacket))).To(BeFalse())
+		})
+
 	})
 })
