@@ -698,9 +698,6 @@ func (s *session) handleUnpackedPacket(packet *unpackedPacket, rcvTime time.Time
 	// If we're not tracing, this slice will always remain empty.
 	var frames []wire.Frame
 	var transportState *quictrace.TransportState
-	if s.traceCallback != nil {
-		transportState = s.sentPacketHandler.GetStats()
-	}
 
 	r := bytes.NewReader(packet.data)
 	var isAckEliciting bool
@@ -738,6 +735,7 @@ func (s *session) handleUnpackedPacket(packet *unpackedPacket, rcvTime time.Time
 	}
 
 	if s.traceCallback != nil {
+		transportState = s.sentPacketHandler.GetStats()
 		s.traceCallback(quictrace.Event{
 			Time:            time.Now(),
 			EventType:       quictrace.PacketReceived,
@@ -753,15 +751,13 @@ func (s *session) handleUnpackedPacket(packet *unpackedPacket, rcvTime time.Time
 		return qerr.Error(qerr.NoError, "contains only ignored frames")
 	}
 
-	if err := s.receivedPacketHandler.ReceivedPacket(packet.packetNumber, packet.encryptionLevel, rcvTime, isAckEliciting); err != nil {
-		return err
-	}
-
 	// If mitigations are turned on, we don't consider a packet received if all frames are ignored
 	if s.config.AttackTimeout > 0 {
 		s.receivedFirstPacket = true
 		s.lastPacketReceivedTime = rcvTime
 	}
+
+	s.receivedPacketHandler.ReceivedPacket(packet.packetNumber, packet.encryptionLevel, rcvTime, isAckEliciting)
 	return nil
 }
 

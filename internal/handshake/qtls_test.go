@@ -4,6 +4,7 @@ import (
 	"crypto/tls"
 	"errors"
 
+	gomock "github.com/golang/mock/gomock"
 	"github.com/marten-seemann/qtls"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -23,21 +24,6 @@ func (h *mockExtensionHandler) ReceivedExtensions(msgType uint8, exts []qtls.Ext
 	h.received = true
 }
 func (*mockExtensionHandler) TransportParameters() <-chan []byte { panic("not implemented") }
-
-type mockClientSessionCache struct {
-	get, put string
-	session  *tls.ClientSessionState
-}
-
-var _ tls.ClientSessionCache = &mockClientSessionCache{}
-
-func (c *mockClientSessionCache) Get(sessionKey string) (session *tls.ClientSessionState, ok bool) {
-	c.get = sessionKey
-	return c.session, false
-}
-func (c *mockClientSessionCache) Put(sessionKey string, cs *tls.ClientSessionState) {
-	c.put = sessionKey
-}
 
 var _ = Describe("qtls.Config generation", func() {
 	It("sets MinVersion and MaxVersion", func() {
@@ -127,31 +113,17 @@ var _ = Describe("qtls.Config generation", func() {
 		})
 
 		It("sets it, and puts and gets session states", func() {
-			state := &qtls.ClientSessionState{}
-			csc := &mockClientSessionCache{session: &tls.ClientSessionState{}}
+			csc := NewMockClientSessionCache(mockCtrl)
 			tlsConf := &tls.Config{ClientSessionCache: csc}
 			qtlsConf := tlsConfigToQtlsConfig(tlsConf, nil, &mockExtensionHandler{})
 			Expect(qtlsConf.ClientSessionCache).ToNot(BeNil())
-			Expect(csc.put).To(BeEmpty())
-			qtlsConf.ClientSessionCache.Put("foobar", state)
-			Expect(csc.put).To(Equal("foobar"))
-			Expect(csc.get).To(BeEmpty())
-			sess, _ := qtlsConf.ClientSessionCache.Get("raboof")
-			Expect(csc.get).To(Equal("raboof"))
-			Expect(sess).To(Equal(state))
-		})
-
-		It("sets it, and gets nil session states for unknown keys", func() {
-			csc := &mockClientSessionCache{}
-			tlsConf := &tls.Config{
-				ClientSessionCache: csc,
-			}
-			qtlsConf := tlsConfigToQtlsConfig(tlsConf, nil, &mockExtensionHandler{})
-			Expect(qtlsConf.ClientSessionCache).ToNot(BeNil())
-			Expect(csc.get).To(BeEmpty())
-			sess, _ := qtlsConf.ClientSessionCache.Get("raboof")
-			Expect(csc.get).To(Equal("raboof"))
-			Expect(sess).To(BeNil())
+			// put something
+			csc.EXPECT().Put("foobar", gomock.Any())
+			qtlsConf.ClientSessionCache.Put("foobar", &qtls.ClientSessionState{})
+			// get something
+			csc.EXPECT().Get("raboof").Return(nil, true)
+			_, ok := qtlsConf.ClientSessionCache.Get("raboof")
+			Expect(ok).To(BeTrue())
 		})
 	})
 })

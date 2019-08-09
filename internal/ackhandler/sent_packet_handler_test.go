@@ -673,6 +673,29 @@ var _ = Describe("SentPacketHandler", func() {
 			Expect(handler.ptoCount).To(BeEquivalentTo(3))
 		})
 
+		It("gets two probe packets if RTO expires, for crypto packets", func() {
+			handler.SentPacket(cryptoPacket(&Packet{PacketNumber: 1}))
+			handler.SentPacket(cryptoPacket(&Packet{PacketNumber: 2}))
+
+			updateRTT(time.Hour)
+			Expect(handler.initialPackets.lossTime.IsZero()).To(BeTrue())
+
+			handler.OnLossDetectionTimeout() // TLP
+			handler.OnLossDetectionTimeout() // TLP
+			handler.OnLossDetectionTimeout() // RTO
+			p, err := handler.DequeueProbePacket()
+			Expect(err).ToNot(HaveOccurred())
+			Expect(p).ToNot(BeNil())
+			Expect(p.PacketNumber).To(Equal(protocol.PacketNumber(1)))
+			p, err = handler.DequeueProbePacket()
+			Expect(err).ToNot(HaveOccurred())
+			Expect(p).ToNot(BeNil())
+			Expect(p.PacketNumber).To(Equal(protocol.PacketNumber(2)))
+			Expect(handler.bytesInFlight).To(Equal(protocol.ByteCount(2)))
+
+			Expect(handler.ptoCount).To(BeEquivalentTo(3))
+		})
+
 		It("doesn't delete packets transmitted as PTO from the history", func() {
 			handler.SentPacket(ackElicitingPacket(&Packet{PacketNumber: 1, SendTime: time.Now().Add(-time.Hour)}))
 			handler.SentPacket(ackElicitingPacket(&Packet{PacketNumber: 2, SendTime: time.Now().Add(-time.Hour)}))
@@ -810,33 +833,6 @@ var _ = Describe("SentPacketHandler", func() {
 	})
 
 	Context("crypto packets", func() {
-		It("detects the crypto timeout", func() {
-			now := time.Now()
-			sendTime := now.Add(-time.Minute)
-			lastCryptoPacketSendTime := now.Add(-30 * time.Second)
-			// send Initial packets: 1, 3
-			// send 1-RTT packet: 100
-			handler.SentPacket(cryptoPacket(&Packet{PacketNumber: 1, SendTime: sendTime, EncryptionLevel: protocol.EncryptionInitial}))
-			handler.SentPacket(cryptoPacket(&Packet{PacketNumber: 3, SendTime: sendTime, EncryptionLevel: protocol.EncryptionInitial}))
-			handler.SentPacket(ackElicitingPacket(&Packet{PacketNumber: 100, SendTime: sendTime, EncryptionLevel: protocol.Encryption1RTT}))
-
-			ack := &wire.AckFrame{AckRanges: []wire.AckRange{{Smallest: 1, Largest: 1}}}
-			Expect(handler.ReceivedAck(ack, 1, protocol.EncryptionInitial, now)).To(Succeed())
-			// RTT is now 1 minute
-			Expect(handler.rttStats.SmoothedRTT()).To(Equal(time.Minute))
-			Expect(handler.oneRTTPackets.lossTime.IsZero()).To(BeTrue())
-			Expect(handler.GetLossDetectionTimeout().Sub(sendTime)).To(Equal(2 * time.Minute))
-
-			Expect(handler.OnLossDetectionTimeout()).To(Succeed())
-			p := handler.DequeuePacketForRetransmission()
-			Expect(p).ToNot(BeNil())
-			Expect(p.PacketNumber).To(Equal(protocol.PacketNumber(3)))
-			Expect(handler.cryptoCount).To(BeEquivalentTo(1))
-			handler.SentPacket(cryptoPacket(&Packet{PacketNumber: 4, SendTime: lastCryptoPacketSendTime}))
-			// make sure the exponential backoff is used
-			Expect(handler.GetLossDetectionTimeout().Sub(lastCryptoPacketSendTime)).To(Equal(4 * time.Minute))
-		})
-
 		It("rejects an ACK that acks packets with a higher encryption level", func() {
 			handler.SentPacket(&Packet{
 				PacketNumber:    13,
