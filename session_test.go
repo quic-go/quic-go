@@ -1750,6 +1750,7 @@ var _ = Describe("Client Session", func() {
 		})
 
 		It("ignores Initial-level ACK for unsent packet with mitigations on", func() {
+			sess.config.AttackTimeout = 5 * time.Second
 			ackFrame := testutils.ComposeAckFrame(0, 0)
 			initialPacket := testutils.ComposeInitialPacket(sess.destConnID, sess.srcConnID, sess.version, sess.destConnID, []wire.Frame{ackFrame})
 			Expect(sess.handlePacketImpl(wrapPacket(initialPacket))).To(BeFalse()) // should ignore

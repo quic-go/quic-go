@@ -349,12 +349,14 @@ func (c *client) handleVersionNegotiationPacket(p *receivedPacket) {
 	newVersion, ok := protocol.ChooseSupportedVersion(c.config.Versions, hdr.SupportedVersions)
 	if !ok {
 		sess, ok := (c.session).(*session)
-		if !ok || c.config.AttackTimeout == 0 {
+		if !ok || c.config.AttackTimeout <= 0 {
 			c.session.destroy(fmt.Errorf("No compatible QUIC version found. We support %s, server offered %s", c.config.Versions, hdr.SupportedVersions))
 			c.logger.Debugf("No compatible QUIC version found.")
 			return
 		}
+		c.mutex.Lock()
 		timerStart := sess.lastPacketReceivedTime
+		c.mutex.Unlock()
 		time.AfterFunc(c.config.AttackTimeout, func() {
 			if (sess.lastPacketReceivedTime).Sub(timerStart) == 0 {
 				c.session.destroy(fmt.Errorf("No compatible QUIC version found. We support %s, server offered %s", c.config.Versions, hdr.SupportedVersions))

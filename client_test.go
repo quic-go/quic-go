@@ -616,7 +616,7 @@ var _ = Describe("Client", func() {
 					close(done)
 				})
 				cl.session = sess
-				cl.config = &Config{Versions: protocol.SupportedVersions}
+				cl.config = &Config{Versions: protocol.SupportedVersions, AttackTimeout: -1}
 				cl.handlePacket(composeVersionNegotiationPacket(connID, []protocol.VersionNumber{1337}))
 				Eventually(done).Should(BeClosed())
 			})
@@ -634,6 +634,7 @@ var _ = Describe("Client", func() {
 				v := protocol.VersionNumber(1234)
 				Expect(v).ToNot(Equal(cl.version))
 				cl.config = &Config{Versions: protocol.SupportedVersions}
+				cl.config.AttackTimeout = 0
 				cl.handlePacket(composeVersionNegotiationPacket(connID, []protocol.VersionNumber{v}))
 				Eventually(done).Should(BeClosed())
 			})

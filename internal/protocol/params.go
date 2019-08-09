@@ -98,7 +98,7 @@ const DefaultIdleTimeout = 30 * time.Second
 const DefaultHandshakeTimeout = 10 * time.Second
 
 // DefaultAttackTimeout is the default timeout for a connection that receives a potentially malicious packets
-const DefaultAttackTimeout = 5 * time.Second
+const DefaultAttackTimeout = 0 * time.Second
 
 // RetiredConnectionIDDeleteTimeout is the time we keep closed sessions around in order to retransmit the CONNECTION_CLOSE.
 // after this time all information about the old connection will be deleted
