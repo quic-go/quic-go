@@ -417,7 +417,7 @@ var _ = Describe("Crypto Setup TLS", func() {
 			}()
 			var ch chunk
 			Eventually(cChunkChan).Should(Receive(&ch))
-			Eventually(chChan).Should(BeClosed())
+			Eventually(chChan).Should(Receive(BeNil()))
 			// make sure the whole ClientHello was written
 			Expect(len(ch.data)).To(BeNumerically(">=", 4))
 			Expect(messageType(ch.data[0])).To(Equal(typeClientHello))
@@ -671,10 +671,53 @@ var _ = Describe("Crypto Setup TLS", func() {
 
 				csc.EXPECT().Get(gomock.Any()).Return(state, true)
 				csc.EXPECT().Put(gomock.Any(), gomock.Any()).MaxTimes(1)
-				client, clientErr, server, serverErr = handshakeWithTLSConf(clientConf, serverConf, true)
-				Expect(clientErr).ToNot(HaveOccurred())
-				Expect(serverErr).ToNot(HaveOccurred())
-				Eventually(receivedSessionTicket).Should(BeClosed())
+
+				cChunkChan, cInitialStream, cHandshakeStream, _ := initStreams()
+				cRunner := NewMockHandshakeRunner(mockCtrl)
+				cRunner.EXPECT().OnReceivedParams(gomock.Any())
+				cRunner.EXPECT().OnHandshakeComplete()
+				client, clientHelloChan := NewCryptoSetupClient(
+					cInitialStream,
+					cHandshakeStream,
+					ioutil.Discard,
+					protocol.ConnectionID{},
+					nil,
+					&TransportParameters{},
+					cRunner,
+					clientConf,
+					true,
+					&congestion.RTTStats{},
+					utils.DefaultLogger.WithPrefix("client"),
+				)
+
+				sChunkChan, sInitialStream, sHandshakeStream, _ := initStreams()
+				sRunner := NewMockHandshakeRunner(mockCtrl)
+				sRunner.EXPECT().OnReceivedParams(gomock.Any())
+				sRunner.EXPECT().OnHandshakeComplete()
+				server = NewCryptoSetupServer(
+					sInitialStream,
+					sHandshakeStream,
+					ioutil.Discard,
+					protocol.ConnectionID{},
+					nil,
+					&TransportParameters{},
+					sRunner,
+					serverConf,
+					true,
+					&congestion.RTTStats{},
+					utils.DefaultLogger.WithPrefix("server"),
+				)
+
+				done := make(chan struct{})
+				go func() {
+					defer GinkgoRecover()
+					handshake(client, cChunkChan, server, sChunkChan)
+					close(done)
+				}()
+				Eventually(done).Should(BeClosed())
+
+				Expect(clientHelloChan).To(Receive(Not(BeNil())))
+
 				Expect(server.ConnectionState().DidResume).To(BeTrue())
 				Expect(client.ConnectionState().DidResume).To(BeTrue())
 				opener, err := server.Get0RTTOpener()

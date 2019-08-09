@@ -156,7 +156,7 @@ type session struct {
 
 	undecryptablePackets []*receivedPacket
 
-	clientHelloWritten    <-chan struct{}
+	clientHelloWritten    <-chan *handshake.TransportParameters
 	earlySessionReadyChan chan struct{}
 	handshakeCompleteChan chan struct{} // is closed when the handshake completes
 	handshakeComplete     bool
@@ -463,8 +463,11 @@ func (s *session) run() error {
 
 	if s.perspective == protocol.PerspectiveClient {
 		select {
-		case <-s.clientHelloWritten:
+		case zeroRTTParams := <-s.clientHelloWritten:
 			s.scheduleSending()
+			if zeroRTTParams != nil {
+				s.processTransportParameters(zeroRTTParams)
+			}
 		case closeErr := <-s.closeChan:
 			// put the close error back into the channel, so that the run loop can receive it
 			s.closeChan <- closeErr
@@ -1099,7 +1102,7 @@ func (s *session) processTransportParameters(params *handshake.TransportParamete
 		return
 	}
 
-	s.logger.Debugf("Received Transport Parameters: %s", params)
+	s.logger.Debugf("Processed Transport Parameters: %s", params)
 	s.peerParams = params
 	// Our local idle timeout will always be > 0.
 	s.idleTimeout = utils.MinNonZeroDuration(s.config.MaxIdleTimeout, params.MaxIdleTimeout)
@@ -1124,7 +1127,9 @@ func (s *session) processTransportParameters(params *handshake.TransportParamete
 	}
 	// On the server side, the early session is ready as soon as we processed
 	// the client's transport parameters.
-	close(s.earlySessionReadyChan)
+	if s.perspective == protocol.PerspectiveServer {
+		close(s.earlySessionReadyChan)
+	}
 }
 
 func (s *session) sendPackets() error {
