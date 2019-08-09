@@ -64,12 +64,16 @@ func ComposeAckFrame(smallest protocol.PacketNumber, largest protocol.PacketNumb
 
 // ComposeInitialPacket returns an Initial packet encrypted under key
 // (the original destination connection ID) containing specified frames
+// If frame list is empty, the payload will be empty. If the frame list
+// starts with nil, the payload will be all padding, of the minimum Initial length.
 func ComposeInitialPacket(srcConnID protocol.ConnectionID, destConnID protocol.ConnectionID, version protocol.VersionNumber, key protocol.ConnectionID, frames []wire.Frame) []byte {
 	sealer, _, _ := handshake.NewInitialAEAD(key, protocol.PerspectiveServer)
 
 	// compose payload
 	var payload []byte
 	if len(frames) == 0 {
+		payload = nil
+	} else if frames[0] == nil {
 		payload = make([]byte, protocol.MinInitialPacketSize)
 	} else {
 		payload = packRawPayload(version, frames)

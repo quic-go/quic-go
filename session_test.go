@@ -611,7 +611,7 @@ var _ = Describe("Session", func() {
 			Eventually(sess.Context().Done()).Should(BeClosed())
 		})
 
-		It("rejects packets with empty payload", func() {
+		It("rejects packets with empty payload when mitigations are turned off", func() {
 			unpacker.EXPECT().Unpack(gomock.Any(), gomock.Any()).Return(&unpackedPacket{
 				hdr:  &wire.ExtendedHeader{},
 				data: []byte{}, // no payload
@@ -628,6 +628,7 @@ var _ = Describe("Session", func() {
 				close(done)
 			}()
 			sessionRunner.EXPECT().Retire(gomock.Any())
+			sess.config.AttackTimeout = 0 // turn off mitigations
 			sess.handlePacket(getPacket(&wire.ExtendedHeader{
 				Header:          wire.Header{DestConnectionID: sess.srcConnID},
 				PacketNumberLen: protocol.PacketNumberLen1,
@@ -1748,10 +1749,17 @@ var _ = Describe("Client Session", func() {
 			Expect(sess.handlePacketImpl(getPacket(hdr2, nil))).To(BeFalse())
 		})
 
+		It("ignores Initial-level ACK for unsent packet with mitigations on", func() {
+			ackFrame := testutils.ComposeAckFrame(0, 0)
+			initialPacket := testutils.ComposeInitialPacket(sess.destConnID, sess.srcConnID, sess.version, sess.destConnID, []wire.Frame{ackFrame})
+			Expect(sess.handlePacketImpl(wrapPacket(initialPacket))).To(BeFalse()) // should ignore
+		})
+
 		// Illustrates that an injected Initial with an ACK frame for an unsent packet causes
 		// the connection to immediately break down
-		It("fails on Initial-level ACK for unsent packet", func() {
+		It("fails on Initial-level ACK for unsent packet with mitigations off", func() {
 			sessionRunner.EXPECT().Retire(gomock.Any())
+			sess.config.AttackTimeout = -1
 			ackFrame := testutils.ComposeAckFrame(0, 0)
 			initialPacket := testutils.ComposeInitialPacket(sess.destConnID, sess.srcConnID, sess.version, sess.destConnID, []wire.Frame{ackFrame})
 			Expect(sess.handlePacketImpl(wrapPacket(initialPacket))).To(BeFalse())

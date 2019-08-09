@@ -8,6 +8,7 @@ import (
 	"net"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/lucas-clemente/quic-go/internal/handshake"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
@@ -215,6 +216,12 @@ func populateClientConfig(config *Config, createdPacketConn bool) *Config {
 	if config.IdleTimeout != 0 {
 		idleTimeout = config.IdleTimeout
 	}
+	attackTimeout := protocol.DefaultAttackTimeout
+	if config.AttackTimeout > 0 {
+		attackTimeout = config.AttackTimeout
+	} else if config.AttackTimeout < 0 {
+		attackTimeout = 0
+	}
 
 	maxReceiveStreamFlowControlWindow := config.MaxReceiveStreamFlowControlWindow
 	if maxReceiveStreamFlowControlWindow == 0 {
@@ -245,6 +252,7 @@ func populateClientConfig(config *Config, createdPacketConn bool) *Config {
 		Versions:                              versions,
 		HandshakeTimeout:                      handshakeTimeout,
 		IdleTimeout:                           idleTimeout,
+		AttackTimeout:                         attackTimeout,
 		ConnectionIDLength:                    connIDLen,
 		MaxReceiveStreamFlowControlWindow:     maxReceiveStreamFlowControlWindow,
 		MaxReceiveConnectionFlowControlWindow: maxReceiveConnectionFlowControlWindow,
@@ -340,8 +348,19 @@ func (c *client) handleVersionNegotiationPacket(p *receivedPacket) {
 	c.logger.Infof("Received a Version Negotiation packet. Supported Versions: %s", hdr.SupportedVersions)
 	newVersion, ok := protocol.ChooseSupportedVersion(c.config.Versions, hdr.SupportedVersions)
 	if !ok {
-		c.session.destroy(fmt.Errorf("No compatible QUIC version found. We support %s, server offered %s", c.config.Versions, hdr.SupportedVersions))
-		c.logger.Debugf("No compatible QUIC version found.")
+		sess, ok := (c.session).(*session)
+		if !ok || c.config.AttackTimeout == 0 {
+			c.session.destroy(fmt.Errorf("No compatible QUIC version found. We support %s, server offered %s", c.config.Versions, hdr.SupportedVersions))
+			c.logger.Debugf("No compatible QUIC version found.")
+			return
+		}
+		timerStart := sess.lastPacketReceivedTime
+		time.AfterFunc(c.config.AttackTimeout, func() {
+			if (sess.lastPacketReceivedTime).Sub(timerStart) == 0 {
+				c.session.destroy(fmt.Errorf("No compatible QUIC version found. We support %s, server offered %s", c.config.Versions, hdr.SupportedVersions))
+				c.logger.Debugf("No compatible QUIC version found.")
+			}
+		})
 		return
 	}
 	c.receivedVersionNegotiationPacket = true

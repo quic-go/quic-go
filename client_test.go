@@ -438,6 +438,7 @@ var _ = Describe("Client", func() {
 				config := &Config{
 					HandshakeTimeout:      1337 * time.Minute,
 					IdleTimeout:           42 * time.Hour,
+					AttackTimeout:         64 * time.Minute,
 					MaxIncomingStreams:    1234,
 					MaxIncomingUniStreams: 4321,
 					ConnectionIDLength:    13,
@@ -447,6 +448,7 @@ var _ = Describe("Client", func() {
 				c := populateClientConfig(config, false)
 				Expect(c.HandshakeTimeout).To(Equal(1337 * time.Minute))
 				Expect(c.IdleTimeout).To(Equal(42 * time.Hour))
+				Expect(c.AttackTimeout).To(Equal(64 * time.Minute))
 				Expect(c.MaxIncomingStreams).To(Equal(1234))
 				Expect(c.MaxIncomingUniStreams).To(Equal(4321))
 				Expect(c.ConnectionIDLength).To(Equal(13))
@@ -494,6 +496,7 @@ var _ = Describe("Client", func() {
 				Expect(c.Versions).To(Equal(protocol.SupportedVersions))
 				Expect(c.HandshakeTimeout).To(Equal(protocol.DefaultHandshakeTimeout))
 				Expect(c.IdleTimeout).To(Equal(protocol.DefaultIdleTimeout))
+				Expect(c.AttackTimeout).To(Equal(protocol.DefaultAttackTimeout))
 			})
 		})
 

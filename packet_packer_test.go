@@ -334,6 +334,7 @@ var _ = Describe("Packet packer", func() {
 				sealingManager.EXPECT().Get1RTTSealer().Return(sealer, nil)
 				p, err := packer.PackConnectionClose(&ccf)
 				Expect(err).ToNot(HaveOccurred())
+				Expect(p.header).ToNot(Equal(nil))
 				Expect(p.frames).To(HaveLen(1))
 				Expect(p.frames[0]).To(Equal(&ccf))
 			})

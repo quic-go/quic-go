@@ -269,12 +269,14 @@ var _ = Describe("MITM test", func() {
 				})
 			})
 
-			Context("successful injection attacks", func() {
+			Context("early handshake injection attacks", func() {
 				// These tests demonstrate that the QUIC protocol is vulnerable to injection attacks before the handshake
 				// finishes. In particular, an adversary who can intercept packets coming from one endpoint and send a reply
 				// that arrives before the real reply can tear down the connection in multiple ways.
 
 				const rtt = 20 * time.Millisecond
+				const mitigationsOff time.Duration = -1
+				const mitigationsOn time.Duration = 5 * time.Second
 
 				// AfterEach closes the proxy, but each function is responsible
 				// for closing client and server connections
@@ -291,7 +293,7 @@ var _ = Describe("MITM test", func() {
 					defer GinkgoRecover()
 
 					// Create fake version negotiation packet with no supported versions
-					versions := []protocol.VersionNumber{}
+					versions := []protocol.VersionNumber{0x22334455, 0x33445566}
 					packet, _ := wire.ComposeVersionNegotiation(hdr.SrcConnectionID, hdr.DestConnectionID, versions)
 
 					// Send the packet
@@ -313,12 +315,22 @@ var _ = Describe("MITM test", func() {
 					Expect(err).ToNot(HaveOccurred())
 				}
 
-				// Send a forged Initial packet with no frames to client
+				// Send a forged empty Initial packet with no frames to client
+				// expects hdr from an Initial packet intercepted from client
+				sendForgedEmptyPacket := func(conn net.PacketConn, remoteAddr net.Addr, hdr *wire.Header) {
+					defer GinkgoRecover()
+
+					emptyPacket := testutils.ComposeInitialPacket(hdr.DestConnectionID, hdr.SrcConnectionID, hdr.Version, hdr.DestConnectionID, nil)
+					_, err := conn.WriteTo(emptyPacket, remoteAddr)
+					Expect(err).ToNot(HaveOccurred())
+				}
+
+				// Send a forged Initial packet with all padding frames to client
 				// expects hdr from an Initial packet intercepted from client
 				sendForgedInitialPacket := func(conn net.PacketConn, remoteAddr net.Addr, hdr *wire.Header) {
 					defer GinkgoRecover()
 
-					initialPacket := testutils.ComposeInitialPacket(hdr.DestConnectionID, hdr.SrcConnectionID, hdr.Version, hdr.DestConnectionID, nil)
+					initialPacket := testutils.ComposeInitialPacket(hdr.DestConnectionID, hdr.SrcConnectionID, hdr.Version, hdr.DestConnectionID, []wire.Frame{nil})
 					_, err := conn.WriteTo(initialPacket, remoteAddr)
 					Expect(err).ToNot(HaveOccurred())
 				}
@@ -337,7 +349,7 @@ var _ = Describe("MITM test", func() {
 
 				// runTestFail succeeds if an error occurs in dialing
 				// expects a proxy delay function that runs every time a packet is received
-				runTestFail := func(delayCb quicproxy.DelayCallback) {
+				runTestFail := func(delayCb quicproxy.DelayCallback, attackTimeout time.Duration) {
 					startServerAndProxy(delayCb, nil)
 					raddr, err := net.ResolveUDPAddr("udp", fmt.Sprintf("localhost:%d", proxy.LocalPort()))
 					Expect(err).ToNot(HaveOccurred())
@@ -349,96 +361,199 @@ var _ = Describe("MITM test", func() {
 						&quic.Config{
 							Versions:           []protocol.VersionNumber{version},
 							ConnectionIDLength: connIDLen,
+							AttackTimeout:      attackTimeout,
 						},
 					)
 					Expect(err).To(HaveOccurred())
 				}
 
-				// fails immediately because client connection closes when it can't find compatible version
-				It("fails when a forged version negotiation packet is sent to client", func() {
-					delayCb := func(dir quicproxy.Direction, raw []byte) time.Duration {
-						fmt.Println()
-						if dir == quicproxy.DirectionIncoming {
-							defer GinkgoRecover()
+				// succeeds if no error occurs
+				runTest := func(delayCb quicproxy.DelayCallback, attackTimeout time.Duration) {
+					startServerAndProxy(delayCb, nil)
+					raddr, err := net.ResolveUDPAddr("udp", fmt.Sprintf("localhost:%d", proxy.LocalPort()))
+					Expect(err).ToNot(HaveOccurred())
+					sess, err := quic.Dial(
+						clientConn,
+						raddr,
+						fmt.Sprintf("localhost:%d", proxy.LocalPort()),
+						getTLSClientConfig(),
+						&quic.Config{
+							Versions:           []protocol.VersionNumber{version},
+							ConnectionIDLength: connIDLen,
+							AttackTimeout:      attackTimeout,
+						},
+					)
+					Expect(err).ToNot(HaveOccurred())
+					str, err := sess.AcceptUniStream(context.Background())
+					Expect(err).ToNot(HaveOccurred())
+					data, err := ioutil.ReadAll(str)
+					Expect(err).ToNot(HaveOccurred())
+					Expect(data).To(Equal(testserver.PRData))
+					Expect(sess.Close()).To(Succeed())
+				}
 
-							hdr, _, _, err := wire.ParsePacket(raw, connIDLen)
-							Expect(err).ToNot(HaveOccurred())
+				Context("sending forged version negotiation packets to client", func() {
+					var delayCb func(dir quicproxy.Direction, raw []byte) time.Duration
 
-							if hdr.Type != protocol.PacketTypeInitial {
-								return 0
+					JustBeforeEach(func() {
+						delayCb = func(dir quicproxy.Direction, raw []byte) time.Duration {
+							if dir == quicproxy.DirectionIncoming {
+								defer GinkgoRecover()
+
+								hdr, _, _, err := wire.ParsePacket(raw, connIDLen)
+								Expect(err).ToNot(HaveOccurred())
+
+								if hdr.Type != protocol.PacketTypeInitial {
+									return 0
+								}
+
+								go sendForgedVersionNegotationPacket(serverConn, clientConn.LocalAddr(), hdr)
 							}
-
-							go sendForgedVersionNegotationPacket(serverConn, clientConn.LocalAddr(), hdr)
+							return rtt / 2
 						}
-						return rtt / 2
-					}
-					runTestFail(delayCb)
+					})
+
+					It("recovers when mitigations are enabled", func() {
+						runTest(delayCb, mitigationsOn)
+					})
+
+					// fails immediately because client connection closes when it can't find compatible version
+					It("fails when mitigations are disabled", func() {
+						runTestFail(delayCb, mitigationsOff)
+					})
 				})
 
-				// times out, because client doesn't accept subsequent real retry packets from server
-				// as it has already accepted a retry.
-				// TODO: determine behavior when server does not send Retry packets
-				initialPacketIntercepted := false
-				It("fails when a forged retry packet with modified srcConnID is sent to client", func() {
-					delayCb := func(dir quicproxy.Direction, raw []byte) time.Duration {
-						if dir == quicproxy.DirectionIncoming && !initialPacketIntercepted {
-							defer GinkgoRecover()
+				Context("sending forged retry packets to client", func() {
+					var delayCb func(dir quicproxy.Direction, raw []byte) time.Duration
+					JustBeforeEach(func() {
+						initialPacketIntercepted := false
+						delayCb = func(dir quicproxy.Direction, raw []byte) time.Duration {
+							if dir == quicproxy.DirectionIncoming && !initialPacketIntercepted {
+								defer GinkgoRecover()
 
-							hdr, _, _, err := wire.ParsePacket(raw, connIDLen)
-							Expect(err).ToNot(HaveOccurred())
+								hdr, _, _, err := wire.ParsePacket(raw, connIDLen)
+								Expect(err).ToNot(HaveOccurred())
 
-							if hdr.Type != protocol.PacketTypeInitial {
-								return 0
+								if hdr.Type != protocol.PacketTypeInitial {
+									return 0
+								}
+
+								initialPacketIntercepted = true
+								go sendForgedRetryPacket(serverConn, clientConn.LocalAddr(), hdr)
 							}
-
-							initialPacketIntercepted = true
-							go sendForgedRetryPacket(serverConn, clientConn.LocalAddr(), hdr)
+							return rtt / 2
 						}
-						return rtt / 2
-					}
-					runTestFail(delayCb)
+					})
+
+					// times out, because client doesn't accept subsequent real retry packets from server
+					// as it has already accepted a retry.
+					It("fails when server always sends retry packets, and mitigations are disabled", func() {
+						runTestFail(delayCb, mitigationsOff)
+					})
+
+					// times out, because client thinks the connection ID has changed.
+					// It("fails when server never sends retry packets", func() {
+					// 	serverConfig.AcceptToken = func(_ net.Addr, _ *quic.Token) bool {
+					// 		return true
+					// 	}
+					// 	runTestFail(delayCb, mitigationsOff)
+					// })
+
+					// It("recovers when mitigations are enabled", func() {
+					// 	runTest(delayCb, mitigationsOn)
+					// })
 				})
 
-				// times out, because client doesn't accept real retry packets from server because
-				// it has already accepted an initial.
-				// TODO: determine behavior when server does not send Retry packets
-				It("fails when a forged initial packet is sent to client", func() {
-					delayCb := func(dir quicproxy.Direction, raw []byte) time.Duration {
-						if dir == quicproxy.DirectionIncoming {
-							defer GinkgoRecover()
+				Context("sending forged empty packets to client", func() {
+					var delayCb func(dir quicproxy.Direction, raw []byte) time.Duration
+					JustBeforeEach(func() {
+						delayCb = func(dir quicproxy.Direction, raw []byte) time.Duration {
+							if dir == quicproxy.DirectionIncoming {
+								defer GinkgoRecover()
 
-							hdr, _, _, err := wire.ParsePacket(raw, connIDLen)
-							Expect(err).ToNot(HaveOccurred())
+								hdr, _, _, err := wire.ParsePacket(raw, connIDLen)
+								Expect(err).ToNot(HaveOccurred())
 
-							if hdr.Type != protocol.PacketTypeInitial {
-								return 0
+								if hdr.Type != protocol.PacketTypeInitial {
+									return 0
+								}
+
+								go sendForgedEmptyPacket(serverConn, clientConn.LocalAddr(), hdr)
 							}
-
-							go sendForgedInitialPacket(serverConn, clientConn.LocalAddr(), hdr)
+							return rtt
 						}
-						return rtt
-					}
-					runTestFail(delayCb)
+					})
+
+					// fails immediately because client closes when it receives an
+					// empty packet.
+					It("fails when mitigations are disabled", func() {
+						runTestFail(delayCb, mitigationsOff)
+					})
+
+					// It("recovers when mitigations are enabled", func() {
+					// 	runTest(delayCb, mitigationsOn)
+					// })
 				})
 
-				// client connection closes immediately on receiving ack for unsent packet
-				It("fails when a forged initial packet with ack for unsent packet is sent to client", func() {
-					delayCb := func(dir quicproxy.Direction, raw []byte) time.Duration {
-						if dir == quicproxy.DirectionIncoming {
-							defer GinkgoRecover()
+				Context("sending forged Initial packets to client", func() {
+					var delayCb func(dir quicproxy.Direction, raw []byte) time.Duration
+					JustBeforeEach(func() {
+						delayCb = func(dir quicproxy.Direction, raw []byte) time.Duration {
+							if dir == quicproxy.DirectionIncoming {
+								defer GinkgoRecover()
 
-							hdr, _, _, err := wire.ParsePacket(raw, connIDLen)
-							Expect(err).ToNot(HaveOccurred())
+								hdr, _, _, err := wire.ParsePacket(raw, connIDLen)
+								Expect(err).ToNot(HaveOccurred())
 
-							if hdr.Type != protocol.PacketTypeInitial {
-								return 0
+								if hdr.Type != protocol.PacketTypeInitial {
+									return 0
+								}
+
+								go sendForgedInitialPacket(serverConn, clientConn.LocalAddr(), hdr)
 							}
-
-							go sendForgedInitialPacketWithAck(serverConn, clientConn.LocalAddr(), hdr)
+							return rtt
 						}
-						return rtt
-					}
-					runTestFail(delayCb)
+					})
+
+					// times out, because client doesn't accept real retry packets from server because
+					// it has already accepted an initial.
+					// TODO: determine behavior when server does not send Retry packets
+					It("fails when mitigations are disabled", func() {
+						runTestFail(delayCb, mitigationsOff)
+					})
+					// It("recovers when mitigations are enabled", func() {
+					// 	runTest(delayCb, mitigationsOn)
+					// })
+				})
+
+				Context("sending forged initial with ack for unsent packet to client", func() {
+					var delayCb func(dir quicproxy.Direction, raw []byte) time.Duration
+					JustBeforeEach(func() {
+						delayCb = func(dir quicproxy.Direction, raw []byte) time.Duration {
+							if dir == quicproxy.DirectionIncoming {
+								defer GinkgoRecover()
+
+								hdr, _, _, err := wire.ParsePacket(raw, connIDLen)
+								Expect(err).ToNot(HaveOccurred())
+
+								if hdr.Type != protocol.PacketTypeInitial {
+									return 0
+								}
+
+								go sendForgedInitialPacketWithAck(serverConn, clientConn.LocalAddr(), hdr)
+							}
+							return rtt
+						}
+					})
+
+					It("recovers when mitigations are enabled", func() {
+						runTest(delayCb, mitigationsOn)
+					})
+
+					// client connection closes immediately on receiving ack for unsent packet
+					It("fails when mitigations are disabled", func() {
+						runTestFail(delayCb, mitigationsOff)
+					})
 				})
 
 			})

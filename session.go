@@ -9,6 +9,7 @@ import (
 	"io"
 	"net"
 	"reflect"
+	"strings"
 	"sync"
 	"time"
 
@@ -610,10 +611,19 @@ func (s *session) handleSinglePacket(p *receivedPacket, hdr *wire.Header) bool /
 
 	if s.logger.Debug() {
 		s.logger.Debugf("<- Reading packet %#x (%d bytes) for connection %s, %s", packet.packetNumber, len(p.data), hdr.DestConnectionID, packet.encryptionLevel)
-		packet.hdr.Log(s.logger)
+		// Quick fix for nil pointer
+		if packet.hdr != nil {
+			packet.hdr.Log(s.logger)
+		}
 	}
 
 	if err := s.handleUnpackedPacket(packet, p.rcvTime); err != nil {
+		if s.config.AttackTimeout > 0 {
+			quicErr, ok := err.(*qerr.QuicError)
+			if ok && quicErr.ErrorCode == qerr.NoError {
+				return false
+			}
+		}
 		s.closeLocal(err)
 		return false
 	}
@@ -662,6 +672,10 @@ func (s *session) handleRetryPacket(p *receivedPacket, hdr *wire.Header) bool /*
 
 func (s *session) handleUnpackedPacket(packet *unpackedPacket, rcvTime time.Time) error {
 	if len(packet.data) == 0 {
+		// Ignore empty packets if mitigations are turned on.
+		if s.config.AttackTimeout > 0 && packet.encryptionLevel != protocol.Encryption1RTT {
+			return qerr.Error(qerr.NoError, "empty packet")
+		}
 		return qerr.Error(qerr.ProtocolViolation, "empty packet")
 	}
 
@@ -672,8 +686,11 @@ func (s *session) handleUnpackedPacket(packet *unpackedPacket, rcvTime time.Time
 		s.packer.ChangeDestConnectionID(s.destConnID)
 	}
 
-	s.receivedFirstPacket = true
-	s.lastPacketReceivedTime = rcvTime
+	if s.config.AttackTimeout <= 0 {
+		s.receivedFirstPacket = true
+		s.lastPacketReceivedTime = rcvTime
+	}
+
 	s.firstAckElicitingPacketAfterIdleSentTime = time.Time{}
 	s.keepAlivePingSent = false
 
@@ -687,6 +704,8 @@ func (s *session) handleUnpackedPacket(packet *unpackedPacket, rcvTime time.Time
 
 	r := bytes.NewReader(packet.data)
 	var isAckEliciting bool
+	var containsValidFrames bool
+	var containsIgnoredFrames bool
 	for {
 		frame, err := s.frameParser.ParseNext(r, packet.encryptionLevel)
 		if err != nil {
@@ -702,7 +721,19 @@ func (s *session) handleUnpackedPacket(packet *unpackedPacket, rcvTime time.Time
 			frames = append(frames, frame)
 		}
 		if err := s.handleFrame(frame, packet.packetNumber, packet.encryptionLevel); err != nil {
+			// If mitigations are turned on, ignore ACKs for unsent and skipped packets
+			// at Initial/Handshake level, as they could be sent by an attacker.
+			if s.config.AttackTimeout > 0 && packet.encryptionLevel != protocol.Encryption1RTT {
+				errStr := err.Error()
+				if strings.Contains(errStr, ackhandler.ErrUnsentAck) || strings.Contains(errStr, ackhandler.ErrSkippedAck) {
+					s.logger.Debugf("Ignoring ACK for unsent/skipped packet.")
+					containsIgnoredFrames = true
+					continue
+				}
+			}
 			return err
+		} else {
+			containsValidFrames = true
 		}
 	}
 
@@ -718,8 +749,18 @@ func (s *session) handleUnpackedPacket(packet *unpackedPacket, rcvTime time.Time
 		})
 	}
 
+	if s.config.AttackTimeout > 0 && containsIgnoredFrames && !containsValidFrames {
+		return qerr.Error(qerr.NoError, "contains only ignored frames")
+	}
+
 	if err := s.receivedPacketHandler.ReceivedPacket(packet.packetNumber, packet.encryptionLevel, rcvTime, isAckEliciting); err != nil {
 		return err
+	}
+
+	// If mitigations are turned on, we don't consider a packet received if all frames are ignored
+	if s.config.AttackTimeout > 0 {
+		s.receivedFirstPacket = true
+		s.lastPacketReceivedTime = rcvTime
 	}
 	return nil
 }
@@ -1222,8 +1263,11 @@ func (s *session) logPacket(packet *packedPacket) {
 		// We don't need to allocate the slices for calling the format functions
 		return
 	}
-	s.logger.Debugf("-> Sending packet 0x%x (%d bytes) for connection %s, %s", packet.header.PacketNumber, len(packet.raw), s.srcConnID, packet.EncryptionLevel())
-	packet.header.Log(s.logger)
+	// Quick fix to avoid nil pointer
+	if packet.header != nil {
+		s.logger.Debugf("-> Sending packet 0x%x (%d bytes) for connection %s, %s", packet.header.PacketNumber, len(packet.raw), s.srcConnID, packet.EncryptionLevel())
+		packet.header.Log(s.logger)
+	}
 	if packet.ack != nil {
 		wire.LogFrame(s.logger, packet.ack, true)
 	}
