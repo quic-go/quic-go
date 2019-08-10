@@ -666,7 +666,7 @@ func (h *sentPacketHandler) ResetForRetry() error {
 func (h *sentPacketHandler) GetStats() *quictrace.TransportState {
 	return &quictrace.TransportState{
 		MinRTT:           h.rttStats.MinRTT(),
-		SmoothedRTT:      h.rttStats.SmoothedOrInitialRTT(),
+		SmoothedRTT:      h.rttStats.SmoothedRTT(),
 		LatestRTT:        h.rttStats.LatestRTT(),
 		BytesInFlight:    h.bytesInFlight,
 		CongestionWindow: h.congestion.GetCongestionWindow(),
