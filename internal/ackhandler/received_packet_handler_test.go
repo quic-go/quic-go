@@ -25,12 +25,12 @@ var _ = Describe("Received Packet Handler", func() {
 
 	It("generates ACKs for different packet number spaces", func() {
 		sendTime := time.Now().Add(-time.Second)
-		handler.ReceivedPacket(2, protocol.EncryptionInitial, sendTime, true)
-		handler.ReceivedPacket(1, protocol.EncryptionHandshake, sendTime, true)
-		handler.ReceivedPacket(5, protocol.Encryption1RTT, sendTime, true)
-		handler.ReceivedPacket(3, protocol.EncryptionInitial, sendTime, true)
-		handler.ReceivedPacket(2, protocol.EncryptionHandshake, sendTime, true)
-		handler.ReceivedPacket(4, protocol.Encryption1RTT, sendTime, true)
+		Expect(handler.ReceivedPacket(2, protocol.EncryptionInitial, sendTime, true)).To(Succeed())
+		Expect(handler.ReceivedPacket(1, protocol.EncryptionHandshake, sendTime, true)).To(Succeed())
+		Expect(handler.ReceivedPacket(5, protocol.Encryption1RTT, sendTime, true)).To(Succeed())
+		Expect(handler.ReceivedPacket(3, protocol.EncryptionInitial, sendTime, true)).To(Succeed())
+		Expect(handler.ReceivedPacket(2, protocol.EncryptionHandshake, sendTime, true)).To(Succeed())
+		Expect(handler.ReceivedPacket(4, protocol.Encryption1RTT, sendTime, true)).To(Succeed())
 		initialAck := handler.GetAckFrame(protocol.EncryptionInitial)
 		Expect(initialAck).ToNot(BeNil())
 		Expect(initialAck.AckRanges).To(HaveLen(1))
@@ -50,18 +50,32 @@ var _ = Describe("Received Packet Handler", func() {
 
 	It("uses the same packet number space for 0-RTT and 1-RTT packets", func() {
 		sendTime := time.Now().Add(-time.Second)
-		handler.ReceivedPacket(2, protocol.Encryption0RTT, sendTime, true)
-		handler.ReceivedPacket(3, protocol.Encryption1RTT, sendTime, true)
+		Expect(handler.ReceivedPacket(2, protocol.Encryption0RTT, sendTime, true)).To(Succeed())
+		Expect(handler.ReceivedPacket(3, protocol.Encryption1RTT, sendTime, true)).To(Succeed())
 		ack := handler.GetAckFrame(protocol.Encryption1RTT)
 		Expect(ack).ToNot(BeNil())
 		Expect(ack.AckRanges).To(HaveLen(1))
 		Expect(ack.AckRanges[0]).To(Equal(wire.AckRange{Smallest: 2, Largest: 3}))
 	})
 
+	It("rejects 0-RTT packets with higher packet numbers than 1-RTT packets", func() {
+		sendTime := time.Now()
+		Expect(handler.ReceivedPacket(10, protocol.Encryption0RTT, sendTime, true)).To(Succeed())
+		Expect(handler.ReceivedPacket(11, protocol.Encryption1RTT, sendTime, true)).To(Succeed())
+		Expect(handler.ReceivedPacket(12, protocol.Encryption0RTT, sendTime, true)).To(MatchError("received packet number 12 on a 0-RTT packet after receiving 11 on a 1-RTT packet"))
+	})
+
+	It("allows reordered 0-RTT packets", func() {
+		sendTime := time.Now()
+		Expect(handler.ReceivedPacket(10, protocol.Encryption0RTT, sendTime, true)).To(Succeed())
+		Expect(handler.ReceivedPacket(12, protocol.Encryption1RTT, sendTime, true)).To(Succeed())
+		Expect(handler.ReceivedPacket(11, protocol.Encryption0RTT, sendTime, true)).To(Succeed())
+	})
+
 	It("drops Initial packets", func() {
 		sendTime := time.Now().Add(-time.Second)
-		handler.ReceivedPacket(2, protocol.EncryptionInitial, sendTime, true)
-		handler.ReceivedPacket(1, protocol.EncryptionHandshake, sendTime, true)
+		Expect(handler.ReceivedPacket(2, protocol.EncryptionInitial, sendTime, true)).To(Succeed())
+		Expect(handler.ReceivedPacket(1, protocol.EncryptionHandshake, sendTime, true)).To(Succeed())
 		Expect(handler.GetAckFrame(protocol.EncryptionInitial)).ToNot(BeNil())
 		handler.DropPackets(protocol.EncryptionInitial)
 		Expect(handler.GetAckFrame(protocol.EncryptionInitial)).To(BeNil())
@@ -70,8 +84,8 @@ var _ = Describe("Received Packet Handler", func() {
 
 	It("drops Handshake packets", func() {
 		sendTime := time.Now().Add(-time.Second)
-		handler.ReceivedPacket(1, protocol.EncryptionHandshake, sendTime, true)
-		handler.ReceivedPacket(2, protocol.Encryption1RTT, sendTime, true)
+		Expect(handler.ReceivedPacket(1, protocol.EncryptionHandshake, sendTime, true)).To(Succeed())
+		Expect(handler.ReceivedPacket(2, protocol.Encryption1RTT, sendTime, true)).To(Succeed())
 		Expect(handler.GetAckFrame(protocol.EncryptionHandshake)).ToNot(BeNil())
 		handler.DropPackets(protocol.EncryptionInitial)
 		Expect(handler.GetAckFrame(protocol.EncryptionHandshake)).To(BeNil())
