@@ -510,9 +510,23 @@ func (p *packetPacker) getShortHeader(kp protocol.KeyPhaseBit) *wire.ExtendedHea
 func (p *packetPacker) getLongHeader(encLevel protocol.EncryptionLevel) *wire.ExtendedHeader {
 	pn, pnLen := p.pnManager.PeekPacketNumber(encLevel)
 	hdr := &wire.ExtendedHeader{}
+	hdr.IsLongHeader = true
+	hdr.Version = p.version
+	hdr.SrcConnectionID = p.srcConnID
+	hdr.DestConnectionID = p.getDestConnID()
+
+	// Set the length to the maximum packet size.
+	// Since it is encoded as a varint, this guarantees us that the header will end up at most as big as GetLength() returns.
+	hdr.Length = p.maxPacketSize
+
 	hdr.PacketNumber = pn
 	hdr.PacketNumberLen = pnLen
-	hdr.DestConnectionID = p.getDestConnID()
+	if encLevel != protocol.Encryption0RTT {
+		// Always send long header packets with the maximum packet number length.
+		// This simplifies retransmissions: Since the header can't get any larger,
+		// we don't need to split CRYPTO frames.
+		hdr.PacketNumberLen = protocol.PacketNumberLen4
+	}
 
 	switch encLevel {
 	case protocol.EncryptionInitial:
@@ -523,17 +537,6 @@ func (p *packetPacker) getLongHeader(encLevel protocol.EncryptionLevel) *wire.Ex
 	case protocol.Encryption0RTT:
 		hdr.Type = protocol.PacketType0RTT
 	}
-
-	hdr.Version = p.version
-	hdr.IsLongHeader = true
-	// Always send long header packets with the maximum packet number length.
-	// This simplifies retransmissions: Since the header can't get any larger,
-	// we don't need to split CRYPTO frames.
-	hdr.PacketNumberLen = protocol.PacketNumberLen4
-	hdr.SrcConnectionID = p.srcConnID
-	// Set the length to the maximum packet size.
-	// Since it is encoded as a varint, this guarantees us that the header will end up at most as big as GetLength() returns.
-	hdr.Length = p.maxPacketSize
 
 	return hdr
 }
