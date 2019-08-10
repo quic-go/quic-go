@@ -241,6 +241,39 @@ var _ = Describe("Packet packer", func() {
 			})
 		})
 
+		Context("packing 0-RTT packets", func() {
+			BeforeEach(func() {
+				packer.perspective = protocol.PerspectiveClient
+				sealingManager.EXPECT().GetInitialSealer().Return(nil, nil).AnyTimes()
+				sealingManager.EXPECT().GetHandshakeSealer().Return(nil, nil).AnyTimes()
+				sealingManager.EXPECT().Get1RTTSealer().Return(nil, handshake.ErrKeysNotYetAvailable).AnyTimes()
+				initialStream.EXPECT().HasData().AnyTimes()
+				ackFramer.EXPECT().GetAckFrame(protocol.EncryptionInitial).AnyTimes()
+				handshakeStream.EXPECT().HasData().AnyTimes()
+				ackFramer.EXPECT().GetAckFrame(protocol.EncryptionHandshake).AnyTimes()
+				ackFramer.EXPECT().GetAckFrame(protocol.Encryption1RTT).AnyTimes()
+			})
+
+			It("packs a 0-RTT packet", func() {
+				sealingManager.EXPECT().Get0RTTSealer().Return(sealer, nil).AnyTimes()
+				pnManager.EXPECT().PeekPacketNumber(protocol.Encryption0RTT).Return(protocol.PacketNumber(0x42), protocol.PacketNumberLen2)
+				pnManager.EXPECT().PopPacketNumber(protocol.Encryption0RTT).Return(protocol.PacketNumber(0x42))
+				cf := ackhandler.Frame{Frame: &wire.MaxDataFrame{ByteOffset: 0x1337}}
+				framer.EXPECT().AppendControlFrames(nil, gomock.Any()).DoAndReturn(func(frames []ackhandler.Frame, _ protocol.ByteCount) ([]ackhandler.Frame, protocol.ByteCount) {
+					return append(frames, cf), cf.Length(packer.version)
+				})
+				framer.EXPECT().AppendStreamFrames(gomock.Any(), gomock.Any()).DoAndReturn(func(frames []ackhandler.Frame, _ protocol.ByteCount) ([]ackhandler.Frame, protocol.ByteCount) {
+					return frames, 0
+				})
+				p, err := packer.PackPacket()
+				Expect(p).ToNot(BeNil())
+				Expect(err).ToNot(HaveOccurred())
+				Expect(p.header.Type).To(Equal(protocol.PacketType0RTT))
+				Expect(p.EncryptionLevel()).To(Equal(protocol.Encryption0RTT))
+				Expect(p.frames).To(Equal([]ackhandler.Frame{cf}))
+			})
+		})
+
 		Context("packing normal packets", func() {
 			BeforeEach(func() {
 				sealingManager.EXPECT().GetInitialSealer().Return(nil, nil).AnyTimes()
