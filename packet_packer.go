@@ -295,7 +295,9 @@ func (p *packetPacker) PackRetransmission(packet *ackhandler.Packet) ([]*packedP
 			frames = append(frames, frameToAdd)
 		}
 		if sf, ok := frames[len(frames)-1].(*wire.StreamFrame); ok {
+			sfLen := sf.Length(p.version)
 			sf.DataLenPresent = false
+			length += sf.Length(p.version) - sfLen
 		}
 		p, err := p.writeAndSealPacket(hdr, payload{frames: frames, length: length}, packet.EncryptionLevel, sealer)
 		if err != nil {
