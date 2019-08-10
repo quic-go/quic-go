@@ -114,7 +114,11 @@ func (f *framerI) AppendStreamFrames(frames []wire.Frame, maxLen protocol.ByteCo
 	}
 	f.mutex.Unlock()
 	if frameAdded {
-		frames[len(frames)-1].(*wire.StreamFrame).DataLenPresent = false
+		lastFrame := frames[len(frames)-1].(*wire.StreamFrame)
+		lastFrameLen := lastFrame.Length(f.version)
+		// acount for the smaller size of the last STREAM frame
+		lastFrame.DataLenPresent = false
+		length += lastFrame.Length(f.version) - lastFrameLen
 	}
 	return frames, length
 }
