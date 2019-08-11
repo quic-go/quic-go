@@ -3,6 +3,7 @@ package quic
 import (
 	"bytes"
 	"fmt"
+	"time"
 
 	"github.com/lucas-clemente/quic-go/internal/handshake"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
@@ -39,7 +40,7 @@ func newPacketUnpacker(cs handshake.CryptoSetup, version protocol.VersionNumber)
 	}
 }
 
-func (u *packetUnpacker) Unpack(hdr *wire.Header, data []byte) (*unpackedPacket, error) {
+func (u *packetUnpacker) Unpack(hdr *wire.Header, rcvTime time.Time, data []byte) (*unpackedPacket, error) {
 	var encLevel protocol.EncryptionLevel
 	var extHdr *wire.ExtendedHeader
 	var decrypted []byte
@@ -73,7 +74,7 @@ func (u *packetUnpacker) Unpack(hdr *wire.Header, data []byte) (*unpackedPacket,
 		if err != nil {
 			return nil, err
 		}
-		extHdr, decrypted, err = u.unpackShortHeaderPacket(opener, hdr, data)
+		extHdr, decrypted, err = u.unpackShortHeaderPacket(opener, hdr, rcvTime, data)
 		if err != nil {
 			return nil, err
 		}
@@ -109,7 +110,12 @@ func (u *packetUnpacker) unpackLongHeaderPacket(opener handshake.LongHeaderOpene
 	return extHdr, decrypted, nil
 }
 
-func (u *packetUnpacker) unpackShortHeaderPacket(opener handshake.ShortHeaderOpener, hdr *wire.Header, data []byte) (*wire.ExtendedHeader, []byte, error) {
+func (u *packetUnpacker) unpackShortHeaderPacket(
+	opener handshake.ShortHeaderOpener,
+	hdr *wire.Header,
+	rcvTime time.Time,
+	data []byte,
+) (*wire.ExtendedHeader, []byte, error) {
 	extHdr, parseErr := u.unpack(opener, hdr, data)
 	// If the reserved bits are set incorrectly, we still need to continue unpacking.
 	// This avoids a timing side-channel, which otherwise might allow an attacker
@@ -118,7 +124,7 @@ func (u *packetUnpacker) unpackShortHeaderPacket(opener handshake.ShortHeaderOpe
 		return nil, nil, parseErr
 	}
 	extHdrLen := extHdr.GetLength(u.version)
-	decrypted, err := opener.Open(data[extHdrLen:extHdrLen], data[extHdrLen:], extHdr.PacketNumber, extHdr.KeyPhase, data[:extHdrLen])
+	decrypted, err := opener.Open(data[extHdrLen:extHdrLen], data[extHdrLen:], rcvTime, extHdr.PacketNumber, extHdr.KeyPhase, data[:extHdrLen])
 	if err != nil {
 		return nil, nil, err
 	}

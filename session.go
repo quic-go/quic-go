@@ -24,7 +24,7 @@ import (
 )
 
 type unpacker interface {
-	Unpack(hdr *wire.Header, data []byte) (*unpackedPacket, error)
+	Unpack(hdr *wire.Header, rcvTime time.Time, data []byte) (*unpackedPacket, error)
 }
 
 type streamGetter interface {
@@ -588,7 +588,7 @@ func (s *session) handleSinglePacket(p *receivedPacket, hdr *wire.Header) bool /
 		return false
 	}
 
-	packet, err := s.unpacker.Unpack(hdr, p.data)
+	packet, err := s.unpacker.Unpack(hdr, p.rcvTime, p.data)
 	if err != nil {
 		switch err {
 		case handshake.ErrKeysDropped:

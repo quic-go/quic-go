@@ -82,122 +82,123 @@ var _ = Describe("Updatable AEAD", func() {
 
 		It("encrypts and decrypts a message", func() {
 			encrypted := server.Seal(nil, msg, 0x1337, ad)
-			opened, err := client.Open(nil, encrypted, 0x1337, protocol.KeyPhaseZero, ad)
+			opened, err := client.Open(nil, encrypted, time.Now(), 0x1337, protocol.KeyPhaseZero, ad)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(opened).To(Equal(msg))
 		})
 
 		It("fails to open a message if the associated data is not the same", func() {
 			encrypted := client.Seal(nil, msg, 0x1337, ad)
-			_, err := server.Open(nil, encrypted, 0x1337, protocol.KeyPhaseZero, []byte("wrong ad"))
+			_, err := server.Open(nil, encrypted, time.Now(), 0x1337, protocol.KeyPhaseZero, []byte("wrong ad"))
 			Expect(err).To(MatchError(ErrDecryptionFailed))
 		})
 
 		It("fails to open a message if the packet number is not the same", func() {
 			encrypted := server.Seal(nil, msg, 0x1337, ad)
-			_, err := client.Open(nil, encrypted, 0x42, protocol.KeyPhaseZero, ad)
+			_, err := client.Open(nil, encrypted, time.Now(), 0x42, protocol.KeyPhaseZero, ad)
 			Expect(err).To(MatchError(ErrDecryptionFailed))
 		})
 
 		Context("key updates", func() {
 			Context("receiving key updates", func() {
 				It("updates keys", func() {
+					now := time.Now()
 					Expect(server.KeyPhase()).To(Equal(protocol.KeyPhaseZero))
 					encrypted0 := server.Seal(nil, msg, 0x1337, ad)
-					server.rollKeys()
+					server.rollKeys(now)
 					Expect(server.KeyPhase()).To(Equal(protocol.KeyPhaseOne))
 					encrypted1 := server.Seal(nil, msg, 0x1337, ad)
 					Expect(encrypted0).ToNot(Equal(encrypted1))
 					// expect opening to fail. The client didn't roll keys yet
-					_, err := client.Open(nil, encrypted1, 0x1337, protocol.KeyPhaseZero, ad)
+					_, err := client.Open(nil, encrypted1, now, 0x1337, protocol.KeyPhaseZero, ad)
 					Expect(err).To(MatchError(ErrDecryptionFailed))
-					client.rollKeys()
-					decrypted, err := client.Open(nil, encrypted1, 0x1337, protocol.KeyPhaseOne, ad)
+					client.rollKeys(now)
+					decrypted, err := client.Open(nil, encrypted1, now, 0x1337, protocol.KeyPhaseOne, ad)
 					Expect(err).ToNot(HaveOccurred())
 					Expect(decrypted).To(Equal(msg))
 				})
 
 				It("updates the keys when receiving a packet with the next key phase", func() {
+					now := time.Now()
 					// receive the first packet at key phase zero
 					encrypted0 := client.Seal(nil, msg, 0x42, ad)
-					decrypted, err := server.Open(nil, encrypted0, 0x42, protocol.KeyPhaseZero, ad)
+					decrypted, err := server.Open(nil, encrypted0, now, 0x42, protocol.KeyPhaseZero, ad)
 					Expect(err).ToNot(HaveOccurred())
 					Expect(decrypted).To(Equal(msg))
 					// send one packet at key phase zero
 					Expect(server.KeyPhase()).To(Equal(protocol.KeyPhaseZero))
 					_ = server.Seal(nil, msg, 0x1, ad)
 					// now received a message at key phase one
-					client.rollKeys()
+					client.rollKeys(now)
 					encrypted1 := client.Seal(nil, msg, 0x43, ad)
-					decrypted, err = server.Open(nil, encrypted1, 0x43, protocol.KeyPhaseOne, ad)
+					decrypted, err = server.Open(nil, encrypted1, now, 0x43, protocol.KeyPhaseOne, ad)
 					Expect(err).ToNot(HaveOccurred())
 					Expect(decrypted).To(Equal(msg))
 					Expect(server.KeyPhase()).To(Equal(protocol.KeyPhaseOne))
 				})
 
 				It("opens a reordered packet with the old keys after an update", func() {
-					rttStats.UpdateRTT(time.Hour, 0, time.Time{}) // make sure the keys don't get dropped yet
+					now := time.Now()
 					encrypted01 := client.Seal(nil, msg, 0x42, ad)
 					encrypted02 := client.Seal(nil, msg, 0x43, ad)
 					// receive the first packet with key phase 0
-					_, err := server.Open(nil, encrypted01, 0x42, protocol.KeyPhaseZero, ad)
+					_, err := server.Open(nil, encrypted01, now, 0x42, protocol.KeyPhaseZero, ad)
 					Expect(err).ToNot(HaveOccurred())
 					// send one packet at key phase zero
 					_ = server.Seal(nil, msg, 0x1, ad)
 					// now receive a packet with key phase 1
-					client.rollKeys()
+					client.rollKeys(now)
 					encrypted1 := client.Seal(nil, msg, 0x44, ad)
 					Expect(server.KeyPhase()).To(Equal(protocol.KeyPhaseZero))
-					_, err = server.Open(nil, encrypted1, 0x44, protocol.KeyPhaseOne, ad)
+					_, err = server.Open(nil, encrypted1, now, 0x44, protocol.KeyPhaseOne, ad)
 					Expect(err).ToNot(HaveOccurred())
 					Expect(server.KeyPhase()).To(Equal(protocol.KeyPhaseOne))
 					// now receive a reordered packet with key phase 0
-					decrypted, err := server.Open(nil, encrypted02, 0x43, protocol.KeyPhaseZero, ad)
+					decrypted, err := server.Open(nil, encrypted02, now, 0x43, protocol.KeyPhaseZero, ad)
 					Expect(err).ToNot(HaveOccurred())
 					Expect(decrypted).To(Equal(msg))
 					Expect(server.KeyPhase()).To(Equal(protocol.KeyPhaseOne))
 				})
 
 				It("drops keys 3 PTOs after a key update", func() {
-					rttStats.UpdateRTT(10*time.Millisecond, 0, time.Now())
+					now := time.Now()
+					rttStats.UpdateRTT(10*time.Millisecond, 0, now)
 					pto := rttStats.PTO()
-					Expect(pto).To(BeNumerically("<", 50*time.Millisecond))
 					encrypted01 := client.Seal(nil, msg, 0x42, ad)
 					encrypted02 := client.Seal(nil, msg, 0x43, ad)
 					// receive the first packet with key phase 0
-					_, err := server.Open(nil, encrypted01, 0x42, protocol.KeyPhaseZero, ad)
+					_, err := server.Open(nil, encrypted01, now, 0x42, protocol.KeyPhaseZero, ad)
 					Expect(err).ToNot(HaveOccurred())
 					// send one packet at key phase zero
 					_ = server.Seal(nil, msg, 0x1, ad)
 					// now receive a packet with key phase 1
-					client.rollKeys()
+					client.rollKeys(now)
 					encrypted1 := client.Seal(nil, msg, 0x44, ad)
 					Expect(server.KeyPhase()).To(Equal(protocol.KeyPhaseZero))
-					_, err = server.Open(nil, encrypted1, 0x44, protocol.KeyPhaseOne, ad)
+					_, err = server.Open(nil, encrypted1, now, 0x44, protocol.KeyPhaseOne, ad)
 					Expect(err).ToNot(HaveOccurred())
 					Expect(server.KeyPhase()).To(Equal(protocol.KeyPhaseOne))
 					// now receive a reordered packet with key phase 0
-					time.Sleep(3*pto + 5*time.Millisecond)
-					_, err = server.Open(nil, encrypted02, 0x43, protocol.KeyPhaseZero, ad)
+					_, err = server.Open(nil, encrypted02, now.Add(3*pto).Add(time.Nanosecond), 0x43, protocol.KeyPhaseZero, ad)
 					Expect(err).To(MatchError(ErrKeysDropped))
 				})
 
 				It("errors when the peer starts with key phase 1", func() {
-					client.rollKeys()
+					client.rollKeys(time.Now())
 					encrypted := client.Seal(nil, msg, 0x1337, ad)
-					_, err := server.Open(nil, encrypted, 0x1337, protocol.KeyPhaseOne, ad)
+					_, err := server.Open(nil, encrypted, time.Now(), 0x1337, protocol.KeyPhaseOne, ad)
 					Expect(err).To(MatchError("PROTOCOL_VIOLATION: wrong initial keyphase"))
 				})
 
 				It("errors when the peer updates keys too frequently", func() {
 					// receive the first packet at key phase zero
 					encrypted0 := client.Seal(nil, msg, 0x42, ad)
-					_, err := server.Open(nil, encrypted0, 0x42, protocol.KeyPhaseZero, ad)
+					_, err := server.Open(nil, encrypted0, time.Now(), 0x42, protocol.KeyPhaseZero, ad)
 					Expect(err).ToNot(HaveOccurred())
 					// now receive a packet at key phase one, before having sent any packets
-					client.rollKeys()
+					client.rollKeys(time.Now())
 					encrypted1 := client.Seal(nil, msg, 0x42, ad)
-					_, err = server.Open(nil, encrypted1, 0x42, protocol.KeyPhaseOne, ad)
+					_, err = server.Open(nil, encrypted1, time.Now(), 0x42, protocol.KeyPhaseOne, ad)
 					Expect(err).To(MatchError("PROTOCOL_VIOLATION: keys updated too quickly"))
 				})
 			})
@@ -227,7 +228,7 @@ var _ = Describe("Updatable AEAD", func() {
 						pn := protocol.PacketNumber(i)
 						Expect(server.KeyPhase()).To(Equal(protocol.KeyPhaseZero))
 						encrypted := client.Seal(nil, msg, pn, ad)
-						_, err := server.Open(nil, encrypted, pn, protocol.KeyPhaseZero, ad)
+						_, err := server.Open(nil, encrypted, time.Now(), pn, protocol.KeyPhaseZero, ad)
 						Expect(err).ToNot(HaveOccurred())
 					}
 					// no update allowed before receiving an acknowledgement for the current key phase
