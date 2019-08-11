@@ -720,18 +720,6 @@ var _ = Describe("Crypto Setup TLS", func() {
 
 				Expect(server.ConnectionState().DidResume).To(BeTrue())
 				Expect(client.ConnectionState().DidResume).To(BeTrue())
-				opener, err := server.Get0RTTOpener()
-				Expect(err).ToNot(HaveOccurred())
-				Expect(opener).ToNot(BeNil())
-				sealer, err := client.Get0RTTSealer()
-				Expect(err).ToNot(HaveOccurred())
-				Expect(sealer).ToNot(BeNil())
-				// use the 0-RTT sealer and opener to encrypt and decrypt a message
-				plaintext := []byte("Lorem ipsum dolor sit amet")
-				msg := sealer.Seal(nil, plaintext, 0x1337, []byte("foobar"))
-				decrypted, err := opener.Open(nil, msg, 0x1337, []byte("foobar"))
-				Expect(err).ToNot(HaveOccurred())
-				Expect(decrypted).To(Equal(plaintext))
 			})
 		})
 	})
