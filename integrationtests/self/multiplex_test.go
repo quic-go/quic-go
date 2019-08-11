@@ -35,7 +35,7 @@ var _ = Describe("Multiplexing", func() {
 							str, err := sess.OpenStream()
 							Expect(err).ToNot(HaveOccurred())
 							defer str.Close()
-							_, err = str.Write(testserver.PRDataLong)
+							_, err = str.Write(testserver.PRData)
 							Expect(err).ToNot(HaveOccurred())
 						}()
 					}
@@ -51,11 +51,12 @@ var _ = Describe("Multiplexing", func() {
 					&quic.Config{Versions: []protocol.VersionNumber{version}},
 				)
 				Expect(err).ToNot(HaveOccurred())
+				defer sess.Close()
 				str, err := sess.AcceptStream(context.Background())
 				Expect(err).ToNot(HaveOccurred())
 				data, err := ioutil.ReadAll(str)
 				Expect(err).ToNot(HaveOccurred())
-				Expect(data).To(Equal(testserver.PRDataLong))
+				Expect(data).To(Equal(testserver.PRData))
 			}
 
 			Context("multiplexing clients on the same conn", func() {
