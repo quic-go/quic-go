@@ -15,6 +15,7 @@ import (
 	quicproxy "github.com/lucas-clemente/quic-go/integrationtests/tools/proxy"
 	"github.com/lucas-clemente/quic-go/integrationtests/tools/testserver"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
+	"github.com/lucas-clemente/quic-go/internal/qerr"
 	"github.com/lucas-clemente/quic-go/internal/testutils"
 	"github.com/lucas-clemente/quic-go/internal/wire"
 	. "github.com/onsi/ginkgo"
@@ -288,8 +289,6 @@ var _ = Describe("MITM test", func() {
 				// from serverConn to client's remoteAddr
 				// expects hdr from an Initial packet intercepted from client
 				sendForgedVersionNegotationPacket := func(conn net.PacketConn, remoteAddr net.Addr, hdr *wire.Header) {
-					defer GinkgoRecover()
-
 					// Create fake version negotiation packet with no supported versions
 					versions := []protocol.VersionNumber{}
 					packet, _ := wire.ComposeVersionNegotiation(hdr.SrcConnectionID, hdr.DestConnectionID, versions)
@@ -303,8 +302,6 @@ var _ = Describe("MITM test", func() {
 				// from serverConn to client's remoteAddr
 				// expects hdr from an Initial packet intercepted from client
 				sendForgedRetryPacket := func(conn net.PacketConn, remoteAddr net.Addr, hdr *wire.Header) {
-					defer GinkgoRecover()
-
 					var x byte = 0x12
 					fakeSrcConnID := protocol.ConnectionID{x, x, x, x, x, x, x, x}
 					retryPacket := testutils.ComposeRetryPacket(fakeSrcConnID, hdr.SrcConnectionID, hdr.DestConnectionID, []byte("token"), hdr.Version)
@@ -316,8 +313,6 @@ var _ = Describe("MITM test", func() {
 				// Send a forged Initial packet with no frames to client
 				// expects hdr from an Initial packet intercepted from client
 				sendForgedInitialPacket := func(conn net.PacketConn, remoteAddr net.Addr, hdr *wire.Header) {
-					defer GinkgoRecover()
-
 					initialPacket := testutils.ComposeInitialPacket(hdr.DestConnectionID, hdr.SrcConnectionID, hdr.Version, hdr.DestConnectionID, nil)
 					_, err := conn.WriteTo(initialPacket, remoteAddr)
 					Expect(err).ToNot(HaveOccurred())
@@ -326,8 +321,6 @@ var _ = Describe("MITM test", func() {
 				// Send a forged Initial packet with ACK for random packet to client
 				// expects hdr from an Initial packet intercepted from client
 				sendForgedInitialPacketWithAck := func(conn net.PacketConn, remoteAddr net.Addr, hdr *wire.Header) {
-					defer GinkgoRecover()
-
 					// Fake Initial with ACK for packet 2 (unsent)
 					ackFrame := testutils.ComposeAckFrame(2, 2)
 					initialPacket := testutils.ComposeInitialPacket(hdr.DestConnectionID, hdr.SrcConnectionID, hdr.Version, hdr.DestConnectionID, []wire.Frame{ackFrame})
@@ -335,9 +328,7 @@ var _ = Describe("MITM test", func() {
 					Expect(err).ToNot(HaveOccurred())
 				}
 
-				// runTestFail succeeds if an error occurs in dialing
-				// expects a proxy delay function that runs every time a packet is received
-				runTestFail := func(delayCb quicproxy.DelayCallback) {
+				runTest := func(delayCb quicproxy.DelayCallback) error {
 					startServerAndProxy(delayCb, nil)
 					raddr, err := net.ResolveUDPAddr("udp", fmt.Sprintf("localhost:%d", proxy.LocalPort()))
 					Expect(err).ToNot(HaveOccurred())
@@ -349,15 +340,15 @@ var _ = Describe("MITM test", func() {
 						&quic.Config{
 							Versions:           []protocol.VersionNumber{version},
 							ConnectionIDLength: connIDLen,
+							HandshakeTimeout:   2 * time.Second,
 						},
 					)
-					Expect(err).To(HaveOccurred())
+					return err
 				}
 
 				// fails immediately because client connection closes when it can't find compatible version
 				It("fails when a forged version negotiation packet is sent to client", func() {
 					delayCb := func(dir quicproxy.Direction, raw []byte) time.Duration {
-						fmt.Println()
 						if dir == quicproxy.DirectionIncoming {
 							defer GinkgoRecover()
 
@@ -368,18 +359,20 @@ var _ = Describe("MITM test", func() {
 								return 0
 							}
 
-							go sendForgedVersionNegotationPacket(serverConn, clientConn.LocalAddr(), hdr)
+							sendForgedVersionNegotationPacket(serverConn, clientConn.LocalAddr(), hdr)
 						}
 						return rtt / 2
 					}
-					runTestFail(delayCb)
+					err := runTest(delayCb)
+					Expect(err).To(HaveOccurred())
+					Expect(err.Error()).To(ContainSubstring("No compatible QUIC version found."))
 				})
 
 				// times out, because client doesn't accept subsequent real retry packets from server
 				// as it has already accepted a retry.
 				// TODO: determine behavior when server does not send Retry packets
-				initialPacketIntercepted := false
-				It("fails when a forged retry packet with modified srcConnID is sent to client", func() {
+				It("fails when a forged Retry packet with modified srcConnID is sent to client", func() {
+					var initialPacketIntercepted bool
 					delayCb := func(dir quicproxy.Direction, raw []byte) time.Duration {
 						if dir == quicproxy.DirectionIncoming && !initialPacketIntercepted {
 							defer GinkgoRecover()
@@ -392,11 +385,13 @@ var _ = Describe("MITM test", func() {
 							}
 
 							initialPacketIntercepted = true
-							go sendForgedRetryPacket(serverConn, clientConn.LocalAddr(), hdr)
+							sendForgedRetryPacket(serverConn, clientConn.LocalAddr(), hdr)
 						}
 						return rtt / 2
 					}
-					runTestFail(delayCb)
+					err := runTest(delayCb)
+					Expect(err).To(HaveOccurred())
+					Expect(err.(net.Error).Timeout()).To(BeTrue())
 				})
 
 				// times out, because client doesn't accept real retry packets from server because
@@ -414,11 +409,13 @@ var _ = Describe("MITM test", func() {
 								return 0
 							}
 
-							go sendForgedInitialPacket(serverConn, clientConn.LocalAddr(), hdr)
+							sendForgedInitialPacket(serverConn, clientConn.LocalAddr(), hdr)
 						}
 						return rtt
 					}
-					runTestFail(delayCb)
+					err := runTest(delayCb)
+					Expect(err).To(HaveOccurred())
+					Expect(err.(net.Error).Timeout()).To(BeTrue())
 				})
 
 				// client connection closes immediately on receiving ack for unsent packet
@@ -434,11 +431,15 @@ var _ = Describe("MITM test", func() {
 								return 0
 							}
 
-							go sendForgedInitialPacketWithAck(serverConn, clientConn.LocalAddr(), hdr)
+							sendForgedInitialPacketWithAck(serverConn, clientConn.LocalAddr(), hdr)
 						}
 						return rtt
 					}
-					runTestFail(delayCb)
+					err := runTest(delayCb)
+					Expect(err).To(HaveOccurred())
+					Expect(err).To(BeAssignableToTypeOf(&qerr.QuicError{}))
+					Expect(err.(*qerr.QuicError).ErrorCode).To(Equal(qerr.ProtocolViolation))
+					Expect(err.Error()).To(ContainSubstring("Received ACK for an unsent packet"))
 				})
 
 			})
