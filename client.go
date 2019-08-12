@@ -359,8 +359,8 @@ func (c *client) handleVersionNegotiationPacket(p *receivedPacket) {
 		c.mutex.Unlock()
 		time.AfterFunc(c.config.AttackTimeout, func() {
 			if (sess.lastPacketReceivedTime).Sub(timerStart) == 0 {
-				c.session.destroy(fmt.Errorf("No compatible QUIC version found. We support %s, server offered %s", c.config.Versions, hdr.SupportedVersions))
-				c.logger.Debugf("No compatible QUIC version found.")
+				c.session.destroy(fmt.Errorf("Timed out: No compatible QUIC version found. We support %s, server offered %s", c.config.Versions, hdr.SupportedVersions))
+				c.logger.Debugf("Timed out: No compatible QUIC version found.")
 			}
 		})
 		return

@@ -1766,6 +1766,23 @@ var _ = Describe("Client Session", func() {
 			Expect(sess.handlePacketImpl(wrapPacket(initialPacket))).To(BeFalse())
 		})
 
+		It("ignores Initial-level unparseable frames with mitigations on", func() {
+			sess.config.AttackTimeout = 5 * time.Second
+			payload := make([]byte, protocol.MinInitialPacketSize)
+			payload[0] = byte(31)
+			initialPacket := testutils.ComposeInitialByPayload(sess.destConnID, sess.srcConnID, sess.version, sess.destConnID, payload)
+			Expect(sess.handlePacketImpl(wrapPacket(initialPacket))).To(BeFalse())
+		})
+
+		It("fails on Initial-level unparseable frames with mitigations off", func() {
+			sessionRunner.EXPECT().Retire(gomock.Any())
+			sess.config.AttackTimeout = -1
+			payload := make([]byte, protocol.MinInitialPacketSize)
+			payload[0] = byte(31)
+			initialPacket := testutils.ComposeInitialByPayload(sess.destConnID, sess.srcConnID, sess.version, sess.destConnID, payload)
+			Expect(sess.handlePacketImpl(wrapPacket(initialPacket))).To(BeFalse())
+		})
+
 		// Illustrates that an injected Initial with a CONNECTION_CLOSE frame causes
 		// the connection to immediately break down
 		It("fails on Initial-level CONNECTION_CLOSE frame", func() {
