@@ -24,16 +24,22 @@ env:
 # second part of the GOARCH workaround
 # now actually set the GOARCH env variable to the value of the temporary variable set earlier
 before_install:
-  - go get golang.org/x/tools/cmd/cover
-  - go get github.com/onsi/ginkgo/ginkgo
-  - go get github.com/onsi/gomega
+  - travis_retry go get golang.org/x/tools/cmd/cover
+  - travis_retry go get github.com/onsi/ginkgo/ginkgo
+  - travis_retry go get github.com/onsi/gomega
   - export GOARCH=$TRAVIS_GOARCH
   - go env # for debugging
+  - travis_retry go get -t ./...
   - "export DISPLAY=:99.0"
   - "Xvfb $DISPLAY &> /dev/null &"
 
 script:
+  - | 
+    if [ ${TESTMODE} == "lint" ]; then
+      travis_retry curl -sfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s v1.15.0
+    fi
   - .travis/script.sh
+
 
 after_success:
   - .travis/after_success.sh
