@@ -80,22 +80,25 @@ var _ = Describe("Framer", func() {
 		It("returns STREAM frames", func() {
 			streamGetter.EXPECT().GetOrOpenSendStream(id1).Return(stream1, nil)
 			f := &wire.StreamFrame{
-				StreamID: id1,
-				Data:     []byte("foobar"),
-				Offset:   42,
+				StreamID:       id1,
+				Data:           []byte("foobar"),
+				Offset:         42,
+				DataLenPresent: true,
 			}
 			stream1.EXPECT().popStreamFrame(gomock.Any()).Return(f, false)
 			framer.AddActiveStream(id1)
 			fs, length := framer.AppendStreamFrames(nil, 1000)
 			Expect(fs).To(Equal([]wire.Frame{f}))
+			Expect(fs[0].(*wire.StreamFrame).DataLenPresent).To(BeFalse())
 			Expect(length).To(Equal(f.Length(version)))
 		})
 
 		It("appends to a frame slice", func() {
 			streamGetter.EXPECT().GetOrOpenSendStream(id1).Return(stream1, nil)
 			f := &wire.StreamFrame{
-				StreamID: id1,
-				Data:     []byte("foobar"),
+				StreamID:       id1,
+				Data:           []byte("foobar"),
+				DataLenPresent: true,
 			}
 			stream1.EXPECT().popStreamFrame(gomock.Any()).Return(f, false)
 			framer.AddActiveStream(id1)
@@ -103,6 +106,7 @@ var _ = Describe("Framer", func() {
 			frames := []wire.Frame{mdf}
 			fs, length := framer.AppendStreamFrames(frames, 1000)
 			Expect(fs).To(Equal([]wire.Frame{mdf, f}))
+			Expect(fs[1].(*wire.StreamFrame).DataLenPresent).To(BeFalse())
 			Expect(length).To(Equal(f.Length(version)))
 		})
 
@@ -110,8 +114,9 @@ var _ = Describe("Framer", func() {
 			streamGetter.EXPECT().GetOrOpenSendStream(id1).Return(nil, nil)
 			streamGetter.EXPECT().GetOrOpenSendStream(id2).Return(stream2, nil)
 			f := &wire.StreamFrame{
-				StreamID: id2,
-				Data:     []byte("foobar"),
+				StreamID:       id2,
+				Data:           []byte("foobar"),
+				DataLenPresent: true,
 			}
 			stream2.EXPECT().popStreamFrame(gomock.Any()).Return(f, false)
 			framer.AddActiveStream(id1)
@@ -124,8 +129,9 @@ var _ = Describe("Framer", func() {
 			streamGetter.EXPECT().GetOrOpenSendStream(id1).Return(stream1, nil)
 			streamGetter.EXPECT().GetOrOpenSendStream(id2).Return(stream2, nil)
 			f := &wire.StreamFrame{
-				StreamID: id2,
-				Data:     []byte("foobar"),
+				StreamID:       id2,
+				Data:           []byte("foobar"),
+				DataLenPresent: true,
 			}
 			stream1.EXPECT().popStreamFrame(gomock.Any()).Return(nil, false)
 			stream2.EXPECT().popStreamFrame(gomock.Any()).Return(f, false)
@@ -287,8 +293,9 @@ var _ = Describe("Framer", func() {
 			streamGetter.EXPECT().GetOrOpenSendStream(id1).Return(stream1, nil)
 			// pop a frame such that the remaining size is one byte less than the minimum STREAM frame size
 			f := &wire.StreamFrame{
-				StreamID: id1,
-				Data:     bytes.Repeat([]byte("f"), int(500-protocol.MinStreamFrameSize)),
+				StreamID:       id1,
+				Data:           bytes.Repeat([]byte("f"), int(500-protocol.MinStreamFrameSize)),
+				DataLenPresent: true,
 			}
 			stream1.EXPECT().popStreamFrame(gomock.Any()).Return(f, false)
 			framer.AddActiveStream(id1)
