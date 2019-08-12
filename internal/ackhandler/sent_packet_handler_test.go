@@ -795,26 +795,11 @@ var _ = Describe("SentPacketHandler", func() {
 			Expect(handler.bytesInFlight).To(BeZero())
 		})
 
-		It("uses early retransmit for crypto packets", func() {
-			now := time.Now()
-			handler.SentPacket(cryptoPacket(&Packet{PacketNumber: 1, SendTime: now.Add(-time.Hour)}))
-			handler.SentPacket(cryptoPacket(&Packet{PacketNumber: 2, SendTime: now.Add(-time.Second)}))
-			Expect(handler.oneRTTPackets.lossTime.IsZero()).To(BeTrue())
-
-			ack := &wire.AckFrame{AckRanges: []wire.AckRange{{Smallest: 2, Largest: 2}}}
-			Expect(handler.ReceivedAck(ack, 1, protocol.EncryptionInitial, now)).To(Succeed())
-			Expect(handler.DequeuePacketForRetransmission()).ToNot(BeNil())
-			Expect(handler.DequeuePacketForRetransmission()).To(BeNil())
-			// no need to set an alarm, since packet 1 was already declared lost
-			Expect(handler.initialPackets.lossTime.IsZero()).To(BeTrue())
-			Expect(handler.bytesInFlight).To(BeZero())
-		})
-
 		It("sets the early retransmit alarm", func() {
 			now := time.Now()
-			handler.SentPacket(ackElicitingPacket(&Packet{PacketNumber: 1, SendTime: now.Add(-2 * time.Second), EncryptionLevel: protocol.Encryption1RTT}))
-			handler.SentPacket(ackElicitingPacket(&Packet{PacketNumber: 2, SendTime: now.Add(-2 * time.Second), EncryptionLevel: protocol.Encryption1RTT}))
-			handler.SentPacket(ackElicitingPacket(&Packet{PacketNumber: 3, SendTime: now.Add(-time.Second), EncryptionLevel: protocol.Encryption1RTT}))
+			handler.SentPacket(ackElicitingPacket(&Packet{PacketNumber: 1, SendTime: now.Add(-2 * time.Second)}))
+			handler.SentPacket(ackElicitingPacket(&Packet{PacketNumber: 2, SendTime: now.Add(-2 * time.Second)}))
+			handler.SentPacket(ackElicitingPacket(&Packet{PacketNumber: 3, SendTime: now.Add(-time.Second)}))
 			Expect(handler.oneRTTPackets.lossTime.IsZero()).To(BeTrue())
 
 			ack := &wire.AckFrame{AckRanges: []wire.AckRange{{Smallest: 2, Largest: 2}}}
@@ -824,6 +809,27 @@ var _ = Describe("SentPacketHandler", func() {
 			// Packet 1 should be considered lost (1+1/8) RTTs after it was sent.
 			Expect(handler.oneRTTPackets.lossTime.IsZero()).To(BeFalse())
 			Expect(handler.oneRTTPackets.lossTime.Sub(getPacket(1, protocol.Encryption1RTT).SendTime)).To(Equal(time.Second * 9 / 8))
+
+			Expect(handler.OnLossDetectionTimeout()).To(Succeed())
+			Expect(handler.DequeuePacketForRetransmission()).NotTo(BeNil())
+			// make sure this is not an RTO: only packet 1 is retransmissted
+			Expect(handler.DequeuePacketForRetransmission()).To(BeNil())
+		})
+
+		It("sets the early retransmit alarm for crypto packets", func() {
+			now := time.Now()
+			handler.SentPacket(cryptoPacket(&Packet{PacketNumber: 1, SendTime: now.Add(-2 * time.Second)}))
+			handler.SentPacket(cryptoPacket(&Packet{PacketNumber: 2, SendTime: now.Add(-2 * time.Second)}))
+			handler.SentPacket(cryptoPacket(&Packet{PacketNumber: 3, SendTime: now.Add(-time.Second)}))
+			Expect(handler.initialPackets.lossTime.IsZero()).To(BeTrue())
+
+			ack := &wire.AckFrame{AckRanges: []wire.AckRange{{Smallest: 2, Largest: 2}}}
+			Expect(handler.ReceivedAck(ack, 1, protocol.EncryptionInitial, now.Add(-time.Second))).To(Succeed())
+			Expect(handler.rttStats.SmoothedRTT()).To(Equal(time.Second))
+
+			// Packet 1 should be considered lost (1+1/8) RTTs after it was sent.
+			Expect(handler.initialPackets.lossTime.IsZero()).To(BeFalse())
+			Expect(handler.initialPackets.lossTime.Sub(getPacket(1, protocol.EncryptionInitial).SendTime)).To(Equal(time.Second * 9 / 8))
 
 			Expect(handler.OnLossDetectionTimeout()).To(Succeed())
 			Expect(handler.DequeuePacketForRetransmission()).NotTo(BeNil())
