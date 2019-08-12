@@ -2,9 +2,7 @@
 
 set -ex
 
-go get -t ./...
 if [ ${TESTMODE} == "lint" ]; then
-  curl -sfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s v1.15.0
   ./bin/golangci-lint run ./...
 fi
 
