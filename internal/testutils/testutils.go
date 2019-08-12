@@ -6,6 +6,7 @@ import (
 	"github.com/lucas-clemente/quic-go/internal/handshake"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/internal/wire"
+	"github.com/lucas-clemente/quic-go/quictrace/pb"
 )
 
 // Utilities for simulating packet injection and man-in-the-middle (MITM) attacker tests.
@@ -41,6 +42,12 @@ func ComposeCryptoFrame(cft CryptoFrameType, size int) *wire.CryptoFrame {
 	}
 }
 
+func ComposeEmptyFrame(frameType pb.FrameType, length int) []byte {
+	frame := make([]byte, length)
+	frame[0] = byte(frameType)
+	return frame
+}
+
 // ComposeConnCloseFrame returns a new Connection Close frame with a generic error
 func ComposeConnCloseFrame() *wire.ConnectionCloseFrame {
 	return &wire.ConnectionCloseFrame{
@@ -62,22 +69,10 @@ func ComposeAckFrame(smallest protocol.PacketNumber, largest protocol.PacketNumb
 	}
 }
 
-// ComposeInitialPacket returns an Initial packet encrypted under key
-// (the original destination connection ID) containing specified frames
-// If frame list is empty, the payload will be empty. If the frame list
-// starts with nil, the payload will be all padding, of the minimum Initial length.
-func ComposeInitialPacket(srcConnID protocol.ConnectionID, destConnID protocol.ConnectionID, version protocol.VersionNumber, key protocol.ConnectionID, frames []wire.Frame) []byte {
+// ComposeInitialByPayload returns an Initial packet encrypted under key
+// (the original destination connection ID) containing specified payload
+func ComposeInitialByPayload(srcConnID protocol.ConnectionID, destConnID protocol.ConnectionID, version protocol.VersionNumber, key protocol.ConnectionID, payload []byte) []byte {
 	sealer, _, _ := handshake.NewInitialAEAD(key, protocol.PerspectiveServer)
-
-	// compose payload
-	var payload []byte
-	if len(frames) == 0 {
-		payload = nil
-	} else if frames[0] == nil {
-		payload = make([]byte, protocol.MinInitialPacketSize)
-	} else {
-		payload = packRawPayload(version, frames)
-	}
 
 	// compose Initial header
 	payloadSize := len(payload)
@@ -111,6 +106,20 @@ func ComposeInitialPacket(srcConnID protocol.ConnectionID, destConnID protocol.C
 		encrypted[pnOffset:payloadOffset], // packet number bytes
 	)
 	return encrypted
+}
+
+// ComposeInitialPacket returns an Initial packet encrypted under key
+// (the original destination connection ID) containing specified frames
+// If frame list is empty, the payload will be empty. If the frame list
+// starts with nil, the payload will be all padding, of the minimum Initial length.
+func ComposeInitialPacket(srcConnID protocol.ConnectionID, destConnID protocol.ConnectionID, version protocol.VersionNumber, key protocol.ConnectionID, frames []wire.Frame) []byte {
+	var payload []byte
+	if len(frames) == 0 {
+		payload = make([]byte, protocol.MinInitialPacketSize)
+	} else {
+		payload = packRawPayload(version, frames)
+	}
+	return ComposeInitialByPayload(srcConnID, destConnID, version, key, payload)
 }
 
 // ComposeRetryPacket returns a new raw Retry Packet
