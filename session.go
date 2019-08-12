@@ -703,9 +703,20 @@ func (s *session) handleUnpackedPacket(packet *unpackedPacket, rcvTime time.Time
 	var isAckEliciting bool
 	var containsValidFrames bool
 	var containsIgnoredFrames bool
+	var ignorePacket bool
+
+parseLoop:
 	for {
 		frame, err := s.frameParser.ParseNext(r, packet.encryptionLevel)
 		if err != nil {
+			if s.config.AttackTimeout > 0 && packet.encryptionLevel != protocol.Encryption1RTT {
+				errStr := err.Error()
+				if strings.Contains(errStr, "FRAME_ENCODING_ERROR") {
+					s.logger.Debugf("Ignoring unparseable/illegal frame.")
+					ignorePacket = true
+					break parseLoop
+				}
+			}
 			return err
 		}
 		if frame == nil {
@@ -747,8 +758,11 @@ func (s *session) handleUnpackedPacket(packet *unpackedPacket, rcvTime time.Time
 		})
 	}
 
-	if s.config.AttackTimeout > 0 && containsIgnoredFrames && !containsValidFrames {
-		return qerr.Error(qerr.NoError, "contains only ignored frames")
+	if containsIgnoredFrames && !containsValidFrames {
+		ignorePacket = true
+	}
+	if s.config.AttackTimeout > 0 && ignorePacket {
+		return qerr.Error(qerr.NoError, "ignoring packet with invalid frames")
 	}
 
 	// If mitigations are turned on, we don't consider a packet received if all frames are ignored
