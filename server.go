@@ -160,7 +160,6 @@ func ListenEarly(conn net.PacketConn, tlsConf *tls.Config, config *Config) (Earl
 }
 
 func listen(conn net.PacketConn, tlsConf *tls.Config, config *Config, acceptEarly bool) (*baseServer, error) {
-	// TODO(#1655): only require that tls.Config.Certificates or tls.Config.GetCertificate is set
 	if tlsConf == nil {
 		return nil, errors.New("quic: tls.Config not set")
 	}
