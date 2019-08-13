@@ -507,6 +507,11 @@ var _ = Describe("Client", func() {
 				Expect(c.IdleTimeout).To(Equal(protocol.DefaultIdleTimeout))
 				Expect(c.AttackTimeout).To(Equal(protocol.DefaultAttackTimeout))
 			})
+
+			It("turns off mitigation if AttackTimeout is negative", func() {
+				c := populateClientConfig(&Config{AttackTimeout: -1}, false)
+				Expect(c.AttackTimeout).To(Equal(time.Duration(0)))
+			})
 		})
 
 		It("creates new sessions with the right parameters", func() {
@@ -682,7 +687,7 @@ var _ = Describe("Client", func() {
 	})
 
 	Context("handling potentially injected packets", func() {
-		// NOTE: We hope these tests as written will fail once mitigations for injection adversaries are put in place.
+		// NOTE: We hope these tests as written will fail once mitigation for injection adversaries is put in place.
 
 		// Illustrates that adversary who injects any packet quickly can
 		// cause a real version negotiation packet to be ignored.

@@ -628,7 +628,7 @@ var _ = Describe("Session", func() {
 				close(done)
 			}()
 			sessionRunner.EXPECT().Retire(gomock.Any())
-			sess.config.AttackTimeout = 0 // turn off mitigations
+			sess.config.AttackTimeout = 0 // turn off mitigation
 			sess.handlePacket(getPacket(&wire.ExtendedHeader{
 				Header:          wire.Header{DestConnectionID: sess.srcConnID},
 				PacketNumberLen: protocol.PacketNumberLen1,
@@ -1726,6 +1726,8 @@ var _ = Describe("Client Session", func() {
 
 	Context("handling potentially injected packets", func() {
 		var unpacker *MockUnpacker
+		const mitigationOn = 500 * time.Millisecond
+		const mitigationOff = -1
 
 		getPacket := func(extHdr *wire.ExtendedHeader, data []byte) *receivedPacket {
 			buf := &bytes.Buffer{}
@@ -1789,8 +1791,8 @@ var _ = Describe("Client Session", func() {
 			Expect(sess.handlePacketImpl(getPacket(hdr2, nil))).To(BeFalse())
 		})
 
-		It("ignores Initial-level ACK for unsent packet with mitigations on", func() {
-			sess.config.AttackTimeout = 5 * time.Second
+		It("ignores Initial-level ACK for unsent packet with mitigation on", func() {
+			sess.config.AttackTimeout = mitigationOn
 			ackFrame := testutils.ComposeAckFrame(0, 0)
 			initialPacket := testutils.ComposeInitialPacket(sess.destConnID, sess.srcConnID, sess.version, sess.destConnID, []wire.Frame{ackFrame})
 			Expect(sess.handlePacketImpl(wrapPacket(initialPacket))).To(BeFalse()) // should ignore
@@ -1798,38 +1800,67 @@ var _ = Describe("Client Session", func() {
 
 		// Illustrates that an injected Initial with an ACK frame for an unsent packet causes
 		// the connection to immediately break down
-		It("fails on Initial-level ACK for unsent packet with mitigations off", func() {
+		It("fails on Initial-level ACK for unsent packet with mitigation off", func() {
+			sess.config.AttackTimeout = mitigationOff
 			sessionRunner.EXPECT().Retire(gomock.Any())
-			sess.config.AttackTimeout = -1
 			ackFrame := testutils.ComposeAckFrame(0, 0)
 			initialPacket := testutils.ComposeInitialPacket(sess.destConnID, sess.srcConnID, sess.version, sess.destConnID, []wire.Frame{ackFrame})
 			Expect(sess.handlePacketImpl(wrapPacket(initialPacket))).To(BeFalse())
 		})
 
-		It("ignores Initial-level unparseable frames with mitigations on", func() {
-			sess.config.AttackTimeout = 5 * time.Second
+		It("ignores Initial-level unparseable frames with mitigation on", func() {
+			sess.config.AttackTimeout = mitigationOn
 			payload := make([]byte, protocol.MinInitialPacketSize)
 			payload[0] = byte(31)
 			initialPacket := testutils.ComposeInitialByPayload(sess.destConnID, sess.srcConnID, sess.version, sess.destConnID, payload)
 			Expect(sess.handlePacketImpl(wrapPacket(initialPacket))).To(BeFalse())
 		})
 
-		It("fails on Initial-level unparseable frames with mitigations off", func() {
+		It("fails on Initial-level unparseable frames with mitigation off", func() {
+			sess.config.AttackTimeout = mitigationOff
 			sessionRunner.EXPECT().Retire(gomock.Any())
-			sess.config.AttackTimeout = -1
 			payload := make([]byte, protocol.MinInitialPacketSize)
 			payload[0] = byte(31)
 			initialPacket := testutils.ComposeInitialByPayload(sess.destConnID, sess.srcConnID, sess.version, sess.destConnID, payload)
+			Expect(sess.handlePacketImpl(wrapPacket(initialPacket))).To(BeFalse())
+		})
+
+		It("ignores Initial-level empty packets with mitigation on", func() {
+			sess.config.AttackTimeout = mitigationOn
+			initialPacket := testutils.ComposeInitialByPayload(sess.destConnID, sess.srcConnID, sess.version, sess.destConnID, nil)
 			Expect(sess.handlePacketImpl(wrapPacket(initialPacket))).To(BeFalse())
 		})
 
 		// Illustrates that an injected Initial with a CONNECTION_CLOSE frame causes
 		// the connection to immediately break down
-		It("fails on Initial-level CONNECTION_CLOSE frame", func() {
+		It("fails on Initial-level CONNECTION_CLOSE frame with mitigation off", func() {
+			sess.config.AttackTimeout = mitigationOff
 			sessionRunner.EXPECT().Remove(gomock.Any())
 			connCloseFrame := testutils.ComposeConnCloseFrame()
 			initialPacket := testutils.ComposeInitialPacket(sess.destConnID, sess.srcConnID, sess.version, sess.destConnID, []wire.Frame{connCloseFrame})
 			Expect(sess.handlePacketImpl(wrapPacket(initialPacket))).To(BeTrue())
+		})
+
+		It("ignores Initial-level CONNECTION_CLOSE frame with mitigation on", func() {
+			sess.config.AttackTimeout = mitigationOn
+			connCloseFrame := testutils.ComposeConnCloseFrame()
+			initialPacket := testutils.ComposeInitialPacket(sess.destConnID, sess.srcConnID, sess.version, sess.destConnID, []wire.Frame{connCloseFrame})
+			Expect(sess.handlePacketImpl(wrapPacket(initialPacket))).To(BeTrue())
+			sess.mutex.Lock()
+			sess.lastPacketReceivedTime = time.Now()
+			sess.mutex.Unlock()
+		})
+
+		It("times out on Initial-level CONNECTION_CLOSE frame with mitigation on if no packets received", func() {
+			sess.config.AttackTimeout = mitigationOn
+			sessionRunner.EXPECT().Remove(gomock.Any())
+			connCloseFrame := testutils.ComposeConnCloseFrame()
+			initialPacket := testutils.ComposeInitialPacket(sess.destConnID, sess.srcConnID, sess.version, sess.destConnID, []wire.Frame{connCloseFrame})
+			Expect(sess.handlePacketImpl(wrapPacket(initialPacket))).To(BeTrue())
+			sess.mutex.Lock()
+			sess.lastPacketReceivedTime = time.Now().Add(-time.Hour)
+			sess.mutex.Unlock()
+			time.Sleep(mitigationOn * 2)
 		})
 
 		// Illustrates that attacker who injects a Retry packet and changes the connection ID

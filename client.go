@@ -8,7 +8,6 @@ import (
 	"net"
 	"strings"
 	"sync"
-	"time"
 
 	"github.com/lucas-clemente/quic-go/internal/handshake"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
@@ -348,21 +347,18 @@ func (c *client) handleVersionNegotiationPacket(p *receivedPacket) {
 	c.logger.Infof("Received a Version Negotiation packet. Supported Versions: %s", hdr.SupportedVersions)
 	newVersion, ok := protocol.ChooseSupportedVersion(c.config.Versions, hdr.SupportedVersions)
 	if !ok {
-		sess, ok := (c.session).(*session)
-		if !ok || c.config.AttackTimeout <= 0 {
-			c.session.destroy(fmt.Errorf("No compatible QUIC version found. We support %s, server offered %s", c.config.Versions, hdr.SupportedVersions))
+		fail := func(e error) {
+			c.session.destroy(e)
 			c.logger.Debugf("No compatible QUIC version found.")
+		}
+		errImmediate := fmt.Errorf("No compatible QUIC version found. We support %s, server offered %s", c.config.Versions, hdr.SupportedVersions)
+		errTimeout := fmt.Errorf("Timed out: No compatible QUIC version found. We support %s, server offered %s", c.config.Versions, hdr.SupportedVersions)
+		sess, ok := c.session.(*session)
+		if !ok { // this catches MockQuicSession
+			fail(errImmediate)
 			return
 		}
-		c.mutex.Lock()
-		timerStart := sess.lastPacketReceivedTime
-		c.mutex.Unlock()
-		time.AfterFunc(c.config.AttackTimeout, func() {
-			if (sess.lastPacketReceivedTime).Sub(timerStart) == 0 {
-				c.session.destroy(fmt.Errorf("Timed out: No compatible QUIC version found. We support %s, server offered %s", c.config.Versions, hdr.SupportedVersions))
-				c.logger.Debugf("Timed out: No compatible QUIC version found.")
-			}
-		})
+		sess.maybeRecover(fail, errImmediate, errTimeout)
 		return
 	}
 	c.receivedVersionNegotiationPacket = true

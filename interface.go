@@ -209,8 +209,7 @@ type Config struct {
 	// AttackTimeout is the maximum duration that may pass after a suspicious packet is
 	// received without any incoming network activity, used for experimental mitigation
 	// against injection attacks. If the timeout is exceeded, the connection is closed.
-	// If this value is zero, the timeout defaults to 5 seconds.
-	// If value is negative, mitigations will be turned off.
+	// If this value is zero or negative, mitigation will be turned off.
 	AttackTimeout time.Duration
 	// AcceptToken determines if a Token is accepted.
 	// It is called with token = nil if the client didn't send a token.

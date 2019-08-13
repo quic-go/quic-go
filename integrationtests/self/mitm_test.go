@@ -277,10 +277,12 @@ var _ = Describe("MITM test", func() {
 
 				const rtt = 5 * time.Millisecond
 				const mitigationOff time.Duration = -1
-				const mitigationOn time.Duration = 5 * time.Second
+				const mitigationOn time.Duration = 500 * time.Millisecond
 
 				var delayCb func(dir quicproxy.Direction, raw []byte) time.Duration
+				var dropCb func(dir quicproxy.Direction, raw []byte) bool
 				var generateForgery func(hdr *wire.Header) []byte
+				var initialReceived bool
 
 				// AfterEach closes the proxy, but each function is responsible
 				// for closing client and server connections
@@ -290,8 +292,8 @@ var _ = Describe("MITM test", func() {
 					Expect(proxy.Close()).To(Succeed())
 				})
 
-				runTest := func(delayCb quicproxy.DelayCallback, attackTimeout time.Duration) error {
-					startServerAndProxy(delayCb, nil)
+				runTest := func(delayCb quicproxy.DelayCallback, dropCb quicproxy.DropCallback, attackTimeout time.Duration) error {
+					startServerAndProxy(delayCb, dropCb)
 					raddr, err := net.ResolveUDPAddr("udp", fmt.Sprintf("localhost:%d", proxy.LocalPort()))
 					Expect(err).ToNot(HaveOccurred())
 					sess, err := quic.Dial(
@@ -319,6 +321,7 @@ var _ = Describe("MITM test", func() {
 
 				Context("intercept client Initial and reply with forged", func() {
 					JustBeforeEach(func() {
+						initialReceived = false
 						delayCb = func(dir quicproxy.Direction, raw []byte) time.Duration {
 							if dir == quicproxy.DirectionIncoming {
 								defer GinkgoRecover()
@@ -326,15 +329,19 @@ var _ = Describe("MITM test", func() {
 								hdr, _, _, err := wire.ParsePacket(raw, connIDLen)
 								Expect(err).ToNot(HaveOccurred())
 
-								if hdr.Type != protocol.PacketTypeInitial {
+								if hdr.Type != protocol.PacketTypeInitial || initialReceived {
 									return 0
 								}
 
+								initialReceived = true
 								forgedPacket := generateForgery(hdr)
 								_, err = serverConn.WriteTo(forgedPacket, clientConn.LocalAddr())
 								Expect(err).ToNot(HaveOccurred())
 							}
 							return rtt / 2
+						}
+						dropCb = func(dir quicproxy.Direction, raw []byte) bool {
+							return false
 						}
 					})
 
@@ -348,14 +355,29 @@ var _ = Describe("MITM test", func() {
 						})
 
 						It("recovers when mitigation is enabled", func() {
-							Expect(runTest(delayCb, mitigationOn)).To(Succeed())
+							Expect(runTest(delayCb, dropCb, mitigationOn)).To(Succeed())
 						})
 
 						// fails immediately because client connection closes when it can't find compatible version
 						It("fails when mitigation is disabled", func() {
-							err := runTest(delayCb, mitigationOff)
+							err := runTest(delayCb, dropCb, mitigationOff)
 							Expect(err).To(HaveOccurred())
 							Expect(err.Error()).To(ContainSubstring("No compatible QUIC version found."))
+						})
+
+						Context("when all all server packets are dropped", func() {
+							var dropServerPackets func(dir quicproxy.Direction, raw []byte) bool
+							BeforeEach(func() {
+								dropServerPackets = func(dir quicproxy.Direction, raw []byte) bool {
+									return dir == quicproxy.DirectionOutgoing
+								}
+							})
+
+							It("times out when mitigation is enabled", func() {
+								err := runTest(delayCb, dropServerPackets, mitigationOn)
+								Expect(err).To(HaveOccurred())
+								Expect(err.Error()).To(ContainSubstring("Timed out: No compatible QUIC version found."))
+							})
 						})
 					})
 
@@ -371,23 +393,21 @@ var _ = Describe("MITM test", func() {
 						// times out, because client doesn't accept subsequent real retry packets from server
 						// as it has already accepted a retry.
 						It("times out when server always sends retry packets, and mitigation is disabled", func() {
-							err := runTest(delayCb, mitigationOff)
+							err := runTest(delayCb, dropCb, mitigationOff)
 							Expect(err).To(HaveOccurred())
 							Expect(err.(net.Error).Timeout()).To(BeTrue())
 						})
 
-						// times out, because client thinks the connection ID has changed.
-						PIt("times out when server never sends retry packets", func() {
+						PIt("fails when server never sends retry packets", func() {
 							serverConfig.AcceptToken = func(_ net.Addr, _ *quic.Token) bool {
 								return true
 							}
-							err := runTest(delayCb, mitigationOff)
+							err := runTest(delayCb, dropCb, mitigationOff)
 							Expect(err).To(HaveOccurred())
-							Expect(err.(net.Error).Timeout()).To(BeTrue())
 						})
 
 						PIt("recovers when mitigation is enabled", func() {
-							Expect(runTest(delayCb, mitigationOn)).To(Succeed())
+							Expect(runTest(delayCb, dropCb, mitigationOn)).To(Succeed())
 						})
 					})
 
@@ -398,16 +418,15 @@ var _ = Describe("MITM test", func() {
 							}
 						})
 
-						// fails immediately because client closes when it receives an
-						// empty packet.
+						// fails immediately because client closes when it receives an empty packet.
 						It("fails when mitigation is disabled", func() {
-							err := runTest(delayCb, mitigationOff)
+							err := runTest(delayCb, dropCb, mitigationOff)
 							Expect(err).To(HaveOccurred())
 							Expect(err.Error()).To(ContainSubstring("empty packet"))
 						})
 
-						PIt("recovers when mitigation is enabled", func() {
-							Expect(runTest(delayCb, mitigationOn)).To(Succeed())
+						It("recovers when mitigation is enabled", func() {
+							Expect(runTest(delayCb, dropCb, mitigationOn)).To(Succeed())
 						})
 					})
 
@@ -422,13 +441,13 @@ var _ = Describe("MITM test", func() {
 						// it has already accepted an initial.
 						// TODO: determine behavior when server does not send Retry packets
 						It("fails when mitigation is disabled", func() {
-							err := runTest(delayCb, mitigationOff)
+							err := runTest(delayCb, dropCb, mitigationOff)
 							Expect(err).To(HaveOccurred())
 							Expect(err.(net.Error).Timeout()).To(BeTrue())
 						})
 
 						PIt("recovers when mitigation is enabled", func() {
-							Expect(runTest(delayCb, mitigationOn)).To(Succeed())
+							Expect(runTest(delayCb, dropCb, mitigationOn)).To(Succeed())
 						})
 					})
 
@@ -442,12 +461,12 @@ var _ = Describe("MITM test", func() {
 						})
 
 						It("recovers when mitigation is enabled", func() {
-							Expect(runTest(delayCb, mitigationOn)).To(Succeed())
+							Expect(runTest(delayCb, dropCb, mitigationOn)).To(Succeed())
 						})
 
 						// client connection closes immediately on receiving ack for unsent packet
 						It("fails when mitigation is disabled", func() {
-							err := runTest(delayCb, mitigationOff)
+							err := runTest(delayCb, dropCb, mitigationOff)
 							Expect(err).To(HaveOccurred())
 							Expect(err).To(BeAssignableToTypeOf(&qerr.QuicError{}))
 							Expect(err.(*qerr.QuicError).ErrorCode).To(Equal(qerr.ProtocolViolation))
@@ -467,12 +486,12 @@ var _ = Describe("MITM test", func() {
 						})
 
 						It("recovers when mitigation is enabled", func() {
-							Expect(runTest(delayCb, mitigationOn)).To(Succeed())
+							Expect(runTest(delayCb, dropCb, mitigationOn)).To(Succeed())
 						})
 
 						// client connection closes immediately on receiving unparseable frame
 						It("fails when mitigation is disabled", func() {
-							err := runTest(delayCb, mitigationOff)
+							err := runTest(delayCb, dropCb, mitigationOff)
 							Expect(err).To(HaveOccurred())
 							Expect(err).To(BeAssignableToTypeOf(&qerr.QuicError{}))
 							Expect(err.(*qerr.QuicError).ErrorCode).To(Equal(qerr.FrameEncodingError))
@@ -490,16 +509,40 @@ var _ = Describe("MITM test", func() {
 						})
 
 						It("recovers when mitigation is enabled", func() {
-							Expect(runTest(delayCb, mitigationOn)).To(Succeed())
+							Expect(runTest(delayCb, dropCb, mitigationOn)).To(Succeed())
 						})
 
 						// client connection closes immediately on receiving illegal frame
 						It("fails when mitigation is disabled", func() {
-							err := runTest(delayCb, mitigationOff)
+							err := runTest(delayCb, dropCb, mitigationOff)
 							Expect(err).To(HaveOccurred())
 							Expect(err).To(BeAssignableToTypeOf(&qerr.QuicError{}))
 							Expect(err.(*qerr.QuicError).ErrorCode).To(Equal(qerr.FrameEncodingError))
 							Expect(err.Error()).To(ContainSubstring("PingFrame not allowed at encryption level Initial"))
+						})
+
+					})
+
+					Context("initial packet with CONNECTION_CLOSE", func() {
+						BeforeEach(func() {
+							generateForgery = func(hdr *wire.Header) []byte {
+								connCloseFrame := testutils.ComposeConnCloseFrame()
+								return testutils.ComposeInitialPacket(hdr.DestConnectionID, hdr.SrcConnectionID, hdr.Version, hdr.DestConnectionID, []wire.Frame{connCloseFrame})
+							}
+						})
+
+						// TODO: modify this test so Initial is sent after Retry
+						PIt("recovers when mitigation is enabled", func() {
+							Expect(runTest(delayCb, dropCb, mitigationOn)).To(Succeed())
+						})
+
+						// client connection closes immediately on receiving CONNECTION_CLOSE
+						It("fails when mitigation is disabled", func() {
+							err := runTest(delayCb, dropCb, mitigationOff)
+							Expect(err).To(HaveOccurred())
+							Expect(err).To(BeAssignableToTypeOf(&qerr.QuicError{}))
+							Expect(err.(*qerr.QuicError).ErrorCode).To(Equal(qerr.ErrorCode(0)))
+							Expect(err.Error()).To(ContainSubstring("mitm attacker"))
 						})
 
 					})
