@@ -46,18 +46,6 @@ func (mr *MockSessionRunnerMockRecorder) AddResetToken(arg0, arg1 interface{}) *
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddResetToken", reflect.TypeOf((*MockSessionRunner)(nil).AddResetToken), arg0, arg1)
 }
 
-// OnHandshakeComplete mocks base method
-func (m *MockSessionRunner) OnHandshakeComplete(arg0 Session) {
-	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "OnHandshakeComplete", arg0)
-}
-
-// OnHandshakeComplete indicates an expected call of OnHandshakeComplete
-func (mr *MockSessionRunnerMockRecorder) OnHandshakeComplete(arg0 interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "OnHandshakeComplete", reflect.TypeOf((*MockSessionRunner)(nil).OnHandshakeComplete), arg0)
-}
-
 // Remove mocks base method
 func (m *MockSessionRunner) Remove(arg0 protocol.ConnectionID) {
 	m.ctrl.T.Helper()

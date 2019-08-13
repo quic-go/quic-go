@@ -15,6 +15,7 @@ import (
 	quicproxy "github.com/lucas-clemente/quic-go/integrationtests/tools/proxy"
 	"github.com/lucas-clemente/quic-go/integrationtests/tools/testserver"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
+	"github.com/lucas-clemente/quic-go/internal/qerr"
 	"github.com/lucas-clemente/quic-go/internal/testutils"
 	"github.com/lucas-clemente/quic-go/internal/wire"
 	. "github.com/onsi/ginkgo"
@@ -275,8 +276,8 @@ var _ = Describe("MITM test", func() {
 				// that arrives before the real reply can tear down the connection in multiple ways.
 
 				const rtt = 5 * time.Millisecond
-				const mitigationsOff time.Duration = -1
-				const mitigationsOn time.Duration = 5 * time.Second
+				const mitigationOff time.Duration = -1
+				const mitigationOn time.Duration = 5 * time.Second
 
 				var delayCb func(dir quicproxy.Direction, raw []byte) time.Duration
 				var generateForgery func(hdr *wire.Header) []byte
@@ -289,28 +290,7 @@ var _ = Describe("MITM test", func() {
 					Expect(proxy.Close()).To(Succeed())
 				})
 
-				// runTestFail succeeds if an error occurs in dialing
-				// expects a proxy delay function that runs every time a packet is received
-				runTestFail := func(delayCb quicproxy.DelayCallback, attackTimeout time.Duration) {
-					startServerAndProxy(delayCb, nil)
-					raddr, err := net.ResolveUDPAddr("udp", fmt.Sprintf("localhost:%d", proxy.LocalPort()))
-					Expect(err).ToNot(HaveOccurred())
-					_, err = quic.Dial(
-						clientConn,
-						raddr,
-						fmt.Sprintf("localhost:%d", proxy.LocalPort()),
-						getTLSClientConfig(),
-						&quic.Config{
-							Versions:           []protocol.VersionNumber{version},
-							ConnectionIDLength: connIDLen,
-							AttackTimeout:      attackTimeout,
-						},
-					)
-					Expect(err).To(HaveOccurred())
-				}
-
-				// succeeds if no error occurs
-				runTest := func(delayCb quicproxy.DelayCallback, attackTimeout time.Duration) {
+				runTest := func(delayCb quicproxy.DelayCallback, attackTimeout time.Duration) error {
 					startServerAndProxy(delayCb, nil)
 					raddr, err := net.ResolveUDPAddr("udp", fmt.Sprintf("localhost:%d", proxy.LocalPort()))
 					Expect(err).ToNot(HaveOccurred())
@@ -323,18 +303,21 @@ var _ = Describe("MITM test", func() {
 							Versions:           []protocol.VersionNumber{version},
 							ConnectionIDLength: connIDLen,
 							AttackTimeout:      attackTimeout,
+							HandshakeTimeout:   2 * time.Second,
 						},
 					)
-					Expect(err).ToNot(HaveOccurred())
-					str, err := sess.AcceptUniStream(context.Background())
-					Expect(err).ToNot(HaveOccurred())
-					data, err := ioutil.ReadAll(str)
-					Expect(err).ToNot(HaveOccurred())
-					Expect(data).To(Equal(testserver.PRData))
-					Expect(sess.Close()).To(Succeed())
+					if err == nil {
+						str, err := sess.AcceptUniStream(context.Background())
+						Expect(err).ToNot(HaveOccurred())
+						data, err := ioutil.ReadAll(str)
+						Expect(err).ToNot(HaveOccurred())
+						Expect(data).To(Equal(testserver.PRData))
+						Expect(sess.Close()).To(Succeed())
+					}
+					return err
 				}
 
-				Context("intercept client Initial and send back fake", func() {
+				Context("intercept client Initial and reply with forged", func() {
 					JustBeforeEach(func() {
 						delayCb = func(dir quicproxy.Direction, raw []byte) time.Duration {
 							if dir == quicproxy.DirectionIncoming {
@@ -364,13 +347,15 @@ var _ = Describe("MITM test", func() {
 							}
 						})
 
-						It("recovers when mitigations are enabled", func() {
-							runTest(delayCb, mitigationsOn)
+						It("recovers when mitigation is enabled", func() {
+							Expect(runTest(delayCb, mitigationOn)).To(Succeed())
 						})
 
 						// fails immediately because client connection closes when it can't find compatible version
-						It("fails when mitigations are disabled", func() {
-							runTestFail(delayCb, mitigationsOff)
+						It("fails when mitigation is disabled", func() {
+							err := runTest(delayCb, mitigationOff)
+							Expect(err).To(HaveOccurred())
+							Expect(err.Error()).To(ContainSubstring("No compatible QUIC version found."))
 						})
 					})
 
@@ -385,39 +370,45 @@ var _ = Describe("MITM test", func() {
 
 						// times out, because client doesn't accept subsequent real retry packets from server
 						// as it has already accepted a retry.
-						It("fails when server always sends retry packets, and mitigations are disabled", func() {
-							runTestFail(delayCb, mitigationsOff)
+						It("times out when server always sends retry packets, and mitigation is disabled", func() {
+							err := runTest(delayCb, mitigationOff)
+							Expect(err).To(HaveOccurred())
+							Expect(err.(net.Error).Timeout()).To(BeTrue())
 						})
 
 						// times out, because client thinks the connection ID has changed.
-						// It("fails when server never sends retry packets", func() {
-						// 	serverConfig.AcceptToken = func(_ net.Addr, _ *quic.Token) bool {
-						// 		return true
-						// 	}
-						// 	runTestFail(delayCb, mitigationsOff)
-						// })
+						PIt("times out when server never sends retry packets", func() {
+							serverConfig.AcceptToken = func(_ net.Addr, _ *quic.Token) bool {
+								return true
+							}
+							err := runTest(delayCb, mitigationOff)
+							Expect(err).To(HaveOccurred())
+							Expect(err.(net.Error).Timeout()).To(BeTrue())
+						})
 
-						// It("recovers when mitigations are enabled", func() {
-						// 	runTest(delayCb, mitigationsOn)
-						// })
+						PIt("recovers when mitigation is enabled", func() {
+							Expect(runTest(delayCb, mitigationOn)).To(Succeed())
+						})
 					})
 
 					Context("empty initial packet", func() {
-
 						BeforeEach(func() {
 							generateForgery = func(hdr *wire.Header) []byte {
 								return testutils.ComposeInitialByPayload(hdr.DestConnectionID, hdr.SrcConnectionID, hdr.Version, hdr.DestConnectionID, nil)
 							}
 						})
+
 						// fails immediately because client closes when it receives an
 						// empty packet.
-						It("fails when mitigations are disabled", func() {
-							runTestFail(delayCb, mitigationsOff)
+						It("fails when mitigation is disabled", func() {
+							err := runTest(delayCb, mitigationOff)
+							Expect(err).To(HaveOccurred())
+							Expect(err.Error()).To(ContainSubstring("empty packet"))
 						})
 
-						// It("recovers when mitigations are enabled", func() {
-						// 	runTest(delayCb, mitigationsOn)
-						// })
+						PIt("recovers when mitigation is enabled", func() {
+							Expect(runTest(delayCb, mitigationOn)).To(Succeed())
+						})
 					})
 
 					Context("initial packet with only padding", func() {
@@ -430,12 +421,15 @@ var _ = Describe("MITM test", func() {
 						// times out, because client doesn't accept real retry packets from server because
 						// it has already accepted an initial.
 						// TODO: determine behavior when server does not send Retry packets
-						It("fails when mitigations are disabled", func() {
-							runTestFail(delayCb, mitigationsOff)
+						It("fails when mitigation is disabled", func() {
+							err := runTest(delayCb, mitigationOff)
+							Expect(err).To(HaveOccurred())
+							Expect(err.(net.Error).Timeout()).To(BeTrue())
 						})
-						// It("recovers when mitigations are enabled", func() {
-						// 	runTest(delayCb, mitigationsOn)
-						// })
+
+						PIt("recovers when mitigation is enabled", func() {
+							Expect(runTest(delayCb, mitigationOn)).To(Succeed())
+						})
 					})
 
 					Context("initial packet with ack for unsent packet", func() {
@@ -447,13 +441,17 @@ var _ = Describe("MITM test", func() {
 							}
 						})
 
-						It("recovers when mitigations are enabled", func() {
-							runTest(delayCb, mitigationsOn)
+						It("recovers when mitigation is enabled", func() {
+							Expect(runTest(delayCb, mitigationOn)).To(Succeed())
 						})
 
 						// client connection closes immediately on receiving ack for unsent packet
-						It("fails when mitigations are disabled", func() {
-							runTestFail(delayCb, mitigationsOff)
+						It("fails when mitigation is disabled", func() {
+							err := runTest(delayCb, mitigationOff)
+							Expect(err).To(HaveOccurred())
+							Expect(err).To(BeAssignableToTypeOf(&qerr.QuicError{}))
+							Expect(err.(*qerr.QuicError).ErrorCode).To(Equal(qerr.ProtocolViolation))
+							Expect(err.Error()).To(ContainSubstring("Received ACK for an unsent packet"))
 						})
 
 					})
@@ -468,13 +466,17 @@ var _ = Describe("MITM test", func() {
 							}
 						})
 
-						It("recovers when mitigations are enabled", func() {
-							runTest(delayCb, mitigationsOn)
+						It("recovers when mitigation is enabled", func() {
+							Expect(runTest(delayCb, mitigationOn)).To(Succeed())
 						})
 
 						// client connection closes immediately on receiving unparseable frame
-						It("fails when mitigations are disabled", func() {
-							runTestFail(delayCb, mitigationsOff)
+						It("fails when mitigation is disabled", func() {
+							err := runTest(delayCb, mitigationOff)
+							Expect(err).To(HaveOccurred())
+							Expect(err).To(BeAssignableToTypeOf(&qerr.QuicError{}))
+							Expect(err.(*qerr.QuicError).ErrorCode).To(Equal(qerr.FrameEncodingError))
+							Expect(err.Error()).To(ContainSubstring("unknown type byte"))
 						})
 
 					})
@@ -487,17 +489,20 @@ var _ = Describe("MITM test", func() {
 							}
 						})
 
-						It("recovers when mitigations are enabled", func() {
-							runTest(delayCb, mitigationsOn)
+						It("recovers when mitigation is enabled", func() {
+							Expect(runTest(delayCb, mitigationOn)).To(Succeed())
 						})
 
 						// client connection closes immediately on receiving illegal frame
-						It("fails when mitigations are disabled", func() {
-							runTestFail(delayCb, mitigationsOff)
+						It("fails when mitigation is disabled", func() {
+							err := runTest(delayCb, mitigationOff)
+							Expect(err).To(HaveOccurred())
+							Expect(err).To(BeAssignableToTypeOf(&qerr.QuicError{}))
+							Expect(err.(*qerr.QuicError).ErrorCode).To(Equal(qerr.FrameEncodingError))
+							Expect(err.Error()).To(ContainSubstring("PingFrame not allowed at encryption level Initial"))
 						})
 
 					})
-
 				})
 
 			})

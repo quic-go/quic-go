@@ -25,7 +25,7 @@ import (
 )
 
 type unpacker interface {
-	Unpack(hdr *wire.Header, data []byte) (*unpackedPacket, error)
+	Unpack(hdr *wire.Header, rcvTime time.Time, data []byte) (*unpackedPacket, error)
 }
 
 type streamGetter interface {
@@ -136,12 +136,15 @@ type session struct {
 	connectionClosePacket     *packedPacket
 	packetsReceivedAfterClose int
 
-	ctx       context.Context
-	ctxCancel context.CancelFunc
+	ctx                context.Context
+	ctxCancel          context.CancelFunc
+	handshakeCtx       context.Context
+	handshakeCtxCancel context.CancelFunc
 
 	undecryptablePackets []*receivedPacket
 
 	clientHelloWritten    <-chan struct{}
+	earlySessionReadyChan chan struct{}
 	handshakeCompleteChan chan struct{} // is closed when the handshake completes
 	handshakeComplete     bool
 
@@ -169,6 +172,7 @@ type session struct {
 }
 
 var _ Session = &session{}
+var _ EarlySession = &session{}
 var _ streamSender = &session{}
 
 var newSession = func(
@@ -344,6 +348,7 @@ func (s *session) preSetup() {
 		s.rttStats,
 		s.logger,
 	)
+	s.earlySessionReadyChan = make(chan struct{})
 	if s.config.QuicTracer != nil {
 		s.traceCallback = func(ev quictrace.Event) {
 			s.config.QuicTracer.Trace(s.origDestConnID, ev)
@@ -357,6 +362,7 @@ func (s *session) postSetup() error {
 	s.sendingScheduled = make(chan struct{}, 1)
 	s.undecryptablePackets = make([]*receivedPacket, 0, protocol.MaxUndecryptablePackets)
 	s.ctx, s.ctxCancel = context.WithCancel(context.Background())
+	s.handshakeCtx, s.handshakeCtxCancel = context.WithCancel(context.Background())
 
 	s.timer = utils.NewTimer()
 	now := time.Now()
@@ -466,6 +472,15 @@ runLoop:
 	return closeErr.err
 }
 
+// blocks until the early session can be used
+func (s *session) earlySessionReady() <-chan struct{} {
+	return s.earlySessionReadyChan
+}
+
+func (s *session) HandshakeComplete() context.Context {
+	return s.handshakeCtx
+}
+
 func (s *session) Context() context.Context {
 	return s.ctx
 }
@@ -506,7 +521,7 @@ func (s *session) idleTimeoutStartTime() time.Time {
 func (s *session) handleHandshakeComplete() {
 	s.handshakeComplete = true
 	s.handshakeCompleteChan = nil // prevent this case from ever being selected again
-	s.sessionRunner.OnHandshakeComplete(s)
+	s.handshakeCtxCancel()
 
 	// The client completes the handshake first (after sending the CFIN).
 	// We need to make sure it learns about the server completing the handshake,
@@ -589,7 +604,7 @@ func (s *session) handleSinglePacket(p *receivedPacket, hdr *wire.Header) bool /
 		return false
 	}
 
-	packet, err := s.unpacker.Unpack(hdr, p.data)
+	packet, err := s.unpacker.Unpack(hdr, p.rcvTime, p.data)
 	if err != nil {
 		switch err {
 		case handshake.ErrKeysDropped:
@@ -1061,6 +1076,9 @@ func (s *session) processTransportParameters(data []byte) {
 	if params.StatelessResetToken != nil {
 		s.sessionRunner.AddResetToken(*params.StatelessResetToken, s)
 	}
+	// On the server side, the early session is ready as soon as we processed
+	// the client's transport parameters.
+	close(s.earlySessionReadyChan)
 }
 
 func (s *session) processTransportParametersForClient(data []byte) (*handshake.TransportParameters, error) {

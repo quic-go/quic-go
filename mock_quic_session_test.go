@@ -137,6 +137,20 @@ func (mr *MockQuicSessionMockRecorder) GetVersion() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetVersion", reflect.TypeOf((*MockQuicSession)(nil).GetVersion))
 }
 
+// HandshakeComplete mocks base method
+func (m *MockQuicSession) HandshakeComplete() context.Context {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "HandshakeComplete")
+	ret0, _ := ret[0].(context.Context)
+	return ret0
+}
+
+// HandshakeComplete indicates an expected call of HandshakeComplete
+func (mr *MockQuicSessionMockRecorder) HandshakeComplete() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HandshakeComplete", reflect.TypeOf((*MockQuicSession)(nil).HandshakeComplete))
+}
+
 // LocalAddr mocks base method
 func (m *MockQuicSession) LocalAddr() net.Addr {
 	m.ctrl.T.Helper()
@@ -261,6 +275,20 @@ func (m *MockQuicSession) destroy(arg0 error) {
 func (mr *MockQuicSessionMockRecorder) destroy(arg0 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "destroy", reflect.TypeOf((*MockQuicSession)(nil).destroy), arg0)
+}
+
+// earlySessionReady mocks base method
+func (m *MockQuicSession) earlySessionReady() <-chan struct{} {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "earlySessionReady")
+	ret0, _ := ret[0].(<-chan struct{})
+	return ret0
+}
+
+// earlySessionReady indicates an expected call of earlySessionReady
+func (mr *MockQuicSessionMockRecorder) earlySessionReady() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "earlySessionReady", reflect.TypeOf((*MockQuicSession)(nil).earlySessionReady))
 }
 
 // getPerspective mocks base method

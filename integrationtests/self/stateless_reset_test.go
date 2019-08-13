@@ -92,12 +92,13 @@ var _ = Describe("Stateless Resets", func() {
 				close(acceptStopped)
 			}()
 
-			// trigger something (not too small) to be sent,
-			// so that we receive the stateless reset
-			_, err = str.Write([]byte("Lorem ipsum dolor sit amet."))
-			Expect(err).ToNot(HaveOccurred())
-			_, err = str.Read([]byte{0})
-			Expect(err).To(MatchError("INTERNAL_ERROR: received a stateless reset"))
+			// Trigger something (not too small) to be sent, so that we receive the stateless reset.
+			// If the client already sent another packet, it might already have received a packet.
+			_, serr := str.Write([]byte("Lorem ipsum dolor sit amet."))
+			if serr == nil {
+				_, serr = str.Read([]byte{0})
+			}
+			Expect(serr).To(MatchError("INTERNAL_ERROR: received a stateless reset"))
 
 			Expect(ln2.Close()).To(Succeed())
 			Eventually(acceptStopped).Should(BeClosed())
