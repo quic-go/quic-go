@@ -292,7 +292,7 @@ func (c *client) establishSecureConnection(ctx context.Context) error {
 		return ctx.Err()
 	case err := <-errorChan:
 		return err
-	case <-c.handshakeChan:
+	case <-c.session.HandshakeComplete().Done():
 		// handshake successfully completed
 		return nil
 	}
@@ -371,13 +371,9 @@ func (c *client) createNewTLSSession(version protocol.VersionNumber) error {
 
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
-	runner := &runner{
-		packetHandlerManager:    c.packetHandlers,
-		onHandshakeCompleteImpl: func(_ Session) { close(c.handshakeChan) },
-	}
 	sess, err := newClientSession(
 		c.conn,
-		runner,
+		c.packetHandlers,
 		c.destConnID,
 		c.srcConnID,
 		c.config,

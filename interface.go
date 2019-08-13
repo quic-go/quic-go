@@ -171,6 +171,19 @@ type Session interface {
 	ConnectionState() tls.ConnectionState
 }
 
+// An EarlySession is a session that is handshaking.
+// Data sent during the handshake is encrypted using the forward secure keys.
+// When using client certificates, the client's identity is only verified
+// after completion of the handshake.
+type EarlySession interface {
+	Session
+
+	// Blocks until the handshake completes (or fails).
+	// Data sent before completion of the handshake is encrypted with 1-RTT keys.
+	// Note that the client's identity hasn't been verified yet.
+	HandshakeComplete() context.Context
+}
+
 // Config contains all configuration data needed for a QUIC server or client.
 type Config struct {
 	// The QUIC versions that can be negotiated.
@@ -233,4 +246,15 @@ type Listener interface {
 	Addr() net.Addr
 	// Accept returns new sessions. It should be called in a loop.
 	Accept(context.Context) (Session, error)
+}
+
+// An EarlyListener listens for incoming QUIC connections,
+// and returns them before the handshake completes.
+type EarlyListener interface {
+	// Close the server. All active sessions will be closed.
+	Close() error
+	// Addr returns the local network addr that the server is listening on.
+	Addr() net.Addr
+	// Accept returns new early sessions. It should be called in a loop.
+	Accept(context.Context) (EarlySession, error)
 }
