@@ -18,6 +18,8 @@ const (
 	// Maximum reordering in time space before time based loss detection considers a packet lost.
 	// Specified as an RTT multiplier.
 	timeThreshold = 9.0 / 8
+	// Maximum reordering in packets before packet threshold loss detection considers a packet lost.
+	packetThreshold = 3
 )
 
 type packetNumberSpace struct {
@@ -373,21 +375,24 @@ func (h *sentPacketHandler) detectLostPackets(
 	// Minimum time of granularity before packets are deemed lost.
 	lossDelay = utils.MaxDuration(lossDelay, protocol.TimerGranularity)
 
+	// Packets sent before this time are deemed lost.
+	lostSendTime := now.Add(-lossDelay)
+
 	var lostPackets []*Packet
 	pnSpace.history.Iterate(func(packet *Packet) (bool, error) {
 		if packet.PacketNumber > pnSpace.largestAcked {
 			return false, nil
 		}
 
-		timeSinceSent := now.Sub(packet.SendTime)
-		if timeSinceSent > lossDelay {
+		if packet.SendTime.Before(lostSendTime) || pnSpace.largestAcked >= packet.PacketNumber+packetThreshold {
 			lostPackets = append(lostPackets, packet)
 		} else if pnSpace.lossTime.IsZero() {
 			// Note: This conditional is only entered once per call
+			lossTime := packet.SendTime.Add(lossDelay)
 			if h.logger.Debug() {
-				h.logger.Debugf("\tsetting loss timer for packet %#x (%s) to %s (in %s)", packet.PacketNumber, encLevel, lossDelay, lossDelay-timeSinceSent)
+				h.logger.Debugf("\tsetting loss timer for packet %#x (%s) to %s (in %s)", packet.PacketNumber, encLevel, lossDelay, lossTime)
 			}
-			pnSpace.lossTime = now.Add(lossDelay - timeSinceSent)
+			pnSpace.lossTime = lossTime
 		}
 		return true, nil
 	})
