@@ -169,7 +169,25 @@ func (h *sentPacketHandler) sentPacketImpl(packet *Packet) bool /* is ack-elicit
 	return isAckEliciting
 }
 
+func (h *sentPacketHandler) ValidateAck(ackFrame *wire.AckFrame, withPacketNumber protocol.PacketNumber, encLevel protocol.EncryptionLevel, rcvTime time.Time) error {
+	pnSpace := h.getPacketNumberSpace(encLevel)
+
+	largestAcked := ackFrame.LargestAcked()
+	if largestAcked > pnSpace.largestSent {
+		return qerr.Error(qerr.ProtocolViolation, "Received ACK for an unsent packet")
+	}
+
+	pnSpace.largestAcked = utils.MaxPacketNumber(pnSpace.largestAcked, largestAcked)
+
+	if !pnSpace.pns.Validate(ackFrame) {
+		return qerr.Error(qerr.ProtocolViolation, "Received an ACK for a skipped packet number")
+	}
+
+	return nil
+}
+
 func (h *sentPacketHandler) ReceivedAck(ackFrame *wire.AckFrame, withPacketNumber protocol.PacketNumber, encLevel protocol.EncryptionLevel, rcvTime time.Time) error {
+	// err := h.ValidateAck(ackFrame, withPacketNumber, encLevel, rcvTime)
 	pnSpace := h.getPacketNumberSpace(encLevel)
 
 	largestAcked := ackFrame.LargestAcked()

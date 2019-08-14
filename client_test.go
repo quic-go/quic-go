@@ -45,6 +45,11 @@ var _ = Describe("Client", func() {
 		) (quicSession, error)
 	)
 
+	const (
+		mitigationOn  = 500 * time.Millisecond
+		mitigationOff = -1
+	)
+
 	// generate a packet sent by the server that accepts the QUIC version suggested by the client
 	acceptClientVersionPacket := func(connID protocol.ConnectionID) []byte {
 		b := &bytes.Buffer{}
@@ -448,6 +453,7 @@ var _ = Describe("Client", func() {
 				config := &Config{
 					HandshakeTimeout:      1337 * time.Minute,
 					IdleTimeout:           42 * time.Hour,
+					AttackTimeout:         64 * time.Minute,
 					MaxIncomingStreams:    1234,
 					MaxIncomingUniStreams: 4321,
 					ConnectionIDLength:    13,
@@ -458,6 +464,7 @@ var _ = Describe("Client", func() {
 				c := populateClientConfig(config, false)
 				Expect(c.HandshakeTimeout).To(Equal(1337 * time.Minute))
 				Expect(c.IdleTimeout).To(Equal(42 * time.Hour))
+				Expect(c.AttackTimeout).To(Equal(64 * time.Minute))
 				Expect(c.MaxIncomingStreams).To(Equal(1234))
 				Expect(c.MaxIncomingUniStreams).To(Equal(4321))
 				Expect(c.ConnectionIDLength).To(Equal(13))
@@ -506,6 +513,12 @@ var _ = Describe("Client", func() {
 				Expect(c.Versions).To(Equal(protocol.SupportedVersions))
 				Expect(c.HandshakeTimeout).To(Equal(protocol.DefaultHandshakeTimeout))
 				Expect(c.IdleTimeout).To(Equal(protocol.DefaultIdleTimeout))
+				Expect(c.AttackTimeout).To(Equal(protocol.DefaultAttackTimeout))
+			})
+
+			It("turns off mitigation if AttackTimeout is negative", func() {
+				c := populateClientConfig(&Config{AttackTimeout: -1}, false)
+				Expect(c.AttackTimeout).To(Equal(time.Duration(0)))
 			})
 		})
 
@@ -627,7 +640,7 @@ var _ = Describe("Client", func() {
 					close(done)
 				})
 				cl.session = sess
-				cl.config = &Config{Versions: protocol.SupportedVersions}
+				cl.config = &Config{Versions: protocol.SupportedVersions, AttackTimeout: mitigationOff}
 				cl.handlePacket(composeVersionNegotiationPacket(connID, []protocol.VersionNumber{1337}))
 				Eventually(done).Should(BeClosed())
 			})
@@ -644,7 +657,7 @@ var _ = Describe("Client", func() {
 				cl.session = sess
 				v := protocol.VersionNumber(1234)
 				Expect(v).ToNot(Equal(cl.version))
-				cl.config = &Config{Versions: protocol.SupportedVersions}
+				cl.config = &Config{Versions: protocol.SupportedVersions, AttackTimeout: mitigationOff}
 				cl.handlePacket(composeVersionNegotiationPacket(connID, []protocol.VersionNumber{v}))
 				Eventually(done).Should(BeClosed())
 			})
@@ -681,7 +694,7 @@ var _ = Describe("Client", func() {
 	})
 
 	Context("handling potentially injected packets", func() {
-		// NOTE: We hope these tests as written will fail once mitigations for injection adversaries are put in place.
+		// NOTE: We hope these tests as written will fail once mitigation for injection adversaries is put in place.
 
 		// Illustrates that adversary who injects any packet quickly can
 		// cause a real version negotiation packet to be ignored.

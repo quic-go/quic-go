@@ -54,7 +54,9 @@ type quicSession interface {
 	run() error
 	destroy(error)
 	closeForRecreating() protocol.PacketNumber
+	//maybeRecover(func(error),error,error)
 	closeRemote(error)
+	maybeRecover(func(error), error, error)
 }
 
 type sessionRunner interface {
@@ -241,6 +243,12 @@ func populateServerConfig(config *Config) *Config {
 	if config.IdleTimeout != 0 {
 		idleTimeout = config.IdleTimeout
 	}
+	attackTimeout := protocol.DefaultAttackTimeout
+	if config.AttackTimeout > 0 {
+		attackTimeout = config.AttackTimeout
+	} else if config.AttackTimeout < 0 {
+		attackTimeout = 0
+	}
 
 	maxReceiveStreamFlowControlWindow := config.MaxReceiveStreamFlowControlWindow
 	if maxReceiveStreamFlowControlWindow == 0 {
@@ -271,6 +279,7 @@ func populateServerConfig(config *Config) *Config {
 		Versions:                              versions,
 		HandshakeTimeout:                      handshakeTimeout,
 		IdleTimeout:                           idleTimeout,
+		AttackTimeout:                         attackTimeout,
 		AcceptToken:                           verifyToken,
 		KeepAlive:                             config.KeepAlive,
 		MaxReceiveStreamFlowControlWindow:     maxReceiveStreamFlowControlWindow,

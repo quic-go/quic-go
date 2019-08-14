@@ -223,6 +223,13 @@ type Config struct {
 	// If the timeout is exceeded, the connection is closed.
 	// If this value is zero, the timeout is set to 30 seconds.
 	IdleTimeout time.Duration
+	// AttackTimeout is the maximum duration that may pass after a suspicious packet is
+	// received without any incoming network activity, used for experimental mitigation
+	// against injection attacks. If the timeout is exceeded, the connection is closed.
+	// This timeout should be longer than any reasonable round trip time, but excessively
+	// long timeouts with delay reporting of rejected connections.
+	// If this value is zero or negative, mitigation will be turned off.
+	AttackTimeout time.Duration
 	// AcceptToken determines if a Token is accepted.
 	// It is called with token = nil if the client didn't send a token.
 	// If not set, a default verification function is used:

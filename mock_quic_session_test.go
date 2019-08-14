@@ -317,6 +317,18 @@ func (mr *MockQuicSessionMockRecorder) handlePacket(arg0 interface{}) *gomock.Ca
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "handlePacket", reflect.TypeOf((*MockQuicSession)(nil).handlePacket), arg0)
 }
 
+// maybeRecover mocks base method
+func (m *MockQuicSession) maybeRecover(arg0 func(error), arg1, arg2 error) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "maybeRecover", arg0, arg1, arg2)
+}
+
+// maybeRecover indicates an expected call of maybeRecover
+func (mr *MockQuicSessionMockRecorder) maybeRecover(arg0, arg1, arg2 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "maybeRecover", reflect.TypeOf((*MockQuicSession)(nil).maybeRecover), arg0, arg1, arg2)
+}
+
 // run mocks base method
 func (m *MockQuicSession) run() error {
 	m.ctrl.T.Helper()

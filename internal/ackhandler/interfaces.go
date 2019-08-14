@@ -25,6 +25,7 @@ type SentPacketHandler interface {
 	// SentPacket may modify the packet
 	SentPacket(packet *Packet)
 	ReceivedAck(ackFrame *wire.AckFrame, withPacketNumber protocol.PacketNumber, encLevel protocol.EncryptionLevel, recvTime time.Time) error
+	ValidateAck(ackFrame *wire.AckFrame, withPacketNumber protocol.PacketNumber, encLevel protocol.EncryptionLevel, recvTime time.Time) error
 	DropPackets(protocol.EncryptionLevel)
 	ResetForRetry() error
 
