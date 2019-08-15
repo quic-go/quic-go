@@ -467,6 +467,7 @@ func (s *session) run() error {
 			s.scheduleSending()
 			if zeroRTTParams != nil {
 				s.processTransportParameters(zeroRTTParams)
+				close(s.earlySessionReadyChan)
 			}
 		case closeErr := <-s.closeChan:
 			// put the close error back into the channel, so that the run loop can receive it
