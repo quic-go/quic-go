@@ -598,7 +598,15 @@ func (h *sentPacketHandler) ResetForRetry() error {
 		h.queueFramesForRetransmission(p)
 		return true, nil
 	})
+	// All application data packets sent at this point are 0-RTT packets.
+	// In the case of a Retry, we can assume that the server dropped all of them.
+	h.appDataPackets.history.Iterate(func(p *Packet) (bool, error) {
+		h.queueFramesForRetransmission(p)
+		return true, nil
+	})
+
 	h.initialPackets = newPacketNumberSpace(h.initialPackets.pns.Pop())
+	h.appDataPackets = newPacketNumberSpace(h.appDataPackets.pns.Pop())
 	h.setLossDetectionTimer()
 	return nil
 }

@@ -875,5 +875,35 @@ var _ = Describe("SentPacketHandler", func() {
 			Expect(handler.GetLossDetectionTimeout()).To(BeZero())
 			Expect(handler.SendMode()).To(Equal(SendAny))
 		})
+
+		It("queues outstanding frames for retransmission and cancels alarms", func() {
+			var lostInitial, lost0RTT bool
+			handler.SentPacket(&Packet{
+				PacketNumber:    13,
+				EncryptionLevel: protocol.EncryptionInitial,
+				Frames: []Frame{
+					{Frame: &wire.CryptoFrame{Data: []byte("foobar")}, OnLost: func(wire.Frame) { lostInitial = true }},
+				},
+				Length: 100,
+			})
+			pn := handler.PopPacketNumber(protocol.Encryption0RTT)
+			handler.SentPacket(&Packet{
+				PacketNumber:    pn,
+				EncryptionLevel: protocol.Encryption0RTT,
+				Frames: []Frame{
+					{Frame: &wire.StreamFrame{Data: []byte("foobar")}, OnLost: func(wire.Frame) { lost0RTT = true }},
+				},
+				Length: 999,
+			})
+			Expect(handler.bytesInFlight).ToNot(BeZero())
+			// now receive a Retry
+			Expect(handler.ResetForRetry()).To(Succeed())
+			Expect(handler.bytesInFlight).To(BeZero())
+			Expect(lostInitial).To(BeTrue())
+			Expect(lost0RTT).To(BeTrue())
+
+			// make sure we keep increasing the packet number for 0-RTT packets
+			Expect(handler.PopPacketNumber(protocol.Encryption0RTT)).To(BeNumerically(">", pn))
+		})
 	})
 })
