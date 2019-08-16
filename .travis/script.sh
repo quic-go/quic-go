@@ -6,6 +6,10 @@ if [ ${TESTMODE} == "lint" ]; then
   ./bin/golangci-lint run ./...
 fi
 
+if [ ${TESTMODE} == "fuzz" ]; then
+  .travis/fuzzit.sh
+fi
+
 if [ ${TESTMODE} == "unit" ]; then
   ginkgo -r -v -cover -randomizeAllSpecs -randomizeSuites -trace -skipPackage integrationtests,benchmark
 fi
