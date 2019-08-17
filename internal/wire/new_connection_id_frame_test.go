@@ -30,14 +30,14 @@ var _ = Describe("NEW_CONNECTION_ID frame", func() {
 
 		It("errors when the connection ID has an invalid length", func() {
 			data := []byte{0x18}
-			data = append(data, encodeVarInt(0xdeadbeef)...)   // sequence number
-			data = append(data, encodeVarInt(0xcafe)...)       // retire prior to
-			data = append(data, 3)                             // connection ID length
-			data = append(data, []byte{1, 2, 3}...)            // connection ID
-			data = append(data, []byte("deadbeefdecafbad")...) // stateless reset token
+			data = append(data, encodeVarInt(0xdeadbeef)...)                                                          // sequence number
+			data = append(data, encodeVarInt(0xcafe)...)                                                              // retire prior to
+			data = append(data, 21)                                                                                   // connection ID length
+			data = append(data, []byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21}...) // connection ID
+			data = append(data, []byte("deadbeefdecafbad")...)                                                        // stateless reset token
 			b := bytes.NewReader(data)
 			_, err := parseNewConnectionIDFrame(b, versionIETFFrames)
-			Expect(err).To(MatchError("invalid connection ID length: 3"))
+			Expect(err).To(MatchError("invalid connection ID length: 21"))
 		})
 
 		It("errors on EOFs", func() {
