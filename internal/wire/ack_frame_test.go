@@ -3,6 +3,7 @@ package wire
 import (
 	"bytes"
 	"io"
+	"math"
 	"time"
 
 	"github.com/lucas-clemente/quic-go/internal/protocol"
@@ -127,6 +128,20 @@ var _ = Describe("ACK Frame (for IETF QUIC)", func() {
 				Expect(err).ToNot(HaveOccurred())
 				Expect(frame.DelayTime).To(Equal(delayTime * (1 << i)))
 			}
+		})
+
+		It("gracefully handles overflows of the delay time", func() {
+			data := []byte{0x2}
+			data = append(data, encodeVarInt(100)...)              // largest acked
+			data = append(data, encodeVarInt(math.MaxUint64/5)...) // delay
+			data = append(data, encodeVarInt(0)...)                // num blocks
+			data = append(data, encodeVarInt(0)...)                // first ack block
+			b := bytes.NewReader(data)
+			frame, err := parseAckFrame(b, protocol.AckDelayExponent, versionIETFFrames)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(frame.DelayTime).To(BeNumerically(">", 0))
+			// The maximum encodable duration is ~292 years.
+			Expect(frame.DelayTime.Hours()).To(BeNumerically("~", 292*365*24, 365*24))
 		})
 
 		It("errors on EOF", func() {
