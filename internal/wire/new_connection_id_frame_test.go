@@ -28,6 +28,18 @@ var _ = Describe("NEW_CONNECTION_ID frame", func() {
 			Expect(string(frame.StatelessResetToken[:])).To(Equal("deadbeefdecafbad"))
 		})
 
+		It("errors when the Retire Prior To value is larger than the Sequence Number", func() {
+			data := []byte{0x18}
+			data = append(data, encodeVarInt(1000)...) // sequence number
+			data = append(data, encodeVarInt(1001)...) // retire prior to
+			data = append(data, 3)
+			data = append(data, []byte{1, 2, 3}...)
+			data = append(data, []byte("deadbeefdecafbad")...) // stateless reset token
+			b := bytes.NewReader(data)
+			_, err := parseNewConnectionIDFrame(b, versionIETFFrames)
+			Expect(err).To(MatchError("Retire Prior To value (1001) larger than Sequence Number (1000)"))
+		})
+
 		It("errors when the connection ID has an invalid length", func() {
 			data := []byte{0x18}
 			data = append(data, encodeVarInt(0xdeadbeef)...)                                                          // sequence number

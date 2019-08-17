@@ -31,6 +31,9 @@ func parseNewConnectionIDFrame(r *bytes.Reader, _ protocol.VersionNumber) (*NewC
 	if err != nil {
 		return nil, err
 	}
+	if ret > seq {
+		return nil, fmt.Errorf("Retire Prior To value (%d) larger than Sequence Number (%d)", ret, seq)
+	}
 	connIDLen, err := r.ReadByte()
 	if err != nil {
 		return nil, err
