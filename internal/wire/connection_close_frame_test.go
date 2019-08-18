@@ -25,6 +25,7 @@ var _ = Describe("CONNECTION_CLOSE Frame", func() {
 			Expect(err).ToNot(HaveOccurred())
 			Expect(frame.IsApplicationError).To(BeFalse())
 			Expect(frame.ErrorCode).To(Equal(qerr.ErrorCode(0x19)))
+			Expect(frame.FrameType).To(Equal(uint64(0x1337)))
 			Expect(frame.ReasonPhrase).To(Equal(reason))
 			Expect(b.Len()).To(BeZero())
 		})
@@ -87,12 +88,13 @@ var _ = Describe("CONNECTION_CLOSE Frame", func() {
 			b := &bytes.Buffer{}
 			frame := &ConnectionCloseFrame{
 				ErrorCode: 0xbeef,
+				FrameType: 0x12345,
 			}
 			Expect(frame.Write(b, versionIETFFrames)).To(Succeed())
 			expected := []byte{0x1c}
 			expected = append(expected, encodeVarInt(0xbeef)...)
-			expected = append(expected, encodeVarInt(0)...) // frame type
-			expected = append(expected, encodeVarInt(0)...) // reason phrase length
+			expected = append(expected, encodeVarInt(0x12345)...) // frame type
+			expected = append(expected, encodeVarInt(0)...)       // reason phrase length
 			Expect(b.Bytes()).To(Equal(expected))
 		})
 
