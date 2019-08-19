@@ -139,10 +139,16 @@ var _ = Describe("Transport Parameters", func() {
 	})
 
 	It("doesn't send the max_ack_delay, if it has the default value", func() {
-		dataDefault := (&TransportParameters{MaxAckDelay: protocol.DefaultMaxAckDelay}).Marshal()
-		defaultLen := len(dataDefault)
-		data := (&TransportParameters{MaxAckDelay: protocol.DefaultMaxAckDelay + time.Millisecond}).Marshal()
-		Expect(len(data)).To(Equal(defaultLen + 2 /* parameter ID */ + 2 /* length field */ + 1 /* value */))
+		const num = 1000
+		var defaultLen, dataLen int
+		// marshal 1000 times to average out the greasing transport parameter
+		for i := 0; i < num; i++ {
+			dataDefault := (&TransportParameters{MaxAckDelay: protocol.DefaultMaxAckDelay}).Marshal()
+			defaultLen += len(dataDefault)
+			data := (&TransportParameters{MaxAckDelay: protocol.DefaultMaxAckDelay + time.Millisecond}).Marshal()
+			dataLen += len(data)
+		}
+		Expect(float32(dataLen) / num).To(BeNumerically("~", float32(defaultLen)/num+2 /* parameter ID */ +2 /* length field */ +1 /* value */, 1))
 	})
 
 	It("errors when the ack_delay_exponenent is too large", func() {
@@ -152,10 +158,16 @@ var _ = Describe("Transport Parameters", func() {
 	})
 
 	It("doesn't send the ack_delay_exponent, if it has the default value", func() {
-		dataDefault := (&TransportParameters{AckDelayExponent: protocol.DefaultAckDelayExponent}).Marshal()
-		defaultLen := len(dataDefault)
-		data := (&TransportParameters{AckDelayExponent: protocol.DefaultAckDelayExponent + 1}).Marshal()
-		Expect(len(data)).To(Equal(defaultLen + 2 /* parameter ID */ + 2 /* length field */ + 1 /* value */))
+		const num = 1000
+		var defaultLen, dataLen int
+		// marshal 1000 times to average out the greasing transport parameter
+		for i := 0; i < num; i++ {
+			dataDefault := (&TransportParameters{AckDelayExponent: protocol.DefaultAckDelayExponent}).Marshal()
+			defaultLen += len(dataDefault)
+			data := (&TransportParameters{AckDelayExponent: protocol.DefaultAckDelayExponent + 1}).Marshal()
+			dataLen += len(data)
+		}
+		Expect(float32(dataLen) / num).To(BeNumerically("~", float32(defaultLen)/num+2 /* parameter ID */ +2 /* length field */ +1 /* value */, 1))
 	})
 
 	It("sets the default value for the ack_delay_exponent, when no value was sent", func() {
