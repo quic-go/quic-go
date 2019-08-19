@@ -678,7 +678,7 @@ var _ = Describe("Client", func() {
 	})
 
 	Context("handling potentially injected packets", func() {
-		// NOTE: We hope these tests as written will fail once mitigations for injection adversaries are put in place.
+		// NOTE: We hope these tests as written will fail once mitigation for injection adversaries is put in place.
 
 		// Illustrates that adversary who injects any packet quickly can
 		// cause a real version negotiation packet to be ignored.
