@@ -5,8 +5,11 @@ import (
 	"crypto/tls"
 	"flag"
 	"io"
+	"log"
 	"net/http"
 	"sync"
+
+	_ "net/http/pprof"
 
 	"github.com/lucas-clemente/quic-go/http3"
 	"github.com/lucas-clemente/quic-go/internal/testdata"
@@ -14,6 +17,10 @@ import (
 )
 
 func main() {
+	go func() {
+		log.Println(http.ListenAndServe("localhost:6061", nil))
+	}()
+
 	verbose := flag.Bool("v", false, "verbose")
 	quiet := flag.Bool("q", false, "don't print the data")
 	insecure := flag.Bool("insecure", false, "skip certificate verification")
