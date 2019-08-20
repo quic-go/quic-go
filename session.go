@@ -105,7 +105,8 @@ type session struct {
 	version        protocol.VersionNumber
 	config         *Config
 
-	conn connection
+	conn      connection
+	sendQueue *sendQueue
 
 	streamsMap streamManager
 
@@ -337,6 +338,7 @@ var newClientSession = func(
 }
 
 func (s *session) preSetup() {
+	s.sendQueue = newSendQueue(s.conn)
 	s.frameParser = wire.NewFrameParser(s.version)
 	s.rttStats = &congestion.RTTStats{}
 	s.receivedPacketHandler = ackhandler.NewReceivedPacketHandler(s.rttStats, s.logger, s.version)
@@ -377,6 +379,11 @@ func (s *session) run() error {
 	defer s.ctxCancel()
 
 	go s.cryptoStreamHandler.RunHandshake()
+	go func() {
+		if err := s.sendQueue.Run(); err != nil {
+			s.closeLocal(err)
+		}
+	}()
 
 	if s.perspective == protocol.PerspectiveClient {
 		select {
@@ -468,6 +475,7 @@ runLoop:
 	s.closed.Set(true)
 	s.logger.Infof("Connection %s closed.", s.srcConnID)
 	s.cryptoStreamHandler.Close()
+	s.sendQueue.Close()
 	return closeErr.err
 }
 
@@ -1123,7 +1131,8 @@ func (s *session) maybeSendAckOnlyPacket() error {
 		return nil
 	}
 	s.sentPacketHandler.SentPacket(packet.ToAckHandlerPacket())
-	return s.sendPackedPacket(packet)
+	s.sendQueue.Send(packet)
+	return nil
 }
 
 // maybeSendRetransmission sends retransmissions for at most one packet.
@@ -1145,9 +1154,7 @@ func (s *session) maybeSendRetransmission() (bool, error) {
 	}
 	s.sentPacketHandler.SentPacketsAsRetransmission(ackhandlerPackets, retransmitPacket.PacketNumber)
 	for _, packet := range packets {
-		if err := s.sendPackedPacket(packet); err != nil {
-			return false, err
-		}
+		s.sendPackedPacket(packet)
 	}
 	return true, nil
 }
@@ -1169,9 +1176,7 @@ func (s *session) sendProbePacket() error {
 	}
 	s.sentPacketHandler.SentPacketsAsRetransmission(ackhandlerPackets, p.PacketNumber)
 	for _, packet := range packets {
-		if err := s.sendPackedPacket(packet); err != nil {
-			return err
-		}
+		s.sendPackedPacket(packet)
 	}
 	return nil
 }
@@ -1187,14 +1192,11 @@ func (s *session) sendPacket() (bool, error) {
 		return false, err
 	}
 	s.sentPacketHandler.SentPacket(packet.ToAckHandlerPacket())
-	if err := s.sendPackedPacket(packet); err != nil {
-		return false, err
-	}
+	s.sendPackedPacket(packet)
 	return true, nil
 }
 
-func (s *session) sendPackedPacket(packet *packedPacket) error {
-	defer packet.buffer.Release()
+func (s *session) sendPackedPacket(packet *packedPacket) {
 	if s.firstAckElicitingPacketAfterIdleSentTime.IsZero() && packet.IsAckEliciting() {
 		s.firstAckElicitingPacketAfterIdleSentTime = time.Now()
 	}
@@ -1210,7 +1212,7 @@ func (s *session) sendPackedPacket(packet *packedPacket) error {
 		})
 	}
 	s.logPacket(packet)
-	return s.conn.Write(packet.raw)
+	s.sendQueue.Send(packet)
 }
 
 func (s *session) sendConnectionClose(quicErr *qerr.QuicError) error {
