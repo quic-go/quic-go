@@ -63,10 +63,14 @@ func (p *packedPacket) IsAckEliciting() bool {
 }
 
 func (p *packedPacket) ToAckHandlerPacket() *ackhandler.Packet {
+	largestAcked := protocol.InvalidPacketNumber
+	if p.ack != nil {
+		largestAcked = p.ack.LargestAcked()
+	}
 	return &ackhandler.Packet{
 		PacketNumber:    p.header.PacketNumber,
 		PacketType:      p.header.Type,
-		Ack:             p.ack,
+		LargestAcked:    largestAcked,
 		Frames:          p.frames,
 		Length:          protocol.ByteCount(len(p.raw)),
 		EncryptionLevel: p.EncryptionLevel(),
