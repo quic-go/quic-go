@@ -3,11 +3,13 @@ package http3
 import (
 	"errors"
 	"io"
+
+	"github.com/lucas-clemente/quic-go"
 )
 
 // The body of a http.Request or http.Response.
 type body struct {
-	str io.ReadCloser
+	str quic.Stream
 
 	isRequest bool
 
@@ -16,14 +18,14 @@ type body struct {
 
 var _ io.ReadCloser = &body{}
 
-func newRequestBody(str io.ReadCloser) *body {
+func newRequestBody(str quic.Stream) *body {
 	return &body{
 		str:       str,
 		isRequest: true,
 	}
 }
 
-func newResponseBody(str io.ReadCloser) *body {
+func newResponseBody(str quic.Stream) *body {
 	return &body{str: str}
 }
 
@@ -62,7 +64,8 @@ func (r *body) Read(b []byte) (int, error) {
 func (r *body) Close() error {
 	// quic.Stream.Close() closes the write side, not the read side
 	if r.isRequest {
-		return nil
+		return r.str.Close()
 	}
-	return r.str.Close()
+	r.str.CancelRead(quic.ErrorCode(errorRequestCanceled))
+	return nil
 }
