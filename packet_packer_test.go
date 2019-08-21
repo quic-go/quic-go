@@ -932,7 +932,6 @@ var _ = Describe("Packet packer", func() {
 					pnManager.EXPECT().PopPacketNumber(protocol.EncryptionInitial).Return(protocol.PacketNumber(0x42))
 					sealingManager.EXPECT().GetInitialSealer().Return(sealer, nil)
 					packet := &ackhandler.Packet{
-						PacketType:      protocol.PacketTypeHandshake,
 						EncryptionLevel: protocol.EncryptionInitial,
 						Frames:          []wire.Frame{cf},
 					}
@@ -952,7 +951,6 @@ var _ = Describe("Packet packer", func() {
 					sealingManager.EXPECT().GetInitialSealer().Return(sealer, nil)
 					packer.perspective = protocol.PerspectiveClient
 					packet := &ackhandler.Packet{
-						PacketType:      protocol.PacketTypeInitial,
 						EncryptionLevel: protocol.EncryptionInitial,
 						Frames:          []wire.Frame{cf},
 					}

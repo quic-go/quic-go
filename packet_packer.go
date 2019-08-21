@@ -69,7 +69,6 @@ func (p *packedPacket) ToAckHandlerPacket() *ackhandler.Packet {
 	}
 	return &ackhandler.Packet{
 		PacketNumber:    p.header.PacketNumber,
-		PacketType:      p.header.Type,
 		LargestAcked:    largestAcked,
 		Frames:          p.frames,
 		Length:          protocol.ByteCount(len(p.raw)),

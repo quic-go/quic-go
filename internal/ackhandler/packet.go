@@ -10,7 +10,6 @@ import (
 // A Packet is a packet
 type Packet struct {
 	PacketNumber    protocol.PacketNumber
-	PacketType      protocol.PacketType
 	Frames          []wire.Frame
 	LargestAcked    protocol.PacketNumber // InvalidPacketNumber if the packet doesn't contain an ACK
 	Length          protocol.ByteCount
