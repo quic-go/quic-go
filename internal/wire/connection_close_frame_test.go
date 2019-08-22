@@ -132,6 +132,7 @@ var _ = Describe("CONNECTION_CLOSE Frame", func() {
 			b := &bytes.Buffer{}
 			f := &ConnectionCloseFrame{
 				ErrorCode:    0xcafe,
+				FrameType:    0xdeadbeef,
 				ReasonPhrase: "foobar",
 			}
 			Expect(f.Write(b, versionIETFFrames)).To(Succeed())
