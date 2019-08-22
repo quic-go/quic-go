@@ -17,6 +17,7 @@ import (
 )
 
 const defaultUserAgent = "quic-go HTTP/3"
+const defaultMaxResponseHeaderBytes = 10 * 1 << 20 // 10 MB
 
 var defaultQuicConfig = &quic.Config{KeepAlive: true}
 
@@ -24,6 +25,7 @@ var dialAddr = quic.DialAddr
 
 type roundTripperOpts struct {
 	DisableCompression bool
+	MaxHeaderBytes     int64
 }
 
 // client is a HTTP3 client doing requests
@@ -121,6 +123,13 @@ func (c *client) Close() error {
 	return c.session.Close()
 }
 
+func (c *client) maxHeaderBytes() uint64 {
+	if c.opts.MaxHeaderBytes <= 0 {
+		return defaultMaxResponseHeaderBytes
+	}
+	return uint64(c.opts.MaxHeaderBytes)
+}
+
 // Roundtrip executes a request and returns a response
 // TODO: handle request cancelations
 func (c *client) RoundTrip(req *http.Request) (*http.Response, error) {
@@ -160,7 +169,9 @@ func (c *client) RoundTrip(req *http.Request) (*http.Response, error) {
 	if !ok {
 		return nil, errors.New("not a HEADERS frame")
 	}
-	// TODO: check size
+	if hf.Length > c.maxHeaderBytes() {
+		return nil, fmt.Errorf("Headers frame too large: %d bytes (max: %d)", hf.Length, c.maxHeaderBytes())
+	}
 	headerBlock := make([]byte, hf.Length)
 	if _, err := io.ReadFull(str, headerBlock); err != nil {
 		return nil, err
