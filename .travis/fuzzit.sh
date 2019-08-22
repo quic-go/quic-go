@@ -11,6 +11,10 @@ fi
 ## in the old style GOPATH way
 export GO111MODULE="off"
 
+## Install fuzzit
+wget -q -O fuzzit https://github.com/fuzzitdev/fuzzit/releases/download/v2.4.23/fuzzit_Linux_x86_64
+chmod a+x fuzzit
+
 ## Install go-fuzz
 go get -u github.com/dvyukov/go-fuzz/go-fuzz github.com/dvyukov/go-fuzz/go-fuzz-build
 
@@ -18,13 +22,15 @@ go get -u github.com/dvyukov/go-fuzz/go-fuzz github.com/dvyukov/go-fuzz/go-fuzz-
 go get -d -v -u ./...
 
 cd fuzzing/header
-
 go-fuzz-build -libfuzzer -o fuzz-header.a .
 clang -fsanitize=fuzzer fuzz-header.a -o fuzz-header
 
-## Install fuzzit
-wget -q -O fuzzit https://github.com/fuzzitdev/fuzzit/releases/download/v2.4.23/fuzzit_Linux_x86_64
-chmod a+x fuzzit
+cd ../frames
+go-fuzz-build -libfuzzer -o fuzz-frames.a .
+clang -fsanitize=fuzzer fuzz-frames.a -o fuzz-frames
 
-# Create the job
-./fuzzit create job --type ${FUZZING_TYPE} --branch ${BRANCH} --revision=${TRAVIS_COMMIT} quic-go/fuzz-header fuzz-header
+cd ../..
+
+# Create the jobs
+./fuzzit create job --type ${FUZZING_TYPE} --branch ${BRANCH} --revision=${TRAVIS_COMMIT} quic-go/fuzz-header fuzzing/header/fuzz-header
+./fuzzit create job --type ${FUZZING_TYPE} --branch ${BRANCH} --revision=${TRAVIS_COMMIT} quic-go/fuzz-frames fuzzing/frames/fuzz-frames
