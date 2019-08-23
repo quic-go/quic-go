@@ -181,6 +181,28 @@ var _ = Describe("Server", func() {
 			Expect(hfs).To(HaveKeyWithValue(":status", []string{"200"}))
 		})
 
+		It("errors when the client sends a too large header frame", func() {
+			s.Server.MaxHeaderBytes = 42
+			s.Handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				Fail("Handler should not be called.")
+			})
+
+			requestData := encodeRequest(exampleGetRequest)
+			buf := &bytes.Buffer{}
+			(&dataFrame{Length: 6}).Write(buf) // add a body
+			buf.Write([]byte("foobar"))
+			responseBuf := &bytes.Buffer{}
+			setRequest(append(requestData, buf.Bytes()...))
+			str.EXPECT().Write(gomock.Any()).DoAndReturn(func(p []byte) (int, error) {
+				return responseBuf.Write(p)
+			}).AnyTimes()
+
+			str.EXPECT().CancelWrite(quic.ErrorCode(errorLimitExceeded))
+			err := s.handleRequest(str, qpackDecoder)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("Headers frame too large"))
+		})
+
 		It("cancels reading when the body of POST request is not read", func() {
 			handlerCalled := make(chan struct{})
 			s.Handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

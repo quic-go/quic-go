@@ -155,6 +155,13 @@ func (s *Server) handleConn(sess quic.Session) {
 	}
 }
 
+func (s *Server) maxHeaderBytes() uint64 {
+	if s.Server.MaxHeaderBytes <= 0 {
+		return http.DefaultMaxHeaderBytes
+	}
+	return uint64(s.Server.MaxHeaderBytes)
+}
+
 // TODO: improve error handling.
 // Most (but not all) of the errors occurring here are connection-level erros.
 func (s *Server) handleRequest(str quic.Stream, decoder *qpack.Decoder) error {
@@ -168,7 +175,10 @@ func (s *Server) handleRequest(str quic.Stream, decoder *qpack.Decoder) error {
 		str.CancelWrite(quic.ErrorCode(errorUnexpectedFrame))
 		return errors.New("expected first frame to be a headers frame")
 	}
-	// TODO: check length
+	if hf.Length > s.maxHeaderBytes() {
+		str.CancelWrite(quic.ErrorCode(errorLimitExceeded))
+		return fmt.Errorf("Headers frame too large: %d bytes (max: %d)", hf.Length, s.maxHeaderBytes())
+	}
 	headerBlock := make([]byte, hf.Length)
 	if _, err := io.ReadFull(str, headerBlock); err != nil {
 		str.CancelWrite(quic.ErrorCode(errorIncompleteRequest))

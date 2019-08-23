@@ -31,7 +31,7 @@ var _ = Describe("Client", func() {
 	BeforeEach(func() {
 		origDialAddr = dialAddr
 		hostname := "quic.clemente.io:1337"
-		client = newClient(hostname, nil, &roundTripperOpts{}, nil, nil)
+		client = newClient(hostname, nil, &roundTripperOpts{MaxHeaderBytes: 1337}, nil, nil)
 		Expect(client.hostname).To(Equal(hostname))
 
 		var err error
@@ -274,6 +274,28 @@ var _ = Describe("Client", func() {
 				})
 				_, err := client.RoundTrip(request)
 				Expect(err).To(MatchError("test done"))
+			})
+
+			It("errors when the first frame is not a HEADERS frame", func() {
+				buf := &bytes.Buffer{}
+				(&dataFrame{Length: 0x42}).Write(buf)
+				str.EXPECT().Close().MaxTimes(1)
+				str.EXPECT().Read(gomock.Any()).DoAndReturn(func(b []byte) (int, error) {
+					return buf.Read(b)
+				}).AnyTimes()
+				_, err := client.RoundTrip(request)
+				Expect(err).To(MatchError("not a HEADERS frame"))
+			})
+
+			It("errors when the first frame is not a HEADERS frame", func() {
+				buf := &bytes.Buffer{}
+				(&headersFrame{Length: 1338}).Write(buf)
+				str.EXPECT().Close().MaxTimes(1)
+				str.EXPECT().Read(gomock.Any()).DoAndReturn(func(b []byte) (int, error) {
+					return buf.Read(b)
+				}).AnyTimes()
+				_, err := client.RoundTrip(request)
+				Expect(err).To(MatchError("Headers frame too large: 1338 bytes (max: 1337)"))
 			})
 		})
 
