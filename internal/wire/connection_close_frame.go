@@ -62,7 +62,7 @@ func parseConnectionCloseFrame(r *bytes.Reader, version protocol.VersionNumber) 
 func (f *ConnectionCloseFrame) Length(version protocol.VersionNumber) protocol.ByteCount {
 	length := 1 + utils.VarIntLen(uint64(f.ErrorCode)) + utils.VarIntLen(uint64(len(f.ReasonPhrase))) + protocol.ByteCount(len(f.ReasonPhrase))
 	if !f.IsApplicationError {
-		length++ // for the frame type
+		length += utils.VarIntLen(f.FrameType) // for the frame type
 	}
 	return length
 }
