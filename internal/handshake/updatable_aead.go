@@ -59,6 +59,8 @@ type updatableAEAD struct {
 	numSentWithCurrentKey   uint64
 	rcvAEAD                 cipher.AEAD
 	sendAEAD                cipher.AEAD
+	// caches cipher.AEAD.Overhead(). This speeds up calls to Overhead().
+	aeadOverhead int
 
 	nextRcvAEAD           cipher.AEAD
 	nextSendAEAD          cipher.AEAD
@@ -120,6 +122,7 @@ func (a *updatableAEAD) SetReadKey(suite cipherSuite, trafficSecret []byte) {
 	if a.suite == nil {
 		a.nonceBuf = make([]byte, a.rcvAEAD.NonceSize())
 		a.hpMask = make([]byte, a.hpDecrypter.BlockSize())
+		a.aeadOverhead = a.rcvAEAD.Overhead()
 		a.suite = suite
 	}
 
@@ -135,6 +138,7 @@ func (a *updatableAEAD) SetWriteKey(suite cipherSuite, trafficSecret []byte) {
 	if a.suite == nil {
 		a.nonceBuf = make([]byte, a.sendAEAD.NonceSize())
 		a.hpMask = make([]byte, a.hpEncrypter.BlockSize())
+		a.aeadOverhead = a.sendAEAD.Overhead()
 		a.suite = suite
 	}
 
@@ -238,7 +242,7 @@ func (a *updatableAEAD) KeyPhase() protocol.KeyPhaseBit {
 }
 
 func (a *updatableAEAD) Overhead() int {
-	return a.sendAEAD.Overhead()
+	return a.aeadOverhead
 }
 
 func (a *updatableAEAD) EncryptHeader(sample []byte, firstByte *byte, pnBytes []byte) {
