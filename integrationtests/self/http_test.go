@@ -3,6 +3,7 @@ package self_test
 import (
 	"bytes"
 	"compress/gzip"
+	"context"
 	"crypto/tls"
 	"fmt"
 	"io/ioutil"
@@ -19,6 +20,11 @@ import (
 	. "github.com/onsi/gomega"
 	"github.com/onsi/gomega/gbytes"
 )
+
+type streamCancelError interface {
+	Canceled() bool
+	ErrorCode() protocol.ApplicationErrorCode
+}
 
 var _ = Describe("HTTP tests", func() {
 	var client *http.Client
@@ -183,6 +189,36 @@ var _ = Describe("HTTP tests", func() {
 				body, err := ioutil.ReadAll(gbytes.TimeoutReader(resp.Body, 3*time.Second))
 				Expect(err).ToNot(HaveOccurred())
 				Expect(string(body)).To(Equal("Hello, World!\n"))
+			})
+
+			It("cancels requests", func() {
+				handlerCalled := make(chan struct{})
+				http.HandleFunc("/cancel", func(w http.ResponseWriter, r *http.Request) {
+					defer GinkgoRecover()
+					defer close(handlerCalled)
+					for {
+						if _, err := w.Write([]byte("foobar")); err != nil {
+							Expect(r.Context().Done()).To(BeClosed())
+							serr, ok := err.(streamCancelError)
+							Expect(ok).To(BeTrue())
+							Expect(serr.Canceled()).To(BeTrue())
+							Expect(serr.ErrorCode()).To(BeEquivalentTo(5))
+							return
+						}
+					}
+				})
+
+				req, err := http.NewRequest(http.MethodGet, "https://localhost:"+testserver.Port()+"/cancel", nil)
+				Expect(err).ToNot(HaveOccurred())
+				ctx, cancel := context.WithCancel(context.Background())
+				req = req.WithContext(ctx)
+				resp, err := client.Do(req)
+				Expect(err).ToNot(HaveOccurred())
+				Expect(resp.StatusCode).To(Equal(200))
+				cancel()
+				Eventually(handlerCalled).Should(BeClosed())
+				_, err = resp.Body.Read([]byte{0})
+				Expect(err).To(HaveOccurred())
 			})
 		})
 	}
