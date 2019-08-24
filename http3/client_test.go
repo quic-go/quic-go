@@ -299,6 +299,56 @@ var _ = Describe("Client", func() {
 			})
 		})
 
+		Context("request cancelations", func() {
+			It("cancels a request while the request is still in flight", func() {
+				ctx, cancel := context.WithCancel(context.Background())
+				req := request.WithContext(ctx)
+				sess.EXPECT().OpenStreamSync(context.Background()).Return(str, nil)
+				buf := &bytes.Buffer{}
+				str.EXPECT().Close().MaxTimes(1)
+
+				done := make(chan struct{})
+				str.EXPECT().Write(gomock.Any()).DoAndReturn(func(p []byte) (int, error) {
+					return buf.Write(p)
+				})
+				str.EXPECT().CancelWrite(quic.ErrorCode(errorRequestCanceled))
+				str.EXPECT().CancelRead(quic.ErrorCode(errorRequestCanceled)).Do(func(quic.ErrorCode) { close(done) })
+				str.EXPECT().Read(gomock.Any()).DoAndReturn(func([]byte) (int, error) {
+					cancel()
+					return 0, errors.New("test done")
+				})
+				_, err := client.RoundTrip(req)
+				Expect(err).To(MatchError("test done"))
+				Eventually(done).Should(BeClosed())
+			})
+
+			It("cancels a request after the response arrived", func() {
+				rspBuf := &bytes.Buffer{}
+				rw := newResponseWriter(rspBuf, utils.DefaultLogger)
+				rw.WriteHeader(418)
+
+				ctx, cancel := context.WithCancel(context.Background())
+				req := request.WithContext(ctx)
+				sess.EXPECT().OpenStreamSync(context.Background()).Return(str, nil)
+				buf := &bytes.Buffer{}
+				str.EXPECT().Close().MaxTimes(1)
+
+				done := make(chan struct{})
+				str.EXPECT().Write(gomock.Any()).DoAndReturn(func(p []byte) (int, error) {
+					return buf.Write(p)
+				})
+				str.EXPECT().Read(gomock.Any()).DoAndReturn(func(b []byte) (int, error) {
+					return rspBuf.Read(b)
+				}).AnyTimes()
+				str.EXPECT().CancelWrite(quic.ErrorCode(errorRequestCanceled))
+				str.EXPECT().CancelRead(quic.ErrorCode(errorRequestCanceled)).Do(func(quic.ErrorCode) { close(done) })
+				_, err := client.RoundTrip(req)
+				Expect(err).ToNot(HaveOccurred())
+				cancel()
+				Eventually(done).Should(BeClosed())
+			})
+		})
+
 		Context("gzip compression", func() {
 			var gzippedData []byte // a gzipped foobar
 			var response *http.Response

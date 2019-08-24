@@ -153,6 +153,19 @@ func (c *client) RoundTrip(req *http.Request) (*http.Response, error) {
 		return nil, err
 	}
 
+	// Request Cancelation:
+	// This go routine keeps running even after RoundTrip() returns.
+	// It is shut down when the application is done processing the body.
+	reqDone := make(chan struct{})
+	go func() {
+		select {
+		case <-req.Context().Done():
+			str.CancelWrite(quic.ErrorCode(errorRequestCanceled))
+			str.CancelRead(quic.ErrorCode(errorRequestCanceled))
+		case <-reqDone:
+		}
+	}()
+
 	var requestGzip bool
 	if !c.opts.DisableCompression && req.Method != "HEAD" && req.Header.Get("Accept-Encoding") == "" && req.Header.Get("Range") == "" {
 		requestGzip = true
@@ -198,7 +211,7 @@ func (c *client) RoundTrip(req *http.Request) (*http.Response, error) {
 			res.Header.Add(hf.Name, hf.Value)
 		}
 	}
-	respBody := newResponseBody(str)
+	respBody := newResponseBody(str, reqDone)
 	if requestGzip && res.Header.Get("Content-Encoding") == "gzip" {
 		res.Header.Del("Content-Encoding")
 		res.Header.Del("Content-Length")
