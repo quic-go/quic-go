@@ -172,13 +172,6 @@ func (h *sentPacketHandler) sentPacketImpl(packet *Packet) bool /* is ack-elicit
 	}
 
 	pnSpace.largestSent = packet.PacketNumber
-
-	packet.largestAcked = protocol.InvalidPacketNumber
-	if packet.Ack != nil {
-		packet.largestAcked = packet.Ack.LargestAcked()
-	}
-	packet.Ack = nil // no need to save the ACK
-
 	isAckEliciting := len(packet.Frames) > 0
 
 	if isAckEliciting {
@@ -237,8 +230,8 @@ func (h *sentPacketHandler) ReceivedAck(ackFrame *wire.AckFrame, withPacketNumbe
 
 	priorInFlight := h.bytesInFlight
 	for _, p := range ackedPackets {
-		if p.largestAcked != protocol.InvalidPacketNumber && encLevel == protocol.Encryption1RTT {
-			h.lowestNotConfirmedAcked = utils.MaxPacketNumber(h.lowestNotConfirmedAcked, p.largestAcked+1)
+		if p.LargestAcked != protocol.InvalidPacketNumber && encLevel == protocol.Encryption1RTT {
+			h.lowestNotConfirmedAcked = utils.MaxPacketNumber(h.lowestNotConfirmedAcked, p.LargestAcked+1)
 		}
 		if err := h.onPacketAcked(p, rcvTime); err != nil {
 			return err

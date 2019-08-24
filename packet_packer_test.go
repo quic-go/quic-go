@@ -5,6 +5,7 @@ import (
 	"errors"
 	"math/rand"
 	"net"
+	"time"
 
 	"github.com/golang/mock/gomock"
 	"github.com/lucas-clemente/quic-go/internal/ackhandler"
@@ -931,7 +932,6 @@ var _ = Describe("Packet packer", func() {
 					pnManager.EXPECT().PopPacketNumber(protocol.EncryptionInitial).Return(protocol.PacketNumber(0x42))
 					sealingManager.EXPECT().GetInitialSealer().Return(sealer, nil)
 					packet := &ackhandler.Packet{
-						PacketType:      protocol.PacketTypeHandshake,
 						EncryptionLevel: protocol.EncryptionInitial,
 						Frames:          []wire.Frame{cf},
 					}
@@ -951,7 +951,6 @@ var _ = Describe("Packet packer", func() {
 					sealingManager.EXPECT().GetInitialSealer().Return(sealer, nil)
 					packer.perspective = protocol.PerspectiveClient
 					packet := &ackhandler.Packet{
-						PacketType:      protocol.PacketTypeInitial,
 						EncryptionLevel: protocol.EncryptionInitial,
 						Frames:          []wire.Frame{cf},
 					}
@@ -967,5 +966,31 @@ var _ = Describe("Packet packer", func() {
 				})
 			})
 		})
+	})
+})
+
+var _ = Describe("Converting to AckHandler packets", func() {
+	It("convert a packet", func() {
+		packet := &packedPacket{
+			header: &wire.ExtendedHeader{Header: wire.Header{}},
+			frames: []wire.Frame{&wire.MaxDataFrame{}, &wire.PingFrame{}},
+			ack:    &wire.AckFrame{AckRanges: []wire.AckRange{{Largest: 100, Smallest: 80}}},
+			raw:    []byte("foobar"),
+		}
+		p := packet.ToAckHandlerPacket()
+		Expect(p.Length).To(Equal(protocol.ByteCount(6)))
+		Expect(p.Frames).To(Equal(packet.frames))
+		Expect(p.LargestAcked).To(Equal(protocol.PacketNumber(100)))
+		Expect(p.SendTime).To(BeTemporally("~", time.Now(), 50*time.Millisecond))
+	})
+
+	It("sets the LargestAcked to invalid, if the packet doesn't have an ACK frame", func() {
+		packet := &packedPacket{
+			header: &wire.ExtendedHeader{Header: wire.Header{}},
+			frames: []wire.Frame{&wire.MaxDataFrame{}, &wire.PingFrame{}},
+			raw:    []byte("foobar"),
+		}
+		p := packet.ToAckHandlerPacket()
+		Expect(p.LargestAcked).To(Equal(protocol.InvalidPacketNumber))
 	})
 })

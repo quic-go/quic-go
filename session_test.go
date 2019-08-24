@@ -867,10 +867,7 @@ var _ = Describe("Session", func() {
 		})
 
 		It("sends a retransmission and a regular packet in the same run", func() {
-			packetToRetransmit := &ackhandler.Packet{
-				PacketNumber: 10,
-				PacketType:   protocol.PacketTypeHandshake,
-			}
+			packetToRetransmit := &ackhandler.Packet{PacketNumber: 10}
 			retransmittedPacket := getPacket(123)
 			newPacket := getPacket(234)
 			sess.windowUpdateQueue.callback(&wire.MaxDataFrame{})
@@ -921,10 +918,7 @@ var _ = Describe("Session", func() {
 		})
 
 		It("sends a probe packet", func() {
-			packetToRetransmit := &ackhandler.Packet{
-				PacketNumber: 0x42,
-				PacketType:   protocol.PacketTypeHandshake,
-			}
+			packetToRetransmit := &ackhandler.Packet{PacketNumber: 0x42}
 			retransmittedPacket := getPacket(123)
 			sph := mockackhandler.NewMockSentPacketHandler(mockCtrl)
 			sph.EXPECT().TimeUntilSend()

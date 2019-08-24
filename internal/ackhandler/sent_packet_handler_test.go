@@ -31,7 +31,7 @@ func ackElicitingPacket(p *Packet) *Packet {
 func nonAckElicitingPacket(p *Packet) *Packet {
 	p = ackElicitingPacket(p)
 	p.Frames = nil
-	p.Ack = &wire.AckFrame{AckRanges: []wire.AckRange{{Smallest: 1, Largest: 1}}}
+	p.LargestAcked = 1
 	return p
 }
 
@@ -332,11 +332,9 @@ var _ = Describe("SentPacketHandler", func() {
 
 		Context("determining which ACKs we have received an ACK for", func() {
 			BeforeEach(func() {
-				ack1 := &wire.AckFrame{AckRanges: []wire.AckRange{{Smallest: 80, Largest: 100}}}
-				ack2 := &wire.AckFrame{AckRanges: []wire.AckRange{{Smallest: 50, Largest: 200}}}
 				morePackets := []*Packet{
-					{PacketNumber: 13, Ack: ack1, Frames: []wire.Frame{&streamFrame}, Length: 1, EncryptionLevel: protocol.Encryption1RTT},
-					{PacketNumber: 14, Ack: ack2, Frames: []wire.Frame{&streamFrame}, Length: 1, EncryptionLevel: protocol.Encryption1RTT},
+					{PacketNumber: 13, LargestAcked: 100, Frames: []wire.Frame{&streamFrame}, Length: 1, EncryptionLevel: protocol.Encryption1RTT},
+					{PacketNumber: 14, LargestAcked: 200, Frames: []wire.Frame{&streamFrame}, Length: 1, EncryptionLevel: protocol.Encryption1RTT},
 					{PacketNumber: 15, Frames: []wire.Frame{&streamFrame}, Length: 1, EncryptionLevel: protocol.Encryption1RTT},
 				}
 				for _, packet := range morePackets {
