@@ -246,7 +246,7 @@ func (a *updatableAEAD) Overhead() int {
 }
 
 func (a *updatableAEAD) EncryptHeader(sample []byte, firstByte *byte, pnBytes []byte) {
-	if len(sample) != a.hpEncrypter.BlockSize() {
+	if len(sample) != len(a.hpMask) {
 		panic("invalid sample size")
 	}
 	a.hpEncrypter.Encrypt(a.hpMask, sample)
@@ -257,7 +257,7 @@ func (a *updatableAEAD) EncryptHeader(sample []byte, firstByte *byte, pnBytes []
 }
 
 func (a *updatableAEAD) DecryptHeader(sample []byte, firstByte *byte, pnBytes []byte) {
-	if len(sample) != a.hpDecrypter.BlockSize() {
+	if len(sample) != len(a.hpMask) {
 		panic("invalid sample size")
 	}
 	a.hpDecrypter.Encrypt(a.hpMask, sample)
