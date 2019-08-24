@@ -99,6 +99,17 @@ func (s *Server) serveImpl(tlsConf *tls.Config, conn net.PacketConn) error {
 	}
 	// Replace existing ALPNs by H3
 	tlsConf.NextProtos = []string{nextProtoH3}
+	if tlsConf.GetConfigForClient != nil {
+		getConfigForClient := tlsConf.GetConfigForClient
+		tlsConf.GetConfigForClient = func(ch *tls.ClientHelloInfo) (*tls.Config, error) {
+			conf, err := getConfigForClient(ch)
+			if err != nil || conf == nil {
+				return conf, err
+			}
+			conf.NextProtos = []string{nextProtoH3}
+			return conf, nil
+		}
+	}
 
 	var ln quic.Listener
 	var err error

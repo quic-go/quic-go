@@ -406,6 +406,30 @@ var _ = Describe("Server", func() {
 			Expect(s.ListenAndServe()).To(HaveOccurred())
 			Expect(receivedConf.NextProtos).To(Equal([]string{nextProtoH3}))
 		})
+
+		It("sets the ALPN for tls.Configs returned by the tls.GetConfigForClient", func() {
+			tlsConf := &tls.Config{
+				GetConfigForClient: func(ch *tls.ClientHelloInfo) (*tls.Config, error) {
+					return &tls.Config{NextProtos: []string{"foo", "bar"}}, nil
+				},
+			}
+
+			var receivedConf *tls.Config
+			quicListenAddr = func(addr string, conf *tls.Config, _ *quic.Config) (quic.Listener, error) {
+				receivedConf = conf
+				return nil, errors.New("listen err")
+			}
+			s.TLSConfig = tlsConf
+			Expect(s.ListenAndServe()).To(HaveOccurred())
+			// check that the config used by QUIC uses the h3 ALPN
+			conf, err := receivedConf.GetConfigForClient(&tls.ClientHelloInfo{})
+			Expect(err).ToNot(HaveOccurred())
+			Expect(conf.NextProtos).To(Equal([]string{nextProtoH3}))
+			// check that the original config was not modified
+			conf, err = tlsConf.GetConfigForClient(&tls.ClientHelloInfo{})
+			Expect(err).ToNot(HaveOccurred())
+			Expect(conf.NextProtos).To(Equal([]string{"foo", "bar"}))
+		})
 	})
 
 	Context("ListenAndServeTLS", func() {
