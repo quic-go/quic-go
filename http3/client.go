@@ -97,7 +97,6 @@ func (c *client) dial() error {
 		}
 	}()
 
-	// TODO: send a SETTINGS frame
 	return nil
 }
 
