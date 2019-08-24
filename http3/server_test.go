@@ -383,15 +383,18 @@ var _ = Describe("Server", func() {
 			Expect(receivedConf).To(Equal(conf))
 		})
 
-		It("adds the ALPN token to the tls.Config", func() {
+		It("replaces the ALPN token to the tls.Config", func() {
+			tlsConf := &tls.Config{NextProtos: []string{"foo", "bar"}}
 			var receivedConf *tls.Config
 			quicListenAddr = func(addr string, tlsConf *tls.Config, _ *quic.Config) (quic.Listener, error) {
 				receivedConf = tlsConf
 				return nil, errors.New("listen err")
 			}
-			s.TLSConfig = &tls.Config{NextProtos: []string{"foo", "bar"}}
+			s.TLSConfig = tlsConf
 			Expect(s.ListenAndServe()).To(HaveOccurred())
-			Expect(receivedConf.NextProtos).To(Equal([]string{"foo", "bar", nextProtoH3}))
+			Expect(receivedConf.NextProtos).To(Equal([]string{nextProtoH3}))
+			// make sure the original tls.Config was not modified
+			Expect(tlsConf.NextProtos).To(Equal([]string{"foo", "bar"}))
 		})
 
 		It("uses the ALPN token if no tls.Config is given", func() {

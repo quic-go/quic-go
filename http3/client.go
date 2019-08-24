@@ -57,10 +57,11 @@ func newClient(
 ) *client {
 	if tlsConf == nil {
 		tlsConf = &tls.Config{}
+	} else {
+		tlsConf = tlsConf.Clone()
 	}
-	if !strSliceContains(tlsConf.NextProtos, nextProtoH3) {
-		tlsConf.NextProtos = append(tlsConf.NextProtos, nextProtoH3)
-	}
+	// Replace existing ALPNs by H3
+	tlsConf.NextProtos = []string{nextProtoH3}
 	if quicConfig == nil {
 		quicConfig = defaultQuicConfig
 	}
