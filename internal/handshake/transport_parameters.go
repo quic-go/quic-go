@@ -139,6 +139,9 @@ func (p *TransportParameters) Unmarshal(data []byte, sentBy protocol.Perspective
 	if !readMaxAckDelay {
 		p.MaxAckDelay = protocol.DefaultMaxAckDelay
 	}
+	if p.MaxPacketSize == 0 {
+		p.MaxPacketSize = protocol.MaxByteCount
+	}
 
 	// check that every transport parameter was sent at most once
 	sort.Slice(parameterIDs, func(i, j int) bool { return parameterIDs[i] < parameterIDs[j] })
@@ -196,6 +199,9 @@ func (p *TransportParameters) readNumericTransportParameter(
 		maxAckDelay := time.Duration(val) * time.Millisecond
 		if maxAckDelay >= protocol.MaxMaxAckDelay {
 			return fmt.Errorf("invalid value for max_ack_delay: %dms (maximum %dms)", maxAckDelay/time.Millisecond, (protocol.MaxMaxAckDelay-time.Millisecond)/time.Millisecond)
+		}
+		if maxAckDelay < 0 {
+			maxAckDelay = utils.InfDuration
 		}
 		p.MaxAckDelay = maxAckDelay
 	default:
