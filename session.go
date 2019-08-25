@@ -118,6 +118,7 @@ type session struct {
 	framer                framer
 	windowUpdateQueue     *windowUpdateQueue
 	connFlowController    flowcontrol.ConnectionFlowController
+	tokenStoreKey         string                    // only set for the client
 	tokenGenerator        *handshake.TokenGenerator // only set for the server
 
 	unpacker    unpacker
@@ -334,6 +335,16 @@ var newClientSession = func(
 		s.perspective,
 		s.version,
 	)
+	if len(tlsConf.ServerName) > 0 {
+		s.tokenStoreKey = tlsConf.ServerName
+	} else {
+		s.tokenStoreKey = conn.RemoteAddr().String()
+	}
+	if s.config.TokenStore != nil {
+		if token := s.config.TokenStore.Pop(s.tokenStoreKey); token != nil {
+			s.packer.SetToken(token.data)
+		}
+	}
 	return s, s.postSetup()
 }
 
@@ -775,6 +786,7 @@ func (s *session) handleFrame(f wire.Frame, pn protocol.PacketNumber, encLevel p
 		// since we don't send PATH_CHALLENGEs, we don't expect PATH_RESPONSEs
 		err = errors.New("unexpected PATH_RESPONSE frame")
 	case *wire.NewTokenFrame:
+		err = s.handleNewTokenFrame(frame)
 	case *wire.NewConnectionIDFrame:
 	case *wire.RetireConnectionIDFrame:
 		// since we don't send new connection IDs, we don't expect retirements
@@ -899,6 +911,16 @@ func (s *session) handleStopSendingFrame(frame *wire.StopSendingFrame) error {
 
 func (s *session) handlePathChallengeFrame(frame *wire.PathChallengeFrame) {
 	s.queueControlFrame(&wire.PathResponseFrame{Data: frame.Data})
+}
+
+func (s *session) handleNewTokenFrame(frame *wire.NewTokenFrame) error {
+	if s.perspective == protocol.PerspectiveServer {
+		return qerr.Error(qerr.ProtocolViolation, "Received NEW_TOKEN frame from the client.")
+	}
+	if s.config.TokenStore != nil {
+		s.config.TokenStore.Put(s.tokenStoreKey, &ClientToken{data: frame.Token})
+	}
+	return nil
 }
 
 func (s *session) handleAckFrame(frame *wire.AckFrame, pn protocol.PacketNumber, encLevel protocol.EncryptionLevel) error {
