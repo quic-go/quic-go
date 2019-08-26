@@ -8,6 +8,25 @@ import (
 	"github.com/lucas-clemente/quic-go/quictrace"
 )
 
+// A Packet is a packet
+type Packet struct {
+	PacketNumber    protocol.PacketNumber
+	Frames          []wire.Frame
+	LargestAcked    protocol.PacketNumber // InvalidPacketNumber if the packet doesn't contain an ACK
+	Length          protocol.ByteCount
+	EncryptionLevel protocol.EncryptionLevel
+	SendTime        time.Time
+
+	// There are two reasons why a packet cannot be retransmitted:
+	// * it was already retransmitted
+	// * this packet is a retransmission, and we already received an ACK for the original packet
+	canBeRetransmitted      bool
+	includedInBytesInFlight bool
+	retransmittedAs         []protocol.PacketNumber
+	isRetransmission        bool // we need a separate bool here because 0 is a valid packet number
+	retransmissionOf        protocol.PacketNumber
+}
+
 // SentPacketHandler handles ACKs received for outgoing packets
 type SentPacketHandler interface {
 	// SentPacket may modify the packet
