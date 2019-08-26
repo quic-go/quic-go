@@ -906,9 +906,8 @@ var _ = Describe("Session", func() {
 			sph.EXPECT().TimeUntilSend()
 			gomock.InOrder(
 				packer.EXPECT().PackRetransmission(packetToRetransmit).Return([]*packedPacket{retransmittedPacket}, nil),
-				sph.EXPECT().SentPacketsAsRetransmission(gomock.Any(), protocol.PacketNumber(10)).Do(func(packets []*ackhandler.Packet, _ protocol.PacketNumber) {
-					Expect(packets).To(HaveLen(1))
-					Expect(packets[0].PacketNumber).To(Equal(protocol.PacketNumber(123)))
+				sph.EXPECT().SentPacket(gomock.Any()).Do(func(packet *ackhandler.Packet) {
+					Expect(packet.PacketNumber).To(Equal(protocol.PacketNumber(123)))
 				}),
 				packer.EXPECT().PackPacket().Return(newPacket, nil),
 				sph.EXPECT().SentPacket(gomock.Any()).Do(func(p *ackhandler.Packet) {
@@ -934,11 +933,14 @@ var _ = Describe("Session", func() {
 			sph.EXPECT().GetLossDetectionTimeout().AnyTimes()
 			sph.EXPECT().DequeuePacketForRetransmission().Return(packet)
 			packer.EXPECT().PackRetransmission(packet).Return(retransmissions, nil)
-			sph.EXPECT().SentPacketsAsRetransmission(gomock.Any(), protocol.PacketNumber(42)).Do(func(packets []*ackhandler.Packet, _ protocol.PacketNumber) {
-				Expect(packets).To(HaveLen(2))
-				Expect(packets[0].PacketNumber).To(Equal(protocol.PacketNumber(1337)))
-				Expect(packets[1].PacketNumber).To(Equal(protocol.PacketNumber(1338)))
-			})
+			gomock.InOrder(
+				sph.EXPECT().SentPacket(gomock.Any()).Do(func(packet *ackhandler.Packet) {
+					Expect(packet.PacketNumber).To(Equal(protocol.PacketNumber(1337)))
+				}),
+				sph.EXPECT().SentPacket(gomock.Any()).Do(func(packet *ackhandler.Packet) {
+					Expect(packet.PacketNumber).To(Equal(protocol.PacketNumber(1338)))
+				}),
+			)
 			sess.sentPacketHandler = sph
 			sent, err := sess.maybeSendRetransmission()
 			Expect(err).NotTo(HaveOccurred())
@@ -956,9 +958,8 @@ var _ = Describe("Session", func() {
 			sph.EXPECT().ShouldSendNumPackets().Return(1)
 			sph.EXPECT().DequeueProbePacket().Return(packetToRetransmit, nil)
 			packer.EXPECT().PackRetransmission(packetToRetransmit).Return([]*packedPacket{retransmittedPacket}, nil)
-			sph.EXPECT().SentPacketsAsRetransmission(gomock.Any(), protocol.PacketNumber(0x42)).Do(func(packets []*ackhandler.Packet, _ protocol.PacketNumber) {
-				Expect(packets).To(HaveLen(1))
-				Expect(packets[0].PacketNumber).To(Equal(protocol.PacketNumber(123)))
+			sph.EXPECT().SentPacket(gomock.Any()).Do(func(packet *ackhandler.Packet) {
+				Expect(packet.PacketNumber).To(Equal(protocol.PacketNumber(123)))
 			})
 			sess.sentPacketHandler = sph
 			Expect(sess.sendPackets()).To(Succeed())

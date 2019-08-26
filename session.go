@@ -1170,12 +1170,8 @@ func (s *session) maybeSendRetransmission() (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	ackhandlerPackets := make([]*ackhandler.Packet, len(packets))
-	for i, packet := range packets {
-		ackhandlerPackets[i] = packet.ToAckHandlerPacket()
-	}
-	s.sentPacketHandler.SentPacketsAsRetransmission(ackhandlerPackets, retransmitPacket.PacketNumber)
 	for _, packet := range packets {
+		s.sentPacketHandler.SentPacket(packet.ToAckHandlerPacket())
 		s.sendPackedPacket(packet)
 	}
 	return true, nil
@@ -1192,12 +1188,8 @@ func (s *session) sendProbePacket() error {
 	if err != nil {
 		return err
 	}
-	ackhandlerPackets := make([]*ackhandler.Packet, len(packets))
-	for i, packet := range packets {
-		ackhandlerPackets[i] = packet.ToAckHandlerPacket()
-	}
-	s.sentPacketHandler.SentPacketsAsRetransmission(ackhandlerPackets, p.PacketNumber)
 	for _, packet := range packets {
+		s.sentPacketHandler.SentPacket(packet.ToAckHandlerPacket())
 		s.sendPackedPacket(packet)
 	}
 	return nil

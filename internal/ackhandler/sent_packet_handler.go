@@ -138,17 +138,6 @@ func (h *sentPacketHandler) SentPacket(packet *Packet) {
 	}
 }
 
-func (h *sentPacketHandler) SentPacketsAsRetransmission(packets []*Packet, retransmissionOf protocol.PacketNumber) {
-	var p []*Packet
-	for _, packet := range packets {
-		if isAckEliciting := h.sentPacketImpl(packet); isAckEliciting {
-			p = append(p, packet)
-		}
-	}
-	h.getPacketNumberSpace(p[0].EncryptionLevel).history.SentPacketsAsRetransmission(p, retransmissionOf)
-	h.setLossDetectionTimer()
-}
-
 func (h *sentPacketHandler) getPacketNumberSpace(encLevel protocol.EncryptionLevel) *packetNumberSpace {
 	switch encLevel {
 	case protocol.EncryptionInitial:
@@ -472,48 +461,14 @@ func (h *sentPacketHandler) onPacketAcked(p *Packet, rcvTime time.Time) error {
 		return nil
 	}
 
-	// only report the acking of this packet to the congestion controller if:
-	// * it is an ack-eliciting packet
-	// * this packet wasn't retransmitted yet
-	if p.isRetransmission {
-		// that the parent doesn't exist is expected to happen every time the original packet was already acked
-		if parent := pnSpace.history.GetPacket(p.retransmissionOf); parent != nil {
-			if len(parent.retransmittedAs) == 1 {
-				parent.retransmittedAs = nil
-			} else {
-				// remove this packet from the slice of retransmission
-				retransmittedAs := make([]protocol.PacketNumber, 0, len(parent.retransmittedAs)-1)
-				for _, pn := range parent.retransmittedAs {
-					if pn != p.PacketNumber {
-						retransmittedAs = append(retransmittedAs, pn)
-					}
-				}
-				parent.retransmittedAs = retransmittedAs
-			}
-		}
-	}
 	// this also applies to packets that have been retransmitted as probe packets
 	if p.includedInBytesInFlight {
 		h.bytesInFlight -= p.Length
 	}
-	if err := h.stopRetransmissionsFor(p, pnSpace); err != nil {
-		return err
-	}
-	return pnSpace.history.Remove(p.PacketNumber)
-}
-
-func (h *sentPacketHandler) stopRetransmissionsFor(p *Packet, pnSpace *packetNumberSpace) error {
 	if err := pnSpace.history.MarkCannotBeRetransmitted(p.PacketNumber); err != nil {
 		return err
 	}
-	for _, r := range p.retransmittedAs {
-		packet := pnSpace.history.GetPacket(r)
-		if packet == nil {
-			return fmt.Errorf("sent packet handler BUG: marking packet as not retransmittable %d (retransmission of %d) not found in history", r, p.PacketNumber)
-		}
-		h.stopRetransmissionsFor(packet, pnSpace)
-	}
-	return nil
+	return pnSpace.history.Remove(p.PacketNumber)
 }
 
 func (h *sentPacketHandler) DequeuePacketForRetransmission() *Packet {

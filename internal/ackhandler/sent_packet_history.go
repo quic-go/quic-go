@@ -38,27 +38,6 @@ func (h *sentPacketHistory) sentPacketImpl(p *Packet) *PacketElement {
 	return el
 }
 
-func (h *sentPacketHistory) SentPacketsAsRetransmission(packets []*Packet, retransmissionOf protocol.PacketNumber) {
-	retransmission, ok := h.packetMap[retransmissionOf]
-	// The retransmitted packet is not present anymore.
-	// This can happen if it was acked in between dequeueing of the retransmission and sending.
-	// Just treat the retransmissions as normal packets.
-	// TODO: This won't happen if we clear packets queued for retransmission on new ACKs.
-	if !ok {
-		for _, packet := range packets {
-			h.sentPacketImpl(packet)
-		}
-		return
-	}
-	retransmission.Value.retransmittedAs = make([]protocol.PacketNumber, len(packets))
-	for i, packet := range packets {
-		retransmission.Value.retransmittedAs[i] = packet.PacketNumber
-		el := h.sentPacketImpl(packet)
-		el.Value.isRetransmission = true
-		el.Value.retransmissionOf = retransmissionOf
-	}
-}
-
 func (h *sentPacketHistory) GetPacket(p protocol.PacketNumber) *Packet {
 	if el, ok := h.packetMap[p]; ok {
 		return &el.Value

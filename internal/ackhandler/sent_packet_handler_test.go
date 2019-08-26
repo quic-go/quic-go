@@ -63,19 +63,6 @@ var _ = Describe("SentPacketHandler", func() {
 		return nil
 	}
 
-	losePacket := func(pn protocol.PacketNumber, encLevel protocol.EncryptionLevel) {
-		p := getPacket(pn, encLevel)
-		ExpectWithOffset(1, p).ToNot(BeNil())
-		handler.queuePacketForRetransmission(p, handler.getPacketNumberSpace(encLevel))
-		if p.includedInBytesInFlight {
-			p.includedInBytesInFlight = false
-			handler.bytesInFlight -= p.Length
-		}
-		r := handler.DequeuePacketForRetransmission()
-		ExpectWithOffset(1, r).ToNot(BeNil())
-		ExpectWithOffset(1, r.PacketNumber).To(Equal(pn))
-	}
-
 	expectInPacketHistory := func(expected []protocol.PacketNumber, encLevel protocol.EncryptionLevel) {
 		pnSpace := handler.getPacketNumberSpace(encLevel)
 		ExpectWithOffset(1, pnSpace.history.Len()).To(Equal(len(expected)))
@@ -365,50 +352,6 @@ var _ = Describe("SentPacketHandler", func() {
 				Expect(handler.ReceivedAck(ack2, 2, protocol.Encryption1RTT, time.Now())).To(Succeed())
 				Expect(handler.GetLowestPacketNotConfirmedAcked()).To(Equal(protocol.PacketNumber(201)))
 			})
-		})
-	})
-
-	Context("ACK processing, for retransmitted packets", func() {
-		It("sends a packet as retransmission", func() {
-			// packet 5 was retransmitted as packet 6
-			handler.SentPacket(ackElicitingPacket(&Packet{PacketNumber: 5, Length: 10, EncryptionLevel: protocol.Encryption1RTT}))
-			Expect(handler.bytesInFlight).To(Equal(protocol.ByteCount(10)))
-			losePacket(5, protocol.Encryption1RTT)
-			Expect(handler.bytesInFlight).To(BeZero())
-			handler.SentPacketsAsRetransmission([]*Packet{ackElicitingPacket(&Packet{PacketNumber: 6, Length: 11})}, 5)
-			Expect(handler.bytesInFlight).To(Equal(protocol.ByteCount(11)))
-		})
-
-		It("removes a packet when it is acked", func() {
-			// packet 5 was retransmitted as packet 6
-			handler.SentPacket(ackElicitingPacket(&Packet{PacketNumber: 5, Length: 10}))
-			losePacket(5, protocol.Encryption1RTT)
-			handler.SentPacketsAsRetransmission([]*Packet{ackElicitingPacket(&Packet{PacketNumber: 6, Length: 11})}, 5)
-			Expect(handler.bytesInFlight).To(Equal(protocol.ByteCount(11)))
-			// ack 5
-			ack := &wire.AckFrame{AckRanges: []wire.AckRange{{Smallest: 5, Largest: 5}}}
-			err := handler.ReceivedAck(ack, 1, protocol.Encryption1RTT, time.Now())
-			Expect(err).ToNot(HaveOccurred())
-			expectInPacketHistory([]protocol.PacketNumber{6}, protocol.Encryption1RTT)
-			Expect(handler.bytesInFlight).To(Equal(protocol.ByteCount(11)))
-		})
-
-		It("handles ACKs that ack the original packet as well as the retransmission", func() {
-			// packet 5 was retransmitted as packet 7
-			handler.SentPacket(ackElicitingPacket(&Packet{PacketNumber: 5, Length: 10}))
-			losePacket(5, protocol.Encryption1RTT)
-			handler.SentPacketsAsRetransmission([]*Packet{ackElicitingPacket(&Packet{PacketNumber: 7, Length: 11})}, 5)
-			// ack 5 and 7
-			ack := &wire.AckFrame{
-				AckRanges: []wire.AckRange{
-					{Smallest: 7, Largest: 7},
-					{Smallest: 5, Largest: 5},
-				},
-			}
-			err := handler.ReceivedAck(ack, 1, protocol.Encryption1RTT, time.Now())
-			Expect(err).ToNot(HaveOccurred())
-			Expect(handler.oneRTTPackets.history.Len()).To(BeZero())
-			Expect(handler.bytesInFlight).To(BeZero())
 		})
 	})
 
@@ -749,20 +692,6 @@ var _ = Describe("SentPacketHandler", func() {
 			Expect(handler.oneRTTPackets.history.Len()).To(BeZero())
 			Expect(handler.bytesInFlight).To(BeZero())
 			Expect(handler.retransmissionQueue).To(HaveLen(3)) // packets 3, 4, 5
-		})
-
-		It("handles ACKs for the original packet", func() {
-			handler.SentPacket(ackElicitingPacket(&Packet{PacketNumber: 5, SendTime: time.Now().Add(-time.Hour)}))
-			handler.rttStats.UpdateRTT(time.Second, 0, time.Now())
-			handler.OnLossDetectionTimeout() // TLP
-			handler.OnLossDetectionTimeout() // TLP
-			handler.OnLossDetectionTimeout() // RTO
-			handler.SentPacketsAsRetransmission([]*Packet{ackElicitingPacket(&Packet{PacketNumber: 6})}, 5)
-			ack := &wire.AckFrame{AckRanges: []wire.AckRange{{Smallest: 5, Largest: 5}}}
-			err := handler.ReceivedAck(ack, 1, protocol.Encryption1RTT, time.Now())
-			Expect(err).ToNot(HaveOccurred())
-			err = handler.OnLossDetectionTimeout()
-			Expect(err).ToNot(HaveOccurred())
 		})
 
 		It("handles ACKs for the original packet", func() {
