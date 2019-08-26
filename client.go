@@ -348,17 +348,15 @@ func (c *client) handleVersionNegotiationPacket(p *receivedPacket) {
 	c.logger.Infof("Received a Version Negotiation packet. Supported Versions: %s", hdr.SupportedVersions)
 	newVersion, ok := protocol.ChooseSupportedVersion(c.config.Versions, hdr.SupportedVersions)
 	if !ok {
-		fail := func(err error) { c.session.destroy(err) }
-		errStr := fmt.Sprintf("No compatible QUIC version found. We support %s, server offered %s", c.config.Versions, hdr.SupportedVersions)
-		errImmediate := fmt.Errorf(errStr)
-		errTimeout := fmt.Errorf("Timed out: %v", errStr)
-		sess, ok := c.session.(*session)
-		if !ok { // this catches MockQuicSession
-			fail(errImmediate)
-			return
+		fail := func(err error) {
+			c.session.destroy(err)
 		}
-		sess.maybeRecover(fail, errImmediate, errTimeout)
-		// c.session.maybeRecover(fail, errImmediate, errTimeout)
+		err := fmt.Errorf("No compatible QUIC version found. We support %s, server offered %s", c.config.Versions, hdr.SupportedVersions)
+		if c.config.AttackTimeout <= 0 {
+			fail(err)
+		} else {
+			c.session.maybeRecover(fail, err)
+		}
 		return
 	}
 	c.receivedVersionNegotiationPacket = true

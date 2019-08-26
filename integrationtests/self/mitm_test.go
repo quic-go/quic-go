@@ -284,6 +284,10 @@ var _ = Describe("MITM test", func() {
 				var generateForgery func(hdr *wire.Header) []byte
 				var initialReceived bool
 
+				dropServerPackets := func(dir quicproxy.Direction, raw []byte) bool {
+					return dir == quicproxy.DirectionOutgoing
+				}
+
 				// AfterEach closes the proxy, but each function is responsible
 				// for closing client and server connections
 				AfterEach(func() {
@@ -365,20 +369,12 @@ var _ = Describe("MITM test", func() {
 							Expect(err.Error()).To(ContainSubstring("No compatible QUIC version found."))
 						})
 
-						Context("when all server packets are dropped", func() {
-							var dropServerPackets func(dir quicproxy.Direction, raw []byte) bool
-							BeforeEach(func() {
-								dropServerPackets = func(dir quicproxy.Direction, raw []byte) bool {
-									return dir == quicproxy.DirectionOutgoing
-								}
-							})
-
-							PIt("times out when mitigation is enabled", func(done Done) {
-								err := runTest(delayCb, dropServerPackets, mitigationOn)
-								Expect(err).To(HaveOccurred())
-								Expect(err.Error()).To(ContainSubstring("Timed out: No compatible QUIC version found."))
-								done <- 1
-							}, 5)
+						It("times out when mitigation is enabled and no server packets are received", func() {
+							err := runTest(delayCb, dropServerPackets, mitigationOn)
+							Expect(err).To(HaveOccurred())
+							Expect(err).To(BeAssignableToTypeOf(&qerr.QuicError{}))
+							Expect(err.(*qerr.QuicError).IsAttackTimeout()).To(BeTrue())
+							Expect(err.Error()).To(ContainSubstring("No compatible QUIC version found."))
 						})
 					})
 
@@ -407,6 +403,7 @@ var _ = Describe("MITM test", func() {
 							Expect(err).To(HaveOccurred())
 						})
 
+						// mitigation for changed srcConnID not yet implemented
 						PIt("recovers when mitigation is enabled", func() {
 							Expect(runTest(delayCb, dropCb, mitigationOn)).To(Succeed())
 						})
@@ -447,28 +444,7 @@ var _ = Describe("MITM test", func() {
 							Expect(err.(net.Error).Timeout()).To(BeTrue())
 						})
 
-						PIt("recovers when mitigation is enabled", func() {
-							Expect(runTest(delayCb, dropCb, mitigationOn)).To(Succeed())
-						})
-					})
-
-					Context("initial packet with only padding", func() {
-						BeforeEach(func() {
-							generateForgery = func(hdr *wire.Header) []byte {
-								return testutils.ComposeInitialPacket(hdr.DestConnectionID, hdr.SrcConnectionID, hdr.Version, hdr.DestConnectionID, nil)
-							}
-						})
-
-						// times out, because client doesn't accept real retry packets from server because
-						// it has already accepted an initial.
-						// TODO: determine behavior when server does not send Retry packets
-						It("fails when mitigation is disabled", func() {
-							err := runTest(delayCb, dropCb, mitigationOff)
-							Expect(err).To(HaveOccurred())
-							Expect(err.(net.Error).Timeout()).To(BeTrue())
-						})
-
-						PIt("recovers when mitigation is enabled", func() {
+						It("recovers when mitigation is enabled", func() {
 							Expect(runTest(delayCb, dropCb, mitigationOn)).To(Succeed())
 						})
 					})
@@ -481,6 +457,7 @@ var _ = Describe("MITM test", func() {
 							}
 						})
 
+						// CRYPTO_ERROR not yet handled
 						PIt("recovers when mitigation is enabled", func() {
 							Expect(runTest(delayCb, dropCb, mitigationOn)).To(Succeed())
 						})
@@ -572,7 +549,8 @@ var _ = Describe("MITM test", func() {
 							}
 						})
 
-						PIt("recovers when mitigation is enabled", func() {
+						// TODO: weird error, not sure why
+						It("recovers when mitigation is enabled", func() {
 							Expect(runTest(delayCb, dropCb, mitigationOn)).To(Succeed())
 						})
 
@@ -582,6 +560,14 @@ var _ = Describe("MITM test", func() {
 							Expect(err).To(HaveOccurred())
 							Expect(err).To(BeAssignableToTypeOf(&qerr.QuicError{}))
 							Expect(err.(*qerr.QuicError).ErrorCode).To(Equal(qerr.ErrorCode(0)))
+							Expect(err.Error()).To(ContainSubstring("mitm attacker"))
+						})
+
+						It("times out when mitigation is enabled and no server packets are received", func() {
+							err := runTest(delayCb, dropServerPackets, mitigationOn)
+							Expect(err).To(BeAssignableToTypeOf(&qerr.QuicError{}))
+							Expect(err.(*qerr.QuicError).ErrorCode).To(Equal(qerr.ErrorCode(0)))
+							Expect(err.(*qerr.QuicError).IsAttackTimeout()).To(BeTrue())
 							Expect(err.Error()).To(ContainSubstring("mitm attacker"))
 						})
 

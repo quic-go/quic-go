@@ -347,12 +347,15 @@ var _ = Describe("Session", func() {
 
 		It("handles CONNECTION_CLOSE frames, with a transport error code", func() {
 			testErr := qerr.Error(qerr.StreamLimitError, "foobar")
+			if sess.mitigationOn(protocol.EncryptionUnspecified) {
+				packer.EXPECT().PackPacket().AnyTimes() // hopefully delete this, not sure why its needed
+				testErr = qerr.ToAttackTimeoutError(testErr)
+			}
 			streamManager.EXPECT().CloseWithError(testErr)
 			sessionRunner.EXPECT().ReplaceWithClosed(sess.srcConnID, gomock.Any()).Do(func(_ protocol.ConnectionID, s packetHandler) {
 				Expect(s).To(BeAssignableToTypeOf(&closedRemoteSession{}))
 			})
 			cryptoSetup.EXPECT().Close()
-
 			go func() {
 				defer GinkgoRecover()
 				cryptoSetup.EXPECT().RunHandshake().MaxTimes(1)
@@ -368,6 +371,10 @@ var _ = Describe("Session", func() {
 
 		It("handles CONNECTION_CLOSE frames, with an application error code", func() {
 			testErr := qerr.ApplicationError(0x1337, "foobar")
+			if sess.mitigationOn(protocol.EncryptionUnspecified) {
+				packer.EXPECT().PackPacket().AnyTimes() // hopefully delete this
+				testErr = qerr.ToAttackTimeoutError(testErr)
+			}
 			streamManager.EXPECT().CloseWithError(testErr)
 			sessionRunner.EXPECT().ReplaceWithClosed(sess.srcConnID, gomock.Any()).Do(func(_ protocol.ConnectionID, s packetHandler) {
 				Expect(s).To(BeAssignableToTypeOf(&closedRemoteSession{}))
@@ -518,6 +525,7 @@ var _ = Describe("Session", func() {
 		})
 
 		It("informs the ReceivedPacketHandler about non-ack-eliciting packets", func() {
+			sess.config.AttackTimeout = 0 // turn off mitigation because padding-only packets are rejected
 			hdr := &wire.ExtendedHeader{
 				Header:          wire.Header{DestConnectionID: sess.srcConnID},
 				PacketNumber:    0x37,
@@ -544,6 +552,7 @@ var _ = Describe("Session", func() {
 				PacketNumber:    0x37,
 				PacketNumberLen: protocol.PacketNumberLen1,
 			}
+			sess.handshakeComplete = true
 			rcvTime := time.Now().Add(-10 * time.Second)
 			buf := &bytes.Buffer{}
 			Expect((&wire.PingFrame{}).Write(buf, sess.version)).To(Succeed())
@@ -762,6 +771,7 @@ var _ = Describe("Session", func() {
 			}
 
 			It("cuts packets to the right length", func() {
+				sess.config.AttackTimeout = 0 // turn off mitigation because padding-only packets are rejected
 				hdrLen, packet := getPacketWithLength(sess.srcConnID, 456)
 				unpacker.EXPECT().Unpack(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(func(_ *wire.Header, _ time.Time, data []byte) (*unpackedPacket, error) {
 					Expect(data).To(HaveLen(hdrLen + 456 - 3))
@@ -774,6 +784,7 @@ var _ = Describe("Session", func() {
 			})
 
 			It("handles coalesced packets", func() {
+				sess.config.AttackTimeout = 0 // turn off mitigation because padding-only packets are rejected
 				hdrLen1, packet1 := getPacketWithLength(sess.srcConnID, 456)
 				unpacker.EXPECT().Unpack(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(func(_ *wire.Header, _ time.Time, data []byte) (*unpackedPacket, error) {
 					Expect(data).To(HaveLen(hdrLen1 + 456 - 3))
@@ -795,6 +806,7 @@ var _ = Describe("Session", func() {
 			})
 
 			It("works with undecryptable packets", func() {
+				sess.config.AttackTimeout = 0 // turn off mitigation because padding-only packets are rejected
 				hdrLen1, packet1 := getPacketWithLength(sess.srcConnID, 456)
 				hdrLen2, packet2 := getPacketWithLength(sess.srcConnID, 123)
 				gomock.InOrder(
@@ -815,6 +827,7 @@ var _ = Describe("Session", func() {
 			})
 
 			It("ignores coalesced packet parts if the destination connection IDs don't match", func() {
+				sess.config.AttackTimeout = 0 // turn off mitigation because padding-only packets are rejected
 				wrongConnID := protocol.ConnectionID{0xde, 0xad, 0xbe, 0xef}
 				Expect(sess.srcConnID).ToNot(Equal(wrongConnID))
 				hdrLen1, packet1 := getPacketWithLength(sess.srcConnID, 456)
@@ -1810,22 +1823,51 @@ var _ = Describe("Client Session", func() {
 		})
 
 		It("ignores Initial-level CONNECTION_CLOSE frame with mitigation on", func() {
+			packer.EXPECT().PackPacket().AnyTimes()
+			sess.config.HandshakeTimeout = mitigationOn + time.Millisecond*50
 			sess.config.AttackTimeout = mitigationOn
+			sess.perspective = protocol.PerspectiveServer
+			sessionRunner.EXPECT().Remove(gomock.Any())
+			cryptoSetup.EXPECT().Close()
+			done := make(chan struct{})
+			go func() {
+				defer GinkgoRecover()
+				cryptoSetup.EXPECT().RunHandshake().MaxTimes(1)
+				err := sess.run()
+				nerr, ok := err.(net.Error)
+				Expect(ok).To(BeTrue())
+				Expect(nerr.Timeout()).To(BeTrue())
+				Expect(err.Error()).To(ContainSubstring("Handshake did not complete in time"))
+				close(done)
+			}()
 			connCloseFrame := testutils.ComposeConnCloseFrame()
 			initialPacket := testutils.ComposeInitialPacket(sess.destConnID, sess.srcConnID, sess.version, sess.destConnID, []wire.Frame{connCloseFrame})
 			Expect(sess.handlePacketImpl(wrapPacket(initialPacket))).To(BeTrue())
-			sess.lastPacketReceivedTime = time.Now()
+			sess.lastPacketReceivedTime = time.Now().Add(mitigationOn / 2)
+			Eventually(done).Should(BeClosed())
 		})
 
-		PIt("times out on Initial-level CONNECTION_CLOSE frame with mitigation on if no packets received", func() {
+		It("times out on Initial-level CONNECTION_CLOSE frame with mitigation on if no packets received", func() {
+			packer.EXPECT().PackPacket().AnyTimes()
 			sess.config.AttackTimeout = mitigationOn
+			sess.perspective = protocol.PerspectiveServer
 			sessionRunner.EXPECT().Remove(gomock.Any())
+			cryptoSetup.EXPECT().Close()
+			done := make(chan struct{})
+			go func() {
+				defer GinkgoRecover()
+				cryptoSetup.EXPECT().RunHandshake().MaxTimes(1)
+				err := sess.run()
+				Expect(err).To(BeAssignableToTypeOf(&qerr.QuicError{}))
+				Expect(err.(*qerr.QuicError).IsAttackTimeout()).To(BeTrue())
+				Expect(err.(*qerr.QuicError).ErrorMessage).To(ContainSubstring("mitm attacker"))
+				close(done)
+			}()
 			connCloseFrame := testutils.ComposeConnCloseFrame()
 			initialPacket := testutils.ComposeInitialPacket(sess.destConnID, sess.srcConnID, sess.version, sess.destConnID, []wire.Frame{connCloseFrame})
+			sess.lastPacketReceivedTime = time.Now()
 			Expect(sess.handlePacketImpl(wrapPacket(initialPacket))).To(BeTrue())
-			sess.lastPacketReceivedTime = time.Now().Add(-time.Hour)
-
-			time.Sleep(mitigationOn * 2)
+			Eventually(done).Should(BeClosed())
 		})
 
 		// Illustrates that attacker who injects a Retry packet and changes the connection ID

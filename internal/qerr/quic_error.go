@@ -11,6 +11,8 @@ type QuicError struct {
 	ErrorMessage       string
 	isTimeout          bool
 	isApplicationError bool
+	recoverable        bool
+	ignorable          bool
 }
 
 var _ net.Error = &QuicError{}
@@ -39,6 +41,7 @@ func CryptoError(tlsAlert uint8, errorMessage string) *QuicError {
 	}
 }
 
+// ApplicationError creates a new QuicError instance for an application error
 func ApplicationError(errorCode ErrorCode, errorMessage string) *QuicError {
 	return &QuicError{
 		ErrorCode:          errorCode,
@@ -72,7 +75,22 @@ func (e *QuicError) Temporary() bool {
 
 // Timeout says if this error is a timeout.
 func (e *QuicError) Timeout() bool {
-	return e.isTimeout
+	return e.isTimeout && !e.recoverable
+}
+
+// IsAttackTimeout says if this error is an attack timeout error.
+func (e *QuicError) IsAttackTimeout() bool {
+	return e.isTimeout && e.recoverable
+}
+
+// IsRecoverable says if this error is recoverable
+func (e *QuicError) IsRecoverable() bool {
+	return e.recoverable
+}
+
+// IsIgnorable says if this error is ignorable.
+func (e *QuicError) IsIgnorable() bool {
+	return e.ignorable || e.ErrorCode == FrameEncodingError
 }
 
 // ToQuicError converts an arbitrary error to a QuicError. It leaves QuicErrors
@@ -85,4 +103,26 @@ func ToQuicError(err error) *QuicError {
 		return Error(e, "")
 	}
 	return Error(InternalError, err.Error())
+}
+
+// ToAttackTimeoutError converts an arbitrary error to an attack timeout error.
+func ToAttackTimeoutError(err error) *QuicError {
+	qErr := ToQuicError(err)
+	qErr.isTimeout = true
+	qErr.recoverable = true
+	return qErr
+}
+
+// ToRecoverableError converts an arbitrary error to a recoverable error.
+func ToRecoverableError(err error) *QuicError {
+	qErr := ToQuicError(err)
+	qErr.recoverable = true
+	return qErr
+}
+
+// ToIgnorableError converts an arbitrary error to an ignorable error.
+func ToIgnorableError(err error) *QuicError {
+	qErr := ToQuicError(err)
+	qErr.ignorable = true
+	return qErr
 }
