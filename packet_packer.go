@@ -284,11 +284,11 @@ func (p *packetPacker) PackRetransmission(packet *ackhandler.Packet) ([]*packedP
 			frame.DataLenPresent = false
 			frameToAdd := frame
 
-			sf, err := frame.MaybeSplitOffFrame(maxSize-length, p.version)
-			if err != nil {
-				return nil, err
-			}
-			if sf != nil {
+			sf, needsSplit := frame.MaybeSplitOffFrame(maxSize-length, p.version)
+			if needsSplit {
+				if sf == nil { // size too small to create a new STREAM frame
+					continue
+				}
 				frameToAdd = sf
 			} else {
 				streamFrames = streamFrames[1:]

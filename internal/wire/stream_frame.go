@@ -143,15 +143,18 @@ func (f *StreamFrame) MaxDataLen(maxSize protocol.ByteCount, version protocol.Ve
 }
 
 // MaybeSplitOffFrame splits a frame such that it is not bigger than n bytes.
-// If n >= len(frame), nil is returned and nothing is modified.
-func (f *StreamFrame) MaybeSplitOffFrame(maxSize protocol.ByteCount, version protocol.VersionNumber) (*StreamFrame, error) {
+// It returns if the frame was actually split.
+// The frame might not be split if:
+// * the size is large enough to fit the whole frame
+// * the size is too small to fit even a 1-byte frame. In that case, the frame returned is nil.
+func (f *StreamFrame) MaybeSplitOffFrame(maxSize protocol.ByteCount, version protocol.VersionNumber) (*StreamFrame, bool /* was splitting required */) {
 	if maxSize >= f.Length(version) {
-		return nil, nil
+		return nil, false
 	}
 
 	n := f.MaxDataLen(maxSize, version)
 	if n == 0 {
-		return nil, errors.New("too small")
+		return nil, true
 	}
 	newFrame := &StreamFrame{
 		FinBit:         false,
@@ -164,5 +167,5 @@ func (f *StreamFrame) MaybeSplitOffFrame(maxSize protocol.ByteCount, version pro
 	f.Data = f.Data[n:]
 	f.Offset += n
 
-	return newFrame, nil
+	return newFrame, true
 }
