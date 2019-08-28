@@ -892,77 +892,38 @@ var _ = Describe("Session", func() {
 			Expect(frames).To(Equal([]wire.Frame{&wire.DataBlockedFrame{DataLimit: 1337}}))
 		})
 
-		It("sends a retransmission and a regular packet in the same run", func() {
-			packetToRetransmit := &ackhandler.Packet{PacketNumber: 10}
-			retransmittedPacket := getPacket(123)
-			newPacket := getPacket(234)
-			sess.windowUpdateQueue.callback(&wire.MaxDataFrame{})
-			sph := mockackhandler.NewMockSentPacketHandler(mockCtrl)
-			sph.EXPECT().GetLossDetectionTimeout().AnyTimes()
-			sph.EXPECT().DequeuePacketForRetransmission().Return(packetToRetransmit)
-			sph.EXPECT().SendMode().Return(ackhandler.SendRetransmission)
-			sph.EXPECT().SendMode().Return(ackhandler.SendAny)
-			sph.EXPECT().ShouldSendNumPackets().Return(2)
-			sph.EXPECT().TimeUntilSend()
-			gomock.InOrder(
-				packer.EXPECT().PackRetransmission(packetToRetransmit).Return([]*packedPacket{retransmittedPacket}, nil),
-				sph.EXPECT().SentPacket(gomock.Any()).Do(func(packet *ackhandler.Packet) {
-					Expect(packet.PacketNumber).To(Equal(protocol.PacketNumber(123)))
-				}),
-				packer.EXPECT().PackPacket().Return(newPacket, nil),
-				sph.EXPECT().SentPacket(gomock.Any()).Do(func(p *ackhandler.Packet) {
-					Expect(p.PacketNumber).To(Equal(protocol.PacketNumber(234)))
-				}),
-			)
-			sess.sentPacketHandler = sph
-			Expect(sess.sendPackets()).To(Succeed())
-			Eventually(mconn.written).Should(HaveLen(2))
-		})
-
-		It("sends multiple packets, if the retransmission is split", func() {
-			packet := &ackhandler.Packet{
-				PacketNumber: 42,
-				Frames: []wire.Frame{&wire.StreamFrame{
-					StreamID: 0x5,
-					Data:     []byte("foobar"),
-				}},
-				EncryptionLevel: protocol.Encryption1RTT,
-			}
-			retransmissions := []*packedPacket{getPacket(1337), getPacket(1338)}
-			sph := mockackhandler.NewMockSentPacketHandler(mockCtrl)
-			sph.EXPECT().GetLossDetectionTimeout().AnyTimes()
-			sph.EXPECT().DequeuePacketForRetransmission().Return(packet)
-			packer.EXPECT().PackRetransmission(packet).Return(retransmissions, nil)
-			gomock.InOrder(
-				sph.EXPECT().SentPacket(gomock.Any()).Do(func(packet *ackhandler.Packet) {
-					Expect(packet.PacketNumber).To(Equal(protocol.PacketNumber(1337)))
-				}),
-				sph.EXPECT().SentPacket(gomock.Any()).Do(func(packet *ackhandler.Packet) {
-					Expect(packet.PacketNumber).To(Equal(protocol.PacketNumber(1338)))
-				}),
-			)
-			sess.sentPacketHandler = sph
-			sent, err := sess.maybeSendRetransmission()
-			Expect(err).NotTo(HaveOccurred())
-			Expect(sent).To(BeTrue())
-			Eventually(mconn.written).Should(HaveLen(2))
-		})
-
 		It("sends a probe packet", func() {
-			packetToRetransmit := &ackhandler.Packet{PacketNumber: 0x42}
-			retransmittedPacket := getPacket(123)
 			sph := mockackhandler.NewMockSentPacketHandler(mockCtrl)
 			sph.EXPECT().GetLossDetectionTimeout().AnyTimes()
 			sph.EXPECT().TimeUntilSend()
 			sph.EXPECT().SendMode().Return(ackhandler.SendPTO)
 			sph.EXPECT().ShouldSendNumPackets().Return(1)
-			sph.EXPECT().DequeueProbePacket().Return(packetToRetransmit, nil)
-			packer.EXPECT().PackRetransmission(packetToRetransmit).Return([]*packedPacket{retransmittedPacket}, nil)
+			sph.EXPECT().QueueProbePacket()
+			packer.EXPECT().PackPacket().Return(getPacket(123), nil)
 			sph.EXPECT().SentPacket(gomock.Any()).Do(func(packet *ackhandler.Packet) {
 				Expect(packet.PacketNumber).To(Equal(protocol.PacketNumber(123)))
 			})
 			sess.sentPacketHandler = sph
 			Expect(sess.sendPackets()).To(Succeed())
+		})
+
+		It("sends a PING as a probe packet", func() {
+			sph := mockackhandler.NewMockSentPacketHandler(mockCtrl)
+			sph.EXPECT().GetLossDetectionTimeout().AnyTimes()
+			sph.EXPECT().TimeUntilSend()
+			sph.EXPECT().SendMode().Return(ackhandler.SendPTO)
+			sph.EXPECT().ShouldSendNumPackets().Return(1)
+			sph.EXPECT().QueueProbePacket().Return(false)
+			packer.EXPECT().PackPacket().Return(getPacket(123), nil)
+			sph.EXPECT().SentPacket(gomock.Any()).Do(func(packet *ackhandler.Packet) {
+				Expect(packet.PacketNumber).To(Equal(protocol.PacketNumber(123)))
+			})
+			sess.sentPacketHandler = sph
+			Expect(sess.sendPackets()).To(Succeed())
+			// We're using a mock packet packer in this test.
+			// We therefore need to test separately that the PING was actually queued.
+			frames, _ := sess.framer.AppendControlFrames(nil, protocol.MaxByteCount)
+			Expect(frames).To(Equal([]wire.Frame{&wire.PingFrame{}}))
 		})
 
 		It("doesn't send when the SentPacketHandler doesn't allow it", func() {
@@ -981,7 +942,6 @@ var _ = Describe("Session", func() {
 		BeforeEach(func() {
 			sph = mockackhandler.NewMockSentPacketHandler(mockCtrl)
 			sph.EXPECT().GetLossDetectionTimeout().AnyTimes()
-			sph.EXPECT().DequeuePacketForRetransmission().AnyTimes()
 			sess.sentPacketHandler = sph
 			streamManager.EXPECT().CloseWithError(gomock.Any())
 		})

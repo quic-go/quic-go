@@ -11,13 +11,12 @@ import (
 // A Packet is a packet
 type Packet struct {
 	PacketNumber    protocol.PacketNumber
-	Frames          []wire.Frame
+	Frames          []Frame
 	LargestAcked    protocol.PacketNumber // InvalidPacketNumber if the packet doesn't contain an ACK
 	Length          protocol.ByteCount
 	EncryptionLevel protocol.EncryptionLevel
 	SendTime        time.Time
 
-	canBeRetransmitted      bool
 	includedInBytesInFlight bool
 }
 
@@ -43,8 +42,7 @@ type SentPacketHandler interface {
 
 	// only to be called once the handshake is complete
 	GetLowestPacketNotConfirmedAcked() protocol.PacketNumber
-	DequeuePacketForRetransmission() *Packet
-	DequeueProbePacket() (*Packet, error)
+	QueueProbePacket() bool /* was a packet queued */
 
 	PeekPacketNumber(protocol.EncryptionLevel) (protocol.PacketNumber, protocol.PacketNumberLen)
 	PopPacketNumber(protocol.EncryptionLevel) protocol.PacketNumber

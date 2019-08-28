@@ -1,7 +1,6 @@
 package ackhandler
 
 import (
-	"errors"
 	"fmt"
 	"math"
 	"time"
@@ -55,8 +54,6 @@ type sentPacketHandler struct {
 	// once we receive an ACK from the peer for packet 20, the lowestNotConfirmedAcked is 101
 	// Only applies to the application-data packet number space.
 	lowestNotConfirmedAcked protocol.PacketNumber
-
-	retransmissionQueue []*Packet
 
 	bytesInFlight protocol.ByteCount
 
@@ -112,14 +109,6 @@ func (h *sentPacketHandler) DropPackets(encLevel protocol.EncryptionLevel) {
 		}
 		return true, nil
 	})
-	// remove packets from the retransmission queue
-	var queue []*Packet
-	for _, packet := range h.retransmissionQueue {
-		if packet.EncryptionLevel != encLevel {
-			queue = append(queue, packet)
-		}
-	}
-	h.retransmissionQueue = queue
 	// drop the packet history
 	switch encLevel {
 	case protocol.EncryptionInitial:
@@ -170,7 +159,6 @@ func (h *sentPacketHandler) sentPacketImpl(packet *Packet) bool /* is ack-elicit
 		h.lastSentAckElicitingPacketTime = packet.SendTime
 		packet.includedInBytesInFlight = true
 		h.bytesInFlight += packet.Length
-		packet.canBeRetransmitted = true
 		if h.numProbesToSend > 0 {
 			h.numProbesToSend--
 		}
@@ -335,12 +323,14 @@ func (h *sentPacketHandler) setLossDetectionTimer() {
 
 	// Cancel the alarm if no packets are outstanding
 	if !h.hasOutstandingPackets() {
+		h.logger.Debugf("setLossDetectionTimer: canceling. Bytes in flight: %d", h.bytesInFlight)
 		h.alarm = time.Time{}
 		return
 	}
 
 	// PTO alarm
 	h.alarm = h.lastSentAckElicitingPacketTime.Add(h.rttStats.PTO() << h.ptoCount)
+	h.logger.Debugf("setLossDetectionTimer: setting to", h.alarm)
 }
 
 func (h *sentPacketHandler) detectLostPackets(
@@ -388,27 +378,23 @@ func (h *sentPacketHandler) detectLostPackets(
 	}
 
 	for _, p := range lostPackets {
+		h.queueFramesForRetransmission(p)
 		// the bytes in flight need to be reduced no matter if this packet will be retransmitted
 		if p.includedInBytesInFlight {
 			h.bytesInFlight -= p.Length
 			h.congestion.OnPacketLost(p.PacketNumber, p.Length, priorInFlight)
 		}
-		if p.canBeRetransmitted {
-			// queue the packet for retransmission, and report the loss to the congestion controller
-			if err := h.queuePacketForRetransmission(p, pnSpace); err != nil {
-				return err
-			}
-		}
 		pnSpace.history.Remove(p.PacketNumber)
 		if h.traceCallback != nil {
+			// TODO: trace frames
 			h.traceCallback(quictrace.Event{
 				Time:            now,
 				EventType:       quictrace.PacketLost,
 				EncryptionLevel: p.EncryptionLevel,
 				PacketNumber:    p.PacketNumber,
 				PacketSize:      p.Length,
-				Frames:          p.Frames,
-				TransportState:  h.GetStats(),
+				//Frames:          p.Frames,
+				TransportState: h.GetStats(),
 			})
 		}
 	}
@@ -454,61 +440,14 @@ func (h *sentPacketHandler) GetLossDetectionTimeout() time.Time {
 
 func (h *sentPacketHandler) onPacketAcked(p *Packet, rcvTime time.Time) error {
 	pnSpace := h.getPacketNumberSpace(p.EncryptionLevel)
-	// This happens if a packet and its retransmissions is acked in the same ACK.
-	// As soon as we process the first one, this will remove all the retransmissions,
-	// so we won't find the retransmitted packet number later.
 	if packet := pnSpace.history.GetPacket(p.PacketNumber); packet == nil {
 		return nil
 	}
 
-	// this also applies to packets that have been retransmitted as probe packets
 	if p.includedInBytesInFlight {
 		h.bytesInFlight -= p.Length
 	}
-	if err := pnSpace.history.MarkCannotBeRetransmitted(p.PacketNumber); err != nil {
-		return err
-	}
 	return pnSpace.history.Remove(p.PacketNumber)
-}
-
-func (h *sentPacketHandler) DequeuePacketForRetransmission() *Packet {
-	if len(h.retransmissionQueue) == 0 {
-		return nil
-	}
-	packet := h.retransmissionQueue[0]
-	// Shift the slice and don't retain anything that isn't needed.
-	copy(h.retransmissionQueue, h.retransmissionQueue[1:])
-	h.retransmissionQueue[len(h.retransmissionQueue)-1] = nil
-	h.retransmissionQueue = h.retransmissionQueue[:len(h.retransmissionQueue)-1]
-	return packet
-}
-
-func (h *sentPacketHandler) DequeueProbePacket() (*Packet, error) {
-	if len(h.retransmissionQueue) > 0 {
-		return h.DequeuePacketForRetransmission(), nil
-	}
-
-	var pnSpace *packetNumberSpace
-	var p *Packet
-	if h.initialPackets != nil {
-		pnSpace = h.initialPackets
-		p = h.initialPackets.history.FirstOutstanding()
-	}
-	if p == nil && h.handshakePackets != nil {
-		pnSpace = h.handshakePackets
-		p = h.handshakePackets.history.FirstOutstanding()
-	}
-	if p == nil {
-		pnSpace = h.oneRTTPackets
-		p = h.oneRTTPackets.history.FirstOutstanding()
-	}
-	if p == nil {
-		return nil, errors.New("cannot dequeue a probe packet. No outstanding packets")
-	}
-	if err := h.queuePacketForRetransmission(p, pnSpace); err != nil {
-		return nil, err
-	}
-	return h.DequeuePacketForRetransmission(), nil
 }
 
 func (h *sentPacketHandler) PeekPacketNumber(encLevel protocol.EncryptionLevel) (protocol.PacketNumber, protocol.PacketNumberLen) {
@@ -530,7 +469,7 @@ func (h *sentPacketHandler) PopPacketNumber(encLevel protocol.EncryptionLevel) p
 }
 
 func (h *sentPacketHandler) SendMode() SendMode {
-	numTrackedPackets := len(h.retransmissionQueue) + h.oneRTTPackets.history.Len()
+	numTrackedPackets := h.oneRTTPackets.history.Len()
 	if h.initialPackets != nil {
 		numTrackedPackets += h.initialPackets.history.Len()
 	}
@@ -558,10 +497,6 @@ func (h *sentPacketHandler) SendMode() SendMode {
 		}
 		return SendAck
 	}
-	// Send retransmissions first, if there are any.
-	if len(h.retransmissionQueue) > 0 {
-		return SendRetransmission
-	}
 	if numTrackedPackets >= protocol.MaxOutstandingSentPackets {
 		if h.logger.Debug() {
 			h.logger.Debugf("Max outstanding limited: tracking %d packets, maximum: %d", numTrackedPackets, protocol.MaxOutstandingSentPackets)
@@ -587,30 +522,45 @@ func (h *sentPacketHandler) ShouldSendNumPackets() int {
 	return int(math.Ceil(float64(protocol.MinPacingDelay) / float64(delay)))
 }
 
-func (h *sentPacketHandler) queuePacketForRetransmission(p *Packet, pnSpace *packetNumberSpace) error {
-	if !p.canBeRetransmitted {
-		return fmt.Errorf("sent packet handler BUG: packet %d already queued for retransmission", p.PacketNumber)
+func (h *sentPacketHandler) QueueProbePacket() bool {
+	var p *Packet
+	if h.initialPackets != nil {
+		p = h.initialPackets.history.FirstOutstanding()
 	}
-	if err := pnSpace.history.MarkCannotBeRetransmitted(p.PacketNumber); err != nil {
-		return err
+	if p == nil && h.handshakePackets != nil {
+		p = h.handshakePackets.history.FirstOutstanding()
 	}
-	h.retransmissionQueue = append(h.retransmissionQueue, p)
-	return nil
+	if p == nil {
+		p = h.oneRTTPackets.history.FirstOutstanding()
+	}
+	if p == nil {
+		return false
+	}
+	h.queueFramesForRetransmission(p)
+	// TODO: don't remove the packet here
+	// Keep track of acknowledged frames instead.
+	if p.includedInBytesInFlight {
+		h.bytesInFlight -= p.Length
+	}
+	if err := h.getPacketNumberSpace(p.EncryptionLevel).history.Remove(p.PacketNumber); err != nil {
+		// should never happen. We just got this packet from the history a lines above.
+		panic(err)
+	}
+	return true
+}
+
+func (h *sentPacketHandler) queueFramesForRetransmission(p *Packet) {
+	for _, f := range p.Frames {
+		f.OnLost(f.Frame)
+	}
 }
 
 func (h *sentPacketHandler) ResetForRetry() error {
 	h.bytesInFlight = 0
-	var packets []*Packet
 	h.initialPackets.history.Iterate(func(p *Packet) (bool, error) {
-		if p.canBeRetransmitted {
-			packets = append(packets, p)
-		}
+		h.queueFramesForRetransmission(p)
 		return true, nil
 	})
-	for _, p := range packets {
-		h.logger.Debugf("Queueing packet %#x for retransmission.", p.PacketNumber)
-		h.retransmissionQueue = append(h.retransmissionQueue, p)
-	}
 	h.initialPackets = newPacketNumberSpace(h.initialPackets.pns.Pop())
 	h.setLossDetectionTimer()
 	return nil
