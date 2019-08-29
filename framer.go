@@ -105,7 +105,10 @@ func (f *framerI) AppendStreamFrames(frames []wire.Frame, maxLen protocol.ByteCo
 		} else { // no more data to send. Stream is not active any more
 			delete(f.activeStreams, id)
 		}
-		if frame == nil { // can happen if the receiveStream was canceled after it said it had data
+		// The frame can be nil
+		// * if the receiveStream was canceled after it said it had data
+		// * the remaining size doesn't allow us to add another STREAM frame
+		if frame == nil {
 			continue
 		}
 		frames = append(frames, frame)

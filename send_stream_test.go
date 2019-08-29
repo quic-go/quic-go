@@ -517,7 +517,7 @@ var _ = Describe("Send Stream", func() {
 		})
 	})
 
-	Context("stream cancelations", func() {
+	Context("stream cancellations", func() {
 		Context("canceling writing", func() {
 			It("queues a RESET_STREAM frame", func() {
 				mockSender.EXPECT().queueControlFrame(&wire.ResetStreamFrame{
@@ -656,6 +656,57 @@ var _ = Describe("Send Stream", func() {
 				Expect(err.(streamCanceledError).Canceled()).To(BeTrue())
 				Expect(err.(streamCanceledError).ErrorCode()).To(Equal(protocol.ApplicationErrorCode(123)))
 			})
+		})
+	})
+
+	Context("retransmissions", func() {
+		It("queues and retrieves frames", func() {
+			f := &wire.StreamFrame{
+				Data:           []byte("foobar"),
+				Offset:         0x42,
+				DataLenPresent: false,
+			}
+			mockSender.EXPECT().onHasStreamData(streamID)
+			str.queueRetransmission(f)
+			frame, _ := str.popStreamFrame(protocol.MaxByteCount)
+			Expect(frame).ToNot(BeNil())
+			Expect(frame.Offset).To(Equal(protocol.ByteCount(0x42)))
+			Expect(frame.Data).To(Equal([]byte("foobar")))
+			Expect(frame.DataLenPresent).To(BeTrue())
+		})
+
+		It("splits a retransmission", func() {
+			f := &wire.StreamFrame{
+				Data:           []byte("foobar"),
+				Offset:         0x42,
+				DataLenPresent: false,
+			}
+			mockSender.EXPECT().onHasStreamData(streamID)
+			str.queueRetransmission(f)
+			frame, hasMoreData := str.popStreamFrame(f.Length(str.version) - 3)
+			Expect(hasMoreData).To(BeTrue())
+			Expect(frame).ToNot(BeNil())
+			Expect(frame.Offset).To(Equal(protocol.ByteCount(0x42)))
+			Expect(frame.Data).To(Equal([]byte("foo")))
+			Expect(frame.DataLenPresent).To(BeTrue())
+			frame, _ = str.popStreamFrame(protocol.MaxByteCount)
+			Expect(frame).ToNot(BeNil())
+			Expect(frame.Offset).To(Equal(protocol.ByteCount(0x45)))
+			Expect(frame.Data).To(Equal([]byte("bar")))
+			Expect(frame.DataLenPresent).To(BeTrue())
+		})
+
+		It("returns nil if the size is too small", func() {
+			f := &wire.StreamFrame{
+				Data:           []byte("foobar"),
+				Offset:         0x42,
+				DataLenPresent: false,
+			}
+			mockSender.EXPECT().onHasStreamData(streamID)
+			str.queueRetransmission(f)
+			frame, hasMoreData := str.popStreamFrame(2)
+			Expect(hasMoreData).To(BeTrue())
+			Expect(frame).To(BeNil())
 		})
 	})
 })

@@ -24,6 +24,8 @@ type sendStreamI interface {
 type sendStream struct {
 	mutex sync.Mutex
 
+	retransmissionQueue []*wire.StreamFrame
+
 	ctx       context.Context
 	ctxCancel context.CancelFunc
 
@@ -147,6 +149,15 @@ func (s *sendStream) Write(p []byte) (int, error) {
 // maxBytes is the maximum length this frame (including frame header) will have.
 func (s *sendStream) popStreamFrame(maxBytes protocol.ByteCount) (*wire.StreamFrame, bool /* has more data to send */) {
 	s.mutex.Lock()
+	if len(s.retransmissionQueue) > 0 {
+		frame, hasMoreRetransmissions := s.maybeGetRetransmission(maxBytes)
+		if frame != nil || hasMoreRetransmissions {
+			s.mutex.Unlock()
+			// We always claim that we have more data to send.
+			// This might be incorrect, in which case there'll be a spurious call to popStreamFrame in the future.
+			return frame, true
+		}
+	}
 	completed, frame, hasMoreData := s.popStreamFrameImpl(maxBytes)
 	s.mutex.Unlock()
 
@@ -194,6 +205,16 @@ func (s *sendStream) popStreamFrameImpl(maxBytes protocol.ByteCount) (bool /* co
 	return frame.FinBit, frame, s.dataForWriting != nil
 }
 
+func (s *sendStream) maybeGetRetransmission(maxBytes protocol.ByteCount) (*wire.StreamFrame, bool /* has more retransmissions */) {
+	f := s.retransmissionQueue[0]
+	newFrame, needsSplit := f.MaybeSplitOffFrame(maxBytes, s.version)
+	if needsSplit {
+		return newFrame, true
+	}
+	s.retransmissionQueue = s.retransmissionQueue[1:]
+	return f, len(s.retransmissionQueue) > 0
+}
+
 func (s *sendStream) hasData() bool {
 	s.mutex.Lock()
 	hasData := len(s.dataForWriting) > 0
@@ -225,6 +246,15 @@ func (s *sendStream) getDataForWriting(maxBytes protocol.ByteCount) ([]byte, boo
 	s.writeOffset += protocol.ByteCount(len(ret))
 	s.flowController.AddBytesSent(protocol.ByteCount(len(ret)))
 	return ret, s.finishedWriting && s.dataForWriting == nil && !s.finSent
+}
+
+func (s *sendStream) queueRetransmission(f *wire.StreamFrame) {
+	f.DataLenPresent = true
+	s.mutex.Lock()
+	s.retransmissionQueue = append(s.retransmissionQueue, f)
+	s.mutex.Unlock()
+
+	s.sender.onHasStreamData(s.streamID)
 }
 
 func (s *sendStream) Close() error {
