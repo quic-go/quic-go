@@ -3,6 +3,8 @@ package quic
 import (
 	"bytes"
 
+	"github.com/lucas-clemente/quic-go/internal/ackhandler"
+
 	"github.com/golang/mock/gomock"
 
 	"github.com/lucas-clemente/quic-go/internal/protocol"
@@ -37,21 +39,25 @@ var _ = Describe("Framer", func() {
 	Context("handling control frames", func() {
 		It("adds control frames", func() {
 			mdf := &wire.MaxDataFrame{ByteOffset: 0x42}
-			msdf := &wire.MaxStreamDataFrame{ByteOffset: 0x1337}
+			msf := &wire.MaxStreamsFrame{MaxStreamNum: 0x1337}
 			framer.QueueControlFrame(mdf)
-			framer.QueueControlFrame(msdf)
+			framer.QueueControlFrame(msf)
 			frames, length := framer.AppendControlFrames(nil, 1000)
-			Expect(frames).To(ContainElement(mdf))
-			Expect(frames).To(ContainElement(msdf))
-			Expect(length).To(Equal(mdf.Length(version) + msdf.Length(version)))
+			Expect(frames).To(HaveLen(2))
+			fs := []wire.Frame{frames[0].Frame, frames[1].Frame}
+			Expect(fs).To(ContainElement(mdf))
+			Expect(fs).To(ContainElement(msf))
+			Expect(length).To(Equal(mdf.Length(version) + msf.Length(version)))
 		})
 
 		It("appends to the slice given", func() {
-			ack := &wire.AckFrame{}
+			ping := &wire.PingFrame{}
 			mdf := &wire.MaxDataFrame{ByteOffset: 0x42}
 			framer.QueueControlFrame(mdf)
-			frames, length := framer.AppendControlFrames([]wire.Frame{ack}, 1000)
-			Expect(frames).To(Equal([]wire.Frame{ack, mdf}))
+			frames, length := framer.AppendControlFrames([]ackhandler.Frame{{Frame: ping}}, 1000)
+			Expect(frames).To(HaveLen(2))
+			Expect(frames[0].Frame).To(Equal(ping))
+			Expect(frames[1].Frame).To(Equal(mdf))
 			Expect(length).To(Equal(mdf.Length(version)))
 		})
 
@@ -88,8 +94,8 @@ var _ = Describe("Framer", func() {
 			stream1.EXPECT().popStreamFrame(gomock.Any()).Return(f, false)
 			framer.AddActiveStream(id1)
 			fs, length := framer.AppendStreamFrames(nil, 1000)
-			Expect(fs).To(Equal([]wire.Frame{f}))
-			Expect(fs[0].(*wire.StreamFrame).DataLenPresent).To(BeFalse())
+			Expect(fs).To(HaveLen(1))
+			Expect(fs[0].Frame.(*wire.StreamFrame).DataLenPresent).To(BeFalse())
 			Expect(length).To(Equal(f.Length(version)))
 		})
 
@@ -103,10 +109,12 @@ var _ = Describe("Framer", func() {
 			stream1.EXPECT().popStreamFrame(gomock.Any()).Return(f, false)
 			framer.AddActiveStream(id1)
 			mdf := &wire.MaxDataFrame{ByteOffset: 1337}
-			frames := []wire.Frame{mdf}
+			frames := []ackhandler.Frame{{Frame: mdf}}
 			fs, length := framer.AppendStreamFrames(frames, 1000)
-			Expect(fs).To(Equal([]wire.Frame{mdf, f}))
-			Expect(fs[1].(*wire.StreamFrame).DataLenPresent).To(BeFalse())
+			Expect(fs).To(HaveLen(2))
+			Expect(fs[0].Frame).To(Equal(mdf))
+			Expect(fs[1].Frame.(*wire.StreamFrame).Data).To(Equal([]byte("foobar")))
+			Expect(fs[1].Frame.(*wire.StreamFrame).DataLenPresent).To(BeFalse())
 			Expect(length).To(Equal(f.Length(version)))
 		})
 
@@ -122,7 +130,8 @@ var _ = Describe("Framer", func() {
 			framer.AddActiveStream(id1)
 			framer.AddActiveStream(id2)
 			frames, _ := framer.AppendStreamFrames(nil, 1000)
-			Expect(frames).To(Equal([]wire.Frame{f}))
+			Expect(frames).To(HaveLen(1))
+			Expect(frames[0].Frame).To(Equal(f))
 		})
 
 		It("skips a stream that was reported active, but doesn't have any data", func() {
@@ -138,7 +147,8 @@ var _ = Describe("Framer", func() {
 			framer.AddActiveStream(id1)
 			framer.AddActiveStream(id2)
 			frames, _ := framer.AppendStreamFrames(nil, 1000)
-			Expect(frames).To(Equal([]wire.Frame{f}))
+			Expect(frames).To(HaveLen(1))
+			Expect(frames[0].Frame).To(Equal(f))
 		})
 
 		It("pops from a stream multiple times, if it has enough data", func() {
@@ -149,9 +159,11 @@ var _ = Describe("Framer", func() {
 			stream1.EXPECT().popStreamFrame(gomock.Any()).Return(f2, false)
 			framer.AddActiveStream(id1) // only add it once
 			frames, _ := framer.AppendStreamFrames(nil, protocol.MinStreamFrameSize)
-			Expect(frames).To(Equal([]wire.Frame{f1}))
+			Expect(frames).To(HaveLen(1))
+			Expect(frames[0].Frame).To(Equal(f1))
 			frames, _ = framer.AppendStreamFrames(nil, protocol.MinStreamFrameSize)
-			Expect(frames).To(Equal([]wire.Frame{f2}))
+			Expect(frames).To(HaveLen(1))
+			Expect(frames[0].Frame).To(Equal(f2))
 			// no further calls to popStreamFrame, after popStreamFrame said there's no more data
 			frames, _ = framer.AppendStreamFrames(nil, protocol.MinStreamFrameSize)
 			Expect(frames).To(BeNil())
@@ -170,13 +182,16 @@ var _ = Describe("Framer", func() {
 			framer.AddActiveStream(id2)
 			// first a frame from stream 1
 			frames, _ := framer.AppendStreamFrames(nil, protocol.MinStreamFrameSize)
-			Expect(frames).To(Equal([]wire.Frame{f11}))
+			Expect(frames).To(HaveLen(1))
+			Expect(frames[0].Frame).To(Equal(f11))
 			// then a frame from stream 2
 			frames, _ = framer.AppendStreamFrames(nil, protocol.MinStreamFrameSize)
-			Expect(frames).To(Equal([]wire.Frame{f2}))
+			Expect(frames).To(HaveLen(1))
+			Expect(frames[0].Frame).To(Equal(f2))
 			// then another frame from stream 1
 			frames, _ = framer.AppendStreamFrames(nil, protocol.MinStreamFrameSize)
-			Expect(frames).To(Equal([]wire.Frame{f12}))
+			Expect(frames).To(HaveLen(1))
+			Expect(frames[0].Frame).To(Equal(f12))
 		})
 
 		It("only dequeues data from each stream once per packet", func() {
@@ -190,7 +205,9 @@ var _ = Describe("Framer", func() {
 			framer.AddActiveStream(id1)
 			framer.AddActiveStream(id2)
 			frames, length := framer.AppendStreamFrames(nil, 1000)
-			Expect(frames).To(Equal([]wire.Frame{f1, f2}))
+			Expect(frames).To(HaveLen(2))
+			Expect(frames[0].Frame).To(Equal(f1))
+			Expect(frames[1].Frame).To(Equal(f2))
 			Expect(length).To(Equal(f1.Length(version) + f2.Length(version)))
 		})
 
@@ -204,7 +221,9 @@ var _ = Describe("Framer", func() {
 			framer.AddActiveStream(id2)
 			framer.AddActiveStream(id1)
 			frames, _ := framer.AppendStreamFrames(nil, 1000)
-			Expect(frames).To(Equal([]wire.Frame{f2, f1}))
+			Expect(frames).To(HaveLen(2))
+			Expect(frames[0].Frame).To(Equal(f2))
+			Expect(frames[1].Frame).To(Equal(f1))
 		})
 
 		It("only asks a stream for data once, even if it was reported active multiple times", func() {
@@ -238,7 +257,7 @@ var _ = Describe("Framer", func() {
 				framer.AddActiveStream(id1)
 				frames, _ := framer.AppendStreamFrames(nil, i)
 				Expect(frames).To(HaveLen(1))
-				f := frames[0].(*wire.StreamFrame)
+				f := frames[0].Frame.(*wire.StreamFrame)
 				Expect(f.DataLenPresent).To(BeFalse())
 				Expect(f.Length(version)).To(Equal(i))
 			}
@@ -269,8 +288,8 @@ var _ = Describe("Framer", func() {
 				framer.AddActiveStream(id2)
 				frames, _ := framer.AppendStreamFrames(nil, i)
 				Expect(frames).To(HaveLen(2))
-				f1 := frames[0].(*wire.StreamFrame)
-				f2 := frames[1].(*wire.StreamFrame)
+				f1 := frames[0].Frame.(*wire.StreamFrame)
+				f2 := frames[1].Frame.(*wire.StreamFrame)
 				Expect(f1.DataLenPresent).To(BeTrue())
 				Expect(f2.DataLenPresent).To(BeFalse())
 				Expect(f1.Length(version) + f2.Length(version)).To(Equal(i))
@@ -300,7 +319,8 @@ var _ = Describe("Framer", func() {
 			stream1.EXPECT().popStreamFrame(gomock.Any()).Return(f, false)
 			framer.AddActiveStream(id1)
 			fs, length := framer.AppendStreamFrames(nil, 500)
-			Expect(fs).To(Equal([]wire.Frame{f}))
+			Expect(fs).To(HaveLen(1))
+			Expect(fs[0].Frame).To(Equal(f))
 			Expect(length).To(Equal(f.Length(version)))
 		})
 	})

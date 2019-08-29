@@ -309,7 +309,7 @@ var _ = Describe("Session", func() {
 			err := sess.handleFrame(&wire.PathChallengeFrame{Data: data}, 0, protocol.EncryptionUnspecified)
 			Expect(err).ToNot(HaveOccurred())
 			frames, _ := sess.framer.AppendControlFrames(nil, 1000)
-			Expect(frames).To(Equal([]wire.Frame{&wire.PathResponseFrame{Data: data}}))
+			Expect(frames).To(Equal([]ackhandler.Frame{{Frame: &wire.PathResponseFrame{Data: data}}}))
 		})
 
 		It("rejects NEW_TOKEN frames", func() {
@@ -889,7 +889,7 @@ var _ = Describe("Session", func() {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(sent).To(BeTrue())
 			frames, _ := sess.framer.AppendControlFrames(nil, 1000)
-			Expect(frames).To(Equal([]wire.Frame{&wire.DataBlockedFrame{DataLimit: 1337}}))
+			Expect(frames).To(Equal([]ackhandler.Frame{{Frame: &wire.DataBlockedFrame{DataLimit: 1337}}}))
 		})
 
 		It("sends a probe packet", func() {
@@ -923,7 +923,7 @@ var _ = Describe("Session", func() {
 			// We're using a mock packet packer in this test.
 			// We therefore need to test separately that the PING was actually queued.
 			frames, _ := sess.framer.AppendControlFrames(nil, protocol.MaxByteCount)
-			Expect(frames).To(Equal([]wire.Frame{&wire.PingFrame{}}))
+			Expect(frames).To(Equal([]ackhandler.Frame{{Frame: &wire.PingFrame{}}}))
 		})
 
 		It("doesn't send when the SentPacketHandler doesn't allow it", func() {
