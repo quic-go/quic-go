@@ -19,6 +19,8 @@ import (
 	"github.com/lucas-clemente/quic-go/internal/wire"
 )
 
+var ErrServerClosed = errors.New("server closed")
+
 // packetHandler handles packets
 type packetHandler interface {
 	handlePacket(*receivedPacket)
@@ -308,7 +310,7 @@ func (s *baseServer) Close() error {
 	}
 	s.sessionHandler.CloseServer()
 	if s.serverError == nil {
-		s.serverError = errors.New("server closed")
+		s.serverError = ErrServerClosed
 	}
 	var err error
 	// If the server was started with ListenAddr, we created the packet conn.
