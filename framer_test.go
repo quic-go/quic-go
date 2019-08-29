@@ -91,7 +91,7 @@ var _ = Describe("Framer", func() {
 				Offset:         42,
 				DataLenPresent: true,
 			}
-			stream1.EXPECT().popStreamFrame(gomock.Any()).Return(f, false)
+			stream1.EXPECT().popStreamFrame(gomock.Any()).Return(&ackhandler.Frame{Frame: f}, false)
 			framer.AddActiveStream(id1)
 			fs, length := framer.AppendStreamFrames(nil, 1000)
 			Expect(fs).To(HaveLen(1))
@@ -106,7 +106,7 @@ var _ = Describe("Framer", func() {
 				Data:           []byte("foobar"),
 				DataLenPresent: true,
 			}
-			stream1.EXPECT().popStreamFrame(gomock.Any()).Return(f, false)
+			stream1.EXPECT().popStreamFrame(gomock.Any()).Return(&ackhandler.Frame{Frame: f}, false)
 			framer.AddActiveStream(id1)
 			mdf := &wire.MaxDataFrame{ByteOffset: 1337}
 			frames := []ackhandler.Frame{{Frame: mdf}}
@@ -126,7 +126,7 @@ var _ = Describe("Framer", func() {
 				Data:           []byte("foobar"),
 				DataLenPresent: true,
 			}
-			stream2.EXPECT().popStreamFrame(gomock.Any()).Return(f, false)
+			stream2.EXPECT().popStreamFrame(gomock.Any()).Return(&ackhandler.Frame{Frame: f}, false)
 			framer.AddActiveStream(id1)
 			framer.AddActiveStream(id2)
 			frames, _ := framer.AppendStreamFrames(nil, 1000)
@@ -143,7 +143,7 @@ var _ = Describe("Framer", func() {
 				DataLenPresent: true,
 			}
 			stream1.EXPECT().popStreamFrame(gomock.Any()).Return(nil, false)
-			stream2.EXPECT().popStreamFrame(gomock.Any()).Return(f, false)
+			stream2.EXPECT().popStreamFrame(gomock.Any()).Return(&ackhandler.Frame{Frame: f}, false)
 			framer.AddActiveStream(id1)
 			framer.AddActiveStream(id2)
 			frames, _ := framer.AppendStreamFrames(nil, 1000)
@@ -155,8 +155,8 @@ var _ = Describe("Framer", func() {
 			streamGetter.EXPECT().GetOrOpenSendStream(id1).Return(stream1, nil).Times(2)
 			f1 := &wire.StreamFrame{StreamID: id1, Data: []byte("foobar")}
 			f2 := &wire.StreamFrame{StreamID: id1, Data: []byte("foobaz")}
-			stream1.EXPECT().popStreamFrame(gomock.Any()).Return(f1, true)
-			stream1.EXPECT().popStreamFrame(gomock.Any()).Return(f2, false)
+			stream1.EXPECT().popStreamFrame(gomock.Any()).Return(&ackhandler.Frame{Frame: f1}, true)
+			stream1.EXPECT().popStreamFrame(gomock.Any()).Return(&ackhandler.Frame{Frame: f2}, false)
 			framer.AddActiveStream(id1) // only add it once
 			frames, _ := framer.AppendStreamFrames(nil, protocol.MinStreamFrameSize)
 			Expect(frames).To(HaveLen(1))
@@ -175,9 +175,9 @@ var _ = Describe("Framer", func() {
 			f11 := &wire.StreamFrame{StreamID: id1, Data: []byte("foobar")}
 			f12 := &wire.StreamFrame{StreamID: id1, Data: []byte("foobaz")}
 			f2 := &wire.StreamFrame{StreamID: id2, Data: []byte("raboof")}
-			stream1.EXPECT().popStreamFrame(gomock.Any()).Return(f11, true)
-			stream1.EXPECT().popStreamFrame(gomock.Any()).Return(f12, false)
-			stream2.EXPECT().popStreamFrame(gomock.Any()).Return(f2, false)
+			stream1.EXPECT().popStreamFrame(gomock.Any()).Return(&ackhandler.Frame{Frame: f11}, true)
+			stream1.EXPECT().popStreamFrame(gomock.Any()).Return(&ackhandler.Frame{Frame: f12}, false)
+			stream2.EXPECT().popStreamFrame(gomock.Any()).Return(&ackhandler.Frame{Frame: f2}, false)
 			framer.AddActiveStream(id1) // only add it once
 			framer.AddActiveStream(id2)
 			// first a frame from stream 1
@@ -200,8 +200,8 @@ var _ = Describe("Framer", func() {
 			f1 := &wire.StreamFrame{StreamID: id1, Data: []byte("foobar")}
 			f2 := &wire.StreamFrame{StreamID: id2, Data: []byte("raboof")}
 			// both streams have more data, and will be re-queued
-			stream1.EXPECT().popStreamFrame(gomock.Any()).Return(f1, true)
-			stream2.EXPECT().popStreamFrame(gomock.Any()).Return(f2, true)
+			stream1.EXPECT().popStreamFrame(gomock.Any()).Return(&ackhandler.Frame{Frame: f1}, true)
+			stream2.EXPECT().popStreamFrame(gomock.Any()).Return(&ackhandler.Frame{Frame: f2}, true)
 			framer.AddActiveStream(id1)
 			framer.AddActiveStream(id2)
 			frames, length := framer.AppendStreamFrames(nil, 1000)
@@ -216,8 +216,8 @@ var _ = Describe("Framer", func() {
 			streamGetter.EXPECT().GetOrOpenSendStream(id2).Return(stream2, nil)
 			f1 := &wire.StreamFrame{Data: []byte("foobar")}
 			f2 := &wire.StreamFrame{Data: []byte("foobaz")}
-			stream1.EXPECT().popStreamFrame(gomock.Any()).Return(f1, false)
-			stream2.EXPECT().popStreamFrame(gomock.Any()).Return(f2, false)
+			stream1.EXPECT().popStreamFrame(gomock.Any()).Return(&ackhandler.Frame{Frame: f1}, false)
+			stream2.EXPECT().popStreamFrame(gomock.Any()).Return(&ackhandler.Frame{Frame: f2}, false)
 			framer.AddActiveStream(id2)
 			framer.AddActiveStream(id1)
 			frames, _ := framer.AppendStreamFrames(nil, 1000)
@@ -229,7 +229,7 @@ var _ = Describe("Framer", func() {
 		It("only asks a stream for data once, even if it was reported active multiple times", func() {
 			streamGetter.EXPECT().GetOrOpenSendStream(id1).Return(stream1, nil)
 			f := &wire.StreamFrame{Data: []byte("foobar")}
-			stream1.EXPECT().popStreamFrame(gomock.Any()).Return(f, false) // only one call to this function
+			stream1.EXPECT().popStreamFrame(gomock.Any()).Return(&ackhandler.Frame{Frame: f}, false) // only one call to this function
 			framer.AddActiveStream(id1)
 			framer.AddActiveStream(id1)
 			frames, _ := framer.AppendStreamFrames(nil, 1000)
@@ -245,14 +245,14 @@ var _ = Describe("Framer", func() {
 		It("pops maximum size STREAM frames", func() {
 			for i := protocol.MinStreamFrameSize; i < 2000; i++ {
 				streamGetter.EXPECT().GetOrOpenSendStream(id1).Return(stream1, nil)
-				stream1.EXPECT().popStreamFrame(gomock.Any()).DoAndReturn(func(size protocol.ByteCount) (*wire.StreamFrame, bool) {
+				stream1.EXPECT().popStreamFrame(gomock.Any()).DoAndReturn(func(size protocol.ByteCount) (*ackhandler.Frame, bool) {
 					f := &wire.StreamFrame{
 						StreamID:       id1,
 						DataLenPresent: true,
 					}
 					f.Data = make([]byte, f.MaxDataLen(size, version))
 					Expect(f.Length(version)).To(Equal(size))
-					return f, false
+					return &ackhandler.Frame{Frame: f}, false
 				})
 				framer.AddActiveStream(id1)
 				frames, _ := framer.AppendStreamFrames(nil, i)
@@ -267,22 +267,22 @@ var _ = Describe("Framer", func() {
 			for i := 2 * protocol.MinStreamFrameSize; i < 2000; i++ {
 				streamGetter.EXPECT().GetOrOpenSendStream(id1).Return(stream1, nil)
 				streamGetter.EXPECT().GetOrOpenSendStream(id2).Return(stream2, nil)
-				stream1.EXPECT().popStreamFrame(gomock.Any()).DoAndReturn(func(size protocol.ByteCount) (*wire.StreamFrame, bool) {
+				stream1.EXPECT().popStreamFrame(gomock.Any()).DoAndReturn(func(size protocol.ByteCount) (*ackhandler.Frame, bool) {
 					f := &wire.StreamFrame{
 						StreamID:       id2,
 						DataLenPresent: true,
 					}
 					f.Data = make([]byte, f.MaxDataLen(protocol.MinStreamFrameSize, version))
-					return f, false
+					return &ackhandler.Frame{Frame: f}, false
 				})
-				stream2.EXPECT().popStreamFrame(gomock.Any()).DoAndReturn(func(size protocol.ByteCount) (*wire.StreamFrame, bool) {
+				stream2.EXPECT().popStreamFrame(gomock.Any()).DoAndReturn(func(size protocol.ByteCount) (*ackhandler.Frame, bool) {
 					f := &wire.StreamFrame{
 						StreamID:       id2,
 						DataLenPresent: true,
 					}
 					f.Data = make([]byte, f.MaxDataLen(size, version))
 					Expect(f.Length(version)).To(Equal(size))
-					return f, false
+					return &ackhandler.Frame{Frame: f}, false
 				})
 				framer.AddActiveStream(id1)
 				framer.AddActiveStream(id2)
@@ -298,7 +298,8 @@ var _ = Describe("Framer", func() {
 
 		It("pops frames that when asked for the the minimum STREAM frame size", func() {
 			streamGetter.EXPECT().GetOrOpenSendStream(id1).Return(stream1, nil)
-			stream1.EXPECT().popStreamFrame(gomock.Any()).Return(&wire.StreamFrame{Data: []byte("foobar")}, false)
+			f := &wire.StreamFrame{Data: []byte("foobar")}
+			stream1.EXPECT().popStreamFrame(gomock.Any()).Return(&ackhandler.Frame{Frame: f}, false)
 			framer.AddActiveStream(id1)
 			framer.AppendStreamFrames(nil, protocol.MinStreamFrameSize)
 		})
@@ -316,7 +317,7 @@ var _ = Describe("Framer", func() {
 				Data:           bytes.Repeat([]byte("f"), int(500-protocol.MinStreamFrameSize)),
 				DataLenPresent: true,
 			}
-			stream1.EXPECT().popStreamFrame(gomock.Any()).Return(f, false)
+			stream1.EXPECT().popStreamFrame(gomock.Any()).Return(&ackhandler.Frame{Frame: f}, false)
 			framer.AddActiveStream(id1)
 			fs, length := framer.AppendStreamFrames(nil, 500)
 			Expect(fs).To(HaveLen(1))

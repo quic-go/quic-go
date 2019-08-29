@@ -10,6 +10,7 @@ import (
 	time "time"
 
 	gomock "github.com/golang/mock/gomock"
+	ackhandler "github.com/lucas-clemente/quic-go/internal/ackhandler"
 	protocol "github.com/lucas-clemente/quic-go/internal/protocol"
 	wire "github.com/lucas-clemente/quic-go/internal/wire"
 )
@@ -171,10 +172,10 @@ func (mr *MockSendStreamIMockRecorder) hasData() *gomock.Call {
 }
 
 // popStreamFrame mocks base method
-func (m *MockSendStreamI) popStreamFrame(arg0 protocol.ByteCount) (*wire.StreamFrame, bool) {
+func (m *MockSendStreamI) popStreamFrame(arg0 protocol.ByteCount) (*ackhandler.Frame, bool) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "popStreamFrame", arg0)
-	ret0, _ := ret[0].(*wire.StreamFrame)
+	ret0, _ := ret[0].(*ackhandler.Frame)
 	ret1, _ := ret[1].(bool)
 	return ret0, ret1
 }

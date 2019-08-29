@@ -77,7 +77,7 @@ func (f *framerI) AddActiveStream(id protocol.StreamID) {
 
 func (f *framerI) AppendStreamFrames(frames []ackhandler.Frame, maxLen protocol.ByteCount) ([]ackhandler.Frame, protocol.ByteCount) {
 	var length protocol.ByteCount
-	var lastFrame *wire.StreamFrame
+	var lastFrame *ackhandler.Frame
 	f.mutex.Lock()
 	// pop STREAM frames, until less than MinStreamFrameSize bytes are left in the packet
 	numActiveStreams := len(f.streamQueue)
@@ -112,7 +112,7 @@ func (f *framerI) AppendStreamFrames(frames []ackhandler.Frame, maxLen protocol.
 		if frame == nil {
 			continue
 		}
-		frames = append(frames, ackhandler.Frame{Frame: frame})
+		frames = append(frames, *frame)
 		length += frame.Length(f.version)
 		lastFrame = frame
 	}
@@ -120,7 +120,7 @@ func (f *framerI) AppendStreamFrames(frames []ackhandler.Frame, maxLen protocol.
 	if lastFrame != nil {
 		lastFrameLen := lastFrame.Length(f.version)
 		// account for the smaller size of the last STREAM frame
-		lastFrame.DataLenPresent = false
+		lastFrame.Frame.(*wire.StreamFrame).DataLenPresent = false
 		length += lastFrame.Length(f.version) - lastFrameLen
 	}
 	return frames, length

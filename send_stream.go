@@ -6,6 +6,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/lucas-clemente/quic-go/internal/ackhandler"
+
 	"github.com/lucas-clemente/quic-go/internal/flowcontrol"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/internal/utils"
@@ -16,7 +18,7 @@ type sendStreamI interface {
 	SendStream
 	handleStopSendingFrame(*wire.StopSendingFrame)
 	hasData() bool
-	popStreamFrame(maxBytes protocol.ByteCount) (*wire.StreamFrame, bool)
+	popStreamFrame(maxBytes protocol.ByteCount) (*ackhandler.Frame, bool)
 	closeForShutdown(error)
 	handleMaxStreamDataFrame(*wire.MaxStreamDataFrame)
 }
@@ -147,7 +149,7 @@ func (s *sendStream) Write(p []byte) (int, error) {
 
 // popStreamFrame returns the next STREAM frame that is supposed to be sent on this stream
 // maxBytes is the maximum length this frame (including frame header) will have.
-func (s *sendStream) popStreamFrame(maxBytes protocol.ByteCount) (*wire.StreamFrame, bool /* has more data to send */) {
+func (s *sendStream) popStreamFrame(maxBytes protocol.ByteCount) (*ackhandler.Frame, bool /* has more data to send */) {
 	s.mutex.Lock()
 	if len(s.retransmissionQueue) > 0 {
 		frame, hasMoreRetransmissions := s.maybeGetRetransmission(maxBytes)
@@ -155,7 +157,10 @@ func (s *sendStream) popStreamFrame(maxBytes protocol.ByteCount) (*wire.StreamFr
 			s.mutex.Unlock()
 			// We always claim that we have more data to send.
 			// This might be incorrect, in which case there'll be a spurious call to popStreamFrame in the future.
-			return frame, true
+			if frame == nil {
+				return nil, true
+			}
+			return &ackhandler.Frame{Frame: frame}, true
 		}
 	}
 	completed, frame, hasMoreData := s.popStreamFrameImpl(maxBytes)
@@ -164,7 +169,10 @@ func (s *sendStream) popStreamFrame(maxBytes protocol.ByteCount) (*wire.StreamFr
 	if completed {
 		s.sender.onStreamCompleted(s.streamID)
 	}
-	return frame, hasMoreData
+	if frame == nil {
+		return nil, hasMoreData
+	}
+	return &ackhandler.Frame{Frame: frame}, hasMoreData
 }
 
 func (s *sendStream) popStreamFrameImpl(maxBytes protocol.ByteCount) (bool /* completed */, *wire.StreamFrame, bool /* has more data to send */) {
@@ -248,10 +256,11 @@ func (s *sendStream) getDataForWriting(maxBytes protocol.ByteCount) ([]byte, boo
 	return ret, s.finishedWriting && s.dataForWriting == nil && !s.finSent
 }
 
-func (s *sendStream) queueRetransmission(f *wire.StreamFrame) {
-	f.DataLenPresent = true
+func (s *sendStream) queueRetransmission(f wire.Frame) {
+	sf := f.(*wire.StreamFrame)
+	sf.DataLenPresent = true
 	s.mutex.Lock()
-	s.retransmissionQueue = append(s.retransmissionQueue, f)
+	s.retransmissionQueue = append(s.retransmissionQueue, sf)
 	s.mutex.Unlock()
 
 	s.sender.onHasStreamData(s.streamID)
