@@ -68,6 +68,9 @@ func (p *packedPacket) ToAckHandlerPacket(q *retransmissionQueue) *ackhandler.Pa
 	}
 	encLevel := p.EncryptionLevel()
 	for i := range p.frames {
+		if p.frames[i].OnLost != nil {
+			continue
+		}
 		switch encLevel {
 		case protocol.EncryptionInitial:
 			p.frames[i].OnLost = q.AddInitial

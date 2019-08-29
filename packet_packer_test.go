@@ -447,29 +447,6 @@ var _ = Describe("Packet packer", func() {
 				Expect(p.frames[2].Frame.(*wire.StreamFrame).Data).To(Equal([]byte("frame 3")))
 			})
 
-			It("adds retransmissions", func() {
-				f1 := &wire.StreamFrame{Data: []byte("frame 1")}
-				cf := &wire.MaxDataFrame{ByteOffset: 0x42}
-				retransmissionQueue.AddAppData(f1)
-				retransmissionQueue.AddAppData(cf)
-				pnManager.EXPECT().PeekPacketNumber(protocol.Encryption1RTT).Return(protocol.PacketNumber(0x42), protocol.PacketNumberLen2)
-				pnManager.EXPECT().PopPacketNumber(protocol.Encryption1RTT).Return(protocol.PacketNumber(0x42))
-				sealingManager.EXPECT().Get1RTTSealer().Return(sealer, nil)
-				ackFramer.EXPECT().GetAckFrame(protocol.Encryption1RTT)
-				expectAppendControlFrames()
-				f2 := &wire.StreamFrame{Data: []byte("frame 2")}
-				expectAppendStreamFrames(ackhandler.Frame{Frame: f2})
-				p, err := packer.PackPacket()
-				Expect(p).ToNot(BeNil())
-				Expect(err).ToNot(HaveOccurred())
-				Expect(p.frames).To(HaveLen(3))
-				Expect(p.frames[0].Frame).To(BeAssignableToTypeOf(&wire.StreamFrame{}))
-				Expect(p.frames[0].Frame.(*wire.StreamFrame).Data).To(Equal([]byte("frame 1")))
-				Expect(p.frames[1].Frame).To(Equal(cf))
-				Expect(p.frames[2].Frame).To(BeAssignableToTypeOf(&wire.StreamFrame{}))
-				Expect(p.frames[2].Frame.(*wire.StreamFrame).Data).To(Equal([]byte("frame 2")))
-			})
-
 			Context("making ACK packets ack-eliciting", func() {
 				sendMaxNumNonAckElicitingAcks := func() {
 					for i := 0; i < protocol.MaxNonAckElicitingAcks; i++ {
@@ -807,13 +784,20 @@ var _ = Describe("Converting to AckHandler packets", func() {
 		Expect(p.LargestAcked).To(Equal(protocol.InvalidPacketNumber))
 	})
 
-	It("sets the OnLost callback", func() {
+	It("doesn't overwrite the OnLost callback, if it is set", func() {
+		var pingLost bool
 		packet := &packedPacket{
-			header: &wire.ExtendedHeader{Header: wire.Header{}},
-			frames: []ackhandler.Frame{{Frame: &wire.MaxDataFrame{}}},
-			raw:    []byte("foobar"),
+			header: &wire.ExtendedHeader{Header: wire.Header{Type: protocol.PacketTypeHandshake}},
+			frames: []ackhandler.Frame{
+				{Frame: &wire.MaxDataFrame{}},
+				{Frame: &wire.PingFrame{}, OnLost: func(wire.Frame) { pingLost = true }},
+			},
+			raw: []byte("foobar"),
 		}
 		p := packet.ToAckHandlerPacket(newRetransmissionQueue(protocol.VersionTLS))
+		Expect(p.Frames).To(HaveLen(2))
 		Expect(p.Frames[0].OnLost).ToNot(BeNil())
+		p.Frames[1].OnLost(nil)
+		Expect(pingLost).To(BeTrue())
 	})
 })

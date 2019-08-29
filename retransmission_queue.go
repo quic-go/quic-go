@@ -14,8 +14,7 @@ type retransmissionQueue struct {
 	handshake           []wire.Frame
 	handshakeCryptoData []*wire.CryptoFrame
 
-	appData    []wire.Frame
-	streamData []*wire.StreamFrame
+	appData []wire.Frame
 
 	version protocol.VersionNumber
 }
@@ -49,10 +48,8 @@ func (q *retransmissionQueue) HasHandshakeData() bool {
 }
 
 func (q *retransmissionQueue) AddAppData(f wire.Frame) {
-	if sf, ok := f.(*wire.StreamFrame); ok {
-		sf.DataLenPresent = true
-		q.streamData = append(q.streamData, sf)
-		return
+	if _, ok := f.(*wire.StreamFrame); ok {
+		panic("STREAM frames are handled with their respective streams.")
 	}
 	q.appData = append(q.appData, f)
 }
@@ -94,19 +91,6 @@ func (q *retransmissionQueue) GetHandshakeFrame(maxLen protocol.ByteCount) wire.
 }
 
 func (q *retransmissionQueue) GetAppDataFrame(maxLen protocol.ByteCount) wire.Frame {
-	if len(q.streamData) > 0 {
-		f := q.streamData[0]
-		if f.Length(q.version) <= maxLen {
-			q.streamData = q.streamData[1:]
-			return f
-		}
-		if maxLen >= protocol.MinStreamFrameSize {
-			newFrame, needsSplit := f.MaybeSplitOffFrame(maxLen, q.version)
-			if needsSplit && newFrame != nil {
-				return newFrame
-			}
-		}
-	}
 	if len(q.appData) == 0 {
 		return nil
 	}
