@@ -43,7 +43,8 @@ type sendStream struct {
 	closedForShutdown bool // set when CloseForShutdown() is called
 	finishedWriting   bool // set once Close() is called
 	canceledWrite     bool // set when CancelWrite() is called, or a STOP_SENDING frame is received
-	finSent           bool // set when a STREAM_FRAME with FIN bit has b
+	finSent           bool // set when a STREAM_FRAME with FIN bit has been sent
+	completed         bool // set when this stream has been reported to the streamSender as completed
 
 	dataForWriting []byte
 
@@ -255,20 +256,26 @@ func (s *sendStream) getDataForWriting(maxBytes protocol.ByteCount) ([]byte, boo
 }
 
 func (s *sendStream) frameAcked() {
-	var streamCompleted bool
 	s.mutex.Lock()
 	s.numOutstandingFrames--
 	if s.numOutstandingFrames < 0 {
 		panic("numOutStandingFrames negative")
 	}
-	if (s.finSent || s.canceledWrite) && s.numOutstandingFrames == 0 && len(s.retransmissionQueue) == 0 {
-		streamCompleted = true
-	}
+	newlyCompleted := s.isNewlyCompleted()
 	s.mutex.Unlock()
 
-	if streamCompleted {
+	if newlyCompleted {
 		s.sender.onStreamCompleted(s.streamID)
 	}
+}
+
+func (s *sendStream) isNewlyCompleted() bool {
+	completed := (s.finSent || s.canceledWrite) && s.numOutstandingFrames == 0 && len(s.retransmissionQueue) == 0
+	if completed && !s.completed {
+		s.completed = true
+		return true
+	}
+	return false
 }
 
 func (s *sendStream) queueRetransmission(f wire.Frame) {
@@ -299,27 +306,32 @@ func (s *sendStream) Close() error {
 	return nil
 }
 
-// TODO: also complete the stream when this is called after all outstanding data has been acknowledged
 func (s *sendStream) CancelWrite(errorCode protocol.ApplicationErrorCode) {
-	s.mutex.Lock()
 	s.cancelWriteImpl(errorCode, fmt.Errorf("Write on stream %d canceled with error code %d", s.streamID, errorCode))
-	s.mutex.Unlock()
+
 }
 
 // must be called after locking the mutex
 func (s *sendStream) cancelWriteImpl(errorCode protocol.ApplicationErrorCode, writeErr error) {
-	if s.canceledWrite || s.finishedWriting {
+	s.mutex.Lock()
+	if s.canceledWrite {
+		s.mutex.Unlock()
 		return
 	}
 	s.canceledWrite = true
 	s.cancelWriteErr = writeErr
+	newlyCompleted := s.isNewlyCompleted()
+	s.mutex.Unlock()
+
 	s.signalWrite()
 	s.sender.queueControlFrame(&wire.ResetStreamFrame{
 		StreamID:   s.streamID,
 		ByteOffset: s.writeOffset,
 		ErrorCode:  errorCode,
 	})
-	// TODO(#991): cancel retransmissions for this stream
+	if newlyCompleted {
+		s.sender.onStreamCompleted(s.streamID)
+	}
 	s.ctxCancel()
 }
 
@@ -334,11 +346,7 @@ func (s *sendStream) handleMaxStreamDataFrame(frame *wire.MaxStreamDataFrame) {
 	}
 }
 
-// TODO: also complete the stream when the frame is received after all outstanding data has been acknowledged
 func (s *sendStream) handleStopSendingFrame(frame *wire.StopSendingFrame) {
-	s.mutex.Lock()
-	defer s.mutex.Unlock()
-
 	writeErr := streamCanceledError{
 		errorCode: frame.ErrorCode,
 		error:     fmt.Errorf("Stream %d was reset with error code %d", s.streamID, frame.ErrorCode),
