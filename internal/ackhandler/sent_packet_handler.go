@@ -444,6 +444,11 @@ func (h *sentPacketHandler) onPacketAcked(p *Packet, rcvTime time.Time) error {
 		return nil
 	}
 
+	for _, f := range p.Frames {
+		if f.OnAcked != nil {
+			f.OnAcked()
+		}
+	}
 	if p.includedInBytesInFlight {
 		h.bytesInFlight -= p.Length
 	}
