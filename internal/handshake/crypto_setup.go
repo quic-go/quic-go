@@ -70,7 +70,6 @@ type cryptoSetup struct {
 
 	runner handshakeRunner
 
-	closed    bool
 	alertChan chan uint8
 	// handshakeDone is closed as soon as the go routine running qtls.Handshake() returns
 	handshakeDone chan struct{}
@@ -283,19 +282,13 @@ func (h *cryptoSetup) RunHandshake() {
 }
 
 func (h *cryptoSetup) onError(alert uint8, message string) {
-
 	h.runner.OnError(qerr.CryptoError(alert, message))
 }
 
+// Close closes the crypto setup.
+// It aborts the handshake, if it is still running.
+// It must only be called once.
 func (h *cryptoSetup) Close() error {
-	h.mutex.Lock()
-	defer h.mutex.Unlock()
-
-	if h.closed {
-		return nil
-	}
-	h.closed = true
-
 	close(h.closeChan)
 	// wait until qtls.Handshake() actually returned
 	<-h.handshakeDone
