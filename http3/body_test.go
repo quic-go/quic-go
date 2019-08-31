@@ -29,9 +29,10 @@ func (t bodyType) String() string {
 
 var _ = Describe("Body", func() {
 	var (
-		rb  *body
-		str *mockquic.MockStream
-		buf *bytes.Buffer
+		rb      *body
+		str     *mockquic.MockStream
+		buf     *bytes.Buffer
+		reqDone chan struct{}
 	)
 
 	getDataFrame := func(data []byte) []byte {
@@ -62,7 +63,8 @@ var _ = Describe("Body", func() {
 				case bodyTypeRequest:
 					rb = newRequestBody(str)
 				case bodyTypeResponse:
-					rb = newResponseBody(str)
+					reqDone = make(chan struct{})
+					rb = newResponseBody(str, reqDone)
 				}
 			})
 
@@ -156,8 +158,31 @@ var _ = Describe("Body", func() {
 			}
 
 			if bodyType == bodyTypeResponse {
+				It("closes the reqDone channel when Read errors", func() {
+					buf.Write([]byte("invalid"))
+					_, err := rb.Read([]byte{0})
+					Expect(err).To(HaveOccurred())
+					Expect(reqDone).To(BeClosed())
+				})
+
+				It("allows multiple calls to Read, when Read errors", func() {
+					buf.Write([]byte("invalid"))
+					_, err := rb.Read([]byte{0})
+					Expect(err).To(HaveOccurred())
+					Expect(reqDone).To(BeClosed())
+					_, err = rb.Read([]byte{0})
+					Expect(err).To(HaveOccurred())
+				})
+
 				It("closes responses", func() {
 					str.EXPECT().CancelRead(quic.ErrorCode(errorRequestCanceled))
+					Expect(rb.Close()).To(Succeed())
+				})
+
+				It("allows multiple calls to Close", func() {
+					str.EXPECT().CancelRead(quic.ErrorCode(errorRequestCanceled)).MaxTimes(2)
+					Expect(rb.Close()).To(Succeed())
+					Expect(reqDone).To(BeClosed())
 					Expect(rb.Close()).To(Succeed())
 				})
 			}
