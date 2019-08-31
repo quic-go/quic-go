@@ -40,7 +40,7 @@ var _ = Describe("early data", func() {
 					Expect(str.Close()).To(Succeed())
 					// make sure the Write finished before the handshake completed
 					Expect(sess.HandshakeComplete().Done()).ToNot(BeClosed())
-					Eventually(sess.HandshakeComplete().Done()).Should(BeClosed())
+					Eventually(sess.HandshakeComplete().Done(), protocol.DefaultHandshakeTimeout).Should(BeClosed())
 					close(done)
 				}()
 				serverPort := ln.Addr().(*net.UDPAddr).Port
