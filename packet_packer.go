@@ -29,7 +29,7 @@ type sealer interface {
 }
 
 type payload struct {
-	frames []wire.Frame
+	frames []ackhandler.Frame
 	ack    *wire.AckFrame
 	length protocol.ByteCount
 }
@@ -38,7 +38,7 @@ type packedPacket struct {
 	header *wire.ExtendedHeader
 	raw    []byte
 	ack    *wire.AckFrame
-	frames []wire.Frame
+	frames []ackhandler.Frame
 
 	buffer *packetBuffer
 }
@@ -67,23 +67,23 @@ func (p *packedPacket) ToAckHandlerPacket(q *retransmissionQueue) *ackhandler.Pa
 		largestAcked = p.ack.LargestAcked()
 	}
 	encLevel := p.EncryptionLevel()
-	frames := make([]ackhandler.Frame, len(p.frames))
-	for i, f := range p.frames {
-		frame := f
-		frames[i].Frame = frame
+	for i := range p.frames {
+		if p.frames[i].OnLost != nil {
+			continue
+		}
 		switch encLevel {
 		case protocol.EncryptionInitial:
-			frames[i].OnLost = q.AddInitial
+			p.frames[i].OnLost = q.AddInitial
 		case protocol.EncryptionHandshake:
-			frames[i].OnLost = q.AddHandshake
+			p.frames[i].OnLost = q.AddHandshake
 		case protocol.Encryption1RTT:
-			frames[i].OnLost = q.AddAppData
+			p.frames[i].OnLost = q.AddAppData
 		}
 	}
 	return &ackhandler.Packet{
 		PacketNumber:    p.header.PacketNumber,
 		LargestAcked:    largestAcked,
-		Frames:          frames,
+		Frames:          p.frames,
 		Length:          protocol.ByteCount(len(p.raw)),
 		EncryptionLevel: encLevel,
 		SendTime:        time.Now(),
@@ -119,8 +119,8 @@ type sealingManager interface {
 }
 
 type frameSource interface {
-	AppendStreamFrames([]wire.Frame, protocol.ByteCount) ([]wire.Frame, protocol.ByteCount)
-	AppendControlFrames([]wire.Frame, protocol.ByteCount) ([]wire.Frame, protocol.ByteCount)
+	AppendStreamFrames([]ackhandler.Frame, protocol.ByteCount) ([]ackhandler.Frame, protocol.ByteCount)
+	AppendControlFrames([]ackhandler.Frame, protocol.ByteCount) ([]ackhandler.Frame, protocol.ByteCount)
 }
 
 type ackFrameSource interface {
@@ -187,7 +187,7 @@ func newPacketPacker(
 // PackConnectionClose packs a packet that ONLY contains a ConnectionCloseFrame
 func (p *packetPacker) PackConnectionClose(ccf *wire.ConnectionCloseFrame) (*packedPacket, error) {
 	payload := payload{
-		frames: []wire.Frame{ccf},
+		frames: []ackhandler.Frame{{Frame: ccf}},
 		length: ccf.Length(p.version),
 	}
 	// send the CONNECTION_CLOSE frame with the highest available encryption level
@@ -287,7 +287,7 @@ func (p *packetPacker) PackPacket() (*packedPacket, error) {
 	if len(payload.frames) == 0 { // the packet only contains an ACK
 		if p.numNonAckElicitingAcks >= protocol.MaxNonAckElicitingAcks {
 			ping := &wire.PingFrame{}
-			payload.frames = append(payload.frames, ping)
+			payload.frames = append(payload.frames, ackhandler.Frame{Frame: ping})
 			payload.length += ping.Length(p.version)
 			p.numNonAckElicitingAcks = 0
 		} else {
@@ -361,12 +361,12 @@ func (p *packetPacker) maybePackCryptoPacket() (*packedPacket, error) {
 			if f == nil {
 				break
 			}
-			payload.frames = append(payload.frames, f)
+			payload.frames = append(payload.frames, ackhandler.Frame{Frame: f})
 			payload.length += f.Length(p.version)
 		}
 	} else if hasData {
 		cf := s.PopCryptoFrame(p.maxPacketSize - hdrLen - protocol.ByteCount(sealer.Overhead()) - payload.length)
-		payload.frames = []wire.Frame{cf}
+		payload.frames = []ackhandler.Frame{{Frame: cf}}
 		payload.length += cf.Length(p.version)
 	}
 	return p.writeAndSealPacket(hdr, payload, encLevel, sealer)
@@ -389,7 +389,7 @@ func (p *packetPacker) composeNextPacket(maxFrameSize protocol.ByteCount) (paylo
 		if f == nil {
 			break
 		}
-		payload.frames = append(payload.frames, f)
+		payload.frames = append(payload.frames, ackhandler.Frame{Frame: f})
 		payload.length += f.Length(p.version)
 	}
 

@@ -6,6 +6,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/lucas-clemente/quic-go/internal/ackhandler"
+
 	"github.com/lucas-clemente/quic-go/internal/flowcontrol"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/internal/utils"
@@ -16,13 +18,16 @@ type sendStreamI interface {
 	SendStream
 	handleStopSendingFrame(*wire.StopSendingFrame)
 	hasData() bool
-	popStreamFrame(maxBytes protocol.ByteCount) (*wire.StreamFrame, bool)
+	popStreamFrame(maxBytes protocol.ByteCount) (*ackhandler.Frame, bool)
 	closeForShutdown(error)
 	handleMaxStreamDataFrame(*wire.MaxStreamDataFrame)
 }
 
 type sendStream struct {
 	mutex sync.Mutex
+
+	numOutstandingFrames int64
+	retransmissionQueue  []*wire.StreamFrame
 
 	ctx       context.Context
 	ctxCancel context.CancelFunc
@@ -38,7 +43,8 @@ type sendStream struct {
 	closedForShutdown bool // set when CloseForShutdown() is called
 	finishedWriting   bool // set once Close() is called
 	canceledWrite     bool // set when CancelWrite() is called, or a STOP_SENDING frame is received
-	finSent           bool // set when a STREAM_FRAME with FIN bit has b
+	finSent           bool // set when a STREAM_FRAME with FIN bit has been sent
+	completed         bool // set when this stream has been reported to the streamSender as completed
 
 	dataForWriting []byte
 
@@ -145,20 +151,32 @@ func (s *sendStream) Write(p []byte) (int, error) {
 
 // popStreamFrame returns the next STREAM frame that is supposed to be sent on this stream
 // maxBytes is the maximum length this frame (including frame header) will have.
-func (s *sendStream) popStreamFrame(maxBytes protocol.ByteCount) (*wire.StreamFrame, bool /* has more data to send */) {
+func (s *sendStream) popStreamFrame(maxBytes protocol.ByteCount) (*ackhandler.Frame, bool /* has more data to send */) {
 	s.mutex.Lock()
-	completed, frame, hasMoreData := s.popStreamFrameImpl(maxBytes)
+	frame, hasMoreData := s.popStreamFrameImpl(maxBytes)
+	if frame != nil {
+		s.numOutstandingFrames++
+	}
 	s.mutex.Unlock()
 
-	if completed {
-		s.sender.onStreamCompleted(s.streamID)
-	}
 	return frame, hasMoreData
 }
 
-func (s *sendStream) popStreamFrameImpl(maxBytes protocol.ByteCount) (bool /* completed */, *wire.StreamFrame, bool /* has more data to send */) {
+func (s *sendStream) popStreamFrameImpl(maxBytes protocol.ByteCount) (*ackhandler.Frame, bool /* has more data to send */) {
+	if len(s.retransmissionQueue) > 0 {
+		frame, hasMoreRetransmissions := s.maybeGetRetransmission(maxBytes)
+		if frame != nil || hasMoreRetransmissions {
+			if frame == nil {
+				return nil, true
+			}
+			// We always claim that we have more data to send.
+			// This might be incorrect, in which case there'll be a spurious call to popStreamFrame in the future.
+			return &ackhandler.Frame{Frame: frame, OnLost: s.queueRetransmission, OnAcked: s.frameAcked}, true
+		}
+	}
+
 	if s.canceledWrite || s.closeForShutdownErr != nil {
-		return false, nil, false
+		return nil, false
 	}
 
 	frame := &wire.StreamFrame{
@@ -168,7 +186,7 @@ func (s *sendStream) popStreamFrameImpl(maxBytes protocol.ByteCount) (bool /* co
 	}
 	maxDataLen := frame.MaxDataLen(maxBytes, s.version)
 	if maxDataLen == 0 { // a STREAM frame must have at least one byte of data
-		return false, nil, s.dataForWriting != nil
+		return nil, s.dataForWriting != nil
 	}
 	frame.Data, frame.FinBit = s.getDataForWriting(maxDataLen)
 	if len(frame.Data) == 0 && !frame.FinBit {
@@ -177,21 +195,31 @@ func (s *sendStream) popStreamFrameImpl(maxBytes protocol.ByteCount) (bool /* co
 		// - there's data for writing, but the stream is stream-level flow control blocked
 		// - there's data for writing, but the stream is connection-level flow control blocked
 		if s.dataForWriting == nil {
-			return false, nil, false
+			return nil, false
 		}
 		if isBlocked, offset := s.flowController.IsNewlyBlocked(); isBlocked {
 			s.sender.queueControlFrame(&wire.StreamDataBlockedFrame{
 				StreamID:  s.streamID,
 				DataLimit: offset,
 			})
-			return false, nil, false
+			return nil, false
 		}
-		return false, nil, true
+		return nil, true
 	}
 	if frame.FinBit {
 		s.finSent = true
 	}
-	return frame.FinBit, frame, s.dataForWriting != nil
+	return &ackhandler.Frame{Frame: frame, OnLost: s.queueRetransmission, OnAcked: s.frameAcked}, s.dataForWriting != nil
+}
+
+func (s *sendStream) maybeGetRetransmission(maxBytes protocol.ByteCount) (*wire.StreamFrame, bool /* has more retransmissions */) {
+	f := s.retransmissionQueue[0]
+	newFrame, needsSplit := f.MaybeSplitOffFrame(maxBytes, s.version)
+	if needsSplit {
+		return newFrame, true
+	}
+	s.retransmissionQueue = s.retransmissionQueue[1:]
+	return f, len(s.retransmissionQueue) > 0
 }
 
 func (s *sendStream) hasData() bool {
@@ -227,6 +255,43 @@ func (s *sendStream) getDataForWriting(maxBytes protocol.ByteCount) ([]byte, boo
 	return ret, s.finishedWriting && s.dataForWriting == nil && !s.finSent
 }
 
+func (s *sendStream) frameAcked() {
+	s.mutex.Lock()
+	s.numOutstandingFrames--
+	if s.numOutstandingFrames < 0 {
+		panic("numOutStandingFrames negative")
+	}
+	newlyCompleted := s.isNewlyCompleted()
+	s.mutex.Unlock()
+
+	if newlyCompleted {
+		s.sender.onStreamCompleted(s.streamID)
+	}
+}
+
+func (s *sendStream) isNewlyCompleted() bool {
+	completed := (s.finSent || s.canceledWrite) && s.numOutstandingFrames == 0 && len(s.retransmissionQueue) == 0
+	if completed && !s.completed {
+		s.completed = true
+		return true
+	}
+	return false
+}
+
+func (s *sendStream) queueRetransmission(f wire.Frame) {
+	sf := f.(*wire.StreamFrame)
+	sf.DataLenPresent = true
+	s.mutex.Lock()
+	s.retransmissionQueue = append(s.retransmissionQueue, sf)
+	s.numOutstandingFrames--
+	if s.numOutstandingFrames < 0 {
+		panic("numOutStandingFrames negative")
+	}
+	s.mutex.Unlock()
+
+	s.sender.onHasStreamData(s.streamID)
+}
+
 func (s *sendStream) Close() error {
 	s.mutex.Lock()
 	if s.canceledWrite {
@@ -242,31 +307,32 @@ func (s *sendStream) Close() error {
 }
 
 func (s *sendStream) CancelWrite(errorCode protocol.ApplicationErrorCode) {
-	s.mutex.Lock()
-	completed := s.cancelWriteImpl(errorCode, fmt.Errorf("Write on stream %d canceled with error code %d", s.streamID, errorCode))
-	s.mutex.Unlock()
+	s.cancelWriteImpl(errorCode, fmt.Errorf("Write on stream %d canceled with error code %d", s.streamID, errorCode))
 
-	if completed {
-		s.sender.onStreamCompleted(s.streamID) // must be called without holding the mutex
-	}
 }
 
 // must be called after locking the mutex
-func (s *sendStream) cancelWriteImpl(errorCode protocol.ApplicationErrorCode, writeErr error) bool /*completed */ {
-	if s.canceledWrite || s.finishedWriting {
-		return false
+func (s *sendStream) cancelWriteImpl(errorCode protocol.ApplicationErrorCode, writeErr error) {
+	s.mutex.Lock()
+	if s.canceledWrite {
+		s.mutex.Unlock()
+		return
 	}
 	s.canceledWrite = true
 	s.cancelWriteErr = writeErr
+	newlyCompleted := s.isNewlyCompleted()
+	s.mutex.Unlock()
+
 	s.signalWrite()
 	s.sender.queueControlFrame(&wire.ResetStreamFrame{
 		StreamID:   s.streamID,
 		ByteOffset: s.writeOffset,
 		ErrorCode:  errorCode,
 	})
-	// TODO(#991): cancel retransmissions for this stream
+	if newlyCompleted {
+		s.sender.onStreamCompleted(s.streamID)
+	}
 	s.ctxCancel()
-	return true
 }
 
 func (s *sendStream) handleMaxStreamDataFrame(frame *wire.MaxStreamDataFrame) {
@@ -281,22 +347,11 @@ func (s *sendStream) handleMaxStreamDataFrame(frame *wire.MaxStreamDataFrame) {
 }
 
 func (s *sendStream) handleStopSendingFrame(frame *wire.StopSendingFrame) {
-	s.mutex.Lock()
-	completed := s.handleStopSendingFrameImpl(frame)
-	s.mutex.Unlock()
-
-	if completed {
-		s.sender.onStreamCompleted(s.streamID)
-	}
-}
-
-// must be called after locking the mutex
-func (s *sendStream) handleStopSendingFrameImpl(frame *wire.StopSendingFrame) bool /*completed*/ {
 	writeErr := streamCanceledError{
 		errorCode: frame.ErrorCode,
 		error:     fmt.Errorf("Stream %d was reset with error code %d", s.streamID, frame.ErrorCode),
 	}
-	return s.cancelWriteImpl(frame.ErrorCode, writeErr)
+	s.cancelWriteImpl(frame.ErrorCode, writeErr)
 }
 
 func (s *sendStream) Context() context.Context {

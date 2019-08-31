@@ -1198,7 +1198,8 @@ func (s *session) sendPackedPacket(packet *packedPacket) {
 			EncryptionLevel: packet.EncryptionLevel(),
 			PacketNumber:    packet.header.PacketNumber,
 			PacketSize:      protocol.ByteCount(len(packet.raw)),
-			Frames:          packet.frames,
+			// TODO: trace frames
+			// Frames:          packet.frames,
 		})
 	}
 	s.logPacket(packet)

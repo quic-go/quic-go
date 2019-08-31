@@ -48,8 +48,10 @@ var _ = Describe("SentPacketHandler", func() {
 		if p.SendTime.IsZero() {
 			p.SendTime = time.Now()
 		}
-		p.Frames = []Frame{
-			{Frame: &wire.PingFrame{}, OnLost: func(wire.Frame) { lostPackets = append(lostPackets, p.PacketNumber) }},
+		if len(p.Frames) == 0 {
+			p.Frames = []Frame{
+				{Frame: &wire.PingFrame{}, OnLost: func(wire.Frame) { lostPackets = append(lostPackets, p.PacketNumber) }},
+			}
 		}
 		return p
 	}
@@ -196,6 +198,17 @@ var _ = Describe("SentPacketHandler", func() {
 				Expect(handler.ReceivedAck(ack, 1, protocol.Encryption1RTT, time.Now())).To(Succeed())
 				Expect(getPacket(0, protocol.Encryption1RTT)).To(BeNil())
 				expectInPacketHistoryOrLost([]protocol.PacketNumber{1, 2, 3, 4, 5, 6, 7, 8, 9}, protocol.Encryption1RTT)
+			})
+
+			It("calls the OnAcked callback", func() {
+				var acked bool
+				handler.SentPacket(ackElicitingPacket(&Packet{
+					PacketNumber: 13,
+					Frames:       []Frame{{Frame: &wire.PingFrame{}, OnAcked: func() { acked = true }}},
+				}))
+				ack := &wire.AckFrame{AckRanges: []wire.AckRange{{Smallest: 13, Largest: 13}}}
+				Expect(handler.ReceivedAck(ack, 1, protocol.Encryption1RTT, time.Now())).To(Succeed())
+				Expect(acked).To(BeTrue())
 			})
 
 			It("handles an ACK frame with one missing packet range", func() {

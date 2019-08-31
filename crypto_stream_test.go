@@ -201,8 +201,9 @@ var _ = Describe("Post Handshake Crypto Stream", func() {
 		Expect(n).To(Equal(3))
 		frames, _ := framer.AppendControlFrames(nil, 1000)
 		Expect(frames).To(HaveLen(2))
-		Expect(frames).To(ContainElement(&wire.CryptoFrame{Data: []byte("foo")}))
-		Expect(frames).To(ContainElement(&wire.CryptoFrame{Data: []byte("bar"), Offset: 3}))
+		fs := []wire.Frame{frames[0].Frame, frames[1].Frame}
+		Expect(fs).To(ContainElement(&wire.CryptoFrame{Data: []byte("foo")}))
+		Expect(fs).To(ContainElement(&wire.CryptoFrame{Data: []byte("bar"), Offset: 3}))
 	})
 
 	It("splits large writes into multiple frames", func() {
@@ -214,9 +215,9 @@ var _ = Describe("Post Handshake Crypto Stream", func() {
 		Expect(frames).To(HaveLen(11)) // one more for framing overhead
 		var dataLen int
 		for _, f := range frames {
-			Expect(f.Length(protocol.VersionTLS)).To(BeNumerically("<=", protocol.MaxPostHandshakeCryptoFrameSize))
-			Expect(f).To(BeAssignableToTypeOf(&wire.CryptoFrame{}))
-			dataLen += len(f.(*wire.CryptoFrame).Data)
+			Expect(f.Frame.Length(protocol.VersionTLS)).To(BeNumerically("<=", protocol.MaxPostHandshakeCryptoFrameSize))
+			Expect(f.Frame).To(BeAssignableToTypeOf(&wire.CryptoFrame{}))
+			dataLen += len(f.Frame.(*wire.CryptoFrame).Data)
 		}
 		Expect(dataLen).To(BeEquivalentTo(size))
 	})
