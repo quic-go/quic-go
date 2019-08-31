@@ -223,7 +223,7 @@ func (h *packetHandlerMap) maybeHandleStatelessReset(data []byte) bool {
 	if data[0]&0x80 != 0 {
 		return false
 	}
-	if len(data) < protocol.MinStatelessResetSize {
+	if len(data) < 17 /* type byte + 16 bytes for the reset token */ {
 		return false
 	}
 

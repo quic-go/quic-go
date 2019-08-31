@@ -265,6 +265,21 @@ var _ = Describe("Packet Handler Map", func() {
 				// make sure we give it enough time to be called to cause an error here
 				time.Sleep(scaleDuration(25 * time.Millisecond))
 			})
+
+			It("ignores packets too small to contain a stateless reset", func() {
+				handler.connIDLen = 0
+				packetHandler := NewMockPacketHandler(mockCtrl)
+				token := [16]byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16}
+				handler.AddResetToken(token, packetHandler)
+				packet := append([]byte{0x40} /* short header packet */, token[:15]...)
+				done := make(chan struct{})
+				// don't EXPECT any calls here, but register the closing of the done channel
+				packetHandler.EXPECT().destroy(gomock.Any()).Do(func(error) {
+					close(done)
+				}).AnyTimes()
+				conn.dataToRead <- packet
+				Consistently(done).ShouldNot(BeClosed())
+			})
 		})
 
 		Context("generating", func() {
