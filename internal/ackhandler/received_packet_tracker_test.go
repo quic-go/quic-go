@@ -207,6 +207,13 @@ var _ = Describe("Received Packet Tracker", func() {
 				Expect(ack.DelayTime).To(BeNumerically("~", 1337*time.Millisecond, 50*time.Millisecond))
 			})
 
+			It("uses a 0 delay time if the delay would be negative", func() {
+				tracker.ReceivedPacket(0, time.Now().Add(time.Hour), true)
+				ack := tracker.GetAckFrame()
+				Expect(ack).ToNot(BeNil())
+				Expect(ack.DelayTime).To(BeZero())
+			})
+
 			It("saves the last sent ACK", func() {
 				tracker.ReceivedPacket(1, time.Time{}, true)
 				ack := tracker.GetAckFrame()
