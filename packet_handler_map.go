@@ -223,7 +223,7 @@ func (h *packetHandlerMap) maybeHandleStatelessReset(data []byte) bool {
 	if data[0]&0x80 != 0 {
 		return false
 	}
-	if len(data) < protocol.MinStatelessResetSize {
+	if len(data) < 17 /* type byte + 16 bytes for the reset token */ {
 		return false
 	}
 
@@ -264,7 +264,7 @@ func (h *packetHandlerMap) maybeSendStatelessReset(p *receivedPacket, connID pro
 	}
 	token := h.GetStatelessResetToken(connID)
 	h.logger.Debugf("Sending stateless reset to %s (connection ID: %s). Token: %#x", p.remoteAddr, connID, token)
-	data := make([]byte, 23)
+	data := make([]byte, protocol.MinStatelessResetSize-16, protocol.MinStatelessResetSize)
 	rand.Read(data)
 	data[0] = (data[0] & 0x7f) | 0x40
 	data = append(data, token[:]...)

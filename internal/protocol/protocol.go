@@ -56,8 +56,8 @@ const DefaultTCPMSS ByteCount = 1460
 // MinInitialPacketSize is the minimum size an Initial packet is required to have.
 const MinInitialPacketSize = 1200
 
-// MinStatelessResetSize is the minimum size of a stateless reset packet
-const MinStatelessResetSize = 1 /* first byte */ + 22 /* random bytes */ + 16 /* token */
+// MinStatelessResetSize is the minimum size of a stateless reset packet that we send
+const MinStatelessResetSize = 1 /* first byte */ + 20 /* max. conn ID length */ + 4 /* max. packet number length */ + 1 /* min. payload length */ + 16 /* token */
 
 // MinConnectionIDLenInitial is the minimum length of the destination connection ID on an Initial packet.
 const MinConnectionIDLenInitial = 8
