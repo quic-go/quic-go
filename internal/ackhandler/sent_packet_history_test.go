@@ -15,13 +15,14 @@ var _ = Describe("SentPacketHistory", func() {
 		ExpectWithOffset(1, hist.packetMap).To(HaveLen(len(packetNumbers)))
 		ExpectWithOffset(1, hist.packetList.Len()).To(Equal(len(packetNumbers)))
 		i := 0
-		hist.Iterate(func(p *Packet) (bool, error) {
+		err := hist.Iterate(func(p *Packet) (bool, error) {
 			pn := packetNumbers[i]
 			ExpectWithOffset(1, p.PacketNumber).To(Equal(pn))
 			ExpectWithOffset(1, hist.packetMap[pn].Value.PacketNumber).To(Equal(pn))
 			i++
 			return true, nil
 		})
+		Expect(err).ToNot(HaveOccurred())
 	}
 
 	BeforeEach(func() {
@@ -52,45 +53,6 @@ var _ = Describe("SentPacketHistory", func() {
 			front := hist.FirstOutstanding()
 			Expect(front).ToNot(BeNil())
 			Expect(front.PacketNumber).To(Equal(protocol.PacketNumber(2)))
-		})
-
-		It("gets the second packet if the first one is retransmitted", func() {
-			hist.SentPacket(&Packet{PacketNumber: 1, canBeRetransmitted: true})
-			hist.SentPacket(&Packet{PacketNumber: 3, canBeRetransmitted: true})
-			hist.SentPacket(&Packet{PacketNumber: 4, canBeRetransmitted: true})
-			front := hist.FirstOutstanding()
-			Expect(front).ToNot(BeNil())
-			Expect(front.PacketNumber).To(Equal(protocol.PacketNumber(1)))
-			// Queue the first packet for retransmission.
-			// The first outstanding packet should now be 3.
-			err := hist.MarkCannotBeRetransmitted(1)
-			Expect(err).ToNot(HaveOccurred())
-			front = hist.FirstOutstanding()
-			Expect(front).ToNot(BeNil())
-			Expect(front.PacketNumber).To(Equal(protocol.PacketNumber(3)))
-		})
-
-		It("gets the third packet if the first two are retransmitted", func() {
-			hist.SentPacket(&Packet{PacketNumber: 1, canBeRetransmitted: true})
-			hist.SentPacket(&Packet{PacketNumber: 3, canBeRetransmitted: true})
-			hist.SentPacket(&Packet{PacketNumber: 4, canBeRetransmitted: true})
-			front := hist.FirstOutstanding()
-			Expect(front).ToNot(BeNil())
-			Expect(front.PacketNumber).To(Equal(protocol.PacketNumber(1)))
-			// Queue the second packet for retransmission.
-			// The first outstanding packet should still be 3.
-			err := hist.MarkCannotBeRetransmitted(3)
-			Expect(err).ToNot(HaveOccurred())
-			front = hist.FirstOutstanding()
-			Expect(front).ToNot(BeNil())
-			Expect(front.PacketNumber).To(Equal(protocol.PacketNumber(1)))
-			// Queue the first packet for retransmission.
-			// The first outstanding packet should still be 4.
-			err = hist.MarkCannotBeRetransmitted(1)
-			Expect(err).ToNot(HaveOccurred())
-			front = hist.FirstOutstanding()
-			Expect(front).ToNot(BeNil())
-			Expect(front.PacketNumber).To(Equal(protocol.PacketNumber(4)))
 		})
 	})
 
@@ -161,100 +123,35 @@ var _ = Describe("SentPacketHistory", func() {
 		})
 	})
 
-	Context("retransmissions", func() {
-		BeforeEach(func() {
-			for i := protocol.PacketNumber(1); i <= 5; i++ {
-				hist.SentPacket(&Packet{PacketNumber: i})
-			}
-		})
-
-		It("errors if the packet doesn't exist", func() {
-			err := hist.MarkCannotBeRetransmitted(100)
-			Expect(err).To(MatchError("sent packet history: packet 100 not found"))
-		})
-
-		It("adds a sent packets as a retransmission", func() {
-			hist.SentPacketsAsRetransmission([]*Packet{{PacketNumber: 13}}, 2)
-			expectInHistory([]protocol.PacketNumber{1, 2, 3, 4, 5, 13})
-			Expect(hist.GetPacket(13).isRetransmission).To(BeTrue())
-			Expect(hist.GetPacket(13).retransmissionOf).To(Equal(protocol.PacketNumber(2)))
-			Expect(hist.GetPacket(2).retransmittedAs).To(Equal([]protocol.PacketNumber{13}))
-		})
-
-		It("adds multiple packets sent as a retransmission", func() {
-			hist.SentPacketsAsRetransmission([]*Packet{{PacketNumber: 13}, {PacketNumber: 15}}, 2)
-			expectInHistory([]protocol.PacketNumber{1, 2, 3, 4, 5, 13, 15})
-			Expect(hist.GetPacket(13).isRetransmission).To(BeTrue())
-			Expect(hist.GetPacket(13).retransmissionOf).To(Equal(protocol.PacketNumber(2)))
-			Expect(hist.GetPacket(15).retransmissionOf).To(Equal(protocol.PacketNumber(2)))
-			Expect(hist.GetPacket(2).retransmittedAs).To(Equal([]protocol.PacketNumber{13, 15}))
-		})
-
-		It("adds a packet as a normal packet if the retransmitted packet doesn't exist", func() {
-			hist.SentPacketsAsRetransmission([]*Packet{{PacketNumber: 13}}, 7)
-			expectInHistory([]protocol.PacketNumber{1, 2, 3, 4, 5, 13})
-			Expect(hist.GetPacket(13).isRetransmission).To(BeFalse())
-			Expect(hist.GetPacket(13).retransmissionOf).To(BeZero())
-		})
-	})
-
 	Context("outstanding packets", func() {
 		It("says if it has outstanding packets", func() {
 			Expect(hist.HasOutstandingPackets()).To(BeFalse())
-			hist.SentPacket(&Packet{
-				EncryptionLevel:    protocol.Encryption1RTT,
-				canBeRetransmitted: true,
-			})
+			hist.SentPacket(&Packet{EncryptionLevel: protocol.Encryption1RTT})
 			Expect(hist.HasOutstandingPackets()).To(BeTrue())
-		})
-
-		It("doesn't consider non-ack-eliciting packets as outstanding", func() {
-			hist.SentPacket(&Packet{
-				EncryptionLevel: protocol.EncryptionInitial,
-			})
-			Expect(hist.HasOutstandingPackets()).To(BeFalse())
 		})
 
 		It("accounts for deleted packets", func() {
 			hist.SentPacket(&Packet{
-				PacketNumber:       10,
-				EncryptionLevel:    protocol.Encryption1RTT,
-				canBeRetransmitted: true,
+				PacketNumber:    10,
+				EncryptionLevel: protocol.Encryption1RTT,
 			})
 			Expect(hist.HasOutstandingPackets()).To(BeTrue())
-			err := hist.Remove(10)
-			Expect(err).ToNot(HaveOccurred())
-			Expect(hist.HasOutstandingPackets()).To(BeFalse())
-		})
-
-		It("doesn't count packets marked as non-ack-eliciting", func() {
-			hist.SentPacket(&Packet{
-				PacketNumber:       10,
-				EncryptionLevel:    protocol.Encryption1RTT,
-				canBeRetransmitted: true,
-			})
-			Expect(hist.HasOutstandingPackets()).To(BeTrue())
-			err := hist.MarkCannotBeRetransmitted(10)
-			Expect(err).ToNot(HaveOccurred())
+			Expect(hist.Remove(10)).To(Succeed())
 			Expect(hist.HasOutstandingPackets()).To(BeFalse())
 		})
 
 		It("counts the number of packets", func() {
 			hist.SentPacket(&Packet{
-				PacketNumber:       10,
-				EncryptionLevel:    protocol.Encryption1RTT,
-				canBeRetransmitted: true,
+				PacketNumber:    10,
+				EncryptionLevel: protocol.Encryption1RTT,
 			})
 			hist.SentPacket(&Packet{
-				PacketNumber:       11,
-				EncryptionLevel:    protocol.Encryption1RTT,
-				canBeRetransmitted: true,
+				PacketNumber:    11,
+				EncryptionLevel: protocol.Encryption1RTT,
 			})
-			err := hist.Remove(11)
-			Expect(err).ToNot(HaveOccurred())
+			Expect(hist.Remove(11)).To(Succeed())
 			Expect(hist.HasOutstandingPackets()).To(BeTrue())
-			err = hist.Remove(10)
-			Expect(err).ToNot(HaveOccurred())
+			Expect(hist.Remove(10)).To(Succeed())
 			Expect(hist.HasOutstandingPackets()).To(BeFalse())
 		})
 	})

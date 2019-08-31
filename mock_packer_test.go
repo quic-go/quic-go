@@ -8,7 +8,6 @@ import (
 	reflect "reflect"
 
 	gomock "github.com/golang/mock/gomock"
-	ackhandler "github.com/lucas-clemente/quic-go/internal/ackhandler"
 	handshake "github.com/lucas-clemente/quic-go/internal/handshake"
 	protocol "github.com/lucas-clemente/quic-go/internal/protocol"
 	wire "github.com/lucas-clemente/quic-go/internal/wire"
@@ -104,21 +103,6 @@ func (m *MockPacker) PackPacket() (*packedPacket, error) {
 func (mr *MockPackerMockRecorder) PackPacket() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PackPacket", reflect.TypeOf((*MockPacker)(nil).PackPacket))
-}
-
-// PackRetransmission mocks base method
-func (m *MockPacker) PackRetransmission(arg0 *ackhandler.Packet) ([]*packedPacket, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "PackRetransmission", arg0)
-	ret0, _ := ret[0].([]*packedPacket)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// PackRetransmission indicates an expected call of PackRetransmission
-func (mr *MockPackerMockRecorder) PackRetransmission(arg0 interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PackRetransmission", reflect.TypeOf((*MockPacker)(nil).PackRetransmission), arg0)
 }
 
 // SetToken mocks base method

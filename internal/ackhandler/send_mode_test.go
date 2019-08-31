@@ -11,7 +11,6 @@ var _ = Describe("Send Mode", func() {
 		Expect(SendAny.String()).To(Equal("any"))
 		Expect(SendAck.String()).To(Equal("ack"))
 		Expect(SendPTO.String()).To(Equal("pto"))
-		Expect(SendRetransmission.String()).To(Equal("retransmission"))
 		Expect(SendMode(123).String()).To(Equal("invalid send mode: 123"))
 	})
 })
