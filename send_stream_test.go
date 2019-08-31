@@ -609,10 +609,10 @@ var _ = Describe("Send Stream", func() {
 		})
 
 		Context("receiving STOP_SENDING frames", func() {
-			It("queues a RESET_STREAM frames with error code Stopping", func() {
+			It("queues a RESET_STREAM frames, and copies the error code from the STOP_SENDING frame", func() {
 				mockSender.EXPECT().queueControlFrame(&wire.ResetStreamFrame{
 					StreamID:  streamID,
-					ErrorCode: errorCodeStopping,
+					ErrorCode: 101,
 				})
 				mockSender.EXPECT().onStreamCompleted(streamID)
 				str.handleStopSendingFrame(&wire.StopSendingFrame{
