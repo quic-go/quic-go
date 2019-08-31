@@ -10,8 +10,6 @@ import (
 	"github.com/lucas-clemente/quic-go/internal/wire"
 )
 
-const errorCodeStopping protocol.ApplicationErrorCode = 0
-
 // The streamSender is notified by the stream about various events.
 type streamSender interface {
 	queueControlFrame(wire.Frame)

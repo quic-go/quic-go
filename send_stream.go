@@ -296,7 +296,7 @@ func (s *sendStream) handleStopSendingFrameImpl(frame *wire.StopSendingFrame) bo
 		errorCode: frame.ErrorCode,
 		error:     fmt.Errorf("Stream %d was reset with error code %d", s.streamID, frame.ErrorCode),
 	}
-	return s.cancelWriteImpl(errorCodeStopping, writeErr)
+	return s.cancelWriteImpl(frame.ErrorCode, writeErr)
 }
 
 func (s *sendStream) Context() context.Context {
