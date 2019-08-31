@@ -383,15 +383,18 @@ var _ = Describe("Server", func() {
 			Expect(receivedConf).To(Equal(conf))
 		})
 
-		It("adds the ALPN token to the tls.Config", func() {
+		It("replaces the ALPN token to the tls.Config", func() {
+			tlsConf := &tls.Config{NextProtos: []string{"foo", "bar"}}
 			var receivedConf *tls.Config
 			quicListenAddr = func(addr string, tlsConf *tls.Config, _ *quic.Config) (quic.Listener, error) {
 				receivedConf = tlsConf
 				return nil, errors.New("listen err")
 			}
-			s.TLSConfig = &tls.Config{NextProtos: []string{"foo", "bar"}}
+			s.TLSConfig = tlsConf
 			Expect(s.ListenAndServe()).To(HaveOccurred())
-			Expect(receivedConf.NextProtos).To(Equal([]string{"foo", "bar", nextProtoH3}))
+			Expect(receivedConf.NextProtos).To(Equal([]string{nextProtoH3}))
+			// make sure the original tls.Config was not modified
+			Expect(tlsConf.NextProtos).To(Equal([]string{"foo", "bar"}))
 		})
 
 		It("uses the ALPN token if no tls.Config is given", func() {
@@ -402,6 +405,30 @@ var _ = Describe("Server", func() {
 			}
 			Expect(s.ListenAndServe()).To(HaveOccurred())
 			Expect(receivedConf.NextProtos).To(Equal([]string{nextProtoH3}))
+		})
+
+		It("sets the ALPN for tls.Configs returned by the tls.GetConfigForClient", func() {
+			tlsConf := &tls.Config{
+				GetConfigForClient: func(ch *tls.ClientHelloInfo) (*tls.Config, error) {
+					return &tls.Config{NextProtos: []string{"foo", "bar"}}, nil
+				},
+			}
+
+			var receivedConf *tls.Config
+			quicListenAddr = func(addr string, conf *tls.Config, _ *quic.Config) (quic.Listener, error) {
+				receivedConf = conf
+				return nil, errors.New("listen err")
+			}
+			s.TLSConfig = tlsConf
+			Expect(s.ListenAndServe()).To(HaveOccurred())
+			// check that the config used by QUIC uses the h3 ALPN
+			conf, err := receivedConf.GetConfigForClient(&tls.ClientHelloInfo{})
+			Expect(err).ToNot(HaveOccurred())
+			Expect(conf.NextProtos).To(Equal([]string{nextProtoH3}))
+			// check that the original config was not modified
+			conf, err = tlsConf.GetConfigForClient(&tls.ClientHelloInfo{})
+			Expect(err).ToNot(HaveOccurred())
+			Expect(conf.NextProtos).To(Equal([]string{"foo", "bar"}))
 		})
 	})
 

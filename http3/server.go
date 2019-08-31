@@ -77,7 +77,7 @@ func (s *Server) Serve(conn net.PacketConn) error {
 	return s.serveImpl(s.TLSConfig, conn)
 }
 
-func (s *Server) serveImpl(tlsConfig *tls.Config, conn net.PacketConn) error {
+func (s *Server) serveImpl(tlsConf *tls.Config, conn net.PacketConn) error {
 	if s.Server == nil {
 		return errors.New("use of http3.Server without http.Server")
 	}
@@ -92,20 +92,31 @@ func (s *Server) serveImpl(tlsConfig *tls.Config, conn net.PacketConn) error {
 		return errors.New("ListenAndServe may only be called once")
 	}
 
-	if tlsConfig == nil {
-		tlsConfig = &tls.Config{}
+	if tlsConf == nil {
+		tlsConf = &tls.Config{}
+	} else {
+		tlsConf = tlsConf.Clone()
 	}
-
-	if !strSliceContains(tlsConfig.NextProtos, nextProtoH3) {
-		tlsConfig.NextProtos = append(tlsConfig.NextProtos, nextProtoH3)
+	// Replace existing ALPNs by H3
+	tlsConf.NextProtos = []string{nextProtoH3}
+	if tlsConf.GetConfigForClient != nil {
+		getConfigForClient := tlsConf.GetConfigForClient
+		tlsConf.GetConfigForClient = func(ch *tls.ClientHelloInfo) (*tls.Config, error) {
+			conf, err := getConfigForClient(ch)
+			if err != nil || conf == nil {
+				return conf, err
+			}
+			conf.NextProtos = []string{nextProtoH3}
+			return conf, nil
+		}
 	}
 
 	var ln quic.Listener
 	var err error
 	if conn == nil {
-		ln, err = quicListenAddr(s.Addr, tlsConfig, s.QuicConfig)
+		ln, err = quicListenAddr(s.Addr, tlsConf, s.QuicConfig)
 	} else {
-		ln, err = quicListen(conn, tlsConfig, s.QuicConfig)
+		ln, err = quicListen(conn, tlsConf, s.QuicConfig)
 	}
 	if err != nil {
 		s.listenerMutex.Unlock()
@@ -384,13 +395,4 @@ func ListenAndServe(addr, certFile, keyFile string, handler http.Handler) error 
 		// Cannot close the HTTP server or wait for requests to complete properly :/
 		return err
 	}
-}
-
-func strSliceContains(ss []string, s string) bool {
-	for _, v := range ss {
-		if v == s {
-			return true
-		}
-	}
-	return false
 }

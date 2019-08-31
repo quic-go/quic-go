@@ -85,13 +85,15 @@ var _ = Describe("Client", func() {
 		) (quic.Session, error) {
 			Expect(hostname).To(Equal("localhost:1337"))
 			Expect(tlsConfP.ServerName).To(Equal(tlsConf.ServerName))
-			Expect(tlsConfP.NextProtos).To(Equal([]string{"proto foo", "proto bar", nextProtoH3}))
+			Expect(tlsConfP.NextProtos).To(Equal([]string{nextProtoH3}))
 			Expect(quicConfP.IdleTimeout).To(Equal(quicConf.IdleTimeout))
 			dialAddrCalled = true
 			return nil, errors.New("test done")
 		}
 		client.RoundTrip(req)
 		Expect(dialAddrCalled).To(BeTrue())
+		// make sure the original tls.Config was not modified
+		Expect(tlsConf.NextProtos).To(Equal([]string{"proto foo", "proto bar"}))
 	})
 
 	It("uses the custom dialer, if provided", func() {
@@ -102,7 +104,7 @@ var _ = Describe("Client", func() {
 		dialer := func(network, address string, tlsConfP *tls.Config, quicConfP *quic.Config) (quic.Session, error) {
 			Expect(network).To(Equal("udp"))
 			Expect(address).To(Equal("localhost:1337"))
-			Expect(tlsConfP).To(Equal(tlsConf))
+			Expect(tlsConfP.ServerName).To(Equal("foo.bar"))
 			Expect(quicConfP.IdleTimeout).To(Equal(quicConf.IdleTimeout))
 			dialerCalled = true
 			return nil, testErr
