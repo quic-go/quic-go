@@ -3,7 +3,6 @@ package wire
 import (
 	"bytes"
 	"errors"
-	"math"
 	"sort"
 	"time"
 
@@ -42,7 +41,7 @@ func parseAckFrame(r *bytes.Reader, ackDelayExponent uint8, version protocol.Ver
 	delayTime := time.Duration(delay*1<<ackDelayExponent) * time.Microsecond
 	if delayTime < 0 {
 		// If the delay time overflows, set it to the maximum encodable value.
-		delayTime = time.Duration(math.MaxInt64)
+		delayTime = utils.InfDuration
 	}
 	frame.DelayTime = delayTime
 
