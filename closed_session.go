@@ -7,6 +7,9 @@ import (
 	"github.com/lucas-clemente/quic-go/internal/utils"
 )
 
+// A closedLocalSession is a session that we closed locally.
+// When receiving packets for such a session, we need to retransmit the packet containing the CONNECTION_CLOSE frame,
+// with an exponential backoff.
 type closedLocalSession struct {
 	conn            connection
 	connClosePacket []byte
@@ -90,3 +93,21 @@ func (s *closedLocalSession) destroy(error) {
 func (s *closedLocalSession) getPerspective() protocol.Perspective {
 	return s.perspective
 }
+
+// A closedRemoteSession is a session that was closed remotely.
+// For such a session, we might receive reordered packets that were sent before the CONNECTION_CLOSE.
+// We can just ignore those packets.
+type closedRemoteSession struct {
+	perspective protocol.Perspective
+}
+
+var _ packetHandler = &closedRemoteSession{}
+
+func newClosedRemoteSession(pers protocol.Perspective) packetHandler {
+	return &closedRemoteSession{perspective: pers}
+}
+
+func (s *closedRemoteSession) handlePacket(*receivedPacket)         {}
+func (s *closedRemoteSession) Close() error                         { return nil }
+func (s *closedRemoteSession) destroy(error)                        {}
+func (s *closedRemoteSession) getPerspective() protocol.Perspective { return s.perspective }

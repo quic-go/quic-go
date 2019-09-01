@@ -93,6 +93,7 @@ var _ = Describe("Session", func() {
 
 	expectReplaceWithClosed := func() {
 		sessionRunner.EXPECT().ReplaceWithClosed(sess.srcConnID, gomock.Any()).Do(func(_ protocol.ConnectionID, s packetHandler) {
+			Expect(s).To(BeAssignableToTypeOf(&closedLocalSession{}))
 			Expect(s.Close()).To(Succeed())
 			Eventually(areClosedSessionsRunning).Should(BeFalse())
 		})
@@ -350,7 +351,9 @@ var _ = Describe("Session", func() {
 		It("handles CONNECTION_CLOSE frames, with a transport error code", func() {
 			testErr := qerr.Error(qerr.StreamLimitError, "foobar")
 			streamManager.EXPECT().CloseWithError(testErr)
-			sessionRunner.EXPECT().Remove(gomock.Any())
+			sessionRunner.EXPECT().ReplaceWithClosed(sess.srcConnID, gomock.Any()).Do(func(_ protocol.ConnectionID, s packetHandler) {
+				Expect(s).To(BeAssignableToTypeOf(&closedRemoteSession{}))
+			})
 			cryptoSetup.EXPECT().Close()
 
 			go func() {
@@ -369,7 +372,9 @@ var _ = Describe("Session", func() {
 		It("handles CONNECTION_CLOSE frames, with an application error code", func() {
 			testErr := qerr.ApplicationError(0x1337, "foobar")
 			streamManager.EXPECT().CloseWithError(testErr)
-			sessionRunner.EXPECT().Remove(gomock.Any())
+			sessionRunner.EXPECT().ReplaceWithClosed(sess.srcConnID, gomock.Any()).Do(func(_ protocol.ConnectionID, s packetHandler) {
+				Expect(s).To(BeAssignableToTypeOf(&closedRemoteSession{}))
+			})
 			cryptoSetup.EXPECT().Close()
 
 			go func() {
@@ -1764,7 +1769,7 @@ var _ = Describe("Client Session", func() {
 		// Illustrates that an injected Initial with a CONNECTION_CLOSE frame causes
 		// the connection to immediately break down
 		It("fails on Initial-level CONNECTION_CLOSE frame", func() {
-			sessionRunner.EXPECT().Remove(gomock.Any())
+			sessionRunner.EXPECT().ReplaceWithClosed(gomock.Any(), gomock.Any())
 			connCloseFrame := testutils.ComposeConnCloseFrame()
 			initialPacket := testutils.ComposeInitialPacket(sess.destConnID, sess.srcConnID, sess.version, sess.destConnID, []wire.Frame{connCloseFrame})
 			Expect(sess.handlePacketImpl(wrapPacket(initialPacket))).To(BeTrue())

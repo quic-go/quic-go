@@ -954,7 +954,7 @@ func (s *session) closeForRecreating() protocol.PacketNumber {
 func (s *session) closeRemote(e error) {
 	s.closeOnce.Do(func() {
 		s.logger.Errorf("Peer closed session with error: %s", e)
-		s.sessionRunner.Remove(s.srcConnID)
+		s.sessionRunner.ReplaceWithClosed(s.srcConnID, newClosedRemoteSession(s.perspective))
 		s.closeChan <- closeError{err: e, remote: true}
 	})
 }
