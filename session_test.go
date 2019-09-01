@@ -837,7 +837,7 @@ var _ = Describe("Session", func() {
 
 	Context("sending packets", func() {
 		BeforeEach(func() {
-			cryptoSetup.EXPECT().RunHandshake()
+			cryptoSetup.EXPECT().RunHandshake().MaxTimes(1)
 			go func() {
 				defer GinkgoRecover()
 				sess.run()
