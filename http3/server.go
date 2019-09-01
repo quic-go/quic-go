@@ -73,6 +73,8 @@ func (s *Server) ListenAndServeTLS(certFile, keyFile string) error {
 }
 
 // Serve an existing UDP connection.
+// It is possible to reuse the same connection for outgoing connections.
+// Closing the server does not close the packet conn.
 func (s *Server) Serve(conn net.PacketConn) error {
 	return s.serveImpl(s.TLSConfig, conn)
 }
