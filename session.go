@@ -1235,7 +1235,7 @@ func (s *session) logPacket(packet *packedPacket) {
 		wire.LogFrame(s.logger, packet.ack, true)
 	}
 	for _, frame := range packet.frames {
-		wire.LogFrame(s.logger, frame, true)
+		wire.LogFrame(s.logger, frame.Frame, true)
 	}
 }
 
