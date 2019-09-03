@@ -4,7 +4,7 @@ group: travis_latest
 language: go
 
 go:
-  - "1.12.x"
+  - "1.13.x"
 
 # first part of the GOARCH workaround
 # setting the GOARCH directly doesn't work, since the value will be overwritten later

@@ -45,6 +45,6 @@ workflows:
   workflow:
     jobs:
       - build:
-          name: "Go 1.12"
-          image: "circleci/golang:1.12"
+          name: "Go 1.13"
+          image: "circleci/golang:1.13"
           runrace: true
