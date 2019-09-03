@@ -9,14 +9,14 @@ import (
 	. "github.com/onsi/gomega"
 )
 
-var _ = Describe("STREAM frame sorter", func() {
+var _ = Describe("frame sorter", func() {
 	var s *frameSorter
 
 	checkGaps := func(expectedGaps []utils.ByteInterval) {
-		Expect(s.gaps.Len()).To(Equal(len(expectedGaps)))
+		ExpectWithOffset(1, s.gaps.Len()).To(Equal(len(expectedGaps)))
 		var i int
 		for gap := s.gaps.Front(); gap != nil; gap = gap.Next() {
-			Expect(gap.Value).To(Equal(expectedGaps[i]))
+			ExpectWithOffset(1, gap.Value).To(Equal(expectedGaps[i]))
 			i++
 		}
 	}
@@ -231,6 +231,7 @@ var _ = Describe("STREAM frame sorter", func() {
 					Expect(s.Push([]byte("123456789012345"), 2)).To(Succeed())
 					Expect(s.queue).ToNot(HaveKey(protocol.ByteCount(5)))
 					Expect(s.queue).To(HaveKey(protocol.ByteCount(2)))
+					Expect(s.queue).To(HaveKey(protocol.ByteCount(15)))
 					Expect(s.queue[2]).To(Equal([]byte("1234567890123")))
 					Expect(s.queue[2]).To(HaveCap(13))
 					checkGaps([]utils.ByteInterval{
@@ -244,8 +245,8 @@ var _ = Describe("STREAM frame sorter", func() {
 					// 5 to 22
 					Expect(s.Push([]byte("12345678901234567"), 5)).To(Succeed())
 					Expect(s.queue).To(HaveKey(protocol.ByteCount(5)))
+					Expect(s.queue).ToNot(HaveKey(protocol.ByteCount(10)))
 					Expect(s.queue).ToNot(HaveKey(protocol.ByteCount(15)))
-					Expect(s.queue[10]).To(Equal([]byte("678901234567")))
 					checkGaps([]utils.ByteInterval{
 						{Start: 0, End: 5},
 						{Start: 22, End: 25},
@@ -272,11 +273,11 @@ var _ = Describe("STREAM frame sorter", func() {
 					// 5 to 27
 					Expect(s.Push(bytes.Repeat([]byte{'d'}, 22), 5)).To(Succeed())
 					Expect(s.queue).To(HaveKey(protocol.ByteCount(5)))
+					Expect(s.queue).ToNot(HaveKey(protocol.ByteCount(10)))
 					Expect(s.queue).ToNot(HaveKey(protocol.ByteCount(15)))
 					Expect(s.queue).To(HaveKey(protocol.ByteCount(25)))
-					Expect(s.queue).To(HaveKey(protocol.ByteCount(10)))
-					Expect(s.queue[10]).To(Equal(bytes.Repeat([]byte{'d'}, 15)))
-					Expect(s.queue[10]).To(HaveCap(15))
+					Expect(s.queue[5]).To(Equal(bytes.Repeat([]byte{'d'}, 20)))
+					Expect(s.queue[5]).To(HaveCap(20))
 					checkGaps([]utils.ByteInterval{
 						{Start: 0, End: 5},
 						{Start: 30, End: protocol.MaxByteCount},

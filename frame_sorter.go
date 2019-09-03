@@ -37,14 +37,11 @@ func (s *frameSorter) push(data []byte, offset protocol.ByteCount) error {
 		return nil
 	}
 
-	var wasCut bool
 	if oldData, ok := s.queue[offset]; ok {
 		if len(data) <= len(oldData) {
 			return errDuplicateStreamData
 		}
-		data = data[len(oldData):]
-		offset += protocol.ByteCount(len(oldData))
-		wasCut = true
+		s.queue[offset] = data
 	}
 
 	start := offset
@@ -66,6 +63,7 @@ func (s *frameSorter) push(data []byte, offset protocol.ByteCount) error {
 		return errors.New("StreamFrameSorter BUG: no gap found")
 	}
 
+	var wasCut bool
 	if start < gap.Value.Start {
 		add := gap.Value.Start - start
 		offset += add
