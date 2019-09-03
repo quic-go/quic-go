@@ -1,6 +1,8 @@
 package quic
 
 import (
+	"sync"
+
 	"github.com/golang/mock/gomock"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -17,6 +19,9 @@ var mockCtrl *gomock.Controller
 
 var _ = BeforeEach(func() {
 	mockCtrl = gomock.NewController(GinkgoT())
+
+	// reset the sync.Once
+	connMuxerOnce = *new(sync.Once)
 })
 
 var _ = AfterEach(func() {

@@ -1,15 +1,34 @@
 package quic
 
 import (
+	"net"
+
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 )
+
+type testConn struct {
+	counter int
+	net.PacketConn
+}
 
 var _ = Describe("Client Multiplexer", func() {
 	It("adds a new packet conn ", func() {
 		conn := newMockPacketConn()
 		_, err := getMultiplexer().AddConn(conn, 8, nil)
 		Expect(err).ToNot(HaveOccurred())
+	})
+
+	It("recognizes when the same connection is added twice", func() {
+		pconn := newMockPacketConn()
+		pconn.addr = &net.UDPAddr{IP: net.IPv4(1, 2, 3, 4), Port: 4321}
+		conn := testConn{PacketConn: pconn}
+		_, err := getMultiplexer().AddConn(conn, 8, nil)
+		Expect(err).ToNot(HaveOccurred())
+		conn.counter++
+		_, err = getMultiplexer().AddConn(conn, 8, nil)
+		Expect(err).ToNot(HaveOccurred())
+		Expect(getMultiplexer().(*connMultiplexer).conns).To(HaveLen(1))
 	})
 
 	It("errors when adding an existing conn with a different connection ID length", func() {
