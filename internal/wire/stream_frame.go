@@ -59,7 +59,7 @@ func parseStreamFrame(r *bytes.Reader, version protocol.VersionNumber) (*StreamF
 	if dataLen < protocol.MinStreamFrameBufferSize {
 		frame = &StreamFrame{Data: make([]byte, dataLen)}
 	} else {
-		frame = getStreamFrame()
+		frame = GetStreamFrame()
 		// The STREAM frame can't be larger than the StreamFrame we obtained from the buffer,
 		// since those StreamFrames have a buffer length of the maximum packet size.
 		if dataLen > uint64(cap(frame.Data)) {
@@ -167,7 +167,7 @@ func (f *StreamFrame) MaybeSplitOffFrame(maxSize protocol.ByteCount, version pro
 		return nil, true
 	}
 
-	new := getStreamFrame()
+	new := GetStreamFrame()
 	new.StreamID = f.StreamID
 	new.Offset = f.Offset
 	new.FinBit = false
