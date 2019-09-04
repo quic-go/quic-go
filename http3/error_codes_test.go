@@ -33,10 +33,6 @@ var _ = Describe("error codes", func() {
 		}
 	})
 
-	It("has a string represenation for frame parsing errors", func() {
-		Expect(errorCode(0x142).String()).To(Equal("HTTP_MALFORMED_FRAME: 0x42"))
-	})
-
 	It("has a string representation for unknown error codes", func() {
 		Expect(errorCode(0x1337).String()).To(Equal("unknown error code: 0x1337"))
 	})

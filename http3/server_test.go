@@ -197,7 +197,7 @@ var _ = Describe("Server", func() {
 				return responseBuf.Write(p)
 			}).AnyTimes()
 
-			str.EXPECT().CancelWrite(quic.ErrorCode(errorLimitExceeded))
+			str.EXPECT().CancelWrite(quic.ErrorCode(errorFrameError))
 			err := s.handleRequest(str, qpackDecoder)
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(ContainSubstring("Headers frame too large"))
