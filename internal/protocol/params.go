@@ -81,6 +81,11 @@ const MaxNonAckElicitingAcks = 19
 // prevents DoS attacks against the streamFrameSorter
 const MaxStreamFrameSorterGaps = 1000
 
+// MinStreamFrameBufferSize is the minimum data length of a received STREAM frame
+// that we use the buffer for. This protects against a DoS where an attacker would send us
+// very small STREAM frames to consume a lot of memory.
+const MinStreamFrameBufferSize = 128
+
 // MaxCryptoStreamOffset is the maximum offset allowed on any of the crypto streams.
 // This limits the size of the ClientHello and Certificates that can be received.
 const MaxCryptoStreamOffset = 16 * (1 << 10)

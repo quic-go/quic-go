@@ -412,7 +412,11 @@ var _ = Describe("Packet packer", func() {
 				frameParser := wire.NewFrameParser(packer.version)
 				frame, err := frameParser.ParseNext(r, protocol.Encryption1RTT)
 				Expect(err).ToNot(HaveOccurred())
-				Expect(frame).To(Equal(f))
+				Expect(frame).To(BeAssignableToTypeOf(&wire.StreamFrame{}))
+				sf := frame.(*wire.StreamFrame)
+				Expect(sf.StreamID).To(Equal(f.StreamID))
+				Expect(sf.FinBit).To(Equal(f.FinBit))
+				Expect(sf.Data).To(BeEmpty())
 				Expect(r.Len()).To(BeZero())
 			})
 

@@ -57,6 +57,7 @@ func Fuzz(data []byte) int {
 		// We accept empty STREAM frames, but we don't write them.
 		if sf, ok := f.(*wire.StreamFrame); ok {
 			if sf.DataLen() == 0 {
+				sf.PutBack()
 				continue
 			}
 		}
@@ -67,6 +68,9 @@ func Fuzz(data []byte) int {
 		frameLen := b.Len() - lenBefore
 		if f.Length(version) != protocol.ByteCount(frameLen) {
 			panic(fmt.Sprintf("Inconsistent frame length for %#v: expected %d, got %d", f, frameLen, f.Length(version)))
+		}
+		if sf, ok := f.(*wire.StreamFrame); ok {
+			sf.PutBack()
 		}
 	}
 	if b.Len() > parsedLen {
