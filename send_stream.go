@@ -270,7 +270,9 @@ func (s *sendStream) getDataForWriting(f *wire.StreamFrame, maxBytes protocol.By
 	f.FinBit = s.finishedWriting && s.dataForWriting == nil && !s.finSent
 }
 
-func (s *sendStream) frameAcked() {
+func (s *sendStream) frameAcked(f wire.Frame) {
+	f.(*wire.StreamFrame).PutBack()
+
 	s.mutex.Lock()
 	s.numOutstandingFrames--
 	if s.numOutstandingFrames < 0 {

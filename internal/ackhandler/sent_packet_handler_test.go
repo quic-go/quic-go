@@ -202,9 +202,14 @@ var _ = Describe("SentPacketHandler", func() {
 
 			It("calls the OnAcked callback", func() {
 				var acked bool
+				ping := &wire.PingFrame{}
 				handler.SentPacket(ackElicitingPacket(&Packet{
 					PacketNumber: 13,
-					Frames:       []Frame{{Frame: &wire.PingFrame{}, OnAcked: func() { acked = true }}},
+					Frames: []Frame{{Frame: ping, OnAcked: func(f wire.Frame) {
+						Expect(f).To(Equal(ping))
+						acked = true
+					},
+					}},
 				}))
 				ack := &wire.AckFrame{AckRanges: []wire.AckRange{{Smallest: 13, Largest: 13}}}
 				Expect(handler.ReceivedAck(ack, 1, protocol.Encryption1RTT, time.Now())).To(Succeed())

@@ -786,7 +786,7 @@ var _ = Describe("Send Stream", func() {
 			// Acknowledge all frames.
 			// We don't expect the stream to be completed, since we still need to send the FIN.
 			for _, f := range frames {
-				f.OnAcked()
+				f.OnAcked(f.Frame)
 			}
 
 			// Now close the stream and acknowledge the FIN.
@@ -794,7 +794,7 @@ var _ = Describe("Send Stream", func() {
 			frame, _ := str.popStreamFrame(protocol.MaxByteCount)
 			Expect(frame).ToNot(BeNil())
 			mockSender.EXPECT().onStreamCompleted(streamID)
-			frame.OnAcked()
+			frame.OnAcked(frame.Frame)
 		})
 
 		It("doesn't say it's completed when there are frames waiting to be retransmitted", func() {
@@ -824,7 +824,7 @@ var _ = Describe("Send Stream", func() {
 
 			// lose the first frame, acknowledge all others
 			for _, f := range frames[1:] {
-				f.OnAcked()
+				f.OnAcked(f.Frame)
 			}
 			frames[0].OnLost(frames[0].Frame)
 
@@ -832,7 +832,7 @@ var _ = Describe("Send Stream", func() {
 			ret, _ := str.popStreamFrame(protocol.MaxByteCount)
 			Expect(ret).ToNot(BeNil())
 			mockSender.EXPECT().onStreamCompleted(streamID)
-			ret.OnAcked()
+			ret.OnAcked(ret.Frame)
 		})
 	})
 })
