@@ -227,7 +227,7 @@ type Config struct {
 	// received without any incoming network activity, used for experimental mitigation
 	// against injection attacks. If the timeout is exceeded, the connection is closed.
 	// This timeout should be longer than any reasonable round trip time, but excessively
-	// long timeouts with delay reporting of rejected connections.
+	// long timeouts will delay reporting of rejected connections.
 	// If this value is zero or negative, mitigation will be turned off.
 	AttackTimeout time.Duration
 	// AcceptToken determines if a Token is accepted.

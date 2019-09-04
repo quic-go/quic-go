@@ -518,29 +518,6 @@ var _ = Describe("MITM test", func() {
 
 					})
 
-					Context("initial packet with illegal frame", func() {
-						BeforeEach(func() {
-							generateForgery = func(hdr *wire.Header) []byte {
-								// ping frames are not allowed at Initial level
-								return testutils.ComposeInitialPacket(hdr.DestConnectionID, hdr.SrcConnectionID, hdr.Version, hdr.DestConnectionID, []wire.Frame{&wire.PingFrame{}})
-							}
-						})
-
-						It("recovers when mitigation is enabled", func() {
-							Expect(runTest(delayCb, dropCb, mitigationOn)).To(Succeed())
-						})
-
-						// client connection closes immediately on receiving illegal frame
-						It("fails when mitigation is disabled", func() {
-							err := runTest(delayCb, dropCb, mitigationOff)
-							Expect(err).To(HaveOccurred())
-							Expect(err).To(BeAssignableToTypeOf(&qerr.QuicError{}))
-							Expect(err.(*qerr.QuicError).ErrorCode).To(Equal(qerr.FrameEncodingError))
-							Expect(err.Error()).To(ContainSubstring("PingFrame not allowed at encryption level Initial"))
-						})
-
-					})
-
 					Context("initial packet with CONNECTION_CLOSE", func() {
 						BeforeEach(func() {
 							generateForgery = func(hdr *wire.Header) []byte {
@@ -549,7 +526,6 @@ var _ = Describe("MITM test", func() {
 							}
 						})
 
-						// TODO: weird error, not sure why
 						It("recovers when mitigation is enabled", func() {
 							Expect(runTest(delayCb, dropCb, mitigationOn)).To(Succeed())
 						})

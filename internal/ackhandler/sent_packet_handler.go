@@ -187,20 +187,11 @@ func (h *sentPacketHandler) ValidateAck(ackFrame *wire.AckFrame, withPacketNumbe
 }
 
 func (h *sentPacketHandler) ReceivedAck(ackFrame *wire.AckFrame, withPacketNumber protocol.PacketNumber, encLevel protocol.EncryptionLevel, rcvTime time.Time) error {
-	// err := h.ValidateAck(ackFrame, withPacketNumber, encLevel, rcvTime)
+	if err := h.ValidateAck(ackFrame, withPacketNumber, encLevel, rcvTime); err != nil {
+		return err
+	}
+
 	pnSpace := h.getPacketNumberSpace(encLevel)
-
-	largestAcked := ackFrame.LargestAcked()
-	if largestAcked > pnSpace.largestSent {
-		return qerr.Error(qerr.ProtocolViolation, "Received ACK for an unsent packet")
-	}
-
-	pnSpace.largestAcked = utils.MaxPacketNumber(pnSpace.largestAcked, largestAcked)
-
-	if !pnSpace.pns.Validate(ackFrame) {
-		return qerr.Error(qerr.ProtocolViolation, "Received an ACK for a skipped packet number")
-	}
-
 	// maybe update the RTT
 	if p := pnSpace.history.GetPacket(ackFrame.LargestAcked()); p != nil {
 		// don't use the ack delay for Initial and Handshake packets

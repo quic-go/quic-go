@@ -390,7 +390,6 @@ func (s *session) postSetup() {
 
 	s.timer = utils.NewTimer()
 	now := time.Now()
-
 	s.lastPacketReceivedTime = now
 	s.sessionCreationTime = now
 
@@ -596,20 +595,18 @@ func (s *session) handleRecoverError(err recoverError) {
 }
 
 func (s *session) checkAttackTimer(now time.Time, rErr recoverError) {
-	if !s.attackTimerStart.IsZero() && s.lastPacketReceivedTime.After(s.lastSuspiciousPacketReceivedTime) {
-		s.logger.Debugf("Good packet received, zeroing attack timer.")
-		s.attackTimerStart = time.Time{}
-		return
-	}
 	if !s.attackTimerStart.IsZero() {
+		if s.lastPacketReceivedTime.After(s.lastSuspiciousPacketReceivedTime) {
+			s.logger.Debugf("Good packet received, zeroing attack timer.")
+			s.attackTimerStart = time.Time{}
+			return
+		}
 		if now.Sub(s.attackTimerStart) >= s.config.AttackTimeout {
 			s.logger.Debugf("No network activity after a suspicious packet was received.")
 			go rErr.fail(rErr.err)
 			return
 		}
 		s.logger.Debugf("Attack possible, but not enough time has passed. Attack timeout is %v, and %v have passed.", s.config.AttackTimeout, now.Sub(s.attackTimerStart))
-	} else {
-		s.logger.Debugf("No attack detected.")
 	}
 }
 
@@ -790,17 +787,16 @@ func (s *session) handleUnpackedPacket(packet *unpackedPacket, rcvTime time.Time
 
 	r := bytes.NewReader(packet.data)
 	var isAckEliciting bool
-	var recoverable bool
 
 	if s.mitigationOn(packet.encryptionLevel) {
+		var recoverableFrame wire.Frame
 		var ignorableError *qerr.QuicError
 		var parsedFirstFrame bool
 		validatingReader := bytes.NewReader(packet.data)
 		for {
 			frame, err := s.frameParser.ParseNext(validatingReader, packet.encryptionLevel)
 			if err != nil {
-				quicErr, ok := err.(*qerr.QuicError)
-				if ok && quicErr.IsIgnorable() {
+				if quicErr, ok := err.(*qerr.QuicError); ok && quicErr.IsIgnorable() {
 					ignorableError = quicErr
 					break
 				}
@@ -814,14 +810,13 @@ func (s *session) handleUnpackedPacket(packet *unpackedPacket, rcvTime time.Time
 			}
 			parsedFirstFrame = true
 			if err := s.validateFrame(frame, packet.packetNumber, packet.encryptionLevel); err != nil {
-				quicErr, ok := err.(*qerr.QuicError)
-				if ok {
+				if quicErr, ok := err.(*qerr.QuicError); ok {
 					if quicErr.IsIgnorable() {
 						ignorableError = quicErr
 						break
 					}
 					if quicErr.IsRecoverable() {
-						recoverable = true
+						recoverableFrame = frame
 						continue
 					}
 				}
@@ -832,6 +827,11 @@ func (s *session) handleUnpackedPacket(packet *unpackedPacket, rcvTime time.Time
 		if ignorableError != nil {
 			s.logger.Debugf("Ignoring packet with invalid frame(s).")
 			return ignorableError
+		}
+
+		if recoverableFrame != nil {
+			s.logger.Debugf("Handling recoverable frame %v", recoverableFrame)
+			return s.handleFrame(recoverableFrame, packet.packetNumber, packet.encryptionLevel)
 		}
 	}
 
@@ -868,7 +868,7 @@ func (s *session) handleUnpackedPacket(packet *unpackedPacket, rcvTime time.Time
 	}
 
 	// If mitigation is turned on, don't register first packet if a frame is ignored or recoverable
-	if s.mitigationOn(packet.encryptionLevel) && !recoverable {
+	if s.mitigationOn(packet.encryptionLevel) {
 		s.receivedFirstPacket = true
 	}
 
@@ -882,23 +882,17 @@ func (s *session) handleUnpackedPacket(packet *unpackedPacket, rcvTime time.Time
 	return nil
 }
 
-// validateFrame returns an error
+// validateFrame returns an error, should only be called at encLevel Initial or Handshake
 func (s *session) validateFrame(f wire.Frame, pn protocol.PacketNumber, encLevel protocol.EncryptionLevel) error {
 	var err error
 	switch frame := f.(type) {
 	case *wire.AckFrame:
 		err = s.validateAckFrame(frame, pn, encLevel)
 	case *wire.ConnectionCloseFrame:
-		err = qerr.ToRecoverableError(fmt.Errorf("CONNECTION_CLOSE"))
-		return err
+		return qerr.ToRecoverableError(fmt.Errorf("CONNECTION_CLOSE"))
 	case *wire.CryptoFrame:
 		err = nil // for now, allow all crypto frames to be processed
-	case *wire.StreamFrame, *wire.MaxDataFrame, *wire.MaxStreamDataFrame, *wire.MaxStreamsFrame,
-		*wire.DataBlockedFrame, *wire.StreamDataBlockedFrame, *wire.StreamsBlockedFrame,
-		*wire.StopSendingFrame, *wire.PingFrame, *wire.PathChallengeFrame, *wire.PathResponseFrame,
-		*wire.NewTokenFrame, *wire.NewConnectionIDFrame, *wire.RetireConnectionIDFrame:
-		err = fmt.Errorf("frame not allowed at encryption level %v", encLevel)
-	default:
+	default: // only ACK, CRYPTO, and CONNECTION_CLOSE are allowed at Initial and Handshake
 		err = fmt.Errorf("unexpected frame type: %s", reflect.ValueOf(&frame).Elem().Type().Name())
 	}
 
