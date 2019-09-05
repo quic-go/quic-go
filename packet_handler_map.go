@@ -117,7 +117,6 @@ func (h *packetHandlerMap) CloseServer() {
 			go func(id string, handler packetHandler) {
 				// session.Close() blocks until the CONNECTION_CLOSE has been sent and the run-loop has stopped
 				_ = handler.Close()
-				h.retireByConnectionIDAsString(id)
 				wg.Done()
 			}(id, handler)
 		}
