@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"strings"
 	"time"
@@ -25,8 +26,7 @@ import (
 
 var _ = Describe("Server", func() {
 	var (
-		s *Server
-		// session            *mockquic.MockSession
+		s                  *Server
 		origQuicListenAddr = quicListenAddr
 	)
 
@@ -342,10 +342,99 @@ var _ = Describe("Server", func() {
 		Expect((&Server{}).Close()).To(Succeed())
 	})
 
-	It("errors when ListenAndServer is called after Close", func() {
+	It("errors when ListenAndServe is called after Close", func() {
 		serv := &Server{Server: &http.Server{}}
 		Expect(serv.Close()).To(Succeed())
-		Expect(serv.ListenAndServe()).To(MatchError("Server is already closed"))
+		Expect(serv.ListenAndServe()).To(MatchError(http.ErrServerClosed))
+	})
+
+	Context("Serve", func() {
+		origQuicListen := quicListen
+
+		AfterEach(func() {
+			quicListen = origQuicListen
+		})
+
+		It("serves a packet conn", func() {
+			ln := mockquic.NewMockListener(mockCtrl)
+			conn := &net.UDPConn{}
+			quicListen = func(c net.PacketConn, tlsConf *tls.Config, config *quic.Config) (quic.Listener, error) {
+				Expect(c).To(Equal(conn))
+				return ln, nil
+			}
+
+			s := &Server{Server: &http.Server{}}
+			s.TLSConfig = &tls.Config{}
+
+			stopAccept := make(chan struct{})
+			ln.EXPECT().Accept(gomock.Any()).DoAndReturn(func(context.Context) (quic.Session, error) {
+				<-stopAccept
+				return nil, errors.New("closed")
+			})
+			done := make(chan struct{})
+			go func() {
+				defer GinkgoRecover()
+				defer close(done)
+				s.Serve(conn)
+			}()
+
+			Consistently(done).ShouldNot(BeClosed())
+			ln.EXPECT().Close().Do(func() { close(stopAccept) })
+			Expect(s.Close()).To(Succeed())
+			Eventually(done).Should(BeClosed())
+		})
+
+		It("serves two packet conns", func() {
+			ln1 := mockquic.NewMockListener(mockCtrl)
+			ln2 := mockquic.NewMockListener(mockCtrl)
+			lns := []quic.Listener{ln1, ln2}
+			conn1 := &net.UDPConn{}
+			conn2 := &net.UDPConn{}
+			conns := []net.PacketConn{conn1, conn2}
+			quicListen = func(c net.PacketConn, tlsConf *tls.Config, config *quic.Config) (quic.Listener, error) {
+				conn := conns[0]
+				conns = conns[1:]
+				ln := lns[0]
+				lns = lns[1:]
+				Expect(c).To(Equal(conn))
+				return ln, nil
+			}
+
+			s := &Server{Server: &http.Server{}}
+			s.TLSConfig = &tls.Config{}
+
+			stopAccept1 := make(chan struct{})
+			ln1.EXPECT().Accept(gomock.Any()).DoAndReturn(func(context.Context) (quic.Session, error) {
+				<-stopAccept1
+				return nil, errors.New("closed")
+			})
+			stopAccept2 := make(chan struct{})
+			ln2.EXPECT().Accept(gomock.Any()).DoAndReturn(func(context.Context) (quic.Session, error) {
+				<-stopAccept2
+				return nil, errors.New("closed")
+			})
+
+			done1 := make(chan struct{})
+			go func() {
+				defer GinkgoRecover()
+				defer close(done1)
+				s.Serve(conn1)
+			}()
+			done2 := make(chan struct{})
+			go func() {
+				defer GinkgoRecover()
+				defer close(done2)
+				s.Serve(conn2)
+			}()
+
+			Consistently(done1).ShouldNot(BeClosed())
+			Expect(done2).ToNot(BeClosed())
+			ln1.EXPECT().Close().Do(func() { close(stopAccept1) })
+			ln2.EXPECT().Close().Do(func() { close(stopAccept2) })
+			Expect(s.Close()).To(Succeed())
+			Eventually(done1).Should(BeClosed())
+			Eventually(done2).Should(BeClosed())
+		})
 	})
 
 	Context("ListenAndServe", func() {
@@ -354,20 +443,6 @@ var _ = Describe("Server", func() {
 		})
 
 		AfterEach(func() {
-			Expect(s.Close()).To(Succeed())
-		})
-
-		It("may only be called once", func() {
-			cErr := make(chan error)
-			for i := 0; i < 2; i++ {
-				go func() {
-					defer GinkgoRecover()
-					if err := s.ListenAndServe(); err != nil {
-						cErr <- err
-					}
-				}()
-			}
-			Eventually(cErr).Should(Receive(MatchError("ListenAndServe may only be called once")))
 			Expect(s.Close()).To(Succeed())
 		})
 
@@ -429,30 +504,6 @@ var _ = Describe("Server", func() {
 			conf, err = tlsConf.GetConfigForClient(&tls.ClientHelloInfo{})
 			Expect(err).ToNot(HaveOccurred())
 			Expect(conf.NextProtos).To(Equal([]string{"foo", "bar"}))
-		})
-	})
-
-	Context("ListenAndServeTLS", func() {
-		BeforeEach(func() {
-			s.Server.Addr = "localhost:0"
-		})
-
-		AfterEach(func() {
-			Expect(s.Close()).To(Succeed())
-		})
-
-		It("may only be called once", func() {
-			cErr := make(chan error)
-			for i := 0; i < 2; i++ {
-				go func() {
-					defer GinkgoRecover()
-					if err := s.ListenAndServeTLS(testdata.GetCertificatePaths()); err != nil {
-						cErr <- err
-					}
-				}()
-			}
-			Eventually(cErr).Should(Receive(MatchError("ListenAndServe may only be called once")))
-			Expect(s.Close()).To(Succeed())
 		})
 	})
 
