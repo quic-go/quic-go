@@ -202,7 +202,7 @@ var _ = Describe("HTTP tests", func() {
 							serr, ok := err.(streamCancelError)
 							Expect(ok).To(BeTrue())
 							Expect(serr.Canceled()).To(BeTrue())
-							Expect(serr.ErrorCode()).To(BeEquivalentTo(5))
+							Expect(serr.ErrorCode()).To(BeEquivalentTo(0x10d))
 							return
 						}
 					}
