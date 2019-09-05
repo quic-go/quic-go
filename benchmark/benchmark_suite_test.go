@@ -2,6 +2,7 @@ package benchmark
 
 import (
 	"flag"
+	"math/rand"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -15,12 +16,15 @@ func TestBenchmark(t *testing.T) {
 }
 
 var (
-	size    int // file size in MB, will be read from flags
-	samples int // number of samples for Measure, will be read from flags
+	size int // file size in MB, will be read from flags
 )
 
 func init() {
 	flag.IntVar(&size, "size", 50, "data length (in MB)")
-	flag.IntVar(&samples, "samples", 6, "number of samples")
-	flag.Parse()
 }
+
+var _ = BeforeSuite(func() {
+	rand.Seed(GinkgoRandomSeed())
+
+	flag.Parse()
+})

@@ -14,8 +14,8 @@ clone_folder: c:\gopath\src\github.com\lucas-clemente\quic-go
 
 install:
   - rmdir c:\go /s /q
-  - appveyor-retry appveyor DownloadFile https://storage.googleapis.com/golang/go1.12.windows-amd64.zip
-  - 7z x go1.12.windows-amd64.zip -y -oC:\ > NUL
+  - appveyor-retry appveyor DownloadFile https://storage.googleapis.com/golang/go1.13.windows-amd64.zip
+  - 7z x go1.13.windows-amd64.zip -y -oC:\ > NUL
   - set PATH=%PATH%;%GOPATH%\bin\windows_%GOARCH%;%GOPATH%\bin
   - set GO111MODULE=on
   - echo %PATH%
@@ -27,7 +27,7 @@ install:
 
 build_script:
   - ginkgo -r -v -randomizeAllSpecs -randomizeSuites -trace -skipPackage benchmark,integrationtests
-  - ginkgo -randomizeAllSpecs -randomizeSuites -trace benchmark -- -samples=1
+  - ginkgo -randomizeAllSpecs -randomizeSuites -trace benchmark -- -size=10
 
 test: off
 

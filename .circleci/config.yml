@@ -25,10 +25,10 @@ jobs:
           command: go version
       - run:
           name: "Run benchmark tests"
-          command: ginkgo -randomizeAllSpecs -trace benchmark -- -samples=1
+          command: ginkgo -randomizeAllSpecs -trace benchmark -- -size=10
       - run:
           name: "Run benchmark tests with race detector"
-          command: ginkgo -race -randomizeAllSpecs -trace benchmark -- -samples=1 -size=10
+          command: ginkgo -race -randomizeAllSpecs -trace benchmark -- -size=5
       - run:
           name: "Run tools tests"
           command: ginkgo -race -r -v -randomizeAllSpecs -trace integrationtests/tools
@@ -45,6 +45,6 @@ workflows:
   workflow:
     jobs:
       - build:
-          name: "Go 1.12"
-          image: "circleci/golang:1.12"
+          name: "Go 1.13"
+          image: "circleci/golang:1.13"
           runrace: true
