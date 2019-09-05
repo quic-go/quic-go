@@ -39,9 +39,9 @@ type Server struct {
 
 	port uint32 // used atomically
 
-	listenerMutex sync.Mutex
-	listener      quic.Listener
-	closed        bool
+	mutex     sync.Mutex
+	listeners map[*quic.Listener]struct{}
+	closed    utils.AtomicBool
 
 	supportedVersionsAsString string
 
@@ -80,19 +80,13 @@ func (s *Server) Serve(conn net.PacketConn) error {
 }
 
 func (s *Server) serveImpl(tlsConf *tls.Config, conn net.PacketConn) error {
+	if s.closed.Get() {
+		return http.ErrServerClosed
+	}
 	if s.Server == nil {
 		return errors.New("use of http3.Server without http.Server")
 	}
 	s.logger = utils.DefaultLogger.WithPrefix("server")
-	s.listenerMutex.Lock()
-	if s.closed {
-		s.listenerMutex.Unlock()
-		return errors.New("Server is already closed")
-	}
-	if s.listener != nil {
-		s.listenerMutex.Unlock()
-		return errors.New("ListenAndServe may only be called once")
-	}
 
 	if tlsConf == nil {
 		tlsConf = &tls.Config{}
@@ -121,11 +115,10 @@ func (s *Server) serveImpl(tlsConf *tls.Config, conn net.PacketConn) error {
 		ln, err = quicListen(conn, tlsConf, s.QuicConfig)
 	}
 	if err != nil {
-		s.listenerMutex.Unlock()
 		return err
 	}
-	s.listener = ln
-	s.listenerMutex.Unlock()
+	s.addListener(&ln)
+	defer s.removeListener(&ln)
 
 	for {
 		sess, err := ln.Accept(context.Background())
@@ -134,6 +127,24 @@ func (s *Server) serveImpl(tlsConf *tls.Config, conn net.PacketConn) error {
 		}
 		go s.handleConn(sess)
 	}
+}
+
+// We store a pointer to interface in the map set. This is safe because we only
+// call trackListener via Serve and can track+defer untrack the same pointer to
+// local variable there. We never need to compare a Listener from another caller.
+func (s *Server) addListener(l *quic.Listener) {
+	s.mutex.Lock()
+	if s.listeners == nil {
+		s.listeners = make(map[*quic.Listener]struct{})
+	}
+	s.listeners[l] = struct{}{}
+	s.mutex.Unlock()
+}
+
+func (s *Server) removeListener(l *quic.Listener) {
+	s.mutex.Lock()
+	delete(s.listeners, l)
+	s.mutex.Unlock()
 }
 
 func (s *Server) handleConn(sess quic.Session) {
@@ -256,15 +267,18 @@ func (s *Server) handleRequest(str quic.Stream, decoder *qpack.Decoder) error {
 // Close the server immediately, aborting requests and sending CONNECTION_CLOSE frames to connected clients.
 // Close in combination with ListenAndServe() (instead of Serve()) may race if it is called before a UDP socket is established.
 func (s *Server) Close() error {
-	s.listenerMutex.Lock()
-	defer s.listenerMutex.Unlock()
-	s.closed = true
-	if s.listener != nil {
-		err := s.listener.Close()
-		s.listener = nil
-		return err
+	s.closed.Set(true)
+
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
+
+	var err error
+	for ln := range s.listeners {
+		if cerr := (*ln).Close(); cerr != nil && err == nil {
+			err = cerr
+		}
 	}
-	return nil
+	return err
 }
 
 // CloseGracefully shuts down the server gracefully. The server sends a GOAWAY frame first, then waits for either timeout to trigger, or for all running requests to complete.
