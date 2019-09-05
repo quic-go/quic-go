@@ -53,7 +53,7 @@ func (s *Server) ListenAndServe() error {
 	if s.Server == nil {
 		return errors.New("use of http3.Server without http.Server")
 	}
-	return s.serveImpl(s.TLSConfig, nil)
+	return s.serve(s.TLSConfig, nil)
 }
 
 // ListenAndServeTLS listens on the UDP address s.Addr and calls s.Handler to handle HTTP/3 requests on incoming connections.
@@ -69,30 +69,21 @@ func (s *Server) ListenAndServeTLS(certFile, keyFile string) error {
 	config := &tls.Config{
 		Certificates: certs,
 	}
-	return s.serveImpl(config, nil)
+	return s.serve(config, nil)
 }
 
 // Serve an existing UDP connection.
 // It is possible to reuse the same connection for outgoing connections.
 // Closing the server does not close the packet conn.
 func (s *Server) Serve(conn net.PacketConn) error {
-	return s.serveImpl(s.TLSConfig, conn)
+	return s.serve(s.TLSConfig, conn)
 }
 
-func (s *Server) serveImpl(tlsConf *tls.Config, conn net.PacketConn) error {
+func (s *Server) serve(tlsConf *tls.Config, conn net.PacketConn) error {
 	if s.Server == nil {
 		return errors.New("use of http3.Server without http.Server")
 	}
 	s.logger = utils.DefaultLogger.WithPrefix("server")
-	s.listenerMutex.Lock()
-	if s.closed {
-		s.listenerMutex.Unlock()
-		return errors.New("Server is already closed")
-	}
-	if s.listener != nil {
-		s.listenerMutex.Unlock()
-		return errors.New("ListenAndServe may only be called once")
-	}
 
 	if tlsConf == nil {
 		tlsConf = &tls.Config{}
@@ -113,6 +104,30 @@ func (s *Server) serveImpl(tlsConf *tls.Config, conn net.PacketConn) error {
 		}
 	}
 
+	if err := s.serveImpl(tlsConf, conn); err != nil {
+		return err
+	}
+
+	for {
+		sess, err := s.listener.Accept(context.Background())
+		if err != nil {
+			return err
+		}
+		go s.handleConn(sess)
+	}
+}
+
+func (s *Server) serveImpl(tlsConf *tls.Config, conn net.PacketConn) error {
+	s.listenerMutex.Lock()
+	defer s.listenerMutex.Unlock()
+
+	if s.closed {
+		return errors.New("Server is already closed")
+	}
+	if s.listener != nil {
+		return errors.New("ListenAndServe may only be called once")
+	}
+
 	var ln quic.Listener
 	var err error
 	if conn == nil {
@@ -121,19 +136,10 @@ func (s *Server) serveImpl(tlsConf *tls.Config, conn net.PacketConn) error {
 		ln, err = quicListen(conn, tlsConf, s.QuicConfig)
 	}
 	if err != nil {
-		s.listenerMutex.Unlock()
 		return err
 	}
 	s.listener = ln
-	s.listenerMutex.Unlock()
-
-	for {
-		sess, err := ln.Accept(context.Background())
-		if err != nil {
-			return err
-		}
-		go s.handleConn(sess)
-	}
+	return nil
 }
 
 func (s *Server) handleConn(sess quic.Session) {
