@@ -25,6 +25,7 @@ type mockPacketConn struct {
 
 func newMockPacketConn() *mockPacketConn {
 	return &mockPacketConn{
+		addr:        &net.UDPAddr{IP: net.IPv6zero, Port: 0x42},
 		dataToRead:  make(chan []byte, 1000),
 		dataWritten: make(chan mockPacketConnWrite, 1000),
 	}
