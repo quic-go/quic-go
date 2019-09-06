@@ -25,16 +25,18 @@ func NewInitialAEAD(connID protocol.ConnectionID, pers protocol.Perspective) (Lo
 	otherKey, otherHPKey, otherIV := computeInitialKeyAndIV(otherSecret)
 
 	encrypter := qtls.AEADAESGCMTLS13(myKey, myIV)
-	hpEncrypter, err := aes.NewCipher(myHPKey)
+	encrypterBlock, err := aes.NewCipher(myHPKey)
 	if err != nil {
 		return nil, nil, err
 	}
 	decrypter := qtls.AEADAESGCMTLS13(otherKey, otherIV)
-	hpDecrypter, err := aes.NewCipher(otherHPKey)
+	decrypterBlock, err := aes.NewCipher(otherHPKey)
 	if err != nil {
 		return nil, nil, err
 	}
-	return newLongHeaderSealer(encrypter, hpEncrypter), newLongHeaderOpener(decrypter, hpDecrypter), nil
+	return newLongHeaderSealer(encrypter, newAESHeaderProtector(encrypterBlock, true)),
+		newLongHeaderOpener(decrypter, newAESHeaderProtector(decrypterBlock, true)),
+		nil
 }
 
 func computeSecrets(connID protocol.ConnectionID) (clientSecret, serverSecret []byte) {

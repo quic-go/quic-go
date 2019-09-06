@@ -498,7 +498,7 @@ func (h *cryptoSetup) SetReadKey(encLevel qtls.EncryptionLevel, suite *qtls.Ciph
 		h.readEncLevel = protocol.EncryptionHandshake
 		h.handshakeOpener = newLongHeaderOpener(
 			createAEAD(suite, trafficSecret),
-			createHeaderProtector(suite, trafficSecret),
+			newAESHeaderProtector(createAESHeaderProtector(suite, trafficSecret), true),
 		)
 		h.logger.Debugf("Installed Handshake Read keys")
 	case qtls.EncryptionApplication:
@@ -520,7 +520,7 @@ func (h *cryptoSetup) SetWriteKey(encLevel qtls.EncryptionLevel, suite *qtls.Cip
 		h.writeEncLevel = protocol.EncryptionHandshake
 		h.handshakeSealer = newLongHeaderSealer(
 			createAEAD(suite, trafficSecret),
-			createHeaderProtector(suite, trafficSecret),
+			newAESHeaderProtector(createAESHeaderProtector(suite, trafficSecret), true),
 		)
 		h.logger.Debugf("Installed Handshake Write keys")
 	case qtls.EncryptionApplication:

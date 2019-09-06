@@ -24,7 +24,8 @@ var _ = Describe("AEAD", func() {
 
 		iv := make([]byte, 12)
 		rand.Read(iv)
-		return newLongHeaderSealer(aead, hpBlock), newLongHeaderOpener(aead, hpBlock)
+		return newLongHeaderSealer(aead, newAESHeaderProtector(hpBlock, true)),
+			newLongHeaderOpener(aead, newAESHeaderProtector(hpBlock, true))
 	}
 
 	Context("message encryption", func() {

@@ -67,8 +67,8 @@ type updatableAEAD struct {
 	nextRcvTrafficSecret  []byte
 	nextSendTrafficSecret []byte
 
-	hpDecrypter cipher.Block
-	hpEncrypter cipher.Block
+	headerDecrypter headerProtector
+	headerEncrypter headerProtector
 
 	rttStats *congestion.RTTStats
 
@@ -76,7 +76,6 @@ type updatableAEAD struct {
 
 	// use a single slice to avoid allocations
 	nonceBuf []byte
-	hpMask   []byte
 }
 
 var _ ShortHeaderOpener = &updatableAEAD{}
@@ -118,10 +117,9 @@ func (a *updatableAEAD) getNextTrafficSecret(hash crypto.Hash, ts []byte) []byte
 // For the server, this function is called after SetWriteKey.
 func (a *updatableAEAD) SetReadKey(suite cipherSuite, trafficSecret []byte) {
 	a.rcvAEAD = createAEAD(suite, trafficSecret)
-	a.hpDecrypter = createHeaderProtector(suite, trafficSecret)
+	a.headerDecrypter = newAESHeaderProtector(createAESHeaderProtector(suite, trafficSecret), false)
 	if a.suite == nil {
 		a.nonceBuf = make([]byte, a.rcvAEAD.NonceSize())
-		a.hpMask = make([]byte, a.hpDecrypter.BlockSize())
 		a.aeadOverhead = a.rcvAEAD.Overhead()
 		a.suite = suite
 	}
@@ -134,10 +132,9 @@ func (a *updatableAEAD) SetReadKey(suite cipherSuite, trafficSecret []byte) {
 // For the server, this function is called before SetWriteKey.
 func (a *updatableAEAD) SetWriteKey(suite cipherSuite, trafficSecret []byte) {
 	a.sendAEAD = createAEAD(suite, trafficSecret)
-	a.hpEncrypter = createHeaderProtector(suite, trafficSecret)
+	a.headerEncrypter = newAESHeaderProtector(createAESHeaderProtector(suite, trafficSecret), false)
 	if a.suite == nil {
 		a.nonceBuf = make([]byte, a.sendAEAD.NonceSize())
-		a.hpMask = make([]byte, a.hpEncrypter.BlockSize())
 		a.aeadOverhead = a.sendAEAD.Overhead()
 		a.suite = suite
 	}
@@ -245,24 +242,10 @@ func (a *updatableAEAD) Overhead() int {
 	return a.aeadOverhead
 }
 
-func (a *updatableAEAD) EncryptHeader(sample []byte, firstByte *byte, pnBytes []byte) {
-	if len(sample) != len(a.hpMask) {
-		panic("invalid sample size")
-	}
-	a.hpEncrypter.Encrypt(a.hpMask, sample)
-	*firstByte ^= a.hpMask[0] & 0x1f
-	for i := range pnBytes {
-		pnBytes[i] ^= a.hpMask[i+1]
-	}
+func (a *updatableAEAD) EncryptHeader(sample []byte, firstByte *byte, hdrBytes []byte) {
+	a.headerEncrypter.EncryptHeader(sample, firstByte, hdrBytes)
 }
 
-func (a *updatableAEAD) DecryptHeader(sample []byte, firstByte *byte, pnBytes []byte) {
-	if len(sample) != len(a.hpMask) {
-		panic("invalid sample size")
-	}
-	a.hpDecrypter.Encrypt(a.hpMask, sample)
-	*firstByte ^= a.hpMask[0] & 0x1f
-	for i := range pnBytes {
-		pnBytes[i] ^= a.hpMask[i+1]
-	}
+func (a *updatableAEAD) DecryptHeader(sample []byte, firstByte *byte, hdrBytes []byte) {
+	a.headerDecrypter.DecryptHeader(sample, firstByte, hdrBytes)
 }
