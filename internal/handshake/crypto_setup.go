@@ -491,14 +491,14 @@ func (h *cryptoSetup) ReadHandshakeMessage() ([]byte, error) {
 	return msg, nil
 }
 
-func (h *cryptoSetup) SetReadKey(encLevel qtls.EncryptionLevel, suite *qtls.CipherSuite, trafficSecret []byte) {
+func (h *cryptoSetup) SetReadKey(encLevel qtls.EncryptionLevel, suite *qtls.CipherSuiteTLS13, trafficSecret []byte) {
 	h.mutex.Lock()
 	switch encLevel {
 	case qtls.EncryptionHandshake:
 		h.readEncLevel = protocol.EncryptionHandshake
 		h.handshakeOpener = newLongHeaderOpener(
 			createAEAD(suite, trafficSecret),
-			newAESHeaderProtector(createAESHeaderProtector(suite, trafficSecret), true),
+			newHeaderProtector(suite, trafficSecret, true),
 		)
 		h.logger.Debugf("Installed Handshake Read keys")
 	case qtls.EncryptionApplication:
@@ -513,14 +513,14 @@ func (h *cryptoSetup) SetReadKey(encLevel qtls.EncryptionLevel, suite *qtls.Ciph
 	h.receivedReadKey <- struct{}{}
 }
 
-func (h *cryptoSetup) SetWriteKey(encLevel qtls.EncryptionLevel, suite *qtls.CipherSuite, trafficSecret []byte) {
+func (h *cryptoSetup) SetWriteKey(encLevel qtls.EncryptionLevel, suite *qtls.CipherSuiteTLS13, trafficSecret []byte) {
 	h.mutex.Lock()
 	switch encLevel {
 	case qtls.EncryptionHandshake:
 		h.writeEncLevel = protocol.EncryptionHandshake
 		h.handshakeSealer = newLongHeaderSealer(
 			createAEAD(suite, trafficSecret),
-			newAESHeaderProtector(createAESHeaderProtector(suite, trafficSecret), true),
+			newHeaderProtector(suite, trafficSecret, true),
 		)
 		h.logger.Debugf("Installed Handshake Write keys")
 	case qtls.EncryptionApplication:

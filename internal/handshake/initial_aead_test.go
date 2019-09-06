@@ -42,19 +42,17 @@ var _ = Describe("Initial AEAD using AES-GCM", func() {
 		It("computes the client key and IV", func() {
 			clientSecret, _ := computeSecrets(connID)
 			Expect(clientSecret).To(Equal(split("8a3515a14ae3c31b9c2d6d5bc58538ca 5cd2baa119087143e60887428dcb52f6")))
-			key, hpKey, iv := computeInitialKeyAndIV(clientSecret)
+			key, iv := computeInitialKeyAndIV(clientSecret)
 			Expect(key).To(Equal(split("98b0d7e5e7a402c67c33f350fa65ea54")))
 			Expect(iv).To(Equal(split("19e94387805eb0b46c03a788")))
-			Expect(hpKey).To(Equal(split("0edd982a6ac527f2eddcbb7348dea5d7")))
 		})
 
 		It("computes the server key and IV", func() {
 			_, serverSecret := computeSecrets(connID)
 			Expect(serverSecret).To(Equal(split("47b2eaea6c266e32c0697a9e2a898bdf 5c4fb3e5ac34f0e549bf2c58581a3811")))
-			key, hpKey, iv := computeInitialKeyAndIV(serverSecret)
+			key, iv := computeInitialKeyAndIV(serverSecret)
 			Expect(key).To(Equal(split("9a8be902a9bdd91d16064ca118045fb4")))
 			Expect(iv).To(Equal(split("0a82086d32205ba22241d8dc")))
-			Expect(hpKey).To(Equal(split("94b9452d2b3c7c7f6da7fdd8593537fd")))
 		})
 
 		It("encrypts the client's Initial", func() {

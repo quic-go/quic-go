@@ -74,8 +74,8 @@ func (o *longHeaderOpener) DecryptHeader(sample []byte, firstByte *byte, pnBytes
 	o.headerProtector.DecryptHeader(sample, firstByte, pnBytes)
 }
 
-func createAEAD(suite cipherSuite, trafficSecret []byte) cipher.AEAD {
-	key := qtls.HkdfExpandLabel(suite.Hash(), trafficSecret, []byte{}, "quic key", suite.KeyLen())
-	iv := qtls.HkdfExpandLabel(suite.Hash(), trafficSecret, []byte{}, "quic iv", suite.IVLen())
+func createAEAD(suite *qtls.CipherSuiteTLS13, trafficSecret []byte) cipher.AEAD {
+	key := qtls.HkdfExpandLabel(suite.Hash, trafficSecret, []byte{}, "quic key", suite.KeyLen)
+	iv := qtls.HkdfExpandLabel(suite.Hash, trafficSecret, []byte{}, "quic iv", suite.IVLen())
 	return suite.AEAD(key, iv)
 }

@@ -1,9 +1,6 @@
 package handshake
 
 import (
-	"crypto"
-	"crypto/aes"
-	"crypto/cipher"
 	"crypto/rand"
 	"os"
 	"time"
@@ -15,21 +12,6 @@ import (
 	. "github.com/onsi/gomega"
 )
 
-type mockCipherSuite struct{}
-
-var _ cipherSuite = &mockCipherSuite{}
-
-func (c *mockCipherSuite) Hash() crypto.Hash { return crypto.SHA256 }
-func (c *mockCipherSuite) KeyLen() int       { return 16 }
-func (c *mockCipherSuite) IVLen() int        { return 12 }
-func (c *mockCipherSuite) AEAD(key, _ []byte) cipher.AEAD {
-	block, err := aes.NewCipher(key)
-	Expect(err).ToNot(HaveOccurred())
-	gcm, err := cipher.NewGCM(block)
-	Expect(err).ToNot(HaveOccurred())
-	return gcm
-}
-
 var _ = Describe("Updatable AEAD", func() {
 	getPeers := func(rttStats *congestion.RTTStats) (client, server *updatableAEAD) {
 		trafficSecret1 := make([]byte, 16)
@@ -39,10 +21,10 @@ var _ = Describe("Updatable AEAD", func() {
 
 		client = newUpdatableAEAD(rttStats, utils.DefaultLogger)
 		server = newUpdatableAEAD(rttStats, utils.DefaultLogger)
-		client.SetReadKey(&mockCipherSuite{}, trafficSecret2)
-		client.SetWriteKey(&mockCipherSuite{}, trafficSecret1)
-		server.SetReadKey(&mockCipherSuite{}, trafficSecret1)
-		server.SetWriteKey(&mockCipherSuite{}, trafficSecret2)
+		client.SetReadKey(aesSuite, trafficSecret2)
+		client.SetWriteKey(aesSuite, trafficSecret1)
+		server.SetReadKey(aesSuite, trafficSecret1)
+		server.SetWriteKey(aesSuite, trafficSecret2)
 		return
 	}
 

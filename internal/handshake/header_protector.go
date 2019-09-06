@@ -13,13 +13,17 @@ type headerProtector interface {
 	DecryptHeader(sample []byte, firstByte *byte, hdrBytes []byte)
 }
 
-func createAESHeaderProtector(suite cipherSuite, trafficSecret []byte) cipher.Block {
-	hpKey := qtls.HkdfExpandLabel(suite.Hash(), trafficSecret, []byte{}, "quic hp", suite.KeyLen())
-	hp, err := aes.NewCipher(hpKey)
-	if err != nil {
-		panic(fmt.Sprintf("error creating new AES cipher: %s", err))
+func newHeaderProtector(suite *qtls.CipherSuiteTLS13, trafficSecret []byte, isLongHeader bool) headerProtector {
+	switch suite.ID {
+	case qtls.TLS_AES_128_GCM_SHA256, qtls.TLS_AES_256_GCM_SHA384:
+		return newAESHeaderProtector(suite, trafficSecret, isLongHeader)
+	case qtls.TLS_CHACHA20_POLY1305_SHA256:
+		// TODO: implement ChaCha header protection
+		fallthrough
+	default:
+		panic(fmt.Sprintf("Invalid cipher suite id: %d", suite.ID))
 	}
-	return hp
+
 }
 
 type aesHeaderProtector struct {
@@ -30,7 +34,12 @@ type aesHeaderProtector struct {
 
 var _ headerProtector = &aesHeaderProtector{}
 
-func newAESHeaderProtector(block cipher.Block, isLongHeader bool) headerProtector {
+func newAESHeaderProtector(suite *qtls.CipherSuiteTLS13, trafficSecret []byte, isLongHeader bool) headerProtector {
+	hpKey := qtls.HkdfExpandLabel(suite.Hash, trafficSecret, []byte{}, "quic hp", suite.KeyLen)
+	block, err := aes.NewCipher(hpKey)
+	if err != nil {
+		panic(fmt.Sprintf("error creating new AES cipher: %s", err))
+	}
 	return &aesHeaderProtector{
 		block:        block,
 		mask:         make([]byte, block.BlockSize()),

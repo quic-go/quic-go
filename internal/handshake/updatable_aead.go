@@ -43,7 +43,7 @@ func setKeyUpdateInterval() {
 }
 
 type updatableAEAD struct {
-	suite cipherSuite
+	suite *qtls.CipherSuiteTLS13
 
 	keyPhase          protocol.KeyPhase
 	largestAcked      protocol.PacketNumber
@@ -103,8 +103,8 @@ func (a *updatableAEAD) rollKeys(now time.Time) {
 	a.rcvAEAD = a.nextRcvAEAD
 	a.sendAEAD = a.nextSendAEAD
 
-	a.nextRcvTrafficSecret = a.getNextTrafficSecret(a.suite.Hash(), a.nextRcvTrafficSecret)
-	a.nextSendTrafficSecret = a.getNextTrafficSecret(a.suite.Hash(), a.nextSendTrafficSecret)
+	a.nextRcvTrafficSecret = a.getNextTrafficSecret(a.suite.Hash, a.nextRcvTrafficSecret)
+	a.nextSendTrafficSecret = a.getNextTrafficSecret(a.suite.Hash, a.nextSendTrafficSecret)
 	a.nextRcvAEAD = createAEAD(a.suite, a.nextRcvTrafficSecret)
 	a.nextSendAEAD = createAEAD(a.suite, a.nextSendTrafficSecret)
 }
@@ -115,31 +115,31 @@ func (a *updatableAEAD) getNextTrafficSecret(hash crypto.Hash, ts []byte) []byte
 
 // For the client, this function is called before SetWriteKey.
 // For the server, this function is called after SetWriteKey.
-func (a *updatableAEAD) SetReadKey(suite cipherSuite, trafficSecret []byte) {
+func (a *updatableAEAD) SetReadKey(suite *qtls.CipherSuiteTLS13, trafficSecret []byte) {
 	a.rcvAEAD = createAEAD(suite, trafficSecret)
-	a.headerDecrypter = newAESHeaderProtector(createAESHeaderProtector(suite, trafficSecret), false)
+	a.headerDecrypter = newHeaderProtector(suite, trafficSecret, false)
 	if a.suite == nil {
 		a.nonceBuf = make([]byte, a.rcvAEAD.NonceSize())
 		a.aeadOverhead = a.rcvAEAD.Overhead()
 		a.suite = suite
 	}
 
-	a.nextRcvTrafficSecret = a.getNextTrafficSecret(suite.Hash(), trafficSecret)
+	a.nextRcvTrafficSecret = a.getNextTrafficSecret(suite.Hash, trafficSecret)
 	a.nextRcvAEAD = createAEAD(suite, a.nextRcvTrafficSecret)
 }
 
 // For the client, this function is called after SetReadKey.
 // For the server, this function is called before SetWriteKey.
-func (a *updatableAEAD) SetWriteKey(suite cipherSuite, trafficSecret []byte) {
+func (a *updatableAEAD) SetWriteKey(suite *qtls.CipherSuiteTLS13, trafficSecret []byte) {
 	a.sendAEAD = createAEAD(suite, trafficSecret)
-	a.headerEncrypter = newAESHeaderProtector(createAESHeaderProtector(suite, trafficSecret), false)
+	a.headerEncrypter = newHeaderProtector(suite, trafficSecret, false)
 	if a.suite == nil {
 		a.nonceBuf = make([]byte, a.sendAEAD.NonceSize())
 		a.aeadOverhead = a.sendAEAD.Overhead()
 		a.suite = suite
 	}
 
-	a.nextSendTrafficSecret = a.getNextTrafficSecret(suite.Hash(), trafficSecret)
+	a.nextSendTrafficSecret = a.getNextTrafficSecret(suite.Hash, trafficSecret)
 	a.nextSendAEAD = createAEAD(suite, a.nextSendTrafficSecret)
 }
 

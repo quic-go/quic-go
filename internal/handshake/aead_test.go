@@ -19,13 +19,9 @@ var _ = Describe("AEAD", func() {
 		Expect(err).ToNot(HaveOccurred())
 		aead, err := cipher.NewGCM(block)
 		Expect(err).ToNot(HaveOccurred())
-		hpBlock, err := aes.NewCipher(hpKey)
-		Expect(err).ToNot(HaveOccurred())
 
-		iv := make([]byte, 12)
-		rand.Read(iv)
-		return newLongHeaderSealer(aead, newAESHeaderProtector(hpBlock, true)),
-			newLongHeaderOpener(aead, newAESHeaderProtector(hpBlock, true))
+		return newLongHeaderSealer(aead, newHeaderProtector(aesSuite, key, true)),
+			newLongHeaderOpener(aead, newAESHeaderProtector(aesSuite, key, true))
 	}
 
 	Context("message encryption", func() {
