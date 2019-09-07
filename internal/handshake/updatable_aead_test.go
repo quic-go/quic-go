@@ -17,8 +17,7 @@ var _ = Describe("Updatable AEAD", func() {
 	for i := range cipherSuites {
 		cs := cipherSuites[i]
 
-		Context(fmt.Sprintf("using %s", cs.name), func() {
-			suite := cs.suite
+		Context(fmt.Sprintf("using %s", cipherSuiteName(cs.ID)), func() {
 
 			getPeers := func(rttStats *congestion.RTTStats) (client, server *updatableAEAD) {
 				trafficSecret1 := make([]byte, 16)
@@ -28,10 +27,10 @@ var _ = Describe("Updatable AEAD", func() {
 
 				client = newUpdatableAEAD(rttStats, utils.DefaultLogger)
 				server = newUpdatableAEAD(rttStats, utils.DefaultLogger)
-				client.SetReadKey(suite, trafficSecret2)
-				client.SetWriteKey(suite, trafficSecret1)
-				server.SetReadKey(suite, trafficSecret1)
-				server.SetWriteKey(suite, trafficSecret2)
+				client.SetReadKey(cs, trafficSecret2)
+				client.SetWriteKey(cs, trafficSecret1)
+				server.SetReadKey(cs, trafficSecret1)
+				server.SetWriteKey(cs, trafficSecret2)
 				return
 			}
 

@@ -500,12 +500,12 @@ func (h *cryptoSetup) SetReadKey(encLevel qtls.EncryptionLevel, suite *qtls.Ciph
 			createAEAD(suite, trafficSecret),
 			newHeaderProtector(suite, trafficSecret, true),
 		)
-		h.logger.Debugf("Installed Handshake Read keys")
+		h.logger.Debugf("Installed Handshake Read keys (using %s)", cipherSuiteName(suite.ID))
 	case qtls.EncryptionApplication:
 		h.readEncLevel = protocol.Encryption1RTT
 		h.aead.SetReadKey(suite, trafficSecret)
 		h.has1RTTOpener = true
-		h.logger.Debugf("Installed 1-RTT Read keys")
+		h.logger.Debugf("Installed 1-RTT Read keys (using %s)", cipherSuiteName(suite.ID))
 	default:
 		panic("unexpected read encryption level")
 	}
@@ -522,12 +522,12 @@ func (h *cryptoSetup) SetWriteKey(encLevel qtls.EncryptionLevel, suite *qtls.Cip
 			createAEAD(suite, trafficSecret),
 			newHeaderProtector(suite, trafficSecret, true),
 		)
-		h.logger.Debugf("Installed Handshake Write keys")
+		h.logger.Debugf("Installed Handshake Write keys (using %s)", cipherSuiteName(suite.ID))
 	case qtls.EncryptionApplication:
 		h.writeEncLevel = protocol.Encryption1RTT
 		h.aead.SetWriteKey(suite, trafficSecret)
 		h.has1RTTSealer = true
-		h.logger.Debugf("Installed 1-RTT Write keys")
+		h.logger.Debugf("Installed 1-RTT Write keys (using %s)", cipherSuiteName(suite.ID))
 	default:
 		panic("unexpected write encryption level")
 	}

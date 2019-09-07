@@ -14,9 +14,7 @@ var _ = Describe("AEAD", func() {
 	for i := range cipherSuites {
 		cs := cipherSuites[i]
 
-		Context(fmt.Sprintf("using %s", cs.name), func() {
-			suite := cs.suite
-
+		Context(fmt.Sprintf("using %s", cipherSuiteName(cs.ID)), func() {
 			getSealerAndOpener := func() (LongHeaderSealer, LongHeaderOpener) {
 				key := make([]byte, 16)
 				hpKey := make([]byte, 16)
@@ -27,8 +25,8 @@ var _ = Describe("AEAD", func() {
 				aead, err := cipher.NewGCM(block)
 				Expect(err).ToNot(HaveOccurred())
 
-				return newLongHeaderSealer(aead, newHeaderProtector(suite, key, true)),
-					newLongHeaderOpener(aead, newHeaderProtector(suite, key, true))
+				return newLongHeaderSealer(aead, newHeaderProtector(cs, key, true)),
+					newLongHeaderOpener(aead, newHeaderProtector(cs, key, true))
 			}
 
 			Context("message encryption", func() {

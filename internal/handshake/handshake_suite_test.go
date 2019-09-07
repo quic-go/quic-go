@@ -31,36 +31,24 @@ var _ = AfterEach(func() {
 
 var aeadChaCha20Poly1305 func(key, nonceMask []byte) cipher.AEAD
 
-var cipherSuites = []struct {
-	name  string
-	suite *qtls.CipherSuiteTLS13
-}{
-	{
-		name: "TLS_AES_128_GCM_SHA256",
-		suite: &qtls.CipherSuiteTLS13{
-			ID:     qtls.TLS_AES_128_GCM_SHA256,
-			KeyLen: 16,
-			AEAD:   qtls.AEADAESGCMTLS13,
-			Hash:   crypto.SHA256,
-		},
+var cipherSuites = []*qtls.CipherSuiteTLS13{
+	&qtls.CipherSuiteTLS13{
+		ID:     qtls.TLS_AES_128_GCM_SHA256,
+		KeyLen: 16,
+		AEAD:   qtls.AEADAESGCMTLS13,
+		Hash:   crypto.SHA256,
 	},
-	{
-		name: "TLS_AES_256_GCM_SHA384",
-		suite: &qtls.CipherSuiteTLS13{
-			ID:     qtls.TLS_AES_256_GCM_SHA384,
-			KeyLen: 32,
-			AEAD:   qtls.AEADAESGCMTLS13,
-			Hash:   crypto.SHA384,
-		},
+	&qtls.CipherSuiteTLS13{
+		ID:     qtls.TLS_AES_256_GCM_SHA384,
+		KeyLen: 32,
+		AEAD:   qtls.AEADAESGCMTLS13,
+		Hash:   crypto.SHA384,
 	},
-	{
-		name: "TLS_CHACHA20_POLY1305_SHA256",
-		suite: &qtls.CipherSuiteTLS13{
-			ID:     qtls.TLS_CHACHA20_POLY1305_SHA256,
-			KeyLen: 32,
-			AEAD:   nil, // will be set by init
-			Hash:   crypto.SHA256,
-		},
+	&qtls.CipherSuiteTLS13{
+		ID:     qtls.TLS_CHACHA20_POLY1305_SHA256,
+		KeyLen: 32,
+		AEAD:   nil, // will be set by init
+		Hash:   crypto.SHA256,
 	},
 }
 
@@ -69,8 +57,8 @@ func init() {
 		panic(err)
 	}
 	for _, s := range cipherSuites {
-		if s.suite.ID == qtls.TLS_CHACHA20_POLY1305_SHA256 {
-			s.suite.AEAD = aeadChaCha20Poly1305
+		if s.ID == qtls.TLS_CHACHA20_POLY1305_SHA256 {
+			s.AEAD = aeadChaCha20Poly1305
 		}
 	}
 }
