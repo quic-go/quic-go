@@ -19,6 +19,7 @@ import (
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/internal/utils"
 	"github.com/marten-seemann/qpack"
+	"github.com/onsi/ginkgo"
 )
 
 // allows mocking of quic.Listen and quic.ListenAddr
@@ -28,6 +29,20 @@ var (
 )
 
 const nextProtoH3 = "h3-22"
+
+type requestError struct {
+	err       error
+	streamErr errorCode
+	connErr   errorCode
+}
+
+func newStreamError(code errorCode, err error) requestError {
+	return requestError{err: err, streamErr: code}
+}
+
+func newConnError(code errorCode, err error) requestError {
+	return requestError{err: err, connErr: code}
+}
 
 // Server is a HTTP2 server listening for QUIC connections.
 type Server struct {
@@ -167,11 +182,20 @@ func (s *Server) handleConn(sess quic.Session) {
 			s.logger.Debugf("Accepting stream failed: %s", err)
 			return
 		}
-		// TODO: handle error
 		go func() {
-			if err := s.handleRequest(str, decoder); err != nil {
+			defer ginkgo.GinkgoRecover()
+			if rerr := s.handleRequest(str, decoder); rerr.err != nil || rerr.streamErr != 0 || rerr.connErr != 0 {
 				s.logger.Debugf("Handling request failed: %s", err)
-				str.CancelWrite(quic.ErrorCode(errorGeneralProtocolError))
+				if rerr.streamErr != 0 {
+					str.CancelWrite(quic.ErrorCode(rerr.streamErr))
+				}
+				if rerr.connErr != 0 {
+					var reason string
+					if rerr.err != nil {
+						reason = rerr.err.Error()
+					}
+					sess.CloseWithError(quic.ErrorCode(rerr.connErr), reason)
+				}
 				return
 			}
 			str.Close()
@@ -186,37 +210,31 @@ func (s *Server) maxHeaderBytes() uint64 {
 	return uint64(s.Server.MaxHeaderBytes)
 }
 
-// TODO: improve error handling.
-// Most (but not all) of the errors occurring here are connection-level erros.
-func (s *Server) handleRequest(str quic.Stream, decoder *qpack.Decoder) error {
+func (s *Server) handleRequest(str quic.Stream, decoder *qpack.Decoder) requestError {
 	frame, err := parseNextFrame(str)
 	if err != nil {
-		str.CancelWrite(quic.ErrorCode(errorRequestCanceled))
-		return err
+		return newStreamError(errorRequestIncomplete, err)
 	}
 	hf, ok := frame.(*headersFrame)
 	if !ok {
-		str.CancelWrite(quic.ErrorCode(errorUnexpectedFrame))
-		return errors.New("expected first frame to be a headers frame")
+		return newConnError(errorUnexpectedFrame, errors.New("expected first frame to be a HEADERS frame"))
 	}
 	if hf.Length > s.maxHeaderBytes() {
-		str.CancelWrite(quic.ErrorCode(errorFrameError))
-		return fmt.Errorf("Headers frame too large: %d bytes (max: %d)", hf.Length, s.maxHeaderBytes())
+		return newStreamError(errorFrameError, fmt.Errorf("HEADERS frame too large: %d bytes (max: %d)", hf.Length, s.maxHeaderBytes()))
 	}
 	headerBlock := make([]byte, hf.Length)
 	if _, err := io.ReadFull(str, headerBlock); err != nil {
-		str.CancelWrite(quic.ErrorCode(errorRequestIncomplete))
-		return err
+		return newStreamError(errorRequestIncomplete, err)
 	}
 	hfs, err := decoder.DecodeFull(headerBlock)
 	if err != nil {
 		// TODO: use the right error code
-		str.CancelWrite(quic.ErrorCode(errorGeneralProtocolError))
-		return err
+		return newConnError(errorGeneralProtocolError, err)
 	}
 	req, err := requestFromHeaders(hfs)
 	if err != nil {
-		return err
+		// TODO: use the right error code
+		return newStreamError(errorGeneralProtocolError, err)
 	}
 	req.Body = newRequestBody(str)
 
@@ -261,7 +279,7 @@ func (s *Server) handleRequest(str quic.Stream, decoder *qpack.Decoder) error {
 	if !readEOF {
 		str.CancelRead(quic.ErrorCode(errorEarlyResponse))
 	}
-	return nil
+	return requestError{}
 }
 
 // Close the server immediately, aborting requests and sending CONNECTION_CLOSE frames to connected clients.
