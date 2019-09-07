@@ -88,6 +88,12 @@ func getFrames() []wire.Frame {
 			Data:     getRandomData(50),
 			FinBit:   true,
 		},
+		&wire.StreamFrame{ // STREAM frame at non-zero offset, with data and FIN bit. Long enough to use the buffer.
+			StreamID: protocol.StreamID(getRandomNumber()),
+			Offset:   protocol.ByteCount(getRandomNumber()),
+			Data:     getRandomData(2 * protocol.MinStreamFrameBufferSize),
+			FinBit:   true,
+		},
 		&wire.StreamFrame{ // STREAM frame at maximum offset, with FIN bit
 			StreamID: protocol.StreamID(getRandomNumber()),
 			Offset:   protocol.MaxByteCount - 5,
