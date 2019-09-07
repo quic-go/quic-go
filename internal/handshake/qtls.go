@@ -1,8 +1,6 @@
 package handshake
 
 import (
-	"crypto"
-	"crypto/cipher"
 	"crypto/tls"
 	"net"
 	"time"
@@ -10,13 +8,6 @@ import (
 
 	"github.com/marten-seemann/qtls"
 )
-
-type cipherSuite interface {
-	Hash() crypto.Hash
-	KeyLen() int
-	IVLen() int
-	AEAD(key, nonce []byte) cipher.AEAD
-}
 
 type conn struct {
 	remoteAddr net.Addr
@@ -138,5 +129,18 @@ func tlsConfigToQtlsConfig(
 		AlternativeRecordLayer: recordLayer,
 		GetExtensions:          extHandler.GetExtensions,
 		ReceivedExtensions:     extHandler.ReceivedExtensions,
+	}
+}
+
+func cipherSuiteName(id uint16) string {
+	switch id {
+	case qtls.TLS_AES_128_GCM_SHA256:
+		return "TLS_AES_128_GCM_SHA256"
+	case qtls.TLS_CHACHA20_POLY1305_SHA256:
+		return "TLS_CHACHA20_POLY1305_SHA256"
+	case qtls.TLS_AES_256_GCM_SHA384:
+		return "TLS_AES_256_GCM_SHA384"
+	default:
+		return "unknown cipher suite"
 	}
 }
