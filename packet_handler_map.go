@@ -65,18 +65,30 @@ func newPacketHandlerMap(
 
 func (h *packetHandlerMap) Add(id protocol.ConnectionID, handler packetHandler) {
 	h.mutex.Lock()
-	h.handlers[string(id)] = handler
+	h.addLocked(id, handler)
 	h.mutex.Unlock()
+}
+
+func (h *packetHandlerMap) addLocked(id protocol.ConnectionID, handler packetHandler) {
+	h.handlers[string(id)] = handler
 }
 
 func (h *packetHandlerMap) Remove(id protocol.ConnectionID) {
+	h.mutex.Lock()
 	h.removeByConnectionIDAsString(string(id))
+	h.mutex.Unlock()
+}
+
+func (h *packetHandlerMap) ReplaceWithClosed(id protocol.ConnectionID, handler packetHandler) {
+	h.mutex.Lock()
+	h.removeByConnectionIDAsString(string(id))
+	h.addLocked(id, handler)
+	h.mutex.Unlock()
+	h.retireByConnectionIDAsString(string(id))
 }
 
 func (h *packetHandlerMap) removeByConnectionIDAsString(id string) {
-	h.mutex.Lock()
 	delete(h.handlers, id)
-	h.mutex.Unlock()
 }
 
 func (h *packetHandlerMap) Retire(id protocol.ConnectionID) {
@@ -85,7 +97,9 @@ func (h *packetHandlerMap) Retire(id protocol.ConnectionID) {
 
 func (h *packetHandlerMap) retireByConnectionIDAsString(id string) {
 	time.AfterFunc(h.deleteRetiredSessionsAfter, func() {
+		h.mutex.Lock()
 		h.removeByConnectionIDAsString(id)
+		h.mutex.Unlock()
 	})
 }
 

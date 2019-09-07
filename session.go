@@ -132,11 +132,8 @@ type session struct {
 	sendingScheduled chan struct{}
 
 	closeOnce sync.Once
-	closed    utils.AtomicBool
 	// closeChan is used to notify the run loop that it should terminate
-	closeChan                 chan closeError
-	connectionClosePacket     *packedPacket
-	packetsReceivedAfterClose int
+	closeChan chan closeError
 
 	ctx                context.Context
 	ctxCancel          context.CancelFunc
@@ -487,7 +484,6 @@ runLoop:
 	}
 
 	s.handleCloseError(closeErr)
-	s.closed.Set(true)
 	s.logger.Infof("Connection %s closed.", s.srcConnID)
 	s.cryptoStreamHandler.Close()
 	s.sendQueue.Close()
@@ -803,32 +799,11 @@ func (s *session) handleFrame(f wire.Frame, pn protocol.PacketNumber, encLevel p
 
 // handlePacket is called by the server with a new packet
 func (s *session) handlePacket(p *receivedPacket) {
-	if s.closed.Get() {
-		s.handlePacketAfterClosed(p)
-	}
 	// Discard packets once the amount of queued packets is larger than
 	// the channel size, protocol.MaxSessionUnprocessedPackets
 	select {
 	case s.receivedPackets <- p:
 	default:
-	}
-}
-
-func (s *session) handlePacketAfterClosed(p *receivedPacket) {
-	s.packetsReceivedAfterClose++
-	if s.connectionClosePacket == nil {
-		return
-	}
-	// exponential backoff
-	// only send a CONNECTION_CLOSE for the 1st, 2nd, 4th, 8th, 16th, ... packet arriving
-	for n := s.packetsReceivedAfterClose; n > 1; n = n / 2 {
-		if n%2 != 0 {
-			return
-		}
-	}
-	s.logger.Debugf("Received %d packets after sending CONNECTION_CLOSE. Retransmitting.", s.packetsReceivedAfterClose)
-	if err := s.conn.Write(s.connectionClosePacket.raw); err != nil {
-		s.logger.Debugf("Error retransmitting CONNECTION_CLOSE: %s", err)
 	}
 }
 
@@ -946,7 +921,6 @@ func (s *session) closeLocal(e error) {
 		} else {
 			s.logger.Errorf("Closing session with error: %s", e)
 		}
-		s.sessionRunner.Retire(s.srcConnID)
 		s.closeChan <- closeError{err: e, sendClose: true, remote: false}
 	})
 }
@@ -980,7 +954,7 @@ func (s *session) closeForRecreating() protocol.PacketNumber {
 func (s *session) closeRemote(e error) {
 	s.closeOnce.Do(func() {
 		s.logger.Errorf("Peer closed session with error: %s", e)
-		s.sessionRunner.Remove(s.srcConnID)
+		s.sessionRunner.ReplaceWithClosed(s.srcConnID, newClosedRemoteSession(s.perspective))
 		s.closeChan <- closeError{err: e, remote: true}
 	})
 }
@@ -1019,9 +993,12 @@ func (s *session) handleCloseError(closeErr closeError) {
 	if closeErr.remote {
 		return
 	}
-	if err := s.sendConnectionClose(quicErr); err != nil {
+	connClosePacket, err := s.sendConnectionClose(quicErr)
+	if err != nil {
 		s.logger.Debugf("Error sending CONNECTION_CLOSE: %s", err)
 	}
+	cs := newClosedLocalSession(s.conn, connClosePacket, s.perspective, s.logger)
+	s.sessionRunner.ReplaceWithClosed(s.srcConnID, cs)
 }
 
 func (s *session) dropEncryptionLevel(encLevel protocol.EncryptionLevel) {
@@ -1206,7 +1183,7 @@ func (s *session) sendPackedPacket(packet *packedPacket) {
 	s.sendQueue.Send(packet)
 }
 
-func (s *session) sendConnectionClose(quicErr *qerr.QuicError) error {
+func (s *session) sendConnectionClose(quicErr *qerr.QuicError) ([]byte, error) {
 	var reason string
 	// don't send details of crypto errors
 	if !quicErr.IsCryptoError() {
@@ -1217,11 +1194,10 @@ func (s *session) sendConnectionClose(quicErr *qerr.QuicError) error {
 		ReasonPhrase: reason,
 	})
 	if err != nil {
-		return err
+		return nil, err
 	}
-	s.connectionClosePacket = packet
 	s.logPacket(packet)
-	return s.conn.Write(packet.raw)
+	return packet.raw, s.conn.Write(packet.raw)
 }
 
 func (s *session) logPacket(packet *packedPacket) {
