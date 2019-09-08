@@ -7,12 +7,12 @@ import (
 
 var _ = Describe("Pool", func() {
 	It("gets and puts STREAM frames", func() {
-		f := getStreamFrame()
+		f := GetStreamFrame()
 		putStreamFrame(f)
 	})
 
 	It("panics when putting a STREAM frame with a wrong capacity", func() {
-		f := getStreamFrame()
+		f := GetStreamFrame()
 		f.Data = []byte("foobar")
 		Expect(func() { putStreamFrame(f) }).To(Panic())
 	})

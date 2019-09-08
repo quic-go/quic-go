@@ -17,7 +17,7 @@ func init() {
 	}
 }
 
-func getStreamFrame() *StreamFrame {
+func GetStreamFrame() *StreamFrame {
 	f := pool.Get().(*StreamFrame)
 	return f
 }
