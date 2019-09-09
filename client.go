@@ -85,6 +85,22 @@ func DialAddrContext(
 	return dialContext(ctx, udpConn, udpAddr, addr, tlsConf, config, true)
 }
 
+// DialAddrFromPacketConn establishes a new QUIC connection to a server using the provided net.PacketConn and context.
+// See DialAddr for details.
+func DialAddrFromPacketConn(
+	ctx context.Context,
+	conn net.PacketConn,
+	addr string,
+	tlsConf *tls.Config,
+	config *Config,
+) (Session, error) {
+	udpAddr, err := net.ResolveUDPAddr("udp", addr)
+	if err != nil {
+		return nil, err
+	}
+	return dialContext(ctx, conn, udpAddr, addr, tlsConf, config, true)
+}
+
 // Dial establishes a new QUIC connection to a server using a net.PacketConn.
 // The same PacketConn can be used for multiple calls to Dial and Listen,
 // QUIC connection IDs are used for demultiplexing the different connections.
