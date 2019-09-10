@@ -11,8 +11,7 @@ type QuicError struct {
 	ErrorMessage       string
 	isTimeout          bool
 	isApplicationError bool
-	recoverable        bool
-	ignorable          bool
+	delayed            bool
 }
 
 var _ net.Error = &QuicError{}
@@ -75,22 +74,17 @@ func (e *QuicError) Temporary() bool {
 
 // Timeout says if this error is a timeout.
 func (e *QuicError) Timeout() bool {
-	return e.isTimeout && !e.recoverable
+	return e.isTimeout && !e.delayed
 }
 
 // IsAttackTimeout says if this error is an attack timeout error.
 func (e *QuicError) IsAttackTimeout() bool {
-	return e.isTimeout && e.recoverable
+	return e.isTimeout && e.delayed
 }
 
-// IsRecoverable says if this error is recoverable
-func (e *QuicError) IsRecoverable() bool {
-	return e.recoverable
-}
-
-// IsIgnorable says if this error is ignorable.
-func (e *QuicError) IsIgnorable() bool {
-	return e.ignorable || e.ErrorCode == FrameEncodingError
+// IsDelayedError says if this error is a delayed error
+func (e *QuicError) IsDelayedError() bool {
+	return e.delayed
 }
 
 // ToQuicError converts an arbitrary error to a QuicError. It leaves QuicErrors
@@ -109,20 +103,13 @@ func ToQuicError(err error) *QuicError {
 func ToAttackTimeoutError(err error) *QuicError {
 	qErr := ToQuicError(err)
 	qErr.isTimeout = true
-	qErr.recoverable = true
+	qErr.delayed = true
 	return qErr
 }
 
-// ToRecoverableError converts an arbitrary error to a recoverable error.
-func ToRecoverableError(err error) *QuicError {
+// ToDelayedError converts an arbitrary error to a delayed error.
+func ToDelayedError(err error) *QuicError {
 	qErr := ToQuicError(err)
-	qErr.recoverable = true
-	return qErr
-}
-
-// ToIgnorableError converts an arbitrary error to an ignorable error.
-func ToIgnorableError(err error) *QuicError {
-	qErr := ToQuicError(err)
-	qErr.ignorable = true
+	qErr.delayed = true
 	return qErr
 }

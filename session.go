@@ -90,7 +90,7 @@ type closeError struct {
 	sendClose bool
 }
 
-type recoverError struct {
+type delayedError struct {
 	err     error
 	fail    func(error)
 	rcvTime time.Time
@@ -140,7 +140,9 @@ type session struct {
 	closeOnce sync.Once
 	// closeChan is used to notify the run loop that it should terminate
 	closeChan   chan closeError
-	recoverChan chan recoverError
+	delayedChan chan delayedError
+
+	prevState *recoveryState
 
 	ctx                context.Context
 	ctxCancel          context.CancelFunc
@@ -382,7 +384,7 @@ func (s *session) preSetup() {
 func (s *session) postSetup() {
 	s.receivedPackets = make(chan *receivedPacket, protocol.MaxSessionUnprocessedPackets)
 	s.closeChan = make(chan closeError, 1)
-	s.recoverChan = make(chan recoverError, 1)
+	s.delayedChan = make(chan delayedError, 1)
 	s.sendingScheduled = make(chan struct{}, 1)
 	s.undecryptablePackets = make([]*receivedPacket, 0, protocol.MaxUndecryptablePackets)
 	s.ctx, s.ctxCancel = context.WithCancel(context.Background())
@@ -418,7 +420,7 @@ func (s *session) run() error {
 	}
 
 	var closeErr closeError
-	var recoverErr recoverError
+	var delayedErr delayedError
 
 runLoop:
 	for {
@@ -450,8 +452,8 @@ runLoop:
 			if wasProcessed := s.handlePacketImpl(p); !wasProcessed {
 				continue
 			}
-		case recoverErr = <-s.recoverChan:
-			s.handleRecoverError(recoverErr)
+		case delayedErr = <-s.delayedChan:
+			s.handleDelayedError(delayedErr)
 			continue
 		case <-s.handshakeCompleteChan:
 			s.handleHandshakeComplete()
@@ -462,11 +464,11 @@ runLoop:
 		// Check if we need to close due to an attack timeout
 		if s.mitigationOn(protocol.EncryptionUnspecified) {
 			select {
-			case recoverErr = <-s.recoverChan:
-				s.handleRecoverError(recoverErr)
+			case delayedErr = <-s.delayedChan:
+				s.handleDelayedError(delayedErr)
 				continue
 			default:
-				s.checkAttackTimer(now, recoverErr)
+				s.checkAttackTimer(now, delayedErr)
 			}
 		}
 
@@ -583,7 +585,7 @@ func (s *session) handleHandshakeComplete() {
 	}
 }
 
-func (s *session) handleRecoverError(err recoverError) {
+func (s *session) handleDelayedError(err delayedError) {
 	s.logger.Debugf("Received a suspicious packet with error %v. Will recover if a good packet is received before timeout.", err.err)
 	if s.attackTimerStart.IsZero() {
 		s.attackTimerStart = err.rcvTime
@@ -594,7 +596,7 @@ func (s *session) handleRecoverError(err recoverError) {
 	s.lastSuspiciousPacketReceivedTime = err.rcvTime
 }
 
-func (s *session) checkAttackTimer(now time.Time, rErr recoverError) {
+func (s *session) checkAttackTimer(now time.Time, delayErr delayedError) {
 	if !s.attackTimerStart.IsZero() {
 		if s.lastPacketReceivedTime.After(s.lastSuspiciousPacketReceivedTime) {
 			s.logger.Debugf("Good packet received, zeroing attack timer.")
@@ -603,7 +605,7 @@ func (s *session) checkAttackTimer(now time.Time, rErr recoverError) {
 		}
 		if now.Sub(s.attackTimerStart) >= s.config.AttackTimeout {
 			s.logger.Debugf("No network activity after a suspicious packet was received.")
-			go rErr.fail(rErr.err)
+			go delayErr.fail(delayErr.err)
 			return
 		}
 		s.logger.Debugf("Attack possible, but not enough time has passed. Attack timeout is %v, and %v have passed.", s.config.AttackTimeout, now.Sub(s.attackTimerStart))
@@ -653,7 +655,7 @@ func (s *session) handlePacketImpl(rp *receivedPacket) bool {
 	return processed
 }
 
-func (s *session) handleSinglePacket(p *receivedPacket, hdr *wire.Header) bool /* was the packet successfully processed */ {
+func (s *session) handleSinglePacket(p *receivedPacket, hdr *wire.Header) (processed bool /* was the packet successfully processed */) {
 	var wasQueued bool
 
 	defer func() {
@@ -703,13 +705,20 @@ func (s *session) handleSinglePacket(p *receivedPacket, hdr *wire.Header) bool /
 		packet.hdr.Log(s.logger)
 	}
 
-	if err := s.handleUnpackedPacket(packet, p.rcvTime); err != nil {
-		if s.mitigationOn(packet.encryptionLevel) {
-			quicErr, ok := err.(*qerr.QuicError)
-			if ok && quicErr.IsIgnorable() {
-				return false
+	if s.mitigationOn(packet.encryptionLevel) {
+		s.saveState()
+		if err := s.handleUnpackedPacket(packet, p.rcvTime); err != nil {
+			s.logger.Debugf("Ignoring or trying to recover from suspicious/invalid packet, rolling back relevant state.")
+			s.restoreState()
+			if qErr, ok := err.(*qerr.QuicError); ok && qErr.IsDelayedError() {
+				return true
 			}
+			return false
 		}
+		return true
+	}
+
+	if err := s.handleUnpackedPacket(packet, p.rcvTime); err != nil {
 		s.closeLocal(err)
 		return false
 	}
@@ -757,24 +766,44 @@ func (s *session) handleRetryPacket(hdr *wire.Header) bool /* was this a valid R
 	return true
 }
 
+type recoveryState struct {
+	destConnID          protocol.ConnectionID
+	receivedFirstPacket bool
+}
+
+func (s *session) saveState() {
+	s.prevState = &recoveryState{
+		destConnID:          s.destConnID,
+		receivedFirstPacket: s.receivedFirstPacket,
+	}
+}
+
+func (s *session) restoreState() {
+	if s.prevState != nil {
+		state := s.prevState
+		if !s.destConnID.Equal(state.destConnID) {
+			s.destConnID = state.destConnID
+			s.packer.ChangeDestConnectionID(s.destConnID)
+		}
+		s.receivedFirstPacket = state.receivedFirstPacket
+	}
+}
+
 func (s *session) handleUnpackedPacket(packet *unpackedPacket, rcvTime time.Time) error {
 	if len(packet.data) == 0 {
-		// Ignore empty packets if mitigation is turned on.
 		err := qerr.Error(qerr.ProtocolViolation, "empty packet")
-		if s.mitigationOn(packet.encryptionLevel) {
-			return qerr.ToIgnorableError(err)
-		}
 		return err
 	}
-	var updateSrcConnID bool
-	if s.perspective == protocol.PerspectiveClient && !s.receivedFirstPacket && packet.hdr.IsLongHeader && !packet.hdr.SrcConnectionID.Equal(s.destConnID) {
-		updateSrcConnID = true
+
+	updateDestConnID := s.perspective == protocol.PerspectiveClient && !s.receivedFirstPacket && packet.hdr.IsLongHeader && !packet.hdr.SrcConnectionID.Equal(s.destConnID)
+	if updateDestConnID {
+		s.logger.Debugf("Received first packet. Switching destination connection ID to: %s", packet.hdr.SrcConnectionID)
+		s.destConnID = packet.hdr.SrcConnectionID
+		s.packer.ChangeDestConnectionID(s.destConnID)
 	}
 
 	// The server can change the source connection ID with the first Handshake packet.
-	if !s.mitigationOn(packet.encryptionLevel) {
-		s.receivedFirstPacket = true
-	}
+	s.receivedFirstPacket = true
 
 	s.lastPacketReceivedTime = rcvTime
 	s.firstAckElicitingPacketAfterIdleSentTime = time.Time{}
@@ -789,49 +818,38 @@ func (s *session) handleUnpackedPacket(packet *unpackedPacket, rcvTime time.Time
 	var isAckEliciting bool
 
 	if s.mitigationOn(packet.encryptionLevel) {
-		var recoverableFrame wire.Frame
-		var ignorableError *qerr.QuicError
 		var parsedFirstFrame bool
+		var delayedErrorFrame wire.Frame
+		var delayedError *qerr.QuicError
+
 		validatingReader := bytes.NewReader(packet.data)
 		for {
 			frame, err := s.frameParser.ParseNext(validatingReader, packet.encryptionLevel)
 			if err != nil {
-				if quicErr, ok := err.(*qerr.QuicError); ok && quicErr.IsIgnorable() {
-					ignorableError = quicErr
-					break
-				}
 				return err
 			}
 			if frame == nil {
-				if !parsedFirstFrame && !updateSrcConnID {
-					return qerr.ToIgnorableError(fmt.Errorf("Packet contains only padding frames."))
+				if !parsedFirstFrame && !updateDestConnID {
+					return fmt.Errorf("packet contains only padding frames")
 				}
 				break
 			}
 			parsedFirstFrame = true
 			if err := s.validateFrame(frame, packet.packetNumber, packet.encryptionLevel); err != nil {
-				if quicErr, ok := err.(*qerr.QuicError); ok {
-					if quicErr.IsIgnorable() {
-						ignorableError = quicErr
-						break
-					}
-					if quicErr.IsRecoverable() {
-						recoverableFrame = frame
-						continue
-					}
+				if quicErr, ok := err.(*qerr.QuicError); ok && quicErr.IsDelayedError() {
+					delayedErrorFrame = frame
+					delayedError = quicErr
+					continue
 				}
 				return err
 			}
 		}
 
-		if ignorableError != nil {
-			s.logger.Debugf("Ignoring packet with invalid frame(s).")
-			return ignorableError
-		}
-
-		if recoverableFrame != nil {
-			s.logger.Debugf("Handling recoverable frame %v", recoverableFrame)
-			return s.handleFrame(recoverableFrame, packet.packetNumber, packet.encryptionLevel)
+		if delayedErrorFrame != nil {
+			if err := s.handleFrame(delayedErrorFrame, packet.packetNumber, packet.encryptionLevel); err != nil {
+				return err
+			}
+			return delayedError
 		}
 	}
 
@@ -867,39 +885,22 @@ func (s *session) handleUnpackedPacket(packet *unpackedPacket, rcvTime time.Time
 		})
 	}
 
-	// If mitigation is turned on, don't register first packet if a frame is ignored or recoverable
-	if s.mitigationOn(packet.encryptionLevel) {
-		s.receivedFirstPacket = true
-	}
-
-	if updateSrcConnID {
-		s.logger.Debugf("Received first packet. Switching destination connection ID to: %s", packet.hdr.SrcConnectionID)
-		s.destConnID = packet.hdr.SrcConnectionID
-		s.packer.ChangeDestConnectionID(s.destConnID)
-	}
-
 	s.receivedPacketHandler.ReceivedPacket(packet.packetNumber, packet.encryptionLevel, rcvTime, isAckEliciting)
 	return nil
 }
 
 // validateFrame returns an error, should only be called at encLevel Initial or Handshake
 func (s *session) validateFrame(f wire.Frame, pn protocol.PacketNumber, encLevel protocol.EncryptionLevel) error {
-	var err error
 	switch frame := f.(type) {
 	case *wire.AckFrame:
-		err = s.validateAckFrame(frame, pn, encLevel)
+		return s.validateAckFrame(frame, pn, encLevel)
 	case *wire.ConnectionCloseFrame:
-		return qerr.ToRecoverableError(fmt.Errorf("CONNECTION_CLOSE"))
+		return qerr.ToDelayedError(fmt.Errorf("CONNECTION_CLOSE"))
 	case *wire.CryptoFrame:
-		err = nil // for now, allow all crypto frames to be processed
+		return nil // for now, allow all crypto frames to be processed
 	default: // only ACK, CRYPTO, and CONNECTION_CLOSE are allowed at Initial and Handshake
-		err = fmt.Errorf("unexpected frame type: %s", reflect.ValueOf(&frame).Elem().Type().Name())
+		return fmt.Errorf("unexpected frame type: %s", reflect.ValueOf(&frame).Elem().Type().Name())
 	}
-
-	if err != nil {
-		err = qerr.ToIgnorableError(err)
-	}
-	return err
 }
 
 func (s *session) handleFrame(f wire.Frame, pn protocol.PacketNumber, encLevel protocol.EncryptionLevel) error {
@@ -955,33 +956,15 @@ func (s *session) handlePacket(p *receivedPacket) {
 	}
 }
 
-func (s *session) handlePacketAfterClosed(p *receivedPacket) {
-	s.packetsReceivedAfterClose++
-	if s.connectionClosePacket == nil {
-		return
-	}
-	// exponential backoff
-	// only send a CONNECTION_CLOSE for the 1st, 2nd, 4th, 8th, 16th, ... packet arriving
-	for n := s.packetsReceivedAfterClose; n > 1; n = n / 2 {
-		if n%2 != 0 {
-			return
-		}
-	}
-	s.logger.Debugf("Received %d packets after sending CONNECTION_CLOSE. Retransmitting.", s.packetsReceivedAfterClose)
-	if err := s.conn.Write(s.connectionClosePacket.raw); err != nil {
-		s.logger.Debugf("Error retransmitting CONNECTION_CLOSE: %s", err)
-	}
-}
-
 func (s *session) mitigationOn(encLevel protocol.EncryptionLevel) bool {
-	return s.config.AttackTimeout > 0 && !s.handshakeComplete && !s.closed.Get() && encLevel != protocol.Encryption1RTT
+	return s.config.AttackTimeout > 0 && !s.handshakeComplete && encLevel != protocol.Encryption1RTT
 }
 
 // MaybeRecover runs fail(err) immediately if injection attack mitigation is turned off,
 // or after AttackTimeout elapses if no packets are received
 func (s *session) maybeRecover(fail func(error), err error) {
 	quicErr := qerr.ToAttackTimeoutError(err)
-	s.recoverChan <- recoverError{err: quicErr, fail: fail, rcvTime: time.Now()}
+	s.delayedChan <- delayedError{err: quicErr, fail: fail, rcvTime: time.Now()}
 }
 
 func (s *session) handleConnectionCloseFrame(frame *wire.ConnectionCloseFrame) {

@@ -1782,7 +1782,6 @@ var _ = Describe("Client Session", func() {
 		// the connection to immediately break down
 		It("fails on Initial-level ACK for unsent packet with mitigation off", func() {
 			sess.config.AttackTimeout = mitigationOff
-			sessionRunner.EXPECT().Retire(gomock.Any())
 			ackFrame := testutils.ComposeAckFrame(0, 0)
 			initialPacket := testutils.ComposeInitialPacket(sess.destConnID, sess.srcConnID, sess.version, sess.destConnID, []wire.Frame{ackFrame})
 			Expect(sess.handlePacketImpl(wrapPacket(initialPacket))).To(BeFalse())
@@ -1798,7 +1797,7 @@ var _ = Describe("Client Session", func() {
 
 		It("fails on Initial-level unparseable frames with mitigation off", func() {
 			sess.config.AttackTimeout = mitigationOff
-			sessionRunner.EXPECT().Retire(gomock.Any())
+			// sessionRunner.EXPECT().Retire(gomock.Any())
 			payload := make([]byte, protocol.MinInitialPacketSize)
 			payload[0] = byte(31)
 			initialPacket := testutils.ComposeInitialByPayload(sess.destConnID, sess.srcConnID, sess.version, sess.destConnID, payload)
@@ -1814,9 +1813,8 @@ var _ = Describe("Client Session", func() {
 		// Illustrates that an injected Initial with a CONNECTION_CLOSE frame causes
 		// the connection to immediately break down
 		It("fails on Initial-level CONNECTION_CLOSE frame with mitigation off", func() {
-			sessionRunner.EXPECT().ReplaceWithClosed(gomock.Any(), gomock.Any())
 			sess.config.AttackTimeout = mitigationOff
-			sessionRunner.EXPECT().Remove(gomock.Any())
+			sessionRunner.EXPECT().ReplaceWithClosed(gomock.Any(), gomock.Any())
 			connCloseFrame := testutils.ComposeConnCloseFrame()
 			initialPacket := testutils.ComposeInitialPacket(sess.destConnID, sess.srcConnID, sess.version, sess.destConnID, []wire.Frame{connCloseFrame})
 			Expect(sess.handlePacketImpl(wrapPacket(initialPacket))).To(BeTrue())
@@ -1849,9 +1847,9 @@ var _ = Describe("Client Session", func() {
 
 		It("times out on Initial-level CONNECTION_CLOSE frame with mitigation on if no packets received", func() {
 			packer.EXPECT().PackPacket().AnyTimes()
+			sessionRunner.EXPECT().ReplaceWithClosed(gomock.Any(), gomock.Any())
 			sess.config.AttackTimeout = mitigationOn
 			sess.perspective = protocol.PerspectiveServer
-			sessionRunner.EXPECT().Remove(gomock.Any())
 			cryptoSetup.EXPECT().Close()
 			done := make(chan struct{})
 			go func() {
