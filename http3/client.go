@@ -179,6 +179,12 @@ func (c *client) doRequest(req *http.Request, str quic.Stream) (*http.Response, 
 		case <-reqDone:
 		}
 	}()
+	noCloseReqDone := false
+	defer func() {
+		if !noCloseReqDone {
+			close(reqDone)
+		}
+	}()
 
 	var requestGzip bool
 	if !c.opts.DisableCompression && req.Method != "HEAD" && req.Header.Get("Accept-Encoding") == "" && req.Header.Get("Range") == "" {
@@ -227,6 +233,7 @@ func (c *client) doRequest(req *http.Request, str quic.Stream) (*http.Response, 
 			res.Header.Add(hf.Name, hf.Value)
 		}
 	}
+	noCloseReqDone = true
 	respBody := newResponseBody(str, reqDone)
 	if requestGzip && res.Header.Get("Content-Encoding") == "gzip" {
 		res.Header.Del("Content-Encoding")
