@@ -12,7 +12,7 @@ fi
 export GO111MODULE="off"
 
 ## Install fuzzit
-wget -q -O fuzzit https://github.com/fuzzitdev/fuzzit/releases/download/v2.4.23/fuzzit_Linux_x86_64
+wget -q -O fuzzit https://github.com/fuzzitdev/fuzzit/releases/download/v2.4.46/fuzzit_Linux_x86_64
 chmod a+x fuzzit
 
 ## Install go-fuzz
