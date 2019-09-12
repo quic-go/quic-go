@@ -228,7 +228,8 @@ type Config struct {
 	// against injection attacks. If the timeout is exceeded, the connection is closed.
 	// This timeout should be longer than any reasonable round trip time, but excessively
 	// long timeouts will delay reporting of rejected connections.
-	// If this value is zero or negative, mitigation will be turned off.
+	// If this value is zero, the default mitigation behavior will be used (currently off).
+	// If this value is negative, mitigation will be disabled.
 	AttackTimeout time.Duration
 	// AcceptToken determines if a Token is accepted.
 	// It is called with token = nil if the client didn't send a token.

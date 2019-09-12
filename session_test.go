@@ -348,7 +348,7 @@ var _ = Describe("Session", func() {
 		It("handles CONNECTION_CLOSE frames, with a transport error code", func() {
 			testErr := qerr.Error(qerr.StreamLimitError, "foobar")
 			if sess.mitigationOn(protocol.EncryptionUnspecified) {
-				packer.EXPECT().PackPacket().AnyTimes() // hopefully delete this, not sure why its needed
+				packer.EXPECT().PackPacket().AnyTimes()
 				testErr = qerr.ToAttackTimeoutError(testErr)
 			}
 			streamManager.EXPECT().CloseWithError(testErr)
@@ -372,7 +372,7 @@ var _ = Describe("Session", func() {
 		It("handles CONNECTION_CLOSE frames, with an application error code", func() {
 			testErr := qerr.ApplicationError(0x1337, "foobar")
 			if sess.mitigationOn(protocol.EncryptionUnspecified) {
-				packer.EXPECT().PackPacket().AnyTimes() // hopefully delete this
+				packer.EXPECT().PackPacket().AnyTimes()
 				testErr = qerr.ToAttackTimeoutError(testErr)
 			}
 			streamManager.EXPECT().CloseWithError(testErr)
@@ -1797,17 +1797,18 @@ var _ = Describe("Client Session", func() {
 
 		It("fails on Initial-level unparseable frames with mitigation off", func() {
 			sess.config.AttackTimeout = mitigationOff
-			// sessionRunner.EXPECT().Retire(gomock.Any())
 			payload := make([]byte, protocol.MinInitialPacketSize)
 			payload[0] = byte(31)
 			initialPacket := testutils.ComposeInitialByPayload(sess.destConnID, sess.srcConnID, sess.version, sess.destConnID, payload)
 			Expect(sess.handlePacketImpl(wrapPacket(initialPacket))).To(BeFalse())
+			Eventually(sess.closeChan).Should(Receive())
 		})
 
 		It("ignores Initial-level empty packets with mitigation on", func() {
 			sess.config.AttackTimeout = mitigationOn
 			initialPacket := testutils.ComposeInitialByPayload(sess.destConnID, sess.srcConnID, sess.version, sess.destConnID, nil)
 			Expect(sess.handlePacketImpl(wrapPacket(initialPacket))).To(BeFalse())
+			Consistently(sess.closeChan).ShouldNot(Receive())
 		})
 
 		// Illustrates that an injected Initial with a CONNECTION_CLOSE frame causes

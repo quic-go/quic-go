@@ -242,7 +242,7 @@ func populateServerConfig(config *Config) *Config {
 	if config.IdleTimeout != 0 {
 		idleTimeout = config.IdleTimeout
 	}
-	// if attackTimeout is 0, set to DefaultAttackTimeout, if negative set to 0 (no timeout)
+	// if attackTimeout is 0, set to DefaultAttackTimeout, if negative set to 0 (mitigation off)
 	attackTimeout := protocol.DefaultAttackTimeout
 	if config.AttackTimeout > 0 {
 		attackTimeout = config.AttackTimeout
