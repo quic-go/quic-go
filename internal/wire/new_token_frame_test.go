@@ -24,6 +24,14 @@ var _ = Describe("NEW_TOKEN frame", func() {
 			Expect(b.Len()).To(BeZero())
 		})
 
+		It("rejects empty tokens", func() {
+			data := []byte{0x7}
+			data = append(data, encodeVarInt(uint64(0))...)
+			b := bytes.NewReader(data)
+			_, err := parseNewTokenFrame(b, protocol.VersionWhatever)
+			Expect(err).To(MatchError("Token must not be empty."))
+		})
+
 		It("errors on EOFs", func() {
 			token := "Lorem ipsum dolor sit amet, consectetur adipiscing elit"
 			data := []byte{0x7}

@@ -295,7 +295,7 @@ var _ = Describe("Frame parsing", func() {
 			&ResetStreamFrame{},
 			&StopSendingFrame{},
 			&CryptoFrame{},
-			&NewTokenFrame{},
+			&NewTokenFrame{Token: []byte("lorem ipsum")},
 			&StreamFrame{Data: []byte("foobar")},
 			&MaxDataFrame{},
 			&MaxStreamDataFrame{},
