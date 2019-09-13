@@ -17,7 +17,7 @@ type ConnectionCloseFrame struct {
 	ReasonPhrase       string
 }
 
-func parseConnectionCloseFrame(r *bytes.Reader, version protocol.VersionNumber) (*ConnectionCloseFrame, error) {
+func parseConnectionCloseFrame(r *bytes.Reader, _ protocol.VersionNumber) (*ConnectionCloseFrame, error) {
 	typeByte, err := r.ReadByte()
 	if err != nil {
 		return nil, err

@@ -64,7 +64,7 @@ func (s *closedLocalSession) handlePacket(p *receivedPacket) {
 	}
 }
 
-func (s *closedLocalSession) handlePacketImpl(p *receivedPacket) {
+func (s *closedLocalSession) handlePacketImpl(_ *receivedPacket) {
 	s.counter++
 	// exponential backoff
 	// only send a CONNECTION_CLOSE for the 1st, 2nd, 4th, 8th, 16th, ... packet arriving

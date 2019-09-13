@@ -250,9 +250,7 @@ var newSession = func(
 	)
 	s.cryptoStreamManager = newCryptoStreamManager(cs, initialStream, handshakeStream, oneRTTStream)
 
-	if err := s.postSetup(); err != nil {
-		return nil, err
-	}
+	s.postSetup()
 	s.unpacker = newPacketUnpacker(cs, s.version)
 	return s, nil
 }
@@ -345,7 +343,8 @@ var newClientSession = func(
 			s.packer.SetToken(token.data)
 		}
 	}
-	return s, s.postSetup()
+	s.postSetup()
+	return s, nil
 }
 
 func (s *session) preSetup() {
@@ -369,7 +368,7 @@ func (s *session) preSetup() {
 	}
 }
 
-func (s *session) postSetup() error {
+func (s *session) postSetup() {
 	s.receivedPackets = make(chan *receivedPacket, protocol.MaxSessionUnprocessedPackets)
 	s.closeChan = make(chan closeError, 1)
 	s.sendingScheduled = make(chan struct{}, 1)
@@ -383,7 +382,6 @@ func (s *session) postSetup() error {
 	s.sessionCreationTime = now
 
 	s.windowUpdateQueue = newWindowUpdateQueue(s.streamsMap, s.connFlowController, s.framer.QueueControlFrame)
-	return nil
 }
 
 // run the session main loop
@@ -608,7 +606,7 @@ func (s *session) handleSinglePacket(p *receivedPacket, hdr *wire.Header) bool /
 	}()
 
 	if hdr.Type == protocol.PacketTypeRetry {
-		return s.handleRetryPacket(p, hdr)
+		return s.handleRetryPacket(hdr)
 	}
 
 	// The server can change the source connection ID with the first Handshake packet.
@@ -654,7 +652,7 @@ func (s *session) handleSinglePacket(p *receivedPacket, hdr *wire.Header) bool /
 	return true
 }
 
-func (s *session) handleRetryPacket(p *receivedPacket, hdr *wire.Header) bool /* was this a valid Retry */ {
+func (s *session) handleRetryPacket(hdr *wire.Header) bool /* was this a valid Retry */ {
 	if s.perspective == protocol.PerspectiveServer {
 		s.logger.Debugf("Ignoring Retry.")
 		return false
@@ -761,7 +759,7 @@ func (s *session) handleFrame(f wire.Frame, pn protocol.PacketNumber, encLevel p
 	case *wire.CryptoFrame:
 		err = s.handleCryptoFrame(frame, encLevel)
 	case *wire.StreamFrame:
-		err = s.handleStreamFrame(frame, encLevel)
+		err = s.handleStreamFrame(frame)
 	case *wire.AckFrame:
 		err = s.handleAckFrame(frame, pn, encLevel)
 	case *wire.ConnectionCloseFrame:
@@ -829,7 +827,7 @@ func (s *session) handleCryptoFrame(frame *wire.CryptoFrame, encLevel protocol.E
 	return nil
 }
 
-func (s *session) handleStreamFrame(frame *wire.StreamFrame, encLevel protocol.EncryptionLevel) error {
+func (s *session) handleStreamFrame(frame *wire.StreamFrame) error {
 	str, err := s.streamsMap.GetOrOpenReceiveStream(frame.StreamID)
 	if err != nil {
 		return err

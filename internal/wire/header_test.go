@@ -14,7 +14,7 @@ var _ = Describe("Header Parsing", func() {
 	appendVersion := func(data []byte, v protocol.VersionNumber) []byte {
 		offset := len(data)
 		data = append(data, []byte{0, 0, 0, 0}...)
-		binary.BigEndian.PutUint32(data[offset:], uint32(versionIETFFrames))
+		binary.BigEndian.PutUint32(data[offset:], uint32(v))
 		return data
 	}
 

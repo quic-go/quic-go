@@ -275,10 +275,7 @@ func (p *packetPacker) PackPacket() (*packedPacket, error) {
 	headerLen := header.GetLength(p.version)
 
 	maxSize := p.maxPacketSize - protocol.ByteCount(sealer.Overhead()) - headerLen
-	payload, err := p.composeNextPacket(maxSize)
-	if err != nil {
-		return nil, err
-	}
+	payload := p.composeNextPacket(maxSize)
 
 	// check if we have anything to send
 	if len(payload.frames) == 0 && payload.ack == nil {
@@ -372,7 +369,7 @@ func (p *packetPacker) maybePackCryptoPacket() (*packedPacket, error) {
 	return p.writeAndSealPacket(hdr, payload, encLevel, sealer)
 }
 
-func (p *packetPacker) composeNextPacket(maxFrameSize protocol.ByteCount) (payload, error) {
+func (p *packetPacker) composeNextPacket(maxFrameSize protocol.ByteCount) payload {
 	var payload payload
 
 	if ack := p.acks.GetAckFrame(protocol.Encryption1RTT); ack != nil {
@@ -399,7 +396,7 @@ func (p *packetPacker) composeNextPacket(maxFrameSize protocol.ByteCount) (paylo
 
 	payload.frames, lengthAdded = p.framer.AppendStreamFrames(payload.frames, maxFrameSize-payload.length)
 	payload.length += lengthAdded
-	return payload, nil
+	return payload
 }
 
 func (p *packetPacker) getSealerAndHeader(encLevel protocol.EncryptionLevel) (sealer, *wire.ExtendedHeader, error) {

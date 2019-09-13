@@ -21,7 +21,7 @@ type StreamFrame struct {
 	fromPool bool
 }
 
-func parseStreamFrame(r *bytes.Reader, version protocol.VersionNumber) (*StreamFrame, error) {
+func parseStreamFrame(r *bytes.Reader, _ protocol.VersionNumber) (*StreamFrame, error) {
 	typeByte, err := r.ReadByte()
 	if err != nil {
 		return nil, err

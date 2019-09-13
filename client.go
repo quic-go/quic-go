@@ -356,7 +356,7 @@ func (c *client) handleVersionNegotiationPacket(p *receivedPacket) {
 	c.initialPacketNumber = c.session.closeForRecreating()
 }
 
-func (c *client) createNewTLSSession(version protocol.VersionNumber) error {
+func (c *client) createNewTLSSession(_ protocol.VersionNumber) error {
 	params := &handshake.TransportParameters{
 		InitialMaxStreamDataBidiRemote: protocol.InitialMaxStreamData,
 		InitialMaxStreamDataBidiLocal:  protocol.InitialMaxStreamData,
