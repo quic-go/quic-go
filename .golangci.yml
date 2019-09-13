@@ -19,6 +19,7 @@ linters:
     - prealloc
     - scopelint
     - staticcheck
+    - stylecheck
     - structcheck
     - unconvert
     - unparam

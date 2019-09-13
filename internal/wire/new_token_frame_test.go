@@ -29,7 +29,7 @@ var _ = Describe("NEW_TOKEN frame", func() {
 			data = append(data, encodeVarInt(uint64(0))...)
 			b := bytes.NewReader(data)
 			_, err := parseNewTokenFrame(b, protocol.VersionWhatever)
-			Expect(err).To(MatchError("Token must not be empty."))
+			Expect(err).To(MatchError("token must not be empty"))
 		})
 
 		It("errors on EOFs", func() {

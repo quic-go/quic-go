@@ -9,7 +9,9 @@ import (
 
 	"github.com/lucas-clemente/quic-go/internal/utils"
 
+	//nolint:stylecheck
 	. "github.com/onsi/ginkgo"
+	//nolint:stylecheck
 	. "github.com/onsi/gomega"
 )
 

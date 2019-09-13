@@ -26,7 +26,7 @@ func parseNewTokenFrame(r *bytes.Reader, _ protocol.VersionNumber) (*NewTokenFra
 		return nil, io.EOF
 	}
 	if tokenLen == 0 {
-		return nil, errors.New("Token must not be empty.")
+		return nil, errors.New("token must not be empty")
 	}
 	token := make([]byte, int(tokenLen))
 	if _, err := io.ReadFull(r, token); err != nil {

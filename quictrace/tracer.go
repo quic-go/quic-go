@@ -70,7 +70,7 @@ func (t *tracer) Emit(connID protocol.ConnectionID) ([]byte, error) {
 func (t *tracer) emitByConnIDAsString(connID string) ([]byte, error) {
 	events, ok := t.events[connID]
 	if !ok {
-		return nil, fmt.Errorf("No trace found for connection ID %s", connID)
+		return nil, fmt.Errorf("no trace found for connection ID %s", connID)
 	}
 	trace := &pb.Trace{
 		DestinationConnectionId: []byte{1, 2, 3, 4, 5, 6, 7, 8},

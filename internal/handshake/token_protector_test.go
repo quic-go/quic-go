@@ -34,6 +34,6 @@ var _ = Describe("Token Protector", func() {
 
 	It("errors when decoding too short tokens", func() {
 		_, err := tp.DecodeToken([]byte("foobar"))
-		Expect(err).To(MatchError("Token too short: 6"))
+		Expect(err).To(MatchError("token too short: 6"))
 	})
 })

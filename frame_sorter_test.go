@@ -555,7 +555,7 @@ var _ = Describe("frame sorter", func() {
 					}
 					Expect(s.gaps.Len()).To(Equal(protocol.MaxStreamFrameSorterGaps))
 					err := s.Push([]byte("foobar"), protocol.ByteCount(protocol.MaxStreamFrameSorterGaps*7)+100, nil)
-					Expect(err).To(MatchError("Too many gaps in received data"))
+					Expect(err).To(MatchError("too many gaps in received data"))
 				})
 			})
 		})
