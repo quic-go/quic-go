@@ -44,9 +44,6 @@ type packedPacket struct {
 }
 
 func (p *packedPacket) EncryptionLevel() protocol.EncryptionLevel {
-	if p.header == nil {
-		return protocol.EncryptionUnspecified
-	}
 	if !p.header.IsLongHeader {
 		return protocol.Encryption1RTT
 	}

@@ -1841,7 +1841,7 @@ var _ = Describe("Client Session", func() {
 			}()
 			connCloseFrame := testutils.ComposeConnCloseFrame()
 			initialPacket := testutils.ComposeInitialPacket(sess.destConnID, sess.srcConnID, sess.version, sess.destConnID, []wire.Frame{connCloseFrame})
-			Expect(sess.handlePacketImpl(wrapPacket(initialPacket))).To(BeTrue())
+			Expect(sess.handlePacketImpl(wrapPacket(initialPacket))).To(BeFalse())
 			sess.lastPacketReceivedTime = time.Now().Add(mitigationOn / 2)
 			Eventually(done).Should(BeClosed())
 		})
@@ -1850,7 +1850,6 @@ var _ = Describe("Client Session", func() {
 			packer.EXPECT().PackPacket().AnyTimes()
 			sessionRunner.EXPECT().ReplaceWithClosed(gomock.Any(), gomock.Any())
 			sess.config.AttackTimeout = mitigationOn
-			sess.perspective = protocol.PerspectiveServer
 			cryptoSetup.EXPECT().Close()
 			done := make(chan struct{})
 			go func() {
@@ -1865,8 +1864,21 @@ var _ = Describe("Client Session", func() {
 			connCloseFrame := testutils.ComposeConnCloseFrame()
 			initialPacket := testutils.ComposeInitialPacket(sess.destConnID, sess.srcConnID, sess.version, sess.destConnID, []wire.Frame{connCloseFrame})
 			sess.lastPacketReceivedTime = time.Now()
-			Expect(sess.handlePacketImpl(wrapPacket(initialPacket))).To(BeTrue())
+			Expect(sess.handlePacketImpl(wrapPacket(initialPacket))).To(BeFalse())
 			Eventually(done).Should(BeClosed())
+		})
+
+		It("accepts packets which use original conn id, after bad packet with different source id with mitigation on", func() {
+			sess.config.AttackTimeout = mitigationOn
+			newConnID := protocol.ConnectionID{0xde, 0xad, 0xbe, 0xef}
+			packer.EXPECT().ChangeDestConnectionID(newConnID)
+			packer.EXPECT().ChangeDestConnectionID(sess.destConnID) // should restore state
+
+			ackFrame := testutils.ComposeAckFrame(0, 0)
+			badPacket := testutils.ComposeInitialPacket(newConnID, sess.destConnID, sess.version, sess.destConnID, []wire.Frame{ackFrame})
+			sess.handlePacketImpl(wrapPacket(badPacket))
+			goodPacket := testutils.ComposeInitialPacket(sess.destConnID, sess.srcConnID, sess.version, sess.destConnID, nil)
+			Expect(sess.handlePacketImpl(wrapPacket(goodPacket))).To(BeTrue())
 		})
 
 		// Illustrates that attacker who injects a Retry packet and changes the connection ID
@@ -1880,6 +1892,22 @@ var _ = Describe("Client Session", func() {
 			sess.handlePacketImpl(wrapPacket(testutils.ComposeRetryPacket(newSrcConnID, sess.destConnID, sess.destConnID, []byte("foobar"), sess.version)))
 			initialPacket := testutils.ComposeInitialPacket(sess.destConnID, sess.srcConnID, sess.version, sess.destConnID, nil)
 			Expect(sess.handlePacketImpl(wrapPacket(initialPacket))).To(BeFalse())
+		})
+
+		It("accepts packet with only CRYPTO and padding frames with mitigation on", func() {
+			sess.config.AttackTimeout = mitigationOn
+			cryptoFrame1 := testutils.ComposeCryptoFrame(42, 5)
+			cryptoFrame2 := testutils.ComposeCryptoFrame(2, 10)
+			packet := testutils.ComposeInitialPacket(sess.destConnID, sess.srcConnID, sess.version, sess.destConnID, []wire.Frame{cryptoFrame1, cryptoFrame2})
+			Expect(sess.handlePacketImpl(wrapPacket(packet))).To(BeTrue())
+		})
+
+		It("ignores packet with bad frames with mitigation on", func() {
+			sess.config.AttackTimeout = mitigationOn
+			okFrame := testutils.ComposeCryptoFrame(2, 10)
+			badFrame := &wire.PingFrame{}
+			packet := testutils.ComposeInitialPacket(sess.destConnID, sess.srcConnID, sess.version, sess.destConnID, []wire.Frame{okFrame, badFrame})
+			Expect(sess.handlePacketImpl(wrapPacket(packet))).To(BeFalse())
 		})
 
 	})

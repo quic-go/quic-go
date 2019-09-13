@@ -55,7 +55,7 @@ type quicSession interface {
 	destroy(error)
 	closeForRecreating() protocol.PacketNumber
 	closeRemote(error)
-	maybeRecover(func(error), error)
+	registerInsecureClose(*closeError)
 }
 
 type sessionRunner interface {

@@ -88,7 +88,6 @@ type closeError struct {
 	err       error
 	remote    bool
 	sendClose bool
-	shutdown  func(error)
 	insecure  bool
 }
 
@@ -578,7 +577,7 @@ func (s *session) handleInsecureCloseError(now time.Time, err closeError) {
 	s.logger.Debugf("Received a suspicious packet with error %v. Will recover if a good packet is received before timeout.", err.err)
 	if s.attackTimerStart.IsZero() {
 		s.attackTimerStart = now
-		s.logger.Debugf("Starting attack timer after suspicious packet received. Timer start: %v", now)
+		s.logger.Debugf("Starting attack timer after suspicious packet received.")
 	} else {
 		s.logger.Debugf("Attack timer already set, keep waiting for good packet.")
 	}
@@ -594,10 +593,11 @@ func (s *session) checkAttackTimer(now time.Time, err closeError) {
 		}
 		if now.Sub(s.attackTimerStart) >= s.config.AttackTimeout {
 			s.logger.Debugf("No network activity after a suspicious packet was received.")
-			go err.shutdown(err.err)
+			err.insecure = false
+			err.err = qerr.ToAttackTimeoutError(err.err)
+			s.closeChan <- err
 			return
 		}
-		s.logger.Debugf("Attack possible, but not enough time has passed. Attack timeout is %v, and %v have passed.", s.config.AttackTimeout, now.Sub(s.attackTimerStart))
 	}
 }
 
@@ -705,9 +705,6 @@ func (s *session) handleSinglePacket(p *receivedPacket, hdr *wire.Header) (proce
 		if mitigationOn {
 			s.logger.Debugf("Ignoring or trying to recover from suspicious/invalid packet, rolling back relevant state.")
 			s.restoreState(prevState)
-			if qErr, ok := err.(*qerr.QuicError); ok && qErr.IsInsecureCloseError() {
-				return true
-			}
 		} else {
 			s.closeLocal(err)
 		}
@@ -848,9 +845,8 @@ func (s *session) handleUnpackedPacket(packet *unpackedPacket, rcvTime time.Time
 }
 
 func (s *session) validatePacket(packet *unpackedPacket, updateDestConnID bool) error {
-	var parsedFirstFrame bool
 	var insecureCloseFrame wire.Frame
-	var insecureCloseError *qerr.QuicError
+	var insecureCloseError error
 
 	validatingReader := bytes.NewReader(packet.data)
 	for {
@@ -859,16 +855,12 @@ func (s *session) validatePacket(packet *unpackedPacket, updateDestConnID bool) 
 			return err
 		}
 		if frame == nil {
-			if !parsedFirstFrame && !updateDestConnID {
-				return fmt.Errorf("packet contains only padding frames")
-			}
 			break
 		}
-		parsedFirstFrame = true
-		if err := s.validateFrame(frame, packet.packetNumber, packet.encryptionLevel); err != nil {
-			if quicErr, ok := err.(*qerr.QuicError); ok && quicErr.IsInsecureCloseError() {
+		if isInsecureClose, err := s.validateFrame(frame, packet.packetNumber, packet.encryptionLevel); err != nil {
+			if isInsecureClose {
 				insecureCloseFrame = frame
-				insecureCloseError = quicErr
+				insecureCloseError = err
 				continue
 			}
 			return err
@@ -884,17 +876,17 @@ func (s *session) validatePacket(packet *unpackedPacket, updateDestConnID bool) 
 	return nil
 }
 
-// validateFrame returns an error, should only be called at encLevel Initial or Handshake
-func (s *session) validateFrame(f wire.Frame, pn protocol.PacketNumber, encLevel protocol.EncryptionLevel) error {
+// should only be called at encLevel Initial or Handshake
+func (s *session) validateFrame(f wire.Frame, pn protocol.PacketNumber, encLevel protocol.EncryptionLevel) (bool /*is insecure close*/, error) {
 	switch frame := f.(type) {
 	case *wire.AckFrame:
-		return s.validateAckFrame(frame, pn, encLevel)
+		return false, s.validateAckFrame(frame, pn, encLevel)
 	case *wire.ConnectionCloseFrame:
-		return qerr.ToInsecureCloseError(fmt.Errorf("CONNECTION_CLOSE"))
+		return true, fmt.Errorf("CONNECTION_CLOSE")
 	case *wire.CryptoFrame:
-		return nil // for now, allow all crypto frames to be processed
+		return false, nil // for now, allow all crypto frames to be processed
 	default: // only ACK, CRYPTO, and CONNECTION_CLOSE are allowed at Initial and Handshake
-		return fmt.Errorf("unexpected frame type: %s", reflect.ValueOf(&frame).Elem().Type().Name())
+		return false, fmt.Errorf("unexpected frame type: %s", reflect.ValueOf(&frame).Elem().Type().Name())
 	}
 }
 
@@ -955,11 +947,9 @@ func (s *session) mitigationOn(encLevel protocol.EncryptionLevel) bool {
 	return s.config.AttackTimeout > 0 && !s.handshakeComplete && encLevel != protocol.Encryption1RTT
 }
 
-// maybeRecover runs shutdown(err) after AttackTimeout elapses if no packets are received
-// should only be called when injection mitigation is turned on
-func (s *session) maybeRecover(shutdown func(error), err error) {
-	quicErr := qerr.ToAttackTimeoutError(err)
-	s.closeChan <- closeError{err: quicErr, insecure: true, shutdown: shutdown}
+func (s *session) registerInsecureClose(closeErr *closeError) {
+	closeErr.insecure = true
+	s.closeChan <- *closeErr
 }
 
 func (s *session) handleConnectionCloseFrame(frame *wire.ConnectionCloseFrame) {
@@ -969,13 +959,10 @@ func (s *session) handleConnectionCloseFrame(frame *wire.ConnectionCloseFrame) {
 	} else {
 		e = qerr.Error(frame.ErrorCode, frame.ReasonPhrase)
 	}
-	shutdown := func(e error) {
-		s.closeRemote(e)
-	}
 	if s.mitigationOn(protocol.EncryptionUnspecified) {
-		s.maybeRecover(shutdown, e)
+		s.registerInsecureClose(&closeError{err: e, remote: true})
 	} else {
-		shutdown(e)
+		s.closeRemote(e)
 	}
 }
 
@@ -1117,6 +1104,13 @@ func (s *session) closeForRecreating() protocol.PacketNumber {
 	return nextPN
 }
 
+func (s *session) immediateCloseRemote(e error) {
+	s.closeOnce.Do(func() {
+		s.logger.Errorf("Peer closed session with error: %s", e)
+		s.sessionRunner.ReplaceWithClosed(s.srcConnID, newClosedRemoteSession(s.perspective))
+	})
+}
+
 func (s *session) closeRemote(e error) {
 	s.closeOnce.Do(func() {
 		s.logger.Errorf("Peer closed session with error: %s", e)
@@ -1148,6 +1142,10 @@ func (s *session) handleCloseError(closeErr closeError) {
 	var ok bool
 	if quicErr, ok = closeErr.err.(*qerr.QuicError); !ok {
 		quicErr = qerr.ToQuicError(closeErr.err)
+	}
+
+	if quicErr.IsAttackTimeout() && closeErr.remote {
+		s.immediateCloseRemote(closeErr.err)
 	}
 
 	s.streamsMap.CloseWithError(quicErr)

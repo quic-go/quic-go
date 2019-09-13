@@ -276,6 +276,7 @@ var _ = Describe("Handshake tests", func() {
 			Expect(err.(*qerr.QuicError).ErrorCode).To(Equal(qerr.ServerBusy))
 		})
 
+		// TODO (tatianab): this test is flaky when mitigation is on
 		It("removes closed connections from the accept queue", func() {
 			firstSess, err := dial()
 			Expect(err).ToNot(HaveOccurred())

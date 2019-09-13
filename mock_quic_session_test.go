@@ -317,16 +317,16 @@ func (mr *MockQuicSessionMockRecorder) handlePacket(arg0 interface{}) *gomock.Ca
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "handlePacket", reflect.TypeOf((*MockQuicSession)(nil).handlePacket), arg0)
 }
 
-// maybeRecover mocks base method
-func (m *MockQuicSession) maybeRecover(arg0 func(error), arg1 error) {
+// registerInsecureClose mocks base method
+func (m *MockQuicSession) registerInsecureClose(arg0 *closeError) {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "maybeRecover", arg0, arg1)
+	m.ctrl.Call(m, "registerInsecureClose", arg0)
 }
 
-// maybeRecover indicates an expected call of maybeRecover
-func (mr *MockQuicSessionMockRecorder) maybeRecover(arg0, arg1 interface{}) *gomock.Call {
+// registerInsecureClose indicates an expected call of registerInsecureClose
+func (mr *MockQuicSessionMockRecorder) registerInsecureClose(arg0 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "maybeRecover", reflect.TypeOf((*MockQuicSession)(nil).maybeRecover), arg0, arg1)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "registerInsecureClose", reflect.TypeOf((*MockQuicSession)(nil).registerInsecureClose), arg0)
 }
 
 // run mocks base method

@@ -11,7 +11,7 @@ type QuicError struct {
 	ErrorMessage       string
 	isTimeout          bool
 	isApplicationError bool
-	isInsecureClose    bool
+	isAttackTimeout    bool
 }
 
 var _ net.Error = &QuicError{}
@@ -74,17 +74,12 @@ func (e *QuicError) Temporary() bool {
 
 // Timeout says if this error is a timeout.
 func (e *QuicError) Timeout() bool {
-	return e.isTimeout && !e.isInsecureClose
+	return e.isTimeout
 }
 
 // IsAttackTimeout says if this error is an attack timeout error.
 func (e *QuicError) IsAttackTimeout() bool {
-	return e.isTimeout && e.isInsecureClose
-}
-
-// IsInsecureCloseError says if this error is an insecure close error
-func (e *QuicError) IsInsecureCloseError() bool {
-	return e.isInsecureClose
+	return e.isAttackTimeout
 }
 
 // ToQuicError converts an arbitrary error to a QuicError. It leaves QuicErrors
@@ -102,14 +97,6 @@ func ToQuicError(err error) *QuicError {
 // ToAttackTimeoutError converts an arbitrary error to an attack timeout error.
 func ToAttackTimeoutError(err error) *QuicError {
 	qErr := ToQuicError(err)
-	qErr.isTimeout = true
-	qErr.isInsecureClose = true
-	return qErr
-}
-
-// ToInsecureCloseError converts an arbitrary error to an insecure close error.
-func ToInsecureCloseError(err error) *QuicError {
-	qErr := ToQuicError(err)
-	qErr.isInsecureClose = true
+	qErr.isAttackTimeout = true
 	return qErr
 }

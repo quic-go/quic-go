@@ -614,7 +614,7 @@ var _ = Describe("Client", func() {
 				sess := NewMockQuicSession(mockCtrl)
 				sess.EXPECT().handlePacket(gomock.Any())
 				cl.session = sess
-				cl.config = &Config{}
+				cl.config = &Config{AttackTimeout: 0}
 				buf := &bytes.Buffer{}
 				Expect((&wire.ExtendedHeader{
 					Header: wire.Header{
@@ -703,7 +703,7 @@ var _ = Describe("Client", func() {
 			sess := NewMockQuicSession(mockCtrl)
 			sess.EXPECT().handlePacket(gomock.Any())
 			cl.session = sess
-			cl.config = &Config{}
+			cl.config = &Config{AttackTimeout: 0}
 			buf := &bytes.Buffer{}
 			Expect((&wire.ExtendedHeader{
 				Header: wire.Header{

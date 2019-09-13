@@ -437,14 +437,13 @@ var _ = Describe("MITM test", func() {
 
 						// times out, because client doesn't accept real retry packets from server because
 						// it has already accepted an initial.
-						// TODO: determine behavior when server does not send Retry packets
 						It("fails when mitigation is disabled", func() {
 							err := runTest(delayCb, dropCb, mitigationOff)
 							Expect(err).To(HaveOccurred())
 							Expect(err.(net.Error).Timeout()).To(BeTrue())
 						})
 
-						It("recovers when mitigation is enabled", func() {
+						PIt("recovers when mitigation is enabled", func() {
 							Expect(runTest(delayCb, dropCb, mitigationOn)).To(Succeed())
 						})
 					})
