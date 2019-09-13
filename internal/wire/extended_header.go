@@ -161,7 +161,6 @@ func (h *ExtendedHeader) writeLongHeader(b *bytes.Buffer, v protocol.VersionNumb
 	return h.writePacketNumber(b)
 }
 
-// TODO: add support for the key phase
 func (h *ExtendedHeader) writeShortHeader(b *bytes.Buffer, v protocol.VersionNumber) error {
 	typeByte := 0x40 | uint8(h.PacketNumberLen-1)
 	if h.KeyPhase == protocol.KeyPhaseOne {
