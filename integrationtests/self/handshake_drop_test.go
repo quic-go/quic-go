@@ -161,7 +161,7 @@ var _ = Describe("Handshake drop tests", func() {
 					app := a
 
 					Context(app.name, func() {
-						It(fmt.Sprintf("establishes a connection when the first packet is lost in %s direction", d), func() {
+						It(fmt.Sprintf("establishes a connection when the first packet is lost in %s direction", direction), func() {
 							var incoming, outgoing int32
 							startListenerAndProxy(func(d quicproxy.Direction, _ []byte) bool {
 								var p int32
@@ -176,7 +176,7 @@ var _ = Describe("Handshake drop tests", func() {
 							app.run(version)
 						})
 
-						It(fmt.Sprintf("establishes a connection when the second packet is lost in %s direction", d), func() {
+						It(fmt.Sprintf("establishes a connection when the second packet is lost in %s direction", direction), func() {
 							var incoming, outgoing int32
 							startListenerAndProxy(func(d quicproxy.Direction, _ []byte) bool {
 								var p int32
@@ -191,7 +191,7 @@ var _ = Describe("Handshake drop tests", func() {
 							app.run(version)
 						})
 
-						It(fmt.Sprintf("establishes a connection when 1/5 of the packets are lost in %s direction", d), func() {
+						It(fmt.Sprintf("establishes a connection when 1/5 of the packets are lost in %s direction", direction), func() {
 							startListenerAndProxy(func(d quicproxy.Direction, _ []byte) bool {
 								return d.Is(direction) && stochasticDropper(5)
 							}, version)
