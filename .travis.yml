@@ -39,7 +39,7 @@ before_install:
 script:
   - | 
     if [ ${TESTMODE} == "lint" ]; then
-      travis_retry curl -sfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s v1.15.0
+      travis_retry curl -sfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s v1.18.0
     fi
   - .travis/script.sh
 
