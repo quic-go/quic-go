@@ -46,19 +46,20 @@ var errUnsupportedVersion = errors.New("unsupported version")
 
 // The Header is the version independent part of the header
 type Header struct {
+	IsLongHeader bool
+	typeByte     byte
+	Type         protocol.PacketType
+
 	Version          protocol.VersionNumber
 	SrcConnectionID  protocol.ConnectionID
 	DestConnectionID protocol.ConnectionID
 
-	IsLongHeader bool
-	Type         protocol.PacketType
-	Length       protocol.ByteCount
+	Length protocol.ByteCount
 
 	Token                []byte
 	SupportedVersions    []protocol.VersionNumber // sent in a Version Negotiation Packet
 	OrigDestConnectionID protocol.ConnectionID    // sent in the Retry packet
 
-	typeByte  byte
 	parsedLen protocol.ByteCount // how many bytes were read while parsing this header
 }
 
