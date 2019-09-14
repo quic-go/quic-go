@@ -9,9 +9,27 @@ import (
 
 type connIDManager struct {
 	queue utils.NewConnectionIDList
+
+	queueControlFrame func(wire.Frame)
+}
+
+func newConnIDManager(queueControlFrame func(wire.Frame)) *connIDManager {
+	return &connIDManager{queueControlFrame: queueControlFrame}
 }
 
 func (h *connIDManager) Add(f *wire.NewConnectionIDFrame) error {
+	var next *utils.NewConnectionIDElement
+	for el := h.queue.Front(); el != nil; el = next {
+		if el.Value.SequenceNumber >= f.RetirePriorTo {
+			break
+		}
+		next = el.Next()
+		h.queueControlFrame(&wire.RetireConnectionIDFrame{
+			SequenceNumber: el.Value.SequenceNumber,
+		})
+		h.queue.Remove(el)
+	}
+
 	// insert a new element at the end
 	if h.queue.Len() == 0 || h.queue.Back().Value.SequenceNumber < f.SequenceNumber {
 		h.queue.PushBack(utils.NewConnectionID{

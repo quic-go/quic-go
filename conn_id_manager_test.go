@@ -8,10 +8,16 @@ import (
 )
 
 var _ = Describe("Connection ID Manager", func() {
-	var m *connIDManager
+	var (
+		m          *connIDManager
+		frameQueue []wire.Frame
+	)
 
 	BeforeEach(func() {
-		m = &connIDManager{}
+		frameQueue = nil
+		m = newConnIDManager(func(f wire.Frame) {
+			frameQueue = append(frameQueue, f)
+		})
 	})
 
 	get := func() (protocol.ConnectionID, *[16]byte) {
@@ -88,5 +94,27 @@ var _ = Describe("Connection ID Manager", func() {
 			ConnectionID:        protocol.ConnectionID{1, 2, 3, 4},
 			StatelessResetToken: [16]byte{0xe, 0xd, 0xc, 0xb, 0xa, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0},
 		})).To(MatchError("received conflicting stateless reset tokens for sequence number 42"))
+	})
+
+	It("retires connection IDs", func() {
+		Expect(m.Add(&wire.NewConnectionIDFrame{
+			SequenceNumber: 10,
+			ConnectionID:   protocol.ConnectionID{1, 2, 3, 4},
+		})).To(Succeed())
+		Expect(m.Add(&wire.NewConnectionIDFrame{
+			SequenceNumber: 13,
+			ConnectionID:   protocol.ConnectionID{2, 3, 4, 5},
+		})).To(Succeed())
+		Expect(frameQueue).To(BeEmpty())
+		Expect(m.Add(&wire.NewConnectionIDFrame{
+			RetirePriorTo:  14,
+			SequenceNumber: 17,
+			ConnectionID:   protocol.ConnectionID{3, 4, 5, 6},
+		})).To(Succeed())
+		Expect(frameQueue).To(HaveLen(2))
+		Expect(frameQueue[0].(*wire.RetireConnectionIDFrame).SequenceNumber).To(BeEquivalentTo(10))
+		Expect(frameQueue[1].(*wire.RetireConnectionIDFrame).SequenceNumber).To(BeEquivalentTo(13))
+		c, _ := get()
+		Expect(c).To(Equal(protocol.ConnectionID{3, 4, 5, 6}))
 	})
 })
