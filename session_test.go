@@ -302,6 +302,14 @@ var _ = Describe("Session", func() {
 			})
 		})
 
+		It("handles NEW_CONNECTION_ID frames", func() {
+			Expect(sess.handleFrame(&wire.NewConnectionIDFrame{
+				SequenceNumber: 10,
+				ConnectionID:   protocol.ConnectionID{1, 2, 3, 4},
+			}, 1, protocol.Encryption1RTT)).To(Succeed())
+			Expect(sess.connIDManager.queue.Front().Value.ConnectionID).To(Equal(protocol.ConnectionID{1, 2, 3, 4}))
+		})
+
 		It("handles PING frames", func() {
 			err := sess.handleFrame(&wire.PingFrame{}, 0, protocol.EncryptionUnspecified)
 			Expect(err).NotTo(HaveOccurred())
