@@ -133,6 +133,9 @@ const MinPacingDelay time.Duration = 100 * time.Microsecond
 // if no other value is configured.
 const DefaultConnectionIDLength = 4
 
+// MaxActiveConnectionIDs is the number of connection IDs that we're storing.
+const MaxActiveConnectionIDs = 4
+
 // AckDelayExponent is the ack delay exponent used when sending ACKs.
 const AckDelayExponent = 3
 
