@@ -117,4 +117,20 @@ var _ = Describe("Connection ID Manager", func() {
 		c, _ := get()
 		Expect(c).To(Equal(protocol.ConnectionID{3, 4, 5, 6}))
 	})
+
+	It("retires old connection IDs when the peer sends too many new ones", func() {
+		for i := uint8(0); i < protocol.MaxActiveConnectionIDs; i++ {
+			Expect(m.Add(&wire.NewConnectionIDFrame{
+				SequenceNumber: uint64(i),
+				ConnectionID:   protocol.ConnectionID{i, i, i, i},
+			})).To(Succeed())
+		}
+		Expect(frameQueue).To(BeEmpty())
+		Expect(m.Add(&wire.NewConnectionIDFrame{
+			SequenceNumber: protocol.MaxActiveConnectionIDs,
+			ConnectionID:   protocol.ConnectionID{1, 2, 3, 4},
+		})).To(Succeed())
+		Expect(frameQueue).To(HaveLen(1))
+		Expect(frameQueue[0].(*wire.RetireConnectionIDFrame).SequenceNumber).To(BeEquivalentTo(0))
+	})
 })
