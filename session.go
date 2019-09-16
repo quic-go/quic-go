@@ -417,10 +417,11 @@ runLoop:
 		// Close immediately if requested
 		select {
 		case closeErr = <-s.closeChan:
-			if !closeErr.insecure {
-				break runLoop
+			if closeErr.insecure {
+				s.handleInsecureCloseError(time.Now(), closeErr)
+				continue
 			}
-			s.closeChan <- closeErr
+			break runLoop
 		case <-s.handshakeCompleteChan:
 			s.handleHandshakeComplete()
 		default:
@@ -781,8 +782,7 @@ func (s *session) handleUnpackedPacket(packet *unpackedPacket, rcvTime time.Time
 	}
 
 	// The server can change the source connection ID with the first Handshake packet.
-	updateDestConnID := s.perspective == protocol.PerspectiveClient && !s.receivedFirstPacket && packet.hdr.IsLongHeader && !packet.hdr.SrcConnectionID.Equal(s.destConnID)
-	if updateDestConnID {
+	if s.perspective == protocol.PerspectiveClient && !s.receivedFirstPacket && packet.hdr.IsLongHeader && !packet.hdr.SrcConnectionID.Equal(s.destConnID) {
 		s.logger.Debugf("Received first packet. Switching destination connection ID to: %s", packet.hdr.SrcConnectionID)
 		s.destConnID = packet.hdr.SrcConnectionID
 		s.packer.ChangeDestConnectionID(s.destConnID)
@@ -803,7 +803,7 @@ func (s *session) handleUnpackedPacket(packet *unpackedPacket, rcvTime time.Time
 	var isAckEliciting bool
 
 	if s.mitigationOn(packet.encryptionLevel) {
-		if err := s.validatePacket(packet, updateDestConnID); err != nil {
+		if err := s.validatePacket(packet); err != nil {
 			return err
 		}
 	}
@@ -844,7 +844,7 @@ func (s *session) handleUnpackedPacket(packet *unpackedPacket, rcvTime time.Time
 	return nil
 }
 
-func (s *session) validatePacket(packet *unpackedPacket, updateDestConnID bool) error {
+func (s *session) validatePacket(packet *unpackedPacket) error {
 	var insecureCloseFrame wire.Frame
 	var insecureCloseError error
 

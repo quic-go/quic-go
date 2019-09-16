@@ -284,6 +284,7 @@ var _ = Describe("MITM test", func() {
 				var generateForgery func(hdr *wire.Header) []byte
 				var initialReceived bool
 
+				//nolint:unparam
 				dropServerPackets := func(dir quicproxy.Direction, raw []byte) bool {
 					return dir == quicproxy.DirectionOutgoing
 				}
@@ -395,14 +396,6 @@ var _ = Describe("MITM test", func() {
 							Expect(err.(net.Error).Timeout()).To(BeTrue())
 						})
 
-						PIt("fails when server never sends retry packets", func() {
-							serverConfig.AcceptToken = func(_ net.Addr, _ *quic.Token) bool {
-								return true
-							}
-							err := runTest(delayCb, dropCb, mitigationOff)
-							Expect(err).To(HaveOccurred())
-						})
-
 						// mitigation for changed srcConnID not yet implemented
 						PIt("recovers when mitigation is enabled", func() {
 							Expect(runTest(delayCb, dropCb, mitigationOn)).To(Succeed())
@@ -443,6 +436,7 @@ var _ = Describe("MITM test", func() {
 							Expect(err.(net.Error).Timeout()).To(BeTrue())
 						})
 
+						// mitigation for valid injected packets that cause real packets to be ignored not yet implemented
 						PIt("recovers when mitigation is enabled", func() {
 							Expect(runTest(delayCb, dropCb, mitigationOn)).To(Succeed())
 						})
@@ -456,7 +450,7 @@ var _ = Describe("MITM test", func() {
 							}
 						})
 
-						// CRYPTO_ERROR not yet handled
+						// mitigation for CRYPTO_ERROR not yet implemented
 						PIt("recovers when mitigation is enabled", func() {
 							Expect(runTest(delayCb, dropCb, mitigationOn)).To(Succeed())
 						})

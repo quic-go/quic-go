@@ -525,7 +525,6 @@ var _ = Describe("Session", func() {
 		})
 
 		It("informs the ReceivedPacketHandler about non-ack-eliciting packets", func() {
-			sess.config.AttackTimeout = 0 // turn off mitigation because padding-only packets are rejected
 			hdr := &wire.ExtendedHeader{
 				Header:          wire.Header{DestConnectionID: sess.srcConnID},
 				PacketNumber:    0x37,
@@ -653,7 +652,7 @@ var _ = Describe("Session", func() {
 				close(done)
 			}()
 			expectReplaceWithClosed()
-			sess.config.AttackTimeout = 0 // turn off mitigation
+			sess.config.AttackTimeout = 0 // turn off mitigation because empty packets will be ignored
 			sess.handlePacket(getPacket(&wire.ExtendedHeader{
 				Header:          wire.Header{DestConnectionID: sess.srcConnID},
 				PacketNumberLen: protocol.PacketNumberLen1,
@@ -771,7 +770,6 @@ var _ = Describe("Session", func() {
 			}
 
 			It("cuts packets to the right length", func() {
-				sess.config.AttackTimeout = 0 // turn off mitigation because padding-only packets are rejected
 				hdrLen, packet := getPacketWithLength(sess.srcConnID, 456)
 				unpacker.EXPECT().Unpack(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(func(_ *wire.Header, _ time.Time, data []byte) (*unpackedPacket, error) {
 					Expect(data).To(HaveLen(hdrLen + 456 - 3))
@@ -784,7 +782,6 @@ var _ = Describe("Session", func() {
 			})
 
 			It("handles coalesced packets", func() {
-				sess.config.AttackTimeout = 0 // turn off mitigation because padding-only packets are rejected
 				hdrLen1, packet1 := getPacketWithLength(sess.srcConnID, 456)
 				unpacker.EXPECT().Unpack(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(func(_ *wire.Header, _ time.Time, data []byte) (*unpackedPacket, error) {
 					Expect(data).To(HaveLen(hdrLen1 + 456 - 3))
@@ -806,7 +803,6 @@ var _ = Describe("Session", func() {
 			})
 
 			It("works with undecryptable packets", func() {
-				sess.config.AttackTimeout = 0 // turn off mitigation because padding-only packets are rejected
 				hdrLen1, packet1 := getPacketWithLength(sess.srcConnID, 456)
 				hdrLen2, packet2 := getPacketWithLength(sess.srcConnID, 123)
 				gomock.InOrder(
@@ -827,7 +823,6 @@ var _ = Describe("Session", func() {
 			})
 
 			It("ignores coalesced packet parts if the destination connection IDs don't match", func() {
-				sess.config.AttackTimeout = 0 // turn off mitigation because padding-only packets are rejected
 				wrongConnID := protocol.ConnectionID{0xde, 0xad, 0xbe, 0xef}
 				Expect(sess.srcConnID).ToNot(Equal(wrongConnID))
 				hdrLen1, packet1 := getPacketWithLength(sess.srcConnID, 456)

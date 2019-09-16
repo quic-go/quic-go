@@ -721,5 +721,19 @@ var _ = Describe("Client", func() {
 			cl.handlePacket(composeVersionNegotiationPacket(connID, []protocol.VersionNumber{1234}))
 			Expect(cl.version).To(Equal(ver))
 		})
+
+		It("registers insecure close error if no matching version is found and mitigation is on", func() {
+			sess := NewMockQuicSession(mockCtrl)
+			done := make(chan struct{})
+			sess.EXPECT().registerInsecureClose(gomock.Any()).Do(func(err *closeError) {
+				defer GinkgoRecover()
+				Expect(err.err.Error()).To(ContainSubstring("No compatible QUIC version found."))
+				close(done)
+			})
+			cl.session = sess
+			cl.config = &Config{Versions: protocol.SupportedVersions, AttackTimeout: mitigationOn}
+			cl.handlePacket(composeVersionNegotiationPacket(connID, []protocol.VersionNumber{1337}))
+			Eventually(done).Should(BeClosed())
+		})
 	})
 })
