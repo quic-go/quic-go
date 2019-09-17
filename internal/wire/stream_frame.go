@@ -13,10 +13,10 @@ import (
 // A StreamFrame of QUIC
 type StreamFrame struct {
 	StreamID       protocol.StreamID
-	FinBit         bool
-	DataLenPresent bool
 	Offset         protocol.ByteCount
 	Data           []byte
+	FinBit         bool
+	DataLenPresent bool
 
 	fromPool bool
 }

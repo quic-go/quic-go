@@ -46,13 +46,14 @@ type TransportParameters struct {
 	MaxAckDelay      time.Duration
 	AckDelayExponent uint8
 
+	DisableMigration bool
+
 	MaxPacketSize protocol.ByteCount
 
 	MaxUniStreamNum  protocol.StreamNum
 	MaxBidiStreamNum protocol.StreamNum
 
-	IdleTimeout      time.Duration
-	DisableMigration bool
+	IdleTimeout time.Duration
 
 	StatelessResetToken  *[16]byte
 	OriginalConnectionID protocol.ConnectionID
