@@ -231,7 +231,7 @@ func (c *cubicSender) RenoBeta() float32 {
 // Called when we receive an ack. Normal TCP tracks how many packets one ack
 // represents, but quic has a separate ack for each packet.
 func (c *cubicSender) maybeIncreaseCwnd(
-	ackedPacketNumber protocol.PacketNumber,
+	_ protocol.PacketNumber,
 	ackedBytes protocol.ByteCount,
 	priorInFlight protocol.ByteCount,
 	eventTime time.Time,

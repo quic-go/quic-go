@@ -44,7 +44,7 @@ var _ = Describe("Stream Cancelations", func() {
 						str, err := sess.OpenUniStreamSync(context.Background())
 						Expect(err).ToNot(HaveOccurred())
 						if _, err = str.Write(testserver.PRData); err != nil {
-							Expect(err).To(MatchError(fmt.Sprintf("Stream %d was reset with error code %d", str.StreamID(), str.StreamID())))
+							Expect(err).To(MatchError(fmt.Sprintf("stream %d was reset with error code %d", str.StreamID(), str.StreamID())))
 							atomic.AddInt32(&canceledCounter, 1)
 							return
 						}
@@ -174,7 +174,7 @@ var _ = Describe("Stream Cancelations", func() {
 					data, err := ioutil.ReadAll(str)
 					if err != nil {
 						atomic.AddInt32(&counter, 1)
-						Expect(err).To(MatchError(fmt.Sprintf("Stream %d was reset with error code %d", str.StreamID(), str.StreamID())))
+						Expect(err).To(MatchError(fmt.Sprintf("stream %d was reset with error code %d", str.StreamID(), str.StreamID())))
 						return
 					}
 					Expect(data).To(Equal(testserver.PRData))
@@ -281,7 +281,7 @@ var _ = Describe("Stream Cancelations", func() {
 							return
 						}
 						if _, err = str.Write(testserver.PRData); err != nil {
-							Expect(err).To(MatchError(fmt.Sprintf("Stream %d was reset with error code %d", str.StreamID(), str.StreamID())))
+							Expect(err).To(MatchError(fmt.Sprintf("stream %d was reset with error code %d", str.StreamID(), str.StreamID())))
 							return
 						}
 						Expect(str.Close()).To(Succeed())
@@ -314,7 +314,7 @@ var _ = Describe("Stream Cancelations", func() {
 					}
 					data, err := ioutil.ReadAll(str)
 					if err != nil {
-						Expect(err).To(MatchError(fmt.Sprintf("Stream %d was reset with error code %d", str.StreamID(), str.StreamID())))
+						Expect(err).To(MatchError(fmt.Sprintf("stream %d was reset with error code %d", str.StreamID(), str.StreamID())))
 						return
 					}
 					atomic.AddInt32(&counter, 1)
@@ -355,7 +355,7 @@ var _ = Describe("Stream Cancelations", func() {
 							length = int(rand.Int31n(int32(len(testserver.PRData) - 1)))
 						}
 						if _, err = str.Write(testserver.PRData[:length]); err != nil {
-							Expect(err).To(MatchError(fmt.Sprintf("Stream %d was reset with error code %d", str.StreamID(), str.StreamID())))
+							Expect(err).To(MatchError(fmt.Sprintf("stream %d was reset with error code %d", str.StreamID(), str.StreamID())))
 							return
 						}
 						if length < len(testserver.PRData) {
@@ -396,7 +396,7 @@ var _ = Describe("Stream Cancelations", func() {
 					}
 					data, err := ioutil.ReadAll(r)
 					if err != nil {
-						Expect(err).To(MatchError(fmt.Sprintf("Stream %d was reset with error code %d", str.StreamID(), str.StreamID())))
+						Expect(err).To(MatchError(fmt.Sprintf("stream %d was reset with error code %d", str.StreamID(), str.StreamID())))
 						return
 					}
 					Expect(data).To(Equal(testserver.PRData[:length]))

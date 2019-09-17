@@ -341,6 +341,7 @@ func (c *client) handleVersionNegotiationPacket(p *receivedPacket) {
 	c.logger.Infof("Received a Version Negotiation packet. Supported Versions: %s", hdr.SupportedVersions)
 	newVersion, ok := protocol.ChooseSupportedVersion(c.config.Versions, hdr.SupportedVersions)
 	if !ok {
+		//nolint:stylecheck
 		c.session.destroy(fmt.Errorf("No compatible QUIC version found. We support %s, server offered %s", c.config.Versions, hdr.SupportedVersions))
 		c.logger.Debugf("No compatible QUIC version found.")
 		return
@@ -356,7 +357,7 @@ func (c *client) handleVersionNegotiationPacket(p *receivedPacket) {
 	c.initialPacketNumber = c.session.closeForRecreating()
 }
 
-func (c *client) createNewTLSSession(version protocol.VersionNumber) error {
+func (c *client) createNewTLSSession(_ protocol.VersionNumber) error {
 	params := &handshake.TransportParameters{
 		InitialMaxStreamDataBidiRemote: protocol.InitialMaxStreamData,
 		InitialMaxStreamDataBidiLocal:  protocol.InitialMaxStreamData,

@@ -14,7 +14,7 @@ type ResetStreamFrame struct {
 	ByteOffset protocol.ByteCount
 }
 
-func parseResetStreamFrame(r *bytes.Reader, version protocol.VersionNumber) (*ResetStreamFrame, error) {
+func parseResetStreamFrame(r *bytes.Reader, _ protocol.VersionNumber) (*ResetStreamFrame, error) {
 	if _, err := r.ReadByte(); err != nil { // read the TypeByte
 		return nil, err
 	}
@@ -43,7 +43,7 @@ func parseResetStreamFrame(r *bytes.Reader, version protocol.VersionNumber) (*Re
 	}, nil
 }
 
-func (f *ResetStreamFrame) Write(b *bytes.Buffer, version protocol.VersionNumber) error {
+func (f *ResetStreamFrame) Write(b *bytes.Buffer, _ protocol.VersionNumber) error {
 	b.WriteByte(0x4)
 	utils.WriteVarInt(b, uint64(f.StreamID))
 	utils.WriteVarInt(b, uint64(f.ErrorCode))

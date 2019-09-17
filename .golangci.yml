@@ -16,9 +16,13 @@ linters:
     - gosimple
     - ineffassign
     - misspell
+    - prealloc
+    - scopelint
     - staticcheck
+    - stylecheck
     - structcheck
     - unconvert
+    - unparam
     - unused
     - varcheck
     - vet

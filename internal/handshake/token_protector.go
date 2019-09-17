@@ -54,7 +54,7 @@ func (s *tokenProtectorImpl) NewToken(data []byte) ([]byte, error) {
 // DecodeToken decodes a token.
 func (s *tokenProtectorImpl) DecodeToken(p []byte) ([]byte, error) {
 	if len(p) < tokenNonceSize {
-		return nil, fmt.Errorf("Token too short: %d", len(p))
+		return nil, fmt.Errorf("token too short: %d", len(p))
 	}
 	nonce := p[:tokenNonceSize]
 	aead, aeadNonce, err := s.createAEAD(nonce)

@@ -307,7 +307,7 @@ func (h *cryptoSetup) HandleMessage(data []byte, encLevel protocol.EncryptionLev
 	}
 	h.messageChan <- data
 	if encLevel == protocol.Encryption1RTT {
-		h.handlePostHandshakeMessage(data)
+		h.handlePostHandshakeMessage()
 	}
 	switch h.perspective {
 	case protocol.PerspectiveClient:
@@ -456,7 +456,7 @@ func (h *cryptoSetup) maybeSendSessionTicket() {
 	}
 }
 
-func (h *cryptoSetup) handlePostHandshakeMessage(data []byte) {
+func (h *cryptoSetup) handlePostHandshakeMessage() {
 	// make sure the handshake has already completed
 	<-h.handshakeDone
 

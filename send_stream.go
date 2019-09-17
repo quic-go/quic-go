@@ -366,7 +366,7 @@ func (s *sendStream) handleMaxStreamDataFrame(frame *wire.MaxStreamDataFrame) {
 func (s *sendStream) handleStopSendingFrame(frame *wire.StopSendingFrame) {
 	writeErr := streamCanceledError{
 		errorCode: frame.ErrorCode,
-		error:     fmt.Errorf("Stream %d was reset with error code %d", s.streamID, frame.ErrorCode),
+		error:     fmt.Errorf("stream %d was reset with error code %d", s.streamID, frame.ErrorCode),
 	}
 	s.cancelWriteImpl(frame.ErrorCode, writeErr)
 }

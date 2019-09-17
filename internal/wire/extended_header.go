@@ -44,7 +44,7 @@ func (h *ExtendedHeader) parse(b *bytes.Reader, v protocol.VersionNumber) (*Exte
 	return h.parseShortHeader(b, v)
 }
 
-func (h *ExtendedHeader) parseLongHeader(b *bytes.Reader, v protocol.VersionNumber) (*ExtendedHeader, error) {
+func (h *ExtendedHeader) parseLongHeader(b *bytes.Reader, _ protocol.VersionNumber) (*ExtendedHeader, error) {
 	if err := h.readPacketNumber(b); err != nil {
 		return nil, err
 	}
@@ -55,7 +55,7 @@ func (h *ExtendedHeader) parseLongHeader(b *bytes.Reader, v protocol.VersionNumb
 	return h, err
 }
 
-func (h *ExtendedHeader) parseShortHeader(b *bytes.Reader, v protocol.VersionNumber) (*ExtendedHeader, error) {
+func (h *ExtendedHeader) parseShortHeader(b *bytes.Reader, _ protocol.VersionNumber) (*ExtendedHeader, error) {
 	h.KeyPhase = protocol.KeyPhaseZero
 	if h.typeByte&0x4 > 0 {
 		h.KeyPhase = protocol.KeyPhaseOne
@@ -121,7 +121,7 @@ func (h *ExtendedHeader) Write(b *bytes.Buffer, ver protocol.VersionNumber) erro
 	return h.writeShortHeader(b, ver)
 }
 
-func (h *ExtendedHeader) writeLongHeader(b *bytes.Buffer, v protocol.VersionNumber) error {
+func (h *ExtendedHeader) writeLongHeader(b *bytes.Buffer, _ protocol.VersionNumber) error {
 	var packetType uint8
 	switch h.Type {
 	case protocol.PacketTypeInitial:
@@ -161,7 +161,7 @@ func (h *ExtendedHeader) writeLongHeader(b *bytes.Buffer, v protocol.VersionNumb
 	return h.writePacketNumber(b)
 }
 
-func (h *ExtendedHeader) writeShortHeader(b *bytes.Buffer, v protocol.VersionNumber) error {
+func (h *ExtendedHeader) writeShortHeader(b *bytes.Buffer, _ protocol.VersionNumber) error {
 	typeByte := 0x40 | uint8(h.PacketNumberLen-1)
 	if h.KeyPhase == protocol.KeyPhaseOne {
 		typeByte |= byte(1 << 2)

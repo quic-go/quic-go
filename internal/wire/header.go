@@ -215,9 +215,11 @@ func (h *Header) parseLongHeader(b *bytes.Reader) error {
 
 func (h *Header) parseVersionNegotiationPacket(b *bytes.Reader) error {
 	if b.Len() == 0 {
+		//nolint:stylecheck
 		return errors.New("Version Negotiation packet has empty version list")
 	}
 	if b.Len()%4 != 0 {
+		//nolint:stylecheck
 		return errors.New("Version Negotiation packet has a version list with an invalid length")
 	}
 	h.SupportedVersions = make([]protocol.VersionNumber, b.Len()/4)

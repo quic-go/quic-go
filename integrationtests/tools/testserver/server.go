@@ -12,7 +12,9 @@ import (
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/internal/testdata"
 
+	//nolint:stylecheck
 	. "github.com/onsi/ginkgo"
+	//nolint:stylecheck
 	. "github.com/onsi/gomega"
 )
 

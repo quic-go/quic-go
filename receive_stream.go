@@ -276,7 +276,7 @@ func (s *receiveStream) handleResetStreamFrameImpl(frame *wire.ResetStreamFrame)
 	s.resetRemotely = true
 	s.resetRemotelyErr = streamCanceledError{
 		errorCode: frame.ErrorCode,
-		error:     fmt.Errorf("Stream %d was reset with error code %d", s.streamID, frame.ErrorCode),
+		error:     fmt.Errorf("stream %d was reset with error code %d", s.streamID, frame.ErrorCode),
 	}
 	s.signalRead()
 	return true, nil

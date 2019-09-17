@@ -125,14 +125,14 @@ func (h *packetHandlerMap) CloseServer() {
 	h.mutex.Lock()
 	h.server = nil
 	var wg sync.WaitGroup
-	for id, handler := range h.handlers {
+	for _, handler := range h.handlers {
 		if handler.getPerspective() == protocol.PerspectiveServer {
 			wg.Add(1)
-			go func(id string, handler packetHandler) {
+			go func(handler packetHandler) {
 				// session.Close() blocks until the CONNECTION_CLOSE has been sent and the run-loop has stopped
 				_ = handler.Close()
 				wg.Done()
-			}(id, handler)
+			}(handler)
 		}
 	}
 	h.mutex.Unlock()

@@ -144,8 +144,7 @@ var _ = Describe("Session", func() {
 				str := NewMockReceiveStreamI(mockCtrl)
 				str.EXPECT().handleStreamFrame(f)
 				streamManager.EXPECT().GetOrOpenReceiveStream(protocol.StreamID(5)).Return(str, nil)
-				err := sess.handleStreamFrame(f, protocol.Encryption1RTT)
-				Expect(err).ToNot(HaveOccurred())
+				Expect(sess.handleStreamFrame(f)).To(Succeed())
 			})
 
 			It("returns errors", func() {
@@ -157,17 +156,15 @@ var _ = Describe("Session", func() {
 				str := NewMockReceiveStreamI(mockCtrl)
 				str.EXPECT().handleStreamFrame(f).Return(testErr)
 				streamManager.EXPECT().GetOrOpenReceiveStream(protocol.StreamID(5)).Return(str, nil)
-				err := sess.handleStreamFrame(f, protocol.Encryption1RTT)
-				Expect(err).To(MatchError(testErr))
+				Expect(sess.handleStreamFrame(f)).To(MatchError(testErr))
 			})
 
 			It("ignores STREAM frames for closed streams", func() {
 				streamManager.EXPECT().GetOrOpenReceiveStream(protocol.StreamID(5)).Return(nil, nil) // for closed streams, the streamManager returns nil
-				err := sess.handleStreamFrame(&wire.StreamFrame{
+				Expect(sess.handleStreamFrame(&wire.StreamFrame{
 					StreamID: 5,
 					Data:     []byte("foobar"),
-				}, protocol.Encryption1RTT)
-				Expect(err).ToNot(HaveOccurred())
+				})).To(Succeed())
 			})
 		})
 

@@ -18,7 +18,7 @@ type frameSorter struct {
 	gaps    *utils.ByteIntervalList
 }
 
-var errDuplicateStreamData = errors.New("Duplicate Stream Data")
+var errDuplicateStreamData = errors.New("duplicate stream data")
 
 func newFrameSorter() *frameSorter {
 	s := frameSorter{
@@ -146,7 +146,7 @@ func (s *frameSorter) push(data []byte, offset protocol.ByteCount, doneCb func()
 	}
 
 	if s.gaps.Len() > protocol.MaxStreamFrameSorterGaps {
-		return errors.New("Too many gaps in received data")
+		return errors.New("too many gaps in received data")
 	}
 
 	if wasCut && len(data) < protocol.MinStreamFrameBufferSize {
