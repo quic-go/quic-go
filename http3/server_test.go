@@ -119,7 +119,7 @@ var _ = Describe("Server", func() {
 				return len(p), nil
 			}).AnyTimes()
 
-			Expect(s.handleRequest(str, qpackDecoder)).To(Succeed())
+			Expect(s.handleRequest(str, qpackDecoder)).To(Equal(requestError{}))
 			var req *http.Request
 			Eventually(requestChan).Should(Receive(&req))
 			Expect(req.Host).To(Equal("www.example.com"))
@@ -135,7 +135,8 @@ var _ = Describe("Server", func() {
 				return responseBuf.Write(p)
 			}).AnyTimes()
 
-			Expect(s.handleRequest(str, qpackDecoder)).To(Succeed())
+			serr := s.handleRequest(str, qpackDecoder)
+			Expect(serr.err).ToNot(HaveOccurred())
 			hfs := decodeHeader(responseBuf)
 			Expect(hfs).To(HaveKeyWithValue(":status", []string{"200"}))
 		})
@@ -153,87 +154,129 @@ var _ = Describe("Server", func() {
 			}).AnyTimes()
 			str.EXPECT().CancelRead(gomock.Any())
 
-			Expect(s.handleRequest(str, qpackDecoder)).To(Succeed())
+			serr := s.handleRequest(str, qpackDecoder)
+			Expect(serr.err).ToNot(HaveOccurred())
 			hfs := decodeHeader(responseBuf)
 			Expect(hfs).To(HaveKeyWithValue(":status", []string{"500"}))
 		})
 
-		It("cancels reading when client sends a body in GET request", func() {
-			handlerCalled := make(chan struct{})
-			s.Handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				close(handlerCalled)
+		Context("stream- and connection-level errors", func() {
+			var sess *mockquic.MockSession
+
+			BeforeEach(func() {
+				sess = mockquic.NewMockSession(mockCtrl)
+				controlStr := mockquic.NewMockStream(mockCtrl)
+				controlStr.EXPECT().Write(gomock.Any())
+				sess.EXPECT().OpenUniStream().Return(controlStr, nil)
+				sess.EXPECT().AcceptStream(gomock.Any()).Return(str, nil)
+				sess.EXPECT().AcceptStream(gomock.Any()).Return(nil, errors.New("done"))
 			})
 
-			requestData := encodeRequest(exampleGetRequest)
-			buf := &bytes.Buffer{}
-			(&dataFrame{Length: 6}).Write(buf) // add a body
-			buf.Write([]byte("foobar"))
-			responseBuf := &bytes.Buffer{}
-			setRequest(append(requestData, buf.Bytes()...))
-			str.EXPECT().Context().Return(reqContext)
-			str.EXPECT().Write(gomock.Any()).DoAndReturn(func(p []byte) (int, error) {
-				return responseBuf.Write(p)
-			}).AnyTimes()
-			str.EXPECT().CancelRead(quic.ErrorCode(errorEarlyResponse))
+			It("cancels reading when client sends a body in GET request", func() {
+				handlerCalled := make(chan struct{})
+				s.Handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					close(handlerCalled)
+				})
 
-			Expect(s.handleRequest(str, qpackDecoder)).To(Succeed())
-			hfs := decodeHeader(responseBuf)
-			Expect(hfs).To(HaveKeyWithValue(":status", []string{"200"}))
-		})
+				requestData := encodeRequest(exampleGetRequest)
+				buf := &bytes.Buffer{}
+				(&dataFrame{Length: 6}).Write(buf) // add a body
+				buf.Write([]byte("foobar"))
+				responseBuf := &bytes.Buffer{}
+				setRequest(append(requestData, buf.Bytes()...))
+				done := make(chan struct{})
+				str.EXPECT().Context().Return(reqContext)
+				str.EXPECT().Write(gomock.Any()).DoAndReturn(func(p []byte) (int, error) {
+					return responseBuf.Write(p)
+				}).AnyTimes()
+				str.EXPECT().CancelRead(quic.ErrorCode(errorEarlyResponse))
+				str.EXPECT().Close().Do(func() { close(done) })
 
-		It("errors when the client sends a too large header frame", func() {
-			s.Server.MaxHeaderBytes = 42
-			s.Handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				Fail("Handler should not be called.")
+				s.handleConn(sess)
+				Eventually(done).Should(BeClosed())
+				hfs := decodeHeader(responseBuf)
+				Expect(hfs).To(HaveKeyWithValue(":status", []string{"200"}))
 			})
 
-			requestData := encodeRequest(exampleGetRequest)
-			buf := &bytes.Buffer{}
-			(&dataFrame{Length: 6}).Write(buf) // add a body
-			buf.Write([]byte("foobar"))
-			responseBuf := &bytes.Buffer{}
-			setRequest(append(requestData, buf.Bytes()...))
-			str.EXPECT().Write(gomock.Any()).DoAndReturn(func(p []byte) (int, error) {
-				return responseBuf.Write(p)
-			}).AnyTimes()
+			It("errors when the client sends a too large header frame", func() {
+				s.Server.MaxHeaderBytes = 42
+				s.Handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					Fail("Handler should not be called.")
+				})
 
-			str.EXPECT().CancelWrite(quic.ErrorCode(errorFrameError))
-			err := s.handleRequest(str, qpackDecoder)
-			Expect(err).To(HaveOccurred())
-			Expect(err.Error()).To(ContainSubstring("Headers frame too large"))
-		})
+				requestData := encodeRequest(exampleGetRequest)
+				buf := &bytes.Buffer{}
+				(&dataFrame{Length: 6}).Write(buf) // add a body
+				buf.Write([]byte("foobar"))
+				responseBuf := &bytes.Buffer{}
+				setRequest(append(requestData, buf.Bytes()...))
+				done := make(chan struct{})
+				str.EXPECT().Write(gomock.Any()).DoAndReturn(func(p []byte) (int, error) {
+					return responseBuf.Write(p)
+				}).AnyTimes()
+				str.EXPECT().CancelWrite(quic.ErrorCode(errorFrameError)).Do(func(quic.ErrorCode) { close(done) })
 
-		It("cancels reading when the body of POST request is not read", func() {
-			handlerCalled := make(chan struct{})
-			s.Handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				Expect(r.Host).To(Equal("www.example.com"))
-				Expect(r.Method).To(Equal("POST"))
-				close(handlerCalled)
+				s.handleConn(sess)
+				Eventually(done).Should(BeClosed())
 			})
 
-			setRequest(encodeRequest(examplePostRequest))
-			str.EXPECT().Context().Return(reqContext)
-			str.EXPECT().Write(gomock.Any()).DoAndReturn(func(p []byte) (int, error) {
-				return len(p), nil
-			}).AnyTimes()
-			str.EXPECT().CancelRead(quic.ErrorCode(errorEarlyResponse))
+			It("handles a request for which the client immediately resets the stream", func() {
+				handlerCalled := make(chan struct{})
+				s.Handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					close(handlerCalled)
+				})
 
-			Expect(s.handleRequest(str, qpackDecoder)).To(Succeed())
-			Eventually(handlerCalled).Should(BeClosed())
-		})
+				testErr := errors.New("stream reset")
+				done := make(chan struct{})
+				str.EXPECT().Read(gomock.Any()).Return(0, testErr)
+				str.EXPECT().CancelWrite(quic.ErrorCode(errorRequestIncomplete)).Do(func(quic.ErrorCode) { close(done) })
 
-		It("handles a request for which the client immediately resets the stream", func() {
-			handlerCalled := make(chan struct{})
-			s.Handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				close(handlerCalled)
+				s.handleConn(sess)
+				Consistently(handlerCalled).ShouldNot(BeClosed())
 			})
 
-			testErr := errors.New("stream reset")
-			str.EXPECT().Read(gomock.Any()).Return(0, testErr)
-			str.EXPECT().CancelWrite(quic.ErrorCode(errorRequestCanceled))
+			It("closes the connection when the first frame is not a HEADERS frame", func() {
+				handlerCalled := make(chan struct{})
+				s.Handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					close(handlerCalled)
+				})
 
-			Expect(s.handleRequest(str, qpackDecoder)).To(MatchError(testErr))
-			Consistently(handlerCalled).ShouldNot(BeClosed())
+				buf := &bytes.Buffer{}
+				(&dataFrame{}).Write(buf)
+				setRequest(buf.Bytes())
+				str.EXPECT().Write(gomock.Any()).DoAndReturn(func(p []byte) (int, error) {
+					return len(p), nil
+				}).AnyTimes()
+
+				done := make(chan struct{})
+				sess.EXPECT().CloseWithError(gomock.Any(), gomock.Any()).Do(func(code quic.ErrorCode, _ string) {
+					Expect(code).To(Equal(quic.ErrorCode(errorUnexpectedFrame)))
+					close(done)
+				})
+				s.handleConn(sess)
+				Eventually(done).Should(BeClosed())
+			})
+
+			It("closes the connection when the first frame is not a HEADERS frame", func() {
+				handlerCalled := make(chan struct{})
+				s.Handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					close(handlerCalled)
+				})
+
+				url := bytes.Repeat([]byte{'a'}, http.DefaultMaxHeaderBytes+1)
+				req, err := http.NewRequest(http.MethodGet, "https://"+string(url), nil)
+				Expect(err).ToNot(HaveOccurred())
+				setRequest(encodeRequest(req))
+				// str.EXPECT().Context().Return(reqContext)
+				str.EXPECT().Write(gomock.Any()).DoAndReturn(func(p []byte) (int, error) {
+					return len(p), nil
+				}).AnyTimes()
+				done := make(chan struct{})
+				str.EXPECT().CancelWrite(quic.ErrorCode(errorFrameError)).Do(func(quic.ErrorCode) { close(done) })
+
+				s.handleConn(sess)
+				Eventually(done).Should(BeClosed())
+			})
 		})
 
 		It("resets the stream when the body of POST request is not read, and the request handler replaces the request.Body", func() {
@@ -253,7 +296,8 @@ var _ = Describe("Server", func() {
 			}).AnyTimes()
 			str.EXPECT().CancelRead(quic.ErrorCode(errorEarlyResponse))
 
-			Expect(s.handleRequest(str, qpackDecoder)).To(Succeed())
+			serr := s.handleRequest(str, qpackDecoder)
+			Expect(serr.err).ToNot(HaveOccurred())
 			Eventually(handlerCalled).Should(BeClosed())
 		})
 
@@ -275,7 +319,8 @@ var _ = Describe("Server", func() {
 			}).AnyTimes()
 			str.EXPECT().CancelRead(quic.ErrorCode(errorEarlyResponse))
 
-			Expect(s.handleRequest(str, qpackDecoder)).To(Succeed())
+			serr := s.handleRequest(str, qpackDecoder)
+			Expect(serr.err).ToNot(HaveOccurred())
 			Eventually(handlerCalled).Should(BeClosed())
 		})
 	})
