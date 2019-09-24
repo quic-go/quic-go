@@ -86,6 +86,9 @@ func (h *packetHandlerMap) Retire(id protocol.ConnectionID) {
 func (h *packetHandlerMap) retireByConnectionIDAsString(id string) {
 	time.AfterFunc(h.deleteRetiredSessionsAfter, func() {
 		h.mutex.Lock()
+		if sess, ok := h.handlers[id]; ok {
+			sess.destroy(errors.New("deleting"))
+		}
 		h.removeByConnectionIDAsString(id)
 		h.mutex.Unlock()
 	})
