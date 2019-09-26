@@ -35,6 +35,7 @@ type packetHandlerMap struct {
 	deleteRetiredSessionsAfter time.Duration
 
 	statelessResetEnabled bool
+	statelessResetMutex   sync.Mutex
 	statelessResetHasher  hash.Hash
 
 	logger utils.Logger
@@ -259,9 +260,11 @@ func (h *packetHandlerMap) GetStatelessResetToken(connID protocol.ConnectionID) 
 		rand.Read(token[:])
 		return token
 	}
+	h.statelessResetMutex.Lock()
 	h.statelessResetHasher.Write(connID.Bytes())
 	copy(token[:], h.statelessResetHasher.Sum(nil))
 	h.statelessResetHasher.Reset()
+	h.statelessResetMutex.Unlock()
 	return token
 }
 
