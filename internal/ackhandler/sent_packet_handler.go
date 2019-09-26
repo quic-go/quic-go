@@ -81,23 +81,31 @@ func NewSentPacketHandler(
 	traceCallback func(quictrace.Event),
 	logger utils.Logger,
 ) SentPacketHandler {
-	congestion := congestion.NewCubicSender(
-		congestion.DefaultClock{},
-		rttStats,
-		true, // use Reno
-		protocol.InitialCongestionWindow,
-		protocol.DefaultMaxCongestionWindow,
-	)
-
-	return &sentPacketHandler{
+	handler := &sentPacketHandler{
 		initialPackets:   newPacketNumberSpace(initialPacketNumber),
 		handshakePackets: newPacketNumberSpace(0),
 		oneRTTPackets:    newPacketNumberSpace(0),
 		rttStats:         rttStats,
-		congestion:       congestion,
 		traceCallback:    traceCallback,
 		logger:           logger,
 	}
+	cc := congestion.NewBBRSender(congestion.DefaultClock{},
+		rttStats,
+		protocol.InitialCongestionWindow,
+		protocol.DefaultBBRMaxCongestionWindow,
+		func() protocol.ByteCount {
+			return handler.bytesInFlight
+		},
+	)
+	//cc := congestion.NewCubicSender(
+	//	congestion.DefaultClock{},
+	//	rttStats,
+	//	true, // use Reno
+	//	protocol.InitialCongestionWindow,
+	//	protocol.DefaultMaxCongestionWindow,
+	//)
+	handler.congestion = cc
+	return handler
 }
 
 func (h *sentPacketHandler) DropPackets(encLevel protocol.EncryptionLevel) {
@@ -205,6 +213,10 @@ func (h *sentPacketHandler) ReceivedAck(ackFrame *wire.AckFrame, withPacketNumbe
 		return nil
 	}
 
+	// has impled CongestionEvent interface.
+	congestionEventHandler, hasCongestionEvent := h.congestion.(congestion.CongestionEvent)
+	var ackedPacketsForEvent, lostPacketsForEvent []*protocol.Packet
+
 	priorInFlight := h.bytesInFlight
 	for _, p := range ackedPackets {
 		if p.LargestAcked != protocol.InvalidPacketNumber && encLevel == protocol.Encryption1RTT {
@@ -214,12 +226,23 @@ func (h *sentPacketHandler) ReceivedAck(ackFrame *wire.AckFrame, withPacketNumbe
 			return err
 		}
 		if p.includedInBytesInFlight {
-			h.congestion.OnPacketAcked(p.PacketNumber, p.Length, priorInFlight, rcvTime)
+			if hasCongestionEvent {
+				ackedPacketsForEvent = append(ackedPacketsForEvent, p.ToPacket())
+			} else {
+				h.congestion.OnPacketAcked(p.PacketNumber, p.Length, priorInFlight, rcvTime)
+			}
 		}
 	}
 
-	if err := h.detectLostPackets(rcvTime, encLevel, priorInFlight); err != nil {
-		return err
+	lostPackets := h.detectLostPackets(rcvTime, encLevel, priorInFlight)
+	if hasCongestionEvent {
+		if lostPackets != nil {
+			lostPacketsForEvent := make([]*protocol.Packet, len(lostPackets))
+			for _, p := range lostPackets {
+				lostPacketsForEvent = append(lostPacketsForEvent,p.ToPacket())
+			}
+		}
+		congestionEventHandler.OnCongestionEvent(priorInFlight, rcvTime, ackedPacketsForEvent, lostPacketsForEvent)
 	}
 
 	h.ptoCount = 0
@@ -337,7 +360,7 @@ func (h *sentPacketHandler) detectLostPackets(
 	now time.Time,
 	encLevel protocol.EncryptionLevel,
 	priorInFlight protocol.ByteCount,
-) error {
+) []*Packet {
 	pnSpace := h.getPacketNumberSpace(encLevel)
 	pnSpace.lossTime = time.Time{}
 
@@ -398,7 +421,7 @@ func (h *sentPacketHandler) detectLostPackets(
 			})
 		}
 	}
-	return nil
+	return lostPackets
 }
 
 func (h *sentPacketHandler) OnLossDetectionTimeout() error {
@@ -407,22 +430,28 @@ func (h *sentPacketHandler) OnLossDetectionTimeout() error {
 	// When OnAlarm is called, we therefore need to make sure that there are
 	// actually packets outstanding.
 	if h.hasOutstandingPackets() {
-		if err := h.onVerifiedLossDetectionTimeout(); err != nil {
-			return err
-		}
+		h.onVerifiedLossDetectionTimeout()
 	}
 	h.setLossDetectionTimer()
 	return nil
 }
 
-func (h *sentPacketHandler) onVerifiedLossDetectionTimeout() error {
+func (h *sentPacketHandler) onVerifiedLossDetectionTimeout() {
 	lossTime, encLevel := h.getEarliestLossTime()
 	if !lossTime.IsZero() {
 		if h.logger.Debug() {
 			h.logger.Debugf("Loss detection alarm fired in loss timer mode. Loss time: %s", lossTime)
 		}
 		// Early retransmit or time loss detection
-		return h.detectLostPackets(time.Now(), encLevel, h.bytesInFlight)
+		lostPackets:=h.detectLostPackets(time.Now(), encLevel, h.bytesInFlight)
+		if congestionEventHandler, ok := h.congestion.(congestion.CongestionEvent); ok && lostPackets != nil {
+			lostPacketsForEvent := make([]*protocol.Packet, len(lostPackets))
+			for idx, p := range lostPackets {
+				lostPacketsForEvent[idx] = p.ToPacket()
+			}
+			congestionEventHandler.OnCongestionEvent(h.bytesInFlight, time.Now(), nil, lostPacketsForEvent)
+		}
+		return
 	}
 
 	// PTO
@@ -431,7 +460,6 @@ func (h *sentPacketHandler) onVerifiedLossDetectionTimeout() error {
 	}
 	h.ptoCount++
 	h.numProbesToSend += 2
-	return nil
 }
 
 func (h *sentPacketHandler) GetLossDetectionTimeout() time.Time {

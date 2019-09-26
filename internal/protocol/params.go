@@ -13,6 +13,9 @@ const defaultMaxCongestionWindowPackets = 1000
 // DefaultMaxCongestionWindow is the default for the max congestion window
 const DefaultMaxCongestionWindow ByteCount = defaultMaxCongestionWindowPackets * DefaultTCPMSS
 
+// DefaultBBRMaxCongestionWindow is the default for the max congestion window in BBR algorithm
+const DefaultBBRMaxCongestionWindow ByteCount = 2000 * DefaultTCPMSS
+
 // InitialCongestionWindow is the initial congestion window in QUIC packets
 const InitialCongestionWindow ByteCount = 32 * DefaultTCPMSS
 

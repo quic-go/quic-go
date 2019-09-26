@@ -20,6 +20,14 @@ type Packet struct {
 	includedInBytesInFlight bool
 }
 
+func (p *Packet) ToPacket() *protocol.Packet {
+	return &protocol.Packet{
+		PacketNumber: p.PacketNumber,
+		Length:       p.Length,
+		SendTime:     p.SendTime,
+	}
+}
+
 // SentPacketHandler handles ACKs received for outgoing packets
 type SentPacketHandler interface {
 	// SentPacket may modify the packet

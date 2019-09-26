@@ -17,6 +17,10 @@ type SendAlgorithm interface {
 	OnRetransmissionTimeout(packetsRetransmitted bool)
 }
 
+type CongestionEvent interface {
+	OnCongestionEvent(priorInFlight protocol.ByteCount, eventTime time.Time, ackedPackets, lostPackets []*protocol.Packet)
+}
+
 // A SendAlgorithmWithDebugInfos is a SendAlgorithm that exposes some debug infos
 type SendAlgorithmWithDebugInfos interface {
 	SendAlgorithm
