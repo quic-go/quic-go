@@ -152,21 +152,6 @@ func (c *client) RoundTrip(req *http.Request) (*http.Response, error) {
 		return nil, err
 	}
 
-	rsp, rerr := c.doRequest(req, str)
-	if rerr.streamErr != 0 {
-		str.CancelWrite(quic.ErrorCode(rerr.streamErr))
-	}
-	if rerr.connErr != 0 {
-		var reason string
-		if rerr.err != nil {
-			reason = rerr.err.Error()
-		}
-		c.session.CloseWithError(quic.ErrorCode(rerr.connErr), reason)
-	}
-	return rsp, rerr.err
-}
-
-func (c *client) doRequest(req *http.Request, str quic.Stream) (*http.Response, requestError) {
 	// Request Cancellation:
 	// This go routine keeps running even after RoundTrip() returns.
 	// It is shut down when the application is done processing the body.
@@ -180,6 +165,28 @@ func (c *client) doRequest(req *http.Request, str quic.Stream) (*http.Response, 
 		}
 	}()
 
+	rsp, rerr := c.doRequest(req, str, reqDone)
+	if rerr.err != nil { // if any error occurred
+		close(reqDone)
+		if rerr.streamErr != 0 { // if it was a stream error
+			str.CancelWrite(quic.ErrorCode(rerr.streamErr))
+		}
+		if rerr.connErr != 0 { // if it was a connection error
+			var reason string
+			if rerr.err != nil {
+				reason = rerr.err.Error()
+			}
+			c.session.CloseWithError(quic.ErrorCode(rerr.connErr), reason)
+		}
+	}
+	return rsp, rerr.err
+}
+
+func (c *client) doRequest(
+	req *http.Request,
+	str quic.Stream,
+	reqDone chan struct{},
+) (*http.Response, requestError) {
 	var requestGzip bool
 	if !c.opts.DisableCompression && req.Method != "HEAD" && req.Header.Get("Accept-Encoding") == "" && req.Header.Get("Range") == "" {
 		requestGzip = true
