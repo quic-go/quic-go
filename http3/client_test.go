@@ -309,9 +309,9 @@ var _ = Describe("Client", func() {
 				canceled := make(chan struct{})
 				gomock.InOrder(
 					str.EXPECT().CancelWrite(quic.ErrorCode(errorRequestCanceled)).Do(func(quic.ErrorCode) { close(canceled) }),
-					str.EXPECT().CancelWrite(gomock.Any()).MaxTimes(1).Do(func(quic.ErrorCode) { close(done) }),
+					str.EXPECT().CancelRead(quic.ErrorCode(errorRequestCanceled)).Do(func(quic.ErrorCode) { close(done) }),
 				)
-				str.EXPECT().CancelRead(quic.ErrorCode(errorRequestCanceled))
+				str.EXPECT().CancelWrite(gomock.Any()).MaxTimes(1)
 				str.EXPECT().Read(gomock.Any()).DoAndReturn(func([]byte) (int, error) {
 					cancel()
 					<-canceled
