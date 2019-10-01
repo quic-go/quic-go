@@ -3,44 +3,58 @@ package quic
 import (
 	"sync"
 
-	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/internal/utils"
 )
+
+type closedSession interface {
+	destroy()
+}
 
 // A closedLocalSession is a session that we closed locally.
 // When receiving packets for such a session, we need to retransmit the packet containing the CONNECTION_CLOSE frame,
 // with an exponential backoff.
-type closedLocalSession struct {
-	conn            connection
-	connClosePacket []byte
-
+type closedBaseSession struct {
 	closeOnce sync.Once
 	closeChan chan struct{} // is closed when the session is closed or destroyed
 
-	receivedPackets chan *receivedPacket
-	counter         uint64 // number of packets received
+	receivedPackets <-chan *receivedPacket
+}
 
-	perspective protocol.Perspective
+func (s *closedBaseSession) destroy() {
+	s.closeOnce.Do(func() {
+		close(s.closeChan)
+	})
+}
+
+func newClosedBaseSession(receivedPackets <-chan *receivedPacket) closedBaseSession {
+	return closedBaseSession{
+		receivedPackets: receivedPackets,
+		closeChan:       make(chan struct{}),
+	}
+}
+
+type closedLocalSession struct {
+	closedBaseSession
+
+	conn            connection
+	connClosePacket []byte
+	counter         uint64 // number of packets received
 
 	logger utils.Logger
 }
 
-var _ packetHandler = &closedLocalSession{}
-
 // newClosedLocalSession creates a new closedLocalSession and runs it.
 func newClosedLocalSession(
 	conn connection,
+	receivedPackets <-chan *receivedPacket,
 	connClosePacket []byte,
-	perspective protocol.Perspective,
 	logger utils.Logger,
-) packetHandler {
+) closedSession {
 	s := &closedLocalSession{
-		conn:            conn,
-		connClosePacket: connClosePacket,
-		perspective:     perspective,
-		logger:          logger,
-		closeChan:       make(chan struct{}),
-		receivedPackets: make(chan *receivedPacket, 64),
+		closedBaseSession: newClosedBaseSession(receivedPackets),
+		conn:              conn,
+		connClosePacket:   connClosePacket,
+		logger:            logger,
 	}
 	go s.run()
 	return s
@@ -50,21 +64,14 @@ func (s *closedLocalSession) run() {
 	for {
 		select {
 		case p := <-s.receivedPackets:
-			s.handlePacketImpl(p)
+			s.handlePacket(p)
 		case <-s.closeChan:
 			return
 		}
 	}
 }
 
-func (s *closedLocalSession) handlePacket(p *receivedPacket) {
-	select {
-	case s.receivedPackets <- p:
-	default:
-	}
-}
-
-func (s *closedLocalSession) handlePacketImpl(_ *receivedPacket) {
+func (s *closedLocalSession) handlePacket(_ *receivedPacket) {
 	s.counter++
 	// exponential backoff
 	// only send a CONNECTION_CLOSE for the 1st, 2nd, 4th, 8th, 16th, ... packet arriving
@@ -79,35 +86,29 @@ func (s *closedLocalSession) handlePacketImpl(_ *receivedPacket) {
 	}
 }
 
-func (s *closedLocalSession) Close() error {
-	s.destroy(nil)
-	return nil
-}
-
-func (s *closedLocalSession) destroy(error) {
-	s.closeOnce.Do(func() {
-		close(s.closeChan)
-	})
-}
-
-func (s *closedLocalSession) getPerspective() protocol.Perspective {
-	return s.perspective
-}
-
 // A closedRemoteSession is a session that was closed remotely.
 // For such a session, we might receive reordered packets that were sent before the CONNECTION_CLOSE.
 // We can just ignore those packets.
 type closedRemoteSession struct {
-	perspective protocol.Perspective
+	closedBaseSession
 }
 
-var _ packetHandler = &closedRemoteSession{}
+var _ closedSession = &closedRemoteSession{}
 
-func newClosedRemoteSession(pers protocol.Perspective) packetHandler {
-	return &closedRemoteSession{perspective: pers}
+func newClosedRemoteSession(receivedPackets <-chan *receivedPacket) closedSession {
+	s := &closedRemoteSession{
+		closedBaseSession: newClosedBaseSession(receivedPackets),
+	}
+	go s.run()
+	return s
 }
 
-func (s *closedRemoteSession) handlePacket(*receivedPacket)         {}
-func (s *closedRemoteSession) Close() error                         { return nil }
-func (s *closedRemoteSession) destroy(error)                        {}
-func (s *closedRemoteSession) getPerspective() protocol.Perspective { return s.perspective }
+func (s *closedRemoteSession) run() {
+	for {
+		select {
+		case <-s.receivedPackets: // discard packets
+		case <-s.closeChan:
+			return
+		}
+	}
+}

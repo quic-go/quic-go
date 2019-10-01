@@ -137,7 +137,9 @@ var _ = Describe("Packet Handler Map", func() {
 		It("deletes retired session entries after a wait time", func() {
 			handler.deleteRetiredSessionsAfter = scaleDuration(10 * time.Millisecond)
 			connID := protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8}
-			handler.Add(connID, NewMockPacketHandler(mockCtrl))
+			sess := NewMockPacketHandler(mockCtrl)
+			handler.Add(connID, sess)
+			sess.EXPECT().destroy(gomock.Any())
 			handler.Retire(connID)
 			time.Sleep(scaleDuration(30 * time.Millisecond))
 			handler.handlePacket(nil, nil, getPacket(connID))

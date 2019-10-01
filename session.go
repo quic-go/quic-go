@@ -87,7 +87,7 @@ func (r *handshakeRunner) OnHandshakeComplete()                 { r.onHandshakeC
 type closeError struct {
 	err       error
 	remote    bool
-	sendClose bool
+	immediate bool
 }
 
 var errCloseForRecreating = errors.New("closing session in order to recreate it")
@@ -131,7 +131,9 @@ type session struct {
 	receivedPackets  chan *receivedPacket
 	sendingScheduled chan struct{}
 
-	closeOnce sync.Once
+	closeOnce          sync.Once
+	closedSessionMutex sync.Mutex
+	closedSession      closedSession
 	// closeChan is used to notify the run loop that it should terminate
 	closeChan chan closeError
 
@@ -919,12 +921,17 @@ func (s *session) closeLocal(e error) {
 		} else {
 			s.logger.Errorf("Closing session with error: %s", e)
 		}
-		s.closeChan <- closeError{err: e, sendClose: true, remote: false}
+		s.closeChan <- closeError{err: e, remote: false}
 	})
 }
 
 // destroy closes the session without sending the error on the wire
 func (s *session) destroy(e error) {
+	s.closedSessionMutex.Lock()
+	if s.closedSession != nil {
+		s.closedSession.destroy()
+	}
+	s.closedSessionMutex.Unlock()
 	s.destroyImpl(e)
 	<-s.ctx.Done()
 }
@@ -937,7 +944,7 @@ func (s *session) destroyImpl(e error) {
 			s.logger.Errorf("Destroying session %s with error: %s", s.destConnID, e)
 		}
 		s.sessionRunner.Remove(s.srcConnID)
-		s.closeChan <- closeError{err: e, sendClose: false, remote: false}
+		s.closeChan <- closeError{err: e, immediate: true, remote: false}
 	})
 }
 
@@ -952,7 +959,6 @@ func (s *session) closeForRecreating() protocol.PacketNumber {
 func (s *session) closeRemote(e error) {
 	s.closeOnce.Do(func() {
 		s.logger.Errorf("Peer closed session with error: %s", e)
-		s.sessionRunner.ReplaceWithClosed(s.srcConnID, newClosedRemoteSession(s.perspective))
 		s.closeChan <- closeError{err: e, remote: true}
 	})
 }
@@ -984,19 +990,24 @@ func (s *session) handleCloseError(closeErr closeError) {
 
 	s.streamsMap.CloseWithError(quicErr)
 
-	if !closeErr.sendClose {
+	if closeErr.immediate {
 		return
 	}
+	s.sessionRunner.Retire(s.srcConnID)
 	// If this is a remote close we're done here
 	if closeErr.remote {
+		s.closedSessionMutex.Lock()
+		s.closedSession = newClosedRemoteSession(s.receivedPackets)
+		s.closedSessionMutex.Unlock()
 		return
 	}
 	connClosePacket, err := s.sendConnectionClose(quicErr)
 	if err != nil {
 		s.logger.Debugf("Error sending CONNECTION_CLOSE: %s", err)
 	}
-	cs := newClosedLocalSession(s.conn, connClosePacket, s.perspective, s.logger)
-	s.sessionRunner.ReplaceWithClosed(s.srcConnID, cs)
+	s.closedSessionMutex.Lock()
+	s.closedSession = newClosedLocalSession(s.conn, s.receivedPackets, connClosePacket, s.logger)
+	s.closedSessionMutex.Unlock()
 }
 
 func (s *session) dropEncryptionLevel(encLevel protocol.EncryptionLevel) {
