@@ -57,8 +57,8 @@ func (m *connMultiplexer) AddConn(
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
 
-	laddr := c.LocalAddr().String()
-	p, ok := m.conns[laddr]
+	connIndex := c.LocalAddr().Network() + " " + c.LocalAddr().String()
+	p, ok := m.conns[connIndex]
 	if !ok {
 		manager := m.newPacketHandlerManager(c, connIDLen, statelessResetKey, m.logger)
 		p = connManager{
@@ -66,7 +66,7 @@ func (m *connMultiplexer) AddConn(
 			statelessResetKey: statelessResetKey,
 			manager:           manager,
 		}
-		m.conns[laddr] = p
+		m.conns[connIndex] = p
 	}
 	if p.connIDLen != connIDLen {
 		return nil, fmt.Errorf("cannot use %d byte connection IDs on a connection that is already using %d byte connction IDs", connIDLen, p.connIDLen)
@@ -81,11 +81,11 @@ func (m *connMultiplexer) RemoveConn(c net.PacketConn) error {
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
 
-	laddr := c.LocalAddr().String()
-	if _, ok := m.conns[laddr]; !ok {
+	connIndex := c.LocalAddr().Network() + " " + c.LocalAddr().String()
+	if _, ok := m.conns[connIndex]; !ok {
 		return fmt.Errorf("cannote remove connection, connection is unknown")
 	}
 
-	delete(m.conns, laddr)
+	delete(m.conns, connIndex)
 	return nil
 }
