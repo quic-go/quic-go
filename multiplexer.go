@@ -57,9 +57,7 @@ func (m *connMultiplexer) AddConn(
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
 
-	network:=c.LocalAddr().Network()
-	laddr := c.LocalAddr().String()
-	connIndex := network+laddr
+	connIndex := c.LocalAddr().Network() + " " + c.LocalAddr().String()
 	p, ok := m.conns[connIndex]
 	if !ok {
 		manager := m.newPacketHandlerManager(c, connIDLen, statelessResetKey, m.logger)
@@ -83,9 +81,7 @@ func (m *connMultiplexer) RemoveConn(c net.PacketConn) error {
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
 
-	network:=c.LocalAddr().Network()
-	laddr := c.LocalAddr().String()
-	connIndex := network+laddr
+	connIndex := c.LocalAddr().Network() + " " + c.LocalAddr().String()
 	if _, ok := m.conns[connIndex]; !ok {
 		return fmt.Errorf("cannote remove connection, connection is unknown")
 	}

@@ -1,6 +1,9 @@
 package quic
 
 import (
+	"bytes"
+	"runtime/pprof"
+	"strings"
 	"sync"
 
 	"github.com/golang/mock/gomock"
@@ -24,6 +27,21 @@ var _ = BeforeEach(func() {
 	connMuxerOnce = *new(sync.Once)
 })
 
+func areSessionsRunning() bool {
+	var b bytes.Buffer
+	pprof.Lookup("goroutine").WriteTo(&b, 1)
+	return strings.Contains(b.String(), "quic-go.(*session).run")
+}
+
+func areClosedSessionsRunning() bool {
+	var b bytes.Buffer
+	pprof.Lookup("goroutine").WriteTo(&b, 1)
+	return strings.Contains(b.String(), "quic-go.(*closedLocalSession).run") ||
+		strings.Contains(b.String(), "quic-go.(*closedRemoteSession).run")
+}
+
 var _ = AfterEach(func() {
 	mockCtrl.Finish()
+	Eventually(areSessionsRunning).Should(BeFalse())
+	Eventually(areClosedSessionsRunning).Should(BeFalse())
 })
