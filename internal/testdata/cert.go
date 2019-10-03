@@ -5,19 +5,18 @@ import (
 	"crypto/x509"
 	"encoding/pem"
 	"io/ioutil"
+	"os"
 	"path"
-	"runtime"
 )
 
 var certPath string
 
 func init() {
-	_, filename, _, ok := runtime.Caller(0)
-	if !ok {
-		panic("Failed to get current frame")
+	ex, err := os.Executable()
+	if err != nil {
+		panic(err)
 	}
-
-	certPath = path.Dir(filename)
+	certPath = path.Dir(ex)
 }
 
 // GetCertificatePaths returns the paths to certificate and key
