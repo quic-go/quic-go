@@ -2,6 +2,7 @@ package main
 
 import (
 	"crypto/tls"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -14,6 +15,8 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
+var errUnsupported = errors.New("unsupported test case")
+
 func main() {
 	logFile, err := os.Create("/logs/log.txt")
 	if err != nil {
@@ -23,47 +26,80 @@ func main() {
 	defer logFile.Close()
 	log.SetOutput(logFile)
 
+	testcase := os.Getenv("TESTCASE")
+	if err := runTestcase(testcase); err != nil {
+		if err == errUnsupported {
+			fmt.Printf("unsupported test case: %s\n", testcase)
+			os.Exit(127)
+		}
+		fmt.Printf("Downloading files failed: %s\n", err.Error())
+		os.Exit(1)
+	}
+}
+
+func runTestcase(testcase string) error {
 	flag.Parse()
 	urls := flag.Args()
 
-	testcase := os.Getenv("TESTCASE")
-
-	var useH3 bool
 	switch testcase {
-	case "handshake", "transfer", "retry":
 	case "http3":
-		useH3 = true
-	default:
-		fmt.Printf("unsupported test case: %s\n", testcase)
-		os.Exit(127)
-	}
-
-	var roundTripper http.RoundTripper
-	if useH3 {
 		r := &http3.RoundTripper{
 			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
 		}
 		defer r.Close()
-		roundTripper = r
-	} else {
-		r := &http09.RoundTripper{
-			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
-		}
-		defer r.Close()
-		roundTripper = r
+		return downloadFiles(r, urls)
+	case "handshake", "transfer", "retry":
+	case "resumption":
+		return runResumptionTest(urls)
+	default:
+		return errUnsupported
 	}
 
+	r := &http09.RoundTripper{
+		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+	}
+	defer r.Close()
+	return downloadFiles(r, urls)
+}
+
+func runResumptionTest(urls []string) error {
+	if len(urls) < 2 {
+		return errors.New("expected at least 2 URLs")
+	}
+	csc := tls.NewLRUClientSessionCache(1)
+
+	// do the first transfer
+	r := &http09.RoundTripper{
+		TLSClientConfig: &tls.Config{
+			InsecureSkipVerify: true,
+			ClientSessionCache: csc,
+		},
+	}
+	if err := downloadFiles(r, urls[:1]); err != nil {
+		return err
+	}
+	r.Close()
+
+	// reestablish the connection, using the session ticket that the server (hopefully provided)
+	r = &http09.RoundTripper{
+		TLSClientConfig: &tls.Config{
+			InsecureSkipVerify: true,
+			ClientSessionCache: csc,
+		},
+	}
+	defer r.Close()
+	return downloadFiles(r, urls[1:])
+}
+
+func downloadFiles(cl http.RoundTripper, urls []string) error {
 	var g errgroup.Group
 	for _, u := range urls {
 		url := u
 		g.Go(func() error {
-			return downloadFile(roundTripper, url)
+			return downloadFile(cl, url)
 		})
 	}
-	if err := g.Wait(); err != nil {
-		fmt.Printf("Downloading files failed: %s\n", err.Error())
-		os.Exit(1)
-	}
+	return g.Wait()
 }
 
 func downloadFile(cl http.RoundTripper, url string) error {
