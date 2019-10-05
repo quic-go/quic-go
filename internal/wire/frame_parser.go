@@ -87,6 +87,8 @@ func (p *frameParser) parseFrame(r *bytes.Reader, typeByte byte, encLevel protoc
 			frame, err = parseConnectionCloseFrame(r, p.version)
 		case 0x1e:
 			frame, err = parseHandshakeDoneFrame(r, p.version)
+		case 0x30, 0x31:
+			frame, err = parseDatagramFrame(r, p.version)
 		default:
 			err = errors.New("unknown frame type")
 		}
