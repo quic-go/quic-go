@@ -95,4 +95,59 @@ var _ = Describe("STREAM frame", func() {
 			Expect(f.Length(versionIETFFrames)).To(Equal(protocol.ByteCount(1 + 6)))
 		})
 	})
+
+	Context("max data length", func() {
+		const maxSize = 3000
+
+		It("returns a data length such that the resulting frame has the right size, if data length is not present", func() {
+			data := make([]byte, maxSize)
+			f := &DatagramFrame{}
+			b := &bytes.Buffer{}
+			for i := 1; i < 3000; i++ {
+				b.Reset()
+				f.Data = nil
+				maxDataLen := f.MaxDataLen(protocol.ByteCount(i), versionIETFFrames)
+				if maxDataLen == 0 { // 0 means that no valid STREAM frame can be written
+					// check that writing a minimal size STREAM frame (i.e. with 1 byte data) is actually larger than the desired size
+					f.Data = []byte{0}
+					Expect(f.Write(b, versionIETFFrames)).To(Succeed())
+					Expect(b.Len()).To(BeNumerically(">", i))
+					continue
+				}
+				f.Data = data[:int(maxDataLen)]
+				Expect(f.Write(b, versionIETFFrames)).To(Succeed())
+				Expect(b.Len()).To(Equal(i))
+			}
+		})
+
+		It("always returns a data length such that the resulting frame has the right size, if data length is present", func() {
+			data := make([]byte, maxSize)
+			f := &DatagramFrame{DataLenPresent: true}
+			b := &bytes.Buffer{}
+			var frameOneByteTooSmallCounter int
+			for i := 1; i < 3000; i++ {
+				b.Reset()
+				f.Data = nil
+				maxDataLen := f.MaxDataLen(protocol.ByteCount(i), versionIETFFrames)
+				if maxDataLen == 0 { // 0 means that no valid STREAM frame can be written
+					// check that writing a minimal size STREAM frame (i.e. with 1 byte data) is actually larger than the desired size
+					f.Data = []byte{0}
+					Expect(f.Write(b, versionIETFFrames)).To(Succeed())
+					Expect(b.Len()).To(BeNumerically(">", i))
+					continue
+				}
+				f.Data = data[:int(maxDataLen)]
+				Expect(f.Write(b, versionIETFFrames)).To(Succeed())
+				// There's *one* pathological case, where a data length of x can be encoded into 1 byte
+				// but a data lengths of x+1 needs 2 bytes
+				// In that case, it's impossible to create a STREAM frame of the desired size
+				if b.Len() == i-1 {
+					frameOneByteTooSmallCounter++
+					continue
+				}
+				Expect(b.Len()).To(Equal(i))
+			}
+			Expect(frameOneByteTooSmallCounter).To(Equal(1))
+		})
+	})
 })

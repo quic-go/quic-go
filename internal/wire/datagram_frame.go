@@ -57,6 +57,24 @@ func (f *DatagramFrame) Write(b *bytes.Buffer, _ protocol.VersionNumber) error {
 	return nil
 }
 
+// MaxDataLen returns the maximum data length
+func (f *DatagramFrame) MaxDataLen(maxSize protocol.ByteCount, version protocol.VersionNumber) protocol.ByteCount {
+	headerLen := protocol.ByteCount(1)
+	if f.DataLenPresent {
+		// pretend that the data size will be 1 bytes
+		// if it turns out that varint encoding the length will consume 2 bytes, we need to adjust the data length afterwards
+		headerLen++
+	}
+	if headerLen > maxSize {
+		return 0
+	}
+	maxDataLen := maxSize - headerLen
+	if f.DataLenPresent && utils.VarIntLen(uint64(maxDataLen)) != 1 {
+		maxDataLen--
+	}
+	return maxDataLen
+}
+
 // Length of a written frame
 func (f *DatagramFrame) Length(_ protocol.VersionNumber) protocol.ByteCount {
 	length := 1 + protocol.ByteCount(len(f.Data))
