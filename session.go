@@ -294,6 +294,7 @@ var newSession = func(
 		ActiveConnectionIDLimit:         protocol.MaxActiveConnectionIDs,
 		InitialSourceConnectionID:       srcConnID,
 		RetrySourceConnectionID:         retrySrcConnID,
+		MaxDatagramFrameSize:            protocol.InvalidByteCount, // disable DATAGRAMs
 	}
 	if s.tracer != nil {
 		s.tracer.SentTransportParameters(params)
@@ -413,6 +414,7 @@ var newClientSession = func(
 		DisableActiveMigration:         true,
 		ActiveConnectionIDLimit:        protocol.MaxActiveConnectionIDs,
 		InitialSourceConnectionID:      srcConnID,
+		MaxDatagramFrameSize:           protocol.InvalidByteCount, // disable DATAGRAMs
 	}
 	if s.tracer != nil {
 		s.tracer.SentTransportParameters(params)
