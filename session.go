@@ -632,9 +632,14 @@ func (s *session) Context() context.Context {
 	return s.ctx
 }
 
+func (s *session) supportsDatagrams() bool {
+	return s.peerParams.MaxDatagramFrameSize != protocol.InvalidByteCount
+}
+
 func (s *session) ConnectionState() ConnectionState {
 	return ConnectionState{
-		TLS: s.cryptoStreamHandler.ConnectionState(),
+		TLS:               s.cryptoStreamHandler.ConnectionState(),
+		SupportsDatagrams: s.supportsDatagrams(),
 	}
 }
 

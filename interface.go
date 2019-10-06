@@ -264,7 +264,8 @@ type Config struct {
 
 // ConnectionState records basic details about a QUIC connection
 type ConnectionState struct {
-	TLS handshake.ConnectionState
+	TLS               handshake.ConnectionState
+	SupportsDatagrams bool
 }
 
 // A Listener for incoming QUIC connections
