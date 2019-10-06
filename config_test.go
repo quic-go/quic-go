@@ -69,6 +69,8 @@ var _ = Describe("Config", func() {
 				f.Set(reflect.ValueOf([]byte{1, 2, 3, 4}))
 			case "KeepAlive":
 				f.Set(reflect.ValueOf(true))
+			case "EnableDatagrams":
+				f.Set(reflect.ValueOf(true))
 			case "Tracer":
 				f.Set(reflect.ValueOf(mocklogging.NewMockTracer(mockCtrl)))
 			default:

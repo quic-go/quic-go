@@ -259,7 +259,10 @@ type Config struct {
 	StatelessResetKey []byte
 	// KeepAlive defines whether this peer will periodically send a packet to keep the connection alive.
 	KeepAlive bool
-	Tracer    logging.Tracer
+	// See https://datatracker.ietf.org/doc/draft-ietf-quic-datagram/.
+	// Datagrams will only be available when both peers enable datagram support.
+	EnableDatagrams bool
+	Tracer          logging.Tracer
 }
 
 // ConnectionState records basic details about a QUIC connection

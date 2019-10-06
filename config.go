@@ -98,6 +98,7 @@ func populateConfig(config *Config) *Config {
 		ConnectionIDLength:                    config.ConnectionIDLength,
 		StatelessResetKey:                     config.StatelessResetKey,
 		TokenStore:                            config.TokenStore,
+		EnableDatagrams:                       config.EnableDatagrams,
 		Tracer:                                config.Tracer,
 	}
 }
