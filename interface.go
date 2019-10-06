@@ -187,6 +187,10 @@ type Session interface {
 	// It blocks until the handshake completes.
 	// Warning: This API should not be considered stable and might change soon.
 	ConnectionState() ConnectionState
+
+	// SendMessage sends a message as a datagram.
+	// See https://datatracker.ietf.org/doc/draft-pauly-quic-datagram/.
+	SendMessage([]byte) error
 }
 
 // An EarlySession is a session that is handshaking.

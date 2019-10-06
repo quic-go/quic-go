@@ -512,6 +512,9 @@ func (s *session) preSetup() {
 	s.sessionCreationTime = now
 
 	s.windowUpdateQueue = newWindowUpdateQueue(s.streamsMap, s.connFlowController, s.framer.QueueControlFrame)
+	if s.config.EnableDatagrams {
+		s.datagramQueue = newDatagramQueue(s.scheduleSending)
+	}
 }
 
 // run the session main loop
@@ -1115,6 +1118,8 @@ func (s *session) handleFrame(f wire.Frame, encLevel protocol.EncryptionLevel, d
 		err = s.handleRetireConnectionIDFrame(frame, destConnID)
 	case *wire.HandshakeDoneFrame:
 		err = s.handleHandshakeDoneFrame()
+	case *wire.DatagramFrame:
+		// TODO: handle DATRAGRAM frames
 	default:
 		err = fmt.Errorf("unexpected frame type: %s", reflect.ValueOf(&frame).Elem().Type().Name())
 	}
@@ -1737,6 +1742,17 @@ func (s *session) onStreamCompleted(id protocol.StreamID) {
 	if err := s.streamsMap.DeleteStream(id); err != nil {
 		s.closeLocal(err)
 	}
+}
+
+func (s *session) SendMessage(p []byte) error {
+	f := &wire.DatagramFrame{DataLenPresent: true}
+	if protocol.ByteCount(len(p)) > f.MaxDataLen(s.peerParams.MaxDatagramFrameSize, s.version) {
+		return errors.New("message too large")
+	}
+	f.Data = make([]byte, len(p))
+	copy(f.Data, p)
+	s.datagramQueue.AddAndWait(f)
+	return nil
 }
 
 func (s *session) LocalAddr() net.Addr {
