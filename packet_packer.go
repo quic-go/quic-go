@@ -156,6 +156,7 @@ type packetPacker struct {
 	pnManager           packetNumberManager
 	framer              frameSource
 	acks                ackFrameSource
+	datagramQueue       *datagramQueue
 	retransmissionQueue *retransmissionQueue
 
 	maxPacketSize          protocol.ByteCount
@@ -175,6 +176,7 @@ func newPacketPacker(
 	cryptoSetup sealingManager,
 	framer frameSource,
 	acks ackFrameSource,
+	datagramQueue *datagramQueue,
 	perspective protocol.Perspective,
 	version protocol.VersionNumber,
 ) *packetPacker {
@@ -185,6 +187,7 @@ func newPacketPacker(
 		initialStream:       initialStream,
 		handshakeStream:     handshakeStream,
 		retransmissionQueue: retransmissionQueue,
+		datagramQueue:       datagramQueue,
 		perspective:         perspective,
 		version:             version,
 		framer:              framer,
@@ -576,10 +579,25 @@ func (p *packetPacker) maybeGetAppDataPacketWithEncLevel(maxPayloadSize protocol
 
 func (p *packetPacker) composeNextPacket(maxFrameSize protocol.ByteCount, ackAllowed bool) *payload {
 	payload := &payload{}
+
+	var hasDatagram bool
+	if p.datagramQueue != nil {
+		if datagram := p.datagramQueue.Get(); datagram != nil {
+			payload.frames = append(payload.frames, ackhandler.Frame{
+				Frame: datagram,
+				// set it to a no-op. Then we won't set the default callback, which would retransmit the frame.
+				OnLost: func(wire.Frame) {},
+			})
+			payload.length += datagram.Length(p.version)
+			hasDatagram = true
+		}
+	}
+
 	var ack *wire.AckFrame
 	hasData := p.framer.HasData()
 	hasRetransmission := p.retransmissionQueue.HasAppData()
-	if ackAllowed {
+	// TODO: make sure ACKs are sent when a lot of DATAGRAMs are queued
+	if !hasDatagram && ackAllowed {
 		ack = p.acks.GetAckFrame(protocol.Encryption1RTT, !hasRetransmission && !hasData)
 		if ack != nil {
 			payload.ack = ack
