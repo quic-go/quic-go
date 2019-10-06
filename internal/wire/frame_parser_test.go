@@ -18,7 +18,7 @@ var _ = Describe("Frame parsing", func() {
 
 	BeforeEach(func() {
 		buf = &bytes.Buffer{}
-		parser = NewFrameParser(versionIETFFrames)
+		parser = NewFrameParser(true, versionIETFFrames)
 	})
 
 	It("returns nil if there's nothing more to read", func() {
@@ -278,6 +278,24 @@ var _ = Describe("Frame parsing", func() {
 		frame, err := parser.ParseNext(bytes.NewReader(buf.Bytes()), protocol.Encryption1RTT)
 		Expect(err).ToNot(HaveOccurred())
 		Expect(frame).To(Equal(f))
+	})
+
+	It("unpacks DATAGRAM frames", func() {
+		f := &DatagramFrame{Data: []byte("foobar")}
+		buf := &bytes.Buffer{}
+		Expect(f.Write(buf, versionIETFFrames)).To(Succeed())
+		frame, err := parser.ParseNext(bytes.NewReader(buf.Bytes()), protocol.Encryption1RTT)
+		Expect(err).ToNot(HaveOccurred())
+		Expect(frame).To(Equal(f))
+	})
+
+	It("errors when DATAGRAM frames are not supported", func() {
+		parser = NewFrameParser(false, versionIETFFrames)
+		f := &DatagramFrame{Data: []byte("foobar")}
+		buf := &bytes.Buffer{}
+		Expect(f.Write(buf, versionIETFFrames)).To(Succeed())
+		_, err := parser.ParseNext(bytes.NewReader(buf.Bytes()), protocol.Encryption1RTT)
+		Expect(err).To(MatchError("FRAME_ENCODING_ERROR (frame type: 0x30): unknown frame type"))
 	})
 
 	It("errors on invalid type", func() {
