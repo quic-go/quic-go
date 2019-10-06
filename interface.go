@@ -141,8 +141,6 @@ type StreamError interface {
 	ErrorCode() ErrorCode
 }
 
-type ConnectionState = handshake.ConnectionState
-
 // A Session is a QUIC connection between two peers.
 type Session interface {
 	// AcceptStream returns the next stream opened by the peer, blocking until one is available.
@@ -262,6 +260,11 @@ type Config struct {
 	// KeepAlive defines whether this peer will periodically send a packet to keep the connection alive.
 	KeepAlive bool
 	Tracer    logging.Tracer
+}
+
+// ConnectionState records basic details about a QUIC connection
+type ConnectionState struct {
+	TLS handshake.ConnectionState
 }
 
 // A Listener for incoming QUIC connections

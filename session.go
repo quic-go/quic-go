@@ -633,7 +633,9 @@ func (s *session) Context() context.Context {
 }
 
 func (s *session) ConnectionState() ConnectionState {
-	return s.cryptoStreamHandler.ConnectionState()
+	return ConnectionState{
+		TLS: s.cryptoStreamHandler.ConnectionState(),
+	}
 }
 
 // Time when the next keep-alive packet should be sent.
