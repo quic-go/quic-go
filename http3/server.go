@@ -334,7 +334,7 @@ func (s *Server) SetQuicHeaders(hdr http.Header) error {
 		s.supportedVersionsAsString = strings.Join(versions, ",")
 	}
 
-	hdr.Add("Alt-Svc", fmt.Sprintf(`quic=":%d"; ma=2592000; v="%s"`, port, s.supportedVersionsAsString))
+	hdr.Add("Alt-Svc", fmt.Sprintf(`%s=":%d"; ma=2592000; quic="%s"`, nextProtoH3, port, s.supportedVersionsAsString))
 
 	return nil
 }
