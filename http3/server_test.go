@@ -339,7 +339,7 @@ var _ = Describe("Server", func() {
 		}
 
 		BeforeEach(func() {
-			Expect(getExpectedHeader([]protocol.VersionNumber{99, 90, 9})).To(Equal(http.Header{"Alt-Svc": {nextProtoH3 + `=":443"; ma=2592000; quic="99,90,9"`}}))
+			Expect(getExpectedHeader([]protocol.VersionNumber{0x00000001, 0x1abadaba})).To(Equal(http.Header{"Alt-Svc": {nextProtoH3 + `=":443"; ma=2592000; quic="1,1abadaba"`}}))
 			expected = getExpectedHeader(protocol.SupportedVersions)
 		})
 
