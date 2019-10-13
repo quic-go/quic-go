@@ -125,5 +125,14 @@ var _ = Describe("qtls.Config generation", func() {
 			_, ok := qtlsConf.ClientSessionCache.Get("raboof")
 			Expect(ok).To(BeTrue())
 		})
+
+		It("puts a nil session state", func() {
+			csc := NewMockClientSessionCache(mockCtrl)
+			tlsConf := &tls.Config{ClientSessionCache: csc}
+			qtlsConf := tlsConfigToQtlsConfig(tlsConf, nil, &mockExtensionHandler{})
+			// put something
+			csc.EXPECT().Put("foobar", nil)
+			qtlsConf.ClientSessionCache.Put("foobar", nil)
+		})
 	})
 })
