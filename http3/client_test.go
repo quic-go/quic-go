@@ -152,14 +152,14 @@ var _ = Describe("Client", func() {
 			decoder := qpack.NewDecoder(nil)
 
 			frame, err := parseNextFrame(str)
-			Expect(err).ToNot(HaveOccurred())
-			Expect(frame).To(BeAssignableToTypeOf(&headersFrame{}))
+			ExpectWithOffset(1, err).ToNot(HaveOccurred())
+			ExpectWithOffset(1, frame).To(BeAssignableToTypeOf(&headersFrame{}))
 			headersFrame := frame.(*headersFrame)
 			data := make([]byte, headersFrame.Length)
 			_, err = io.ReadFull(str, data)
-			Expect(err).ToNot(HaveOccurred())
+			ExpectWithOffset(1, err).ToNot(HaveOccurred())
 			hfs, err := decoder.DecodeFull(data)
-			Expect(err).ToNot(HaveOccurred())
+			ExpectWithOffset(1, err).ToNot(HaveOccurred())
 			for _, p := range hfs {
 				fields[p.Name] = p.Value
 			}
@@ -272,24 +272,28 @@ var _ = Describe("Client", func() {
 				buf := &bytes.Buffer{}
 				(&dataFrame{Length: 0x42}).Write(buf)
 				sess.EXPECT().CloseWithError(quic.ErrorCode(errorUnexpectedFrame), gomock.Any())
-				str.EXPECT().Close().MaxTimes(1)
+				closed := make(chan struct{})
+				str.EXPECT().Close().Do(func() { close(closed) })
 				str.EXPECT().Read(gomock.Any()).DoAndReturn(func(b []byte) (int, error) {
 					return buf.Read(b)
 				}).AnyTimes()
 				_, err := client.RoundTrip(request)
 				Expect(err).To(MatchError("expected first frame to be a HEADERS frame"))
+				Eventually(closed).Should(BeClosed())
 			})
 
 			It("cancels the stream when the HEADERS frame is too large", func() {
 				buf := &bytes.Buffer{}
 				(&headersFrame{Length: 1338}).Write(buf)
 				str.EXPECT().CancelWrite(quic.ErrorCode(errorFrameError))
-				str.EXPECT().Close().MaxTimes(1)
+				closed := make(chan struct{})
+				str.EXPECT().Close().Do(func() { close(closed) })
 				str.EXPECT().Read(gomock.Any()).DoAndReturn(func(b []byte) (int, error) {
 					return buf.Read(b)
 				}).AnyTimes()
 				_, err := client.RoundTrip(request)
 				Expect(err).To(MatchError("HEADERS frame too large: 1338 bytes (max: 1337)"))
+				Eventually(closed).Should(BeClosed())
 			})
 		})
 
