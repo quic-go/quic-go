@@ -334,12 +334,12 @@ var _ = Describe("Server", func() {
 				versionsAsString = append(versionsAsString, v.ToAltSvc())
 			}
 			return http.Header{
-				"Alt-Svc": {fmt.Sprintf(`quic=":443"; ma=2592000; v="%s"`, strings.Join(versionsAsString, ","))},
+				"Alt-Svc": {fmt.Sprintf(`%s=":443"; ma=2592000; quic="%s"`, nextProtoH3, strings.Join(versionsAsString, ","))},
 			}
 		}
 
 		BeforeEach(func() {
-			Expect(getExpectedHeader([]protocol.VersionNumber{99, 90, 9})).To(Equal(http.Header{"Alt-Svc": {`quic=":443"; ma=2592000; v="99,90,9"`}}))
+			Expect(getExpectedHeader([]protocol.VersionNumber{0x00000001, 0x1abadaba})).To(Equal(http.Header{"Alt-Svc": {nextProtoH3 + `=":443"; ma=2592000; quic="1,1abadaba"`}}))
 			expected = getExpectedHeader(protocol.SupportedVersions)
 		})
 
