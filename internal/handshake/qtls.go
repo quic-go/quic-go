@@ -51,6 +51,10 @@ func (c *clientSessionCache) Get(sessionKey string) (*qtls.ClientSessionState, b
 }
 
 func (c *clientSessionCache) Put(sessionKey string, cs *qtls.ClientSessionState) {
+	if cs == nil {
+		c.ClientSessionCache.Put(sessionKey, nil)
+		return
+	}
 	// qtls.ClientSessionState is identical to the tls.ClientSessionState.
 	// In order to allow users of quic-go to use a tls.Config,
 	// we need this workaround to use the ClientSessionCache.
