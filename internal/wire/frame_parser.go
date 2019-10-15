@@ -101,7 +101,7 @@ func (p *frameParser) isAllowedAtEncLevel(f Frame, encLevel protocol.EncryptionL
 	switch encLevel {
 	case protocol.EncryptionInitial, protocol.EncryptionHandshake:
 		switch f.(type) {
-		case *CryptoFrame, *AckFrame, *ConnectionCloseFrame:
+		case *CryptoFrame, *AckFrame, *ConnectionCloseFrame, *PingFrame:
 			return true
 		}
 	case protocol.Encryption1RTT:
