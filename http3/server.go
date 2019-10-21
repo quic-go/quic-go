@@ -10,13 +10,11 @@ import (
 	"net"
 	"net/http"
 	"runtime"
-	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
 
 	"github.com/lucas-clemente/quic-go"
-	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/internal/utils"
 	"github.com/marten-seemann/qpack"
 	"github.com/onsi/ginkgo"
@@ -57,8 +55,6 @@ type Server struct {
 	mutex     sync.Mutex
 	listeners map[*quic.Listener]struct{}
 	closed    utils.AtomicBool
-
-	supportedVersionsAsString string
 
 	logger utils.Logger
 }
@@ -326,15 +322,7 @@ func (s *Server) SetQuicHeaders(hdr http.Header) error {
 		atomic.StoreUint32(&s.port, port)
 	}
 
-	if s.supportedVersionsAsString == "" {
-		var versions []string
-		for _, v := range protocol.SupportedVersions {
-			versions = append(versions, v.ToAltSvc())
-		}
-		s.supportedVersionsAsString = strings.Join(versions, ",")
-	}
-
-	hdr.Add("Alt-Svc", fmt.Sprintf(`%s=":%d"; ma=2592000; quic="%s"`, nextProtoH3, port, s.supportedVersionsAsString))
+	hdr.Add("Alt-Svc", fmt.Sprintf(`%s=":%d"; ma=2592000`, nextProtoH3, port))
 
 	return nil
 }

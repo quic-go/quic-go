@@ -48,11 +48,6 @@ func (vn VersionNumber) String() string {
 	}
 }
 
-// ToAltSvc returns the representation of the version for the H2 Alt-Svc parameters
-func (vn VersionNumber) ToAltSvc() string {
-	return fmt.Sprintf("%x", uint32(vn))
-}
-
 func (vn VersionNumber) isGQUIC() bool {
 	return vn > gquicVersion0 && vn <= maxGquicVersion
 }
