@@ -9,13 +9,11 @@ import (
 	"io"
 	"net"
 	"net/http"
-	"strings"
 	"time"
 
 	"github.com/golang/mock/gomock"
 	"github.com/lucas-clemente/quic-go"
 	mockquic "github.com/lucas-clemente/quic-go/internal/mocks/quic"
-	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/internal/testdata"
 	"github.com/lucas-clemente/quic-go/internal/utils"
 	"github.com/marten-seemann/qpack"
@@ -328,19 +326,15 @@ var _ = Describe("Server", func() {
 	Context("setting http headers", func() {
 		var expected http.Header
 
-		getExpectedHeader := func(versions []protocol.VersionNumber) http.Header {
-			var versionsAsString []string
-			for _, v := range versions {
-				versionsAsString = append(versionsAsString, v.ToAltSvc())
-			}
+		getExpectedHeader := func() http.Header {
 			return http.Header{
-				"Alt-Svc": {fmt.Sprintf(`%s=":443"; ma=2592000; quic="%s"`, nextProtoH3, strings.Join(versionsAsString, ","))},
+				"Alt-Svc": {fmt.Sprintf(`%s=":443"; ma=2592000`, nextProtoH3)},
 			}
 		}
 
 		BeforeEach(func() {
-			Expect(getExpectedHeader([]protocol.VersionNumber{0x00000001, 0x1abadaba})).To(Equal(http.Header{"Alt-Svc": {nextProtoH3 + `=":443"; ma=2592000; quic="1,1abadaba"`}}))
-			expected = getExpectedHeader(protocol.SupportedVersions)
+			Expect(getExpectedHeader()).To(Equal(http.Header{"Alt-Svc": {nextProtoH3 + `=":443"; ma=2592000`}}))
+			expected = getExpectedHeader()
 		})
 
 		It("sets proper headers with numeric port", func() {
