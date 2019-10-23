@@ -271,7 +271,7 @@ var _ = Describe("Client", func() {
 			It("closes the connection when the first frame is not a HEADERS frame", func() {
 				buf := &bytes.Buffer{}
 				(&dataFrame{Length: 0x42}).Write(buf)
-				sess.EXPECT().CloseWithError(quic.ErrorCode(errorUnexpectedFrame), gomock.Any())
+				sess.EXPECT().CloseWithError(quic.ErrorCode(errorFrameUnexpected), gomock.Any())
 				closed := make(chan struct{})
 				str.EXPECT().Close().Do(func() { close(closed) })
 				str.EXPECT().Read(gomock.Any()).DoAndReturn(func(b []byte) (int, error) {

@@ -248,7 +248,7 @@ var _ = Describe("Server", func() {
 
 				done := make(chan struct{})
 				sess.EXPECT().CloseWithError(gomock.Any(), gomock.Any()).Do(func(code quic.ErrorCode, _ string) {
-					Expect(code).To(Equal(quic.ErrorCode(errorUnexpectedFrame)))
+					Expect(code).To(Equal(quic.ErrorCode(errorFrameUnexpected)))
 					close(done)
 				})
 				s.handleConn(sess)

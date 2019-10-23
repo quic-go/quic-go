@@ -14,59 +14,56 @@ const (
 	errorInternalError        errorCode = 0x102
 	errorStreamCreationError  errorCode = 0x103
 	errorClosedCriticalStream errorCode = 0x104
-	errorUnexpectedFrame      errorCode = 0x105
+	errorFrameUnexpected      errorCode = 0x105
 	errorFrameError           errorCode = 0x106
 	errorExcessiveLoad        errorCode = 0x107
-	errorWrongStream          errorCode = 0x108
-	errorIDError              errorCode = 0x109
-	errorSettingsError        errorCode = 0x10a
-	errorMissingSettings      errorCode = 0x10b
-	errorRequestRejected      errorCode = 0x10c
-	errorRequestCanceled      errorCode = 0x10d
-	errorRequestIncomplete    errorCode = 0x10e
-	errorEarlyResponse        errorCode = 0x10f
-	errorConnectError         errorCode = 0x110
-	errorVersionFallback      errorCode = 0x111
+	errorIDError              errorCode = 0x108
+	errorSettingsError        errorCode = 0x109
+	errorMissingSettings      errorCode = 0x10a
+	errorRequestRejected      errorCode = 0x10b
+	errorRequestCanceled      errorCode = 0x10c
+	errorRequestIncomplete    errorCode = 0x10d
+	errorEarlyResponse        errorCode = 0x10e
+	errorConnectError         errorCode = 0x10f
+	errorVersionFallback      errorCode = 0x110
 )
 
 func (e errorCode) String() string {
 	switch e {
 	case errorNoError:
-		return "HTTP_NO_ERROR"
+		return "H3_NO_ERROR"
 	case errorGeneralProtocolError:
-		return "HTTP_GENERAL_PROTOCOL_ERROR"
+		return "H3_GENERAL_PROTOCOL_ERROR"
 	case errorInternalError:
-		return "HTTP_INTERNAL_ERROR"
+		return "H3_INTERNAL_ERROR"
 	case errorStreamCreationError:
-		return "HTTP_STREAM_CREATION_ERROR"
+		return "H3_STREAM_CREATION_ERROR"
 	case errorClosedCriticalStream:
-		return "HTTP_CLOSED_CRITICAL_STREAM"
-	case errorUnexpectedFrame:
-		return "HTTP_UNEXPECTED_FRAME"
+		return "H3_CLOSED_CRITICAL_STREAM"
+	case errorFrameUnexpected:
+		return "H3_FRAME_UNEXPECTED"
 	case errorFrameError:
-		return "HTTP_FRAME_ERROR"
+		return "H3_FRAME_ERROR"
 	case errorExcessiveLoad:
-		return "HTTP_EXCESSIVE_LOAD"
-	case errorWrongStream:
-		return "HTTP_WRONG_STREAM"
+		return "H3_EXCESSIVE_LOAD"
 	case errorIDError:
-		return "HTTP_ID_ERROR"
+		return "H3_ID_ERROR"
 	case errorSettingsError:
-		return "HTTP_SETTINGS_ERROR"
+		return "H3_SETTINGS_ERROR"
 	case errorMissingSettings:
-		return "HTTP_MISSING_SETTINGS"
+		return "H3_MISSING_SETTINGS"
 	case errorRequestRejected:
-		return "HTTP_REQUEST_REJECTED"
+		return "H3_REQUEST_REJECTED"
 	case errorRequestCanceled:
-		return "HTTP_REQUEST_CANCELLED"
+		return "H3_REQUEST_CANCELLED"
 	case errorRequestIncomplete:
-		return "HTTP_INCOMPLETE_REQUEST"
+		return "H3_INCOMPLETE_REQUEST"
 	case errorEarlyResponse:
-		return "HTTP_EARLY_RESPONSE"
+		return "H3_EARLY_RESPONSE"
 	case errorConnectError:
-		return "HTTP_CONNECT_ERROR"
+		return "H3_CONNECT_ERROR"
 	case errorVersionFallback:
-		return "HTTP_VERSION_FALLBACK"
+		return "H3_VERSION_FALLBACK"
 	default:
 		return fmt.Sprintf("unknown error code: %#x", uint16(e))
 	}

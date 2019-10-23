@@ -204,7 +204,7 @@ func (c *client) doRequest(
 	}
 	hf, ok := frame.(*headersFrame)
 	if !ok {
-		return nil, newConnError(errorUnexpectedFrame, errors.New("expected first frame to be a HEADERS frame"))
+		return nil, newConnError(errorFrameUnexpected, errors.New("expected first frame to be a HEADERS frame"))
 	}
 	if hf.Length > c.maxHeaderBytes() {
 		return nil, newStreamError(errorFrameError, fmt.Errorf("HEADERS frame too large: %d bytes (max: %d)", hf.Length, c.maxHeaderBytes()))
