@@ -213,7 +213,7 @@ func (s *Server) handleRequest(str quic.Stream, decoder *qpack.Decoder) requestE
 	}
 	hf, ok := frame.(*headersFrame)
 	if !ok {
-		return newConnError(errorUnexpectedFrame, errors.New("expected first frame to be a HEADERS frame"))
+		return newConnError(errorFrameUnexpected, errors.New("expected first frame to be a HEADERS frame"))
 	}
 	if hf.Length > s.maxHeaderBytes() {
 		return newStreamError(errorFrameError, fmt.Errorf("HEADERS frame too large: %d bytes (max: %d)", hf.Length, s.maxHeaderBytes()))
