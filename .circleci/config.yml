@@ -1,17 +1,19 @@
 version: 2.1
-jobs:
-  build:
-    parameters:
-      image:
-        type: string
-        default: \"\"
-      runrace:
-        type: boolean
-        default: false
+executors:
+  test:
     docker:
-      - image: << parameters.image >>
-        environment:
-          GO111MODULE: "on"
+      - image: "circleci/golang:1.13"
+    environment:
+      runrace: true
+  interop:
+    docker:
+      - image: circleci/buildpack-deps:stretch
+    environment:
+      IMAGE_NAME: martenseemann/quic-go-interop
+
+jobs:
+  test:
+    executor: test
     working_directory: /go/src/github.com/lucas-clemente/quic-go
     steps:
       - checkout
@@ -35,16 +37,52 @@ jobs:
       - run:
           name: "Run self integration tests"
           command: ginkgo -v -randomizeAllSpecs -trace integrationtests/self
-      - when:
-          condition: << parameters.runrace >>
-          steps:
-            - run:
-                name: "Run self integration tests with race detector"
-                command: ginkgo -race -v -randomizeAllSpecs -trace integrationtests/self
+      - run:
+          name: "Run self integration tests with race detector"
+          command: ginkgo -race -v -randomizeAllSpecs -trace integrationtests/self
+  interop-build:
+    executor: interop
+    steps:
+      - checkout
+      - setup_remote_docker:
+          docker_layer_caching: true
+      - run:
+          name: Build docker image
+          command: cd interop && docker build . -t $IMAGE_NAME:latest --pull --build-arg CACHEBUST=$(date +%s)
+      - run:
+          name: Archive Docker image
+          command: docker save -o image.tar $IMAGE_NAME
+      - persist_to_workspace:
+          root: .
+          paths:
+            - ./image.tar
+  interop-publish:
+    executor: interop
+    steps:
+      - attach_workspace:
+          at: /tmp/workspace
+      - setup_remote_docker
+      - run:
+          name: Load archived Docker image 
+          command: docker load -i /tmp/workspace/image.tar
+      - run:
+          name: Publish quic-go-interop
+          command: |
+            echo "$DOCKERHUB_PASS" | docker login -u "$DOCKERHUB_USERNAME" --password-stdin
+            docker push $IMAGE_NAME:latest
+
 workflows:
   workflow:
     jobs:
-      - build:
-          name: "Go 1.13"
-          image: "circleci/golang:1.13"
-          runrace: true
+      - test
+      - interop-build:
+          filters:
+            branches:
+              only: interop
+      - interop-publish:
+          requires:
+            - test
+            - interop-build
+          filters:
+            branches:
+              only: interop
