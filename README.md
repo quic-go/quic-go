@@ -17,12 +17,6 @@ Since quic-go is under active development, there's no guarantee that two builds 
 
 If you want to use quic-go as a library in other projects, please consider using a [tagged release](https://github.com/lucas-clemente/quic-go/releases). These releases expose [experimental QUIC versions](https://github.com/quicwg/base-drafts/wiki/QUIC-Versions), which are guaranteed to be stable.
 
-## Google QUIC
-
-quic-go used to support both the QUIC versions supported by Google Chrome and QUIC as deployed on Google's servers, as well as IETF QUIC. Due to the divergence of the two protocols, we decided to not support both versions any more.
-
-The *master* branch **only** supports IETF QUIC. For Google QUIC support, please refer to the [gquic branch](https://github.com/lucas-clemente/quic-go/tree/gquic). 
-
 ## Guides
 
 *We currently support Go 1.13+, with [Go modules](https://github.com/golang/go/wiki/Modules) support enabled.*
