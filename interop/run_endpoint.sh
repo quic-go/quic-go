@@ -10,8 +10,8 @@ if [ "$ROLE" == "client" ]; then
     echo "Starting QUIC client..."
     echo "Client params: $CLIENT_PARAMS"
     echo "Test case: $TESTCASE"
-    ./client $CLIENT_PARAMS $REQUESTS
+    QUIC_GO_LOG_LEVEL=debug ./client $CLIENT_PARAMS $REQUESTS
 else
     echo "Running QUIC server."
-    ./server "$@"
+    QUIC_GO_LOG_LEVEL=debug ./server "$@"
 fi
