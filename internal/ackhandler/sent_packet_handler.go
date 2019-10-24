@@ -330,7 +330,6 @@ func (h *sentPacketHandler) setLossDetectionTimer() {
 
 	// PTO alarm
 	h.alarm = h.lastSentAckElicitingPacketTime.Add(h.rttStats.PTO() << h.ptoCount)
-	h.logger.Debugf("setLossDetectionTimer: setting to", h.alarm)
 }
 
 func (h *sentPacketHandler) detectLostPackets(
