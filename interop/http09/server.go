@@ -113,6 +113,9 @@ func (s *Server) handleStream(str quic.Stream) error {
 		str.CancelWrite(42)
 		return nil
 	}
+	if request[len(request)-9:] == " HTTP/0.9" {
+		request = request[:len(request)-9]
+	}
 
 	u, err := url.Parse(request[4:])
 	if err != nil {
