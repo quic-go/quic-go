@@ -92,7 +92,7 @@ func (c *client) doRequest(req *http.Request) (*http.Response, error) {
 	if err != nil {
 		return nil, err
 	}
-	cmd := "GET " + req.URL.Path
+	cmd := "GET " + req.URL.Path + "\r\n"
 	if _, err := str.Write([]byte(cmd)); err != nil {
 		return nil, err
 	}
