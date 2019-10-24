@@ -95,14 +95,14 @@ var _ = Describe("Transport Parameters", func() {
 	})
 
 	It("errors if the transport parameters are too short to contain the length", func() {
-		Expect((&TransportParameters{}).Unmarshal([]byte{0}, protocol.PerspectiveClient)).To(MatchError("transport parameter data too short"))
+		Expect((&TransportParameters{}).Unmarshal([]byte{0}, protocol.PerspectiveClient)).To(MatchError("TRANSPORT_PARAMETER_ERROR: transport parameter data too short"))
 	})
 
 	It("errors if the transport parameters are too short to contain the length", func() {
 		data := make([]byte, 2)
 		binary.BigEndian.PutUint16(data, 42)
 		data = append(data, make([]byte, 41)...)
-		Expect((&TransportParameters{}).Unmarshal(data, protocol.PerspectiveClient)).To(MatchError("expected transport parameters to be 42 bytes long, have 41"))
+		Expect((&TransportParameters{}).Unmarshal(data, protocol.PerspectiveClient)).To(MatchError("TRANSPORT_PARAMETER_ERROR: expected transport parameters to be 42 bytes long, have 41"))
 	})
 
 	It("errors when the stateless_reset_token has the wrong length", func() {
@@ -111,7 +111,7 @@ var _ = Describe("Transport Parameters", func() {
 		utils.BigEndian.WriteUint16(b, 15)
 		b.Write(make([]byte, 15))
 		p := &TransportParameters{}
-		Expect(p.Unmarshal(prependLength(b.Bytes()), protocol.PerspectiveServer)).To(MatchError("wrong length for stateless_reset_token: 15 (expected 16)"))
+		Expect(p.Unmarshal(prependLength(b.Bytes()), protocol.PerspectiveServer)).To(MatchError("TRANSPORT_PARAMETER_ERROR: wrong length for stateless_reset_token: 15 (expected 16)"))
 	})
 
 	It("errors when the max_packet_size is too small", func() {
@@ -120,7 +120,7 @@ var _ = Describe("Transport Parameters", func() {
 		utils.BigEndian.WriteUint16(b, uint16(utils.VarIntLen(1199)))
 		utils.WriteVarInt(b, 1199)
 		p := &TransportParameters{}
-		Expect(p.Unmarshal(prependLength(b.Bytes()), protocol.PerspectiveServer)).To(MatchError("invalid value for max_packet_size: 1199 (minimum 1200)"))
+		Expect(p.Unmarshal(prependLength(b.Bytes()), protocol.PerspectiveServer)).To(MatchError("TRANSPORT_PARAMETER_ERROR: invalid value for max_packet_size: 1199 (minimum 1200)"))
 	})
 
 	It("errors when disable_migration has content", func() {
@@ -129,13 +129,13 @@ var _ = Describe("Transport Parameters", func() {
 		utils.BigEndian.WriteUint16(b, 6)
 		b.Write([]byte("foobar"))
 		p := &TransportParameters{}
-		Expect(p.Unmarshal(prependLength(b.Bytes()), protocol.PerspectiveServer)).To(MatchError("wrong length for disable_migration: 6 (expected empty)"))
+		Expect(p.Unmarshal(prependLength(b.Bytes()), protocol.PerspectiveServer)).To(MatchError("TRANSPORT_PARAMETER_ERROR: wrong length for disable_migration: 6 (expected empty)"))
 	})
 
 	It("errors when the max_ack_delay is too large", func() {
 		data := (&TransportParameters{MaxAckDelay: 1 << 14 * time.Millisecond}).Marshal()
 		p := &TransportParameters{}
-		Expect(p.Unmarshal(data, protocol.PerspectiveServer)).To(MatchError("invalid value for max_ack_delay: 16384ms (maximum 16383ms)"))
+		Expect(p.Unmarshal(data, protocol.PerspectiveServer)).To(MatchError("TRANSPORT_PARAMETER_ERROR: invalid value for max_ack_delay: 16384ms (maximum 16383ms)"))
 	})
 
 	It("doesn't send the max_ack_delay, if it has the default value", func() {
@@ -154,7 +154,7 @@ var _ = Describe("Transport Parameters", func() {
 	It("errors when the ack_delay_exponenent is too large", func() {
 		data := (&TransportParameters{AckDelayExponent: 21}).Marshal()
 		p := &TransportParameters{}
-		Expect(p.Unmarshal(data, protocol.PerspectiveServer)).To(MatchError("invalid value for ack_delay_exponent: 21 (maximum 20)"))
+		Expect(p.Unmarshal(data, protocol.PerspectiveServer)).To(MatchError("TRANSPORT_PARAMETER_ERROR: invalid value for ack_delay_exponent: 21 (maximum 20)"))
 	})
 
 	It("doesn't send the ack_delay_exponent, if it has the default value", func() {
@@ -187,7 +187,7 @@ var _ = Describe("Transport Parameters", func() {
 		p := &TransportParameters{}
 		err := p.Unmarshal(prependLength(b.Bytes()), protocol.PerspectiveServer)
 		Expect(err).To(HaveOccurred())
-		Expect(err.Error()).To(ContainSubstring("inconsistent transport parameter length"))
+		Expect(err.Error()).To(ContainSubstring("TRANSPORT_PARAMETER_ERROR: inconsistent transport parameter length"))
 	})
 
 	It("handles max_ack_delays that decode to a negative duration", func() {
@@ -247,7 +247,7 @@ var _ = Describe("Transport Parameters", func() {
 		utils.BigEndian.WriteUint16(b, 7)
 		b.Write([]byte("foobar"))
 		p := &TransportParameters{}
-		Expect(p.Unmarshal(prependLength(b.Bytes()), protocol.PerspectiveServer)).To(MatchError("remaining length (6) smaller than parameter length (7)"))
+		Expect(p.Unmarshal(prependLength(b.Bytes()), protocol.PerspectiveServer)).To(MatchError("TRANSPORT_PARAMETER_ERROR: remaining length (6) smaller than parameter length (7)"))
 	})
 
 	It("errors if there's unprocessed data after reading", func() {
@@ -257,14 +257,14 @@ var _ = Describe("Transport Parameters", func() {
 		utils.WriteVarInt(b, 0x1337)
 		b.Write([]byte("foo"))
 		p := &TransportParameters{}
-		Expect(p.Unmarshal(prependLength(b.Bytes()), protocol.PerspectiveServer)).To(MatchError("should have read all data. Still have 3 bytes"))
+		Expect(p.Unmarshal(prependLength(b.Bytes()), protocol.PerspectiveServer)).To(MatchError("TRANSPORT_PARAMETER_ERROR: should have read all data. Still have 3 bytes"))
 	})
 
 	It("errors if the client sent a stateless_reset_token", func() {
 		var token [16]byte
 		params := &TransportParameters{StatelessResetToken: &token}
 		data := params.Marshal()
-		Expect((&TransportParameters{}).Unmarshal(data, protocol.PerspectiveClient)).To(MatchError("client sent a stateless_reset_token"))
+		Expect((&TransportParameters{}).Unmarshal(data, protocol.PerspectiveClient)).To(MatchError("TRANSPORT_PARAMETER_ERROR: client sent a stateless_reset_token"))
 	})
 
 	It("errors if the client sent a stateless_reset_token", func() {
@@ -272,6 +272,6 @@ var _ = Describe("Transport Parameters", func() {
 			OriginalConnectionID: protocol.ConnectionID{0xca, 0xfe},
 		}
 		data := params.Marshal()
-		Expect((&TransportParameters{}).Unmarshal(data, protocol.PerspectiveClient)).To(MatchError("client sent an original_connection_id"))
+		Expect((&TransportParameters{}).Unmarshal(data, protocol.PerspectiveClient)).To(MatchError("TRANSPORT_PARAMETER_ERROR: client sent an original_connection_id"))
 	})
 })

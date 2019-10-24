@@ -10,6 +10,8 @@ import (
 	"sort"
 	"time"
 
+	"github.com/lucas-clemente/quic-go/internal/qerr"
+
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/internal/utils"
 )
@@ -61,6 +63,13 @@ type TransportParameters struct {
 
 // Unmarshal the transport parameters
 func (p *TransportParameters) Unmarshal(data []byte, sentBy protocol.Perspective) error {
+	if err := p.unmarshal(data, sentBy); err != nil {
+		return qerr.Error(qerr.TransportParameterError, err.Error())
+	}
+	return nil
+}
+
+func (p *TransportParameters) unmarshal(data []byte, sentBy protocol.Perspective) error {
 	if len(data) < 2 {
 		return errors.New("transport parameter data too short")
 	}
