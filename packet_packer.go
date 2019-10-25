@@ -21,7 +21,6 @@ type packer interface {
 
 	HandleTransportParameters(*handshake.TransportParameters)
 	SetToken([]byte)
-	ChangeDestConnectionID(protocol.ConnectionID)
 }
 
 type sealer interface {
@@ -128,8 +127,8 @@ type ackFrameSource interface {
 }
 
 type packetPacker struct {
-	destConnID protocol.ConnectionID
-	srcConnID  protocol.ConnectionID
+	srcConnID     protocol.ConnectionID
+	getDestConnID func() protocol.ConnectionID
 
 	perspective protocol.Perspective
 	version     protocol.VersionNumber
@@ -155,8 +154,8 @@ type packetPacker struct {
 var _ packer = &packetPacker{}
 
 func newPacketPacker(
-	destConnID protocol.ConnectionID,
 	srcConnID protocol.ConnectionID,
+	getDestConnID func() protocol.ConnectionID,
 	initialStream cryptoStream,
 	handshakeStream cryptoStream,
 	packetNumberManager packetNumberManager,
@@ -170,7 +169,7 @@ func newPacketPacker(
 ) *packetPacker {
 	return &packetPacker{
 		cryptoSetup:         cryptoSetup,
-		destConnID:          destConnID,
+		getDestConnID:       getDestConnID,
 		srcConnID:           srcConnID,
 		initialStream:       initialStream,
 		handshakeStream:     handshakeStream,
@@ -432,7 +431,7 @@ func (p *packetPacker) getShortHeader(kp protocol.KeyPhaseBit) *wire.ExtendedHea
 	hdr := &wire.ExtendedHeader{}
 	hdr.PacketNumber = pn
 	hdr.PacketNumberLen = pnLen
-	hdr.DestConnectionID = p.destConnID
+	hdr.DestConnectionID = p.getDestConnID()
 	hdr.KeyPhase = kp
 	return hdr
 }
@@ -442,7 +441,7 @@ func (p *packetPacker) getLongHeader(encLevel protocol.EncryptionLevel) *wire.Ex
 	hdr := &wire.ExtendedHeader{}
 	hdr.PacketNumber = pn
 	hdr.PacketNumberLen = pnLen
-	hdr.DestConnectionID = p.destConnID
+	hdr.DestConnectionID = p.getDestConnID()
 
 	switch encLevel {
 	case protocol.EncryptionInitial:
@@ -548,10 +547,6 @@ func (p *packetPacker) writeAndSealPacketWithPadding(
 		frames: payload.frames,
 		buffer: packetBuffer,
 	}, nil
-}
-
-func (p *packetPacker) ChangeDestConnectionID(connID protocol.ConnectionID) {
-	p.destConnID = connID
 }
 
 func (p *packetPacker) SetToken(token []byte) {

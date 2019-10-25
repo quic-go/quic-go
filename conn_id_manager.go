@@ -11,28 +11,34 @@ import (
 type connIDManager struct {
 	queue utils.NewConnectionIDList
 
+	activeSequenceNumber uint64
+	activeConnectionID   protocol.ConnectionID
+
 	queueControlFrame func(wire.Frame)
 }
 
-func newConnIDManager(queueControlFrame func(wire.Frame)) *connIDManager {
-	return &connIDManager{queueControlFrame: queueControlFrame}
+func newConnIDManager(
+	initialDestConnID protocol.ConnectionID,
+	queueControlFrame func(wire.Frame),
+) *connIDManager {
+	h := &connIDManager{queueControlFrame: queueControlFrame}
+	h.activeConnectionID = initialDestConnID
+	return h
 }
 
 func (h *connIDManager) Add(f *wire.NewConnectionIDFrame) error {
 	if err := h.add(f); err != nil {
 		return err
 	}
-	if h.queue.Len() > protocol.MaxActiveConnectionIDs {
-		// delete the first connection ID in the queue
-		val := h.queue.Remove(h.queue.Front())
-		h.queueControlFrame(&wire.RetireConnectionIDFrame{
-			SequenceNumber: val.SequenceNumber,
-		})
+	if h.queue.Len() >= protocol.MaxActiveConnectionIDs {
+		h.updateConnectionID()
 	}
 	return nil
 }
 
 func (h *connIDManager) add(f *wire.NewConnectionIDFrame) error {
+	// Retire elements in the queue.
+	// Doesn't retire the active connection ID.
 	var next *utils.NewConnectionIDElement
 	for el := h.queue.Front(); el != nil; el = next {
 		if el.Value.SequenceNumber >= f.RetirePriorTo {
@@ -52,27 +58,55 @@ func (h *connIDManager) add(f *wire.NewConnectionIDFrame) error {
 			ConnectionID:        f.ConnectionID,
 			StatelessResetToken: &f.StatelessResetToken,
 		})
-		return nil
-	}
-	// insert a new element somewhere in the middle
-	for el := h.queue.Front(); el != nil; el = el.Next() {
-		if el.Value.SequenceNumber == f.SequenceNumber {
-			if !el.Value.ConnectionID.Equal(f.ConnectionID) {
-				return fmt.Errorf("received conflicting connection IDs for sequence number %d", f.SequenceNumber)
+	} else {
+		// insert a new element somewhere in the middle
+		for el := h.queue.Front(); el != nil; el = el.Next() {
+			if el.Value.SequenceNumber == f.SequenceNumber {
+				if !el.Value.ConnectionID.Equal(f.ConnectionID) {
+					return fmt.Errorf("received conflicting connection IDs for sequence number %d", f.SequenceNumber)
+				}
+				if *el.Value.StatelessResetToken != f.StatelessResetToken {
+					return fmt.Errorf("received conflicting stateless reset tokens for sequence number %d", f.SequenceNumber)
+				}
+				break
 			}
-			if *el.Value.StatelessResetToken != f.StatelessResetToken {
-				return fmt.Errorf("received conflicting stateless reset tokens for sequence number %d", f.SequenceNumber)
+			if el.Value.SequenceNumber > f.SequenceNumber {
+				h.queue.InsertBefore(utils.NewConnectionID{
+					SequenceNumber:      f.SequenceNumber,
+					ConnectionID:        f.ConnectionID,
+					StatelessResetToken: &f.StatelessResetToken,
+				}, el)
+				break
 			}
-			return nil
-		}
-		if el.Value.SequenceNumber > f.SequenceNumber {
-			h.queue.InsertBefore(utils.NewConnectionID{
-				SequenceNumber:      f.SequenceNumber,
-				ConnectionID:        f.ConnectionID,
-				StatelessResetToken: &f.StatelessResetToken,
-			}, el)
-			return nil
 		}
 	}
-	panic("should have processed NEW_CONNECTION_ID frame")
+
+	// Retire the active connection ID, if necessary.
+	if h.activeSequenceNumber < f.RetirePriorTo {
+		// The queue is guaranteed to have at least one element at this point.
+		h.updateConnectionID()
+	}
+	return nil
+}
+
+func (h *connIDManager) updateConnectionID() {
+	h.queueControlFrame(&wire.RetireConnectionIDFrame{
+		SequenceNumber: h.activeSequenceNumber,
+	})
+	front := h.queue.Remove(h.queue.Front())
+	h.activeSequenceNumber = front.SequenceNumber
+	h.activeConnectionID = front.ConnectionID
+}
+
+// is called when the server performs a Retry
+// and when the server changes the connection ID in the first Initial sent
+func (h *connIDManager) ChangeInitialConnID(newConnID protocol.ConnectionID) {
+	if h.activeSequenceNumber != 0 {
+		panic("expected first connection ID to have sequence number 0")
+	}
+	h.activeConnectionID = newConnID
+}
+
+func (h *connIDManager) Get() protocol.ConnectionID {
+	return h.activeConnectionID
 }

@@ -77,7 +77,7 @@ var _ = Describe("Packet packer", func() {
 
 		packer = newPacketPacker(
 			protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8},
-			protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8},
+			func() protocol.ConnectionID { return protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8} },
 			initialStream,
 			handshakeStream,
 			pnManager,
@@ -126,26 +126,10 @@ var _ = Describe("Packet packer", func() {
 			srcConnID := protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8}
 			destConnID := protocol.ConnectionID{8, 7, 6, 5, 4, 3, 2, 1}
 			packer.srcConnID = srcConnID
-			packer.destConnID = destConnID
+			packer.getDestConnID = func() protocol.ConnectionID { return destConnID }
 			h := packer.getLongHeader(protocol.EncryptionHandshake)
 			Expect(h.SrcConnectionID).To(Equal(srcConnID))
 			Expect(h.DestConnectionID).To(Equal(destConnID))
-		})
-
-		It("changes the destination connection ID", func() {
-			pnManager.EXPECT().PeekPacketNumber(protocol.EncryptionInitial).Return(protocol.PacketNumber(0x42), protocol.PacketNumberLen2).Times(2)
-			srcConnID := protocol.ConnectionID{1, 1, 1, 1, 1, 1, 1, 1}
-			packer.srcConnID = srcConnID
-			dest1 := protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8}
-			dest2 := protocol.ConnectionID{8, 7, 6, 5, 4, 3, 2, 1}
-			packer.ChangeDestConnectionID(dest1)
-			h := packer.getLongHeader(protocol.EncryptionInitial)
-			Expect(h.SrcConnectionID).To(Equal(srcConnID))
-			Expect(h.DestConnectionID).To(Equal(dest1))
-			packer.ChangeDestConnectionID(dest2)
-			h = packer.getLongHeader(protocol.EncryptionInitial)
-			Expect(h.SrcConnectionID).To(Equal(srcConnID))
-			Expect(h.DestConnectionID).To(Equal(dest2))
 		})
 
 		It("gets a short header", func() {
@@ -397,7 +381,7 @@ var _ = Describe("Packet packer", func() {
 				Expect(err).ToNot(HaveOccurred())
 				// cut off the tag that the mock sealer added
 				packet.raw = packet.raw[:len(packet.raw)-sealer.Overhead()]
-				hdr, _, _, err := wire.ParsePacket(packet.raw, len(packer.destConnID))
+				hdr, _, _, err := wire.ParsePacket(packet.raw, len(packer.getDestConnID()))
 				Expect(err).ToNot(HaveOccurred())
 				r := bytes.NewReader(packet.raw)
 				extHdr, err := hdr.ParseExtended(r, packer.version)

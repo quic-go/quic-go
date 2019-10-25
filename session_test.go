@@ -79,6 +79,7 @@ var _ = Describe("Session", func() {
 		packer        *MockPacker
 		cryptoSetup   *mocks.MockCryptoSetup
 	)
+	destConnID := protocol.ConnectionID{8, 7, 6, 5, 4, 3, 2, 1}
 
 	getPacket := func(pn protocol.PacketNumber) *packedPacket {
 		buffer := getPacketBuffer()
@@ -110,7 +111,7 @@ var _ = Describe("Session", func() {
 			mconn,
 			sessionRunner,
 			protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8, 9, 10},
-			protocol.ConnectionID{8, 7, 6, 5, 4, 3, 2, 1},
+			destConnID,
 			protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8},
 			populateServerConfig(&Config{}),
 			nil, // tls.Config
@@ -307,7 +308,7 @@ var _ = Describe("Session", func() {
 				SequenceNumber: 10,
 				ConnectionID:   protocol.ConnectionID{1, 2, 3, 4},
 			}, 1, protocol.Encryption1RTT)).To(Succeed())
-			Expect(sess.connIDManager.queue.Front().Value.ConnectionID).To(Equal(protocol.ConnectionID{1, 2, 3, 4}))
+			Expect(sess.connIDManager.queue.Back().Value.ConnectionID).To(Equal(protocol.ConnectionID{1, 2, 3, 4}))
 		})
 
 		It("handles PING frames", func() {
@@ -673,7 +674,7 @@ var _ = Describe("Session", func() {
 				Header: wire.Header{
 					IsLongHeader:     true,
 					Type:             protocol.PacketTypeHandshake,
-					DestConnectionID: sess.destConnID,
+					DestConnectionID: destConnID,
 					SrcConnectionID:  sess.srcConnID,
 					Length:           1,
 					Version:          sess.version,
@@ -685,7 +686,7 @@ var _ = Describe("Session", func() {
 				Header: wire.Header{
 					IsLongHeader:     true,
 					Type:             protocol.PacketTypeHandshake,
-					DestConnectionID: sess.destConnID,
+					DestConnectionID: destConnID,
 					SrcConnectionID:  protocol.ConnectionID{0xde, 0xad, 0xbe, 0xef},
 					Length:           1,
 					Version:          sess.version,
@@ -711,7 +712,7 @@ var _ = Describe("Session", func() {
 				Header: wire.Header{
 					IsLongHeader:     true,
 					Type:             protocol.PacketTypeHandshake,
-					DestConnectionID: sess.destConnID,
+					DestConnectionID: destConnID,
 					SrcConnectionID:  sess.srcConnID,
 					Length:           1,
 					Version:          sess.version,
@@ -752,7 +753,7 @@ var _ = Describe("Session", func() {
 						IsLongHeader:     true,
 						Type:             protocol.PacketTypeHandshake,
 						DestConnectionID: connID,
-						SrcConnectionID:  sess.destConnID,
+						SrcConnectionID:  destConnID,
 						Version:          protocol.VersionTLS,
 						Length:           length,
 					},
@@ -1507,6 +1508,7 @@ var _ = Describe("Client Session", func() {
 		tlsConf       *tls.Config
 		quicConf      *Config
 	)
+	destConnID := protocol.ConnectionID{8, 7, 6, 5, 4, 3, 2, 1}
 
 	getPacket := func(hdr *wire.ExtendedHeader, data []byte) *receivedPacket {
 		buf := &bytes.Buffer{}
@@ -1539,7 +1541,7 @@ var _ = Describe("Client Session", func() {
 		sess = newClientSession(
 			mconn,
 			sessionRunner,
-			protocol.ConnectionID{8, 7, 6, 5, 4, 3, 2, 1},
+			destConnID,
 			protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8},
 			quicConf,
 			tlsConf,
@@ -1571,7 +1573,6 @@ var _ = Describe("Client Session", func() {
 			sess.run()
 		}()
 		newConnID := protocol.ConnectionID{1, 3, 3, 7, 1, 3, 3, 7}
-		packer.EXPECT().ChangeDestConnectionID(newConnID)
 		Expect(sess.handlePacketImpl(getPacket(&wire.ExtendedHeader{
 			Header: wire.Header{
 				IsLongHeader:     true,
@@ -1627,7 +1628,6 @@ var _ = Describe("Client Session", func() {
 		It("handles Retry packets", func() {
 			cryptoSetup.EXPECT().ChangeConnectionID(protocol.ConnectionID{0xde, 0xad, 0xbe, 0xef})
 			packer.EXPECT().SetToken([]byte("foobar"))
-			packer.EXPECT().ChangeDestConnectionID(protocol.ConnectionID{0xde, 0xad, 0xbe, 0xef})
 			Expect(sess.handlePacketImpl(getPacket(validRetryHdr, nil))).To(BeTrue())
 		})
 
@@ -1637,7 +1637,7 @@ var _ = Describe("Client Session", func() {
 		})
 
 		It("ignores Retry packets if the server didn't change the connection ID", func() {
-			validRetryHdr.SrcConnectionID = sess.destConnID
+			validRetryHdr.SrcConnectionID = destConnID
 			Expect(sess.handlePacketImpl(getPacket(validRetryHdr, nil))).To(BeFalse())
 		})
 
@@ -1724,7 +1724,7 @@ var _ = Describe("Client Session", func() {
 				Header: wire.Header{
 					IsLongHeader:     true,
 					Type:             protocol.PacketTypeInitial,
-					DestConnectionID: sess.destConnID,
+					DestConnectionID: destConnID,
 					SrcConnectionID:  sess.srcConnID,
 					Length:           1,
 					Version:          sess.version,
@@ -1736,7 +1736,7 @@ var _ = Describe("Client Session", func() {
 				Header: wire.Header{
 					IsLongHeader:     true,
 					Type:             protocol.PacketTypeInitial,
-					DestConnectionID: sess.destConnID,
+					DestConnectionID: destConnID,
 					SrcConnectionID:  protocol.ConnectionID{0xde, 0xad, 0xbe, 0xef},
 					Length:           1,
 					Version:          sess.version,
@@ -1746,7 +1746,6 @@ var _ = Describe("Client Session", func() {
 			}
 			Expect(sess.srcConnID).ToNot(Equal(hdr2.SrcConnectionID))
 			// Send one packet, which might change the connection ID.
-			packer.EXPECT().ChangeDestConnectionID(sess.srcConnID).MaxTimes(1)
 			// only EXPECT one call to the unpacker
 			unpacker.EXPECT().Unpack(gomock.Any(), gomock.Any(), gomock.Any()).Return(&unpackedPacket{
 				encryptionLevel: protocol.EncryptionInitial,
@@ -1762,7 +1761,7 @@ var _ = Describe("Client Session", func() {
 		// the connection to immediately break down
 		It("fails on Initial-level ACK for unsent packet", func() {
 			ackFrame := testutils.ComposeAckFrame(0, 0)
-			initialPacket := testutils.ComposeInitialPacket(sess.destConnID, sess.srcConnID, sess.version, sess.destConnID, []wire.Frame{ackFrame})
+			initialPacket := testutils.ComposeInitialPacket(destConnID, sess.srcConnID, sess.version, destConnID, []wire.Frame{ackFrame})
 			Expect(sess.handlePacketImpl(wrapPacket(initialPacket))).To(BeFalse())
 		})
 
@@ -1771,7 +1770,7 @@ var _ = Describe("Client Session", func() {
 		It("fails on Initial-level CONNECTION_CLOSE frame", func() {
 			sessionRunner.EXPECT().ReplaceWithClosed(gomock.Any(), gomock.Any())
 			connCloseFrame := testutils.ComposeConnCloseFrame()
-			initialPacket := testutils.ComposeInitialPacket(sess.destConnID, sess.srcConnID, sess.version, sess.destConnID, []wire.Frame{connCloseFrame})
+			initialPacket := testutils.ComposeInitialPacket(destConnID, sess.srcConnID, sess.version, destConnID, []wire.Frame{connCloseFrame})
 			Expect(sess.handlePacketImpl(wrapPacket(initialPacket))).To(BeTrue())
 		})
 
@@ -1781,10 +1780,9 @@ var _ = Describe("Client Session", func() {
 			newSrcConnID := protocol.ConnectionID{0xde, 0xad, 0xbe, 0xef}
 			cryptoSetup.EXPECT().ChangeConnectionID(newSrcConnID)
 			packer.EXPECT().SetToken([]byte("foobar"))
-			packer.EXPECT().ChangeDestConnectionID(newSrcConnID)
 
-			sess.handlePacketImpl(wrapPacket(testutils.ComposeRetryPacket(newSrcConnID, sess.destConnID, sess.destConnID, []byte("foobar"), sess.version)))
-			initialPacket := testutils.ComposeInitialPacket(sess.destConnID, sess.srcConnID, sess.version, sess.destConnID, nil)
+			sess.handlePacketImpl(wrapPacket(testutils.ComposeRetryPacket(newSrcConnID, destConnID, destConnID, []byte("foobar"), sess.version)))
+			initialPacket := testutils.ComposeInitialPacket(sess.connIDManager.Get(), sess.srcConnID, sess.version, sess.connIDManager.Get(), nil)
 			Expect(sess.handlePacketImpl(wrapPacket(initialPacket))).To(BeFalse())
 		})
 

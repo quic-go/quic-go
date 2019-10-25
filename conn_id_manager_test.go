@@ -12,10 +12,11 @@ var _ = Describe("Connection ID Manager", func() {
 		m          *connIDManager
 		frameQueue []wire.Frame
 	)
+	initialConnID := protocol.ConnectionID{1, 1, 1, 1}
 
 	BeforeEach(func() {
 		frameQueue = nil
-		m = newConnIDManager(func(f wire.Frame) {
+		m = newConnIDManager(initialConnID, func(f wire.Frame) {
 			frameQueue = append(frameQueue, f)
 		})
 	})
@@ -28,10 +29,13 @@ var _ = Describe("Connection ID Manager", func() {
 		return val.ConnectionID, val.StatelessResetToken
 	}
 
-	It("returns nil if empty", func() {
-		c, rt := get()
-		Expect(c).To(BeNil())
-		Expect(rt).To(BeNil())
+	It("returns the initial connection ID", func() {
+		Expect(m.Get()).To(Equal(initialConnID))
+	})
+
+	It("changes the initial connection ID", func() {
+		m.ChangeInitialConnID(protocol.ConnectionID{1, 2, 3, 4, 5})
+		Expect(m.Get()).To(Equal(protocol.ConnectionID{1, 2, 3, 4, 5}))
 	})
 
 	It("adds and gets connection IDs", func() {
@@ -111,26 +115,28 @@ var _ = Describe("Connection ID Manager", func() {
 			SequenceNumber: 17,
 			ConnectionID:   protocol.ConnectionID{3, 4, 5, 6},
 		})).To(Succeed())
-		Expect(frameQueue).To(HaveLen(2))
+		Expect(frameQueue).To(HaveLen(3))
 		Expect(frameQueue[0].(*wire.RetireConnectionIDFrame).SequenceNumber).To(BeEquivalentTo(10))
 		Expect(frameQueue[1].(*wire.RetireConnectionIDFrame).SequenceNumber).To(BeEquivalentTo(13))
-		c, _ := get()
-		Expect(c).To(Equal(protocol.ConnectionID{3, 4, 5, 6}))
+		Expect(frameQueue[2].(*wire.RetireConnectionIDFrame).SequenceNumber).To(BeZero())
+		Expect(m.Get()).To(Equal(protocol.ConnectionID{3, 4, 5, 6}))
 	})
 
 	It("retires old connection IDs when the peer sends too many new ones", func() {
-		for i := uint8(0); i < protocol.MaxActiveConnectionIDs; i++ {
+		for i := uint8(1); i <= protocol.MaxActiveConnectionIDs; i++ {
 			Expect(m.Add(&wire.NewConnectionIDFrame{
 				SequenceNumber: uint64(i),
 				ConnectionID:   protocol.ConnectionID{i, i, i, i},
 			})).To(Succeed())
 		}
-		Expect(frameQueue).To(BeEmpty())
+		Expect(frameQueue).To(HaveLen(1))
+		Expect(frameQueue[0].(*wire.RetireConnectionIDFrame).SequenceNumber).To(BeZero())
+		frameQueue = nil
 		Expect(m.Add(&wire.NewConnectionIDFrame{
-			SequenceNumber: protocol.MaxActiveConnectionIDs,
+			SequenceNumber: protocol.MaxActiveConnectionIDs + 1,
 			ConnectionID:   protocol.ConnectionID{1, 2, 3, 4},
 		})).To(Succeed())
 		Expect(frameQueue).To(HaveLen(1))
-		Expect(frameQueue[0].(*wire.RetireConnectionIDFrame).SequenceNumber).To(BeEquivalentTo(0))
+		Expect(frameQueue[0].(*wire.RetireConnectionIDFrame).SequenceNumber).To(BeEquivalentTo(1))
 	})
 })
