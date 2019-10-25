@@ -48,8 +48,6 @@ func parseNextFrame(b io.Reader) (frame, error) {
 		return &headersFrame{Length: l}, nil
 	case 0x4:
 		return parseSettingsFrame(br, l)
-	case 0x2: // PRIORITY
-		fallthrough
 	case 0x3: // CANCEL_PUSH
 		fallthrough
 	case 0x5: // PUSH_PROMISE
