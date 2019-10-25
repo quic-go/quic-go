@@ -1,7 +1,7 @@
 package http3
 
 import (
-	"errors"
+	"fmt"
 	"io"
 
 	"github.com/lucas-clemente/quic-go"
@@ -19,22 +19,26 @@ type body struct {
 	reqDone       chan<- struct{}
 	reqDoneClosed bool
 
+	onFrameError func()
+
 	bytesRemainingInFrame uint64
 }
 
 var _ io.ReadCloser = &body{}
 
-func newRequestBody(str quic.Stream) *body {
+func newRequestBody(str quic.Stream, onFrameError func()) *body {
 	return &body{
-		str:       str,
-		isRequest: true,
+		str:          str,
+		onFrameError: onFrameError,
+		isRequest:    true,
 	}
 }
 
-func newResponseBody(str quic.Stream, done chan<- struct{}) *body {
+func newResponseBody(str quic.Stream, done chan<- struct{}, onFrameError func()) *body {
 	return &body{
-		str:     str,
-		reqDone: done,
+		str:          str,
+		onFrameError: onFrameError,
+		reqDone:      done,
 	}
 }
 
@@ -62,7 +66,10 @@ func (r *body) readImpl(b []byte) (int, error) {
 				r.bytesRemainingInFrame = f.Length
 				break parseLoop
 			default:
-				return 0, errors.New("unexpected frame")
+				r.onFrameError()
+				// parseNextFrame skips over unknown frame types
+				// Therefore, this condition is only entered when we parsed another known frame type.
+				return 0, fmt.Errorf("peer sent an unexpected frame: %T", f)
 			}
 		}
 	}
