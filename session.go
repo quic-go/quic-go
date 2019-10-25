@@ -1054,7 +1054,7 @@ func (s *session) processTransportParametersForClient(data []byte) (*handshake.T
 
 	// check the Retry token
 	if !params.OriginalConnectionID.Equal(s.origDestConnID) {
-		return nil, fmt.Errorf("expected original_connection_id to equal %s, is %s", s.origDestConnID, params.OriginalConnectionID)
+		return nil, qerr.Error(qerr.TransportParameterError, fmt.Sprintf("expected original_connection_id to equal %s, is %s", s.origDestConnID, params.OriginalConnectionID))
 	}
 
 	return params, nil
