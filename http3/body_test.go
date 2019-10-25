@@ -29,11 +29,14 @@ func (t bodyType) String() string {
 
 var _ = Describe("Body", func() {
 	var (
-		rb      *body
-		str     *mockquic.MockStream
-		buf     *bytes.Buffer
-		reqDone chan struct{}
+		rb            *body
+		str           *mockquic.MockStream
+		buf           *bytes.Buffer
+		reqDone       chan struct{}
+		errorCbCalled bool
 	)
+
+	errorCb := func() { errorCbCalled = true }
 
 	getDataFrame := func(data []byte) []byte {
 		b := &bytes.Buffer{}
@@ -44,6 +47,7 @@ var _ = Describe("Body", func() {
 
 	BeforeEach(func() {
 		buf = &bytes.Buffer{}
+		errorCbCalled = false
 	})
 
 	for _, bt := range []bodyType{bodyTypeRequest, bodyTypeResponse} {
@@ -61,10 +65,10 @@ var _ = Describe("Body", func() {
 
 				switch bodyType {
 				case bodyTypeRequest:
-					rb = newRequestBody(str)
+					rb = newRequestBody(str, errorCb)
 				case bodyTypeResponse:
 					reqDone = make(chan struct{})
-					rb = newResponseBody(str, reqDone)
+					rb = newResponseBody(str, reqDone, errorCb)
 				}
 			})
 
@@ -144,10 +148,11 @@ var _ = Describe("Body", func() {
 				Expect(err).To(HaveOccurred())
 			})
 
-			It("errors on unexpected frames", func() {
+			It("errors on unexpected frames, and calls the error callback", func() {
 				(&settingsFrame{}).Write(buf)
 				_, err := rb.Read([]byte{0})
-				Expect(err).To(MatchError("unexpected frame"))
+				Expect(err).To(MatchError("peer sent an unexpected frame: *http3.settingsFrame"))
+				Expect(errorCbCalled).To(BeTrue())
 			})
 
 			if bodyType == bodyTypeRequest {

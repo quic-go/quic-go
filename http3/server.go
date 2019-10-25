@@ -180,7 +180,10 @@ func (s *Server) handleConn(sess quic.Session) {
 		}
 		go func() {
 			defer ginkgo.GinkgoRecover()
-			if rerr := s.handleRequest(str, decoder); rerr.err != nil || rerr.streamErr != 0 || rerr.connErr != 0 {
+			rerr := s.handleRequest(str, decoder, func() {
+				sess.CloseWithError(quic.ErrorCode(errorFrameUnexpected), "")
+			})
+			if rerr.err != nil || rerr.streamErr != 0 || rerr.connErr != 0 {
 				s.logger.Debugf("Handling request failed: %s", err)
 				if rerr.streamErr != 0 {
 					str.CancelWrite(quic.ErrorCode(rerr.streamErr))
@@ -206,7 +209,7 @@ func (s *Server) maxHeaderBytes() uint64 {
 	return uint64(s.Server.MaxHeaderBytes)
 }
 
-func (s *Server) handleRequest(str quic.Stream, decoder *qpack.Decoder) requestError {
+func (s *Server) handleRequest(str quic.Stream, decoder *qpack.Decoder, onFrameError func()) requestError {
 	frame, err := parseNextFrame(str)
 	if err != nil {
 		return newStreamError(errorRequestIncomplete, err)
@@ -232,7 +235,7 @@ func (s *Server) handleRequest(str quic.Stream, decoder *qpack.Decoder) requestE
 		// TODO: use the right error code
 		return newStreamError(errorGeneralProtocolError, err)
 	}
-	req.Body = newRequestBody(str)
+	req.Body = newRequestBody(str, onFrameError)
 
 	if s.logger.Debug() {
 		s.logger.Infof("%s %s%s, on stream %d", req.Method, req.Host, req.RequestURI, str.StreamID())
