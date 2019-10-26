@@ -9,18 +9,21 @@ import (
 
 var _ = Describe("Connection ID Manager", func() {
 	var (
-		m          *connIDManager
-		frameQueue []wire.Frame
-		tokenAdded *[16]byte
+		m             *connIDManager
+		frameQueue    []wire.Frame
+		tokenAdded    *[16]byte
+		retiredTokens [][16]byte
 	)
 	initialConnID := protocol.ConnectionID{1, 1, 1, 1}
 
 	BeforeEach(func() {
 		frameQueue = nil
 		tokenAdded = nil
+		retiredTokens = nil
 		m = newConnIDManager(
 			initialConnID,
 			func(token [16]byte) { tokenAdded = &token },
+			func(token [16]byte) { retiredTokens = append(retiredTokens, token) },
 			func(f wire.Frame,
 			) {
 				frameQueue = append(frameQueue, f)
@@ -138,12 +141,14 @@ var _ = Describe("Connection ID Manager", func() {
 	It("retires old connection IDs when the peer sends too many new ones", func() {
 		for i := uint8(1); i <= protocol.MaxActiveConnectionIDs; i++ {
 			Expect(m.Add(&wire.NewConnectionIDFrame{
-				SequenceNumber: uint64(i),
-				ConnectionID:   protocol.ConnectionID{i, i, i, i},
+				SequenceNumber:      uint64(i),
+				ConnectionID:        protocol.ConnectionID{i, i, i, i},
+				StatelessResetToken: [16]byte{i, i, i, i, i, i, i, i, i, i, i, i, i, i, i, i},
 			})).To(Succeed())
 		}
 		Expect(frameQueue).To(HaveLen(1))
 		Expect(frameQueue[0].(*wire.RetireConnectionIDFrame).SequenceNumber).To(BeZero())
+		Expect(retiredTokens).To(BeEmpty())
 		frameQueue = nil
 		Expect(m.Add(&wire.NewConnectionIDFrame{
 			SequenceNumber: protocol.MaxActiveConnectionIDs + 1,
@@ -151,5 +156,7 @@ var _ = Describe("Connection ID Manager", func() {
 		})).To(Succeed())
 		Expect(frameQueue).To(HaveLen(1))
 		Expect(frameQueue[0].(*wire.RetireConnectionIDFrame).SequenceNumber).To(BeEquivalentTo(1))
+		Expect(retiredTokens).To(HaveLen(1))
+		Expect(retiredTokens[0]).To(Equal([16]byte{1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1}))
 	})
 })

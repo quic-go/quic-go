@@ -209,6 +209,7 @@ var newSession = func(
 	s.connIDManager = newConnIDManager(
 		destConnID,
 		func(token [16]byte) { runner.AddResetToken(token, s) },
+		runner.RetireResetToken,
 		s.queueControlFrame,
 	)
 	s.preSetup()
@@ -281,6 +282,7 @@ var newClientSession = func(
 	s.connIDManager = newConnIDManager(
 		destConnID,
 		func(token [16]byte) { runner.AddResetToken(token, s) },
+		runner.RetireResetToken,
 		s.queueControlFrame,
 	)
 	s.preSetup()
