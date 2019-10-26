@@ -11,19 +11,24 @@ import (
 type connIDManager struct {
 	queue utils.NewConnectionIDList
 
-	activeSequenceNumber uint64
-	activeConnectionID   protocol.ConnectionID
+	activeSequenceNumber      uint64
+	activeConnectionID        protocol.ConnectionID
+	activeStatelessResetToken *[16]byte
 
-	queueControlFrame func(wire.Frame)
+	addStatelessResetToken func([16]byte)
+	queueControlFrame      func(wire.Frame)
 }
 
 func newConnIDManager(
 	initialDestConnID protocol.ConnectionID,
+	addStatelessResetToken func([16]byte),
 	queueControlFrame func(wire.Frame),
 ) *connIDManager {
-	h := &connIDManager{queueControlFrame: queueControlFrame}
-	h.activeConnectionID = initialDestConnID
-	return h
+	return &connIDManager{
+		activeConnectionID:     initialDestConnID,
+		addStatelessResetToken: addStatelessResetToken,
+		queueControlFrame:      queueControlFrame,
+	}
 }
 
 func (h *connIDManager) Add(f *wire.NewConnectionIDFrame) error {
@@ -96,6 +101,7 @@ func (h *connIDManager) updateConnectionID() {
 	front := h.queue.Remove(h.queue.Front())
 	h.activeSequenceNumber = front.SequenceNumber
 	h.activeConnectionID = front.ConnectionID
+	h.activeStatelessResetToken = front.StatelessResetToken
 }
 
 // is called when the server performs a Retry
@@ -105,6 +111,15 @@ func (h *connIDManager) ChangeInitialConnID(newConnID protocol.ConnectionID) {
 		panic("expected first connection ID to have sequence number 0")
 	}
 	h.activeConnectionID = newConnID
+}
+
+// is called when the server provides a stateless reset token in the transport parameters
+func (h *connIDManager) SetStatelessResetToken(token [16]byte) {
+	if h.activeSequenceNumber != 0 {
+		panic("expected first connection ID to have sequence number 0")
+	}
+	h.activeStatelessResetToken = &token
+	h.addStatelessResetToken(token)
 }
 
 func (h *connIDManager) Get() protocol.ConnectionID {

@@ -206,7 +206,11 @@ var newSession = func(
 		logger:                logger,
 		version:               v,
 	}
-	s.connIDManager = newConnIDManager(destConnID, s.queueControlFrame)
+	s.connIDManager = newConnIDManager(
+		destConnID,
+		func(token [16]byte) { runner.AddResetToken(token, s) },
+		s.queueControlFrame,
+	)
 	s.preSetup()
 	s.sentPacketHandler = ackhandler.NewSentPacketHandler(0, s.rttStats, s.traceCallback, s.logger)
 	initialStream := newCryptoStream()
@@ -230,7 +234,6 @@ var newSession = func(
 		logger,
 	)
 	s.cryptoStreamHandler = cs
-	s.connIDManager = newConnIDManager(destConnID, s.queueControlFrame)
 	s.packer = newPacketPacker(
 		s.srcConnID,
 		s.connIDManager.Get,
@@ -275,7 +278,11 @@ var newClientSession = func(
 		initialVersion:        initialVersion,
 		version:               v,
 	}
-	s.connIDManager = newConnIDManager(destConnID, s.queueControlFrame)
+	s.connIDManager = newConnIDManager(
+		destConnID,
+		func(token [16]byte) { runner.AddResetToken(token, s) },
+		s.queueControlFrame,
+	)
 	s.preSetup()
 	s.sentPacketHandler = ackhandler.NewSentPacketHandler(initialPacketNumber, s.rttStats, s.traceCallback, s.logger)
 	initialStream := newCryptoStream()
@@ -1023,7 +1030,7 @@ func (s *session) processTransportParameters(data []byte) {
 	s.connFlowController.UpdateSendWindow(params.InitialMaxData)
 	s.rttStats.SetMaxAckDelay(params.MaxAckDelay)
 	if params.StatelessResetToken != nil {
-		s.sessionRunner.AddResetToken(*params.StatelessResetToken, s)
+		s.connIDManager.SetStatelessResetToken(*params.StatelessResetToken)
 	}
 	// On the server side, the early session is ready as soon as we processed
 	// the client's transport parameters.

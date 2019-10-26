@@ -11,14 +11,20 @@ var _ = Describe("Connection ID Manager", func() {
 	var (
 		m          *connIDManager
 		frameQueue []wire.Frame
+		tokenAdded *[16]byte
 	)
 	initialConnID := protocol.ConnectionID{1, 1, 1, 1}
 
 	BeforeEach(func() {
 		frameQueue = nil
-		m = newConnIDManager(initialConnID, func(f wire.Frame) {
-			frameQueue = append(frameQueue, f)
-		})
+		tokenAdded = nil
+		m = newConnIDManager(
+			initialConnID,
+			func(token [16]byte) { tokenAdded = &token },
+			func(f wire.Frame,
+			) {
+				frameQueue = append(frameQueue, f)
+			})
 	})
 
 	get := func() (protocol.ConnectionID, *[16]byte) {
@@ -36,6 +42,13 @@ var _ = Describe("Connection ID Manager", func() {
 	It("changes the initial connection ID", func() {
 		m.ChangeInitialConnID(protocol.ConnectionID{1, 2, 3, 4, 5})
 		Expect(m.Get()).To(Equal(protocol.ConnectionID{1, 2, 3, 4, 5}))
+	})
+
+	It("sets the token for the first connection ID", func() {
+		token := [16]byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16}
+		m.SetStatelessResetToken(token)
+		Expect(*m.activeStatelessResetToken).To(Equal(token))
+		Expect(*tokenAdded).To(Equal(token))
 	})
 
 	It("adds and gets connection IDs", func() {
