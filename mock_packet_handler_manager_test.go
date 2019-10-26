@@ -110,18 +110,6 @@ func (mr *MockPacketHandlerManagerMockRecorder) Remove(arg0 interface{}) *gomock
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Remove", reflect.TypeOf((*MockPacketHandlerManager)(nil).Remove), arg0)
 }
 
-// RemoveResetToken mocks base method
-func (m *MockPacketHandlerManager) RemoveResetToken(arg0 [16]byte) {
-	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "RemoveResetToken", arg0)
-}
-
-// RemoveResetToken indicates an expected call of RemoveResetToken
-func (mr *MockPacketHandlerManagerMockRecorder) RemoveResetToken(arg0 interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RemoveResetToken", reflect.TypeOf((*MockPacketHandlerManager)(nil).RemoveResetToken), arg0)
-}
-
 // ReplaceWithClosed mocks base method
 func (m *MockPacketHandlerManager) ReplaceWithClosed(arg0 protocol.ConnectionID, arg1 packetHandler) {
 	m.ctrl.T.Helper()
@@ -144,6 +132,18 @@ func (m *MockPacketHandlerManager) Retire(arg0 protocol.ConnectionID) {
 func (mr *MockPacketHandlerManagerMockRecorder) Retire(arg0 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Retire", reflect.TypeOf((*MockPacketHandlerManager)(nil).Retire), arg0)
+}
+
+// RetireResetToken mocks base method
+func (m *MockPacketHandlerManager) RetireResetToken(arg0 [16]byte) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "RetireResetToken", arg0)
+}
+
+// RetireResetToken indicates an expected call of RetireResetToken
+func (mr *MockPacketHandlerManagerMockRecorder) RetireResetToken(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RetireResetToken", reflect.TypeOf((*MockPacketHandlerManager)(nil).RetireResetToken), arg0)
 }
 
 // SetServer mocks base method

@@ -77,7 +77,7 @@ type sessionRunner interface {
 	Remove(protocol.ConnectionID)
 	ReplaceWithClosed(protocol.ConnectionID, packetHandler)
 	AddResetToken([16]byte, packetHandler)
-	RemoveResetToken([16]byte)
+	RetireResetToken([16]byte)
 }
 
 type handshakeRunner struct {
