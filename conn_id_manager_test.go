@@ -159,4 +159,54 @@ var _ = Describe("Connection ID Manager", func() {
 		Expect(retiredTokens).To(HaveLen(1))
 		Expect(retiredTokens[0]).To(Equal([16]byte{1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1}))
 	})
+
+	It("initiates the first connection ID update as soon as possible", func() {
+		Expect(m.Get()).To(Equal(initialConnID))
+		Expect(m.Add(&wire.NewConnectionIDFrame{
+			SequenceNumber:      1,
+			ConnectionID:        protocol.ConnectionID{1, 2, 3, 4},
+			StatelessResetToken: [16]byte{16, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1},
+		})).To(Succeed())
+		Expect(m.Get()).To(Equal(protocol.ConnectionID{1, 2, 3, 4}))
+
+	})
+
+	It("initiates subsequent updates when enough packets are sent", func() {
+		for i := uint8(1); i <= protocol.MaxActiveConnectionIDs; i++ {
+			Expect(m.Add(&wire.NewConnectionIDFrame{
+				SequenceNumber:      uint64(i),
+				ConnectionID:        protocol.ConnectionID{i, i, i, i},
+				StatelessResetToken: [16]byte{i, i, i, i, i, i, i, i, i, i, i, i, i, i, i, i},
+			})).To(Succeed())
+		}
+		Expect(m.Get()).To(Equal(protocol.ConnectionID{1, 1, 1, 1}))
+		for i := 0; i < protocol.PacketsPerConnectionID; i++ {
+			m.SentPacket()
+		}
+		Expect(m.Get()).To(Equal(protocol.ConnectionID{2, 2, 2, 2}))
+		Expect(retiredTokens).To(HaveLen(1))
+		Expect(retiredTokens[0]).To(Equal([16]byte{1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1}))
+	})
+
+	It("only initiates subsequent updates when enough if enough connection IDs are queued", func() {
+		for i := uint8(1); i <= protocol.MaxActiveConnectionIDs/2; i++ {
+			Expect(m.Add(&wire.NewConnectionIDFrame{
+				SequenceNumber:      uint64(i),
+				ConnectionID:        protocol.ConnectionID{i, i, i, i},
+				StatelessResetToken: [16]byte{i, i, i, i, i, i, i, i, i, i, i, i, i, i, i, i},
+			})).To(Succeed())
+		}
+		Expect(m.Get()).To(Equal(protocol.ConnectionID{1, 1, 1, 1}))
+		for i := 0; i < 2*protocol.PacketsPerConnectionID; i++ {
+			m.SentPacket()
+		}
+		Expect(m.Get()).To(Equal(protocol.ConnectionID{1, 1, 1, 1}))
+		Expect(m.Add(&wire.NewConnectionIDFrame{
+			SequenceNumber: 1337,
+			ConnectionID:   protocol.ConnectionID{1, 3, 3, 7},
+		})).To(Succeed())
+		Expect(m.Get()).To(Equal(protocol.ConnectionID{2, 2, 2, 2}))
+		Expect(retiredTokens).To(HaveLen(1))
+		Expect(retiredTokens[0]).To(Equal([16]byte{1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1}))
+	})
 })

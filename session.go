@@ -1126,7 +1126,7 @@ func (s *session) maybeSendAckOnlyPacket() error {
 		return nil
 	}
 	s.sentPacketHandler.SentPacket(packet.ToAckHandlerPacket(s.retransmissionQueue))
-	s.sendQueue.Send(packet)
+	s.sendPackedPacket(packet)
 	return nil
 }
 
@@ -1182,6 +1182,7 @@ func (s *session) sendPackedPacket(packet *packedPacket) {
 		})
 	}
 	s.logPacket(packet)
+	s.connIDManager.SentPacket()
 	s.sendQueue.Send(packet)
 }
 

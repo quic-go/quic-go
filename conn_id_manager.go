@@ -15,6 +15,8 @@ type connIDManager struct {
 	activeConnectionID        protocol.ConnectionID
 	activeStatelessResetToken *[16]byte
 
+	packetsSinceLastChange uint64
+
 	addStatelessResetToken    func([16]byte)
 	retireStatelessResetToken func([16]byte)
 	queueControlFrame         func(wire.Frame)
@@ -108,6 +110,7 @@ func (h *connIDManager) updateConnectionID() {
 	h.activeSequenceNumber = front.SequenceNumber
 	h.activeConnectionID = front.ConnectionID
 	h.activeStatelessResetToken = front.StatelessResetToken
+	h.packetsSinceLastChange = 0
 	h.addStatelessResetToken(*h.activeStatelessResetToken)
 }
 
@@ -129,6 +132,25 @@ func (h *connIDManager) SetStatelessResetToken(token [16]byte) {
 	h.addStatelessResetToken(token)
 }
 
+func (h *connIDManager) SentPacket() {
+	h.packetsSinceLastChange++
+}
+
+func (h *connIDManager) shouldUpdateConnID() bool {
+	// iniate the first change as early as possible
+	if h.queue.Len() > 0 && h.activeSequenceNumber == 0 {
+		return true
+	}
+	// For later changes, only change if
+	// 1. The queue of connection IDs is filled more than 50%.
+	// 2. We sent at least PacketsPerConnectionID packets
+	return 2*h.queue.Len() >= protocol.MaxActiveConnectionIDs &&
+		h.packetsSinceLastChange >= protocol.PacketsPerConnectionID
+}
+
 func (h *connIDManager) Get() protocol.ConnectionID {
+	if h.shouldUpdateConnID() {
+		h.updateConnectionID()
+	}
 	return h.activeConnectionID
 }
