@@ -77,6 +77,7 @@ type sessionRunner interface {
 	Remove(protocol.ConnectionID)
 	ReplaceWithClosed(protocol.ConnectionID, packetHandler)
 	AddResetToken([16]byte, packetHandler)
+	RemoveResetToken([16]byte)
 	RetireResetToken([16]byte)
 }
 
@@ -209,6 +210,7 @@ var newSession = func(
 	s.connIDManager = newConnIDManager(
 		destConnID,
 		func(token [16]byte) { runner.AddResetToken(token, s) },
+		runner.RemoveResetToken,
 		runner.RetireResetToken,
 		s.queueControlFrame,
 	)
@@ -282,6 +284,7 @@ var newClientSession = func(
 	s.connIDManager = newConnIDManager(
 		destConnID,
 		func(token [16]byte) { runner.AddResetToken(token, s) },
+		runner.RemoveResetToken,
 		runner.RetireResetToken,
 		s.queueControlFrame,
 	)
@@ -985,6 +988,7 @@ func (s *session) handleCloseError(closeErr closeError) {
 	}
 
 	s.streamsMap.CloseWithError(quicErr)
+	s.connIDManager.Close()
 
 	// If this is a remote close we're done here
 	if closeErr.remote {

@@ -18,6 +18,7 @@ type connIDManager struct {
 	packetsSinceLastChange uint64
 
 	addStatelessResetToken    func([16]byte)
+	removeStatelessResetToken func([16]byte)
 	retireStatelessResetToken func([16]byte)
 	queueControlFrame         func(wire.Frame)
 }
@@ -25,12 +26,14 @@ type connIDManager struct {
 func newConnIDManager(
 	initialDestConnID protocol.ConnectionID,
 	addStatelessResetToken func([16]byte),
+	removeStatelessResetToken func([16]byte),
 	retireStatelessResetToken func([16]byte),
 	queueControlFrame func(wire.Frame),
 ) *connIDManager {
 	return &connIDManager{
 		activeConnectionID:        initialDestConnID,
 		addStatelessResetToken:    addStatelessResetToken,
+		removeStatelessResetToken: removeStatelessResetToken,
 		retireStatelessResetToken: retireStatelessResetToken,
 		queueControlFrame:         queueControlFrame,
 	}
@@ -112,6 +115,12 @@ func (h *connIDManager) updateConnectionID() {
 	h.activeStatelessResetToken = front.StatelessResetToken
 	h.packetsSinceLastChange = 0
 	h.addStatelessResetToken(*h.activeStatelessResetToken)
+}
+
+func (h *connIDManager) Close() {
+	if h.activeStatelessResetToken != nil {
+		h.removeStatelessResetToken(*h.activeStatelessResetToken)
+	}
 }
 
 // is called when the server performs a Retry

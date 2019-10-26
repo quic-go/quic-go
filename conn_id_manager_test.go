@@ -13,6 +13,7 @@ var _ = Describe("Connection ID Manager", func() {
 		frameQueue    []wire.Frame
 		tokenAdded    *[16]byte
 		retiredTokens [][16]byte
+		removedTokens [][16]byte
 	)
 	initialConnID := protocol.ConnectionID{1, 1, 1, 1}
 
@@ -20,9 +21,11 @@ var _ = Describe("Connection ID Manager", func() {
 		frameQueue = nil
 		tokenAdded = nil
 		retiredTokens = nil
+		removedTokens = nil
 		m = newConnIDManager(
 			initialConnID,
 			func(token [16]byte) { tokenAdded = &token },
+			func(token [16]byte) { removedTokens = append(removedTokens, token) },
 			func(token [16]byte) { retiredTokens = append(retiredTokens, token) },
 			func(f wire.Frame,
 			) {
@@ -208,5 +211,21 @@ var _ = Describe("Connection ID Manager", func() {
 		Expect(m.Get()).To(Equal(protocol.ConnectionID{2, 2, 2, 2}))
 		Expect(retiredTokens).To(HaveLen(1))
 		Expect(retiredTokens[0]).To(Equal([16]byte{1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1}))
+	})
+
+	It("removes the currently active stateless reset token when it is closed", func() {
+		m.Close()
+		Expect(retiredTokens).To(BeEmpty())
+		Expect(removedTokens).To(BeEmpty())
+		Expect(m.Add(&wire.NewConnectionIDFrame{
+			SequenceNumber:      1,
+			ConnectionID:        protocol.ConnectionID{1, 2, 3, 4},
+			StatelessResetToken: [16]byte{16, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1},
+		})).To(Succeed())
+		Expect(m.Get()).To(Equal(protocol.ConnectionID{1, 2, 3, 4}))
+		m.Close()
+		Expect(retiredTokens).To(BeEmpty())
+		Expect(removedTokens).To(HaveLen(1))
+		Expect(removedTokens[0]).To(Equal([16]byte{16, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1}))
 	})
 })
