@@ -55,8 +55,7 @@ var _ = Describe("Initial AEAD using AES-GCM", func() {
 		})
 
 		It("encrypts the client's Initial", func() {
-			sealer, _, err := NewInitialAEAD(connID, protocol.PerspectiveClient)
-			Expect(err).ToNot(HaveOccurred())
+			sealer, _ := NewInitialAEAD(connID, protocol.PerspectiveClient)
 			header := split("c3ff000017088394c8f03e5157080000449e00000002")
 			data := split("060040c4010000c003036660261ff947 cea49cce6cfad687f457cf1b14531ba1 4131a0e8f309a1d0b9c4000006130113 031302010000910000000b0009000006 736572766572ff01000100000a001400 12001d00170018001901000101010201 03010400230000003300260024001d00 204cfdfcd178b784bf328cae793b136f 2aedce005ff183d7bb14952072366470 37002b0003020304000d0020001e0403 05030603020308040805080604010501 060102010402050206020202002d0002 0101001c00024001")
 			data = append(data, make([]byte, 1162-len(data))...) // add PADDING
@@ -71,8 +70,7 @@ var _ = Describe("Initial AEAD using AES-GCM", func() {
 		})
 
 		It("encrypt the server's Initial", func() {
-			sealer, _, err := NewInitialAEAD(connID, protocol.PerspectiveServer)
-			Expect(err).ToNot(HaveOccurred())
+			sealer, _ := NewInitialAEAD(connID, protocol.PerspectiveServer)
 			header := split("c1ff0000170008f067a5502a4262b50040740001")
 			data := split("0d0000000018410a020000560303eefc e7f7b37ba1d1632e96677825ddf73988 cfc79825df566dc5430b9a045a120013 0100002e00330024001d00209d3c940d 89690b84d08a60993c144eca684d1081 287c834d5311bcf32bb9da1a002b0002 0304")
 			sealed := sealer.Seal(nil, data, 1, header)
@@ -87,10 +85,8 @@ var _ = Describe("Initial AEAD using AES-GCM", func() {
 
 	It("seals and opens", func() {
 		connectionID := protocol.ConnectionID{0x12, 0x34, 0x56, 0x78, 0x90, 0xab, 0xcd, 0xef}
-		clientSealer, clientOpener, err := NewInitialAEAD(connectionID, protocol.PerspectiveClient)
-		Expect(err).ToNot(HaveOccurred())
-		serverSealer, serverOpener, err := NewInitialAEAD(connectionID, protocol.PerspectiveServer)
-		Expect(err).ToNot(HaveOccurred())
+		clientSealer, clientOpener := NewInitialAEAD(connectionID, protocol.PerspectiveClient)
+		serverSealer, serverOpener := NewInitialAEAD(connectionID, protocol.PerspectiveServer)
 
 		clientMessage := clientSealer.Seal(nil, []byte("foobar"), 42, []byte("aad"))
 		m, err := serverOpener.Open(nil, clientMessage, 42, []byte("aad"))
@@ -105,22 +101,18 @@ var _ = Describe("Initial AEAD using AES-GCM", func() {
 	It("doesn't work if initialized with different connection IDs", func() {
 		c1 := protocol.ConnectionID{0, 0, 0, 0, 0, 0, 0, 1}
 		c2 := protocol.ConnectionID{0, 0, 0, 0, 0, 0, 0, 2}
-		clientSealer, _, err := NewInitialAEAD(c1, protocol.PerspectiveClient)
-		Expect(err).ToNot(HaveOccurred())
-		_, serverOpener, err := NewInitialAEAD(c2, protocol.PerspectiveServer)
-		Expect(err).ToNot(HaveOccurred())
+		clientSealer, _ := NewInitialAEAD(c1, protocol.PerspectiveClient)
+		_, serverOpener := NewInitialAEAD(c2, protocol.PerspectiveServer)
 
 		clientMessage := clientSealer.Seal(nil, []byte("foobar"), 42, []byte("aad"))
-		_, err = serverOpener.Open(nil, clientMessage, 42, []byte("aad"))
+		_, err := serverOpener.Open(nil, clientMessage, 42, []byte("aad"))
 		Expect(err).To(MatchError(ErrDecryptionFailed))
 	})
 
 	It("encrypts und decrypts the header", func() {
 		connID := protocol.ConnectionID{0xde, 0xca, 0xfb, 0xad}
-		clientSealer, clientOpener, err := NewInitialAEAD(connID, protocol.PerspectiveClient)
-		Expect(err).ToNot(HaveOccurred())
-		serverSealer, serverOpener, err := NewInitialAEAD(connID, protocol.PerspectiveServer)
-		Expect(err).ToNot(HaveOccurred())
+		clientSealer, clientOpener := NewInitialAEAD(connID, protocol.PerspectiveClient)
+		serverSealer, serverOpener := NewInitialAEAD(connID, protocol.PerspectiveServer)
 
 		// the first byte and the last 4 bytes should be encrypted
 		header := []byte{0x5e, 0, 1, 2, 3, 4, 0xde, 0xad, 0xbe, 0xef}

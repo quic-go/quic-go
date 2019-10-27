@@ -126,8 +126,8 @@ func NewCryptoSetupClient(
 	tlsConf *tls.Config,
 	rttStats *congestion.RTTStats,
 	logger utils.Logger,
-) (CryptoSetup, <-chan struct{} /* ClientHello written */, error) {
-	cs, clientHelloWritten, err := newCryptoSetup(
+) (CryptoSetup, <-chan struct{} /* ClientHello written */) {
+	cs, clientHelloWritten := newCryptoSetup(
 		initialStream,
 		handshakeStream,
 		oneRTTStream,
@@ -139,11 +139,8 @@ func NewCryptoSetupClient(
 		logger,
 		protocol.PerspectiveClient,
 	)
-	if err != nil {
-		return nil, nil, err
-	}
 	cs.conn = qtls.Client(newConn(remoteAddr), cs.tlsConf)
-	return cs, clientHelloWritten, nil
+	return cs, clientHelloWritten
 }
 
 // NewCryptoSetupServer creates a new crypto setup for the server
@@ -158,8 +155,8 @@ func NewCryptoSetupServer(
 	tlsConf *tls.Config,
 	rttStats *congestion.RTTStats,
 	logger utils.Logger,
-) (CryptoSetup, error) {
-	cs, _, err := newCryptoSetup(
+) CryptoSetup {
+	cs, _ := newCryptoSetup(
 		initialStream,
 		handshakeStream,
 		oneRTTStream,
@@ -171,11 +168,8 @@ func NewCryptoSetupServer(
 		logger,
 		protocol.PerspectiveServer,
 	)
-	if err != nil {
-		return nil, err
-	}
 	cs.conn = qtls.Server(newConn(remoteAddr), cs.tlsConf)
-	return cs, nil
+	return cs
 }
 
 func newCryptoSetup(
@@ -189,11 +183,8 @@ func newCryptoSetup(
 	rttStats *congestion.RTTStats,
 	logger utils.Logger,
 	perspective protocol.Perspective,
-) (*cryptoSetup, <-chan struct{} /* ClientHello written */, error) {
-	initialSealer, initialOpener, err := NewInitialAEAD(connID, perspective)
-	if err != nil {
-		return nil, nil, err
-	}
+) (*cryptoSetup, <-chan struct{} /* ClientHello written */) {
+	initialSealer, initialOpener := NewInitialAEAD(connID, perspective)
 	extHandler := newExtensionHandler(tp.Marshal(), perspective)
 	cs := &cryptoSetup{
 		initialStream:          initialStream,
@@ -219,17 +210,13 @@ func newCryptoSetup(
 	}
 	qtlsConf := tlsConfigToQtlsConfig(tlsConf, cs, extHandler)
 	cs.tlsConf = qtlsConf
-	return cs, cs.clientHelloWrittenChan, nil
+	return cs, cs.clientHelloWrittenChan
 }
 
-func (h *cryptoSetup) ChangeConnectionID(id protocol.ConnectionID) error {
-	initialSealer, initialOpener, err := NewInitialAEAD(id, h.perspective)
-	if err != nil {
-		return err
-	}
+func (h *cryptoSetup) ChangeConnectionID(id protocol.ConnectionID) {
+	initialSealer, initialOpener := NewInitialAEAD(id, h.perspective)
 	h.initialSealer = initialSealer
 	h.initialOpener = initialOpener
-	return nil
 }
 
 func (h *cryptoSetup) SetLargest1RTTAcked(pn protocol.PacketNumber) {

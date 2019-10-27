@@ -259,10 +259,7 @@ func populateClientConfig(config *Config, createdPacketConn bool) *Config {
 
 func (c *client) dial(ctx context.Context) error {
 	c.logger.Infof("Starting new connection to %s (%s -> %s), source connection ID %s, destination connection ID %s, version %s", c.tlsConf.ServerName, c.conn.LocalAddr(), c.conn.RemoteAddr(), c.srcConnID, c.destConnID, c.version)
-
-	if err := c.createNewTLSSession(c.version); err != nil {
-		return err
-	}
+	c.createNewTLSSession(c.version)
 	err := c.establishSecureConnection(ctx)
 	if err == errCloseForRecreating {
 		return c.dial(ctx)
@@ -357,7 +354,7 @@ func (c *client) handleVersionNegotiationPacket(p *receivedPacket) {
 	c.initialPacketNumber = c.session.closeForRecreating()
 }
 
-func (c *client) createNewTLSSession(_ protocol.VersionNumber) error {
+func (c *client) createNewTLSSession(_ protocol.VersionNumber) {
 	params := &handshake.TransportParameters{
 		InitialMaxStreamDataBidiRemote: protocol.InitialMaxStreamData,
 		InitialMaxStreamDataBidiLocal:  protocol.InitialMaxStreamData,
@@ -372,8 +369,7 @@ func (c *client) createNewTLSSession(_ protocol.VersionNumber) error {
 	}
 
 	c.mutex.Lock()
-	defer c.mutex.Unlock()
-	sess, err := newClientSession(
+	c.session = newClientSession(
 		c.conn,
 		c.packetHandlers,
 		c.destConnID,
@@ -386,12 +382,8 @@ func (c *client) createNewTLSSession(_ protocol.VersionNumber) error {
 		c.logger,
 		c.version,
 	)
-	if err != nil {
-		return err
-	}
-	c.session = sess
+	c.mutex.Unlock()
 	c.packetHandlers.Add(c.srcConnID, c)
-	return nil
 }
 
 func (c *client) Close() error {

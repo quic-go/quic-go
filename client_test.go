@@ -42,7 +42,7 @@ var _ = Describe("Client", func() {
 			initialVersion protocol.VersionNumber,
 			logger utils.Logger,
 			v protocol.VersionNumber,
-		) (quicSession, error)
+		) quicSession
 	)
 
 	// generate a packet sent by the server that accepts the QUIC version suggested by the client
@@ -145,12 +145,12 @@ var _ = Describe("Client", func() {
 				_ protocol.VersionNumber,
 				_ utils.Logger,
 				_ protocol.VersionNumber,
-			) (quicSession, error) {
+			) quicSession {
 				remoteAddrChan <- conn.RemoteAddr().String()
 				sess := NewMockQuicSession(mockCtrl)
 				sess.EXPECT().run()
 				sess.EXPECT().HandshakeComplete().Return(context.Background())
-				return sess, nil
+				return sess
 			}
 			_, err := DialAddr("localhost:17890", tlsConf, &Config{HandshakeTimeout: time.Millisecond})
 			Expect(err).ToNot(HaveOccurred())
@@ -176,12 +176,12 @@ var _ = Describe("Client", func() {
 				_ protocol.VersionNumber,
 				_ utils.Logger,
 				_ protocol.VersionNumber,
-			) (quicSession, error) {
+			) quicSession {
 				hostnameChan <- tlsConf.ServerName
 				sess := NewMockQuicSession(mockCtrl)
 				sess.EXPECT().run()
 				sess.EXPECT().HandshakeComplete().Return(context.Background())
-				return sess, nil
+				return sess
 			}
 			tlsConf.ServerName = "foobar"
 			_, err := DialAddr("localhost:17890", tlsConf, nil)
@@ -207,12 +207,12 @@ var _ = Describe("Client", func() {
 				_ protocol.VersionNumber,
 				_ utils.Logger,
 				_ protocol.VersionNumber,
-			) (quicSession, error) {
+			) quicSession {
 				hostnameChan <- tlsConf.ServerName
 				sess := NewMockQuicSession(mockCtrl)
 				sess.EXPECT().HandshakeComplete().Return(context.Background())
 				sess.EXPECT().run()
-				return sess, nil
+				return sess
 			}
 			_, err := Dial(
 				packetConn,
@@ -243,13 +243,13 @@ var _ = Describe("Client", func() {
 				_ protocol.VersionNumber,
 				_ utils.Logger,
 				_ protocol.VersionNumber,
-			) (quicSession, error) {
+			) quicSession {
 				sess := NewMockQuicSession(mockCtrl)
 				sess.EXPECT().run().Do(func() { close(run) })
 				ctx, cancel := context.WithCancel(context.Background())
 				cancel()
 				sess.EXPECT().HandshakeComplete().Return(ctx)
-				return sess, nil
+				return sess
 			}
 			s, err := Dial(
 				packetConn,
@@ -281,11 +281,11 @@ var _ = Describe("Client", func() {
 				_ protocol.VersionNumber,
 				_ utils.Logger,
 				_ protocol.VersionNumber,
-			) (quicSession, error) {
+			) quicSession {
 				sess := NewMockQuicSession(mockCtrl)
 				sess.EXPECT().run().Return(testErr)
 				sess.EXPECT().HandshakeComplete().Return(context.Background())
-				return sess, nil
+				return sess
 			}
 			packetConn.dataToRead <- acceptClientVersionPacket(cl.srcConnID)
 			_, err := Dial(
@@ -322,8 +322,8 @@ var _ = Describe("Client", func() {
 				_ protocol.VersionNumber,
 				_ utils.Logger,
 				_ protocol.VersionNumber,
-			) (quicSession, error) {
-				return sess, nil
+			) quicSession {
+				return sess
 			}
 			ctx, cancel := context.WithCancel(context.Background())
 			dialed := make(chan struct{})
@@ -366,9 +366,9 @@ var _ = Describe("Client", func() {
 				_ protocol.VersionNumber,
 				_ utils.Logger,
 				_ protocol.VersionNumber,
-			) (quicSession, error) {
+			) quicSession {
 				runner = runnerP
-				return sess, nil
+				return sess
 			}
 			sess.EXPECT().run().Do(func() {
 				runner.Retire(connID)
@@ -411,10 +411,10 @@ var _ = Describe("Client", func() {
 				_ protocol.VersionNumber,
 				_ utils.Logger,
 				_ protocol.VersionNumber,
-			) (quicSession, error) {
+			) quicSession {
 				conn = connP
 				close(sessionCreated)
-				return sess, nil
+				return sess
 			}
 			sess.EXPECT().run().Do(func() {
 				<-run
@@ -531,7 +531,7 @@ var _ = Describe("Client", func() {
 				_ protocol.VersionNumber, /* initial version */
 				_ utils.Logger,
 				versionP protocol.VersionNumber,
-			) (quicSession, error) {
+			) quicSession {
 				cconn = connP
 				version = versionP
 				conf = configP
@@ -540,7 +540,7 @@ var _ = Describe("Client", func() {
 				sess := NewMockQuicSession(mockCtrl)
 				sess.EXPECT().run()
 				sess.EXPECT().HandshakeComplete().Return(context.Background())
-				return sess, nil
+				return sess
 			}
 			_, err := Dial(packetConn, addr, "localhost:1337", tlsConf, config)
 			Expect(err).ToNot(HaveOccurred())
@@ -580,12 +580,12 @@ var _ = Describe("Client", func() {
 					_ protocol.VersionNumber,
 					_ utils.Logger,
 					_ protocol.VersionNumber,
-				) (quicSession, error) {
+				) quicSession {
 					Expect(conn.Write([]byte("0 fake CHLO"))).To(Succeed())
 					sess := NewMockQuicSession(mockCtrl)
 					sess.EXPECT().run().Return(testErr)
 					sess.EXPECT().HandshakeComplete().Return(context.Background())
-					return sess, nil
+					return sess
 				}
 				_, err := Dial(
 					packetConn,

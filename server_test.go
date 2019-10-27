@@ -294,7 +294,7 @@ var _ = Describe("Server", func() {
 					_ *handshake.TokenGenerator,
 					_ utils.Logger,
 					_ protocol.VersionNumber,
-				) (quicSession, error) {
+				) quicSession {
 					Expect(origConnID).To(Equal(hdr.DestConnectionID))
 					Expect(destConnID).To(Equal(hdr.SrcConnectionID))
 					// make sure we're using a server-generated connection ID
@@ -305,7 +305,7 @@ var _ = Describe("Server", func() {
 					sess.EXPECT().run().Do(func() { close(run) })
 					sess.EXPECT().Context().Return(context.Background())
 					sess.EXPECT().HandshakeComplete().Return(context.Background())
-					return sess, nil
+					return sess
 				}
 
 				done := make(chan struct{})
@@ -346,7 +346,7 @@ var _ = Describe("Server", func() {
 					_ *handshake.TokenGenerator,
 					_ utils.Logger,
 					_ protocol.VersionNumber,
-				) (quicSession, error) {
+				) quicSession {
 					sess := NewMockQuicSession(mockCtrl)
 					sess.EXPECT().handlePacket(p)
 					sess.EXPECT().run()
@@ -354,7 +354,7 @@ var _ = Describe("Server", func() {
 					ctx, cancel := context.WithCancel(context.Background())
 					cancel()
 					sess.EXPECT().HandshakeComplete().Return(ctx)
-					return sess, nil
+					return sess
 				}
 
 				var wg sync.WaitGroup
@@ -407,7 +407,7 @@ var _ = Describe("Server", func() {
 					_ *handshake.TokenGenerator,
 					_ utils.Logger,
 					_ protocol.VersionNumber,
-				) (quicSession, error) {
+				) quicSession {
 					sess.EXPECT().handlePacket(p)
 					sess.EXPECT().run()
 					sess.EXPECT().Context().Return(ctx)
@@ -415,7 +415,7 @@ var _ = Describe("Server", func() {
 					cancel()
 					sess.EXPECT().HandshakeComplete().Return(ctx)
 					close(sessionCreated)
-					return sess, nil
+					return sess
 				}
 
 				serv.handlePacket(p)
@@ -504,14 +504,13 @@ var _ = Describe("Server", func() {
 					_ *handshake.TokenGenerator,
 					_ utils.Logger,
 					_ protocol.VersionNumber,
-				) (quicSession, error) {
+				) quicSession {
 					sess.EXPECT().HandshakeComplete().Return(ctx)
 					sess.EXPECT().run().Do(func() {})
 					sess.EXPECT().Context().Return(context.Background())
-					return sess, nil
+					return sess
 				}
-				_, err := serv.createNewSession(&net.UDPAddr{}, nil, nil, nil, nil, protocol.VersionWhatever)
-				Expect(err).ToNot(HaveOccurred())
+				serv.createNewSession(&net.UDPAddr{}, nil, nil, nil, nil, protocol.VersionWhatever)
 				Consistently(done).ShouldNot(BeClosed())
 				cancel() // complete the handshake
 				Eventually(done).Should(BeClosed())
@@ -553,14 +552,13 @@ var _ = Describe("Server", func() {
 				_ *handshake.TokenGenerator,
 				_ utils.Logger,
 				_ protocol.VersionNumber,
-			) (quicSession, error) {
+			) quicSession {
 				sess.EXPECT().run().Do(func() {})
 				sess.EXPECT().earlySessionReady().Return(ready)
 				sess.EXPECT().Context().Return(context.Background())
-				return sess, nil
+				return sess
 			}
-			_, err := serv.createNewSession(&net.UDPAddr{}, nil, nil, nil, nil, protocol.VersionWhatever)
-			Expect(err).ToNot(HaveOccurred())
+			serv.createNewSession(&net.UDPAddr{}, nil, nil, nil, nil, protocol.VersionWhatever)
 			Consistently(done).ShouldNot(BeClosed())
 			close(ready)
 			Eventually(done).Should(BeClosed())
@@ -591,7 +589,7 @@ var _ = Describe("Server", func() {
 				_ *handshake.TokenGenerator,
 				_ utils.Logger,
 				_ protocol.VersionNumber,
-			) (quicSession, error) {
+			) quicSession {
 				ready := make(chan struct{})
 				close(ready)
 				sess := NewMockQuicSession(mockCtrl)
@@ -599,7 +597,7 @@ var _ = Describe("Server", func() {
 				sess.EXPECT().run()
 				sess.EXPECT().earlySessionReady().Return(ready)
 				sess.EXPECT().Context().Return(context.Background())
-				return sess, nil
+				return sess
 			}
 
 			var wg sync.WaitGroup
@@ -652,13 +650,13 @@ var _ = Describe("Server", func() {
 				_ *handshake.TokenGenerator,
 				_ utils.Logger,
 				_ protocol.VersionNumber,
-			) (quicSession, error) {
+			) quicSession {
 				sess.EXPECT().handlePacket(p)
 				sess.EXPECT().run()
 				sess.EXPECT().earlySessionReady()
 				sess.EXPECT().Context().Return(ctx)
 				close(sessionCreated)
-				return sess, nil
+				return sess
 			}
 
 			serv.handlePacket(p)

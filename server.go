@@ -82,7 +82,7 @@ type baseServer struct {
 	sessionHandler packetHandlerManager
 
 	// set as a member, so they can be set in the tests
-	newSession func(connection, sessionRunner, protocol.ConnectionID /* original connection ID */, protocol.ConnectionID /* destination connection ID */, protocol.ConnectionID /* source connection ID */, *Config, *tls.Config, *handshake.TransportParameters, *handshake.TokenGenerator, utils.Logger, protocol.VersionNumber) (quicSession, error)
+	newSession func(connection, sessionRunner, protocol.ConnectionID /* original connection ID */, protocol.ConnectionID /* destination connection ID */, protocol.ConnectionID /* source connection ID */, *Config, *tls.Config, *handshake.TransportParameters, *handshake.TokenGenerator, utils.Logger, protocol.VersionNumber) quicSession
 
 	serverError error
 	errorChan   chan struct{}
@@ -424,7 +424,7 @@ func (s *baseServer) handleInitialImpl(p *receivedPacket, hdr *wire.Header) (qui
 		return nil, nil, err
 	}
 	s.logger.Debugf("Changing connection ID to %s.", connID)
-	sess, err := s.createNewSession(
+	sess := s.createNewSession(
 		p.remoteAddr,
 		origDestConnectionID,
 		hdr.DestConnectionID,
@@ -432,9 +432,6 @@ func (s *baseServer) handleInitialImpl(p *receivedPacket, hdr *wire.Header) (qui
 		connID,
 		hdr.Version,
 	)
-	if err != nil {
-		return nil, nil, err
-	}
 	sess.handlePacket(p)
 	return sess, connID, nil
 }
@@ -446,7 +443,7 @@ func (s *baseServer) createNewSession(
 	destConnID protocol.ConnectionID,
 	srcConnID protocol.ConnectionID,
 	version protocol.VersionNumber,
-) (quicSession, error) {
+) quicSession {
 	token := s.sessionHandler.GetStatelessResetToken(srcConnID)
 	params := &handshake.TransportParameters{
 		InitialMaxStreamDataBidiLocal:  protocol.InitialMaxStreamData,
@@ -462,7 +459,7 @@ func (s *baseServer) createNewSession(
 		StatelessResetToken:            &token,
 		OriginalConnectionID:           origDestConnID,
 	}
-	sess, err := s.newSession(
+	sess := s.newSession(
 		&conn{pconn: s.conn, currentAddr: remoteAddr},
 		s.sessionHandler,
 		clientDestConnID,
@@ -475,12 +472,9 @@ func (s *baseServer) createNewSession(
 		s.logger,
 		version,
 	)
-	if err != nil {
-		return nil, err
-	}
 	go sess.run()
 	go s.handleNewSession(sess)
-	return sess, nil
+	return sess
 }
 
 func (s *baseServer) handleNewSession(sess quicSession) {
@@ -542,10 +536,7 @@ func (s *baseServer) sendRetry(remoteAddr net.Addr, hdr *wire.Header) error {
 }
 
 func (s *baseServer) sendServerBusy(remoteAddr net.Addr, hdr *wire.Header) error {
-	sealer, _, err := handshake.NewInitialAEAD(hdr.DestConnectionID, protocol.PerspectiveServer)
-	if err != nil {
-		return err
-	}
+	sealer, _ := handshake.NewInitialAEAD(hdr.DestConnectionID, protocol.PerspectiveServer)
 	packetBuffer := getPacketBuffer()
 	defer packetBuffer.Release()
 	buf := bytes.NewBuffer(packetBuffer.Slice[:0])
