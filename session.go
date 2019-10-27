@@ -203,15 +203,6 @@ var newSession = func(
 	}
 	s.preSetup()
 	s.sentPacketHandler = ackhandler.NewSentPacketHandler(0, s.rttStats, s.traceCallback, s.logger)
-	s.streamsMap = newStreamsMap(
-		s,
-		s.newFlowController,
-		uint64(s.config.MaxIncomingStreams),
-		uint64(s.config.MaxIncomingUniStreams),
-		s.perspective,
-		s.version,
-	)
-	s.framer = newFramer(s.streamsMap, s.version)
 	initialStream := newCryptoStream()
 	handshakeStream := newCryptoStream()
 	oneRTTStream := newPostHandshakeCryptoStream(s.framer)
@@ -247,10 +238,8 @@ var newSession = func(
 		s.perspective,
 		s.version,
 	)
-	s.cryptoStreamManager = newCryptoStreamManager(cs, initialStream, handshakeStream, oneRTTStream)
-
-	s.postSetup()
 	s.unpacker = newPacketUnpacker(cs, s.version)
+	s.cryptoStreamManager = newCryptoStreamManager(cs, initialStream, handshakeStream, oneRTTStream)
 	return s
 }
 
@@ -306,15 +295,6 @@ var newClientSession = func(
 	s.cryptoStreamHandler = cs
 	s.cryptoStreamManager = newCryptoStreamManager(cs, initialStream, handshakeStream, oneRTTStream)
 	s.unpacker = newPacketUnpacker(cs, s.version)
-	s.streamsMap = newStreamsMap(
-		s,
-		s.newFlowController,
-		uint64(s.config.MaxIncomingStreams),
-		uint64(s.config.MaxIncomingUniStreams),
-		s.perspective,
-		s.version,
-	)
-	s.framer = newFramer(s.streamsMap, s.version)
 	s.packer = newPacketPacker(
 		s.destConnID,
 		s.srcConnID,
@@ -339,7 +319,6 @@ var newClientSession = func(
 			s.packer.SetToken(token.data)
 		}
 	}
-	s.postSetup()
 	return s
 }
 
@@ -357,14 +336,15 @@ func (s *session) preSetup() {
 		s.logger,
 	)
 	s.earlySessionReadyChan = make(chan struct{})
-	if s.config.QuicTracer != nil {
-		s.traceCallback = func(ev quictrace.Event) {
-			s.config.QuicTracer.Trace(s.origDestConnID, ev)
-		}
-	}
-}
-
-func (s *session) postSetup() {
+	s.streamsMap = newStreamsMap(
+		s,
+		s.newFlowController,
+		uint64(s.config.MaxIncomingStreams),
+		uint64(s.config.MaxIncomingUniStreams),
+		s.perspective,
+		s.version,
+	)
+	s.framer = newFramer(s.streamsMap, s.version)
 	s.receivedPackets = make(chan *receivedPacket, protocol.MaxSessionUnprocessedPackets)
 	s.closeChan = make(chan closeError, 1)
 	s.sendingScheduled = make(chan struct{}, 1)
@@ -378,6 +358,12 @@ func (s *session) postSetup() {
 	s.sessionCreationTime = now
 
 	s.windowUpdateQueue = newWindowUpdateQueue(s.streamsMap, s.connFlowController, s.framer.QueueControlFrame)
+
+	if s.config.QuicTracer != nil {
+		s.traceCallback = func(ev quictrace.Event) {
+			s.config.QuicTracer.Trace(s.origDestConnID, ev)
+		}
+	}
 }
 
 // run the session main loop
