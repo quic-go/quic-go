@@ -9,7 +9,6 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/lucas-clemente/quic-go/internal/handshake"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/internal/utils"
 	"github.com/lucas-clemente/quic-go/internal/wire"
@@ -355,20 +354,6 @@ func (c *client) handleVersionNegotiationPacket(p *receivedPacket) {
 }
 
 func (c *client) createNewTLSSession(_ protocol.VersionNumber) {
-	params := &handshake.TransportParameters{
-		InitialMaxStreamDataBidiRemote: protocol.InitialMaxStreamData,
-		InitialMaxStreamDataBidiLocal:  protocol.InitialMaxStreamData,
-		InitialMaxStreamDataUni:        protocol.InitialMaxStreamData,
-		InitialMaxData:                 protocol.InitialMaxData,
-		IdleTimeout:                    c.config.IdleTimeout,
-		MaxBidiStreamNum:               protocol.StreamNum(c.config.MaxIncomingStreams),
-		MaxUniStreamNum:                protocol.StreamNum(c.config.MaxIncomingUniStreams),
-		MaxAckDelay:                    protocol.MaxAckDelayInclGranularity,
-		AckDelayExponent:               protocol.AckDelayExponent,
-		DisableMigration:               true,
-		ActiveConnectionIDLimit:        protocol.MaxActiveConnectionIDs,
-	}
-
 	c.mutex.Lock()
 	c.session = newClientSession(
 		c.conn,
@@ -378,7 +363,6 @@ func (c *client) createNewTLSSession(_ protocol.VersionNumber) {
 		c.config,
 		c.tlsConf,
 		c.initialPacketNumber,
-		params,
 		c.initialVersion,
 		c.logger,
 		c.version,

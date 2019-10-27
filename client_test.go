@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/golang/mock/gomock"
-	"github.com/lucas-clemente/quic-go/internal/handshake"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/internal/utils"
 	"github.com/lucas-clemente/quic-go/internal/wire"
@@ -38,7 +37,6 @@ var _ = Describe("Client", func() {
 			conf *Config,
 			tlsConf *tls.Config,
 			initialPacketNumber protocol.PacketNumber,
-			params *handshake.TransportParameters,
 			initialVersion protocol.VersionNumber,
 			logger utils.Logger,
 			v protocol.VersionNumber,
@@ -141,7 +139,6 @@ var _ = Describe("Client", func() {
 				_ *Config,
 				_ *tls.Config,
 				_ protocol.PacketNumber,
-				_ *handshake.TransportParameters,
 				_ protocol.VersionNumber,
 				_ utils.Logger,
 				_ protocol.VersionNumber,
@@ -172,7 +169,6 @@ var _ = Describe("Client", func() {
 				_ *Config,
 				tlsConf *tls.Config,
 				_ protocol.PacketNumber,
-				_ *handshake.TransportParameters,
 				_ protocol.VersionNumber,
 				_ utils.Logger,
 				_ protocol.VersionNumber,
@@ -203,7 +199,6 @@ var _ = Describe("Client", func() {
 				_ *Config,
 				tlsConf *tls.Config,
 				_ protocol.PacketNumber,
-				_ *handshake.TransportParameters,
 				_ protocol.VersionNumber,
 				_ utils.Logger,
 				_ protocol.VersionNumber,
@@ -239,7 +234,6 @@ var _ = Describe("Client", func() {
 				_ *Config,
 				_ *tls.Config,
 				_ protocol.PacketNumber,
-				_ *handshake.TransportParameters,
 				_ protocol.VersionNumber,
 				_ utils.Logger,
 				_ protocol.VersionNumber,
@@ -277,7 +271,6 @@ var _ = Describe("Client", func() {
 				_ *Config,
 				_ *tls.Config,
 				_ protocol.PacketNumber,
-				_ *handshake.TransportParameters,
 				_ protocol.VersionNumber,
 				_ utils.Logger,
 				_ protocol.VersionNumber,
@@ -318,7 +311,6 @@ var _ = Describe("Client", func() {
 				_ *Config,
 				_ *tls.Config,
 				_ protocol.PacketNumber,
-				_ *handshake.TransportParameters,
 				_ protocol.VersionNumber,
 				_ utils.Logger,
 				_ protocol.VersionNumber,
@@ -362,7 +354,6 @@ var _ = Describe("Client", func() {
 				_ *Config,
 				_ *tls.Config,
 				_ protocol.PacketNumber,
-				_ *handshake.TransportParameters,
 				_ protocol.VersionNumber,
 				_ utils.Logger,
 				_ protocol.VersionNumber,
@@ -407,7 +398,6 @@ var _ = Describe("Client", func() {
 				_ *Config,
 				_ *tls.Config,
 				_ protocol.PacketNumber,
-				_ *handshake.TransportParameters,
 				_ protocol.VersionNumber,
 				_ utils.Logger,
 				_ protocol.VersionNumber,
@@ -527,7 +517,6 @@ var _ = Describe("Client", func() {
 				configP *Config,
 				_ *tls.Config,
 				_ protocol.PacketNumber,
-				params *handshake.TransportParameters,
 				_ protocol.VersionNumber, /* initial version */
 				_ utils.Logger,
 				versionP protocol.VersionNumber,
@@ -576,7 +565,6 @@ var _ = Describe("Client", func() {
 					_ *Config,
 					_ *tls.Config,
 					_ protocol.PacketNumber,
-					_ *handshake.TransportParameters,
 					_ protocol.VersionNumber,
 					_ utils.Logger,
 					_ protocol.VersionNumber,

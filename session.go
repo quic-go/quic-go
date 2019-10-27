@@ -265,7 +265,6 @@ var newClientSession = func(
 	conf *Config,
 	tlsConf *tls.Config,
 	initialPacketNumber protocol.PacketNumber,
-	params *handshake.TransportParameters,
 	initialVersion protocol.VersionNumber,
 	logger utils.Logger,
 	v protocol.VersionNumber,
@@ -293,6 +292,19 @@ var newClientSession = func(
 	initialStream := newCryptoStream()
 	handshakeStream := newCryptoStream()
 	oneRTTStream := newPostHandshakeCryptoStream(s.framer)
+	params := &handshake.TransportParameters{
+		InitialMaxStreamDataBidiRemote: protocol.InitialMaxStreamData,
+		InitialMaxStreamDataBidiLocal:  protocol.InitialMaxStreamData,
+		InitialMaxStreamDataUni:        protocol.InitialMaxStreamData,
+		InitialMaxData:                 protocol.InitialMaxData,
+		IdleTimeout:                    s.config.IdleTimeout,
+		MaxBidiStreamNum:               protocol.StreamNum(s.config.MaxIncomingStreams),
+		MaxUniStreamNum:                protocol.StreamNum(s.config.MaxIncomingUniStreams),
+		MaxAckDelay:                    protocol.MaxAckDelayInclGranularity,
+		AckDelayExponent:               protocol.AckDelayExponent,
+		DisableMigration:               true,
+		ActiveConnectionIDLimit:        protocol.MaxActiveConnectionIDs,
+	}
 	cs, clientHelloWritten := handshake.NewCryptoSetupClient(
 		initialStream,
 		handshakeStream,

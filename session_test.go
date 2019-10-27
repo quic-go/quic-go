@@ -1546,7 +1546,6 @@ var _ = Describe("Client Session", func() {
 			quicConf,
 			tlsConf,
 			42, // initial packet number
-			&handshake.TransportParameters{},
 			protocol.VersionTLS,
 			utils.DefaultLogger,
 			protocol.VersionTLS,
