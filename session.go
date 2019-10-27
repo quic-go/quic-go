@@ -79,6 +79,7 @@ type sessionRunner interface {
 	AddResetToken([16]byte, packetHandler)
 	RemoveResetToken([16]byte)
 	RetireResetToken([16]byte)
+	GetStatelessResetToken(protocol.ConnectionID) [16]byte
 }
 
 type handshakeRunner struct {
@@ -186,12 +187,12 @@ var _ streamSender = &session{}
 var newSession = func(
 	conn connection,
 	runner sessionRunner,
+	origDestConnID protocol.ConnectionID,
 	clientDestConnID protocol.ConnectionID,
 	destConnID protocol.ConnectionID,
 	srcConnID protocol.ConnectionID,
 	conf *Config,
 	tlsConf *tls.Config,
-	params *handshake.TransportParameters,
 	tokenGenerator *handshake.TokenGenerator,
 	logger utils.Logger,
 	v protocol.VersionNumber,
@@ -219,6 +220,22 @@ var newSession = func(
 	initialStream := newCryptoStream()
 	handshakeStream := newCryptoStream()
 	oneRTTStream := newPostHandshakeCryptoStream(s.framer)
+	token := s.sessionRunner.GetStatelessResetToken(srcConnID)
+	params := &handshake.TransportParameters{
+		InitialMaxStreamDataBidiLocal:  protocol.InitialMaxStreamData,
+		InitialMaxStreamDataBidiRemote: protocol.InitialMaxStreamData,
+		InitialMaxStreamDataUni:        protocol.InitialMaxStreamData,
+		InitialMaxData:                 protocol.InitialMaxData,
+		IdleTimeout:                    s.config.IdleTimeout,
+		MaxBidiStreamNum:               protocol.StreamNum(s.config.MaxIncomingStreams),
+		MaxUniStreamNum:                protocol.StreamNum(s.config.MaxIncomingUniStreams),
+		MaxAckDelay:                    protocol.MaxAckDelayInclGranularity,
+		AckDelayExponent:               protocol.AckDelayExponent,
+		DisableMigration:               true,
+		StatelessResetToken:            &token,
+		OriginalConnectionID:           origDestConnID,
+		ActiveConnectionIDLimit:        protocol.MaxActiveConnectionIDs,
+	}
 	cs := handshake.NewCryptoSetupServer(
 		initialStream,
 		handshakeStream,

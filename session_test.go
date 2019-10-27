@@ -104,18 +104,19 @@ var _ = Describe("Session", func() {
 		Eventually(areSessionsRunning).Should(BeFalse())
 
 		sessionRunner = NewMockSessionRunner(mockCtrl)
+		sessionRunner.EXPECT().GetStatelessResetToken(gomock.Any())
 		mconn = newMockConnection()
 		tokenGenerator, err := handshake.NewTokenGenerator()
 		Expect(err).ToNot(HaveOccurred())
 		sess = newSession(
 			mconn,
 			sessionRunner,
+			nil,
 			protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8, 9, 10},
 			destConnID,
 			protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8},
 			populateServerConfig(&Config{}),
 			nil, // tls.Config
-			&handshake.TransportParameters{},
 			tokenGenerator,
 			utils.DefaultLogger,
 			protocol.VersionTLS,

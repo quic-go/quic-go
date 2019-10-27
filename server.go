@@ -35,7 +35,6 @@ type unknownPacketHandler interface {
 type packetHandlerManager interface {
 	io.Closer
 	Add(protocol.ConnectionID, packetHandler)
-	GetStatelessResetToken(protocol.ConnectionID) [16]byte
 	SetServer(unknownPacketHandler)
 	CloseServer()
 	sessionRunner
@@ -72,7 +71,7 @@ type baseServer struct {
 	sessionHandler packetHandlerManager
 
 	// set as a member, so they can be set in the tests
-	newSession func(connection, sessionRunner, protocol.ConnectionID /* original connection ID */, protocol.ConnectionID /* destination connection ID */, protocol.ConnectionID /* source connection ID */, *Config, *tls.Config, *handshake.TransportParameters, *handshake.TokenGenerator, utils.Logger, protocol.VersionNumber) quicSession
+	newSession func(connection, sessionRunner, protocol.ConnectionID /* original connection ID */, protocol.ConnectionID /* client dest connection ID */, protocol.ConnectionID /* destination connection ID */, protocol.ConnectionID /* source connection ID */, *Config, *tls.Config, *handshake.TokenGenerator, utils.Logger, protocol.VersionNumber) quicSession
 
 	serverError error
 	errorChan   chan struct{}
@@ -434,31 +433,15 @@ func (s *baseServer) createNewSession(
 	srcConnID protocol.ConnectionID,
 	version protocol.VersionNumber,
 ) quicSession {
-	token := s.sessionHandler.GetStatelessResetToken(srcConnID)
-	params := &handshake.TransportParameters{
-		InitialMaxStreamDataBidiLocal:  protocol.InitialMaxStreamData,
-		InitialMaxStreamDataBidiRemote: protocol.InitialMaxStreamData,
-		InitialMaxStreamDataUni:        protocol.InitialMaxStreamData,
-		InitialMaxData:                 protocol.InitialMaxData,
-		IdleTimeout:                    s.config.IdleTimeout,
-		MaxBidiStreamNum:               protocol.StreamNum(s.config.MaxIncomingStreams),
-		MaxUniStreamNum:                protocol.StreamNum(s.config.MaxIncomingUniStreams),
-		MaxAckDelay:                    protocol.MaxAckDelayInclGranularity,
-		AckDelayExponent:               protocol.AckDelayExponent,
-		DisableMigration:               true,
-		StatelessResetToken:            &token,
-		OriginalConnectionID:           origDestConnID,
-		ActiveConnectionIDLimit:        protocol.MaxActiveConnectionIDs,
-	}
 	sess := s.newSession(
 		&conn{pconn: s.conn, currentAddr: remoteAddr},
 		s.sessionHandler,
+		origDestConnID,
 		clientDestConnID,
 		destConnID,
 		srcConnID,
 		s.config,
 		s.tlsConf,
-		params,
 		s.tokenGenerator,
 		s.logger,
 		version,
