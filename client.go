@@ -368,6 +368,8 @@ func (c *client) createNewTLSSession(_ protocol.VersionNumber) {
 		c.version,
 	)
 	c.mutex.Unlock()
+	// It's not possible to use the stateless reset token for the client's (first) connection ID,
+	// since there's no way to securely communicate it to the server.
 	c.packetHandlers.Add(c.srcConnID, c)
 }
 

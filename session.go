@@ -73,13 +73,13 @@ func (p *receivedPacket) Clone() *receivedPacket {
 }
 
 type sessionRunner interface {
+	Add(protocol.ConnectionID, packetHandler) [16]byte
 	Retire(protocol.ConnectionID)
 	Remove(protocol.ConnectionID)
 	ReplaceWithClosed(protocol.ConnectionID, packetHandler)
 	AddResetToken([16]byte, packetHandler)
 	RemoveResetToken([16]byte)
 	RetireResetToken([16]byte)
-	GetStatelessResetToken(protocol.ConnectionID) [16]byte
 }
 
 type handshakeRunner struct {
@@ -220,7 +220,7 @@ var newSession = func(
 	initialStream := newCryptoStream()
 	handshakeStream := newCryptoStream()
 	oneRTTStream := newPostHandshakeCryptoStream(s.framer)
-	token := s.sessionRunner.GetStatelessResetToken(srcConnID)
+	token := s.sessionRunner.Add(srcConnID, s)
 	params := &handshake.TransportParameters{
 		InitialMaxStreamDataBidiLocal:  protocol.InitialMaxStreamData,
 		InitialMaxStreamDataBidiRemote: protocol.InitialMaxStreamData,

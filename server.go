@@ -34,7 +34,6 @@ type unknownPacketHandler interface {
 
 type packetHandlerManager interface {
 	io.Closer
-	Add(protocol.ConnectionID, packetHandler)
 	SetServer(unknownPacketHandler)
 	CloseServer()
 	sessionRunner
@@ -364,7 +363,7 @@ func (s *baseServer) handlePacketImpl(p *receivedPacket) bool /* was the packet 
 
 	s.logger.Debugf("<- Received Initial packet.")
 
-	sess, connID, err := s.handleInitialImpl(p, hdr)
+	sess, err := s.handleInitialImpl(p, hdr)
 	if err != nil {
 		s.logger.Errorf("Error occurred handling initial packet: %s", err)
 		return false
@@ -374,13 +373,12 @@ func (s *baseServer) handlePacketImpl(p *receivedPacket) bool /* was the packet 
 	}
 	// Don't put the packet buffer back if a new session was created.
 	// The session will handle the packet and take of that.
-	s.sessionHandler.Add(connID, sess)
 	return true
 }
 
-func (s *baseServer) handleInitialImpl(p *receivedPacket, hdr *wire.Header) (quicSession, protocol.ConnectionID, error) {
+func (s *baseServer) handleInitialImpl(p *receivedPacket, hdr *wire.Header) (quicSession, error) {
 	if len(hdr.Token) == 0 && hdr.DestConnectionID.Len() < protocol.MinConnectionIDLenInitial {
-		return nil, nil, errors.New("too short connection ID")
+		return nil, errors.New("too short connection ID")
 	}
 
 	var token *Token
@@ -400,17 +398,17 @@ func (s *baseServer) handleInitialImpl(p *receivedPacket, hdr *wire.Header) (qui
 		// Log the Initial packet now.
 		// If no Retry is sent, the packet will be logged by the session.
 		(&wire.ExtendedHeader{Header: *hdr}).Log(s.logger)
-		return nil, nil, s.sendRetry(p.remoteAddr, hdr)
+		return nil, s.sendRetry(p.remoteAddr, hdr)
 	}
 
 	if queueLen := atomic.LoadInt32(&s.sessionQueueLen); queueLen >= protocol.MaxAcceptQueueSize {
 		s.logger.Debugf("Rejecting new connection. Server currently busy. Accept queue length: %d (max %d)", queueLen, protocol.MaxAcceptQueueSize)
-		return nil, nil, s.sendServerBusy(p.remoteAddr, hdr)
+		return nil, s.sendServerBusy(p.remoteAddr, hdr)
 	}
 
 	connID, err := protocol.GenerateConnectionID(s.config.ConnectionIDLength)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 	s.logger.Debugf("Changing connection ID to %s.", connID)
 	sess := s.createNewSession(
@@ -422,7 +420,7 @@ func (s *baseServer) handleInitialImpl(p *receivedPacket, hdr *wire.Header) (qui
 		hdr.Version,
 	)
 	sess.handlePacket(p)
-	return sess, connID, nil
+	return sess, nil
 }
 
 func (s *baseServer) createNewSession(

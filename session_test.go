@@ -104,7 +104,7 @@ var _ = Describe("Session", func() {
 		Eventually(areSessionsRunning).Should(BeFalse())
 
 		sessionRunner = NewMockSessionRunner(mockCtrl)
-		sessionRunner.EXPECT().GetStatelessResetToken(gomock.Any())
+		sessionRunner.EXPECT().Add(gomock.Any(), gomock.Any())
 		mconn = newMockConnection()
 		tokenGenerator, err := handshake.NewTokenGenerator()
 		Expect(err).ToNot(HaveOccurred())

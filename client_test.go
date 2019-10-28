@@ -338,45 +338,6 @@ var _ = Describe("Client", func() {
 			Eventually(dialed).Should(BeClosed())
 		})
 
-		It("removes closed sessions from the multiplexer", func() {
-			manager := NewMockPacketHandlerManager(mockCtrl)
-			manager.EXPECT().Add(connID, gomock.Any())
-			manager.EXPECT().Retire(connID)
-			mockMultiplexer.EXPECT().AddConn(packetConn, gomock.Any(), gomock.Any()).Return(manager, nil)
-
-			var runner sessionRunner
-			sess := NewMockQuicSession(mockCtrl)
-			newClientSession = func(
-				_ connection,
-				runnerP sessionRunner,
-				_ protocol.ConnectionID,
-				_ protocol.ConnectionID,
-				_ *Config,
-				_ *tls.Config,
-				_ protocol.PacketNumber,
-				_ protocol.VersionNumber,
-				_ utils.Logger,
-				_ protocol.VersionNumber,
-			) quicSession {
-				runner = runnerP
-				return sess
-			}
-			sess.EXPECT().run().Do(func() {
-				runner.Retire(connID)
-			})
-			sess.EXPECT().HandshakeComplete().Return(context.Background())
-
-			_, err := DialContext(
-				context.Background(),
-				packetConn,
-				addr,
-				"localhost:1337",
-				tlsConf,
-				&Config{},
-			)
-			Expect(err).ToNot(HaveOccurred())
-		})
-
 		It("closes the connection when it was created by DialAddr", func() {
 			if os.Getenv("APPVEYOR") == "True" {
 				Skip("This test is flaky on AppVeyor.")
