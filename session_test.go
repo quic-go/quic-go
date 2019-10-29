@@ -1356,7 +1356,7 @@ var _ = Describe("Session", func() {
 			done := make(chan struct{})
 			go func() {
 				defer GinkgoRecover()
-				cryptoSetup.EXPECT().RunHandshake()
+				cryptoSetup.EXPECT().RunHandshake().MaxTimes(1)
 				close(sess.handshakeCompleteChan)
 				err := sess.run()
 				nerr, ok := err.(net.Error)
