@@ -82,8 +82,7 @@ var _ = Describe("Session", func() {
 		mconn = newMockConnection()
 		tokenGenerator, err := handshake.NewTokenGenerator()
 		Expect(err).ToNot(HaveOccurred())
-		var pSess Session
-		pSess, err = newSession(
+		sess = newSession(
 			mconn,
 			sessionRunner,
 			protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8, 9, 10},
@@ -95,9 +94,7 @@ var _ = Describe("Session", func() {
 			tokenGenerator,
 			utils.DefaultLogger,
 			protocol.VersionTLS,
-		)
-		Expect(err).NotTo(HaveOccurred())
-		sess = pSess.(*session)
+		).(*session)
 		streamManager = NewMockStreamManager(mockCtrl)
 		sess.streamsMap = streamManager
 		packer = NewMockPacker(mockCtrl)
@@ -1498,7 +1495,7 @@ var _ = Describe("Client Session", func() {
 		}
 		mconn = newMockConnection()
 		sessionRunner = NewMockSessionRunner(mockCtrl)
-		sessP, err := newClientSession(
+		sess = newClientSession(
 			mconn,
 			sessionRunner,
 			protocol.ConnectionID{8, 7, 6, 5, 4, 3, 2, 1},
@@ -1510,9 +1507,7 @@ var _ = Describe("Client Session", func() {
 			protocol.VersionTLS,
 			utils.DefaultLogger,
 			protocol.VersionTLS,
-		)
-		sess = sessP.(*session)
-		Expect(err).ToNot(HaveOccurred())
+		).(*session)
 		packer = NewMockPacker(mockCtrl)
 		sess.packer = packer
 		cryptoSetup = mocks.NewMockCryptoSetup(mockCtrl)

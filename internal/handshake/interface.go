@@ -69,7 +69,7 @@ type handshakeRunner interface {
 type CryptoSetup interface {
 	RunHandshake()
 	io.Closer
-	ChangeConnectionID(protocol.ConnectionID) error
+	ChangeConnectionID(protocol.ConnectionID)
 
 	HandleMessage([]byte, protocol.EncryptionLevel) bool
 	SetLargest1RTTAcked(protocol.PacketNumber)

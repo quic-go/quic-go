@@ -37,11 +37,9 @@ func (m *MockCryptoSetup) EXPECT() *MockCryptoSetupMockRecorder {
 }
 
 // ChangeConnectionID mocks base method
-func (m *MockCryptoSetup) ChangeConnectionID(arg0 protocol.ConnectionID) error {
+func (m *MockCryptoSetup) ChangeConnectionID(arg0 protocol.ConnectionID) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ChangeConnectionID", arg0)
-	ret0, _ := ret[0].(error)
-	return ret0
+	m.ctrl.Call(m, "ChangeConnectionID", arg0)
 }
 
 // ChangeConnectionID indicates an expected call of ChangeConnectionID

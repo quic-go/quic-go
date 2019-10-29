@@ -49,7 +49,7 @@ type streamManager interface {
 
 type cryptoStreamHandler interface {
 	RunHandshake()
-	ChangeConnectionID(protocol.ConnectionID) error
+	ChangeConnectionID(protocol.ConnectionID)
 	SetLargest1RTTAcked(protocol.PacketNumber)
 	io.Closer
 	ConnectionState() tls.ConnectionState
@@ -188,7 +188,7 @@ var newSession = func(
 	tokenGenerator *handshake.TokenGenerator,
 	logger utils.Logger,
 	v protocol.VersionNumber,
-) (quicSession, error) {
+) quicSession {
 	s := &session{
 		conn:                  conn,
 		sessionRunner:         runner,
@@ -203,19 +203,10 @@ var newSession = func(
 	}
 	s.preSetup()
 	s.sentPacketHandler = ackhandler.NewSentPacketHandler(0, s.rttStats, s.traceCallback, s.logger)
-	s.streamsMap = newStreamsMap(
-		s,
-		s.newFlowController,
-		uint64(s.config.MaxIncomingStreams),
-		uint64(s.config.MaxIncomingUniStreams),
-		s.perspective,
-		s.version,
-	)
-	s.framer = newFramer(s.streamsMap, s.version)
 	initialStream := newCryptoStream()
 	handshakeStream := newCryptoStream()
 	oneRTTStream := newPostHandshakeCryptoStream(s.framer)
-	cs, err := handshake.NewCryptoSetupServer(
+	cs := handshake.NewCryptoSetupServer(
 		initialStream,
 		handshakeStream,
 		oneRTTStream,
@@ -232,9 +223,6 @@ var newSession = func(
 		s.rttStats,
 		logger,
 	)
-	if err != nil {
-		return nil, err
-	}
 	s.cryptoStreamHandler = cs
 	s.packer = newPacketPacker(
 		s.destConnID,
@@ -250,11 +238,9 @@ var newSession = func(
 		s.perspective,
 		s.version,
 	)
-	s.cryptoStreamManager = newCryptoStreamManager(cs, initialStream, handshakeStream, oneRTTStream)
-
-	s.postSetup()
 	s.unpacker = newPacketUnpacker(cs, s.version)
-	return s, nil
+	s.cryptoStreamManager = newCryptoStreamManager(cs, initialStream, handshakeStream, oneRTTStream)
+	return s
 }
 
 // declare this as a variable, such that we can it mock it in the tests
@@ -270,7 +256,7 @@ var newClientSession = func(
 	initialVersion protocol.VersionNumber,
 	logger utils.Logger,
 	v protocol.VersionNumber,
-) (quicSession, error) {
+) quicSession {
 	s := &session{
 		conn:                  conn,
 		sessionRunner:         runner,
@@ -288,7 +274,7 @@ var newClientSession = func(
 	initialStream := newCryptoStream()
 	handshakeStream := newCryptoStream()
 	oneRTTStream := newPostHandshakeCryptoStream(s.framer)
-	cs, clientHelloWritten, err := handshake.NewCryptoSetupClient(
+	cs, clientHelloWritten := handshake.NewCryptoSetupClient(
 		initialStream,
 		handshakeStream,
 		oneRTTStream,
@@ -305,22 +291,10 @@ var newClientSession = func(
 		s.rttStats,
 		logger,
 	)
-	if err != nil {
-		return nil, err
-	}
 	s.clientHelloWritten = clientHelloWritten
 	s.cryptoStreamHandler = cs
 	s.cryptoStreamManager = newCryptoStreamManager(cs, initialStream, handshakeStream, oneRTTStream)
 	s.unpacker = newPacketUnpacker(cs, s.version)
-	s.streamsMap = newStreamsMap(
-		s,
-		s.newFlowController,
-		uint64(s.config.MaxIncomingStreams),
-		uint64(s.config.MaxIncomingUniStreams),
-		s.perspective,
-		s.version,
-	)
-	s.framer = newFramer(s.streamsMap, s.version)
 	s.packer = newPacketPacker(
 		s.destConnID,
 		s.srcConnID,
@@ -345,8 +319,7 @@ var newClientSession = func(
 			s.packer.SetToken(token.data)
 		}
 	}
-	s.postSetup()
-	return s, nil
+	return s
 }
 
 func (s *session) preSetup() {
@@ -363,14 +336,15 @@ func (s *session) preSetup() {
 		s.logger,
 	)
 	s.earlySessionReadyChan = make(chan struct{})
-	if s.config.QuicTracer != nil {
-		s.traceCallback = func(ev quictrace.Event) {
-			s.config.QuicTracer.Trace(s.origDestConnID, ev)
-		}
-	}
-}
-
-func (s *session) postSetup() {
+	s.streamsMap = newStreamsMap(
+		s,
+		s.newFlowController,
+		uint64(s.config.MaxIncomingStreams),
+		uint64(s.config.MaxIncomingUniStreams),
+		s.perspective,
+		s.version,
+	)
+	s.framer = newFramer(s.streamsMap, s.version)
 	s.receivedPackets = make(chan *receivedPacket, protocol.MaxSessionUnprocessedPackets)
 	s.closeChan = make(chan closeError, 1)
 	s.sendingScheduled = make(chan struct{}, 1)
@@ -384,6 +358,12 @@ func (s *session) postSetup() {
 	s.sessionCreationTime = now
 
 	s.windowUpdateQueue = newWindowUpdateQueue(s.streamsMap, s.connFlowController, s.framer.QueueControlFrame)
+
+	if s.config.QuicTracer != nil {
+		s.traceCallback = func(ev quictrace.Event) {
+			s.config.QuicTracer.Trace(s.origDestConnID, ev)
+		}
+	}
 }
 
 // run the session main loop

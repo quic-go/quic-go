@@ -17,7 +17,7 @@ var initialSuite = &qtls.CipherSuiteTLS13{
 }
 
 // NewInitialAEAD creates a new AEAD for Initial encryption / decryption.
-func NewInitialAEAD(connID protocol.ConnectionID, pers protocol.Perspective) (LongHeaderSealer, LongHeaderOpener, error) {
+func NewInitialAEAD(connID protocol.ConnectionID, pers protocol.Perspective) (LongHeaderSealer, LongHeaderOpener) {
 	clientSecret, serverSecret := computeSecrets(connID)
 	var mySecret, otherSecret []byte
 	if pers == protocol.PerspectiveClient {
@@ -34,8 +34,7 @@ func NewInitialAEAD(connID protocol.ConnectionID, pers protocol.Perspective) (Lo
 	decrypter := qtls.AEADAESGCMTLS13(otherKey, otherIV)
 
 	return newLongHeaderSealer(encrypter, newHeaderProtector(initialSuite, mySecret, true)),
-		newLongHeaderOpener(decrypter, newAESHeaderProtector(initialSuite, otherSecret, true)),
-		nil
+		newLongHeaderOpener(decrypter, newAESHeaderProtector(initialSuite, otherSecret, true))
 }
 
 func computeSecrets(connID protocol.ConnectionID) (clientSecret, serverSecret []byte) {
