@@ -315,11 +315,11 @@ func (s *sendStream) Close() error {
 		s.mutex.Unlock()
 		return fmt.Errorf("Close called for canceled stream %d", s.streamID)
 	}
+	s.ctxCancel()
 	s.finishedWriting = true
 	s.mutex.Unlock()
 
 	s.sender.onHasStreamData(s.streamID) // need to send the FIN, must be called without holding the mutex
-	s.ctxCancel()
 	return nil
 }
 
@@ -335,6 +335,7 @@ func (s *sendStream) cancelWriteImpl(errorCode protocol.ApplicationErrorCode, wr
 		s.mutex.Unlock()
 		return
 	}
+	s.ctxCancel()
 	s.canceledWrite = true
 	s.cancelWriteErr = writeErr
 	newlyCompleted := s.isNewlyCompleted()
@@ -349,7 +350,6 @@ func (s *sendStream) cancelWriteImpl(errorCode protocol.ApplicationErrorCode, wr
 	if newlyCompleted {
 		s.sender.onStreamCompleted(s.streamID)
 	}
-	s.ctxCancel()
 }
 
 func (s *sendStream) handleMaxStreamDataFrame(frame *wire.MaxStreamDataFrame) {
@@ -388,11 +388,11 @@ func (s *sendStream) SetWriteDeadline(t time.Time) error {
 // The peer will NOT be informed about this: the stream is closed without sending a FIN or RST.
 func (s *sendStream) closeForShutdown(err error) {
 	s.mutex.Lock()
+	s.ctxCancel()
 	s.closedForShutdown = true
 	s.closeForShutdownErr = err
 	s.mutex.Unlock()
 	s.signalWrite()
-	s.ctxCancel()
 }
 
 // signalWrite performs a non-blocking send on the writeChan
