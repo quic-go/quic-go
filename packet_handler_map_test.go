@@ -139,7 +139,6 @@ var _ = Describe("Packet Handler Map", func() {
 			connID := protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8}
 			sess := NewMockPacketHandler(mockCtrl)
 			handler.Add(connID, sess)
-			sess.EXPECT().destroy(gomock.Any())
 			handler.Retire(connID)
 			time.Sleep(scaleDuration(30 * time.Millisecond))
 			handler.handlePacket(nil, nil, getPacket(connID))
