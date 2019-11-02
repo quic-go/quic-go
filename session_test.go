@@ -1768,7 +1768,6 @@ var _ = Describe("Client Session", func() {
 		// Illustrates that an injected Initial with a CONNECTION_CLOSE frame causes
 		// the connection to immediately break down
 		It("fails on Initial-level CONNECTION_CLOSE frame", func() {
-			sessionRunner.EXPECT().ReplaceWithClosed(gomock.Any(), gomock.Any())
 			connCloseFrame := testutils.ComposeConnCloseFrame()
 			initialPacket := testutils.ComposeInitialPacket(destConnID, sess.srcConnID, sess.version, destConnID, []wire.Frame{connCloseFrame})
 			Expect(sess.handlePacketImpl(wrapPacket(initialPacket))).To(BeTrue())

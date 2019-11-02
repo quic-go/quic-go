@@ -95,7 +95,7 @@ func (r *handshakeRunner) OnHandshakeComplete()                 { r.onHandshakeC
 type closeError struct {
 	err       error
 	remote    bool
-	sendClose bool
+	immediate bool
 }
 
 var errCloseForRecreating = errors.New("closing session in order to recreate it")
@@ -923,7 +923,7 @@ func (s *session) closeLocal(e error) {
 		} else {
 			s.logger.Errorf("Closing session with error: %s", e)
 		}
-		s.closeChan <- closeError{err: e, sendClose: true, remote: false}
+		s.closeChan <- closeError{err: e, immediate: false, remote: false}
 	})
 }
 
@@ -940,8 +940,7 @@ func (s *session) destroyImpl(e error) {
 		} else {
 			s.logger.Errorf("Destroying session %s with error: %s", s.connIDManager.Get(), e)
 		}
-		s.sessionRunner.Remove(s.srcConnID)
-		s.closeChan <- closeError{err: e, sendClose: false, remote: false}
+		s.closeChan <- closeError{err: e, immediate: true, remote: false}
 	})
 }
 
@@ -956,8 +955,7 @@ func (s *session) closeForRecreating() protocol.PacketNumber {
 func (s *session) closeRemote(e error) {
 	s.closeOnce.Do(func() {
 		s.logger.Errorf("Peer closed session with error: %s", e)
-		s.sessionRunner.ReplaceWithClosed(s.srcConnID, newClosedRemoteSession(s.perspective))
-		s.closeChan <- closeError{err: e, remote: true}
+		s.closeChan <- closeError{err: e, immediate: true, remote: true}
 	})
 }
 
@@ -988,11 +986,13 @@ func (s *session) handleCloseError(closeErr closeError) {
 
 	s.streamsMap.CloseWithError(quicErr)
 
-	if !closeErr.sendClose {
-		return
-	}
 	// If this is a remote close we're done here
 	if closeErr.remote {
+		s.sessionRunner.ReplaceWithClosed(s.srcConnID, newClosedRemoteSession(s.perspective))
+		return
+	}
+	if closeErr.immediate {
+		s.sessionRunner.Remove(s.srcConnID)
 		return
 	}
 	connClosePacket, err := s.sendConnectionClose(quicErr)
