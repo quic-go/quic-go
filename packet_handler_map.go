@@ -84,6 +84,19 @@ func (h *packetHandlerMap) Retire(id protocol.ConnectionID) {
 	})
 }
 
+func (h *packetHandlerMap) ReplaceWithClosed(id protocol.ConnectionID, handler packetHandler) {
+	h.mutex.Lock()
+	h.handlers[string(id)] = handler
+	h.mutex.Unlock()
+
+	time.AfterFunc(h.deleteRetiredSessionsAfter, func() {
+		h.mutex.Lock()
+		handler.Close()
+		delete(h.handlers, string(id))
+		h.mutex.Unlock()
+	})
+}
+
 func (h *packetHandlerMap) AddResetToken(token [16]byte, handler packetHandler) {
 	h.mutex.Lock()
 	h.resetTokens[token] = handler
