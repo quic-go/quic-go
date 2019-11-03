@@ -772,7 +772,11 @@ func (h *sentPacketHandler) queueFramesForRetransmission(p *Packet) {
 
 func (h *sentPacketHandler) ResetForRetry() error {
 	h.bytesInFlight = 0
+	var firstPacketSendTime time.Time
 	h.initialPackets.history.Iterate(func(p *Packet) (bool, error) {
+		if firstPacketSendTime.IsZero() {
+			firstPacketSendTime = p.SendTime
+		}
 		h.queueFramesForRetransmission(p)
 		return true, nil
 	})
@@ -783,6 +787,18 @@ func (h *sentPacketHandler) ResetForRetry() error {
 		return true, nil
 	})
 
+	// Only use the Retry to estimate the RTT if we didn't send any retransmission for the Initial.
+	// Otherwise, we don't know which Initial the Retry was sent in response to.
+	if h.ptoCount == 0 {
+		now := time.Now()
+		h.rttStats.UpdateRTT(now.Sub(firstPacketSendTime), 0, now)
+		if h.logger.Debug() {
+			h.logger.Debugf("\tupdated RTT: %s (σ: %s)", h.rttStats.SmoothedRTT(), h.rttStats.MeanDeviation())
+		}
+		if h.qlogger != nil {
+			h.qlogger.UpdatedMetrics(h.rttStats, h.congestion.GetCongestionWindow(), h.bytesInFlight, h.packetsInFlight())
+		}
+	}
 	h.initialPackets = newPacketNumberSpace(h.initialPackets.pns.Pop())
 	h.appDataPackets = newPacketNumberSpace(h.appDataPackets.pns.Pop())
 	oldAlarm := h.alarm
