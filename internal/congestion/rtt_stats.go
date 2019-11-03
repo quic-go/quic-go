@@ -46,13 +46,19 @@ func (r *RTTStats) SmoothedRTT() time.Duration { return r.smoothedRTT }
 // MeanDeviation gets the mean deviation
 func (r *RTTStats) MeanDeviation() time.Duration { return r.meanDeviation }
 
+// MaxAckDelay gets the max_ack_delay advertized by the peer
 func (r *RTTStats) MaxAckDelay() time.Duration { return r.maxAckDelay }
 
-func (r *RTTStats) PTO() time.Duration {
+// PTO gets the probe timeout duration.
+func (r *RTTStats) PTO(includeMaxAckDelay bool) time.Duration {
 	if r.SmoothedRTT() == 0 {
 		return 2 * defaultInitialRTT
 	}
-	return r.SmoothedRTT() + utils.MaxDuration(4*r.MeanDeviation(), protocol.TimerGranularity) + r.MaxAckDelay()
+	pto := r.SmoothedRTT() + utils.MaxDuration(4*r.MeanDeviation(), protocol.TimerGranularity)
+	if includeMaxAckDelay {
+		pto += r.MaxAckDelay()
+	}
+	return pto
 }
 
 // UpdateRTT updates the RTT based on a new sample.
