@@ -18,6 +18,7 @@ type connIDGenerator struct {
 	addConnectionID    func(protocol.ConnectionID) [16]byte
 	removeConnectionID func(protocol.ConnectionID)
 	retireConnectionID func(protocol.ConnectionID)
+	replaceWithClosed  func(protocol.ConnectionID, packetHandler)
 	queueControlFrame  func(wire.Frame)
 }
 
@@ -26,6 +27,7 @@ func newConnIDGenerator(
 	addConnectionID func(protocol.ConnectionID) [16]byte,
 	removeConnectionID func(protocol.ConnectionID),
 	retireConnectionID func(protocol.ConnectionID),
+	replaceWithClosed func(protocol.ConnectionID, packetHandler),
 	queueControlFrame func(wire.Frame),
 ) *connIDGenerator {
 	m := &connIDGenerator{
@@ -34,6 +36,7 @@ func newConnIDGenerator(
 		addConnectionID:    addConnectionID,
 		removeConnectionID: removeConnectionID,
 		retireConnectionID: retireConnectionID,
+		replaceWithClosed:  replaceWithClosed,
 		queueControlFrame:  queueControlFrame,
 	}
 	m.activeSrcConnIDs[0] = initialConnectionID
@@ -91,5 +94,11 @@ func (m *connIDGenerator) issueNewConnID() error {
 func (m *connIDGenerator) RemoveAll() {
 	for _, connID := range m.activeSrcConnIDs {
 		m.removeConnectionID(connID)
+	}
+}
+
+func (m *connIDGenerator) ReplaceWithClosed(handler packetHandler) {
+	for _, connID := range m.activeSrcConnIDs {
+		m.replaceWithClosed(connID, handler)
 	}
 }
