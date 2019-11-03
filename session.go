@@ -104,10 +104,8 @@ var errCloseForRecreating = errors.New("closing session in order to recreate it"
 
 // A Session is a QUIC session
 type session struct {
-	sessionRunner sessionRunner
-
 	origDestConnID protocol.ConnectionID // if the server sends a Retry, this is the connection ID we used initially
-	srcConnID      protocol.ConnectionID
+	srcConnIDLen   int
 
 	perspective    protocol.Perspective
 	initialVersion protocol.VersionNumber // if version negotiation is performed, this is the version we initially tried
@@ -117,8 +115,9 @@ type session struct {
 	conn      connection
 	sendQueue *sendQueue
 
-	streamsMap    streamManager
-	connIDManager *connIDManager
+	streamsMap      streamManager
+	connIDManager   *connIDManager
+	connIDGenerator *connIDGenerator
 
 	rttStats *congestion.RTTStats
 
@@ -177,6 +176,7 @@ type session struct {
 
 	traceCallback func(quictrace.Event)
 
+	logID  string
 	logger utils.Logger
 }
 
@@ -199,14 +199,18 @@ var newSession = func(
 ) quicSession {
 	s := &session{
 		conn:                  conn,
-		sessionRunner:         runner,
 		config:                conf,
-		srcConnID:             srcConnID,
+		srcConnIDLen:          srcConnID.Len(),
 		tokenGenerator:        tokenGenerator,
 		perspective:           protocol.PerspectiveServer,
 		handshakeCompleteChan: make(chan struct{}),
 		logger:                logger,
 		version:               v,
+	}
+	if origDestConnID != nil {
+		s.logID = origDestConnID.String()
+	} else {
+		s.logID = destConnID.String()
 	}
 	s.connIDManager = newConnIDManager(
 		destConnID,
@@ -215,12 +219,20 @@ var newSession = func(
 		runner.RetireResetToken,
 		s.queueControlFrame,
 	)
+	s.connIDGenerator = newConnIDGenerator(
+		srcConnID,
+		func(connID protocol.ConnectionID) [16]byte { return runner.Add(connID, s) },
+		runner.Remove,
+		runner.Retire,
+		runner.ReplaceWithClosed,
+		s.queueControlFrame,
+	)
 	s.preSetup()
 	s.sentPacketHandler = ackhandler.NewSentPacketHandler(0, s.rttStats, s.traceCallback, s.logger)
 	initialStream := newCryptoStream()
 	handshakeStream := newCryptoStream()
 	oneRTTStream := newPostHandshakeCryptoStream(s.framer)
-	token := s.sessionRunner.Add(srcConnID, s)
+	token := runner.Add(srcConnID, s)
 	params := &handshake.TransportParameters{
 		InitialMaxStreamDataBidiLocal:  protocol.InitialMaxStreamData,
 		InitialMaxStreamDataBidiRemote: protocol.InitialMaxStreamData,
@@ -255,7 +267,7 @@ var newSession = func(
 	)
 	s.cryptoStreamHandler = cs
 	s.packer = newPacketPacker(
-		s.srcConnID,
+		srcConnID,
 		s.connIDManager.Get,
 		initialStream,
 		handshakeStream,
@@ -288,11 +300,11 @@ var newClientSession = func(
 ) quicSession {
 	s := &session{
 		conn:                  conn,
-		sessionRunner:         runner,
 		config:                conf,
-		srcConnID:             srcConnID,
+		srcConnIDLen:          srcConnID.Len(),
 		perspective:           protocol.PerspectiveClient,
 		handshakeCompleteChan: make(chan struct{}),
+		logID:                 destConnID.String(),
 		logger:                logger,
 		initialVersion:        initialVersion,
 		version:               v,
@@ -302,6 +314,14 @@ var newClientSession = func(
 		func(token [16]byte) { runner.AddResetToken(token, s) },
 		runner.RemoveResetToken,
 		runner.RetireResetToken,
+		s.queueControlFrame,
+	)
+	s.connIDGenerator = newConnIDGenerator(
+		srcConnID,
+		func(connID protocol.ConnectionID) [16]byte { return runner.Add(connID, s) },
+		runner.Remove,
+		runner.Retire,
+		runner.ReplaceWithClosed,
 		s.queueControlFrame,
 	)
 	s.preSetup()
@@ -344,7 +364,7 @@ var newClientSession = func(
 	s.cryptoStreamManager = newCryptoStreamManager(cs, initialStream, handshakeStream, oneRTTStream)
 	s.unpacker = newPacketUnpacker(cs, s.version)
 	s.packer = newPacketPacker(
-		s.srcConnID,
+		srcConnID,
 		s.connIDManager.Get,
 		initialStream,
 		handshakeStream,
@@ -512,7 +532,7 @@ runLoop:
 	}
 
 	s.handleCloseError(closeErr)
-	s.logger.Infof("Connection %s closed.", s.srcConnID)
+	s.logger.Infof("Connection %s closed.", s.logID)
 	s.cryptoStreamHandler.Close()
 	s.sendQueue.Close()
 	return closeErr.err
@@ -594,7 +614,7 @@ func (s *session) handlePacketImpl(rp *receivedPacket) bool {
 			p.data = data
 		}
 
-		hdr, packetData, rest, err := wire.ParsePacket(p.data, s.srcConnID.Len())
+		hdr, packetData, rest, err := wire.ParsePacket(p.data, s.srcConnIDLen)
 		if err != nil {
 			s.logger.Debugf("error parsing packet: %s", err)
 			break
@@ -819,8 +839,7 @@ func (s *session) handleFrame(f wire.Frame, pn protocol.PacketNumber, encLevel p
 	case *wire.NewConnectionIDFrame:
 		err = s.handleNewConnectionIDFrame(frame)
 	case *wire.RetireConnectionIDFrame:
-		// since we don't send new connection IDs, we don't expect retirements
-		err = errors.New("unexpected RETIRE_CONNECTION_ID frame")
+		err = s.handleRetireConnectionIDFrame(frame)
 	default:
 		err = fmt.Errorf("unexpected frame type: %s", reflect.ValueOf(&frame).Elem().Type().Name())
 	}
@@ -936,6 +955,10 @@ func (s *session) handleNewConnectionIDFrame(f *wire.NewConnectionIDFrame) error
 	return s.connIDManager.Add(f)
 }
 
+func (s *session) handleRetireConnectionIDFrame(f *wire.RetireConnectionIDFrame) error {
+	return s.connIDGenerator.Retire(f.SequenceNumber)
+}
+
 func (s *session) handleAckFrame(frame *wire.AckFrame, pn protocol.PacketNumber, encLevel protocol.EncryptionLevel) error {
 	if err := s.sentPacketHandler.ReceivedAck(frame, pn, encLevel, s.lastPacketReceivedTime); err != nil {
 		return err
@@ -1021,11 +1044,11 @@ func (s *session) handleCloseError(closeErr closeError) {
 
 	// If this is a remote close we're done here
 	if closeErr.remote {
-		s.sessionRunner.ReplaceWithClosed(s.srcConnID, newClosedRemoteSession(s.perspective))
+		s.connIDGenerator.ReplaceWithClosed(newClosedRemoteSession(s.perspective))
 		return
 	}
 	if closeErr.immediate {
-		s.sessionRunner.Remove(s.srcConnID)
+		s.connIDGenerator.RemoveAll()
 		return
 	}
 	connClosePacket, err := s.sendConnectionClose(quicErr)
@@ -1033,7 +1056,7 @@ func (s *session) handleCloseError(closeErr closeError) {
 		s.logger.Debugf("Error sending CONNECTION_CLOSE: %s", err)
 	}
 	cs := newClosedLocalSession(s.conn, connClosePacket, s.perspective, s.logger)
-	s.sessionRunner.ReplaceWithClosed(s.srcConnID, cs)
+	s.connIDGenerator.ReplaceWithClosed(cs)
 }
 
 func (s *session) dropEncryptionLevel(encLevel protocol.EncryptionLevel) {
@@ -1064,6 +1087,7 @@ func (s *session) processTransportParameters(data []byte) {
 	s.frameParser.SetAckDelayExponent(params.AckDelayExponent)
 	s.connFlowController.UpdateSendWindow(params.InitialMaxData)
 	s.rttStats.SetMaxAckDelay(params.MaxAckDelay)
+	s.connIDGenerator.SetMaxActiveConnIDs(params.ActiveConnectionIDLimit)
 	if params.StatelessResetToken != nil {
 		s.connIDManager.SetStatelessResetToken(*params.StatelessResetToken)
 	}
@@ -1241,7 +1265,7 @@ func (s *session) logPacket(packet *packedPacket) {
 		// We don't need to allocate the slices for calling the format functions
 		return
 	}
-	s.logger.Debugf("-> Sending packet 0x%x (%d bytes) for connection %s, %s", packet.header.PacketNumber, len(packet.raw), s.srcConnID, packet.EncryptionLevel())
+	s.logger.Debugf("-> Sending packet 0x%x (%d bytes) for connection %s, %s", packet.header.PacketNumber, len(packet.raw), s.logID, packet.EncryptionLevel())
 	packet.header.Log(s.logger)
 	if packet.ack != nil {
 		wire.LogFrame(s.logger, packet.ack, true)
