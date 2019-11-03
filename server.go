@@ -37,6 +37,7 @@ type packetHandlerManager interface {
 	Add(protocol.ConnectionID, packetHandler)
 	Retire(protocol.ConnectionID)
 	Remove(protocol.ConnectionID)
+	ReplaceWithClosed(protocol.ConnectionID, packetHandler)
 	AddResetToken([16]byte, packetHandler)
 	RemoveResetToken([16]byte)
 	GetStatelessResetToken(protocol.ConnectionID) [16]byte
@@ -59,6 +60,7 @@ type quicSession interface {
 type sessionRunner interface {
 	Retire(protocol.ConnectionID)
 	Remove(protocol.ConnectionID)
+	ReplaceWithClosed(protocol.ConnectionID, packetHandler)
 	AddResetToken([16]byte, packetHandler)
 	RemoveResetToken([16]byte)
 }

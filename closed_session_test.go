@@ -1,30 +1,40 @@
 package quic
 
 import (
+	"errors"
 	"time"
 
+	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/internal/utils"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 )
 
-var _ = Describe("closed local session", func() {
+var _ = Describe("Closed local session", func() {
 	var (
-		sess            closedSession
-		mconn           *mockConnection
-		receivedPackets chan *receivedPacket
+		sess  packetHandler
+		mconn *mockConnection
 	)
 
 	BeforeEach(func() {
 		mconn = newMockConnection()
-		receivedPackets = make(chan *receivedPacket, 10)
-		sess = newClosedLocalSession(mconn, receivedPackets, []byte("close"), utils.DefaultLogger)
+		sess = newClosedLocalSession(mconn, []byte("close"), protocol.PerspectiveClient, utils.DefaultLogger)
+	})
+
+	AfterEach(func() {
+		Eventually(areClosedSessionsRunning).Should(BeFalse())
+	})
+
+	It("tells its perspective", func() {
+		Expect(sess.getPerspective()).To(Equal(protocol.PerspectiveClient))
+		// stop the session
+		Expect(sess.Close()).To(Succeed())
 	})
 
 	It("repeats the packet containing the CONNECTION_CLOSE frame", func() {
 		for i := 1; i <= 20; i++ {
-			receivedPackets <- &receivedPacket{}
+			sess.handlePacket(&receivedPacket{})
 			if i == 1 || i == 2 || i == 4 || i == 8 || i == 16 {
 				Eventually(mconn.written).Should(Receive(Equal([]byte("close")))) // receive the CONNECTION_CLOSE
 			} else {
@@ -32,40 +42,12 @@ var _ = Describe("closed local session", func() {
 			}
 		}
 		// stop the session
-		sess.destroy()
-		Eventually(areClosedSessionsRunning).Should(BeFalse())
+		Expect(sess.Close()).To(Succeed())
 	})
 
 	It("destroys sessions", func() {
 		Expect(areClosedSessionsRunning()).To(BeTrue())
-		sess.destroy()
-		Eventually(areClosedSessionsRunning).Should(BeFalse())
-	})
-})
-
-var _ = Describe("closed remote session", func() {
-	var (
-		sess            closedSession
-		receivedPackets chan *receivedPacket
-	)
-
-	BeforeEach(func() {
-		receivedPackets = make(chan *receivedPacket, 10)
-		sess = newClosedRemoteSession(receivedPackets)
-	})
-
-	It("discards packets", func() {
-		for i := 0; i < 1000; i++ {
-			receivedPackets <- &receivedPacket{}
-		}
-		// stop the session
-		sess.destroy()
-		Eventually(areClosedSessionsRunning).Should(BeFalse())
-	})
-
-	It("destroys sessions", func() {
-		Expect(areClosedSessionsRunning()).To(BeTrue())
-		sess.destroy()
+		sess.destroy(errors.New("destroy"))
 		Eventually(areClosedSessionsRunning).Should(BeFalse())
 	})
 })
