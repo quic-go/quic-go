@@ -72,6 +72,14 @@ func (p *receivedPacket) Clone() *receivedPacket {
 	}
 }
 
+type sessionRunner interface {
+	Retire(protocol.ConnectionID)
+	Remove(protocol.ConnectionID)
+	ReplaceWithClosed(protocol.ConnectionID, packetHandler)
+	AddResetToken([16]byte, packetHandler)
+	RemoveResetToken([16]byte)
+}
+
 type handshakeRunner struct {
 	onReceivedParams    func([]byte)
 	onError             func(error)
