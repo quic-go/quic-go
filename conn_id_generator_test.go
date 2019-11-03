@@ -12,6 +12,7 @@ var _ = Describe("Connection ID Generator", func() {
 	var (
 		addedConnIDs   []protocol.ConnectionID
 		retiredConnIDs []protocol.ConnectionID
+		removedConnIDs []protocol.ConnectionID
 		queuedFrames   []wire.Frame
 		g              *connIDGenerator
 	)
@@ -19,6 +20,7 @@ var _ = Describe("Connection ID Generator", func() {
 	BeforeEach(func() {
 		addedConnIDs = nil
 		retiredConnIDs = nil
+		removedConnIDs = nil
 		queuedFrames = nil
 		g = newConnIDGenerator(
 			protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7},
@@ -27,6 +29,7 @@ var _ = Describe("Connection ID Generator", func() {
 				l := uint8(len(addedConnIDs))
 				return [16]byte{l, l, l, l, l, l, l, l, l, l, l, l, l, l, l, l}
 			},
+			func(c protocol.ConnectionID) { removedConnIDs = append(removedConnIDs, c) },
 			func(c protocol.ConnectionID) { retiredConnIDs = append(retiredConnIDs, c) },
 			func(f wire.Frame) { queuedFrames = append(queuedFrames, f) },
 		)
@@ -76,6 +79,7 @@ var _ = Describe("Connection ID Generator", func() {
 
 	It("retires the initial connection ID", func() {
 		Expect(g.Retire(0)).To(Succeed())
+		Expect(removedConnIDs).To(BeEmpty())
 		Expect(retiredConnIDs).To(HaveLen(1))
 		Expect(retiredConnIDs[0]).To(Equal(protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7}))
 		Expect(addedConnIDs).To(BeEmpty())
@@ -91,5 +95,17 @@ var _ = Describe("Connection ID Generator", func() {
 		Expect(g.Retire(5)).To(Succeed())
 		Expect(retiredConnIDs).To(HaveLen(1))
 		Expect(queuedFrames).To(HaveLen(1))
+	})
+
+	It("removes all connection IDs", func() {
+		Expect(g.SetMaxActiveConnIDs(5)).To(Succeed())
+		Expect(queuedFrames).To(HaveLen(5))
+		g.RemoveAll()
+		Expect(removedConnIDs).To(HaveLen(6))                                                 // initial connection ID and newly issued ones
+		Expect(removedConnIDs).To(ContainElement(protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7})) // initial connection ID
+		for _, f := range queuedFrames {
+			nf := f.(*wire.NewConnectionIDFrame)
+			Expect(removedConnIDs).To(ContainElement(nf.ConnectionID))
+		}
 	})
 })

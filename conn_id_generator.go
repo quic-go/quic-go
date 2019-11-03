@@ -16,6 +16,7 @@ type connIDGenerator struct {
 	activeSrcConnIDs map[uint64]protocol.ConnectionID
 
 	addConnectionID    func(protocol.ConnectionID) [16]byte
+	removeConnectionID func(protocol.ConnectionID)
 	retireConnectionID func(protocol.ConnectionID)
 	queueControlFrame  func(wire.Frame)
 }
@@ -23,6 +24,7 @@ type connIDGenerator struct {
 func newConnIDGenerator(
 	initialConnectionID protocol.ConnectionID,
 	addConnectionID func(protocol.ConnectionID) [16]byte,
+	removeConnectionID func(protocol.ConnectionID),
 	retireConnectionID func(protocol.ConnectionID),
 	queueControlFrame func(wire.Frame),
 ) *connIDGenerator {
@@ -30,6 +32,7 @@ func newConnIDGenerator(
 		connIDLen:          initialConnectionID.Len(),
 		activeSrcConnIDs:   make(map[uint64]protocol.ConnectionID),
 		addConnectionID:    addConnectionID,
+		removeConnectionID: removeConnectionID,
 		retireConnectionID: retireConnectionID,
 		queueControlFrame:  queueControlFrame,
 	}
@@ -83,4 +86,10 @@ func (m *connIDGenerator) issueNewConnID() error {
 	})
 	m.highestSeq++
 	return nil
+}
+
+func (m *connIDGenerator) RemoveAll() {
+	for _, connID := range m.activeSrcConnIDs {
+		m.removeConnectionID(connID)
+	}
 }
