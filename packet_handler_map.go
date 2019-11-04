@@ -61,7 +61,38 @@ func newPacketHandlerMap(
 		logger:                     logger,
 	}
 	go m.listen()
+
+	if logger.Debug() {
+		go m.logUsage()
+	}
+
 	return m
+}
+
+func (h *packetHandlerMap) logUsage() {
+	ticker := time.NewTicker(2 * time.Second)
+	var printedZero bool
+	for {
+		select {
+		case <-h.listening:
+			return
+		case <-ticker.C:
+		}
+
+		h.mutex.Lock()
+		numHandlers := len(h.handlers)
+		numTokens := len(h.resetTokens)
+		h.mutex.Unlock()
+		// If the number tracked handlers and tokens is zero, only print it a single time.
+		hasZero := numHandlers == 0 && numTokens == 0
+		if !hasZero || (hasZero && !printedZero) {
+			h.logger.Debugf("Tracking %d connection IDs and %d reset tokens.\n", numHandlers, numTokens)
+			printedZero = false
+			if hasZero {
+				printedZero = true
+			}
+		}
+	}
 }
 
 func (h *packetHandlerMap) Add(id protocol.ConnectionID, handler packetHandler) {
