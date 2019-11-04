@@ -8,7 +8,13 @@ import (
 	"github.com/marten-seemann/qtls"
 )
 
-type sealer struct {
+func createAEAD(suite *qtls.CipherSuiteTLS13, trafficSecret []byte) cipher.AEAD {
+	key := qtls.HkdfExpandLabel(suite.Hash, trafficSecret, []byte{}, "quic key", suite.KeyLen)
+	iv := qtls.HkdfExpandLabel(suite.Hash, trafficSecret, []byte{}, "quic iv", suite.IVLen())
+	return suite.AEAD(key, iv)
+}
+
+type longHeaderSealer struct {
 	aead            cipher.AEAD
 	headerProtector headerProtector
 
@@ -16,28 +22,28 @@ type sealer struct {
 	nonceBuf []byte
 }
 
-var _ LongHeaderSealer = &sealer{}
+var _ LongHeaderSealer = &longHeaderSealer{}
 
 func newLongHeaderSealer(aead cipher.AEAD, headerProtector headerProtector) LongHeaderSealer {
-	return &sealer{
+	return &longHeaderSealer{
 		aead:            aead,
 		headerProtector: headerProtector,
 		nonceBuf:        make([]byte, aead.NonceSize()),
 	}
 }
 
-func (s *sealer) Seal(dst, src []byte, pn protocol.PacketNumber, ad []byte) []byte {
+func (s *longHeaderSealer) Seal(dst, src []byte, pn protocol.PacketNumber, ad []byte) []byte {
 	binary.BigEndian.PutUint64(s.nonceBuf[len(s.nonceBuf)-8:], uint64(pn))
 	// The AEAD we're using here will be the qtls.aeadAESGCM13.
 	// It uses the nonce provided here and XOR it with the IV.
 	return s.aead.Seal(dst, s.nonceBuf, src, ad)
 }
 
-func (s *sealer) EncryptHeader(sample []byte, firstByte *byte, pnBytes []byte) {
+func (s *longHeaderSealer) EncryptHeader(sample []byte, firstByte *byte, pnBytes []byte) {
 	s.headerProtector.EncryptHeader(sample, firstByte, pnBytes)
 }
 
-func (s *sealer) Overhead() int {
+func (s *longHeaderSealer) Overhead() int {
 	return s.aead.Overhead()
 }
 
@@ -74,8 +80,68 @@ func (o *longHeaderOpener) DecryptHeader(sample []byte, firstByte *byte, pnBytes
 	o.headerProtector.DecryptHeader(sample, firstByte, pnBytes)
 }
 
-func createAEAD(suite *qtls.CipherSuiteTLS13, trafficSecret []byte) cipher.AEAD {
-	key := qtls.HkdfExpandLabel(suite.Hash, trafficSecret, []byte{}, "quic key", suite.KeyLen)
-	iv := qtls.HkdfExpandLabel(suite.Hash, trafficSecret, []byte{}, "quic iv", suite.IVLen())
-	return suite.AEAD(key, iv)
+type handshakeSealer struct {
+	LongHeaderSealer
+
+	dropInitialKeys func()
+	dropped         bool
+}
+
+func newHandshakeSealer(
+	aead cipher.AEAD,
+	headerProtector headerProtector,
+	dropInitialKeys func(),
+	perspective protocol.Perspective,
+) LongHeaderSealer {
+	sealer := newLongHeaderSealer(aead, headerProtector)
+	// The client drops Initial keys when sending the first Handshake packet.
+	if perspective == protocol.PerspectiveServer {
+		return sealer
+	}
+	return &handshakeSealer{
+		LongHeaderSealer: sealer,
+		dropInitialKeys:  dropInitialKeys,
+	}
+}
+
+func (s *handshakeSealer) Seal(dst, src []byte, pn protocol.PacketNumber, ad []byte) []byte {
+	data := s.LongHeaderSealer.Seal(dst, src, pn, ad)
+	if !s.dropped {
+		s.dropInitialKeys()
+		s.dropped = true
+	}
+	return data
+}
+
+type handshakeOpener struct {
+	LongHeaderOpener
+
+	dropInitialKeys func()
+	dropped         bool
+}
+
+func newHandshakeOpener(
+	aead cipher.AEAD,
+	headerProtector headerProtector,
+	dropInitialKeys func(),
+	perspective protocol.Perspective,
+) LongHeaderOpener {
+	opener := newLongHeaderOpener(aead, headerProtector)
+	// The server drops Initial keys when first successfully processing a Handshake packet.
+	if perspective == protocol.PerspectiveClient {
+		return opener
+	}
+	return &handshakeOpener{
+		LongHeaderOpener: opener,
+		dropInitialKeys:  dropInitialKeys,
+	}
+}
+
+func (o *handshakeOpener) Open(dst, src []byte, pn protocol.PacketNumber, ad []byte) ([]byte, error) {
+	dec, err := o.LongHeaderOpener.Open(dst, src, pn, ad)
+	if err == nil && !o.dropped {
+		o.dropInitialKeys()
+		o.dropped = true
+	}
+	return dec, err
 }

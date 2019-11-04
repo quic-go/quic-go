@@ -221,14 +221,6 @@ func (h *cryptoSetup) ChangeConnectionID(id protocol.ConnectionID) {
 
 func (h *cryptoSetup) SetLargest1RTTAcked(pn protocol.PacketNumber) {
 	h.aead.SetLargestAcked(pn)
-	// drop initial keys
-	// TODO: do this earlier
-	if h.initialOpener != nil {
-		h.initialOpener = nil
-		h.initialSealer = nil
-		h.runner.DropKeys(protocol.EncryptionInitial)
-		h.logger.Debugf("Dropping Initial keys.")
-	}
 	// drop handshake keys
 	if h.handshakeOpener != nil {
 		h.handshakeOpener = nil
@@ -483,9 +475,11 @@ func (h *cryptoSetup) SetReadKey(encLevel qtls.EncryptionLevel, suite *qtls.Ciph
 	switch encLevel {
 	case qtls.EncryptionHandshake:
 		h.readEncLevel = protocol.EncryptionHandshake
-		h.handshakeOpener = newLongHeaderOpener(
+		h.handshakeOpener = newHandshakeOpener(
 			createAEAD(suite, trafficSecret),
 			newHeaderProtector(suite, trafficSecret, true),
+			h.dropInitialKeys,
+			h.perspective,
 		)
 		h.logger.Debugf("Installed Handshake Read keys (using %s)", cipherSuiteName(suite.ID))
 	case qtls.EncryptionApplication:
@@ -505,9 +499,11 @@ func (h *cryptoSetup) SetWriteKey(encLevel qtls.EncryptionLevel, suite *qtls.Cip
 	switch encLevel {
 	case qtls.EncryptionHandshake:
 		h.writeEncLevel = protocol.EncryptionHandshake
-		h.handshakeSealer = newLongHeaderSealer(
+		h.handshakeSealer = newHandshakeSealer(
 			createAEAD(suite, trafficSecret),
 			newHeaderProtector(suite, trafficSecret, true),
+			h.dropInitialKeys,
+			h.perspective,
 		)
 		h.logger.Debugf("Installed Handshake Write keys (using %s)", cipherSuiteName(suite.ID))
 	case qtls.EncryptionApplication:
@@ -550,6 +546,16 @@ func (h *cryptoSetup) WriteRecord(p []byte) (int, error) {
 
 func (h *cryptoSetup) SendAlert(alert uint8) {
 	h.alertChan <- alert
+}
+
+// used a callback in the handshakeSealer and handshakeOpener
+func (h *cryptoSetup) dropInitialKeys() {
+	h.mutex.Lock()
+	h.initialOpener = nil
+	h.initialSealer = nil
+	h.mutex.Unlock()
+	h.runner.DropKeys(protocol.EncryptionInitial)
+	h.logger.Debugf("Dropping Initial keys.")
 }
 
 func (h *cryptoSetup) GetInitialSealer() (LongHeaderSealer, error) {
