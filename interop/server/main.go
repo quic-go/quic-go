@@ -30,7 +30,7 @@ func main() {
 	}
 
 	switch testcase {
-	case "handshake", "transfer", "resumption":
+	case "versionnegotiation", "handshake", "transfer", "resumption":
 		err = runHTTP09Server(quicConf)
 	case "retry":
 		// By default, quic-go performs a Retry on every incoming connection.
