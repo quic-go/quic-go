@@ -34,6 +34,20 @@ func (m *MockSessionRunner) EXPECT() *MockSessionRunnerMockRecorder {
 	return m.recorder
 }
 
+// Add mocks base method
+func (m *MockSessionRunner) Add(arg0 protocol.ConnectionID, arg1 packetHandler) [16]byte {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Add", arg0, arg1)
+	ret0, _ := ret[0].([16]byte)
+	return ret0
+}
+
+// Add indicates an expected call of Add
+func (mr *MockSessionRunnerMockRecorder) Add(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Add", reflect.TypeOf((*MockSessionRunner)(nil).Add), arg0, arg1)
+}
+
 // AddResetToken mocks base method
 func (m *MockSessionRunner) AddResetToken(arg0 [16]byte, arg1 packetHandler) {
 	m.ctrl.T.Helper()
@@ -92,4 +106,16 @@ func (m *MockSessionRunner) Retire(arg0 protocol.ConnectionID) {
 func (mr *MockSessionRunnerMockRecorder) Retire(arg0 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Retire", reflect.TypeOf((*MockSessionRunner)(nil).Retire), arg0)
+}
+
+// RetireResetToken mocks base method
+func (m *MockSessionRunner) RetireResetToken(arg0 [16]byte) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "RetireResetToken", arg0)
+}
+
+// RetireResetToken indicates an expected call of RetireResetToken
+func (mr *MockSessionRunnerMockRecorder) RetireResetToken(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RetireResetToken", reflect.TypeOf((*MockSessionRunner)(nil).RetireResetToken), arg0)
 }

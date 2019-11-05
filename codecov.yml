@@ -9,6 +9,7 @@ coverage:
     - interop/
     - internal/ackhandler/packet_linkedlist.go
     - internal/utils/byteinterval_linkedlist.go
+    - internal/utils/newconnectionid_linkedlist.go
     - internal/utils/packetinterval_linkedlist.go
     - internal/utils/linkedlist/linkedlist.go
     - quictrace/

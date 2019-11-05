@@ -9,7 +9,6 @@ import (
 
 	gomock "github.com/golang/mock/gomock"
 	handshake "github.com/lucas-clemente/quic-go/internal/handshake"
-	protocol "github.com/lucas-clemente/quic-go/internal/protocol"
 	wire "github.com/lucas-clemente/quic-go/internal/wire"
 )
 
@@ -34,18 +33,6 @@ func NewMockPacker(ctrl *gomock.Controller) *MockPacker {
 // EXPECT returns an object that allows the caller to indicate expected use
 func (m *MockPacker) EXPECT() *MockPackerMockRecorder {
 	return m.recorder
-}
-
-// ChangeDestConnectionID mocks base method
-func (m *MockPacker) ChangeDestConnectionID(arg0 protocol.ConnectionID) {
-	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "ChangeDestConnectionID", arg0)
-}
-
-// ChangeDestConnectionID indicates an expected call of ChangeDestConnectionID
-func (mr *MockPackerMockRecorder) ChangeDestConnectionID(arg0 interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ChangeDestConnectionID", reflect.TypeOf((*MockPacker)(nil).ChangeDestConnectionID), arg0)
 }
 
 // HandleTransportParameters mocks base method

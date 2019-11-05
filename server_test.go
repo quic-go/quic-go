@@ -285,12 +285,12 @@ var _ = Describe("Server", func() {
 				serv.newSession = func(
 					_ connection,
 					_ sessionRunner,
+					_ protocol.ConnectionID,
 					origConnID protocol.ConnectionID,
 					destConnID protocol.ConnectionID,
 					srcConnID protocol.ConnectionID,
 					_ *Config,
 					_ *tls.Config,
-					_ *handshake.TransportParameters,
 					_ *handshake.TokenGenerator,
 					_ utils.Logger,
 					_ protocol.VersionNumber,
@@ -340,9 +340,9 @@ var _ = Describe("Server", func() {
 					_ protocol.ConnectionID,
 					_ protocol.ConnectionID,
 					_ protocol.ConnectionID,
+					_ protocol.ConnectionID,
 					_ *Config,
 					_ *tls.Config,
-					_ *handshake.TransportParameters,
 					_ *handshake.TokenGenerator,
 					_ utils.Logger,
 					_ protocol.VersionNumber,
@@ -401,9 +401,9 @@ var _ = Describe("Server", func() {
 					_ protocol.ConnectionID,
 					_ protocol.ConnectionID,
 					_ protocol.ConnectionID,
+					_ protocol.ConnectionID,
 					_ *Config,
 					_ *tls.Config,
-					_ *handshake.TransportParameters,
 					_ *handshake.TokenGenerator,
 					_ utils.Logger,
 					_ protocol.VersionNumber,
@@ -433,7 +433,6 @@ var _ = Describe("Server", func() {
 				Consistently(done).ShouldNot(BeClosed())
 
 				// make the go routine return
-				sess.EXPECT().getPerspective()
 				Expect(serv.Close()).To(Succeed())
 				Eventually(done).Should(BeClosed())
 			})
@@ -498,9 +497,9 @@ var _ = Describe("Server", func() {
 					_ protocol.ConnectionID,
 					_ protocol.ConnectionID,
 					_ protocol.ConnectionID,
+					_ protocol.ConnectionID,
 					_ *Config,
 					_ *tls.Config,
-					_ *handshake.TransportParameters,
 					_ *handshake.TokenGenerator,
 					_ utils.Logger,
 					_ protocol.VersionNumber,
@@ -546,9 +545,9 @@ var _ = Describe("Server", func() {
 				_ protocol.ConnectionID,
 				_ protocol.ConnectionID,
 				_ protocol.ConnectionID,
+				_ protocol.ConnectionID,
 				_ *Config,
 				_ *tls.Config,
-				_ *handshake.TransportParameters,
 				_ *handshake.TokenGenerator,
 				_ utils.Logger,
 				_ protocol.VersionNumber,
@@ -583,9 +582,9 @@ var _ = Describe("Server", func() {
 				_ protocol.ConnectionID,
 				_ protocol.ConnectionID,
 				_ protocol.ConnectionID,
+				_ protocol.ConnectionID,
 				_ *Config,
 				_ *tls.Config,
-				_ *handshake.TransportParameters,
 				_ *handshake.TokenGenerator,
 				_ utils.Logger,
 				_ protocol.VersionNumber,
@@ -644,9 +643,9 @@ var _ = Describe("Server", func() {
 				_ protocol.ConnectionID,
 				_ protocol.ConnectionID,
 				_ protocol.ConnectionID,
+				_ protocol.ConnectionID,
 				_ *Config,
 				_ *tls.Config,
-				_ *handshake.TransportParameters,
 				_ *handshake.TokenGenerator,
 				_ utils.Logger,
 				_ protocol.VersionNumber,
@@ -674,7 +673,6 @@ var _ = Describe("Server", func() {
 			Consistently(done).ShouldNot(BeClosed())
 
 			// make the go routine return
-			sess.EXPECT().getPerspective()
 			Expect(serv.Close()).To(Succeed())
 			Eventually(done).Should(BeClosed())
 		})
