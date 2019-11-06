@@ -175,20 +175,37 @@ var _ = Describe("Connection ID Manager", func() {
 	})
 
 	It("initiates subsequent updates when enough packets are sent", func() {
-		for i := uint8(1); i <= protocol.MaxActiveConnectionIDs; i++ {
+		var s uint8
+		for s = uint8(1); s <= protocol.MaxActiveConnectionIDs; s++ {
 			Expect(m.Add(&wire.NewConnectionIDFrame{
-				SequenceNumber:      uint64(i),
-				ConnectionID:        protocol.ConnectionID{i, i, i, i},
-				StatelessResetToken: [16]byte{i, i, i, i, i, i, i, i, i, i, i, i, i, i, i, i},
+				SequenceNumber:      uint64(s),
+				ConnectionID:        protocol.ConnectionID{s, s, s, s},
+				StatelessResetToken: [16]byte{s, s, s, s, s, s, s, s, s, s, s, s, s, s, s, s},
 			})).To(Succeed())
 		}
-		Expect(m.Get()).To(Equal(protocol.ConnectionID{1, 1, 1, 1}))
-		for i := 0; i < protocol.PacketsPerConnectionID; i++ {
+
+		lastConnID := m.Get()
+		Expect(lastConnID).To(Equal(protocol.ConnectionID{1, 1, 1, 1}))
+
+		var counter int
+		for i := 0; i < 50*protocol.PacketsPerConnectionID; i++ {
 			m.SentPacket()
+
+			connID := m.Get()
+			if !connID.Equal(lastConnID) {
+				counter++
+				lastConnID = connID
+				Expect(retiredTokens).To(HaveLen(1))
+				retiredTokens = nil
+				Expect(m.Add(&wire.NewConnectionIDFrame{
+					SequenceNumber:      uint64(s),
+					ConnectionID:        protocol.ConnectionID{s, s, s, s},
+					StatelessResetToken: [16]byte{s, s, s, s, s, s, s, s, s, s, s, s, s, s, s, s},
+				})).To(Succeed())
+				s++
+			}
 		}
-		Expect(m.Get()).To(Equal(protocol.ConnectionID{2, 2, 2, 2}))
-		Expect(retiredTokens).To(HaveLen(1))
-		Expect(retiredTokens[0]).To(Equal([16]byte{1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1}))
+		Expect(counter).To(BeNumerically("~", 50, 10))
 	})
 
 	It("only initiates subsequent updates when enough if enough connection IDs are queued", func() {

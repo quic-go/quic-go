@@ -1,7 +1,10 @@
 package quic
 
 import (
+	"crypto/rand"
+	"encoding/binary"
 	"fmt"
+	mrand "math/rand"
 
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/internal/utils"
@@ -15,7 +18,12 @@ type connIDManager struct {
 	activeConnectionID        protocol.ConnectionID
 	activeStatelessResetToken *[16]byte
 
+	// We change the connection ID after sending on average
+	// protocol.PacketsPerConnectionID packets. The actual value is randomized
+	// hide the packet loss rate from on-path observers.
 	packetsSinceLastChange uint64
+	rand                   *mrand.Rand
+	packetsPerConnectionID uint64
 
 	addStatelessResetToken    func([16]byte)
 	removeStatelessResetToken func([16]byte)
@@ -30,12 +38,16 @@ func newConnIDManager(
 	retireStatelessResetToken func([16]byte),
 	queueControlFrame func(wire.Frame),
 ) *connIDManager {
+	b := make([]byte, 8)
+	_, _ = rand.Read(b) // ignore the error here. Nothing bad will happen if the seed is not perfectly random.
+	seed := int64(binary.BigEndian.Uint64(b))
 	return &connIDManager{
 		activeConnectionID:        initialDestConnID,
 		addStatelessResetToken:    addStatelessResetToken,
 		removeStatelessResetToken: removeStatelessResetToken,
 		retireStatelessResetToken: retireStatelessResetToken,
 		queueControlFrame:         queueControlFrame,
+		rand:                      mrand.New(mrand.NewSource(seed)),
 	}
 }
 
@@ -114,6 +126,7 @@ func (h *connIDManager) updateConnectionID() {
 	h.activeConnectionID = front.ConnectionID
 	h.activeStatelessResetToken = front.StatelessResetToken
 	h.packetsSinceLastChange = 0
+	h.packetsPerConnectionID = protocol.PacketsPerConnectionID/2 + uint64(h.rand.Int63n(protocol.PacketsPerConnectionID))
 	h.addStatelessResetToken(*h.activeStatelessResetToken)
 }
 
@@ -154,7 +167,7 @@ func (h *connIDManager) shouldUpdateConnID() bool {
 	// 1. The queue of connection IDs is filled more than 50%.
 	// 2. We sent at least PacketsPerConnectionID packets
 	return 2*h.queue.Len() >= protocol.MaxActiveConnectionIDs &&
-		h.packetsSinceLastChange >= protocol.PacketsPerConnectionID
+		h.packetsSinceLastChange >= h.packetsPerConnectionID
 }
 
 func (h *connIDManager) Get() protocol.ConnectionID {
