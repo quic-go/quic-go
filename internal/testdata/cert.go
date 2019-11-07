@@ -3,7 +3,6 @@ package testdata
 import (
 	"crypto/tls"
 	"crypto/x509"
-	"encoding/pem"
 	"io/ioutil"
 	"path"
 	"runtime"
@@ -36,22 +35,21 @@ func GetTLSConfig() *tls.Config {
 	}
 }
 
-// GetRootCA returns an x509.CertPool containing the CA certificate
-func GetRootCA() *x509.CertPool {
+// AddRootCA adds the root CA certificate to a cert pool
+func AddRootCA(certPool *x509.CertPool) {
 	caCertPath := path.Join(certPath, "ca.pem")
 	caCertRaw, err := ioutil.ReadFile(caCertPath)
 	if err != nil {
 		panic(err)
 	}
-	p, _ := pem.Decode(caCertRaw)
-	if p.Type != "CERTIFICATE" {
-		panic("expected a certificate")
+	if ok := certPool.AppendCertsFromPEM(caCertRaw); !ok {
+		panic("Could not add root ceritificate to pool.")
 	}
-	caCert, err := x509.ParseCertificate(p.Bytes)
-	if err != nil {
-		panic(err)
-	}
-	certPool := x509.NewCertPool()
-	certPool.AddCert(caCert)
-	return certPool
+}
+
+// GetRootCA returns an x509.CertPool containing (only) the CA certificate
+func GetRootCA() *x509.CertPool {
+	pool := x509.NewCertPool()
+	AddRootCA(pool)
+	return pool
 }
