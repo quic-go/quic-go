@@ -209,6 +209,26 @@ var _ = Describe("Streams Map", func() {
 					Expect(str).ToNot(BeNil())
 					Expect(str.StreamID()).To(Equal(id))
 				})
+
+				It("errors when deleting unknown incoming unidirectional streams", func() {
+					id := ids.firstIncomingUniStream + 4
+					Expect(m.DeleteStream(id)).To(MatchError(fmt.Sprintf("Tried to delete unknown stream %d", id)))
+				})
+
+				It("errors when deleting unknown outgoing unidirectional streams", func() {
+					id := ids.firstOutgoingUniStream + 4
+					Expect(m.DeleteStream(id)).To(MatchError(fmt.Sprintf("Tried to delete unknown stream %d", id)))
+				})
+
+				It("errors when deleting unknown incoming bidirectional streams", func() {
+					id := ids.firstIncomingBidiStream + 4
+					Expect(m.DeleteStream(id)).To(MatchError(fmt.Sprintf("Tried to delete unknown stream %d", id)))
+				})
+
+				It("errors when deleting unknown outgoing bidirectional streams", func() {
+					id := ids.firstOutgoingBidiStream + 4
+					Expect(m.DeleteStream(id)).To(MatchError(fmt.Sprintf("Tried to delete unknown stream %d", id)))
+				})
 			})
 
 			Context("getting streams", func() {

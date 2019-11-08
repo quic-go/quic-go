@@ -139,14 +139,14 @@ func (m *streamsMap) DeleteStream(id protocol.StreamID) error {
 	switch id.Type() {
 	case protocol.StreamTypeUni:
 		if id.InitiatedBy() == m.perspective {
-			return m.outgoingUniStreams.DeleteStream(num)
+			return convertStreamError(m.outgoingUniStreams.DeleteStream(num), protocol.StreamTypeUni, m.perspective)
 		}
-		return m.incomingUniStreams.DeleteStream(num)
+		return convertStreamError(m.incomingUniStreams.DeleteStream(num), protocol.StreamTypeUni, m.perspective.Opposite())
 	case protocol.StreamTypeBidi:
 		if id.InitiatedBy() == m.perspective {
-			return m.outgoingBidiStreams.DeleteStream(num)
+			return convertStreamError(m.outgoingBidiStreams.DeleteStream(num), protocol.StreamTypeBidi, m.perspective)
 		}
-		return m.incomingBidiStreams.DeleteStream(num)
+		return convertStreamError(m.incomingBidiStreams.DeleteStream(num), protocol.StreamTypeBidi, m.perspective.Opposite())
 	}
 	panic("")
 }
