@@ -139,7 +139,7 @@ func (m *incomingBidiStreamsMap) DeleteStream(num protocol.StreamNum) error {
 func (m *incomingBidiStreamsMap) deleteStream(num protocol.StreamNum) error {
 	if _, ok := m.streams[num]; !ok {
 		return streamError{
-			message: "Tried to delete unknown stream %d",
+			message: "Tried to delete unknown incoming stream %d",
 			nums:    []protocol.StreamNum{num},
 		}
 	}
@@ -149,7 +149,7 @@ func (m *incomingBidiStreamsMap) deleteStream(num protocol.StreamNum) error {
 	if num >= m.nextStreamToAccept {
 		if _, ok := m.streamsToDelete[num]; ok {
 			return streamError{
-				message: "Tried to delete stream %d multiple times",
+				message: "Tried to delete incoming stream %d multiple times",
 				nums:    []protocol.StreamNum{num},
 			}
 		}
