@@ -20,6 +20,16 @@ var _ = Describe("QUIC Transport Errors", func() {
 		Expect(err.Error()).To(Equal("FLOW_CONTROL_ERROR"))
 	})
 
+	It("includes the frame type, for errors without a message", func() {
+		err := ErrorWithFrameType(FlowControlError, 0x1337, "")
+		Expect(err.Error()).To(Equal("FLOW_CONTROL_ERROR (frame type: 0x1337)"))
+	})
+
+	It("includes the frame type, for errors with a message", func() {
+		err := ErrorWithFrameType(FlowControlError, 0x1337, "foobar")
+		Expect(err.Error()).To(Equal("FLOW_CONTROL_ERROR (frame type: 0x1337): foobar"))
+	})
+
 	It("has a string representation for timeout errors", func() {
 		err := TimeoutError("foobar")
 		Expect(err.Timeout()).To(BeTrue())
