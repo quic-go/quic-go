@@ -456,8 +456,7 @@ var _ = Describe("Session", func() {
 		})
 
 		It("closes with an error", func() {
-			testErr := errors.New("test error")
-			streamManager.EXPECT().CloseWithError(qerr.ApplicationError(0x1337, testErr.Error()))
+			streamManager.EXPECT().CloseWithError(qerr.ApplicationError(0x1337, "test error"))
 			expectReplaceWithClosed()
 			cryptoSetup.EXPECT().Close()
 			packer.EXPECT().PackConnectionClose(gomock.Any()).DoAndReturn(func(f *wire.ConnectionCloseFrame) (*packedPacket, error) {
@@ -466,7 +465,24 @@ var _ = Describe("Session", func() {
 				Expect(f.ReasonPhrase).To(Equal("test error"))
 				return &packedPacket{}, nil
 			})
-			sess.CloseWithError(0x1337, testErr.Error())
+			sess.CloseWithError(0x1337, "test error")
+			Eventually(areSessionsRunning).Should(BeFalse())
+			Expect(sess.Context().Done()).To(BeClosed())
+		})
+
+		It("includes the frame type in transport-level close frames", func() {
+			testErr := qerr.ErrorWithFrameType(0x1337, 0x42, "test error")
+			streamManager.EXPECT().CloseWithError(testErr)
+			expectReplaceWithClosed()
+			cryptoSetup.EXPECT().Close()
+			packer.EXPECT().PackConnectionClose(gomock.Any()).DoAndReturn(func(f *wire.ConnectionCloseFrame) (*packedPacket, error) {
+				Expect(f.IsApplicationError).To(BeFalse())
+				Expect(f.FrameType).To(BeEquivalentTo(0x42))
+				Expect(f.ErrorCode).To(BeEquivalentTo(0x1337))
+				Expect(f.ReasonPhrase).To(Equal("test error"))
+				return &packedPacket{}, nil
+			})
+			sess.closeLocal(testErr)
 			Eventually(areSessionsRunning).Should(BeFalse())
 			Expect(sess.Context().Done()).To(BeClosed())
 		})

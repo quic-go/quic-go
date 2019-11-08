@@ -1252,6 +1252,7 @@ func (s *session) sendConnectionClose(quicErr *qerr.QuicError) ([]byte, error) {
 	packet, err := s.packer.PackConnectionClose(&wire.ConnectionCloseFrame{
 		IsApplicationError: quicErr.IsApplicationError(),
 		ErrorCode:          quicErr.ErrorCode,
+		FrameType:          quicErr.FrameType,
 		ReasonPhrase:       reason,
 	})
 	if err != nil {
