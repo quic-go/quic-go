@@ -197,7 +197,7 @@ var _ = Describe("Streams Map (incoming)", func() {
 	It("errors when deleting a non-existing stream", func() {
 		err := m.DeleteStream(1337)
 		Expect(err).To(HaveOccurred())
-		Expect(err.(streamError).TestError()).To(MatchError("Tried to delete unknown stream 1337"))
+		Expect(err.(streamError).TestError()).To(MatchError("Tried to delete unknown incoming stream 1337"))
 	})
 
 	It("sends MAX_STREAMS frames when streams are deleted", func() {
