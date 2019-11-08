@@ -2,6 +2,7 @@ package wire
 
 import (
 	"bytes"
+	"fmt"
 	"io"
 
 	"github.com/lucas-clemente/quic-go/internal/protocol"
@@ -44,6 +45,33 @@ var _ = Describe("STREAMS_BLOCKED frame", func() {
 				Expect(err).To(MatchError(io.EOF))
 			}
 		})
+
+		for _, t := range []protocol.StreamType{protocol.StreamTypeUni, protocol.StreamTypeBidi} {
+			streamType := t
+
+			It("accepts a frame containing the maximum stream count", func() {
+				f := &StreamsBlockedFrame{
+					Type:        streamType,
+					StreamLimit: protocol.MaxStreamCount,
+				}
+				b := &bytes.Buffer{}
+				Expect(f.Write(b, protocol.VersionWhatever)).To(Succeed())
+				frame, err := parseStreamsBlockedFrame(bytes.NewReader(b.Bytes()), protocol.VersionWhatever)
+				Expect(err).ToNot(HaveOccurred())
+				Expect(frame).To(Equal(f))
+			})
+
+			It("errors when receiving a too large stream count", func() {
+				f := &StreamsBlockedFrame{
+					Type:        streamType,
+					StreamLimit: protocol.MaxStreamCount + 1,
+				}
+				b := &bytes.Buffer{}
+				Expect(f.Write(b, protocol.VersionWhatever)).To(Succeed())
+				_, err := parseStreamsBlockedFrame(bytes.NewReader(b.Bytes()), protocol.VersionWhatever)
+				Expect(err).To(MatchError(fmt.Sprintf("%d exceeds the maximum stream count", protocol.MaxStreamCount+1)))
+			})
+		}
 	})
 
 	Context("writing", func() {
