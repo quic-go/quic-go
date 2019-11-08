@@ -214,9 +214,6 @@ func (m *streamsMap) getOrOpenSendStream(id protocol.StreamID) (sendStreamI, err
 }
 
 func (m *streamsMap) HandleMaxStreamsFrame(f *wire.MaxStreamsFrame) error {
-	if f.MaxStreamNum > protocol.MaxStreamCount {
-		return qerr.StreamLimitError
-	}
 	switch f.Type {
 	case protocol.StreamTypeUni:
 		m.outgoingUniStreams.SetMaxStream(f.MaxStreamNum)

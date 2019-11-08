@@ -381,13 +381,6 @@ var _ = Describe("Streams Map", func() {
 					_, err = m.OpenUniStream()
 					expectTooManyStreamsError(err)
 				})
-
-				It("rejects MAX_STREAMS frames with too large values", func() {
-					Expect(m.HandleMaxStreamsFrame(&wire.MaxStreamsFrame{
-						Type:         protocol.StreamTypeBidi,
-						MaxStreamNum: protocol.MaxStreamCount + 1,
-					})).To(MatchError(qerr.StreamLimitError))
-				})
 			})
 
 			Context("sending MAX_STREAMS frames", func() {
