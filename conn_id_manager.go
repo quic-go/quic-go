@@ -15,6 +15,7 @@ type connIDManager struct {
 	queue utils.NewConnectionIDList
 
 	activeSequenceNumber      uint64
+	retiredPriorTo            uint64
 	activeConnectionID        protocol.ConnectionID
 	activeStatelessResetToken *[16]byte
 
@@ -62,18 +63,30 @@ func (h *connIDManager) Add(f *wire.NewConnectionIDFrame) error {
 }
 
 func (h *connIDManager) add(f *wire.NewConnectionIDFrame) error {
+	// If the NEW_CONNECTION_ID frame is reordered, such that its sequenece number
+	// was already retired, send the RETIRE_CONNECTION_ID frame immediately.
+	if f.SequenceNumber < h.retiredPriorTo {
+		h.queueControlFrame(&wire.RetireConnectionIDFrame{
+			SequenceNumber: f.SequenceNumber,
+		})
+		return nil
+	}
+
 	// Retire elements in the queue.
 	// Doesn't retire the active connection ID.
-	var next *utils.NewConnectionIDElement
-	for el := h.queue.Front(); el != nil; el = next {
-		if el.Value.SequenceNumber >= f.RetirePriorTo {
-			break
+	if f.RetirePriorTo > h.retiredPriorTo {
+		var next *utils.NewConnectionIDElement
+		for el := h.queue.Front(); el != nil; el = next {
+			if el.Value.SequenceNumber >= f.RetirePriorTo {
+				break
+			}
+			next = el.Next()
+			h.queueControlFrame(&wire.RetireConnectionIDFrame{
+				SequenceNumber: el.Value.SequenceNumber,
+			})
+			h.queue.Remove(el)
 		}
-		next = el.Next()
-		h.queueControlFrame(&wire.RetireConnectionIDFrame{
-			SequenceNumber: el.Value.SequenceNumber,
-		})
-		h.queue.Remove(el)
+		h.retiredPriorTo = f.RetirePriorTo
 	}
 
 	// insert a new element at the end

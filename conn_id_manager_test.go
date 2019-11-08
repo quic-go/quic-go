@@ -141,6 +141,25 @@ var _ = Describe("Connection ID Manager", func() {
 		Expect(m.Get()).To(Equal(protocol.ConnectionID{3, 4, 5, 6}))
 	})
 
+	It("ignores reordered connection IDs, if their sequence number was already retired", func() {
+		Expect(m.Add(&wire.NewConnectionIDFrame{
+			SequenceNumber: 10,
+			ConnectionID:   protocol.ConnectionID{1, 2, 3, 4},
+			RetirePriorTo:  5,
+		})).To(Succeed())
+		Expect(frameQueue).To(HaveLen(1))
+		Expect(frameQueue[0].(*wire.RetireConnectionIDFrame).SequenceNumber).To(BeZero())
+		frameQueue = nil
+		// If this NEW_CONNECTION_ID frame hadn't been reordered, we would have retired it before.
+		// Make sure it gets retired immediately now.
+		Expect(m.Add(&wire.NewConnectionIDFrame{
+			SequenceNumber: 4,
+			ConnectionID:   protocol.ConnectionID{4, 3, 2, 1},
+		})).To(Succeed())
+		Expect(frameQueue).To(HaveLen(1))
+		Expect(frameQueue[0].(*wire.RetireConnectionIDFrame).SequenceNumber).To(BeEquivalentTo(4))
+	})
+
 	It("retires old connection IDs when the peer sends too many new ones", func() {
 		for i := uint8(1); i <= protocol.MaxActiveConnectionIDs; i++ {
 			Expect(m.Add(&wire.NewConnectionIDFrame{
