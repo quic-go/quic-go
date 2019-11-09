@@ -616,6 +616,20 @@ var _ = Describe("Receive Stream", func() {
 				Expect(str.handleResetStreamFrame(rst)).To(Succeed())
 			})
 
+			It("doesn't call onStreamCompleted again when the final offset was already received via FinBit", func() {
+				mockSender.EXPECT().queueControlFrame(gomock.Any())
+				str.CancelRead(1234)
+				mockSender.EXPECT().onStreamCompleted(streamID)
+				mockFC.EXPECT().Abandon()
+				mockFC.EXPECT().UpdateHighestReceived(protocol.ByteCount(42), true).Times(2)
+				Expect(str.handleStreamFrame(&wire.StreamFrame{
+					StreamID: streamID,
+					Offset:   rst.ByteOffset,
+					FinBit:   true,
+				})).To(Succeed())
+				Expect(str.handleResetStreamFrame(rst)).To(Succeed())
+			})
+
 			It("doesn't do anyting when it was closed for shutdown", func() {
 				str.closeForShutdown(nil)
 				err := str.handleResetStreamFrame(rst)

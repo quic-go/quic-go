@@ -269,6 +269,7 @@ func (s *receiveStream) handleResetStreamFrameImpl(frame *wire.ResetStreamFrame)
 	if err := s.flowController.UpdateHighestReceived(frame.ByteOffset, true); err != nil {
 		return false, err
 	}
+	newlyRcvdFinalOffset := s.finalOffset == protocol.MaxByteCount
 	s.finalOffset = frame.ByteOffset
 
 	// ignore duplicate RESET_STREAM frames for this stream (after checking their final offset)
@@ -281,7 +282,7 @@ func (s *receiveStream) handleResetStreamFrameImpl(frame *wire.ResetStreamFrame)
 		error:     fmt.Errorf("stream %d was reset with error code %d", s.streamID, frame.ErrorCode),
 	}
 	s.signalRead()
-	return true, nil
+	return newlyRcvdFinalOffset, nil
 }
 
 func (s *receiveStream) CloseRemote(offset protocol.ByteCount) {
