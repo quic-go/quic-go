@@ -236,11 +236,13 @@ func (s *receiveStream) handleStreamFrameImpl(frame *wire.StreamFrame) (bool /* 
 	if err := s.flowController.UpdateHighestReceived(maxOffset, frame.FinBit); err != nil {
 		return false, err
 	}
+	var newlyRcvdFinalOffset bool
 	if frame.FinBit {
+		newlyRcvdFinalOffset = s.finalOffset == protocol.MaxByteCount
 		s.finalOffset = maxOffset
 	}
 	if s.canceledRead {
-		return frame.FinBit, nil
+		return newlyRcvdFinalOffset, nil
 	}
 	if err := s.frameQueue.Push(frame.Data, frame.Offset, frame.PutBack); err != nil {
 		return false, err
