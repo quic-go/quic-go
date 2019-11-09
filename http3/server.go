@@ -113,6 +113,7 @@ func (s *Server) serveImpl(tlsConf *tls.Config, conn net.PacketConn) error {
 			if err != nil || conf == nil {
 				return conf, err
 			}
+			conf = conf.Clone()
 			conf.NextProtos = []string{nextProtoH3}
 			return conf, nil
 		}
