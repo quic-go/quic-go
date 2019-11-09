@@ -426,10 +426,16 @@ var _ = Describe("Session", func() {
 		})
 
 		It("shuts down without error", func() {
-			streamManager.EXPECT().CloseWithError(qerr.Error(qerr.NoError, ""))
+			streamManager.EXPECT().CloseWithError(qerr.ApplicationError(0, ""))
 			expectReplaceWithClosed()
 			cryptoSetup.EXPECT().Close()
-			packer.EXPECT().PackConnectionClose(gomock.Any()).Return(&packedPacket{raw: []byte("connection close")}, nil)
+			packer.EXPECT().PackConnectionClose(gomock.Any()).DoAndReturn(func(f *wire.ConnectionCloseFrame) (*packedPacket, error) {
+				Expect(f.IsApplicationError).To(BeTrue())
+				Expect(f.ErrorCode).To(Equal(qerr.NoError))
+				Expect(f.FrameType).To(BeZero())
+				Expect(f.ReasonPhrase).To(BeEmpty())
+				return &packedPacket{raw: []byte("connection close")}, nil
+			})
 			Expect(sess.Close()).To(Succeed())
 			Eventually(areSessionsRunning).Should(BeFalse())
 			Expect(mconn.written).To(HaveLen(1))
@@ -438,7 +444,7 @@ var _ = Describe("Session", func() {
 		})
 
 		It("only closes once", func() {
-			streamManager.EXPECT().CloseWithError(qerr.Error(qerr.NoError, ""))
+			streamManager.EXPECT().CloseWithError(gomock.Any())
 			expectReplaceWithClosed()
 			cryptoSetup.EXPECT().Close()
 			packer.EXPECT().PackConnectionClose(gomock.Any()).Return(&packedPacket{}, nil)
@@ -449,12 +455,17 @@ var _ = Describe("Session", func() {
 			Expect(sess.Context().Done()).To(BeClosed())
 		})
 
-		It("closes streams with proper error", func() {
+		It("closes with an error", func() {
 			testErr := errors.New("test error")
-			streamManager.EXPECT().CloseWithError(qerr.Error(0x1337, testErr.Error()))
+			streamManager.EXPECT().CloseWithError(qerr.ApplicationError(0x1337, testErr.Error()))
 			expectReplaceWithClosed()
 			cryptoSetup.EXPECT().Close()
-			packer.EXPECT().PackConnectionClose(gomock.Any()).Return(&packedPacket{}, nil)
+			packer.EXPECT().PackConnectionClose(gomock.Any()).DoAndReturn(func(f *wire.ConnectionCloseFrame) (*packedPacket, error) {
+				Expect(f.IsApplicationError).To(BeTrue())
+				Expect(f.ErrorCode).To(BeEquivalentTo(0x1337))
+				Expect(f.ReasonPhrase).To(Equal("test error"))
+				return &packedPacket{}, nil
+			})
 			sess.CloseWithError(0x1337, testErr.Error())
 			Eventually(areSessionsRunning).Should(BeFalse())
 			Expect(sess.Context().Done()).To(BeClosed())
@@ -1203,7 +1214,7 @@ var _ = Describe("Session", func() {
 			defer GinkgoRecover()
 			cryptoSetup.EXPECT().RunHandshake().MaxTimes(1)
 			err := sess.run()
-			Expect(err).To(MatchError(qerr.Error(0x1337, testErr.Error())))
+			Expect(err).To(MatchError(qerr.ApplicationError(0x1337, testErr.Error())))
 			close(done)
 		}()
 		streamManager.EXPECT().CloseWithError(gomock.Any())

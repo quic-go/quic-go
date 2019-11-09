@@ -39,6 +39,7 @@ func CryptoError(tlsAlert uint8, errorMessage string) *QuicError {
 	}
 }
 
+// ApplicationError creates a new QuicError instance for an application error
 func ApplicationError(errorCode ErrorCode, errorMessage string) *QuicError {
 	return &QuicError{
 		ErrorCode:          errorCode,
@@ -63,6 +64,11 @@ func (e *QuicError) Error() string {
 // IsCryptoError says if this error is a crypto error
 func (e *QuicError) IsCryptoError() bool {
 	return e.ErrorCode.isCryptoError()
+}
+
+// IsApplicationError says if this error is an application error
+func (e *QuicError) IsApplicationError() bool {
+	return e.isApplicationError
 }
 
 // Temporary says if the error is temporary.

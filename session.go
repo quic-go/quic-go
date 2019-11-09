@@ -1023,14 +1023,14 @@ func (s *session) Close() error {
 }
 
 func (s *session) CloseWithError(code protocol.ApplicationErrorCode, desc string) error {
-	s.closeLocal(qerr.Error(qerr.ErrorCode(code), desc))
+	s.closeLocal(qerr.ApplicationError(qerr.ErrorCode(code), desc))
 	<-s.ctx.Done()
 	return nil
 }
 
 func (s *session) handleCloseError(closeErr closeError) {
 	if closeErr.err == nil {
-		closeErr.err = qerr.NoError
+		closeErr.err = qerr.ApplicationError(0, "")
 	}
 
 	var quicErr *qerr.QuicError
@@ -1250,8 +1250,9 @@ func (s *session) sendConnectionClose(quicErr *qerr.QuicError) ([]byte, error) {
 		reason = quicErr.ErrorMessage
 	}
 	packet, err := s.packer.PackConnectionClose(&wire.ConnectionCloseFrame{
-		ErrorCode:    quicErr.ErrorCode,
-		ReasonPhrase: reason,
+		IsApplicationError: quicErr.IsApplicationError(),
+		ErrorCode:          quicErr.ErrorCode,
+		ReasonPhrase:       reason,
 	})
 	if err != nil {
 		return nil, err
