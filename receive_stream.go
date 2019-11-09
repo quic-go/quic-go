@@ -84,7 +84,7 @@ func (s *receiveStream) Read(p []byte) (int, error) {
 	s.mutex.Unlock()
 
 	if completed {
-		s.streamCompleted()
+		s.sender.onStreamCompleted(s.streamID)
 	}
 	return n, err
 }
@@ -201,7 +201,8 @@ func (s *receiveStream) CancelRead(errorCode protocol.ApplicationErrorCode) {
 	s.mutex.Unlock()
 
 	if completed {
-		s.streamCompleted()
+		s.flowController.Abandon()
+		s.sender.onStreamCompleted(s.streamID)
 	}
 }
 
@@ -226,7 +227,8 @@ func (s *receiveStream) handleStreamFrame(frame *wire.StreamFrame) error {
 	s.mutex.Unlock()
 
 	if completed {
-		s.streamCompleted()
+		s.flowController.Abandon()
+		s.sender.onStreamCompleted(s.streamID)
 	}
 	return err
 }
@@ -257,7 +259,8 @@ func (s *receiveStream) handleResetStreamFrame(frame *wire.ResetStreamFrame) err
 	s.mutex.Unlock()
 
 	if completed {
-		s.streamCompleted()
+		s.flowController.Abandon()
+		s.sender.onStreamCompleted(s.streamID)
 	}
 	return err
 }
@@ -310,17 +313,6 @@ func (s *receiveStream) closeForShutdown(err error) {
 
 func (s *receiveStream) getWindowUpdate() protocol.ByteCount {
 	return s.flowController.GetWindowUpdate()
-}
-
-func (s *receiveStream) streamCompleted() {
-	s.mutex.Lock()
-	finRead := s.finRead
-	s.mutex.Unlock()
-
-	if !finRead {
-		s.flowController.Abandon()
-	}
-	s.sender.onStreamCompleted(s.streamID)
 }
 
 // signalRead performs a non-blocking send on the readChan
