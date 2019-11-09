@@ -2,6 +2,7 @@ package wire
 
 import (
 	"bytes"
+	"fmt"
 
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/internal/utils"
@@ -31,7 +32,9 @@ func parseStreamsBlockedFrame(r *bytes.Reader, _ protocol.VersionNumber) (*Strea
 		return nil, err
 	}
 	f.StreamLimit = protocol.StreamNum(streamLimit)
-
+	if f.StreamLimit > protocol.MaxStreamCount {
+		return nil, fmt.Errorf("%d exceeds the maximum stream count", f.StreamLimit)
+	}
 	return f, nil
 }
 

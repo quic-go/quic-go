@@ -56,5 +56,15 @@ var _ = Describe("Stream ID", func() {
 			Expect(StreamNum(100).StreamID(StreamTypeUni, PerspectiveClient)).To(Equal(StreamID(398)))
 			Expect(StreamNum(100).StreamID(StreamTypeUni, PerspectiveServer)).To(Equal(StreamID(399)))
 		})
+
+		It("has the right value for MaxStreamCount", func() {
+			const maxStreamID = StreamID(1<<62 - 1)
+			for _, dir := range []StreamType{StreamTypeUni, StreamTypeBidi} {
+				for _, pers := range []Perspective{PerspectiveClient, PerspectiveServer} {
+					Expect(MaxStreamCount.StreamID(dir, pers)).To(BeNumerically("<=", maxStreamID))
+					Expect((MaxStreamCount + 1).StreamID(dir, pers)).To(BeNumerically(">", maxStreamID))
+				}
+			}
+		})
 	})
 })
