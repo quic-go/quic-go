@@ -2,6 +2,7 @@ package wire
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"reflect"
 
@@ -32,7 +33,7 @@ func (p *frameParser) ParseNext(r *bytes.Reader, encLevel protocol.EncryptionLev
 
 		f, err := p.parseFrame(r, typeByte, encLevel)
 		if err != nil {
-			return nil, qerr.Error(qerr.FrameEncodingError, err.Error())
+			return nil, qerr.ErrorWithFrameType(qerr.FrameEncodingError, uint64(typeByte), err.Error())
 		}
 		return f, nil
 	}
@@ -85,7 +86,7 @@ func (p *frameParser) parseFrame(r *bytes.Reader, typeByte byte, encLevel protoc
 		case 0x1c, 0x1d:
 			frame, err = parseConnectionCloseFrame(r, p.version)
 		default:
-			err = fmt.Errorf("unknown type byte 0x%x", typeByte)
+			err = errors.New("unknown frame type")
 		}
 	}
 	if err != nil {
