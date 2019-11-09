@@ -538,6 +538,25 @@ var _ = Describe("Receive Stream", func() {
 					FinBit: true,
 				})).To(Succeed())
 			})
+
+			It("handles duplicate FinBits after the stream was canceled", func() {
+				mockSender.EXPECT().queueControlFrame(gomock.Any())
+				str.CancelRead(1234)
+				gomock.InOrder(
+					mockFC.EXPECT().UpdateHighestReceived(protocol.ByteCount(1000), true),
+					mockFC.EXPECT().Abandon(),
+					mockFC.EXPECT().UpdateHighestReceived(protocol.ByteCount(1000), true),
+				)
+				mockSender.EXPECT().onStreamCompleted(streamID)
+				Expect(str.handleStreamFrame(&wire.StreamFrame{
+					Offset: 1000,
+					FinBit: true,
+				})).To(Succeed())
+				Expect(str.handleStreamFrame(&wire.StreamFrame{
+					Offset: 1000,
+					FinBit: true,
+				})).To(Succeed())
+			})
 		})
 
 		Context("receiving RESET_STREAM frames", func() {
@@ -564,7 +583,7 @@ var _ = Describe("Receive Stream", func() {
 					mockFC.EXPECT().UpdateHighestReceived(protocol.ByteCount(42), true),
 					mockFC.EXPECT().Abandon(),
 				)
-				str.handleResetStreamFrame(rst)
+				Expect(str.handleResetStreamFrame(rst)).To(Succeed())
 				Eventually(done).Should(BeClosed())
 			})
 
@@ -594,6 +613,20 @@ var _ = Describe("Receive Stream", func() {
 				mockFC.EXPECT().Abandon()
 				mockFC.EXPECT().UpdateHighestReceived(protocol.ByteCount(42), true).Times(2)
 				Expect(str.handleResetStreamFrame(rst)).To(Succeed())
+				Expect(str.handleResetStreamFrame(rst)).To(Succeed())
+			})
+
+			It("doesn't call onStreamCompleted again when the final offset was already received via FinBit", func() {
+				mockSender.EXPECT().queueControlFrame(gomock.Any())
+				str.CancelRead(1234)
+				mockSender.EXPECT().onStreamCompleted(streamID)
+				mockFC.EXPECT().Abandon()
+				mockFC.EXPECT().UpdateHighestReceived(protocol.ByteCount(42), true).Times(2)
+				Expect(str.handleStreamFrame(&wire.StreamFrame{
+					StreamID: streamID,
+					Offset:   rst.ByteOffset,
+					FinBit:   true,
+				})).To(Succeed())
 				Expect(str.handleResetStreamFrame(rst)).To(Succeed())
 			})
 
