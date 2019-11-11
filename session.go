@@ -677,7 +677,7 @@ func (s *session) handleSinglePacket(p *receivedPacket, hdr *wire.Header) bool /
 		switch err {
 		case handshake.ErrKeysDropped:
 			s.logger.Debugf("Dropping packet because we already dropped the keys.")
-		case handshake.ErrOpenerNotYetAvailable:
+		case handshake.ErrKeysNotYetAvailable:
 			// Sealer for this encryption level not yet available.
 			// Try again later.
 			wasQueued = true
