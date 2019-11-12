@@ -170,9 +170,10 @@ type session struct {
 	peerParams *handshake.TransportParameters
 
 	timer *utils.Timer
-	// keepAlivePingSent stores whether a Ping frame was sent to the peer or not
-	// it is reset as soon as we receive a packet from the peer
+	// keepAlivePingSent stores whether a keep alive PING is in flight.
+	// It is reset as soon as we receive a packet from the peer.
 	keepAlivePingSent bool
+	keepAliveInterval time.Duration
 
 	traceCallback func(quictrace.Event)
 
@@ -504,7 +505,7 @@ runLoop:
 		if s.pacingDeadline.IsZero() { // the timer didn't have a pacing deadline set
 			pacingDeadline = s.sentPacketHandler.TimeUntilSend()
 		}
-		if s.config.KeepAlive && !s.keepAlivePingSent && s.handshakeComplete && s.firstAckElicitingPacketAfterIdleSentTime.IsZero() && time.Since(s.lastPacketReceivedTime) >= s.peerParams.IdleTimeout/2 {
+		if s.config.KeepAlive && !s.keepAlivePingSent && s.handshakeComplete && s.firstAckElicitingPacketAfterIdleSentTime.IsZero() && time.Since(s.lastPacketReceivedTime) >= s.keepAliveInterval/2 {
 			// send a PING frame since there is no activity in the session
 			s.logger.Debugf("Sending a keep-alive ping to keep the connection alive.")
 			s.framer.QueueControlFrame(&wire.PingFrame{})
@@ -558,7 +559,7 @@ func (s *session) ConnectionState() tls.ConnectionState {
 func (s *session) maybeResetTimer() {
 	var deadline time.Time
 	if s.config.KeepAlive && s.handshakeComplete && !s.keepAlivePingSent {
-		deadline = s.idleTimeoutStartTime().Add(s.peerParams.IdleTimeout / 2)
+		deadline = s.idleTimeoutStartTime().Add(s.keepAliveInterval / 2)
 	} else {
 		deadline = s.idleTimeoutStartTime().Add(s.config.IdleTimeout)
 	}
@@ -1079,6 +1080,7 @@ func (s *session) processTransportParameters(data []byte) {
 	}
 	s.logger.Debugf("Received Transport Parameters: %s", params)
 	s.peerParams = params
+	s.keepAliveInterval = utils.MinDuration(params.IdleTimeout/2, protocol.MaxKeepAliveInterval)
 	if err := s.streamsMap.UpdateLimits(params); err != nil {
 		s.closeLocal(err)
 		return

@@ -1295,12 +1295,24 @@ var _ = Describe("Session", func() {
 	})
 
 	Context("keep-alives", func() {
-		// should be shorter than the local timeout for these tests
-		// otherwise we'd send a CONNECTION_CLOSE in the tests where we're testing that no PING is sent
-		remoteIdleTimeout := 20 * time.Second
+		setRemoteIdleTimeout := func(t time.Duration) {
+			tp := &handshake.TransportParameters{IdleTimeout: t}
+			streamManager.EXPECT().UpdateLimits(gomock.Any())
+			packer.EXPECT().HandleTransportParameters(gomock.Any())
+			sess.processTransportParameters(tp.Marshal())
+		}
+
+		runSession := func() {
+			go func() {
+				defer GinkgoRecover()
+				cryptoSetup.EXPECT().RunHandshake().MaxTimes(1)
+				sess.run()
+			}()
+		}
 
 		BeforeEach(func() {
-			sess.peerParams = &handshake.TransportParameters{IdleTimeout: remoteIdleTimeout}
+			sess.config.KeepAlive = true
+			sess.handshakeComplete = true
 		})
 
 		AfterEach(func() {
@@ -1313,44 +1325,44 @@ var _ = Describe("Session", func() {
 			Eventually(sess.Context().Done()).Should(BeClosed())
 		})
 
-		It("sends a PING as a keep-alive", func() {
-			sess.handshakeComplete = true
-			sess.config.KeepAlive = true
-			sess.lastPacketReceivedTime = time.Now().Add(-remoteIdleTimeout / 2)
+		It("sends a PING as a keep-alive after half the idle timeout", func() {
+			setRemoteIdleTimeout(5 * time.Second)
+			sess.lastPacketReceivedTime = time.Now().Add(-protocol.MaxKeepAliveInterval)
 			sent := make(chan struct{})
 			packer.EXPECT().PackPacket().Do(func() (*packedPacket, error) {
 				close(sent)
 				return nil, nil
 			})
-			go func() {
-				defer GinkgoRecover()
-				cryptoSetup.EXPECT().RunHandshake().MaxTimes(1)
-				sess.run()
-			}()
+			runSession()
+			Eventually(sent).Should(BeClosed())
+		})
+
+		It("sends a PING after a maximum of protocol.MaxKeepAliveInterval", func() {
+			setRemoteIdleTimeout(time.Hour)
+			sess.lastPacketReceivedTime = time.Now().Add(-protocol.MaxKeepAliveInterval).Add(-time.Millisecond)
+			sent := make(chan struct{})
+			packer.EXPECT().PackPacket().Do(func() (*packedPacket, error) {
+				close(sent)
+				return nil, nil
+			})
+			runSession()
 			Eventually(sent).Should(BeClosed())
 		})
 
 		It("doesn't send a PING packet if keep-alive is disabled", func() {
-			sess.handshakeComplete = true
+			setRemoteIdleTimeout(5 * time.Second)
 			sess.config.KeepAlive = false
-			sess.lastPacketReceivedTime = time.Now().Add(-remoteIdleTimeout / 2)
-			go func() {
-				defer GinkgoRecover()
-				cryptoSetup.EXPECT().RunHandshake().MaxTimes(1)
-				sess.run()
-			}()
+			sess.lastPacketReceivedTime = time.Now().Add(-time.Second * 5 / 2)
+			runSession()
 			Consistently(mconn.written).ShouldNot(Receive())
 		})
 
 		It("doesn't send a PING if the handshake isn't completed yet", func() {
 			sess.handshakeComplete = false
-			sess.config.KeepAlive = true
-			sess.lastPacketReceivedTime = time.Now().Add(-remoteIdleTimeout / 2)
-			go func() {
-				defer GinkgoRecover()
-				cryptoSetup.EXPECT().RunHandshake().MaxTimes(1)
-				sess.run()
-			}()
+			// Needs to be shorter than our idle timeout.
+			// Otherwise we'll try to send a CONNECTION_CLOSE.
+			sess.lastPacketReceivedTime = time.Now().Add(-20 * time.Second)
+			runSession()
 			Consistently(mconn.written).ShouldNot(Receive())
 		})
 	})
