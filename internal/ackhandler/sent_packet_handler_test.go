@@ -103,20 +103,20 @@ var _ = Describe("SentPacketHandler", func() {
 		It("stores the sent time", func() {
 			sendTime := time.Now().Add(-time.Minute)
 			handler.SentPacket(ackElicitingPacket(&Packet{PacketNumber: 1, SendTime: sendTime}))
-			Expect(handler.lastSentAckElicitingPacketTime).To(Equal(sendTime))
+			Expect(handler.oneRTTPackets.lastSentAckElicitingPacketTime).To(Equal(sendTime))
 		})
 
-		It("stores the sent time of crypto packets", func() {
+		It("stores the sent time of Initial packets", func() {
 			sendTime := time.Now().Add(-time.Minute)
 			handler.SentPacket(ackElicitingPacket(&Packet{PacketNumber: 1, SendTime: sendTime, EncryptionLevel: protocol.EncryptionInitial}))
 			handler.SentPacket(ackElicitingPacket(&Packet{PacketNumber: 2, SendTime: sendTime.Add(time.Hour), EncryptionLevel: protocol.Encryption1RTT}))
-			Expect(handler.lastSentCryptoPacketTime).To(Equal(sendTime))
+			Expect(handler.initialPackets.lastSentAckElicitingPacketTime).To(Equal(sendTime))
 		})
 
 		It("does not store non-ack-eliciting packets", func() {
-			handler.SentPacket(nonAckElicitingPacket(&Packet{PacketNumber: 1, EncryptionLevel: protocol.Encryption1RTT}))
+			handler.SentPacket(nonAckElicitingPacket(&Packet{PacketNumber: 1}))
 			Expect(handler.oneRTTPackets.history.Len()).To(BeZero())
-			Expect(handler.lastSentAckElicitingPacketTime).To(BeZero())
+			Expect(handler.oneRTTPackets.lastSentAckElicitingPacketTime).To(BeZero())
 			Expect(handler.bytesInFlight).To(BeZero())
 		})
 	})
@@ -508,11 +508,12 @@ var _ = Describe("SentPacketHandler", func() {
 			Expect(handler.SendMode()).To(Equal(SendAck))
 		})
 
-		It("allows RTOs, even when congestion limited", func() {
+		It("allows PTOs, even when congestion limited", func() {
 			// note that we don't EXPECT a call to GetCongestionWindow
 			// that means retransmissions are sent without considering the congestion window
 			handler.numProbesToSend = 1
-			Expect(handler.SendMode()).To(Equal(SendPTO))
+			handler.ptoMode = SendPTOHandshake
+			Expect(handler.SendMode()).To(Equal(SendPTOHandshake))
 		})
 
 		It("gets the pacing delay", func() {
@@ -565,13 +566,13 @@ var _ = Describe("SentPacketHandler", func() {
 		It("queues a probe packet", func() {
 			handler.SentPacket(ackElicitingPacket(&Packet{PacketNumber: 10}))
 			handler.SentPacket(ackElicitingPacket(&Packet{PacketNumber: 11}))
-			queued := handler.QueueProbePacket()
+			queued := handler.QueueProbePacket(protocol.Encryption1RTT)
 			Expect(queued).To(BeTrue())
 			Expect(lostPackets).To(Equal([]protocol.PacketNumber{10}))
 		})
 
 		It("says when it can't queue a probe packet", func() {
-			queued := handler.QueueProbePacket()
+			queued := handler.QueueProbePacket(protocol.Encryption1RTT)
 			Expect(queued).To(BeFalse())
 		})
 
@@ -588,7 +589,7 @@ var _ = Describe("SentPacketHandler", func() {
 			Expect(handler.GetLossDetectionTimeout().Sub(sendTime)).To(Equal(4 * timeout))
 		})
 
-		It("sets the PTO send mode until two packets is sent", func() {
+		It("allows two 1-RTT PTOs", func() {
 			var lostPackets []protocol.PacketNumber
 			handler.SentPacket(ackElicitingPacket(&Packet{
 				PacketNumber: 1,
@@ -598,27 +599,27 @@ var _ = Describe("SentPacketHandler", func() {
 				},
 			}))
 			Expect(handler.OnLossDetectionTimeout()).To(Succeed())
-			Expect(handler.SendMode()).To(Equal(SendPTO))
+			Expect(handler.SendMode()).To(Equal(SendPTOAppData))
 			Expect(handler.ShouldSendNumPackets()).To(Equal(2))
 			handler.SentPacket(ackElicitingPacket(&Packet{PacketNumber: 2}))
-			Expect(handler.SendMode()).To(Equal(SendPTO))
+			Expect(handler.SendMode()).To(Equal(SendPTOAppData))
 			handler.SentPacket(ackElicitingPacket(&Packet{PacketNumber: 3}))
-			Expect(handler.SendMode()).ToNot(Equal(SendPTO))
+			Expect(handler.SendMode()).ToNot(Equal(SendPTOAppData))
 		})
 
 		It("only counts ack-eliciting packets as probe packets", func() {
 			handler.SentPacket(ackElicitingPacket(&Packet{PacketNumber: 1, SendTime: time.Now().Add(-time.Hour)}))
 			Expect(handler.OnLossDetectionTimeout()).To(Succeed())
-			Expect(handler.SendMode()).To(Equal(SendPTO))
+			Expect(handler.SendMode()).To(Equal(SendPTOAppData))
 			Expect(handler.ShouldSendNumPackets()).To(Equal(2))
 			handler.SentPacket(ackElicitingPacket(&Packet{PacketNumber: 2}))
-			Expect(handler.SendMode()).To(Equal(SendPTO))
+			Expect(handler.SendMode()).To(Equal(SendPTOAppData))
 			for p := protocol.PacketNumber(3); p < 30; p++ {
 				handler.SentPacket(nonAckElicitingPacket(&Packet{PacketNumber: p}))
-				Expect(handler.SendMode()).To(Equal(SendPTO))
+				Expect(handler.SendMode()).To(Equal(SendPTOAppData))
 			}
 			handler.SentPacket(ackElicitingPacket(&Packet{PacketNumber: 30}))
-			Expect(handler.SendMode()).ToNot(Equal(SendPTO))
+			Expect(handler.SendMode()).ToNot(Equal(SendPTOAppData))
 		})
 
 		It("gets two probe packets if RTO expires", func() {
@@ -630,22 +631,22 @@ var _ = Describe("SentPacketHandler", func() {
 
 			Expect(handler.OnLossDetectionTimeout()).To(Succeed()) // TLP
 			Expect(handler.ptoCount).To(BeEquivalentTo(1))
-			Expect(handler.SendMode()).To(Equal(SendPTO))
+			Expect(handler.SendMode()).To(Equal(SendPTOAppData))
 			handler.SentPacket(ackElicitingPacket(&Packet{PacketNumber: 3}))
-			Expect(handler.SendMode()).To(Equal(SendPTO))
+			Expect(handler.SendMode()).To(Equal(SendPTOAppData))
 			handler.SentPacket(ackElicitingPacket(&Packet{PacketNumber: 4}))
 
 			Expect(handler.OnLossDetectionTimeout()).To(Succeed()) // PTO
 			Expect(handler.ptoCount).To(BeEquivalentTo(2))
-			Expect(handler.SendMode()).To(Equal(SendPTO))
+			Expect(handler.SendMode()).To(Equal(SendPTOAppData))
 			handler.SentPacket(ackElicitingPacket(&Packet{PacketNumber: 5}))
-			Expect(handler.SendMode()).To(Equal(SendPTO))
+			Expect(handler.SendMode()).To(Equal(SendPTOAppData))
 			handler.SentPacket(ackElicitingPacket(&Packet{PacketNumber: 6}))
 
 			Expect(handler.SendMode()).To(Equal(SendAny))
 		})
 
-		It("gets two probe packets if PTO expires, for crypto packets", func() {
+		It("gets two probe packets if PTO expires, for Handshake packets", func() {
 			handler.SentPacket(cryptoPacket(&Packet{PacketNumber: 1}))
 			handler.SentPacket(cryptoPacket(&Packet{PacketNumber: 2}))
 
@@ -653,9 +654,9 @@ var _ = Describe("SentPacketHandler", func() {
 			Expect(handler.initialPackets.lossTime.IsZero()).To(BeTrue())
 
 			Expect(handler.OnLossDetectionTimeout()).To(Succeed())
-			Expect(handler.SendMode()).To(Equal(SendPTO))
+			Expect(handler.SendMode()).To(Equal(SendPTOInitial))
 			handler.SentPacket(cryptoPacket(&Packet{PacketNumber: 3}))
-			Expect(handler.SendMode()).To(Equal(SendPTO))
+			Expect(handler.SendMode()).To(Equal(SendPTOInitial))
 			handler.SentPacket(cryptoPacket(&Packet{PacketNumber: 3}))
 
 			Expect(handler.SendMode()).To(Equal(SendAny))
@@ -665,7 +666,7 @@ var _ = Describe("SentPacketHandler", func() {
 			handler.SentPacket(ackElicitingPacket(&Packet{PacketNumber: 1, SendTime: time.Now().Add(-time.Hour)}))
 			handler.rttStats.UpdateRTT(time.Second, 0, time.Now())
 			Expect(handler.OnLossDetectionTimeout()).To(Succeed())
-			Expect(handler.SendMode()).To(Equal(SendPTO))
+			Expect(handler.SendMode()).To(Equal(SendPTOAppData))
 			ack := &wire.AckFrame{AckRanges: []wire.AckRange{{Smallest: 1, Largest: 1}}}
 			Expect(handler.ReceivedAck(ack, 1, protocol.Encryption1RTT, time.Now())).To(Succeed())
 			Expect(handler.SendMode()).To(Equal(SendAny))

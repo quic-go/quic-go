@@ -42,7 +42,7 @@ type SentPacketHandler interface {
 
 	// only to be called once the handshake is complete
 	GetLowestPacketNotConfirmedAcked() protocol.PacketNumber
-	QueueProbePacket() bool /* was a packet queued */
+	QueueProbePacket(protocol.EncryptionLevel) bool /* was a packet queued */
 
 	PeekPacketNumber(protocol.EncryptionLevel) (protocol.PacketNumber, protocol.PacketNumberLen)
 	PopPacketNumber(protocol.EncryptionLevel) protocol.PacketNumber

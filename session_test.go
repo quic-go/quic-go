@@ -6,6 +6,7 @@ import (
 	"crypto/rand"
 	"crypto/tls"
 	"errors"
+	"fmt"
 	"net"
 	"runtime/pprof"
 	"strings"
@@ -924,40 +925,6 @@ var _ = Describe("Session", func() {
 			Expect(frames).To(Equal([]ackhandler.Frame{{Frame: &wire.DataBlockedFrame{DataLimit: 1337}}}))
 		})
 
-		It("sends a probe packet", func() {
-			sph := mockackhandler.NewMockSentPacketHandler(mockCtrl)
-			sph.EXPECT().GetLossDetectionTimeout().AnyTimes()
-			sph.EXPECT().TimeUntilSend()
-			sph.EXPECT().SendMode().Return(ackhandler.SendPTO)
-			sph.EXPECT().ShouldSendNumPackets().Return(1)
-			sph.EXPECT().QueueProbePacket()
-			packer.EXPECT().PackPacket().Return(getPacket(123), nil)
-			sph.EXPECT().SentPacket(gomock.Any()).Do(func(packet *ackhandler.Packet) {
-				Expect(packet.PacketNumber).To(Equal(protocol.PacketNumber(123)))
-			})
-			sess.sentPacketHandler = sph
-			Expect(sess.sendPackets()).To(Succeed())
-		})
-
-		It("sends a PING as a probe packet", func() {
-			sph := mockackhandler.NewMockSentPacketHandler(mockCtrl)
-			sph.EXPECT().GetLossDetectionTimeout().AnyTimes()
-			sph.EXPECT().TimeUntilSend()
-			sph.EXPECT().SendMode().Return(ackhandler.SendPTO)
-			sph.EXPECT().ShouldSendNumPackets().Return(1)
-			sph.EXPECT().QueueProbePacket().Return(false)
-			packer.EXPECT().PackPacket().Return(getPacket(123), nil)
-			sph.EXPECT().SentPacket(gomock.Any()).Do(func(packet *ackhandler.Packet) {
-				Expect(packet.PacketNumber).To(Equal(protocol.PacketNumber(123)))
-			})
-			sess.sentPacketHandler = sph
-			Expect(sess.sendPackets()).To(Succeed())
-			// We're using a mock packet packer in this test.
-			// We therefore need to test separately that the PING was actually queued.
-			frames, _ := sess.framer.AppendControlFrames(nil, protocol.MaxByteCount)
-			Expect(frames).To(Equal([]ackhandler.Frame{{Frame: &wire.PingFrame{}}}))
-		})
-
 		It("doesn't send when the SentPacketHandler doesn't allow it", func() {
 			sph := mockackhandler.NewMockSentPacketHandler(mockCtrl)
 			sph.EXPECT().GetLossDetectionTimeout().AnyTimes()
@@ -966,6 +933,62 @@ var _ = Describe("Session", func() {
 			err := sess.sendPackets()
 			Expect(err).ToNot(HaveOccurred())
 		})
+
+		for _, enc := range []protocol.EncryptionLevel{protocol.EncryptionInitial, protocol.EncryptionHandshake, protocol.Encryption1RTT} {
+			encLevel := enc
+
+			Context(fmt.Sprintf("sending %s probe packets", encLevel), func() {
+				var sendMode ackhandler.SendMode
+				var getFrame func(protocol.ByteCount) wire.Frame
+
+				BeforeEach(func() {
+					switch encLevel {
+					case protocol.EncryptionInitial:
+						sendMode = ackhandler.SendPTOInitial
+						getFrame = sess.retransmissionQueue.GetInitialFrame
+					case protocol.EncryptionHandshake:
+						sendMode = ackhandler.SendPTOHandshake
+						getFrame = sess.retransmissionQueue.GetHandshakeFrame
+					case protocol.Encryption1RTT:
+						sendMode = ackhandler.SendPTOAppData
+						getFrame = sess.retransmissionQueue.GetAppDataFrame
+					}
+				})
+
+				It("sends a probe packet", func() {
+					sph := mockackhandler.NewMockSentPacketHandler(mockCtrl)
+					sph.EXPECT().GetLossDetectionTimeout().AnyTimes()
+					sph.EXPECT().TimeUntilSend()
+					sph.EXPECT().SendMode().Return(sendMode)
+					sph.EXPECT().ShouldSendNumPackets().Return(1)
+					sph.EXPECT().QueueProbePacket(encLevel)
+					packer.EXPECT().MaybePackProbePacket(encLevel).Return(getPacket(123), nil)
+					sph.EXPECT().SentPacket(gomock.Any()).Do(func(packet *ackhandler.Packet) {
+						Expect(packet.PacketNumber).To(Equal(protocol.PacketNumber(123)))
+					})
+					sess.sentPacketHandler = sph
+					Expect(sess.sendPackets()).To(Succeed())
+				})
+
+				It("sends a PING as a probe packet", func() {
+					sph := mockackhandler.NewMockSentPacketHandler(mockCtrl)
+					sph.EXPECT().GetLossDetectionTimeout().AnyTimes()
+					sph.EXPECT().TimeUntilSend()
+					sph.EXPECT().SendMode().Return(sendMode)
+					sph.EXPECT().ShouldSendNumPackets().Return(1)
+					sph.EXPECT().QueueProbePacket(encLevel).Return(false)
+					packer.EXPECT().MaybePackProbePacket(encLevel).Return(getPacket(123), nil)
+					sph.EXPECT().SentPacket(gomock.Any()).Do(func(packet *ackhandler.Packet) {
+						Expect(packet.PacketNumber).To(Equal(protocol.PacketNumber(123)))
+					})
+					sess.sentPacketHandler = sph
+					Expect(sess.sendPackets()).To(Succeed())
+					// We're using a mock packet packer in this test.
+					// We therefore need to test separately that the PING was actually queued.
+					Expect(getFrame(1000)).To(BeAssignableToTypeOf(&wire.PingFrame{}))
+				})
+			})
+		}
 	})
 
 	Context("packet pacing", func() {

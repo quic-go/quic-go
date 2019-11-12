@@ -136,17 +136,17 @@ func (mr *MockSentPacketHandlerMockRecorder) PopPacketNumber(arg0 interface{}) *
 }
 
 // QueueProbePacket mocks base method
-func (m *MockSentPacketHandler) QueueProbePacket() bool {
+func (m *MockSentPacketHandler) QueueProbePacket(arg0 protocol.EncryptionLevel) bool {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "QueueProbePacket")
+	ret := m.ctrl.Call(m, "QueueProbePacket", arg0)
 	ret0, _ := ret[0].(bool)
 	return ret0
 }
 
 // QueueProbePacket indicates an expected call of QueueProbePacket
-func (mr *MockSentPacketHandlerMockRecorder) QueueProbePacket() *gomock.Call {
+func (mr *MockSentPacketHandlerMockRecorder) QueueProbePacket(arg0 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "QueueProbePacket", reflect.TypeOf((*MockSentPacketHandler)(nil).QueueProbePacket))
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "QueueProbePacket", reflect.TypeOf((*MockSentPacketHandler)(nil).QueueProbePacket), arg0)
 }
 
 // ReceivedAck mocks base method

@@ -1146,8 +1146,18 @@ sendLoop:
 			// There will only be a new ACK after receiving new packets.
 			// SendAck is only returned when we're congestion limited, so we don't need to set the pacingt timer.
 			return s.maybeSendAckOnlyPacket()
-		case ackhandler.SendPTO:
-			if err := s.sendProbePacket(); err != nil {
+		case ackhandler.SendPTOInitial:
+			if err := s.sendProbePacket(protocol.EncryptionInitial); err != nil {
+				return err
+			}
+			numPacketsSent++
+		case ackhandler.SendPTOHandshake:
+			if err := s.sendProbePacket(protocol.EncryptionHandshake); err != nil {
+				return err
+			}
+			numPacketsSent++
+		case ackhandler.SendPTOAppData:
+			if err := s.sendProbePacket(protocol.Encryption1RTT); err != nil {
 				return err
 			}
 			numPacketsSent++
@@ -1189,24 +1199,46 @@ func (s *session) maybeSendAckOnlyPacket() error {
 	return nil
 }
 
-func (s *session) sendProbePacket() error {
-	// Queue probe packets until we actually send out a packet.
+func (s *session) sendProbePacket(encLevel protocol.EncryptionLevel) error {
+	// Queue probe packets until we actually send out a packet,
+	// or until there are no more packets to queue.
+	var packet *packedPacket
 	for {
-		if wasQueued := s.sentPacketHandler.QueueProbePacket(); !wasQueued {
+		if wasQueued := s.sentPacketHandler.QueueProbePacket(encLevel); !wasQueued {
 			break
 		}
-		sent, err := s.sendPacket()
+		var err error
+		packet, err = s.packer.MaybePackProbePacket(encLevel)
 		if err != nil {
 			return err
 		}
-		if sent {
-			return nil
+		if packet != nil {
+			break
 		}
 	}
-	// If there is nothing else to queue, make sure we send out something.
-	s.framer.QueueControlFrame(&wire.PingFrame{})
-	_, err := s.sendPacket()
-	return err
+	if packet == nil {
+		switch encLevel {
+		case protocol.EncryptionInitial:
+			s.retransmissionQueue.AddInitial(&wire.PingFrame{})
+		case protocol.EncryptionHandshake:
+			s.retransmissionQueue.AddHandshake(&wire.PingFrame{})
+		case protocol.Encryption1RTT:
+			s.retransmissionQueue.AddAppData(&wire.PingFrame{})
+		default:
+			panic("unexpected encryption level")
+		}
+		var err error
+		packet, err = s.packer.MaybePackProbePacket(encLevel)
+		if err != nil {
+			return err
+		}
+	}
+	if packet == nil {
+		return fmt.Errorf("session BUG: couldn't pack %s probe packet", encLevel)
+	}
+	s.sentPacketHandler.SentPacket(packet.ToAckHandlerPacket(s.retransmissionQueue))
+	s.sendPackedPacket(packet)
+	return nil
 }
 
 func (s *session) sendPacket() (bool, error) {
