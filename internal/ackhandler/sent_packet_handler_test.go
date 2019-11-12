@@ -577,6 +577,7 @@ var _ = Describe("SentPacketHandler", func() {
 		})
 
 		It("implements exponential backoff", func() {
+			handler.SetHandshakeComplete()
 			sendTime := time.Now().Add(-time.Hour)
 			handler.SentPacket(ackElicitingPacket(&Packet{PacketNumber: 1, SendTime: sendTime}))
 			timeout := handler.GetLossDetectionTimeout().Sub(sendTime)
@@ -590,6 +591,7 @@ var _ = Describe("SentPacketHandler", func() {
 		})
 
 		It("allows two 1-RTT PTOs", func() {
+			handler.SetHandshakeComplete()
 			var lostPackets []protocol.PacketNumber
 			handler.SentPacket(ackElicitingPacket(&Packet{
 				PacketNumber: 1,
@@ -608,6 +610,7 @@ var _ = Describe("SentPacketHandler", func() {
 		})
 
 		It("only counts ack-eliciting packets as probe packets", func() {
+			handler.SetHandshakeComplete()
 			handler.SentPacket(ackElicitingPacket(&Packet{PacketNumber: 1, SendTime: time.Now().Add(-time.Hour)}))
 			Expect(handler.OnLossDetectionTimeout()).To(Succeed())
 			Expect(handler.SendMode()).To(Equal(SendPTOAppData))
@@ -623,6 +626,7 @@ var _ = Describe("SentPacketHandler", func() {
 		})
 
 		It("gets two probe packets if RTO expires", func() {
+			handler.SetHandshakeComplete()
 			handler.SentPacket(ackElicitingPacket(&Packet{PacketNumber: 1}))
 			handler.SentPacket(ackElicitingPacket(&Packet{PacketNumber: 2}))
 
@@ -662,7 +666,20 @@ var _ = Describe("SentPacketHandler", func() {
 			Expect(handler.SendMode()).To(Equal(SendAny))
 		})
 
+		It("doesn't send 1-RTT probe packets before the handshake completes", func() {
+			handler.SentPacket(ackElicitingPacket(&Packet{PacketNumber: 1}))
+			updateRTT(time.Hour)
+			Expect(handler.OnLossDetectionTimeout()).To(Succeed()) // TLP
+			Expect(handler.GetLossDetectionTimeout()).To(BeZero())
+			Expect(handler.SendMode()).To(Equal(SendAny))
+			handler.SetHandshakeComplete()
+			Expect(handler.GetLossDetectionTimeout()).ToNot(BeZero())
+			Expect(handler.OnLossDetectionTimeout()).To(Succeed())
+			Expect(handler.SendMode()).To(Equal(SendPTOAppData))
+		})
+
 		It("resets the send mode when it receives an acknowledgement after queueing probe packets", func() {
+			handler.SetHandshakeComplete()
 			handler.SentPacket(ackElicitingPacket(&Packet{PacketNumber: 1, SendTime: time.Now().Add(-time.Hour)}))
 			handler.rttStats.UpdateRTT(time.Second, 0, time.Now())
 			Expect(handler.OnLossDetectionTimeout()).To(Succeed())

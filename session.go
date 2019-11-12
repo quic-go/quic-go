@@ -590,6 +590,7 @@ func (s *session) handleHandshakeComplete() {
 	s.handshakeCompleteChan = nil // prevent this case from ever being selected again
 	s.handshakeCtxCancel()
 
+	s.sentPacketHandler.SetHandshakeComplete()
 	// The client completes the handshake first (after sending the CFIN).
 	// We need to make sure it learns about the server completing the handshake,
 	// in order to stop retransmitting handshake packets.

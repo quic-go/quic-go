@@ -48,6 +48,8 @@ type sentPacketHandler struct {
 	handshakePackets *packetNumberSpace
 	oneRTTPackets    *packetNumberSpace
 
+	handshakeComplete bool
+
 	// lowestNotConfirmedAcked is the lowest packet number that we sent an ACK for, but haven't received confirmation, that this ACK actually arrived
 	// example: we send an ACK for packets 90-100 with packet number 20
 	// once we receive an ACK from the peer for packet 20, the lowestNotConfirmedAcked is 101
@@ -290,7 +292,8 @@ func (h *sentPacketHandler) getEarliestLossTimeAndSpace() (time.Time, protocol.E
 		lossTime = h.handshakePackets.lossTime
 		encLevel = protocol.EncryptionHandshake
 	}
-	if lossTime.IsZero() || (!h.oneRTTPackets.lossTime.IsZero() && h.oneRTTPackets.lossTime.Before(lossTime)) {
+	if h.handshakeComplete &&
+		(lossTime.IsZero() || (!h.oneRTTPackets.lossTime.IsZero() && h.oneRTTPackets.lossTime.Before(lossTime))) {
 		lossTime = h.oneRTTPackets.lossTime
 		encLevel = protocol.Encryption1RTT
 	}
@@ -310,7 +313,8 @@ func (h *sentPacketHandler) getEarliestSentTimeAndSpace() (time.Time, protocol.E
 		sentTime = h.handshakePackets.lastSentAckElicitingPacketTime
 		encLevel = protocol.EncryptionHandshake
 	}
-	if sentTime.IsZero() || (!h.oneRTTPackets.lastSentAckElicitingPacketTime.IsZero() && h.oneRTTPackets.lastSentAckElicitingPacketTime.Before(sentTime)) {
+	if h.handshakeComplete &&
+		(sentTime.IsZero() || (!h.oneRTTPackets.lastSentAckElicitingPacketTime.IsZero() && h.oneRTTPackets.lastSentAckElicitingPacketTime.Before(sentTime))) {
 		sentTime = h.oneRTTPackets.lastSentAckElicitingPacketTime
 		encLevel = protocol.Encryption1RTT
 	}
@@ -329,7 +333,10 @@ func (h *sentPacketHandler) hasOutstandingCryptoPackets() bool {
 }
 
 func (h *sentPacketHandler) hasOutstandingPackets() bool {
-	return h.oneRTTPackets.history.HasOutstandingPackets() || h.hasOutstandingCryptoPackets()
+	// We only send application data probe packets once the handshake completes,
+	// because before that, we don't have the keys to decrypt ACKs sent in 1-RTT packets.
+	return (h.handshakeComplete && h.oneRTTPackets.history.HasOutstandingPackets()) ||
+		h.hasOutstandingCryptoPackets()
 }
 
 func (h *sentPacketHandler) setLossDetectionTimer() {
@@ -420,7 +427,7 @@ func (h *sentPacketHandler) detectLostPackets(
 
 func (h *sentPacketHandler) OnLossDetectionTimeout() error {
 	// When all outstanding are acknowledged, the alarm is canceled in
-	// updateLossDetectionAlarm. This doesn't reset the timer in the session though.
+	// setLossDetectionTimer. This doesn't reset the timer in the session though.
 	// When OnAlarm is called, we therefore need to make sure that there are
 	// actually packets outstanding.
 	if h.hasOutstandingPackets() {
@@ -589,6 +596,13 @@ func (h *sentPacketHandler) ResetForRetry() error {
 	h.initialPackets = newPacketNumberSpace(h.initialPackets.pns.Pop())
 	h.setLossDetectionTimer()
 	return nil
+}
+
+func (h *sentPacketHandler) SetHandshakeComplete() {
+	h.handshakeComplete = true
+	// We don't send PTOs for application data packets before the handshake completes.
+	// Make sure the timer is armed now, if necessary.
+	h.setLossDetectionTimer()
 }
 
 func (h *sentPacketHandler) GetStats() *quictrace.TransportState {

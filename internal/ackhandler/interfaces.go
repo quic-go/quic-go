@@ -27,6 +27,7 @@ type SentPacketHandler interface {
 	ReceivedAck(ackFrame *wire.AckFrame, withPacketNumber protocol.PacketNumber, encLevel protocol.EncryptionLevel, recvTime time.Time) error
 	DropPackets(protocol.EncryptionLevel)
 	ResetForRetry() error
+	SetHandshakeComplete()
 
 	// The SendMode determines if and what kind of packets can be sent.
 	SendMode() SendMode
