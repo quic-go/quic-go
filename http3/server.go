@@ -28,6 +28,22 @@ var (
 
 const nextProtoH3 = "h3-24"
 
+// contextKey is a value for use with context.WithValue. It's used as
+// a pointer so it fits in an interface{} without allocation.
+type contextKey struct {
+	name string
+}
+
+func (k *contextKey) String() string { return "quic-go/http3 context value " + k.name }
+
+var (
+	// ServerContextKey is a context key. It can be used in HTTP
+	// handlers with Context.Value to access the server that
+	// started the handler. The associated value will be of
+	// type *http3.Server.
+	ServerContextKey = &contextKey{"http3-server"}
+)
+
 type requestError struct {
 	err       error
 	streamErr errorCode
@@ -248,7 +264,10 @@ func (s *Server) handleRequest(sess quic.Session, str quic.Stream, decoder *qpac
 		s.logger.Infof("%s %s%s", req.Method, req.Host, req.RequestURI)
 	}
 
-	req = req.WithContext(str.Context())
+	ctx := str.Context()
+	ctx = context.WithValue(ctx, ServerContextKey, s)
+	ctx = context.WithValue(ctx, http.LocalAddrContextKey, sess.LocalAddr())
+	req = req.WithContext(ctx)
 	responseWriter := newResponseWriter(str, s.logger)
 	handler := s.Handler
 	if handler == nil {

@@ -108,6 +108,7 @@ var _ = Describe("Server", func() {
 			sess = mockquic.NewMockEarlySession(mockCtrl)
 			addr := &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 1337}
 			sess.EXPECT().RemoteAddr().Return(addr).AnyTimes()
+			sess.EXPECT().LocalAddr().AnyTimes()
 		})
 
 		It("calls the HTTP handler function", func() {
@@ -127,6 +128,7 @@ var _ = Describe("Server", func() {
 			Eventually(requestChan).Should(Receive(&req))
 			Expect(req.Host).To(Equal("www.example.com"))
 			Expect(req.RemoteAddr).To(Equal("127.0.0.1:1337"))
+			Expect(req.Context().Value(ServerContextKey)).To(Equal(s))
 		})
 
 		It("returns 200 with an empty handler", func() {
@@ -176,6 +178,7 @@ var _ = Describe("Server", func() {
 				sess.EXPECT().AcceptStream(gomock.Any()).Return(str, nil)
 				sess.EXPECT().AcceptStream(gomock.Any()).Return(nil, errors.New("done"))
 				sess.EXPECT().RemoteAddr().Return(addr).AnyTimes()
+				sess.EXPECT().LocalAddr().AnyTimes()
 			})
 
 			It("cancels reading when client sends a body in GET request", func() {
