@@ -15,7 +15,7 @@ var _ = Describe("STOP_SENDING frame", func() {
 		It("parses a sample frame", func() {
 			data := []byte{0x5}
 			data = append(data, encodeVarInt(0xdecafbad)...) // stream ID
-			data = append(data, []byte{0x13, 0x37}...)       // error code
+			data = append(data, encodeVarInt(0x1337)...)     // error code
 			b := bytes.NewReader(data)
 			frame, err := parseStopSendingFrame(b, versionIETFFrames)
 			Expect(err).ToNot(HaveOccurred())
@@ -27,7 +27,7 @@ var _ = Describe("STOP_SENDING frame", func() {
 		It("errors on EOFs", func() {
 			data := []byte{0x5}
 			data = append(data, encodeVarInt(0xdecafbad)...) // stream ID
-			data = append(data, []byte{0x13, 0x37}...)       // error code
+			data = append(data, encodeVarInt(0x123456)...)   // error code
 			_, err := parseStopSendingFrame(bytes.NewReader(data), versionIETFFrames)
 			Expect(err).NotTo(HaveOccurred())
 			for i := range data {
@@ -41,23 +41,22 @@ var _ = Describe("STOP_SENDING frame", func() {
 		It("writes", func() {
 			frame := &StopSendingFrame{
 				StreamID:  0xdeadbeefcafe,
-				ErrorCode: 0x10,
+				ErrorCode: 0xdecafbad,
 			}
 			buf := &bytes.Buffer{}
-			err := frame.Write(buf, versionIETFFrames)
-			Expect(err).ToNot(HaveOccurred())
+			Expect(frame.Write(buf, versionIETFFrames)).To(Succeed())
 			expected := []byte{0x5}
 			expected = append(expected, encodeVarInt(0xdeadbeefcafe)...)
-			expected = append(expected, []byte{0x0, 0x10}...)
+			expected = append(expected, encodeVarInt(0xdecafbad)...)
 			Expect(buf.Bytes()).To(Equal(expected))
 		})
 
 		It("has the correct min length", func() {
 			frame := &StopSendingFrame{
 				StreamID:  0xdeadbeef,
-				ErrorCode: 0x10,
+				ErrorCode: 0x1234567,
 			}
-			Expect(frame.Length(versionIETFFrames)).To(Equal(1 + 2 + utils.VarIntLen(0xdeadbeef)))
+			Expect(frame.Length(versionIETFFrames)).To(Equal(1 + utils.VarIntLen(0xdeadbeef) + utils.VarIntLen(0x1234567)))
 		})
 	})
 })

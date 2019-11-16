@@ -23,7 +23,7 @@ func parseStopSendingFrame(r *bytes.Reader, _ protocol.VersionNumber) (*StopSend
 	if err != nil {
 		return nil, err
 	}
-	errorCode, err := utils.BigEndian.ReadUint16(r)
+	errorCode, err := utils.ReadVarInt(r)
 	if err != nil {
 		return nil, err
 	}
@@ -36,12 +36,12 @@ func parseStopSendingFrame(r *bytes.Reader, _ protocol.VersionNumber) (*StopSend
 
 // Length of a written frame
 func (f *StopSendingFrame) Length(_ protocol.VersionNumber) protocol.ByteCount {
-	return 1 + utils.VarIntLen(uint64(f.StreamID)) + 2
+	return 1 + utils.VarIntLen(uint64(f.StreamID)) + utils.VarIntLen(uint64(f.ErrorCode))
 }
 
 func (f *StopSendingFrame) Write(b *bytes.Buffer, _ protocol.VersionNumber) error {
 	b.WriteByte(0x5)
 	utils.WriteVarInt(b, uint64(f.StreamID))
-	utils.BigEndian.WriteUint16(b, uint16(f.ErrorCode))
+	utils.WriteVarInt(b, uint64(f.ErrorCode))
 	return nil
 }
