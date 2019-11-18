@@ -1229,6 +1229,10 @@ func (s *session) sendPackedPacket(packet *packedPacket) {
 		s.firstAckElicitingPacketAfterIdleSentTime = time.Now()
 	}
 	if s.traceCallback != nil {
+		frames := make([]wire.Frame, 0, len(packet.frames))
+		for _, f := range packet.frames {
+			frames = append(frames, f.Frame)
+		}
 		s.traceCallback(quictrace.Event{
 			Time:            time.Now(),
 			EventType:       quictrace.PacketSent,
@@ -1236,8 +1240,7 @@ func (s *session) sendPackedPacket(packet *packedPacket) {
 			EncryptionLevel: packet.EncryptionLevel(),
 			PacketNumber:    packet.header.PacketNumber,
 			PacketSize:      protocol.ByteCount(len(packet.raw)),
-			// TODO: trace frames
-			// Frames:          packet.frames,
+			Frames:          frames,
 		})
 	}
 	s.logPacket(packet)
