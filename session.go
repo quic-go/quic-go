@@ -790,7 +790,7 @@ func (s *session) handleUnpackedPacket(packet *unpackedPacket, rcvTime time.Time
 	if s.traceCallback != nil {
 		transportState = s.sentPacketHandler.GetStats()
 		s.traceCallback(quictrace.Event{
-			Time:            time.Now(),
+			Time:            rcvTime,
 			EventType:       quictrace.PacketReceived,
 			TransportState:  transportState,
 			EncryptionLevel: packet.encryptionLevel,
