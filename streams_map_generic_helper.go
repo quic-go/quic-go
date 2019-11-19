@@ -1,4 +1,3 @@
-//nolint:unused
 package quic
 
 import (
