@@ -385,15 +385,18 @@ func (h *sentPacketHandler) detectLostPackets(
 		}
 		pnSpace.history.Remove(p.PacketNumber)
 		if h.traceCallback != nil {
-			// TODO: trace frames
+			frames := make([]wire.Frame, 0, len(p.Frames))
+			for _, f := range p.Frames {
+				frames = append(frames, f.Frame)
+			}
 			h.traceCallback(quictrace.Event{
 				Time:            now,
 				EventType:       quictrace.PacketLost,
 				EncryptionLevel: p.EncryptionLevel,
 				PacketNumber:    p.PacketNumber,
 				PacketSize:      p.Length,
-				//Frames:          p.Frames,
-				TransportState: h.GetStats(),
+				Frames:          frames,
+				TransportState:  h.GetStats(),
 			})
 		}
 	}
