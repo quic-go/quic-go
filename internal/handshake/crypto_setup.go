@@ -563,6 +563,15 @@ func (h *cryptoSetup) dropInitialKeys() {
 	h.logger.Debugf("Dropping Initial keys.")
 }
 
+func (h *cryptoSetup) DropHandshakeKeys() {
+	h.mutex.Lock()
+	h.handshakeOpener = nil
+	h.handshakeSealer = nil
+	h.mutex.Unlock()
+	h.runner.DropKeys(protocol.EncryptionHandshake)
+	h.logger.Debugf("Dropping Handshake keys.")
+}
+
 func (h *cryptoSetup) GetInitialSealer() (LongHeaderSealer, error) {
 	h.mutex.Lock()
 	defer h.mutex.Unlock()

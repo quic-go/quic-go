@@ -51,6 +51,7 @@ type cryptoStreamHandler interface {
 	RunHandshake()
 	ChangeConnectionID(protocol.ConnectionID)
 	SetLargest1RTTAcked(protocol.PacketNumber)
+	DropHandshakeKeys()
 	io.Closer
 	ConnectionState() tls.ConnectionState
 }
@@ -610,6 +611,7 @@ func (s *session) handleHandshakeComplete() {
 			s.closeLocal(err)
 		}
 		s.queueControlFrame(&wire.NewTokenFrame{Token: token})
+		s.cryptoStreamHandler.DropHandshakeKeys()
 		s.queueControlFrame(&wire.HandshakeDoneFrame{})
 	}
 }

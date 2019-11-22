@@ -73,6 +73,7 @@ type CryptoSetup interface {
 
 	HandleMessage([]byte, protocol.EncryptionLevel) bool
 	SetLargest1RTTAcked(protocol.PacketNumber)
+	DropHandshakeKeys()
 	ConnectionState() tls.ConnectionState
 
 	GetInitialOpener() (LongHeaderOpener, error)
