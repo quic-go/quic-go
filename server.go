@@ -508,7 +508,6 @@ func (s *baseServer) sendRetry(remoteAddr net.Addr, hdr *wire.Header) error {
 	replyHdr.Version = hdr.Version
 	replyHdr.SrcConnectionID = connID
 	replyHdr.DestConnectionID = hdr.SrcConnectionID
-	replyHdr.OrigDestConnectionID = hdr.DestConnectionID
 	replyHdr.Token = token
 	s.logger.Debugf("Changing connection ID to %s.", connID)
 	s.logger.Debugf("-> Sending Retry")
@@ -517,6 +516,9 @@ func (s *baseServer) sendRetry(remoteAddr net.Addr, hdr *wire.Header) error {
 	if err := replyHdr.Write(buf, hdr.Version); err != nil {
 		return err
 	}
+	// append the Retry integrity tag
+	tag := handshake.GetRetryIntegrityTag(buf.Bytes(), hdr.DestConnectionID)
+	buf.Write(tag[:])
 	if _, err := s.conn.WriteTo(buf.Bytes(), remoteAddr); err != nil {
 		s.logger.Debugf("Error sending Retry: %s", err)
 	}

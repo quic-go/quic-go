@@ -120,9 +120,6 @@ func (h *ExtendedHeader) Write(b *bytes.Buffer, ver protocol.VersionNumber) erro
 	if h.SrcConnectionID.Len() > protocol.MaxConnIDLen {
 		return fmt.Errorf("invalid connection ID length: %d bytes", h.SrcConnectionID.Len())
 	}
-	if h.OrigDestConnectionID.Len() > protocol.MaxConnIDLen {
-		return fmt.Errorf("invalid connection ID length: %d bytes", h.OrigDestConnectionID.Len())
-	}
 	if h.IsLongHeader {
 		return h.writeLongHeader(b, ver)
 	}
@@ -156,8 +153,6 @@ func (h *ExtendedHeader) writeLongHeader(b *bytes.Buffer, _ protocol.VersionNumb
 
 	switch h.Type {
 	case protocol.PacketTypeRetry:
-		b.WriteByte(uint8(h.OrigDestConnectionID.Len()))
-		b.Write(h.OrigDestConnectionID.Bytes())
 		b.Write(h.Token)
 		return nil
 	case protocol.PacketTypeInitial:
@@ -227,7 +222,7 @@ func (h *ExtendedHeader) Log(logger utils.Logger) {
 				token = fmt.Sprintf("Token: %#x, ", h.Token)
 			}
 			if h.Type == protocol.PacketTypeRetry {
-				logger.Debugf("\tLong Header{Type: %s, DestConnectionID: %s, SrcConnectionID: %s, %sOrigDestConnectionID: %s, Version: %s}", h.Type, h.DestConnectionID, h.SrcConnectionID, token, h.OrigDestConnectionID, h.Version)
+				logger.Debugf("\tLong Header{Type: %s, DestConnectionID: %s, SrcConnectionID: %s, %sVersion: %s}", h.Type, h.DestConnectionID, h.SrcConnectionID, token, h.Version)
 				return
 			}
 		}

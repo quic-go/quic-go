@@ -1750,51 +1750,49 @@ var _ = Describe("Client Session", func() {
 	})
 
 	Context("handling Retry", func() {
-		var validRetryHdr *wire.ExtendedHeader
+		origDestConnID := protocol.ConnectionID{8, 7, 6, 5, 4, 3, 2, 1}
+
+		var retryHdr *wire.ExtendedHeader
 
 		JustBeforeEach(func() {
-			validRetryHdr = &wire.ExtendedHeader{
+			retryHdr = &wire.ExtendedHeader{
 				Header: wire.Header{
-					IsLongHeader:         true,
-					Type:                 protocol.PacketTypeRetry,
-					SrcConnectionID:      protocol.ConnectionID{0xde, 0xad, 0xbe, 0xef},
-					DestConnectionID:     protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8},
-					OrigDestConnectionID: protocol.ConnectionID{8, 7, 6, 5, 4, 3, 2, 1},
-					Token:                []byte("foobar"),
-					Version:              sess.version,
+					IsLongHeader:     true,
+					Type:             protocol.PacketTypeRetry,
+					SrcConnectionID:  protocol.ConnectionID{0xde, 0xad, 0xbe, 0xef},
+					DestConnectionID: protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8},
+					Token:            []byte("foobar"),
+					Version:          sess.version,
 				},
 			}
 		})
+
+		getRetryTag := func(hdr *wire.ExtendedHeader) []byte {
+			buf := &bytes.Buffer{}
+			hdr.Write(buf, sess.version)
+			return handshake.GetRetryIntegrityTag(buf.Bytes(), origDestConnID)[:]
+		}
 
 		It("handles Retry packets", func() {
 			cryptoSetup.EXPECT().ChangeConnectionID(protocol.ConnectionID{0xde, 0xad, 0xbe, 0xef})
 			packer.EXPECT().SetToken([]byte("foobar"))
-			Expect(sess.handlePacketImpl(getPacket(validRetryHdr, nil))).To(BeTrue())
+			Expect(sess.handlePacketImpl(getPacket(retryHdr, getRetryTag(retryHdr)))).To(BeTrue())
 		})
 
 		It("ignores Retry packets after receiving a regular packet", func() {
 			sess.receivedFirstPacket = true
-			Expect(sess.handlePacketImpl(getPacket(validRetryHdr, nil))).To(BeFalse())
+			Expect(sess.handlePacketImpl(getPacket(retryHdr, getRetryTag(retryHdr)))).To(BeFalse())
 		})
 
 		It("ignores Retry packets if the server didn't change the connection ID", func() {
-			validRetryHdr.SrcConnectionID = destConnID
-			Expect(sess.handlePacketImpl(getPacket(validRetryHdr, nil))).To(BeFalse())
+			retryHdr.SrcConnectionID = destConnID
+			Expect(sess.handlePacketImpl(getPacket(retryHdr, getRetryTag(retryHdr)))).To(BeFalse())
 		})
 
-		It("ignores Retry packets with the wrong original destination connection ID", func() {
-			hdr := &wire.ExtendedHeader{
-				Header: wire.Header{
-					IsLongHeader:         true,
-					Type:                 protocol.PacketTypeRetry,
-					SrcConnectionID:      protocol.ConnectionID{0xde, 0xad, 0xbe, 0xef},
-					DestConnectionID:     protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8},
-					OrigDestConnectionID: protocol.ConnectionID{1, 2, 3, 4},
-					Token:                []byte("foobar"),
-				},
-				PacketNumberLen: protocol.PacketNumberLen3,
-			}
-			Expect(sess.handlePacketImpl(getPacket(hdr, nil))).To(BeFalse())
+		It("ignores Retry packets with the a wrong Integrity tag", func() {
+			tag := getRetryTag(retryHdr)
+			tag[0]++
+			Expect(sess.handlePacketImpl(getPacket(retryHdr, tag))).To(BeFalse())
 		})
 	})
 

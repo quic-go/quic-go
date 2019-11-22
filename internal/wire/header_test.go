@@ -271,17 +271,31 @@ var _ = Describe("Header Parsing", func() {
 		It("parses a Retry packet", func() {
 			data := []byte{0xc0 | 0x3<<4 | (10 - 3) /* connection ID length */}
 			data = appendVersion(data, versionIETFFrames)
-			data = append(data, []byte{0x0, 0x0}...)                      // dest and src conn ID lengths
-			data = append(data, 0xa)                                      // orig dest conn ID len
+			data = append(data, []byte{6}...)                             // dest conn ID len
+			data = append(data, []byte{6, 5, 4, 3, 2, 1}...)              // dest conn ID
+			data = append(data, []byte{10}...)                            // src conn ID len
 			data = append(data, []byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}...) // source connection ID
 			data = append(data, []byte{'f', 'o', 'o', 'b', 'a', 'r'}...)  // token
+			data = append(data, []byte{16, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1}...)
 			hdr, pdata, rest, err := ParsePacket(data, 0)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(hdr.Type).To(Equal(protocol.PacketTypeRetry))
-			Expect(hdr.OrigDestConnectionID).To(Equal(protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}))
+			Expect(hdr.DestConnectionID).To(Equal(protocol.ConnectionID{6, 5, 4, 3, 2, 1}))
+			Expect(hdr.SrcConnectionID).To(Equal(protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}))
 			Expect(hdr.Token).To(Equal([]byte("foobar")))
 			Expect(pdata).To(Equal(data))
 			Expect(rest).To(BeEmpty())
+		})
+
+		It("errors if the Retry packet is too short for the integrity tag", func() {
+			data := []byte{0xc0 | 0x3<<4 | (10 - 3) /* connection ID length */}
+			data = appendVersion(data, versionIETFFrames)
+			data = append(data, []byte{0, 0}...)                         // conn ID lens
+			data = append(data, []byte{'f', 'o', 'o', 'b', 'a', 'r'}...) // token
+			data = append(data, []byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}...)
+			// this results in a token length of 0
+			_, _, _, err := ParsePacket(data, 0)
+			Expect(err).To(MatchError(io.EOF))
 		})
 
 		It("errors if the token length is too large", func() {
