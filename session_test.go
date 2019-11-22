@@ -404,6 +404,10 @@ var _ = Describe("Session", func() {
 			Expect(sess.handleFrame(ccf, 0, protocol.EncryptionUnspecified)).To(Succeed())
 			Eventually(sess.Context().Done()).Should(BeClosed())
 		})
+
+		It("errors on HANDSHAKE_DONE frames", func() {
+			Expect(sess.handleHandshakeDoneFrame()).To(MatchError("PROTOCOL_VIOLATION: received a HANDSHAKE_DONE frame"))
+		})
 	})
 
 	It("tells its versions", func() {
@@ -1732,6 +1736,11 @@ var _ = Describe("Client Session", func() {
 			SrcConnectionID:  destConnID,
 		}
 		Expect(sess.handleSinglePacket(&receivedPacket{buffer: getPacketBuffer()}, hdr)).To(BeTrue())
+	})
+
+	It("handles HANDSHAKE_DONE frames", func() {
+		cryptoSetup.EXPECT().DropHandshakeKeys()
+		Expect(sess.handleHandshakeDoneFrame()).To(Succeed())
 	})
 
 	Context("handling tokens", func() {

@@ -856,6 +856,7 @@ func (s *session) handleFrame(f wire.Frame, pn protocol.PacketNumber, encLevel p
 	case *wire.RetireConnectionIDFrame:
 		err = s.handleRetireConnectionIDFrame(frame)
 	case *wire.HandshakeDoneFrame:
+		err = s.handleHandshakeDoneFrame()
 	default:
 		err = fmt.Errorf("unexpected frame type: %s", reflect.ValueOf(&frame).Elem().Type().Name())
 	}
@@ -972,6 +973,14 @@ func (s *session) handleNewConnectionIDFrame(f *wire.NewConnectionIDFrame) error
 
 func (s *session) handleRetireConnectionIDFrame(f *wire.RetireConnectionIDFrame) error {
 	return s.connIDGenerator.Retire(f.SequenceNumber)
+}
+
+func (s *session) handleHandshakeDoneFrame() error {
+	if s.perspective == protocol.PerspectiveServer {
+		return qerr.Error(qerr.ProtocolViolation, "received a HANDSHAKE_DONE frame")
+	}
+	s.cryptoStreamHandler.DropHandshakeKeys()
+	return nil
 }
 
 func (s *session) handleAckFrame(frame *wire.AckFrame, pn protocol.PacketNumber, encLevel protocol.EncryptionLevel) error {

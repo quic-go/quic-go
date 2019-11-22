@@ -221,13 +221,6 @@ func (h *cryptoSetup) ChangeConnectionID(id protocol.ConnectionID) {
 
 func (h *cryptoSetup) SetLargest1RTTAcked(pn protocol.PacketNumber) {
 	h.aead.SetLargestAcked(pn)
-	// drop handshake keys
-	if h.handshakeOpener != nil {
-		h.handshakeOpener = nil
-		h.handshakeSealer = nil
-		h.logger.Debugf("Dropping Handshake keys.")
-		h.runner.DropKeys(protocol.EncryptionHandshake)
-	}
 }
 
 func (h *cryptoSetup) RunHandshake() {
@@ -564,12 +557,18 @@ func (h *cryptoSetup) dropInitialKeys() {
 }
 
 func (h *cryptoSetup) DropHandshakeKeys() {
+	var dropped bool
 	h.mutex.Lock()
-	h.handshakeOpener = nil
-	h.handshakeSealer = nil
+	if h.handshakeOpener != nil {
+		h.handshakeOpener = nil
+		h.handshakeSealer = nil
+		dropped = true
+	}
 	h.mutex.Unlock()
-	h.runner.DropKeys(protocol.EncryptionHandshake)
-	h.logger.Debugf("Dropping Handshake keys.")
+	if dropped {
+		h.runner.DropKeys(protocol.EncryptionHandshake)
+		h.logger.Debugf("Dropping Handshake keys.")
+	}
 }
 
 func (h *cryptoSetup) GetInitialSealer() (LongHeaderSealer, error) {
