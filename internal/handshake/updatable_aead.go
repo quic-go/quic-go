@@ -99,7 +99,7 @@ func (a *updatableAEAD) rollKeys(now time.Time) {
 	a.numRcvdWithCurrentKey = 0
 	a.numSentWithCurrentKey = 0
 	a.prevRcvAEAD = a.rcvAEAD
-	a.prevRcvAEADExpiry = now.Add(3 * a.rttStats.PTO())
+	a.prevRcvAEADExpiry = now.Add(3 * a.rttStats.PTO(true))
 	a.rcvAEAD = a.nextRcvAEAD
 	a.sendAEAD = a.nextSendAEAD
 

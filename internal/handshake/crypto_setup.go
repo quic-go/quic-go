@@ -576,7 +576,7 @@ func (h *cryptoSetup) GetHandshakeSealer() (LongHeaderSealer, error) {
 		if h.initialSealer == nil {
 			return nil, ErrKeysDropped
 		}
-		return nil, errors.New("CryptoSetup: no sealer with encryption level Handshake")
+		return nil, ErrKeysNotYetAvailable
 	}
 	return h.handshakeSealer, nil
 }
@@ -586,7 +586,7 @@ func (h *cryptoSetup) Get1RTTSealer() (ShortHeaderSealer, error) {
 	defer h.mutex.Unlock()
 
 	if !h.has1RTTSealer {
-		return nil, errors.New("CryptoSetup: no sealer with encryption level 1-RTT")
+		return nil, ErrKeysNotYetAvailable
 	}
 	return h.aead, nil
 }
@@ -607,7 +607,7 @@ func (h *cryptoSetup) GetHandshakeOpener() (LongHeaderOpener, error) {
 
 	if h.handshakeOpener == nil {
 		if h.initialOpener != nil {
-			return nil, ErrOpenerNotYetAvailable
+			return nil, ErrKeysNotYetAvailable
 		}
 		// if the initial opener is also not available, the keys were already dropped
 		return nil, ErrKeysDropped
@@ -620,7 +620,7 @@ func (h *cryptoSetup) Get1RTTOpener() (ShortHeaderOpener, error) {
 	defer h.mutex.Unlock()
 
 	if !h.has1RTTOpener {
-		return nil, ErrOpenerNotYetAvailable
+		return nil, ErrKeysNotYetAvailable
 	}
 	return h.aead, nil
 }

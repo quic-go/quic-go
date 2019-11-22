@@ -151,7 +151,7 @@ var _ = Describe("Updatable AEAD", func() {
 						It("drops keys 3 PTOs after a key update", func() {
 							now := time.Now()
 							rttStats.UpdateRTT(10*time.Millisecond, 0, now)
-							pto := rttStats.PTO()
+							pto := rttStats.PTO(true)
 							encrypted01 := client.Seal(nil, msg, 0x42, ad)
 							encrypted02 := client.Seal(nil, msg, 0x43, ad)
 							// receive the first packet with key phase 0

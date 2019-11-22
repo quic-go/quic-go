@@ -85,9 +85,9 @@ var _ = Describe("Packet Unpacker", func() {
 			PacketNumberLen: 2,
 		}
 		hdr, hdrRaw := getHeader(extHdr)
-		cs.EXPECT().Get1RTTOpener().Return(nil, handshake.ErrOpenerNotYetAvailable)
+		cs.EXPECT().Get1RTTOpener().Return(nil, handshake.ErrKeysNotYetAvailable)
 		_, err := unpacker.Unpack(hdr, time.Now(), append(hdrRaw, payload...))
-		Expect(err).To(MatchError(handshake.ErrOpenerNotYetAvailable))
+		Expect(err).To(MatchError(handshake.ErrKeysNotYetAvailable))
 	})
 
 	It("returns the error when unpacking fails", func() {

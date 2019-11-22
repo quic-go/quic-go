@@ -66,13 +66,14 @@ var _ = Describe("RTT stats", func() {
 		rttStats.UpdateRTT(rtt, 0, time.Time{})
 		Expect(rttStats.SmoothedRTT()).To(Equal(rtt))
 		Expect(rttStats.MeanDeviation()).To(Equal(rtt / 2))
-		Expect(rttStats.PTO()).To(Equal(rtt + 4*(rtt/2) + maxAckDelay))
+		Expect(rttStats.PTO(false)).To(Equal(rtt + 4*(rtt/2)))
+		Expect(rttStats.PTO(true)).To(Equal(rtt + 4*(rtt/2) + maxAckDelay))
 	})
 
 	It("uses the granularity for computing the PTO for short RTTs", func() {
 		rtt := time.Microsecond
 		rttStats.UpdateRTT(rtt, 0, time.Time{})
-		Expect(rttStats.PTO()).To(Equal(rtt + protocol.TimerGranularity))
+		Expect(rttStats.PTO(true)).To(Equal(rtt + protocol.TimerGranularity))
 	})
 
 	It("ExpireSmoothedMetrics", func() {
