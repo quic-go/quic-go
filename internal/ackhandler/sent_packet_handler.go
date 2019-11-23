@@ -145,7 +145,7 @@ func (h *sentPacketHandler) getPacketNumberSpace(encLevel protocol.EncryptionLev
 func (h *sentPacketHandler) sentPacketImpl(packet *Packet) bool /* is ack-eliciting */ {
 	pnSpace := h.getPacketNumberSpace(packet.EncryptionLevel)
 
-	if h.logger.Debug() {
+	if h.logger.Debug() && pnSpace.history.HasOutstandingPackets() {
 		for p := utils.MaxPacketNumber(0, pnSpace.largestSent+1); p < packet.PacketNumber; p++ {
 			h.logger.Debugf("Skipping packet number %#x", p)
 		}
