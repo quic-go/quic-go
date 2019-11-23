@@ -55,7 +55,7 @@ var _ = Describe("Crypto Stream", func() {
 				Offset: protocol.MaxCryptoStreamOffset - 5,
 				Data:   []byte("foobar"),
 			})
-			Expect(err).To(MatchError(fmt.Sprintf("received invalid offset %d on crypto stream, maximum allowed %d", protocol.MaxCryptoStreamOffset+1, protocol.MaxCryptoStreamOffset)))
+			Expect(err).To(MatchError(fmt.Sprintf("CRYPTO_BUFFER_EXCEEDED: received invalid offset %d on crypto stream, maximum allowed %d", protocol.MaxCryptoStreamOffset+1, protocol.MaxCryptoStreamOffset)))
 		})
 
 		It("handles messages split over multiple CRYPTO frames", func() {
