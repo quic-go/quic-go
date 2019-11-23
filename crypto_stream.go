@@ -6,6 +6,7 @@ import (
 	"io"
 
 	"github.com/lucas-clemente/quic-go/internal/protocol"
+	"github.com/lucas-clemente/quic-go/internal/qerr"
 	"github.com/lucas-clemente/quic-go/internal/utils"
 	"github.com/lucas-clemente/quic-go/internal/wire"
 )
@@ -73,7 +74,7 @@ func (s *cryptoStreamImpl) HandleCryptoFrame(f *wire.CryptoFrame) error {
 	if s.finished {
 		if highestOffset > s.highestOffset {
 			// reject crypto data received after this stream was already finished
-			return errors.New("received crypto data after change of encryption level")
+			return qerr.Error(qerr.ProtocolViolation, "received crypto data after change of encryption level")
 		}
 		// ignore data with a smaller offset than the highest received
 		// could e.g. be a retransmission
