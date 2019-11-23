@@ -427,6 +427,7 @@ var _ = Describe("Session", func() {
 		})
 
 		It("shuts down without error", func() {
+			sess.handshakeComplete = true
 			streamManager.EXPECT().CloseWithError(qerr.ApplicationError(0, ""))
 			expectReplaceWithClosed()
 			cryptoSetup.EXPECT().Close()
@@ -457,6 +458,7 @@ var _ = Describe("Session", func() {
 		})
 
 		It("closes with an error", func() {
+			sess.handshakeComplete = true
 			streamManager.EXPECT().CloseWithError(qerr.ApplicationError(0x1337, "test error"))
 			expectReplaceWithClosed()
 			cryptoSetup.EXPECT().Close()
@@ -472,6 +474,7 @@ var _ = Describe("Session", func() {
 		})
 
 		It("includes the frame type in transport-level close frames", func() {
+			sess.handshakeComplete = true
 			testErr := qerr.ErrorWithFrameType(0x1337, 0x42, "test error")
 			streamManager.EXPECT().CloseWithError(testErr)
 			expectReplaceWithClosed()
@@ -484,6 +487,21 @@ var _ = Describe("Session", func() {
 				return &packedPacket{}, nil
 			})
 			sess.closeLocal(testErr)
+			Eventually(areSessionsRunning).Should(BeFalse())
+			Expect(sess.Context().Done()).To(BeClosed())
+		})
+
+		It("doesn't send application-level error before the handshake completes", func() {
+			streamManager.EXPECT().CloseWithError(qerr.ApplicationError(0x1337, "test error"))
+			expectReplaceWithClosed()
+			cryptoSetup.EXPECT().Close()
+			packer.EXPECT().PackConnectionClose(gomock.Any()).DoAndReturn(func(f *wire.ConnectionCloseFrame) (*packedPacket, error) {
+				Expect(f.IsApplicationError).To(BeFalse())
+				Expect(f.ErrorCode).To(BeEquivalentTo(0x15a))
+				Expect(f.ReasonPhrase).To(BeEmpty())
+				return &packedPacket{}, nil
+			})
+			sess.CloseWithError(0x1337, "test error")
 			Eventually(areSessionsRunning).Should(BeFalse())
 			Expect(sess.Context().Done()).To(BeClosed())
 		})
@@ -1456,6 +1474,7 @@ var _ = Describe("Session", func() {
 			}()
 			Consistently(sess.Context().Done()).ShouldNot(BeClosed())
 			// make the go routine return
+			sess.handshakeComplete = true
 			expectReplaceWithClosed()
 			cryptoSetup.EXPECT().Close()
 			sess.Close()
