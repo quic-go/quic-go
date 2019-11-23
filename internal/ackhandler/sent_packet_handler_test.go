@@ -590,6 +590,28 @@ var _ = Describe("SentPacketHandler", func() {
 			Expect(handler.GetLossDetectionTimeout().Sub(sendTime)).To(Equal(4 * timeout))
 		})
 
+		It("resets the PTO mode when a packet number space is dropped", func() {
+			now := time.Now()
+			handler.SentPacket(ackElicitingPacket(&Packet{
+				PacketNumber:    1,
+				EncryptionLevel: protocol.EncryptionHandshake,
+				SendTime:        now.Add(-2 * time.Hour),
+			}))
+			handler.SentPacket(ackElicitingPacket(&Packet{
+				PacketNumber: 2,
+				SendTime:     now.Add(-time.Hour),
+			}))
+			// PTO timer based on the Handshake packet
+			Expect(handler.GetLossDetectionTimeout()).To(BeTemporally("~", now.Add(-2*time.Hour), time.Second))
+			Expect(handler.OnLossDetectionTimeout()).To(Succeed())
+			Expect(handler.SendMode()).To(Equal(SendPTOHandshake))
+			handler.SetHandshakeComplete()
+			handler.DropPackets(protocol.EncryptionHandshake)
+			// PTO timer based on the 1-RTT packet
+			Expect(handler.GetLossDetectionTimeout()).To(BeTemporally("~", now.Add(-time.Hour), time.Second))
+			Expect(handler.SendMode()).ToNot(Equal(SendPTOHandshake))
+		})
+
 		It("allows two 1-RTT PTOs", func() {
 			handler.SetHandshakeComplete()
 			var lostPackets []protocol.PacketNumber
