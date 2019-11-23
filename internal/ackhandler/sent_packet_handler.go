@@ -347,7 +347,7 @@ func (h *sentPacketHandler) setLossDetectionTimer() {
 
 	// Cancel the alarm if no packets are outstanding
 	if !h.hasOutstandingPackets() {
-		h.logger.Debugf("setLossDetectionTimer: canceling. Bytes in flight: %d", h.bytesInFlight)
+		h.logger.Debugf("Canceling loss detection timer. No packets in flight.")
 		h.alarm = time.Time{}
 		return
 	}
