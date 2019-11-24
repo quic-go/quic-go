@@ -119,7 +119,7 @@ var _ = Describe("Crypto Stream", func() {
 				err := str.HandleCryptoFrame(&wire.CryptoFrame{
 					Data: createHandshakeMessage(5),
 				})
-				Expect(err).To(MatchError("received crypto data after change of encryption level"))
+				Expect(err).To(MatchError("PROTOCOL_VIOLATION: received crypto data after change of encryption level"))
 			})
 
 			It("ignores crypto data below the maximum offset received before finishing", func() {
