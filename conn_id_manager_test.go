@@ -15,7 +15,7 @@ var _ = Describe("Connection ID Manager", func() {
 		retiredTokens [][16]byte
 		removedTokens [][16]byte
 	)
-	initialConnID := protocol.ConnectionID{1, 1, 1, 1}
+	initialConnID := protocol.ConnectionID{0, 0, 0, 0}
 
 	BeforeEach(func() {
 		frameQueue = nil
@@ -241,6 +241,35 @@ var _ = Describe("Connection ID Manager", func() {
 			}
 		}
 		Expect(counter).To(BeNumerically("~", 50, 10))
+	})
+
+	It("retires delayed connection IDs that arrive after a higher connection ID was already retired", func() {
+		for s := uint8(10); s <= 10+protocol.MaxActiveConnectionIDs/2; s++ {
+			Expect(m.Add(&wire.NewConnectionIDFrame{
+				SequenceNumber:      uint64(s),
+				ConnectionID:        protocol.ConnectionID{s, s, s, s},
+				StatelessResetToken: [16]byte{s, s, s, s, s, s, s, s, s, s, s, s, s, s, s, s},
+			})).To(Succeed())
+		}
+		Expect(m.Get()).To(Equal(protocol.ConnectionID{10, 10, 10, 10}))
+		for {
+			m.SentPacket()
+			if m.Get().Equal(protocol.ConnectionID{11, 11, 11, 11}) {
+				break
+			}
+		}
+		// The active conn ID is now {11, 11, 11, 11}
+		Expect(m.queue.Front().Value.ConnectionID).To(Equal(protocol.ConnectionID{12, 12, 12, 12}))
+		// Add a delayed connection ID. It should just be ignored now.
+		frameQueue = nil
+		Expect(m.Add(&wire.NewConnectionIDFrame{
+			SequenceNumber:      uint64(5),
+			ConnectionID:        protocol.ConnectionID{5, 5, 5, 5},
+			StatelessResetToken: [16]byte{5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5},
+		})).To(Succeed())
+		Expect(m.queue.Front().Value.ConnectionID).To(Equal(protocol.ConnectionID{12, 12, 12, 12}))
+		Expect(frameQueue).To(HaveLen(1))
+		Expect(frameQueue[0].(*wire.RetireConnectionIDFrame).SequenceNumber).To(BeEquivalentTo(5))
 	})
 
 	It("only initiates subsequent updates when enough if enough connection IDs are queued", func() {
