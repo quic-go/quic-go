@@ -453,10 +453,10 @@ func (h *sentPacketHandler) onVerifiedLossDetectionTimeout() error {
 	}
 
 	// PTO
+	_, encLevel = h.getEarliestSentTimeAndSpace()
 	if h.logger.Debug() {
 		h.logger.Debugf("Loss detection alarm for %s fired in PTO mode. PTO count: %d", encLevel, h.ptoCount)
 	}
-	_, encLevel = h.getEarliestSentTimeAndSpace()
 	h.ptoCount++
 	h.numProbesToSend += 2
 	switch encLevel {
