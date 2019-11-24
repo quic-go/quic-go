@@ -95,6 +95,22 @@ var _ = Describe("Connection ID Manager", func() {
 		Expect(rt2).To(BeNil())
 	})
 
+	It("ignores duplicates for the currently used connection ID", func() {
+		f := &wire.NewConnectionIDFrame{
+			SequenceNumber:      1,
+			ConnectionID:        protocol.ConnectionID{1, 2, 3, 4},
+			StatelessResetToken: [16]byte{0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 0xa, 0xb, 0xc, 0xd, 0xe},
+		}
+		Expect(m.Add(f)).To(Succeed())
+		Expect(m.Get()).To(Equal(protocol.ConnectionID{1, 2, 3, 4}))
+		c, _ := get()
+		Expect(c).To(BeNil())
+		// Now send the same connection ID again. It should not be queued.
+		Expect(m.Add(f)).To(Succeed())
+		c, _ = get()
+		Expect(c).To(BeNil())
+	})
+
 	It("rejects duplicates with different connection IDs", func() {
 		Expect(m.Add(&wire.NewConnectionIDFrame{
 			SequenceNumber: 42,

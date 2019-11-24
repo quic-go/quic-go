@@ -89,6 +89,10 @@ func (h *connIDManager) add(f *wire.NewConnectionIDFrame) error {
 		h.retiredPriorTo = f.RetirePriorTo
 	}
 
+	if f.SequenceNumber == h.activeSequenceNumber {
+		return nil
+	}
+
 	// insert a new element at the end
 	if h.queue.Len() == 0 || h.queue.Back().Value.SequenceNumber < f.SequenceNumber {
 		h.queue.PushBack(utils.NewConnectionID{
