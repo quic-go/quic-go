@@ -120,6 +120,8 @@ func (h *sentPacketHandler) DropPackets(encLevel protocol.EncryptionLevel) {
 	default:
 		panic(fmt.Sprintf("Cannot drop keys for encryption level %s", encLevel))
 	}
+	h.setLossDetectionTimer()
+	h.ptoMode = SendNone
 }
 
 func (h *sentPacketHandler) SentPacket(packet *Packet) {
