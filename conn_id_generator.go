@@ -13,7 +13,8 @@ type connIDGenerator struct {
 	connIDLen  int
 	highestSeq uint64
 
-	activeSrcConnIDs map[uint64]protocol.ConnectionID
+	activeSrcConnIDs        map[uint64]protocol.ConnectionID
+	initialClientDestConnID protocol.ConnectionID
 
 	addConnectionID    func(protocol.ConnectionID) [16]byte
 	removeConnectionID func(protocol.ConnectionID)
@@ -24,6 +25,7 @@ type connIDGenerator struct {
 
 func newConnIDGenerator(
 	initialConnectionID protocol.ConnectionID,
+	initialClientDestConnID protocol.ConnectionID, // nil for the client
 	addConnectionID func(protocol.ConnectionID) [16]byte,
 	removeConnectionID func(protocol.ConnectionID),
 	retireConnectionID func(protocol.ConnectionID),
@@ -40,6 +42,7 @@ func newConnIDGenerator(
 		queueControlFrame:  queueControlFrame,
 	}
 	m.activeSrcConnIDs[0] = initialConnectionID
+	m.initialClientDestConnID = initialClientDestConnID
 	return m
 }
 
@@ -91,13 +94,26 @@ func (m *connIDGenerator) issueNewConnID() error {
 	return nil
 }
 
+func (m *connIDGenerator) SetHandshakeComplete() {
+	if m.initialClientDestConnID != nil {
+		m.retireConnectionID(m.initialClientDestConnID)
+		m.initialClientDestConnID = nil
+	}
+}
+
 func (m *connIDGenerator) RemoveAll() {
+	if m.initialClientDestConnID != nil {
+		m.removeConnectionID(m.initialClientDestConnID)
+	}
 	for _, connID := range m.activeSrcConnIDs {
 		m.removeConnectionID(connID)
 	}
 }
 
 func (m *connIDGenerator) ReplaceWithClosed(handler packetHandler) {
+	if m.initialClientDestConnID != nil {
+		m.replaceWithClosed(m.initialClientDestConnID, handler)
+	}
 	for _, connID := range m.activeSrcConnIDs {
 		m.replaceWithClosed(connID, handler)
 	}

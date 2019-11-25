@@ -18,6 +18,7 @@ var _ = Describe("Connection ID Generator", func() {
 		g                  *connIDGenerator
 	)
 	initialConnID := protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7}
+	initialClientDestConnID := protocol.ConnectionID{0xa, 0xb, 0xc, 0xd, 0xe}
 
 	BeforeEach(func() {
 		addedConnIDs = nil
@@ -27,6 +28,7 @@ var _ = Describe("Connection ID Generator", func() {
 		replacedWithClosed = make(map[string]packetHandler)
 		g = newConnIDGenerator(
 			initialConnID,
+			initialClientDestConnID,
 			func(c protocol.ConnectionID) [16]byte {
 				addedConnIDs = append(addedConnIDs, c)
 				l := uint8(len(addedConnIDs))
@@ -101,12 +103,19 @@ var _ = Describe("Connection ID Generator", func() {
 		Expect(queuedFrames).To(HaveLen(1))
 	})
 
+	It("retires the client's initial destination connection ID when the handshake completes", func() {
+		g.SetHandshakeComplete()
+		Expect(retiredConnIDs).To(HaveLen(1))
+		Expect(retiredConnIDs[0]).To(Equal(initialClientDestConnID))
+	})
+
 	It("removes all connection IDs", func() {
 		Expect(g.SetMaxActiveConnIDs(5)).To(Succeed())
 		Expect(queuedFrames).To(HaveLen(5))
 		g.RemoveAll()
-		Expect(removedConnIDs).To(HaveLen(6)) // initial connection ID and newly issued ones
+		Expect(removedConnIDs).To(HaveLen(7)) // initial conn ID, initial client dest conn id, and newly issued ones
 		Expect(removedConnIDs).To(ContainElement(initialConnID))
+		Expect(removedConnIDs).To(ContainElement(initialClientDestConnID))
 		for _, f := range queuedFrames {
 			nf := f.(*wire.NewConnectionIDFrame)
 			Expect(removedConnIDs).To(ContainElement(nf.ConnectionID))
@@ -118,7 +127,8 @@ var _ = Describe("Connection ID Generator", func() {
 		Expect(queuedFrames).To(HaveLen(5))
 		sess := NewMockPacketHandler(mockCtrl)
 		g.ReplaceWithClosed(sess)
-		Expect(replacedWithClosed).To(HaveLen(6)) // initial connection ID and newly issued ones
+		Expect(replacedWithClosed).To(HaveLen(7)) // initial conn ID, initial client dest conn id, and newly issued ones
+		Expect(replacedWithClosed).To(HaveKeyWithValue(string(initialClientDestConnID), sess))
 		Expect(replacedWithClosed).To(HaveKeyWithValue(string(initialConnID), sess))
 		for _, f := range queuedFrames {
 			nf := f.(*wire.NewConnectionIDFrame)
