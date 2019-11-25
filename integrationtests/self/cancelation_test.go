@@ -12,7 +12,6 @@ import (
 	"time"
 
 	quic "github.com/lucas-clemente/quic-go"
-	"github.com/lucas-clemente/quic-go/integrationtests/tools/testserver"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -43,7 +42,7 @@ var _ = Describe("Stream Cancelations", func() {
 						defer wg.Done()
 						str, err := sess.OpenUniStreamSync(context.Background())
 						Expect(err).ToNot(HaveOccurred())
-						if _, err = str.Write(testserver.PRData); err != nil {
+						if _, err = str.Write(PRData); err != nil {
 							Expect(err).To(MatchError(fmt.Sprintf("stream %d was reset with error code %d", str.StreamID(), str.StreamID())))
 							atomic.AddInt32(&canceledCounter, 1)
 							return
@@ -87,7 +86,7 @@ var _ = Describe("Stream Cancelations", func() {
 					}
 					data, err := ioutil.ReadAll(str)
 					Expect(err).ToNot(HaveOccurred())
-					Expect(data).To(Equal(testserver.PRData))
+					Expect(data).To(Equal(PRData))
 				}()
 			}
 			wg.Wait()
@@ -125,17 +124,17 @@ var _ = Describe("Stream Cancelations", func() {
 					Expect(err).ToNot(HaveOccurred())
 					// only read some data from about 1/3 of the streams
 					if rand.Int31()%3 != 0 {
-						length := int(rand.Int31n(int32(len(testserver.PRData) - 1)))
+						length := int(rand.Int31n(int32(len(PRData) - 1)))
 						data, err := ioutil.ReadAll(io.LimitReader(str, int64(length)))
 						Expect(err).ToNot(HaveOccurred())
 						str.CancelRead(quic.ErrorCode(str.StreamID()))
-						Expect(data).To(Equal(testserver.PRData[:length]))
+						Expect(data).To(Equal(PRData[:length]))
 						atomic.AddInt32(&canceledCounter, 1)
 						return
 					}
 					data, err := ioutil.ReadAll(str)
 					Expect(err).ToNot(HaveOccurred())
-					Expect(data).To(Equal(testserver.PRData))
+					Expect(data).To(Equal(PRData))
 				}()
 			}
 			wg.Wait()
@@ -177,7 +176,7 @@ var _ = Describe("Stream Cancelations", func() {
 						Expect(err).To(MatchError(fmt.Sprintf("stream %d was reset with error code %d", str.StreamID(), str.StreamID())))
 						return
 					}
-					Expect(data).To(Equal(testserver.PRData))
+					Expect(data).To(Equal(PRData))
 				}()
 			}
 			wg.Wait()
@@ -211,7 +210,7 @@ var _ = Describe("Stream Cancelations", func() {
 							atomic.AddInt32(&canceledCounter, 1)
 							return
 						}
-						_, err = str.Write(testserver.PRData)
+						_, err = str.Write(PRData)
 						Expect(err).ToNot(HaveOccurred())
 						Expect(str.Close()).To(Succeed())
 					}()
@@ -238,14 +237,14 @@ var _ = Describe("Stream Cancelations", func() {
 						Expect(err).ToNot(HaveOccurred())
 						// only write some data from about 1/3 of the streams, then cancel
 						if rand.Int31()%3 != 0 {
-							length := int(rand.Int31n(int32(len(testserver.PRData) - 1)))
-							_, err = str.Write(testserver.PRData[:length])
+							length := int(rand.Int31n(int32(len(PRData) - 1)))
+							_, err = str.Write(PRData[:length])
 							Expect(err).ToNot(HaveOccurred())
 							str.CancelWrite(quic.ErrorCode(str.StreamID()))
 							atomic.AddInt32(&canceledCounter, 1)
 							return
 						}
-						_, err = str.Write(testserver.PRData)
+						_, err = str.Write(PRData)
 						Expect(err).ToNot(HaveOccurred())
 						Expect(str.Close()).To(Succeed())
 					}()
@@ -280,7 +279,7 @@ var _ = Describe("Stream Cancelations", func() {
 							str.CancelWrite(quic.ErrorCode(str.StreamID()))
 							return
 						}
-						if _, err = str.Write(testserver.PRData); err != nil {
+						if _, err = str.Write(PRData); err != nil {
 							Expect(err).To(MatchError(fmt.Sprintf("stream %d was reset with error code %d", str.StreamID(), str.StreamID())))
 							return
 						}
@@ -318,7 +317,7 @@ var _ = Describe("Stream Cancelations", func() {
 						return
 					}
 					atomic.AddInt32(&counter, 1)
-					Expect(data).To(Equal(testserver.PRData))
+					Expect(data).To(Equal(PRData))
 				}()
 			}
 			wg.Wait()
@@ -350,15 +349,15 @@ var _ = Describe("Stream Cancelations", func() {
 						str, err := sess.OpenUniStreamSync(context.Background())
 						Expect(err).ToNot(HaveOccurred())
 						// cancel about half of the streams
-						length := len(testserver.PRData)
+						length := len(PRData)
 						if rand.Int31()%2 == 0 {
-							length = int(rand.Int31n(int32(len(testserver.PRData) - 1)))
+							length = int(rand.Int31n(int32(len(PRData) - 1)))
 						}
-						if _, err = str.Write(testserver.PRData[:length]); err != nil {
+						if _, err = str.Write(PRData[:length]); err != nil {
 							Expect(err).To(MatchError(fmt.Sprintf("stream %d was reset with error code %d", str.StreamID(), str.StreamID())))
 							return
 						}
-						if length < len(testserver.PRData) {
+						if length < len(PRData) {
 							str.CancelWrite(quic.ErrorCode(str.StreamID()))
 						} else {
 							Expect(str.Close()).To(Succeed())
@@ -388,10 +387,10 @@ var _ = Describe("Stream Cancelations", func() {
 					Expect(err).ToNot(HaveOccurred())
 
 					r := io.Reader(str)
-					length := len(testserver.PRData)
+					length := len(PRData)
 					// cancel around half of the streams
 					if rand.Int31()%2 == 0 {
-						length = int(rand.Int31n(int32(len(testserver.PRData) - 1)))
+						length = int(rand.Int31n(int32(len(PRData) - 1)))
 						r = io.LimitReader(str, int64(length))
 					}
 					data, err := ioutil.ReadAll(r)
@@ -399,14 +398,14 @@ var _ = Describe("Stream Cancelations", func() {
 						Expect(err).To(MatchError(fmt.Sprintf("stream %d was reset with error code %d", str.StreamID(), str.StreamID())))
 						return
 					}
-					Expect(data).To(Equal(testserver.PRData[:length]))
-					if length < len(testserver.PRData) {
+					Expect(data).To(Equal(PRData[:length]))
+					if length < len(PRData) {
 						str.CancelRead(quic.ErrorCode(str.StreamID()))
 						return
 					}
 
 					atomic.AddInt32(&counter, 1)
-					Expect(data).To(Equal(testserver.PRData))
+					Expect(data).To(Equal(PRData))
 				}()
 			}
 			wg.Wait()
@@ -437,7 +436,7 @@ var _ = Describe("Stream Cancelations", func() {
 						defer GinkgoRecover()
 						str, err := sess.OpenUniStreamSync(context.Background())
 						Expect(err).ToNot(HaveOccurred())
-						_, err = str.Write(testserver.PRData)
+						_, err = str.Write(PRData)
 						Expect(err).ToNot(HaveOccurred())
 						Expect(str.Close()).To(Succeed())
 					}()
@@ -476,7 +475,7 @@ var _ = Describe("Stream Cancelations", func() {
 					}
 					data, err := ioutil.ReadAll(str)
 					Expect(err).ToNot(HaveOccurred())
-					Expect(data).To(Equal(testserver.PRData))
+					Expect(data).To(Equal(PRData))
 					wg.Done()
 				}()
 			}
@@ -520,7 +519,7 @@ var _ = Describe("Stream Cancelations", func() {
 					numOpened++
 					go func(str quic.SendStream) {
 						defer GinkgoRecover()
-						_, err = str.Write(testserver.PRData)
+						_, err = str.Write(PRData)
 						Expect(err).ToNot(HaveOccurred())
 						Expect(str.Close()).To(Succeed())
 					}(str)
@@ -547,7 +546,7 @@ var _ = Describe("Stream Cancelations", func() {
 					Expect(err).ToNot(HaveOccurred())
 					data, err := ioutil.ReadAll(str)
 					Expect(err).ToNot(HaveOccurred())
-					Expect(data).To(Equal(testserver.PRData))
+					Expect(data).To(Equal(PRData))
 					wg.Done()
 				}()
 			}

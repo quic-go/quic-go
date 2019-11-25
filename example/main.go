@@ -19,7 +19,6 @@ import (
 
 	"github.com/lucas-clemente/quic-go"
 	"github.com/lucas-clemente/quic-go/http3"
-	"github.com/lucas-clemente/quic-go/integrationtests/tools/testserver"
 	"github.com/lucas-clemente/quic-go/internal/testdata"
 	"github.com/lucas-clemente/quic-go/internal/utils"
 	"github.com/lucas-clemente/quic-go/quictrace"
@@ -39,6 +38,17 @@ func (b *binds) Set(v string) error {
 // Size is needed by the /demo/upload handler to determine the size of the uploaded file
 type Size interface {
 	Size() int64
+}
+
+// See https://en.wikipedia.org/wiki/Lehmer_random_number_generator
+func generatePRData(l int) []byte {
+	res := make([]byte, l)
+	seed := uint64(1)
+	for i := 0; i < l; i++ {
+		seed = seed * 48271 % 2147483647
+		res[i] = byte(seed)
+	}
+	return res
 }
 
 var tracer quictrace.Tracer
@@ -93,7 +103,7 @@ func setupHandler(www string, trace bool) http.Handler {
 				w.WriteHeader(400)
 				return
 			}
-			w.Write(testserver.GeneratePRData(int(num)))
+			w.Write(generatePRData(int(num)))
 		})
 	}
 

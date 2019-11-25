@@ -27,6 +27,29 @@ func getTLSClientConfig() *tls.Config {
 	}
 }
 
+const (
+	dataLen     = 500 * 1024       // 500 KB
+	dataLenLong = 50 * 1024 * 1024 // 50 MB
+)
+
+var (
+	// PRData contains dataLen bytes of pseudo-random data.
+	PRData = GeneratePRData(dataLen)
+	// PRDataLong contains dataLenLong bytes of pseudo-random data.
+	PRDataLong = GeneratePRData(dataLenLong)
+)
+
+// See https://en.wikipedia.org/wiki/Lehmer_random_number_generator
+func GeneratePRData(l int) []byte {
+	res := make([]byte, l)
+	seed := uint64(1)
+	for i := 0; i < l; i++ {
+		seed = seed * 48271 % 2147483647
+		res[i] = byte(seed)
+	}
+	return res
+}
+
 func TestSelf(t *testing.T) {
 	RegisterFailHandler(Fail)
 	RunSpecs(t, "Self integration tests")
