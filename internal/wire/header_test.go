@@ -558,4 +558,9 @@ var _ = Describe("Header Parsing", func() {
 			}
 		})
 	})
+
+	It("tells its packet type for logging", func() {
+		Expect((&Header{IsLongHeader: true, Type: protocol.PacketTypeHandshake}).PacketType()).To(Equal("Handshake"))
+		Expect((&Header{}).PacketType()).To(Equal("1-RTT"))
+	})
 })

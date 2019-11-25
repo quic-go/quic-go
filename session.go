@@ -665,7 +665,7 @@ func (s *session) handleSinglePacket(p *receivedPacket, hdr *wire.Header) bool /
 	// After this, all packets with a different source connection have to be ignored.
 	destConnID := s.connIDManager.Get()
 	if s.receivedFirstPacket && hdr.IsLongHeader && !hdr.SrcConnectionID.Equal(destConnID) {
-		s.logger.Debugf("Dropping packet with unexpected source connection ID: %s (expected %s)", hdr.SrcConnectionID, destConnID)
+		s.logger.Debugf("Dropping %s packet with unexpected source connection ID: %s (expected %s)", hdr.PacketType(), hdr.SrcConnectionID, destConnID)
 		return false
 	}
 	// drop 0-RTT packets
@@ -677,7 +677,7 @@ func (s *session) handleSinglePacket(p *receivedPacket, hdr *wire.Header) bool /
 	if err != nil {
 		switch err {
 		case handshake.ErrKeysDropped:
-			s.logger.Debugf("Dropping packet because we already dropped the keys.")
+			s.logger.Debugf("Dropping %s packet because we already dropped the keys.", hdr.PacketType())
 		case handshake.ErrKeysNotYetAvailable:
 			// Sealer for this encryption level not yet available.
 			// Try again later.
@@ -688,7 +688,7 @@ func (s *session) handleSinglePacket(p *receivedPacket, hdr *wire.Header) bool /
 		default:
 			// This might be a packet injected by an attacker.
 			// Drop it.
-			s.logger.Debugf("Dropping packet that could not be unpacked. Error: %s", err)
+			s.logger.Debugf("Dropping %s packet that could not be unpacked. Error: %s", hdr.PacketType(), err)
 		}
 		return false
 	}
