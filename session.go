@@ -873,7 +873,6 @@ func (s *session) handleCryptoFrame(frame *wire.CryptoFrame, encLevel protocol.E
 	if err != nil {
 		return err
 	}
-	s.logger.Debugf("Handled crypto frame at level %s. encLevelChanged: %t", encLevel, encLevelChanged)
 	if encLevelChanged {
 		s.tryDecryptingQueuedPackets()
 	}
