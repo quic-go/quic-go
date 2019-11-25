@@ -288,14 +288,19 @@ func (h *cryptoSetup) HandleMessage(data []byte, encLevel protocol.EncryptionLev
 	if encLevel == protocol.Encryption1RTT {
 		h.handlePostHandshakeMessage()
 	}
+	var strFinished bool
 	switch h.perspective {
 	case protocol.PerspectiveClient:
-		return h.handleMessageForClient(msgType)
+		strFinished = h.handleMessageForClient(msgType)
 	case protocol.PerspectiveServer:
-		return h.handleMessageForServer(msgType)
+		strFinished = h.handleMessageForServer(msgType)
 	default:
 		panic("")
 	}
+	if strFinished {
+		h.logger.Debugf("Done with encryption level %s.", encLevel)
+	}
+	return strFinished
 }
 
 func (h *cryptoSetup) checkEncryptionLevel(msgType messageType, encLevel protocol.EncryptionLevel) error {
