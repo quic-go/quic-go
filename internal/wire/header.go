@@ -247,3 +247,11 @@ func (h *Header) ParseExtended(b *bytes.Reader, ver protocol.VersionNumber) (*Ex
 func (h *Header) toExtendedHeader() *ExtendedHeader {
 	return &ExtendedHeader{Header: *h}
 }
+
+// PacketType is the type of the packet, for logging purposes
+func (h *Header) PacketType() string {
+	if h.IsLongHeader {
+		return h.Type.String()
+	}
+	return "1-RTT"
+}
