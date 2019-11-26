@@ -1689,6 +1689,32 @@ var _ = Describe("Client Session", func() {
 		Eventually(sess.Context().Done()).Should(BeClosed())
 	})
 
+	It("continues accepting Long Header packets after using a new connection ID", func() {
+		unpacker := NewMockUnpacker(mockCtrl)
+		sess.unpacker = unpacker
+		sessionRunner.EXPECT().AddResetToken(gomock.Any(), gomock.Any())
+		sess.handleNewConnectionIDFrame(&wire.NewConnectionIDFrame{
+			SequenceNumber: 1,
+			ConnectionID:   protocol.ConnectionID{1, 2, 3, 4, 5},
+		})
+		Expect(sess.connIDManager.Get()).To(Equal(protocol.ConnectionID{1, 2, 3, 4, 5}))
+		// now receive a packet with the original source connection ID
+		unpacker.EXPECT().Unpack(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(func(hdr *wire.Header, _ time.Time, _ []byte) (*unpackedPacket, error) {
+			return &unpackedPacket{
+				hdr:             &wire.ExtendedHeader{Header: *hdr},
+				data:            []byte{0},
+				encryptionLevel: protocol.EncryptionHandshake,
+			}, nil
+		})
+		hdr := &wire.Header{
+			IsLongHeader:     true,
+			Type:             protocol.PacketTypeHandshake,
+			DestConnectionID: srcConnID,
+			SrcConnectionID:  destConnID,
+		}
+		Expect(sess.handleSinglePacket(&receivedPacket{buffer: getPacketBuffer()}, hdr)).To(BeTrue())
+	})
+
 	Context("handling tokens", func() {
 		var mockTokenStore *MockTokenStore
 
