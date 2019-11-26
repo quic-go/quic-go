@@ -9,7 +9,6 @@ import (
 	"time"
 
 	quic "github.com/lucas-clemente/quic-go"
-	"github.com/lucas-clemente/quic-go/integrationtests/tools/testlog"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 
 	. "github.com/onsi/ginkgo"
@@ -93,7 +92,7 @@ var _ = Describe("Multiplexing", func() {
 						close(done2)
 					}()
 					timeout := 30 * time.Second
-					if testlog.Debug() {
+					if debugLog() {
 						timeout = time.Minute
 					}
 					Eventually(done1, timeout).Should(BeClosed())
@@ -127,7 +126,7 @@ var _ = Describe("Multiplexing", func() {
 						close(done2)
 					}()
 					timeout := 30 * time.Second
-					if testlog.Debug() {
+					if debugLog() {
 						timeout = time.Minute
 					}
 					Eventually(done1, timeout).Should(BeClosed())
@@ -157,7 +156,7 @@ var _ = Describe("Multiplexing", func() {
 						close(done)
 					}()
 					timeout := 30 * time.Second
-					if testlog.Debug() {
+					if debugLog() {
 						timeout = time.Minute
 					}
 					Eventually(done, timeout).Should(BeClosed())
@@ -210,7 +209,7 @@ var _ = Describe("Multiplexing", func() {
 						close(done2)
 					}()
 					timeout := 30 * time.Second
-					if testlog.Debug() {
+					if debugLog() {
 						timeout = time.Minute
 					}
 					Eventually(done1, timeout).Should(BeClosed())
