@@ -5,6 +5,7 @@ import (
 	"encoding/binary"
 	"math"
 	"math/rand"
+	"net"
 	"time"
 
 	"github.com/lucas-clemente/quic-go/internal/protocol"
@@ -277,5 +278,53 @@ var _ = Describe("Transport Parameters", func() {
 		}
 		data := params.Marshal()
 		Expect((&TransportParameters{}).Unmarshal(data, protocol.PerspectiveClient)).To(MatchError("TRANSPORT_PARAMETER_ERROR: client sent an original_connection_id"))
+	})
+
+	Context("preferred address", func() {
+		pa := &PreferredAddress{
+			IPv4:                net.IPv4(127, 0, 0, 1),
+			IPv4Port:            42,
+			IPv6:                net.IP{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16},
+			IPv6Port:            13,
+			ConnectionID:        protocol.ConnectionID{0xde, 0xad, 0xbe, 0xef},
+			StatelessResetToken: [16]byte{16, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1},
+		}
+
+		It("marshals and unmarshals", func() {
+			data := (&TransportParameters{PreferredAddress: pa}).Marshal()
+			p := &TransportParameters{}
+			Expect(p.Unmarshal(data, protocol.PerspectiveServer)).To(Succeed())
+			Expect(p.PreferredAddress.IPv4.String()).To(Equal(pa.IPv4.String()))
+			Expect(p.PreferredAddress.IPv4Port).To(Equal(pa.IPv4Port))
+			Expect(p.PreferredAddress.IPv6.String()).To(Equal(pa.IPv6.String()))
+			Expect(p.PreferredAddress.IPv6Port).To(Equal(pa.IPv6Port))
+			Expect(p.PreferredAddress.ConnectionID).To(Equal(pa.ConnectionID))
+			Expect(p.PreferredAddress.StatelessResetToken).To(Equal(pa.StatelessResetToken))
+		})
+
+		It("errors if the client sent a preferred_address", func() {
+			data := (&TransportParameters{PreferredAddress: pa}).Marshal()
+			p := &TransportParameters{}
+			Expect(p.Unmarshal(data, protocol.PerspectiveClient)).To(MatchError("TRANSPORT_PARAMETER_ERROR: client sent a preferred_address"))
+		})
+
+		It("errors on EOF", func() {
+			raw := []byte{
+				127, 0, 0, 1, // IPv4
+				0, 42, // IPv4 Port
+				1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, // IPv6
+				13, 37, // IPv6 Port,
+				4, // conn ID len
+				0xde, 0xad, 0xbe, 0xef,
+				16, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, // stateless reset token
+			}
+			for i := 1; i < len(raw); i++ {
+				buf := &bytes.Buffer{}
+				utils.BigEndian.WriteUint16(buf, uint16(preferredAddressParamaterID))
+				buf.Write(prependLength(raw[:i]))
+				p := &TransportParameters{}
+				Expect(p.Unmarshal(prependLength(buf.Bytes()), protocol.PerspectiveServer)).ToNot(Succeed())
+			}
+		})
 	})
 })
