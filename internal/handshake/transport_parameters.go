@@ -36,7 +36,7 @@ const (
 	ackDelayExponentParameterID               transportParameterID = 0xa
 	maxAckDelayParameterID                    transportParameterID = 0xb
 	disableMigrationParameterID               transportParameterID = 0xc
-	activeConnectionIDLimitParameterId        transportParameterID = 0xe
+	activeConnectionIDLimitParameterID        transportParameterID = 0xe
 )
 
 // TransportParameters are parameters sent to the peer during the handshake
@@ -111,7 +111,7 @@ func (p *TransportParameters) unmarshal(data []byte, sentBy protocol.Perspective
 			initialMaxStreamsUniParameterID,
 			idleTimeoutParameterID,
 			maxPacketSizeParameterID,
-			activeConnectionIDLimitParameterId:
+			activeConnectionIDLimitParameterID:
 			if err := p.readNumericTransportParameter(r, paramID, int(paramLen)); err != nil {
 				return err
 			}
@@ -217,7 +217,7 @@ func (p *TransportParameters) readNumericTransportParameter(
 			maxAckDelay = utils.InfDuration
 		}
 		p.MaxAckDelay = maxAckDelay
-	case activeConnectionIDLimitParameterId:
+	case activeConnectionIDLimitParameterID:
 		p.ActiveConnectionIDLimit = val
 	default:
 		return fmt.Errorf("TransportParameter BUG: transport parameter %d not found", paramID)
@@ -281,7 +281,7 @@ func (p *TransportParameters) Marshal() []byte {
 		b.Write(p.OriginalConnectionID.Bytes())
 	}
 	// active_connection_id_limit
-	p.marshalVarintParam(b, activeConnectionIDLimitParameterId, p.ActiveConnectionIDLimit)
+	p.marshalVarintParam(b, activeConnectionIDLimitParameterID, p.ActiveConnectionIDLimit)
 
 	data := b.Bytes()
 	binary.BigEndian.PutUint16(data[:2], uint16(b.Len()-2))
