@@ -20,6 +20,7 @@ const (
 	FinalSizeError          ErrorCode = 0x6
 	FrameEncodingError      ErrorCode = 0x7
 	TransportParameterError ErrorCode = 0x8
+	ConnectionIDLimitError  ErrorCode = 0x9
 	ProtocolViolation       ErrorCode = 0xa
 	CryptoBufferExceeded    ErrorCode = 0xd
 )
@@ -64,6 +65,8 @@ func (e ErrorCode) String() string {
 		return "FRAME_ENCODING_ERROR"
 	case TransportParameterError:
 		return "TRANSPORT_PARAMETER_ERROR"
+	case ConnectionIDLimitError:
+		return "CONNECTION_ID_LIMIT_ERROR"
 	case ProtocolViolation:
 		return "PROTOCOL_VIOLATION"
 	case CryptoBufferExceeded:
