@@ -48,6 +48,20 @@ func (mr *MockPacketHandlerManagerMockRecorder) Add(arg0, arg1 interface{}) *gom
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Add", reflect.TypeOf((*MockPacketHandlerManager)(nil).Add), arg0, arg1)
 }
 
+// AddIfNotTaken mocks base method
+func (m *MockPacketHandlerManager) AddIfNotTaken(arg0 protocol.ConnectionID, arg1 packetHandler) bool {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "AddIfNotTaken", arg0, arg1)
+	ret0, _ := ret[0].(bool)
+	return ret0
+}
+
+// AddIfNotTaken indicates an expected call of AddIfNotTaken
+func (mr *MockPacketHandlerManagerMockRecorder) AddIfNotTaken(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddIfNotTaken", reflect.TypeOf((*MockPacketHandlerManager)(nil).AddIfNotTaken), arg0, arg1)
+}
+
 // AddResetToken mocks base method
 func (m *MockPacketHandlerManager) AddResetToken(arg0 [16]byte, arg1 packetHandler) {
 	m.ctrl.T.Helper()
@@ -84,6 +98,20 @@ func (m *MockPacketHandlerManager) CloseServer() {
 func (mr *MockPacketHandlerManagerMockRecorder) CloseServer() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CloseServer", reflect.TypeOf((*MockPacketHandlerManager)(nil).CloseServer))
+}
+
+// GetStatelessResetToken mocks base method
+func (m *MockPacketHandlerManager) GetStatelessResetToken(arg0 protocol.ConnectionID) [16]byte {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetStatelessResetToken", arg0)
+	ret0, _ := ret[0].([16]byte)
+	return ret0
+}
+
+// GetStatelessResetToken indicates an expected call of GetStatelessResetToken
+func (mr *MockPacketHandlerManagerMockRecorder) GetStatelessResetToken(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetStatelessResetToken", reflect.TypeOf((*MockPacketHandlerManager)(nil).GetStatelessResetToken), arg0)
 }
 
 // Remove mocks base method

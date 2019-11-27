@@ -196,6 +196,7 @@ var newSession = func(
 	clientDestConnID protocol.ConnectionID,
 	destConnID protocol.ConnectionID,
 	srcConnID protocol.ConnectionID,
+	statelessResetToken [16]byte,
 	conf *Config,
 	tlsConf *tls.Config,
 	tokenGenerator *handshake.TokenGenerator,
@@ -239,8 +240,6 @@ var newSession = func(
 	initialStream := newCryptoStream()
 	handshakeStream := newCryptoStream()
 	oneRTTStream := newPostHandshakeCryptoStream(s.framer)
-	runner.Add(clientDestConnID, s)
-	token := runner.Add(srcConnID, s)
 	params := &handshake.TransportParameters{
 		InitialMaxStreamDataBidiLocal:  protocol.InitialMaxStreamData,
 		InitialMaxStreamDataBidiRemote: protocol.InitialMaxStreamData,
@@ -252,7 +251,7 @@ var newSession = func(
 		MaxAckDelay:                    protocol.MaxAckDelayInclGranularity,
 		AckDelayExponent:               protocol.AckDelayExponent,
 		DisableMigration:               true,
-		StatelessResetToken:            &token,
+		StatelessResetToken:            &statelessResetToken,
 		OriginalConnectionID:           origDestConnID,
 		ActiveConnectionIDLimit:        protocol.MaxActiveConnectionIDs,
 	}

@@ -108,7 +108,6 @@ var _ = Describe("Session", func() {
 		Eventually(areSessionsRunning).Should(BeFalse())
 
 		sessionRunner = NewMockSessionRunner(mockCtrl)
-		sessionRunner.EXPECT().Add(gomock.Any(), gomock.Any()).Times(2)
 		mconn = newMockConnection()
 		tokenGenerator, err := handshake.NewTokenGenerator()
 		Expect(err).ToNot(HaveOccurred())
@@ -119,6 +118,7 @@ var _ = Describe("Session", func() {
 			clientDestConnID,
 			destConnID,
 			srcConnID,
+			[16]byte{},
 			populateServerConfig(&Config{}),
 			nil, // tls.Config
 			tokenGenerator,
