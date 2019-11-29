@@ -8,7 +8,6 @@ import (
 	"time"
 
 	quic "github.com/lucas-clemente/quic-go"
-	"github.com/lucas-clemente/quic-go/integrationtests/tools/testserver"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -60,7 +59,7 @@ var _ = Describe("Stream deadline tests", func() {
 			done := make(chan struct{})
 			go func() {
 				defer GinkgoRecover()
-				_, err := serverStr.Write(testserver.PRDataLong)
+				_, err := serverStr.Write(PRDataLong)
 				Expect(err).ToNot(HaveOccurred())
 				close(done)
 			}()
@@ -68,9 +67,9 @@ var _ = Describe("Stream deadline tests", func() {
 			var bytesRead int
 			var timeoutCounter int
 			buf := make([]byte, 1<<10)
-			data := make([]byte, len(testserver.PRDataLong))
+			data := make([]byte, len(PRDataLong))
 			clientStr.SetReadDeadline(time.Now().Add(timeout))
-			for bytesRead < len(testserver.PRDataLong) {
+			for bytesRead < len(PRDataLong) {
 				n, err := clientStr.Read(buf)
 				if nerr, ok := err.(net.Error); ok && nerr.Timeout() {
 					timeoutCounter++
@@ -81,7 +80,7 @@ var _ = Describe("Stream deadline tests", func() {
 				copy(data[bytesRead:], buf[:n])
 				bytesRead += n
 			}
-			Expect(data).To(Equal(testserver.PRDataLong))
+			Expect(data).To(Equal(PRDataLong))
 			// make sure the test actually worked an Read actually ran into the deadline a few times
 			Expect(timeoutCounter).To(BeNumerically(">=", 10))
 			Eventually(done).Should(BeClosed())
@@ -91,14 +90,14 @@ var _ = Describe("Stream deadline tests", func() {
 			const timeout = 20 * time.Millisecond
 			go func() {
 				defer GinkgoRecover()
-				_, err := serverStr.Write(testserver.PRDataLong)
+				_, err := serverStr.Write(PRDataLong)
 				Expect(err).ToNot(HaveOccurred())
 			}()
 
 			var bytesRead int
 			var timeoutCounter int
 			buf := make([]byte, 1<<10)
-			data := make([]byte, len(testserver.PRDataLong))
+			data := make([]byte, len(PRDataLong))
 			clientStr.SetReadDeadline(time.Now().Add(timeout))
 			deadlineDone := make(chan struct{})
 			received := make(chan struct{})
@@ -115,7 +114,7 @@ var _ = Describe("Stream deadline tests", func() {
 				}
 			}()
 
-			for bytesRead < len(testserver.PRDataLong) {
+			for bytesRead < len(PRDataLong) {
 				n, err := clientStr.Read(buf)
 				if nerr, ok := err.(net.Error); ok && nerr.Timeout() {
 					timeoutCounter++
@@ -126,7 +125,7 @@ var _ = Describe("Stream deadline tests", func() {
 				bytesRead += n
 			}
 			close(received)
-			Expect(data).To(Equal(testserver.PRDataLong))
+			Expect(data).To(Equal(PRDataLong))
 			// make sure the test actually worked an Read actually ran into the deadline a few times
 			Expect(timeoutCounter).To(BeNumerically(">=", 10))
 			Eventually(deadlineDone).Should(BeClosed())
@@ -141,15 +140,15 @@ var _ = Describe("Stream deadline tests", func() {
 				defer GinkgoRecover()
 				data, err := ioutil.ReadAll(serverStr)
 				Expect(err).ToNot(HaveOccurred())
-				Expect(data).To(Equal(testserver.PRDataLong))
+				Expect(data).To(Equal(PRDataLong))
 				close(done)
 			}()
 
 			var bytesWritten int
 			var timeoutCounter int
 			clientStr.SetWriteDeadline(time.Now().Add(timeout))
-			for bytesWritten < len(testserver.PRDataLong) {
-				n, err := clientStr.Write(testserver.PRDataLong[bytesWritten:])
+			for bytesWritten < len(PRDataLong) {
+				n, err := clientStr.Write(PRDataLong[bytesWritten:])
 				if nerr, ok := err.(net.Error); ok && nerr.Timeout() {
 					timeoutCounter++
 					clientStr.SetWriteDeadline(time.Now().Add(timeout))
@@ -171,7 +170,7 @@ var _ = Describe("Stream deadline tests", func() {
 				defer GinkgoRecover()
 				data, err := ioutil.ReadAll(serverStr)
 				Expect(err).ToNot(HaveOccurred())
-				Expect(data).To(Equal(testserver.PRDataLong))
+				Expect(data).To(Equal(PRDataLong))
 				close(readDone)
 			}()
 
@@ -193,8 +192,8 @@ var _ = Describe("Stream deadline tests", func() {
 			var bytesWritten int
 			var timeoutCounter int
 			clientStr.SetWriteDeadline(time.Now().Add(timeout))
-			for bytesWritten < len(testserver.PRDataLong) {
-				n, err := clientStr.Write(testserver.PRDataLong[bytesWritten:])
+			for bytesWritten < len(PRDataLong) {
+				n, err := clientStr.Write(PRDataLong[bytesWritten:])
 				if nerr, ok := err.(net.Error); ok && nerr.Timeout() {
 					timeoutCounter++
 				} else {

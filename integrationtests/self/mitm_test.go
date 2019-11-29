@@ -13,7 +13,6 @@ import (
 
 	quic "github.com/lucas-clemente/quic-go"
 	quicproxy "github.com/lucas-clemente/quic-go/integrationtests/tools/proxy"
-	"github.com/lucas-clemente/quic-go/integrationtests/tools/testserver"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/internal/qerr"
 	"github.com/lucas-clemente/quic-go/internal/testutils"
@@ -50,7 +49,7 @@ var _ = Describe("MITM test", func() {
 					Expect(err).ToNot(HaveOccurred())
 					str, err := serverSess.OpenUniStream()
 					Expect(err).ToNot(HaveOccurred())
-					_, err = str.Write(testserver.PRData)
+					_, err = str.Write(PRData)
 					Expect(err).ToNot(HaveOccurred())
 					Expect(str.Close()).To(Succeed())
 				}()
@@ -139,7 +138,7 @@ var _ = Describe("MITM test", func() {
 						Expect(err).ToNot(HaveOccurred())
 						data, err := ioutil.ReadAll(str)
 						Expect(err).ToNot(HaveOccurred())
-						Expect(data).To(Equal(testserver.PRData))
+						Expect(data).To(Equal(PRData))
 						Expect(sess.Close()).To(Succeed())
 					}
 
@@ -185,7 +184,7 @@ var _ = Describe("MITM test", func() {
 					Expect(err).ToNot(HaveOccurred())
 					data, err := ioutil.ReadAll(str)
 					Expect(err).ToNot(HaveOccurred())
-					Expect(data).To(Equal(testserver.PRData))
+					Expect(data).To(Equal(PRData))
 					Expect(sess.Close()).To(Succeed())
 				}
 
