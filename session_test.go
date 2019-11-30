@@ -82,6 +82,7 @@ var _ = Describe("Session", func() {
 	)
 	srcConnID := protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8}
 	destConnID := protocol.ConnectionID{8, 7, 6, 5, 4, 3, 2, 1}
+	clientDestConnID := protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}
 
 	getPacket := func(pn protocol.PacketNumber) *packedPacket {
 		buffer := getPacketBuffer()
@@ -95,6 +96,7 @@ var _ = Describe("Session", func() {
 	}
 
 	expectReplaceWithClosed := func() {
+		sessionRunner.EXPECT().ReplaceWithClosed(clientDestConnID, gomock.Any()).MaxTimes(1)
 		sessionRunner.EXPECT().ReplaceWithClosed(srcConnID, gomock.Any()).Do(func(_ protocol.ConnectionID, s packetHandler) {
 			Expect(s).To(BeAssignableToTypeOf(&closedLocalSession{}))
 			Expect(s.Close()).To(Succeed())
@@ -106,7 +108,6 @@ var _ = Describe("Session", func() {
 		Eventually(areSessionsRunning).Should(BeFalse())
 
 		sessionRunner = NewMockSessionRunner(mockCtrl)
-		sessionRunner.EXPECT().Add(gomock.Any(), gomock.Any())
 		mconn = newMockConnection()
 		tokenGenerator, err := handshake.NewTokenGenerator()
 		Expect(err).ToNot(HaveOccurred())
@@ -114,9 +115,10 @@ var _ = Describe("Session", func() {
 			mconn,
 			sessionRunner,
 			nil,
-			protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8, 9, 10},
+			clientDestConnID,
 			destConnID,
 			srcConnID,
+			[16]byte{},
 			populateServerConfig(&Config{}),
 			nil, // tls.Config
 			tokenGenerator,
@@ -360,6 +362,9 @@ var _ = Describe("Session", func() {
 			sessionRunner.EXPECT().ReplaceWithClosed(srcConnID, gomock.Any()).Do(func(_ protocol.ConnectionID, s packetHandler) {
 				Expect(s).To(BeAssignableToTypeOf(&closedRemoteSession{}))
 			})
+			sessionRunner.EXPECT().ReplaceWithClosed(clientDestConnID, gomock.Any()).Do(func(_ protocol.ConnectionID, s packetHandler) {
+				Expect(s).To(BeAssignableToTypeOf(&closedRemoteSession{}))
+			})
 			cryptoSetup.EXPECT().Close()
 
 			go func() {
@@ -379,6 +384,9 @@ var _ = Describe("Session", func() {
 			testErr := qerr.ApplicationError(0x1337, "foobar")
 			streamManager.EXPECT().CloseWithError(testErr)
 			sessionRunner.EXPECT().ReplaceWithClosed(srcConnID, gomock.Any()).Do(func(_ protocol.ConnectionID, s packetHandler) {
+				Expect(s).To(BeAssignableToTypeOf(&closedRemoteSession{}))
+			})
+			sessionRunner.EXPECT().ReplaceWithClosed(clientDestConnID, gomock.Any()).Do(func(_ protocol.ConnectionID, s packetHandler) {
 				Expect(s).To(BeAssignableToTypeOf(&closedRemoteSession{}))
 			})
 			cryptoSetup.EXPECT().Close()
@@ -508,7 +516,7 @@ var _ = Describe("Session", func() {
 
 		It("closes the session in order to recreate it", func() {
 			streamManager.EXPECT().CloseWithError(gomock.Any())
-			sessionRunner.EXPECT().Remove(gomock.Any())
+			sessionRunner.EXPECT().Remove(gomock.Any()).AnyTimes()
 			cryptoSetup.EXPECT().Close()
 			sess.closeForRecreating()
 			Expect(mconn.written).To(BeEmpty()) // no CONNECTION_CLOSE or PUBLIC_RESET sent
@@ -519,7 +527,7 @@ var _ = Describe("Session", func() {
 		It("destroys the session", func() {
 			testErr := errors.New("close")
 			streamManager.EXPECT().CloseWithError(gomock.Any())
-			sessionRunner.EXPECT().Remove(gomock.Any())
+			sessionRunner.EXPECT().Remove(gomock.Any()).AnyTimes()
 			cryptoSetup.EXPECT().Close()
 			sess.destroy(testErr)
 			Eventually(areSessionsRunning).Should(BeFalse())
@@ -1191,6 +1199,7 @@ var _ = Describe("Session", func() {
 		sph.EXPECT().GetLossDetectionTimeout().AnyTimes()
 		sph.EXPECT().TimeUntilSend().AnyTimes()
 		sph.EXPECT().SendMode().AnyTimes()
+		sessionRunner.EXPECT().Retire(clientDestConnID)
 		go func() {
 			defer GinkgoRecover()
 			<-finishHandshake
@@ -1232,6 +1241,7 @@ var _ = Describe("Session", func() {
 
 	It("sends a 1-RTT packet when the handshake completes", func() {
 		done := make(chan struct{})
+		sessionRunner.EXPECT().Retire(clientDestConnID)
 		packer.EXPECT().PackPacket().DoAndReturn(func() (*packedPacket, error) {
 			defer close(done)
 			return &packedPacket{
@@ -1335,7 +1345,7 @@ var _ = Describe("Session", func() {
 			sessionRunner.EXPECT().ReplaceWithClosed(gomock.Any(), gomock.Any()).Do(func(_ protocol.ConnectionID, s packetHandler) {
 				Expect(s).To(BeAssignableToTypeOf(&closedLocalSession{}))
 				Expect(s.Close()).To(Succeed())
-			}).Times(4)
+			}).Times(5) // initial connection ID + initial client dest conn ID + 3 newly issued conn IDs
 			packer.EXPECT().PackConnectionClose(gomock.Any()).Return(&packedPacket{}, nil)
 			cryptoSetup.EXPECT().Close()
 			sess.Close()
@@ -1422,7 +1432,7 @@ var _ = Describe("Session", func() {
 		})
 
 		It("times out due to no network activity", func() {
-			sessionRunner.EXPECT().Remove(gomock.Any())
+			sessionRunner.EXPECT().Remove(gomock.Any()).Times(2)
 			sess.handshakeComplete = true
 			sess.lastPacketReceivedTime = time.Now().Add(-time.Hour)
 			done := make(chan struct{})
@@ -1442,7 +1452,7 @@ var _ = Describe("Session", func() {
 
 		It("times out due to non-completed handshake", func() {
 			sess.sessionCreationTime = time.Now().Add(-protocol.DefaultHandshakeTimeout).Add(-time.Second)
-			sessionRunner.EXPECT().Remove(gomock.Any())
+			sessionRunner.EXPECT().Remove(gomock.Any()).Times(2)
 			cryptoSetup.EXPECT().Close()
 			done := make(chan struct{})
 			go func() {
@@ -1483,7 +1493,10 @@ var _ = Describe("Session", func() {
 
 		It("closes the session due to the idle timeout after handshake", func() {
 			packer.EXPECT().PackPacket().AnyTimes()
-			sessionRunner.EXPECT().Remove(gomock.Any())
+			gomock.InOrder(
+				sessionRunner.EXPECT().Retire(clientDestConnID),
+				sessionRunner.EXPECT().Remove(gomock.Any()),
+			)
 			cryptoSetup.EXPECT().Close()
 			sess.config.IdleTimeout = 0
 			done := make(chan struct{})

@@ -17,6 +17,8 @@ import (
 	"github.com/lucas-clemente/quic-go/internal/qerr"
 	"github.com/lucas-clemente/quic-go/internal/utils"
 	"github.com/lucas-clemente/quic-go/internal/wire"
+
+	"github.com/onsi/ginkgo"
 )
 
 // packetHandler handles packets
@@ -37,6 +39,8 @@ type packetHandlerManager interface {
 	SetServer(unknownPacketHandler)
 	CloseServer()
 	sessionRunner
+	AddIfNotTaken(protocol.ConnectionID, packetHandler) bool
+	GetStatelessResetToken(protocol.ConnectionID) [16]byte
 }
 
 type quicSession interface {
@@ -70,7 +74,7 @@ type baseServer struct {
 	sessionHandler packetHandlerManager
 
 	// set as a member, so they can be set in the tests
-	newSession func(connection, sessionRunner, protocol.ConnectionID /* original connection ID */, protocol.ConnectionID /* client dest connection ID */, protocol.ConnectionID /* destination connection ID */, protocol.ConnectionID /* source connection ID */, *Config, *tls.Config, *handshake.TokenGenerator, utils.Logger, protocol.VersionNumber) quicSession
+	newSession func(connection, sessionRunner, protocol.ConnectionID /* original connection ID */, protocol.ConnectionID /* client dest connection ID */, protocol.ConnectionID /* destination connection ID */, protocol.ConnectionID /* source connection ID */, [16]byte, *Config, *tls.Config, *handshake.TokenGenerator, utils.Logger, protocol.VersionNumber) quicSession
 
 	serverError error
 	errorChan   chan struct{}
@@ -327,6 +331,7 @@ func (s *baseServer) Addr() net.Addr {
 
 func (s *baseServer) handlePacket(p *receivedPacket) {
 	go func() {
+		defer ginkgo.GinkgoRecover()
 		if shouldReleaseBuffer := s.handlePacketImpl(p); !shouldReleaseBuffer {
 			p.buffer.Release()
 		}
@@ -368,7 +373,9 @@ func (s *baseServer) handlePacketImpl(p *receivedPacket) bool /* was the packet 
 		s.logger.Errorf("Error occurred handling initial packet: %s", err)
 		return false
 	}
-	if sess == nil { // a retry was done, or the connection attempt was rejected
+	// A retry was done, or the connection attempt was rejected,
+	// or if the Initial was a duplicate.
+	if sess == nil {
 		return false
 	}
 	// Don't put the packet buffer back if a new session was created.
@@ -419,7 +426,9 @@ func (s *baseServer) handleInitialImpl(p *receivedPacket, hdr *wire.Header) (qui
 		connID,
 		hdr.Version,
 	)
-	sess.handlePacket(p)
+	if sess != nil {
+		sess.handlePacket(p)
+	}
 	return sess, nil
 }
 
@@ -438,12 +447,20 @@ func (s *baseServer) createNewSession(
 		clientDestConnID,
 		destConnID,
 		srcConnID,
+		s.sessionHandler.GetStatelessResetToken(srcConnID),
 		s.config,
 		s.tlsConf,
 		s.tokenGenerator,
 		s.logger,
 		version,
 	)
+	added := s.sessionHandler.AddIfNotTaken(clientDestConnID, sess)
+	// We're already keeping track of this connection ID.
+	// This might happen if we receive two copies of the Initial at the same time.
+	if !added {
+		return nil
+	}
+	s.sessionHandler.Add(srcConnID, sess)
 	go sess.run()
 	go s.handleNewSession(sess)
 	return sess
