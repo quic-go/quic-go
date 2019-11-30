@@ -1121,7 +1121,12 @@ func (s *session) processTransportParametersForClient(data []byte) (*handshake.T
 	if !params.OriginalConnectionID.Equal(s.origDestConnID) {
 		return nil, qerr.Error(qerr.TransportParameterError, fmt.Sprintf("expected original_connection_id to equal %s, is %s", s.origDestConnID, params.OriginalConnectionID))
 	}
-
+	// We don't support connection migration yet, so we don't have any use for the preferred_address.
+	if params.PreferredAddress != nil {
+		s.logger.Debugf("Server sent preferred_address. Retiring the preferred_address connection ID.")
+		// Retire the connection ID.
+		s.framer.QueueControlFrame(&wire.RetireConnectionIDFrame{SequenceNumber: 1})
+	}
 	return params, nil
 }
 

@@ -1810,6 +1810,37 @@ var _ = Describe("Client Session", func() {
 			Eventually(sess.Context().Done()).Should(BeClosed())
 		})
 
+		It("immediately retires the preferred_address connection ID", func() {
+			go func() {
+				defer GinkgoRecover()
+				cryptoSetup.EXPECT().RunHandshake().MaxTimes(1)
+				sess.run()
+			}()
+			params := &handshake.TransportParameters{
+				PreferredAddress: &handshake.PreferredAddress{
+					IPv4:         net.IPv4(127, 0, 0, 1),
+					IPv6:         net.IP{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16},
+					ConnectionID: protocol.ConnectionID{1, 2, 3, 4},
+				},
+			}
+			packer.EXPECT().HandleTransportParameters(gomock.Any())
+			packer.EXPECT().PackPacket().MaxTimes(1)
+			sess.processTransportParameters(params.Marshal())
+			cf, _ := sess.framer.AppendControlFrames(nil, protocol.MaxByteCount)
+			Expect(cf).To(HaveLen(1))
+			Expect(cf[0].Frame).To(Equal(&wire.RetireConnectionIDFrame{SequenceNumber: 1}))
+
+			// make the go routine return
+			sessionRunner.EXPECT().ReplaceWithClosed(gomock.Any(), gomock.Any()).Do(func(_ protocol.ConnectionID, s packetHandler) {
+				Expect(s).To(BeAssignableToTypeOf(&closedLocalSession{}))
+				Expect(s.Close()).To(Succeed())
+			})
+			packer.EXPECT().PackConnectionClose(gomock.Any()).Return(&packedPacket{}, nil)
+			cryptoSetup.EXPECT().Close()
+			sess.Close()
+			Eventually(sess.Context().Done()).Should(BeClosed())
+		})
+
 		It("errors if the TransportParameters contain an original_connection_id, although no Retry was performed", func() {
 			params := &handshake.TransportParameters{
 				OriginalConnectionID: protocol.ConnectionID{0xde, 0xca, 0xfb, 0xad},
