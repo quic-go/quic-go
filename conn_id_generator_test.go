@@ -44,12 +44,12 @@ var _ = Describe("Connection ID Generator", func() {
 	It("issues new connection IDs", func() {
 		Expect(g.SetMaxActiveConnIDs(4)).To(Succeed())
 		Expect(retiredConnIDs).To(BeEmpty())
-		Expect(addedConnIDs).To(HaveLen(4))
+		Expect(addedConnIDs).To(HaveLen(3))
 		for i := 0; i < len(addedConnIDs)-1; i++ {
 			Expect(addedConnIDs[i]).ToNot(Equal(addedConnIDs[i+1]))
 		}
-		Expect(queuedFrames).To(HaveLen(4))
-		for i := 0; i < 4; i++ {
+		Expect(queuedFrames).To(HaveLen(3))
+		for i := 0; i < 3; i++ {
 			f := queuedFrames[i]
 			Expect(f).To(BeAssignableToTypeOf(&wire.NewConnectionIDFrame{}))
 			nf := f.(*wire.NewConnectionIDFrame)
@@ -63,8 +63,8 @@ var _ = Describe("Connection ID Generator", func() {
 	It("limits the number of connection IDs that it issues", func() {
 		Expect(g.SetMaxActiveConnIDs(9999999)).To(Succeed())
 		Expect(retiredConnIDs).To(BeEmpty())
-		Expect(addedConnIDs).To(HaveLen(protocol.MaxIssuedConnectionIDs))
-		Expect(queuedFrames).To(HaveLen(protocol.MaxIssuedConnectionIDs))
+		Expect(addedConnIDs).To(HaveLen(protocol.MaxIssuedConnectionIDs - 1))
+		Expect(queuedFrames).To(HaveLen(protocol.MaxIssuedConnectionIDs - 1))
 	})
 
 	It("errors if the peers tries to retire a connection ID that wasn't yet issued", func() {
@@ -79,7 +79,7 @@ var _ = Describe("Connection ID Generator", func() {
 		Expect(queuedFrames).To(HaveLen(1))
 		Expect(queuedFrames[0]).To(BeAssignableToTypeOf(&wire.NewConnectionIDFrame{}))
 		nf := queuedFrames[0].(*wire.NewConnectionIDFrame)
-		Expect(nf.SequenceNumber).To(BeEquivalentTo(6))
+		Expect(nf.SequenceNumber).To(BeEquivalentTo(5))
 		Expect(nf.ConnectionID.Len()).To(Equal(7))
 	})
 
@@ -111,9 +111,9 @@ var _ = Describe("Connection ID Generator", func() {
 
 	It("removes all connection IDs", func() {
 		Expect(g.SetMaxActiveConnIDs(5)).To(Succeed())
-		Expect(queuedFrames).To(HaveLen(5))
+		Expect(queuedFrames).To(HaveLen(4))
 		g.RemoveAll()
-		Expect(removedConnIDs).To(HaveLen(7)) // initial conn ID, initial client dest conn id, and newly issued ones
+		Expect(removedConnIDs).To(HaveLen(6)) // initial conn ID, initial client dest conn id, and newly issued ones
 		Expect(removedConnIDs).To(ContainElement(initialConnID))
 		Expect(removedConnIDs).To(ContainElement(initialClientDestConnID))
 		for _, f := range queuedFrames {
@@ -124,10 +124,10 @@ var _ = Describe("Connection ID Generator", func() {
 
 	It("replaces with a closed session for all connection IDs", func() {
 		Expect(g.SetMaxActiveConnIDs(5)).To(Succeed())
-		Expect(queuedFrames).To(HaveLen(5))
+		Expect(queuedFrames).To(HaveLen(4))
 		sess := NewMockPacketHandler(mockCtrl)
 		g.ReplaceWithClosed(sess)
-		Expect(replacedWithClosed).To(HaveLen(7)) // initial conn ID, initial client dest conn id, and newly issued ones
+		Expect(replacedWithClosed).To(HaveLen(6)) // initial conn ID, initial client dest conn id, and newly issued ones
 		Expect(replacedWithClosed).To(HaveKeyWithValue(string(initialClientDestConnID), sess))
 		Expect(replacedWithClosed).To(HaveKeyWithValue(string(initialConnID), sess))
 		for _, f := range queuedFrames {

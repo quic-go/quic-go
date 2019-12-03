@@ -51,8 +51,12 @@ func (m *connIDGenerator) SetMaxActiveConnIDs(limit uint64) error {
 		return nil
 	}
 	// The active_connection_id_limit transport parameter is the number of
-	// connection IDs issued in NEW_CONNECTION_IDs frame that the peer will store.
-	for i := uint64(0); i < utils.MinUint64(limit, protocol.MaxIssuedConnectionIDs); i++ {
+	// connection IDs the peer will store. This limit includes the connection ID
+	// used during the handshake, and the one sent in the preferred_address
+	// transport parameter.
+	// We currently don't send the preferred_address transport parameter,
+	// so we can issue (limit - 1) connection IDs.
+	for i := uint64(1); i < utils.MinUint64(limit, protocol.MaxIssuedConnectionIDs); i++ {
 		if err := m.issueNewConnID(); err != nil {
 			return err
 		}
