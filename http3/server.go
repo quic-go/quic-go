@@ -26,7 +26,7 @@ var (
 	quicListenAddr = quic.ListenAddr
 )
 
-const nextProtoH3 = "h3-22"
+const nextProtoH3 = "h3-24"
 
 type requestError struct {
 	err       error
