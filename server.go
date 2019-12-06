@@ -17,8 +17,6 @@ import (
 	"github.com/lucas-clemente/quic-go/internal/qerr"
 	"github.com/lucas-clemente/quic-go/internal/utils"
 	"github.com/lucas-clemente/quic-go/internal/wire"
-
-	"github.com/onsi/ginkgo"
 )
 
 // packetHandler handles packets
@@ -331,7 +329,6 @@ func (s *baseServer) Addr() net.Addr {
 
 func (s *baseServer) handlePacket(p *receivedPacket) {
 	go func() {
-		defer ginkgo.GinkgoRecover()
 		if shouldReleaseBuffer := s.handlePacketImpl(p); !shouldReleaseBuffer {
 			p.buffer.Release()
 		}
