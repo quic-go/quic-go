@@ -17,7 +17,9 @@ import (
 	"github.com/Psiphon-Labs/quic-go"
 	"github.com/Psiphon-Labs/quic-go/internal/utils"
 	"github.com/marten-seemann/qpack"
-	"github.com/onsi/ginkgo"
+	// [Psiphon]
+	// Remove testing dependency.
+	//"github.com/onsi/ginkgo"
 )
 
 // allows mocking of quic.Listen and quic.ListenAddr
@@ -180,7 +182,8 @@ func (s *Server) handleConn(sess quic.Session) {
 			return
 		}
 		go func() {
-			defer ginkgo.GinkgoRecover()
+			// [Psiphon]
+			//defer ginkgo.GinkgoRecover()
 			rerr := s.handleRequest(str, decoder, func() {
 				sess.CloseWithError(quic.ErrorCode(errorFrameUnexpected), "")
 			})
