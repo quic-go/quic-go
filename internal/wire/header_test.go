@@ -188,6 +188,7 @@ var _ = Describe("Header Parsing", func() {
 			Expect(extHdr.PacketNumberLen).To(Equal(protocol.PacketNumberLen4))
 			Expect(b.Len()).To(Equal(6)) // foobar
 			Expect(hdr.ParsedLen()).To(BeEquivalentTo(hdrLen))
+			Expect(extHdr.ParsedLen()).To(Equal(hdr.ParsedLen() + 4))
 		})
 
 		It("errors if 0x40 is not set", func() {
@@ -382,6 +383,7 @@ var _ = Describe("Header Parsing", func() {
 				Expect(data).To(Equal(append(hdrRaw, []byte("foobar")...)))
 				Expect(rest).To(Equal([]byte("raboof")))
 			})
+
 			It("errors on packets that are smaller than the length in the packet header, for too small packet number", func() {
 				buf := &bytes.Buffer{}
 				Expect((&ExtendedHeader{
@@ -438,6 +440,8 @@ var _ = Describe("Header Parsing", func() {
 			Expect(extHdr.DestConnectionID).To(Equal(connID))
 			Expect(extHdr.SrcConnectionID).To(BeEmpty())
 			Expect(extHdr.PacketNumber).To(Equal(protocol.PacketNumber(0x42)))
+			Expect(hdr.ParsedLen()).To(BeEquivalentTo(len(data) - 1))
+			Expect(extHdr.ParsedLen()).To(Equal(hdr.ParsedLen() + 1))
 			Expect(pdata).To(Equal(data))
 			Expect(rest).To(BeEmpty())
 		})

@@ -26,22 +26,32 @@ type ExtendedHeader struct {
 
 	PacketNumberLen protocol.PacketNumberLen
 	PacketNumber    protocol.PacketNumber
+
+	parsedLen protocol.ByteCount
 }
 
 func (h *ExtendedHeader) parse(b *bytes.Reader, v protocol.VersionNumber) (bool /* reserved bits valid */, error) {
+	startLen := b.Len()
 	// read the (now unencrypted) first byte
 	var err error
 	h.typeByte, err = b.ReadByte()
 	if err != nil {
 		return false, err
 	}
-	if _, err := b.Seek(int64(h.ParsedLen())-1, io.SeekCurrent); err != nil {
+	if _, err := b.Seek(int64(h.Header.ParsedLen())-1, io.SeekCurrent); err != nil {
 		return false, err
 	}
+	var reservedBitsValid bool
 	if h.IsLongHeader {
-		return h.parseLongHeader(b, v)
+		reservedBitsValid, err = h.parseLongHeader(b, v)
+	} else {
+		reservedBitsValid, err = h.parseShortHeader(b, v)
 	}
-	return h.parseShortHeader(b, v)
+	if err != nil {
+		return false, err
+	}
+	h.parsedLen = protocol.ByteCount(startLen - b.Len())
+	return reservedBitsValid, err
 }
 
 func (h *ExtendedHeader) parseLongHeader(b *bytes.Reader, _ protocol.VersionNumber) (bool /* reserved bits valid */, error) {
@@ -184,6 +194,11 @@ func (h *ExtendedHeader) writePacketNumber(b *bytes.Buffer) error {
 		return fmt.Errorf("invalid packet number length: %d", h.PacketNumberLen)
 	}
 	return nil
+}
+
+// ParsedLen returns the number of bytes that were consumed when parsing the header
+func (h *ExtendedHeader) ParsedLen() protocol.ByteCount {
+	return h.parsedLen
 }
 
 // GetLength determines the length of the Header.
