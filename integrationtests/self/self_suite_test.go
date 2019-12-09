@@ -10,8 +10,8 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/lucas-clemente/quic-go/internal/testdata"
-	"github.com/lucas-clemente/quic-go/internal/utils"
+	"github.com/Psiphon-Labs/quic-go/internal/testdata"
+	"github.com/Psiphon-Labs/quic-go/internal/utils"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"

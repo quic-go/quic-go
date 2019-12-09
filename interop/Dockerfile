@@ -11,7 +11,7 @@ ENV PATH="/go/bin:${PATH}"
 # build with --build-arg CACHEBUST=$(date +%s)
 ARG CACHEBUST=1
 
-RUN git clone https://github.com/lucas-clemente/quic-go && \
+RUN git clone https://github.com/Psiphon-Labs/quic-go && \
   cd quic-go && \
   git fetch origin interop && git checkout -t origin/interop && \
   go get ./...

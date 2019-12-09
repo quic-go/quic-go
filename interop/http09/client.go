@@ -12,7 +12,7 @@ import (
 
 	"golang.org/x/net/idna"
 
-	"github.com/lucas-clemente/quic-go"
+	"github.com/Psiphon-Labs/quic-go"
 )
 
 // RoundTripper performs HTTP/0.9 roundtrips over QUIC.

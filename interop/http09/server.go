@@ -13,7 +13,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/lucas-clemente/quic-go"
+	"github.com/Psiphon-Labs/quic-go"
 )
 
 const h09alpn = "hq-23"

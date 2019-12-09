@@ -5,17 +5,17 @@
 # It then creates a mock for this public (alias) type.
 
 TEMP_DIR=$(mktemp -d)
-mkdir -p $TEMP_DIR/src/github.com/lucas-clemente/quic-go/
+mkdir -p $TEMP_DIR/src/github.com/Psiphon-Labs/quic-go/
 
 # uppercase the name of the interface
 INTERFACE_NAME="$(tr '[:lower:]' '[:upper:]' <<< ${4:0:1})${4:1}"
 
 # copy all .go files to a temporary directory
-rsync -r --exclude 'vendor' --include='*.go' --include '*/' --exclude '*'   $GOPATH/src/github.com/lucas-clemente/quic-go/ $TEMP_DIR/src/github.com/lucas-clemente/quic-go/
+rsync -r --exclude 'vendor' --include='*.go' --include '*/' --exclude '*'   $GOPATH/src/github.com/Psiphon-Labs/quic-go/ $TEMP_DIR/src/github.com/Psiphon-Labs/quic-go/
 
 # create a public alias for the interface, so that mockgen can process it
-echo -e "package $1\n" > $TEMP_DIR/src/github.com/lucas-clemente/quic-go/mockgen_interface.go
-echo "type $INTERFACE_NAME = $4" >> $TEMP_DIR/src/github.com/lucas-clemente/quic-go/mockgen_interface.go
+echo -e "package $1\n" > $TEMP_DIR/src/github.com/Psiphon-Labs/quic-go/mockgen_interface.go
+echo "type $INTERFACE_NAME = $4" >> $TEMP_DIR/src/github.com/Psiphon-Labs/quic-go/mockgen_interface.go
 
 export GOPATH="$TEMP_DIR:$GOPATH"
 

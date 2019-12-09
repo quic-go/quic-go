@@ -3,7 +3,7 @@ package quic
 import (
 	"github.com/cheekybits/genny/generic"
 
-	"github.com/lucas-clemente/quic-go/internal/protocol"
+	"github.com/Psiphon-Labs/quic-go/internal/protocol"
 )
 
 // In the auto-generated streams maps, we need to be able to close the streams.

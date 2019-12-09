@@ -6,7 +6,7 @@ import (
 	"io"
 	"time"
 
-	"github.com/lucas-clemente/quic-go/internal/protocol"
+	"github.com/Psiphon-Labs/quic-go/internal/protocol"
 	"github.com/marten-seemann/qtls"
 )
 

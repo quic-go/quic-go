@@ -4,8 +4,8 @@ import (
 	"crypto/rand"
 	"math"
 
-	"github.com/lucas-clemente/quic-go/internal/protocol"
-	"github.com/lucas-clemente/quic-go/internal/wire"
+	"github.com/Psiphon-Labs/quic-go/internal/protocol"
+	"github.com/Psiphon-Labs/quic-go/internal/wire"
 )
 
 // The packetNumberGenerator generates the packet number for the next packet

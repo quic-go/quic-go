@@ -1,4 +1,4 @@
-module github.com/lucas-clemente/quic-go
+module github.com/Psiphon-Labs/quic-go
 
 go 1.13
 
