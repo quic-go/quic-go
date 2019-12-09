@@ -156,6 +156,12 @@ func (s *receiveStream) readImpl(p []byte) (bool /*stream completed */, int, err
 			}
 		}
 
+		// [Psiphon]
+		// Stop timer to immediately release resources
+		if deadlineTimer != nil {
+			deadlineTimer.Reset(time.Time{})
+		}
+
 		if bytesRead > len(p) {
 			return false, bytesRead, fmt.Errorf("BUG: bytesRead (%d) > len(p) (%d) in stream.Read", bytesRead, len(p))
 		}

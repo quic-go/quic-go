@@ -543,6 +543,10 @@ runLoop:
 		}
 	}
 
+	// [Psiphon]
+	// Stop timer to immediately release resources
+	s.timer.Reset(time.Time{})
+
 	s.handleCloseError(closeErr)
 	s.logger.Infof("Connection %s closed.", s.logID)
 	s.cryptoStreamHandler.Close()

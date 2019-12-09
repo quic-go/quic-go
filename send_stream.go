@@ -141,6 +141,12 @@ func (s *sendStream) Write(p []byte) (int, error) {
 		s.mutex.Lock()
 	}
 
+	// [Psiphon]
+	// Stop timer to immediately release resources
+	if deadlineTimer != nil {
+		deadlineTimer.Reset(time.Time{})
+	}
+
 	if s.closeForShutdownErr != nil {
 		return bytesWritten, s.closeForShutdownErr
 	} else if s.cancelWriteErr != nil {
