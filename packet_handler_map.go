@@ -228,8 +228,12 @@ func (h *packetHandlerMap) listen() {
 		// If it does, we only read a truncated packet, which will then end up undecryptable
 		n, addr, err := h.conn.ReadFrom(data)
 		if err != nil {
-			h.close(err)
-			return
+			// [Psiphon]
+			// Do not unconditionally shutdown
+			if netErr, ok := err.(net.Error); !ok || !netErr.Temporary() {
+				h.close(err)
+				return
+			}
 		}
 		h.handlePacket(addr, buffer, data[:n])
 	}

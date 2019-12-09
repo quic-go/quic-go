@@ -46,7 +46,11 @@ type client struct {
 	decoder *qpack.Decoder
 
 	hostname string
-	session  quic.Session
+
+	// [Psiphon]
+	setSession sync.Mutex
+
+	session quic.Session
 
 	logger utils.Logger
 }
@@ -68,7 +72,13 @@ func newClient(
 	if quicConfig == nil {
 		quicConfig = defaultQuicConfig
 	}
-	quicConfig.MaxIncomingStreams = -1 // don't allow any bidirectional streams
+
+	// [Psiphon]
+	// Prevent race condition the results from concurrent RoundTrippers using defaultQuicConfig
+	if quicConfig.MaxIncomingStreams != -1 {
+		quicConfig.MaxIncomingStreams = -1 // don't allow any bidirectional streams
+	}
+
 	logger := utils.DefaultLogger.WithPrefix("h3 client")
 
 	return &client{
@@ -85,11 +95,18 @@ func newClient(
 
 func (c *client) dial() error {
 	var err error
+	var session quic.Session
 	if c.dialer != nil {
-		c.session, err = c.dialer("udp", c.hostname, c.tlsConf, c.config)
+		session, err = c.dialer("udp", c.hostname, c.tlsConf, c.config)
 	} else {
-		c.session, err = dialAddr(c.hostname, c.tlsConf, c.config)
+		session, err = dialAddr(c.hostname, c.tlsConf, c.config)
 	}
+
+	// [Psiphon]
+	c.setSession.Lock()
+	c.session = session
+	c.setSession.Unlock()
+
 	if err != nil {
 		return err
 	}
@@ -123,6 +140,16 @@ func (c *client) setupSession() error {
 }
 
 func (c *client) Close() error {
+
+	// [Psiphon]
+	// Prevent panic when c.session is nil
+	c.setSession.Lock()
+	session := c.session
+	c.setSession.Unlock()
+	if session == nil {
+		return nil
+	}
+
 	return c.session.Close()
 }
 
