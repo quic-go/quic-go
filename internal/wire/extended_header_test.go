@@ -214,6 +214,7 @@ var _ = Describe("Header", func() {
 					DestConnectionID: protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8},
 					SrcConnectionID:  protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8},
 					Length:           1,
+					lenByteCount:     1,
 				},
 				PacketNumberLen: protocol.PacketNumberLen1,
 			}
@@ -221,6 +222,24 @@ var _ = Describe("Header", func() {
 			Expect(h.GetLength(versionIETFHeader)).To(BeEquivalentTo(expectedLen))
 			Expect(h.Write(buf, versionIETFHeader)).To(Succeed())
 			Expect(buf.Len()).To(Equal(expectedLen))
+		})
+
+		It("has the right length for the Long Header, for multi-bytes as simply byte range", func() {
+			h := &ExtendedHeader{
+				Header: Header{
+					IsLongHeader:     true,
+					Type:             protocol.PacketTypeHandshake,
+					DestConnectionID: protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8},
+					SrcConnectionID:  protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8},
+					Length:           1,
+					lenByteCount:     2,
+				},
+				PacketNumberLen: protocol.PacketNumberLen1,
+			}
+			expectedLen := 1 /* type byte */ + 4 /* version */ + 1 /* dest conn ID len */ + 8 /* dest conn id */ + 1 /* src conn ID len */ + 8 /* src conn id */ + 2 /* short len */ + 1 /* packet number */
+			Expect(h.GetLength(versionIETFHeader)).To(BeEquivalentTo(expectedLen))
+			Expect(h.Write(buf, versionIETFHeader)).To(Succeed())
+			Expect(buf.Len()).To(Equal(expectedLen + (int(utils.VarIntLen(uint64(h.Length))) - h.lenByteCount)))
 		})
 
 		It("has the right length for the Long Header, for a long length", func() {
@@ -231,6 +250,7 @@ var _ = Describe("Header", func() {
 					DestConnectionID: protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8},
 					SrcConnectionID:  protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8},
 					Length:           1500,
+					lenByteCount:     2,
 				},
 				PacketNumberLen: protocol.PacketNumberLen2,
 			}
@@ -248,6 +268,7 @@ var _ = Describe("Header", func() {
 					DestConnectionID: protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8},
 					SrcConnectionID:  protocol.ConnectionID{1, 2, 3, 4},
 					Length:           1500,
+					lenByteCount:     2,
 				},
 				PacketNumberLen: protocol.PacketNumberLen2,
 			}
@@ -265,6 +286,7 @@ var _ = Describe("Header", func() {
 					SrcConnectionID:  protocol.ConnectionID{1, 2, 3, 4},
 					Type:             protocol.PacketTypeInitial,
 					Length:           1500,
+					lenByteCount:     2,
 					Token:            []byte("foo"),
 				},
 				PacketNumberLen: protocol.PacketNumberLen2,

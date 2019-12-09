@@ -190,6 +190,44 @@ var _ = Describe("Header Parsing", func() {
 			Expect(hdr.ParsedLen()).To(BeEquivalentTo(hdrLen))
 		})
 
+		It("parses a Long Header for multi bytes as simply byte range", func() {
+			destConnID := protocol.ConnectionID{9, 8, 7, 6, 5, 4, 3, 2, 1}
+			srcConnID := protocol.ConnectionID{0xde, 0xad, 0xbe, 0xef}
+			data := []byte{0xc0 ^ 0x3}
+			data = appendVersion(data, versionIETFFrames)
+			data = append(data, 0x9) // dest conn id length
+			data = append(data, destConnID...)
+			data = append(data, 0x4) // src conn id length
+			data = append(data, srcConnID...)
+			data = append(data, encodeVarInt(6)...)  // token length
+			data = append(data, []byte("foobar")...) // token
+			data = append(data, []byte{64, 10}...)   // length
+			hdrLen := len(data)
+			data = append(data, []byte{0, 0, 0xbe, 0xef}...) // packet number
+			data = append(data, []byte("foobar")...)
+			Expect(IsVersionNegotiationPacket(data)).To(BeFalse())
+
+			hdr, pdata, rest, err := ParsePacket(data, 0)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(pdata).To(Equal(data))
+			Expect(hdr.IsLongHeader).To(BeTrue())
+			Expect(hdr.DestConnectionID).To(Equal(destConnID))
+			Expect(hdr.SrcConnectionID).To(Equal(srcConnID))
+			Expect(hdr.Type).To(Equal(protocol.PacketTypeInitial))
+			Expect(hdr.Token).To(Equal([]byte("foobar")))
+			Expect(hdr.Length).To(Equal(protocol.ByteCount(10)))
+			Expect(hdr.lenByteCount).To(Equal(2))
+			Expect(hdr.Version).To(Equal(versionIETFFrames))
+			Expect(rest).To(BeEmpty())
+			b := bytes.NewReader(data)
+			extHdr, err := hdr.ParseExtended(b, versionIETFFrames)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(extHdr.PacketNumber).To(Equal(protocol.PacketNumber(0xbeef)))
+			Expect(extHdr.PacketNumberLen).To(Equal(protocol.PacketNumberLen4))
+			Expect(b.Len()).To(Equal(6)) // foobar
+			Expect(hdr.ParsedLen()).To(BeEquivalentTo(hdrLen))
+		})
+
 		It("errors if 0x40 is not set", func() {
 			data := []byte{
 				0x80 | 0x2<<4,
@@ -563,4 +601,5 @@ var _ = Describe("Header Parsing", func() {
 		Expect((&Header{IsLongHeader: true, Type: protocol.PacketTypeHandshake}).PacketType()).To(Equal("Handshake"))
 		Expect((&Header{}).PacketType()).To(Equal("1-RTT"))
 	})
+
 })

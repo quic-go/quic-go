@@ -54,7 +54,8 @@ type Header struct {
 	SrcConnectionID  protocol.ConnectionID
 	DestConnectionID protocol.ConnectionID
 
-	Length protocol.ByteCount
+	Length       protocol.ByteCount
+	lenByteCount int // len actual byte count refer to peer implement of Section 16
 
 	Token                []byte
 	SupportedVersions    []protocol.VersionNumber // sent in a Version Negotiation Packet
@@ -205,11 +206,13 @@ func (h *Header) parseLongHeader(b *bytes.Reader) error {
 		}
 	}
 
+	firstByteIndex := b.Len()
 	pl, err := utils.ReadVarInt(b)
 	if err != nil {
 		return err
 	}
 	h.Length = protocol.ByteCount(pl)
+	h.lenByteCount = firstByteIndex - b.Len()
 	return nil
 }
 
