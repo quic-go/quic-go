@@ -131,6 +131,7 @@ var _ = Describe("Session", func() {
 		sess.packer = packer
 		cryptoSetup = mocks.NewMockCryptoSetup(mockCtrl)
 		sess.cryptoStreamHandler = cryptoSetup
+		sess.handshakeComplete = true
 	})
 
 	AfterEach(func() {
@@ -466,7 +467,6 @@ var _ = Describe("Session", func() {
 		})
 
 		It("closes with an error", func() {
-			sess.handshakeComplete = true
 			streamManager.EXPECT().CloseWithError(qerr.ApplicationError(0x1337, "test error"))
 			expectReplaceWithClosed()
 			cryptoSetup.EXPECT().Close()
@@ -482,7 +482,6 @@ var _ = Describe("Session", func() {
 		})
 
 		It("includes the frame type in transport-level close frames", func() {
-			sess.handshakeComplete = true
 			testErr := qerr.ErrorWithFrameType(0x1337, 0x42, "test error")
 			streamManager.EXPECT().CloseWithError(testErr)
 			expectReplaceWithClosed()
@@ -500,6 +499,7 @@ var _ = Describe("Session", func() {
 		})
 
 		It("doesn't send application-level error before the handshake completes", func() {
+			sess.handshakeComplete = false
 			streamManager.EXPECT().CloseWithError(qerr.ApplicationError(0x1337, "test error"))
 			expectReplaceWithClosed()
 			cryptoSetup.EXPECT().Close()
@@ -764,6 +764,7 @@ var _ = Describe("Session", func() {
 		})
 
 		It("queues undecryptable packets", func() {
+			sess.handshakeComplete = false
 			hdr := &wire.ExtendedHeader{
 				Header: wire.Header{
 					IsLongHeader:     true,
@@ -856,6 +857,7 @@ var _ = Describe("Session", func() {
 			})
 
 			It("works with undecryptable packets", func() {
+				sess.handshakeComplete = false
 				hdrLen1, packet1 := getPacketWithLength(srcConnID, 456)
 				hdrLen2, packet2 := getPacketWithLength(srcConnID, 123)
 				gomock.InOrder(
@@ -1371,7 +1373,6 @@ var _ = Describe("Session", func() {
 
 		BeforeEach(func() {
 			sess.config.KeepAlive = true
-			sess.handshakeComplete = true
 		})
 
 		AfterEach(func() {
@@ -1433,7 +1434,6 @@ var _ = Describe("Session", func() {
 
 		It("times out due to no network activity", func() {
 			sessionRunner.EXPECT().Remove(gomock.Any()).Times(2)
-			sess.handshakeComplete = true
 			sess.lastPacketReceivedTime = time.Now().Add(-time.Hour)
 			done := make(chan struct{})
 			cryptoSetup.EXPECT().Close()
@@ -1451,6 +1451,7 @@ var _ = Describe("Session", func() {
 		})
 
 		It("times out due to non-completed handshake", func() {
+			sess.handshakeComplete = false
 			sess.sessionCreationTime = time.Now().Add(-protocol.DefaultHandshakeTimeout).Add(-time.Second)
 			sessionRunner.EXPECT().Remove(gomock.Any()).Times(2)
 			cryptoSetup.EXPECT().Close()
@@ -1469,6 +1470,7 @@ var _ = Describe("Session", func() {
 		})
 
 		It("does not use the idle timeout before the handshake complete", func() {
+			sess.handshakeComplete = false
 			sess.config.IdleTimeout = 9999 * time.Second
 			sess.lastPacketReceivedTime = time.Now().Add(-time.Minute)
 			packer.EXPECT().PackConnectionClose(gomock.Any()).DoAndReturn(func(f *wire.ConnectionCloseFrame) (*packedPacket, error) {
@@ -1515,7 +1517,6 @@ var _ = Describe("Session", func() {
 		})
 
 		It("doesn't time out when it just sent a packet", func() {
-			sess.handshakeComplete = true
 			sess.lastPacketReceivedTime = time.Now().Add(-time.Hour)
 			sess.firstAckElicitingPacketAfterIdleSentTime = time.Now().Add(-time.Second)
 			sess.config.IdleTimeout = 30 * time.Second

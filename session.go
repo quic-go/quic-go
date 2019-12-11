@@ -569,10 +569,15 @@ func (s *session) ConnectionState() tls.ConnectionState {
 
 func (s *session) maybeResetTimer() {
 	var deadline time.Time
-	if s.config.KeepAlive && s.handshakeComplete && !s.keepAlivePingSent {
-		deadline = s.idleTimeoutStartTime().Add(s.keepAliveInterval / 2)
+	if !s.handshakeComplete {
+		handshakeDeadline := s.sessionCreationTime.Add(s.config.HandshakeTimeout)
+		deadline = handshakeDeadline
 	} else {
-		deadline = s.idleTimeoutStartTime().Add(s.config.IdleTimeout)
+		if s.config.KeepAlive && !s.keepAlivePingSent {
+			deadline = s.idleTimeoutStartTime().Add(s.keepAliveInterval / 2)
+		} else {
+			deadline = s.idleTimeoutStartTime().Add(s.config.IdleTimeout)
+		}
 	}
 
 	if ackAlarm := s.receivedPacketHandler.GetAlarmTimeout(); !ackAlarm.IsZero() {
@@ -580,10 +585,6 @@ func (s *session) maybeResetTimer() {
 	}
 	if lossTime := s.sentPacketHandler.GetLossDetectionTimeout(); !lossTime.IsZero() {
 		deadline = utils.MinTime(deadline, lossTime)
-	}
-	if !s.handshakeComplete {
-		handshakeDeadline := s.sessionCreationTime.Add(s.config.HandshakeTimeout)
-		deadline = utils.MinTime(deadline, handshakeDeadline)
 	}
 	if !s.pacingDeadline.IsZero() {
 		deadline = utils.MinTime(deadline, s.pacingDeadline)
