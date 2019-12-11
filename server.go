@@ -231,8 +231,8 @@ func populateConfig(config *Config) *Config {
 		handshakeTimeout = config.HandshakeTimeout
 	}
 	idleTimeout := protocol.DefaultIdleTimeout
-	if config.IdleTimeout != 0 {
-		idleTimeout = config.IdleTimeout
+	if config.MaxIdleTimeout != 0 {
+		idleTimeout = config.MaxIdleTimeout
 	}
 	maxReceiveStreamFlowControlWindow := config.MaxReceiveStreamFlowControlWindow
 	if maxReceiveStreamFlowControlWindow == 0 {
@@ -258,7 +258,7 @@ func populateConfig(config *Config) *Config {
 	return &Config{
 		Versions:                              versions,
 		HandshakeTimeout:                      handshakeTimeout,
-		IdleTimeout:                           idleTimeout,
+		MaxIdleTimeout:                        idleTimeout,
 		AcceptToken:                           config.AcceptToken,
 		KeepAlive:                             config.KeepAlive,
 		MaxReceiveStreamFlowControlWindow:     maxReceiveStreamFlowControlWindow,

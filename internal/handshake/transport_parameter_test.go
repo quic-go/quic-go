@@ -29,14 +29,14 @@ var _ = Describe("Transport Parameters", func() {
 			InitialMaxData:                 0x4567,
 			MaxBidiStreamNum:               1337,
 			MaxUniStreamNum:                7331,
-			IdleTimeout:                    42 * time.Second,
+			MaxIdleTimeout:                 42 * time.Second,
 			OriginalConnectionID:           protocol.ConnectionID{0xde, 0xad, 0xbe, 0xef},
 			AckDelayExponent:               14,
 			MaxAckDelay:                    37 * time.Millisecond,
 			StatelessResetToken:            &[16]byte{0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88, 0x99, 0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff, 0x00},
 			ActiveConnectionIDLimit:        123,
 		}
-		Expect(p.String()).To(Equal("&handshake.TransportParameters{OriginalConnectionID: 0xdeadbeef, InitialMaxStreamDataBidiLocal: 0x1234, InitialMaxStreamDataBidiRemote: 0x2345, InitialMaxStreamDataUni: 0x3456, InitialMaxData: 0x4567, MaxBidiStreamNum: 1337, MaxUniStreamNum: 7331, IdleTimeout: 42s, AckDelayExponent: 14, MaxAckDelay: 37ms, ActiveConnectionIDLimit: 123, StatelessResetToken: 0x112233445566778899aabbccddeeff00}"))
+		Expect(p.String()).To(Equal("&handshake.TransportParameters{OriginalConnectionID: 0xdeadbeef, InitialMaxStreamDataBidiLocal: 0x1234, InitialMaxStreamDataBidiRemote: 0x2345, InitialMaxStreamDataUni: 0x3456, InitialMaxData: 0x4567, MaxBidiStreamNum: 1337, MaxUniStreamNum: 7331, MaxIdleTimeout: 42s, AckDelayExponent: 14, MaxAckDelay: 37ms, ActiveConnectionIDLimit: 123, StatelessResetToken: 0x112233445566778899aabbccddeeff00}"))
 	})
 
 	It("has a string representation, if there's no stateless reset token", func() {
@@ -47,13 +47,13 @@ var _ = Describe("Transport Parameters", func() {
 			InitialMaxData:                 0x4567,
 			MaxBidiStreamNum:               1337,
 			MaxUniStreamNum:                7331,
-			IdleTimeout:                    42 * time.Second,
+			MaxIdleTimeout:                 42 * time.Second,
 			OriginalConnectionID:           protocol.ConnectionID{0xde, 0xad, 0xbe, 0xef},
 			AckDelayExponent:               14,
 			MaxAckDelay:                    37 * time.Second,
 			ActiveConnectionIDLimit:        89,
 		}
-		Expect(p.String()).To(Equal("&handshake.TransportParameters{OriginalConnectionID: 0xdeadbeef, InitialMaxStreamDataBidiLocal: 0x1234, InitialMaxStreamDataBidiRemote: 0x2345, InitialMaxStreamDataUni: 0x3456, InitialMaxData: 0x4567, MaxBidiStreamNum: 1337, MaxUniStreamNum: 7331, IdleTimeout: 42s, AckDelayExponent: 14, MaxAckDelay: 37s, ActiveConnectionIDLimit: 89}"))
+		Expect(p.String()).To(Equal("&handshake.TransportParameters{OriginalConnectionID: 0xdeadbeef, InitialMaxStreamDataBidiLocal: 0x1234, InitialMaxStreamDataBidiRemote: 0x2345, InitialMaxStreamDataUni: 0x3456, InitialMaxData: 0x4567, MaxBidiStreamNum: 1337, MaxUniStreamNum: 7331, MaxIdleTimeout: 42s, AckDelayExponent: 14, MaxAckDelay: 37s, ActiveConnectionIDLimit: 89}"))
 	})
 
 	It("marshals and unmarshals", func() {
@@ -70,7 +70,7 @@ var _ = Describe("Transport Parameters", func() {
 			InitialMaxStreamDataBidiRemote: protocol.ByteCount(getRandomValue()),
 			InitialMaxStreamDataUni:        protocol.ByteCount(getRandomValue()),
 			InitialMaxData:                 protocol.ByteCount(getRandomValue()),
-			IdleTimeout:                    0xcafe * time.Second,
+			MaxIdleTimeout:                 0xcafe * time.Second,
 			MaxBidiStreamNum:               protocol.StreamNum(getRandomValue()),
 			MaxUniStreamNum:                protocol.StreamNum(getRandomValue()),
 			DisableMigration:               true,
@@ -90,7 +90,7 @@ var _ = Describe("Transport Parameters", func() {
 		Expect(p.InitialMaxData).To(Equal(params.InitialMaxData))
 		Expect(p.MaxUniStreamNum).To(Equal(params.MaxUniStreamNum))
 		Expect(p.MaxBidiStreamNum).To(Equal(params.MaxBidiStreamNum))
-		Expect(p.IdleTimeout).To(Equal(params.IdleTimeout))
+		Expect(p.MaxIdleTimeout).To(Equal(params.MaxIdleTimeout))
 		Expect(p.DisableMigration).To(Equal(params.DisableMigration))
 		Expect(p.StatelessResetToken).To(Equal(params.StatelessResetToken))
 		Expect(p.OriginalConnectionID).To(Equal(protocol.ConnectionID{0xde, 0xad, 0xbe, 0xef}))

@@ -222,7 +222,7 @@ var _ = Describe("MITM test", func() {
 
 					BeforeEach(func() {
 						numCorrupted = 0
-						serverConfig.IdleTimeout = idleTimeout
+						serverConfig.MaxIdleTimeout = idleTimeout
 					})
 
 					AfterEach(func() {

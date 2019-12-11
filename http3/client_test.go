@@ -75,7 +75,7 @@ var _ = Describe("Client", func() {
 			ServerName: "foo.bar",
 			NextProtos: []string{"proto foo", "proto bar"},
 		}
-		quicConf := &quic.Config{IdleTimeout: time.Nanosecond}
+		quicConf := &quic.Config{MaxIdleTimeout: time.Nanosecond}
 		client = newClient("localhost:1337", tlsConf, &roundTripperOpts{}, quicConf, nil)
 		var dialAddrCalled bool
 		dialAddr = func(
@@ -86,7 +86,7 @@ var _ = Describe("Client", func() {
 			Expect(hostname).To(Equal("localhost:1337"))
 			Expect(tlsConfP.ServerName).To(Equal(tlsConf.ServerName))
 			Expect(tlsConfP.NextProtos).To(Equal([]string{nextProtoH3}))
-			Expect(quicConfP.IdleTimeout).To(Equal(quicConf.IdleTimeout))
+			Expect(quicConfP.MaxIdleTimeout).To(Equal(quicConf.MaxIdleTimeout))
 			dialAddrCalled = true
 			return nil, errors.New("test done")
 		}
@@ -99,13 +99,13 @@ var _ = Describe("Client", func() {
 	It("uses the custom dialer, if provided", func() {
 		testErr := errors.New("test done")
 		tlsConf := &tls.Config{ServerName: "foo.bar"}
-		quicConf := &quic.Config{IdleTimeout: 1337 * time.Second}
+		quicConf := &quic.Config{MaxIdleTimeout: 1337 * time.Second}
 		var dialerCalled bool
 		dialer := func(network, address string, tlsConfP *tls.Config, quicConfP *quic.Config) (quic.Session, error) {
 			Expect(network).To(Equal("udp"))
 			Expect(address).To(Equal("localhost:1337"))
 			Expect(tlsConfP.ServerName).To(Equal("foo.bar"))
-			Expect(quicConfP.IdleTimeout).To(Equal(quicConf.IdleTimeout))
+			Expect(quicConfP.MaxIdleTimeout).To(Equal(quicConf.MaxIdleTimeout))
 			dialerCalled = true
 			return nil, testErr
 		}

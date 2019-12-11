@@ -25,7 +25,7 @@ type transportParameterID uint16
 
 const (
 	originalConnectionIDParameterID           transportParameterID = 0x0
-	idleTimeoutParameterID                    transportParameterID = 0x1
+	maxIdleTimeoutParameterID                 transportParameterID = 0x1
 	statelessResetTokenParameterID            transportParameterID = 0x2
 	maxPacketSizeParameterID                  transportParameterID = 0x3
 	initialMaxDataParameterID                 transportParameterID = 0x4
@@ -68,7 +68,7 @@ type TransportParameters struct {
 	MaxUniStreamNum  protocol.StreamNum
 	MaxBidiStreamNum protocol.StreamNum
 
-	IdleTimeout time.Duration
+	MaxIdleTimeout time.Duration
 
 	PreferredAddress *PreferredAddress
 
@@ -123,7 +123,7 @@ func (p *TransportParameters) unmarshal(data []byte, sentBy protocol.Perspective
 			initialMaxDataParameterID,
 			initialMaxStreamsBidiParameterID,
 			initialMaxStreamsUniParameterID,
-			idleTimeoutParameterID,
+			maxIdleTimeoutParameterID,
 			maxPacketSizeParameterID,
 			activeConnectionIDLimitParameterID:
 			if err := p.readNumericTransportParameter(r, paramID, int(paramLen)); err != nil {
@@ -259,8 +259,8 @@ func (p *TransportParameters) readNumericTransportParameter(
 		p.MaxBidiStreamNum = protocol.StreamNum(val)
 	case initialMaxStreamsUniParameterID:
 		p.MaxUniStreamNum = protocol.StreamNum(val)
-	case idleTimeoutParameterID:
-		p.IdleTimeout = utils.MaxDuration(protocol.MinRemoteIdleTimeout, time.Duration(val)*time.Millisecond)
+	case maxIdleTimeoutParameterID:
+		p.MaxIdleTimeout = utils.MaxDuration(protocol.MinRemoteIdleTimeout, time.Duration(val)*time.Millisecond)
 	case maxPacketSizeParameterID:
 		if val < 1200 {
 			return fmt.Errorf("invalid value for max_packet_size: %d (minimum 1200)", val)
@@ -314,7 +314,7 @@ func (p *TransportParameters) Marshal() []byte {
 	// initial_max_uni_streams
 	p.marshalVarintParam(b, initialMaxStreamsUniParameterID, uint64(p.MaxUniStreamNum))
 	// idle_timeout
-	p.marshalVarintParam(b, idleTimeoutParameterID, uint64(p.IdleTimeout/time.Millisecond))
+	p.marshalVarintParam(b, maxIdleTimeoutParameterID, uint64(p.MaxIdleTimeout/time.Millisecond))
 	// max_packet_size
 	p.marshalVarintParam(b, maxPacketSizeParameterID, uint64(protocol.MaxReceivePacketSize))
 	// max_ack_delay
@@ -371,8 +371,8 @@ func (p *TransportParameters) marshalVarintParam(b *bytes.Buffer, id transportPa
 
 // String returns a string representation, intended for logging.
 func (p *TransportParameters) String() string {
-	logString := "&handshake.TransportParameters{OriginalConnectionID: %s, InitialMaxStreamDataBidiLocal: %#x, InitialMaxStreamDataBidiRemote: %#x, InitialMaxStreamDataUni: %#x, InitialMaxData: %#x, MaxBidiStreamNum: %d, MaxUniStreamNum: %d, IdleTimeout: %s, AckDelayExponent: %d, MaxAckDelay: %s, ActiveConnectionIDLimit: %d"
-	logParams := []interface{}{p.OriginalConnectionID, p.InitialMaxStreamDataBidiLocal, p.InitialMaxStreamDataBidiRemote, p.InitialMaxStreamDataUni, p.InitialMaxData, p.MaxBidiStreamNum, p.MaxUniStreamNum, p.IdleTimeout, p.AckDelayExponent, p.MaxAckDelay, p.ActiveConnectionIDLimit}
+	logString := "&handshake.TransportParameters{OriginalConnectionID: %s, InitialMaxStreamDataBidiLocal: %#x, InitialMaxStreamDataBidiRemote: %#x, InitialMaxStreamDataUni: %#x, InitialMaxData: %#x, MaxBidiStreamNum: %d, MaxUniStreamNum: %d, MaxIdleTimeout: %s, AckDelayExponent: %d, MaxAckDelay: %s, ActiveConnectionIDLimit: %d"
+	logParams := []interface{}{p.OriginalConnectionID, p.InitialMaxStreamDataBidiLocal, p.InitialMaxStreamDataBidiRemote, p.InitialMaxStreamDataUni, p.InitialMaxData, p.MaxBidiStreamNum, p.MaxUniStreamNum, p.MaxIdleTimeout, p.AckDelayExponent, p.MaxAckDelay, p.ActiveConnectionIDLimit}
 	if p.StatelessResetToken != nil { // the client never sends a stateless reset token
 		logString += ", StatelessResetToken: %#x"
 		logParams = append(logParams, *p.StatelessResetToken)

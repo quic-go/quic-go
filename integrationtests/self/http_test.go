@@ -111,8 +111,8 @@ var _ = Describe("HTTP tests", func() {
 						},
 						DisableCompression: true,
 						QuicConfig: &quic.Config{
-							Versions:    []protocol.VersionNumber{version},
-							IdleTimeout: 10 * time.Second,
+							Versions:       []protocol.VersionNumber{version},
+							MaxIdleTimeout: 10 * time.Second,
 						},
 					},
 				}

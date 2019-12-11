@@ -424,7 +424,7 @@ var _ = Describe("Crypto Setup TLS", func() {
 		It("receives transport parameters", func() {
 			var cTransportParametersRcvd, sTransportParametersRcvd []byte
 			cChunkChan, cInitialStream, cHandshakeStream, _ := initStreams()
-			cTransportParameters := &TransportParameters{IdleTimeout: 0x42 * time.Second}
+			cTransportParameters := &TransportParameters{MaxIdleTimeout: 0x42 * time.Second}
 			cRunner := NewMockHandshakeRunner(mockCtrl)
 			cRunner.EXPECT().OnReceivedParams(gomock.Any()).Do(func(b []byte) { sTransportParametersRcvd = b })
 			cRunner.EXPECT().OnHandshakeComplete()
@@ -447,7 +447,7 @@ var _ = Describe("Crypto Setup TLS", func() {
 			sRunner.EXPECT().OnReceivedParams(gomock.Any()).Do(func(b []byte) { cTransportParametersRcvd = b })
 			sRunner.EXPECT().OnHandshakeComplete()
 			sTransportParameters := &TransportParameters{
-				IdleTimeout:         0x1337 * time.Second,
+				MaxIdleTimeout:      0x1337 * time.Second,
 				StatelessResetToken: &token,
 			}
 			server := NewCryptoSetupServer(
@@ -473,11 +473,11 @@ var _ = Describe("Crypto Setup TLS", func() {
 			Expect(cTransportParametersRcvd).ToNot(BeNil())
 			clTP := &TransportParameters{}
 			Expect(clTP.Unmarshal(cTransportParametersRcvd, protocol.PerspectiveClient)).To(Succeed())
-			Expect(clTP.IdleTimeout).To(Equal(cTransportParameters.IdleTimeout))
+			Expect(clTP.MaxIdleTimeout).To(Equal(cTransportParameters.MaxIdleTimeout))
 			Expect(sTransportParametersRcvd).ToNot(BeNil())
 			srvTP := &TransportParameters{}
 			Expect(srvTP.Unmarshal(sTransportParametersRcvd, protocol.PerspectiveServer)).To(Succeed())
-			Expect(srvTP.IdleTimeout).To(Equal(sTransportParameters.IdleTimeout))
+			Expect(srvTP.MaxIdleTimeout).To(Equal(sTransportParameters.MaxIdleTimeout))
 		})
 
 		Context("with session tickets", func() {

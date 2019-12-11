@@ -132,6 +132,7 @@ var _ = Describe("Session", func() {
 		cryptoSetup = mocks.NewMockCryptoSetup(mockCtrl)
 		sess.cryptoStreamHandler = cryptoSetup
 		sess.handshakeComplete = true
+		sess.idleTimeout = time.Hour
 	})
 
 	AfterEach(func() {
@@ -1326,7 +1327,7 @@ var _ = Describe("Session", func() {
 				sess.run()
 			}()
 			params := &handshake.TransportParameters{
-				IdleTimeout:                   90 * time.Second,
+				MaxIdleTimeout:                90 * time.Second,
 				InitialMaxStreamDataBidiLocal: 0x5000,
 				InitialMaxData:                0x5000,
 				ActiveConnectionIDLimit:       3,
@@ -1357,7 +1358,7 @@ var _ = Describe("Session", func() {
 
 	Context("keep-alives", func() {
 		setRemoteIdleTimeout := func(t time.Duration) {
-			tp := &handshake.TransportParameters{IdleTimeout: t}
+			tp := &handshake.TransportParameters{MaxIdleTimeout: t}
 			streamManager.EXPECT().UpdateLimits(gomock.Any())
 			packer.EXPECT().HandleTransportParameters(gomock.Any())
 			sess.processTransportParameters(tp.Marshal())
@@ -1372,6 +1373,7 @@ var _ = Describe("Session", func() {
 		}
 
 		BeforeEach(func() {
+			sess.config.MaxIdleTimeout = 30 * time.Second
 			sess.config.KeepAlive = true
 		})
 
@@ -1387,7 +1389,7 @@ var _ = Describe("Session", func() {
 
 		It("sends a PING as a keep-alive after half the idle timeout", func() {
 			setRemoteIdleTimeout(5 * time.Second)
-			sess.lastPacketReceivedTime = time.Now().Add(-protocol.MaxKeepAliveInterval)
+			sess.lastPacketReceivedTime = time.Now().Add(-5 * time.Second / 2)
 			sent := make(chan struct{})
 			packer.EXPECT().PackPacket().Do(func() (*packedPacket, error) {
 				close(sent)
@@ -1398,6 +1400,7 @@ var _ = Describe("Session", func() {
 		})
 
 		It("sends a PING after a maximum of protocol.MaxKeepAliveInterval", func() {
+			sess.config.MaxIdleTimeout = time.Hour
 			setRemoteIdleTimeout(time.Hour)
 			sess.lastPacketReceivedTime = time.Now().Add(-protocol.MaxKeepAliveInterval).Add(-time.Millisecond)
 			sent := make(chan struct{})
@@ -1471,7 +1474,7 @@ var _ = Describe("Session", func() {
 
 		It("does not use the idle timeout before the handshake complete", func() {
 			sess.handshakeComplete = false
-			sess.config.IdleTimeout = 9999 * time.Second
+			sess.config.MaxIdleTimeout = 9999 * time.Second
 			sess.lastPacketReceivedTime = time.Now().Add(-time.Minute)
 			packer.EXPECT().PackConnectionClose(gomock.Any()).DoAndReturn(func(f *wire.ConnectionCloseFrame) (*packedPacket, error) {
 				Expect(f.ErrorCode).To(Equal(qerr.NoError))
@@ -1500,7 +1503,7 @@ var _ = Describe("Session", func() {
 				sessionRunner.EXPECT().Remove(gomock.Any()),
 			)
 			cryptoSetup.EXPECT().Close()
-			sess.config.IdleTimeout = 0
+			sess.idleTimeout = 0
 			done := make(chan struct{})
 			go func() {
 				defer GinkgoRecover()
@@ -1519,7 +1522,7 @@ var _ = Describe("Session", func() {
 		It("doesn't time out when it just sent a packet", func() {
 			sess.lastPacketReceivedTime = time.Now().Add(-time.Hour)
 			sess.firstAckElicitingPacketAfterIdleSentTime = time.Now().Add(-time.Second)
-			sess.config.IdleTimeout = 30 * time.Second
+			sess.idleTimeout = 30 * time.Second
 			go func() {
 				defer GinkgoRecover()
 				cryptoSetup.EXPECT().RunHandshake().MaxTimes(1)
@@ -1840,6 +1843,16 @@ var _ = Describe("Client Session", func() {
 			cryptoSetup.EXPECT().Close()
 			sess.Close()
 			Eventually(sess.Context().Done()).Should(BeClosed())
+		})
+
+		It("uses the minimum of the peers' idle timeouts", func() {
+			sess.config.MaxIdleTimeout = 19 * time.Second
+			params := &handshake.TransportParameters{
+				MaxIdleTimeout: 18 * time.Second,
+			}
+			packer.EXPECT().HandleTransportParameters(gomock.Any())
+			sess.processTransportParameters(params.Marshal())
+			Expect(sess.idleTimeout).To(Equal(18 * time.Second))
 		})
 
 		It("errors if the TransportParameters contain an original_connection_id, although no Retry was performed", func() {
