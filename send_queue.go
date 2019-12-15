@@ -1,5 +1,12 @@
 package quic
 
+import (
+	"errors"
+	"runtime"
+
+	"golang.org/x/sys/unix"
+)
+
 type sendQueue struct {
 	queue     chan *packedPacket
 	closeChan chan struct{}
@@ -20,6 +27,18 @@ func (h *sendQueue) Send(p *packedPacket) {
 }
 
 func (h *sendQueue) Run() error {
+	runtime.LockOSThread()
+	defer runtime.UnlockOSThread()
+
+	var cpuset unix.CPUSet
+	unix.SchedGetaffinity(0, &cpuset)
+	if cpuset.Count() <= 0 {
+		return errors.New("couldn't get CPU affinity mask")
+	}
+	cpuset.Zero()
+	cpuset.Set(0)
+	unix.SchedSetaffinity(0, &cpuset)
+
 	var p *packedPacket
 	for {
 		select {
