@@ -16,7 +16,13 @@ func newSendQueue(conn connection) *sendQueue {
 }
 
 func (h *sendQueue) Send(p *packedPacket) {
-	h.queue <- p
+	// h.queue <- p
+	// return
+
+	if err := h.conn.Write(p.raw); err != nil {
+		panic(err)
+	}
+	p.buffer.Release()
 }
 
 func (h *sendQueue) Run() error {
