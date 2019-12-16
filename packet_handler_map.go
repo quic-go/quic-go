@@ -7,6 +7,7 @@ import (
 	"errors"
 	"hash"
 	"net"
+	"runtime"
 	"sync"
 	"time"
 
@@ -220,6 +221,11 @@ func (h *packetHandlerMap) close(e error) error {
 }
 
 func (h *packetHandlerMap) listen() {
+	runtime.LockOSThread()
+	defer runtime.UnlockOSThread()
+
+	bindToCPU(0)
+
 	defer close(h.listening)
 	for {
 		buffer := getPacketBuffer()
