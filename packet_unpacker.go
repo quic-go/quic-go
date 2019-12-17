@@ -159,7 +159,7 @@ func (u *packetUnpacker) unpack(hd headerDecryptor, hdr *wire.Header, data []byt
 	}
 	// 4. if the packet number is shorter than 4 bytes, replace the remaining bytes with the copy we saved earlier
 	if extHdr.PacketNumberLen != protocol.PacketNumberLen4 {
-		copy(data[extHdr.GetLength(u.version):hdrLen+4], origPNBytes[int(extHdr.PacketNumberLen):])
+		copy(data[extHdr.ParsedLen():hdrLen+4], origPNBytes[int(extHdr.PacketNumberLen):])
 	}
 
 	extHdr.PacketNumber = protocol.DecodePacketNumber(
