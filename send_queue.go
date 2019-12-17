@@ -1,10 +1,19 @@
 package quic
 
 import (
+	"fmt"
 	"runtime"
+	"time"
 
 	"golang.org/x/sys/unix"
 )
+
+/*
+#define _GNU_SOURCE
+#include <sched.h>
+#include <pthread.h>
+*/
+import "C"
 
 type sendQueue struct {
 	queue     chan *packedPacket
@@ -42,9 +51,14 @@ func (h *sendQueue) Run() error {
 
 	bindToCPU(0)
 
+	ticker := time.NewTicker(500 * time.Millisecond)
+
 	var p *packedPacket
 	for {
 		select {
+		case <-ticker.C:
+			fmt.Println("Running send queue on CPU", C.sched_getcpu())
+			continue
 		case <-h.closeChan:
 			return nil
 		case p = <-h.queue:
