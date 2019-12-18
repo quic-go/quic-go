@@ -51,6 +51,7 @@ type cryptoStreamHandler interface {
 	RunHandshake()
 	ChangeConnectionID(protocol.ConnectionID)
 	SetLargest1RTTAcked(protocol.PacketNumber)
+	DropHandshakeKeys()
 	io.Closer
 	ConnectionState() tls.ConnectionState
 }
@@ -605,16 +606,15 @@ func (s *session) handleHandshakeComplete() {
 
 	s.connIDGenerator.SetHandshakeComplete()
 	s.sentPacketHandler.SetHandshakeComplete()
-	// The client completes the handshake first (after sending the CFIN).
-	// We need to make sure it learns about the server completing the handshake,
-	// in order to stop retransmitting handshake packets.
-	// They will stop retransmitting handshake packets when receiving the first 1-RTT packet.
+
 	if s.perspective == protocol.PerspectiveServer {
 		token, err := s.tokenGenerator.NewToken(s.conn.RemoteAddr())
 		if err != nil {
 			s.closeLocal(err)
 		}
 		s.queueControlFrame(&wire.NewTokenFrame{Token: token})
+		s.cryptoStreamHandler.DropHandshakeKeys()
+		s.queueControlFrame(&wire.HandshakeDoneFrame{})
 	}
 }
 
@@ -857,6 +857,8 @@ func (s *session) handleFrame(f wire.Frame, pn protocol.PacketNumber, encLevel p
 		err = s.handleNewConnectionIDFrame(frame)
 	case *wire.RetireConnectionIDFrame:
 		err = s.handleRetireConnectionIDFrame(frame)
+	case *wire.HandshakeDoneFrame:
+		err = s.handleHandshakeDoneFrame()
 	default:
 		err = fmt.Errorf("unexpected frame type: %s", reflect.ValueOf(&frame).Elem().Type().Name())
 	}
@@ -973,6 +975,14 @@ func (s *session) handleNewConnectionIDFrame(f *wire.NewConnectionIDFrame) error
 
 func (s *session) handleRetireConnectionIDFrame(f *wire.RetireConnectionIDFrame) error {
 	return s.connIDGenerator.Retire(f.SequenceNumber)
+}
+
+func (s *session) handleHandshakeDoneFrame() error {
+	if s.perspective == protocol.PerspectiveServer {
+		return qerr.Error(qerr.ProtocolViolation, "received a HANDSHAKE_DONE frame")
+	}
+	s.cryptoStreamHandler.DropHandshakeKeys()
+	return nil
 }
 
 func (s *session) handleAckFrame(frame *wire.AckFrame, pn protocol.PacketNumber, encLevel protocol.EncryptionLevel) error {

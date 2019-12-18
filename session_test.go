@@ -406,6 +406,10 @@ var _ = Describe("Session", func() {
 			Expect(sess.handleFrame(ccf, 0, protocol.EncryptionUnspecified)).To(Succeed())
 			Eventually(sess.Context().Done()).Should(BeClosed())
 		})
+
+		It("errors on HANDSHAKE_DONE frames", func() {
+			Expect(sess.handleHandshakeDoneFrame()).To(MatchError("PROTOCOL_VIOLATION: received a HANDSHAKE_DONE frame"))
+		})
 	})
 
 	It("tells its versions", func() {
@@ -1207,6 +1211,7 @@ var _ = Describe("Session", func() {
 			defer GinkgoRecover()
 			<-finishHandshake
 			cryptoSetup.EXPECT().RunHandshake()
+			cryptoSetup.EXPECT().DropHandshakeKeys()
 			close(sess.handshakeCompleteChan)
 			sess.run()
 		}()
@@ -1242,10 +1247,13 @@ var _ = Describe("Session", func() {
 		Eventually(sess.Context().Done()).Should(BeClosed())
 	})
 
-	It("sends a 1-RTT packet when the handshake completes", func() {
+	It("sends a HANDSHAKE_DONE frame when the handshake completes", func() {
 		done := make(chan struct{})
 		sessionRunner.EXPECT().Retire(clientDestConnID)
 		packer.EXPECT().PackPacket().DoAndReturn(func() (*packedPacket, error) {
+			frames, _ := sess.framer.AppendControlFrames(nil, protocol.MaxByteCount)
+			Expect(frames).ToNot(BeEmpty())
+			Expect(frames[0].Frame).To(BeEquivalentTo(&wire.HandshakeDoneFrame{}))
 			defer close(done)
 			return &packedPacket{
 				header: &wire.ExtendedHeader{},
@@ -1256,6 +1264,7 @@ var _ = Describe("Session", func() {
 		go func() {
 			defer GinkgoRecover()
 			cryptoSetup.EXPECT().RunHandshake()
+			cryptoSetup.EXPECT().DropHandshakeKeys()
 			close(sess.handshakeCompleteChan)
 			sess.run()
 		}()
@@ -1508,6 +1517,7 @@ var _ = Describe("Session", func() {
 			go func() {
 				defer GinkgoRecover()
 				cryptoSetup.EXPECT().RunHandshake().MaxTimes(1)
+				cryptoSetup.EXPECT().DropHandshakeKeys().MaxTimes(1)
 				close(sess.handshakeCompleteChan)
 				err := sess.run()
 				nerr, ok := err.(net.Error)
@@ -1730,6 +1740,11 @@ var _ = Describe("Client Session", func() {
 			SrcConnectionID:  destConnID,
 		}
 		Expect(sess.handleSinglePacket(&receivedPacket{buffer: getPacketBuffer()}, hdr)).To(BeTrue())
+	})
+
+	It("handles HANDSHAKE_DONE frames", func() {
+		cryptoSetup.EXPECT().DropHandshakeKeys()
+		Expect(sess.handleHandshakeDoneFrame()).To(Succeed())
 	})
 
 	Context("handling tokens", func() {
