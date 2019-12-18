@@ -176,26 +176,19 @@ var _ = Describe("Connection ID Manager", func() {
 		Expect(frameQueue[0].(*wire.RetireConnectionIDFrame).SequenceNumber).To(BeEquivalentTo(4))
 	})
 
-	It("retires old connection IDs when the peer sends too many new ones", func() {
-		for i := uint8(1); i <= protocol.MaxActiveConnectionIDs; i++ {
+	It("errors when the peer sends too connection IDs", func() {
+		for i := uint8(1); i < protocol.MaxActiveConnectionIDs; i++ {
 			Expect(m.Add(&wire.NewConnectionIDFrame{
 				SequenceNumber:      uint64(i),
 				ConnectionID:        protocol.ConnectionID{i, i, i, i},
 				StatelessResetToken: [16]byte{i, i, i, i, i, i, i, i, i, i, i, i, i, i, i, i},
 			})).To(Succeed())
 		}
-		Expect(frameQueue).To(HaveLen(1))
-		Expect(frameQueue[0].(*wire.RetireConnectionIDFrame).SequenceNumber).To(BeZero())
-		Expect(retiredTokens).To(BeEmpty())
-		frameQueue = nil
 		Expect(m.Add(&wire.NewConnectionIDFrame{
-			SequenceNumber: protocol.MaxActiveConnectionIDs + 1,
-			ConnectionID:   protocol.ConnectionID{1, 2, 3, 4},
-		})).To(Succeed())
-		Expect(frameQueue).To(HaveLen(1))
-		Expect(frameQueue[0].(*wire.RetireConnectionIDFrame).SequenceNumber).To(BeEquivalentTo(1))
-		Expect(retiredTokens).To(HaveLen(1))
-		Expect(retiredTokens[0]).To(Equal([16]byte{1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1}))
+			SequenceNumber:      uint64(9999),
+			ConnectionID:        protocol.ConnectionID{1, 2, 3, 4},
+			StatelessResetToken: [16]byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16},
+		})).To(MatchError("CONNECTION_ID_LIMIT_ERROR"))
 	})
 
 	It("initiates the first connection ID update as soon as possible", func() {
@@ -211,7 +204,7 @@ var _ = Describe("Connection ID Manager", func() {
 
 	It("initiates subsequent updates when enough packets are sent", func() {
 		var s uint8
-		for s = uint8(1); s <= protocol.MaxActiveConnectionIDs; s++ {
+		for s = uint8(1); s < protocol.MaxActiveConnectionIDs; s++ {
 			Expect(m.Add(&wire.NewConnectionIDFrame{
 				SequenceNumber:      uint64(s),
 				ConnectionID:        protocol.ConnectionID{s, s, s, s},

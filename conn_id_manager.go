@@ -7,6 +7,7 @@ import (
 	mrand "math/rand"
 
 	"github.com/lucas-clemente/quic-go/internal/protocol"
+	"github.com/lucas-clemente/quic-go/internal/qerr"
 	"github.com/lucas-clemente/quic-go/internal/utils"
 	"github.com/lucas-clemente/quic-go/internal/wire"
 )
@@ -57,7 +58,7 @@ func (h *connIDManager) Add(f *wire.NewConnectionIDFrame) error {
 		return err
 	}
 	if h.queue.Len() >= protocol.MaxActiveConnectionIDs {
-		h.updateConnectionID()
+		return qerr.ConnectionIDLimitError
 	}
 	return nil
 }

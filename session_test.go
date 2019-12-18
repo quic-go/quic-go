@@ -1347,7 +1347,7 @@ var _ = Describe("Session", func() {
 			packer.EXPECT().HandleTransportParameters(params)
 			packer.EXPECT().PackPacket().MaxTimes(3)
 			Expect(sess.earlySessionReady()).ToNot(BeClosed())
-			sessionRunner.EXPECT().Add(gomock.Any(), sess).Times(3)
+			sessionRunner.EXPECT().Add(gomock.Any(), sess).Times(2)
 			sess.processTransportParameters(params.Marshal())
 			Expect(sess.earlySessionReady()).To(BeClosed())
 
@@ -1357,7 +1357,7 @@ var _ = Describe("Session", func() {
 			sessionRunner.EXPECT().ReplaceWithClosed(gomock.Any(), gomock.Any()).Do(func(_ protocol.ConnectionID, s packetHandler) {
 				Expect(s).To(BeAssignableToTypeOf(&closedLocalSession{}))
 				Expect(s.Close()).To(Succeed())
-			}).Times(5) // initial connection ID + initial client dest conn ID + 3 newly issued conn IDs
+			}).Times(4) // initial connection ID + initial client dest conn ID + 2 newly issued conn IDs
 			packer.EXPECT().PackConnectionClose(gomock.Any()).Return(&packedPacket{}, nil)
 			cryptoSetup.EXPECT().Close()
 			sess.Close()
