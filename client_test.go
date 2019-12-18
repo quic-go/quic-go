@@ -398,7 +398,7 @@ var _ = Describe("Client", func() {
 				tokenStore := NewLRUTokenStore(10, 4)
 				config := &Config{
 					HandshakeTimeout:      1337 * time.Minute,
-					IdleTimeout:           42 * time.Hour,
+					MaxIdleTimeout:        42 * time.Hour,
 					MaxIncomingStreams:    1234,
 					MaxIncomingUniStreams: 4321,
 					ConnectionIDLength:    13,
@@ -408,7 +408,7 @@ var _ = Describe("Client", func() {
 				}
 				c := populateClientConfig(config, false)
 				Expect(c.HandshakeTimeout).To(Equal(1337 * time.Minute))
-				Expect(c.IdleTimeout).To(Equal(42 * time.Hour))
+				Expect(c.MaxIdleTimeout).To(Equal(42 * time.Hour))
 				Expect(c.MaxIncomingStreams).To(Equal(1234))
 				Expect(c.MaxIncomingUniStreams).To(Equal(4321))
 				Expect(c.ConnectionIDLength).To(Equal(13))
@@ -456,7 +456,7 @@ var _ = Describe("Client", func() {
 				c := populateClientConfig(&Config{}, false)
 				Expect(c.Versions).To(Equal(protocol.SupportedVersions))
 				Expect(c.HandshakeTimeout).To(Equal(protocol.DefaultHandshakeTimeout))
-				Expect(c.IdleTimeout).To(Equal(protocol.DefaultIdleTimeout))
+				Expect(c.MaxIdleTimeout).To(Equal(protocol.DefaultIdleTimeout))
 			})
 		})
 

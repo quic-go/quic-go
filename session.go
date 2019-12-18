@@ -163,6 +163,7 @@ type session struct {
 	receivedRetry       bool
 	receivedFirstPacket bool
 
+	idleTimeout         time.Duration
 	sessionCreationTime time.Time
 	// The idle timeout is set based on the max of the time we received the last packet...
 	lastPacketReceivedTime time.Time
@@ -245,7 +246,7 @@ var newSession = func(
 		InitialMaxStreamDataBidiRemote: protocol.InitialMaxStreamData,
 		InitialMaxStreamDataUni:        protocol.InitialMaxStreamData,
 		InitialMaxData:                 protocol.InitialMaxData,
-		IdleTimeout:                    s.config.IdleTimeout,
+		MaxIdleTimeout:                 s.config.MaxIdleTimeout,
 		MaxBidiStreamNum:               protocol.StreamNum(s.config.MaxIncomingStreams),
 		MaxUniStreamNum:                protocol.StreamNum(s.config.MaxIncomingUniStreams),
 		MaxAckDelay:                    protocol.MaxAckDelayInclGranularity,
@@ -346,7 +347,7 @@ var newClientSession = func(
 		InitialMaxStreamDataBidiLocal:  protocol.InitialMaxStreamData,
 		InitialMaxStreamDataUni:        protocol.InitialMaxStreamData,
 		InitialMaxData:                 protocol.InitialMaxData,
-		IdleTimeout:                    s.config.IdleTimeout,
+		MaxIdleTimeout:                 s.config.MaxIdleTimeout,
 		MaxBidiStreamNum:               protocol.StreamNum(s.config.MaxIncomingStreams),
 		MaxUniStreamNum:                protocol.StreamNum(s.config.MaxIncomingUniStreams),
 		MaxAckDelay:                    protocol.MaxAckDelayInclGranularity,
@@ -533,7 +534,7 @@ runLoop:
 			s.destroyImpl(qerr.TimeoutError("Handshake did not complete in time"))
 			continue
 		}
-		if s.handshakeComplete && now.Sub(s.idleTimeoutStartTime()) >= s.config.IdleTimeout {
+		if s.handshakeComplete && now.Sub(s.idleTimeoutStartTime()) >= s.idleTimeout {
 			s.destroyImpl(qerr.TimeoutError("No recent network activity"))
 			continue
 		}
@@ -569,10 +570,15 @@ func (s *session) ConnectionState() tls.ConnectionState {
 
 func (s *session) maybeResetTimer() {
 	var deadline time.Time
-	if s.config.KeepAlive && s.handshakeComplete && !s.keepAlivePingSent {
-		deadline = s.idleTimeoutStartTime().Add(s.keepAliveInterval / 2)
+	if !s.handshakeComplete {
+		handshakeDeadline := s.sessionCreationTime.Add(s.config.HandshakeTimeout)
+		deadline = handshakeDeadline
 	} else {
-		deadline = s.idleTimeoutStartTime().Add(s.config.IdleTimeout)
+		if s.config.KeepAlive && !s.keepAlivePingSent {
+			deadline = s.idleTimeoutStartTime().Add(s.keepAliveInterval / 2)
+		} else {
+			deadline = s.idleTimeoutStartTime().Add(s.idleTimeout)
+		}
 	}
 
 	if ackAlarm := s.receivedPacketHandler.GetAlarmTimeout(); !ackAlarm.IsZero() {
@@ -580,10 +586,6 @@ func (s *session) maybeResetTimer() {
 	}
 	if lossTime := s.sentPacketHandler.GetLossDetectionTimeout(); !lossTime.IsZero() {
 		deadline = utils.MinTime(deadline, lossTime)
-	}
-	if !s.handshakeComplete {
-		handshakeDeadline := s.sessionCreationTime.Add(s.config.HandshakeTimeout)
-		deadline = utils.MinTime(deadline, handshakeDeadline)
 	}
 	if !s.pacingDeadline.IsZero() {
 		deadline = utils.MinTime(deadline, s.pacingDeadline)
@@ -1093,7 +1095,9 @@ func (s *session) processTransportParameters(data []byte) {
 	}
 	s.logger.Debugf("Received Transport Parameters: %s", params)
 	s.peerParams = params
-	s.keepAliveInterval = utils.MinDuration(params.IdleTimeout/2, protocol.MaxKeepAliveInterval)
+	// Our local idle timeout will always be > 0.
+	s.idleTimeout = utils.MinNonZeroDuration(s.config.MaxIdleTimeout, params.MaxIdleTimeout)
+	s.keepAliveInterval = utils.MinDuration(s.idleTimeout/2, protocol.MaxKeepAliveInterval)
 	if err := s.streamsMap.UpdateLimits(params); err != nil {
 		s.closeLocal(err)
 		return

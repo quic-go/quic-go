@@ -198,62 +198,11 @@ func newClient(
 // populateClientConfig populates fields in the quic.Config with their default values, if none are set
 // it may be called with nil
 func populateClientConfig(config *Config, createdPacketConn bool) *Config {
-	if config == nil {
-		config = &Config{}
+	config = populateConfig(config)
+	if config.ConnectionIDLength == 0 && !createdPacketConn {
+		config.ConnectionIDLength = protocol.DefaultConnectionIDLength
 	}
-	versions := config.Versions
-	if len(versions) == 0 {
-		versions = protocol.SupportedVersions
-	}
-
-	handshakeTimeout := protocol.DefaultHandshakeTimeout
-	if config.HandshakeTimeout != 0 {
-		handshakeTimeout = config.HandshakeTimeout
-	}
-	idleTimeout := protocol.DefaultIdleTimeout
-	if config.IdleTimeout != 0 {
-		idleTimeout = config.IdleTimeout
-	}
-
-	maxReceiveStreamFlowControlWindow := config.MaxReceiveStreamFlowControlWindow
-	if maxReceiveStreamFlowControlWindow == 0 {
-		maxReceiveStreamFlowControlWindow = protocol.DefaultMaxReceiveStreamFlowControlWindow
-	}
-	maxReceiveConnectionFlowControlWindow := config.MaxReceiveConnectionFlowControlWindow
-	if maxReceiveConnectionFlowControlWindow == 0 {
-		maxReceiveConnectionFlowControlWindow = protocol.DefaultMaxReceiveConnectionFlowControlWindow
-	}
-	maxIncomingStreams := config.MaxIncomingStreams
-	if maxIncomingStreams == 0 {
-		maxIncomingStreams = protocol.DefaultMaxIncomingStreams
-	} else if maxIncomingStreams < 0 {
-		maxIncomingStreams = 0
-	}
-	maxIncomingUniStreams := config.MaxIncomingUniStreams
-	if maxIncomingUniStreams == 0 {
-		maxIncomingUniStreams = protocol.DefaultMaxIncomingUniStreams
-	} else if maxIncomingUniStreams < 0 {
-		maxIncomingUniStreams = 0
-	}
-	connIDLen := config.ConnectionIDLength
-	if connIDLen == 0 && !createdPacketConn {
-		connIDLen = protocol.DefaultConnectionIDLength
-	}
-
-	return &Config{
-		Versions:                              versions,
-		HandshakeTimeout:                      handshakeTimeout,
-		IdleTimeout:                           idleTimeout,
-		ConnectionIDLength:                    connIDLen,
-		MaxReceiveStreamFlowControlWindow:     maxReceiveStreamFlowControlWindow,
-		MaxReceiveConnectionFlowControlWindow: maxReceiveConnectionFlowControlWindow,
-		MaxIncomingStreams:                    maxIncomingStreams,
-		MaxIncomingUniStreams:                 maxIncomingUniStreams,
-		KeepAlive:                             config.KeepAlive,
-		StatelessResetKey:                     config.StatelessResetKey,
-		QuicTracer:                            config.QuicTracer,
-		TokenStore:                            config.TokenStore,
-	}
+	return config
 }
 
 func (c *client) dial(ctx context.Context) error {

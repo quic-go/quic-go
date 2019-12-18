@@ -60,7 +60,7 @@ var _ = Describe("Stateless Resets", func() {
 				getTLSClientConfig(),
 				&quic.Config{
 					ConnectionIDLength: connIDLen,
-					IdleTimeout:        2 * time.Second,
+					MaxIdleTimeout:     2 * time.Second,
 				},
 			)
 			Expect(err).ToNot(HaveOccurred())

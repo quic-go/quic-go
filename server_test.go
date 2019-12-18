@@ -95,7 +95,7 @@ var _ = Describe("Server", func() {
 		server := ln.(*baseServer)
 		Expect(server.config.Versions).To(Equal(protocol.SupportedVersions))
 		Expect(server.config.HandshakeTimeout).To(Equal(protocol.DefaultHandshakeTimeout))
-		Expect(server.config.IdleTimeout).To(Equal(protocol.DefaultIdleTimeout))
+		Expect(server.config.MaxIdleTimeout).To(Equal(protocol.DefaultIdleTimeout))
 		Expect(reflect.ValueOf(server.config.AcceptToken)).To(Equal(reflect.ValueOf(defaultAcceptToken)))
 		Expect(server.config.KeepAlive).To(BeFalse())
 		// stop the listener
@@ -110,7 +110,7 @@ var _ = Describe("Server", func() {
 			Versions:          supportedVersions,
 			AcceptToken:       acceptToken,
 			HandshakeTimeout:  1337 * time.Hour,
-			IdleTimeout:       42 * time.Minute,
+			MaxIdleTimeout:    42 * time.Minute,
 			KeepAlive:         true,
 			StatelessResetKey: []byte("foobar"),
 			QuicTracer:        tracer,
@@ -121,7 +121,7 @@ var _ = Describe("Server", func() {
 		Expect(server.sessionHandler).ToNot(BeNil())
 		Expect(server.config.Versions).To(Equal(supportedVersions))
 		Expect(server.config.HandshakeTimeout).To(Equal(1337 * time.Hour))
-		Expect(server.config.IdleTimeout).To(Equal(42 * time.Minute))
+		Expect(server.config.MaxIdleTimeout).To(Equal(42 * time.Minute))
 		Expect(reflect.ValueOf(server.config.AcceptToken)).To(Equal(reflect.ValueOf(acceptToken)))
 		Expect(server.config.KeepAlive).To(BeTrue())
 		Expect(server.config.StatelessResetKey).To(Equal([]byte("foobar")))

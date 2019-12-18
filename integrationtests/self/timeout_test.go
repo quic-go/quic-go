@@ -92,7 +92,7 @@ var _ = Describe("Timeout tests", func() {
 		sess, err := quic.DialAddr(
 			fmt.Sprintf("localhost:%d", proxy.LocalPort()),
 			getTLSClientConfig(),
-			&quic.Config{IdleTimeout: idleTimeout},
+			&quic.Config{MaxIdleTimeout: idleTimeout},
 		)
 		Expect(err).ToNot(HaveOccurred())
 		strIn, err := sess.AcceptStream(context.Background())
@@ -155,7 +155,7 @@ var _ = Describe("Timeout tests", func() {
 			sess, err := quic.DialAddr(
 				fmt.Sprintf("localhost:%d", server.Addr().(*net.UDPAddr).Port),
 				getTLSClientConfig(),
-				&quic.Config{IdleTimeout: idleTimeout},
+				&quic.Config{MaxIdleTimeout: idleTimeout},
 			)
 			Expect(err).ToNot(HaveOccurred())
 			startTime := time.Now()
@@ -196,7 +196,7 @@ var _ = Describe("Timeout tests", func() {
 			sess, err := quic.DialAddr(
 				fmt.Sprintf("localhost:%d", server.Addr().(*net.UDPAddr).Port),
 				getTLSClientConfig(),
-				&quic.Config{IdleTimeout: idleTimeout},
+				&quic.Config{MaxIdleTimeout: idleTimeout},
 			)
 			Expect(err).ToNot(HaveOccurred())
 
