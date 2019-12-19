@@ -30,22 +30,28 @@ var _ = Describe("Handshake drop tests", func() {
 		ln    quic.Listener
 	)
 
-	startListenerAndProxy := func(dropCallback quicproxy.DropCallback, version protocol.VersionNumber) {
+	const timeout = 10 * time.Minute
+
+	startListenerAndProxy := func(dropCallback quicproxy.DropCallback, doRetry bool, version protocol.VersionNumber) {
+		conf := &quic.Config{
+			MaxIdleTimeout:   timeout,
+			HandshakeTimeout: timeout,
+			Versions:         []protocol.VersionNumber{version},
+		}
+		if !doRetry {
+			conf.AcceptToken = func(net.Addr, *quic.Token) bool { return true }
+		}
 		var err error
-		ln, err = quic.ListenAddr(
-			"localhost:0",
-			getTLSConfig(),
-			&quic.Config{
-				Versions: []protocol.VersionNumber{version},
-			},
-		)
+		ln, err = quic.ListenAddr("localhost:0", getTLSConfig(), conf)
 		Expect(err).ToNot(HaveOccurred())
 		serverPort := ln.Addr().(*net.UDPAddr).Port
 		proxy, err = quicproxy.NewQuicProxy("localhost:0", &quicproxy.Opts{
 			RemoteAddr: fmt.Sprintf("localhost:%d", serverPort),
 			DropPacket: dropCallback,
-		},
-		)
+			DelayPacket: func(dir quicproxy.Direction, packet []byte) time.Duration {
+				return 10 * time.Millisecond
+			},
+		})
 		Expect(err).ToNot(HaveOccurred())
 	}
 
@@ -73,7 +79,11 @@ var _ = Describe("Handshake drop tests", func() {
 			sess, err := quic.DialAddr(
 				fmt.Sprintf("localhost:%d", proxy.LocalPort()),
 				getTLSClientConfig(),
-				&quic.Config{Versions: []protocol.VersionNumber{version}},
+				&quic.Config{
+					MaxIdleTimeout:   timeout,
+					HandshakeTimeout: timeout,
+					Versions:         []protocol.VersionNumber{version},
+				},
 			)
 			Expect(err).ToNot(HaveOccurred())
 			str, err := sess.OpenStream()
@@ -82,7 +92,7 @@ var _ = Describe("Handshake drop tests", func() {
 			Expect(err).ToNot(HaveOccurred())
 
 			var serverSession quic.Session
-			Eventually(serverSessionChan, 10*time.Second).Should(Receive(&serverSession))
+			Eventually(serverSessionChan, timeout).Should(Receive(&serverSession))
 			sess.Close()
 			serverSession.Close()
 		},
@@ -105,7 +115,11 @@ var _ = Describe("Handshake drop tests", func() {
 			sess, err := quic.DialAddr(
 				fmt.Sprintf("localhost:%d", proxy.LocalPort()),
 				getTLSClientConfig(),
-				&quic.Config{Versions: []protocol.VersionNumber{version}},
+				&quic.Config{
+					MaxIdleTimeout:   timeout,
+					HandshakeTimeout: timeout,
+					Versions:         []protocol.VersionNumber{version},
+				},
 			)
 			Expect(err).ToNot(HaveOccurred())
 			str, err := sess.AcceptStream(context.Background())
@@ -116,7 +130,7 @@ var _ = Describe("Handshake drop tests", func() {
 			Expect(string(b)).To(Equal("foobar"))
 
 			var serverSession quic.Session
-			Eventually(serverSessionChan, 10*time.Second).Should(Receive(&serverSession))
+			Eventually(serverSessionChan, timeout).Should(Receive(&serverSession))
 			sess.Close()
 			serverSession.Close()
 		},
@@ -135,11 +149,15 @@ var _ = Describe("Handshake drop tests", func() {
 			sess, err := quic.DialAddr(
 				fmt.Sprintf("localhost:%d", proxy.LocalPort()),
 				getTLSClientConfig(),
-				&quic.Config{Versions: []protocol.VersionNumber{version}},
+				&quic.Config{
+					MaxIdleTimeout:   timeout,
+					HandshakeTimeout: timeout,
+					Versions:         []protocol.VersionNumber{version},
+				},
 			)
 			Expect(err).ToNot(HaveOccurred())
 			var serverSession quic.Session
-			Eventually(serverSessionChan, 10*time.Second).Should(Receive(&serverSession))
+			Eventually(serverSessionChan, timeout).Should(Receive(&serverSession))
 			// both server and client accepted a session. Close now.
 			sess.Close()
 			serverSession.Close()
@@ -147,6 +165,7 @@ var _ = Describe("Handshake drop tests", func() {
 	}
 
 	AfterEach(func() {
+		Expect(ln.Close()).To(Succeed())
 		Expect(proxy.Close()).To(Succeed())
 	})
 
@@ -157,46 +176,56 @@ var _ = Describe("Handshake drop tests", func() {
 			for _, d := range directions {
 				direction := d
 
-				for _, a := range []*applicationProtocol{clientSpeaksFirst, serverSpeaksFirst, nobodySpeaks} {
-					app := a
+				for _, dr := range []bool{true, false} {
+					doRetry := dr
+					desc := "when using Retry"
+					if !dr {
+						desc = "when not using Retry"
+					}
 
-					Context(app.name, func() {
-						It(fmt.Sprintf("establishes a connection when the first packet is lost in %s direction", direction), func() {
-							var incoming, outgoing int32
-							startListenerAndProxy(func(d quicproxy.Direction, _ []byte) bool {
-								var p int32
-								switch d {
-								case quicproxy.DirectionIncoming:
-									p = atomic.AddInt32(&incoming, 1)
-								case quicproxy.DirectionOutgoing:
-									p = atomic.AddInt32(&outgoing, 1)
-								}
-								return p == 1 && d.Is(direction)
-							}, version)
-							app.run(version)
-						})
+					Context(desc, func() {
+						for _, a := range []*applicationProtocol{clientSpeaksFirst, serverSpeaksFirst, nobodySpeaks} {
+							app := a
 
-						It(fmt.Sprintf("establishes a connection when the second packet is lost in %s direction", direction), func() {
-							var incoming, outgoing int32
-							startListenerAndProxy(func(d quicproxy.Direction, _ []byte) bool {
-								var p int32
-								switch d {
-								case quicproxy.DirectionIncoming:
-									p = atomic.AddInt32(&incoming, 1)
-								case quicproxy.DirectionOutgoing:
-									p = atomic.AddInt32(&outgoing, 1)
-								}
-								return p == 2 && d.Is(direction)
-							}, version)
-							app.run(version)
-						})
+							Context(app.name, func() {
+								It(fmt.Sprintf("establishes a connection when the first packet is lost in %s direction", direction), func() {
+									var incoming, outgoing int32
+									startListenerAndProxy(func(d quicproxy.Direction, _ []byte) bool {
+										var p int32
+										switch d {
+										case quicproxy.DirectionIncoming:
+											p = atomic.AddInt32(&incoming, 1)
+										case quicproxy.DirectionOutgoing:
+											p = atomic.AddInt32(&outgoing, 1)
+										}
+										return p == 1 && d.Is(direction)
+									}, doRetry, version)
+									app.run(version)
+								})
 
-						It(fmt.Sprintf("establishes a connection when 1/5 of the packets are lost in %s direction", direction), func() {
-							startListenerAndProxy(func(d quicproxy.Direction, _ []byte) bool {
-								return d.Is(direction) && stochasticDropper(5)
-							}, version)
-							app.run(version)
-						})
+								It(fmt.Sprintf("establishes a connection when the second packet is lost in %s direction", direction), func() {
+									var incoming, outgoing int32
+									startListenerAndProxy(func(d quicproxy.Direction, _ []byte) bool {
+										var p int32
+										switch d {
+										case quicproxy.DirectionIncoming:
+											p = atomic.AddInt32(&incoming, 1)
+										case quicproxy.DirectionOutgoing:
+											p = atomic.AddInt32(&outgoing, 1)
+										}
+										return p == 2 && d.Is(direction)
+									}, doRetry, version)
+									app.run(version)
+								})
+
+								It(fmt.Sprintf("establishes a connection when 1/3 of the packets are lost in %s direction", direction), func() {
+									startListenerAndProxy(func(d quicproxy.Direction, _ []byte) bool {
+										return d.Is(direction) && stochasticDropper(3)
+									}, doRetry, version)
+									app.run(version)
+								})
+							})
+						}
 					})
 				}
 			}
