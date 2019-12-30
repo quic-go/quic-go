@@ -1,9 +1,15 @@
 # Changelog
 
-## v0.13.0 (unreleased)
+## v0.14.0 (2019-12-04)
 
+- Supports QUIC WG draft-24.
+
+## v0.13.0 (2019-11-05)
+
+- Supports QUIC WG draft-23.
 - Add an `EarlyListener` that allows sending of 0.5-RTT data.
 - Add a `TokenStore` to store address validation tokens.
+- Issue and use new connection IDs during a connection.
 
 ## v0.12.0 (2019-08-05)
 
