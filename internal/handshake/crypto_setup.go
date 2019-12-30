@@ -1,6 +1,7 @@
 package handshake
 
 import (
+	"bytes"
 	"crypto/tls"
 	"errors"
 	"fmt"
@@ -448,12 +449,28 @@ func (h *cryptoSetup) marshalPeerParamsForSessionState() []byte {
 }
 
 func (h *cryptoSetup) handlePeerParamsFromSessionState(data []byte) {
-	var tp TransportParameters
-	if err := tp.Unmarshal(data, protocol.PerspectiveServer); err != nil {
+	tp, err := h.handlePeerParamsFromSessionStateImpl(data)
+	if err != nil {
 		h.logger.Debugf("Restoring of transport parameters from session ticket failed: %s", err.Error())
 		return
 	}
-	h.zeroRTTParameters = &tp
+	h.zeroRTTParameters = tp
+}
+
+func (h *cryptoSetup) handlePeerParamsFromSessionStateImpl(data []byte) (*TransportParameters, error) {
+	r := bytes.NewReader(data)
+	version, err := utils.ReadVarInt(r)
+	if err != nil {
+		return nil, err
+	}
+	if version != transportParameterMarshalingVersion {
+		return nil, fmt.Errorf("unknown transport parameter marshaling version: %d", version)
+	}
+	var tp TransportParameters
+	if err := tp.Unmarshal(data[len(data)-r.Len():], protocol.PerspectiveServer); err != nil {
+		return nil, err
+	}
+	return &tp, nil
 }
 
 // only valid for the server
@@ -469,7 +486,12 @@ func (h *cryptoSetup) maybeSendSessionTicket() {
 }
 
 func (h *cryptoSetup) accept0RTT(sessionTicketData []byte) bool {
-	return h.ourParams.ValidFromSessionTicket(sessionTicketData)
+	var tp TransportParameters
+	if err := tp.UnmarshalFromSessionTicket(sessionTicketData); err != nil {
+		h.logger.Debugf("Unmarshaling transport parameters from session ticket failed: %s", err.Error())
+		return false
+	}
+	return h.ourParams.ValidFor0RTT(&tp)
 }
 
 func (h *cryptoSetup) handlePostHandshakeMessage() {

@@ -17,6 +17,8 @@ import (
 	"github.com/lucas-clemente/quic-go/internal/utils"
 )
 
+const transportParameterMarshalingVersion = 1
+
 func init() {
 	rand.Seed(time.Now().UTC().UnixNano())
 }
@@ -379,6 +381,8 @@ func (p *TransportParameters) marshalVarintParam(b *bytes.Buffer, id transportPa
 // For convenience, we use the same format that we also use for sending the transport parameters.
 func (p *TransportParameters) MarshalForSessionTicket() []byte {
 	b := &bytes.Buffer{}
+	utils.WriteVarInt(b, transportParameterMarshalingVersion)
+	startLen := b.Len()
 	b.Write([]byte{0, 0}) // length. Will be replaced later
 
 	// initial_max_stream_data_bidi_local
@@ -395,17 +399,26 @@ func (p *TransportParameters) MarshalForSessionTicket() []byte {
 	p.marshalVarintParam(b, initialMaxStreamsUniParameterID, uint64(p.MaxUniStreamNum))
 
 	data := b.Bytes()
-	binary.BigEndian.PutUint16(data[:2], uint16(b.Len()-2))
+	binary.BigEndian.PutUint16(data[startLen:startLen+2], uint16(b.Len()-2-startLen))
 	return data
 }
 
-// ValidFromSessionTicket checks if the transport parameters match those saved in the session ticket.
-func (p *TransportParameters) ValidFromSessionTicket(data []byte) bool {
-	tp := &TransportParameters{}
-	if err := tp.Unmarshal(data, protocol.PerspectiveServer); err != nil {
-		return false
+// UnmarshalFromSessionTicket unmarshals transport parameters from a session ticket.
+func (p *TransportParameters) UnmarshalFromSessionTicket(data []byte) error {
+	r := bytes.NewReader(data)
+	version, err := utils.ReadVarInt(r)
+	if err != nil {
+		return err
 	}
+	if version != transportParameterMarshalingVersion {
+		return fmt.Errorf("unknown transport parameter marshaling version: %d", version)
+	}
+	tp := &TransportParameters{}
+	return tp.Unmarshal(data[len(data)-r.Len():], protocol.PerspectiveServer)
+}
 
+// ValidFor0RTT checks if the transport parameters match those saved in the session ticket.
+func (p *TransportParameters) ValidFor0RTT(tp *TransportParameters) bool {
 	return p.InitialMaxStreamDataBidiLocal == tp.InitialMaxStreamDataBidiLocal &&
 		p.InitialMaxStreamDataBidiRemote == tp.InitialMaxStreamDataBidiRemote &&
 		p.InitialMaxStreamDataUni == tp.InitialMaxStreamDataUni &&

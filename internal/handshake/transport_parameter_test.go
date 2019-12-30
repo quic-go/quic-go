@@ -3,6 +3,7 @@ package handshake
 import (
 	"bytes"
 	"encoding/binary"
+	"fmt"
 	"math"
 	"math/rand"
 	"net"
@@ -341,13 +342,21 @@ var _ = Describe("Transport Parameters", func() {
 				MaxBidiStreamNum:               protocol.StreamNum(getRandomValue()),
 				MaxUniStreamNum:                protocol.StreamNum(getRandomValue()),
 			}
-			data := params.MarshalForSessionTicket()
-			Expect(params.ValidFromSessionTicket(data)).To(BeTrue())
+			Expect(params.ValidFor0RTT(params)).To(BeTrue())
 		})
 
 		It("rejects the parameters if it can't parse them", func() {
-			params := &TransportParameters{}
-			Expect(params.ValidFromSessionTicket([]byte("foobar"))).To(BeFalse())
+			var p TransportParameters
+			Expect(p.UnmarshalFromSessionTicket([]byte("foobar"))).ToNot(Succeed())
+		})
+
+		It("rejects the parameters if the version changed", func() {
+			var p TransportParameters
+			data := p.MarshalForSessionTicket()
+			b := &bytes.Buffer{}
+			utils.WriteVarInt(b, transportParameterMarshalingVersion+1)
+			b.Write(data[utils.VarIntLen(transportParameterMarshalingVersion):])
+			Expect(p.UnmarshalFromSessionTicket(b.Bytes())).To(MatchError(fmt.Sprintf("unknown transport parameter marshaling version: %d", transportParameterMarshalingVersion+1)))
 		})
 
 		Context("rejects the parameters if they changed", func() {
@@ -370,37 +379,37 @@ var _ = Describe("Transport Parameters", func() {
 					MaxBidiStreamNum:               5,
 					MaxUniStreamNum:                6,
 				}
-				Expect(params.ValidFromSessionTicket(p.Marshal())).To(BeTrue())
+				Expect(params.ValidFor0RTT(p)).To(BeTrue())
 			})
 
 			It("rejects the parameters if the InitialMaxStreamDataBidiLocal changed", func() {
 				p.InitialMaxStreamDataBidiLocal = 0
-				Expect(params.ValidFromSessionTicket(p.Marshal())).To(BeFalse())
+				Expect(params.ValidFor0RTT(p)).To(BeFalse())
 			})
 
 			It("rejects the parameters if the InitialMaxStreamDataBidiRemote changed", func() {
 				p.InitialMaxStreamDataBidiRemote = 0
-				Expect(params.ValidFromSessionTicket(p.Marshal())).To(BeFalse())
+				Expect(params.ValidFor0RTT(p)).To(BeFalse())
 			})
 
 			It("rejects the parameters if the InitialMaxStreamDataUni changed", func() {
 				p.InitialMaxStreamDataUni = 0
-				Expect(params.ValidFromSessionTicket(p.Marshal())).To(BeFalse())
+				Expect(params.ValidFor0RTT(p)).To(BeFalse())
 			})
 
 			It("rejects the parameters if the InitialMaxData changed", func() {
 				p.InitialMaxData = 0
-				Expect(params.ValidFromSessionTicket(p.Marshal())).To(BeFalse())
+				Expect(params.ValidFor0RTT(p)).To(BeFalse())
 			})
 
 			It("rejects the parameters if the MaxBidiStreamNum changed", func() {
 				p.MaxBidiStreamNum = 0
-				Expect(params.ValidFromSessionTicket(p.Marshal())).To(BeFalse())
+				Expect(params.ValidFor0RTT(p)).To(BeFalse())
 			})
 
 			It("rejects the parameters if the MaxUniStreamNum changed", func() {
 				p.MaxUniStreamNum = 0
-				Expect(params.ValidFromSessionTicket(p.Marshal())).To(BeFalse())
+				Expect(params.ValidFor0RTT(p)).To(BeFalse())
 			})
 		})
 	})
