@@ -78,6 +78,29 @@ var _ = Describe("Packet Unpacker", func() {
 		Expect(packet.data).To(Equal([]byte("decrypted")))
 	})
 
+	It("opens 0-RTT packets", func() {
+		extHdr := &wire.ExtendedHeader{
+			Header: wire.Header{
+				IsLongHeader:     true,
+				Type:             protocol.PacketType0RTT,
+				Length:           3 + 6, // packet number len + payload
+				DestConnectionID: connID,
+				Version:          version,
+			},
+			PacketNumber:    2,
+			PacketNumberLen: 3,
+		}
+		hdr, hdrRaw := getHeader(extHdr)
+		opener := mocks.NewMockLongHeaderOpener(mockCtrl)
+		cs.EXPECT().Get0RTTOpener().Return(opener, nil)
+		opener.EXPECT().DecryptHeader(gomock.Any(), gomock.Any(), gomock.Any())
+		opener.EXPECT().Open(gomock.Any(), payload, extHdr.PacketNumber, hdrRaw).Return([]byte("decrypted"), nil)
+		packet, err := unpacker.Unpack(hdr, time.Now(), append(hdrRaw, payload...))
+		Expect(err).ToNot(HaveOccurred())
+		Expect(packet.encryptionLevel).To(Equal(protocol.Encryption0RTT))
+		Expect(packet.data).To(Equal([]byte("decrypted")))
+	})
+
 	It("returns the error when getting the sealer fails", func() {
 		extHdr := &wire.ExtendedHeader{
 			Header:          wire.Header{DestConnectionID: connID},

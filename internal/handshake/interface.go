@@ -59,7 +59,7 @@ type tlsExtensionHandler interface {
 }
 
 type handshakeRunner interface {
-	OnReceivedParams([]byte)
+	OnReceivedParams(*TransportParameters)
 	OnHandshakeComplete()
 	OnError(error)
 	DropKeys(protocol.EncryptionLevel)
@@ -78,9 +78,11 @@ type CryptoSetup interface {
 
 	GetInitialOpener() (LongHeaderOpener, error)
 	GetHandshakeOpener() (LongHeaderOpener, error)
+	Get0RTTOpener() (LongHeaderOpener, error)
 	Get1RTTOpener() (ShortHeaderOpener, error)
 
 	GetInitialSealer() (LongHeaderSealer, error)
 	GetHandshakeSealer() (LongHeaderSealer, error)
+	Get0RTTSealer() (LongHeaderSealer, error)
 	Get1RTTSealer() (ShortHeaderSealer, error)
 }

@@ -47,6 +47,7 @@ type updatableAEAD struct {
 
 	keyPhase          protocol.KeyPhase
 	largestAcked      protocol.PacketNumber
+	firstPacketNumber protocol.PacketNumber
 	keyUpdateInterval uint64
 
 	// Time when the keys should be dropped. Keys are dropped on the next call to Open().
@@ -83,6 +84,7 @@ var _ ShortHeaderSealer = &updatableAEAD{}
 
 func newUpdatableAEAD(rttStats *congestion.RTTStats, logger utils.Logger) *updatableAEAD {
 	return &updatableAEAD{
+		firstPacketNumber:       protocol.InvalidPacketNumber,
 		largestAcked:            protocol.InvalidPacketNumber,
 		firstRcvdWithCurrentKey: protocol.InvalidPacketNumber,
 		firstSentWithCurrentKey: protocol.InvalidPacketNumber,
@@ -199,6 +201,9 @@ func (a *updatableAEAD) Seal(dst, src []byte, pn protocol.PacketNumber, ad []byt
 	if a.firstSentWithCurrentKey == protocol.InvalidPacketNumber {
 		a.firstSentWithCurrentKey = pn
 	}
+	if a.firstPacketNumber == protocol.InvalidPacketNumber {
+		a.firstPacketNumber = pn
+	}
 	a.numSentWithCurrentKey++
 	binary.BigEndian.PutUint64(a.nonceBuf[len(a.nonceBuf)-8:], uint64(pn))
 	// The AEAD we're using here will be the qtls.aeadAESGCM13.
@@ -248,4 +253,8 @@ func (a *updatableAEAD) EncryptHeader(sample []byte, firstByte *byte, hdrBytes [
 
 func (a *updatableAEAD) DecryptHeader(sample []byte, firstByte *byte, hdrBytes []byte) {
 	a.headerDecrypter.DecryptHeader(sample, firstByte, hdrBytes)
+}
+
+func (a *updatableAEAD) FirstPacketNumber() protocol.PacketNumber {
+	return a.firstPacketNumber
 }

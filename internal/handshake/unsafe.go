@@ -19,6 +19,9 @@ func init() {
 	if !structsEqual(&tls.ClientSessionState{}, &qtls.ClientSessionState{}) {
 		panic("qtls.ClientSessionState not compatible with tls.ClientSessionState")
 	}
+	if !structsEqual(&tls.ClientSessionState{}, &clientSessionState{}) {
+		panic("clientSessionState not compatible with tls.ClientSessionState")
+	}
 }
 
 func structsEqual(a, b interface{}) bool {

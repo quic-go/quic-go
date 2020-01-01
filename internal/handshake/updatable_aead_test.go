@@ -75,6 +75,13 @@ var _ = Describe("Updatable AEAD", func() {
 					Expect(opened).To(Equal(msg))
 				})
 
+				It("saves the first packet number", func() {
+					client.Seal(nil, msg, 0x1337, ad)
+					Expect(client.FirstPacketNumber()).To(Equal(protocol.PacketNumber(0x1337)))
+					client.Seal(nil, msg, 0x1338, ad)
+					Expect(client.FirstPacketNumber()).To(Equal(protocol.PacketNumber(0x1337)))
+				})
+
 				It("fails to open a message if the associated data is not the same", func() {
 					encrypted := client.Seal(nil, msg, 0x1337, ad)
 					_, err := server.Open(nil, encrypted, time.Now(), 0x1337, protocol.KeyPhaseZero, []byte("wrong ad"))

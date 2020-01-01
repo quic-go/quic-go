@@ -84,16 +84,16 @@ type sessionRunner interface {
 }
 
 type handshakeRunner struct {
-	onReceivedParams    func([]byte)
+	onReceivedParams    func(*handshake.TransportParameters)
 	onError             func(error)
 	dropKeys            func(protocol.EncryptionLevel)
 	onHandshakeComplete func()
 }
 
-func (r *handshakeRunner) OnReceivedParams(b []byte)            { r.onReceivedParams(b) }
-func (r *handshakeRunner) OnError(e error)                      { r.onError(e) }
-func (r *handshakeRunner) DropKeys(el protocol.EncryptionLevel) { r.dropKeys(el) }
-func (r *handshakeRunner) OnHandshakeComplete()                 { r.onHandshakeComplete() }
+func (r *handshakeRunner) OnReceivedParams(tp *handshake.TransportParameters) { r.onReceivedParams(tp) }
+func (r *handshakeRunner) OnError(e error)                                    { r.onError(e) }
+func (r *handshakeRunner) DropKeys(el protocol.EncryptionLevel)               { r.dropKeys(el) }
+func (r *handshakeRunner) OnHandshakeComplete()                               { r.onHandshakeComplete() }
 
 type closeError struct {
 	err       error
@@ -156,7 +156,7 @@ type session struct {
 
 	undecryptablePackets []*receivedPacket
 
-	clientHelloWritten    <-chan struct{}
+	clientHelloWritten    <-chan *handshake.TransportParameters
 	earlySessionReadyChan chan struct{}
 	handshakeCompleteChan chan struct{} // is closed when the handshake completes
 	handshakeComplete     bool
@@ -274,6 +274,7 @@ var newSession = func(
 			},
 		},
 		tlsConf,
+		true, // TODO: make 0-RTT support configurable
 		s.rttStats,
 		logger,
 	)
@@ -370,6 +371,7 @@ var newClientSession = func(
 			onHandshakeComplete: func() { close(s.handshakeCompleteChan) },
 		},
 		tlsConf,
+		true, // TODO: make 0-RTT support configurable
 		s.rttStats,
 		logger,
 	)
@@ -461,8 +463,12 @@ func (s *session) run() error {
 
 	if s.perspective == protocol.PerspectiveClient {
 		select {
-		case <-s.clientHelloWritten:
+		case zeroRTTParams := <-s.clientHelloWritten:
 			s.scheduleSending()
+			if zeroRTTParams != nil {
+				s.processTransportParameters(zeroRTTParams)
+				close(s.earlySessionReadyChan)
+			}
 		case closeErr := <-s.closeChan:
 			// put the close error back into the channel, so that the run loop can receive it
 			s.closeChan <- closeErr
@@ -681,8 +687,8 @@ func (s *session) handleSinglePacket(p *receivedPacket, hdr *wire.Header) bool /
 		s.logger.Debugf("Dropping %s packet with unexpected source connection ID: %s (expected %s)", hdr.PacketType(), hdr.SrcConnectionID, s.handshakeDestConnID)
 		return false
 	}
-	// drop 0-RTT packets
-	if hdr.Type == protocol.PacketType0RTT {
+	// drop 0-RTT packets, if we are a client
+	if s.perspective == protocol.PerspectiveClient && hdr.Type == protocol.PacketType0RTT {
 		return false
 	}
 
@@ -816,8 +822,7 @@ func (s *session) handleUnpackedPacket(packet *unpackedPacket, rcvTime time.Time
 		})
 	}
 
-	s.receivedPacketHandler.ReceivedPacket(packet.packetNumber, packet.encryptionLevel, rcvTime, isAckEliciting)
-	return nil
+	return s.receivedPacketHandler.ReceivedPacket(packet.packetNumber, packet.encryptionLevel, rcvTime, isAckEliciting)
 }
 
 func (s *session) handleFrame(f wire.Frame, pn protocol.PacketNumber, encLevel protocol.EncryptionLevel) error {
@@ -1090,20 +1095,14 @@ func (s *session) dropEncryptionLevel(encLevel protocol.EncryptionLevel) {
 	s.receivedPacketHandler.DropPackets(encLevel)
 }
 
-func (s *session) processTransportParameters(data []byte) {
-	var params *handshake.TransportParameters
-	var err error
-	switch s.perspective {
-	case protocol.PerspectiveClient:
-		params, err = s.processTransportParametersForClient(data)
-	case protocol.PerspectiveServer:
-		params, err = s.processTransportParametersForServer(data)
-	}
-	if err != nil {
-		s.closeLocal(err)
+func (s *session) processTransportParameters(params *handshake.TransportParameters) {
+	// check the Retry token
+	if s.perspective == protocol.PerspectiveClient && !params.OriginalConnectionID.Equal(s.origDestConnID) {
+		s.closeLocal(qerr.Error(qerr.TransportParameterError, fmt.Sprintf("expected original_connection_id to equal %s, is %s", s.origDestConnID, params.OriginalConnectionID)))
 		return
 	}
-	s.logger.Debugf("Received Transport Parameters: %s", params)
+
+	s.logger.Debugf("Processed Transport Parameters: %s", params)
 	s.peerParams = params
 	// Our local idle timeout will always be > 0.
 	s.idleTimeout = utils.MinNonZeroDuration(s.config.MaxIdleTimeout, params.MaxIdleTimeout)
@@ -1120,36 +1119,17 @@ func (s *session) processTransportParameters(data []byte) {
 	if params.StatelessResetToken != nil {
 		s.connIDManager.SetStatelessResetToken(*params.StatelessResetToken)
 	}
-	// On the server side, the early session is ready as soon as we processed
-	// the client's transport parameters.
-	close(s.earlySessionReadyChan)
-}
-
-func (s *session) processTransportParametersForClient(data []byte) (*handshake.TransportParameters, error) {
-	params := &handshake.TransportParameters{}
-	if err := params.Unmarshal(data, s.perspective.Opposite()); err != nil {
-		return nil, err
-	}
-
-	// check the Retry token
-	if !params.OriginalConnectionID.Equal(s.origDestConnID) {
-		return nil, qerr.Error(qerr.TransportParameterError, fmt.Sprintf("expected original_connection_id to equal %s, is %s", s.origDestConnID, params.OriginalConnectionID))
-	}
 	// We don't support connection migration yet, so we don't have any use for the preferred_address.
 	if params.PreferredAddress != nil {
 		s.logger.Debugf("Server sent preferred_address. Retiring the preferred_address connection ID.")
 		// Retire the connection ID.
 		s.framer.QueueControlFrame(&wire.RetireConnectionIDFrame{SequenceNumber: 1})
 	}
-	return params, nil
-}
-
-func (s *session) processTransportParametersForServer(data []byte) (*handshake.TransportParameters, error) {
-	params := &handshake.TransportParameters{}
-	if err := params.Unmarshal(data, s.perspective.Opposite()); err != nil {
-		return nil, err
+	// On the server side, the early session is ready as soon as we processed
+	// the client's transport parameters.
+	if s.perspective == protocol.PerspectiveServer {
+		close(s.earlySessionReadyChan)
 	}
-	return params, nil
 }
 
 func (s *session) sendPackets() error {

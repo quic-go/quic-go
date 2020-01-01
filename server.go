@@ -361,6 +361,7 @@ func (s *baseServer) handlePacketImpl(p *receivedPacket) bool /* was the packet 
 		// Drop long header packets.
 		// There's litte point in sending a Stateless Reset, since the client
 		// might not have received the token yet.
+		s.logger.Debugf("Dropping long header packet of type %s (%d bytes)", hdr.Type, len(p.data))
 		return false
 	}
 

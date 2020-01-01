@@ -89,9 +89,11 @@ func (mr *MockReceivedPacketHandlerMockRecorder) IgnoreBelow(arg0 interface{}) *
 }
 
 // ReceivedPacket mocks base method
-func (m *MockReceivedPacketHandler) ReceivedPacket(arg0 protocol.PacketNumber, arg1 protocol.EncryptionLevel, arg2 time.Time, arg3 bool) {
+func (m *MockReceivedPacketHandler) ReceivedPacket(arg0 protocol.PacketNumber, arg1 protocol.EncryptionLevel, arg2 time.Time, arg3 bool) error {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "ReceivedPacket", arg0, arg1, arg2, arg3)
+	ret := m.ctrl.Call(m, "ReceivedPacket", arg0, arg1, arg2, arg3)
+	ret0, _ := ret[0].(error)
+	return ret0
 }
 
 // ReceivedPacket indicates an expected call of ReceivedPacket

@@ -1313,23 +1313,7 @@ var _ = Describe("Session", func() {
 	})
 
 	Context("transport parameters", func() {
-		It("errors if it can't unmarshal the TransportParameters", func() {
-			go func() {
-				defer GinkgoRecover()
-				cryptoSetup.EXPECT().RunHandshake().MaxTimes(1)
-				err := sess.run()
-				Expect(err).To(HaveOccurred())
-				Expect(err.Error()).To(ContainSubstring("transport parameter"))
-			}()
-			streamManager.EXPECT().CloseWithError(gomock.Any())
-			expectReplaceWithClosed()
-			packer.EXPECT().PackConnectionClose(gomock.Any()).Return(&packedPacket{}, nil)
-			cryptoSetup.EXPECT().Close()
-			sess.processTransportParameters([]byte("invalid"))
-			Eventually(sess.Context().Done()).Should(BeClosed())
-		})
-
-		It("processes transport parameters received from the client", func() {
+		It("process transport parameters received from the client", func() {
 			go func() {
 				defer GinkgoRecover()
 				cryptoSetup.EXPECT().RunHandshake().MaxTimes(1)
@@ -1348,7 +1332,7 @@ var _ = Describe("Session", func() {
 			packer.EXPECT().PackPacket().MaxTimes(3)
 			Expect(sess.earlySessionReady()).ToNot(BeClosed())
 			sessionRunner.EXPECT().Add(gomock.Any(), sess).Times(2)
-			sess.processTransportParameters(params.Marshal())
+			sess.processTransportParameters(params)
 			Expect(sess.earlySessionReady()).To(BeClosed())
 
 			// make the go routine return
@@ -1367,10 +1351,9 @@ var _ = Describe("Session", func() {
 
 	Context("keep-alives", func() {
 		setRemoteIdleTimeout := func(t time.Duration) {
-			tp := &handshake.TransportParameters{MaxIdleTimeout: t}
 			streamManager.EXPECT().UpdateLimits(gomock.Any())
 			packer.EXPECT().HandleTransportParameters(gomock.Any())
-			sess.processTransportParameters(tp.Marshal())
+			sess.processTransportParameters(&handshake.TransportParameters{MaxIdleTimeout: t})
 		}
 
 		runSession := func() {
@@ -1814,27 +1797,40 @@ var _ = Describe("Client Session", func() {
 	})
 
 	Context("transport parameters", func() {
-		It("errors if it can't unmarshal the TransportParameters", func() {
+		var (
+			closed  bool
+			errChan chan error
+		)
+
+		JustBeforeEach(func() {
+			errChan = make(chan error, 1)
+			closed = false
 			go func() {
 				defer GinkgoRecover()
 				cryptoSetup.EXPECT().RunHandshake().MaxTimes(1)
-				err := sess.run()
-				Expect(err).To(HaveOccurred())
-				Expect(err.Error()).To(ContainSubstring("transport parameter"))
+				errChan <- sess.run()
 			}()
-			expectReplaceWithClosed()
-			packer.EXPECT().PackConnectionClose(gomock.Any()).Return(&packedPacket{}, nil)
-			cryptoSetup.EXPECT().Close()
-			sess.processTransportParameters([]byte("invalid"))
+		})
+
+		expectClose := func() {
+			if !closed {
+				sessionRunner.EXPECT().ReplaceWithClosed(gomock.Any(), gomock.Any()).Do(func(_ protocol.ConnectionID, s packetHandler) {
+					Expect(s).To(BeAssignableToTypeOf(&closedLocalSession{}))
+					Expect(s.Close()).To(Succeed())
+				})
+				packer.EXPECT().PackConnectionClose(gomock.Any()).Return(&packedPacket{}, nil).MaxTimes(1)
+				cryptoSetup.EXPECT().Close()
+			}
+			closed = true
+		}
+
+		AfterEach(func() {
+			expectClose()
+			sess.Close()
 			Eventually(sess.Context().Done()).Should(BeClosed())
 		})
 
 		It("immediately retires the preferred_address connection ID", func() {
-			go func() {
-				defer GinkgoRecover()
-				cryptoSetup.EXPECT().RunHandshake().MaxTimes(1)
-				sess.run()
-			}()
 			params := &handshake.TransportParameters{
 				PreferredAddress: &handshake.PreferredAddress{
 					IPv4:         net.IPv4(127, 0, 0, 1),
@@ -1844,20 +1840,10 @@ var _ = Describe("Client Session", func() {
 			}
 			packer.EXPECT().HandleTransportParameters(gomock.Any())
 			packer.EXPECT().PackPacket().MaxTimes(1)
-			sess.processTransportParameters(params.Marshal())
+			sess.processTransportParameters(params)
 			cf, _ := sess.framer.AppendControlFrames(nil, protocol.MaxByteCount)
 			Expect(cf).To(HaveLen(1))
 			Expect(cf[0].Frame).To(Equal(&wire.RetireConnectionIDFrame{SequenceNumber: 1}))
-
-			// make the go routine return
-			sessionRunner.EXPECT().ReplaceWithClosed(gomock.Any(), gomock.Any()).Do(func(_ protocol.ConnectionID, s packetHandler) {
-				Expect(s).To(BeAssignableToTypeOf(&closedLocalSession{}))
-				Expect(s.Close()).To(Succeed())
-			})
-			packer.EXPECT().PackConnectionClose(gomock.Any()).Return(&packedPacket{}, nil)
-			cryptoSetup.EXPECT().Close()
-			sess.Close()
-			Eventually(sess.Context().Done()).Should(BeClosed())
 		})
 
 		It("uses the minimum of the peers' idle timeouts", func() {
@@ -1866,27 +1852,27 @@ var _ = Describe("Client Session", func() {
 				MaxIdleTimeout: 18 * time.Second,
 			}
 			packer.EXPECT().HandleTransportParameters(gomock.Any())
-			sess.processTransportParameters(params.Marshal())
+			sess.processTransportParameters(params)
 			Expect(sess.idleTimeout).To(Equal(18 * time.Second))
 		})
 
 		It("errors if the TransportParameters contain an original_connection_id, although no Retry was performed", func() {
-			params := &handshake.TransportParameters{
+			expectClose()
+			sess.processTransportParameters(&handshake.TransportParameters{
 				OriginalConnectionID: protocol.ConnectionID{0xde, 0xca, 0xfb, 0xad},
 				StatelessResetToken:  &[16]byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16},
-			}
-			_, err := sess.processTransportParametersForClient(params.Marshal())
-			Expect(err).To(MatchError("TRANSPORT_PARAMETER_ERROR: expected original_connection_id to equal (empty), is 0xdecafbad"))
+			})
+			Eventually(errChan).Should(Receive(MatchError("TRANSPORT_PARAMETER_ERROR: expected original_connection_id to equal (empty), is 0xdecafbad")))
 		})
 
 		It("errors if the TransportParameters contain a wrong original_connection_id", func() {
 			sess.origDestConnID = protocol.ConnectionID{0xde, 0xad, 0xbe, 0xef}
-			params := &handshake.TransportParameters{
+			expectClose()
+			sess.processTransportParameters(&handshake.TransportParameters{
 				OriginalConnectionID: protocol.ConnectionID{0xde, 0xca, 0xfb, 0xad},
 				StatelessResetToken:  &[16]byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16},
-			}
-			_, err := sess.processTransportParametersForClient(params.Marshal())
-			Expect(err).To(MatchError("TRANSPORT_PARAMETER_ERROR: expected original_connection_id to equal 0xdeadbeef, is 0xdecafbad"))
+			})
+			Eventually(errChan).Should(Receive(MatchError("TRANSPORT_PARAMETER_ERROR: expected original_connection_id to equal 0xdeadbeef, is 0xdecafbad")))
 		})
 	})
 

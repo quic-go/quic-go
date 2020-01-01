@@ -257,6 +257,50 @@ var _ = Describe("Client", func() {
 			Eventually(run).Should(BeClosed())
 		})
 
+		It("returns early sessions", func() {
+			manager := NewMockPacketHandlerManager(mockCtrl)
+			manager.EXPECT().Add(gomock.Any(), gomock.Any())
+			mockMultiplexer.EXPECT().AddConn(packetConn, gomock.Any(), gomock.Any()).Return(manager, nil)
+
+			readyChan := make(chan struct{})
+			done := make(chan struct{})
+			newClientSession = func(
+				_ connection,
+				runner sessionRunner,
+				_ protocol.ConnectionID,
+				_ protocol.ConnectionID,
+				_ *Config,
+				_ *tls.Config,
+				_ protocol.PacketNumber,
+				_ protocol.VersionNumber,
+				_ utils.Logger,
+				_ protocol.VersionNumber,
+			) quicSession {
+				sess := NewMockQuicSession(mockCtrl)
+				sess.EXPECT().run().Do(func() { <-done })
+				sess.EXPECT().HandshakeComplete().Return(context.Background())
+				sess.EXPECT().earlySessionReady().Return(readyChan)
+				return sess
+			}
+
+			go func() {
+				defer GinkgoRecover()
+				defer close(done)
+				s, err := DialEarly(
+					packetConn,
+					addr,
+					"localhost:1337",
+					tlsConf,
+					&Config{},
+				)
+				Expect(err).ToNot(HaveOccurred())
+				Expect(s).ToNot(BeNil())
+			}()
+			Consistently(done).ShouldNot(BeClosed())
+			close(readyChan)
+			Eventually(done).Should(BeClosed())
+		})
+
 		It("returns an error that occurs while waiting for the handshake to complete", func() {
 			manager := NewMockPacketHandlerManager(mockCtrl)
 			manager.EXPECT().Add(gomock.Any(), gomock.Any())
