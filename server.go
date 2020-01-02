@@ -68,6 +68,7 @@ type baseServer struct {
 
 	tokenGenerator *handshake.TokenGenerator
 
+	zeroRTTQueue   *zeroRTTQueue
 	sessionHandler packetHandlerManager
 
 	receivedPackets chan *receivedPacket
@@ -175,6 +176,7 @@ func listen(conn net.PacketConn, tlsConf *tls.Config, config *Config, acceptEarl
 		config:              config,
 		tokenGenerator:      tokenGenerator,
 		sessionHandler:      sessionHandler,
+		zeroRTTQueue:        newZeroRTTQueue(),
 		sessionQueue:        make(chan quicSession),
 		errorChan:           make(chan struct{}),
 		receivedPackets:     make(chan *receivedPacket, 1000),
@@ -286,11 +288,7 @@ func (s *baseServer) handlePacket(p *receivedPacket) {
 	s.receivedPackets <- p
 }
 
-func (s *baseServer) handlePacketImpl(p *receivedPacket) bool /* was the packet passed on to a session */ {
-	if len(p.data) < protocol.MinInitialPacketSize {
-		s.logger.Debugf("Dropping a packet that is too small to be a valid Initial (%d bytes)", len(p.data))
-		return false
-	}
+func (s *baseServer) handlePacketImpl(p *receivedPacket) bool /* was the packet handled */ {
 	// If we're creating a new session, the packet will be passed to the session.
 	// The header will then be parsed again.
 	hdr, _, _, err := wire.ParsePacket(p.data, s.config.ConnectionIDLength)
@@ -302,17 +300,26 @@ func (s *baseServer) handlePacketImpl(p *receivedPacket) bool /* was the packet 
 	if !hdr.IsLongHeader {
 		return false
 	}
+	if hdr.Type == protocol.PacketTypeInitial && len(p.data) < protocol.MinInitialPacketSize {
+		s.logger.Debugf("Dropping a packet that is too small to be a valid Initial (%d bytes)", len(p.data))
+		return false
+	}
 	// send a Version Negotiation Packet if the client is speaking a different protocol version
 	if !protocol.IsSupportedVersion(s.config.Versions, hdr.Version) {
 		go s.sendVersionNegotiationPacket(p, hdr)
 		return false
 	}
-	if hdr.IsLongHeader && hdr.Type != protocol.PacketTypeInitial {
-		// Drop long header packets.
-		// There's litte point in sending a Stateless Reset, since the client
-		// might not have received the token yet.
-		s.logger.Debugf("Dropping long header packet of type %s (%d bytes)", hdr.Type, len(p.data))
-		return false
+	if hdr.IsLongHeader {
+		if hdr.Type == protocol.PacketType0RTT {
+			s.zeroRTTQueue.Enqueue(hdr.DestConnectionID, p)
+			return true
+		} else if hdr.Type != protocol.PacketTypeInitial {
+			// Drop long header packets.
+			// There's litte point in sending a Stateless Reset, since the client
+			// might not have received the token yet.
+			s.logger.Debugf("Dropping long header packet of type %s (%d bytes)", hdr.Type, len(p.data))
+			return false
+		}
 	}
 
 	s.logger.Debugf("<- Received Initial packet.")
@@ -382,7 +389,15 @@ func (s *baseServer) handleInitialImpl(p *receivedPacket, hdr *wire.Header) (qui
 		connID,
 		hdr.Version,
 	)
-	if sess != nil {
+	if sess == nil {
+		return nil, nil
+	}
+	sess.handlePacket(p)
+	for {
+		p := s.zeroRTTQueue.Dequeue(hdr.DestConnectionID)
+		if p == nil {
+			break
+		}
 		sess.handlePacket(p)
 	}
 	return sess, nil
