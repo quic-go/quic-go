@@ -159,6 +159,9 @@ const MaxAckDelayInclGranularity = MaxAckDelay + TimerGranularity
 // KeyUpdateInterval is the maximum number of packets we send or receive before initiating a key udpate.
 const KeyUpdateInterval = 100 * 1000
 
+// Max0RTTQueueingDuration is the maximum time that we store 0-RTT packets in order to wait for the corresponding Initial to be received.
+const Max0RTTQueueingDuration = 100 * time.Millisecond
+
 // Max0RTTQueues is the maximum number of connections that we buffer 0-RTT packets for.
 const Max0RTTQueues = 32
 

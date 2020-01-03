@@ -2,6 +2,7 @@ package quic
 
 import (
 	"encoding/binary"
+	"time"
 
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 
@@ -83,6 +84,14 @@ var _ = Describe("0-RTT queue", func() {
 			Expect(binary.BigEndian.Uint32(p.data)).To(BeEquivalentTo(i))
 		}
 		// The queue should now be empty.
+		Expect(q.Dequeue(connID)).To(BeNil())
+	})
+
+	It("deletes packets if they aren't dequeued after a short while", func() {
+		connID := protocol.ConnectionID{0xde, 0xad, 0xbe, 0xef}
+		p := &receivedPacket{data: []byte("foobar")}
+		q.Enqueue(connID, p)
+		time.Sleep(protocol.Max0RTTQueueingDuration * 3 / 2)
 		Expect(q.Dequeue(connID)).To(BeNil())
 	})
 })
