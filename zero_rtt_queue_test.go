@@ -17,6 +17,22 @@ var _ = Describe("0-RTT queue", func() {
 		q = newZeroRTTQueue()
 	})
 
+	AfterEach(func() {
+		// dequeue all packets to make sure the timers are stopped
+		q.mutex.Lock()
+		for connID := range q.queue {
+			for {
+				q.mutex.Unlock()
+				p := q.Dequeue(protocol.ConnectionID(connID))
+				q.mutex.Lock()
+				if p != nil {
+					break
+				}
+			}
+		}
+		q.mutex.Unlock()
+	})
+
 	It("stores a 0-RTT packet", func() {
 		connID := protocol.ConnectionID{0xde, 0xad, 0xbe, 0xef}
 		p := &receivedPacket{data: []byte("foobar")}
@@ -89,7 +105,7 @@ var _ = Describe("0-RTT queue", func() {
 
 	It("deletes packets if they aren't dequeued after a short while", func() {
 		connID := protocol.ConnectionID{0xde, 0xad, 0xbe, 0xef}
-		p := &receivedPacket{data: []byte("foobar")}
+		p := &receivedPacket{data: []byte("foobar"), buffer: getPacketBuffer()}
 		q.Enqueue(connID, p)
 		time.Sleep(protocol.Max0RTTQueueingDuration * 3 / 2)
 		Expect(q.Dequeue(connID)).To(BeNil())

@@ -30,11 +30,7 @@ func (h *zeroRTTQueue) Enqueue(connID protocol.ConnectionID, p *receivedPacket) 
 		if len(h.queue) >= protocol.Max0RTTQueues {
 			return
 		}
-		h.queue[cid] = &zeroRTTQueueEntry{timer: time.AfterFunc(protocol.Max0RTTQueueingDuration, func() {
-			h.mutex.Lock()
-			delete(h.queue, cid)
-			h.mutex.Unlock()
-		})}
+		h.queue[cid] = &zeroRTTQueueEntry{timer: time.AfterFunc(protocol.Max0RTTQueueingDuration, func() { h.deleteQueue(connID) })}
 	}
 	entry := h.queue[cid]
 	if len(entry.packets) >= protocol.Max0RTTQueueLen {
@@ -58,4 +54,18 @@ func (h *zeroRTTQueue) Dequeue(connID protocol.ConnectionID) *receivedPacket {
 		delete(h.queue, string(connID))
 	}
 	return p
+}
+
+func (h *zeroRTTQueue) deleteQueue(connID protocol.ConnectionID) {
+	h.mutex.Lock()
+	defer h.mutex.Unlock()
+
+	entry, ok := h.queue[string(connID)]
+	if !ok {
+		return
+	}
+	for _, p := range entry.packets {
+		p.buffer.Release()
+	}
+	delete(h.queue, string(connID))
 }
