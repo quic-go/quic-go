@@ -6,7 +6,6 @@ package mockquic
 
 import (
 	context "context"
-	tls "crypto/tls"
 	net "net"
 	reflect "reflect"
 
@@ -97,10 +96,10 @@ func (mr *MockSessionMockRecorder) CloseWithError(arg0, arg1 interface{}) *gomoc
 }
 
 // ConnectionState mocks base method
-func (m *MockSession) ConnectionState() tls.ConnectionState {
+func (m *MockSession) ConnectionState() quic_go.ConnectionState {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ConnectionState")
-	ret0, _ := ret[0].(tls.ConnectionState)
+	ret0, _ := ret[0].(quic_go.ConnectionState)
 	return ret0
 }
 

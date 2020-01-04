@@ -139,6 +139,10 @@ type StreamError interface {
 	ErrorCode() ErrorCode
 }
 
+type ConnectionState struct {
+	TLSConnectionState tls.ConnectionState
+}
+
 // A Session is a QUIC connection between two peers.
 type Session interface {
 	// AcceptStream returns the next stream opened by the peer, blocking until one is available.
@@ -185,7 +189,7 @@ type Session interface {
 	Context() context.Context
 	// ConnectionState returns basic details about the QUIC connection.
 	// Warning: This API should not be considered stable and might change soon.
-	ConnectionState() tls.ConnectionState
+	ConnectionState() ConnectionState
 }
 
 // An EarlySession is a session that is handshaking.

@@ -571,8 +571,8 @@ func (s *session) Context() context.Context {
 	return s.ctx
 }
 
-func (s *session) ConnectionState() tls.ConnectionState {
-	return s.cryptoStreamHandler.ConnectionState()
+func (s *session) ConnectionState() ConnectionState {
+	return ConnectionState{TLSConnectionState: s.cryptoStreamHandler.ConnectionState()}
 }
 
 func (s *session) maybeResetTimer() {
