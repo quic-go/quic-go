@@ -1022,9 +1022,9 @@ func (s *session) destroy(e error) {
 func (s *session) destroyImpl(e error) {
 	s.closeOnce.Do(func() {
 		if nerr, ok := e.(net.Error); ok && nerr.Timeout() {
-			s.logger.Errorf("Destroying session %s: %s", s.connIDManager.Get(), e)
+			s.logger.Errorf("Destroying session: %s", e)
 		} else {
-			s.logger.Errorf("Destroying session %s with error: %s", s.connIDManager.Get(), e)
+			s.logger.Errorf("Destroying session with error: %s", e)
 		}
 		s.closeChan <- closeError{err: e, immediate: true, remote: false}
 	})
