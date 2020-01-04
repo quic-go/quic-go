@@ -8,7 +8,6 @@ import (
 	"io"
 	"net"
 	"sync"
-	"unsafe"
 
 	"github.com/lucas-clemente/quic-go/internal/congestion"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
@@ -782,12 +781,6 @@ func (h *cryptoSetup) Get1RTTOpener() (ShortHeaderOpener, error) {
 	return h.aead, nil
 }
 
-func (h *cryptoSetup) ConnectionState() tls.ConnectionState {
-	cs := h.conn.ConnectionState()
-	// h.conn is a qtls.Conn, which returns a qtls.ConnectionState.
-	// qtls.ConnectionState is identical to the tls.ConnectionState.
-	// It contains an unexported field which is used ExportKeyingMaterial().
-	// The only way to return a tls.ConnectionState is to use unsafe.
-	// In unsafe.go we check that the two objects are actually identical.
-	return *(*tls.ConnectionState)(unsafe.Pointer(&cs))
+func (h *cryptoSetup) ConnectionState() ConnectionState {
+	return h.conn.ConnectionState()
 }

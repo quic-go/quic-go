@@ -2,11 +2,11 @@ package quic
 
 import (
 	"context"
-	"crypto/tls"
 	"io"
 	"net"
 	"time"
 
+	"github.com/lucas-clemente/quic-go/internal/handshake"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/quictrace"
 )
@@ -139,6 +139,8 @@ type StreamError interface {
 	ErrorCode() ErrorCode
 }
 
+type ConnectionState = handshake.ConnectionState
+
 // A Session is a QUIC connection between two peers.
 type Session interface {
 	// AcceptStream returns the next stream opened by the peer, blocking until one is available.
@@ -182,8 +184,9 @@ type Session interface {
 	// Warning: This API should not be considered stable and might change soon.
 	Context() context.Context
 	// ConnectionState returns basic details about the QUIC connection.
+	// It blocks until the handshake completes.
 	// Warning: This API should not be considered stable and might change soon.
-	ConnectionState() tls.ConnectionState
+	ConnectionState() ConnectionState
 }
 
 // An EarlySession is a session that is handshaking.

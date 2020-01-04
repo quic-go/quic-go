@@ -1,7 +1,6 @@
 package handshake
 
 import (
-	"crypto/tls"
 	"errors"
 	"io"
 	"time"
@@ -21,6 +20,9 @@ var (
 	// ErrDecryptionFailed is returned when the AEAD fails to open the packet.
 	ErrDecryptionFailed = errors.New("decryption failed")
 )
+
+// ConnectionState contains information about the state of the connection.
+type ConnectionState = qtls.ConnectionState
 
 type headerDecryptor interface {
 	DecryptHeader(sample []byte, firstByte *byte, pnBytes []byte)
@@ -74,7 +76,7 @@ type CryptoSetup interface {
 	HandleMessage([]byte, protocol.EncryptionLevel) bool
 	SetLargest1RTTAcked(protocol.PacketNumber)
 	DropHandshakeKeys()
-	ConnectionState() tls.ConnectionState
+	ConnectionState() ConnectionState
 
 	GetInitialOpener() (LongHeaderOpener, error)
 	GetHandshakeOpener() (LongHeaderOpener, error)

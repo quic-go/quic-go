@@ -6,13 +6,13 @@ package mockquic
 
 import (
 	context "context"
-	tls "crypto/tls"
 	net "net"
 	reflect "reflect"
 
 	gomock "github.com/golang/mock/gomock"
 	quic "github.com/lucas-clemente/quic-go"
 	protocol "github.com/lucas-clemente/quic-go/internal/protocol"
+	qtls "github.com/marten-seemann/qtls"
 )
 
 // MockEarlySession is a mock of EarlySession interface
@@ -83,10 +83,10 @@ func (mr *MockEarlySessionMockRecorder) CloseWithError(arg0, arg1 interface{}) *
 }
 
 // ConnectionState mocks base method
-func (m *MockEarlySession) ConnectionState() tls.ConnectionState {
+func (m *MockEarlySession) ConnectionState() qtls.ConnectionState {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ConnectionState")
-	ret0, _ := ret[0].(tls.ConnectionState)
+	ret0, _ := ret[0].(qtls.ConnectionState)
 	return ret0
 }
 

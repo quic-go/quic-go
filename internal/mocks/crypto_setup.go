@@ -5,12 +5,12 @@
 package mocks
 
 import (
-	tls "crypto/tls"
 	reflect "reflect"
 
 	gomock "github.com/golang/mock/gomock"
 	handshake "github.com/lucas-clemente/quic-go/internal/handshake"
 	protocol "github.com/lucas-clemente/quic-go/internal/protocol"
+	qtls "github.com/marten-seemann/qtls"
 )
 
 // MockCryptoSetup is a mock of CryptoSetup interface
@@ -63,10 +63,10 @@ func (mr *MockCryptoSetupMockRecorder) Close() *gomock.Call {
 }
 
 // ConnectionState mocks base method
-func (m *MockCryptoSetup) ConnectionState() tls.ConnectionState {
+func (m *MockCryptoSetup) ConnectionState() qtls.ConnectionState {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ConnectionState")
-	ret0, _ := ret[0].(tls.ConnectionState)
+	ret0, _ := ret[0].(qtls.ConnectionState)
 	return ret0
 }
 
