@@ -19,6 +19,8 @@ import (
 
 var errUnsupported = errors.New("unsupported test case")
 
+var tlsConf *tls.Config
+
 func main() {
 	logFile, err := os.Create("/logs/log.txt")
 	if err != nil {
@@ -28,6 +30,17 @@ func main() {
 	defer logFile.Close()
 	log.SetOutput(logFile)
 
+	keyLog, err := os.Create("/logs/keylogfile.txt")
+	if err != nil {
+		fmt.Printf("Could not create key log file: %s\n", err.Error())
+		os.Exit(1)
+	}
+	defer keyLog.Close()
+
+	tlsConf = &tls.Config{
+		InsecureSkipVerify: true,
+		KeyLogWriter:       keyLog,
+	}
 	testcase := os.Getenv("TESTCASE")
 	if err := runTestcase(testcase); err != nil {
 		if err == errUnsupported {
@@ -45,9 +58,7 @@ func runTestcase(testcase string) error {
 
 	switch testcase {
 	case "http3":
-		r := &http3.RoundTripper{
-			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
-		}
+		r := &http3.RoundTripper{TLSClientConfig: tlsConf}
 		defer r.Close()
 		return downloadFiles(r, urls)
 	case "handshake", "transfer", "retry":
@@ -59,9 +70,7 @@ func runTestcase(testcase string) error {
 		return errUnsupported
 	}
 
-	r := &http09.RoundTripper{
-		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
-	}
+	r := &http09.RoundTripper{TLSClientConfig: tlsConf}
 	defer r.Close()
 	return downloadFiles(r, urls)
 }
@@ -85,27 +94,18 @@ func runResumptionTest(urls []string) error {
 	if len(urls) < 2 {
 		return errors.New("expected at least 2 URLs")
 	}
-	csc := tls.NewLRUClientSessionCache(1)
+
+	tlsConf.ClientSessionCache = tls.NewLRUClientSessionCache(1)
 
 	// do the first transfer
-	r := &http09.RoundTripper{
-		TLSClientConfig: &tls.Config{
-			InsecureSkipVerify: true,
-			ClientSessionCache: csc,
-		},
-	}
+	r := &http09.RoundTripper{TLSClientConfig: tlsConf}
 	if err := downloadFiles(r, urls[:1]); err != nil {
 		return err
 	}
 	r.Close()
 
 	// reestablish the connection, using the session ticket that the server (hopefully provided)
-	r = &http09.RoundTripper{
-		TLSClientConfig: &tls.Config{
-			InsecureSkipVerify: true,
-			ClientSessionCache: csc,
-		},
-	}
+	r = &http09.RoundTripper{TLSClientConfig: tlsConf}
 	defer r.Close()
 	return downloadFiles(r, urls[1:])
 }
