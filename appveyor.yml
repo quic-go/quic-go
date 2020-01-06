@@ -5,7 +5,7 @@ os: Windows Server 2012 R2
 environment:
   GOPATH: c:\gopath
   CGO_ENABLED: 0
-  TIMESCALE_FACTOR: 20
+  TIMESCALE_FACTOR: 40
   matrix:
     - GOARCH: 386
     - GOARCH: amd64
