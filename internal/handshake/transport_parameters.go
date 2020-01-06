@@ -413,8 +413,7 @@ func (p *TransportParameters) UnmarshalFromSessionTicket(data []byte) error {
 	if version != transportParameterMarshalingVersion {
 		return fmt.Errorf("unknown transport parameter marshaling version: %d", version)
 	}
-	tp := &TransportParameters{}
-	return tp.Unmarshal(data[len(data)-r.Len():], protocol.PerspectiveServer)
+	return p.Unmarshal(data[len(data)-r.Len():], protocol.PerspectiveServer)
 }
 
 // ValidFor0RTT checks if the transport parameters match those saved in the session ticket.

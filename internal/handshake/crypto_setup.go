@@ -491,7 +491,13 @@ func (h *cryptoSetup) accept0RTT(sessionTicketData []byte) bool {
 		h.logger.Debugf("Unmarshaling transport parameters from session ticket failed: %s", err.Error())
 		return false
 	}
-	return h.ourParams.ValidFor0RTT(&tp)
+	valid := h.ourParams.ValidFor0RTT(&tp)
+	if valid {
+		h.logger.Debugf("Accepting 0-RTT.")
+	} else {
+		h.logger.Debugf("Transport parameters changed. Rejecting 0-RTT.")
+	}
+	return valid
 }
 
 func (h *cryptoSetup) handlePostHandshakeMessage() {
