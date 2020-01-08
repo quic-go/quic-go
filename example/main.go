@@ -85,7 +85,7 @@ var _ http.Handler = &tracingHandler{}
 func (h *tracingHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	h.handler.ServeHTTP(w, r)
 	if err := exportTraces(); err != nil {
-		panic(err)
+		log.Fatal(err)
 	}
 }
 

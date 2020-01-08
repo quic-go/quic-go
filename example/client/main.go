@@ -6,6 +6,7 @@ import (
 	"crypto/x509"
 	"flag"
 	"io"
+	"log"
 	"net/http"
 	"sync"
 
@@ -32,7 +33,7 @@ func main() {
 
 	pool, err := x509.SystemCertPool()
 	if err != nil {
-		panic(err)
+		log.Fatal(err)
 	}
 	testdata.AddRootCA(pool)
 	roundTripper := &http3.RoundTripper{
@@ -53,14 +54,14 @@ func main() {
 		go func(addr string) {
 			rsp, err := hclient.Get(addr)
 			if err != nil {
-				panic(err)
+				log.Fatal(err)
 			}
 			logger.Infof("Got response for %s: %#v", addr, rsp)
 
 			body := &bytes.Buffer{}
 			_, err = io.Copy(body, rsp.Body)
 			if err != nil {
-				panic(err)
+				log.Fatal(err)
 			}
 			if *quiet {
 				logger.Infof("Request Body: %d bytes", body.Len())
