@@ -1382,6 +1382,7 @@ var _ = Describe("Session", func() {
 		It("sends a PING as a keep-alive after half the idle timeout", func() {
 			setRemoteIdleTimeout(5 * time.Second)
 			sess.lastPacketReceivedTime = time.Now().Add(-5 * time.Second / 2)
+			sess.firstAckElicitingPacketAfterIdleSentTime = time.Now().Add(-5 * time.Second / 2)
 			sent := make(chan struct{})
 			packer.EXPECT().PackPacket().Do(func() (*packedPacket, error) {
 				close(sent)
@@ -1395,6 +1396,7 @@ var _ = Describe("Session", func() {
 			sess.config.MaxIdleTimeout = time.Hour
 			setRemoteIdleTimeout(time.Hour)
 			sess.lastPacketReceivedTime = time.Now().Add(-protocol.MaxKeepAliveInterval).Add(-time.Millisecond)
+			sess.firstAckElicitingPacketAfterIdleSentTime = time.Now().Add(-protocol.MaxKeepAliveInterval).Add(-time.Millisecond)
 			sent := make(chan struct{})
 			packer.EXPECT().PackPacket().Do(func() (*packedPacket, error) {
 				close(sent)

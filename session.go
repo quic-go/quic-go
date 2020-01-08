@@ -524,11 +524,17 @@ runLoop:
 		if s.pacingDeadline.IsZero() { // the timer didn't have a pacing deadline set
 			pacingDeadline = s.sentPacketHandler.TimeUntilSend()
 		}
-		if s.config.KeepAlive && !s.keepAlivePingSent && s.handshakeComplete && s.firstAckElicitingPacketAfterIdleSentTime.IsZero() && time.Since(s.lastPacketReceivedTime) >= s.keepAliveInterval/2 {
+		if keepAliveTime := s.nextKeepAliveTime(); !keepAliveTime.IsZero() && !now.Before(keepAliveTime) {
 			// send a PING frame since there is no activity in the session
-			s.logger.Debugf("Sending a keep-alive ping to keep the connection alive.")
+			s.logger.Debugf("Sending a keep-alive PING to keep the connection alive.")
 			s.framer.QueueControlFrame(&wire.PingFrame{})
 			s.keepAlivePingSent = true
+		} else if !s.handshakeComplete && now.Sub(s.sessionCreationTime) >= s.config.HandshakeTimeout {
+			s.destroyImpl(qerr.TimeoutError("Handshake did not complete in time"))
+			continue
+		} else if s.handshakeComplete && now.Sub(s.idleTimeoutStartTime()) >= s.idleTimeout {
+			s.destroyImpl(qerr.TimeoutError("No recent network activity"))
+			continue
 		} else if !pacingDeadline.IsZero() && now.Before(pacingDeadline) {
 			// If we get to this point before the pacing deadline, we should wait until that deadline.
 			// This can happen when scheduleSending is called, or a packet is received.
@@ -575,14 +581,22 @@ func (s *session) ConnectionState() tls.ConnectionState {
 	return s.cryptoStreamHandler.ConnectionState()
 }
 
+// Time when the next keep-alive packet should be sent.
+// It returns a zero time if no keep-alive should be sent.
+func (s *session) nextKeepAliveTime() time.Time {
+	if !s.config.KeepAlive || s.keepAlivePingSent || s.firstAckElicitingPacketAfterIdleSentTime.IsZero() {
+		return time.Time{}
+	}
+	return s.lastPacketReceivedTime.Add(s.keepAliveInterval / 2)
+}
+
 func (s *session) maybeResetTimer() {
 	var deadline time.Time
 	if !s.handshakeComplete {
-		handshakeDeadline := s.sessionCreationTime.Add(s.config.HandshakeTimeout)
-		deadline = handshakeDeadline
+		deadline = s.sessionCreationTime.Add(s.config.HandshakeTimeout)
 	} else {
-		if s.config.KeepAlive && !s.keepAlivePingSent {
-			deadline = s.idleTimeoutStartTime().Add(s.keepAliveInterval / 2)
+		if keepAliveTime := s.nextKeepAliveTime(); !keepAliveTime.IsZero() {
+			deadline = keepAliveTime
 		} else {
 			deadline = s.idleTimeoutStartTime().Add(s.idleTimeout)
 		}
