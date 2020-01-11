@@ -918,11 +918,11 @@ var _ = Describe("Session", func() {
 		})
 
 		It("doesn't send packets if there's nothing to send", func() {
-			packer.EXPECT().PackPacket().Return(getPacket(2), nil)
+			packer.EXPECT().PackPacket().Return(nil, nil)
 			sess.receivedPacketHandler.ReceivedPacket(0x035e, protocol.Encryption1RTT, time.Now(), true)
 			sent, err := sess.sendPacket()
 			Expect(err).NotTo(HaveOccurred())
-			Expect(sent).To(BeTrue())
+			Expect(sent).To(BeFalse())
 		})
 
 		It("sends ACK only packets", func() {
