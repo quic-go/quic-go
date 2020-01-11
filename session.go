@@ -117,8 +117,11 @@ type session struct {
 	version        protocol.VersionNumber
 	config         *Config
 
-	conn      connection
-	sendQueue *sendQueue
+	conn connection
+
+	sendQueue          *sendQueue
+	sendQueueBlocked   bool
+	sendQueueAvailable <-chan struct{}
 
 	streamsMap      streamManager
 	connIDManager   *connIDManager
@@ -409,7 +412,7 @@ var newClientSession = func(
 }
 
 func (s *session) preSetup() {
-	s.sendQueue = newSendQueue(s.conn)
+	s.sendQueue, s.sendQueueAvailable = newSendQueue(s.conn)
 	s.retransmissionQueue = newRetransmissionQueue(s.version)
 	s.frameParser = wire.NewFrameParser(s.version)
 	s.rttStats = &congestion.RTTStats{}
@@ -492,9 +495,18 @@ runLoop:
 
 		s.maybeResetTimer()
 
+		var sendQueueChan <-chan struct{}
+		// If the send queue was blocked the last time we tried to send a packet,
+		// it will notify us when it's possible to send another packet.
+		if s.sendQueueBlocked {
+			sendQueueChan = s.sendQueueAvailable
+		}
+
 		select {
 		case closeErr = <-s.closeChan:
 			break runLoop
+		case <-sendQueueChan:
+			s.sendQueueBlocked = false
 		case <-s.timer.Chan():
 			s.timer.SetRead()
 			// We do all the interesting stuff after the switch statement, so
@@ -1162,6 +1174,10 @@ func (s *session) sendPackets() error {
 	var numPacketsSent int
 sendLoop:
 	for {
+		if !s.sendQueue.CanSend() {
+			s.sendQueueBlocked = true
+			return nil
+		}
 		switch sendMode {
 		case ackhandler.SendNone:
 			break sendLoop
