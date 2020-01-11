@@ -27,38 +27,6 @@ import (
 	"github.com/lucas-clemente/quic-go/internal/wire"
 )
 
-type mockConnection struct {
-	remoteAddr net.Addr
-	localAddr  net.Addr
-	written    chan []byte
-}
-
-func newMockConnection() *mockConnection {
-	return &mockConnection{
-		remoteAddr: &net.UDPAddr{},
-		written:    make(chan []byte, 100),
-	}
-}
-
-func (m *mockConnection) Write(p []byte) error {
-	b := make([]byte, len(p))
-	copy(b, p)
-	select {
-	case m.written <- b:
-	default:
-		panic("mockConnection channel full")
-	}
-	return nil
-}
-func (m *mockConnection) Read([]byte) (int, net.Addr, error) { panic("not implemented") }
-
-func (m *mockConnection) SetCurrentRemoteAddr(addr net.Addr) {
-	m.remoteAddr = addr
-}
-func (m *mockConnection) LocalAddr() net.Addr  { return m.localAddr }
-func (m *mockConnection) RemoteAddr() net.Addr { return m.remoteAddr }
-func (*mockConnection) Close() error           { panic("not implemented") }
-
 func areSessionsRunning() bool {
 	var b bytes.Buffer
 	pprof.Lookup("goroutine").WriteTo(&b, 1)
