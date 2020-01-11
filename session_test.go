@@ -718,18 +718,6 @@ var _ = Describe("Session", func() {
 			Eventually(done).Should(BeClosed())
 		})
 
-		It("ignores 0-RTT packets", func() {
-			hdr := &wire.ExtendedHeader{
-				Header: wire.Header{
-					IsLongHeader:     true,
-					Type:             protocol.PacketType0RTT,
-					DestConnectionID: srcConnID,
-				},
-				PacketNumberLen: protocol.PacketNumberLen2,
-			}
-			Expect(sess.handlePacketImpl(getPacket(hdr, nil))).To(BeFalse())
-		})
-
 		It("ignores packets with a different source connection ID", func() {
 			hdr1 := &wire.ExtendedHeader{
 				Header: wire.Header{
@@ -1940,6 +1928,21 @@ var _ = Describe("Client Session", func() {
 			Expect(sess.handlePacketImpl(getPacket(hdr1, nil))).To(BeTrue())
 			// The next packet has to be ignored, since the source connection ID doesn't match.
 			Expect(sess.handlePacketImpl(getPacket(hdr2, nil))).To(BeFalse())
+		})
+
+		It("ignores 0-RTT packets", func() {
+			hdr := &wire.ExtendedHeader{
+				Header: wire.Header{
+					IsLongHeader:     true,
+					Type:             protocol.PacketType0RTT,
+					DestConnectionID: srcConnID,
+					Length:           2 + 6,
+					Version:          sess.version,
+				},
+				PacketNumber:    0x42,
+				PacketNumberLen: protocol.PacketNumberLen2,
+			}
+			Expect(sess.handlePacketImpl(getPacket(hdr, []byte("foobar")))).To(BeFalse())
 		})
 
 		// Illustrates that an injected Initial with an ACK frame for an unsent packet causes
