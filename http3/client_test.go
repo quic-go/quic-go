@@ -140,6 +140,19 @@ var _ = Describe("Client", func() {
 		Expect(err).To(MatchError(testErr))
 	})
 
+	It("Closing the client after dialing fails", func() {
+		testErr := errors.New("dial error")
+		client = newClient("localhost:1337", nil, &roundTripperOpts{}, nil, nil)
+		dialAddr = func(hostname string, _ *tls.Config, _ *quic.Config) (quic.Session, error) {
+			return nil, testErr
+		}
+		defer GinkgoRecover()
+		_, err := client.RoundTrip(req)
+		Expect(err).To(MatchError(testErr))
+		err = client.Close()
+		Expect(err).ToNot(HaveOccurred())
+	})
+
 	Context("Doing requests", func() {
 		var (
 			request *http.Request
