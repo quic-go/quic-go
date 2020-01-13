@@ -598,12 +598,17 @@ var _ = Describe("Server", func() {
 	})
 
 	Context("server accepting sessions that haven't completed the handshake", func() {
-		var serv *earlyServer
+		var (
+			serv *earlyServer
+			phm  *MockPacketHandlerManager
+		)
 
 		BeforeEach(func() {
 			ln, err := ListenEarly(conn, tlsConf, nil)
 			Expect(err).ToNot(HaveOccurred())
 			serv = ln.(*earlyServer)
+			phm = NewMockPacketHandlerManager(mockCtrl)
+			serv.sessionHandler = phm
 		})
 
 		It("accepts new sessions when they become ready", func() {
@@ -640,6 +645,9 @@ var _ = Describe("Server", func() {
 				sess.EXPECT().Context().Return(context.Background())
 				return sess
 			}
+			phm.EXPECT().GetStatelessResetToken(gomock.Any())
+			phm.EXPECT().AddIfNotTaken(gomock.Any(), sess).Return(true)
+			phm.EXPECT().Add(gomock.Any(), sess)
 			serv.createNewSession(&net.UDPAddr{}, nil, nil, nil, nil, protocol.VersionWhatever)
 			Consistently(done).ShouldNot(BeClosed())
 			close(ready)
@@ -681,6 +689,9 @@ var _ = Describe("Server", func() {
 				go func() {
 					defer GinkgoRecover()
 					defer wg.Done()
+					phm.EXPECT().GetStatelessResetToken(gomock.Any())
+					phm.EXPECT().AddIfNotTaken(gomock.Any(), gomock.Any()).Return(true)
+					phm.EXPECT().Add(gomock.Any(), gomock.Any())
 					serv.handlePacket(getInitialWithRandomDestConnID())
 					Consistently(conn.dataWritten).ShouldNot(Receive())
 				}()
@@ -730,6 +741,9 @@ var _ = Describe("Server", func() {
 				return sess
 			}
 
+			phm.EXPECT().GetStatelessResetToken(gomock.Any())
+			phm.EXPECT().AddIfNotTaken(gomock.Any(), sess).Return(true)
+			phm.EXPECT().Add(gomock.Any(), sess)
 			serv.handlePacket(p)
 			Consistently(conn.dataWritten).ShouldNot(Receive())
 			Eventually(sessionCreated).Should(BeClosed())
@@ -745,6 +759,7 @@ var _ = Describe("Server", func() {
 			Consistently(done).ShouldNot(BeClosed())
 
 			// make the go routine return
+			phm.EXPECT().CloseServer()
 			sess.EXPECT().getPerspective().MaxTimes(2) // once for every conn ID
 			Expect(serv.Close()).To(Succeed())
 			Eventually(done).Should(BeClosed())
