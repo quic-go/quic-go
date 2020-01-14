@@ -46,6 +46,7 @@ var _ = Describe("Server", func() {
 		var (
 			qpackDecoder       *qpack.Decoder
 			str                *mockquic.MockStream
+			sess               *mockquic.MockSession
 			exampleGetRequest  *http.Request
 			examplePostRequest *http.Request
 		)
@@ -103,6 +104,10 @@ var _ = Describe("Server", func() {
 
 			qpackDecoder = qpack.NewDecoder(nil)
 			str = mockquic.NewMockStream(mockCtrl)
+
+			sess = mockquic.NewMockSession(mockCtrl)
+			addr := &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 1337}
+			sess.EXPECT().RemoteAddr().Return(addr).AnyTimes()
 		})
 
 		It("calls the HTTP handler function", func() {
@@ -117,10 +122,11 @@ var _ = Describe("Server", func() {
 				return len(p), nil
 			}).AnyTimes()
 
-			Expect(s.handleRequest(str, qpackDecoder, nil)).To(Equal(requestError{}))
+			Expect(s.handleRequest(sess, str, qpackDecoder, nil)).To(Equal(requestError{}))
 			var req *http.Request
 			Eventually(requestChan).Should(Receive(&req))
 			Expect(req.Host).To(Equal("www.example.com"))
+			Expect(req.RemoteAddr).To(Equal("127.0.0.1:1337"))
 		})
 
 		It("returns 200 with an empty handler", func() {
@@ -133,7 +139,7 @@ var _ = Describe("Server", func() {
 				return responseBuf.Write(p)
 			}).AnyTimes()
 
-			serr := s.handleRequest(str, qpackDecoder, nil)
+			serr := s.handleRequest(sess, str, qpackDecoder, nil)
 			Expect(serr.err).ToNot(HaveOccurred())
 			hfs := decodeHeader(responseBuf)
 			Expect(hfs).To(HaveKeyWithValue(":status", []string{"200"}))
@@ -152,7 +158,7 @@ var _ = Describe("Server", func() {
 			}).AnyTimes()
 			str.EXPECT().CancelRead(gomock.Any())
 
-			serr := s.handleRequest(str, qpackDecoder, nil)
+			serr := s.handleRequest(sess, str, qpackDecoder, nil)
 			Expect(serr.err).ToNot(HaveOccurred())
 			hfs := decodeHeader(responseBuf)
 			Expect(hfs).To(HaveKeyWithValue(":status", []string{"500"}))
@@ -162,12 +168,14 @@ var _ = Describe("Server", func() {
 			var sess *mockquic.MockSession
 
 			BeforeEach(func() {
+				addr := &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 1337}
 				sess = mockquic.NewMockSession(mockCtrl)
 				controlStr := mockquic.NewMockStream(mockCtrl)
 				controlStr.EXPECT().Write(gomock.Any())
 				sess.EXPECT().OpenUniStream().Return(controlStr, nil)
 				sess.EXPECT().AcceptStream(gomock.Any()).Return(str, nil)
 				sess.EXPECT().AcceptStream(gomock.Any()).Return(nil, errors.New("done"))
+				sess.EXPECT().RemoteAddr().Return(addr).AnyTimes()
 			})
 
 			It("cancels reading when client sends a body in GET request", func() {
@@ -294,7 +302,7 @@ var _ = Describe("Server", func() {
 			}).AnyTimes()
 			str.EXPECT().CancelRead(quic.ErrorCode(errorEarlyResponse))
 
-			serr := s.handleRequest(str, qpackDecoder, nil)
+			serr := s.handleRequest(sess, str, qpackDecoder, nil)
 			Expect(serr.err).ToNot(HaveOccurred())
 			Eventually(handlerCalled).Should(BeClosed())
 		})
@@ -317,7 +325,7 @@ var _ = Describe("Server", func() {
 			}).AnyTimes()
 			str.EXPECT().CancelRead(quic.ErrorCode(errorEarlyResponse))
 
-			serr := s.handleRequest(str, qpackDecoder, nil)
+			serr := s.handleRequest(sess, str, qpackDecoder, nil)
 			Expect(serr.err).ToNot(HaveOccurred())
 			Eventually(handlerCalled).Should(BeClosed())
 		})
