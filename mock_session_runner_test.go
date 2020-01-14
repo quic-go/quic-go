@@ -35,9 +35,11 @@ func (m *MockSessionRunner) EXPECT() *MockSessionRunnerMockRecorder {
 }
 
 // Add mocks base method
-func (m *MockSessionRunner) Add(arg0 protocol.ConnectionID, arg1 packetHandler) {
+func (m *MockSessionRunner) Add(arg0 protocol.ConnectionID, arg1 packetHandler) bool {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "Add", arg0, arg1)
+	ret := m.ctrl.Call(m, "Add", arg0, arg1)
+	ret0, _ := ret[0].(bool)
+	return ret0
 }
 
 // Add indicates an expected call of Add

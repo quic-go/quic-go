@@ -74,7 +74,7 @@ func (p *receivedPacket) Clone() *receivedPacket {
 }
 
 type sessionRunner interface {
-	Add(protocol.ConnectionID, packetHandler)
+	Add(protocol.ConnectionID, packetHandler) bool
 	GetStatelessResetToken(protocol.ConnectionID) [16]byte
 	Retire(protocol.ConnectionID)
 	Remove(protocol.ConnectionID)

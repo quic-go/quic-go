@@ -95,22 +95,17 @@ func (h *packetHandlerMap) logUsage() {
 	}
 }
 
-func (h *packetHandlerMap) Add(id protocol.ConnectionID, handler packetHandler) {
-	h.mutex.Lock()
-	h.handlers[string(id)] = handler
-	h.mutex.Unlock()
-}
-
-func (h *packetHandlerMap) AddIfNotTaken(id protocol.ConnectionID, handler packetHandler) bool /* was added */ {
+func (h *packetHandlerMap) Add(id protocol.ConnectionID, handler packetHandler) bool /* was added */ {
 	sid := string(id)
+
 	h.mutex.Lock()
 	defer h.mutex.Unlock()
 
-	if _, ok := h.handlers[sid]; !ok {
-		h.handlers[sid] = handler
-		return true
+	if _, ok := h.handlers[sid]; ok {
+		return false
 	}
-	return false
+	h.handlers[sid] = handler
+	return true
 }
 
 func (h *packetHandlerMap) Remove(id protocol.ConnectionID) {
