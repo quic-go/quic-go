@@ -295,14 +295,6 @@ var _ = Describe("Packet Handler Map", func() {
 				statelessResetKey = key
 			})
 
-			It("generates stateless reset tokens when adding new sessions", func() {
-				connID1 := []byte{0xde, 0xad, 0xbe, 0xef}
-				connID2 := []byte{0xde, 0xca, 0xfb, 0xad}
-				token1 := handler.Add(connID1, nil)
-				Expect(handler.Add(connID1, nil)).To(Equal(token1))
-				Expect(handler.Add(connID2, nil)).ToNot(Equal(token1))
-			})
-
 			It("generates stateless reset tokens", func() {
 				connID1 := []byte{0xde, 0xad, 0xbe, 0xef}
 				connID2 := []byte{0xde, 0xca, 0xfb, 0xad}

@@ -95,11 +95,10 @@ func (h *packetHandlerMap) logUsage() {
 	}
 }
 
-func (h *packetHandlerMap) Add(id protocol.ConnectionID, handler packetHandler) [16]byte {
+func (h *packetHandlerMap) Add(id protocol.ConnectionID, handler packetHandler) {
 	h.mutex.Lock()
 	h.handlers[string(id)] = handler
 	h.mutex.Unlock()
-	return h.GetStatelessResetToken(id)
 }
 
 func (h *packetHandlerMap) AddIfNotTaken(id protocol.ConnectionID, handler packetHandler) bool /* was added */ {

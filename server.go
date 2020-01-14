@@ -37,7 +37,6 @@ type packetHandlerManager interface {
 	CloseServer()
 	sessionRunner
 	AddIfNotTaken(protocol.ConnectionID, packetHandler) bool
-	GetStatelessResetToken(protocol.ConnectionID) [16]byte
 }
 
 type quicSession interface {

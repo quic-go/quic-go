@@ -35,11 +35,9 @@ func (m *MockPacketHandlerManager) EXPECT() *MockPacketHandlerManagerMockRecorde
 }
 
 // Add mocks base method
-func (m *MockPacketHandlerManager) Add(arg0 protocol.ConnectionID, arg1 packetHandler) [16]byte {
+func (m *MockPacketHandlerManager) Add(arg0 protocol.ConnectionID, arg1 packetHandler) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Add", arg0, arg1)
-	ret0, _ := ret[0].([16]byte)
-	return ret0
+	m.ctrl.Call(m, "Add", arg0, arg1)
 }
 
 // Add indicates an expected call of Add

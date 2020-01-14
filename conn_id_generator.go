@@ -16,30 +16,33 @@ type connIDGenerator struct {
 	activeSrcConnIDs        map[uint64]protocol.ConnectionID
 	initialClientDestConnID protocol.ConnectionID
 
-	addConnectionID    func(protocol.ConnectionID) [16]byte
-	removeConnectionID func(protocol.ConnectionID)
-	retireConnectionID func(protocol.ConnectionID)
-	replaceWithClosed  func(protocol.ConnectionID, packetHandler)
-	queueControlFrame  func(wire.Frame)
+	addConnectionID        func(protocol.ConnectionID)
+	getStatelessResetToken func(protocol.ConnectionID) [16]byte
+	removeConnectionID     func(protocol.ConnectionID)
+	retireConnectionID     func(protocol.ConnectionID)
+	replaceWithClosed      func(protocol.ConnectionID, packetHandler)
+	queueControlFrame      func(wire.Frame)
 }
 
 func newConnIDGenerator(
 	initialConnectionID protocol.ConnectionID,
 	initialClientDestConnID protocol.ConnectionID, // nil for the client
-	addConnectionID func(protocol.ConnectionID) [16]byte,
+	addConnectionID func(protocol.ConnectionID),
+	getStatelessResetToken func(protocol.ConnectionID) [16]byte,
 	removeConnectionID func(protocol.ConnectionID),
 	retireConnectionID func(protocol.ConnectionID),
 	replaceWithClosed func(protocol.ConnectionID, packetHandler),
 	queueControlFrame func(wire.Frame),
 ) *connIDGenerator {
 	m := &connIDGenerator{
-		connIDLen:          initialConnectionID.Len(),
-		activeSrcConnIDs:   make(map[uint64]protocol.ConnectionID),
-		addConnectionID:    addConnectionID,
-		removeConnectionID: removeConnectionID,
-		retireConnectionID: retireConnectionID,
-		replaceWithClosed:  replaceWithClosed,
-		queueControlFrame:  queueControlFrame,
+		connIDLen:              initialConnectionID.Len(),
+		activeSrcConnIDs:       make(map[uint64]protocol.ConnectionID),
+		addConnectionID:        addConnectionID,
+		getStatelessResetToken: getStatelessResetToken,
+		removeConnectionID:     removeConnectionID,
+		retireConnectionID:     retireConnectionID,
+		replaceWithClosed:      replaceWithClosed,
+		queueControlFrame:      queueControlFrame,
 	}
 	m.activeSrcConnIDs[0] = initialConnectionID
 	m.initialClientDestConnID = initialClientDestConnID
@@ -88,11 +91,11 @@ func (m *connIDGenerator) issueNewConnID() error {
 		return err
 	}
 	m.activeSrcConnIDs[m.highestSeq+1] = connID
-	token := m.addConnectionID(connID)
+	m.addConnectionID(connID)
 	m.queueControlFrame(&wire.NewConnectionIDFrame{
 		SequenceNumber:      m.highestSeq + 1,
 		ConnectionID:        connID,
-		StatelessResetToken: token,
+		StatelessResetToken: m.getStatelessResetToken(connID),
 	})
 	m.highestSeq++
 	return nil
