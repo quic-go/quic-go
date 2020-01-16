@@ -210,11 +210,25 @@ func (h *packetHandlerMap) close(e error) error {
 		}(handler)
 	}
 
+	// [Psiphon]
+	// Call h.server.setCloseError(e) outside of mutex to prevent deadlock
+	// See comment in psiphon/common/quic/gquic-go/packetHandlerMap.close
+
+	var server unknownPacketHandler
 	if h.server != nil {
-		h.server.setCloseError(e)
+		server = h.server
 	}
+
+	h.mutex.Unlock()
+
+	if server != nil {
+		server.setCloseError(e)
+	}
+
+	h.mutex.Lock()
 	h.closed = true
 	h.mutex.Unlock()
+
 	wg.Wait()
 	return getMultiplexer().RemoveConn(h.conn)
 }
