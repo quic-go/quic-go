@@ -221,7 +221,7 @@ func newCryptoSetup(
 		writeRecord:            make(chan struct{}, 1),
 		closeChan:              make(chan struct{}),
 	}
-	qtlsConf := tlsConfigToQtlsConfig(tlsConf, cs, extHandler, cs.marshalPeerParamsForSessionState, cs.handlePeerParamsFromSessionState, cs.accept0RTT, enable0RTT)
+	qtlsConf := tlsConfigToQtlsConfig(tlsConf, cs, extHandler, cs.marshalPeerParamsForSessionState, cs.handlePeerParamsFromSessionState, cs.accept0RTT, cs.rejected0RTT, enable0RTT)
 	cs.tlsConf = qtlsConf
 	return cs, cs.clientHelloWrittenChan
 }
@@ -490,6 +490,8 @@ func (h *cryptoSetup) maybeSendSessionTicket() {
 	}
 }
 
+// accept0RTT is called for the server when receiving the client's session ticket.
+// It decides whether to accept 0-RTT.
 func (h *cryptoSetup) accept0RTT(sessionTicketData []byte) bool {
 	var tp TransportParameters
 	if err := tp.UnmarshalFromSessionTicket(sessionTicketData); err != nil {
@@ -503,6 +505,20 @@ func (h *cryptoSetup) accept0RTT(sessionTicketData []byte) bool {
 		h.logger.Debugf("Transport parameters changed. Rejecting 0-RTT.")
 	}
 	return valid
+}
+
+// rejected0RTT is called for the client when the server rejects 0-RTT.
+func (h *cryptoSetup) rejected0RTT() {
+	h.logger.Debugf("0-RTT was rejected. Dropping 0-RTT keys.")
+
+	h.mutex.Lock()
+	had0RTTKeys := h.zeroRTTSealer != nil
+	h.zeroRTTSealer = nil
+	h.mutex.Unlock()
+
+	if had0RTTKeys {
+		h.runner.DropKeys(protocol.Encryption0RTT)
+	}
 }
 
 func (h *cryptoSetup) handlePostHandshakeMessage() {
