@@ -110,17 +110,23 @@ func ComposeInitialPacket(srcConnID protocol.ConnectionID, destConnID protocol.C
 }
 
 // ComposeRetryPacket returns a new raw Retry Packet
-func ComposeRetryPacket(srcConnID protocol.ConnectionID, destConnID protocol.ConnectionID, origDestConnID protocol.ConnectionID, token []byte, version protocol.VersionNumber) []byte {
+func ComposeRetryPacket(
+	srcConnID protocol.ConnectionID,
+	destConnID protocol.ConnectionID,
+	origDestConnID protocol.ConnectionID,
+	token []byte,
+	version protocol.VersionNumber,
+) []byte {
 	hdr := &wire.ExtendedHeader{
 		Header: wire.Header{
-			IsLongHeader:         true,
-			Type:                 protocol.PacketTypeRetry,
-			SrcConnectionID:      srcConnID,
-			DestConnectionID:     destConnID,
-			OrigDestConnectionID: origDestConnID,
-			Token:                token,
-			Version:              version,
+			IsLongHeader:     true,
+			Type:             protocol.PacketTypeRetry,
+			SrcConnectionID:  srcConnID,
+			DestConnectionID: destConnID,
+			Token:            token,
+			Version:          version,
 		},
 	}
-	return writePacket(hdr, nil)
+	data := writePacket(hdr, nil)
+	return append(data, handshake.GetRetryIntegrityTag(data, origDestConnID)[:]...)
 }

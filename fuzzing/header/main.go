@@ -83,15 +83,6 @@ func main() {
 			Length:           protocol.ByteCount(rand.Intn(1000)),
 			Version:          version,
 		},
-		wire.Header{ // Retry Packet
-			IsLongHeader:         true,
-			SrcConnectionID:      protocol.ConnectionID(getRandomData(8)),
-			DestConnectionID:     protocol.ConnectionID(getRandomData(9)),
-			OrigDestConnectionID: protocol.ConnectionID(getRandomData(10)),
-			Type:                 protocol.PacketTypeRetry,
-			Token:                getRandomData(10),
-			Version:              version,
-		},
 		wire.Header{ // Retry Packet, with empty orig dest conn id
 			IsLongHeader:     true,
 			SrcConnectionID:  protocol.ConnectionID(getRandomData(8)),
@@ -99,14 +90,6 @@ func main() {
 			Type:             protocol.PacketTypeRetry,
 			Token:            getRandomData(1000),
 			Version:          version,
-		},
-		wire.Header{ // Retry Packet, with zero-length dest conn id
-			IsLongHeader:         true,
-			SrcConnectionID:      protocol.ConnectionID(getRandomData(8)),
-			OrigDestConnectionID: protocol.ConnectionID(getRandomData(10)),
-			Type:                 protocol.PacketTypeRetry,
-			Token:                getRandomData(1000),
-			Version:              version,
 		},
 		wire.Header{ // Short-Header
 			DestConnectionID: protocol.ConnectionID(getRandomData(8)),
@@ -122,6 +105,9 @@ func main() {
 		b := &bytes.Buffer{}
 		if err := extHdr.Write(b, version); err != nil {
 			panic(err)
+		}
+		if h.Type == protocol.PacketTypeRetry {
+			b.Write([]byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16})
 		}
 		if h.Length > 0 {
 			b.Write(make([]byte, h.Length))

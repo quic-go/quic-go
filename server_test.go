@@ -297,8 +297,8 @@ var _ = Describe("Server", func() {
 				Expect(replyHdr.Type).To(Equal(protocol.PacketTypeRetry))
 				Expect(replyHdr.SrcConnectionID).ToNot(Equal(hdr.DestConnectionID))
 				Expect(replyHdr.DestConnectionID).To(Equal(hdr.SrcConnectionID))
-				Expect(replyHdr.OrigDestConnectionID).To(Equal(hdr.DestConnectionID))
 				Expect(replyHdr.Token).ToNot(BeEmpty())
+				Expect(write.data[len(write.data)-16:]).To(Equal(handshake.GetRetryIntegrityTag(write.data[:len(write.data)-16], hdr.DestConnectionID)[:]))
 			})
 
 			It("creates a session, if no Token is required", func() {
