@@ -62,6 +62,8 @@ func runTestcase(testcase string) error {
 		defer r.Close()
 		return downloadFiles(r, urls)
 	case "handshake", "transfer", "retry":
+	case "multiconnect":
+		return runMultiConnectTest(urls)
 	case "versionnegotiation":
 		return runVersionNegotiationTest(urls)
 	case "resumption":
@@ -86,6 +88,19 @@ func runVersionNegotiationTest(urls []string) error {
 	}
 	if !strings.Contains(err.Error(), "No compatible QUIC version found") {
 		return fmt.Errorf("expect version negotiation error, got: %s", err.Error())
+	}
+	return nil
+}
+
+func runMultiConnectTest(urls []string) error {
+	for _, url := range urls {
+		r := &http09.RoundTripper{TLSClientConfig: tlsConf}
+		if err := downloadFile(r, url); err != nil {
+			return err
+		}
+		if err := r.Close(); err != nil {
+			return err
+		}
 	}
 	return nil
 }
