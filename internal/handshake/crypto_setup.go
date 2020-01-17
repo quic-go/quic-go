@@ -475,7 +475,12 @@ func (h *cryptoSetup) handlePeerParamsFromSessionStateImpl(data []byte) (*Transp
 
 // only valid for the server
 func (h *cryptoSetup) maybeSendSessionTicket() {
-	ticket, err := h.conn.GetSessionTicket(h.ourParams.MarshalForSessionTicket())
+	var appData []byte
+	// Save transport parameters to the session ticket if we're allowing 0-RTT.
+	if h.tlsConf.MaxEarlyData > 0 {
+		appData = h.ourParams.MarshalForSessionTicket()
+	}
+	ticket, err := h.conn.GetSessionTicket(appData)
 	if err != nil {
 		h.onError(alertInternalError, err.Error())
 		return
