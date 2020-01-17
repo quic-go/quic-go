@@ -44,7 +44,7 @@ var _ = Describe("0-RTT", func() {
 				return proxy, &num0RTTPackets
 			}
 
-			dialAndReceiveSessionTicket := func(ln quic.Listener, proxyPort int) *tls.Config {
+			dialAndReceiveSessionTicket := func(ln quic.EarlyListener, proxyPort int) *tls.Config {
 				// dial the first session in order to receive a session ticket
 				go func() {
 					defer GinkgoRecover()
@@ -68,7 +68,7 @@ var _ = Describe("0-RTT", func() {
 				return clientConf
 			}
 
-			transfer0RTTData := func(ln quic.Listener, proxyPort int, clientConf *tls.Config, testdata []byte) {
+			transfer0RTTData := func(ln quic.EarlyListener, proxyPort int, clientConf *tls.Config, testdata []byte) {
 				// now dial the second session, and use 0-RTT to send some data
 				done := make(chan struct{})
 				go func() {
@@ -98,7 +98,7 @@ var _ = Describe("0-RTT", func() {
 			}
 
 			It("transfers 0-RTT data", func() {
-				ln, err := quic.ListenAddr(
+				ln, err := quic.ListenAddrEarly(
 					"localhost:0",
 					getTLSConfig(),
 					&quic.Config{
@@ -122,7 +122,7 @@ var _ = Describe("0-RTT", func() {
 
 			// Test that data intended to be sent with 1-RTT protection is not sent in 0-RTT packets.
 			It("waits until a session until the handshake is done", func() {
-				ln, err := quic.ListenAddr(
+				ln, err := quic.ListenAddrEarly(
 					"localhost:0",
 					getTLSConfig(),
 					&quic.Config{
@@ -199,7 +199,7 @@ var _ = Describe("0-RTT", func() {
 					num0RTTDropped uint32
 				)
 
-				ln, err := quic.ListenAddr(
+				ln, err := quic.ListenAddrEarly(
 					"localhost:0",
 					getTLSConfig(),
 					&quic.Config{
@@ -253,7 +253,7 @@ var _ = Describe("0-RTT", func() {
 				var firstConnID, secondConnID protocol.ConnectionID
 				var firstCounter, secondCounter int
 
-				ln, err := quic.ListenAddr(
+				ln, err := quic.ListenAddrEarly(
 					"localhost:0",
 					getTLSConfig(),
 					&quic.Config{Versions: []protocol.VersionNumber{version}},

@@ -249,7 +249,26 @@ func populateClientConfig(config *Config, createdPacketConn bool) *Config {
 
 func (c *client) dial(ctx context.Context) error {
 	c.logger.Infof("Starting new connection to %s (%s -> %s), source connection ID %s, destination connection ID %s, version %s", c.tlsConf.ServerName, c.conn.LocalAddr(), c.conn.RemoteAddr(), c.srcConnID, c.destConnID, c.version)
-	c.createNewTLSSession(c.version)
+
+	c.mutex.Lock()
+	c.session = newClientSession(
+		c.conn,
+		c.packetHandlers,
+		c.destConnID,
+		c.srcConnID,
+		c.config,
+		c.tlsConf,
+		c.initialPacketNumber,
+		c.initialVersion,
+		c.use0RTT,
+		c.logger,
+		c.version,
+	)
+	c.mutex.Unlock()
+	// It's not possible to use the stateless reset token for the client's (first) connection ID,
+	// since there's no way to securely communicate it to the server.
+	c.packetHandlers.Add(c.srcConnID, c)
+
 	err := c.establishSecureConnection(ctx)
 	if err == errCloseForRecreating {
 		return c.dial(ctx)
@@ -352,26 +371,6 @@ func (c *client) handleVersionNegotiationPacket(p *receivedPacket) {
 
 	c.logger.Infof("Switching to QUIC version %s. New connection ID: %s", newVersion, c.destConnID)
 	c.initialPacketNumber = c.session.closeForRecreating()
-}
-
-func (c *client) createNewTLSSession(_ protocol.VersionNumber) {
-	c.mutex.Lock()
-	c.session = newClientSession(
-		c.conn,
-		c.packetHandlers,
-		c.destConnID,
-		c.srcConnID,
-		c.config,
-		c.tlsConf,
-		c.initialPacketNumber,
-		c.initialVersion,
-		c.logger,
-		c.version,
-	)
-	c.mutex.Unlock()
-	// It's not possible to use the stateless reset token for the client's (first) connection ID,
-	// since there's no way to securely communicate it to the server.
-	c.packetHandlers.Add(c.srcConnID, c)
 }
 
 func (c *client) Close() error {

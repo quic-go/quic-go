@@ -122,6 +122,7 @@ var _ = Describe("Session", func() {
 			populateServerConfig(&Config{}),
 			nil, // tls.Config
 			tokenGenerator,
+			false,
 			utils.DefaultLogger,
 			protocol.VersionTLS,
 		).(*session)
@@ -1658,6 +1659,7 @@ var _ = Describe("Client Session", func() {
 			tlsConf,
 			42, // initial packet number
 			protocol.VersionTLS,
+			false,
 			utils.DefaultLogger,
 			protocol.VersionTLS,
 		).(*session)

@@ -331,9 +331,11 @@ var _ = Describe("Server", func() {
 					_ *Config,
 					_ *tls.Config,
 					_ *handshake.TokenGenerator,
+					enable0RTT bool,
 					_ utils.Logger,
 					_ protocol.VersionNumber,
 				) quicSession {
+					Expect(enable0RTT).To(BeFalse())
 					Expect(origConnID).To(Equal(hdr.DestConnectionID))
 					Expect(destConnID).To(Equal(hdr.SrcConnectionID))
 					// make sure we're using a server-generated connection ID
@@ -381,6 +383,7 @@ var _ = Describe("Server", func() {
 					_ *Config,
 					_ *tls.Config,
 					_ *handshake.TokenGenerator,
+					_ bool,
 					_ utils.Logger,
 					_ protocol.VersionNumber,
 				) quicSession {
@@ -409,6 +412,7 @@ var _ = Describe("Server", func() {
 					_ *Config,
 					_ *tls.Config,
 					_ *handshake.TokenGenerator,
+					_ bool,
 					_ utils.Logger,
 					_ protocol.VersionNumber,
 				) quicSession {
@@ -469,6 +473,7 @@ var _ = Describe("Server", func() {
 					_ *Config,
 					_ *tls.Config,
 					_ *handshake.TokenGenerator,
+					_ bool,
 					_ utils.Logger,
 					_ protocol.VersionNumber,
 				) quicSession {
@@ -572,6 +577,7 @@ var _ = Describe("Server", func() {
 					_ *Config,
 					_ *tls.Config,
 					_ *handshake.TokenGenerator,
+					_ bool,
 					_ utils.Logger,
 					_ protocol.VersionNumber,
 				) quicSession {
@@ -624,9 +630,11 @@ var _ = Describe("Server", func() {
 				_ *Config,
 				_ *tls.Config,
 				_ *handshake.TokenGenerator,
+				enable0RTT bool,
 				_ utils.Logger,
 				_ protocol.VersionNumber,
 			) quicSession {
+				Expect(enable0RTT).To(BeTrue())
 				sess.EXPECT().run().Do(func() {})
 				sess.EXPECT().earlySessionReady().Return(ready)
 				sess.EXPECT().Context().Return(context.Background())
@@ -653,6 +661,7 @@ var _ = Describe("Server", func() {
 				_ *Config,
 				_ *tls.Config,
 				_ *handshake.TokenGenerator,
+				_ bool,
 				_ utils.Logger,
 				_ protocol.VersionNumber,
 			) quicSession {
@@ -709,6 +718,7 @@ var _ = Describe("Server", func() {
 				_ *Config,
 				_ *tls.Config,
 				_ *handshake.TokenGenerator,
+				_ bool,
 				_ utils.Logger,
 				_ protocol.VersionNumber,
 			) quicSession {

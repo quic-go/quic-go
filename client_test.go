@@ -38,6 +38,7 @@ var _ = Describe("Client", func() {
 			tlsConf *tls.Config,
 			initialPacketNumber protocol.PacketNumber,
 			initialVersion protocol.VersionNumber,
+			enable0RTT bool,
 			logger utils.Logger,
 			v protocol.VersionNumber,
 		) quicSession
@@ -140,6 +141,7 @@ var _ = Describe("Client", func() {
 				_ *tls.Config,
 				_ protocol.PacketNumber,
 				_ protocol.VersionNumber,
+				_ bool,
 				_ utils.Logger,
 				_ protocol.VersionNumber,
 			) quicSession {
@@ -170,6 +172,7 @@ var _ = Describe("Client", func() {
 				tlsConf *tls.Config,
 				_ protocol.PacketNumber,
 				_ protocol.VersionNumber,
+				_ bool,
 				_ utils.Logger,
 				_ protocol.VersionNumber,
 			) quicSession {
@@ -200,6 +203,7 @@ var _ = Describe("Client", func() {
 				tlsConf *tls.Config,
 				_ protocol.PacketNumber,
 				_ protocol.VersionNumber,
+				_ bool,
 				_ utils.Logger,
 				_ protocol.VersionNumber,
 			) quicSession {
@@ -235,9 +239,11 @@ var _ = Describe("Client", func() {
 				_ *tls.Config,
 				_ protocol.PacketNumber,
 				_ protocol.VersionNumber,
+				enable0RTT bool,
 				_ utils.Logger,
 				_ protocol.VersionNumber,
 			) quicSession {
+				Expect(enable0RTT).To(BeFalse())
 				sess := NewMockQuicSession(mockCtrl)
 				sess.EXPECT().run().Do(func() { close(run) })
 				ctx, cancel := context.WithCancel(context.Background())
@@ -273,9 +279,11 @@ var _ = Describe("Client", func() {
 				_ *tls.Config,
 				_ protocol.PacketNumber,
 				_ protocol.VersionNumber,
+				enable0RTT bool,
 				_ utils.Logger,
 				_ protocol.VersionNumber,
 			) quicSession {
+				Expect(enable0RTT).To(BeTrue())
 				sess := NewMockQuicSession(mockCtrl)
 				sess.EXPECT().run().Do(func() { <-done })
 				sess.EXPECT().HandshakeComplete().Return(context.Background())
@@ -316,6 +324,7 @@ var _ = Describe("Client", func() {
 				_ *tls.Config,
 				_ protocol.PacketNumber,
 				_ protocol.VersionNumber,
+				_ bool,
 				_ utils.Logger,
 				_ protocol.VersionNumber,
 			) quicSession {
@@ -356,6 +365,7 @@ var _ = Describe("Client", func() {
 				_ *tls.Config,
 				_ protocol.PacketNumber,
 				_ protocol.VersionNumber,
+				_ bool,
 				_ utils.Logger,
 				_ protocol.VersionNumber,
 			) quicSession {
@@ -404,6 +414,7 @@ var _ = Describe("Client", func() {
 				_ *tls.Config,
 				_ protocol.PacketNumber,
 				_ protocol.VersionNumber,
+				_ bool,
 				_ utils.Logger,
 				_ protocol.VersionNumber,
 			) quicSession {
@@ -523,6 +534,7 @@ var _ = Describe("Client", func() {
 				_ *tls.Config,
 				_ protocol.PacketNumber,
 				_ protocol.VersionNumber, /* initial version */
+				_ bool,
 				_ utils.Logger,
 				versionP protocol.VersionNumber,
 			) quicSession {
@@ -571,6 +583,7 @@ var _ = Describe("Client", func() {
 					_ *tls.Config,
 					_ protocol.PacketNumber,
 					_ protocol.VersionNumber,
+					_ bool,
 					_ utils.Logger,
 					_ protocol.VersionNumber,
 				) quicSession {
