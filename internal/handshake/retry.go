@@ -5,6 +5,7 @@ import (
 	"crypto/aes"
 	"crypto/cipher"
 	"fmt"
+	"sync"
 
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 )
@@ -25,18 +26,23 @@ func init() {
 	retryAEAD = aead
 }
 
+var retryBuf bytes.Buffer
+var retryMutex sync.Mutex
+var retryNonce [12]byte
+
 // GetRetryIntegrityTag calculates the integrity tag on a Retry packet
 func GetRetryIntegrityTag(retry []byte, origDestConnID protocol.ConnectionID) *[16]byte {
-	buf := bytes.NewBuffer(make([]byte, 0, 1+origDestConnID.Len()+len(retry)))
-	buf.WriteByte(uint8(origDestConnID.Len()))
-	buf.Write(origDestConnID.Bytes())
-	buf.Write(retry)
+	retryMutex.Lock()
+	retryBuf.WriteByte(uint8(origDestConnID.Len()))
+	retryBuf.Write(origDestConnID.Bytes())
+	retryBuf.Write(retry)
 
-	sealed := retryAEAD.Seal(nil, make([]byte, 12), []byte{}, buf.Bytes())
+	var tag [16]byte
+	sealed := retryAEAD.Seal(tag[:0], retryNonce[:], nil, retryBuf.Bytes())
 	if len(sealed) != 16 {
 		panic(fmt.Sprintf("unexpected Retry integrity tag length: %d", len(sealed)))
 	}
-	var tag [16]byte
-	copy(tag[:], sealed)
+	retryBuf.Reset()
+	retryMutex.Unlock()
 	return &tag
 }
