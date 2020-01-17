@@ -202,6 +202,7 @@ var newSession = func(
 	conf *Config,
 	tlsConf *tls.Config,
 	tokenGenerator *handshake.TokenGenerator,
+	enable0RTT bool,
 	logger utils.Logger,
 	v protocol.VersionNumber,
 ) quicSession {
@@ -274,7 +275,7 @@ var newSession = func(
 			},
 		},
 		tlsConf,
-		true, // TODO: make 0-RTT support configurable
+		enable0RTT,
 		s.rttStats,
 		logger,
 	)
@@ -308,6 +309,7 @@ var newClientSession = func(
 	tlsConf *tls.Config,
 	initialPacketNumber protocol.PacketNumber,
 	initialVersion protocol.VersionNumber,
+	enable0RTT bool,
 	logger utils.Logger,
 	v protocol.VersionNumber,
 ) quicSession {
@@ -371,7 +373,7 @@ var newClientSession = func(
 			onHandshakeComplete: func() { close(s.handshakeCompleteChan) },
 		},
 		tlsConf,
-		true, // TODO: make 0-RTT support configurable
+		enable0RTT,
 		s.rttStats,
 		logger,
 	)
