@@ -1,8 +1,10 @@
 package qlog
 
 import (
+	"bytes"
 	"encoding/json"
 
+	"github.com/francoispqt/gojay"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/internal/wire"
 
@@ -12,8 +14,10 @@ import (
 
 var _ = Describe("Packet Header", func() {
 	check := func(hdr *wire.ExtendedHeader, expected map[string]interface{}) {
-		data, err := json.Marshal(transformHeader(hdr))
-		ExpectWithOffset(1, err).ToNot(HaveOccurred())
+		buf := &bytes.Buffer{}
+		enc := gojay.NewEncoder(buf)
+		ExpectWithOffset(1, enc.Encode(transformHeader(hdr))).To(Succeed())
+		data := buf.Bytes()
 		ExpectWithOffset(1, json.Valid(data)).To(BeTrue())
 		checkEncoding(data, expected)
 	}

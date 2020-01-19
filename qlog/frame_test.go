@@ -1,8 +1,11 @@
 package qlog
 
 import (
+	"bytes"
 	"encoding/json"
 	"time"
+
+	"github.com/francoispqt/gojay"
 
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/internal/wire"
@@ -13,8 +16,10 @@ import (
 
 var _ = Describe("Frames", func() {
 	check := func(f wire.Frame, expected map[string]interface{}) {
-		data, err := transformFrame(f).MarshalJSON()
-		ExpectWithOffset(1, err).ToNot(HaveOccurred())
+		buf := &bytes.Buffer{}
+		enc := gojay.NewEncoder(buf)
+		ExpectWithOffset(1, enc.Encode(transformFrame(f))).To(Succeed())
+		data := buf.Bytes()
 		ExpectWithOffset(1, json.Valid(data)).To(BeTrue())
 		checkEncoding(data, expected)
 	}

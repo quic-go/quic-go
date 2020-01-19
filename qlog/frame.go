@@ -1,8 +1,9 @@
 package qlog
 
 import (
-	"encoding/json"
 	"fmt"
+
+	"github.com/francoispqt/gojay"
 
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/internal/wire"
@@ -12,26 +13,7 @@ type frame struct {
 	Frame interface{}
 }
 
-type streamType protocol.StreamType
-
-func (s streamType) String() string {
-	switch protocol.StreamType(s) {
-	case protocol.StreamTypeUni:
-		return "unidirectional"
-	case protocol.StreamTypeBidi:
-		return "bidirectional"
-	default:
-		panic("unknown stream type")
-	}
-}
-
-func escapeStr(str string) []byte { return []byte("\"" + str + "\"") }
-
-type connectionID protocol.ConnectionID
-
-func (c connectionID) MarshalJSON() ([]byte, error) {
-	return escapeStr(fmt.Sprintf("%x", c)), nil
-}
+var _ gojay.MarshalerJSONObject = frame{}
 
 type cryptoFrame struct {
 	Offset protocol.ByteCount
@@ -67,294 +49,189 @@ func transformFrame(wf wire.Frame) *frame {
 	}
 }
 
-// MarshalJSON marshals to JSON
-func (f frame) MarshalJSON() ([]byte, error) {
+func (f frame) MarshalJSONObject(enc *gojay.Encoder) {
 	switch frame := f.Frame.(type) {
 	case *wire.PingFrame:
-		return marshalPingFrame(frame)
+		marshalPingFrame(enc, frame)
 	case *wire.AckFrame:
-		return marshalAckFrame(frame)
+		marshalAckFrame(enc, frame)
 	case *wire.ResetStreamFrame:
-		return marshalResetStreamFrame(frame)
+		marshalResetStreamFrame(enc, frame)
 	case *wire.StopSendingFrame:
-		return marshalStopSendingFrame(frame)
+		marshalStopSendingFrame(enc, frame)
 	case *cryptoFrame:
-		return marshalCryptoFrame(frame)
+		marshalCryptoFrame(enc, frame)
 	case *wire.NewTokenFrame:
-		return marshalNewTokenFrame(frame)
+		marshalNewTokenFrame(enc, frame)
 	case *streamFrame:
-		return marshalStreamFrame(frame)
+		marshalStreamFrame(enc, frame)
 	case *wire.MaxDataFrame:
-		return marshalMaxDataFrame(frame)
+		marshalMaxDataFrame(enc, frame)
 	case *wire.MaxStreamDataFrame:
-		return marshalMaxStreamDataFrame(frame)
+		marshalMaxStreamDataFrame(enc, frame)
 	case *wire.MaxStreamsFrame:
-		return marshalMaxStreamsFrame(frame)
+		marshalMaxStreamsFrame(enc, frame)
 	case *wire.DataBlockedFrame:
-		return marshalDataBlockedFrame(frame)
+		marshalDataBlockedFrame(enc, frame)
 	case *wire.StreamDataBlockedFrame:
-		return marshalStreamDataBlockedFrame(frame)
+		marshalStreamDataBlockedFrame(enc, frame)
 	case *wire.StreamsBlockedFrame:
-		return marshalStreamsBlockedFrame(frame)
+		marshalStreamsBlockedFrame(enc, frame)
 	case *wire.NewConnectionIDFrame:
-		return marshalNewConnectionIDFrame(frame)
+		marshalNewConnectionIDFrame(enc, frame)
 	case *wire.RetireConnectionIDFrame:
-		return marshalRetireConnectionIDFrame(frame)
+		marshalRetireConnectionIDFrame(enc, frame)
 	case *wire.PathChallengeFrame:
-		return marshalPathChallengeFrame(frame)
+		marshalPathChallengeFrame(enc, frame)
 	case *wire.PathResponseFrame:
-		return marshalPathResponseFrame(frame)
+		marshalPathResponseFrame(enc, frame)
 	case *wire.ConnectionCloseFrame:
-		return marshalConnectionCloseFrame(frame)
+		marshalConnectionCloseFrame(enc, frame)
 	case *wire.HandshakeDoneFrame:
-		return marshalHandshakeDoneFrame(frame)
+		marshalHandshakeDoneFrame(enc, frame)
 	default:
 		panic("unknown frame type")
 	}
 }
 
-func marshalPingFrame(_ *wire.PingFrame) ([]byte, error) {
-	return json.Marshal(struct {
-		FrameType string `json:"frame_type"`
-	}{
-		FrameType: "ping",
-	})
+func (f frame) IsNil() bool { return false }
+
+func marshalPingFrame(enc *gojay.Encoder, _ *wire.PingFrame) {
+	enc.StringKey("frame_type", "ping")
 }
 
-type ackRange struct {
-	Smallest protocol.PacketNumber
-	Largest  protocol.PacketNumber
-}
+type ackRanges []wire.AckRange
 
-func (ar ackRange) MarshalJSON() ([]byte, error) {
-	if ar.Smallest == ar.Largest {
-		return json.Marshal([]string{fmt.Sprintf("%d", ar.Smallest)})
+func (ars ackRanges) MarshalJSONArray(enc *gojay.Encoder) {
+	for _, r := range ars {
+		enc.Array(ackRange(r))
 	}
-	return json.Marshal([]string{fmt.Sprintf("%d", ar.Smallest), fmt.Sprintf("%d", ar.Largest)})
 }
 
-func marshalAckFrame(f *wire.AckFrame) ([]byte, error) {
-	ranges := make([]ackRange, len(f.AckRanges))
-	for i, r := range f.AckRanges {
-		ranges[i] = ackRange{Smallest: r.Smallest, Largest: r.Largest}
+func (ars ackRanges) IsNil() bool { return false }
+
+type ackRange wire.AckRange
+
+func (ar ackRange) MarshalJSONArray(enc *gojay.Encoder) {
+	enc.AddString(toString(int64(ar.Smallest)))
+	if ar.Smallest != ar.Largest {
+		enc.AddString(toString(int64(ar.Largest)))
 	}
-	return json.Marshal(struct {
-		FrameType string     `json:"frame_type"`
-		AckDelay  int64      `json:"ack_delay,string,omitempty"`
-		AckRanges []ackRange `json:"acked_ranges"`
-	}{
-		FrameType: "ack",
-		AckDelay:  f.DelayTime.Milliseconds(),
-		AckRanges: ranges,
-	})
 }
 
-func marshalResetStreamFrame(f *wire.ResetStreamFrame) ([]byte, error) {
-	return json.Marshal(struct {
-		FrameType string                        `json:"frame_type"`
-		StreamID  protocol.StreamID             `json:"stream_id,string"`
-		ErrorCode protocol.ApplicationErrorCode `json:"error_code"`
-		FinalSize protocol.ByteCount            `json:"final_size,string"`
-	}{
-		FrameType: "reset_stream",
-		StreamID:  f.StreamID,
-		ErrorCode: f.ErrorCode,
-		FinalSize: f.ByteOffset,
-	})
+func (ar ackRange) IsNil() bool { return false }
+
+func marshalAckFrame(enc *gojay.Encoder, f *wire.AckFrame) {
+	enc.StringKey("frame_type", "ack")
+	if f.DelayTime != 0 {
+		enc.StringKey("ack_delay", toString(f.DelayTime.Milliseconds()))
+	}
+	enc.ArrayKey("acked_ranges", ackRanges(f.AckRanges))
 }
 
-func marshalStopSendingFrame(f *wire.StopSendingFrame) ([]byte, error) {
-	return json.Marshal(struct {
-		FrameType string                        `json:"frame_type"`
-		StreamID  protocol.StreamID             `json:"stream_id,string"`
-		ErrorCode protocol.ApplicationErrorCode `json:"error_code"`
-	}{
-		FrameType: "stop_sending",
-		StreamID:  f.StreamID,
-		ErrorCode: f.ErrorCode,
-	})
+func marshalResetStreamFrame(enc *gojay.Encoder, f *wire.ResetStreamFrame) {
+	enc.StringKey("frame_type", "reset_stream")
+	enc.StringKey("stream_id", toString(int64(f.StreamID)))
+	enc.Int64Key("error_code", int64(f.ErrorCode))
+	enc.StringKey("final_size", toString(int64(f.ByteOffset)))
 }
 
-func marshalCryptoFrame(f *cryptoFrame) ([]byte, error) {
-	return json.Marshal(struct {
-		FrameType string             `json:"frame_type"`
-		Offset    protocol.ByteCount `json:"offset,string"`
-		Length    protocol.ByteCount `json:"length"`
-	}{
-		FrameType: "crypto",
-		Offset:    f.Offset,
-		Length:    f.Length,
-	})
+func marshalStopSendingFrame(enc *gojay.Encoder, f *wire.StopSendingFrame) {
+	enc.StringKey("frame_type", "stop_sending")
+	enc.StringKey("stream_id", toString(int64(f.StreamID)))
+	enc.Int64Key("error_code", int64(f.ErrorCode))
 }
 
-func marshalNewTokenFrame(f *wire.NewTokenFrame) ([]byte, error) {
-	return json.Marshal(struct {
-		FrameType string `json:"frame_type"`
-		Length    int    `json:"length"`
-		Token     string `json:"token"`
-	}{
-		FrameType: "new_token",
-		Length:    len(f.Token),
-		Token:     fmt.Sprintf("%x", f.Token),
-	})
+func marshalCryptoFrame(enc *gojay.Encoder, f *cryptoFrame) {
+	enc.StringKey("frame_type", "crypto")
+	enc.StringKey("offset", toString(int64(f.Offset)))
+	enc.Int64Key("length", int64(f.Length))
 }
 
-func marshalStreamFrame(f *streamFrame) ([]byte, error) {
-	return json.Marshal(struct {
-		FrameType string             `json:"frame_type"`
-		StreamID  protocol.StreamID  `json:"stream_id,string"`
-		Offset    protocol.ByteCount `json:"offset,string"`
-		Length    protocol.ByteCount `json:"length"`
-		Fin       bool               `json:"fin,omitempty"`
-	}{
-		FrameType: "stream",
-		StreamID:  f.StreamID,
-		Offset:    f.Offset,
-		Length:    f.Length,
-		Fin:       f.FinBit,
-	})
+func marshalNewTokenFrame(enc *gojay.Encoder, f *wire.NewTokenFrame) {
+	enc.StringKey("frame_type", "new_token")
+	enc.IntKey("length", len(f.Token))
+	enc.StringKey("token", fmt.Sprintf("%x", f.Token))
 }
 
-func marshalMaxDataFrame(f *wire.MaxDataFrame) ([]byte, error) {
-	return json.Marshal(struct {
-		FrameType string             `json:"frame_type"`
-		Maximum   protocol.ByteCount `json:"maximum,string"`
-	}{
-		FrameType: "max_data",
-		Maximum:   f.ByteOffset,
-	})
+func marshalStreamFrame(enc *gojay.Encoder, f *streamFrame) {
+	enc.StringKey("frame_type", "stream")
+	enc.StringKey("stream_id", toString(int64(f.StreamID)))
+	enc.StringKey("offset", toString(int64(f.Offset)))
+	enc.IntKey("length", int(f.Length))
+	enc.BoolKeyOmitEmpty("fin", f.FinBit)
 }
 
-func marshalMaxStreamDataFrame(f *wire.MaxStreamDataFrame) ([]byte, error) {
-	return json.Marshal(struct {
-		FrameType string             `json:"frame_type"`
-		StreamID  protocol.StreamID  `json:"stream_id,string"`
-		Maximum   protocol.ByteCount `json:"maximum,string"`
-	}{
-		FrameType: "max_stream_data",
-		StreamID:  f.StreamID,
-		Maximum:   f.ByteOffset,
-	})
+func marshalMaxDataFrame(enc *gojay.Encoder, f *wire.MaxDataFrame) {
+	enc.StringKey("frame_type", "max_data")
+	enc.StringKey("maximum", toString(int64(f.ByteOffset)))
 }
 
-func marshalMaxStreamsFrame(f *wire.MaxStreamsFrame) ([]byte, error) {
-	return json.Marshal(struct {
-		FrameType  string             `json:"frame_type"`
-		StreamType string             `json:"stream_type"`
-		Maximum    protocol.StreamNum `json:"maximum,string"`
-	}{
-		FrameType:  "max_streams",
-		StreamType: streamType(f.Type).String(),
-		Maximum:    f.MaxStreamNum,
-	})
+func marshalMaxStreamDataFrame(enc *gojay.Encoder, f *wire.MaxStreamDataFrame) {
+	enc.StringKey("frame_type", "max_stream_data")
+	enc.StringKey("stream_id", toString(int64(f.StreamID)))
+	enc.StringKey("maximum", toString(int64(f.ByteOffset)))
 }
 
-func marshalDataBlockedFrame(f *wire.DataBlockedFrame) ([]byte, error) {
-	return json.Marshal(struct {
-		FrameType string             `json:"frame_type"`
-		Limit     protocol.ByteCount `json:"limit,string"`
-	}{
-		FrameType: "data_blocked",
-		Limit:     f.DataLimit,
-	})
+func marshalMaxStreamsFrame(enc *gojay.Encoder, f *wire.MaxStreamsFrame) {
+	enc.StringKey("frame_type", "max_streams")
+	enc.StringKey("stream_type", streamType(f.Type).String())
+	enc.StringKey("maximum", toString(int64(f.MaxStreamNum)))
 }
 
-func marshalStreamDataBlockedFrame(f *wire.StreamDataBlockedFrame) ([]byte, error) {
-	return json.Marshal(struct {
-		FrameType string             `json:"frame_type"`
-		StreamID  protocol.StreamID  `json:"stream_id,string"`
-		Limit     protocol.ByteCount `json:"limit,string"`
-	}{
-		FrameType: "stream_data_blocked",
-		StreamID:  f.StreamID,
-		Limit:     f.DataLimit,
-	})
+func marshalDataBlockedFrame(enc *gojay.Encoder, f *wire.DataBlockedFrame) {
+	enc.StringKey("frame_type", "data_blocked")
+	enc.StringKey("limit", toString(int64(f.DataLimit)))
 }
 
-func marshalStreamsBlockedFrame(f *wire.StreamsBlockedFrame) ([]byte, error) {
-	return json.Marshal(struct {
-		FrameType  string             `json:"frame_type"`
-		StreamType string             `json:"stream_type"`
-		Limit      protocol.StreamNum `json:"limit,string"`
-	}{
-		FrameType:  "streams_blocked",
-		StreamType: streamType(f.Type).String(),
-		Limit:      f.StreamLimit,
-	})
+func marshalStreamDataBlockedFrame(enc *gojay.Encoder, f *wire.StreamDataBlockedFrame) {
+	enc.StringKey("frame_type", "stream_data_blocked")
+	enc.StringKey("stream_id", toString(int64(f.StreamID)))
+	enc.StringKey("limit", toString(int64(f.DataLimit)))
 }
 
-func marshalNewConnectionIDFrame(f *wire.NewConnectionIDFrame) ([]byte, error) {
-	return json.Marshal(struct {
-		FrameType      string       `json:"frame_type"`
-		SequenceNumber uint64       `json:"sequence_number,string"`
-		RetirePriorTo  uint64       `json:"retire_prior_to,string"`
-		Length         int          `json:"length"`
-		ConnectionID   connectionID `json:"connection_id"`
-		ResetToken     string       `json:"reset_token"`
-	}{
-		FrameType:      "new_connection_id",
-		SequenceNumber: f.SequenceNumber,
-		RetirePriorTo:  f.RetirePriorTo,
-		Length:         f.ConnectionID.Len(),
-		ConnectionID:   connectionID(f.ConnectionID),
-		ResetToken:     fmt.Sprintf("%x", f.StatelessResetToken),
-	})
+func marshalStreamsBlockedFrame(enc *gojay.Encoder, f *wire.StreamsBlockedFrame) {
+	enc.StringKey("frame_type", "streams_blocked")
+	enc.StringKey("stream_type", streamType(f.Type).String())
+	enc.StringKey("limit", toString(int64(f.StreamLimit)))
 }
 
-func marshalRetireConnectionIDFrame(f *wire.RetireConnectionIDFrame) ([]byte, error) {
-	return json.Marshal(struct {
-		FrameType      string `json:"frame_type"`
-		SequenceNumber uint64 `json:"sequence_number,string"`
-	}{
-		FrameType:      "retire_connection_id",
-		SequenceNumber: f.SequenceNumber,
-	})
+func marshalNewConnectionIDFrame(enc *gojay.Encoder, f *wire.NewConnectionIDFrame) {
+	enc.StringKey("frame_type", "new_connection_id")
+	enc.StringKey("sequence_number", toString(int64(f.SequenceNumber)))
+	enc.StringKey("retire_prior_to", toString(int64(f.RetirePriorTo)))
+	enc.IntKey("length", f.ConnectionID.Len())
+	enc.StringKey("connection_id", connectionID(f.ConnectionID).String())
+	enc.StringKey("reset_token", fmt.Sprintf("%x", f.StatelessResetToken))
 }
 
-func marshalPathChallengeFrame(f *wire.PathChallengeFrame) ([]byte, error) {
-	return json.Marshal(struct {
-		FrameType string `json:"frame_type"`
-		Data      string `json:"data"`
-	}{
-		FrameType: "path_challenge",
-		Data:      fmt.Sprintf("%x", f.Data[:]),
-	})
+func marshalRetireConnectionIDFrame(enc *gojay.Encoder, f *wire.RetireConnectionIDFrame) {
+	enc.StringKey("frame_type", "retire_connection_id")
+	enc.StringKey("sequence_number", toString(int64(f.SequenceNumber)))
 }
 
-func marshalPathResponseFrame(f *wire.PathResponseFrame) ([]byte, error) {
-	return json.Marshal(struct {
-		FrameType string `json:"frame_type"`
-		Data      string `json:"data"`
-	}{
-		FrameType: "path_response",
-		Data:      fmt.Sprintf("%x", f.Data[:]),
-	})
+func marshalPathChallengeFrame(enc *gojay.Encoder, f *wire.PathChallengeFrame) {
+	enc.StringKey("frame_type", "path_challenge")
+	enc.StringKey("data", fmt.Sprintf("%x", f.Data[:]))
 }
 
-func marshalConnectionCloseFrame(f *wire.ConnectionCloseFrame) ([]byte, error) {
+func marshalPathResponseFrame(enc *gojay.Encoder, f *wire.PathResponseFrame) {
+	enc.StringKey("frame_type", "path_response")
+	enc.StringKey("data", fmt.Sprintf("%x", f.Data[:]))
+}
+
+func marshalConnectionCloseFrame(enc *gojay.Encoder, f *wire.ConnectionCloseFrame) {
 	errorSpace := "transport"
 	if f.IsApplicationError {
 		errorSpace = "application"
 	}
-	return json.Marshal(struct {
-		FrameType    string `json:"frame_type"`
-		ErrorSpace   string `json:"error_space"`
-		ErrorCode    uint64 `json:"error_code"`
-		RawErrorCode uint64 `json:"raw_error_code"`
-		Reason       string `json:"reason"`
-	}{
-		FrameType:    "connection_close",
-		ErrorSpace:   errorSpace,
-		ErrorCode:    uint64(f.ErrorCode),
-		RawErrorCode: uint64(f.ErrorCode),
-		Reason:       f.ReasonPhrase,
-	})
+	enc.StringKey("frame_type", "connection_close")
+	enc.StringKey("error_space", errorSpace)
+	enc.Int64Key("error_code", int64(f.ErrorCode))
+	enc.Int64Key("raw_error_code", int64(f.ErrorCode))
+	enc.StringKey("reason", f.ReasonPhrase)
 }
 
-func marshalHandshakeDoneFrame(_ *wire.HandshakeDoneFrame) ([]byte, error) {
-	return json.Marshal(struct {
-		FrameType string `json:"frame_type"`
-	}{
-		FrameType: "handshake_done",
-	})
+func marshalHandshakeDoneFrame(enc *gojay.Encoder, _ *wire.HandshakeDoneFrame) {
+	enc.StringKey("frame_type", "handshake_done")
 }
