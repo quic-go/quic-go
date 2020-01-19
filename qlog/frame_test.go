@@ -12,34 +12,11 @@ import (
 )
 
 var _ = Describe("Frames", func() {
-	// marshal the frame
 	check := func(f wire.Frame, expected map[string]interface{}) {
 		data, err := transformFrame(f).MarshalJSON()
 		ExpectWithOffset(1, err).ToNot(HaveOccurred())
 		ExpectWithOffset(1, json.Valid(data)).To(BeTrue())
-		// unmarshal the frame
-		m := make(map[string](interface{}))
-		ExpectWithOffset(1, json.Unmarshal(data, &m)).To(Succeed())
-		ExpectWithOffset(1, m).To(HaveLen(len(expected)))
-		for key, value := range expected {
-			switch value.(type) {
-			case string:
-				ExpectWithOffset(1, m).To(HaveKeyWithValue(key, value))
-			case int:
-				ExpectWithOffset(1, m).To(HaveKeyWithValue(key, float64(value.(int))))
-			case bool:
-				ExpectWithOffset(1, m).To(HaveKeyWithValue(key, value.(bool)))
-			case [][]string: // used in the ACK frame
-				ExpectWithOffset(1, m).To(HaveKey(key))
-				for i, l := range value.([][]string) {
-					for j, s := range l {
-						ExpectWithOffset(1, m[key].([]interface{})[i].([]interface{})[j].(string)).To(Equal(s))
-					}
-				}
-			default:
-				Fail("unexpected type")
-			}
-		}
+		checkEncoding(data, expected)
 	}
 
 	It("marshals PING frames", func() {
