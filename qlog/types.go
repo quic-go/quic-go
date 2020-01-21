@@ -60,3 +60,33 @@ func (c category) String() string {
 		panic("unknown category")
 	}
 }
+
+type packetType protocol.PacketType
+
+const (
+	packetTypeInitial packetType = iota
+	packetTypeHandshake
+	packetTypeRetry
+	packetType0RTT
+	packetTypeVersionNegotiation
+	packetType1RTT
+)
+
+func (t packetType) String() string {
+	switch t {
+	case packetTypeInitial:
+		return "initial"
+	case packetTypeHandshake:
+		return "handshake"
+	case packetTypeRetry:
+		return "retry"
+	case packetType0RTT:
+		return "0RTT"
+	case packetTypeVersionNegotiation:
+		return "version_negotiation"
+	case packetType1RTT:
+		return "1RTT"
+	default:
+		panic("unknown packet type")
+	}
+}

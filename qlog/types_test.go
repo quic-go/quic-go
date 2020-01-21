@@ -12,4 +12,13 @@ var _ = Describe("Types", func() {
 		Expect(categoryRecovery.String()).To(Equal("recovery"))
 		Expect(categorySecurity.String()).To(Equal("security"))
 	})
+
+	It("has a string representation for the packet type", func() {
+		Expect(packetTypeInitial.String()).To(Equal("initial"))
+		Expect(packetTypeHandshake.String()).To(Equal("handshake"))
+		Expect(packetType0RTT.String()).To(Equal("0RTT"))
+		Expect(packetType1RTT.String()).To(Equal("1RTT"))
+		Expect(packetTypeRetry.String()).To(Equal("retry"))
+		Expect(packetTypeVersionNegotiation.String()).To(Equal("version_negotiation"))
+	})
 })

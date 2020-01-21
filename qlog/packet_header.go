@@ -7,6 +7,27 @@ import (
 	"github.com/lucas-clemente/quic-go/internal/wire"
 )
 
+func getPacketType(hdr *wire.ExtendedHeader) packetType {
+	if !hdr.IsLongHeader {
+		return packetType1RTT
+	}
+	if hdr.Version == 0 {
+		return packetTypeVersionNegotiation
+	}
+	switch hdr.Type {
+	case protocol.PacketTypeInitial:
+		return packetTypeInitial
+	case protocol.PacketTypeHandshake:
+		return packetTypeHandshake
+	case protocol.PacketType0RTT:
+		return packetType0RTT
+	case protocol.PacketTypeRetry:
+		return packetTypeRetry
+	default:
+		panic("unknown packet type")
+	}
+}
+
 func transformHeader(hdr *wire.ExtendedHeader) *packetHeader {
 	return &packetHeader{
 		PacketNumber:     hdr.PacketNumber,
