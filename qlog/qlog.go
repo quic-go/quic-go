@@ -13,6 +13,7 @@ import (
 type Tracer interface {
 	Export() error
 	SentPacket(time.Time, *wire.ExtendedHeader, *wire.AckFrame, []wire.Frame)
+	ReceivedPacket(time.Time, *wire.ExtendedHeader, []wire.Frame)
 }
 
 type tracer struct {
@@ -67,6 +68,21 @@ func (t *tracer) SentPacket(time time.Time, hdr *wire.ExtendedHeader, ack *wire.
 	t.events = append(t.events, event{
 		Time: time,
 		eventDetails: eventPacketSent{
+			PacketType: getPacketType(hdr),
+			Header:     *transformHeader(hdr),
+			Frames:     fs,
+		},
+	})
+}
+
+func (t *tracer) ReceivedPacket(time time.Time, hdr *wire.ExtendedHeader, frames []wire.Frame) {
+	fs := make([]frame, len(frames))
+	for i, f := range frames {
+		fs[i] = *transformFrame(f)
+	}
+	t.events = append(t.events, event{
+		Time: time,
+		eventDetails: eventPacketReceived{
 			PacketType: getPacketType(hdr),
 			Header:     *transformHeader(hdr),
 			Frames:     fs,

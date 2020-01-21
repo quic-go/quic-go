@@ -130,5 +130,34 @@ var _ = Describe("Tracer", func() {
 			Expect(frames[0].(map[string]interface{})).To(HaveKeyWithValue("frame_type", "ack"))
 			Expect(frames[1].(map[string]interface{})).To(HaveKeyWithValue("frame_type", "max_data"))
 		})
+
+		It("records a received packet", func() {
+			now := time.Now()
+			tracer.ReceivedPacket(
+				now,
+				&wire.ExtendedHeader{
+					Header: wire.Header{
+						IsLongHeader:     true,
+						Type:             protocol.PacketTypeInitial,
+						DestConnectionID: protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8},
+						SrcConnectionID:  protocol.ConnectionID{4, 3, 2, 1},
+						Version:          protocol.VersionTLS,
+					},
+					PacketNumber: 1337,
+				},
+				[]wire.Frame{
+					&wire.MaxStreamDataFrame{StreamID: 42, ByteOffset: 987},
+					&wire.StreamFrame{StreamID: 123, Offset: 1234, Data: []byte("foobar"), FinBit: true},
+				},
+			)
+			t, category, eventName, ev := exportAndParse()
+			Expect(t).To(BeTemporally("~", now, time.Millisecond))
+			Expect(category).To(Equal("transport"))
+			Expect(eventName).To(Equal("packet_received"))
+			Expect(ev).To(HaveKeyWithValue("packet_type", "initial"))
+			Expect(ev).To(HaveKey("header"))
+			Expect(ev).To(HaveKey("frames"))
+			Expect(ev["frames"].([]interface{})).To(HaveLen(2))
+		})
 	})
 })

@@ -61,3 +61,25 @@ func (e eventPacketSent) MarshalJSONObject(enc *gojay.Encoder) {
 	enc.BoolKeyOmitEmpty("is_coalesced", e.IsCoalesced)
 	enc.StringKeyOmitEmpty("trigger", e.Trigger)
 }
+
+type eventPacketReceived struct {
+	PacketType  packetType
+	Header      packetHeader
+	Frames      frames
+	IsCoalesced bool
+	Trigger     string
+}
+
+var _ eventDetails = eventPacketReceived{}
+
+func (e eventPacketReceived) Category() category { return categoryTransport }
+func (e eventPacketReceived) Name() string       { return "packet_received" }
+func (e eventPacketReceived) IsNil() bool        { return false }
+
+func (e eventPacketReceived) MarshalJSONObject(enc *gojay.Encoder) {
+	enc.StringKey("packet_type", e.PacketType.String())
+	enc.ObjectKey("header", e.Header)
+	enc.ArrayKeyOmitEmpty("frames", e.Frames)
+	enc.BoolKeyOmitEmpty("is_coalesced", e.IsCoalesced)
+	enc.StringKeyOmitEmpty("trigger", e.Trigger)
+}
