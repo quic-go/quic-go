@@ -15,6 +15,17 @@ type frame struct {
 
 var _ gojay.MarshalerJSONObject = frame{}
 
+type frames []frame
+
+func (fs frames) IsNil() bool { return fs == nil }
+func (fs frames) MarshalJSONArray(enc *gojay.Encoder) {
+	for _, f := range fs {
+		enc.Object(f)
+	}
+}
+
+var _ gojay.MarshalerJSONArray = frames{}
+
 type cryptoFrame struct {
 	Offset protocol.ByteCount
 	Length protocol.ByteCount

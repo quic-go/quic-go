@@ -39,3 +39,25 @@ func (e event) MarshalJSONArray(enc *gojay.Encoder) {
 	enc.String(e.Name())
 	enc.Object(e.eventDetails)
 }
+
+type eventPacketSent struct {
+	PacketType  packetType
+	Header      packetHeader
+	Frames      frames
+	IsCoalesced bool
+	Trigger     string
+}
+
+var _ eventDetails = eventPacketSent{}
+
+func (e eventPacketSent) Category() category { return categoryTransport }
+func (e eventPacketSent) Name() string       { return "packet_sent" }
+func (e eventPacketSent) IsNil() bool        { return false }
+
+func (e eventPacketSent) MarshalJSONObject(enc *gojay.Encoder) {
+	enc.StringKey("packet_type", e.PacketType.String())
+	enc.ObjectKey("header", e.Header)
+	enc.ArrayKeyOmitEmpty("frames", e.Frames)
+	enc.BoolKeyOmitEmpty("is_coalesced", e.IsCoalesced)
+	enc.StringKeyOmitEmpty("trigger", e.Trigger)
+}
