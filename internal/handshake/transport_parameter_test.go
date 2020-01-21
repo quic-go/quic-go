@@ -77,7 +77,7 @@ var _ = Describe("Transport Parameters", func() {
 			MaxIdleTimeout:                 0xcafe * time.Second,
 			MaxBidiStreamNum:               protocol.StreamNum(getRandomValue()),
 			MaxUniStreamNum:                protocol.StreamNum(getRandomValue()),
-			DisableMigration:               true,
+			DisableActiveMigration:         true,
 			StatelessResetToken:            &token,
 			OriginalConnectionID:           protocol.ConnectionID{0xde, 0xad, 0xbe, 0xef},
 			AckDelayExponent:               13,
@@ -95,7 +95,7 @@ var _ = Describe("Transport Parameters", func() {
 		Expect(p.MaxUniStreamNum).To(Equal(params.MaxUniStreamNum))
 		Expect(p.MaxBidiStreamNum).To(Equal(params.MaxBidiStreamNum))
 		Expect(p.MaxIdleTimeout).To(Equal(params.MaxIdleTimeout))
-		Expect(p.DisableMigration).To(Equal(params.DisableMigration))
+		Expect(p.DisableActiveMigration).To(Equal(params.DisableActiveMigration))
 		Expect(p.StatelessResetToken).To(Equal(params.StatelessResetToken))
 		Expect(p.OriginalConnectionID).To(Equal(protocol.ConnectionID{0xde, 0xad, 0xbe, 0xef}))
 		Expect(p.AckDelayExponent).To(Equal(uint8(13)))
@@ -132,13 +132,13 @@ var _ = Describe("Transport Parameters", func() {
 		Expect(p.Unmarshal(prependLength(b.Bytes()), protocol.PerspectiveServer)).To(MatchError("TRANSPORT_PARAMETER_ERROR: invalid value for max_packet_size: 1199 (minimum 1200)"))
 	})
 
-	It("errors when disable_migration has content", func() {
+	It("errors when disable_active_migration has content", func() {
 		b := &bytes.Buffer{}
-		utils.BigEndian.WriteUint16(b, uint16(disableMigrationParameterID))
+		utils.BigEndian.WriteUint16(b, uint16(disableActiveMigrationParameterID))
 		utils.BigEndian.WriteUint16(b, 6)
 		b.Write([]byte("foobar"))
 		p := &TransportParameters{}
-		Expect(p.Unmarshal(prependLength(b.Bytes()), protocol.PerspectiveServer)).To(MatchError("TRANSPORT_PARAMETER_ERROR: wrong length for disable_migration: 6 (expected empty)"))
+		Expect(p.Unmarshal(prependLength(b.Bytes()), protocol.PerspectiveServer)).To(MatchError("TRANSPORT_PARAMETER_ERROR: wrong length for disable_active_migration: 6 (expected empty)"))
 	})
 
 	It("errors when the max_ack_delay is too large", func() {
