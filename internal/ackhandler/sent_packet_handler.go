@@ -87,8 +87,6 @@ func NewSentPacketHandler(
 		congestion.DefaultClock{},
 		rttStats,
 		true, // use Reno
-		protocol.InitialCongestionWindow,
-		protocol.DefaultMaxCongestionWindow,
 	)
 
 	return &sentPacketHandler{
