@@ -231,7 +231,7 @@ var _ = Describe("Cubic", func() {
 			clock.Advance(100 * time.Millisecond)
 			currentCwnd = cubic.CongestionWindowAfterAck(maxDatagramSize, currentCwnd, rttMin, clock.Now())
 		}
-		expectedCwnd = 553632
+		expectedCwnd = 553632 * maxDatagramSize / 1460
 		Expect(currentCwnd).To(Equal(expectedCwnd))
 	})
 })
