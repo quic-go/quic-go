@@ -62,7 +62,7 @@ var _ = Describe("Packet Handler Map", func() {
 		}
 		handler.server = nil
 		handler.mutex.Unlock()
-		handler.Close()
+		handler.Destroy()
 		Eventually(handler.listening).Should(BeClosed())
 	})
 

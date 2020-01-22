@@ -287,7 +287,7 @@ func (c *client) establishSecureConnection(ctx context.Context) error {
 	go func() {
 		err := c.session.run() // returns as soon as the session is closed
 		if err != errCloseForRecreating && c.createdPacketConn {
-			c.packetHandlers.Close()
+			c.packetHandlers.Destroy()
 		}
 		errorChan <- err
 	}()
