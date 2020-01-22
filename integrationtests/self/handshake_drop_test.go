@@ -67,7 +67,7 @@ var _ = Describe("Handshake drop tests", func() {
 				defer GinkgoRecover()
 				sess, err := ln.Accept(context.Background())
 				Expect(err).ToNot(HaveOccurred())
-				defer sess.Close()
+				defer sess.CloseWithError(0, "")
 				str, err := sess.AcceptStream(context.Background())
 				Expect(err).ToNot(HaveOccurred())
 				b := make([]byte, 6)
@@ -93,8 +93,8 @@ var _ = Describe("Handshake drop tests", func() {
 
 			var serverSession quic.Session
 			Eventually(serverSessionChan, timeout).Should(Receive(&serverSession))
-			sess.Close()
-			serverSession.Close()
+			sess.CloseWithError(0, "")
+			serverSession.CloseWithError(0, "")
 		},
 	}
 
@@ -131,8 +131,8 @@ var _ = Describe("Handshake drop tests", func() {
 
 			var serverSession quic.Session
 			Eventually(serverSessionChan, timeout).Should(Receive(&serverSession))
-			sess.Close()
-			serverSession.Close()
+			sess.CloseWithError(0, "")
+			serverSession.CloseWithError(0, "")
 		},
 	}
 
@@ -159,8 +159,8 @@ var _ = Describe("Handshake drop tests", func() {
 			var serverSession quic.Session
 			Eventually(serverSessionChan, timeout).Should(Receive(&serverSession))
 			// both server and client accepted a session. Close now.
-			sess.Close()
-			serverSession.Close()
+			sess.CloseWithError(0, "")
+			serverSession.CloseWithError(0, "")
 		},
 	}
 

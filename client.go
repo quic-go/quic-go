@@ -301,8 +301,7 @@ func (c *client) establishSecureConnection(ctx context.Context) error {
 
 	select {
 	case <-ctx.Done():
-		// The session will send a PeerGoingAway error to the server.
-		c.session.Close()
+		c.session.shutdown()
 		return ctx.Err()
 	case err := <-errorChan:
 		return err
@@ -373,13 +372,13 @@ func (c *client) handleVersionNegotiationPacket(p *receivedPacket) {
 	c.initialPacketNumber = c.session.closeForRecreating()
 }
 
-func (c *client) Close() error {
+func (c *client) shutdown() {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
 	if c.session == nil {
-		return nil
+		return
 	}
-	return c.session.Close()
+	c.session.shutdown()
 }
 
 func (c *client) destroy(e error) {

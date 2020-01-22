@@ -64,7 +64,7 @@ var _ = Describe("0-RTT", func() {
 				Expect(err).ToNot(HaveOccurred())
 				Eventually(puts).Should(Receive())
 				// received the session ticket. We're done here.
-				Expect(sess.Close()).To(Succeed())
+				Expect(sess.CloseWithError(0, "")).To(Succeed())
 				return clientConf
 			}
 

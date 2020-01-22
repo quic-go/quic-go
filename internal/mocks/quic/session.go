@@ -68,20 +68,6 @@ func (mr *MockSessionMockRecorder) AcceptUniStream(arg0 interface{}) *gomock.Cal
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AcceptUniStream", reflect.TypeOf((*MockSession)(nil).AcceptUniStream), arg0)
 }
 
-// Close mocks base method
-func (m *MockSession) Close() error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Close")
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// Close indicates an expected call of Close
-func (mr *MockSessionMockRecorder) Close() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Close", reflect.TypeOf((*MockSession)(nil).Close))
-}
-
 // CloseWithError mocks base method
 func (m *MockSession) CloseWithError(arg0 protocol.ApplicationErrorCode, arg1 string) error {
 	m.ctrl.T.Helper()

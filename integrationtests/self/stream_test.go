@@ -112,7 +112,7 @@ var _ = Describe("Bidirectional streams", func() {
 					sess, err := server.Accept(context.Background())
 					Expect(err).ToNot(HaveOccurred())
 					runSendingPeer(sess)
-					sess.Close()
+					sess.CloseWithError(0, "")
 				}()
 
 				client, err := quic.DialAddr(
