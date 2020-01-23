@@ -102,19 +102,34 @@ func NewSentPacketHandler(
 
 func (h *sentPacketHandler) DropPackets(encLevel protocol.EncryptionLevel) {
 	// remove outstanding packets from bytes_in_flight
-	pnSpace := h.getPacketNumberSpace(encLevel)
-	pnSpace.history.Iterate(func(p *Packet) (bool, error) {
-		if p.includedInBytesInFlight {
-			h.bytesInFlight -= p.Length
-		}
-		return true, nil
-	})
+	if encLevel == protocol.EncryptionInitial || encLevel == protocol.EncryptionHandshake {
+		pnSpace := h.getPacketNumberSpace(encLevel)
+		pnSpace.history.Iterate(func(p *Packet) (bool, error) {
+			if p.includedInBytesInFlight {
+				h.bytesInFlight -= p.Length
+			}
+			return true, nil
+		})
+	}
 	// drop the packet history
 	switch encLevel {
 	case protocol.EncryptionInitial:
 		h.initialPackets = nil
 	case protocol.EncryptionHandshake:
 		h.handshakePackets = nil
+	case protocol.Encryption0RTT:
+		// TODO(#2067): invalidate sent data
+		h.appDataPackets.history.Iterate(func(p *Packet) (bool, error) {
+			if p.EncryptionLevel != protocol.Encryption0RTT {
+				return false, nil
+			}
+			h.queueFramesForRetransmission(p)
+			if p.includedInBytesInFlight {
+				h.bytesInFlight -= p.Length
+			}
+			h.appDataPackets.history.Remove(p.PacketNumber)
+			return true, nil
+		})
 	default:
 		panic(fmt.Sprintf("Cannot drop keys for encryption level %s", encLevel))
 	}
