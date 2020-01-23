@@ -253,18 +253,6 @@ func (mr *MockQuicSessionMockRecorder) closeForRecreating() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "closeForRecreating", reflect.TypeOf((*MockQuicSession)(nil).closeForRecreating))
 }
 
-// closeRemote mocks base method
-func (m *MockQuicSession) closeRemote(arg0 error) {
-	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "closeRemote", arg0)
-}
-
-// closeRemote indicates an expected call of closeRemote
-func (mr *MockQuicSessionMockRecorder) closeRemote(arg0 interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "closeRemote", reflect.TypeOf((*MockQuicSession)(nil).closeRemote), arg0)
-}
-
 // destroy mocks base method
 func (m *MockQuicSession) destroy(arg0 error) {
 	m.ctrl.T.Helper()
