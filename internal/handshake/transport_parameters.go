@@ -38,7 +38,7 @@ const (
 	initialMaxStreamsUniParameterID           transportParameterID = 0x9
 	ackDelayExponentParameterID               transportParameterID = 0xa
 	maxAckDelayParameterID                    transportParameterID = 0xb
-	disableMigrationParameterID               transportParameterID = 0xc
+	disableActiveMigrationParameterID         transportParameterID = 0xc
 	preferredAddressParamaterID               transportParameterID = 0xd
 	activeConnectionIDLimitParameterID        transportParameterID = 0xe
 )
@@ -63,7 +63,7 @@ type TransportParameters struct {
 	MaxAckDelay      time.Duration
 	AckDelayExponent uint8
 
-	DisableMigration bool
+	DisableActiveMigration bool
 
 	MaxPacketSize protocol.ByteCount
 
@@ -143,11 +143,11 @@ func (p *TransportParameters) unmarshal(data []byte, sentBy protocol.Perspective
 				if err := p.readPreferredAddress(r, int(paramLen)); err != nil {
 					return err
 				}
-			case disableMigrationParameterID:
+			case disableActiveMigrationParameterID:
 				if paramLen != 0 {
-					return fmt.Errorf("wrong length for disable_migration: %d (expected empty)", paramLen)
+					return fmt.Errorf("wrong length for disable_active_migration: %d (expected empty)", paramLen)
 				}
-				p.DisableMigration = true
+				p.DisableActiveMigration = true
 			case statelessResetTokenParameterID:
 				if sentBy == protocol.PerspectiveClient {
 					return errors.New("client sent a stateless_reset_token")
@@ -329,9 +329,9 @@ func (p *TransportParameters) Marshal() []byte {
 	if p.AckDelayExponent != protocol.DefaultAckDelayExponent {
 		p.marshalVarintParam(b, ackDelayExponentParameterID, uint64(p.AckDelayExponent))
 	}
-	// disable_migration
-	if p.DisableMigration {
-		utils.BigEndian.WriteUint16(b, uint16(disableMigrationParameterID))
+	// disable_active_migration
+	if p.DisableActiveMigration {
+		utils.BigEndian.WriteUint16(b, uint16(disableActiveMigrationParameterID))
 		utils.BigEndian.WriteUint16(b, 0)
 	}
 	if p.StatelessResetToken != nil {
