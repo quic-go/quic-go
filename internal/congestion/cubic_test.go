@@ -28,12 +28,12 @@ var _ = Describe("Cubic", func() {
 	})
 
 	renoCwnd := func(currentCwnd protocol.ByteCount) protocol.ByteCount {
-		return currentCwnd + protocol.ByteCount(float32(protocol.DefaultTCPMSS)*nConnectionAlpha*float32(protocol.DefaultTCPMSS)/float32(currentCwnd))
+		return currentCwnd + protocol.ByteCount(float32(maxDatagramSize)*nConnectionAlpha*float32(maxDatagramSize)/float32(currentCwnd))
 	}
 
 	cubicConvexCwnd := func(initialCwnd protocol.ByteCount, rtt, elapsedTime time.Duration) protocol.ByteCount {
 		offset := protocol.ByteCount((elapsedTime+rtt)/time.Microsecond) << 10 / 1000000
-		deltaCongestionWindow := 410 * offset * offset * offset * protocol.DefaultTCPMSS >> 40
+		deltaCongestionWindow := 410 * offset * offset * offset * maxDatagramSize >> 40
 		return initialCwnd + deltaCongestionWindow
 	}
 
@@ -41,13 +41,13 @@ var _ = Describe("Cubic", func() {
 		// Convex growth.
 		const rttMin = 100 * time.Millisecond
 		const rttMinS = float32(rttMin/time.Millisecond) / 1000.0
-		currentCwnd := 10 * protocol.DefaultTCPMSS
+		currentCwnd := 10 * maxDatagramSize
 		initialCwnd := currentCwnd
 
 		clock.Advance(time.Millisecond)
 		initialTime := clock.Now()
 		expectedFirstCwnd := renoCwnd(currentCwnd)
-		currentCwnd = cubic.CongestionWindowAfterAck(protocol.DefaultTCPMSS, currentCwnd, rttMin, initialTime)
+		currentCwnd = cubic.CongestionWindowAfterAck(maxDatagramSize, currentCwnd, rttMin, initialTime)
 		Expect(expectedFirstCwnd).To(Equal(currentCwnd))
 
 		// Normal TCP phase.
@@ -59,13 +59,13 @@ var _ = Describe("Cubic", func() {
 			// receive current_cwnd/Alpha acks back.  (This is another way of
 			// saying we expect cwnd to increase by approximately Alpha once
 			// we receive current_cwnd number ofacks back).
-			numAcksThisEpoch := int(float32(currentCwnd/protocol.DefaultTCPMSS) / nConnectionAlpha)
+			numAcksThisEpoch := int(float32(currentCwnd/maxDatagramSize) / nConnectionAlpha)
 
 			initialCwndThisEpoch := currentCwnd
 			for n := 0; n < numAcksThisEpoch; n++ {
 				// Call once per ACK.
 				expectedNextCwnd := renoCwnd(currentCwnd)
-				currentCwnd = cubic.CongestionWindowAfterAck(protocol.DefaultTCPMSS, currentCwnd, rttMin, clock.Now())
+				currentCwnd = cubic.CongestionWindowAfterAck(maxDatagramSize, currentCwnd, rttMin, clock.Now())
 				Expect(currentCwnd).To(Equal(expectedNextCwnd))
 			}
 			// Our byte-wise Reno implementation is an estimate.  We expect
@@ -73,51 +73,51 @@ var _ = Describe("Cubic", func() {
 			// cwnd/kDefaultTCPMSS/Alpha acks, but it may be off by as much as
 			// half a packet for smaller values of current_cwnd.
 			cwndChangeThisEpoch := currentCwnd - initialCwndThisEpoch
-			Expect(cwndChangeThisEpoch).To(BeNumerically("~", protocol.DefaultTCPMSS, protocol.DefaultTCPMSS/2))
+			Expect(cwndChangeThisEpoch).To(BeNumerically("~", maxDatagramSize, maxDatagramSize/2))
 			clock.Advance(100 * time.Millisecond)
 		}
 
 		for i := 0; i < 54; i++ {
-			maxAcksThisEpoch := currentCwnd / protocol.DefaultTCPMSS
+			maxAcksThisEpoch := currentCwnd / maxDatagramSize
 			interval := time.Duration(100*1000/maxAcksThisEpoch) * time.Microsecond
 			for n := 0; n < int(maxAcksThisEpoch); n++ {
 				clock.Advance(interval)
-				currentCwnd = cubic.CongestionWindowAfterAck(protocol.DefaultTCPMSS, currentCwnd, rttMin, clock.Now())
+				currentCwnd = cubic.CongestionWindowAfterAck(maxDatagramSize, currentCwnd, rttMin, clock.Now())
 				expectedCwnd := cubicConvexCwnd(initialCwnd, rttMin, clock.Now().Sub(initialTime))
 				// If we allow per-ack updates, every update is a small cubic update.
 				Expect(currentCwnd).To(Equal(expectedCwnd))
 			}
 		}
 		expectedCwnd := cubicConvexCwnd(initialCwnd, rttMin, clock.Now().Sub(initialTime))
-		currentCwnd = cubic.CongestionWindowAfterAck(protocol.DefaultTCPMSS, currentCwnd, rttMin, clock.Now())
+		currentCwnd = cubic.CongestionWindowAfterAck(maxDatagramSize, currentCwnd, rttMin, clock.Now())
 		Expect(currentCwnd).To(Equal(expectedCwnd))
 	})
 
 	It("works above the origin with fine grained cubing", func() {
 		// Start the test with an artificially large cwnd to prevent Reno
 		// from over-taking cubic.
-		currentCwnd := 1000 * protocol.DefaultTCPMSS
+		currentCwnd := 1000 * maxDatagramSize
 		initialCwnd := currentCwnd
 		rttMin := 100 * time.Millisecond
 		clock.Advance(time.Millisecond)
 		initialTime := clock.Now()
 
-		currentCwnd = cubic.CongestionWindowAfterAck(protocol.DefaultTCPMSS, currentCwnd, rttMin, clock.Now())
+		currentCwnd = cubic.CongestionWindowAfterAck(maxDatagramSize, currentCwnd, rttMin, clock.Now())
 		clock.Advance(600 * time.Millisecond)
-		currentCwnd = cubic.CongestionWindowAfterAck(protocol.DefaultTCPMSS, currentCwnd, rttMin, clock.Now())
+		currentCwnd = cubic.CongestionWindowAfterAck(maxDatagramSize, currentCwnd, rttMin, clock.Now())
 
 		// We expect the algorithm to perform only non-zero, fine-grained cubic
 		// increases on every ack in this case.
 		for i := 0; i < 100; i++ {
 			clock.Advance(10 * time.Millisecond)
 			expectedCwnd := cubicConvexCwnd(initialCwnd, rttMin, clock.Now().Sub(initialTime))
-			nextCwnd := cubic.CongestionWindowAfterAck(protocol.DefaultTCPMSS, currentCwnd, rttMin, clock.Now())
+			nextCwnd := cubic.CongestionWindowAfterAck(maxDatagramSize, currentCwnd, rttMin, clock.Now())
 			// Make sure we are performing cubic increases.
 			Expect(nextCwnd).To(Equal(expectedCwnd))
 			// Make sure that these are non-zero, less-than-packet sized increases.
 			Expect(nextCwnd).To(BeNumerically(">", currentCwnd))
 			cwndDelta := nextCwnd - currentCwnd
-			Expect(protocol.DefaultTCPMSS / 10).To(BeNumerically(">", cwndDelta))
+			Expect(maxDatagramSize / 10).To(BeNumerically(">", cwndDelta))
 			currentCwnd = nextCwnd
 		}
 	})
@@ -126,14 +126,14 @@ var _ = Describe("Cubic", func() {
 		// Start the test with a large cwnd and RTT, to force the first
 		// increase to be a cubic increase.
 		initialCwndPackets := 150
-		currentCwnd := protocol.ByteCount(initialCwndPackets) * protocol.DefaultTCPMSS
+		currentCwnd := protocol.ByteCount(initialCwndPackets) * maxDatagramSize
 		rttMin := 350 * time.Millisecond
 
 		// Initialize the epoch
 		clock.Advance(time.Millisecond)
 		// Keep track of the growth of the reno-equivalent cwnd.
 		rCwnd := renoCwnd(currentCwnd)
-		currentCwnd = cubic.CongestionWindowAfterAck(protocol.DefaultTCPMSS, currentCwnd, rttMin, clock.Now())
+		currentCwnd = cubic.CongestionWindowAfterAck(maxDatagramSize, currentCwnd, rttMin, clock.Now())
 		initialCwnd := currentCwnd
 
 		// Simulate the return of cwnd packets in less than
@@ -149,10 +149,10 @@ var _ = Describe("Cubic", func() {
 		// regardless of the temporary plateau.
 		clock.Advance(interval)
 		rCwnd = renoCwnd(rCwnd)
-		Expect(cubic.CongestionWindowAfterAck(protocol.DefaultTCPMSS, currentCwnd, rttMin, clock.Now())).To(Equal(currentCwnd))
+		Expect(cubic.CongestionWindowAfterAck(maxDatagramSize, currentCwnd, rttMin, clock.Now())).To(Equal(currentCwnd))
 		for i := 1; i < maxAcks; i++ {
 			clock.Advance(interval)
-			nextCwnd := cubic.CongestionWindowAfterAck(protocol.DefaultTCPMSS, currentCwnd, rttMin, clock.Now())
+			nextCwnd := cubic.CongestionWindowAfterAck(maxDatagramSize, currentCwnd, rttMin, clock.Now())
 			rCwnd = renoCwnd(rCwnd)
 			// The window shoud increase on every ack.
 			Expect(nextCwnd).To(BeNumerically(">", currentCwnd))
@@ -165,17 +165,17 @@ var _ = Describe("Cubic", func() {
 		// packet, because our byte-wise Reno algorithm is always a slight
 		// under-estimation).  Without per-ack updates, the current_cwnd
 		// would otherwise be unchanged.
-		minimumExpectedIncrease := protocol.DefaultTCPMSS * 9 / 10
+		minimumExpectedIncrease := maxDatagramSize * 9 / 10
 		Expect(currentCwnd).To(BeNumerically(">", initialCwnd+minimumExpectedIncrease))
 	})
 
 	It("handles loss events", func() {
 		rttMin := 100 * time.Millisecond
-		currentCwnd := 422 * protocol.DefaultTCPMSS
+		currentCwnd := 422 * maxDatagramSize
 		expectedCwnd := renoCwnd(currentCwnd)
 		// Initialize the state.
 		clock.Advance(time.Millisecond)
-		Expect(cubic.CongestionWindowAfterAck(protocol.DefaultTCPMSS, currentCwnd, rttMin, clock.Now())).To(Equal(expectedCwnd))
+		Expect(cubic.CongestionWindowAfterAck(maxDatagramSize, currentCwnd, rttMin, clock.Now())).To(Equal(expectedCwnd))
 
 		// On the first loss, the last max congestion window is set to the
 		// congestion window before the loss.
@@ -199,7 +199,7 @@ var _ = Describe("Cubic", func() {
 		Expect(cubic.lastMaxCongestionWindow).To(Equal(expectedLastMax))
 		Expect(expectedCwnd).To(BeNumerically("<", cubic.lastMaxCongestionWindow))
 		// Simulate an increase, and check that we are below the origin.
-		currentCwnd = cubic.CongestionWindowAfterAck(protocol.DefaultTCPMSS, currentCwnd, rttMin, clock.Now())
+		currentCwnd = cubic.CongestionWindowAfterAck(maxDatagramSize, currentCwnd, rttMin, clock.Now())
 		Expect(cubic.lastMaxCongestionWindow).To(BeNumerically(">", currentCwnd))
 
 		// On the final loss, simulate the condition where the congestion
@@ -215,23 +215,23 @@ var _ = Describe("Cubic", func() {
 	It("works below origin", func() {
 		// Concave growth.
 		rttMin := 100 * time.Millisecond
-		currentCwnd := 422 * protocol.DefaultTCPMSS
+		currentCwnd := 422 * maxDatagramSize
 		expectedCwnd := renoCwnd(currentCwnd)
 		// Initialize the state.
 		clock.Advance(time.Millisecond)
-		Expect(cubic.CongestionWindowAfterAck(protocol.DefaultTCPMSS, currentCwnd, rttMin, clock.Now())).To(Equal(expectedCwnd))
+		Expect(cubic.CongestionWindowAfterAck(maxDatagramSize, currentCwnd, rttMin, clock.Now())).To(Equal(expectedCwnd))
 
 		expectedCwnd = protocol.ByteCount(float32(currentCwnd) * nConnectionBeta)
 		Expect(cubic.CongestionWindowAfterPacketLoss(currentCwnd)).To(Equal(expectedCwnd))
 		currentCwnd = expectedCwnd
 		// First update after loss to initialize the epoch.
-		currentCwnd = cubic.CongestionWindowAfterAck(protocol.DefaultTCPMSS, currentCwnd, rttMin, clock.Now())
+		currentCwnd = cubic.CongestionWindowAfterAck(maxDatagramSize, currentCwnd, rttMin, clock.Now())
 		// Cubic phase.
 		for i := 0; i < 40; i++ {
 			clock.Advance(100 * time.Millisecond)
-			currentCwnd = cubic.CongestionWindowAfterAck(protocol.DefaultTCPMSS, currentCwnd, rttMin, clock.Now())
+			currentCwnd = cubic.CongestionWindowAfterAck(maxDatagramSize, currentCwnd, rttMin, clock.Now())
 		}
-		expectedCwnd = 553632
+		expectedCwnd = 553632 * maxDatagramSize / 1460
 		Expect(currentCwnd).To(Equal(expectedCwnd))
 	})
 })

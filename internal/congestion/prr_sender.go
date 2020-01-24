@@ -36,7 +36,7 @@ func (p *PrrSender) OnPacketAcked(ackedBytes protocol.ByteCount) {
 // CanSend returns if packets can be sent
 func (p *PrrSender) CanSend(congestionWindow, bytesInFlight, slowstartThreshold protocol.ByteCount) bool {
 	// Return QuicTime::Zero In order to ensure limited transmit always works.
-	if p.bytesSentSinceLoss == 0 || bytesInFlight < protocol.DefaultTCPMSS {
+	if p.bytesSentSinceLoss == 0 || bytesInFlight < maxDatagramSize {
 		return true
 	}
 	if congestionWindow > bytesInFlight {
@@ -44,7 +44,7 @@ func (p *PrrSender) CanSend(congestionWindow, bytesInFlight, slowstartThreshold 
 		// of sending the entire available window. This prevents burst retransmits
 		// when more packets are lost than the CWND reduction.
 		//   limit = MAX(prr_delivered - prr_out, DeliveredData) + MSS
-		return p.bytesDeliveredSinceLoss+p.ackCountSinceLoss*protocol.DefaultTCPMSS > p.bytesSentSinceLoss
+		return p.bytesDeliveredSinceLoss+p.ackCountSinceLoss*maxDatagramSize > p.bytesSentSinceLoss
 	}
 	// Implement Proportional Rate Reduction (RFC6937).
 	// Checks a simplified version of the PRR formula that doesn't use division:

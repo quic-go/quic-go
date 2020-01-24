@@ -8,13 +8,8 @@ const MaxPacketSizeIPv4 = 1252
 // MaxPacketSizeIPv6 is the maximum packet size that we use for sending IPv6 packets.
 const MaxPacketSizeIPv6 = 1232
 
-const defaultMaxCongestionWindowPackets = 10000
-
-// DefaultMaxCongestionWindow is the default for the max congestion window
-const DefaultMaxCongestionWindow ByteCount = defaultMaxCongestionWindowPackets * DefaultTCPMSS
-
-// InitialCongestionWindow is the initial congestion window in QUIC packets
-const InitialCongestionWindow ByteCount = 32 * DefaultTCPMSS
+// MaxCongestionWindowPackets is the maximum congestion window in packet.
+const MaxCongestionWindowPackets = 10000
 
 // MaxUndecryptablePackets limits the number of undecryptable packets that are queued in the session.
 const MaxUndecryptablePackets = 10
@@ -45,7 +40,7 @@ const DefaultMaxIncomingStreams = 100
 const DefaultMaxIncomingUniStreams = 100
 
 // MaxSessionUnprocessedPackets is the max number of packets stored in each session that are not yet processed.
-const MaxSessionUnprocessedPackets = defaultMaxCongestionWindowPackets
+const MaxSessionUnprocessedPackets = MaxCongestionWindowPackets
 
 // SkipPacketAveragePeriodLength is the average period length in which one packet number is skipped to prevent an Optimistic ACK attack
 const SkipPacketAveragePeriodLength PacketNumber = 500
@@ -66,7 +61,7 @@ const RetryTokenValidity = 10 * time.Second
 // MaxOutstandingSentPackets is maximum number of packets saved for retransmission.
 // When reached, it imposes a soft limit on sending new packets:
 // Sending ACKs and retransmission is still allowed, but now new regular packets can be sent.
-const MaxOutstandingSentPackets = 2 * defaultMaxCongestionWindowPackets
+const MaxOutstandingSentPackets = 2 * MaxCongestionWindowPackets
 
 // MaxTrackedSentPackets is maximum number of sent packets saved for retransmission.
 // When reached, no more packets will be sent.

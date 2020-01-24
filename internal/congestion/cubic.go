@@ -19,7 +19,7 @@ import (
 // where 0.100 is 100 ms which is the scaling round trip time.
 const cubeScale = 40
 const cubeCongestionWindowScale = 410
-const cubeFactor protocol.ByteCount = 1 << cubeScale / cubeCongestionWindowScale / protocol.DefaultTCPMSS
+const cubeFactor protocol.ByteCount = 1 << cubeScale / cubeCongestionWindowScale / maxDatagramSize
 
 const defaultNumConnections = 1
 
@@ -125,7 +125,7 @@ func (c *Cubic) OnApplicationLimited() {
 // a loss event. Returns the new congestion window in packets. The new
 // congestion window is a multiplicative decrease of our current window.
 func (c *Cubic) CongestionWindowAfterPacketLoss(currentCongestionWindow protocol.ByteCount) protocol.ByteCount {
-	if currentCongestionWindow+protocol.DefaultTCPMSS < c.lastMaxCongestionWindow {
+	if currentCongestionWindow+maxDatagramSize < c.lastMaxCongestionWindow {
 		// We never reached the old max, so assume we are competing with another
 		// flow. Use our extra back off factor to allow the other flow to go up.
 		c.lastMaxCongestionWindow = protocol.ByteCount(c.betaLastMax() * float32(currentCongestionWindow))
@@ -175,7 +175,7 @@ func (c *Cubic) CongestionWindowAfterAck(
 		offset = -offset
 	}
 
-	deltaCongestionWindow := protocol.ByteCount(cubeCongestionWindowScale*offset*offset*offset) * protocol.DefaultTCPMSS >> cubeScale
+	deltaCongestionWindow := protocol.ByteCount(cubeCongestionWindowScale*offset*offset*offset) * maxDatagramSize >> cubeScale
 	var targetCongestionWindow protocol.ByteCount
 	if elapsedTime > int64(c.timeToOriginPoint) {
 		targetCongestionWindow = c.originPointCongestionWindow + deltaCongestionWindow
@@ -190,7 +190,7 @@ func (c *Cubic) CongestionWindowAfterAck(
 	// congestion windows (less than 25), the formula below will
 	// increase slightly slower than linearly per estimated tcp window
 	// of bytes.
-	c.estimatedTCPcongestionWindow += protocol.ByteCount(float32(c.ackedBytesCount) * c.alpha() * float32(protocol.DefaultTCPMSS) / float32(c.estimatedTCPcongestionWindow))
+	c.estimatedTCPcongestionWindow += protocol.ByteCount(float32(c.ackedBytesCount) * c.alpha() * float32(maxDatagramSize) / float32(c.estimatedTCPcongestionWindow))
 	c.ackedBytesCount = 0
 
 	// We have a new cubic congestion window.

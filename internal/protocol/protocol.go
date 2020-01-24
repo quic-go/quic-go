@@ -49,10 +49,6 @@ type ApplicationErrorCode uint64
 // Ethernet's max packet size is 1500 bytes,  1500 - 48 = 1452.
 const MaxReceivePacketSize ByteCount = 1452
 
-// DefaultTCPMSS is the default maximum packet size used in the Linux TCP implementation.
-// Used in QUIC for congestion window computations in bytes.
-const DefaultTCPMSS ByteCount = 1460
-
 // MinInitialPacketSize is the minimum size an Initial packet is required to have.
 const MinInitialPacketSize = 1200
 

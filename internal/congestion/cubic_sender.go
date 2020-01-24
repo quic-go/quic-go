@@ -8,9 +8,14 @@ import (
 )
 
 const (
-	maxBurstBytes                                     = 3 * protocol.DefaultTCPMSS
-	renoBeta                       float32            = 0.7 // Reno backoff factor.
-	defaultMinimumCongestionWindow protocol.ByteCount = 2 * protocol.DefaultTCPMSS
+	// maxDatagramSize is the default maximum packet size used in the Linux TCP implementation.
+	// Used in QUIC for congestion window computations in bytes.
+	maxDatagramSize                 = protocol.ByteCount(protocol.MaxPacketSizeIPv4)
+	maxBurstBytes                   = 3 * maxDatagramSize
+	renoBeta                float32 = 0.7 // Reno backoff factor.
+	maxCongestionWindow             = protocol.MaxCongestionWindowPackets * maxDatagramSize
+	minCongestionWindow             = 2 * maxDatagramSize
+	initialCongestionWindow         = 32 * maxDatagramSize
 )
 
 type cubicSender struct {
@@ -67,7 +72,11 @@ var _ SendAlgorithm = &cubicSender{}
 var _ SendAlgorithmWithDebugInfos = &cubicSender{}
 
 // NewCubicSender makes a new cubic sender
-func NewCubicSender(clock Clock, rttStats *RTTStats, reno bool, initialCongestionWindow, initialMaxCongestionWindow protocol.ByteCount) *cubicSender {
+func NewCubicSender(clock Clock, rttStats *RTTStats, reno bool) *cubicSender {
+	return newCubicSender(clock, rttStats, reno, initialCongestionWindow, maxCongestionWindow)
+}
+
+func newCubicSender(clock Clock, rttStats *RTTStats, reno bool, initialCongestionWindow, initialMaxCongestionWindow protocol.ByteCount) *cubicSender {
 	return &cubicSender{
 		rttStats:                   rttStats,
 		largestSentPacketNumber:    protocol.InvalidPacketNumber,
@@ -76,7 +85,7 @@ func NewCubicSender(clock Clock, rttStats *RTTStats, reno bool, initialCongestio
 		initialCongestionWindow:    initialCongestionWindow,
 		initialMaxCongestionWindow: initialMaxCongestionWindow,
 		congestionWindow:           initialCongestionWindow,
-		minCongestionWindow:        defaultMinimumCongestionWindow,
+		minCongestionWindow:        minCongestionWindow,
 		slowstartThreshold:         initialMaxCongestionWindow,
 		maxCongestionWindow:        initialMaxCongestionWindow,
 		numConnections:             defaultNumConnections,
@@ -93,7 +102,7 @@ func (c *cubicSender) TimeUntilSend(bytesInFlight protocol.ByteCount) time.Durat
 			return 0
 		}
 	}
-	return c.rttStats.SmoothedRTT() * time.Duration(protocol.DefaultTCPMSS) / time.Duration(2*c.GetCongestionWindow())
+	return c.rttStats.SmoothedRTT() * time.Duration(maxDatagramSize) / time.Duration(2*c.GetCongestionWindow())
 }
 
 func (c *cubicSender) OnPacketSent(
@@ -146,7 +155,7 @@ func (c *cubicSender) SlowstartThreshold() protocol.ByteCount {
 }
 
 func (c *cubicSender) MaybeExitSlowStart() {
-	if c.InSlowStart() && c.hybridSlowStart.ShouldExitSlowStart(c.rttStats.LatestRTT(), c.rttStats.MinRTT(), c.GetCongestionWindow()/protocol.DefaultTCPMSS) {
+	if c.InSlowStart() && c.hybridSlowStart.ShouldExitSlowStart(c.rttStats.LatestRTT(), c.rttStats.MinRTT(), c.GetCongestionWindow()/maxDatagramSize) {
 		c.ExitSlowstart()
 	}
 }
@@ -204,7 +213,7 @@ func (c *cubicSender) OnPacketLost(
 		if c.congestionWindow >= 2*c.initialCongestionWindow {
 			c.minSlowStartExitWindow = c.congestionWindow / 2
 		}
-		c.congestionWindow -= protocol.DefaultTCPMSS
+		c.congestionWindow -= maxDatagramSize
 	} else if c.reno {
 		c.congestionWindow = protocol.ByteCount(float32(c.congestionWindow) * c.RenoBeta())
 	} else {
@@ -247,7 +256,7 @@ func (c *cubicSender) maybeIncreaseCwnd(
 	}
 	if c.InSlowStart() {
 		// TCP slow start, exponential growth, increase by one for each ACK.
-		c.congestionWindow += protocol.DefaultTCPMSS
+		c.congestionWindow += maxDatagramSize
 		return
 	}
 	// Congestion avoidance
@@ -256,8 +265,8 @@ func (c *cubicSender) maybeIncreaseCwnd(
 		c.numAckedPackets++
 		// Divide by num_connections to smoothly increase the CWND at a faster
 		// rate than conventional Reno.
-		if c.numAckedPackets*uint64(c.numConnections) >= uint64(c.congestionWindow)/uint64(protocol.DefaultTCPMSS) {
-			c.congestionWindow += protocol.DefaultTCPMSS
+		if c.numAckedPackets*uint64(c.numConnections) >= uint64(c.congestionWindow)/uint64(maxDatagramSize) {
+			c.congestionWindow += maxDatagramSize
 			c.numAckedPackets = 0
 		}
 	} else {
