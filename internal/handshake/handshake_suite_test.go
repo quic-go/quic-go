@@ -3,6 +3,8 @@ package handshake
 import (
 	"crypto"
 	"crypto/cipher"
+	"encoding/hex"
+	"strings"
 
 	"github.com/alangpierce/go-forceexport"
 	"github.com/golang/mock/gomock"
@@ -50,6 +52,18 @@ var cipherSuites = []*qtls.CipherSuiteTLS13{
 		AEAD:   nil, // will be set by init
 		Hash:   crypto.SHA256,
 	},
+}
+
+func splitHexString(s string) (slice []byte) {
+	for _, ss := range strings.Split(s, " ") {
+		if ss[0:2] == "0x" {
+			ss = ss[2:]
+		}
+		d, err := hex.DecodeString(ss)
+		Expect(err).ToNot(HaveOccurred())
+		slice = append(slice, d...)
+	}
+	return
 }
 
 func init() {

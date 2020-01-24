@@ -21,4 +21,10 @@ var _ = Describe("Retry Integrity Check", func() {
 		t2 := GetRetryIntegrityTag([]byte("foobar"), protocol.ConnectionID{4, 3, 2, 1})
 		Expect(*t1).ToNot(Equal(*t2))
 	})
+
+	It("uses the test vector from the draft", func() {
+		connID := protocol.ConnectionID(splitHexString("0x8394c8f03e515708"))
+		data := splitHexString("ffff0000190008f067a5502a4262b574 6f6b656e1e5ec5b014cbb1f0fd93df40 48c446a6")
+		Expect(GetRetryIntegrityTag(data[:len(data)-16], connID)[:]).To(Equal(data[len(data)-16:]))
+	})
 })
