@@ -586,7 +586,7 @@ func (s *session) ConnectionState() tls.ConnectionState {
 // Time when the next keep-alive packet should be sent.
 // It returns a zero time if no keep-alive should be sent.
 func (s *session) nextKeepAliveTime() time.Time {
-	if !s.config.KeepAlive || s.keepAlivePingSent || s.firstAckElicitingPacketAfterIdleSentTime.IsZero() {
+	if !s.config.KeepAlive || s.keepAlivePingSent || !s.firstAckElicitingPacketAfterIdleSentTime.IsZero() {
 		return time.Time{}
 	}
 	return s.lastPacketReceivedTime.Add(s.keepAliveInterval / 2)
