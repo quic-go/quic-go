@@ -128,7 +128,7 @@ var _ = Describe("Client", func() {
 	It("errors if it can't open a stream", func() {
 		testErr := errors.New("stream open error")
 		client = newClient("localhost:1337", nil, &roundTripperOpts{}, nil, nil)
-		session := mockquic.NewMockSession(mockCtrl)
+		session := mockquic.NewMockEarlySession(mockCtrl)
 		session.EXPECT().OpenUniStream().Return(nil, testErr).MaxTimes(1)
 		session.EXPECT().OpenStreamSync(context.Background()).Return(nil, testErr).MaxTimes(1)
 		session.EXPECT().CloseWithError(gomock.Any(), gomock.Any()).MaxTimes(1)
@@ -144,7 +144,7 @@ var _ = Describe("Client", func() {
 		var (
 			request *http.Request
 			str     *mockquic.MockStream
-			sess    *mockquic.MockSession
+			sess    *mockquic.MockEarlySession
 		)
 
 		decodeHeader := func(str io.Reader) map[string]string {
@@ -171,7 +171,7 @@ var _ = Describe("Client", func() {
 			controlStr.EXPECT().Write([]byte{0x0}).Return(1, nil).MaxTimes(1)
 			controlStr.EXPECT().Write(gomock.Any()).MaxTimes(1) // SETTINGS frame
 			str = mockquic.NewMockStream(mockCtrl)
-			sess = mockquic.NewMockSession(mockCtrl)
+			sess = mockquic.NewMockEarlySession(mockCtrl)
 			sess.EXPECT().OpenUniStream().Return(controlStr, nil).MaxTimes(1)
 			dialAddr = func(hostname string, _ *tls.Config, _ *quic.Config) (quic.Session, error) {
 				return sess, nil
