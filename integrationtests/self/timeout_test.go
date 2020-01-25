@@ -229,4 +229,64 @@ var _ = Describe("Timeout tests", func() {
 			Eventually(serverSessionClosed).Should(BeClosed())
 		})
 	})
+
+	It("does not time out if keepalive is set", func() {
+		const idleTimeout = 100 * time.Millisecond
+
+		server, err := quic.ListenAddr(
+			"localhost:0",
+			getTLSConfig(),
+			nil,
+		)
+		Expect(err).ToNot(HaveOccurred())
+		defer server.Close()
+
+		serverSessionClosed := make(chan struct{})
+		go func() {
+			defer GinkgoRecover()
+			sess, err := server.Accept(context.Background())
+			Expect(err).ToNot(HaveOccurred())
+			sess.AcceptStream(context.Background()) // blocks until the session is closed
+			close(serverSessionClosed)
+		}()
+
+		drop := utils.AtomicBool{}
+
+		proxy, err := quicproxy.NewQuicProxy("localhost:0", &quicproxy.Opts{
+			RemoteAddr: fmt.Sprintf("localhost:%d", server.Addr().(*net.UDPAddr).Port),
+			DropPacket: func(quicproxy.Direction, []byte) bool {
+				return drop.Get()
+			},
+		})
+		Expect(err).ToNot(HaveOccurred())
+		defer proxy.Close()
+
+		sess, err := quic.DialAddr(
+			fmt.Sprintf("localhost:%d", proxy.LocalPort()),
+			getTLSClientConfig(),
+			&quic.Config{
+				MaxIdleTimeout: idleTimeout,
+				KeepAlive:      true,
+			},
+		)
+		Expect(err).ToNot(HaveOccurred())
+
+		// wait longer than the idle timeout
+		time.Sleep(3 * idleTimeout)
+		str, err := sess.OpenUniStream()
+		Expect(err).ToNot(HaveOccurred())
+		_, err = str.Write([]byte("foobar"))
+		Expect(err).ToNot(HaveOccurred())
+		Consistently(serverSessionClosed).ShouldNot(BeClosed())
+
+		// idle timeout will still kick in if pings are dropped
+		drop.Set(true)
+		time.Sleep(2 * idleTimeout)
+		_, err = str.Write([]byte("foobar"))
+		checkTimeoutError(err)
+
+		Expect(server.Close()).To(Succeed())
+		Eventually(serverSessionClosed).Should(BeClosed())
+	})
+
 })
