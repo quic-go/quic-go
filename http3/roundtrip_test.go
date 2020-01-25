@@ -58,9 +58,10 @@ func (m *mockBody) Close() error {
 
 var _ = Describe("RoundTripper", func() {
 	var (
-		rt      *RoundTripper
-		req1    *http.Request
-		session *mockquic.MockEarlySession
+		rt           *RoundTripper
+		req1         *http.Request
+		session      *mockquic.MockEarlySession
+		handshakeCtx context.Context // an already canceled context
 	)
 
 	BeforeEach(func() {
@@ -68,6 +69,10 @@ var _ = Describe("RoundTripper", func() {
 		var err error
 		req1, err = http.NewRequest("GET", "https://www.example.org/file1.html", nil)
 		Expect(err).ToNot(HaveOccurred())
+
+		ctx, cancel := context.WithCancel(context.Background())
+		cancel()
+		handshakeCtx = ctx
 	})
 
 	Context("dialing hosts", func() {
@@ -76,7 +81,7 @@ var _ = Describe("RoundTripper", func() {
 		BeforeEach(func() {
 			session = mockquic.NewMockEarlySession(mockCtrl)
 			origDialAddr = dialAddr
-			dialAddr = func(addr string, tlsConf *tls.Config, config *quic.Config) (quic.Session, error) {
+			dialAddr = func(addr string, tlsConf *tls.Config, config *quic.Config) (quic.EarlySession, error) {
 				// return an error when trying to open a stream
 				// we don't want to test all the dial logic here, just that dialing happens at all
 				return session, nil
@@ -93,6 +98,7 @@ var _ = Describe("RoundTripper", func() {
 			req, err := http.NewRequest("GET", "https://quic.clemente.io/foobar.html", nil)
 			Expect(err).ToNot(HaveOccurred())
 			session.EXPECT().OpenUniStream().AnyTimes().Return(nil, testErr)
+			session.EXPECT().HandshakeComplete().Return(handshakeCtx)
 			session.EXPECT().OpenStreamSync(context.Background()).Return(nil, testErr)
 			session.EXPECT().CloseWithError(gomock.Any(), gomock.Any()).Do(func(quic.ErrorCode, string) { close(closed) })
 			_, err = rt.RoundTrip(req)
@@ -104,7 +110,7 @@ var _ = Describe("RoundTripper", func() {
 		It("uses the quic.Config, if provided", func() {
 			config := &quic.Config{HandshakeTimeout: time.Millisecond}
 			var receivedConfig *quic.Config
-			dialAddr = func(addr string, tlsConf *tls.Config, config *quic.Config) (quic.Session, error) {
+			dialAddr = func(addr string, tlsConf *tls.Config, config *quic.Config) (quic.EarlySession, error) {
 				receivedConfig = config
 				return nil, errors.New("handshake error")
 			}
@@ -116,7 +122,7 @@ var _ = Describe("RoundTripper", func() {
 
 		It("uses the custom dialer, if provided", func() {
 			var dialed bool
-			dialer := func(_, _ string, tlsCfgP *tls.Config, cfg *quic.Config) (quic.Session, error) {
+			dialer := func(_, _ string, tlsCfgP *tls.Config, cfg *quic.Config) (quic.EarlySession, error) {
 				dialed = true
 				return nil, errors.New("handshake error")
 			}
@@ -129,6 +135,7 @@ var _ = Describe("RoundTripper", func() {
 		It("reuses existing clients", func() {
 			closed := make(chan struct{})
 			testErr := errors.New("test err")
+			session.EXPECT().HandshakeComplete().Return(handshakeCtx)
 			session.EXPECT().OpenUniStream().AnyTimes().Return(nil, testErr)
 			session.EXPECT().OpenStreamSync(context.Background()).Return(nil, testErr).Times(2)
 			session.EXPECT().CloseWithError(gomock.Any(), gomock.Any()).Do(func(quic.ErrorCode, string) { close(closed) })
