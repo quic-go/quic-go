@@ -6,8 +6,9 @@ package handshake
 
 import (
 	tls "crypto/tls"
-	gomock "github.com/golang/mock/gomock"
 	reflect "reflect"
+
+	gomock "github.com/golang/mock/gomock"
 )
 
 // MockClientSessionCache is a mock of ClientSessionCache interface
