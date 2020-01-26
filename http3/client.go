@@ -15,6 +15,10 @@ import (
 	"github.com/marten-seemann/qpack"
 )
 
+// MethodGet0RTT allows a GET request to be sent using 0-RTT.
+// Note that 0-RTT data doesn't provide replay protection.
+const MethodGet0RTT = "GET_0RTT"
+
 const defaultUserAgent = "quic-go HTTP/3"
 const defaultMaxResponseHeaderBytes = 10 * 1 << 20 // 10 MB
 
@@ -150,11 +154,16 @@ func (c *client) RoundTrip(req *http.Request) (*http.Response, error) {
 		return nil, c.handshakeErr
 	}
 
-	// wait for the handshake to complete
-	select {
-	case <-c.session.HandshakeComplete().Done():
-	case <-req.Context().Done():
-		return nil, req.Context().Err()
+	// Immediately send out this request, if this is a 0-RTT request.
+	if req.Method == MethodGet0RTT {
+		req.Method = http.MethodGet
+	} else {
+		// wait for the handshake to complete
+		select {
+		case <-c.session.HandshakeComplete().Done():
+		case <-req.Context().Done():
+			return nil, req.Context().Err()
+		}
 	}
 
 	str, err := c.session.OpenStreamSync(req.Context())

@@ -187,6 +187,25 @@ var _ = Describe("Client", func() {
 			Expect(err).ToNot(HaveOccurred())
 		})
 
+		It("performs a 0-RTT request", func() {
+			testErr := errors.New("stream open error")
+			request.Method = MethodGet0RTT
+			// don't EXPECT any calls to HandshakeComplete()
+			sess.EXPECT().OpenStreamSync(context.Background()).Return(str, nil)
+			buf := &bytes.Buffer{}
+			str.EXPECT().Write(gomock.Any()).DoAndReturn(func(p []byte) (int, error) {
+				return buf.Write(p)
+			}).AnyTimes()
+			str.EXPECT().Close()
+			str.EXPECT().CancelWrite(gomock.Any())
+			str.EXPECT().Read(gomock.Any()).DoAndReturn(func([]byte) (int, error) {
+				return 0, testErr
+			})
+			_, err := client.RoundTrip(request)
+			Expect(err).To(MatchError(testErr))
+			Expect(decodeHeader(buf)).To(HaveKeyWithValue(":method", "GET"))
+		})
+
 		It("returns a response", func() {
 			rspBuf := &bytes.Buffer{}
 			rw := newResponseWriter(rspBuf, utils.DefaultLogger)
