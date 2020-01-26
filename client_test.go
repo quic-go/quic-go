@@ -96,7 +96,7 @@ var _ = Describe("Client", func() {
 
 	AfterEach(func() {
 		if s, ok := cl.session.(*session); ok {
-			s.Close()
+			s.shutdown()
 		}
 		Eventually(areSessionsRunning).Should(BeFalse())
 	})
@@ -387,7 +387,7 @@ var _ = Describe("Client", func() {
 				close(dialed)
 			}()
 			Consistently(dialed).ShouldNot(BeClosed())
-			sess.EXPECT().Close()
+			sess.EXPECT().shutdown()
 			cancel()
 			Eventually(dialed).Should(BeClosed())
 		})

@@ -46,7 +46,7 @@ var _ = Describe("Key Update tests", func() {
 			nil,
 		)
 		Expect(err).ToNot(HaveOccurred())
-		defer sess.Close()
+		defer sess.CloseWithError(0, "")
 		str, err := sess.AcceptUniStream(context.Background())
 		Expect(err).ToNot(HaveOccurred())
 		data, err := ioutil.ReadAll(str)

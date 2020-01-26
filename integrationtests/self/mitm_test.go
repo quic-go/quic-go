@@ -139,7 +139,7 @@ var _ = Describe("MITM test", func() {
 						data, err := ioutil.ReadAll(str)
 						Expect(err).ToNot(HaveOccurred())
 						Expect(data).To(Equal(PRData))
-						Expect(sess.Close()).To(Succeed())
+						Expect(sess.CloseWithError(0, "")).To(Succeed())
 					}
 
 					It("downloads a message when the packets are injected towards the server", func() {
@@ -185,7 +185,7 @@ var _ = Describe("MITM test", func() {
 					data, err := ioutil.ReadAll(str)
 					Expect(err).ToNot(HaveOccurred())
 					Expect(data).To(Equal(PRData))
-					Expect(sess.Close()).To(Succeed())
+					Expect(sess.CloseWithError(0, "")).To(Succeed())
 				}
 
 				Context("duplicating packets", func() {

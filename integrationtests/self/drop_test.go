@@ -100,7 +100,7 @@ var _ = Describe("Drop Tests", func() {
 								time.Sleep(messageInterval)
 							}
 							<-done
-							Expect(sess.Close()).To(Succeed())
+							Expect(sess.CloseWithError(0, "")).To(Succeed())
 						}()
 
 						sess, err := quic.DialAddr(
@@ -109,7 +109,7 @@ var _ = Describe("Drop Tests", func() {
 							&quic.Config{Versions: []protocol.VersionNumber{version}},
 						)
 						Expect(err).ToNot(HaveOccurred())
-						defer sess.Close()
+						defer sess.CloseWithError(0, "")
 						str, err := sess.AcceptStream(context.Background())
 						Expect(err).ToNot(HaveOccurred())
 						for i := uint8(1); i <= numMessages; i++ {

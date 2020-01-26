@@ -93,7 +93,7 @@ var _ = Describe("Stream Cancelations", func() {
 
 			var serverCanceledCounter int32
 			Eventually(serverCanceledCounterChan).Should(Receive(&serverCanceledCounter))
-			Expect(sess.Close()).To(Succeed())
+			Expect(sess.CloseWithError(0, "")).To(Succeed())
 
 			clientCanceledCounter := atomic.LoadInt32(&canceledCounter)
 			// The server will only count a stream as being reset if learns about the cancelation before it finished writing all data.
@@ -141,7 +141,7 @@ var _ = Describe("Stream Cancelations", func() {
 
 			var serverCanceledCounter int32
 			Eventually(serverCanceledCounterChan).Should(Receive(&serverCanceledCounter))
-			Expect(sess.Close()).To(Succeed())
+			Expect(sess.CloseWithError(0, "")).To(Succeed())
 
 			clientCanceledCounter := atomic.LoadInt32(&canceledCounter)
 			// The server will only count a stream as being reset if learns about the cancelation before it finished writing all data.
@@ -185,7 +185,7 @@ var _ = Describe("Stream Cancelations", func() {
 			fmt.Fprintf(GinkgoWriter, "Canceled writing on %d of %d streams\n", streamCount, numStreams)
 			Expect(streamCount).To(BeNumerically(">", numStreams/10))
 			Expect(numStreams - streamCount).To(BeNumerically(">", numStreams/10))
-			Expect(sess.Close()).To(Succeed())
+			Expect(sess.CloseWithError(0, "")).To(Succeed())
 			Expect(server.Close()).To(Succeed())
 			return streamCount
 		}
@@ -326,7 +326,7 @@ var _ = Describe("Stream Cancelations", func() {
 			Expect(count).To(BeNumerically(">", numStreams/15))
 			fmt.Fprintf(GinkgoWriter, "Successfully read from %d of %d streams.\n", count, numStreams)
 
-			Expect(sess.Close()).To(Succeed())
+			Expect(sess.CloseWithError(0, "")).To(Succeed())
 			Eventually(done).Should(BeClosed())
 			Expect(server.Close()).To(Succeed())
 		})
@@ -414,7 +414,7 @@ var _ = Describe("Stream Cancelations", func() {
 			Expect(count).To(BeNumerically(">", numStreams/15))
 			fmt.Fprintf(GinkgoWriter, "Successfully read from %d of %d streams.\n", count, numStreams)
 
-			Expect(sess.Close()).To(Succeed())
+			Expect(sess.CloseWithError(0, "")).To(Succeed())
 			Eventually(done).Should(BeClosed())
 			Expect(server.Close()).To(Succeed())
 		})
@@ -484,7 +484,7 @@ var _ = Describe("Stream Cancelations", func() {
 			count := atomic.LoadInt32(&counter)
 			fmt.Fprintf(GinkgoWriter, "Canceled AcceptStream %d times\n", count)
 			Expect(count).To(BeNumerically(">", numStreams/2))
-			Expect(sess.Close()).To(Succeed())
+			Expect(sess.CloseWithError(0, "")).To(Succeed())
 			Expect(server.Close()).To(Succeed())
 		})
 
@@ -555,7 +555,7 @@ var _ = Describe("Stream Cancelations", func() {
 			count := atomic.LoadInt32(&numCanceled)
 			fmt.Fprintf(GinkgoWriter, "Canceled OpenStreamSync %d times\n", count)
 			Expect(count).To(BeNumerically(">", numStreams/5))
-			Expect(sess.Close()).To(Succeed())
+			Expect(sess.CloseWithError(0, "")).To(Succeed())
 			Expect(server.Close()).To(Succeed())
 		})
 	})

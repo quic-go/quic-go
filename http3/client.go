@@ -123,7 +123,7 @@ func (c *client) setupSession() error {
 }
 
 func (c *client) Close() error {
-	return c.session.Close()
+	return c.session.CloseWithError(quic.ErrorCode(errorNoError), "")
 }
 
 func (c *client) maxHeaderBytes() uint64 {

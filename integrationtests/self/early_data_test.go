@@ -64,7 +64,7 @@ var _ = Describe("early data", func() {
 				data, err := ioutil.ReadAll(str)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(data).To(Equal([]byte("early data")))
-				sess.Close()
+				sess.CloseWithError(0, "")
 				Eventually(done).Should(BeClosed())
 			})
 		})

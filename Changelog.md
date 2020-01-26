@@ -3,6 +3,7 @@
 ## v0.15.0 (unreleased)
 
 - Add support for 0-RTT.
+- Remove `Session.Close()`. Applications need to pass an application error code to the transport using `Session.CloseWithError()`.
 
 ## v0.14.0 (2019-12-04)
 

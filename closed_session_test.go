@@ -30,7 +30,7 @@ var _ = Describe("Closed local session", func() {
 	It("tells its perspective", func() {
 		Expect(sess.getPerspective()).To(Equal(protocol.PerspectiveClient))
 		// stop the session
-		Expect(sess.Close()).To(Succeed())
+		sess.shutdown()
 	})
 
 	It("repeats the packet containing the CONNECTION_CLOSE frame", func() {
@@ -45,7 +45,7 @@ var _ = Describe("Closed local session", func() {
 			}
 		}
 		// stop the session
-		Expect(sess.Close()).To(Succeed())
+		sess.shutdown()
 	})
 
 	It("destroys sessions", func() {

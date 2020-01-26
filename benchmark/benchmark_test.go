@@ -85,7 +85,7 @@ var _ = Describe("Benchmarks", func() {
 				b.RecordValue("transfer rate [MB/s]", float64(dataLen)/1e6/runtime.Seconds())
 
 				ln.Close()
-				sess.Close()
+				sess.CloseWithError(0, "")
 			}, 3)
 		})
 	}

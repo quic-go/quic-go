@@ -49,7 +49,7 @@ var _ = Describe("Multiplexing", func() {
 					&quic.Config{Versions: []protocol.VersionNumber{version}},
 				)
 				Expect(err).ToNot(HaveOccurred())
-				defer sess.Close()
+				defer sess.CloseWithError(0, "")
 				str, err := sess.AcceptStream(context.Background())
 				Expect(err).ToNot(HaveOccurred())
 				data, err := ioutil.ReadAll(str)

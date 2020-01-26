@@ -1063,12 +1063,11 @@ func (s *session) closeRemote(e error) {
 	})
 }
 
-// Close the connection. It sends a qerr.NoError.
+// Close the connection. It sends a NO_ERROR transport error.
 // It waits until the run loop has stopped before returning
-func (s *session) Close() error {
+func (s *session) shutdown() {
 	s.closeLocal(nil)
 	<-s.ctx.Done()
-	return nil
 }
 
 func (s *session) CloseWithError(code protocol.ApplicationErrorCode, desc string) error {

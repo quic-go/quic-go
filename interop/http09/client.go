@@ -116,7 +116,7 @@ func (c *client) Close() error {
 	if c.sess == nil {
 		return nil
 	}
-	return c.sess.Close()
+	return c.sess.CloseWithError(0, "")
 }
 
 func hostnameFromRequest(req *http.Request) string {

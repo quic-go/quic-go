@@ -175,8 +175,6 @@ type Session interface {
 	LocalAddr() net.Addr
 	// RemoteAddr returns the address of the peer.
 	RemoteAddr() net.Addr
-	// Close the connection.
-	io.Closer
 	// Close the connection with an error.
 	// The error string will be sent to the peer.
 	CloseWithError(ErrorCode, string) error

@@ -135,7 +135,7 @@ func (h *packetHandlerMap) ReplaceWithClosed(id protocol.ConnectionID, handler p
 
 	time.AfterFunc(h.deleteRetiredSessionsAfter, func() {
 		h.mutex.Lock()
-		handler.Close()
+		handler.shutdown()
 		delete(h.handlers, string(id))
 		h.mutex.Unlock()
 	})
@@ -175,8 +175,8 @@ func (h *packetHandlerMap) CloseServer() {
 		if handler.getPerspective() == protocol.PerspectiveServer {
 			wg.Add(1)
 			go func(handler packetHandler) {
-				// session.Close() blocks until the CONNECTION_CLOSE has been sent and the run-loop has stopped
-				_ = handler.Close()
+				// blocks until the CONNECTION_CLOSE has been sent and the run-loop has stopped
+				handler.shutdown()
 				wg.Done()
 			}(handler)
 		}

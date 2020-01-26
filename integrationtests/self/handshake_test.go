@@ -111,7 +111,7 @@ var _ = Describe("Handshake tests", func() {
 				)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(sess.(versioner).GetVersion()).To(Equal(protocol.SupportedVersions[0]))
-				Expect(sess.Close()).To(Succeed())
+				Expect(sess.CloseWithError(0, "")).To(Succeed())
 			})
 
 			It("when the client supports more versions than the server supports", func() {
@@ -130,7 +130,7 @@ var _ = Describe("Handshake tests", func() {
 				)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(sess.(versioner).GetVersion()).To(Equal(protocol.SupportedVersions[0]))
-				Expect(sess.Close()).To(Succeed())
+				Expect(sess.CloseWithError(0, "")).To(Succeed())
 			})
 		})
 	}
@@ -254,7 +254,7 @@ var _ = Describe("Handshake tests", func() {
 			for i := 0; i < protocol.MaxAcceptQueueSize; i++ {
 				sess, err := dial()
 				Expect(err).ToNot(HaveOccurred())
-				defer sess.Close()
+				defer sess.CloseWithError(0, "")
 			}
 			time.Sleep(25 * time.Millisecond) // wait a bit for the sessions to be queued
 
@@ -268,7 +268,7 @@ var _ = Describe("Handshake tests", func() {
 			// dial again, and expect that this dial succeeds
 			sess, err := dial()
 			Expect(err).ToNot(HaveOccurred())
-			defer sess.Close()
+			defer sess.CloseWithError(0, "")
 			time.Sleep(25 * time.Millisecond) // wait a bit for the session to be queued
 
 			_, err = dial()
@@ -283,7 +283,7 @@ var _ = Describe("Handshake tests", func() {
 			for i := 1; i < protocol.MaxAcceptQueueSize; i++ {
 				sess, err := dial()
 				Expect(err).ToNot(HaveOccurred())
-				defer sess.Close()
+				defer sess.CloseWithError(0, "")
 			}
 			time.Sleep(25 * time.Millisecond) // wait a bit for the sessions to be queued
 
@@ -293,7 +293,7 @@ var _ = Describe("Handshake tests", func() {
 
 			// Now close the one of the session that are waiting to be accepted.
 			// This should free one spot in the queue.
-			Expect(firstSess.Close())
+			Expect(firstSess.CloseWithError(0, ""))
 			time.Sleep(25 * time.Millisecond)
 
 			// dial again, and expect that this dial succeeds
@@ -330,7 +330,7 @@ var _ = Describe("Handshake tests", func() {
 				nil,
 			)
 			Expect(err).ToNot(HaveOccurred())
-			defer sess.Close()
+			defer sess.CloseWithError(0, "")
 			cs := sess.ConnectionState()
 			Expect(cs.NegotiatedProtocol).To(Equal(alpn))
 			Expect(cs.NegotiatedProtocolIsMutual).To(BeTrue())
@@ -389,7 +389,7 @@ var _ = Describe("Handshake tests", func() {
 			Eventually(puts).Should(Receive())
 			Expect(tokenChan).ToNot(Receive())
 			// received a token. Close this session.
-			Expect(sess.Close()).To(Succeed())
+			Expect(sess.CloseWithError(0, "")).To(Succeed())
 
 			// dial the second session and verify that the token was used
 			done := make(chan struct{})
@@ -405,7 +405,7 @@ var _ = Describe("Handshake tests", func() {
 				quicConf,
 			)
 			Expect(err).ToNot(HaveOccurred())
-			defer sess.Close()
+			defer sess.CloseWithError(0, "")
 			Expect(gets).To(Receive())
 			Expect(tokenChan).To(Receive())
 
