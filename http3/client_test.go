@@ -310,6 +310,21 @@ var _ = Describe("Client", func() {
 		})
 
 		Context("request cancellations", func() {
+			It("cancels a request while waiting for the handshake to complete", func() {
+				ctx, cancel := context.WithCancel(context.Background())
+				req := request.WithContext(ctx)
+				sess.EXPECT().HandshakeComplete().Return(context.Background())
+
+				errChan := make(chan error)
+				go func() {
+					_, err := client.RoundTrip(req)
+					errChan <- err
+				}()
+				Consistently(errChan).ShouldNot(Receive())
+				cancel()
+				Eventually(errChan).Should(Receive(MatchError("context canceled")))
+			})
+
 			It("cancels a request while the request is still in flight", func() {
 				ctx, cancel := context.WithCancel(context.Background())
 				req := request.WithContext(ctx)

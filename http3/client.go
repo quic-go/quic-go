@@ -101,7 +101,6 @@ func (c *client) dial() error {
 		}
 	}()
 
-	<-c.session.HandshakeComplete().Done()
 	return nil
 }
 
@@ -149,6 +148,13 @@ func (c *client) RoundTrip(req *http.Request) (*http.Response, error) {
 
 	if c.handshakeErr != nil {
 		return nil, c.handshakeErr
+	}
+
+	// wait for the handshake to complete
+	select {
+	case <-c.session.HandshakeComplete().Done():
+	case <-req.Context().Done():
+		return nil, req.Context().Err()
 	}
 
 	str, err := c.session.OpenStreamSync(req.Context())
