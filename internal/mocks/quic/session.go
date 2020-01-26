@@ -11,7 +11,7 @@ import (
 	reflect "reflect"
 
 	gomock "github.com/golang/mock/gomock"
-	quic_go "github.com/lucas-clemente/quic-go"
+	quic "github.com/lucas-clemente/quic-go"
 	protocol "github.com/lucas-clemente/quic-go/internal/protocol"
 )
 
@@ -39,10 +39,10 @@ func (m *MockSession) EXPECT() *MockSessionMockRecorder {
 }
 
 // AcceptStream mocks base method
-func (m *MockSession) AcceptStream(arg0 context.Context) (quic_go.Stream, error) {
+func (m *MockSession) AcceptStream(arg0 context.Context) (quic.Stream, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "AcceptStream", arg0)
-	ret0, _ := ret[0].(quic_go.Stream)
+	ret0, _ := ret[0].(quic.Stream)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -54,10 +54,10 @@ func (mr *MockSessionMockRecorder) AcceptStream(arg0 interface{}) *gomock.Call {
 }
 
 // AcceptUniStream mocks base method
-func (m *MockSession) AcceptUniStream(arg0 context.Context) (quic_go.ReceiveStream, error) {
+func (m *MockSession) AcceptUniStream(arg0 context.Context) (quic.ReceiveStream, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "AcceptUniStream", arg0)
-	ret0, _ := ret[0].(quic_go.ReceiveStream)
+	ret0, _ := ret[0].(quic.ReceiveStream)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -139,10 +139,10 @@ func (mr *MockSessionMockRecorder) LocalAddr() *gomock.Call {
 }
 
 // OpenStream mocks base method
-func (m *MockSession) OpenStream() (quic_go.Stream, error) {
+func (m *MockSession) OpenStream() (quic.Stream, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "OpenStream")
-	ret0, _ := ret[0].(quic_go.Stream)
+	ret0, _ := ret[0].(quic.Stream)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -154,10 +154,10 @@ func (mr *MockSessionMockRecorder) OpenStream() *gomock.Call {
 }
 
 // OpenStreamSync mocks base method
-func (m *MockSession) OpenStreamSync(arg0 context.Context) (quic_go.Stream, error) {
+func (m *MockSession) OpenStreamSync(arg0 context.Context) (quic.Stream, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "OpenStreamSync", arg0)
-	ret0, _ := ret[0].(quic_go.Stream)
+	ret0, _ := ret[0].(quic.Stream)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -169,10 +169,10 @@ func (mr *MockSessionMockRecorder) OpenStreamSync(arg0 interface{}) *gomock.Call
 }
 
 // OpenUniStream mocks base method
-func (m *MockSession) OpenUniStream() (quic_go.SendStream, error) {
+func (m *MockSession) OpenUniStream() (quic.SendStream, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "OpenUniStream")
-	ret0, _ := ret[0].(quic_go.SendStream)
+	ret0, _ := ret[0].(quic.SendStream)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -184,10 +184,10 @@ func (mr *MockSessionMockRecorder) OpenUniStream() *gomock.Call {
 }
 
 // OpenUniStreamSync mocks base method
-func (m *MockSession) OpenUniStreamSync(arg0 context.Context) (quic_go.SendStream, error) {
+func (m *MockSession) OpenUniStreamSync(arg0 context.Context) (quic.SendStream, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "OpenUniStreamSync", arg0)
-	ret0, _ := ret[0].(quic_go.SendStream)
+	ret0, _ := ret[0].(quic.SendStream)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }

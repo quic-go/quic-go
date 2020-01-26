@@ -10,7 +10,7 @@ import (
 	reflect "reflect"
 
 	gomock "github.com/golang/mock/gomock"
-	quic_go "github.com/lucas-clemente/quic-go"
+	quic "github.com/lucas-clemente/quic-go"
 )
 
 // MockListener is a mock of Listener interface
@@ -37,10 +37,10 @@ func (m *MockListener) EXPECT() *MockListenerMockRecorder {
 }
 
 // Accept mocks base method
-func (m *MockListener) Accept(arg0 context.Context) (quic_go.Session, error) {
+func (m *MockListener) Accept(arg0 context.Context) (quic.Session, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Accept", arg0)
-	ret0, _ := ret[0].(quic_go.Session)
+	ret0, _ := ret[0].(quic.Session)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
