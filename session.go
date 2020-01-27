@@ -791,6 +791,9 @@ func (s *session) handleRetryPacket(hdr *wire.Header, data []byte) bool /* was t
 	}
 	s.logger.Debugf("<- Received Retry")
 	s.logger.Debugf("Switching destination connection ID to: %s", hdr.SrcConnectionID)
+	if s.qlogger != nil {
+		s.qlogger.ReceivedRetry(time.Now(), hdr)
+	}
 	s.origDestConnID = s.handshakeDestConnID
 	newDestConnID := hdr.SrcConnectionID
 	s.receivedRetry = true

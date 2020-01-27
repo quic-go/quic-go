@@ -83,3 +83,16 @@ func (e eventPacketReceived) MarshalJSONObject(enc *gojay.Encoder) {
 	enc.BoolKeyOmitEmpty("is_coalesced", e.IsCoalesced)
 	enc.StringKeyOmitEmpty("trigger", e.Trigger)
 }
+
+type eventRetryReceived struct {
+	Header packetHeader
+}
+
+func (e eventRetryReceived) Category() category { return categoryTransport }
+func (e eventRetryReceived) Name() string       { return "packet_received" }
+func (e eventRetryReceived) IsNil() bool        { return false }
+
+func (e eventRetryReceived) MarshalJSONObject(enc *gojay.Encoder) {
+	enc.StringKey("packet_type", packetTypeRetry.String())
+	enc.ObjectKey("header", e.Header)
+}

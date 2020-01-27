@@ -28,14 +28,19 @@ func getPacketType(hdr *wire.ExtendedHeader) packetType {
 	}
 }
 
-func transformHeader(hdr *wire.ExtendedHeader) *packetHeader {
+func transformHeader(hdr *wire.Header) *packetHeader {
 	return &packetHeader{
-		PacketNumber:     hdr.PacketNumber,
 		PayloadLength:    hdr.Length,
 		SrcConnectionID:  hdr.SrcConnectionID,
 		DestConnectionID: hdr.DestConnectionID,
 		Version:          hdr.Version,
 	}
+}
+
+func transformExtendedHeader(hdr *wire.ExtendedHeader) *packetHeader {
+	h := transformHeader(&hdr.Header)
+	h.PacketNumber = hdr.PacketNumber
+	return h
 }
 
 type packetHeader struct {

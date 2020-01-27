@@ -72,7 +72,7 @@ var _ = Describe("Packet Header", func() {
 		check := func(hdr *wire.ExtendedHeader, expected map[string]interface{}) {
 			buf := &bytes.Buffer{}
 			enc := gojay.NewEncoder(buf)
-			ExpectWithOffset(1, enc.Encode(transformHeader(hdr))).To(Succeed())
+			ExpectWithOffset(1, enc.Encode(transformExtendedHeader(hdr))).To(Succeed())
 			data := buf.Bytes()
 			ExpectWithOffset(1, json.Valid(data)).To(BeTrue())
 			checkEncoding(data, expected)

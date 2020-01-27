@@ -159,5 +159,26 @@ var _ = Describe("Tracer", func() {
 			Expect(ev).To(HaveKey("frames"))
 			Expect(ev["frames"].([]interface{})).To(HaveLen(2))
 		})
+
+		It("records a received Retry packet", func() {
+			now := time.Now()
+			tracer.ReceivedRetry(
+				now,
+				&wire.Header{
+					IsLongHeader:     true,
+					Type:             protocol.PacketTypeRetry,
+					DestConnectionID: protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8},
+					SrcConnectionID:  protocol.ConnectionID{4, 3, 2, 1},
+					Version:          protocol.VersionTLS,
+				},
+			)
+			t, category, eventName, ev := exportAndParse()
+			Expect(t).To(BeTemporally("~", now, time.Millisecond))
+			Expect(category).To(Equal("transport"))
+			Expect(eventName).To(Equal("packet_received"))
+			Expect(ev).To(HaveKeyWithValue("packet_type", "retry"))
+			Expect(ev).To(HaveKey("header"))
+			Expect(ev).ToNot(HaveKey("frames"))
+		})
 	})
 })

@@ -13,6 +13,7 @@ import (
 type Tracer interface {
 	Export() error
 	SentPacket(time.Time, *wire.ExtendedHeader, *wire.AckFrame, []wire.Frame)
+	ReceivedRetry(time.Time, *wire.Header)
 	ReceivedPacket(time.Time, *wire.ExtendedHeader, []wire.Frame)
 }
 
@@ -71,7 +72,7 @@ func (t *tracer) SentPacket(time time.Time, hdr *wire.ExtendedHeader, ack *wire.
 		Time: time,
 		eventDetails: eventPacketSent{
 			PacketType: getPacketType(hdr),
-			Header:     *transformHeader(hdr),
+			Header:     *transformExtendedHeader(hdr),
 			Frames:     fs,
 		},
 	})
@@ -86,8 +87,17 @@ func (t *tracer) ReceivedPacket(time time.Time, hdr *wire.ExtendedHeader, frames
 		Time: time,
 		eventDetails: eventPacketReceived{
 			PacketType: getPacketType(hdr),
-			Header:     *transformHeader(hdr),
+			Header:     *transformExtendedHeader(hdr),
 			Frames:     fs,
+		},
+	})
+}
+
+func (t *tracer) ReceivedRetry(time time.Time, hdr *wire.Header) {
+	t.events = append(t.events, event{
+		Time: time,
+		eventDetails: eventRetryReceived{
+			Header: *transformHeader(hdr),
 		},
 	})
 }
