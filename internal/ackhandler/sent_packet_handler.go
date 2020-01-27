@@ -10,6 +10,7 @@ import (
 	"github.com/lucas-clemente/quic-go/internal/qerr"
 	"github.com/lucas-clemente/quic-go/internal/utils"
 	"github.com/lucas-clemente/quic-go/internal/wire"
+	"github.com/lucas-clemente/quic-go/qlog"
 	"github.com/lucas-clemente/quic-go/quictrace"
 )
 
@@ -73,7 +74,8 @@ type sentPacketHandler struct {
 
 	traceCallback func(quictrace.Event)
 
-	logger utils.Logger
+	qlogger qlog.Tracer
+	logger  utils.Logger
 }
 
 // NewSentPacketHandler creates a new sentPacketHandler
@@ -81,6 +83,7 @@ func NewSentPacketHandler(
 	initialPacketNumber protocol.PacketNumber,
 	rttStats *congestion.RTTStats,
 	traceCallback func(quictrace.Event),
+	qlogger qlog.Tracer,
 	logger utils.Logger,
 ) SentPacketHandler {
 	congestion := congestion.NewCubicSender(
@@ -96,6 +99,7 @@ func NewSentPacketHandler(
 		rttStats:         rttStats,
 		congestion:       congestion,
 		traceCallback:    traceCallback,
+		qlogger:          qlogger,
 		logger:           logger,
 	}
 }
@@ -209,6 +213,16 @@ func (h *sentPacketHandler) ReceivedAck(ackFrame *wire.AckFrame, withPacketNumbe
 			h.logger.Debugf("\tupdated RTT: %s (σ: %s)", h.rttStats.SmoothedRTT(), h.rttStats.MeanDeviation())
 		}
 		h.congestion.MaybeExitSlowStart()
+		if h.qlogger != nil {
+			packetsInFlight := h.appDataPackets.history.Len()
+			if h.handshakePackets != nil {
+				packetsInFlight += h.handshakePackets.history.Len()
+			}
+			if h.initialPackets != nil {
+				packetsInFlight += h.initialPackets.history.Len()
+			}
+			h.qlogger.UpdatedMetrics(rcvTime, h.rttStats, h.congestion.GetCongestionWindow(), h.bytesInFlight, packetsInFlight)
+		}
 	}
 
 	ackedPackets, err := h.determineNewlyAckedPackets(ackFrame, encLevel)

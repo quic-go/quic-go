@@ -3,6 +3,8 @@ package qlog
 import (
 	"time"
 
+	"github.com/lucas-clemente/quic-go/internal/protocol"
+
 	"github.com/francoispqt/gojay"
 )
 
@@ -95,4 +97,32 @@ func (e eventRetryReceived) IsNil() bool        { return false }
 func (e eventRetryReceived) MarshalJSONObject(enc *gojay.Encoder) {
 	enc.StringKey("packet_type", packetTypeRetry.String())
 	enc.ObjectKey("header", e.Header)
+}
+
+func milliseconds(dur time.Duration) float64 { return float64(dur.Nanoseconds()) / 1e6 }
+
+type eventMetricsUpdated struct {
+	MinRTT      time.Duration
+	SmoothedRTT time.Duration
+	LatestRTT   time.Duration
+	RTTVariance time.Duration
+
+	CongestionWindow protocol.ByteCount
+	BytesInFlight    protocol.ByteCount
+	PacketsInFlight  int
+}
+
+func (e eventMetricsUpdated) Category() category { return categoryRecovery }
+func (e eventMetricsUpdated) Name() string       { return "metrics_updated" }
+func (e eventMetricsUpdated) IsNil() bool        { return false }
+
+func (e eventMetricsUpdated) MarshalJSONObject(enc *gojay.Encoder) {
+	enc.FloatKey("min_rtt", milliseconds(e.MinRTT))
+	enc.FloatKey("smoothed_rtt", milliseconds(e.SmoothedRTT))
+	enc.FloatKey("latest_rtt", milliseconds(e.LatestRTT))
+	enc.FloatKey("rtt_variance", milliseconds(e.RTTVariance))
+
+	enc.Uint64Key("congestion_window", uint64(e.CongestionWindow))
+	enc.Uint64Key("bytes_in_flight", uint64(e.BytesInFlight))
+	enc.Uint64KeyOmitEmpty("packets_in_flight", uint64(e.PacketsInFlight))
 }

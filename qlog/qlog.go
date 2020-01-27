@@ -4,6 +4,8 @@ import (
 	"io"
 	"time"
 
+	"github.com/lucas-clemente/quic-go/internal/congestion"
+
 	"github.com/francoispqt/gojay"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/internal/wire"
@@ -15,6 +17,7 @@ type Tracer interface {
 	SentPacket(time.Time, *wire.ExtendedHeader, *wire.AckFrame, []wire.Frame)
 	ReceivedRetry(time.Time, *wire.Header)
 	ReceivedPacket(time.Time, *wire.ExtendedHeader, []wire.Frame)
+	UpdatedMetrics(time time.Time, rttStats *congestion.RTTStats, cwnd protocol.ByteCount, bytesInFLight protocol.ByteCount, packetsInFlight int)
 }
 
 type tracer struct {
@@ -98,6 +101,21 @@ func (t *tracer) ReceivedRetry(time time.Time, hdr *wire.Header) {
 		Time: time,
 		eventDetails: eventRetryReceived{
 			Header: *transformHeader(hdr),
+		},
+	})
+}
+
+func (t *tracer) UpdatedMetrics(time time.Time, rttStats *congestion.RTTStats, cwnd, bytesInFlight protocol.ByteCount, packetsInFlight int) {
+	t.events = append(t.events, event{
+		Time: time,
+		eventDetails: eventMetricsUpdated{
+			MinRTT:           rttStats.MinRTT(),
+			SmoothedRTT:      rttStats.SmoothedRTT(),
+			LatestRTT:        rttStats.LatestRTT(),
+			RTTVariance:      rttStats.MeanDeviation(),
+			CongestionWindow: cwnd,
+			BytesInFlight:    bytesInFlight,
+			PacketsInFlight:  packetsInFlight,
 		},
 	})
 }

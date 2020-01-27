@@ -6,6 +6,7 @@ import (
 	"io"
 	"time"
 
+	"github.com/lucas-clemente/quic-go/internal/congestion"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/internal/wire"
 
@@ -179,6 +180,40 @@ var _ = Describe("Tracer", func() {
 			Expect(ev).To(HaveKeyWithValue("packet_type", "retry"))
 			Expect(ev).To(HaveKey("header"))
 			Expect(ev).ToNot(HaveKey("frames"))
+		})
+
+		It("records metrics updates", func() {
+			now := time.Now()
+			rttStats := congestion.NewRTTStats()
+			rttStats.UpdateRTT(15*time.Millisecond, 0, now)
+			rttStats.UpdateRTT(20*time.Millisecond, 0, now)
+			rttStats.UpdateRTT(25*time.Millisecond, 0, now)
+			Expect(rttStats.MinRTT()).To(Equal(15 * time.Millisecond))
+			Expect(rttStats.SmoothedRTT()).To(And(
+				BeNumerically(">", 15*time.Millisecond),
+				BeNumerically("<", 25*time.Millisecond),
+			))
+			Expect(rttStats.LatestRTT()).To(Equal(25 * time.Millisecond))
+			tracer.UpdatedMetrics(
+				now,
+				rttStats,
+				4321,
+				1234,
+				42,
+			)
+			t, category, eventName, ev := exportAndParse()
+			Expect(t).To(BeTemporally("~", now, time.Millisecond))
+			Expect(category).To(Equal("recovery"))
+			Expect(eventName).To(Equal("metrics_updated"))
+			Expect(ev).To(HaveKeyWithValue("min_rtt", float64(15)))
+			Expect(ev).To(HaveKeyWithValue("latest_rtt", float64(25)))
+			Expect(ev).To(HaveKey("smoothed_rtt"))
+			Expect(time.Duration(ev["smoothed_rtt"].(float64)) * time.Millisecond).To(BeNumerically("~", rttStats.SmoothedRTT(), time.Millisecond))
+			Expect(ev).To(HaveKey("rtt_variance"))
+			Expect(time.Duration(ev["rtt_variance"].(float64)) * time.Millisecond).To(BeNumerically("~", rttStats.MeanDeviation(), time.Millisecond))
+			Expect(ev).To(HaveKeyWithValue("congestion_window", float64(4321)))
+			Expect(ev).To(HaveKeyWithValue("bytes_in_flight", float64(1234)))
+			Expect(ev).To(HaveKeyWithValue("packets_in_flight", float64(42)))
 		})
 	})
 })
