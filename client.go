@@ -12,6 +12,7 @@ import (
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/internal/utils"
 	"github.com/lucas-clemente/quic-go/internal/wire"
+	"github.com/lucas-clemente/quic-go/qlog"
 )
 
 type client struct {
@@ -176,7 +177,14 @@ func dialContext(
 		return nil, err
 	}
 	c.packetHandlers = packetHandlers
-	if err := c.dial(ctx); err != nil {
+
+	var qlogger qlog.Tracer
+	if c.config.GetLogWriter != nil {
+		if w := c.config.GetLogWriter(c.destConnID); w != nil {
+			qlogger = qlog.NewTracer(w, protocol.PerspectiveClient, c.destConnID)
+		}
+	}
+	if err := c.dial(ctx, qlogger); err != nil {
 		return nil, err
 	}
 	return c.session, nil
@@ -249,7 +257,7 @@ func populateClientConfig(config *Config, createdPacketConn bool) *Config {
 	return config
 }
 
-func (c *client) dial(ctx context.Context) error {
+func (c *client) dial(ctx context.Context, qlogger qlog.Tracer) error {
 	c.logger.Infof("Starting new connection to %s (%s -> %s), source connection ID %s, destination connection ID %s, version %s", c.tlsConf.ServerName, c.conn.LocalAddr(), c.conn.RemoteAddr(), c.srcConnID, c.destConnID, c.version)
 
 	c.mutex.Lock()
@@ -263,6 +271,7 @@ func (c *client) dial(ctx context.Context) error {
 		c.initialPacketNumber,
 		c.initialVersion,
 		c.use0RTT,
+		qlogger,
 		c.logger,
 		c.version,
 	)
@@ -271,21 +280,7 @@ func (c *client) dial(ctx context.Context) error {
 	// since there's no way to securely communicate it to the server.
 	c.packetHandlers.Add(c.srcConnID, c)
 
-	err := c.establishSecureConnection(ctx)
-	if err == errCloseForRecreating {
-		return c.dial(ctx)
-	}
-	return err
-}
-
-// establishSecureConnection runs the session, and tries to establish a secure connection
-// It returns:
-// - errCloseForRecreating when the server sends a version negotiation packet
-// - any other error that might occur
-// - when the connection is forward-secure
-func (c *client) establishSecureConnection(ctx context.Context) error {
 	errorChan := make(chan error, 1)
-
 	go func() {
 		err := c.session.run() // returns as soon as the session is closed
 		if err != errCloseForRecreating && c.createdPacketConn {
@@ -306,6 +301,9 @@ func (c *client) establishSecureConnection(ctx context.Context) error {
 		c.session.shutdown()
 		return ctx.Err()
 	case err := <-errorChan:
+		if err == errCloseForRecreating {
+			return c.dial(ctx, qlogger)
+		}
 		return err
 	case <-earlySessionChan:
 		// ready to send 0-RTT data

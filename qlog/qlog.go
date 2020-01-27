@@ -35,6 +35,8 @@ func NewTracer(w io.WriteCloser, p protocol.Perspective, odcid protocol.Connecti
 	}
 }
 
+func (t *tracer) Active() bool { return true }
+
 // Export writes a qlog.
 func (t *tracer) Export() error {
 	enc := gojay.NewEncoder(t.w)
