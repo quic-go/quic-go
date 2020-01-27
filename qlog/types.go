@@ -90,3 +90,23 @@ func (t packetType) String() string {
 		panic("unknown packet type")
 	}
 }
+
+type PacketLossReason uint8
+
+const (
+	// PacketLossReorderingThreshold: when a packet is deemed lost due to reordering threshold
+	PacketLossReorderingThreshold PacketLossReason = iota
+	// PacketLossTimeThreshold: when a packet is deemed lost due to time threshold
+	PacketLossTimeThreshold
+)
+
+func (r PacketLossReason) String() string {
+	switch r {
+	case PacketLossReorderingThreshold:
+		return "reordering_threshold"
+	case PacketLossTimeThreshold:
+		return "time_threshold"
+	default:
+		panic("unknown loss reason")
+	}
+}

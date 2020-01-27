@@ -14,9 +14,16 @@ import (
 )
 
 var _ = Describe("Packet Header", func() {
-	Context("determining the packet type", func() {
+	It("determines the packet type from the encryption level", func() {
+		Expect(getPacketTypeFromEncryptionLevel(protocol.EncryptionInitial)).To(Equal(packetTypeInitial))
+		Expect(getPacketTypeFromEncryptionLevel(protocol.EncryptionHandshake)).To(Equal(packetTypeHandshake))
+		Expect(getPacketTypeFromEncryptionLevel(protocol.Encryption0RTT)).To(Equal(packetType0RTT))
+		Expect(getPacketTypeFromEncryptionLevel(protocol.Encryption1RTT)).To(Equal(packetType1RTT))
+	})
+
+	Context("determining the packet type from the header", func() {
 		It("recognizes Initial packets", func() {
-			Expect(getPacketType(&wire.ExtendedHeader{
+			Expect(getPacketTypeFromHeader(&wire.ExtendedHeader{
 				Header: wire.Header{
 					IsLongHeader: true,
 					Type:         protocol.PacketTypeInitial,
@@ -26,7 +33,7 @@ var _ = Describe("Packet Header", func() {
 		})
 
 		It("recognizes Handshake packets", func() {
-			Expect(getPacketType(&wire.ExtendedHeader{
+			Expect(getPacketTypeFromHeader(&wire.ExtendedHeader{
 				Header: wire.Header{
 					IsLongHeader: true,
 					Type:         protocol.PacketTypeHandshake,
@@ -36,7 +43,7 @@ var _ = Describe("Packet Header", func() {
 		})
 
 		It("recognizes Retry packets", func() {
-			Expect(getPacketType(&wire.ExtendedHeader{
+			Expect(getPacketTypeFromHeader(&wire.ExtendedHeader{
 				Header: wire.Header{
 					IsLongHeader: true,
 					Type:         protocol.PacketTypeRetry,
@@ -46,7 +53,7 @@ var _ = Describe("Packet Header", func() {
 		})
 
 		It("recognizes 0-RTT packets", func() {
-			Expect(getPacketType(&wire.ExtendedHeader{
+			Expect(getPacketTypeFromHeader(&wire.ExtendedHeader{
 				Header: wire.Header{
 					IsLongHeader: true,
 					Type:         protocol.PacketType0RTT,
@@ -56,13 +63,13 @@ var _ = Describe("Packet Header", func() {
 		})
 
 		It("recognizes Version Negotiation packets", func() {
-			Expect(getPacketType(&wire.ExtendedHeader{
+			Expect(getPacketTypeFromHeader(&wire.ExtendedHeader{
 				Header: wire.Header{IsLongHeader: true},
 			})).To(Equal(packetTypeVersionNegotiation))
 		})
 
 		It("recognizes 1-RTT packets", func() {
-			Expect(getPacketType(&wire.ExtendedHeader{
+			Expect(getPacketTypeFromHeader(&wire.ExtendedHeader{
 				Header: wire.Header{},
 			})).To(Equal(packetType1RTT))
 		})

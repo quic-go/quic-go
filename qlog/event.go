@@ -126,3 +126,19 @@ func (e eventMetricsUpdated) MarshalJSONObject(enc *gojay.Encoder) {
 	enc.Uint64Key("bytes_in_flight", uint64(e.BytesInFlight))
 	enc.Uint64KeyOmitEmpty("packets_in_flight", uint64(e.PacketsInFlight))
 }
+
+type eventPacketLost struct {
+	PacketType   packetType
+	PacketNumber protocol.PacketNumber
+	Trigger      PacketLossReason
+}
+
+func (e eventPacketLost) Category() category { return categoryRecovery }
+func (e eventPacketLost) Name() string       { return "packet_lost" }
+func (e eventPacketLost) IsNil() bool        { return false }
+
+func (e eventPacketLost) MarshalJSONObject(enc *gojay.Encoder) {
+	enc.StringKey("packet_type", e.PacketType.String())
+	enc.StringKey("packet_number", toString(int64(e.PacketNumber)))
+	enc.StringKey("trigger", e.Trigger.String())
+}

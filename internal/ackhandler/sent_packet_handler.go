@@ -409,8 +409,16 @@ func (h *sentPacketHandler) detectLostPackets(
 			return false, nil
 		}
 
-		if packet.SendTime.Before(lostSendTime) || pnSpace.largestAcked >= packet.PacketNumber+packetThreshold {
+		if packet.SendTime.Before(lostSendTime) {
 			lostPackets = append(lostPackets, packet)
+			if h.qlogger != nil {
+				h.qlogger.LostPacket(now, packet.EncryptionLevel, packet.PacketNumber, qlog.PacketLossTimeThreshold)
+			}
+		} else if pnSpace.largestAcked >= packet.PacketNumber+packetThreshold {
+			lostPackets = append(lostPackets, packet)
+			if h.qlogger != nil {
+				h.qlogger.LostPacket(now, packet.EncryptionLevel, packet.PacketNumber, qlog.PacketLossReorderingThreshold)
+			}
 		} else if pnSpace.lossTime.IsZero() {
 			// Note: This conditional is only entered once per call
 			lossTime := packet.SendTime.Add(lossDelay)

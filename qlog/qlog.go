@@ -18,6 +18,7 @@ type Tracer interface {
 	ReceivedRetry(time.Time, *wire.Header)
 	ReceivedPacket(time.Time, *wire.ExtendedHeader, []wire.Frame)
 	UpdatedMetrics(time time.Time, rttStats *congestion.RTTStats, cwnd protocol.ByteCount, bytesInFLight protocol.ByteCount, packetsInFlight int)
+	LostPacket(time.Time, protocol.EncryptionLevel, protocol.PacketNumber, PacketLossReason)
 }
 
 type tracer struct {
@@ -74,7 +75,7 @@ func (t *tracer) SentPacket(time time.Time, hdr *wire.ExtendedHeader, ack *wire.
 	t.events = append(t.events, event{
 		Time: time,
 		eventDetails: eventPacketSent{
-			PacketType: getPacketType(hdr),
+			PacketType: getPacketTypeFromHeader(hdr),
 			Header:     *transformExtendedHeader(hdr),
 			Frames:     fs,
 		},
@@ -89,7 +90,7 @@ func (t *tracer) ReceivedPacket(time time.Time, hdr *wire.ExtendedHeader, frames
 	t.events = append(t.events, event{
 		Time: time,
 		eventDetails: eventPacketReceived{
-			PacketType: getPacketType(hdr),
+			PacketType: getPacketTypeFromHeader(hdr),
 			Header:     *transformExtendedHeader(hdr),
 			Frames:     fs,
 		},
@@ -116,6 +117,17 @@ func (t *tracer) UpdatedMetrics(time time.Time, rttStats *congestion.RTTStats, c
 			CongestionWindow: cwnd,
 			BytesInFlight:    bytesInFlight,
 			PacketsInFlight:  packetsInFlight,
+		},
+	})
+}
+
+func (t *tracer) LostPacket(time time.Time, encLevel protocol.EncryptionLevel, pn protocol.PacketNumber, lossReason PacketLossReason) {
+	t.events = append(t.events, event{
+		Time: time,
+		eventDetails: eventPacketLost{
+			PacketType:   getPacketTypeFromEncryptionLevel(encLevel),
+			PacketNumber: pn,
+			Trigger:      lossReason,
 		},
 	})
 }
