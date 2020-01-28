@@ -301,7 +301,7 @@ var _ = Describe("Client", func() {
 			It("cancels a request while the request is still in flight", func() {
 				ctx, cancel := context.WithCancel(context.Background())
 				req := request.WithContext(ctx)
-				sess.EXPECT().OpenStreamSync(context.Background()).Return(str, nil)
+				sess.EXPECT().OpenStreamSync(ctx).Return(str, nil)
 				buf := &bytes.Buffer{}
 				str.EXPECT().Close().MaxTimes(1)
 
@@ -333,7 +333,7 @@ var _ = Describe("Client", func() {
 
 				ctx, cancel := context.WithCancel(context.Background())
 				req := request.WithContext(ctx)
-				sess.EXPECT().OpenStreamSync(context.Background()).Return(str, nil)
+				sess.EXPECT().OpenStreamSync(ctx).Return(str, nil)
 				buf := &bytes.Buffer{}
 				str.EXPECT().Close().MaxTimes(1)
 

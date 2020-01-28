@@ -2,7 +2,6 @@ package http3
 
 import (
 	"bytes"
-	"context"
 	"crypto/tls"
 	"errors"
 	"fmt"
@@ -150,7 +149,7 @@ func (c *client) RoundTrip(req *http.Request) (*http.Response, error) {
 		return nil, c.handshakeErr
 	}
 
-	str, err := c.session.OpenStreamSync(context.Background())
+	str, err := c.session.OpenStreamSync(req.Context())
 	if err != nil {
 		return nil, err
 	}
