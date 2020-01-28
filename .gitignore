@@ -1,6 +1,7 @@
 debug
 debug.test
 main
+mockgen_tmp.go
 *.qtr
 
 fuzzing/*/*.zip
