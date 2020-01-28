@@ -144,7 +144,6 @@ func ListenEarly(conn net.PacketConn, tlsConf *tls.Config, config *Config) (Earl
 	if err != nil {
 		return nil, err
 	}
-	s.acceptEarlySessions = true
 	return &earlyServer{s}, nil
 }
 
