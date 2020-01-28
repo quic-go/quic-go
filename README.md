@@ -21,10 +21,6 @@ If you want to use quic-go as a library in other projects, please consider using
 
 *We currently support Go 1.13+, with [Go modules](https://github.com/golang/go/wiki/Modules) support enabled.*
 
-Installing and updating dependencies:
-
-    go get -u ./...
-
 Running tests:
 
     go test ./...
