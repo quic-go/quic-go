@@ -93,6 +93,7 @@ var _ = Describe("Tracer", func() {
 					},
 					PacketNumber: 1337,
 				},
+				987,
 				nil,
 				[]wire.Frame{
 					&wire.MaxStreamDataFrame{StreamID: 42, ByteOffset: 987},
@@ -105,6 +106,10 @@ var _ = Describe("Tracer", func() {
 			Expect(eventName).To(Equal("packet_sent"))
 			Expect(ev).To(HaveKeyWithValue("packet_type", "handshake"))
 			Expect(ev).To(HaveKey("header"))
+			hdr := ev["header"].(map[string]interface{})
+			Expect(hdr).To(HaveKeyWithValue("packet_size", float64(987)))
+			Expect(hdr).To(HaveKeyWithValue("packet_number", "1337"))
+			Expect(hdr).To(HaveKeyWithValue("scid", "04030201"))
 			Expect(ev).To(HaveKey("frames"))
 			frames := ev["frames"].([]interface{})
 			Expect(frames).To(HaveLen(2))
@@ -119,6 +124,7 @@ var _ = Describe("Tracer", func() {
 					Header:       wire.Header{DestConnectionID: protocol.ConnectionID{1, 2, 3, 4}},
 					PacketNumber: 1337,
 				},
+				123,
 				&wire.AckFrame{AckRanges: []wire.AckRange{{Smallest: 1, Largest: 10}}},
 				[]wire.Frame{&wire.MaxDataFrame{ByteOffset: 987}},
 			)
@@ -146,6 +152,7 @@ var _ = Describe("Tracer", func() {
 					},
 					PacketNumber: 1337,
 				},
+				789,
 				[]wire.Frame{
 					&wire.MaxStreamDataFrame{StreamID: 42, ByteOffset: 987},
 					&wire.StreamFrame{StreamID: 123, Offset: 1234, Data: []byte("foobar"), FinBit: true},
@@ -157,6 +164,10 @@ var _ = Describe("Tracer", func() {
 			Expect(eventName).To(Equal("packet_received"))
 			Expect(ev).To(HaveKeyWithValue("packet_type", "initial"))
 			Expect(ev).To(HaveKey("header"))
+			hdr := ev["header"].(map[string]interface{})
+			Expect(hdr).To(HaveKeyWithValue("packet_size", float64(789)))
+			Expect(hdr).To(HaveKeyWithValue("packet_number", "1337"))
+			Expect(hdr).To(HaveKeyWithValue("scid", "04030201"))
 			Expect(ev).To(HaveKey("frames"))
 			Expect(ev["frames"].([]interface{})).To(HaveLen(2))
 		})

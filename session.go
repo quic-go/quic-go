@@ -866,7 +866,7 @@ func (s *session) handleUnpackedPacket(packet *unpackedPacket, rcvTime time.Time
 		})
 	}
 	if s.qlogger != nil {
-		s.qlogger.ReceivedPacket(rcvTime, packet.hdr, frames)
+		s.qlogger.ReceivedPacket(rcvTime, packet.hdr, protocol.ByteCount(len(packet.data)), frames)
 	}
 
 	return s.receivedPacketHandler.ReceivedPacket(packet.packetNumber, packet.encryptionLevel, rcvTime, isAckEliciting)
@@ -1337,7 +1337,7 @@ func (s *session) sendPackedPacket(packet *packedPacket) {
 		for _, f := range packet.frames {
 			frames = append(frames, f.Frame)
 		}
-		s.qlogger.SentPacket(now, packet.header, packet.ack, frames)
+		s.qlogger.SentPacket(now, packet.header, protocol.ByteCount(len(packet.raw)), packet.ack, frames)
 	}
 	s.logPacket(packet)
 	s.connIDManager.SentPacket()

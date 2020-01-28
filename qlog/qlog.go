@@ -14,10 +14,10 @@ import (
 // A Tracer records events to be exported to a qlog.
 type Tracer interface {
 	Export() error
-	SentPacket(time.Time, *wire.ExtendedHeader, *wire.AckFrame, []wire.Frame)
+	SentPacket(t time.Time, hdr *wire.ExtendedHeader, packetSize protocol.ByteCount, ack *wire.AckFrame, frames []wire.Frame)
 	ReceivedRetry(time.Time, *wire.Header)
-	ReceivedPacket(time.Time, *wire.ExtendedHeader, []wire.Frame)
-	UpdatedMetrics(time time.Time, rttStats *congestion.RTTStats, cwnd protocol.ByteCount, bytesInFLight protocol.ByteCount, packetsInFlight int)
+	ReceivedPacket(t time.Time, hdr *wire.ExtendedHeader, packetSize protocol.ByteCount, frames []wire.Frame)
+	UpdatedMetrics(t time.Time, rttStats *congestion.RTTStats, cwnd protocol.ByteCount, bytesInFLight protocol.ByteCount, packetsInFlight int)
 	LostPacket(time.Time, protocol.EncryptionLevel, protocol.PacketNumber, PacketLossReason)
 }
 
@@ -60,7 +60,7 @@ func (t *tracer) Export() error {
 	return t.w.Close()
 }
 
-func (t *tracer) SentPacket(time time.Time, hdr *wire.ExtendedHeader, ack *wire.AckFrame, frames []wire.Frame) {
+func (t *tracer) SentPacket(time time.Time, hdr *wire.ExtendedHeader, packetSize protocol.ByteCount, ack *wire.AckFrame, frames []wire.Frame) {
 	numFrames := len(frames)
 	if ack != nil {
 		numFrames++
@@ -72,26 +72,30 @@ func (t *tracer) SentPacket(time time.Time, hdr *wire.ExtendedHeader, ack *wire.
 	for _, f := range frames {
 		fs = append(fs, *transformFrame(f))
 	}
+	header := *transformExtendedHeader(hdr)
+	header.PacketSize = packetSize
 	t.events = append(t.events, event{
 		Time: time,
 		eventDetails: eventPacketSent{
 			PacketType: getPacketTypeFromHeader(hdr),
-			Header:     *transformExtendedHeader(hdr),
+			Header:     header,
 			Frames:     fs,
 		},
 	})
 }
 
-func (t *tracer) ReceivedPacket(time time.Time, hdr *wire.ExtendedHeader, frames []wire.Frame) {
+func (t *tracer) ReceivedPacket(time time.Time, hdr *wire.ExtendedHeader, packetSize protocol.ByteCount, frames []wire.Frame) {
 	fs := make([]frame, len(frames))
 	for i, f := range frames {
 		fs[i] = *transformFrame(f)
 	}
+	header := *transformExtendedHeader(hdr)
+	header.PacketSize = packetSize
 	t.events = append(t.events, event{
 		Time: time,
 		eventDetails: eventPacketReceived{
 			PacketType: getPacketTypeFromHeader(hdr),
-			Header:     *transformExtendedHeader(hdr),
+			Header:     header,
 			Frames:     fs,
 		},
 	})

@@ -60,8 +60,10 @@ func transformExtendedHeader(hdr *wire.ExtendedHeader) *packetHeader {
 
 type packetHeader struct {
 	PacketNumber  protocol.PacketNumber
-	PacketSize    protocol.ByteCount
 	PayloadLength protocol.ByteCount
+	// Size of the QUIC packet (QUIC header + payload).
+	// See https://github.com/quiclog/internet-drafts/issues/40.
+	PacketSize protocol.ByteCount
 
 	Version          protocol.VersionNumber
 	SrcConnectionID  protocol.ConnectionID
@@ -70,8 +72,8 @@ type packetHeader struct {
 
 func (h packetHeader) MarshalJSONObject(enc *gojay.Encoder) {
 	enc.StringKey("packet_number", toString(int64(h.PacketNumber)))
-	enc.Int64KeyOmitEmpty("packet_size", int64(h.PacketSize))
 	enc.Int64KeyOmitEmpty("payload_length", int64(h.PayloadLength))
+	enc.Int64KeyOmitEmpty("packet_size", int64(h.PacketSize))
 	if h.Version != 0 {
 		enc.StringKey("version", versionNumber(h.Version).String())
 	}
