@@ -41,7 +41,7 @@ type Server struct {
 	QuicConfig *quic.Config
 
 	mutex    sync.Mutex
-	listener quic.Listener
+	listener quic.EarlyListener
 }
 
 // Close closes the server.
@@ -69,7 +69,7 @@ func (s *Server) ListenAndServe() error {
 
 	tlsConf := s.TLSConfig.Clone()
 	tlsConf.NextProtos = []string{h09alpn}
-	ln, err := quic.Listen(conn, tlsConf, s.QuicConfig)
+	ln, err := quic.ListenEarly(conn, tlsConf, s.QuicConfig)
 	if err != nil {
 		return err
 	}
