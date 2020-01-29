@@ -53,6 +53,7 @@ func (q *windowUpdateQueue) QueueAll() {
 	}
 	// queue all stream-level window updates
 	for id := range q.queue {
+		delete(q.queue, id)
 		str, err := q.streamGetter.GetOrOpenReceiveStream(id)
 		if err != nil || str == nil { // the stream can be nil if it was completed before dequeing the window update
 			continue
@@ -65,7 +66,6 @@ func (q *windowUpdateQueue) QueueAll() {
 			StreamID:   id,
 			ByteOffset: offset,
 		})
-		delete(q.queue, id)
 	}
 	q.mutex.Unlock()
 }
