@@ -52,8 +52,18 @@ var _ = Describe("Window Update Queue", func() {
 	})
 
 	It("doesn't queue a MAX_STREAM_DATA for a closed stream", func() {
-		streamGetter.EXPECT().GetOrOpenReceiveStream(protocol.StreamID(12)).Return(nil, nil)
 		q.AddStream(12)
+		streamGetter.EXPECT().GetOrOpenReceiveStream(protocol.StreamID(12)).Return(nil, nil)
+		q.QueueAll()
+		Expect(queuedFrames).To(BeEmpty())
+	})
+
+	It("removes closed streams from the queue", func() {
+		q.AddStream(12)
+		streamGetter.EXPECT().GetOrOpenReceiveStream(protocol.StreamID(12)).Return(nil, nil)
+		q.QueueAll()
+		Expect(queuedFrames).To(BeEmpty())
+		// don't EXPECT any further calls to GetOrOpenReceiveStream
 		q.QueueAll()
 		Expect(queuedFrames).To(BeEmpty())
 	})
@@ -61,8 +71,20 @@ var _ = Describe("Window Update Queue", func() {
 	It("doesn't queue a MAX_STREAM_DATA if the flow controller returns an offset of 0", func() {
 		stream5 := NewMockStreamI(mockCtrl)
 		stream5.EXPECT().getWindowUpdate().Return(protocol.ByteCount(0))
-		streamGetter.EXPECT().GetOrOpenReceiveStream(protocol.StreamID(5)).Return(stream5, nil)
 		q.AddStream(5)
+		streamGetter.EXPECT().GetOrOpenReceiveStream(protocol.StreamID(5)).Return(stream5, nil)
+		q.QueueAll()
+		Expect(queuedFrames).To(BeEmpty())
+	})
+
+	It("removes streams for which the flow controller returns an offset of 0 from the queue", func() {
+		stream5 := NewMockStreamI(mockCtrl)
+		stream5.EXPECT().getWindowUpdate().Return(protocol.ByteCount(0))
+		q.AddStream(5)
+		streamGetter.EXPECT().GetOrOpenReceiveStream(protocol.StreamID(5)).Return(stream5, nil)
+		q.QueueAll()
+		Expect(queuedFrames).To(BeEmpty())
+		// don't EXPECT any further calls to GetOrOpenReveiveStream and to getWindowUpdate
 		q.QueueAll()
 		Expect(queuedFrames).To(BeEmpty())
 	})
