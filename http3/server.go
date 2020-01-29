@@ -173,10 +173,8 @@ func (s *Server) handleConn(sess quic.EarlySession) {
 	(&settingsFrame{}).Write(buf)
 	str.Write(buf.Bytes())
 
-	// Wait for completion of the handshake.
-	// TODO(#2311): allow 0-RTT requests.
-	<-sess.HandshakeComplete().Done()
-
+	// Process all requests immediately.
+	// It's the client's responsibility to decide which requests are eligible for 0-RTT.
 	for {
 		str, err := sess.AcceptStream(context.Background())
 		if err != nil {

@@ -135,8 +135,8 @@ var _ = Describe("RoundTripper", func() {
 		It("reuses existing clients", func() {
 			closed := make(chan struct{})
 			testErr := errors.New("test err")
-			session.EXPECT().HandshakeComplete().Return(handshakeCtx)
 			session.EXPECT().OpenUniStream().AnyTimes().Return(nil, testErr)
+			session.EXPECT().HandshakeComplete().Return(handshakeCtx).Times(2)
 			session.EXPECT().OpenStreamSync(context.Background()).Return(nil, testErr).Times(2)
 			session.EXPECT().CloseWithError(gomock.Any(), gomock.Any()).Do(func(quic.ErrorCode, string) { close(closed) })
 			req, err := http.NewRequest("GET", "https://quic.clemente.io/file1.html", nil)
