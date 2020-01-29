@@ -60,7 +60,7 @@ var _ = Describe("RoundTripper", func() {
 	var (
 		rt      *RoundTripper
 		req1    *http.Request
-		session *mockquic.MockSession
+		session *mockquic.MockEarlySession
 	)
 
 	BeforeEach(func() {
@@ -74,7 +74,7 @@ var _ = Describe("RoundTripper", func() {
 		origDialAddr := dialAddr
 
 		BeforeEach(func() {
-			session = mockquic.NewMockSession(mockCtrl)
+			session = mockquic.NewMockEarlySession(mockCtrl)
 			origDialAddr = dialAddr
 			dialAddr = func(addr string, tlsConf *tls.Config, config *quic.Config) (quic.Session, error) {
 				// return an error when trying to open a stream

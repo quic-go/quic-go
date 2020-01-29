@@ -46,7 +46,7 @@ var _ = Describe("Server", func() {
 		var (
 			qpackDecoder       *qpack.Decoder
 			str                *mockquic.MockStream
-			sess               *mockquic.MockSession
+			sess               *mockquic.MockEarlySession
 			exampleGetRequest  *http.Request
 			examplePostRequest *http.Request
 		)
@@ -105,7 +105,7 @@ var _ = Describe("Server", func() {
 			qpackDecoder = qpack.NewDecoder(nil)
 			str = mockquic.NewMockStream(mockCtrl)
 
-			sess = mockquic.NewMockSession(mockCtrl)
+			sess = mockquic.NewMockEarlySession(mockCtrl)
 			addr := &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 1337}
 			sess.EXPECT().RemoteAddr().Return(addr).AnyTimes()
 		})
@@ -165,13 +165,16 @@ var _ = Describe("Server", func() {
 		})
 
 		Context("stream- and connection-level errors", func() {
-			var sess *mockquic.MockSession
+			var sess *mockquic.MockEarlySession
 
 			BeforeEach(func() {
 				addr := &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 1337}
-				sess = mockquic.NewMockSession(mockCtrl)
+				sess = mockquic.NewMockEarlySession(mockCtrl)
 				controlStr := mockquic.NewMockStream(mockCtrl)
 				controlStr.EXPECT().Write(gomock.Any())
+				ctx, cancel := context.WithCancel(context.Background())
+				cancel()
+				sess.EXPECT().HandshakeComplete().Return(ctx)
 				sess.EXPECT().OpenUniStream().Return(controlStr, nil)
 				sess.EXPECT().AcceptStream(gomock.Any()).Return(str, nil)
 				sess.EXPECT().AcceptStream(gomock.Any()).Return(nil, errors.New("done"))
@@ -403,9 +406,9 @@ var _ = Describe("Server", func() {
 		})
 
 		It("serves a packet conn", func() {
-			ln := mockquic.NewMockListener(mockCtrl)
+			ln := mockquic.NewMockEarlyListener(mockCtrl)
 			conn := &net.UDPConn{}
-			quicListen = func(c net.PacketConn, tlsConf *tls.Config, config *quic.Config) (quic.Listener, error) {
+			quicListen = func(c net.PacketConn, tlsConf *tls.Config, config *quic.Config) (quic.EarlyListener, error) {
 				Expect(c).To(Equal(conn))
 				return ln, nil
 			}
@@ -432,13 +435,13 @@ var _ = Describe("Server", func() {
 		})
 
 		It("serves two packet conns", func() {
-			ln1 := mockquic.NewMockListener(mockCtrl)
-			ln2 := mockquic.NewMockListener(mockCtrl)
-			lns := []quic.Listener{ln1, ln2}
+			ln1 := mockquic.NewMockEarlyListener(mockCtrl)
+			ln2 := mockquic.NewMockEarlyListener(mockCtrl)
+			lns := []quic.EarlyListener{ln1, ln2}
 			conn1 := &net.UDPConn{}
 			conn2 := &net.UDPConn{}
 			conns := []net.PacketConn{conn1, conn2}
-			quicListen = func(c net.PacketConn, tlsConf *tls.Config, config *quic.Config) (quic.Listener, error) {
+			quicListen = func(c net.PacketConn, tlsConf *tls.Config, config *quic.Config) (quic.EarlyListener, error) {
 				conn := conns[0]
 				conns = conns[1:]
 				ln := lns[0]
@@ -496,7 +499,7 @@ var _ = Describe("Server", func() {
 		It("uses the quic.Config to start the QUIC server", func() {
 			conf := &quic.Config{HandshakeTimeout: time.Nanosecond}
 			var receivedConf *quic.Config
-			quicListenAddr = func(addr string, _ *tls.Config, config *quic.Config) (quic.Listener, error) {
+			quicListenAddr = func(addr string, _ *tls.Config, config *quic.Config) (quic.EarlyListener, error) {
 				receivedConf = config
 				return nil, errors.New("listen err")
 			}
@@ -508,7 +511,7 @@ var _ = Describe("Server", func() {
 		It("replaces the ALPN token to the tls.Config", func() {
 			tlsConf := &tls.Config{NextProtos: []string{"foo", "bar"}}
 			var receivedConf *tls.Config
-			quicListenAddr = func(addr string, tlsConf *tls.Config, _ *quic.Config) (quic.Listener, error) {
+			quicListenAddr = func(addr string, tlsConf *tls.Config, _ *quic.Config) (quic.EarlyListener, error) {
 				receivedConf = tlsConf
 				return nil, errors.New("listen err")
 			}
@@ -521,7 +524,7 @@ var _ = Describe("Server", func() {
 
 		It("uses the ALPN token if no tls.Config is given", func() {
 			var receivedConf *tls.Config
-			quicListenAddr = func(addr string, tlsConf *tls.Config, _ *quic.Config) (quic.Listener, error) {
+			quicListenAddr = func(addr string, tlsConf *tls.Config, _ *quic.Config) (quic.EarlyListener, error) {
 				receivedConf = tlsConf
 				return nil, errors.New("listen err")
 			}
@@ -537,7 +540,7 @@ var _ = Describe("Server", func() {
 			}
 
 			var receivedConf *tls.Config
-			quicListenAddr = func(addr string, conf *tls.Config, _ *quic.Config) (quic.Listener, error) {
+			quicListenAddr = func(addr string, conf *tls.Config, _ *quic.Config) (quic.EarlyListener, error) {
 				receivedConf = conf
 				return nil, errors.New("listen err")
 			}
@@ -562,7 +565,7 @@ var _ = Describe("Server", func() {
 			}
 
 			var receivedConf *tls.Config
-			quicListenAddr = func(addr string, conf *tls.Config, _ *quic.Config) (quic.Listener, error) {
+			quicListenAddr = func(addr string, conf *tls.Config, _ *quic.Config) (quic.EarlyListener, error) {
 				receivedConf = conf
 				return nil, errors.New("listen err")
 			}
@@ -585,7 +588,7 @@ var _ = Describe("Server", func() {
 
 	It("errors when listening fails", func() {
 		testErr := errors.New("listen error")
-		quicListenAddr = func(addr string, tlsConf *tls.Config, config *quic.Config) (quic.Listener, error) {
+		quicListenAddr = func(addr string, tlsConf *tls.Config, config *quic.Config) (quic.EarlyListener, error) {
 			return nil, testErr
 		}
 		fullpem, privkey := testdata.GetCertificatePaths()
