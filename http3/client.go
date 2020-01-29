@@ -23,7 +23,7 @@ var defaultQuicConfig = &quic.Config{
 	KeepAlive:          true,
 }
 
-var dialAddr = quic.DialAddr
+var dialAddr = quic.DialAddrEarly
 
 type roundTripperOpts struct {
 	DisableCompression bool
@@ -37,7 +37,7 @@ type client struct {
 	opts    *roundTripperOpts
 
 	dialOnce     sync.Once
-	dialer       func(network, addr string, tlsCfg *tls.Config, cfg *quic.Config) (quic.Session, error)
+	dialer       func(network, addr string, tlsCfg *tls.Config, cfg *quic.Config) (quic.EarlySession, error)
 	handshakeErr error
 
 	requestWriter *requestWriter
@@ -45,7 +45,7 @@ type client struct {
 	decoder *qpack.Decoder
 
 	hostname string
-	session  quic.Session
+	session  quic.EarlySession
 
 	logger utils.Logger
 }
@@ -55,7 +55,7 @@ func newClient(
 	tlsConf *tls.Config,
 	opts *roundTripperOpts,
 	quicConfig *quic.Config,
-	dialer func(network, addr string, tlsCfg *tls.Config, cfg *quic.Config) (quic.Session, error),
+	dialer func(network, addr string, tlsCfg *tls.Config, cfg *quic.Config) (quic.EarlySession, error),
 ) *client {
 	if tlsConf == nil {
 		tlsConf = &tls.Config{}
@@ -93,6 +93,7 @@ func (c *client) dial() error {
 		return err
 	}
 
+	// run the sesssion setup using 0-RTT data
 	go func() {
 		if err := c.setupSession(); err != nil {
 			c.logger.Debugf("Setting up session failed: %s", err)
@@ -100,6 +101,7 @@ func (c *client) dial() error {
 		}
 	}()
 
+	<-c.session.HandshakeComplete().Done()
 	return nil
 }
 

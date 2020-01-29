@@ -26,6 +26,7 @@ var _ = Describe("Client", func() {
 		client       *client
 		req          *http.Request
 		origDialAddr = dialAddr
+		handshakeCtx context.Context // an already canceled context
 	)
 
 	BeforeEach(func() {
@@ -37,6 +38,10 @@ var _ = Describe("Client", func() {
 		var err error
 		req, err = http.NewRequest("GET", "https://localhost:1337", nil)
 		Expect(err).ToNot(HaveOccurred())
+
+		ctx, cancel := context.WithCancel(context.Background())
+		cancel()
+		handshakeCtx = ctx
 	})
 
 	AfterEach(func() {
@@ -46,7 +51,7 @@ var _ = Describe("Client", func() {
 	It("uses the default QUIC and TLS config if none is give", func() {
 		client = newClient("localhost:1337", nil, &roundTripperOpts{}, nil, nil)
 		var dialAddrCalled bool
-		dialAddr = func(_ string, tlsConf *tls.Config, quicConf *quic.Config) (quic.Session, error) {
+		dialAddr = func(_ string, tlsConf *tls.Config, quicConf *quic.Config) (quic.EarlySession, error) {
 			Expect(quicConf).To(Equal(defaultQuicConfig))
 			Expect(tlsConf.NextProtos).To(Equal([]string{nextProtoH3}))
 			dialAddrCalled = true
@@ -59,7 +64,7 @@ var _ = Describe("Client", func() {
 	It("adds the port to the hostname, if none is given", func() {
 		client = newClient("quic.clemente.io", nil, &roundTripperOpts{}, nil, nil)
 		var dialAddrCalled bool
-		dialAddr = func(hostname string, _ *tls.Config, _ *quic.Config) (quic.Session, error) {
+		dialAddr = func(hostname string, _ *tls.Config, _ *quic.Config) (quic.EarlySession, error) {
 			Expect(hostname).To(Equal("quic.clemente.io:443"))
 			dialAddrCalled = true
 			return nil, errors.New("test done")
@@ -82,7 +87,7 @@ var _ = Describe("Client", func() {
 			hostname string,
 			tlsConfP *tls.Config,
 			quicConfP *quic.Config,
-		) (quic.Session, error) {
+		) (quic.EarlySession, error) {
 			Expect(hostname).To(Equal("localhost:1337"))
 			Expect(tlsConfP.ServerName).To(Equal(tlsConf.ServerName))
 			Expect(tlsConfP.NextProtos).To(Equal([]string{nextProtoH3}))
@@ -101,7 +106,7 @@ var _ = Describe("Client", func() {
 		tlsConf := &tls.Config{ServerName: "foo.bar"}
 		quicConf := &quic.Config{MaxIdleTimeout: 1337 * time.Second}
 		var dialerCalled bool
-		dialer := func(network, address string, tlsConfP *tls.Config, quicConfP *quic.Config) (quic.Session, error) {
+		dialer := func(network, address string, tlsConfP *tls.Config, quicConfP *quic.Config) (quic.EarlySession, error) {
 			Expect(network).To(Equal("udp"))
 			Expect(address).To(Equal("localhost:1337"))
 			Expect(tlsConfP.ServerName).To(Equal("foo.bar"))
@@ -118,7 +123,7 @@ var _ = Describe("Client", func() {
 	It("errors when dialing fails", func() {
 		testErr := errors.New("handshake error")
 		client = newClient("localhost:1337", nil, &roundTripperOpts{}, nil, nil)
-		dialAddr = func(hostname string, _ *tls.Config, _ *quic.Config) (quic.Session, error) {
+		dialAddr = func(hostname string, _ *tls.Config, _ *quic.Config) (quic.EarlySession, error) {
 			return nil, testErr
 		}
 		_, err := client.RoundTrip(req)
@@ -130,9 +135,10 @@ var _ = Describe("Client", func() {
 		client = newClient("localhost:1337", nil, &roundTripperOpts{}, nil, nil)
 		session := mockquic.NewMockEarlySession(mockCtrl)
 		session.EXPECT().OpenUniStream().Return(nil, testErr).MaxTimes(1)
+		session.EXPECT().HandshakeComplete().Return(handshakeCtx).MaxTimes(1)
 		session.EXPECT().OpenStreamSync(context.Background()).Return(nil, testErr).MaxTimes(1)
 		session.EXPECT().CloseWithError(gomock.Any(), gomock.Any()).MaxTimes(1)
-		dialAddr = func(hostname string, _ *tls.Config, _ *quic.Config) (quic.Session, error) {
+		dialAddr = func(hostname string, _ *tls.Config, _ *quic.Config) (quic.EarlySession, error) {
 			return session, nil
 		}
 		defer GinkgoRecover()
@@ -173,7 +179,7 @@ var _ = Describe("Client", func() {
 			str = mockquic.NewMockStream(mockCtrl)
 			sess = mockquic.NewMockEarlySession(mockCtrl)
 			sess.EXPECT().OpenUniStream().Return(controlStr, nil).MaxTimes(1)
-			dialAddr = func(hostname string, _ *tls.Config, _ *quic.Config) (quic.Session, error) {
+			dialAddr = func(hostname string, _ *tls.Config, _ *quic.Config) (quic.EarlySession, error) {
 				return sess, nil
 			}
 			var err error
@@ -186,7 +192,10 @@ var _ = Describe("Client", func() {
 			rw := newResponseWriter(rspBuf, utils.DefaultLogger)
 			rw.WriteHeader(418)
 
-			sess.EXPECT().OpenStreamSync(context.Background()).Return(str, nil)
+			gomock.InOrder(
+				sess.EXPECT().HandshakeComplete().Return(handshakeCtx),
+				sess.EXPECT().OpenStreamSync(context.Background()).Return(str, nil),
+			)
 			str.EXPECT().Write(gomock.Any()).AnyTimes()
 			str.EXPECT().Close()
 			str.EXPECT().Read(gomock.Any()).DoAndReturn(func(p []byte) (int, error) {
@@ -220,7 +229,10 @@ var _ = Describe("Client", func() {
 
 			BeforeEach(func() {
 				strBuf = &bytes.Buffer{}
-				sess.EXPECT().OpenStreamSync(context.Background()).Return(str, nil)
+				gomock.InOrder(
+					sess.EXPECT().HandshakeComplete().Return(handshakeCtx),
+					sess.EXPECT().OpenStreamSync(context.Background()).Return(str, nil),
+				)
 				body := &mockBody{}
 				body.SetData([]byte("request body"))
 				var err error
@@ -301,6 +313,7 @@ var _ = Describe("Client", func() {
 			It("cancels a request while the request is still in flight", func() {
 				ctx, cancel := context.WithCancel(context.Background())
 				req := request.WithContext(ctx)
+				sess.EXPECT().HandshakeComplete().Return(handshakeCtx)
 				sess.EXPECT().OpenStreamSync(ctx).Return(str, nil)
 				buf := &bytes.Buffer{}
 				str.EXPECT().Close().MaxTimes(1)
@@ -333,6 +346,7 @@ var _ = Describe("Client", func() {
 
 				ctx, cancel := context.WithCancel(context.Background())
 				req := request.WithContext(ctx)
+				sess.EXPECT().HandshakeComplete().Return(handshakeCtx)
 				sess.EXPECT().OpenStreamSync(ctx).Return(str, nil)
 				buf := &bytes.Buffer{}
 				str.EXPECT().Close().MaxTimes(1)
@@ -354,21 +368,8 @@ var _ = Describe("Client", func() {
 		})
 
 		Context("gzip compression", func() {
-			var gzippedData []byte // a gzipped foobar
-			var response *http.Response
-
 			BeforeEach(func() {
-				var b bytes.Buffer
-				w := gzip.NewWriter(&b)
-				w.Write([]byte("foobar"))
-				w.Close()
-				gzippedData = b.Bytes()
-				response = &http.Response{
-					StatusCode: 200,
-					Header:     http.Header{"Content-Length": []string{"1000"}},
-				}
-				_ = gzippedData
-				_ = response
+				sess.EXPECT().HandshakeComplete().Return(handshakeCtx)
 			})
 
 			It("adds the gzip header to requests", func() {
