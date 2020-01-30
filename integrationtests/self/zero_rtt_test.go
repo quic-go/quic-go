@@ -346,6 +346,44 @@ var _ = Describe("0-RTT", func() {
 				fmt.Fprintf(GinkgoWriter, "Sent %d 0-RTT packets.", num0RTT)
 				Expect(num0RTT).ToNot(BeZero())
 			})
+
+			It("rejects 0-RTT when the ALPN changed", func() {
+				const maxStreams = 42
+				tlsConf := getTLSConfig()
+				ln, err := quic.ListenAddrEarly(
+					"localhost:0",
+					tlsConf,
+					&quic.Config{
+						Versions:    []protocol.VersionNumber{version},
+						AcceptToken: func(_ net.Addr, _ *quic.Token) bool { return true },
+					},
+				)
+				Expect(err).ToNot(HaveOccurred())
+
+				clientConf := dialAndReceiveSessionTicket(ln, ln.Addr().(*net.UDPAddr).Port)
+
+				// now close the listener and dial new connection with a different ALPN
+				Expect(ln.Close()).To(Succeed())
+				clientConf.NextProtos = []string{"new-alpn"}
+				tlsConf.NextProtos = []string{"new-alpn"}
+				ln, err = quic.ListenAddrEarly(
+					"localhost:0",
+					tlsConf,
+					&quic.Config{
+						Versions:    []protocol.VersionNumber{version},
+						AcceptToken: func(_ net.Addr, _ *quic.Token) bool { return true },
+					},
+				)
+				Expect(err).ToNot(HaveOccurred())
+				proxy, num0RTTPackets := runCountingProxy(ln.Addr().(*net.UDPAddr).Port)
+				defer proxy.Close()
+				transfer0RTTData(ln, proxy.LocalPort(), clientConf, PRData, false)
+
+				// The client should send 0-RTT packets, but the server doesn't process them.
+				num0RTT := atomic.LoadUint32(num0RTTPackets)
+				fmt.Fprintf(GinkgoWriter, "Sent %d 0-RTT packets.", num0RTT)
+				Expect(num0RTT).ToNot(BeZero())
+			})
 		})
 	}
 })
