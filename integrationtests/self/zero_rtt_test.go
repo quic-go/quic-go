@@ -311,9 +311,10 @@ var _ = Describe("0-RTT", func() {
 
 			It("rejects 0-RTT when the server's transport parameters changed", func() {
 				const maxStreams = 42
+				tlsConf := getTLSConfig()
 				ln, err := quic.ListenAddrEarly(
 					"localhost:0",
-					getTLSConfig(),
+					tlsConf,
 					&quic.Config{
 						Versions:           []protocol.VersionNumber{version},
 						AcceptToken:        func(_ net.Addr, _ *quic.Token) bool { return true },
@@ -328,7 +329,7 @@ var _ = Describe("0-RTT", func() {
 				Expect(ln.Close()).To(Succeed())
 				ln, err = quic.ListenAddrEarly(
 					"localhost:0",
-					getTLSConfig(),
+					tlsConf,
 					&quic.Config{
 						Versions:           []protocol.VersionNumber{version},
 						AcceptToken:        func(_ net.Addr, _ *quic.Token) bool { return true },
