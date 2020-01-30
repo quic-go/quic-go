@@ -53,7 +53,7 @@ type cryptoStreamHandler interface {
 	SetLargest1RTTAcked(protocol.PacketNumber)
 	DropHandshakeKeys()
 	io.Closer
-	ConnectionState() tls.ConnectionState
+	ConnectionState() handshake.ConnectionState
 }
 
 type receivedPacket struct {
@@ -579,7 +579,7 @@ func (s *session) Context() context.Context {
 	return s.ctx
 }
 
-func (s *session) ConnectionState() tls.ConnectionState {
+func (s *session) ConnectionState() ConnectionState {
 	return s.cryptoStreamHandler.ConnectionState()
 }
 

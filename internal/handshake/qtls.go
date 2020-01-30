@@ -34,6 +34,7 @@ func tlsConfigToQtlsConfig(
 	getDataForSessionState func() []byte,
 	setDataFromSessionState func([]byte),
 	accept0RTT func([]byte) bool,
+	rejected0RTT func(),
 	enable0RTT bool,
 ) *qtls.Config {
 	if c == nil {
@@ -61,7 +62,7 @@ func tlsConfigToQtlsConfig(
 			if tlsConf == nil {
 				return nil, nil
 			}
-			return tlsConfigToQtlsConfig(tlsConf, recordLayer, extHandler, getDataForSessionState, setDataFromSessionState, accept0RTT, enable0RTT), nil
+			return tlsConfigToQtlsConfig(tlsConf, recordLayer, extHandler, getDataForSessionState, setDataFromSessionState, accept0RTT, rejected0RTT, enable0RTT), nil
 		}
 	}
 	var csc qtls.ClientSessionCache
@@ -99,6 +100,7 @@ func tlsConfigToQtlsConfig(
 		GetExtensions:          extHandler.GetExtensions,
 		ReceivedExtensions:     extHandler.ReceivedExtensions,
 		Accept0RTT:             accept0RTT,
+		Rejected0RTT:           rejected0RTT,
 	}
 	if enable0RTT {
 		conf.Enable0RTT = true

@@ -68,7 +68,13 @@ var _ = Describe("0-RTT", func() {
 				return clientConf
 			}
 
-			transfer0RTTData := func(ln quic.EarlyListener, proxyPort int, clientConf *tls.Config, testdata []byte) {
+			transfer0RTTData := func(
+				ln quic.EarlyListener,
+				proxyPort int,
+				clientConf *tls.Config,
+				testdata []byte, // data to transfer
+				expect0RTT bool, // do we expect that 0-RTT is actually used
+			) {
 				// now dial the second session, and use 0-RTT to send some data
 				done := make(chan struct{})
 				go func() {
@@ -80,6 +86,7 @@ var _ = Describe("0-RTT", func() {
 					data, err := ioutil.ReadAll(str)
 					Expect(err).ToNot(HaveOccurred())
 					Expect(data).To(Equal(testdata))
+					Expect(sess.ConnectionState().Used0RTT).To(Equal(expect0RTT))
 					close(done)
 				}()
 
@@ -94,6 +101,7 @@ var _ = Describe("0-RTT", func() {
 				_, err = str.Write(testdata)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(str.Close()).To(Succeed())
+				Expect(sess.ConnectionState().Used0RTT).To(Equal(expect0RTT))
 				Eventually(done).Should(BeClosed())
 			}
 
@@ -113,7 +121,7 @@ var _ = Describe("0-RTT", func() {
 				defer proxy.Close()
 
 				clientConf := dialAndReceiveSessionTicket(ln, proxy.LocalPort())
-				transfer0RTTData(ln, proxy.LocalPort(), clientConf, PRData)
+				transfer0RTTData(ln, proxy.LocalPort(), clientConf, PRData, true)
 
 				num0RTT := atomic.LoadUint32(num0RTTPackets)
 				fmt.Fprintf(GinkgoWriter, "Sent %d 0-RTT packets.", num0RTT)
@@ -239,7 +247,7 @@ var _ = Describe("0-RTT", func() {
 				defer proxy.Close()
 
 				clientConf := dialAndReceiveSessionTicket(ln, proxy.LocalPort())
-				transfer0RTTData(ln, proxy.LocalPort(), clientConf, PRData)
+				transfer0RTTData(ln, proxy.LocalPort(), clientConf, PRData, true)
 
 				num0RTT := atomic.LoadUint32(&num0RTTPackets)
 				numDropped := atomic.LoadUint32(&num0RTTDropped)
@@ -293,12 +301,49 @@ var _ = Describe("0-RTT", func() {
 				defer proxy.Close()
 
 				clientConf := dialAndReceiveSessionTicket(ln, proxy.LocalPort())
-				transfer0RTTData(ln, proxy.LocalPort(), clientConf, GeneratePRData(5*1100)) // ~5 packets
+				transfer0RTTData(ln, proxy.LocalPort(), clientConf, GeneratePRData(5*1100), true) // ~5 packets
 
 				mutex.Lock()
 				defer mutex.Unlock()
 				Expect(firstCounter).To(BeNumerically("~", 5, 1)) // the FIN bit might be sent extra
 				Expect(secondCounter).To(Equal(firstCounter))
+			})
+
+			It("rejects 0-RTT when the server's transport parameters changed", func() {
+				const maxStreams = 42
+				ln, err := quic.ListenAddrEarly(
+					"localhost:0",
+					getTLSConfig(),
+					&quic.Config{
+						Versions:           []protocol.VersionNumber{version},
+						AcceptToken:        func(_ net.Addr, _ *quic.Token) bool { return true },
+						MaxIncomingStreams: maxStreams,
+					},
+				)
+				Expect(err).ToNot(HaveOccurred())
+
+				clientConf := dialAndReceiveSessionTicket(ln, ln.Addr().(*net.UDPAddr).Port)
+
+				// now close the listener and restart it with a different config
+				Expect(ln.Close()).To(Succeed())
+				ln, err = quic.ListenAddrEarly(
+					"localhost:0",
+					getTLSConfig(),
+					&quic.Config{
+						Versions:           []protocol.VersionNumber{version},
+						AcceptToken:        func(_ net.Addr, _ *quic.Token) bool { return true },
+						MaxIncomingStreams: maxStreams + 1,
+					},
+				)
+				Expect(err).ToNot(HaveOccurred())
+				proxy, num0RTTPackets := runCountingProxy(ln.Addr().(*net.UDPAddr).Port)
+				defer proxy.Close()
+				transfer0RTTData(ln, proxy.LocalPort(), clientConf, PRData, false)
+
+				// The client should send 0-RTT packets, but the server doesn't process them.
+				num0RTT := atomic.LoadUint32(num0RTTPackets)
+				fmt.Fprintf(GinkgoWriter, "Sent %d 0-RTT packets.", num0RTT)
+				Expect(num0RTT).ToNot(BeZero())
 			})
 		})
 	}

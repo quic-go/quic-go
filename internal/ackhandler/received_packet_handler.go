@@ -93,6 +93,9 @@ func (h *receivedPacketHandler) DropPackets(encLevel protocol.EncryptionLevel) {
 		h.initialPackets = nil
 	case protocol.EncryptionHandshake:
 		h.handshakePackets = nil
+	case protocol.Encryption0RTT:
+		// Nothing to do here.
+		// If we are rejecting 0-RTT, no 0-RTT packets will have been decrypted.
 	default:
 		panic(fmt.Sprintf("Cannot drop keys for encryption level %s", encLevel))
 	}

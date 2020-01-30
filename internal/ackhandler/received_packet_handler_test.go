@@ -91,4 +91,8 @@ var _ = Describe("Received Packet Handler", func() {
 		Expect(handler.GetAckFrame(protocol.EncryptionHandshake)).To(BeNil())
 		Expect(handler.GetAckFrame(protocol.Encryption1RTT)).ToNot(BeNil())
 	})
+
+	It("does nothing when droping 0-RTT packets", func() {
+		handler.DropPackets(protocol.Encryption0RTT)
+	})
 })

@@ -28,19 +28,19 @@ func (*mockExtensionHandler) TransportParameters() <-chan []byte { panic("not im
 var _ = Describe("qtls.Config generation", func() {
 	It("sets MinVersion and MaxVersion", func() {
 		tlsConf := &tls.Config{MinVersion: tls.VersionTLS11, MaxVersion: tls.VersionTLS12}
-		qtlsConf := tlsConfigToQtlsConfig(tlsConf, nil, &mockExtensionHandler{}, nil, nil, nil, false)
+		qtlsConf := tlsConfigToQtlsConfig(tlsConf, nil, &mockExtensionHandler{}, nil, nil, nil, nil, false)
 		Expect(qtlsConf.MinVersion).To(BeEquivalentTo(tls.VersionTLS13))
 		Expect(qtlsConf.MaxVersion).To(BeEquivalentTo(tls.VersionTLS13))
 	})
 
 	It("works when called with a nil config", func() {
-		qtlsConf := tlsConfigToQtlsConfig(nil, nil, &mockExtensionHandler{}, nil, nil, nil, false)
+		qtlsConf := tlsConfigToQtlsConfig(nil, nil, &mockExtensionHandler{}, nil, nil, nil, nil, false)
 		Expect(qtlsConf).ToNot(BeNil())
 	})
 
 	It("sets the setter and getter function for TLS extensions", func() {
 		extHandler := &mockExtensionHandler{}
-		qtlsConf := tlsConfigToQtlsConfig(&tls.Config{}, nil, extHandler, nil, nil, nil, false)
+		qtlsConf := tlsConfigToQtlsConfig(&tls.Config{}, nil, extHandler, nil, nil, nil, nil, false)
 		Expect(extHandler.get).To(BeFalse())
 		qtlsConf.GetExtensions(10)
 		Expect(extHandler.get).To(BeTrue())
@@ -51,31 +51,40 @@ var _ = Describe("qtls.Config generation", func() {
 
 	It("sets the Accept0RTT callback", func() {
 		accept0RTT := func([]byte) bool { return true }
-		qtlsConf := tlsConfigToQtlsConfig(nil, nil, &mockExtensionHandler{}, nil, nil, accept0RTT, false)
+		qtlsConf := tlsConfigToQtlsConfig(nil, nil, &mockExtensionHandler{}, nil, nil, accept0RTT, nil, false)
 		Expect(qtlsConf.Accept0RTT).ToNot(BeNil())
 		Expect(qtlsConf.Accept0RTT(nil)).To(BeTrue())
 	})
 
+	It("sets the Accept0RTT callback", func() {
+		var called bool
+		rejected0RTT := func() { called = true }
+		qtlsConf := tlsConfigToQtlsConfig(nil, nil, &mockExtensionHandler{}, nil, nil, nil, rejected0RTT, false)
+		Expect(qtlsConf.Rejected0RTT).ToNot(BeNil())
+		qtlsConf.Rejected0RTT()
+		Expect(called).To(BeTrue())
+	})
+
 	It("enables 0-RTT", func() {
-		qtlsConf := tlsConfigToQtlsConfig(nil, nil, &mockExtensionHandler{}, nil, nil, nil, false)
+		qtlsConf := tlsConfigToQtlsConfig(nil, nil, &mockExtensionHandler{}, nil, nil, nil, nil, false)
 		Expect(qtlsConf.Enable0RTT).To(BeFalse())
 		Expect(qtlsConf.MaxEarlyData).To(BeZero())
-		qtlsConf = tlsConfigToQtlsConfig(nil, nil, &mockExtensionHandler{}, nil, nil, nil, true)
+		qtlsConf = tlsConfigToQtlsConfig(nil, nil, &mockExtensionHandler{}, nil, nil, nil, nil, true)
 		Expect(qtlsConf.Enable0RTT).To(BeTrue())
 		Expect(qtlsConf.MaxEarlyData).To(Equal(uint32(0xffffffff)))
 	})
 
 	It("initializes such that the session ticket key remains constant", func() {
 		tlsConf := &tls.Config{}
-		qtlsConf1 := tlsConfigToQtlsConfig(tlsConf, nil, &mockExtensionHandler{}, nil, nil, nil, false)
-		qtlsConf2 := tlsConfigToQtlsConfig(tlsConf, nil, &mockExtensionHandler{}, nil, nil, nil, false)
+		qtlsConf1 := tlsConfigToQtlsConfig(tlsConf, nil, &mockExtensionHandler{}, nil, nil, nil, nil, false)
+		qtlsConf2 := tlsConfigToQtlsConfig(tlsConf, nil, &mockExtensionHandler{}, nil, nil, nil, nil, false)
 		Expect(qtlsConf1.SessionTicketKey).ToNot(BeZero()) // should now contain a random value
 		Expect(qtlsConf1.SessionTicketKey).To(Equal(qtlsConf2.SessionTicketKey))
 	})
 
 	Context("GetConfigForClient callback", func() {
 		It("doesn't set it if absent", func() {
-			qtlsConf := tlsConfigToQtlsConfig(&tls.Config{}, nil, &mockExtensionHandler{}, nil, nil, nil, false)
+			qtlsConf := tlsConfigToQtlsConfig(&tls.Config{}, nil, &mockExtensionHandler{}, nil, nil, nil, nil, false)
 			Expect(qtlsConf.GetConfigForClient).To(BeNil())
 		})
 
@@ -86,7 +95,7 @@ var _ = Describe("qtls.Config generation", func() {
 				},
 			}
 			extHandler := &mockExtensionHandler{}
-			qtlsConf := tlsConfigToQtlsConfig(tlsConf, nil, extHandler, nil, nil, nil, false)
+			qtlsConf := tlsConfigToQtlsConfig(tlsConf, nil, extHandler, nil, nil, nil, nil, false)
 			Expect(qtlsConf.GetConfigForClient).ToNot(BeNil())
 			confForClient, err := qtlsConf.GetConfigForClient(nil)
 			Expect(err).ToNot(HaveOccurred())
@@ -106,7 +115,7 @@ var _ = Describe("qtls.Config generation", func() {
 					return nil, testErr
 				},
 			}
-			qtlsConf := tlsConfigToQtlsConfig(tlsConf, nil, &mockExtensionHandler{}, nil, nil, nil, false)
+			qtlsConf := tlsConfigToQtlsConfig(tlsConf, nil, &mockExtensionHandler{}, nil, nil, nil, nil, false)
 			_, err := qtlsConf.GetConfigForClient(nil)
 			Expect(err).To(MatchError(testErr))
 		})
@@ -117,14 +126,14 @@ var _ = Describe("qtls.Config generation", func() {
 					return nil, nil
 				},
 			}
-			qtlsConf := tlsConfigToQtlsConfig(tlsConf, nil, &mockExtensionHandler{}, nil, nil, nil, false)
+			qtlsConf := tlsConfigToQtlsConfig(tlsConf, nil, &mockExtensionHandler{}, nil, nil, nil, nil, false)
 			Expect(qtlsConf.GetConfigForClient(nil)).To(BeNil())
 		})
 	})
 
 	Context("ClientSessionCache", func() {
 		It("doesn't set if absent", func() {
-			qtlsConf := tlsConfigToQtlsConfig(&tls.Config{}, nil, &mockExtensionHandler{}, nil, nil, nil, false)
+			qtlsConf := tlsConfigToQtlsConfig(&tls.Config{}, nil, &mockExtensionHandler{}, nil, nil, nil, nil, false)
 			Expect(qtlsConf.ClientSessionCache).To(BeNil())
 		})
 
@@ -138,6 +147,7 @@ var _ = Describe("qtls.Config generation", func() {
 				&mockExtensionHandler{},
 				func() []byte { return []byte("foobar") },
 				func(p []byte) { appData = p },
+				nil,
 				nil,
 				false,
 			)
@@ -159,7 +169,7 @@ var _ = Describe("qtls.Config generation", func() {
 		It("puts a nil session state", func() {
 			csc := NewMockClientSessionCache(mockCtrl)
 			tlsConf := &tls.Config{ClientSessionCache: csc}
-			qtlsConf := tlsConfigToQtlsConfig(tlsConf, nil, &mockExtensionHandler{}, nil, nil, nil, false)
+			qtlsConf := tlsConfigToQtlsConfig(tlsConf, nil, &mockExtensionHandler{}, nil, nil, nil, nil, false)
 			// put something
 			csc.EXPECT().Put("foobar", nil)
 			qtlsConf.ClientSessionCache.Put("foobar", nil)
