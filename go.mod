@@ -9,7 +9,7 @@ require (
 	github.com/golang/protobuf v1.3.0
 	github.com/marten-seemann/chacha20 v0.2.0
 	github.com/marten-seemann/qpack v0.1.0
-	github.com/marten-seemann/qtls v0.6.1
+	github.com/marten-seemann/qtls v0.7.0
 	github.com/onsi/ginkgo v1.11.0
 	github.com/onsi/gomega v1.8.1
 	golang.org/x/crypto v0.0.0-20190829043050-9756ffdc2472
