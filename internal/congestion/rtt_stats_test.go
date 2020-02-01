@@ -129,7 +129,7 @@ var _ = Describe("RTT stats", func() {
 	})
 
 	It("ResetAfterConnectionMigrations", func() {
-		rttStats.UpdateRTT((200 * time.Millisecond), 0, time.Time{})
+		rttStats.UpdateRTT(200*time.Millisecond, 0, time.Time{})
 		Expect(rttStats.LatestRTT()).To(Equal((200 * time.Millisecond)))
 		Expect(rttStats.SmoothedRTT()).To(Equal((200 * time.Millisecond)))
 		Expect(rttStats.MinRTT()).To(Equal((200 * time.Millisecond)))
@@ -145,4 +145,15 @@ var _ = Describe("RTT stats", func() {
 		Expect(rttStats.MinRTT()).To(Equal(time.Duration(0)))
 	})
 
+	It("restores the RTT", func() {
+		rttStats.SetInitialRTT(10 * time.Second)
+		Expect(rttStats.LatestRTT()).To(Equal(10 * time.Second))
+		Expect(rttStats.SmoothedRTT()).To(Equal(10 * time.Second))
+		Expect(rttStats.MeanDeviation()).To(BeZero())
+		// update the RTT and make sure that the initial value is immediately forgotten
+		rttStats.UpdateRTT(200*time.Millisecond, 0, time.Time{})
+		Expect(rttStats.LatestRTT()).To(Equal(200 * time.Millisecond))
+		Expect(rttStats.SmoothedRTT()).To(Equal(200 * time.Millisecond))
+		Expect(rttStats.MeanDeviation()).To(Equal(100 * time.Millisecond))
+	})
 })
