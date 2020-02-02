@@ -4,19 +4,22 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/lucas-clemente/quic-go/internal/utils"
 )
 
-const sessionTicketRevision = 0
+const sessionTicketRevision = 1
 
 type sessionTicket struct {
 	Parameters *TransportParameters
+	RTT        time.Duration // to be encoded in mus
 }
 
 func (t *sessionTicket) Marshal() []byte {
 	b := &bytes.Buffer{}
 	utils.WriteVarInt(b, sessionTicketRevision)
+	utils.WriteVarInt(b, uint64(t.RTT.Microseconds()))
 	t.Parameters.MarshalForSessionTicket(b)
 	return b.Bytes()
 }
@@ -30,10 +33,15 @@ func (t *sessionTicket) Unmarshal(b []byte) error {
 	if rev != sessionTicketRevision {
 		return fmt.Errorf("unknown session ticket revision: %d", rev)
 	}
+	rtt, err := utils.ReadVarInt(r)
+	if err != nil {
+		return errors.New("failed to read RTT")
+	}
 	var tp TransportParameters
 	if err := tp.UnmarshalFromSessionTicket(b[len(b)-r.Len():]); err != nil {
 		return fmt.Errorf("unmarshaling transport parameters from session ticket failed: %s", err.Error())
 	}
 	t.Parameters = &tp
+	t.RTT = time.Duration(rtt) * time.Microsecond
 	return nil
 }

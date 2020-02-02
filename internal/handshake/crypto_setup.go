@@ -87,6 +87,8 @@ type cryptoSetup struct {
 	// for clients: to see if a ServerHello is a HelloRetryRequest
 	writeRecord chan struct{}
 
+	rttStats *congestion.RTTStats
+
 	logger utils.Logger
 
 	perspective protocol.Perspective
@@ -198,6 +200,7 @@ func newCryptoSetup(
 		runner:                 runner,
 		ourParams:              tp,
 		paramsChan:             extHandler.TransportParameters(),
+		rttStats:               rttStats,
 		logger:                 logger,
 		perspective:            perspective,
 		handshakeDone:          make(chan struct{}),
@@ -464,7 +467,10 @@ func (h *cryptoSetup) GetSessionTicket() ([]byte, error) {
 	var appData []byte
 	// Save transport parameters to the session ticket if we're allowing 0-RTT.
 	if h.tlsConf.MaxEarlyData > 0 {
-		appData = (&sessionTicket{Parameters: h.ourParams}).Marshal()
+		appData = (&sessionTicket{
+			Parameters: h.ourParams,
+			RTT:        h.rttStats.SmoothedRTT(),
+		}).Marshal()
 	}
 	return h.conn.GetSessionTicket(appData)
 }
@@ -479,7 +485,8 @@ func (h *cryptoSetup) accept0RTT(sessionTicketData []byte) bool {
 	}
 	valid := h.ourParams.ValidFor0RTT(t.Parameters)
 	if valid {
-		h.logger.Debugf("Accepting 0-RTT.")
+		h.logger.Debugf("Accepting 0-RTT. Restoring RTT from session ticket: %s", t.RTT)
+		h.rttStats.SetInitialRTT(t.RTT)
 	} else {
 		h.logger.Debugf("Transport parameters changed. Rejecting 0-RTT.")
 	}
