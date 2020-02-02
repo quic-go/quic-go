@@ -72,6 +72,7 @@ type CryptoSetup interface {
 	RunHandshake()
 	io.Closer
 	ChangeConnectionID(protocol.ConnectionID)
+	GetSessionTicket() ([]byte, error)
 
 	HandleMessage([]byte, protocol.EncryptionLevel) bool
 	SetLargest1RTTAcked(protocol.PacketNumber)

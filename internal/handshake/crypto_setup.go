@@ -16,12 +16,8 @@ import (
 	"github.com/marten-seemann/qtls"
 )
 
-const (
-	// TLS unexpected_message alert
-	alertUnexpectedMessage uint8 = 10
-	// TLS internal error
-	alertInternalError uint8 = 80
-)
+// TLS unexpected_message alert
+const alertUnexpectedMessage uint8 = 10
 
 type messageType uint8
 
@@ -111,7 +107,6 @@ type cryptoSetup struct {
 	handshakeOpener LongHeaderOpener
 	handshakeSealer LongHeaderSealer
 
-	oneRTTStream  io.Writer
 	aead          *updatableAEAD
 	has1RTTSealer bool
 	has1RTTOpener bool
@@ -124,7 +119,6 @@ var _ CryptoSetup = &cryptoSetup{}
 func NewCryptoSetupClient(
 	initialStream io.Writer,
 	handshakeStream io.Writer,
-	oneRTTStream io.Writer,
 	connID protocol.ConnectionID,
 	remoteAddr net.Addr,
 	tp *TransportParameters,
@@ -137,7 +131,6 @@ func NewCryptoSetupClient(
 	cs, clientHelloWritten := newCryptoSetup(
 		initialStream,
 		handshakeStream,
-		oneRTTStream,
 		connID,
 		tp,
 		runner,
@@ -155,7 +148,6 @@ func NewCryptoSetupClient(
 func NewCryptoSetupServer(
 	initialStream io.Writer,
 	handshakeStream io.Writer,
-	oneRTTStream io.Writer,
 	connID protocol.ConnectionID,
 	remoteAddr net.Addr,
 	tp *TransportParameters,
@@ -168,7 +160,6 @@ func NewCryptoSetupServer(
 	cs, _ := newCryptoSetup(
 		initialStream,
 		handshakeStream,
-		oneRTTStream,
 		connID,
 		tp,
 		runner,
@@ -185,7 +176,6 @@ func NewCryptoSetupServer(
 func newCryptoSetup(
 	initialStream io.Writer,
 	handshakeStream io.Writer,
-	oneRTTStream io.Writer,
 	connID protocol.ConnectionID,
 	tp *TransportParameters,
 	runner handshakeRunner,
@@ -202,7 +192,6 @@ func newCryptoSetup(
 		initialSealer:          initialSealer,
 		initialOpener:          initialOpener,
 		handshakeStream:        handshakeStream,
-		oneRTTStream:           oneRTTStream,
 		aead:                   newUpdatableAEAD(rttStats, logger),
 		readEncLevel:           protocol.EncryptionInitial,
 		writeEncLevel:          protocol.EncryptionInitial,
@@ -251,10 +240,6 @@ func (h *cryptoSetup) RunHandshake() {
 	select {
 	case <-handshakeComplete: // return when the handshake is done
 		h.runner.OnHandshakeComplete()
-		// send a session ticket
-		if h.perspective == protocol.PerspectiveServer {
-			h.maybeSendSessionTicket()
-		}
 	case <-h.closeChan:
 		close(h.messageChan)
 		// wait until the Handshake() go routine has returned
@@ -475,20 +460,13 @@ func (h *cryptoSetup) handlePeerParamsFromSessionStateImpl(data []byte) (*Transp
 }
 
 // only valid for the server
-func (h *cryptoSetup) maybeSendSessionTicket() {
+func (h *cryptoSetup) GetSessionTicket() ([]byte, error) {
 	var appData []byte
 	// Save transport parameters to the session ticket if we're allowing 0-RTT.
 	if h.tlsConf.MaxEarlyData > 0 {
 		appData = (&sessionTicket{Parameters: h.ourParams}).Marshal()
 	}
-	ticket, err := h.conn.GetSessionTicket(appData)
-	if err != nil {
-		h.onError(alertInternalError, err.Error())
-		return
-	}
-	if ticket != nil {
-		h.oneRTTStream.Write(ticket)
-	}
+	return h.conn.GetSessionTicket(appData)
 }
 
 // accept0RTT is called for the server when receiving the client's session ticket.
