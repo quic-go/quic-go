@@ -379,8 +379,7 @@ func (p *TransportParameters) marshalVarintParam(b *bytes.Buffer, id transportPa
 // if the transport parameters changed.
 // Since the session ticket is encrypted, the serialization format is defined by the server.
 // For convenience, we use the same format that we also use for sending the transport parameters.
-func (p *TransportParameters) MarshalForSessionTicket() []byte {
-	b := &bytes.Buffer{}
+func (p *TransportParameters) MarshalForSessionTicket(b *bytes.Buffer) {
 	utils.WriteVarInt(b, transportParameterMarshalingVersion)
 	startLen := b.Len()
 	b.Write([]byte{0, 0}) // length. Will be replaced later
@@ -398,9 +397,8 @@ func (p *TransportParameters) MarshalForSessionTicket() []byte {
 	// initial_max_uni_streams
 	p.marshalVarintParam(b, initialMaxStreamsUniParameterID, uint64(p.MaxUniStreamNum))
 
-	data := b.Bytes()
-	binary.BigEndian.PutUint16(data[startLen:startLen+2], uint16(b.Len()-2-startLen))
-	return data
+	// replace the length
+	binary.BigEndian.PutUint16(b.Bytes()[startLen:startLen+2], uint16(b.Len()-2-startLen))
 }
 
 // UnmarshalFromSessionTicket unmarshals transport parameters from a session ticket.

@@ -444,7 +444,9 @@ func (h *cryptoSetup) handleTransportParameters(data []byte) {
 
 // must be called after receiving the transport parameters
 func (h *cryptoSetup) marshalPeerParamsForSessionState() []byte {
-	return h.peerParams.MarshalForSessionTicket()
+	b := &bytes.Buffer{}
+	h.peerParams.MarshalForSessionTicket(b)
+	return b.Bytes()
 }
 
 func (h *cryptoSetup) handlePeerParamsFromSessionState(data []byte) {
@@ -477,7 +479,7 @@ func (h *cryptoSetup) maybeSendSessionTicket() {
 	var appData []byte
 	// Save transport parameters to the session ticket if we're allowing 0-RTT.
 	if h.tlsConf.MaxEarlyData > 0 {
-		appData = h.ourParams.MarshalForSessionTicket()
+		appData = (&sessionTicket{Parameters: h.ourParams}).Marshal()
 	}
 	ticket, err := h.conn.GetSessionTicket(appData)
 	if err != nil {
@@ -492,12 +494,12 @@ func (h *cryptoSetup) maybeSendSessionTicket() {
 // accept0RTT is called for the server when receiving the client's session ticket.
 // It decides whether to accept 0-RTT.
 func (h *cryptoSetup) accept0RTT(sessionTicketData []byte) bool {
-	var tp TransportParameters
-	if err := tp.UnmarshalFromSessionTicket(sessionTicketData); err != nil {
+	var t sessionTicket
+	if err := t.Unmarshal(sessionTicketData); err != nil {
 		h.logger.Debugf("Unmarshaling transport parameters from session ticket failed: %s", err.Error())
 		return false
 	}
-	valid := h.ourParams.ValidFor0RTT(&tp)
+	valid := h.ourParams.ValidFor0RTT(t.Parameters)
 	if valid {
 		h.logger.Debugf("Accepting 0-RTT.")
 	} else {

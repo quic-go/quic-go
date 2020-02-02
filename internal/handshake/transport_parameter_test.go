@@ -343,6 +343,16 @@ var _ = Describe("Transport Parameters", func() {
 				MaxUniStreamNum:                protocol.StreamNum(getRandomValue()),
 			}
 			Expect(params.ValidFor0RTT(params)).To(BeTrue())
+			b := &bytes.Buffer{}
+			params.MarshalForSessionTicket(b)
+			var tp TransportParameters
+			Expect(tp.UnmarshalFromSessionTicket(b.Bytes())).To(Succeed())
+			Expect(tp.InitialMaxStreamDataBidiLocal).To(Equal(params.InitialMaxStreamDataBidiLocal))
+			Expect(tp.InitialMaxStreamDataBidiRemote).To(Equal(params.InitialMaxStreamDataBidiRemote))
+			Expect(tp.InitialMaxStreamDataUni).To(Equal(params.InitialMaxStreamDataUni))
+			Expect(tp.InitialMaxData).To(Equal(params.InitialMaxData))
+			Expect(tp.MaxBidiStreamNum).To(Equal(params.MaxBidiStreamNum))
+			Expect(tp.MaxUniStreamNum).To(Equal(params.MaxUniStreamNum))
 		})
 
 		It("rejects the parameters if it can't parse them", func() {
@@ -352,7 +362,9 @@ var _ = Describe("Transport Parameters", func() {
 
 		It("rejects the parameters if the version changed", func() {
 			var p TransportParameters
-			data := p.MarshalForSessionTicket()
+			buf := &bytes.Buffer{}
+			p.MarshalForSessionTicket(buf)
+			data := buf.Bytes()
 			b := &bytes.Buffer{}
 			utils.WriteVarInt(b, transportParameterMarshalingVersion+1)
 			b.Write(data[utils.VarIntLen(transportParameterMarshalingVersion):])
