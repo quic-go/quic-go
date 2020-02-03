@@ -132,6 +132,7 @@ func listenAddr(addr string, tlsConf *tls.Config, config *Config, acceptEarly bo
 // The PacketConn can be used for simultaneous calls to Dial.
 // QUIC connection IDs are used for demultiplexing the different connections.
 // The tls.Config must not be nil and must contain a certificate configuration.
+// The tls.Config.CipherSuites allows setting of TLS 1.3 cipher suites.
 // Furthermore, it must define an application control (using NextProtos).
 // The quic.Config may be nil, in that case the default values will be used.
 func Listen(conn net.PacketConn, tlsConf *tls.Config, config *Config) (Listener, error) {
