@@ -170,9 +170,29 @@ var _ = Describe("Server", func() {
 			BeforeEach(func() {
 				addr := &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 1337}
 				sess = mockquic.NewMockEarlySession(mockCtrl)
-				controlStr := mockquic.NewMockStream(mockCtrl)
-				controlStr.EXPECT().Write(gomock.Any())
-				sess.EXPECT().OpenUniStream().Return(controlStr, nil)
+
+				controlStrOut := mockquic.NewMockStream(mockCtrl)
+				controlStrOut.EXPECT().Write(gomock.Any())
+
+				controlStrIn := mockquic.NewMockStream(mockCtrl)
+				controlStrIn.EXPECT().Read(gomock.Any()).DoAndReturn(func(p []byte) (int, error) {
+					copy(p, []byte{0x0})
+					return 1, nil
+				})
+				controlStrIn.EXPECT().Read(gomock.Any()).DoAndReturn(func(p []byte) (int, error) {
+					buf := &bytes.Buffer{}
+					(&settingsFrame{}).Write(buf)
+					copy(p, buf.Bytes())
+					if len(p) < len(buf.Bytes()) {
+						return len(p), nil
+					}
+					return len(buf.Bytes()), nil
+				})
+				controlStrIn.EXPECT().Read(gomock.Any()).AnyTimes()
+
+				sess.EXPECT().OpenUniStream().Return(controlStrOut, nil)
+				sess.EXPECT().AcceptUniStream(gomock.Any()).Return(controlStrIn, nil)
+
 				sess.EXPECT().AcceptStream(gomock.Any()).Return(str, nil)
 				sess.EXPECT().AcceptStream(gomock.Any()).Return(nil, errors.New("done"))
 				sess.EXPECT().RemoteAddr().Return(addr).AnyTimes()

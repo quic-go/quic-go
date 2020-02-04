@@ -136,7 +136,10 @@ var _ = Describe("Client", func() {
 		session := mockquic.NewMockEarlySession(mockCtrl)
 		session.EXPECT().OpenUniStream().Return(nil, testErr).MaxTimes(1)
 		session.EXPECT().HandshakeComplete().Return(handshakeCtx).MaxTimes(1)
-		session.EXPECT().OpenStreamSync(context.Background()).Return(nil, testErr).MaxTimes(1)
+
+		ctx, cancel := context.WithCancel(client.clientContext)
+		defer cancel()
+		session.EXPECT().OpenStreamSync(ctx).Return(nil, testErr).MaxTimes(1)
 		session.EXPECT().CloseWithError(gomock.Any(), gomock.Any()).MaxTimes(1)
 		dialAddr = func(hostname string, _ *tls.Config, _ *quic.Config) (quic.EarlySession, error) {
 			return session, nil
@@ -173,12 +176,31 @@ var _ = Describe("Client", func() {
 		}
 
 		BeforeEach(func() {
-			controlStr := mockquic.NewMockStream(mockCtrl)
-			controlStr.EXPECT().Write([]byte{0x0}).Return(1, nil).MaxTimes(1)
-			controlStr.EXPECT().Write(gomock.Any()).MaxTimes(1) // SETTINGS frame
-			str = mockquic.NewMockStream(mockCtrl)
 			sess = mockquic.NewMockEarlySession(mockCtrl)
-			sess.EXPECT().OpenUniStream().Return(controlStr, nil).MaxTimes(1)
+
+			controlStrOut := mockquic.NewMockStream(mockCtrl)
+			controlStrOut.EXPECT().Write(gomock.Any()).MaxTimes(1)
+
+			controlStrIn := mockquic.NewMockStream(mockCtrl)
+			controlStrIn.EXPECT().Read(gomock.Any()).DoAndReturn(func(p []byte) (int, error) {
+				copy(p, []byte{0x0})
+				return 1, nil
+			}).MaxTimes(1)
+			controlStrIn.EXPECT().Read(gomock.Any()).DoAndReturn(func(p []byte) (int, error) {
+				buf := &bytes.Buffer{}
+				(&settingsFrame{}).Write(buf)
+				copy(p, buf.Bytes())
+				if len(p) < len(buf.Bytes()) {
+					return len(p), nil
+				}
+				return len(buf.Bytes()), nil
+			}).MaxTimes(1)
+			controlStrIn.EXPECT().Read(gomock.Any()).AnyTimes()
+
+			sess.EXPECT().OpenUniStream().Return(controlStrOut, nil).MaxTimes(1)
+			sess.EXPECT().AcceptUniStream(gomock.Any()).Return(controlStrIn, nil).MaxTimes(1)
+
+			str = mockquic.NewMockStream(mockCtrl)
 			dialAddr = func(hostname string, _ *tls.Config, _ *quic.Config) (quic.EarlySession, error) {
 				return sess, nil
 			}
@@ -191,7 +213,7 @@ var _ = Describe("Client", func() {
 			testErr := errors.New("stream open error")
 			request.Method = MethodGet0RTT
 			// don't EXPECT any calls to HandshakeComplete()
-			sess.EXPECT().OpenStreamSync(context.Background()).Return(str, nil)
+			sess.EXPECT().OpenStreamSync(gomock.Any()).Return(str, nil)
 			buf := &bytes.Buffer{}
 			str.EXPECT().Write(gomock.Any()).DoAndReturn(func(p []byte) (int, error) {
 				return buf.Write(p)
@@ -213,7 +235,7 @@ var _ = Describe("Client", func() {
 
 			gomock.InOrder(
 				sess.EXPECT().HandshakeComplete().Return(handshakeCtx),
-				sess.EXPECT().OpenStreamSync(context.Background()).Return(str, nil),
+				sess.EXPECT().OpenStreamSync(gomock.Any()).Return(str, nil),
 			)
 			str.EXPECT().Write(gomock.Any()).AnyTimes()
 			str.EXPECT().Close()
@@ -250,7 +272,7 @@ var _ = Describe("Client", func() {
 				strBuf = &bytes.Buffer{}
 				gomock.InOrder(
 					sess.EXPECT().HandshakeComplete().Return(handshakeCtx),
-					sess.EXPECT().OpenStreamSync(context.Background()).Return(str, nil),
+					sess.EXPECT().OpenStreamSync(gomock.Any()).Return(str, nil),
 				)
 				body := &mockBody{}
 				body.SetData([]byte("request body"))
@@ -348,7 +370,7 @@ var _ = Describe("Client", func() {
 				ctx, cancel := context.WithCancel(context.Background())
 				req := request.WithContext(ctx)
 				sess.EXPECT().HandshakeComplete().Return(handshakeCtx)
-				sess.EXPECT().OpenStreamSync(ctx).Return(str, nil)
+				sess.EXPECT().OpenStreamSync(gomock.Any()).Return(str, nil)
 				buf := &bytes.Buffer{}
 				str.EXPECT().Close().MaxTimes(1)
 
@@ -381,7 +403,7 @@ var _ = Describe("Client", func() {
 				ctx, cancel := context.WithCancel(context.Background())
 				req := request.WithContext(ctx)
 				sess.EXPECT().HandshakeComplete().Return(handshakeCtx)
-				sess.EXPECT().OpenStreamSync(ctx).Return(str, nil)
+				sess.EXPECT().OpenStreamSync(gomock.Any()).Return(str, nil)
 				buf := &bytes.Buffer{}
 				str.EXPECT().Close().MaxTimes(1)
 
@@ -407,7 +429,7 @@ var _ = Describe("Client", func() {
 			})
 
 			It("adds the gzip header to requests", func() {
-				sess.EXPECT().OpenStreamSync(context.Background()).Return(str, nil)
+				sess.EXPECT().OpenStreamSync(gomock.Any()).Return(str, nil)
 				buf := &bytes.Buffer{}
 				str.EXPECT().Write(gomock.Any()).DoAndReturn(func(p []byte) (int, error) {
 					return buf.Write(p)
@@ -425,7 +447,9 @@ var _ = Describe("Client", func() {
 
 			It("doesn't add gzip if the header disable it", func() {
 				client = newClient("quic.clemente.io:1337", nil, &roundTripperOpts{DisableCompression: true}, nil, nil)
-				sess.EXPECT().OpenStreamSync(context.Background()).Return(str, nil)
+				ctx, cancel := context.WithCancel(client.clientContext)
+				defer cancel()
+				sess.EXPECT().OpenStreamSync(ctx).Return(str, nil)
 				buf := &bytes.Buffer{}
 				str.EXPECT().Write(gomock.Any()).DoAndReturn(func(p []byte) (int, error) {
 					return buf.Write(p)
@@ -442,7 +466,7 @@ var _ = Describe("Client", func() {
 			})
 
 			It("decompresses the response", func() {
-				sess.EXPECT().OpenStreamSync(context.Background()).Return(str, nil)
+				sess.EXPECT().OpenStreamSync(gomock.Any()).Return(str, nil)
 				buf := &bytes.Buffer{}
 				rw := newResponseWriter(buf, utils.DefaultLogger)
 				rw.Header().Set("Content-Encoding", "gzip")
@@ -466,7 +490,7 @@ var _ = Describe("Client", func() {
 			})
 
 			It("only decompresses the response if the response contains the right content-encoding header", func() {
-				sess.EXPECT().OpenStreamSync(context.Background()).Return(str, nil)
+				sess.EXPECT().OpenStreamSync(gomock.Any()).Return(str, nil)
 				buf := &bytes.Buffer{}
 				rw := newResponseWriter(buf, utils.DefaultLogger)
 				rw.Write([]byte("not gzipped"))

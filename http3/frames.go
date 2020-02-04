@@ -48,11 +48,11 @@ func parseNextFrame(b io.Reader) (frame, error) {
 		return &headersFrame{Length: l}, nil
 	case 0x4:
 		return parseSettingsFrame(br, l)
+	case 0x7: // GOAWAY
+		return parseGoawayFrame(br, l)
 	case 0x3: // CANCEL_PUSH
 		fallthrough
 	case 0x5: // PUSH_PROMISE
-		fallthrough
-	case 0x7: // GOAWAY
 		fallthrough
 	case 0xd: // MAX_PUSH_ID
 		fallthrough
@@ -130,4 +130,33 @@ func (f *settingsFrame) Write(b *bytes.Buffer) {
 		utils.WriteVarInt(b, id)
 		utils.WriteVarInt(b, val)
 	}
+}
+
+type goawayFrame struct {
+	Length   uint64
+	StreamID protocol.StreamID
+}
+
+func parseGoawayFrame(r io.Reader, l uint64) (*goawayFrame, error) {
+	buf := make([]byte, l)
+	if _, err := io.ReadFull(r, buf); err != nil {
+		if err == io.ErrUnexpectedEOF {
+			return nil, io.EOF
+		}
+		return nil, err
+	}
+	b := bytes.NewReader(buf)
+	streamID, err := utils.ReadVarInt(b)
+	if err != nil {
+		return nil, err
+	}
+	return &goawayFrame{Length: l, StreamID: protocol.StreamID(streamID)}, nil
+}
+
+func (f *goawayFrame) Write(b *bytes.Buffer) {
+	// GOAWAY frame (type=0x7)
+	utils.WriteVarInt(b, 0x7)
+	sid := uint64(f.StreamID)
+	utils.WriteVarInt(b, uint64(utils.VarIntLen(sid)))
+	utils.WriteVarInt(b, sid)
 }
