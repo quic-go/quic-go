@@ -8,6 +8,8 @@ import (
 	"errors"
 	"net"
 	"reflect"
+	"runtime/pprof"
+	"strings"
 	"sync"
 	"time"
 
@@ -22,6 +24,12 @@ import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 )
+
+func areServersRunning() bool {
+	var b bytes.Buffer
+	pprof.Lookup("goroutine").WriteTo(&b, 1)
+	return strings.Contains(b.String(), "quic-go.(*baseServer).run")
+}
 
 var _ = Describe("Server", func() {
 	var (
@@ -75,6 +83,10 @@ var _ = Describe("Server", func() {
 		conn.addr = &net.UDPAddr{}
 		tlsConf = testdata.GetTLSConfig()
 		tlsConf.NextProtos = []string{"proto1"}
+	})
+
+	AfterEach(func() {
+		Eventually(areServersRunning).Should(BeFalse())
 	})
 
 	It("errors when no tls.Config is given", func() {
@@ -163,6 +175,11 @@ var _ = Describe("Server", func() {
 			serv = ln.(*baseServer)
 			phm = NewMockPacketHandlerManager(mockCtrl)
 			serv.sessionHandler = phm
+		})
+
+		AfterEach(func() {
+			phm.EXPECT().CloseServer().MaxTimes(1)
+			serv.Close()
 		})
 
 		Context("handling packets", func() {
@@ -350,9 +367,10 @@ var _ = Describe("Server", func() {
 					return sess
 				}
 
-				phm.EXPECT().AddIfNotTaken(protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}, sess).Return(true)
-				phm.EXPECT().Add(gomock.Any(), sess).Do(func(c protocol.ConnectionID, _ packetHandler) {
+				phm.EXPECT().Add(protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}, sess).Return(true)
+				phm.EXPECT().Add(gomock.Any(), sess).DoAndReturn(func(c protocol.ConnectionID, _ packetHandler) bool {
 					Expect(c).To(Equal(newConnID))
+					return true
 				})
 
 				done := make(chan struct{})
@@ -393,7 +411,7 @@ var _ = Describe("Server", func() {
 
 				p := getInitial(protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8, 9})
 				phm.EXPECT().GetStatelessResetToken(gomock.Any())
-				phm.EXPECT().AddIfNotTaken(protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8, 9}, sess).Return(false)
+				phm.EXPECT().Add(protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8, 9}, sess).Return(false)
 				Expect(serv.handlePacketImpl(p)).To(BeFalse())
 				Expect(createdSession).To(BeTrue())
 			})
@@ -427,8 +445,7 @@ var _ = Describe("Server", func() {
 				}
 
 				phm.EXPECT().GetStatelessResetToken(gomock.Any()).Times(protocol.MaxAcceptQueueSize)
-				phm.EXPECT().AddIfNotTaken(gomock.Any(), gomock.Any()).Return(true).Times(protocol.MaxAcceptQueueSize)
-				phm.EXPECT().Add(gomock.Any(), gomock.Any()).Times(protocol.MaxAcceptQueueSize)
+				phm.EXPECT().Add(gomock.Any(), gomock.Any()).Return(true).Times(2 * protocol.MaxAcceptQueueSize)
 
 				var wg sync.WaitGroup
 				wg.Add(protocol.MaxAcceptQueueSize)
@@ -488,8 +505,7 @@ var _ = Describe("Server", func() {
 				}
 
 				phm.EXPECT().GetStatelessResetToken(gomock.Any())
-				phm.EXPECT().AddIfNotTaken(gomock.Any(), gomock.Any()).Return(true)
-				phm.EXPECT().Add(gomock.Any(), gomock.Any())
+				phm.EXPECT().Add(gomock.Any(), gomock.Any()).Return(true).Times(2)
 
 				serv.handlePacket(p)
 				Consistently(conn.dataWritten).ShouldNot(Receive())
@@ -587,8 +603,7 @@ var _ = Describe("Server", func() {
 					return sess
 				}
 				phm.EXPECT().GetStatelessResetToken(gomock.Any())
-				phm.EXPECT().AddIfNotTaken(gomock.Any(), gomock.Any()).Return(true)
-				phm.EXPECT().Add(gomock.Any(), gomock.Any())
+				phm.EXPECT().Add(gomock.Any(), gomock.Any()).Return(true).Times(2)
 				serv.createNewSession(&net.UDPAddr{}, nil, nil, nil, nil, protocol.VersionWhatever)
 				Consistently(done).ShouldNot(BeClosed())
 				cancel() // complete the handshake
@@ -598,12 +613,22 @@ var _ = Describe("Server", func() {
 	})
 
 	Context("server accepting sessions that haven't completed the handshake", func() {
-		var serv *earlyServer
+		var (
+			serv *earlyServer
+			phm  *MockPacketHandlerManager
+		)
 
 		BeforeEach(func() {
 			ln, err := ListenEarly(conn, tlsConf, nil)
 			Expect(err).ToNot(HaveOccurred())
 			serv = ln.(*earlyServer)
+			phm = NewMockPacketHandlerManager(mockCtrl)
+			serv.sessionHandler = phm
+		})
+
+		AfterEach(func() {
+			phm.EXPECT().CloseServer().MaxTimes(1)
+			serv.Close()
 		})
 
 		It("accepts new sessions when they become ready", func() {
@@ -640,6 +665,8 @@ var _ = Describe("Server", func() {
 				sess.EXPECT().Context().Return(context.Background())
 				return sess
 			}
+			phm.EXPECT().GetStatelessResetToken(gomock.Any())
+			phm.EXPECT().Add(gomock.Any(), sess).Return(true).Times(2)
 			serv.createNewSession(&net.UDPAddr{}, nil, nil, nil, nil, protocol.VersionWhatever)
 			Consistently(done).ShouldNot(BeClosed())
 			close(ready)
@@ -681,6 +708,8 @@ var _ = Describe("Server", func() {
 				go func() {
 					defer GinkgoRecover()
 					defer wg.Done()
+					phm.EXPECT().GetStatelessResetToken(gomock.Any())
+					phm.EXPECT().Add(gomock.Any(), gomock.Any()).Return(true).Times(2)
 					serv.handlePacket(getInitialWithRandomDestConnID())
 					Consistently(conn.dataWritten).ShouldNot(Receive())
 				}()
@@ -730,6 +759,8 @@ var _ = Describe("Server", func() {
 				return sess
 			}
 
+			phm.EXPECT().GetStatelessResetToken(gomock.Any())
+			phm.EXPECT().Add(gomock.Any(), sess).Return(true).Times(2)
 			serv.handlePacket(p)
 			Consistently(conn.dataWritten).ShouldNot(Receive())
 			Eventually(sessionCreated).Should(BeClosed())
@@ -745,6 +776,7 @@ var _ = Describe("Server", func() {
 			Consistently(done).ShouldNot(BeClosed())
 
 			// make the go routine return
+			phm.EXPECT().CloseServer()
 			sess.EXPECT().getPerspective().MaxTimes(2) // once for every conn ID
 			Expect(serv.Close()).To(Succeed())
 			Eventually(done).Should(BeClosed())

@@ -178,8 +178,8 @@ var _ = Describe("Packet Handler Map", func() {
 
 		It("says if a connection ID is already taken", func() {
 			connID := protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8}
-			Expect(handler.AddIfNotTaken(connID, NewMockPacketHandler(mockCtrl))).To(BeTrue())
-			Expect(handler.AddIfNotTaken(connID, NewMockPacketHandler(mockCtrl))).To(BeFalse())
+			Expect(handler.Add(connID, NewMockPacketHandler(mockCtrl))).To(BeTrue())
+			Expect(handler.Add(connID, NewMockPacketHandler(mockCtrl))).To(BeFalse())
 		})
 	})
 
@@ -293,14 +293,6 @@ var _ = Describe("Packet Handler Map", func() {
 				key := make([]byte, 32)
 				rand.Read(key)
 				statelessResetKey = key
-			})
-
-			It("generates stateless reset tokens when adding new sessions", func() {
-				connID1 := []byte{0xde, 0xad, 0xbe, 0xef}
-				connID2 := []byte{0xde, 0xca, 0xfb, 0xad}
-				token1 := handler.Add(connID1, nil)
-				Expect(handler.Add(connID1, nil)).To(Equal(token1))
-				Expect(handler.Add(connID2, nil)).ToNot(Equal(token1))
 			})
 
 			It("generates stateless reset tokens", func() {

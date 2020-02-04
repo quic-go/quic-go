@@ -74,7 +74,8 @@ func (p *receivedPacket) Clone() *receivedPacket {
 }
 
 type sessionRunner interface {
-	Add(protocol.ConnectionID, packetHandler) [16]byte
+	Add(protocol.ConnectionID, packetHandler) bool
+	GetStatelessResetToken(protocol.ConnectionID) [16]byte
 	Retire(protocol.ConnectionID)
 	Remove(protocol.ConnectionID)
 	ReplaceWithClosed(protocol.ConnectionID, packetHandler)
@@ -232,7 +233,8 @@ var newSession = func(
 	s.connIDGenerator = newConnIDGenerator(
 		srcConnID,
 		clientDestConnID,
-		func(connID protocol.ConnectionID) [16]byte { return runner.Add(connID, s) },
+		func(connID protocol.ConnectionID) { runner.Add(connID, s) },
+		runner.GetStatelessResetToken,
 		runner.Remove,
 		runner.Retire,
 		runner.ReplaceWithClosed,
@@ -335,7 +337,8 @@ var newClientSession = func(
 	s.connIDGenerator = newConnIDGenerator(
 		srcConnID,
 		nil,
-		func(connID protocol.ConnectionID) [16]byte { return runner.Add(connID, s) },
+		func(connID protocol.ConnectionID) { runner.Add(connID, s) },
+		runner.GetStatelessResetToken,
 		runner.Remove,
 		runner.Retire,
 		runner.ReplaceWithClosed,

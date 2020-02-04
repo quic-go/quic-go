@@ -35,10 +35,10 @@ func (m *MockPacketHandlerManager) EXPECT() *MockPacketHandlerManagerMockRecorde
 }
 
 // Add mocks base method
-func (m *MockPacketHandlerManager) Add(arg0 protocol.ConnectionID, arg1 packetHandler) [16]byte {
+func (m *MockPacketHandlerManager) Add(arg0 protocol.ConnectionID, arg1 packetHandler) bool {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Add", arg0, arg1)
-	ret0, _ := ret[0].([16]byte)
+	ret0, _ := ret[0].(bool)
 	return ret0
 }
 
@@ -46,20 +46,6 @@ func (m *MockPacketHandlerManager) Add(arg0 protocol.ConnectionID, arg1 packetHa
 func (mr *MockPacketHandlerManagerMockRecorder) Add(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Add", reflect.TypeOf((*MockPacketHandlerManager)(nil).Add), arg0, arg1)
-}
-
-// AddIfNotTaken mocks base method
-func (m *MockPacketHandlerManager) AddIfNotTaken(arg0 protocol.ConnectionID, arg1 packetHandler) bool {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "AddIfNotTaken", arg0, arg1)
-	ret0, _ := ret[0].(bool)
-	return ret0
-}
-
-// AddIfNotTaken indicates an expected call of AddIfNotTaken
-func (mr *MockPacketHandlerManagerMockRecorder) AddIfNotTaken(arg0, arg1 interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddIfNotTaken", reflect.TypeOf((*MockPacketHandlerManager)(nil).AddIfNotTaken), arg0, arg1)
 }
 
 // AddResetToken mocks base method
