@@ -104,19 +104,33 @@ var _ = Describe("ClientSessionCache", func() {
 	})
 
 	It("refuses a session state when unmarshalling fails", func() {
+		rttStats := congestion.NewRTTStats()
+		rttStats.SetInitialRTT(10 * time.Second)
 		cache := tls.NewLRUClientSessionCache(1)
-		b := &bytes.Buffer{}
-		utils.WriteVarInt(b, clientSessionStateRevision)
-		b.Write([]byte("foobar"))
-		cache.Put("localhost", encodeIntoSessionTicket(b.Bytes()))
-
 		csc := newClientSessionCache(
 			cache,
-			congestion.NewRTTStats(),
-			func() []byte { return nil },
-			func([]byte) {},
+			rttStats,
+			func() []byte { return []byte("foobar") },
+			func(b []byte) {},
 		)
-		_, ok := csc.Get("localhost")
-		Expect(ok).To(BeFalse())
+		csc.Put("localhost", &qtls.ClientSessionState{})
+		state, ok := cache.Get("localhost")
+		Expect(ok).To(BeTrue())
+		tlsSessBytes := (*[unsafe.Sizeof(*state)]byte)(unsafe.Pointer(state))[:]
+		var session clientSessionState
+		sessBytes := (*[unsafe.Sizeof(session)]byte)(unsafe.Pointer(&session))[:]
+		copy(sessBytes, tlsSessBytes)
+		Expect(session.nonce).ToNot(BeEmpty())
+
+		_, ok = csc.Get("localhost")
+		Expect(ok).To(BeTrue())
+		nonce := session.nonce
+
+		for i := 0; i < len(nonce); i++ {
+			session.nonce = session.nonce[:i]
+			copy(tlsSessBytes, sessBytes)
+			_, ok = csc.Get("localhost")
+			Expect(ok).To(BeFalse())
+		}
 	})
 })
