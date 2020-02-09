@@ -1,28 +1,37 @@
 package handshake
 
 import (
+	"bytes"
 	"crypto/tls"
-	"encoding/asn1"
+	"io"
+	"time"
 	"unsafe"
 
 	"github.com/marten-seemann/qtls"
+
+	"github.com/lucas-clemente/quic-go/internal/congestion"
+	"github.com/lucas-clemente/quic-go/internal/utils"
 )
 
-type nonceField struct {
-	Nonce   []byte
-	AppData []byte
-}
+const clientSessionStateRevision = 1
 
 type clientSessionCache struct {
 	tls.ClientSessionCache
+	rttStats *congestion.RTTStats
 
 	getAppData func() []byte
 	setAppData func([]byte)
 }
 
-func newClientSessionCache(cache tls.ClientSessionCache, get func() []byte, set func([]byte)) *clientSessionCache {
+func newClientSessionCache(
+	cache tls.ClientSessionCache,
+	rttStats *congestion.RTTStats,
+	get func() []byte,
+	set func([]byte),
+) *clientSessionCache {
 	return &clientSessionCache{
 		ClientSessionCache: cache,
+		rttStats:           rttStats,
 		getAppData:         get,
 		setAppData:         set,
 	}
@@ -43,12 +52,37 @@ func (c *clientSessionCache) Get(sessionKey string) (*qtls.ClientSessionState, b
 	var session clientSessionState
 	sessBytes := (*[unsafe.Sizeof(session)]byte)(unsafe.Pointer(&session))[:]
 	copy(sessBytes, tlsSessBytes)
-	var nf nonceField
-	if _, err := asn1.Unmarshal(session.nonce, &nf); err != nil {
+	r := bytes.NewReader(session.nonce)
+	rev, err := utils.ReadVarInt(r)
+	if err != nil {
 		return nil, false
 	}
-	c.setAppData(nf.AppData)
-	session.nonce = nf.Nonce
+	if rev != clientSessionStateRevision {
+		return nil, false
+	}
+	rtt, err := utils.ReadVarInt(r)
+	if err != nil {
+		return nil, false
+	}
+	appDataLen, err := utils.ReadVarInt(r)
+	if err != nil {
+		return nil, false
+	}
+	appData := make([]byte, appDataLen)
+	if _, err := io.ReadFull(r, appData); err != nil {
+		return nil, false
+	}
+	nonceLen, err := utils.ReadVarInt(r)
+	if err != nil {
+		return nil, false
+	}
+	nonce := make([]byte, nonceLen)
+	if _, err := io.ReadFull(r, nonce); err != nil {
+		return nil, false
+	}
+	c.setAppData(appData)
+	session.nonce = nonce
+	c.rttStats.SetInitialRTT(time.Duration(rtt) * time.Microsecond)
 	var qtlsSession qtls.ClientSessionState
 	qtlsSessBytes := (*[unsafe.Sizeof(qtlsSession)]byte)(unsafe.Pointer(&qtlsSession))[:]
 	copy(qtlsSessBytes, sessBytes)
@@ -68,14 +102,15 @@ func (c *clientSessionCache) Put(sessionKey string, cs *qtls.ClientSessionState)
 	var session clientSessionState
 	sessBytes := (*[unsafe.Sizeof(session)]byte)(unsafe.Pointer(&session))[:]
 	copy(sessBytes, qtlsSessBytes)
-	nonce, err := asn1.Marshal(nonceField{
-		Nonce:   session.nonce,
-		AppData: c.getAppData(),
-	})
-	if err != nil { // marshaling
-		panic(err)
-	}
-	session.nonce = nonce
+	appData := c.getAppData()
+	buf := &bytes.Buffer{}
+	utils.WriteVarInt(buf, clientSessionStateRevision)
+	utils.WriteVarInt(buf, uint64(c.rttStats.SmoothedRTT().Microseconds()))
+	utils.WriteVarInt(buf, uint64(len(appData)))
+	buf.Write(appData)
+	utils.WriteVarInt(buf, uint64(len(session.nonce)))
+	buf.Write(session.nonce)
+	session.nonce = buf.Bytes()
 	var tlsSession tls.ClientSessionState
 	tlsSessBytes := (*[unsafe.Sizeof(tlsSession)]byte)(unsafe.Pointer(&tlsSession))[:]
 	copy(tlsSessBytes, sessBytes)

@@ -6,6 +6,8 @@ import (
 	"time"
 
 	"github.com/marten-seemann/qtls"
+
+	"github.com/lucas-clemente/quic-go/internal/congestion"
 )
 
 type conn struct {
@@ -31,6 +33,7 @@ func tlsConfigToQtlsConfig(
 	c *tls.Config,
 	recordLayer qtls.RecordLayer,
 	extHandler tlsExtensionHandler,
+	rttStats *congestion.RTTStats,
 	getDataForSessionState func() []byte,
 	setDataFromSessionState func([]byte),
 	accept0RTT func([]byte) bool,
@@ -62,12 +65,12 @@ func tlsConfigToQtlsConfig(
 			if tlsConf == nil {
 				return nil, nil
 			}
-			return tlsConfigToQtlsConfig(tlsConf, recordLayer, extHandler, getDataForSessionState, setDataFromSessionState, accept0RTT, rejected0RTT, enable0RTT), nil
+			return tlsConfigToQtlsConfig(tlsConf, recordLayer, extHandler, rttStats, getDataForSessionState, setDataFromSessionState, accept0RTT, rejected0RTT, enable0RTT), nil
 		}
 	}
 	var csc qtls.ClientSessionCache
 	if c.ClientSessionCache != nil {
-		csc = newClientSessionCache(c.ClientSessionCache, getDataForSessionState, setDataFromSessionState)
+		csc = newClientSessionCache(c.ClientSessionCache, rttStats, getDataForSessionState, setDataFromSessionState)
 	}
 	conf := &qtls.Config{
 		Rand:                        c.Rand,
