@@ -16,8 +16,9 @@ import (
 
 type packer interface {
 	PackPacket() (*packedPacket, error)
+	PackAppDataPacket() (*packedPacket, error)
 	MaybePackProbePacket(protocol.EncryptionLevel) (*packedPacket, error)
-	MaybePackAckPacket() (*packedPacket, error)
+	MaybePackAckPacket(handshakeConfirmed bool) (*packedPacket, error)
 	PackConnectionClose(*wire.ConnectionCloseFrame) (*packedPacket, error)
 
 	HandleTransportParameters(*handshake.TransportParameters)
@@ -138,10 +139,6 @@ type packetPacker struct {
 	version     protocol.VersionNumber
 	cryptoSetup sealingManager
 
-	// Once both Initial and Handshake keys are dropped, we only send 1-RTT packets.
-	droppedInitial   bool
-	droppedHandshake bool
-
 	initialStream   cryptoStream
 	handshakeStream cryptoStream
 
@@ -188,10 +185,6 @@ func newPacketPacker(
 	}
 }
 
-func (p *packetPacker) handshakeConfirmed() bool {
-	return p.droppedInitial && p.droppedHandshake
-}
-
 // PackConnectionClose packs a packet that ONLY contains a ConnectionCloseFrame
 func (p *packetPacker) PackConnectionClose(ccf *wire.ConnectionCloseFrame) (*packedPacket, error) {
 	payload := payload{
@@ -225,10 +218,10 @@ func (p *packetPacker) PackConnectionClose(ccf *wire.ConnectionCloseFrame) (*pac
 	return p.writeAndSealPacket(hdr, payload, encLevel, sealer)
 }
 
-func (p *packetPacker) MaybePackAckPacket() (*packedPacket, error) {
+func (p *packetPacker) MaybePackAckPacket(handshakeConfirmed bool) (*packedPacket, error) {
 	var encLevel protocol.EncryptionLevel
 	var ack *wire.AckFrame
-	if !p.handshakeConfirmed() {
+	if !handshakeConfirmed {
 		ack = p.acks.GetAckFrame(protocol.EncryptionInitial)
 		if ack != nil {
 			encLevel = protocol.EncryptionInitial
@@ -261,38 +254,33 @@ func (p *packetPacker) MaybePackAckPacket() (*packedPacket, error) {
 	return p.writeAndSealPacket(hdr, payload, encLevel, sealer)
 }
 
-// PackPacket packs a new packet
-// the other controlFrames are sent in the next packet, but might be queued and sent in the next packet if the packet would overflow MaxPacketSize otherwise
+// PackPacket packs a new packet.
+// It packs an Initial / Handshake if there is data to send in these packet number spaces.
+// It should only be called before the handshake is confirmed.
 func (p *packetPacker) PackPacket() (*packedPacket, error) {
-	if !p.handshakeConfirmed() {
-		packet, err := p.maybePackCryptoPacket()
-		if err != nil {
-			return nil, err
-		}
-		if packet != nil {
-			return packet, nil
-		}
+	packet, err := p.maybePackCryptoPacket()
+	if err != nil || packet != nil {
+		return packet, err
 	}
+	return p.maybePackAppDataPacket()
+}
 
+// PackAppDataPacket packs a packet in the application data packet number space.
+// It should be called after the handshake is confirmed.
+func (p *packetPacker) PackAppDataPacket() (*packedPacket, error) {
 	return p.maybePackAppDataPacket()
 }
 
 func (p *packetPacker) maybePackCryptoPacket() (*packedPacket, error) {
 	// Try packing an Initial packet.
 	packet, err := p.maybePackInitialPacket()
-	if err == handshake.ErrKeysDropped {
-		p.droppedInitial = true
-	} else if err != nil || packet != nil {
+	if (err != nil && err != handshake.ErrKeysDropped) || packet != nil {
 		return packet, err
 	}
 
 	// No Initial was packed. Try packing a Handshake packet.
 	packet, err = p.maybePackHandshakePacket()
-	if err == handshake.ErrKeysDropped {
-		p.droppedHandshake = true
-		return nil, nil
-	}
-	if err == handshake.ErrKeysNotYetAvailable {
+	if err == handshake.ErrKeysDropped || err == handshake.ErrKeysNotYetAvailable {
 		return nil, nil
 	}
 	return packet, err

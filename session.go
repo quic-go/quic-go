@@ -164,6 +164,7 @@ type session struct {
 	earlySessionReadyChan chan struct{}
 	handshakeCompleteChan chan struct{} // is closed when the handshake completes
 	handshakeComplete     bool
+	handshakeConfirmed    bool
 
 	receivedRetry       bool
 	receivedFirstPacket bool
@@ -1139,6 +1140,9 @@ func (s *session) handleCloseError(closeErr closeError) {
 }
 
 func (s *session) dropEncryptionLevel(encLevel protocol.EncryptionLevel) {
+	if encLevel == protocol.EncryptionHandshake {
+		s.handshakeConfirmed = true
+	}
 	s.sentPacketHandler.DropPackets(encLevel)
 	s.receivedPacketHandler.DropPackets(encLevel)
 }
@@ -1247,7 +1251,7 @@ sendLoop:
 }
 
 func (s *session) maybeSendAckOnlyPacket() error {
-	packet, err := s.packer.MaybePackAckPacket()
+	packet, err := s.packer.MaybePackAckPacket(s.handshakeConfirmed)
 	if err != nil {
 		return err
 	}
@@ -1305,7 +1309,13 @@ func (s *session) sendPacket() (bool, error) {
 	}
 	s.windowUpdateQueue.QueueAll()
 
-	packet, err := s.packer.PackPacket()
+	var packet *packedPacket
+	var err error
+	if !s.handshakeConfirmed {
+		packet, err = s.packer.PackPacket()
+	} else {
+		packet, err = s.packer.PackAppDataPacket()
+	}
 	if err != nil || packet == nil {
 		return false, err
 	}

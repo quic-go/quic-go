@@ -49,18 +49,18 @@ func (mr *MockPackerMockRecorder) HandleTransportParameters(arg0 interface{}) *g
 }
 
 // MaybePackAckPacket mocks base method
-func (m *MockPacker) MaybePackAckPacket() (*packedPacket, error) {
+func (m *MockPacker) MaybePackAckPacket(arg0 bool) (*packedPacket, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "MaybePackAckPacket")
+	ret := m.ctrl.Call(m, "MaybePackAckPacket", arg0)
 	ret0, _ := ret[0].(*packedPacket)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // MaybePackAckPacket indicates an expected call of MaybePackAckPacket
-func (mr *MockPackerMockRecorder) MaybePackAckPacket() *gomock.Call {
+func (mr *MockPackerMockRecorder) MaybePackAckPacket(arg0 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MaybePackAckPacket", reflect.TypeOf((*MockPacker)(nil).MaybePackAckPacket))
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MaybePackAckPacket", reflect.TypeOf((*MockPacker)(nil).MaybePackAckPacket), arg0)
 }
 
 // MaybePackProbePacket mocks base method
@@ -76,6 +76,21 @@ func (m *MockPacker) MaybePackProbePacket(arg0 protocol.EncryptionLevel) (*packe
 func (mr *MockPackerMockRecorder) MaybePackProbePacket(arg0 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MaybePackProbePacket", reflect.TypeOf((*MockPacker)(nil).MaybePackProbePacket), arg0)
+}
+
+// PackAppDataPacket mocks base method
+func (m *MockPacker) PackAppDataPacket() (*packedPacket, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "PackAppDataPacket")
+	ret0, _ := ret[0].(*packedPacket)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// PackAppDataPacket indicates an expected call of PackAppDataPacket
+func (mr *MockPackerMockRecorder) PackAppDataPacket() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PackAppDataPacket", reflect.TypeOf((*MockPacker)(nil).PackAppDataPacket))
 }
 
 // PackConnectionClose mocks base method
