@@ -3,8 +3,10 @@ package http3
 import (
 	"fmt"
 	"io"
+	"net/http"
 
 	"github.com/lucas-clemente/quic-go"
+	"github.com/marten-seemann/qpack"
 )
 
 // The body of a http.Request or http.Response.
@@ -22,6 +24,8 @@ type body struct {
 	onFrameError func()
 
 	bytesRemainingInFrame uint64
+
+	resp *http.Response
 }
 
 var _ io.ReadCloser = &body{}
@@ -34,11 +38,12 @@ func newRequestBody(str quic.Stream, onFrameError func()) *body {
 	}
 }
 
-func newResponseBody(str quic.Stream, done chan<- struct{}, onFrameError func()) *body {
+func newResponseBody(str quic.Stream, done chan<- struct{}, onFrameError func(), resp *http.Response) *body {
 	return &body{
 		str:          str,
 		onFrameError: onFrameError,
 		reqDone:      done,
+		resp:         resp,
 	}
 }
 
@@ -60,7 +65,21 @@ func (r *body) readImpl(b []byte) (int, error) {
 			}
 			switch f := frame.(type) {
 			case *headersFrame:
-				// skip HEADERS frames
+				decoder := qpack.NewDecoder(func(f qpack.HeaderField) {
+					if r.resp.Trailer == nil {
+						r.resp.Trailer = http.Header{}
+					}
+					r.resp.Trailer.Add(f.Name, f.Value)
+				})
+
+				p := make([]byte, f.Length)
+				r.str.Read(p)
+				_, err := decoder.Write(p)
+				if err != nil {
+					// Ignoring invalid frame
+					continue
+				}
+				decoder.Close()
 				continue
 			case *dataFrame:
 				r.bytesRemainingInFrame = f.Length

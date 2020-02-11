@@ -255,7 +255,7 @@ func (c *client) doRequest(
 	}
 	respBody := newResponseBody(str, reqDone, func() {
 		c.session.CloseWithError(quic.ErrorCode(errorFrameUnexpected), "")
-	})
+	}, res)
 	if requestGzip && res.Header.Get("Content-Encoding") == "gzip" {
 		res.Header.Del("Content-Encoding")
 		res.Header.Del("Content-Length")
