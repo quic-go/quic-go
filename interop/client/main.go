@@ -30,12 +30,16 @@ func main() {
 	defer logFile.Close()
 	log.SetOutput(logFile)
 
-	keyLog, err := os.Create("/logs/keylogfile.txt")
-	if err != nil {
-		fmt.Printf("Could not create key log file: %s\n", err.Error())
-		os.Exit(1)
+	var keyLog io.Writer
+	if filename := os.Getenv("SSLKEYLOGFILE"); len(filename) > 0 {
+		f, err := os.Create(filename)
+		if err != nil {
+			fmt.Printf("Could not create key log file: %s\n", err.Error())
+			os.Exit(1)
+		}
+		defer f.Close()
+		keyLog = f
 	}
-	defer keyLog.Close()
 
 	tlsConf = &tls.Config{
 		InsecureSkipVerify: true,
