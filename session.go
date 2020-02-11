@@ -1340,7 +1340,7 @@ func (s *session) sendPackedPacket(packet *packedPacket) {
 			TransportState:  s.sentPacketHandler.GetStats(),
 			EncryptionLevel: packet.EncryptionLevel(),
 			PacketNumber:    packet.header.PacketNumber,
-			PacketSize:      protocol.ByteCount(len(packet.raw)),
+			PacketSize:      packet.buffer.Len(),
 			Frames:          frames,
 		})
 	}
@@ -1349,11 +1349,11 @@ func (s *session) sendPackedPacket(packet *packedPacket) {
 		for _, f := range packet.frames {
 			frames = append(frames, f.Frame)
 		}
-		s.qlogger.SentPacket(now, packet.header, protocol.ByteCount(len(packet.raw)), packet.ack, frames)
+		s.qlogger.SentPacket(now, packet.header, packet.buffer.Len(), packet.ack, frames)
 	}
 	s.logPacket(packet)
 	s.connIDManager.SentPacket()
-	s.sendQueue.Send(packet)
+	s.sendQueue.Send(packet.buffer)
 }
 
 func (s *session) sendConnectionClose(quicErr *qerr.QuicError) ([]byte, error) {
@@ -1376,7 +1376,7 @@ func (s *session) sendConnectionClose(quicErr *qerr.QuicError) ([]byte, error) {
 		return nil, err
 	}
 	s.logPacket(packet)
-	return packet.raw, s.conn.Write(packet.raw)
+	return packet.buffer.Data, s.conn.Write(packet.buffer.Data)
 }
 
 func (s *session) logPacket(packet *packedPacket) {
@@ -1384,7 +1384,7 @@ func (s *session) logPacket(packet *packedPacket) {
 		// We don't need to allocate the slices for calling the format functions
 		return
 	}
-	s.logger.Debugf("-> Sending packet 0x%x (%d bytes) for connection %s, %s", packet.header.PacketNumber, len(packet.raw), s.logID, packet.EncryptionLevel())
+	s.logger.Debugf("-> Sending packet 0x%x (%d bytes) for connection %s, %s", packet.header.PacketNumber, packet.buffer.Len(), s.logID, packet.EncryptionLevel())
 	packet.header.Log(s.logger)
 	if packet.ack != nil {
 		wire.LogFrame(s.logger, packet.ack, true)

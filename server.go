@@ -494,7 +494,7 @@ func (s *baseServer) sendServerBusy(remoteAddr net.Addr, hdr *wire.Header) error
 	sealer, _ := handshake.NewInitialAEAD(hdr.DestConnectionID, protocol.PerspectiveServer)
 	packetBuffer := getPacketBuffer()
 	defer packetBuffer.Release()
-	buf := bytes.NewBuffer(packetBuffer.Slice[:0])
+	buf := bytes.NewBuffer(packetBuffer.Data)
 
 	ccf := &wire.ConnectionCloseFrame{ErrorCode: qerr.ServerBusy}
 

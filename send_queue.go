@@ -1,7 +1,7 @@
 package quic
 
 type sendQueue struct {
-	queue       chan *packedPacket
+	queue       chan *packetBuffer
 	closeCalled chan struct{} // runStopped when Close() is called
 	runStopped  chan struct{} // runStopped when the run loop returns
 	conn        connection
@@ -12,12 +12,12 @@ func newSendQueue(conn connection) *sendQueue {
 		conn:        conn,
 		runStopped:  make(chan struct{}),
 		closeCalled: make(chan struct{}),
-		queue:       make(chan *packedPacket, 1),
+		queue:       make(chan *packetBuffer, 1),
 	}
 	return s
 }
 
-func (h *sendQueue) Send(p *packedPacket) {
+func (h *sendQueue) Send(p *packetBuffer) {
 	h.queue <- p
 }
 
@@ -34,10 +34,10 @@ func (h *sendQueue) Run() error {
 			// make sure that all queued packets are actually sent out
 			shouldClose = true
 		case p := <-h.queue:
-			if err := h.conn.Write(p.raw); err != nil {
+			if err := h.conn.Write(p.Data); err != nil {
 				return err
 			}
-			p.buffer.Release()
+			p.Release()
 		}
 	}
 }

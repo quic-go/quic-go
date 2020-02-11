@@ -37,7 +37,6 @@ type payload struct {
 
 type packedPacket struct {
 	header *wire.ExtendedHeader
-	raw    []byte
 	ack    *wire.AckFrame
 	frames []ackhandler.Frame
 
@@ -87,7 +86,7 @@ func (p *packedPacket) ToAckHandlerPacket(now time.Time, q *retransmissionQueue)
 		PacketNumber:    p.header.PacketNumber,
 		LargestAcked:    largestAcked,
 		Frames:          p.frames,
-		Length:          protocol.ByteCount(len(p.raw)),
+		Length:          p.buffer.Len(),
 		EncryptionLevel: encLevel,
 		SendTime:        now,
 	}
@@ -536,28 +535,25 @@ func (p *packetPacker) writeSinglePacket(
 	encLevel protocol.EncryptionLevel,
 	sealer sealer,
 ) (*packedPacket, error) {
-	packetBuffer := getPacketBuffer()
-
-	n, err := p.appendPacket(packetBuffer.Slice[:0], header, payload, encLevel, sealer)
-	if err != nil {
+	buffer := getPacketBuffer()
+	if err := p.appendPacket(buffer, header, payload, encLevel, sealer); err != nil {
 		return nil, err
 	}
 	return &packedPacket{
+		buffer: buffer,
 		header: header,
-		raw:    packetBuffer.Slice[:n],
 		ack:    payload.ack,
 		frames: payload.frames,
-		buffer: packetBuffer,
 	}, nil
 }
 
 func (p *packetPacker) appendPacket(
-	raw []byte,
+	buffer *packetBuffer,
 	header *wire.ExtendedHeader,
 	payload payload,
 	encLevel protocol.EncryptionLevel,
 	sealer sealer,
-) (int, error) {
+) error {
 	var paddingLen protocol.ByteCount
 	pnLen := protocol.ByteCount(header.PacketNumberLen)
 	if encLevel != protocol.Encryption1RTT {
@@ -572,46 +568,49 @@ func (p *packetPacker) appendPacket(
 		paddingLen = 4 - pnLen - payload.length
 	}
 
-	hdrOffset := len(raw)
-	buffer := bytes.NewBuffer(raw)
-	if err := header.Write(buffer, p.version); err != nil {
-		return 0, err
+	hdrOffset := buffer.Len()
+	buf := bytes.NewBuffer(buffer.Data)
+	if err := header.Write(buf, p.version); err != nil {
+		return err
 	}
-	payloadOffset := buffer.Len()
+	payloadOffset := buf.Len()
 
 	if payload.ack != nil {
-		if err := payload.ack.Write(buffer, p.version); err != nil {
-			return 0, err
+		if err := payload.ack.Write(buf, p.version); err != nil {
+			return err
 		}
 	}
 	if paddingLen > 0 {
-		buffer.Write(bytes.Repeat([]byte{0}, int(paddingLen)))
+		buf.Write(bytes.Repeat([]byte{0}, int(paddingLen)))
 	}
 	for _, frame := range payload.frames {
-		if err := frame.Write(buffer, p.version); err != nil {
-			return 0, err
+		if err := frame.Write(buf, p.version); err != nil {
+			return err
 		}
 	}
 
-	if payloadSize := protocol.ByteCount(buffer.Len()-payloadOffset) - paddingLen; payloadSize != payload.length {
-		return 0, fmt.Errorf("PacketPacker BUG: payload size inconsistent (expected %d, got %d bytes)", payload.length, payloadSize)
+	if payloadSize := protocol.ByteCount(buf.Len()-payloadOffset) - paddingLen; payloadSize != payload.length {
+		return fmt.Errorf("PacketPacker BUG: payload size inconsistent (expected %d, got %d bytes)", payload.length, payloadSize)
 	}
-	if size := protocol.ByteCount(buffer.Len() + sealer.Overhead()); size > p.maxPacketSize {
-		return 0, fmt.Errorf("PacketPacker BUG: packet too large (%d bytes, allowed %d bytes)", size, p.maxPacketSize)
+	if size := protocol.ByteCount(buf.Len() + sealer.Overhead()); size > p.maxPacketSize {
+		return fmt.Errorf("PacketPacker BUG: packet too large (%d bytes, allowed %d bytes)", size, p.maxPacketSize)
 	}
 
-	raw = raw[:buffer.Len()]
+	raw := buffer.Data
+	// encrypt the packet
+	raw = raw[:buf.Len()]
 	_ = sealer.Seal(raw[payloadOffset:payloadOffset], raw[payloadOffset:], header.PacketNumber, raw[hdrOffset:payloadOffset])
-	raw = raw[0 : buffer.Len()+sealer.Overhead()]
-
+	raw = raw[0 : buf.Len()+sealer.Overhead()]
+	// apply header protection
 	pnOffset := payloadOffset - int(header.PacketNumberLen)
 	sealer.EncryptHeader(raw[pnOffset+4:pnOffset+4+16], &raw[0], raw[pnOffset:payloadOffset])
+	buffer.Data = raw
 
 	num := p.pnManager.PopPacketNumber(encLevel)
 	if num != header.PacketNumber {
-		return 0, errors.New("packetPacker BUG: Peeked and Popped packet numbers do not match")
+		return errors.New("packetPacker BUG: Peeked and Popped packet numbers do not match")
 	}
-	return len(raw) - hdrOffset, nil
+	return nil
 }
 
 func (p *packetPacker) SetToken(token []byte) {

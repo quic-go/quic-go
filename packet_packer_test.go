@@ -183,8 +183,8 @@ var _ = Describe("Packet packer", func() {
 			hdrRawEncrypted[0] ^= 0xff
 			hdrRawEncrypted[len(hdrRaw)-2] ^= 0xff
 			hdrRawEncrypted[len(hdrRaw)-1] ^= 0xff
-			Expect(p.raw[0:len(hdrRaw)]).To(Equal(hdrRawEncrypted))
-			Expect(p.raw[len(p.raw)-4:]).To(Equal([]byte{0xde, 0xca, 0xfb, 0xad}))
+			Expect(p.buffer.Data[0:len(hdrRaw)]).To(Equal(hdrRawEncrypted))
+			Expect(p.buffer.Data[p.buffer.Len()-4:]).To(Equal([]byte{0xde, 0xca, 0xfb, 0xad}))
 		})
 	})
 
@@ -309,7 +309,7 @@ var _ = Describe("Packet packer", func() {
 				b := &bytes.Buffer{}
 				f.Write(b, packer.version)
 				Expect(p.frames).To(Equal([]ackhandler.Frame{{Frame: f}}))
-				Expect(p.raw).To(ContainSubstring(b.String()))
+				Expect(p.buffer.Data).To(ContainSubstring(b.String()))
 			})
 
 			It("stores the encryption level a packet was sealed with", func() {
@@ -371,7 +371,7 @@ var _ = Describe("Packet packer", func() {
 				Expect(p).ToNot(BeNil())
 				Expect(err).ToNot(HaveOccurred())
 				Expect(p.frames).To(Equal(frames))
-				Expect(p.raw).NotTo(BeEmpty())
+				Expect(p.buffer.Len()).ToNot(BeZero())
 			})
 
 			It("accounts for the space consumed by control frames", func() {
@@ -408,10 +408,10 @@ var _ = Describe("Packet packer", func() {
 				packet, err := packer.PackAppDataPacket()
 				Expect(err).ToNot(HaveOccurred())
 				// cut off the tag that the mock sealer added
-				packet.raw = packet.raw[:len(packet.raw)-sealer.Overhead()]
-				hdr, _, _, err := wire.ParsePacket(packet.raw, len(packer.getDestConnID()))
+				packet.buffer.Data = packet.buffer.Data[:packet.buffer.Len()-protocol.ByteCount(sealer.Overhead())]
+				hdr, _, _, err := wire.ParsePacket(packet.buffer.Data, len(packer.getDestConnID()))
 				Expect(err).ToNot(HaveOccurred())
-				r := bytes.NewReader(packet.raw)
+				r := bytes.NewReader(packet.buffer.Data)
 				extHdr, err := hdr.ParseExtended(r, packer.version)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(extHdr.PacketNumberLen).To(Equal(protocol.PacketNumberLen1))
@@ -613,7 +613,7 @@ var _ = Describe("Packet packer", func() {
 				sealingManager.EXPECT().GetInitialSealer().Return(sealer, nil)
 				p, err := packer.PackPacket()
 				Expect(err).ToNot(HaveOccurred())
-				checkLength(p.raw)
+				checkLength(p.buffer.Data)
 			})
 
 			It("packs a maximum size Handshake packet", func() {
@@ -635,9 +635,9 @@ var _ = Describe("Packet packer", func() {
 				p, err := packer.PackPacket()
 				Expect(err).ToNot(HaveOccurred())
 				Expect(p.frames).To(HaveLen(1))
-				Expect(p.raw).To(HaveLen(int(packer.maxPacketSize)))
+				Expect(p.buffer.Len()).To(BeEquivalentTo(packer.maxPacketSize))
 				Expect(p.header.IsLongHeader).To(BeTrue())
-				checkLength(p.raw)
+				checkLength(p.buffer.Data)
 			})
 
 			It("adds retransmissions", func() {
@@ -654,7 +654,7 @@ var _ = Describe("Packet packer", func() {
 				Expect(p.EncryptionLevel()).To(Equal(protocol.EncryptionInitial))
 				Expect(p.frames).To(Equal([]ackhandler.Frame{{Frame: f}}))
 				Expect(p.header.IsLongHeader).To(BeTrue())
-				checkLength(p.raw)
+				checkLength(p.buffer.Data)
 			})
 
 			It("sends an Initial packet containing only an ACK", func() {
@@ -709,11 +709,11 @@ var _ = Describe("Packet packer", func() {
 				packet, err := packer.PackPacket()
 				Expect(err).ToNot(HaveOccurred())
 				Expect(packet.header.Token).To(Equal(token))
-				Expect(packet.raw).To(HaveLen(protocol.MinInitialPacketSize))
+				Expect(packet.buffer.Len()).To(BeEquivalentTo(protocol.MinInitialPacketSize))
 				Expect(packet.frames).To(HaveLen(1))
 				cf := packet.frames[0].Frame.(*wire.CryptoFrame)
 				Expect(cf.Data).To(Equal([]byte("foobar")))
-				checkLength(packet.raw)
+				checkLength(packet.buffer.Data)
 			})
 
 			It("adds an ACK frame", func() {
@@ -729,7 +729,7 @@ var _ = Describe("Packet packer", func() {
 				packer.perspective = protocol.PerspectiveClient
 				packet, err := packer.PackPacket()
 				Expect(err).ToNot(HaveOccurred())
-				Expect(packet.raw).To(HaveLen(protocol.MinInitialPacketSize))
+				Expect(packet.buffer.Len()).To(BeEquivalentTo(protocol.MinInitialPacketSize))
 				Expect(packet.ack).To(Equal(ack))
 				Expect(packet.frames).To(HaveLen(1))
 			})
@@ -751,7 +751,7 @@ var _ = Describe("Packet packer", func() {
 				Expect(packet.EncryptionLevel()).To(Equal(protocol.EncryptionInitial))
 				Expect(packet.frames).To(HaveLen(1))
 				Expect(packet.frames[0].Frame).To(Equal(f))
-				checkLength(packet.raw)
+				checkLength(packet.buffer.Data)
 			})
 
 			It("packs a Handshake probe packet", func() {
@@ -769,7 +769,7 @@ var _ = Describe("Packet packer", func() {
 				Expect(packet.EncryptionLevel()).To(Equal(protocol.EncryptionHandshake))
 				Expect(packet.frames).To(HaveLen(1))
 				Expect(packet.frames[0].Frame).To(Equal(f))
-				checkLength(packet.raw)
+				checkLength(packet.buffer.Data)
 			})
 
 			It("packs a 1-RTT probe packet", func() {
@@ -795,11 +795,13 @@ var _ = Describe("Packet packer", func() {
 
 var _ = Describe("Converting to AckHandler packets", func() {
 	It("convert a packet", func() {
+		buffer := getPacketBuffer()
+		buffer.Data = append(buffer.Data, []byte("foobar")...)
 		packet := &packedPacket{
+			buffer: buffer,
 			header: &wire.ExtendedHeader{Header: wire.Header{}},
 			frames: []ackhandler.Frame{{Frame: &wire.MaxDataFrame{}}, {Frame: &wire.PingFrame{}}},
 			ack:    &wire.AckFrame{AckRanges: []wire.AckRange{{Largest: 100, Smallest: 80}}},
-			raw:    []byte("foobar"),
 		}
 		t := time.Now()
 		p := packet.ToAckHandlerPacket(t, nil)
@@ -811,9 +813,9 @@ var _ = Describe("Converting to AckHandler packets", func() {
 
 	It("sets the LargestAcked to invalid, if the packet doesn't have an ACK frame", func() {
 		packet := &packedPacket{
+			buffer: getPacketBuffer(),
 			header: &wire.ExtendedHeader{Header: wire.Header{}},
 			frames: []ackhandler.Frame{{Frame: &wire.MaxDataFrame{}}, {Frame: &wire.PingFrame{}}},
-			raw:    []byte("foobar"),
 		}
 		p := packet.ToAckHandlerPacket(time.Now(), nil)
 		Expect(p.LargestAcked).To(Equal(protocol.InvalidPacketNumber))
@@ -822,12 +824,12 @@ var _ = Describe("Converting to AckHandler packets", func() {
 	It("doesn't overwrite the OnLost callback, if it is set", func() {
 		var pingLost bool
 		packet := &packedPacket{
+			buffer: getPacketBuffer(),
 			header: &wire.ExtendedHeader{Header: wire.Header{Type: protocol.PacketTypeHandshake}},
 			frames: []ackhandler.Frame{
 				{Frame: &wire.MaxDataFrame{}},
 				{Frame: &wire.PingFrame{}, OnLost: func(wire.Frame) { pingLost = true }},
 			},
-			raw: []byte("foobar"),
 		}
 		p := packet.ToAckHandlerPacket(time.Now(), newRetransmissionQueue(protocol.VersionTLS))
 		Expect(p.Frames).To(HaveLen(2))
