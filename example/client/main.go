@@ -8,6 +8,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"os"
 	"sync"
 
 	"github.com/lucas-clemente/quic-go/http3"
@@ -18,6 +19,7 @@ import (
 func main() {
 	verbose := flag.Bool("v", false, "verbose")
 	quiet := flag.Bool("q", false, "don't print the data")
+	keyLogFile := flag.String("keylog", "", "key log file")
 	insecure := flag.Bool("insecure", false, "skip certificate verification")
 	flag.Parse()
 	urls := flag.Args()
@@ -31,6 +33,16 @@ func main() {
 	}
 	logger.SetLogTimeFormat("")
 
+	var keyLog *os.File
+	if len(*keyLogFile) > 0 {
+		var err error
+		keyLog, err = os.Create(*keyLogFile)
+		if err != nil {
+			log.Fatal(err)
+		}
+		defer keyLog.Close()
+	}
+
 	pool, err := x509.SystemCertPool()
 	if err != nil {
 		log.Fatal(err)
@@ -40,6 +52,7 @@ func main() {
 		TLSClientConfig: &tls.Config{
 			RootCAs:            pool,
 			InsecureSkipVerify: *insecure,
+			KeyLogWriter:       keyLog,
 		},
 	}
 	defer roundTripper.Close()
