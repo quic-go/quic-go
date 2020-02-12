@@ -24,7 +24,7 @@ var _ = Describe("SentPacketHandler", func() {
 	BeforeEach(func() {
 		lostPackets = nil
 		rttStats := &congestion.RTTStats{}
-		handler = NewSentPacketHandler(42, rttStats, nil, utils.DefaultLogger).(*sentPacketHandler)
+		handler = NewSentPacketHandler(42, rttStats, nil, nil, utils.DefaultLogger).(*sentPacketHandler)
 		streamFrame = wire.StreamFrame{
 			StreamID: 5,
 			Data:     []byte{0x13, 0x37},

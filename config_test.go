@@ -2,6 +2,7 @@ package quic
 
 import (
 	"fmt"
+	"io"
 	"net"
 	"reflect"
 	"time"
@@ -14,11 +15,16 @@ import (
 
 var _ = Describe("Config", func() {
 	It("clones function fields", func() {
-		var called bool
-		c1 := &Config{AcceptToken: func(_ net.Addr, _ *Token) bool { called = true; return true }}
+		var calledAcceptToken, calledGetLogWriter bool
+		c1 := &Config{
+			AcceptToken:  func(_ net.Addr, _ *Token) bool { calledAcceptToken = true; return true },
+			GetLogWriter: func(connectionID []byte) io.WriteCloser { calledGetLogWriter = true; return nil },
+		}
 		c2 := c1.Clone()
 		c2.AcceptToken(&net.UDPAddr{}, &Token{})
-		Expect(called).To(BeTrue())
+		c2.GetLogWriter([]byte{1, 2, 3})
+		Expect(calledAcceptToken).To(BeTrue())
+		Expect(calledGetLogWriter).To(BeTrue())
 	})
 
 	It("clones non-function fields", func() {
@@ -34,7 +40,7 @@ var _ = Describe("Config", func() {
 			}
 
 			switch fn := typ.Field(i).Name; fn {
-			case "AcceptToken":
+			case "AcceptToken", "GetLogWriter":
 				// Can't compare functions.
 			case "Versions":
 				f.Set(reflect.ValueOf([]VersionNumber{1, 2, 3}))

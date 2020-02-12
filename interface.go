@@ -260,6 +260,10 @@ type Config struct {
 	// QUIC Event Tracer.
 	// Warning: Experimental. This API should not be considered stable and will change soon.
 	QuicTracer quictrace.Tracer
+	// GetLogWriter is used to pass in a writer for the qlog.
+	// If it is nil, no qlog will be collected and exported.
+	// If it returns nil, no qlog will be collected and exported for the respective connection.
+	GetLogWriter func(connectionID []byte) io.WriteCloser
 }
 
 // A Listener for incoming QUIC connections

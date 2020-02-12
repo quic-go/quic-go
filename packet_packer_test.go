@@ -830,11 +830,12 @@ var _ = Describe("Converting to AckHandler packets", func() {
 			ack:    &wire.AckFrame{AckRanges: []wire.AckRange{{Largest: 100, Smallest: 80}}},
 			raw:    []byte("foobar"),
 		}
-		p := packet.ToAckHandlerPacket(nil)
+		t := time.Now()
+		p := packet.ToAckHandlerPacket(t, nil)
 		Expect(p.Length).To(Equal(protocol.ByteCount(6)))
 		Expect(p.Frames).To(Equal(packet.frames))
 		Expect(p.LargestAcked).To(Equal(protocol.PacketNumber(100)))
-		Expect(p.SendTime).To(BeTemporally("~", time.Now(), 50*time.Millisecond))
+		Expect(p.SendTime).To(Equal(t))
 	})
 
 	It("sets the LargestAcked to invalid, if the packet doesn't have an ACK frame", func() {
@@ -843,7 +844,7 @@ var _ = Describe("Converting to AckHandler packets", func() {
 			frames: []ackhandler.Frame{{Frame: &wire.MaxDataFrame{}}, {Frame: &wire.PingFrame{}}},
 			raw:    []byte("foobar"),
 		}
-		p := packet.ToAckHandlerPacket(nil)
+		p := packet.ToAckHandlerPacket(time.Now(), nil)
 		Expect(p.LargestAcked).To(Equal(protocol.InvalidPacketNumber))
 	})
 
@@ -857,7 +858,7 @@ var _ = Describe("Converting to AckHandler packets", func() {
 			},
 			raw: []byte("foobar"),
 		}
-		p := packet.ToAckHandlerPacket(newRetransmissionQueue(protocol.VersionTLS))
+		p := packet.ToAckHandlerPacket(time.Now(), newRetransmissionQueue(protocol.VersionTLS))
 		Expect(p.Frames).To(HaveLen(2))
 		Expect(p.Frames[0].OnLost).ToNot(BeNil())
 		p.Frames[1].OnLost(nil)

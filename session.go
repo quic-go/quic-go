@@ -20,6 +20,7 @@ import (
 	"github.com/lucas-clemente/quic-go/internal/qerr"
 	"github.com/lucas-clemente/quic-go/internal/utils"
 	"github.com/lucas-clemente/quic-go/internal/wire"
+	"github.com/lucas-clemente/quic-go/qlog"
 	"github.com/lucas-clemente/quic-go/quictrace"
 )
 
@@ -186,8 +187,9 @@ type session struct {
 
 	traceCallback func(quictrace.Event)
 
-	logID  string
-	logger utils.Logger
+	logID   string
+	qlogger qlog.Tracer
+	logger  utils.Logger
 }
 
 var _ Session = &session{}
@@ -206,6 +208,7 @@ var newSession = func(
 	tlsConf *tls.Config,
 	tokenGenerator *handshake.TokenGenerator,
 	enable0RTT bool,
+	qlogger qlog.Tracer,
 	logger utils.Logger,
 	v protocol.VersionNumber,
 ) quicSession {
@@ -218,6 +221,7 @@ var newSession = func(
 		oneRTTStream:          newCryptoStream(),
 		perspective:           protocol.PerspectiveServer,
 		handshakeCompleteChan: make(chan struct{}),
+		qlogger:               qlogger,
 		logger:                logger,
 		version:               v,
 	}
@@ -244,7 +248,7 @@ var newSession = func(
 		s.queueControlFrame,
 	)
 	s.preSetup()
-	s.sentPacketHandler = ackhandler.NewSentPacketHandler(0, s.rttStats, s.traceCallback, s.logger)
+	s.sentPacketHandler = ackhandler.NewSentPacketHandler(0, s.rttStats, s.traceCallback, s.qlogger, s.logger)
 	initialStream := newCryptoStream()
 	handshakeStream := newCryptoStream()
 	params := &handshake.TransportParameters{
@@ -313,6 +317,7 @@ var newClientSession = func(
 	initialPacketNumber protocol.PacketNumber,
 	initialVersion protocol.VersionNumber,
 	enable0RTT bool,
+	qlogger qlog.Tracer,
 	logger utils.Logger,
 	v protocol.VersionNumber,
 ) quicSession {
@@ -325,6 +330,7 @@ var newClientSession = func(
 		handshakeCompleteChan: make(chan struct{}),
 		logID:                 destConnID.String(),
 		logger:                logger,
+		qlogger:               qlogger,
 		initialVersion:        initialVersion,
 		version:               v,
 	}
@@ -346,7 +352,7 @@ var newClientSession = func(
 		s.queueControlFrame,
 	)
 	s.preSetup()
-	s.sentPacketHandler = ackhandler.NewSentPacketHandler(initialPacketNumber, s.rttStats, s.traceCallback, s.logger)
+	s.sentPacketHandler = ackhandler.NewSentPacketHandler(initialPacketNumber, s.rttStats, s.traceCallback, s.qlogger, s.logger)
 	initialStream := newCryptoStream()
 	handshakeStream := newCryptoStream()
 	params := &handshake.TransportParameters{
@@ -565,6 +571,11 @@ runLoop:
 	s.logger.Infof("Connection %s closed.", s.logID)
 	s.cryptoStreamHandler.Close()
 	s.sendQueue.Close()
+	if s.qlogger != nil {
+		if err := s.qlogger.Export(); err != nil {
+			return err
+		}
+	}
 	return closeErr.err
 }
 
@@ -780,6 +791,9 @@ func (s *session) handleRetryPacket(hdr *wire.Header, data []byte) bool /* was t
 	}
 	s.logger.Debugf("<- Received Retry")
 	s.logger.Debugf("Switching destination connection ID to: %s", hdr.SrcConnectionID)
+	if s.qlogger != nil {
+		s.qlogger.ReceivedRetry(time.Now(), hdr)
+	}
 	s.origDestConnID = s.handshakeDestConnID
 	newDestConnID := hdr.SrcConnectionID
 	s.receivedRetry = true
@@ -831,7 +845,7 @@ func (s *session) handleUnpackedPacket(packet *unpackedPacket, rcvTime time.Time
 		if ackhandler.IsFrameAckEliciting(frame) {
 			isAckEliciting = true
 		}
-		if s.traceCallback != nil {
+		if s.traceCallback != nil || s.qlogger != nil {
 			frames = append(frames, frame)
 		}
 		if err := s.handleFrame(frame, packet.packetNumber, packet.encryptionLevel); err != nil {
@@ -850,6 +864,9 @@ func (s *session) handleUnpackedPacket(packet *unpackedPacket, rcvTime time.Time
 			PacketSize:      protocol.ByteCount(len(packet.data)),
 			Frames:          frames,
 		})
+	}
+	if s.qlogger != nil {
+		s.qlogger.ReceivedPacket(rcvTime, packet.hdr, protocol.ByteCount(len(packet.data)), frames)
 	}
 
 	return s.receivedPacketHandler.ReceivedPacket(packet.packetNumber, packet.encryptionLevel, rcvTime, isAckEliciting)
@@ -1235,7 +1252,6 @@ func (s *session) maybeSendAckOnlyPacket() error {
 	if packet == nil {
 		return nil
 	}
-	s.sentPacketHandler.SentPacket(packet.ToAckHandlerPacket(s.retransmissionQueue))
 	s.sendPackedPacket(packet)
 	return nil
 }
@@ -1277,7 +1293,6 @@ func (s *session) sendProbePacket(encLevel protocol.EncryptionLevel) error {
 	if packet == nil {
 		return fmt.Errorf("session BUG: couldn't pack %s probe packet", encLevel)
 	}
-	s.sentPacketHandler.SentPacket(packet.ToAckHandlerPacket(s.retransmissionQueue))
 	s.sendPackedPacket(packet)
 	return nil
 }
@@ -1292,7 +1307,6 @@ func (s *session) sendPacket() (bool, error) {
 	if err != nil || packet == nil {
 		return false, err
 	}
-	s.sentPacketHandler.SentPacket(packet.ToAckHandlerPacket(s.retransmissionQueue))
 	s.sendPackedPacket(packet)
 	return true, nil
 }
@@ -1301,13 +1315,15 @@ func (s *session) sendPackedPacket(packet *packedPacket) {
 	if s.firstAckElicitingPacketAfterIdleSentTime.IsZero() && packet.IsAckEliciting() {
 		s.firstAckElicitingPacketAfterIdleSentTime = time.Now()
 	}
+	now := time.Now()
+	s.sentPacketHandler.SentPacket(packet.ToAckHandlerPacket(now, s.retransmissionQueue))
 	if s.traceCallback != nil {
 		frames := make([]wire.Frame, 0, len(packet.frames))
 		for _, f := range packet.frames {
 			frames = append(frames, f.Frame)
 		}
 		s.traceCallback(quictrace.Event{
-			Time:            time.Now(),
+			Time:            now,
 			EventType:       quictrace.PacketSent,
 			TransportState:  s.sentPacketHandler.GetStats(),
 			EncryptionLevel: packet.EncryptionLevel(),
@@ -1315,6 +1331,13 @@ func (s *session) sendPackedPacket(packet *packedPacket) {
 			PacketSize:      protocol.ByteCount(len(packet.raw)),
 			Frames:          frames,
 		})
+	}
+	if s.qlogger != nil {
+		frames := make([]wire.Frame, 0, len(packet.frames))
+		for _, f := range packet.frames {
+			frames = append(frames, f.Frame)
+		}
+		s.qlogger.SentPacket(now, packet.header, protocol.ByteCount(len(packet.raw)), packet.ack, frames)
 	}
 	s.logPacket(packet)
 	s.connIDManager.SentPacket()

@@ -63,7 +63,7 @@ func (p *packedPacket) IsAckEliciting() bool {
 	return ackhandler.HasAckElicitingFrames(p.frames)
 }
 
-func (p *packedPacket) ToAckHandlerPacket(q *retransmissionQueue) *ackhandler.Packet {
+func (p *packedPacket) ToAckHandlerPacket(now time.Time, q *retransmissionQueue) *ackhandler.Packet {
 	largestAcked := protocol.InvalidPacketNumber
 	if p.ack != nil {
 		largestAcked = p.ack.LargestAcked()
@@ -88,7 +88,7 @@ func (p *packedPacket) ToAckHandlerPacket(q *retransmissionQueue) *ackhandler.Pa
 		Frames:          p.frames,
 		Length:          protocol.ByteCount(len(p.raw)),
 		EncryptionLevel: encLevel,
-		SendTime:        time.Now(),
+		SendTime:        now,
 	}
 }
 
