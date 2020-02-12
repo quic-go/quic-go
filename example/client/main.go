@@ -36,14 +36,14 @@ func main() {
 	}
 	logger.SetLogTimeFormat("")
 
-	var keyLog *os.File
+	var keyLog io.Writer
 	if len(*keyLogFile) > 0 {
-		var err error
-		keyLog, err = os.Create(*keyLogFile)
+		f, err := os.Create(*keyLogFile)
 		if err != nil {
 			log.Fatal(err)
 		}
-		defer keyLog.Close()
+		defer f.Close()
+		keyLog = f
 	}
 
 	pool, err := x509.SystemCertPool()
