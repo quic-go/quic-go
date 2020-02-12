@@ -16,9 +16,9 @@ import (
 type responseWriter struct {
 	stream io.Writer
 
-	header        http.Header
-	trailers      []string
-	
+	header   http.Header
+	trailers []string
+
 	status        int // status code passed to WriteHeader
 	headerWritten bool
 
