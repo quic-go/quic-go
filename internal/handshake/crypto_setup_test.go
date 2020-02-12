@@ -8,7 +8,6 @@ import (
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"errors"
-	"io/ioutil"
 	"math/big"
 	"time"
 
@@ -55,12 +54,11 @@ func (s *stream) Write(b []byte) (int, error) {
 var _ = Describe("Crypto Setup TLS", func() {
 	var clientConf, serverConf *tls.Config
 
-	initStreams := func() (chan chunk, *stream /* initial */, *stream /* handshake */, *stream /* 1-RTT */) {
+	initStreams := func() (chan chunk, *stream /* initial */, *stream /* handshake */) {
 		chunkChan := make(chan chunk, 100)
 		initialStream := newStream(chunkChan, protocol.EncryptionInitial)
 		handshakeStream := newStream(chunkChan, protocol.EncryptionHandshake)
-		oneRTTStream := newStream(chunkChan, protocol.Encryption1RTT)
-		return chunkChan, initialStream, handshakeStream, oneRTTStream
+		return chunkChan, initialStream, handshakeStream
 	}
 
 	BeforeEach(func() {
@@ -89,7 +87,6 @@ var _ = Describe("Crypto Setup TLS", func() {
 		server := NewCryptoSetupServer(
 			&bytes.Buffer{},
 			&bytes.Buffer{},
-			ioutil.Discard,
 			protocol.ConnectionID{},
 			nil,
 			&TransportParameters{},
@@ -117,11 +114,10 @@ var _ = Describe("Crypto Setup TLS", func() {
 		sErrChan := make(chan error, 1)
 		runner := NewMockHandshakeRunner(mockCtrl)
 		runner.EXPECT().OnError(gomock.Any()).Do(func(e error) { sErrChan <- e })
-		_, sInitialStream, sHandshakeStream, _ := initStreams()
+		_, sInitialStream, sHandshakeStream := initStreams()
 		server := NewCryptoSetupServer(
 			sInitialStream,
 			sHandshakeStream,
-			ioutil.Discard,
 			protocol.ConnectionID{},
 			nil,
 			&TransportParameters{},
@@ -153,13 +149,12 @@ var _ = Describe("Crypto Setup TLS", func() {
 
 	It("errors when a message is received at the wrong encryption level", func() {
 		sErrChan := make(chan error, 1)
-		_, sInitialStream, sHandshakeStream, _ := initStreams()
+		_, sInitialStream, sHandshakeStream := initStreams()
 		runner := NewMockHandshakeRunner(mockCtrl)
 		runner.EXPECT().OnError(gomock.Any()).Do(func(e error) { sErrChan <- e })
 		server := NewCryptoSetupServer(
 			sInitialStream,
 			sHandshakeStream,
-			ioutil.Discard,
 			protocol.ConnectionID{},
 			nil,
 			&TransportParameters{},
@@ -194,13 +189,12 @@ var _ = Describe("Crypto Setup TLS", func() {
 
 	It("returns Handshake() when handling a message fails", func() {
 		sErrChan := make(chan error, 1)
-		_, sInitialStream, sHandshakeStream, _ := initStreams()
+		_, sInitialStream, sHandshakeStream := initStreams()
 		runner := NewMockHandshakeRunner(mockCtrl)
 		runner.EXPECT().OnError(gomock.Any()).Do(func(e error) { sErrChan <- e })
 		server := NewCryptoSetupServer(
 			sInitialStream,
 			sHandshakeStream,
-			ioutil.Discard,
 			protocol.ConnectionID{},
 			nil,
 			&TransportParameters{},
@@ -230,11 +224,10 @@ var _ = Describe("Crypto Setup TLS", func() {
 	})
 
 	It("returns Handshake() when it is closed", func() {
-		_, sInitialStream, sHandshakeStream, _ := initStreams()
+		_, sInitialStream, sHandshakeStream := initStreams()
 		server := NewCryptoSetupServer(
 			sInitialStream,
 			sHandshakeStream,
-			ioutil.Discard,
 			protocol.ConnectionID{},
 			nil,
 			&TransportParameters{},
@@ -305,6 +298,11 @@ var _ = Describe("Crypto Setup TLS", func() {
 			go func() {
 				defer GinkgoRecover()
 				server.RunHandshake()
+				ticket, err := server.GetSessionTicket()
+				Expect(err).ToNot(HaveOccurred())
+				if ticket != nil {
+					client.HandleMessage(ticket, protocol.Encryption1RTT)
+				}
 				close(done)
 			}()
 
@@ -314,7 +312,7 @@ var _ = Describe("Crypto Setup TLS", func() {
 
 		handshakeWithTLSConf := func(clientConf, serverConf *tls.Config, enable0RTT bool) (CryptoSetup /* client */, error /* client error */, CryptoSetup /* server */, error /* server error */) {
 			var cHandshakeComplete bool
-			cChunkChan, cInitialStream, cHandshakeStream, cOneRTTStream := initStreams()
+			cChunkChan, cInitialStream, cHandshakeStream := initStreams()
 			cErrChan := make(chan error, 1)
 			cRunner := NewMockHandshakeRunner(mockCtrl)
 			cRunner.EXPECT().OnReceivedParams(gomock.Any())
@@ -323,7 +321,6 @@ var _ = Describe("Crypto Setup TLS", func() {
 			client, _ := NewCryptoSetupClient(
 				cInitialStream,
 				cHandshakeStream,
-				cOneRTTStream,
 				protocol.ConnectionID{},
 				nil,
 				&TransportParameters{},
@@ -335,7 +332,7 @@ var _ = Describe("Crypto Setup TLS", func() {
 			)
 
 			var sHandshakeComplete bool
-			sChunkChan, sInitialStream, sHandshakeStream, sOneRTTStream := initStreams()
+			sChunkChan, sInitialStream, sHandshakeStream := initStreams()
 			sErrChan := make(chan error, 1)
 			sRunner := NewMockHandshakeRunner(mockCtrl)
 			sRunner.EXPECT().OnReceivedParams(gomock.Any())
@@ -345,7 +342,6 @@ var _ = Describe("Crypto Setup TLS", func() {
 			server := NewCryptoSetupServer(
 				sInitialStream,
 				sHandshakeStream,
-				sOneRTTStream,
 				protocol.ConnectionID{},
 				nil,
 				&TransportParameters{StatelessResetToken: &token},
@@ -394,11 +390,10 @@ var _ = Describe("Crypto Setup TLS", func() {
 
 		It("signals when it has written the ClientHello", func() {
 			runner := NewMockHandshakeRunner(mockCtrl)
-			cChunkChan, cInitialStream, cHandshakeStream, _ := initStreams()
+			cChunkChan, cInitialStream, cHandshakeStream := initStreams()
 			client, chChan := NewCryptoSetupClient(
 				cInitialStream,
 				cHandshakeStream,
-				ioutil.Discard,
 				protocol.ConnectionID{},
 				nil,
 				&TransportParameters{},
@@ -431,7 +426,7 @@ var _ = Describe("Crypto Setup TLS", func() {
 
 		It("receives transport parameters", func() {
 			var cTransportParametersRcvd, sTransportParametersRcvd *TransportParameters
-			cChunkChan, cInitialStream, cHandshakeStream, _ := initStreams()
+			cChunkChan, cInitialStream, cHandshakeStream := initStreams()
 			cTransportParameters := &TransportParameters{MaxIdleTimeout: 0x42 * time.Second}
 			cRunner := NewMockHandshakeRunner(mockCtrl)
 			cRunner.EXPECT().OnReceivedParams(gomock.Any()).Do(func(tp *TransportParameters) { sTransportParametersRcvd = tp })
@@ -439,7 +434,6 @@ var _ = Describe("Crypto Setup TLS", func() {
 			client, _ := NewCryptoSetupClient(
 				cInitialStream,
 				cHandshakeStream,
-				ioutil.Discard,
 				protocol.ConnectionID{},
 				nil,
 				cTransportParameters,
@@ -450,7 +444,7 @@ var _ = Describe("Crypto Setup TLS", func() {
 				utils.DefaultLogger.WithPrefix("client"),
 			)
 
-			sChunkChan, sInitialStream, sHandshakeStream, _ := initStreams()
+			sChunkChan, sInitialStream, sHandshakeStream := initStreams()
 			var token [16]byte
 			sRunner := NewMockHandshakeRunner(mockCtrl)
 			sRunner.EXPECT().OnReceivedParams(gomock.Any()).Do(func(tp *TransportParameters) { cTransportParametersRcvd = tp })
@@ -462,7 +456,6 @@ var _ = Describe("Crypto Setup TLS", func() {
 			server := NewCryptoSetupServer(
 				sInitialStream,
 				sHandshakeStream,
-				ioutil.Discard,
 				protocol.ConnectionID{},
 				nil,
 				sTransportParameters,
@@ -487,14 +480,13 @@ var _ = Describe("Crypto Setup TLS", func() {
 
 		Context("with session tickets", func() {
 			It("errors when the NewSessionTicket is sent at the wrong encryption level", func() {
-				cChunkChan, cInitialStream, cHandshakeStream, _ := initStreams()
+				cChunkChan, cInitialStream, cHandshakeStream := initStreams()
 				cRunner := NewMockHandshakeRunner(mockCtrl)
 				cRunner.EXPECT().OnReceivedParams(gomock.Any())
 				cRunner.EXPECT().OnHandshakeComplete()
 				client, _ := NewCryptoSetupClient(
 					cInitialStream,
 					cHandshakeStream,
-					ioutil.Discard,
 					protocol.ConnectionID{},
 					nil,
 					&TransportParameters{},
@@ -505,14 +497,13 @@ var _ = Describe("Crypto Setup TLS", func() {
 					utils.DefaultLogger.WithPrefix("client"),
 				)
 
-				sChunkChan, sInitialStream, sHandshakeStream, _ := initStreams()
+				sChunkChan, sInitialStream, sHandshakeStream := initStreams()
 				sRunner := NewMockHandshakeRunner(mockCtrl)
 				sRunner.EXPECT().OnReceivedParams(gomock.Any())
 				sRunner.EXPECT().OnHandshakeComplete()
 				server := NewCryptoSetupServer(
 					sInitialStream,
 					sHandshakeStream,
-					ioutil.Discard,
 					protocol.ConnectionID{},
 					nil,
 					&TransportParameters{},
@@ -544,14 +535,13 @@ var _ = Describe("Crypto Setup TLS", func() {
 			})
 
 			It("errors when handling the NewSessionTicket fails", func() {
-				cChunkChan, cInitialStream, cHandshakeStream, _ := initStreams()
+				cChunkChan, cInitialStream, cHandshakeStream := initStreams()
 				cRunner := NewMockHandshakeRunner(mockCtrl)
 				cRunner.EXPECT().OnReceivedParams(gomock.Any())
 				cRunner.EXPECT().OnHandshakeComplete()
 				client, _ := NewCryptoSetupClient(
 					cInitialStream,
 					cHandshakeStream,
-					ioutil.Discard,
 					protocol.ConnectionID{},
 					nil,
 					&TransportParameters{},
@@ -562,14 +552,13 @@ var _ = Describe("Crypto Setup TLS", func() {
 					utils.DefaultLogger.WithPrefix("client"),
 				)
 
-				sChunkChan, sInitialStream, sHandshakeStream, _ := initStreams()
+				sChunkChan, sInitialStream, sHandshakeStream := initStreams()
 				sRunner := NewMockHandshakeRunner(mockCtrl)
 				sRunner.EXPECT().OnReceivedParams(gomock.Any())
 				sRunner.EXPECT().OnHandshakeComplete()
 				server := NewCryptoSetupServer(
 					sInitialStream,
 					sHandshakeStream,
-					ioutil.Discard,
 					protocol.ConnectionID{},
 					nil,
 					&TransportParameters{},
@@ -670,16 +659,16 @@ var _ = Describe("Crypto Setup TLS", func() {
 				Expect(client.ConnectionState().DidResume).To(BeFalse())
 
 				csc.EXPECT().Get(gomock.Any()).Return(state, true)
+				csc.EXPECT().Put(gomock.Any(), nil)
 				csc.EXPECT().Put(gomock.Any(), gomock.Any()).MaxTimes(1)
 
-				cChunkChan, cInitialStream, cHandshakeStream, _ := initStreams()
+				cChunkChan, cInitialStream, cHandshakeStream := initStreams()
 				cRunner := NewMockHandshakeRunner(mockCtrl)
 				cRunner.EXPECT().OnReceivedParams(gomock.Any())
 				cRunner.EXPECT().OnHandshakeComplete()
 				client, clientHelloChan := NewCryptoSetupClient(
 					cInitialStream,
 					cHandshakeStream,
-					ioutil.Discard,
 					protocol.ConnectionID{},
 					nil,
 					&TransportParameters{},
@@ -690,14 +679,13 @@ var _ = Describe("Crypto Setup TLS", func() {
 					utils.DefaultLogger.WithPrefix("client"),
 				)
 
-				sChunkChan, sInitialStream, sHandshakeStream, _ := initStreams()
+				sChunkChan, sInitialStream, sHandshakeStream := initStreams()
 				sRunner := NewMockHandshakeRunner(mockCtrl)
 				sRunner.EXPECT().OnReceivedParams(gomock.Any())
 				sRunner.EXPECT().OnHandshakeComplete()
 				server = NewCryptoSetupServer(
 					sInitialStream,
 					sHandshakeStream,
-					ioutil.Discard,
 					protocol.ConnectionID{},
 					nil,
 					&TransportParameters{},

@@ -110,7 +110,7 @@ const MinStreamFrameSize ByteCount = 128
 
 // MaxPostHandshakeCryptoFrameSize is the maximum size of CRYPTO frames
 // we send after the handshake completes.
-const MaxPostHandshakeCryptoFrameSize ByteCount = 1000
+const MaxPostHandshakeCryptoFrameSize = 1000
 
 // MaxAckFrameSize is the maximum size for an ACK frame that we write
 // Due to the varint encoding, ACK frames can grow (almost) indefinitely large.

@@ -52,6 +52,7 @@ type cryptoStreamHandler interface {
 	ChangeConnectionID(protocol.ConnectionID)
 	SetLargest1RTTAcked(protocol.PacketNumber)
 	DropHandshakeKeys()
+	GetSessionTicket() ([]byte, error)
 	io.Closer
 	ConnectionState() handshake.ConnectionState
 }
@@ -141,6 +142,7 @@ type session struct {
 	frameParser wire.FrameParser
 	packer      packer
 
+	oneRTTStream        cryptoStream // only set for the server
 	cryptoStreamHandler cryptoStreamHandler
 
 	receivedPackets  chan *receivedPacket
@@ -213,6 +215,7 @@ var newSession = func(
 		handshakeDestConnID:   destConnID,
 		srcConnIDLen:          srcConnID.Len(),
 		tokenGenerator:        tokenGenerator,
+		oneRTTStream:          newCryptoStream(),
 		perspective:           protocol.PerspectiveServer,
 		handshakeCompleteChan: make(chan struct{}),
 		logger:                logger,
@@ -244,7 +247,6 @@ var newSession = func(
 	s.sentPacketHandler = ackhandler.NewSentPacketHandler(0, s.rttStats, s.traceCallback, s.logger)
 	initialStream := newCryptoStream()
 	handshakeStream := newCryptoStream()
-	oneRTTStream := newPostHandshakeCryptoStream(s.framer)
 	params := &handshake.TransportParameters{
 		InitialMaxStreamDataBidiLocal:  protocol.InitialMaxStreamData,
 		InitialMaxStreamDataBidiRemote: protocol.InitialMaxStreamData,
@@ -263,7 +265,6 @@ var newSession = func(
 	cs := handshake.NewCryptoSetupServer(
 		initialStream,
 		handshakeStream,
-		oneRTTStream,
 		clientDestConnID,
 		conn.RemoteAddr(),
 		params,
@@ -297,7 +298,7 @@ var newSession = func(
 		s.version,
 	)
 	s.unpacker = newPacketUnpacker(cs, s.version)
-	s.cryptoStreamManager = newCryptoStreamManager(cs, initialStream, handshakeStream, oneRTTStream)
+	s.cryptoStreamManager = newCryptoStreamManager(cs, initialStream, handshakeStream, s.oneRTTStream)
 	return s
 }
 
@@ -348,7 +349,6 @@ var newClientSession = func(
 	s.sentPacketHandler = ackhandler.NewSentPacketHandler(initialPacketNumber, s.rttStats, s.traceCallback, s.logger)
 	initialStream := newCryptoStream()
 	handshakeStream := newCryptoStream()
-	oneRTTStream := newPostHandshakeCryptoStream(s.framer)
 	params := &handshake.TransportParameters{
 		InitialMaxStreamDataBidiRemote: protocol.InitialMaxStreamData,
 		InitialMaxStreamDataBidiLocal:  protocol.InitialMaxStreamData,
@@ -365,7 +365,6 @@ var newClientSession = func(
 	cs, clientHelloWritten := handshake.NewCryptoSetupClient(
 		initialStream,
 		handshakeStream,
-		oneRTTStream,
 		destConnID,
 		conn.RemoteAddr(),
 		params,
@@ -382,7 +381,7 @@ var newClientSession = func(
 	)
 	s.clientHelloWritten = clientHelloWritten
 	s.cryptoStreamHandler = cs
-	s.cryptoStreamManager = newCryptoStreamManager(cs, initialStream, handshakeStream, oneRTTStream)
+	s.cryptoStreamManager = newCryptoStreamManager(cs, initialStream, handshakeStream, newCryptoStream())
 	s.unpacker = newPacketUnpacker(cs, s.version)
 	s.packer = newPacketPacker(
 		srcConnID,
@@ -633,6 +632,16 @@ func (s *session) handleHandshakeComplete() {
 	s.sentPacketHandler.SetHandshakeComplete()
 
 	if s.perspective == protocol.PerspectiveServer {
+		ticket, err := s.cryptoStreamHandler.GetSessionTicket()
+		if err != nil {
+			s.closeLocal(err)
+		}
+		if ticket != nil {
+			s.oneRTTStream.Write(ticket)
+			for s.oneRTTStream.HasData() {
+				s.queueControlFrame(s.oneRTTStream.PopCryptoFrame(protocol.MaxPostHandshakeCryptoFrameSize))
+			}
+		}
 		token, err := s.tokenGenerator.NewToken(s.conn.RemoteAddr())
 		if err != nil {
 			s.closeLocal(err)
