@@ -37,9 +37,15 @@ func main() {
 
 	testcase := os.Getenv("TESTCASE")
 
+	getLogWriter, err := utils.GetQLOGWriter()
+	if err != nil {
+		fmt.Println(err.Error())
+		os.Exit(1)
+	}
 	// a quic.Config that doesn't do a Retry
 	quicConf := &quic.Config{
-		AcceptToken: func(_ net.Addr, _ *quic.Token) bool { return true },
+		AcceptToken:  func(_ net.Addr, _ *quic.Token) bool { return true },
+		GetLogWriter: getLogWriter,
 	}
 	tlsConf = testdata.GetTLSConfig()
 	tlsConf.KeyLogWriter = keyLog
