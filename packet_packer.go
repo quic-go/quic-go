@@ -15,8 +15,8 @@ import (
 )
 
 type packer interface {
-	PackPacket() (*coalescedPacket, error)
-	PackAppDataPacket() (*packedPacket, error)
+	PackCoalescedPacket() (*coalescedPacket, error)
+	PackPacket() (*packedPacket, error)
 	MaybePackProbePacket(protocol.EncryptionLevel) (*packedPacket, error)
 	MaybePackAckPacket(handshakeConfirmed bool) (*packedPacket, error)
 	PackConnectionClose(*wire.ConnectionCloseFrame) (*packedPacket, error)
@@ -264,10 +264,10 @@ func (p *packetPacker) MaybePackAckPacket(handshakeConfirmed bool) (*packedPacke
 	return p.writeSinglePacket(hdr, payload, encLevel, sealer)
 }
 
-// PackPacket packs a new packet.
+// PackCoalescedPacket packs a new packet.
 // It packs an Initial / Handshake if there is data to send in these packet number spaces.
 // It should only be called before the handshake is confirmed.
-func (p *packetPacker) PackPacket() (*coalescedPacket, error) {
+func (p *packetPacker) PackCoalescedPacket() (*coalescedPacket, error) {
 	buffer := getPacketBuffer()
 	packet, err := p.packCoalescedPacket(buffer)
 	if err != nil {
@@ -324,9 +324,9 @@ func (p *packetPacker) packCoalescedPacket(buffer *packetBuffer) (*coalescedPack
 	return packet, nil
 }
 
-// PackAppDataPacket packs a packet in the application data packet number space.
+// PackPacket packs a packet in the application data packet number space.
 // It should be called after the handshake is confirmed.
-func (p *packetPacker) PackAppDataPacket() (*packedPacket, error) {
+func (p *packetPacker) PackPacket() (*packedPacket, error) {
 	buffer := getPacketBuffer()
 	contents, err := p.maybeAppendAppDataPacket(buffer)
 	if err != nil || contents == nil {

@@ -887,7 +887,7 @@ var _ = Describe("Session", func() {
 
 		It("sends packets", func() {
 			sess.handshakeConfirmed = true
-			packer.EXPECT().PackAppDataPacket().Return(getPacket(1), nil)
+			packer.EXPECT().PackPacket().Return(getPacket(1), nil)
 			sess.receivedPacketHandler.ReceivedPacket(0x035e, protocol.Encryption1RTT, time.Now(), true)
 			mconn.EXPECT().Write(gomock.Any())
 			sent, err := sess.sendPacket()
@@ -897,7 +897,7 @@ var _ = Describe("Session", func() {
 
 		It("doesn't send packets if there's nothing to send", func() {
 			sess.handshakeConfirmed = true
-			packer.EXPECT().PackAppDataPacket().Return(nil, nil)
+			packer.EXPECT().PackPacket().Return(nil, nil)
 			sess.receivedPacketHandler.ReceivedPacket(0x035e, protocol.Encryption1RTT, time.Now(), true)
 			sent, err := sess.sendPacket()
 			Expect(err).NotTo(HaveOccurred())
@@ -918,7 +918,7 @@ var _ = Describe("Session", func() {
 			sess.handshakeConfirmed = true
 			fc := mocks.NewMockConnectionFlowController(mockCtrl)
 			fc.EXPECT().IsNewlyBlocked().Return(true, protocol.ByteCount(1337))
-			packer.EXPECT().PackAppDataPacket().Return(getPacket(1), nil)
+			packer.EXPECT().PackPacket().Return(getPacket(1), nil)
 			sess.connFlowController = fc
 			mconn.EXPECT().Write(gomock.Any())
 			sent, err := sess.sendPacket()
@@ -1022,8 +1022,8 @@ var _ = Describe("Session", func() {
 			sph.EXPECT().TimeUntilSend().Return(time.Now()).Times(2)
 			sph.EXPECT().TimeUntilSend().Return(time.Now().Add(time.Hour))
 			sph.EXPECT().SendMode().Return(ackhandler.SendAny).Times(2) // allow 2 packets...
-			packer.EXPECT().PackAppDataPacket().Return(getPacket(10), nil)
-			packer.EXPECT().PackAppDataPacket().Return(getPacket(11), nil)
+			packer.EXPECT().PackPacket().Return(getPacket(10), nil)
+			packer.EXPECT().PackPacket().Return(getPacket(11), nil)
 			mconn.EXPECT().Write(gomock.Any()).Times(2)
 			go func() {
 				defer GinkgoRecover()
@@ -1042,7 +1042,7 @@ var _ = Describe("Session", func() {
 			sph.EXPECT().TimeUntilSend().Return(time.Now())
 			sph.EXPECT().SendMode().Return(ackhandler.SendAny)
 			sph.EXPECT().SendMode().Return(ackhandler.SendAck)
-			packer.EXPECT().PackAppDataPacket().Return(getPacket(100), nil)
+			packer.EXPECT().PackPacket().Return(getPacket(100), nil)
 			mconn.EXPECT().Write(gomock.Any())
 			go func() {
 				defer GinkgoRecover()
@@ -1061,8 +1061,8 @@ var _ = Describe("Session", func() {
 			sph.EXPECT().TimeUntilSend().Return(time.Now().Add(time.Hour))
 			sph.EXPECT().ShouldSendNumPackets().Times(2).Return(1)
 			sph.EXPECT().SendMode().Return(ackhandler.SendAny).AnyTimes()
-			packer.EXPECT().PackAppDataPacket().Return(getPacket(100), nil)
-			packer.EXPECT().PackAppDataPacket().Return(getPacket(101), nil)
+			packer.EXPECT().PackPacket().Return(getPacket(100), nil)
+			packer.EXPECT().PackPacket().Return(getPacket(101), nil)
 			written := make(chan struct{}, 2)
 			mconn.EXPECT().Write(gomock.Any()).DoAndReturn(func(p []byte) (int, error) {
 				written <- struct{}{}
@@ -1085,9 +1085,9 @@ var _ = Describe("Session", func() {
 			sph.EXPECT().TimeUntilSend().Return(time.Now())
 			sph.EXPECT().TimeUntilSend().Return(time.Now().Add(time.Hour))
 			sph.EXPECT().SendMode().Return(ackhandler.SendAny).Times(3)
-			packer.EXPECT().PackAppDataPacket().Return(getPacket(1000), nil)
-			packer.EXPECT().PackAppDataPacket().Return(getPacket(1001), nil)
-			packer.EXPECT().PackAppDataPacket().Return(getPacket(1002), nil)
+			packer.EXPECT().PackPacket().Return(getPacket(1000), nil)
+			packer.EXPECT().PackPacket().Return(getPacket(1001), nil)
+			packer.EXPECT().PackPacket().Return(getPacket(1002), nil)
 			written := make(chan struct{}, 3)
 			mconn.EXPECT().Write(gomock.Any()).DoAndReturn(func(p []byte) (int, error) {
 				written <- struct{}{}
@@ -1106,7 +1106,7 @@ var _ = Describe("Session", func() {
 			sph.EXPECT().TimeUntilSend().Return(time.Now())
 			sph.EXPECT().ShouldSendNumPackets().Return(1)
 			sph.EXPECT().SendMode().Return(ackhandler.SendAny).AnyTimes()
-			packer.EXPECT().PackAppDataPacket()
+			packer.EXPECT().PackPacket()
 			// don't EXPECT any calls to mconn.Write()
 			go func() {
 				defer GinkgoRecover()
@@ -1142,7 +1142,7 @@ var _ = Describe("Session", func() {
 			sph.EXPECT().ShouldSendNumPackets().AnyTimes().Return(1)
 			sph.EXPECT().SentPacket(gomock.Any())
 			sess.sentPacketHandler = sph
-			packer.EXPECT().PackAppDataPacket().Return(getPacket(1), nil)
+			packer.EXPECT().PackPacket().Return(getPacket(1), nil)
 
 			go func() {
 				defer GinkgoRecover()
@@ -1159,7 +1159,7 @@ var _ = Describe("Session", func() {
 		})
 
 		It("sets the timer to the ack timer", func() {
-			packer.EXPECT().PackAppDataPacket().Return(getPacket(1234), nil)
+			packer.EXPECT().PackPacket().Return(getPacket(1234), nil)
 			sph := mockackhandler.NewMockSentPacketHandler(mockCtrl)
 			sph.EXPECT().TimeUntilSend().Return(time.Now())
 			sph.EXPECT().TimeUntilSend().Return(time.Now().Add(time.Hour))
@@ -1193,7 +1193,7 @@ var _ = Describe("Session", func() {
 		sess.sentPacketHandler = sph
 		buffer := getPacketBuffer()
 		buffer.Data = append(buffer.Data, []byte("foobar")...)
-		packer.EXPECT().PackPacket().Return(&coalescedPacket{
+		packer.EXPECT().PackCoalescedPacket().Return(&coalescedPacket{
 			buffer: buffer,
 			packets: []*packetContents{
 				{
@@ -1218,7 +1218,7 @@ var _ = Describe("Session", func() {
 				},
 			},
 		}, nil)
-		packer.EXPECT().PackPacket().AnyTimes()
+		packer.EXPECT().PackCoalescedPacket().AnyTimes()
 
 		sph.EXPECT().GetLossDetectionTimeout().AnyTimes()
 		sph.EXPECT().SendMode().Return(ackhandler.SendAny).AnyTimes()
@@ -1257,7 +1257,7 @@ var _ = Describe("Session", func() {
 	})
 
 	It("cancels the HandshakeComplete context and informs the SentPacketHandler when the handshake completes", func() {
-		packer.EXPECT().PackPacket().AnyTimes()
+		packer.EXPECT().PackCoalescedPacket().AnyTimes()
 		finishHandshake := make(chan struct{})
 		sph := mockackhandler.NewMockSentPacketHandler(mockCtrl)
 		sess.sentPacketHandler = sph
@@ -1294,7 +1294,7 @@ var _ = Describe("Session", func() {
 
 	It("sends a session ticket when the handshake completes", func() {
 		const size = protocol.MaxPostHandshakeCryptoFrameSize * 3 / 2
-		packer.EXPECT().PackPacket().AnyTimes()
+		packer.EXPECT().PackCoalescedPacket().AnyTimes()
 		finishHandshake := make(chan struct{})
 		sessionRunner.EXPECT().Retire(clientDestConnID)
 		go func() {
@@ -1334,7 +1334,7 @@ var _ = Describe("Session", func() {
 	})
 
 	It("doesn't cancel the HandshakeComplete context when the handshake fails", func() {
-		packer.EXPECT().PackPacket().AnyTimes()
+		packer.EXPECT().PackCoalescedPacket().AnyTimes()
 		streamManager.EXPECT().CloseWithError(gomock.Any())
 		expectReplaceWithClosed()
 		packer.EXPECT().PackConnectionClose(gomock.Any()).Return(&packedPacket{buffer: getPacketBuffer()}, nil)
@@ -1355,7 +1355,7 @@ var _ = Describe("Session", func() {
 	It("sends a HANDSHAKE_DONE frame when the handshake completes", func() {
 		done := make(chan struct{})
 		sessionRunner.EXPECT().Retire(clientDestConnID)
-		packer.EXPECT().PackPacket().DoAndReturn(func() (*packedPacket, error) {
+		packer.EXPECT().PackCoalescedPacket().DoAndReturn(func() (*packedPacket, error) {
 			frames, _ := sess.framer.AppendControlFrames(nil, protocol.MaxByteCount)
 			Expect(frames).ToNot(BeEmpty())
 			Expect(frames[0].Frame).To(BeEquivalentTo(&wire.HandshakeDoneFrame{}))
@@ -1367,7 +1367,7 @@ var _ = Describe("Session", func() {
 				buffer: getPacketBuffer(),
 			}, nil
 		})
-		packer.EXPECT().PackPacket().AnyTimes()
+		packer.EXPECT().PackCoalescedPacket().AnyTimes()
 		go func() {
 			defer GinkgoRecover()
 			cryptoSetup.EXPECT().RunHandshake()
@@ -1441,7 +1441,7 @@ var _ = Describe("Session", func() {
 			}
 			streamManager.EXPECT().UpdateLimits(params)
 			packer.EXPECT().HandleTransportParameters(params)
-			packer.EXPECT().PackPacket().MaxTimes(3)
+			packer.EXPECT().PackCoalescedPacket().MaxTimes(3)
 			Expect(sess.earlySessionReady()).ToNot(BeClosed())
 			sessionRunner.EXPECT().GetStatelessResetToken(gomock.Any()).Times(2)
 			sessionRunner.EXPECT().Add(gomock.Any(), sess).Times(2)
@@ -1497,7 +1497,7 @@ var _ = Describe("Session", func() {
 			setRemoteIdleTimeout(5 * time.Second)
 			sess.lastPacketReceivedTime = time.Now().Add(-5 * time.Second / 2)
 			sent := make(chan struct{})
-			packer.EXPECT().PackPacket().Do(func() (*packedPacket, error) {
+			packer.EXPECT().PackCoalescedPacket().Do(func() (*packedPacket, error) {
 				close(sent)
 				return nil, nil
 			})
@@ -1510,7 +1510,7 @@ var _ = Describe("Session", func() {
 			setRemoteIdleTimeout(time.Hour)
 			sess.lastPacketReceivedTime = time.Now().Add(-protocol.MaxKeepAliveInterval).Add(-time.Millisecond)
 			sent := make(chan struct{})
-			packer.EXPECT().PackPacket().Do(func() (*packedPacket, error) {
+			packer.EXPECT().PackCoalescedPacket().Do(func() (*packedPacket, error) {
 				close(sent)
 				return nil, nil
 			})
@@ -1606,7 +1606,7 @@ var _ = Describe("Session", func() {
 		})
 
 		It("closes the session due to the idle timeout after handshake", func() {
-			packer.EXPECT().PackPacket().AnyTimes()
+			packer.EXPECT().PackCoalescedPacket().AnyTimes()
 			gomock.InOrder(
 				sessionRunner.EXPECT().Retire(clientDestConnID),
 				sessionRunner.EXPECT().Remove(gomock.Any()),
@@ -1965,7 +1965,7 @@ var _ = Describe("Client Session", func() {
 				},
 			}
 			packer.EXPECT().HandleTransportParameters(gomock.Any())
-			packer.EXPECT().PackPacket().MaxTimes(1)
+			packer.EXPECT().PackCoalescedPacket().MaxTimes(1)
 			sess.processTransportParameters(params)
 			cf, _ := sess.framer.AppendControlFrames(nil, protocol.MaxByteCount)
 			Expect(cf).To(HaveLen(1))

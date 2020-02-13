@@ -1311,7 +1311,7 @@ func (s *session) sendPacket() (bool, error) {
 
 	if !s.handshakeConfirmed {
 		now := time.Now()
-		packet, err := s.packer.PackPacket()
+		packet, err := s.packer.PackCoalescedPacket()
 		if err != nil || packet == nil {
 			return false, err
 		}
@@ -1326,7 +1326,7 @@ func (s *session) sendPacket() (bool, error) {
 		s.sendQueue.Send(packet.buffer)
 		return true, nil
 	}
-	packet, err := s.packer.PackAppDataPacket()
+	packet, err := s.packer.PackPacket()
 	if err != nil || packet == nil {
 		return false, err
 	}
