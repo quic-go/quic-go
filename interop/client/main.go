@@ -11,10 +11,13 @@ import (
 	"os"
 	"strings"
 
+	"golang.org/x/sync/errgroup"
+
+	"github.com/lucas-clemente/quic-go"
 	"github.com/lucas-clemente/quic-go/http3"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/interop/http09"
-	"golang.org/x/sync/errgroup"
+	"github.com/lucas-clemente/quic-go/interop/utils"
 )
 
 var errUnsupported = errors.New("unsupported test case")
@@ -30,15 +33,13 @@ func main() {
 	defer logFile.Close()
 	log.SetOutput(logFile)
 
-	var keyLog io.Writer
-	if filename := os.Getenv("SSLKEYLOGFILE"); len(filename) > 0 {
-		f, err := os.Create(filename)
-		if err != nil {
-			fmt.Printf("Could not create key log file: %s\n", err.Error())
-			os.Exit(1)
-		}
-		defer f.Close()
-		keyLog = f
+	keyLog, err := utils.GetSSLKeyLog()
+	if err != nil {
+		fmt.Printf("Could not create key log: %s\n", err.Error())
+		os.Exit(1)
+	}
+	if keyLog != nil {
+		defer keyLog.Close()
 	}
 
 	tlsConf = &tls.Config{
@@ -60,9 +61,18 @@ func runTestcase(testcase string) error {
 	flag.Parse()
 	urls := flag.Args()
 
+	getLogWriter, err := utils.GetQLOGWriter()
+	if err != nil {
+		return err
+	}
+	quicConf := &quic.Config{GetLogWriter: getLogWriter}
+
 	switch testcase {
 	case "http3":
-		r := &http3.RoundTripper{TLSClientConfig: tlsConf}
+		r := &http3.RoundTripper{
+			TLSClientConfig: tlsConf,
+			QuicConfig:      quicConf,
+		}
 		defer r.Close()
 		return downloadFiles(r, urls)
 	case "handshake", "transfer", "retry":
@@ -76,7 +86,10 @@ func runTestcase(testcase string) error {
 		return errUnsupported
 	}
 
-	r := &http09.RoundTripper{TLSClientConfig: tlsConf}
+	r := &http09.RoundTripper{
+		TLSClientConfig: tlsConf,
+		QuicConfig:      quicConf,
+	}
 	defer r.Close()
 	return downloadFiles(r, urls)
 }

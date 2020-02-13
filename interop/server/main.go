@@ -3,7 +3,6 @@ package main
 import (
 	"crypto/tls"
 	"fmt"
-	"io"
 	"log"
 	"net"
 	"net/http"
@@ -13,6 +12,7 @@ import (
 	"github.com/lucas-clemente/quic-go/http3"
 	"github.com/lucas-clemente/quic-go/internal/testdata"
 	"github.com/lucas-clemente/quic-go/interop/http09"
+	"github.com/lucas-clemente/quic-go/interop/utils"
 )
 
 var tlsConf *tls.Config
@@ -26,22 +26,26 @@ func main() {
 	defer logFile.Close()
 	log.SetOutput(logFile)
 
-	var keyLog io.Writer
-	if filename := os.Getenv("SSLKEYLOGFILE"); len(filename) > 0 {
-		f, err := os.Create(filename)
-		if err != nil {
-			fmt.Printf("Could not create key log file: %s\n", err.Error())
-			os.Exit(1)
-		}
-		defer f.Close()
-		keyLog = f
+	keyLog, err := utils.GetSSLKeyLog()
+	if err != nil {
+		fmt.Printf("Could not create key log: %s\n", err.Error())
+		os.Exit(1)
+	}
+	if keyLog != nil {
+		defer keyLog.Close()
 	}
 
 	testcase := os.Getenv("TESTCASE")
 
+	getLogWriter, err := utils.GetQLOGWriter()
+	if err != nil {
+		fmt.Println(err.Error())
+		os.Exit(1)
+	}
 	// a quic.Config that doesn't do a Retry
 	quicConf := &quic.Config{
-		AcceptToken: func(_ net.Addr, _ *quic.Token) bool { return true },
+		AcceptToken:  func(_ net.Addr, _ *quic.Token) bool { return true },
+		GetLogWriter: getLogWriter,
 	}
 	tlsConf = testdata.GetTLSConfig()
 	tlsConf.KeyLogWriter = keyLog
