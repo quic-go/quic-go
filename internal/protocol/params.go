@@ -81,6 +81,10 @@ const MaxStreamFrameSorterGaps = 1000
 // very small STREAM frames to consume a lot of memory.
 const MinStreamFrameBufferSize = 128
 
+// MinCoalescedPacketSize is the minimum size of a coalesced packet that we pack.
+// If a packet has less than this number of bytes, we won't coalesce any more packets onto it.
+const MinCoalescedPacketSize = 128
+
 // MaxCryptoStreamOffset is the maximum offset allowed on any of the crypto streams.
 // This limits the size of the ClientHello and Certificates that can be received.
 const MaxCryptoStreamOffset = 16 * (1 << 10)

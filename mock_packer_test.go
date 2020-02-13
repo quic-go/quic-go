@@ -109,10 +109,10 @@ func (mr *MockPackerMockRecorder) PackConnectionClose(arg0 interface{}) *gomock.
 }
 
 // PackPacket mocks base method
-func (m *MockPacker) PackPacket() (*packedPacket, error) {
+func (m *MockPacker) PackPacket() (*coalescedPacket, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "PackPacket")
-	ret0, _ := ret[0].(*packedPacket)
+	ret0, _ := ret[0].(*coalescedPacket)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
