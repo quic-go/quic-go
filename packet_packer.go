@@ -287,7 +287,7 @@ func (p *packetPacker) packCoalescedPacket(buffer *packetBuffer) (*coalescedPack
 		packets: make([]*packetContents, 0, 3),
 	}
 	// Try packing an Initial packet.
-	contents, err := p.maybeAppendInitialPacket(buffer)
+	contents, err := p.maybeAppendCryptoPacket(buffer, protocol.EncryptionInitial)
 	if err != nil && err != handshake.ErrKeysDropped {
 		return nil, err
 	}
@@ -299,7 +299,7 @@ func (p *packetPacker) packCoalescedPacket(buffer *packetBuffer) (*coalescedPack
 	}
 
 	// Add a Handshake packet.
-	contents, err = p.maybeAppendHandshakePacket(buffer)
+	contents, err = p.maybeAppendCryptoPacket(buffer, protocol.EncryptionHandshake)
 	if err != nil && err != handshake.ErrKeysDropped && err != handshake.ErrKeysNotYetAvailable {
 		return nil, err
 	}
@@ -339,52 +339,38 @@ func (p *packetPacker) PackPacket() (*packedPacket, error) {
 	}, nil
 }
 
-func (p *packetPacker) maybeAppendInitialPacket(buffer *packetBuffer) (*packetContents, error) {
-	sealer, err := p.cryptoSetup.GetInitialSealer()
-	if err != nil {
-		return nil, err
-	}
-
-	hasRetransmission := p.retransmissionQueue.HasInitialData()
-	ack := p.acks.GetAckFrame(protocol.EncryptionInitial)
-	if !p.initialStream.HasData() && !hasRetransmission && ack == nil {
-		// nothing to send
-		return nil, nil
-	}
-	return p.appendCryptoPacket(buffer, protocol.EncryptionInitial, sealer, ack, hasRetransmission)
-}
-
-func (p *packetPacker) maybeAppendHandshakePacket(buffer *packetBuffer) (*packetContents, error) {
-	sealer, err := p.cryptoSetup.GetHandshakeSealer()
-	if err != nil {
-		return nil, err
-	}
-
-	hasRetransmission := p.retransmissionQueue.HasHandshakeData()
-	// TODO: make sure that the ACK always fits
-	ack := p.acks.GetAckFrame(protocol.EncryptionHandshake)
-	if !p.handshakeStream.HasData() && !hasRetransmission && ack == nil {
-		// nothing to send
-		return nil, nil
-	}
-	return p.appendCryptoPacket(buffer, protocol.EncryptionHandshake, sealer, ack, hasRetransmission)
-}
-
-func (p *packetPacker) appendCryptoPacket(
-	buffer *packetBuffer,
-	encLevel protocol.EncryptionLevel,
-	sealer handshake.LongHeaderSealer,
-	ack *wire.AckFrame,
-	hasRetransmission bool,
-) (*packetContents, error) {
-	s := p.handshakeStream
+func (p *packetPacker) maybeAppendCryptoPacket(buffer *packetBuffer, encLevel protocol.EncryptionLevel) (*packetContents, error) {
+	var sealer sealer
+	var s cryptoStream
+	var hasRetransmission bool
 	maxPacketSize := p.maxPacketSize
-	if encLevel == protocol.EncryptionInitial {
-		s = p.initialStream
+	switch encLevel {
+	case protocol.EncryptionInitial:
 		if p.perspective == protocol.PerspectiveClient {
 			maxPacketSize = protocol.MinInitialPacketSize
 		}
+		s = p.initialStream
+		hasRetransmission = p.retransmissionQueue.HasInitialData()
+		var err error
+		sealer, err = p.cryptoSetup.GetInitialSealer()
+		if err != nil {
+			return nil, err
+		}
+	case protocol.EncryptionHandshake:
+		s = p.handshakeStream
+		hasRetransmission = p.retransmissionQueue.HasHandshakeData()
+		var err error
+		sealer, err = p.cryptoSetup.GetHandshakeSealer()
+		if err != nil {
+			return nil, err
+		}
 	}
+	ack := p.acks.GetAckFrame(encLevel)
+	if !s.HasData() && !hasRetransmission && ack == nil {
+		// nothing to send
+		return nil, nil
+	}
+
 	remainingLen := maxPacketSize - buffer.Len() - protocol.ByteCount(sealer.Overhead())
 
 	var payload payload
@@ -503,9 +489,9 @@ func (p *packetPacker) MaybePackProbePacket(encLevel protocol.EncryptionLevel) (
 	buffer := getPacketBuffer()
 	switch encLevel {
 	case protocol.EncryptionInitial:
-		contents, err = p.maybeAppendInitialPacket(buffer)
+		contents, err = p.maybeAppendCryptoPacket(buffer, protocol.EncryptionInitial)
 	case protocol.EncryptionHandshake:
-		contents, err = p.maybeAppendHandshakePacket(buffer)
+		contents, err = p.maybeAppendCryptoPacket(buffer, protocol.EncryptionHandshake)
 	case protocol.Encryption1RTT:
 		contents, err = p.maybeAppendAppDataPacket(buffer)
 	default:
