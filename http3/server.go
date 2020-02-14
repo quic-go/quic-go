@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/lucas-clemente/quic-go"
+	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/internal/utils"
 	"github.com/marten-seemann/qpack"
 )
@@ -137,6 +138,12 @@ func (s *Server) serveImpl(tlsConf *tls.Config, conn net.PacketConn) error {
 		}
 	}
 
+	// Update QUIC MaxIdleTimeout to server IdleTimeout
+	if s.IdleTimeout > 0 {
+		s.QuicConfig.MaxIdleTimeout = s.IdleTimeout
+		s.logger.Debugf("Updated QUIC MaxIdleTimeout to IdleTimeout: %v", s.IdleTimeout)
+	}
+
 	var ln quic.EarlyListener
 	var err error
 	if conn == nil {
@@ -230,6 +237,37 @@ func (s *Server) maxHeaderBytes() uint64 {
 }
 
 func (s *Server) handleRequest(sess quic.Session, str quic.Stream, decoder *qpack.Decoder, onFrameError func()) requestError {
+
+	var (
+		wholeReadDeadline time.Time
+		hdrDeadline       time.Time
+
+		setReadDeadline bool
+	)
+	t0 := time.Now()
+	// set read timeout
+	if d := s.ReadTimeout; d != 0 {
+		wholeReadDeadline = t0.Add(d)
+		err := str.SetReadDeadline(wholeReadDeadline)
+		if err != nil {
+			s.logger.Errorf("failed to SetReadDeadline on stream %v: %s", str.StreamID(), err)
+			return newStreamError(errorInternalError, err)
+		}
+		s.logger.Debugf("Set read deadline to the ReadTimeout %v on StreamID %v", d, str.StreamID())
+		setReadDeadline = true
+	}
+	// set header timeout
+	if d := s.ReadHeaderTimeout; d != 0 {
+		hdrDeadline = t0.Add(d)
+		err := str.SetReadDeadline(hdrDeadline)
+		if err != nil {
+			s.logger.Errorf("failed to SetReadDeadline on stream %v: %s", str.StreamID(), err)
+			return newStreamError(errorInternalError, err)
+		}
+		s.logger.Debugf("Set read deadline to the ReadHeaderTimeout %v on stream %v", d, str.StreamID())
+		setReadDeadline = true
+	}
+
 	frame, err := parseNextFrame(str)
 	if err != nil {
 		return newStreamError(errorRequestIncomplete, err)
@@ -265,6 +303,16 @@ func (s *Server) handleRequest(sess quic.Session, str quic.Stream, decoder *qpac
 		s.logger.Infof("%s %s%s", req.Method, req.Host, req.RequestURI)
 	}
 
+	// Adjust the read deadline if necessary
+	if setReadDeadline && !hdrDeadline.Equal(wholeReadDeadline) {
+		err := str.SetReadDeadline(wholeReadDeadline)
+		if err != nil {
+			s.logger.Errorf("failed to SetReadDeadline on stream %v: %s", str.StreamID(), err)
+			return newStreamError(errorInternalError, err)
+		}
+		s.logger.Debugf("Adjusted read deadline to the ReadTimeout %v on StreamID %v", s.ReadTimeout, str.StreamID())
+	}
+
 	ctx := str.Context()
 	ctx = context.WithValue(ctx, ServerContextKey, s)
 	ctx = context.WithValue(ctx, http.LocalAddrContextKey, sess.LocalAddr())
@@ -274,6 +322,16 @@ func (s *Server) handleRequest(sess quic.Session, str quic.Stream, decoder *qpac
 	handler := s.Handler
 	if handler == nil {
 		handler = http.DefaultServeMux
+	}
+
+	// Done with header, now set the write timeout
+	var writeDeadline *time.Timer
+	if d := s.WriteTimeout; d != 0 {
+		writeDeadline = time.AfterFunc(d, func() {
+			str.CancelWrite(protocol.ApplicationErrorCode(errorInternalError))
+		})
+		defer writeDeadline.Stop()
+		s.logger.Debugf("Set write deadline to %v on stream %v", d, str.StreamID())
 	}
 
 	var panicked bool
