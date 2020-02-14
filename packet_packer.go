@@ -365,7 +365,11 @@ func (p *packetPacker) maybeAppendCryptoPacket(buffer *packetBuffer, encLevel pr
 			return nil, err
 		}
 	}
-	ack := p.acks.GetAckFrame(encLevel)
+
+	var ack *wire.AckFrame
+	if encLevel != protocol.EncryptionHandshake || buffer.Len() == 0 {
+		ack = p.acks.GetAckFrame(encLevel)
+	}
 	if !s.HasData() && !hasRetransmission && ack == nil {
 		// nothing to send
 		return nil, nil
@@ -430,7 +434,7 @@ func (p *packetPacker) maybeAppendAppDataPacket(buffer *packetBuffer) (*packetCo
 	headerLen := header.GetLength(p.version)
 
 	maxSize := p.maxPacketSize - buffer.Len() - protocol.ByteCount(sealer.Overhead()) - headerLen
-	payload := p.composeNextPacket(maxSize)
+	payload := p.composeNextPacket(maxSize, encLevel != protocol.Encryption0RTT && buffer.Len() == 0)
 
 	// check if we have anything to send
 	if len(payload.frames) == 0 && payload.ack == nil {
@@ -452,13 +456,16 @@ func (p *packetPacker) maybeAppendAppDataPacket(buffer *packetBuffer) (*packetCo
 	return p.appendPacket(buffer, header, payload, encLevel, sealer)
 }
 
-func (p *packetPacker) composeNextPacket(maxFrameSize protocol.ByteCount) payload {
+func (p *packetPacker) composeNextPacket(maxFrameSize protocol.ByteCount, ackAllowed bool) payload {
 	var payload payload
 
-	// TODO: we don't need to request ACKs when sending 0-RTT packets
-	if ack := p.acks.GetAckFrame(protocol.Encryption1RTT); ack != nil {
-		payload.ack = ack
-		payload.length += ack.Length(p.version)
+	var ack *wire.AckFrame
+	if ackAllowed {
+		ack = p.acks.GetAckFrame(protocol.Encryption1RTT)
+		if ack != nil {
+			payload.ack = ack
+			payload.length += ack.Length(p.version)
+		}
 	}
 
 	for {
