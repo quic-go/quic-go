@@ -14,6 +14,7 @@ import (
 	"github.com/golang/mock/gomock"
 	"github.com/lucas-clemente/quic-go"
 	mockquic "github.com/lucas-clemente/quic-go/internal/mocks/quic"
+	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/internal/testdata"
 	"github.com/lucas-clemente/quic-go/internal/utils"
 	"github.com/marten-seemann/qpack"
@@ -286,6 +287,49 @@ var _ = Describe("Server", func() {
 				s.handleConn(sess)
 				Eventually(done).Should(BeClosed())
 			})
+
+			It("sets timeout on ReadHeaderTimeout, ReadTimeout and WriteTimeout", func() {
+				s.Server.ReadHeaderTimeout = 5 * time.Second
+				s.Server.ReadTimeout = 10 * time.Second
+				s.Server.WriteTimeout = 10 * time.Second
+
+				handlerCalled := make(chan struct{})
+				s.Handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					close(handlerCalled)
+				})
+
+				str.EXPECT().Context().Return(reqContext)
+				str.EXPECT().StreamID().Return(protocol.StreamID(1)).AnyTimes()
+
+				// read timeout
+				str.EXPECT().SetReadDeadline(gomock.Any()).Return(nil)
+				// header timeout
+				str.EXPECT().SetReadDeadline(gomock.Any()).Return(nil)
+				// adjust read timeout
+				str.EXPECT().SetReadDeadline(gomock.Any()).Return(nil)
+				// write timeout
+				str.EXPECT().SetWriteDeadline(gomock.Any()).Return(nil)
+
+				buf := bytes.NewBuffer(encodeRequest(exampleGetRequest))
+				str.EXPECT().Read(gomock.Any()).DoAndReturn(func(p []byte) (int, error) {
+					if buf.Len() == 0 {
+						return 0, io.EOF
+					}
+					return buf.Read(p)
+				}).AnyTimes()
+				str.EXPECT().Write(gomock.Any()).DoAndReturn(func(p []byte) (int, error) {
+					return len(p), nil
+				}).AnyTimes()
+
+				done := make(chan struct{})
+				str.EXPECT().Close().Do(func() {
+					close(done)
+				})
+
+				s.handleConn(sess)
+				Eventually(done).Should(BeClosed())
+			})
+
 		})
 
 		It("resets the stream when the body of POST request is not read, and the request handler replaces the request.Body", func() {
