@@ -11,6 +11,7 @@ import (
 	"runtime/pprof"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/lucas-clemente/quic-go/qlog"
@@ -436,6 +437,51 @@ var _ = Describe("Server", func() {
 				phm.EXPECT().Add(gomock.Any(), sess).Return(true).Times(2)
 				Expect(serv.handlePacketImpl(initialPacket)).To(BeTrue())
 				Expect(createdSession).To(BeTrue())
+			})
+
+			It("drops packets if the receive queue is full", func() {
+				phm.EXPECT().GetStatelessResetToken(gomock.Any()).AnyTimes()
+				phm.EXPECT().Add(gomock.Any(), gomock.Any()).AnyTimes()
+
+				serv.config.AcceptToken = func(net.Addr, *Token) bool { return true }
+				acceptSession := make(chan struct{})
+				var counter uint32 // to be used as an atomic, so we query it in Eventually
+				serv.newSession = func(
+					_ connection,
+					runner sessionRunner,
+					_ protocol.ConnectionID,
+					_ protocol.ConnectionID,
+					_ protocol.ConnectionID,
+					_ protocol.ConnectionID,
+					_ [16]byte,
+					_ *Config,
+					_ *tls.Config,
+					_ *handshake.TokenGenerator,
+					_ bool,
+					_ qlog.Tracer,
+					_ utils.Logger,
+					_ protocol.VersionNumber,
+				) quicSession {
+					<-acceptSession
+					atomic.AddUint32(&counter, 1)
+					return nil
+				}
+
+				serv.handlePacket(getInitial(protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8}))
+				var wg sync.WaitGroup
+				for i := 0; i < 3*protocol.MaxServerUnprocessedPackets; i++ {
+					wg.Add(1)
+					go func() {
+						defer GinkgoRecover()
+						defer wg.Done()
+						serv.handlePacket(getInitial(protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8}))
+					}()
+				}
+				wg.Wait()
+
+				close(acceptSession)
+				Eventually(func() uint32 { return atomic.LoadUint32(&counter) }).Should(BeEquivalentTo(protocol.MaxServerUnprocessedPackets + 1))
+				Consistently(func() uint32 { return atomic.LoadUint32(&counter) }).Should(BeEquivalentTo(protocol.MaxServerUnprocessedPackets + 1))
 			})
 
 			It("only creates a single session for a duplicate Initial", func() {

@@ -179,7 +179,7 @@ func listen(conn net.PacketConn, tlsConf *tls.Config, config *Config, acceptEarl
 		zeroRTTQueue:        newZeroRTTQueue(),
 		sessionQueue:        make(chan quicSession),
 		errorChan:           make(chan struct{}),
-		receivedPackets:     make(chan *receivedPacket, 1000),
+		receivedPackets:     make(chan *receivedPacket, protocol.MaxServerUnprocessedPackets),
 		newSession:          newSession,
 		logger:              utils.DefaultLogger.WithPrefix("server"),
 		acceptEarlySessions: acceptEarly,
@@ -285,7 +285,11 @@ func (s *baseServer) Addr() net.Addr {
 }
 
 func (s *baseServer) handlePacket(p *receivedPacket) {
-	s.receivedPackets <- p
+	select {
+	case s.receivedPackets <- p:
+	default:
+		s.logger.Debugf("Dropping packet from %s (%d bytes). Server receive queue full.", p.remoteAddr, len(p.data))
+	}
 }
 
 func (s *baseServer) handlePacketImpl(p *receivedPacket) bool /* was the packet handled */ {

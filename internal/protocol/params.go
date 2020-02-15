@@ -39,6 +39,9 @@ const DefaultMaxIncomingStreams = 100
 // DefaultMaxIncomingUniStreams is the maximum number of unidirectional streams that a peer may open
 const DefaultMaxIncomingUniStreams = 100
 
+// MaxServerUnprocessedPackets is the max number of packets stored in the server that are not yet processed.
+const MaxServerUnprocessedPackets = 1024
+
 // MaxSessionUnprocessedPackets is the max number of packets stored in each session that are not yet processed.
 const MaxSessionUnprocessedPackets = MaxCongestionWindowPackets
 
