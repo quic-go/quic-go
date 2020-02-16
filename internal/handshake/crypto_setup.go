@@ -120,6 +120,7 @@ func NewCryptoSetupClient(
 	handshakeStream io.Writer,
 	oneRTTStream io.Writer,
 	connID protocol.ConnectionID,
+	localAddr net.Addr,
 	remoteAddr net.Addr,
 	tp *TransportParameters,
 	runner handshakeRunner,
@@ -139,7 +140,7 @@ func NewCryptoSetupClient(
 		logger,
 		protocol.PerspectiveClient,
 	)
-	cs.conn = qtls.Client(newConn(remoteAddr), cs.tlsConf)
+	cs.conn = qtls.Client(newConn(localAddr, remoteAddr), cs.tlsConf)
 	return cs, clientHelloWritten
 }
 
@@ -149,6 +150,7 @@ func NewCryptoSetupServer(
 	handshakeStream io.Writer,
 	oneRTTStream io.Writer,
 	connID protocol.ConnectionID,
+	localAddr net.Addr,
 	remoteAddr net.Addr,
 	tp *TransportParameters,
 	runner handshakeRunner,
@@ -168,7 +170,7 @@ func NewCryptoSetupServer(
 		logger,
 		protocol.PerspectiveServer,
 	)
-	cs.conn = qtls.Server(newConn(remoteAddr), cs.tlsConf)
+	cs.conn = qtls.Server(newConn(localAddr, remoteAddr), cs.tlsConf)
 	return cs
 }
 
