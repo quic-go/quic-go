@@ -1,6 +1,7 @@
 package qlog
 
 import (
+	"net"
 	"sort"
 	"time"
 
@@ -57,6 +58,42 @@ func (e event) MarshalJSONArray(enc *gojay.Encoder) {
 	enc.String(e.Category().String())
 	enc.String(e.Name())
 	enc.Object(e.eventDetails)
+}
+
+type eventConnectionStarted struct {
+	SrcAddr  *net.UDPAddr
+	DestAddr *net.UDPAddr
+
+	Version          protocol.VersionNumber
+	SrcConnectionID  protocol.ConnectionID
+	DestConnectionID protocol.ConnectionID
+
+	// TODO: add ALPN
+}
+
+var _ eventDetails = &eventConnectionStarted{}
+
+func (e eventConnectionStarted) Category() category { return categoryTransport }
+func (e eventConnectionStarted) Name() string       { return "connection_started" }
+func (e eventConnectionStarted) IsNil() bool        { return false }
+
+func (e eventConnectionStarted) MarshalJSONObject(enc *gojay.Encoder) {
+	// If ip is not an IPv4 address, To4 returns nil.
+	// Note that there might be some corner cases, where this is not correct.
+	// See https://stackoverflow.com/questions/22751035/golang-distinguish-ipv4-ipv6.
+	isIPv6 := e.SrcAddr.IP.To4() == nil
+	if isIPv6 {
+		enc.StringKey("ip_version", "ipv6")
+	} else {
+		enc.StringKey("ip_version", "ipv4")
+	}
+	enc.StringKey("src_ip", e.SrcAddr.IP.String())
+	enc.IntKey("src_port", e.SrcAddr.Port)
+	enc.StringKey("dst_ip", e.DestAddr.IP.String())
+	enc.IntKey("dst_port", e.DestAddr.Port)
+	enc.StringKey("quic_version", versionNumber(e.Version).String())
+	enc.StringKey("src_cid", connectionID(e.SrcConnectionID).String())
+	enc.StringKey("dst_cid", connectionID(e.DestConnectionID).String())
 }
 
 type eventPacketSent struct {

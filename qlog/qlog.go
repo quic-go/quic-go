@@ -2,6 +2,7 @@ package qlog
 
 import (
 	"io"
+	"net"
 	"time"
 
 	"github.com/lucas-clemente/quic-go/internal/congestion"
@@ -14,6 +15,7 @@ import (
 // A Tracer records events to be exported to a qlog.
 type Tracer interface {
 	Export() error
+	StartedConnection(t time.Time, local, remote net.Addr, version protocol.VersionNumber, srcConnID, destConnID protocol.ConnectionID)
 	SentPacket(t time.Time, hdr *wire.ExtendedHeader, packetSize protocol.ByteCount, ack *wire.AckFrame, frames []wire.Frame)
 	ReceivedRetry(time.Time, *wire.Header)
 	ReceivedPacket(t time.Time, hdr *wire.ExtendedHeader, packetSize protocol.ByteCount, frames []wire.Frame)
@@ -58,6 +60,28 @@ func (t *tracer) Export() error {
 		return err
 	}
 	return t.w.Close()
+}
+
+func (t *tracer) StartedConnection(time time.Time, local, remote net.Addr, version protocol.VersionNumber, srcConnID, destConnID protocol.ConnectionID) {
+	// ignore this event if we're not dealing with UDP addresses here
+	localAddr, ok := local.(*net.UDPAddr)
+	if !ok {
+		return
+	}
+	remoteAddr, ok := remote.(*net.UDPAddr)
+	if !ok {
+		return
+	}
+	t.events = append(t.events, event{
+		Time: time,
+		eventDetails: eventConnectionStarted{
+			SrcAddr:          localAddr,
+			DestAddr:         remoteAddr,
+			Version:          version,
+			SrcConnectionID:  srcConnID,
+			DestConnectionID: destConnID,
+		},
+	})
 }
 
 func (t *tracer) SentPacket(time time.Time, hdr *wire.ExtendedHeader, packetSize protocol.ByteCount, ack *wire.AckFrame, frames []wire.Frame) {

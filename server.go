@@ -402,6 +402,9 @@ func (s *baseServer) createNewSession(
 			qlogger = qlog.NewTracer(w, protocol.PerspectiveServer, origDestConnID)
 		}
 	}
+	if qlogger != nil {
+		qlogger.StartedConnection(time.Now(), s.conn.LocalAddr(), remoteAddr, version, srcConnID, destConnID)
+	}
 	sess := s.newSession(
 		&conn{pconn: s.conn, currentAddr: remoteAddr},
 		s.sessionHandler,
