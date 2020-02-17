@@ -196,3 +196,20 @@ func (e eventPacketLost) MarshalJSONObject(enc *gojay.Encoder) {
 	enc.StringKey("packet_number", toString(int64(e.PacketNumber)))
 	enc.StringKey("trigger", e.Trigger.String())
 }
+
+type eventKeyUpdated struct {
+	Trigger    string
+	KeyType    keyType
+	Generation uint64
+	// we don't log the keys here, so we don't need `old` and `new`.
+}
+
+func (e eventKeyUpdated) Category() category { return categorySecurity }
+func (e eventKeyUpdated) Name() string       { return "key_updated" }
+func (e eventKeyUpdated) IsNil() bool        { return false }
+
+func (e eventKeyUpdated) MarshalJSONObject(enc *gojay.Encoder) {
+	enc.StringKey("trigger", e.Trigger)
+	enc.StringKey("key_type", e.KeyType.String())
+	enc.Uint64KeyOmitEmpty("generation", e.Generation)
+}

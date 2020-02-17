@@ -95,6 +95,7 @@ var _ = Describe("Crypto Setup TLS", func() {
 			tlsConf,
 			false,
 			&congestion.RTTStats{},
+			nil,
 			utils.DefaultLogger.WithPrefix("server"),
 		)
 		qtlsConf := server.(*cryptoSetup).tlsConf
@@ -127,6 +128,7 @@ var _ = Describe("Crypto Setup TLS", func() {
 			testdata.GetTLSConfig(),
 			false,
 			&congestion.RTTStats{},
+			nil,
 			utils.DefaultLogger.WithPrefix("server"),
 		)
 
@@ -165,6 +167,7 @@ var _ = Describe("Crypto Setup TLS", func() {
 			testdata.GetTLSConfig(),
 			false,
 			&congestion.RTTStats{},
+			nil,
 			utils.DefaultLogger.WithPrefix("server"),
 		)
 
@@ -206,6 +209,7 @@ var _ = Describe("Crypto Setup TLS", func() {
 			serverConf,
 			false,
 			&congestion.RTTStats{},
+			nil,
 			utils.DefaultLogger.WithPrefix("server"),
 		)
 
@@ -240,6 +244,7 @@ var _ = Describe("Crypto Setup TLS", func() {
 			serverConf,
 			false,
 			&congestion.RTTStats{},
+			nil,
 			utils.DefaultLogger.WithPrefix("server"),
 		)
 
@@ -334,6 +339,7 @@ var _ = Describe("Crypto Setup TLS", func() {
 				clientConf,
 				enable0RTT,
 				&congestion.RTTStats{},
+				nil,
 				utils.DefaultLogger.WithPrefix("client"),
 			)
 
@@ -356,6 +362,7 @@ var _ = Describe("Crypto Setup TLS", func() {
 				serverConf,
 				enable0RTT,
 				&congestion.RTTStats{},
+				nil,
 				utils.DefaultLogger.WithPrefix("server"),
 			)
 
@@ -409,6 +416,7 @@ var _ = Describe("Crypto Setup TLS", func() {
 				&tls.Config{InsecureSkipVerify: true},
 				false,
 				&congestion.RTTStats{},
+				nil,
 				utils.DefaultLogger.WithPrefix("client"),
 			)
 
@@ -450,6 +458,7 @@ var _ = Describe("Crypto Setup TLS", func() {
 				clientConf,
 				false,
 				&congestion.RTTStats{},
+				nil,
 				utils.DefaultLogger.WithPrefix("client"),
 			)
 
@@ -473,6 +482,7 @@ var _ = Describe("Crypto Setup TLS", func() {
 				serverConf,
 				false,
 				&congestion.RTTStats{},
+				nil,
 				utils.DefaultLogger.WithPrefix("server"),
 			)
 
@@ -505,6 +515,7 @@ var _ = Describe("Crypto Setup TLS", func() {
 					clientConf,
 					false,
 					&congestion.RTTStats{},
+					nil,
 					utils.DefaultLogger.WithPrefix("client"),
 				)
 
@@ -523,6 +534,7 @@ var _ = Describe("Crypto Setup TLS", func() {
 					serverConf,
 					false,
 					&congestion.RTTStats{},
+					nil,
 					utils.DefaultLogger.WithPrefix("server"),
 				)
 
@@ -562,6 +574,7 @@ var _ = Describe("Crypto Setup TLS", func() {
 					clientConf,
 					false,
 					&congestion.RTTStats{},
+					nil,
 					utils.DefaultLogger.WithPrefix("client"),
 				)
 
@@ -580,6 +593,7 @@ var _ = Describe("Crypto Setup TLS", func() {
 					serverConf,
 					false,
 					&congestion.RTTStats{},
+					nil,
 					utils.DefaultLogger.WithPrefix("server"),
 				)
 
@@ -691,6 +705,7 @@ var _ = Describe("Crypto Setup TLS", func() {
 					clientConf,
 					true,
 					&congestion.RTTStats{},
+					nil,
 					utils.DefaultLogger.WithPrefix("client"),
 				)
 
@@ -709,6 +724,7 @@ var _ = Describe("Crypto Setup TLS", func() {
 					serverConf,
 					true,
 					&congestion.RTTStats{},
+					nil,
 					utils.DefaultLogger.WithPrefix("server"),
 				)
 

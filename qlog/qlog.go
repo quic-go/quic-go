@@ -21,6 +21,7 @@ type Tracer interface {
 	ReceivedPacket(t time.Time, hdr *wire.ExtendedHeader, packetSize protocol.ByteCount, frames []wire.Frame)
 	UpdatedMetrics(t time.Time, rttStats *congestion.RTTStats, cwnd protocol.ByteCount, bytesInFLight protocol.ByteCount, packetsInFlight int)
 	LostPacket(time.Time, protocol.EncryptionLevel, protocol.PacketNumber, PacketLossReason)
+	UpdatedKeyFromTLS(time.Time, protocol.EncryptionLevel, protocol.Perspective)
 }
 
 type tracer struct {
@@ -156,6 +157,16 @@ func (t *tracer) LostPacket(time time.Time, encLevel protocol.EncryptionLevel, p
 			PacketType:   getPacketTypeFromEncryptionLevel(encLevel),
 			PacketNumber: pn,
 			Trigger:      lossReason,
+		},
+	})
+}
+
+func (t *tracer) UpdatedKeyFromTLS(time time.Time, encLevel protocol.EncryptionLevel, pers protocol.Perspective) {
+	t.events = append(t.events, event{
+		Time: time,
+		eventDetails: eventKeyUpdated{
+			Trigger: "tls",
+			KeyType: encLevelToKeyType(encLevel, pers),
 		},
 	})
 }
