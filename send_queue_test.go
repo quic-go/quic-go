@@ -70,4 +70,30 @@ var _ = Describe("Send Queue", func() {
 		q.Close()
 		Eventually(done).Should(BeClosed())
 	})
+
+	It("blocks Close() until the packet has been sent out", func() {
+		written := make(chan []byte)
+		c.EXPECT().Write(gomock.Any()).Do(func(p []byte) { written <- p })
+		done := make(chan struct{})
+		go func() {
+			defer GinkgoRecover()
+			q.Run()
+			close(done)
+		}()
+
+		q.Send(getPacket([]byte("foobar")))
+
+		closed := make(chan struct{})
+		go func() {
+			defer GinkgoRecover()
+			q.Close()
+			close(closed)
+		}()
+
+		Consistently(closed).ShouldNot(BeClosed())
+		// now write the packet
+		Expect(written).To(Receive())
+		Eventually(done).Should(BeClosed())
+		Eventually(closed).Should(BeClosed())
+	})
 })
