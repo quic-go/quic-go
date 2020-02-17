@@ -372,6 +372,7 @@ func (h *sentPacketHandler) setLossDetectionTimer() {
 	if lossTime, _ := h.getEarliestLossTimeAndSpace(); !lossTime.IsZero() {
 		// Early retransmit timer or time loss detection.
 		h.alarm = lossTime
+		return
 	}
 
 	// Cancel the alarm if no packets are outstanding
