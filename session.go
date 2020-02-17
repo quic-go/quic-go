@@ -270,6 +270,7 @@ var newSession = func(
 		initialStream,
 		handshakeStream,
 		clientDestConnID,
+		conn.LocalAddr(),
 		conn.RemoteAddr(),
 		params,
 		&handshakeRunner{
@@ -372,6 +373,7 @@ var newClientSession = func(
 		initialStream,
 		handshakeStream,
 		destConnID,
+		conn.LocalAddr(),
 		conn.RemoteAddr(),
 		params,
 		&handshakeRunner{
