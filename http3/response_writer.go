@@ -120,7 +120,7 @@ func (w *responseWriter) declareTrailer(k string) {
 	}
 }
 
-func (w *responseWriter) hasNonemptyTrailers() bool {
+func (w *responseWriter) hasNonEmptyTrailers() bool {
 	for _, trailer := range w.trailers {
 		if _, ok := w.header[trailer]; ok {
 			return true
@@ -132,7 +132,7 @@ func (w *responseWriter) hasNonemptyTrailers() bool {
 func (w *responseWriter) writeTrailers() {
 	w.promoteTrailer()
 
-	if !w.hasNonemptyTrailers() {
+	if !w.hasNonEmptyTrailers() {
 		return
 	}
 

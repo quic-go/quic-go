@@ -26,24 +26,30 @@ type body struct {
 	bytesRemainingInFrame uint64
 
 	resp *http.Response
+
+	decoder *qpack.Decoder
+
+	maxHeaderBytes uint64
 }
 
 var _ io.ReadCloser = &body{}
 
 func newRequestBody(str quic.Stream, onFrameError func()) *body {
 	return &body{
-		str:          str,
-		onFrameError: onFrameError,
-		isRequest:    true,
+		str:            str,
+		onFrameError:   onFrameError,
+		isRequest:      true,
 	}
 }
 
-func newResponseBody(str quic.Stream, done chan<- struct{}, onFrameError func(), resp *http.Response) *body {
+func newResponseBody(str quic.Stream, done chan<- struct{}, onFrameError func(), resp *http.Response, decoder *qpack.Decoder, maxHeaderBytes uint64) *body {
 	return &body{
-		str:          str,
-		onFrameError: onFrameError,
-		reqDone:      done,
-		resp:         resp,
+		str:            str,
+		onFrameError:   onFrameError,
+		reqDone:        done,
+		resp:           resp,
+		decoder:        decoder,
+		maxHeaderBytes: maxHeaderBytes,
 	}
 }
 
@@ -65,21 +71,28 @@ func (r *body) readImpl(b []byte) (int, error) {
 			}
 			switch f := frame.(type) {
 			case *headersFrame:
-				decoder := qpack.NewDecoder(func(f qpack.HeaderField) {
-					if r.resp.Trailer == nil {
-						r.resp.Trailer = http.Header{}
-					}
-					r.resp.Trailer.Add(f.Name, f.Value)
-				})
-
+				if r.isRequest {
+					// skip HEADERS frame in request
+					continue
+				}
+				if f.Length > r.maxHeaderBytes {
+					return 0, fmt.Errorf("HEADERS frame too large: %d bytes (max: %d)", f.Length, r.maxHeaderBytes)
+				}
 				p := make([]byte, f.Length)
 				r.str.Read(p)
-				_, err := decoder.Write(p)
+				trailers, err := r.decoder.DecodeFull(p)
 				if err != nil {
 					// Ignoring invalid frame
 					continue
 				}
-				decoder.Close()
+
+				for _, trailer := range trailers {
+					if r.resp.Trailer == nil {
+						r.resp.Trailer = http.Header{}
+					}
+					r.resp.Trailer.Add(trailer.Name, trailer.Value)
+				}
+
 				continue
 			case *dataFrame:
 				r.bytesRemainingInFrame = f.Length
