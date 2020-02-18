@@ -8,6 +8,7 @@ import (
 	"io"
 	"net"
 	"sync"
+	"time"
 
 	"github.com/lucas-clemente/quic-go/internal/congestion"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
@@ -94,6 +95,8 @@ type cryptoSetup struct {
 	perspective protocol.Perspective
 
 	mutex sync.Mutex // protects all members below
+
+	handshakeCompleteTime time.Time
 
 	readEncLevel  protocol.EncryptionLevel
 	writeEncLevel protocol.EncryptionLevel
@@ -244,6 +247,9 @@ func (h *cryptoSetup) RunHandshake() {
 
 	select {
 	case <-handshakeComplete: // return when the handshake is done
+		h.mutex.Lock()
+		h.handshakeCompleteTime = time.Now()
+		h.mutex.Unlock()
 		h.runner.OnHandshakeComplete()
 	case <-h.closeChan:
 		close(h.messageChan)
@@ -763,6 +769,11 @@ func (h *cryptoSetup) GetHandshakeOpener() (LongHeaderOpener, error) {
 func (h *cryptoSetup) Get1RTTOpener() (ShortHeaderOpener, error) {
 	h.mutex.Lock()
 	defer h.mutex.Unlock()
+
+	if h.zeroRTTOpener != nil && time.Since(h.handshakeCompleteTime) > 3*h.rttStats.PTO(true) {
+		h.zeroRTTOpener = nil
+		h.logger.Debugf("Dropping 0-RTT keys.")
+	}
 
 	if !h.has1RTTOpener {
 		return nil, ErrKeysNotYetAvailable
