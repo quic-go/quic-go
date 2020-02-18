@@ -755,6 +755,7 @@ var _ = Describe("SentPacketHandler", func() {
 		})
 
 		It("sets the early retransmit alarm", func() {
+			handler.handshakeComplete = true
 			now := time.Now()
 			handler.SentPacket(ackElicitingPacket(&Packet{PacketNumber: 1, SendTime: now.Add(-2 * time.Second)}))
 			handler.SentPacket(ackElicitingPacket(&Packet{PacketNumber: 2, SendTime: now.Add(-2 * time.Second)}))
@@ -766,8 +767,7 @@ var _ = Describe("SentPacketHandler", func() {
 			Expect(handler.rttStats.SmoothedRTT()).To(Equal(time.Second))
 
 			// Packet 1 should be considered lost (1+1/8) RTTs after it was sent.
-			Expect(handler.appDataPackets.lossTime.IsZero()).To(BeFalse())
-			Expect(handler.appDataPackets.lossTime.Sub(getPacket(1, protocol.Encryption1RTT).SendTime)).To(Equal(time.Second * 9 / 8))
+			Expect(handler.GetLossDetectionTimeout().Sub(getPacket(1, protocol.Encryption1RTT).SendTime)).To(Equal(time.Second * 9 / 8))
 		})
 
 		It("sets the early retransmit alarm for crypto packets", func() {
@@ -782,8 +782,7 @@ var _ = Describe("SentPacketHandler", func() {
 			Expect(handler.rttStats.SmoothedRTT()).To(Equal(time.Second))
 
 			// Packet 1 should be considered lost (1+1/8) RTTs after it was sent.
-			Expect(handler.initialPackets.lossTime.IsZero()).To(BeFalse())
-			Expect(handler.initialPackets.lossTime.Sub(getPacket(1, protocol.EncryptionInitial).SendTime)).To(Equal(time.Second * 9 / 8))
+			Expect(handler.GetLossDetectionTimeout().Sub(getPacket(1, protocol.EncryptionInitial).SendTime)).To(Equal(time.Second * 9 / 8))
 		})
 	})
 
