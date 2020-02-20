@@ -249,7 +249,15 @@ var newSession = func(
 		s.queueControlFrame,
 	)
 	s.preSetup()
-	s.sentPacketHandler = ackhandler.NewSentPacketHandler(0, s.rttStats, protocol.PerspectiveServer, s.traceCallback, s.qlogger, s.logger)
+	s.sentPacketHandler, s.receivedPacketHandler = ackhandler.NewAckHandler(
+		0,
+		s.rttStats,
+		s.perspective,
+		s.traceCallback,
+		s.qlogger,
+		s.logger,
+		s.version,
+	)
 	initialStream := newCryptoStream()
 	handshakeStream := newCryptoStream()
 	params := &handshake.TransportParameters{
@@ -354,7 +362,15 @@ var newClientSession = func(
 		s.queueControlFrame,
 	)
 	s.preSetup()
-	s.sentPacketHandler = ackhandler.NewSentPacketHandler(initialPacketNumber, s.rttStats, protocol.PerspectiveClient, s.traceCallback, s.qlogger, s.logger)
+	s.sentPacketHandler, s.receivedPacketHandler = ackhandler.NewAckHandler(
+		initialPacketNumber,
+		s.rttStats,
+		s.perspective,
+		s.traceCallback,
+		s.qlogger,
+		s.logger,
+		s.version,
+	)
 	initialStream := newCryptoStream()
 	handshakeStream := newCryptoStream()
 	params := &handshake.TransportParameters{
@@ -424,7 +440,6 @@ func (s *session) preSetup() {
 	s.retransmissionQueue = newRetransmissionQueue(s.version)
 	s.frameParser = wire.NewFrameParser(s.version)
 	s.rttStats = &congestion.RTTStats{}
-	s.receivedPacketHandler = ackhandler.NewReceivedPacketHandler(s.rttStats, s.logger, s.version)
 	s.connFlowController = flowcontrol.NewConnectionFlowController(
 		protocol.InitialMaxData,
 		protocol.ByteCount(s.config.MaxReceiveConnectionFlowControlWindow),

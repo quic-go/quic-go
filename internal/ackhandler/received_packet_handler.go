@@ -41,8 +41,7 @@ type receivedPacketHandler struct {
 
 var _ ReceivedPacketHandler = &receivedPacketHandler{}
 
-// NewReceivedPacketHandler creates a new receivedPacketHandler
-func NewReceivedPacketHandler(
+func newReceivedPacketHandler(
 	rttStats *congestion.RTTStats,
 	logger utils.Logger,
 	version protocol.VersionNumber,

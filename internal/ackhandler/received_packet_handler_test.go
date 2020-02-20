@@ -16,7 +16,7 @@ var _ = Describe("Received Packet Handler", func() {
 	var handler ReceivedPacketHandler
 
 	BeforeEach(func() {
-		handler = NewReceivedPacketHandler(
+		handler = newReceivedPacketHandler(
 			&congestion.RTTStats{},
 			utils.DefaultLogger,
 			protocol.VersionWhatever,
