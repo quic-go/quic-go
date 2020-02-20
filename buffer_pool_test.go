@@ -10,7 +10,7 @@ import (
 var _ = Describe("Buffer Pool", func() {
 	It("returns buffers of cap", func() {
 		buf := getPacketBuffer()
-		Expect(buf.Slice).To(HaveCap(int(protocol.MaxReceivePacketSize)))
+		Expect(buf.Data).To(HaveCap(int(protocol.MaxReceivePacketSize)))
 	})
 
 	It("releases buffers", func() {
@@ -18,9 +18,15 @@ var _ = Describe("Buffer Pool", func() {
 		buf.Release()
 	})
 
+	It("gets the length", func() {
+		buf := getPacketBuffer()
+		buf.Data = append(buf.Data, []byte("foobar")...)
+		Expect(buf.Len()).To(BeEquivalentTo(6))
+	})
+
 	It("panics if wrong-sized buffers are passed", func() {
 		buf := getPacketBuffer()
-		buf.Slice = make([]byte, 10)
+		buf.Data = make([]byte, 10)
 		Expect(func() { buf.Release() }).To(Panic())
 	})
 

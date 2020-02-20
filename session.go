@@ -164,6 +164,7 @@ type session struct {
 	earlySessionReadyChan chan struct{}
 	handshakeCompleteChan chan struct{} // is closed when the handshake completes
 	handshakeComplete     bool
+	handshakeConfirmed    bool
 
 	receivedRetry       bool
 	receivedFirstPacket bool
@@ -1139,6 +1140,9 @@ func (s *session) handleCloseError(closeErr closeError) {
 }
 
 func (s *session) dropEncryptionLevel(encLevel protocol.EncryptionLevel) {
+	if encLevel == protocol.EncryptionHandshake {
+		s.handshakeConfirmed = true
+	}
 	s.sentPacketHandler.DropPackets(encLevel)
 	s.receivedPacketHandler.DropPackets(encLevel)
 }
@@ -1247,7 +1251,7 @@ sendLoop:
 }
 
 func (s *session) maybeSendAckOnlyPacket() error {
-	packet, err := s.packer.MaybePackAckPacket()
+	packet, err := s.packer.MaybePackAckPacket(s.handshakeConfirmed)
 	if err != nil {
 		return err
 	}
@@ -1305,6 +1309,23 @@ func (s *session) sendPacket() (bool, error) {
 	}
 	s.windowUpdateQueue.QueueAll()
 
+	if !s.handshakeConfirmed {
+		now := time.Now()
+		packet, err := s.packer.PackCoalescedPacket()
+		if err != nil || packet == nil {
+			return false, err
+		}
+		for _, p := range packet.packets {
+			if s.firstAckElicitingPacketAfterIdleSentTime.IsZero() && p.IsAckEliciting() {
+				s.firstAckElicitingPacketAfterIdleSentTime = now
+			}
+			s.sentPacketHandler.SentPacket(p.ToAckHandlerPacket(now, s.retransmissionQueue))
+		}
+		s.connIDManager.SentPacket()
+		s.logCoalescedPacket(now, packet)
+		s.sendQueue.Send(packet.buffer)
+		return true, nil
+	}
 	packet, err := s.packer.PackPacket()
 	if err != nil || packet == nil {
 		return false, err
@@ -1314,36 +1335,14 @@ func (s *session) sendPacket() (bool, error) {
 }
 
 func (s *session) sendPackedPacket(packet *packedPacket) {
-	if s.firstAckElicitingPacketAfterIdleSentTime.IsZero() && packet.IsAckEliciting() {
-		s.firstAckElicitingPacketAfterIdleSentTime = time.Now()
-	}
 	now := time.Now()
-	s.sentPacketHandler.SentPacket(packet.ToAckHandlerPacket(now, s.retransmissionQueue))
-	if s.traceCallback != nil {
-		frames := make([]wire.Frame, 0, len(packet.frames))
-		for _, f := range packet.frames {
-			frames = append(frames, f.Frame)
-		}
-		s.traceCallback(quictrace.Event{
-			Time:            now,
-			EventType:       quictrace.PacketSent,
-			TransportState:  s.sentPacketHandler.GetStats(),
-			EncryptionLevel: packet.EncryptionLevel(),
-			PacketNumber:    packet.header.PacketNumber,
-			PacketSize:      protocol.ByteCount(len(packet.raw)),
-			Frames:          frames,
-		})
+	if s.firstAckElicitingPacketAfterIdleSentTime.IsZero() && packet.IsAckEliciting() {
+		s.firstAckElicitingPacketAfterIdleSentTime = now
 	}
-	if s.qlogger != nil {
-		frames := make([]wire.Frame, 0, len(packet.frames))
-		for _, f := range packet.frames {
-			frames = append(frames, f.Frame)
-		}
-		s.qlogger.SentPacket(now, packet.header, protocol.ByteCount(len(packet.raw)), packet.ack, frames)
-	}
-	s.logPacket(packet)
+	s.sentPacketHandler.SentPacket(packet.ToAckHandlerPacket(time.Now(), s.retransmissionQueue))
 	s.connIDManager.SentPacket()
-	s.sendQueue.Send(packet)
+	s.logPacket(now, packet)
+	s.sendQueue.Send(packet.buffer)
 }
 
 func (s *session) sendConnectionClose(quicErr *qerr.QuicError) ([]byte, error) {
@@ -1365,23 +1364,64 @@ func (s *session) sendConnectionClose(quicErr *qerr.QuicError) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	s.logPacket(packet)
-	return packet.raw, s.conn.Write(packet.raw)
+	s.logPacket(time.Now(), packet)
+	return packet.buffer.Data, s.conn.Write(packet.buffer.Data)
 }
 
-func (s *session) logPacket(packet *packedPacket) {
+func (s *session) logPacketContents(now time.Time, p *packetContents) {
+	// qlog
+	if s.qlogger != nil {
+		frames := make([]wire.Frame, 0, len(p.frames))
+		for _, f := range p.frames {
+			frames = append(frames, f.Frame)
+		}
+		s.qlogger.SentPacket(now, p.header, p.length, p.ack, frames)
+	}
+
+	// quic-trace
+	if s.traceCallback != nil {
+		frames := make([]wire.Frame, 0, len(p.frames))
+		for _, f := range p.frames {
+			frames = append(frames, f.Frame)
+		}
+		s.traceCallback(quictrace.Event{
+			Time:            now,
+			EventType:       quictrace.PacketSent,
+			TransportState:  s.sentPacketHandler.GetStats(),
+			EncryptionLevel: p.EncryptionLevel(),
+			PacketNumber:    p.header.PacketNumber,
+			PacketSize:      p.length,
+			Frames:          frames,
+		})
+	}
+
+	// quic-go logging
 	if !s.logger.Debug() {
-		// We don't need to allocate the slices for calling the format functions
 		return
 	}
-	s.logger.Debugf("-> Sending packet 0x%x (%d bytes) for connection %s, %s", packet.header.PacketNumber, len(packet.raw), s.logID, packet.EncryptionLevel())
-	packet.header.Log(s.logger)
-	if packet.ack != nil {
-		wire.LogFrame(s.logger, packet.ack, true)
+	p.header.Log(s.logger)
+	if p.ack != nil {
+		wire.LogFrame(s.logger, p.ack, true)
 	}
-	for _, frame := range packet.frames {
+	for _, frame := range p.frames {
 		wire.LogFrame(s.logger, frame.Frame, true)
 	}
+}
+
+func (s *session) logCoalescedPacket(now time.Time, packet *coalescedPacket) {
+	if s.logger.Debug() {
+		s.logger.Debugf("-> Sending coalesced packet (%d parts, %d bytes) for connection %s", len(packet.packets), packet.buffer.Len(), s.logID)
+	}
+	for _, p := range packet.packets {
+		s.logPacketContents(now, p)
+	}
+}
+
+func (s *session) logPacket(now time.Time, packet *packedPacket) {
+	if s.logger.Debug() {
+		s.logger.Debugf("-> Sending packet %#x (%d bytes) for connection %s, %s", packet.header.PacketNumber, packet.buffer.Len(), s.logID, packet.EncryptionLevel())
+	}
+	s.logPacketContents(now, packet.packetContents)
 }
 
 // AcceptStream returns the next stream openend by the peer
