@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"io"
+	"net"
 	"time"
 
 	"github.com/lucas-clemente/quic-go/internal/congestion"
@@ -78,6 +79,30 @@ var _ = Describe("Tracer", func() {
 			Expect(ev).To(HaveLen(4))
 			return time.Unix(0, int64(1e6*ev[0].(float64))), ev[1].(string), ev[2].(string), ev[3].(map[string]interface{})
 		}
+
+		It("records connection starts", func() {
+			now := time.Now()
+			tracer.StartedConnection(
+				now,
+				&net.UDPAddr{IP: net.IPv4(192, 168, 13, 37), Port: 42},
+				&net.UDPAddr{IP: net.IPv4(192, 168, 12, 34), Port: 24},
+				0xdeadbeef,
+				protocol.ConnectionID{1, 2, 3, 4},
+				protocol.ConnectionID{5, 6, 7, 8},
+			)
+			t, category, eventName, ev := exportAndParse()
+			Expect(t).To(BeTemporally("~", now, time.Millisecond))
+			Expect(category).To(Equal("transport"))
+			Expect(eventName).To(Equal("connection_started"))
+			Expect(ev).To(HaveKeyWithValue("ip_version", "ipv4"))
+			Expect(ev).To(HaveKeyWithValue("src_ip", "192.168.13.37"))
+			Expect(ev).To(HaveKeyWithValue("src_port", float64(42)))
+			Expect(ev).To(HaveKeyWithValue("dst_ip", "192.168.12.34"))
+			Expect(ev).To(HaveKeyWithValue("dst_port", float64(24)))
+			Expect(ev).To(HaveKeyWithValue("quic_version", "deadbeef"))
+			Expect(ev).To(HaveKeyWithValue("src_cid", "01020304"))
+			Expect(ev).To(HaveKeyWithValue("dst_cid", "05060708"))
+		})
 
 		It("records a sent packet, without an ACK", func() {
 			now := time.Now()

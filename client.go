@@ -8,6 +8,7 @@ import (
 	"net"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/internal/utils"
@@ -259,6 +260,9 @@ func populateClientConfig(config *Config, createdPacketConn bool) *Config {
 
 func (c *client) dial(ctx context.Context, qlogger qlog.Tracer) error {
 	c.logger.Infof("Starting new connection to %s (%s -> %s), source connection ID %s, destination connection ID %s, version %s", c.tlsConf.ServerName, c.conn.LocalAddr(), c.conn.RemoteAddr(), c.srcConnID, c.destConnID, c.version)
+	if qlogger != nil {
+		qlogger.StartedConnection(time.Now(), c.conn.LocalAddr(), c.conn.LocalAddr(), c.version, c.srcConnID, c.destConnID)
+	}
 
 	c.mutex.Lock()
 	c.session = newClientSession(
