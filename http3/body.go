@@ -36,9 +36,9 @@ var _ io.ReadCloser = &body{}
 
 func newRequestBody(str quic.Stream, onFrameError func()) *body {
 	return &body{
-		str:            str,
-		onFrameError:   onFrameError,
-		isRequest:      true,
+		str:          str,
+		onFrameError: onFrameError,
+		isRequest:    true,
 	}
 }
 
@@ -93,7 +93,8 @@ func (r *body) readImpl(b []byte) (int, error) {
 					r.resp.Trailer.Add(trailer.Name, trailer.Value)
 				}
 
-				continue
+				// Trailer Frame is the last frame.
+				return 0, nil
 			case *dataFrame:
 				r.bytesRemainingInFrame = f.Length
 				break parseLoop
