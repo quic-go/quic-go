@@ -154,19 +154,6 @@ var _ = Describe("Session", func() {
 				err := sess.handleAckFrame(f, protocol.EncryptionHandshake)
 				Expect(err).ToNot(HaveOccurred())
 			})
-
-			It("tells the ReceivedPacketHandler to ignore low ranges", func() {
-				cryptoSetup.EXPECT().SetLargest1RTTAcked(protocol.PacketNumber(3))
-				ack := &wire.AckFrame{AckRanges: []wire.AckRange{{Smallest: 2, Largest: 3}}}
-				sph := mockackhandler.NewMockSentPacketHandler(mockCtrl)
-				sph.EXPECT().ReceivedAck(gomock.Any(), gomock.Any(), gomock.Any())
-				sph.EXPECT().GetLowestPacketNotConfirmedAcked().Return(protocol.PacketNumber(0x42))
-				sess.sentPacketHandler = sph
-				rph := mockackhandler.NewMockReceivedPacketHandler(mockCtrl)
-				rph.EXPECT().IgnoreBelow(protocol.PacketNumber(0x42))
-				sess.receivedPacketHandler = rph
-				Expect(sess.handleAckFrame(ack, protocol.Encryption1RTT)).To(Succeed())
-			})
 		})
 
 		Context("handling RESET_STREAM frames", func() {

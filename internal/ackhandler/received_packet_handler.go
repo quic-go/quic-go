@@ -32,6 +32,8 @@ const (
 )
 
 type receivedPacketHandler struct {
+	sentPackets sentPacketTracker
+
 	initialPackets   *receivedPacketTracker
 	handshakePackets *receivedPacketTracker
 	appDataPackets   *receivedPacketTracker
@@ -42,11 +44,13 @@ type receivedPacketHandler struct {
 var _ ReceivedPacketHandler = &receivedPacketHandler{}
 
 func newReceivedPacketHandler(
+	sentPackets sentPacketTracker,
 	rttStats *congestion.RTTStats,
 	logger utils.Logger,
 	version protocol.VersionNumber,
 ) ReceivedPacketHandler {
 	return &receivedPacketHandler{
+		sentPackets:      sentPackets,
 		initialPackets:   newReceivedPacketTracker(rttStats, logger, version),
 		handshakePackets: newReceivedPacketTracker(rttStats, logger, version),
 		appDataPackets:   newReceivedPacketTracker(rttStats, logger, version),
@@ -74,16 +78,12 @@ func (h *receivedPacketHandler) ReceivedPacket(
 		if h.lowest1RTTPacket == protocol.InvalidPacketNumber || pn < h.lowest1RTTPacket {
 			h.lowest1RTTPacket = pn
 		}
+		h.appDataPackets.IgnoreBelow(h.sentPackets.GetLowestPacketNotConfirmedAcked())
 		h.appDataPackets.ReceivedPacket(pn, rcvTime, shouldInstigateAck)
 	default:
 		panic(fmt.Sprintf("received packet with unknown encryption level: %s", encLevel))
 	}
 	return nil
-}
-
-// only to be used with 1-RTT packets
-func (h *receivedPacketHandler) IgnoreBelow(pn protocol.PacketNumber) {
-	h.appDataPackets.IgnoreBelow(pn)
 }
 
 func (h *receivedPacketHandler) DropPackets(encLevel protocol.EncryptionLevel) {

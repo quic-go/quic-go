@@ -76,18 +76,6 @@ func (mr *MockReceivedPacketHandlerMockRecorder) GetAlarmTimeout() *gomock.Call 
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetAlarmTimeout", reflect.TypeOf((*MockReceivedPacketHandler)(nil).GetAlarmTimeout))
 }
 
-// IgnoreBelow mocks base method
-func (m *MockReceivedPacketHandler) IgnoreBelow(arg0 protocol.PacketNumber) {
-	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "IgnoreBelow", arg0)
-}
-
-// IgnoreBelow indicates an expected call of IgnoreBelow
-func (mr *MockReceivedPacketHandlerMockRecorder) IgnoreBelow(arg0 interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IgnoreBelow", reflect.TypeOf((*MockReceivedPacketHandler)(nil).IgnoreBelow), arg0)
-}
-
 // ReceivedPacket mocks base method
 func (m *MockReceivedPacketHandler) ReceivedPacket(arg0 protocol.PacketNumber, arg1 protocol.EncryptionLevel, arg2 time.Time, arg3 bool) error {
 	m.ctrl.T.Helper()

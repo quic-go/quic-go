@@ -1060,7 +1060,6 @@ func (s *session) handleAckFrame(frame *wire.AckFrame, encLevel protocol.Encrypt
 		return err
 	}
 	if encLevel == protocol.Encryption1RTT {
-		s.receivedPacketHandler.IgnoreBelow(s.sentPacketHandler.GetLowestPacketNotConfirmedAcked())
 		s.cryptoStreamHandler.SetLargest1RTTAcked(frame.LargestAcked())
 	}
 	return nil

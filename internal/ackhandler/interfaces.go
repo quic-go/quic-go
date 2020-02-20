@@ -42,7 +42,6 @@ type SentPacketHandler interface {
 	ShouldSendNumPackets() int
 
 	// only to be called once the handshake is complete
-	GetLowestPacketNotConfirmedAcked() protocol.PacketNumber
 	QueueProbePacket(protocol.EncryptionLevel) bool /* was a packet queued */
 
 	PeekPacketNumber(protocol.EncryptionLevel) (protocol.PacketNumber, protocol.PacketNumberLen)
@@ -55,10 +54,13 @@ type SentPacketHandler interface {
 	GetStats() *quictrace.TransportState
 }
 
+type sentPacketTracker interface {
+	GetLowestPacketNotConfirmedAcked() protocol.PacketNumber
+}
+
 // ReceivedPacketHandler handles ACKs needed to send for incoming packets
 type ReceivedPacketHandler interface {
 	ReceivedPacket(pn protocol.PacketNumber, encLevel protocol.EncryptionLevel, rcvTime time.Time, shouldInstigateAck bool) error
-	IgnoreBelow(protocol.PacketNumber)
 	DropPackets(protocol.EncryptionLevel)
 
 	GetAlarmTimeout() time.Time
