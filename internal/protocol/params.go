@@ -12,7 +12,7 @@ const MaxPacketSizeIPv6 = 1232
 const MaxCongestionWindowPackets = 10000
 
 // MaxUndecryptablePackets limits the number of undecryptable packets that are queued in the session.
-const MaxUndecryptablePackets = 10
+const MaxUndecryptablePackets = 33
 
 // ConnectionFlowControlMultiplier determines how much larger the connection flow control windows needs to be relative to any stream's flow control window
 // This is the value that Chromium is using
@@ -38,6 +38,9 @@ const DefaultMaxIncomingStreams = 100
 
 // DefaultMaxIncomingUniStreams is the maximum number of unidirectional streams that a peer may open
 const DefaultMaxIncomingUniStreams = 100
+
+// MaxServerUnprocessedPackets is the max number of packets stored in the server that are not yet processed.
+const MaxServerUnprocessedPackets = 1024
 
 // MaxSessionUnprocessedPackets is the max number of packets stored in each session that are not yet processed.
 const MaxSessionUnprocessedPackets = MaxCongestionWindowPackets
@@ -158,3 +161,15 @@ const MaxAckDelayInclGranularity = MaxAckDelay + TimerGranularity
 
 // KeyUpdateInterval is the maximum number of packets we send or receive before initiating a key udpate.
 const KeyUpdateInterval = 100 * 1000
+
+// Max0RTTQueueingDuration is the maximum time that we store 0-RTT packets in order to wait for the corresponding Initial to be received.
+const Max0RTTQueueingDuration = 100 * time.Millisecond
+
+// Max0RTTQueues is the maximum number of connections that we buffer 0-RTT packets for.
+const Max0RTTQueues = 32
+
+// Max0RTTQueueLen is the maximum number of 0-RTT packets that we buffer for each connection.
+// When a new session is created, all buffered packets are passed to the session immediately.
+// To avoid blocking, this value has to be smaller than MaxSessionUnprocessedPackets.
+// To avoid packets being dropped as undecryptable by the session, this value has to be smaller than MaxUndecryptablePackets.
+const Max0RTTQueueLen = 32
