@@ -64,20 +64,6 @@ func (mr *MockSentPacketHandlerMockRecorder) GetLossDetectionTimeout() *gomock.C
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetLossDetectionTimeout", reflect.TypeOf((*MockSentPacketHandler)(nil).GetLossDetectionTimeout))
 }
 
-// GetLowestPacketNotConfirmedAcked mocks base method
-func (m *MockSentPacketHandler) GetLowestPacketNotConfirmedAcked() protocol.PacketNumber {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetLowestPacketNotConfirmedAcked")
-	ret0, _ := ret[0].(protocol.PacketNumber)
-	return ret0
-}
-
-// GetLowestPacketNotConfirmedAcked indicates an expected call of GetLowestPacketNotConfirmedAcked
-func (mr *MockSentPacketHandlerMockRecorder) GetLowestPacketNotConfirmedAcked() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetLowestPacketNotConfirmedAcked", reflect.TypeOf((*MockSentPacketHandler)(nil).GetLowestPacketNotConfirmedAcked))
-}
-
 // GetStats mocks base method
 func (m *MockSentPacketHandler) GetStats() *quictrace.TransportState {
 	m.ctrl.T.Helper()

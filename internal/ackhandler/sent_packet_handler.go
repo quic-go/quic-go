@@ -80,15 +80,17 @@ type sentPacketHandler struct {
 	logger        utils.Logger
 }
 
-// NewSentPacketHandler creates a new sentPacketHandler
-func NewSentPacketHandler(
+var _ SentPacketHandler = &sentPacketHandler{}
+var _ sentPacketTracker = &sentPacketHandler{}
+
+func newSentPacketHandler(
 	initialPacketNumber protocol.PacketNumber,
 	rttStats *congestion.RTTStats,
 	pers protocol.Perspective,
 	traceCallback func(quictrace.Event),
 	qlogger qlog.Tracer,
 	logger utils.Logger,
-) SentPacketHandler {
+) *sentPacketHandler {
 	congestion := congestion.NewCubicSender(
 		congestion.DefaultClock{},
 		rttStats,

@@ -14,9 +14,12 @@ import (
 
 var _ = Describe("Received Packet Handler", func() {
 	var handler ReceivedPacketHandler
+	var sentPackets *MockSentPacketTracker
 
 	BeforeEach(func() {
-		handler = NewReceivedPacketHandler(
+		sentPackets = NewMockSentPacketTracker(mockCtrl)
+		handler = newReceivedPacketHandler(
+			sentPackets,
 			&congestion.RTTStats{},
 			utils.DefaultLogger,
 			protocol.VersionWhatever,
@@ -24,6 +27,7 @@ var _ = Describe("Received Packet Handler", func() {
 	})
 
 	It("generates ACKs for different packet number spaces", func() {
+		sentPackets.EXPECT().GetLowestPacketNotConfirmedAcked().AnyTimes()
 		sendTime := time.Now().Add(-time.Second)
 		Expect(handler.ReceivedPacket(2, protocol.EncryptionInitial, sendTime, true)).To(Succeed())
 		Expect(handler.ReceivedPacket(1, protocol.EncryptionHandshake, sendTime, true)).To(Succeed())
@@ -49,6 +53,7 @@ var _ = Describe("Received Packet Handler", func() {
 	})
 
 	It("uses the same packet number space for 0-RTT and 1-RTT packets", func() {
+		sentPackets.EXPECT().GetLowestPacketNotConfirmedAcked().AnyTimes()
 		sendTime := time.Now().Add(-time.Second)
 		Expect(handler.ReceivedPacket(2, protocol.Encryption0RTT, sendTime, true)).To(Succeed())
 		Expect(handler.ReceivedPacket(3, protocol.Encryption1RTT, sendTime, true)).To(Succeed())
@@ -59,6 +64,7 @@ var _ = Describe("Received Packet Handler", func() {
 	})
 
 	It("rejects 0-RTT packets with higher packet numbers than 1-RTT packets", func() {
+		sentPackets.EXPECT().GetLowestPacketNotConfirmedAcked().AnyTimes()
 		sendTime := time.Now()
 		Expect(handler.ReceivedPacket(10, protocol.Encryption0RTT, sendTime, true)).To(Succeed())
 		Expect(handler.ReceivedPacket(11, protocol.Encryption1RTT, sendTime, true)).To(Succeed())
@@ -66,6 +72,7 @@ var _ = Describe("Received Packet Handler", func() {
 	})
 
 	It("allows reordered 0-RTT packets", func() {
+		sentPackets.EXPECT().GetLowestPacketNotConfirmedAcked().AnyTimes()
 		sendTime := time.Now()
 		Expect(handler.ReceivedPacket(10, protocol.Encryption0RTT, sendTime, true)).To(Succeed())
 		Expect(handler.ReceivedPacket(12, protocol.Encryption1RTT, sendTime, true)).To(Succeed())
@@ -83,6 +90,7 @@ var _ = Describe("Received Packet Handler", func() {
 	})
 
 	It("drops Handshake packets", func() {
+		sentPackets.EXPECT().GetLowestPacketNotConfirmedAcked().AnyTimes()
 		sendTime := time.Now().Add(-time.Second)
 		Expect(handler.ReceivedPacket(1, protocol.EncryptionHandshake, sendTime, true)).To(Succeed())
 		Expect(handler.ReceivedPacket(2, protocol.Encryption1RTT, sendTime, true)).To(Succeed())
@@ -92,7 +100,26 @@ var _ = Describe("Received Packet Handler", func() {
 		Expect(handler.GetAckFrame(protocol.Encryption1RTT)).ToNot(BeNil())
 	})
 
-	It("does nothing when droping 0-RTT packets", func() {
+	It("does nothing when dropping 0-RTT packets", func() {
 		handler.DropPackets(protocol.Encryption0RTT)
+	})
+
+	It("drops old ACK ranges", func() {
+		sendTime := time.Now()
+		sentPackets.EXPECT().GetLowestPacketNotConfirmedAcked().Times(2)
+		Expect(handler.ReceivedPacket(1, protocol.Encryption1RTT, sendTime, true)).To(Succeed())
+		Expect(handler.ReceivedPacket(2, protocol.Encryption1RTT, sendTime, true)).To(Succeed())
+		ack := handler.GetAckFrame(protocol.Encryption1RTT)
+		Expect(ack).ToNot(BeNil())
+		Expect(ack.LowestAcked()).To(Equal(protocol.PacketNumber(1)))
+		Expect(ack.LargestAcked()).To(Equal(protocol.PacketNumber(2)))
+		sentPackets.EXPECT().GetLowestPacketNotConfirmedAcked()
+		Expect(handler.ReceivedPacket(3, protocol.Encryption1RTT, sendTime, true)).To(Succeed())
+		sentPackets.EXPECT().GetLowestPacketNotConfirmedAcked().Return(protocol.PacketNumber(2))
+		Expect(handler.ReceivedPacket(4, protocol.Encryption1RTT, sendTime, true)).To(Succeed())
+		ack = handler.GetAckFrame(protocol.Encryption1RTT)
+		Expect(ack).ToNot(BeNil())
+		Expect(ack.LowestAcked()).To(Equal(protocol.PacketNumber(2)))
+		Expect(ack.LargestAcked()).To(Equal(protocol.PacketNumber(4)))
 	})
 })
