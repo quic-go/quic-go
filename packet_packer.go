@@ -264,6 +264,15 @@ func (p *packetPacker) MaybePackAckPacket(handshakeConfirmed bool) (*packedPacke
 	return p.writeSinglePacket(hdr, payload, encLevel, sealer)
 }
 
+func (p *packetPacker) padPacket(buffer *packetBuffer) {
+	if dataLen := len(buffer.Data); dataLen < protocol.MinInitialPacketSize {
+		buffer.Data = buffer.Data[:protocol.MinInitialPacketSize]
+		for n := dataLen; n < protocol.MinInitialPacketSize; n++ {
+			buffer.Data[n] = 0
+		}
+	}
+}
+
 // PackCoalescedPacket packs a new packet.
 // It packs an Initial / Handshake if there is data to send in these packet number spaces.
 // It should only be called before the handshake is confirmed.
@@ -278,6 +287,11 @@ func (p *packetPacker) PackCoalescedPacket() (*coalescedPacket, error) {
 		buffer.Release()
 		return nil, nil
 	}
+
+	if p.perspective == protocol.PerspectiveClient && packet.packets[0].header.Type == protocol.PacketTypeInitial {
+		p.padPacket(buffer)
+	}
+
 	return packet, nil
 }
 
@@ -507,6 +521,9 @@ func (p *packetPacker) MaybePackProbePacket(encLevel protocol.EncryptionLevel) (
 	if err != nil {
 		return nil, err
 	}
+	if p.perspective == protocol.PerspectiveClient && encLevel == protocol.EncryptionInitial {
+		p.padPacket(buffer)
+	}
 	return &packedPacket{
 		buffer:         buffer,
 		packetContents: contents,
@@ -620,13 +637,7 @@ func (p *packetPacker) appendPacket(
 	var paddingLen protocol.ByteCount
 	pnLen := protocol.ByteCount(header.PacketNumberLen)
 	if encLevel != protocol.Encryption1RTT {
-		if p.perspective == protocol.PerspectiveClient && header.Type == protocol.PacketTypeInitial {
-			headerLen := header.GetLength(p.version)
-			header.Length = pnLen + protocol.MinInitialPacketSize - headerLen
-			paddingLen = protocol.ByteCount(protocol.MinInitialPacketSize-sealer.Overhead()) - headerLen - payload.length
-		} else {
-			header.Length = pnLen + protocol.ByteCount(sealer.Overhead()) + payload.length
-		}
+		header.Length = pnLen + protocol.ByteCount(sealer.Overhead()) + payload.length
 	} else if payload.length < 4-pnLen {
 		paddingLen = 4 - pnLen - payload.length
 	}
