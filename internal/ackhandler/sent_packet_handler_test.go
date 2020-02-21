@@ -767,9 +767,8 @@ var _ = Describe("SentPacketHandler", func() {
 				protocol.EncryptionInitial,
 				time.Now(),
 			)).To(Succeed())
-			handler.DropPackets(protocol.EncryptionInitial) // Initial keys are dropped when a Handshake packet is received.
 
-			handler.SentPacket(handshakePacketNonAckEliciting(&Packet{PacketNumber: 1}))
+			handler.SentPacket(handshakePacketNonAckEliciting(&Packet{PacketNumber: 1})) // also drops Initial packets
 			Expect(handler.GetLossDetectionTimeout()).ToNot(BeZero())
 			Expect(handler.OnLossDetectionTimeout()).To(Succeed())
 			Expect(handler.SendMode()).To(Equal(SendPTOHandshake))
@@ -853,7 +852,7 @@ var _ = Describe("SentPacketHandler", func() {
 			Expect(handler.ReceivedAck(ack, protocol.EncryptionHandshake, time.Now())).To(MatchError("PROTOCOL_VIOLATION: Received ACK for an unsent packet"))
 		})
 
-		It("deletes Initial packets", func() {
+		It("deletes Initial packets, as a server", func() {
 			for i := protocol.PacketNumber(0); i < 6; i++ {
 				handler.SentPacket(ackElicitingPacket(&Packet{
 					PacketNumber:    i,
@@ -872,6 +871,37 @@ var _ = Describe("SentPacketHandler", func() {
 			Expect(handler.bytesInFlight).To(Equal(protocol.ByteCount(10)))
 			Expect(handler.initialPackets).To(BeNil())
 			Expect(handler.handshakePackets.history.Len()).ToNot(BeZero())
+		})
+
+		Context("deleting Initials", func() {
+			BeforeEach(func() { perspective = protocol.PerspectiveClient })
+
+			It("deletes Initials, as a client", func() {
+				for i := protocol.PacketNumber(0); i < 6; i++ {
+					handler.SentPacket(ackElicitingPacket(&Packet{
+						PacketNumber:    i,
+						EncryptionLevel: protocol.EncryptionInitial,
+					}))
+				}
+				Expect(handler.bytesInFlight).To(Equal(protocol.ByteCount(6)))
+				handler.DropPackets(protocol.EncryptionInitial)
+				// DropPackets should be ignored for clients and the Initial packet number space.
+				// It has to be possible to send another Initial packets after this function was called.
+				handler.SentPacket(ackElicitingPacket(&Packet{
+					PacketNumber:    10,
+					EncryptionLevel: protocol.EncryptionInitial,
+				}))
+				Expect(handler.bytesInFlight).To(Equal(protocol.ByteCount(7)))
+				// Sending a Handshake packet triggers dropping of Initials.
+				handler.SentPacket(ackElicitingPacket(&Packet{
+					PacketNumber:    1,
+					EncryptionLevel: protocol.EncryptionHandshake,
+				}))
+				Expect(handler.bytesInFlight).To(Equal(protocol.ByteCount(1)))
+				Expect(lostPackets).To(BeEmpty()) // frames must not be queued for retransmission
+				Expect(handler.initialPackets).To(BeNil())
+				Expect(handler.handshakePackets.history.Len()).ToNot(BeZero())
+			})
 		})
 
 		It("deletes Handshake packets", func() {
