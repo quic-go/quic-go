@@ -1424,7 +1424,11 @@ func (s *session) logPacketContents(now time.Time, p *packetContents) {
 
 func (s *session) logCoalescedPacket(now time.Time, packet *coalescedPacket) {
 	if s.logger.Debug() {
-		s.logger.Debugf("-> Sending coalesced packet (%d parts, %d bytes) for connection %s", len(packet.packets), packet.buffer.Len(), s.logID)
+		if len(packet.packets) > 1 {
+			s.logger.Debugf("-> Sending coalesced packet (%d parts, %d bytes) for connection %s", len(packet.packets), packet.buffer.Len(), s.logID)
+		} else {
+			s.logger.Debugf("-> Sending packet %#x (%d bytes) for connection %s, %s", packet.packets[0].header.PacketNumber, packet.buffer.Len(), s.logID, packet.packets[0].EncryptionLevel())
+		}
 	}
 	for _, p := range packet.packets {
 		s.logPacketContents(now, p)
