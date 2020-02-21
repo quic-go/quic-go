@@ -49,7 +49,8 @@ type sentPacketHandler struct {
 	handshakePackets *packetNumberSpace
 	appDataPackets   *packetNumberSpace
 
-	handshakeComplete bool
+	peerNotAwaitingAddressValidation bool
+	handshakeComplete                bool
 
 	// lowestNotConfirmedAcked is the lowest packet number that we sent an ACK for, but haven't received confirmation, that this ACK actually arrived
 	// example: we send an ACK for packets 90-100 with packet number 20
@@ -72,16 +73,18 @@ type sentPacketHandler struct {
 	// The alarm timeout
 	alarm time.Time
 
-	traceCallback func(quictrace.Event)
+	perspective protocol.Perspective
 
-	qlogger qlog.Tracer
-	logger  utils.Logger
+	traceCallback func(quictrace.Event)
+	qlogger       qlog.Tracer
+	logger        utils.Logger
 }
 
 // NewSentPacketHandler creates a new sentPacketHandler
 func NewSentPacketHandler(
 	initialPacketNumber protocol.PacketNumber,
 	rttStats *congestion.RTTStats,
+	pers protocol.Perspective,
 	traceCallback func(quictrace.Event),
 	qlogger qlog.Tracer,
 	logger utils.Logger,
@@ -92,15 +95,21 @@ func NewSentPacketHandler(
 		true, // use Reno
 	)
 
+	var peerNotAwaitingAddressValidation bool
+	if pers == protocol.PerspectiveServer {
+		peerNotAwaitingAddressValidation = true
+	}
 	return &sentPacketHandler{
-		initialPackets:   newPacketNumberSpace(initialPacketNumber),
-		handshakePackets: newPacketNumberSpace(0),
-		appDataPackets:   newPacketNumberSpace(0),
-		rttStats:         rttStats,
-		congestion:       congestion,
-		traceCallback:    traceCallback,
-		qlogger:          qlogger,
-		logger:           logger,
+		peerNotAwaitingAddressValidation: peerNotAwaitingAddressValidation,
+		initialPackets:                   newPacketNumberSpace(initialPacketNumber),
+		handshakePackets:                 newPacketNumberSpace(0),
+		appDataPackets:                   newPacketNumberSpace(0),
+		rttStats:                         rttStats,
+		congestion:                       congestion,
+		perspective:                      pers,
+		traceCallback:                    traceCallback,
+		qlogger:                          qlogger,
+		logger:                           logger,
 	}
 }
 
@@ -142,8 +151,11 @@ func (h *sentPacketHandler) DropPackets(encLevel protocol.EncryptionLevel) {
 }
 
 func (h *sentPacketHandler) SentPacket(packet *Packet) {
-	if isAckEliciting := h.sentPacketImpl(packet); isAckEliciting {
+	isAckEliciting := h.sentPacketImpl(packet)
+	if isAckEliciting {
 		h.getPacketNumberSpace(packet.EncryptionLevel).history.SentPacket(packet)
+	}
+	if isAckEliciting || !h.peerNotAwaitingAddressValidation {
 		h.setLossDetectionTimer()
 	}
 }
@@ -201,6 +213,15 @@ func (h *sentPacketHandler) ReceivedAck(ack *wire.AckFrame, encLevel protocol.En
 		return qerr.Error(qerr.ProtocolViolation, "Received an ACK for a skipped packet number")
 	}
 
+	// Servers complete address validation when a protected packet is received.
+	if h.perspective == protocol.PerspectiveClient && !h.peerNotAwaitingAddressValidation &&
+		(encLevel == protocol.EncryptionHandshake || encLevel == protocol.Encryption1RTT) {
+		h.peerNotAwaitingAddressValidation = true
+		h.logger.Debugf("Peer doesn't await address validation any longer.")
+		// Make sure that the timer is reset, even if this ACK doesn't acknowledge any (ack-eliciting) packets.
+		h.setLossDetectionTimer()
+	}
+
 	// maybe update the RTT
 	if p := pnSpace.history.GetPacket(ack.LargestAcked()); p != nil {
 		// don't use the ack delay for Initial and Handshake packets
@@ -226,11 +247,8 @@ func (h *sentPacketHandler) ReceivedAck(ack *wire.AckFrame, encLevel protocol.En
 	}
 
 	ackedPackets, err := h.determineNewlyAckedPackets(ack, encLevel)
-	if err != nil {
+	if err != nil || len(ackedPackets) == 0 {
 		return err
-	}
-	if len(ackedPackets) == 0 {
-		return nil
 	}
 
 	priorInFlight := h.bytesInFlight
@@ -376,7 +394,7 @@ func (h *sentPacketHandler) setLossDetectionTimer() {
 	}
 
 	// Cancel the alarm if no packets are outstanding
-	if !h.hasOutstandingPackets() {
+	if !h.hasOutstandingPackets() && h.peerNotAwaitingAddressValidation {
 		h.logger.Debugf("Canceling loss detection timer. No packets in flight.")
 		h.alarm = time.Time{}
 		return
@@ -471,7 +489,7 @@ func (h *sentPacketHandler) OnLossDetectionTimeout() error {
 	// setLossDetectionTimer. This doesn't reset the timer in the session though.
 	// When OnAlarm is called, we therefore need to make sure that there are
 	// actually packets outstanding.
-	if h.hasOutstandingPackets() {
+	if h.hasOutstandingPackets() || !h.peerNotAwaitingAddressValidation {
 		if err := h.onVerifiedLossDetectionTimeout(); err != nil {
 			return err
 		}
@@ -643,7 +661,7 @@ func (h *sentPacketHandler) ResetForRetry() error {
 
 	h.initialPackets = newPacketNumberSpace(h.initialPackets.pns.Pop())
 	h.appDataPackets = newPacketNumberSpace(h.appDataPackets.pns.Pop())
-	h.setLossDetectionTimer()
+	h.alarm = time.Time{}
 	return nil
 }
 

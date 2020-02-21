@@ -249,7 +249,7 @@ var newSession = func(
 		s.queueControlFrame,
 	)
 	s.preSetup()
-	s.sentPacketHandler = ackhandler.NewSentPacketHandler(0, s.rttStats, s.traceCallback, s.qlogger, s.logger)
+	s.sentPacketHandler = ackhandler.NewSentPacketHandler(0, s.rttStats, protocol.PerspectiveServer, s.traceCallback, s.qlogger, s.logger)
 	initialStream := newCryptoStream()
 	handshakeStream := newCryptoStream()
 	params := &handshake.TransportParameters{
@@ -354,7 +354,7 @@ var newClientSession = func(
 		s.queueControlFrame,
 	)
 	s.preSetup()
-	s.sentPacketHandler = ackhandler.NewSentPacketHandler(initialPacketNumber, s.rttStats, s.traceCallback, s.qlogger, s.logger)
+	s.sentPacketHandler = ackhandler.NewSentPacketHandler(initialPacketNumber, s.rttStats, protocol.PerspectiveClient, s.traceCallback, s.qlogger, s.logger)
 	initialStream := newCryptoStream()
 	handshakeStream := newCryptoStream()
 	params := &handshake.TransportParameters{
