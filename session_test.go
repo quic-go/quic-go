@@ -149,9 +149,9 @@ var _ = Describe("Session", func() {
 			It("informs the SentPacketHandler about ACKs", func() {
 				f := &wire.AckFrame{AckRanges: []wire.AckRange{{Smallest: 2, Largest: 3}}}
 				sph := mockackhandler.NewMockSentPacketHandler(mockCtrl)
-				sph.EXPECT().ReceivedAck(f, protocol.PacketNumber(42), protocol.EncryptionHandshake, gomock.Any())
+				sph.EXPECT().ReceivedAck(f, protocol.EncryptionHandshake, gomock.Any())
 				sess.sentPacketHandler = sph
-				err := sess.handleAckFrame(f, 42, protocol.EncryptionHandshake)
+				err := sess.handleAckFrame(f, protocol.EncryptionHandshake)
 				Expect(err).ToNot(HaveOccurred())
 			})
 
@@ -159,13 +159,13 @@ var _ = Describe("Session", func() {
 				cryptoSetup.EXPECT().SetLargest1RTTAcked(protocol.PacketNumber(3))
 				ack := &wire.AckFrame{AckRanges: []wire.AckRange{{Smallest: 2, Largest: 3}}}
 				sph := mockackhandler.NewMockSentPacketHandler(mockCtrl)
-				sph.EXPECT().ReceivedAck(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any())
+				sph.EXPECT().ReceivedAck(gomock.Any(), gomock.Any(), gomock.Any())
 				sph.EXPECT().GetLowestPacketNotConfirmedAcked().Return(protocol.PacketNumber(0x42))
 				sess.sentPacketHandler = sph
 				rph := mockackhandler.NewMockReceivedPacketHandler(mockCtrl)
 				rph.EXPECT().IgnoreBelow(protocol.PacketNumber(0x42))
 				sess.receivedPacketHandler = rph
-				Expect(sess.handleAckFrame(ack, 0, protocol.Encryption1RTT)).To(Succeed())
+				Expect(sess.handleAckFrame(ack, protocol.Encryption1RTT)).To(Succeed())
 			})
 		})
 
@@ -201,7 +201,7 @@ var _ = Describe("Session", func() {
 				Expect(sess.handleFrame(&wire.ResetStreamFrame{
 					StreamID:  3,
 					ErrorCode: 42,
-				}, 0, protocol.EncryptionUnspecified)).To(Succeed())
+				}, protocol.EncryptionUnspecified)).To(Succeed())
 			})
 		})
 
@@ -236,7 +236,7 @@ var _ = Describe("Session", func() {
 				Expect(sess.handleFrame(&wire.MaxStreamDataFrame{
 					StreamID:   10,
 					ByteOffset: 1337,
-				}, 0, protocol.EncryptionUnspecified)).To(Succeed())
+				}, protocol.EncryptionUnspecified)).To(Succeed())
 			})
 		})
 
@@ -278,7 +278,7 @@ var _ = Describe("Session", func() {
 				Expect(sess.handleFrame(&wire.StopSendingFrame{
 					StreamID:  3,
 					ErrorCode: 1337,
-				}, 0, protocol.EncryptionUnspecified)).To(Succeed())
+				}, protocol.EncryptionUnspecified)).To(Succeed())
 			})
 		})
 
@@ -286,23 +286,23 @@ var _ = Describe("Session", func() {
 			Expect(sess.handleFrame(&wire.NewConnectionIDFrame{
 				SequenceNumber: 10,
 				ConnectionID:   protocol.ConnectionID{1, 2, 3, 4},
-			}, 1, protocol.Encryption1RTT)).To(Succeed())
+			}, protocol.Encryption1RTT)).To(Succeed())
 			Expect(sess.connIDManager.queue.Back().Value.ConnectionID).To(Equal(protocol.ConnectionID{1, 2, 3, 4}))
 		})
 
 		It("handles PING frames", func() {
-			err := sess.handleFrame(&wire.PingFrame{}, 0, protocol.EncryptionUnspecified)
+			err := sess.handleFrame(&wire.PingFrame{}, protocol.EncryptionUnspecified)
 			Expect(err).NotTo(HaveOccurred())
 		})
 
 		It("rejects PATH_RESPONSE frames", func() {
-			err := sess.handleFrame(&wire.PathResponseFrame{Data: [8]byte{1, 2, 3, 4, 5, 6, 7, 8}}, 0, protocol.EncryptionUnspecified)
+			err := sess.handleFrame(&wire.PathResponseFrame{Data: [8]byte{1, 2, 3, 4, 5, 6, 7, 8}}, protocol.EncryptionUnspecified)
 			Expect(err).To(MatchError("unexpected PATH_RESPONSE frame"))
 		})
 
 		It("handles PATH_CHALLENGE frames", func() {
 			data := [8]byte{1, 2, 3, 4, 5, 6, 7, 8}
-			err := sess.handleFrame(&wire.PathChallengeFrame{Data: data}, 0, protocol.EncryptionUnspecified)
+			err := sess.handleFrame(&wire.PathChallengeFrame{Data: data}, protocol.EncryptionUnspecified)
 			Expect(err).ToNot(HaveOccurred())
 			frames, _ := sess.framer.AppendControlFrames(nil, 1000)
 			Expect(frames).To(Equal([]ackhandler.Frame{{Frame: &wire.PathResponseFrame{Data: data}}}))
@@ -316,17 +316,17 @@ var _ = Describe("Session", func() {
 		})
 
 		It("handles BLOCKED frames", func() {
-			err := sess.handleFrame(&wire.DataBlockedFrame{}, 0, protocol.EncryptionUnspecified)
+			err := sess.handleFrame(&wire.DataBlockedFrame{}, protocol.EncryptionUnspecified)
 			Expect(err).NotTo(HaveOccurred())
 		})
 
 		It("handles STREAM_BLOCKED frames", func() {
-			err := sess.handleFrame(&wire.StreamDataBlockedFrame{}, 0, protocol.EncryptionUnspecified)
+			err := sess.handleFrame(&wire.StreamDataBlockedFrame{}, protocol.EncryptionUnspecified)
 			Expect(err).NotTo(HaveOccurred())
 		})
 
 		It("handles STREAM_ID_BLOCKED frames", func() {
-			err := sess.handleFrame(&wire.StreamsBlockedFrame{}, 0, protocol.EncryptionUnspecified)
+			err := sess.handleFrame(&wire.StreamsBlockedFrame{}, protocol.EncryptionUnspecified)
 			Expect(err).NotTo(HaveOccurred())
 		})
 
@@ -350,7 +350,7 @@ var _ = Describe("Session", func() {
 				ErrorCode:    qerr.StreamLimitError,
 				ReasonPhrase: "foobar",
 			}
-			Expect(sess.handleFrame(ccf, 0, protocol.EncryptionUnspecified)).To(Succeed())
+			Expect(sess.handleFrame(ccf, protocol.EncryptionUnspecified)).To(Succeed())
 			Eventually(sess.Context().Done()).Should(BeClosed())
 		})
 
@@ -375,7 +375,7 @@ var _ = Describe("Session", func() {
 				ReasonPhrase:       "foobar",
 				IsApplicationError: true,
 			}
-			Expect(sess.handleFrame(ccf, 0, protocol.EncryptionUnspecified)).To(Succeed())
+			Expect(sess.handleFrame(ccf, protocol.EncryptionUnspecified)).To(Succeed())
 			Eventually(sess.Context().Done()).Should(BeClosed())
 		})
 

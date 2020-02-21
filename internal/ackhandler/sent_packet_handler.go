@@ -187,26 +187,26 @@ func (h *sentPacketHandler) sentPacketImpl(packet *Packet) bool /* is ack-elicit
 	return isAckEliciting
 }
 
-func (h *sentPacketHandler) ReceivedAck(ackFrame *wire.AckFrame, withPacketNumber protocol.PacketNumber, encLevel protocol.EncryptionLevel, rcvTime time.Time) error {
+func (h *sentPacketHandler) ReceivedAck(ack *wire.AckFrame, encLevel protocol.EncryptionLevel, rcvTime time.Time) error {
 	pnSpace := h.getPacketNumberSpace(encLevel)
 
-	largestAcked := ackFrame.LargestAcked()
+	largestAcked := ack.LargestAcked()
 	if largestAcked > pnSpace.largestSent {
 		return qerr.Error(qerr.ProtocolViolation, "Received ACK for an unsent packet")
 	}
 
 	pnSpace.largestAcked = utils.MaxPacketNumber(pnSpace.largestAcked, largestAcked)
 
-	if !pnSpace.pns.Validate(ackFrame) {
+	if !pnSpace.pns.Validate(ack) {
 		return qerr.Error(qerr.ProtocolViolation, "Received an ACK for a skipped packet number")
 	}
 
 	// maybe update the RTT
-	if p := pnSpace.history.GetPacket(ackFrame.LargestAcked()); p != nil {
+	if p := pnSpace.history.GetPacket(ack.LargestAcked()); p != nil {
 		// don't use the ack delay for Initial and Handshake packets
 		var ackDelay time.Duration
 		if encLevel == protocol.Encryption1RTT {
-			ackDelay = utils.MinDuration(ackFrame.DelayTime, h.rttStats.MaxAckDelay())
+			ackDelay = utils.MinDuration(ack.DelayTime, h.rttStats.MaxAckDelay())
 		}
 		h.rttStats.UpdateRTT(rcvTime.Sub(p.SendTime), ackDelay, rcvTime)
 		if h.logger.Debug() {
@@ -225,7 +225,7 @@ func (h *sentPacketHandler) ReceivedAck(ackFrame *wire.AckFrame, withPacketNumbe
 		}
 	}
 
-	ackedPackets, err := h.determineNewlyAckedPackets(ackFrame, encLevel)
+	ackedPackets, err := h.determineNewlyAckedPackets(ack, encLevel)
 	if err != nil {
 		return err
 	}

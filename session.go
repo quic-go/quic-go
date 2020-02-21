@@ -851,7 +851,7 @@ func (s *session) handleUnpackedPacket(packet *unpackedPacket, rcvTime time.Time
 		if s.traceCallback != nil || s.qlogger != nil {
 			frames = append(frames, frame)
 		}
-		if err := s.handleFrame(frame, packet.packetNumber, packet.encryptionLevel); err != nil {
+		if err := s.handleFrame(frame, packet.encryptionLevel); err != nil {
 			return err
 		}
 	}
@@ -875,7 +875,7 @@ func (s *session) handleUnpackedPacket(packet *unpackedPacket, rcvTime time.Time
 	return s.receivedPacketHandler.ReceivedPacket(packet.packetNumber, packet.encryptionLevel, rcvTime, isAckEliciting)
 }
 
-func (s *session) handleFrame(f wire.Frame, pn protocol.PacketNumber, encLevel protocol.EncryptionLevel) error {
+func (s *session) handleFrame(f wire.Frame, encLevel protocol.EncryptionLevel) error {
 	var err error
 	wire.LogFrame(s.logger, f, false)
 	switch frame := f.(type) {
@@ -884,7 +884,7 @@ func (s *session) handleFrame(f wire.Frame, pn protocol.PacketNumber, encLevel p
 	case *wire.StreamFrame:
 		err = s.handleStreamFrame(frame)
 	case *wire.AckFrame:
-		err = s.handleAckFrame(frame, pn, encLevel)
+		err = s.handleAckFrame(frame, encLevel)
 	case *wire.ConnectionCloseFrame:
 		s.handleConnectionCloseFrame(frame)
 	case *wire.ResetStreamFrame:
@@ -1040,8 +1040,8 @@ func (s *session) handleHandshakeDoneFrame() error {
 	return nil
 }
 
-func (s *session) handleAckFrame(frame *wire.AckFrame, pn protocol.PacketNumber, encLevel protocol.EncryptionLevel) error {
-	if err := s.sentPacketHandler.ReceivedAck(frame, pn, encLevel, s.lastPacketReceivedTime); err != nil {
+func (s *session) handleAckFrame(frame *wire.AckFrame, encLevel protocol.EncryptionLevel) error {
+	if err := s.sentPacketHandler.ReceivedAck(frame, encLevel, s.lastPacketReceivedTime); err != nil {
 		return err
 	}
 	if encLevel == protocol.Encryption1RTT {
