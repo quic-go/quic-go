@@ -10,11 +10,13 @@ import (
 	"net"
 	"net/http"
 	"runtime"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
 
 	"github.com/lucas-clemente/quic-go"
+	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/internal/utils"
 	"github.com/marten-seemann/qpack"
 	"github.com/onsi/ginkgo"
@@ -50,11 +52,38 @@ type requestError struct {
 	connErr   errorCode
 }
 
+func (r *requestError) HasError() bool {
+	return r.err != nil || r.streamErr != 0 || r.connErr != 0
+}
+
+func (r *requestError) String() string {
+	ret := make([]string, 0)
+	if r.err != nil {
+		ret = append(ret, r.err.Error())
+	}
+	if r.streamErr != 0 {
+		ret = append(ret, r.streamErr.String())
+	}
+	if r.connErr != 0 {
+		ret = append(ret, r.connErr.String())
+	}
+	return strings.Join(ret, ", ")
+}
+
+type ctrlStream struct {
+	out         quic.SendStream
+	in          quic.ReceiveStream
+	maxStreamID protocol.StreamID
+}
+
 func newStreamError(code errorCode, err error) requestError {
 	return requestError{err: err, streamErr: code}
 }
 
 func newConnError(code errorCode, err error) requestError {
+	if code == 0 {
+		panic("errorCode == 0 means no error occurred, errorCode must not equal 0 to be a connection error")
+	}
 	return requestError{err: err, connErr: code}
 }
 
@@ -73,6 +102,15 @@ type Server struct {
 	closed    utils.AtomicBool
 
 	logger utils.Logger
+
+	sessCtx      context.Context
+	sessCancel   context.CancelFunc
+	clients      sync.WaitGroup
+	serverClosed chan struct{}
+}
+
+func (cs *ctrlStream) incrementStreamID() {
+	atomic.AddInt64((*int64)(&cs.maxStreamID), 4)
 }
 
 // ListenAndServe listens on the UDP address s.Addr and calls s.Handler to handle HTTP/3 requests on incoming connections.
@@ -179,31 +217,49 @@ func (s *Server) handleConn(sess quic.EarlySession) {
 	// TODO: accept control streams
 	decoder := qpack.NewDecoder(nil)
 
-	// send a SETTINGS frame
-	str, err := sess.OpenUniStream()
-	if err != nil {
-		s.logger.Debugf("Opening the control stream failed.")
-		return
+	cs, rerr := s.handleControlStreams(sess)
+	if rerr.HasError() {
+		s.logger.Debugf("Error encountered while opening control streams: %s", rerr)
+		if rerr.connErr != 0 {
+			var reason string
+			if rerr.err != nil {
+				reason = rerr.err.Error()
+			}
+			sess.CloseWithError(quic.ErrorCode(rerr.connErr), reason)
+		}
+		// control streams only have connection errors
 	}
-	buf := bytes.NewBuffer([]byte{0})
-	(&settingsFrame{}).Write(buf)
-	str.Write(buf.Bytes())
+
+	if s.sessCtx == nil {
+		s.sessCtx, s.sessCancel = context.WithCancel(context.Background())
+	}
+	if s.serverClosed == nil {
+		s.serverClosed = make(chan struct{})
+	}
 
 	// Process all requests immediately.
 	// It's the client's responsibility to decide which requests are eligible for 0-RTT.
 	for {
-		str, err := sess.AcceptStream(context.Background())
+		if s.closed.Get() {
+			return
+		}
+		str, err := sess.AcceptStream(s.sessCtx)
 		if err != nil {
+			if errors.Is(context.Canceled, s.sessCtx.Err()) {
+				s.logger.Debugf("Server closed, ending session")
+				return
+			}
 			s.logger.Debugf("Accepting stream failed: %s", err)
 			return
 		}
+		cs.incrementStreamID()
 		go func() {
 			defer ginkgo.GinkgoRecover()
 			rerr := s.handleRequest(sess, str, decoder, func() {
 				sess.CloseWithError(quic.ErrorCode(errorFrameUnexpected), "")
 			})
-			if rerr.err != nil || rerr.streamErr != 0 || rerr.connErr != 0 {
-				s.logger.Debugf("Handling request failed: %s", err)
+			if rerr.HasError() {
+				s.logger.Debugf("Handling request failed: %s", rerr)
 				if rerr.streamErr != 0 {
 					str.CancelWrite(quic.ErrorCode(rerr.streamErr))
 				}
@@ -219,6 +275,85 @@ func (s *Server) handleConn(sess quic.EarlySession) {
 			str.Close()
 		}()
 	}
+}
+
+func (s *Server) handleControlStreams(sess quic.Session) (*ctrlStream, requestError) {
+	// send a SETTINGS frame
+	controlStreamOut, err := sess.OpenUniStream()
+	if err != nil {
+		return nil, newConnError(errorMissingSettings, err)
+	}
+	buf := bytes.NewBuffer([]byte{0})
+	(&settingsFrame{}).Write(buf)
+	controlStreamOut.Write(buf.Bytes())
+
+	controlStreamIn, err := sess.AcceptUniStream(context.Background())
+	if err != nil {
+		s.logger.Debugf("Accepting the incoming control stream failed.")
+		return nil, newConnError(errorMissingSettings, err)
+	}
+
+	pair := &ctrlStream{in: controlStreamIn, out: controlStreamOut}
+
+	br, ok := controlStreamIn.(byteReader)
+	if !ok {
+		br = &byteReaderImpl{controlStreamIn}
+	}
+	t, err := utils.ReadVarInt(br)
+	if t != 0x0 {
+		s.logger.Debugf("First stream must be a control stream")
+		return nil, newConnError(errorMissingSettings, err)
+	}
+
+	frame, err := parseNextFrame(controlStreamIn)
+	if err != nil {
+		s.logger.Debugf("Error encountered while parsing incoming frame")
+		return nil, newConnError(errorMissingSettings, err)
+	}
+	sf, ok := frame.(*settingsFrame)
+	if !ok {
+		s.logger.Debugf("First incoming frame parsed was not a settings frame")
+		return nil, newConnError(errorMissingSettings, nil)
+	}
+	// TODO: do something with the settings frame
+	s.logger.Debugf("Got settings frame: %+v", sf)
+
+	s.clients.Add(1)
+	connDone := make(chan struct{})
+	go func() {
+		defer ginkgo.GinkgoRecover()
+		defer close(connDone)
+		defer s.clients.Done()
+		for {
+			frame, err := parseNextFrame(controlStreamIn)
+			if err != nil {
+				s.logger.Debugf("Error encountered while parsing incoming frame: %s", err)
+				return
+			}
+			// TODO: do something with incoming frames on the control stream
+			s.logger.Debugf("Got frame on control stream: %+v", frame)
+		}
+	}()
+
+	go func() {
+		select {
+		case <-s.serverClosed:
+			goaway := goawayFrame{
+				StreamID: pair.maxStreamID + 4,
+			}
+			buf := &bytes.Buffer{}
+			goaway.Write(buf)
+			_, err := pair.out.Write(buf.Bytes())
+			if err != nil {
+				s.logger.Debugf("Error encountered while writing goaway frame: %s", err)
+			}
+			s.logger.Debugf("Sent goaway frame with StreamID %d to %d", pair.maxStreamID, pair.out.StreamID())
+
+		case <-connDone:
+		}
+	}()
+
+	return pair, requestError{}
 }
 
 func (s *Server) maxHeaderBytes() uint64 {
@@ -325,8 +460,30 @@ func (s *Server) Close() error {
 // CloseGracefully shuts down the server gracefully. The server sends a GOAWAY frame first, then waits for either timeout to trigger, or for all running requests to complete.
 // CloseGracefully in combination with ListenAndServe() (instead of Serve()) may race if it is called before a UDP socket is established.
 func (s *Server) CloseGracefully(timeout time.Duration) error {
-	// TODO: implement
-	return nil
+	s.closed.Set(true)
+
+	if s.serverClosed == nil {
+		s.logger.Debugf("Nothing is open, closing")
+		return s.Close()
+	}
+
+	s.sessCancel()
+	close(s.serverClosed)
+
+	// give time for those connections to either complete or self terminate
+	done := make(chan struct{})
+	go func() {
+		s.clients.Wait()
+		close(done)
+	}()
+
+	select {
+	case <-done:
+	case <-time.After(timeout):
+	}
+
+	// close them
+	return s.Close()
 }
 
 // SetQuicHeaders can be used to set the proper headers that announce that this server supports QUIC.

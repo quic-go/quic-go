@@ -2,6 +2,7 @@ package http3
 
 import (
 	"bytes"
+	"context"
 	"crypto/tls"
 	"errors"
 	"fmt"
@@ -11,6 +12,7 @@ import (
 	"sync"
 
 	"github.com/lucas-clemente/quic-go"
+	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/internal/utils"
 	"github.com/marten-seemann/qpack"
 )
@@ -52,6 +54,10 @@ type client struct {
 	session  quic.EarlySession
 
 	logger utils.Logger
+
+	clientContext context.Context
+	clientCancel  context.CancelFunc
+	goawayChan    chan protocol.StreamID
 }
 
 func newClient(
@@ -74,6 +80,8 @@ func newClient(
 	quicConfig.MaxIncomingStreams = -1 // don't allow any bidirectional streams
 	logger := utils.DefaultLogger.WithPrefix("h3 client")
 
+	ctx, cancel := context.WithCancel(context.Background())
+
 	return &client{
 		hostname:      authorityAddr("https", hostname),
 		tlsConf:       tlsConf,
@@ -83,6 +91,9 @@ func newClient(
 		opts:          opts,
 		dialer:        dialer,
 		logger:        logger,
+		clientContext: ctx,
+		clientCancel:  cancel,
+		goawayChan:    make(chan protocol.StreamID),
 	}
 }
 
@@ -98,21 +109,21 @@ func (c *client) dial() error {
 	}
 
 	// run the sesssion setup using 0-RTT data
-	go func() {
-		if err := c.setupSession(); err != nil {
-			c.logger.Debugf("Setting up session failed: %s", err)
-			c.session.CloseWithError(quic.ErrorCode(errorInternalError), "")
-		}
-	}()
+	// go func() {
+	if rerr := c.setupSession(); rerr.HasError() {
+		c.logger.Debugf("Setting up session failed: %s", rerr)
+		c.session.CloseWithError(quic.ErrorCode(rerr.connErr), "")
+	}
+	// }()
 
 	return nil
 }
 
-func (c *client) setupSession() error {
+func (c *client) setupSession() requestError {
 	// open the control stream
 	str, err := c.session.OpenUniStream()
 	if err != nil {
-		return err
+		return newConnError(errorMissingSettings, err)
 	}
 	buf := &bytes.Buffer{}
 	// write the type byte
@@ -120,10 +131,62 @@ func (c *client) setupSession() error {
 	// send the SETTINGS frame
 	(&settingsFrame{}).Write(buf)
 	if _, err := str.Write(buf.Bytes()); err != nil {
-		return err
+		return newConnError(errorMissingSettings, err)
 	}
 
-	return nil
+	controlStreamIn, err := c.session.AcceptUniStream(context.Background())
+	if err != nil {
+		c.logger.Debugf("Accepting the incoming control stream failed.")
+		return newConnError(errorInternalError, err)
+	}
+
+	br, ok := controlStreamIn.(byteReader)
+	if !ok {
+		br = &byteReaderImpl{controlStreamIn}
+	}
+	t, err := utils.ReadVarInt(br)
+	if t != 0x0 {
+		c.logger.Debugf("First stream must be a control stream")
+		return newConnError(errorMissingSettings, err)
+	}
+
+	frame, err := parseNextFrame(controlStreamIn)
+	if err != nil {
+		c.logger.Debugf("Error encountered while parsing incoming frame")
+		return newConnError(errorStreamCreationError, err)
+	}
+	sf, ok := frame.(*settingsFrame)
+	if !ok {
+		c.logger.Debugf("First incoming frame parsed was not a settings frame")
+		return newConnError(errorMissingSettings, nil)
+	}
+	// TODO: do something with the settings frame
+	c.logger.Debugf("Got settings frame: %+v", sf)
+	go func() {
+		for {
+			frame, err := parseNextFrame(controlStreamIn)
+			if err != nil {
+				// Hack
+				if err.Error() == "Application error 0x100" {
+					c.logger.Debugf("Closing control streams")
+					return
+				}
+				c.logger.Debugf("Error encountered while parsing incoming frame: %s", err)
+				return
+			}
+			switch f := frame.(type) {
+			case *goawayFrame:
+				c.logger.Debugf("Received goaway frame, halting requests with streamID >= %d", f.StreamID)
+				c.clientCancel()
+				c.goawayChan <- f.StreamID
+				c.clientContext, c.clientCancel = context.WithCancel(context.Background())
+			default:
+				c.logger.Debugf("Received frame %+v", f)
+			}
+		}
+	}()
+
+	return requestError{}
 }
 
 func (c *client) Close() error {
@@ -139,6 +202,9 @@ func (c *client) maxHeaderBytes() uint64 {
 
 // RoundTrip executes a request and returns a response
 func (c *client) RoundTrip(req *http.Request) (*http.Response, error) {
+	if c.clientContext.Err() != nil {
+		return nil, errors.New("server is no longer accepting requests")
+	}
 	if req.URL.Scheme != "https" {
 		return nil, errors.New("http3: unsupported scheme")
 	}
@@ -166,7 +232,9 @@ func (c *client) RoundTrip(req *http.Request) (*http.Response, error) {
 		}
 	}
 
-	str, err := c.session.OpenStreamSync(req.Context())
+	ctx, cancel := context.WithCancel(c.clientContext)
+	defer cancel()
+	str, err := c.session.OpenStreamSync(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -175,14 +243,7 @@ func (c *client) RoundTrip(req *http.Request) (*http.Response, error) {
 	// This go routine keeps running even after RoundTrip() returns.
 	// It is shut down when the application is done processing the body.
 	reqDone := make(chan struct{})
-	go func() {
-		select {
-		case <-req.Context().Done():
-			str.CancelWrite(quic.ErrorCode(errorRequestCanceled))
-			str.CancelRead(quic.ErrorCode(errorRequestCanceled))
-		case <-reqDone:
-		}
-	}()
+	go c.requestCancelled(str, req, reqDone)
 
 	rsp, rerr := c.doRequest(req, str, reqDone)
 	if rerr.err != nil { // if any error occurred
@@ -199,6 +260,34 @@ func (c *client) RoundTrip(req *http.Request) (*http.Response, error) {
 		}
 	}
 	return rsp, rerr.err
+}
+
+func (c *client) requestCancelled(str quic.Stream, req *http.Request, reqDone <-chan struct{}) {
+	select {
+	case id := <-c.goawayChan:
+		// if goaway was sent we need to check it and put it back on the channel
+		// so other requests can check as well
+		if str.StreamID() >= id {
+			str.CancelWrite(quic.ErrorCode(errorRequestCanceled))
+			str.CancelRead(quic.ErrorCode(errorRequestCanceled))
+			return
+		}
+		c.goawayChan <- id
+	case <-req.Context().Done():
+		str.CancelWrite(quic.ErrorCode(errorRequestCanceled))
+		str.CancelRead(quic.ErrorCode(errorRequestCanceled))
+
+		return
+	case <-reqDone:
+		return
+	}
+	// continue processing request if our streamID < goaway streamID
+	select {
+	case <-req.Context().Done():
+		str.CancelWrite(quic.ErrorCode(errorRequestCanceled))
+		str.CancelRead(quic.ErrorCode(errorRequestCanceled))
+	case <-reqDone:
+	}
 }
 
 func (c *client) doRequest(
