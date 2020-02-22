@@ -10,7 +10,7 @@ import (
 	gomock "github.com/golang/mock/gomock"
 	handshake "github.com/lucas-clemente/quic-go/internal/handshake"
 	protocol "github.com/lucas-clemente/quic-go/internal/protocol"
-	wire "github.com/lucas-clemente/quic-go/internal/wire"
+	qerr "github.com/lucas-clemente/quic-go/internal/qerr"
 )
 
 // MockPacker is a mock of Packer interface
@@ -94,10 +94,10 @@ func (mr *MockPackerMockRecorder) PackCoalescedPacket() *gomock.Call {
 }
 
 // PackConnectionClose mocks base method
-func (m *MockPacker) PackConnectionClose(arg0 *wire.ConnectionCloseFrame) (*packedPacket, error) {
+func (m *MockPacker) PackConnectionClose(arg0 *qerr.QuicError) (*coalescedPacket, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "PackConnectionClose", arg0)
-	ret0, _ := ret[0].(*packedPacket)
+	ret0, _ := ret[0].(*coalescedPacket)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }

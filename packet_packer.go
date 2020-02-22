@@ -7,6 +7,8 @@ import (
 	"net"
 	"time"
 
+	"github.com/lucas-clemente/quic-go/internal/qerr"
+
 	"github.com/lucas-clemente/quic-go/internal/ackhandler"
 	"github.com/lucas-clemente/quic-go/internal/handshake"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
@@ -19,7 +21,7 @@ type packer interface {
 	PackPacket() (*packedPacket, error)
 	MaybePackProbePacket(protocol.EncryptionLevel) (*packedPacket, error)
 	MaybePackAckPacket(handshakeConfirmed bool) (*packedPacket, error)
-	PackConnectionClose(*wire.ConnectionCloseFrame) (*packedPacket, error)
+	PackConnectionClose(*qerr.QuicError) (*coalescedPacket, error)
 
 	HandleTransportParameters(*handshake.TransportParameters)
 	SetToken([]byte)
@@ -196,36 +198,81 @@ func newPacketPacker(
 }
 
 // PackConnectionClose packs a packet that ONLY contains a ConnectionCloseFrame
-func (p *packetPacker) PackConnectionClose(ccf *wire.ConnectionCloseFrame) (*packedPacket, error) {
-	payload := payload{
-		frames: []ackhandler.Frame{{Frame: ccf}},
-		length: ccf.Length(p.version),
-	}
-	// send the CONNECTION_CLOSE frame with the highest available encryption level
-	var err error
-	var hdr *wire.ExtendedHeader
-	var sealer sealer
-	encLevel := protocol.Encryption1RTT
-	s, err := p.cryptoSetup.Get1RTTSealer()
-	if err != nil {
-		encLevel = protocol.EncryptionHandshake
-		sealer, err = p.cryptoSetup.GetHandshakeSealer()
-		if err != nil {
-			encLevel = protocol.EncryptionInitial
-			sealer, err = p.cryptoSetup.GetInitialSealer()
-			if err != nil {
-				return nil, err
-			}
-			hdr = p.getLongHeader(protocol.EncryptionInitial)
-		} else {
-			hdr = p.getLongHeader(protocol.EncryptionHandshake)
-		}
-	} else {
-		sealer = s
-		hdr = p.getShortHeader(s.KeyPhase())
+func (p *packetPacker) PackConnectionClose(quicErr *qerr.QuicError) (*coalescedPacket, error) {
+	var reason string
+	// don't send details of crypto errors
+	if !quicErr.IsCryptoError() {
+		reason = quicErr.ErrorMessage
 	}
 
-	return p.writeSinglePacket(hdr, payload, encLevel, sealer)
+	buffer := getPacketBuffer()
+	contents := make([]*packetContents, 0, 1)
+	for _, encLevel := range []protocol.EncryptionLevel{protocol.EncryptionInitial, protocol.EncryptionHandshake, protocol.Encryption0RTT, protocol.Encryption1RTT} {
+		if p.perspective == protocol.PerspectiveServer && encLevel == protocol.Encryption0RTT {
+			continue
+		}
+		quicErrToSend := quicErr
+		reasonPhrase := reason
+		if encLevel == protocol.EncryptionInitial || encLevel == protocol.EncryptionHandshake {
+			// don't send application errors in Initial or Handshake packets
+			if quicErr.IsApplicationError() {
+				quicErrToSend = qerr.UserCanceledError
+				reasonPhrase = ""
+			}
+		}
+		ccf := &wire.ConnectionCloseFrame{
+			IsApplicationError: quicErrToSend.IsApplicationError(),
+			ErrorCode:          quicErrToSend.ErrorCode,
+			FrameType:          quicErrToSend.FrameType,
+			ReasonPhrase:       reasonPhrase,
+		}
+		payload := payload{
+			frames: []ackhandler.Frame{{Frame: ccf}},
+			length: ccf.Length(p.version),
+		}
+
+		var sealer sealer
+		var err error
+		var keyPhase protocol.KeyPhaseBit // only set for 1-RTT
+		switch encLevel {
+		case protocol.EncryptionInitial:
+			sealer, err = p.cryptoSetup.GetInitialSealer()
+		case protocol.EncryptionHandshake:
+			sealer, err = p.cryptoSetup.GetHandshakeSealer()
+		case protocol.Encryption0RTT:
+			sealer, err = p.cryptoSetup.Get0RTTSealer()
+		case protocol.Encryption1RTT:
+			var s handshake.ShortHeaderSealer
+			s, err = p.cryptoSetup.Get1RTTSealer()
+			if err == nil {
+				keyPhase = s.KeyPhase()
+			}
+			sealer = s
+		}
+		if err == handshake.ErrKeysNotYetAvailable || err == handshake.ErrKeysDropped {
+			continue
+		}
+		if err != nil {
+			return nil, err
+		}
+		var hdr *wire.ExtendedHeader
+		if encLevel == protocol.Encryption1RTT {
+			hdr = p.getShortHeader(keyPhase)
+		} else {
+			hdr = p.getLongHeader(encLevel)
+		}
+		c, err := p.appendPacket(buffer, hdr, payload, encLevel, sealer)
+		if err != nil {
+			return nil, err
+		}
+		contents = append(contents, c)
+	}
+
+	if p.perspective == protocol.PerspectiveClient && contents[0].header.Type == protocol.PacketTypeInitial {
+		p.padPacket(buffer)
+	}
+
+	return &coalescedPacket{buffer: buffer, packets: contents}, nil
 }
 
 func (p *packetPacker) MaybePackAckPacket(handshakeConfirmed bool) (*packedPacket, error) {
