@@ -3,6 +3,7 @@
 set -ex
 
 if [ ${TESTMODE} == "lint" ]; then
+  .travis/no_ginkgo.sh
   ./bin/golangci-lint run ./...
 fi
 
