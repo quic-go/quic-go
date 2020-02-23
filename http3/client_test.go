@@ -146,6 +146,12 @@ var _ = Describe("Client", func() {
 		Expect(err).To(MatchError(testErr))
 	})
 
+	It("closes correctly if session was not created", func() {
+		client = newClient("localhost:1337", nil, &roundTripperOpts{}, nil, nil)
+		err := client.Close()
+		Expect(err).ToNot(HaveOccurred())
+	})
+
 	Context("Doing requests", func() {
 		var (
 			request *http.Request

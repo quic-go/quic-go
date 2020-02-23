@@ -127,6 +127,9 @@ func (c *client) setupSession() error {
 }
 
 func (c *client) Close() error {
+	if c.session == nil {
+		return nil
+	}
 	return c.session.CloseWithError(quic.ErrorCode(errorNoError), "")
 }
 
