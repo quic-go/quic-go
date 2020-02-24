@@ -102,7 +102,7 @@ func (u *packetUnpacker) Unpack(hdr *wire.Header, rcvTime time.Time, data []byte
 }
 
 func (u *packetUnpacker) unpackLongHeaderPacket(opener handshake.LongHeaderOpener, hdr *wire.Header, data []byte) (*wire.ExtendedHeader, []byte, error) {
-	extHdr, parseErr := u.unpack(opener, hdr, data)
+	extHdr, parseErr := u.unpackHeader(opener, hdr, data)
 	// If the reserved bits are set incorrectly, we still need to continue unpacking.
 	// This avoids a timing side-channel, which otherwise might allow an attacker
 	// to gain information about the header encryption.
@@ -126,7 +126,7 @@ func (u *packetUnpacker) unpackShortHeaderPacket(
 	rcvTime time.Time,
 	data []byte,
 ) (*wire.ExtendedHeader, []byte, error) {
-	extHdr, parseErr := u.unpack(opener, hdr, data)
+	extHdr, parseErr := u.unpackHeader(opener, hdr, data)
 	// If the reserved bits are set incorrectly, we still need to continue unpacking.
 	// This avoids a timing side-channel, which otherwise might allow an attacker
 	// to gain information about the header encryption.
@@ -144,7 +144,20 @@ func (u *packetUnpacker) unpackShortHeaderPacket(
 	return extHdr, decrypted, nil
 }
 
-func (u *packetUnpacker) unpack(hd headerDecryptor, hdr *wire.Header, data []byte) (*wire.ExtendedHeader, error) {
+func (u *packetUnpacker) unpackHeader(hd headerDecryptor, hdr *wire.Header, data []byte) (*wire.ExtendedHeader, error) {
+	extHdr, err := unpackHeader(hd, hdr, data, u.version)
+	if err != nil && err != wire.ErrInvalidReservedBits {
+		return nil, err
+	}
+	extHdr.PacketNumber = protocol.DecodePacketNumber(
+		extHdr.PacketNumberLen,
+		u.largestRcvdPacketNumber,
+		extHdr.PacketNumber,
+	)
+	return extHdr, err
+}
+
+func unpackHeader(hd headerDecryptor, hdr *wire.Header, data []byte, version protocol.VersionNumber) (*wire.ExtendedHeader, error) {
 	r := bytes.NewReader(data)
 
 	hdrLen := hdr.ParsedLen()
@@ -163,7 +176,7 @@ func (u *packetUnpacker) unpack(hd headerDecryptor, hdr *wire.Header, data []byt
 		data[hdrLen:hdrLen+4],
 	)
 	// 3. parse the header (and learn the actual length of the packet number)
-	extHdr, parseErr := hdr.ParseExtended(r, u.version)
+	extHdr, parseErr := hdr.ParseExtended(r, version)
 	if parseErr != nil && parseErr != wire.ErrInvalidReservedBits {
 		return nil, parseErr
 	}
@@ -171,11 +184,5 @@ func (u *packetUnpacker) unpack(hd headerDecryptor, hdr *wire.Header, data []byt
 	if extHdr.PacketNumberLen != protocol.PacketNumberLen4 {
 		copy(data[extHdr.ParsedLen():hdrLen+4], origPNBytes[int(extHdr.PacketNumberLen):])
 	}
-
-	extHdr.PacketNumber = protocol.DecodePacketNumber(
-		extHdr.PacketNumberLen,
-		u.largestRcvdPacketNumber,
-		extHdr.PacketNumber,
-	)
 	return extHdr, parseErr
 }

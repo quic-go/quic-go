@@ -455,4 +455,30 @@ var _ = Describe("Handshake tests", func() {
 			Eventually(done).Should(BeClosed())
 		})
 	})
+
+	It("rejects invalid Retry token with the INVALID_TOKEN error", func() {
+		tokenChan := make(chan *quic.Token, 10)
+		serverConfig.AcceptToken = func(addr net.Addr, token *quic.Token) bool {
+			tokenChan <- token
+			return false
+		}
+
+		server, err := quic.ListenAddr("localhost:0", getTLSConfig(), serverConfig)
+		Expect(err).ToNot(HaveOccurred())
+		defer server.Close()
+
+		_, err = quic.DialAddr(
+			fmt.Sprintf("localhost:%d", server.Addr().(*net.UDPAddr).Port),
+			getTLSClientConfig(),
+			nil,
+		)
+		Expect(err).To(HaveOccurred())
+		Expect(err.Error()).To(ContainSubstring("INVALID_TOKEN"))
+		Expect(tokenChan).To(HaveLen(2))
+		token := <-tokenChan
+		Expect(token).To(BeNil())
+		token = <-tokenChan
+		Expect(token).ToNot(BeNil())
+		Expect(token.IsRetryToken).To(BeTrue())
+	})
 })
