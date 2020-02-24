@@ -71,7 +71,8 @@ type Server struct {
 	listeners map[*quic.EarlyListener]struct{}
 	closed    utils.AtomicBool
 
-	logger utils.Logger
+	loggerOnce sync.Once
+	logger     utils.Logger
 }
 
 // ListenAndServe listens on the UDP address s.Addr and calls s.Handler to handle HTTP/3 requests on incoming connections.
@@ -112,7 +113,9 @@ func (s *Server) serveImpl(tlsConf *tls.Config, conn net.PacketConn) error {
 	if s.Server == nil {
 		return errors.New("use of http3.Server without http.Server")
 	}
-	s.logger = utils.DefaultLogger.WithPrefix("server")
+	s.loggerOnce.Do(func() {
+		s.logger = utils.DefaultLogger.WithPrefix("server")
+	})
 
 	if tlsConf == nil {
 		tlsConf = &tls.Config{}
