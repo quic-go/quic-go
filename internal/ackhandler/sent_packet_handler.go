@@ -116,6 +116,16 @@ func newSentPacketHandler(
 }
 
 func (h *sentPacketHandler) DropPackets(encLevel protocol.EncryptionLevel) {
+	if h.perspective == protocol.PerspectiveClient && encLevel == protocol.EncryptionInitial {
+		// This function is called when the crypto setup seals a Handshake packet.
+		// If this Handshake packet is coalesced behind an Initial packet, we would drop the Initial packet number space
+		// before SentPacket() was called for that Initial packet.
+		return
+	}
+	h.dropPackets(encLevel)
+}
+
+func (h *sentPacketHandler) dropPackets(encLevel protocol.EncryptionLevel) {
 	// remove outstanding packets from bytes_in_flight
 	if encLevel == protocol.EncryptionInitial || encLevel == protocol.EncryptionHandshake {
 		pnSpace := h.getPacketNumberSpace(encLevel)
@@ -153,6 +163,10 @@ func (h *sentPacketHandler) DropPackets(encLevel protocol.EncryptionLevel) {
 }
 
 func (h *sentPacketHandler) SentPacket(packet *Packet) {
+	// For the client, drop the Initial packet number space when the first Handshake packet is sent.
+	if h.perspective == protocol.PerspectiveClient && packet.EncryptionLevel == protocol.EncryptionHandshake && h.initialPackets != nil {
+		h.dropPackets(protocol.EncryptionInitial)
+	}
 	isAckEliciting := h.sentPacketImpl(packet)
 	if isAckEliciting {
 		h.getPacketNumberSpace(packet.EncryptionLevel).history.SentPacket(packet)
