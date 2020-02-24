@@ -8,12 +8,11 @@ require (
 	github.com/francoispqt/gojay v1.2.13
 	github.com/golang/mock v1.4.0
 	github.com/golang/protobuf v1.3.1
-	github.com/marten-seemann/chacha20 v0.2.0
 	github.com/marten-seemann/qpack v0.1.0
 	github.com/marten-seemann/qtls v0.7.1
 	github.com/onsi/ginkgo v1.11.0
 	github.com/onsi/gomega v1.8.1
-	golang.org/x/crypto v0.0.0-20190829043050-9756ffdc2472
+	golang.org/x/crypto v0.0.0-20200221231518-2aa609cf4a9d
 	golang.org/x/net v0.0.0-20190404232315-eb5bcb51f2a3
 	golang.org/x/sync v0.0.0-20190423024810-112230192c58
 )
