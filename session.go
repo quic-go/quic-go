@@ -535,6 +535,12 @@ runLoop:
 			if wasProcessed := s.handlePacketImpl(p); !wasProcessed {
 				continue
 			}
+			// Don't set timers and send packets if the packet made us close the session.
+			select {
+			case closeErr = <-s.closeChan:
+				break runLoop
+			default:
+			}
 		case <-s.handshakeCompleteChan:
 			s.handleHandshakeComplete()
 		}
@@ -1105,6 +1111,7 @@ func (s *session) closeForRecreating() protocol.PacketNumber {
 func (s *session) closeRemote(e error) {
 	s.closeOnce.Do(func() {
 		s.logger.Errorf("Peer closed session with error: %s", e)
+		s.logger.Debugf("sending to close chan")
 		s.closeChan <- closeError{err: e, immediate: true, remote: true}
 	})
 }
