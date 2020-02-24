@@ -31,6 +31,7 @@ var _ = Describe("early data", func() {
 				done := make(chan struct{})
 				go func() {
 					defer GinkgoRecover()
+					defer close(done)
 					sess, err := ln.Accept(context.Background())
 					Expect(err).ToNot(HaveOccurred())
 					str, err := sess.OpenUniStream()
@@ -40,8 +41,7 @@ var _ = Describe("early data", func() {
 					Expect(str.Close()).To(Succeed())
 					// make sure the Write finished before the handshake completed
 					Expect(sess.HandshakeComplete().Done()).ToNot(BeClosed())
-					Eventually(sess.HandshakeComplete().Done(), protocol.DefaultHandshakeTimeout).Should(BeClosed())
-					close(done)
+					Eventually(sess.Context().Done()).Should(BeClosed())
 				}()
 				serverPort := ln.Addr().(*net.UDPAddr).Port
 				proxy, err := quicproxy.NewQuicProxy("localhost:0", &quicproxy.Opts{
