@@ -259,7 +259,7 @@ var _ = Describe("0-RTT", func() {
 			It("retransmits all 0-RTT data when the server performs a Retry", func() {
 				var mutex sync.Mutex
 				var firstConnID, secondConnID protocol.ConnectionID
-				var firstCounter, secondCounter int
+				var firstCounter, secondCounter protocol.ByteCount
 
 				ln, err := quic.ListenAddrEarly(
 					"localhost:0",
@@ -270,26 +270,41 @@ var _ = Describe("0-RTT", func() {
 				defer ln.Close()
 				serverPort := ln.Addr().(*net.UDPAddr).Port
 
+				countZeroRTTBytes := func(data []byte) (n protocol.ByteCount) {
+					for len(data) > 0 {
+						hdr, _, rest, err := wire.ParsePacket(data, 0)
+						if err != nil {
+							return
+						}
+						data = rest
+						if hdr.Type == protocol.PacketType0RTT {
+							n += hdr.Length - 16 /* AEAD tag */
+						}
+					}
+					return
+				}
+
 				proxy, err := quicproxy.NewQuicProxy("localhost:0", &quicproxy.Opts{
 					RemoteAddr: fmt.Sprintf("localhost:%d", serverPort),
-					DelayPacket: func(_ quicproxy.Direction, data []byte) time.Duration {
-						hdr, _, _, err := wire.ParsePacket(data, 0)
+					DelayPacket: func(dir quicproxy.Direction, data []byte) time.Duration {
+						connID, err := wire.ParseConnectionID(data, 0)
 						Expect(err).ToNot(HaveOccurred())
-						if hdr.Type == protocol.PacketType0RTT {
-							connID := hdr.DestConnectionID
-							mutex.Lock()
-							defer mutex.Unlock()
+
+						mutex.Lock()
+						defer mutex.Unlock()
+
+						if zeroRTTBytes := countZeroRTTBytes(data); zeroRTTBytes > 0 {
 							if firstConnID == nil {
 								firstConnID = connID
-								firstCounter++
+								firstCounter += zeroRTTBytes
 							} else if firstConnID != nil && firstConnID.Equal(connID) {
 								Expect(secondConnID).To(BeNil())
-								firstCounter++
+								firstCounter += zeroRTTBytes
 							} else if secondConnID == nil {
 								secondConnID = connID
-								secondCounter++
+								secondCounter += zeroRTTBytes
 							} else if secondConnID != nil && secondConnID.Equal(connID) {
-								secondCounter++
+								secondCounter += zeroRTTBytes
 							} else {
 								Fail("received 3 connection IDs on 0-RTT packets")
 							}
@@ -301,12 +316,12 @@ var _ = Describe("0-RTT", func() {
 				defer proxy.Close()
 
 				clientConf := dialAndReceiveSessionTicket(ln, proxy.LocalPort())
-				transfer0RTTData(ln, proxy.LocalPort(), clientConf, GeneratePRData(5*1100), true) // ~5 packets
+				transfer0RTTData(ln, proxy.LocalPort(), clientConf, GeneratePRData(5000), true) // ~5 packets
 
 				mutex.Lock()
 				defer mutex.Unlock()
-				Expect(firstCounter).To(BeNumerically("~", 5, 1)) // the FIN bit might be sent extra
-				Expect(secondCounter).To(Equal(firstCounter))
+				Expect(firstCounter).To(BeNumerically("~", 5000+100 /* framing overhead */, 100)) // the FIN bit might be sent extra
+				Expect(secondCounter).To(BeNumerically("~", firstCounter, 20))
 			})
 
 			It("rejects 0-RTT when the server's transport parameters changed", func() {
