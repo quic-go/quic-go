@@ -33,8 +33,6 @@ before_install:
   - export GOARCH=$TRAVIS_GOARCH
   - go env # for debugging
   - travis_retry go get -t ./...
-  - "export DISPLAY=:99.0"
-  - "Xvfb $DISPLAY &> /dev/null &"
 
 script:
   - | 
