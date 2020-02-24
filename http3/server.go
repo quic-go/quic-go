@@ -17,7 +17,6 @@ import (
 	"github.com/lucas-clemente/quic-go"
 	"github.com/lucas-clemente/quic-go/internal/utils"
 	"github.com/marten-seemann/qpack"
-	"github.com/onsi/ginkgo"
 )
 
 // allows mocking of quic.Listen and quic.ListenAddr
@@ -198,7 +197,6 @@ func (s *Server) handleConn(sess quic.EarlySession) {
 			return
 		}
 		go func() {
-			defer ginkgo.GinkgoRecover()
 			rerr := s.handleRequest(sess, str, decoder, func() {
 				sess.CloseWithError(quic.ErrorCode(errorFrameUnexpected), "")
 			})
