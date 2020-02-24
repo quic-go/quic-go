@@ -2,7 +2,6 @@ package handshake
 
 import (
 	"bytes"
-	"encoding/binary"
 	"errors"
 	"fmt"
 	"io"
@@ -23,7 +22,7 @@ func init() {
 	rand.Seed(time.Now().UTC().UnixNano())
 }
 
-type transportParameterID uint16
+type transportParameterID uint64
 
 const (
 	originalConnectionIDParameterID           transportParameterID = 0x0
@@ -88,25 +87,23 @@ func (p *TransportParameters) Unmarshal(data []byte, sentBy protocol.Perspective
 }
 
 func (p *TransportParameters) unmarshal(data []byte, sentBy protocol.Perspective) error {
-	if len(data) < 2 {
-		return errors.New("transport parameter data too short")
-	}
-	length := binary.BigEndian.Uint16(data[:2])
-	if len(data)-2 < int(length) {
-		return fmt.Errorf("expected transport parameters to be %d bytes long, have %d", length, len(data)-2)
-	}
-
 	// needed to check that every parameter is only sent at most once
 	var parameterIDs []transportParameterID
 
 	var readAckDelayExponent bool
 	var readMaxAckDelay bool
 
-	r := bytes.NewReader(data[2:])
-	for r.Len() >= 4 {
-		paramIDInt, _ := utils.BigEndian.ReadUint16(r)
+	r := bytes.NewReader(data)
+	for r.Len() > 0 {
+		paramIDInt, err := utils.ReadVarInt(r)
+		if err != nil {
+			return err
+		}
 		paramID := transportParameterID(paramIDInt)
-		paramLen, _ := utils.BigEndian.ReadUint16(r)
+		paramLen, err := utils.ReadVarInt(r)
+		if err != nil {
+			return err
+		}
 		parameterIDs = append(parameterIDs, paramID)
 		switch paramID {
 		case ackDelayExponentParameterID:
@@ -187,9 +184,6 @@ func (p *TransportParameters) unmarshal(data []byte, sentBy protocol.Perspective
 		}
 	}
 
-	if r.Len() != 0 {
-		return fmt.Errorf("should have read all data. Still have %d bytes", r.Len())
-	}
 	return nil
 }
 
@@ -293,14 +287,13 @@ func (p *TransportParameters) readNumericTransportParameter(
 // Marshal the transport parameters
 func (p *TransportParameters) Marshal() []byte {
 	b := &bytes.Buffer{}
-	b.Write([]byte{0, 0}) // length. Will be replaced later
 
 	//add a greased value
-	utils.BigEndian.WriteUint16(b, uint16(27+31*rand.Intn(100)))
+	utils.WriteVarInt(b, uint64(27+31*rand.Intn(100)))
 	length := rand.Intn(16)
 	randomData := make([]byte, length)
 	rand.Read(randomData)
-	utils.BigEndian.WriteUint16(b, uint16(length))
+	utils.WriteVarInt(b, uint64(length))
 	b.Write(randomData)
 
 	// initial_max_stream_data_bidi_local
@@ -331,17 +324,17 @@ func (p *TransportParameters) Marshal() []byte {
 	}
 	// disable_active_migration
 	if p.DisableActiveMigration {
-		utils.BigEndian.WriteUint16(b, uint16(disableActiveMigrationParameterID))
-		utils.BigEndian.WriteUint16(b, 0)
+		utils.WriteVarInt(b, uint64(disableActiveMigrationParameterID))
+		utils.WriteVarInt(b, 0)
 	}
 	if p.StatelessResetToken != nil {
-		utils.BigEndian.WriteUint16(b, uint16(statelessResetTokenParameterID))
-		utils.BigEndian.WriteUint16(b, 16)
+		utils.WriteVarInt(b, uint64(statelessResetTokenParameterID))
+		utils.WriteVarInt(b, 16)
 		b.Write(p.StatelessResetToken[:])
 	}
 	if p.PreferredAddress != nil {
-		utils.BigEndian.WriteUint16(b, uint16(preferredAddressParamaterID))
-		utils.BigEndian.WriteUint16(b, 4+2+16+2+1+uint16(p.PreferredAddress.ConnectionID.Len())+16)
+		utils.WriteVarInt(b, uint64(preferredAddressParamaterID))
+		utils.WriteVarInt(b, 4+2+16+2+1+uint64(p.PreferredAddress.ConnectionID.Len())+16)
 		ipv4 := p.PreferredAddress.IPv4
 		b.Write(ipv4[len(ipv4)-4:])
 		utils.BigEndian.WriteUint16(b, p.PreferredAddress.IPv4Port)
@@ -352,22 +345,19 @@ func (p *TransportParameters) Marshal() []byte {
 		b.Write(p.PreferredAddress.StatelessResetToken[:])
 	}
 	if p.OriginalConnectionID.Len() > 0 {
-		utils.BigEndian.WriteUint16(b, uint16(originalConnectionIDParameterID))
-		utils.BigEndian.WriteUint16(b, uint16(p.OriginalConnectionID.Len()))
+		utils.WriteVarInt(b, uint64(originalConnectionIDParameterID))
+		utils.WriteVarInt(b, uint64(p.OriginalConnectionID.Len()))
 		b.Write(p.OriginalConnectionID.Bytes())
 	}
 
 	// active_connection_id_limit
 	p.marshalVarintParam(b, activeConnectionIDLimitParameterID, p.ActiveConnectionIDLimit)
-
-	data := b.Bytes()
-	binary.BigEndian.PutUint16(data[:2], uint16(b.Len()-2))
-	return data
+	return b.Bytes()
 }
 
 func (p *TransportParameters) marshalVarintParam(b *bytes.Buffer, id transportParameterID, val uint64) {
-	utils.BigEndian.WriteUint16(b, uint16(id))
-	utils.BigEndian.WriteUint16(b, uint16(utils.VarIntLen(val)))
+	utils.WriteVarInt(b, uint64(id))
+	utils.WriteVarInt(b, uint64(utils.VarIntLen(val)))
 	utils.WriteVarInt(b, val)
 }
 
@@ -381,8 +371,6 @@ func (p *TransportParameters) marshalVarintParam(b *bytes.Buffer, id transportPa
 // For convenience, we use the same format that we also use for sending the transport parameters.
 func (p *TransportParameters) MarshalForSessionTicket(b *bytes.Buffer) {
 	utils.WriteVarInt(b, transportParameterMarshalingVersion)
-	startLen := b.Len()
-	b.Write([]byte{0, 0}) // length. Will be replaced later
 
 	// initial_max_stream_data_bidi_local
 	p.marshalVarintParam(b, initialMaxStreamDataBidiLocalParameterID, uint64(p.InitialMaxStreamDataBidiLocal))
@@ -396,9 +384,6 @@ func (p *TransportParameters) MarshalForSessionTicket(b *bytes.Buffer) {
 	p.marshalVarintParam(b, initialMaxStreamsBidiParameterID, uint64(p.MaxBidiStreamNum))
 	// initial_max_uni_streams
 	p.marshalVarintParam(b, initialMaxStreamsUniParameterID, uint64(p.MaxUniStreamNum))
-
-	// replace the length
-	binary.BigEndian.PutUint16(b.Bytes()[startLen:startLen+2], uint16(b.Len()-2-startLen))
 }
 
 // UnmarshalFromSessionTicket unmarshals transport parameters from a session ticket.
