@@ -437,17 +437,13 @@ var _ = Describe("Server", func() {
 		It("serves two packet conns", func() {
 			ln1 := mockquic.NewMockEarlyListener(mockCtrl)
 			ln2 := mockquic.NewMockEarlyListener(mockCtrl)
-			lns := []quic.EarlyListener{ln1, ln2}
+			lns := make(chan quic.EarlyListener, 2)
+			lns <- ln1
+			lns <- ln2
 			conn1 := &net.UDPConn{}
 			conn2 := &net.UDPConn{}
-			conns := []net.PacketConn{conn1, conn2}
 			quicListen = func(c net.PacketConn, tlsConf *tls.Config, config *quic.Config) (quic.EarlyListener, error) {
-				conn := conns[0]
-				conns = conns[1:]
-				ln := lns[0]
-				lns = lns[1:]
-				Expect(c).To(Equal(conn))
-				return ln, nil
+				return <-lns, nil
 			}
 
 			s := &Server{Server: &http.Server{}}
