@@ -502,6 +502,34 @@ var _ = Describe("Session", func() {
 			sess.shutdown()
 			Eventually(returned).Should(BeClosed())
 		})
+
+		It("doesn't send any more packets after receiving a CONNECTION_CLOSE", func() {
+			unpacker := NewMockUnpacker(mockCtrl)
+			sess.handshakeConfirmed = true
+			sess.unpacker = unpacker
+			cryptoSetup.EXPECT().Close()
+			streamManager.EXPECT().CloseWithError(gomock.Any())
+			sessionRunner.EXPECT().ReplaceWithClosed(gomock.Any(), gomock.Any()).AnyTimes()
+			buf := &bytes.Buffer{}
+			Expect((&wire.ExtendedHeader{
+				Header:          wire.Header{DestConnectionID: srcConnID},
+				PacketNumberLen: protocol.PacketNumberLen2,
+			}).Write(buf, sess.version)).To(Succeed())
+			unpacker.EXPECT().Unpack(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(func(*wire.Header, time.Time, []byte) (*unpackedPacket, error) {
+				buf := &bytes.Buffer{}
+				Expect((&wire.ConnectionCloseFrame{ErrorCode: qerr.StreamLimitError}).Write(buf, sess.version)).To(Succeed())
+				return &unpackedPacket{data: buf.Bytes(), encryptionLevel: protocol.Encryption1RTT}, nil
+			})
+			// don't EXPECT any calls to packer.PackPacket()
+			sess.handlePacket(&receivedPacket{
+				rcvTime:    time.Now(),
+				remoteAddr: &net.UDPAddr{},
+				buffer:     getPacketBuffer(),
+				data:       buf.Bytes(),
+			})
+			// Consistently(pack).ShouldNot(Receive())
+			Eventually(sess.Context().Done()).Should(BeClosed())
+		})
 	})
 
 	Context("receiving packets", func() {
