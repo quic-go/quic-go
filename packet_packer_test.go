@@ -6,6 +6,8 @@ import (
 	"net"
 	"time"
 
+	"github.com/lucas-clemente/quic-go/internal/qerr"
+
 	"github.com/lucas-clemente/quic-go/internal/ackhandler"
 
 	"github.com/golang/mock/gomock"
@@ -275,6 +277,151 @@ var _ = Describe("Packet packer", func() {
 			})
 		})
 
+		Context("packing CONNECTION_CLOSE", func() {
+			It("clears the reason phrase for crypto errors", func() {
+				pnManager.EXPECT().PeekPacketNumber(protocol.EncryptionHandshake).Return(protocol.PacketNumber(0x42), protocol.PacketNumberLen2)
+				pnManager.EXPECT().PopPacketNumber(protocol.EncryptionHandshake).Return(protocol.PacketNumber(0x42))
+				sealingManager.EXPECT().GetInitialSealer().Return(nil, handshake.ErrKeysDropped)
+				sealingManager.EXPECT().GetHandshakeSealer().Return(getSealer(), nil)
+				sealingManager.EXPECT().Get1RTTSealer().Return(nil, handshake.ErrKeysNotYetAvailable)
+				quicErr := qerr.CryptoError(0x42, "crypto error")
+				quicErr.FrameType = 0x1234
+				p, err := packer.PackConnectionClose(quicErr)
+				Expect(err).ToNot(HaveOccurred())
+				Expect(p.packets).To(HaveLen(1))
+				Expect(p.packets[0].header.Type).To(Equal(protocol.PacketTypeHandshake))
+				Expect(p.packets[0].frames).To(HaveLen(1))
+				Expect(p.packets[0].frames[0].Frame).To(BeAssignableToTypeOf(&wire.ConnectionCloseFrame{}))
+				ccf := p.packets[0].frames[0].Frame.(*wire.ConnectionCloseFrame)
+				Expect(ccf.IsApplicationError).To(BeFalse())
+				Expect(ccf.ErrorCode).To(BeEquivalentTo(0x100 + 0x42))
+				Expect(ccf.FrameType).To(BeEquivalentTo(0x1234))
+				Expect(ccf.ReasonPhrase).To(BeEmpty())
+			})
+
+			It("packs a CONNECTION_CLOSE in 1-RTT", func() {
+				pnManager.EXPECT().PeekPacketNumber(protocol.Encryption1RTT).Return(protocol.PacketNumber(0x42), protocol.PacketNumberLen2)
+				pnManager.EXPECT().PopPacketNumber(protocol.Encryption1RTT).Return(protocol.PacketNumber(0x42))
+				sealingManager.EXPECT().GetInitialSealer().Return(nil, handshake.ErrKeysDropped)
+				sealingManager.EXPECT().GetHandshakeSealer().Return(nil, handshake.ErrKeysDropped)
+				sealingManager.EXPECT().Get1RTTSealer().Return(getSealer(), nil)
+				// expect no framer.PopStreamFrames
+				p, err := packer.PackConnectionClose(qerr.Error(qerr.CryptoBufferExceeded, "test error"))
+				Expect(err).ToNot(HaveOccurred())
+				Expect(p.packets).To(HaveLen(1))
+				Expect(p.packets[0].header.IsLongHeader).To(BeFalse())
+				Expect(p.packets[0].frames).To(HaveLen(1))
+				Expect(p.packets[0].frames[0].Frame).To(BeAssignableToTypeOf(&wire.ConnectionCloseFrame{}))
+				ccf := p.packets[0].frames[0].Frame.(*wire.ConnectionCloseFrame)
+				Expect(ccf.IsApplicationError).To(BeFalse())
+				Expect(ccf.ErrorCode).To(Equal(qerr.CryptoBufferExceeded))
+				Expect(ccf.ReasonPhrase).To(Equal("test error"))
+			})
+
+			It("packs a CONNECTION_CLOSE in all available encryption levels, and replaces application errors in Initial and Handshake", func() {
+				pnManager.EXPECT().PeekPacketNumber(protocol.EncryptionInitial).Return(protocol.PacketNumber(1), protocol.PacketNumberLen2)
+				pnManager.EXPECT().PopPacketNumber(protocol.EncryptionInitial).Return(protocol.PacketNumber(1))
+				pnManager.EXPECT().PeekPacketNumber(protocol.EncryptionHandshake).Return(protocol.PacketNumber(2), protocol.PacketNumberLen2)
+				pnManager.EXPECT().PopPacketNumber(protocol.EncryptionHandshake).Return(protocol.PacketNumber(2))
+				pnManager.EXPECT().PeekPacketNumber(protocol.Encryption1RTT).Return(protocol.PacketNumber(3), protocol.PacketNumberLen2)
+				pnManager.EXPECT().PopPacketNumber(protocol.Encryption1RTT).Return(protocol.PacketNumber(3))
+				sealingManager.EXPECT().GetInitialSealer().Return(getSealer(), nil)
+				sealingManager.EXPECT().GetHandshakeSealer().Return(getSealer(), nil)
+				sealingManager.EXPECT().Get1RTTSealer().Return(getSealer(), nil)
+				p, err := packer.PackConnectionClose(qerr.ApplicationError(0x1337, "test error"))
+				Expect(err).ToNot(HaveOccurred())
+				Expect(p.packets).To(HaveLen(3))
+				Expect(p.packets[0].header.Type).To(Equal(protocol.PacketTypeInitial))
+				Expect(p.packets[0].header.PacketNumber).To(Equal(protocol.PacketNumber(1)))
+				Expect(p.packets[0].frames).To(HaveLen(1))
+				Expect(p.packets[0].frames[0].Frame).To(BeAssignableToTypeOf(&wire.ConnectionCloseFrame{}))
+				ccf := p.packets[0].frames[0].Frame.(*wire.ConnectionCloseFrame)
+				Expect(ccf.IsApplicationError).To(BeFalse())
+				Expect(ccf.ErrorCode).To(Equal(qerr.UserCanceledError.ErrorCode))
+				Expect(ccf.ReasonPhrase).To(BeEmpty())
+				Expect(p.packets[1].header.Type).To(Equal(protocol.PacketTypeHandshake))
+				Expect(p.packets[1].header.PacketNumber).To(Equal(protocol.PacketNumber(2)))
+				Expect(p.packets[1].frames).To(HaveLen(1))
+				Expect(p.packets[1].frames[0].Frame).To(BeAssignableToTypeOf(&wire.ConnectionCloseFrame{}))
+				ccf = p.packets[1].frames[0].Frame.(*wire.ConnectionCloseFrame)
+				Expect(ccf.IsApplicationError).To(BeFalse())
+				Expect(ccf.ErrorCode).To(Equal(qerr.UserCanceledError.ErrorCode))
+				Expect(ccf.ReasonPhrase).To(BeEmpty())
+				Expect(p.packets[2].header.IsLongHeader).To(BeFalse())
+				Expect(p.packets[2].header.PacketNumber).To(Equal(protocol.PacketNumber(3)))
+				Expect(p.packets[2].frames).To(HaveLen(1))
+				Expect(p.packets[2].frames[0].Frame).To(BeAssignableToTypeOf(&wire.ConnectionCloseFrame{}))
+				ccf = p.packets[2].frames[0].Frame.(*wire.ConnectionCloseFrame)
+				Expect(ccf.IsApplicationError).To(BeTrue())
+				Expect(ccf.ErrorCode).To(BeEquivalentTo(0x1337))
+				Expect(ccf.ReasonPhrase).To(Equal("test error"))
+			})
+
+			It("packs a CONNECTION_CLOSE in all available encryption levels, as a client", func() {
+				packer.perspective = protocol.PerspectiveClient
+				pnManager.EXPECT().PeekPacketNumber(protocol.EncryptionHandshake).Return(protocol.PacketNumber(1), protocol.PacketNumberLen2)
+				pnManager.EXPECT().PopPacketNumber(protocol.EncryptionHandshake).Return(protocol.PacketNumber(1))
+				pnManager.EXPECT().PeekPacketNumber(protocol.Encryption1RTT).Return(protocol.PacketNumber(2), protocol.PacketNumberLen2)
+				pnManager.EXPECT().PopPacketNumber(protocol.Encryption1RTT).Return(protocol.PacketNumber(2))
+				sealingManager.EXPECT().GetInitialSealer().Return(nil, handshake.ErrKeysDropped)
+				sealingManager.EXPECT().GetHandshakeSealer().Return(getSealer(), nil)
+				sealingManager.EXPECT().Get0RTTSealer().Return(nil, handshake.ErrKeysDropped)
+				sealingManager.EXPECT().Get1RTTSealer().Return(getSealer(), nil)
+				p, err := packer.PackConnectionClose(qerr.ApplicationError(0x1337, "test error"))
+				Expect(err).ToNot(HaveOccurred())
+				Expect(p.packets).To(HaveLen(2))
+				Expect(p.buffer.Len()).To(BeNumerically("<", protocol.MinInitialPacketSize))
+				Expect(p.packets[0].header.Type).To(Equal(protocol.PacketTypeHandshake))
+				Expect(p.packets[0].header.PacketNumber).To(Equal(protocol.PacketNumber(1)))
+				Expect(p.packets[0].frames).To(HaveLen(1))
+				Expect(p.packets[0].frames[0].Frame).To(BeAssignableToTypeOf(&wire.ConnectionCloseFrame{}))
+				ccf := p.packets[0].frames[0].Frame.(*wire.ConnectionCloseFrame)
+				Expect(ccf.IsApplicationError).To(BeFalse())
+				Expect(ccf.ErrorCode).To(Equal(qerr.UserCanceledError.ErrorCode))
+				Expect(ccf.ReasonPhrase).To(BeEmpty())
+				Expect(p.packets[1].header.IsLongHeader).To(BeFalse())
+				Expect(p.packets[1].header.PacketNumber).To(Equal(protocol.PacketNumber(2)))
+				Expect(p.packets[1].frames).To(HaveLen(1))
+				Expect(p.packets[1].frames[0].Frame).To(BeAssignableToTypeOf(&wire.ConnectionCloseFrame{}))
+				ccf = p.packets[1].frames[0].Frame.(*wire.ConnectionCloseFrame)
+				Expect(ccf.IsApplicationError).To(BeTrue())
+				Expect(ccf.ErrorCode).To(BeEquivalentTo(0x1337))
+				Expect(ccf.ReasonPhrase).To(Equal("test error"))
+			})
+
+			It("packs a CONNECTION_CLOSE in all available encryption levels and pads, as a client", func() {
+				packer.perspective = protocol.PerspectiveClient
+				pnManager.EXPECT().PeekPacketNumber(protocol.EncryptionInitial).Return(protocol.PacketNumber(1), protocol.PacketNumberLen2)
+				pnManager.EXPECT().PopPacketNumber(protocol.EncryptionInitial).Return(protocol.PacketNumber(1))
+				pnManager.EXPECT().PeekPacketNumber(protocol.Encryption0RTT).Return(protocol.PacketNumber(2), protocol.PacketNumberLen2)
+				pnManager.EXPECT().PopPacketNumber(protocol.Encryption0RTT).Return(protocol.PacketNumber(2))
+				sealingManager.EXPECT().GetInitialSealer().Return(getSealer(), nil)
+				sealingManager.EXPECT().GetHandshakeSealer().Return(nil, handshake.ErrKeysNotYetAvailable)
+				sealingManager.EXPECT().Get0RTTSealer().Return(getSealer(), nil)
+				sealingManager.EXPECT().Get1RTTSealer().Return(nil, handshake.ErrKeysNotYetAvailable)
+				p, err := packer.PackConnectionClose(qerr.ApplicationError(0x1337, "test error"))
+				Expect(err).ToNot(HaveOccurred())
+				Expect(p.packets).To(HaveLen(2))
+				Expect(p.buffer.Len()).To(BeEquivalentTo(protocol.MinInitialPacketSize))
+				Expect(p.packets[0].header.Type).To(Equal(protocol.PacketTypeInitial))
+				Expect(p.packets[0].header.PacketNumber).To(Equal(protocol.PacketNumber(1)))
+				Expect(p.packets[0].frames).To(HaveLen(1))
+				Expect(p.packets[0].frames[0].Frame).To(BeAssignableToTypeOf(&wire.ConnectionCloseFrame{}))
+				ccf := p.packets[0].frames[0].Frame.(*wire.ConnectionCloseFrame)
+				Expect(ccf.IsApplicationError).To(BeFalse())
+				Expect(ccf.ErrorCode).To(Equal(qerr.UserCanceledError.ErrorCode))
+				Expect(ccf.ReasonPhrase).To(BeEmpty())
+				Expect(p.packets[1].header.Type).To(Equal(protocol.PacketType0RTT))
+				Expect(p.packets[1].header.PacketNumber).To(Equal(protocol.PacketNumber(2)))
+				Expect(p.packets[1].frames).To(HaveLen(1))
+				Expect(p.packets[1].frames[0].Frame).To(BeAssignableToTypeOf(&wire.ConnectionCloseFrame{}))
+				ccf = p.packets[1].frames[0].Frame.(*wire.ConnectionCloseFrame)
+				Expect(ccf.IsApplicationError).To(BeTrue())
+				Expect(ccf.ErrorCode).To(BeEquivalentTo(0x1337))
+				Expect(ccf.ReasonPhrase).To(Equal("test error"))
+			})
+		})
+
 		Context("packing normal packets", func() {
 			BeforeEach(func() {
 				initialStream.EXPECT().HasData().AnyTimes()
@@ -342,21 +489,6 @@ var _ = Describe("Packet packer", func() {
 				Expect(err).NotTo(HaveOccurred())
 				Expect(p).ToNot(BeNil())
 				Expect(p.ack).To(Equal(ack))
-			})
-
-			It("packs a CONNECTION_CLOSE", func() {
-				pnManager.EXPECT().PeekPacketNumber(protocol.Encryption1RTT).Return(protocol.PacketNumber(0x42), protocol.PacketNumberLen2)
-				pnManager.EXPECT().PopPacketNumber(protocol.Encryption1RTT).Return(protocol.PacketNumber(0x42))
-				// expect no framer.PopStreamFrames
-				ccf := wire.ConnectionCloseFrame{
-					ErrorCode:    0x1337,
-					ReasonPhrase: "foobar",
-				}
-				sealingManager.EXPECT().Get1RTTSealer().Return(getSealer(), nil)
-				p, err := packer.PackConnectionClose(&ccf)
-				Expect(err).ToNot(HaveOccurred())
-				Expect(p.frames).To(HaveLen(1))
-				Expect(p.frames[0].Frame).To(Equal(&ccf))
 			})
 
 			It("packs control frames", func() {

@@ -1360,25 +1360,11 @@ func (s *session) sendPackedPacket(packet *packedPacket) {
 }
 
 func (s *session) sendConnectionClose(quicErr *qerr.QuicError) ([]byte, error) {
-	// don't send application errors in Initial or Handshake packets
-	if quicErr.IsApplicationError() && !s.handshakeComplete {
-		quicErr = qerr.UserCanceledError
-	}
-	var reason string
-	// don't send details of crypto errors
-	if !quicErr.IsCryptoError() {
-		reason = quicErr.ErrorMessage
-	}
-	packet, err := s.packer.PackConnectionClose(&wire.ConnectionCloseFrame{
-		IsApplicationError: quicErr.IsApplicationError(),
-		ErrorCode:          quicErr.ErrorCode,
-		FrameType:          quicErr.FrameType,
-		ReasonPhrase:       reason,
-	})
+	packet, err := s.packer.PackConnectionClose(quicErr)
 	if err != nil {
 		return nil, err
 	}
-	s.logPacket(time.Now(), packet)
+	s.logCoalescedPacket(time.Now(), packet)
 	return packet.buffer.Data, s.conn.Write(packet.buffer.Data)
 }
 

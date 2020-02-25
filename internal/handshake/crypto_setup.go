@@ -700,7 +700,7 @@ func (h *cryptoSetup) Get0RTTSealer() (LongHeaderSealer, error) {
 	defer h.mutex.Unlock()
 
 	if h.zeroRTTSealer == nil {
-		return nil, errors.New("CryptoSetup: 0-RTT sealer not available")
+		return nil, ErrKeysDropped
 	}
 	return h.zeroRTTSealer, nil
 }
