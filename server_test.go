@@ -806,19 +806,14 @@ var _ = Describe("Server", func() {
 				return sess
 			}
 
-			var wg sync.WaitGroup
-			wg.Add(protocol.MaxAcceptQueueSize)
+			phm.EXPECT().GetStatelessResetToken(gomock.Any()).Times(protocol.MaxAcceptQueueSize)
+			phm.EXPECT().Add(gomock.Any(), gomock.Any()).Return(true).Times(2 * protocol.MaxAcceptQueueSize)
 			for i := 0; i < protocol.MaxAcceptQueueSize; i++ {
-				go func() {
-					defer GinkgoRecover()
-					defer wg.Done()
-					phm.EXPECT().GetStatelessResetToken(gomock.Any())
-					phm.EXPECT().Add(gomock.Any(), gomock.Any()).Return(true).Times(2)
-					serv.handlePacket(getInitialWithRandomDestConnID())
-					Consistently(conn.dataWritten).ShouldNot(Receive())
-				}()
+				serv.handlePacket(getInitialWithRandomDestConnID())
 			}
-			wg.Wait()
+
+			Eventually(func() int32 { return atomic.LoadInt32(&serv.sessionQueueLen) }).Should(BeEquivalentTo(protocol.MaxAcceptQueueSize))
+			Consistently(conn.dataWritten).ShouldNot(Receive())
 
 			p := getInitialWithRandomDestConnID()
 			hdr := parseHeader(p.data)
