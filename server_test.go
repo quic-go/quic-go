@@ -14,6 +14,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/lucas-clemente/quic-go/internal/qerr"
+
 	"github.com/lucas-clemente/quic-go/qlog"
 
 	"github.com/golang/mock/gomock"
@@ -40,15 +42,27 @@ var _ = Describe("Server", func() {
 		tlsConf *tls.Config
 	)
 
-	getPacket := func(hdr *wire.Header, data []byte) *receivedPacket {
-		buf := &bytes.Buffer{}
+	getPacket := func(hdr *wire.Header, p []byte) *receivedPacket {
+		buffer := getPacketBuffer()
+		buf := bytes.NewBuffer(buffer.Data)
+		if hdr.IsLongHeader {
+			hdr.Length = 4 + protocol.ByteCount(len(p)) + 16
+		}
 		Expect((&wire.ExtendedHeader{
 			Header:          *hdr,
-			PacketNumberLen: protocol.PacketNumberLen3,
+			PacketNumber:    0x42,
+			PacketNumberLen: protocol.PacketNumberLen4,
 		}).Write(buf, protocol.VersionTLS)).To(Succeed())
+		n := buf.Len()
+		buf.Write(p)
+		data := buffer.Data[:buf.Len()]
+		sealer, _ := handshake.NewInitialAEAD(hdr.DestConnectionID, protocol.PerspectiveClient)
+		_ = sealer.Seal(data[n:n], data[n:], 0x42, data[:n])
+		data = data[:len(data)+16]
+		sealer.EncryptHeader(data[n:n+16], &data[0], data[n-4:n])
 		return &receivedPacket{
-			data:   append(buf.Bytes(), data...),
-			buffer: getPacketBuffer(),
+			data:   data,
+			buffer: buffer,
 		}
 	}
 
@@ -319,6 +333,61 @@ var _ = Describe("Server", func() {
 				Expect(replyHdr.DestConnectionID).To(Equal(hdr.SrcConnectionID))
 				Expect(replyHdr.Token).ToNot(BeEmpty())
 				Expect(write.data[len(write.data)-16:]).To(Equal(handshake.GetRetryIntegrityTag(write.data[:len(write.data)-16], hdr.DestConnectionID)[:]))
+			})
+
+			It("sends an INVALID_TOKEN error, if an invalid retry token is received", func() {
+				serv.config.AcceptToken = func(_ net.Addr, _ *Token) bool { return false }
+				token, err := serv.tokenGenerator.NewRetryToken(&net.UDPAddr{}, nil)
+				Expect(err).ToNot(HaveOccurred())
+				hdr := &wire.Header{
+					IsLongHeader:     true,
+					Type:             protocol.PacketTypeInitial,
+					SrcConnectionID:  protocol.ConnectionID{5, 4, 3, 2, 1},
+					DestConnectionID: protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8, 9, 10},
+					Token:            token,
+					Version:          protocol.VersionTLS,
+				}
+				packet := getPacket(hdr, make([]byte, protocol.MinInitialPacketSize))
+				packet.data = append(packet.data, []byte("coalesced packet")...) // add some garbage to simulate a coalesced packet
+				packet.remoteAddr = &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 1337}
+				serv.handlePacket(packet)
+				var write mockPacketConnWrite
+				Eventually(conn.dataWritten).Should(Receive(&write))
+				Expect(write.to.String()).To(Equal("127.0.0.1:1337"))
+				replyHdr := parseHeader(write.data)
+				Expect(replyHdr.Type).To(Equal(protocol.PacketTypeInitial))
+				Expect(replyHdr.SrcConnectionID).To(Equal(hdr.DestConnectionID))
+				Expect(replyHdr.DestConnectionID).To(Equal(hdr.SrcConnectionID))
+				_, opener := handshake.NewInitialAEAD(hdr.DestConnectionID, protocol.PerspectiveClient)
+				extHdr, err := unpackHeader(opener, replyHdr, write.data, hdr.Version)
+				Expect(err).ToNot(HaveOccurred())
+				data, err := opener.Open(nil, write.data[extHdr.ParsedLen():], extHdr.PacketNumber, write.data[:extHdr.ParsedLen()])
+				Expect(err).ToNot(HaveOccurred())
+				f, err := wire.NewFrameParser(hdr.Version).ParseNext(bytes.NewReader(data), protocol.EncryptionInitial)
+				Expect(err).ToNot(HaveOccurred())
+				Expect(f).To(BeAssignableToTypeOf(&wire.ConnectionCloseFrame{}))
+				ccf := f.(*wire.ConnectionCloseFrame)
+				Expect(ccf.ErrorCode).To(Equal(qerr.InvalidToken))
+				Expect(ccf.ReasonPhrase).To(BeEmpty())
+			})
+
+			It("doesn't send an INVALID_TOKEN error, if the packet is corrupted", func() {
+				serv.config.AcceptToken = func(_ net.Addr, _ *Token) bool { return false }
+				token, err := serv.tokenGenerator.NewRetryToken(&net.UDPAddr{}, nil)
+				Expect(err).ToNot(HaveOccurred())
+				hdr := &wire.Header{
+					IsLongHeader:     true,
+					Type:             protocol.PacketTypeInitial,
+					SrcConnectionID:  protocol.ConnectionID{5, 4, 3, 2, 1},
+					DestConnectionID: protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8, 9, 10},
+					Token:            token,
+					Version:          protocol.VersionTLS,
+				}
+				packet := getPacket(hdr, make([]byte, protocol.MinInitialPacketSize))
+				packet.data[len(packet.data)-10] ^= 0xff // corrupt the packet
+				packet.remoteAddr = &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 1337}
+				serv.handlePacket(packet)
+				Consistently(conn.dataWritten).ShouldNot(Receive())
 			})
 
 			It("creates a session, if no Token is required", func() {

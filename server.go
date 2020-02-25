@@ -363,6 +363,12 @@ func (s *baseServer) handleInitialImpl(p *receivedPacket, hdr *wire.Header) (qui
 	}
 	if !s.config.AcceptToken(p.remoteAddr, token) {
 		go func() {
+			if token != nil && token.IsRetryToken {
+				if err := s.maybeSendInvalidToken(p, hdr); err != nil {
+					s.logger.Debugf("Error sending INVALID_TOKEN error: %s", err)
+				}
+				return
+			}
 			if err := s.sendRetry(p.remoteAddr, hdr); err != nil {
 				s.logger.Debugf("Error sending Retry: %s", err)
 			}
@@ -512,13 +518,39 @@ func (s *baseServer) sendRetry(remoteAddr net.Addr, hdr *wire.Header) error {
 	return err
 }
 
+func (s *baseServer) maybeSendInvalidToken(p *receivedPacket, hdr *wire.Header) error {
+	// Only send INVALID_TOKEN if we can unprotect the packet.
+	// This makes sure that we won't send it for packets that were corrupted.
+	sealer, opener := handshake.NewInitialAEAD(hdr.DestConnectionID, protocol.PerspectiveServer)
+	data := p.data[:hdr.ParsedLen()+hdr.Length]
+	extHdr, err := unpackHeader(opener, hdr, data, hdr.Version)
+	if err != nil {
+		// don't return the error here. Just drop the packet.
+		return nil
+	}
+	hdrLen := extHdr.ParsedLen()
+	if _, err := opener.Open(data[hdrLen:hdrLen], data[hdrLen:], extHdr.PacketNumber, data[:hdrLen]); err != nil {
+		// don't return the error here. Just drop the packet.
+		return nil
+	}
+	if s.logger.Debug() {
+		s.logger.Debugf("Client sent an invalid retry token. Sending INVALID_TOKEN to %s.", p.remoteAddr)
+	}
+	return s.sendError(p.remoteAddr, hdr, sealer, qerr.InvalidToken)
+}
+
 func (s *baseServer) sendServerBusy(remoteAddr net.Addr, hdr *wire.Header) error {
 	sealer, _ := handshake.NewInitialAEAD(hdr.DestConnectionID, protocol.PerspectiveServer)
+	return s.sendError(remoteAddr, hdr, sealer, qerr.ServerBusy)
+}
+
+// sendError sends the error as a response to the packet received with header hdr
+func (s *baseServer) sendError(remoteAddr net.Addr, hdr *wire.Header, sealer handshake.LongHeaderSealer, errorCode qerr.ErrorCode) error {
 	packetBuffer := getPacketBuffer()
 	defer packetBuffer.Release()
 	buf := bytes.NewBuffer(packetBuffer.Data)
 
-	ccf := &wire.ConnectionCloseFrame{ErrorCode: qerr.ServerBusy}
+	ccf := &wire.ConnectionCloseFrame{ErrorCode: errorCode}
 
 	replyHdr := &wire.ExtendedHeader{}
 	replyHdr.IsLongHeader = true
