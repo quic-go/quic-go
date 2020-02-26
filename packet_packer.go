@@ -636,12 +636,6 @@ func (p *packetPacker) getLongHeader(encLevel protocol.EncryptionLevel) *wire.Ex
 
 	hdr.PacketNumber = pn
 	hdr.PacketNumberLen = pnLen
-	if encLevel != protocol.Encryption0RTT {
-		// Always send long header packets with the maximum packet number length.
-		// This simplifies retransmissions: Since the header can't get any larger,
-		// we don't need to split CRYPTO frames.
-		hdr.PacketNumberLen = protocol.PacketNumberLen4
-	}
 
 	switch encLevel {
 	case protocol.EncryptionInitial:
