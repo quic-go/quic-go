@@ -76,9 +76,11 @@ func tlsConfigToQtlsConfig(
 		csc = newClientSessionCache(c.ClientSessionCache, rttStats, getDataForSessionState, setDataFromSessionState)
 	}
 	conf := &qtls.Config{
-		Rand:                        c.Rand,
-		Time:                        c.Time,
-		Certificates:                c.Certificates,
+		Rand:         c.Rand,
+		Time:         c.Time,
+		Certificates: c.Certificates,
+		// NameToCertificate is deprecated, but we still need to copy it if the user sets it.
+		//nolint:staticcheck
 		NameToCertificate:           c.NameToCertificate,
 		GetCertificate:              c.GetCertificate,
 		GetClientCertificate:        c.GetClientCertificate,
