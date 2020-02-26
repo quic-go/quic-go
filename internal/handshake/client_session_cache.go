@@ -48,10 +48,7 @@ func (c *clientSessionCache) Get(sessionKey string) (*qtls.ClientSessionState, b
 	// In order to allow users of quic-go to use a tls.Config,
 	// we need this workaround to use the ClientSessionCache.
 	// In unsafe.go we check that the two structs are actually identical.
-	tlsSessBytes := (*[unsafe.Sizeof(*sess)]byte)(unsafe.Pointer(sess))[:]
-	var session clientSessionState
-	sessBytes := (*[unsafe.Sizeof(session)]byte)(unsafe.Pointer(&session))[:]
-	copy(sessBytes, tlsSessBytes)
+	session := (*clientSessionState)(unsafe.Pointer(sess))
 	r := bytes.NewReader(session.nonce)
 	rev, err := utils.ReadVarInt(r)
 	if err != nil {
@@ -83,10 +80,7 @@ func (c *clientSessionCache) Get(sessionKey string) (*qtls.ClientSessionState, b
 	c.setAppData(appData)
 	session.nonce = nonce
 	c.rttStats.SetInitialRTT(time.Duration(rtt) * time.Microsecond)
-	var qtlsSession qtls.ClientSessionState
-	qtlsSessBytes := (*[unsafe.Sizeof(qtlsSession)]byte)(unsafe.Pointer(&qtlsSession))[:]
-	copy(qtlsSessBytes, sessBytes)
-	return &qtlsSession, ok
+	return (*qtls.ClientSessionState)(unsafe.Pointer(session)), ok
 }
 
 func (c *clientSessionCache) Put(sessionKey string, cs *qtls.ClientSessionState) {
@@ -98,10 +92,7 @@ func (c *clientSessionCache) Put(sessionKey string, cs *qtls.ClientSessionState)
 	// In order to allow users of quic-go to use a tls.Config,
 	// we need this workaround to use the ClientSessionCache.
 	// In unsafe.go we check that the two structs are actually identical.
-	qtlsSessBytes := (*[unsafe.Sizeof(*cs)]byte)(unsafe.Pointer(cs))[:]
-	var session clientSessionState
-	sessBytes := (*[unsafe.Sizeof(session)]byte)(unsafe.Pointer(&session))[:]
-	copy(sessBytes, qtlsSessBytes)
+	session := (*clientSessionState)(unsafe.Pointer(cs))
 	appData := c.getAppData()
 	buf := &bytes.Buffer{}
 	utils.WriteVarInt(buf, clientSessionStateRevision)
@@ -111,8 +102,5 @@ func (c *clientSessionCache) Put(sessionKey string, cs *qtls.ClientSessionState)
 	utils.WriteVarInt(buf, uint64(len(session.nonce)))
 	buf.Write(session.nonce)
 	session.nonce = buf.Bytes()
-	var tlsSession tls.ClientSessionState
-	tlsSessBytes := (*[unsafe.Sizeof(tlsSession)]byte)(unsafe.Pointer(&tlsSession))[:]
-	copy(tlsSessBytes, sessBytes)
-	c.ClientSessionCache.Put(sessionKey, &tlsSession)
+	c.ClientSessionCache.Put(sessionKey, (*tls.ClientSessionState)(unsafe.Pointer(session)))
 }
