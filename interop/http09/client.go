@@ -66,10 +66,11 @@ func (r *RoundTripper) Close() error {
 	r.mutex.Lock()
 	defer r.mutex.Unlock()
 
-	for _, c := range r.clients {
+	for id, c := range r.clients {
 		if err := c.Close(); err != nil {
 			return err
 		}
+		delete(r.clients, id)
 	}
 	return nil
 }
