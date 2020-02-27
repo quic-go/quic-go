@@ -4,6 +4,7 @@ import (
 	"crypto/tls"
 	"net"
 	"time"
+	"unsafe"
 
 	"github.com/marten-seemann/qtls"
 
@@ -58,10 +59,10 @@ func tlsConfigToQtlsConfig(
 	if maxVersion < qtls.VersionTLS13 {
 		maxVersion = qtls.VersionTLS13
 	}
-	var getConfigForClient func(ch *tls.ClientHelloInfo) (*qtls.Config, error)
+	var getConfigForClient func(ch *qtls.ClientHelloInfo) (*qtls.Config, error)
 	if c.GetConfigForClient != nil {
-		getConfigForClient = func(ch *tls.ClientHelloInfo) (*qtls.Config, error) {
-			tlsConf, err := c.GetConfigForClient(ch)
+		getConfigForClient = func(ch *qtls.ClientHelloInfo) (*qtls.Config, error) {
+			tlsConf, err := c.GetConfigForClient((*tls.ClientHelloInfo)(unsafe.Pointer(ch)))
 			if err != nil {
 				return nil, err
 			}
@@ -78,12 +79,12 @@ func tlsConfigToQtlsConfig(
 	conf := &qtls.Config{
 		Rand:         c.Rand,
 		Time:         c.Time,
-		Certificates: c.Certificates,
+		Certificates: *(*[]qtls.Certificate)(unsafe.Pointer(&c.Certificates)),
 		// NameToCertificate is deprecated, but we still need to copy it if the user sets it.
 		//nolint:staticcheck
-		NameToCertificate:           c.NameToCertificate,
-		GetCertificate:              c.GetCertificate,
-		GetClientCertificate:        c.GetClientCertificate,
+		NameToCertificate:           *(*map[string]*qtls.Certificate)(unsafe.Pointer(&c.NameToCertificate)),
+		GetCertificate:              *(*func(*qtls.ClientHelloInfo) (*qtls.Certificate, error))(unsafe.Pointer(&c.GetCertificate)),
+		GetClientCertificate:        *(*func(*qtls.CertificateRequestInfo) (*qtls.Certificate, error))(unsafe.Pointer(&c.GetClientCertificate)),
 		GetConfigForClient:          getConfigForClient,
 		VerifyPeerCertificate:       c.VerifyPeerCertificate,
 		RootCAs:                     c.RootCAs,
@@ -115,6 +116,18 @@ func tlsConfigToQtlsConfig(
 		conf.MaxEarlyData = 0xffffffff
 	}
 	return conf
+}
+
+// qtlsConfigToTLSConfig is used to transform a qtls.Config to a tls.Config.
+// It is used to create the tls.Config in the ClientHelloInfo.
+// It doesn't copy all values, but only those used by ClientHelloInfo.SupportsCertificate.
+func qtlsConfigToTLSConfig(config *qtls.Config) *tls.Config {
+	return &tls.Config{
+		MinVersion:       config.MinVersion,
+		MaxVersion:       config.MaxVersion,
+		CipherSuites:     config.CipherSuites,
+		CurvePreferences: config.CurvePreferences,
+	}
 }
 
 func cipherSuiteName(id uint16) string {
