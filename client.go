@@ -248,16 +248,6 @@ func newClient(
 	return c, nil
 }
 
-// populateClientConfig populates fields in the quic.Config with their default values, if none are set
-// it may be called with nil
-func populateClientConfig(config *Config, createdPacketConn bool) *Config {
-	config = populateConfig(config)
-	if config.ConnectionIDLength == 0 && !createdPacketConn {
-		config.ConnectionIDLength = protocol.DefaultConnectionIDLength
-	}
-	return config
-}
-
 func (c *client) dial(ctx context.Context, qlogger qlog.Tracer) error {
 	c.logger.Infof("Starting new connection to %s (%s -> %s), source connection ID %s, destination connection ID %s, version %s", c.tlsConf.ServerName, c.conn.LocalAddr(), c.conn.RemoteAddr(), c.srcConnID, c.destConnID, c.version)
 	if qlogger != nil {
