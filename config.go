@@ -21,6 +21,16 @@ func populateServerConfig(config *Config) *Config {
 	return config
 }
 
+// populateClientConfig populates fields in the quic.Config with their default values, if none are set
+// it may be called with nil
+func populateClientConfig(config *Config, createdPacketConn bool) *Config {
+	config = populateConfig(config)
+	if config.ConnectionIDLength == 0 && !createdPacketConn {
+		config.ConnectionIDLength = protocol.DefaultConnectionIDLength
+	}
+	return config
+}
+
 func populateConfig(config *Config) *Config {
 	if config == nil {
 		config = &Config{}
@@ -72,5 +82,6 @@ func populateConfig(config *Config) *Config {
 		StatelessResetKey:                     config.StatelessResetKey,
 		TokenStore:                            config.TokenStore,
 		QuicTracer:                            config.QuicTracer,
+		GetLogWriter:                          config.GetLogWriter,
 	}
 }
