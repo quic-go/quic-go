@@ -113,12 +113,11 @@ var _ = Describe("Packet packer", func() {
 
 	Context("generating a packet header", func() {
 		It("uses the Long Header format", func() {
-			pnManager.EXPECT().PeekPacketNumber(protocol.EncryptionHandshake).Return(protocol.PacketNumber(0x42), protocol.PacketNumberLen2)
+			pnManager.EXPECT().PeekPacketNumber(protocol.EncryptionHandshake).Return(protocol.PacketNumber(0x42), protocol.PacketNumberLen3)
 			h := packer.getLongHeader(protocol.EncryptionHandshake)
 			Expect(h.IsLongHeader).To(BeTrue())
 			Expect(h.PacketNumber).To(Equal(protocol.PacketNumber(0x42)))
-			// long headers always use 4 byte packet numbers, no matter what the packet number generator says
-			Expect(h.PacketNumberLen).To(Equal(protocol.PacketNumberLen4))
+			Expect(h.PacketNumberLen).To(Equal(protocol.PacketNumberLen3))
 			Expect(h.Version).To(Equal(packer.version))
 		})
 
