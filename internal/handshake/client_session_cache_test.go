@@ -18,13 +18,8 @@ import (
 
 var _ = Describe("ClientSessionCache", func() {
 	encodeIntoSessionTicket := func(data []byte) *tls.ClientSessionState {
-		var session clientSessionState
-		sessBytes := (*[unsafe.Sizeof(session)]byte)(unsafe.Pointer(&session))[:]
-		session.nonce = data
-		var tlsSession tls.ClientSessionState
-		tlsSessBytes := (*[unsafe.Sizeof(tlsSession)]byte)(unsafe.Pointer(&tlsSession))[:]
-		copy(tlsSessBytes, sessBytes)
-		return &tlsSession
+		session := &clientSessionState{nonce: data}
+		return (*tls.ClientSessionState)(unsafe.Pointer(session))
 	}
 
 	It("puts and gets", func() {
@@ -116,10 +111,7 @@ var _ = Describe("ClientSessionCache", func() {
 		csc.Put("localhost", &qtls.ClientSessionState{})
 		state, ok := cache.Get("localhost")
 		Expect(ok).To(BeTrue())
-		tlsSessBytes := (*[unsafe.Sizeof(*state)]byte)(unsafe.Pointer(state))[:]
-		var session clientSessionState
-		sessBytes := (*[unsafe.Sizeof(session)]byte)(unsafe.Pointer(&session))[:]
-		copy(sessBytes, tlsSessBytes)
+		session := (*clientSessionState)(unsafe.Pointer(state))
 		Expect(session.nonce).ToNot(BeEmpty())
 
 		_, ok = csc.Get("localhost")
@@ -128,7 +120,6 @@ var _ = Describe("ClientSessionCache", func() {
 
 		for i := 0; i < len(nonce); i++ {
 			session.nonce = session.nonce[:i]
-			copy(tlsSessBytes, sessBytes)
 			_, ok = csc.Get("localhost")
 			Expect(ok).To(BeFalse())
 		}
