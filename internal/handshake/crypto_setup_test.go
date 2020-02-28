@@ -103,7 +103,7 @@ var _ = Describe("Crypto Setup TLS", func() {
 		Expect(getCertificateErr).To(MatchError("GetCertificate"))
 		_, getClientCertificateErr := qtlsConf.GetClientCertificate(nil)
 		Expect(getClientCertificateErr).To(MatchError("GetClientCertificate"))
-		cconf, err := qtlsConf.GetConfigForClient(&tls.ClientHelloInfo{ServerName: "foo.bar"})
+		cconf, err := qtlsConf.GetConfigForClient(&qtls.ClientHelloInfo{ServerName: "foo.bar"})
 		Expect(err).ToNot(HaveOccurred())
 		Expect(cconf.ServerName).To(Equal("foo.bar"))
 		Expect(cconf.AlternativeRecordLayer).ToNot(BeNil())

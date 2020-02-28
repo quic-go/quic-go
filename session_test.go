@@ -1307,8 +1307,11 @@ var _ = Describe("Session", func() {
 		Consistently(handshakeCtx.Done()).ShouldNot(BeClosed())
 		mconn.EXPECT().RemoteAddr().Return(&net.UDPAddr{}) // the remote addr is needed for the token
 		close(finishHandshake)
-		Eventually(handshakeCtx.Done()).Should(BeClosed())
-		frames, _ := sess.framer.AppendControlFrames(nil, protocol.MaxByteCount)
+		var frames []ackhandler.Frame
+		Eventually(func() []ackhandler.Frame {
+			frames, _ = sess.framer.AppendControlFrames(nil, protocol.MaxByteCount)
+			return frames
+		}).ShouldNot(BeEmpty())
 		var count int
 		var s int
 		for _, f := range frames {
