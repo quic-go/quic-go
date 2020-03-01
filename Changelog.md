@@ -1,7 +1,8 @@
 # Changelog
 
-## v0.15.0 (unreleased)
+## v0.15.0 (2020-03-01)
 
+- Supports QUIC WG draft-27.
 - Add support for 0-RTT.
 - Remove `Session.Close()`. Applications need to pass an application error code to the transport using `Session.CloseWithError()`.
 - Make the TLS Cipher Suites configurable (via `tls.Config.CipherSuites`).
