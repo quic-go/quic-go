@@ -284,7 +284,7 @@ func (h *packetHandlerMap) maybeHandleStatelessReset(data []byte) bool {
 	var token [16]byte
 	copy(token[:], data[len(data)-16:])
 	if sess, ok := h.resetTokens[token]; ok {
-		h.logger.Debugf("Received a stateless retry with token %#x. Closing session.", token)
+		h.logger.Debugf("Received a stateless reset with token %#x. Closing session.", token)
 		go sess.destroy(errors.New("received a stateless reset"))
 		return true
 	}
