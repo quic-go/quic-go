@@ -9,6 +9,8 @@ import (
 	"github.com/lucas-clemente/quic-go/internal/congestion"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/internal/utils"
+	"github.com/marten-seemann/qtls"
+
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 )
@@ -17,7 +19,7 @@ var _ = Describe("Updatable AEAD", func() {
 	for i := range cipherSuites {
 		cs := cipherSuites[i]
 
-		Context(fmt.Sprintf("using %s", cipherSuiteName(cs.ID)), func() {
+		Context(fmt.Sprintf("using %s", qtls.CipherSuiteName(cs.ID)), func() {
 
 			getPeers := func(rttStats *congestion.RTTStats) (client, server *updatableAEAD) {
 				trafficSecret1 := make([]byte, 16)
