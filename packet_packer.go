@@ -677,10 +677,11 @@ func (p *packetPacker) appendPacket(
 ) (*packetContents, error) {
 	var paddingLen protocol.ByteCount
 	pnLen := protocol.ByteCount(header.PacketNumberLen)
-	if encLevel != protocol.Encryption1RTT {
-		header.Length = pnLen + protocol.ByteCount(sealer.Overhead()) + payload.length
-	} else if payload.length < 4-pnLen {
+	if payload.length < 4-pnLen {
 		paddingLen = 4 - pnLen - payload.length
+	}
+	if header.IsLongHeader {
+		header.Length = pnLen + protocol.ByteCount(sealer.Overhead()) + payload.length + paddingLen
 	}
 
 	hdrOffset := buffer.Len()

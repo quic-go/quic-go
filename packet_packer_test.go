@@ -527,6 +527,42 @@ var _ = Describe("Packet packer", func() {
 				Expect(err).ToNot(HaveOccurred())
 			})
 
+			It("pads if payload length + packet number length is smaller than 4, for Long Header packets", func() {
+				pnManager.EXPECT().PeekPacketNumber(protocol.EncryptionHandshake).Return(protocol.PacketNumber(0x42), protocol.PacketNumberLen1)
+				pnManager.EXPECT().PopPacketNumber(protocol.EncryptionHandshake).Return(protocol.PacketNumber(0x42))
+				sealer := getSealer()
+				sealingManager.EXPECT().GetInitialSealer().Return(nil, handshake.ErrKeysDropped)
+				sealingManager.EXPECT().GetHandshakeSealer().Return(sealer, nil)
+				sealingManager.EXPECT().Get1RTTSealer().Return(nil, handshake.ErrKeysNotYetAvailable)
+				packer.retransmissionQueue.AddHandshake(&wire.PingFrame{})
+				packet, err := packer.PackCoalescedPacket()
+				Expect(err).ToNot(HaveOccurred())
+				Expect(packet).ToNot(BeNil())
+				Expect(packet.packets).To(HaveLen(1))
+				// cut off the tag that the mock sealer added
+				// packet.buffer.Data = packet.buffer.Data[:packet.buffer.Len()-protocol.ByteCount(sealer.Overhead())]
+				hdr, _, _, err := wire.ParsePacket(packet.buffer.Data, len(packer.getDestConnID()))
+				Expect(err).ToNot(HaveOccurred())
+				r := bytes.NewReader(packet.buffer.Data)
+				extHdr, err := hdr.ParseExtended(r, packer.version)
+				Expect(err).ToNot(HaveOccurred())
+				Expect(extHdr.PacketNumberLen).To(Equal(protocol.PacketNumberLen1))
+				Expect(r.Len()).To(Equal(4 - 1 /* packet number length */ + int(sealer.Overhead())))
+				// the first bytes of the payload should be a 2 PADDING frames...
+				firstPayloadByte, err := r.ReadByte()
+				Expect(err).ToNot(HaveOccurred())
+				Expect(firstPayloadByte).To(Equal(byte(0)))
+				secondPayloadByte, err := r.ReadByte()
+				Expect(err).ToNot(HaveOccurred())
+				Expect(secondPayloadByte).To(Equal(byte(0)))
+				// ... followed by the PING
+				frameParser := wire.NewFrameParser(packer.version)
+				frame, err := frameParser.ParseNext(r, protocol.Encryption1RTT)
+				Expect(err).ToNot(HaveOccurred())
+				Expect(frame).To(BeAssignableToTypeOf(&wire.PingFrame{}))
+				Expect(r.Len()).To(Equal(sealer.Overhead()))
+			})
+
 			It("pads if payload length + packet number length is smaller than 4", func() {
 				f := &wire.StreamFrame{
 					StreamID: 0x10, // small stream ID, such that only a single byte is consumed
