@@ -128,7 +128,7 @@ func (p *chachaHeaderProtector) apply(sample []byte, firstByte *byte, hdrBytes [
 	if err != nil {
 		panic(err)
 	}
-	cipher.SetCounter(binary.BigEndian.Uint32(sample[4:]))
+	cipher.SetCounter(binary.LittleEndian.Uint32(sample[:4]))
 	cipher.XORKeyStream(p.mask[:], p.mask[:])
 	p.applyMask(firstByte, hdrBytes)
 }
