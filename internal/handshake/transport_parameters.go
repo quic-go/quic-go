@@ -38,7 +38,7 @@ const (
 	ackDelayExponentParameterID               transportParameterID = 0xa
 	maxAckDelayParameterID                    transportParameterID = 0xb
 	disableActiveMigrationParameterID         transportParameterID = 0xc
-	preferredAddressParamaterID               transportParameterID = 0xd
+	preferredAddressParameterID               transportParameterID = 0xd
 	activeConnectionIDLimitParameterID        transportParameterID = 0xe
 )
 
@@ -133,7 +133,7 @@ func (p *TransportParameters) unmarshal(data []byte, sentBy protocol.Perspective
 				return fmt.Errorf("remaining length (%d) smaller than parameter length (%d)", r.Len(), paramLen)
 			}
 			switch paramID {
-			case preferredAddressParamaterID:
+			case preferredAddressParameterID:
 				if sentBy == protocol.PerspectiveClient {
 					return errors.New("client sent a preferred_address")
 				}
@@ -333,7 +333,7 @@ func (p *TransportParameters) Marshal() []byte {
 		b.Write(p.StatelessResetToken[:])
 	}
 	if p.PreferredAddress != nil {
-		utils.WriteVarInt(b, uint64(preferredAddressParamaterID))
+		utils.WriteVarInt(b, uint64(preferredAddressParameterID))
 		utils.WriteVarInt(b, 4+2+16+2+1+uint64(p.PreferredAddress.ConnectionID.Len())+16)
 		ipv4 := p.PreferredAddress.IPv4
 		b.Write(ipv4[len(ipv4)-4:])
