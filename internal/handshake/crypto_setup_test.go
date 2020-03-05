@@ -54,6 +54,8 @@ func (s *stream) Write(b []byte) (int, error) {
 var _ = Describe("Crypto Setup TLS", func() {
 	var clientConf, serverConf *tls.Config
 
+	// unparam incorrectly complains that the first argument is never used.
+	//nolint:unparam
 	initStreams := func() (chan chunk, *stream /* initial */, *stream /* handshake */) {
 		chunkChan := make(chan chunk, 100)
 		initialStream := newStream(chunkChan, protocol.EncryptionInitial)

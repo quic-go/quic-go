@@ -547,7 +547,7 @@ var _ = Describe("Packet packer", func() {
 				extHdr, err := hdr.ParseExtended(r, packer.version)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(extHdr.PacketNumberLen).To(Equal(protocol.PacketNumberLen1))
-				Expect(r.Len()).To(Equal(4 - 1 /* packet number length */ + int(sealer.Overhead())))
+				Expect(r.Len()).To(Equal(4 - 1 /* packet number length */ + sealer.Overhead()))
 				// the first bytes of the payload should be a 2 PADDING frames...
 				firstPayloadByte, err := r.ReadByte()
 				Expect(err).ToNot(HaveOccurred())
