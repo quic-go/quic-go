@@ -53,6 +53,10 @@ func newConnIDManager(
 	}
 }
 
+func (h *connIDManager) AddFromPreferredAddress(connID protocol.ConnectionID, resetToken *[16]byte) error {
+	return h.addConnectionID(1, connID, resetToken)
+}
+
 func (h *connIDManager) Add(f *wire.NewConnectionIDFrame) error {
 	if err := h.add(f); err != nil {
 		return err
@@ -64,7 +68,7 @@ func (h *connIDManager) Add(f *wire.NewConnectionIDFrame) error {
 }
 
 func (h *connIDManager) add(f *wire.NewConnectionIDFrame) error {
-	// If the NEW_CONNECTION_ID frame is reordered, such that its sequenece number
+	// If the NEW_CONNECTION_ID frame is reordered, such that its sequence number
 	// was already retired, send the RETIRE_CONNECTION_ID frame immediately.
 	if f.SequenceNumber < h.highestRetired {
 		h.queueControlFrame(&wire.RetireConnectionIDFrame{
@@ -94,40 +98,47 @@ func (h *connIDManager) add(f *wire.NewConnectionIDFrame) error {
 		return nil
 	}
 
-	// insert a new element at the end
-	if h.queue.Len() == 0 || h.queue.Back().Value.SequenceNumber < f.SequenceNumber {
-		h.queue.PushBack(utils.NewConnectionID{
-			SequenceNumber:      f.SequenceNumber,
-			ConnectionID:        f.ConnectionID,
-			StatelessResetToken: &f.StatelessResetToken,
-		})
-	} else {
-		// insert a new element somewhere in the middle
-		for el := h.queue.Front(); el != nil; el = el.Next() {
-			if el.Value.SequenceNumber == f.SequenceNumber {
-				if !el.Value.ConnectionID.Equal(f.ConnectionID) {
-					return fmt.Errorf("received conflicting connection IDs for sequence number %d", f.SequenceNumber)
-				}
-				if *el.Value.StatelessResetToken != f.StatelessResetToken {
-					return fmt.Errorf("received conflicting stateless reset tokens for sequence number %d", f.SequenceNumber)
-				}
-				break
-			}
-			if el.Value.SequenceNumber > f.SequenceNumber {
-				h.queue.InsertBefore(utils.NewConnectionID{
-					SequenceNumber:      f.SequenceNumber,
-					ConnectionID:        f.ConnectionID,
-					StatelessResetToken: &f.StatelessResetToken,
-				}, el)
-				break
-			}
-		}
+	if err := h.addConnectionID(f.SequenceNumber, f.ConnectionID, &f.StatelessResetToken); err != nil {
+		return err
 	}
 
 	// Retire the active connection ID, if necessary.
 	if h.activeSequenceNumber < f.RetirePriorTo {
 		// The queue is guaranteed to have at least one element at this point.
 		h.updateConnectionID()
+	}
+	return nil
+}
+
+func (h *connIDManager) addConnectionID(seq uint64, connID protocol.ConnectionID, resetToken *[16]byte) error {
+	// insert a new element at the end
+	if h.queue.Len() == 0 || h.queue.Back().Value.SequenceNumber < seq {
+		h.queue.PushBack(utils.NewConnectionID{
+			SequenceNumber:      seq,
+			ConnectionID:        connID,
+			StatelessResetToken: resetToken,
+		})
+		return nil
+	}
+	// insert a new element somewhere in the middle
+	for el := h.queue.Front(); el != nil; el = el.Next() {
+		if el.Value.SequenceNumber == seq {
+			if !el.Value.ConnectionID.Equal(connID) {
+				return fmt.Errorf("received conflicting connection IDs for sequence number %d", seq)
+			}
+			if *el.Value.StatelessResetToken != *resetToken {
+				return fmt.Errorf("received conflicting stateless reset tokens for sequence number %d", seq)
+			}
+			break
+		}
+		if el.Value.SequenceNumber > seq {
+			h.queue.InsertBefore(utils.NewConnectionID{
+				SequenceNumber:      seq,
+				ConnectionID:        connID,
+				StatelessResetToken: resetToken,
+			}, el)
+			break
+		}
 	}
 	return nil
 }
