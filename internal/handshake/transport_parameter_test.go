@@ -316,6 +316,7 @@ var _ = Describe("Transport Parameters", func() {
 				InitialMaxData:                 protocol.ByteCount(getRandomValue()),
 				MaxBidiStreamNum:               protocol.StreamNum(getRandomValue()),
 				MaxUniStreamNum:                protocol.StreamNum(getRandomValue()),
+				ActiveConnectionIDLimit:        getRandomValue(),
 			}
 			Expect(params.ValidFor0RTT(params)).To(BeTrue())
 			b := &bytes.Buffer{}
@@ -328,6 +329,7 @@ var _ = Describe("Transport Parameters", func() {
 			Expect(tp.InitialMaxData).To(Equal(params.InitialMaxData))
 			Expect(tp.MaxBidiStreamNum).To(Equal(params.MaxBidiStreamNum))
 			Expect(tp.MaxUniStreamNum).To(Equal(params.MaxUniStreamNum))
+			Expect(tp.ActiveConnectionIDLimit).To(Equal(params.ActiveConnectionIDLimit))
 		})
 
 		It("rejects the parameters if it can't parse them", func() {

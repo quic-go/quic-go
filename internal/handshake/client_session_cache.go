@@ -13,7 +13,7 @@ import (
 	"github.com/lucas-clemente/quic-go/internal/utils"
 )
 
-const clientSessionStateRevision = 1
+const clientSessionStateRevision = 2
 
 type clientSessionCache struct {
 	tls.ClientSessionCache
