@@ -601,7 +601,7 @@ var _ = Describe("SentPacketHandler", func() {
 			Expect(handler.GetLossDetectionTimeout().Sub(sendTime)).To(Equal(4 * timeout))
 		})
 
-		It("resets the PTO mode when a packet number space is dropped", func() {
+		It("resets the PTO mode and PTO count when a packet number space is dropped", func() {
 			now := time.Now()
 			handler.SentPacket(ackElicitingPacket(&Packet{
 				PacketNumber:    1,
@@ -621,6 +621,7 @@ var _ = Describe("SentPacketHandler", func() {
 			// PTO timer based on the 1-RTT packet
 			Expect(handler.GetLossDetectionTimeout()).To(BeTemporally("~", now.Add(-time.Hour), time.Second))
 			Expect(handler.SendMode()).ToNot(Equal(SendPTOHandshake))
+			Expect(handler.ptoCount).To(BeZero())
 		})
 
 		It("allows two 1-RTT PTOs", func() {
