@@ -277,5 +277,15 @@ var _ = Describe("Tracer", func() {
 			Expect(ev).ToNot(HaveKey("old"))
 			Expect(ev).ToNot(HaveKey("new"))
 		})
+
+		It("records PTO changes", func() {
+			now := time.Now()
+			tracer.UpdatedPTOCount(now, 42)
+			t, category, eventName, ev := exportAndParse()
+			Expect(t).To(BeTemporally("~", now, time.Millisecond))
+			Expect(category).To(Equal("recovery"))
+			Expect(eventName).To(Equal("metrics_updated"))
+			Expect(ev).To(HaveKeyWithValue("pto_count", float64(42)))
+		})
 	})
 })

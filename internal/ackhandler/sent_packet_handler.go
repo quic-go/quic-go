@@ -160,6 +160,9 @@ func (h *sentPacketHandler) dropPackets(encLevel protocol.EncryptionLevel) {
 	}
 	h.setLossDetectionTimer()
 	h.ptoCount = 0
+	if h.qlogger != nil {
+		h.qlogger.UpdatedPTOCount(time.Now(), 0)
+	}
 	h.ptoMode = SendNone
 }
 
@@ -286,6 +289,9 @@ func (h *sentPacketHandler) ReceivedAck(ack *wire.AckFrame, encLevel protocol.En
 	}
 
 	h.ptoCount = 0
+	if h.qlogger != nil {
+		h.qlogger.UpdatedPTOCount(rcvTime, 0)
+	}
 	h.numProbesToSend = 0
 
 	h.setLossDetectionTimer()
@@ -531,6 +537,9 @@ func (h *sentPacketHandler) onVerifiedLossDetectionTimeout() error {
 		h.logger.Debugf("Loss detection alarm for %s fired in PTO mode. PTO count: %d", encLevel, h.ptoCount)
 	}
 	h.ptoCount++
+	if h.qlogger != nil {
+		h.qlogger.UpdatedPTOCount(time.Now(), h.ptoCount)
+	}
 	h.numProbesToSend += 2
 	switch encLevel {
 	case protocol.EncryptionInitial:
