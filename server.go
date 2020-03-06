@@ -455,6 +455,13 @@ func (s *baseServer) createNewSession(
 	// We're already keeping track of this connection ID.
 	// This might happen if we receive two copies of the Initial at the same time.
 	if !added {
+
+		// [Psiphon]
+		// Stop timer to release resources
+		if s, ok := sess.(*session); ok {
+			s.timer.Reset(time.Time{})
+		}
+
 		return nil
 	}
 	s.sessionHandler.Add(srcConnID, sess)

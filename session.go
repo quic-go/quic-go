@@ -446,6 +446,19 @@ func (s *session) preSetup() {
 	}
 }
 
+// [Psiphon]
+//
+// Backport https://github.com/lucas-clemente/quic-go/commit/079279b9cf4cb5dafc8b7f673a2e7e47a4b6a06e:
+//   > session.maybeResetTimer() and session.run() were using slightly
+//   > different definitions of when a keep-alive PING should be sent. Under
+//   > certain conditions, this would make us repeatedly set a timer for the
+//   > keep-alive, but on timer expiration no keep-alive would be sent.
+//
+// This changes session.run and session.maybeResetTimer. As we don't yet have
+// https://github.com/lucas-clemente/quic-go/commit/27549c56656665859354255d3912f6428bfcb9f0,
+// "use the minimum of the two peers' max_idle_timeouts", s.config.IdleTimeout is used
+// in place of s.idleTimeout.
+
 // run the session main loop
 func (s *session) run() error {
 	defer s.ctxCancel()
@@ -516,11 +529,17 @@ runLoop:
 		if s.pacingDeadline.IsZero() { // the timer didn't have a pacing deadline set
 			pacingDeadline = s.sentPacketHandler.TimeUntilSend()
 		}
-		if s.config.KeepAlive && !s.keepAlivePingSent && s.handshakeComplete && s.firstAckElicitingPacketAfterIdleSentTime.IsZero() && time.Since(s.lastPacketReceivedTime) >= s.keepAliveInterval/2 {
+		if keepAliveTime := s.nextKeepAliveTime(); !keepAliveTime.IsZero() && !now.Before(keepAliveTime) {
 			// send a PING frame since there is no activity in the session
-			s.logger.Debugf("Sending a keep-alive ping to keep the connection alive.")
+			s.logger.Debugf("Sending a keep-alive PING to keep the connection alive.")
 			s.framer.QueueControlFrame(&wire.PingFrame{})
 			s.keepAlivePingSent = true
+		} else if !s.handshakeComplete && now.Sub(s.sessionCreationTime) >= s.config.HandshakeTimeout {
+			s.destroyImpl(qerr.TimeoutError("Handshake did not complete in time"))
+			continue
+		} else if s.handshakeComplete && now.Sub(s.idleTimeoutStartTime()) >= s.config.IdleTimeout {
+			s.destroyImpl(qerr.TimeoutError("No recent network activity"))
+			continue
 		} else if !pacingDeadline.IsZero() && now.Before(pacingDeadline) {
 			// If we get to this point before the pacing deadline, we should wait until that deadline.
 			// This can happen when scheduleSending is called, or a packet is received.
@@ -571,12 +590,25 @@ func (s *session) ConnectionState() tls.ConnectionState {
 	return s.cryptoStreamHandler.ConnectionState()
 }
 
+// Time when the next keep-alive packet should be sent.
+// It returns a zero time if no keep-alive should be sent.
+func (s *session) nextKeepAliveTime() time.Time {
+	if !s.config.KeepAlive || s.keepAlivePingSent || s.firstAckElicitingPacketAfterIdleSentTime.IsZero() {
+		return time.Time{}
+	}
+	return s.lastPacketReceivedTime.Add(s.keepAliveInterval / 2)
+}
+
 func (s *session) maybeResetTimer() {
 	var deadline time.Time
-	if s.config.KeepAlive && s.handshakeComplete && !s.keepAlivePingSent {
-		deadline = s.idleTimeoutStartTime().Add(s.keepAliveInterval / 2)
+	if !s.handshakeComplete {
+		deadline = s.sessionCreationTime.Add(s.config.HandshakeTimeout)
 	} else {
-		deadline = s.idleTimeoutStartTime().Add(s.config.IdleTimeout)
+		if keepAliveTime := s.nextKeepAliveTime(); !keepAliveTime.IsZero() {
+			deadline = keepAliveTime
+		} else {
+			deadline = s.idleTimeoutStartTime().Add(s.config.IdleTimeout)
+		}
 	}
 
 	if ackAlarm := s.receivedPacketHandler.GetAlarmTimeout(); !ackAlarm.IsZero() {
@@ -584,10 +616,6 @@ func (s *session) maybeResetTimer() {
 	}
 	if lossTime := s.sentPacketHandler.GetLossDetectionTimeout(); !lossTime.IsZero() {
 		deadline = utils.MinTime(deadline, lossTime)
-	}
-	if !s.handshakeComplete {
-		handshakeDeadline := s.sessionCreationTime.Add(s.config.HandshakeTimeout)
-		deadline = utils.MinTime(deadline, handshakeDeadline)
 	}
 	if !s.pacingDeadline.IsZero() {
 		deadline = utils.MinTime(deadline, s.pacingDeadline)
