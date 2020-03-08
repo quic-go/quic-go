@@ -36,8 +36,8 @@ var _ = Describe("HTTP 0.9 integration tests", func() {
 			defer close(done)
 			_ = server.ListenAndServe()
 		}()
-		var ln quic.Listener
-		Eventually(func() quic.Listener {
+		var ln quic.EarlyListener
+		Eventually(func() quic.EarlyListener {
 			server.mutex.Lock()
 			defer server.mutex.Unlock()
 			ln = server.listener

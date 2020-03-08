@@ -74,14 +74,16 @@ func runTestcase(testcase string) error {
 			QuicConfig:      quicConf,
 		}
 		defer r.Close()
-		return downloadFiles(r, urls)
+		return downloadFiles(r, urls, false)
 	case "handshake", "transfer", "retry":
 	case "multiconnect":
 		return runMultiConnectTest(urls)
 	case "versionnegotiation":
 		return runVersionNegotiationTest(urls)
 	case "resumption":
-		return runResumptionTest(urls)
+		return runResumptionTest(urls, false)
+	case "zerortt":
+		return runResumptionTest(urls, true)
 	default:
 		return errUnsupported
 	}
@@ -91,7 +93,7 @@ func runTestcase(testcase string) error {
 		QuicConfig:      quicConf,
 	}
 	defer r.Close()
-	return downloadFiles(r, urls)
+	return downloadFiles(r, urls, false)
 }
 
 func runVersionNegotiationTest(urls []string) error {
@@ -99,7 +101,7 @@ func runVersionNegotiationTest(urls []string) error {
 		return errors.New("expected at least 2 URLs")
 	}
 	protocol.SupportedVersions = []protocol.VersionNumber{0x1a2a3a4a}
-	err := downloadFile(&http09.RoundTripper{}, urls[0])
+	err := downloadFile(&http09.RoundTripper{}, urls[0], false)
 	if err == nil {
 		return errors.New("expected version negotiation to fail")
 	}
@@ -112,7 +114,7 @@ func runVersionNegotiationTest(urls []string) error {
 func runMultiConnectTest(urls []string) error {
 	for _, url := range urls {
 		r := &http09.RoundTripper{TLSClientConfig: tlsConf}
-		if err := downloadFile(r, url); err != nil {
+		if err := downloadFile(r, url, false); err != nil {
 			return err
 		}
 		if err := r.Close(); err != nil {
@@ -122,7 +124,7 @@ func runMultiConnectTest(urls []string) error {
 	return nil
 }
 
-func runResumptionTest(urls []string) error {
+func runResumptionTest(urls []string, use0RTT bool) error {
 	if len(urls) < 2 {
 		return errors.New("expected at least 2 URLs")
 	}
@@ -131,7 +133,7 @@ func runResumptionTest(urls []string) error {
 
 	// do the first transfer
 	r := &http09.RoundTripper{TLSClientConfig: tlsConf}
-	if err := downloadFiles(r, urls[:1]); err != nil {
+	if err := downloadFiles(r, urls[:1], false); err != nil {
 		return err
 	}
 	r.Close()
@@ -139,22 +141,26 @@ func runResumptionTest(urls []string) error {
 	// reestablish the connection, using the session ticket that the server (hopefully provided)
 	r = &http09.RoundTripper{TLSClientConfig: tlsConf}
 	defer r.Close()
-	return downloadFiles(r, urls[1:])
+	return downloadFiles(r, urls[1:], use0RTT)
 }
 
-func downloadFiles(cl http.RoundTripper, urls []string) error {
+func downloadFiles(cl http.RoundTripper, urls []string, use0RTT bool) error {
 	var g errgroup.Group
 	for _, u := range urls {
 		url := u
 		g.Go(func() error {
-			return downloadFile(cl, url)
+			return downloadFile(cl, url, use0RTT)
 		})
 	}
 	return g.Wait()
 }
 
-func downloadFile(cl http.RoundTripper, url string) error {
-	req, err := http.NewRequest(http.MethodGet, url, nil)
+func downloadFile(cl http.RoundTripper, url string, use0RTT bool) error {
+	method := http.MethodGet
+	if use0RTT {
+		method = http09.MethodGet0RTT
+	}
+	req, err := http.NewRequest(method, url, nil)
 	if err != nil {
 		return err
 	}
