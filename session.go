@@ -1495,12 +1495,8 @@ func (s *session) scheduleSending() {
 }
 
 func (s *session) tryQueueingUndecryptablePacket(p *receivedPacket) {
-	if s.handshakeComplete {
-		s.logger.Debugf("Received undecryptable packet from %s after the handshake (%d bytes)", p.remoteAddr.String(), len(p.data))
-		return
-	}
 	if len(s.undecryptablePackets)+1 > protocol.MaxUndecryptablePackets {
-		s.logger.Infof("Dropping undecrytable packet (%d bytes). Undecryptable packet queue full.", len(p.data))
+		s.logger.Infof("Dropping undecryptable packet (%d bytes). Undecryptable packet queue full.", len(p.data))
 		return
 	}
 	s.logger.Infof("Queueing packet (%d bytes) for later decryption", len(p.data))
