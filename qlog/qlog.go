@@ -19,6 +19,7 @@ type Tracer interface {
 	SentPacket(t time.Time, hdr *wire.ExtendedHeader, packetSize protocol.ByteCount, ack *wire.AckFrame, frames []wire.Frame)
 	ReceivedRetry(time.Time, *wire.Header)
 	ReceivedPacket(t time.Time, hdr *wire.ExtendedHeader, packetSize protocol.ByteCount, frames []wire.Frame)
+	BufferedPacket(time.Time, PacketType)
 	UpdatedMetrics(t time.Time, rttStats *congestion.RTTStats, cwnd protocol.ByteCount, bytesInFLight protocol.ByteCount, packetsInFlight int)
 	LostPacket(time.Time, protocol.EncryptionLevel, protocol.PacketNumber, PacketLossReason)
 	UpdatedPTOCount(time.Time, uint32)
@@ -104,7 +105,7 @@ func (t *tracer) SentPacket(time time.Time, hdr *wire.ExtendedHeader, packetSize
 	t.events = append(t.events, event{
 		Time: time,
 		eventDetails: eventPacketSent{
-			PacketType: getPacketTypeFromHeader(hdr),
+			PacketType: PacketTypeFromHeader(&hdr.Header),
 			Header:     header,
 			Frames:     fs,
 		},
@@ -121,7 +122,7 @@ func (t *tracer) ReceivedPacket(time time.Time, hdr *wire.ExtendedHeader, packet
 	t.events = append(t.events, event{
 		Time: time,
 		eventDetails: eventPacketReceived{
-			PacketType: getPacketTypeFromHeader(hdr),
+			PacketType: PacketTypeFromHeader(&hdr.Header),
 			Header:     header,
 			Frames:     fs,
 		},
@@ -134,6 +135,13 @@ func (t *tracer) ReceivedRetry(time time.Time, hdr *wire.Header) {
 		eventDetails: eventRetryReceived{
 			Header: *transformHeader(hdr),
 		},
+	})
+}
+
+func (t *tracer) BufferedPacket(time time.Time, packetType PacketType) {
+	t.events = append(t.events, event{
+		Time:         time,
+		eventDetails: eventPacketBuffered{PacketType: packetType},
 	})
 }
 

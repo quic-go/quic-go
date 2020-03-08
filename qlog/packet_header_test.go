@@ -15,63 +15,51 @@ import (
 
 var _ = Describe("Packet Header", func() {
 	It("determines the packet type from the encryption level", func() {
-		Expect(getPacketTypeFromEncryptionLevel(protocol.EncryptionInitial)).To(Equal(packetTypeInitial))
-		Expect(getPacketTypeFromEncryptionLevel(protocol.EncryptionHandshake)).To(Equal(packetTypeHandshake))
-		Expect(getPacketTypeFromEncryptionLevel(protocol.Encryption0RTT)).To(Equal(packetType0RTT))
-		Expect(getPacketTypeFromEncryptionLevel(protocol.Encryption1RTT)).To(Equal(packetType1RTT))
+		Expect(getPacketTypeFromEncryptionLevel(protocol.EncryptionInitial)).To(Equal(PacketTypeInitial))
+		Expect(getPacketTypeFromEncryptionLevel(protocol.EncryptionHandshake)).To(Equal(PacketTypeHandshake))
+		Expect(getPacketTypeFromEncryptionLevel(protocol.Encryption0RTT)).To(Equal(PacketType0RTT))
+		Expect(getPacketTypeFromEncryptionLevel(protocol.Encryption1RTT)).To(Equal(PacketType1RTT))
 	})
 
 	Context("determining the packet type from the header", func() {
 		It("recognizes Initial packets", func() {
-			Expect(getPacketTypeFromHeader(&wire.ExtendedHeader{
-				Header: wire.Header{
-					IsLongHeader: true,
-					Type:         protocol.PacketTypeInitial,
-					Version:      protocol.VersionTLS,
-				},
-			})).To(Equal(packetTypeInitial))
+			Expect(PacketTypeFromHeader(&wire.Header{
+				IsLongHeader: true,
+				Type:         protocol.PacketTypeInitial,
+				Version:      protocol.VersionTLS,
+			})).To(Equal(PacketTypeInitial))
 		})
 
 		It("recognizes Handshake packets", func() {
-			Expect(getPacketTypeFromHeader(&wire.ExtendedHeader{
-				Header: wire.Header{
-					IsLongHeader: true,
-					Type:         protocol.PacketTypeHandshake,
-					Version:      protocol.VersionTLS,
-				},
-			})).To(Equal(packetTypeHandshake))
+			Expect(PacketTypeFromHeader(&wire.Header{
+				IsLongHeader: true,
+				Type:         protocol.PacketTypeHandshake,
+				Version:      protocol.VersionTLS,
+			})).To(Equal(PacketTypeHandshake))
 		})
 
 		It("recognizes Retry packets", func() {
-			Expect(getPacketTypeFromHeader(&wire.ExtendedHeader{
-				Header: wire.Header{
-					IsLongHeader: true,
-					Type:         protocol.PacketTypeRetry,
-					Version:      protocol.VersionTLS,
-				},
-			})).To(Equal(packetTypeRetry))
+			Expect(PacketTypeFromHeader(&wire.Header{
+				IsLongHeader: true,
+				Type:         protocol.PacketTypeRetry,
+				Version:      protocol.VersionTLS,
+			})).To(Equal(PacketTypeRetry))
 		})
 
 		It("recognizes 0-RTT packets", func() {
-			Expect(getPacketTypeFromHeader(&wire.ExtendedHeader{
-				Header: wire.Header{
-					IsLongHeader: true,
-					Type:         protocol.PacketType0RTT,
-					Version:      protocol.VersionTLS,
-				},
-			})).To(Equal(packetType0RTT))
+			Expect(PacketTypeFromHeader(&wire.Header{
+				IsLongHeader: true,
+				Type:         protocol.PacketType0RTT,
+				Version:      protocol.VersionTLS,
+			})).To(Equal(PacketType0RTT))
 		})
 
 		It("recognizes Version Negotiation packets", func() {
-			Expect(getPacketTypeFromHeader(&wire.ExtendedHeader{
-				Header: wire.Header{IsLongHeader: true},
-			})).To(Equal(packetTypeVersionNegotiation))
+			Expect(PacketTypeFromHeader(&wire.Header{IsLongHeader: true})).To(Equal(PacketTypeVersionNegotiation))
 		})
 
 		It("recognizes 1-RTT packets", func() {
-			Expect(getPacketTypeFromHeader(&wire.ExtendedHeader{
-				Header: wire.Header{},
-			})).To(Equal(packetType1RTT))
+			Expect(PacketTypeFromHeader(&wire.Header{})).To(Equal(PacketType1RTT))
 		})
 	})
 

@@ -7,37 +7,37 @@ import (
 	"github.com/lucas-clemente/quic-go/internal/wire"
 )
 
-func getPacketTypeFromHeader(hdr *wire.ExtendedHeader) packetType {
+func PacketTypeFromHeader(hdr *wire.Header) PacketType {
 	if !hdr.IsLongHeader {
-		return packetType1RTT
+		return PacketType1RTT
 	}
 	if hdr.Version == 0 {
-		return packetTypeVersionNegotiation
+		return PacketTypeVersionNegotiation
 	}
 	switch hdr.Type {
 	case protocol.PacketTypeInitial:
-		return packetTypeInitial
+		return PacketTypeInitial
 	case protocol.PacketTypeHandshake:
-		return packetTypeHandshake
+		return PacketTypeHandshake
 	case protocol.PacketType0RTT:
-		return packetType0RTT
+		return PacketType0RTT
 	case protocol.PacketTypeRetry:
-		return packetTypeRetry
+		return PacketTypeRetry
 	default:
 		panic("unknown packet type")
 	}
 }
 
-func getPacketTypeFromEncryptionLevel(encLevel protocol.EncryptionLevel) packetType {
+func getPacketTypeFromEncryptionLevel(encLevel protocol.EncryptionLevel) PacketType {
 	switch encLevel {
 	case protocol.EncryptionInitial:
-		return packetTypeInitial
+		return PacketTypeInitial
 	case protocol.EncryptionHandshake:
-		return packetTypeHandshake
+		return PacketTypeHandshake
 	case protocol.Encryption0RTT:
-		return packetType0RTT
+		return PacketType0RTT
 	case protocol.Encryption1RTT:
-		return packetType1RTT
+		return PacketType1RTT
 	default:
 		panic("unknown encryption level")
 	}

@@ -61,30 +61,37 @@ func (c category) String() string {
 	}
 }
 
-type packetType protocol.PacketType
+// PacketType is the packet type of a QUIC packet
+type PacketType protocol.PacketType
 
 const (
-	packetTypeInitial packetType = iota
-	packetTypeHandshake
-	packetTypeRetry
-	packetType0RTT
-	packetTypeVersionNegotiation
-	packetType1RTT
+	// PacketTypeInitial: Initial packet
+	PacketTypeInitial PacketType = iota
+	// PacketTypeHandshake: Handshake packet
+	PacketTypeHandshake
+	// PacketTypeRetry: Retry packet
+	PacketTypeRetry
+	// PacketType0RTT: 0-RTT packet
+	PacketType0RTT
+	// PacketTypeVersionNegotiation: Version Negotiation packet
+	PacketTypeVersionNegotiation
+	// PacketType1RTT: 1-RTT packet
+	PacketType1RTT
 )
 
-func (t packetType) String() string {
+func (t PacketType) String() string {
 	switch t {
-	case packetTypeInitial:
+	case PacketTypeInitial:
 		return "initial"
-	case packetTypeHandshake:
+	case PacketTypeHandshake:
 		return "handshake"
-	case packetTypeRetry:
+	case PacketTypeRetry:
 		return "retry"
-	case packetType0RTT:
+	case PacketType0RTT:
 		return "0RTT"
-	case packetTypeVersionNegotiation:
+	case PacketTypeVersionNegotiation:
 		return "version_negotiation"
-	case packetType1RTT:
+	case PacketType1RTT:
 		return "1RTT"
 	default:
 		panic("unknown packet type")
