@@ -211,7 +211,7 @@ func newCryptoSetup(
 		initialSealer:          initialSealer,
 		initialOpener:          initialOpener,
 		handshakeStream:        handshakeStream,
-		aead:                   newUpdatableAEAD(rttStats, logger),
+		aead:                   newUpdatableAEAD(rttStats, qlogger, logger),
 		readEncLevel:           protocol.EncryptionInitial,
 		writeEncLevel:          protocol.EncryptionInitial,
 		runner:                 runner,

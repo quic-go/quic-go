@@ -33,4 +33,10 @@ var _ = Describe("Types", func() {
 		Expect(encLevelToKeyType(protocol.Encryption1RTT, protocol.PerspectiveClient).String()).To(Equal("client_1rtt_secret"))
 		Expect(encLevelToKeyType(protocol.Encryption1RTT, protocol.PerspectiveServer).String()).To(Equal("server_1rtt_secret"))
 	})
+
+	It("has a string representation for the key update trigger", func() {
+		Expect(keyUpdateTLS.String()).To(Equal("tls"))
+		Expect(keyUpdateRemote.String()).To(Equal("remote_update"))
+		Expect(keyUpdateLocal.String()).To(Equal("local_update"))
+	})
 })

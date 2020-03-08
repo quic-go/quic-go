@@ -12,6 +12,7 @@ import (
 	"github.com/lucas-clemente/quic-go/internal/congestion"
 	"github.com/lucas-clemente/quic-go/internal/qerr"
 	"github.com/lucas-clemente/quic-go/internal/utils"
+	"github.com/lucas-clemente/quic-go/qlog"
 
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/marten-seemann/qtls"
@@ -73,7 +74,8 @@ type updatableAEAD struct {
 
 	rttStats *congestion.RTTStats
 
-	logger utils.Logger
+	qlogger qlog.Tracer
+	logger  utils.Logger
 
 	// use a single slice to avoid allocations
 	nonceBuf []byte
@@ -82,7 +84,7 @@ type updatableAEAD struct {
 var _ ShortHeaderOpener = &updatableAEAD{}
 var _ ShortHeaderSealer = &updatableAEAD{}
 
-func newUpdatableAEAD(rttStats *congestion.RTTStats, logger utils.Logger) *updatableAEAD {
+func newUpdatableAEAD(rttStats *congestion.RTTStats, qlogger qlog.Tracer, logger utils.Logger) *updatableAEAD {
 	return &updatableAEAD{
 		firstPacketNumber:       protocol.InvalidPacketNumber,
 		largestAcked:            protocol.InvalidPacketNumber,
@@ -90,6 +92,7 @@ func newUpdatableAEAD(rttStats *congestion.RTTStats, logger utils.Logger) *updat
 		firstSentWithCurrentKey: protocol.InvalidPacketNumber,
 		keyUpdateInterval:       keyUpdateInterval,
 		rttStats:                rttStats,
+		qlogger:                 qlogger,
 		logger:                  logger,
 	}
 }
@@ -180,6 +183,9 @@ func (a *updatableAEAD) Open(dst, src []byte, rcvTime time.Time, pn protocol.Pac
 		}
 		a.rollKeys(rcvTime)
 		a.logger.Debugf("Peer updated keys to %s", a.keyPhase)
+		if a.qlogger != nil {
+			a.qlogger.UpdatedKey(rcvTime, a.keyPhase, true)
+		}
 		a.firstRcvdWithCurrentKey = pn
 		return dec, err
 	}
@@ -238,7 +244,11 @@ func (a *updatableAEAD) shouldInitiateKeyUpdate() bool {
 
 func (a *updatableAEAD) KeyPhase() protocol.KeyPhaseBit {
 	if a.shouldInitiateKeyUpdate() {
-		a.rollKeys(time.Now())
+		now := time.Now()
+		if a.qlogger != nil {
+			a.qlogger.UpdatedKey(now, a.keyPhase, false)
+		}
+		a.rollKeys(now)
 	}
 	return a.keyPhase.Bit()
 }
