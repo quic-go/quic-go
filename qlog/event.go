@@ -166,6 +166,22 @@ func (e eventPacketBuffered) MarshalJSONObject(enc *gojay.Encoder) {
 	enc.StringKey("trigger", "keys_unavailable")
 }
 
+type eventPacketDropped struct {
+	PacketType PacketType
+	PacketSize protocol.ByteCount
+	Trigger    PacketDropReason
+}
+
+func (e eventPacketDropped) Category() category { return categoryTransport }
+func (e eventPacketDropped) Name() string       { return "packet_dropped" }
+func (e eventPacketDropped) IsNil() bool        { return false }
+
+func (e eventPacketDropped) MarshalJSONObject(enc *gojay.Encoder) {
+	enc.StringKeyOmitEmpty("packet_type", e.PacketType.String())
+	enc.Uint64Key("packet_size", uint64(e.PacketSize))
+	enc.StringKey("trigger", e.Trigger.String())
+}
+
 func milliseconds(dur time.Duration) float64 { return float64(dur.Nanoseconds()) / 1e6 }
 
 type eventMetricsUpdated struct {
