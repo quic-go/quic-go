@@ -110,3 +110,68 @@ func (r PacketLossReason) String() string {
 		panic("unknown loss reason")
 	}
 }
+
+type keyType uint8
+
+const (
+	keyTypeServerInitial keyType = iota
+	keyTypeClientInitial
+	keyTypeServerHandshake
+	keyTypeClientHandshake
+	keyTypeServer0RTT
+	keyTypeClient0RTT
+	keyTypeServer1RTT
+	keyTypeClient1RTT
+)
+
+func encLevelToKeyType(encLevel protocol.EncryptionLevel, pers protocol.Perspective) keyType {
+	if pers == protocol.PerspectiveServer {
+		switch encLevel {
+		case protocol.EncryptionInitial:
+			return keyTypeServerInitial
+		case protocol.EncryptionHandshake:
+			return keyTypeServerHandshake
+		case protocol.Encryption0RTT:
+			return keyTypeServer0RTT
+		case protocol.Encryption1RTT:
+			return keyTypeServer1RTT
+		default:
+			panic("unknown encryption level")
+		}
+	}
+	switch encLevel {
+	case protocol.EncryptionInitial:
+		return keyTypeClientInitial
+	case protocol.EncryptionHandshake:
+		return keyTypeClientHandshake
+	case protocol.Encryption0RTT:
+		return keyTypeClient0RTT
+	case protocol.Encryption1RTT:
+		return keyTypeClient1RTT
+	default:
+		panic("unknown encryption level")
+	}
+}
+
+func (t keyType) String() string {
+	switch t {
+	case keyTypeServerInitial:
+		return "server_initial_secret"
+	case keyTypeClientInitial:
+		return "client_initial_secret"
+	case keyTypeServerHandshake:
+		return "server_handshake_secret"
+	case keyTypeClientHandshake:
+		return "client_handshake_secret"
+	case keyTypeServer0RTT:
+		return "server_0rtt_secret"
+	case keyTypeClient0RTT:
+		return "client_0rtt_secret"
+	case keyTypeServer1RTT:
+		return "server_1rtt_secret"
+	case keyTypeClient1RTT:
+		return "client_1rtt_secret"
+	default:
+		panic("unknown key type")
+	}
+}

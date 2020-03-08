@@ -294,6 +294,7 @@ var newSession = func(
 		tlsConf,
 		enable0RTT,
 		s.rttStats,
+		qlogger,
 		logger,
 	)
 	s.cryptoStreamHandler = cs
@@ -402,6 +403,7 @@ var newClientSession = func(
 		tlsConf,
 		enable0RTT,
 		s.rttStats,
+		qlogger,
 		logger,
 	)
 	s.clientHelloWritten = clientHelloWritten
