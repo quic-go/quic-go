@@ -4,6 +4,8 @@ main
 mockgen_tmp.go
 *.qtr
 *.qlog
+.DS_Store
+*~
 
 fuzzing/*/*.zip
 fuzzing/*/coverprofile
@@ -14,3 +16,4 @@ fuzzing/*/corpus/
 !fuzzing/frames/single-frame*
 !fuzzing/frames/multiple-frame*
 !fuzzing/header/header*
+
