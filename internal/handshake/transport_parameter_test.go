@@ -299,7 +299,7 @@ var _ = Describe("Transport Parameters", func() {
 			}
 			for i := 1; i < len(raw); i++ {
 				buf := &bytes.Buffer{}
-				utils.WriteVarInt(buf, uint64(preferredAddressParamaterID))
+				utils.WriteVarInt(buf, uint64(preferredAddressParameterID))
 				buf.Write(raw[:i])
 				p := &TransportParameters{}
 				Expect(p.Unmarshal(buf.Bytes(), protocol.PerspectiveServer)).ToNot(Succeed())
