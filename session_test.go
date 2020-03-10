@@ -1955,20 +1955,26 @@ var _ = Describe("Client Session", func() {
 			Eventually(sess.Context().Done()).Should(BeClosed())
 		})
 
-		It("immediately retires the preferred_address connection ID", func() {
+		It("uses the preferred_address connection ID", func() {
 			params := &handshake.TransportParameters{
 				PreferredAddress: &handshake.PreferredAddress{
-					IPv4:         net.IPv4(127, 0, 0, 1),
-					IPv6:         net.IP{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16},
-					ConnectionID: protocol.ConnectionID{1, 2, 3, 4},
+					IPv4:                net.IPv4(127, 0, 0, 1),
+					IPv6:                net.IP{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16},
+					ConnectionID:        protocol.ConnectionID{1, 2, 3, 4},
+					StatelessResetToken: [16]byte{16, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1},
 				},
 			}
 			packer.EXPECT().HandleTransportParameters(gomock.Any())
 			packer.EXPECT().PackCoalescedPacket().MaxTimes(1)
 			sess.processTransportParameters(params)
+			// make sure the connection ID is not retired
 			cf, _ := sess.framer.AppendControlFrames(nil, protocol.MaxByteCount)
-			Expect(cf).To(HaveLen(1))
-			Expect(cf[0].Frame).To(Equal(&wire.RetireConnectionIDFrame{SequenceNumber: 1}))
+			Expect(cf).To(BeEmpty())
+			sessionRunner.EXPECT().AddResetToken([16]byte{16, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1}, sess)
+			Expect(sess.connIDManager.Get()).To(Equal(protocol.ConnectionID{1, 2, 3, 4}))
+			// shut down
+			sessionRunner.EXPECT().RemoveResetToken([16]byte{16, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1})
+			expectClose()
 		})
 
 		It("uses the minimum of the peers' idle timeouts", func() {

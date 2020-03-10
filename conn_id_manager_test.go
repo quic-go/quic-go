@@ -80,13 +80,18 @@ var _ = Describe("Connection ID Manager", func() {
 	})
 
 	It("accepts duplicates", func() {
-		f := &wire.NewConnectionIDFrame{
+		f1 := &wire.NewConnectionIDFrame{
 			SequenceNumber:      1,
 			ConnectionID:        protocol.ConnectionID{1, 2, 3, 4},
 			StatelessResetToken: [16]byte{0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 0xa, 0xb, 0xc, 0xd, 0xe},
 		}
-		Expect(m.Add(f)).To(Succeed())
-		Expect(m.Add(f)).To(Succeed())
+		f2 := &wire.NewConnectionIDFrame{
+			SequenceNumber:      1,
+			ConnectionID:        protocol.ConnectionID{1, 2, 3, 4},
+			StatelessResetToken: [16]byte{0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 0xa, 0xb, 0xc, 0xd, 0xe},
+		}
+		Expect(m.Add(f1)).To(Succeed())
+		Expect(m.Add(f2)).To(Succeed())
 		c1, rt1 := get()
 		Expect(c1).To(Equal(protocol.ConnectionID{1, 2, 3, 4}))
 		Expect(*rt1).To(Equal([16]byte{0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 0xa, 0xb, 0xc, 0xd, 0xe}))

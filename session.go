@@ -1198,7 +1198,7 @@ func (s *session) processTransportParameters(params *handshake.TransportParamete
 	if params.PreferredAddress != nil {
 		s.logger.Debugf("Server sent preferred_address. Retiring the preferred_address connection ID.")
 		// Retire the connection ID.
-		s.framer.QueueControlFrame(&wire.RetireConnectionIDFrame{SequenceNumber: 1})
+		s.connIDManager.AddFromPreferredAddress(params.PreferredAddress.ConnectionID, &params.PreferredAddress.StatelessResetToken)
 	}
 	// On the server side, the early session is ready as soon as we processed
 	// the client's transport parameters.
