@@ -363,7 +363,6 @@ var _ = Describe("0-RTT", func() {
 			})
 
 			It("rejects 0-RTT when the ALPN changed", func() {
-				const maxStreams = 42
 				tlsConf := getTLSConfig()
 				ln, err := quic.ListenAddrEarly(
 					"localhost:0",
