@@ -9,7 +9,7 @@ import (
 	"github.com/lucas-clemente/quic-go/internal/utils"
 )
 
-const sessionTicketRevision = 1
+const sessionTicketRevision = 2
 
 type sessionTicket struct {
 	Parameters *TransportParameters

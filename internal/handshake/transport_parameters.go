@@ -384,6 +384,8 @@ func (p *TransportParameters) MarshalForSessionTicket(b *bytes.Buffer) {
 	p.marshalVarintParam(b, initialMaxStreamsBidiParameterID, uint64(p.MaxBidiStreamNum))
 	// initial_max_uni_streams
 	p.marshalVarintParam(b, initialMaxStreamsUniParameterID, uint64(p.MaxUniStreamNum))
+	// active_connection_id_limit
+	p.marshalVarintParam(b, activeConnectionIDLimitParameterID, p.ActiveConnectionIDLimit)
 }
 
 // UnmarshalFromSessionTicket unmarshals transport parameters from a session ticket.
