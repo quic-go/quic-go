@@ -21,6 +21,7 @@ type Tracer interface {
 	ReceivedPacket(t time.Time, hdr *wire.ExtendedHeader, packetSize protocol.ByteCount, frames []wire.Frame)
 	UpdatedMetrics(t time.Time, rttStats *congestion.RTTStats, cwnd protocol.ByteCount, bytesInFLight protocol.ByteCount, packetsInFlight int)
 	LostPacket(time.Time, protocol.EncryptionLevel, protocol.PacketNumber, PacketLossReason)
+	UpdatedPTOCount(time.Time, uint32)
 	UpdatedKeyFromTLS(time.Time, protocol.EncryptionLevel, protocol.Perspective)
 }
 
@@ -168,5 +169,12 @@ func (t *tracer) UpdatedKeyFromTLS(time time.Time, encLevel protocol.EncryptionL
 			Trigger: "tls",
 			KeyType: encLevelToKeyType(encLevel, pers),
 		},
+	})
+}
+
+func (t *tracer) UpdatedPTOCount(time time.Time, value uint32) {
+	t.events = append(t.events, event{
+		Time:         time,
+		eventDetails: eventUpdatedPTO{Value: value},
 	})
 }

@@ -181,6 +181,18 @@ func (e eventMetricsUpdated) MarshalJSONObject(enc *gojay.Encoder) {
 	enc.Uint64KeyOmitEmpty("packets_in_flight", uint64(e.PacketsInFlight))
 }
 
+type eventUpdatedPTO struct {
+	Value uint32
+}
+
+func (e eventUpdatedPTO) Category() category { return categoryRecovery }
+func (e eventUpdatedPTO) Name() string       { return "metrics_updated" }
+func (e eventUpdatedPTO) IsNil() bool        { return false }
+
+func (e eventUpdatedPTO) MarshalJSONObject(enc *gojay.Encoder) {
+	enc.Uint32Key("pto_count", e.Value)
+}
+
 type eventPacketLost struct {
 	PacketType   packetType
 	PacketNumber protocol.PacketNumber
