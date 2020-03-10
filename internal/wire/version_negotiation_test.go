@@ -14,7 +14,6 @@ var _ = Describe("Version Negotiation Packets", func() {
 		data, err := ComposeVersionNegotiation(destConnID, srcConnID, versions)
 		Expect(err).ToNot(HaveOccurred())
 		Expect(data[0] & 0x80).ToNot(BeZero())
-		Expect(data[0] & 0x40).ToNot(BeZero())
 		hdr, _, rest, err := ParsePacket(data, 4)
 		Expect(err).ToNot(HaveOccurred())
 		Expect(hdr.DestConnectionID).To(Equal(destConnID))
