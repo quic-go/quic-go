@@ -175,3 +175,24 @@ func (t keyType) String() string {
 		panic("unknown key type")
 	}
 }
+
+type keyUpdateTrigger uint8
+
+const (
+	keyUpdateTLS keyUpdateTrigger = iota
+	keyUpdateRemote
+	keyUpdateLocal
+)
+
+func (t keyUpdateTrigger) String() string {
+	switch t {
+	case keyUpdateTLS:
+		return "tls"
+	case keyUpdateRemote:
+		return "remote_update"
+	case keyUpdateLocal:
+		return "local_update"
+	default:
+		panic("unknown key update trigger")
+	}
+}

@@ -23,6 +23,7 @@ type Tracer interface {
 	LostPacket(time.Time, protocol.EncryptionLevel, protocol.PacketNumber, PacketLossReason)
 	UpdatedPTOCount(time.Time, uint32)
 	UpdatedKeyFromTLS(time.Time, protocol.EncryptionLevel, protocol.Perspective)
+	UpdatedKey(t time.Time, generation protocol.KeyPhase, remote bool)
 }
 
 type tracer struct {
@@ -162,19 +163,42 @@ func (t *tracer) LostPacket(time time.Time, encLevel protocol.EncryptionLevel, p
 	})
 }
 
+func (t *tracer) UpdatedPTOCount(time time.Time, value uint32) {
+	t.events = append(t.events, event{
+		Time:         time,
+		eventDetails: eventUpdatedPTO{Value: value},
+	})
+}
+
 func (t *tracer) UpdatedKeyFromTLS(time time.Time, encLevel protocol.EncryptionLevel, pers protocol.Perspective) {
 	t.events = append(t.events, event{
 		Time: time,
 		eventDetails: eventKeyUpdated{
-			Trigger: "tls",
+			Trigger: keyUpdateTLS,
 			KeyType: encLevelToKeyType(encLevel, pers),
 		},
 	})
 }
 
-func (t *tracer) UpdatedPTOCount(time time.Time, value uint32) {
+func (t *tracer) UpdatedKey(time time.Time, generation protocol.KeyPhase, remote bool) {
+	trigger := keyUpdateLocal
+	if remote {
+		trigger = keyUpdateRemote
+	}
 	t.events = append(t.events, event{
-		Time:         time,
-		eventDetails: eventUpdatedPTO{Value: value},
+		Time: time,
+		eventDetails: eventKeyUpdated{
+			Trigger:    trigger,
+			KeyType:    keyTypeClient1RTT,
+			Generation: generation,
+		},
+	})
+	t.events = append(t.events, event{
+		Time: time,
+		eventDetails: eventKeyUpdated{
+			Trigger:    trigger,
+			KeyType:    keyTypeServer1RTT,
+			Generation: generation,
+		},
 	})
 }

@@ -27,8 +27,8 @@ var _ = Describe("Updatable AEAD", func() {
 				rand.Read(trafficSecret1)
 				rand.Read(trafficSecret2)
 
-				client = newUpdatableAEAD(rttStats, utils.DefaultLogger)
-				server = newUpdatableAEAD(rttStats, utils.DefaultLogger)
+				client = newUpdatableAEAD(rttStats, nil, utils.DefaultLogger)
+				server = newUpdatableAEAD(rttStats, nil, utils.DefaultLogger)
 				client.SetReadKey(cs, trafficSecret2)
 				client.SetWriteKey(cs, trafficSecret1)
 				server.SetReadKey(cs, trafficSecret1)
