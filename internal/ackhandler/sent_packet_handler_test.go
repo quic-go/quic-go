@@ -783,6 +783,16 @@ var _ = Describe("SentPacketHandler", func() {
 			handler.SentPacket(handshakePacketNonAckEliciting(&Packet{PacketNumber: 2}))
 			Expect(handler.GetLossDetectionTimeout()).To(BeZero())
 		})
+
+		It("doesn't send a packet to unblock the server after handshake confirmation, even if no Handshake ACK was received", func() {
+			handler.SentPacket(handshakePacket(&Packet{PacketNumber: 1}))
+			Expect(handler.GetLossDetectionTimeout()).ToNot(BeZero())
+			Expect(handler.OnLossDetectionTimeout()).To(Succeed())
+			Expect(handler.SendMode()).To(Equal(SendPTOHandshake))
+			// confirm the handshake
+			handler.DropPackets(protocol.EncryptionHandshake)
+			Expect(handler.GetLossDetectionTimeout()).To(BeZero())
+		})
 	})
 
 	Context("Packet-based loss detection", func() {

@@ -126,6 +126,11 @@ func (h *sentPacketHandler) DropPackets(encLevel protocol.EncryptionLevel) {
 }
 
 func (h *sentPacketHandler) dropPackets(encLevel protocol.EncryptionLevel) {
+	// The server won't await address validation after the handshake is confirmed.
+	// This applies even if we didn't receive an ACK for a Handshake packet.
+	if h.perspective == protocol.PerspectiveClient && encLevel == protocol.EncryptionHandshake {
+		h.peerNotAwaitingAddressValidation = true
+	}
 	// remove outstanding packets from bytes_in_flight
 	if encLevel == protocol.EncryptionInitial || encLevel == protocol.EncryptionHandshake {
 		pnSpace := h.getPacketNumberSpace(encLevel)
