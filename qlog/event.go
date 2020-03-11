@@ -97,7 +97,7 @@ func (e eventConnectionStarted) MarshalJSONObject(enc *gojay.Encoder) {
 }
 
 type eventPacketSent struct {
-	PacketType  packetType
+	PacketType  PacketType
 	Header      packetHeader
 	Frames      frames
 	IsCoalesced bool
@@ -119,7 +119,7 @@ func (e eventPacketSent) MarshalJSONObject(enc *gojay.Encoder) {
 }
 
 type eventPacketReceived struct {
-	PacketType  packetType
+	PacketType  PacketType
 	Header      packetHeader
 	Frames      frames
 	IsCoalesced bool
@@ -149,8 +149,21 @@ func (e eventRetryReceived) Name() string       { return "packet_received" }
 func (e eventRetryReceived) IsNil() bool        { return false }
 
 func (e eventRetryReceived) MarshalJSONObject(enc *gojay.Encoder) {
-	enc.StringKey("packet_type", packetTypeRetry.String())
+	enc.StringKey("packet_type", PacketTypeRetry.String())
 	enc.ObjectKey("header", e.Header)
+}
+
+type eventPacketBuffered struct {
+	PacketType PacketType
+}
+
+func (e eventPacketBuffered) Category() category { return categoryTransport }
+func (e eventPacketBuffered) Name() string       { return "packet_buffered" }
+func (e eventPacketBuffered) IsNil() bool        { return false }
+
+func (e eventPacketBuffered) MarshalJSONObject(enc *gojay.Encoder) {
+	enc.StringKey("packet_type", e.PacketType.String())
+	enc.StringKey("trigger", "keys_unavailable")
 }
 
 func milliseconds(dur time.Duration) float64 { return float64(dur.Nanoseconds()) / 1e6 }
@@ -194,7 +207,7 @@ func (e eventUpdatedPTO) MarshalJSONObject(enc *gojay.Encoder) {
 }
 
 type eventPacketLost struct {
-	PacketType   packetType
+	PacketType   PacketType
 	PacketNumber protocol.PacketNumber
 	Trigger      PacketLossReason
 }

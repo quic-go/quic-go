@@ -15,12 +15,12 @@ var _ = Describe("Types", func() {
 	})
 
 	It("has a string representation for the packet type", func() {
-		Expect(packetTypeInitial.String()).To(Equal("initial"))
-		Expect(packetTypeHandshake.String()).To(Equal("handshake"))
-		Expect(packetType0RTT.String()).To(Equal("0RTT"))
-		Expect(packetType1RTT.String()).To(Equal("1RTT"))
-		Expect(packetTypeRetry.String()).To(Equal("retry"))
-		Expect(packetTypeVersionNegotiation.String()).To(Equal("version_negotiation"))
+		Expect(PacketTypeInitial.String()).To(Equal("initial"))
+		Expect(PacketTypeHandshake.String()).To(Equal("handshake"))
+		Expect(PacketType0RTT.String()).To(Equal("0RTT"))
+		Expect(PacketType1RTT.String()).To(Equal("1RTT"))
+		Expect(PacketTypeRetry.String()).To(Equal("retry"))
+		Expect(PacketTypeVersionNegotiation.String()).To(Equal("version_negotiation"))
 	})
 
 	It("has a string representation for the key type", func() {

@@ -243,6 +243,18 @@ var _ = Describe("Tracer", func() {
 			Expect(ev).ToNot(HaveKey("frames"))
 		})
 
+		It("records buffered packets", func() {
+			now := time.Now()
+			tracer.BufferedPacket(now, PacketTypeHandshake)
+			entry := exportAndParseSingle()
+			Expect(entry.Time).To(BeTemporally("~", now, time.Millisecond))
+			Expect(entry.Category).To(Equal("transport"))
+			Expect(entry.Name).To(Equal("packet_buffered"))
+			ev := entry.Event
+			Expect(ev).To(HaveKeyWithValue("packet_type", "handshake"))
+			Expect(ev).To(HaveKeyWithValue("trigger", "keys_unavailable"))
+		})
+
 		It("records metrics updates", func() {
 			now := time.Now()
 			rttStats := congestion.NewRTTStats()
