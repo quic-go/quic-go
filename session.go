@@ -1113,7 +1113,6 @@ func (s *session) closeForRecreating() protocol.PacketNumber {
 func (s *session) closeRemote(e error) {
 	s.closeOnce.Do(func() {
 		s.logger.Errorf("Peer closed session with error: %s", e)
-		s.logger.Debugf("sending to close chan")
 		s.closeChan <- closeError{err: e, immediate: true, remote: true}
 	})
 }
