@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"crypto/md5"
 	"errors"
 	"flag"
@@ -215,7 +216,13 @@ func main() {
 				log.Fatal(err)
 			}
 			log.Printf("Creating qlog file %s.\n", filename)
-			return f
+			return struct {
+				io.Writer
+				io.Closer
+			}{
+				bufio.NewWriter(f),
+				f,
+			}
 		}
 	}
 

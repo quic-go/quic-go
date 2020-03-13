@@ -1,6 +1,7 @@
 package utils
 
 import (
+	"bufio"
 	"fmt"
 	"io"
 	"log"
@@ -38,6 +39,12 @@ func GetQLOGWriter() (func(connID []byte) io.WriteCloser, error) {
 		if err != nil {
 			log.Fatalf("Failed to create qlog file %s: %s", path, err.Error())
 		}
-		return f
+		return struct {
+			io.Writer
+			io.Closer
+		}{
+			bufio.NewWriter(f),
+			f,
+		}
 	}, nil
 }
