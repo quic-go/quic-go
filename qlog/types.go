@@ -6,6 +6,24 @@ import (
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 )
 
+type owner uint8
+
+const (
+	ownerLocal owner = iota
+	ownerRemote
+)
+
+func (o owner) String() string {
+	switch o {
+	case ownerLocal:
+		return "local"
+	case ownerRemote:
+		return "remote"
+	default:
+		panic("unknown owner")
+	}
+}
+
 type versionNumber protocol.VersionNumber
 
 func (v versionNumber) String() string {

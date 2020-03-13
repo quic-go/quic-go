@@ -16,6 +16,8 @@ import (
 type Tracer interface {
 	Export() error
 	StartedConnection(t time.Time, local, remote net.Addr, version protocol.VersionNumber, srcConnID, destConnID protocol.ConnectionID)
+	SentTransportParameters(time.Time, *wire.TransportParameters)
+	ReceivedTransportParameters(time.Time, *wire.TransportParameters)
 	SentPacket(t time.Time, hdr *wire.ExtendedHeader, packetSize protocol.ByteCount, ack *wire.AckFrame, frames []wire.Frame)
 	ReceivedRetry(time.Time, *wire.Header)
 	ReceivedPacket(t time.Time, hdr *wire.ExtendedHeader, packetSize protocol.ByteCount, frames []wire.Frame)
@@ -85,6 +87,37 @@ func (t *tracer) StartedConnection(time time.Time, local, remote net.Addr, versi
 			Version:          version,
 			SrcConnectionID:  srcConnID,
 			DestConnectionID: destConnID,
+		},
+	})
+}
+
+func (t *tracer) SentTransportParameters(time time.Time, tp *wire.TransportParameters) {
+	t.recordTransportParameters(time, ownerLocal, tp)
+}
+
+func (t *tracer) ReceivedTransportParameters(time time.Time, tp *wire.TransportParameters) {
+	t.recordTransportParameters(time, ownerRemote, tp)
+}
+
+func (t *tracer) recordTransportParameters(time time.Time, owner owner, tp *wire.TransportParameters) {
+	t.events = append(t.events, event{
+		Time: time,
+		eventDetails: eventTransportParameters{
+			Owner:                          owner,
+			OriginalConnectionID:           tp.OriginalConnectionID,
+			StatelessResetToken:            tp.StatelessResetToken,
+			DisableActiveMigration:         tp.DisableActiveMigration,
+			MaxIdleTimeout:                 tp.MaxIdleTimeout,
+			MaxPacketSize:                  tp.MaxPacketSize,
+			AckDelayExponent:               tp.AckDelayExponent,
+			MaxAckDelay:                    tp.MaxAckDelay,
+			ActiveConnectionIDLimit:        tp.ActiveConnectionIDLimit,
+			InitialMaxData:                 tp.InitialMaxData,
+			InitialMaxStreamDataBidiLocal:  tp.InitialMaxStreamDataBidiLocal,
+			InitialMaxStreamDataBidiRemote: tp.InitialMaxStreamDataBidiRemote,
+			InitialMaxStreamDataUni:        tp.InitialMaxStreamDataUni,
+			InitialMaxStreamsBidi:          int64(tp.MaxBidiStreamNum),
+			InitialMaxStreamsUni:           int64(tp.MaxUniStreamNum),
 		},
 	})
 }
