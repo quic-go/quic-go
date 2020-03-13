@@ -1167,6 +1167,9 @@ func (s *session) dropEncryptionLevel(encLevel protocol.EncryptionLevel) {
 	}
 	s.sentPacketHandler.DropPackets(encLevel)
 	s.receivedPacketHandler.DropPackets(encLevel)
+	if s.qlogger != nil {
+		s.qlogger.DroppedEncryptionLevel(time.Now(), encLevel)
+	}
 }
 
 func (s *session) processTransportParameters(params *handshake.TransportParameters) {

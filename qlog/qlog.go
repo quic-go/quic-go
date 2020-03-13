@@ -25,6 +25,7 @@ type Tracer interface {
 	UpdatedPTOCount(time.Time, uint32)
 	UpdatedKeyFromTLS(time.Time, protocol.EncryptionLevel, protocol.Perspective)
 	UpdatedKey(t time.Time, generation protocol.KeyPhase, remote bool)
+	DroppedEncryptionLevel(time.Time, protocol.EncryptionLevel)
 }
 
 type tracer struct {
@@ -207,6 +208,21 @@ func (t *tracer) UpdatedKey(time time.Time, generation protocol.KeyPhase, remote
 			Trigger:    trigger,
 			KeyType:    keyTypeServer1RTT,
 			Generation: generation,
+		},
+	})
+}
+
+func (t *tracer) DroppedEncryptionLevel(time time.Time, encLevel protocol.EncryptionLevel) {
+	t.events = append(t.events, event{
+		Time: time,
+		eventDetails: eventKeyRetired{
+			KeyType: encLevelToKeyType(encLevel, protocol.PerspectiveServer),
+		},
+	})
+	t.events = append(t.events, event{
+		Time: time,
+		eventDetails: eventKeyRetired{
+			KeyType: encLevelToKeyType(encLevel, protocol.PerspectiveClient),
 		},
 	})
 }
