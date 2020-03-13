@@ -248,6 +248,7 @@ type Config struct {
 	// GetLogWriter is used to pass in a writer for the qlog.
 	// If it is nil, no qlog will be collected and exported.
 	// If it returns nil, no qlog will be collected and exported for the respective connection.
+	// It is recommended to use a buffered writer here.
 	GetLogWriter func(connectionID []byte) io.WriteCloser
 }
 
