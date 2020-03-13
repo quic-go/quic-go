@@ -124,9 +124,9 @@ func (ars ackRanges) IsNil() bool { return false }
 type ackRange wire.AckRange
 
 func (ar ackRange) MarshalJSONArray(enc *gojay.Encoder) {
-	enc.AddString(toString(int64(ar.Smallest)))
+	enc.AddInt64(int64(ar.Smallest))
 	if ar.Smallest != ar.Largest {
-		enc.AddString(toString(int64(ar.Largest)))
+		enc.AddInt64(int64(ar.Largest))
 	}
 }
 
@@ -134,28 +134,26 @@ func (ar ackRange) IsNil() bool { return false }
 
 func marshalAckFrame(enc *gojay.Encoder, f *wire.AckFrame) {
 	enc.StringKey("frame_type", "ack")
-	if f.DelayTime != 0 {
-		enc.StringKey("ack_delay", toString(f.DelayTime.Milliseconds()))
-	}
+	enc.FloatKeyOmitEmpty("ack_delay", milliseconds(f.DelayTime))
 	enc.ArrayKey("acked_ranges", ackRanges(f.AckRanges))
 }
 
 func marshalResetStreamFrame(enc *gojay.Encoder, f *wire.ResetStreamFrame) {
 	enc.StringKey("frame_type", "reset_stream")
-	enc.StringKey("stream_id", toString(int64(f.StreamID)))
+	enc.Int64Key("stream_id", int64(f.StreamID))
 	enc.Int64Key("error_code", int64(f.ErrorCode))
-	enc.StringKey("final_size", toString(int64(f.ByteOffset)))
+	enc.Int64Key("final_size", int64(f.ByteOffset))
 }
 
 func marshalStopSendingFrame(enc *gojay.Encoder, f *wire.StopSendingFrame) {
 	enc.StringKey("frame_type", "stop_sending")
-	enc.StringKey("stream_id", toString(int64(f.StreamID)))
+	enc.Int64Key("stream_id", int64(f.StreamID))
 	enc.Int64Key("error_code", int64(f.ErrorCode))
 }
 
 func marshalCryptoFrame(enc *gojay.Encoder, f *cryptoFrame) {
 	enc.StringKey("frame_type", "crypto")
-	enc.StringKey("offset", toString(int64(f.Offset)))
+	enc.Int64Key("offset", int64(f.Offset))
 	enc.Int64Key("length", int64(f.Length))
 }
 
@@ -167,50 +165,50 @@ func marshalNewTokenFrame(enc *gojay.Encoder, f *wire.NewTokenFrame) {
 
 func marshalStreamFrame(enc *gojay.Encoder, f *streamFrame) {
 	enc.StringKey("frame_type", "stream")
-	enc.StringKey("stream_id", toString(int64(f.StreamID)))
-	enc.StringKey("offset", toString(int64(f.Offset)))
+	enc.Int64Key("stream_id", int64(f.StreamID))
+	enc.Int64Key("offset", int64(f.Offset))
 	enc.IntKey("length", int(f.Length))
 	enc.BoolKeyOmitEmpty("fin", f.FinBit)
 }
 
 func marshalMaxDataFrame(enc *gojay.Encoder, f *wire.MaxDataFrame) {
 	enc.StringKey("frame_type", "max_data")
-	enc.StringKey("maximum", toString(int64(f.ByteOffset)))
+	enc.Int64Key("maximum", int64(f.ByteOffset))
 }
 
 func marshalMaxStreamDataFrame(enc *gojay.Encoder, f *wire.MaxStreamDataFrame) {
 	enc.StringKey("frame_type", "max_stream_data")
-	enc.StringKey("stream_id", toString(int64(f.StreamID)))
-	enc.StringKey("maximum", toString(int64(f.ByteOffset)))
+	enc.Int64Key("stream_id", int64(f.StreamID))
+	enc.Int64Key("maximum", int64(f.ByteOffset))
 }
 
 func marshalMaxStreamsFrame(enc *gojay.Encoder, f *wire.MaxStreamsFrame) {
 	enc.StringKey("frame_type", "max_streams")
 	enc.StringKey("stream_type", streamType(f.Type).String())
-	enc.StringKey("maximum", toString(int64(f.MaxStreamNum)))
+	enc.Int64Key("maximum", int64(f.MaxStreamNum))
 }
 
 func marshalDataBlockedFrame(enc *gojay.Encoder, f *wire.DataBlockedFrame) {
 	enc.StringKey("frame_type", "data_blocked")
-	enc.StringKey("limit", toString(int64(f.DataLimit)))
+	enc.Int64Key("limit", int64(f.DataLimit))
 }
 
 func marshalStreamDataBlockedFrame(enc *gojay.Encoder, f *wire.StreamDataBlockedFrame) {
 	enc.StringKey("frame_type", "stream_data_blocked")
-	enc.StringKey("stream_id", toString(int64(f.StreamID)))
-	enc.StringKey("limit", toString(int64(f.DataLimit)))
+	enc.Int64Key("stream_id", int64(f.StreamID))
+	enc.Int64Key("limit", int64(f.DataLimit))
 }
 
 func marshalStreamsBlockedFrame(enc *gojay.Encoder, f *wire.StreamsBlockedFrame) {
 	enc.StringKey("frame_type", "streams_blocked")
 	enc.StringKey("stream_type", streamType(f.Type).String())
-	enc.StringKey("limit", toString(int64(f.StreamLimit)))
+	enc.Int64Key("limit", int64(f.StreamLimit))
 }
 
 func marshalNewConnectionIDFrame(enc *gojay.Encoder, f *wire.NewConnectionIDFrame) {
 	enc.StringKey("frame_type", "new_connection_id")
-	enc.StringKey("sequence_number", toString(int64(f.SequenceNumber)))
-	enc.StringKey("retire_prior_to", toString(int64(f.RetirePriorTo)))
+	enc.Int64Key("sequence_number", int64(f.SequenceNumber))
+	enc.Int64Key("retire_prior_to", int64(f.RetirePriorTo))
 	enc.IntKey("length", f.ConnectionID.Len())
 	enc.StringKey("connection_id", connectionID(f.ConnectionID).String())
 	enc.StringKey("reset_token", fmt.Sprintf("%x", f.StatelessResetToken))
@@ -218,7 +216,7 @@ func marshalNewConnectionIDFrame(enc *gojay.Encoder, f *wire.NewConnectionIDFram
 
 func marshalRetireConnectionIDFrame(enc *gojay.Encoder, f *wire.RetireConnectionIDFrame) {
 	enc.StringKey("frame_type", "retire_connection_id")
-	enc.StringKey("sequence_number", toString(int64(f.SequenceNumber)))
+	enc.Int64Key("sequence_number", int64(f.SequenceNumber))
 }
 
 func marshalPathChallengeFrame(enc *gojay.Encoder, f *wire.PathChallengeFrame) {

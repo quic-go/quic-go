@@ -2,14 +2,9 @@ package qlog
 
 import (
 	"fmt"
-	"strconv"
 
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 )
-
-func toString(i int64) string {
-	return strconv.FormatInt(i, 10)
-}
 
 type versionNumber protocol.VersionNumber
 

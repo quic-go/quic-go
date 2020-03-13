@@ -71,18 +71,18 @@ type packetHeader struct {
 }
 
 func (h packetHeader) MarshalJSONObject(enc *gojay.Encoder) {
-	enc.StringKey("packet_number", toString(int64(h.PacketNumber)))
+	enc.Int64Key("packet_number", int64(h.PacketNumber))
 	enc.Int64KeyOmitEmpty("payload_length", int64(h.PayloadLength))
 	enc.Int64KeyOmitEmpty("packet_size", int64(h.PacketSize))
 	if h.Version != 0 {
 		enc.StringKey("version", versionNumber(h.Version).String())
 	}
 	if h.SrcConnectionID.Len() > 0 {
-		enc.StringKey("scil", toString(int64(h.SrcConnectionID.Len())))
+		enc.IntKey("scil", h.SrcConnectionID.Len())
 		enc.StringKey("scid", connectionID(h.SrcConnectionID).String())
 	}
 	if h.DestConnectionID.Len() > 0 {
-		enc.StringKey("dcil", toString(int64(h.DestConnectionID.Len())))
+		enc.IntKey("dcil", h.DestConnectionID.Len())
 		enc.StringKey("dcid", connectionID(h.DestConnectionID).String())
 	}
 }

@@ -77,7 +77,7 @@ var _ = Describe("Packet Header", func() {
 			check(
 				&wire.ExtendedHeader{PacketNumber: 42},
 				map[string]interface{}{
-					"packet_number": "42",
+					"packet_number": 42,
 				},
 			)
 		})
@@ -89,7 +89,7 @@ var _ = Describe("Packet Header", func() {
 					Header:       wire.Header{Length: 123},
 				},
 				map[string]interface{}{
-					"packet_number":  "42",
+					"packet_number":  42,
 					"payload_length": 123,
 				},
 			)
@@ -104,8 +104,8 @@ var _ = Describe("Packet Header", func() {
 					},
 				},
 				map[string]interface{}{
-					"packet_number": "42",
-					"scil":          "16",
+					"packet_number": 42,
+					"scil":          16,
 					"scid":          "00112233445566778899aabbccddeeff",
 				},
 			)
@@ -118,8 +118,8 @@ var _ = Describe("Packet Header", func() {
 					Header:       wire.Header{DestConnectionID: protocol.ConnectionID{0xde, 0xad, 0xbe, 0xef}},
 				},
 				map[string]interface{}{
-					"packet_number": "42",
-					"dcil":          "4",
+					"packet_number": 42,
+					"dcil":          4,
 					"dcid":          "deadbeef",
 				},
 			)
@@ -132,7 +132,7 @@ var _ = Describe("Packet Header", func() {
 					Header:       wire.Header{Version: protocol.VersionNumber(0xdecafbad)},
 				},
 				map[string]interface{}{
-					"packet_number": "42",
+					"packet_number": 42,
 					"version":       "decafbad",
 				},
 			)
