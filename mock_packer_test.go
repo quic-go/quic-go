@@ -8,9 +8,9 @@ import (
 	reflect "reflect"
 
 	gomock "github.com/golang/mock/gomock"
-	handshake "github.com/lucas-clemente/quic-go/internal/handshake"
 	protocol "github.com/lucas-clemente/quic-go/internal/protocol"
 	qerr "github.com/lucas-clemente/quic-go/internal/qerr"
+	wire "github.com/lucas-clemente/quic-go/internal/wire"
 )
 
 // MockPacker is a mock of Packer interface
@@ -37,7 +37,7 @@ func (m *MockPacker) EXPECT() *MockPackerMockRecorder {
 }
 
 // HandleTransportParameters mocks base method
-func (m *MockPacker) HandleTransportParameters(arg0 *handshake.TransportParameters) {
+func (m *MockPacker) HandleTransportParameters(arg0 *wire.TransportParameters) {
 	m.ctrl.T.Helper()
 	m.ctrl.Call(m, "HandleTransportParameters", arg0)
 }

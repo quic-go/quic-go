@@ -14,6 +14,7 @@ import (
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/internal/qerr"
 	"github.com/lucas-clemente/quic-go/internal/utils"
+	"github.com/lucas-clemente/quic-go/internal/wire"
 	"github.com/lucas-clemente/quic-go/qlog"
 	"github.com/marten-seemann/qtls"
 )
@@ -64,8 +65,8 @@ type cryptoSetup struct {
 
 	messageChan chan []byte
 
-	ourParams  *TransportParameters
-	peerParams *TransportParameters
+	ourParams  *wire.TransportParameters
+	peerParams *wire.TransportParameters
 	paramsChan <-chan []byte
 
 	runner handshakeRunner
@@ -76,9 +77,9 @@ type cryptoSetup struct {
 	// is closed when Close() is called
 	closeChan chan struct{}
 
-	zeroRTTParameters      *TransportParameters
+	zeroRTTParameters      *wire.TransportParameters
 	clientHelloWritten     bool
-	clientHelloWrittenChan chan *TransportParameters
+	clientHelloWrittenChan chan *wire.TransportParameters
 
 	receivedWriteKey chan struct{}
 	receivedReadKey  chan struct{}
@@ -129,14 +130,14 @@ func NewCryptoSetupClient(
 	connID protocol.ConnectionID,
 	localAddr net.Addr,
 	remoteAddr net.Addr,
-	tp *TransportParameters,
+	tp *wire.TransportParameters,
 	runner handshakeRunner,
 	tlsConf *tls.Config,
 	enable0RTT bool,
 	rttStats *congestion.RTTStats,
 	qlogger qlog.Tracer,
 	logger utils.Logger,
-) (CryptoSetup, <-chan *TransportParameters /* ClientHello written. Receive nil for non-0-RTT */) {
+) (CryptoSetup, <-chan *wire.TransportParameters /* ClientHello written. Receive nil for non-0-RTT */) {
 	cs, clientHelloWritten := newCryptoSetup(
 		initialStream,
 		handshakeStream,
@@ -161,7 +162,7 @@ func NewCryptoSetupServer(
 	connID protocol.ConnectionID,
 	localAddr net.Addr,
 	remoteAddr net.Addr,
-	tp *TransportParameters,
+	tp *wire.TransportParameters,
 	runner handshakeRunner,
 	tlsConf *tls.Config,
 	enable0RTT bool,
@@ -190,7 +191,7 @@ func newCryptoSetup(
 	initialStream io.Writer,
 	handshakeStream io.Writer,
 	connID protocol.ConnectionID,
-	tp *TransportParameters,
+	tp *wire.TransportParameters,
 	runner handshakeRunner,
 	tlsConf *tls.Config,
 	enable0RTT bool,
@@ -198,7 +199,7 @@ func newCryptoSetup(
 	qlogger qlog.Tracer,
 	logger utils.Logger,
 	perspective protocol.Perspective,
-) (*cryptoSetup, <-chan *TransportParameters /* ClientHello written. Receive nil for non-0-RTT */) {
+) (*cryptoSetup, <-chan *wire.TransportParameters /* ClientHello written. Receive nil for non-0-RTT */) {
 	initialSealer, initialOpener := NewInitialAEAD(connID, perspective)
 	if qlogger != nil {
 		now := time.Now()
@@ -223,7 +224,7 @@ func newCryptoSetup(
 		perspective:            perspective,
 		handshakeDone:          make(chan struct{}),
 		alertChan:              make(chan uint8),
-		clientHelloWrittenChan: make(chan *TransportParameters, 1),
+		clientHelloWrittenChan: make(chan *wire.TransportParameters, 1),
 		messageChan:            make(chan []byte, 100),
 		receivedReadKey:        make(chan struct{}),
 		receivedWriteKey:       make(chan struct{}),
@@ -448,7 +449,7 @@ func (h *cryptoSetup) handleMessageForClient(msgType messageType) bool {
 }
 
 func (h *cryptoSetup) handleTransportParameters(data []byte) {
-	var tp TransportParameters
+	var tp wire.TransportParameters
 	if err := tp.Unmarshal(data, h.perspective.Opposite()); err != nil {
 		h.runner.OnError(qerr.Error(qerr.TransportParameterError, err.Error()))
 	}
@@ -472,17 +473,9 @@ func (h *cryptoSetup) handlePeerParamsFromSessionState(data []byte) {
 	h.zeroRTTParameters = tp
 }
 
-func (h *cryptoSetup) handlePeerParamsFromSessionStateImpl(data []byte) (*TransportParameters, error) {
-	r := bytes.NewReader(data)
-	version, err := utils.ReadVarInt(r)
-	if err != nil {
-		return nil, err
-	}
-	if version != transportParameterMarshalingVersion {
-		return nil, fmt.Errorf("unknown transport parameter marshaling version: %d", version)
-	}
-	var tp TransportParameters
-	if err := tp.Unmarshal(data[len(data)-r.Len():], protocol.PerspectiveServer); err != nil {
+func (h *cryptoSetup) handlePeerParamsFromSessionStateImpl(data []byte) (*wire.TransportParameters, error) {
+	var tp wire.TransportParameters
+	if err := tp.UnmarshalFromSessionTicket(data); err != nil {
 		return nil, err
 	}
 	return &tp, nil

@@ -11,13 +11,15 @@ import (
 	"math/big"
 	"time"
 
-	gomock "github.com/golang/mock/gomock"
 	"github.com/lucas-clemente/quic-go/internal/congestion"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/internal/qerr"
 	"github.com/lucas-clemente/quic-go/internal/testdata"
 	"github.com/lucas-clemente/quic-go/internal/utils"
+	"github.com/lucas-clemente/quic-go/internal/wire"
 	"github.com/marten-seemann/qtls"
+
+	"github.com/golang/mock/gomock"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -92,7 +94,7 @@ var _ = Describe("Crypto Setup TLS", func() {
 			protocol.ConnectionID{},
 			nil,
 			nil,
-			&TransportParameters{},
+			&wire.TransportParameters{},
 			NewMockHandshakeRunner(mockCtrl),
 			tlsConf,
 			false,
@@ -125,7 +127,7 @@ var _ = Describe("Crypto Setup TLS", func() {
 			protocol.ConnectionID{},
 			nil,
 			nil,
-			&TransportParameters{},
+			&wire.TransportParameters{},
 			runner,
 			testdata.GetTLSConfig(),
 			false,
@@ -164,7 +166,7 @@ var _ = Describe("Crypto Setup TLS", func() {
 			protocol.ConnectionID{},
 			nil,
 			nil,
-			&TransportParameters{},
+			&wire.TransportParameters{},
 			runner,
 			testdata.GetTLSConfig(),
 			false,
@@ -206,7 +208,7 @@ var _ = Describe("Crypto Setup TLS", func() {
 			protocol.ConnectionID{},
 			nil,
 			nil,
-			&TransportParameters{},
+			&wire.TransportParameters{},
 			runner,
 			serverConf,
 			false,
@@ -241,7 +243,7 @@ var _ = Describe("Crypto Setup TLS", func() {
 			protocol.ConnectionID{},
 			nil,
 			nil,
-			&TransportParameters{},
+			&wire.TransportParameters{},
 			NewMockHandshakeRunner(mockCtrl),
 			serverConf,
 			false,
@@ -336,7 +338,7 @@ var _ = Describe("Crypto Setup TLS", func() {
 				protocol.ConnectionID{},
 				nil,
 				nil,
-				&TransportParameters{},
+				&wire.TransportParameters{},
 				cRunner,
 				clientConf,
 				enable0RTT,
@@ -359,7 +361,7 @@ var _ = Describe("Crypto Setup TLS", func() {
 				protocol.ConnectionID{},
 				nil,
 				nil,
-				&TransportParameters{StatelessResetToken: &token},
+				&wire.TransportParameters{StatelessResetToken: &token},
 				sRunner,
 				serverConf,
 				enable0RTT,
@@ -413,7 +415,7 @@ var _ = Describe("Crypto Setup TLS", func() {
 				protocol.ConnectionID{},
 				nil,
 				nil,
-				&TransportParameters{},
+				&wire.TransportParameters{},
 				runner,
 				&tls.Config{InsecureSkipVerify: true},
 				false,
@@ -443,11 +445,11 @@ var _ = Describe("Crypto Setup TLS", func() {
 		})
 
 		It("receives transport parameters", func() {
-			var cTransportParametersRcvd, sTransportParametersRcvd *TransportParameters
+			var cTransportParametersRcvd, sTransportParametersRcvd *wire.TransportParameters
 			cChunkChan, cInitialStream, cHandshakeStream := initStreams()
-			cTransportParameters := &TransportParameters{MaxIdleTimeout: 0x42 * time.Second}
+			cTransportParameters := &wire.TransportParameters{MaxIdleTimeout: 0x42 * time.Second}
 			cRunner := NewMockHandshakeRunner(mockCtrl)
-			cRunner.EXPECT().OnReceivedParams(gomock.Any()).Do(func(tp *TransportParameters) { sTransportParametersRcvd = tp })
+			cRunner.EXPECT().OnReceivedParams(gomock.Any()).Do(func(tp *wire.TransportParameters) { sTransportParametersRcvd = tp })
 			cRunner.EXPECT().OnHandshakeComplete()
 			client, _ := NewCryptoSetupClient(
 				cInitialStream,
@@ -467,9 +469,9 @@ var _ = Describe("Crypto Setup TLS", func() {
 			sChunkChan, sInitialStream, sHandshakeStream := initStreams()
 			var token [16]byte
 			sRunner := NewMockHandshakeRunner(mockCtrl)
-			sRunner.EXPECT().OnReceivedParams(gomock.Any()).Do(func(tp *TransportParameters) { cTransportParametersRcvd = tp })
+			sRunner.EXPECT().OnReceivedParams(gomock.Any()).Do(func(tp *wire.TransportParameters) { cTransportParametersRcvd = tp })
 			sRunner.EXPECT().OnHandshakeComplete()
-			sTransportParameters := &TransportParameters{
+			sTransportParameters := &wire.TransportParameters{
 				MaxIdleTimeout:      0x1337 * time.Second,
 				StatelessResetToken: &token,
 			}
@@ -512,7 +514,7 @@ var _ = Describe("Crypto Setup TLS", func() {
 					protocol.ConnectionID{},
 					nil,
 					nil,
-					&TransportParameters{},
+					&wire.TransportParameters{},
 					cRunner,
 					clientConf,
 					false,
@@ -531,7 +533,7 @@ var _ = Describe("Crypto Setup TLS", func() {
 					protocol.ConnectionID{},
 					nil,
 					nil,
-					&TransportParameters{},
+					&wire.TransportParameters{},
 					sRunner,
 					serverConf,
 					false,
@@ -571,7 +573,7 @@ var _ = Describe("Crypto Setup TLS", func() {
 					protocol.ConnectionID{},
 					nil,
 					nil,
-					&TransportParameters{},
+					&wire.TransportParameters{},
 					cRunner,
 					clientConf,
 					false,
@@ -590,7 +592,7 @@ var _ = Describe("Crypto Setup TLS", func() {
 					protocol.ConnectionID{},
 					nil,
 					nil,
-					&TransportParameters{},
+					&wire.TransportParameters{},
 					sRunner,
 					serverConf,
 					false,
@@ -702,7 +704,7 @@ var _ = Describe("Crypto Setup TLS", func() {
 					protocol.ConnectionID{},
 					nil,
 					nil,
-					&TransportParameters{},
+					&wire.TransportParameters{},
 					cRunner,
 					clientConf,
 					true,
@@ -721,7 +723,7 @@ var _ = Describe("Crypto Setup TLS", func() {
 					protocol.ConnectionID{},
 					nil,
 					nil,
-					&TransportParameters{},
+					&wire.TransportParameters{},
 					sRunner,
 					serverConf,
 					true,

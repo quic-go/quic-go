@@ -1430,7 +1430,7 @@ var _ = Describe("Session", func() {
 				cryptoSetup.EXPECT().RunHandshake().MaxTimes(1)
 				sess.run()
 			}()
-			params := &handshake.TransportParameters{
+			params := &wire.TransportParameters{
 				MaxIdleTimeout:                90 * time.Second,
 				InitialMaxStreamDataBidiLocal: 0x5000,
 				InitialMaxData:                0x5000,
@@ -1465,7 +1465,7 @@ var _ = Describe("Session", func() {
 		setRemoteIdleTimeout := func(t time.Duration) {
 			streamManager.EXPECT().UpdateLimits(gomock.Any())
 			packer.EXPECT().HandleTransportParameters(gomock.Any())
-			sess.processTransportParameters(&handshake.TransportParameters{MaxIdleTimeout: t})
+			sess.processTransportParameters(&wire.TransportParameters{MaxIdleTimeout: t})
 		}
 
 		runSession := func() {
@@ -1956,8 +1956,8 @@ var _ = Describe("Client Session", func() {
 		})
 
 		It("uses the preferred_address connection ID", func() {
-			params := &handshake.TransportParameters{
-				PreferredAddress: &handshake.PreferredAddress{
+			params := &wire.TransportParameters{
+				PreferredAddress: &wire.PreferredAddress{
 					IPv4:                net.IPv4(127, 0, 0, 1),
 					IPv6:                net.IP{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16},
 					ConnectionID:        protocol.ConnectionID{1, 2, 3, 4},
@@ -1979,7 +1979,7 @@ var _ = Describe("Client Session", func() {
 
 		It("uses the minimum of the peers' idle timeouts", func() {
 			sess.config.MaxIdleTimeout = 19 * time.Second
-			params := &handshake.TransportParameters{
+			params := &wire.TransportParameters{
 				MaxIdleTimeout: 18 * time.Second,
 			}
 			packer.EXPECT().HandleTransportParameters(gomock.Any())
@@ -1989,7 +1989,7 @@ var _ = Describe("Client Session", func() {
 
 		It("errors if the TransportParameters contain an original_connection_id, although no Retry was performed", func() {
 			expectClose()
-			sess.processTransportParameters(&handshake.TransportParameters{
+			sess.processTransportParameters(&wire.TransportParameters{
 				OriginalConnectionID: protocol.ConnectionID{0xde, 0xca, 0xfb, 0xad},
 				StatelessResetToken:  &[16]byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16},
 			})
@@ -1999,7 +1999,7 @@ var _ = Describe("Client Session", func() {
 		It("errors if the TransportParameters contain a wrong original_connection_id", func() {
 			sess.origDestConnID = protocol.ConnectionID{0xde, 0xad, 0xbe, 0xef}
 			expectClose()
-			sess.processTransportParameters(&handshake.TransportParameters{
+			sess.processTransportParameters(&wire.TransportParameters{
 				OriginalConnectionID: protocol.ConnectionID{0xde, 0xca, 0xfb, 0xad},
 				StatelessResetToken:  &[16]byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16},
 			})

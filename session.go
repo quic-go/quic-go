@@ -43,7 +43,7 @@ type streamManager interface {
 	AcceptStream(context.Context) (Stream, error)
 	AcceptUniStream(context.Context) (ReceiveStream, error)
 	DeleteStream(protocol.StreamID) error
-	UpdateLimits(*handshake.TransportParameters) error
+	UpdateLimits(*wire.TransportParameters) error
 	HandleMaxStreamsFrame(*wire.MaxStreamsFrame) error
 	CloseWithError(error)
 }
@@ -87,16 +87,16 @@ type sessionRunner interface {
 }
 
 type handshakeRunner struct {
-	onReceivedParams    func(*handshake.TransportParameters)
+	onReceivedParams    func(*wire.TransportParameters)
 	onError             func(error)
 	dropKeys            func(protocol.EncryptionLevel)
 	onHandshakeComplete func()
 }
 
-func (r *handshakeRunner) OnReceivedParams(tp *handshake.TransportParameters) { r.onReceivedParams(tp) }
-func (r *handshakeRunner) OnError(e error)                                    { r.onError(e) }
-func (r *handshakeRunner) DropKeys(el protocol.EncryptionLevel)               { r.dropKeys(el) }
-func (r *handshakeRunner) OnHandshakeComplete()                               { r.onHandshakeComplete() }
+func (r *handshakeRunner) OnReceivedParams(tp *wire.TransportParameters) { r.onReceivedParams(tp) }
+func (r *handshakeRunner) OnError(e error)                               { r.onError(e) }
+func (r *handshakeRunner) DropKeys(el protocol.EncryptionLevel)          { r.dropKeys(el) }
+func (r *handshakeRunner) OnHandshakeComplete()                          { r.onHandshakeComplete() }
 
 type closeError struct {
 	err       error
@@ -160,7 +160,7 @@ type session struct {
 
 	undecryptablePackets []*receivedPacket
 
-	clientHelloWritten    <-chan *handshake.TransportParameters
+	clientHelloWritten    <-chan *wire.TransportParameters
 	earlySessionReadyChan chan struct{}
 	handshakeCompleteChan chan struct{} // is closed when the handshake completes
 	handshakeComplete     bool
@@ -178,7 +178,7 @@ type session struct {
 	// pacingDeadline is the time when the next packet should be sent
 	pacingDeadline time.Time
 
-	peerParams *handshake.TransportParameters
+	peerParams *wire.TransportParameters
 
 	timer *utils.Timer
 	// keepAlivePingSent stores whether a keep alive PING is in flight.
@@ -260,7 +260,7 @@ var newSession = func(
 	)
 	initialStream := newCryptoStream()
 	handshakeStream := newCryptoStream()
-	params := &handshake.TransportParameters{
+	params := &wire.TransportParameters{
 		InitialMaxStreamDataBidiLocal:  protocol.InitialMaxStreamData,
 		InitialMaxStreamDataBidiRemote: protocol.InitialMaxStreamData,
 		InitialMaxStreamDataUni:        protocol.InitialMaxStreamData,
@@ -374,7 +374,7 @@ var newClientSession = func(
 	)
 	initialStream := newCryptoStream()
 	handshakeStream := newCryptoStream()
-	params := &handshake.TransportParameters{
+	params := &wire.TransportParameters{
 		InitialMaxStreamDataBidiRemote: protocol.InitialMaxStreamData,
 		InitialMaxStreamDataBidiLocal:  protocol.InitialMaxStreamData,
 		InitialMaxStreamDataUni:        protocol.InitialMaxStreamData,
@@ -1169,7 +1169,7 @@ func (s *session) dropEncryptionLevel(encLevel protocol.EncryptionLevel) {
 	s.receivedPacketHandler.DropPackets(encLevel)
 }
 
-func (s *session) processTransportParameters(params *handshake.TransportParameters) {
+func (s *session) processTransportParameters(params *wire.TransportParameters) {
 	// check the Retry token
 	if s.perspective == protocol.PerspectiveClient && !params.OriginalConnectionID.Equal(s.origDestConnID) {
 		s.closeLocal(qerr.Error(qerr.TransportParameterError, fmt.Sprintf("expected original_connection_id to equal %s, is %s", s.origDestConnID, params.OriginalConnectionID)))

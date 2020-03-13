@@ -7,7 +7,6 @@ import (
 	"net"
 
 	"github.com/lucas-clemente/quic-go/internal/flowcontrol"
-	"github.com/lucas-clemente/quic-go/internal/handshake"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/internal/qerr"
 	"github.com/lucas-clemente/quic-go/internal/wire"
@@ -223,7 +222,7 @@ func (m *streamsMap) HandleMaxStreamsFrame(f *wire.MaxStreamsFrame) error {
 	return nil
 }
 
-func (m *streamsMap) UpdateLimits(p *handshake.TransportParameters) error {
+func (m *streamsMap) UpdateLimits(p *wire.TransportParameters) error {
 	if p.MaxBidiStreamNum > protocol.MaxStreamCount ||
 		p.MaxUniStreamNum > protocol.MaxStreamCount {
 		return qerr.StreamLimitError
