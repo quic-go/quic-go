@@ -275,6 +275,9 @@ var newSession = func(
 		OriginalConnectionID:           origDestConnID,
 		ActiveConnectionIDLimit:        protocol.MaxActiveConnectionIDs,
 	}
+	if s.qlogger != nil {
+		s.qlogger.SentTransportParameters(time.Now(), params)
+	}
 	cs := handshake.NewCryptoSetupServer(
 		initialStream,
 		handshakeStream,
@@ -386,6 +389,9 @@ var newClientSession = func(
 		AckDelayExponent:               protocol.AckDelayExponent,
 		DisableActiveMigration:         true,
 		ActiveConnectionIDLimit:        protocol.MaxActiveConnectionIDs,
+	}
+	if s.qlogger != nil {
+		s.qlogger.SentTransportParameters(time.Now(), params)
 	}
 	cs, clientHelloWritten := handshake.NewCryptoSetupClient(
 		initialStream,
@@ -1188,7 +1194,12 @@ func (s *session) processTransportParameters(params *wire.TransportParameters) {
 		return
 	}
 
-	s.logger.Debugf("Processed Transport Parameters: %s", params)
+	if s.logger.Debug() {
+		s.logger.Debugf("Processed Transport Parameters: %s", params)
+	}
+	if s.qlogger != nil {
+		s.qlogger.ReceivedTransportParameters(time.Now(), params)
+	}
 	s.peerParams = params
 	// Our local idle timeout will always be > 0.
 	s.idleTimeout = utils.MinNonZeroDuration(s.config.MaxIdleTimeout, params.MaxIdleTimeout)

@@ -7,6 +7,11 @@ import (
 )
 
 var _ = Describe("Types", func() {
+	It("has a string representation for the owner", func() {
+		Expect(ownerLocal.String()).To(Equal("local"))
+		Expect(ownerRemote.String()).To(Equal("remote"))
+	})
+
 	It("has a string representation for the category", func() {
 		Expect(categoryConnectivity.String()).To(Equal("connectivity"))
 		Expect(categoryTransport.String()).To(Equal("transport"))

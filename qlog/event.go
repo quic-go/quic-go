@@ -1,6 +1,7 @@
 package qlog
 
 import (
+	"fmt"
 	"net"
 	"sort"
 	"time"
@@ -267,4 +268,53 @@ func (e eventKeyRetired) IsNil() bool        { return false }
 func (e eventKeyRetired) MarshalJSONObject(enc *gojay.Encoder) {
 	enc.StringKey("trigger", "tls")
 	enc.StringKey("key_type", e.KeyType.String())
+}
+
+type eventTransportParameters struct {
+	Owner owner
+
+	OriginalConnectionID    protocol.ConnectionID
+	StatelessResetToken     *[16]byte
+	DisableActiveMigration  bool
+	MaxIdleTimeout          time.Duration
+	MaxPacketSize           protocol.ByteCount
+	AckDelayExponent        uint8
+	MaxAckDelay             time.Duration
+	ActiveConnectionIDLimit uint64
+
+	InitialMaxData                 protocol.ByteCount
+	InitialMaxStreamDataBidiLocal  protocol.ByteCount
+	InitialMaxStreamDataBidiRemote protocol.ByteCount
+	InitialMaxStreamDataUni        protocol.ByteCount
+	InitialMaxStreamsBidi          int64
+	InitialMaxStreamsUni           int64
+
+	// TODO: add the preferred_address
+}
+
+func (e eventTransportParameters) Category() category { return categoryTransport }
+func (e eventTransportParameters) Name() string       { return "parameters_set" }
+func (e eventTransportParameters) IsNil() bool        { return false }
+
+func (e eventTransportParameters) MarshalJSONObject(enc *gojay.Encoder) {
+	enc.StringKey("owner", e.Owner.String())
+	if e.OriginalConnectionID != nil {
+		enc.StringKey("original_connection_id", connectionID(e.OriginalConnectionID).String())
+	}
+	if e.StatelessResetToken != nil {
+		enc.StringKey("stateless_reset_token", fmt.Sprintf("%x", e.StatelessResetToken[:]))
+	}
+	enc.BoolKey("disable_active_migration", e.DisableActiveMigration)
+	enc.FloatKeyOmitEmpty("max_idle_timeout", milliseconds(e.MaxIdleTimeout))
+	enc.Uint64KeyNullEmpty("max_packet_size", uint64(e.MaxPacketSize))
+	enc.Uint8KeyOmitEmpty("ack_delay_exponent", e.AckDelayExponent)
+	enc.FloatKeyOmitEmpty("max_ack_delay", milliseconds(e.MaxAckDelay))
+	enc.Uint64KeyOmitEmpty("active_connection_id_limit", e.ActiveConnectionIDLimit)
+
+	enc.Int64KeyOmitEmpty("initial_max_data", int64(e.InitialMaxData))
+	enc.Int64KeyOmitEmpty("initial_max_stream_data_bidi_local", int64(e.InitialMaxStreamDataBidiLocal))
+	enc.Int64KeyOmitEmpty("initial_max_stream_data_bidi_remote", int64(e.InitialMaxStreamDataBidiRemote))
+	enc.Int64KeyOmitEmpty("initial_max_stream_data_uni", int64(e.InitialMaxStreamDataUni))
+	enc.Int64KeyOmitEmpty("initial_max_streams_bidi", e.InitialMaxStreamsBidi)
+	enc.Int64KeyOmitEmpty("initial_max_streams_uni", e.InitialMaxStreamsUni)
 }
