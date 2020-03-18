@@ -3,6 +3,7 @@ package qlog
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"io"
 	"net"
 	"time"
@@ -21,6 +22,21 @@ func (nopWriteCloserImpl) Close() error { return nil }
 
 func nopWriteCloser(w io.Writer) io.WriteCloser {
 	return &nopWriteCloserImpl{Writer: w}
+}
+
+type limitedWriter struct {
+	io.WriteCloser
+	N       int
+	written int
+}
+
+func (w *limitedWriter) Write(p []byte) (int, error) {
+	if w.written+len(p) > w.N {
+		return 0, errors.New("writer full")
+	}
+	n, err := w.WriteCloser.Write(p)
+	w.written += n
+	return n, err
 }
 
 type entry struct {
@@ -67,6 +83,18 @@ var _ = Describe("Tracer", func() {
 		Expect(trace).To(HaveKey("vantage_point"))
 		vantagePoint := trace["vantage_point"].(map[string]interface{})
 		Expect(vantagePoint).To(HaveKeyWithValue("type", "server"))
+	})
+
+	It("stops writing when encountering an error", func() {
+		tracer = NewTracer(
+			&limitedWriter{WriteCloser: nopWriteCloser(buf), N: 250},
+			protocol.PerspectiveServer,
+			protocol.ConnectionID{0xde, 0xad, 0xbe, 0xef},
+		)
+		for i := uint32(0); i < 1000; i++ {
+			tracer.UpdatedPTOCount(time.Now(), i)
+		}
+		Expect(tracer.Export()).To(MatchError("writer full"))
 	})
 
 	Context("Events", func() {

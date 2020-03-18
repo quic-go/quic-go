@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"bytes"
 	"crypto/tls"
 	"crypto/x509"
@@ -61,7 +62,13 @@ func main() {
 				log.Fatal(err)
 			}
 			log.Printf("Creating qlog file %s.\n", filename)
-			return f
+			return struct {
+				io.Writer
+				io.Closer
+			}{
+				bufio.NewWriter(f),
+				f,
+			}
 		}
 	}
 	roundTripper := &http3.RoundTripper{
