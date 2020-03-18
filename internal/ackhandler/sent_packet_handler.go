@@ -164,10 +164,10 @@ func (h *sentPacketHandler) dropPackets(encLevel protocol.EncryptionLevel) {
 		panic(fmt.Sprintf("Cannot drop keys for encryption level %s", encLevel))
 	}
 	h.setLossDetectionTimer()
-	h.ptoCount = 0
-	if h.qlogger != nil {
+	if h.qlogger != nil && h.ptoCount != 0 {
 		h.qlogger.UpdatedPTOCount(time.Now(), 0)
 	}
+	h.ptoCount = 0
 	h.ptoMode = SendNone
 }
 
@@ -293,10 +293,10 @@ func (h *sentPacketHandler) ReceivedAck(ack *wire.AckFrame, encLevel protocol.En
 		return err
 	}
 
-	h.ptoCount = 0
-	if h.qlogger != nil {
+	if h.qlogger != nil && h.ptoCount != 0 {
 		h.qlogger.UpdatedPTOCount(rcvTime, 0)
 	}
+	h.ptoCount = 0
 	h.numProbesToSend = 0
 
 	h.setLossDetectionTimer()
