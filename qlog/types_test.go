@@ -21,6 +21,7 @@ var _ = Describe("Types", func() {
 		Expect(PacketType1RTT.String()).To(Equal("1RTT"))
 		Expect(PacketTypeRetry.String()).To(Equal("retry"))
 		Expect(PacketTypeVersionNegotiation.String()).To(Equal("version_negotiation"))
+		Expect(PacketTypeNotDetermined.String()).To(BeEmpty())
 	})
 
 	It("has a string representation for the key type", func() {
@@ -38,5 +39,15 @@ var _ = Describe("Types", func() {
 		Expect(keyUpdateTLS.String()).To(Equal("tls"))
 		Expect(keyUpdateRemote.String()).To(Equal("remote_update"))
 		Expect(keyUpdateLocal.String()).To(Equal("local_update"))
+	})
+
+	It("has a string representation for the packet drop reason", func() {
+		Expect(PacketDropKeyUnavailable.String()).To(Equal("key_unavailable"))
+		Expect(PacketDropUnknownConnectionID.String()).To(Equal("unknown_connection_id"))
+		Expect(PacketDropHeaderParseError.String()).To(Equal("header_parse_error"))
+		Expect(PacketDropPayloadDecryptError.String()).To(Equal("payload_decrypt_error"))
+		Expect(PacketDropProtocolViolation.String()).To(Equal("protocol_violation"))
+		Expect(PacketDropDOSPrevention.String()).To(Equal("dos_prevention"))
+		Expect(PacketDropUnsupportedVersion.String()).To(Equal("unsupported_version"))
 	})
 })

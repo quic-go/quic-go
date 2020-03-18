@@ -255,6 +255,19 @@ var _ = Describe("Tracer", func() {
 			Expect(ev).To(HaveKeyWithValue("trigger", "keys_unavailable"))
 		})
 
+		It("records dropped packets", func() {
+			now := time.Now()
+			tracer.DroppedPacket(now, PacketTypeHandshake, 1337, PacketDropPayloadDecryptError)
+			entry := exportAndParseSingle()
+			Expect(entry.Time).To(BeTemporally("~", now, time.Millisecond))
+			Expect(entry.Category).To(Equal("transport"))
+			Expect(entry.Name).To(Equal("packet_dropped"))
+			ev := entry.Event
+			Expect(ev).To(HaveKeyWithValue("packet_type", "handshake"))
+			Expect(ev).To(HaveKeyWithValue("packet_size", float64(1337)))
+			Expect(ev).To(HaveKeyWithValue("trigger", "payload_decrypt_error"))
+		})
+
 		It("records metrics updates", func() {
 			now := time.Now()
 			rttStats := congestion.NewRTTStats()

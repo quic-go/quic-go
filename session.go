@@ -703,6 +703,9 @@ func (s *session) handlePacketImpl(rp *receivedPacket) bool {
 
 		hdr, packetData, rest, err := wire.ParsePacket(p.data, s.srcConnIDLen)
 		if err != nil {
+			if s.qlogger != nil {
+				s.qlogger.DroppedPacket(p.rcvTime, qlog.PacketTypeNotDetermined, protocol.ByteCount(len(data)), qlog.PacketDropHeaderParseError)
+			}
 			s.logger.Debugf("error parsing packet: %s", err)
 			break
 		}
@@ -761,6 +764,9 @@ func (s *session) handleSinglePacket(p *receivedPacket, hdr *wire.Header) bool /
 	if err != nil {
 		switch err {
 		case handshake.ErrKeysDropped:
+			if s.qlogger != nil {
+				s.qlogger.DroppedPacket(p.rcvTime, qlog.PacketTypeFromHeader(hdr), protocol.ByteCount(len(p.data)), qlog.PacketDropKeyUnavailable)
+			}
 			s.logger.Debugf("Dropping %s packet (%d bytes) because we already dropped the keys.", hdr.PacketType(), len(p.data))
 		case handshake.ErrKeysNotYetAvailable:
 			// Sealer for this encryption level not yet available.
@@ -772,6 +778,9 @@ func (s *session) handleSinglePacket(p *receivedPacket, hdr *wire.Header) bool /
 		default:
 			// This might be a packet injected by an attacker.
 			// Drop it.
+			if s.qlogger != nil {
+				s.qlogger.DroppedPacket(p.rcvTime, qlog.PacketTypeFromHeader(hdr), protocol.ByteCount(len(p.data)), qlog.PacketDropPayloadDecryptError)
+			}
 			s.logger.Debugf("Dropping %s packet (%d bytes) that could not be unpacked. Error: %s", hdr.PacketType(), len(p.data), err)
 		}
 		return false
@@ -1500,6 +1509,9 @@ func (s *session) scheduleSending() {
 
 func (s *session) tryQueueingUndecryptablePacket(p *receivedPacket, hdr *wire.Header) {
 	if len(s.undecryptablePackets)+1 > protocol.MaxUndecryptablePackets {
+		if s.qlogger != nil {
+			s.qlogger.DroppedPacket(p.rcvTime, qlog.PacketTypeFromHeader(hdr), protocol.ByteCount(len(p.data)), qlog.PacketDropDOSPrevention)
+		}
 		s.logger.Infof("Dropping undecryptable packet (%d bytes). Undecryptable packet queue full.", len(p.data))
 		return
 	}

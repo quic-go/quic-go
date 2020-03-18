@@ -20,6 +20,7 @@ type Tracer interface {
 	ReceivedRetry(time.Time, *wire.Header)
 	ReceivedPacket(t time.Time, hdr *wire.ExtendedHeader, packetSize protocol.ByteCount, frames []wire.Frame)
 	BufferedPacket(time.Time, PacketType)
+	DroppedPacket(time.Time, PacketType, protocol.ByteCount, PacketDropReason)
 	UpdatedMetrics(t time.Time, rttStats *congestion.RTTStats, cwnd protocol.ByteCount, bytesInFLight protocol.ByteCount, packetsInFlight int)
 	LostPacket(time.Time, protocol.EncryptionLevel, protocol.PacketNumber, PacketLossReason)
 	UpdatedPTOCount(time.Time, uint32)
@@ -143,6 +144,17 @@ func (t *tracer) BufferedPacket(time time.Time, packetType PacketType) {
 	t.events = append(t.events, event{
 		Time:         time,
 		eventDetails: eventPacketBuffered{PacketType: packetType},
+	})
+}
+
+func (t *tracer) DroppedPacket(time time.Time, packetType PacketType, size protocol.ByteCount, dropReason PacketDropReason) {
+	t.events = append(t.events, event{
+		Time: time,
+		eventDetails: eventPacketDropped{
+			PacketType: packetType,
+			PacketSize: size,
+			Trigger:    dropReason,
+		},
 	})
 }
 

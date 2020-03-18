@@ -60,18 +60,20 @@ func (c category) String() string {
 type PacketType protocol.PacketType
 
 const (
-	// PacketTypeInitial: Initial packet
+	// PacketTypeInitial is the packet type of an Initial packet
 	PacketTypeInitial PacketType = iota
-	// PacketTypeHandshake: Handshake packet
+	// PacketTypeHandshake is the packet type of a Handshake packet
 	PacketTypeHandshake
-	// PacketTypeRetry: Retry packet
+	// PacketTypeRetry is the packet type of a Retry packet
 	PacketTypeRetry
-	// PacketType0RTT: 0-RTT packet
+	// PacketType0RTT is the packet type of a 0-RTT packet
 	PacketType0RTT
-	// PacketTypeVersionNegotiation: Version Negotiation packet
+	// PacketTypeVersionNegotiation is the packet type of a Version Negotiation packet
 	PacketTypeVersionNegotiation
-	// PacketType1RTT: 1-RTT packet
+	// PacketType1RTT is a 1-RTT packet
 	PacketType1RTT
+	// PacketTypeNotDetermined is the packet type when it could not be determined
+	PacketTypeNotDetermined
 )
 
 func (t PacketType) String() string {
@@ -88,6 +90,8 @@ func (t PacketType) String() string {
 		return "version_negotiation"
 	case PacketType1RTT:
 		return "1RTT"
+	case PacketTypeNotDetermined:
+		return ""
 	default:
 		panic("unknown packet type")
 	}
@@ -196,5 +200,45 @@ func (t keyUpdateTrigger) String() string {
 		return "local_update"
 	default:
 		panic("unknown key update trigger")
+	}
+}
+
+type PacketDropReason uint8
+
+const (
+	// PacketDropKeyUnavailable: when a packet is dropped because keys are unavailable
+	PacketDropKeyUnavailable PacketDropReason = iota
+	// PacketDropUnknownConnectionID: when a packet is dropped because the connection ID is unknown
+	PacketDropUnknownConnectionID
+	// PacketDropHeaderParseError: when a packet is dropped because header parsing failed
+	PacketDropHeaderParseError
+	// PacketDropPayloadDecryptError: when a packet is dropped because decrypting the payload failed
+	PacketDropPayloadDecryptError
+	// PacketDropProtocolViolation: when a packet is dropped due to a protocol violation
+	PacketDropProtocolViolation
+	// PacketDropDOSPrevention: when a packet is dropped to mitigate a DoS attack
+	PacketDropDOSPrevention
+	// PacketDropUnsupportedVersion: when a packet is dropped because the version is not supported
+	PacketDropUnsupportedVersion
+)
+
+func (r PacketDropReason) String() string {
+	switch r {
+	case PacketDropKeyUnavailable:
+		return "key_unavailable"
+	case PacketDropUnknownConnectionID:
+		return "unknown_connection_id"
+	case PacketDropHeaderParseError:
+		return "header_parse_error"
+	case PacketDropPayloadDecryptError:
+		return "payload_decrypt_error"
+	case PacketDropProtocolViolation:
+		return "protocol_violation"
+	case PacketDropDOSPrevention:
+		return "dos_prevention"
+	case PacketDropUnsupportedVersion:
+		return "unsupported_version"
+	default:
+		panic("unknown packet drop reason")
 	}
 }
