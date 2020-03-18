@@ -41,8 +41,8 @@ var _ = Describe("Frames", func() {
 			},
 			map[string]interface{}{
 				"frame_type":   "ack",
-				"ack_delay":    "86",
-				"acked_ranges": [][]string{[]string{"120"}},
+				"ack_delay":    86,
+				"acked_ranges": [][]float64{{120}},
 			},
 		)
 	})
@@ -54,7 +54,7 @@ var _ = Describe("Frames", func() {
 			},
 			map[string]interface{}{
 				"frame_type":   "ack",
-				"acked_ranges": [][]string{[]string{"120"}},
+				"acked_ranges": [][]float64{{120}},
 			},
 		)
 	})
@@ -70,10 +70,10 @@ var _ = Describe("Frames", func() {
 			},
 			map[string]interface{}{
 				"frame_type": "ack",
-				"ack_delay":  "86",
-				"acked_ranges": [][]string{
-					[]string{"5", "50"},
-					[]string{"100", "120"},
+				"ack_delay":  86,
+				"acked_ranges": [][]float64{
+					{5, 50},
+					{100, 120},
 				},
 			},
 		)
@@ -88,9 +88,9 @@ var _ = Describe("Frames", func() {
 			},
 			map[string]interface{}{
 				"frame_type": "reset_stream",
-				"stream_id":  "987",
+				"stream_id":  987,
 				"error_code": 42,
-				"final_size": "1234",
+				"final_size": 1234,
 			},
 		)
 	})
@@ -103,7 +103,7 @@ var _ = Describe("Frames", func() {
 			},
 			map[string]interface{}{
 				"frame_type": "stop_sending",
-				"stream_id":  "987",
+				"stream_id":  987,
 				"error_code": 42,
 			},
 		)
@@ -117,7 +117,7 @@ var _ = Describe("Frames", func() {
 			},
 			map[string]interface{}{
 				"frame_type": "crypto",
-				"offset":     "1337",
+				"offset":     1337,
 				"length":     6,
 			},
 		)
@@ -146,8 +146,8 @@ var _ = Describe("Frames", func() {
 			},
 			map[string]interface{}{
 				"frame_type": "stream",
-				"stream_id":  "42",
-				"offset":     "1337",
+				"stream_id":  42,
+				"offset":     1337,
 				"fin":        true,
 				"length":     6,
 			},
@@ -163,8 +163,8 @@ var _ = Describe("Frames", func() {
 			},
 			map[string]interface{}{
 				"frame_type": "stream",
-				"stream_id":  "42",
-				"offset":     "1337",
+				"stream_id":  42,
+				"offset":     1337,
 				"length":     3,
 			},
 		)
@@ -177,7 +177,7 @@ var _ = Describe("Frames", func() {
 			},
 			map[string]interface{}{
 				"frame_type": "max_data",
-				"maximum":    "1337",
+				"maximum":    1337,
 			},
 		)
 	})
@@ -190,8 +190,8 @@ var _ = Describe("Frames", func() {
 			},
 			map[string]interface{}{
 				"frame_type": "max_stream_data",
-				"stream_id":  "1234",
-				"maximum":    "1337",
+				"stream_id":  1234,
+				"maximum":    1337,
 			},
 		)
 	})
@@ -205,7 +205,7 @@ var _ = Describe("Frames", func() {
 			map[string]interface{}{
 				"frame_type":  "max_streams",
 				"stream_type": "bidirectional",
-				"maximum":     "42",
+				"maximum":     42,
 			},
 		)
 	})
@@ -217,7 +217,7 @@ var _ = Describe("Frames", func() {
 			},
 			map[string]interface{}{
 				"frame_type": "data_blocked",
-				"limit":      "1337",
+				"limit":      1337,
 			},
 		)
 	})
@@ -230,8 +230,8 @@ var _ = Describe("Frames", func() {
 			},
 			map[string]interface{}{
 				"frame_type": "stream_data_blocked",
-				"stream_id":  "42",
-				"limit":      "1337",
+				"stream_id":  42,
+				"limit":      1337,
 			},
 		)
 	})
@@ -245,7 +245,7 @@ var _ = Describe("Frames", func() {
 			map[string]interface{}{
 				"frame_type":  "streams_blocked",
 				"stream_type": "unidirectional",
-				"limit":       "123",
+				"limit":       123,
 			},
 		)
 	})
@@ -260,8 +260,8 @@ var _ = Describe("Frames", func() {
 			},
 			map[string]interface{}{
 				"frame_type":      "new_connection_id",
-				"sequence_number": "42",
-				"retire_prior_to": "24",
+				"sequence_number": 42,
+				"retire_prior_to": 24,
 				"length":          4,
 				"connection_id":   "deadbeef",
 				"reset_token":     "000102030405060708090a0b0c0d0e0f",
@@ -276,7 +276,7 @@ var _ = Describe("Frames", func() {
 			},
 			map[string]interface{}{
 				"frame_type":      "retire_connection_id",
-				"sequence_number": "1337",
+				"sequence_number": 1337,
 			},
 		)
 	})

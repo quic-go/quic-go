@@ -218,7 +218,7 @@ func (e eventPacketLost) IsNil() bool        { return false }
 
 func (e eventPacketLost) MarshalJSONObject(enc *gojay.Encoder) {
 	enc.StringKey("packet_type", e.PacketType.String())
-	enc.StringKey("packet_number", toString(int64(e.PacketNumber)))
+	enc.Int64Key("packet_number", int64(e.PacketNumber))
 	enc.StringKey("trigger", e.Trigger.String())
 }
 

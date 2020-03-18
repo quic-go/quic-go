@@ -155,7 +155,7 @@ var _ = Describe("Tracer", func() {
 			Expect(ev).To(HaveKey("header"))
 			hdr := ev["header"].(map[string]interface{})
 			Expect(hdr).To(HaveKeyWithValue("packet_size", float64(987)))
-			Expect(hdr).To(HaveKeyWithValue("packet_number", "1337"))
+			Expect(hdr).To(HaveKeyWithValue("packet_number", float64(1337)))
 			Expect(hdr).To(HaveKeyWithValue("scid", "04030201"))
 			Expect(ev).To(HaveKey("frames"))
 			frames := ev["frames"].([]interface{})
@@ -215,7 +215,7 @@ var _ = Describe("Tracer", func() {
 			Expect(ev).To(HaveKey("header"))
 			hdr := ev["header"].(map[string]interface{})
 			Expect(hdr).To(HaveKeyWithValue("packet_size", float64(789)))
-			Expect(hdr).To(HaveKeyWithValue("packet_number", "1337"))
+			Expect(hdr).To(HaveKeyWithValue("packet_number", float64(1337)))
 			Expect(hdr).To(HaveKeyWithValue("scid", "04030201"))
 			Expect(ev).To(HaveKey("frames"))
 			Expect(ev["frames"].([]interface{})).To(HaveLen(2))
@@ -299,7 +299,7 @@ var _ = Describe("Tracer", func() {
 			Expect(entry.Name).To(Equal("packet_lost"))
 			ev := entry.Event
 			Expect(ev).To(HaveKeyWithValue("packet_type", "handshake"))
-			Expect(ev).To(HaveKeyWithValue("packet_number", "42"))
+			Expect(ev).To(HaveKeyWithValue("packet_number", float64(42)))
 			Expect(ev).To(HaveKeyWithValue("trigger", "reordering_threshold"))
 		})
 
