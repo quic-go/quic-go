@@ -9,6 +9,7 @@ import (
 
 	gomock "github.com/golang/mock/gomock"
 	protocol "github.com/lucas-clemente/quic-go/internal/protocol"
+	wire "github.com/lucas-clemente/quic-go/internal/wire"
 )
 
 // MockHandshakeRunner is a mock of HandshakeRunner interface
@@ -71,7 +72,7 @@ func (mr *MockHandshakeRunnerMockRecorder) OnHandshakeComplete() *gomock.Call {
 }
 
 // OnReceivedParams mocks base method
-func (m *MockHandshakeRunner) OnReceivedParams(arg0 *TransportParameters) {
+func (m *MockHandshakeRunner) OnReceivedParams(arg0 *wire.TransportParameters) {
 	m.ctrl.T.Helper()
 	m.ctrl.Call(m, "OnReceivedParams", arg0)
 }

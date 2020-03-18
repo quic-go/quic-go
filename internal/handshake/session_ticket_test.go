@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/lucas-clemente/quic-go/internal/utils"
+	"github.com/lucas-clemente/quic-go/internal/wire"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -13,7 +14,7 @@ import (
 var _ = Describe("Session Ticket", func() {
 	It("marshals and unmarshals a session ticket", func() {
 		ticket := &sessionTicket{
-			Parameters: &TransportParameters{
+			Parameters: &wire.TransportParameters{
 				InitialMaxStreamDataBidiLocal:  1,
 				InitialMaxStreamDataBidiRemote: 2,
 			},

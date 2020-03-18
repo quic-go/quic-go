@@ -23,7 +23,7 @@ type packer interface {
 	MaybePackAckPacket(handshakeConfirmed bool) (*packedPacket, error)
 	PackConnectionClose(*qerr.QuicError) (*coalescedPacket, error)
 
-	HandleTransportParameters(*handshake.TransportParameters)
+	HandleTransportParameters(*wire.TransportParameters)
 	SetToken([]byte)
 }
 
@@ -738,7 +738,7 @@ func (p *packetPacker) SetToken(token []byte) {
 	p.token = token
 }
 
-func (p *packetPacker) HandleTransportParameters(params *handshake.TransportParameters) {
+func (p *packetPacker) HandleTransportParameters(params *wire.TransportParameters) {
 	if params.MaxPacketSize != 0 {
 		p.maxPacketSize = utils.MinByteCount(p.maxPacketSize, params.MaxPacketSize)
 	}

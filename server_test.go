@@ -295,7 +295,7 @@ var _ = Describe("Server", func() {
 				destConnID := protocol.ConnectionID{1, 2, 3, 4, 5, 6}
 				packet := getPacket(&wire.Header{
 					IsLongHeader:     true,
-					Type:             protocol.PacketTypeInitial,
+					Type:             protocol.PacketTypeHandshake,
 					SrcConnectionID:  srcConnID,
 					DestConnectionID: destConnID,
 					Version:          0x42,

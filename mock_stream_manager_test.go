@@ -9,7 +9,6 @@ import (
 	reflect "reflect"
 
 	gomock "github.com/golang/mock/gomock"
-	handshake "github.com/lucas-clemente/quic-go/internal/handshake"
 	protocol "github.com/lucas-clemente/quic-go/internal/protocol"
 	wire "github.com/lucas-clemente/quic-go/internal/wire"
 )
@@ -198,7 +197,7 @@ func (mr *MockStreamManagerMockRecorder) OpenUniStreamSync(arg0 interface{}) *go
 }
 
 // UpdateLimits mocks base method
-func (m *MockStreamManager) UpdateLimits(arg0 *handshake.TransportParameters) error {
+func (m *MockStreamManager) UpdateLimits(arg0 *wire.TransportParameters) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "UpdateLimits", arg0)
 	ret0, _ := ret[0].(error)

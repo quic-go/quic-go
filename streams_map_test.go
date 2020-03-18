@@ -8,7 +8,6 @@ import (
 
 	"github.com/golang/mock/gomock"
 	"github.com/lucas-clemente/quic-go/internal/flowcontrol"
-	"github.com/lucas-clemente/quic-go/internal/handshake"
 	"github.com/lucas-clemente/quic-go/internal/mocks"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/internal/qerr"
@@ -81,7 +80,7 @@ var _ = Describe("Streams Map", func() {
 			)
 
 			allowUnlimitedStreams := func() {
-				m.UpdateLimits(&handshake.TransportParameters{
+				m.UpdateLimits(&wire.TransportParameters{
 					MaxBidiStreamNum: protocol.MaxStreamCount,
 					MaxUniStreamNum:  protocol.MaxStreamCount,
 				})
@@ -331,7 +330,7 @@ var _ = Describe("Streams Map", func() {
 						m.perspective = pers
 						_, err := m.OpenStream()
 						expectTooManyStreamsError(err)
-						Expect(m.UpdateLimits(&handshake.TransportParameters{
+						Expect(m.UpdateLimits(&wire.TransportParameters{
 							MaxBidiStreamNum: 5,
 							MaxUniStreamNum:  8,
 						})).To(Succeed())
@@ -357,13 +356,13 @@ var _ = Describe("Streams Map", func() {
 				}
 
 				It("rejects parameters with too large unidirectional stream counts", func() {
-					Expect(m.UpdateLimits(&handshake.TransportParameters{
+					Expect(m.UpdateLimits(&wire.TransportParameters{
 						MaxUniStreamNum: protocol.MaxStreamCount + 1,
 					})).To(MatchError(qerr.StreamLimitError))
 				})
 
 				It("rejects parameters with too large unidirectional stream counts", func() {
-					Expect(m.UpdateLimits(&handshake.TransportParameters{
+					Expect(m.UpdateLimits(&wire.TransportParameters{
 						MaxBidiStreamNum: protocol.MaxStreamCount + 1,
 					})).To(MatchError(qerr.StreamLimitError))
 				})

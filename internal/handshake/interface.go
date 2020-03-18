@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/lucas-clemente/quic-go/internal/protocol"
+	"github.com/lucas-clemente/quic-go/internal/wire"
 	"github.com/marten-seemann/qtls"
 )
 
@@ -61,7 +62,7 @@ type tlsExtensionHandler interface {
 }
 
 type handshakeRunner interface {
-	OnReceivedParams(*TransportParameters)
+	OnReceivedParams(*wire.TransportParameters)
 	OnHandshakeComplete()
 	OnError(error)
 	DropKeys(protocol.EncryptionLevel)

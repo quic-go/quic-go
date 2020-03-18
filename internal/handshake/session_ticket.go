@@ -7,12 +7,13 @@ import (
 	"time"
 
 	"github.com/lucas-clemente/quic-go/internal/utils"
+	"github.com/lucas-clemente/quic-go/internal/wire"
 )
 
 const sessionTicketRevision = 2
 
 type sessionTicket struct {
-	Parameters *TransportParameters
+	Parameters *wire.TransportParameters
 	RTT        time.Duration // to be encoded in mus
 }
 
@@ -37,7 +38,7 @@ func (t *sessionTicket) Unmarshal(b []byte) error {
 	if err != nil {
 		return errors.New("failed to read RTT")
 	}
-	var tp TransportParameters
+	var tp wire.TransportParameters
 	if err := tp.UnmarshalFromSessionTicket(b[len(b)-r.Len():]); err != nil {
 		return fmt.Errorf("unmarshaling transport parameters from session ticket failed: %s", err.Error())
 	}
