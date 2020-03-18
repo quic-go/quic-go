@@ -238,3 +238,17 @@ func (e eventKeyUpdated) MarshalJSONObject(enc *gojay.Encoder) {
 	enc.StringKey("key_type", e.KeyType.String())
 	enc.Uint64KeyOmitEmpty("generation", uint64(e.Generation))
 }
+
+type eventKeyRetired struct {
+	KeyType    keyType
+	Generation protocol.KeyPhase
+}
+
+func (e eventKeyRetired) Category() category { return categorySecurity }
+func (e eventKeyRetired) Name() string       { return "key_retired" }
+func (e eventKeyRetired) IsNil() bool        { return false }
+
+func (e eventKeyRetired) MarshalJSONObject(enc *gojay.Encoder) {
+	enc.StringKey("trigger", "tls")
+	enc.StringKey("key_type", e.KeyType.String())
+}

@@ -328,7 +328,7 @@ var _ = Describe("Tracer", func() {
 			Expect(ev).ToNot(HaveKey("new"))
 		})
 
-		It("records QUIC key udpates", func() {
+		It("records QUIC key updates", func() {
 			now := time.Now()
 			tracer.UpdatedKey(now, 1337, true)
 			entries := exportAndParse()
@@ -346,6 +346,25 @@ var _ = Describe("Tracer", func() {
 			}
 			Expect(keyTypes).To(ContainElement("server_1rtt_secret"))
 			Expect(keyTypes).To(ContainElement("client_1rtt_secret"))
+		})
+
+		It("records dropped encryption levels", func() {
+			now := time.Now()
+			tracer.DroppedEncryptionLevel(now, protocol.EncryptionInitial)
+			entries := exportAndParse()
+			Expect(entries).To(HaveLen(2))
+			var keyTypes []string
+			for _, entry := range entries {
+				Expect(entry.Time).To(BeTemporally("~", now, time.Millisecond))
+				Expect(entry.Category).To(Equal("security"))
+				Expect(entry.Name).To(Equal("key_retired"))
+				ev := entry.Event
+				Expect(ev).To(HaveKeyWithValue("trigger", "tls"))
+				Expect(ev).To(HaveKey("key_type"))
+				keyTypes = append(keyTypes, ev["key_type"].(string))
+			}
+			Expect(keyTypes).To(ContainElement("server_initial_secret"))
+			Expect(keyTypes).To(ContainElement("client_initial_secret"))
 		})
 	})
 })
