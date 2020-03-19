@@ -216,13 +216,7 @@ func main() {
 				log.Fatal(err)
 			}
 			log.Printf("Creating qlog file %s.\n", filename)
-			return struct {
-				io.Writer
-				io.Closer
-			}{
-				bufio.NewWriter(f),
-				f,
-			}
+			return utils.NewBufferedWriteCloser(bufio.NewWriter(f), f)
 		}
 	}
 
