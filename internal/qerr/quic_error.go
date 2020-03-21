@@ -16,10 +16,6 @@ type QuicError struct {
 
 var _ net.Error = &QuicError{}
 
-// UserCanceledError is used if the application closes the connection
-// before the handshake completes.
-var UserCanceledError = &QuicError{ErrorCode: 0x15a}
-
 // NewError creates a new QuicError instance
 func NewError(errorCode ErrorCode, errorMessage string) *QuicError {
 	return &QuicError{

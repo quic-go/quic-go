@@ -23,6 +23,7 @@ const (
 	ConnectionIDLimitError  ErrorCode = 0x9
 	ProtocolViolation       ErrorCode = 0xa
 	InvalidToken            ErrorCode = 0xb
+	ApplicationError        ErrorCode = 0xc
 	CryptoBufferExceeded    ErrorCode = 0xd
 )
 
@@ -72,6 +73,8 @@ func (e ErrorCode) String() string {
 		return "PROTOCOL_VIOLATION"
 	case InvalidToken:
 		return "INVALID_TOKEN"
+	case ApplicationError:
+		return "APPLICATION_ERROR"
 	case CryptoBufferExceeded:
 		return "CRYPTO_BUFFER_EXCEEDED"
 	default:

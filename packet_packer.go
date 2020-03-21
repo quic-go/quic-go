@@ -216,7 +216,7 @@ func (p *packetPacker) PackConnectionClose(quicErr *qerr.QuicError) (*coalescedP
 		if encLevel == protocol.EncryptionInitial || encLevel == protocol.EncryptionHandshake {
 			// don't send application errors in Initial or Handshake packets
 			if quicErr.IsApplicationError() {
-				quicErrToSend = qerr.UserCanceledError
+				quicErrToSend = qerr.NewError(qerr.ApplicationError, "")
 				reasonPhrase = ""
 			}
 		}
