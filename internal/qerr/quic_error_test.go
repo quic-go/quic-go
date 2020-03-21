@@ -9,47 +9,47 @@ import (
 
 var _ = Describe("QUIC Transport Errors", func() {
 	It("has a string representation", func() {
-		err := Error(FlowControlError, "foobar")
+		err := NewError(FlowControlError, "foobar")
 		Expect(err.Timeout()).To(BeFalse())
 		Expect(err.IsApplicationError()).To(BeFalse())
 		Expect(err.Error()).To(Equal("FLOW_CONTROL_ERROR: foobar"))
 	})
 
 	It("has a string representation for empty error phrases", func() {
-		err := Error(FlowControlError, "")
+		err := NewError(FlowControlError, "")
 		Expect(err.Error()).To(Equal("FLOW_CONTROL_ERROR"))
 	})
 
 	It("includes the frame type, for errors without a message", func() {
-		err := ErrorWithFrameType(FlowControlError, 0x1337, "")
+		err := NewErrorWithFrameType(FlowControlError, 0x1337, "")
 		Expect(err.Error()).To(Equal("FLOW_CONTROL_ERROR (frame type: 0x1337)"))
 	})
 
 	It("includes the frame type, for errors with a message", func() {
-		err := ErrorWithFrameType(FlowControlError, 0x1337, "foobar")
+		err := NewErrorWithFrameType(FlowControlError, 0x1337, "foobar")
 		Expect(err.Error()).To(Equal("FLOW_CONTROL_ERROR (frame type: 0x1337): foobar"))
 	})
 
 	It("has a string representation for timeout errors", func() {
-		err := TimeoutError("foobar")
+		err := NewTimeoutError("foobar")
 		Expect(err.Timeout()).To(BeTrue())
 		Expect(err.Error()).To(Equal("NO_ERROR: foobar"))
 	})
 
 	Context("crypto errors", func() {
 		It("has a string representation for errors with a message", func() {
-			err := CryptoError(42, "foobar")
+			err := NewCryptoError(42, "foobar")
 			Expect(err.Error()).To(Equal("CRYPTO_ERROR: foobar"))
 		})
 
 		It("has a string representation for errors without a message", func() {
-			err := CryptoError(42, "")
+			err := NewCryptoError(42, "")
 			Expect(err.Error()).To(Equal("CRYPTO_ERROR: tls: bad certificate"))
 		})
 
 		It("says if an error is a crypto error", func() {
-			Expect(Error(FlowControlError, "").IsCryptoError()).To(BeFalse())
-			err := CryptoError(42, "")
+			Expect(NewError(FlowControlError, "").IsCryptoError()).To(BeFalse())
+			err := NewCryptoError(42, "")
 			Expect(err.IsCryptoError()).To(BeTrue())
 			Expect(err.IsApplicationError()).To(BeFalse())
 
@@ -58,13 +58,13 @@ var _ = Describe("QUIC Transport Errors", func() {
 
 	Context("application errors", func() {
 		It("has a string representation for errors with a message", func() {
-			err := ApplicationError(0x42, "foobar")
+			err := NewApplicationError(0x42, "foobar")
 			Expect(err.IsApplicationError()).To(BeTrue())
 			Expect(err.Error()).To(Equal("Application error 0x42: foobar"))
 		})
 
 		It("has a string representation for errors without a message", func() {
-			err := ApplicationError(0x42, "")
+			err := NewApplicationError(0x42, "")
 			Expect(err.Error()).To(Equal("Application error 0x42"))
 		})
 	})
@@ -83,17 +83,17 @@ var _ = Describe("QUIC Transport Errors", func() {
 
 	Context("ToQuicError", func() {
 		It("leaves QuicError unchanged", func() {
-			err := Error(TransportParameterError, "foo")
+			err := NewError(TransportParameterError, "foo")
 			Expect(ToQuicError(err)).To(Equal(err))
 		})
 
 		It("wraps ErrorCode properly", func() {
 			var err error = FinalSizeError
-			Expect(ToQuicError(err)).To(Equal(Error(FinalSizeError, "")))
+			Expect(ToQuicError(err)).To(Equal(NewError(FinalSizeError, "")))
 		})
 
 		It("changes default errors to InternalError", func() {
-			Expect(ToQuicError(io.EOF)).To(Equal(Error(InternalError, "EOF")))
+			Expect(ToQuicError(io.EOF)).To(Equal(NewError(InternalError, "EOF")))
 		})
 	})
 })

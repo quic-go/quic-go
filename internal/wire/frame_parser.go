@@ -33,7 +33,7 @@ func (p *frameParser) ParseNext(r *bytes.Reader, encLevel protocol.EncryptionLev
 
 		f, err := p.parseFrame(r, typeByte, encLevel)
 		if err != nil {
-			return nil, qerr.ErrorWithFrameType(qerr.FrameEncodingError, uint64(typeByte), err.Error())
+			return nil, qerr.NewErrorWithFrameType(qerr.FrameEncodingError, uint64(typeByte), err.Error())
 		}
 		return f, nil
 	}

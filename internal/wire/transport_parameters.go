@@ -81,7 +81,7 @@ type TransportParameters struct {
 // Unmarshal the transport parameters
 func (p *TransportParameters) Unmarshal(data []byte, sentBy protocol.Perspective) error {
 	if err := p.unmarshal(data, sentBy); err != nil {
-		return qerr.Error(qerr.TransportParameterError, err.Error())
+		return qerr.NewError(qerr.TransportParameterError, err.Error())
 	}
 	return nil
 }

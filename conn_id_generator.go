@@ -69,7 +69,7 @@ func (m *connIDGenerator) SetMaxActiveConnIDs(limit uint64) error {
 
 func (m *connIDGenerator) Retire(seq uint64) error {
 	if seq > m.highestSeq {
-		return qerr.Error(qerr.ProtocolViolation, fmt.Sprintf("tried to retire connection ID %d. Highest issued: %d", seq, m.highestSeq))
+		return qerr.NewError(qerr.ProtocolViolation, fmt.Sprintf("tried to retire connection ID %d. Highest issued: %d", seq, m.highestSeq))
 	}
 	connID, ok := m.activeSrcConnIDs[seq]
 	// We might already have deleted this connection ID, if this is a duplicate frame.

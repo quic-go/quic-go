@@ -281,7 +281,7 @@ func (h *cryptoSetup) RunHandshake() {
 }
 
 func (h *cryptoSetup) onError(alert uint8, message string) {
-	h.runner.OnError(qerr.CryptoError(alert, message))
+	h.runner.OnError(qerr.NewCryptoError(alert, message))
 }
 
 // Close closes the crypto setup.
@@ -451,7 +451,7 @@ func (h *cryptoSetup) handleMessageForClient(msgType messageType) bool {
 func (h *cryptoSetup) handleTransportParameters(data []byte) {
 	var tp wire.TransportParameters
 	if err := tp.Unmarshal(data, h.perspective.Opposite()); err != nil {
-		h.runner.OnError(qerr.Error(qerr.TransportParameterError, err.Error()))
+		h.runner.OnError(qerr.NewError(qerr.TransportParameterError, err.Error()))
 	}
 	h.peerParams = &tp
 	h.runner.OnReceivedParams(h.peerParams)

@@ -572,10 +572,10 @@ runLoop:
 			s.framer.QueueControlFrame(&wire.PingFrame{})
 			s.keepAlivePingSent = true
 		} else if !s.handshakeComplete && now.Sub(s.sessionCreationTime) >= s.config.HandshakeTimeout {
-			s.destroyImpl(qerr.TimeoutError("Handshake did not complete in time"))
+			s.destroyImpl(qerr.NewTimeoutError("Handshake did not complete in time"))
 			continue
 		} else if s.handshakeComplete && now.Sub(s.idleTimeoutStartTime()) >= s.idleTimeout {
-			s.destroyImpl(qerr.TimeoutError("No recent network activity"))
+			s.destroyImpl(qerr.NewTimeoutError("No recent network activity"))
 			continue
 		} else if !pacingDeadline.IsZero() && now.Before(pacingDeadline) {
 			// If we get to this point before the pacing deadline, we should wait until that deadline.
@@ -586,11 +586,11 @@ runLoop:
 		}
 
 		if !s.handshakeComplete && now.Sub(s.sessionCreationTime) >= s.config.HandshakeTimeout {
-			s.destroyImpl(qerr.TimeoutError("Handshake did not complete in time"))
+			s.destroyImpl(qerr.NewTimeoutError("Handshake did not complete in time"))
 			continue
 		}
 		if s.handshakeComplete && now.Sub(s.idleTimeoutStartTime()) >= s.idleTimeout {
-			s.destroyImpl(qerr.TimeoutError("No recent network activity"))
+			s.destroyImpl(qerr.NewTimeoutError("No recent network activity"))
 			continue
 		}
 
@@ -780,7 +780,7 @@ func (s *session) handleSinglePacket(p *receivedPacket, hdr *wire.Header) bool /
 			wasQueued = true
 			s.tryQueueingUndecryptablePacket(p, hdr)
 		case wire.ErrInvalidReservedBits:
-			s.closeLocal(qerr.Error(qerr.ProtocolViolation, err.Error()))
+			s.closeLocal(qerr.NewError(qerr.ProtocolViolation, err.Error()))
 		default:
 			// This might be a packet injected by an attacker.
 			// Drop it.
@@ -852,7 +852,7 @@ func (s *session) handleRetryPacket(hdr *wire.Header, data []byte) bool /* was t
 
 func (s *session) handleUnpackedPacket(packet *unpackedPacket, rcvTime time.Time) error {
 	if len(packet.data) == 0 {
-		return qerr.Error(qerr.ProtocolViolation, "empty packet")
+		return qerr.NewError(qerr.ProtocolViolation, "empty packet")
 	}
 
 	// The server can change the source connection ID with the first Handshake packet.
@@ -971,9 +971,9 @@ func (s *session) handlePacket(p *receivedPacket) {
 func (s *session) handleConnectionCloseFrame(frame *wire.ConnectionCloseFrame) {
 	var e error
 	if frame.IsApplicationError {
-		e = qerr.ApplicationError(frame.ErrorCode, frame.ReasonPhrase)
+		e = qerr.NewApplicationError(frame.ErrorCode, frame.ReasonPhrase)
 	} else {
-		e = qerr.Error(frame.ErrorCode, frame.ReasonPhrase)
+		e = qerr.NewError(frame.ErrorCode, frame.ReasonPhrase)
 	}
 	s.closeRemote(e)
 }
@@ -1054,7 +1054,7 @@ func (s *session) handlePathChallengeFrame(frame *wire.PathChallengeFrame) {
 
 func (s *session) handleNewTokenFrame(frame *wire.NewTokenFrame) error {
 	if s.perspective == protocol.PerspectiveServer {
-		return qerr.Error(qerr.ProtocolViolation, "Received NEW_TOKEN frame from the client.")
+		return qerr.NewError(qerr.ProtocolViolation, "Received NEW_TOKEN frame from the client.")
 	}
 	if s.config.TokenStore != nil {
 		s.config.TokenStore.Put(s.tokenStoreKey, &ClientToken{data: frame.Token})
@@ -1072,7 +1072,7 @@ func (s *session) handleRetireConnectionIDFrame(f *wire.RetireConnectionIDFrame)
 
 func (s *session) handleHandshakeDoneFrame() error {
 	if s.perspective == protocol.PerspectiveServer {
-		return qerr.Error(qerr.ProtocolViolation, "received a HANDSHAKE_DONE frame")
+		return qerr.NewError(qerr.ProtocolViolation, "received a HANDSHAKE_DONE frame")
 	}
 	s.cryptoStreamHandler.DropHandshakeKeys()
 	return nil
@@ -1140,14 +1140,14 @@ func (s *session) shutdown() {
 }
 
 func (s *session) CloseWithError(code protocol.ApplicationErrorCode, desc string) error {
-	s.closeLocal(qerr.ApplicationError(qerr.ErrorCode(code), desc))
+	s.closeLocal(qerr.NewApplicationError(qerr.ErrorCode(code), desc))
 	<-s.ctx.Done()
 	return nil
 }
 
 func (s *session) handleCloseError(closeErr closeError) {
 	if closeErr.err == nil {
-		closeErr.err = qerr.ApplicationError(0, "")
+		closeErr.err = qerr.NewApplicationError(0, "")
 	}
 
 	var quicErr *qerr.QuicError
@@ -1190,7 +1190,7 @@ func (s *session) dropEncryptionLevel(encLevel protocol.EncryptionLevel) {
 func (s *session) processTransportParameters(params *wire.TransportParameters) {
 	// check the Retry token
 	if s.perspective == protocol.PerspectiveClient && !params.OriginalConnectionID.Equal(s.origDestConnID) {
-		s.closeLocal(qerr.Error(qerr.TransportParameterError, fmt.Sprintf("expected original_connection_id to equal %s, is %s", s.origDestConnID, params.OriginalConnectionID)))
+		s.closeLocal(qerr.NewError(qerr.TransportParameterError, fmt.Sprintf("expected original_connection_id to equal %s, is %s", s.origDestConnID, params.OriginalConnectionID)))
 		return
 	}
 
