@@ -165,7 +165,7 @@ var _ = Describe("Tracer", func() {
 				MaxAckDelay:                    123 * time.Millisecond,
 				AckDelayExponent:               12,
 				DisableActiveMigration:         true,
-				MaxPacketSize:                  1234,
+				MaxUDPPayloadSize:              1234,
 				MaxIdleTimeout:                 321 * time.Millisecond,
 				StatelessResetToken:            &[16]byte{0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88, 0x99, 0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff, 0x00},
 				OriginalConnectionID:           protocol.ConnectionID{0xde, 0xad, 0xc0, 0xde},
@@ -180,7 +180,7 @@ var _ = Describe("Tracer", func() {
 			Expect(ev).To(HaveKeyWithValue("original_connection_id", "deadc0de"))
 			Expect(ev).To(HaveKeyWithValue("stateless_reset_token", "112233445566778899aabbccddeeff00"))
 			Expect(ev).To(HaveKeyWithValue("max_idle_timeout", float64(321)))
-			Expect(ev).To(HaveKeyWithValue("max_packet_size", float64(1234)))
+			Expect(ev).To(HaveKeyWithValue("max_udp_payload_size", float64(1234)))
 			Expect(ev).To(HaveKeyWithValue("ack_delay_exponent", float64(12)))
 			Expect(ev).To(HaveKeyWithValue("active_connection_id_limit", float64(7)))
 			Expect(ev).To(HaveKeyWithValue("initial_max_data", float64(4000)))

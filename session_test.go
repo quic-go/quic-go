@@ -1436,7 +1436,7 @@ var _ = Describe("Session", func() {
 				InitialMaxData:                0x5000,
 				ActiveConnectionIDLimit:       3,
 				// marshaling always sets it to this value
-				MaxPacketSize: protocol.MaxReceivePacketSize,
+				MaxUDPPayloadSize: protocol.MaxReceivePacketSize,
 			}
 			streamManager.EXPECT().UpdateLimits(params)
 			packer.EXPECT().HandleTransportParameters(params)

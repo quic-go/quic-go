@@ -149,7 +149,7 @@ func (t *tracer) recordTransportParameters(time time.Time, owner owner, tp *wire
 			StatelessResetToken:            tp.StatelessResetToken,
 			DisableActiveMigration:         tp.DisableActiveMigration,
 			MaxIdleTimeout:                 tp.MaxIdleTimeout,
-			MaxPacketSize:                  tp.MaxPacketSize,
+			MaxUDPPayloadSize:              tp.MaxUDPPayloadSize,
 			AckDelayExponent:               tp.AckDelayExponent,
 			MaxAckDelay:                    tp.MaxAckDelay,
 			ActiveConnectionIDLimit:        tp.ActiveConnectionIDLimit,

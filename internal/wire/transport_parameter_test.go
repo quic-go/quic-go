@@ -107,7 +107,7 @@ var _ = Describe("Transport Parameters", func() {
 
 	It("errors when the max_packet_size is too small", func() {
 		b := &bytes.Buffer{}
-		utils.WriteVarInt(b, uint64(maxPacketSizeParameterID))
+		utils.WriteVarInt(b, uint64(maxUDPPayloadSizeParameterID))
 		utils.WriteVarInt(b, uint64(utils.VarIntLen(1199)))
 		utils.WriteVarInt(b, 1199)
 		p := &TransportParameters{}
