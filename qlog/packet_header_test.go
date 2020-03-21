@@ -61,6 +61,13 @@ var _ = Describe("Packet Header", func() {
 		It("recognizes 1-RTT packets", func() {
 			Expect(PacketTypeFromHeader(&wire.Header{})).To(Equal(PacketType1RTT))
 		})
+
+		It("handles unrecognized packet types", func() {
+			Expect(PacketTypeFromHeader(&wire.Header{
+				IsLongHeader: true,
+				Version:      protocol.VersionTLS,
+			})).To(Equal(PacketTypeNotDetermined))
+		})
 	})
 
 	Context("marshalling", func() {
