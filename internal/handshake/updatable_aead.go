@@ -184,7 +184,7 @@ func (a *updatableAEAD) Open(dst, src []byte, rcvTime time.Time, pn protocol.Pac
 		a.rollKeys(rcvTime)
 		a.logger.Debugf("Peer updated keys to %s", a.keyPhase)
 		if a.qlogger != nil {
-			a.qlogger.UpdatedKey(rcvTime, a.keyPhase, true)
+			a.qlogger.UpdatedKey(a.keyPhase, true)
 		}
 		a.firstRcvdWithCurrentKey = pn
 		return dec, err
@@ -244,11 +244,10 @@ func (a *updatableAEAD) shouldInitiateKeyUpdate() bool {
 
 func (a *updatableAEAD) KeyPhase() protocol.KeyPhaseBit {
 	if a.shouldInitiateKeyUpdate() {
-		now := time.Now()
 		if a.qlogger != nil {
-			a.qlogger.UpdatedKey(now, a.keyPhase, false)
+			a.qlogger.UpdatedKey(a.keyPhase, false)
 		}
-		a.rollKeys(now)
+		a.rollKeys(time.Now())
 	}
 	return a.keyPhase.Bit()
 }

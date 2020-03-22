@@ -165,7 +165,7 @@ func (h *sentPacketHandler) dropPackets(encLevel protocol.EncryptionLevel) {
 	}
 	h.setLossDetectionTimer()
 	if h.qlogger != nil && h.ptoCount != 0 {
-		h.qlogger.UpdatedPTOCount(time.Now(), 0)
+		h.qlogger.UpdatedPTOCount(0)
 	}
 	h.ptoCount = 0
 	h.ptoMode = SendNone
@@ -267,7 +267,7 @@ func (h *sentPacketHandler) ReceivedAck(ack *wire.AckFrame, encLevel protocol.En
 			if h.initialPackets != nil {
 				packetsInFlight += h.initialPackets.history.Len()
 			}
-			h.qlogger.UpdatedMetrics(rcvTime, h.rttStats, h.congestion.GetCongestionWindow(), h.bytesInFlight, packetsInFlight)
+			h.qlogger.UpdatedMetrics(h.rttStats, h.congestion.GetCongestionWindow(), h.bytesInFlight, packetsInFlight)
 		}
 	}
 
@@ -294,7 +294,7 @@ func (h *sentPacketHandler) ReceivedAck(ack *wire.AckFrame, encLevel protocol.En
 	}
 
 	if h.qlogger != nil && h.ptoCount != 0 {
-		h.qlogger.UpdatedPTOCount(rcvTime, 0)
+		h.qlogger.UpdatedPTOCount(0)
 	}
 	h.ptoCount = 0
 	h.numProbesToSend = 0
@@ -459,12 +459,12 @@ func (h *sentPacketHandler) detectLostPackets(
 		if packet.SendTime.Before(lostSendTime) {
 			lostPackets = append(lostPackets, packet)
 			if h.qlogger != nil {
-				h.qlogger.LostPacket(now, packet.EncryptionLevel, packet.PacketNumber, qlog.PacketLossTimeThreshold)
+				h.qlogger.LostPacket(packet.EncryptionLevel, packet.PacketNumber, qlog.PacketLossTimeThreshold)
 			}
 		} else if pnSpace.largestAcked >= packet.PacketNumber+packetThreshold {
 			lostPackets = append(lostPackets, packet)
 			if h.qlogger != nil {
-				h.qlogger.LostPacket(now, packet.EncryptionLevel, packet.PacketNumber, qlog.PacketLossReorderingThreshold)
+				h.qlogger.LostPacket(packet.EncryptionLevel, packet.PacketNumber, qlog.PacketLossReorderingThreshold)
 			}
 		} else if pnSpace.lossTime.IsZero() {
 			// Note: This conditional is only entered once per call
@@ -543,7 +543,7 @@ func (h *sentPacketHandler) onVerifiedLossDetectionTimeout() error {
 	}
 	h.ptoCount++
 	if h.qlogger != nil {
-		h.qlogger.UpdatedPTOCount(time.Now(), h.ptoCount)
+		h.qlogger.UpdatedPTOCount(h.ptoCount)
 	}
 	h.numProbesToSend += 2
 	switch encLevel {

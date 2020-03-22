@@ -428,7 +428,7 @@ func (s *baseServer) createNewSession(
 		}
 	}
 	if qlogger != nil {
-		qlogger.StartedConnection(time.Now(), s.conn.LocalAddr(), remoteAddr, version, srcConnID, destConnID)
+		qlogger.StartedConnection(s.conn.LocalAddr(), remoteAddr, version, srcConnID, destConnID)
 	}
 	sess := s.newSession(
 		&conn{pconn: s.conn, currentAddr: remoteAddr},

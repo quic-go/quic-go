@@ -202,9 +202,8 @@ func newCryptoSetup(
 ) (*cryptoSetup, <-chan *wire.TransportParameters /* ClientHello written. Receive nil for non-0-RTT */) {
 	initialSealer, initialOpener := NewInitialAEAD(connID, perspective)
 	if qlogger != nil {
-		now := time.Now()
-		qlogger.UpdatedKeyFromTLS(now, protocol.EncryptionInitial, protocol.PerspectiveClient)
-		qlogger.UpdatedKeyFromTLS(now, protocol.EncryptionInitial, protocol.PerspectiveServer)
+		qlogger.UpdatedKeyFromTLS(protocol.EncryptionInitial, protocol.PerspectiveClient)
+		qlogger.UpdatedKeyFromTLS(protocol.EncryptionInitial, protocol.PerspectiveServer)
 	}
 	extHandler := newExtensionHandler(tp.Marshal(), perspective)
 	cs := &cryptoSetup{
@@ -241,9 +240,8 @@ func (h *cryptoSetup) ChangeConnectionID(id protocol.ConnectionID) {
 	h.initialSealer = initialSealer
 	h.initialOpener = initialOpener
 	if h.qlogger != nil {
-		now := time.Now()
-		h.qlogger.UpdatedKeyFromTLS(now, protocol.EncryptionInitial, protocol.PerspectiveClient)
-		h.qlogger.UpdatedKeyFromTLS(now, protocol.EncryptionInitial, protocol.PerspectiveServer)
+		h.qlogger.UpdatedKeyFromTLS(protocol.EncryptionInitial, protocol.PerspectiveClient)
+		h.qlogger.UpdatedKeyFromTLS(protocol.EncryptionInitial, protocol.PerspectiveServer)
 	}
 }
 
@@ -575,7 +573,7 @@ func (h *cryptoSetup) SetReadKey(encLevel qtls.EncryptionLevel, suite *qtls.Ciph
 		h.mutex.Unlock()
 		h.logger.Debugf("Installed 0-RTT Read keys (using %s)", qtls.CipherSuiteName(suite.ID))
 		if h.qlogger != nil {
-			h.qlogger.UpdatedKeyFromTLS(time.Now(), protocol.Encryption0RTT, h.perspective.Opposite())
+			h.qlogger.UpdatedKeyFromTLS(protocol.Encryption0RTT, h.perspective.Opposite())
 		}
 		return
 	case qtls.EncryptionHandshake:
@@ -597,7 +595,7 @@ func (h *cryptoSetup) SetReadKey(encLevel qtls.EncryptionLevel, suite *qtls.Ciph
 	}
 	h.mutex.Unlock()
 	if h.qlogger != nil {
-		h.qlogger.UpdatedKeyFromTLS(time.Now(), h.readEncLevel, h.perspective.Opposite())
+		h.qlogger.UpdatedKeyFromTLS(h.readEncLevel, h.perspective.Opposite())
 	}
 	h.receivedReadKey <- struct{}{}
 }
@@ -616,7 +614,7 @@ func (h *cryptoSetup) SetWriteKey(encLevel qtls.EncryptionLevel, suite *qtls.Cip
 		h.mutex.Unlock()
 		h.logger.Debugf("Installed 0-RTT Write keys (using %s)", qtls.CipherSuiteName(suite.ID))
 		if h.qlogger != nil {
-			h.qlogger.UpdatedKeyFromTLS(time.Now(), protocol.Encryption0RTT, h.perspective)
+			h.qlogger.UpdatedKeyFromTLS(protocol.Encryption0RTT, h.perspective)
 		}
 		return
 	case qtls.EncryptionHandshake:
@@ -642,7 +640,7 @@ func (h *cryptoSetup) SetWriteKey(encLevel qtls.EncryptionLevel, suite *qtls.Cip
 	}
 	h.mutex.Unlock()
 	if h.qlogger != nil {
-		h.qlogger.UpdatedKeyFromTLS(time.Now(), h.writeEncLevel, h.perspective)
+		h.qlogger.UpdatedKeyFromTLS(h.writeEncLevel, h.perspective)
 	}
 	h.receivedWriteKey <- struct{}{}
 }

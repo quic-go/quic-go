@@ -19,20 +19,20 @@ const eventChanSize = 50
 // A Tracer records events to be exported to a qlog.
 type Tracer interface {
 	Export() error
-	StartedConnection(t time.Time, local, remote net.Addr, version protocol.VersionNumber, srcConnID, destConnID protocol.ConnectionID)
-	SentTransportParameters(time.Time, *wire.TransportParameters)
-	ReceivedTransportParameters(time.Time, *wire.TransportParameters)
-	SentPacket(t time.Time, hdr *wire.ExtendedHeader, packetSize protocol.ByteCount, ack *wire.AckFrame, frames []wire.Frame)
-	ReceivedRetry(time.Time, *wire.Header)
-	ReceivedPacket(t time.Time, hdr *wire.ExtendedHeader, packetSize protocol.ByteCount, frames []wire.Frame)
-	BufferedPacket(time.Time, PacketType)
-	DroppedPacket(time.Time, PacketType, protocol.ByteCount, PacketDropReason)
-	UpdatedMetrics(t time.Time, rttStats *congestion.RTTStats, cwnd protocol.ByteCount, bytesInFLight protocol.ByteCount, packetsInFlight int)
-	LostPacket(time.Time, protocol.EncryptionLevel, protocol.PacketNumber, PacketLossReason)
-	UpdatedPTOCount(time.Time, uint32)
-	UpdatedKeyFromTLS(time.Time, protocol.EncryptionLevel, protocol.Perspective)
-	UpdatedKey(t time.Time, generation protocol.KeyPhase, remote bool)
-	DroppedEncryptionLevel(time.Time, protocol.EncryptionLevel)
+	StartedConnection(local, remote net.Addr, version protocol.VersionNumber, srcConnID, destConnID protocol.ConnectionID)
+	SentTransportParameters(*wire.TransportParameters)
+	ReceivedTransportParameters(*wire.TransportParameters)
+	SentPacket(hdr *wire.ExtendedHeader, packetSize protocol.ByteCount, ack *wire.AckFrame, frames []wire.Frame)
+	ReceivedRetry(*wire.Header)
+	ReceivedPacket(hdr *wire.ExtendedHeader, packetSize protocol.ByteCount, frames []wire.Frame)
+	BufferedPacket(PacketType)
+	DroppedPacket(PacketType, protocol.ByteCount, PacketDropReason)
+	UpdatedMetrics(rttStats *congestion.RTTStats, cwnd protocol.ByteCount, bytesInFLight protocol.ByteCount, packetsInFlight int)
+	LostPacket(protocol.EncryptionLevel, protocol.PacketNumber, PacketLossReason)
+	UpdatedPTOCount(value uint32)
+	UpdatedKeyFromTLS(protocol.EncryptionLevel, protocol.Perspective)
+	UpdatedKey(generation protocol.KeyPhase, remote bool)
+	DroppedEncryptionLevel(protocol.EncryptionLevel)
 }
 
 type tracer struct {
@@ -110,7 +110,14 @@ func (t *tracer) Export() error {
 	return t.w.Close()
 }
 
-func (t *tracer) StartedConnection(time time.Time, local, remote net.Addr, version protocol.VersionNumber, srcConnID, destConnID protocol.ConnectionID) {
+func (t *tracer) recordEvent(details eventDetails) {
+	t.events <- event{
+		Time:         time.Now(),
+		eventDetails: details,
+	}
+}
+
+func (t *tracer) StartedConnection(local, remote net.Addr, version protocol.VersionNumber, srcConnID, destConnID protocol.ConnectionID) {
 	// ignore this event if we're not dealing with UDP addresses here
 	localAddr, ok := local.(*net.UDPAddr)
 	if !ok {
@@ -120,50 +127,44 @@ func (t *tracer) StartedConnection(time time.Time, local, remote net.Addr, versi
 	if !ok {
 		return
 	}
-	t.events <- event{
-		Time: time,
-		eventDetails: eventConnectionStarted{
-			SrcAddr:          localAddr,
-			DestAddr:         remoteAddr,
-			Version:          version,
-			SrcConnectionID:  srcConnID,
-			DestConnectionID: destConnID,
-		},
-	}
+	t.recordEvent(&eventConnectionStarted{
+		SrcAddr:          localAddr,
+		DestAddr:         remoteAddr,
+		Version:          version,
+		SrcConnectionID:  srcConnID,
+		DestConnectionID: destConnID,
+	})
 }
 
-func (t *tracer) SentTransportParameters(time time.Time, tp *wire.TransportParameters) {
-	t.recordTransportParameters(time, ownerLocal, tp)
+func (t *tracer) SentTransportParameters(tp *wire.TransportParameters) {
+	t.recordTransportParameters(ownerLocal, tp)
 }
 
-func (t *tracer) ReceivedTransportParameters(time time.Time, tp *wire.TransportParameters) {
-	t.recordTransportParameters(time, ownerRemote, tp)
+func (t *tracer) ReceivedTransportParameters(tp *wire.TransportParameters) {
+	t.recordTransportParameters(ownerRemote, tp)
 }
 
-func (t *tracer) recordTransportParameters(time time.Time, owner owner, tp *wire.TransportParameters) {
-	t.events <- event{
-		Time: time,
-		eventDetails: eventTransportParameters{
-			Owner:                          owner,
-			OriginalConnectionID:           tp.OriginalConnectionID,
-			StatelessResetToken:            tp.StatelessResetToken,
-			DisableActiveMigration:         tp.DisableActiveMigration,
-			MaxIdleTimeout:                 tp.MaxIdleTimeout,
-			MaxUDPPayloadSize:              tp.MaxUDPPayloadSize,
-			AckDelayExponent:               tp.AckDelayExponent,
-			MaxAckDelay:                    tp.MaxAckDelay,
-			ActiveConnectionIDLimit:        tp.ActiveConnectionIDLimit,
-			InitialMaxData:                 tp.InitialMaxData,
-			InitialMaxStreamDataBidiLocal:  tp.InitialMaxStreamDataBidiLocal,
-			InitialMaxStreamDataBidiRemote: tp.InitialMaxStreamDataBidiRemote,
-			InitialMaxStreamDataUni:        tp.InitialMaxStreamDataUni,
-			InitialMaxStreamsBidi:          int64(tp.MaxBidiStreamNum),
-			InitialMaxStreamsUni:           int64(tp.MaxUniStreamNum),
-		},
-	}
+func (t *tracer) recordTransportParameters(owner owner, tp *wire.TransportParameters) {
+	t.recordEvent(&eventTransportParameters{
+		Owner:                          owner,
+		OriginalConnectionID:           tp.OriginalConnectionID,
+		StatelessResetToken:            tp.StatelessResetToken,
+		DisableActiveMigration:         tp.DisableActiveMigration,
+		MaxIdleTimeout:                 tp.MaxIdleTimeout,
+		MaxUDPPayloadSize:              tp.MaxUDPPayloadSize,
+		AckDelayExponent:               tp.AckDelayExponent,
+		MaxAckDelay:                    tp.MaxAckDelay,
+		ActiveConnectionIDLimit:        tp.ActiveConnectionIDLimit,
+		InitialMaxData:                 tp.InitialMaxData,
+		InitialMaxStreamDataBidiLocal:  tp.InitialMaxStreamDataBidiLocal,
+		InitialMaxStreamDataBidiRemote: tp.InitialMaxStreamDataBidiRemote,
+		InitialMaxStreamDataUni:        tp.InitialMaxStreamDataUni,
+		InitialMaxStreamsBidi:          int64(tp.MaxBidiStreamNum),
+		InitialMaxStreamsUni:           int64(tp.MaxUniStreamNum),
+	})
 }
 
-func (t *tracer) SentPacket(time time.Time, hdr *wire.ExtendedHeader, packetSize protocol.ByteCount, ack *wire.AckFrame, frames []wire.Frame) {
+func (t *tracer) SentPacket(hdr *wire.ExtendedHeader, packetSize protocol.ByteCount, ack *wire.AckFrame, frames []wire.Frame) {
 	numFrames := len(frames)
 	if ack != nil {
 		numFrames++
@@ -177,137 +178,94 @@ func (t *tracer) SentPacket(time time.Time, hdr *wire.ExtendedHeader, packetSize
 	}
 	header := *transformExtendedHeader(hdr)
 	header.PacketSize = packetSize
-	t.events <- event{
-		Time: time,
-		eventDetails: eventPacketSent{
-			PacketType: PacketTypeFromHeader(&hdr.Header),
-			Header:     header,
-			Frames:     fs,
-		},
-	}
+	t.recordEvent(&eventPacketSent{
+		PacketType: PacketTypeFromHeader(&hdr.Header),
+		Header:     header,
+		Frames:     fs,
+	})
 }
 
-func (t *tracer) ReceivedPacket(time time.Time, hdr *wire.ExtendedHeader, packetSize protocol.ByteCount, frames []wire.Frame) {
+func (t *tracer) ReceivedPacket(hdr *wire.ExtendedHeader, packetSize protocol.ByteCount, frames []wire.Frame) {
 	fs := make([]frame, len(frames))
 	for i, f := range frames {
 		fs[i] = *transformFrame(f)
 	}
 	header := *transformExtendedHeader(hdr)
 	header.PacketSize = packetSize
-	t.events <- event{
-		Time: time,
-		eventDetails: eventPacketReceived{
-			PacketType: PacketTypeFromHeader(&hdr.Header),
-			Header:     header,
-			Frames:     fs,
-		},
-	}
+	t.recordEvent(&eventPacketReceived{
+		PacketType: PacketTypeFromHeader(&hdr.Header),
+		Header:     header,
+		Frames:     fs,
+	})
 }
 
-func (t *tracer) ReceivedRetry(time time.Time, hdr *wire.Header) {
-	t.events <- event{
-		Time: time,
-		eventDetails: eventRetryReceived{
-			Header: *transformHeader(hdr),
-		},
-	}
+func (t *tracer) ReceivedRetry(hdr *wire.Header) {
+	t.recordEvent(&eventRetryReceived{
+		Header: *transformHeader(hdr),
+	})
 }
 
-func (t *tracer) BufferedPacket(time time.Time, packetType PacketType) {
-	t.events <- event{
-		Time:         time,
-		eventDetails: eventPacketBuffered{PacketType: packetType},
-	}
+func (t *tracer) BufferedPacket(packetType PacketType) {
+	t.recordEvent(&eventPacketBuffered{PacketType: packetType})
 }
 
-func (t *tracer) DroppedPacket(time time.Time, packetType PacketType, size protocol.ByteCount, dropReason PacketDropReason) {
-	t.events <- event{
-		Time: time,
-		eventDetails: eventPacketDropped{
-			PacketType: packetType,
-			PacketSize: size,
-			Trigger:    dropReason,
-		},
-	}
+func (t *tracer) DroppedPacket(packetType PacketType, size protocol.ByteCount, dropReason PacketDropReason) {
+	t.recordEvent(&eventPacketDropped{
+		PacketType: packetType,
+		PacketSize: size,
+		Trigger:    dropReason,
+	})
 }
 
-func (t *tracer) UpdatedMetrics(time time.Time, rttStats *congestion.RTTStats, cwnd, bytesInFlight protocol.ByteCount, packetsInFlight int) {
-	t.events <- event{
-		Time: time,
-		eventDetails: eventMetricsUpdated{
-			MinRTT:           rttStats.MinRTT(),
-			SmoothedRTT:      rttStats.SmoothedRTT(),
-			LatestRTT:        rttStats.LatestRTT(),
-			RTTVariance:      rttStats.MeanDeviation(),
-			CongestionWindow: cwnd,
-			BytesInFlight:    bytesInFlight,
-			PacketsInFlight:  packetsInFlight,
-		},
-	}
+func (t *tracer) UpdatedMetrics(rttStats *congestion.RTTStats, cwnd, bytesInFlight protocol.ByteCount, packetsInFlight int) {
+	t.recordEvent(&eventMetricsUpdated{
+		MinRTT:           rttStats.MinRTT(),
+		SmoothedRTT:      rttStats.SmoothedRTT(),
+		LatestRTT:        rttStats.LatestRTT(),
+		RTTVariance:      rttStats.MeanDeviation(),
+		CongestionWindow: cwnd,
+		BytesInFlight:    bytesInFlight,
+		PacketsInFlight:  packetsInFlight,
+	})
 }
 
-func (t *tracer) LostPacket(time time.Time, encLevel protocol.EncryptionLevel, pn protocol.PacketNumber, lossReason PacketLossReason) {
-	t.events <- event{
-		Time: time,
-		eventDetails: eventPacketLost{
-			PacketType:   getPacketTypeFromEncryptionLevel(encLevel),
-			PacketNumber: pn,
-			Trigger:      lossReason,
-		},
-	}
+func (t *tracer) LostPacket(encLevel protocol.EncryptionLevel, pn protocol.PacketNumber, lossReason PacketLossReason) {
+	t.recordEvent(&eventPacketLost{
+		PacketType:   getPacketTypeFromEncryptionLevel(encLevel),
+		PacketNumber: pn,
+		Trigger:      lossReason,
+	})
 }
 
-func (t *tracer) UpdatedPTOCount(time time.Time, value uint32) {
-	t.events <- event{
-		Time:         time,
-		eventDetails: eventUpdatedPTO{Value: value},
-	}
+func (t *tracer) UpdatedPTOCount(value uint32) {
+	t.recordEvent(&eventUpdatedPTO{Value: value})
 }
 
-func (t *tracer) UpdatedKeyFromTLS(time time.Time, encLevel protocol.EncryptionLevel, pers protocol.Perspective) {
-	t.events <- event{
-		Time: time,
-		eventDetails: eventKeyUpdated{
-			Trigger: keyUpdateTLS,
-			KeyType: encLevelToKeyType(encLevel, pers),
-		},
-	}
+func (t *tracer) UpdatedKeyFromTLS(encLevel protocol.EncryptionLevel, pers protocol.Perspective) {
+	t.recordEvent(&eventKeyUpdated{
+		Trigger: keyUpdateTLS,
+		KeyType: encLevelToKeyType(encLevel, pers),
+	})
 }
 
-func (t *tracer) UpdatedKey(time time.Time, generation protocol.KeyPhase, remote bool) {
+func (t *tracer) UpdatedKey(generation protocol.KeyPhase, remote bool) {
 	trigger := keyUpdateLocal
 	if remote {
 		trigger = keyUpdateRemote
 	}
-	t.events <- event{
-		Time: time,
-		eventDetails: eventKeyUpdated{
-			Trigger:    trigger,
-			KeyType:    keyTypeClient1RTT,
-			Generation: generation,
-		},
-	}
-	t.events <- event{
-		Time: time,
-		eventDetails: eventKeyUpdated{
-			Trigger:    trigger,
-			KeyType:    keyTypeServer1RTT,
-			Generation: generation,
-		},
-	}
+	t.recordEvent(&eventKeyUpdated{
+		Trigger:    trigger,
+		KeyType:    keyTypeClient1RTT,
+		Generation: generation,
+	})
+	t.recordEvent(&eventKeyUpdated{
+		Trigger:    trigger,
+		KeyType:    keyTypeServer1RTT,
+		Generation: generation,
+	})
 }
 
-func (t *tracer) DroppedEncryptionLevel(time time.Time, encLevel protocol.EncryptionLevel) {
-	t.events <- event{
-		Time: time,
-		eventDetails: eventKeyRetired{
-			KeyType: encLevelToKeyType(encLevel, protocol.PerspectiveServer),
-		},
-	}
-	t.events <- event{
-		Time: time,
-		eventDetails: eventKeyRetired{
-			KeyType: encLevelToKeyType(encLevel, protocol.PerspectiveClient),
-		},
-	}
+func (t *tracer) DroppedEncryptionLevel(encLevel protocol.EncryptionLevel) {
+	t.recordEvent(&eventKeyRetired{KeyType: encLevelToKeyType(encLevel, protocol.PerspectiveServer)})
+	t.recordEvent(&eventKeyRetired{KeyType: encLevelToKeyType(encLevel, protocol.PerspectiveClient)})
 }

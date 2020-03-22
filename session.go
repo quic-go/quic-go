@@ -276,7 +276,7 @@ var newSession = func(
 		ActiveConnectionIDLimit:        protocol.MaxActiveConnectionIDs,
 	}
 	if s.qlogger != nil {
-		s.qlogger.SentTransportParameters(time.Now(), params)
+		s.qlogger.SentTransportParameters(params)
 	}
 	cs := handshake.NewCryptoSetupServer(
 		initialStream,
@@ -391,7 +391,7 @@ var newClientSession = func(
 		ActiveConnectionIDLimit:        protocol.MaxActiveConnectionIDs,
 	}
 	if s.qlogger != nil {
-		s.qlogger.SentTransportParameters(time.Now(), params)
+		s.qlogger.SentTransportParameters(params)
 	}
 	cs, clientHelloWritten := handshake.NewCryptoSetupClient(
 		initialStream,
@@ -710,7 +710,7 @@ func (s *session) handlePacketImpl(rp *receivedPacket) bool {
 		hdr, packetData, rest, err := wire.ParsePacket(p.data, s.srcConnIDLen)
 		if err != nil {
 			if s.qlogger != nil {
-				s.qlogger.DroppedPacket(p.rcvTime, qlog.PacketTypeNotDetermined, protocol.ByteCount(len(data)), qlog.PacketDropHeaderParseError)
+				s.qlogger.DroppedPacket(qlog.PacketTypeNotDetermined, protocol.ByteCount(len(data)), qlog.PacketDropHeaderParseError)
 			}
 			s.logger.Debugf("error parsing packet: %s", err)
 			break
@@ -771,7 +771,7 @@ func (s *session) handleSinglePacket(p *receivedPacket, hdr *wire.Header) bool /
 		switch err {
 		case handshake.ErrKeysDropped:
 			if s.qlogger != nil {
-				s.qlogger.DroppedPacket(p.rcvTime, qlog.PacketTypeFromHeader(hdr), protocol.ByteCount(len(p.data)), qlog.PacketDropKeyUnavailable)
+				s.qlogger.DroppedPacket(qlog.PacketTypeFromHeader(hdr), protocol.ByteCount(len(p.data)), qlog.PacketDropKeyUnavailable)
 			}
 			s.logger.Debugf("Dropping %s packet (%d bytes) because we already dropped the keys.", hdr.PacketType(), len(p.data))
 		case handshake.ErrKeysNotYetAvailable:
@@ -785,7 +785,7 @@ func (s *session) handleSinglePacket(p *receivedPacket, hdr *wire.Header) bool /
 			// This might be a packet injected by an attacker.
 			// Drop it.
 			if s.qlogger != nil {
-				s.qlogger.DroppedPacket(p.rcvTime, qlog.PacketTypeFromHeader(hdr), protocol.ByteCount(len(p.data)), qlog.PacketDropPayloadDecryptError)
+				s.qlogger.DroppedPacket(qlog.PacketTypeFromHeader(hdr), protocol.ByteCount(len(p.data)), qlog.PacketDropPayloadDecryptError)
 			}
 			s.logger.Debugf("Dropping %s packet (%d bytes) that could not be unpacked. Error: %s", hdr.PacketType(), len(p.data), err)
 		}
@@ -833,7 +833,7 @@ func (s *session) handleRetryPacket(hdr *wire.Header, data []byte) bool /* was t
 	s.logger.Debugf("<- Received Retry")
 	s.logger.Debugf("Switching destination connection ID to: %s", hdr.SrcConnectionID)
 	if s.qlogger != nil {
-		s.qlogger.ReceivedRetry(time.Now(), hdr)
+		s.qlogger.ReceivedRetry(hdr)
 	}
 	s.origDestConnID = s.handshakeDestConnID
 	newDestConnID := hdr.SrcConnectionID
@@ -907,7 +907,7 @@ func (s *session) handleUnpackedPacket(packet *unpackedPacket, rcvTime time.Time
 		})
 	}
 	if s.qlogger != nil {
-		s.qlogger.ReceivedPacket(rcvTime, packet.hdr, protocol.ByteCount(len(packet.data)), frames)
+		s.qlogger.ReceivedPacket(packet.hdr, protocol.ByteCount(len(packet.data)), frames)
 	}
 
 	return s.receivedPacketHandler.ReceivedPacket(packet.packetNumber, packet.encryptionLevel, rcvTime, isAckEliciting)
@@ -1183,7 +1183,7 @@ func (s *session) dropEncryptionLevel(encLevel protocol.EncryptionLevel) {
 	s.sentPacketHandler.DropPackets(encLevel)
 	s.receivedPacketHandler.DropPackets(encLevel)
 	if s.qlogger != nil {
-		s.qlogger.DroppedEncryptionLevel(time.Now(), encLevel)
+		s.qlogger.DroppedEncryptionLevel(encLevel)
 	}
 }
 
@@ -1198,7 +1198,7 @@ func (s *session) processTransportParameters(params *wire.TransportParameters) {
 		s.logger.Debugf("Processed Transport Parameters: %s", params)
 	}
 	if s.qlogger != nil {
-		s.qlogger.ReceivedTransportParameters(time.Now(), params)
+		s.qlogger.ReceivedTransportParameters(params)
 	}
 	s.peerParams = params
 	// Our local idle timeout will always be > 0.
@@ -1406,7 +1406,7 @@ func (s *session) logPacketContents(now time.Time, p *packetContents) {
 		for _, f := range p.frames {
 			frames = append(frames, f.Frame)
 		}
-		s.qlogger.SentPacket(now, p.header, p.length, p.ack, frames)
+		s.qlogger.SentPacket(p.header, p.length, p.ack, frames)
 	}
 
 	// quic-trace
@@ -1521,14 +1521,14 @@ func (s *session) scheduleSending() {
 func (s *session) tryQueueingUndecryptablePacket(p *receivedPacket, hdr *wire.Header) {
 	if len(s.undecryptablePackets)+1 > protocol.MaxUndecryptablePackets {
 		if s.qlogger != nil {
-			s.qlogger.DroppedPacket(p.rcvTime, qlog.PacketTypeFromHeader(hdr), protocol.ByteCount(len(p.data)), qlog.PacketDropDOSPrevention)
+			s.qlogger.DroppedPacket(qlog.PacketTypeFromHeader(hdr), protocol.ByteCount(len(p.data)), qlog.PacketDropDOSPrevention)
 		}
 		s.logger.Infof("Dropping undecryptable packet (%d bytes). Undecryptable packet queue full.", len(p.data))
 		return
 	}
 	s.logger.Infof("Queueing packet (%d bytes) for later decryption", len(p.data))
 	if s.qlogger != nil {
-		s.qlogger.BufferedPacket(p.rcvTime, qlog.PacketTypeFromHeader(hdr))
+		s.qlogger.BufferedPacket(qlog.PacketTypeFromHeader(hdr))
 	}
 	s.undecryptablePackets = append(s.undecryptablePackets, p)
 }
