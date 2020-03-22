@@ -51,23 +51,4 @@ var _ = Describe("Events", func() {
 		Expect(eventFields[3]).To(Equal("data"))
 		Expect(decoded[3].(map[string]interface{})["event"]).To(Equal("details"))
 	})
-
-	It("sorts events", func() {
-		now := time.Now()
-		ev := events{
-			event{Time: now.Add(time.Minute), eventDetails: mevent{}},
-			event{Time: now, eventDetails: mevent{}},
-		}
-
-		buf := &bytes.Buffer{}
-		enc := gojay.NewEncoder(buf)
-		Expect(enc.Encode(ev)).To(Succeed())
-		var decoded []interface{}
-		Expect(json.Unmarshal(buf.Bytes(), &decoded)).To(Succeed())
-		Expect(decoded).To(HaveLen(2))
-		t1 := time.Unix(0, int64(decoded[0].([]interface{})[0].(float64)*1e6))
-		t2 := time.Unix(0, int64(decoded[1].([]interface{})[0].(float64)*1e6))
-		Expect(t1).To(BeTemporally("~", now, time.Millisecond))
-		Expect(t2).To(BeTemporally("~", now.Add(time.Minute), time.Millisecond))
-	})
 })

@@ -3,7 +3,6 @@ package qlog
 import (
 	"fmt"
 	"net"
-	"sort"
 	"time"
 
 	"github.com/lucas-clemente/quic-go/internal/protocol"
@@ -15,26 +14,11 @@ var eventFields = [4]string{"time", "category", "event", "data"}
 
 type events []event
 
-var _ sort.Interface = &events{}
 var _ gojay.MarshalerJSONArray = events{}
 
 func (e events) IsNil() bool { return e == nil }
-func (e events) Len() int    { return len(e) }
-func (e events) Less(i, j int) bool {
-	// Don't use time.Before() here.
-	// Before() uses monotonic time.
-	// We need to make sure that the actual exported timestamp are sorted.
-	return e[i].Time.UnixNano() < e[j].Time.UnixNano()
-}
-func (e events) Swap(i, j int) { e[i], e[j] = e[j], e[i] }
 
 func (e events) MarshalJSONArray(enc *gojay.Encoder) {
-	// Event timestamps are taken from multiple go routines.
-	// For example, the receiving go routine sets the receive time of the packet.
-	// Therefore, events can end up being slightly out of order.
-	// It turns out that Go's stable sort implementation is a lot faster in that case.
-	// See https://gist.github.com/marten-seemann/30251742b378318097e5400ea170c00f for benchmarking code.
-	sort.Stable(e)
 	for _, ev := range e {
 		enc.Array(ev)
 	}
