@@ -92,7 +92,7 @@ var _ = Describe("Tracer", func() {
 			protocol.ConnectionID{0xde, 0xad, 0xbe, 0xef},
 		)
 		for i := uint32(0); i < 1000; i++ {
-			tracer.UpdatedPTOCount(time.Now(), i)
+			tracer.UpdatedPTOCount(i)
 		}
 		Expect(tracer.Export()).To(MatchError("writer full"))
 	})
@@ -129,9 +129,7 @@ var _ = Describe("Tracer", func() {
 		}
 
 		It("records connection starts", func() {
-			now := time.Now()
 			tracer.StartedConnection(
-				now,
 				&net.UDPAddr{IP: net.IPv4(192, 168, 13, 37), Port: 42},
 				&net.UDPAddr{IP: net.IPv4(192, 168, 12, 34), Port: 24},
 				0xdeadbeef,
@@ -139,7 +137,7 @@ var _ = Describe("Tracer", func() {
 				protocol.ConnectionID{5, 6, 7, 8},
 			)
 			entry := exportAndParseSingle()
-			Expect(entry.Time).To(BeTemporally("~", now, time.Millisecond))
+			Expect(entry.Time).To(BeTemporally("~", time.Now(), 10*time.Millisecond))
 			Expect(entry.Category).To(Equal("transport"))
 			Expect(entry.Name).To(Equal("connection_started"))
 			ev := entry.Event
@@ -154,8 +152,7 @@ var _ = Describe("Tracer", func() {
 		})
 
 		It("records sent transport parameters", func() {
-			now := time.Now()
-			tracer.SentTransportParameters(now, &wire.TransportParameters{
+			tracer.SentTransportParameters(&wire.TransportParameters{
 				InitialMaxStreamDataBidiLocal:  1000,
 				InitialMaxStreamDataBidiRemote: 2000,
 				InitialMaxStreamDataUni:        3000,
@@ -172,7 +169,7 @@ var _ = Describe("Tracer", func() {
 				ActiveConnectionIDLimit:        7,
 			})
 			entry := exportAndParseSingle()
-			Expect(entry.Time).To(BeTemporally("~", now, time.Millisecond))
+			Expect(entry.Time).To(BeTemporally("~", time.Now(), 10*time.Millisecond))
 			Expect(entry.Category).To(Equal("transport"))
 			Expect(entry.Name).To(Equal("parameters_set"))
 			ev := entry.Event
@@ -192,10 +189,9 @@ var _ = Describe("Tracer", func() {
 		})
 
 		It("records received transport parameters", func() {
-			now := time.Now()
-			tracer.ReceivedTransportParameters(now, &wire.TransportParameters{})
+			tracer.ReceivedTransportParameters(&wire.TransportParameters{})
 			entry := exportAndParseSingle()
-			Expect(entry.Time).To(BeTemporally("~", now, time.Millisecond))
+			Expect(entry.Time).To(BeTemporally("~", time.Now(), 10*time.Millisecond))
 			Expect(entry.Category).To(Equal("transport"))
 			Expect(entry.Name).To(Equal("parameters_set"))
 			ev := entry.Event
@@ -203,9 +199,7 @@ var _ = Describe("Tracer", func() {
 		})
 
 		It("records a sent packet, without an ACK", func() {
-			now := time.Now()
 			tracer.SentPacket(
-				now,
 				&wire.ExtendedHeader{
 					Header: wire.Header{
 						IsLongHeader:     true,
@@ -224,7 +218,7 @@ var _ = Describe("Tracer", func() {
 				},
 			)
 			entry := exportAndParseSingle()
-			Expect(entry.Time).To(BeTemporally("~", now, time.Millisecond))
+			Expect(entry.Time).To(BeTemporally("~", time.Now(), 10*time.Millisecond))
 			Expect(entry.Category).To(Equal("transport"))
 			Expect(entry.Name).To(Equal("packet_sent"))
 			ev := entry.Event
@@ -243,7 +237,6 @@ var _ = Describe("Tracer", func() {
 
 		It("records a sent packet, without an ACK", func() {
 			tracer.SentPacket(
-				time.Now(),
 				&wire.ExtendedHeader{
 					Header:       wire.Header{DestConnectionID: protocol.ConnectionID{1, 2, 3, 4}},
 					PacketNumber: 1337,
@@ -264,9 +257,7 @@ var _ = Describe("Tracer", func() {
 		})
 
 		It("records a received packet", func() {
-			now := time.Now()
 			tracer.ReceivedPacket(
-				now,
 				&wire.ExtendedHeader{
 					Header: wire.Header{
 						IsLongHeader:     true,
@@ -284,7 +275,7 @@ var _ = Describe("Tracer", func() {
 				},
 			)
 			entry := exportAndParseSingle()
-			Expect(entry.Time).To(BeTemporally("~", now, time.Millisecond))
+			Expect(entry.Time).To(BeTemporally("~", time.Now(), 10*time.Millisecond))
 			Expect(entry.Category).To(Equal("transport"))
 			Expect(entry.Name).To(Equal("packet_received"))
 			ev := entry.Event
@@ -299,9 +290,7 @@ var _ = Describe("Tracer", func() {
 		})
 
 		It("records a received Retry packet", func() {
-			now := time.Now()
 			tracer.ReceivedRetry(
-				now,
 				&wire.Header{
 					IsLongHeader:     true,
 					Type:             protocol.PacketTypeRetry,
@@ -311,7 +300,7 @@ var _ = Describe("Tracer", func() {
 				},
 			)
 			entry := exportAndParseSingle()
-			Expect(entry.Time).To(BeTemporally("~", now, time.Millisecond))
+			Expect(entry.Time).To(BeTemporally("~", time.Now(), 10*time.Millisecond))
 			Expect(entry.Category).To(Equal("transport"))
 			Expect(entry.Name).To(Equal("packet_received"))
 			ev := entry.Event
@@ -321,10 +310,9 @@ var _ = Describe("Tracer", func() {
 		})
 
 		It("records buffered packets", func() {
-			now := time.Now()
-			tracer.BufferedPacket(now, PacketTypeHandshake)
+			tracer.BufferedPacket(PacketTypeHandshake)
 			entry := exportAndParseSingle()
-			Expect(entry.Time).To(BeTemporally("~", now, time.Millisecond))
+			Expect(entry.Time).To(BeTemporally("~", time.Now(), 10*time.Millisecond))
 			Expect(entry.Category).To(Equal("transport"))
 			Expect(entry.Name).To(Equal("packet_buffered"))
 			ev := entry.Event
@@ -333,10 +321,9 @@ var _ = Describe("Tracer", func() {
 		})
 
 		It("records dropped packets", func() {
-			now := time.Now()
-			tracer.DroppedPacket(now, PacketTypeHandshake, 1337, PacketDropPayloadDecryptError)
+			tracer.DroppedPacket(PacketTypeHandshake, 1337, PacketDropPayloadDecryptError)
 			entry := exportAndParseSingle()
-			Expect(entry.Time).To(BeTemporally("~", now, time.Millisecond))
+			Expect(entry.Time).To(BeTemporally("~", time.Now(), 10*time.Millisecond))
 			Expect(entry.Category).To(Equal("transport"))
 			Expect(entry.Name).To(Equal("packet_dropped"))
 			ev := entry.Event
@@ -358,14 +345,13 @@ var _ = Describe("Tracer", func() {
 			))
 			Expect(rttStats.LatestRTT()).To(Equal(25 * time.Millisecond))
 			tracer.UpdatedMetrics(
-				now,
 				rttStats,
 				4321,
 				1234,
 				42,
 			)
 			entry := exportAndParseSingle()
-			Expect(entry.Time).To(BeTemporally("~", now, time.Millisecond))
+			Expect(entry.Time).To(BeTemporally("~", time.Now(), 10*time.Millisecond))
 			Expect(entry.Category).To(Equal("recovery"))
 			Expect(entry.Name).To(Equal("metrics_updated"))
 			ev := entry.Event
@@ -381,10 +367,9 @@ var _ = Describe("Tracer", func() {
 		})
 
 		It("records lost packets", func() {
-			now := time.Now()
-			tracer.LostPacket(now, protocol.EncryptionHandshake, 42, PacketLossReorderingThreshold)
+			tracer.LostPacket(protocol.EncryptionHandshake, 42, PacketLossReorderingThreshold)
 			entry := exportAndParseSingle()
-			Expect(entry.Time).To(BeTemporally("~", now, time.Millisecond))
+			Expect(entry.Time).To(BeTemporally("~", time.Now(), 10*time.Millisecond))
 			Expect(entry.Category).To(Equal("recovery"))
 			Expect(entry.Name).To(Equal("packet_lost"))
 			ev := entry.Event
@@ -394,20 +379,18 @@ var _ = Describe("Tracer", func() {
 		})
 
 		It("records PTO changes", func() {
-			now := time.Now()
-			tracer.UpdatedPTOCount(now, 42)
+			tracer.UpdatedPTOCount(42)
 			entry := exportAndParseSingle()
-			Expect(entry.Time).To(BeTemporally("~", now, time.Millisecond))
+			Expect(entry.Time).To(BeTemporally("~", time.Now(), 10*time.Millisecond))
 			Expect(entry.Category).To(Equal("recovery"))
 			Expect(entry.Name).To(Equal("metrics_updated"))
 			Expect(entry.Event).To(HaveKeyWithValue("pto_count", float64(42)))
 		})
 
 		It("records TLS key updates", func() {
-			now := time.Now()
-			tracer.UpdatedKeyFromTLS(now, protocol.EncryptionHandshake, protocol.PerspectiveClient)
+			tracer.UpdatedKeyFromTLS(protocol.EncryptionHandshake, protocol.PerspectiveClient)
 			entry := exportAndParseSingle()
-			Expect(entry.Time).To(BeTemporally("~", now, time.Millisecond))
+			Expect(entry.Time).To(BeTemporally("~", time.Now(), 10*time.Millisecond))
 			Expect(entry.Category).To(Equal("security"))
 			Expect(entry.Name).To(Equal("key_updated"))
 			ev := entry.Event
@@ -419,13 +402,12 @@ var _ = Describe("Tracer", func() {
 		})
 
 		It("records QUIC key updates", func() {
-			now := time.Now()
-			tracer.UpdatedKey(now, 1337, true)
+			tracer.UpdatedKey(1337, true)
 			entries := exportAndParse()
 			Expect(entries).To(HaveLen(2))
 			var keyTypes []string
 			for _, entry := range entries {
-				Expect(entry.Time).To(BeTemporally("~", now, time.Millisecond))
+				Expect(entry.Time).To(BeTemporally("~", time.Now(), 10*time.Millisecond))
 				Expect(entry.Category).To(Equal("security"))
 				Expect(entry.Name).To(Equal("key_updated"))
 				ev := entry.Event
@@ -439,13 +421,12 @@ var _ = Describe("Tracer", func() {
 		})
 
 		It("records dropped encryption levels", func() {
-			now := time.Now()
-			tracer.DroppedEncryptionLevel(now, protocol.EncryptionInitial)
+			tracer.DroppedEncryptionLevel(protocol.EncryptionInitial)
 			entries := exportAndParse()
 			Expect(entries).To(HaveLen(2))
 			var keyTypes []string
 			for _, entry := range entries {
-				Expect(entry.Time).To(BeTemporally("~", now, time.Millisecond))
+				Expect(entry.Time).To(BeTemporally("~", time.Now(), 10*time.Millisecond))
 				Expect(entry.Category).To(Equal("security"))
 				Expect(entry.Name).To(Equal("key_retired"))
 				ev := entry.Event
