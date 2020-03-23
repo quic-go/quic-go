@@ -7,6 +7,7 @@ import (
 	"github.com/lucas-clemente/quic-go/internal/wire"
 )
 
+// PacketTypeFromHeader determines the packet type from a *wire.Header.
 func PacketTypeFromHeader(hdr *wire.Header) PacketType {
 	if !hdr.IsLongHeader {
 		return PacketType1RTT
@@ -24,7 +25,7 @@ func PacketTypeFromHeader(hdr *wire.Header) PacketType {
 	case protocol.PacketTypeRetry:
 		return PacketTypeRetry
 	default:
-		panic("unknown packet type")
+		return PacketTypeNotDetermined
 	}
 }
 
