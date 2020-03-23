@@ -318,7 +318,7 @@ var _ = Describe("Session", func() {
 		})
 
 		It("handles CONNECTION_CLOSE frames, with a transport error code", func() {
-			testErr := qerr.Error(qerr.StreamLimitError, "foobar")
+			testErr := qerr.NewError(qerr.StreamLimitError, "foobar")
 			streamManager.EXPECT().CloseWithError(testErr)
 			sessionRunner.EXPECT().ReplaceWithClosed(srcConnID, gomock.Any()).Do(func(_ protocol.ConnectionID, s packetHandler) {
 				Expect(s).To(BeAssignableToTypeOf(&closedRemoteSession{}))
@@ -342,7 +342,7 @@ var _ = Describe("Session", func() {
 		})
 
 		It("handles CONNECTION_CLOSE frames, with an application error code", func() {
-			testErr := qerr.ApplicationError(0x1337, "foobar")
+			testErr := qerr.NewApplicationError(0x1337, "foobar")
 			streamManager.EXPECT().CloseWithError(testErr)
 			sessionRunner.EXPECT().ReplaceWithClosed(srcConnID, gomock.Any()).Do(func(_ protocol.ConnectionID, s packetHandler) {
 				Expect(s).To(BeAssignableToTypeOf(&closedRemoteSession{}))
@@ -401,7 +401,7 @@ var _ = Describe("Session", func() {
 
 		It("shuts down without error", func() {
 			sess.handshakeComplete = true
-			streamManager.EXPECT().CloseWithError(qerr.ApplicationError(0, ""))
+			streamManager.EXPECT().CloseWithError(qerr.NewApplicationError(0, ""))
 			expectReplaceWithClosed()
 			cryptoSetup.EXPECT().Close()
 			buffer := getPacketBuffer()
@@ -430,7 +430,7 @@ var _ = Describe("Session", func() {
 		})
 
 		It("closes with an error", func() {
-			streamManager.EXPECT().CloseWithError(qerr.ApplicationError(0x1337, "test error"))
+			streamManager.EXPECT().CloseWithError(qerr.NewApplicationError(0x1337, "test error"))
 			expectReplaceWithClosed()
 			cryptoSetup.EXPECT().Close()
 			packer.EXPECT().PackConnectionClose(gomock.Any()).DoAndReturn(func(quicErr *qerr.QuicError) (*coalescedPacket, error) {
@@ -446,7 +446,7 @@ var _ = Describe("Session", func() {
 		})
 
 		It("includes the frame type in transport-level close frames", func() {
-			testErr := qerr.ErrorWithFrameType(0x1337, 0x42, "test error")
+			testErr := qerr.NewErrorWithFrameType(0x1337, 0x42, "test error")
 			streamManager.EXPECT().CloseWithError(testErr)
 			expectReplaceWithClosed()
 			cryptoSetup.EXPECT().Close()
@@ -1411,7 +1411,7 @@ var _ = Describe("Session", func() {
 			defer GinkgoRecover()
 			cryptoSetup.EXPECT().RunHandshake().MaxTimes(1)
 			err := sess.run()
-			Expect(err).To(MatchError(qerr.ApplicationError(0x1337, testErr.Error())))
+			Expect(err).To(MatchError(qerr.NewApplicationError(0x1337, testErr.Error())))
 			close(done)
 		}()
 		streamManager.EXPECT().CloseWithError(gomock.Any())

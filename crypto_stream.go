@@ -40,12 +40,12 @@ func newCryptoStream() cryptoStream {
 func (s *cryptoStreamImpl) HandleCryptoFrame(f *wire.CryptoFrame) error {
 	highestOffset := f.Offset + protocol.ByteCount(len(f.Data))
 	if maxOffset := highestOffset; maxOffset > protocol.MaxCryptoStreamOffset {
-		return qerr.Error(qerr.CryptoBufferExceeded, fmt.Sprintf("received invalid offset %d on crypto stream, maximum allowed %d", maxOffset, protocol.MaxCryptoStreamOffset))
+		return qerr.NewError(qerr.CryptoBufferExceeded, fmt.Sprintf("received invalid offset %d on crypto stream, maximum allowed %d", maxOffset, protocol.MaxCryptoStreamOffset))
 	}
 	if s.finished {
 		if highestOffset > s.highestOffset {
 			// reject crypto data received after this stream was already finished
-			return qerr.Error(qerr.ProtocolViolation, "received crypto data after change of encryption level")
+			return qerr.NewError(qerr.ProtocolViolation, "received crypto data after change of encryption level")
 		}
 		// ignore data with a smaller offset than the highest received
 		// could e.g. be a retransmission

@@ -229,13 +229,13 @@ func (h *sentPacketHandler) ReceivedAck(ack *wire.AckFrame, encLevel protocol.En
 
 	largestAcked := ack.LargestAcked()
 	if largestAcked > pnSpace.largestSent {
-		return qerr.Error(qerr.ProtocolViolation, "Received ACK for an unsent packet")
+		return qerr.NewError(qerr.ProtocolViolation, "Received ACK for an unsent packet")
 	}
 
 	pnSpace.largestAcked = utils.MaxPacketNumber(pnSpace.largestAcked, largestAcked)
 
 	if !pnSpace.pns.Validate(ack) {
-		return qerr.Error(qerr.ProtocolViolation, "Received an ACK for a skipped packet number")
+		return qerr.NewError(qerr.ProtocolViolation, "Received an ACK for a skipped packet number")
 	}
 
 	// Servers complete address validation when a protected packet is received.

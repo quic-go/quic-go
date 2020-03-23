@@ -160,7 +160,7 @@ func (a *updatableAEAD) Open(dst, src []byte, rcvTime time.Time, pn protocol.Pac
 				// This can only occur when the first packet received has key phase 1.
 				// This is an error, since the key phase starts at 0,
 				// and peers are only allowed to update keys after the handshake is confirmed.
-				return nil, qerr.Error(qerr.ProtocolViolation, "wrong initial keyphase")
+				return nil, qerr.NewError(qerr.ProtocolViolation, "wrong initial keyphase")
 			}
 			if a.prevRcvAEAD == nil {
 				return nil, ErrKeysDropped
@@ -179,7 +179,7 @@ func (a *updatableAEAD) Open(dst, src []byte, rcvTime time.Time, pn protocol.Pac
 		}
 		// Opening succeeded. Check if the peer was allowed to update.
 		if a.firstSentWithCurrentKey == protocol.InvalidPacketNumber {
-			return nil, qerr.Error(qerr.ProtocolViolation, "keys updated too quickly")
+			return nil, qerr.NewError(qerr.ProtocolViolation, "keys updated too quickly")
 		}
 		a.rollKeys(rcvTime)
 		a.logger.Debugf("Peer updated keys to %s", a.keyPhase)
