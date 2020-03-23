@@ -7,6 +7,8 @@ import (
 	"log"
 	"os"
 	"strings"
+
+	"github.com/lucas-clemente/quic-go/internal/utils"
 )
 
 // GetSSLKeyLog creates a file for the TLS key log
@@ -39,12 +41,6 @@ func GetQLOGWriter() (func(connID []byte) io.WriteCloser, error) {
 		if err != nil {
 			log.Fatalf("Failed to create qlog file %s: %s", path, err.Error())
 		}
-		return struct {
-			io.Writer
-			io.Closer
-		}{
-			bufio.NewWriter(f),
-			f,
-		}
+		return utils.NewBufferedWriteCloser(bufio.NewWriter(f), f)
 	}, nil
 }
