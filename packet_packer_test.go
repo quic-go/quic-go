@@ -732,7 +732,7 @@ var _ = Describe("Packet packer", func() {
 					Expect(err).ToNot(HaveOccurred())
 					// now reduce the maxPacketSize
 					packer.HandleTransportParameters(&wire.TransportParameters{
-						MaxPacketSize: maxPacketSize - 10,
+						MaxUDPPayloadSize: maxPacketSize - 10,
 					})
 					framer.EXPECT().AppendControlFrames(gomock.Any(), gomock.Any()).Do(func(_ []ackhandler.Frame, maxLen protocol.ByteCount) ([]ackhandler.Frame, protocol.ByteCount) {
 						Expect(maxLen).To(Equal(initialMaxPacketSize - 10))
@@ -757,7 +757,7 @@ var _ = Describe("Packet packer", func() {
 					Expect(err).ToNot(HaveOccurred())
 					// now try to increase the maxPacketSize
 					packer.HandleTransportParameters(&wire.TransportParameters{
-						MaxPacketSize: maxPacketSize + 10,
+						MaxUDPPayloadSize: maxPacketSize + 10,
 					})
 					framer.EXPECT().AppendControlFrames(gomock.Any(), gomock.Any()).Do(func(_ []ackhandler.Frame, maxLen protocol.ByteCount) ([]ackhandler.Frame, protocol.ByteCount) {
 						Expect(maxLen).To(Equal(initialMaxPacketSize))

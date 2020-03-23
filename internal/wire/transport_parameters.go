@@ -28,7 +28,7 @@ const (
 	originalConnectionIDParameterID           transportParameterID = 0x0
 	maxIdleTimeoutParameterID                 transportParameterID = 0x1
 	statelessResetTokenParameterID            transportParameterID = 0x2
-	maxPacketSizeParameterID                  transportParameterID = 0x3
+	maxUDPPayloadSizeParameterID              transportParameterID = 0x3
 	initialMaxDataParameterID                 transportParameterID = 0x4
 	initialMaxStreamDataBidiLocalParameterID  transportParameterID = 0x5
 	initialMaxStreamDataBidiRemoteParameterID transportParameterID = 0x6
@@ -64,7 +64,7 @@ type TransportParameters struct {
 
 	DisableActiveMigration bool
 
-	MaxPacketSize protocol.ByteCount
+	MaxUDPPayloadSize protocol.ByteCount
 
 	MaxUniStreamNum  protocol.StreamNum
 	MaxBidiStreamNum protocol.StreamNum
@@ -123,7 +123,7 @@ func (p *TransportParameters) unmarshal(data []byte, sentBy protocol.Perspective
 			initialMaxStreamsBidiParameterID,
 			initialMaxStreamsUniParameterID,
 			maxIdleTimeoutParameterID,
-			maxPacketSizeParameterID,
+			maxUDPPayloadSizeParameterID,
 			activeConnectionIDLimitParameterID:
 			if err := p.readNumericTransportParameter(r, paramID, int(paramLen)); err != nil {
 				return err
@@ -172,8 +172,8 @@ func (p *TransportParameters) unmarshal(data []byte, sentBy protocol.Perspective
 	if !readMaxAckDelay {
 		p.MaxAckDelay = protocol.DefaultMaxAckDelay
 	}
-	if p.MaxPacketSize == 0 {
-		p.MaxPacketSize = protocol.MaxByteCount
+	if p.MaxUDPPayloadSize == 0 {
+		p.MaxUDPPayloadSize = protocol.MaxByteCount
 	}
 
 	// check that every transport parameter was sent at most once
@@ -257,11 +257,11 @@ func (p *TransportParameters) readNumericTransportParameter(
 		p.MaxUniStreamNum = protocol.StreamNum(val)
 	case maxIdleTimeoutParameterID:
 		p.MaxIdleTimeout = utils.MaxDuration(protocol.MinRemoteIdleTimeout, time.Duration(val)*time.Millisecond)
-	case maxPacketSizeParameterID:
+	case maxUDPPayloadSizeParameterID:
 		if val < 1200 {
 			return fmt.Errorf("invalid value for max_packet_size: %d (minimum 1200)", val)
 		}
-		p.MaxPacketSize = protocol.ByteCount(val)
+		p.MaxUDPPayloadSize = protocol.ByteCount(val)
 	case ackDelayExponentParameterID:
 		if val > protocol.MaxAckDelayExponent {
 			return fmt.Errorf("invalid value for ack_delay_exponent: %d (maximum %d)", val, protocol.MaxAckDelayExponent)
@@ -311,7 +311,7 @@ func (p *TransportParameters) Marshal() []byte {
 	// idle_timeout
 	p.marshalVarintParam(b, maxIdleTimeoutParameterID, uint64(p.MaxIdleTimeout/time.Millisecond))
 	// max_packet_size
-	p.marshalVarintParam(b, maxPacketSizeParameterID, uint64(protocol.MaxReceivePacketSize))
+	p.marshalVarintParam(b, maxUDPPayloadSizeParameterID, uint64(protocol.MaxReceivePacketSize))
 	// max_ack_delay
 	// Only send it if is different from the default value.
 	if p.MaxAckDelay != protocol.DefaultMaxAckDelay {

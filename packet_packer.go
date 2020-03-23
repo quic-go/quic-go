@@ -739,7 +739,7 @@ func (p *packetPacker) SetToken(token []byte) {
 }
 
 func (p *packetPacker) HandleTransportParameters(params *wire.TransportParameters) {
-	if params.MaxPacketSize != 0 {
-		p.maxPacketSize = utils.MinByteCount(p.maxPacketSize, params.MaxPacketSize)
+	if params.MaxUDPPayloadSize != 0 {
+		p.maxPacketSize = utils.MinByteCount(p.maxPacketSize, params.MaxUDPPayloadSize)
 	}
 }

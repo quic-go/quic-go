@@ -277,7 +277,7 @@ type eventTransportParameters struct {
 	StatelessResetToken     *[16]byte
 	DisableActiveMigration  bool
 	MaxIdleTimeout          time.Duration
-	MaxPacketSize           protocol.ByteCount
+	MaxUDPPayloadSize       protocol.ByteCount
 	AckDelayExponent        uint8
 	MaxAckDelay             time.Duration
 	ActiveConnectionIDLimit uint64
@@ -306,7 +306,7 @@ func (e eventTransportParameters) MarshalJSONObject(enc *gojay.Encoder) {
 	}
 	enc.BoolKey("disable_active_migration", e.DisableActiveMigration)
 	enc.FloatKeyOmitEmpty("max_idle_timeout", milliseconds(e.MaxIdleTimeout))
-	enc.Uint64KeyNullEmpty("max_packet_size", uint64(e.MaxPacketSize))
+	enc.Uint64KeyNullEmpty("max_udp_payload_size", uint64(e.MaxUDPPayloadSize))
 	enc.Uint8KeyOmitEmpty("ack_delay_exponent", e.AckDelayExponent)
 	enc.FloatKeyOmitEmpty("max_ack_delay", milliseconds(e.MaxAckDelay))
 	enc.Uint64KeyOmitEmpty("active_connection_id_limit", e.ActiveConnectionIDLimit)
