@@ -246,10 +246,11 @@ type Config struct {
 	// Warning: Experimental. This API should not be considered stable and will change soon.
 	QuicTracer quictrace.Tracer
 	// GetLogWriter is used to pass in a writer for the qlog.
+	// The role will either be "client" or "server".
 	// If it is nil, no qlog will be collected and exported.
 	// If it returns nil, no qlog will be collected and exported for the respective connection.
 	// It is recommended to use a buffered writer here.
-	GetLogWriter func(connectionID []byte) io.WriteCloser
+	GetLogWriter func(role string, connectionID []byte) io.WriteCloser
 }
 
 // A Listener for incoming QUIC connections

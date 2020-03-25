@@ -180,7 +180,7 @@ func dialContext(
 
 	var qlogger qlog.Tracer
 	if c.config.GetLogWriter != nil {
-		if w := c.config.GetLogWriter(c.destConnID); w != nil {
+		if w := c.config.GetLogWriter("client", c.destConnID); w != nil {
 			qlogger = qlog.NewTracer(w, protocol.PerspectiveClient, c.destConnID)
 		}
 	}

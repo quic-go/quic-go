@@ -65,11 +65,11 @@ var _ = Describe("Config", func() {
 			var calledAcceptToken, calledGetLogWriter bool
 			c1 := &Config{
 				AcceptToken:  func(_ net.Addr, _ *Token) bool { calledAcceptToken = true; return true },
-				GetLogWriter: func(connectionID []byte) io.WriteCloser { calledGetLogWriter = true; return nil },
+				GetLogWriter: func(role string, connectionID []byte) io.WriteCloser { calledGetLogWriter = true; return nil },
 			}
 			c2 := c1.Clone()
 			c2.AcceptToken(&net.UDPAddr{}, &Token{})
-			c2.GetLogWriter([]byte{1, 2, 3})
+			c2.GetLogWriter("role", []byte{1, 2, 3})
 			Expect(calledAcceptToken).To(BeTrue())
 			Expect(calledGetLogWriter).To(BeTrue())
 		})
@@ -98,11 +98,11 @@ var _ = Describe("Config", func() {
 			var calledAcceptToken, calledGetLogWriter bool
 			c1 := &Config{
 				AcceptToken:  func(_ net.Addr, _ *Token) bool { calledAcceptToken = true; return true },
-				GetLogWriter: func(connectionID []byte) io.WriteCloser { calledGetLogWriter = true; return nil },
+				GetLogWriter: func(role string, connectionID []byte) io.WriteCloser { calledGetLogWriter = true; return nil },
 			}
 			c2 := populateConfig(c1)
 			c2.AcceptToken(&net.UDPAddr{}, &Token{})
-			c2.GetLogWriter([]byte{1, 2, 3})
+			c2.GetLogWriter("role", []byte{1, 2, 3})
 			Expect(calledAcceptToken).To(BeTrue())
 			Expect(calledGetLogWriter).To(BeTrue())
 		})
