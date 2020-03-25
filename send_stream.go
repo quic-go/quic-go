@@ -311,9 +311,13 @@ func (s *sendStream) queueRetransmission(f wire.Frame) {
 
 func (s *sendStream) Close() error {
 	s.mutex.Lock()
+	if s.closedForShutdown {
+		s.mutex.Unlock()
+		return nil
+	}
 	if s.canceledWrite {
 		s.mutex.Unlock()
-		return fmt.Errorf("Close called for canceled stream %d", s.streamID)
+		return fmt.Errorf("close called for canceled stream %d", s.streamID)
 	}
 	s.ctxCancel()
 	s.finishedWriting = true
