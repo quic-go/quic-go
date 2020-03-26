@@ -438,6 +438,11 @@ var _ = Describe("Send Stream", func() {
 				f, hasMoreData := str.popStreamFrame(1000)
 				Expect(f).To(BeNil())
 				Expect(hasMoreData).To(BeFalse())
+
+				Expect(str.Close()).To(Succeed())
+				f, hasMoreData = str.popStreamFrame(1000)
+				Expect(f).To(BeNil())
+				Expect(hasMoreData).To(BeFalse())
 			})
 
 			It("doesn't allow FIN twice", func() {
