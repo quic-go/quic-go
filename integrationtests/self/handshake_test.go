@@ -57,7 +57,7 @@ var _ = Describe("Handshake tests", func() {
 	BeforeEach(func() {
 		server = nil
 		acceptStopped = make(chan struct{})
-		serverConfig = &quic.Config{}
+		serverConfig = getQuicConfigForServer(nil)
 		tlsServerConf = getTLSConfig()
 	})
 
@@ -121,13 +121,12 @@ var _ = Describe("Handshake tests", func() {
 				serverConfig.Versions = supportedVersions
 				server := runServer()
 				defer server.Close()
-				conf := &quic.Config{
-					Versions: []protocol.VersionNumber{7, 8, 9, protocol.SupportedVersions[0], 10},
-				}
 				sess, err := quic.DialAddr(
 					fmt.Sprintf("localhost:%d", server.Addr().(*net.UDPAddr).Port),
 					getTLSClientConfig(),
-					conf,
+					getQuicConfigForClient(&quic.Config{
+						Versions: []protocol.VersionNumber{7, 8, 9, protocol.SupportedVersions[0], 10},
+					}),
 				)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(sess.(versioner).GetVersion()).To(Equal(protocol.SupportedVersions[0]))
@@ -187,9 +186,7 @@ var _ = Describe("Handshake tests", func() {
 
 				BeforeEach(func() {
 					serverConfig.Versions = []protocol.VersionNumber{version}
-					clientConfig = &quic.Config{
-						Versions: []protocol.VersionNumber{version},
-					}
+					clientConfig = getQuicConfigForClient(&quic.Config{Versions: []protocol.VersionNumber{version}})
 				})
 
 				JustBeforeEach(func() {
@@ -421,7 +418,7 @@ var _ = Describe("Handshake tests", func() {
 			gets := make(chan string, 100)
 			puts := make(chan string, 100)
 			tokenStore := newTokenStore(gets, puts)
-			quicConf := &quic.Config{TokenStore: tokenStore}
+			quicConf := getQuicConfigForClient(&quic.Config{TokenStore: tokenStore})
 			sess, err := quic.DialAddr(
 				fmt.Sprintf("localhost:%d", server.Addr().(*net.UDPAddr).Port),
 				getTLSClientConfig(),

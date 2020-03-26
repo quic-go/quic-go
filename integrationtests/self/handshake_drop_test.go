@@ -33,11 +33,11 @@ var _ = Describe("Handshake drop tests", func() {
 	const timeout = 10 * time.Minute
 
 	startListenerAndProxy := func(dropCallback quicproxy.DropCallback, doRetry bool, version protocol.VersionNumber) {
-		conf := &quic.Config{
+		conf := getQuicConfigForServer(&quic.Config{
 			MaxIdleTimeout:   timeout,
 			HandshakeTimeout: timeout,
 			Versions:         []protocol.VersionNumber{version},
-		}
+		})
 		if !doRetry {
 			conf.AcceptToken = func(net.Addr, *quic.Token) bool { return true }
 		}
@@ -79,11 +79,11 @@ var _ = Describe("Handshake drop tests", func() {
 			sess, err := quic.DialAddr(
 				fmt.Sprintf("localhost:%d", proxy.LocalPort()),
 				getTLSClientConfig(),
-				&quic.Config{
+				getQuicConfigForClient(&quic.Config{
 					MaxIdleTimeout:   timeout,
 					HandshakeTimeout: timeout,
 					Versions:         []protocol.VersionNumber{version},
-				},
+				}),
 			)
 			Expect(err).ToNot(HaveOccurred())
 			str, err := sess.OpenStream()
@@ -115,11 +115,11 @@ var _ = Describe("Handshake drop tests", func() {
 			sess, err := quic.DialAddr(
 				fmt.Sprintf("localhost:%d", proxy.LocalPort()),
 				getTLSClientConfig(),
-				&quic.Config{
+				getQuicConfigForClient(&quic.Config{
 					MaxIdleTimeout:   timeout,
 					HandshakeTimeout: timeout,
 					Versions:         []protocol.VersionNumber{version},
-				},
+				}),
 			)
 			Expect(err).ToNot(HaveOccurred())
 			str, err := sess.AcceptStream(context.Background())
@@ -149,11 +149,11 @@ var _ = Describe("Handshake drop tests", func() {
 			sess, err := quic.DialAddr(
 				fmt.Sprintf("localhost:%d", proxy.LocalPort()),
 				getTLSClientConfig(),
-				&quic.Config{
+				getQuicConfigForClient(&quic.Config{
 					MaxIdleTimeout:   timeout,
 					HandshakeTimeout: timeout,
 					Versions:         []protocol.VersionNumber{version},
-				},
+				}),
 			)
 			Expect(err).ToNot(HaveOccurred())
 			var serverSession quic.Session
