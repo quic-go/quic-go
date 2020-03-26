@@ -24,6 +24,7 @@ var _ = Describe("Types", func() {
 		Expect(PacketTypeHandshake.String()).To(Equal("handshake"))
 		Expect(PacketType0RTT.String()).To(Equal("0RTT"))
 		Expect(PacketType1RTT.String()).To(Equal("1RTT"))
+		Expect(PacketTypeStatelessReset.String()).To(Equal("stateless_reset"))
 		Expect(PacketTypeRetry.String()).To(Equal("retry"))
 		Expect(PacketTypeVersionNegotiation.String()).To(Equal("version_negotiation"))
 		Expect(PacketTypeNotDetermined.String()).To(BeEmpty())

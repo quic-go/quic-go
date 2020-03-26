@@ -138,6 +138,19 @@ func (e eventRetryReceived) MarshalJSONObject(enc *gojay.Encoder) {
 	enc.ObjectKey("header", e.Header)
 }
 
+type eventStatelessResetReceived struct {
+	Token *[16]byte
+}
+
+func (e eventStatelessResetReceived) Category() category { return categoryTransport }
+func (e eventStatelessResetReceived) Name() string       { return "packet_received" }
+func (e eventStatelessResetReceived) IsNil() bool        { return false }
+
+func (e eventStatelessResetReceived) MarshalJSONObject(enc *gojay.Encoder) {
+	enc.StringKey("packet_type", PacketTypeStatelessReset.String())
+	enc.StringKey("stateless_reset_token", fmt.Sprintf("%x", *e.Token))
+}
+
 type eventPacketBuffered struct {
 	PacketType PacketType
 }

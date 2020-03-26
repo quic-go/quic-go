@@ -1149,6 +1149,9 @@ func (s *session) handleCloseError(closeErr closeError) {
 	if closeErr.err == nil {
 		closeErr.err = qerr.NewApplicationError(0, "")
 	}
+	if statelessReset, ok := closeErr.err.(interface{ StatelessResetToken() *[16]byte }); ok && s.qlogger != nil {
+		s.qlogger.ReceivedStatelessReset(statelessReset.StatelessResetToken())
+	}
 
 	var quicErr *qerr.QuicError
 	var ok bool

@@ -90,6 +90,8 @@ const (
 	PacketTypeVersionNegotiation
 	// PacketType1RTT is a 1-RTT packet
 	PacketType1RTT
+	// PacketTypeStatelessReset is a stateless reset
+	PacketTypeStatelessReset
 	// PacketTypeNotDetermined is the packet type when it could not be determined
 	PacketTypeNotDetermined
 )
@@ -106,6 +108,8 @@ func (t PacketType) String() string {
 		return "0RTT"
 	case PacketTypeVersionNegotiation:
 		return "version_negotiation"
+	case PacketTypeStatelessReset:
+		return "stateless_reset"
 	case PacketType1RTT:
 		return "1RTT"
 	case PacketTypeNotDetermined:

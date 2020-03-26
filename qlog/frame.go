@@ -211,7 +211,7 @@ func marshalNewConnectionIDFrame(enc *gojay.Encoder, f *wire.NewConnectionIDFram
 	enc.Int64Key("retire_prior_to", int64(f.RetirePriorTo))
 	enc.IntKey("length", f.ConnectionID.Len())
 	enc.StringKey("connection_id", connectionID(f.ConnectionID).String())
-	enc.StringKey("reset_token", fmt.Sprintf("%x", f.StatelessResetToken))
+	enc.StringKey("stateless_reset_token", fmt.Sprintf("%x", f.StatelessResetToken))
 }
 
 func marshalRetireConnectionIDFrame(enc *gojay.Encoder, f *wire.RetireConnectionIDFrame) {

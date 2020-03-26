@@ -98,7 +98,8 @@ var _ = Describe("Stateless Resets", func() {
 			if serr == nil {
 				_, serr = str.Read([]byte{0})
 			}
-			Expect(serr).To(MatchError("INTERNAL_ERROR: received a stateless reset"))
+			Expect(serr).To(HaveOccurred())
+			Expect(serr.Error()).To(ContainSubstring("INTERNAL_ERROR: received a stateless reset"))
 
 			Expect(ln2.Close()).To(Succeed())
 			Eventually(acceptStopped).Should(BeClosed())
