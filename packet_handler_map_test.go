@@ -233,7 +233,11 @@ var _ = Describe("Packet Handler Map", func() {
 				packet := append([]byte{0x40} /* short header packet */, make([]byte, 50)...)
 				packet = append(packet, token[:]...)
 				destroyed := make(chan struct{})
-				packetHandler.EXPECT().destroy(errors.New("received a stateless reset")).Do(func(error) {
+				packetHandler.EXPECT().destroy(gomock.Any()).Do(func(err error) {
+					Expect(err).To(HaveOccurred())
+					Expect(err).To(BeAssignableToTypeOf(&statelessResetErr{}))
+					Expect(err.Error()).To(ContainSubstring("received a stateless reset"))
+					Expect(*err.(*statelessResetErr).StatelessResetToken()).To(Equal(token))
 					close(destroyed)
 				})
 				conn.dataToRead <- packet
@@ -248,7 +252,11 @@ var _ = Describe("Packet Handler Map", func() {
 				packet := append([]byte{0x40} /* short header packet */, make([]byte, 50)...)
 				packet = append(packet, token[:]...)
 				destroyed := make(chan struct{})
-				packetHandler.EXPECT().destroy(errors.New("received a stateless reset")).Do(func(error) {
+				packetHandler.EXPECT().destroy(gomock.Any()).Do(func(err error) {
+					Expect(err).To(HaveOccurred())
+					Expect(err).To(BeAssignableToTypeOf(&statelessResetErr{}))
+					Expect(err.Error()).To(ContainSubstring("received a stateless reset"))
+					Expect(*err.(*statelessResetErr).StatelessResetToken()).To(Equal(token))
 					close(destroyed)
 				})
 				conn.dataToRead <- packet

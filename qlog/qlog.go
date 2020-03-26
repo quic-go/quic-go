@@ -25,6 +25,7 @@ type Tracer interface {
 	SentPacket(hdr *wire.ExtendedHeader, packetSize protocol.ByteCount, ack *wire.AckFrame, frames []wire.Frame)
 	ReceivedRetry(*wire.Header)
 	ReceivedPacket(hdr *wire.ExtendedHeader, packetSize protocol.ByteCount, frames []wire.Frame)
+	ReceivedStatelessReset(token *[16]byte)
 	BufferedPacket(PacketType)
 	DroppedPacket(PacketType, protocol.ByteCount, PacketDropReason)
 	UpdatedMetrics(rttStats *congestion.RTTStats, cwnd protocol.ByteCount, bytesInFLight protocol.ByteCount, packetsInFlight int)
@@ -202,6 +203,12 @@ func (t *tracer) ReceivedPacket(hdr *wire.ExtendedHeader, packetSize protocol.By
 func (t *tracer) ReceivedRetry(hdr *wire.Header) {
 	t.recordEvent(&eventRetryReceived{
 		Header: *transformHeader(hdr),
+	})
+}
+
+func (t *tracer) ReceivedStatelessReset(token *[16]byte) {
+	t.recordEvent(&eventStatelessResetReceived{
+		Token: token,
 	})
 }
 
