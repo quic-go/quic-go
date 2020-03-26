@@ -423,8 +423,13 @@ func (s *baseServer) createNewSession(
 ) quicSession {
 	var qlogger qlog.Tracer
 	if s.config.GetLogWriter != nil {
-		if w := s.config.GetLogWriter(origDestConnID); w != nil {
-			qlogger = qlog.NewTracer(w, protocol.PerspectiveServer, origDestConnID)
+		// Use the same connection ID that is passed to the client's GetLogWriter callback.
+		connID := clientDestConnID
+		if origDestConnID.Len() > 0 {
+			connID = origDestConnID
+		}
+		if w := s.config.GetLogWriter(connID); w != nil {
+			qlogger = qlog.NewTracer(w, protocol.PerspectiveServer, connID)
 		}
 	}
 	if qlogger != nil {
