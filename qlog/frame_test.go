@@ -259,12 +259,12 @@ var _ = Describe("Frames", func() {
 				StatelessResetToken: [16]byte{0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 0xa, 0xb, 0xc, 0xd, 0xe, 0xf},
 			},
 			map[string]interface{}{
-				"frame_type":      "new_connection_id",
-				"sequence_number": 42,
-				"retire_prior_to": 24,
-				"length":          4,
-				"connection_id":   "deadbeef",
-				"reset_token":     "000102030405060708090a0b0c0d0e0f",
+				"frame_type":            "new_connection_id",
+				"sequence_number":       42,
+				"retire_prior_to":       24,
+				"length":                4,
+				"connection_id":         "deadbeef",
+				"stateless_reset_token": "000102030405060708090a0b0c0d0e0f",
 			},
 		)
 	})
