@@ -29,7 +29,7 @@ var _ = Describe("Handshake RTT tests", func() {
 
 	BeforeEach(func() {
 		acceptStopped = make(chan struct{})
-		serverConfig = &quic.Config{}
+		serverConfig = getQuicConfigForServer(nil)
 		serverTLSConfig = getTLSConfig()
 	})
 
@@ -79,9 +79,7 @@ var _ = Describe("Handshake RTT tests", func() {
 		}
 		serverConfig.Versions = protocol.SupportedVersions[:1]
 		runServerAndProxy()
-		clientConfig := &quic.Config{
-			Versions: protocol.SupportedVersions[1:2],
-		}
+		clientConfig := getQuicConfigForClient(&quic.Config{Versions: protocol.SupportedVersions[1:2]})
 		_, err := quic.DialAddr(
 			proxy.LocalAddr().String(),
 			getTLSClientConfig(),
@@ -96,7 +94,7 @@ var _ = Describe("Handshake RTT tests", func() {
 
 	BeforeEach(func() {
 		serverConfig.Versions = []protocol.VersionNumber{protocol.VersionTLS}
-		clientConfig = &quic.Config{Versions: []protocol.VersionNumber{protocol.VersionTLS}}
+		clientConfig = getQuicConfigForClient(&quic.Config{Versions: []protocol.VersionNumber{protocol.VersionTLS}})
 		clientConfig := getTLSClientConfig()
 		clientConfig.InsecureSkipVerify = true
 	})

@@ -1,14 +1,19 @@
 package self_test
 
 import (
+	"bufio"
 	"bytes"
 	"crypto/tls"
 	"flag"
+	"fmt"
+	"io"
 	"log"
 	"math/rand"
 	"os"
 	"sync"
 	"testing"
+
+	"github.com/lucas-clemente/quic-go"
 
 	"github.com/lucas-clemente/quic-go/internal/testdata"
 	"github.com/lucas-clemente/quic-go/internal/utils"
@@ -87,12 +92,42 @@ var (
 	logFileName string // the log file set in the ginkgo flags
 	logBufOnce  sync.Once
 	logBuf      *syncedBuffer
+	enableQlog  bool
 )
 
 // read the logfile command line flag
 // to set call ginkgo -- -logfile=log.txt
 func init() {
 	flag.StringVar(&logFileName, "logfile", "", "log file")
+	flag.BoolVar(&enableQlog, "qlog", false, "enable qlog")
+}
+
+func getQuicConfigForClient(conf *quic.Config) *quic.Config {
+	return getQuicConfigForRole("client", conf)
+}
+
+func getQuicConfigForServer(conf *quic.Config) *quic.Config {
+	return getQuicConfigForRole("server", conf)
+}
+
+func getQuicConfigForRole(role string, conf *quic.Config) *quic.Config {
+	if conf == nil {
+		conf = &quic.Config{}
+	} else {
+		conf = conf.Clone()
+	}
+	if !enableQlog {
+		return conf
+	}
+	conf.GetLogWriter = func(connectionID []byte) io.WriteCloser {
+		filename := fmt.Sprintf("log_%x_%s.qlog", connectionID, role)
+		fmt.Fprintf(GinkgoWriter, "Creating %s.\n", filename)
+		f, err := os.Create(filename)
+		Expect(err).ToNot(HaveOccurred())
+		bw := bufio.NewWriter(f)
+		return utils.NewBufferedWriteCloser(bw, f)
+	}
+	return conf
 }
 
 var _ = BeforeEach(func() {

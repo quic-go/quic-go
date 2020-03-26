@@ -59,7 +59,7 @@ var _ = Describe("0-RTT", func() {
 				sess, err := quic.DialAddr(
 					fmt.Sprintf("localhost:%d", proxyPort),
 					clientConf,
-					&quic.Config{Versions: []protocol.VersionNumber{version}},
+					getQuicConfigForClient(&quic.Config{Versions: []protocol.VersionNumber{version}}),
 				)
 				Expect(err).ToNot(HaveOccurred())
 				Eventually(puts).Should(Receive())
@@ -93,7 +93,7 @@ var _ = Describe("0-RTT", func() {
 				sess, err := quic.DialAddrEarly(
 					fmt.Sprintf("localhost:%d", proxyPort),
 					clientConf,
-					&quic.Config{Versions: []protocol.VersionNumber{version}},
+					getQuicConfigForClient(&quic.Config{Versions: []protocol.VersionNumber{version}}),
 				)
 				Expect(err).ToNot(HaveOccurred())
 				str, err := sess.OpenUniStream()
@@ -109,10 +109,10 @@ var _ = Describe("0-RTT", func() {
 				ln, err := quic.ListenAddrEarly(
 					"localhost:0",
 					getTLSConfig(),
-					&quic.Config{
+					getQuicConfigForServer(&quic.Config{
 						Versions:    []protocol.VersionNumber{version},
 						AcceptToken: func(_ net.Addr, _ *quic.Token) bool { return true },
-					},
+					}),
 				)
 				Expect(err).ToNot(HaveOccurred())
 				defer ln.Close()
@@ -171,7 +171,7 @@ var _ = Describe("0-RTT", func() {
 				sess, err := quic.DialAddrEarly(
 					fmt.Sprintf("localhost:%d", proxy.LocalPort()),
 					clientConf,
-					&quic.Config{Versions: []protocol.VersionNumber{version}},
+					getQuicConfigForClient(&quic.Config{Versions: []protocol.VersionNumber{version}}),
 				)
 				Expect(err).ToNot(HaveOccurred())
 				sent0RTT := make(chan struct{})
@@ -210,10 +210,10 @@ var _ = Describe("0-RTT", func() {
 				ln, err := quic.ListenAddrEarly(
 					"localhost:0",
 					getTLSConfig(),
-					&quic.Config{
+					getQuicConfigForServer(&quic.Config{
 						Versions:    []protocol.VersionNumber{version},
 						AcceptToken: func(_ net.Addr, _ *quic.Token) bool { return true },
-					},
+					}),
 				)
 				Expect(err).ToNot(HaveOccurred())
 				defer ln.Close()
@@ -264,7 +264,7 @@ var _ = Describe("0-RTT", func() {
 				ln, err := quic.ListenAddrEarly(
 					"localhost:0",
 					getTLSConfig(),
-					&quic.Config{Versions: []protocol.VersionNumber{version}},
+					getQuicConfigForServer(&quic.Config{Versions: []protocol.VersionNumber{version}}),
 				)
 				Expect(err).ToNot(HaveOccurred())
 				defer ln.Close()
@@ -330,11 +330,11 @@ var _ = Describe("0-RTT", func() {
 				ln, err := quic.ListenAddrEarly(
 					"localhost:0",
 					tlsConf,
-					&quic.Config{
+					getQuicConfigForServer(&quic.Config{
 						Versions:           []protocol.VersionNumber{version},
 						AcceptToken:        func(_ net.Addr, _ *quic.Token) bool { return true },
 						MaxIncomingStreams: maxStreams,
-					},
+					}),
 				)
 				Expect(err).ToNot(HaveOccurred())
 
@@ -345,11 +345,11 @@ var _ = Describe("0-RTT", func() {
 				ln, err = quic.ListenAddrEarly(
 					"localhost:0",
 					tlsConf,
-					&quic.Config{
+					getQuicConfigForServer(&quic.Config{
 						Versions:           []protocol.VersionNumber{version},
 						AcceptToken:        func(_ net.Addr, _ *quic.Token) bool { return true },
 						MaxIncomingStreams: maxStreams + 1,
-					},
+					}),
 				)
 				Expect(err).ToNot(HaveOccurred())
 				proxy, num0RTTPackets := runCountingProxy(ln.Addr().(*net.UDPAddr).Port)
@@ -367,10 +367,10 @@ var _ = Describe("0-RTT", func() {
 				ln, err := quic.ListenAddrEarly(
 					"localhost:0",
 					tlsConf,
-					&quic.Config{
+					getQuicConfigForServer(&quic.Config{
 						Versions:    []protocol.VersionNumber{version},
 						AcceptToken: func(_ net.Addr, _ *quic.Token) bool { return true },
-					},
+					}),
 				)
 				Expect(err).ToNot(HaveOccurred())
 
@@ -383,10 +383,10 @@ var _ = Describe("0-RTT", func() {
 				ln, err = quic.ListenAddrEarly(
 					"localhost:0",
 					tlsConf,
-					&quic.Config{
+					getQuicConfigForServer(&quic.Config{
 						Versions:    []protocol.VersionNumber{version},
 						AcceptToken: func(_ net.Addr, _ *quic.Token) bool { return true },
-					},
+					}),
 				)
 				Expect(err).ToNot(HaveOccurred())
 				proxy, num0RTTPackets := runCountingProxy(ln.Addr().(*net.UDPAddr).Port)

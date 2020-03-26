@@ -63,10 +63,10 @@ var _ = Describe("MITM test", func() {
 			}
 
 			BeforeEach(func() {
-				serverConfig = &quic.Config{
+				serverConfig = getQuicConfigForServer(&quic.Config{
 					Versions:           []protocol.VersionNumber{version},
 					ConnectionIDLength: connIDLen,
-				}
+				})
 				addr, err := net.ResolveUDPAddr("udp", "localhost:0")
 				Expect(err).ToNot(HaveOccurred())
 				clientConn, err = net.ListenUDP("udp", addr)
@@ -128,10 +128,10 @@ var _ = Describe("MITM test", func() {
 							raddr,
 							fmt.Sprintf("localhost:%d", proxy.LocalPort()),
 							getTLSClientConfig(),
-							&quic.Config{
+							getQuicConfigForClient(&quic.Config{
 								Versions:           []protocol.VersionNumber{version},
 								ConnectionIDLength: connIDLen,
-							},
+							}),
 						)
 						Expect(err).ToNot(HaveOccurred())
 						str, err := sess.AcceptUniStream(context.Background())
@@ -174,10 +174,10 @@ var _ = Describe("MITM test", func() {
 						raddr,
 						fmt.Sprintf("localhost:%d", proxy.LocalPort()),
 						getTLSClientConfig(),
-						&quic.Config{
+						getQuicConfigForClient(&quic.Config{
 							Versions:           []protocol.VersionNumber{version},
 							ConnectionIDLength: connIDLen,
-						},
+						}),
 					)
 					Expect(err).ToNot(HaveOccurred())
 					str, err := sess.AcceptUniStream(context.Background())
@@ -335,11 +335,11 @@ var _ = Describe("MITM test", func() {
 						raddr,
 						fmt.Sprintf("localhost:%d", proxy.LocalPort()),
 						getTLSClientConfig(),
-						&quic.Config{
+						getQuicConfigForClient(&quic.Config{
 							Versions:           []protocol.VersionNumber{version},
 							ConnectionIDLength: connIDLen,
 							HandshakeTimeout:   2 * time.Second,
-						},
+						}),
 					)
 					return err
 				}

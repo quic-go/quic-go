@@ -29,7 +29,7 @@ var _ = Describe("Timeout tests", func() {
 			_, err := quic.DialAddr(
 				"localhost:12345",
 				getTLSClientConfig(),
-				&quic.Config{HandshakeTimeout: 10 * time.Millisecond},
+				getQuicConfigForClient(&quic.Config{HandshakeTimeout: 10 * time.Millisecond}),
 			)
 			errChan <- err
 		}()
@@ -47,7 +47,7 @@ var _ = Describe("Timeout tests", func() {
 				ctx,
 				"localhost:12345",
 				getTLSClientConfig(),
-				nil,
+				getQuicConfigForClient(nil),
 			)
 			errChan <- err
 		}()
@@ -63,7 +63,7 @@ var _ = Describe("Timeout tests", func() {
 		server, err := quic.ListenAddr(
 			"localhost:0",
 			getTLSConfig(),
-			nil,
+			getQuicConfigForServer(nil),
 		)
 		Expect(err).ToNot(HaveOccurred())
 		defer server.Close()
@@ -92,7 +92,7 @@ var _ = Describe("Timeout tests", func() {
 		sess, err := quic.DialAddr(
 			fmt.Sprintf("localhost:%d", proxy.LocalPort()),
 			getTLSClientConfig(),
-			&quic.Config{MaxIdleTimeout: idleTimeout},
+			getQuicConfigForClient(&quic.Config{MaxIdleTimeout: idleTimeout}),
 		)
 		Expect(err).ToNot(HaveOccurred())
 		strIn, err := sess.AcceptStream(context.Background())
@@ -139,7 +139,11 @@ var _ = Describe("Timeout tests", func() {
 		})
 
 		It("times out after inactivity", func() {
-			server, err := quic.ListenAddr("localhost:0", getTLSConfig(), nil)
+			server, err := quic.ListenAddr(
+				"localhost:0",
+				getTLSConfig(),
+				getQuicConfigForServer(nil),
+			)
 			Expect(err).ToNot(HaveOccurred())
 			defer server.Close()
 
@@ -155,7 +159,7 @@ var _ = Describe("Timeout tests", func() {
 			sess, err := quic.DialAddr(
 				fmt.Sprintf("localhost:%d", server.Addr().(*net.UDPAddr).Port),
 				getTLSClientConfig(),
-				&quic.Config{MaxIdleTimeout: idleTimeout},
+				getQuicConfigForClient(&quic.Config{MaxIdleTimeout: idleTimeout}),
 			)
 			Expect(err).ToNot(HaveOccurred())
 			startTime := time.Now()
@@ -180,7 +184,11 @@ var _ = Describe("Timeout tests", func() {
 		})
 
 		It("times out after sending a packet", func() {
-			server, err := quic.ListenAddr("localhost:0", getTLSConfig(), nil)
+			server, err := quic.ListenAddr(
+				"localhost:0",
+				getTLSConfig(),
+				getQuicConfigForServer(nil),
+			)
 			Expect(err).ToNot(HaveOccurred())
 			defer server.Close()
 
@@ -196,7 +204,7 @@ var _ = Describe("Timeout tests", func() {
 			sess, err := quic.DialAddr(
 				fmt.Sprintf("localhost:%d", server.Addr().(*net.UDPAddr).Port),
 				getTLSClientConfig(),
-				&quic.Config{MaxIdleTimeout: idleTimeout},
+				getQuicConfigForClient(&quic.Config{MaxIdleTimeout: idleTimeout}),
 			)
 			Expect(err).ToNot(HaveOccurred())
 
@@ -236,7 +244,7 @@ var _ = Describe("Timeout tests", func() {
 		server, err := quic.ListenAddr(
 			"localhost:0",
 			getTLSConfig(),
-			nil,
+			getQuicConfigForServer(nil),
 		)
 		Expect(err).ToNot(HaveOccurred())
 		defer server.Close()
@@ -264,10 +272,10 @@ var _ = Describe("Timeout tests", func() {
 		sess, err := quic.DialAddr(
 			fmt.Sprintf("localhost:%d", proxy.LocalPort()),
 			getTLSClientConfig(),
-			&quic.Config{
+			getQuicConfigForClient(&quic.Config{
 				MaxIdleTimeout: idleTimeout,
 				KeepAlive:      true,
-			},
+			}),
 		)
 		Expect(err).ToNot(HaveOccurred())
 
