@@ -3,6 +3,7 @@ package ackhandler
 import (
 	"fmt"
 	"math"
+	"sync"
 	"time"
 
 	"github.com/lucas-clemente/quic-go/internal/congestion"
@@ -60,8 +61,9 @@ type sentPacketHandler struct {
 
 	bytesInFlight protocol.ByteCount
 
-	congestion congestion.SendAlgorithmWithDebugInfos
-	rttStats   *congestion.RTTStats
+	congestion      congestion.SendAlgorithmWithDebugInfos
+	congestionMutex sync.RWMutex
+	rttStats        *congestion.RTTStats
 
 	// The number of times a PTO has been sent without receiving an ack.
 	ptoCount uint32
@@ -91,11 +93,11 @@ func newSentPacketHandler(
 	qlogger qlog.Tracer,
 	logger utils.Logger,
 ) *sentPacketHandler {
-	congestion := congestion.NewCubicSender(
+	cc := congestion.NewCubicSender(
 		congestion.DefaultClock{},
-		rttStats,
 		true, // use Reno
 	)
+	cc.SetRTTStats(rttStats)
 
 	var peerNotAwaitingAddressValidation bool
 	if pers == protocol.PerspectiveServer {
@@ -107,7 +109,7 @@ func newSentPacketHandler(
 		handshakePackets:                 newPacketNumberSpace(0),
 		appDataPackets:                   newPacketNumberSpace(0),
 		rttStats:                         rttStats,
-		congestion:                       congestion,
+		congestion:                       cc,
 		perspective:                      pers,
 		traceCallback:                    traceCallback,
 		qlogger:                          qlogger,
@@ -218,9 +220,10 @@ func (h *sentPacketHandler) sentPacketImpl(packet *Packet) bool /* is ack-elicit
 			h.numProbesToSend--
 		}
 	}
-	h.congestion.OnPacketSent(packet.SendTime, h.bytesInFlight, packet.PacketNumber, packet.Length, isAckEliciting)
 
-	h.nextSendTime = utils.MaxTime(h.nextSendTime, packet.SendTime).Add(h.congestion.TimeUntilSend(h.bytesInFlight))
+	cong := h.getCongestion()
+	cong.OnPacketSent(packet.SendTime, h.bytesInFlight, packet.PacketNumber, packet.Length, isAckEliciting)
+	h.nextSendTime = utils.MaxTime(h.nextSendTime, packet.SendTime).Add(cong.TimeUntilSend(h.bytesInFlight))
 	return isAckEliciting
 }
 
@@ -247,6 +250,8 @@ func (h *sentPacketHandler) ReceivedAck(ack *wire.AckFrame, encLevel protocol.En
 		h.setLossDetectionTimer()
 	}
 
+	cong := h.getCongestion()
+
 	// maybe update the RTT
 	if p := pnSpace.history.GetPacket(ack.LargestAcked()); p != nil {
 		// don't use the ack delay for Initial and Handshake packets
@@ -258,7 +263,7 @@ func (h *sentPacketHandler) ReceivedAck(ack *wire.AckFrame, encLevel protocol.En
 		if h.logger.Debug() {
 			h.logger.Debugf("\tupdated RTT: %s (σ: %s)", h.rttStats.SmoothedRTT(), h.rttStats.MeanDeviation())
 		}
-		h.congestion.MaybeExitSlowStart()
+		cong.MaybeExitSlowStart()
 		if h.qlogger != nil {
 			packetsInFlight := h.appDataPackets.history.Len()
 			if h.handshakePackets != nil {
@@ -267,7 +272,7 @@ func (h *sentPacketHandler) ReceivedAck(ack *wire.AckFrame, encLevel protocol.En
 			if h.initialPackets != nil {
 				packetsInFlight += h.initialPackets.history.Len()
 			}
-			h.qlogger.UpdatedMetrics(h.rttStats, h.congestion.GetCongestionWindow(), h.bytesInFlight, packetsInFlight)
+			h.qlogger.UpdatedMetrics(h.rttStats, cong.GetCongestionWindow(), h.bytesInFlight, packetsInFlight)
 		}
 	}
 
@@ -285,7 +290,7 @@ func (h *sentPacketHandler) ReceivedAck(ack *wire.AckFrame, encLevel protocol.En
 			return err
 		}
 		if p.includedInBytesInFlight {
-			h.congestion.OnPacketAcked(p.PacketNumber, p.Length, priorInFlight, rcvTime)
+			cong.OnPacketAcked(p.PacketNumber, p.Length, priorInFlight, rcvTime)
 		}
 	}
 
@@ -485,12 +490,14 @@ func (h *sentPacketHandler) detectLostPackets(
 		h.logger.Debugf("\tlost packets (%d): %#x", len(pns), pns)
 	}
 
+	cong := h.getCongestion()
+
 	for _, p := range lostPackets {
 		h.queueFramesForRetransmission(p)
 		// the bytes in flight need to be reduced no matter if this packet will be retransmitted
 		if p.includedInBytesInFlight {
 			h.bytesInFlight -= p.Length
-			h.congestion.OnPacketLost(p.PacketNumber, p.Length, priorInFlight)
+			cong.OnPacketLost(p.PacketNumber, p.Length, priorInFlight)
 		}
 		pnSpace.history.Remove(p.PacketNumber)
 		if h.traceCallback != nil {
@@ -621,9 +628,10 @@ func (h *sentPacketHandler) SendMode() SendMode {
 		return h.ptoMode
 	}
 	// Only send ACKs if we're congestion limited.
-	if !h.congestion.CanSend(h.bytesInFlight) {
+	cong := h.getCongestion()
+	if !cong.CanSend(h.bytesInFlight) {
 		if h.logger.Debug() {
-			h.logger.Debugf("Congestion limited: bytes in flight %d, window %d", h.bytesInFlight, h.congestion.GetCongestionWindow())
+			h.logger.Debugf("Congestion limited: bytes in flight %d, window %d", h.bytesInFlight, cong.GetCongestionWindow())
 		}
 		return SendAck
 	}
@@ -645,7 +653,7 @@ func (h *sentPacketHandler) ShouldSendNumPackets() int {
 		// RTO probes should not be paced, but must be sent immediately.
 		return h.numProbesToSend
 	}
-	delay := h.congestion.TimeUntilSend(h.bytesInFlight)
+	delay := h.getCongestion().TimeUntilSend(h.bytesInFlight)
 	if delay == 0 || delay > protocol.MinPacingDelay {
 		return 1
 	}
@@ -704,13 +712,27 @@ func (h *sentPacketHandler) SetHandshakeComplete() {
 }
 
 func (h *sentPacketHandler) GetStats() *quictrace.TransportState {
+	cong := h.getCongestion()
 	return &quictrace.TransportState{
 		MinRTT:           h.rttStats.MinRTT(),
 		SmoothedRTT:      h.rttStats.SmoothedRTT(),
 		LatestRTT:        h.rttStats.LatestRTT(),
 		BytesInFlight:    h.bytesInFlight,
-		CongestionWindow: h.congestion.GetCongestionWindow(),
-		InSlowStart:      h.congestion.InSlowStart(),
-		InRecovery:       h.congestion.InRecovery(),
+		CongestionWindow: cong.GetCongestionWindow(),
+		InSlowStart:      cong.InSlowStart(),
+		InRecovery:       cong.InRecovery(),
 	}
+}
+
+func (h *sentPacketHandler) getCongestion() congestion.SendAlgorithmWithDebugInfos {
+	h.congestionMutex.RLock()
+	defer h.congestionMutex.RUnlock()
+	return h.congestion
+}
+
+func (h *sentPacketHandler) SetCongestion(cc congestion.SendAlgorithmWithDebugInfos) {
+	h.congestionMutex.Lock()
+	h.congestion = cc
+	h.congestion.SetRTTStats(h.rttStats)
+	h.congestionMutex.Unlock()
 }

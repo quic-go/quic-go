@@ -9,6 +9,7 @@ import (
 	time "time"
 
 	gomock "github.com/golang/mock/gomock"
+	congestion "github.com/lucas-clemente/quic-go/internal/congestion"
 	protocol "github.com/lucas-clemente/quic-go/internal/protocol"
 )
 
@@ -149,6 +150,18 @@ func (m *MockSendAlgorithmWithDebugInfos) OnRetransmissionTimeout(arg0 bool) {
 func (mr *MockSendAlgorithmWithDebugInfosMockRecorder) OnRetransmissionTimeout(arg0 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "OnRetransmissionTimeout", reflect.TypeOf((*MockSendAlgorithmWithDebugInfos)(nil).OnRetransmissionTimeout), arg0)
+}
+
+// SetRTTStats mocks base method
+func (m *MockSendAlgorithmWithDebugInfos) SetRTTStats(arg0 *congestion.RTTStats) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "SetRTTStats", arg0)
+}
+
+// SetRTTStats indicates an expected call of SetRTTStats
+func (mr *MockSendAlgorithmWithDebugInfosMockRecorder) SetRTTStats(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetRTTStats", reflect.TypeOf((*MockSendAlgorithmWithDebugInfos)(nil).SetRTTStats), arg0)
 }
 
 // TimeUntilSend mocks base method

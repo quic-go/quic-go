@@ -1,13 +1,13 @@
 package congestion
 
 import (
-	"time"
-
 	"github.com/lucas-clemente/quic-go/internal/protocol"
+	"time"
 )
 
 // A SendAlgorithm performs congestion control
 type SendAlgorithm interface {
+	SetRTTStats(rttStats *RTTStats)
 	TimeUntilSend(bytesInFlight protocol.ByteCount) time.Duration
 	OnPacketSent(sentTime time.Time, bytesInFlight protocol.ByteCount, packetNumber protocol.PacketNumber, bytes protocol.ByteCount, isRetransmittable bool)
 	CanSend(bytesInFlight protocol.ByteCount) bool

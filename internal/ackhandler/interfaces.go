@@ -1,6 +1,7 @@
 package ackhandler
 
 import (
+	"github.com/lucas-clemente/quic-go/internal/congestion"
 	"time"
 
 	"github.com/lucas-clemente/quic-go/internal/protocol"
@@ -52,6 +53,8 @@ type SentPacketHandler interface {
 
 	// report some congestion statistics. For tracing only.
 	GetStats() *quictrace.TransportState
+
+	SetCongestion(cc congestion.SendAlgorithmWithDebugInfos)
 }
 
 type sentPacketTracker interface {

@@ -10,6 +10,7 @@ import (
 
 	gomock "github.com/golang/mock/gomock"
 	ackhandler "github.com/lucas-clemente/quic-go/internal/ackhandler"
+	congestion "github.com/lucas-clemente/quic-go/internal/congestion"
 	protocol "github.com/lucas-clemente/quic-go/internal/protocol"
 	wire "github.com/lucas-clemente/quic-go/internal/wire"
 	quictrace "github.com/lucas-clemente/quic-go/quictrace"
@@ -187,6 +188,18 @@ func (m *MockSentPacketHandler) SentPacket(arg0 *ackhandler.Packet) {
 func (mr *MockSentPacketHandlerMockRecorder) SentPacket(arg0 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SentPacket", reflect.TypeOf((*MockSentPacketHandler)(nil).SentPacket), arg0)
+}
+
+// SetCongestion mocks base method
+func (m *MockSentPacketHandler) SetCongestion(arg0 congestion.SendAlgorithmWithDebugInfos) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "SetCongestion", arg0)
+}
+
+// SetCongestion indicates an expected call of SetCongestion
+func (mr *MockSentPacketHandlerMockRecorder) SetCongestion(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetCongestion", reflect.TypeOf((*MockSentPacketHandler)(nil).SetCongestion), arg0)
 }
 
 // SetHandshakeComplete mocks base method

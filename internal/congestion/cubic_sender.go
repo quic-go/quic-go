@@ -72,13 +72,12 @@ var _ SendAlgorithm = &cubicSender{}
 var _ SendAlgorithmWithDebugInfos = &cubicSender{}
 
 // NewCubicSender makes a new cubic sender
-func NewCubicSender(clock Clock, rttStats *RTTStats, reno bool) *cubicSender {
-	return newCubicSender(clock, rttStats, reno, initialCongestionWindow, maxCongestionWindow)
+func NewCubicSender(clock Clock, reno bool) *cubicSender {
+	return newCubicSender(clock, reno, initialCongestionWindow, maxCongestionWindow)
 }
 
-func newCubicSender(clock Clock, rttStats *RTTStats, reno bool, initialCongestionWindow, initialMaxCongestionWindow protocol.ByteCount) *cubicSender {
+func newCubicSender(clock Clock, reno bool, initialCongestionWindow, initialMaxCongestionWindow protocol.ByteCount) *cubicSender {
 	return &cubicSender{
-		rttStats:                   rttStats,
 		largestSentPacketNumber:    protocol.InvalidPacketNumber,
 		largestAckedPacketNumber:   protocol.InvalidPacketNumber,
 		largestSentAtLastCutback:   protocol.InvalidPacketNumber,
@@ -92,6 +91,10 @@ func newCubicSender(clock Clock, rttStats *RTTStats, reno bool, initialCongestio
 		cubic:                      NewCubic(clock),
 		reno:                       reno,
 	}
+}
+
+func (c *cubicSender) SetRTTStats(rttStats *RTTStats) {
+	c.rttStats = rttStats
 }
 
 // TimeUntilSend returns when the next packet should be sent.

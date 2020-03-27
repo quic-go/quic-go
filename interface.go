@@ -2,6 +2,7 @@ package quic
 
 import (
 	"context"
+	"github.com/lucas-clemente/quic-go/internal/congestion"
 	"io"
 	"net"
 	"time"
@@ -172,6 +173,8 @@ type Session interface {
 	// It blocks until the handshake completes.
 	// Warning: This API should not be considered stable and might change soon.
 	ConnectionState() ConnectionState
+	// Replace the current congestion control algorithm with a new one.
+	SetCongestion(congestion.SendAlgorithmWithDebugInfos)
 }
 
 // An EarlySession is a session that is handshaking.

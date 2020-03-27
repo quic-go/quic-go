@@ -628,6 +628,10 @@ func (s *session) ConnectionState() ConnectionState {
 	return s.cryptoStreamHandler.ConnectionState()
 }
 
+func (s *session) SetCongestion(cc congestion.SendAlgorithmWithDebugInfos) {
+	s.sentPacketHandler.SetCongestion(cc)
+}
+
 // Time when the next keep-alive packet should be sent.
 // It returns a zero time if no keep-alive should be sent.
 func (s *session) nextKeepAliveTime() time.Time {

@@ -11,6 +11,7 @@ import (
 
 	gomock "github.com/golang/mock/gomock"
 	quic "github.com/lucas-clemente/quic-go"
+	congestion "github.com/lucas-clemente/quic-go/internal/congestion"
 	protocol "github.com/lucas-clemente/quic-go/internal/protocol"
 	qtls "github.com/marten-seemann/qtls"
 )
@@ -210,4 +211,16 @@ func (m *MockEarlySession) RemoteAddr() net.Addr {
 func (mr *MockEarlySessionMockRecorder) RemoteAddr() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RemoteAddr", reflect.TypeOf((*MockEarlySession)(nil).RemoteAddr))
+}
+
+// SetCongestion mocks base method
+func (m *MockEarlySession) SetCongestion(arg0 congestion.SendAlgorithmWithDebugInfos) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "SetCongestion", arg0)
+}
+
+// SetCongestion indicates an expected call of SetCongestion
+func (mr *MockEarlySessionMockRecorder) SetCongestion(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetCongestion", reflect.TypeOf((*MockEarlySession)(nil).SetCongestion), arg0)
 }
