@@ -889,8 +889,12 @@ func (s *session) handleUnpackedPacket(packet *unpackedPacket, rcvTime time.Time
 		if s.traceCallback != nil || s.qlogger != nil {
 			frames = append(frames, frame)
 		}
-		if err := s.handleFrame(frame, packet.encryptionLevel); err != nil {
-			return err
+		// Only process frames now if we're not logging.
+		// If we're logging, we need to make sure that the packet_received event is logged first.
+		if s.qlogger == nil {
+			if err := s.handleFrame(frame, packet.encryptionLevel); err != nil {
+				return err
+			}
 		}
 	}
 
@@ -908,6 +912,11 @@ func (s *session) handleUnpackedPacket(packet *unpackedPacket, rcvTime time.Time
 	}
 	if s.qlogger != nil {
 		s.qlogger.ReceivedPacket(packet.hdr, protocol.ByteCount(len(packet.data)), frames)
+		for _, frame := range frames {
+			if err := s.handleFrame(frame, packet.encryptionLevel); err != nil {
+				return err
+			}
+		}
 	}
 
 	return s.receivedPacketHandler.ReceivedPacket(packet.packetNumber, packet.encryptionLevel, rcvTime, isAckEliciting)
