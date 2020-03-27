@@ -113,7 +113,7 @@ var _ = Describe("Tracer", func() {
 				ev := e.([]interface{})
 				Expect(ev).To(HaveLen(4))
 				entries = append(entries, entry{
-					Time:     time.Unix(0, int64(1e6*ev[0].(float64))),
+					Time:     time.Now().Add(time.Duration(ev[0].(float64)) * time.Millisecond),
 					Category: ev[1].(string),
 					Name:     ev[2].(string),
 					Event:    ev[3].(map[string]interface{}),

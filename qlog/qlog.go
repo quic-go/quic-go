@@ -37,9 +37,10 @@ type Tracer interface {
 }
 
 type tracer struct {
-	w           io.WriteCloser
-	odcid       protocol.ConnectionID
-	perspective protocol.Perspective
+	w             io.WriteCloser
+	odcid         protocol.ConnectionID
+	perspective   protocol.Perspective
+	referenceTime time.Time
 
 	suffix     []byte
 	events     chan event
@@ -52,11 +53,12 @@ var _ Tracer = &tracer{}
 // NewTracer creates a new tracer to record a qlog.
 func NewTracer(w io.WriteCloser, p protocol.Perspective, odcid protocol.ConnectionID) Tracer {
 	t := &tracer{
-		w:           w,
-		perspective: p,
-		odcid:       odcid,
-		runStopped:  make(chan struct{}),
-		events:      make(chan event, eventChanSize),
+		w:             w,
+		perspective:   p,
+		odcid:         odcid,
+		runStopped:    make(chan struct{}),
+		events:        make(chan event, eventChanSize),
+		referenceTime: time.Now(),
 	}
 	go t.run()
 	return t
@@ -70,8 +72,12 @@ func (t *tracer) run() {
 		traces: traces{
 			{
 				VantagePoint: vantagePoint{Type: t.perspective},
-				CommonFields: commonFields{ODCID: connectionID(t.odcid), GroupID: connectionID(t.odcid)},
-				EventFields:  eventFields[:],
+				CommonFields: commonFields{
+					ODCID:         connectionID(t.odcid),
+					GroupID:       connectionID(t.odcid),
+					ReferenceTime: t.referenceTime,
+				},
+				EventFields: eventFields[:],
 			},
 		}}
 	if err := enc.Encode(tl); err != nil {
@@ -113,7 +119,7 @@ func (t *tracer) Export() error {
 
 func (t *tracer) recordEvent(details eventDetails) {
 	t.events <- event{
-		Time:         time.Now(),
+		RelativeTime: time.Since(t.referenceTime),
 		eventDetails: details,
 	}
 }

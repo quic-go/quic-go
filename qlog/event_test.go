@@ -22,12 +22,10 @@ func (mevent) MarshalJSONObject(enc *gojay.Encoder) { enc.StringKey("event", "de
 
 var _ = Describe("Events", func() {
 	It("marshals the fields before the event details", func() {
-		now := time.Now()
-
 		buf := &bytes.Buffer{}
 		enc := gojay.NewEncoder(buf)
 		Expect(enc.Encode(event{
-			Time:         now,
+			RelativeTime: 1337 * time.Microsecond,
 			eventDetails: mevent{},
 		})).To(Succeed())
 
@@ -36,8 +34,8 @@ var _ = Describe("Events", func() {
 		Expect(decoded).To(HaveLen(4))
 
 		// 1st field
-		Expect(eventFields[0]).To(Equal("time"))
-		Expect(time.Unix(0, int64(1e6*decoded[0].(float64)))).To(BeTemporally("~", now, 2*time.Microsecond))
+		Expect(eventFields[0]).To(Equal("relative_time"))
+		Expect(decoded[0].(float64)).To(Equal(1.337))
 
 		// 2nd field
 		Expect(eventFields[1]).To(Equal("category"))
