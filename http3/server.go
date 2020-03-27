@@ -270,6 +270,7 @@ func (s *Server) handleRequest(sess quic.Session, str quic.Stream, decoder *qpac
 	ctx = context.WithValue(ctx, http.LocalAddrContextKey, sess.LocalAddr())
 	req = req.WithContext(ctx)
 	responseWriter := newResponseWriter(str, s.logger)
+	defer responseWriter.Flush()
 	handler := s.Handler
 	if handler == nil {
 		handler = http.DefaultServeMux

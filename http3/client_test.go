@@ -216,6 +216,7 @@ var _ = Describe("Client", func() {
 			rspBuf := &bytes.Buffer{}
 			rw := newResponseWriter(rspBuf, utils.DefaultLogger)
 			rw.WriteHeader(418)
+			rw.Flush()
 
 			gomock.InOrder(
 				sess.EXPECT().HandshakeComplete().Return(handshakeCtx),
@@ -383,6 +384,7 @@ var _ = Describe("Client", func() {
 				rspBuf := &bytes.Buffer{}
 				rw := newResponseWriter(rspBuf, utils.DefaultLogger)
 				rw.WriteHeader(418)
+				rw.Flush()
 
 				ctx, cancel := context.WithCancel(context.Background())
 				req := request.WithContext(ctx)
@@ -455,6 +457,7 @@ var _ = Describe("Client", func() {
 				gz := gzip.NewWriter(rw)
 				gz.Write([]byte("gzipped response"))
 				gz.Close()
+				rw.Flush()
 				str.EXPECT().Write(gomock.Any()).AnyTimes()
 				str.EXPECT().Read(gomock.Any()).DoAndReturn(func(p []byte) (int, error) {
 					return buf.Read(p)
@@ -476,6 +479,7 @@ var _ = Describe("Client", func() {
 				buf := &bytes.Buffer{}
 				rw := newResponseWriter(buf, utils.DefaultLogger)
 				rw.Write([]byte("not gzipped"))
+				rw.Flush()
 				str.EXPECT().Write(gomock.Any()).AnyTimes()
 				str.EXPECT().Read(gomock.Any()).DoAndReturn(func(p []byte) (int, error) {
 					return buf.Read(p)
