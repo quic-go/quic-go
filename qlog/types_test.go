@@ -56,6 +56,13 @@ var _ = Describe("Types", func() {
 		Expect(keyUpdateLocal.String()).To(Equal("local_update"))
 	})
 
+	It("tells the packet number space from the encryption level", func() {
+		Expect(encLevelToPacketNumberSpace(protocol.EncryptionInitial)).To(Equal("initial"))
+		Expect(encLevelToPacketNumberSpace(protocol.EncryptionHandshake)).To(Equal("handshake"))
+		Expect(encLevelToPacketNumberSpace(protocol.Encryption0RTT)).To(Equal("application_data"))
+		Expect(encLevelToPacketNumberSpace(protocol.Encryption1RTT)).To(Equal("application_data"))
+	})
+
 	It("has a string representation for the packet drop reason", func() {
 		Expect(PacketDropKeyUnavailable.String()).To(Equal("key_unavailable"))
 		Expect(PacketDropUnknownConnectionID.String()).To(Equal("unknown_connection_id"))
@@ -102,5 +109,10 @@ var _ = Describe("Types", func() {
 			Expect(transportError(qerr.CryptoBufferExceeded).String()).To(Equal("crypto_buffer_exceeded"))
 			Expect(transportError(1337).String()).To(BeEmpty())
 		})
+	})
+
+	It("has a string representation for the timer type", func() {
+		Expect(TimerTypeACK.String()).To(Equal("ack"))
+		Expect(TimerTypePTO.String()).To(Equal("pto"))
 	})
 })

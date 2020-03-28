@@ -120,6 +120,19 @@ func (t PacketType) String() string {
 	}
 }
 
+func encLevelToPacketNumberSpace(encLevel protocol.EncryptionLevel) string {
+	switch encLevel {
+	case protocol.EncryptionInitial:
+		return "initial"
+	case protocol.EncryptionHandshake:
+		return "handshake"
+	case protocol.Encryption0RTT, protocol.Encryption1RTT:
+		return "application_data"
+	default:
+		panic("unknown encryption level")
+	}
+}
+
 type PacketLossReason uint8
 
 const (
@@ -300,5 +313,26 @@ func (e transportError) String() string {
 		return "crypto_buffer_exceeded"
 	default:
 		return ""
+	}
+}
+
+// TimerType is the type of the loss detection timer
+type TimerType uint8
+
+const (
+	// TimerTypeACK is the timer type for the early retransmit timer
+	TimerTypeACK TimerType = iota
+	// TimerTypePTO is the timer type for the PTO retransmit timer
+	TimerTypePTO
+)
+
+func (t TimerType) String() string {
+	switch t {
+	case TimerTypeACK:
+		return "ack"
+	case TimerTypePTO:
+		return "pto"
+	default:
+		panic("unknown timer type")
 	}
 }

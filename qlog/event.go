@@ -334,3 +334,45 @@ func (e eventTransportParameters) MarshalJSONObject(enc *gojay.Encoder) {
 	enc.Int64KeyOmitEmpty("initial_max_streams_bidi", e.InitialMaxStreamsBidi)
 	enc.Int64KeyOmitEmpty("initial_max_streams_uni", e.InitialMaxStreamsUni)
 }
+
+type eventLossTimerSet struct {
+	TimerType TimerType
+	EncLevel  protocol.EncryptionLevel
+	Delta     time.Duration
+}
+
+func (e eventLossTimerSet) Category() category { return categoryRecovery }
+func (e eventLossTimerSet) Name() string       { return "loss_timer_updated" }
+func (e eventLossTimerSet) IsNil() bool        { return false }
+
+func (e eventLossTimerSet) MarshalJSONObject(enc *gojay.Encoder) {
+	enc.StringKey("event_type", "set")
+	enc.StringKey("timer_type", e.TimerType.String())
+	enc.StringKey("packet_number_space", encLevelToPacketNumberSpace(e.EncLevel))
+	enc.Float64Key("delta", milliseconds(e.Delta))
+}
+
+type eventLossTimerExpired struct {
+	TimerType TimerType
+	EncLevel  protocol.EncryptionLevel
+}
+
+func (e eventLossTimerExpired) Category() category { return categoryRecovery }
+func (e eventLossTimerExpired) Name() string       { return "loss_timer_updated" }
+func (e eventLossTimerExpired) IsNil() bool        { return false }
+
+func (e eventLossTimerExpired) MarshalJSONObject(enc *gojay.Encoder) {
+	enc.StringKey("event_type", "expired")
+	enc.StringKey("timer_type", e.TimerType.String())
+	enc.StringKey("packet_number_space", encLevelToPacketNumberSpace(e.EncLevel))
+}
+
+type eventLossTimerCanceled struct{}
+
+func (e eventLossTimerCanceled) Category() category { return categoryRecovery }
+func (e eventLossTimerCanceled) Name() string       { return "loss_timer_updated" }
+func (e eventLossTimerCanceled) IsNil() bool        { return false }
+
+func (e eventLossTimerCanceled) MarshalJSONObject(enc *gojay.Encoder) {
+	enc.StringKey("event_type", "cancelled")
+}

@@ -433,22 +433,32 @@ func (h *sentPacketHandler) hasOutstandingPackets() bool {
 }
 
 func (h *sentPacketHandler) setLossDetectionTimer() {
-	if lossTime, _ := h.getEarliestLossTimeAndSpace(); !lossTime.IsZero() {
+	oldAlarm := h.alarm // only needed in case qlog is enabled
+	if lossTime, encLevel := h.getEarliestLossTimeAndSpace(); !lossTime.IsZero() {
 		// Early retransmit timer or time loss detection.
 		h.alarm = lossTime
+		if h.qlogger != nil && h.alarm != oldAlarm {
+			h.qlogger.SetLossTimer(qlog.TimerTypeACK, encLevel, h.alarm)
+		}
 		return
 	}
 
 	// Cancel the alarm if no packets are outstanding
 	if !h.hasOutstandingPackets() && h.peerCompletedAddressValidation {
-		h.logger.Debugf("Canceling loss detection timer. No packets in flight.")
 		h.alarm = time.Time{}
+		h.logger.Debugf("Canceling loss detection timer. No packets in flight.")
+		if h.qlogger != nil && !oldAlarm.IsZero() {
+			h.qlogger.LossTimerCanceled()
+		}
 		return
 	}
 
 	// PTO alarm
 	sentTime, encLevel := h.getEarliestSentTimeAndSpace()
 	h.alarm = sentTime.Add(h.rttStats.PTO(encLevel == protocol.Encryption1RTT) << h.ptoCount)
+	if h.qlogger != nil && h.alarm != oldAlarm {
+		h.qlogger.SetLossTimer(qlog.TimerTypePTO, encLevel, h.alarm)
+	}
 }
 
 func (h *sentPacketHandler) detectAndRemoveLostPackets(now time.Time, encLevel protocol.EncryptionLevel) ([]*Packet, error) {
@@ -545,6 +555,9 @@ func (h *sentPacketHandler) onVerifiedLossDetectionTimeout() error {
 		if h.logger.Debug() {
 			h.logger.Debugf("Loss detection alarm fired in loss timer mode. Loss time: %s", earliestLossTime)
 		}
+		if h.qlogger != nil {
+			h.qlogger.LossTimerExpired(qlog.TimerTypeACK, encLevel)
+		}
 		// Early retransmit or time loss detection
 		priorInFlight := h.bytesInFlight
 		lostPackets, err := h.detectAndRemoveLostPackets(time.Now(), encLevel)
@@ -563,6 +576,7 @@ func (h *sentPacketHandler) onVerifiedLossDetectionTimeout() error {
 	}
 	h.ptoCount++
 	if h.qlogger != nil {
+		h.qlogger.LossTimerExpired(qlog.TimerTypePTO, encLevel)
 		h.qlogger.UpdatedPTOCount(h.ptoCount)
 	}
 	h.numProbesToSend += 2
@@ -695,7 +709,11 @@ func (h *sentPacketHandler) ResetForRetry() error {
 
 	h.initialPackets = newPacketNumberSpace(h.initialPackets.pns.Pop())
 	h.appDataPackets = newPacketNumberSpace(h.appDataPackets.pns.Pop())
+	oldAlarm := h.alarm
 	h.alarm = time.Time{}
+	if h.qlogger != nil && !oldAlarm.IsZero() {
+		h.qlogger.LossTimerCanceled()
+	}
 	return nil
 }
 
