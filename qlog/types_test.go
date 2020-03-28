@@ -1,7 +1,16 @@
 package qlog
 
 import (
+	"go/ast"
+	"go/parser"
+	"go/token"
+	"path"
+	"runtime"
+	"strconv"
+
 	"github.com/lucas-clemente/quic-go/internal/protocol"
+	"github.com/lucas-clemente/quic-go/internal/qerr"
+
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 )
@@ -55,5 +64,43 @@ var _ = Describe("Types", func() {
 		Expect(PacketDropProtocolViolation.String()).To(Equal("protocol_violation"))
 		Expect(PacketDropDOSPrevention.String()).To(Equal("dos_prevention"))
 		Expect(PacketDropUnsupportedVersion.String()).To(Equal("unsupported_version"))
+	})
+
+	Context("transport errors", func() {
+		It("has a string representation for every error code", func() {
+			// We parse the error code file, extract all constants, and verify that
+			// each of them has a string version. Go FTW!
+			_, thisfile, _, ok := runtime.Caller(0)
+			if !ok {
+				panic("Failed to get current frame")
+			}
+			filename := path.Join(path.Dir(thisfile), "../internal/qerr/error_codes.go")
+			fileAst, err := parser.ParseFile(token.NewFileSet(), filename, nil, 0)
+			Expect(err).NotTo(HaveOccurred())
+			constSpecs := fileAst.Decls[2].(*ast.GenDecl).Specs
+			Expect(len(constSpecs)).To(BeNumerically(">", 4)) // at time of writing
+			for _, c := range constSpecs {
+				valString := c.(*ast.ValueSpec).Values[0].(*ast.BasicLit).Value
+				val, err := strconv.ParseInt(valString, 0, 64)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(transportError(val).String()).ToNot(BeEmpty())
+			}
+		})
+
+		It("has a string representation for transport errors", func() {
+			Expect(transportError(qerr.NoError).String()).To(Equal("no_error"))
+			Expect(transportError(qerr.InternalError).String()).To(Equal("internal_error"))
+			Expect(transportError(qerr.ServerBusy).String()).To(Equal("server_busy"))
+			Expect(transportError(qerr.FlowControlError).String()).To(Equal("flow_control_error"))
+			Expect(transportError(qerr.StreamLimitError).String()).To(Equal("stream_limit_error"))
+			Expect(transportError(qerr.StreamStateError).String()).To(Equal("stream_state_error"))
+			Expect(transportError(qerr.FrameEncodingError).String()).To(Equal("frame_encoding_error"))
+			Expect(transportError(qerr.ConnectionIDLimitError).String()).To(Equal("connection_id_limit_error"))
+			Expect(transportError(qerr.ProtocolViolation).String()).To(Equal("protocol_violation"))
+			Expect(transportError(qerr.InvalidToken).String()).To(Equal("invalid_token"))
+			Expect(transportError(qerr.ApplicationError).String()).To(Equal("application_error"))
+			Expect(transportError(qerr.CryptoBufferExceeded).String()).To(Equal("crypto_buffer_exceeded"))
+			Expect(transportError(1337).String()).To(BeEmpty())
+		})
 	})
 })
