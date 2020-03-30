@@ -1363,6 +1363,7 @@ func (s *session) sendPacket() (bool, error) {
 		if err != nil || packet == nil {
 			return false, err
 		}
+		s.logCoalescedPacket(now, packet)
 		for _, p := range packet.packets {
 			if s.firstAckElicitingPacketAfterIdleSentTime.IsZero() && p.IsAckEliciting() {
 				s.firstAckElicitingPacketAfterIdleSentTime = now
@@ -1370,7 +1371,6 @@ func (s *session) sendPacket() (bool, error) {
 			s.sentPacketHandler.SentPacket(p.ToAckHandlerPacket(now, s.retransmissionQueue))
 		}
 		s.connIDManager.SentPacket()
-		s.logCoalescedPacket(now, packet)
 		s.sendQueue.Send(packet.buffer)
 		return true, nil
 	}
@@ -1387,9 +1387,9 @@ func (s *session) sendPackedPacket(packet *packedPacket) {
 	if s.firstAckElicitingPacketAfterIdleSentTime.IsZero() && packet.IsAckEliciting() {
 		s.firstAckElicitingPacketAfterIdleSentTime = now
 	}
+	s.logPacket(now, packet)
 	s.sentPacketHandler.SentPacket(packet.ToAckHandlerPacket(time.Now(), s.retransmissionQueue))
 	s.connIDManager.SentPacket()
-	s.logPacket(now, packet)
 	s.sendQueue.Send(packet.buffer)
 }
 
