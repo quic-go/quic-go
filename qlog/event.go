@@ -182,7 +182,7 @@ func (e eventPacketDropped) MarshalJSONObject(enc *gojay.Encoder) {
 
 func milliseconds(dur time.Duration) float64 { return float64(dur.Nanoseconds()) / 1e6 }
 
-type eventMetricsUpdated struct {
+type metrics struct {
 	MinRTT      time.Duration
 	SmoothedRTT time.Duration
 	LatestRTT   time.Duration
@@ -193,19 +193,38 @@ type eventMetricsUpdated struct {
 	PacketsInFlight  int
 }
 
+type eventMetricsUpdated struct {
+	Last    *metrics
+	Current *metrics
+}
+
 func (e eventMetricsUpdated) Category() category { return categoryRecovery }
 func (e eventMetricsUpdated) Name() string       { return "metrics_updated" }
 func (e eventMetricsUpdated) IsNil() bool        { return false }
 
 func (e eventMetricsUpdated) MarshalJSONObject(enc *gojay.Encoder) {
-	enc.FloatKey("min_rtt", milliseconds(e.MinRTT))
-	enc.FloatKey("smoothed_rtt", milliseconds(e.SmoothedRTT))
-	enc.FloatKey("latest_rtt", milliseconds(e.LatestRTT))
-	enc.FloatKey("rtt_variance", milliseconds(e.RTTVariance))
+	if e.Last == nil || e.Last.MinRTT != e.Current.MinRTT {
+		enc.FloatKey("min_rtt", milliseconds(e.Current.MinRTT))
+	}
+	if e.Last == nil || e.Last.SmoothedRTT != e.Current.SmoothedRTT {
+		enc.FloatKey("smoothed_rtt", milliseconds(e.Current.SmoothedRTT))
+	}
+	if e.Last == nil || e.Last.LatestRTT != e.Current.LatestRTT {
+		enc.FloatKey("latest_rtt", milliseconds(e.Current.LatestRTT))
+	}
+	if e.Last == nil || e.Last.RTTVariance != e.Current.RTTVariance {
+		enc.FloatKey("rtt_variance", milliseconds(e.Current.RTTVariance))
+	}
 
-	enc.Uint64Key("congestion_window", uint64(e.CongestionWindow))
-	enc.Uint64Key("bytes_in_flight", uint64(e.BytesInFlight))
-	enc.Uint64KeyOmitEmpty("packets_in_flight", uint64(e.PacketsInFlight))
+	if e.Last == nil || e.Last.CongestionWindow != e.Current.CongestionWindow {
+		enc.Uint64Key("congestion_window", uint64(e.Current.CongestionWindow))
+	}
+	if e.Last == nil || e.Last.BytesInFlight != e.Current.BytesInFlight {
+		enc.Uint64Key("bytes_in_flight", uint64(e.Current.BytesInFlight))
+	}
+	if e.Last == nil || e.Last.PacketsInFlight != e.Current.PacketsInFlight {
+		enc.Uint64KeyOmitEmpty("packets_in_flight", uint64(e.Current.PacketsInFlight))
+	}
 }
 
 type eventUpdatedPTO struct {
