@@ -7,6 +7,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"time"
 
 	"github.com/lucas-clemente/quic-go"
 	"github.com/lucas-clemente/quic-go/http3"
@@ -44,8 +45,9 @@ func main() {
 	}
 	// a quic.Config that doesn't do a Retry
 	quicConf := &quic.Config{
-		AcceptToken:  func(_ net.Addr, _ *quic.Token) bool { return true },
-		GetLogWriter: getLogWriter,
+		AcceptToken:      func(_ net.Addr, _ *quic.Token) bool { return true },
+		GetLogWriter:     getLogWriter,
+		HandshakeTimeout: 20 * time.Second,
 	}
 	tlsConf = testdata.GetTLSConfig()
 	tlsConf.KeyLogWriter = keyLog
