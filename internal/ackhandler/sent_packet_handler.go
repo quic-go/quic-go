@@ -277,14 +277,14 @@ func (h *sentPacketHandler) ReceivedAck(ack *wire.AckFrame, encLevel protocol.En
 		return err
 	}
 
+	if err := h.detectAndRemoveLostPackets(rcvTime, encLevel, priorInFlight); err != nil {
+		return err
+	}
+
 	for _, p := range ackedPackets {
 		if p.includedInBytesInFlight {
 			h.congestion.OnPacketAcked(p.PacketNumber, p.Length, priorInFlight, rcvTime)
 		}
-	}
-
-	if err := h.detectAndRemoveLostPackets(rcvTime, encLevel, priorInFlight); err != nil {
-		return err
 	}
 
 	if h.qlogger != nil && h.ptoCount != 0 {
