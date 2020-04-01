@@ -272,7 +272,7 @@ func (h *sentPacketHandler) ReceivedAck(ack *wire.AckFrame, encLevel protocol.En
 	}
 
 	priorInFlight := h.bytesInFlight
-	ackedPackets, err := h.determineNewlyAckedPackets(ack, encLevel)
+	ackedPackets, err := h.detectAndRemoveAckedPackets(ack, encLevel)
 	if err != nil || len(ackedPackets) == 0 {
 		return err
 	}
@@ -283,7 +283,7 @@ func (h *sentPacketHandler) ReceivedAck(ack *wire.AckFrame, encLevel protocol.En
 		}
 	}
 
-	if err := h.detectLostPackets(rcvTime, encLevel, priorInFlight); err != nil {
+	if err := h.detectAndRemoveLostPackets(rcvTime, encLevel, priorInFlight); err != nil {
 		return err
 	}
 
@@ -301,15 +301,15 @@ func (h *sentPacketHandler) GetLowestPacketNotConfirmedAcked() protocol.PacketNu
 	return h.lowestNotConfirmedAcked
 }
 
-func (h *sentPacketHandler) determineNewlyAckedPackets(
-	ackFrame *wire.AckFrame,
+func (h *sentPacketHandler) detectAndRemoveAckedPackets(
+	ack *wire.AckFrame,
 	encLevel protocol.EncryptionLevel,
 ) ([]*Packet, error) {
 	pnSpace := h.getPacketNumberSpace(encLevel)
 	var ackedPackets []*Packet
 	ackRangeIndex := 0
-	lowestAcked := ackFrame.LowestAcked()
-	largestAcked := ackFrame.LargestAcked()
+	lowestAcked := ack.LowestAcked()
+	largestAcked := ack.LargestAcked()
 	err := pnSpace.history.Iterate(func(p *Packet) (bool, error) {
 		// Ignore packets below the lowest acked
 		if p.PacketNumber < lowestAcked {
@@ -320,12 +320,12 @@ func (h *sentPacketHandler) determineNewlyAckedPackets(
 			return false, nil
 		}
 
-		if ackFrame.HasMissingRanges() {
-			ackRange := ackFrame.AckRanges[len(ackFrame.AckRanges)-1-ackRangeIndex]
+		if ack.HasMissingRanges() {
+			ackRange := ack.AckRanges[len(ack.AckRanges)-1-ackRangeIndex]
 
-			for p.PacketNumber > ackRange.Largest && ackRangeIndex < len(ackFrame.AckRanges)-1 {
+			for p.PacketNumber > ackRange.Largest && ackRangeIndex < len(ack.AckRanges)-1 {
 				ackRangeIndex++
-				ackRange = ackFrame.AckRanges[len(ackFrame.AckRanges)-1-ackRangeIndex]
+				ackRange = ack.AckRanges[len(ack.AckRanges)-1-ackRangeIndex]
 			}
 
 			if p.PacketNumber >= ackRange.Smallest { // packet i contained in ACK range
@@ -449,7 +449,7 @@ func (h *sentPacketHandler) setLossDetectionTimer() {
 	h.alarm = sentTime.Add(h.rttStats.PTO(encLevel == protocol.Encryption1RTT) << h.ptoCount)
 }
 
-func (h *sentPacketHandler) detectLostPackets(
+func (h *sentPacketHandler) detectAndRemoveLostPackets(
 	now time.Time,
 	encLevel protocol.EncryptionLevel,
 	priorInFlight protocol.ByteCount,
@@ -549,7 +549,7 @@ func (h *sentPacketHandler) onVerifiedLossDetectionTimeout() error {
 			h.logger.Debugf("Loss detection alarm fired in loss timer mode. Loss time: %s", earliestLossTime)
 		}
 		// Early retransmit or time loss detection
-		return h.detectLostPackets(time.Now(), encLevel, h.bytesInFlight)
+		return h.detectAndRemoveLostPackets(time.Now(), encLevel, h.bytesInFlight)
 	}
 
 	// PTO
