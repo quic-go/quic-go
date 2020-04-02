@@ -49,8 +49,8 @@ type sentPacketHandler struct {
 	handshakePackets *packetNumberSpace
 	appDataPackets   *packetNumberSpace
 
-	peerNotAwaitingAddressValidation bool
-	handshakeComplete                bool
+	peerCompletedAddressValidation bool
+	handshakeComplete              bool
 
 	// lowestNotConfirmedAcked is the lowest packet number that we sent an ACK for, but haven't received confirmation, that this ACK actually arrived
 	// example: we send an ACK for packets 90-100 with packet number 20
@@ -97,21 +97,17 @@ func newSentPacketHandler(
 		true, // use Reno
 	)
 
-	var peerNotAwaitingAddressValidation bool
-	if pers == protocol.PerspectiveServer {
-		peerNotAwaitingAddressValidation = true
-	}
 	return &sentPacketHandler{
-		peerNotAwaitingAddressValidation: peerNotAwaitingAddressValidation,
-		initialPackets:                   newPacketNumberSpace(initialPacketNumber),
-		handshakePackets:                 newPacketNumberSpace(0),
-		appDataPackets:                   newPacketNumberSpace(0),
-		rttStats:                         rttStats,
-		congestion:                       congestion,
-		perspective:                      pers,
-		traceCallback:                    traceCallback,
-		qlogger:                          qlogger,
-		logger:                           logger,
+		peerCompletedAddressValidation: pers == protocol.PerspectiveServer,
+		initialPackets:                 newPacketNumberSpace(initialPacketNumber),
+		handshakePackets:               newPacketNumberSpace(0),
+		appDataPackets:                 newPacketNumberSpace(0),
+		rttStats:                       rttStats,
+		congestion:                     congestion,
+		perspective:                    pers,
+		traceCallback:                  traceCallback,
+		qlogger:                        qlogger,
+		logger:                         logger,
 	}
 }
 
@@ -129,7 +125,7 @@ func (h *sentPacketHandler) dropPackets(encLevel protocol.EncryptionLevel) {
 	// The server won't await address validation after the handshake is confirmed.
 	// This applies even if we didn't receive an ACK for a Handshake packet.
 	if h.perspective == protocol.PerspectiveClient && encLevel == protocol.EncryptionHandshake {
-		h.peerNotAwaitingAddressValidation = true
+		h.peerCompletedAddressValidation = true
 	}
 	// remove outstanding packets from bytes_in_flight
 	if encLevel == protocol.EncryptionInitial || encLevel == protocol.EncryptionHandshake {
@@ -180,7 +176,7 @@ func (h *sentPacketHandler) SentPacket(packet *Packet) {
 	if isAckEliciting {
 		h.getPacketNumberSpace(packet.EncryptionLevel).history.SentPacket(packet)
 	}
-	if isAckEliciting || !h.peerNotAwaitingAddressValidation {
+	if isAckEliciting || !h.peerCompletedAddressValidation {
 		h.setLossDetectionTimer()
 	}
 }
@@ -239,9 +235,9 @@ func (h *sentPacketHandler) ReceivedAck(ack *wire.AckFrame, encLevel protocol.En
 	}
 
 	// Servers complete address validation when a protected packet is received.
-	if h.perspective == protocol.PerspectiveClient && !h.peerNotAwaitingAddressValidation &&
+	if h.perspective == protocol.PerspectiveClient && !h.peerCompletedAddressValidation &&
 		(encLevel == protocol.EncryptionHandshake || encLevel == protocol.Encryption1RTT) {
-		h.peerNotAwaitingAddressValidation = true
+		h.peerCompletedAddressValidation = true
 		h.logger.Debugf("Peer doesn't await address validation any longer.")
 		// Make sure that the timer is reset, even if this ACK doesn't acknowledge any (ack-eliciting) packets.
 		h.setLossDetectionTimer()
@@ -422,7 +418,7 @@ func (h *sentPacketHandler) setLossDetectionTimer() {
 	}
 
 	// Cancel the alarm if no packets are outstanding
-	if !h.hasOutstandingPackets() && h.peerNotAwaitingAddressValidation {
+	if !h.hasOutstandingPackets() && h.peerCompletedAddressValidation {
 		h.logger.Debugf("Canceling loss detection timer. No packets in flight.")
 		h.alarm = time.Time{}
 		return
@@ -517,7 +513,7 @@ func (h *sentPacketHandler) OnLossDetectionTimeout() error {
 	// setLossDetectionTimer. This doesn't reset the timer in the session though.
 	// When OnAlarm is called, we therefore need to make sure that there are
 	// actually packets outstanding.
-	if h.hasOutstandingPackets() || !h.peerNotAwaitingAddressValidation {
+	if h.hasOutstandingPackets() || !h.peerCompletedAddressValidation {
 		if err := h.onVerifiedLossDetectionTimeout(); err != nil {
 			return err
 		}

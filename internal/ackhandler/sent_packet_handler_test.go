@@ -750,7 +750,7 @@ var _ = Describe("SentPacketHandler", func() {
 			Expect(handler.SendMode()).To(Equal(SendPTOInitial))
 
 			// Now receive an ACK for a Handshake packet.
-			// This tells the client that the server is not awaiting address validation.
+			// This tells the client that the server completed address validation.
 			handler.SentPacket(handshakePacket(&Packet{PacketNumber: 1}))
 			Expect(handler.ReceivedAck(
 				&wire.AckFrame{AckRanges: []wire.AckRange{{Smallest: 1, Largest: 1}}},
