@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/lucas-clemente/quic-go/internal/protocol"
+	"github.com/lucas-clemente/quic-go/internal/qerr"
 )
 
 type owner uint8
@@ -262,5 +263,42 @@ func (r PacketDropReason) String() string {
 		return "unsupported_version"
 	default:
 		panic("unknown packet drop reason")
+	}
+}
+
+type transportError uint64
+
+func (e transportError) String() string {
+	switch qerr.ErrorCode(e) {
+	case qerr.NoError:
+		return "no_error"
+	case qerr.InternalError:
+		return "internal_error"
+	case qerr.ServerBusy:
+		return "server_busy"
+	case qerr.FlowControlError:
+		return "flow_control_error"
+	case qerr.StreamLimitError:
+		return "stream_limit_error"
+	case qerr.StreamStateError:
+		return "stream_state_error"
+	case qerr.FinalSizeError:
+		return "final_size_error"
+	case qerr.FrameEncodingError:
+		return "frame_encoding_error"
+	case qerr.TransportParameterError:
+		return "transport_parameter_error"
+	case qerr.ConnectionIDLimitError:
+		return "connection_id_limit_error"
+	case qerr.ProtocolViolation:
+		return "protocol_violation"
+	case qerr.InvalidToken:
+		return "invalid_token"
+	case qerr.ApplicationError:
+		return "application_error"
+	case qerr.CryptoBufferExceeded:
+		return "crypto_buffer_exceeded"
+	default:
+		return ""
 	}
 }

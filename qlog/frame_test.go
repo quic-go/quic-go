@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"time"
 
+	"github.com/lucas-clemente/quic-go/internal/qerr"
+
 	"github.com/francoispqt/gojay"
 
 	"github.com/lucas-clemente/quic-go/internal/protocol"
@@ -325,14 +327,14 @@ var _ = Describe("Frames", func() {
 	It("marshals CONNECTION_CLOSE frames, for transport error codes", func() {
 		check(
 			&wire.ConnectionCloseFrame{
-				ErrorCode:    1337,
+				ErrorCode:    qerr.FlowControlError,
 				ReasonPhrase: "lorem ipsum",
 			},
 			map[string]interface{}{
 				"frame_type":     "connection_close",
 				"error_space":    "transport",
-				"error_code":     1337,
-				"raw_error_code": 1337,
+				"error_code":     "flow_control_error",
+				"raw_error_code": int(qerr.FlowControlError),
 				"reason":         "lorem ipsum",
 			},
 		)
