@@ -167,6 +167,17 @@ func (h *sentPacketHandler) dropPackets(encLevel protocol.EncryptionLevel) {
 	h.ptoMode = SendNone
 }
 
+func (h *sentPacketHandler) packetsInFlight() int {
+	packetsInFlight := h.appDataPackets.history.Len()
+	if h.handshakePackets != nil {
+		packetsInFlight += h.handshakePackets.history.Len()
+	}
+	if h.initialPackets != nil {
+		packetsInFlight += h.initialPackets.history.Len()
+	}
+	return packetsInFlight
+}
+
 func (h *sentPacketHandler) SentPacket(packet *Packet) {
 	// For the client, drop the Initial packet number space when the first Handshake packet is sent.
 	if h.perspective == protocol.PerspectiveClient && packet.EncryptionLevel == protocol.EncryptionHandshake && h.initialPackets != nil {
@@ -175,6 +186,9 @@ func (h *sentPacketHandler) SentPacket(packet *Packet) {
 	isAckEliciting := h.sentPacketImpl(packet)
 	if isAckEliciting {
 		h.getPacketNumberSpace(packet.EncryptionLevel).history.SentPacket(packet)
+	}
+	if h.qlogger != nil {
+		h.qlogger.UpdatedMetrics(h.rttStats, h.congestion.GetCongestionWindow(), h.bytesInFlight, h.packetsInFlight())
 	}
 	if isAckEliciting || !h.peerCompletedAddressValidation {
 		h.setLossDetectionTimer()
@@ -256,14 +270,7 @@ func (h *sentPacketHandler) ReceivedAck(ack *wire.AckFrame, encLevel protocol.En
 		}
 		h.congestion.MaybeExitSlowStart()
 		if h.qlogger != nil {
-			packetsInFlight := h.appDataPackets.history.Len()
-			if h.handshakePackets != nil {
-				packetsInFlight += h.handshakePackets.history.Len()
-			}
-			if h.initialPackets != nil {
-				packetsInFlight += h.initialPackets.history.Len()
-			}
-			h.qlogger.UpdatedMetrics(h.rttStats, h.congestion.GetCongestionWindow(), h.bytesInFlight, packetsInFlight)
+			h.qlogger.UpdatedMetrics(h.rttStats, h.congestion.GetCongestionWindow(), h.bytesInFlight, h.packetsInFlight())
 		}
 	}
 

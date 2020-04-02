@@ -377,6 +377,50 @@ var _ = Describe("Tracer", func() {
 			Expect(ev).To(HaveKeyWithValue("packets_in_flight", float64(42)))
 		})
 
+		It("only logs the diff between two metrics updates", func() {
+			now := time.Now()
+			rttStats := congestion.NewRTTStats()
+			rttStats.UpdateRTT(15*time.Millisecond, 0, now)
+			rttStats.UpdateRTT(20*time.Millisecond, 0, now)
+			rttStats.UpdateRTT(25*time.Millisecond, 0, now)
+			Expect(rttStats.MinRTT()).To(Equal(15 * time.Millisecond))
+
+			rttStats2 := congestion.NewRTTStats()
+			rttStats2.UpdateRTT(15*time.Millisecond, 0, now)
+			rttStats2.UpdateRTT(15*time.Millisecond, 0, now)
+			rttStats2.UpdateRTT(15*time.Millisecond, 0, now)
+			Expect(rttStats2.MinRTT()).To(Equal(15 * time.Millisecond))
+
+			Expect(rttStats.LatestRTT()).To(Equal(25 * time.Millisecond))
+			tracer.UpdatedMetrics(
+				rttStats,
+				4321,
+				1234,
+				42,
+			)
+			tracer.UpdatedMetrics(
+				rttStats2,
+				4321,
+				12345, // changed
+				42,
+			)
+			entries := exportAndParse()
+			Expect(entries).To(HaveLen(2))
+			Expect(entries[0].Time).To(BeTemporally("~", time.Now(), 10*time.Millisecond))
+			Expect(entries[0].Category).To(Equal("recovery"))
+			Expect(entries[0].Name).To(Equal("metrics_updated"))
+			Expect(entries[0].Event).To(HaveLen(7))
+			Expect(entries[1].Time).To(BeTemporally("~", time.Now(), 10*time.Millisecond))
+			Expect(entries[1].Category).To(Equal("recovery"))
+			Expect(entries[1].Name).To(Equal("metrics_updated"))
+			ev := entries[1].Event
+			Expect(ev).ToNot(HaveKey("min_rtt"))
+			Expect(ev).ToNot(HaveKey("congestion_window"))
+			Expect(ev).ToNot(HaveKey("packets_in_flight"))
+			Expect(ev).To(HaveKeyWithValue("bytes_in_flight", float64(12345)))
+			Expect(ev).To(HaveKeyWithValue("smoothed_rtt", float64(15)))
+		})
+
 		It("records lost packets", func() {
 			tracer.LostPacket(protocol.EncryptionHandshake, 42, PacketLossReorderingThreshold)
 			entry := exportAndParseSingle()

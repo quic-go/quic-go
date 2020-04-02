@@ -46,6 +46,8 @@ type tracer struct {
 	events     chan event
 	encodeErr  error
 	runStopped chan struct{}
+
+	lastMetrics *metrics
 }
 
 var _ Tracer = &tracer{}
@@ -231,7 +233,7 @@ func (t *tracer) DroppedPacket(packetType PacketType, size protocol.ByteCount, d
 }
 
 func (t *tracer) UpdatedMetrics(rttStats *congestion.RTTStats, cwnd, bytesInFlight protocol.ByteCount, packetsInFlight int) {
-	t.recordEvent(&eventMetricsUpdated{
+	m := &metrics{
 		MinRTT:           rttStats.MinRTT(),
 		SmoothedRTT:      rttStats.SmoothedRTT(),
 		LatestRTT:        rttStats.LatestRTT(),
@@ -239,7 +241,12 @@ func (t *tracer) UpdatedMetrics(rttStats *congestion.RTTStats, cwnd, bytesInFlig
 		CongestionWindow: cwnd,
 		BytesInFlight:    bytesInFlight,
 		PacketsInFlight:  packetsInFlight,
+	}
+	t.recordEvent(&eventMetricsUpdated{
+		Last:    t.lastMetrics,
+		Current: m,
 	})
+	t.lastMetrics = m
 }
 
 func (t *tracer) LostPacket(encLevel protocol.EncryptionLevel, pn protocol.PacketNumber, lossReason PacketLossReason) {
