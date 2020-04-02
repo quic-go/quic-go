@@ -10,7 +10,7 @@ import (
 	"github.com/francoispqt/gojay"
 )
 
-var eventFields = [4]string{"time", "category", "event", "data"}
+var eventFields = [4]string{"relative_time", "category", "event", "data"}
 
 type events []event
 
@@ -31,7 +31,7 @@ type eventDetails interface {
 }
 
 type event struct {
-	Time time.Time
+	RelativeTime time.Duration
 	eventDetails
 }
 
@@ -39,7 +39,7 @@ var _ gojay.MarshalerJSONArray = event{}
 
 func (e event) IsNil() bool { return false }
 func (e event) MarshalJSONArray(enc *gojay.Encoder) {
-	enc.Float64(float64(e.Time.UnixNano()) / 1e6)
+	enc.Float64(float64(e.RelativeTime.Nanoseconds()) / 1e6)
 	enc.String(e.Category().String())
 	enc.String(e.Name())
 	enc.Object(e.eventDetails)

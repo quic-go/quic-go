@@ -1,6 +1,8 @@
 package qlog
 
 import (
+	"time"
+
 	"github.com/francoispqt/gojay"
 
 	"github.com/lucas-clemente/quic-go/internal/protocol"
@@ -34,15 +36,17 @@ func (p vantagePoint) MarshalJSONObject(enc *gojay.Encoder) {
 }
 
 type commonFields struct {
-	ODCID        connectionID
-	GroupID      connectionID
-	ProtocolType string
+	ODCID         connectionID
+	GroupID       connectionID
+	ProtocolType  string
+	ReferenceTime time.Time
 }
 
 func (f commonFields) MarshalJSONObject(enc *gojay.Encoder) {
 	enc.StringKey("ODCID", f.ODCID.String())
 	enc.StringKey("group_id", f.ODCID.String())
 	enc.StringKeyOmitEmpty("protocol_type", f.ProtocolType)
+	enc.Float64Key("reference_time", float64(f.ReferenceTime.UnixNano()/1e6))
 }
 
 func (f commonFields) IsNil() bool { return false }
