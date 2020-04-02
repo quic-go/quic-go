@@ -448,6 +448,12 @@ func (h *sentPacketHandler) setLossDetectionTimer() {
 
 	// PTO alarm
 	sentTime, encLevel := h.getEarliestSentTimeAndSpace()
+	if sentTime.IsZero() {
+		if h.peerCompletedAddressValidation {
+			panic("didn't expect sentTime to be zero")
+		}
+		sentTime = time.Now()
+	}
 	h.alarm = sentTime.Add(h.rttStats.PTO(encLevel == protocol.Encryption1RTT) << h.ptoCount)
 }
 

@@ -793,6 +793,21 @@ var _ = Describe("SentPacketHandler", func() {
 			handler.DropPackets(protocol.EncryptionHandshake)
 			Expect(handler.GetLossDetectionTimeout()).To(BeZero())
 		})
+
+		It("correctly sets the timer after the Initial packet number space has been dropped", func() {
+			handler.SentPacket(initialPacket(&Packet{PacketNumber: 1, SendTime: time.Now().Add(-42 * time.Second)}))
+			Expect(handler.ReceivedAck(
+				&wire.AckFrame{AckRanges: []wire.AckRange{{Smallest: 1, Largest: 1}}},
+				protocol.EncryptionInitial,
+				time.Now(),
+			)).To(Succeed())
+			handler.SentPacket(handshakePacketNonAckEliciting(&Packet{PacketNumber: 1, SendTime: time.Now()}))
+			Expect(handler.initialPackets).To(BeNil())
+
+			pto := handler.rttStats.PTO(false)
+			Expect(pto).ToNot(BeZero())
+			Expect(handler.GetLossDetectionTimeout()).To(BeTemporally("~", time.Now().Add(pto), 10*time.Millisecond))
+		})
 	})
 
 	Context("Packet-based loss detection", func() {
