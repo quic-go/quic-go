@@ -492,5 +492,46 @@ var _ = Describe("Tracer", func() {
 			Expect(keyTypes).To(ContainElement("server_initial_secret"))
 			Expect(keyTypes).To(ContainElement("client_initial_secret"))
 		})
+
+		It("records when the timer is set", func() {
+			t := time.Now().Add(1337 * time.Millisecond)
+			tracer.SetLossTimer(TimerTypePTO, protocol.EncryptionHandshake, t)
+			entry := exportAndParseSingle()
+			Expect(entry.Time).To(BeTemporally("~", time.Now(), 10*time.Millisecond))
+			Expect(entry.Category).To(Equal("recovery"))
+			Expect(entry.Name).To(Equal("loss_timer_updated"))
+			ev := entry.Event
+			Expect(ev).To(HaveLen(4))
+			Expect(ev).To(HaveKeyWithValue("event_type", "set"))
+			Expect(ev).To(HaveKeyWithValue("timer_type", "pto"))
+			Expect(ev).To(HaveKeyWithValue("packet_number_space", "handshake"))
+			Expect(ev).To(HaveKey("delta"))
+			delta := time.Duration(ev["delta"].(float64)) * time.Millisecond
+			Expect(entry.Time.Add(delta)).To(BeTemporally("~", t, 2*time.Millisecond))
+		})
+
+		It("records when the loss timer expires", func() {
+			tracer.LossTimerExpired(TimerTypeACK, protocol.Encryption1RTT)
+			entry := exportAndParseSingle()
+			Expect(entry.Time).To(BeTemporally("~", time.Now(), 10*time.Millisecond))
+			Expect(entry.Category).To(Equal("recovery"))
+			Expect(entry.Name).To(Equal("loss_timer_updated"))
+			ev := entry.Event
+			Expect(ev).To(HaveLen(3))
+			Expect(ev).To(HaveKeyWithValue("event_type", "expired"))
+			Expect(ev).To(HaveKeyWithValue("timer_type", "ack"))
+			Expect(ev).To(HaveKeyWithValue("packet_number_space", "application_data"))
+		})
+
+		It("records when the timer is canceled", func() {
+			tracer.LossTimerCanceled()
+			entry := exportAndParseSingle()
+			Expect(entry.Time).To(BeTemporally("~", time.Now(), 10*time.Millisecond))
+			Expect(entry.Category).To(Equal("recovery"))
+			Expect(entry.Name).To(Equal("loss_timer_updated"))
+			ev := entry.Event
+			Expect(ev).To(HaveLen(1))
+			Expect(ev).To(HaveKeyWithValue("event_type", "cancelled"))
+		})
 	})
 })

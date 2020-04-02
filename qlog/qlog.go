@@ -34,6 +34,9 @@ type Tracer interface {
 	UpdatedKeyFromTLS(protocol.EncryptionLevel, protocol.Perspective)
 	UpdatedKey(generation protocol.KeyPhase, remote bool)
 	DroppedEncryptionLevel(protocol.EncryptionLevel)
+	SetLossTimer(TimerType, protocol.EncryptionLevel, time.Time)
+	LossTimerExpired(TimerType, protocol.EncryptionLevel)
+	LossTimerCanceled()
 }
 
 type tracer struct {
@@ -119,9 +122,9 @@ func (t *tracer) Export() error {
 	return t.w.Close()
 }
 
-func (t *tracer) recordEvent(details eventDetails) {
+func (t *tracer) recordEvent(eventTime time.Time, details eventDetails) {
 	t.events <- event{
-		RelativeTime: time.Since(t.referenceTime),
+		RelativeTime: eventTime.Sub(t.referenceTime),
 		eventDetails: details,
 	}
 }
@@ -136,7 +139,7 @@ func (t *tracer) StartedConnection(local, remote net.Addr, version protocol.Vers
 	if !ok {
 		return
 	}
-	t.recordEvent(&eventConnectionStarted{
+	t.recordEvent(time.Now(), &eventConnectionStarted{
 		SrcAddr:          localAddr,
 		DestAddr:         remoteAddr,
 		Version:          version,
@@ -154,7 +157,7 @@ func (t *tracer) ReceivedTransportParameters(tp *wire.TransportParameters) {
 }
 
 func (t *tracer) recordTransportParameters(owner owner, tp *wire.TransportParameters) {
-	t.recordEvent(&eventTransportParameters{
+	t.recordEvent(time.Now(), &eventTransportParameters{
 		Owner:                          owner,
 		OriginalConnectionID:           tp.OriginalConnectionID,
 		StatelessResetToken:            tp.StatelessResetToken,
@@ -187,7 +190,7 @@ func (t *tracer) SentPacket(hdr *wire.ExtendedHeader, packetSize protocol.ByteCo
 	}
 	header := *transformExtendedHeader(hdr)
 	header.PacketSize = packetSize
-	t.recordEvent(&eventPacketSent{
+	t.recordEvent(time.Now(), &eventPacketSent{
 		PacketType: PacketTypeFromHeader(&hdr.Header),
 		Header:     header,
 		Frames:     fs,
@@ -201,7 +204,7 @@ func (t *tracer) ReceivedPacket(hdr *wire.ExtendedHeader, packetSize protocol.By
 	}
 	header := *transformExtendedHeader(hdr)
 	header.PacketSize = packetSize
-	t.recordEvent(&eventPacketReceived{
+	t.recordEvent(time.Now(), &eventPacketReceived{
 		PacketType: PacketTypeFromHeader(&hdr.Header),
 		Header:     header,
 		Frames:     fs,
@@ -209,23 +212,23 @@ func (t *tracer) ReceivedPacket(hdr *wire.ExtendedHeader, packetSize protocol.By
 }
 
 func (t *tracer) ReceivedRetry(hdr *wire.Header) {
-	t.recordEvent(&eventRetryReceived{
+	t.recordEvent(time.Now(), &eventRetryReceived{
 		Header: *transformHeader(hdr),
 	})
 }
 
 func (t *tracer) ReceivedStatelessReset(token *[16]byte) {
-	t.recordEvent(&eventStatelessResetReceived{
+	t.recordEvent(time.Now(), &eventStatelessResetReceived{
 		Token: token,
 	})
 }
 
 func (t *tracer) BufferedPacket(packetType PacketType) {
-	t.recordEvent(&eventPacketBuffered{PacketType: packetType})
+	t.recordEvent(time.Now(), &eventPacketBuffered{PacketType: packetType})
 }
 
 func (t *tracer) DroppedPacket(packetType PacketType, size protocol.ByteCount, dropReason PacketDropReason) {
-	t.recordEvent(&eventPacketDropped{
+	t.recordEvent(time.Now(), &eventPacketDropped{
 		PacketType: packetType,
 		PacketSize: size,
 		Trigger:    dropReason,
@@ -242,7 +245,7 @@ func (t *tracer) UpdatedMetrics(rttStats *congestion.RTTStats, cwnd, bytesInFlig
 		BytesInFlight:    bytesInFlight,
 		PacketsInFlight:  packetsInFlight,
 	}
-	t.recordEvent(&eventMetricsUpdated{
+	t.recordEvent(time.Now(), &eventMetricsUpdated{
 		Last:    t.lastMetrics,
 		Current: m,
 	})
@@ -250,7 +253,7 @@ func (t *tracer) UpdatedMetrics(rttStats *congestion.RTTStats, cwnd, bytesInFlig
 }
 
 func (t *tracer) LostPacket(encLevel protocol.EncryptionLevel, pn protocol.PacketNumber, lossReason PacketLossReason) {
-	t.recordEvent(&eventPacketLost{
+	t.recordEvent(time.Now(), &eventPacketLost{
 		PacketType:   getPacketTypeFromEncryptionLevel(encLevel),
 		PacketNumber: pn,
 		Trigger:      lossReason,
@@ -258,11 +261,11 @@ func (t *tracer) LostPacket(encLevel protocol.EncryptionLevel, pn protocol.Packe
 }
 
 func (t *tracer) UpdatedPTOCount(value uint32) {
-	t.recordEvent(&eventUpdatedPTO{Value: value})
+	t.recordEvent(time.Now(), &eventUpdatedPTO{Value: value})
 }
 
 func (t *tracer) UpdatedKeyFromTLS(encLevel protocol.EncryptionLevel, pers protocol.Perspective) {
-	t.recordEvent(&eventKeyUpdated{
+	t.recordEvent(time.Now(), &eventKeyUpdated{
 		Trigger: keyUpdateTLS,
 		KeyType: encLevelToKeyType(encLevel, pers),
 	})
@@ -273,12 +276,13 @@ func (t *tracer) UpdatedKey(generation protocol.KeyPhase, remote bool) {
 	if remote {
 		trigger = keyUpdateRemote
 	}
-	t.recordEvent(&eventKeyUpdated{
+	now := time.Now()
+	t.recordEvent(now, &eventKeyUpdated{
 		Trigger:    trigger,
 		KeyType:    keyTypeClient1RTT,
 		Generation: generation,
 	})
-	t.recordEvent(&eventKeyUpdated{
+	t.recordEvent(now, &eventKeyUpdated{
 		Trigger:    trigger,
 		KeyType:    keyTypeServer1RTT,
 		Generation: generation,
@@ -286,6 +290,27 @@ func (t *tracer) UpdatedKey(generation protocol.KeyPhase, remote bool) {
 }
 
 func (t *tracer) DroppedEncryptionLevel(encLevel protocol.EncryptionLevel) {
-	t.recordEvent(&eventKeyRetired{KeyType: encLevelToKeyType(encLevel, protocol.PerspectiveServer)})
-	t.recordEvent(&eventKeyRetired{KeyType: encLevelToKeyType(encLevel, protocol.PerspectiveClient)})
+	now := time.Now()
+	t.recordEvent(now, &eventKeyRetired{KeyType: encLevelToKeyType(encLevel, protocol.PerspectiveServer)})
+	t.recordEvent(now, &eventKeyRetired{KeyType: encLevelToKeyType(encLevel, protocol.PerspectiveClient)})
+}
+
+func (t *tracer) SetLossTimer(tt TimerType, encLevel protocol.EncryptionLevel, timeout time.Time) {
+	now := time.Now()
+	t.recordEvent(now, &eventLossTimerSet{
+		TimerType: tt,
+		EncLevel:  encLevel,
+		Delta:     timeout.Sub(now),
+	})
+}
+
+func (t *tracer) LossTimerExpired(tt TimerType, encLevel protocol.EncryptionLevel) {
+	t.recordEvent(time.Now(), &eventLossTimerExpired{
+		TimerType: tt,
+		EncLevel:  encLevel,
+	})
+}
+
+func (t *tracer) LossTimerCanceled() {
+	t.recordEvent(time.Now(), &eventLossTimerCanceled{})
 }
