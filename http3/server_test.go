@@ -57,14 +57,14 @@ var _ = Describe("Server", func() {
 			decoder := qpack.NewDecoder(nil)
 
 			frame, err := parseNextFrame(str)
-			Expect(err).ToNot(HaveOccurred())
-			Expect(frame).To(BeAssignableToTypeOf(&headersFrame{}))
+			ExpectWithOffset(1, err).ToNot(HaveOccurred())
+			ExpectWithOffset(1, frame).To(BeAssignableToTypeOf(&headersFrame{}))
 			headersFrame := frame.(*headersFrame)
 			data := make([]byte, headersFrame.Length)
 			_, err = io.ReadFull(str, data)
-			Expect(err).ToNot(HaveOccurred())
+			ExpectWithOffset(1, err).ToNot(HaveOccurred())
 			hfs, err := decoder.DecodeFull(data)
-			Expect(err).ToNot(HaveOccurred())
+			ExpectWithOffset(1, err).ToNot(HaveOccurred())
 			for _, p := range hfs {
 				fields[p.Name] = append(fields[p.Name], p.Value)
 			}
