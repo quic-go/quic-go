@@ -39,7 +39,8 @@ func GetQLOGWriter() (func(connID []byte) io.WriteCloser, error) {
 		path := fmt.Sprintf("%s/%x.qlog", strings.TrimRight(qlogDir, "/"), connID)
 		f, err := os.Create(path)
 		if err != nil {
-			log.Fatalf("Failed to create qlog file %s: %s", path, err.Error())
+			log.Printf("Failed to create qlog file %s: %s", path, err.Error())
+			return nil
 		}
 		return utils.NewBufferedWriteCloser(bufio.NewWriter(f), f)
 	}, nil
