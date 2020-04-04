@@ -187,7 +187,7 @@ func (h *sentPacketHandler) SentPacket(packet *Packet) {
 	if isAckEliciting {
 		h.getPacketNumberSpace(packet.EncryptionLevel).history.SentPacket(packet)
 	}
-	if h.qlogger != nil {
+	if h.qlogger != nil && isAckEliciting {
 		h.qlogger.UpdatedMetrics(h.rttStats, h.congestion.GetCongestionWindow(), h.bytesInFlight, h.packetsInFlight())
 	}
 	if isAckEliciting || !h.peerCompletedAddressValidation {
