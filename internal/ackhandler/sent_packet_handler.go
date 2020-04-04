@@ -721,9 +721,13 @@ func (h *sentPacketHandler) ResetForRetry() error {
 	h.appDataPackets = newPacketNumberSpace(h.appDataPackets.pns.Pop())
 	oldAlarm := h.alarm
 	h.alarm = time.Time{}
-	if h.qlogger != nil && !oldAlarm.IsZero() {
-		h.qlogger.LossTimerCanceled()
+	if h.qlogger != nil {
+		h.qlogger.UpdatedPTOCount(0)
+		if !oldAlarm.IsZero() {
+			h.qlogger.LossTimerCanceled()
+		}
 	}
+	h.ptoCount = 0
 	return nil
 }
 

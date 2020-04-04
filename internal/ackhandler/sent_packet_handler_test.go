@@ -995,7 +995,7 @@ var _ = Describe("SentPacketHandler", func() {
 			perspective = protocol.PerspectiveClient
 		})
 
-		It("queues outstanding packets for retransmission and cancels alarms", func() {
+		It("queues outstanding packets for retransmission, cancels alarms and resets PTO count", func() {
 			handler.SentPacket(initialPacket(&Packet{PacketNumber: 42}))
 			Expect(handler.GetLossDetectionTimeout()).ToNot(BeZero())
 			Expect(handler.bytesInFlight).ToNot(BeZero())
@@ -1006,6 +1006,7 @@ var _ = Describe("SentPacketHandler", func() {
 			Expect(handler.bytesInFlight).To(BeZero())
 			Expect(handler.GetLossDetectionTimeout()).To(BeZero())
 			Expect(handler.SendMode()).To(Equal(SendAny))
+			Expect(handler.ptoCount).To(BeZero())
 		})
 
 		It("queues outstanding frames for retransmission and cancels alarms", func() {
