@@ -481,7 +481,7 @@ func (h *sentPacketHandler) detectAndRemoveLostPackets(now time.Time, encLevel p
 	lostSendTime := now.Add(-lossDelay)
 
 	var lostPackets []*Packet
-	pnSpace.history.Iterate(func(packet *Packet) (bool, error) {
+	if err := pnSpace.history.Iterate(func(packet *Packet) (bool, error) {
 		if packet.PacketNumber > pnSpace.largestAcked {
 			return false, nil
 		}
@@ -505,7 +505,9 @@ func (h *sentPacketHandler) detectAndRemoveLostPackets(now time.Time, encLevel p
 			pnSpace.lossTime = lossTime
 		}
 		return true, nil
-	})
+	}); err != nil {
+		return nil, err
+	}
 
 	if h.logger.Debug() && len(lostPackets) > 0 {
 		pns := make([]protocol.PacketNumber, len(lostPackets))
@@ -521,7 +523,9 @@ func (h *sentPacketHandler) detectAndRemoveLostPackets(now time.Time, encLevel p
 		if p.includedInBytesInFlight {
 			h.bytesInFlight -= p.Length
 		}
-		pnSpace.history.Remove(p.PacketNumber)
+		if err := pnSpace.history.Remove(p.PacketNumber); err != nil {
+			return nil, err
+		}
 		if h.traceCallback != nil {
 			frames := make([]wire.Frame, 0, len(p.Frames))
 			for _, f := range p.Frames {

@@ -27,3 +27,9 @@ linters:
     - unused
     - varcheck
     - vet
+
+issues:
+  exclude-rules:
+    - path: qlog/
+      linters:
+        - goconst
