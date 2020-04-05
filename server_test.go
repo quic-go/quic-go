@@ -743,6 +743,7 @@ var _ = Describe("Server", func() {
 				}()
 
 				ctx, cancel := context.WithCancel(context.Background()) // handshake context
+				serv.config.AcceptToken = func(_ net.Addr, _ *Token) bool { return true }
 				serv.newSession = func(
 					_ connection,
 					runner sessionRunner,
@@ -761,11 +762,12 @@ var _ = Describe("Server", func() {
 					sess.EXPECT().HandshakeComplete().Return(ctx)
 					sess.EXPECT().run().Do(func() {})
 					sess.EXPECT().Context().Return(context.Background())
+					sess.EXPECT().handlePacket(gomock.Any())
 					return sess
 				}
 				phm.EXPECT().GetStatelessResetToken(gomock.Any())
 				phm.EXPECT().Add(gomock.Any(), gomock.Any()).Return(true).Times(2)
-				serv.createNewSession(&net.UDPAddr{}, nil, nil, nil, nil, protocol.VersionWhatever)
+				serv.handlePacket(getInitialWithRandomDestConnID())
 				Consistently(done).ShouldNot(BeClosed())
 				cancel() // complete the handshake
 				Eventually(done).Should(BeClosed())
@@ -805,6 +807,7 @@ var _ = Describe("Server", func() {
 			}()
 
 			ready := make(chan struct{})
+			serv.config.AcceptToken = func(_ net.Addr, _ *Token) bool { return true }
 			serv.newSession = func(
 				_ connection,
 				runner sessionRunner,
@@ -824,11 +827,12 @@ var _ = Describe("Server", func() {
 				sess.EXPECT().run().Do(func() {})
 				sess.EXPECT().earlySessionReady().Return(ready)
 				sess.EXPECT().Context().Return(context.Background())
+				sess.EXPECT().handlePacket(gomock.Any())
 				return sess
 			}
 			phm.EXPECT().GetStatelessResetToken(gomock.Any())
 			phm.EXPECT().Add(gomock.Any(), sess).Return(true).Times(2)
-			serv.createNewSession(&net.UDPAddr{}, nil, nil, nil, nil, protocol.VersionWhatever)
+			serv.handlePacket(getInitialWithRandomDestConnID())
 			Consistently(done).ShouldNot(BeClosed())
 			close(ready)
 			Eventually(done).Should(BeClosed())

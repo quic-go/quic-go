@@ -347,7 +347,7 @@ func (s *baseServer) handleInitialImpl(p *receivedPacket, hdr *wire.Header) (qui
 	}
 
 	var token *Token
-	var origDestConnectionID protocol.ConnectionID
+	var origDestConnID protocol.ConnectionID
 	if len(hdr.Token) > 0 {
 		c, err := s.tokenGenerator.DecodeToken(hdr.Token)
 		if err == nil {
@@ -356,7 +356,7 @@ func (s *baseServer) handleInitialImpl(p *receivedPacket, hdr *wire.Header) (qui
 				RemoteAddr:   c.RemoteAddr,
 				SentTime:     c.SentTime,
 			}
-			origDestConnectionID = c.OriginalDestConnectionID
+			origDestConnID = c.OriginalDestConnectionID
 		}
 	}
 	if !s.config.AcceptToken(p.remoteAddr, token) {
@@ -388,18 +388,32 @@ func (s *baseServer) handleInitialImpl(p *receivedPacket, hdr *wire.Header) (qui
 	if err != nil {
 		return nil, err
 	}
+
 	s.logger.Debugf("Changing connection ID to %s.", connID)
-	sess := s.createNewSession(
-		p.remoteAddr,
-		origDestConnectionID,
+	sess := s.newSession(
+		&conn{pconn: s.conn, currentAddr: p.remoteAddr},
+		s.sessionHandler,
+		origDestConnID,
 		hdr.DestConnectionID,
 		hdr.SrcConnectionID,
 		connID,
+		s.sessionHandler.GetStatelessResetToken(connID),
+		s.config,
+		s.tlsConf,
+		s.tokenGenerator,
+		s.acceptEarlySessions,
+		s.logger,
 		hdr.Version,
 	)
-	if sess == nil {
+	if added := s.sessionHandler.Add(hdr.DestConnectionID, sess); !added {
+		// We're already keeping track of this connection ID.
+		// This might happen if we receive two copies of the Initial at the same time.
 		return nil, nil
 	}
+	s.sessionHandler.Add(connID, sess)
+	go sess.run()
+	go s.handleNewSession(sess)
+
 	sess.handlePacket(p)
 	for {
 		p := s.zeroRTTQueue.Dequeue(hdr.DestConnectionID)
@@ -409,40 +423,6 @@ func (s *baseServer) handleInitialImpl(p *receivedPacket, hdr *wire.Header) (qui
 		sess.handlePacket(p)
 	}
 	return sess, nil
-}
-
-func (s *baseServer) createNewSession(
-	remoteAddr net.Addr,
-	origDestConnID protocol.ConnectionID,
-	clientDestConnID protocol.ConnectionID,
-	destConnID protocol.ConnectionID,
-	srcConnID protocol.ConnectionID,
-	version protocol.VersionNumber,
-) quicSession {
-	sess := s.newSession(
-		&conn{pconn: s.conn, currentAddr: remoteAddr},
-		s.sessionHandler,
-		origDestConnID,
-		clientDestConnID,
-		destConnID,
-		srcConnID,
-		s.sessionHandler.GetStatelessResetToken(srcConnID),
-		s.config,
-		s.tlsConf,
-		s.tokenGenerator,
-		s.acceptEarlySessions,
-		s.logger,
-		version,
-	)
-	if added := s.sessionHandler.Add(clientDestConnID, sess); !added {
-		// We're already keeping track of this connection ID.
-		// This might happen if we receive two copies of the Initial at the same time.
-		return nil
-	}
-	s.sessionHandler.Add(srcConnID, sess)
-	go sess.run()
-	go s.handleNewSession(sess)
-	return sess
 }
 
 func (s *baseServer) handleNewSession(sess quicSession) {
