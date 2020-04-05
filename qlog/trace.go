@@ -46,7 +46,7 @@ func (f commonFields) MarshalJSONObject(enc *gojay.Encoder) {
 	enc.StringKey("ODCID", f.ODCID.String())
 	enc.StringKey("group_id", f.ODCID.String())
 	enc.StringKeyOmitEmpty("protocol_type", f.ProtocolType)
-	enc.Float64Key("reference_time", float64(f.ReferenceTime.UnixNano()/1e6))
+	enc.Float64Key("reference_time", float64(f.ReferenceTime.UnixNano())/1e6)
 }
 
 func (f commonFields) IsNil() bool { return false }
