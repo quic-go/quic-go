@@ -209,7 +209,6 @@ var newSession = func(
 	tlsConf *tls.Config,
 	tokenGenerator *handshake.TokenGenerator,
 	enable0RTT bool,
-	qlogger qlog.Tracer,
 	logger utils.Logger,
 	v protocol.VersionNumber,
 ) quicSession {
@@ -222,15 +221,26 @@ var newSession = func(
 		oneRTTStream:          newCryptoStream(),
 		perspective:           protocol.PerspectiveServer,
 		handshakeCompleteChan: make(chan struct{}),
-		qlogger:               qlogger,
 		logger:                logger,
 		version:               v,
 	}
+	// Use the same connection ID that is passed to the client's GetLogWriter callback.
+	var logID protocol.ConnectionID
 	if origDestConnID != nil {
-		s.logID = origDestConnID.String()
+		logID = origDestConnID
 	} else {
-		s.logID = destConnID.String()
+		logID = clientDestConnID
 	}
+	s.logID = logID.String()
+	if s.config.GetLogWriter != nil {
+		if w := s.config.GetLogWriter(logID); w != nil {
+			s.qlogger = qlog.NewTracer(w, protocol.PerspectiveServer, logID)
+		}
+	}
+	if s.qlogger != nil {
+		s.qlogger.StartedConnection(s.conn.LocalAddr(), conn.RemoteAddr(), v, srcConnID, destConnID)
+	}
+
 	s.connIDManager = newConnIDManager(
 		destConnID,
 		func(token [16]byte) { runner.AddResetToken(token, s) },
@@ -297,7 +307,7 @@ var newSession = func(
 		tlsConf,
 		enable0RTT,
 		s.rttStats,
-		qlogger,
+		s.qlogger,
 		logger,
 	)
 	s.cryptoStreamHandler = cs

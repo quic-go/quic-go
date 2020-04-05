@@ -93,7 +93,6 @@ var _ = Describe("Session", func() {
 			nil, // tls.Config
 			tokenGenerator,
 			false,
-			nil,
 			utils.DefaultLogger,
 			protocol.VersionTLS,
 		).(*session)
