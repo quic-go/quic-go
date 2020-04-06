@@ -205,6 +205,8 @@ var newSession = func(
 	destConnID protocol.ConnectionID,
 	srcConnID protocol.ConnectionID,
 	statelessResetToken [16]byte,
+	initialSealer handshake.LongHeaderSealer,
+	initialOpener handshake.LongHeaderOpener,
 	conf *Config,
 	tlsConf *tls.Config,
 	tokenGenerator *handshake.TokenGenerator,
@@ -291,7 +293,8 @@ var newSession = func(
 	cs := handshake.NewCryptoSetupServer(
 		initialStream,
 		handshakeStream,
-		clientDestConnID,
+		initialSealer,
+		initialOpener,
 		conn.LocalAddr(),
 		conn.RemoteAddr(),
 		params,

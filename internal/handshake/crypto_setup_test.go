@@ -88,10 +88,12 @@ var _ = Describe("Crypto Setup TLS", func() {
 				return &tls.Config{ServerName: ch.ServerName}, nil
 			},
 		}
+		initialSealer, initialOpener := NewInitialAEAD(protocol.ConnectionID{}, protocol.PerspectiveServer)
 		server := NewCryptoSetupServer(
 			&bytes.Buffer{},
 			&bytes.Buffer{},
-			protocol.ConnectionID{},
+			initialSealer,
+			initialOpener,
 			nil,
 			nil,
 			&wire.TransportParameters{},
@@ -121,10 +123,12 @@ var _ = Describe("Crypto Setup TLS", func() {
 		runner := NewMockHandshakeRunner(mockCtrl)
 		runner.EXPECT().OnError(gomock.Any()).Do(func(e error) { sErrChan <- e })
 		_, sInitialStream, sHandshakeStream := initStreams()
+		initialSealer, initialOpener := NewInitialAEAD(protocol.ConnectionID{}, protocol.PerspectiveServer)
 		server := NewCryptoSetupServer(
 			sInitialStream,
 			sHandshakeStream,
-			protocol.ConnectionID{},
+			initialSealer,
+			initialOpener,
 			nil,
 			nil,
 			&wire.TransportParameters{},
@@ -160,10 +164,12 @@ var _ = Describe("Crypto Setup TLS", func() {
 		_, sInitialStream, sHandshakeStream := initStreams()
 		runner := NewMockHandshakeRunner(mockCtrl)
 		runner.EXPECT().OnError(gomock.Any()).Do(func(e error) { sErrChan <- e })
+		initialSealer, initialOpener := NewInitialAEAD(protocol.ConnectionID{}, protocol.PerspectiveServer)
 		server := NewCryptoSetupServer(
 			sInitialStream,
 			sHandshakeStream,
-			protocol.ConnectionID{},
+			initialSealer,
+			initialOpener,
 			nil,
 			nil,
 			&wire.TransportParameters{},
@@ -202,10 +208,12 @@ var _ = Describe("Crypto Setup TLS", func() {
 		_, sInitialStream, sHandshakeStream := initStreams()
 		runner := NewMockHandshakeRunner(mockCtrl)
 		runner.EXPECT().OnError(gomock.Any()).Do(func(e error) { sErrChan <- e })
+		initialSealer, initialOpener := NewInitialAEAD(protocol.ConnectionID{}, protocol.PerspectiveServer)
 		server := NewCryptoSetupServer(
 			sInitialStream,
 			sHandshakeStream,
-			protocol.ConnectionID{},
+			initialSealer,
+			initialOpener,
 			nil,
 			nil,
 			&wire.TransportParameters{},
@@ -237,10 +245,12 @@ var _ = Describe("Crypto Setup TLS", func() {
 
 	It("returns Handshake() when it is closed", func() {
 		_, sInitialStream, sHandshakeStream := initStreams()
+		initialSealer, initialOpener := NewInitialAEAD(protocol.ConnectionID{}, protocol.PerspectiveServer)
 		server := NewCryptoSetupServer(
 			sInitialStream,
 			sHandshakeStream,
-			protocol.ConnectionID{},
+			initialSealer,
+			initialOpener,
 			nil,
 			nil,
 			&wire.TransportParameters{},
@@ -355,10 +365,12 @@ var _ = Describe("Crypto Setup TLS", func() {
 			sRunner.EXPECT().OnError(gomock.Any()).Do(func(e error) { sErrChan <- e }).MaxTimes(1)
 			sRunner.EXPECT().OnHandshakeComplete().Do(func() { sHandshakeComplete = true }).MaxTimes(1)
 			var token [16]byte
+			initialSealer, initialOpener := NewInitialAEAD(protocol.ConnectionID{}, protocol.PerspectiveServer)
 			server := NewCryptoSetupServer(
 				sInitialStream,
 				sHandshakeStream,
-				protocol.ConnectionID{},
+				initialSealer,
+				initialOpener,
 				nil,
 				nil,
 				&wire.TransportParameters{StatelessResetToken: &token},
@@ -475,10 +487,12 @@ var _ = Describe("Crypto Setup TLS", func() {
 				MaxIdleTimeout:      0x1337 * time.Second,
 				StatelessResetToken: &token,
 			}
+			initialSealer, initialOpener := NewInitialAEAD(protocol.ConnectionID{}, protocol.PerspectiveServer)
 			server := NewCryptoSetupServer(
 				sInitialStream,
 				sHandshakeStream,
-				protocol.ConnectionID{},
+				initialSealer,
+				initialOpener,
 				nil,
 				nil,
 				sTransportParameters,
@@ -527,10 +541,12 @@ var _ = Describe("Crypto Setup TLS", func() {
 				sRunner := NewMockHandshakeRunner(mockCtrl)
 				sRunner.EXPECT().OnReceivedParams(gomock.Any())
 				sRunner.EXPECT().OnHandshakeComplete()
+				initialSealer, initialOpener := NewInitialAEAD(protocol.ConnectionID{}, protocol.PerspectiveServer)
 				server := NewCryptoSetupServer(
 					sInitialStream,
 					sHandshakeStream,
-					protocol.ConnectionID{},
+					initialSealer,
+					initialOpener,
 					nil,
 					nil,
 					&wire.TransportParameters{},
@@ -586,10 +602,12 @@ var _ = Describe("Crypto Setup TLS", func() {
 				sRunner := NewMockHandshakeRunner(mockCtrl)
 				sRunner.EXPECT().OnReceivedParams(gomock.Any())
 				sRunner.EXPECT().OnHandshakeComplete()
+				initialSealer, initialOpener := NewInitialAEAD(protocol.ConnectionID{}, protocol.PerspectiveServer)
 				server := NewCryptoSetupServer(
 					sInitialStream,
 					sHandshakeStream,
-					protocol.ConnectionID{},
+					initialSealer,
+					initialOpener,
 					nil,
 					nil,
 					&wire.TransportParameters{},
@@ -717,10 +735,12 @@ var _ = Describe("Crypto Setup TLS", func() {
 				sRunner := NewMockHandshakeRunner(mockCtrl)
 				sRunner.EXPECT().OnReceivedParams(gomock.Any())
 				sRunner.EXPECT().OnHandshakeComplete()
+				initialSealer, initialOpener := NewInitialAEAD(protocol.ConnectionID{}, protocol.PerspectiveServer)
 				server = NewCryptoSetupServer(
 					sInitialStream,
 					sHandshakeStream,
-					protocol.ConnectionID{},
+					initialSealer,
+					initialOpener,
 					nil,
 					nil,
 					&wire.TransportParameters{},

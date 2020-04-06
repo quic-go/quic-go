@@ -138,10 +138,12 @@ func NewCryptoSetupClient(
 	qlogger qlog.Tracer,
 	logger utils.Logger,
 ) (CryptoSetup, <-chan *wire.TransportParameters /* ClientHello written. Receive nil for non-0-RTT */) {
+	initialSealer, initialOpener := NewInitialAEAD(connID, protocol.PerspectiveClient)
 	cs, clientHelloWritten := newCryptoSetup(
 		initialStream,
 		handshakeStream,
-		connID,
+		initialSealer,
+		initialOpener,
 		tp,
 		runner,
 		tlsConf,
@@ -159,7 +161,8 @@ func NewCryptoSetupClient(
 func NewCryptoSetupServer(
 	initialStream io.Writer,
 	handshakeStream io.Writer,
-	connID protocol.ConnectionID,
+	initialSealer LongHeaderSealer,
+	initialOpener LongHeaderOpener,
 	localAddr net.Addr,
 	remoteAddr net.Addr,
 	tp *wire.TransportParameters,
@@ -173,7 +176,8 @@ func NewCryptoSetupServer(
 	cs, _ := newCryptoSetup(
 		initialStream,
 		handshakeStream,
-		connID,
+		initialSealer,
+		initialOpener,
 		tp,
 		runner,
 		tlsConf,
@@ -190,7 +194,8 @@ func NewCryptoSetupServer(
 func newCryptoSetup(
 	initialStream io.Writer,
 	handshakeStream io.Writer,
-	connID protocol.ConnectionID,
+	initialSealer LongHeaderSealer,
+	initialOpener LongHeaderOpener,
 	tp *wire.TransportParameters,
 	runner handshakeRunner,
 	tlsConf *tls.Config,
@@ -200,7 +205,6 @@ func newCryptoSetup(
 	logger utils.Logger,
 	perspective protocol.Perspective,
 ) (*cryptoSetup, <-chan *wire.TransportParameters /* ClientHello written. Receive nil for non-0-RTT */) {
-	initialSealer, initialOpener := NewInitialAEAD(connID, perspective)
 	if qlogger != nil {
 		qlogger.UpdatedKeyFromTLS(protocol.EncryptionInitial, protocol.PerspectiveClient)
 		qlogger.UpdatedKeyFromTLS(protocol.EncryptionInitial, protocol.PerspectiveServer)

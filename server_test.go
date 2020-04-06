@@ -6,6 +6,7 @@ import (
 	"crypto/rand"
 	"crypto/tls"
 	"errors"
+	mrand "math/rand"
 	"net"
 	"reflect"
 	"runtime/pprof"
@@ -414,6 +415,8 @@ var _ = Describe("Server", func() {
 					destConnID protocol.ConnectionID,
 					srcConnID protocol.ConnectionID,
 					tokenP [16]byte,
+					_ handshake.LongHeaderSealer,
+					_ handshake.LongHeaderOpener,
 					_ *Config,
 					_ *tls.Config,
 					_ *handshake.TokenGenerator,
@@ -455,6 +458,45 @@ var _ = Describe("Server", func() {
 				Eventually(done).Should(BeClosed())
 			})
 
+			It("doesn't create a session for invalid Initials", func() {
+				serv.config.AcceptToken = func(_ net.Addr, _ *Token) bool { return true }
+				hdr := &wire.Header{
+					IsLongHeader:     true,
+					Type:             protocol.PacketTypeInitial,
+					SrcConnectionID:  protocol.ConnectionID{5, 4, 3, 2, 1},
+					DestConnectionID: protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8, 9, 10},
+					Version:          protocol.VersionTLS,
+				}
+				p := getPacket(hdr, make([]byte, protocol.MinInitialPacketSize))
+				p.data[mrand.Intn(len(p.data))] ^= 0xff
+
+				sess := NewMockQuicSession(mockCtrl)
+				serv.newSession = func(
+					_ connection,
+					_ sessionRunner,
+					_ protocol.ConnectionID,
+					_ protocol.ConnectionID,
+					_ protocol.ConnectionID,
+					_ protocol.ConnectionID,
+					_ [16]byte,
+					_ handshake.LongHeaderSealer,
+					_ handshake.LongHeaderOpener,
+					_ *Config,
+					_ *tls.Config,
+					_ *handshake.TokenGenerator,
+					_ bool,
+					_ utils.Logger,
+					_ protocol.VersionNumber,
+				) quicSession {
+					Fail("didn't expect a call to newSession()")
+					return sess
+				}
+
+				serv.handlePacket(p)
+				// the Handshake packet is written by the session
+				Consistently(conn.dataWritten).ShouldNot(Receive())
+			})
+
 			It("passes queued 0-RTT packets to the session", func() {
 				serv.config.AcceptToken = func(_ net.Addr, _ *Token) bool { return true }
 				var createdSession bool
@@ -483,6 +525,8 @@ var _ = Describe("Server", func() {
 					_ protocol.ConnectionID,
 					_ protocol.ConnectionID,
 					_ [16]byte,
+					_ handshake.LongHeaderSealer,
+					_ handshake.LongHeaderOpener,
 					_ *Config,
 					_ *tls.Config,
 					_ *handshake.TokenGenerator,
@@ -518,6 +562,8 @@ var _ = Describe("Server", func() {
 					_ protocol.ConnectionID,
 					_ protocol.ConnectionID,
 					_ [16]byte,
+					_ handshake.LongHeaderSealer,
+					_ handshake.LongHeaderOpener,
 					_ *Config,
 					_ *tls.Config,
 					_ *handshake.TokenGenerator,
@@ -559,6 +605,8 @@ var _ = Describe("Server", func() {
 					_ protocol.ConnectionID,
 					_ protocol.ConnectionID,
 					_ [16]byte,
+					_ handshake.LongHeaderSealer,
+					_ handshake.LongHeaderOpener,
 					_ *Config,
 					_ *tls.Config,
 					_ *handshake.TokenGenerator,
@@ -588,6 +636,8 @@ var _ = Describe("Server", func() {
 					_ protocol.ConnectionID,
 					_ protocol.ConnectionID,
 					_ [16]byte,
+					_ handshake.LongHeaderSealer,
+					_ handshake.LongHeaderOpener,
 					_ *Config,
 					_ *tls.Config,
 					_ *handshake.TokenGenerator,
@@ -648,6 +698,8 @@ var _ = Describe("Server", func() {
 					_ protocol.ConnectionID,
 					_ protocol.ConnectionID,
 					_ [16]byte,
+					_ handshake.LongHeaderSealer,
+					_ handshake.LongHeaderOpener,
 					_ *Config,
 					_ *tls.Config,
 					_ *handshake.TokenGenerator,
@@ -752,6 +804,8 @@ var _ = Describe("Server", func() {
 					_ protocol.ConnectionID,
 					_ protocol.ConnectionID,
 					_ [16]byte,
+					_ handshake.LongHeaderSealer,
+					_ handshake.LongHeaderOpener,
 					_ *Config,
 					_ *tls.Config,
 					_ *handshake.TokenGenerator,
@@ -816,6 +870,8 @@ var _ = Describe("Server", func() {
 				_ protocol.ConnectionID,
 				_ protocol.ConnectionID,
 				_ [16]byte,
+				_ handshake.LongHeaderSealer,
+				_ handshake.LongHeaderOpener,
 				_ *Config,
 				_ *tls.Config,
 				_ *handshake.TokenGenerator,
@@ -850,6 +906,8 @@ var _ = Describe("Server", func() {
 				_ protocol.ConnectionID,
 				_ protocol.ConnectionID,
 				_ [16]byte,
+				_ handshake.LongHeaderSealer,
+				_ handshake.LongHeaderOpener,
 				_ *Config,
 				_ *tls.Config,
 				_ *handshake.TokenGenerator,
@@ -904,6 +962,8 @@ var _ = Describe("Server", func() {
 				_ protocol.ConnectionID,
 				_ protocol.ConnectionID,
 				_ [16]byte,
+				_ handshake.LongHeaderSealer,
+				_ handshake.LongHeaderOpener,
 				_ *Config,
 				_ *tls.Config,
 				_ *handshake.TokenGenerator,

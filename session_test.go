@@ -81,6 +81,7 @@ var _ = Describe("Session", func() {
 		mconn.EXPECT().LocalAddr().Return(&net.UDPAddr{})
 		tokenGenerator, err := handshake.NewTokenGenerator()
 		Expect(err).ToNot(HaveOccurred())
+		initialSealer, initialOpener := handshake.NewInitialAEAD(protocol.ConnectionID{}, protocol.PerspectiveServer)
 		sess = newSession(
 			mconn,
 			sessionRunner,
@@ -89,6 +90,8 @@ var _ = Describe("Session", func() {
 			destConnID,
 			srcConnID,
 			[16]byte{},
+			initialSealer,
+			initialOpener,
 			populateServerConfig(&Config{}),
 			nil, // tls.Config
 			tokenGenerator,

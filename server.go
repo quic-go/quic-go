@@ -72,7 +72,7 @@ type baseServer struct {
 	receivedPackets chan *receivedPacket
 
 	// set as a member, so they can be set in the tests
-	newSession func(connection, sessionRunner, protocol.ConnectionID /* original connection ID */, protocol.ConnectionID /* client dest connection ID */, protocol.ConnectionID /* destination connection ID */, protocol.ConnectionID /* source connection ID */, [16]byte, *Config, *tls.Config, *handshake.TokenGenerator, bool /* enable 0-RTT */, utils.Logger, protocol.VersionNumber) quicSession
+	newSession func(connection, sessionRunner, protocol.ConnectionID /* original connection ID */, protocol.ConnectionID /* client dest connection ID */, protocol.ConnectionID /* destination connection ID */, protocol.ConnectionID /* source connection ID */, [16]byte, handshake.LongHeaderSealer, handshake.LongHeaderOpener, *Config, *tls.Config, *handshake.TokenGenerator, bool /* enable 0-RTT */, utils.Logger, protocol.VersionNumber) quicSession
 
 	serverError error
 	errorChan   chan struct{}
@@ -293,7 +293,7 @@ func (s *baseServer) handlePacket(p *receivedPacket) {
 func (s *baseServer) handlePacketImpl(p *receivedPacket) bool /* was the packet handled */ {
 	// If we're creating a new session, the packet will be passed to the session.
 	// The header will then be parsed again.
-	hdr, _, _, err := wire.ParsePacket(p.data, s.config.ConnectionIDLength)
+	hdr, data, _, err := wire.ParsePacket(p.data, s.config.ConnectionIDLength)
 	if err != nil {
 		s.logger.Debugf("Error parsing packet: %s", err)
 		return false
@@ -311,22 +311,20 @@ func (s *baseServer) handlePacketImpl(p *receivedPacket) bool /* was the packet 
 		go s.sendVersionNegotiationPacket(p, hdr)
 		return false
 	}
-	if hdr.IsLongHeader {
-		if hdr.Type == protocol.PacketType0RTT {
-			s.zeroRTTQueue.Enqueue(hdr.DestConnectionID, p)
-			return true
-		} else if hdr.Type != protocol.PacketTypeInitial {
-			// Drop long header packets.
-			// There's litte point in sending a Stateless Reset, since the client
-			// might not have received the token yet.
-			s.logger.Debugf("Dropping long header packet of type %s (%d bytes)", hdr.Type, len(p.data))
-			return false
-		}
+	if hdr.Type == protocol.PacketType0RTT {
+		s.zeroRTTQueue.Enqueue(hdr.DestConnectionID, p)
+		return true
+	} else if hdr.Type != protocol.PacketTypeInitial {
+		// Drop long header packets.
+		// There's litte point in sending a Stateless Reset, since the client
+		// might not have received the token yet.
+		s.logger.Debugf("Dropping long header packet of type %s (%d bytes)", hdr.Type, len(p.data))
+		return false
 	}
 
 	s.logger.Debugf("<- Received Initial packet.")
 
-	sess, err := s.handleInitialImpl(p, hdr)
+	sess, err := s.handleInitialImpl(p, hdr, data)
 	if err != nil {
 		s.logger.Errorf("Error occurred handling initial packet: %s", err)
 		return false
@@ -341,7 +339,7 @@ func (s *baseServer) handlePacketImpl(p *receivedPacket) bool /* was the packet 
 	return true
 }
 
-func (s *baseServer) handleInitialImpl(p *receivedPacket, hdr *wire.Header) (quicSession, error) {
+func (s *baseServer) handleInitialImpl(p *receivedPacket, hdr *wire.Header, data []byte) (quicSession, error) {
 	if len(hdr.Token) == 0 && hdr.DestConnectionID.Len() < protocol.MinConnectionIDLenInitial {
 		return nil, errors.New("too short connection ID")
 	}
@@ -388,8 +386,14 @@ func (s *baseServer) handleInitialImpl(p *receivedPacket, hdr *wire.Header) (qui
 	if err != nil {
 		return nil, err
 	}
-
 	s.logger.Debugf("Changing connection ID to %s.", connID)
+
+	initialSealer, initialOpener := handshake.NewInitialAEAD(hdr.DestConnectionID, protocol.PerspectiveServer)
+	if err := s.checkValidInitial(initialOpener, hdr, data); err != nil {
+		s.logger.Debugf("Dropping invalid Initial: %s", err)
+		return nil, nil
+	}
+
 	sess := s.newSession(
 		&conn{pconn: s.conn, currentAddr: p.remoteAddr},
 		s.sessionHandler,
@@ -398,6 +402,8 @@ func (s *baseServer) handleInitialImpl(p *receivedPacket, hdr *wire.Header) (qui
 		hdr.SrcConnectionID,
 		connID,
 		s.sessionHandler.GetStatelessResetToken(connID),
+		initialSealer,
+		initialOpener,
 		s.config,
 		s.tlsConf,
 		s.tokenGenerator,
@@ -423,6 +429,21 @@ func (s *baseServer) handleInitialImpl(p *receivedPacket, hdr *wire.Header) (qui
 		sess.handlePacket(p)
 	}
 	return sess, nil
+}
+
+func (s *baseServer) checkValidInitial(opener handshake.LongHeaderOpener, hdr *wire.Header, data []byte) error {
+	// Make sure not to do in-place decryption here.
+	buf := getPacketBuffer()
+	defer buf.Release()
+	buf.Data = buf.Data[:len(data)]
+	copy(buf.Data, data)
+	extHdr, err := unpackHeader(opener, hdr, buf.Data, hdr.Version)
+	if err != nil {
+		return err
+	}
+	extHdrLen := extHdr.ParsedLen()
+	_, err = opener.Open(buf.Data[extHdrLen:extHdrLen], buf.Data[extHdrLen:], extHdr.PacketNumber, buf.Data[:extHdrLen])
+	return err
 }
 
 func (s *baseServer) handleNewSession(sess quicSession) {
