@@ -306,6 +306,11 @@ var _ = Describe("Tracer", func() {
 			ev := entry.Event
 			Expect(ev).To(HaveKeyWithValue("packet_type", "retry"))
 			Expect(ev).To(HaveKey("header"))
+			header := ev["header"]
+			Expect(header).ToNot(HaveKey("packet_number"))
+			Expect(header).To(HaveKey("version"))
+			Expect(header).To(HaveKey("dcid"))
+			Expect(header).To(HaveKey("scid"))
 			Expect(ev).ToNot(HaveKey("frames"))
 		})
 
