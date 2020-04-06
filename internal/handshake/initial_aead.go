@@ -39,13 +39,13 @@ func NewInitialAEAD(connID protocol.ConnectionID, pers protocol.Perspective) (Lo
 
 func computeSecrets(connID protocol.ConnectionID) (clientSecret, serverSecret []byte) {
 	initialSecret := qtls.HkdfExtract(crypto.SHA256, connID, quicVersion1Salt)
-	clientSecret = qtls.HkdfExpandLabel(crypto.SHA256, initialSecret, []byte{}, "client in", crypto.SHA256.Size())
-	serverSecret = qtls.HkdfExpandLabel(crypto.SHA256, initialSecret, []byte{}, "server in", crypto.SHA256.Size())
+	clientSecret = hkdfExpandLabel(crypto.SHA256, initialSecret, []byte{}, "client in", crypto.SHA256.Size())
+	serverSecret = hkdfExpandLabel(crypto.SHA256, initialSecret, []byte{}, "server in", crypto.SHA256.Size())
 	return
 }
 
 func computeInitialKeyAndIV(secret []byte) (key, iv []byte) {
-	key = qtls.HkdfExpandLabel(crypto.SHA256, secret, []byte{}, "quic key", 16)
-	iv = qtls.HkdfExpandLabel(crypto.SHA256, secret, []byte{}, "quic iv", 12)
+	key = hkdfExpandLabel(crypto.SHA256, secret, []byte{}, "quic key", 16)
+	iv = hkdfExpandLabel(crypto.SHA256, secret, []byte{}, "quic iv", 12)
 	return
 }
