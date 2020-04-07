@@ -797,7 +797,7 @@ func (s *session) handleSinglePacket(p *receivedPacket, hdr *wire.Header) bool /
 		packet.hdr.Log(s.logger)
 	}
 
-	if err := s.handleUnpackedPacket(packet, p.rcvTime); err != nil {
+	if err := s.handleUnpackedPacket(packet, p.rcvTime, protocol.ByteCount(len(p.data))); err != nil {
 		s.closeLocal(err)
 		return false
 	}
@@ -850,7 +850,11 @@ func (s *session) handleRetryPacket(hdr *wire.Header, data []byte) bool /* was t
 	return true
 }
 
-func (s *session) handleUnpackedPacket(packet *unpackedPacket, rcvTime time.Time) error {
+func (s *session) handleUnpackedPacket(
+	packet *unpackedPacket,
+	rcvTime time.Time,
+	packetSize protocol.ByteCount, // only for logging
+) error {
 	if len(packet.data) == 0 {
 		return qerr.NewError(qerr.ProtocolViolation, "empty packet")
 	}
@@ -911,7 +915,7 @@ func (s *session) handleUnpackedPacket(packet *unpackedPacket, rcvTime time.Time
 		})
 	}
 	if s.qlogger != nil {
-		s.qlogger.ReceivedPacket(packet.hdr, protocol.ByteCount(len(packet.data)), frames)
+		s.qlogger.ReceivedPacket(packet.hdr, packetSize, frames)
 		for _, frame := range frames {
 			if err := s.handleFrame(frame, packet.encryptionLevel); err != nil {
 				return err
