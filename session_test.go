@@ -906,7 +906,10 @@ var _ = Describe("Session", func() {
 				})
 				_, packet2 := getPacketWithLength(wrongConnID, 123)
 				// don't EXPECT any more calls to unpacker.Unpack()
-				qlogger.EXPECT().ReceivedPacket(gomock.Any(), protocol.ByteCount(len(packet1.data)), gomock.Any())
+				gomock.InOrder(
+					qlogger.EXPECT().ReceivedPacket(gomock.Any(), protocol.ByteCount(len(packet1.data)), gomock.Any()),
+					qlogger.EXPECT().DroppedPacket(gomock.Any(), protocol.ByteCount(len(packet2.data)), qlog.PacketDropUnknownConnectionID),
+				)
 				packet1.data = append(packet1.data, packet2.data...)
 				Expect(sess.handlePacketImpl(packet1)).To(BeTrue())
 			})

@@ -717,6 +717,9 @@ func (s *session) handlePacketImpl(rp *receivedPacket) bool {
 		}
 
 		if counter > 0 && !hdr.DestConnectionID.Equal(lastConnID) {
+			if s.qlogger != nil {
+				s.qlogger.DroppedPacket(qlog.PacketTypeFromHeader(hdr), protocol.ByteCount(len(data)), qlog.PacketDropUnknownConnectionID)
+			}
 			s.logger.Debugf("coalesced packet has different destination connection ID: %s, expected %s", hdr.DestConnectionID, lastConnID)
 			break
 		}
