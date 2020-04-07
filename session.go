@@ -769,6 +769,7 @@ func (s *session) handleSinglePacket(p *receivedPacket, hdr *wire.Header) bool /
 	}
 	// drop 0-RTT packets, if we are a client
 	if s.perspective == protocol.PerspectiveClient && hdr.Type == protocol.PacketType0RTT {
+		s.qlogger.DroppedPacket(qlog.PacketType0RTT, protocol.ByteCount(len(p.data)), qlog.PacketDropKeyUnavailable)
 		return false
 	}
 

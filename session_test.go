@@ -2202,6 +2202,7 @@ var _ = Describe("Client Session", func() {
 				PacketNumber:    0x42,
 				PacketNumberLen: protocol.PacketNumberLen2,
 			}, []byte("foobar"))
+			qlogger.EXPECT().DroppedPacket(qlog.PacketType0RTT, protocol.ByteCount(len(p.data)), gomock.Any())
 			Expect(sess.handlePacketImpl(p)).To(BeFalse())
 		})
 
