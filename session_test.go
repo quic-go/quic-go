@@ -480,7 +480,7 @@ var _ = Describe("Session", func() {
 			sessionRunner.EXPECT().Remove(gomock.Any()).AnyTimes()
 			cryptoSetup.EXPECT().Close()
 			// don't EXPECT any calls to mconn.Write()
-			qlogger.EXPECT().Export()
+			// don't EXPECT any call to qlogger.Export()
 			sess.closeForRecreating()
 			Eventually(areSessionsRunning).Should(BeFalse())
 			expectedRunErr = errCloseForRecreating

@@ -600,14 +600,14 @@ runLoop:
 	}
 
 	s.handleCloseError(closeErr)
+	if closeErr.err != errCloseForRecreating && s.qlogger != nil {
+		if err := s.qlogger.Export(); err != nil {
+			s.logger.Errorf("exporting qlog failed: %s", err)
+		}
+	}
 	s.logger.Infof("Connection %s closed.", s.logID)
 	s.cryptoStreamHandler.Close()
 	s.sendQueue.Close()
-	if s.qlogger != nil {
-		if err := s.qlogger.Export(); err != nil {
-			return err
-		}
-	}
 	return closeErr.err
 }
 
