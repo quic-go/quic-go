@@ -95,4 +95,10 @@ var _ = Describe("Unsafe checks", func() {
 		Expect(c.config.MaxVersion).To(BeEquivalentTo(tls.VersionTLS12))
 		Expect(c.config.CurvePreferences).To(Equal([]tls.CurveID{19, 20, 21}))
 	})
+
+	It("converts a qtls.ClientHelloInfo to a tls.ClientHelloInfo, if no config is set", func() {
+		chi := &qtlsClientHelloInfo{CipherSuites: []uint16{13, 37}}
+		tlsCHI := toTLSClientHelloInfo((*qtls.ClientHelloInfo)(unsafe.Pointer(chi)))
+		Expect(tlsCHI.CipherSuites).To(Equal([]uint16{13, 37}))
+	})
 })

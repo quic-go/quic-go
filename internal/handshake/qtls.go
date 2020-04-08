@@ -62,7 +62,11 @@ func tlsConfigToQtlsConfig(
 	var getConfigForClient func(ch *qtls.ClientHelloInfo) (*qtls.Config, error)
 	if c.GetConfigForClient != nil {
 		getConfigForClient = func(ch *qtls.ClientHelloInfo) (*qtls.Config, error) {
-			tlsConf, err := c.GetConfigForClient((*tls.ClientHelloInfo)(unsafe.Pointer(ch)))
+			var chi *tls.ClientHelloInfo
+			if ch != nil {
+				chi = toTLSClientHelloInfo(ch)
+			}
+			tlsConf, err := c.GetConfigForClient(chi)
 			if err != nil {
 				return nil, err
 			}
