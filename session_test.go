@@ -769,6 +769,7 @@ var _ = Describe("Session", func() {
 			Expect(sess.handlePacketImpl(p1)).To(BeTrue())
 			// The next packet has to be ignored, since the source connection ID doesn't match.
 			p2 := getPacket(hdr2, nil)
+			qlogger.EXPECT().DroppedPacket(qlog.PacketTypeHandshake, protocol.ByteCount(len(p2.data)), qlog.PacketDropUnknownConnectionID)
 			Expect(sess.handlePacketImpl(p2)).To(BeFalse())
 		})
 
@@ -906,7 +907,10 @@ var _ = Describe("Session", func() {
 				})
 				_, packet2 := getPacketWithLength(wrongConnID, 123)
 				// don't EXPECT any more calls to unpacker.Unpack()
-				qlogger.EXPECT().ReceivedPacket(gomock.Any(), protocol.ByteCount(len(packet1.data)), gomock.Any())
+				gomock.InOrder(
+					qlogger.EXPECT().ReceivedPacket(gomock.Any(), protocol.ByteCount(len(packet1.data)), gomock.Any()),
+					qlogger.EXPECT().DroppedPacket(gomock.Any(), protocol.ByteCount(len(packet2.data)), qlog.PacketDropUnknownConnectionID),
+				)
 				packet1.data = append(packet1.data, packet2.data...)
 				Expect(sess.handlePacketImpl(packet1)).To(BeTrue())
 			})
@@ -2182,6 +2186,7 @@ var _ = Describe("Client Session", func() {
 			qlogger.EXPECT().ReceivedPacket(gomock.Any(), gomock.Any(), gomock.Any())
 			Expect(sess.handlePacketImpl(getPacket(hdr1, nil))).To(BeTrue())
 			// The next packet has to be ignored, since the source connection ID doesn't match.
+			qlogger.EXPECT().DroppedPacket(gomock.Any(), gomock.Any(), gomock.Any())
 			Expect(sess.handlePacketImpl(getPacket(hdr2, nil))).To(BeFalse())
 		})
 
@@ -2197,6 +2202,7 @@ var _ = Describe("Client Session", func() {
 				PacketNumber:    0x42,
 				PacketNumberLen: protocol.PacketNumberLen2,
 			}, []byte("foobar"))
+			qlogger.EXPECT().DroppedPacket(qlog.PacketType0RTT, protocol.ByteCount(len(p.data)), gomock.Any())
 			Expect(sess.handlePacketImpl(p)).To(BeFalse())
 		})
 

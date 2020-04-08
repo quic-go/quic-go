@@ -717,6 +717,9 @@ func (s *session) handlePacketImpl(rp *receivedPacket) bool {
 		}
 
 		if counter > 0 && !hdr.DestConnectionID.Equal(lastConnID) {
+			if s.qlogger != nil {
+				s.qlogger.DroppedPacket(qlog.PacketTypeFromHeader(hdr), protocol.ByteCount(len(data)), qlog.PacketDropUnknownConnectionID)
+			}
 			s.logger.Debugf("coalesced packet has different destination connection ID: %s, expected %s", hdr.DestConnectionID, lastConnID)
 			break
 		}
@@ -758,11 +761,15 @@ func (s *session) handleSinglePacket(p *receivedPacket, hdr *wire.Header) bool /
 	// The server can change the source connection ID with the first Handshake packet.
 	// After this, all packets with a different source connection have to be ignored.
 	if s.receivedFirstPacket && hdr.IsLongHeader && !hdr.SrcConnectionID.Equal(s.handshakeDestConnID) {
+		if s.qlogger != nil {
+			s.qlogger.DroppedPacket(qlog.PacketTypeFromHeader(hdr), protocol.ByteCount(len(p.data)), qlog.PacketDropUnknownConnectionID)
+		}
 		s.logger.Debugf("Dropping %s packet (%d bytes) with unexpected source connection ID: %s (expected %s)", hdr.PacketType(), len(p.data), hdr.SrcConnectionID, s.handshakeDestConnID)
 		return false
 	}
 	// drop 0-RTT packets, if we are a client
 	if s.perspective == protocol.PerspectiveClient && hdr.Type == protocol.PacketType0RTT {
+		s.qlogger.DroppedPacket(qlog.PacketType0RTT, protocol.ByteCount(len(p.data)), qlog.PacketDropKeyUnavailable)
 		return false
 	}
 
