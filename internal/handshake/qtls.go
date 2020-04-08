@@ -62,11 +62,7 @@ func tlsConfigToQtlsConfig(
 	var getConfigForClient func(ch *qtls.ClientHelloInfo) (*qtls.Config, error)
 	if c.GetConfigForClient != nil {
 		getConfigForClient = func(ch *qtls.ClientHelloInfo) (*qtls.Config, error) {
-			var chi *tls.ClientHelloInfo
-			if ch != nil {
-				chi = toTLSClientHelloInfo(ch)
-			}
-			tlsConf, err := c.GetConfigForClient(chi)
+			tlsConf, err := c.GetConfigForClient(toTLSClientHelloInfo(ch))
 			if err != nil {
 				return nil, err
 			}
@@ -74,6 +70,19 @@ func tlsConfigToQtlsConfig(
 				return nil, nil
 			}
 			return tlsConfigToQtlsConfig(tlsConf, recordLayer, extHandler, rttStats, getDataForSessionState, setDataFromSessionState, accept0RTT, rejected0RTT, enable0RTT), nil
+		}
+	}
+	var getCertificate func(ch *qtls.ClientHelloInfo) (*qtls.Certificate, error)
+	if c.GetCertificate != nil {
+		getCertificate = func(ch *qtls.ClientHelloInfo) (*qtls.Certificate, error) {
+			cert, err := c.GetCertificate(toTLSClientHelloInfo(ch))
+			if err != nil {
+				return nil, err
+			}
+			if cert == nil {
+				return nil, nil
+			}
+			return (*qtls.Certificate)(unsafe.Pointer(cert)), nil
 		}
 	}
 	var csc qtls.ClientSessionCache
@@ -87,7 +96,7 @@ func tlsConfigToQtlsConfig(
 		// NameToCertificate is deprecated, but we still need to copy it if the user sets it.
 		//nolint:staticcheck
 		NameToCertificate:           *(*map[string]*qtls.Certificate)(unsafe.Pointer(&c.NameToCertificate)),
-		GetCertificate:              *(*func(*qtls.ClientHelloInfo) (*qtls.Certificate, error))(unsafe.Pointer(&c.GetCertificate)),
+		GetCertificate:              getCertificate,
 		GetClientCertificate:        *(*func(*qtls.CertificateRequestInfo) (*qtls.Certificate, error))(unsafe.Pointer(&c.GetClientCertificate)),
 		GetConfigForClient:          getConfigForClient,
 		VerifyPeerCertificate:       c.VerifyPeerCertificate,

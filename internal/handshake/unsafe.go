@@ -81,6 +81,9 @@ type qtlsClientHelloInfo struct {
 }
 
 func toTLSClientHelloInfo(chi *qtls.ClientHelloInfo) *tls.ClientHelloInfo {
+	if chi == nil {
+		return nil
+	}
 	qtlsCHI := (*qtlsClientHelloInfo)(unsafe.Pointer(chi))
 	var config *tls.Config
 	if qtlsCHI.config != nil {
