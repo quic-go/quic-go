@@ -214,6 +214,9 @@ func (p *TransportParameters) readPreferredAddress(r *bytes.Reader, expectedLen 
 	if err != nil {
 		return err
 	}
+	if connIDLen == 0 || connIDLen > protocol.MaxConnIDLen {
+		return fmt.Errorf("invalid connection ID length: %d", connIDLen)
+	}
 	connID, err := protocol.ReadConnectionID(r, int(connIDLen))
 	if err != nil {
 		return err
