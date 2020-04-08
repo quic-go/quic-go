@@ -859,15 +859,37 @@ func (s *session) handleUnpackedPacket(
 		return qerr.NewError(qerr.ProtocolViolation, "empty packet")
 	}
 
-	// The server can change the source connection ID with the first Handshake packet.
-	if s.perspective == protocol.PerspectiveClient && !s.receivedFirstPacket && packet.hdr.IsLongHeader && !packet.hdr.SrcConnectionID.Equal(s.handshakeDestConnID) {
-		cid := packet.hdr.SrcConnectionID
-		s.logger.Debugf("Received first packet. Switching destination connection ID to: %s", cid)
-		s.handshakeDestConnID = cid
-		s.connIDManager.ChangeInitialConnID(cid)
+	if !s.receivedFirstPacket {
+		s.receivedFirstPacket = true
+		// The server can change the source connection ID with the first Handshake packet.
+		if s.perspective == protocol.PerspectiveClient && packet.hdr.IsLongHeader && !packet.hdr.SrcConnectionID.Equal(s.handshakeDestConnID) {
+			cid := packet.hdr.SrcConnectionID
+			s.logger.Debugf("Received first packet. Switching destination connection ID to: %s", cid)
+			s.handshakeDestConnID = cid
+			s.connIDManager.ChangeInitialConnID(cid)
+		}
+		// We create the session as soon as we receive the first packet from the client.
+		// We do that before authenticating the packet.
+		// That means that if the source connection ID was corrupted,
+		// we might have create a session with an incorrect source connection ID.
+		// Once we authenticate the first packet, we need to update it.
+		if s.perspective == protocol.PerspectiveServer {
+			if !packet.hdr.SrcConnectionID.Equal(s.handshakeDestConnID) {
+				s.handshakeDestConnID = packet.hdr.SrcConnectionID
+				s.connIDManager.ChangeInitialConnID(packet.hdr.SrcConnectionID)
+			}
+			if s.qlogger != nil {
+				s.qlogger.StartedConnection(
+					s.conn.LocalAddr(),
+					s.conn.RemoteAddr(),
+					s.version,
+					packet.hdr.SrcConnectionID,
+					packet.hdr.DestConnectionID,
+				)
+			}
+		}
 	}
 
-	s.receivedFirstPacket = true
 	s.lastPacketReceivedTime = rcvTime
 	s.firstAckElicitingPacketAfterIdleSentTime = time.Time{}
 	s.keepAlivePingSent = false
