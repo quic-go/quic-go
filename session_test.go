@@ -2102,6 +2102,7 @@ var _ = Describe("Client Session", func() {
 				StatelessResetToken:  &[16]byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16},
 			}
 			expectClose()
+			qlogger.EXPECT().ReceivedTransportParameters(params)
 			sess.processTransportParameters(params)
 			Eventually(errChan).Should(Receive(MatchError("TRANSPORT_PARAMETER_ERROR: expected original_connection_id to equal (empty), is 0xdecafbad")))
 		})
@@ -2113,6 +2114,7 @@ var _ = Describe("Client Session", func() {
 				StatelessResetToken:  &[16]byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16},
 			}
 			expectClose()
+			qlogger.EXPECT().ReceivedTransportParameters(params)
 			sess.processTransportParameters(params)
 			Eventually(errChan).Should(Receive(MatchError("TRANSPORT_PARAMETER_ERROR: expected original_connection_id to equal 0xdeadbeef, is 0xdecafbad")))
 		})

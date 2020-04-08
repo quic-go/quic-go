@@ -1204,18 +1204,19 @@ func (s *session) dropEncryptionLevel(encLevel protocol.EncryptionLevel) {
 }
 
 func (s *session) processTransportParameters(params *wire.TransportParameters) {
-	// check the Retry token
-	if s.perspective == protocol.PerspectiveClient && !params.OriginalConnectionID.Equal(s.origDestConnID) {
-		s.closeLocal(qerr.NewError(qerr.TransportParameterError, fmt.Sprintf("expected original_connection_id to equal %s, is %s", s.origDestConnID, params.OriginalConnectionID)))
-		return
-	}
-
 	if s.logger.Debug() {
 		s.logger.Debugf("Processed Transport Parameters: %s", params)
 	}
 	if s.qlogger != nil {
 		s.qlogger.ReceivedTransportParameters(params)
 	}
+
+	// check the Retry token
+	if s.perspective == protocol.PerspectiveClient && !params.OriginalConnectionID.Equal(s.origDestConnID) {
+		s.closeLocal(qerr.NewError(qerr.TransportParameterError, fmt.Sprintf("expected original_connection_id to equal %s, is %s", s.origDestConnID, params.OriginalConnectionID)))
+		return
+	}
+
 	s.peerParams = params
 	// Our local idle timeout will always be > 0.
 	s.idleTimeout = utils.MinNonZeroDuration(s.config.MaxIdleTimeout, params.MaxIdleTimeout)
