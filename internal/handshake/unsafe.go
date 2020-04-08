@@ -81,7 +81,14 @@ type qtlsClientHelloInfo struct {
 }
 
 func toTLSClientHelloInfo(chi *qtls.ClientHelloInfo) *tls.ClientHelloInfo {
+	if chi == nil {
+		return nil
+	}
 	qtlsCHI := (*qtlsClientHelloInfo)(unsafe.Pointer(chi))
+	var config *tls.Config
+	if qtlsCHI.config != nil {
+		config = qtlsConfigToTLSConfig((*qtls.Config)(unsafe.Pointer(qtlsCHI.config)))
+	}
 	return (*tls.ClientHelloInfo)(unsafe.Pointer(&clientHelloInfo{
 		CipherSuites:      chi.CipherSuites,
 		ServerName:        chi.ServerName,
@@ -91,6 +98,6 @@ func toTLSClientHelloInfo(chi *qtls.ClientHelloInfo) *tls.ClientHelloInfo {
 		SupportedProtos:   chi.SupportedProtos,
 		SupportedVersions: chi.SupportedVersions,
 		Conn:              chi.Conn,
-		config:            qtlsConfigToTLSConfig((*qtls.Config)(unsafe.Pointer(qtlsCHI.config))),
+		config:            config,
 	}))
 }

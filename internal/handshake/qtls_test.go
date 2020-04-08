@@ -132,6 +132,47 @@ var _ = Describe("qtls.Config generation", func() {
 		})
 	})
 
+	Context("GetCertificate callback", func() {
+		It("returns a certificate", func() {
+			tlsConf := &tls.Config{
+				GetCertificate: func(*tls.ClientHelloInfo) (*tls.Certificate, error) {
+					return &tls.Certificate{Certificate: [][]byte{[]byte("foo"), []byte("bar")}}, nil
+				},
+			}
+			qtlsConf := tlsConfigToQtlsConfig(tlsConf, nil, &mockExtensionHandler{}, congestion.NewRTTStats(), nil, nil, nil, nil, false)
+			qtlsCert, err := qtlsConf.GetCertificate(nil)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(qtlsCert).ToNot(BeNil())
+			Expect(qtlsCert.Certificate).To(Equal([][]byte{[]byte("foo"), []byte("bar")}))
+		})
+
+		It("doesn't set it if absent", func() {
+			qtlsConf := tlsConfigToQtlsConfig(&tls.Config{}, nil, &mockExtensionHandler{}, congestion.NewRTTStats(), nil, nil, nil, nil, false)
+			Expect(qtlsConf.GetCertificate).To(BeNil())
+		})
+
+		It("returns errors", func() {
+			tlsConf := &tls.Config{
+				GetCertificate: func(*tls.ClientHelloInfo) (*tls.Certificate, error) {
+					return nil, errors.New("test")
+				},
+			}
+			qtlsConf := tlsConfigToQtlsConfig(tlsConf, nil, &mockExtensionHandler{}, congestion.NewRTTStats(), nil, nil, nil, nil, false)
+			_, err := qtlsConf.GetCertificate(nil)
+			Expect(err).To(MatchError("test"))
+		})
+
+		It("returns nil when the callback returns nil", func() {
+			tlsConf := &tls.Config{
+				GetCertificate: func(*tls.ClientHelloInfo) (*tls.Certificate, error) {
+					return nil, nil
+				},
+			}
+			qtlsConf := tlsConfigToQtlsConfig(tlsConf, nil, &mockExtensionHandler{}, congestion.NewRTTStats(), nil, nil, nil, nil, false)
+			Expect(qtlsConf.GetCertificate(nil)).To(BeNil())
+		})
+	})
+
 	Context("ClientSessionCache", func() {
 		It("doesn't set if absent", func() {
 			qtlsConf := tlsConfigToQtlsConfig(&tls.Config{}, nil, &mockExtensionHandler{}, congestion.NewRTTStats(), nil, nil, nil, nil, false)
