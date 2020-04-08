@@ -260,14 +260,18 @@ var _ = Describe("Transport Parameters", func() {
 	})
 
 	Context("preferred address", func() {
-		pa := &PreferredAddress{
-			IPv4:                net.IPv4(127, 0, 0, 1),
-			IPv4Port:            42,
-			IPv6:                net.IP{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16},
-			IPv6Port:            13,
-			ConnectionID:        protocol.ConnectionID{0xde, 0xad, 0xbe, 0xef},
-			StatelessResetToken: [16]byte{16, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1},
-		}
+		var pa *PreferredAddress
+
+		BeforeEach(func() {
+			pa = &PreferredAddress{
+				IPv4:                net.IPv4(127, 0, 0, 1),
+				IPv4Port:            42,
+				IPv6:                net.IP{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16},
+				IPv6Port:            13,
+				ConnectionID:        protocol.ConnectionID{0xde, 0xad, 0xbe, 0xef},
+				StatelessResetToken: [16]byte{16, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1},
+			}
+		})
 
 		It("marshals and unmarshals", func() {
 			data := (&TransportParameters{PreferredAddress: pa}).Marshal()
@@ -285,6 +289,21 @@ var _ = Describe("Transport Parameters", func() {
 			data := (&TransportParameters{PreferredAddress: pa}).Marshal()
 			p := &TransportParameters{}
 			Expect(p.Unmarshal(data, protocol.PerspectiveClient)).To(MatchError("TRANSPORT_PARAMETER_ERROR: client sent a preferred_address"))
+		})
+
+		It("errors on zero-length connection IDs", func() {
+			pa.ConnectionID = protocol.ConnectionID{}
+			data := (&TransportParameters{PreferredAddress: pa}).Marshal()
+			p := &TransportParameters{}
+			Expect(p.Unmarshal(data, protocol.PerspectiveServer)).To(MatchError("TRANSPORT_PARAMETER_ERROR: invalid connection ID length: 0"))
+		})
+
+		It("errors on too long connection IDs", func() {
+			pa.ConnectionID = protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21}
+			Expect(pa.ConnectionID.Len()).To(BeNumerically(">", protocol.MaxConnIDLen))
+			data := (&TransportParameters{PreferredAddress: pa}).Marshal()
+			p := &TransportParameters{}
+			Expect(p.Unmarshal(data, protocol.PerspectiveServer)).To(MatchError("TRANSPORT_PARAMETER_ERROR: invalid connection ID length: 21"))
 		})
 
 		It("errors on EOF", func() {
