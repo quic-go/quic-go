@@ -115,7 +115,7 @@ func (a *updatableAEAD) rollKeys(now time.Time) {
 }
 
 func (a *updatableAEAD) getNextTrafficSecret(hash crypto.Hash, ts []byte) []byte {
-	return qtls.HkdfExpandLabel(hash, ts, []byte{}, "quic ku", hash.Size())
+	return hkdfExpandLabel(hash, ts, []byte{}, "quic ku", hash.Size())
 }
 
 // For the client, this function is called before SetWriteKey.
