@@ -1,6 +1,6 @@
 module github.com/lucas-clemente/quic-go
 
-go 1.14
+go 1.13
 
 require (
 	github.com/alangpierce/go-forceexport v0.0.0-20160317203124-8f1d6941cd75
@@ -9,7 +9,7 @@ require (
 	github.com/golang/mock v1.4.0
 	github.com/golang/protobuf v1.3.1
 	github.com/marten-seemann/qpack v0.1.0
-	github.com/marten-seemann/qtls v0.8.0
+	github.com/marten-seemann/qtls v0.9.0
 	github.com/onsi/ginkgo v1.11.0
 	github.com/onsi/gomega v1.8.1
 	golang.org/x/crypto v0.0.0-20200221231518-2aa609cf4a9d

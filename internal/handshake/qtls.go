@@ -130,15 +130,3 @@ func tlsConfigToQtlsConfig(
 	}
 	return conf
 }
-
-// qtlsConfigToTLSConfig is used to transform a qtls.Config to a tls.Config.
-// It is used to create the tls.Config in the ClientHelloInfo.
-// It doesn't copy all values, but only those used by ClientHelloInfo.SupportsCertificate.
-func qtlsConfigToTLSConfig(config *qtls.Config) *tls.Config {
-	return &tls.Config{
-		MinVersion:       config.MinVersion,
-		MaxVersion:       config.MaxVersion,
-		CipherSuites:     config.CipherSuites,
-		CurvePreferences: config.CurvePreferences,
-	}
-}
