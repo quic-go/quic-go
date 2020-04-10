@@ -76,6 +76,9 @@ var _ = Describe("Tracer", func() {
 		commonFields := trace["common_fields"].(map[string]interface{})
 		Expect(commonFields).To(HaveKeyWithValue("ODCID", "deadbeef"))
 		Expect(commonFields).To(HaveKeyWithValue("group_id", "deadbeef"))
+		Expect(commonFields).To(HaveKey("reference_time"))
+		referenceTime := time.Unix(0, int64(commonFields["reference_time"].(float64)*1e6))
+		Expect(referenceTime).To(BeTemporally("~", time.Now(), 10*time.Millisecond))
 		Expect(trace).To(HaveKey("event_fields"))
 		for i, ef := range trace["event_fields"].([]interface{}) {
 			Expect(ef.(string)).To(Equal(eventFields[i]))
@@ -108,12 +111,16 @@ var _ = Describe("Tracer", func() {
 			traces := m["traces"].([]interface{})
 			Expect(traces).To(HaveLen(1))
 			trace := traces[0].(map[string]interface{})
+			Expect(trace).To(HaveKey("common_fields"))
+			commonFields := trace["common_fields"].(map[string]interface{})
+			Expect(commonFields).To(HaveKey("reference_time"))
+			referenceTime := time.Unix(0, int64(commonFields["reference_time"].(float64)*1e6))
 			Expect(trace).To(HaveKey("events"))
 			for _, e := range trace["events"].([]interface{}) {
 				ev := e.([]interface{})
 				Expect(ev).To(HaveLen(4))
 				entries = append(entries, entry{
-					Time:     time.Now().Add(time.Duration(ev[0].(float64)) * time.Millisecond),
+					Time:     referenceTime.Add(time.Duration(ev[0].(float64)*1e6) * time.Nanosecond),
 					Category: ev[1].(string),
 					Name:     ev[2].(string),
 					Event:    ev[3].(map[string]interface{}),
@@ -499,8 +506,8 @@ var _ = Describe("Tracer", func() {
 		})
 
 		It("records when the timer is set", func() {
-			t := time.Now().Add(1337 * time.Millisecond)
-			tracer.SetLossTimer(TimerTypePTO, protocol.EncryptionHandshake, t)
+			timeout := time.Now().Add(137 * time.Millisecond)
+			tracer.SetLossTimer(TimerTypePTO, protocol.EncryptionHandshake, timeout)
 			entry := exportAndParseSingle()
 			Expect(entry.Time).To(BeTemporally("~", time.Now(), 10*time.Millisecond))
 			Expect(entry.Category).To(Equal("recovery"))
@@ -511,8 +518,8 @@ var _ = Describe("Tracer", func() {
 			Expect(ev).To(HaveKeyWithValue("timer_type", "pto"))
 			Expect(ev).To(HaveKeyWithValue("packet_number_space", "handshake"))
 			Expect(ev).To(HaveKey("delta"))
-			delta := time.Duration(ev["delta"].(float64)) * time.Millisecond
-			Expect(entry.Time.Add(delta)).To(BeTemporally("~", t, 2*time.Millisecond))
+			delta := time.Duration(ev["delta"].(float64)*1e6) * time.Nanosecond
+			Expect(entry.Time.Add(delta)).To(BeTemporally("~", timeout, 10*time.Microsecond))
 		})
 
 		It("records when the loss timer expires", func() {
