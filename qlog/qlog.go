@@ -327,8 +327,8 @@ func (t *tracer) DroppedEncryptionLevel(encLevel protocol.EncryptionLevel) {
 }
 
 func (t *tracer) SetLossTimer(tt TimerType, encLevel protocol.EncryptionLevel, timeout time.Time) {
-	now := time.Now()
 	t.mutex.Lock()
+	now := time.Now()
 	t.recordEvent(now, &eventLossTimerSet{
 		TimerType: tt,
 		EncLevel:  encLevel,
