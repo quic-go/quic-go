@@ -46,7 +46,8 @@ type client struct {
 
 	session quicSession
 
-	logger utils.Logger
+	qlogger qlog.Tracer
+	logger  utils.Logger
 }
 
 var _ packetHandler = &client{}
@@ -178,13 +179,12 @@ func dialContext(
 	}
 	c.packetHandlers = packetHandlers
 
-	var qlogger qlog.Tracer
 	if c.config.GetLogWriter != nil {
 		if w := c.config.GetLogWriter(c.destConnID); w != nil {
-			qlogger = qlog.NewTracer(w, protocol.PerspectiveClient, c.destConnID)
+			c.qlogger = qlog.NewTracer(w, protocol.PerspectiveClient, c.destConnID)
 		}
 	}
-	if err := c.dial(ctx, qlogger); err != nil {
+	if err := c.dial(ctx); err != nil {
 		return nil, err
 	}
 	return c.session, nil
@@ -247,10 +247,10 @@ func newClient(
 	return c, nil
 }
 
-func (c *client) dial(ctx context.Context, qlogger qlog.Tracer) error {
+func (c *client) dial(ctx context.Context) error {
 	c.logger.Infof("Starting new connection to %s (%s -> %s), source connection ID %s, destination connection ID %s, version %s", c.tlsConf.ServerName, c.conn.LocalAddr(), c.conn.RemoteAddr(), c.srcConnID, c.destConnID, c.version)
-	if qlogger != nil {
-		qlogger.StartedConnection(c.conn.LocalAddr(), c.conn.LocalAddr(), c.version, c.srcConnID, c.destConnID)
+	if c.qlogger != nil {
+		c.qlogger.StartedConnection(c.conn.LocalAddr(), c.conn.LocalAddr(), c.version, c.srcConnID, c.destConnID)
 	}
 
 	c.mutex.Lock()
@@ -264,7 +264,7 @@ func (c *client) dial(ctx context.Context, qlogger qlog.Tracer) error {
 		c.initialPacketNumber,
 		c.initialVersion,
 		c.use0RTT,
-		qlogger,
+		c.qlogger,
 		c.logger,
 		c.version,
 	)
@@ -295,7 +295,7 @@ func (c *client) dial(ctx context.Context, qlogger qlog.Tracer) error {
 		return ctx.Err()
 	case err := <-errorChan:
 		if err == errCloseForRecreating {
-			return c.dial(ctx, qlogger)
+			return c.dial(ctx)
 		}
 		return err
 	case <-earlySessionChan:
