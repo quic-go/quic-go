@@ -213,7 +213,7 @@ var _ = Describe("Header Parsing", func() {
 				'f', 'o', 'o', 'b', 'a', 'r', // unspecified bytes
 			}
 			hdr, _, rest, err := ParsePacket(data, 0)
-			Expect(err).ToNot(HaveOccurred())
+			Expect(err).To(MatchError(ErrUnsupportedVersion))
 			Expect(hdr.IsLongHeader).To(BeTrue())
 			Expect(hdr.Version).To(Equal(protocol.VersionNumber(0xdeadbeef)))
 			Expect(hdr.DestConnectionID).To(Equal(protocol.ConnectionID{0x1, 0x2, 0x3, 0x4, 0x5, 0x6, 0x7, 0x8}))
