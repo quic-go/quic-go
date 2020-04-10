@@ -616,6 +616,28 @@ var _ = Describe("Session", func() {
 			Expect(sess.handlePacketImpl(p)).To(BeFalse())
 		})
 
+		It("drops packets with an unsupported version", func() {
+			origSupportedVersions := make([]protocol.VersionNumber, len(protocol.SupportedVersions))
+			copy(origSupportedVersions, protocol.SupportedVersions)
+			defer func() {
+				protocol.SupportedVersions = origSupportedVersions
+			}()
+
+			protocol.SupportedVersions = append(protocol.SupportedVersions, sess.version+1)
+			p := getPacket(&wire.ExtendedHeader{
+				Header: wire.Header{
+					IsLongHeader:     true,
+					Type:             protocol.PacketTypeHandshake,
+					DestConnectionID: destConnID,
+					SrcConnectionID:  srcConnID,
+					Version:          sess.version + 1,
+				},
+				PacketNumberLen: protocol.PacketNumberLen2,
+			}, nil)
+			qlogger.EXPECT().DroppedPacket(qlog.PacketTypeHandshake, protocol.ByteCount(len(p.data)), qlog.PacketDropUnexpectedVersion)
+			Expect(sess.handlePacketImpl(p)).To(BeFalse())
+		})
+
 		It("informs the ReceivedPacketHandler about non-ack-eliciting packets", func() {
 			hdr := &wire.ExtendedHeader{
 				Header:          wire.Header{DestConnectionID: srcConnID},
