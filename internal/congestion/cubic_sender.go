@@ -20,13 +20,11 @@ const (
 
 type cubicSender struct {
 	hybridSlowStart HybridSlowStart
-	prr             PrrSender
 	rttStats        *RTTStats
 	stats           connectionStats
 	cubic           *Cubic
 
-	noPRR bool
-	reno  bool
+	reno bool
 
 	// Track the largest packet that has been sent.
 	largestSentPacketNumber protocol.PacketNumber
@@ -96,12 +94,6 @@ func newCubicSender(clock Clock, rttStats *RTTStats, reno bool, initialCongestio
 
 // TimeUntilSend returns when the next packet should be sent.
 func (c *cubicSender) TimeUntilSend(bytesInFlight protocol.ByteCount) time.Duration {
-	if !c.noPRR && c.InRecovery() {
-		// PRR is used when in recovery.
-		if c.prr.CanSend(c.GetCongestionWindow(), bytesInFlight, c.GetSlowStartThreshold()) {
-			return 0
-		}
-	}
 	return c.rttStats.SmoothedRTT() * time.Duration(maxDatagramSize) / time.Duration(2*c.GetCongestionWindow())
 }
 
@@ -115,18 +107,11 @@ func (c *cubicSender) OnPacketSent(
 	if !isRetransmittable {
 		return
 	}
-	if c.InRecovery() {
-		// PRR is used when in recovery.
-		c.prr.OnPacketSent(bytes)
-	}
 	c.largestSentPacketNumber = packetNumber
 	c.hybridSlowStart.OnPacketSent(packetNumber)
 }
 
 func (c *cubicSender) CanSend(bytesInFlight protocol.ByteCount) bool {
-	if !c.noPRR && c.InRecovery() {
-		return c.prr.CanSend(c.GetCongestionWindow(), bytesInFlight, c.GetSlowStartThreshold())
-	}
 	return bytesInFlight < c.GetCongestionWindow()
 }
 
@@ -168,10 +153,6 @@ func (c *cubicSender) OnPacketAcked(
 ) {
 	c.largestAckedPacketNumber = utils.MaxPacketNumber(ackedPacketNumber, c.largestAckedPacketNumber)
 	if c.InRecovery() {
-		// PRR is used when in recovery.
-		if !c.noPRR {
-			c.prr.OnPacketAcked(ackedBytes)
-		}
 		return
 	}
 	c.maybeIncreaseCwnd(ackedPacketNumber, ackedBytes, priorInFlight, eventTime)
@@ -202,10 +183,6 @@ func (c *cubicSender) OnPacketLost(
 	c.lastCutbackExitedSlowstart = c.InSlowStart()
 	if c.InSlowStart() {
 		c.stats.slowstartPacketsLost++
-	}
-
-	if !c.noPRR {
-		c.prr.OnPacketLost(priorInFlight)
 	}
 
 	// TODO(chromium): Separate out all of slow start into a separate class.
@@ -320,7 +297,6 @@ func (c *cubicSender) OnRetransmissionTimeout(packetsRetransmitted bool) {
 // OnConnectionMigration is called when the connection is migrated (?)
 func (c *cubicSender) OnConnectionMigration() {
 	c.hybridSlowStart.Restart()
-	c.prr = PrrSender{}
 	c.largestSentPacketNumber = protocol.InvalidPacketNumber
 	c.largestAckedPacketNumber = protocol.InvalidPacketNumber
 	c.largestSentAtLastCutback = protocol.InvalidPacketNumber
