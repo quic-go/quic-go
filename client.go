@@ -358,6 +358,9 @@ func (c *client) handleVersionNegotiationPacket(p *receivedPacket) {
 	}
 
 	c.logger.Infof("Received a Version Negotiation packet. Supported Versions: %s", hdr.SupportedVersions)
+	if c.qlogger != nil {
+		c.qlogger.ReceivedVersionNegotiationPacket(hdr)
+	}
 	newVersion, ok := protocol.ChooseSupportedVersion(c.config.Versions, hdr.SupportedVersions)
 	if !ok {
 		//nolint:stylecheck

@@ -676,7 +676,11 @@ var _ = Describe("Client", func() {
 				})
 				cl.session = sess
 				cl.config = &Config{Versions: protocol.SupportedVersions}
-				cl.handlePacket(composeVersionNegotiationPacket(connID, []protocol.VersionNumber{1337}))
+				p := composeVersionNegotiationPacket(connID, []protocol.VersionNumber{1337})
+				hdr, _, _, err := wire.ParsePacket(p.data, 0)
+				Expect(err).ToNot(HaveOccurred())
+				qlogger.EXPECT().ReceivedVersionNegotiationPacket(hdr)
+				cl.handlePacket(p)
 				Eventually(done).Should(BeClosed())
 			})
 
@@ -693,6 +697,7 @@ var _ = Describe("Client", func() {
 				v := protocol.VersionNumber(1234)
 				Expect(v).ToNot(Equal(cl.version))
 				cl.config = &Config{Versions: protocol.SupportedVersions}
+				qlogger.EXPECT().ReceivedVersionNegotiationPacket(gomock.Any())
 				cl.handlePacket(composeVersionNegotiationPacket(connID, []protocol.VersionNumber{v}))
 				Eventually(done).Should(BeClosed())
 			})
@@ -709,6 +714,7 @@ var _ = Describe("Client", func() {
 				cl.session = sess
 				versions := []protocol.VersionNumber{1234, 4321}
 				cl.config = &Config{Versions: versions}
+				qlogger.EXPECT().ReceivedVersionNegotiationPacket(gomock.Any())
 				cl.handlePacket(composeVersionNegotiationPacket(connID, versions))
 				Eventually(destroyed).Should(BeClosed())
 				Expect(cl.version).To(Equal(protocol.VersionNumber(1234)))
