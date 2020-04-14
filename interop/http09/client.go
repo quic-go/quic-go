@@ -5,6 +5,7 @@ import (
 	"crypto/tls"
 	"errors"
 	"io/ioutil"
+	"log"
 	"net"
 	"net/http"
 	"strings"
@@ -37,6 +38,8 @@ func (r *RoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
 	if req.Method != http.MethodGet && req.Method != MethodGet0RTT {
 		return nil, errors.New("only GET requests supported")
 	}
+
+	log.Printf("Requesting %s.\n", req.URL)
 
 	r.mutex.Lock()
 	hostname := authorityAddr("https", hostnameFromRequest(req))
