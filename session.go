@@ -585,15 +585,6 @@ runLoop:
 			continue
 		}
 
-		if !s.handshakeComplete && now.Sub(s.sessionCreationTime) >= s.config.HandshakeTimeout {
-			s.destroyImpl(qerr.NewTimeoutError("Handshake did not complete in time"))
-			continue
-		}
-		if s.handshakeComplete && now.Sub(s.idleTimeoutStartTime()) >= s.idleTimeout {
-			s.destroyImpl(qerr.NewTimeoutError("No recent network activity"))
-			continue
-		}
-
 		if err := s.sendPackets(); err != nil {
 			s.closeLocal(err)
 		}
