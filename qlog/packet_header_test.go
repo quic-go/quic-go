@@ -80,11 +80,12 @@ var _ = Describe("Packet Header", func() {
 			checkEncoding(data, expected)
 		}
 
-		It("marshals a header", func() {
+		It("marshals a header for a 1-RTT packet", func() {
 			check(
 				&wire.ExtendedHeader{PacketNumber: 42},
 				map[string]interface{}{
 					"packet_number": 42,
+					"dcil":          0,
 				},
 			)
 		})
@@ -93,11 +94,38 @@ var _ = Describe("Packet Header", func() {
 			check(
 				&wire.ExtendedHeader{
 					PacketNumber: 42,
-					Header:       wire.Header{Length: 123},
+					Header: wire.Header{
+						IsLongHeader: true,
+						Type:         protocol.PacketTypeInitial,
+						Length:       123,
+						Version:      protocol.VersionNumber(0xdecafbad),
+					},
 				},
 				map[string]interface{}{
 					"packet_number":  42,
 					"payload_length": 123,
+					"dcil":           0,
+					"scil":           0,
+					"version":        "decafbad",
+				},
+			)
+		})
+
+		It("marshals a packet with packet number 0", func() {
+			check(
+				&wire.ExtendedHeader{
+					PacketNumber: 0,
+					Header: wire.Header{
+						IsLongHeader: true,
+						Type:         protocol.PacketTypeHandshake,
+						Version:      protocol.VersionNumber(0xdecafbad),
+					},
+				},
+				map[string]interface{}{
+					"packet_number": 0,
+					"dcil":          0,
+					"scil":          0,
+					"version":       "decafbad",
 				},
 			)
 		})
@@ -107,18 +135,23 @@ var _ = Describe("Packet Header", func() {
 				&wire.ExtendedHeader{
 					PacketNumber: 42,
 					Header: wire.Header{
+						IsLongHeader:    true,
+						Type:            protocol.PacketTypeHandshake,
 						SrcConnectionID: protocol.ConnectionID{0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88, 0x99, 0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff},
+						Version:         protocol.VersionNumber(0xdecafbad),
 					},
 				},
 				map[string]interface{}{
 					"packet_number": 42,
+					"dcil":          0,
 					"scil":          16,
 					"scid":          "00112233445566778899aabbccddeeff",
+					"version":       "decafbad",
 				},
 			)
 		})
 
-		It("marshals a header with a destination connection ID", func() {
+		It("marshals a 1-RTT header with a destination connection ID", func() {
 			check(
 				&wire.ExtendedHeader{
 					PacketNumber: 42,
@@ -128,19 +161,6 @@ var _ = Describe("Packet Header", func() {
 					"packet_number": 42,
 					"dcil":          4,
 					"dcid":          "deadbeef",
-				},
-			)
-		})
-
-		It("marshals a header with a version number", func() {
-			check(
-				&wire.ExtendedHeader{
-					PacketNumber: 42,
-					Header:       wire.Header{Version: protocol.VersionNumber(0xdecafbad)},
-				},
-				map[string]interface{}{
-					"packet_number": 42,
-					"version":       "decafbad",
 				},
 			)
 		})
