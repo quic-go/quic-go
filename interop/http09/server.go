@@ -95,7 +95,7 @@ func (s *Server) handleConn(sess quic.Session) {
 		}
 		go func() {
 			if err := s.handleStream(str); err != nil {
-				log.Printf("Handling stream failed: %s", err.Error())
+				log.Printf("Handling stream failed: %s\n", err.Error())
 			}
 		}()
 	}
@@ -109,6 +109,9 @@ func (s *Server) handleStream(str quic.Stream) error {
 	request := string(reqBytes)
 	request = strings.TrimRight(request, "\r\n")
 	request = strings.TrimRight(request, " ")
+
+	log.Printf("Received request: %s\n", request)
+
 	if request[:5] != "GET /" {
 		str.CancelWrite(42)
 		return nil
