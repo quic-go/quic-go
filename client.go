@@ -56,6 +56,8 @@ var (
 	// make it possible to mock connection ID generation in the tests
 	generateConnectionID           = protocol.GenerateConnectionID
 	generateConnectionIDForInitial = protocol.GenerateConnectionIDForInitial
+	// make it possible to the qlogger
+	newQlogger = qlog.NewTracer
 )
 
 // DialAddr establishes a new QUIC connection to a server.
@@ -181,7 +183,7 @@ func dialContext(
 
 	if c.config.GetLogWriter != nil {
 		if w := c.config.GetLogWriter(c.destConnID); w != nil {
-			c.qlogger = qlog.NewTracer(w, protocol.PerspectiveClient, c.destConnID)
+			c.qlogger = newQlogger(w, protocol.PerspectiveClient, c.destConnID)
 		}
 	}
 	if err := c.dial(ctx); err != nil {
