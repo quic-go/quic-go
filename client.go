@@ -27,7 +27,7 @@ type client struct {
 
 	packetHandlers packetHandlerManager
 
-	versionNegotiated                utils.AtomicBool // has the server accepted our version
+	versionNegotiated                bool // has the server accepted our version
 	receivedVersionNegotiationPacket bool
 	negotiatedVersions               []protocol.VersionNumber // the list of versions from the version negotiation packet
 
@@ -309,14 +309,14 @@ func (c *client) dial(ctx context.Context, qlogger qlog.Tracer) error {
 
 func (c *client) handlePacket(p *receivedPacket) {
 	if wire.IsVersionNegotiationPacket(p.data) {
-		go c.handleVersionNegotiationPacket(p)
+		c.handleVersionNegotiationPacket(p)
 		return
 	}
 
 	// this is the first packet we are receiving
 	// since it is not a Version Negotiation Packet, this means the server supports the suggested version
-	if !c.versionNegotiated.Get() {
-		c.versionNegotiated.Set(true)
+	if !c.versionNegotiated {
+		c.versionNegotiated = true
 	}
 
 	c.session.handlePacket(p)
@@ -333,7 +333,7 @@ func (c *client) handleVersionNegotiationPacket(p *receivedPacket) {
 	}
 
 	// ignore delayed / duplicated version negotiation packets
-	if c.receivedVersionNegotiationPacket || c.versionNegotiated.Get() {
+	if c.receivedVersionNegotiationPacket || c.versionNegotiated {
 		c.logger.Debugf("Received a delayed Version Negotiation packet.")
 		return
 	}

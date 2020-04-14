@@ -631,41 +631,41 @@ var _ = Describe("Client", func() {
 					PacketNumberLen: protocol.PacketNumberLen3,
 				}).Write(buf, protocol.VersionTLS)).To(Succeed())
 				cl.handlePacket(&receivedPacket{data: buf.Bytes()})
-				Eventually(cl.versionNegotiated.Get).Should(BeTrue())
+				Expect(cl.versionNegotiated).To(BeTrue())
 			})
 
 			// Illustrates that adversary that injects a version negotiation packet
 			// with no supported versions can break a connection.
 			It("errors if no matching version is found", func() {
 				sess := NewMockQuicSession(mockCtrl)
-				done := make(chan struct{})
+				var destroyed bool
 				sess.EXPECT().destroy(gomock.Any()).Do(func(err error) {
 					defer GinkgoRecover()
 					Expect(err).To(HaveOccurred())
 					Expect(err.Error()).To(ContainSubstring("No compatible QUIC version found."))
-					close(done)
+					destroyed = true
 				})
 				cl.session = sess
 				cl.config = &Config{Versions: protocol.SupportedVersions}
 				cl.handlePacket(composeVersionNegotiationPacket(connID, []protocol.VersionNumber{1337}))
-				Eventually(done).Should(BeClosed())
+				Expect(destroyed).To(BeTrue())
 			})
 
 			It("errors if the version is supported by quic-go, but disabled by the quic.Config", func() {
 				sess := NewMockQuicSession(mockCtrl)
-				done := make(chan struct{})
+				var destroyed bool
 				sess.EXPECT().destroy(gomock.Any()).Do(func(err error) {
 					defer GinkgoRecover()
 					Expect(err).To(HaveOccurred())
 					Expect(err.Error()).To(ContainSubstring("No compatible QUIC version found."))
-					close(done)
+					destroyed = true
 				})
 				cl.session = sess
 				v := protocol.VersionNumber(1234)
 				Expect(v).ToNot(Equal(cl.version))
 				cl.config = &Config{Versions: protocol.SupportedVersions}
 				cl.handlePacket(composeVersionNegotiationPacket(connID, []protocol.VersionNumber{v}))
-				Eventually(done).Should(BeClosed())
+				Expect(destroyed).To(BeTrue())
 			})
 
 			It("changes to the version preferred by the quic.Config", func() {
@@ -673,15 +673,15 @@ var _ = Describe("Client", func() {
 				cl.packetHandlers = phm
 
 				sess := NewMockQuicSession(mockCtrl)
-				destroyed := make(chan struct{})
+				var destroyed bool
 				sess.EXPECT().closeForRecreating().Do(func() {
-					close(destroyed)
+					destroyed = true
 				})
 				cl.session = sess
 				versions := []protocol.VersionNumber{1234, 4321}
 				cl.config = &Config{Versions: versions}
 				cl.handlePacket(composeVersionNegotiationPacket(connID, versions))
-				Eventually(destroyed).Should(BeClosed())
+				Expect(destroyed).To(BeTrue())
 				Expect(cl.version).To(Equal(protocol.VersionNumber(1234)))
 			})
 
