@@ -42,6 +42,7 @@ func GetQLOGWriter() (func(connID []byte) io.WriteCloser, error) {
 			log.Printf("Failed to create qlog file %s: %s", path, err.Error())
 			return nil
 		}
+		log.Printf("Created qlog file: %s\n", path)
 		return utils.NewBufferedWriteCloser(bufio.NewWriter(f), f)
 	}, nil
 }
