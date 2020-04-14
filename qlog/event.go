@@ -140,6 +140,19 @@ func (e eventRetryReceived) MarshalJSONObject(enc *gojay.Encoder) {
 	enc.ObjectKey("header", e.Header)
 }
 
+type eventVersionNegotiationReceived struct {
+	Header packetHeader
+}
+
+func (e eventVersionNegotiationReceived) Category() category { return categoryTransport }
+func (e eventVersionNegotiationReceived) Name() string       { return "packet_received" }
+func (e eventVersionNegotiationReceived) IsNil() bool        { return false }
+
+func (e eventVersionNegotiationReceived) MarshalJSONObject(enc *gojay.Encoder) {
+	enc.StringKey("packet_type", PacketTypeVersionNegotiation.String())
+	enc.ObjectKey("header", e.Header)
+}
+
 type eventStatelessResetReceived struct {
 	Token *[16]byte
 }
