@@ -714,10 +714,57 @@ var _ = Describe("Client", func() {
 				Expect(cl.version).To(Equal(protocol.VersionNumber(1234)))
 			})
 
+			It("drops unparseable version negotiation packets", func() {
+				cl.config = config
+				ver := cl.version
+				p := composeVersionNegotiationPacket(connID, []protocol.VersionNumber{ver})
+				p.data = p.data[:len(p.data)-1]
+				done := make(chan struct{})
+				qlogger.EXPECT().DroppedPacket(qlog.PacketTypeVersionNegotiation, protocol.ByteCount(len(p.data)), qlog.PacketDropHeaderParseError).Do(func(qlog.PacketType, protocol.ByteCount, qlog.PacketDropReason) {
+					close(done)
+				})
+				cl.handlePacket(p)
+				Eventually(done).Should(BeClosed())
+				Expect(cl.version).To(Equal(ver))
+			})
+
+			It("drops version negotiation packets if any other packet was received before", func() {
+				sess := NewMockQuicSession(mockCtrl)
+				sess.EXPECT().handlePacket(gomock.Any())
+				cl.session = sess
+				cl.config = config
+				buf := &bytes.Buffer{}
+				Expect((&wire.ExtendedHeader{
+					Header: wire.Header{
+						DestConnectionID: connID,
+						SrcConnectionID:  connID,
+						Version:          cl.version,
+					},
+					PacketNumberLen: protocol.PacketNumberLen3,
+				}).Write(buf, protocol.VersionTLS)).To(Succeed())
+				cl.handlePacket(&receivedPacket{data: buf.Bytes()})
+
+				ver := cl.version
+				p := composeVersionNegotiationPacket(connID, []protocol.VersionNumber{1234})
+				done := make(chan struct{})
+				qlogger.EXPECT().DroppedPacket(qlog.PacketTypeVersionNegotiation, protocol.ByteCount(len(p.data)), qlog.PacketDropUnexpectedPacket).Do(func(qlog.PacketType, protocol.ByteCount, qlog.PacketDropReason) {
+					close(done)
+				})
+				cl.handlePacket(p)
+				Eventually(done).Should(BeClosed())
+				Expect(cl.version).To(Equal(ver))
+			})
+
 			It("drops version negotiation packets that contain the offered version", func() {
 				cl.config = config
 				ver := cl.version
-				cl.handlePacket(composeVersionNegotiationPacket(connID, []protocol.VersionNumber{ver}))
+				p := composeVersionNegotiationPacket(connID, []protocol.VersionNumber{ver})
+				done := make(chan struct{})
+				qlogger.EXPECT().DroppedPacket(qlog.PacketTypeVersionNegotiation, protocol.ByteCount(len(p.data)), qlog.PacketDropUnexpectedVersion).Do(func(qlog.PacketType, protocol.ByteCount, qlog.PacketDropReason) {
+					close(done)
+				})
+				cl.handlePacket(p)
+				Eventually(done).Should(BeClosed())
 				Expect(cl.version).To(Equal(ver))
 			})
 		})
@@ -726,35 +773,5 @@ var _ = Describe("Client", func() {
 	It("tells its version", func() {
 		Expect(cl.version).ToNot(BeZero())
 		Expect(cl.GetVersion()).To(Equal(cl.version))
-	})
-
-	Context("handling potentially injected packets", func() {
-		// NOTE: We hope these tests as written will fail once mitigations for injection adversaries are put in place.
-
-		// Illustrates that adversary who injects any packet quickly can
-		// cause a real version negotiation packet to be ignored.
-		It("version negotiation packets ignored if any other packet is received", func() {
-			// Copy of existing test "recognizes that a non Version Negotiation packet means that the server accepted the suggested version"
-			sess := NewMockQuicSession(mockCtrl)
-			sess.EXPECT().handlePacket(gomock.Any())
-			cl.session = sess
-			cl.config = config
-			buf := &bytes.Buffer{}
-			Expect((&wire.ExtendedHeader{
-				Header: wire.Header{
-					DestConnectionID: connID,
-					SrcConnectionID:  connID,
-					Version:          cl.version,
-				},
-				PacketNumberLen: protocol.PacketNumberLen3,
-			}).Write(buf, protocol.VersionTLS)).To(Succeed())
-			cl.handlePacket(&receivedPacket{data: buf.Bytes()})
-
-			// Version negotiation is now ignored
-			cl.config = config
-			ver := cl.version
-			cl.handlePacket(composeVersionNegotiationPacket(connID, []protocol.VersionNumber{1234}))
-			Expect(cl.version).To(Equal(ver))
-		})
 	})
 })

@@ -330,18 +330,27 @@ func (c *client) handleVersionNegotiationPacket(p *receivedPacket) {
 
 	hdr, _, _, err := wire.ParsePacket(p.data, 0)
 	if err != nil {
+		if c.qlogger != nil {
+			c.qlogger.DroppedPacket(qlog.PacketTypeVersionNegotiation, protocol.ByteCount(len(p.data)), qlog.PacketDropHeaderParseError)
+		}
 		c.logger.Debugf("Error parsing Version Negotiation packet: %s", err)
 		return
 	}
 
 	// ignore delayed / duplicated version negotiation packets
 	if c.receivedVersionNegotiationPacket || c.versionNegotiated.Get() {
+		if c.qlogger != nil {
+			c.qlogger.DroppedPacket(qlog.PacketTypeVersionNegotiation, protocol.ByteCount(len(p.data)), qlog.PacketDropUnexpectedPacket)
+		}
 		c.logger.Debugf("Received a delayed Version Negotiation packet.")
 		return
 	}
 
 	for _, v := range hdr.SupportedVersions {
 		if v == c.version {
+			if c.qlogger != nil {
+				c.qlogger.DroppedPacket(qlog.PacketTypeVersionNegotiation, protocol.ByteCount(len(p.data)), qlog.PacketDropUnexpectedVersion)
+			}
 			// The Version Negotiation packet contains the version that we offered.
 			// This might be a packet sent by an attacker (or by a terribly broken server implementation).
 			return
