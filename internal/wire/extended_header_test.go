@@ -322,10 +322,10 @@ var _ = Describe("Header", func() {
 					Length:           54321,
 					Version:          0xfeed,
 				},
-				PacketNumber:    0x1337,
+				PacketNumber:    1337,
 				PacketNumberLen: protocol.PacketNumberLen2,
 			}).Log(logger)
-			Expect(buf.String()).To(ContainSubstring("Long Header{Type: Handshake, DestConnectionID: 0xdeadbeefcafe1337, SrcConnectionID: 0xdecafbad13371337, PacketNumber: 0x1337, PacketNumberLen: 2, Length: 54321, Version: 0xfeed}"))
+			Expect(buf.String()).To(ContainSubstring("Long Header{Type: Handshake, DestConnectionID: 0xdeadbeefcafe1337, SrcConnectionID: 0xdecafbad13371337, PacketNumber: 1337, PacketNumberLen: 2, Length: 54321, Version: 0xfeed}"))
 		})
 
 		It("logs Initial Packets with a Token", func() {
@@ -339,10 +339,10 @@ var _ = Describe("Header", func() {
 					Length:           100,
 					Version:          0xfeed,
 				},
-				PacketNumber:    0x42,
+				PacketNumber:    42,
 				PacketNumberLen: protocol.PacketNumberLen2,
 			}).Log(logger)
-			Expect(buf.String()).To(ContainSubstring("Long Header{Type: Initial, DestConnectionID: 0xcafe1337, SrcConnectionID: 0xdecafbad, Token: 0xdeadbeef, PacketNumber: 0x42, PacketNumberLen: 2, Length: 100, Version: 0xfeed}"))
+			Expect(buf.String()).To(ContainSubstring("Long Header{Type: Initial, DestConnectionID: 0xcafe1337, SrcConnectionID: 0xdecafbad, Token: 0xdeadbeef, PacketNumber: 42, PacketNumberLen: 2, Length: 100, Version: 0xfeed}"))
 		})
 
 		It("logs Initial packets without a Token", func() {
@@ -355,10 +355,10 @@ var _ = Describe("Header", func() {
 					Length:           100,
 					Version:          0xfeed,
 				},
-				PacketNumber:    0x42,
+				PacketNumber:    42,
 				PacketNumberLen: protocol.PacketNumberLen2,
 			}).Log(logger)
-			Expect(buf.String()).To(ContainSubstring("Long Header{Type: Initial, DestConnectionID: 0xcafe1337, SrcConnectionID: 0xdecafbad, Token: (empty), PacketNumber: 0x42, PacketNumberLen: 2, Length: 100, Version: 0xfeed}"))
+			Expect(buf.String()).To(ContainSubstring("Long Header{Type: Initial, DestConnectionID: 0xcafe1337, SrcConnectionID: 0xdecafbad, Token: (empty), PacketNumber: 42, PacketNumberLen: 2, Length: 100, Version: 0xfeed}"))
 		})
 
 		It("logs Retry packets with a Token", func() {
@@ -381,10 +381,10 @@ var _ = Describe("Header", func() {
 					DestConnectionID: protocol.ConnectionID{0xde, 0xad, 0xbe, 0xef, 0xca, 0xfe, 0x13, 0x37},
 				},
 				KeyPhase:        protocol.KeyPhaseOne,
-				PacketNumber:    0x1337,
+				PacketNumber:    1337,
 				PacketNumberLen: 4,
 			}).Log(logger)
-			Expect(buf.String()).To(ContainSubstring("Short Header{DestConnectionID: 0xdeadbeefcafe1337, PacketNumber: 0x1337, PacketNumberLen: 4, KeyPhase: 1}"))
+			Expect(buf.String()).To(ContainSubstring("Short Header{DestConnectionID: 0xdeadbeefcafe1337, PacketNumber: 1337, PacketNumberLen: 4, KeyPhase: 1}"))
 		})
 	})
 })

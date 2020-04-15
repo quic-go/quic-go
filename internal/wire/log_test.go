@@ -68,23 +68,23 @@ var _ = Describe("Frame logging", func() {
 
 	It("logs ACK frames without missing packets", func() {
 		frame := &AckFrame{
-			AckRanges: []AckRange{{Smallest: 0x42, Largest: 0x1337}},
+			AckRanges: []AckRange{{Smallest: 42, Largest: 1337}},
 			DelayTime: 1 * time.Millisecond,
 		}
 		LogFrame(logger, frame, false)
-		Expect(buf.String()).To(ContainSubstring("\t<- &wire.AckFrame{LargestAcked: 0x1337, LowestAcked: 0x42, DelayTime: 1ms}\n"))
+		Expect(buf.String()).To(ContainSubstring("\t<- &wire.AckFrame{LargestAcked: 1337, LowestAcked: 42, DelayTime: 1ms}\n"))
 	})
 
 	It("logs ACK frames with missing packets", func() {
 		frame := &AckFrame{
 			AckRanges: []AckRange{
-				{Smallest: 0x5, Largest: 0x8},
-				{Smallest: 0x2, Largest: 0x3},
+				{Smallest: 5, Largest: 8},
+				{Smallest: 2, Largest: 3},
 			},
 			DelayTime: 12 * time.Millisecond,
 		}
 		LogFrame(logger, frame, false)
-		Expect(buf.String()).To(ContainSubstring("\t<- &wire.AckFrame{LargestAcked: 0x8, LowestAcked: 0x2, AckRanges: {{Largest: 0x8, Smallest: 0x5}, {Largest: 0x3, Smallest: 0x2}}, DelayTime: 12ms}\n"))
+		Expect(buf.String()).To(ContainSubstring("\t<- &wire.AckFrame{LargestAcked: 8, LowestAcked: 2, AckRanges: {{Largest: 8, Smallest: 5}, {Largest: 3, Smallest: 2}}, DelayTime: 12ms}\n"))
 	})
 
 	It("logs MAX_STREAMS frames", func() {

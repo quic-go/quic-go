@@ -68,7 +68,7 @@ func (h *receivedPacketTracker) IgnoreBelow(p protocol.PacketNumber) {
 	h.ignoreBelow = p
 	h.packetHistory.DeleteBelow(p)
 	if h.logger.Debug() {
-		h.logger.Debugf("\tIgnoring all packets below %#x.", p)
+		h.logger.Debugf("\tIgnoring all packets below %d.", p)
 	}
 }
 
@@ -106,7 +106,7 @@ func (h *receivedPacketTracker) maybeQueueAck(packetNumber protocol.PacketNumber
 	// missing packets we reported in the previous ack, send an ACK immediately.
 	if wasMissing {
 		if h.logger.Debug() {
-			h.logger.Debugf("\tQueueing ACK because packet %#x was missing before.", packetNumber)
+			h.logger.Debugf("\tQueueing ACK because packet %d was missing before.", packetNumber)
 		}
 		h.ackQueued = true
 	}

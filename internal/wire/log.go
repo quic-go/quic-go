@@ -27,11 +27,11 @@ func LogFrame(logger utils.Logger, frame Frame, sent bool) {
 		if len(f.AckRanges) > 1 {
 			ackRanges := make([]string, len(f.AckRanges))
 			for i, r := range f.AckRanges {
-				ackRanges[i] = fmt.Sprintf("{Largest: %#x, Smallest: %#x}", r.Largest, r.Smallest)
+				ackRanges[i] = fmt.Sprintf("{Largest: %d, Smallest: %d}", r.Largest, r.Smallest)
 			}
-			logger.Debugf("\t%s &wire.AckFrame{LargestAcked: %#x, LowestAcked: %#x, AckRanges: {%s}, DelayTime: %s}", dir, f.LargestAcked(), f.LowestAcked(), strings.Join(ackRanges, ", "), f.DelayTime.String())
+			logger.Debugf("\t%s &wire.AckFrame{LargestAcked: %d, LowestAcked: %d, AckRanges: {%s}, DelayTime: %s}", dir, f.LargestAcked(), f.LowestAcked(), strings.Join(ackRanges, ", "), f.DelayTime.String())
 		} else {
-			logger.Debugf("\t%s &wire.AckFrame{LargestAcked: %#x, LowestAcked: %#x, DelayTime: %s}", dir, f.LargestAcked(), f.LowestAcked(), f.DelayTime.String())
+			logger.Debugf("\t%s &wire.AckFrame{LargestAcked: %d, LowestAcked: %d, DelayTime: %s}", dir, f.LargestAcked(), f.LowestAcked(), f.DelayTime.String())
 		}
 	case *MaxStreamsFrame:
 		switch f.Type {
