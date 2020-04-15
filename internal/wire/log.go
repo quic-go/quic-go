@@ -20,9 +20,11 @@ func LogFrame(logger utils.Logger, frame Frame, sent bool) {
 	switch f := frame.(type) {
 	case *CryptoFrame:
 		dataLen := protocol.ByteCount(len(f.Data))
-		logger.Debugf("\t%s &wire.CryptoFrame{Offset: 0x%x, Data length: 0x%x, Offset + Data length: 0x%x}", dir, f.Offset, dataLen, f.Offset+dataLen)
+		logger.Debugf("\t%s &wire.CryptoFrame{Offset: %d, Data length: %d, Offset + Data length: %d}", dir, f.Offset, dataLen, f.Offset+dataLen)
 	case *StreamFrame:
-		logger.Debugf("\t%s &wire.StreamFrame{StreamID: %d, FinBit: %t, Offset: 0x%x, Data length: 0x%x, Offset + Data length: 0x%x}", dir, f.StreamID, f.FinBit, f.Offset, f.DataLen(), f.Offset+f.DataLen())
+		logger.Debugf("\t%s &wire.StreamFrame{StreamID: %d, FinBit: %t, Offset: %d, Data length: %d, Offset + Data length: %d}", dir, f.StreamID, f.FinBit, f.Offset, f.DataLen(), f.Offset+f.DataLen())
+	case *ResetStreamFrame:
+		logger.Debugf("\t%s &wire.ResetStreamFrame{StreamID: %d, ErrorCode: %#x, ByteOffset: %d}", dir, f.StreamID, f.ErrorCode, f.ByteOffset)
 	case *AckFrame:
 		if len(f.AckRanges) > 1 {
 			ackRanges := make([]string, len(f.AckRanges))
@@ -33,6 +35,14 @@ func LogFrame(logger utils.Logger, frame Frame, sent bool) {
 		} else {
 			logger.Debugf("\t%s &wire.AckFrame{LargestAcked: %d, LowestAcked: %d, DelayTime: %s}", dir, f.LargestAcked(), f.LowestAcked(), f.DelayTime.String())
 		}
+	case *MaxDataFrame:
+		logger.Debugf("\t%s &wire.MaxDataFrame{ByteOffset: %d}", dir, f.ByteOffset)
+	case *MaxStreamDataFrame:
+		logger.Debugf("\t%s &wire.MaxStreamDataFrame{StreamID: %d, ByteOffset: %d}", dir, f.StreamID, f.ByteOffset)
+	case *DataBlockedFrame:
+		logger.Debugf("\t%s &wire.DataBlockedFrame{DataLimit: %d}", dir, f.DataLimit)
+	case *StreamDataBlockedFrame:
+		logger.Debugf("\t%s &wire.StreamDataBlockedFrame{StreamID: %d, DataLimit: %d}", dir, f.StreamID, f.DataLimit)
 	case *MaxStreamsFrame:
 		switch f.Type {
 		case protocol.StreamTypeUni:
