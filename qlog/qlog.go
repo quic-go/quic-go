@@ -232,9 +232,14 @@ func (t *tracer) ReceivedRetry(hdr *wire.Header) {
 }
 
 func (t *tracer) ReceivedVersionNegotiationPacket(hdr *wire.Header) {
+	versions := make([]versionNumber, len(hdr.SupportedVersions))
+	for i, v := range hdr.SupportedVersions {
+		versions[i] = versionNumber(v)
+	}
 	t.mutex.Lock()
 	t.recordEvent(time.Now(), &eventVersionNegotiationReceived{
-		Header: *transformHeader(hdr),
+		Header:            *transformHeader(hdr),
+		SupportedVersions: versions,
 	})
 	t.mutex.Unlock()
 }
