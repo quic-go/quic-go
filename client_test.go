@@ -1,10 +1,13 @@
 package quic
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"crypto/tls"
 	"errors"
+	"io"
+	"io/ioutil"
 	"net"
 	"os"
 	"time"
@@ -12,6 +15,7 @@ import (
 	"github.com/lucas-clemente/quic-go/qlog"
 
 	"github.com/golang/mock/gomock"
+	"github.com/lucas-clemente/quic-go/internal/mocks"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/internal/utils"
 	"github.com/lucas-clemente/quic-go/internal/wire"
@@ -30,6 +34,8 @@ var _ = Describe("Client", func() {
 		mockMultiplexer *MockMultiplexer
 		origMultiplexer multiplexer
 		tlsConf         *tls.Config
+		qlogger         *mocks.MockTracer
+		config          *Config
 
 		originalClientSessConstructor func(
 			conn connection,
@@ -45,6 +51,7 @@ var _ = Describe("Client", func() {
 			logger utils.Logger,
 			v protocol.VersionNumber,
 		) quicSession
+		originalQlogConstructor func(io.WriteCloser, protocol.Perspective, protocol.ConnectionID) qlog.Tracer
 	)
 
 	// generate a packet sent by the server that accepts the QUIC version suggested by the client
@@ -72,6 +79,21 @@ var _ = Describe("Client", func() {
 		tlsConf = &tls.Config{NextProtos: []string{"proto1"}}
 		connID = protocol.ConnectionID{0, 0, 0, 0, 0, 0, 0x13, 0x37}
 		originalClientSessConstructor = newClientSession
+		originalQlogConstructor = newQlogger
+		qlogger = mocks.NewMockTracer(mockCtrl)
+		newQlogger = func(io.WriteCloser, protocol.Perspective, protocol.ConnectionID) qlog.Tracer {
+			return qlogger
+		}
+		config = &Config{
+			GetLogWriter: func([]byte) io.WriteCloser {
+				// Since we're mocking the qlogger, it doesn't matter what we return here,
+				// as long as it's not nil.
+				return utils.NewBufferedWriteCloser(
+					bufio.NewWriter(&bytes.Buffer{}),
+					ioutil.NopCloser(&bytes.Buffer{}),
+				)
+			},
+		}
 		Eventually(areSessionsRunning).Should(BeFalse())
 		// sess = NewMockQuicSession(mockCtrl)
 		addr = &net.UDPAddr{IP: net.IPv4(192, 168, 100, 200), Port: 1337}
@@ -83,6 +105,7 @@ var _ = Describe("Client", func() {
 			destConnID: connID,
 			version:    protocol.SupportedVersions[0],
 			conn:       &conn{pconn: packetConn, currentAddr: addr},
+			qlogger:    qlogger,
 			logger:     utils.DefaultLogger,
 		}
 		getMultiplexer() // make the sync.Once execute
@@ -95,6 +118,7 @@ var _ = Describe("Client", func() {
 	AfterEach(func() {
 		connMuxer = origMultiplexer
 		newClientSession = originalClientSessConstructor
+		newQlogger = originalQlogConstructor
 	})
 
 	AfterEach(func() {
@@ -219,12 +243,13 @@ var _ = Describe("Client", func() {
 				sess.EXPECT().run()
 				return sess
 			}
+			qlogger.EXPECT().StartedConnection(gomock.Any(), gomock.Any(), protocol.VersionTLS, gomock.Any(), gomock.Any())
 			_, err := Dial(
 				packetConn,
 				addr,
 				"test.com",
 				tlsConf,
-				&Config{},
+				config,
 			)
 			Expect(err).ToNot(HaveOccurred())
 			Eventually(hostnameChan).Should(Receive(Equal("test.com")))
@@ -258,12 +283,13 @@ var _ = Describe("Client", func() {
 				sess.EXPECT().HandshakeComplete().Return(ctx)
 				return sess
 			}
+			qlogger.EXPECT().StartedConnection(gomock.Any(), gomock.Any(), protocol.VersionTLS, gomock.Any(), gomock.Any())
 			s, err := Dial(
 				packetConn,
 				addr,
 				"localhost:1337",
 				tlsConf,
-				&Config{},
+				config,
 			)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(s).ToNot(BeNil())
@@ -302,12 +328,13 @@ var _ = Describe("Client", func() {
 			go func() {
 				defer GinkgoRecover()
 				defer close(done)
+				qlogger.EXPECT().StartedConnection(gomock.Any(), gomock.Any(), protocol.VersionTLS, gomock.Any(), gomock.Any())
 				s, err := DialEarly(
 					packetConn,
 					addr,
 					"localhost:1337",
 					tlsConf,
-					&Config{},
+					config,
 				)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(s).ToNot(BeNil())
@@ -343,12 +370,13 @@ var _ = Describe("Client", func() {
 				return sess
 			}
 			packetConn.dataToRead <- acceptClientVersionPacket(cl.srcConnID)
+			qlogger.EXPECT().StartedConnection(gomock.Any(), gomock.Any(), protocol.VersionTLS, gomock.Any(), gomock.Any())
 			_, err := Dial(
 				packetConn,
 				addr,
 				"localhost:1337",
 				tlsConf,
-				&Config{},
+				config,
 			)
 			Expect(err).To(MatchError(testErr))
 		})
@@ -385,13 +413,14 @@ var _ = Describe("Client", func() {
 			dialed := make(chan struct{})
 			go func() {
 				defer GinkgoRecover()
+				qlogger.EXPECT().StartedConnection(gomock.Any(), gomock.Any(), protocol.VersionTLS, gomock.Any(), gomock.Any())
 				_, err := DialContext(
 					ctx,
 					packetConn,
 					addr,
 					"localhost:1337",
 					tlsConf,
-					&Config{},
+					config,
 				)
 				Expect(err).To(MatchError(context.Canceled))
 				close(dialed)
@@ -513,8 +542,7 @@ var _ = Describe("Client", func() {
 			})
 
 			It("uses 0-byte connection IDs when dialing an address", func() {
-				config := &Config{}
-				c := populateClientConfig(config, true)
+				c := populateClientConfig(&Config{}, true)
 				Expect(c.ConnectionIDLength).To(BeZero())
 			})
 
@@ -606,12 +634,13 @@ var _ = Describe("Client", func() {
 					sess.EXPECT().HandshakeComplete().Return(context.Background())
 					return sess
 				}
+				qlogger.EXPECT().StartedConnection(gomock.Any(), gomock.Any(), protocol.VersionTLS, gomock.Any(), gomock.Any())
 				_, err := Dial(
 					packetConn,
 					addr,
 					"localhost:1337",
 					tlsConf,
-					&Config{},
+					config,
 				)
 				Expect(err).To(MatchError(testErr))
 			})
@@ -620,7 +649,7 @@ var _ = Describe("Client", func() {
 				sess := NewMockQuicSession(mockCtrl)
 				sess.EXPECT().handlePacket(gomock.Any())
 				cl.session = sess
-				cl.config = &Config{}
+				cl.config = config
 				buf := &bytes.Buffer{}
 				Expect((&wire.ExtendedHeader{
 					Header: wire.Header{
@@ -647,7 +676,11 @@ var _ = Describe("Client", func() {
 				})
 				cl.session = sess
 				cl.config = &Config{Versions: protocol.SupportedVersions}
-				cl.handlePacket(composeVersionNegotiationPacket(connID, []protocol.VersionNumber{1337}))
+				p := composeVersionNegotiationPacket(connID, []protocol.VersionNumber{1337})
+				hdr, _, _, err := wire.ParsePacket(p.data, 0)
+				Expect(err).ToNot(HaveOccurred())
+				qlogger.EXPECT().ReceivedVersionNegotiationPacket(hdr)
+				cl.handlePacket(p)
 				Eventually(done).Should(BeClosed())
 			})
 
@@ -664,6 +697,7 @@ var _ = Describe("Client", func() {
 				v := protocol.VersionNumber(1234)
 				Expect(v).ToNot(Equal(cl.version))
 				cl.config = &Config{Versions: protocol.SupportedVersions}
+				qlogger.EXPECT().ReceivedVersionNegotiationPacket(gomock.Any())
 				cl.handlePacket(composeVersionNegotiationPacket(connID, []protocol.VersionNumber{v}))
 				Eventually(done).Should(BeClosed())
 			})
@@ -680,15 +714,63 @@ var _ = Describe("Client", func() {
 				cl.session = sess
 				versions := []protocol.VersionNumber{1234, 4321}
 				cl.config = &Config{Versions: versions}
+				qlogger.EXPECT().ReceivedVersionNegotiationPacket(gomock.Any())
 				cl.handlePacket(composeVersionNegotiationPacket(connID, versions))
 				Eventually(destroyed).Should(BeClosed())
 				Expect(cl.version).To(Equal(protocol.VersionNumber(1234)))
 			})
 
-			It("drops version negotiation packets that contain the offered version", func() {
-				cl.config = &Config{}
+			It("drops unparseable version negotiation packets", func() {
+				cl.config = config
 				ver := cl.version
-				cl.handlePacket(composeVersionNegotiationPacket(connID, []protocol.VersionNumber{ver}))
+				p := composeVersionNegotiationPacket(connID, []protocol.VersionNumber{ver})
+				p.data = p.data[:len(p.data)-1]
+				done := make(chan struct{})
+				qlogger.EXPECT().DroppedPacket(qlog.PacketTypeVersionNegotiation, protocol.ByteCount(len(p.data)), qlog.PacketDropHeaderParseError).Do(func(qlog.PacketType, protocol.ByteCount, qlog.PacketDropReason) {
+					close(done)
+				})
+				cl.handlePacket(p)
+				Eventually(done).Should(BeClosed())
+				Expect(cl.version).To(Equal(ver))
+			})
+
+			It("drops version negotiation packets if any other packet was received before", func() {
+				sess := NewMockQuicSession(mockCtrl)
+				sess.EXPECT().handlePacket(gomock.Any())
+				cl.session = sess
+				cl.config = config
+				buf := &bytes.Buffer{}
+				Expect((&wire.ExtendedHeader{
+					Header: wire.Header{
+						DestConnectionID: connID,
+						SrcConnectionID:  connID,
+						Version:          cl.version,
+					},
+					PacketNumberLen: protocol.PacketNumberLen3,
+				}).Write(buf, protocol.VersionTLS)).To(Succeed())
+				cl.handlePacket(&receivedPacket{data: buf.Bytes()})
+
+				ver := cl.version
+				p := composeVersionNegotiationPacket(connID, []protocol.VersionNumber{1234})
+				done := make(chan struct{})
+				qlogger.EXPECT().DroppedPacket(qlog.PacketTypeVersionNegotiation, protocol.ByteCount(len(p.data)), qlog.PacketDropUnexpectedPacket).Do(func(qlog.PacketType, protocol.ByteCount, qlog.PacketDropReason) {
+					close(done)
+				})
+				cl.handlePacket(p)
+				Eventually(done).Should(BeClosed())
+				Expect(cl.version).To(Equal(ver))
+			})
+
+			It("drops version negotiation packets that contain the offered version", func() {
+				cl.config = config
+				ver := cl.version
+				p := composeVersionNegotiationPacket(connID, []protocol.VersionNumber{ver})
+				done := make(chan struct{})
+				qlogger.EXPECT().DroppedPacket(qlog.PacketTypeVersionNegotiation, protocol.ByteCount(len(p.data)), qlog.PacketDropUnexpectedVersion).Do(func(qlog.PacketType, protocol.ByteCount, qlog.PacketDropReason) {
+					close(done)
+				})
+				cl.handlePacket(p)
+				Eventually(done).Should(BeClosed())
 				Expect(cl.version).To(Equal(ver))
 			})
 		})
@@ -697,35 +779,5 @@ var _ = Describe("Client", func() {
 	It("tells its version", func() {
 		Expect(cl.version).ToNot(BeZero())
 		Expect(cl.GetVersion()).To(Equal(cl.version))
-	})
-
-	Context("handling potentially injected packets", func() {
-		// NOTE: We hope these tests as written will fail once mitigations for injection adversaries are put in place.
-
-		// Illustrates that adversary who injects any packet quickly can
-		// cause a real version negotiation packet to be ignored.
-		It("version negotiation packets ignored if any other packet is received", func() {
-			// Copy of existing test "recognizes that a non Version Negotiation packet means that the server accepted the suggested version"
-			sess := NewMockQuicSession(mockCtrl)
-			sess.EXPECT().handlePacket(gomock.Any())
-			cl.session = sess
-			cl.config = &Config{}
-			buf := &bytes.Buffer{}
-			Expect((&wire.ExtendedHeader{
-				Header: wire.Header{
-					DestConnectionID: connID,
-					SrcConnectionID:  connID,
-					Version:          cl.version,
-				},
-				PacketNumberLen: protocol.PacketNumberLen3,
-			}).Write(buf, protocol.VersionTLS)).To(Succeed())
-			cl.handlePacket(&receivedPacket{data: buf.Bytes()})
-
-			// Version negotiation is now ignored
-			cl.config = &Config{}
-			ver := cl.version
-			cl.handlePacket(composeVersionNegotiationPacket(connID, []protocol.VersionNumber{1234}))
-			Expect(cl.version).To(Equal(ver))
-		})
 	})
 })

@@ -321,6 +321,33 @@ var _ = Describe("Tracer", func() {
 			Expect(ev).ToNot(HaveKey("frames"))
 		})
 
+		It("records a received Version Negotiation packet", func() {
+			tracer.ReceivedVersionNegotiationPacket(
+				&wire.Header{
+					IsLongHeader:      true,
+					Type:              protocol.PacketTypeRetry,
+					DestConnectionID:  protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8},
+					SrcConnectionID:   protocol.ConnectionID{4, 3, 2, 1},
+					SupportedVersions: []protocol.VersionNumber{0xdeadbeef, 0xdecafbad},
+				},
+			)
+			entry := exportAndParseSingle()
+			Expect(entry.Time).To(BeTemporally("~", time.Now(), 10*time.Millisecond))
+			Expect(entry.Category).To(Equal("transport"))
+			Expect(entry.Name).To(Equal("packet_received"))
+			ev := entry.Event
+			Expect(ev).To(HaveKeyWithValue("packet_type", "version_negotiation"))
+			Expect(ev).To(HaveKey("header"))
+			Expect(ev).ToNot(HaveKey("frames"))
+			Expect(ev).To(HaveKey("supported_versions"))
+			Expect(ev["supported_versions"].([]interface{})).To(Equal([]interface{}{"deadbeef", "decafbad"}))
+			header := ev["header"]
+			Expect(header).ToNot(HaveKey("packet_number"))
+			Expect(header).ToNot(HaveKey("version"))
+			Expect(header).To(HaveKey("dcid"))
+			Expect(header).To(HaveKey("scid"))
+		})
+
 		It("records a received Retry packet", func() {
 			tracer.ReceivedStatelessReset(&[16]byte{0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88, 0x99, 0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff})
 			entry := exportAndParseSingle()

@@ -47,6 +47,15 @@ func (e event) MarshalJSONArray(enc *gojay.Encoder) {
 	enc.Object(e.eventDetails)
 }
 
+type versions []versionNumber
+
+func (v versions) IsNil() bool { return false }
+func (v versions) MarshalJSONArray(enc *gojay.Encoder) {
+	for _, e := range v {
+		enc.AddString(e.String())
+	}
+}
+
 type eventConnectionStarted struct {
 	SrcAddr  *net.UDPAddr
 	DestAddr *net.UDPAddr
@@ -138,6 +147,21 @@ func (e eventRetryReceived) IsNil() bool        { return false }
 func (e eventRetryReceived) MarshalJSONObject(enc *gojay.Encoder) {
 	enc.StringKey("packet_type", PacketTypeRetry.String())
 	enc.ObjectKey("header", e.Header)
+}
+
+type eventVersionNegotiationReceived struct {
+	Header            packetHeader
+	SupportedVersions []versionNumber
+}
+
+func (e eventVersionNegotiationReceived) Category() category { return categoryTransport }
+func (e eventVersionNegotiationReceived) Name() string       { return "packet_received" }
+func (e eventVersionNegotiationReceived) IsNil() bool        { return false }
+
+func (e eventVersionNegotiationReceived) MarshalJSONObject(enc *gojay.Encoder) {
+	enc.StringKey("packet_type", PacketTypeVersionNegotiation.String())
+	enc.ObjectKey("header", e.Header)
+	enc.ArrayKey("supported_versions", versions(e.SupportedVersions))
 }
 
 type eventStatelessResetReceived struct {

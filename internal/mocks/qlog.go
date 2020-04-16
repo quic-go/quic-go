@@ -173,6 +173,18 @@ func (mr *MockTracerMockRecorder) ReceivedTransportParameters(arg0 interface{}) 
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReceivedTransportParameters", reflect.TypeOf((*MockTracer)(nil).ReceivedTransportParameters), arg0)
 }
 
+// ReceivedVersionNegotiationPacket mocks base method
+func (m *MockTracer) ReceivedVersionNegotiationPacket(arg0 *wire.Header) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "ReceivedVersionNegotiationPacket", arg0)
+}
+
+// ReceivedVersionNegotiationPacket indicates an expected call of ReceivedVersionNegotiationPacket
+func (mr *MockTracerMockRecorder) ReceivedVersionNegotiationPacket(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReceivedVersionNegotiationPacket", reflect.TypeOf((*MockTracer)(nil).ReceivedVersionNegotiationPacket), arg0)
+}
+
 // SentPacket mocks base method
 func (m *MockTracer) SentPacket(arg0 *wire.ExtendedHeader, arg1 protocol.ByteCount, arg2 *wire.AckFrame, arg3 []wire.Frame) {
 	m.ctrl.T.Helper()

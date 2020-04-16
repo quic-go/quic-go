@@ -24,6 +24,7 @@ type Tracer interface {
 	SentTransportParameters(*wire.TransportParameters)
 	ReceivedTransportParameters(*wire.TransportParameters)
 	SentPacket(hdr *wire.ExtendedHeader, packetSize protocol.ByteCount, ack *wire.AckFrame, frames []wire.Frame)
+	ReceivedVersionNegotiationPacket(*wire.Header)
 	ReceivedRetry(*wire.Header)
 	ReceivedPacket(hdr *wire.ExtendedHeader, packetSize protocol.ByteCount, frames []wire.Frame)
 	ReceivedStatelessReset(token *[16]byte)
@@ -226,6 +227,19 @@ func (t *tracer) ReceivedRetry(hdr *wire.Header) {
 	t.mutex.Lock()
 	t.recordEvent(time.Now(), &eventRetryReceived{
 		Header: *transformHeader(hdr),
+	})
+	t.mutex.Unlock()
+}
+
+func (t *tracer) ReceivedVersionNegotiationPacket(hdr *wire.Header) {
+	versions := make([]versionNumber, len(hdr.SupportedVersions))
+	for i, v := range hdr.SupportedVersions {
+		versions[i] = versionNumber(v)
+	}
+	t.mutex.Lock()
+	t.recordEvent(time.Now(), &eventVersionNegotiationReceived{
+		Header:            *transformHeader(hdr),
+		SupportedVersions: versions,
 	})
 	t.mutex.Unlock()
 }

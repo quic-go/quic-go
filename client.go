@@ -46,7 +46,8 @@ type client struct {
 
 	session quicSession
 
-	logger utils.Logger
+	qlogger qlog.Tracer
+	logger  utils.Logger
 }
 
 var _ packetHandler = &client{}
@@ -55,6 +56,8 @@ var (
 	// make it possible to mock connection ID generation in the tests
 	generateConnectionID           = protocol.GenerateConnectionID
 	generateConnectionIDForInitial = protocol.GenerateConnectionIDForInitial
+	// make it possible to the qlogger
+	newQlogger = qlog.NewTracer
 )
 
 // DialAddr establishes a new QUIC connection to a server.
@@ -178,13 +181,12 @@ func dialContext(
 	}
 	c.packetHandlers = packetHandlers
 
-	var qlogger qlog.Tracer
 	if c.config.GetLogWriter != nil {
 		if w := c.config.GetLogWriter(c.destConnID); w != nil {
-			qlogger = qlog.NewTracer(w, protocol.PerspectiveClient, c.destConnID)
+			c.qlogger = newQlogger(w, protocol.PerspectiveClient, c.destConnID)
 		}
 	}
-	if err := c.dial(ctx, qlogger); err != nil {
+	if err := c.dial(ctx); err != nil {
 		return nil, err
 	}
 	return c.session, nil
@@ -247,10 +249,10 @@ func newClient(
 	return c, nil
 }
 
-func (c *client) dial(ctx context.Context, qlogger qlog.Tracer) error {
+func (c *client) dial(ctx context.Context) error {
 	c.logger.Infof("Starting new connection to %s (%s -> %s), source connection ID %s, destination connection ID %s, version %s", c.tlsConf.ServerName, c.conn.LocalAddr(), c.conn.RemoteAddr(), c.srcConnID, c.destConnID, c.version)
-	if qlogger != nil {
-		qlogger.StartedConnection(c.conn.LocalAddr(), c.conn.LocalAddr(), c.version, c.srcConnID, c.destConnID)
+	if c.qlogger != nil {
+		c.qlogger.StartedConnection(c.conn.LocalAddr(), c.conn.LocalAddr(), c.version, c.srcConnID, c.destConnID)
 	}
 
 	c.mutex.Lock()
@@ -264,7 +266,7 @@ func (c *client) dial(ctx context.Context, qlogger qlog.Tracer) error {
 		c.initialPacketNumber,
 		c.initialVersion,
 		c.use0RTT,
-		qlogger,
+		c.qlogger,
 		c.logger,
 		c.version,
 	)
@@ -295,7 +297,7 @@ func (c *client) dial(ctx context.Context, qlogger qlog.Tracer) error {
 		return ctx.Err()
 	case err := <-errorChan:
 		if err == errCloseForRecreating {
-			return c.dial(ctx, qlogger)
+			return c.dial(ctx)
 		}
 		return err
 	case <-earlySessionChan:
@@ -328,18 +330,27 @@ func (c *client) handleVersionNegotiationPacket(p *receivedPacket) {
 
 	hdr, _, _, err := wire.ParsePacket(p.data, 0)
 	if err != nil {
+		if c.qlogger != nil {
+			c.qlogger.DroppedPacket(qlog.PacketTypeVersionNegotiation, protocol.ByteCount(len(p.data)), qlog.PacketDropHeaderParseError)
+		}
 		c.logger.Debugf("Error parsing Version Negotiation packet: %s", err)
 		return
 	}
 
 	// ignore delayed / duplicated version negotiation packets
 	if c.receivedVersionNegotiationPacket || c.versionNegotiated.Get() {
+		if c.qlogger != nil {
+			c.qlogger.DroppedPacket(qlog.PacketTypeVersionNegotiation, protocol.ByteCount(len(p.data)), qlog.PacketDropUnexpectedPacket)
+		}
 		c.logger.Debugf("Received a delayed Version Negotiation packet.")
 		return
 	}
 
 	for _, v := range hdr.SupportedVersions {
 		if v == c.version {
+			if c.qlogger != nil {
+				c.qlogger.DroppedPacket(qlog.PacketTypeVersionNegotiation, protocol.ByteCount(len(p.data)), qlog.PacketDropUnexpectedVersion)
+			}
 			// The Version Negotiation packet contains the version that we offered.
 			// This might be a packet sent by an attacker (or by a terribly broken server implementation).
 			return
@@ -347,6 +358,9 @@ func (c *client) handleVersionNegotiationPacket(p *receivedPacket) {
 	}
 
 	c.logger.Infof("Received a Version Negotiation packet. Supported Versions: %s", hdr.SupportedVersions)
+	if c.qlogger != nil {
+		c.qlogger.ReceivedVersionNegotiationPacket(hdr)
+	}
 	newVersion, ok := protocol.ChooseSupportedVersion(c.config.Versions, hdr.SupportedVersions)
 	if !ok {
 		//nolint:stylecheck
