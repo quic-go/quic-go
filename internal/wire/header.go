@@ -42,7 +42,7 @@ func IsVersionNegotiationPacket(b []byte) bool {
 	return b[0]&0x80 > 0 && b[1] == 0 && b[2] == 0 && b[3] == 0 && b[4] == 0
 }
 
-var errUnsupportedVersion = errors.New("unsupported version")
+var ErrUnsupportedVersion = errors.New("unsupported version")
 
 // The Header is the version independent part of the header
 type Header struct {
@@ -69,8 +69,8 @@ type Header struct {
 func ParsePacket(data []byte, shortHeaderConnIDLen int) (*Header, []byte /* packet data */, []byte /* rest */, error) {
 	hdr, err := parseHeader(bytes.NewReader(data), shortHeaderConnIDLen)
 	if err != nil {
-		if err == errUnsupportedVersion {
-			return hdr, nil, nil, nil
+		if err == ErrUnsupportedVersion {
+			return hdr, nil, nil, ErrUnsupportedVersion
 		}
 		return nil, nil, nil, err
 	}
@@ -160,7 +160,7 @@ func (h *Header) parseLongHeader(b *bytes.Reader) error {
 	}
 	// If we don't understand the version, we have no idea how to interpret the rest of the bytes
 	if !protocol.IsSupportedVersion(protocol.SupportedVersions, h.Version) {
-		return errUnsupportedVersion
+		return ErrUnsupportedVersion
 	}
 
 	switch (h.typeByte & 0x30) >> 4 {

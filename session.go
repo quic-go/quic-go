@@ -701,7 +701,11 @@ func (s *session) handlePacketImpl(rp *receivedPacket) bool {
 		hdr, packetData, rest, err := wire.ParsePacket(p.data, s.srcConnIDLen)
 		if err != nil {
 			if s.qlogger != nil {
-				s.qlogger.DroppedPacket(qlog.PacketTypeNotDetermined, protocol.ByteCount(len(data)), qlog.PacketDropHeaderParseError)
+				dropReason := qlog.PacketDropHeaderParseError
+				if err == wire.ErrUnsupportedVersion {
+					dropReason = qlog.PacketDropUnsupportedVersion
+				}
+				s.qlogger.DroppedPacket(qlog.PacketTypeNotDetermined, protocol.ByteCount(len(data)), dropReason)
 			}
 			s.logger.Debugf("error parsing packet: %s", err)
 			break

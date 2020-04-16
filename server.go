@@ -296,7 +296,7 @@ func (s *baseServer) handlePacketImpl(p *receivedPacket) bool /* was the packet 
 	// If we're creating a new session, the packet will be passed to the session.
 	// The header will then be parsed again.
 	hdr, _, _, err := wire.ParsePacket(p.data, s.config.ConnectionIDLength)
-	if err != nil {
+	if err != nil && err != wire.ErrUnsupportedVersion {
 		s.logger.Debugf("Error parsing packet: %s", err)
 		return false
 	}
