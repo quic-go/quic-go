@@ -2,7 +2,10 @@ package qlog
 
 import (
 	"encoding/json"
+	"os"
+	"strconv"
 	"testing"
+	"time"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -11,6 +14,16 @@ import (
 func TestQlog(t *testing.T) {
 	RegisterFailHandler(Fail)
 	RunSpecs(t, "qlog Suite")
+}
+
+//nolint:unparam
+func scaleDuration(t time.Duration) time.Duration {
+	scaleFactor := 1
+	if f, err := strconv.Atoi(os.Getenv("TIMESCALE_FACTOR")); err == nil { // parsing "" errors, so this works fine if the env is not set
+		scaleFactor = f
+	}
+	Expect(scaleFactor).ToNot(BeZero())
+	return time.Duration(scaleFactor) * t
 }
 
 func checkEncoding(data []byte, expected map[string]interface{}) {
