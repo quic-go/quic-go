@@ -578,10 +578,14 @@ var _ = Describe("Session", func() {
 
 		It("drops Retry packets", func() {
 			p := getPacket(&wire.ExtendedHeader{Header: wire.Header{
-				IsLongHeader: true,
-				Type:         protocol.PacketTypeRetry,
-			}}, nil)
-			qlogger.EXPECT().DroppedPacket(qlog.PacketTypeNotDetermined, protocol.ByteCount(len(p.data)), gomock.Any())
+				IsLongHeader:     true,
+				Type:             protocol.PacketTypeRetry,
+				DestConnectionID: destConnID,
+				SrcConnectionID:  srcConnID,
+				Version:          sess.version,
+				Token:            []byte("foobar"),
+			}}, make([]byte, 16) /* Retry integrity tag */)
+			qlogger.EXPECT().DroppedPacket(qlog.PacketTypeRetry, protocol.ByteCount(len(p.data)), qlog.PacketDropUnexpectedPacket)
 			Expect(sess.handlePacketImpl(p)).To(BeFalse())
 		})
 
@@ -2054,18 +2058,24 @@ var _ = Describe("Client Session", func() {
 
 		It("ignores Retry packets after receiving a regular packet", func() {
 			sess.receivedFirstPacket = true
-			Expect(sess.handlePacketImpl(getPacket(retryHdr, getRetryTag(retryHdr)))).To(BeFalse())
+			p := getPacket(retryHdr, getRetryTag(retryHdr))
+			qlogger.EXPECT().DroppedPacket(qlog.PacketTypeRetry, protocol.ByteCount(len(p.data)), qlog.PacketDropUnexpectedPacket)
+			Expect(sess.handlePacketImpl(p)).To(BeFalse())
 		})
 
 		It("ignores Retry packets if the server didn't change the connection ID", func() {
 			retryHdr.SrcConnectionID = destConnID
-			Expect(sess.handlePacketImpl(getPacket(retryHdr, getRetryTag(retryHdr)))).To(BeFalse())
+			p := getPacket(retryHdr, getRetryTag(retryHdr))
+			qlogger.EXPECT().DroppedPacket(qlog.PacketTypeRetry, protocol.ByteCount(len(p.data)), qlog.PacketDropUnexpectedPacket)
+			Expect(sess.handlePacketImpl(p)).To(BeFalse())
 		})
 
 		It("ignores Retry packets with the a wrong Integrity tag", func() {
 			tag := getRetryTag(retryHdr)
 			tag[0]++
-			Expect(sess.handlePacketImpl(getPacket(retryHdr, tag))).To(BeFalse())
+			p := getPacket(retryHdr, tag)
+			qlogger.EXPECT().DroppedPacket(qlog.PacketTypeRetry, protocol.ByteCount(len(p.data)), qlog.PacketDropPayloadDecryptError)
+			Expect(sess.handlePacketImpl(p)).To(BeFalse())
 		})
 	})
 
