@@ -10,6 +10,8 @@ import (
 	"github.com/francoispqt/gojay"
 )
 
+func milliseconds(dur time.Duration) float64 { return float64(dur.Nanoseconds()) / 1e6 }
+
 var eventFields = [4]string{"relative_time", "category", "event", "data"}
 
 type events []event
@@ -39,7 +41,7 @@ var _ gojay.MarshalerJSONArray = event{}
 
 func (e event) IsNil() bool { return false }
 func (e event) MarshalJSONArray(enc *gojay.Encoder) {
-	enc.Float64(float64(e.RelativeTime.Nanoseconds()) / 1e6)
+	enc.Float64(milliseconds(e.RelativeTime))
 	enc.String(e.Category().String())
 	enc.String(e.Name())
 	enc.Object(e.eventDetails)
@@ -179,8 +181,6 @@ func (e eventPacketDropped) MarshalJSONObject(enc *gojay.Encoder) {
 	enc.Uint64Key("packet_size", uint64(e.PacketSize))
 	enc.StringKey("trigger", e.Trigger.String())
 }
-
-func milliseconds(dur time.Duration) float64 { return float64(dur.Nanoseconds()) / 1e6 }
 
 type metrics struct {
 	MinRTT      time.Duration
