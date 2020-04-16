@@ -46,6 +46,7 @@ func getPacketTypeFromEncryptionLevel(encLevel protocol.EncryptionLevel) PacketT
 
 func transformHeader(hdr *wire.Header) *packetHeader {
 	return &packetHeader{
+		PacketType:       PacketTypeFromHeader(hdr),
 		PayloadLength:    hdr.Length,
 		SrcConnectionID:  hdr.SrcConnectionID,
 		DestConnectionID: hdr.DestConnectionID,
@@ -60,6 +61,9 @@ func transformExtendedHeader(hdr *wire.ExtendedHeader) *packetHeader {
 }
 
 type packetHeader struct {
+	// We don't log the packet type as a part of the header yet, see https://github.com/quiclog/internet-drafts/issues/40.
+	PacketType PacketType
+
 	PacketNumber  protocol.PacketNumber
 	PayloadLength protocol.ByteCount
 	// Size of the QUIC packet (QUIC header + payload).
@@ -72,18 +76,22 @@ type packetHeader struct {
 }
 
 func (h packetHeader) MarshalJSONObject(enc *gojay.Encoder) {
-	enc.Int64KeyOmitEmpty("packet_number", int64(h.PacketNumber))
+	if h.PacketType != PacketTypeRetry && h.PacketType != PacketTypeVersionNegotiation {
+		enc.Int64Key("packet_number", int64(h.PacketNumber))
+	}
 	enc.Int64KeyOmitEmpty("payload_length", int64(h.PayloadLength))
 	enc.Int64KeyOmitEmpty("packet_size", int64(h.PacketSize))
 	if h.Version != 0 {
 		enc.StringKey("version", versionNumber(h.Version).String())
 	}
-	if h.SrcConnectionID.Len() > 0 {
+	if h.PacketType != PacketType1RTT {
 		enc.IntKey("scil", h.SrcConnectionID.Len())
-		enc.StringKey("scid", connectionID(h.SrcConnectionID).String())
+		if h.SrcConnectionID.Len() > 0 {
+			enc.StringKey("scid", connectionID(h.SrcConnectionID).String())
+		}
 	}
+	enc.IntKey("dcil", h.DestConnectionID.Len())
 	if h.DestConnectionID.Len() > 0 {
-		enc.IntKey("dcil", h.DestConnectionID.Len())
 		enc.StringKey("dcid", connectionID(h.DestConnectionID).String())
 	}
 }
