@@ -213,7 +213,7 @@ func (h *sentPacketHandler) sentPacketImpl(packet *Packet) bool /* is ack-elicit
 
 	if h.logger.Debug() && pnSpace.history.HasOutstandingPackets() {
 		for p := utils.MaxPacketNumber(0, pnSpace.largestSent+1); p < packet.PacketNumber; p++ {
-			h.logger.Debugf("Skipping packet number %#x", p)
+			h.logger.Debugf("Skipping packet number %d", p)
 		}
 	}
 
@@ -332,7 +332,7 @@ func (h *sentPacketHandler) detectAndRemoveAckedPackets(ack *wire.AckFrame, encL
 
 			if p.PacketNumber >= ackRange.Smallest { // packet i contained in ACK range
 				if p.PacketNumber > ackRange.Largest {
-					return false, fmt.Errorf("BUG: ackhandler would have acked wrong packet 0x%x, while evaluating range 0x%x -> 0x%x", p.PacketNumber, ackRange.Smallest, ackRange.Largest)
+					return false, fmt.Errorf("BUG: ackhandler would have acked wrong packet %d, while evaluating range %d -> %d", p.PacketNumber, ackRange.Smallest, ackRange.Largest)
 				}
 				ackedPackets = append(ackedPackets, p)
 			}
@@ -346,7 +346,7 @@ func (h *sentPacketHandler) detectAndRemoveAckedPackets(ack *wire.AckFrame, encL
 		for i, p := range ackedPackets {
 			pns[i] = p.PacketNumber
 		}
-		h.logger.Debugf("\tnewly acked packets (%d): %#x", len(pns), pns)
+		h.logger.Debugf("\tnewly acked packets (%d): %d", len(pns), pns)
 	}
 
 	for _, p := range ackedPackets {
@@ -500,7 +500,7 @@ func (h *sentPacketHandler) detectAndRemoveLostPackets(now time.Time, encLevel p
 			// Note: This conditional is only entered once per call
 			lossTime := packet.SendTime.Add(lossDelay)
 			if h.logger.Debug() {
-				h.logger.Debugf("\tsetting loss timer for packet %#x (%s) to %s (in %s)", packet.PacketNumber, encLevel, lossDelay, lossTime)
+				h.logger.Debugf("\tsetting loss timer for packet %d (%s) to %s (in %s)", packet.PacketNumber, encLevel, lossDelay, lossTime)
 			}
 			pnSpace.lossTime = lossTime
 		}
@@ -514,7 +514,7 @@ func (h *sentPacketHandler) detectAndRemoveLostPackets(now time.Time, encLevel p
 		for i, p := range lostPackets {
 			pns[i] = p.PacketNumber
 		}
-		h.logger.Debugf("\tlost packets (%d): %#x", len(pns), pns)
+		h.logger.Debugf("\tlost packets (%d): %d", len(pns), pns)
 	}
 
 	for _, p := range lostPackets {

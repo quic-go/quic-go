@@ -803,7 +803,7 @@ func (s *session) handleSinglePacket(p *receivedPacket, hdr *wire.Header) bool /
 	}
 
 	if s.logger.Debug() {
-		s.logger.Debugf("<- Reading packet %#x (%d bytes) for connection %s, %s", packet.packetNumber, len(p.data), hdr.DestConnectionID, packet.encryptionLevel)
+		s.logger.Debugf("<- Reading packet %d (%d bytes) for connection %s, %s", packet.packetNumber, len(p.data), hdr.DestConnectionID, packet.encryptionLevel)
 		packet.hdr.Log(s.logger)
 	}
 
@@ -1507,7 +1507,7 @@ func (s *session) logCoalescedPacket(now time.Time, packet *coalescedPacket) {
 		if len(packet.packets) > 1 {
 			s.logger.Debugf("-> Sending coalesced packet (%d parts, %d bytes) for connection %s", len(packet.packets), packet.buffer.Len(), s.logID)
 		} else {
-			s.logger.Debugf("-> Sending packet %#x (%d bytes) for connection %s, %s", packet.packets[0].header.PacketNumber, packet.buffer.Len(), s.logID, packet.packets[0].EncryptionLevel())
+			s.logger.Debugf("-> Sending packet %d (%d bytes) for connection %s, %s", packet.packets[0].header.PacketNumber, packet.buffer.Len(), s.logID, packet.packets[0].EncryptionLevel())
 		}
 	}
 	for _, p := range packet.packets {
@@ -1517,7 +1517,7 @@ func (s *session) logCoalescedPacket(now time.Time, packet *coalescedPacket) {
 
 func (s *session) logPacket(now time.Time, packet *packedPacket) {
 	if s.logger.Debug() {
-		s.logger.Debugf("-> Sending packet %#x (%d bytes) for connection %s, %s", packet.header.PacketNumber, packet.buffer.Len(), s.logID, packet.EncryptionLevel())
+		s.logger.Debugf("-> Sending packet %d (%d bytes) for connection %s, %s", packet.header.PacketNumber, packet.buffer.Len(), s.logID, packet.EncryptionLevel())
 	}
 	s.logPacketContents(now, packet.packetContents)
 }
