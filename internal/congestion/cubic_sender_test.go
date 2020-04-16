@@ -264,18 +264,6 @@ var _ = Describe("Cubic Sender", func() {
 		Expect(sender.GetCongestionWindow()).To(Equal(expectedSendWindow))
 	})
 
-	It("no PRR when less than one packet in flight", func() {
-		SendAvailableSendWindow()
-		LoseNPackets(int(initialCongestionWindowPackets) - 1)
-		AckNPackets(1)
-		// PRR will allow 2 packets for every ack during recovery.
-		Expect(SendAvailableSendWindow()).To(Equal(2))
-		// Simulate abandoning all packets by supplying a bytes_in_flight of 0.
-		// PRR should now allow a packet to be sent, even though prr's state
-		// variables believe it has sent enough packets.
-		Expect(sender.CanSend(0)).To(BeTrue())
-	})
-
 	It("slow start packet loss PRR", func() {
 		sender.SetNumEmulatedConnections(1)
 		// Test based on the first example in RFC6937.
@@ -555,7 +543,6 @@ var _ = Describe("Cubic Sender", func() {
 
 	It("no PRR", func() {
 		sender.SetNumEmulatedConnections(1)
-		sender.noPRR = true
 
 		SendAvailableSendWindow()
 		LoseNPackets(9)
