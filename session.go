@@ -711,6 +711,14 @@ func (s *session) handlePacketImpl(rp *receivedPacket) bool {
 			break
 		}
 
+		if hdr.IsLongHeader && hdr.Version != s.version {
+			if s.qlogger != nil {
+				s.qlogger.DroppedPacket(qlog.PacketTypeFromHeader(hdr), protocol.ByteCount(len(data)), qlog.PacketDropUnexpectedVersion)
+			}
+			s.logger.Debugf("Dropping packet with version %x. Expected %x.", hdr.Version, s.version)
+			break
+		}
+
 		if counter > 0 && !hdr.DestConnectionID.Equal(lastConnID) {
 			if s.qlogger != nil {
 				s.qlogger.DroppedPacket(qlog.PacketTypeFromHeader(hdr), protocol.ByteCount(len(data)), qlog.PacketDropUnknownConnectionID)
