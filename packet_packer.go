@@ -565,7 +565,7 @@ func (p *packetPacker) MaybePackProbePacket(encLevel protocol.EncryptionLevel) (
 	default:
 		panic("unknown encryption level")
 	}
-	if err != nil {
+	if err != nil || contents == nil {
 		return nil, err
 	}
 	if p.perspective == protocol.PerspectiveClient && encLevel == protocol.EncryptionInitial {
