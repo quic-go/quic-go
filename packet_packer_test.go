@@ -1127,6 +1127,18 @@ var _ = Describe("Packet packer", func() {
 				Expect(packet.frames).To(HaveLen(1))
 				Expect(packet.frames[0].Frame).To(Equal(f))
 			})
+
+			It("returns nil if there's no probe data to send", func() {
+				sealingManager.EXPECT().Get1RTTSealer().Return(getSealer(), nil)
+				ackFramer.EXPECT().GetAckFrame(protocol.Encryption1RTT)
+				pnManager.EXPECT().PeekPacketNumber(protocol.Encryption1RTT).Return(protocol.PacketNumber(0x42), protocol.PacketNumberLen2)
+				expectAppendControlFrames()
+				expectAppendStreamFrames()
+
+				packet, err := packer.MaybePackProbePacket(protocol.Encryption1RTT)
+				Expect(err).ToNot(HaveOccurred())
+				Expect(packet).To(BeNil())
+			})
 		})
 	})
 })

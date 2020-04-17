@@ -1404,7 +1404,7 @@ func (s *session) sendProbePacket(encLevel protocol.EncryptionLevel) error {
 			return err
 		}
 	}
-	if packet == nil {
+	if packet == nil || packet.packetContents == nil {
 		return fmt.Errorf("session BUG: couldn't pack %s probe packet", encLevel)
 	}
 	s.sendPackedPacket(packet)

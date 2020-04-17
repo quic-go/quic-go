@@ -166,6 +166,10 @@ func (s *sendStream) popStreamFrame(maxBytes protocol.ByteCount) (*ackhandler.Fr
 }
 
 func (s *sendStream) popNewOrRetransmittedStreamFrame(maxBytes protocol.ByteCount) (*wire.StreamFrame, bool /* has more data to send */) {
+	if s.canceledWrite || s.closeForShutdownErr != nil {
+		return nil, false
+	}
+
 	if len(s.retransmissionQueue) > 0 {
 		f, hasMoreRetransmissions := s.maybeGetRetransmission(maxBytes)
 		if f != nil || hasMoreRetransmissions {
@@ -195,10 +199,6 @@ func (s *sendStream) popNewOrRetransmittedStreamFrame(maxBytes protocol.ByteCoun
 }
 
 func (s *sendStream) popNewStreamFrame(f *wire.StreamFrame, maxBytes protocol.ByteCount) bool {
-	if s.canceledWrite || s.closeForShutdownErr != nil {
-		return false
-	}
-
 	maxDataLen := f.MaxDataLen(maxBytes, s.version)
 	if maxDataLen == 0 { // a STREAM frame must have at least one byte of data
 		return s.dataForWriting != nil
@@ -329,7 +329,6 @@ func (s *sendStream) Close() error {
 
 func (s *sendStream) CancelWrite(errorCode protocol.ApplicationErrorCode) {
 	s.cancelWriteImpl(errorCode, fmt.Errorf("Write on stream %d canceled with error code %d", s.streamID, errorCode))
-
 }
 
 // must be called after locking the mutex
