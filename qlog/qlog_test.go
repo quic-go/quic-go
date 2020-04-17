@@ -158,6 +158,17 @@ var _ = Describe("Tracer", func() {
 			Expect(ev).To(HaveKeyWithValue("dst_cid", "05060708"))
 		})
 
+		It("records connection closes", func() {
+			tracer.ClosedConnection(CloseReasonIdleTimeout)
+			entry := exportAndParseSingle()
+			Expect(entry.Time).To(BeTemporally("~", time.Now(), 10*time.Millisecond))
+			Expect(entry.Category).To(Equal("transport"))
+			Expect(entry.Name).To(Equal("connection_state_updated"))
+			ev := entry.Event
+			Expect(ev).To(HaveKeyWithValue("new", "closed"))
+			Expect(ev).To(HaveKeyWithValue("trigger", "idle_timeout"))
+		})
+
 		It("records sent transport parameters", func() {
 			tracer.SentTransportParameters(&wire.TransportParameters{
 				InitialMaxStreamDataBidiLocal:  1000,

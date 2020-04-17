@@ -572,9 +572,15 @@ runLoop:
 			s.framer.QueueControlFrame(&wire.PingFrame{})
 			s.keepAlivePingSent = true
 		} else if !s.handshakeComplete && now.Sub(s.sessionCreationTime) >= s.config.HandshakeTimeout {
+			if s.qlogger != nil {
+				s.qlogger.ClosedConnection(qlog.CloseReasonHandshakeTimeout)
+			}
 			s.destroyImpl(qerr.NewTimeoutError("Handshake did not complete in time"))
 			continue
 		} else if s.handshakeComplete && now.Sub(s.idleTimeoutStartTime()) >= s.idleTimeout {
+			if s.qlogger != nil {
+				s.qlogger.ClosedConnection(qlog.CloseReasonIdleTimeout)
+			}
 			s.destroyImpl(qerr.NewTimeoutError("No recent network activity"))
 			continue
 		} else if !pacingDeadline.IsZero() && now.Before(pacingDeadline) {

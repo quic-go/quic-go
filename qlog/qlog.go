@@ -21,6 +21,7 @@ const eventChanSize = 50
 type Tracer interface {
 	Export() error
 	StartedConnection(local, remote net.Addr, version protocol.VersionNumber, srcConnID, destConnID protocol.ConnectionID)
+	ClosedConnection(CloseReason)
 	SentTransportParameters(*wire.TransportParameters)
 	ReceivedTransportParameters(*wire.TransportParameters)
 	SentPacket(hdr *wire.ExtendedHeader, packetSize protocol.ByteCount, ack *wire.AckFrame, frames []wire.Frame)
@@ -151,6 +152,12 @@ func (t *tracer) StartedConnection(local, remote net.Addr, version protocol.Vers
 		SrcConnectionID:  srcConnID,
 		DestConnectionID: destConnID,
 	})
+	t.mutex.Unlock()
+}
+
+func (t *tracer) ClosedConnection(r CloseReason) {
+	t.mutex.Lock()
+	t.recordEvent(time.Now(), &eventConnectionClosed{Reason: r})
 	t.mutex.Unlock()
 }
 

@@ -92,6 +92,19 @@ func (e eventConnectionStarted) MarshalJSONObject(enc *gojay.Encoder) {
 	enc.StringKey("dst_cid", connectionID(e.DestConnectionID).String())
 }
 
+type eventConnectionClosed struct {
+	Reason CloseReason
+}
+
+func (e eventConnectionClosed) Category() category { return categoryTransport }
+func (e eventConnectionClosed) Name() string       { return "connection_state_updated" }
+func (e eventConnectionClosed) IsNil() bool        { return false }
+
+func (e eventConnectionClosed) MarshalJSONObject(enc *gojay.Encoder) {
+	enc.StringKey("new", "closed")
+	enc.StringKey("trigger", e.Reason.String())
+}
+
 type eventPacketSent struct {
 	PacketType  PacketType
 	Header      packetHeader
