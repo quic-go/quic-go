@@ -1708,7 +1708,10 @@ var _ = Describe("Session", func() {
 			sess.lastPacketReceivedTime = time.Now().Add(-time.Hour)
 			done := make(chan struct{})
 			cryptoSetup.EXPECT().Close()
-			qlogger.EXPECT().Export()
+			gomock.InOrder(
+				qlogger.EXPECT().ClosedConnection(qlog.CloseReasonIdleTimeout),
+				qlogger.EXPECT().Export(),
+			)
 			go func() {
 				defer GinkgoRecover()
 				cryptoSetup.EXPECT().RunHandshake().MaxTimes(1)
@@ -1727,7 +1730,10 @@ var _ = Describe("Session", func() {
 			sess.sessionCreationTime = time.Now().Add(-protocol.DefaultHandshakeTimeout).Add(-time.Second)
 			sessionRunner.EXPECT().Remove(gomock.Any()).Times(2)
 			cryptoSetup.EXPECT().Close()
-			qlogger.EXPECT().Export()
+			gomock.InOrder(
+				qlogger.EXPECT().ClosedConnection(qlog.CloseReasonHandshakeTimeout),
+				qlogger.EXPECT().Export(),
+			)
 			done := make(chan struct{})
 			go func() {
 				defer GinkgoRecover()
@@ -1775,7 +1781,10 @@ var _ = Describe("Session", func() {
 				sessionRunner.EXPECT().Remove(gomock.Any()),
 			)
 			cryptoSetup.EXPECT().Close()
-			qlogger.EXPECT().Export()
+			gomock.InOrder(
+				qlogger.EXPECT().ClosedConnection(qlog.CloseReasonIdleTimeout),
+				qlogger.EXPECT().Export(),
+			)
 			sess.idleTimeout = 0
 			done := make(chan struct{})
 			go func() {

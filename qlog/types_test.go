@@ -118,4 +118,9 @@ var _ = Describe("Types", func() {
 		Expect(TimerTypeACK.String()).To(Equal("ack"))
 		Expect(TimerTypePTO.String()).To(Equal("pto"))
 	})
+
+	It("has a string representation for the close reason", func() {
+		Expect(CloseReasonHandshakeTimeout.String()).To(Equal("handshake_timeout"))
+		Expect(CloseReasonIdleTimeout.String()).To(Equal("idle_timeout"))
+	})
 })
