@@ -755,6 +755,22 @@ var _ = Describe("Send Stream", func() {
 			Expect(newFrame).ToNot(BeNil())
 			Expect(newFrame.Frame.(*wire.StreamFrame).Data).To(Equal([]byte("foobar")))
 		})
+
+		It("doesn't get a retransmission after a stream was canceled", func() {
+			str.numOutstandingFrames = 1
+			f := &wire.StreamFrame{
+				Data:           []byte("foobar"),
+				Offset:         0x42,
+				DataLenPresent: false,
+			}
+			mockSender.EXPECT().onHasStreamData(streamID)
+			str.queueRetransmission(f)
+			mockSender.EXPECT().queueControlFrame(gomock.Any())
+			str.CancelWrite(0)
+			frame, hasMoreData := str.popStreamFrame(protocol.MaxByteCount)
+			Expect(hasMoreData).To(BeFalse())
+			Expect(frame).To(BeNil())
+		})
 	})
 
 	Context("determining when a stream is completed", func() {
