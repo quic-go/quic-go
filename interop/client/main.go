@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"time"
 
 	"golang.org/x/sync/errgroup"
 
@@ -126,18 +127,44 @@ func runMultiConnectTest(r *http09.RoundTripper, urls []string) error {
 	return nil
 }
 
+type sessionCache struct {
+	tls.ClientSessionCache
+	put chan<- struct{}
+}
+
+func newSessionCache(c tls.ClientSessionCache) (tls.ClientSessionCache, <-chan struct{}) {
+	put := make(chan struct{}, 100)
+	return &sessionCache{ClientSessionCache: c, put: put}, put
+}
+
+func (c *sessionCache) Put(key string, cs *tls.ClientSessionState) {
+	c.ClientSessionCache.Put(key, cs)
+	c.put <- struct{}{}
+}
+
 func runResumptionTest(r *http09.RoundTripper, urls []string, use0RTT bool) error {
 	if len(urls) < 2 {
 		return errors.New("expected at least 2 URLs")
 	}
 
-	tlsConf.ClientSessionCache = tls.NewLRUClientSessionCache(1)
+	var put <-chan struct{}
+	tlsConf.ClientSessionCache, put = newSessionCache(tls.NewLRUClientSessionCache(1))
 
 	// do the first transfer
 	if err := downloadFiles(r, urls[:1], false); err != nil {
 		return err
 	}
-	r.Close()
+
+	// wait for the session ticket to arrive
+	select {
+	case <-time.NewTimer(10 * time.Second).C:
+		return errors.New("expected to receive a session ticket within 10 seconds")
+	case <-put:
+	}
+
+	if err := r.Close(); err != nil {
+		return err
+	}
 
 	// reestablish the connection, using the session ticket that the server (hopefully provided)
 	defer r.Close()
