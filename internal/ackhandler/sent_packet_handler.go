@@ -20,6 +20,8 @@ const (
 	timeThreshold = 9.0 / 8
 	// Maximum reordering in packets before packet threshold loss detection considers a packet lost.
 	packetThreshold = 3
+	// Before validating the client's address, the server won't send more than 3x bytes than it received.
+	amplificationFactor = 3
 )
 
 type packetNumberSpace struct {
@@ -49,8 +51,16 @@ type sentPacketHandler struct {
 	handshakePackets *packetNumberSpace
 	appDataPackets   *packetNumberSpace
 
+	// Do we know that the peer completed address validation yet?
+	// Always true for the server.
 	peerCompletedAddressValidation bool
-	handshakeComplete              bool
+	bytesReceived                  protocol.ByteCount
+	bytesSent                      protocol.ByteCount
+	// Have we validated the peer's address yet?
+	// Always true for the client.
+	peerAddressValidated bool
+
+	handshakeComplete bool
 
 	// lowestNotConfirmedAcked is the lowest packet number that we sent an ACK for, but haven't received confirmation, that this ACK actually arrived
 	// example: we send an ACK for packets 90-100 with packet number 20
@@ -99,6 +109,7 @@ func newSentPacketHandler(
 
 	return &sentPacketHandler{
 		peerCompletedAddressValidation: pers == protocol.PerspectiveServer,
+		peerAddressValidated:           pers == protocol.PerspectiveClient,
 		initialPackets:                 newPacketNumberSpace(initialPacketNumber),
 		handshakePackets:               newPacketNumberSpace(0),
 		appDataPackets:                 newPacketNumberSpace(0),
@@ -168,6 +179,16 @@ func (h *sentPacketHandler) dropPackets(encLevel protocol.EncryptionLevel) {
 	h.ptoMode = SendNone
 }
 
+func (h *sentPacketHandler) ReceivedBytes(n protocol.ByteCount) {
+	h.bytesReceived += n
+}
+
+func (h *sentPacketHandler) ReceivedPacket(encLevel protocol.EncryptionLevel) {
+	if h.perspective == protocol.PerspectiveServer && encLevel == protocol.EncryptionHandshake {
+		h.peerAddressValidated = true
+	}
+}
+
 func (h *sentPacketHandler) packetsInFlight() int {
 	packetsInFlight := h.appDataPackets.history.Len()
 	if h.handshakePackets != nil {
@@ -180,6 +201,7 @@ func (h *sentPacketHandler) packetsInFlight() int {
 }
 
 func (h *sentPacketHandler) SentPacket(packet *Packet) {
+	h.bytesSent += packet.Length
 	// For the client, drop the Initial packet number space when the first Handshake packet is sent.
 	if h.perspective == protocol.PerspectiveClient && packet.EncryptionLevel == protocol.EncryptionHandshake && h.initialPackets != nil {
 		h.dropPackets(protocol.EncryptionInitial)
@@ -638,6 +660,10 @@ func (h *sentPacketHandler) SendMode() SendMode {
 		numTrackedPackets += h.handshakePackets.history.Len()
 	}
 
+	if h.AmplificationWindow() == 0 {
+		h.logger.Debugf("Amplification window limited. Received %d bytes, already sent out %d bytes", h.bytesReceived, h.bytesSent)
+		return SendNone
+	}
 	// Don't send any packets if we're keeping track of the maximum number of packets.
 	// Note that since MaxOutstandingSentPackets is smaller than MaxTrackedSentPackets,
 	// we will stop sending out new data when reaching MaxOutstandingSentPackets,
@@ -681,6 +707,16 @@ func (h *sentPacketHandler) ShouldSendNumPackets() int {
 		return 1
 	}
 	return int(math.Ceil(float64(protocol.MinPacingDelay) / float64(delay)))
+}
+
+func (h *sentPacketHandler) AmplificationWindow() protocol.ByteCount {
+	if h.peerAddressValidated {
+		return protocol.MaxByteCount
+	}
+	if h.bytesSent >= amplificationFactor*h.bytesReceived {
+		return 0
+	}
+	return amplificationFactor*h.bytesReceived - h.bytesSent
 }
 
 func (h *sentPacketHandler) QueueProbePacket(encLevel protocol.EncryptionLevel) bool {

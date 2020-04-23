@@ -38,6 +38,20 @@ func (m *MockSentPacketHandler) EXPECT() *MockSentPacketHandlerMockRecorder {
 	return m.recorder
 }
 
+// AmplificationWindow mocks base method
+func (m *MockSentPacketHandler) AmplificationWindow() protocol.ByteCount {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "AmplificationWindow")
+	ret0, _ := ret[0].(protocol.ByteCount)
+	return ret0
+}
+
+// AmplificationWindow indicates an expected call of AmplificationWindow
+func (mr *MockSentPacketHandlerMockRecorder) AmplificationWindow() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AmplificationWindow", reflect.TypeOf((*MockSentPacketHandler)(nil).AmplificationWindow))
+}
+
 // DropPackets mocks base method
 func (m *MockSentPacketHandler) DropPackets(arg0 protocol.EncryptionLevel) {
 	m.ctrl.T.Helper()
@@ -147,6 +161,18 @@ func (m *MockSentPacketHandler) ReceivedAck(arg0 *wire.AckFrame, arg1 protocol.E
 func (mr *MockSentPacketHandlerMockRecorder) ReceivedAck(arg0, arg1, arg2 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReceivedAck", reflect.TypeOf((*MockSentPacketHandler)(nil).ReceivedAck), arg0, arg1, arg2)
+}
+
+// ReceivedBytes mocks base method
+func (m *MockSentPacketHandler) ReceivedBytes(arg0 protocol.ByteCount) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "ReceivedBytes", arg0)
+}
+
+// ReceivedBytes indicates an expected call of ReceivedBytes
+func (mr *MockSentPacketHandlerMockRecorder) ReceivedBytes(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReceivedBytes", reflect.TypeOf((*MockSentPacketHandler)(nil).ReceivedBytes), arg0)
 }
 
 // ResetForRetry mocks base method

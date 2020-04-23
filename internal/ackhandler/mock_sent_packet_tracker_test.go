@@ -47,3 +47,15 @@ func (mr *MockSentPacketTrackerMockRecorder) GetLowestPacketNotConfirmedAcked() 
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetLowestPacketNotConfirmedAcked", reflect.TypeOf((*MockSentPacketTracker)(nil).GetLowestPacketNotConfirmedAcked))
 }
+
+// ReceivedPacket mocks base method
+func (m *MockSentPacketTracker) ReceivedPacket(arg0 protocol.EncryptionLevel) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "ReceivedPacket", arg0)
+}
+
+// ReceivedPacket indicates an expected call of ReceivedPacket
+func (mr *MockSentPacketTrackerMockRecorder) ReceivedPacket(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReceivedPacket", reflect.TypeOf((*MockSentPacketTracker)(nil).ReceivedPacket), arg0)
+}

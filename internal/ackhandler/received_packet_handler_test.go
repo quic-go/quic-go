@@ -3,6 +3,8 @@ package ackhandler
 import (
 	"time"
 
+	"github.com/golang/mock/gomock"
+
 	"github.com/lucas-clemente/quic-go/internal/congestion"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/internal/utils"
@@ -29,6 +31,9 @@ var _ = Describe("Received Packet Handler", func() {
 	It("generates ACKs for different packet number spaces", func() {
 		sentPackets.EXPECT().GetLowestPacketNotConfirmedAcked().AnyTimes()
 		sendTime := time.Now().Add(-time.Second)
+		sentPackets.EXPECT().ReceivedPacket(protocol.EncryptionInitial).Times(2)
+		sentPackets.EXPECT().ReceivedPacket(protocol.EncryptionHandshake).Times(2)
+		sentPackets.EXPECT().ReceivedPacket(protocol.Encryption1RTT).Times(2)
 		Expect(handler.ReceivedPacket(2, protocol.EncryptionInitial, sendTime, true)).To(Succeed())
 		Expect(handler.ReceivedPacket(1, protocol.EncryptionHandshake, sendTime, true)).To(Succeed())
 		Expect(handler.ReceivedPacket(5, protocol.Encryption1RTT, sendTime, true)).To(Succeed())
@@ -54,6 +59,8 @@ var _ = Describe("Received Packet Handler", func() {
 
 	It("uses the same packet number space for 0-RTT and 1-RTT packets", func() {
 		sentPackets.EXPECT().GetLowestPacketNotConfirmedAcked().AnyTimes()
+		sentPackets.EXPECT().ReceivedPacket(protocol.Encryption0RTT)
+		sentPackets.EXPECT().ReceivedPacket(protocol.Encryption1RTT)
 		sendTime := time.Now().Add(-time.Second)
 		Expect(handler.ReceivedPacket(2, protocol.Encryption0RTT, sendTime, true)).To(Succeed())
 		Expect(handler.ReceivedPacket(3, protocol.Encryption1RTT, sendTime, true)).To(Succeed())
@@ -64,6 +71,7 @@ var _ = Describe("Received Packet Handler", func() {
 	})
 
 	It("rejects 0-RTT packets with higher packet numbers than 1-RTT packets", func() {
+		sentPackets.EXPECT().ReceivedPacket(gomock.Any()).Times(3)
 		sentPackets.EXPECT().GetLowestPacketNotConfirmedAcked().AnyTimes()
 		sendTime := time.Now()
 		Expect(handler.ReceivedPacket(10, protocol.Encryption0RTT, sendTime, true)).To(Succeed())
@@ -72,6 +80,7 @@ var _ = Describe("Received Packet Handler", func() {
 	})
 
 	It("allows reordered 0-RTT packets", func() {
+		sentPackets.EXPECT().ReceivedPacket(gomock.Any()).Times(3)
 		sentPackets.EXPECT().GetLowestPacketNotConfirmedAcked().AnyTimes()
 		sendTime := time.Now()
 		Expect(handler.ReceivedPacket(10, protocol.Encryption0RTT, sendTime, true)).To(Succeed())
@@ -80,6 +89,7 @@ var _ = Describe("Received Packet Handler", func() {
 	})
 
 	It("drops Initial packets", func() {
+		sentPackets.EXPECT().ReceivedPacket(gomock.Any()).Times(2)
 		sendTime := time.Now().Add(-time.Second)
 		Expect(handler.ReceivedPacket(2, protocol.EncryptionInitial, sendTime, true)).To(Succeed())
 		Expect(handler.ReceivedPacket(1, protocol.EncryptionHandshake, sendTime, true)).To(Succeed())
@@ -90,6 +100,7 @@ var _ = Describe("Received Packet Handler", func() {
 	})
 
 	It("drops Handshake packets", func() {
+		sentPackets.EXPECT().ReceivedPacket(gomock.Any()).Times(2)
 		sentPackets.EXPECT().GetLowestPacketNotConfirmedAcked().AnyTimes()
 		sendTime := time.Now().Add(-time.Second)
 		Expect(handler.ReceivedPacket(1, protocol.EncryptionHandshake, sendTime, true)).To(Succeed())
@@ -105,6 +116,7 @@ var _ = Describe("Received Packet Handler", func() {
 	})
 
 	It("drops old ACK ranges", func() {
+		sentPackets.EXPECT().ReceivedPacket(gomock.Any()).AnyTimes()
 		sendTime := time.Now()
 		sentPackets.EXPECT().GetLowestPacketNotConfirmedAcked().Times(2)
 		Expect(handler.ReceivedPacket(1, protocol.Encryption1RTT, sendTime, true)).To(Succeed())

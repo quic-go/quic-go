@@ -1033,6 +1033,13 @@ var _ = Describe("Session", func() {
 
 		It("sends packets", func() {
 			sess.handshakeConfirmed = true
+			sph := mockackhandler.NewMockSentPacketHandler(mockCtrl)
+			sph.EXPECT().TimeUntilSend().AnyTimes()
+			sph.EXPECT().GetLossDetectionTimeout().AnyTimes()
+			sph.EXPECT().SendMode().Return(ackhandler.SendAny).AnyTimes()
+			sph.EXPECT().ShouldSendNumPackets().Return(1000)
+			sph.EXPECT().SentPacket(gomock.Any())
+			sess.sentPacketHandler = sph
 			runSession()
 			p := getPacket(1)
 			packer.EXPECT().PackPacket().Return(p, nil)
@@ -1069,6 +1076,13 @@ var _ = Describe("Session", func() {
 
 		It("adds a BLOCKED frame when it is connection-level flow control blocked", func() {
 			sess.handshakeConfirmed = true
+			sph := mockackhandler.NewMockSentPacketHandler(mockCtrl)
+			sph.EXPECT().TimeUntilSend().AnyTimes()
+			sph.EXPECT().GetLossDetectionTimeout().AnyTimes()
+			sph.EXPECT().SendMode().Return(ackhandler.SendAny).AnyTimes()
+			sph.EXPECT().ShouldSendNumPackets().Return(1000)
+			sph.EXPECT().SentPacket(gomock.Any())
+			sess.sentPacketHandler = sph
 			fc := mocks.NewMockConnectionFlowController(mockCtrl)
 			fc.EXPECT().IsNewlyBlocked().Return(true, protocol.ByteCount(1337))
 			fc.EXPECT().IsNewlyBlocked()
@@ -1366,10 +1380,12 @@ var _ = Describe("Session", func() {
 	It("sends coalesced packets before the handshake is confirmed", func() {
 		sess.handshakeConfirmed = false
 		sph := mockackhandler.NewMockSentPacketHandler(mockCtrl)
+		const window protocol.ByteCount = 321
+		sph.EXPECT().AmplificationWindow().Return(window).AnyTimes()
 		sess.sentPacketHandler = sph
 		buffer := getPacketBuffer()
 		buffer.Data = append(buffer.Data, []byte("foobar")...)
-		packer.EXPECT().PackCoalescedPacket(protocol.MaxByteCount).Return(&coalescedPacket{
+		packer.EXPECT().PackCoalescedPacket(window).Return(&coalescedPacket{
 			buffer: buffer,
 			packets: []*packetContents{
 				{
@@ -1394,7 +1410,7 @@ var _ = Describe("Session", func() {
 				},
 			},
 		}, nil)
-		packer.EXPECT().PackCoalescedPacket(protocol.MaxByteCount).AnyTimes()
+		packer.EXPECT().PackCoalescedPacket(window).AnyTimes()
 
 		sph.EXPECT().GetLossDetectionTimeout().AnyTimes()
 		sph.EXPECT().SendMode().Return(ackhandler.SendAny).AnyTimes()
@@ -1545,9 +1561,17 @@ var _ = Describe("Session", func() {
 	})
 
 	It("sends a HANDSHAKE_DONE frame when the handshake completes", func() {
+		sph := mockackhandler.NewMockSentPacketHandler(mockCtrl)
+		sph.EXPECT().SendMode().Return(ackhandler.SendAny).AnyTimes()
+		sph.EXPECT().AmplificationWindow().Return(protocol.MaxByteCount)
+		sph.EXPECT().SetHandshakeComplete()
+		sph.EXPECT().GetLossDetectionTimeout().AnyTimes()
+		sph.EXPECT().TimeUntilSend().AnyTimes()
+		sph.EXPECT().ShouldSendNumPackets().AnyTimes().Return(10)
+		sess.sentPacketHandler = sph
 		done := make(chan struct{})
 		sessionRunner.EXPECT().Retire(clientDestConnID)
-		packer.EXPECT().PackCoalescedPacket(protocol.MaxByteCount).DoAndReturn(func(protocol.ByteCount) (*packedPacket, error) {
+		packer.EXPECT().PackCoalescedPacket(gomock.Any()).DoAndReturn(func(protocol.ByteCount) (*packedPacket, error) {
 			frames, _ := sess.framer.AppendControlFrames(nil, protocol.MaxByteCount)
 			Expect(frames).ToNot(BeEmpty())
 			Expect(frames[0].Frame).To(BeEquivalentTo(&wire.HandshakeDoneFrame{}))
@@ -1559,7 +1583,7 @@ var _ = Describe("Session", func() {
 				buffer: getPacketBuffer(),
 			}, nil
 		})
-		packer.EXPECT().PackCoalescedPacket(protocol.MaxByteCount).AnyTimes()
+		packer.EXPECT().PackCoalescedPacket(gomock.Any()).AnyTimes()
 		go func() {
 			defer GinkgoRecover()
 			cryptoSetup.EXPECT().RunHandshake()
@@ -1659,6 +1683,7 @@ var _ = Describe("Session", func() {
 		BeforeEach(func() {
 			sess.config.MaxIdleTimeout = 30 * time.Second
 			sess.config.KeepAlive = true
+			sess.receivedPacketHandler.ReceivedPacket(0, protocol.EncryptionHandshake, time.Now(), true)
 		})
 
 		AfterEach(func() {
@@ -2098,6 +2123,7 @@ var _ = Describe("Client Session", func() {
 		It("handles Retry packets", func() {
 			sph := mockackhandler.NewMockSentPacketHandler(mockCtrl)
 			sess.sentPacketHandler = sph
+			sph.EXPECT().ReceivedBytes(gomock.Any())
 			sph.EXPECT().ResetForRetry()
 			cryptoSetup.EXPECT().ChangeConnectionID(protocol.ConnectionID{0xde, 0xad, 0xbe, 0xef})
 			packer.EXPECT().SetToken([]byte("foobar"))
@@ -2333,6 +2359,7 @@ var _ = Describe("Client Session", func() {
 		It("ignores Initial packets which use original source id, after accepting a Retry", func() {
 			sph := mockackhandler.NewMockSentPacketHandler(mockCtrl)
 			sess.sentPacketHandler = sph
+			sph.EXPECT().ReceivedBytes(gomock.Any()).Times(2)
 			sph.EXPECT().ResetForRetry()
 			newSrcConnID := protocol.ConnectionID{0xde, 0xad, 0xbe, 0xef}
 			cryptoSetup.EXPECT().ChangeConnectionID(newSrcConnID)
