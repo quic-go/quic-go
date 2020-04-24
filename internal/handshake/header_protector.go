@@ -3,7 +3,6 @@ package handshake
 import (
 	"crypto/aes"
 	"crypto/cipher"
-	"crypto/rand"
 	"encoding/binary"
 	"fmt"
 
@@ -93,27 +92,10 @@ func newChaChaHeaderProtector(suite *qtls.CipherSuiteTLS13, trafficSecret []byte
 }
 
 func (p *chachaHeaderProtector) DecryptHeader(sample []byte, firstByte *byte, hdrBytes []byte) {
-	// Workaround for https://github.com/lucas-clemente/quic-go/issues/2326.
-	// The ChaCha20 implementation panics when the nonce is 0xffffffff.
-	// Don't apply header protection in that case.
-	// The packet will end up undecryptable, but it only applies to 1 in 2^32 packets.
-	if sample[0] == 0xff && sample[1] == 0xff && sample[2] == 0xff && sample[3] == 0xff {
-		return
-	}
 	p.apply(sample, firstByte, hdrBytes)
 }
 
 func (p *chachaHeaderProtector) EncryptHeader(sample []byte, firstByte *byte, hdrBytes []byte) {
-	// Workaround for https://github.com/lucas-clemente/quic-go/issues/2326.
-	// The ChaCha20 implementation panics when the nonce is 0xffffffff.
-	// Apply header protection with a random mask, in order to not leak any data.
-	// The packet will end up undecryptable, but this only applies to 1 in 2^32 packets.
-	if sample[0] == 0xff && sample[1] == 0xff && sample[2] == 0xff && sample[3] == 0xff {
-		if _, err := rand.Read(p.mask[:]); err != nil {
-			panic("couldn't get rand for ChaCha20 bug workaround")
-		}
-		p.applyMask(firstByte, hdrBytes)
-	}
 	p.apply(sample, firstByte, hdrBytes)
 }
 
