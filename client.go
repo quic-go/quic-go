@@ -252,7 +252,7 @@ func newClient(
 func (c *client) dial(ctx context.Context) error {
 	c.logger.Infof("Starting new connection to %s (%s -> %s), source connection ID %s, destination connection ID %s, version %s", c.tlsConf.ServerName, c.conn.LocalAddr(), c.conn.RemoteAddr(), c.srcConnID, c.destConnID, c.version)
 	if c.qlogger != nil {
-		c.qlogger.StartedConnection(c.conn.LocalAddr(), c.conn.LocalAddr(), c.version, c.srcConnID, c.destConnID)
+		c.qlogger.StartedConnection(c.conn.LocalAddr(), c.conn.RemoteAddr(), c.version, c.srcConnID, c.destConnID)
 	}
 
 	c.mutex.Lock()

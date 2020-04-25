@@ -243,7 +243,7 @@ var _ = Describe("Client", func() {
 				sess.EXPECT().run()
 				return sess
 			}
-			qlogger.EXPECT().StartedConnection(gomock.Any(), gomock.Any(), protocol.VersionTLS, gomock.Any(), gomock.Any())
+			qlogger.EXPECT().StartedConnection(packetConn.addr, addr, protocol.VersionTLS, gomock.Any(), gomock.Any())
 			_, err := Dial(
 				packetConn,
 				addr,
