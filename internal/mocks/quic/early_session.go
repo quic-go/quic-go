@@ -211,3 +211,15 @@ func (mr *MockEarlySessionMockRecorder) RemoteAddr() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RemoteAddr", reflect.TypeOf((*MockEarlySession)(nil).RemoteAddr))
 }
+
+// SetMaxPacketSize mocks base method
+func (m *MockEarlySession) SetMaxPacketSize(arg0 uint64) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "SetMaxPacketSize", arg0)
+}
+
+// SetMaxPacketSize indicates an expected call of SetMaxPacketSize
+func (mr *MockEarlySessionMockRecorder) SetMaxPacketSize(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetMaxPacketSize", reflect.TypeOf((*MockEarlySession)(nil).SetMaxPacketSize), arg0)
+}

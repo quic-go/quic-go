@@ -123,6 +123,18 @@ func (mr *MockPackerMockRecorder) PackPacket() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PackPacket", reflect.TypeOf((*MockPacker)(nil).PackPacket))
 }
 
+// SetMaxPacketSize mocks base method
+func (m *MockPacker) SetMaxPacketSize(arg0 protocol.ByteCount) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "SetMaxPacketSize", arg0)
+}
+
+// SetMaxPacketSize indicates an expected call of SetMaxPacketSize
+func (mr *MockPackerMockRecorder) SetMaxPacketSize(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetMaxPacketSize", reflect.TypeOf((*MockPacker)(nil).SetMaxPacketSize), arg0)
+}
+
 // SetToken mocks base method
 func (m *MockPacker) SetToken(arg0 []byte) {
 	m.ctrl.T.Helper()
