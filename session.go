@@ -1650,3 +1650,7 @@ func (s *session) getPerspective() protocol.Perspective {
 func (s *session) GetVersion() protocol.VersionNumber {
 	return s.version
 }
+
+func (s *session) SetMaxPacketSize(packetSize uint64) {
+	s.packer.SetMaxPacketSize(protocol.ByteCount(packetSize))
+}

@@ -187,6 +187,9 @@ type Session interface {
 	// It blocks until the handshake completes.
 	// Warning: This API should not be considered stable and might change soon.
 	ConnectionState() ConnectionState
+	// SetMaxPacketSize allows setting the maximum packet size for outgoing
+	// packets, only use if you know what you are doing.
+	SetMaxPacketSize(packetSize uint64)
 }
 
 // An EarlySession is a session that is handshaking.

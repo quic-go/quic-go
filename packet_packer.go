@@ -22,6 +22,7 @@ type packer interface {
 	MaybePackProbePacket(protocol.EncryptionLevel) (*packedPacket, error)
 	MaybePackAckPacket(handshakeConfirmed bool) (*packedPacket, error)
 	PackConnectionClose(*qerr.QuicError) (*coalescedPacket, error)
+	SetMaxPacketSize(packetSize protocol.ByteCount)
 
 	HandleTransportParameters(*wire.TransportParameters)
 	SetToken([]byte)
@@ -742,4 +743,8 @@ func (p *packetPacker) HandleTransportParameters(params *wire.TransportParameter
 	if params.MaxUDPPayloadSize != 0 {
 		p.maxPacketSize = utils.MinByteCount(p.maxPacketSize, params.MaxUDPPayloadSize)
 	}
+}
+
+func (p *packetPacker) SetMaxPacketSize(packetSize protocol.ByteCount) {
+	p.maxPacketSize = packetSize
 }
