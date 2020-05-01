@@ -821,6 +821,18 @@ var _ = Describe("SentPacketHandler", func() {
 			Expect(pto).ToNot(BeZero())
 			Expect(handler.GetLossDetectionTimeout()).To(BeTemporally("~", time.Now().Add(pto), 10*time.Millisecond))
 		})
+
+		It("doesn't reset the PTO count when receiving an ACK", func() {
+			now := time.Now()
+			handler.SentPacket(initialPacket(&Packet{PacketNumber: 1, SendTime: now.Add(-time.Minute)}))
+			handler.SentPacket(initialPacket(&Packet{PacketNumber: 2, SendTime: now.Add(-time.Minute)}))
+			Expect(handler.GetLossDetectionTimeout()).To(BeTemporally("~", now.Add(-time.Minute), time.Second))
+			Expect(handler.OnLossDetectionTimeout()).To(Succeed())
+			Expect(handler.SendMode()).To(Equal(SendPTOInitial))
+			Expect(handler.ptoCount).To(BeEquivalentTo(1))
+			Expect(handler.ReceivedAck(&wire.AckFrame{AckRanges: []wire.AckRange{{Smallest: 1, Largest: 1}}}, protocol.EncryptionInitial, time.Now())).To(Succeed())
+			Expect(handler.ptoCount).To(BeEquivalentTo(1))
+		})
 	})
 
 	Context("Packet-based loss detection", func() {

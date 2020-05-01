@@ -292,10 +292,13 @@ func (h *sentPacketHandler) ReceivedAck(ack *wire.AckFrame, encLevel protocol.En
 		}
 	}
 
-	if h.qlogger != nil && h.ptoCount != 0 {
-		h.qlogger.UpdatedPTOCount(0)
+	// Reset the pto_count unless the client is unsure if the server has validated the client's address.
+	if h.peerCompletedAddressValidation {
+		if h.qlogger != nil && h.ptoCount != 0 {
+			h.qlogger.UpdatedPTOCount(0)
+		}
+		h.ptoCount = 0
 	}
-	h.ptoCount = 0
 	h.numProbesToSend = 0
 
 	h.setLossDetectionTimer()
