@@ -46,7 +46,8 @@ type sendStream struct {
 	finSent           bool // set when a STREAM_FRAME with FIN bit has been sent
 	completed         bool // set when this stream has been reported to the streamSender as completed
 
-	dataForWriting []byte
+	dataForWriting []byte // during a Write() call, this slice is the part of p that still needs to be sent out
+	nextFrame      *wire.StreamFrame
 
 	writeChan chan struct{}
 	deadline  time.Time
@@ -108,26 +109,50 @@ func (s *sendStream) Write(p []byte) (int, error) {
 		notifiedSender bool
 	)
 	for {
-		bytesWritten = len(p) - len(s.dataForWriting)
-		deadline := s.deadline
-		if !deadline.IsZero() {
-			if !time.Now().Before(deadline) {
-				s.dataForWriting = nil
-				return bytesWritten, errDeadline
+		var copied bool
+		var deadline time.Time
+		// As soon as dataForWriting becomes smaller than a certain size x, we copy all the data to a STREAM frame (s.nextFrame),
+		// which can the be popped the next time we assemble a packet.
+		// This allows us to return Write() when all data but x bytes have been sent out.
+		// When the user now calls Close(), this is much more likely to happen before we popped that last STREAM frame,
+		// allowing us to set the FIN bit on that frame (instead of sending an empty STREAM frame with FIN).
+		if s.canBufferStreamFrame() && len(s.dataForWriting) > 0 {
+			f := wire.GetStreamFrame()
+			f.Offset = s.writeOffset
+			f.StreamID = s.streamID
+			f.DataLenPresent = true
+			f.Data = f.Data[:len(s.dataForWriting)]
+			copy(f.Data, s.dataForWriting)
+			s.nextFrame = f
+			s.dataForWriting = nil
+			bytesWritten = len(p)
+			copied = true
+		} else {
+			bytesWritten = len(p) - len(s.dataForWriting)
+			deadline = s.deadline
+			if !deadline.IsZero() {
+				if !time.Now().Before(deadline) {
+					s.dataForWriting = nil
+					return bytesWritten, errDeadline
+				}
+				if deadlineTimer == nil {
+					deadlineTimer = utils.NewTimer()
+				}
+				deadlineTimer.Reset(deadline)
 			}
-			if deadlineTimer == nil {
-				deadlineTimer = utils.NewTimer()
+			if s.dataForWriting == nil || s.canceledWrite || s.closedForShutdown {
+				break
 			}
-			deadlineTimer.Reset(deadline)
-		}
-		if s.dataForWriting == nil || s.canceledWrite || s.closedForShutdown {
-			break
 		}
 
 		s.mutex.Unlock()
 		if !notifiedSender {
 			s.sender.onHasStreamData(s.streamID) // must be called without holding the mutex
 			notifiedSender = true
+		}
+		if copied {
+			s.mutex.Lock()
+			break
 		}
 		if deadline.IsZero() {
 			<-s.writeChan
@@ -147,6 +172,10 @@ func (s *sendStream) Write(p []byte) (int, error) {
 		return bytesWritten, s.cancelWriteErr
 	}
 	return bytesWritten, nil
+}
+
+func (s *sendStream) canBufferStreamFrame() bool {
+	return s.nextFrame == nil && protocol.ByteCount(len(s.dataForWriting)) <= protocol.MaxReceivePacketSize
 }
 
 // popStreamFrame returns the next STREAM frame that is supposed to be sent on this stream
@@ -182,6 +211,63 @@ func (s *sendStream) popNewOrRetransmittedStreamFrame(maxBytes protocol.ByteCoun
 		}
 	}
 
+	if len(s.dataForWriting) == 0 && s.nextFrame == nil {
+		if s.finishedWriting && !s.finSent {
+			s.finSent = true
+			return &wire.StreamFrame{
+				StreamID:       s.streamID,
+				Offset:         s.writeOffset,
+				DataLenPresent: true,
+				FinBit:         true,
+			}, false
+		}
+		return nil, false
+	}
+
+	sendWindow := s.flowController.SendWindowSize()
+	if sendWindow == 0 {
+		if isBlocked, offset := s.flowController.IsNewlyBlocked(); isBlocked {
+			s.sender.queueControlFrame(&wire.StreamDataBlockedFrame{
+				StreamID:  s.streamID,
+				DataLimit: offset,
+			})
+			return nil, false
+		}
+		return nil, true
+	}
+
+	f, hasMoreData := s.popNewStreamFrame(maxBytes, sendWindow)
+	if dataLen := f.DataLen(); dataLen > 0 {
+		s.writeOffset += f.DataLen()
+		s.flowController.AddBytesSent(f.DataLen())
+	}
+	f.FinBit = s.finishedWriting && s.dataForWriting == nil && s.nextFrame == nil && !s.finSent
+	if f.FinBit {
+		s.finSent = true
+	}
+	return f, hasMoreData
+}
+
+func (s *sendStream) popNewStreamFrame(maxBytes, sendWindow protocol.ByteCount) (*wire.StreamFrame, bool) {
+	if s.nextFrame != nil {
+		nextFrame := s.nextFrame
+		s.nextFrame = nil
+
+		maxDataLen := utils.MinByteCount(sendWindow, nextFrame.MaxDataLen(maxBytes, s.version))
+		if nextFrame.DataLen() > maxDataLen {
+			s.nextFrame = wire.GetStreamFrame()
+			s.nextFrame.StreamID = s.streamID
+			s.nextFrame.Offset = s.writeOffset + maxDataLen
+			s.nextFrame.Data = s.nextFrame.Data[:nextFrame.DataLen()-maxDataLen]
+			s.nextFrame.DataLenPresent = true
+			copy(s.nextFrame.Data, nextFrame.Data[maxDataLen:])
+			nextFrame.Data = nextFrame.Data[:maxDataLen]
+		} else {
+			s.signalWrite()
+		}
+		return nextFrame, s.nextFrame != nil || s.dataForWriting != nil
+	}
+
 	f := wire.GetStreamFrame()
 	f.FinBit = false
 	f.StreamID = s.streamID
@@ -189,8 +275,7 @@ func (s *sendStream) popNewOrRetransmittedStreamFrame(maxBytes protocol.ByteCoun
 	f.DataLenPresent = true
 	f.Data = f.Data[:0]
 
-	hasMoreData := s.popNewStreamFrame(f, maxBytes)
-
+	hasMoreData := s.popNewStreamFrameWithoutBuffer(f, maxBytes, sendWindow)
 	if len(f.Data) == 0 && !f.FinBit {
 		f.PutBack()
 		return nil, hasMoreData
@@ -198,33 +283,14 @@ func (s *sendStream) popNewOrRetransmittedStreamFrame(maxBytes protocol.ByteCoun
 	return f, hasMoreData
 }
 
-func (s *sendStream) popNewStreamFrame(f *wire.StreamFrame, maxBytes protocol.ByteCount) bool {
+func (s *sendStream) popNewStreamFrameWithoutBuffer(f *wire.StreamFrame, maxBytes, sendWindow protocol.ByteCount) bool {
 	maxDataLen := f.MaxDataLen(maxBytes, s.version)
 	if maxDataLen == 0 { // a STREAM frame must have at least one byte of data
-		return s.dataForWriting != nil
+		return s.dataForWriting != nil || s.nextFrame != nil || s.finishedWriting
 	}
-	s.getDataForWriting(f, maxDataLen)
-	if len(f.Data) == 0 && !f.FinBit {
-		// this can happen if:
-		// - popStreamFrame is called but there's no data for writing
-		// - there's data for writing, but the stream is stream-level flow control blocked
-		// - there's data for writing, but the stream is connection-level flow control blocked
-		if s.dataForWriting == nil {
-			return false
-		}
-		if isBlocked, offset := s.flowController.IsNewlyBlocked(); isBlocked {
-			s.sender.queueControlFrame(&wire.StreamDataBlockedFrame{
-				StreamID:  s.streamID,
-				DataLimit: offset,
-			})
-			return false
-		}
-		return true
-	}
-	if f.FinBit {
-		s.finSent = true
-	}
-	return s.dataForWriting != nil
+	s.getDataForWriting(f, utils.MinByteCount(maxDataLen, sendWindow))
+
+	return s.dataForWriting != nil || s.nextFrame != nil || s.finishedWriting
 }
 
 func (s *sendStream) maybeGetRetransmission(maxBytes protocol.ByteCount) (*wire.StreamFrame, bool /* has more retransmissions */) {
@@ -245,29 +311,19 @@ func (s *sendStream) hasData() bool {
 }
 
 func (s *sendStream) getDataForWriting(f *wire.StreamFrame, maxBytes protocol.ByteCount) {
-	if s.dataForWriting == nil {
-		f.FinBit = s.finishedWriting && !s.finSent
-		return
-	}
-
-	maxBytes = utils.MinByteCount(maxBytes, s.flowController.SendWindowSize())
-	if maxBytes == 0 {
-		return
-	}
-
-	if protocol.ByteCount(len(s.dataForWriting)) > maxBytes {
-		f.Data = f.Data[:maxBytes]
-		copy(f.Data, s.dataForWriting)
-		s.dataForWriting = s.dataForWriting[maxBytes:]
-	} else {
+	if protocol.ByteCount(len(s.dataForWriting)) <= maxBytes {
 		f.Data = f.Data[:len(s.dataForWriting)]
 		copy(f.Data, s.dataForWriting)
 		s.dataForWriting = nil
 		s.signalWrite()
+		return
 	}
-	s.writeOffset += f.DataLen()
-	s.flowController.AddBytesSent(f.DataLen())
-	f.FinBit = s.finishedWriting && s.dataForWriting == nil && !s.finSent
+	f.Data = f.Data[:maxBytes]
+	copy(f.Data, s.dataForWriting)
+	s.dataForWriting = s.dataForWriting[maxBytes:]
+	if s.canBufferStreamFrame() {
+		s.signalWrite()
+	}
 }
 
 func (s *sendStream) frameAcked(f wire.Frame) {
@@ -357,7 +413,7 @@ func (s *sendStream) cancelWriteImpl(errorCode protocol.ApplicationErrorCode, wr
 
 func (s *sendStream) handleMaxStreamDataFrame(frame *wire.MaxStreamDataFrame) {
 	s.mutex.Lock()
-	hasStreamData := s.dataForWriting != nil
+	hasStreamData := s.dataForWriting != nil || s.nextFrame != nil
 	s.mutex.Unlock()
 
 	s.flowController.UpdateSendWindow(frame.ByteOffset)
