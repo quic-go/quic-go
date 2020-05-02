@@ -472,7 +472,6 @@ func (s *session) preSetup() {
 	s.ctx, s.ctxCancel = context.WithCancel(context.Background())
 	s.handshakeCtx, s.handshakeCtxCancel = context.WithCancel(context.Background())
 
-	s.timer = utils.NewTimer()
 	now := time.Now()
 	s.lastPacketReceivedTime = now
 	s.sessionCreationTime = now
@@ -489,6 +488,8 @@ func (s *session) preSetup() {
 // run the session main loop
 func (s *session) run() error {
 	defer s.ctxCancel()
+
+	s.timer = utils.NewTimer()
 
 	go s.cryptoStreamHandler.RunHandshake()
 	go func() {
