@@ -605,6 +605,7 @@ runLoop:
 	s.logger.Infof("Connection %s closed.", s.logID)
 	s.cryptoStreamHandler.Close()
 	s.sendQueue.Close()
+	s.timer.Stop()
 	return closeErr.err
 }
 
