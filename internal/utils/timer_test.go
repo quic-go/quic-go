@@ -77,4 +77,11 @@ var _ = Describe("Timer", func() {
 		Eventually(t.Chan()).Should(Receive())
 		Consistently(t.Chan()).ShouldNot(Receive())
 	})
+
+	It("stops", func() {
+		t := NewTimer()
+		t.Reset(time.Now().Add(50 * time.Millisecond))
+		t.Stop()
+		Consistently(t.Chan()).ShouldNot(Receive())
+	})
 })
