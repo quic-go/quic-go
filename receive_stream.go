@@ -132,6 +132,7 @@ func (s *receiveStream) readImpl(p []byte) (bool /*stream completed */, int, err
 				}
 				if deadlineTimer == nil {
 					deadlineTimer = utils.NewTimer()
+					defer deadlineTimer.Stop()
 				}
 				deadlineTimer.Reset(deadline)
 			}
