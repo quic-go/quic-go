@@ -2126,6 +2126,7 @@ var _ = Describe("Client Session", func() {
 				defer GinkgoRecover()
 				cryptoSetup.EXPECT().RunHandshake().MaxTimes(1)
 				errChan <- sess.run()
+				close(errChan)
 			}()
 		})
 
@@ -2147,6 +2148,7 @@ var _ = Describe("Client Session", func() {
 			expectClose()
 			sess.shutdown()
 			Eventually(sess.Context().Done()).Should(BeClosed())
+			Eventually(errChan).Should(BeClosed())
 		})
 
 		It("uses the preferred_address connection ID", func() {
