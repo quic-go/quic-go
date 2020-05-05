@@ -5,8 +5,8 @@ import (
 	"crypto/cipher"
 	"encoding/hex"
 	"strings"
+	"unsafe"
 
-	"github.com/alangpierce/go-forceexport"
 	"github.com/golang/mock/gomock"
 	"github.com/marten-seemann/qtls"
 
@@ -30,8 +30,6 @@ var _ = BeforeEach(func() {
 var _ = AfterEach(func() {
 	mockCtrl.Finish()
 })
-
-var aeadChaCha20Poly1305 func(key, nonceMask []byte) cipher.AEAD
 
 var cipherSuites = []*qtls.CipherSuiteTLS13{
 	&qtls.CipherSuiteTLS13{
@@ -66,13 +64,25 @@ func splitHexString(s string) (slice []byte) {
 	return
 }
 
+type cipherSuiteTLS13 struct {
+	ID     uint16
+	KeyLen int
+	AEAD   func(key, fixedNonce []byte) cipher.AEAD
+	Hash   crypto.Hash
+}
+
+//go:linkname cipherSuiteTLS13ByID github.com/marten-seemann/qtls.cipherSuiteTLS13ByID
+func cipherSuiteTLS13ByID(id uint16) *cipherSuiteTLS13
+
 func init() {
-	if err := forceexport.GetFunc(&aeadChaCha20Poly1305, "github.com/marten-seemann/qtls.aeadChaCha20Poly1305"); err != nil {
-		panic(err)
-	}
+	val := cipherSuiteTLS13ByID(qtls.TLS_CHACHA20_POLY1305_SHA256)
+	chacha := (*cipherSuiteTLS13)(unsafe.Pointer(val))
 	for _, s := range cipherSuites {
 		if s.ID == qtls.TLS_CHACHA20_POLY1305_SHA256 {
-			s.AEAD = aeadChaCha20Poly1305
+			if s.KeyLen != chacha.KeyLen || s.Hash != chacha.Hash {
+				panic("invalid parameters for ChaCha20")
+			}
+			s.AEAD = chacha.AEAD
 		}
 	}
 }
