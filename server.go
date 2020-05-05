@@ -296,7 +296,7 @@ func (s *baseServer) handlePacket(p *receivedPacket) {
 	}
 }
 
-func (s *baseServer) handlePacketImpl(p *receivedPacket) bool /* was the packet handled */ {
+func (s *baseServer) handlePacketImpl(p *receivedPacket) bool /* should the buffer be released */ {
 	// If we're creating a new session, the packet will be passed to the session.
 	// The header will then be parsed again.
 	hdr, _, _, err := wire.ParsePacket(p.data, s.config.ConnectionIDLength)
@@ -332,24 +332,18 @@ func (s *baseServer) handlePacketImpl(p *receivedPacket) bool /* was the packet 
 
 	s.logger.Debugf("<- Received Initial packet.")
 
-	sess, err := s.handleInitialImpl(p, hdr)
-	if err != nil {
+	if err := s.handleInitialImpl(p, hdr); err != nil {
 		s.logger.Errorf("Error occurred handling initial packet: %s", err)
-		return false
 	}
-	// A retry was done, or the connection attempt was rejected,
-	// or if the Initial was a duplicate.
-	if sess == nil {
-		return false
-	}
-	// Don't put the packet buffer back if a new session was created.
-	// The session will handle the packet and take of that.
+	// Don't put the packet buffer back.
+	// handleInitialImpl deals with the buffer.
 	return true
 }
 
-func (s *baseServer) handleInitialImpl(p *receivedPacket, hdr *wire.Header) (quicSession, error) {
+func (s *baseServer) handleInitialImpl(p *receivedPacket, hdr *wire.Header) error {
 	if len(hdr.Token) == 0 && hdr.DestConnectionID.Len() < protocol.MinConnectionIDLenInitial {
-		return nil, errors.New("too short connection ID")
+		p.buffer.Release()
+		return errors.New("too short connection ID")
 	}
 
 	var token *Token
@@ -367,6 +361,7 @@ func (s *baseServer) handleInitialImpl(p *receivedPacket, hdr *wire.Header) (qui
 	}
 	if !s.config.AcceptToken(p.remoteAddr, token) {
 		go func() {
+			defer p.buffer.Release()
 			if token != nil && token.IsRetryToken {
 				if err := s.maybeSendInvalidToken(p, hdr); err != nil {
 					s.logger.Debugf("Error sending INVALID_TOKEN error: %s", err)
@@ -377,7 +372,7 @@ func (s *baseServer) handleInitialImpl(p *receivedPacket, hdr *wire.Header) (qui
 				s.logger.Debugf("Error sending Retry: %s", err)
 			}
 		}()
-		return nil, nil
+		return nil
 	}
 
 	if queueLen := atomic.LoadInt32(&s.sessionQueueLen); queueLen >= protocol.MaxAcceptQueueSize {
@@ -387,12 +382,12 @@ func (s *baseServer) handleInitialImpl(p *receivedPacket, hdr *wire.Header) (qui
 				s.logger.Debugf("Error rejecting connection: %s", err)
 			}
 		}()
-		return nil, nil
+		return nil
 	}
 
 	connID, err := protocol.GenerateConnectionID(s.config.ConnectionIDLength)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	s.logger.Debugf("Changing connection ID to %s.", connID)
 	sess := s.createNewSession(
@@ -404,7 +399,8 @@ func (s *baseServer) handleInitialImpl(p *receivedPacket, hdr *wire.Header) (qui
 		hdr.Version,
 	)
 	if sess == nil {
-		return nil, nil
+		p.buffer.Release()
+		return nil
 	}
 	sess.handlePacket(p)
 	for {
@@ -414,7 +410,7 @@ func (s *baseServer) handleInitialImpl(p *receivedPacket, hdr *wire.Header) (qui
 		}
 		sess.handlePacket(p)
 	}
-	return sess, nil
+	return nil
 }
 
 func (s *baseServer) createNewSession(

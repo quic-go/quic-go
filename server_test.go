@@ -14,17 +14,16 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/lucas-clemente/quic-go/internal/qerr"
-
-	"github.com/lucas-clemente/quic-go/qlog"
-
-	"github.com/golang/mock/gomock"
 	"github.com/lucas-clemente/quic-go/internal/handshake"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
+	"github.com/lucas-clemente/quic-go/internal/qerr"
 	"github.com/lucas-clemente/quic-go/internal/testdata"
 	"github.com/lucas-clemente/quic-go/internal/utils"
 	"github.com/lucas-clemente/quic-go/internal/wire"
+	"github.com/lucas-clemente/quic-go/qlog"
 	"github.com/lucas-clemente/quic-go/quictrace"
+
+	"github.com/golang/mock/gomock"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -580,7 +579,7 @@ var _ = Describe("Server", func() {
 				p := getInitial(protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8, 9})
 				phm.EXPECT().GetStatelessResetToken(gomock.Any())
 				phm.EXPECT().Add(protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8, 9}, sess).Return(false)
-				Expect(serv.handlePacketImpl(p)).To(BeFalse())
+				Expect(serv.handlePacketImpl(p)).To(BeTrue())
 				Expect(createdSession).To(BeTrue())
 			})
 
