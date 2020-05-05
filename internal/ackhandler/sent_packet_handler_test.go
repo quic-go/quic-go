@@ -601,6 +601,19 @@ var _ = Describe("SentPacketHandler", func() {
 			Expect(handler.GetLossDetectionTimeout().Sub(sendTime)).To(Equal(4 * timeout))
 		})
 
+		It("reset the PTO count when receiving an ACK", func() {
+			now := time.Now()
+			handler.SetHandshakeComplete()
+			handler.SentPacket(ackElicitingPacket(&Packet{PacketNumber: 1, SendTime: now.Add(-time.Minute)}))
+			handler.SentPacket(ackElicitingPacket(&Packet{PacketNumber: 2, SendTime: now.Add(-time.Minute)}))
+			Expect(handler.GetLossDetectionTimeout()).To(BeTemporally("~", now.Add(-time.Minute), time.Second))
+			Expect(handler.OnLossDetectionTimeout()).To(Succeed())
+			Expect(handler.SendMode()).To(Equal(SendPTOAppData))
+			Expect(handler.ptoCount).To(BeEquivalentTo(1))
+			Expect(handler.ReceivedAck(&wire.AckFrame{AckRanges: []wire.AckRange{{Smallest: 1, Largest: 1}}}, protocol.Encryption1RTT, time.Now())).To(Succeed())
+			Expect(handler.ptoCount).To(BeZero())
+		})
+
 		It("resets the PTO mode and PTO count when a packet number space is dropped", func() {
 			now := time.Now()
 			handler.SentPacket(ackElicitingPacket(&Packet{
@@ -807,6 +820,18 @@ var _ = Describe("SentPacketHandler", func() {
 			pto := handler.rttStats.PTO(false)
 			Expect(pto).ToNot(BeZero())
 			Expect(handler.GetLossDetectionTimeout()).To(BeTemporally("~", time.Now().Add(pto), 10*time.Millisecond))
+		})
+
+		It("doesn't reset the PTO count when receiving an ACK", func() {
+			now := time.Now()
+			handler.SentPacket(initialPacket(&Packet{PacketNumber: 1, SendTime: now.Add(-time.Minute)}))
+			handler.SentPacket(initialPacket(&Packet{PacketNumber: 2, SendTime: now.Add(-time.Minute)}))
+			Expect(handler.GetLossDetectionTimeout()).To(BeTemporally("~", now.Add(-time.Minute), time.Second))
+			Expect(handler.OnLossDetectionTimeout()).To(Succeed())
+			Expect(handler.SendMode()).To(Equal(SendPTOInitial))
+			Expect(handler.ptoCount).To(BeEquivalentTo(1))
+			Expect(handler.ReceivedAck(&wire.AckFrame{AckRanges: []wire.AckRange{{Smallest: 1, Largest: 1}}}, protocol.EncryptionInitial, time.Now())).To(Succeed())
+			Expect(handler.ptoCount).To(BeEquivalentTo(1))
 		})
 	})
 
