@@ -164,6 +164,7 @@ func (h *sentPacketHandler) dropPackets(encLevel protocol.EncryptionLevel) {
 		h.qlogger.UpdatedPTOCount(0)
 	}
 	h.ptoCount = 0
+	h.numProbesToSend = 0
 	h.ptoMode = SendNone
 }
 

@@ -966,6 +966,19 @@ var _ = Describe("SentPacketHandler", func() {
 			Expect(lostPackets).To(Equal([]protocol.PacketNumber{0, 1, 2, 3, 4, 5}))
 			Expect(handler.bytesInFlight).To(Equal(protocol.ByteCount(6)))
 		})
+
+		It("cancels the PTO when dropping a packet number space", func() {
+			now := time.Now()
+			handler.SentPacket(handshakePacket(&Packet{PacketNumber: 1, SendTime: now.Add(-time.Minute)}))
+			handler.SentPacket(handshakePacket(&Packet{PacketNumber: 2, SendTime: now.Add(-time.Minute)}))
+			Expect(handler.GetLossDetectionTimeout()).To(BeTemporally("~", now.Add(-time.Minute), time.Second))
+			Expect(handler.OnLossDetectionTimeout()).To(Succeed())
+			Expect(handler.SendMode()).To(Equal(SendPTOHandshake))
+			Expect(handler.ptoCount).To(BeEquivalentTo(1))
+			handler.DropPackets(protocol.EncryptionHandshake)
+			Expect(handler.ptoCount).To(BeZero())
+			Expect(handler.SendMode()).To(Equal(SendAny))
+		})
 	})
 
 	Context("peeking and popping packet number", func() {
