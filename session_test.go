@@ -388,29 +388,35 @@ var _ = Describe("Session", func() {
 
 	Context("closing", func() {
 		var (
-			runErr         error
+			runErr         chan error
 			expectedRunErr error
 		)
 
 		BeforeEach(func() {
-			Eventually(areSessionsRunning).Should(BeFalse())
-			go func() {
-				defer GinkgoRecover()
-				cryptoSetup.EXPECT().RunHandshake().MaxTimes(1)
-				runErr = sess.run()
-			}()
-			Eventually(areSessionsRunning).Should(BeTrue())
+			runErr = make(chan error, 1)
 			expectedRunErr = nil
 		})
 
 		AfterEach(func() {
 			if expectedRunErr != nil {
-				Expect(runErr).To(MatchError(expectedRunErr))
+				Eventually(runErr).Should(Receive(MatchError(expectedRunErr)))
+			} else {
+				Eventually(runErr).Should(Receive())
 			}
 		})
 
+		runSession := func() {
+			go func() {
+				defer GinkgoRecover()
+				cryptoSetup.EXPECT().RunHandshake().MaxTimes(1)
+				runErr <- sess.run()
+			}()
+			Eventually(areSessionsRunning).Should(BeTrue())
+		}
+
 		It("shuts down without error", func() {
 			sess.handshakeComplete = true
+			runSession()
 			streamManager.EXPECT().CloseWithError(qerr.NewApplicationError(0, ""))
 			expectReplaceWithClosed()
 			cryptoSetup.EXPECT().Close()
@@ -429,6 +435,7 @@ var _ = Describe("Session", func() {
 		})
 
 		It("only closes once", func() {
+			runSession()
 			streamManager.EXPECT().CloseWithError(gomock.Any())
 			expectReplaceWithClosed()
 			cryptoSetup.EXPECT().Close()
@@ -442,6 +449,7 @@ var _ = Describe("Session", func() {
 		})
 
 		It("closes with an error", func() {
+			runSession()
 			streamManager.EXPECT().CloseWithError(qerr.NewApplicationError(0x1337, "test error"))
 			expectReplaceWithClosed()
 			cryptoSetup.EXPECT().Close()
@@ -459,6 +467,7 @@ var _ = Describe("Session", func() {
 		})
 
 		It("includes the frame type in transport-level close frames", func() {
+			runSession()
 			testErr := qerr.NewErrorWithFrameType(0x1337, 0x42, "test error")
 			streamManager.EXPECT().CloseWithError(testErr)
 			expectReplaceWithClosed()
@@ -478,6 +487,7 @@ var _ = Describe("Session", func() {
 		})
 
 		It("closes the session in order to recreate it", func() {
+			runSession()
 			streamManager.EXPECT().CloseWithError(gomock.Any())
 			sessionRunner.EXPECT().Remove(gomock.Any()).AnyTimes()
 			cryptoSetup.EXPECT().Close()
@@ -489,6 +499,7 @@ var _ = Describe("Session", func() {
 		})
 
 		It("destroys the session", func() {
+			runSession()
 			testErr := errors.New("close")
 			streamManager.EXPECT().CloseWithError(gomock.Any())
 			sessionRunner.EXPECT().Remove(gomock.Any()).AnyTimes()
@@ -501,6 +512,7 @@ var _ = Describe("Session", func() {
 		})
 
 		It("cancels the context when the run loop exists", func() {
+			runSession()
 			streamManager.EXPECT().CloseWithError(gomock.Any())
 			expectReplaceWithClosed()
 			cryptoSetup.EXPECT().Close()
@@ -524,6 +536,7 @@ var _ = Describe("Session", func() {
 			unpacker := NewMockUnpacker(mockCtrl)
 			sess.handshakeConfirmed = true
 			sess.unpacker = unpacker
+			runSession()
 			cryptoSetup.EXPECT().Close()
 			streamManager.EXPECT().CloseWithError(gomock.Any())
 			sessionRunner.EXPECT().ReplaceWithClosed(gomock.Any(), gomock.Any()).AnyTimes()
