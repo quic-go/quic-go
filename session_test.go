@@ -1594,12 +1594,7 @@ var _ = Describe("Session", func() {
 	})
 
 	Context("transport parameters", func() {
-		It("process transport parameters received from the client", func() {
-			go func() {
-				defer GinkgoRecover()
-				cryptoSetup.EXPECT().RunHandshake().MaxTimes(1)
-				sess.run()
-			}()
+		It("processes transport parameters received from the client", func() {
 			params := &wire.TransportParameters{
 				MaxIdleTimeout:                90 * time.Second,
 				InitialMaxStreamDataBidiLocal: 0x5000,
@@ -1617,19 +1612,6 @@ var _ = Describe("Session", func() {
 			qlogger.EXPECT().ReceivedTransportParameters(params)
 			sess.processTransportParameters(params)
 			Expect(sess.earlySessionReady()).To(BeClosed())
-
-			// make the go routine return
-			streamManager.EXPECT().CloseWithError(gomock.Any())
-			sessionRunner.EXPECT().ReplaceWithClosed(gomock.Any(), gomock.Any()).Do(func(_ protocol.ConnectionID, s packetHandler) {
-				Expect(s).To(BeAssignableToTypeOf(&closedLocalSession{}))
-				s.shutdown()
-			}).Times(4) // initial connection ID + initial client dest conn ID + 2 newly issued conn IDs
-			packer.EXPECT().PackConnectionClose(gomock.Any()).Return(&coalescedPacket{buffer: getPacketBuffer()}, nil)
-			cryptoSetup.EXPECT().Close()
-			mconn.EXPECT().Write(gomock.Any())
-			qlogger.EXPECT().Export()
-			sess.shutdown()
-			Eventually(sess.Context().Done()).Should(BeClosed())
 		})
 	})
 
