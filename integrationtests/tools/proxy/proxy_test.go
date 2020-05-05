@@ -2,6 +2,7 @@ package quicproxy
 
 import (
 	"bytes"
+	"fmt"
 	"net"
 	"runtime/pprof"
 	"strconv"
@@ -9,10 +10,9 @@ import (
 	"sync/atomic"
 	"time"
 
-	"fmt"
-
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/internal/wire"
+
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 )
@@ -160,8 +160,8 @@ var _ = Describe("QUIC Proxy", func() {
 					data := buf[0:n]
 					serverReceivedPackets <- packetData(data)
 					// echo the packet
-					serverConn.WriteToUDP(data, addr)
 					atomic.AddInt32(&serverNumPacketsSent, 1)
+					serverConn.WriteToUDP(data, addr)
 				}
 			}()
 		})
