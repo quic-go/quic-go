@@ -79,6 +79,7 @@ type baseServer struct {
 	serverError error
 	errorChan   chan struct{}
 	closed      bool
+	running     chan struct{} // closed as soon as run() returns
 
 	sessionQueue    chan quicSession
 	sessionQueueLen int32 // to be used as an atomic
@@ -179,6 +180,7 @@ func listen(conn net.PacketConn, tlsConf *tls.Config, config *Config, acceptEarl
 		zeroRTTQueue:        newZeroRTTQueue(),
 		sessionQueue:        make(chan quicSession),
 		errorChan:           make(chan struct{}),
+		running:             make(chan struct{}),
 		receivedPackets:     make(chan *receivedPacket, protocol.MaxServerUnprocessedPackets),
 		newSession:          newSession,
 		logger:              utils.DefaultLogger.WithPrefix("server"),
@@ -191,6 +193,7 @@ func listen(conn net.PacketConn, tlsConf *tls.Config, config *Config, acceptEarl
 }
 
 func (s *baseServer) run() {
+	defer close(s.running)
 	for {
 		select {
 		case <-s.errorChan:
@@ -265,6 +268,7 @@ func (s *baseServer) Close() error {
 	}
 	s.closed = true
 	close(s.errorChan)
+	<-s.running
 	return err
 }
 
