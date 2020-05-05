@@ -137,6 +137,7 @@ func (s *sendStream) Write(p []byte) (int, error) {
 				}
 				if deadlineTimer == nil {
 					deadlineTimer = utils.NewTimer()
+					defer deadlineTimer.Stop()
 				}
 				deadlineTimer.Reset(deadline)
 			}

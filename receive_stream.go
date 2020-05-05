@@ -104,6 +104,7 @@ func (s *receiveStream) readImpl(p []byte) (bool /*stream completed */, int, err
 	}
 
 	bytesRead := 0
+	var deadlineTimer *utils.Timer
 	for bytesRead < len(p) {
 		if s.currentFrame == nil || s.readPosInFrame >= len(s.currentFrame) {
 			s.dequeueNextFrame()
@@ -112,7 +113,6 @@ func (s *receiveStream) readImpl(p []byte) (bool /*stream completed */, int, err
 			return false, bytesRead, s.closeForShutdownErr
 		}
 
-		var deadlineTimer *utils.Timer
 		for {
 			// Stop waiting on errors
 			if s.closedForShutdown {
@@ -132,6 +132,7 @@ func (s *receiveStream) readImpl(p []byte) (bool /*stream completed */, int, err
 				}
 				if deadlineTimer == nil {
 					deadlineTimer = utils.NewTimer()
+					defer deadlineTimer.Stop()
 				}
 				deadlineTimer.Reset(deadline)
 			}
