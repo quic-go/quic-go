@@ -3,7 +3,6 @@ module github.com/lucas-clemente/quic-go
 go 1.13
 
 require (
-	github.com/alangpierce/go-forceexport v0.0.0-20160317203124-8f1d6941cd75
 	github.com/cheekybits/genny v1.0.0
 	github.com/francoispqt/gojay v1.2.13
 	github.com/golang/mock v1.4.0
