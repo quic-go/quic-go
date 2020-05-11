@@ -3,19 +3,23 @@ package self_test
 import (
 	"bufio"
 	"bytes"
+	"crypto/rand"
+	"crypto/rsa"
 	"crypto/tls"
+	"crypto/x509"
+	"crypto/x509/pkix"
 	"flag"
 	"fmt"
 	"io"
 	"log"
-	"math/rand"
+	"math/big"
+	mrand "math/rand"
 	"os"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/lucas-clemente/quic-go"
-
-	"github.com/lucas-clemente/quic-go/internal/testdata"
 	"github.com/lucas-clemente/quic-go/internal/utils"
 
 	. "github.com/onsi/ginkgo"
@@ -23,19 +27,6 @@ import (
 )
 
 const alpn = "quic-go integration tests"
-
-func getTLSConfig() *tls.Config {
-	conf := testdata.GetTLSConfig()
-	conf.NextProtos = []string{alpn}
-	return conf
-}
-
-func getTLSClientConfig() *tls.Config {
-	return &tls.Config{
-		RootCAs:    testdata.GetRootCA(),
-		NextProtos: []string{alpn},
-	}
-}
 
 const (
 	dataLen     = 500 * 1024       // 500 KB
@@ -93,6 +84,11 @@ var (
 	logBufOnce  sync.Once
 	logBuf      *syncedBuffer
 	enableQlog  bool
+
+	caPrivateKey   *rsa.PrivateKey
+	ca             *x509.Certificate
+	leafPrivateKey *rsa.PrivateKey
+	leafCert       *x509.Certificate
 )
 
 // read the logfile command line flag
@@ -100,6 +96,78 @@ var (
 func init() {
 	flag.StringVar(&logFileName, "logfile", "", "log file")
 	flag.BoolVar(&enableQlog, "qlog", false, "enable qlog")
+
+	if err := generateCA(); err != nil {
+		panic(err)
+	}
+	if err := generateCertChain(); err != nil {
+		panic(err)
+	}
+}
+
+func generateCA() error {
+	caCert := &x509.Certificate{
+		SerialNumber:          big.NewInt(2019),
+		Subject:               pkix.Name{},
+		NotBefore:             time.Now(),
+		NotAfter:              time.Now().Add(24 * time.Hour),
+		IsCA:                  true,
+		ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth, x509.ExtKeyUsageServerAuth},
+		KeyUsage:              x509.KeyUsageDigitalSignature | x509.KeyUsageCertSign,
+		BasicConstraintsValid: true,
+	}
+	var err error
+	caPrivateKey, err = rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		return err
+	}
+	caBytes, err := x509.CreateCertificate(rand.Reader, caCert, caCert, &caPrivateKey.PublicKey, caPrivateKey)
+	if err != nil {
+		return err
+	}
+	ca, err = x509.ParseCertificate(caBytes)
+	return err
+}
+
+func generateCertChain() error {
+	cert := &x509.Certificate{
+		SerialNumber: big.NewInt(1),
+		DNSNames:     []string{"localhost"},
+		NotBefore:    time.Now(),
+		NotAfter:     time.Now().Add(24 * time.Hour),
+		ExtKeyUsage:  []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth, x509.ExtKeyUsageServerAuth},
+		KeyUsage:     x509.KeyUsageDigitalSignature,
+	}
+	var err error
+	leafPrivateKey, err = rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		return err
+	}
+	certBytes, err := x509.CreateCertificate(rand.Reader, cert, ca, &leafPrivateKey.PublicKey, caPrivateKey)
+	if err != nil {
+		return err
+	}
+	leafCert, err = x509.ParseCertificate(certBytes)
+	return err
+}
+
+func getTLSConfig() *tls.Config {
+	return &tls.Config{
+		Certificates: []tls.Certificate{tls.Certificate{
+			Certificate: [][]byte{leafCert.Raw},
+			PrivateKey:  leafPrivateKey,
+		}},
+		NextProtos: []string{alpn},
+	}
+}
+
+func getTLSClientConfig() *tls.Config {
+	root := x509.NewCertPool()
+	root.AddCert(ca)
+	return &tls.Config{
+		RootCAs:    root,
+		NextProtos: []string{alpn},
+	}
 }
 
 func getQuicConfigForClient(conf *quic.Config) *quic.Config {
@@ -163,5 +231,5 @@ func TestSelf(t *testing.T) {
 }
 
 var _ = BeforeSuite(func() {
-	rand.Seed(GinkgoRandomSeed())
+	mrand.Seed(GinkgoRandomSeed())
 })
