@@ -2,6 +2,7 @@ package self_test
 
 import (
 	"context"
+	"crypto/tls"
 	"fmt"
 	mrand "math/rand"
 	"net"
@@ -32,7 +33,7 @@ var _ = Describe("Handshake drop tests", func() {
 
 	const timeout = 10 * time.Minute
 
-	startListenerAndProxy := func(dropCallback quicproxy.DropCallback, doRetry bool, version protocol.VersionNumber) {
+	startListenerAndProxy := func(dropCallback quicproxy.DropCallback, doRetry bool, longCertChain bool, version protocol.VersionNumber) {
 		conf := getQuicConfigForServer(&quic.Config{
 			MaxIdleTimeout:   timeout,
 			HandshakeTimeout: timeout,
@@ -41,8 +42,14 @@ var _ = Describe("Handshake drop tests", func() {
 		if !doRetry {
 			conf.AcceptToken = func(net.Addr, *quic.Token) bool { return true }
 		}
+		var tlsConf *tls.Config
+		if longCertChain {
+			tlsConf = getTLSConfigWithLongCertChain()
+		} else {
+			tlsConf = getTLSConfig()
+		}
 		var err error
-		ln, err = quic.ListenAddr("localhost:0", getTLSConfig(), conf)
+		ln, err = quic.ListenAddr("localhost:0", tlsConf, conf)
 		Expect(err).ToNot(HaveOccurred())
 		serverPort := ln.Addr().(*net.UDPAddr).Port
 		proxy, err = quicproxy.NewQuicProxy("localhost:0", &quicproxy.Opts{
@@ -184,46 +191,52 @@ var _ = Describe("Handshake drop tests", func() {
 					}
 
 					Context(desc, func() {
-						for _, a := range []*applicationProtocol{clientSpeaksFirst, serverSpeaksFirst, nobodySpeaks} {
-							app := a
+						for _, lcc := range []bool{false, true} {
+							longCertChain := lcc
 
-							Context(app.name, func() {
-								It(fmt.Sprintf("establishes a connection when the first packet is lost in %s direction", direction), func() {
-									var incoming, outgoing int32
-									startListenerAndProxy(func(d quicproxy.Direction, _ []byte) bool {
-										var p int32
-										switch d {
-										case quicproxy.DirectionIncoming:
-											p = atomic.AddInt32(&incoming, 1)
-										case quicproxy.DirectionOutgoing:
-											p = atomic.AddInt32(&outgoing, 1)
-										}
-										return p == 1 && d.Is(direction)
-									}, doRetry, version)
-									app.run(version)
-								})
+							Context(fmt.Sprintf("using a long certificate chain: %t", longCertChain), func() {
+								for _, a := range []*applicationProtocol{clientSpeaksFirst, serverSpeaksFirst, nobodySpeaks} {
+									app := a
 
-								It(fmt.Sprintf("establishes a connection when the second packet is lost in %s direction", direction), func() {
-									var incoming, outgoing int32
-									startListenerAndProxy(func(d quicproxy.Direction, _ []byte) bool {
-										var p int32
-										switch d {
-										case quicproxy.DirectionIncoming:
-											p = atomic.AddInt32(&incoming, 1)
-										case quicproxy.DirectionOutgoing:
-											p = atomic.AddInt32(&outgoing, 1)
-										}
-										return p == 2 && d.Is(direction)
-									}, doRetry, version)
-									app.run(version)
-								})
+									Context(app.name, func() {
+										It(fmt.Sprintf("establishes a connection when the first packet is lost in %s direction", direction), func() {
+											var incoming, outgoing int32
+											startListenerAndProxy(func(d quicproxy.Direction, _ []byte) bool {
+												var p int32
+												switch d {
+												case quicproxy.DirectionIncoming:
+													p = atomic.AddInt32(&incoming, 1)
+												case quicproxy.DirectionOutgoing:
+													p = atomic.AddInt32(&outgoing, 1)
+												}
+												return p == 1 && d.Is(direction)
+											}, doRetry, longCertChain, version)
+											app.run(version)
+										})
 
-								It(fmt.Sprintf("establishes a connection when 1/3 of the packets are lost in %s direction", direction), func() {
-									startListenerAndProxy(func(d quicproxy.Direction, _ []byte) bool {
-										return d.Is(direction) && stochasticDropper(3)
-									}, doRetry, version)
-									app.run(version)
-								})
+										It(fmt.Sprintf("establishes a connection when the second packet is lost in %s direction", direction), func() {
+											var incoming, outgoing int32
+											startListenerAndProxy(func(d quicproxy.Direction, _ []byte) bool {
+												var p int32
+												switch d {
+												case quicproxy.DirectionIncoming:
+													p = atomic.AddInt32(&incoming, 1)
+												case quicproxy.DirectionOutgoing:
+													p = atomic.AddInt32(&outgoing, 1)
+												}
+												return p == 2 && d.Is(direction)
+											}, doRetry, longCertChain, version)
+											app.run(version)
+										})
+
+										It(fmt.Sprintf("establishes a connection when 1/3 of the packets are lost in %s direction", direction), func() {
+											startListenerAndProxy(func(d quicproxy.Direction, _ []byte) bool {
+												return d.Is(direction) && stochasticDropper(3)
+											}, doRetry, longCertChain, version)
+											app.run(version)
+										})
+									})
+								}
 							})
 						}
 					})

@@ -85,10 +85,9 @@ var (
 	logBuf      *syncedBuffer
 	enableQlog  bool
 
-	caPrivateKey   *rsa.PrivateKey
-	ca             *x509.Certificate
-	leafPrivateKey *rsa.PrivateKey
-	leafCert       *x509.Certificate
+	tlsConfig          *tls.Config
+	tlsConfigLongChain *tls.Config
+	tlsClientConfig    *tls.Config
 )
 
 // read the logfile command line flag
@@ -97,16 +96,37 @@ func init() {
 	flag.StringVar(&logFileName, "logfile", "", "log file")
 	flag.BoolVar(&enableQlog, "qlog", false, "enable qlog")
 
-	if err := generateCA(); err != nil {
+	ca, caPrivateKey, err := generateCA()
+	if err != nil {
 		panic(err)
 	}
-	if err := generateCertChain(); err != nil {
+	leafCert, leafPrivateKey, err := generateLeafCert(ca, caPrivateKey)
+	if err != nil {
 		panic(err)
+	}
+	tlsConfig = &tls.Config{
+		Certificates: []tls.Certificate{tls.Certificate{
+			Certificate: [][]byte{leafCert.Raw},
+			PrivateKey:  leafPrivateKey,
+		}},
+		NextProtos: []string{alpn},
+	}
+	tlsConfLongChain, err := generateTLSConfigWithLongCertChain(ca, caPrivateKey)
+	if err != nil {
+		panic(err)
+	}
+	tlsConfigLongChain = tlsConfLongChain
+
+	root := x509.NewCertPool()
+	root.AddCert(ca)
+	tlsClientConfig = &tls.Config{
+		RootCAs:    root,
+		NextProtos: []string{alpn},
 	}
 }
 
-func generateCA() error {
-	caCert := &x509.Certificate{
+func generateCA() (*x509.Certificate, *rsa.PrivateKey, error) {
+	certTempl := &x509.Certificate{
 		SerialNumber:          big.NewInt(2019),
 		Subject:               pkix.Name{},
 		NotBefore:             time.Now(),
@@ -116,21 +136,23 @@ func generateCA() error {
 		KeyUsage:              x509.KeyUsageDigitalSignature | x509.KeyUsageCertSign,
 		BasicConstraintsValid: true,
 	}
-	var err error
-	caPrivateKey, err = rsa.GenerateKey(rand.Reader, 2048)
+	caPrivateKey, err := rsa.GenerateKey(rand.Reader, 2048)
 	if err != nil {
-		return err
+		return nil, nil, err
 	}
-	caBytes, err := x509.CreateCertificate(rand.Reader, caCert, caCert, &caPrivateKey.PublicKey, caPrivateKey)
+	caBytes, err := x509.CreateCertificate(rand.Reader, certTempl, certTempl, &caPrivateKey.PublicKey, caPrivateKey)
 	if err != nil {
-		return err
+		return nil, nil, err
 	}
-	ca, err = x509.ParseCertificate(caBytes)
-	return err
+	ca, err := x509.ParseCertificate(caBytes)
+	if err != nil {
+		return nil, nil, err
+	}
+	return ca, caPrivateKey, nil
 }
 
-func generateCertChain() error {
-	cert := &x509.Certificate{
+func generateLeafCert(ca *x509.Certificate, caPrivateKey *rsa.PrivateKey) (*x509.Certificate, *rsa.PrivateKey, error) {
+	certTempl := &x509.Certificate{
 		SerialNumber: big.NewInt(1),
 		DNSNames:     []string{"localhost"},
 		NotBefore:    time.Now(),
@@ -138,36 +160,86 @@ func generateCertChain() error {
 		ExtKeyUsage:  []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth, x509.ExtKeyUsageServerAuth},
 		KeyUsage:     x509.KeyUsageDigitalSignature,
 	}
-	var err error
-	leafPrivateKey, err = rsa.GenerateKey(rand.Reader, 2048)
+	privKey, err := rsa.GenerateKey(rand.Reader, 2048)
 	if err != nil {
-		return err
+		return nil, nil, err
 	}
-	certBytes, err := x509.CreateCertificate(rand.Reader, cert, ca, &leafPrivateKey.PublicKey, caPrivateKey)
+	certBytes, err := x509.CreateCertificate(rand.Reader, certTempl, ca, &privKey.PublicKey, caPrivateKey)
 	if err != nil {
-		return err
+		return nil, nil, err
 	}
-	leafCert, err = x509.ParseCertificate(certBytes)
-	return err
+	cert, err := x509.ParseCertificate(certBytes)
+	if err != nil {
+		return nil, nil, err
+	}
+	return cert, privKey, nil
 }
 
-func getTLSConfig() *tls.Config {
+// getTLSConfigWithLongCertChain generates a tls.Config that uses a long certificate chain.
+// The Root CA used is the same as for the config returned from getTLSConfig().
+func generateTLSConfigWithLongCertChain(ca *x509.Certificate, caPrivateKey *rsa.PrivateKey) (*tls.Config, error) {
+	const chainLen = 7
+	certTempl := &x509.Certificate{
+		SerialNumber:          big.NewInt(2019),
+		Subject:               pkix.Name{},
+		NotBefore:             time.Now(),
+		NotAfter:              time.Now().Add(24 * time.Hour),
+		IsCA:                  true,
+		ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth, x509.ExtKeyUsageServerAuth},
+		KeyUsage:              x509.KeyUsageDigitalSignature | x509.KeyUsageCertSign,
+		BasicConstraintsValid: true,
+	}
+
+	lastCA := ca
+	lastCAPrivKey := caPrivateKey
+	privKey, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		return nil, err
+	}
+	certs := make([]*x509.Certificate, chainLen)
+	for i := 0; i < chainLen; i++ {
+		caBytes, err := x509.CreateCertificate(rand.Reader, certTempl, lastCA, &privKey.PublicKey, lastCAPrivKey)
+		if err != nil {
+			return nil, err
+		}
+		ca, err := x509.ParseCertificate(caBytes)
+		if err != nil {
+			return nil, err
+		}
+		certs[i] = ca
+		lastCA = ca
+		lastCAPrivKey = privKey
+	}
+	leafCert, leafPrivateKey, err := generateLeafCert(lastCA, lastCAPrivKey)
+	if err != nil {
+		return nil, err
+	}
+
+	rawCerts := make([][]byte, chainLen+1)
+	for i, cert := range certs {
+		rawCerts[chainLen-i] = cert.Raw
+	}
+	rawCerts[0] = leafCert.Raw
+
 	return &tls.Config{
 		Certificates: []tls.Certificate{tls.Certificate{
-			Certificate: [][]byte{leafCert.Raw},
+			Certificate: rawCerts,
 			PrivateKey:  leafPrivateKey,
 		}},
 		NextProtos: []string{alpn},
-	}
+	}, nil
+}
+
+func getTLSConfig() *tls.Config {
+	return tlsConfig.Clone()
+}
+
+func getTLSConfigWithLongCertChain() *tls.Config {
+	return tlsConfigLongChain.Clone()
 }
 
 func getTLSClientConfig() *tls.Config {
-	root := x509.NewCertPool()
-	root.AddCert(ca)
-	return &tls.Config{
-		RootCAs:    root,
-		NextProtos: []string{alpn},
-	}
+	return tlsClientConfig.Clone()
 }
 
 func getQuicConfigForClient(conf *quic.Config) *quic.Config {
