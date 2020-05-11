@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"io"
+	mrand "math/rand"
 	"runtime"
 	"time"
 
@@ -1030,6 +1031,55 @@ var _ = Describe("Send Stream", func() {
 			Expect(ret).ToNot(BeNil())
 			mockSender.EXPECT().onStreamCompleted(streamID)
 			ret.OnAcked(ret.Frame)
+		})
+
+		// This test is kind of an integration test.
+		// It writes 4 MB of data, and pops STREAM frames that sometimes are and sometimes aren't limited by flow control.
+		// Half of these STREAM frames are then received and their content saved, while the other half is reported lost
+		// and has to be retransmitted.
+		It("retransmits data until everything has been acknowledged", func() {
+			const dataLen = 1 << 22 // 4 MB
+			mockSender.EXPECT().onHasStreamData(streamID).AnyTimes()
+			mockFC.EXPECT().SendWindowSize().DoAndReturn(func() protocol.ByteCount {
+				return protocol.ByteCount(mrand.Intn(500)) + 50
+			}).AnyTimes()
+			mockFC.EXPECT().AddBytesSent(gomock.Any()).AnyTimes()
+
+			data := make([]byte, dataLen)
+			_, err := mrand.Read(data)
+			Expect(err).ToNot(HaveOccurred())
+			done := make(chan struct{})
+			go func() {
+				defer GinkgoRecover()
+				defer close(done)
+				_, err := str.Write(data)
+				Expect(err).ToNot(HaveOccurred())
+				str.Close()
+			}()
+
+			var completed bool
+			mockSender.EXPECT().onStreamCompleted(streamID).Do(func(protocol.StreamID) { completed = true })
+
+			received := make([]byte, dataLen)
+			for {
+				if completed {
+					break
+				}
+				f, _ := str.popStreamFrame(protocol.ByteCount(mrand.Intn(300) + 100))
+				if f == nil {
+					continue
+				}
+				sf := f.Frame.(*wire.StreamFrame)
+				// 50%: acknowledge the frame and save the data
+				// 50%: lose the frame
+				if mrand.Intn(100) < 50 {
+					copy(received[sf.Offset:sf.Offset+sf.DataLen()], sf.Data)
+					f.OnAcked(f.Frame)
+				} else {
+					f.OnLost(f.Frame)
+				}
+			}
+			Expect(received).To(Equal(data))
 		})
 	})
 })
