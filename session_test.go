@@ -1036,7 +1036,7 @@ var _ = Describe("Session", func() {
 			runSession()
 			p := getPacket(1)
 			packer.EXPECT().PackPacket().Return(p, nil)
-			packer.EXPECT().PackPacket().Return(nil, nil)
+			packer.EXPECT().PackPacket().Return(nil, nil).AnyTimes()
 			sent := make(chan struct{})
 			mconn.EXPECT().Write(gomock.Any()).Do(func([]byte) { close(sent) })
 			qlogger.EXPECT().SentPacket(p.header, p.buffer.Len(), nil, []wire.Frame{})
@@ -1047,7 +1047,7 @@ var _ = Describe("Session", func() {
 		It("doesn't send packets if there's nothing to send", func() {
 			sess.handshakeConfirmed = true
 			runSession()
-			packer.EXPECT().PackPacket().Return(nil, nil)
+			packer.EXPECT().PackPacket().Return(nil, nil).AnyTimes()
 			sess.receivedPacketHandler.ReceivedPacket(0x035e, protocol.Encryption1RTT, time.Now(), true)
 			sess.scheduleSending()
 			time.Sleep(50 * time.Millisecond) // make sure there are no calls to mconn.Write()
@@ -1074,7 +1074,7 @@ var _ = Describe("Session", func() {
 			fc.EXPECT().IsNewlyBlocked()
 			p := getPacket(1)
 			packer.EXPECT().PackPacket().Return(p, nil)
-			packer.EXPECT().PackPacket().Return(nil, nil)
+			packer.EXPECT().PackPacket().Return(nil, nil).AnyTimes()
 			sess.connFlowController = fc
 			runSession()
 			sent := make(chan struct{})
