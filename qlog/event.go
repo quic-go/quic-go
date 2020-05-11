@@ -326,14 +326,14 @@ func (e eventKeyRetired) MarshalJSONObject(enc *gojay.Encoder) {
 type eventTransportParameters struct {
 	Owner owner
 
-	OriginalConnectionID    protocol.ConnectionID
-	StatelessResetToken     *[16]byte
-	DisableActiveMigration  bool
-	MaxIdleTimeout          time.Duration
-	MaxUDPPayloadSize       protocol.ByteCount
-	AckDelayExponent        uint8
-	MaxAckDelay             time.Duration
-	ActiveConnectionIDLimit uint64
+	OriginalDestinationConnectionID protocol.ConnectionID
+	StatelessResetToken             *[16]byte
+	DisableActiveMigration          bool
+	MaxIdleTimeout                  time.Duration
+	MaxUDPPayloadSize               protocol.ByteCount
+	AckDelayExponent                uint8
+	MaxAckDelay                     time.Duration
+	ActiveConnectionIDLimit         uint64
 
 	InitialMaxData                 protocol.ByteCount
 	InitialMaxStreamDataBidiLocal  protocol.ByteCount
@@ -351,8 +351,8 @@ func (e eventTransportParameters) IsNil() bool        { return false }
 
 func (e eventTransportParameters) MarshalJSONObject(enc *gojay.Encoder) {
 	enc.StringKey("owner", e.Owner.String())
-	if e.OriginalConnectionID != nil {
-		enc.StringKey("original_connection_id", connectionID(e.OriginalConnectionID).String())
+	if e.OriginalDestinationConnectionID != nil {
+		enc.StringKey("original_destination_connection_id", connectionID(e.OriginalDestinationConnectionID).String())
 	}
 	if e.StatelessResetToken != nil {
 		enc.StringKey("stateless_reset_token", fmt.Sprintf("%x", e.StatelessResetToken[:]))

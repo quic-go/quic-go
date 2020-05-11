@@ -261,19 +261,19 @@ var newSession = func(
 	initialStream := newCryptoStream()
 	handshakeStream := newCryptoStream()
 	params := &wire.TransportParameters{
-		InitialMaxStreamDataBidiLocal:  protocol.InitialMaxStreamData,
-		InitialMaxStreamDataBidiRemote: protocol.InitialMaxStreamData,
-		InitialMaxStreamDataUni:        protocol.InitialMaxStreamData,
-		InitialMaxData:                 protocol.InitialMaxData,
-		MaxIdleTimeout:                 s.config.MaxIdleTimeout,
-		MaxBidiStreamNum:               protocol.StreamNum(s.config.MaxIncomingStreams),
-		MaxUniStreamNum:                protocol.StreamNum(s.config.MaxIncomingUniStreams),
-		MaxAckDelay:                    protocol.MaxAckDelayInclGranularity,
-		AckDelayExponent:               protocol.AckDelayExponent,
-		DisableActiveMigration:         true,
-		StatelessResetToken:            &statelessResetToken,
-		OriginalConnectionID:           origDestConnID,
-		ActiveConnectionIDLimit:        protocol.MaxActiveConnectionIDs,
+		InitialMaxStreamDataBidiLocal:   protocol.InitialMaxStreamData,
+		InitialMaxStreamDataBidiRemote:  protocol.InitialMaxStreamData,
+		InitialMaxStreamDataUni:         protocol.InitialMaxStreamData,
+		InitialMaxData:                  protocol.InitialMaxData,
+		MaxIdleTimeout:                  s.config.MaxIdleTimeout,
+		MaxBidiStreamNum:                protocol.StreamNum(s.config.MaxIncomingStreams),
+		MaxUniStreamNum:                 protocol.StreamNum(s.config.MaxIncomingUniStreams),
+		MaxAckDelay:                     protocol.MaxAckDelayInclGranularity,
+		AckDelayExponent:                protocol.AckDelayExponent,
+		DisableActiveMigration:          true,
+		StatelessResetToken:             &statelessResetToken,
+		OriginalDestinationConnectionID: origDestConnID,
+		ActiveConnectionIDLimit:         protocol.MaxActiveConnectionIDs,
 	}
 	if s.qlogger != nil {
 		s.qlogger.SentTransportParameters(params)
@@ -1275,8 +1275,8 @@ func (s *session) processTransportParameters(params *wire.TransportParameters) {
 	}
 
 	// check the Retry token
-	if s.perspective == protocol.PerspectiveClient && !params.OriginalConnectionID.Equal(s.origDestConnID) {
-		s.closeLocal(qerr.NewError(qerr.TransportParameterError, fmt.Sprintf("expected original_connection_id to equal %s, is %s", s.origDestConnID, params.OriginalConnectionID)))
+	if s.perspective == protocol.PerspectiveClient && !params.OriginalDestinationConnectionID.Equal(s.origDestConnID) {
+		s.closeLocal(qerr.NewError(qerr.TransportParameterError, fmt.Sprintf("expected original_destination_connection_id to equal %s, is %s", s.origDestConnID, params.OriginalDestinationConnectionID)))
 		return
 	}
 

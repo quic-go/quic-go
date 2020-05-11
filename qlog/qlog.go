@@ -172,21 +172,21 @@ func (t *tracer) ReceivedTransportParameters(tp *wire.TransportParameters) {
 func (t *tracer) recordTransportParameters(owner owner, tp *wire.TransportParameters) {
 	t.mutex.Lock()
 	t.recordEvent(time.Now(), &eventTransportParameters{
-		Owner:                          owner,
-		OriginalConnectionID:           tp.OriginalConnectionID,
-		StatelessResetToken:            tp.StatelessResetToken,
-		DisableActiveMigration:         tp.DisableActiveMigration,
-		MaxIdleTimeout:                 tp.MaxIdleTimeout,
-		MaxUDPPayloadSize:              tp.MaxUDPPayloadSize,
-		AckDelayExponent:               tp.AckDelayExponent,
-		MaxAckDelay:                    tp.MaxAckDelay,
-		ActiveConnectionIDLimit:        tp.ActiveConnectionIDLimit,
-		InitialMaxData:                 tp.InitialMaxData,
-		InitialMaxStreamDataBidiLocal:  tp.InitialMaxStreamDataBidiLocal,
-		InitialMaxStreamDataBidiRemote: tp.InitialMaxStreamDataBidiRemote,
-		InitialMaxStreamDataUni:        tp.InitialMaxStreamDataUni,
-		InitialMaxStreamsBidi:          int64(tp.MaxBidiStreamNum),
-		InitialMaxStreamsUni:           int64(tp.MaxUniStreamNum),
+		Owner:                           owner,
+		OriginalDestinationConnectionID: tp.OriginalDestinationConnectionID,
+		StatelessResetToken:             tp.StatelessResetToken,
+		DisableActiveMigration:          tp.DisableActiveMigration,
+		MaxIdleTimeout:                  tp.MaxIdleTimeout,
+		MaxUDPPayloadSize:               tp.MaxUDPPayloadSize,
+		AckDelayExponent:                tp.AckDelayExponent,
+		MaxAckDelay:                     tp.MaxAckDelay,
+		ActiveConnectionIDLimit:         tp.ActiveConnectionIDLimit,
+		InitialMaxData:                  tp.InitialMaxData,
+		InitialMaxStreamDataBidiLocal:   tp.InitialMaxStreamDataBidiLocal,
+		InitialMaxStreamDataBidiRemote:  tp.InitialMaxStreamDataBidiRemote,
+		InitialMaxStreamDataUni:         tp.InitialMaxStreamDataUni,
+		InitialMaxStreamsBidi:           int64(tp.MaxBidiStreamNum),
+		InitialMaxStreamsUni:            int64(tp.MaxUniStreamNum),
 	})
 	t.mutex.Unlock()
 }

@@ -25,21 +25,21 @@ func init() {
 type transportParameterID uint64
 
 const (
-	originalConnectionIDParameterID           transportParameterID = 0x0
-	maxIdleTimeoutParameterID                 transportParameterID = 0x1
-	statelessResetTokenParameterID            transportParameterID = 0x2
-	maxUDPPayloadSizeParameterID              transportParameterID = 0x3
-	initialMaxDataParameterID                 transportParameterID = 0x4
-	initialMaxStreamDataBidiLocalParameterID  transportParameterID = 0x5
-	initialMaxStreamDataBidiRemoteParameterID transportParameterID = 0x6
-	initialMaxStreamDataUniParameterID        transportParameterID = 0x7
-	initialMaxStreamsBidiParameterID          transportParameterID = 0x8
-	initialMaxStreamsUniParameterID           transportParameterID = 0x9
-	ackDelayExponentParameterID               transportParameterID = 0xa
-	maxAckDelayParameterID                    transportParameterID = 0xb
-	disableActiveMigrationParameterID         transportParameterID = 0xc
-	preferredAddressParameterID               transportParameterID = 0xd
-	activeConnectionIDLimitParameterID        transportParameterID = 0xe
+	originalDestinationConnectionIDParameterID transportParameterID = 0x0
+	maxIdleTimeoutParameterID                  transportParameterID = 0x1
+	statelessResetTokenParameterID             transportParameterID = 0x2
+	maxUDPPayloadSizeParameterID               transportParameterID = 0x3
+	initialMaxDataParameterID                  transportParameterID = 0x4
+	initialMaxStreamDataBidiLocalParameterID   transportParameterID = 0x5
+	initialMaxStreamDataBidiRemoteParameterID  transportParameterID = 0x6
+	initialMaxStreamDataUniParameterID         transportParameterID = 0x7
+	initialMaxStreamsBidiParameterID           transportParameterID = 0x8
+	initialMaxStreamsUniParameterID            transportParameterID = 0x9
+	ackDelayExponentParameterID                transportParameterID = 0xa
+	maxAckDelayParameterID                     transportParameterID = 0xb
+	disableActiveMigrationParameterID          transportParameterID = 0xc
+	preferredAddressParameterID                transportParameterID = 0xd
+	activeConnectionIDLimitParameterID         transportParameterID = 0xe
 )
 
 // PreferredAddress is the value encoding in the preferred_address transport parameter
@@ -73,9 +73,9 @@ type TransportParameters struct {
 
 	PreferredAddress *PreferredAddress
 
-	StatelessResetToken     *[16]byte
-	OriginalConnectionID    protocol.ConnectionID
-	ActiveConnectionIDLimit uint64
+	StatelessResetToken             *[16]byte
+	OriginalDestinationConnectionID protocol.ConnectionID
+	ActiveConnectionIDLimit         uint64
 }
 
 // Unmarshal the transport parameters
@@ -155,11 +155,11 @@ func (p *TransportParameters) unmarshal(data []byte, sentBy protocol.Perspective
 				var token [16]byte
 				r.Read(token[:])
 				p.StatelessResetToken = &token
-			case originalConnectionIDParameterID:
+			case originalDestinationConnectionIDParameterID:
 				if sentBy == protocol.PerspectiveClient {
-					return errors.New("client sent an original_connection_id")
+					return errors.New("client sent an original_destination_connection_id")
 				}
-				p.OriginalConnectionID, _ = protocol.ReadConnectionID(r, int(paramLen))
+				p.OriginalDestinationConnectionID, _ = protocol.ReadConnectionID(r, int(paramLen))
 			default:
 				r.Seek(int64(paramLen), io.SeekCurrent)
 			}
@@ -347,10 +347,10 @@ func (p *TransportParameters) Marshal() []byte {
 		b.Write(p.PreferredAddress.ConnectionID.Bytes())
 		b.Write(p.PreferredAddress.StatelessResetToken[:])
 	}
-	if p.OriginalConnectionID.Len() > 0 {
-		utils.WriteVarInt(b, uint64(originalConnectionIDParameterID))
-		utils.WriteVarInt(b, uint64(p.OriginalConnectionID.Len()))
-		b.Write(p.OriginalConnectionID.Bytes())
+	if p.OriginalDestinationConnectionID.Len() > 0 {
+		utils.WriteVarInt(b, uint64(originalDestinationConnectionIDParameterID))
+		utils.WriteVarInt(b, uint64(p.OriginalDestinationConnectionID.Len()))
+		b.Write(p.OriginalDestinationConnectionID.Bytes())
 	}
 
 	// active_connection_id_limit
@@ -416,8 +416,8 @@ func (p *TransportParameters) ValidFor0RTT(tp *TransportParameters) bool {
 
 // String returns a string representation, intended for logging.
 func (p *TransportParameters) String() string {
-	logString := "&wire.TransportParameters{OriginalConnectionID: %s, InitialMaxStreamDataBidiLocal: %d, InitialMaxStreamDataBidiRemote: %d, InitialMaxStreamDataUni: %d, InitialMaxData: %d, MaxBidiStreamNum: %d, MaxUniStreamNum: %d, MaxIdleTimeout: %s, AckDelayExponent: %d, MaxAckDelay: %s, ActiveConnectionIDLimit: %d"
-	logParams := []interface{}{p.OriginalConnectionID, p.InitialMaxStreamDataBidiLocal, p.InitialMaxStreamDataBidiRemote, p.InitialMaxStreamDataUni, p.InitialMaxData, p.MaxBidiStreamNum, p.MaxUniStreamNum, p.MaxIdleTimeout, p.AckDelayExponent, p.MaxAckDelay, p.ActiveConnectionIDLimit}
+	logString := "&wire.TransportParameters{OriginalDestinationConnectionID: %s, InitialMaxStreamDataBidiLocal: %d, InitialMaxStreamDataBidiRemote: %d, InitialMaxStreamDataUni: %d, InitialMaxData: %d, MaxBidiStreamNum: %d, MaxUniStreamNum: %d, MaxIdleTimeout: %s, AckDelayExponent: %d, MaxAckDelay: %s, ActiveConnectionIDLimit: %d"
+	logParams := []interface{}{p.OriginalDestinationConnectionID, p.InitialMaxStreamDataBidiLocal, p.InitialMaxStreamDataBidiRemote, p.InitialMaxStreamDataUni, p.InitialMaxData, p.MaxBidiStreamNum, p.MaxUniStreamNum, p.MaxIdleTimeout, p.AckDelayExponent, p.MaxAckDelay, p.ActiveConnectionIDLimit}
 	if p.StatelessResetToken != nil { // the client never sends a stateless reset token
 		logString += ", StatelessResetToken: %#x"
 		logParams = append(logParams, *p.StatelessResetToken)

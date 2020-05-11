@@ -26,56 +26,56 @@ var _ = Describe("Transport Parameters", func() {
 
 	It("has a string representation", func() {
 		p := &TransportParameters{
-			InitialMaxStreamDataBidiLocal:  1234,
-			InitialMaxStreamDataBidiRemote: 2345,
-			InitialMaxStreamDataUni:        3456,
-			InitialMaxData:                 4567,
-			MaxBidiStreamNum:               1337,
-			MaxUniStreamNum:                7331,
-			MaxIdleTimeout:                 42 * time.Second,
-			OriginalConnectionID:           protocol.ConnectionID{0xde, 0xad, 0xbe, 0xef},
-			AckDelayExponent:               14,
-			MaxAckDelay:                    37 * time.Millisecond,
-			StatelessResetToken:            &[16]byte{0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88, 0x99, 0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff, 0x00},
-			ActiveConnectionIDLimit:        123,
+			InitialMaxStreamDataBidiLocal:   1234,
+			InitialMaxStreamDataBidiRemote:  2345,
+			InitialMaxStreamDataUni:         3456,
+			InitialMaxData:                  4567,
+			MaxBidiStreamNum:                1337,
+			MaxUniStreamNum:                 7331,
+			MaxIdleTimeout:                  42 * time.Second,
+			OriginalDestinationConnectionID: protocol.ConnectionID{0xde, 0xad, 0xbe, 0xef},
+			AckDelayExponent:                14,
+			MaxAckDelay:                     37 * time.Millisecond,
+			StatelessResetToken:             &[16]byte{0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88, 0x99, 0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff, 0x00},
+			ActiveConnectionIDLimit:         123,
 		}
-		Expect(p.String()).To(Equal("&wire.TransportParameters{OriginalConnectionID: 0xdeadbeef, InitialMaxStreamDataBidiLocal: 1234, InitialMaxStreamDataBidiRemote: 2345, InitialMaxStreamDataUni: 3456, InitialMaxData: 4567, MaxBidiStreamNum: 1337, MaxUniStreamNum: 7331, MaxIdleTimeout: 42s, AckDelayExponent: 14, MaxAckDelay: 37ms, ActiveConnectionIDLimit: 123, StatelessResetToken: 0x112233445566778899aabbccddeeff00}"))
+		Expect(p.String()).To(Equal("&wire.TransportParameters{OriginalDestinationConnectionID: 0xdeadbeef, InitialMaxStreamDataBidiLocal: 1234, InitialMaxStreamDataBidiRemote: 2345, InitialMaxStreamDataUni: 3456, InitialMaxData: 4567, MaxBidiStreamNum: 1337, MaxUniStreamNum: 7331, MaxIdleTimeout: 42s, AckDelayExponent: 14, MaxAckDelay: 37ms, ActiveConnectionIDLimit: 123, StatelessResetToken: 0x112233445566778899aabbccddeeff00}"))
 	})
 
 	It("has a string representation, if there's no stateless reset token", func() {
 		p := &TransportParameters{
-			InitialMaxStreamDataBidiLocal:  1234,
-			InitialMaxStreamDataBidiRemote: 2345,
-			InitialMaxStreamDataUni:        3456,
-			InitialMaxData:                 4567,
-			MaxBidiStreamNum:               1337,
-			MaxUniStreamNum:                7331,
-			MaxIdleTimeout:                 42 * time.Second,
-			OriginalConnectionID:           protocol.ConnectionID{0xde, 0xad, 0xbe, 0xef},
-			AckDelayExponent:               14,
-			MaxAckDelay:                    37 * time.Second,
-			ActiveConnectionIDLimit:        89,
+			InitialMaxStreamDataBidiLocal:   1234,
+			InitialMaxStreamDataBidiRemote:  2345,
+			InitialMaxStreamDataUni:         3456,
+			InitialMaxData:                  4567,
+			MaxBidiStreamNum:                1337,
+			MaxUniStreamNum:                 7331,
+			MaxIdleTimeout:                  42 * time.Second,
+			OriginalDestinationConnectionID: protocol.ConnectionID{0xde, 0xad, 0xbe, 0xef},
+			AckDelayExponent:                14,
+			MaxAckDelay:                     37 * time.Second,
+			ActiveConnectionIDLimit:         89,
 		}
-		Expect(p.String()).To(Equal("&wire.TransportParameters{OriginalConnectionID: 0xdeadbeef, InitialMaxStreamDataBidiLocal: 1234, InitialMaxStreamDataBidiRemote: 2345, InitialMaxStreamDataUni: 3456, InitialMaxData: 4567, MaxBidiStreamNum: 1337, MaxUniStreamNum: 7331, MaxIdleTimeout: 42s, AckDelayExponent: 14, MaxAckDelay: 37s, ActiveConnectionIDLimit: 89}"))
+		Expect(p.String()).To(Equal("&wire.TransportParameters{OriginalDestinationConnectionID: 0xdeadbeef, InitialMaxStreamDataBidiLocal: 1234, InitialMaxStreamDataBidiRemote: 2345, InitialMaxStreamDataUni: 3456, InitialMaxData: 4567, MaxBidiStreamNum: 1337, MaxUniStreamNum: 7331, MaxIdleTimeout: 42s, AckDelayExponent: 14, MaxAckDelay: 37s, ActiveConnectionIDLimit: 89}"))
 	})
 
 	It("marshals and unmarshals", func() {
 		var token [16]byte
 		rand.Read(token[:])
 		params := &TransportParameters{
-			InitialMaxStreamDataBidiLocal:  protocol.ByteCount(getRandomValue()),
-			InitialMaxStreamDataBidiRemote: protocol.ByteCount(getRandomValue()),
-			InitialMaxStreamDataUni:        protocol.ByteCount(getRandomValue()),
-			InitialMaxData:                 protocol.ByteCount(getRandomValue()),
-			MaxIdleTimeout:                 0xcafe * time.Second,
-			MaxBidiStreamNum:               protocol.StreamNum(getRandomValue()),
-			MaxUniStreamNum:                protocol.StreamNum(getRandomValue()),
-			DisableActiveMigration:         true,
-			StatelessResetToken:            &token,
-			OriginalConnectionID:           protocol.ConnectionID{0xde, 0xad, 0xbe, 0xef},
-			AckDelayExponent:               13,
-			MaxAckDelay:                    42 * time.Millisecond,
-			ActiveConnectionIDLimit:        getRandomValue(),
+			InitialMaxStreamDataBidiLocal:   protocol.ByteCount(getRandomValue()),
+			InitialMaxStreamDataBidiRemote:  protocol.ByteCount(getRandomValue()),
+			InitialMaxStreamDataUni:         protocol.ByteCount(getRandomValue()),
+			InitialMaxData:                  protocol.ByteCount(getRandomValue()),
+			MaxIdleTimeout:                  0xcafe * time.Second,
+			MaxBidiStreamNum:                protocol.StreamNum(getRandomValue()),
+			MaxUniStreamNum:                 protocol.StreamNum(getRandomValue()),
+			DisableActiveMigration:          true,
+			StatelessResetToken:             &token,
+			OriginalDestinationConnectionID: protocol.ConnectionID{0xde, 0xad, 0xbe, 0xef},
+			AckDelayExponent:                13,
+			MaxAckDelay:                     42 * time.Millisecond,
+			ActiveConnectionIDLimit:         getRandomValue(),
 		}
 		data := params.Marshal()
 
@@ -90,7 +90,7 @@ var _ = Describe("Transport Parameters", func() {
 		Expect(p.MaxIdleTimeout).To(Equal(params.MaxIdleTimeout))
 		Expect(p.DisableActiveMigration).To(Equal(params.DisableActiveMigration))
 		Expect(p.StatelessResetToken).To(Equal(params.StatelessResetToken))
-		Expect(p.OriginalConnectionID).To(Equal(protocol.ConnectionID{0xde, 0xad, 0xbe, 0xef}))
+		Expect(p.OriginalDestinationConnectionID).To(Equal(protocol.ConnectionID{0xde, 0xad, 0xbe, 0xef}))
 		Expect(p.AckDelayExponent).To(Equal(uint8(13)))
 		Expect(p.MaxAckDelay).To(Equal(42 * time.Millisecond))
 		Expect(p.ActiveConnectionIDLimit).To(Equal(params.ActiveConnectionIDLimit))
@@ -253,10 +253,10 @@ var _ = Describe("Transport Parameters", func() {
 
 	It("errors if the client sent a stateless_reset_token", func() {
 		params := &TransportParameters{
-			OriginalConnectionID: protocol.ConnectionID{0xca, 0xfe},
+			OriginalDestinationConnectionID: protocol.ConnectionID{0xca, 0xfe},
 		}
 		data := params.Marshal()
-		Expect((&TransportParameters{}).Unmarshal(data, protocol.PerspectiveClient)).To(MatchError("TRANSPORT_PARAMETER_ERROR: client sent an original_connection_id"))
+		Expect((&TransportParameters{}).Unmarshal(data, protocol.PerspectiveClient)).To(MatchError("TRANSPORT_PARAMETER_ERROR: client sent an original_destination_connection_id"))
 	})
 
 	Context("preferred address", func() {
