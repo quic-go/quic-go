@@ -15,6 +15,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	_ "net/http/pprof"
 
@@ -119,6 +120,73 @@ func setupHandler(www string, trace bool) http.Handler {
 			0x61, 0x00, 0x00, 0x00, 0xf0, 0x00, 0x01, 0xe2, 0xb8, 0x75, 0x22, 0x00,
 			0x00, 0x00, 0x00, 0x49, 0x45, 0x4e, 0x44, 0xae, 0x42, 0x60, 0x82,
 		})
+	})
+
+	// tile w/ delayed response
+	mux.HandleFunc("/demo/delayed_tile", func(w http.ResponseWriter, r *http.Request) {
+		ctx := r.Context()
+		dur := 6 * time.Second
+		log.Printf("responding after %v ...", dur)
+
+		t0 := time.Now()
+		select {
+		case <-time.After(dur):
+			log.Printf("start responding")
+			// Small 40x40 png
+			w.Write([]byte{
+				0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d,
+				0x49, 0x48, 0x44, 0x52, 0x00, 0x00, 0x00, 0x28, 0x00, 0x00, 0x00, 0x28,
+				0x01, 0x03, 0x00, 0x00, 0x00, 0xb6, 0x30, 0x2a, 0x2e, 0x00, 0x00, 0x00,
+				0x03, 0x50, 0x4c, 0x54, 0x45, 0x5a, 0xc3, 0x5a, 0xad, 0x38, 0xaa, 0xdb,
+				0x00, 0x00, 0x00, 0x0b, 0x49, 0x44, 0x41, 0x54, 0x78, 0x01, 0x63, 0x18,
+				0x61, 0x00, 0x00, 0x00, 0xf0, 0x00, 0x01, 0xe2, 0xb8, 0x75, 0x22, 0x00,
+				0x00, 0x00, 0x00, 0x49, 0x45, 0x4e, 0x44, 0xae, 0x42, 0x60, 0x82,
+			})
+		case <-ctx.Done():
+			err := ctx.Err()
+			log.Printf("context done after %v: %s", time.Since(t0), err.Error())
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
+
+	})
+
+	// Slow response
+	mux.HandleFunc("/demo/slow_resp", func(w http.ResponseWriter, r *http.Request) {
+		ctx := r.Context()
+		log.Printf("slow_resp handler is started")
+		defer log.Printf("slow_resp is ended")
+
+		done := make(chan bool)
+		t0 := time.Now()
+
+		go func() {
+			for i := 0; i < 10; i++ {
+				select {
+				case <-time.After(500 * time.Millisecond):
+					fmt.Fprintf(w, "this is %d test\n", i)
+					if f, ok := w.(http.Flusher); ok {
+						f.Flush()
+						log.Printf("=== flushed ===")
+					} else {
+						log.Printf("=== fluser disabled !!!")
+					}
+				case <-ctx.Done():
+					// make sure to stop the goroutine
+					log.Printf("stoooooop")
+					return
+				}
+			}
+			done <- true
+		}()
+
+		select {
+		case <-done:
+			log.Printf("done")
+		case <-ctx.Done():
+			err := ctx.Err()
+			log.Printf("context done after %v: %s", time.Since(t0), err.Error())
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
 	})
 
 	mux.HandleFunc("/demo/tiles", func(w http.ResponseWriter, r *http.Request) {
@@ -231,7 +299,15 @@ func main() {
 				err = http3.ListenAndServe(bCap, certFile, keyFile, nil)
 			} else {
 				server := http3.Server{
-					Server:     &http.Server{Handler: handler, Addr: bCap},
+					Server: &http.Server{
+						Handler: handler,
+						Addr:    bCap,
+						// Handler: http.TimeoutHandler(handler, 3*time.Second, "Handler timeout exceeds"),
+						// IdleTimeout:       20 * time.Second,
+						// ReadTimeout:       4 * time.Second,
+						// ReadHeaderTimeout: 2 * time.Second,
+						// WriteTimeout:      4 * time.Second,
+					},
 					QuicConfig: quicConf,
 				}
 				err = server.ListenAndServeTLS(testdata.GetCertificatePaths())
