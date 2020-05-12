@@ -124,6 +124,29 @@ var _ = Describe("Send Stream", func() {
 			Eventually(done).Should(BeClosed())
 		})
 
+		It("bundles small writes", func() {
+			done := make(chan struct{})
+			go func() {
+				defer GinkgoRecover()
+				mockSender.EXPECT().onHasStreamData(streamID).Times(2)
+				n, err := strWithTimeout.Write([]byte("foo"))
+				Expect(err).ToNot(HaveOccurred())
+				Expect(n).To(Equal(3))
+				n, err = strWithTimeout.Write([]byte("bar"))
+				Expect(err).ToNot(HaveOccurred())
+				Expect(n).To(Equal(3))
+				close(done)
+			}()
+			Eventually(done).Should(BeClosed()) // both Write calls returned without any data having been dequeued yet
+			mockFC.EXPECT().SendWindowSize().Return(protocol.MaxByteCount)
+			mockFC.EXPECT().AddBytesSent(protocol.ByteCount(6))
+			frame, _ := str.popStreamFrame(protocol.MaxByteCount)
+			f := frame.Frame.(*wire.StreamFrame)
+			Expect(f.Offset).To(BeZero())
+			Expect(f.FinBit).To(BeFalse())
+			Expect(f.Data).To(Equal([]byte("foobar")))
+		})
+
 		It("writes and gets data in multiple turns, for large writes", func() {
 			mockFC.EXPECT().SendWindowSize().Return(protocol.MaxByteCount).Times(5)
 			var totalBytesSent protocol.ByteCount

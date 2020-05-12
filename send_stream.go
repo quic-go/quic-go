@@ -117,13 +117,19 @@ func (s *sendStream) Write(p []byte) (int, error) {
 		// When the user now calls Close(), this is much more likely to happen before we popped that last STREAM frame,
 		// allowing us to set the FIN bit on that frame (instead of sending an empty STREAM frame with FIN).
 		if s.canBufferStreamFrame() && len(s.dataForWriting) > 0 {
-			f := wire.GetStreamFrame()
-			f.Offset = s.writeOffset
-			f.StreamID = s.streamID
-			f.DataLenPresent = true
-			f.Data = f.Data[:len(s.dataForWriting)]
-			copy(f.Data, s.dataForWriting)
-			s.nextFrame = f
+			if s.nextFrame == nil {
+				f := wire.GetStreamFrame()
+				f.Offset = s.writeOffset
+				f.StreamID = s.streamID
+				f.DataLenPresent = true
+				f.Data = f.Data[:len(s.dataForWriting)]
+				copy(f.Data, s.dataForWriting)
+				s.nextFrame = f
+			} else {
+				l := len(s.nextFrame.Data)
+				s.nextFrame.Data = s.nextFrame.Data[:l+len(s.dataForWriting)]
+				copy(s.nextFrame.Data[l:], s.dataForWriting)
+			}
 			s.dataForWriting = nil
 			bytesWritten = len(p)
 			copied = true
@@ -176,7 +182,11 @@ func (s *sendStream) Write(p []byte) (int, error) {
 }
 
 func (s *sendStream) canBufferStreamFrame() bool {
-	return s.nextFrame == nil && protocol.ByteCount(len(s.dataForWriting)) <= protocol.MaxReceivePacketSize
+	var l protocol.ByteCount
+	if s.nextFrame != nil {
+		l = s.nextFrame.DataLen()
+	}
+	return l+protocol.ByteCount(len(s.dataForWriting)) <= protocol.MaxReceivePacketSize
 }
 
 // popStreamFrame returns the next STREAM frame that is supposed to be sent on this stream
