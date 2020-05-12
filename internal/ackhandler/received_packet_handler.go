@@ -118,15 +118,15 @@ func (h *receivedPacketHandler) GetAckFrame(encLevel protocol.EncryptionLevel) *
 	switch encLevel {
 	case protocol.EncryptionInitial:
 		if h.initialPackets != nil {
-			ack = h.initialPackets.GetAckFrame()
+			ack = h.initialPackets.GetAckFrame(true)
 		}
 	case protocol.EncryptionHandshake:
 		if h.handshakePackets != nil {
-			ack = h.handshakePackets.GetAckFrame()
+			ack = h.handshakePackets.GetAckFrame(true)
 		}
 	case protocol.Encryption1RTT:
 		// 0-RTT packets can't contain ACK frames
-		return h.appDataPackets.GetAckFrame()
+		return h.appDataPackets.GetAckFrame(true)
 	default:
 		return nil
 	}
