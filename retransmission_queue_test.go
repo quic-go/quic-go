@@ -176,9 +176,12 @@ var _ = Describe("Retransmission queue", func() {
 
 		It("queues and retrieves a control frame", func() {
 			f := &wire.MaxDataFrame{ByteOffset: 0x42}
+			Expect(q.HasAppData()).To(BeFalse())
 			q.AddAppData(f)
+			Expect(q.HasAppData()).To(BeTrue())
 			Expect(q.GetAppDataFrame(f.Length(version) - 1)).To(BeNil())
 			Expect(q.GetAppDataFrame(f.Length(version))).To(Equal(f))
+			Expect(q.HasAppData()).To(BeFalse())
 		})
 	})
 })
