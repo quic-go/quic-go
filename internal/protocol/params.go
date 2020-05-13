@@ -43,7 +43,7 @@ const DefaultMaxIncomingUniStreams = 100
 const MaxServerUnprocessedPackets = 1024
 
 // MaxSessionUnprocessedPackets is the max number of packets stored in each session that are not yet processed.
-const MaxSessionUnprocessedPackets = MaxCongestionWindowPackets
+const MaxSessionUnprocessedPackets = 256
 
 // SkipPacketAveragePeriodLength is the average period length in which one packet number is skipped to prevent an Optimistic ACK attack
 const SkipPacketAveragePeriodLength PacketNumber = 500
