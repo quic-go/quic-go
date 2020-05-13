@@ -113,20 +113,20 @@ func (h *receivedPacketHandler) GetAlarmTimeout() time.Time {
 	return utils.MinNonZeroTime(utils.MinNonZeroTime(initialAlarm, handshakeAlarm), oneRTTAlarm)
 }
 
-func (h *receivedPacketHandler) GetAckFrame(encLevel protocol.EncryptionLevel) *wire.AckFrame {
+func (h *receivedPacketHandler) GetAckFrame(encLevel protocol.EncryptionLevel, onlyIfQueued bool) *wire.AckFrame {
 	var ack *wire.AckFrame
 	switch encLevel {
 	case protocol.EncryptionInitial:
 		if h.initialPackets != nil {
-			ack = h.initialPackets.GetAckFrame(true)
+			ack = h.initialPackets.GetAckFrame(onlyIfQueued)
 		}
 	case protocol.EncryptionHandshake:
 		if h.handshakePackets != nil {
-			ack = h.handshakePackets.GetAckFrame(true)
+			ack = h.handshakePackets.GetAckFrame(onlyIfQueued)
 		}
 	case protocol.Encryption1RTT:
 		// 0-RTT packets can't contain ACK frames
-		return h.appDataPackets.GetAckFrame(true)
+		return h.appDataPackets.GetAckFrame(onlyIfQueued)
 	default:
 		return nil
 	}
