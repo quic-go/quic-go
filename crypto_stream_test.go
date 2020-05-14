@@ -97,7 +97,7 @@ var _ = Describe("Crypto Stream", func() {
 					Offset: 10,
 				})).To(Succeed())
 				err := str.Finish()
-				Expect(err).To(MatchError("encryption level changed, but crypto stream has more data to read"))
+				Expect(err).To(MatchError("PROTOCOL_VIOLATION: encryption level changed, but crypto stream has more data to read"))
 			})
 
 			It("works with reordered data", func() {
