@@ -1,7 +1,6 @@
 package quic
 
 import (
-	"errors"
 	"fmt"
 	"io"
 
@@ -81,7 +80,7 @@ func (s *cryptoStreamImpl) GetCryptoData() []byte {
 
 func (s *cryptoStreamImpl) Finish() error {
 	if s.queue.HasMoreData() {
-		return errors.New("encryption level changed, but crypto stream has more data to read")
+		return qerr.NewError(qerr.ProtocolViolation, "encryption level changed, but crypto stream has more data to read")
 	}
 	s.finished = true
 	return nil
