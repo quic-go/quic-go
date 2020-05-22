@@ -11,8 +11,8 @@ import (
 type windowUpdateQueue struct {
 	mutex sync.Mutex
 
-	queue      map[protocol.StreamID]bool // used as a set
-	queuedConn bool                       // connection-level window update
+	queue      map[protocol.StreamID]struct{} // used as a set
+	queuedConn bool                           // connection-level window update
 
 	streamGetter       streamGetter
 	connFlowController flowcontrol.ConnectionFlowController
@@ -25,7 +25,7 @@ func newWindowUpdateQueue(
 	cb func(wire.Frame),
 ) *windowUpdateQueue {
 	return &windowUpdateQueue{
-		queue:              make(map[protocol.StreamID]bool),
+		queue:              make(map[protocol.StreamID]struct{}),
 		streamGetter:       streamGetter,
 		connFlowController: connFC,
 		callback:           cb,
@@ -34,7 +34,7 @@ func newWindowUpdateQueue(
 
 func (q *windowUpdateQueue) AddStream(id protocol.StreamID) {
 	q.mutex.Lock()
-	q.queue[id] = true
+	q.queue[id] = struct{}{}
 	q.mutex.Unlock()
 }
 
