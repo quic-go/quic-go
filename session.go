@@ -503,7 +503,7 @@ func (s *session) run() error {
 		case zeroRTTParams := <-s.clientHelloWritten:
 			s.scheduleSending()
 			if zeroRTTParams != nil {
-				s.processTransportParameters(zeroRTTParams)
+				s.restoreTransportParameters(zeroRTTParams)
 				close(s.earlySessionReadyChan)
 			}
 		case closeErr := <-s.closeChan:
@@ -1263,6 +1263,21 @@ func (s *session) dropEncryptionLevel(encLevel protocol.EncryptionLevel) {
 	s.receivedPacketHandler.DropPackets(encLevel)
 	if s.qlogger != nil {
 		s.qlogger.DroppedEncryptionLevel(encLevel)
+	}
+}
+
+// is called for the client, when restoring transport parameters saved for 0-RTT
+func (s *session) restoreTransportParameters(params *wire.TransportParameters) {
+	if s.logger.Debug() {
+		s.logger.Debugf("Restoring Transport Parameters: %s", params)
+	}
+
+	s.peerParams = params
+	s.connIDGenerator.SetMaxActiveConnIDs(params.ActiveConnectionIDLimit)
+	s.connFlowController.UpdateSendWindow(params.InitialMaxData)
+	if err := s.streamsMap.UpdateLimits(params); err != nil {
+		s.closeLocal(err)
+		return
 	}
 }
 
