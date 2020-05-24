@@ -41,6 +41,7 @@ const (
 	preferredAddressParameterID                transportParameterID = 0xd
 	activeConnectionIDLimitParameterID         transportParameterID = 0xe
 	initialSourceConnectionIDParameterID       transportParameterID = 0xf
+	retrySourceConnectionIDParameterID         transportParameterID = 0x10
 )
 
 // PreferredAddress is the value encoding in the preferred_address transport parameter
@@ -76,6 +77,7 @@ type TransportParameters struct {
 
 	OriginalDestinationConnectionID protocol.ConnectionID
 	InitialSourceConnectionID       protocol.ConnectionID
+	RetrySourceConnectionID         *protocol.ConnectionID // use a pointer here to distinguish zero-length connection IDs from missing transport parameters
 
 	StatelessResetToken     *[16]byte
 	ActiveConnectionIDLimit uint64
@@ -171,6 +173,12 @@ func (p *TransportParameters) unmarshal(data []byte, sentBy protocol.Perspective
 			case initialSourceConnectionIDParameterID:
 				p.InitialSourceConnectionID, _ = protocol.ReadConnectionID(r, int(paramLen))
 				readInitialSourceConnectionID = true
+			case retrySourceConnectionIDParameterID:
+				if sentBy == protocol.PerspectiveClient {
+					return errors.New("client sent a retry_source_connection_id")
+				}
+				connID, _ := protocol.ReadConnectionID(r, int(paramLen))
+				p.RetrySourceConnectionID = &connID
 			default:
 				r.Seek(int64(paramLen), io.SeekCurrent)
 			}
@@ -378,7 +386,12 @@ func (p *TransportParameters) Marshal(pers protocol.Perspective) []byte {
 	utils.WriteVarInt(b, uint64(initialSourceConnectionIDParameterID))
 	utils.WriteVarInt(b, uint64(p.InitialSourceConnectionID.Len()))
 	b.Write(p.InitialSourceConnectionID.Bytes())
-
+	// retry_source_connection_id
+	if pers == protocol.PerspectiveServer && p.RetrySourceConnectionID != nil {
+		utils.WriteVarInt(b, uint64(retrySourceConnectionIDParameterID))
+		utils.WriteVarInt(b, uint64(p.RetrySourceConnectionID.Len()))
+		b.Write(p.RetrySourceConnectionID.Bytes())
+	}
 	return b.Bytes()
 }
 
@@ -440,8 +453,14 @@ func (p *TransportParameters) ValidFor0RTT(tp *TransportParameters) bool {
 
 // String returns a string representation, intended for logging.
 func (p *TransportParameters) String() string {
-	logString := "&wire.TransportParameters{OriginalDestinationConnectionID: %s, InitialSourceConnectionID: %s, InitialMaxStreamDataBidiLocal: %d, InitialMaxStreamDataBidiRemote: %d, InitialMaxStreamDataUni: %d, InitialMaxData: %d, MaxBidiStreamNum: %d, MaxUniStreamNum: %d, MaxIdleTimeout: %s, AckDelayExponent: %d, MaxAckDelay: %s, ActiveConnectionIDLimit: %d"
-	logParams := []interface{}{p.OriginalDestinationConnectionID, p.InitialSourceConnectionID, p.InitialMaxStreamDataBidiLocal, p.InitialMaxStreamDataBidiRemote, p.InitialMaxStreamDataUni, p.InitialMaxData, p.MaxBidiStreamNum, p.MaxUniStreamNum, p.MaxIdleTimeout, p.AckDelayExponent, p.MaxAckDelay, p.ActiveConnectionIDLimit}
+	logString := "&wire.TransportParameters{OriginalDestinationConnectionID: %s, InitialSourceConnectionID: %s, "
+	logParams := []interface{}{p.OriginalDestinationConnectionID, p.InitialSourceConnectionID}
+	if p.RetrySourceConnectionID != nil {
+		logString += "RetrySourceConnectionID: %s, "
+		logParams = append(logParams, p.RetrySourceConnectionID)
+	}
+	logString += "InitialMaxStreamDataBidiLocal: %d, InitialMaxStreamDataBidiRemote: %d, InitialMaxStreamDataUni: %d, InitialMaxData: %d, MaxBidiStreamNum: %d, MaxUniStreamNum: %d, MaxIdleTimeout: %s, AckDelayExponent: %d, MaxAckDelay: %s, ActiveConnectionIDLimit: %d"
+	logParams = append(logParams, []interface{}{p.InitialMaxStreamDataBidiLocal, p.InitialMaxStreamDataBidiRemote, p.InitialMaxStreamDataUni, p.InitialMaxData, p.MaxBidiStreamNum, p.MaxUniStreamNum, p.MaxIdleTimeout, p.AckDelayExponent, p.MaxAckDelay, p.ActiveConnectionIDLimit}...)
 	if p.StatelessResetToken != nil { // the client never sends a stateless reset token
 		logString += ", StatelessResetToken: %#x"
 		logParams = append(logParams, *p.StatelessResetToken)
