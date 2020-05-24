@@ -40,6 +40,7 @@ const (
 	disableActiveMigrationParameterID          transportParameterID = 0xc
 	preferredAddressParameterID                transportParameterID = 0xd
 	activeConnectionIDLimitParameterID         transportParameterID = 0xe
+	initialSourceConnectionIDParameterID       transportParameterID = 0xf
 )
 
 // PreferredAddress is the value encoding in the preferred_address transport parameter
@@ -73,9 +74,11 @@ type TransportParameters struct {
 
 	PreferredAddress *PreferredAddress
 
-	StatelessResetToken             *[16]byte
 	OriginalDestinationConnectionID protocol.ConnectionID
-	ActiveConnectionIDLimit         uint64
+	InitialSourceConnectionID       protocol.ConnectionID
+
+	StatelessResetToken     *[16]byte
+	ActiveConnectionIDLimit uint64
 }
 
 // Unmarshal the transport parameters
@@ -94,6 +97,7 @@ func (p *TransportParameters) unmarshal(data []byte, sentBy protocol.Perspective
 		readAckDelayExponent                bool
 		readMaxAckDelay                     bool
 		readOriginalDestinationConnectionID bool
+		readInitialSourceConnectionID       bool
 	)
 
 	r := bytes.NewReader(data)
@@ -164,23 +168,31 @@ func (p *TransportParameters) unmarshal(data []byte, sentBy protocol.Perspective
 				}
 				p.OriginalDestinationConnectionID, _ = protocol.ReadConnectionID(r, int(paramLen))
 				readOriginalDestinationConnectionID = true
+			case initialSourceConnectionIDParameterID:
+				p.InitialSourceConnectionID, _ = protocol.ReadConnectionID(r, int(paramLen))
+				readInitialSourceConnectionID = true
 			default:
 				r.Seek(int64(paramLen), io.SeekCurrent)
 			}
 		}
 	}
 
-	if sentBy == protocol.PerspectiveServer && !fromSessionTicket && !readOriginalDestinationConnectionID {
-		return errors.New("expected original_destination_connection_id")
-	}
-	if !readAckDelayExponent {
-		p.AckDelayExponent = protocol.DefaultAckDelayExponent
-	}
-	if !readMaxAckDelay {
-		p.MaxAckDelay = protocol.DefaultMaxAckDelay
-	}
-	if p.MaxUDPPayloadSize == 0 {
-		p.MaxUDPPayloadSize = protocol.MaxByteCount
+	if !fromSessionTicket {
+		if sentBy == protocol.PerspectiveServer && !readOriginalDestinationConnectionID {
+			return errors.New("missing original_destination_connection_id")
+		}
+		if !readAckDelayExponent {
+			p.AckDelayExponent = protocol.DefaultAckDelayExponent
+		}
+		if !readMaxAckDelay {
+			p.MaxAckDelay = protocol.DefaultMaxAckDelay
+		}
+		if p.MaxUDPPayloadSize == 0 {
+			p.MaxUDPPayloadSize = protocol.MaxByteCount
+		}
+		if !readInitialSourceConnectionID {
+			return errors.New("missing initial_source_connection_id")
+		}
 	}
 
 	// check that every transport parameter was sent at most once
@@ -360,9 +372,13 @@ func (p *TransportParameters) Marshal(pers protocol.Perspective) []byte {
 			b.Write(p.PreferredAddress.StatelessResetToken[:])
 		}
 	}
-
 	// active_connection_id_limit
 	p.marshalVarintParam(b, activeConnectionIDLimitParameterID, p.ActiveConnectionIDLimit)
+	// initial_source_connection_id
+	utils.WriteVarInt(b, uint64(initialSourceConnectionIDParameterID))
+	utils.WriteVarInt(b, uint64(p.InitialSourceConnectionID.Len()))
+	b.Write(p.InitialSourceConnectionID.Bytes())
+
 	return b.Bytes()
 }
 
@@ -424,8 +440,8 @@ func (p *TransportParameters) ValidFor0RTT(tp *TransportParameters) bool {
 
 // String returns a string representation, intended for logging.
 func (p *TransportParameters) String() string {
-	logString := "&wire.TransportParameters{OriginalDestinationConnectionID: %s, InitialMaxStreamDataBidiLocal: %d, InitialMaxStreamDataBidiRemote: %d, InitialMaxStreamDataUni: %d, InitialMaxData: %d, MaxBidiStreamNum: %d, MaxUniStreamNum: %d, MaxIdleTimeout: %s, AckDelayExponent: %d, MaxAckDelay: %s, ActiveConnectionIDLimit: %d"
-	logParams := []interface{}{p.OriginalDestinationConnectionID, p.InitialMaxStreamDataBidiLocal, p.InitialMaxStreamDataBidiRemote, p.InitialMaxStreamDataUni, p.InitialMaxData, p.MaxBidiStreamNum, p.MaxUniStreamNum, p.MaxIdleTimeout, p.AckDelayExponent, p.MaxAckDelay, p.ActiveConnectionIDLimit}
+	logString := "&wire.TransportParameters{OriginalDestinationConnectionID: %s, InitialSourceConnectionID: %s, InitialMaxStreamDataBidiLocal: %d, InitialMaxStreamDataBidiRemote: %d, InitialMaxStreamDataUni: %d, InitialMaxData: %d, MaxBidiStreamNum: %d, MaxUniStreamNum: %d, MaxIdleTimeout: %s, AckDelayExponent: %d, MaxAckDelay: %s, ActiveConnectionIDLimit: %d"
+	logParams := []interface{}{p.OriginalDestinationConnectionID, p.InitialSourceConnectionID, p.InitialMaxStreamDataBidiLocal, p.InitialMaxStreamDataBidiRemote, p.InitialMaxStreamDataUni, p.InitialMaxData, p.MaxBidiStreamNum, p.MaxUniStreamNum, p.MaxIdleTimeout, p.AckDelayExponent, p.MaxAckDelay, p.ActiveConnectionIDLimit}
 	if p.StatelessResetToken != nil { // the client never sends a stateless reset token
 		logString += ", StatelessResetToken: %#x"
 		logParams = append(logParams, *p.StatelessResetToken)
