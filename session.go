@@ -274,6 +274,7 @@ var newSession = func(
 		StatelessResetToken:             &statelessResetToken,
 		OriginalDestinationConnectionID: origDestConnID,
 		ActiveConnectionIDLimit:         protocol.MaxActiveConnectionIDs,
+		InitialSourceConnectionID:       srcConnID,
 	}
 	if s.qlogger != nil {
 		s.qlogger.SentTransportParameters(params)
@@ -390,6 +391,7 @@ var newClientSession = func(
 		AckDelayExponent:               protocol.AckDelayExponent,
 		DisableActiveMigration:         true,
 		ActiveConnectionIDLimit:        protocol.MaxActiveConnectionIDs,
+		InitialSourceConnectionID:      srcConnID,
 	}
 	if s.qlogger != nil {
 		s.qlogger.SentTransportParameters(params)
@@ -1289,7 +1291,13 @@ func (s *session) processTransportParameters(params *wire.TransportParameters) {
 		s.qlogger.ReceivedTransportParameters(params)
 	}
 
-	// check the Retry token
+	// check the initial_source_connection_id
+	if !params.InitialSourceConnectionID.Equal(s.handshakeDestConnID) {
+		s.closeLocal(qerr.NewError(qerr.TransportParameterError, fmt.Sprintf("expected initial_source_connection_id to equal %s, is %s", s.handshakeDestConnID, params.InitialSourceConnectionID)))
+		return
+	}
+
+	// check the original_destination_connection_id
 	if s.perspective == protocol.PerspectiveClient && !params.OriginalDestinationConnectionID.Equal(s.origDestConnID) {
 		s.closeLocal(qerr.NewError(qerr.TransportParameterError, fmt.Sprintf("expected original_destination_connection_id to equal %s, is %s", s.origDestConnID, params.OriginalDestinationConnectionID)))
 		return
