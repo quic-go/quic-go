@@ -111,7 +111,7 @@ type session struct {
 	// Destination connection ID used during the handshake.
 	// Used to check source connection ID on incoming packets.
 	handshakeDestConnID protocol.ConnectionID
-	// if the server sends a Retry, this is the connection ID we used initially
+	// Set for the client. Destination connection ID used on the first Initial sent.
 	origDestConnID protocol.ConnectionID
 	srcConnIDLen   int
 
@@ -338,6 +338,7 @@ var newClientSession = func(
 	s := &session{
 		conn:                  conn,
 		config:                conf,
+		origDestConnID:        destConnID,
 		handshakeDestConnID:   destConnID,
 		srcConnIDLen:          srcConnID.Len(),
 		perspective:           protocol.PerspectiveClient,
@@ -876,7 +877,6 @@ func (s *session) handleRetryPacket(hdr *wire.Header, data []byte) bool /* was t
 	if s.qlogger != nil {
 		s.qlogger.ReceivedRetry(hdr)
 	}
-	s.origDestConnID = s.handshakeDestConnID
 	newDestConnID := hdr.SrcConnectionID
 	s.receivedRetry = true
 	if err := s.sentPacketHandler.ResetForRetry(); err != nil {

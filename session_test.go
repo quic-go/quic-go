@@ -2227,6 +2227,7 @@ var _ = Describe("Client Session", func() {
 
 		It("uses the preferred_address connection ID", func() {
 			params := &wire.TransportParameters{
+				OriginalDestinationConnectionID: destConnID,
 				PreferredAddress: &wire.PreferredAddress{
 					IPv4:                net.IPv4(127, 0, 0, 1),
 					IPv6:                net.IP{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16},
@@ -2251,23 +2252,13 @@ var _ = Describe("Client Session", func() {
 		It("uses the minimum of the peers' idle timeouts", func() {
 			sess.config.MaxIdleTimeout = 19 * time.Second
 			params := &wire.TransportParameters{
-				MaxIdleTimeout: 18 * time.Second,
+				OriginalDestinationConnectionID: destConnID,
+				MaxIdleTimeout:                  18 * time.Second,
 			}
 			packer.EXPECT().HandleTransportParameters(gomock.Any())
 			qlogger.EXPECT().ReceivedTransportParameters(params)
 			sess.processTransportParameters(params)
 			Expect(sess.idleTimeout).To(Equal(18 * time.Second))
-		})
-
-		It("errors if the TransportParameters contain an original_destination_connection_id, although no Retry was performed", func() {
-			params := &wire.TransportParameters{
-				OriginalDestinationConnectionID: protocol.ConnectionID{0xde, 0xca, 0xfb, 0xad},
-				StatelessResetToken:             &[16]byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16},
-			}
-			expectClose()
-			qlogger.EXPECT().ReceivedTransportParameters(params)
-			sess.processTransportParameters(params)
-			Eventually(errChan).Should(Receive(MatchError("TRANSPORT_PARAMETER_ERROR: expected original_destination_connection_id to equal (empty), is 0xdecafbad")))
 		})
 
 		It("errors if the TransportParameters contain a wrong original_destination_connection_id", func() {

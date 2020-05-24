@@ -348,7 +348,7 @@ func (s *baseServer) handleInitialImpl(p *receivedPacket, hdr *wire.Header) erro
 	}
 
 	var token *Token
-	var origDestConnectionID protocol.ConnectionID
+	origDestConnectionID := hdr.DestConnectionID
 	if len(hdr.Token) > 0 {
 		c, err := s.tokenGenerator.DecodeToken(hdr.Token)
 		if err == nil {
@@ -357,7 +357,9 @@ func (s *baseServer) handleInitialImpl(p *receivedPacket, hdr *wire.Header) erro
 				RemoteAddr:   c.RemoteAddr,
 				SentTime:     c.SentTime,
 			}
-			origDestConnectionID = c.OriginalDestConnectionID
+			if token.IsRetryToken {
+				origDestConnectionID = c.OriginalDestConnectionID
+			}
 		}
 	}
 	if !s.config.AcceptToken(p.remoteAddr, token) {

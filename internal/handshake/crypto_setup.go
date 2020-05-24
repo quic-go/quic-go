@@ -205,7 +205,7 @@ func newCryptoSetup(
 		qlogger.UpdatedKeyFromTLS(protocol.EncryptionInitial, protocol.PerspectiveClient)
 		qlogger.UpdatedKeyFromTLS(protocol.EncryptionInitial, protocol.PerspectiveServer)
 	}
-	extHandler := newExtensionHandler(tp.Marshal(), perspective)
+	extHandler := newExtensionHandler(tp.Marshal(perspective), perspective)
 	cs := &cryptoSetup{
 		initialStream:          initialStream,
 		initialSealer:          initialSealer,

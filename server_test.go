@@ -289,6 +289,79 @@ var _ = Describe("Server", func() {
 				Eventually(done).Should(BeClosed())
 			})
 
+			It("creates a session when the token is accepted", func() {
+				serv.config.AcceptToken = func(_ net.Addr, token *Token) bool { return true }
+				retryToken, err := serv.tokenGenerator.NewRetryToken(&net.UDPAddr{}, protocol.ConnectionID{0xde, 0xad, 0xc0, 0xde})
+				Expect(err).ToNot(HaveOccurred())
+				hdr := &wire.Header{
+					IsLongHeader:     true,
+					Type:             protocol.PacketTypeInitial,
+					SrcConnectionID:  protocol.ConnectionID{5, 4, 3, 2, 1},
+					DestConnectionID: protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8, 9, 10},
+					Version:          protocol.VersionTLS,
+					Token:            retryToken,
+				}
+				p := getPacket(hdr, make([]byte, protocol.MinInitialPacketSize))
+				run := make(chan struct{})
+				var token [16]byte
+				rand.Read(token[:])
+				var newConnID protocol.ConnectionID
+				phm.EXPECT().GetStatelessResetToken(gomock.Any()).DoAndReturn(func(c protocol.ConnectionID) [16]byte {
+					newConnID = c
+					return token
+				})
+				sess := NewMockQuicSession(mockCtrl)
+				serv.newSession = func(
+					_ connection,
+					_ sessionRunner,
+					origDestConnID protocol.ConnectionID,
+					clientDestConnID protocol.ConnectionID,
+					destConnID protocol.ConnectionID,
+					srcConnID protocol.ConnectionID,
+					tokenP [16]byte,
+					_ *Config,
+					_ *tls.Config,
+					_ *handshake.TokenGenerator,
+					enable0RTT bool,
+					_ qlog.Tracer,
+					_ utils.Logger,
+					_ protocol.VersionNumber,
+				) quicSession {
+					Expect(enable0RTT).To(BeFalse())
+					Expect(origDestConnID).To(Equal(protocol.ConnectionID{0xde, 0xad, 0xc0, 0xde}))
+					Expect(clientDestConnID).To(Equal(hdr.DestConnectionID))
+					Expect(destConnID).To(Equal(hdr.SrcConnectionID))
+					// make sure we're using a server-generated connection ID
+					Expect(srcConnID).ToNot(Equal(hdr.DestConnectionID))
+					Expect(srcConnID).ToNot(Equal(hdr.SrcConnectionID))
+					Expect(srcConnID).To(Equal(newConnID))
+					Expect(tokenP).To(Equal(token))
+					sess.EXPECT().handlePacket(p)
+					sess.EXPECT().run().Do(func() { close(run) })
+					sess.EXPECT().Context().Return(context.Background())
+					sess.EXPECT().HandshakeComplete().Return(context.Background())
+					return sess
+				}
+
+				phm.EXPECT().Add(protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}, sess).Return(true)
+				phm.EXPECT().Add(gomock.Any(), sess).DoAndReturn(func(c protocol.ConnectionID, _ packetHandler) bool {
+					Expect(c).To(Equal(newConnID))
+					return true
+				})
+
+				done := make(chan struct{})
+				go func() {
+					defer GinkgoRecover()
+					serv.handlePacket(p)
+					// the Handshake packet is written by the session
+					Consistently(conn.dataWritten).ShouldNot(Receive())
+					close(done)
+				}()
+				// make sure we're using a server-generated connection ID
+				Eventually(run).Should(BeClosed())
+				Eventually(done).Should(BeClosed())
+			})
+
 			It("sends a Version Negotiation Packet for unsupported versions", func() {
 				srcConnID := protocol.ConnectionID{1, 2, 3, 4, 5}
 				destConnID := protocol.ConnectionID{1, 2, 3, 4, 5, 6}
@@ -408,8 +481,8 @@ var _ = Describe("Server", func() {
 				serv.newSession = func(
 					_ connection,
 					_ sessionRunner,
-					_ protocol.ConnectionID,
-					origConnID protocol.ConnectionID,
+					origDestConnID protocol.ConnectionID,
+					clientDestConnID protocol.ConnectionID,
 					destConnID protocol.ConnectionID,
 					srcConnID protocol.ConnectionID,
 					tokenP [16]byte,
@@ -422,7 +495,8 @@ var _ = Describe("Server", func() {
 					_ protocol.VersionNumber,
 				) quicSession {
 					Expect(enable0RTT).To(BeFalse())
-					Expect(origConnID).To(Equal(hdr.DestConnectionID))
+					Expect(origDestConnID).To(Equal(hdr.DestConnectionID))
+					Expect(clientDestConnID).To(Equal(hdr.DestConnectionID))
 					Expect(destConnID).To(Equal(hdr.SrcConnectionID))
 					// make sure we're using a server-generated connection ID
 					Expect(srcConnID).ToNot(Equal(hdr.DestConnectionID))

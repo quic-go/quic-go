@@ -80,18 +80,21 @@ type TransportParameters struct {
 
 // Unmarshal the transport parameters
 func (p *TransportParameters) Unmarshal(data []byte, sentBy protocol.Perspective) error {
-	if err := p.unmarshal(data, sentBy); err != nil {
+	if err := p.unmarshal(data, sentBy, false); err != nil {
 		return qerr.NewError(qerr.TransportParameterError, err.Error())
 	}
 	return nil
 }
 
-func (p *TransportParameters) unmarshal(data []byte, sentBy protocol.Perspective) error {
+func (p *TransportParameters) unmarshal(data []byte, sentBy protocol.Perspective, fromSessionTicket bool) error {
 	// needed to check that every parameter is only sent at most once
 	var parameterIDs []transportParameterID
 
-	var readAckDelayExponent bool
-	var readMaxAckDelay bool
+	var (
+		readAckDelayExponent                bool
+		readMaxAckDelay                     bool
+		readOriginalDestinationConnectionID bool
+	)
 
 	r := bytes.NewReader(data)
 	for r.Len() > 0 {
@@ -160,12 +163,16 @@ func (p *TransportParameters) unmarshal(data []byte, sentBy protocol.Perspective
 					return errors.New("client sent an original_destination_connection_id")
 				}
 				p.OriginalDestinationConnectionID, _ = protocol.ReadConnectionID(r, int(paramLen))
+				readOriginalDestinationConnectionID = true
 			default:
 				r.Seek(int64(paramLen), io.SeekCurrent)
 			}
 		}
 	}
 
+	if sentBy == protocol.PerspectiveServer && !fromSessionTicket && !readOriginalDestinationConnectionID {
+		return errors.New("expected original_destination_connection_id")
+	}
 	if !readAckDelayExponent {
 		p.AckDelayExponent = protocol.DefaultAckDelayExponent
 	}
@@ -288,7 +295,7 @@ func (p *TransportParameters) readNumericTransportParameter(
 }
 
 // Marshal the transport parameters
-func (p *TransportParameters) Marshal() []byte {
+func (p *TransportParameters) Marshal(pers protocol.Perspective) []byte {
 	b := &bytes.Buffer{}
 
 	//add a greased value
@@ -330,27 +337,28 @@ func (p *TransportParameters) Marshal() []byte {
 		utils.WriteVarInt(b, uint64(disableActiveMigrationParameterID))
 		utils.WriteVarInt(b, 0)
 	}
-	if p.StatelessResetToken != nil {
+	if pers == protocol.PerspectiveServer {
+		// stateless_reset_token
 		utils.WriteVarInt(b, uint64(statelessResetTokenParameterID))
 		utils.WriteVarInt(b, 16)
 		b.Write(p.StatelessResetToken[:])
-	}
-	if p.PreferredAddress != nil {
-		utils.WriteVarInt(b, uint64(preferredAddressParameterID))
-		utils.WriteVarInt(b, 4+2+16+2+1+uint64(p.PreferredAddress.ConnectionID.Len())+16)
-		ipv4 := p.PreferredAddress.IPv4
-		b.Write(ipv4[len(ipv4)-4:])
-		utils.BigEndian.WriteUint16(b, p.PreferredAddress.IPv4Port)
-		b.Write(p.PreferredAddress.IPv6)
-		utils.BigEndian.WriteUint16(b, p.PreferredAddress.IPv6Port)
-		b.WriteByte(uint8(p.PreferredAddress.ConnectionID.Len()))
-		b.Write(p.PreferredAddress.ConnectionID.Bytes())
-		b.Write(p.PreferredAddress.StatelessResetToken[:])
-	}
-	if p.OriginalDestinationConnectionID.Len() > 0 {
+		// original_destination_connection_id
 		utils.WriteVarInt(b, uint64(originalDestinationConnectionIDParameterID))
 		utils.WriteVarInt(b, uint64(p.OriginalDestinationConnectionID.Len()))
 		b.Write(p.OriginalDestinationConnectionID.Bytes())
+		// preferred_address
+		if p.PreferredAddress != nil {
+			utils.WriteVarInt(b, uint64(preferredAddressParameterID))
+			utils.WriteVarInt(b, 4+2+16+2+1+uint64(p.PreferredAddress.ConnectionID.Len())+16)
+			ipv4 := p.PreferredAddress.IPv4
+			b.Write(ipv4[len(ipv4)-4:])
+			utils.BigEndian.WriteUint16(b, p.PreferredAddress.IPv4Port)
+			b.Write(p.PreferredAddress.IPv6)
+			utils.BigEndian.WriteUint16(b, p.PreferredAddress.IPv6Port)
+			b.WriteByte(uint8(p.PreferredAddress.ConnectionID.Len()))
+			b.Write(p.PreferredAddress.ConnectionID.Bytes())
+			b.Write(p.PreferredAddress.StatelessResetToken[:])
+		}
 	}
 
 	// active_connection_id_limit
@@ -401,7 +409,7 @@ func (p *TransportParameters) UnmarshalFromSessionTicket(data []byte) error {
 	if version != transportParameterMarshalingVersion {
 		return fmt.Errorf("unknown transport parameter marshaling version: %d", version)
 	}
-	return p.Unmarshal(data[len(data)-r.Len():], protocol.PerspectiveServer)
+	return p.unmarshal(data[len(data)-r.Len():], protocol.PerspectiveServer, true)
 }
 
 // ValidFor0RTT checks if the transport parameters match those saved in the session ticket.
