@@ -129,7 +129,7 @@ func (p *TransportParameters) unmarshal(data []byte, sentBy protocol.Perspective
 				return err
 			}
 		default:
-			if r.Len() < int(paramLen) {
+			if uint64(r.Len()) < paramLen {
 				return fmt.Errorf("remaining length (%d) smaller than parameter length (%d)", r.Len(), paramLen)
 			}
 			switch paramID {
