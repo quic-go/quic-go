@@ -94,6 +94,7 @@ var _ = Describe("Session", func() {
 			mconn,
 			sessionRunner,
 			nil,
+			nil,
 			clientDestConnID,
 			destConnID,
 			srcConnID,
@@ -2280,7 +2281,47 @@ var _ = Describe("Client Session", func() {
 			Eventually(errChan).Should(Receive(MatchError("TRANSPORT_PARAMETER_ERROR: expected initial_source_connection_id to equal 0xdeadbeef, is 0xdecafbad")))
 		})
 
-		It("errors if the TransportParameters contain a wrong original_destination_connection_id", func() {
+		It("errors if the transport parameters don't contain the retry_source_connection_id, if a Retry was performed", func() {
+			sess.retrySrcConnID = &protocol.ConnectionID{0xde, 0xad, 0xbe, 0xef}
+			params := &wire.TransportParameters{
+				OriginalDestinationConnectionID: destConnID,
+				InitialSourceConnectionID:       destConnID,
+				StatelessResetToken:             &[16]byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16},
+			}
+			expectClose()
+			qlogger.EXPECT().ReceivedTransportParameters(params)
+			sess.processTransportParameters(params)
+			Eventually(errChan).Should(Receive(MatchError("TRANSPORT_PARAMETER_ERROR: missing retry_source_connection_id")))
+		})
+
+		It("errors if the transport parameters contain the wrong retry_source_connection_id, if a Retry was performed", func() {
+			sess.retrySrcConnID = &protocol.ConnectionID{0xde, 0xad, 0xbe, 0xef}
+			params := &wire.TransportParameters{
+				OriginalDestinationConnectionID: destConnID,
+				InitialSourceConnectionID:       destConnID,
+				RetrySourceConnectionID:         &protocol.ConnectionID{0xde, 0xad, 0xc0, 0xde},
+				StatelessResetToken:             &[16]byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16},
+			}
+			expectClose()
+			qlogger.EXPECT().ReceivedTransportParameters(params)
+			sess.processTransportParameters(params)
+			Eventually(errChan).Should(Receive(MatchError("TRANSPORT_PARAMETER_ERROR: expected retry_source_connection_id to equal 0xdeadbeef, is 0xdeadc0de")))
+		})
+
+		It("errors if the transport parameters contain the retry_source_connection_id, if no Retry was performed", func() {
+			params := &wire.TransportParameters{
+				OriginalDestinationConnectionID: destConnID,
+				InitialSourceConnectionID:       destConnID,
+				RetrySourceConnectionID:         &protocol.ConnectionID{0xde, 0xad, 0xc0, 0xde},
+				StatelessResetToken:             &[16]byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16},
+			}
+			expectClose()
+			qlogger.EXPECT().ReceivedTransportParameters(params)
+			sess.processTransportParameters(params)
+			Eventually(errChan).Should(Receive(MatchError("TRANSPORT_PARAMETER_ERROR: received retry_source_connection_id, although no Retry was performed")))
+		})
+
+		It("errors if the transport parameters contain a wrong original_destination_connection_id", func() {
 			sess.origDestConnID = protocol.ConnectionID{0xde, 0xad, 0xbe, 0xef}
 			params := &wire.TransportParameters{
 				OriginalDestinationConnectionID: protocol.ConnectionID{0xde, 0xca, 0xfb, 0xad},

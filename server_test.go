@@ -291,7 +291,11 @@ var _ = Describe("Server", func() {
 
 			It("creates a session when the token is accepted", func() {
 				serv.config.AcceptToken = func(_ net.Addr, token *Token) bool { return true }
-				retryToken, err := serv.tokenGenerator.NewRetryToken(&net.UDPAddr{}, protocol.ConnectionID{0xde, 0xad, 0xc0, 0xde}, nil)
+				retryToken, err := serv.tokenGenerator.NewRetryToken(
+					&net.UDPAddr{},
+					protocol.ConnectionID{0xde, 0xad, 0xc0, 0xde},
+					protocol.ConnectionID{0xde, 0xca, 0xfb, 0xad},
+				)
 				Expect(err).ToNot(HaveOccurred())
 				hdr := &wire.Header{
 					IsLongHeader:     true,
@@ -305,16 +309,23 @@ var _ = Describe("Server", func() {
 				run := make(chan struct{})
 				var token [16]byte
 				rand.Read(token[:])
+
 				var newConnID protocol.ConnectionID
-				phm.EXPECT().GetStatelessResetToken(gomock.Any()).DoAndReturn(func(c protocol.ConnectionID) [16]byte {
+				phm.EXPECT().AddWithConnID(protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}, gomock.Any(), gomock.Any()).DoAndReturn(func(_, c protocol.ConnectionID, fn func() packetHandler) bool {
 					newConnID = c
-					return token
+					phm.EXPECT().GetStatelessResetToken(gomock.Any()).DoAndReturn(func(c protocol.ConnectionID) [16]byte {
+						newConnID = c
+						return token
+					})
+					fn()
+					return true
 				})
 				sess := NewMockQuicSession(mockCtrl)
 				serv.newSession = func(
 					_ connection,
 					_ sessionRunner,
 					origDestConnID protocol.ConnectionID,
+					retrySrcConnID *protocol.ConnectionID,
 					clientDestConnID protocol.ConnectionID,
 					destConnID protocol.ConnectionID,
 					srcConnID protocol.ConnectionID,
@@ -329,6 +340,7 @@ var _ = Describe("Server", func() {
 				) quicSession {
 					Expect(enable0RTT).To(BeFalse())
 					Expect(origDestConnID).To(Equal(protocol.ConnectionID{0xde, 0xad, 0xc0, 0xde}))
+					Expect(retrySrcConnID).To(Equal(&protocol.ConnectionID{0xde, 0xca, 0xfb, 0xad}))
 					Expect(clientDestConnID).To(Equal(hdr.DestConnectionID))
 					Expect(destConnID).To(Equal(hdr.SrcConnectionID))
 					// make sure we're using a server-generated connection ID
@@ -342,12 +354,6 @@ var _ = Describe("Server", func() {
 					sess.EXPECT().HandshakeComplete().Return(context.Background())
 					return sess
 				}
-
-				phm.EXPECT().Add(protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}, sess).Return(true)
-				phm.EXPECT().Add(gomock.Any(), sess).DoAndReturn(func(c protocol.ConnectionID, _ packetHandler) bool {
-					Expect(c).To(Equal(newConnID))
-					return true
-				})
 
 				done := make(chan struct{})
 				go func() {
@@ -475,13 +481,24 @@ var _ = Describe("Server", func() {
 				run := make(chan struct{})
 				var token [16]byte
 				rand.Read(token[:])
+
 				var newConnID protocol.ConnectionID
+				phm.EXPECT().AddWithConnID(protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}, gomock.Any(), gomock.Any()).DoAndReturn(func(_, c protocol.ConnectionID, fn func() packetHandler) bool {
+					newConnID = c
+					phm.EXPECT().GetStatelessResetToken(gomock.Any()).DoAndReturn(func(c protocol.ConnectionID) [16]byte {
+						newConnID = c
+						return token
+					})
+					fn()
+					return true
+				})
 
 				sess := NewMockQuicSession(mockCtrl)
 				serv.newSession = func(
 					_ connection,
 					_ sessionRunner,
 					origDestConnID protocol.ConnectionID,
+					retrySrcConnID *protocol.ConnectionID,
 					clientDestConnID protocol.ConnectionID,
 					destConnID protocol.ConnectionID,
 					srcConnID protocol.ConnectionID,
@@ -496,6 +513,7 @@ var _ = Describe("Server", func() {
 				) quicSession {
 					Expect(enable0RTT).To(BeFalse())
 					Expect(origDestConnID).To(Equal(hdr.DestConnectionID))
+					Expect(retrySrcConnID).To(BeNil())
 					Expect(clientDestConnID).To(Equal(hdr.DestConnectionID))
 					Expect(destConnID).To(Equal(hdr.SrcConnectionID))
 					// make sure we're using a server-generated connection ID
@@ -509,16 +527,6 @@ var _ = Describe("Server", func() {
 					sess.EXPECT().HandshakeComplete().Return(context.Background())
 					return sess
 				}
-
-				phm.EXPECT().AddWithConnID(protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}, gomock.Any(), gomock.Any()).DoAndReturn(func(_, c protocol.ConnectionID, fn func() packetHandler) bool {
-					newConnID = c
-					phm.EXPECT().GetStatelessResetToken(gomock.Any()).DoAndReturn(func(c protocol.ConnectionID) [16]byte {
-						newConnID = c
-						return token
-					})
-					fn()
-					return true
-				})
 
 				done := make(chan struct{})
 				go func() {
@@ -557,6 +565,7 @@ var _ = Describe("Server", func() {
 					_ connection,
 					runner sessionRunner,
 					_ protocol.ConnectionID,
+					_ *protocol.ConnectionID,
 					_ protocol.ConnectionID,
 					_ protocol.ConnectionID,
 					_ protocol.ConnectionID,
@@ -599,6 +608,7 @@ var _ = Describe("Server", func() {
 					_ connection,
 					runner sessionRunner,
 					_ protocol.ConnectionID,
+					_ *protocol.ConnectionID,
 					_ protocol.ConnectionID,
 					_ protocol.ConnectionID,
 					_ protocol.ConnectionID,
@@ -646,6 +656,7 @@ var _ = Describe("Server", func() {
 					_ connection,
 					runner sessionRunner,
 					_ protocol.ConnectionID,
+					_ *protocol.ConnectionID,
 					_ protocol.ConnectionID,
 					_ protocol.ConnectionID,
 					_ protocol.ConnectionID,
@@ -675,6 +686,7 @@ var _ = Describe("Server", func() {
 					_ connection,
 					runner sessionRunner,
 					_ protocol.ConnectionID,
+					_ *protocol.ConnectionID,
 					_ protocol.ConnectionID,
 					_ protocol.ConnectionID,
 					_ protocol.ConnectionID,
@@ -739,6 +751,7 @@ var _ = Describe("Server", func() {
 					_ connection,
 					runner sessionRunner,
 					_ protocol.ConnectionID,
+					_ *protocol.ConnectionID,
 					_ protocol.ConnectionID,
 					_ protocol.ConnectionID,
 					_ protocol.ConnectionID,
@@ -846,6 +859,7 @@ var _ = Describe("Server", func() {
 					_ connection,
 					runner sessionRunner,
 					_ protocol.ConnectionID,
+					_ *protocol.ConnectionID,
 					_ protocol.ConnectionID,
 					_ protocol.ConnectionID,
 					_ protocol.ConnectionID,
@@ -868,7 +882,7 @@ var _ = Describe("Server", func() {
 					fn()
 					return true
 				})
-				serv.createNewSession(&net.UDPAddr{}, nil, nil, nil, nil, protocol.VersionWhatever)
+				serv.createNewSession(&net.UDPAddr{}, nil, nil, nil, nil, nil, protocol.VersionWhatever)
 				Consistently(done).ShouldNot(BeClosed())
 				cancel() // complete the handshake
 				Eventually(done).Should(BeClosed())
@@ -912,6 +926,7 @@ var _ = Describe("Server", func() {
 				_ connection,
 				runner sessionRunner,
 				_ protocol.ConnectionID,
+				_ *protocol.ConnectionID,
 				_ protocol.ConnectionID,
 				_ protocol.ConnectionID,
 				_ protocol.ConnectionID,
@@ -935,7 +950,7 @@ var _ = Describe("Server", func() {
 				fn()
 				return true
 			})
-			serv.createNewSession(&net.UDPAddr{}, nil, nil, nil, nil, protocol.VersionWhatever)
+			serv.createNewSession(&net.UDPAddr{}, nil, nil, nil, nil, nil, protocol.VersionWhatever)
 			Consistently(done).ShouldNot(BeClosed())
 			close(ready)
 			Eventually(done).Should(BeClosed())
@@ -949,6 +964,7 @@ var _ = Describe("Server", func() {
 				_ connection,
 				runner sessionRunner,
 				_ protocol.ConnectionID,
+				_ *protocol.ConnectionID,
 				_ protocol.ConnectionID,
 				_ protocol.ConnectionID,
 				_ protocol.ConnectionID,
@@ -1007,6 +1023,7 @@ var _ = Describe("Server", func() {
 				_ connection,
 				runner sessionRunner,
 				_ protocol.ConnectionID,
+				_ *protocol.ConnectionID,
 				_ protocol.ConnectionID,
 				_ protocol.ConnectionID,
 				_ protocol.ConnectionID,

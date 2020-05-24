@@ -11,13 +11,12 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/lucas-clemente/quic-go/qlog"
-
 	"github.com/lucas-clemente/quic-go/internal/handshake"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/internal/qerr"
 	"github.com/lucas-clemente/quic-go/internal/utils"
 	"github.com/lucas-clemente/quic-go/internal/wire"
+	"github.com/lucas-clemente/quic-go/qlog"
 )
 
 // packetHandler handles packets
@@ -75,7 +74,23 @@ type baseServer struct {
 	receivedPackets chan *receivedPacket
 
 	// set as a member, so they can be set in the tests
-	newSession func(connection, sessionRunner, protocol.ConnectionID /* original connection ID */, protocol.ConnectionID /* client dest connection ID */, protocol.ConnectionID /* destination connection ID */, protocol.ConnectionID /* source connection ID */, [16]byte, *Config, *tls.Config, *handshake.TokenGenerator, bool /* enable 0-RTT */, qlog.Tracer, utils.Logger, protocol.VersionNumber) quicSession
+	newSession func(
+		connection,
+		sessionRunner,
+		protocol.ConnectionID, /* original dest connection ID */
+		*protocol.ConnectionID, /* retry src connection ID */
+		protocol.ConnectionID, /* client dest connection ID */
+		protocol.ConnectionID, /* destination connection ID */
+		protocol.ConnectionID, /* source connection ID */
+		[16]byte,
+		*Config,
+		*tls.Config,
+		*handshake.TokenGenerator,
+		bool, /* enable 0-RTT */
+		qlog.Tracer,
+		utils.Logger,
+		protocol.VersionNumber,
+	) quicSession
 
 	serverError error
 	errorChan   chan struct{}
@@ -347,7 +362,10 @@ func (s *baseServer) handleInitialImpl(p *receivedPacket, hdr *wire.Header) erro
 		return errors.New("too short connection ID")
 	}
 
-	var token *Token
+	var (
+		token                *Token
+		retrySrcConnectionID *protocol.ConnectionID
+	)
 	origDestConnectionID := hdr.DestConnectionID
 	if len(hdr.Token) > 0 {
 		c, err := s.tokenGenerator.DecodeToken(hdr.Token)
@@ -359,6 +377,7 @@ func (s *baseServer) handleInitialImpl(p *receivedPacket, hdr *wire.Header) erro
 			}
 			if token.IsRetryToken {
 				origDestConnectionID = c.OriginalDestConnectionID
+				retrySrcConnectionID = &c.RetrySrcConnectionID
 			}
 		}
 	}
@@ -396,6 +415,7 @@ func (s *baseServer) handleInitialImpl(p *receivedPacket, hdr *wire.Header) erro
 	sess := s.createNewSession(
 		p.remoteAddr,
 		origDestConnectionID,
+		retrySrcConnectionID,
 		hdr.DestConnectionID,
 		hdr.SrcConnectionID,
 		connID,
@@ -419,6 +439,7 @@ func (s *baseServer) handleInitialImpl(p *receivedPacket, hdr *wire.Header) erro
 func (s *baseServer) createNewSession(
 	remoteAddr net.Addr,
 	origDestConnID protocol.ConnectionID,
+	retrySrcConnID *protocol.ConnectionID,
 	clientDestConnID protocol.ConnectionID,
 	destConnID protocol.ConnectionID,
 	srcConnID protocol.ConnectionID,
@@ -441,6 +462,7 @@ func (s *baseServer) createNewSession(
 			&conn{pconn: s.conn, currentAddr: remoteAddr},
 			s.sessionHandler,
 			origDestConnID,
+			retrySrcConnID,
 			clientDestConnID,
 			destConnID,
 			srcConnID,
