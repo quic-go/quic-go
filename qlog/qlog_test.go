@@ -185,6 +185,7 @@ var _ = Describe("Tracer", func() {
 				StatelessResetToken:             &[16]byte{0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88, 0x99, 0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff, 0x00},
 				OriginalDestinationConnectionID: protocol.ConnectionID{0xde, 0xad, 0xc0, 0xde},
 				InitialSourceConnectionID:       protocol.ConnectionID{0xde, 0xad, 0xbe, 0xef},
+				RetrySourceConnectionID:         &protocol.ConnectionID{0xde, 0xca, 0xfb, 0xad},
 				ActiveConnectionIDLimit:         7,
 			})
 			entry := exportAndParseSingle()
@@ -195,6 +196,7 @@ var _ = Describe("Tracer", func() {
 			Expect(ev).To(HaveKeyWithValue("owner", "local"))
 			Expect(ev).To(HaveKeyWithValue("original_destination_connection_id", "deadc0de"))
 			Expect(ev).To(HaveKeyWithValue("initial_source_connection_id", "deadbeef"))
+			Expect(ev).To(HaveKeyWithValue("retry_source_connection_id", "decafbad"))
 			Expect(ev).To(HaveKeyWithValue("stateless_reset_token", "112233445566778899aabbccddeeff00"))
 			Expect(ev).To(HaveKeyWithValue("max_idle_timeout", float64(321)))
 			Expect(ev).To(HaveKeyWithValue("max_udp_payload_size", float64(1234)))
@@ -219,6 +221,19 @@ var _ = Describe("Tracer", func() {
 			Expect(entry.Name).To(Equal("parameters_set"))
 			ev := entry.Event
 			Expect(ev).ToNot(HaveKey("stateless_reset_token"))
+		})
+
+		It("records transport parameters without retry_source_connection_id", func() {
+			tracer.SentTransportParameters(&wire.TransportParameters{
+				StatelessResetToken: &[16]byte{0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88, 0x99, 0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff, 0x00},
+			})
+			entry := exportAndParseSingle()
+			Expect(entry.Time).To(BeTemporally("~", time.Now(), scaleDuration(10*time.Millisecond)))
+			Expect(entry.Category).To(Equal("transport"))
+			Expect(entry.Name).To(Equal("parameters_set"))
+			ev := entry.Event
+			Expect(ev).To(HaveKeyWithValue("owner", "local"))
+			Expect(ev).ToNot(HaveKey("retry_source_connection_id"))
 		})
 
 		It("records received transport parameters", func() {

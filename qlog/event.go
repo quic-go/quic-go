@@ -329,6 +329,7 @@ type eventTransportParameters struct {
 
 	OriginalDestinationConnectionID protocol.ConnectionID
 	InitialSourceConnectionID       protocol.ConnectionID
+	RetrySourceConnectionID         *protocol.ConnectionID
 
 	StatelessResetToken     *[16]byte
 	DisableActiveMigration  bool
@@ -358,6 +359,9 @@ func (e eventTransportParameters) MarshalJSONObject(enc *gojay.Encoder) {
 		enc.StringKey("original_destination_connection_id", connectionID(e.OriginalDestinationConnectionID).String())
 		if e.StatelessResetToken != nil {
 			enc.StringKey("stateless_reset_token", fmt.Sprintf("%x", e.StatelessResetToken[:]))
+		}
+		if e.RetrySourceConnectionID != nil {
+			enc.StringKey("retry_source_connection_id", connectionID(*e.RetrySourceConnectionID).String())
 		}
 	}
 	enc.StringKey("initial_source_connection_id", connectionID(e.InitialSourceConnectionID).String())
