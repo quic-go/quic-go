@@ -179,6 +179,7 @@ func (t *tracer) recordTransportParameters(sentBy protocol.Perspective, tp *wire
 		Owner:                           owner,
 		SentBy:                          sentBy,
 		OriginalDestinationConnectionID: tp.OriginalDestinationConnectionID,
+		InitialSourceConnectionID:       tp.InitialSourceConnectionID,
 		StatelessResetToken:             tp.StatelessResetToken,
 		DisableActiveMigration:          tp.DisableActiveMigration,
 		MaxIdleTimeout:                  tp.MaxIdleTimeout,
