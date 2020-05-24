@@ -162,17 +162,22 @@ func (t *tracer) ClosedConnection(r CloseReason) {
 }
 
 func (t *tracer) SentTransportParameters(tp *wire.TransportParameters) {
-	t.recordTransportParameters(ownerLocal, tp)
+	t.recordTransportParameters(t.perspective, tp)
 }
 
 func (t *tracer) ReceivedTransportParameters(tp *wire.TransportParameters) {
-	t.recordTransportParameters(ownerRemote, tp)
+	t.recordTransportParameters(t.perspective.Opposite(), tp)
 }
 
-func (t *tracer) recordTransportParameters(owner owner, tp *wire.TransportParameters) {
+func (t *tracer) recordTransportParameters(sentBy protocol.Perspective, tp *wire.TransportParameters) {
+	owner := ownerLocal
+	if sentBy != t.perspective {
+		owner = ownerRemote
+	}
 	t.mutex.Lock()
 	t.recordEvent(time.Now(), &eventTransportParameters{
 		Owner:                           owner,
+		SentBy:                          sentBy,
 		OriginalDestinationConnectionID: tp.OriginalDestinationConnectionID,
 		StatelessResetToken:             tp.StatelessResetToken,
 		DisableActiveMigration:          tp.DisableActiveMigration,

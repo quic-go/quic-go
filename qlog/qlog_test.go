@@ -206,6 +206,19 @@ var _ = Describe("Tracer", func() {
 			Expect(ev).To(HaveKeyWithValue("initial_max_streams_uni", float64(20)))
 		})
 
+		It("records the server's transport parameters, without a stateless reset token", func() {
+			tracer.SentTransportParameters(&wire.TransportParameters{
+				OriginalDestinationConnectionID: protocol.ConnectionID{0xde, 0xad, 0xc0, 0xde},
+				ActiveConnectionIDLimit:         7,
+			})
+			entry := exportAndParseSingle()
+			Expect(entry.Time).To(BeTemporally("~", time.Now(), scaleDuration(10*time.Millisecond)))
+			Expect(entry.Category).To(Equal("transport"))
+			Expect(entry.Name).To(Equal("parameters_set"))
+			ev := entry.Event
+			Expect(ev).ToNot(HaveKey("stateless_reset_token"))
+		})
+
 		It("records received transport parameters", func() {
 			tracer.ReceivedTransportParameters(&wire.TransportParameters{})
 			entry := exportAndParseSingle()
@@ -214,6 +227,7 @@ var _ = Describe("Tracer", func() {
 			Expect(entry.Name).To(Equal("parameters_set"))
 			ev := entry.Event
 			Expect(ev).To(HaveKeyWithValue("owner", "remote"))
+			Expect(ev).ToNot(HaveKey("original_destination_connection_id"))
 		})
 
 		It("records a sent packet, without an ACK", func() {

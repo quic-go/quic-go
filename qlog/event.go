@@ -324,7 +324,8 @@ func (e eventKeyRetired) MarshalJSONObject(enc *gojay.Encoder) {
 }
 
 type eventTransportParameters struct {
-	Owner owner
+	Owner  owner
+	SentBy protocol.Perspective
 
 	OriginalDestinationConnectionID protocol.ConnectionID
 	StatelessResetToken             *[16]byte
@@ -351,11 +352,11 @@ func (e eventTransportParameters) IsNil() bool        { return false }
 
 func (e eventTransportParameters) MarshalJSONObject(enc *gojay.Encoder) {
 	enc.StringKey("owner", e.Owner.String())
-	if e.OriginalDestinationConnectionID != nil {
+	if e.SentBy == protocol.PerspectiveServer {
 		enc.StringKey("original_destination_connection_id", connectionID(e.OriginalDestinationConnectionID).String())
-	}
-	if e.StatelessResetToken != nil {
-		enc.StringKey("stateless_reset_token", fmt.Sprintf("%x", e.StatelessResetToken[:]))
+		if e.StatelessResetToken != nil {
+			enc.StringKey("stateless_reset_token", fmt.Sprintf("%x", e.StatelessResetToken[:]))
+		}
 	}
 	enc.BoolKey("disable_active_migration", e.DisableActiveMigration)
 	enc.FloatKeyOmitEmpty("max_idle_timeout", milliseconds(e.MaxIdleTimeout))
