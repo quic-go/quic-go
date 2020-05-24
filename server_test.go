@@ -253,7 +253,7 @@ var _ = Describe("Server", func() {
 					close(done)
 					return false
 				}
-				token, err := serv.tokenGenerator.NewRetryToken(raddr, nil)
+				token, err := serv.tokenGenerator.NewRetryToken(raddr, nil, nil)
 				Expect(err).ToNot(HaveOccurred())
 				packet := getPacket(&wire.Header{
 					IsLongHeader: true,
@@ -291,7 +291,7 @@ var _ = Describe("Server", func() {
 
 			It("creates a session when the token is accepted", func() {
 				serv.config.AcceptToken = func(_ net.Addr, token *Token) bool { return true }
-				retryToken, err := serv.tokenGenerator.NewRetryToken(&net.UDPAddr{}, protocol.ConnectionID{0xde, 0xad, 0xc0, 0xde})
+				retryToken, err := serv.tokenGenerator.NewRetryToken(&net.UDPAddr{}, protocol.ConnectionID{0xde, 0xad, 0xc0, 0xde}, nil)
 				Expect(err).ToNot(HaveOccurred())
 				hdr := &wire.Header{
 					IsLongHeader:     true,
@@ -409,7 +409,7 @@ var _ = Describe("Server", func() {
 
 			It("sends an INVALID_TOKEN error, if an invalid retry token is received", func() {
 				serv.config.AcceptToken = func(_ net.Addr, _ *Token) bool { return false }
-				token, err := serv.tokenGenerator.NewRetryToken(&net.UDPAddr{}, nil)
+				token, err := serv.tokenGenerator.NewRetryToken(&net.UDPAddr{}, nil, nil)
 				Expect(err).ToNot(HaveOccurred())
 				hdr := &wire.Header{
 					IsLongHeader:     true,
@@ -445,7 +445,7 @@ var _ = Describe("Server", func() {
 
 			It("doesn't send an INVALID_TOKEN error, if the packet is corrupted", func() {
 				serv.config.AcceptToken = func(_ net.Addr, _ *Token) bool { return false }
-				token, err := serv.tokenGenerator.NewRetryToken(&net.UDPAddr{}, nil)
+				token, err := serv.tokenGenerator.NewRetryToken(&net.UDPAddr{}, nil, nil)
 				Expect(err).ToNot(HaveOccurred())
 				hdr := &wire.Header{
 					IsLongHeader:     true,

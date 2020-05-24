@@ -494,11 +494,11 @@ func (s *baseServer) sendRetry(remoteAddr net.Addr, hdr *wire.Header) error {
 	// Log the Initial packet now.
 	// If no Retry is sent, the packet will be logged by the session.
 	(&wire.ExtendedHeader{Header: *hdr}).Log(s.logger)
-	token, err := s.tokenGenerator.NewRetryToken(remoteAddr, hdr.DestConnectionID)
+	srcConnID, err := protocol.GenerateConnectionID(s.config.ConnectionIDLength)
 	if err != nil {
 		return err
 	}
-	connID, err := protocol.GenerateConnectionID(s.config.ConnectionIDLength)
+	token, err := s.tokenGenerator.NewRetryToken(remoteAddr, hdr.DestConnectionID, srcConnID)
 	if err != nil {
 		return err
 	}
@@ -506,10 +506,10 @@ func (s *baseServer) sendRetry(remoteAddr net.Addr, hdr *wire.Header) error {
 	replyHdr.IsLongHeader = true
 	replyHdr.Type = protocol.PacketTypeRetry
 	replyHdr.Version = hdr.Version
-	replyHdr.SrcConnectionID = connID
+	replyHdr.SrcConnectionID = srcConnID
 	replyHdr.DestConnectionID = hdr.SrcConnectionID
 	replyHdr.Token = token
-	s.logger.Debugf("Changing connection ID to %s.", connID)
+	s.logger.Debugf("Changing connection ID to %s.", srcConnID)
 	s.logger.Debugf("-> Sending Retry")
 	replyHdr.Log(s.logger)
 	buf := &bytes.Buffer{}
