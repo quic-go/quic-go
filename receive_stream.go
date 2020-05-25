@@ -29,7 +29,6 @@ type receiveStream struct {
 	sender streamSender
 
 	frameQueue  *frameSorter
-	readOffset  protocol.ByteCount
 	finalOffset protocol.ByteCount
 
 	currentFrame       []byte
@@ -169,7 +168,6 @@ func (s *receiveStream) readImpl(p []byte) (bool /*stream completed */, int, err
 		m := copy(p[bytesRead:], s.currentFrame[s.readPosInFrame:])
 		s.readPosInFrame += m
 		bytesRead += m
-		s.readOffset += protocol.ByteCount(m)
 
 		s.mutex.Lock()
 		// when a RESET_STREAM was received, the was already informed about the final byteOffset for this stream
