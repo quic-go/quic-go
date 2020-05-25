@@ -68,9 +68,9 @@ func (h *connIDManager) Add(f *wire.NewConnectionIDFrame) error {
 }
 
 func (h *connIDManager) add(f *wire.NewConnectionIDFrame) error {
-	// If the NEW_CONNECTION_ID frame is reordered, such that its sequence number
-	// was already retired, send the RETIRE_CONNECTION_ID frame immediately.
-	if f.SequenceNumber < h.highestRetired {
+	// If the NEW_CONNECTION_ID frame is reordered, such that its sequence number is smaller than the currently active
+	// connection ID or if it was already retired, send the RETIRE_CONNECTION_ID frame immediately.
+	if f.SequenceNumber <= h.activeSequenceNumber || f.SequenceNumber < h.highestRetired {
 		h.queueControlFrame(&wire.RetireConnectionIDFrame{
 			SequenceNumber: f.SequenceNumber,
 		})
