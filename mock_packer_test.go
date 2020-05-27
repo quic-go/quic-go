@@ -79,18 +79,18 @@ func (mr *MockPackerMockRecorder) MaybePackProbePacket(arg0 interface{}) *gomock
 }
 
 // PackCoalescedPacket mocks base method
-func (m *MockPacker) PackCoalescedPacket() (*coalescedPacket, error) {
+func (m *MockPacker) PackCoalescedPacket(arg0 protocol.ByteCount) (*coalescedPacket, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "PackCoalescedPacket")
+	ret := m.ctrl.Call(m, "PackCoalescedPacket", arg0)
 	ret0, _ := ret[0].(*coalescedPacket)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // PackCoalescedPacket indicates an expected call of PackCoalescedPacket
-func (mr *MockPackerMockRecorder) PackCoalescedPacket() *gomock.Call {
+func (mr *MockPackerMockRecorder) PackCoalescedPacket(arg0 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PackCoalescedPacket", reflect.TypeOf((*MockPacker)(nil).PackCoalescedPacket))
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PackCoalescedPacket", reflect.TypeOf((*MockPacker)(nil).PackCoalescedPacket), arg0)
 }
 
 // PackConnectionClose mocks base method

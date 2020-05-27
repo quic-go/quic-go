@@ -64,6 +64,7 @@ func (h *receivedPacketHandler) ReceivedPacket(
 	rcvTime time.Time,
 	shouldInstigateAck bool,
 ) error {
+	h.sentPackets.ReceivedPacket(encLevel)
 	switch encLevel {
 	case protocol.EncryptionInitial:
 		h.initialPackets.ReceivedPacket(pn, rcvTime, shouldInstigateAck)
