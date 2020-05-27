@@ -28,8 +28,8 @@ type packetNumberSpace struct {
 	history *sentPacketHistory
 	pns     *packetNumberGenerator
 
-	lossTime                       time.Time
-	lastSentAckElicitingPacketTime time.Time
+	lossTime                   time.Time
+	lastAckElicitingPacketTime time.Time
 
 	largestAcked protocol.PacketNumber
 	largestSent  protocol.PacketNumber
@@ -244,7 +244,7 @@ func (h *sentPacketHandler) sentPacketImpl(packet *Packet) bool /* is ack-elicit
 	isAckEliciting := len(packet.Frames) > 0
 
 	if isAckEliciting {
-		pnSpace.lastSentAckElicitingPacketTime = packet.SendTime
+		pnSpace.lastAckElicitingPacketTime = packet.SendTime
 		packet.includedInBytesInFlight = true
 		h.bytesInFlight += packet.Length
 		if h.numProbesToSend > 0 {
@@ -419,22 +419,22 @@ func (h *sentPacketHandler) getEarliestLossTimeAndSpace() (time.Time, protocol.E
 	return lossTime, encLevel
 }
 
-// same logic as getEarliestLossTimeAndSpace, but for lastSentAckElicitingPacketTime instead of lossTime
+// same logic as getEarliestLossTimeAndSpace, but for lastAckElicitingPacketTime instead of lossTime
 func (h *sentPacketHandler) getEarliestSentTimeAndSpace() (time.Time, protocol.EncryptionLevel) {
 	var encLevel protocol.EncryptionLevel
 	var sentTime time.Time
 
 	if h.initialPackets != nil {
-		sentTime = h.initialPackets.lastSentAckElicitingPacketTime
+		sentTime = h.initialPackets.lastAckElicitingPacketTime
 		encLevel = protocol.EncryptionInitial
 	}
-	if h.handshakePackets != nil && (sentTime.IsZero() || (!h.handshakePackets.lastSentAckElicitingPacketTime.IsZero() && h.handshakePackets.lastSentAckElicitingPacketTime.Before(sentTime))) {
-		sentTime = h.handshakePackets.lastSentAckElicitingPacketTime
+	if h.handshakePackets != nil && (sentTime.IsZero() || (!h.handshakePackets.lastAckElicitingPacketTime.IsZero() && h.handshakePackets.lastAckElicitingPacketTime.Before(sentTime))) {
+		sentTime = h.handshakePackets.lastAckElicitingPacketTime
 		encLevel = protocol.EncryptionHandshake
 	}
 	if h.handshakeComplete &&
-		(sentTime.IsZero() || (!h.appDataPackets.lastSentAckElicitingPacketTime.IsZero() && h.appDataPackets.lastSentAckElicitingPacketTime.Before(sentTime))) {
-		sentTime = h.appDataPackets.lastSentAckElicitingPacketTime
+		(sentTime.IsZero() || (!h.appDataPackets.lastAckElicitingPacketTime.IsZero() && h.appDataPackets.lastAckElicitingPacketTime.Before(sentTime))) {
+		sentTime = h.appDataPackets.lastAckElicitingPacketTime
 		encLevel = protocol.Encryption1RTT
 	}
 	return sentTime, encLevel

@@ -125,20 +125,20 @@ var _ = Describe("SentPacketHandler", func() {
 		It("stores the sent time", func() {
 			sendTime := time.Now().Add(-time.Minute)
 			handler.SentPacket(ackElicitingPacket(&Packet{PacketNumber: 1, SendTime: sendTime}))
-			Expect(handler.appDataPackets.lastSentAckElicitingPacketTime).To(Equal(sendTime))
+			Expect(handler.appDataPackets.lastAckElicitingPacketTime).To(Equal(sendTime))
 		})
 
 		It("stores the sent time of Initial packets", func() {
 			sendTime := time.Now().Add(-time.Minute)
 			handler.SentPacket(ackElicitingPacket(&Packet{PacketNumber: 1, SendTime: sendTime, EncryptionLevel: protocol.EncryptionInitial}))
 			handler.SentPacket(ackElicitingPacket(&Packet{PacketNumber: 2, SendTime: sendTime.Add(time.Hour), EncryptionLevel: protocol.Encryption1RTT}))
-			Expect(handler.initialPackets.lastSentAckElicitingPacketTime).To(Equal(sendTime))
+			Expect(handler.initialPackets.lastAckElicitingPacketTime).To(Equal(sendTime))
 		})
 
 		It("does not store non-ack-eliciting packets", func() {
 			handler.SentPacket(nonAckElicitingPacket(&Packet{PacketNumber: 1}))
 			Expect(handler.appDataPackets.history.Len()).To(BeZero())
-			Expect(handler.appDataPackets.lastSentAckElicitingPacketTime).To(BeZero())
+			Expect(handler.appDataPackets.lastAckElicitingPacketTime).To(BeZero())
 			Expect(handler.bytesInFlight).To(BeZero())
 		})
 	})
