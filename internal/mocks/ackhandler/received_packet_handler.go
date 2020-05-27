@@ -76,6 +76,20 @@ func (mr *MockReceivedPacketHandlerMockRecorder) GetAlarmTimeout() *gomock.Call 
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetAlarmTimeout", reflect.TypeOf((*MockReceivedPacketHandler)(nil).GetAlarmTimeout))
 }
 
+// IsPotentiallyDuplicate mocks base method
+func (m *MockReceivedPacketHandler) IsPotentiallyDuplicate(arg0 protocol.PacketNumber, arg1 protocol.EncryptionLevel) bool {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "IsPotentiallyDuplicate", arg0, arg1)
+	ret0, _ := ret[0].(bool)
+	return ret0
+}
+
+// IsPotentiallyDuplicate indicates an expected call of IsPotentiallyDuplicate
+func (mr *MockReceivedPacketHandlerMockRecorder) IsPotentiallyDuplicate(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IsPotentiallyDuplicate", reflect.TypeOf((*MockReceivedPacketHandler)(nil).IsPotentiallyDuplicate), arg0, arg1)
+}
+
 // ReceivedPacket mocks base method
 func (m *MockReceivedPacketHandler) ReceivedPacket(arg0 protocol.PacketNumber, arg1 protocol.EncryptionLevel, arg2 time.Time, arg3 bool) error {
 	m.ctrl.T.Helper()

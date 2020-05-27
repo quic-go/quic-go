@@ -815,6 +815,14 @@ func (s *session) handleSinglePacket(p *receivedPacket, hdr *wire.Header) bool /
 		packet.hdr.Log(s.logger)
 	}
 
+	if s.receivedPacketHandler.IsPotentiallyDuplicate(packet.packetNumber, packet.encryptionLevel) {
+		s.logger.Debugf("Dropping (potentially) duplicate packet.")
+		if s.qlogger != nil {
+			s.qlogger.DroppedPacket(qlog.PacketTypeFromHeader(hdr), protocol.ByteCount(len(p.data)), qlog.PacketDropDuplicate)
+		}
+		return false
+	}
+
 	if err := s.handleUnpackedPacket(packet, p.rcvTime, protocol.ByteCount(len(p.data))); err != nil {
 		s.closeLocal(err)
 		return false

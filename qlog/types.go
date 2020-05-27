@@ -262,6 +262,8 @@ const (
 	PacketDropUnexpectedSourceConnectionID
 	// PacketDropUnexpectedVersion is used when a packet with an unexpected version is received
 	PacketDropUnexpectedVersion
+	// PacketDropDuplicate is used when a duplicate packet is received
+	PacketDropDuplicate
 )
 
 func (r PacketDropReason) String() string {
@@ -286,6 +288,8 @@ func (r PacketDropReason) String() string {
 		return "unexpected_source_connection_id"
 	case PacketDropUnexpectedVersion:
 		return "unexpected_version"
+	case PacketDropDuplicate:
+		return "duplicate"
 	default:
 		panic("unknown packet drop reason")
 	}
