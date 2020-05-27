@@ -399,7 +399,7 @@ func (h *sentPacketHandler) detectAndRemoveAckedPackets(ack *wire.AckFrame, encL
 	return ackedPackets, err
 }
 
-func (h *sentPacketHandler) getEarliestLossTimeAndSpace() (time.Time, protocol.EncryptionLevel) {
+func (h *sentPacketHandler) getLossTimeAndSpace() (time.Time, protocol.EncryptionLevel) {
 	var encLevel protocol.EncryptionLevel
 	var lossTime time.Time
 
@@ -419,7 +419,7 @@ func (h *sentPacketHandler) getEarliestLossTimeAndSpace() (time.Time, protocol.E
 	return lossTime, encLevel
 }
 
-// same logic as getEarliestLossTimeAndSpace, but for lastAckElicitingPacketTime instead of lossTime
+// same logic as getLossTimeAndSpace, but for lastAckElicitingPacketTime instead of lossTime
 func (h *sentPacketHandler) getEarliestSentTimeAndSpace() (time.Time, protocol.EncryptionLevel) {
 	var encLevel protocol.EncryptionLevel
 	var sentTime time.Time
@@ -460,7 +460,7 @@ func (h *sentPacketHandler) hasOutstandingPackets() bool {
 
 func (h *sentPacketHandler) setLossDetectionTimer() {
 	oldAlarm := h.alarm // only needed in case qlog is enabled
-	if lossTime, encLevel := h.getEarliestLossTimeAndSpace(); !lossTime.IsZero() {
+	if lossTime, encLevel := h.getLossTimeAndSpace(); !lossTime.IsZero() {
 		// Early retransmit timer or time loss detection.
 		h.alarm = lossTime
 		if h.qlogger != nil && h.alarm != oldAlarm {
@@ -586,7 +586,7 @@ func (h *sentPacketHandler) OnLossDetectionTimeout() error {
 }
 
 func (h *sentPacketHandler) onVerifiedLossDetectionTimeout() error {
-	earliestLossTime, encLevel := h.getEarliestLossTimeAndSpace()
+	earliestLossTime, encLevel := h.getLossTimeAndSpace()
 	if !earliestLossTime.IsZero() {
 		if h.logger.Debug() {
 			h.logger.Debugf("Loss detection alarm fired in loss timer mode. Loss time: %s", earliestLossTime)
