@@ -118,6 +118,21 @@ func (h *packetHandlerMap) Add(id protocol.ConnectionID, handler packetHandler) 
 	return true
 }
 
+func (h *packetHandlerMap) AddWithConnID(clientDestConnID, newConnID protocol.ConnectionID, fn func() packetHandler) bool {
+	sid := string(clientDestConnID)
+	h.mutex.Lock()
+	defer h.mutex.Unlock()
+
+	if _, ok := h.handlers[sid]; ok {
+		return false
+	}
+
+	sess := fn()
+	h.handlers[sid] = sess
+	h.handlers[string(newConnID)] = sess
+	return true
+}
+
 func (h *packetHandlerMap) Remove(id protocol.ConnectionID) {
 	h.mutex.Lock()
 	delete(h.handlers, string(id))

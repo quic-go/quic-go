@@ -181,6 +181,14 @@ var _ = Describe("Packet Handler Map", func() {
 			Expect(handler.Add(connID, NewMockPacketHandler(mockCtrl))).To(BeTrue())
 			Expect(handler.Add(connID, NewMockPacketHandler(mockCtrl))).To(BeFalse())
 		})
+
+		It("says if a connection ID is already taken, for AddWithConnID", func() {
+			clientDestConnID := protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8}
+			newConnID1 := protocol.ConnectionID{1, 2, 3, 4}
+			newConnID2 := protocol.ConnectionID{4, 3, 2, 1}
+			Expect(handler.AddWithConnID(clientDestConnID, newConnID1, func() packetHandler { return NewMockPacketHandler(mockCtrl) })).To(BeTrue())
+			Expect(handler.AddWithConnID(clientDestConnID, newConnID2, func() packetHandler { return NewMockPacketHandler(mockCtrl) })).To(BeFalse())
+		})
 	})
 
 	Context("running a server", func() {

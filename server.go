@@ -34,6 +34,7 @@ type unknownPacketHandler interface {
 }
 
 type packetHandlerManager interface {
+	AddWithConnID(protocol.ConnectionID, protocol.ConnectionID, func() packetHandler) bool
 	Destroy() error
 	sessionRunner
 	SetServer(unknownPacketHandler)
@@ -421,39 +422,39 @@ func (s *baseServer) createNewSession(
 	srcConnID protocol.ConnectionID,
 	version protocol.VersionNumber,
 ) quicSession {
-	var qlogger qlog.Tracer
-	if s.config.GetLogWriter != nil {
-		// Use the same connection ID that is passed to the client's GetLogWriter callback.
-		connID := clientDestConnID
-		if origDestConnID.Len() > 0 {
-			connID = origDestConnID
+	var sess quicSession
+	if added := s.sessionHandler.AddWithConnID(clientDestConnID, srcConnID, func() packetHandler {
+		var qlogger qlog.Tracer
+		if s.config.GetLogWriter != nil {
+			// Use the same connection ID that is passed to the client's GetLogWriter callback.
+			connID := clientDestConnID
+			if origDestConnID.Len() > 0 {
+				connID = origDestConnID
+			}
+			if w := s.config.GetLogWriter(connID); w != nil {
+				qlogger = qlog.NewTracer(w, protocol.PerspectiveServer, connID)
+			}
 		}
-		if w := s.config.GetLogWriter(connID); w != nil {
-			qlogger = qlog.NewTracer(w, protocol.PerspectiveServer, connID)
-		}
-	}
-	sess := s.newSession(
-		&conn{pconn: s.conn, currentAddr: remoteAddr},
-		s.sessionHandler,
-		origDestConnID,
-		clientDestConnID,
-		destConnID,
-		srcConnID,
-		s.sessionHandler.GetStatelessResetToken(srcConnID),
-		s.config,
-		s.tlsConf,
-		s.tokenGenerator,
-		s.acceptEarlySessions,
-		qlogger,
-		s.logger,
-		version,
-	)
-	if added := s.sessionHandler.Add(clientDestConnID, sess); !added {
-		// We're already keeping track of this connection ID.
-		// This might happen if we receive two copies of the Initial at the same time.
+		sess = s.newSession(
+			&conn{pconn: s.conn, currentAddr: remoteAddr},
+			s.sessionHandler,
+			origDestConnID,
+			clientDestConnID,
+			destConnID,
+			srcConnID,
+			s.sessionHandler.GetStatelessResetToken(srcConnID),
+			s.config,
+			s.tlsConf,
+			s.tokenGenerator,
+			s.acceptEarlySessions,
+			qlogger,
+			s.logger,
+			version,
+		)
+		return sess
+	}); !added {
 		return nil
 	}
-	s.sessionHandler.Add(srcConnID, sess)
 	go sess.run()
 	go s.handleNewSession(sess)
 	return sess
