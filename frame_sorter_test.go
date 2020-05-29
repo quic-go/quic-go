@@ -1401,6 +1401,10 @@ var _ = Describe("frame sorter", func() {
 			}
 
 			Context(fmt.Sprintf("using %s frames", name), func() {
+				seed := time.Now().UnixNano()
+				fmt.Fprintf(GinkgoWriter, "Seed: %d\n", seed)
+				rand.Seed(seed)
+
 				var data []byte
 				var dataLen protocol.ByteCount
 				var callbacks []callbackTracker
@@ -1454,7 +1458,6 @@ var _ = Describe("frame sorter", func() {
 				// It creates a new callback and adds the
 				push := func(data []byte, offset protocol.ByteCount) {
 					cb, t := getCallback()
-					fmt.Fprintf(GinkgoWriter, "Pushing %d bytes at offset %d - %d\n", len(data), offset, offset+protocol.ByteCount(len(data)))
 					ExpectWithOffset(1, s.Push(data, offset, cb)).To(Succeed())
 					callbacks = append(callbacks, t)
 				}
@@ -1497,10 +1500,6 @@ var _ = Describe("frame sorter", func() {
 				})
 
 				It("inserting frames in a random order, with randomly cut retransmissions", func() {
-					seed := time.Now().UnixNano()
-					fmt.Fprintf(GinkgoWriter, "Seed: %d\n", seed)
-					rand.Seed(seed)
-
 					frames := getRandomFrames()
 
 					for _, f := range frames {
