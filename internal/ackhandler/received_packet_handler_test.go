@@ -137,6 +137,7 @@ var _ = Describe("Received Packet Handler", func() {
 
 	It("says if packets are duplicates", func() {
 		sendTime := time.Now()
+		sentPackets.EXPECT().ReceivedPacket(gomock.Any()).AnyTimes()
 		sentPackets.EXPECT().GetLowestPacketNotConfirmedAcked().AnyTimes()
 		// Initial
 		Expect(handler.IsPotentiallyDuplicate(3, protocol.EncryptionInitial)).To(BeFalse())
