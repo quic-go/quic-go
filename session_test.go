@@ -666,7 +666,10 @@ var _ = Describe("Session", func() {
 				data:            []byte{0}, // one PADDING frame
 			}, nil)
 			rph := mockackhandler.NewMockReceivedPacketHandler(mockCtrl)
-			rph.EXPECT().ReceivedPacket(protocol.PacketNumber(0x1337), protocol.EncryptionInitial, rcvTime, false)
+			gomock.InOrder(
+				rph.EXPECT().IsPotentiallyDuplicate(protocol.PacketNumber(0x1337), protocol.EncryptionInitial),
+				rph.EXPECT().ReceivedPacket(protocol.PacketNumber(0x1337), protocol.EncryptionInitial, rcvTime, false),
+			)
 			sess.receivedPacketHandler = rph
 			packet.rcvTime = rcvTime
 			qlogger.EXPECT().StartedConnection(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any())
@@ -691,12 +694,35 @@ var _ = Describe("Session", func() {
 				data:            buf.Bytes(),
 			}, nil)
 			rph := mockackhandler.NewMockReceivedPacketHandler(mockCtrl)
-			rph.EXPECT().ReceivedPacket(protocol.PacketNumber(0x1337), protocol.Encryption1RTT, rcvTime, true)
+			gomock.InOrder(
+				rph.EXPECT().IsPotentiallyDuplicate(protocol.PacketNumber(0x1337), protocol.Encryption1RTT),
+				rph.EXPECT().ReceivedPacket(protocol.PacketNumber(0x1337), protocol.Encryption1RTT, rcvTime, true),
+			)
 			sess.receivedPacketHandler = rph
 			packet.rcvTime = rcvTime
 			qlogger.EXPECT().StartedConnection(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any())
 			qlogger.EXPECT().ReceivedPacket(hdr, protocol.ByteCount(len(packet.data)), []wire.Frame{&wire.PingFrame{}})
 			Expect(sess.handlePacketImpl(packet)).To(BeTrue())
+		})
+
+		It("drops duplicate packets", func() {
+			hdr := &wire.ExtendedHeader{
+				Header:          wire.Header{DestConnectionID: srcConnID},
+				PacketNumber:    0x37,
+				PacketNumberLen: protocol.PacketNumberLen1,
+			}
+			packet := getPacket(hdr, nil)
+			unpacker.EXPECT().Unpack(gomock.Any(), gomock.Any(), gomock.Any()).Return(&unpackedPacket{
+				packetNumber:    0x1337,
+				encryptionLevel: protocol.Encryption1RTT,
+				hdr:             hdr,
+				data:            []byte("foobar"),
+			}, nil)
+			rph := mockackhandler.NewMockReceivedPacketHandler(mockCtrl)
+			rph.EXPECT().IsPotentiallyDuplicate(protocol.PacketNumber(0x1337), protocol.Encryption1RTT).Return(true)
+			sess.receivedPacketHandler = rph
+			qlogger.EXPECT().DroppedPacket(qlog.PacketType1RTT, protocol.ByteCount(len(packet.data)), qlog.PacketDropDuplicate)
+			Expect(sess.handlePacketImpl(packet)).To(BeFalse())
 		})
 
 		It("drops a packet when unpacking fails", func() {
@@ -784,8 +810,9 @@ var _ = Describe("Session", func() {
 
 		It("rejects packets with empty payload", func() {
 			unpacker.EXPECT().Unpack(gomock.Any(), gomock.Any(), gomock.Any()).Return(&unpackedPacket{
-				hdr:  &wire.ExtendedHeader{},
-				data: []byte{}, // no payload
+				hdr:             &wire.ExtendedHeader{},
+				data:            []byte{}, // no payload
+				encryptionLevel: protocol.Encryption1RTT,
 			}, nil)
 			streamManager.EXPECT().CloseWithError(gomock.Any())
 			cryptoSetup.EXPECT().Close()
@@ -933,6 +960,7 @@ var _ = Describe("Session", func() {
 					return &unpackedPacket{
 						encryptionLevel: protocol.EncryptionHandshake,
 						data:            []byte{0},
+						packetNumber:    1,
 						hdr:             &wire.ExtendedHeader{Header: wire.Header{SrcConnectionID: destConnID}},
 					}, nil
 				})
@@ -942,6 +970,7 @@ var _ = Describe("Session", func() {
 					return &unpackedPacket{
 						encryptionLevel: protocol.EncryptionHandshake,
 						data:            []byte{0},
+						packetNumber:    2,
 						hdr:             &wire.ExtendedHeader{Header: wire.Header{SrcConnectionID: destConnID}},
 					}, nil
 				})

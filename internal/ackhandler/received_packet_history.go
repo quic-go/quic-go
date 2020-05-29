@@ -128,3 +128,18 @@ func (h *receivedPacketHistory) GetHighestAckRange() wire.AckRange {
 	}
 	return ackRange
 }
+
+func (h *receivedPacketHistory) IsPotentiallyDuplicate(p protocol.PacketNumber) bool {
+	if p < h.deletedBelow {
+		return true
+	}
+	for el := h.ranges.Back(); el != nil; el = el.Prev() {
+		if p > el.Value.End {
+			return false
+		}
+		if p <= el.Value.End && p >= el.Value.Start {
+			return true
+		}
+	}
+	return false
+}

@@ -134,4 +134,26 @@ var _ = Describe("Received Packet Handler", func() {
 		Expect(ack.LowestAcked()).To(Equal(protocol.PacketNumber(2)))
 		Expect(ack.LargestAcked()).To(Equal(protocol.PacketNumber(4)))
 	})
+
+	It("says if packets are duplicates", func() {
+		sendTime := time.Now()
+		sentPackets.EXPECT().GetLowestPacketNotConfirmedAcked().AnyTimes()
+		// Initial
+		Expect(handler.IsPotentiallyDuplicate(3, protocol.EncryptionInitial)).To(BeFalse())
+		Expect(handler.ReceivedPacket(3, protocol.EncryptionInitial, sendTime, true)).To(Succeed())
+		Expect(handler.IsPotentiallyDuplicate(3, protocol.EncryptionInitial)).To(BeTrue())
+		// Handshake
+		Expect(handler.IsPotentiallyDuplicate(3, protocol.EncryptionHandshake)).To(BeFalse())
+		Expect(handler.ReceivedPacket(3, protocol.EncryptionHandshake, sendTime, true)).To(Succeed())
+		Expect(handler.IsPotentiallyDuplicate(3, protocol.EncryptionHandshake)).To(BeTrue())
+		// 0-RTT
+		Expect(handler.IsPotentiallyDuplicate(3, protocol.Encryption0RTT)).To(BeFalse())
+		Expect(handler.ReceivedPacket(3, protocol.Encryption0RTT, sendTime, true)).To(Succeed())
+		Expect(handler.IsPotentiallyDuplicate(3, protocol.Encryption0RTT)).To(BeTrue())
+		// 1-RTT
+		Expect(handler.IsPotentiallyDuplicate(3, protocol.Encryption1RTT)).To(BeTrue())
+		Expect(handler.IsPotentiallyDuplicate(4, protocol.Encryption1RTT)).To(BeFalse())
+		Expect(handler.ReceivedPacket(4, protocol.Encryption1RTT, sendTime, true)).To(Succeed())
+		Expect(handler.IsPotentiallyDuplicate(4, protocol.Encryption1RTT)).To(BeTrue())
+	})
 })
