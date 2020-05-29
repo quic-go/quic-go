@@ -78,7 +78,7 @@ var _ = Describe("Tracer", func() {
 		Expect(commonFields).To(HaveKeyWithValue("group_id", "deadbeef"))
 		Expect(commonFields).To(HaveKey("reference_time"))
 		referenceTime := time.Unix(0, int64(commonFields["reference_time"].(float64)*1e6))
-		Expect(referenceTime).To(BeTemporally("~", time.Now(), 10*time.Millisecond))
+		Expect(referenceTime).To(BeTemporally("~", time.Now(), scaleDuration(10*time.Millisecond)))
 		Expect(trace).To(HaveKey("event_fields"))
 		for i, ef := range trace["event_fields"].([]interface{}) {
 			Expect(ef.(string)).To(Equal(eventFields[i]))
@@ -161,7 +161,7 @@ var _ = Describe("Tracer", func() {
 		It("records connection closes", func() {
 			tracer.ClosedConnection(CloseReasonIdleTimeout)
 			entry := exportAndParseSingle()
-			Expect(entry.Time).To(BeTemporally("~", time.Now(), 10*time.Millisecond))
+			Expect(entry.Time).To(BeTemporally("~", time.Now(), scaleDuration(10*time.Millisecond)))
 			Expect(entry.Category).To(Equal("transport"))
 			Expect(entry.Name).To(Equal("connection_state_updated"))
 			ev := entry.Event
@@ -343,7 +343,7 @@ var _ = Describe("Tracer", func() {
 				},
 			)
 			entry := exportAndParseSingle()
-			Expect(entry.Time).To(BeTemporally("~", time.Now(), 10*time.Millisecond))
+			Expect(entry.Time).To(BeTemporally("~", time.Now(), scaleDuration(10*time.Millisecond)))
 			Expect(entry.Category).To(Equal("transport"))
 			Expect(entry.Name).To(Equal("packet_received"))
 			ev := entry.Event
@@ -456,11 +456,11 @@ var _ = Describe("Tracer", func() {
 			)
 			entries := exportAndParse()
 			Expect(entries).To(HaveLen(2))
-			Expect(entries[0].Time).To(BeTemporally("~", time.Now(), 10*time.Millisecond))
+			Expect(entries[0].Time).To(BeTemporally("~", time.Now(), scaleDuration(10*time.Millisecond)))
 			Expect(entries[0].Category).To(Equal("recovery"))
 			Expect(entries[0].Name).To(Equal("metrics_updated"))
 			Expect(entries[0].Event).To(HaveLen(7))
-			Expect(entries[1].Time).To(BeTemporally("~", time.Now(), 10*time.Millisecond))
+			Expect(entries[1].Time).To(BeTemporally("~", time.Now(), scaleDuration(10*time.Millisecond)))
 			Expect(entries[1].Category).To(Equal("recovery"))
 			Expect(entries[1].Name).To(Equal("metrics_updated"))
 			ev := entries[1].Event
