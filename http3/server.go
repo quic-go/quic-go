@@ -25,7 +25,7 @@ var (
 	quicListenAddr = quic.ListenAddrEarly
 )
 
-const nextProtoH3 = "h3-27"
+const nextProtoH3 = "h3-28"
 
 // contextKey is a value for use with context.WithValue. It's used as
 // a pointer so it fits in an interface{} without allocation.
