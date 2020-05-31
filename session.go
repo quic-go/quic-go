@@ -111,9 +111,11 @@ type session struct {
 	// Destination connection ID used during the handshake.
 	// Used to check source connection ID on incoming packets.
 	handshakeDestConnID protocol.ConnectionID
-	// if the server sends a Retry, this is the connection ID we used initially
+	// Set for the client. Destination connection ID used on the first Initial sent.
 	origDestConnID protocol.ConnectionID
-	srcConnIDLen   int
+	retrySrcConnID *protocol.ConnectionID // only set for the client (and if a Retry was performed)
+
+	srcConnIDLen int
 
 	perspective    protocol.Perspective
 	initialVersion protocol.VersionNumber // if version negotiation is performed, this is the version we initially tried
@@ -201,6 +203,7 @@ var newSession = func(
 	conn connection,
 	runner sessionRunner,
 	origDestConnID protocol.ConnectionID,
+	retrySrcConnID *protocol.ConnectionID,
 	clientDestConnID protocol.ConnectionID,
 	destConnID protocol.ConnectionID,
 	srcConnID protocol.ConnectionID,
@@ -261,19 +264,21 @@ var newSession = func(
 	initialStream := newCryptoStream()
 	handshakeStream := newCryptoStream()
 	params := &wire.TransportParameters{
-		InitialMaxStreamDataBidiLocal:  protocol.InitialMaxStreamData,
-		InitialMaxStreamDataBidiRemote: protocol.InitialMaxStreamData,
-		InitialMaxStreamDataUni:        protocol.InitialMaxStreamData,
-		InitialMaxData:                 protocol.InitialMaxData,
-		MaxIdleTimeout:                 s.config.MaxIdleTimeout,
-		MaxBidiStreamNum:               protocol.StreamNum(s.config.MaxIncomingStreams),
-		MaxUniStreamNum:                protocol.StreamNum(s.config.MaxIncomingUniStreams),
-		MaxAckDelay:                    protocol.MaxAckDelayInclGranularity,
-		AckDelayExponent:               protocol.AckDelayExponent,
-		DisableActiveMigration:         true,
-		StatelessResetToken:            &statelessResetToken,
-		OriginalConnectionID:           origDestConnID,
-		ActiveConnectionIDLimit:        protocol.MaxActiveConnectionIDs,
+		InitialMaxStreamDataBidiLocal:   protocol.InitialMaxStreamData,
+		InitialMaxStreamDataBidiRemote:  protocol.InitialMaxStreamData,
+		InitialMaxStreamDataUni:         protocol.InitialMaxStreamData,
+		InitialMaxData:                  protocol.InitialMaxData,
+		MaxIdleTimeout:                  s.config.MaxIdleTimeout,
+		MaxBidiStreamNum:                protocol.StreamNum(s.config.MaxIncomingStreams),
+		MaxUniStreamNum:                 protocol.StreamNum(s.config.MaxIncomingUniStreams),
+		MaxAckDelay:                     protocol.MaxAckDelayInclGranularity,
+		AckDelayExponent:                protocol.AckDelayExponent,
+		DisableActiveMigration:          true,
+		StatelessResetToken:             &statelessResetToken,
+		OriginalDestinationConnectionID: origDestConnID,
+		ActiveConnectionIDLimit:         protocol.MaxActiveConnectionIDs,
+		InitialSourceConnectionID:       srcConnID,
+		RetrySourceConnectionID:         retrySrcConnID,
 	}
 	if s.qlogger != nil {
 		s.qlogger.SentTransportParameters(params)
@@ -338,6 +343,7 @@ var newClientSession = func(
 	s := &session{
 		conn:                  conn,
 		config:                conf,
+		origDestConnID:        destConnID,
 		handshakeDestConnID:   destConnID,
 		srcConnIDLen:          srcConnID.Len(),
 		perspective:           protocol.PerspectiveClient,
@@ -389,6 +395,7 @@ var newClientSession = func(
 		AckDelayExponent:               protocol.AckDelayExponent,
 		DisableActiveMigration:         true,
 		ActiveConnectionIDLimit:        protocol.MaxActiveConnectionIDs,
+		InitialSourceConnectionID:      srcConnID,
 	}
 	if s.qlogger != nil {
 		s.qlogger.SentTransportParameters(params)
@@ -503,7 +510,7 @@ func (s *session) run() error {
 		case zeroRTTParams := <-s.clientHelloWritten:
 			s.scheduleSending()
 			if zeroRTTParams != nil {
-				s.processTransportParameters(zeroRTTParams)
+				s.restoreTransportParameters(zeroRTTParams)
 				close(s.earlySessionReadyChan)
 			}
 		case closeErr := <-s.closeChan:
@@ -871,12 +878,11 @@ func (s *session) handleRetryPacket(hdr *wire.Header, data []byte) bool /* was t
 		return false
 	}
 
-	s.logger.Debugf("<- Received Retry")
+	s.logger.Debugf("<- Received Retry: %#v", hdr)
 	s.logger.Debugf("Switching destination connection ID to: %s", hdr.SrcConnectionID)
 	if s.qlogger != nil {
 		s.qlogger.ReceivedRetry(hdr)
 	}
-	s.origDestConnID = s.handshakeDestConnID
 	newDestConnID := hdr.SrcConnectionID
 	s.receivedRetry = true
 	if err := s.sentPacketHandler.ResetForRetry(); err != nil {
@@ -884,6 +890,7 @@ func (s *session) handleRetryPacket(hdr *wire.Header, data []byte) bool /* was t
 		return false
 	}
 	s.handshakeDestConnID = newDestConnID
+	s.retrySrcConnID = &newDestConnID
 	s.cryptoStreamHandler.ChangeConnectionID(newDestConnID)
 	s.packer.SetToken(hdr.Token)
 	s.connIDManager.ChangeInitialConnID(newDestConnID)
@@ -1266,7 +1273,28 @@ func (s *session) dropEncryptionLevel(encLevel protocol.EncryptionLevel) {
 	}
 }
 
+// is called for the client, when restoring transport parameters saved for 0-RTT
+func (s *session) restoreTransportParameters(params *wire.TransportParameters) {
+	if s.logger.Debug() {
+		s.logger.Debugf("Restoring Transport Parameters: %s", params)
+	}
+
+	s.peerParams = params
+	s.connIDGenerator.SetMaxActiveConnIDs(params.ActiveConnectionIDLimit)
+	s.connFlowController.UpdateSendWindow(params.InitialMaxData)
+	if err := s.streamsMap.UpdateLimits(params); err != nil {
+		s.closeLocal(err)
+		return
+	}
+}
+
 func (s *session) processTransportParameters(params *wire.TransportParameters) {
+	if err := s.processTransportParametersImpl(params); err != nil {
+		s.closeLocal(err)
+	}
+}
+
+func (s *session) processTransportParametersImpl(params *wire.TransportParameters) error {
 	if s.logger.Debug() {
 		s.logger.Debugf("Processed Transport Parameters: %s", params)
 	}
@@ -1274,10 +1302,26 @@ func (s *session) processTransportParameters(params *wire.TransportParameters) {
 		s.qlogger.ReceivedTransportParameters(params)
 	}
 
-	// check the Retry token
-	if s.perspective == protocol.PerspectiveClient && !params.OriginalConnectionID.Equal(s.origDestConnID) {
-		s.closeLocal(qerr.NewError(qerr.TransportParameterError, fmt.Sprintf("expected original_connection_id to equal %s, is %s", s.origDestConnID, params.OriginalConnectionID)))
-		return
+	// check the initial_source_connection_id
+	if !params.InitialSourceConnectionID.Equal(s.handshakeDestConnID) {
+		return qerr.NewError(qerr.TransportParameterError, fmt.Sprintf("expected initial_source_connection_id to equal %s, is %s", s.handshakeDestConnID, params.InitialSourceConnectionID))
+	}
+
+	if s.perspective == protocol.PerspectiveClient {
+		// check the original_destination_connection_id
+		if !params.OriginalDestinationConnectionID.Equal(s.origDestConnID) {
+			return qerr.NewError(qerr.TransportParameterError, fmt.Sprintf("expected original_destination_connection_id to equal %s, is %s", s.origDestConnID, params.OriginalDestinationConnectionID))
+		}
+		if s.retrySrcConnID != nil { // a Retry was performed
+			if params.RetrySourceConnectionID == nil {
+				return qerr.NewError(qerr.TransportParameterError, "missing retry_source_connection_id")
+			}
+			if !(*params.RetrySourceConnectionID).Equal(*s.retrySrcConnID) {
+				return qerr.NewError(qerr.TransportParameterError, fmt.Sprintf("expected retry_source_connection_id to equal %s, is %s", s.retrySrcConnID, *params.RetrySourceConnectionID))
+			}
+		} else if params.RetrySourceConnectionID != nil {
+			return qerr.NewError(qerr.TransportParameterError, "received retry_source_connection_id, although no Retry was performed")
+		}
 	}
 
 	s.peerParams = params
@@ -1285,8 +1329,7 @@ func (s *session) processTransportParameters(params *wire.TransportParameters) {
 	s.idleTimeout = utils.MinNonZeroDuration(s.config.MaxIdleTimeout, params.MaxIdleTimeout)
 	s.keepAliveInterval = utils.MinDuration(s.idleTimeout/2, protocol.MaxKeepAliveInterval)
 	if err := s.streamsMap.UpdateLimits(params); err != nil {
-		s.closeLocal(err)
-		return
+		return err
 	}
 	s.packer.HandleTransportParameters(params)
 	s.frameParser.SetAckDelayExponent(params.AckDelayExponent)
@@ -1307,6 +1350,7 @@ func (s *session) processTransportParameters(params *wire.TransportParameters) {
 	if s.perspective == protocol.PerspectiveServer {
 		close(s.earlySessionReadyChan)
 	}
+	return nil
 }
 
 func (s *session) sendPackets() error {

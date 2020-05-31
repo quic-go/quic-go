@@ -324,9 +324,13 @@ func (e eventKeyRetired) MarshalJSONObject(enc *gojay.Encoder) {
 }
 
 type eventTransportParameters struct {
-	Owner owner
+	Owner  owner
+	SentBy protocol.Perspective
 
-	OriginalConnectionID    protocol.ConnectionID
+	OriginalDestinationConnectionID protocol.ConnectionID
+	InitialSourceConnectionID       protocol.ConnectionID
+	RetrySourceConnectionID         *protocol.ConnectionID
+
 	StatelessResetToken     *[16]byte
 	DisableActiveMigration  bool
 	MaxIdleTimeout          time.Duration
@@ -351,12 +355,16 @@ func (e eventTransportParameters) IsNil() bool        { return false }
 
 func (e eventTransportParameters) MarshalJSONObject(enc *gojay.Encoder) {
 	enc.StringKey("owner", e.Owner.String())
-	if e.OriginalConnectionID != nil {
-		enc.StringKey("original_connection_id", connectionID(e.OriginalConnectionID).String())
+	if e.SentBy == protocol.PerspectiveServer {
+		enc.StringKey("original_destination_connection_id", connectionID(e.OriginalDestinationConnectionID).String())
+		if e.StatelessResetToken != nil {
+			enc.StringKey("stateless_reset_token", fmt.Sprintf("%x", e.StatelessResetToken[:]))
+		}
+		if e.RetrySourceConnectionID != nil {
+			enc.StringKey("retry_source_connection_id", connectionID(*e.RetrySourceConnectionID).String())
+		}
 	}
-	if e.StatelessResetToken != nil {
-		enc.StringKey("stateless_reset_token", fmt.Sprintf("%x", e.StatelessResetToken[:]))
-	}
+	enc.StringKey("initial_source_connection_id", connectionID(e.InitialSourceConnectionID).String())
 	enc.BoolKey("disable_active_migration", e.DisableActiveMigration)
 	enc.FloatKeyOmitEmpty("max_idle_timeout", milliseconds(e.MaxIdleTimeout))
 	enc.Uint64KeyNullEmpty("max_udp_payload_size", uint64(e.MaxUDPPayloadSize))
