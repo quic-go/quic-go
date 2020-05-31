@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.16.0 (2020-05-31)
+
+- Supports QUIC WG draft-28.
+
 ## v0.15.0 (2020-03-01)
 
 - Supports QUIC WG draft-27.
