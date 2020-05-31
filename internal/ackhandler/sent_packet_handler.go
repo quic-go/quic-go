@@ -603,6 +603,7 @@ func (h *sentPacketHandler) onVerifiedLossDetectionTimeout() error {
 		for _, p := range lostPackets {
 			h.congestion.OnPacketLost(p.PacketNumber, p.Length, priorInFlight)
 		}
+		return nil
 	}
 
 	// PTO
