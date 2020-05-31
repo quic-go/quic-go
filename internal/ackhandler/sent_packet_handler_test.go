@@ -917,7 +917,7 @@ var _ = Describe("SentPacketHandler", func() {
 			now := time.Now()
 			handler.SentPacket(ackElicitingPacket(&Packet{PacketNumber: 1, SendTime: now.Add(-2 * time.Second)}))
 			handler.SentPacket(ackElicitingPacket(&Packet{PacketNumber: 2, SendTime: now.Add(-2 * time.Second)}))
-			handler.SentPacket(ackElicitingPacket(&Packet{PacketNumber: 3, SendTime: now.Add(-time.Second)}))
+			handler.SentPacket(ackElicitingPacket(&Packet{PacketNumber: 3, SendTime: now}))
 			Expect(handler.appDataPackets.lossTime.IsZero()).To(BeTrue())
 
 			ack := &wire.AckFrame{AckRanges: []wire.AckRange{{Smallest: 2, Largest: 2}}}
@@ -926,13 +926,16 @@ var _ = Describe("SentPacketHandler", func() {
 
 			// Packet 1 should be considered lost (1+1/8) RTTs after it was sent.
 			Expect(handler.GetLossDetectionTimeout().Sub(getPacket(1, protocol.Encryption1RTT).SendTime)).To(Equal(time.Second * 9 / 8))
+			expectInPacketHistory([]protocol.PacketNumber{1, 3}, protocol.Encryption1RTT)
+			Expect(handler.OnLossDetectionTimeout()).To(Succeed())
+			expectInPacketHistory([]protocol.PacketNumber{3}, protocol.Encryption1RTT)
 		})
 
 		It("sets the early retransmit alarm for crypto packets", func() {
 			now := time.Now()
 			handler.SentPacket(initialPacket(&Packet{PacketNumber: 1, SendTime: now.Add(-2 * time.Second)}))
 			handler.SentPacket(initialPacket(&Packet{PacketNumber: 2, SendTime: now.Add(-2 * time.Second)}))
-			handler.SentPacket(initialPacket(&Packet{PacketNumber: 3, SendTime: now.Add(-time.Second)}))
+			handler.SentPacket(initialPacket(&Packet{PacketNumber: 3, SendTime: now}))
 			Expect(handler.initialPackets.lossTime.IsZero()).To(BeTrue())
 
 			ack := &wire.AckFrame{AckRanges: []wire.AckRange{{Smallest: 2, Largest: 2}}}
@@ -941,6 +944,9 @@ var _ = Describe("SentPacketHandler", func() {
 
 			// Packet 1 should be considered lost (1+1/8) RTTs after it was sent.
 			Expect(handler.GetLossDetectionTimeout().Sub(getPacket(1, protocol.EncryptionInitial).SendTime)).To(Equal(time.Second * 9 / 8))
+			expectInPacketHistory([]protocol.PacketNumber{1, 3}, protocol.EncryptionInitial)
+			Expect(handler.OnLossDetectionTimeout()).To(Succeed())
+			expectInPacketHistory([]protocol.PacketNumber{3}, protocol.EncryptionInitial)
 		})
 	})
 
