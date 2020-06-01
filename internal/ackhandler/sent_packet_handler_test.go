@@ -813,6 +813,10 @@ var _ = Describe("SentPacketHandler", func() {
 			Expect(handler.OnLossDetectionTimeout()).To(Succeed())
 			Expect(handler.SendMode()).To(Equal(SendPTOInitial))
 
+			// send a single packet to unblock the server
+			handler.SentPacket(initialPacket(&Packet{PacketNumber: 2}))
+			Expect(handler.SendMode()).To(Equal(SendAny))
+
 			// Now receive an ACK for a Handshake packet.
 			// This tells the client that the server completed address validation.
 			handler.SentPacket(handshakePacket(&Packet{PacketNumber: 1}))
@@ -825,7 +829,7 @@ var _ = Describe("SentPacketHandler", func() {
 			Expect(handler.GetLossDetectionTimeout()).To(BeZero())
 		})
 
-		It("sends an Handshake packet to unblock the server, if Initial keys were already dropped", func() {
+		It("sends a Handshake packet to unblock the server, if Initial keys were already dropped", func() {
 			handler.SentPacket(initialPacket(&Packet{PacketNumber: 1}))
 			Expect(handler.ReceivedAck(
 				&wire.AckFrame{AckRanges: []wire.AckRange{{Smallest: 1, Largest: 1}}},

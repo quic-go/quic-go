@@ -1,6 +1,7 @@
 package ackhandler
 
 import (
+	"errors"
 	"fmt"
 	"math"
 	"time"
@@ -617,25 +618,39 @@ func (h *sentPacketHandler) onVerifiedLossDetectionTimeout() error {
 	}
 
 	// PTO
-	_, encLevel = h.getPTOTimeAndSpace()
-	if h.logger.Debug() {
-		h.logger.Debugf("Loss detection alarm for %s fired in PTO mode. PTO count: %d", encLevel, h.ptoCount)
-	}
 	h.ptoCount++
-	if h.qlogger != nil {
-		h.qlogger.LossTimerExpired(qlog.TimerTypePTO, encLevel)
-		h.qlogger.UpdatedPTOCount(h.ptoCount)
-	}
-	h.numProbesToSend += 2
-	switch encLevel {
-	case protocol.EncryptionInitial:
-		h.ptoMode = SendPTOInitial
-	case protocol.EncryptionHandshake:
-		h.ptoMode = SendPTOHandshake
-	case protocol.Encryption1RTT:
-		h.ptoMode = SendPTOAppData
-	default:
-		return fmt.Errorf("TPO timer in unexpected encryption level: %s", encLevel)
+	if h.bytesInFlight > 0 {
+		_, encLevel = h.getPTOTimeAndSpace()
+		if h.logger.Debug() {
+			h.logger.Debugf("Loss detection alarm for %s fired in PTO mode. PTO count: %d", encLevel, h.ptoCount)
+		}
+		if h.qlogger != nil {
+			h.qlogger.LossTimerExpired(qlog.TimerTypePTO, encLevel)
+			h.qlogger.UpdatedPTOCount(h.ptoCount)
+		}
+		h.numProbesToSend += 2
+		switch encLevel {
+		case protocol.EncryptionInitial:
+			h.ptoMode = SendPTOInitial
+		case protocol.EncryptionHandshake:
+			h.ptoMode = SendPTOHandshake
+		case protocol.Encryption1RTT:
+			h.ptoMode = SendPTOAppData
+		default:
+			return fmt.Errorf("TPO timer in unexpected encryption level: %s", encLevel)
+		}
+	} else {
+		if h.perspective == protocol.PerspectiveServer {
+			return errors.New("sentPacketHandler BUG: PTO fired, but bytes_in_flight is 0")
+		}
+		h.numProbesToSend++
+		if h.initialPackets != nil {
+			h.ptoMode = SendPTOInitial
+		} else if h.handshakePackets != nil {
+			h.ptoMode = SendPTOHandshake
+		} else {
+			return errors.New("sentPacketHandler BUG: PTO fired, but bytes_in_flight is 0 and Initial and Handshake already dropped")
+		}
 	}
 	return nil
 }
