@@ -64,3 +64,17 @@ func (mr *MockFrameSourceMockRecorder) AppendStreamFrames(arg0, arg1 interface{}
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AppendStreamFrames", reflect.TypeOf((*MockFrameSource)(nil).AppendStreamFrames), arg0, arg1)
 }
+
+// HasData mocks base method
+func (m *MockFrameSource) HasData() bool {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "HasData")
+	ret0, _ := ret[0].(bool)
+	return ret0
+}
+
+// HasData indicates an expected call of HasData
+func (mr *MockFrameSourceMockRecorder) HasData() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HasData", reflect.TypeOf((*MockFrameSource)(nil).HasData))
+}

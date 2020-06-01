@@ -135,12 +135,13 @@ type sealingManager interface {
 }
 
 type frameSource interface {
+	HasData() bool
 	AppendStreamFrames([]ackhandler.Frame, protocol.ByteCount) ([]ackhandler.Frame, protocol.ByteCount)
 	AppendControlFrames([]ackhandler.Frame, protocol.ByteCount) ([]ackhandler.Frame, protocol.ByteCount)
 }
 
 type ackFrameSource interface {
-	GetAckFrame(protocol.EncryptionLevel) *wire.AckFrame
+	GetAckFrame(encLevel protocol.EncryptionLevel, onlyIfQueued bool) *wire.AckFrame
 }
 
 type packetPacker struct {
@@ -279,18 +280,18 @@ func (p *packetPacker) MaybePackAckPacket(handshakeConfirmed bool) (*packedPacke
 	var encLevel protocol.EncryptionLevel
 	var ack *wire.AckFrame
 	if !handshakeConfirmed {
-		ack = p.acks.GetAckFrame(protocol.EncryptionInitial)
+		ack = p.acks.GetAckFrame(protocol.EncryptionInitial, true)
 		if ack != nil {
 			encLevel = protocol.EncryptionInitial
 		} else {
-			ack = p.acks.GetAckFrame(protocol.EncryptionHandshake)
+			ack = p.acks.GetAckFrame(protocol.EncryptionHandshake, true)
 			if ack != nil {
 				encLevel = protocol.EncryptionHandshake
 			}
 		}
 	}
 	if ack == nil {
-		ack = p.acks.GetAckFrame(protocol.Encryption1RTT)
+		ack = p.acks.GetAckFrame(protocol.Encryption1RTT, true)
 		if ack == nil {
 			return nil, nil
 		}
@@ -431,11 +432,12 @@ func (p *packetPacker) maybeAppendCryptoPacket(buffer *packetBuffer, maxPacketSi
 		}
 	}
 
+	hasData := s.HasData()
 	var ack *wire.AckFrame
 	if encLevel != protocol.EncryptionHandshake || buffer.Len() == 0 {
-		ack = p.acks.GetAckFrame(encLevel)
+		ack = p.acks.GetAckFrame(encLevel, !hasRetransmission && !hasData)
 	}
-	if !s.HasData() && !hasRetransmission && ack == nil {
+	if !hasData && !hasRetransmission && ack == nil {
 		// nothing to send
 		return nil, nil
 	}
@@ -499,7 +501,7 @@ func (p *packetPacker) maybeAppendAppDataPacket(buffer *packetBuffer, maxPacketS
 	headerLen := header.GetLength(p.version)
 
 	maxSize := maxPacketSize - buffer.Len() - protocol.ByteCount(sealer.Overhead()) - headerLen
-	payload := p.composeNextPacket(maxSize, encLevel != protocol.Encryption0RTT && buffer.Len() == 0)
+	payload := p.composeNextPacket(maxSize, encLevel == protocol.Encryption1RTT && buffer.Len() == 0)
 
 	// check if we have anything to send
 	if len(payload.frames) == 0 && payload.ack == nil {
@@ -523,35 +525,44 @@ func (p *packetPacker) maybeAppendAppDataPacket(buffer *packetBuffer, maxPacketS
 
 func (p *packetPacker) composeNextPacket(maxFrameSize protocol.ByteCount, ackAllowed bool) payload {
 	var payload payload
-
 	var ack *wire.AckFrame
+	hasData := p.framer.HasData()
+	hasRetransmission := p.retransmissionQueue.HasAppData()
 	if ackAllowed {
-		ack = p.acks.GetAckFrame(protocol.Encryption1RTT)
+		ack = p.acks.GetAckFrame(protocol.Encryption1RTT, !hasRetransmission && !hasData)
 		if ack != nil {
 			payload.ack = ack
 			payload.length += ack.Length(p.version)
 		}
 	}
 
-	for {
-		remainingLen := maxFrameSize - payload.length
-		if remainingLen < protocol.MinStreamFrameSize {
-			break
-		}
-		f := p.retransmissionQueue.GetAppDataFrame(remainingLen)
-		if f == nil {
-			break
-		}
-		payload.frames = append(payload.frames, ackhandler.Frame{Frame: f})
-		payload.length += f.Length(p.version)
+	if ack == nil && !hasData && !hasRetransmission {
+		return payload
 	}
 
-	var lengthAdded protocol.ByteCount
-	payload.frames, lengthAdded = p.framer.AppendControlFrames(payload.frames, maxFrameSize-payload.length)
-	payload.length += lengthAdded
+	if hasRetransmission {
+		for {
+			remainingLen := maxFrameSize - payload.length
+			if remainingLen < protocol.MinStreamFrameSize {
+				break
+			}
+			f := p.retransmissionQueue.GetAppDataFrame(remainingLen)
+			if f == nil {
+				break
+			}
+			payload.frames = append(payload.frames, ackhandler.Frame{Frame: f})
+			payload.length += f.Length(p.version)
+		}
+	}
 
-	payload.frames, lengthAdded = p.framer.AppendStreamFrames(payload.frames, maxFrameSize-payload.length)
-	payload.length += lengthAdded
+	if hasData {
+		var lengthAdded protocol.ByteCount
+		payload.frames, lengthAdded = p.framer.AppendControlFrames(payload.frames, maxFrameSize-payload.length)
+		payload.length += lengthAdded
+
+		payload.frames, lengthAdded = p.framer.AppendStreamFrames(payload.frames, maxFrameSize-payload.length)
+		payload.length += lengthAdded
+	}
 	return payload
 }
 

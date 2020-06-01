@@ -19,9 +19,11 @@ type receivedPacketTracker struct {
 	maxAckDelay time.Duration
 	rttStats    *congestion.RTTStats
 
+	hasNewAck bool // true as soon as we received an ack-eliciting new packet
+	ackQueued bool // true once we received more than 2 (or later in the connection 10) ack-eliciting packets
+
 	packetsReceivedSinceLastAck             int
 	ackElicitingPacketsReceivedSinceLastAck int
-	ackQueued                               bool
 	ackAlarm                                time.Time
 	lastAck                                 *wire.AckFrame
 
@@ -55,7 +57,9 @@ func (h *receivedPacketTracker) ReceivedPacket(packetNumber protocol.PacketNumbe
 		h.largestObservedReceivedTime = rcvTime
 	}
 
-	h.packetHistory.ReceivedPacket(packetNumber)
+	if isNew := h.packetHistory.ReceivedPacket(packetNumber); isNew && shouldInstigateAck {
+		h.hasNewAck = true
+	}
 	h.maybeQueueAck(packetNumber, rcvTime, shouldInstigateAck, isMissing)
 }
 
@@ -96,7 +100,9 @@ func (h *receivedPacketTracker) maybeQueueAck(packetNumber protocol.PacketNumber
 
 	// always ack the first packet
 	if h.lastAck == nil {
-		h.logger.Debugf("\tQueueing ACK because the first packet should be acknowledged.")
+		if !h.ackQueued {
+			h.logger.Debugf("\tQueueing ACK because the first packet should be acknowledged.")
+		}
 		h.ackQueued = true
 		return
 	}
@@ -163,13 +169,18 @@ func (h *receivedPacketTracker) maybeQueueAck(packetNumber protocol.PacketNumber
 	}
 }
 
-func (h *receivedPacketTracker) GetAckFrame() *wire.AckFrame {
-	now := time.Now()
-	if !h.ackQueued && (h.ackAlarm.IsZero() || h.ackAlarm.After(now)) {
+func (h *receivedPacketTracker) GetAckFrame(onlyIfQueued bool) *wire.AckFrame {
+	if !h.hasNewAck {
 		return nil
 	}
-	if h.logger.Debug() && !h.ackQueued && !h.ackAlarm.IsZero() {
-		h.logger.Debugf("Sending ACK because the ACK timer expired.")
+	now := time.Now()
+	if onlyIfQueued {
+		if !h.ackQueued && (h.ackAlarm.IsZero() || h.ackAlarm.After(now)) {
+			return nil
+		}
+		if h.logger.Debug() && !h.ackQueued && !h.ackAlarm.IsZero() {
+			h.logger.Debugf("Sending ACK because the ACK timer expired.")
+		}
 	}
 
 	ack := &wire.AckFrame{
@@ -182,6 +193,7 @@ func (h *receivedPacketTracker) GetAckFrame() *wire.AckFrame {
 	h.lastAck = ack
 	h.ackAlarm = time.Time{}
 	h.ackQueued = false
+	h.hasNewAck = false
 	h.packetsReceivedSinceLastAck = 0
 	h.ackElicitingPacketsReceivedSinceLastAck = 0
 	return ack

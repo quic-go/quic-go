@@ -49,17 +49,17 @@ func (mr *MockReceivedPacketHandlerMockRecorder) DropPackets(arg0 interface{}) *
 }
 
 // GetAckFrame mocks base method
-func (m *MockReceivedPacketHandler) GetAckFrame(arg0 protocol.EncryptionLevel) *wire.AckFrame {
+func (m *MockReceivedPacketHandler) GetAckFrame(arg0 protocol.EncryptionLevel, arg1 bool) *wire.AckFrame {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetAckFrame", arg0)
+	ret := m.ctrl.Call(m, "GetAckFrame", arg0, arg1)
 	ret0, _ := ret[0].(*wire.AckFrame)
 	return ret0
 }
 
 // GetAckFrame indicates an expected call of GetAckFrame
-func (mr *MockReceivedPacketHandlerMockRecorder) GetAckFrame(arg0 interface{}) *gomock.Call {
+func (mr *MockReceivedPacketHandlerMockRecorder) GetAckFrame(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetAckFrame", reflect.TypeOf((*MockReceivedPacketHandler)(nil).GetAckFrame), arg0)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetAckFrame", reflect.TypeOf((*MockReceivedPacketHandler)(nil).GetAckFrame), arg0, arg1)
 }
 
 // GetAlarmTimeout mocks base method

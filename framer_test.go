@@ -50,6 +50,16 @@ var _ = Describe("Framer", func() {
 			Expect(length).To(Equal(mdf.Length(version) + msf.Length(version)))
 		})
 
+		It("says if it has data", func() {
+			Expect(framer.HasData()).To(BeFalse())
+			f := &wire.MaxDataFrame{ByteOffset: 0x42}
+			framer.QueueControlFrame(f)
+			Expect(framer.HasData()).To(BeTrue())
+			frames, _ := framer.AppendControlFrames(nil, 1000)
+			Expect(frames).To(HaveLen(1))
+			Expect(framer.HasData()).To(BeFalse())
+		})
+
 		It("appends to the slice given", func() {
 			ping := &wire.PingFrame{}
 			mdf := &wire.MaxDataFrame{ByteOffset: 0x42}
@@ -97,6 +107,25 @@ var _ = Describe("Framer", func() {
 			Expect(fs).To(HaveLen(1))
 			Expect(fs[0].Frame.(*wire.StreamFrame).DataLenPresent).To(BeFalse())
 			Expect(length).To(Equal(f.Length(version)))
+		})
+
+		It("says if it has data", func() {
+			streamGetter.EXPECT().GetOrOpenSendStream(id1).Return(stream1, nil).Times(2)
+			Expect(framer.HasData()).To(BeFalse())
+			framer.AddActiveStream(id1)
+			Expect(framer.HasData()).To(BeTrue())
+			f1 := &wire.StreamFrame{StreamID: id1, Data: []byte("foo")}
+			f2 := &wire.StreamFrame{StreamID: id1, Data: []byte("bar")}
+			stream1.EXPECT().popStreamFrame(gomock.Any()).Return(&ackhandler.Frame{Frame: f1}, true)
+			stream1.EXPECT().popStreamFrame(gomock.Any()).Return(&ackhandler.Frame{Frame: f2}, false)
+			frames, _ := framer.AppendStreamFrames(nil, protocol.MaxByteCount)
+			Expect(frames).To(HaveLen(1))
+			Expect(frames[0].Frame).To(Equal(f1))
+			Expect(framer.HasData()).To(BeTrue())
+			frames, _ = framer.AppendStreamFrames(nil, protocol.MaxByteCount)
+			Expect(frames).To(HaveLen(1))
+			Expect(frames[0].Frame).To(Equal(f2))
+			Expect(framer.HasData()).To(BeFalse())
 		})
 
 		It("appends to a frame slice", func() {
