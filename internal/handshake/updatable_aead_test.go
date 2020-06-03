@@ -9,12 +9,30 @@ import (
 	"github.com/lucas-clemente/quic-go/internal/congestion"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/internal/utils"
+	"github.com/marten-seemann/qtls"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 )
 
 var _ = Describe("Updatable AEAD", func() {
+	It("ChaCha test vector from the draft", func() {
+		secret := splitHexString("9ac312a7f877468ebe69422748ad00a1 5443f18203a07d6060f688f30f21632b")
+		aead := newUpdatableAEAD(&congestion.RTTStats{}, nil, nil)
+		chacha := cipherSuites[2]
+		Expect(chacha.ID).To(Equal(qtls.TLS_CHACHA20_POLY1305_SHA256))
+		aead.SetWriteKey(chacha, secret)
+		header := splitHexString("4200bff4")
+		const pnOffset = 1
+		payloadOffset := len(header)
+		plaintext := splitHexString("01")
+		payload := aead.Seal(nil, plaintext, 654360564, header)
+		Expect(payload).To(Equal(splitHexString("655e5cd55c41f69080575d7999c25a5bfb")))
+		packet := append(header, payload...)
+		aead.EncryptHeader(packet[pnOffset+4:pnOffset+4+16], &packet[0], packet[pnOffset:payloadOffset])
+		Expect(packet).To(Equal(splitHexString("4cfe4189655e5cd55c41f69080575d7999c25a5bfb")))
+	})
+
 	for i := range cipherSuites {
 		cs := cipherSuites[i]
 
