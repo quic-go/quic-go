@@ -125,20 +125,20 @@ var _ = Describe("SentPacketHandler", func() {
 		It("stores the sent time", func() {
 			sendTime := time.Now().Add(-time.Minute)
 			handler.SentPacket(ackElicitingPacket(&Packet{PacketNumber: 1, SendTime: sendTime}))
-			Expect(handler.appDataPackets.lastSentAckElicitingPacketTime).To(Equal(sendTime))
+			Expect(handler.appDataPackets.lastAckElicitingPacketTime).To(Equal(sendTime))
 		})
 
 		It("stores the sent time of Initial packets", func() {
 			sendTime := time.Now().Add(-time.Minute)
 			handler.SentPacket(ackElicitingPacket(&Packet{PacketNumber: 1, SendTime: sendTime, EncryptionLevel: protocol.EncryptionInitial}))
 			handler.SentPacket(ackElicitingPacket(&Packet{PacketNumber: 2, SendTime: sendTime.Add(time.Hour), EncryptionLevel: protocol.Encryption1RTT}))
-			Expect(handler.initialPackets.lastSentAckElicitingPacketTime).To(Equal(sendTime))
+			Expect(handler.initialPackets.lastAckElicitingPacketTime).To(Equal(sendTime))
 		})
 
 		It("does not store non-ack-eliciting packets", func() {
 			handler.SentPacket(nonAckElicitingPacket(&Packet{PacketNumber: 1}))
 			Expect(handler.appDataPackets.history.Len()).To(BeZero())
-			Expect(handler.appDataPackets.lastSentAckElicitingPacketTime).To(BeZero())
+			Expect(handler.appDataPackets.lastAckElicitingPacketTime).To(BeZero())
 			Expect(handler.bytesInFlight).To(BeZero())
 		})
 	})
@@ -813,6 +813,10 @@ var _ = Describe("SentPacketHandler", func() {
 			Expect(handler.OnLossDetectionTimeout()).To(Succeed())
 			Expect(handler.SendMode()).To(Equal(SendPTOInitial))
 
+			// send a single packet to unblock the server
+			handler.SentPacket(initialPacket(&Packet{PacketNumber: 2}))
+			Expect(handler.SendMode()).To(Equal(SendAny))
+
 			// Now receive an ACK for a Handshake packet.
 			// This tells the client that the server completed address validation.
 			handler.SentPacket(handshakePacket(&Packet{PacketNumber: 1}))
@@ -825,7 +829,7 @@ var _ = Describe("SentPacketHandler", func() {
 			Expect(handler.GetLossDetectionTimeout()).To(BeZero())
 		})
 
-		It("sends an Handshake packet to unblock the server, if Initial keys were already dropped", func() {
+		It("sends a Handshake packet to unblock the server, if Initial keys were already dropped", func() {
 			handler.SentPacket(initialPacket(&Packet{PacketNumber: 1}))
 			Expect(handler.ReceivedAck(
 				&wire.AckFrame{AckRanges: []wire.AckRange{{Smallest: 1, Largest: 1}}},

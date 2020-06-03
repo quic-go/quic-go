@@ -1,6 +1,7 @@
 package ackhandler
 
 import (
+	"errors"
 	"fmt"
 	"math"
 	"time"
@@ -28,8 +29,8 @@ type packetNumberSpace struct {
 	history *sentPacketHistory
 	pns     *packetNumberGenerator
 
-	lossTime                       time.Time
-	lastSentAckElicitingPacketTime time.Time
+	lossTime                   time.Time
+	lastAckElicitingPacketTime time.Time
 
 	largestAcked protocol.PacketNumber
 	largestSent  protocol.PacketNumber
@@ -244,7 +245,7 @@ func (h *sentPacketHandler) sentPacketImpl(packet *Packet) bool /* is ack-elicit
 	isAckEliciting := len(packet.Frames) > 0
 
 	if isAckEliciting {
-		pnSpace.lastSentAckElicitingPacketTime = packet.SendTime
+		pnSpace.lastAckElicitingPacketTime = packet.SendTime
 		packet.includedInBytesInFlight = true
 		h.bytesInFlight += packet.Length
 		if h.numProbesToSend > 0 {
@@ -399,7 +400,7 @@ func (h *sentPacketHandler) detectAndRemoveAckedPackets(ack *wire.AckFrame, encL
 	return ackedPackets, err
 }
 
-func (h *sentPacketHandler) getEarliestLossTimeAndSpace() (time.Time, protocol.EncryptionLevel) {
+func (h *sentPacketHandler) getLossTimeAndSpace() (time.Time, protocol.EncryptionLevel) {
 	var encLevel protocol.EncryptionLevel
 	var lossTime time.Time
 
@@ -411,33 +412,49 @@ func (h *sentPacketHandler) getEarliestLossTimeAndSpace() (time.Time, protocol.E
 		lossTime = h.handshakePackets.lossTime
 		encLevel = protocol.EncryptionHandshake
 	}
-	if h.handshakeComplete &&
-		(lossTime.IsZero() || (!h.appDataPackets.lossTime.IsZero() && h.appDataPackets.lossTime.Before(lossTime))) {
+	if lossTime.IsZero() || (!h.appDataPackets.lossTime.IsZero() && h.appDataPackets.lossTime.Before(lossTime)) {
 		lossTime = h.appDataPackets.lossTime
 		encLevel = protocol.Encryption1RTT
 	}
 	return lossTime, encLevel
 }
 
-// same logic as getEarliestLossTimeAndSpace, but for lastSentAckElicitingPacketTime instead of lossTime
-func (h *sentPacketHandler) getEarliestSentTimeAndSpace() (time.Time, protocol.EncryptionLevel) {
-	var encLevel protocol.EncryptionLevel
-	var sentTime time.Time
+// same logic as getLossTimeAndSpace, but for lastAckElicitingPacketTime instead of lossTime
+func (h *sentPacketHandler) getPTOTimeAndSpace() (time.Time, protocol.EncryptionLevel) {
+	if !h.hasOutstandingPackets() {
+		t := time.Now().Add(h.rttStats.PTO(false) << h.ptoCount)
+		if h.initialPackets != nil {
+			return t, protocol.EncryptionInitial
+		}
+		return t, protocol.EncryptionHandshake
+	}
+
+	var (
+		encLevel protocol.EncryptionLevel
+		pto      time.Time
+	)
 
 	if h.initialPackets != nil {
-		sentTime = h.initialPackets.lastSentAckElicitingPacketTime
 		encLevel = protocol.EncryptionInitial
+		if t := h.initialPackets.lastAckElicitingPacketTime; !t.IsZero() {
+			pto = t.Add(h.rttStats.PTO(false) << h.ptoCount)
+		}
 	}
-	if h.handshakePackets != nil && (sentTime.IsZero() || (!h.handshakePackets.lastSentAckElicitingPacketTime.IsZero() && h.handshakePackets.lastSentAckElicitingPacketTime.Before(sentTime))) {
-		sentTime = h.handshakePackets.lastSentAckElicitingPacketTime
-		encLevel = protocol.EncryptionHandshake
+	if h.handshakePackets != nil && !h.handshakePackets.lastAckElicitingPacketTime.IsZero() {
+		t := h.handshakePackets.lastAckElicitingPacketTime.Add(h.rttStats.PTO(false) << h.ptoCount)
+		if pto.IsZero() || (!t.IsZero() && t.Before(pto)) {
+			pto = t
+			encLevel = protocol.EncryptionHandshake
+		}
 	}
-	if h.handshakeComplete &&
-		(sentTime.IsZero() || (!h.appDataPackets.lastSentAckElicitingPacketTime.IsZero() && h.appDataPackets.lastSentAckElicitingPacketTime.Before(sentTime))) {
-		sentTime = h.appDataPackets.lastSentAckElicitingPacketTime
-		encLevel = protocol.Encryption1RTT
+	if h.handshakeComplete && !h.appDataPackets.lastAckElicitingPacketTime.IsZero() {
+		t := h.appDataPackets.lastAckElicitingPacketTime.Add(h.rttStats.PTO(true) << h.ptoCount)
+		if pto.IsZero() || (!t.IsZero() && t.Before(pto)) {
+			pto = t
+			encLevel = protocol.Encryption1RTT
+		}
 	}
-	return sentTime, encLevel
+	return pto, encLevel
 }
 
 func (h *sentPacketHandler) hasOutstandingCryptoPackets() bool {
@@ -460,7 +477,7 @@ func (h *sentPacketHandler) hasOutstandingPackets() bool {
 
 func (h *sentPacketHandler) setLossDetectionTimer() {
 	oldAlarm := h.alarm // only needed in case qlog is enabled
-	if lossTime, encLevel := h.getEarliestLossTimeAndSpace(); !lossTime.IsZero() {
+	if lossTime, encLevel := h.getLossTimeAndSpace(); !lossTime.IsZero() {
 		// Early retransmit timer or time loss detection.
 		h.alarm = lossTime
 		if h.qlogger != nil && h.alarm != oldAlarm {
@@ -480,14 +497,8 @@ func (h *sentPacketHandler) setLossDetectionTimer() {
 	}
 
 	// PTO alarm
-	sentTime, encLevel := h.getEarliestSentTimeAndSpace()
-	if sentTime.IsZero() {
-		if h.peerCompletedAddressValidation {
-			panic("didn't expect sentTime to be zero")
-		}
-		sentTime = time.Now()
-	}
-	h.alarm = sentTime.Add(h.rttStats.PTO(encLevel == protocol.Encryption1RTT) << h.ptoCount)
+	ptoTime, encLevel := h.getPTOTimeAndSpace()
+	h.alarm = ptoTime
 	if h.qlogger != nil && h.alarm != oldAlarm {
 		h.qlogger.SetLossTimer(qlog.TimerTypePTO, encLevel, h.alarm)
 	}
@@ -586,7 +597,7 @@ func (h *sentPacketHandler) OnLossDetectionTimeout() error {
 }
 
 func (h *sentPacketHandler) onVerifiedLossDetectionTimeout() error {
-	earliestLossTime, encLevel := h.getEarliestLossTimeAndSpace()
+	earliestLossTime, encLevel := h.getLossTimeAndSpace()
 	if !earliestLossTime.IsZero() {
 		if h.logger.Debug() {
 			h.logger.Debugf("Loss detection alarm fired in loss timer mode. Loss time: %s", earliestLossTime)
@@ -607,25 +618,39 @@ func (h *sentPacketHandler) onVerifiedLossDetectionTimeout() error {
 	}
 
 	// PTO
-	_, encLevel = h.getEarliestSentTimeAndSpace()
-	if h.logger.Debug() {
-		h.logger.Debugf("Loss detection alarm for %s fired in PTO mode. PTO count: %d", encLevel, h.ptoCount)
-	}
 	h.ptoCount++
-	if h.qlogger != nil {
-		h.qlogger.LossTimerExpired(qlog.TimerTypePTO, encLevel)
-		h.qlogger.UpdatedPTOCount(h.ptoCount)
-	}
-	h.numProbesToSend += 2
-	switch encLevel {
-	case protocol.EncryptionInitial:
-		h.ptoMode = SendPTOInitial
-	case protocol.EncryptionHandshake:
-		h.ptoMode = SendPTOHandshake
-	case protocol.Encryption1RTT:
-		h.ptoMode = SendPTOAppData
-	default:
-		return fmt.Errorf("TPO timer in unexpected encryption level: %s", encLevel)
+	if h.bytesInFlight > 0 {
+		_, encLevel = h.getPTOTimeAndSpace()
+		if h.logger.Debug() {
+			h.logger.Debugf("Loss detection alarm for %s fired in PTO mode. PTO count: %d", encLevel, h.ptoCount)
+		}
+		if h.qlogger != nil {
+			h.qlogger.LossTimerExpired(qlog.TimerTypePTO, encLevel)
+			h.qlogger.UpdatedPTOCount(h.ptoCount)
+		}
+		h.numProbesToSend += 2
+		switch encLevel {
+		case protocol.EncryptionInitial:
+			h.ptoMode = SendPTOInitial
+		case protocol.EncryptionHandshake:
+			h.ptoMode = SendPTOHandshake
+		case protocol.Encryption1RTT:
+			h.ptoMode = SendPTOAppData
+		default:
+			return fmt.Errorf("TPO timer in unexpected encryption level: %s", encLevel)
+		}
+	} else {
+		if h.perspective == protocol.PerspectiveServer {
+			return errors.New("sentPacketHandler BUG: PTO fired, but bytes_in_flight is 0")
+		}
+		h.numProbesToSend++
+		if h.initialPackets != nil {
+			h.ptoMode = SendPTOInitial
+		} else if h.handshakePackets != nil {
+			h.ptoMode = SendPTOHandshake
+		} else {
+			return errors.New("sentPacketHandler BUG: PTO fired, but bytes_in_flight is 0 and Initial and Handshake already dropped")
+		}
 	}
 	return nil
 }
