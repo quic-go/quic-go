@@ -1401,15 +1401,15 @@ var _ = Describe("frame sorter", func() {
 			}
 
 			Context(fmt.Sprintf("using %s frames", name), func() {
-				seed := time.Now().UnixNano()
-				fmt.Fprintf(GinkgoWriter, "Seed: %d\n", seed)
-				rand.Seed(seed)
-
 				var data []byte
 				var dataLen protocol.ByteCount
 				var callbacks []callbackTracker
 
 				BeforeEach(func() {
+					seed := time.Now().UnixNano()
+					fmt.Fprintf(GinkgoWriter, "Seed: %d\n", seed)
+					rand.Seed(seed)
+
 					callbacks = nil
 					dataLen = 25
 					if longFrames {
