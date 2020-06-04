@@ -276,7 +276,7 @@ func (s *Server) handleRequest(sess quic.Session, str quic.Stream, decoder *qpac
 		handler = http.DefaultServeMux
 	}
 
-	var panicked, readEOF bool
+	var panicked bool
 	func() {
 		defer func() {
 			if p := recover(); p != nil {
@@ -289,10 +289,6 @@ func (s *Server) handleRequest(sess quic.Session, str quic.Stream, decoder *qpac
 			}
 		}()
 		handler.ServeHTTP(responseWriter, req)
-		// read the eof
-		if _, err = str.Read([]byte{0}); err == io.EOF {
-			readEOF = true
-		}
 	}()
 
 	if panicked {
@@ -301,9 +297,8 @@ func (s *Server) handleRequest(sess quic.Session, str quic.Stream, decoder *qpac
 		responseWriter.WriteHeader(200)
 	}
 
-	if !readEOF {
-		str.CancelRead(quic.ErrorCode(errorEarlyResponse))
-	}
+	// If the EOF was read by the handler, CancelRead() is a no-op.
+	str.CancelRead(quic.ErrorCode(errorEarlyResponse))
 	return requestError{}
 }
 
