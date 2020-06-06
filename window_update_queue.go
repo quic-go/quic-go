@@ -3,6 +3,7 @@ package quic
 import (
 	"sync"
 
+	"github.com/lucas-clemente/quic-go/internal/ackhandler"
 	"github.com/lucas-clemente/quic-go/internal/flowcontrol"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/internal/wire"
@@ -16,13 +17,13 @@ type windowUpdateQueue struct {
 
 	streamGetter       streamGetter
 	connFlowController flowcontrol.ConnectionFlowController
-	callback           func(wire.Frame)
+	callback           func(ackhandler.Frame)
 }
 
 func newWindowUpdateQueue(
 	streamGetter streamGetter,
 	connFC flowcontrol.ConnectionFlowController,
-	cb func(wire.Frame),
+	cb func(ackhandler.Frame),
 ) *windowUpdateQueue {
 	return &windowUpdateQueue{
 		queue:              make(map[protocol.StreamID]struct{}),
@@ -48,7 +49,7 @@ func (q *windowUpdateQueue) QueueAll() {
 	q.mutex.Lock()
 	// queue a connection-level window update
 	if q.queuedConn {
-		q.callback(&wire.MaxDataFrame{ByteOffset: q.connFlowController.GetWindowUpdate()})
+		q.callback(ackhandler.Frame{Frame: &wire.MaxDataFrame{ByteOffset: q.connFlowController.GetWindowUpdate()}})
 		q.queuedConn = false
 	}
 	// queue all stream-level window updates
@@ -62,10 +63,10 @@ func (q *windowUpdateQueue) QueueAll() {
 		if offset == 0 { // can happen if we received a final offset, right after queueing the window update
 			continue
 		}
-		q.callback(&wire.MaxStreamDataFrame{
+		q.callback(ackhandler.Frame{Frame: &wire.MaxStreamDataFrame{
 			StreamID:   id,
 			ByteOffset: offset,
-		})
+		}})
 	}
 	q.mutex.Unlock()
 }

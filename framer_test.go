@@ -40,8 +40,8 @@ var _ = Describe("Framer", func() {
 		It("adds control frames", func() {
 			mdf := &wire.MaxDataFrame{ByteOffset: 0x42}
 			msf := &wire.MaxStreamsFrame{MaxStreamNum: 0x1337}
-			framer.QueueControlFrame(mdf)
-			framer.QueueControlFrame(msf)
+			framer.QueueControlFrame(ackhandler.Frame{Frame: mdf})
+			framer.QueueControlFrame(ackhandler.Frame{Frame: msf})
 			frames, length := framer.AppendControlFrames(nil, 1000)
 			Expect(frames).To(HaveLen(2))
 			fs := []wire.Frame{frames[0].Frame, frames[1].Frame}
@@ -53,7 +53,7 @@ var _ = Describe("Framer", func() {
 		It("says if it has data", func() {
 			Expect(framer.HasData()).To(BeFalse())
 			f := &wire.MaxDataFrame{ByteOffset: 0x42}
-			framer.QueueControlFrame(f)
+			framer.QueueControlFrame(ackhandler.Frame{Frame: f})
 			Expect(framer.HasData()).To(BeTrue())
 			frames, _ := framer.AppendControlFrames(nil, 1000)
 			Expect(frames).To(HaveLen(1))
@@ -63,7 +63,7 @@ var _ = Describe("Framer", func() {
 		It("appends to the slice given", func() {
 			ping := &wire.PingFrame{}
 			mdf := &wire.MaxDataFrame{ByteOffset: 0x42}
-			framer.QueueControlFrame(mdf)
+			framer.QueueControlFrame(ackhandler.Frame{Frame: mdf})
 			frames, length := framer.AppendControlFrames([]ackhandler.Frame{{Frame: ping}}, 1000)
 			Expect(frames).To(HaveLen(2))
 			Expect(frames[0].Frame).To(Equal(ping))
@@ -77,7 +77,7 @@ var _ = Describe("Framer", func() {
 			bfLen := bf.Length(version)
 			numFrames := int(maxSize / bfLen) // max number of frames that fit into maxSize
 			for i := 0; i < numFrames+1; i++ {
-				framer.QueueControlFrame(bf)
+				framer.QueueControlFrame(ackhandler.Frame{Frame: bf})
 			}
 			frames, length := framer.AppendControlFrames(nil, maxSize)
 			Expect(frames).To(HaveLen(numFrames))

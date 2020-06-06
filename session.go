@@ -577,7 +577,7 @@ runLoop:
 		if keepAliveTime := s.nextKeepAliveTime(); !keepAliveTime.IsZero() && !now.Before(keepAliveTime) {
 			// send a PING frame since there is no activity in the session
 			s.logger.Debugf("Sending a keep-alive PING to keep the connection alive.")
-			s.framer.QueueControlFrame(&wire.PingFrame{})
+			s.framer.QueueControlFrame(ackhandler.Frame{Frame: &wire.PingFrame{}})
 			s.keepAlivePingSent = true
 		} else if !s.handshakeComplete && now.Sub(s.sessionCreationTime) >= s.config.HandshakeTimeout {
 			if s.qlogger != nil {
@@ -1474,7 +1474,7 @@ func (s *session) sendProbePacket(encLevel protocol.EncryptionLevel) error {
 
 func (s *session) sendPacket() (bool, error) {
 	if isBlocked, offset := s.connFlowController.IsNewlyBlocked(); isBlocked {
-		s.framer.QueueControlFrame(&wire.DataBlockedFrame{DataLimit: offset})
+		s.framer.QueueControlFrame(ackhandler.Frame{Frame: &wire.DataBlockedFrame{DataLimit: offset}})
 	}
 	s.windowUpdateQueue.QueueAll()
 
@@ -1665,7 +1665,7 @@ func (s *session) tryDecryptingQueuedPackets() {
 }
 
 func (s *session) queueControlFrame(f wire.Frame) {
-	s.framer.QueueControlFrame(f)
+	s.framer.QueueControlFrame(ackhandler.Frame{Frame: f})
 	s.scheduleSending()
 }
 

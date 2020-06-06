@@ -12,7 +12,7 @@ import (
 type framer interface {
 	HasData() bool
 
-	QueueControlFrame(wire.Frame)
+	QueueControlFrame(ackhandler.Frame)
 	AppendControlFrames([]ackhandler.Frame, protocol.ByteCount) ([]ackhandler.Frame, protocol.ByteCount)
 
 	AddActiveStream(protocol.StreamID)
@@ -29,7 +29,7 @@ type framerI struct {
 	streamQueue   []protocol.StreamID
 
 	controlFrameMutex sync.Mutex
-	controlFrames     []wire.Frame
+	controlFrames     []ackhandler.Frame
 }
 
 var _ framer = &framerI{}
@@ -58,7 +58,7 @@ func (f *framerI) HasData() bool {
 	return hasData
 }
 
-func (f *framerI) QueueControlFrame(frame wire.Frame) {
+func (f *framerI) QueueControlFrame(frame ackhandler.Frame) {
 	f.controlFrameMutex.Lock()
 	f.controlFrames = append(f.controlFrames, frame)
 	f.controlFrameMutex.Unlock()
@@ -73,7 +73,7 @@ func (f *framerI) AppendControlFrames(frames []ackhandler.Frame, maxLen protocol
 		if length+frameLen > maxLen {
 			break
 		}
-		frames = append(frames, ackhandler.Frame{Frame: frame})
+		frames = append(frames, frame)
 		length += frameLen
 		f.controlFrames = f.controlFrames[:len(f.controlFrames)-1]
 	}
