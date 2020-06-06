@@ -110,4 +110,97 @@ var _ = Describe("Window Update Queue", func() {
 		Expect(queuedFrames).To(HaveLen(1))
 		Expect(queuedFrames[0].Frame).To(Equal(&wire.MaxStreamDataFrame{StreamID: 10, ByteOffset: 200}))
 	})
+
+	It("queues a retransmission for a lost MAX_DATA frame", func() {
+		connFC.EXPECT().GetWindowUpdate().Return(protocol.ByteCount(0x42))
+		q.AddConnection()
+		q.QueueAll()
+		Expect(queuedFrames).To(HaveLen(1))
+		f := queuedFrames[0]
+		Expect(f.Frame).To(Equal(&wire.MaxDataFrame{ByteOffset: 0x42}))
+
+		queuedFrames = nil
+		// make sure there's no MAX_DATA frame queued
+		q.QueueAll()
+		Expect(queuedFrames).To(BeEmpty())
+		// now lose the frame
+		f.OnLost(f.Frame)
+		connFC.EXPECT().GetWindowUpdate().Return(protocol.ByteCount(0x1337))
+		q.QueueAll()
+		Expect(queuedFrames).To(HaveLen(1))
+		f = queuedFrames[0]
+		Expect(f.Frame).To(Equal(&wire.MaxDataFrame{ByteOffset: 0x1337}))
+	})
+
+	It("queues a retransmission for a lost MAX_STREAM_DATA frame", func() {
+		stream12 := NewMockStreamI(mockCtrl)
+		stream12.EXPECT().getWindowUpdate().Return(protocol.ByteCount(1000))
+		streamGetter.EXPECT().GetOrOpenReceiveStream(protocol.StreamID(12)).Return(stream12, nil)
+		q.AddStream(12)
+		q.QueueAll()
+		Expect(queuedFrames).To(HaveLen(1))
+		f := queuedFrames[0]
+		Expect(f.Frame).To(Equal(&wire.MaxStreamDataFrame{StreamID: 12, ByteOffset: 1000}))
+
+		queuedFrames = nil
+		// make sure there's no MAX_STREAM_DATA frame queued
+		q.QueueAll()
+		Expect(queuedFrames).To(BeEmpty())
+		// now lose the frame
+		f.OnLost(f.Frame)
+		streamGetter.EXPECT().GetOrOpenReceiveStream(protocol.StreamID(12)).Return(stream12, nil)
+		stream12.EXPECT().getWindowUpdate().Return(protocol.ByteCount(2000))
+		q.QueueAll()
+		Expect(queuedFrames).To(HaveLen(1))
+		f = queuedFrames[0]
+		Expect(f.Frame).To(Equal(&wire.MaxStreamDataFrame{StreamID: 12, ByteOffset: 2000}))
+	})
+
+	It("queues a retransmissions for lost MAX_STREAM_DATA frames, for mulitple streams", func() {
+		stream11 := NewMockStreamI(mockCtrl)
+		stream11.EXPECT().getWindowUpdate().Return(protocol.ByteCount(1000))
+		streamGetter.EXPECT().GetOrOpenReceiveStream(protocol.StreamID(11)).Return(stream11, nil)
+		q.AddStream(11)
+		stream12 := NewMockStreamI(mockCtrl)
+		stream12.EXPECT().getWindowUpdate().Return(protocol.ByteCount(1000))
+		streamGetter.EXPECT().GetOrOpenReceiveStream(protocol.StreamID(12)).Return(stream12, nil)
+		q.AddStream(12)
+		q.QueueAll()
+		Expect(queuedFrames).To(HaveLen(2))
+		queuedFrames[0].OnLost(queuedFrames[0].Frame)
+		queuedFrames[1].OnLost(queuedFrames[1].Frame)
+
+		queuedFrames = nil
+		streamGetter.EXPECT().GetOrOpenReceiveStream(protocol.StreamID(11)).Return(stream11, nil)
+		stream11.EXPECT().getWindowUpdate().Return(protocol.ByteCount(2000))
+		streamGetter.EXPECT().GetOrOpenReceiveStream(protocol.StreamID(12)).Return(stream12, nil)
+		stream12.EXPECT().getWindowUpdate().Return(protocol.ByteCount(3000))
+		q.QueueAll()
+		Expect(queuedFrames).To(HaveLen(2))
+		frames := []wire.Frame{queuedFrames[0].Frame, queuedFrames[1].Frame}
+		Expect(frames).To(ContainElement(&wire.MaxStreamDataFrame{StreamID: 11, ByteOffset: 2000}))
+		Expect(frames).To(ContainElement(&wire.MaxStreamDataFrame{StreamID: 12, ByteOffset: 3000}))
+	})
+
+	It("doesn't queue a retransmission for a lost MAX_STREAM_DATA frame, if the stream is already closed", func() {
+		stream12 := NewMockStreamI(mockCtrl)
+		stream12.EXPECT().getWindowUpdate().Return(protocol.ByteCount(1000))
+		streamGetter.EXPECT().GetOrOpenReceiveStream(protocol.StreamID(12)).Return(stream12, nil)
+		q.AddStream(12)
+		q.QueueAll()
+		Expect(queuedFrames).To(HaveLen(1))
+		f := queuedFrames[0]
+		Expect(f.Frame).To(Equal(&wire.MaxStreamDataFrame{StreamID: 12, ByteOffset: 1000}))
+
+		queuedFrames = nil
+		// make sure there's no MAX_STREAM_DATA frame queued
+		q.QueueAll()
+		Expect(queuedFrames).To(BeEmpty())
+		// now lose the frame
+		f.OnLost(f.Frame)
+		streamGetter.EXPECT().GetOrOpenReceiveStream(protocol.StreamID(12)).Return(nil, nil)
+		q.QueueAll()
+		Expect(queuedFrames).To(BeEmpty())
+	})
+
 })

@@ -49,11 +49,15 @@ func (q *windowUpdateQueue) QueueAll() {
 	q.mutex.Lock()
 	// queue a connection-level window update
 	if q.queuedConn {
-		q.callback(ackhandler.Frame{Frame: &wire.MaxDataFrame{ByteOffset: q.connFlowController.GetWindowUpdate()}})
+		q.callback(ackhandler.Frame{
+			Frame:  &wire.MaxDataFrame{ByteOffset: q.connFlowController.GetWindowUpdate()},
+			OnLost: func(wire.Frame) { q.AddConnection() },
+		})
 		q.queuedConn = false
 	}
 	// queue all stream-level window updates
-	for id := range q.queue {
+	for s := range q.queue {
+		id := s // capture the loop variable
 		delete(q.queue, id)
 		str, err := q.streamGetter.GetOrOpenReceiveStream(id)
 		if err != nil || str == nil { // the stream can be nil if it was completed before dequeing the window update
@@ -63,10 +67,13 @@ func (q *windowUpdateQueue) QueueAll() {
 		if offset == 0 { // can happen if we received a final offset, right after queueing the window update
 			continue
 		}
-		q.callback(ackhandler.Frame{Frame: &wire.MaxStreamDataFrame{
-			StreamID:   id,
-			ByteOffset: offset,
-		}})
+		q.callback(ackhandler.Frame{
+			Frame: &wire.MaxStreamDataFrame{
+				StreamID:   id,
+				ByteOffset: offset,
+			},
+			OnLost: func(wire.Frame) { q.AddStream(id) },
+		})
 	}
 	q.mutex.Unlock()
 }
