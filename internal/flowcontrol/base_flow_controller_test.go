@@ -145,7 +145,7 @@ var _ = Describe("Base Flow controller", func() {
 
 			It("doesn't increase the window size when no RTT estimate is available", func() {
 				setRtt(0)
-				controller.startNewAutoTuningEpoch()
+				controller.startNewAutoTuningEpoch(time.Now())
 				controller.AddBytesRead(400)
 				offset := controller.getWindowUpdate()
 				Expect(offset).ToNot(BeZero()) // make sure a window update is sent

@@ -68,7 +68,7 @@ func (c *baseFlowController) AddBytesRead(n protocol.ByteCount) {
 	// pretend we sent a WindowUpdate when reading the first byte
 	// this way auto-tuning of the window size already works for the first WindowUpdate
 	if c.bytesRead == 0 {
-		c.startNewAutoTuningEpoch()
+		c.startNewAutoTuningEpoch(time.Now())
 	}
 	c.bytesRead += n
 }
@@ -105,15 +105,16 @@ func (c *baseFlowController) maybeAdjustWindowSize() {
 	}
 
 	fraction := float64(bytesReadInEpoch) / float64(c.receiveWindowSize)
-	if time.Since(c.epochStartTime) < time.Duration(4*fraction*float64(rtt)) {
+	now := time.Now()
+	if now.Sub(c.epochStartTime) < time.Duration(4*fraction*float64(rtt)) {
 		// window is consumed too fast, try to increase the window size
 		c.receiveWindowSize = utils.MinByteCount(2*c.receiveWindowSize, c.maxReceiveWindowSize)
 	}
-	c.startNewAutoTuningEpoch()
+	c.startNewAutoTuningEpoch(now)
 }
 
-func (c *baseFlowController) startNewAutoTuningEpoch() {
-	c.epochStartTime = time.Now()
+func (c *baseFlowController) startNewAutoTuningEpoch(now time.Time) {
+	c.epochStartTime = now
 	c.epochStartOffset = c.bytesRead
 }
 
