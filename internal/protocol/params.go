@@ -30,8 +30,9 @@ const DefaultMaxReceiveStreamFlowControlWindow = 6 * (1 << 20) // 6 MB
 // DefaultMaxReceiveConnectionFlowControlWindow is the default connection-level flow control window for receiving data, for the server
 const DefaultMaxReceiveConnectionFlowControlWindow = 15 * (1 << 20) // 12 MB
 
-// WindowUpdateThreshold is the fraction of the receive window that has to be consumed before an higher offset is advertised to the client
-const WindowUpdateThreshold = 0.25
+// WindowUpdateFraction is the fraction of the receive window that has to be consumed before an higher offset is advertised.
+// For example, if this value is 3, then we'll grant higher flow control credit once 1/3 of the window has been consumed.
+const WindowUpdateFraction = 4
 
 // DefaultMaxIncomingStreams is the maximum number of streams that a peer may open
 const DefaultMaxIncomingStreams = 100
