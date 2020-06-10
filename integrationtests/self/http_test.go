@@ -178,8 +178,8 @@ var _ = Describe("HTTP tests", func() {
 				Expect(body).To(Equal(PRDataLong))
 			})
 
-			It("downloads many hellos", func() {
-				const num = 1500
+			FIt("downloads many hellos", func() {
+				const num = 150
 
 				for i := 0; i < num; i++ {
 					resp, err := client.Get("https://localhost:" + port + "/hello")
