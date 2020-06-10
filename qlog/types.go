@@ -303,8 +303,8 @@ func (e transportError) String() string {
 		return "no_error"
 	case qerr.InternalError:
 		return "internal_error"
-	case qerr.ServerBusy:
-		return "server_busy"
+	case qerr.ConnectionRefused:
+		return "connection_refused"
 	case qerr.FlowControlError:
 		return "flow_control_error"
 	case qerr.StreamLimitError:

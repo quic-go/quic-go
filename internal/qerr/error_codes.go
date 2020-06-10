@@ -13,7 +13,7 @@ type ErrorCode uint64
 const (
 	NoError                 ErrorCode = 0x0
 	InternalError           ErrorCode = 0x1
-	ServerBusy              ErrorCode = 0x2
+	ConnectionRefused       ErrorCode = 0x2
 	FlowControlError        ErrorCode = 0x3
 	StreamLimitError        ErrorCode = 0x4
 	StreamStateError        ErrorCode = 0x5
@@ -53,8 +53,8 @@ func (e ErrorCode) String() string {
 		return "NO_ERROR"
 	case InternalError:
 		return "INTERNAL_ERROR"
-	case ServerBusy:
-		return "SERVER_BUSY"
+	case ConnectionRefused:
+		return "CONNECTION_REFUSED"
 	case FlowControlError:
 		return "FLOW_CONTROL_ERROR"
 	case StreamLimitError:
