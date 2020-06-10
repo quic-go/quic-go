@@ -179,7 +179,7 @@ var _ = Describe("HTTP tests", func() {
 			})
 
 			It("downloads many hellos", func() {
-				const num = 150
+				const num = 1500
 
 				for i := 0; i < num; i++ {
 					resp, err := client.Get("https://localhost:" + port + "/hello")
