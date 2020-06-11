@@ -58,7 +58,7 @@ func splitHexString(s string) (slice []byte) {
 			ss = ss[2:]
 		}
 		d, err := hex.DecodeString(ss)
-		Expect(err).ToNot(HaveOccurred())
+		ExpectWithOffset(1, err).ToNot(HaveOccurred())
 		slice = append(slice, d...)
 	}
 	return

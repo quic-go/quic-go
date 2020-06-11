@@ -24,7 +24,7 @@ var _ = Describe("Retry Integrity Check", func() {
 
 	It("uses the test vector from the draft", func() {
 		connID := protocol.ConnectionID(splitHexString("0x8394c8f03e515708"))
-		data := splitHexString("ffff0000190008f067a5502a4262b574 6f6b656e1e5ec5b014cbb1f0fd93df40 48c446a6")
+		data := splitHexString("ffff00001d0008f067a5502a4262b574 6f6b656ed16926d81f6f9ca2953a8aa4 575e1e49")
 		Expect(GetRetryIntegrityTag(data[:len(data)-16], connID)[:]).To(Equal(data[len(data)-16:]))
 	})
 })
