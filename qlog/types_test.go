@@ -100,7 +100,7 @@ var _ = Describe("Types", func() {
 		It("has a string representation for transport errors", func() {
 			Expect(transportError(qerr.NoError).String()).To(Equal("no_error"))
 			Expect(transportError(qerr.InternalError).String()).To(Equal("internal_error"))
-			Expect(transportError(qerr.ServerBusy).String()).To(Equal("server_busy"))
+			Expect(transportError(qerr.ConnectionRefused).String()).To(Equal("connection_refused"))
 			Expect(transportError(qerr.FlowControlError).String()).To(Equal("flow_control_error"))
 			Expect(transportError(qerr.StreamLimitError).String()).To(Equal("stream_limit_error"))
 			Expect(transportError(qerr.StreamStateError).String()).To(Equal("stream_state_error"))

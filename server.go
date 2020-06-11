@@ -400,7 +400,7 @@ func (s *baseServer) handleInitialImpl(p *receivedPacket, hdr *wire.Header) erro
 	if queueLen := atomic.LoadInt32(&s.sessionQueueLen); queueLen >= protocol.MaxAcceptQueueSize {
 		s.logger.Debugf("Rejecting new connection. Server currently busy. Accept queue length: %d (max %d)", queueLen, protocol.MaxAcceptQueueSize)
 		go func() {
-			if err := s.sendServerBusy(p.remoteAddr, hdr); err != nil {
+			if err := s.sendConnectionRefused(p.remoteAddr, hdr); err != nil {
 				s.logger.Debugf("Error rejecting connection: %s", err)
 			}
 		}()
@@ -566,9 +566,9 @@ func (s *baseServer) maybeSendInvalidToken(p *receivedPacket, hdr *wire.Header) 
 	return s.sendError(p.remoteAddr, hdr, sealer, qerr.InvalidToken)
 }
 
-func (s *baseServer) sendServerBusy(remoteAddr net.Addr, hdr *wire.Header) error {
+func (s *baseServer) sendConnectionRefused(remoteAddr net.Addr, hdr *wire.Header) error {
 	sealer, _ := handshake.NewInitialAEAD(hdr.DestConnectionID, protocol.PerspectiveServer)
-	return s.sendError(remoteAddr, hdr, sealer, qerr.ServerBusy)
+	return s.sendError(remoteAddr, hdr, sealer, qerr.ConnectionRefused)
 }
 
 // sendError sends the error as a response to the packet received with header hdr
