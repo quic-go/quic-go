@@ -214,17 +214,30 @@ var _ = Describe("Timeout tests", func() {
 			Expect(err).ToNot(HaveOccurred())
 			defer server.Close()
 
+			drop := utils.AtomicBool{}
+			proxy, err := quicproxy.NewQuicProxy("localhost:0", &quicproxy.Opts{
+				RemoteAddr: fmt.Sprintf("localhost:%d", server.Addr().(*net.UDPAddr).Port),
+				DropPacket: func(dir quicproxy.Direction, _ []byte) bool {
+					if dir == quicproxy.DirectionOutgoing {
+						return drop.Get()
+					}
+					return false
+				},
+			})
+			Expect(err).ToNot(HaveOccurred())
+			defer proxy.Close()
+
 			serverSessionClosed := make(chan struct{})
 			go func() {
 				defer GinkgoRecover()
 				sess, err := server.Accept(context.Background())
 				Expect(err).ToNot(HaveOccurred())
-				sess.AcceptStream(context.Background()) // blocks until the session is closed
+				<-sess.Context().Done() // block until the session is closed
 				close(serverSessionClosed)
 			}()
 
 			sess, err := quic.DialAddr(
-				fmt.Sprintf("localhost:%d", server.Addr().(*net.UDPAddr).Port),
+				fmt.Sprintf("localhost:%d", proxy.LocalPort()),
 				getTLSClientConfig(),
 				getQuicConfig(&quic.Config{MaxIdleTimeout: idleTimeout}),
 			)
@@ -232,6 +245,7 @@ var _ = Describe("Timeout tests", func() {
 
 			// wait half the idle timeout, then send a packet
 			time.Sleep(idleTimeout / 2)
+			drop.Set(true)
 			str, err := sess.OpenUniStream()
 			Expect(err).ToNot(HaveOccurred())
 			_, err = str.Write([]byte("foobar"))
@@ -281,7 +295,6 @@ var _ = Describe("Timeout tests", func() {
 		}()
 
 		drop := utils.AtomicBool{}
-
 		proxy, err := quicproxy.NewQuicProxy("localhost:0", &quicproxy.Opts{
 			RemoteAddr: fmt.Sprintf("localhost:%d", server.Addr().(*net.UDPAddr).Port),
 			DropPacket: func(quicproxy.Direction, []byte) bool {
