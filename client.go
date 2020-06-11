@@ -81,8 +81,12 @@ func DialAddrEarly(
 	tlsConf *tls.Config,
 	config *Config,
 ) (EarlySession, error) {
-	defer utils.Logger.WithPrefix(utils.DefaultLogger, "client").Debugf("Returning early session")
-	return dialAddrContext(context.Background(), addr, tlsConf, config, true)
+	sess, err := dialAddrContext(context.Background(), addr, tlsConf, config, true)
+	if err != nil {
+		return nil, err
+	}
+	utils.Logger.WithPrefix(utils.DefaultLogger, "client").Debugf("Returning early session")
+	return sess, nil
 }
 
 // DialAddrContext establishes a new QUIC connection to a server using the provided context.
