@@ -10,6 +10,8 @@ import (
 	"strconv"
 	"sync"
 
+	"github.com/lucas-clemente/quic-go/internal/protocol"
+
 	"github.com/lucas-clemente/quic-go"
 	"github.com/lucas-clemente/quic-go/internal/utils"
 	"github.com/marten-seemann/qpack"
@@ -72,6 +74,7 @@ func newClient(
 		quicConfig = defaultQuicConfig
 	}
 	quicConfig.MaxIncomingStreams = -1 // don't allow any bidirectional streams
+	quicConfig.Versions = []protocol.VersionNumber{protocol.VersionDraft29}
 	logger := utils.DefaultLogger.WithPrefix("h3 client")
 
 	return &client{

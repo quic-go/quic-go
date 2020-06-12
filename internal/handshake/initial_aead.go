@@ -7,7 +7,8 @@ import (
 	"github.com/marten-seemann/qtls"
 )
 
-var quicVersion1Salt = []byte{0xaf, 0xbf, 0xec, 0x28, 0x99, 0x93, 0xd2, 0x4c, 0x9e, 0x97, 0x86, 0xf1, 0x9c, 0x61, 0x11, 0xe0, 0x43, 0x90, 0xa8, 0x99}
+var draft28Salt = []byte{0xc3, 0xee, 0xf7, 0x12, 0xc7, 0x2e, 0xbb, 0x5a, 0x11, 0xa7, 0xd2, 0x43, 0x2b, 0xb4, 0x63, 0x65, 0xbe, 0xf9, 0xf5, 0x02}
+var draft29Salt = []byte{0xaf, 0xbf, 0xec, 0x28, 0x99, 0x93, 0xd2, 0x4c, 0x9e, 0x97, 0x86, 0xf1, 0x9c, 0x61, 0x11, 0xe0, 0x43, 0x90, 0xa8, 0x99}
 
 var initialSuite = &qtls.CipherSuiteTLS13{
 	ID:     qtls.TLS_AES_128_GCM_SHA256,
@@ -17,8 +18,8 @@ var initialSuite = &qtls.CipherSuiteTLS13{
 }
 
 // NewInitialAEAD creates a new AEAD for Initial encryption / decryption.
-func NewInitialAEAD(connID protocol.ConnectionID, pers protocol.Perspective) (LongHeaderSealer, LongHeaderOpener) {
-	clientSecret, serverSecret := computeSecrets(connID)
+func NewInitialAEAD(connID protocol.ConnectionID, pers protocol.Perspective, v protocol.VersionNumber) (LongHeaderSealer, LongHeaderOpener) {
+	clientSecret, serverSecret := computeSecrets(connID, v)
 	var mySecret, otherSecret []byte
 	if pers == protocol.PerspectiveClient {
 		mySecret = clientSecret
@@ -37,8 +38,12 @@ func NewInitialAEAD(connID protocol.ConnectionID, pers protocol.Perspective) (Lo
 		newLongHeaderOpener(decrypter, newAESHeaderProtector(initialSuite, otherSecret, true))
 }
 
-func computeSecrets(connID protocol.ConnectionID) (clientSecret, serverSecret []byte) {
-	initialSecret := qtls.HkdfExtract(crypto.SHA256, connID, quicVersion1Salt)
+func computeSecrets(connID protocol.ConnectionID, v protocol.VersionNumber) (clientSecret, serverSecret []byte) {
+	salt := draft29Salt
+	if v == protocol.VersionDraft28 {
+		salt = draft28Salt
+	}
+	initialSecret := qtls.HkdfExtract(crypto.SHA256, connID, salt)
 	clientSecret = hkdfExpandLabel(crypto.SHA256, initialSecret, []byte{}, "client in", crypto.SHA256.Size())
 	serverSecret = hkdfExpandLabel(crypto.SHA256, initialSecret, []byte{}, "server in", crypto.SHA256.Size())
 	return

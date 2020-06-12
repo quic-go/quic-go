@@ -97,6 +97,8 @@ type cryptoSetup struct {
 
 	perspective protocol.Perspective
 
+	version protocol.VersionNumber
+
 	mutex sync.Mutex // protects all members below
 
 	handshakeCompleteTime time.Time
@@ -137,6 +139,7 @@ func NewCryptoSetupClient(
 	rttStats *congestion.RTTStats,
 	qlogger qlog.Tracer,
 	logger utils.Logger,
+	version protocol.VersionNumber,
 ) (CryptoSetup, <-chan *wire.TransportParameters /* ClientHello written. Receive nil for non-0-RTT */) {
 	cs, clientHelloWritten := newCryptoSetup(
 		initialStream,
@@ -150,6 +153,7 @@ func NewCryptoSetupClient(
 		qlogger,
 		logger,
 		protocol.PerspectiveClient,
+		version,
 	)
 	cs.conn = qtls.Client(newConn(localAddr, remoteAddr), cs.tlsConf)
 	return cs, clientHelloWritten
@@ -169,6 +173,7 @@ func NewCryptoSetupServer(
 	rttStats *congestion.RTTStats,
 	qlogger qlog.Tracer,
 	logger utils.Logger,
+	version protocol.VersionNumber,
 ) CryptoSetup {
 	cs, _ := newCryptoSetup(
 		initialStream,
@@ -182,6 +187,7 @@ func NewCryptoSetupServer(
 		qlogger,
 		logger,
 		protocol.PerspectiveServer,
+		version,
 	)
 	cs.conn = qtls.Server(newConn(localAddr, remoteAddr), cs.tlsConf)
 	return cs
@@ -199,8 +205,9 @@ func newCryptoSetup(
 	qlogger qlog.Tracer,
 	logger utils.Logger,
 	perspective protocol.Perspective,
+	v protocol.VersionNumber,
 ) (*cryptoSetup, <-chan *wire.TransportParameters /* ClientHello written. Receive nil for non-0-RTT */) {
-	initialSealer, initialOpener := NewInitialAEAD(connID, perspective)
+	initialSealer, initialOpener := NewInitialAEAD(connID, perspective, v)
 	if qlogger != nil {
 		qlogger.UpdatedKeyFromTLS(protocol.EncryptionInitial, protocol.PerspectiveClient)
 		qlogger.UpdatedKeyFromTLS(protocol.EncryptionInitial, protocol.PerspectiveServer)
@@ -221,6 +228,7 @@ func newCryptoSetup(
 		qlogger:                qlogger,
 		logger:                 logger,
 		perspective:            perspective,
+		version:                v,
 		handshakeDone:          make(chan struct{}),
 		alertChan:              make(chan uint8),
 		clientHelloWrittenChan: make(chan *wire.TransportParameters, 1),
@@ -236,7 +244,7 @@ func newCryptoSetup(
 }
 
 func (h *cryptoSetup) ChangeConnectionID(id protocol.ConnectionID) {
-	initialSealer, initialOpener := NewInitialAEAD(id, h.perspective)
+	initialSealer, initialOpener := NewInitialAEAD(id, h.perspective, h.version)
 	h.initialSealer = initialSealer
 	h.initialOpener = initialOpener
 	if h.qlogger != nil {

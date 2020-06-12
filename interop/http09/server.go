@@ -13,6 +13,8 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/lucas-clemente/quic-go/internal/protocol"
+
 	"github.com/lucas-clemente/quic-go"
 )
 
@@ -69,6 +71,12 @@ func (s *Server) ListenAndServe() error {
 
 	tlsConf := s.TLSConfig.Clone()
 	tlsConf.NextProtos = []string{h09alpn}
+
+	if s.QuicConfig == nil {
+		s.QuicConfig = &quic.Config{}
+	}
+	s.QuicConfig.Versions = []protocol.VersionNumber{protocol.VersionDraft29}
+
 	ln, err := quic.ListenEarly(conn, tlsConf, s.QuicConfig)
 	if err != nil {
 		return err

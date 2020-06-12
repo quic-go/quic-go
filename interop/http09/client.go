@@ -11,6 +11,8 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/lucas-clemente/quic-go/internal/protocol"
+
 	"golang.org/x/net/idna"
 
 	"github.com/lucas-clemente/quic-go"
@@ -42,6 +44,11 @@ func (r *RoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
 	log.Printf("Requesting %s.\n", req.URL)
 
 	r.mutex.Lock()
+	if r.QuicConfig == nil {
+		r.QuicConfig = &quic.Config{}
+	}
+	r.QuicConfig.Versions = []protocol.VersionNumber{protocol.VersionDraft29}
+
 	hostname := authorityAddr("https", hostnameFromRequest(req))
 	if r.clients == nil {
 		r.clients = make(map[string]*client)

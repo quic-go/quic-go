@@ -304,6 +304,7 @@ var newSession = func(
 		s.rttStats,
 		qlogger,
 		logger,
+		s.version,
 	)
 	s.cryptoStreamHandler = cs
 	s.packer = newPacketPacker(
@@ -418,6 +419,7 @@ var newClientSession = func(
 		s.rttStats,
 		qlogger,
 		logger,
+		s.version,
 	)
 	s.clientHelloWritten = clientHelloWritten
 	s.cryptoStreamHandler = cs
@@ -869,7 +871,7 @@ func (s *session) handleRetryPacket(hdr *wire.Header, data []byte) bool /* was t
 		return false
 	}
 
-	tag := handshake.GetRetryIntegrityTag(data[:len(data)-16], destConnID)
+	tag := handshake.GetRetryIntegrityTag(data[:len(data)-16], destConnID, s.version)
 	if !bytes.Equal(data[len(data)-16:], tag[:]) {
 		if s.qlogger != nil {
 			s.qlogger.DroppedPacket(qlog.PacketTypeRetry, protocol.ByteCount(len(data)), qlog.PacketDropPayloadDecryptError)

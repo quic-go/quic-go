@@ -503,6 +503,8 @@ var _ = Describe("Server", func() {
 			}
 			s.QuicConfig = conf
 			Expect(s.ListenAndServe()).To(HaveOccurred())
+			conf.Versions = nil
+			receivedConf.Versions = nil
 			Expect(receivedConf).To(Equal(conf))
 		})
 
