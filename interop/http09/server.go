@@ -16,7 +16,7 @@ import (
 	"github.com/lucas-clemente/quic-go"
 )
 
-const h09alpn = "hq-28"
+const h09alpn = "hq-29"
 
 type responseWriter struct {
 	io.Writer
