@@ -13,9 +13,11 @@ var _ = Describe("Pacer", func() {
 	var p *pacer
 
 	const packetsPerSecond = 42
+	var bandwidth uint64 // in bytes/s
 
 	BeforeEach(func() {
-		p = newPacer(packetsPerSecond * uint64(maxDatagramSize)) // bandwidth: 42 full-size packets per second
+		bandwidth = uint64(packetsPerSecond * maxDatagramSize) // 42 full-size packets per second
+		p = newPacer(func() Bandwidth { return Bandwidth(bandwidth) * BytesPerSecond })
 	})
 
 	It("allows a burst at the beginning", func() {
@@ -26,7 +28,7 @@ var _ = Describe("Pacer", func() {
 
 	It("allows a big burst for high pacing rates", func() {
 		t := time.Now()
-		p.SetBandwidth(10000 * packetsPerSecond * uint64(maxDatagramSize))
+		bandwidth = uint64(10000 * packetsPerSecond * maxDatagramSize)
 		Expect(p.TimeUntilSend()).To(BeZero())
 		Expect(p.Budget(t)).To(BeNumerically(">", maxBurstSize))
 	})
@@ -94,14 +96,14 @@ var _ = Describe("Pacer", func() {
 	It("changes the bandwidth", func() {
 		t := time.Now()
 		sendBurst(t)
-		p.SetBandwidth(uint64(maxDatagramSize)) // reduce the bandwidth to 1 packet per second
+		bandwidth = uint64(maxDatagramSize) // reduce the bandwidth to 1 packet per second
 		Expect(p.TimeUntilSend()).To(Equal(t.Add(time.Second)))
 	})
 
 	It("doesn't pace faster than the minimum pacing duration", func() {
 		t := time.Now()
 		sendBurst(t)
-		p.SetBandwidth(1e6 * uint64(maxDatagramSize))
+		bandwidth = uint64(1e6 * maxDatagramSize)
 		Expect(p.TimeUntilSend()).To(Equal(t.Add(protocol.MinPacingDelay)))
 		Expect(p.Budget(t.Add(protocol.MinPacingDelay))).To(Equal(protocol.ByteCount(protocol.MinPacingDelay) * maxDatagramSize * 1e6 / 1e9))
 	})
