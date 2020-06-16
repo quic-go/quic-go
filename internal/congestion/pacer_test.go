@@ -3,6 +3,8 @@ package congestion
 import (
 	"time"
 
+	"github.com/lucas-clemente/quic-go/internal/protocol"
+
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 )
@@ -20,6 +22,13 @@ var _ = Describe("Pacer", func() {
 		t := time.Now()
 		Expect(p.TimeUntilSend()).To(BeZero())
 		Expect(p.Budget(t)).To(BeEquivalentTo(maxBurstSize))
+	})
+
+	It("allows a big burst for high pacing rates", func() {
+		t := time.Now()
+		p.SetBandwidth(10000 * packetsPerSecond * uint64(maxDatagramSize))
+		Expect(p.TimeUntilSend()).To(BeZero())
+		Expect(p.Budget(t)).To(BeNumerically(">", maxBurstSize))
 	})
 
 	It("reduces the budget when sending packets", func() {
@@ -87,5 +96,13 @@ var _ = Describe("Pacer", func() {
 		sendBurst(t)
 		p.SetBandwidth(uint64(maxDatagramSize)) // reduce the bandwidth to 1 packet per second
 		Expect(p.TimeUntilSend()).To(Equal(t.Add(time.Second)))
+	})
+
+	It("doesn't pace faster than the minimum pacing duration", func() {
+		t := time.Now()
+		sendBurst(t)
+		p.SetBandwidth(1e6 * uint64(maxDatagramSize))
+		Expect(p.TimeUntilSend()).To(Equal(t.Add(protocol.MinPacingDelay)))
+		Expect(p.Budget(t.Add(protocol.MinPacingDelay))).To(Equal(protocol.ByteCount(protocol.MinPacingDelay) * maxDatagramSize * 1e6 / 1e9))
 	})
 })

@@ -18,10 +18,9 @@ type pacer struct {
 }
 
 func newPacer(bw uint64) *pacer {
-	return &pacer{
-		bandwidth:        bw,
-		budgetAtLastSent: maxBurstSize,
-	}
+	p := &pacer{bandwidth: bw}
+	p.budgetAtLastSent = p.maxBurstSize()
+	return p
 }
 
 func (p *pacer) SentPacket(sendTime time.Time, size protocol.ByteCount) {
@@ -43,11 +42,16 @@ func (p *pacer) SetBandwidth(bw uint64) {
 
 func (p *pacer) Budget(now time.Time) protocol.ByteCount {
 	if p.lastSentTime.IsZero() {
-		return p.budgetAtLastSent
+		return p.maxBurstSize()
 	}
-	return utils.MinByteCount(
+	budget := p.budgetAtLastSent + (protocol.ByteCount(p.bandwidth)*protocol.ByteCount(now.Sub(p.lastSentTime).Nanoseconds()))/1e9
+	return utils.MinByteCount(p.maxBurstSize(), budget)
+}
+
+func (p *pacer) maxBurstSize() protocol.ByteCount {
+	return utils.MaxByteCount(
+		protocol.ByteCount(uint64((protocol.MinPacingDelay+protocol.TimerGranularity).Nanoseconds())*p.bandwidth)/1e9,
 		maxBurstSize,
-		p.budgetAtLastSent+(protocol.ByteCount(p.bandwidth)*protocol.ByteCount(now.Sub(p.lastSentTime).Nanoseconds()))/1e9,
 	)
 }
 
@@ -56,6 +60,8 @@ func (p *pacer) TimeUntilSend() time.Time {
 	if p.budgetAtLastSent >= maxDatagramSize {
 		return time.Time{}
 	}
-	// TODO: don't allow pacing faster than MinPacingDelay
-	return p.lastSentTime.Add(time.Duration(math.Ceil(float64(maxDatagramSize-p.budgetAtLastSent)*1e9/float64(p.bandwidth))) * time.Nanosecond)
+	return p.lastSentTime.Add(utils.MaxDuration(
+		protocol.MinPacingDelay,
+		time.Duration(math.Ceil(float64(maxDatagramSize-p.budgetAtLastSent)*1e9/float64(p.bandwidth)))*time.Nanosecond,
+	))
 }
