@@ -112,9 +112,11 @@ func (h *packetHandlerMap) Add(id protocol.ConnectionID, handler packetHandler) 
 	defer h.mutex.Unlock()
 
 	if _, ok := h.handlers[sid]; ok {
+		h.logger.Debugf("Not adding connection ID %s, as it already exists.", id)
 		return false
 	}
 	h.handlers[sid] = handler
+	h.logger.Debugf("Adding connection ID %s.", id)
 	return true
 }
 
@@ -124,12 +126,14 @@ func (h *packetHandlerMap) AddWithConnID(clientDestConnID, newConnID protocol.Co
 	defer h.mutex.Unlock()
 
 	if _, ok := h.handlers[sid]; ok {
+		h.logger.Debugf("Not adding connection ID %s for a new session, as it already exists.", clientDestConnID)
 		return false
 	}
 
 	sess := fn()
 	h.handlers[sid] = sess
 	h.handlers[string(newConnID)] = sess
+	h.logger.Debugf("Adding connection IDs %s and %s for a new session.", clientDestConnID, newConnID)
 	return true
 }
 
@@ -137,13 +141,16 @@ func (h *packetHandlerMap) Remove(id protocol.ConnectionID) {
 	h.mutex.Lock()
 	delete(h.handlers, string(id))
 	h.mutex.Unlock()
+	h.logger.Debugf("Removing connection ID %s.", id)
 }
 
 func (h *packetHandlerMap) Retire(id protocol.ConnectionID) {
+	h.logger.Debugf("Retiring connection ID %s in %s.", id, h.deleteRetiredSessionsAfter)
 	time.AfterFunc(h.deleteRetiredSessionsAfter, func() {
 		h.mutex.Lock()
 		delete(h.handlers, string(id))
 		h.mutex.Unlock()
+		h.logger.Debugf("Removing connection ID %s after it has been retired.", id)
 	})
 }
 
@@ -151,12 +158,14 @@ func (h *packetHandlerMap) ReplaceWithClosed(id protocol.ConnectionID, handler p
 	h.mutex.Lock()
 	h.handlers[string(id)] = handler
 	h.mutex.Unlock()
+	h.logger.Debugf("Replacing session for connection ID %s with a closed session.", id)
 
 	time.AfterFunc(h.deleteRetiredSessionsAfter, func() {
 		h.mutex.Lock()
 		handler.shutdown()
 		delete(h.handlers, string(id))
 		h.mutex.Unlock()
+		h.logger.Debugf("Removing connection ID %s for a closed session after it has been retired.", id)
 	})
 }
 
