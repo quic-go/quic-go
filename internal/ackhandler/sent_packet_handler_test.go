@@ -10,6 +10,7 @@ import (
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/internal/utils"
 	"github.com/lucas-clemente/quic-go/internal/wire"
+
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 )
@@ -427,7 +428,6 @@ var _ = Describe("SentPacketHandler", func() {
 				protocol.ByteCount(42),
 				true,
 			)
-			cong.EXPECT().TimeUntilSend(gomock.Any())
 			handler.SentPacket(&Packet{
 				PacketNumber:    1,
 				Length:          42,
@@ -439,7 +439,6 @@ var _ = Describe("SentPacketHandler", func() {
 		It("should call MaybeExitSlowStart and OnPacketAcked", func() {
 			rcvTime := time.Now().Add(-5 * time.Second)
 			cong.EXPECT().OnPacketSent(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Times(3)
-			cong.EXPECT().TimeUntilSend(gomock.Any()).Times(3)
 			gomock.InOrder(
 				cong.EXPECT().MaybeExitSlowStart(), // must be called before packets are acked
 				cong.EXPECT().OnPacketAcked(protocol.PacketNumber(1), protocol.ByteCount(1), protocol.ByteCount(3), rcvTime),
@@ -454,7 +453,6 @@ var _ = Describe("SentPacketHandler", func() {
 
 		It("doesn't call OnPacketAcked when a retransmitted packet is acked", func() {
 			cong.EXPECT().OnPacketSent(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Times(2)
-			cong.EXPECT().TimeUntilSend(gomock.Any()).Times(2)
 			handler.SentPacket(ackElicitingPacket(&Packet{PacketNumber: 1, SendTime: time.Now().Add(-time.Hour)}))
 			handler.SentPacket(ackElicitingPacket(&Packet{PacketNumber: 2}))
 			// lose packet 1
@@ -472,7 +470,6 @@ var _ = Describe("SentPacketHandler", func() {
 
 		It("calls OnPacketAcked and OnPacketLost with the right bytes_in_flight value", func() {
 			cong.EXPECT().OnPacketSent(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Times(4)
-			cong.EXPECT().TimeUntilSend(gomock.Any()).Times(4)
 			handler.SentPacket(ackElicitingPacket(&Packet{PacketNumber: 1, SendTime: time.Now().Add(-time.Hour)}))
 			handler.SentPacket(ackElicitingPacket(&Packet{PacketNumber: 2, SendTime: time.Now().Add(-30 * time.Minute)}))
 			handler.SentPacket(ackElicitingPacket(&Packet{PacketNumber: 3, SendTime: time.Now().Add(-30 * time.Minute)}))
@@ -498,7 +495,6 @@ var _ = Describe("SentPacketHandler", func() {
 		It("passes the bytes in flight to the congestion controller", func() {
 			handler.ReceivedPacket(protocol.EncryptionHandshake)
 			cong.EXPECT().OnPacketSent(gomock.Any(), protocol.ByteCount(42), gomock.Any(), protocol.ByteCount(42), true)
-			cong.EXPECT().TimeUntilSend(gomock.Any())
 			handler.SentPacket(&Packet{
 				Length:          42,
 				EncryptionLevel: protocol.EncryptionInitial,
@@ -512,7 +508,6 @@ var _ = Describe("SentPacketHandler", func() {
 		It("returns SendNone if limited by the 3x limit", func() {
 			handler.ReceivedBytes(100)
 			cong.EXPECT().OnPacketSent(gomock.Any(), protocol.ByteCount(300), gomock.Any(), protocol.ByteCount(300), true)
-			cong.EXPECT().TimeUntilSend(gomock.Any())
 			handler.SentPacket(&Packet{
 				Length:          300,
 				EncryptionLevel: protocol.EncryptionInitial,
@@ -527,7 +522,6 @@ var _ = Describe("SentPacketHandler", func() {
 		It("limits the window to 3x the bytes received, to avoid amplification attacks", func() {
 			handler.ReceivedPacket(protocol.EncryptionInitial) // receiving an Initial packet doesn't validate the client's address
 			cong.EXPECT().OnPacketSent(gomock.Any(), protocol.ByteCount(50), gomock.Any(), protocol.ByteCount(50), true)
-			cong.EXPECT().TimeUntilSend(gomock.Any())
 			handler.SentPacket(&Packet{
 				Length:          50,
 				EncryptionLevel: protocol.EncryptionInitial,
@@ -549,7 +543,6 @@ var _ = Describe("SentPacketHandler", func() {
 		It("allows sending of ACKs when we're keeping track of MaxOutstandingSentPackets packets", func() {
 			handler.ReceivedPacket(protocol.EncryptionHandshake)
 			cong.EXPECT().CanSend(gomock.Any()).Return(true).AnyTimes()
-			cong.EXPECT().TimeUntilSend(gomock.Any()).AnyTimes()
 			cong.EXPECT().OnPacketSent(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
 			for i := protocol.PacketNumber(1); i < protocol.MaxOutstandingSentPackets; i++ {
 				handler.SentPacket(ackElicitingPacket(&Packet{PacketNumber: i}))
@@ -568,35 +561,17 @@ var _ = Describe("SentPacketHandler", func() {
 			Expect(handler.SendMode()).To(Equal(SendPTOHandshake))
 		})
 
-		It("gets the pacing delay", func() {
-			sendTime := time.Now().Add(-time.Minute)
-			handler.bytesInFlight = 100
-			cong.EXPECT().OnPacketSent(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any())
-			cong.EXPECT().TimeUntilSend(protocol.ByteCount(100)).Return(time.Hour)
-			handler.SentPacket(&Packet{PacketNumber: 1, SendTime: sendTime, EncryptionLevel: protocol.Encryption1RTT})
-			Expect(handler.TimeUntilSend()).To(Equal(sendTime.Add(time.Hour)))
+		It("says if it has pacing budget", func() {
+			cong.EXPECT().HasPacingBudget().Return(true)
+			Expect(handler.HasPacingBudget()).To(BeTrue())
+			cong.EXPECT().HasPacingBudget().Return(false)
+			Expect(handler.HasPacingBudget()).To(BeFalse())
 		})
 
-		It("allows sending of all RTO probe packets", func() {
-			handler.numProbesToSend = 5
-			Expect(handler.ShouldSendNumPackets()).To(Equal(5))
-		})
-
-		It("allows sending of one packet, if it should be sent immediately", func() {
-			cong.EXPECT().TimeUntilSend(gomock.Any()).Return(time.Duration(0))
-			Expect(handler.ShouldSendNumPackets()).To(Equal(1))
-		})
-
-		It("allows sending of multiple packets, if the pacing delay is smaller than the minimum", func() {
-			pacingDelay := protocol.MinPacingDelay / 10
-			cong.EXPECT().TimeUntilSend(gomock.Any()).Return(pacingDelay)
-			Expect(handler.ShouldSendNumPackets()).To(Equal(10))
-		})
-
-		It("allows sending of multiple packets, if the pacing delay is smaller than the minimum, and not a fraction", func() {
-			pacingDelay := protocol.MinPacingDelay * 2 / 5
-			cong.EXPECT().TimeUntilSend(gomock.Any()).Return(pacingDelay)
-			Expect(handler.ShouldSendNumPackets()).To(Equal(3))
+		It("returns the pacing delay", func() {
+			t := time.Now()
+			cong.EXPECT().TimeUntilSend(gomock.Any()).Return(t)
+			Expect(handler.TimeUntilSend()).To(Equal(t))
 		})
 	})
 
@@ -694,7 +669,6 @@ var _ = Describe("SentPacketHandler", func() {
 			}))
 			Expect(handler.OnLossDetectionTimeout()).To(Succeed())
 			Expect(handler.SendMode()).To(Equal(SendPTOAppData))
-			Expect(handler.ShouldSendNumPackets()).To(Equal(2))
 			handler.SentPacket(ackElicitingPacket(&Packet{PacketNumber: 2}))
 			Expect(handler.SendMode()).To(Equal(SendPTOAppData))
 			handler.SentPacket(ackElicitingPacket(&Packet{PacketNumber: 3}))
@@ -707,7 +681,6 @@ var _ = Describe("SentPacketHandler", func() {
 			handler.SentPacket(ackElicitingPacket(&Packet{PacketNumber: 1, SendTime: time.Now().Add(-time.Hour)}))
 			Expect(handler.OnLossDetectionTimeout()).To(Succeed())
 			Expect(handler.SendMode()).To(Equal(SendPTOAppData))
-			Expect(handler.ShouldSendNumPackets()).To(Equal(2))
 			handler.SentPacket(ackElicitingPacket(&Packet{PacketNumber: 2}))
 			Expect(handler.SendMode()).To(Equal(SendPTOAppData))
 			for p := protocol.PacketNumber(3); p < 30; p++ {
