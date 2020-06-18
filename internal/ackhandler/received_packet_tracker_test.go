@@ -117,7 +117,7 @@ var _ = Describe("Received Packet Tracker", func() {
 				Expect(ack).ToNot(BeNil())
 				Expect(ack.HasMissingRanges()).To(BeTrue())
 				Expect(tracker.ackQueued).To(BeFalse())
-				tracker.ReceivedPacket(12, time.Now(), false)
+				tracker.ReceivedPacket(12, time.Now(), true)
 				Expect(tracker.ackQueued).To(BeTrue())
 			})
 
