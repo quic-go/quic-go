@@ -12,12 +12,14 @@ import (
 var _ = Describe("Pacer", func() {
 	var p *pacer
 
-	const packetsPerSecond = 42
+	const packetsPerSecond = 50
 	var bandwidth uint64 // in bytes/s
 
 	BeforeEach(func() {
-		bandwidth = uint64(packetsPerSecond * maxDatagramSize) // 42 full-size packets per second
-		p = newPacer(func() Bandwidth { return Bandwidth(bandwidth) * BytesPerSecond })
+		bandwidth = uint64(packetsPerSecond * maxDatagramSize) // 50 full-size packets per second
+		// The pacer will multiply the bandwidth with 1.25 to achieve a slightly higher pacing speed.
+		// For the tests, cancel out this factor, so we can do the math using the exact bandwidth.
+		p = newPacer(func() Bandwidth { return Bandwidth(bandwidth) * BytesPerSecond * 4 / 5 })
 	})
 
 	It("allows a burst at the beginning", func() {
@@ -96,8 +98,8 @@ var _ = Describe("Pacer", func() {
 	It("changes the bandwidth", func() {
 		t := time.Now()
 		sendBurst(t)
-		bandwidth = uint64(maxDatagramSize) // reduce the bandwidth to 1 packet per second
-		Expect(p.TimeUntilSend()).To(Equal(t.Add(time.Second)))
+		bandwidth = uint64(5 * maxDatagramSize) // reduce the bandwidth to 5 packet per second
+		Expect(p.TimeUntilSend()).To(Equal(t.Add(time.Second / 5)))
 	})
 
 	It("doesn't pace faster than the minimum pacing duration", func() {
