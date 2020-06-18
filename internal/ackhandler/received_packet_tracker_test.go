@@ -328,7 +328,6 @@ var _ = Describe("Received Packet Tracker", func() {
 					tracker.ReceivedPacket(1, time.Time{}, true)
 					tracker.ackAlarm = time.Now().Add(-time.Minute)
 					Expect(tracker.GetAckFrame(true)).ToNot(BeNil())
-					Expect(tracker.packetsReceivedSinceLastAck).To(BeZero())
 					Expect(tracker.GetAlarmTimeout()).To(BeZero())
 					Expect(tracker.ackElicitingPacketsReceivedSinceLastAck).To(BeZero())
 					Expect(tracker.ackQueued).To(BeFalse())

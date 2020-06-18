@@ -22,7 +22,6 @@ type receivedPacketTracker struct {
 	hasNewAck bool // true as soon as we received an ack-eliciting new packet
 	ackQueued bool // true once we received more than 2 (or later in the connection 10) ack-eliciting packets
 
-	packetsReceivedSinceLastAck             int
 	ackElicitingPacketsReceivedSinceLastAck int
 	ackAlarm                                time.Time
 	lastAck                                 *wire.AckFrame
@@ -96,8 +95,6 @@ func (h *receivedPacketTracker) hasNewMissingPackets() bool {
 // It is implemented analogously to Chrome's QuicConnection::MaybeQueueAck()
 // in ACK_DECIMATION_WITH_REORDERING mode.
 func (h *receivedPacketTracker) maybeQueueAck(packetNumber protocol.PacketNumber, rcvTime time.Time, shouldInstigateAck, wasMissing bool) {
-	h.packetsReceivedSinceLastAck++
-
 	// always ack the first packet
 	if h.lastAck == nil {
 		if !h.ackQueued {
@@ -194,7 +191,6 @@ func (h *receivedPacketTracker) GetAckFrame(onlyIfQueued bool) *wire.AckFrame {
 	h.ackAlarm = time.Time{}
 	h.ackQueued = false
 	h.hasNewAck = false
-	h.packetsReceivedSinceLastAck = 0
 	h.ackElicitingPacketsReceivedSinceLastAck = 0
 	return ack
 }
