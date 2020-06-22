@@ -169,7 +169,7 @@ var _ = Describe("HTTP tests", func() {
 				Expect(body).To(Equal(PRData))
 			})
 
-			for i := 0; i < 50; i++ {
+			for i := 0; i < 100000; i++ {
 				It("downloads a large file", func() {
 					resp, err := client.Get("https://localhost:" + port + "/prdatalong")
 					Expect(err).ToNot(HaveOccurred())
