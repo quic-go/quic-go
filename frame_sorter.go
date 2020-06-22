@@ -3,6 +3,7 @@ package quic
 import (
 	"errors"
 	"fmt"
+	"sort"
 
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/internal/utils"
@@ -18,6 +19,17 @@ type frameSorter struct {
 	readPos protocol.ByteCount
 	gaps    *utils.ByteIntervalList
 }
+
+type entry struct {
+	offset protocol.ByteCount
+	length int
+}
+
+type entries []entry
+
+func (e entries) Len() int           { return len(e) }
+func (e entries) Less(i, j int) bool { return e[i].offset < e[j].offset }
+func (e entries) Swap(i, j int)      { e[i], e[j] = e[j], e[i] }
 
 var errDuplicateStreamData = errors.New("duplicate stream data")
 
@@ -163,9 +175,15 @@ func (s *frameSorter) push(data []byte, offset protocol.ByteCount, doneCb func()
 		for gap := s.gaps.Front(); gap != nil; gap = gap.Next() {
 			fmt.Printf("Start: %d, End: %d\n", gap.Value.Start, gap.Value.End)
 		}
-		fmt.Println("Queue:")
+
+		var e entries
 		for offset, el := range s.queue {
-			fmt.Printf("%d: %d bytes\n", offset, len(el.Data))
+			e = append(e, entry{offset: offset, length: len(el.Data)})
+		}
+		sort.Sort(e)
+		fmt.Println("Queue:")
+		for _, en := range e {
+			fmt.Printf("%d - %d (%d bytes)\n", en.offset, en.offset+protocol.ByteCount(en.length), en.length)
 		}
 		return errors.New("too many gaps in received data")
 	}
