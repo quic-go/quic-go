@@ -2,6 +2,7 @@ package quic
 
 import (
 	"errors"
+	"fmt"
 
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/internal/utils"
@@ -157,6 +158,15 @@ func (s *frameSorter) push(data []byte, offset protocol.ByteCount, doneCb func()
 	}
 
 	if s.gaps.Len() > protocol.MaxStreamFrameSorterGaps {
+		fmt.Println("read pos: ", s.readPos)
+		fmt.Println("Gaps:")
+		for gap := s.gaps.Front(); gap != nil; gap = gap.Next() {
+			fmt.Printf("Start: %d, End: %d\n", gap.Value.Start, gap.Value.End)
+		}
+		fmt.Println("Queue:")
+		for offset, el := range s.queue {
+			fmt.Printf("%d: %d bytes\n", offset, len(el.Data))
+		}
 		return errors.New("too many gaps in received data")
 	}
 
