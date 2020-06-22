@@ -418,18 +418,15 @@ var _ = Describe("MITM test", func() {
 
 				// client connection closes immediately on receiving ack for unsent packet
 				It("fails when a forged initial packet with ack for unsent packet is sent to client", func() {
+					clientAddr := clientConn.LocalAddr()
 					delayCb := func(dir quicproxy.Direction, raw []byte) time.Duration {
 						if dir == quicproxy.DirectionIncoming {
-							defer GinkgoRecover()
-
 							hdr, _, _, err := wire.ParsePacket(raw, connIDLen)
 							Expect(err).ToNot(HaveOccurred())
-
 							if hdr.Type != protocol.PacketTypeInitial {
 								return 0
 							}
-
-							sendForgedInitialPacketWithAck(serverConn, clientConn.LocalAddr(), hdr)
+							sendForgedInitialPacketWithAck(serverConn, clientAddr, hdr)
 						}
 						return rtt
 					}
@@ -439,7 +436,6 @@ var _ = Describe("MITM test", func() {
 					Expect(err.(*qerr.QuicError).ErrorCode).To(Equal(qerr.ProtocolViolation))
 					Expect(err.Error()).To(ContainSubstring("Received ACK for an unsent packet"))
 				})
-
 			})
 		})
 	}
