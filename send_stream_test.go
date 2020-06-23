@@ -695,6 +695,32 @@ var _ = Describe("Send Stream", func() {
 				str.CancelWrite(9876)
 			})
 
+			// This test is inherently racy, as it tests a concurrent call to Write() and CancelRead().
+			// A single successful run of this test therefore doesn't mean a lot,
+			// for reliable results it has to be run many times.
+			It("returns a nil error when the whole slice has been sent out", func() {
+				mockSender.EXPECT().queueControlFrame(gomock.Any()).MaxTimes(1)
+				mockSender.EXPECT().onHasStreamData(streamID).MaxTimes(1)
+				mockSender.EXPECT().onStreamCompleted(streamID).MaxTimes(1)
+				mockFC.EXPECT().SendWindowSize().Return(protocol.MaxByteCount).MaxTimes(1)
+				mockFC.EXPECT().AddBytesSent(gomock.Any()).MaxTimes(1)
+				errChan := make(chan error)
+				go func() {
+					defer GinkgoRecover()
+					n, err := strWithTimeout.Write(getData(100))
+					if n == 0 {
+						errChan <- nil
+						return
+					}
+					errChan <- err
+				}()
+
+				runtime.Gosched()
+				go str.popStreamFrame(protocol.MaxByteCount)
+				go str.CancelWrite(1234)
+				Eventually(errChan).Should(Receive(Not(HaveOccurred())))
+			})
+
 			It("unblocks Write", func() {
 				mockSender.EXPECT().queueControlFrame(gomock.Any())
 				mockSender.EXPECT().onHasStreamData(streamID)
