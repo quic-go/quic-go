@@ -169,16 +169,14 @@ var _ = Describe("HTTP tests", func() {
 				Expect(body).To(Equal(PRData))
 			})
 
-			for i := 0; i < 100000; i++ {
-				It("downloads a large file", func() {
-					resp, err := client.Get("https://localhost:" + port + "/prdatalong")
-					Expect(err).ToNot(HaveOccurred())
-					Expect(resp.StatusCode).To(Equal(200))
-					body, err := ioutil.ReadAll(gbytes.TimeoutReader(resp.Body, 20*time.Second))
-					Expect(err).ToNot(HaveOccurred())
-					Expect(body).To(Equal(PRDataLong))
-				})
-			}
+			FIt("downloads a large file", func() {
+				resp, err := client.Get("https://localhost:" + port + "/prdatalong")
+				Expect(err).ToNot(HaveOccurred())
+				Expect(resp.StatusCode).To(Equal(200))
+				body, err := ioutil.ReadAll(gbytes.TimeoutReader(resp.Body, 20*time.Second))
+				Expect(err).ToNot(HaveOccurred())
+				Expect(body).To(Equal(PRDataLong))
+			})
 
 			It("downloads many hellos", func() {
 				const num = 150

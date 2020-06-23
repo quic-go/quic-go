@@ -39,15 +39,15 @@ jobs:
       - run:
           name: "Run tools tests"
           command: ginkgo -race -r -v -randomizeAllSpecs -trace integrationtests/tools
-#      - run:
-#          name: "Run self integration tests"
-#          command: ginkgo -v -randomizeAllSpecs -trace integrationtests/self
+      - run:
+          name: "Run self integration tests"
+          command: ginkgo -randomizeAllSpecs -untilItFails -trace integrationtests/self
 #      - run:
 #          name: "Run self integration tests with race detector"
 #          command: ginkgo -race -v -randomizeAllSpecs -trace integrationtests/self
-      - run:
-          name: "Run self integration tests with qlog"
-          command: ginkgo -v -randomizeAllSpecs -trace integrationtests/self -failFast -- -qlog
+#      - run:
+#          name: "Run self integration tests with qlog"
+#          command: ginkgo -v -randomizeAllSpecs -trace integrationtests/self -failFast -- -qlog
   go114:
     <<: *test
   go113:
