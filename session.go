@@ -1058,6 +1058,9 @@ func (s *session) handlePacket(p *receivedPacket) {
 	select {
 	case s.receivedPackets <- p:
 	default:
+		if s.perspective == protocol.PerspectiveClient {
+			fmt.Fprintf(ginkgo.GinkgoWriter, "Dropping packet (%d bytes).\n", len(p.data))
+		}
 	}
 }
 
