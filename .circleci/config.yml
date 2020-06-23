@@ -31,28 +31,10 @@ jobs:
           name: "Build infos"
           command: go version
       - run:
-          name: "Run benchmark tests"
-          command: ginkgo -randomizeAllSpecs -trace benchmark -- -size=10
-      - run:
-          name: "Run benchmark tests with race detector"
-          command: ginkgo -race -randomizeAllSpecs -trace benchmark -- -size=5
-      - run:
-          name: "Run tools tests"
-          command: ginkgo -race -r -v -randomizeAllSpecs -trace integrationtests/tools
-      - run:
-          name: "Run self integration tests"
-          command: ginkgo -v -randomizeAllSpecs -trace integrationtests/self
-      - run:
-          name: "Run self integration tests with race detector"
-          command: ginkgo -race -v -randomizeAllSpecs -trace integrationtests/self
-      - run:
-          name: "Run self integration tests with qlog"
-          command: ginkgo -v -randomizeAllSpecs -trace integrationtests/self -- -qlog
+          name: "Run reordering"
+          command: ginkgo -untilItFails
   go114:
     <<: *test
-  go113:
-    <<: *test
-    executor: test-go113
   interop-build:
     executor: interop
     steps:
@@ -88,7 +70,6 @@ workflows:
   workflow:
     jobs:
       - go114
-      - go113
       - interop-build:
           filters:
             branches:
