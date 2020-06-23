@@ -12,6 +12,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/onsi/ginkgo"
+
 	"github.com/lucas-clemente/quic-go/internal/ackhandler"
 	"github.com/lucas-clemente/quic-go/internal/congestion"
 	"github.com/lucas-clemente/quic-go/internal/flowcontrol"
@@ -816,6 +818,10 @@ func (s *session) handleSinglePacket(p *receivedPacket, hdr *wire.Header) bool /
 			s.logger.Debugf("Dropping %s packet (%d bytes) that could not be unpacked. Error: %s", hdr.PacketType(), len(p.data), err)
 		}
 		return false
+	}
+
+	if packet.encryptionLevel == protocol.Encryption1RTT {
+		fmt.Fprintf(ginkgo.GinkgoWriter, "Received packet %d (%d bytes).\n", packet.packetNumber, len(p.data))
 	}
 
 	if s.logger.Debug() {
