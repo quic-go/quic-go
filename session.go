@@ -820,7 +820,7 @@ func (s *session) handleSinglePacket(p *receivedPacket, hdr *wire.Header) bool /
 		return false
 	}
 
-	if packet.encryptionLevel == protocol.Encryption1RTT {
+	if s.perspective == protocol.PerspectiveClient && packet.encryptionLevel == protocol.Encryption1RTT {
 		fmt.Fprintf(ginkgo.GinkgoWriter, "Received packet %d (%d bytes).\n", packet.packetNumber, len(p.data))
 	}
 
@@ -976,6 +976,10 @@ func (s *session) handleUnpackedPacket(
 				return err
 			}
 		}
+	}
+
+	if s.perspective == protocol.PerspectiveServer {
+		fmt.Fprintf(ginkgo.GinkgoWriter, "congestion stats: %#v\n", s.sentPacketHandler.GetStats())
 	}
 
 	if s.traceCallback != nil {
@@ -1583,6 +1587,9 @@ func (s *session) logCoalescedPacket(now time.Time, packet *coalescedPacket) {
 }
 
 func (s *session) logPacket(now time.Time, packet *packedPacket) {
+	if s.perspective == protocol.PerspectiveServer && packet.EncryptionLevel() == protocol.Encryption1RTT {
+		fmt.Fprintf(ginkgo.GinkgoWriter, "Sent packet %d (%d bytes)\n", packet.header.PacketNumber, packet.buffer.Len())
+	}
 	if s.logger.Debug() {
 		s.logger.Debugf("-> Sending packet %d (%d bytes) for connection %s, %s", packet.header.PacketNumber, packet.buffer.Len(), s.logID, packet.EncryptionLevel())
 	}
