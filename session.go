@@ -570,10 +570,6 @@ runLoop:
 			}
 		}
 
-		var pacingDeadline time.Time
-		if s.pacingDeadline.IsZero() { // the timer didn't have a pacing deadline set
-			pacingDeadline = s.sentPacketHandler.TimeUntilSend()
-		}
 		if keepAliveTime := s.nextKeepAliveTime(); !keepAliveTime.IsZero() && !now.Before(keepAliveTime) {
 			// send a PING frame since there is no activity in the session
 			s.logger.Debugf("Sending a keep-alive PING to keep the connection alive.")
@@ -590,12 +586,6 @@ runLoop:
 				s.qlogger.ClosedConnection(qlog.CloseReasonIdleTimeout)
 			}
 			s.destroyImpl(qerr.NewTimeoutError("No recent network activity"))
-			continue
-		} else if !pacingDeadline.IsZero() && now.Before(pacingDeadline) {
-			// If we get to this point before the pacing deadline, we should wait until that deadline.
-			// This can happen when scheduleSending is called, or a packet is received.
-			// Set the timer and restart the run loop.
-			s.pacingDeadline = pacingDeadline
 			continue
 		}
 
@@ -1356,23 +1346,16 @@ func (s *session) processTransportParametersImpl(params *wire.TransportParameter
 func (s *session) sendPackets() error {
 	s.pacingDeadline = time.Time{}
 
-	sendMode := s.sentPacketHandler.SendMode()
-	if sendMode == ackhandler.SendNone { // shortcut: return immediately if there's nothing to send
-		return nil
-	}
-
-	numPackets := s.sentPacketHandler.ShouldSendNumPackets()
-	var numPacketsSent int
-sendLoop:
+	var sentPacket bool // only used in for packets sent in send mode SendAny
 	for {
-		switch sendMode {
+		switch sendMode := s.sentPacketHandler.SendMode(); sendMode {
 		case ackhandler.SendNone:
-			break sendLoop
+			return nil
 		case ackhandler.SendAck:
 			// If we already sent packets, and the send mode switches to SendAck,
-			// we've just become congestion limited.
+			// as we've just become congestion limited.
 			// There's no need to try to send an ACK at this moment.
-			if numPacketsSent > 0 {
+			if sentPacket {
 				return nil
 			}
 			// We can at most send a single ACK only packet.
@@ -1383,40 +1366,28 @@ sendLoop:
 			if err := s.sendProbePacket(protocol.EncryptionInitial); err != nil {
 				return err
 			}
-			numPacketsSent++
 		case ackhandler.SendPTOHandshake:
 			if err := s.sendProbePacket(protocol.EncryptionHandshake); err != nil {
 				return err
 			}
-			numPacketsSent++
 		case ackhandler.SendPTOAppData:
 			if err := s.sendProbePacket(protocol.Encryption1RTT); err != nil {
 				return err
 			}
-			numPacketsSent++
 		case ackhandler.SendAny:
-			sentPacket, err := s.sendPacket()
-			if err != nil {
+			if s.handshakeComplete && !s.sentPacketHandler.HasPacingBudget() {
+				s.pacingDeadline = s.sentPacketHandler.TimeUntilSend()
+				return nil
+			}
+			sent, err := s.sendPacket()
+			if err != nil || !sent {
 				return err
 			}
-			if !sentPacket {
-				break sendLoop
-			}
-			numPacketsSent++
+			sentPacket = true
 		default:
 			return fmt.Errorf("BUG: invalid send mode %d", sendMode)
 		}
-		if numPacketsSent >= numPackets {
-			break
-		}
-		sendMode = s.sentPacketHandler.SendMode()
 	}
-	// Only start the pacing timer if we sent as many packets as we were allowed.
-	// There will probably be more to send when calling sendPacket again.
-	if numPacketsSent == numPackets {
-		s.pacingDeadline = s.sentPacketHandler.TimeUntilSend()
-	}
-	return nil
 }
 
 func (s *session) maybeSendAckOnlyPacket() error {

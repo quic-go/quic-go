@@ -3,7 +3,6 @@ package ackhandler
 import (
 	"errors"
 	"fmt"
-	"math"
 	"time"
 
 	"github.com/lucas-clemente/quic-go/internal/congestion"
@@ -46,8 +45,6 @@ func newPacketNumberSpace(initialPN protocol.PacketNumber) *packetNumberSpace {
 }
 
 type sentPacketHandler struct {
-	nextSendTime time.Time
-
 	initialPackets   *packetNumberSpace
 	handshakePackets *packetNumberSpace
 	appDataPackets   *packetNumberSpace
@@ -254,7 +251,6 @@ func (h *sentPacketHandler) sentPacketImpl(packet *Packet) bool /* is ack-elicit
 	}
 	h.congestion.OnPacketSent(packet.SendTime, h.bytesInFlight, packet.PacketNumber, packet.Length, isAckEliciting)
 
-	h.nextSendTime = utils.MaxTime(h.nextSendTime, packet.SendTime).Add(h.congestion.TimeUntilSend(h.bytesInFlight))
 	return isAckEliciting
 }
 
@@ -720,19 +716,11 @@ func (h *sentPacketHandler) SendMode() SendMode {
 }
 
 func (h *sentPacketHandler) TimeUntilSend() time.Time {
-	return h.nextSendTime
+	return h.congestion.TimeUntilSend(h.bytesInFlight)
 }
 
-func (h *sentPacketHandler) ShouldSendNumPackets() int {
-	if h.numProbesToSend > 0 {
-		// RTO probes should not be paced, but must be sent immediately.
-		return h.numProbesToSend
-	}
-	delay := h.congestion.TimeUntilSend(h.bytesInFlight)
-	if delay == 0 || delay > protocol.MinPacingDelay {
-		return 1
-	}
-	return int(math.Ceil(float64(protocol.MinPacingDelay) / float64(delay)))
+func (h *sentPacketHandler) HasPacingBudget() bool {
+	return h.congestion.HasPacingBudget()
 }
 
 func (h *sentPacketHandler) AmplificationWindow() protocol.ByteCount {

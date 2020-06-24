@@ -36,12 +36,8 @@ type SentPacketHandler interface {
 	// TimeUntilSend is the time when the next packet should be sent.
 	// It is used for pacing packets.
 	TimeUntilSend() time.Time
-	// ShouldSendNumPackets returns the number of packets that should be sent immediately.
-	// It always returns a number greater or equal than 1.
-	// A number greater than 1 is returned when the pacing delay is smaller than the minimum pacing delay.
-	// Note that the number of packets is only calculated based on the pacing algorithm.
-	// Before sending any packet, SendingAllowed() must be called to learn if we can actually send it.
-	ShouldSendNumPackets() int
+	// HasPacingBudget says if the pacer allows sending of a (full size) packet at this moment.
+	HasPacingBudget() bool
 
 	// only to be called once the handshake is complete
 	QueueProbePacket(protocol.EncryptionLevel) bool /* was a packet queued */

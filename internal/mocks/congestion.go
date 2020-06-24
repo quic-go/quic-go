@@ -63,6 +63,20 @@ func (mr *MockSendAlgorithmWithDebugInfosMockRecorder) GetCongestionWindow() *go
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetCongestionWindow", reflect.TypeOf((*MockSendAlgorithmWithDebugInfos)(nil).GetCongestionWindow))
 }
 
+// HasPacingBudget mocks base method
+func (m *MockSendAlgorithmWithDebugInfos) HasPacingBudget() bool {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "HasPacingBudget")
+	ret0, _ := ret[0].(bool)
+	return ret0
+}
+
+// HasPacingBudget indicates an expected call of HasPacingBudget
+func (mr *MockSendAlgorithmWithDebugInfosMockRecorder) HasPacingBudget() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HasPacingBudget", reflect.TypeOf((*MockSendAlgorithmWithDebugInfos)(nil).HasPacingBudget))
+}
+
 // InRecovery mocks base method
 func (m *MockSendAlgorithmWithDebugInfos) InRecovery() bool {
 	m.ctrl.T.Helper()
@@ -152,10 +166,10 @@ func (mr *MockSendAlgorithmWithDebugInfosMockRecorder) OnRetransmissionTimeout(a
 }
 
 // TimeUntilSend mocks base method
-func (m *MockSendAlgorithmWithDebugInfos) TimeUntilSend(arg0 protocol.ByteCount) time.Duration {
+func (m *MockSendAlgorithmWithDebugInfos) TimeUntilSend(arg0 protocol.ByteCount) time.Time {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "TimeUntilSend", arg0)
-	ret0, _ := ret[0].(time.Duration)
+	ret0, _ := ret[0].(time.Time)
 	return ret0
 }
 

@@ -23,6 +23,8 @@ type cubicSender struct {
 	rttStats        *RTTStats
 	stats           connectionStats
 	cubic           *Cubic
+	pacer           *pacer
+	clock           Clock
 
 	reno bool
 
@@ -75,7 +77,7 @@ func NewCubicSender(clock Clock, rttStats *RTTStats, reno bool) *cubicSender {
 }
 
 func newCubicSender(clock Clock, rttStats *RTTStats, reno bool, initialCongestionWindow, initialMaxCongestionWindow protocol.ByteCount) *cubicSender {
-	return &cubicSender{
+	c := &cubicSender{
 		rttStats:                   rttStats,
 		largestSentPacketNumber:    protocol.InvalidPacketNumber,
 		largestAckedPacketNumber:   protocol.InvalidPacketNumber,
@@ -88,13 +90,20 @@ func newCubicSender(clock Clock, rttStats *RTTStats, reno bool, initialCongestio
 		maxCongestionWindow:        initialMaxCongestionWindow,
 		numConnections:             defaultNumConnections,
 		cubic:                      NewCubic(clock),
+		clock:                      clock,
 		reno:                       reno,
 	}
+	c.pacer = newPacer(c.BandwidthEstimate)
+	return c
 }
 
 // TimeUntilSend returns when the next packet should be sent.
-func (c *cubicSender) TimeUntilSend(bytesInFlight protocol.ByteCount) time.Duration {
-	return c.rttStats.SmoothedRTT() * time.Duration(maxDatagramSize) / time.Duration(2*c.GetCongestionWindow())
+func (c *cubicSender) TimeUntilSend(_ protocol.ByteCount) time.Time {
+	return c.pacer.TimeUntilSend()
+}
+
+func (c *cubicSender) HasPacingBudget() bool {
+	return c.pacer.Budget(c.clock.Now()) >= maxDatagramSize
 }
 
 func (c *cubicSender) OnPacketSent(
@@ -104,6 +113,7 @@ func (c *cubicSender) OnPacketSent(
 	bytes protocol.ByteCount,
 	isRetransmittable bool,
 ) {
+	c.pacer.SentPacket(sentTime, bytes)
 	if !isRetransmittable {
 		return
 	}
