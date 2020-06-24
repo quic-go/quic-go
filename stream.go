@@ -149,10 +149,6 @@ func (s *stream) closeForShutdown(err error) {
 	s.receiveStream.closeForShutdown(err)
 }
 
-func (s *stream) handleResetStreamFrame(frame *wire.ResetStreamFrame) error {
-	return s.receiveStream.handleResetStreamFrame(frame)
-}
-
 // checkIfCompleted is called from the uniStreamSender, when one of the stream halves is completed.
 // It makes sure that the onStreamCompleted callback is only called if both receive and send side have completed.
 func (s *stream) checkIfCompleted() {
