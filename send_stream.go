@@ -173,6 +173,9 @@ func (s *sendStream) Write(p []byte) (int, error) {
 		s.mutex.Lock()
 	}
 
+	if bytesWritten == len(p) {
+		return bytesWritten, nil
+	}
 	if s.closeForShutdownErr != nil {
 		return bytesWritten, s.closeForShutdownErr
 	} else if s.cancelWriteErr != nil {
