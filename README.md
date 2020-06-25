@@ -19,7 +19,7 @@ If you want to use quic-go as a library in other projects, please consider using
 
 ## Guides
 
-*We currently support both Go 1.13.x and Go 1.14+, with [Go modules](https://github.com/golang/go/wiki/Modules) support enabled.*
+*We currently support Go 1.14+, with [Go modules](https://github.com/golang/go/wiki/Modules) support enabled.*
 
 Running tests:
 

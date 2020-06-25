@@ -50,6 +50,16 @@ type ErrorCode = protocol.ApplicationErrorCode
 
 // Stream is the interface implemented by QUIC streams
 type Stream interface {
+	ReceiveStream
+	SendStream
+	// SetDeadline sets the read and write deadlines associated
+	// with the connection. It is equivalent to calling both
+	// SetReadDeadline and SetWriteDeadline.
+	SetDeadline(t time.Time) error
+}
+
+// A ReceiveStream is a unidirectional Receive Stream.
+type ReceiveStream interface {
 	// StreamID returns the stream ID.
 	StreamID() StreamID
 	// Read reads data from the stream.
@@ -60,6 +70,22 @@ type Stream interface {
 	// If the session was closed due to a timeout, the error satisfies
 	// the net.Error interface, and Timeout() will be true.
 	io.Reader
+	// CancelRead aborts receiving on this stream.
+	// It will ask the peer to stop transmitting stream data.
+	// Read will unblock immediately, and future Read calls will fail.
+	// When called multiple times or after reading the io.EOF it is a no-op.
+	CancelRead(ErrorCode)
+	// SetReadDeadline sets the deadline for future Read calls and
+	// any currently-blocked Read call.
+	// A zero value for t means Read will not time out.
+
+	SetReadDeadline(t time.Time) error
+}
+
+// A SendStream is a unidirectional Send Stream.
+type SendStream interface {
+	// StreamID returns the stream ID.
+	StreamID() StreamID
 	// Write writes data to the stream.
 	// Write can be made to time out and return a net.Error with Timeout() == true
 	// after a fixed time limit; see SetDeadline and SetWriteDeadline.
@@ -78,57 +104,16 @@ type Stream interface {
 	// Write will unblock immediately, and future calls to Write will fail.
 	// When called multiple times or after closing the stream it is a no-op.
 	CancelWrite(ErrorCode)
-	// CancelRead aborts receiving on this stream.
-	// It will ask the peer to stop transmitting stream data.
-	// Read will unblock immediately, and future Read calls will fail.
-	// When called multiple times or after reading the io.EOF it is a no-op.
-	CancelRead(ErrorCode)
 	// The context is canceled as soon as the write-side of the stream is closed.
 	// This happens when Close() or CancelWrite() is called, or when the peer
 	// cancels the read-side of their stream.
 	// Warning: This API should not be considered stable and might change soon.
 	Context() context.Context
-	// SetReadDeadline sets the deadline for future Read calls and
-	// any currently-blocked Read call.
-	// A zero value for t means Read will not time out.
-	SetReadDeadline(t time.Time) error
 	// SetWriteDeadline sets the deadline for future Write calls
 	// and any currently-blocked Write call.
 	// Even if write times out, it may return n > 0, indicating that
 	// some of the data was successfully written.
 	// A zero value for t means Write will not time out.
-	SetWriteDeadline(t time.Time) error
-	// SetDeadline sets the read and write deadlines associated
-	// with the connection. It is equivalent to calling both
-	// SetReadDeadline and SetWriteDeadline.
-	SetDeadline(t time.Time) error
-}
-
-// A ReceiveStream is a unidirectional Receive Stream.
-type ReceiveStream interface {
-	// see Stream.StreamID
-	StreamID() StreamID
-	// see Stream.Read
-	io.Reader
-	// see Stream.CancelRead
-	CancelRead(ErrorCode)
-	// see Stream.SetReadDealine
-	SetReadDeadline(t time.Time) error
-}
-
-// A SendStream is a unidirectional Send Stream.
-type SendStream interface {
-	// see Stream.StreamID
-	StreamID() StreamID
-	// see Stream.Write
-	io.Writer
-	// see Stream.Close
-	io.Closer
-	// see Stream.CancelWrite
-	CancelWrite(ErrorCode)
-	// see Stream.Context
-	Context() context.Context
-	// see Stream.SetWriteDeadline
 	SetWriteDeadline(t time.Time) error
 }
 
