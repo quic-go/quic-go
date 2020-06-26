@@ -85,13 +85,13 @@ type TransportParameters struct {
 
 // Unmarshal the transport parameters
 func (p *TransportParameters) Unmarshal(data []byte, sentBy protocol.Perspective) error {
-	if err := p.unmarshal(data, sentBy, false); err != nil {
+	if err := p.unmarshal(bytes.NewReader(data), sentBy, false); err != nil {
 		return qerr.NewError(qerr.TransportParameterError, err.Error())
 	}
 	return nil
 }
 
-func (p *TransportParameters) unmarshal(data []byte, sentBy protocol.Perspective, fromSessionTicket bool) error {
+func (p *TransportParameters) unmarshal(r *bytes.Reader, sentBy protocol.Perspective, fromSessionTicket bool) error {
 	// needed to check that every parameter is only sent at most once
 	var parameterIDs []transportParameterID
 
@@ -102,7 +102,6 @@ func (p *TransportParameters) unmarshal(data []byte, sentBy protocol.Perspective
 		readInitialSourceConnectionID       bool
 	)
 
-	r := bytes.NewReader(data)
 	for r.Len() > 0 {
 		paramIDInt, err := utils.ReadVarInt(r)
 		if err != nil {
@@ -429,8 +428,7 @@ func (p *TransportParameters) MarshalForSessionTicket(b *bytes.Buffer) {
 }
 
 // UnmarshalFromSessionTicket unmarshals transport parameters from a session ticket.
-func (p *TransportParameters) UnmarshalFromSessionTicket(data []byte) error {
-	r := bytes.NewReader(data)
+func (p *TransportParameters) UnmarshalFromSessionTicket(r *bytes.Reader) error {
 	version, err := utils.ReadVarInt(r)
 	if err != nil {
 		return err
@@ -438,7 +436,7 @@ func (p *TransportParameters) UnmarshalFromSessionTicket(data []byte) error {
 	if version != transportParameterMarshalingVersion {
 		return fmt.Errorf("unknown transport parameter marshaling version: %d", version)
 	}
-	return p.unmarshal(data[len(data)-r.Len():], protocol.PerspectiveServer, true)
+	return p.unmarshal(r, protocol.PerspectiveServer, true)
 }
 
 // ValidFor0RTT checks if the transport parameters match those saved in the session ticket.

@@ -96,7 +96,7 @@ func tlsConfigToQtlsConfig(
 	}
 	var csc qtls.ClientSessionCache
 	if c.ClientSessionCache != nil {
-		csc = newClientSessionCache(c.ClientSessionCache, rttStats, getDataForSessionState, setDataFromSessionState)
+		csc = &clientSessionCache{c.ClientSessionCache}
 	}
 	conf := &qtls.Config{
 		Rand:         c.Rand,
@@ -126,18 +126,50 @@ func tlsConfigToQtlsConfig(
 		CurvePreferences:            c.CurvePreferences,
 		DynamicRecordSizingDisabled: c.DynamicRecordSizingDisabled,
 		// no need to copy Renegotiation, it's not supported by TLS 1.3
-		KeyLogWriter:           c.KeyLogWriter,
-		AlternativeRecordLayer: recordLayer,
-		GetExtensions:          extHandler.GetExtensions,
-		ReceivedExtensions:     extHandler.ReceivedExtensions,
-		Accept0RTT:             accept0RTT,
-		Rejected0RTT:           rejected0RTT,
+		KeyLogWriter:               c.KeyLogWriter,
+		AlternativeRecordLayer:     recordLayer,
+		GetExtensions:              extHandler.GetExtensions,
+		ReceivedExtensions:         extHandler.ReceivedExtensions,
+		Accept0RTT:                 accept0RTT,
+		Rejected0RTT:               rejected0RTT,
+		GetAppDataForSessionState:  getDataForSessionState,
+		SetAppDataFromSessionState: setDataFromSessionState,
 	}
 	if enable0RTT {
 		conf.Enable0RTT = true
 		conf.MaxEarlyData = 0xffffffff
 	}
 	return conf
+}
+
+type clientSessionCache struct {
+	tls.ClientSessionCache
+}
+
+var _ qtls.ClientSessionCache = &clientSessionCache{}
+
+func (c *clientSessionCache) Get(sessionKey string) (*qtls.ClientSessionState, bool) {
+	sess, ok := c.ClientSessionCache.Get(sessionKey)
+	if sess == nil {
+		return nil, ok
+	}
+	// qtls.ClientSessionState is identical to the tls.ClientSessionState.
+	// In order to allow users of quic-go to use a tls.Config,
+	// we need this workaround to use the ClientSessionCache.
+	// In unsafe.go we check that the two structs are actually identical.
+	return (*qtls.ClientSessionState)(unsafe.Pointer(sess)), ok
+}
+
+func (c *clientSessionCache) Put(sessionKey string, cs *qtls.ClientSessionState) {
+	if cs == nil {
+		c.ClientSessionCache.Put(sessionKey, nil)
+		return
+	}
+	// qtls.ClientSessionState is identical to the tls.ClientSessionState.
+	// In order to allow users of quic-go to use a tls.Config,
+	// we need this workaround to use the ClientSessionCache.
+	// In unsafe.go we check that the two structs are actually identical.
+	c.ClientSessionCache.Put(sessionKey, (*tls.ClientSessionState)(unsafe.Pointer(cs)))
 }
 
 type clientHelloInfo struct {
