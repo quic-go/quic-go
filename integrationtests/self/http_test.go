@@ -1,6 +1,7 @@
 package self_test
 
 import (
+	"bufio"
 	"bytes"
 	"compress/gzip"
 	"context"
@@ -279,6 +280,44 @@ var _ = Describe("HTTP tests", func() {
 				Eventually(handlerCalled).Should(BeClosed())
 				_, err = resp.Body.Read([]byte{0})
 				Expect(err).To(HaveOccurred())
+			})
+
+			It("allows streamed HTTP requests", func() {
+				done := make(chan struct{})
+				mux.HandleFunc("/echoline", func(w http.ResponseWriter, r *http.Request) {
+					defer GinkgoRecover()
+					defer close(done)
+					w.WriteHeader(200)
+					w.(http.Flusher).Flush()
+					reader := bufio.NewReader(r.Body)
+					for {
+						msg, err := reader.ReadString('\n')
+						if err != nil {
+							return
+						}
+						_, err = w.Write([]byte(msg))
+						Expect(err).ToNot(HaveOccurred())
+						w.(http.Flusher).Flush()
+					}
+				})
+
+				r, w := io.Pipe()
+				req, err := http.NewRequest("PUT", "https://localhost:"+port+"/echoline", r)
+				Expect(err).ToNot(HaveOccurred())
+				rsp, err := client.Do(req)
+				Expect(err).ToNot(HaveOccurred())
+				Expect(rsp.StatusCode).To(Equal(200))
+
+				reader := bufio.NewReader(rsp.Body)
+				for i := 0; i < 5; i++ {
+					msg := fmt.Sprintf("Hello world, %d!\n", i)
+					fmt.Fprint(w, msg)
+					msgRcvd, err := reader.ReadString('\n')
+					Expect(err).ToNot(HaveOccurred())
+					Expect(msgRcvd).To(Equal(msg))
+				}
+				Expect(req.Body.Close()).To(Succeed())
+				Eventually(done).Should(BeClosed())
 			})
 		})
 	}
