@@ -660,7 +660,7 @@ func (h *cryptoSetup) WriteRecord(p []byte) (int, error) {
 				h.logger.Debugf("Doing 0-RTT.")
 				h.clientHelloWrittenChan <- h.zeroRTTParameters
 			} else {
-				h.logger.Debugf("Not doing 0-RTT. Has Sealer: %t, has params: %t", h.zeroRTTSealer != nil, h.zeroRTTParameters != nil)
+				h.logger.Debugf("Not doing 0-RTT.")
 				h.clientHelloWrittenChan <- nil
 			}
 		} else {
