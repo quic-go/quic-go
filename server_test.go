@@ -234,8 +234,9 @@ var _ = Describe("Server", func() {
 			It("drops non-Initial packets", func() {
 				serv.handlePacket(getPacket(
 					&wire.Header{
-						Type:    protocol.PacketTypeHandshake,
-						Version: serv.config.Versions[0],
+						IsLongHeader: true,
+						Type:         protocol.PacketTypeHandshake,
+						Version:      serv.config.Versions[0],
 					},
 					[]byte("invalid"),
 				))

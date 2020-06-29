@@ -322,7 +322,7 @@ func (s *baseServer) handlePacketImpl(p *receivedPacket) bool /* should the buff
 	}
 	// Short header packets should never end up here in the first place
 	if !hdr.IsLongHeader {
-		return false
+		panic(fmt.Sprintf("misrouted packet: %#v", hdr))
 	}
 	if hdr.Type == protocol.PacketTypeInitial && len(p.data) < protocol.MinInitialPacketSize {
 		s.logger.Debugf("Dropping a packet that is too small to be a valid Initial (%d bytes)", len(p.data))
