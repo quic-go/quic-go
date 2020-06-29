@@ -10,7 +10,7 @@ import (
 	"github.com/lucas-clemente/quic-go/internal/qerr"
 	"github.com/lucas-clemente/quic-go/internal/utils"
 	"github.com/lucas-clemente/quic-go/internal/wire"
-	"github.com/lucas-clemente/quic-go/qlog"
+	"github.com/lucas-clemente/quic-go/logging"
 	"github.com/lucas-clemente/quic-go/quictrace"
 )
 
@@ -84,7 +84,7 @@ type sentPacketHandler struct {
 	perspective protocol.Perspective
 
 	traceCallback func(quictrace.Event)
-	qlogger       qlog.Tracer
+	qlogger       logging.Tracer
 	logger        utils.Logger
 }
 
@@ -96,7 +96,7 @@ func newSentPacketHandler(
 	rttStats *congestion.RTTStats,
 	pers protocol.Perspective,
 	traceCallback func(quictrace.Event),
-	qlogger qlog.Tracer,
+	qlogger logging.Tracer,
 	logger utils.Logger,
 ) *sentPacketHandler {
 	congestion := congestion.NewCubicSender(
@@ -477,7 +477,7 @@ func (h *sentPacketHandler) setLossDetectionTimer() {
 		// Early retransmit timer or time loss detection.
 		h.alarm = lossTime
 		if h.qlogger != nil && h.alarm != oldAlarm {
-			h.qlogger.SetLossTimer(qlog.TimerTypeACK, encLevel, h.alarm)
+			h.qlogger.SetLossTimer(logging.TimerTypeACK, encLevel, h.alarm)
 		}
 		return
 	}
@@ -496,7 +496,7 @@ func (h *sentPacketHandler) setLossDetectionTimer() {
 	ptoTime, encLevel := h.getPTOTimeAndSpace()
 	h.alarm = ptoTime
 	if h.qlogger != nil && h.alarm != oldAlarm {
-		h.qlogger.SetLossTimer(qlog.TimerTypePTO, encLevel, h.alarm)
+		h.qlogger.SetLossTimer(logging.TimerTypePTO, encLevel, h.alarm)
 	}
 }
 
@@ -522,12 +522,12 @@ func (h *sentPacketHandler) detectAndRemoveLostPackets(now time.Time, encLevel p
 		if packet.SendTime.Before(lostSendTime) {
 			lostPackets = append(lostPackets, packet)
 			if h.qlogger != nil {
-				h.qlogger.LostPacket(packet.EncryptionLevel, packet.PacketNumber, qlog.PacketLossTimeThreshold)
+				h.qlogger.LostPacket(packet.EncryptionLevel, packet.PacketNumber, logging.PacketLossTimeThreshold)
 			}
 		} else if pnSpace.largestAcked >= packet.PacketNumber+packetThreshold {
 			lostPackets = append(lostPackets, packet)
 			if h.qlogger != nil {
-				h.qlogger.LostPacket(packet.EncryptionLevel, packet.PacketNumber, qlog.PacketLossReorderingThreshold)
+				h.qlogger.LostPacket(packet.EncryptionLevel, packet.PacketNumber, logging.PacketLossReorderingThreshold)
 			}
 		} else if pnSpace.lossTime.IsZero() {
 			// Note: This conditional is only entered once per call
@@ -599,7 +599,7 @@ func (h *sentPacketHandler) onVerifiedLossDetectionTimeout() error {
 			h.logger.Debugf("Loss detection alarm fired in loss timer mode. Loss time: %s", earliestLossTime)
 		}
 		if h.qlogger != nil {
-			h.qlogger.LossTimerExpired(qlog.TimerTypeACK, encLevel)
+			h.qlogger.LossTimerExpired(logging.TimerTypeACK, encLevel)
 		}
 		// Early retransmit or time loss detection
 		priorInFlight := h.bytesInFlight
@@ -621,7 +621,7 @@ func (h *sentPacketHandler) onVerifiedLossDetectionTimeout() error {
 			h.logger.Debugf("Loss detection alarm for %s fired in PTO mode. PTO count: %d", encLevel, h.ptoCount)
 		}
 		if h.qlogger != nil {
-			h.qlogger.LossTimerExpired(qlog.TimerTypePTO, encLevel)
+			h.qlogger.LossTimerExpired(logging.TimerTypePTO, encLevel)
 			h.qlogger.UpdatedPTOCount(h.ptoCount)
 		}
 		h.numProbesToSend += 2

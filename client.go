@@ -11,6 +11,7 @@ import (
 
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/internal/utils"
+	"github.com/lucas-clemente/quic-go/logging"
 	"github.com/lucas-clemente/quic-go/qlog"
 )
 
@@ -40,7 +41,7 @@ type client struct {
 
 	session quicSession
 
-	qlogger qlog.Tracer
+	qlogger logging.Tracer
 	logger  utils.Logger
 }
 

@@ -11,6 +11,7 @@ import (
 	"github.com/lucas-clemente/quic-go/internal/congestion"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/internal/wire"
+	"github.com/lucas-clemente/quic-go/logging"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -48,7 +49,7 @@ type entry struct {
 
 var _ = Describe("Tracer", func() {
 	var (
-		tracer Tracer
+		tracer logging.Tracer
 		buf    *bytes.Buffer
 	)
 
@@ -159,7 +160,7 @@ var _ = Describe("Tracer", func() {
 		})
 
 		It("records connection closes", func() {
-			tracer.ClosedConnection(CloseReasonIdleTimeout)
+			tracer.ClosedConnection(logging.CloseReasonIdleTimeout)
 			entry := exportAndParseSingle()
 			Expect(entry.Time).To(BeTemporally("~", time.Now(), scaleDuration(10*time.Millisecond)))
 			Expect(entry.Category).To(Equal("transport"))
@@ -402,7 +403,7 @@ var _ = Describe("Tracer", func() {
 		})
 
 		It("records buffered packets", func() {
-			tracer.BufferedPacket(PacketTypeHandshake)
+			tracer.BufferedPacket(logging.PacketTypeHandshake)
 			entry := exportAndParseSingle()
 			Expect(entry.Time).To(BeTemporally("~", time.Now(), scaleDuration(10*time.Millisecond)))
 			Expect(entry.Category).To(Equal("transport"))
@@ -413,7 +414,7 @@ var _ = Describe("Tracer", func() {
 		})
 
 		It("records dropped packets", func() {
-			tracer.DroppedPacket(PacketTypeHandshake, 1337, PacketDropPayloadDecryptError)
+			tracer.DroppedPacket(logging.PacketTypeHandshake, 1337, logging.PacketDropPayloadDecryptError)
 			entry := exportAndParseSingle()
 			Expect(entry.Time).To(BeTemporally("~", time.Now(), scaleDuration(10*time.Millisecond)))
 			Expect(entry.Category).To(Equal("transport"))
@@ -503,7 +504,7 @@ var _ = Describe("Tracer", func() {
 		})
 
 		It("records lost packets", func() {
-			tracer.LostPacket(protocol.EncryptionHandshake, 42, PacketLossReorderingThreshold)
+			tracer.LostPacket(protocol.EncryptionHandshake, 42, logging.PacketLossReorderingThreshold)
 			entry := exportAndParseSingle()
 			Expect(entry.Time).To(BeTemporally("~", time.Now(), scaleDuration(10*time.Millisecond)))
 			Expect(entry.Category).To(Equal("recovery"))
@@ -576,7 +577,7 @@ var _ = Describe("Tracer", func() {
 
 		It("records when the timer is set", func() {
 			timeout := time.Now().Add(137 * time.Millisecond)
-			tracer.SetLossTimer(TimerTypePTO, protocol.EncryptionHandshake, timeout)
+			tracer.SetLossTimer(logging.TimerTypePTO, protocol.EncryptionHandshake, timeout)
 			entry := exportAndParseSingle()
 			Expect(entry.Time).To(BeTemporally("~", time.Now(), scaleDuration(10*time.Millisecond)))
 			Expect(entry.Category).To(Equal("recovery"))
@@ -592,7 +593,7 @@ var _ = Describe("Tracer", func() {
 		})
 
 		It("records when the loss timer expires", func() {
-			tracer.LossTimerExpired(TimerTypeACK, protocol.Encryption1RTT)
+			tracer.LossTimerExpired(logging.TimerTypeACK, protocol.Encryption1RTT)
 			entry := exportAndParseSingle()
 			Expect(entry.Time).To(BeTemporally("~", time.Now(), scaleDuration(10*time.Millisecond)))
 			Expect(entry.Category).To(Equal("recovery"))

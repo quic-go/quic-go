@@ -21,7 +21,7 @@ import (
 	"github.com/lucas-clemente/quic-go/internal/testutils"
 	"github.com/lucas-clemente/quic-go/internal/utils"
 	"github.com/lucas-clemente/quic-go/internal/wire"
-	"github.com/lucas-clemente/quic-go/qlog"
+	"github.com/lucas-clemente/quic-go/logging"
 
 	"github.com/golang/mock/gomock"
 
@@ -587,14 +587,14 @@ var _ = Describe("Session", func() {
 				Version:          sess.version,
 				Token:            []byte("foobar"),
 			}}, make([]byte, 16) /* Retry integrity tag */)
-			qlogger.EXPECT().DroppedPacket(qlog.PacketTypeRetry, protocol.ByteCount(len(p.data)), qlog.PacketDropUnexpectedPacket)
+			qlogger.EXPECT().DroppedPacket(logging.PacketTypeRetry, protocol.ByteCount(len(p.data)), logging.PacketDropUnexpectedPacket)
 			Expect(sess.handlePacketImpl(p)).To(BeFalse())
 		})
 
 		It("drops Version Negotiation packets", func() {
 			b, err := wire.ComposeVersionNegotiation(srcConnID, destConnID, sess.config.Versions)
 			Expect(err).ToNot(HaveOccurred())
-			qlogger.EXPECT().DroppedPacket(qlog.PacketTypeVersionNegotiation, protocol.ByteCount(len(b)), qlog.PacketDropUnexpectedPacket)
+			qlogger.EXPECT().DroppedPacket(logging.PacketTypeVersionNegotiation, protocol.ByteCount(len(b)), logging.PacketDropUnexpectedPacket)
 			Expect(sess.handlePacketImpl(&receivedPacket{
 				data:   b,
 				buffer: getPacketBuffer(),
@@ -611,7 +611,7 @@ var _ = Describe("Session", func() {
 				PacketNumberLen: protocol.PacketNumberLen2,
 			}, nil)
 			p.data[0] ^= 0x40 // unset the QUIC bit
-			qlogger.EXPECT().DroppedPacket(qlog.PacketTypeNotDetermined, protocol.ByteCount(len(p.data)), qlog.PacketDropHeaderParseError)
+			qlogger.EXPECT().DroppedPacket(logging.PacketTypeNotDetermined, protocol.ByteCount(len(p.data)), logging.PacketDropHeaderParseError)
 			Expect(sess.handlePacketImpl(p)).To(BeFalse())
 		})
 
@@ -624,7 +624,7 @@ var _ = Describe("Session", func() {
 				},
 				PacketNumberLen: protocol.PacketNumberLen2,
 			}, nil)
-			qlogger.EXPECT().DroppedPacket(qlog.PacketTypeNotDetermined, protocol.ByteCount(len(p.data)), qlog.PacketDropUnsupportedVersion)
+			qlogger.EXPECT().DroppedPacket(logging.PacketTypeNotDetermined, protocol.ByteCount(len(p.data)), logging.PacketDropUnsupportedVersion)
 			Expect(sess.handlePacketImpl(p)).To(BeFalse())
 		})
 
@@ -646,7 +646,7 @@ var _ = Describe("Session", func() {
 				},
 				PacketNumberLen: protocol.PacketNumberLen2,
 			}, nil)
-			qlogger.EXPECT().DroppedPacket(qlog.PacketTypeHandshake, protocol.ByteCount(len(p.data)), qlog.PacketDropUnexpectedVersion)
+			qlogger.EXPECT().DroppedPacket(logging.PacketTypeHandshake, protocol.ByteCount(len(p.data)), logging.PacketDropUnexpectedVersion)
 			Expect(sess.handlePacketImpl(p)).To(BeFalse())
 		})
 
@@ -720,7 +720,7 @@ var _ = Describe("Session", func() {
 			rph := mockackhandler.NewMockReceivedPacketHandler(mockCtrl)
 			rph.EXPECT().IsPotentiallyDuplicate(protocol.PacketNumber(0x1337), protocol.Encryption1RTT).Return(true)
 			sess.receivedPacketHandler = rph
-			qlogger.EXPECT().DroppedPacket(qlog.PacketType1RTT, protocol.ByteCount(len(packet.data)), qlog.PacketDropDuplicate)
+			qlogger.EXPECT().DroppedPacket(logging.PacketType1RTT, protocol.ByteCount(len(packet.data)), logging.PacketDropDuplicate)
 			Expect(sess.handlePacketImpl(packet)).To(BeFalse())
 		})
 
@@ -746,7 +746,7 @@ var _ = Describe("Session", func() {
 				PacketNumber:    0x1337,
 				PacketNumberLen: protocol.PacketNumberLen2,
 			}, []byte("foobar"))
-			qlogger.EXPECT().DroppedPacket(qlog.PacketTypeHandshake, protocol.ByteCount(len(p.data)), qlog.PacketDropPayloadDecryptError)
+			qlogger.EXPECT().DroppedPacket(logging.PacketTypeHandshake, protocol.ByteCount(len(p.data)), logging.PacketDropPayloadDecryptError)
 			sess.handlePacket(p)
 			Consistently(sess.Context().Done()).ShouldNot(BeClosed())
 			// make the go routine return
@@ -794,7 +794,7 @@ var _ = Describe("Session", func() {
 				runErr <- sess.run()
 			}()
 			expectReplaceWithClosed()
-			qlogger.EXPECT().DroppedPacket(qlog.PacketType1RTT, gomock.Any(), qlog.PacketDropPayloadDecryptError)
+			qlogger.EXPECT().DroppedPacket(logging.PacketType1RTT, gomock.Any(), logging.PacketDropPayloadDecryptError)
 			sess.handlePacket(getPacket(&wire.ExtendedHeader{
 				Header:          wire.Header{DestConnectionID: srcConnID},
 				PacketNumberLen: protocol.PacketNumberLen1,
@@ -872,7 +872,7 @@ var _ = Describe("Session", func() {
 			Expect(sess.handlePacketImpl(p1)).To(BeTrue())
 			// The next packet has to be ignored, since the source connection ID doesn't match.
 			p2 := getPacket(hdr2, nil)
-			qlogger.EXPECT().DroppedPacket(qlog.PacketTypeHandshake, protocol.ByteCount(len(p2.data)), qlog.PacketDropUnknownConnectionID)
+			qlogger.EXPECT().DroppedPacket(logging.PacketTypeHandshake, protocol.ByteCount(len(p2.data)), logging.PacketDropUnknownConnectionID)
 			Expect(sess.handlePacketImpl(p2)).To(BeFalse())
 		})
 
@@ -892,7 +892,7 @@ var _ = Describe("Session", func() {
 			}
 			unpacker.EXPECT().Unpack(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil, handshake.ErrKeysNotYetAvailable)
 			packet := getPacket(hdr, nil)
-			qlogger.EXPECT().BufferedPacket(qlog.PacketTypeHandshake)
+			qlogger.EXPECT().BufferedPacket(logging.PacketTypeHandshake)
 			Expect(sess.handlePacketImpl(packet)).To(BeFalse())
 			Expect(sess.undecryptablePackets).To(Equal([]*receivedPacket{packet}))
 		})
@@ -1023,7 +1023,7 @@ var _ = Describe("Session", func() {
 				// don't EXPECT any more calls to unpacker.Unpack()
 				gomock.InOrder(
 					qlogger.EXPECT().ReceivedPacket(gomock.Any(), protocol.ByteCount(len(packet1.data)), gomock.Any()),
-					qlogger.EXPECT().DroppedPacket(gomock.Any(), protocol.ByteCount(len(packet2.data)), qlog.PacketDropUnknownConnectionID),
+					qlogger.EXPECT().DroppedPacket(gomock.Any(), protocol.ByteCount(len(packet2.data)), logging.PacketDropUnknownConnectionID),
 				)
 				packet1.data = append(packet1.data, packet2.data...)
 				Expect(sess.handlePacketImpl(packet1)).To(BeTrue())
@@ -1789,7 +1789,7 @@ var _ = Describe("Session", func() {
 			done := make(chan struct{})
 			cryptoSetup.EXPECT().Close()
 			gomock.InOrder(
-				qlogger.EXPECT().ClosedConnection(qlog.CloseReasonIdleTimeout),
+				qlogger.EXPECT().ClosedConnection(logging.CloseReasonIdleTimeout),
 				qlogger.EXPECT().Export(),
 			)
 			go func() {
@@ -1811,7 +1811,7 @@ var _ = Describe("Session", func() {
 			sessionRunner.EXPECT().Remove(gomock.Any()).Times(2)
 			cryptoSetup.EXPECT().Close()
 			gomock.InOrder(
-				qlogger.EXPECT().ClosedConnection(qlog.CloseReasonHandshakeTimeout),
+				qlogger.EXPECT().ClosedConnection(logging.CloseReasonHandshakeTimeout),
 				qlogger.EXPECT().Export(),
 			)
 			done := make(chan struct{})
@@ -1861,7 +1861,7 @@ var _ = Describe("Session", func() {
 			)
 			cryptoSetup.EXPECT().Close()
 			gomock.InOrder(
-				qlogger.EXPECT().ClosedConnection(qlog.CloseReasonIdleTimeout),
+				qlogger.EXPECT().ClosedConnection(logging.CloseReasonIdleTimeout),
 				qlogger.EXPECT().Export(),
 			)
 			sess.idleTimeout = 0
@@ -2195,14 +2195,14 @@ var _ = Describe("Client Session", func() {
 
 		It("ignores Version Negotiation packets that offer the current version", func() {
 			p := getVNP(sess.version)
-			qlogger.EXPECT().DroppedPacket(qlog.PacketTypeVersionNegotiation, protocol.ByteCount(len(p.data)), qlog.PacketDropUnexpectedVersion)
+			qlogger.EXPECT().DroppedPacket(logging.PacketTypeVersionNegotiation, protocol.ByteCount(len(p.data)), logging.PacketDropUnexpectedVersion)
 			Expect(sess.handlePacketImpl(p)).To(BeFalse())
 		})
 
 		It("ignores unparseable Version Negotiation packets", func() {
 			p := getVNP(sess.version)
 			p.data = p.data[:len(p.data)-2]
-			qlogger.EXPECT().DroppedPacket(qlog.PacketTypeVersionNegotiation, protocol.ByteCount(len(p.data)), qlog.PacketDropHeaderParseError)
+			qlogger.EXPECT().DroppedPacket(logging.PacketTypeVersionNegotiation, protocol.ByteCount(len(p.data)), logging.PacketDropHeaderParseError)
 			Expect(sess.handlePacketImpl(p)).To(BeFalse())
 		})
 	})
@@ -2249,14 +2249,14 @@ var _ = Describe("Client Session", func() {
 		It("ignores Retry packets after receiving a regular packet", func() {
 			sess.receivedFirstPacket = true
 			p := getPacket(retryHdr, getRetryTag(retryHdr))
-			qlogger.EXPECT().DroppedPacket(qlog.PacketTypeRetry, protocol.ByteCount(len(p.data)), qlog.PacketDropUnexpectedPacket)
+			qlogger.EXPECT().DroppedPacket(logging.PacketTypeRetry, protocol.ByteCount(len(p.data)), logging.PacketDropUnexpectedPacket)
 			Expect(sess.handlePacketImpl(p)).To(BeFalse())
 		})
 
 		It("ignores Retry packets if the server didn't change the connection ID", func() {
 			retryHdr.SrcConnectionID = destConnID
 			p := getPacket(retryHdr, getRetryTag(retryHdr))
-			qlogger.EXPECT().DroppedPacket(qlog.PacketTypeRetry, protocol.ByteCount(len(p.data)), qlog.PacketDropUnexpectedPacket)
+			qlogger.EXPECT().DroppedPacket(logging.PacketTypeRetry, protocol.ByteCount(len(p.data)), logging.PacketDropUnexpectedPacket)
 			Expect(sess.handlePacketImpl(p)).To(BeFalse())
 		})
 
@@ -2264,7 +2264,7 @@ var _ = Describe("Client Session", func() {
 			tag := getRetryTag(retryHdr)
 			tag[0]++
 			p := getPacket(retryHdr, tag)
-			qlogger.EXPECT().DroppedPacket(qlog.PacketTypeRetry, protocol.ByteCount(len(p.data)), qlog.PacketDropPayloadDecryptError)
+			qlogger.EXPECT().DroppedPacket(logging.PacketTypeRetry, protocol.ByteCount(len(p.data)), logging.PacketDropPayloadDecryptError)
 			Expect(sess.handlePacketImpl(p)).To(BeFalse())
 		})
 	})
@@ -2490,7 +2490,7 @@ var _ = Describe("Client Session", func() {
 				PacketNumber:    0x42,
 				PacketNumberLen: protocol.PacketNumberLen2,
 			}, []byte("foobar"))
-			qlogger.EXPECT().DroppedPacket(qlog.PacketType0RTT, protocol.ByteCount(len(p.data)), gomock.Any())
+			qlogger.EXPECT().DroppedPacket(logging.PacketType0RTT, protocol.ByteCount(len(p.data)), gomock.Any())
 			Expect(sess.handlePacketImpl(p)).To(BeFalse())
 		})
 
