@@ -51,7 +51,7 @@ type entry struct {
 
 var _ = Describe("Tracer", func() {
 	var (
-		tracer logging.Tracer
+		tracer logging.ConnectionTracer
 		buf    *bytes.Buffer
 	)
 

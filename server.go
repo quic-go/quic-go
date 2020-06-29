@@ -87,7 +87,7 @@ type baseServer struct {
 		*tls.Config,
 		*handshake.TokenGenerator,
 		bool, /* enable 0-RTT */
-		logging.Tracer,
+		logging.ConnectionTracer,
 		utils.Logger,
 		protocol.VersionNumber,
 	) quicSession
@@ -447,7 +447,7 @@ func (s *baseServer) createNewSession(
 ) quicSession {
 	var sess quicSession
 	if added := s.sessionHandler.AddWithConnID(clientDestConnID, srcConnID, func() packetHandler {
-		var tracer logging.Tracer
+		var tracer logging.ConnectionTracer
 		if s.config.GetLogWriter != nil {
 			// Use the same connection ID that is passed to the client's GetLogWriter callback.
 			connID := clientDestConnID

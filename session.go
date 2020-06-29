@@ -204,7 +204,7 @@ type session struct {
 	traceCallback func(quictrace.Event)
 
 	logID  string
-	tracer logging.Tracer
+	tracer logging.ConnectionTracer
 	logger utils.Logger
 }
 
@@ -225,7 +225,7 @@ var newSession = func(
 	tlsConf *tls.Config,
 	tokenGenerator *handshake.TokenGenerator,
 	enable0RTT bool,
-	tracer logging.Tracer,
+	tracer logging.ConnectionTracer,
 	logger utils.Logger,
 	v protocol.VersionNumber,
 ) quicSession {
@@ -350,7 +350,7 @@ var newClientSession = func(
 	initialVersion protocol.VersionNumber,
 	enable0RTT bool,
 	hasNegotiatedVersion bool,
-	tracer logging.Tracer,
+	tracer logging.ConnectionTracer,
 	logger utils.Logger,
 	v protocol.VersionNumber,
 ) quicSession {

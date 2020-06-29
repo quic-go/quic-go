@@ -41,7 +41,7 @@ type client struct {
 
 	session quicSession
 
-	tracer logging.Tracer
+	tracer logging.ConnectionTracer
 	logger utils.Logger
 }
 

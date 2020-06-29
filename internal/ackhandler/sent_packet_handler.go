@@ -84,7 +84,7 @@ type sentPacketHandler struct {
 	perspective protocol.Perspective
 
 	traceCallback func(quictrace.Event)
-	tracer        logging.Tracer
+	tracer        logging.ConnectionTracer
 	logger        utils.Logger
 }
 
@@ -96,7 +96,7 @@ func newSentPacketHandler(
 	rttStats *congestion.RTTStats,
 	pers protocol.Perspective,
 	traceCallback func(quictrace.Event),
-	tracer logging.Tracer,
+	tracer logging.ConnectionTracer,
 	logger utils.Logger,
 ) *sentPacketHandler {
 	congestion := congestion.NewCubicSender(

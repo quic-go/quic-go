@@ -49,7 +49,7 @@ var _ = Describe("Session", func() {
 		streamManager *MockStreamManager
 		packer        *MockPacker
 		cryptoSetup   *mocks.MockCryptoSetup
-		tracer        *mocks.MockTracer
+		tracer        *mocks.MockConnectionTracer
 	)
 	remoteAddr := &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 1337}
 	localAddr := &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 7331}
@@ -87,7 +87,7 @@ var _ = Describe("Session", func() {
 		mconn.EXPECT().LocalAddr().Return(localAddr).AnyTimes()
 		tokenGenerator, err := handshake.NewTokenGenerator()
 		Expect(err).ToNot(HaveOccurred())
-		tracer = mocks.NewMockTracer(mockCtrl)
+		tracer = mocks.NewMockConnectionTracer(mockCtrl)
 		tracer.EXPECT().SentTransportParameters(gomock.Any())
 		tracer.EXPECT().UpdatedKeyFromTLS(gomock.Any(), gomock.Any()).AnyTimes()
 		sess = newSession(
@@ -1981,7 +1981,7 @@ var _ = Describe("Client Session", func() {
 		packer        *MockPacker
 		mconn         *MockConnection
 		cryptoSetup   *mocks.MockCryptoSetup
-		tracer        *mocks.MockTracer
+		tracer        *mocks.MockConnectionTracer
 		tlsConf       *tls.Config
 		quicConf      *Config
 	)
@@ -2020,7 +2020,7 @@ var _ = Describe("Client Session", func() {
 			tlsConf = &tls.Config{}
 		}
 		sessionRunner = NewMockSessionRunner(mockCtrl)
-		tracer = mocks.NewMockTracer(mockCtrl)
+		tracer = mocks.NewMockConnectionTracer(mockCtrl)
 		tracer.EXPECT().SentTransportParameters(gomock.Any())
 		tracer.EXPECT().UpdatedKeyFromTLS(gomock.Any(), gomock.Any()).AnyTimes()
 		sess = newClientSession(

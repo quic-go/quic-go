@@ -34,7 +34,7 @@ var _ = Describe("Client", func() {
 		mockMultiplexer *MockMultiplexer
 		origMultiplexer multiplexer
 		tlsConf         *tls.Config
-		tracer          *mocks.MockTracer
+		tracer          *mocks.MockConnectionTracer
 		config          *Config
 
 		originalClientSessConstructor func(
@@ -48,11 +48,11 @@ var _ = Describe("Client", func() {
 			initialVersion protocol.VersionNumber,
 			enable0RTT bool,
 			hasNegotiatedVersion bool,
-			tracer logging.Tracer,
+			tracer logging.ConnectionTracer,
 			logger utils.Logger,
 			v protocol.VersionNumber,
 		) quicSession
-		originalTracerConstructor func(io.WriteCloser, protocol.Perspective, protocol.ConnectionID) logging.Tracer
+		originalTracerConstructor func(io.WriteCloser, protocol.Perspective, protocol.ConnectionID) logging.ConnectionTracer
 	)
 
 	// generate a packet sent by the server that accepts the QUIC version suggested by the client
@@ -71,8 +71,8 @@ var _ = Describe("Client", func() {
 		connID = protocol.ConnectionID{0, 0, 0, 0, 0, 0, 0x13, 0x37}
 		originalClientSessConstructor = newClientSession
 		originalTracerConstructor = newTracer
-		tracer = mocks.NewMockTracer(mockCtrl)
-		newTracer = func(io.WriteCloser, protocol.Perspective, protocol.ConnectionID) logging.Tracer {
+		tracer = mocks.NewMockConnectionTracer(mockCtrl)
+		newTracer = func(io.WriteCloser, protocol.Perspective, protocol.ConnectionID) logging.ConnectionTracer {
 			return tracer
 		}
 		config = &Config{
@@ -161,7 +161,7 @@ var _ = Describe("Client", func() {
 				_ protocol.VersionNumber,
 				_ bool,
 				_ bool,
-				_ logging.Tracer,
+				_ logging.ConnectionTracer,
 				_ utils.Logger,
 				_ protocol.VersionNumber,
 			) quicSession {
@@ -194,7 +194,7 @@ var _ = Describe("Client", func() {
 				_ protocol.VersionNumber,
 				_ bool,
 				_ bool,
-				_ logging.Tracer,
+				_ logging.ConnectionTracer,
 				_ utils.Logger,
 				_ protocol.VersionNumber,
 			) quicSession {
@@ -227,7 +227,7 @@ var _ = Describe("Client", func() {
 				_ protocol.VersionNumber,
 				_ bool,
 				_ bool,
-				_ logging.Tracer,
+				_ logging.ConnectionTracer,
 				_ utils.Logger,
 				_ protocol.VersionNumber,
 			) quicSession {
@@ -266,7 +266,7 @@ var _ = Describe("Client", func() {
 				_ protocol.VersionNumber,
 				enable0RTT bool,
 				_ bool,
-				_ logging.Tracer,
+				_ logging.ConnectionTracer,
 				_ utils.Logger,
 				_ protocol.VersionNumber,
 			) quicSession {
@@ -309,7 +309,7 @@ var _ = Describe("Client", func() {
 				_ protocol.VersionNumber,
 				enable0RTT bool,
 				_ bool,
-				_ logging.Tracer,
+				_ logging.ConnectionTracer,
 				_ utils.Logger,
 				_ protocol.VersionNumber,
 			) quicSession {
@@ -357,7 +357,7 @@ var _ = Describe("Client", func() {
 				_ protocol.VersionNumber,
 				_ bool,
 				_ bool,
-				_ logging.Tracer,
+				_ logging.ConnectionTracer,
 				_ utils.Logger,
 				_ protocol.VersionNumber,
 			) quicSession {
@@ -401,7 +401,7 @@ var _ = Describe("Client", func() {
 				_ protocol.VersionNumber,
 				_ bool,
 				_ bool,
-				_ logging.Tracer,
+				_ logging.ConnectionTracer,
 				_ utils.Logger,
 				_ protocol.VersionNumber,
 			) quicSession {
@@ -453,7 +453,7 @@ var _ = Describe("Client", func() {
 				_ protocol.VersionNumber,
 				_ bool,
 				_ bool,
-				_ logging.Tracer,
+				_ logging.ConnectionTracer,
 				_ utils.Logger,
 				_ protocol.VersionNumber,
 			) quicSession {
@@ -574,7 +574,7 @@ var _ = Describe("Client", func() {
 				_ protocol.VersionNumber, /* initial version */
 				_ bool,
 				_ bool,
-				_ logging.Tracer,
+				_ logging.ConnectionTracer,
 				_ utils.Logger,
 				versionP protocol.VersionNumber,
 			) quicSession {
@@ -616,7 +616,7 @@ var _ = Describe("Client", func() {
 				version protocol.VersionNumber,
 				_ bool,
 				hasNegotiatedVersion bool,
-				_ logging.Tracer,
+				_ logging.ConnectionTracer,
 				_ utils.Logger,
 				versionP protocol.VersionNumber,
 			) quicSession {

@@ -11,8 +11,8 @@ import (
 	"github.com/lucas-clemente/quic-go/internal/wire"
 )
 
-// A Tracer records events.
-type Tracer interface {
+// A ConnectionTracer records events.
+type ConnectionTracer interface {
 	StartedConnection(local, remote net.Addr, version protocol.VersionNumber, srcConnID, destConnID protocol.ConnectionID)
 	ClosedConnection(CloseReason)
 	SentTransportParameters(*wire.TransportParameters)

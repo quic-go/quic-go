@@ -74,7 +74,7 @@ type updatableAEAD struct {
 
 	rttStats *congestion.RTTStats
 
-	tracer logging.Tracer
+	tracer logging.ConnectionTracer
 	logger utils.Logger
 
 	// use a single slice to avoid allocations
@@ -84,7 +84,7 @@ type updatableAEAD struct {
 var _ ShortHeaderOpener = &updatableAEAD{}
 var _ ShortHeaderSealer = &updatableAEAD{}
 
-func newUpdatableAEAD(rttStats *congestion.RTTStats, tracer logging.Tracer, logger utils.Logger) *updatableAEAD {
+func newUpdatableAEAD(rttStats *congestion.RTTStats, tracer logging.ConnectionTracer, logger utils.Logger) *updatableAEAD {
 	return &updatableAEAD{
 		firstPacketNumber:       protocol.InvalidPacketNumber,
 		largestAcked:            protocol.InvalidPacketNumber,

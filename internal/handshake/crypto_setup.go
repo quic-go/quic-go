@@ -94,7 +94,7 @@ type cryptoSetup struct {
 
 	rttStats *congestion.RTTStats
 
-	tracer logging.Tracer
+	tracer logging.ConnectionTracer
 	logger utils.Logger
 
 	perspective protocol.Perspective
@@ -137,7 +137,7 @@ func NewCryptoSetupClient(
 	tlsConf *tls.Config,
 	enable0RTT bool,
 	rttStats *congestion.RTTStats,
-	tracer logging.Tracer,
+	tracer logging.ConnectionTracer,
 	logger utils.Logger,
 ) (CryptoSetup, <-chan *wire.TransportParameters /* ClientHello written. Receive nil for non-0-RTT */) {
 	cs, clientHelloWritten := newCryptoSetup(
@@ -169,7 +169,7 @@ func NewCryptoSetupServer(
 	tlsConf *tls.Config,
 	enable0RTT bool,
 	rttStats *congestion.RTTStats,
-	tracer logging.Tracer,
+	tracer logging.ConnectionTracer,
 	logger utils.Logger,
 ) CryptoSetup {
 	cs, _ := newCryptoSetup(
@@ -198,7 +198,7 @@ func newCryptoSetup(
 	tlsConf *tls.Config,
 	enable0RTT bool,
 	rttStats *congestion.RTTStats,
-	tracer logging.Tracer,
+	tracer logging.ConnectionTracer,
 	logger utils.Logger,
 	perspective protocol.Perspective,
 ) (*cryptoSetup, <-chan *wire.TransportParameters /* ClientHello written. Receive nil for non-0-RTT */) {
