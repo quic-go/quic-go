@@ -74,8 +74,8 @@ type updatableAEAD struct {
 
 	rttStats *congestion.RTTStats
 
-	qlogger logging.Tracer
-	logger  utils.Logger
+	tracer logging.Tracer
+	logger utils.Logger
 
 	// use a single slice to avoid allocations
 	nonceBuf []byte
@@ -84,7 +84,7 @@ type updatableAEAD struct {
 var _ ShortHeaderOpener = &updatableAEAD{}
 var _ ShortHeaderSealer = &updatableAEAD{}
 
-func newUpdatableAEAD(rttStats *congestion.RTTStats, qlogger logging.Tracer, logger utils.Logger) *updatableAEAD {
+func newUpdatableAEAD(rttStats *congestion.RTTStats, tracer logging.Tracer, logger utils.Logger) *updatableAEAD {
 	return &updatableAEAD{
 		firstPacketNumber:       protocol.InvalidPacketNumber,
 		largestAcked:            protocol.InvalidPacketNumber,
@@ -92,7 +92,7 @@ func newUpdatableAEAD(rttStats *congestion.RTTStats, qlogger logging.Tracer, log
 		firstSentWithCurrentKey: protocol.InvalidPacketNumber,
 		keyUpdateInterval:       keyUpdateInterval,
 		rttStats:                rttStats,
-		qlogger:                 qlogger,
+		tracer:                  tracer,
 		logger:                  logger,
 	}
 }
@@ -183,8 +183,8 @@ func (a *updatableAEAD) Open(dst, src []byte, rcvTime time.Time, pn protocol.Pac
 		}
 		a.rollKeys(rcvTime)
 		a.logger.Debugf("Peer updated keys to %s", a.keyPhase)
-		if a.qlogger != nil {
-			a.qlogger.UpdatedKey(a.keyPhase, true)
+		if a.tracer != nil {
+			a.tracer.UpdatedKey(a.keyPhase, true)
 		}
 		a.firstRcvdWithCurrentKey = pn
 		return dec, err
@@ -244,8 +244,8 @@ func (a *updatableAEAD) shouldInitiateKeyUpdate() bool {
 
 func (a *updatableAEAD) KeyPhase() protocol.KeyPhaseBit {
 	if a.shouldInitiateKeyUpdate() {
-		if a.qlogger != nil {
-			a.qlogger.UpdatedKey(a.keyPhase, false)
+		if a.tracer != nil {
+			a.tracer.UpdatedKey(a.keyPhase, false)
 		}
 		a.rollKeys(time.Now())
 	}

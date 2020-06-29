@@ -447,7 +447,7 @@ func (s *baseServer) createNewSession(
 ) quicSession {
 	var sess quicSession
 	if added := s.sessionHandler.AddWithConnID(clientDestConnID, srcConnID, func() packetHandler {
-		var qlogger logging.Tracer
+		var tracer logging.Tracer
 		if s.config.GetLogWriter != nil {
 			// Use the same connection ID that is passed to the client's GetLogWriter callback.
 			connID := clientDestConnID
@@ -455,7 +455,7 @@ func (s *baseServer) createNewSession(
 				connID = origDestConnID
 			}
 			if w := s.config.GetLogWriter(connID); w != nil {
-				qlogger = qlog.NewTracer(w, protocol.PerspectiveServer, connID)
+				tracer = qlog.NewTracer(w, protocol.PerspectiveServer, connID)
 			}
 		}
 		sess = s.newSession(
@@ -471,7 +471,7 @@ func (s *baseServer) createNewSession(
 			s.tlsConf,
 			s.tokenGenerator,
 			s.acceptEarlySessions,
-			qlogger,
+			tracer,
 			s.logger,
 			version,
 		)

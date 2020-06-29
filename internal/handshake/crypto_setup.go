@@ -94,8 +94,8 @@ type cryptoSetup struct {
 
 	rttStats *congestion.RTTStats
 
-	qlogger logging.Tracer
-	logger  utils.Logger
+	tracer logging.Tracer
+	logger utils.Logger
 
 	perspective protocol.Perspective
 
@@ -137,7 +137,7 @@ func NewCryptoSetupClient(
 	tlsConf *tls.Config,
 	enable0RTT bool,
 	rttStats *congestion.RTTStats,
-	qlogger logging.Tracer,
+	tracer logging.Tracer,
 	logger utils.Logger,
 ) (CryptoSetup, <-chan *wire.TransportParameters /* ClientHello written. Receive nil for non-0-RTT */) {
 	cs, clientHelloWritten := newCryptoSetup(
@@ -149,7 +149,7 @@ func NewCryptoSetupClient(
 		tlsConf,
 		enable0RTT,
 		rttStats,
-		qlogger,
+		tracer,
 		logger,
 		protocol.PerspectiveClient,
 	)
@@ -169,7 +169,7 @@ func NewCryptoSetupServer(
 	tlsConf *tls.Config,
 	enable0RTT bool,
 	rttStats *congestion.RTTStats,
-	qlogger logging.Tracer,
+	tracer logging.Tracer,
 	logger utils.Logger,
 ) CryptoSetup {
 	cs, _ := newCryptoSetup(
@@ -181,7 +181,7 @@ func NewCryptoSetupServer(
 		tlsConf,
 		enable0RTT,
 		rttStats,
-		qlogger,
+		tracer,
 		logger,
 		protocol.PerspectiveServer,
 	)
@@ -198,14 +198,14 @@ func newCryptoSetup(
 	tlsConf *tls.Config,
 	enable0RTT bool,
 	rttStats *congestion.RTTStats,
-	qlogger logging.Tracer,
+	tracer logging.Tracer,
 	logger utils.Logger,
 	perspective protocol.Perspective,
 ) (*cryptoSetup, <-chan *wire.TransportParameters /* ClientHello written. Receive nil for non-0-RTT */) {
 	initialSealer, initialOpener := NewInitialAEAD(connID, perspective)
-	if qlogger != nil {
-		qlogger.UpdatedKeyFromTLS(protocol.EncryptionInitial, protocol.PerspectiveClient)
-		qlogger.UpdatedKeyFromTLS(protocol.EncryptionInitial, protocol.PerspectiveServer)
+	if tracer != nil {
+		tracer.UpdatedKeyFromTLS(protocol.EncryptionInitial, protocol.PerspectiveClient)
+		tracer.UpdatedKeyFromTLS(protocol.EncryptionInitial, protocol.PerspectiveServer)
 	}
 	extHandler := newExtensionHandler(tp.Marshal(perspective), perspective)
 	cs := &cryptoSetup{
@@ -213,14 +213,14 @@ func newCryptoSetup(
 		initialSealer:          initialSealer,
 		initialOpener:          initialOpener,
 		handshakeStream:        handshakeStream,
-		aead:                   newUpdatableAEAD(rttStats, qlogger, logger),
+		aead:                   newUpdatableAEAD(rttStats, tracer, logger),
 		readEncLevel:           protocol.EncryptionInitial,
 		writeEncLevel:          protocol.EncryptionInitial,
 		runner:                 runner,
 		ourParams:              tp,
 		paramsChan:             extHandler.TransportParameters(),
 		rttStats:               rttStats,
-		qlogger:                qlogger,
+		tracer:                 tracer,
 		logger:                 logger,
 		perspective:            perspective,
 		handshakeDone:          make(chan struct{}),
@@ -241,9 +241,9 @@ func (h *cryptoSetup) ChangeConnectionID(id protocol.ConnectionID) {
 	initialSealer, initialOpener := NewInitialAEAD(id, h.perspective)
 	h.initialSealer = initialSealer
 	h.initialOpener = initialOpener
-	if h.qlogger != nil {
-		h.qlogger.UpdatedKeyFromTLS(protocol.EncryptionInitial, protocol.PerspectiveClient)
-		h.qlogger.UpdatedKeyFromTLS(protocol.EncryptionInitial, protocol.PerspectiveServer)
+	if h.tracer != nil {
+		h.tracer.UpdatedKeyFromTLS(protocol.EncryptionInitial, protocol.PerspectiveClient)
+		h.tracer.UpdatedKeyFromTLS(protocol.EncryptionInitial, protocol.PerspectiveServer)
 	}
 }
 
@@ -589,8 +589,8 @@ func (h *cryptoSetup) SetReadKey(encLevel qtls.EncryptionLevel, suite *qtls.Ciph
 		)
 		h.mutex.Unlock()
 		h.logger.Debugf("Installed 0-RTT Read keys (using %s)", qtls.CipherSuiteName(suite.ID))
-		if h.qlogger != nil {
-			h.qlogger.UpdatedKeyFromTLS(protocol.Encryption0RTT, h.perspective.Opposite())
+		if h.tracer != nil {
+			h.tracer.UpdatedKeyFromTLS(protocol.Encryption0RTT, h.perspective.Opposite())
 		}
 		return
 	case qtls.EncryptionHandshake:
@@ -611,8 +611,8 @@ func (h *cryptoSetup) SetReadKey(encLevel qtls.EncryptionLevel, suite *qtls.Ciph
 		panic("unexpected read encryption level")
 	}
 	h.mutex.Unlock()
-	if h.qlogger != nil {
-		h.qlogger.UpdatedKeyFromTLS(h.readEncLevel, h.perspective.Opposite())
+	if h.tracer != nil {
+		h.tracer.UpdatedKeyFromTLS(h.readEncLevel, h.perspective.Opposite())
 	}
 	h.receivedReadKey <- struct{}{}
 }
@@ -630,8 +630,8 @@ func (h *cryptoSetup) SetWriteKey(encLevel qtls.EncryptionLevel, suite *qtls.Cip
 		)
 		h.mutex.Unlock()
 		h.logger.Debugf("Installed 0-RTT Write keys (using %s)", qtls.CipherSuiteName(suite.ID))
-		if h.qlogger != nil {
-			h.qlogger.UpdatedKeyFromTLS(protocol.Encryption0RTT, h.perspective)
+		if h.tracer != nil {
+			h.tracer.UpdatedKeyFromTLS(protocol.Encryption0RTT, h.perspective)
 		}
 		return
 	case qtls.EncryptionHandshake:
@@ -656,8 +656,8 @@ func (h *cryptoSetup) SetWriteKey(encLevel qtls.EncryptionLevel, suite *qtls.Cip
 		panic("unexpected write encryption level")
 	}
 	h.mutex.Unlock()
-	if h.qlogger != nil {
-		h.qlogger.UpdatedKeyFromTLS(h.writeEncLevel, h.perspective)
+	if h.tracer != nil {
+		h.tracer.UpdatedKeyFromTLS(h.writeEncLevel, h.perspective)
 	}
 	h.receivedWriteKey <- struct{}{}
 }

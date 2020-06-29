@@ -49,7 +49,7 @@ var _ = Describe("Session", func() {
 		streamManager *MockStreamManager
 		packer        *MockPacker
 		cryptoSetup   *mocks.MockCryptoSetup
-		qlogger       *mocks.MockTracer
+		tracer        *mocks.MockTracer
 	)
 	remoteAddr := &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 1337}
 	localAddr := &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 7331}
@@ -87,9 +87,9 @@ var _ = Describe("Session", func() {
 		mconn.EXPECT().LocalAddr().Return(localAddr).AnyTimes()
 		tokenGenerator, err := handshake.NewTokenGenerator()
 		Expect(err).ToNot(HaveOccurred())
-		qlogger = mocks.NewMockTracer(mockCtrl)
-		qlogger.EXPECT().SentTransportParameters(gomock.Any())
-		qlogger.EXPECT().UpdatedKeyFromTLS(gomock.Any(), gomock.Any()).AnyTimes()
+		tracer = mocks.NewMockTracer(mockCtrl)
+		tracer.EXPECT().SentTransportParameters(gomock.Any())
+		tracer.EXPECT().UpdatedKeyFromTLS(gomock.Any(), gomock.Any()).AnyTimes()
 		sess = newSession(
 			mconn,
 			sessionRunner,
@@ -103,7 +103,7 @@ var _ = Describe("Session", func() {
 			nil, // tls.Config
 			tokenGenerator,
 			false,
-			qlogger,
+			tracer,
 			utils.DefaultLogger,
 			protocol.VersionTLS,
 		).(*session)
@@ -337,7 +337,7 @@ var _ = Describe("Session", func() {
 				Expect(s).To(BeAssignableToTypeOf(&closedRemoteSession{}))
 			})
 			cryptoSetup.EXPECT().Close()
-			qlogger.EXPECT().Export()
+			tracer.EXPECT().Export()
 
 			go func() {
 				defer GinkgoRecover()
@@ -361,7 +361,7 @@ var _ = Describe("Session", func() {
 				Expect(s).To(BeAssignableToTypeOf(&closedRemoteSession{}))
 			})
 			cryptoSetup.EXPECT().Close()
-			qlogger.EXPECT().Export()
+			tracer.EXPECT().Export()
 
 			go func() {
 				defer GinkgoRecover()
@@ -429,7 +429,7 @@ var _ = Describe("Session", func() {
 				return &coalescedPacket{buffer: buffer}, nil
 			})
 			mconn.EXPECT().Write([]byte("connection close"))
-			qlogger.EXPECT().Export()
+			tracer.EXPECT().Export()
 			sess.shutdown()
 			Eventually(areSessionsRunning).Should(BeFalse())
 			Expect(sess.Context().Done()).To(BeClosed())
@@ -442,7 +442,7 @@ var _ = Describe("Session", func() {
 			cryptoSetup.EXPECT().Close()
 			packer.EXPECT().PackConnectionClose(gomock.Any()).Return(&coalescedPacket{buffer: getPacketBuffer()}, nil)
 			mconn.EXPECT().Write(gomock.Any())
-			qlogger.EXPECT().Export()
+			tracer.EXPECT().Export()
 			sess.shutdown()
 			sess.shutdown()
 			Eventually(areSessionsRunning).Should(BeFalse())
@@ -461,7 +461,7 @@ var _ = Describe("Session", func() {
 				return &coalescedPacket{buffer: getPacketBuffer()}, nil
 			})
 			mconn.EXPECT().Write(gomock.Any())
-			qlogger.EXPECT().Export()
+			tracer.EXPECT().Export()
 			sess.CloseWithError(0x1337, "test error")
 			Eventually(areSessionsRunning).Should(BeFalse())
 			Expect(sess.Context().Done()).To(BeClosed())
@@ -481,7 +481,7 @@ var _ = Describe("Session", func() {
 				return &coalescedPacket{buffer: getPacketBuffer()}, nil
 			})
 			mconn.EXPECT().Write(gomock.Any())
-			qlogger.EXPECT().Export()
+			tracer.EXPECT().Export()
 			sess.closeLocal(testErr)
 			Eventually(areSessionsRunning).Should(BeFalse())
 			Expect(sess.Context().Done()).To(BeClosed())
@@ -494,7 +494,7 @@ var _ = Describe("Session", func() {
 			sessionRunner.EXPECT().Remove(gomock.Any()).AnyTimes()
 			cryptoSetup.EXPECT().Close()
 			// don't EXPECT any calls to mconn.Write()
-			qlogger.EXPECT().Export()
+			tracer.EXPECT().Export()
 			sess.destroy(testErr)
 			Eventually(areSessionsRunning).Should(BeFalse())
 			expectedRunErr = testErr
@@ -516,7 +516,7 @@ var _ = Describe("Session", func() {
 			}()
 			Consistently(returned).ShouldNot(BeClosed())
 			mconn.EXPECT().Write(gomock.Any())
-			qlogger.EXPECT().Export()
+			tracer.EXPECT().Export()
 			sess.shutdown()
 			Eventually(returned).Should(BeClosed())
 		})
@@ -545,9 +545,9 @@ var _ = Describe("Session", func() {
 				}, nil
 			})
 			gomock.InOrder(
-				qlogger.EXPECT().StartedConnection(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()),
-				qlogger.EXPECT().ReceivedPacket(gomock.Any(), gomock.Any(), gomock.Any()),
-				qlogger.EXPECT().Export(),
+				tracer.EXPECT().StartedConnection(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()),
+				tracer.EXPECT().ReceivedPacket(gomock.Any(), gomock.Any(), gomock.Any()),
+				tracer.EXPECT().Export(),
 			)
 			// don't EXPECT any calls to packer.PackPacket()
 			sess.handlePacket(&receivedPacket{
@@ -587,14 +587,14 @@ var _ = Describe("Session", func() {
 				Version:          sess.version,
 				Token:            []byte("foobar"),
 			}}, make([]byte, 16) /* Retry integrity tag */)
-			qlogger.EXPECT().DroppedPacket(logging.PacketTypeRetry, protocol.ByteCount(len(p.data)), logging.PacketDropUnexpectedPacket)
+			tracer.EXPECT().DroppedPacket(logging.PacketTypeRetry, protocol.ByteCount(len(p.data)), logging.PacketDropUnexpectedPacket)
 			Expect(sess.handlePacketImpl(p)).To(BeFalse())
 		})
 
 		It("drops Version Negotiation packets", func() {
 			b, err := wire.ComposeVersionNegotiation(srcConnID, destConnID, sess.config.Versions)
 			Expect(err).ToNot(HaveOccurred())
-			qlogger.EXPECT().DroppedPacket(logging.PacketTypeVersionNegotiation, protocol.ByteCount(len(b)), logging.PacketDropUnexpectedPacket)
+			tracer.EXPECT().DroppedPacket(logging.PacketTypeVersionNegotiation, protocol.ByteCount(len(b)), logging.PacketDropUnexpectedPacket)
 			Expect(sess.handlePacketImpl(&receivedPacket{
 				data:   b,
 				buffer: getPacketBuffer(),
@@ -611,7 +611,7 @@ var _ = Describe("Session", func() {
 				PacketNumberLen: protocol.PacketNumberLen2,
 			}, nil)
 			p.data[0] ^= 0x40 // unset the QUIC bit
-			qlogger.EXPECT().DroppedPacket(logging.PacketTypeNotDetermined, protocol.ByteCount(len(p.data)), logging.PacketDropHeaderParseError)
+			tracer.EXPECT().DroppedPacket(logging.PacketTypeNotDetermined, protocol.ByteCount(len(p.data)), logging.PacketDropHeaderParseError)
 			Expect(sess.handlePacketImpl(p)).To(BeFalse())
 		})
 
@@ -624,7 +624,7 @@ var _ = Describe("Session", func() {
 				},
 				PacketNumberLen: protocol.PacketNumberLen2,
 			}, nil)
-			qlogger.EXPECT().DroppedPacket(logging.PacketTypeNotDetermined, protocol.ByteCount(len(p.data)), logging.PacketDropUnsupportedVersion)
+			tracer.EXPECT().DroppedPacket(logging.PacketTypeNotDetermined, protocol.ByteCount(len(p.data)), logging.PacketDropUnsupportedVersion)
 			Expect(sess.handlePacketImpl(p)).To(BeFalse())
 		})
 
@@ -646,7 +646,7 @@ var _ = Describe("Session", func() {
 				},
 				PacketNumberLen: protocol.PacketNumberLen2,
 			}, nil)
-			qlogger.EXPECT().DroppedPacket(logging.PacketTypeHandshake, protocol.ByteCount(len(p.data)), logging.PacketDropUnexpectedVersion)
+			tracer.EXPECT().DroppedPacket(logging.PacketTypeHandshake, protocol.ByteCount(len(p.data)), logging.PacketDropUnexpectedVersion)
 			Expect(sess.handlePacketImpl(p)).To(BeFalse())
 		})
 
@@ -671,8 +671,8 @@ var _ = Describe("Session", func() {
 			)
 			sess.receivedPacketHandler = rph
 			packet.rcvTime = rcvTime
-			qlogger.EXPECT().StartedConnection(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any())
-			qlogger.EXPECT().ReceivedPacket(hdr, protocol.ByteCount(len(packet.data)), nil)
+			tracer.EXPECT().StartedConnection(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any())
+			tracer.EXPECT().ReceivedPacket(hdr, protocol.ByteCount(len(packet.data)), nil)
 			Expect(sess.handlePacketImpl(packet)).To(BeTrue())
 		})
 
@@ -699,8 +699,8 @@ var _ = Describe("Session", func() {
 			)
 			sess.receivedPacketHandler = rph
 			packet.rcvTime = rcvTime
-			qlogger.EXPECT().StartedConnection(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any())
-			qlogger.EXPECT().ReceivedPacket(hdr, protocol.ByteCount(len(packet.data)), []wire.Frame{&wire.PingFrame{}})
+			tracer.EXPECT().StartedConnection(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any())
+			tracer.EXPECT().ReceivedPacket(hdr, protocol.ByteCount(len(packet.data)), []wire.Frame{&wire.PingFrame{}})
 			Expect(sess.handlePacketImpl(packet)).To(BeTrue())
 		})
 
@@ -720,7 +720,7 @@ var _ = Describe("Session", func() {
 			rph := mockackhandler.NewMockReceivedPacketHandler(mockCtrl)
 			rph.EXPECT().IsPotentiallyDuplicate(protocol.PacketNumber(0x1337), protocol.Encryption1RTT).Return(true)
 			sess.receivedPacketHandler = rph
-			qlogger.EXPECT().DroppedPacket(logging.PacketType1RTT, protocol.ByteCount(len(packet.data)), logging.PacketDropDuplicate)
+			tracer.EXPECT().DroppedPacket(logging.PacketType1RTT, protocol.ByteCount(len(packet.data)), logging.PacketDropDuplicate)
 			Expect(sess.handlePacketImpl(packet)).To(BeFalse())
 		})
 
@@ -746,11 +746,11 @@ var _ = Describe("Session", func() {
 				PacketNumber:    0x1337,
 				PacketNumberLen: protocol.PacketNumberLen2,
 			}, []byte("foobar"))
-			qlogger.EXPECT().DroppedPacket(logging.PacketTypeHandshake, protocol.ByteCount(len(p.data)), logging.PacketDropPayloadDecryptError)
+			tracer.EXPECT().DroppedPacket(logging.PacketTypeHandshake, protocol.ByteCount(len(p.data)), logging.PacketDropPayloadDecryptError)
 			sess.handlePacket(p)
 			Consistently(sess.Context().Done()).ShouldNot(BeClosed())
 			// make the go routine return
-			qlogger.EXPECT().Export()
+			tracer.EXPECT().Export()
 			mconn.EXPECT().Write(gomock.Any())
 			sess.closeLocal(errors.New("close"))
 			Eventually(sess.Context().Done()).Should(BeClosed())
@@ -776,7 +776,7 @@ var _ = Describe("Session", func() {
 				Header:          wire.Header{DestConnectionID: srcConnID},
 				PacketNumberLen: protocol.PacketNumberLen1,
 			}, nil)
-			qlogger.EXPECT().Export()
+			tracer.EXPECT().Export()
 			sess.handlePacket(packet)
 			Eventually(sess.Context().Done()).Should(BeClosed())
 		})
@@ -794,14 +794,14 @@ var _ = Describe("Session", func() {
 				runErr <- sess.run()
 			}()
 			expectReplaceWithClosed()
-			qlogger.EXPECT().DroppedPacket(logging.PacketType1RTT, gomock.Any(), logging.PacketDropPayloadDecryptError)
+			tracer.EXPECT().DroppedPacket(logging.PacketType1RTT, gomock.Any(), logging.PacketDropPayloadDecryptError)
 			sess.handlePacket(getPacket(&wire.ExtendedHeader{
 				Header:          wire.Header{DestConnectionID: srcConnID},
 				PacketNumberLen: protocol.PacketNumberLen1,
 			}, nil))
 			Consistently(runErr).ShouldNot(Receive())
 			// make the go routine return
-			qlogger.EXPECT().Export()
+			tracer.EXPECT().Export()
 			mconn.EXPECT().Write(gomock.Any())
 			sess.shutdown()
 			Eventually(sess.Context().Done()).Should(BeClosed())
@@ -825,7 +825,7 @@ var _ = Describe("Session", func() {
 			}()
 			expectReplaceWithClosed()
 			mconn.EXPECT().Write(gomock.Any())
-			qlogger.EXPECT().Export()
+			tracer.EXPECT().Export()
 			sess.handlePacket(getPacket(&wire.ExtendedHeader{
 				Header:          wire.Header{DestConnectionID: srcConnID},
 				PacketNumberLen: protocol.PacketNumberLen1,
@@ -867,12 +867,12 @@ var _ = Describe("Session", func() {
 				data:            []byte{0}, // one PADDING frame
 			}, nil)
 			p1 := getPacket(hdr1, nil)
-			qlogger.EXPECT().StartedConnection(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any())
-			qlogger.EXPECT().ReceivedPacket(gomock.Any(), protocol.ByteCount(len(p1.data)), gomock.Any())
+			tracer.EXPECT().StartedConnection(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any())
+			tracer.EXPECT().ReceivedPacket(gomock.Any(), protocol.ByteCount(len(p1.data)), gomock.Any())
 			Expect(sess.handlePacketImpl(p1)).To(BeTrue())
 			// The next packet has to be ignored, since the source connection ID doesn't match.
 			p2 := getPacket(hdr2, nil)
-			qlogger.EXPECT().DroppedPacket(logging.PacketTypeHandshake, protocol.ByteCount(len(p2.data)), logging.PacketDropUnknownConnectionID)
+			tracer.EXPECT().DroppedPacket(logging.PacketTypeHandshake, protocol.ByteCount(len(p2.data)), logging.PacketDropUnknownConnectionID)
 			Expect(sess.handlePacketImpl(p2)).To(BeFalse())
 		})
 
@@ -892,7 +892,7 @@ var _ = Describe("Session", func() {
 			}
 			unpacker.EXPECT().Unpack(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil, handshake.ErrKeysNotYetAvailable)
 			packet := getPacket(hdr, nil)
-			qlogger.EXPECT().BufferedPacket(logging.PacketTypeHandshake)
+			tracer.EXPECT().BufferedPacket(logging.PacketTypeHandshake)
 			Expect(sess.handlePacketImpl(packet)).To(BeFalse())
 			Expect(sess.undecryptablePackets).To(Equal([]*receivedPacket{packet}))
 		})
@@ -909,15 +909,15 @@ var _ = Describe("Session", func() {
 					PacketNumberLen: protocol.PacketNumberLen1,
 				}, nil)
 				packet.remoteAddr = &net.IPAddr{IP: net.IPv4(192, 168, 0, 100)}
-				qlogger.EXPECT().StartedConnection(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any())
-				qlogger.EXPECT().ReceivedPacket(gomock.Any(), protocol.ByteCount(len(packet.data)), gomock.Any())
+				tracer.EXPECT().StartedConnection(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any())
+				tracer.EXPECT().ReceivedPacket(gomock.Any(), protocol.ByteCount(len(packet.data)), gomock.Any())
 				Expect(sess.handlePacketImpl(packet)).To(BeTrue())
 			})
 		})
 
 		Context("coalesced packets", func() {
 			BeforeEach(func() {
-				qlogger.EXPECT().StartedConnection(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).MaxTimes(1)
+				tracer.EXPECT().StartedConnection(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).MaxTimes(1)
 			})
 			getPacketWithLength := func(connID protocol.ConnectionID, length protocol.ByteCount) (int /* header length */, *receivedPacket) {
 				hdr := &wire.ExtendedHeader{
@@ -948,7 +948,7 @@ var _ = Describe("Session", func() {
 						hdr:             &wire.ExtendedHeader{},
 					}, nil
 				})
-				qlogger.EXPECT().ReceivedPacket(gomock.Any(), protocol.ByteCount(len(packet.data)), gomock.Any())
+				tracer.EXPECT().ReceivedPacket(gomock.Any(), protocol.ByteCount(len(packet.data)), gomock.Any())
 				Expect(sess.handlePacketImpl(packet)).To(BeTrue())
 			})
 
@@ -974,8 +974,8 @@ var _ = Describe("Session", func() {
 					}, nil
 				})
 				gomock.InOrder(
-					qlogger.EXPECT().ReceivedPacket(gomock.Any(), protocol.ByteCount(len(packet1.data)), gomock.Any()),
-					qlogger.EXPECT().ReceivedPacket(gomock.Any(), protocol.ByteCount(len(packet2.data)), gomock.Any()),
+					tracer.EXPECT().ReceivedPacket(gomock.Any(), protocol.ByteCount(len(packet1.data)), gomock.Any()),
+					tracer.EXPECT().ReceivedPacket(gomock.Any(), protocol.ByteCount(len(packet2.data)), gomock.Any()),
 				)
 				packet1.data = append(packet1.data, packet2.data...)
 				Expect(sess.handlePacketImpl(packet1)).To(BeTrue())
@@ -997,8 +997,8 @@ var _ = Describe("Session", func() {
 					}),
 				)
 				gomock.InOrder(
-					qlogger.EXPECT().BufferedPacket(gomock.Any()),
-					qlogger.EXPECT().ReceivedPacket(gomock.Any(), protocol.ByteCount(len(packet2.data)), gomock.Any()),
+					tracer.EXPECT().BufferedPacket(gomock.Any()),
+					tracer.EXPECT().ReceivedPacket(gomock.Any(), protocol.ByteCount(len(packet2.data)), gomock.Any()),
 				)
 				packet1.data = append(packet1.data, packet2.data...)
 				Expect(sess.handlePacketImpl(packet1)).To(BeTrue())
@@ -1022,8 +1022,8 @@ var _ = Describe("Session", func() {
 				_, packet2 := getPacketWithLength(wrongConnID, 123)
 				// don't EXPECT any more calls to unpacker.Unpack()
 				gomock.InOrder(
-					qlogger.EXPECT().ReceivedPacket(gomock.Any(), protocol.ByteCount(len(packet1.data)), gomock.Any()),
-					qlogger.EXPECT().DroppedPacket(gomock.Any(), protocol.ByteCount(len(packet2.data)), logging.PacketDropUnknownConnectionID),
+					tracer.EXPECT().ReceivedPacket(gomock.Any(), protocol.ByteCount(len(packet1.data)), gomock.Any()),
+					tracer.EXPECT().DroppedPacket(gomock.Any(), protocol.ByteCount(len(packet2.data)), logging.PacketDropUnknownConnectionID),
 				)
 				packet1.data = append(packet1.data, packet2.data...)
 				Expect(sess.handlePacketImpl(packet1)).To(BeTrue())
@@ -1044,7 +1044,7 @@ var _ = Describe("Session", func() {
 			expectReplaceWithClosed()
 			cryptoSetup.EXPECT().Close()
 			mconn.EXPECT().Write(gomock.Any())
-			qlogger.EXPECT().Export()
+			tracer.EXPECT().Export()
 			sess.shutdown()
 			Eventually(sess.Context().Done()).Should(BeClosed())
 			Eventually(sessionDone).Should(BeClosed())
@@ -1074,7 +1074,7 @@ var _ = Describe("Session", func() {
 			packer.EXPECT().PackPacket().Return(nil, nil).AnyTimes()
 			sent := make(chan struct{})
 			mconn.EXPECT().Write(gomock.Any()).Do(func([]byte) { close(sent) })
-			qlogger.EXPECT().SentPacket(p.header, p.buffer.Len(), nil, []wire.Frame{})
+			tracer.EXPECT().SentPacket(p.header, p.buffer.Len(), nil, []wire.Frame{})
 			sess.scheduleSending()
 			Eventually(sent).Should(BeClosed())
 		})
@@ -1120,7 +1120,7 @@ var _ = Describe("Session", func() {
 			runSession()
 			sent := make(chan struct{})
 			mconn.EXPECT().Write(gomock.Any()).Do(func([]byte) { close(sent) })
-			qlogger.EXPECT().SentPacket(p.header, p.length, nil, []wire.Frame{})
+			tracer.EXPECT().SentPacket(p.header, p.length, nil, []wire.Frame{})
 			sess.scheduleSending()
 			Eventually(sent).Should(BeClosed())
 			frames, _ := sess.framer.AppendControlFrames(nil, 1000)
@@ -1175,7 +1175,7 @@ var _ = Describe("Session", func() {
 					runSession()
 					sent := make(chan struct{})
 					mconn.EXPECT().Write(gomock.Any()).Do(func([]byte) { close(sent) })
-					qlogger.EXPECT().SentPacket(p.header, p.length, gomock.Any(), gomock.Any())
+					tracer.EXPECT().SentPacket(p.header, p.length, gomock.Any(), gomock.Any())
 					sess.scheduleSending()
 					Eventually(sent).Should(BeClosed())
 				})
@@ -1196,7 +1196,7 @@ var _ = Describe("Session", func() {
 					runSession()
 					sent := make(chan struct{})
 					mconn.EXPECT().Write(gomock.Any()).Do(func([]byte) { close(sent) })
-					qlogger.EXPECT().SentPacket(p.header, p.length, gomock.Any(), gomock.Any())
+					tracer.EXPECT().SentPacket(p.header, p.length, gomock.Any(), gomock.Any())
 					sess.scheduleSending()
 					Eventually(sent).Should(BeClosed())
 					// We're using a mock packet packer in this test.
@@ -1211,7 +1211,7 @@ var _ = Describe("Session", func() {
 		var sph *mockackhandler.MockSentPacketHandler
 
 		BeforeEach(func() {
-			qlogger.EXPECT().SentPacket(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+			tracer.EXPECT().SentPacket(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
 			sph = mockackhandler.NewMockSentPacketHandler(mockCtrl)
 			sph.EXPECT().GetLossDetectionTimeout().AnyTimes()
 			sess.handshakeConfirmed = true
@@ -1226,7 +1226,7 @@ var _ = Describe("Session", func() {
 			expectReplaceWithClosed()
 			cryptoSetup.EXPECT().Close()
 			mconn.EXPECT().Write(gomock.Any())
-			qlogger.EXPECT().Export()
+			tracer.EXPECT().Export()
 			sess.shutdown()
 			Eventually(sess.Context().Done()).Should(BeClosed())
 		})
@@ -1348,7 +1348,7 @@ var _ = Describe("Session", func() {
 			packer.EXPECT().PackConnectionClose(gomock.Any()).Return(&coalescedPacket{buffer: getPacketBuffer()}, nil)
 			cryptoSetup.EXPECT().Close()
 			mconn.EXPECT().Write(gomock.Any())
-			qlogger.EXPECT().Export()
+			tracer.EXPECT().Export()
 			sess.shutdown()
 			Eventually(sess.Context().Done()).Should(BeClosed())
 		})
@@ -1374,7 +1374,7 @@ var _ = Describe("Session", func() {
 			// only EXPECT calls after scheduleSending is called
 			written := make(chan struct{})
 			mconn.EXPECT().Write(gomock.Any()).Do(func([]byte) { close(written) })
-			qlogger.EXPECT().SentPacket(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+			tracer.EXPECT().SentPacket(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
 			sess.scheduleSending()
 			Eventually(written).Should(BeClosed())
 		})
@@ -1398,7 +1398,7 @@ var _ = Describe("Session", func() {
 
 			written := make(chan struct{})
 			mconn.EXPECT().Write(gomock.Any()).Do(func([]byte) { close(written) })
-			qlogger.EXPECT().SentPacket(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+			tracer.EXPECT().SentPacket(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
 			go func() {
 				defer GinkgoRecover()
 				cryptoSetup.EXPECT().RunHandshake().MaxTimes(1)
@@ -1460,10 +1460,10 @@ var _ = Describe("Session", func() {
 			}),
 		)
 		gomock.InOrder(
-			qlogger.EXPECT().SentPacket(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Do(func(hdr *wire.ExtendedHeader, _ protocol.ByteCount, _ *wire.AckFrame, _ []wire.Frame) {
+			tracer.EXPECT().SentPacket(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Do(func(hdr *wire.ExtendedHeader, _ protocol.ByteCount, _ *wire.AckFrame, _ []wire.Frame) {
 				Expect(hdr.Type).To(Equal(protocol.PacketTypeInitial))
 			}),
-			qlogger.EXPECT().SentPacket(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Do(func(hdr *wire.ExtendedHeader, _ protocol.ByteCount, _ *wire.AckFrame, _ []wire.Frame) {
+			tracer.EXPECT().SentPacket(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Do(func(hdr *wire.ExtendedHeader, _ protocol.ByteCount, _ *wire.AckFrame, _ []wire.Frame) {
 				Expect(hdr.Type).To(Equal(protocol.PacketTypeHandshake))
 			}),
 		)
@@ -1486,7 +1486,7 @@ var _ = Describe("Session", func() {
 		packer.EXPECT().PackConnectionClose(gomock.Any()).Return(&coalescedPacket{buffer: getPacketBuffer()}, nil)
 		cryptoSetup.EXPECT().Close()
 		mconn.EXPECT().Write(gomock.Any())
-		qlogger.EXPECT().Export()
+		tracer.EXPECT().Export()
 		sess.shutdown()
 		Eventually(sess.Context().Done()).Should(BeClosed())
 	})
@@ -1522,7 +1522,7 @@ var _ = Describe("Session", func() {
 		packer.EXPECT().PackConnectionClose(gomock.Any()).Return(&coalescedPacket{buffer: getPacketBuffer()}, nil)
 		cryptoSetup.EXPECT().Close()
 		mconn.EXPECT().Write(gomock.Any())
-		qlogger.EXPECT().Export()
+		tracer.EXPECT().Export()
 		sess.shutdown()
 		Eventually(sess.Context().Done()).Should(BeClosed())
 	})
@@ -1566,7 +1566,7 @@ var _ = Describe("Session", func() {
 		packer.EXPECT().PackConnectionClose(gomock.Any()).Return(&coalescedPacket{buffer: getPacketBuffer()}, nil)
 		cryptoSetup.EXPECT().Close()
 		mconn.EXPECT().Write(gomock.Any())
-		qlogger.EXPECT().Export()
+		tracer.EXPECT().Export()
 		sess.shutdown()
 		Eventually(sess.Context().Done()).Should(BeClosed())
 	})
@@ -1577,7 +1577,7 @@ var _ = Describe("Session", func() {
 		expectReplaceWithClosed()
 		packer.EXPECT().PackConnectionClose(gomock.Any()).Return(&coalescedPacket{buffer: getPacketBuffer()}, nil)
 		cryptoSetup.EXPECT().Close()
-		qlogger.EXPECT().Export()
+		tracer.EXPECT().Export()
 		go func() {
 			defer GinkgoRecover()
 			cryptoSetup.EXPECT().RunHandshake()
@@ -1630,7 +1630,7 @@ var _ = Describe("Session", func() {
 		expectReplaceWithClosed()
 		packer.EXPECT().PackConnectionClose(gomock.Any()).Return(&coalescedPacket{buffer: getPacketBuffer()}, nil)
 		cryptoSetup.EXPECT().Close()
-		qlogger.EXPECT().Export()
+		tracer.EXPECT().Export()
 		sess.shutdown()
 		Eventually(sess.Context().Done()).Should(BeClosed())
 	})
@@ -1648,7 +1648,7 @@ var _ = Describe("Session", func() {
 		packer.EXPECT().PackConnectionClose(gomock.Any()).Return(&coalescedPacket{buffer: getPacketBuffer()}, nil)
 		cryptoSetup.EXPECT().Close()
 		mconn.EXPECT().Write(gomock.Any())
-		qlogger.EXPECT().Export()
+		tracer.EXPECT().Export()
 		sess.shutdown()
 		Eventually(done).Should(BeClosed())
 	})
@@ -1668,7 +1668,7 @@ var _ = Describe("Session", func() {
 		packer.EXPECT().PackConnectionClose(gomock.Any()).Return(&coalescedPacket{buffer: getPacketBuffer()}, nil)
 		cryptoSetup.EXPECT().Close()
 		mconn.EXPECT().Write(gomock.Any())
-		qlogger.EXPECT().Export()
+		tracer.EXPECT().Export()
 		Expect(sess.CloseWithError(0x1337, testErr.Error())).To(Succeed())
 		Eventually(done).Should(BeClosed())
 	})
@@ -1690,7 +1690,7 @@ var _ = Describe("Session", func() {
 			Expect(sess.earlySessionReady()).ToNot(BeClosed())
 			sessionRunner.EXPECT().GetStatelessResetToken(gomock.Any()).Times(2)
 			sessionRunner.EXPECT().Add(gomock.Any(), sess).Times(2)
-			qlogger.EXPECT().ReceivedTransportParameters(params)
+			tracer.EXPECT().ReceivedTransportParameters(params)
 			sess.processTransportParameters(params)
 			Expect(sess.earlySessionReady()).To(BeClosed())
 		})
@@ -1700,7 +1700,7 @@ var _ = Describe("Session", func() {
 		setRemoteIdleTimeout := func(t time.Duration) {
 			streamManager.EXPECT().UpdateLimits(gomock.Any())
 			packer.EXPECT().HandleTransportParameters(gomock.Any())
-			qlogger.EXPECT().ReceivedTransportParameters(gomock.Any())
+			tracer.EXPECT().ReceivedTransportParameters(gomock.Any())
 			sess.processTransportParameters(&wire.TransportParameters{
 				MaxIdleTimeout:            t,
 				InitialSourceConnectionID: destConnID,
@@ -1728,7 +1728,7 @@ var _ = Describe("Session", func() {
 			packer.EXPECT().PackConnectionClose(gomock.Any()).Return(&coalescedPacket{buffer: getPacketBuffer()}, nil)
 			cryptoSetup.EXPECT().Close()
 			mconn.EXPECT().Write(gomock.Any())
-			qlogger.EXPECT().Export()
+			tracer.EXPECT().Export()
 			sess.shutdown()
 			Eventually(sess.Context().Done()).Should(BeClosed())
 		})
@@ -1789,8 +1789,8 @@ var _ = Describe("Session", func() {
 			done := make(chan struct{})
 			cryptoSetup.EXPECT().Close()
 			gomock.InOrder(
-				qlogger.EXPECT().ClosedConnection(logging.CloseReasonIdleTimeout),
-				qlogger.EXPECT().Export(),
+				tracer.EXPECT().ClosedConnection(logging.CloseReasonIdleTimeout),
+				tracer.EXPECT().Export(),
 			)
 			go func() {
 				defer GinkgoRecover()
@@ -1811,8 +1811,8 @@ var _ = Describe("Session", func() {
 			sessionRunner.EXPECT().Remove(gomock.Any()).Times(2)
 			cryptoSetup.EXPECT().Close()
 			gomock.InOrder(
-				qlogger.EXPECT().ClosedConnection(logging.CloseReasonHandshakeTimeout),
-				qlogger.EXPECT().Export(),
+				tracer.EXPECT().ClosedConnection(logging.CloseReasonHandshakeTimeout),
+				tracer.EXPECT().Export(),
 			)
 			done := make(chan struct{})
 			go func() {
@@ -1836,7 +1836,7 @@ var _ = Describe("Session", func() {
 				Expect(quicErr.ErrorCode).To(Equal(qerr.NoError))
 				return &coalescedPacket{buffer: getPacketBuffer()}, nil
 			})
-			qlogger.EXPECT().Export()
+			tracer.EXPECT().Export()
 			// the handshake timeout is irrelevant here, since it depends on the time the session was created,
 			// and not on the last network activity
 			go func() {
@@ -1861,8 +1861,8 @@ var _ = Describe("Session", func() {
 			)
 			cryptoSetup.EXPECT().Close()
 			gomock.InOrder(
-				qlogger.EXPECT().ClosedConnection(logging.CloseReasonIdleTimeout),
-				qlogger.EXPECT().Export(),
+				tracer.EXPECT().ClosedConnection(logging.CloseReasonIdleTimeout),
+				tracer.EXPECT().Export(),
 			)
 			sess.idleTimeout = 0
 			done := make(chan struct{})
@@ -1897,7 +1897,7 @@ var _ = Describe("Session", func() {
 			expectReplaceWithClosed()
 			cryptoSetup.EXPECT().Close()
 			mconn.EXPECT().Write(gomock.Any())
-			qlogger.EXPECT().Export()
+			tracer.EXPECT().Export()
 			sess.shutdown()
 			Eventually(sess.Context().Done()).Should(BeClosed())
 		})
@@ -1981,7 +1981,7 @@ var _ = Describe("Client Session", func() {
 		packer        *MockPacker
 		mconn         *MockConnection
 		cryptoSetup   *mocks.MockCryptoSetup
-		qlogger       *mocks.MockTracer
+		tracer        *mocks.MockTracer
 		tlsConf       *tls.Config
 		quicConf      *Config
 	)
@@ -2020,9 +2020,9 @@ var _ = Describe("Client Session", func() {
 			tlsConf = &tls.Config{}
 		}
 		sessionRunner = NewMockSessionRunner(mockCtrl)
-		qlogger = mocks.NewMockTracer(mockCtrl)
-		qlogger.EXPECT().SentTransportParameters(gomock.Any())
-		qlogger.EXPECT().UpdatedKeyFromTLS(gomock.Any(), gomock.Any()).AnyTimes()
+		tracer = mocks.NewMockTracer(mockCtrl)
+		tracer.EXPECT().SentTransportParameters(gomock.Any())
+		tracer.EXPECT().UpdatedKeyFromTLS(gomock.Any(), gomock.Any()).AnyTimes()
 		sess = newClientSession(
 			mconn,
 			sessionRunner,
@@ -2034,7 +2034,7 @@ var _ = Describe("Client Session", func() {
 			protocol.VersionTLS,
 			false,
 			false,
-			qlogger,
+			tracer,
 			utils.DefaultLogger,
 			protocol.VersionTLS,
 		).(*session)
@@ -2071,14 +2071,14 @@ var _ = Describe("Client Session", func() {
 			},
 			PacketNumberLen: protocol.PacketNumberLen2,
 		}, []byte("foobar"))
-		qlogger.EXPECT().ReceivedPacket(gomock.Any(), protocol.ByteCount(len(p.data)), nil)
+		tracer.EXPECT().ReceivedPacket(gomock.Any(), protocol.ByteCount(len(p.data)), nil)
 		Expect(sess.handlePacketImpl(p)).To(BeTrue())
 		// make sure the go routine returns
 		packer.EXPECT().PackConnectionClose(gomock.Any()).Return(&coalescedPacket{buffer: getPacketBuffer()}, nil)
 		expectReplaceWithClosed()
 		cryptoSetup.EXPECT().Close()
 		mconn.EXPECT().Write(gomock.Any())
-		qlogger.EXPECT().Export()
+		tracer.EXPECT().Export()
 		sess.shutdown()
 		Eventually(sess.Context().Done()).Should(BeClosed())
 	})
@@ -2106,7 +2106,7 @@ var _ = Describe("Client Session", func() {
 			DestConnectionID: srcConnID,
 			SrcConnectionID:  destConnID,
 		}
-		qlogger.EXPECT().ReceivedPacket(gomock.Any(), gomock.Any(), gomock.Any())
+		tracer.EXPECT().ReceivedPacket(gomock.Any(), gomock.Any(), gomock.Any())
 		Expect(sess.handleSinglePacket(&receivedPacket{buffer: getPacketBuffer()}, hdr)).To(BeTrue())
 	})
 
@@ -2154,7 +2154,7 @@ var _ = Describe("Client Session", func() {
 				errChan <- sess.run()
 			}()
 			sessionRunner.EXPECT().Remove(srcConnID)
-			qlogger.EXPECT().ReceivedVersionNegotiationPacket(gomock.Any()).Do(func(hdr *wire.Header) {
+			tracer.EXPECT().ReceivedVersionNegotiationPacket(gomock.Any()).Do(func(hdr *wire.Header) {
 				Expect(hdr.Version).To(BeZero())
 				Expect(hdr.SupportedVersions).To(And(
 					ContainElement(protocol.VersionNumber(4321)),
@@ -2181,8 +2181,8 @@ var _ = Describe("Client Session", func() {
 			}()
 			sessionRunner.EXPECT().Remove(srcConnID).MaxTimes(1)
 			gomock.InOrder(
-				qlogger.EXPECT().ReceivedVersionNegotiationPacket(gomock.Any()),
-				qlogger.EXPECT().Export(),
+				tracer.EXPECT().ReceivedVersionNegotiationPacket(gomock.Any()),
+				tracer.EXPECT().Export(),
 			)
 			cryptoSetup.EXPECT().Close()
 			Expect(sess.handlePacketImpl(getVNP(12345678))).To(BeFalse())
@@ -2195,14 +2195,14 @@ var _ = Describe("Client Session", func() {
 
 		It("ignores Version Negotiation packets that offer the current version", func() {
 			p := getVNP(sess.version)
-			qlogger.EXPECT().DroppedPacket(logging.PacketTypeVersionNegotiation, protocol.ByteCount(len(p.data)), logging.PacketDropUnexpectedVersion)
+			tracer.EXPECT().DroppedPacket(logging.PacketTypeVersionNegotiation, protocol.ByteCount(len(p.data)), logging.PacketDropUnexpectedVersion)
 			Expect(sess.handlePacketImpl(p)).To(BeFalse())
 		})
 
 		It("ignores unparseable Version Negotiation packets", func() {
 			p := getVNP(sess.version)
 			p.data = p.data[:len(p.data)-2]
-			qlogger.EXPECT().DroppedPacket(logging.PacketTypeVersionNegotiation, protocol.ByteCount(len(p.data)), logging.PacketDropHeaderParseError)
+			tracer.EXPECT().DroppedPacket(logging.PacketTypeVersionNegotiation, protocol.ByteCount(len(p.data)), logging.PacketDropHeaderParseError)
 			Expect(sess.handlePacketImpl(p)).To(BeFalse())
 		})
 	})
@@ -2238,7 +2238,7 @@ var _ = Describe("Client Session", func() {
 			sph.EXPECT().ResetForRetry()
 			cryptoSetup.EXPECT().ChangeConnectionID(protocol.ConnectionID{0xde, 0xad, 0xbe, 0xef})
 			packer.EXPECT().SetToken([]byte("foobar"))
-			qlogger.EXPECT().ReceivedRetry(gomock.Any()).Do(func(hdr *wire.Header) {
+			tracer.EXPECT().ReceivedRetry(gomock.Any()).Do(func(hdr *wire.Header) {
 				Expect(hdr.DestConnectionID).To(Equal(retryHdr.DestConnectionID))
 				Expect(hdr.SrcConnectionID).To(Equal(retryHdr.SrcConnectionID))
 				Expect(hdr.Token).To(Equal(retryHdr.Token))
@@ -2249,14 +2249,14 @@ var _ = Describe("Client Session", func() {
 		It("ignores Retry packets after receiving a regular packet", func() {
 			sess.receivedFirstPacket = true
 			p := getPacket(retryHdr, getRetryTag(retryHdr))
-			qlogger.EXPECT().DroppedPacket(logging.PacketTypeRetry, protocol.ByteCount(len(p.data)), logging.PacketDropUnexpectedPacket)
+			tracer.EXPECT().DroppedPacket(logging.PacketTypeRetry, protocol.ByteCount(len(p.data)), logging.PacketDropUnexpectedPacket)
 			Expect(sess.handlePacketImpl(p)).To(BeFalse())
 		})
 
 		It("ignores Retry packets if the server didn't change the connection ID", func() {
 			retryHdr.SrcConnectionID = destConnID
 			p := getPacket(retryHdr, getRetryTag(retryHdr))
-			qlogger.EXPECT().DroppedPacket(logging.PacketTypeRetry, protocol.ByteCount(len(p.data)), logging.PacketDropUnexpectedPacket)
+			tracer.EXPECT().DroppedPacket(logging.PacketTypeRetry, protocol.ByteCount(len(p.data)), logging.PacketDropUnexpectedPacket)
 			Expect(sess.handlePacketImpl(p)).To(BeFalse())
 		})
 
@@ -2264,7 +2264,7 @@ var _ = Describe("Client Session", func() {
 			tag := getRetryTag(retryHdr)
 			tag[0]++
 			p := getPacket(retryHdr, tag)
-			qlogger.EXPECT().DroppedPacket(logging.PacketTypeRetry, protocol.ByteCount(len(p.data)), logging.PacketDropPayloadDecryptError)
+			tracer.EXPECT().DroppedPacket(logging.PacketTypeRetry, protocol.ByteCount(len(p.data)), logging.PacketDropPayloadDecryptError)
 			Expect(sess.handlePacketImpl(p)).To(BeFalse())
 		})
 	})
@@ -2295,7 +2295,7 @@ var _ = Describe("Client Session", func() {
 				packer.EXPECT().PackConnectionClose(gomock.Any()).Return(&coalescedPacket{buffer: getPacketBuffer()}, nil).MaxTimes(1)
 				cryptoSetup.EXPECT().Close()
 				mconn.EXPECT().Write(gomock.Any())
-				qlogger.EXPECT().Export()
+				tracer.EXPECT().Export()
 			}
 			closed = true
 		}
@@ -2320,7 +2320,7 @@ var _ = Describe("Client Session", func() {
 			}
 			packer.EXPECT().HandleTransportParameters(gomock.Any())
 			packer.EXPECT().PackCoalescedPacket(protocol.MaxByteCount).MaxTimes(1)
-			qlogger.EXPECT().ReceivedTransportParameters(params)
+			tracer.EXPECT().ReceivedTransportParameters(params)
 			sess.processTransportParameters(params)
 			// make sure the connection ID is not retired
 			cf, _ := sess.framer.AppendControlFrames(nil, protocol.MaxByteCount)
@@ -2340,7 +2340,7 @@ var _ = Describe("Client Session", func() {
 				MaxIdleTimeout:                  18 * time.Second,
 			}
 			packer.EXPECT().HandleTransportParameters(gomock.Any())
-			qlogger.EXPECT().ReceivedTransportParameters(params)
+			tracer.EXPECT().ReceivedTransportParameters(params)
 			sess.processTransportParameters(params)
 			Expect(sess.idleTimeout).To(Equal(18 * time.Second))
 		})
@@ -2353,7 +2353,7 @@ var _ = Describe("Client Session", func() {
 				StatelessResetToken:             &[16]byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16},
 			}
 			expectClose()
-			qlogger.EXPECT().ReceivedTransportParameters(params)
+			tracer.EXPECT().ReceivedTransportParameters(params)
 			sess.processTransportParameters(params)
 			Eventually(errChan).Should(Receive(MatchError("TRANSPORT_PARAMETER_ERROR: expected initial_source_connection_id to equal 0xdeadbeef, is 0xdecafbad")))
 		})
@@ -2366,7 +2366,7 @@ var _ = Describe("Client Session", func() {
 				StatelessResetToken:             &[16]byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16},
 			}
 			expectClose()
-			qlogger.EXPECT().ReceivedTransportParameters(params)
+			tracer.EXPECT().ReceivedTransportParameters(params)
 			sess.processTransportParameters(params)
 			Eventually(errChan).Should(Receive(MatchError("TRANSPORT_PARAMETER_ERROR: missing retry_source_connection_id")))
 		})
@@ -2380,7 +2380,7 @@ var _ = Describe("Client Session", func() {
 				StatelessResetToken:             &[16]byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16},
 			}
 			expectClose()
-			qlogger.EXPECT().ReceivedTransportParameters(params)
+			tracer.EXPECT().ReceivedTransportParameters(params)
 			sess.processTransportParameters(params)
 			Eventually(errChan).Should(Receive(MatchError("TRANSPORT_PARAMETER_ERROR: expected retry_source_connection_id to equal 0xdeadbeef, is 0xdeadc0de")))
 		})
@@ -2393,7 +2393,7 @@ var _ = Describe("Client Session", func() {
 				StatelessResetToken:             &[16]byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16},
 			}
 			expectClose()
-			qlogger.EXPECT().ReceivedTransportParameters(params)
+			tracer.EXPECT().ReceivedTransportParameters(params)
 			sess.processTransportParameters(params)
 			Eventually(errChan).Should(Receive(MatchError("TRANSPORT_PARAMETER_ERROR: received retry_source_connection_id, although no Retry was performed")))
 		})
@@ -2406,7 +2406,7 @@ var _ = Describe("Client Session", func() {
 				StatelessResetToken:             &[16]byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16},
 			}
 			expectClose()
-			qlogger.EXPECT().ReceivedTransportParameters(params)
+			tracer.EXPECT().ReceivedTransportParameters(params)
 			sess.processTransportParameters(params)
 			Eventually(errChan).Should(Receive(MatchError("TRANSPORT_PARAMETER_ERROR: expected original_destination_connection_id to equal 0xdeadbeef, is 0xdecafbad")))
 		})
@@ -2471,10 +2471,10 @@ var _ = Describe("Client Session", func() {
 				hdr:             hdr1,
 				data:            []byte{0}, // one PADDING frame
 			}, nil)
-			qlogger.EXPECT().ReceivedPacket(gomock.Any(), gomock.Any(), gomock.Any())
+			tracer.EXPECT().ReceivedPacket(gomock.Any(), gomock.Any(), gomock.Any())
 			Expect(sess.handlePacketImpl(getPacket(hdr1, nil))).To(BeTrue())
 			// The next packet has to be ignored, since the source connection ID doesn't match.
-			qlogger.EXPECT().DroppedPacket(gomock.Any(), gomock.Any(), gomock.Any())
+			tracer.EXPECT().DroppedPacket(gomock.Any(), gomock.Any(), gomock.Any())
 			Expect(sess.handlePacketImpl(getPacket(hdr2, nil))).To(BeFalse())
 		})
 
@@ -2490,7 +2490,7 @@ var _ = Describe("Client Session", func() {
 				PacketNumber:    0x42,
 				PacketNumberLen: protocol.PacketNumberLen2,
 			}, []byte("foobar"))
-			qlogger.EXPECT().DroppedPacket(logging.PacketType0RTT, protocol.ByteCount(len(p.data)), gomock.Any())
+			tracer.EXPECT().DroppedPacket(logging.PacketType0RTT, protocol.ByteCount(len(p.data)), gomock.Any())
 			Expect(sess.handlePacketImpl(p)).To(BeFalse())
 		})
 
@@ -2499,7 +2499,7 @@ var _ = Describe("Client Session", func() {
 		It("fails on Initial-level ACK for unsent packet", func() {
 			ackFrame := testutils.ComposeAckFrame(0, 0)
 			initialPacket := testutils.ComposeInitialPacket(destConnID, srcConnID, sess.version, destConnID, []wire.Frame{ackFrame})
-			qlogger.EXPECT().ReceivedPacket(gomock.Any(), gomock.Any(), gomock.Any())
+			tracer.EXPECT().ReceivedPacket(gomock.Any(), gomock.Any(), gomock.Any())
 			Expect(sess.handlePacketImpl(wrapPacket(initialPacket))).To(BeFalse())
 		})
 
@@ -2508,7 +2508,7 @@ var _ = Describe("Client Session", func() {
 		It("fails on Initial-level CONNECTION_CLOSE frame", func() {
 			connCloseFrame := testutils.ComposeConnCloseFrame()
 			initialPacket := testutils.ComposeInitialPacket(destConnID, srcConnID, sess.version, destConnID, []wire.Frame{connCloseFrame})
-			qlogger.EXPECT().ReceivedPacket(gomock.Any(), gomock.Any(), gomock.Any())
+			tracer.EXPECT().ReceivedPacket(gomock.Any(), gomock.Any(), gomock.Any())
 			Expect(sess.handlePacketImpl(wrapPacket(initialPacket))).To(BeTrue())
 		})
 
@@ -2523,10 +2523,10 @@ var _ = Describe("Client Session", func() {
 			cryptoSetup.EXPECT().ChangeConnectionID(newSrcConnID)
 			packer.EXPECT().SetToken([]byte("foobar"))
 
-			qlogger.EXPECT().ReceivedRetry(gomock.Any())
+			tracer.EXPECT().ReceivedRetry(gomock.Any())
 			sess.handlePacketImpl(wrapPacket(testutils.ComposeRetryPacket(newSrcConnID, destConnID, destConnID, []byte("foobar"), sess.version)))
 			initialPacket := testutils.ComposeInitialPacket(sess.connIDManager.Get(), srcConnID, sess.version, sess.connIDManager.Get(), nil)
-			qlogger.EXPECT().DroppedPacket(gomock.Any(), gomock.Any(), gomock.Any())
+			tracer.EXPECT().DroppedPacket(gomock.Any(), gomock.Any(), gomock.Any())
 			Expect(sess.handlePacketImpl(wrapPacket(initialPacket))).To(BeFalse())
 		})
 

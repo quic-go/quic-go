@@ -14,10 +14,10 @@ func NewAckHandler(
 	rttStats *congestion.RTTStats,
 	pers protocol.Perspective,
 	traceCallback func(quictrace.Event),
-	qlogger logging.Tracer,
+	tracer logging.Tracer,
 	logger utils.Logger,
 	version protocol.VersionNumber,
 ) (SentPacketHandler, ReceivedPacketHandler) {
-	sph := newSentPacketHandler(initialPacketNumber, rttStats, pers, traceCallback, qlogger, logger)
+	sph := newSentPacketHandler(initialPacketNumber, rttStats, pers, traceCallback, tracer, logger)
 	return sph, newReceivedPacketHandler(sph, rttStats, logger, version)
 }

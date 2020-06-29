@@ -41,8 +41,8 @@ type client struct {
 
 	session quicSession
 
-	qlogger logging.Tracer
-	logger  utils.Logger
+	tracer logging.Tracer
+	logger utils.Logger
 }
 
 var _ packetHandler = &client{}
@@ -51,8 +51,8 @@ var (
 	// make it possible to mock connection ID generation in the tests
 	generateConnectionID           = protocol.GenerateConnectionID
 	generateConnectionIDForInitial = protocol.GenerateConnectionIDForInitial
-	// make it possible to the qlogger
-	newQlogger = qlog.NewTracer
+	// make it possible to the tracer
+	newTracer = qlog.NewTracer
 )
 
 // DialAddr establishes a new QUIC connection to a server.
@@ -182,7 +182,7 @@ func dialContext(
 
 	if c.config.GetLogWriter != nil {
 		if w := c.config.GetLogWriter(c.destConnID); w != nil {
-			c.qlogger = newQlogger(w, protocol.PerspectiveClient, c.destConnID)
+			c.tracer = newTracer(w, protocol.PerspectiveClient, c.destConnID)
 		}
 	}
 	if err := c.dial(ctx); err != nil {
@@ -250,8 +250,8 @@ func newClient(
 
 func (c *client) dial(ctx context.Context) error {
 	c.logger.Infof("Starting new connection to %s (%s -> %s), source connection ID %s, destination connection ID %s, version %s", c.tlsConf.ServerName, c.conn.LocalAddr(), c.conn.RemoteAddr(), c.srcConnID, c.destConnID, c.version)
-	if c.qlogger != nil {
-		c.qlogger.StartedConnection(c.conn.LocalAddr(), c.conn.RemoteAddr(), c.version, c.srcConnID, c.destConnID)
+	if c.tracer != nil {
+		c.tracer.StartedConnection(c.conn.LocalAddr(), c.conn.RemoteAddr(), c.version, c.srcConnID, c.destConnID)
 	}
 
 	c.mutex.Lock()
@@ -266,7 +266,7 @@ func (c *client) dial(ctx context.Context) error {
 		c.version,
 		c.use0RTT,
 		c.hasNegotiatedVersion,
-		c.qlogger,
+		c.tracer,
 		c.logger,
 		c.version,
 	)
