@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+	"log"
 	"net"
 	"sync"
 	"time"
@@ -90,8 +91,14 @@ func (t *tracer) run() {
 	}
 }
 
-// Export writes a qlog.
-func (t *tracer) Export() error {
+func (t *tracer) Close() {
+	if err := t.export(); err != nil {
+		log.Printf("exporting qlog failed: %s\n", err)
+	}
+}
+
+// export writes a qlog.
+func (t *tracer) export() error {
 	close(t.events)
 	<-t.runStopped
 	if t.encodeErr != nil {

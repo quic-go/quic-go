@@ -51,6 +51,18 @@ func (mr *MockTracerMockRecorder) BufferedPacket(arg0 interface{}) *gomock.Call 
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "BufferedPacket", reflect.TypeOf((*MockTracer)(nil).BufferedPacket), arg0)
 }
 
+// Close mocks base method
+func (m *MockTracer) Close() {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "Close")
+}
+
+// Close indicates an expected call of Close
+func (mr *MockTracerMockRecorder) Close() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Close", reflect.TypeOf((*MockTracer)(nil).Close))
+}
+
 // ClosedConnection mocks base method
 func (m *MockTracer) ClosedConnection(arg0 logging.CloseReason) {
 	m.ctrl.T.Helper()
@@ -85,20 +97,6 @@ func (m *MockTracer) DroppedPacket(arg0 logging.PacketType, arg1 protocol.ByteCo
 func (mr *MockTracerMockRecorder) DroppedPacket(arg0, arg1, arg2 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DroppedPacket", reflect.TypeOf((*MockTracer)(nil).DroppedPacket), arg0, arg1, arg2)
-}
-
-// Export mocks base method
-func (m *MockTracer) Export() error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Export")
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// Export indicates an expected call of Export
-func (mr *MockTracerMockRecorder) Export() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Export", reflect.TypeOf((*MockTracer)(nil).Export))
 }
 
 // LossTimerCanceled mocks base method

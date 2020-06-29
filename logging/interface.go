@@ -13,7 +13,6 @@ import (
 
 // A Tracer records events.
 type Tracer interface {
-	Export() error
 	StartedConnection(local, remote net.Addr, version protocol.VersionNumber, srcConnID, destConnID protocol.ConnectionID)
 	ClosedConnection(CloseReason)
 	SentTransportParameters(*wire.TransportParameters)
@@ -34,4 +33,6 @@ type Tracer interface {
 	SetLossTimer(TimerType, protocol.EncryptionLevel, time.Time)
 	LossTimerExpired(TimerType, protocol.EncryptionLevel)
 	LossTimerCanceled()
+	// Close is called when the connection is closed.
+	Close()
 }

@@ -611,9 +611,7 @@ runLoop:
 
 	s.handleCloseError(closeErr)
 	if !errors.Is(closeErr.err, errCloseForRecreating{}) && s.tracer != nil {
-		if err := s.tracer.Export(); err != nil {
-			s.logger.Errorf("exporting qlog failed: %s", err)
-		}
+		s.tracer.Close()
 	}
 	s.logger.Infof("Connection %s closed.", s.logID)
 	s.cryptoStreamHandler.Close()

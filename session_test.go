@@ -337,7 +337,7 @@ var _ = Describe("Session", func() {
 				Expect(s).To(BeAssignableToTypeOf(&closedRemoteSession{}))
 			})
 			cryptoSetup.EXPECT().Close()
-			tracer.EXPECT().Export()
+			tracer.EXPECT().Close()
 
 			go func() {
 				defer GinkgoRecover()
@@ -361,7 +361,7 @@ var _ = Describe("Session", func() {
 				Expect(s).To(BeAssignableToTypeOf(&closedRemoteSession{}))
 			})
 			cryptoSetup.EXPECT().Close()
-			tracer.EXPECT().Export()
+			tracer.EXPECT().Close()
 
 			go func() {
 				defer GinkgoRecover()
@@ -429,7 +429,7 @@ var _ = Describe("Session", func() {
 				return &coalescedPacket{buffer: buffer}, nil
 			})
 			mconn.EXPECT().Write([]byte("connection close"))
-			tracer.EXPECT().Export()
+			tracer.EXPECT().Close()
 			sess.shutdown()
 			Eventually(areSessionsRunning).Should(BeFalse())
 			Expect(sess.Context().Done()).To(BeClosed())
@@ -442,7 +442,7 @@ var _ = Describe("Session", func() {
 			cryptoSetup.EXPECT().Close()
 			packer.EXPECT().PackConnectionClose(gomock.Any()).Return(&coalescedPacket{buffer: getPacketBuffer()}, nil)
 			mconn.EXPECT().Write(gomock.Any())
-			tracer.EXPECT().Export()
+			tracer.EXPECT().Close()
 			sess.shutdown()
 			sess.shutdown()
 			Eventually(areSessionsRunning).Should(BeFalse())
@@ -461,7 +461,7 @@ var _ = Describe("Session", func() {
 				return &coalescedPacket{buffer: getPacketBuffer()}, nil
 			})
 			mconn.EXPECT().Write(gomock.Any())
-			tracer.EXPECT().Export()
+			tracer.EXPECT().Close()
 			sess.CloseWithError(0x1337, "test error")
 			Eventually(areSessionsRunning).Should(BeFalse())
 			Expect(sess.Context().Done()).To(BeClosed())
@@ -481,7 +481,7 @@ var _ = Describe("Session", func() {
 				return &coalescedPacket{buffer: getPacketBuffer()}, nil
 			})
 			mconn.EXPECT().Write(gomock.Any())
-			tracer.EXPECT().Export()
+			tracer.EXPECT().Close()
 			sess.closeLocal(testErr)
 			Eventually(areSessionsRunning).Should(BeFalse())
 			Expect(sess.Context().Done()).To(BeClosed())
@@ -494,7 +494,7 @@ var _ = Describe("Session", func() {
 			sessionRunner.EXPECT().Remove(gomock.Any()).AnyTimes()
 			cryptoSetup.EXPECT().Close()
 			// don't EXPECT any calls to mconn.Write()
-			tracer.EXPECT().Export()
+			tracer.EXPECT().Close()
 			sess.destroy(testErr)
 			Eventually(areSessionsRunning).Should(BeFalse())
 			expectedRunErr = testErr
@@ -516,7 +516,7 @@ var _ = Describe("Session", func() {
 			}()
 			Consistently(returned).ShouldNot(BeClosed())
 			mconn.EXPECT().Write(gomock.Any())
-			tracer.EXPECT().Export()
+			tracer.EXPECT().Close()
 			sess.shutdown()
 			Eventually(returned).Should(BeClosed())
 		})
@@ -547,7 +547,7 @@ var _ = Describe("Session", func() {
 			gomock.InOrder(
 				tracer.EXPECT().StartedConnection(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()),
 				tracer.EXPECT().ReceivedPacket(gomock.Any(), gomock.Any(), gomock.Any()),
-				tracer.EXPECT().Export(),
+				tracer.EXPECT().Close(),
 			)
 			// don't EXPECT any calls to packer.PackPacket()
 			sess.handlePacket(&receivedPacket{
@@ -750,7 +750,7 @@ var _ = Describe("Session", func() {
 			sess.handlePacket(p)
 			Consistently(sess.Context().Done()).ShouldNot(BeClosed())
 			// make the go routine return
-			tracer.EXPECT().Export()
+			tracer.EXPECT().Close()
 			mconn.EXPECT().Write(gomock.Any())
 			sess.closeLocal(errors.New("close"))
 			Eventually(sess.Context().Done()).Should(BeClosed())
@@ -776,7 +776,7 @@ var _ = Describe("Session", func() {
 				Header:          wire.Header{DestConnectionID: srcConnID},
 				PacketNumberLen: protocol.PacketNumberLen1,
 			}, nil)
-			tracer.EXPECT().Export()
+			tracer.EXPECT().Close()
 			sess.handlePacket(packet)
 			Eventually(sess.Context().Done()).Should(BeClosed())
 		})
@@ -801,7 +801,7 @@ var _ = Describe("Session", func() {
 			}, nil))
 			Consistently(runErr).ShouldNot(Receive())
 			// make the go routine return
-			tracer.EXPECT().Export()
+			tracer.EXPECT().Close()
 			mconn.EXPECT().Write(gomock.Any())
 			sess.shutdown()
 			Eventually(sess.Context().Done()).Should(BeClosed())
@@ -825,7 +825,7 @@ var _ = Describe("Session", func() {
 			}()
 			expectReplaceWithClosed()
 			mconn.EXPECT().Write(gomock.Any())
-			tracer.EXPECT().Export()
+			tracer.EXPECT().Close()
 			sess.handlePacket(getPacket(&wire.ExtendedHeader{
 				Header:          wire.Header{DestConnectionID: srcConnID},
 				PacketNumberLen: protocol.PacketNumberLen1,
@@ -1044,7 +1044,7 @@ var _ = Describe("Session", func() {
 			expectReplaceWithClosed()
 			cryptoSetup.EXPECT().Close()
 			mconn.EXPECT().Write(gomock.Any())
-			tracer.EXPECT().Export()
+			tracer.EXPECT().Close()
 			sess.shutdown()
 			Eventually(sess.Context().Done()).Should(BeClosed())
 			Eventually(sessionDone).Should(BeClosed())
@@ -1226,7 +1226,7 @@ var _ = Describe("Session", func() {
 			expectReplaceWithClosed()
 			cryptoSetup.EXPECT().Close()
 			mconn.EXPECT().Write(gomock.Any())
-			tracer.EXPECT().Export()
+			tracer.EXPECT().Close()
 			sess.shutdown()
 			Eventually(sess.Context().Done()).Should(BeClosed())
 		})
@@ -1348,7 +1348,7 @@ var _ = Describe("Session", func() {
 			packer.EXPECT().PackConnectionClose(gomock.Any()).Return(&coalescedPacket{buffer: getPacketBuffer()}, nil)
 			cryptoSetup.EXPECT().Close()
 			mconn.EXPECT().Write(gomock.Any())
-			tracer.EXPECT().Export()
+			tracer.EXPECT().Close()
 			sess.shutdown()
 			Eventually(sess.Context().Done()).Should(BeClosed())
 		})
@@ -1486,7 +1486,7 @@ var _ = Describe("Session", func() {
 		packer.EXPECT().PackConnectionClose(gomock.Any()).Return(&coalescedPacket{buffer: getPacketBuffer()}, nil)
 		cryptoSetup.EXPECT().Close()
 		mconn.EXPECT().Write(gomock.Any())
-		tracer.EXPECT().Export()
+		tracer.EXPECT().Close()
 		sess.shutdown()
 		Eventually(sess.Context().Done()).Should(BeClosed())
 	})
@@ -1522,7 +1522,7 @@ var _ = Describe("Session", func() {
 		packer.EXPECT().PackConnectionClose(gomock.Any()).Return(&coalescedPacket{buffer: getPacketBuffer()}, nil)
 		cryptoSetup.EXPECT().Close()
 		mconn.EXPECT().Write(gomock.Any())
-		tracer.EXPECT().Export()
+		tracer.EXPECT().Close()
 		sess.shutdown()
 		Eventually(sess.Context().Done()).Should(BeClosed())
 	})
@@ -1566,7 +1566,7 @@ var _ = Describe("Session", func() {
 		packer.EXPECT().PackConnectionClose(gomock.Any()).Return(&coalescedPacket{buffer: getPacketBuffer()}, nil)
 		cryptoSetup.EXPECT().Close()
 		mconn.EXPECT().Write(gomock.Any())
-		tracer.EXPECT().Export()
+		tracer.EXPECT().Close()
 		sess.shutdown()
 		Eventually(sess.Context().Done()).Should(BeClosed())
 	})
@@ -1577,7 +1577,7 @@ var _ = Describe("Session", func() {
 		expectReplaceWithClosed()
 		packer.EXPECT().PackConnectionClose(gomock.Any()).Return(&coalescedPacket{buffer: getPacketBuffer()}, nil)
 		cryptoSetup.EXPECT().Close()
-		tracer.EXPECT().Export()
+		tracer.EXPECT().Close()
 		go func() {
 			defer GinkgoRecover()
 			cryptoSetup.EXPECT().RunHandshake()
@@ -1630,7 +1630,7 @@ var _ = Describe("Session", func() {
 		expectReplaceWithClosed()
 		packer.EXPECT().PackConnectionClose(gomock.Any()).Return(&coalescedPacket{buffer: getPacketBuffer()}, nil)
 		cryptoSetup.EXPECT().Close()
-		tracer.EXPECT().Export()
+		tracer.EXPECT().Close()
 		sess.shutdown()
 		Eventually(sess.Context().Done()).Should(BeClosed())
 	})
@@ -1648,7 +1648,7 @@ var _ = Describe("Session", func() {
 		packer.EXPECT().PackConnectionClose(gomock.Any()).Return(&coalescedPacket{buffer: getPacketBuffer()}, nil)
 		cryptoSetup.EXPECT().Close()
 		mconn.EXPECT().Write(gomock.Any())
-		tracer.EXPECT().Export()
+		tracer.EXPECT().Close()
 		sess.shutdown()
 		Eventually(done).Should(BeClosed())
 	})
@@ -1668,7 +1668,7 @@ var _ = Describe("Session", func() {
 		packer.EXPECT().PackConnectionClose(gomock.Any()).Return(&coalescedPacket{buffer: getPacketBuffer()}, nil)
 		cryptoSetup.EXPECT().Close()
 		mconn.EXPECT().Write(gomock.Any())
-		tracer.EXPECT().Export()
+		tracer.EXPECT().Close()
 		Expect(sess.CloseWithError(0x1337, testErr.Error())).To(Succeed())
 		Eventually(done).Should(BeClosed())
 	})
@@ -1728,7 +1728,7 @@ var _ = Describe("Session", func() {
 			packer.EXPECT().PackConnectionClose(gomock.Any()).Return(&coalescedPacket{buffer: getPacketBuffer()}, nil)
 			cryptoSetup.EXPECT().Close()
 			mconn.EXPECT().Write(gomock.Any())
-			tracer.EXPECT().Export()
+			tracer.EXPECT().Close()
 			sess.shutdown()
 			Eventually(sess.Context().Done()).Should(BeClosed())
 		})
@@ -1790,7 +1790,7 @@ var _ = Describe("Session", func() {
 			cryptoSetup.EXPECT().Close()
 			gomock.InOrder(
 				tracer.EXPECT().ClosedConnection(logging.CloseReasonIdleTimeout),
-				tracer.EXPECT().Export(),
+				tracer.EXPECT().Close(),
 			)
 			go func() {
 				defer GinkgoRecover()
@@ -1812,7 +1812,7 @@ var _ = Describe("Session", func() {
 			cryptoSetup.EXPECT().Close()
 			gomock.InOrder(
 				tracer.EXPECT().ClosedConnection(logging.CloseReasonHandshakeTimeout),
-				tracer.EXPECT().Export(),
+				tracer.EXPECT().Close(),
 			)
 			done := make(chan struct{})
 			go func() {
@@ -1836,7 +1836,7 @@ var _ = Describe("Session", func() {
 				Expect(quicErr.ErrorCode).To(Equal(qerr.NoError))
 				return &coalescedPacket{buffer: getPacketBuffer()}, nil
 			})
-			tracer.EXPECT().Export()
+			tracer.EXPECT().Close()
 			// the handshake timeout is irrelevant here, since it depends on the time the session was created,
 			// and not on the last network activity
 			go func() {
@@ -1862,7 +1862,7 @@ var _ = Describe("Session", func() {
 			cryptoSetup.EXPECT().Close()
 			gomock.InOrder(
 				tracer.EXPECT().ClosedConnection(logging.CloseReasonIdleTimeout),
-				tracer.EXPECT().Export(),
+				tracer.EXPECT().Close(),
 			)
 			sess.idleTimeout = 0
 			done := make(chan struct{})
@@ -1897,7 +1897,7 @@ var _ = Describe("Session", func() {
 			expectReplaceWithClosed()
 			cryptoSetup.EXPECT().Close()
 			mconn.EXPECT().Write(gomock.Any())
-			tracer.EXPECT().Export()
+			tracer.EXPECT().Close()
 			sess.shutdown()
 			Eventually(sess.Context().Done()).Should(BeClosed())
 		})
@@ -2078,7 +2078,7 @@ var _ = Describe("Client Session", func() {
 		expectReplaceWithClosed()
 		cryptoSetup.EXPECT().Close()
 		mconn.EXPECT().Write(gomock.Any())
-		tracer.EXPECT().Export()
+		tracer.EXPECT().Close()
 		sess.shutdown()
 		Eventually(sess.Context().Done()).Should(BeClosed())
 	})
@@ -2182,7 +2182,7 @@ var _ = Describe("Client Session", func() {
 			sessionRunner.EXPECT().Remove(srcConnID).MaxTimes(1)
 			gomock.InOrder(
 				tracer.EXPECT().ReceivedVersionNegotiationPacket(gomock.Any()),
-				tracer.EXPECT().Export(),
+				tracer.EXPECT().Close(),
 			)
 			cryptoSetup.EXPECT().Close()
 			Expect(sess.handlePacketImpl(getVNP(12345678))).To(BeFalse())
@@ -2295,7 +2295,7 @@ var _ = Describe("Client Session", func() {
 				packer.EXPECT().PackConnectionClose(gomock.Any()).Return(&coalescedPacket{buffer: getPacketBuffer()}, nil).MaxTimes(1)
 				cryptoSetup.EXPECT().Close()
 				mconn.EXPECT().Write(gomock.Any())
-				tracer.EXPECT().Export()
+				tracer.EXPECT().Close()
 			}
 			closed = true
 		}

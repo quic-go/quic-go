@@ -5,7 +5,9 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"log"
 	"net"
+	"os"
 	"time"
 
 	"github.com/lucas-clemente/quic-go/internal/congestion"
@@ -63,7 +65,7 @@ var _ = Describe("Tracer", func() {
 	})
 
 	It("exports a trace that has the right metadata", func() {
-		Expect(tracer.Export()).To(Succeed())
+		tracer.Close()
 
 		m := make(map[string]interface{})
 		Expect(json.Unmarshal(buf.Bytes(), &m)).To(Succeed())
@@ -98,12 +100,17 @@ var _ = Describe("Tracer", func() {
 		for i := uint32(0); i < 1000; i++ {
 			tracer.UpdatedPTOCount(i)
 		}
-		Expect(tracer.Export()).To(MatchError("writer full"))
+
+		buf := &bytes.Buffer{}
+		log.SetOutput(buf)
+		defer log.SetOutput(os.Stdout)
+		tracer.Close()
+		Expect(buf.String()).To(ContainSubstring("writer full"))
 	})
 
 	Context("Events", func() {
 		exportAndParse := func() []entry {
-			Expect(tracer.Export()).To(Succeed())
+			tracer.Close()
 
 			m := make(map[string]interface{})
 			Expect(json.Unmarshal(buf.Bytes(), &m)).To(Succeed())
