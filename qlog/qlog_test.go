@@ -57,7 +57,7 @@ var _ = Describe("Tracer", func() {
 
 	BeforeEach(func() {
 		buf = &bytes.Buffer{}
-		tracer = NewTracer(
+		tracer = newTracer(
 			nopWriteCloser(buf),
 			protocol.PerspectiveServer,
 			protocol.ConnectionID{0xde, 0xad, 0xbe, 0xef},
@@ -92,7 +92,7 @@ var _ = Describe("Tracer", func() {
 	})
 
 	It("stops writing when encountering an error", func() {
-		tracer = NewTracer(
+		tracer = newTracer(
 			&limitedWriter{WriteCloser: nopWriteCloser(buf), N: 250},
 			protocol.PerspectiveServer,
 			protocol.ConnectionID{0xde, 0xad, 0xbe, 0xef},

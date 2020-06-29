@@ -2,11 +2,11 @@ package quic
 
 import (
 	"fmt"
-	"io"
 	"net"
 	"reflect"
 	"time"
 
+	"github.com/lucas-clemente/quic-go/internal/mocks"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/quictrace"
 
@@ -54,6 +54,8 @@ var _ = Describe("Config", func() {
 				f.Set(reflect.ValueOf(true))
 			case "QuicTracer":
 				f.Set(reflect.ValueOf(quictrace.NewTracer()))
+			case "Tracer":
+				f.Set(reflect.ValueOf(mocks.NewMockTracer(mockCtrl)))
 			default:
 				Fail(fmt.Sprintf("all fields must be accounted for, but saw unknown field %q", fn))
 			}
@@ -62,16 +64,13 @@ var _ = Describe("Config", func() {
 	}
 	Context("cloning", func() {
 		It("clones function fields", func() {
-			var calledAcceptToken, calledGetLogWriter bool
+			var calledAcceptToken bool
 			c1 := &Config{
-				AcceptToken:  func(_ net.Addr, _ *Token) bool { calledAcceptToken = true; return true },
-				GetLogWriter: func(connectionID []byte) io.WriteCloser { calledGetLogWriter = true; return nil },
+				AcceptToken: func(_ net.Addr, _ *Token) bool { calledAcceptToken = true; return true },
 			}
 			c2 := c1.Clone()
 			c2.AcceptToken(&net.UDPAddr{}, &Token{})
-			c2.GetLogWriter([]byte{1, 2, 3})
 			Expect(calledAcceptToken).To(BeTrue())
-			Expect(calledGetLogWriter).To(BeTrue())
 		})
 
 		It("clones non-function fields", func() {
@@ -95,16 +94,13 @@ var _ = Describe("Config", func() {
 
 	Context("populating", func() {
 		It("populates function fields", func() {
-			var calledAcceptToken, calledGetLogWriter bool
+			var calledAcceptToken bool
 			c1 := &Config{
-				AcceptToken:  func(_ net.Addr, _ *Token) bool { calledAcceptToken = true; return true },
-				GetLogWriter: func(connectionID []byte) io.WriteCloser { calledGetLogWriter = true; return nil },
+				AcceptToken: func(_ net.Addr, _ *Token) bool { calledAcceptToken = true; return true },
 			}
 			c2 := populateConfig(c1)
 			c2.AcceptToken(&net.UDPAddr{}, &Token{})
-			c2.GetLogWriter([]byte{1, 2, 3})
 			Expect(calledAcceptToken).To(BeTrue())
-			Expect(calledGetLogWriter).To(BeTrue())
 		})
 
 		It("copies non-function fields", func() {

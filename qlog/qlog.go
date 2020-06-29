@@ -19,6 +19,25 @@ import (
 
 const eventChanSize = 50
 
+type tracer struct {
+	getLogWriter func(connectionID []byte) io.WriteCloser
+}
+
+var _ logging.Tracer = &tracer{}
+
+// NewTracer creates a new qlog tracer.
+func NewTracer(getLogWriter func(connectionID []byte) io.WriteCloser) logging.Tracer {
+	return &tracer{getLogWriter: getLogWriter}
+}
+
+func (t *tracer) TracerForServer(odcid protocol.ConnectionID) logging.ConnectionTracer {
+	return newTracer(t.getLogWriter(odcid.Bytes()), protocol.PerspectiveServer, odcid)
+}
+
+func (t *tracer) TracerForClient(odcid protocol.ConnectionID) logging.ConnectionTracer {
+	return newTracer(t.getLogWriter(odcid.Bytes()), protocol.PerspectiveClient, odcid)
+}
+
 type connectionTracer struct {
 	mutex sync.Mutex
 
@@ -37,8 +56,8 @@ type connectionTracer struct {
 
 var _ logging.ConnectionTracer = &connectionTracer{}
 
-// NewTracer creates a new connectionTracer to record a qlog.
-func NewTracer(w io.WriteCloser, p protocol.Perspective, odcid protocol.ConnectionID) logging.ConnectionTracer {
+// newTracer creates a new connectionTracer to record a qlog.
+func newTracer(w io.WriteCloser, p protocol.Perspective, odcid protocol.ConnectionID) logging.ConnectionTracer {
 	t := &connectionTracer{
 		w:             w,
 		perspective:   p,

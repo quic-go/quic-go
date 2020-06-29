@@ -11,6 +11,11 @@ import (
 	"github.com/lucas-clemente/quic-go/internal/wire"
 )
 
+type Tracer interface {
+	TracerForServer(odcid protocol.ConnectionID) ConnectionTracer
+	TracerForClient(odcid protocol.ConnectionID) ConnectionTracer
+}
+
 // A ConnectionTracer records events.
 type ConnectionTracer interface {
 	StartedConnection(local, remote net.Addr, version protocol.VersionNumber, srcConnID, destConnID protocol.ConnectionID)

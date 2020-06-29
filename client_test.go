@@ -1,13 +1,10 @@
 package quic
 
 import (
-	"bufio"
 	"bytes"
 	"context"
 	"crypto/tls"
 	"errors"
-	"io"
-	"io/ioutil"
 	"net"
 	"os"
 	"time"
@@ -52,7 +49,6 @@ var _ = Describe("Client", func() {
 			logger utils.Logger,
 			v protocol.VersionNumber,
 		) quicSession
-		originalTracerConstructor func(io.WriteCloser, protocol.Perspective, protocol.ConnectionID) logging.ConnectionTracer
 	)
 
 	// generate a packet sent by the server that accepts the QUIC version suggested by the client
@@ -70,21 +66,10 @@ var _ = Describe("Client", func() {
 		tlsConf = &tls.Config{NextProtos: []string{"proto1"}}
 		connID = protocol.ConnectionID{0, 0, 0, 0, 0, 0, 0x13, 0x37}
 		originalClientSessConstructor = newClientSession
-		originalTracerConstructor = newTracer
 		tracer = mocks.NewMockConnectionTracer(mockCtrl)
-		newTracer = func(io.WriteCloser, protocol.Perspective, protocol.ConnectionID) logging.ConnectionTracer {
-			return tracer
-		}
-		config = &Config{
-			GetLogWriter: func([]byte) io.WriteCloser {
-				// Since we're mocking the tracer, it doesn't matter what we return here,
-				// as long as it's not nil.
-				return utils.NewBufferedWriteCloser(
-					bufio.NewWriter(&bytes.Buffer{}),
-					ioutil.NopCloser(&bytes.Buffer{}),
-				)
-			},
-		}
+		tr := mocks.NewMockTracer(mockCtrl)
+		tr.EXPECT().TracerForClient(gomock.Any()).Return(tracer).MaxTimes(1)
+		config = &Config{Tracer: tr}
 		Eventually(areSessionsRunning).Should(BeFalse())
 		// sess = NewMockQuicSession(mockCtrl)
 		addr = &net.UDPAddr{IP: net.IPv4(192, 168, 100, 200), Port: 1337}
@@ -109,7 +94,6 @@ var _ = Describe("Client", func() {
 	AfterEach(func() {
 		connMuxer = origMultiplexer
 		newClientSession = originalClientSessConstructor
-		newTracer = originalTracerConstructor
 	})
 
 	AfterEach(func() {

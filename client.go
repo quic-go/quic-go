@@ -12,7 +12,6 @@ import (
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/internal/utils"
 	"github.com/lucas-clemente/quic-go/logging"
-	"github.com/lucas-clemente/quic-go/qlog"
 )
 
 type client struct {
@@ -51,8 +50,6 @@ var (
 	// make it possible to mock connection ID generation in the tests
 	generateConnectionID           = protocol.GenerateConnectionID
 	generateConnectionIDForInitial = protocol.GenerateConnectionIDForInitial
-	// make it possible to the tracer
-	newTracer = qlog.NewTracer
 )
 
 // DialAddr establishes a new QUIC connection to a server.
@@ -180,10 +177,8 @@ func dialContext(
 	}
 	c.packetHandlers = packetHandlers
 
-	if c.config.GetLogWriter != nil {
-		if w := c.config.GetLogWriter(c.destConnID); w != nil {
-			c.tracer = newTracer(w, protocol.PerspectiveClient, c.destConnID)
-		}
+	if c.config.Tracer != nil {
+		c.tracer = c.config.Tracer.TracerForClient(c.destConnID)
 	}
 	if err := c.dial(ctx); err != nil {
 		return nil, err

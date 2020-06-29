@@ -17,7 +17,6 @@ import (
 	"github.com/lucas-clemente/quic-go/internal/utils"
 	"github.com/lucas-clemente/quic-go/internal/wire"
 	"github.com/lucas-clemente/quic-go/logging"
-	"github.com/lucas-clemente/quic-go/qlog"
 )
 
 // packetHandler handles packets
@@ -448,15 +447,13 @@ func (s *baseServer) createNewSession(
 	var sess quicSession
 	if added := s.sessionHandler.AddWithConnID(clientDestConnID, srcConnID, func() packetHandler {
 		var tracer logging.ConnectionTracer
-		if s.config.GetLogWriter != nil {
+		if s.config.Tracer != nil {
 			// Use the same connection ID that is passed to the client's GetLogWriter callback.
 			connID := clientDestConnID
 			if origDestConnID.Len() > 0 {
 				connID = origDestConnID
 			}
-			if w := s.config.GetLogWriter(connID); w != nil {
-				tracer = qlog.NewTracer(w, protocol.PerspectiveServer, connID)
-			}
+			tracer = s.config.Tracer.TracerForServer(connID)
 		}
 		sess = s.newSession(
 			&conn{pconn: s.conn, currentAddr: remoteAddr},
