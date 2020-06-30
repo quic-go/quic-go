@@ -11,7 +11,6 @@ import (
 
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/internal/utils"
-	"github.com/lucas-clemente/quic-go/internal/wire"
 	"github.com/lucas-clemente/quic-go/qlog"
 )
 
@@ -27,20 +26,15 @@ type client struct {
 
 	packetHandlers packetHandlerManager
 
-	versionNegotiated                utils.AtomicBool // has the server accepted our version
-	receivedVersionNegotiationPacket bool
-	negotiatedVersions               []protocol.VersionNumber // the list of versions from the version negotiation packet
-
 	tlsConf *tls.Config
 	config  *Config
 
 	srcConnID  protocol.ConnectionID
 	destConnID protocol.ConnectionID
 
-	initialPacketNumber protocol.PacketNumber
-
-	initialVersion protocol.VersionNumber
-	version        protocol.VersionNumber
+	initialPacketNumber  protocol.PacketNumber
+	hasNegotiatedVersion bool
+	version              protocol.VersionNumber
 
 	handshakeChan chan struct{}
 
@@ -268,8 +262,9 @@ func (c *client) dial(ctx context.Context) error {
 		c.config,
 		c.tlsConf,
 		c.initialPacketNumber,
-		c.initialVersion,
+		c.version,
 		c.use0RTT,
+		c.hasNegotiatedVersion,
 		c.qlogger,
 		c.logger,
 		c.version,
@@ -280,7 +275,7 @@ func (c *client) dial(ctx context.Context) error {
 	errorChan := make(chan error, 1)
 	go func() {
 		err := c.session.run() // returns as soon as the session is closed
-		if err != errCloseForRecreating && c.createdPacketConn {
+		if !errors.Is(err, errCloseForRecreating{}) && c.createdPacketConn {
 			c.packetHandlers.Destroy()
 		}
 		errorChan <- err
@@ -298,7 +293,11 @@ func (c *client) dial(ctx context.Context) error {
 		c.session.shutdown()
 		return ctx.Err()
 	case err := <-errorChan:
-		if err == errCloseForRecreating {
+		var recreateErr *errCloseForRecreating
+		if errors.As(err, &recreateErr) {
+			c.initialPacketNumber = recreateErr.nextPacketNumber
+			c.version = recreateErr.nextVersion
+			c.hasNegotiatedVersion = true
 			return c.dial(ctx)
 		}
 		return err
@@ -312,73 +311,7 @@ func (c *client) dial(ctx context.Context) error {
 }
 
 func (c *client) handlePacket(p *receivedPacket) {
-	if wire.IsVersionNegotiationPacket(p.data) {
-		go c.handleVersionNegotiationPacket(p)
-		return
-	}
-
-	// this is the first packet we are receiving
-	// since it is not a Version Negotiation Packet, this means the server supports the suggested version
-	if !c.versionNegotiated.Get() {
-		c.versionNegotiated.Set(true)
-	}
-
 	c.session.handlePacket(p)
-}
-
-func (c *client) handleVersionNegotiationPacket(p *receivedPacket) {
-	c.mutex.Lock()
-	defer c.mutex.Unlock()
-
-	hdr, _, _, err := wire.ParsePacket(p.data, 0)
-	if err != nil {
-		if c.qlogger != nil {
-			c.qlogger.DroppedPacket(qlog.PacketTypeVersionNegotiation, protocol.ByteCount(len(p.data)), qlog.PacketDropHeaderParseError)
-		}
-		c.logger.Debugf("Error parsing Version Negotiation packet: %s", err)
-		return
-	}
-
-	// ignore delayed / duplicated version negotiation packets
-	if c.receivedVersionNegotiationPacket || c.versionNegotiated.Get() {
-		if c.qlogger != nil {
-			c.qlogger.DroppedPacket(qlog.PacketTypeVersionNegotiation, protocol.ByteCount(len(p.data)), qlog.PacketDropUnexpectedPacket)
-		}
-		c.logger.Debugf("Received a delayed Version Negotiation packet.")
-		return
-	}
-
-	for _, v := range hdr.SupportedVersions {
-		if v == c.version {
-			if c.qlogger != nil {
-				c.qlogger.DroppedPacket(qlog.PacketTypeVersionNegotiation, protocol.ByteCount(len(p.data)), qlog.PacketDropUnexpectedVersion)
-			}
-			// The Version Negotiation packet contains the version that we offered.
-			// This might be a packet sent by an attacker (or by a terribly broken server implementation).
-			return
-		}
-	}
-
-	c.logger.Infof("Received a Version Negotiation packet. Supported Versions: %s", hdr.SupportedVersions)
-	if c.qlogger != nil {
-		c.qlogger.ReceivedVersionNegotiationPacket(hdr)
-	}
-	newVersion, ok := protocol.ChooseSupportedVersion(c.config.Versions, hdr.SupportedVersions)
-	if !ok {
-		//nolint:stylecheck
-		c.session.destroy(fmt.Errorf("No compatible QUIC version found. We support %s, server offered %s", c.config.Versions, hdr.SupportedVersions))
-		c.logger.Debugf("No compatible QUIC version found.")
-		return
-	}
-	c.receivedVersionNegotiationPacket = true
-	c.negotiatedVersions = hdr.SupportedVersions
-
-	// switch to negotiated version
-	c.initialVersion = c.version
-	c.version = newVersion
-
-	c.logger.Infof("Switching to QUIC version %s. New connection ID: %s", newVersion, c.destConnID)
-	c.initialPacketNumber = c.session.closeForRecreating()
 }
 
 func (c *client) shutdown() {
