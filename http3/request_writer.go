@@ -57,14 +57,13 @@ func (w *requestWriter) WriteRequest(str quic.Stream, req *http.Request, gzip bo
 		defer req.Body.Close()
 		b := make([]byte, bodyCopyBufferSize)
 		for {
-			n, err := req.Body.Read(b)
-			if err == io.EOF {
-				break
-			}
-			if err != nil {
-				str.CancelWrite(quic.ErrorCode(errorRequestCanceled))
-				w.logger.Errorf("Error writing request: %s", err)
-				return
+			n, rerr := req.Body.Read(b)
+			if n == 0 {
+				if rerr == nil {
+					continue
+				} else if rerr == io.EOF {
+					break
+				}
 			}
 			buf := &bytes.Buffer{}
 			(&dataFrame{Length: uint64(n)}).Write(buf)
@@ -74,6 +73,14 @@ func (w *requestWriter) WriteRequest(str quic.Stream, req *http.Request, gzip bo
 			}
 			if _, err := str.Write(b[:n]); err != nil {
 				w.logger.Errorf("Error writing request: %s", err)
+				return
+			}
+			if rerr != nil {
+				if rerr == io.EOF {
+					break
+				}
+				str.CancelWrite(quic.ErrorCode(errorRequestCanceled))
+				w.logger.Errorf("Error writing request: %s", rerr)
 				return
 			}
 		}
