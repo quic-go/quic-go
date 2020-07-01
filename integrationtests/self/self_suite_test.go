@@ -21,6 +21,7 @@ import (
 
 	"github.com/lucas-clemente/quic-go"
 	"github.com/lucas-clemente/quic-go/internal/utils"
+	"github.com/lucas-clemente/quic-go/qlog"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -259,14 +260,14 @@ func getQuicConfigForRole(role string, conf *quic.Config) *quic.Config {
 	if !enableQlog {
 		return conf
 	}
-	conf.GetLogWriter = func(connectionID []byte) io.WriteCloser {
+	conf.Tracer = qlog.NewTracer(func(connectionID []byte) io.WriteCloser {
 		filename := fmt.Sprintf("log_%x_%s.qlog", connectionID, role)
 		fmt.Fprintf(GinkgoWriter, "Creating %s.\n", filename)
 		f, err := os.Create(filename)
 		Expect(err).ToNot(HaveOccurred())
 		bw := bufio.NewWriter(f)
 		return utils.NewBufferedWriteCloser(bw, f)
-	}
+	})
 	return conf
 }
 

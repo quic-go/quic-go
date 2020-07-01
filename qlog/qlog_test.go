@@ -5,12 +5,15 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"log"
 	"net"
+	"os"
 	"time"
 
 	"github.com/lucas-clemente/quic-go/internal/congestion"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/internal/wire"
+	"github.com/lucas-clemente/quic-go/logging"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -48,13 +51,13 @@ type entry struct {
 
 var _ = Describe("Tracer", func() {
 	var (
-		tracer Tracer
+		tracer logging.ConnectionTracer
 		buf    *bytes.Buffer
 	)
 
 	BeforeEach(func() {
 		buf = &bytes.Buffer{}
-		tracer = NewTracer(
+		tracer = newTracer(
 			nopWriteCloser(buf),
 			protocol.PerspectiveServer,
 			protocol.ConnectionID{0xde, 0xad, 0xbe, 0xef},
@@ -62,7 +65,7 @@ var _ = Describe("Tracer", func() {
 	})
 
 	It("exports a trace that has the right metadata", func() {
-		Expect(tracer.Export()).To(Succeed())
+		tracer.Close()
 
 		m := make(map[string]interface{})
 		Expect(json.Unmarshal(buf.Bytes(), &m)).To(Succeed())
@@ -89,7 +92,7 @@ var _ = Describe("Tracer", func() {
 	})
 
 	It("stops writing when encountering an error", func() {
-		tracer = NewTracer(
+		tracer = newTracer(
 			&limitedWriter{WriteCloser: nopWriteCloser(buf), N: 250},
 			protocol.PerspectiveServer,
 			protocol.ConnectionID{0xde, 0xad, 0xbe, 0xef},
@@ -97,12 +100,17 @@ var _ = Describe("Tracer", func() {
 		for i := uint32(0); i < 1000; i++ {
 			tracer.UpdatedPTOCount(i)
 		}
-		Expect(tracer.Export()).To(MatchError("writer full"))
+
+		buf := &bytes.Buffer{}
+		log.SetOutput(buf)
+		defer log.SetOutput(os.Stdout)
+		tracer.Close()
+		Expect(buf.String()).To(ContainSubstring("writer full"))
 	})
 
 	Context("Events", func() {
 		exportAndParse := func() []entry {
-			Expect(tracer.Export()).To(Succeed())
+			tracer.Close()
 
 			m := make(map[string]interface{})
 			Expect(json.Unmarshal(buf.Bytes(), &m)).To(Succeed())
@@ -159,7 +167,7 @@ var _ = Describe("Tracer", func() {
 		})
 
 		It("records connection closes", func() {
-			tracer.ClosedConnection(CloseReasonIdleTimeout)
+			tracer.ClosedConnection(logging.CloseReasonIdleTimeout)
 			entry := exportAndParseSingle()
 			Expect(entry.Time).To(BeTemporally("~", time.Now(), scaleDuration(10*time.Millisecond)))
 			Expect(entry.Category).To(Equal("transport"))
@@ -402,7 +410,7 @@ var _ = Describe("Tracer", func() {
 		})
 
 		It("records buffered packets", func() {
-			tracer.BufferedPacket(PacketTypeHandshake)
+			tracer.BufferedPacket(logging.PacketTypeHandshake)
 			entry := exportAndParseSingle()
 			Expect(entry.Time).To(BeTemporally("~", time.Now(), scaleDuration(10*time.Millisecond)))
 			Expect(entry.Category).To(Equal("transport"))
@@ -413,7 +421,7 @@ var _ = Describe("Tracer", func() {
 		})
 
 		It("records dropped packets", func() {
-			tracer.DroppedPacket(PacketTypeHandshake, 1337, PacketDropPayloadDecryptError)
+			tracer.DroppedPacket(logging.PacketTypeHandshake, 1337, logging.PacketDropPayloadDecryptError)
 			entry := exportAndParseSingle()
 			Expect(entry.Time).To(BeTemporally("~", time.Now(), scaleDuration(10*time.Millisecond)))
 			Expect(entry.Category).To(Equal("transport"))
@@ -503,7 +511,7 @@ var _ = Describe("Tracer", func() {
 		})
 
 		It("records lost packets", func() {
-			tracer.LostPacket(protocol.EncryptionHandshake, 42, PacketLossReorderingThreshold)
+			tracer.LostPacket(protocol.EncryptionHandshake, 42, logging.PacketLossReorderingThreshold)
 			entry := exportAndParseSingle()
 			Expect(entry.Time).To(BeTemporally("~", time.Now(), scaleDuration(10*time.Millisecond)))
 			Expect(entry.Category).To(Equal("recovery"))
@@ -576,7 +584,7 @@ var _ = Describe("Tracer", func() {
 
 		It("records when the timer is set", func() {
 			timeout := time.Now().Add(137 * time.Millisecond)
-			tracer.SetLossTimer(TimerTypePTO, protocol.EncryptionHandshake, timeout)
+			tracer.SetLossTimer(logging.TimerTypePTO, protocol.EncryptionHandshake, timeout)
 			entry := exportAndParseSingle()
 			Expect(entry.Time).To(BeTemporally("~", time.Now(), scaleDuration(10*time.Millisecond)))
 			Expect(entry.Category).To(Equal("recovery"))
@@ -592,7 +600,7 @@ var _ = Describe("Tracer", func() {
 		})
 
 		It("records when the loss timer expires", func() {
-			tracer.LossTimerExpired(TimerTypeACK, protocol.Encryption1RTT)
+			tracer.LossTimerExpired(logging.TimerTypeACK, protocol.Encryption1RTT)
 			entry := exportAndParseSingle()
 			Expect(entry.Time).To(BeTemporally("~", time.Now(), scaleDuration(10*time.Millisecond)))
 			Expect(entry.Category).To(Equal("recovery"))

@@ -1,18 +1,15 @@
 package quic
 
 import (
-	"bufio"
 	"bytes"
 	"context"
 	"crypto/tls"
 	"errors"
-	"io"
-	"io/ioutil"
 	"net"
 	"os"
 	"time"
 
-	"github.com/lucas-clemente/quic-go/qlog"
+	"github.com/lucas-clemente/quic-go/logging"
 
 	"github.com/golang/mock/gomock"
 	"github.com/lucas-clemente/quic-go/internal/mocks"
@@ -34,7 +31,7 @@ var _ = Describe("Client", func() {
 		mockMultiplexer *MockMultiplexer
 		origMultiplexer multiplexer
 		tlsConf         *tls.Config
-		qlogger         *mocks.MockTracer
+		tracer          *mocks.MockConnectionTracer
 		config          *Config
 
 		originalClientSessConstructor func(
@@ -48,11 +45,10 @@ var _ = Describe("Client", func() {
 			initialVersion protocol.VersionNumber,
 			enable0RTT bool,
 			hasNegotiatedVersion bool,
-			qlogger qlog.Tracer,
+			tracer logging.ConnectionTracer,
 			logger utils.Logger,
 			v protocol.VersionNumber,
 		) quicSession
-		originalQlogConstructor func(io.WriteCloser, protocol.Perspective, protocol.ConnectionID) qlog.Tracer
 	)
 
 	// generate a packet sent by the server that accepts the QUIC version suggested by the client
@@ -70,21 +66,10 @@ var _ = Describe("Client", func() {
 		tlsConf = &tls.Config{NextProtos: []string{"proto1"}}
 		connID = protocol.ConnectionID{0, 0, 0, 0, 0, 0, 0x13, 0x37}
 		originalClientSessConstructor = newClientSession
-		originalQlogConstructor = newQlogger
-		qlogger = mocks.NewMockTracer(mockCtrl)
-		newQlogger = func(io.WriteCloser, protocol.Perspective, protocol.ConnectionID) qlog.Tracer {
-			return qlogger
-		}
-		config = &Config{
-			GetLogWriter: func([]byte) io.WriteCloser {
-				// Since we're mocking the qlogger, it doesn't matter what we return here,
-				// as long as it's not nil.
-				return utils.NewBufferedWriteCloser(
-					bufio.NewWriter(&bytes.Buffer{}),
-					ioutil.NopCloser(&bytes.Buffer{}),
-				)
-			},
-		}
+		tracer = mocks.NewMockConnectionTracer(mockCtrl)
+		tr := mocks.NewMockTracer(mockCtrl)
+		tr.EXPECT().TracerForClient(gomock.Any()).Return(tracer).MaxTimes(1)
+		config = &Config{Tracer: tr}
 		Eventually(areSessionsRunning).Should(BeFalse())
 		// sess = NewMockQuicSession(mockCtrl)
 		addr = &net.UDPAddr{IP: net.IPv4(192, 168, 100, 200), Port: 1337}
@@ -96,7 +81,7 @@ var _ = Describe("Client", func() {
 			destConnID: connID,
 			version:    protocol.SupportedVersions[0],
 			conn:       &conn{pconn: packetConn, currentAddr: addr},
-			qlogger:    qlogger,
+			tracer:     tracer,
 			logger:     utils.DefaultLogger,
 		}
 		getMultiplexer() // make the sync.Once execute
@@ -109,7 +94,6 @@ var _ = Describe("Client", func() {
 	AfterEach(func() {
 		connMuxer = origMultiplexer
 		newClientSession = originalClientSessConstructor
-		newQlogger = originalQlogConstructor
 	})
 
 	AfterEach(func() {
@@ -161,7 +145,7 @@ var _ = Describe("Client", func() {
 				_ protocol.VersionNumber,
 				_ bool,
 				_ bool,
-				_ qlog.Tracer,
+				_ logging.ConnectionTracer,
 				_ utils.Logger,
 				_ protocol.VersionNumber,
 			) quicSession {
@@ -194,7 +178,7 @@ var _ = Describe("Client", func() {
 				_ protocol.VersionNumber,
 				_ bool,
 				_ bool,
-				_ qlog.Tracer,
+				_ logging.ConnectionTracer,
 				_ utils.Logger,
 				_ protocol.VersionNumber,
 			) quicSession {
@@ -227,7 +211,7 @@ var _ = Describe("Client", func() {
 				_ protocol.VersionNumber,
 				_ bool,
 				_ bool,
-				_ qlog.Tracer,
+				_ logging.ConnectionTracer,
 				_ utils.Logger,
 				_ protocol.VersionNumber,
 			) quicSession {
@@ -237,7 +221,7 @@ var _ = Describe("Client", func() {
 				sess.EXPECT().run()
 				return sess
 			}
-			qlogger.EXPECT().StartedConnection(packetConn.addr, addr, protocol.VersionTLS, gomock.Any(), gomock.Any())
+			tracer.EXPECT().StartedConnection(packetConn.addr, addr, protocol.VersionTLS, gomock.Any(), gomock.Any())
 			_, err := Dial(
 				packetConn,
 				addr,
@@ -266,7 +250,7 @@ var _ = Describe("Client", func() {
 				_ protocol.VersionNumber,
 				enable0RTT bool,
 				_ bool,
-				_ qlog.Tracer,
+				_ logging.ConnectionTracer,
 				_ utils.Logger,
 				_ protocol.VersionNumber,
 			) quicSession {
@@ -278,7 +262,7 @@ var _ = Describe("Client", func() {
 				sess.EXPECT().HandshakeComplete().Return(ctx)
 				return sess
 			}
-			qlogger.EXPECT().StartedConnection(gomock.Any(), gomock.Any(), protocol.VersionTLS, gomock.Any(), gomock.Any())
+			tracer.EXPECT().StartedConnection(gomock.Any(), gomock.Any(), protocol.VersionTLS, gomock.Any(), gomock.Any())
 			s, err := Dial(
 				packetConn,
 				addr,
@@ -309,7 +293,7 @@ var _ = Describe("Client", func() {
 				_ protocol.VersionNumber,
 				enable0RTT bool,
 				_ bool,
-				_ qlog.Tracer,
+				_ logging.ConnectionTracer,
 				_ utils.Logger,
 				_ protocol.VersionNumber,
 			) quicSession {
@@ -324,7 +308,7 @@ var _ = Describe("Client", func() {
 			go func() {
 				defer GinkgoRecover()
 				defer close(done)
-				qlogger.EXPECT().StartedConnection(gomock.Any(), gomock.Any(), protocol.VersionTLS, gomock.Any(), gomock.Any())
+				tracer.EXPECT().StartedConnection(gomock.Any(), gomock.Any(), protocol.VersionTLS, gomock.Any(), gomock.Any())
 				s, err := DialEarly(
 					packetConn,
 					addr,
@@ -357,7 +341,7 @@ var _ = Describe("Client", func() {
 				_ protocol.VersionNumber,
 				_ bool,
 				_ bool,
-				_ qlog.Tracer,
+				_ logging.ConnectionTracer,
 				_ utils.Logger,
 				_ protocol.VersionNumber,
 			) quicSession {
@@ -367,7 +351,7 @@ var _ = Describe("Client", func() {
 				return sess
 			}
 			packetConn.dataToRead <- acceptClientVersionPacket(cl.srcConnID)
-			qlogger.EXPECT().StartedConnection(gomock.Any(), gomock.Any(), protocol.VersionTLS, gomock.Any(), gomock.Any())
+			tracer.EXPECT().StartedConnection(gomock.Any(), gomock.Any(), protocol.VersionTLS, gomock.Any(), gomock.Any())
 			_, err := Dial(
 				packetConn,
 				addr,
@@ -401,7 +385,7 @@ var _ = Describe("Client", func() {
 				_ protocol.VersionNumber,
 				_ bool,
 				_ bool,
-				_ qlog.Tracer,
+				_ logging.ConnectionTracer,
 				_ utils.Logger,
 				_ protocol.VersionNumber,
 			) quicSession {
@@ -411,7 +395,7 @@ var _ = Describe("Client", func() {
 			dialed := make(chan struct{})
 			go func() {
 				defer GinkgoRecover()
-				qlogger.EXPECT().StartedConnection(gomock.Any(), gomock.Any(), protocol.VersionTLS, gomock.Any(), gomock.Any())
+				tracer.EXPECT().StartedConnection(gomock.Any(), gomock.Any(), protocol.VersionTLS, gomock.Any(), gomock.Any())
 				_, err := DialContext(
 					ctx,
 					packetConn,
@@ -453,7 +437,7 @@ var _ = Describe("Client", func() {
 				_ protocol.VersionNumber,
 				_ bool,
 				_ bool,
-				_ qlog.Tracer,
+				_ logging.ConnectionTracer,
 				_ utils.Logger,
 				_ protocol.VersionNumber,
 			) quicSession {
@@ -574,7 +558,7 @@ var _ = Describe("Client", func() {
 				_ protocol.VersionNumber, /* initial version */
 				_ bool,
 				_ bool,
-				_ qlog.Tracer,
+				_ logging.ConnectionTracer,
 				_ utils.Logger,
 				versionP protocol.VersionNumber,
 			) quicSession {
@@ -616,7 +600,7 @@ var _ = Describe("Client", func() {
 				version protocol.VersionNumber,
 				_ bool,
 				hasNegotiatedVersion bool,
-				_ qlog.Tracer,
+				_ logging.ConnectionTracer,
 				_ utils.Logger,
 				versionP protocol.VersionNumber,
 			) quicSession {
@@ -642,8 +626,8 @@ var _ = Describe("Client", func() {
 			}
 
 			gomock.InOrder(
-				qlogger.EXPECT().StartedConnection(gomock.Any(), gomock.Any(), initialVersion, gomock.Any(), gomock.Any()),
-				qlogger.EXPECT().StartedConnection(gomock.Any(), gomock.Any(), protocol.VersionNumber(789), gomock.Any(), gomock.Any()),
+				tracer.EXPECT().StartedConnection(gomock.Any(), gomock.Any(), initialVersion, gomock.Any(), gomock.Any()),
+				tracer.EXPECT().StartedConnection(gomock.Any(), gomock.Any(), protocol.VersionNumber(789), gomock.Any(), gomock.Any()),
 			)
 			_, err := DialAddr("localhost:7890", tlsConf, config)
 			Expect(err).ToNot(HaveOccurred())

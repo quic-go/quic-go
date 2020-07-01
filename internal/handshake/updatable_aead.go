@@ -12,7 +12,7 @@ import (
 	"github.com/lucas-clemente/quic-go/internal/congestion"
 	"github.com/lucas-clemente/quic-go/internal/qerr"
 	"github.com/lucas-clemente/quic-go/internal/utils"
-	"github.com/lucas-clemente/quic-go/qlog"
+	"github.com/lucas-clemente/quic-go/logging"
 
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/marten-seemann/qtls"
@@ -74,8 +74,8 @@ type updatableAEAD struct {
 
 	rttStats *congestion.RTTStats
 
-	qlogger qlog.Tracer
-	logger  utils.Logger
+	tracer logging.ConnectionTracer
+	logger utils.Logger
 
 	// use a single slice to avoid allocations
 	nonceBuf []byte
@@ -84,7 +84,7 @@ type updatableAEAD struct {
 var _ ShortHeaderOpener = &updatableAEAD{}
 var _ ShortHeaderSealer = &updatableAEAD{}
 
-func newUpdatableAEAD(rttStats *congestion.RTTStats, qlogger qlog.Tracer, logger utils.Logger) *updatableAEAD {
+func newUpdatableAEAD(rttStats *congestion.RTTStats, tracer logging.ConnectionTracer, logger utils.Logger) *updatableAEAD {
 	return &updatableAEAD{
 		firstPacketNumber:       protocol.InvalidPacketNumber,
 		largestAcked:            protocol.InvalidPacketNumber,
@@ -92,7 +92,7 @@ func newUpdatableAEAD(rttStats *congestion.RTTStats, qlogger qlog.Tracer, logger
 		firstSentWithCurrentKey: protocol.InvalidPacketNumber,
 		keyUpdateInterval:       keyUpdateInterval,
 		rttStats:                rttStats,
-		qlogger:                 qlogger,
+		tracer:                  tracer,
 		logger:                  logger,
 	}
 }
@@ -183,8 +183,8 @@ func (a *updatableAEAD) Open(dst, src []byte, rcvTime time.Time, pn protocol.Pac
 		}
 		a.rollKeys(rcvTime)
 		a.logger.Debugf("Peer updated keys to %s", a.keyPhase)
-		if a.qlogger != nil {
-			a.qlogger.UpdatedKey(a.keyPhase, true)
+		if a.tracer != nil {
+			a.tracer.UpdatedKey(a.keyPhase, true)
 		}
 		a.firstRcvdWithCurrentKey = pn
 		return dec, err
@@ -244,8 +244,8 @@ func (a *updatableAEAD) shouldInitiateKeyUpdate() bool {
 
 func (a *updatableAEAD) KeyPhase() protocol.KeyPhaseBit {
 	if a.shouldInitiateKeyUpdate() {
-		if a.qlogger != nil {
-			a.qlogger.UpdatedKey(a.keyPhase, false)
+		if a.tracer != nil {
+			a.tracer.UpdatedKey(a.keyPhase, false)
 		}
 		a.rollKeys(time.Now())
 	}

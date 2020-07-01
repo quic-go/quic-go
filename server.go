@@ -16,7 +16,7 @@ import (
 	"github.com/lucas-clemente/quic-go/internal/qerr"
 	"github.com/lucas-clemente/quic-go/internal/utils"
 	"github.com/lucas-clemente/quic-go/internal/wire"
-	"github.com/lucas-clemente/quic-go/qlog"
+	"github.com/lucas-clemente/quic-go/logging"
 )
 
 // packetHandler handles packets
@@ -86,7 +86,7 @@ type baseServer struct {
 		*tls.Config,
 		*handshake.TokenGenerator,
 		bool, /* enable 0-RTT */
-		qlog.Tracer,
+		logging.ConnectionTracer,
 		utils.Logger,
 		protocol.VersionNumber,
 	) quicSession
@@ -446,16 +446,14 @@ func (s *baseServer) createNewSession(
 ) quicSession {
 	var sess quicSession
 	if added := s.sessionHandler.AddWithConnID(clientDestConnID, srcConnID, func() packetHandler {
-		var qlogger qlog.Tracer
-		if s.config.GetLogWriter != nil {
+		var tracer logging.ConnectionTracer
+		if s.config.Tracer != nil {
 			// Use the same connection ID that is passed to the client's GetLogWriter callback.
 			connID := clientDestConnID
 			if origDestConnID.Len() > 0 {
 				connID = origDestConnID
 			}
-			if w := s.config.GetLogWriter(connID); w != nil {
-				qlogger = qlog.NewTracer(w, protocol.PerspectiveServer, connID)
-			}
+			tracer = s.config.Tracer.TracerForServer(connID)
 		}
 		sess = s.newSession(
 			&conn{pconn: s.conn, currentAddr: remoteAddr},
@@ -470,7 +468,7 @@ func (s *baseServer) createNewSession(
 			s.tlsConf,
 			s.tokenGenerator,
 			s.acceptEarlySessions,
-			qlogger,
+			tracer,
 			s.logger,
 			version,
 		)

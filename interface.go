@@ -6,6 +6,8 @@ import (
 	"net"
 	"time"
 
+	"github.com/lucas-clemente/quic-go/logging"
+
 	"github.com/lucas-clemente/quic-go/internal/handshake"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/quictrace"
@@ -245,11 +247,7 @@ type Config struct {
 	// QUIC Event Tracer.
 	// Warning: Experimental. This API should not be considered stable and will change soon.
 	QuicTracer quictrace.Tracer
-	// GetLogWriter is used to pass in a writer for the qlog.
-	// If it is nil, no qlog will be collected and exported.
-	// If it returns nil, no qlog will be collected and exported for the respective connection.
-	// It is recommended to use a buffered writer here.
-	GetLogWriter func(connectionID []byte) io.WriteCloser
+	Tracer     logging.Tracer
 }
 
 // A Listener for incoming QUIC connections
