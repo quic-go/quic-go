@@ -6,7 +6,6 @@ import (
 	"net"
 	"unsafe"
 
-	gomock "github.com/golang/mock/gomock"
 	"github.com/lucas-clemente/quic-go/internal/congestion"
 	"github.com/marten-seemann/qtls"
 	. "github.com/onsi/ginkgo"
@@ -179,36 +178,6 @@ var _ = Describe("qtls.Config", func() {
 		It("doesn't set if absent", func() {
 			qtlsConf := tlsConfigToQtlsConfig(&tls.Config{}, nil, &mockExtensionHandler{}, congestion.NewRTTStats(), nil, nil, nil, nil, false)
 			Expect(qtlsConf.ClientSessionCache).To(BeNil())
-		})
-
-		It("sets it, and puts and gets session states", func() {
-			csc := NewMockClientSessionCache(mockCtrl)
-			tlsConf := &tls.Config{ClientSessionCache: csc}
-			var appData []byte
-			qtlsConf := tlsConfigToQtlsConfig(
-				tlsConf,
-				nil,
-				&mockExtensionHandler{},
-				congestion.NewRTTStats(),
-				func() []byte { return []byte("foobar") },
-				func(p []byte) { appData = p },
-				nil,
-				nil,
-				false,
-			)
-			Expect(qtlsConf.ClientSessionCache).ToNot(BeNil())
-
-			var state *tls.ClientSessionState
-			// put something
-			csc.EXPECT().Put("localhost", gomock.Any()).Do(func(_ string, css *tls.ClientSessionState) {
-				state = css
-			})
-			qtlsConf.ClientSessionCache.Put("localhost", &qtls.ClientSessionState{})
-			// get something
-			csc.EXPECT().Get("localhost").Return(state, true)
-			_, ok := qtlsConf.ClientSessionCache.Get("localhost")
-			Expect(ok).To(BeTrue())
-			Expect(appData).To(Equal([]byte("foobar")))
 		})
 
 		It("puts a nil session state", func() {

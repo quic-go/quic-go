@@ -59,6 +59,8 @@ func (m messageType) String() string {
 	}
 }
 
+const clientSessionStateRevision = 3
+
 type cryptoSetup struct {
 	tlsConf *qtls.Config
 	conn    *qtls.Conn
@@ -230,7 +232,7 @@ func newCryptoSetup(
 		writeRecord:            make(chan struct{}, 1),
 		closeChan:              make(chan struct{}),
 	}
-	qtlsConf := tlsConfigToQtlsConfig(tlsConf, cs, extHandler, rttStats, cs.marshalPeerParamsForSessionState, cs.handlePeerParamsFromSessionState, cs.accept0RTT, cs.rejected0RTT, enable0RTT)
+	qtlsConf := tlsConfigToQtlsConfig(tlsConf, cs, extHandler, rttStats, cs.marshalDataForSessionState, cs.handleDataFromSessionState, cs.accept0RTT, cs.rejected0RTT, enable0RTT)
 	cs.tlsConf = qtlsConf
 	return cs, cs.clientHelloWrittenChan
 }
@@ -456,14 +458,16 @@ func (h *cryptoSetup) handleTransportParameters(data []byte) {
 }
 
 // must be called after receiving the transport parameters
-func (h *cryptoSetup) marshalPeerParamsForSessionState() []byte {
-	b := &bytes.Buffer{}
-	h.peerParams.MarshalForSessionTicket(b)
-	return b.Bytes()
+func (h *cryptoSetup) marshalDataForSessionState() []byte {
+	buf := &bytes.Buffer{}
+	utils.WriteVarInt(buf, clientSessionStateRevision)
+	utils.WriteVarInt(buf, uint64(h.rttStats.SmoothedRTT().Microseconds()))
+	h.peerParams.MarshalForSessionTicket(buf)
+	return buf.Bytes()
 }
 
-func (h *cryptoSetup) handlePeerParamsFromSessionState(data []byte) {
-	tp, err := h.handlePeerParamsFromSessionStateImpl(data)
+func (h *cryptoSetup) handleDataFromSessionState(data []byte) {
+	tp, err := h.handleDataFromSessionStateImpl(data)
 	if err != nil {
 		h.logger.Debugf("Restoring of transport parameters from session ticket failed: %s", err.Error())
 		return
@@ -471,9 +475,22 @@ func (h *cryptoSetup) handlePeerParamsFromSessionState(data []byte) {
 	h.zeroRTTParameters = tp
 }
 
-func (h *cryptoSetup) handlePeerParamsFromSessionStateImpl(data []byte) (*wire.TransportParameters, error) {
+func (h *cryptoSetup) handleDataFromSessionStateImpl(data []byte) (*wire.TransportParameters, error) {
+	r := bytes.NewReader(data)
+	ver, err := utils.ReadVarInt(r)
+	if err != nil {
+		return nil, err
+	}
+	if ver != clientSessionStateRevision {
+		return nil, fmt.Errorf("mismatching version. Got %d, expected %d", ver, clientSessionStateRevision)
+	}
+	rtt, err := utils.ReadVarInt(r)
+	if err != nil {
+		return nil, err
+	}
+	h.rttStats.SetInitialRTT(time.Duration(rtt) * time.Microsecond)
 	var tp wire.TransportParameters
-	if err := tp.UnmarshalFromSessionTicket(data); err != nil {
+	if err := tp.UnmarshalFromSessionTicket(r); err != nil {
 		return nil, err
 	}
 	return &tp, nil
