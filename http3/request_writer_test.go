@@ -16,6 +16,12 @@ import (
 	. "github.com/onsi/gomega"
 )
 
+type foobarReader struct{}
+
+func (r *foobarReader) Read(b []byte) (int, error) {
+	return copy(b, []byte("foobar")), io.EOF
+}
+
 var _ = Describe("Request Writer", func() {
 	var (
 		rw     *requestWriter
@@ -78,6 +84,23 @@ var _ = Describe("Request Writer", func() {
 		contentLength, err := strconv.Atoi(headerFields["content-length"])
 		Expect(err).ToNot(HaveOccurred())
 		Expect(contentLength).To(BeNumerically(">", 0))
+
+		frame, err := parseNextFrame(strBuf)
+		Expect(err).ToNot(HaveOccurred())
+		Expect(frame).To(BeAssignableToTypeOf(&dataFrame{}))
+		Expect(frame.(*dataFrame).Length).To(BeEquivalentTo(6))
+	})
+
+	It("writes a POST request, if the Body returns an EOF immediately", func() {
+		closed := make(chan struct{})
+		str.EXPECT().Close().Do(func() { close(closed) })
+		req, err := http.NewRequest("POST", "https://quic.clemente.io/upload.html", &foobarReader{})
+		Expect(err).ToNot(HaveOccurred())
+		Expect(rw.WriteRequest(str, req, false)).To(Succeed())
+
+		Eventually(closed).Should(BeClosed())
+		headerFields := decode(strBuf)
+		Expect(headerFields).To(HaveKeyWithValue(":method", "POST"))
 
 		frame, err := parseNextFrame(strBuf)
 		Expect(err).ToNot(HaveOccurred())
