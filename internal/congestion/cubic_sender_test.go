@@ -98,6 +98,7 @@ var _ = Describe("Cubic Sender", func() {
 	})
 
 	It("paces", func() {
+		rttStats.UpdateRTT(10*time.Millisecond, 0, time.Now())
 		clock.Advance(time.Hour)
 		// Fill the send window with data, then verify that we can't send.
 		SendAvailableSendWindow()
@@ -129,7 +130,7 @@ var _ = Describe("Cubic Sender", func() {
 		// At startup make sure we can send.
 		Expect(sender.CanSend(0)).To(BeTrue())
 		Expect(sender.TimeUntilSend(0)).To(BeZero())
-		Expect(sender.BandwidthEstimate()).To(BeZero())
+		Expect(sender.BandwidthEstimate()).To(Equal(infBandwidth))
 		// Make sure we can send.
 		Expect(sender.TimeUntilSend(0)).To(BeZero())
 

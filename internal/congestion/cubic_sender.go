@@ -276,7 +276,7 @@ func (c *cubicSender) BandwidthEstimate() Bandwidth {
 	srtt := c.rttStats.SmoothedRTT()
 	if srtt == 0 {
 		// If we haven't measured an rtt, the bandwidth estimate is unknown.
-		return 0
+		return infBandwidth
 	}
 	return BandwidthFromDelta(c.GetCongestionWindow(), srtt)
 }
