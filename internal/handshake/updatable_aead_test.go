@@ -36,7 +36,7 @@ var _ = Describe("Updatable AEAD", func() {
 	for i := range cipherSuites {
 		cs := cipherSuites[i]
 
-		Context(fmt.Sprintf("using %s", cipherSuiteName(cs.ID)), func() {
+		Context(fmt.Sprintf("using %s", qtls.CipherSuiteName(cs.ID)), func() {
 			getPeers := func(rttStats *congestion.RTTStats) (client, server *updatableAEAD) {
 				trafficSecret1 := make([]byte, 16)
 				trafficSecret2 := make([]byte, 16)
