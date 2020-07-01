@@ -104,7 +104,19 @@ type closeError struct {
 	immediate bool
 }
 
-var errCloseForRecreating = errors.New("closing session in order to recreate it")
+type errCloseForRecreating struct {
+	nextPacketNumber protocol.PacketNumber
+	nextVersion      protocol.VersionNumber
+}
+
+func (errCloseForRecreating) Error() string {
+	return "closing session in order to recreate it"
+}
+
+func (errCloseForRecreating) Is(target error) bool {
+	_, ok := target.(errCloseForRecreating)
+	return ok
+}
 
 // A Session is a QUIC session
 type session struct {
@@ -169,6 +181,7 @@ type session struct {
 	handshakeConfirmed    bool
 
 	receivedRetry       bool
+	versionNegotiated   bool
 	receivedFirstPacket bool
 
 	idleTimeout         time.Duration
@@ -336,6 +349,7 @@ var newClientSession = func(
 	initialPacketNumber protocol.PacketNumber,
 	initialVersion protocol.VersionNumber,
 	enable0RTT bool,
+	hasNegotiatedVersion bool,
 	qlogger qlog.Tracer,
 	logger utils.Logger,
 	v protocol.VersionNumber,
@@ -352,6 +366,7 @@ var newClientSession = func(
 		logger:                logger,
 		qlogger:               qlogger,
 		initialVersion:        initialVersion,
+		versionNegotiated:     hasNegotiatedVersion,
 		version:               v,
 	}
 	s.connIDManager = newConnIDManager(
@@ -595,7 +610,7 @@ runLoop:
 	}
 
 	s.handleCloseError(closeErr)
-	if closeErr.err != errCloseForRecreating && s.qlogger != nil {
+	if !errors.Is(closeErr.err, errCloseForRecreating{}) && s.qlogger != nil {
 		if err := s.qlogger.Export(); err != nil {
 			s.logger.Errorf("exporting qlog failed: %s", err)
 		}
@@ -692,6 +707,11 @@ func (s *session) handleHandshakeComplete() {
 }
 
 func (s *session) handlePacketImpl(rp *receivedPacket) bool {
+	if wire.IsVersionNegotiationPacket(rp.data) {
+		s.handleVersionNegotiationPacket(rp)
+		return false
+	}
+
 	var counter uint8
 	var lastConnID protocol.ConnectionID
 	var processed bool
@@ -886,6 +906,55 @@ func (s *session) handleRetryPacket(hdr *wire.Header, data []byte) bool /* was t
 	s.connIDManager.ChangeInitialConnID(newDestConnID)
 	s.scheduleSending()
 	return true
+}
+
+func (s *session) handleVersionNegotiationPacket(p *receivedPacket) {
+	if s.perspective == protocol.PerspectiveServer || // servers never receive version negotiation packets
+		s.receivedFirstPacket || s.versionNegotiated { // ignore delayed / duplicated version negotiation packets
+		if s.qlogger != nil {
+			s.qlogger.DroppedPacket(qlog.PacketTypeVersionNegotiation, protocol.ByteCount(len(p.data)), qlog.PacketDropUnexpectedPacket)
+		}
+		return
+	}
+
+	hdr, _, _, err := wire.ParsePacket(p.data, 0)
+	if err != nil {
+		if s.qlogger != nil {
+			s.qlogger.DroppedPacket(qlog.PacketTypeVersionNegotiation, protocol.ByteCount(len(p.data)), qlog.PacketDropHeaderParseError)
+		}
+		s.logger.Debugf("Error parsing Version Negotiation packet: %s", err)
+		return
+	}
+
+	for _, v := range hdr.SupportedVersions {
+		if v == s.version {
+			if s.qlogger != nil {
+				s.qlogger.DroppedPacket(qlog.PacketTypeVersionNegotiation, protocol.ByteCount(len(p.data)), qlog.PacketDropUnexpectedVersion)
+			}
+			// The Version Negotiation packet contains the version that we offered.
+			// This might be a packet sent by an attacker, or it was corrupted.
+			return
+		}
+	}
+
+	s.logger.Infof("Received a Version Negotiation packet. Supported Versions: %s", hdr.SupportedVersions)
+	if s.qlogger != nil {
+		s.qlogger.ReceivedVersionNegotiationPacket(hdr)
+	}
+	newVersion, ok := protocol.ChooseSupportedVersion(s.config.Versions, hdr.SupportedVersions)
+	if !ok {
+		//nolint:stylecheck
+		s.destroyImpl(fmt.Errorf("No compatible QUIC version found. We support %s, server offered %s.", s.config.Versions, hdr.SupportedVersions))
+		s.logger.Infof("No compatible QUIC version found.")
+		return
+	}
+
+	s.logger.Infof("Switching to QUIC version %s.", newVersion)
+	nextPN, _ := s.sentPacketHandler.PeekPacketNumber(protocol.EncryptionInitial)
+	s.destroyImpl(&errCloseForRecreating{
+		nextPacketNumber: nextPN,
+		nextVersion:      newVersion,
+	})
 }
 
 func (s *session) handleUnpackedPacket(
@@ -1188,14 +1257,6 @@ func (s *session) destroyImpl(e error) {
 		}
 		s.closeChan <- closeError{err: e, immediate: true, remote: false}
 	})
-}
-
-// closeForRecreating closes the session in order to recreate it immediately afterwards
-// It returns the first packet number that should be used in the new session.
-func (s *session) closeForRecreating() protocol.PacketNumber {
-	s.destroy(errCloseForRecreating)
-	nextPN, _ := s.sentPacketHandler.PeekPacketNumber(protocol.EncryptionInitial)
-	return nextPN
 }
 
 func (s *session) closeRemote(e error) {

@@ -487,18 +487,6 @@ var _ = Describe("Session", func() {
 			Expect(sess.Context().Done()).To(BeClosed())
 		})
 
-		It("closes the session in order to recreate it", func() {
-			runSession()
-			streamManager.EXPECT().CloseWithError(gomock.Any())
-			sessionRunner.EXPECT().Remove(gomock.Any()).AnyTimes()
-			cryptoSetup.EXPECT().Close()
-			// don't EXPECT any calls to mconn.Write()
-			// don't EXPECT any call to qlogger.Export()
-			sess.closeForRecreating()
-			Eventually(areSessionsRunning).Should(BeFalse())
-			expectedRunErr = errCloseForRecreating
-		})
-
 		It("destroys the session", func() {
 			runSession()
 			testErr := errors.New("close")
@@ -601,6 +589,16 @@ var _ = Describe("Session", func() {
 			}}, make([]byte, 16) /* Retry integrity tag */)
 			qlogger.EXPECT().DroppedPacket(qlog.PacketTypeRetry, protocol.ByteCount(len(p.data)), qlog.PacketDropUnexpectedPacket)
 			Expect(sess.handlePacketImpl(p)).To(BeFalse())
+		})
+
+		It("drops Version Negotiation packets", func() {
+			b, err := wire.ComposeVersionNegotiation(srcConnID, destConnID, sess.config.Versions)
+			Expect(err).ToNot(HaveOccurred())
+			qlogger.EXPECT().DroppedPacket(qlog.PacketTypeVersionNegotiation, protocol.ByteCount(len(b)), qlog.PacketDropUnexpectedPacket)
+			Expect(sess.handlePacketImpl(&receivedPacket{
+				data:   b,
+				buffer: getPacketBuffer(),
+			})).To(BeFalse())
 		})
 
 		It("drops packets for which header decryption fails", func() {
@@ -2035,6 +2033,7 @@ var _ = Describe("Client Session", func() {
 			42, // initial packet number
 			protocol.VersionTLS,
 			false,
+			false,
 			qlogger,
 			utils.DefaultLogger,
 			protocol.VersionTLS,
@@ -2130,6 +2129,81 @@ var _ = Describe("Client Session", func() {
 		It("handles NEW_TOKEN frames", func() {
 			mockTokenStore.EXPECT().Put("server", &ClientToken{data: []byte("foobar")})
 			Expect(sess.handleNewTokenFrame(&wire.NewTokenFrame{Token: []byte("foobar")})).To(Succeed())
+		})
+	})
+
+	Context("handling Version Negotiation", func() {
+		getVNP := func(versions ...protocol.VersionNumber) *receivedPacket {
+			b, err := wire.ComposeVersionNegotiation(srcConnID, destConnID, versions)
+			Expect(err).ToNot(HaveOccurred())
+			return &receivedPacket{
+				data:   b,
+				buffer: getPacketBuffer(),
+			}
+		}
+
+		It("closes and returns the right error", func() {
+			sph := mockackhandler.NewMockSentPacketHandler(mockCtrl)
+			sess.sentPacketHandler = sph
+			sph.EXPECT().PeekPacketNumber(protocol.EncryptionInitial).Return(protocol.PacketNumber(128), protocol.PacketNumberLen4)
+			sess.config.Versions = []protocol.VersionNumber{1234, 4321}
+			errChan := make(chan error, 1)
+			go func() {
+				defer GinkgoRecover()
+				cryptoSetup.EXPECT().RunHandshake().MaxTimes(1)
+				errChan <- sess.run()
+			}()
+			sessionRunner.EXPECT().Remove(srcConnID)
+			qlogger.EXPECT().ReceivedVersionNegotiationPacket(gomock.Any()).Do(func(hdr *wire.Header) {
+				Expect(hdr.Version).To(BeZero())
+				Expect(hdr.SupportedVersions).To(And(
+					ContainElement(protocol.VersionNumber(4321)),
+					ContainElement(protocol.VersionNumber(1337)),
+				))
+			})
+			cryptoSetup.EXPECT().Close()
+			Expect(sess.handlePacketImpl(getVNP(4321, 1337))).To(BeFalse())
+			var err error
+			Eventually(errChan).Should(Receive(&err))
+			Expect(err).To(HaveOccurred())
+			Expect(err).To(BeAssignableToTypeOf(&errCloseForRecreating{}))
+			recreateErr := err.(*errCloseForRecreating)
+			Expect(recreateErr.nextVersion).To(Equal(protocol.VersionNumber(4321)))
+			Expect(recreateErr.nextPacketNumber).To(Equal(protocol.PacketNumber(128)))
+		})
+
+		It("it closes when no matching version is found", func() {
+			errChan := make(chan error, 1)
+			go func() {
+				defer GinkgoRecover()
+				cryptoSetup.EXPECT().RunHandshake().MaxTimes(1)
+				errChan <- sess.run()
+			}()
+			sessionRunner.EXPECT().Remove(srcConnID).MaxTimes(1)
+			gomock.InOrder(
+				qlogger.EXPECT().ReceivedVersionNegotiationPacket(gomock.Any()),
+				qlogger.EXPECT().Export(),
+			)
+			cryptoSetup.EXPECT().Close()
+			Expect(sess.handlePacketImpl(getVNP(12345678))).To(BeFalse())
+			var err error
+			Eventually(errChan).Should(Receive(&err))
+			Expect(err).To(HaveOccurred())
+			Expect(err).ToNot(BeAssignableToTypeOf(&errCloseForRecreating{}))
+			Expect(err.Error()).To(ContainSubstring("No compatible QUIC version found"))
+		})
+
+		It("ignores Version Negotiation packets that offer the current version", func() {
+			p := getVNP(sess.version)
+			qlogger.EXPECT().DroppedPacket(qlog.PacketTypeVersionNegotiation, protocol.ByteCount(len(p.data)), qlog.PacketDropUnexpectedVersion)
+			Expect(sess.handlePacketImpl(p)).To(BeFalse())
+		})
+
+		It("ignores unparseable Version Negotiation packets", func() {
+			p := getVNP(sess.version)
+			p.data = p.data[:len(p.data)-2]
+			qlogger.EXPECT().DroppedPacket(qlog.PacketTypeVersionNegotiation, protocol.ByteCount(len(p.data)), qlog.PacketDropHeaderParseError)
+			Expect(sess.handlePacketImpl(p)).To(BeFalse())
 		})
 	})
 
