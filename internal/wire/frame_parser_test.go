@@ -155,8 +155,8 @@ var _ = Describe("Frame parsing", func() {
 
 	It("unpacks MAX_STREAM_DATA frames", func() {
 		f := &MaxStreamDataFrame{
-			StreamID:   0xdeadbeef,
-			ByteOffset: 0xdecafbad,
+			StreamID:          0xdeadbeef,
+			MaximumStreamData: 0xdecafbad,
 		}
 		buf := &bytes.Buffer{}
 		err := f.Write(buf, versionIETFFrames)
@@ -287,8 +287,8 @@ var _ = Describe("Frame parsing", func() {
 
 	It("errors on invalid frames", func() {
 		f := &MaxStreamDataFrame{
-			StreamID:   0x1337,
-			ByteOffset: 0xdeadbeef,
+			StreamID:          0x1337,
+			MaximumStreamData: 0xdeadbeef,
 		}
 		b := &bytes.Buffer{}
 		f.Write(b, versionIETFFrames)

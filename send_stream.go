@@ -430,7 +430,7 @@ func (s *sendStream) handleMaxStreamDataFrame(frame *wire.MaxStreamDataFrame) {
 	hasStreamData := s.dataForWriting != nil || s.nextFrame != nil
 	s.mutex.Unlock()
 
-	s.flowController.UpdateSendWindow(frame.ByteOffset)
+	s.flowController.UpdateSendWindow(frame.MaximumStreamData)
 	if hasStreamData {
 		s.sender.onHasStreamData(s.streamID)
 	}

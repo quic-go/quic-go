@@ -179,7 +179,7 @@ func marshalMaxDataFrame(enc *gojay.Encoder, f *wire.MaxDataFrame) {
 func marshalMaxStreamDataFrame(enc *gojay.Encoder, f *wire.MaxStreamDataFrame) {
 	enc.StringKey("frame_type", "max_stream_data")
 	enc.Int64Key("stream_id", int64(f.StreamID))
-	enc.Int64Key("maximum", int64(f.ByteOffset))
+	enc.Int64Key("maximum", int64(f.MaximumStreamData))
 }
 
 func marshalMaxStreamsFrame(enc *gojay.Encoder, f *wire.MaxStreamsFrame) {

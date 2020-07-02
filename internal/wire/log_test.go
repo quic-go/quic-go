@@ -106,11 +106,11 @@ var _ = Describe("Frame logging", func() {
 
 	It("logs MAX_STREAM_DATA frames", func() {
 		frame := &MaxStreamDataFrame{
-			StreamID:   10,
-			ByteOffset: 42,
+			StreamID:          10,
+			MaximumStreamData: 42,
 		}
 		LogFrame(logger, frame, false)
-		Expect(buf.String()).To(ContainSubstring("\t<- &wire.MaxStreamDataFrame{StreamID: 10, ByteOffset: 42}\n"))
+		Expect(buf.String()).To(ContainSubstring("\t<- &wire.MaxStreamDataFrame{StreamID: 10, MaximumStreamData: 42}\n"))
 	})
 
 	It("logs DATA_BLOCKED frames", func() {

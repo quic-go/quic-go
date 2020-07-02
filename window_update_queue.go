@@ -63,8 +63,8 @@ func (q *windowUpdateQueue) QueueAll() {
 			continue
 		}
 		q.callback(&wire.MaxStreamDataFrame{
-			StreamID:   id,
-			ByteOffset: offset,
+			StreamID:          id,
+			MaximumStreamData: offset,
 		})
 	}
 	q.mutex.Unlock()

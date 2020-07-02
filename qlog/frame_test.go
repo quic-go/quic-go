@@ -187,8 +187,8 @@ var _ = Describe("Frames", func() {
 	It("marshals MAX_STREAM_DATA frames", func() {
 		check(
 			&wire.MaxStreamDataFrame{
-				StreamID:   1234,
-				ByteOffset: 1337,
+				StreamID:          1234,
+				MaximumStreamData: 1337,
 			},
 			map[string]interface{}{
 				"frame_type": "max_stream_data",

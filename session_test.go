@@ -212,8 +212,8 @@ var _ = Describe("Session", func() {
 
 			It("updates the flow control window of a stream", func() {
 				f := &wire.MaxStreamDataFrame{
-					StreamID:   12345,
-					ByteOffset: 0x1337,
+					StreamID:          12345,
+					MaximumStreamData: 0x1337,
 				}
 				str := NewMockSendStreamI(mockCtrl)
 				streamManager.EXPECT().GetOrOpenSendStream(protocol.StreamID(12345)).Return(str, nil)
@@ -231,8 +231,8 @@ var _ = Describe("Session", func() {
 			It("ignores MAX_STREAM_DATA frames for a closed stream", func() {
 				streamManager.EXPECT().GetOrOpenSendStream(protocol.StreamID(10)).Return(nil, nil)
 				Expect(sess.handleFrame(&wire.MaxStreamDataFrame{
-					StreamID:   10,
-					ByteOffset: 1337,
+					StreamID:          10,
+					MaximumStreamData: 1337,
 				}, protocol.EncryptionUnspecified)).To(Succeed())
 			})
 		})

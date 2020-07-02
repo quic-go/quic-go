@@ -149,12 +149,12 @@ func getFrames() []wire.Frame {
 			MaximumData: protocol.MaxByteCount,
 		},
 		&wire.MaxStreamDataFrame{
-			StreamID:   protocol.StreamID(getRandomNumber()),
-			ByteOffset: protocol.ByteCount(getRandomNumber()),
+			StreamID:          protocol.StreamID(getRandomNumber()),
+			MaximumStreamData: protocol.ByteCount(getRandomNumber()),
 		},
 		&wire.MaxStreamDataFrame{
-			StreamID:   protocol.StreamID(getRandomNumber()),
-			ByteOffset: protocol.MaxByteCount,
+			StreamID:          protocol.StreamID(getRandomNumber()),
+			MaximumStreamData: protocol.MaxByteCount,
 		},
 		&wire.MaxStreamsFrame{
 			Type:         protocol.StreamTypeUni,
