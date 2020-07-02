@@ -42,7 +42,7 @@ func LogFrame(logger utils.Logger, frame Frame, sent bool) {
 	case *DataBlockedFrame:
 		logger.Debugf("\t%s &wire.DataBlockedFrame{MaximumData: %d}", dir, f.MaximumData)
 	case *StreamDataBlockedFrame:
-		logger.Debugf("\t%s &wire.StreamDataBlockedFrame{StreamID: %d, DataLimit: %d}", dir, f.StreamID, f.DataLimit)
+		logger.Debugf("\t%s &wire.StreamDataBlockedFrame{StreamID: %d, MaximumStreamData: %d}", dir, f.StreamID, f.MaximumStreamData)
 	case *MaxStreamsFrame:
 		switch f.Type {
 		case protocol.StreamTypeUni:

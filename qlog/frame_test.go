@@ -227,8 +227,8 @@ var _ = Describe("Frames", func() {
 	It("marshals STREAM_DATA_BLOCKED frames", func() {
 		check(
 			&wire.StreamDataBlockedFrame{
-				StreamID:  42,
-				DataLimit: 1337,
+				StreamID:          42,
+				MaximumStreamData: 1337,
 			},
 			map[string]interface{}{
 				"frame_type": "stream_data_blocked",

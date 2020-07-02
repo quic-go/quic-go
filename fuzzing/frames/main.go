@@ -171,12 +171,12 @@ func getFrames() []wire.Frame {
 			MaximumData: protocol.MaxByteCount,
 		},
 		&wire.StreamDataBlockedFrame{
-			StreamID:  protocol.StreamID(getRandomNumber()),
-			DataLimit: protocol.ByteCount(getRandomNumber()),
+			StreamID:          protocol.StreamID(getRandomNumber()),
+			MaximumStreamData: protocol.ByteCount(getRandomNumber()),
 		},
 		&wire.StreamDataBlockedFrame{
-			StreamID:  protocol.StreamID(getRandomNumber()),
-			DataLimit: protocol.MaxByteCount,
+			StreamID:          protocol.StreamID(getRandomNumber()),
+			MaximumStreamData: protocol.MaxByteCount,
 		},
 		&wire.StreamsBlockedFrame{
 			Type:        protocol.StreamTypeUni,

@@ -242,8 +242,8 @@ func (s *sendStream) popNewOrRetransmittedStreamFrame(maxBytes protocol.ByteCoun
 	if sendWindow == 0 {
 		if isBlocked, offset := s.flowController.IsNewlyBlocked(); isBlocked {
 			s.sender.queueControlFrame(&wire.StreamDataBlockedFrame{
-				StreamID:  s.streamID,
-				DataLimit: offset,
+				StreamID:          s.streamID,
+				MaximumStreamData: offset,
 			})
 			return nil, false
 		}

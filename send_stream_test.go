@@ -311,8 +311,8 @@ var _ = Describe("Send Stream", func() {
 				mockFC.EXPECT().SendWindowSize().Return(protocol.ByteCount(0))
 				mockFC.EXPECT().IsNewlyBlocked().Return(true, protocol.ByteCount(12))
 				mockSender.EXPECT().queueControlFrame(&wire.StreamDataBlockedFrame{
-					StreamID:  streamID,
-					DataLimit: 12,
+					StreamID:          streamID,
+					MaximumStreamData: 12,
 				})
 				done := make(chan struct{})
 				go func() {
@@ -354,8 +354,8 @@ var _ = Describe("Send Stream", func() {
 				// don't use offset 3 here, to make sure the BLOCKED frame contains the number returned by the flow controller
 				mockFC.EXPECT().IsNewlyBlocked().Return(true, protocol.ByteCount(10))
 				mockSender.EXPECT().queueControlFrame(&wire.StreamDataBlockedFrame{
-					StreamID:  streamID,
-					DataLimit: 10,
+					StreamID:          streamID,
+					MaximumStreamData: 10,
 				})
 				f, hasMoreData = str.popStreamFrame(1000)
 				Expect(f).To(BeNil())

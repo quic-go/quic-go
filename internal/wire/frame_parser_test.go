@@ -191,8 +191,8 @@ var _ = Describe("Frame parsing", func() {
 
 	It("unpacks STREAM_DATA_BLOCKED frames", func() {
 		f := &StreamDataBlockedFrame{
-			StreamID:  0xdeadbeef,
-			DataLimit: 0xdead,
+			StreamID:          0xdeadbeef,
+			MaximumStreamData: 0xdead,
 		}
 		err := f.Write(buf, versionIETFFrames)
 		Expect(err).ToNot(HaveOccurred())
