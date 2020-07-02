@@ -271,7 +271,7 @@ var _ = Describe("Tracer", func() {
 				nil,
 				[]wire.Frame{
 					&wire.MaxStreamDataFrame{StreamID: 42, MaximumStreamData: 987},
-					&wire.StreamFrame{StreamID: 123, Offset: 1234, Data: []byte("foobar"), FinBit: true},
+					&wire.StreamFrame{StreamID: 123, Offset: 1234, Data: []byte("foobar"), Fin: true},
 				},
 			)
 			entry := exportAndParseSingle()
@@ -328,7 +328,7 @@ var _ = Describe("Tracer", func() {
 				789,
 				[]wire.Frame{
 					&wire.MaxStreamDataFrame{StreamID: 42, MaximumStreamData: 987},
-					&wire.StreamFrame{StreamID: 123, Offset: 1234, Data: []byte("foobar"), FinBit: true},
+					&wire.StreamFrame{StreamID: 123, Offset: 1234, Data: []byte("foobar"), Fin: true},
 				},
 			)
 			entry := exportAndParseSingle()

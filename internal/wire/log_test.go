@@ -63,7 +63,7 @@ var _ = Describe("Frame logging", func() {
 			Data:     bytes.Repeat([]byte{'f'}, 100),
 		}
 		LogFrame(logger, frame, false)
-		Expect(buf.String()).To(ContainSubstring("\t<- &wire.StreamFrame{StreamID: 42, FinBit: false, Offset: 1337, Data length: 100, Offset + Data length: 1437}\n"))
+		Expect(buf.String()).To(ContainSubstring("\t<- &wire.StreamFrame{StreamID: 42, Fin: false, Offset: 1337, Data length: 100, Offset + Data length: 1437}\n"))
 	})
 
 	It("logs ACK frames without missing packets", func() {

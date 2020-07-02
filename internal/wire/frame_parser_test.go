@@ -130,7 +130,7 @@ var _ = Describe("Frame parsing", func() {
 		f := &StreamFrame{
 			StreamID: 0x42,
 			Offset:   0x1337,
-			FinBit:   true,
+			Fin:      true,
 			Data:     []byte("foobar"),
 		}
 		err := f.Write(buf, versionIETFFrames)

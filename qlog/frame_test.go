@@ -143,7 +143,7 @@ var _ = Describe("Frames", func() {
 			&wire.StreamFrame{
 				StreamID: 42,
 				Offset:   1337,
-				FinBit:   true,
+				Fin:      true,
 				Data:     []byte("foobar"),
 			},
 			map[string]interface{}{

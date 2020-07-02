@@ -41,7 +41,7 @@ type receiveStream struct {
 	resetRemotelyErr    StreamError
 
 	closedForShutdown bool // set when CloseForShutdown() is called
-	finRead           bool // set once we read a frame with a FinBit
+	finRead           bool // set once we read a frame with a Fin
 	canceledRead      bool // set when CancelRead() is called
 	resetRemotely     bool // set when HandleResetStreamFrame() is called
 
@@ -234,11 +234,11 @@ func (s *receiveStream) handleStreamFrame(frame *wire.StreamFrame) error {
 
 func (s *receiveStream) handleStreamFrameImpl(frame *wire.StreamFrame) (bool /* completed */, error) {
 	maxOffset := frame.Offset + frame.DataLen()
-	if err := s.flowController.UpdateHighestReceived(maxOffset, frame.FinBit); err != nil {
+	if err := s.flowController.UpdateHighestReceived(maxOffset, frame.Fin); err != nil {
 		return false, err
 	}
 	var newlyRcvdFinalOffset bool
-	if frame.FinBit {
+	if frame.Fin {
 		newlyRcvdFinalOffset = s.finalOffset == protocol.MaxByteCount
 		s.finalOffset = maxOffset
 	}
@@ -288,7 +288,7 @@ func (s *receiveStream) handleResetStreamFrameImpl(frame *wire.ResetStreamFrame)
 }
 
 func (s *receiveStream) CloseRemote(offset protocol.ByteCount) {
-	s.handleStreamFrame(&wire.StreamFrame{FinBit: true, Offset: offset})
+	s.handleStreamFrame(&wire.StreamFrame{Fin: true, Offset: offset})
 }
 
 func (s *receiveStream) SetReadDeadline(t time.Time) error {

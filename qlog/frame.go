@@ -53,7 +53,7 @@ func transformFrame(wf wire.Frame) *frame {
 			StreamID: f.StreamID,
 			Offset:   f.Offset,
 			Length:   f.DataLen(),
-			FinBit:   f.FinBit,
+			FinBit:   f.Fin,
 		}}
 	default:
 		return &frame{Frame: wf}

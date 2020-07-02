@@ -70,11 +70,11 @@ func getFrames() []wire.Frame {
 	frames := []wire.Frame{
 		&wire.StreamFrame{ // STREAM frame at 0 offset, with FIN bit
 			StreamID: protocol.StreamID(getRandomNumber()),
-			FinBit:   true,
+			Fin:      true,
 		},
 		&wire.StreamFrame{ // STREAM frame at 0 offset, with data and FIN bit
 			StreamID: protocol.StreamID(getRandomNumber()),
-			FinBit:   true,
+			Fin:      true,
 			Data:     getRandomData(100),
 		},
 		&wire.StreamFrame{ // STREAM frame at non-zero offset, with data
@@ -86,19 +86,19 @@ func getFrames() []wire.Frame {
 			StreamID: protocol.StreamID(getRandomNumber()),
 			Offset:   protocol.ByteCount(getRandomNumber()),
 			Data:     getRandomData(50),
-			FinBit:   true,
+			Fin:      true,
 		},
 		&wire.StreamFrame{ // STREAM frame at non-zero offset, with data and FIN bit. Long enough to use the buffer.
 			StreamID: protocol.StreamID(getRandomNumber()),
 			Offset:   protocol.ByteCount(getRandomNumber()),
 			Data:     getRandomData(2 * protocol.MinStreamFrameBufferSize),
-			FinBit:   true,
+			Fin:      true,
 		},
 		&wire.StreamFrame{ // STREAM frame at maximum offset, with FIN bit
 			StreamID: protocol.StreamID(getRandomNumber()),
 			Offset:   protocol.MaxByteCount - 5,
 			Data:     getRandomData(5),
-			FinBit:   true,
+			Fin:      true,
 		},
 		&wire.StreamFrame{ // STREAM frame with data at maximum offset
 			StreamID: protocol.StreamID(getRandomNumber()),

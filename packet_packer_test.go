@@ -566,7 +566,7 @@ var _ = Describe("Packet packer", func() {
 			It("pads if payload length + packet number length is smaller than 4", func() {
 				f := &wire.StreamFrame{
 					StreamID: 0x10, // small stream ID, such that only a single byte is consumed
-					FinBit:   true,
+					Fin:      true,
 				}
 				Expect(f.Length(packer.version)).To(BeEquivalentTo(2))
 				pnManager.EXPECT().PeekPacketNumber(protocol.Encryption1RTT).Return(protocol.PacketNumber(0x42), protocol.PacketNumberLen1)
@@ -599,7 +599,7 @@ var _ = Describe("Packet packer", func() {
 				Expect(frame).To(BeAssignableToTypeOf(&wire.StreamFrame{}))
 				sf := frame.(*wire.StreamFrame)
 				Expect(sf.StreamID).To(Equal(f.StreamID))
-				Expect(sf.FinBit).To(Equal(f.FinBit))
+				Expect(sf.Fin).To(Equal(f.Fin))
 				Expect(sf.Data).To(BeEmpty())
 				Expect(r.Len()).To(BeZero())
 			})
