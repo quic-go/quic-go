@@ -98,10 +98,10 @@ var _ = Describe("Frame logging", func() {
 
 	It("logs MAX_DATA frames", func() {
 		frame := &MaxDataFrame{
-			ByteOffset: 42,
+			MaximumData: 42,
 		}
 		LogFrame(logger, frame, false)
-		Expect(buf.String()).To(ContainSubstring("\t<- &wire.MaxDataFrame{ByteOffset: 42}\n"))
+		Expect(buf.String()).To(ContainSubstring("\t<- &wire.MaxDataFrame{MaximumData: 42}\n"))
 	})
 
 	It("logs MAX_STREAM_DATA frames", func() {

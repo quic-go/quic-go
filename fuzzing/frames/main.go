@@ -143,10 +143,10 @@ func getFrames() []wire.Frame {
 			Token: getRandomData(10),
 		},
 		&wire.MaxDataFrame{
-			ByteOffset: protocol.ByteCount(getRandomNumber()),
+			MaximumData: protocol.ByteCount(getRandomNumber()),
 		},
 		&wire.MaxDataFrame{
-			ByteOffset: protocol.MaxByteCount,
+			MaximumData: protocol.MaxByteCount,
 		},
 		&wire.MaxStreamDataFrame{
 			StreamID:   protocol.StreamID(getRandomNumber()),

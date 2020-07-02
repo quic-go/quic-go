@@ -94,7 +94,7 @@ var _ = Describe("Window Update Queue", func() {
 		q.AddConnection()
 		q.QueueAll()
 		Expect(queuedFrames).To(Equal([]wire.Frame{
-			&wire.MaxDataFrame{ByteOffset: 0x1337},
+			&wire.MaxDataFrame{MaximumData: 0x1337},
 		}))
 	})
 

@@ -300,7 +300,7 @@ var _ = Describe("Tracer", func() {
 				},
 				123,
 				&wire.AckFrame{AckRanges: []wire.AckRange{{Smallest: 1, Largest: 10}}},
-				[]wire.Frame{&wire.MaxDataFrame{ByteOffset: 987}},
+				[]wire.Frame{&wire.MaxDataFrame{MaximumData: 987}},
 			)
 			entry := exportAndParseSingle()
 			ev := entry.Event

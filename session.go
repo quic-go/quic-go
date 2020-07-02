@@ -1143,7 +1143,7 @@ func (s *session) handleStreamFrame(frame *wire.StreamFrame) error {
 }
 
 func (s *session) handleMaxDataFrame(frame *wire.MaxDataFrame) {
-	s.connFlowController.UpdateSendWindow(frame.ByteOffset)
+	s.connFlowController.UpdateSendWindow(frame.MaximumData)
 }
 
 func (s *session) handleMaxStreamDataFrame(frame *wire.MaxStreamDataFrame) error {

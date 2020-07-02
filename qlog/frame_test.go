@@ -175,7 +175,7 @@ var _ = Describe("Frames", func() {
 	It("marshals MAX_DATA frames", func() {
 		check(
 			&wire.MaxDataFrame{
-				ByteOffset: 1337,
+				MaximumData: 1337,
 			},
 			map[string]interface{}{
 				"frame_type": "max_data",

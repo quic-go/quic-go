@@ -225,7 +225,7 @@ var _ = Describe("Session", func() {
 			It("updates the flow control window of the connection", func() {
 				offset := protocol.ByteCount(0x800000)
 				connFC.EXPECT().UpdateSendWindow(offset)
-				sess.handleMaxDataFrame(&wire.MaxDataFrame{ByteOffset: offset})
+				sess.handleMaxDataFrame(&wire.MaxDataFrame{MaximumData: offset})
 			})
 
 			It("ignores MAX_STREAM_DATA frames for a closed stream", func() {

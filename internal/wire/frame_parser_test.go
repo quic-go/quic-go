@@ -143,7 +143,7 @@ var _ = Describe("Frame parsing", func() {
 
 	It("unpacks MAX_DATA frames", func() {
 		f := &MaxDataFrame{
-			ByteOffset: 0xcafe,
+			MaximumData: 0xcafe,
 		}
 		buf := &bytes.Buffer{}
 		err := f.Write(buf, versionIETFFrames)
