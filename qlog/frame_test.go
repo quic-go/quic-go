@@ -5,22 +5,21 @@ import (
 	"encoding/json"
 	"time"
 
+	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/internal/qerr"
+	"github.com/lucas-clemente/quic-go/logging"
 
 	"github.com/francoispqt/gojay"
-
-	"github.com/lucas-clemente/quic-go/internal/protocol"
-	"github.com/lucas-clemente/quic-go/internal/wire"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 )
 
 var _ = Describe("Frames", func() {
-	check := func(f wire.Frame, expected map[string]interface{}) {
+	check := func(f logging.Frame, expected map[string]interface{}) {
 		buf := &bytes.Buffer{}
 		enc := gojay.NewEncoder(buf)
-		ExpectWithOffset(1, enc.Encode(transformFrame(f))).To(Succeed())
+		ExpectWithOffset(1, enc.Encode(frame{Frame: f})).To(Succeed())
 		data := buf.Bytes()
 		ExpectWithOffset(1, json.Valid(data)).To(BeTrue())
 		checkEncoding(data, expected)
@@ -28,7 +27,7 @@ var _ = Describe("Frames", func() {
 
 	It("marshals PING frames", func() {
 		check(
-			&wire.PingFrame{},
+			&logging.PingFrame{},
 			map[string]interface{}{
 				"frame_type": "ping",
 			},
@@ -37,9 +36,9 @@ var _ = Describe("Frames", func() {
 
 	It("marshals ACK frames with a range acknowledging a single packet", func() {
 		check(
-			&wire.AckFrame{
+			&logging.AckFrame{
 				DelayTime: 86 * time.Millisecond,
-				AckRanges: []wire.AckRange{{Smallest: 120, Largest: 120}},
+				AckRanges: []logging.AckRange{{Smallest: 120, Largest: 120}},
 			},
 			map[string]interface{}{
 				"frame_type":   "ack",
@@ -51,8 +50,8 @@ var _ = Describe("Frames", func() {
 
 	It("marshals ACK frames without a delay", func() {
 		check(
-			&wire.AckFrame{
-				AckRanges: []wire.AckRange{{Smallest: 120, Largest: 120}},
+			&logging.AckFrame{
+				AckRanges: []logging.AckRange{{Smallest: 120, Largest: 120}},
 			},
 			map[string]interface{}{
 				"frame_type":   "ack",
@@ -63,9 +62,9 @@ var _ = Describe("Frames", func() {
 
 	It("marshals ACK frames with a range acknowledging ranges of packets", func() {
 		check(
-			&wire.AckFrame{
+			&logging.AckFrame{
 				DelayTime: 86 * time.Millisecond,
-				AckRanges: []wire.AckRange{
+				AckRanges: []logging.AckRange{
 					{Smallest: 5, Largest: 50},
 					{Smallest: 100, Largest: 120},
 				},
@@ -83,7 +82,7 @@ var _ = Describe("Frames", func() {
 
 	It("marshals RESET_STREAM frames", func() {
 		check(
-			&wire.ResetStreamFrame{
+			&logging.ResetStreamFrame{
 				StreamID:  987,
 				FinalSize: 1234,
 				ErrorCode: 42,
@@ -99,7 +98,7 @@ var _ = Describe("Frames", func() {
 
 	It("marshals STOP_SENDING frames", func() {
 		check(
-			&wire.StopSendingFrame{
+			&logging.StopSendingFrame{
 				StreamID:  987,
 				ErrorCode: 42,
 			},
@@ -113,9 +112,9 @@ var _ = Describe("Frames", func() {
 
 	It("marshals CRYPTO frames", func() {
 		check(
-			&wire.CryptoFrame{
+			&logging.CryptoFrame{
 				Offset: 1337,
-				Data:   []byte("foobar"),
+				Length: 6,
 			},
 			map[string]interface{}{
 				"frame_type": "crypto",
@@ -127,7 +126,7 @@ var _ = Describe("Frames", func() {
 
 	It("marshals NEW_TOKEN frames", func() {
 		check(
-			&wire.NewTokenFrame{
+			&logging.NewTokenFrame{
 				Token: []byte{0xde, 0xad, 0xbe, 0xef},
 			},
 			map[string]interface{}{
@@ -140,28 +139,28 @@ var _ = Describe("Frames", func() {
 
 	It("marshals STREAM frames with FIN", func() {
 		check(
-			&wire.StreamFrame{
+			&logging.StreamFrame{
 				StreamID: 42,
 				Offset:   1337,
 				Fin:      true,
-				Data:     []byte("foobar"),
+				Length:   9876,
 			},
 			map[string]interface{}{
 				"frame_type": "stream",
 				"stream_id":  42,
 				"offset":     1337,
 				"fin":        true,
-				"length":     6,
+				"length":     9876,
 			},
 		)
 	})
 
 	It("marshals STREAM frames without FIN", func() {
 		check(
-			&wire.StreamFrame{
+			&logging.StreamFrame{
 				StreamID: 42,
 				Offset:   1337,
-				Data:     []byte("foo"),
+				Length:   3,
 			},
 			map[string]interface{}{
 				"frame_type": "stream",
@@ -174,7 +173,7 @@ var _ = Describe("Frames", func() {
 
 	It("marshals MAX_DATA frames", func() {
 		check(
-			&wire.MaxDataFrame{
+			&logging.MaxDataFrame{
 				MaximumData: 1337,
 			},
 			map[string]interface{}{
@@ -186,7 +185,7 @@ var _ = Describe("Frames", func() {
 
 	It("marshals MAX_STREAM_DATA frames", func() {
 		check(
-			&wire.MaxStreamDataFrame{
+			&logging.MaxStreamDataFrame{
 				StreamID:          1234,
 				MaximumStreamData: 1337,
 			},
@@ -200,7 +199,7 @@ var _ = Describe("Frames", func() {
 
 	It("marshals MAX_STREAMS frames", func() {
 		check(
-			&wire.MaxStreamsFrame{
+			&logging.MaxStreamsFrame{
 				Type:         protocol.StreamTypeBidi,
 				MaxStreamNum: 42,
 			},
@@ -214,7 +213,7 @@ var _ = Describe("Frames", func() {
 
 	It("marshals DATA_BLOCKED frames", func() {
 		check(
-			&wire.DataBlockedFrame{
+			&logging.DataBlockedFrame{
 				MaximumData: 1337,
 			},
 			map[string]interface{}{
@@ -226,7 +225,7 @@ var _ = Describe("Frames", func() {
 
 	It("marshals STREAM_DATA_BLOCKED frames", func() {
 		check(
-			&wire.StreamDataBlockedFrame{
+			&logging.StreamDataBlockedFrame{
 				StreamID:          42,
 				MaximumStreamData: 1337,
 			},
@@ -240,7 +239,7 @@ var _ = Describe("Frames", func() {
 
 	It("marshals STREAMS_BLOCKED frames", func() {
 		check(
-			&wire.StreamsBlockedFrame{
+			&logging.StreamsBlockedFrame{
 				Type:        protocol.StreamTypeUni,
 				StreamLimit: 123,
 			},
@@ -254,7 +253,7 @@ var _ = Describe("Frames", func() {
 
 	It("marshals NEW_CONNECTION_ID frames", func() {
 		check(
-			&wire.NewConnectionIDFrame{
+			&logging.NewConnectionIDFrame{
 				SequenceNumber:      42,
 				RetirePriorTo:       24,
 				ConnectionID:        protocol.ConnectionID{0xde, 0xad, 0xbe, 0xef},
@@ -273,7 +272,7 @@ var _ = Describe("Frames", func() {
 
 	It("marshals RETIRE_CONNECTION_ID frames", func() {
 		check(
-			&wire.RetireConnectionIDFrame{
+			&logging.RetireConnectionIDFrame{
 				SequenceNumber: 1337,
 			},
 			map[string]interface{}{
@@ -285,7 +284,7 @@ var _ = Describe("Frames", func() {
 
 	It("marshals PATH_CHALLENGE frames", func() {
 		check(
-			&wire.PathChallengeFrame{
+			&logging.PathChallengeFrame{
 				Data: [8]byte{0xde, 0xad, 0xbe, 0xef, 0xca, 0xfe, 0xc0, 0x01},
 			},
 			map[string]interface{}{
@@ -297,7 +296,7 @@ var _ = Describe("Frames", func() {
 
 	It("marshals PATH_RESPONSE frames", func() {
 		check(
-			&wire.PathResponseFrame{
+			&logging.PathResponseFrame{
 				Data: [8]byte{0xde, 0xad, 0xbe, 0xef, 0xca, 0xfe, 0xc0, 0x01},
 			},
 			map[string]interface{}{
@@ -309,7 +308,7 @@ var _ = Describe("Frames", func() {
 
 	It("marshals CONNECTION_CLOSE frames, for application error codes", func() {
 		check(
-			&wire.ConnectionCloseFrame{
+			&logging.ConnectionCloseFrame{
 				IsApplicationError: true,
 				ErrorCode:          1337,
 				ReasonPhrase:       "lorem ipsum",
@@ -326,7 +325,7 @@ var _ = Describe("Frames", func() {
 
 	It("marshals CONNECTION_CLOSE frames, for transport error codes", func() {
 		check(
-			&wire.ConnectionCloseFrame{
+			&logging.ConnectionCloseFrame{
 				ErrorCode:    qerr.FlowControlError,
 				ReasonPhrase: "lorem ipsum",
 			},
@@ -342,7 +341,7 @@ var _ = Describe("Frames", func() {
 
 	It("marshals HANDSHAKE_DONE frames", func() {
 		check(
-			&wire.HandshakeDoneFrame{},
+			&logging.HandshakeDoneFrame{},
 			map[string]interface{}{
 				"frame_type": "handshake_done",
 			},

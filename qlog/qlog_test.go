@@ -12,7 +12,6 @@ import (
 
 	"github.com/lucas-clemente/quic-go/internal/congestion"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
-	"github.com/lucas-clemente/quic-go/internal/wire"
 	"github.com/lucas-clemente/quic-go/logging"
 
 	. "github.com/onsi/ginkgo"
@@ -178,7 +177,7 @@ var _ = Describe("Tracer", func() {
 		})
 
 		It("records sent transport parameters", func() {
-			tracer.SentTransportParameters(&wire.TransportParameters{
+			tracer.SentTransportParameters(&logging.TransportParameters{
 				InitialMaxStreamDataBidiLocal:   1000,
 				InitialMaxStreamDataBidiRemote:  2000,
 				InitialMaxStreamDataUni:         3000,
@@ -219,7 +218,7 @@ var _ = Describe("Tracer", func() {
 		})
 
 		It("records the server's transport parameters, without a stateless reset token", func() {
-			tracer.SentTransportParameters(&wire.TransportParameters{
+			tracer.SentTransportParameters(&logging.TransportParameters{
 				OriginalDestinationConnectionID: protocol.ConnectionID{0xde, 0xad, 0xc0, 0xde},
 				ActiveConnectionIDLimit:         7,
 			})
@@ -232,7 +231,7 @@ var _ = Describe("Tracer", func() {
 		})
 
 		It("records transport parameters without retry_source_connection_id", func() {
-			tracer.SentTransportParameters(&wire.TransportParameters{
+			tracer.SentTransportParameters(&logging.TransportParameters{
 				StatelessResetToken: &[16]byte{0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88, 0x99, 0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff, 0x00},
 			})
 			entry := exportAndParseSingle()
@@ -245,7 +244,7 @@ var _ = Describe("Tracer", func() {
 		})
 
 		It("records received transport parameters", func() {
-			tracer.ReceivedTransportParameters(&wire.TransportParameters{})
+			tracer.ReceivedTransportParameters(&logging.TransportParameters{})
 			entry := exportAndParseSingle()
 			Expect(entry.Time).To(BeTemporally("~", time.Now(), scaleDuration(10*time.Millisecond)))
 			Expect(entry.Category).To(Equal("transport"))
@@ -257,8 +256,8 @@ var _ = Describe("Tracer", func() {
 
 		It("records a sent packet, without an ACK", func() {
 			tracer.SentPacket(
-				&wire.ExtendedHeader{
-					Header: wire.Header{
+				&logging.ExtendedHeader{
+					Header: logging.Header{
 						IsLongHeader:     true,
 						Type:             protocol.PacketTypeHandshake,
 						DestConnectionID: protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8},
@@ -269,9 +268,9 @@ var _ = Describe("Tracer", func() {
 				},
 				987,
 				nil,
-				[]wire.Frame{
-					&wire.MaxStreamDataFrame{StreamID: 42, MaximumStreamData: 987},
-					&wire.StreamFrame{StreamID: 123, Offset: 1234, Data: []byte("foobar"), Fin: true},
+				[]logging.Frame{
+					&logging.MaxStreamDataFrame{StreamID: 42, MaximumStreamData: 987},
+					&logging.StreamFrame{StreamID: 123, Offset: 1234, Length: 6, Fin: true},
 				},
 			)
 			entry := exportAndParseSingle()
@@ -294,13 +293,13 @@ var _ = Describe("Tracer", func() {
 
 		It("records a sent packet, without an ACK", func() {
 			tracer.SentPacket(
-				&wire.ExtendedHeader{
-					Header:       wire.Header{DestConnectionID: protocol.ConnectionID{1, 2, 3, 4}},
+				&logging.ExtendedHeader{
+					Header:       logging.Header{DestConnectionID: protocol.ConnectionID{1, 2, 3, 4}},
 					PacketNumber: 1337,
 				},
 				123,
-				&wire.AckFrame{AckRanges: []wire.AckRange{{Smallest: 1, Largest: 10}}},
-				[]wire.Frame{&wire.MaxDataFrame{MaximumData: 987}},
+				&logging.AckFrame{AckRanges: []logging.AckRange{{Smallest: 1, Largest: 10}}},
+				[]logging.Frame{&logging.MaxDataFrame{MaximumData: 987}},
 			)
 			entry := exportAndParseSingle()
 			ev := entry.Event
@@ -315,8 +314,8 @@ var _ = Describe("Tracer", func() {
 
 		It("records a received packet", func() {
 			tracer.ReceivedPacket(
-				&wire.ExtendedHeader{
-					Header: wire.Header{
+				&logging.ExtendedHeader{
+					Header: logging.Header{
 						IsLongHeader:     true,
 						Type:             protocol.PacketTypeInitial,
 						DestConnectionID: protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8},
@@ -326,9 +325,9 @@ var _ = Describe("Tracer", func() {
 					PacketNumber: 1337,
 				},
 				789,
-				[]wire.Frame{
-					&wire.MaxStreamDataFrame{StreamID: 42, MaximumStreamData: 987},
-					&wire.StreamFrame{StreamID: 123, Offset: 1234, Data: []byte("foobar"), Fin: true},
+				[]logging.Frame{
+					&logging.MaxStreamDataFrame{StreamID: 42, MaximumStreamData: 987},
+					&logging.StreamFrame{StreamID: 123, Offset: 1234, Length: 6, Fin: true},
 				},
 			)
 			entry := exportAndParseSingle()
@@ -348,7 +347,7 @@ var _ = Describe("Tracer", func() {
 
 		It("records a received Retry packet", func() {
 			tracer.ReceivedRetry(
-				&wire.Header{
+				&logging.Header{
 					IsLongHeader:     true,
 					Type:             protocol.PacketTypeRetry,
 					DestConnectionID: protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8},
@@ -373,7 +372,7 @@ var _ = Describe("Tracer", func() {
 
 		It("records a received Version Negotiation packet", func() {
 			tracer.ReceivedVersionNegotiationPacket(
-				&wire.Header{
+				&logging.Header{
 					IsLongHeader:      true,
 					Type:              protocol.PacketTypeRetry,
 					DestConnectionID:  protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8},

@@ -672,7 +672,7 @@ var _ = Describe("Session", func() {
 			sess.receivedPacketHandler = rph
 			packet.rcvTime = rcvTime
 			tracer.EXPECT().StartedConnection(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any())
-			tracer.EXPECT().ReceivedPacket(hdr, protocol.ByteCount(len(packet.data)), nil)
+			tracer.EXPECT().ReceivedPacket(hdr, protocol.ByteCount(len(packet.data)), []logging.Frame{})
 			Expect(sess.handlePacketImpl(packet)).To(BeTrue())
 		})
 
@@ -700,7 +700,7 @@ var _ = Describe("Session", func() {
 			sess.receivedPacketHandler = rph
 			packet.rcvTime = rcvTime
 			tracer.EXPECT().StartedConnection(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any())
-			tracer.EXPECT().ReceivedPacket(hdr, protocol.ByteCount(len(packet.data)), []wire.Frame{&wire.PingFrame{}})
+			tracer.EXPECT().ReceivedPacket(hdr, protocol.ByteCount(len(packet.data)), []logging.Frame{&logging.PingFrame{}})
 			Expect(sess.handlePacketImpl(packet)).To(BeTrue())
 		})
 
@@ -1074,7 +1074,7 @@ var _ = Describe("Session", func() {
 			packer.EXPECT().PackPacket().Return(nil, nil).AnyTimes()
 			sent := make(chan struct{})
 			mconn.EXPECT().Write(gomock.Any()).Do(func([]byte) { close(sent) })
-			tracer.EXPECT().SentPacket(p.header, p.buffer.Len(), nil, []wire.Frame{})
+			tracer.EXPECT().SentPacket(p.header, p.buffer.Len(), nil, []logging.Frame{})
 			sess.scheduleSending()
 			Eventually(sent).Should(BeClosed())
 		})
@@ -1120,11 +1120,11 @@ var _ = Describe("Session", func() {
 			runSession()
 			sent := make(chan struct{})
 			mconn.EXPECT().Write(gomock.Any()).Do(func([]byte) { close(sent) })
-			tracer.EXPECT().SentPacket(p.header, p.length, nil, []wire.Frame{})
+			tracer.EXPECT().SentPacket(p.header, p.length, nil, []logging.Frame{})
 			sess.scheduleSending()
 			Eventually(sent).Should(BeClosed())
 			frames, _ := sess.framer.AppendControlFrames(nil, 1000)
-			Expect(frames).To(Equal([]ackhandler.Frame{{Frame: &wire.DataBlockedFrame{MaximumData: 1337}}}))
+			Expect(frames).To(Equal([]ackhandler.Frame{{Frame: &logging.DataBlockedFrame{MaximumData: 1337}}}))
 		})
 
 		It("doesn't send when the SentPacketHandler doesn't allow it", func() {
@@ -1460,10 +1460,10 @@ var _ = Describe("Session", func() {
 			}),
 		)
 		gomock.InOrder(
-			tracer.EXPECT().SentPacket(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Do(func(hdr *wire.ExtendedHeader, _ protocol.ByteCount, _ *wire.AckFrame, _ []wire.Frame) {
+			tracer.EXPECT().SentPacket(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Do(func(hdr *wire.ExtendedHeader, _ protocol.ByteCount, _ *wire.AckFrame, _ []logging.Frame) {
 				Expect(hdr.Type).To(Equal(protocol.PacketTypeInitial))
 			}),
-			tracer.EXPECT().SentPacket(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Do(func(hdr *wire.ExtendedHeader, _ protocol.ByteCount, _ *wire.AckFrame, _ []wire.Frame) {
+			tracer.EXPECT().SentPacket(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Do(func(hdr *wire.ExtendedHeader, _ protocol.ByteCount, _ *wire.AckFrame, _ []logging.Frame) {
 				Expect(hdr.Type).To(Equal(protocol.PacketTypeHandshake))
 			}),
 		)
@@ -2071,7 +2071,7 @@ var _ = Describe("Client Session", func() {
 			},
 			PacketNumberLen: protocol.PacketNumberLen2,
 		}, []byte("foobar"))
-		tracer.EXPECT().ReceivedPacket(gomock.Any(), protocol.ByteCount(len(p.data)), nil)
+		tracer.EXPECT().ReceivedPacket(gomock.Any(), protocol.ByteCount(len(p.data)), []logging.Frame{})
 		Expect(sess.handlePacketImpl(p)).To(BeTrue())
 		// make sure the go routine returns
 		packer.EXPECT().PackConnectionClose(gomock.Any()).Return(&coalescedPacket{buffer: getPacketBuffer()}, nil)

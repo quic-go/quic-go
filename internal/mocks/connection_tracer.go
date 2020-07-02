@@ -40,7 +40,7 @@ func (m *MockConnectionTracer) EXPECT() *MockConnectionTracerMockRecorder {
 }
 
 // BufferedPacket mocks base method
-func (m *MockConnectionTracer) BufferedPacket(arg0 logging.PacketType) {
+func (m *MockConnectionTracer) BufferedPacket(arg0 protocol.PacketType) {
 	m.ctrl.T.Helper()
 	m.ctrl.Call(m, "BufferedPacket", arg0)
 }
@@ -88,7 +88,7 @@ func (mr *MockConnectionTracerMockRecorder) DroppedEncryptionLevel(arg0 interfac
 }
 
 // DroppedPacket mocks base method
-func (m *MockConnectionTracer) DroppedPacket(arg0 logging.PacketType, arg1 protocol.ByteCount, arg2 logging.PacketDropReason) {
+func (m *MockConnectionTracer) DroppedPacket(arg0 protocol.PacketType, arg1 protocol.ByteCount, arg2 logging.PacketDropReason) {
 	m.ctrl.T.Helper()
 	m.ctrl.Call(m, "DroppedPacket", arg0, arg1, arg2)
 }
@@ -136,7 +136,7 @@ func (mr *MockConnectionTracerMockRecorder) LostPacket(arg0, arg1, arg2 interfac
 }
 
 // ReceivedPacket mocks base method
-func (m *MockConnectionTracer) ReceivedPacket(arg0 *wire.ExtendedHeader, arg1 protocol.ByteCount, arg2 []wire.Frame) {
+func (m *MockConnectionTracer) ReceivedPacket(arg0 *wire.ExtendedHeader, arg1 protocol.ByteCount, arg2 []logging.Frame) {
 	m.ctrl.T.Helper()
 	m.ctrl.Call(m, "ReceivedPacket", arg0, arg1, arg2)
 }
@@ -196,7 +196,7 @@ func (mr *MockConnectionTracerMockRecorder) ReceivedVersionNegotiationPacket(arg
 }
 
 // SentPacket mocks base method
-func (m *MockConnectionTracer) SentPacket(arg0 *wire.ExtendedHeader, arg1 protocol.ByteCount, arg2 *wire.AckFrame, arg3 []wire.Frame) {
+func (m *MockConnectionTracer) SentPacket(arg0 *wire.ExtendedHeader, arg1 protocol.ByteCount, arg2 *wire.AckFrame, arg3 []logging.Frame) {
 	m.ctrl.T.Helper()
 	m.ctrl.Call(m, "SentPacket", arg0, arg1, arg2, arg3)
 }
