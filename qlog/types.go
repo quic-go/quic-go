@@ -5,6 +5,7 @@ import (
 
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/internal/qerr"
+	"github.com/lucas-clemente/quic-go/logging"
 )
 
 type owner uint8
@@ -210,5 +211,100 @@ func (e transportError) String() string {
 		return "crypto_buffer_exceeded"
 	default:
 		return ""
+	}
+}
+
+type packetType logging.PacketType
+
+func (t packetType) String() string {
+	switch logging.PacketType(t) {
+	case logging.PacketTypeInitial:
+		return "initial"
+	case logging.PacketTypeHandshake:
+		return "handshake"
+	case logging.PacketTypeRetry:
+		return "retry"
+	case logging.PacketType0RTT:
+		return "0RTT"
+	case logging.PacketTypeVersionNegotiation:
+		return "version_negotiation"
+	case logging.PacketTypeStatelessReset:
+		return "stateless_reset"
+	case logging.PacketType1RTT:
+		return "1RTT"
+	case logging.PacketTypeNotDetermined:
+		return ""
+	default:
+		panic("unknown packet type")
+	}
+}
+
+type packetLossReason logging.PacketLossReason
+
+func (r packetLossReason) String() string {
+	switch logging.PacketLossReason(r) {
+	case logging.PacketLossReorderingThreshold:
+		return "reordering_threshold"
+	case logging.PacketLossTimeThreshold:
+		return "time_threshold"
+	default:
+		panic("unknown loss reason")
+	}
+}
+
+type packetDropReason logging.PacketDropReason
+
+func (r packetDropReason) String() string {
+	switch logging.PacketDropReason(r) {
+	case logging.PacketDropKeyUnavailable:
+		return "key_unavailable"
+	case logging.PacketDropUnknownConnectionID:
+		return "unknown_connection_id"
+	case logging.PacketDropHeaderParseError:
+		return "header_parse_error"
+	case logging.PacketDropPayloadDecryptError:
+		return "payload_decrypt_error"
+	case logging.PacketDropProtocolViolation:
+		return "protocol_violation"
+	case logging.PacketDropDOSPrevention:
+		return "dos_prevention"
+	case logging.PacketDropUnsupportedVersion:
+		return "unsupported_version"
+	case logging.PacketDropUnexpectedPacket:
+		return "unexpected_packet"
+	case logging.PacketDropUnexpectedSourceConnectionID:
+		return "unexpected_source_connection_id"
+	case logging.PacketDropUnexpectedVersion:
+		return "unexpected_version"
+	case logging.PacketDropDuplicate:
+		return "duplicate"
+	default:
+		panic("unknown packet drop reason")
+	}
+}
+
+type timerType logging.TimerType
+
+func (t timerType) String() string {
+	switch logging.TimerType(t) {
+	case logging.TimerTypeACK:
+		return "ack"
+	case logging.TimerTypePTO:
+		return "pto"
+	default:
+		panic("unknown timer type")
+	}
+}
+
+type closeReason logging.CloseReason
+
+func (r closeReason) String() string {
+	switch logging.CloseReason(r) {
+	case logging.CloseReasonHandshakeTimeout:
+		return "handshake_timeout"
+	case logging.CloseReasonIdleTimeout:
+		return "idle_timeout"
+	default:
+		panic("unknown close reason")
 	}
 }

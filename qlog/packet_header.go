@@ -7,19 +7,21 @@ import (
 	"github.com/lucas-clemente/quic-go/logging"
 )
 
-func getPacketTypeFromEncryptionLevel(encLevel protocol.EncryptionLevel) logging.PacketType {
+func getPacketTypeFromEncryptionLevel(encLevel protocol.EncryptionLevel) packetType {
+	var t logging.PacketType
 	switch encLevel {
 	case protocol.EncryptionInitial:
-		return logging.PacketTypeInitial
+		t = logging.PacketTypeInitial
 	case protocol.EncryptionHandshake:
-		return logging.PacketTypeHandshake
+		t = logging.PacketTypeHandshake
 	case protocol.Encryption0RTT:
-		return logging.PacketType0RTT
+		t = logging.PacketType0RTT
 	case protocol.Encryption1RTT:
-		return logging.PacketType1RTT
+		t = logging.PacketType1RTT
 	default:
 		panic("unknown encryption level")
 	}
+	return packetType(t)
 }
 
 func transformHeader(hdr *wire.Header) *packetHeader {

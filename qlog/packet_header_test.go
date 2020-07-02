@@ -16,10 +16,10 @@ import (
 
 var _ = Describe("Packet Header", func() {
 	It("determines the packet type from the encryption level", func() {
-		Expect(getPacketTypeFromEncryptionLevel(protocol.EncryptionInitial)).To(Equal(logging.PacketTypeInitial))
-		Expect(getPacketTypeFromEncryptionLevel(protocol.EncryptionHandshake)).To(Equal(logging.PacketTypeHandshake))
-		Expect(getPacketTypeFromEncryptionLevel(protocol.Encryption0RTT)).To(Equal(logging.PacketType0RTT))
-		Expect(getPacketTypeFromEncryptionLevel(protocol.Encryption1RTT)).To(Equal(logging.PacketType1RTT))
+		Expect(getPacketTypeFromEncryptionLevel(protocol.EncryptionInitial)).To(BeEquivalentTo(logging.PacketTypeInitial))
+		Expect(getPacketTypeFromEncryptionLevel(protocol.EncryptionHandshake)).To(BeEquivalentTo(logging.PacketTypeHandshake))
+		Expect(getPacketTypeFromEncryptionLevel(protocol.Encryption0RTT)).To(BeEquivalentTo(logging.PacketType0RTT))
+		Expect(getPacketTypeFromEncryptionLevel(protocol.Encryption1RTT)).To(BeEquivalentTo(logging.PacketType1RTT))
 	})
 
 	Context("marshalling", func() {

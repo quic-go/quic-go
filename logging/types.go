@@ -1,11 +1,9 @@
 package logging
 
-import (
-	"github.com/lucas-clemente/quic-go/internal/protocol"
-)
+import "github.com/lucas-clemente/quic-go/internal/protocol"
 
 // PacketType is the packet type of a QUIC packet
-type PacketType protocol.PacketType
+type PacketType = protocol.PacketType
 
 const (
 	// PacketTypeInitial is the packet type of an Initial packet
@@ -26,29 +24,6 @@ const (
 	PacketTypeNotDetermined
 )
 
-func (t PacketType) String() string {
-	switch t {
-	case PacketTypeInitial:
-		return "initial"
-	case PacketTypeHandshake:
-		return "handshake"
-	case PacketTypeRetry:
-		return "retry"
-	case PacketType0RTT:
-		return "0RTT"
-	case PacketTypeVersionNegotiation:
-		return "version_negotiation"
-	case PacketTypeStatelessReset:
-		return "stateless_reset"
-	case PacketType1RTT:
-		return "1RTT"
-	case PacketTypeNotDetermined:
-		return ""
-	default:
-		panic("unknown packet type")
-	}
-}
-
 type PacketLossReason uint8
 
 const (
@@ -57,17 +32,6 @@ const (
 	// PacketLossTimeThreshold: when a packet is deemed lost due to time threshold
 	PacketLossTimeThreshold
 )
-
-func (r PacketLossReason) String() string {
-	switch r {
-	case PacketLossReorderingThreshold:
-		return "reordering_threshold"
-	case PacketLossTimeThreshold:
-		return "time_threshold"
-	default:
-		panic("unknown loss reason")
-	}
-}
 
 type PacketDropReason uint8
 
@@ -96,35 +60,6 @@ const (
 	PacketDropDuplicate
 )
 
-func (r PacketDropReason) String() string {
-	switch r {
-	case PacketDropKeyUnavailable:
-		return "key_unavailable"
-	case PacketDropUnknownConnectionID:
-		return "unknown_connection_id"
-	case PacketDropHeaderParseError:
-		return "header_parse_error"
-	case PacketDropPayloadDecryptError:
-		return "payload_decrypt_error"
-	case PacketDropProtocolViolation:
-		return "protocol_violation"
-	case PacketDropDOSPrevention:
-		return "dos_prevention"
-	case PacketDropUnsupportedVersion:
-		return "unsupported_version"
-	case PacketDropUnexpectedPacket:
-		return "unexpected_packet"
-	case PacketDropUnexpectedSourceConnectionID:
-		return "unexpected_source_connection_id"
-	case PacketDropUnexpectedVersion:
-		return "unexpected_version"
-	case PacketDropDuplicate:
-		return "duplicate"
-	default:
-		panic("unknown packet drop reason")
-	}
-}
-
 // TimerType is the type of the loss detection timer
 type TimerType uint8
 
@@ -134,17 +69,6 @@ const (
 	// TimerTypePTO is the timer type for the PTO retransmit timer
 	TimerTypePTO
 )
-
-func (t TimerType) String() string {
-	switch t {
-	case TimerTypeACK:
-		return "ack"
-	case TimerTypePTO:
-		return "pto"
-	default:
-		panic("unknown timer type")
-	}
-}
 
 // CloseReason is the reason why a session is closed
 type CloseReason uint8
@@ -157,14 +81,3 @@ const (
 	// This reason is not defined in the qlog draft, but very useful for debugging.
 	CloseReasonIdleTimeout
 )
-
-func (r CloseReason) String() string {
-	switch r {
-	case CloseReasonHandshakeTimeout:
-		return "handshake_timeout"
-	case CloseReasonIdleTimeout:
-		return "idle_timeout"
-	default:
-		panic("unknown close reason")
-	}
-}
