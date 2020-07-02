@@ -2,11 +2,10 @@ package logging
 
 import (
 	"github.com/lucas-clemente/quic-go/internal/protocol"
-	"github.com/lucas-clemente/quic-go/internal/wire"
 )
 
 // PacketTypeFromHeader determines the packet type from a *wire.Header.
-func PacketTypeFromHeader(hdr *wire.Header) PacketType {
+func PacketTypeFromHeader(hdr *Header) PacketType {
 	if !hdr.IsLongHeader {
 		return PacketType1RTT
 	}
@@ -31,13 +30,13 @@ func PacketTypeFromHeader(hdr *wire.Header) PacketType {
 type PacketHeader struct {
 	PacketType PacketType
 
-	PacketNumber  protocol.PacketNumber
-	PayloadLength protocol.ByteCount
+	PacketNumber  PacketNumber
+	PayloadLength ByteCount
 	// Size of the QUIC packet (QUIC header + payload).
 	// See https://github.com/quiclog/internet-drafts/issues/40.
-	PacketSize protocol.ByteCount
+	PacketSize ByteCount
 
-	Version          protocol.VersionNumber
-	SrcConnectionID  protocol.ConnectionID
-	DestConnectionID protocol.ConnectionID
+	Version          VersionNumber
+	SrcConnectionID  ConnectionID
+	DestConnectionID ConnectionID
 }
