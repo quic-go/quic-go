@@ -416,9 +416,9 @@ func (s *sendStream) cancelWriteImpl(errorCode protocol.ApplicationErrorCode, wr
 
 	s.signalWrite()
 	s.sender.queueControlFrame(&wire.ResetStreamFrame{
-		StreamID:   s.streamID,
-		ByteOffset: s.writeOffset,
-		ErrorCode:  errorCode,
+		StreamID:  s.streamID,
+		FinalSize: s.writeOffset,
+		ErrorCode: errorCode,
 	})
 	if newlyCompleted {
 		s.sender.onStreamCompleted(s.streamID)

@@ -84,9 +84,9 @@ var _ = Describe("Frames", func() {
 	It("marshals RESET_STREAM frames", func() {
 		check(
 			&wire.ResetStreamFrame{
-				StreamID:   987,
-				ByteOffset: 1234,
-				ErrorCode:  42,
+				StreamID:  987,
+				FinalSize: 1234,
+				ErrorCode: 42,
 			},
 			map[string]interface{}{
 				"frame_type": "reset_stream",

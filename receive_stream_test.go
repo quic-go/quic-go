@@ -507,8 +507,8 @@ var _ = Describe("Receive Stream", func() {
 				)
 				mockSender.EXPECT().onStreamCompleted(streamID)
 				Expect(str.handleResetStreamFrame(&wire.ResetStreamFrame{
-					StreamID:   streamID,
-					ByteOffset: 42,
+					StreamID:  streamID,
+					FinalSize: 42,
 				})).To(Succeed())
 				str.CancelRead(1234)
 			})
@@ -561,9 +561,9 @@ var _ = Describe("Receive Stream", func() {
 
 		Context("receiving RESET_STREAM frames", func() {
 			rst := &wire.ResetStreamFrame{
-				StreamID:   streamID,
-				ByteOffset: 42,
-				ErrorCode:  1234,
+				StreamID:  streamID,
+				FinalSize: 42,
+				ErrorCode: 1234,
 			}
 
 			It("unblocks Read", func() {
@@ -624,7 +624,7 @@ var _ = Describe("Receive Stream", func() {
 				mockFC.EXPECT().UpdateHighestReceived(protocol.ByteCount(42), true).Times(2)
 				Expect(str.handleStreamFrame(&wire.StreamFrame{
 					StreamID: streamID,
-					Offset:   rst.ByteOffset,
+					Offset:   rst.FinalSize,
 					FinBit:   true,
 				})).To(Succeed())
 				Expect(str.handleResetStreamFrame(rst)).To(Succeed())

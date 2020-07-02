@@ -268,11 +268,11 @@ func (s *receiveStream) handleResetStreamFrameImpl(frame *wire.ResetStreamFrame)
 	if s.closedForShutdown {
 		return false, nil
 	}
-	if err := s.flowController.UpdateHighestReceived(frame.ByteOffset, true); err != nil {
+	if err := s.flowController.UpdateHighestReceived(frame.FinalSize, true); err != nil {
 		return false, err
 	}
 	newlyRcvdFinalOffset := s.finalOffset == protocol.MaxByteCount
-	s.finalOffset = frame.ByteOffset
+	s.finalOffset = frame.FinalSize
 
 	// ignore duplicate RESET_STREAM frames for this stream (after checking their final offset)
 	if s.resetRemotely {

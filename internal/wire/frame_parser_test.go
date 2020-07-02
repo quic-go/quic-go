@@ -82,9 +82,9 @@ var _ = Describe("Frame parsing", func() {
 
 	It("unpacks RESET_STREAM frames", func() {
 		f := &ResetStreamFrame{
-			StreamID:   0xdeadbeef,
-			ByteOffset: 0xdecafbad1234,
-			ErrorCode:  0x1337,
+			StreamID:  0xdeadbeef,
+			FinalSize: 0xdecafbad1234,
+			ErrorCode: 0x1337,
 		}
 		err := f.Write(buf, versionIETFFrames)
 		Expect(err).ToNot(HaveOccurred())

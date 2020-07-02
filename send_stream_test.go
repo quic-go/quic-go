@@ -685,9 +685,9 @@ var _ = Describe("Send Stream", func() {
 			It("queues a RESET_STREAM frame", func() {
 				gomock.InOrder(
 					mockSender.EXPECT().queueControlFrame(&wire.ResetStreamFrame{
-						StreamID:   streamID,
-						ByteOffset: 1234,
-						ErrorCode:  9876,
+						StreamID:  streamID,
+						FinalSize: 1234,
+						ErrorCode: 9876,
 					}),
 					mockSender.EXPECT().onStreamCompleted(streamID),
 				)

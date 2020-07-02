@@ -142,7 +142,7 @@ func marshalResetStreamFrame(enc *gojay.Encoder, f *wire.ResetStreamFrame) {
 	enc.StringKey("frame_type", "reset_stream")
 	enc.Int64Key("stream_id", int64(f.StreamID))
 	enc.Int64Key("error_code", int64(f.ErrorCode))
-	enc.Int64Key("final_size", int64(f.ByteOffset))
+	enc.Int64Key("final_size", int64(f.FinalSize))
 }
 
 func marshalStopSendingFrame(enc *gojay.Encoder, f *wire.StopSendingFrame) {

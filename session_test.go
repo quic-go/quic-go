@@ -169,9 +169,9 @@ var _ = Describe("Session", func() {
 		Context("handling RESET_STREAM frames", func() {
 			It("closes the streams for writing", func() {
 				f := &wire.ResetStreamFrame{
-					StreamID:   555,
-					ErrorCode:  42,
-					ByteOffset: 0x1337,
+					StreamID:  555,
+					ErrorCode: 42,
+					FinalSize: 0x1337,
 				}
 				str := NewMockReceiveStreamI(mockCtrl)
 				streamManager.EXPECT().GetOrOpenReceiveStream(protocol.StreamID(555)).Return(str, nil)
@@ -182,8 +182,8 @@ var _ = Describe("Session", func() {
 
 			It("returns errors", func() {
 				f := &wire.ResetStreamFrame{
-					StreamID:   7,
-					ByteOffset: 0x1337,
+					StreamID:  7,
+					FinalSize: 0x1337,
 				}
 				testErr := errors.New("flow control violation")
 				str := NewMockReceiveStreamI(mockCtrl)

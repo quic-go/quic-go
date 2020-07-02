@@ -24,7 +24,7 @@ func LogFrame(logger utils.Logger, frame Frame, sent bool) {
 	case *StreamFrame:
 		logger.Debugf("\t%s &wire.StreamFrame{StreamID: %d, FinBit: %t, Offset: %d, Data length: %d, Offset + Data length: %d}", dir, f.StreamID, f.FinBit, f.Offset, f.DataLen(), f.Offset+f.DataLen())
 	case *ResetStreamFrame:
-		logger.Debugf("\t%s &wire.ResetStreamFrame{StreamID: %d, ErrorCode: %#x, ByteOffset: %d}", dir, f.StreamID, f.ErrorCode, f.ByteOffset)
+		logger.Debugf("\t%s &wire.ResetStreamFrame{StreamID: %d, ErrorCode: %#x, FinalSize: %d}", dir, f.StreamID, f.ErrorCode, f.FinalSize)
 	case *AckFrame:
 		if len(f.AckRanges) > 1 {
 			ackRanges := make([]string, len(f.AckRanges))
