@@ -1504,7 +1504,7 @@ func (s *session) sendProbePacket(encLevel protocol.EncryptionLevel) error {
 
 func (s *session) sendPacket() (bool, error) {
 	if isBlocked, offset := s.connFlowController.IsNewlyBlocked(); isBlocked {
-		s.framer.QueueControlFrame(&wire.DataBlockedFrame{DataLimit: offset})
+		s.framer.QueueControlFrame(&wire.DataBlockedFrame{MaximumData: offset})
 	}
 	s.windowUpdateQueue.QueueAll()
 

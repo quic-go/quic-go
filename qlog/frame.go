@@ -190,7 +190,7 @@ func marshalMaxStreamsFrame(enc *gojay.Encoder, f *wire.MaxStreamsFrame) {
 
 func marshalDataBlockedFrame(enc *gojay.Encoder, f *wire.DataBlockedFrame) {
 	enc.StringKey("frame_type", "data_blocked")
-	enc.Int64Key("limit", int64(f.DataLimit))
+	enc.Int64Key("limit", int64(f.MaximumData))
 }
 
 func marshalStreamDataBlockedFrame(enc *gojay.Encoder, f *wire.StreamDataBlockedFrame) {

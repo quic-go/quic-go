@@ -215,7 +215,7 @@ var _ = Describe("Frames", func() {
 	It("marshals DATA_BLOCKED frames", func() {
 		check(
 			&wire.DataBlockedFrame{
-				DataLimit: 1337,
+				MaximumData: 1337,
 			},
 			map[string]interface{}{
 				"frame_type": "data_blocked",

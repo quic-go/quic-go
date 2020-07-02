@@ -180,7 +180,7 @@ var _ = Describe("Frame parsing", func() {
 	})
 
 	It("unpacks DATA_BLOCKED frames", func() {
-		f := &DataBlockedFrame{DataLimit: 0x1234}
+		f := &DataBlockedFrame{MaximumData: 0x1234}
 		buf := &bytes.Buffer{}
 		err := f.Write(buf, versionIETFFrames)
 		Expect(err).ToNot(HaveOccurred())

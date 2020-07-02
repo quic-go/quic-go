@@ -115,10 +115,10 @@ var _ = Describe("Frame logging", func() {
 
 	It("logs DATA_BLOCKED frames", func() {
 		frame := &DataBlockedFrame{
-			DataLimit: 1000,
+			MaximumData: 1000,
 		}
 		LogFrame(logger, frame, false)
-		Expect(buf.String()).To(ContainSubstring("\t<- &wire.DataBlockedFrame{DataLimit: 1000}\n"))
+		Expect(buf.String()).To(ContainSubstring("\t<- &wire.DataBlockedFrame{MaximumData: 1000}\n"))
 	})
 
 	It("logs STREAM_DATA_BLOCKED frames", func() {

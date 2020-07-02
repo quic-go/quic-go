@@ -1124,7 +1124,7 @@ var _ = Describe("Session", func() {
 			sess.scheduleSending()
 			Eventually(sent).Should(BeClosed())
 			frames, _ := sess.framer.AppendControlFrames(nil, 1000)
-			Expect(frames).To(Equal([]ackhandler.Frame{{Frame: &wire.DataBlockedFrame{DataLimit: 1337}}}))
+			Expect(frames).To(Equal([]ackhandler.Frame{{Frame: &wire.DataBlockedFrame{MaximumData: 1337}}}))
 		})
 
 		It("doesn't send when the SentPacketHandler doesn't allow it", func() {
