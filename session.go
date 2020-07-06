@@ -16,6 +16,7 @@ import (
 	"github.com/lucas-clemente/quic-go/internal/congestion"
 	"github.com/lucas-clemente/quic-go/internal/flowcontrol"
 	"github.com/lucas-clemente/quic-go/internal/handshake"
+	"github.com/lucas-clemente/quic-go/internal/logutils"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/internal/qerr"
 	"github.com/lucas-clemente/quic-go/internal/utils"
@@ -1042,7 +1043,11 @@ func (s *session) handleUnpackedPacket(
 		})
 	}
 	if s.tracer != nil {
-		s.tracer.ReceivedPacket(packet.hdr, packetSize, frames)
+		fs := make([]logging.Frame, len(frames))
+		for i, frame := range frames {
+			fs[i] = logutils.ConvertFrame(frame)
+		}
+		s.tracer.ReceivedPacket(packet.hdr, packetSize, fs)
 		for _, frame := range frames {
 			if err := s.handleFrame(frame, packet.encryptionLevel); err != nil {
 				return err
@@ -1556,9 +1561,9 @@ func (s *session) sendConnectionClose(quicErr *qerr.QuicError) ([]byte, error) {
 func (s *session) logPacketContents(now time.Time, p *packetContents) {
 	// tracing
 	if s.tracer != nil {
-		frames := make([]wire.Frame, 0, len(p.frames))
+		frames := make([]logging.Frame, 0, len(p.frames))
 		for _, f := range p.frames {
-			frames = append(frames, f.Frame)
+			frames = append(frames, logutils.ConvertFrame(f.Frame))
 		}
 		s.tracer.SentPacket(p.header, p.length, p.ack, frames)
 	}
