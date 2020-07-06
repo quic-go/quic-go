@@ -645,7 +645,10 @@ var _ = Describe("Server", func() {
 				wg.Wait()
 
 				close(acceptSession)
-				Eventually(func() uint32 { return atomic.LoadUint32(&counter) }).Should(BeEquivalentTo(protocol.MaxServerUnprocessedPackets + 1))
+				Eventually(
+					func() uint32 { return atomic.LoadUint32(&counter) },
+					scaleDuration(100*time.Millisecond),
+				).Should(BeEquivalentTo(protocol.MaxServerUnprocessedPackets + 1))
 				Consistently(func() uint32 { return atomic.LoadUint32(&counter) }).Should(BeEquivalentTo(protocol.MaxServerUnprocessedPackets + 1))
 			})
 
