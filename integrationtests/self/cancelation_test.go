@@ -42,12 +42,12 @@ var _ = FDescribe("Stream Cancelations", func() {
 						defer wg.Done()
 						str, err := sess.OpenUniStreamSync(context.Background())
 						Expect(err).ToNot(HaveOccurred())
+						defer str.Close()
 						if _, err = str.Write(PRData); err != nil {
 							Expect(err).To(MatchError(fmt.Sprintf("stream %d was reset with error code %d", str.StreamID(), str.StreamID())))
 							atomic.AddInt32(&canceledCounter, 1)
 							return
 						}
-						Expect(str.Close()).To(Succeed())
 					}()
 				}
 				wg.Wait()
