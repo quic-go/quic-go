@@ -17,7 +17,7 @@ import (
 	. "github.com/onsi/gomega"
 )
 
-var _ = Describe("Stream Cancelations", func() {
+var _ = FDescribe("Stream Cancelations", func() {
 	const numStreams = 80
 
 	Context("canceling the read side", func() {
