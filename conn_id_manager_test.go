@@ -201,6 +201,27 @@ var _ = Describe("Connection ID Manager", func() {
 		Expect(frameQueue[0].(*wire.RetireConnectionIDFrame).SequenceNumber).To(BeEquivalentTo(9))
 	})
 
+	It("accepts retransmissions for the connection ID that is in use", func() {
+		connID := protocol.ConnectionID{1, 2, 3, 4}
+
+		Expect(m.Add(&wire.NewConnectionIDFrame{
+			SequenceNumber: 1,
+			ConnectionID:   connID,
+		})).To(Succeed())
+		Expect(frameQueue).To(BeEmpty())
+		Expect(m.Get()).To(Equal(connID))
+		Expect(frameQueue).To(HaveLen(1))
+		Expect(frameQueue[0]).To(BeAssignableToTypeOf(&wire.RetireConnectionIDFrame{}))
+		Expect(frameQueue[0].(*wire.RetireConnectionIDFrame).SequenceNumber).To(BeZero())
+		frameQueue = nil
+
+		Expect(m.Add(&wire.NewConnectionIDFrame{
+			SequenceNumber: 1,
+			ConnectionID:   connID,
+		})).To(Succeed())
+		Expect(frameQueue).To(BeEmpty())
+	})
+
 	It("errors when the peer sends too connection IDs", func() {
 		for i := uint8(1); i < protocol.MaxActiveConnectionIDs; i++ {
 			Expect(m.Add(&wire.NewConnectionIDFrame{
