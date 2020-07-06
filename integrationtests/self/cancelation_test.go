@@ -360,7 +360,10 @@ var _ = FDescribe("Stream Cancelations", func() {
 						if length < len(PRData) {
 							str.CancelWrite(quic.ErrorCode(str.StreamID()))
 						} else {
-							Expect(str.Close()).To(Succeed())
+							Expect(str.Close()).To(Or(
+								Succeed(),
+								MatchError(fmt.Sprintf("stream %d was reset with error code %d", str.StreamID(), str.StreamID())),
+							))
 						}
 					}()
 				}
