@@ -1024,7 +1024,7 @@ func (s *session) handleUnpackedPacket(
 		// Only process frames now if we're not logging.
 		// If we're logging, we need to make sure that the packet_received event is logged first.
 		if s.tracer == nil {
-			if err := s.handleFrame(frame, packet.encryptionLevel); err != nil {
+			if err := s.handleFrame(frame, packet.encryptionLevel, packet.hdr.DestConnectionID); err != nil {
 				return err
 			}
 		}
@@ -1049,7 +1049,7 @@ func (s *session) handleUnpackedPacket(
 		}
 		s.tracer.ReceivedPacket(packet.hdr, packetSize, fs)
 		for _, frame := range frames {
-			if err := s.handleFrame(frame, packet.encryptionLevel); err != nil {
+			if err := s.handleFrame(frame, packet.encryptionLevel, packet.hdr.DestConnectionID); err != nil {
 				return err
 			}
 		}
@@ -1058,7 +1058,7 @@ func (s *session) handleUnpackedPacket(
 	return s.receivedPacketHandler.ReceivedPacket(packet.packetNumber, packet.encryptionLevel, rcvTime, isAckEliciting)
 }
 
-func (s *session) handleFrame(f wire.Frame, encLevel protocol.EncryptionLevel) error {
+func (s *session) handleFrame(f wire.Frame, encLevel protocol.EncryptionLevel, destConnID protocol.ConnectionID) error {
 	var err error
 	wire.LogFrame(s.logger, f, false)
 	switch frame := f.(type) {
@@ -1094,7 +1094,7 @@ func (s *session) handleFrame(f wire.Frame, encLevel protocol.EncryptionLevel) e
 	case *wire.NewConnectionIDFrame:
 		err = s.handleNewConnectionIDFrame(frame)
 	case *wire.RetireConnectionIDFrame:
-		err = s.handleRetireConnectionIDFrame(frame)
+		err = s.handleRetireConnectionIDFrame(frame, destConnID)
 	case *wire.HandshakeDoneFrame:
 		err = s.handleHandshakeDoneFrame()
 	default:
@@ -1211,8 +1211,8 @@ func (s *session) handleNewConnectionIDFrame(f *wire.NewConnectionIDFrame) error
 	return s.connIDManager.Add(f)
 }
 
-func (s *session) handleRetireConnectionIDFrame(f *wire.RetireConnectionIDFrame) error {
-	return s.connIDGenerator.Retire(f.SequenceNumber)
+func (s *session) handleRetireConnectionIDFrame(f *wire.RetireConnectionIDFrame, destConnID protocol.ConnectionID) error {
+	return s.connIDGenerator.Retire(f.SequenceNumber, destConnID)
 }
 
 func (s *session) handleHandshakeDoneFrame() error {
