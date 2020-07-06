@@ -23,6 +23,8 @@ var _ = Describe("Stream Cancelations", func() {
 	Context("canceling the read side", func() {
 		var server quic.Listener
 
+		// The server accepts a single session, and then opens numStreams unidirectional streams.
+		// On each of these streams, it (tries to) write PRData.
 		runServer := func() <-chan int32 {
 			numCanceledStreamsChan := make(chan int32)
 			var err error
@@ -42,12 +44,16 @@ var _ = Describe("Stream Cancelations", func() {
 						defer wg.Done()
 						str, err := sess.OpenUniStreamSync(context.Background())
 						Expect(err).ToNot(HaveOccurred())
-						if _, err = str.Write(PRData); err != nil {
+						if _, err := str.Write(PRData); err != nil {
 							Expect(err).To(MatchError(fmt.Sprintf("stream %d was reset with error code %d", str.StreamID(), str.StreamID())))
 							atomic.AddInt32(&canceledCounter, 1)
 							return
 						}
-						Expect(str.Close()).To(Succeed())
+						if err := str.Close(); err != nil {
+							Expect(err).To(MatchError(fmt.Sprintf("close called for canceled stream %d", str.StreamID())))
+							atomic.AddInt32(&canceledCounter, 1)
+							return
+						}
 					}()
 				}
 				wg.Wait()
@@ -283,7 +289,10 @@ var _ = Describe("Stream Cancelations", func() {
 							Expect(err).To(MatchError(fmt.Sprintf("stream %d was reset with error code %d", str.StreamID(), str.StreamID())))
 							return
 						}
-						Expect(str.Close()).To(Succeed())
+						if err := str.Close(); err != nil {
+							Expect(err).To(MatchError(fmt.Sprintf("close called for canceled stream %d", str.StreamID())))
+							return
+						}
 					}()
 				}
 				wg.Wait()
@@ -359,8 +368,9 @@ var _ = Describe("Stream Cancelations", func() {
 						}
 						if length < len(PRData) {
 							str.CancelWrite(quic.ErrorCode(str.StreamID()))
-						} else {
-							Expect(str.Close()).To(Succeed())
+						} else if err := str.Close(); err != nil {
+							Expect(err).To(MatchError(fmt.Sprintf("close called for canceled stream %d", str.StreamID())))
+							return
 						}
 					}()
 				}
