@@ -270,8 +270,8 @@ var _ = Describe("Tracer", func() {
 				987,
 				nil,
 				[]wire.Frame{
-					&wire.MaxStreamDataFrame{StreamID: 42, ByteOffset: 987},
-					&wire.StreamFrame{StreamID: 123, Offset: 1234, Data: []byte("foobar"), FinBit: true},
+					&wire.MaxStreamDataFrame{StreamID: 42, MaximumStreamData: 987},
+					&wire.StreamFrame{StreamID: 123, Offset: 1234, Data: []byte("foobar"), Fin: true},
 				},
 			)
 			entry := exportAndParseSingle()
@@ -300,7 +300,7 @@ var _ = Describe("Tracer", func() {
 				},
 				123,
 				&wire.AckFrame{AckRanges: []wire.AckRange{{Smallest: 1, Largest: 10}}},
-				[]wire.Frame{&wire.MaxDataFrame{ByteOffset: 987}},
+				[]wire.Frame{&wire.MaxDataFrame{MaximumData: 987}},
 			)
 			entry := exportAndParseSingle()
 			ev := entry.Event
@@ -327,8 +327,8 @@ var _ = Describe("Tracer", func() {
 				},
 				789,
 				[]wire.Frame{
-					&wire.MaxStreamDataFrame{StreamID: 42, ByteOffset: 987},
-					&wire.StreamFrame{StreamID: 123, Offset: 1234, Data: []byte("foobar"), FinBit: true},
+					&wire.MaxStreamDataFrame{StreamID: 42, MaximumStreamData: 987},
+					&wire.StreamFrame{StreamID: 123, Offset: 1234, Data: []byte("foobar"), Fin: true},
 				},
 			)
 			entry := exportAndParseSingle()

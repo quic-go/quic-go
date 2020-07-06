@@ -84,9 +84,9 @@ var _ = Describe("Frames", func() {
 	It("marshals RESET_STREAM frames", func() {
 		check(
 			&wire.ResetStreamFrame{
-				StreamID:   987,
-				ByteOffset: 1234,
-				ErrorCode:  42,
+				StreamID:  987,
+				FinalSize: 1234,
+				ErrorCode: 42,
 			},
 			map[string]interface{}{
 				"frame_type": "reset_stream",
@@ -143,7 +143,7 @@ var _ = Describe("Frames", func() {
 			&wire.StreamFrame{
 				StreamID: 42,
 				Offset:   1337,
-				FinBit:   true,
+				Fin:      true,
 				Data:     []byte("foobar"),
 			},
 			map[string]interface{}{
@@ -175,7 +175,7 @@ var _ = Describe("Frames", func() {
 	It("marshals MAX_DATA frames", func() {
 		check(
 			&wire.MaxDataFrame{
-				ByteOffset: 1337,
+				MaximumData: 1337,
 			},
 			map[string]interface{}{
 				"frame_type": "max_data",
@@ -187,8 +187,8 @@ var _ = Describe("Frames", func() {
 	It("marshals MAX_STREAM_DATA frames", func() {
 		check(
 			&wire.MaxStreamDataFrame{
-				StreamID:   1234,
-				ByteOffset: 1337,
+				StreamID:          1234,
+				MaximumStreamData: 1337,
 			},
 			map[string]interface{}{
 				"frame_type": "max_stream_data",
@@ -215,7 +215,7 @@ var _ = Describe("Frames", func() {
 	It("marshals DATA_BLOCKED frames", func() {
 		check(
 			&wire.DataBlockedFrame{
-				DataLimit: 1337,
+				MaximumData: 1337,
 			},
 			map[string]interface{}{
 				"frame_type": "data_blocked",
@@ -227,8 +227,8 @@ var _ = Describe("Frames", func() {
 	It("marshals STREAM_DATA_BLOCKED frames", func() {
 		check(
 			&wire.StreamDataBlockedFrame{
-				StreamID:  42,
-				DataLimit: 1337,
+				StreamID:          42,
+				MaximumStreamData: 1337,
 			},
 			map[string]interface{}{
 				"frame_type": "stream_data_blocked",

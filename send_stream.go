@@ -232,7 +232,7 @@ func (s *sendStream) popNewOrRetransmittedStreamFrame(maxBytes protocol.ByteCoun
 				StreamID:       s.streamID,
 				Offset:         s.writeOffset,
 				DataLenPresent: true,
-				FinBit:         true,
+				Fin:            true,
 			}, false
 		}
 		return nil, false
@@ -242,8 +242,8 @@ func (s *sendStream) popNewOrRetransmittedStreamFrame(maxBytes protocol.ByteCoun
 	if sendWindow == 0 {
 		if isBlocked, offset := s.flowController.IsNewlyBlocked(); isBlocked {
 			s.sender.queueControlFrame(&wire.StreamDataBlockedFrame{
-				StreamID:  s.streamID,
-				DataLimit: offset,
+				StreamID:          s.streamID,
+				MaximumStreamData: offset,
 			})
 			return nil, false
 		}
@@ -255,8 +255,8 @@ func (s *sendStream) popNewOrRetransmittedStreamFrame(maxBytes protocol.ByteCoun
 		s.writeOffset += f.DataLen()
 		s.flowController.AddBytesSent(f.DataLen())
 	}
-	f.FinBit = s.finishedWriting && s.dataForWriting == nil && s.nextFrame == nil && !s.finSent
-	if f.FinBit {
+	f.Fin = s.finishedWriting && s.dataForWriting == nil && s.nextFrame == nil && !s.finSent
+	if f.Fin {
 		s.finSent = true
 	}
 	return f, hasMoreData
@@ -283,14 +283,14 @@ func (s *sendStream) popNewStreamFrame(maxBytes, sendWindow protocol.ByteCount) 
 	}
 
 	f := wire.GetStreamFrame()
-	f.FinBit = false
+	f.Fin = false
 	f.StreamID = s.streamID
 	f.Offset = s.writeOffset
 	f.DataLenPresent = true
 	f.Data = f.Data[:0]
 
 	hasMoreData := s.popNewStreamFrameWithoutBuffer(f, maxBytes, sendWindow)
-	if len(f.Data) == 0 && !f.FinBit {
+	if len(f.Data) == 0 && !f.Fin {
 		f.PutBack()
 		return nil, hasMoreData
 	}
@@ -416,9 +416,9 @@ func (s *sendStream) cancelWriteImpl(errorCode protocol.ApplicationErrorCode, wr
 
 	s.signalWrite()
 	s.sender.queueControlFrame(&wire.ResetStreamFrame{
-		StreamID:   s.streamID,
-		ByteOffset: s.writeOffset,
-		ErrorCode:  errorCode,
+		StreamID:  s.streamID,
+		FinalSize: s.writeOffset,
+		ErrorCode: errorCode,
 	})
 	if newlyCompleted {
 		s.sender.onStreamCompleted(s.streamID)
@@ -430,7 +430,7 @@ func (s *sendStream) handleMaxStreamDataFrame(frame *wire.MaxStreamDataFrame) {
 	hasStreamData := s.dataForWriting != nil || s.nextFrame != nil
 	s.mutex.Unlock()
 
-	s.flowController.UpdateSendWindow(frame.ByteOffset)
+	s.flowController.UpdateSendWindow(frame.MaximumStreamData)
 	if hasStreamData {
 		s.sender.onHasStreamData(s.streamID)
 	}

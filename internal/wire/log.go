@@ -22,9 +22,9 @@ func LogFrame(logger utils.Logger, frame Frame, sent bool) {
 		dataLen := protocol.ByteCount(len(f.Data))
 		logger.Debugf("\t%s &wire.CryptoFrame{Offset: %d, Data length: %d, Offset + Data length: %d}", dir, f.Offset, dataLen, f.Offset+dataLen)
 	case *StreamFrame:
-		logger.Debugf("\t%s &wire.StreamFrame{StreamID: %d, FinBit: %t, Offset: %d, Data length: %d, Offset + Data length: %d}", dir, f.StreamID, f.FinBit, f.Offset, f.DataLen(), f.Offset+f.DataLen())
+		logger.Debugf("\t%s &wire.StreamFrame{StreamID: %d, Fin: %t, Offset: %d, Data length: %d, Offset + Data length: %d}", dir, f.StreamID, f.Fin, f.Offset, f.DataLen(), f.Offset+f.DataLen())
 	case *ResetStreamFrame:
-		logger.Debugf("\t%s &wire.ResetStreamFrame{StreamID: %d, ErrorCode: %#x, ByteOffset: %d}", dir, f.StreamID, f.ErrorCode, f.ByteOffset)
+		logger.Debugf("\t%s &wire.ResetStreamFrame{StreamID: %d, ErrorCode: %#x, FinalSize: %d}", dir, f.StreamID, f.ErrorCode, f.FinalSize)
 	case *AckFrame:
 		if len(f.AckRanges) > 1 {
 			ackRanges := make([]string, len(f.AckRanges))
@@ -36,13 +36,13 @@ func LogFrame(logger utils.Logger, frame Frame, sent bool) {
 			logger.Debugf("\t%s &wire.AckFrame{LargestAcked: %d, LowestAcked: %d, DelayTime: %s}", dir, f.LargestAcked(), f.LowestAcked(), f.DelayTime.String())
 		}
 	case *MaxDataFrame:
-		logger.Debugf("\t%s &wire.MaxDataFrame{ByteOffset: %d}", dir, f.ByteOffset)
+		logger.Debugf("\t%s &wire.MaxDataFrame{MaximumData: %d}", dir, f.MaximumData)
 	case *MaxStreamDataFrame:
-		logger.Debugf("\t%s &wire.MaxStreamDataFrame{StreamID: %d, ByteOffset: %d}", dir, f.StreamID, f.ByteOffset)
+		logger.Debugf("\t%s &wire.MaxStreamDataFrame{StreamID: %d, MaximumStreamData: %d}", dir, f.StreamID, f.MaximumStreamData)
 	case *DataBlockedFrame:
-		logger.Debugf("\t%s &wire.DataBlockedFrame{DataLimit: %d}", dir, f.DataLimit)
+		logger.Debugf("\t%s &wire.DataBlockedFrame{MaximumData: %d}", dir, f.MaximumData)
 	case *StreamDataBlockedFrame:
-		logger.Debugf("\t%s &wire.StreamDataBlockedFrame{StreamID: %d, DataLimit: %d}", dir, f.StreamID, f.DataLimit)
+		logger.Debugf("\t%s &wire.StreamDataBlockedFrame{StreamID: %d, MaximumStreamData: %d}", dir, f.StreamID, f.MaximumStreamData)
 	case *MaxStreamsFrame:
 		switch f.Type {
 		case protocol.StreamTypeUni:

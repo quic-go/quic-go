@@ -38,7 +38,7 @@ var _ = Describe("Framer", func() {
 
 	Context("handling control frames", func() {
 		It("adds control frames", func() {
-			mdf := &wire.MaxDataFrame{ByteOffset: 0x42}
+			mdf := &wire.MaxDataFrame{MaximumData: 0x42}
 			msf := &wire.MaxStreamsFrame{MaxStreamNum: 0x1337}
 			framer.QueueControlFrame(mdf)
 			framer.QueueControlFrame(msf)
@@ -52,7 +52,7 @@ var _ = Describe("Framer", func() {
 
 		It("says if it has data", func() {
 			Expect(framer.HasData()).To(BeFalse())
-			f := &wire.MaxDataFrame{ByteOffset: 0x42}
+			f := &wire.MaxDataFrame{MaximumData: 0x42}
 			framer.QueueControlFrame(f)
 			Expect(framer.HasData()).To(BeTrue())
 			frames, _ := framer.AppendControlFrames(nil, 1000)
@@ -62,7 +62,7 @@ var _ = Describe("Framer", func() {
 
 		It("appends to the slice given", func() {
 			ping := &wire.PingFrame{}
-			mdf := &wire.MaxDataFrame{ByteOffset: 0x42}
+			mdf := &wire.MaxDataFrame{MaximumData: 0x42}
 			framer.QueueControlFrame(mdf)
 			frames, length := framer.AppendControlFrames([]ackhandler.Frame{{Frame: ping}}, 1000)
 			Expect(frames).To(HaveLen(2))
@@ -73,7 +73,7 @@ var _ = Describe("Framer", func() {
 
 		It("adds the right number of frames", func() {
 			maxSize := protocol.ByteCount(1000)
-			bf := &wire.DataBlockedFrame{DataLimit: 0x1337}
+			bf := &wire.DataBlockedFrame{MaximumData: 0x1337}
 			bfLen := bf.Length(version)
 			numFrames := int(maxSize / bfLen) // max number of frames that fit into maxSize
 			for i := 0; i < numFrames+1; i++ {
@@ -137,7 +137,7 @@ var _ = Describe("Framer", func() {
 			}
 			stream1.EXPECT().popStreamFrame(gomock.Any()).Return(&ackhandler.Frame{Frame: f}, false)
 			framer.AddActiveStream(id1)
-			mdf := &wire.MaxDataFrame{ByteOffset: 1337}
+			mdf := &wire.MaxDataFrame{MaximumData: 1337}
 			frames := []ackhandler.Frame{{Frame: mdf}}
 			fs, length := framer.AppendStreamFrames(frames, 1000)
 			Expect(fs).To(HaveLen(2))

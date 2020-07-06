@@ -88,7 +88,7 @@ var _ = Describe("Send Stream", func() {
 			frame, _ := str.popStreamFrame(protocol.MaxByteCount)
 			f := frame.Frame.(*wire.StreamFrame)
 			Expect(f.Data).To(Equal([]byte("foobar")))
-			Expect(f.FinBit).To(BeFalse())
+			Expect(f.Fin).To(BeFalse())
 			Expect(f.Offset).To(BeZero())
 			Expect(f.DataLenPresent).To(BeTrue())
 			Expect(str.writeOffset).To(Equal(protocol.ByteCount(6)))
@@ -112,13 +112,13 @@ var _ = Describe("Send Stream", func() {
 			frame, _ := str.popStreamFrame(expectedFrameHeaderLen(0) + 3)
 			f := frame.Frame.(*wire.StreamFrame)
 			Expect(f.Offset).To(BeZero())
-			Expect(f.FinBit).To(BeFalse())
+			Expect(f.Fin).To(BeFalse())
 			Expect(f.Data).To(Equal([]byte("foo")))
 			Expect(f.DataLenPresent).To(BeTrue())
 			frame, _ = str.popStreamFrame(protocol.MaxByteCount)
 			f = frame.Frame.(*wire.StreamFrame)
 			Expect(f.Data).To(Equal([]byte("bar")))
-			Expect(f.FinBit).To(BeFalse())
+			Expect(f.Fin).To(BeFalse())
 			Expect(f.Offset).To(Equal(protocol.ByteCount(3)))
 			Expect(f.DataLenPresent).To(BeTrue())
 			Expect(str.popStreamFrame(1000)).To(BeNil())
@@ -144,7 +144,7 @@ var _ = Describe("Send Stream", func() {
 			frame, _ := str.popStreamFrame(protocol.MaxByteCount)
 			f := frame.Frame.(*wire.StreamFrame)
 			Expect(f.Offset).To(BeZero())
-			Expect(f.FinBit).To(BeFalse())
+			Expect(f.Fin).To(BeFalse())
 			Expect(f.Data).To(Equal([]byte("foobar")))
 		})
 
@@ -166,7 +166,7 @@ var _ = Describe("Send Stream", func() {
 				frame, _ := str.popStreamFrame(1100)
 				f := frame.Frame.(*wire.StreamFrame)
 				Expect(f.Offset).To(BeNumerically("~", 1100*i, 10*i))
-				Expect(f.FinBit).To(BeFalse())
+				Expect(f.Fin).To(BeFalse())
 				Expect(f.Data).To(Equal(getDataAtOffset(f.Offset, f.DataLen())))
 				Expect(f.DataLenPresent).To(BeTrue())
 			}
@@ -248,11 +248,11 @@ var _ = Describe("Send Stream", func() {
 			mockFC.EXPECT().AddBytesSent(gomock.Any()).Times(2)
 			frame, hasMoreData := str.popStreamFrame(50)
 			Expect(frame).ToNot(BeNil())
-			Expect(frame.Frame.(*wire.StreamFrame).FinBit).To(BeFalse())
+			Expect(frame.Frame.(*wire.StreamFrame).Fin).To(BeFalse())
 			Expect(hasMoreData).To(BeTrue())
 			frame, hasMoreData = str.popStreamFrame(protocol.MaxByteCount)
 			Expect(frame).ToNot(BeNil())
-			Expect(frame.Frame.(*wire.StreamFrame).FinBit).To(BeFalse())
+			Expect(frame.Frame.(*wire.StreamFrame).Fin).To(BeFalse())
 			Expect(hasMoreData).To(BeFalse())
 			frame, _ = str.popStreamFrame(protocol.MaxByteCount)
 			Expect(frame).To(BeNil())
@@ -311,8 +311,8 @@ var _ = Describe("Send Stream", func() {
 				mockFC.EXPECT().SendWindowSize().Return(protocol.ByteCount(0))
 				mockFC.EXPECT().IsNewlyBlocked().Return(true, protocol.ByteCount(12))
 				mockSender.EXPECT().queueControlFrame(&wire.StreamDataBlockedFrame{
-					StreamID:  streamID,
-					DataLimit: 12,
+					StreamID:          streamID,
+					MaximumStreamData: 12,
 				})
 				done := make(chan struct{})
 				go func() {
@@ -354,8 +354,8 @@ var _ = Describe("Send Stream", func() {
 				// don't use offset 3 here, to make sure the BLOCKED frame contains the number returned by the flow controller
 				mockFC.EXPECT().IsNewlyBlocked().Return(true, protocol.ByteCount(10))
 				mockSender.EXPECT().queueControlFrame(&wire.StreamDataBlockedFrame{
-					StreamID:  streamID,
-					DataLimit: 10,
+					StreamID:          streamID,
+					MaximumStreamData: 10,
 				})
 				f, hasMoreData = str.popStreamFrame(1000)
 				Expect(f).To(BeNil())
@@ -533,7 +533,7 @@ var _ = Describe("Send Stream", func() {
 				Expect(frame).ToNot(BeNil())
 				f := frame.Frame.(*wire.StreamFrame)
 				Expect(f.Data).To(BeEmpty())
-				Expect(f.FinBit).To(BeTrue())
+				Expect(f.Fin).To(BeTrue())
 				Expect(f.DataLenPresent).To(BeTrue())
 				Expect(hasMoreData).To(BeFalse())
 			})
@@ -550,11 +550,11 @@ var _ = Describe("Send Stream", func() {
 				Expect(frame).ToNot(BeNil())
 				f := frame.Frame.(*wire.StreamFrame)
 				Expect(f.Data).To(Equal([]byte("foo")))
-				Expect(f.FinBit).To(BeFalse())
+				Expect(f.Fin).To(BeFalse())
 				frame, _ = str.popStreamFrame(protocol.MaxByteCount)
 				f = frame.Frame.(*wire.StreamFrame)
 				Expect(f.Data).To(Equal([]byte("bar")))
-				Expect(f.FinBit).To(BeTrue())
+				Expect(f.Fin).To(BeTrue())
 			})
 
 			It("doesn't send a FIN when there's still data, for long writes", func() {
@@ -579,7 +579,7 @@ var _ = Describe("Send Stream", func() {
 					Expect(frame).ToNot(BeNil())
 					f := frame.Frame.(*wire.StreamFrame)
 					Expect(f.Data).To(Equal(getDataAtOffset(f.Offset, f.DataLen())))
-					Expect(f.FinBit).To(Equal(i == 5)) // the last frame should have the FIN bit set
+					Expect(f.Fin).To(Equal(i == 5)) // the last frame should have the FIN bit set
 				}
 			})
 
@@ -602,7 +602,7 @@ var _ = Describe("Send Stream", func() {
 				Expect(frame).ToNot(BeNil())
 				f := frame.Frame.(*wire.StreamFrame)
 				Expect(f.Data).To(BeEmpty())
-				Expect(f.FinBit).To(BeTrue())
+				Expect(f.Fin).To(BeTrue())
 				frame, hasMoreData := str.popStreamFrame(1000)
 				Expect(frame).To(BeNil())
 				Expect(hasMoreData).To(BeFalse())
@@ -653,8 +653,8 @@ var _ = Describe("Send Stream", func() {
 		It("informs the flow controller", func() {
 			mockFC.EXPECT().UpdateSendWindow(protocol.ByteCount(0x1337))
 			str.handleMaxStreamDataFrame(&wire.MaxStreamDataFrame{
-				StreamID:   streamID,
-				ByteOffset: 0x1337,
+				StreamID:          streamID,
+				MaximumStreamData: 0x1337,
 			})
 		})
 
@@ -671,8 +671,8 @@ var _ = Describe("Send Stream", func() {
 			waitForWrite()
 			mockSender.EXPECT().onHasStreamData(streamID)
 			str.handleMaxStreamDataFrame(&wire.MaxStreamDataFrame{
-				StreamID:   streamID,
-				ByteOffset: 42,
+				StreamID:          streamID,
+				MaximumStreamData: 42,
 			})
 			// make sure the Write go routine returns
 			str.closeForShutdown(nil)
@@ -685,9 +685,9 @@ var _ = Describe("Send Stream", func() {
 			It("queues a RESET_STREAM frame", func() {
 				gomock.InOrder(
 					mockSender.EXPECT().queueControlFrame(&wire.ResetStreamFrame{
-						StreamID:   streamID,
-						ByteOffset: 1234,
-						ErrorCode:  9876,
+						StreamID:  streamID,
+						FinalSize: 1234,
+						ErrorCode: 9876,
 					}),
 					mockSender.EXPECT().onStreamCompleted(streamID),
 				)
@@ -1035,7 +1035,7 @@ var _ = Describe("Send Stream", func() {
 			frame, hasMoreData := str.popStreamFrame(protocol.MaxByteCount)
 			Expect(hasMoreData).To(BeFalse())
 			Expect(frame).ToNot(BeNil())
-			Expect(frame.Frame.(*wire.StreamFrame).FinBit).To(BeTrue())
+			Expect(frame.Frame.(*wire.StreamFrame).Fin).To(BeTrue())
 
 			mockSender.EXPECT().onStreamCompleted(streamID)
 			frame.OnAcked(frame.Frame)
@@ -1062,7 +1062,7 @@ var _ = Describe("Send Stream", func() {
 					continue
 				}
 				frames = append(frames, *frame)
-				if frame.Frame.(*wire.StreamFrame).FinBit {
+				if frame.Frame.(*wire.StreamFrame).Fin {
 					break
 				}
 			}

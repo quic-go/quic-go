@@ -169,9 +169,9 @@ var _ = Describe("Session", func() {
 		Context("handling RESET_STREAM frames", func() {
 			It("closes the streams for writing", func() {
 				f := &wire.ResetStreamFrame{
-					StreamID:   555,
-					ErrorCode:  42,
-					ByteOffset: 0x1337,
+					StreamID:  555,
+					ErrorCode: 42,
+					FinalSize: 0x1337,
 				}
 				str := NewMockReceiveStreamI(mockCtrl)
 				streamManager.EXPECT().GetOrOpenReceiveStream(protocol.StreamID(555)).Return(str, nil)
@@ -182,8 +182,8 @@ var _ = Describe("Session", func() {
 
 			It("returns errors", func() {
 				f := &wire.ResetStreamFrame{
-					StreamID:   7,
-					ByteOffset: 0x1337,
+					StreamID:  7,
+					FinalSize: 0x1337,
 				}
 				testErr := errors.New("flow control violation")
 				str := NewMockReceiveStreamI(mockCtrl)
@@ -212,8 +212,8 @@ var _ = Describe("Session", func() {
 
 			It("updates the flow control window of a stream", func() {
 				f := &wire.MaxStreamDataFrame{
-					StreamID:   12345,
-					ByteOffset: 0x1337,
+					StreamID:          12345,
+					MaximumStreamData: 0x1337,
 				}
 				str := NewMockSendStreamI(mockCtrl)
 				streamManager.EXPECT().GetOrOpenSendStream(protocol.StreamID(12345)).Return(str, nil)
@@ -225,14 +225,14 @@ var _ = Describe("Session", func() {
 			It("updates the flow control window of the connection", func() {
 				offset := protocol.ByteCount(0x800000)
 				connFC.EXPECT().UpdateSendWindow(offset)
-				sess.handleMaxDataFrame(&wire.MaxDataFrame{ByteOffset: offset})
+				sess.handleMaxDataFrame(&wire.MaxDataFrame{MaximumData: offset})
 			})
 
 			It("ignores MAX_STREAM_DATA frames for a closed stream", func() {
 				streamManager.EXPECT().GetOrOpenSendStream(protocol.StreamID(10)).Return(nil, nil)
 				Expect(sess.handleFrame(&wire.MaxStreamDataFrame{
-					StreamID:   10,
-					ByteOffset: 1337,
+					StreamID:          10,
+					MaximumStreamData: 1337,
 				}, protocol.EncryptionUnspecified)).To(Succeed())
 			})
 		})
@@ -1124,7 +1124,7 @@ var _ = Describe("Session", func() {
 			sess.scheduleSending()
 			Eventually(sent).Should(BeClosed())
 			frames, _ := sess.framer.AppendControlFrames(nil, 1000)
-			Expect(frames).To(Equal([]ackhandler.Frame{{Frame: &wire.DataBlockedFrame{DataLimit: 1337}}}))
+			Expect(frames).To(Equal([]ackhandler.Frame{{Frame: &wire.DataBlockedFrame{MaximumData: 1337}}}))
 		})
 
 		It("doesn't send when the SentPacketHandler doesn't allow it", func() {

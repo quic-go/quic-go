@@ -70,11 +70,11 @@ func getFrames() []wire.Frame {
 	frames := []wire.Frame{
 		&wire.StreamFrame{ // STREAM frame at 0 offset, with FIN bit
 			StreamID: protocol.StreamID(getRandomNumber()),
-			FinBit:   true,
+			Fin:      true,
 		},
 		&wire.StreamFrame{ // STREAM frame at 0 offset, with data and FIN bit
 			StreamID: protocol.StreamID(getRandomNumber()),
-			FinBit:   true,
+			Fin:      true,
 			Data:     getRandomData(100),
 		},
 		&wire.StreamFrame{ // STREAM frame at non-zero offset, with data
@@ -86,19 +86,19 @@ func getFrames() []wire.Frame {
 			StreamID: protocol.StreamID(getRandomNumber()),
 			Offset:   protocol.ByteCount(getRandomNumber()),
 			Data:     getRandomData(50),
-			FinBit:   true,
+			Fin:      true,
 		},
 		&wire.StreamFrame{ // STREAM frame at non-zero offset, with data and FIN bit. Long enough to use the buffer.
 			StreamID: protocol.StreamID(getRandomNumber()),
 			Offset:   protocol.ByteCount(getRandomNumber()),
 			Data:     getRandomData(2 * protocol.MinStreamFrameBufferSize),
-			FinBit:   true,
+			Fin:      true,
 		},
 		&wire.StreamFrame{ // STREAM frame at maximum offset, with FIN bit
 			StreamID: protocol.StreamID(getRandomNumber()),
 			Offset:   protocol.MaxByteCount - 5,
 			Data:     getRandomData(5),
-			FinBit:   true,
+			Fin:      true,
 		},
 		&wire.StreamFrame{ // STREAM frame with data at maximum offset
 			StreamID: protocol.StreamID(getRandomNumber()),
@@ -119,14 +119,14 @@ func getFrames() []wire.Frame {
 		},
 		&wire.PingFrame{},
 		&wire.ResetStreamFrame{
-			StreamID:   protocol.StreamID(getRandomNumber()),
-			ErrorCode:  quic.ErrorCode(getRandomNumber()),
-			ByteOffset: protocol.ByteCount(getRandomNumber()),
+			StreamID:  protocol.StreamID(getRandomNumber()),
+			ErrorCode: quic.ErrorCode(getRandomNumber()),
+			FinalSize: protocol.ByteCount(getRandomNumber()),
 		},
 		&wire.ResetStreamFrame{ // at maximum offset
-			StreamID:   protocol.StreamID(getRandomNumber()),
-			ErrorCode:  quic.ErrorCode(getRandomNumber()),
-			ByteOffset: protocol.MaxByteCount,
+			StreamID:  protocol.StreamID(getRandomNumber()),
+			ErrorCode: quic.ErrorCode(getRandomNumber()),
+			FinalSize: protocol.MaxByteCount,
 		},
 		&wire.StopSendingFrame{
 			StreamID:  protocol.StreamID(getRandomNumber()),
@@ -143,18 +143,18 @@ func getFrames() []wire.Frame {
 			Token: getRandomData(10),
 		},
 		&wire.MaxDataFrame{
-			ByteOffset: protocol.ByteCount(getRandomNumber()),
+			MaximumData: protocol.ByteCount(getRandomNumber()),
 		},
 		&wire.MaxDataFrame{
-			ByteOffset: protocol.MaxByteCount,
+			MaximumData: protocol.MaxByteCount,
 		},
 		&wire.MaxStreamDataFrame{
-			StreamID:   protocol.StreamID(getRandomNumber()),
-			ByteOffset: protocol.ByteCount(getRandomNumber()),
+			StreamID:          protocol.StreamID(getRandomNumber()),
+			MaximumStreamData: protocol.ByteCount(getRandomNumber()),
 		},
 		&wire.MaxStreamDataFrame{
-			StreamID:   protocol.StreamID(getRandomNumber()),
-			ByteOffset: protocol.MaxByteCount,
+			StreamID:          protocol.StreamID(getRandomNumber()),
+			MaximumStreamData: protocol.MaxByteCount,
 		},
 		&wire.MaxStreamsFrame{
 			Type:         protocol.StreamTypeUni,
@@ -165,18 +165,18 @@ func getFrames() []wire.Frame {
 			MaxStreamNum: protocol.StreamNum(getRandomNumber()),
 		},
 		&wire.DataBlockedFrame{
-			DataLimit: protocol.ByteCount(getRandomNumber()),
+			MaximumData: protocol.ByteCount(getRandomNumber()),
 		},
 		&wire.DataBlockedFrame{
-			DataLimit: protocol.MaxByteCount,
+			MaximumData: protocol.MaxByteCount,
 		},
 		&wire.StreamDataBlockedFrame{
-			StreamID:  protocol.StreamID(getRandomNumber()),
-			DataLimit: protocol.ByteCount(getRandomNumber()),
+			StreamID:          protocol.StreamID(getRandomNumber()),
+			MaximumStreamData: protocol.ByteCount(getRandomNumber()),
 		},
 		&wire.StreamDataBlockedFrame{
-			StreamID:  protocol.StreamID(getRandomNumber()),
-			DataLimit: protocol.MaxByteCount,
+			StreamID:          protocol.StreamID(getRandomNumber()),
+			MaximumStreamData: protocol.MaxByteCount,
 		},
 		&wire.StreamsBlockedFrame{
 			Type:        protocol.StreamTypeUni,

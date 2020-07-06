@@ -53,7 +53,7 @@ func transformFrame(wf wire.Frame) *frame {
 			StreamID: f.StreamID,
 			Offset:   f.Offset,
 			Length:   f.DataLen(),
-			FinBit:   f.FinBit,
+			FinBit:   f.Fin,
 		}}
 	default:
 		return &frame{Frame: wf}
@@ -142,7 +142,7 @@ func marshalResetStreamFrame(enc *gojay.Encoder, f *wire.ResetStreamFrame) {
 	enc.StringKey("frame_type", "reset_stream")
 	enc.Int64Key("stream_id", int64(f.StreamID))
 	enc.Int64Key("error_code", int64(f.ErrorCode))
-	enc.Int64Key("final_size", int64(f.ByteOffset))
+	enc.Int64Key("final_size", int64(f.FinalSize))
 }
 
 func marshalStopSendingFrame(enc *gojay.Encoder, f *wire.StopSendingFrame) {
@@ -173,13 +173,13 @@ func marshalStreamFrame(enc *gojay.Encoder, f *streamFrame) {
 
 func marshalMaxDataFrame(enc *gojay.Encoder, f *wire.MaxDataFrame) {
 	enc.StringKey("frame_type", "max_data")
-	enc.Int64Key("maximum", int64(f.ByteOffset))
+	enc.Int64Key("maximum", int64(f.MaximumData))
 }
 
 func marshalMaxStreamDataFrame(enc *gojay.Encoder, f *wire.MaxStreamDataFrame) {
 	enc.StringKey("frame_type", "max_stream_data")
 	enc.Int64Key("stream_id", int64(f.StreamID))
-	enc.Int64Key("maximum", int64(f.ByteOffset))
+	enc.Int64Key("maximum", int64(f.MaximumStreamData))
 }
 
 func marshalMaxStreamsFrame(enc *gojay.Encoder, f *wire.MaxStreamsFrame) {
@@ -190,13 +190,13 @@ func marshalMaxStreamsFrame(enc *gojay.Encoder, f *wire.MaxStreamsFrame) {
 
 func marshalDataBlockedFrame(enc *gojay.Encoder, f *wire.DataBlockedFrame) {
 	enc.StringKey("frame_type", "data_blocked")
-	enc.Int64Key("limit", int64(f.DataLimit))
+	enc.Int64Key("limit", int64(f.MaximumData))
 }
 
 func marshalStreamDataBlockedFrame(enc *gojay.Encoder, f *wire.StreamDataBlockedFrame) {
 	enc.StringKey("frame_type", "stream_data_blocked")
 	enc.Int64Key("stream_id", int64(f.StreamID))
-	enc.Int64Key("limit", int64(f.DataLimit))
+	enc.Int64Key("limit", int64(f.MaximumStreamData))
 }
 
 func marshalStreamsBlockedFrame(enc *gojay.Encoder, f *wire.StreamsBlockedFrame) {
