@@ -78,7 +78,7 @@ var _ = Describe("Connection ID Generator", func() {
 		Expect(queuedFrames).ToNot(BeEmpty())
 		Expect(queuedFrames[0]).To(BeAssignableToTypeOf(&wire.NewConnectionIDFrame{}))
 		f := queuedFrames[0].(*wire.NewConnectionIDFrame)
-		Expect(g.Retire(f.SequenceNumber, f.ConnectionID)).To(MatchError(fmt.Sprintf("FRAME_ENCODING_ERROR: tried to retire connection ID %d (%s), which was used as the Destination Connection ID on this packet", f.SequenceNumber, f.ConnectionID)))
+		Expect(g.Retire(f.SequenceNumber, f.ConnectionID)).To(MatchError(fmt.Sprintf("PROTOCOL_VIOLATION: tried to retire connection ID %d (%s), which was used as the Destination Connection ID on this packet", f.SequenceNumber, f.ConnectionID)))
 	})
 
 	It("issues new connection IDs, when old ones are retired", func() {

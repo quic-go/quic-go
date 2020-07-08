@@ -77,7 +77,7 @@ func (m *connIDGenerator) Retire(seq uint64, sentWithDestConnID protocol.Connect
 		return nil
 	}
 	if connID.Equal(sentWithDestConnID) {
-		return qerr.NewError(qerr.FrameEncodingError, fmt.Sprintf("tried to retire connection ID %d (%s), which was used as the Destination Connection ID on this packet", seq, connID))
+		return qerr.NewError(qerr.ProtocolViolation, fmt.Sprintf("tried to retire connection ID %d (%s), which was used as the Destination Connection ID on this packet", seq, connID))
 	}
 	m.retireConnectionID(connID)
 	delete(m.activeSrcConnIDs, seq)
