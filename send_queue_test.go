@@ -1,6 +1,8 @@
 package quic
 
 import (
+	"errors"
+
 	"github.com/golang/mock/gomock"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -66,6 +68,31 @@ var _ = Describe("Send Queue", func() {
 		Eventually(written).Should(Receive(Equal([]byte("raboof"))))
 		q.Close()
 		Eventually(done).Should(BeClosed())
+	})
+
+	It("does not block pending send after the queue has stopped running", func() {
+		done := make(chan struct{})
+		go func() {
+			defer GinkgoRecover()
+			q.Run()
+			close(done)
+		}()
+
+		// the run loop exits if there is a write error
+		testErr := errors.New("test error")
+		c.EXPECT().Write(gomock.Any()).Return(testErr)
+		q.Send(getPacket([]byte("foobar")))
+		Eventually(done).Should(BeClosed())
+
+		sent := make(chan struct{})
+		go func() {
+			defer GinkgoRecover()
+			q.Send(getPacket([]byte("raboof")))
+			q.Send(getPacket([]byte("quux")))
+			close(sent)
+		}()
+
+		Eventually(sent).Should(BeClosed())
 	})
 
 	It("blocks Close() until the packet has been sent out", func() {
