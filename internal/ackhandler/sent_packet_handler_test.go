@@ -634,24 +634,36 @@ var _ = Describe("SentPacketHandler", func() {
 
 		It("resets the PTO mode and PTO count when a packet number space is dropped", func() {
 			handler.ReceivedPacket(protocol.EncryptionHandshake)
+
 			now := time.Now()
+			handler.rttStats.UpdateRTT(time.Second/2, 0, now)
+			Expect(handler.rttStats.SmoothedRTT()).To(Equal(time.Second / 2))
+			Expect(handler.rttStats.PTO(true)).To(And(
+				BeNumerically(">", time.Second),
+				BeNumerically("<", 2*time.Second),
+			))
+			sendTimeHandshake := now.Add(-2 * time.Minute)
+			sendTimeAppData := now.Add(-time.Minute)
+
 			handler.SentPacket(ackElicitingPacket(&Packet{
 				PacketNumber:    1,
 				EncryptionLevel: protocol.EncryptionHandshake,
-				SendTime:        now.Add(-2 * time.Hour),
+				SendTime:        sendTimeHandshake,
 			}))
 			handler.SentPacket(ackElicitingPacket(&Packet{
 				PacketNumber: 2,
-				SendTime:     now.Add(-time.Hour),
+				SendTime:     sendTimeAppData,
 			}))
+
 			// PTO timer based on the Handshake packet
-			Expect(handler.GetLossDetectionTimeout()).To(BeTemporally("~", now.Add(-2*time.Hour), time.Second))
 			Expect(handler.OnLossDetectionTimeout()).To(Succeed())
+			Expect(handler.ptoCount).To(BeEquivalentTo(1))
 			Expect(handler.SendMode()).To(Equal(SendPTOHandshake))
+			Expect(handler.GetLossDetectionTimeout()).To(Equal(sendTimeHandshake.Add(handler.rttStats.PTO(false) << 1)))
 			handler.SetHandshakeComplete()
 			handler.DropPackets(protocol.EncryptionHandshake)
 			// PTO timer based on the 1-RTT packet
-			Expect(handler.GetLossDetectionTimeout()).To(BeTemporally("~", now.Add(-time.Hour), time.Second))
+			Expect(handler.GetLossDetectionTimeout()).To(Equal(sendTimeAppData.Add(handler.rttStats.PTO(true)))) // no backoff. PTO count = 0
 			Expect(handler.SendMode()).ToNot(Equal(SendPTOHandshake))
 			Expect(handler.ptoCount).To(BeZero())
 		})
