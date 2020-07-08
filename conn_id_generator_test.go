@@ -62,6 +62,15 @@ var _ = Describe("Connection ID Generator", func() {
 		}
 	})
 
+	It("doesn't issue new connection IDs in RetireBugBackwardsCompatibilityMode", func() {
+		RetireBugBackwardsCompatibilityMode = true
+		defer func() { RetireBugBackwardsCompatibilityMode = false }()
+
+		Expect(g.SetMaxActiveConnIDs(4)).To(Succeed())
+		Expect(retiredConnIDs).To(BeEmpty())
+		Expect(addedConnIDs).To(BeEmpty())
+	})
+
 	It("limits the number of connection IDs that it issues", func() {
 		Expect(g.SetMaxActiveConnIDs(9999999)).To(Succeed())
 		Expect(retiredConnIDs).To(BeEmpty())
@@ -79,6 +88,18 @@ var _ = Describe("Connection ID Generator", func() {
 		Expect(queuedFrames[0]).To(BeAssignableToTypeOf(&wire.NewConnectionIDFrame{}))
 		f := queuedFrames[0].(*wire.NewConnectionIDFrame)
 		Expect(g.Retire(f.SequenceNumber, f.ConnectionID)).To(MatchError(fmt.Sprintf("PROTOCOL_VIOLATION: tried to retire connection ID %d (%s), which was used as the Destination Connection ID on this packet", f.SequenceNumber, f.ConnectionID)))
+	})
+
+	It("doesn't error if the peers tries to retire a connection ID in a packet with that connection ID in RetireBugBackwardsCompatibilityMode", func() {
+		Expect(g.SetMaxActiveConnIDs(4)).To(Succeed())
+		Expect(queuedFrames).ToNot(BeEmpty())
+		Expect(queuedFrames[0]).To(BeAssignableToTypeOf(&wire.NewConnectionIDFrame{}))
+
+		RetireBugBackwardsCompatibilityMode = true
+		defer func() { RetireBugBackwardsCompatibilityMode = false }()
+
+		f := queuedFrames[0].(*wire.NewConnectionIDFrame)
+		Expect(g.Retire(f.SequenceNumber, f.ConnectionID)).To(Succeed())
 	})
 
 	It("issues new connection IDs, when old ones are retired", func() {
