@@ -307,7 +307,7 @@ func (s *baseServer) handlePacket(p *receivedPacket) {
 	select {
 	case s.receivedPackets <- p:
 	default:
-		s.logger.Debugf("Dropping packet from %s (%d bytes). Server receive queue full.", p.remoteAddr, len(p.data))
+		s.logger.Debugf("Dropping packet from %s (%d bytes). Server receive queue full.", p.remoteAddr, p.Size())
 	}
 }
 
@@ -323,8 +323,8 @@ func (s *baseServer) handlePacketImpl(p *receivedPacket) bool /* should the buff
 	if !hdr.IsLongHeader {
 		panic(fmt.Sprintf("misrouted packet: %#v", hdr))
 	}
-	if hdr.Type == protocol.PacketTypeInitial && len(p.data) < protocol.MinInitialPacketSize {
-		s.logger.Debugf("Dropping a packet that is too small to be a valid Initial (%d bytes)", len(p.data))
+	if hdr.Type == protocol.PacketTypeInitial && p.Size() < protocol.MinInitialPacketSize {
+		s.logger.Debugf("Dropping a packet that is too small to be a valid Initial (%d bytes)", p.Size())
 		return false
 	}
 	// send a Version Negotiation Packet if the client is speaking a different protocol version

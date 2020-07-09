@@ -684,7 +684,7 @@ var _ = Describe("Session", func() {
 				Version:          sess.version,
 				Token:            []byte("foobar"),
 			}}, make([]byte, 16) /* Retry integrity tag */)
-			tracer.EXPECT().DroppedPacket(logging.PacketTypeRetry, protocol.ByteCount(len(p.data)), logging.PacketDropUnexpectedPacket)
+			tracer.EXPECT().DroppedPacket(logging.PacketTypeRetry, p.Size(), logging.PacketDropUnexpectedPacket)
 			Expect(sess.handlePacketImpl(p)).To(BeFalse())
 		})
 
@@ -708,7 +708,7 @@ var _ = Describe("Session", func() {
 				PacketNumberLen: protocol.PacketNumberLen2,
 			}, nil)
 			p.data[0] ^= 0x40 // unset the QUIC bit
-			tracer.EXPECT().DroppedPacket(logging.PacketTypeNotDetermined, protocol.ByteCount(len(p.data)), logging.PacketDropHeaderParseError)
+			tracer.EXPECT().DroppedPacket(logging.PacketTypeNotDetermined, p.Size(), logging.PacketDropHeaderParseError)
 			Expect(sess.handlePacketImpl(p)).To(BeFalse())
 		})
 
@@ -721,7 +721,7 @@ var _ = Describe("Session", func() {
 				},
 				PacketNumberLen: protocol.PacketNumberLen2,
 			}, nil)
-			tracer.EXPECT().DroppedPacket(logging.PacketTypeNotDetermined, protocol.ByteCount(len(p.data)), logging.PacketDropUnsupportedVersion)
+			tracer.EXPECT().DroppedPacket(logging.PacketTypeNotDetermined, p.Size(), logging.PacketDropUnsupportedVersion)
 			Expect(sess.handlePacketImpl(p)).To(BeFalse())
 		})
 
@@ -743,7 +743,7 @@ var _ = Describe("Session", func() {
 				},
 				PacketNumberLen: protocol.PacketNumberLen2,
 			}, nil)
-			tracer.EXPECT().DroppedPacket(logging.PacketTypeHandshake, protocol.ByteCount(len(p.data)), logging.PacketDropUnexpectedVersion)
+			tracer.EXPECT().DroppedPacket(logging.PacketTypeHandshake, p.Size(), logging.PacketDropUnexpectedVersion)
 			Expect(sess.handlePacketImpl(p)).To(BeFalse())
 		})
 
@@ -843,7 +843,7 @@ var _ = Describe("Session", func() {
 				PacketNumber:    0x1337,
 				PacketNumberLen: protocol.PacketNumberLen2,
 			}, []byte("foobar"))
-			tracer.EXPECT().DroppedPacket(logging.PacketTypeHandshake, protocol.ByteCount(len(p.data)), logging.PacketDropPayloadDecryptError)
+			tracer.EXPECT().DroppedPacket(logging.PacketTypeHandshake, p.Size(), logging.PacketDropPayloadDecryptError)
 			sess.handlePacket(p)
 			Consistently(sess.Context().Done()).ShouldNot(BeClosed())
 			// make the go routine return
@@ -2202,7 +2202,7 @@ var _ = Describe("Client Session", func() {
 			},
 			PacketNumberLen: protocol.PacketNumberLen2,
 		}, []byte("foobar"))
-		tracer.EXPECT().ReceivedPacket(gomock.Any(), protocol.ByteCount(len(p.data)), []logging.Frame{})
+		tracer.EXPECT().ReceivedPacket(gomock.Any(), p.Size(), []logging.Frame{})
 		Expect(sess.handlePacketImpl(p)).To(BeTrue())
 		// make sure the go routine returns
 		packer.EXPECT().PackConnectionClose(gomock.Any()).Return(&coalescedPacket{buffer: getPacketBuffer()}, nil)
@@ -2329,14 +2329,14 @@ var _ = Describe("Client Session", func() {
 
 		It("ignores Version Negotiation packets that offer the current version", func() {
 			p := getVNP(sess.version)
-			tracer.EXPECT().DroppedPacket(logging.PacketTypeVersionNegotiation, protocol.ByteCount(len(p.data)), logging.PacketDropUnexpectedVersion)
+			tracer.EXPECT().DroppedPacket(logging.PacketTypeVersionNegotiation, p.Size(), logging.PacketDropUnexpectedVersion)
 			Expect(sess.handlePacketImpl(p)).To(BeFalse())
 		})
 
 		It("ignores unparseable Version Negotiation packets", func() {
 			p := getVNP(sess.version)
 			p.data = p.data[:len(p.data)-2]
-			tracer.EXPECT().DroppedPacket(logging.PacketTypeVersionNegotiation, protocol.ByteCount(len(p.data)), logging.PacketDropHeaderParseError)
+			tracer.EXPECT().DroppedPacket(logging.PacketTypeVersionNegotiation, p.Size(), logging.PacketDropHeaderParseError)
 			Expect(sess.handlePacketImpl(p)).To(BeFalse())
 		})
 	})
@@ -2383,14 +2383,14 @@ var _ = Describe("Client Session", func() {
 		It("ignores Retry packets after receiving a regular packet", func() {
 			sess.receivedFirstPacket = true
 			p := getPacket(retryHdr, getRetryTag(retryHdr))
-			tracer.EXPECT().DroppedPacket(logging.PacketTypeRetry, protocol.ByteCount(len(p.data)), logging.PacketDropUnexpectedPacket)
+			tracer.EXPECT().DroppedPacket(logging.PacketTypeRetry, p.Size(), logging.PacketDropUnexpectedPacket)
 			Expect(sess.handlePacketImpl(p)).To(BeFalse())
 		})
 
 		It("ignores Retry packets if the server didn't change the connection ID", func() {
 			retryHdr.SrcConnectionID = destConnID
 			p := getPacket(retryHdr, getRetryTag(retryHdr))
-			tracer.EXPECT().DroppedPacket(logging.PacketTypeRetry, protocol.ByteCount(len(p.data)), logging.PacketDropUnexpectedPacket)
+			tracer.EXPECT().DroppedPacket(logging.PacketTypeRetry, p.Size(), logging.PacketDropUnexpectedPacket)
 			Expect(sess.handlePacketImpl(p)).To(BeFalse())
 		})
 
@@ -2398,7 +2398,7 @@ var _ = Describe("Client Session", func() {
 			tag := getRetryTag(retryHdr)
 			tag[0]++
 			p := getPacket(retryHdr, tag)
-			tracer.EXPECT().DroppedPacket(logging.PacketTypeRetry, protocol.ByteCount(len(p.data)), logging.PacketDropPayloadDecryptError)
+			tracer.EXPECT().DroppedPacket(logging.PacketTypeRetry, p.Size(), logging.PacketDropPayloadDecryptError)
 			Expect(sess.handlePacketImpl(p)).To(BeFalse())
 		})
 	})
@@ -2627,7 +2627,7 @@ var _ = Describe("Client Session", func() {
 				PacketNumber:    0x42,
 				PacketNumberLen: protocol.PacketNumberLen2,
 			}, []byte("foobar"))
-			tracer.EXPECT().DroppedPacket(logging.PacketType0RTT, protocol.ByteCount(len(p.data)), gomock.Any())
+			tracer.EXPECT().DroppedPacket(logging.PacketType0RTT, p.Size(), gomock.Any())
 			Expect(sess.handlePacketImpl(p)).To(BeFalse())
 		})
 
