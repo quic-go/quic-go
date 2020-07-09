@@ -81,7 +81,7 @@ type ConnectionTracer interface {
 	SentTransportParameters(*TransportParameters)
 	ReceivedTransportParameters(*TransportParameters)
 	SentPacket(hdr *ExtendedHeader, packetSize ByteCount, ack *AckFrame, frames []Frame)
-	ReceivedVersionNegotiationPacket(*Header)
+	ReceivedVersionNegotiationPacket(*Header, []VersionNumber)
 	ReceivedRetry(*Header)
 	ReceivedPacket(hdr *ExtendedHeader, packetSize ByteCount, frames []Frame)
 	ReceivedStatelessReset(token *[16]byte)

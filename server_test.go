@@ -385,10 +385,11 @@ var _ = Describe("Server", func() {
 				Eventually(conn.dataWritten).Should(Receive(&write))
 				Expect(write.to.String()).To(Equal("127.0.0.1:1337"))
 				Expect(wire.IsVersionNegotiationPacket(write.data)).To(BeTrue())
-				hdr := parseHeader(write.data)
+				hdr, versions, err := wire.ParseVersionNegotiationPacket(bytes.NewReader(write.data))
+				Expect(err).ToNot(HaveOccurred())
 				Expect(hdr.DestConnectionID).To(Equal(srcConnID))
 				Expect(hdr.SrcConnectionID).To(Equal(destConnID))
-				Expect(hdr.SupportedVersions).ToNot(ContainElement(protocol.VersionNumber(0x42)))
+				Expect(versions).ToNot(ContainElement(protocol.VersionNumber(0x42)))
 			})
 
 			It("replies with a Retry packet, if a Token is required", func() {

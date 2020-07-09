@@ -56,8 +56,7 @@ type Header struct {
 
 	Length protocol.ByteCount
 
-	Token             []byte
-	SupportedVersions []protocol.VersionNumber // sent in a Version Negotiation Packet
+	Token []byte
 
 	parsedLen protocol.ByteCount // how many bytes were read while parsing this header
 }
@@ -155,8 +154,8 @@ func (h *Header) parseLongHeader(b *bytes.Reader) error {
 	if err != nil {
 		return err
 	}
-	if h.Version == 0 {
-		return h.parseVersionNegotiationPacket(b)
+	if h.Version == 0 { // version negotiation packet
+		return nil
 	}
 	// If we don't understand the version, we have no idea how to interpret the rest of the bytes
 	if !protocol.IsSupportedVersion(protocol.SupportedVersions, h.Version) {
@@ -206,26 +205,6 @@ func (h *Header) parseLongHeader(b *bytes.Reader) error {
 		return err
 	}
 	h.Length = protocol.ByteCount(pl)
-	return nil
-}
-
-func (h *Header) parseVersionNegotiationPacket(b *bytes.Reader) error {
-	if b.Len() == 0 {
-		//nolint:stylecheck
-		return errors.New("Version Negotiation packet has empty version list")
-	}
-	if b.Len()%4 != 0 {
-		//nolint:stylecheck
-		return errors.New("Version Negotiation packet has a version list with an invalid length")
-	}
-	h.SupportedVersions = make([]protocol.VersionNumber, b.Len()/4)
-	for i := 0; b.Len() > 0; i++ {
-		v, err := utils.BigEndian.ReadUint32(b)
-		if err != nil {
-			return err
-		}
-		h.SupportedVersions[i] = protocol.VersionNumber(v)
-	}
 	return nil
 }
 

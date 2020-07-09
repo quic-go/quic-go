@@ -3,10 +3,36 @@ package wire
 import (
 	"bytes"
 	"crypto/rand"
+	"errors"
 
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/internal/utils"
 )
+
+// ParseVersionNegotiationPacket parses a Version Negotiation packet.
+func ParseVersionNegotiationPacket(b *bytes.Reader) (*Header, []protocol.VersionNumber, error) {
+	hdr, err := parseHeader(b, 0)
+	if err != nil {
+		return nil, nil, err
+	}
+	if b.Len() == 0 {
+		//nolint:stylecheck
+		return nil, nil, errors.New("Version Negotiation packet has empty version list")
+	}
+	if b.Len()%4 != 0 {
+		//nolint:stylecheck
+		return nil, nil, errors.New("Version Negotiation packet has a version list with an invalid length")
+	}
+	versions := make([]protocol.VersionNumber, b.Len()/4)
+	for i := 0; b.Len() > 0; i++ {
+		v, err := utils.BigEndian.ReadUint32(b)
+		if err != nil {
+			return nil, nil, err
+		}
+		versions[i] = protocol.VersionNumber(v)
+	}
+	return hdr, versions, nil
+}
 
 // ComposeVersionNegotiation composes a Version Negotiation
 func ComposeVersionNegotiation(destConnID, srcConnID protocol.ConnectionID, versions []protocol.VersionNumber) ([]byte, error) {
