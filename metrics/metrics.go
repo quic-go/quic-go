@@ -65,6 +65,9 @@ func (t *tracer) TracerForConnection(p logging.Perspective, _ logging.Connection
 	return newConnTracer(t, p)
 }
 
+func (t *tracer) DroppedPacket(net.Addr, logging.PacketType, logging.ByteCount, logging.PacketDropReason) {
+}
+
 type connTracer struct {
 	perspective logging.Perspective
 	tracer      logging.Tracer

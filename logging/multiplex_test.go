@@ -54,6 +54,13 @@ var _ = Describe("Tracing", func() {
 			tr2.EXPECT().TracerForConnection(PerspectiveClient, ConnectionID{1, 2, 3})
 			Expect(tracer.TracerForConnection(PerspectiveClient, ConnectionID{1, 2, 3})).To(BeNil())
 		})
+
+		It("traces the PacketSent event", func() {
+			remote := &net.UDPAddr{IP: net.IPv4(4, 3, 2, 1)}
+			tr1.EXPECT().DroppedPacket(remote, PacketTypeRetry, ByteCount(1024), PacketDropDuplicate)
+			tr2.EXPECT().DroppedPacket(remote, PacketTypeRetry, ByteCount(1024), PacketDropDuplicate)
+			tracer.DroppedPacket(remote, PacketTypeRetry, 1024, PacketDropDuplicate)
+		})
 	})
 
 	Context("Connection Tracer", func() {
