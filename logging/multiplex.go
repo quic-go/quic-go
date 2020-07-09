@@ -5,15 +5,52 @@ import (
 	"time"
 )
 
+type tracerMultiplexer struct {
+	tracers []Tracer
+}
+
+var _ Tracer = &tracerMultiplexer{}
+
+// NewMultiplexedTracer creates a new tracer that multiplexes all events to multiple tracers.
+func NewMultiplexedTracer(tracers ...Tracer) Tracer {
+	if len(tracers) == 0 {
+		return nil
+	}
+	if len(tracers) == 1 {
+		return tracers[1]
+	}
+	return &tracerMultiplexer{tracers}
+}
+
+func (m *tracerMultiplexer) TracerForServer(odcid ConnectionID) ConnectionTracer {
+	var connTracers []ConnectionTracer
+	for _, t := range m.tracers {
+		if ct := t.TracerForServer(odcid); ct != nil {
+			connTracers = append(connTracers, ct)
+		}
+	}
+	return newConnectionMultiplexer(connTracers...)
+}
+
+func (m *tracerMultiplexer) TracerForClient(odcid ConnectionID) ConnectionTracer {
+	var connTracers []ConnectionTracer
+	for _, t := range m.tracers {
+		if ct := t.TracerForClient(odcid); ct != nil {
+			connTracers = append(connTracers, ct)
+		}
+	}
+	return newConnectionMultiplexer(connTracers...)
+}
+
 type connTracerMultiplexer struct {
 	tracers []ConnectionTracer
 }
 
 var _ ConnectionTracer = &connTracerMultiplexer{}
 
-func NewConnectionMultiplexer(tracers ...ConnectionTracer) ConnectionTracer {
+func newConnectionMultiplexer(tracers ...ConnectionTracer) ConnectionTracer {
 	if len(tracers) == 0 {
-		panic("no tracers")
+		return nil
 	}
 	if len(tracers) == 1 {
 		return tracers[0]
