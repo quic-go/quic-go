@@ -517,7 +517,7 @@ func (s *session) run() error {
 	go s.cryptoStreamHandler.RunHandshake()
 	go func() {
 		if err := s.sendQueue.Run(); err != nil {
-			s.closeLocal(err)
+			s.destroyImpl(err)
 		}
 	}()
 

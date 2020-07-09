@@ -7,6 +7,7 @@ import (
 	"crypto/tls"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"runtime/pprof"
 	"strings"
@@ -557,6 +558,33 @@ var _ = Describe("Session", func() {
 				data:       buf.Bytes(),
 			})
 			// Consistently(pack).ShouldNot(Receive())
+			Eventually(sess.Context().Done()).Should(BeClosed())
+		})
+
+		It("closes when the sendQueue encounters an error", func() {
+			sess.handshakeConfirmed = true
+			conn := NewMockConnection(mockCtrl)
+			conn.EXPECT().Write(gomock.Any()).Return(io.ErrClosedPipe).AnyTimes()
+			sess.sendQueue = newSendQueue(conn)
+			sph := mockackhandler.NewMockSentPacketHandler(mockCtrl)
+			sph.EXPECT().GetLossDetectionTimeout().Return(time.Now().Add(time.Hour)).AnyTimes()
+			sph.EXPECT().SendMode().Return(ackhandler.SendAny).AnyTimes()
+			sph.EXPECT().HasPacingBudget().Return(true).AnyTimes()
+			sph.EXPECT().AmplificationWindow().Return(protocol.MaxByteCount).AnyTimes()
+			// only expect a single SentPacket() call
+			sph.EXPECT().SentPacket(gomock.Any())
+			tracer.EXPECT().SentPacket(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any())
+			tracer.EXPECT().Close()
+			streamManager.EXPECT().CloseWithError(gomock.Any())
+			sessionRunner.EXPECT().Remove(gomock.Any()).AnyTimes()
+			cryptoSetup.EXPECT().Close()
+			sess.sentPacketHandler = sph
+			p := getPacket(1)
+			packer.EXPECT().PackPacket().Return(p, nil)
+			packer.EXPECT().PackPacket().Return(nil, nil).AnyTimes()
+			runSession()
+			sess.queueControlFrame(&wire.PingFrame{})
+			sess.scheduleSending()
 			Eventually(sess.Context().Done()).Should(BeClosed())
 		})
 	})
