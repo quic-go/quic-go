@@ -296,13 +296,13 @@ func (t timerType) String() string {
 	}
 }
 
-type closeReason logging.CloseReason
+type timeoutReason logging.TimeoutReason
 
-func (r closeReason) String() string {
-	switch logging.CloseReason(r) {
-	case logging.CloseReasonHandshakeTimeout:
+func (r timeoutReason) String() string {
+	switch logging.TimeoutReason(r) {
+	case logging.TimeoutReasonHandshake:
 		return "handshake_timeout"
-	case logging.CloseReasonIdleTimeout:
+	case logging.TimeoutReasonIdle:
 		return "idle_timeout"
 	default:
 		panic("unknown close reason")

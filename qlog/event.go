@@ -94,7 +94,7 @@ func (e eventConnectionStarted) MarshalJSONObject(enc *gojay.Encoder) {
 }
 
 type eventConnectionClosed struct {
-	Reason closeReason
+	Reason timeoutReason
 }
 
 func (e eventConnectionClosed) Category() category { return categoryTransport }

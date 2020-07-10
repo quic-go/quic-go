@@ -172,7 +172,7 @@ var _ = Describe("Tracing", func() {
 			})
 
 			It("records connection closes", func() {
-				tracer.ClosedConnection(logging.CloseReasonIdleTimeout)
+				tracer.ClosedConnection(logging.TimeoutReasonIdle)
 				entry := exportAndParseSingle()
 				Expect(entry.Time).To(BeTemporally("~", time.Now(), scaleDuration(10*time.Millisecond)))
 				Expect(entry.Category).To(Equal("transport"))

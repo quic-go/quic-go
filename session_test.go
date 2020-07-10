@@ -1817,7 +1817,7 @@ var _ = Describe("Session", func() {
 			done := make(chan struct{})
 			cryptoSetup.EXPECT().Close()
 			gomock.InOrder(
-				tracer.EXPECT().ClosedConnection(logging.CloseReasonIdleTimeout),
+				tracer.EXPECT().ClosedConnection(logging.TimeoutReasonIdle),
 				tracer.EXPECT().Close(),
 			)
 			go func() {
@@ -1839,7 +1839,7 @@ var _ = Describe("Session", func() {
 			sessionRunner.EXPECT().Remove(gomock.Any()).Times(2)
 			cryptoSetup.EXPECT().Close()
 			gomock.InOrder(
-				tracer.EXPECT().ClosedConnection(logging.CloseReasonHandshakeTimeout),
+				tracer.EXPECT().ClosedConnection(logging.TimeoutReasonHandshake),
 				tracer.EXPECT().Close(),
 			)
 			done := make(chan struct{})
@@ -1889,7 +1889,7 @@ var _ = Describe("Session", func() {
 			)
 			cryptoSetup.EXPECT().Close()
 			gomock.InOrder(
-				tracer.EXPECT().ClosedConnection(logging.CloseReasonIdleTimeout),
+				tracer.EXPECT().ClosedConnection(logging.TimeoutReasonIdle),
 				tracer.EXPECT().Close(),
 			)
 			sess.idleTimeout = 0

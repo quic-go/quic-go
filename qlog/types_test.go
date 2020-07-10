@@ -59,8 +59,8 @@ var _ = Describe("Types", func() {
 	})
 
 	It("has a string representation for the close reason", func() {
-		Expect(closeReason(logging.CloseReasonHandshakeTimeout).String()).To(Equal("handshake_timeout"))
-		Expect(closeReason(logging.CloseReasonIdleTimeout).String()).To(Equal("idle_timeout"))
+		Expect(timeoutReason(logging.TimeoutReasonHandshake).String()).To(Equal("handshake_timeout"))
+		Expect(timeoutReason(logging.TimeoutReasonIdle).String()).To(Equal("idle_timeout"))
 	})
 
 	It("has a string representation for the key type", func() {

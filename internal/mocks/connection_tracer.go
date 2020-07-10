@@ -64,7 +64,7 @@ func (mr *MockConnectionTracerMockRecorder) Close() *gomock.Call {
 }
 
 // ClosedConnection mocks base method
-func (m *MockConnectionTracer) ClosedConnection(arg0 logging.CloseReason) {
+func (m *MockConnectionTracer) ClosedConnection(arg0 logging.TimeoutReason) {
 	m.ctrl.T.Helper()
 	m.ctrl.Call(m, "ClosedConnection", arg0)
 }

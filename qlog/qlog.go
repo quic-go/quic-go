@@ -163,9 +163,9 @@ func (t *connectionTracer) StartedConnection(local, remote net.Addr, version pro
 	t.mutex.Unlock()
 }
 
-func (t *connectionTracer) ClosedConnection(r logging.CloseReason) {
+func (t *connectionTracer) ClosedConnection(r logging.TimeoutReason) {
 	t.mutex.Lock()
-	t.recordEvent(time.Now(), &eventConnectionClosed{Reason: closeReason(r)})
+	t.recordEvent(time.Now(), &eventConnectionClosed{Reason: timeoutReason(r)})
 	t.mutex.Unlock()
 }
 

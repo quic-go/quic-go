@@ -593,13 +593,13 @@ runLoop:
 			s.keepAlivePingSent = true
 		} else if !s.handshakeComplete && now.Sub(s.sessionCreationTime) >= s.config.HandshakeTimeout {
 			if s.tracer != nil {
-				s.tracer.ClosedConnection(logging.CloseReasonHandshakeTimeout)
+				s.tracer.ClosedConnection(logging.TimeoutReasonHandshake)
 			}
 			s.destroyImpl(qerr.NewTimeoutError("Handshake did not complete in time"))
 			continue
 		} else if s.handshakeComplete && now.Sub(s.idleTimeoutStartTime()) >= s.idleTimeout {
 			if s.tracer != nil {
-				s.tracer.ClosedConnection(logging.CloseReasonIdleTimeout)
+				s.tracer.ClosedConnection(logging.TimeoutReasonIdle)
 			}
 			s.destroyImpl(qerr.NewTimeoutError("No recent network activity"))
 			continue
