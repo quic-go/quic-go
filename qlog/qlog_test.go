@@ -172,7 +172,7 @@ var _ = Describe("Tracing", func() {
 			})
 
 			It("records connection closes", func() {
-				tracer.ClosedConnection(logging.CloseReasonIdleTimeout)
+				tracer.ClosedConnection(logging.NewTimeoutCloseReason(logging.TimeoutReasonIdle))
 				entry := exportAndParseSingle()
 				Expect(entry.Time).To(BeTemporally("~", time.Now(), scaleDuration(10*time.Millisecond)))
 				Expect(entry.Category).To(Equal("transport"))
@@ -180,6 +180,17 @@ var _ = Describe("Tracing", func() {
 				ev := entry.Event
 				Expect(ev).To(HaveKeyWithValue("new", "closed"))
 				Expect(ev).To(HaveKeyWithValue("trigger", "idle_timeout"))
+			})
+
+			It("records a received stateless reset packet", func() {
+				tracer.ClosedConnection(logging.NewStatelessResetCloseReason(&[16]byte{0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88, 0x99, 0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff}))
+				entry := exportAndParseSingle()
+				Expect(entry.Time).To(BeTemporally("~", time.Now(), scaleDuration(10*time.Millisecond)))
+				Expect(entry.Category).To(Equal("transport"))
+				Expect(entry.Name).To(Equal("packet_received"))
+				ev := entry.Event
+				Expect(ev).To(HaveKeyWithValue("packet_type", "stateless_reset"))
+				Expect(ev).To(HaveKeyWithValue("stateless_reset_token", "00112233445566778899aabbccddeeff"))
 			})
 
 			It("records sent transport parameters", func() {
@@ -401,17 +412,6 @@ var _ = Describe("Tracing", func() {
 				Expect(header).ToNot(HaveKey("version"))
 				Expect(header).To(HaveKey("dcid"))
 				Expect(header).To(HaveKey("scid"))
-			})
-
-			It("records a received Retry packet", func() {
-				tracer.ReceivedStatelessReset(&[16]byte{0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88, 0x99, 0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff})
-				entry := exportAndParseSingle()
-				Expect(entry.Time).To(BeTemporally("~", time.Now(), scaleDuration(10*time.Millisecond)))
-				Expect(entry.Category).To(Equal("transport"))
-				Expect(entry.Name).To(Equal("packet_received"))
-				ev := entry.Event
-				Expect(ev).To(HaveKeyWithValue("packet_type", "stateless_reset"))
-				Expect(ev).To(HaveKeyWithValue("stateless_reset_token", "00112233445566778899aabbccddeeff"))
 			})
 
 			It("records buffered packets", func() {

@@ -8,6 +8,7 @@ import (
 
 	"github.com/lucas-clemente/quic-go/internal/congestion"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
+	"github.com/lucas-clemente/quic-go/internal/qerr"
 	"github.com/lucas-clemente/quic-go/internal/wire"
 )
 
@@ -32,12 +33,18 @@ type (
 	StreamType = protocol.StreamType
 	// The VersionNumber is the QUIC version.
 	VersionNumber = protocol.VersionNumber
+
 	// The Header is the QUIC packet header, before removing header protection.
 	Header = wire.Header
 	// The ExtendedHeader is the QUIC packet header, after removing header protection.
 	ExtendedHeader = wire.ExtendedHeader
 	// The TransportParameters are QUIC transport parameters.
 	TransportParameters = wire.TransportParameters
+
+	// A TransportError is a transport-level error code.
+	TransportError = qerr.ErrorCode
+	// An ApplicationError is an application-defined error code.
+	ApplicationError = qerr.ErrorCode
 
 	// The RTTStats contain statistics used by the congestion controller.
 	RTTStats = congestion.RTTStats
@@ -84,7 +91,6 @@ type ConnectionTracer interface {
 	ReceivedVersionNegotiationPacket(*Header, []VersionNumber)
 	ReceivedRetry(*Header)
 	ReceivedPacket(hdr *ExtendedHeader, packetSize ByteCount, frames []Frame)
-	ReceivedStatelessReset(token *[16]byte)
 	BufferedPacket(PacketType)
 	DroppedPacket(PacketType, ByteCount, PacketDropReason)
 	UpdatedMetrics(rttStats *RTTStats, cwnd ByteCount, bytesInFLight ByteCount, packetsInFlight int)

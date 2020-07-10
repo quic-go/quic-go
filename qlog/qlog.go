@@ -165,8 +165,15 @@ func (t *connectionTracer) StartedConnection(local, remote net.Addr, version pro
 
 func (t *connectionTracer) ClosedConnection(r logging.CloseReason) {
 	t.mutex.Lock()
-	t.recordEvent(time.Now(), &eventConnectionClosed{Reason: closeReason(r)})
-	t.mutex.Unlock()
+	defer t.mutex.Unlock()
+
+	if reason, ok := r.Timeout(); ok {
+		t.recordEvent(time.Now(), &eventConnectionClosed{Reason: timeoutReason(reason)})
+	} else if token, ok := r.StatelessReset(); ok {
+		t.recordEvent(time.Now(), &eventStatelessResetReceived{
+			Token: &token,
+		})
+	}
 }
 
 func (t *connectionTracer) SentTransportParameters(tp *wire.TransportParameters) {
@@ -262,14 +269,6 @@ func (t *connectionTracer) ReceivedVersionNegotiationPacket(hdr *wire.Header, ve
 	t.recordEvent(time.Now(), &eventVersionNegotiationReceived{
 		Header:            *transformHeader(hdr),
 		SupportedVersions: ver,
-	})
-	t.mutex.Unlock()
-}
-
-func (t *connectionTracer) ReceivedStatelessReset(token *[16]byte) {
-	t.mutex.Lock()
-	t.recordEvent(time.Now(), &eventStatelessResetReceived{
-		Token: token,
 	})
 	t.mutex.Unlock()
 }

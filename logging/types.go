@@ -70,14 +70,14 @@ const (
 	TimerTypePTO
 )
 
-// CloseReason is the reason why a session is closed
-type CloseReason uint8
+// TimeoutReason is the reason why a session is closed
+type TimeoutReason uint8
 
 const (
-	// CloseReasonHandshakeTimeout is used when the session is closed due to a handshake timeout
+	// TimeoutReasonHandshake is used when the session is closed due to a handshake timeout
 	// This reason is not defined in the qlog draft, but very useful for debugging.
-	CloseReasonHandshakeTimeout CloseReason = iota
-	// CloseReasonIdleTimeout is used when the session is closed due to an idle timeout
+	TimeoutReasonHandshake TimeoutReason = iota
+	// TimeoutReasonIdle is used when the session is closed due to an idle timeout
 	// This reason is not defined in the qlog draft, but very useful for debugging.
-	CloseReasonIdleTimeout
+	TimeoutReasonIdle
 )
