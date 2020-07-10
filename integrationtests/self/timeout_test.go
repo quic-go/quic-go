@@ -3,6 +3,9 @@ package self_test
 import (
 	"context"
 	"fmt"
+	"io"
+	"io/ioutil"
+	mrand "math/rand"
 	"net"
 	"os"
 	"strconv"
@@ -14,6 +17,25 @@ import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 )
+
+type faultyConn struct {
+	net.PacketConn
+	Timeout time.Time
+}
+
+func (c *faultyConn) ReadFrom(p []byte) (int, net.Addr, error) {
+	if time.Now().Before(c.Timeout) {
+		return c.PacketConn.ReadFrom(p)
+	}
+	return 0, nil, io.ErrClosedPipe
+}
+
+func (c *faultyConn) WriteTo(p []byte, addr net.Addr) (int, error) {
+	if time.Now().Before(c.Timeout) {
+		return c.PacketConn.WriteTo(p, addr)
+	}
+	return 0, io.ErrClosedPipe
+}
 
 var _ = Describe("Timeout tests", func() {
 	checkTimeoutError := func(err error) {
@@ -297,4 +319,159 @@ var _ = Describe("Timeout tests", func() {
 		Eventually(serverSessionClosed).Should(BeClosed())
 	})
 
+	Context("faulty packet conns", func() {
+		runServer := func(ctx context.Context, ln quic.Listener) error {
+			sess, err := ln.Accept(ctx)
+			if err != nil {
+				return err
+			}
+			str, err := sess.OpenUniStream()
+			if err != nil {
+				return err
+			}
+			defer str.Close()
+			_, err = str.Write(PRData)
+			return err
+		}
+
+		runClient := func(sess quic.Session) error {
+			str, err := sess.AcceptUniStream(context.Background())
+			if err != nil {
+				return err
+			}
+			data, err := ioutil.ReadAll(str)
+			if err != nil {
+				return err
+			}
+			Expect(data).To(Equal(PRData))
+			return sess.CloseWithError(0, "done")
+		}
+
+		It("deals with an erroring packet conn, on the server side", func() {
+			addr, err := net.ResolveUDPAddr("udp", "localhost:0")
+			Expect(err).ToNot(HaveOccurred())
+			conn, err := net.ListenUDP("udp", addr)
+			Expect(err).ToNot(HaveOccurred())
+			timeout := time.Duration(mrand.Intn(150)) * time.Millisecond
+			fmt.Fprintf(GinkgoWriter, "Timeout: %s\n", timeout)
+			ln, err := quic.Listen(
+				&faultyConn{PacketConn: conn, Timeout: time.Now().Add(timeout)},
+				getTLSConfig(),
+				getQuicConfigForServer(nil),
+			)
+			Expect(err).ToNot(HaveOccurred())
+
+			proxy, err := quicproxy.NewQuicProxy("localhost:0", &quicproxy.Opts{
+				RemoteAddr:  fmt.Sprintf("localhost:%d", ln.Addr().(*net.UDPAddr).Port),
+				DelayPacket: func(quicproxy.Direction, []byte) time.Duration { return 10 * time.Millisecond },
+			})
+			Expect(err).ToNot(HaveOccurred())
+			defer proxy.Close()
+
+			serverErrChan := make(chan error, 1)
+			go func() {
+				defer GinkgoRecover()
+				serverErrChan <- runServer(context.Background(), ln)
+			}()
+
+			clientErrChan := make(chan error, 1)
+			go func() {
+				defer GinkgoRecover()
+				sess, err := quic.DialAddr(
+					fmt.Sprintf("localhost:%d", proxy.LocalPort()),
+					getTLSClientConfig(),
+					getQuicConfigForClient(&quic.Config{
+						HandshakeTimeout: time.Second,
+						MaxIdleTimeout:   time.Second,
+					}),
+				)
+				if err != nil {
+					clientErrChan <- err
+					return
+				}
+				clientErrChan <- runClient(sess)
+			}()
+
+			var serverErr, clientErr error
+			Eventually(serverErrChan, 5*time.Second).Should(Receive(&serverErr))
+			if serverErr != nil {
+				Expect(serverErr.Error()).To(ContainSubstring(io.ErrClosedPipe.Error()))
+			}
+			Eventually(clientErrChan, 5*time.Second).Should(Receive(&clientErr))
+			if clientErr != nil {
+				nErr, ok := clientErr.(net.Error)
+				Expect(ok).To(BeTrue())
+				Expect(nErr.Timeout()).To(BeTrue())
+			}
+		})
+
+		It("deals with an erroring packet conn, on the client side", func() {
+			ln, err := quic.ListenAddr(
+				"localhost:0",
+				getTLSConfig(),
+				getQuicConfigForServer(&quic.Config{
+					HandshakeTimeout: time.Second,
+					MaxIdleTimeout:   time.Second,
+					KeepAlive:        true,
+				}),
+			)
+			Expect(err).ToNot(HaveOccurred())
+
+			proxy, err := quicproxy.NewQuicProxy("localhost:0", &quicproxy.Opts{
+				RemoteAddr:  fmt.Sprintf("localhost:%d", ln.Addr().(*net.UDPAddr).Port),
+				DelayPacket: func(quicproxy.Direction, []byte) time.Duration { return 10 * time.Millisecond },
+			})
+			Expect(err).ToNot(HaveOccurred())
+			defer proxy.Close()
+
+			// If the connection errors before the handshake completes, the handshake will fail with a
+			// handshake error on the server side. This means that the session will never be returned
+			// on ln.Accept().
+			// By using this context for ln.Accept(), we make sure that the runServer() still returns.
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			serverErrChan := make(chan error, 1)
+			go func() {
+				defer GinkgoRecover()
+				serverErrChan <- runServer(ctx, ln)
+			}()
+
+			addr, err := net.ResolveUDPAddr("udp", "localhost:0")
+			Expect(err).ToNot(HaveOccurred())
+			conn, err := net.ListenUDP("udp", addr)
+			Expect(err).ToNot(HaveOccurred())
+			timeout := time.Duration(mrand.Intn(150)) * time.Millisecond
+			fmt.Fprintf(GinkgoWriter, "Timeout: %s\n", timeout)
+			clientErrChan := make(chan error, 1)
+			go func() {
+				defer GinkgoRecover()
+				sess, err := quic.Dial(
+					&faultyConn{PacketConn: conn, Timeout: time.Now().Add(timeout)},
+					proxy.LocalAddr(),
+					"localhost",
+					getTLSClientConfig(),
+					getQuicConfigForClient(nil),
+				)
+				if err != nil {
+					clientErrChan <- err
+					return
+				}
+				clientErrChan <- runClient(sess)
+			}()
+
+			var serverErr, clientErr error
+			Eventually(clientErrChan, 5*time.Second).Should(Receive(&clientErr))
+			if clientErr != nil {
+				Expect(clientErr.Error()).To(ContainSubstring(io.ErrClosedPipe.Error()))
+				cancel()
+			}
+			Eventually(serverErrChan, 5*time.Second).Should(Receive(&serverErr))
+			if serverErr != nil && serverErr != context.Canceled {
+				nErr, ok := serverErr.(net.Error)
+				Expect(ok).To(BeTrue())
+				Expect(nErr.Timeout()).To(BeTrue())
+			}
+
+		})
+	})
 })
