@@ -64,7 +64,7 @@ func (mr *MockConnectionTracerMockRecorder) Close() *gomock.Call {
 }
 
 // ClosedConnection mocks base method
-func (m *MockConnectionTracer) ClosedConnection(arg0 logging.TimeoutReason) {
+func (m *MockConnectionTracer) ClosedConnection(arg0 logging.CloseReason) {
 	m.ctrl.T.Helper()
 	m.ctrl.Call(m, "ClosedConnection", arg0)
 }
@@ -157,18 +157,6 @@ func (m *MockConnectionTracer) ReceivedRetry(arg0 *wire.Header) {
 func (mr *MockConnectionTracerMockRecorder) ReceivedRetry(arg0 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReceivedRetry", reflect.TypeOf((*MockConnectionTracer)(nil).ReceivedRetry), arg0)
-}
-
-// ReceivedStatelessReset mocks base method
-func (m *MockConnectionTracer) ReceivedStatelessReset(arg0 *[16]byte) {
-	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "ReceivedStatelessReset", arg0)
-}
-
-// ReceivedStatelessReset indicates an expected call of ReceivedStatelessReset
-func (mr *MockConnectionTracerMockRecorder) ReceivedStatelessReset(arg0 interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReceivedStatelessReset", reflect.TypeOf((*MockConnectionTracer)(nil).ReceivedStatelessReset), arg0)
 }
 
 // ReceivedTransportParameters mocks base method

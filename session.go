@@ -593,13 +593,13 @@ runLoop:
 			s.keepAlivePingSent = true
 		} else if !s.handshakeComplete && now.Sub(s.sessionCreationTime) >= s.config.HandshakeTimeout {
 			if s.tracer != nil {
-				s.tracer.ClosedConnection(logging.TimeoutReasonHandshake)
+				s.tracer.ClosedConnection(logging.NewTimeoutCloseReason(logging.TimeoutReasonHandshake))
 			}
 			s.destroyImpl(qerr.NewTimeoutError("Handshake did not complete in time"))
 			continue
 		} else if s.handshakeComplete && now.Sub(s.idleTimeoutStartTime()) >= s.idleTimeout {
 			if s.tracer != nil {
-				s.tracer.ClosedConnection(logging.TimeoutReasonIdle)
+				s.tracer.ClosedConnection(logging.NewTimeoutCloseReason(logging.TimeoutReasonIdle))
 			}
 			s.destroyImpl(qerr.NewTimeoutError("No recent network activity"))
 			continue
@@ -1269,7 +1269,7 @@ func (s *session) closeRemote(e error) {
 	})
 }
 
-// Close the connection. It sends a NO_ERROR transport error.
+// Close the connection. It sends a NO_ERROR application error.
 // It waits until the run loop has stopped before returning
 func (s *session) shutdown() {
 	s.closeLocal(nil)
@@ -1286,9 +1286,6 @@ func (s *session) handleCloseError(closeErr closeError) {
 	if closeErr.err == nil {
 		closeErr.err = qerr.NewApplicationError(0, "")
 	}
-	if statelessReset, ok := closeErr.err.(interface{ StatelessResetToken() *[16]byte }); ok && s.tracer != nil {
-		s.tracer.ReceivedStatelessReset(statelessReset.StatelessResetToken())
-	}
 
 	var quicErr *qerr.QuicError
 	var ok bool
@@ -1298,6 +1295,19 @@ func (s *session) handleCloseError(closeErr closeError) {
 
 	s.streamsMap.CloseWithError(quicErr)
 	s.connIDManager.Close()
+
+	if s.tracer != nil {
+		// timeout errors are logged as soon as they occur (to distinguish between handshake and idle timeouts)
+		if nerr, ok := closeErr.err.(net.Error); !ok || !nerr.Timeout() {
+			if statelessReset, ok := closeErr.err.(interface{ StatelessResetToken() *[16]byte }); ok && s.tracer != nil {
+				s.tracer.ClosedConnection(logging.NewStatelessResetCloseReason(statelessReset.StatelessResetToken()))
+			} else if quicErr.IsApplicationError() {
+				s.tracer.ClosedConnection(logging.NewApplicationCloseReason(quicErr.ErrorCode, closeErr.remote))
+			} else {
+				s.tracer.ClosedConnection(logging.NewTransportCloseReason(quicErr.ErrorCode, closeErr.remote))
+			}
+		}
+	}
 
 	// If this is a remote close we're done here
 	if closeErr.remote {

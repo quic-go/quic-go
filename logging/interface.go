@@ -84,14 +84,13 @@ type Tracer interface {
 // A ConnectionTracer records events.
 type ConnectionTracer interface {
 	StartedConnection(local, remote net.Addr, version VersionNumber, srcConnID, destConnID ConnectionID)
-	ClosedConnection(TimeoutReason)
+	ClosedConnection(CloseReason)
 	SentTransportParameters(*TransportParameters)
 	ReceivedTransportParameters(*TransportParameters)
 	SentPacket(hdr *ExtendedHeader, packetSize ByteCount, ack *AckFrame, frames []Frame)
 	ReceivedVersionNegotiationPacket(*Header, []VersionNumber)
 	ReceivedRetry(*Header)
 	ReceivedPacket(hdr *ExtendedHeader, packetSize ByteCount, frames []Frame)
-	ReceivedStatelessReset(token *[16]byte)
 	BufferedPacket(PacketType)
 	DroppedPacket(PacketType, ByteCount, PacketDropReason)
 	UpdatedMetrics(rttStats *RTTStats, cwnd ByteCount, bytesInFLight ByteCount, packetsInFlight int)

@@ -338,7 +338,15 @@ var _ = Describe("Session", func() {
 				Expect(s).To(BeAssignableToTypeOf(&closedRemoteSession{}))
 			})
 			cryptoSetup.EXPECT().Close()
-			tracer.EXPECT().Close()
+			gomock.InOrder(
+				tracer.EXPECT().ClosedConnection(gomock.Any()).Do(func(reason logging.CloseReason) {
+					errorCode, remote, ok := reason.TransportError()
+					Expect(ok).To(BeTrue())
+					Expect(remote).To(BeTrue())
+					Expect(errorCode).To(Equal(qerr.StreamLimitError))
+				}),
+				tracer.EXPECT().Close(),
+			)
 
 			go func() {
 				defer GinkgoRecover()
@@ -362,7 +370,15 @@ var _ = Describe("Session", func() {
 				Expect(s).To(BeAssignableToTypeOf(&closedRemoteSession{}))
 			})
 			cryptoSetup.EXPECT().Close()
-			tracer.EXPECT().Close()
+			gomock.InOrder(
+				tracer.EXPECT().ClosedConnection(gomock.Any()).Do(func(reason logging.CloseReason) {
+					errorCode, remote, ok := reason.ApplicationError()
+					Expect(ok).To(BeTrue())
+					Expect(remote).To(BeTrue())
+					Expect(errorCode).To(BeEquivalentTo(0x1337))
+				}),
+				tracer.EXPECT().Close(),
+			)
 
 			go func() {
 				defer GinkgoRecover()
@@ -430,7 +446,15 @@ var _ = Describe("Session", func() {
 				return &coalescedPacket{buffer: buffer}, nil
 			})
 			mconn.EXPECT().Write([]byte("connection close"))
-			tracer.EXPECT().Close()
+			gomock.InOrder(
+				tracer.EXPECT().ClosedConnection(gomock.Any()).Do(func(reason logging.CloseReason) {
+					errorCode, remote, ok := reason.ApplicationError()
+					Expect(ok).To(BeTrue())
+					Expect(remote).To(BeFalse())
+					Expect(errorCode).To(BeZero())
+				}),
+				tracer.EXPECT().Close(),
+			)
 			sess.shutdown()
 			Eventually(areSessionsRunning).Should(BeFalse())
 			Expect(sess.Context().Done()).To(BeClosed())
@@ -443,6 +467,7 @@ var _ = Describe("Session", func() {
 			cryptoSetup.EXPECT().Close()
 			packer.EXPECT().PackConnectionClose(gomock.Any()).Return(&coalescedPacket{buffer: getPacketBuffer()}, nil)
 			mconn.EXPECT().Write(gomock.Any())
+			tracer.EXPECT().ClosedConnection(gomock.Any())
 			tracer.EXPECT().Close()
 			sess.shutdown()
 			sess.shutdown()
@@ -462,7 +487,15 @@ var _ = Describe("Session", func() {
 				return &coalescedPacket{buffer: getPacketBuffer()}, nil
 			})
 			mconn.EXPECT().Write(gomock.Any())
-			tracer.EXPECT().Close()
+			gomock.InOrder(
+				tracer.EXPECT().ClosedConnection(gomock.Any()).Do(func(reason logging.CloseReason) {
+					errorCode, remote, ok := reason.ApplicationError()
+					Expect(ok).To(BeTrue())
+					Expect(remote).To(BeFalse())
+					Expect(errorCode).To(Equal(logging.ApplicationError(0x1337)))
+				}),
+				tracer.EXPECT().Close(),
+			)
 			sess.CloseWithError(0x1337, "test error")
 			Eventually(areSessionsRunning).Should(BeFalse())
 			Expect(sess.Context().Done()).To(BeClosed())
@@ -482,7 +515,15 @@ var _ = Describe("Session", func() {
 				return &coalescedPacket{buffer: getPacketBuffer()}, nil
 			})
 			mconn.EXPECT().Write(gomock.Any())
-			tracer.EXPECT().Close()
+			gomock.InOrder(
+				tracer.EXPECT().ClosedConnection(gomock.Any()).Do(func(reason logging.CloseReason) {
+					errorCode, remote, ok := reason.TransportError()
+					Expect(ok).To(BeTrue())
+					Expect(remote).To(BeFalse())
+					Expect(errorCode).To(Equal(logging.TransportError(0x1337)))
+				}),
+				tracer.EXPECT().Close(),
+			)
 			sess.closeLocal(testErr)
 			Eventually(areSessionsRunning).Should(BeFalse())
 			Expect(sess.Context().Done()).To(BeClosed())
@@ -495,7 +536,15 @@ var _ = Describe("Session", func() {
 			sessionRunner.EXPECT().Remove(gomock.Any()).AnyTimes()
 			cryptoSetup.EXPECT().Close()
 			// don't EXPECT any calls to mconn.Write()
-			tracer.EXPECT().Close()
+			gomock.InOrder(
+				tracer.EXPECT().ClosedConnection(gomock.Any()).Do(func(reason logging.CloseReason) {
+					errorCode, remote, ok := reason.TransportError()
+					Expect(ok).To(BeTrue())
+					Expect(remote).To(BeFalse())
+					Expect(errorCode).To(Equal(qerr.InternalError))
+				}),
+				tracer.EXPECT().Close(),
+			)
 			sess.destroy(testErr)
 			Eventually(areSessionsRunning).Should(BeFalse())
 			expectedRunErr = testErr
@@ -517,6 +566,7 @@ var _ = Describe("Session", func() {
 			}()
 			Consistently(returned).ShouldNot(BeClosed())
 			mconn.EXPECT().Write(gomock.Any())
+			tracer.EXPECT().ClosedConnection(gomock.Any())
 			tracer.EXPECT().Close()
 			sess.shutdown()
 			Eventually(returned).Should(BeClosed())
@@ -548,6 +598,7 @@ var _ = Describe("Session", func() {
 			gomock.InOrder(
 				tracer.EXPECT().StartedConnection(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()),
 				tracer.EXPECT().ReceivedPacket(gomock.Any(), gomock.Any(), gomock.Any()),
+				tracer.EXPECT().ClosedConnection(gomock.Any()),
 				tracer.EXPECT().Close(),
 			)
 			// don't EXPECT any calls to packer.PackPacket()
@@ -574,6 +625,7 @@ var _ = Describe("Session", func() {
 			// only expect a single SentPacket() call
 			sph.EXPECT().SentPacket(gomock.Any())
 			tracer.EXPECT().SentPacket(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any())
+			tracer.EXPECT().ClosedConnection(gomock.Any())
 			tracer.EXPECT().Close()
 			streamManager.EXPECT().CloseWithError(gomock.Any())
 			sessionRunner.EXPECT().Remove(gomock.Any()).AnyTimes()
@@ -778,6 +830,7 @@ var _ = Describe("Session", func() {
 			sess.handlePacket(p)
 			Consistently(sess.Context().Done()).ShouldNot(BeClosed())
 			// make the go routine return
+			tracer.EXPECT().ClosedConnection(gomock.Any())
 			tracer.EXPECT().Close()
 			mconn.EXPECT().Write(gomock.Any())
 			sess.closeLocal(errors.New("close"))
@@ -804,6 +857,7 @@ var _ = Describe("Session", func() {
 				Header:          wire.Header{DestConnectionID: srcConnID},
 				PacketNumberLen: protocol.PacketNumberLen1,
 			}, nil)
+			tracer.EXPECT().ClosedConnection(gomock.Any())
 			tracer.EXPECT().Close()
 			sess.handlePacket(packet)
 			Eventually(sess.Context().Done()).Should(BeClosed())
@@ -829,6 +883,7 @@ var _ = Describe("Session", func() {
 			}, nil))
 			Consistently(runErr).ShouldNot(Receive())
 			// make the go routine return
+			tracer.EXPECT().ClosedConnection(gomock.Any())
 			tracer.EXPECT().Close()
 			mconn.EXPECT().Write(gomock.Any())
 			sess.shutdown()
@@ -853,6 +908,7 @@ var _ = Describe("Session", func() {
 			}()
 			expectReplaceWithClosed()
 			mconn.EXPECT().Write(gomock.Any())
+			tracer.EXPECT().ClosedConnection(gomock.Any())
 			tracer.EXPECT().Close()
 			sess.handlePacket(getPacket(&wire.ExtendedHeader{
 				Header:          wire.Header{DestConnectionID: srcConnID},
@@ -1072,6 +1128,7 @@ var _ = Describe("Session", func() {
 			expectReplaceWithClosed()
 			cryptoSetup.EXPECT().Close()
 			mconn.EXPECT().Write(gomock.Any())
+			tracer.EXPECT().ClosedConnection(gomock.Any())
 			tracer.EXPECT().Close()
 			sess.shutdown()
 			Eventually(sess.Context().Done()).Should(BeClosed())
@@ -1254,6 +1311,7 @@ var _ = Describe("Session", func() {
 			expectReplaceWithClosed()
 			cryptoSetup.EXPECT().Close()
 			mconn.EXPECT().Write(gomock.Any())
+			tracer.EXPECT().ClosedConnection(gomock.Any())
 			tracer.EXPECT().Close()
 			sess.shutdown()
 			Eventually(sess.Context().Done()).Should(BeClosed())
@@ -1376,6 +1434,7 @@ var _ = Describe("Session", func() {
 			packer.EXPECT().PackConnectionClose(gomock.Any()).Return(&coalescedPacket{buffer: getPacketBuffer()}, nil)
 			cryptoSetup.EXPECT().Close()
 			mconn.EXPECT().Write(gomock.Any())
+			tracer.EXPECT().ClosedConnection(gomock.Any())
 			tracer.EXPECT().Close()
 			sess.shutdown()
 			Eventually(sess.Context().Done()).Should(BeClosed())
@@ -1514,6 +1573,7 @@ var _ = Describe("Session", func() {
 		packer.EXPECT().PackConnectionClose(gomock.Any()).Return(&coalescedPacket{buffer: getPacketBuffer()}, nil)
 		cryptoSetup.EXPECT().Close()
 		mconn.EXPECT().Write(gomock.Any())
+		tracer.EXPECT().ClosedConnection(gomock.Any())
 		tracer.EXPECT().Close()
 		sess.shutdown()
 		Eventually(sess.Context().Done()).Should(BeClosed())
@@ -1550,6 +1610,7 @@ var _ = Describe("Session", func() {
 		packer.EXPECT().PackConnectionClose(gomock.Any()).Return(&coalescedPacket{buffer: getPacketBuffer()}, nil)
 		cryptoSetup.EXPECT().Close()
 		mconn.EXPECT().Write(gomock.Any())
+		tracer.EXPECT().ClosedConnection(gomock.Any())
 		tracer.EXPECT().Close()
 		sess.shutdown()
 		Eventually(sess.Context().Done()).Should(BeClosed())
@@ -1594,6 +1655,7 @@ var _ = Describe("Session", func() {
 		packer.EXPECT().PackConnectionClose(gomock.Any()).Return(&coalescedPacket{buffer: getPacketBuffer()}, nil)
 		cryptoSetup.EXPECT().Close()
 		mconn.EXPECT().Write(gomock.Any())
+		tracer.EXPECT().ClosedConnection(gomock.Any())
 		tracer.EXPECT().Close()
 		sess.shutdown()
 		Eventually(sess.Context().Done()).Should(BeClosed())
@@ -1605,6 +1667,7 @@ var _ = Describe("Session", func() {
 		expectReplaceWithClosed()
 		packer.EXPECT().PackConnectionClose(gomock.Any()).Return(&coalescedPacket{buffer: getPacketBuffer()}, nil)
 		cryptoSetup.EXPECT().Close()
+		tracer.EXPECT().ClosedConnection(gomock.Any())
 		tracer.EXPECT().Close()
 		go func() {
 			defer GinkgoRecover()
@@ -1658,6 +1721,7 @@ var _ = Describe("Session", func() {
 		expectReplaceWithClosed()
 		packer.EXPECT().PackConnectionClose(gomock.Any()).Return(&coalescedPacket{buffer: getPacketBuffer()}, nil)
 		cryptoSetup.EXPECT().Close()
+		tracer.EXPECT().ClosedConnection(gomock.Any())
 		tracer.EXPECT().Close()
 		sess.shutdown()
 		Eventually(sess.Context().Done()).Should(BeClosed())
@@ -1676,6 +1740,7 @@ var _ = Describe("Session", func() {
 		packer.EXPECT().PackConnectionClose(gomock.Any()).Return(&coalescedPacket{buffer: getPacketBuffer()}, nil)
 		cryptoSetup.EXPECT().Close()
 		mconn.EXPECT().Write(gomock.Any())
+		tracer.EXPECT().ClosedConnection(gomock.Any())
 		tracer.EXPECT().Close()
 		sess.shutdown()
 		Eventually(done).Should(BeClosed())
@@ -1696,6 +1761,7 @@ var _ = Describe("Session", func() {
 		packer.EXPECT().PackConnectionClose(gomock.Any()).Return(&coalescedPacket{buffer: getPacketBuffer()}, nil)
 		cryptoSetup.EXPECT().Close()
 		mconn.EXPECT().Write(gomock.Any())
+		tracer.EXPECT().ClosedConnection(gomock.Any())
 		tracer.EXPECT().Close()
 		Expect(sess.CloseWithError(0x1337, testErr.Error())).To(Succeed())
 		Eventually(done).Should(BeClosed())
@@ -1756,6 +1822,7 @@ var _ = Describe("Session", func() {
 			packer.EXPECT().PackConnectionClose(gomock.Any()).Return(&coalescedPacket{buffer: getPacketBuffer()}, nil)
 			cryptoSetup.EXPECT().Close()
 			mconn.EXPECT().Write(gomock.Any())
+			tracer.EXPECT().ClosedConnection(gomock.Any())
 			tracer.EXPECT().Close()
 			sess.shutdown()
 			Eventually(sess.Context().Done()).Should(BeClosed())
@@ -1817,7 +1884,11 @@ var _ = Describe("Session", func() {
 			done := make(chan struct{})
 			cryptoSetup.EXPECT().Close()
 			gomock.InOrder(
-				tracer.EXPECT().ClosedConnection(logging.TimeoutReasonIdle),
+				tracer.EXPECT().ClosedConnection(gomock.Any()).Do(func(reason logging.CloseReason) {
+					timeout, ok := reason.Timeout()
+					Expect(ok).To(BeTrue())
+					Expect(timeout).To(Equal(logging.TimeoutReasonIdle))
+				}),
 				tracer.EXPECT().Close(),
 			)
 			go func() {
@@ -1839,7 +1910,11 @@ var _ = Describe("Session", func() {
 			sessionRunner.EXPECT().Remove(gomock.Any()).Times(2)
 			cryptoSetup.EXPECT().Close()
 			gomock.InOrder(
-				tracer.EXPECT().ClosedConnection(logging.TimeoutReasonHandshake),
+				tracer.EXPECT().ClosedConnection(gomock.Any()).Do(func(reason logging.CloseReason) {
+					timeout, ok := reason.Timeout()
+					Expect(ok).To(BeTrue())
+					Expect(timeout).To(Equal(logging.TimeoutReasonHandshake))
+				}),
 				tracer.EXPECT().Close(),
 			)
 			done := make(chan struct{})
@@ -1864,7 +1939,13 @@ var _ = Describe("Session", func() {
 				Expect(quicErr.ErrorCode).To(Equal(qerr.NoError))
 				return &coalescedPacket{buffer: getPacketBuffer()}, nil
 			})
-			tracer.EXPECT().Close()
+			gomock.InOrder(
+				tracer.EXPECT().ClosedConnection(gomock.Any()).Do(func(reason logging.CloseReason) {
+					_, ok := reason.Timeout()
+					Expect(ok).To(BeFalse())
+				}),
+				tracer.EXPECT().Close(),
+			)
 			// the handshake timeout is irrelevant here, since it depends on the time the session was created,
 			// and not on the last network activity
 			go func() {
@@ -1889,7 +1970,11 @@ var _ = Describe("Session", func() {
 			)
 			cryptoSetup.EXPECT().Close()
 			gomock.InOrder(
-				tracer.EXPECT().ClosedConnection(logging.TimeoutReasonIdle),
+				tracer.EXPECT().ClosedConnection(gomock.Any()).Do(func(reason logging.CloseReason) {
+					timeout, ok := reason.Timeout()
+					Expect(ok).To(BeTrue())
+					Expect(timeout).To(Equal(logging.TimeoutReasonIdle))
+				}),
 				tracer.EXPECT().Close(),
 			)
 			sess.idleTimeout = 0
@@ -1925,6 +2010,7 @@ var _ = Describe("Session", func() {
 			expectReplaceWithClosed()
 			cryptoSetup.EXPECT().Close()
 			mconn.EXPECT().Write(gomock.Any())
+			tracer.EXPECT().ClosedConnection(gomock.Any())
 			tracer.EXPECT().Close()
 			sess.shutdown()
 			Eventually(sess.Context().Done()).Should(BeClosed())
@@ -2106,6 +2192,7 @@ var _ = Describe("Client Session", func() {
 		expectReplaceWithClosed()
 		cryptoSetup.EXPECT().Close()
 		mconn.EXPECT().Write(gomock.Any())
+		tracer.EXPECT().ClosedConnection(gomock.Any())
 		tracer.EXPECT().Close()
 		sess.shutdown()
 		Eventually(sess.Context().Done()).Should(BeClosed())
@@ -2189,6 +2276,7 @@ var _ = Describe("Client Session", func() {
 					ContainElement(protocol.VersionNumber(1337)),
 				))
 			})
+			tracer.EXPECT().ClosedConnection(gomock.Any())
 			cryptoSetup.EXPECT().Close()
 			Expect(sess.handlePacketImpl(getVNP(4321, 1337))).To(BeFalse())
 			var err error
@@ -2210,6 +2298,7 @@ var _ = Describe("Client Session", func() {
 			sessionRunner.EXPECT().Remove(srcConnID).MaxTimes(1)
 			gomock.InOrder(
 				tracer.EXPECT().ReceivedVersionNegotiationPacket(gomock.Any(), gomock.Any()),
+				tracer.EXPECT().ClosedConnection(gomock.Any()),
 				tracer.EXPECT().Close(),
 			)
 			cryptoSetup.EXPECT().Close()
@@ -2323,7 +2412,10 @@ var _ = Describe("Client Session", func() {
 				packer.EXPECT().PackConnectionClose(gomock.Any()).Return(&coalescedPacket{buffer: getPacketBuffer()}, nil).MaxTimes(1)
 				cryptoSetup.EXPECT().Close()
 				mconn.EXPECT().Write(gomock.Any())
-				tracer.EXPECT().Close()
+				gomock.InOrder(
+					tracer.EXPECT().ClosedConnection(gomock.Any()),
+					tracer.EXPECT().Close(),
+				)
 			}
 			closed = true
 		}
