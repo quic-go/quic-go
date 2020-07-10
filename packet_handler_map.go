@@ -16,7 +16,7 @@ import (
 )
 
 type statelessResetErr struct {
-	token [16]byte
+	token protocol.StatelessResetToken
 }
 
 func (e statelessResetErr) Error() string {
@@ -34,7 +34,7 @@ type packetHandlerMap struct {
 	connIDLen int
 
 	handlers    map[string] /* string(ConnectionID)*/ packetHandler
-	resetTokens map[[16]byte] /* stateless reset token */ packetHandler
+	resetTokens map[protocol.StatelessResetToken] /* stateless reset token */ packetHandler
 	server      unknownPacketHandler
 
 	listening chan struct{} // is closed when listen returns
@@ -62,7 +62,7 @@ func newPacketHandlerMap(
 		connIDLen:                  connIDLen,
 		listening:                  make(chan struct{}),
 		handlers:                   make(map[string]packetHandler),
-		resetTokens:                make(map[[16]byte]packetHandler),
+		resetTokens:                make(map[protocol.StatelessResetToken]packetHandler),
 		deleteRetiredSessionsAfter: protocol.RetiredConnectionIDDeleteTimeout,
 		statelessResetEnabled:      len(statelessResetKey) > 0,
 		statelessResetHasher:       hmac.New(sha256.New, statelessResetKey),
@@ -167,19 +167,19 @@ func (h *packetHandlerMap) ReplaceWithClosed(id protocol.ConnectionID, handler p
 	})
 }
 
-func (h *packetHandlerMap) AddResetToken(token [16]byte, handler packetHandler) {
+func (h *packetHandlerMap) AddResetToken(token protocol.StatelessResetToken, handler packetHandler) {
 	h.mutex.Lock()
 	h.resetTokens[token] = handler
 	h.mutex.Unlock()
 }
 
-func (h *packetHandlerMap) RemoveResetToken(token [16]byte) {
+func (h *packetHandlerMap) RemoveResetToken(token protocol.StatelessResetToken) {
 	h.mutex.Lock()
 	delete(h.resetTokens, token)
 	h.mutex.Unlock()
 }
 
-func (h *packetHandlerMap) RetireResetToken(token [16]byte) {
+func (h *packetHandlerMap) RetireResetToken(token protocol.StatelessResetToken) {
 	time.AfterFunc(h.deleteRetiredSessionsAfter, func() {
 		h.mutex.Lock()
 		delete(h.resetTokens, token)
@@ -313,7 +313,7 @@ func (h *packetHandlerMap) maybeHandleStatelessReset(data []byte) bool {
 		return false
 	}
 
-	var token [16]byte
+	var token protocol.StatelessResetToken
 	copy(token[:], data[len(data)-16:])
 	if sess, ok := h.resetTokens[token]; ok {
 		h.logger.Debugf("Received a stateless reset with token %#x. Closing session.", token)
@@ -323,8 +323,8 @@ func (h *packetHandlerMap) maybeHandleStatelessReset(data []byte) bool {
 	return false
 }
 
-func (h *packetHandlerMap) GetStatelessResetToken(connID protocol.ConnectionID) [16]byte {
-	var token [16]byte
+func (h *packetHandlerMap) GetStatelessResetToken(connID protocol.ConnectionID) protocol.StatelessResetToken {
+	var token protocol.StatelessResetToken
 	if !h.statelessResetEnabled {
 		// Return a random stateless reset token.
 		// This token will be sent in the server's transport parameters.

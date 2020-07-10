@@ -236,7 +236,7 @@ var _ = Describe("Packet Handler Map", func() {
 		Context("handling", func() {
 			It("handles stateless resets", func() {
 				packetHandler := NewMockPacketHandler(mockCtrl)
-				token := [16]byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16}
+				token := protocol.StatelessResetToken{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16}
 				handler.AddResetToken(token, packetHandler)
 				packet := append([]byte{0x40} /* short header packet */, make([]byte, 50)...)
 				packet = append(packet, token[:]...)
@@ -257,7 +257,7 @@ var _ = Describe("Packet Handler Map", func() {
 			It("handles stateless resets for 0-length connection IDs", func() {
 				handler.connIDLen = 0
 				packetHandler := NewMockPacketHandler(mockCtrl)
-				token := [16]byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16}
+				token := protocol.StatelessResetToken{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16}
 				handler.AddResetToken(token, packetHandler)
 				packet := append([]byte{0x40} /* short header packet */, make([]byte, 50)...)
 				packet = append(packet, token[:]...)
@@ -280,7 +280,7 @@ var _ = Describe("Packet Handler Map", func() {
 				connID := protocol.ConnectionID{0xde, 0xad, 0xbe, 0xef, 0x42}
 				packetHandler := NewMockPacketHandler(mockCtrl)
 				handler.Add(connID, packetHandler)
-				token := [16]byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16}
+				token := protocol.StatelessResetToken{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16}
 				handler.AddResetToken(token, NewMockPacketHandler(mockCtrl))
 				handler.RetireResetToken(token)
 				packetHandler.EXPECT().handlePacket(gomock.Any())
@@ -295,7 +295,7 @@ var _ = Describe("Packet Handler Map", func() {
 			It("ignores packets too small to contain a stateless reset", func() {
 				handler.connIDLen = 0
 				packetHandler := NewMockPacketHandler(mockCtrl)
-				token := [16]byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16}
+				token := protocol.StatelessResetToken{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16}
 				handler.AddResetToken(token, packetHandler)
 				packet := append([]byte{0x40} /* short header packet */, token[:15]...)
 				done := make(chan struct{})

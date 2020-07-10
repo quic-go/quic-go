@@ -88,7 +88,7 @@ var _ = Describe("Crypto Setup TLS", func() {
 				return &tls.Config{ServerName: ch.ServerName}, nil
 			},
 		}
-		var token [16]byte
+		var token protocol.StatelessResetToken
 		server := NewCryptoSetupServer(
 			&bytes.Buffer{},
 			&bytes.Buffer{},
@@ -122,7 +122,7 @@ var _ = Describe("Crypto Setup TLS", func() {
 		runner := NewMockHandshakeRunner(mockCtrl)
 		runner.EXPECT().OnError(gomock.Any()).Do(func(e error) { sErrChan <- e })
 		_, sInitialStream, sHandshakeStream := initStreams()
-		var token [16]byte
+		var token protocol.StatelessResetToken
 		server := NewCryptoSetupServer(
 			sInitialStream,
 			sHandshakeStream,
@@ -162,7 +162,7 @@ var _ = Describe("Crypto Setup TLS", func() {
 		_, sInitialStream, sHandshakeStream := initStreams()
 		runner := NewMockHandshakeRunner(mockCtrl)
 		runner.EXPECT().OnError(gomock.Any()).Do(func(e error) { sErrChan <- e })
-		var token [16]byte
+		var token protocol.StatelessResetToken
 		server := NewCryptoSetupServer(
 			sInitialStream,
 			sHandshakeStream,
@@ -205,7 +205,7 @@ var _ = Describe("Crypto Setup TLS", func() {
 		_, sInitialStream, sHandshakeStream := initStreams()
 		runner := NewMockHandshakeRunner(mockCtrl)
 		runner.EXPECT().OnError(gomock.Any()).Do(func(e error) { sErrChan <- e })
-		var token [16]byte
+		var token protocol.StatelessResetToken
 		server := NewCryptoSetupServer(
 			sInitialStream,
 			sHandshakeStream,
@@ -241,7 +241,7 @@ var _ = Describe("Crypto Setup TLS", func() {
 
 	It("returns Handshake() when it is closed", func() {
 		_, sInitialStream, sHandshakeStream := initStreams()
-		var token [16]byte
+		var token protocol.StatelessResetToken
 		server := NewCryptoSetupServer(
 			sInitialStream,
 			sHandshakeStream,
@@ -363,7 +363,7 @@ var _ = Describe("Crypto Setup TLS", func() {
 			sRunner.EXPECT().OnError(gomock.Any()).Do(func(e error) { sErrChan <- e }).MaxTimes(1)
 			sRunner.EXPECT().OnHandshakeComplete().Do(func() { sHandshakeComplete = true }).MaxTimes(1)
 			if serverTransportParameters.StatelessResetToken == nil {
-				var token [16]byte
+				var token protocol.StatelessResetToken
 				serverTransportParameters.StatelessResetToken = &token
 			}
 			server := NewCryptoSetupServer(
@@ -493,7 +493,7 @@ var _ = Describe("Crypto Setup TLS", func() {
 			)
 
 			sChunkChan, sInitialStream, sHandshakeStream := initStreams()
-			var token [16]byte
+			var token protocol.StatelessResetToken
 			sRunner := NewMockHandshakeRunner(mockCtrl)
 			sRunner.EXPECT().OnReceivedParams(gomock.Any()).Do(func(tp *wire.TransportParameters) { cTransportParametersRcvd = tp })
 			sRunner.EXPECT().OnHandshakeComplete()
@@ -553,7 +553,7 @@ var _ = Describe("Crypto Setup TLS", func() {
 				sRunner := NewMockHandshakeRunner(mockCtrl)
 				sRunner.EXPECT().OnReceivedParams(gomock.Any())
 				sRunner.EXPECT().OnHandshakeComplete()
-				var token [16]byte
+				var token protocol.StatelessResetToken
 				server := NewCryptoSetupServer(
 					sInitialStream,
 					sHandshakeStream,
@@ -613,7 +613,7 @@ var _ = Describe("Crypto Setup TLS", func() {
 				sRunner := NewMockHandshakeRunner(mockCtrl)
 				sRunner.EXPECT().OnReceivedParams(gomock.Any())
 				sRunner.EXPECT().OnHandshakeComplete()
-				var token [16]byte
+				var token protocol.StatelessResetToken
 				server := NewCryptoSetupServer(
 					sInitialStream,
 					sHandshakeStream,

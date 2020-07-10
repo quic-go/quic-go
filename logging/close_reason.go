@@ -12,7 +12,7 @@ type CloseReason struct {
 	transportError   *TransportError
 
 	timeout             *TimeoutReason
-	statelessResetToken *[16]byte
+	statelessResetToken *StatelessResetToken
 }
 
 // NewApplicationCloseReason creates a new CloseReason for an application error.
@@ -31,8 +31,8 @@ func NewTimeoutCloseReason(r TimeoutReason) CloseReason {
 }
 
 // NewStatelessResetCloseReason creates a new CloseReason for a stateless reset.
-func NewStatelessResetCloseReason(token *[16]byte) CloseReason {
-	return CloseReason{statelessResetToken: token}
+func NewStatelessResetCloseReason(token StatelessResetToken) CloseReason {
+	return CloseReason{statelessResetToken: &token}
 }
 
 // ApplicationError gets the application error.
@@ -60,7 +60,7 @@ func (r *CloseReason) Timeout() (reason TimeoutReason, ok bool) {
 }
 
 // StatelessReset gets the stateless reset token.
-func (r *CloseReason) StatelessReset() (token [16]byte, ok bool) {
+func (r *CloseReason) StatelessReset() (token StatelessResetToken, ok bool) {
 	if r.statelessResetToken == nil {
 		return
 	}

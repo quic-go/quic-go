@@ -18,7 +18,7 @@ type connIDManager struct {
 	activeSequenceNumber      uint64
 	highestRetired            uint64
 	activeConnectionID        protocol.ConnectionID
-	activeStatelessResetToken *[16]byte
+	activeStatelessResetToken *protocol.StatelessResetToken
 
 	// We change the connection ID after sending on average
 	// protocol.PacketsPerConnectionID packets. The actual value is randomized
@@ -27,17 +27,17 @@ type connIDManager struct {
 	rand                   *mrand.Rand
 	packetsPerConnectionID uint64
 
-	addStatelessResetToken    func([16]byte)
-	removeStatelessResetToken func([16]byte)
-	retireStatelessResetToken func([16]byte)
+	addStatelessResetToken    func(protocol.StatelessResetToken)
+	removeStatelessResetToken func(protocol.StatelessResetToken)
+	retireStatelessResetToken func(protocol.StatelessResetToken)
 	queueControlFrame         func(wire.Frame)
 }
 
 func newConnIDManager(
 	initialDestConnID protocol.ConnectionID,
-	addStatelessResetToken func([16]byte),
-	removeStatelessResetToken func([16]byte),
-	retireStatelessResetToken func([16]byte),
+	addStatelessResetToken func(protocol.StatelessResetToken),
+	removeStatelessResetToken func(protocol.StatelessResetToken),
+	retireStatelessResetToken func(protocol.StatelessResetToken),
 	queueControlFrame func(wire.Frame),
 ) *connIDManager {
 	b := make([]byte, 8)
@@ -53,7 +53,7 @@ func newConnIDManager(
 	}
 }
 
-func (h *connIDManager) AddFromPreferredAddress(connID protocol.ConnectionID, resetToken [16]byte) error {
+func (h *connIDManager) AddFromPreferredAddress(connID protocol.ConnectionID, resetToken protocol.StatelessResetToken) error {
 	return h.addConnectionID(1, connID, resetToken)
 }
 
@@ -110,7 +110,7 @@ func (h *connIDManager) add(f *wire.NewConnectionIDFrame) error {
 	return nil
 }
 
-func (h *connIDManager) addConnectionID(seq uint64, connID protocol.ConnectionID, resetToken [16]byte) error {
+func (h *connIDManager) addConnectionID(seq uint64, connID protocol.ConnectionID, resetToken protocol.StatelessResetToken) error {
 	// insert a new element at the end
 	if h.queue.Len() == 0 || h.queue.Back().Value.SequenceNumber < seq {
 		h.queue.PushBack(utils.NewConnectionID{
@@ -177,7 +177,7 @@ func (h *connIDManager) ChangeInitialConnID(newConnID protocol.ConnectionID) {
 }
 
 // is called when the server provides a stateless reset token in the transport parameters
-func (h *connIDManager) SetStatelessResetToken(token [16]byte) {
+func (h *connIDManager) SetStatelessResetToken(token protocol.StatelessResetToken) {
 	if h.activeSequenceNumber != 0 {
 		panic("expected first connection ID to have sequence number 0")
 	}

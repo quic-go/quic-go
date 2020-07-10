@@ -51,7 +51,7 @@ type PreferredAddress struct {
 	IPv6                net.IP
 	IPv6Port            uint16
 	ConnectionID        protocol.ConnectionID
-	StatelessResetToken [16]byte
+	StatelessResetToken protocol.StatelessResetToken
 }
 
 // TransportParameters are parameters sent to the peer during the handshake
@@ -79,7 +79,7 @@ type TransportParameters struct {
 	InitialSourceConnectionID       protocol.ConnectionID
 	RetrySourceConnectionID         *protocol.ConnectionID // use a pointer here to distinguish zero-length connection IDs from missing transport parameters
 
-	StatelessResetToken     *[16]byte
+	StatelessResetToken     *protocol.StatelessResetToken
 	ActiveConnectionIDLimit uint64
 }
 
@@ -160,7 +160,7 @@ func (p *TransportParameters) unmarshal(r *bytes.Reader, sentBy protocol.Perspec
 				if paramLen != 16 {
 					return fmt.Errorf("wrong length for stateless_reset_token: %d (expected 16)", paramLen)
 				}
-				var token [16]byte
+				var token protocol.StatelessResetToken
 				r.Read(token[:])
 				p.StatelessResetToken = &token
 			case originalDestinationConnectionIDParameterID:

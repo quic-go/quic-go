@@ -218,7 +218,7 @@ var _ = Describe("Frame parsing", func() {
 		f := &NewConnectionIDFrame{
 			SequenceNumber:      0x1337,
 			ConnectionID:        protocol.ConnectionID{0xde, 0xad, 0xbe, 0xef},
-			StatelessResetToken: [16]byte{0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15},
+			StatelessResetToken: protocol.StatelessResetToken{0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15},
 		}
 		buf := &bytes.Buffer{}
 		Expect(f.Write(buf, versionIETFFrames)).To(Succeed())
