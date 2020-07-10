@@ -18,7 +18,10 @@ func newSendQueue(conn connection) *sendQueue {
 }
 
 func (h *sendQueue) Send(p *packetBuffer) {
-	h.queue <- p
+	select {
+	case h.queue <- p:
+	case <-h.runStopped:
+	}
 }
 
 func (h *sendQueue) Run() error {
