@@ -247,7 +247,7 @@ var _ = Describe("Packet Handler Map", func() {
 					var resetErr statelessResetErr
 					Expect(errors.As(err, &resetErr)).To(BeTrue())
 					Expect(err.Error()).To(ContainSubstring("received a stateless reset"))
-					Expect(resetErr.token).To(Equal(&token))
+					Expect(resetErr.token).To(Equal(token))
 					close(destroyed)
 				})
 				conn.dataToRead <- packet
@@ -268,7 +268,7 @@ var _ = Describe("Packet Handler Map", func() {
 					var resetErr statelessResetErr
 					Expect(errors.As(err, &resetErr)).To(BeTrue())
 					Expect(err.Error()).To(ContainSubstring("received a stateless reset"))
-					Expect(resetErr.token).To(Equal(&token))
+					Expect(resetErr.token).To(Equal(token))
 					close(destroyed)
 				})
 				conn.dataToRead <- packet

@@ -53,7 +53,7 @@ func newConnIDManager(
 	}
 }
 
-func (h *connIDManager) AddFromPreferredAddress(connID protocol.ConnectionID, resetToken *[16]byte) error {
+func (h *connIDManager) AddFromPreferredAddress(connID protocol.ConnectionID, resetToken [16]byte) error {
 	return h.addConnectionID(1, connID, resetToken)
 }
 
@@ -98,7 +98,7 @@ func (h *connIDManager) add(f *wire.NewConnectionIDFrame) error {
 		return nil
 	}
 
-	if err := h.addConnectionID(f.SequenceNumber, f.ConnectionID, &f.StatelessResetToken); err != nil {
+	if err := h.addConnectionID(f.SequenceNumber, f.ConnectionID, f.StatelessResetToken); err != nil {
 		return err
 	}
 
@@ -110,7 +110,7 @@ func (h *connIDManager) add(f *wire.NewConnectionIDFrame) error {
 	return nil
 }
 
-func (h *connIDManager) addConnectionID(seq uint64, connID protocol.ConnectionID, resetToken *[16]byte) error {
+func (h *connIDManager) addConnectionID(seq uint64, connID protocol.ConnectionID, resetToken [16]byte) error {
 	// insert a new element at the end
 	if h.queue.Len() == 0 || h.queue.Back().Value.SequenceNumber < seq {
 		h.queue.PushBack(utils.NewConnectionID{
@@ -126,7 +126,7 @@ func (h *connIDManager) addConnectionID(seq uint64, connID protocol.ConnectionID
 			if !el.Value.ConnectionID.Equal(connID) {
 				return fmt.Errorf("received conflicting connection IDs for sequence number %d", seq)
 			}
-			if *el.Value.StatelessResetToken != *resetToken {
+			if el.Value.StatelessResetToken != resetToken {
 				return fmt.Errorf("received conflicting stateless reset tokens for sequence number %d", seq)
 			}
 			break
@@ -155,7 +155,7 @@ func (h *connIDManager) updateConnectionID() {
 	front := h.queue.Remove(h.queue.Front())
 	h.activeSequenceNumber = front.SequenceNumber
 	h.activeConnectionID = front.ConnectionID
-	h.activeStatelessResetToken = front.StatelessResetToken
+	h.activeStatelessResetToken = &front.StatelessResetToken
 	h.packetsSinceLastChange = 0
 	h.packetsPerConnectionID = protocol.PacketsPerConnectionID/2 + uint64(h.rand.Int63n(protocol.PacketsPerConnectionID))
 	h.addStatelessResetToken(*h.activeStatelessResetToken)
@@ -190,7 +190,7 @@ func (h *connIDManager) SentPacket() {
 }
 
 func (h *connIDManager) shouldUpdateConnID() bool {
-	// iniate the first change as early as possible
+	// initiate the first change as early as possible
 	if h.queue.Len() > 0 && h.activeSequenceNumber == 0 {
 		return true
 	}

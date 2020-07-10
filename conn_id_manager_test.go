@@ -33,9 +33,9 @@ var _ = Describe("Connection ID Manager", func() {
 			})
 	})
 
-	get := func() (protocol.ConnectionID, *[16]byte) {
+	get := func() (protocol.ConnectionID, [16]byte) {
 		if m.queue.Len() == 0 {
-			return nil, nil
+			return nil, [16]byte{}
 		}
 		val := m.queue.Remove(m.queue.Front())
 		return val.ConnectionID, val.StatelessResetToken
@@ -70,13 +70,12 @@ var _ = Describe("Connection ID Manager", func() {
 		})).To(Succeed())
 		c1, rt1 := get()
 		Expect(c1).To(Equal(protocol.ConnectionID{1, 2, 3, 4}))
-		Expect(*rt1).To(Equal([16]byte{0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 0xa, 0xb, 0xc, 0xd, 0xe}))
+		Expect(rt1).To(Equal([16]byte{0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 0xa, 0xb, 0xc, 0xd, 0xe}))
 		c2, rt2 := get()
 		Expect(c2).To(Equal(protocol.ConnectionID{2, 3, 4, 5}))
-		Expect(*rt2).To(Equal([16]byte{0xe, 0xd, 0xc, 0xb, 0xa, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0}))
-		c3, rt3 := get()
+		Expect(rt2).To(Equal([16]byte{0xe, 0xd, 0xc, 0xb, 0xa, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0}))
+		c3, _ := get()
 		Expect(c3).To(BeNil())
-		Expect(rt3).To(BeNil())
 	})
 
 	It("accepts duplicates", func() {
@@ -94,10 +93,9 @@ var _ = Describe("Connection ID Manager", func() {
 		Expect(m.Add(f2)).To(Succeed())
 		c1, rt1 := get()
 		Expect(c1).To(Equal(protocol.ConnectionID{1, 2, 3, 4}))
-		Expect(*rt1).To(Equal([16]byte{0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 0xa, 0xb, 0xc, 0xd, 0xe}))
-		c2, rt2 := get()
+		Expect(rt1).To(Equal([16]byte{0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 0xa, 0xb, 0xc, 0xd, 0xe}))
+		c2, _ := get()
 		Expect(c2).To(BeNil())
-		Expect(rt2).To(BeNil())
 	})
 
 	It("ignores duplicates for the currently used connection ID", func() {
