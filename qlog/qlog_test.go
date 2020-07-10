@@ -379,12 +379,12 @@ var _ = Describe("Tracing", func() {
 			It("records a received Version Negotiation packet", func() {
 				tracer.ReceivedVersionNegotiationPacket(
 					&logging.Header{
-						IsLongHeader:      true,
-						Type:              protocol.PacketTypeRetry,
-						DestConnectionID:  protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8},
-						SrcConnectionID:   protocol.ConnectionID{4, 3, 2, 1},
-						SupportedVersions: []protocol.VersionNumber{0xdeadbeef, 0xdecafbad},
+						IsLongHeader:     true,
+						Type:             protocol.PacketTypeRetry,
+						DestConnectionID: protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8},
+						SrcConnectionID:  protocol.ConnectionID{4, 3, 2, 1},
 					},
+					[]protocol.VersionNumber{0xdeadbeef, 0xdecafbad},
 				)
 				entry := exportAndParseSingle()
 				Expect(entry.Time).To(BeTemporally("~", time.Now(), scaleDuration(10*time.Millisecond)))

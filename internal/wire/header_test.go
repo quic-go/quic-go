@@ -111,47 +111,6 @@ var _ = Describe("Header Parsing", func() {
 		})
 	})
 
-	Context("Version Negotiation Packets", func() {
-		It("parses", func() {
-			srcConnID := protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12}
-			destConnID := protocol.ConnectionID{9, 8, 7, 6, 5, 4, 3, 2, 1}
-			versions := []protocol.VersionNumber{0x22334455, 0x33445566}
-			vnp, err := ComposeVersionNegotiation(destConnID, srcConnID, versions)
-			Expect(err).ToNot(HaveOccurred())
-			Expect(IsVersionNegotiationPacket(vnp)).To(BeTrue())
-			hdr, _, rest, err := ParsePacket(vnp, 0)
-			Expect(err).ToNot(HaveOccurred())
-			Expect(hdr.DestConnectionID).To(Equal(destConnID))
-			Expect(hdr.SrcConnectionID).To(Equal(srcConnID))
-			Expect(hdr.IsLongHeader).To(BeTrue())
-			Expect(hdr.Version).To(BeZero())
-			for _, v := range versions {
-				Expect(hdr.SupportedVersions).To(ContainElement(v))
-			}
-			Expect(rest).To(BeEmpty())
-		})
-
-		It("errors if it contains versions of the wrong length", func() {
-			connID := protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8}
-			versions := []protocol.VersionNumber{0x22334455, 0x33445566}
-			data, err := ComposeVersionNegotiation(connID, connID, versions)
-			Expect(err).ToNot(HaveOccurred())
-			_, _, _, err = ParsePacket(data[:len(data)-2], 0)
-			Expect(err).To(MatchError("Version Negotiation packet has a version list with an invalid length"))
-		})
-
-		It("errors if the version list is empty", func() {
-			connID := protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8}
-			versions := []protocol.VersionNumber{0x22334455}
-			data, err := ComposeVersionNegotiation(connID, connID, versions)
-			Expect(err).ToNot(HaveOccurred())
-			// remove 8 bytes (two versions), since ComposeVersionNegotiation also added a reserved version number
-			data = data[:len(data)-8]
-			_, _, _, err = ParsePacket(data, 0)
-			Expect(err).To(MatchError("Version Negotiation packet has empty version list"))
-		})
-	})
-
 	Context("Long Headers", func() {
 		It("parses a Long Header", func() {
 			destConnID := protocol.ConnectionID{9, 8, 7, 6, 5, 4, 3, 2, 1}

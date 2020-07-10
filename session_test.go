@@ -2182,9 +2182,9 @@ var _ = Describe("Client Session", func() {
 				errChan <- sess.run()
 			}()
 			sessionRunner.EXPECT().Remove(srcConnID)
-			tracer.EXPECT().ReceivedVersionNegotiationPacket(gomock.Any()).Do(func(hdr *wire.Header) {
+			tracer.EXPECT().ReceivedVersionNegotiationPacket(gomock.Any(), gomock.Any()).Do(func(hdr *wire.Header, versions []logging.VersionNumber) {
 				Expect(hdr.Version).To(BeZero())
-				Expect(hdr.SupportedVersions).To(And(
+				Expect(versions).To(And(
 					ContainElement(protocol.VersionNumber(4321)),
 					ContainElement(protocol.VersionNumber(1337)),
 				))
@@ -2209,7 +2209,7 @@ var _ = Describe("Client Session", func() {
 			}()
 			sessionRunner.EXPECT().Remove(srcConnID).MaxTimes(1)
 			gomock.InOrder(
-				tracer.EXPECT().ReceivedVersionNegotiationPacket(gomock.Any()),
+				tracer.EXPECT().ReceivedVersionNegotiationPacket(gomock.Any(), gomock.Any()),
 				tracer.EXPECT().Close(),
 			)
 			cryptoSetup.EXPECT().Close()

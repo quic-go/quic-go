@@ -916,7 +916,7 @@ func (s *session) handleVersionNegotiationPacket(p *receivedPacket) {
 		return
 	}
 
-	hdr, _, _, err := wire.ParsePacket(p.data, 0)
+	hdr, supportedVersions, err := wire.ParseVersionNegotiationPacket(bytes.NewReader(p.data))
 	if err != nil {
 		if s.tracer != nil {
 			s.tracer.DroppedPacket(logging.PacketTypeVersionNegotiation, protocol.ByteCount(len(p.data)), logging.PacketDropHeaderParseError)
@@ -925,7 +925,7 @@ func (s *session) handleVersionNegotiationPacket(p *receivedPacket) {
 		return
 	}
 
-	for _, v := range hdr.SupportedVersions {
+	for _, v := range supportedVersions {
 		if v == s.version {
 			if s.tracer != nil {
 				s.tracer.DroppedPacket(logging.PacketTypeVersionNegotiation, protocol.ByteCount(len(p.data)), logging.PacketDropUnexpectedVersion)
@@ -936,14 +936,14 @@ func (s *session) handleVersionNegotiationPacket(p *receivedPacket) {
 		}
 	}
 
-	s.logger.Infof("Received a Version Negotiation packet. Supported Versions: %s", hdr.SupportedVersions)
+	s.logger.Infof("Received a Version Negotiation packet. Supported Versions: %s", supportedVersions)
 	if s.tracer != nil {
-		s.tracer.ReceivedVersionNegotiationPacket(hdr)
+		s.tracer.ReceivedVersionNegotiationPacket(hdr, supportedVersions)
 	}
-	newVersion, ok := protocol.ChooseSupportedVersion(s.config.Versions, hdr.SupportedVersions)
+	newVersion, ok := protocol.ChooseSupportedVersion(s.config.Versions, supportedVersions)
 	if !ok {
 		//nolint:stylecheck
-		s.destroyImpl(fmt.Errorf("No compatible QUIC version found. We support %s, server offered %s.", s.config.Versions, hdr.SupportedVersions))
+		s.destroyImpl(fmt.Errorf("No compatible QUIC version found. We support %s, server offered %s.", s.config.Versions, supportedVersions))
 		s.logger.Infof("No compatible QUIC version found.")
 		return
 	}
