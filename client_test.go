@@ -634,9 +634,4 @@ var _ = Describe("Client", func() {
 			Expect(counter).To(Equal(2))
 		})
 	})
-
-	It("tells its version", func() {
-		Expect(cl.version).ToNot(BeZero())
-		Expect(cl.GetVersion()).To(Equal(cl.version))
-	})
 })

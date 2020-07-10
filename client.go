@@ -44,8 +44,6 @@ type client struct {
 	logger utils.Logger
 }
 
-var _ packetHandler = &client{}
-
 var (
 	// make it possible to mock connection ID generation in the tests
 	generateConnectionID           = protocol.GenerateConnectionID
@@ -266,7 +264,7 @@ func (c *client) dial(ctx context.Context) error {
 		c.version,
 	)
 	c.mutex.Unlock()
-	c.packetHandlers.Add(c.srcConnID, c)
+	c.packetHandlers.Add(c.srcConnID, c.session)
 
 	errorChan := make(chan error, 1)
 	go func() {
@@ -304,37 +302,4 @@ func (c *client) dial(ctx context.Context) error {
 		// handshake successfully completed
 		return nil
 	}
-}
-
-func (c *client) handlePacket(p *receivedPacket) {
-	c.session.handlePacket(p)
-}
-
-func (c *client) shutdown() {
-	c.mutex.Lock()
-	defer c.mutex.Unlock()
-	if c.session == nil {
-		return
-	}
-	c.session.shutdown()
-}
-
-func (c *client) destroy(e error) {
-	c.mutex.Lock()
-	defer c.mutex.Unlock()
-	if c.session == nil {
-		return
-	}
-	c.session.destroy(e)
-}
-
-func (c *client) GetVersion() protocol.VersionNumber {
-	c.mutex.Lock()
-	v := c.version
-	c.mutex.Unlock()
-	return v
-}
-
-func (c *client) getPerspective() protocol.Perspective {
-	return protocol.PerspectiveClient
 }
