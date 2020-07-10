@@ -274,6 +274,9 @@ func (h *packetHandlerMap) handlePacket(
 	connID, err := wire.ParseConnectionID(data, h.connIDLen)
 	if err != nil {
 		h.logger.Debugf("error parsing connection ID on packet from %s: %s", addr, err)
+		if h.tracer != nil {
+			h.tracer.DroppedPacket(addr, logging.PacketTypeNotDetermined, protocol.ByteCount(len(data)), logging.PacketDropHeaderParseError)
+		}
 		return
 	}
 	rcvTime := time.Now()
