@@ -19,8 +19,6 @@ type statelessResetErr struct {
 	token *[16]byte
 }
 
-func (e statelessResetErr) StatelessResetToken() *[16]byte { return e.token }
-
 func (e statelessResetErr) Error() string {
 	return fmt.Sprintf("received a stateless reset with token %x", *e.token)
 }
@@ -319,7 +317,7 @@ func (h *packetHandlerMap) maybeHandleStatelessReset(data []byte) bool {
 	copy(token[:], data[len(data)-16:])
 	if sess, ok := h.resetTokens[token]; ok {
 		h.logger.Debugf("Received a stateless reset with token %#x. Closing session.", token)
-		go sess.destroy(&statelessResetErr{token: &token})
+		go sess.destroy(statelessResetErr{token: &token})
 		return true
 	}
 	return false

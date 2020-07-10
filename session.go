@@ -1299,8 +1299,9 @@ func (s *session) handleCloseError(closeErr closeError) {
 	if s.tracer != nil {
 		// timeout errors are logged as soon as they occur (to distinguish between handshake and idle timeouts)
 		if nerr, ok := closeErr.err.(net.Error); !ok || !nerr.Timeout() {
-			if statelessReset, ok := closeErr.err.(interface{ StatelessResetToken() *[16]byte }); ok && s.tracer != nil {
-				s.tracer.ClosedConnection(logging.NewStatelessResetCloseReason(statelessReset.StatelessResetToken()))
+			var resetErr statelessResetErr
+			if errors.As(closeErr.err, &resetErr) {
+				s.tracer.ClosedConnection(logging.NewStatelessResetCloseReason(resetErr.token))
 			} else if quicErr.IsApplicationError() {
 				s.tracer.ClosedConnection(logging.NewApplicationCloseReason(quicErr.ErrorCode, closeErr.remote))
 			} else {

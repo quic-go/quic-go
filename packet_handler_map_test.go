@@ -242,10 +242,12 @@ var _ = Describe("Packet Handler Map", func() {
 				packet = append(packet, token[:]...)
 				destroyed := make(chan struct{})
 				packetHandler.EXPECT().destroy(gomock.Any()).Do(func(err error) {
+					defer GinkgoRecover()
 					Expect(err).To(HaveOccurred())
-					Expect(err).To(BeAssignableToTypeOf(&statelessResetErr{}))
+					var resetErr statelessResetErr
+					Expect(errors.As(err, &resetErr)).To(BeTrue())
 					Expect(err.Error()).To(ContainSubstring("received a stateless reset"))
-					Expect(*err.(*statelessResetErr).StatelessResetToken()).To(Equal(token))
+					Expect(resetErr.token).To(Equal(&token))
 					close(destroyed)
 				})
 				conn.dataToRead <- packet
@@ -261,10 +263,12 @@ var _ = Describe("Packet Handler Map", func() {
 				packet = append(packet, token[:]...)
 				destroyed := make(chan struct{})
 				packetHandler.EXPECT().destroy(gomock.Any()).Do(func(err error) {
+					defer GinkgoRecover()
 					Expect(err).To(HaveOccurred())
-					Expect(err).To(BeAssignableToTypeOf(&statelessResetErr{}))
+					var resetErr statelessResetErr
+					Expect(errors.As(err, &resetErr)).To(BeTrue())
 					Expect(err.Error()).To(ContainSubstring("received a stateless reset"))
-					Expect(*err.(*statelessResetErr).StatelessResetToken()).To(Equal(token))
+					Expect(resetErr.token).To(Equal(&token))
 					close(destroyed)
 				})
 				conn.dataToRead <- packet

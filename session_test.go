@@ -639,6 +639,23 @@ var _ = Describe("Session", func() {
 			sess.scheduleSending()
 			Eventually(sess.Context().Done()).Should(BeClosed())
 		})
+
+		It("closes due to a stateless reset", func() {
+			token := [16]byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16}
+			runSession()
+			gomock.InOrder(
+				tracer.EXPECT().ClosedConnection(gomock.Any()).Do(func(reason logging.CloseReason) {
+					t, ok := reason.StatelessReset()
+					Expect(ok).To(BeTrue())
+					Expect(t).To(Equal(token))
+				}),
+				tracer.EXPECT().Close(),
+			)
+			streamManager.EXPECT().CloseWithError(gomock.Any())
+			sessionRunner.EXPECT().Remove(gomock.Any()).AnyTimes()
+			cryptoSetup.EXPECT().Close()
+			sess.destroy(statelessResetErr{token: &token})
+		})
 	})
 
 	Context("receiving packets", func() {
