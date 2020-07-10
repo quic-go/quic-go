@@ -50,7 +50,7 @@ var _ = Describe("Packet Handler Map", func() {
 
 	JustBeforeEach(func() {
 		conn = newMockPacketConn()
-		handler = newPacketHandlerMap(conn, connIDLen, statelessResetKey, utils.DefaultLogger).(*packetHandlerMap)
+		handler = newPacketHandlerMap(conn, connIDLen, statelessResetKey, nil, utils.DefaultLogger).(*packetHandlerMap)
 	})
 
 	AfterEach(func() {
