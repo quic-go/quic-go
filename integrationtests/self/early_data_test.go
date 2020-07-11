@@ -25,7 +25,7 @@ var _ = Describe("early data", func() {
 				ln, err := quic.ListenAddrEarly(
 					"localhost:0",
 					getTLSConfig(),
-					getQuicConfigForServer(&quic.Config{Versions: []protocol.VersionNumber{version}}),
+					getQuicConfig(&quic.Config{Versions: []protocol.VersionNumber{version}}),
 				)
 				Expect(err).ToNot(HaveOccurred())
 				done := make(chan struct{})
@@ -56,7 +56,7 @@ var _ = Describe("early data", func() {
 				sess, err := quic.DialAddr(
 					fmt.Sprintf("localhost:%d", proxy.LocalPort()),
 					getTLSClientConfig(),
-					getQuicConfigForClient(&quic.Config{Versions: []protocol.VersionNumber{version}}),
+					getQuicConfig(&quic.Config{Versions: []protocol.VersionNumber{version}}),
 				)
 				Expect(err).ToNot(HaveOccurred())
 				str, err := sess.AcceptUniStream(context.Background())

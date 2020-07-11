@@ -22,6 +22,7 @@ import (
 	"github.com/lucas-clemente/quic-go/http3"
 	"github.com/lucas-clemente/quic-go/internal/testdata"
 	"github.com/lucas-clemente/quic-go/internal/utils"
+	"github.com/lucas-clemente/quic-go/logging"
 	"github.com/lucas-clemente/quic-go/qlog"
 	"github.com/lucas-clemente/quic-go/quictrace"
 )
@@ -210,7 +211,7 @@ func main() {
 		quicConf.QuicTracer = tracer
 	}
 	if *enableQlog {
-		quicConf.Tracer = qlog.NewTracer(func(connID []byte) io.WriteCloser {
+		quicConf.Tracer = qlog.NewTracer(func(_ logging.Perspective, connID []byte) io.WriteCloser {
 			filename := fmt.Sprintf("server_%x.qlog", connID)
 			f, err := os.Create(filename)
 			if err != nil {

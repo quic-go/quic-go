@@ -19,6 +19,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/lucas-clemente/quic-go/logging"
+
 	"github.com/lucas-clemente/quic-go"
 	"github.com/lucas-clemente/quic-go/internal/utils"
 	"github.com/lucas-clemente/quic-go/qlog"
@@ -243,15 +245,7 @@ func getTLSClientConfig() *tls.Config {
 	return tlsClientConfig.Clone()
 }
 
-func getQuicConfigForClient(conf *quic.Config) *quic.Config {
-	return getQuicConfigForRole("client", conf)
-}
-
-func getQuicConfigForServer(conf *quic.Config) *quic.Config {
-	return getQuicConfigForRole("server", conf)
-}
-
-func getQuicConfigForRole(role string, conf *quic.Config) *quic.Config {
+func getQuicConfig(conf *quic.Config) *quic.Config {
 	if conf == nil {
 		conf = &quic.Config{}
 	} else {
@@ -260,7 +254,11 @@ func getQuicConfigForRole(role string, conf *quic.Config) *quic.Config {
 	if !enableQlog {
 		return conf
 	}
-	conf.Tracer = qlog.NewTracer(func(connectionID []byte) io.WriteCloser {
+	conf.Tracer = qlog.NewTracer(func(p logging.Perspective, connectionID []byte) io.WriteCloser {
+		role := "server"
+		if p == logging.PerspectiveClient {
+			role = "client"
+		}
 		filename := fmt.Sprintf("log_%x_%s.qlog", connectionID, role)
 		fmt.Fprintf(GinkgoWriter, "Creating %s.\n", filename)
 		f, err := os.Create(filename)

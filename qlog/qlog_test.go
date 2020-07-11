@@ -51,9 +51,8 @@ type entry struct {
 var _ = Describe("Tracing", func() {
 	Context("tracer", func() {
 		It("returns nil when there's no io.WriteCloser", func() {
-			t := NewTracer(func([]byte) io.WriteCloser { return nil })
-			Expect(t.TracerForClient(logging.ConnectionID{1, 2, 3, 4})).To(BeNil())
-			Expect(t.TracerForServer(logging.ConnectionID{1, 2, 3, 4})).To(BeNil())
+			t := NewTracer(func(logging.Perspective, []byte) io.WriteCloser { return nil })
+			Expect(t.TracerForConnection(logging.PerspectiveClient, logging.ConnectionID{1, 2, 3, 4})).To(BeNil())
 		})
 	})
 
@@ -65,8 +64,8 @@ var _ = Describe("Tracing", func() {
 
 		BeforeEach(func() {
 			buf = &bytes.Buffer{}
-			t := NewTracer(func([]byte) io.WriteCloser { return nopWriteCloser(buf) })
-			tracer = t.TracerForServer(logging.ConnectionID{0xde, 0xad, 0xbe, 0xef})
+			t := NewTracer(func(logging.Perspective, []byte) io.WriteCloser { return nopWriteCloser(buf) })
+			tracer = t.TracerForConnection(logging.PerspectiveServer, logging.ConnectionID{0xde, 0xad, 0xbe, 0xef})
 		})
 
 		It("exports a trace that has the right metadata", func() {

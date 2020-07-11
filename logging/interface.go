@@ -79,12 +79,11 @@ const (
 
 // A Tracer traces events.
 type Tracer interface {
-	// TracerForServer requests a new tracer for a connection that was accepted by the server.
+	// ConnectionTracer requests a new tracer for a connection.
+	// The ODCID is the original destination connection ID:
+	// The destination connection ID that the client used on the first Initial packet it sent on this connection.
 	// If nil is returned, tracing will be disabled for this connection.
-	TracerForServer(odcid ConnectionID) ConnectionTracer
-	// TracerForServer requests a new tracer for a connection that was dialed by the client.
-	// If nil is returned, tracing will be disabled for this connection.
-	TracerForClient(odcid ConnectionID) ConnectionTracer
+	TracerForConnection(p Perspective, odcid ConnectionID) ConnectionTracer
 }
 
 // A ConnectionTracer records events.

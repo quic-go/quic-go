@@ -20,26 +20,19 @@ import (
 const eventChanSize = 50
 
 type tracer struct {
-	getLogWriter func(connectionID []byte) io.WriteCloser
+	getLogWriter func(p logging.Perspective, connectionID []byte) io.WriteCloser
 }
 
 var _ logging.Tracer = &tracer{}
 
 // NewTracer creates a new qlog tracer.
-func NewTracer(getLogWriter func(connectionID []byte) io.WriteCloser) logging.Tracer {
+func NewTracer(getLogWriter func(p logging.Perspective, connectionID []byte) io.WriteCloser) logging.Tracer {
 	return &tracer{getLogWriter: getLogWriter}
 }
 
-func (t *tracer) TracerForServer(odcid protocol.ConnectionID) logging.ConnectionTracer {
-	if w := t.getLogWriter(odcid.Bytes()); w != nil {
-		return newConnectionTracer(w, protocol.PerspectiveServer, odcid)
-	}
-	return nil
-}
-
-func (t *tracer) TracerForClient(odcid protocol.ConnectionID) logging.ConnectionTracer {
-	if w := t.getLogWriter(odcid.Bytes()); w != nil {
-		return newConnectionTracer(w, protocol.PerspectiveClient, odcid)
+func (t *tracer) TracerForConnection(p logging.Perspective, odcid protocol.ConnectionID) logging.ConnectionTracer {
+	if w := t.getLogWriter(p, odcid.Bytes()); w != nil {
+		return newConnectionTracer(w, p, odcid)
 	}
 	return nil
 }

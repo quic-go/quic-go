@@ -26,7 +26,7 @@ var _ = Describe("Unidirectional Streams", func() {
 	BeforeEach(func() {
 		var err error
 		qconf = &quic.Config{Versions: []protocol.VersionNumber{protocol.VersionTLS}}
-		server, err = quic.ListenAddr("localhost:0", getTLSConfig(), getQuicConfigForServer(qconf))
+		server, err = quic.ListenAddr("localhost:0", getTLSConfig(), getQuicConfig(qconf))
 		Expect(err).ToNot(HaveOccurred())
 		serverAddr = fmt.Sprintf("localhost:%d", server.Addr().(*net.UDPAddr).Port)
 	})
@@ -81,7 +81,7 @@ var _ = Describe("Unidirectional Streams", func() {
 		client, err := quic.DialAddr(
 			serverAddr,
 			getTLSClientConfig(),
-			getQuicConfigForClient(qconf),
+			getQuicConfig(qconf),
 		)
 		Expect(err).ToNot(HaveOccurred())
 		runSendingPeer(client)
@@ -99,7 +99,7 @@ var _ = Describe("Unidirectional Streams", func() {
 		client, err := quic.DialAddr(
 			serverAddr,
 			getTLSClientConfig(),
-			getQuicConfigForClient(qconf),
+			getQuicConfig(qconf),
 		)
 		Expect(err).ToNot(HaveOccurred())
 		runReceivingPeer(client)
@@ -125,7 +125,7 @@ var _ = Describe("Unidirectional Streams", func() {
 		client, err := quic.DialAddr(
 			serverAddr,
 			getTLSClientConfig(),
-			getQuicConfigForClient(qconf),
+			getQuicConfig(qconf),
 		)
 		Expect(err).ToNot(HaveOccurred())
 		done2 := make(chan struct{})

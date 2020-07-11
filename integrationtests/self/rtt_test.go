@@ -23,7 +23,7 @@ var _ = Describe("non-zero RTT", func() {
 			ln, err := quic.ListenAddr(
 				"localhost:0",
 				getTLSConfig(),
-				getQuicConfigForServer(&quic.Config{Versions: []protocol.VersionNumber{version}}),
+				getQuicConfig(&quic.Config{Versions: []protocol.VersionNumber{version}}),
 			)
 			Expect(err).ToNot(HaveOccurred())
 			go func() {
@@ -43,7 +43,7 @@ var _ = Describe("non-zero RTT", func() {
 			sess, err := quic.DialAddr(
 				fmt.Sprintf("localhost:%d", port),
 				getTLSClientConfig(),
-				getQuicConfigForClient(&quic.Config{Versions: []protocol.VersionNumber{version}}),
+				getQuicConfig(&quic.Config{Versions: []protocol.VersionNumber{version}}),
 			)
 			Expect(err).ToNot(HaveOccurred())
 			str, err := sess.AcceptStream(context.Background())
@@ -79,7 +79,7 @@ var _ = Describe("non-zero RTT", func() {
 					sess, err := quic.DialAddr(
 						fmt.Sprintf("localhost:%d", proxy.LocalPort()),
 						getTLSClientConfig(),
-						getQuicConfigForClient(&quic.Config{Versions: []protocol.VersionNumber{version}}),
+						getQuicConfig(&quic.Config{Versions: []protocol.VersionNumber{version}}),
 					)
 					Expect(err).ToNot(HaveOccurred())
 					str, err := sess.AcceptStream(context.Background())

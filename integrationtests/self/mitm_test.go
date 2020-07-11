@@ -63,7 +63,7 @@ var _ = Describe("MITM test", func() {
 			}
 
 			BeforeEach(func() {
-				serverConfig = getQuicConfigForServer(&quic.Config{
+				serverConfig = getQuicConfig(&quic.Config{
 					Versions:           []protocol.VersionNumber{version},
 					ConnectionIDLength: connIDLen,
 				})
@@ -128,7 +128,7 @@ var _ = Describe("MITM test", func() {
 							raddr,
 							fmt.Sprintf("localhost:%d", proxy.LocalPort()),
 							getTLSClientConfig(),
-							getQuicConfigForClient(&quic.Config{
+							getQuicConfig(&quic.Config{
 								Versions:           []protocol.VersionNumber{version},
 								ConnectionIDLength: connIDLen,
 							}),
@@ -174,7 +174,7 @@ var _ = Describe("MITM test", func() {
 						raddr,
 						fmt.Sprintf("localhost:%d", proxy.LocalPort()),
 						getTLSClientConfig(),
-						getQuicConfigForClient(&quic.Config{
+						getQuicConfig(&quic.Config{
 							Versions:           []protocol.VersionNumber{version},
 							ConnectionIDLength: connIDLen,
 						}),
@@ -335,7 +335,7 @@ var _ = Describe("MITM test", func() {
 						raddr,
 						fmt.Sprintf("localhost:%d", proxy.LocalPort()),
 						getTLSClientConfig(),
-						getQuicConfigForClient(&quic.Config{
+						getQuicConfig(&quic.Config{
 							Versions:           []protocol.VersionNumber{version},
 							ConnectionIDLength: connIDLen,
 							HandshakeTimeout:   2 * time.Second,

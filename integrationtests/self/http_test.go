@@ -77,7 +77,7 @@ var _ = Describe("HTTP tests", func() {
 				Handler:   mux,
 				TLSConfig: testdata.GetTLSConfig(),
 			},
-			QuicConfig: getQuicConfigForServer(&quic.Config{Versions: versions}),
+			QuicConfig: getQuicConfig(&quic.Config{Versions: versions}),
 		}
 
 		addr, err := net.ResolveUDPAddr("udp", "0.0.0.0:0")
@@ -111,7 +111,7 @@ var _ = Describe("HTTP tests", func() {
 							RootCAs: testdata.GetRootCA(),
 						},
 						DisableCompression: true,
-						QuicConfig: getQuicConfigForClient(&quic.Config{
+						QuicConfig: getQuicConfig(&quic.Config{
 							Versions:       []protocol.VersionNumber{version},
 							MaxIdleTimeout: 10 * time.Second,
 						}),

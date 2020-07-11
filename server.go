@@ -453,7 +453,7 @@ func (s *baseServer) createNewSession(
 			if origDestConnID.Len() > 0 {
 				connID = origDestConnID
 			}
-			tracer = s.config.Tracer.TracerForServer(connID)
+			tracer = s.config.Tracer.TracerForConnection(protocol.PerspectiveServer, connID)
 		}
 		sess = s.newSession(
 			&conn{pconn: s.conn, currentAddr: remoteAddr},

@@ -68,7 +68,7 @@ var _ = Describe("Client", func() {
 		originalClientSessConstructor = newClientSession
 		tracer = mocks.NewMockConnectionTracer(mockCtrl)
 		tr := mocks.NewMockTracer(mockCtrl)
-		tr.EXPECT().TracerForClient(gomock.Any()).Return(tracer).MaxTimes(1)
+		tr.EXPECT().TracerForConnection(protocol.PerspectiveClient, gomock.Any()).Return(tracer).MaxTimes(1)
 		config = &Config{Tracer: tr}
 		Eventually(areSessionsRunning).Should(BeFalse())
 		// sess = NewMockQuicSession(mockCtrl)
