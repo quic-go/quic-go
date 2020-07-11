@@ -79,7 +79,11 @@ const (
 
 // A Tracer traces events.
 type Tracer interface {
+	// TracerForServer requests a new tracer for a connection that was accepted by the server.
+	// If nil is returned, tracing will be disabled for this connection.
 	TracerForServer(odcid ConnectionID) ConnectionTracer
+	// TracerForServer requests a new tracer for a connection that was dialed by the client.
+	// If nil is returned, tracing will be disabled for this connection.
 	TracerForClient(odcid ConnectionID) ConnectionTracer
 }
 
@@ -89,13 +93,13 @@ type ConnectionTracer interface {
 	ClosedConnection(CloseReason)
 	SentTransportParameters(*TransportParameters)
 	ReceivedTransportParameters(*TransportParameters)
-	SentPacket(hdr *ExtendedHeader, packetSize ByteCount, ack *AckFrame, frames []Frame)
+	SentPacket(hdr *ExtendedHeader, size ByteCount, ack *AckFrame, frames []Frame)
 	ReceivedVersionNegotiationPacket(*Header, []VersionNumber)
 	ReceivedRetry(*Header)
-	ReceivedPacket(hdr *ExtendedHeader, packetSize ByteCount, frames []Frame)
+	ReceivedPacket(hdr *ExtendedHeader, size ByteCount, frames []Frame)
 	BufferedPacket(PacketType)
 	DroppedPacket(PacketType, ByteCount, PacketDropReason)
-	UpdatedMetrics(rttStats *RTTStats, cwnd ByteCount, bytesInFLight ByteCount, packetsInFlight int)
+	UpdatedMetrics(rttStats *RTTStats, cwnd, bytesInFlight ByteCount, packetsInFlight int)
 	LostPacket(EncryptionLevel, PacketNumber, PacketLossReason)
 	UpdatedPTOCount(value uint32)
 	UpdatedKeyFromTLS(EncryptionLevel, Perspective)
