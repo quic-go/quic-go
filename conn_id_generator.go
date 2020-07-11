@@ -17,7 +17,7 @@ type connIDGenerator struct {
 	initialClientDestConnID protocol.ConnectionID
 
 	addConnectionID        func(protocol.ConnectionID)
-	getStatelessResetToken func(protocol.ConnectionID) [16]byte
+	getStatelessResetToken func(protocol.ConnectionID) protocol.StatelessResetToken
 	removeConnectionID     func(protocol.ConnectionID)
 	retireConnectionID     func(protocol.ConnectionID)
 	replaceWithClosed      func(protocol.ConnectionID, packetHandler)
@@ -28,7 +28,7 @@ func newConnIDGenerator(
 	initialConnectionID protocol.ConnectionID,
 	initialClientDestConnID protocol.ConnectionID, // nil for the client
 	addConnectionID func(protocol.ConnectionID),
-	getStatelessResetToken func(protocol.ConnectionID) [16]byte,
+	getStatelessResetToken func(protocol.ConnectionID) protocol.StatelessResetToken,
 	removeConnectionID func(protocol.ConnectionID),
 	retireConnectionID func(protocol.ConnectionID),
 	replaceWithClosed func(protocol.ConnectionID, packetHandler),

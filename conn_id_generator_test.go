@@ -22,8 +22,8 @@ var _ = Describe("Connection ID Generator", func() {
 	initialConnID := protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7}
 	initialClientDestConnID := protocol.ConnectionID{0xa, 0xb, 0xc, 0xd, 0xe}
 
-	connIDToToken := func(c protocol.ConnectionID) [16]byte {
-		return [16]byte{c[0], c[0], c[0], c[0], c[0], c[0], c[0], c[0], c[0], c[0], c[0], c[0], c[0], c[0], c[0], c[0]}
+	connIDToToken := func(c protocol.ConnectionID) protocol.StatelessResetToken {
+		return protocol.StatelessResetToken{c[0], c[0], c[0], c[0], c[0], c[0], c[0], c[0], c[0], c[0], c[0], c[0], c[0], c[0], c[0], c[0]}
 	}
 
 	BeforeEach(func() {

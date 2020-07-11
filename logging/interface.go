@@ -25,6 +25,8 @@ type (
 	PacketNumber = protocol.PacketNumber
 	// The Perspective is the role of a QUIC endpoint (client or server).
 	Perspective = protocol.Perspective
+	// A StatelessResetToken is a stateless reset token.
+	StatelessResetToken = protocol.StatelessResetToken
 	// The StreamID is the stream ID.
 	StreamID = protocol.StreamID
 	// The StreamNum is the number of the stream.

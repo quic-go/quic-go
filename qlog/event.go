@@ -179,7 +179,7 @@ func (e eventVersionNegotiationReceived) MarshalJSONObject(enc *gojay.Encoder) {
 }
 
 type eventStatelessResetReceived struct {
-	Token *[16]byte
+	Token protocol.StatelessResetToken
 }
 
 func (e eventStatelessResetReceived) Category() category { return categoryTransport }
@@ -188,7 +188,7 @@ func (e eventStatelessResetReceived) IsNil() bool        { return false }
 
 func (e eventStatelessResetReceived) MarshalJSONObject(enc *gojay.Encoder) {
 	enc.StringKey("packet_type", packetType(logging.PacketTypeStatelessReset).String())
-	enc.StringKey("stateless_reset_token", fmt.Sprintf("%x", *e.Token))
+	enc.StringKey("stateless_reset_token", fmt.Sprintf("%x", e.Token))
 }
 
 type eventPacketBuffered struct {
@@ -332,7 +332,7 @@ type eventTransportParameters struct {
 	InitialSourceConnectionID       protocol.ConnectionID
 	RetrySourceConnectionID         *protocol.ConnectionID
 
-	StatelessResetToken     *[16]byte
+	StatelessResetToken     *protocol.StatelessResetToken
 	DisableActiveMigration  bool
 	MaxIdleTimeout          time.Duration
 	MaxUDPPayloadSize       protocol.ByteCount

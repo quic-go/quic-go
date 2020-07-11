@@ -171,7 +171,7 @@ func (t *connectionTracer) ClosedConnection(r logging.CloseReason) {
 		t.recordEvent(time.Now(), &eventConnectionClosed{Reason: timeoutReason(reason)})
 	} else if token, ok := r.StatelessReset(); ok {
 		t.recordEvent(time.Now(), &eventStatelessResetReceived{
-			Token: &token,
+			Token: token,
 		})
 	}
 }

@@ -214,7 +214,7 @@ func getFrames() []wire.Frame {
 
 	seq1 := getRandomNumber()
 	seq2 := getRandomNumber()
-	var token1, token2 [16]byte
+	var token1, token2 protocol.StatelessResetToken
 	copy(token1[:], getRandomData(16))
 	copy(token2[:], getRandomData(16))
 	frames = append(frames, []wire.Frame{

@@ -81,7 +81,7 @@ type baseServer struct {
 		protocol.ConnectionID, /* client dest connection ID */
 		protocol.ConnectionID, /* destination connection ID */
 		protocol.ConnectionID, /* source connection ID */
-		[16]byte,
+		protocol.StatelessResetToken,
 		*Config,
 		*tls.Config,
 		*handshake.TokenGenerator,

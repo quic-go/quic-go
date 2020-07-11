@@ -43,6 +43,9 @@ const MaxByteCount = ByteCount(1<<62 - 1)
 // An ApplicationErrorCode is an application-defined error code.
 type ApplicationErrorCode uint64
 
+// A StatelessResetToken is a stateless reset token.
+type StatelessResetToken [16]byte
+
 // MaxReceivePacketSize maximum packet size of any QUIC packet, based on
 // ethernet's max size, minus the IP and UDP headers. IPv6 has a 40 byte header,
 // UDP adds an additional 8 bytes.  This is a total overhead of 48 bytes.
