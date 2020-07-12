@@ -51,7 +51,7 @@ var _ = Describe("Timeout tests", func() {
 			_, err := quic.DialAddr(
 				"localhost:12345",
 				getTLSClientConfig(),
-				getQuicConfigForClient(&quic.Config{HandshakeTimeout: 10 * time.Millisecond}),
+				getQuicConfig(&quic.Config{HandshakeTimeout: 10 * time.Millisecond}),
 			)
 			errChan <- err
 		}()
@@ -69,7 +69,7 @@ var _ = Describe("Timeout tests", func() {
 				ctx,
 				"localhost:12345",
 				getTLSClientConfig(),
-				getQuicConfigForClient(nil),
+				getQuicConfig(nil),
 			)
 			errChan <- err
 		}()
@@ -85,7 +85,7 @@ var _ = Describe("Timeout tests", func() {
 		server, err := quic.ListenAddr(
 			"localhost:0",
 			getTLSConfig(),
-			getQuicConfigForServer(nil),
+			getQuicConfig(nil),
 		)
 		Expect(err).ToNot(HaveOccurred())
 		defer server.Close()
@@ -114,7 +114,7 @@ var _ = Describe("Timeout tests", func() {
 		sess, err := quic.DialAddr(
 			fmt.Sprintf("localhost:%d", proxy.LocalPort()),
 			getTLSClientConfig(),
-			getQuicConfigForClient(&quic.Config{MaxIdleTimeout: idleTimeout}),
+			getQuicConfig(&quic.Config{MaxIdleTimeout: idleTimeout}),
 		)
 		Expect(err).ToNot(HaveOccurred())
 		strIn, err := sess.AcceptStream(context.Background())
@@ -164,7 +164,7 @@ var _ = Describe("Timeout tests", func() {
 			server, err := quic.ListenAddr(
 				"localhost:0",
 				getTLSConfig(),
-				getQuicConfigForServer(nil),
+				getQuicConfig(nil),
 			)
 			Expect(err).ToNot(HaveOccurred())
 			defer server.Close()
@@ -181,7 +181,7 @@ var _ = Describe("Timeout tests", func() {
 			sess, err := quic.DialAddr(
 				fmt.Sprintf("localhost:%d", server.Addr().(*net.UDPAddr).Port),
 				getTLSClientConfig(),
-				getQuicConfigForClient(&quic.Config{MaxIdleTimeout: idleTimeout}),
+				getQuicConfig(&quic.Config{MaxIdleTimeout: idleTimeout}),
 			)
 			Expect(err).ToNot(HaveOccurred())
 			startTime := time.Now()
@@ -209,7 +209,7 @@ var _ = Describe("Timeout tests", func() {
 			server, err := quic.ListenAddr(
 				"localhost:0",
 				getTLSConfig(),
-				getQuicConfigForServer(nil),
+				getQuicConfig(nil),
 			)
 			Expect(err).ToNot(HaveOccurred())
 			defer server.Close()
@@ -226,7 +226,7 @@ var _ = Describe("Timeout tests", func() {
 			sess, err := quic.DialAddr(
 				fmt.Sprintf("localhost:%d", server.Addr().(*net.UDPAddr).Port),
 				getTLSClientConfig(),
-				getQuicConfigForClient(&quic.Config{MaxIdleTimeout: idleTimeout}),
+				getQuicConfig(&quic.Config{MaxIdleTimeout: idleTimeout}),
 			)
 			Expect(err).ToNot(HaveOccurred())
 
@@ -266,7 +266,7 @@ var _ = Describe("Timeout tests", func() {
 		server, err := quic.ListenAddr(
 			"localhost:0",
 			getTLSConfig(),
-			getQuicConfigForServer(nil),
+			getQuicConfig(nil),
 		)
 		Expect(err).ToNot(HaveOccurred())
 		defer server.Close()
@@ -294,7 +294,7 @@ var _ = Describe("Timeout tests", func() {
 		sess, err := quic.DialAddr(
 			fmt.Sprintf("localhost:%d", proxy.LocalPort()),
 			getTLSClientConfig(),
-			getQuicConfigForClient(&quic.Config{
+			getQuicConfig(&quic.Config{
 				MaxIdleTimeout: idleTimeout,
 				KeepAlive:      true,
 			}),
@@ -357,7 +357,7 @@ var _ = Describe("Timeout tests", func() {
 			ln, err := quic.Listen(
 				&faultyConn{PacketConn: conn, Timeout: time.Now().Add(timeout)},
 				getTLSConfig(),
-				getQuicConfigForServer(nil),
+				getQuicConfig(nil),
 			)
 			Expect(err).ToNot(HaveOccurred())
 
@@ -380,7 +380,7 @@ var _ = Describe("Timeout tests", func() {
 				sess, err := quic.DialAddr(
 					fmt.Sprintf("localhost:%d", proxy.LocalPort()),
 					getTLSClientConfig(),
-					getQuicConfigForClient(&quic.Config{
+					getQuicConfig(&quic.Config{
 						HandshakeTimeout: time.Second,
 						MaxIdleTimeout:   time.Second,
 					}),
@@ -409,7 +409,7 @@ var _ = Describe("Timeout tests", func() {
 			ln, err := quic.ListenAddr(
 				"localhost:0",
 				getTLSConfig(),
-				getQuicConfigForServer(&quic.Config{
+				getQuicConfig(&quic.Config{
 					HandshakeTimeout: time.Second,
 					MaxIdleTimeout:   time.Second,
 					KeepAlive:        true,
@@ -450,7 +450,7 @@ var _ = Describe("Timeout tests", func() {
 					proxy.LocalAddr(),
 					"localhost",
 					getTLSClientConfig(),
-					getQuicConfigForClient(nil),
+					getQuicConfig(nil),
 				)
 				if err != nil {
 					clientErrChan <- err

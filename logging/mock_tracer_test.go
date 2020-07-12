@@ -33,30 +33,16 @@ func (m *MockTracer) EXPECT() *MockTracerMockRecorder {
 	return m.recorder
 }
 
-// TracerForClient mocks base method
-func (m *MockTracer) TracerForClient(arg0 protocol.ConnectionID) ConnectionTracer {
+// TracerForConnection mocks base method
+func (m *MockTracer) TracerForConnection(arg0 protocol.Perspective, arg1 protocol.ConnectionID) ConnectionTracer {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "TracerForClient", arg0)
+	ret := m.ctrl.Call(m, "TracerForConnection", arg0, arg1)
 	ret0, _ := ret[0].(ConnectionTracer)
 	return ret0
 }
 
-// TracerForClient indicates an expected call of TracerForClient
-func (mr *MockTracerMockRecorder) TracerForClient(arg0 interface{}) *gomock.Call {
+// TracerForConnection indicates an expected call of TracerForConnection
+func (mr *MockTracerMockRecorder) TracerForConnection(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "TracerForClient", reflect.TypeOf((*MockTracer)(nil).TracerForClient), arg0)
-}
-
-// TracerForServer mocks base method
-func (m *MockTracer) TracerForServer(arg0 protocol.ConnectionID) ConnectionTracer {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "TracerForServer", arg0)
-	ret0, _ := ret[0].(ConnectionTracer)
-	return ret0
-}
-
-// TracerForServer indicates an expected call of TracerForServer
-func (mr *MockTracerMockRecorder) TracerForServer(arg0 interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "TracerForServer", reflect.TypeOf((*MockTracer)(nil).TracerForServer), arg0)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "TracerForConnection", reflect.TypeOf((*MockTracer)(nil).TracerForConnection), arg0, arg1)
 }

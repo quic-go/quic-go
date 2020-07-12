@@ -22,20 +22,10 @@ func NewMultiplexedTracer(tracers ...Tracer) Tracer {
 	return &tracerMultiplexer{tracers}
 }
 
-func (m *tracerMultiplexer) TracerForServer(odcid ConnectionID) ConnectionTracer {
+func (m *tracerMultiplexer) TracerForConnection(p Perspective, odcid ConnectionID) ConnectionTracer {
 	var connTracers []ConnectionTracer
 	for _, t := range m.tracers {
-		if ct := t.TracerForServer(odcid); ct != nil {
-			connTracers = append(connTracers, ct)
-		}
-	}
-	return newConnectionMultiplexer(connTracers...)
-}
-
-func (m *tracerMultiplexer) TracerForClient(odcid ConnectionID) ConnectionTracer {
-	var connTracers []ConnectionTracer
-	for _, t := range m.tracers {
-		if ct := t.TracerForClient(odcid); ct != nil {
+		if ct := t.TracerForConnection(p, odcid); ct != nil {
 			connTracers = append(connTracers, ct)
 		}
 	}

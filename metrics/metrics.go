@@ -44,12 +44,8 @@ var _ logging.Tracer = &tracer{}
 // NewTracer creates a new metrics tracer.
 func NewTracer() logging.Tracer { return &tracer{} }
 
-func (t *tracer) TracerForServer(logging.ConnectionID) logging.ConnectionTracer {
-	return newConnTracer(t, logging.PerspectiveServer)
-}
-
-func (t *tracer) TracerForClient(logging.ConnectionID) logging.ConnectionTracer {
-	return newConnTracer(t, logging.PerspectiveClient)
+func (t *tracer) TracerForConnection(p logging.Perspective, _ logging.ConnectionID) logging.ConnectionTracer {
+	return newConnTracer(t, p)
 }
 
 type connTracer struct {

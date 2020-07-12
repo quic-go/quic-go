@@ -176,7 +176,7 @@ func dialContext(
 	c.packetHandlers = packetHandlers
 
 	if c.config.Tracer != nil {
-		c.tracer = c.config.Tracer.TracerForClient(c.destConnID)
+		c.tracer = c.config.Tracer.TracerForConnection(protocol.PerspectiveClient, c.destConnID)
 	}
 	if err := c.dial(ctx); err != nil {
 		return nil, err

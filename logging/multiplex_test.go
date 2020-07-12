@@ -23,24 +23,18 @@ var _ = Describe("Tracing", func() {
 			tracer = NewMultiplexedTracer(tr1, tr2)
 		})
 
-		It("multiplexes the TracerForServer call", func() {
-			tr1.EXPECT().TracerForServer(ConnectionID{1, 2, 3})
-			tr2.EXPECT().TracerForServer(ConnectionID{1, 2, 3})
-			tracer.TracerForServer(ConnectionID{1, 2, 3})
-		})
-
-		It("multiplexes the TracerForClient call", func() {
-			tr1.EXPECT().TracerForClient(ConnectionID{1, 2, 3})
-			tr2.EXPECT().TracerForClient(ConnectionID{1, 2, 3})
-			tracer.TracerForClient(ConnectionID{1, 2, 3})
+		It("multiplexes the TracerForConnection call", func() {
+			tr1.EXPECT().TracerForConnection(PerspectiveClient, ConnectionID{1, 2, 3})
+			tr2.EXPECT().TracerForConnection(PerspectiveClient, ConnectionID{1, 2, 3})
+			tracer.TracerForConnection(PerspectiveClient, ConnectionID{1, 2, 3})
 		})
 
 		It("uses multiple connection tracers", func() {
 			ctr1 := NewMockConnectionTracer(mockCtrl)
 			ctr2 := NewMockConnectionTracer(mockCtrl)
-			tr1.EXPECT().TracerForClient(ConnectionID{1, 2, 3}).Return(ctr1)
-			tr2.EXPECT().TracerForClient(ConnectionID{1, 2, 3}).Return(ctr2)
-			tr := tracer.TracerForClient(ConnectionID{1, 2, 3})
+			tr1.EXPECT().TracerForConnection(PerspectiveServer, ConnectionID{1, 2, 3}).Return(ctr1)
+			tr2.EXPECT().TracerForConnection(PerspectiveServer, ConnectionID{1, 2, 3}).Return(ctr2)
+			tr := tracer.TracerForConnection(PerspectiveServer, ConnectionID{1, 2, 3})
 			ctr1.EXPECT().LossTimerCanceled()
 			ctr2.EXPECT().LossTimerCanceled()
 			tr.LossTimerCanceled()
@@ -48,17 +42,17 @@ var _ = Describe("Tracing", func() {
 
 		It("handles tracers that return a nil ConnectionTracer", func() {
 			ctr1 := NewMockConnectionTracer(mockCtrl)
-			tr1.EXPECT().TracerForClient(ConnectionID{1, 2, 3}).Return(ctr1)
-			tr2.EXPECT().TracerForClient(ConnectionID{1, 2, 3})
-			tr := tracer.TracerForClient(ConnectionID{1, 2, 3})
+			tr1.EXPECT().TracerForConnection(PerspectiveServer, ConnectionID{1, 2, 3}).Return(ctr1)
+			tr2.EXPECT().TracerForConnection(PerspectiveServer, ConnectionID{1, 2, 3})
+			tr := tracer.TracerForConnection(PerspectiveServer, ConnectionID{1, 2, 3})
 			ctr1.EXPECT().LossTimerCanceled()
 			tr.LossTimerCanceled()
 		})
 
 		It("returns nil when all tracers return a nil ConnectionTracer", func() {
-			tr1.EXPECT().TracerForClient(ConnectionID{1, 2, 3})
-			tr2.EXPECT().TracerForClient(ConnectionID{1, 2, 3})
-			Expect(tracer.TracerForClient(ConnectionID{1, 2, 3})).To(BeNil())
+			tr1.EXPECT().TracerForConnection(PerspectiveClient, ConnectionID{1, 2, 3})
+			tr2.EXPECT().TracerForConnection(PerspectiveClient, ConnectionID{1, 2, 3})
+			Expect(tracer.TracerForConnection(PerspectiveClient, ConnectionID{1, 2, 3})).To(BeNil())
 		})
 	})
 
