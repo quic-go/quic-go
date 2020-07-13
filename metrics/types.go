@@ -44,3 +44,24 @@ func (r packetLossReason) String() string {
 		panic("unknown packet loss reason")
 	}
 }
+
+type packetType logging.PacketType
+
+func (t packetType) String() string {
+	switch logging.PacketType(t) {
+	case logging.PacketTypeInitial:
+		return "initial"
+	case logging.PacketTypeHandshake:
+		return "handshake"
+	case logging.PacketTypeVersionNegotiation:
+		return "version_negotiation"
+	case logging.PacketTypeRetry:
+		return "retry"
+	case logging.PacketType0RTT:
+		return "0-RTT"
+	case logging.PacketType1RTT:
+		return "1-RTT"
+	default:
+		panic("unknown packet type")
+	}
+}
