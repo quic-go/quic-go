@@ -15,12 +15,15 @@ import (
 // Measures
 var (
 	connections = stats.Int64("quic-go/connections", "number of QUIC connections", stats.UnitDimensionless)
+	lostPackets = stats.Int64("quic-go/lost-packets", "number of packets declared lost", stats.UnitDimensionless)
 )
 
 // Tags
 var (
-	keyPerspective, _ = tag.NewKey("perspective")
-	keyIPVersion, _   = tag.NewKey("ip_version")
+	keyPerspective, _      = tag.NewKey("perspective")
+	keyIPVersion, _        = tag.NewKey("ip_version")
+	keyEncryptionLevel, _  = tag.NewKey("encryption_level")
+	keyPacketLossReason, _ = tag.NewKey("packet_loss_reason")
 )
 
 // Views
@@ -30,11 +33,17 @@ var (
 		TagKeys:     []tag.Key{keyPerspective, keyIPVersion},
 		Aggregation: view.Count(),
 	}
+	LostPacketsView = &view.View{
+		Measure:     lostPackets,
+		TagKeys:     []tag.Key{keyEncryptionLevel, keyPacketLossReason},
+		Aggregation: view.Count(),
+	}
 )
 
 // DefaultViews collects all OpenCensus views for metric gathering purposes
 var DefaultViews = []*view.View{
 	ConnectionsView,
+	LostPacketsView,
 }
 
 type tracer struct{}
@@ -98,7 +107,15 @@ func (t *connTracer) ReceivedPacket(*logging.ExtendedHeader, logging.ByteCount, 
 func (t *connTracer) BufferedPacket(logging.PacketType)                                             {}
 func (t *connTracer) DroppedPacket(logging.PacketType, logging.ByteCount, logging.PacketDropReason) {}
 func (t *connTracer) UpdatedMetrics(*logging.RTTStats, logging.ByteCount, logging.ByteCount, int)   {}
-func (t *connTracer) LostPacket(logging.EncryptionLevel, logging.PacketNumber, logging.PacketLossReason) {
+func (t *connTracer) LostPacket(encLevel logging.EncryptionLevel, _ logging.PacketNumber, reason logging.PacketLossReason) {
+	stats.RecordWithTags(
+		context.Background(),
+		[]tag.Mutator{
+			tag.Upsert(keyEncryptionLevel, encryptionLevel(encLevel).String()),
+			tag.Upsert(keyPacketLossReason, packetLossReason(reason).String()),
+		},
+		lostPackets.M(1),
+	)
 }
 func (t *connTracer) UpdatedPTOCount(value uint32)                                       {}
 func (t *connTracer) UpdatedKeyFromTLS(logging.EncryptionLevel, logging.Perspective)     {}
