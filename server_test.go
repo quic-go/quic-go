@@ -14,6 +14,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/lucas-clemente/quic-go/internal/mocks"
+
 	"github.com/lucas-clemente/quic-go/internal/handshake"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/internal/qerr"
@@ -60,8 +62,9 @@ var _ = Describe("Server", func() {
 		data = data[:len(data)+16]
 		sealer.EncryptHeader(data[n:n+16], &data[0], data[n-4:n])
 		return &receivedPacket{
-			data:   data,
-			buffer: buffer,
+			remoteAddr: &net.UDPAddr{IP: net.IPv4(4, 5, 6, 7), Port: 456},
+			data:       data,
+			buffer:     buffer,
 		}
 	}
 
@@ -181,12 +184,14 @@ var _ = Describe("Server", func() {
 
 	Context("server accepting sessions that completed the handshake", func() {
 		var (
-			serv *baseServer
-			phm  *MockPacketHandlerManager
+			serv   *baseServer
+			phm    *MockPacketHandlerManager
+			tracer *mocks.MockTracer
 		)
 
 		BeforeEach(func() {
-			ln, err := Listen(conn, tlsConf, nil)
+			tracer = mocks.NewMockTracer(mockCtrl)
+			ln, err := Listen(conn, tlsConf, &Config{Tracer: tracer})
 			Expect(err).ToNot(HaveOccurred())
 			serv = ln.(*baseServer)
 			phm = NewMockPacketHandlerManager(mockCtrl)
@@ -200,46 +205,39 @@ var _ = Describe("Server", func() {
 
 		Context("handling packets", func() {
 			It("drops Initial packets with a too short connection ID", func() {
-				serv.handlePacket(getPacket(&wire.Header{
+				p := getPacket(&wire.Header{
 					IsLongHeader:     true,
 					Type:             protocol.PacketTypeInitial,
 					DestConnectionID: protocol.ConnectionID{1, 2, 3, 4},
 					Version:          serv.config.Versions[0],
-				}, nil))
+				}, nil)
+				tracer.EXPECT().DroppedPacket(p.remoteAddr, logging.PacketTypeInitial, p.Size(), logging.PacketDropUnexpectedPacket)
+				serv.handlePacket(p)
 				Consistently(conn.dataWritten).ShouldNot(Receive())
 			})
 
 			It("drops too small Initial", func() {
-				serv.handlePacket(getPacket(&wire.Header{
+				p := getPacket(&wire.Header{
 					IsLongHeader:     true,
 					Type:             protocol.PacketTypeInitial,
 					DestConnectionID: protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8},
 					Version:          serv.config.Versions[0],
 				}, make([]byte, protocol.MinInitialPacketSize-100),
-				))
-				Consistently(conn.dataWritten).ShouldNot(Receive())
-			})
-
-			It("drops packets with a too short connection ID", func() {
-				serv.handlePacket(getPacket(&wire.Header{
-					IsLongHeader:     true,
-					Type:             protocol.PacketTypeInitial,
-					SrcConnectionID:  protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8},
-					DestConnectionID: protocol.ConnectionID{1, 2, 3, 4},
-					Version:          serv.config.Versions[0],
-				}, make([]byte, protocol.MinInitialPacketSize)))
+				)
+				tracer.EXPECT().DroppedPacket(p.remoteAddr, logging.PacketTypeInitial, p.Size(), logging.PacketDropUnexpectedPacket)
+				serv.handlePacket(p)
 				Consistently(conn.dataWritten).ShouldNot(Receive())
 			})
 
 			It("drops non-Initial packets", func() {
-				serv.handlePacket(getPacket(
-					&wire.Header{
-						IsLongHeader: true,
-						Type:         protocol.PacketTypeHandshake,
-						Version:      serv.config.Versions[0],
-					},
-					[]byte("invalid"),
-				))
+				p := getPacket(&wire.Header{
+					IsLongHeader: true,
+					Type:         protocol.PacketTypeHandshake,
+					Version:      serv.config.Versions[0],
+				}, []byte("invalid"))
+				tracer.EXPECT().DroppedPacket(p.remoteAddr, logging.PacketTypeHandshake, p.Size(), logging.PacketDropUnexpectedPacket)
+				serv.handlePacket(p)
+				Consistently(conn.dataWritten).ShouldNot(Receive())
 			})
 
 			It("decodes the token from the Token field", func() {
@@ -321,6 +319,7 @@ var _ = Describe("Server", func() {
 					fn()
 					return true
 				})
+				tracer.EXPECT().TracerForConnection(protocol.PerspectiveServer, protocol.ConnectionID{0xde, 0xad, 0xc0, 0xde})
 				sess := NewMockQuicSession(mockCtrl)
 				serv.newSession = func(
 					_ connection,
@@ -466,6 +465,7 @@ var _ = Describe("Server", func() {
 				packet := getPacket(hdr, make([]byte, protocol.MinInitialPacketSize))
 				packet.data[len(packet.data)-10] ^= 0xff // corrupt the packet
 				packet.remoteAddr = &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 1337}
+				tracer.EXPECT().DroppedPacket(packet.remoteAddr, logging.PacketTypeInitial, packet.Size(), logging.PacketDropPayloadDecryptError)
 				serv.handlePacket(packet)
 				Consistently(conn.dataWritten).ShouldNot(Receive())
 			})
@@ -494,6 +494,7 @@ var _ = Describe("Server", func() {
 					fn()
 					return true
 				})
+				tracer.EXPECT().TracerForConnection(protocol.PerspectiveServer, protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8, 9, 10})
 
 				sess := NewMockQuicSession(mockCtrl)
 				serv.newSession = func(
@@ -592,6 +593,7 @@ var _ = Describe("Server", func() {
 					fn()
 					return true
 				})
+				tracer.EXPECT().TracerForConnection(protocol.PerspectiveServer, gomock.Any())
 				Expect(serv.handlePacketImpl(initialPacket)).To(BeTrue())
 				Expect(createdSession).To(BeTrue())
 			})
@@ -602,6 +604,7 @@ var _ = Describe("Server", func() {
 					fn()
 					return true
 				}).AnyTimes()
+				tracer.EXPECT().TracerForConnection(protocol.PerspectiveServer, gomock.Any()).AnyTimes()
 
 				serv.config.AcceptToken = func(net.Addr, *Token) bool { return true }
 				acceptSession := make(chan struct{})
@@ -633,7 +636,9 @@ var _ = Describe("Server", func() {
 					return sess
 				}
 
-				serv.handlePacket(getInitial(protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8}))
+				p := getInitial(protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8})
+				serv.handlePacket(p)
+				tracer.EXPECT().DroppedPacket(p.remoteAddr, logging.PacketTypeNotDetermined, p.Size(), logging.PacketDropDOSPrevention).MinTimes(1)
 				var wg sync.WaitGroup
 				for i := 0; i < 3*protocol.MaxServerUnprocessedPackets; i++ {
 					wg.Add(1)
@@ -719,6 +724,7 @@ var _ = Describe("Server", func() {
 					fn()
 					return true
 				}).Times(protocol.MaxAcceptQueueSize)
+				tracer.EXPECT().TracerForConnection(protocol.PerspectiveServer, gomock.Any()).Times(protocol.MaxAcceptQueueSize)
 
 				var wg sync.WaitGroup
 				wg.Add(protocol.MaxAcceptQueueSize)
@@ -784,6 +790,7 @@ var _ = Describe("Server", func() {
 					fn()
 					return true
 				})
+				tracer.EXPECT().TracerForConnection(protocol.PerspectiveServer, gomock.Any())
 
 				serv.handlePacket(p)
 				Consistently(conn.dataWritten).ShouldNot(Receive())
@@ -887,6 +894,7 @@ var _ = Describe("Server", func() {
 					fn()
 					return true
 				})
+				tracer.EXPECT().TracerForConnection(protocol.PerspectiveServer, gomock.Any())
 				serv.createNewSession(&net.UDPAddr{}, nil, nil, nil, nil, nil, protocol.VersionWhatever)
 				Consistently(done).ShouldNot(BeClosed())
 				cancel() // complete the handshake

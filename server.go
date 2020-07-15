@@ -178,7 +178,7 @@ func listen(conn net.PacketConn, tlsConf *tls.Config, config *Config, acceptEarl
 		}
 	}
 
-	sessionHandler, err := getMultiplexer().AddConn(conn, config.ConnectionIDLength, config.StatelessResetKey)
+	sessionHandler, err := getMultiplexer().AddConn(conn, config.ConnectionIDLength, config.StatelessResetKey, config.Tracer)
 	if err != nil {
 		return nil, err
 	}
@@ -307,7 +307,10 @@ func (s *baseServer) handlePacket(p *receivedPacket) {
 	select {
 	case s.receivedPackets <- p:
 	default:
-		s.logger.Debugf("Dropping packet from %s (%d bytes). Server receive queue full.", p.remoteAddr, len(p.data))
+		s.logger.Debugf("Dropping packet from %s (%d bytes). Server receive queue full.", p.remoteAddr, p.Size())
+		if s.config.Tracer != nil {
+			s.config.Tracer.DroppedPacket(p.remoteAddr, logging.PacketTypeNotDetermined, p.Size(), logging.PacketDropDOSPrevention)
+		}
 	}
 }
 
@@ -316,6 +319,9 @@ func (s *baseServer) handlePacketImpl(p *receivedPacket) bool /* should the buff
 	// The header will then be parsed again.
 	hdr, _, _, err := wire.ParsePacket(p.data, s.config.ConnectionIDLength)
 	if err != nil && err != wire.ErrUnsupportedVersion {
+		if s.config.Tracer != nil {
+			s.config.Tracer.DroppedPacket(p.remoteAddr, logging.PacketTypeNotDetermined, p.Size(), logging.PacketDropHeaderParseError)
+		}
 		s.logger.Debugf("Error parsing packet: %s", err)
 		return false
 	}
@@ -323,8 +329,11 @@ func (s *baseServer) handlePacketImpl(p *receivedPacket) bool /* should the buff
 	if !hdr.IsLongHeader {
 		panic(fmt.Sprintf("misrouted packet: %#v", hdr))
 	}
-	if hdr.Type == protocol.PacketTypeInitial && len(p.data) < protocol.MinInitialPacketSize {
-		s.logger.Debugf("Dropping a packet that is too small to be a valid Initial (%d bytes)", len(p.data))
+	if hdr.Type == protocol.PacketTypeInitial && p.Size() < protocol.MinInitialPacketSize {
+		s.logger.Debugf("Dropping a packet that is too small to be a valid Initial (%d bytes)", p.Size())
+		if s.config.Tracer != nil {
+			s.config.Tracer.DroppedPacket(p.remoteAddr, logging.PacketTypeInitial, p.Size(), logging.PacketDropUnexpectedPacket)
+		}
 		return false
 	}
 	// send a Version Negotiation Packet if the client is speaking a different protocol version
@@ -338,9 +347,12 @@ func (s *baseServer) handlePacketImpl(p *receivedPacket) bool /* should the buff
 			return true
 		} else if hdr.Type != protocol.PacketTypeInitial {
 			// Drop long header packets.
-			// There's litte point in sending a Stateless Reset, since the client
+			// There's little point in sending a Stateless Reset, since the client
 			// might not have received the token yet.
 			s.logger.Debugf("Dropping long header packet of type %s (%d bytes)", hdr.Type, len(p.data))
+			if s.config.Tracer != nil {
+				s.config.Tracer.DroppedPacket(p.remoteAddr, logging.PacketTypeFromHeader(hdr), p.Size(), logging.PacketDropUnexpectedPacket)
+			}
 			return false
 		}
 	}
@@ -358,6 +370,9 @@ func (s *baseServer) handlePacketImpl(p *receivedPacket) bool /* should the buff
 func (s *baseServer) handleInitialImpl(p *receivedPacket, hdr *wire.Header) error {
 	if len(hdr.Token) == 0 && hdr.DestConnectionID.Len() < protocol.MinConnectionIDLenInitial {
 		p.buffer.Release()
+		if s.config.Tracer != nil {
+			s.config.Tracer.DroppedPacket(p.remoteAddr, logging.PacketTypeInitial, p.Size(), logging.PacketDropUnexpectedPacket)
+		}
 		return errors.New("too short connection ID")
 	}
 
@@ -549,12 +564,18 @@ func (s *baseServer) maybeSendInvalidToken(p *receivedPacket, hdr *wire.Header) 
 	data := p.data[:hdr.ParsedLen()+hdr.Length]
 	extHdr, err := unpackHeader(opener, hdr, data, hdr.Version)
 	if err != nil {
+		if s.config.Tracer != nil {
+			s.config.Tracer.DroppedPacket(p.remoteAddr, logging.PacketTypeInitial, p.Size(), logging.PacketDropHeaderParseError)
+		}
 		// don't return the error here. Just drop the packet.
 		return nil
 	}
 	hdrLen := extHdr.ParsedLen()
 	if _, err := opener.Open(data[hdrLen:hdrLen], data[hdrLen:], extHdr.PacketNumber, data[:hdrLen]); err != nil {
 		// don't return the error here. Just drop the packet.
+		if s.config.Tracer != nil {
+			s.config.Tracer.DroppedPacket(p.remoteAddr, logging.PacketTypeInitial, p.Size(), logging.PacketDropPayloadDecryptError)
+		}
 		return nil
 	}
 	if s.logger.Debug() {

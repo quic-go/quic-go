@@ -19,10 +19,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/lucas-clemente/quic-go/logging"
-
 	"github.com/lucas-clemente/quic-go"
 	"github.com/lucas-clemente/quic-go/internal/utils"
+	"github.com/lucas-clemente/quic-go/logging"
 	"github.com/lucas-clemente/quic-go/qlog"
 
 	. "github.com/onsi/ginkgo"
@@ -91,6 +90,19 @@ var (
 	tlsConfig          *tls.Config
 	tlsConfigLongChain *tls.Config
 	tlsClientConfig    *tls.Config
+
+	tracer = qlog.NewTracer(func(p logging.Perspective, connectionID []byte) io.WriteCloser {
+		role := "server"
+		if p == logging.PerspectiveClient {
+			role = "client"
+		}
+		filename := fmt.Sprintf("log_%x_%s.qlog", connectionID, role)
+		fmt.Fprintf(GinkgoWriter, "Creating %s.\n", filename)
+		f, err := os.Create(filename)
+		Expect(err).ToNot(HaveOccurred())
+		bw := bufio.NewWriter(f)
+		return utils.NewBufferedWriteCloser(bw, f)
+	})
 )
 
 // read the logfile command line flag
@@ -254,18 +266,7 @@ func getQuicConfig(conf *quic.Config) *quic.Config {
 	if !enableQlog {
 		return conf
 	}
-	conf.Tracer = qlog.NewTracer(func(p logging.Perspective, connectionID []byte) io.WriteCloser {
-		role := "server"
-		if p == logging.PerspectiveClient {
-			role = "client"
-		}
-		filename := fmt.Sprintf("log_%x_%s.qlog", connectionID, role)
-		fmt.Fprintf(GinkgoWriter, "Creating %s.\n", filename)
-		f, err := os.Create(filename)
-		Expect(err).ToNot(HaveOccurred())
-		bw := bufio.NewWriter(f)
-		return utils.NewBufferedWriteCloser(bw, f)
-	})
+	conf.Tracer = tracer
 	return conf
 }
 

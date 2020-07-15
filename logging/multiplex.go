@@ -32,6 +32,12 @@ func (m *tracerMultiplexer) TracerForConnection(p Perspective, odcid ConnectionI
 	return newConnectionMultiplexer(connTracers...)
 }
 
+func (m *tracerMultiplexer) DroppedPacket(remote net.Addr, typ PacketType, size ByteCount, reason PacketDropReason) {
+	for _, t := range m.tracers {
+		t.DroppedPacket(remote, typ, size, reason)
+	}
+}
+
 type connTracerMultiplexer struct {
 	tracers []ConnectionTracer
 }

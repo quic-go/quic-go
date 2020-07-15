@@ -7,10 +7,14 @@ import (
 	"net"
 	"time"
 
-	"github.com/golang/mock/gomock"
+	"github.com/lucas-clemente/quic-go/internal/mocks"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/internal/utils"
 	"github.com/lucas-clemente/quic-go/internal/wire"
+	"github.com/lucas-clemente/quic-go/logging"
+
+	"github.com/golang/mock/gomock"
+
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 )
@@ -19,6 +23,7 @@ var _ = Describe("Packet Handler Map", func() {
 	var (
 		handler *packetHandlerMap
 		conn    *mockPacketConn
+		tracer  *mocks.MockTracer
 
 		connIDLen         int
 		statelessResetKey []byte
@@ -46,11 +51,12 @@ var _ = Describe("Packet Handler Map", func() {
 	BeforeEach(func() {
 		statelessResetKey = nil
 		connIDLen = 0
+		tracer = mocks.NewMockTracer(mockCtrl)
 	})
 
 	JustBeforeEach(func() {
 		conn = newMockPacketConn()
-		handler = newPacketHandlerMap(conn, connIDLen, statelessResetKey, utils.DefaultLogger).(*packetHandlerMap)
+		handler = newPacketHandlerMap(conn, connIDLen, statelessResetKey, tracer, utils.DefaultLogger).(*packetHandlerMap)
 	})
 
 	AfterEach(func() {
@@ -122,7 +128,9 @@ var _ = Describe("Packet Handler Map", func() {
 		})
 
 		It("drops unparseable packets", func() {
-			handler.handlePacket(nil, nil, []byte{0, 1, 2, 3})
+			addr := &net.UDPAddr{IP: net.IPv4(9, 8, 7, 6), Port: 1234}
+			tracer.EXPECT().DroppedPacket(addr, logging.PacketTypeNotDetermined, protocol.ByteCount(4), logging.PacketDropHeaderParseError)
+			handler.handlePacket(addr, nil, []byte{0, 1, 2, 3})
 		})
 
 		It("deletes removed sessions immediately", func() {

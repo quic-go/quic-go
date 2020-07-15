@@ -84,6 +84,8 @@ type Tracer interface {
 	// The destination connection ID that the client used on the first Initial packet it sent on this connection.
 	// If nil is returned, tracing will be disabled for this connection.
 	TracerForConnection(p Perspective, odcid ConnectionID) ConnectionTracer
+
+	DroppedPacket(net.Addr, PacketType, ByteCount, PacketDropReason)
 }
 
 // A ConnectionTracer records events.

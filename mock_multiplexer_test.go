@@ -9,6 +9,7 @@ import (
 	reflect "reflect"
 
 	gomock "github.com/golang/mock/gomock"
+	logging "github.com/lucas-clemente/quic-go/logging"
 )
 
 // MockMultiplexer is a mock of Multiplexer interface
@@ -35,18 +36,18 @@ func (m *MockMultiplexer) EXPECT() *MockMultiplexerMockRecorder {
 }
 
 // AddConn mocks base method
-func (m *MockMultiplexer) AddConn(arg0 net.PacketConn, arg1 int, arg2 []byte) (packetHandlerManager, error) {
+func (m *MockMultiplexer) AddConn(arg0 net.PacketConn, arg1 int, arg2 []byte, arg3 logging.Tracer) (packetHandlerManager, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "AddConn", arg0, arg1, arg2)
+	ret := m.ctrl.Call(m, "AddConn", arg0, arg1, arg2, arg3)
 	ret0, _ := ret[0].(packetHandlerManager)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // AddConn indicates an expected call of AddConn
-func (mr *MockMultiplexerMockRecorder) AddConn(arg0, arg1, arg2 interface{}) *gomock.Call {
+func (mr *MockMultiplexerMockRecorder) AddConn(arg0, arg1, arg2, arg3 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddConn", reflect.TypeOf((*MockMultiplexer)(nil).AddConn), arg0, arg1, arg2)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddConn", reflect.TypeOf((*MockMultiplexer)(nil).AddConn), arg0, arg1, arg2, arg3)
 }
 
 // RemoveConn mocks base method
