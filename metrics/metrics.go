@@ -16,6 +16,7 @@ import (
 var (
 	connections = stats.Int64("quic-go/connections", "number of QUIC connections", stats.UnitDimensionless)
 	lostPackets = stats.Int64("quic-go/lost-packets", "number of packets declared lost", stats.UnitDimensionless)
+	sentPackets = stats.Int64("quic-go/sent-packets", "number of packets sent", stats.UnitDimensionless)
 )
 
 // Tags
@@ -24,6 +25,7 @@ var (
 	keyIPVersion, _        = tag.NewKey("ip_version")
 	keyEncryptionLevel, _  = tag.NewKey("encryption_level")
 	keyPacketLossReason, _ = tag.NewKey("packet_loss_reason")
+	keyPacketType, _       = tag.NewKey("packet_type")
 )
 
 // Views
@@ -38,12 +40,18 @@ var (
 		TagKeys:     []tag.Key{keyEncryptionLevel, keyPacketLossReason},
 		Aggregation: view.Count(),
 	}
+	SentPacketsView = &view.View{
+		Measure:     sentPackets,
+		TagKeys:     []tag.Key{keyPacketType},
+		Aggregation: view.Count(),
+	}
 )
 
 // DefaultViews collects all OpenCensus views for metric gathering purposes
 var DefaultViews = []*view.View{
 	ConnectionsView,
 	LostPacketsView,
+	SentPacketsView,
 }
 
 type tracer struct{}
@@ -98,7 +106,14 @@ func (t *connTracer) StartedConnection(local, _ net.Addr, _ logging.VersionNumbe
 func (t *connTracer) ClosedConnection(logging.CloseReason)                     {}
 func (t *connTracer) SentTransportParameters(*logging.TransportParameters)     {}
 func (t *connTracer) ReceivedTransportParameters(*logging.TransportParameters) {}
-func (t *connTracer) SentPacket(*logging.ExtendedHeader, logging.ByteCount, *logging.AckFrame, []logging.Frame) {
+func (t *connTracer) SentPacket(hdr *logging.ExtendedHeader, _ logging.ByteCount, _ *logging.AckFrame, _ []logging.Frame) {
+	stats.RecordWithTags(
+		context.Background(),
+		[]tag.Mutator{
+			tag.Upsert(keyPacketType, packetType(logging.PacketTypeFromHeader(&hdr.Header)).String()),
+		},
+		sentPackets.M(1),
+	)
 }
 func (t *connTracer) ReceivedVersionNegotiationPacket(*logging.Header, []logging.VersionNumber) {}
 func (t *connTracer) ReceivedRetry(*logging.Header)                                             {}
