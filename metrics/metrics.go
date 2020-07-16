@@ -5,6 +5,7 @@ import (
 	"net"
 	"time"
 
+	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/logging"
 
 	"go.opencensus.io/stats"
@@ -63,6 +64,16 @@ func NewTracer() logging.Tracer { return &tracer{} }
 
 func (t *tracer) TracerForConnection(p logging.Perspective, _ logging.ConnectionID) logging.ConnectionTracer {
 	return newConnTracer(t, p)
+}
+
+func (t *tracer) SentPacket(_ net.Addr, hdr *logging.Header, _ protocol.ByteCount, _ []logging.Frame) {
+	stats.RecordWithTags(
+		context.Background(),
+		[]tag.Mutator{
+			tag.Upsert(keyPacketType, packetType(logging.PacketTypeFromHeader(hdr)).String()),
+		},
+		sentPackets.M(1),
+	)
 }
 
 func (t *tracer) DroppedPacket(net.Addr, logging.PacketType, logging.ByteCount, logging.PacketDropReason) {

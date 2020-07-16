@@ -32,6 +32,12 @@ func (m *tracerMultiplexer) TracerForConnection(p Perspective, odcid ConnectionI
 	return newConnectionMultiplexer(connTracers...)
 }
 
+func (m *tracerMultiplexer) SentPacket(remote net.Addr, hdr *Header, size ByteCount, frames []Frame) {
+	for _, t := range m.tracers {
+		t.SentPacket(remote, hdr, size, frames)
+	}
+}
+
 func (m *tracerMultiplexer) DroppedPacket(remote net.Addr, typ PacketType, size ByteCount, reason PacketDropReason) {
 	for _, t := range m.tracers {
 		t.DroppedPacket(remote, typ, size, reason)

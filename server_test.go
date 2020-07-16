@@ -261,6 +261,7 @@ var _ = Describe("Server", func() {
 					Version:      serv.config.Versions[0],
 				}, make([]byte, protocol.MinInitialPacketSize))
 				packet.remoteAddr = raddr
+				tracer.EXPECT().SentPacket(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).MaxTimes(1)
 				serv.handlePacket(packet)
 				Eventually(done).Should(BeClosed())
 			})
@@ -284,6 +285,7 @@ var _ = Describe("Server", func() {
 					Version:      serv.config.Versions[0],
 				}, make([]byte, protocol.MinInitialPacketSize))
 				packet.remoteAddr = raddr
+				tracer.EXPECT().SentPacket(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).MaxTimes(1)
 				serv.handlePacket(packet)
 				Eventually(done).Should(BeClosed())
 			})
@@ -379,6 +381,12 @@ var _ = Describe("Server", func() {
 					Version:          0x42,
 				}, make([]byte, protocol.MinInitialPacketSize))
 				packet.remoteAddr = &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 1337}
+				tracer.EXPECT().SentPacket(packet.remoteAddr, gomock.Any(), gomock.Any(), nil).Do(func(_ net.Addr, replyHdr *logging.Header, _ logging.ByteCount, _ []logging.Frame) {
+					Expect(replyHdr.IsLongHeader).To(BeTrue())
+					Expect(replyHdr.Version).To(BeZero())
+					Expect(replyHdr.SrcConnectionID).To(Equal(destConnID))
+					Expect(replyHdr.DestConnectionID).To(Equal(srcConnID))
+				})
 				serv.handlePacket(packet)
 				var write mockPacketConnWrite
 				Eventually(conn.dataWritten).Should(Receive(&write))
@@ -402,6 +410,12 @@ var _ = Describe("Server", func() {
 				}
 				packet := getPacket(hdr, make([]byte, protocol.MinInitialPacketSize))
 				packet.remoteAddr = &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 1337}
+				tracer.EXPECT().SentPacket(packet.remoteAddr, gomock.Any(), gomock.Any(), nil).Do(func(_ net.Addr, replyHdr *logging.Header, _ logging.ByteCount, _ []logging.Frame) {
+					Expect(replyHdr.Type).To(Equal(protocol.PacketTypeRetry))
+					Expect(replyHdr.SrcConnectionID).ToNot(Equal(hdr.DestConnectionID))
+					Expect(replyHdr.DestConnectionID).To(Equal(hdr.SrcConnectionID))
+					Expect(replyHdr.Token).ToNot(BeEmpty())
+				})
 				serv.handlePacket(packet)
 				var write mockPacketConnWrite
 				Eventually(conn.dataWritten).Should(Receive(&write))
@@ -429,6 +443,16 @@ var _ = Describe("Server", func() {
 				packet := getPacket(hdr, make([]byte, protocol.MinInitialPacketSize))
 				packet.data = append(packet.data, []byte("coalesced packet")...) // add some garbage to simulate a coalesced packet
 				packet.remoteAddr = &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 1337}
+				tracer.EXPECT().SentPacket(packet.remoteAddr, gomock.Any(), gomock.Any(), gomock.Any()).Do(func(_ net.Addr, replyHdr *logging.Header, _ logging.ByteCount, frames []logging.Frame) {
+					Expect(replyHdr.Type).To(Equal(protocol.PacketTypeInitial))
+					Expect(replyHdr.SrcConnectionID).To(Equal(hdr.DestConnectionID))
+					Expect(replyHdr.DestConnectionID).To(Equal(hdr.SrcConnectionID))
+					Expect(frames).To(HaveLen(1))
+					Expect(frames[0]).To(BeAssignableToTypeOf(&wire.ConnectionCloseFrame{}))
+					ccf := frames[0].(*logging.ConnectionCloseFrame)
+					Expect(ccf.IsApplicationError).To(BeFalse())
+					Expect(ccf.ErrorCode).To(Equal(qerr.InvalidToken))
+				})
 				serv.handlePacket(packet)
 				var write mockPacketConnWrite
 				Eventually(conn.dataWritten).Should(Receive(&write))
@@ -740,6 +764,7 @@ var _ = Describe("Server", func() {
 				p := getInitialWithRandomDestConnID()
 				hdr, _, _, err := wire.ParsePacket(p.data, 0)
 				Expect(err).ToNot(HaveOccurred())
+				tracer.EXPECT().SentPacket(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any())
 				serv.handlePacket(p)
 				var reject mockPacketConnWrite
 				Eventually(conn.dataWritten).Should(Receive(&reject))

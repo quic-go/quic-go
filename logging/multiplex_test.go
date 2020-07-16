@@ -57,6 +57,15 @@ var _ = Describe("Tracing", func() {
 
 		It("traces the PacketSent event", func() {
 			remote := &net.UDPAddr{IP: net.IPv4(4, 3, 2, 1)}
+			hdr := &Header{DestConnectionID: ConnectionID{1, 2, 3}}
+			f := &MaxDataFrame{MaximumData: 1337}
+			tr1.EXPECT().SentPacket(remote, hdr, ByteCount(1024), []Frame{f})
+			tr2.EXPECT().SentPacket(remote, hdr, ByteCount(1024), []Frame{f})
+			tracer.SentPacket(remote, hdr, 1024, []Frame{f})
+		})
+
+		It("traces the PacketDropped event", func() {
+			remote := &net.UDPAddr{IP: net.IPv4(4, 3, 2, 1)}
 			tr1.EXPECT().DroppedPacket(remote, PacketTypeRetry, ByteCount(1024), PacketDropDuplicate)
 			tr2.EXPECT().DroppedPacket(remote, PacketTypeRetry, ByteCount(1024), PacketDropDuplicate)
 			tracer.DroppedPacket(remote, PacketTypeRetry, 1024, PacketDropDuplicate)
