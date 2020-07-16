@@ -68,6 +68,8 @@ const (
 	Encryption1RTT EncryptionLevel = protocol.Encryption1RTT
 	// Encryption0RTT is the 0-RTT encryption level
 	Encryption0RTT EncryptionLevel = protocol.Encryption0RTT
+	// EncryptionNone is no encryption
+	EncryptionNone EncryptionLevel = protocol.EncryptionUnspecified
 )
 
 const (
@@ -85,6 +87,7 @@ type Tracer interface {
 	// If nil is returned, tracing will be disabled for this connection.
 	TracerForConnection(p Perspective, odcid ConnectionID) ConnectionTracer
 
+	SentPacket(net.Addr, *Header, ByteCount, []Frame)
 	DroppedPacket(net.Addr, PacketType, ByteCount, PacketDropReason)
 }
 

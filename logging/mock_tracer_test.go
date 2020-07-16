@@ -7,6 +7,7 @@ package logging
 import (
 	gomock "github.com/golang/mock/gomock"
 	protocol "github.com/lucas-clemente/quic-go/internal/protocol"
+	wire "github.com/lucas-clemente/quic-go/internal/wire"
 	net "net"
 	reflect "reflect"
 )
@@ -44,6 +45,18 @@ func (m *MockTracer) DroppedPacket(arg0 net.Addr, arg1 protocol.PacketType, arg2
 func (mr *MockTracerMockRecorder) DroppedPacket(arg0, arg1, arg2, arg3 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DroppedPacket", reflect.TypeOf((*MockTracer)(nil).DroppedPacket), arg0, arg1, arg2, arg3)
+}
+
+// SentPacket mocks base method
+func (m *MockTracer) SentPacket(arg0 net.Addr, arg1 *wire.Header, arg2 protocol.ByteCount, arg3 []Frame) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "SentPacket", arg0, arg1, arg2, arg3)
+}
+
+// SentPacket indicates an expected call of SentPacket
+func (mr *MockTracerMockRecorder) SentPacket(arg0, arg1, arg2, arg3 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SentPacket", reflect.TypeOf((*MockTracer)(nil).SentPacket), arg0, arg1, arg2, arg3)
 }
 
 // TracerForConnection mocks base method

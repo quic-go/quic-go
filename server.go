@@ -553,6 +553,9 @@ func (s *baseServer) sendRetry(remoteAddr net.Addr, hdr *wire.Header) error {
 	// append the Retry integrity tag
 	tag := handshake.GetRetryIntegrityTag(buf.Bytes(), hdr.DestConnectionID)
 	buf.Write(tag[:])
+	if s.config.Tracer != nil {
+		s.config.Tracer.SentPacket(remoteAddr, &replyHdr.Header, protocol.ByteCount(buf.Len()), nil)
+	}
 	_, err = s.conn.WriteTo(buf.Bytes(), remoteAddr)
 	return err
 }
@@ -627,6 +630,9 @@ func (s *baseServer) sendError(remoteAddr net.Addr, hdr *wire.Header, sealer han
 
 	replyHdr.Log(s.logger)
 	wire.LogFrame(s.logger, ccf, true)
+	if s.config.Tracer != nil {
+		s.config.Tracer.SentPacket(remoteAddr, &replyHdr.Header, protocol.ByteCount(len(raw)), []logging.Frame{ccf})
+	}
 	_, err := s.conn.WriteTo(raw, remoteAddr)
 	return err
 }
@@ -637,6 +643,18 @@ func (s *baseServer) sendVersionNegotiationPacket(p *receivedPacket, hdr *wire.H
 	if err != nil {
 		s.logger.Debugf("Error composing Version Negotiation: %s", err)
 		return
+	}
+	if s.config.Tracer != nil {
+		s.config.Tracer.SentPacket(
+			p.remoteAddr,
+			&wire.Header{
+				IsLongHeader:     true,
+				DestConnectionID: hdr.SrcConnectionID,
+				SrcConnectionID:  hdr.DestConnectionID,
+			},
+			protocol.ByteCount(len(data)),
+			nil,
+		)
 	}
 	if _, err := s.conn.WriteTo(data, p.remoteAddr); err != nil {
 		s.logger.Debugf("Error sending Version Negotiation: %s", err)

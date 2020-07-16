@@ -37,6 +37,7 @@ func (t *tracer) TracerForConnection(p logging.Perspective, odcid protocol.Conne
 	return nil
 }
 
+func (t *tracer) SentPacket(net.Addr, *logging.Header, protocol.ByteCount, []logging.Frame) {}
 func (t *tracer) DroppedPacket(net.Addr, logging.PacketType, protocol.ByteCount, logging.PacketDropReason) {
 }
 
