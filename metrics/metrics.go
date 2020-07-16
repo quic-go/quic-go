@@ -2,6 +2,7 @@ package metrics
 
 import (
 	"context"
+	"fmt"
 	"net"
 	"time"
 
@@ -17,6 +18,7 @@ var (
 	connections = stats.Int64("quic-go/connections", "number of QUIC connections", stats.UnitDimensionless)
 	lostPackets = stats.Int64("quic-go/lost-packets", "number of packets declared lost", stats.UnitDimensionless)
 	sentPackets = stats.Int64("quic-go/sent-packets", "number of packets sent", stats.UnitDimensionless)
+	closes      = stats.Int64("quic-go/close", "number of connections closed", stats.UnitDimensionless)
 )
 
 // Tags
@@ -26,6 +28,9 @@ var (
 	keyEncryptionLevel, _  = tag.NewKey("encryption_level")
 	keyPacketLossReason, _ = tag.NewKey("packet_loss_reason")
 	keyPacketType, _       = tag.NewKey("packet_type")
+	keyCloseReason, _      = tag.NewKey("close_reason")
+	keyCloseRemote, _      = tag.NewKey("close_remote")
+	keyErrorCode, _        = tag.NewKey("error_code")
 )
 
 // Views
@@ -45,6 +50,11 @@ var (
 		TagKeys:     []tag.Key{keyPacketType},
 		Aggregation: view.Count(),
 	}
+	CloseView = &view.View{
+		Measure:     closes,
+		TagKeys:     []tag.Key{keyCloseReason, keyErrorCode},
+		Aggregation: view.Count(),
+	}
 )
 
 // DefaultViews collects all OpenCensus views for metric gathering purposes
@@ -52,6 +62,7 @@ var DefaultViews = []*view.View{
 	ConnectionsView,
 	LostPacketsView,
 	SentPacketsView,
+	CloseView,
 }
 
 type tracer struct{}
@@ -106,7 +117,33 @@ func (t *connTracer) StartedConnection(local, _ net.Addr, _ logging.VersionNumbe
 	)
 }
 
-func (t *connTracer) ClosedConnection(logging.CloseReason)                     {}
+func (t *connTracer) ClosedConnection(r logging.CloseReason) {
+	var tags []tag.Mutator
+	if timeout, ok := r.Timeout(); ok {
+		tags = []tag.Mutator{
+			tag.Upsert(keyCloseReason, timeoutReason(timeout).String()),
+			tag.Upsert(keyCloseRemote, "false"),
+		}
+	} else if _, ok := r.StatelessReset(); ok {
+		tags = []tag.Mutator{
+			tag.Upsert(keyCloseReason, "stateless_reset"),
+			tag.Upsert(keyCloseRemote, "true"),
+		}
+	} else if errorCode, remote, ok := r.ApplicationError(); ok {
+		tags = []tag.Mutator{
+			tag.Upsert(keyCloseReason, "application_error"),
+			tag.Upsert(keyErrorCode, errorCode.String()),
+			tag.Upsert(keyCloseRemote, fmt.Sprintf("%t", remote)),
+		}
+	} else if errorCode, remote, ok := r.TransportError(); ok {
+		tags = []tag.Mutator{
+			tag.Upsert(keyCloseReason, "transport_error"),
+			tag.Upsert(keyErrorCode, errorCode.String()),
+			tag.Upsert(keyCloseRemote, fmt.Sprintf("%t", remote)),
+		}
+	}
+	stats.RecordWithTags(context.Background(), tags, closes.M(1))
+}
 func (t *connTracer) SentTransportParameters(*logging.TransportParameters)     {}
 func (t *connTracer) ReceivedTransportParameters(*logging.TransportParameters) {}
 func (t *connTracer) SentPacket(hdr *logging.ExtendedHeader, _ logging.ByteCount, _ *logging.AckFrame, _ []logging.Frame) {
