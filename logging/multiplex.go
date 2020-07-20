@@ -17,7 +17,7 @@ func NewMultiplexedTracer(tracers ...Tracer) Tracer {
 		return nil
 	}
 	if len(tracers) == 1 {
-		return tracers[1]
+		return tracers[0]
 	}
 	return &tracerMultiplexer{tracers}
 }
