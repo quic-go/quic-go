@@ -12,63 +12,75 @@ import (
 
 var _ = Describe("Tracing", func() {
 	Context("Tracer", func() {
-		var (
-			tracer   Tracer
-			tr1, tr2 *MockTracer
-		)
-
-		BeforeEach(func() {
-			tr1 = NewMockTracer(mockCtrl)
-			tr2 = NewMockTracer(mockCtrl)
-			tracer = NewMultiplexedTracer(tr1, tr2)
+		It("returns a nil tracer if no tracers are passed in", func() {
+			Expect(NewMultiplexedTracer()).To(BeNil())
 		})
 
-		It("multiplexes the TracerForConnection call", func() {
-			tr1.EXPECT().TracerForConnection(PerspectiveClient, ConnectionID{1, 2, 3})
-			tr2.EXPECT().TracerForConnection(PerspectiveClient, ConnectionID{1, 2, 3})
-			tracer.TracerForConnection(PerspectiveClient, ConnectionID{1, 2, 3})
+		It("returns the raw tracer if only one tracer is passed in", func() {
+			tr := NewMockTracer(mockCtrl)
+			tracer := NewMultiplexedTracer(tr)
+			Expect(tracer).To(BeAssignableToTypeOf(&MockTracer{}))
 		})
 
-		It("uses multiple connection tracers", func() {
-			ctr1 := NewMockConnectionTracer(mockCtrl)
-			ctr2 := NewMockConnectionTracer(mockCtrl)
-			tr1.EXPECT().TracerForConnection(PerspectiveServer, ConnectionID{1, 2, 3}).Return(ctr1)
-			tr2.EXPECT().TracerForConnection(PerspectiveServer, ConnectionID{1, 2, 3}).Return(ctr2)
-			tr := tracer.TracerForConnection(PerspectiveServer, ConnectionID{1, 2, 3})
-			ctr1.EXPECT().LossTimerCanceled()
-			ctr2.EXPECT().LossTimerCanceled()
-			tr.LossTimerCanceled()
-		})
+		Context("tracing events", func() {
+			var (
+				tracer   Tracer
+				tr1, tr2 *MockTracer
+			)
 
-		It("handles tracers that return a nil ConnectionTracer", func() {
-			ctr1 := NewMockConnectionTracer(mockCtrl)
-			tr1.EXPECT().TracerForConnection(PerspectiveServer, ConnectionID{1, 2, 3}).Return(ctr1)
-			tr2.EXPECT().TracerForConnection(PerspectiveServer, ConnectionID{1, 2, 3})
-			tr := tracer.TracerForConnection(PerspectiveServer, ConnectionID{1, 2, 3})
-			ctr1.EXPECT().LossTimerCanceled()
-			tr.LossTimerCanceled()
-		})
+			BeforeEach(func() {
+				tr1 = NewMockTracer(mockCtrl)
+				tr2 = NewMockTracer(mockCtrl)
+				tracer = NewMultiplexedTracer(tr1, tr2)
+			})
 
-		It("returns nil when all tracers return a nil ConnectionTracer", func() {
-			tr1.EXPECT().TracerForConnection(PerspectiveClient, ConnectionID{1, 2, 3})
-			tr2.EXPECT().TracerForConnection(PerspectiveClient, ConnectionID{1, 2, 3})
-			Expect(tracer.TracerForConnection(PerspectiveClient, ConnectionID{1, 2, 3})).To(BeNil())
-		})
+			It("multiplexes the TracerForConnection call", func() {
+				tr1.EXPECT().TracerForConnection(PerspectiveClient, ConnectionID{1, 2, 3})
+				tr2.EXPECT().TracerForConnection(PerspectiveClient, ConnectionID{1, 2, 3})
+				tracer.TracerForConnection(PerspectiveClient, ConnectionID{1, 2, 3})
+			})
 
-		It("traces the PacketSent event", func() {
-			remote := &net.UDPAddr{IP: net.IPv4(4, 3, 2, 1)}
-			hdr := &Header{DestConnectionID: ConnectionID{1, 2, 3}}
-			f := &MaxDataFrame{MaximumData: 1337}
-			tr1.EXPECT().SentPacket(remote, hdr, ByteCount(1024), []Frame{f})
-			tr2.EXPECT().SentPacket(remote, hdr, ByteCount(1024), []Frame{f})
-			tracer.SentPacket(remote, hdr, 1024, []Frame{f})
-		})
+			It("uses multiple connection tracers", func() {
+				ctr1 := NewMockConnectionTracer(mockCtrl)
+				ctr2 := NewMockConnectionTracer(mockCtrl)
+				tr1.EXPECT().TracerForConnection(PerspectiveServer, ConnectionID{1, 2, 3}).Return(ctr1)
+				tr2.EXPECT().TracerForConnection(PerspectiveServer, ConnectionID{1, 2, 3}).Return(ctr2)
+				tr := tracer.TracerForConnection(PerspectiveServer, ConnectionID{1, 2, 3})
+				ctr1.EXPECT().LossTimerCanceled()
+				ctr2.EXPECT().LossTimerCanceled()
+				tr.LossTimerCanceled()
+			})
 
-		It("traces the PacketDropped event", func() {
-			remote := &net.UDPAddr{IP: net.IPv4(4, 3, 2, 1)}
-			tr1.EXPECT().DroppedPacket(remote, PacketTypeRetry, ByteCount(1024), PacketDropDuplicate)
-			tr2.EXPECT().DroppedPacket(remote, PacketTypeRetry, ByteCount(1024), PacketDropDuplicate)
-			tracer.DroppedPacket(remote, PacketTypeRetry, 1024, PacketDropDuplicate)
+			It("handles tracers that return a nil ConnectionTracer", func() {
+				ctr1 := NewMockConnectionTracer(mockCtrl)
+				tr1.EXPECT().TracerForConnection(PerspectiveServer, ConnectionID{1, 2, 3}).Return(ctr1)
+				tr2.EXPECT().TracerForConnection(PerspectiveServer, ConnectionID{1, 2, 3})
+				tr := tracer.TracerForConnection(PerspectiveServer, ConnectionID{1, 2, 3})
+				ctr1.EXPECT().LossTimerCanceled()
+				tr.LossTimerCanceled()
+			})
+
+			It("returns nil when all tracers return a nil ConnectionTracer", func() {
+				tr1.EXPECT().TracerForConnection(PerspectiveClient, ConnectionID{1, 2, 3})
+				tr2.EXPECT().TracerForConnection(PerspectiveClient, ConnectionID{1, 2, 3})
+				Expect(tracer.TracerForConnection(PerspectiveClient, ConnectionID{1, 2, 3})).To(BeNil())
+			})
+
+			It("traces the PacketSent event", func() {
+				remote := &net.UDPAddr{IP: net.IPv4(4, 3, 2, 1)}
+				hdr := &Header{DestConnectionID: ConnectionID{1, 2, 3}}
+				f := &MaxDataFrame{MaximumData: 1337}
+				tr1.EXPECT().SentPacket(remote, hdr, ByteCount(1024), []Frame{f})
+				tr2.EXPECT().SentPacket(remote, hdr, ByteCount(1024), []Frame{f})
+				tracer.SentPacket(remote, hdr, 1024, []Frame{f})
+			})
+
+			It("traces the PacketDropped event", func() {
+				remote := &net.UDPAddr{IP: net.IPv4(4, 3, 2, 1)}
+				tr1.EXPECT().DroppedPacket(remote, PacketTypeRetry, ByteCount(1024), PacketDropDuplicate)
+				tr2.EXPECT().DroppedPacket(remote, PacketTypeRetry, ByteCount(1024), PacketDropDuplicate)
+				tracer.DroppedPacket(remote, PacketTypeRetry, 1024, PacketDropDuplicate)
+			})
 		})
 	})
 
