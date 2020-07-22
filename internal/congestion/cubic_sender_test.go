@@ -182,9 +182,9 @@ var _ = Describe("Cubic Sender", func() {
 		Expect(sender.GetCongestionWindow()).To(Equal(expectedSendWindow))
 
 		// Now RTO and ensure slow start gets reset.
-		Expect(sender.HybridSlowStart().Started()).To(BeTrue())
+		Expect(sender.hybridSlowStart.Started()).To(BeTrue())
 		sender.OnRetransmissionTimeout(true)
-		Expect(sender.HybridSlowStart().Started()).To(BeFalse())
+		Expect(sender.hybridSlowStart.Started()).To(BeFalse())
 	})
 
 	It("slow start packet loss with large reduction", func() {
@@ -233,9 +233,9 @@ var _ = Describe("Cubic Sender", func() {
 		Expect(sender.GetCongestionWindow()).To(Equal(expectedSendWindow))
 
 		// Now RTO and ensure slow start gets reset.
-		Expect(sender.HybridSlowStart().Started()).To(BeTrue())
+		Expect(sender.hybridSlowStart.Started()).To(BeTrue())
 		sender.OnRetransmissionTimeout(true)
-		Expect(sender.HybridSlowStart().Started()).To(BeFalse())
+		Expect(sender.hybridSlowStart.Started()).To(BeFalse())
 	})
 
 	It("slow start half packet loss with large reduction", func() {
@@ -368,13 +368,13 @@ var _ = Describe("Cubic Sender", func() {
 
 	It("RTO congestion window", func() {
 		Expect(sender.GetCongestionWindow()).To(Equal(defaultWindowTCP))
-		Expect(sender.SlowstartThreshold()).To(Equal(MaxCongestionWindow))
+		Expect(sender.slowStartThreshold).To(Equal(MaxCongestionWindow))
 
 		// Expect the window to decrease to the minimum once the RTO fires
 		// and slow start threshold to be set to 1/2 of the CWND.
 		sender.OnRetransmissionTimeout(true)
 		Expect(sender.GetCongestionWindow()).To(Equal(2 * maxDatagramSize))
-		Expect(sender.SlowstartThreshold()).To(Equal(5 * maxDatagramSize))
+		Expect(sender.slowStartThreshold).To(Equal(5 * maxDatagramSize))
 	})
 
 	It("RTO congestion window no retransmission", func() {
@@ -458,7 +458,7 @@ var _ = Describe("Cubic Sender", func() {
 		LoseNPackets(1)
 
 		// We should now have fallen out of slow start with a reduced window.
-		expectedSendWindow = protocol.ByteCount(float32(expectedSendWindow) * sender.RenoBeta())
+		expectedSendWindow = protocol.ByteCount(float32(expectedSendWindow) * sender.renoBeta())
 		Expect(sender.GetCongestionWindow()).To(Equal(expectedSendWindow))
 
 		// No congestion window growth should occur in recovery phase, i.e., until the
@@ -557,7 +557,7 @@ var _ = Describe("Cubic Sender", func() {
 
 	It("reset after connection migration", func() {
 		Expect(sender.GetCongestionWindow()).To(Equal(defaultWindowTCP))
-		Expect(sender.SlowstartThreshold()).To(Equal(MaxCongestionWindow))
+		Expect(sender.slowStartThreshold).To(Equal(MaxCongestionWindow))
 
 		// Starts with slow start.
 		sender.SetNumEmulatedConnections(1)
@@ -578,13 +578,13 @@ var _ = Describe("Cubic Sender", func() {
 		// start threshold is also updated.
 		expectedSendWindow = protocol.ByteCount(float32(expectedSendWindow) * renoBeta)
 		Expect(sender.GetCongestionWindow()).To(Equal(expectedSendWindow))
-		Expect(sender.SlowstartThreshold()).To(Equal(expectedSendWindow))
+		Expect(sender.slowStartThreshold).To(Equal(expectedSendWindow))
 
 		// Resets cwnd and slow start threshold on connection migrations.
 		sender.OnConnectionMigration()
 		Expect(sender.GetCongestionWindow()).To(Equal(defaultWindowTCP))
-		Expect(sender.SlowstartThreshold()).To(Equal(MaxCongestionWindow))
-		Expect(sender.HybridSlowStart().Started()).To(BeFalse())
+		Expect(sender.slowStartThreshold).To(Equal(MaxCongestionWindow))
+		Expect(sender.hybridSlowStart.Started()).To(BeFalse())
 	})
 
 	It("default max cwnd", func() {
