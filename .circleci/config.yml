@@ -41,8 +41,8 @@ jobs:
           name: "Run self integration tests with race detector"
           command: ginkgo -race -v -randomizeAllSpecs -trace integrationtests/self
       - run:
-          name: "Run self integration tests with qlog"
-          command: ginkgo -v -randomizeAllSpecs -trace integrationtests/self -- -qlog
+          name: "Run self integration tests with qlog and metrics"
+          command: ginkgo -v -randomizeAllSpecs -trace integrationtests/self -- -qlog -metrics
   go114:
     <<: *test
   interop-build:
