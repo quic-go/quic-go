@@ -54,7 +54,7 @@ type cubicSender struct {
 	maxCongestionWindow protocol.ByteCount
 
 	// Slow start congestion window in bytes, aka ssthresh.
-	slowstartThreshold protocol.ByteCount
+	slowStartThreshold protocol.ByteCount
 
 	// Number of connections to simulate.
 	numConnections int
@@ -86,7 +86,7 @@ func newCubicSender(clock Clock, rttStats *RTTStats, reno bool, initialCongestio
 		initialMaxCongestionWindow: initialMaxCongestionWindow,
 		congestionWindow:           initialCongestionWindow,
 		minCongestionWindow:        minCongestionWindow,
-		slowstartThreshold:         initialMaxCongestionWindow,
+		slowStartThreshold:         initialMaxCongestionWindow,
 		maxCongestionWindow:        initialMaxCongestionWindow,
 		numConnections:             defaultNumConnections,
 		cubic:                      NewCubic(clock),
@@ -130,28 +130,17 @@ func (c *cubicSender) InRecovery() bool {
 }
 
 func (c *cubicSender) InSlowStart() bool {
-	return c.GetCongestionWindow() < c.GetSlowStartThreshold()
+	return c.GetCongestionWindow() < c.slowStartThreshold
 }
 
 func (c *cubicSender) GetCongestionWindow() protocol.ByteCount {
 	return c.congestionWindow
 }
 
-func (c *cubicSender) GetSlowStartThreshold() protocol.ByteCount {
-	return c.slowstartThreshold
-}
-
-func (c *cubicSender) ExitSlowstart() {
-	c.slowstartThreshold = c.congestionWindow
-}
-
-func (c *cubicSender) SlowstartThreshold() protocol.ByteCount {
-	return c.slowstartThreshold
-}
-
 func (c *cubicSender) MaybeExitSlowStart() {
 	if c.InSlowStart() && c.hybridSlowStart.ShouldExitSlowStart(c.rttStats.LatestRTT(), c.rttStats.MinRTT(), c.GetCongestionWindow()/maxDatagramSize) {
-		c.ExitSlowstart()
+		// exit slow start
+		c.slowStartThreshold = c.congestionWindow
 	}
 }
 
@@ -185,7 +174,7 @@ func (c *cubicSender) OnPacketLost(
 			if c.slowStartLargeReduction {
 				// Reduce congestion window by lost_bytes for every loss.
 				c.congestionWindow = utils.MaxByteCount(c.congestionWindow-lostBytes, c.minSlowStartExitWindow)
-				c.slowstartThreshold = c.congestionWindow
+				c.slowStartThreshold = c.congestionWindow
 			}
 		}
 		return
@@ -202,21 +191,21 @@ func (c *cubicSender) OnPacketLost(
 		}
 		c.congestionWindow -= maxDatagramSize
 	} else if c.reno {
-		c.congestionWindow = protocol.ByteCount(float32(c.congestionWindow) * c.RenoBeta())
+		c.congestionWindow = protocol.ByteCount(float32(c.congestionWindow) * c.renoBeta())
 	} else {
 		c.congestionWindow = c.cubic.CongestionWindowAfterPacketLoss(c.congestionWindow)
 	}
 	if c.congestionWindow < c.minCongestionWindow {
 		c.congestionWindow = c.minCongestionWindow
 	}
-	c.slowstartThreshold = c.congestionWindow
+	c.slowStartThreshold = c.congestionWindow
 	c.largestSentAtLastCutback = c.largestSentPacketNumber
 	// reset packet count from congestion avoidance mode. We start
 	// counting again when we're out of recovery.
 	c.numAckedPackets = 0
 }
 
-func (c *cubicSender) RenoBeta() float32 {
+func (c *cubicSender) renoBeta() float32 {
 	// kNConnectionBeta is the backoff factor after loss for our N-connection
 	// emulation, which emulates the effective backoff of an ensemble of N
 	// TCP-Reno connections on a single loss event. The effective multiplier is
@@ -281,11 +270,6 @@ func (c *cubicSender) BandwidthEstimate() Bandwidth {
 	return BandwidthFromDelta(c.GetCongestionWindow(), srtt)
 }
 
-// HybridSlowStart returns the hybrid slow start instance for testing
-func (c *cubicSender) HybridSlowStart() *HybridSlowStart {
-	return &c.hybridSlowStart
-}
-
 // SetNumEmulatedConnections sets the number of emulated connections
 func (c *cubicSender) SetNumEmulatedConnections(n int) {
 	c.numConnections = utils.Max(n, 1)
@@ -300,7 +284,7 @@ func (c *cubicSender) OnRetransmissionTimeout(packetsRetransmitted bool) {
 	}
 	c.hybridSlowStart.Restart()
 	c.cubic.Reset()
-	c.slowstartThreshold = c.congestionWindow / 2
+	c.slowStartThreshold = c.congestionWindow / 2
 	c.congestionWindow = c.minCongestionWindow
 }
 
@@ -314,7 +298,7 @@ func (c *cubicSender) OnConnectionMigration() {
 	c.cubic.Reset()
 	c.numAckedPackets = 0
 	c.congestionWindow = c.initialCongestionWindow
-	c.slowstartThreshold = c.initialMaxCongestionWindow
+	c.slowStartThreshold = c.initialMaxCongestionWindow
 	c.maxCongestionWindow = c.initialMaxCongestionWindow
 }
 
