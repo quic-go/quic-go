@@ -40,9 +40,6 @@ type cubicSender struct {
 	// Used for stats collection of slowstartPacketsLost
 	lastCutbackExitedSlowstart bool
 
-	// When true, exit slow start with large cutback of congestion window.
-	slowStartLargeReduction bool
-
 	// Congestion window in packets.
 	congestionWindow protocol.ByteCount
 
@@ -63,8 +60,6 @@ type cubicSender struct {
 
 	initialCongestionWindow    protocol.ByteCount
 	initialMaxCongestionWindow protocol.ByteCount
-
-	minSlowStartExitWindow protocol.ByteCount
 }
 
 var _ SendAlgorithm = &cubicSender{}
@@ -167,24 +162,11 @@ func (c *cubicSender) OnPacketLost(
 	// TCP NewReno (RFC6582) says that once a loss occurs, any losses in packets
 	// already sent should be treated as a single loss event, since it's expected.
 	if packetNumber <= c.largestSentAtLastCutback {
-		if c.lastCutbackExitedSlowstart {
-			if c.slowStartLargeReduction {
-				// Reduce congestion window by lost_bytes for every loss.
-				c.congestionWindow = utils.MaxByteCount(c.congestionWindow-lostBytes, c.minSlowStartExitWindow)
-				c.slowStartThreshold = c.congestionWindow
-			}
-		}
 		return
 	}
 	c.lastCutbackExitedSlowstart = c.InSlowStart()
 
-	// TODO(chromium): Separate out all of slow start into a separate class.
-	if c.slowStartLargeReduction && c.InSlowStart() {
-		if c.congestionWindow >= 2*c.initialCongestionWindow {
-			c.minSlowStartExitWindow = c.congestionWindow / 2
-		}
-		c.congestionWindow -= maxDatagramSize
-	} else if c.reno {
+	if c.reno {
 		c.congestionWindow = protocol.ByteCount(float32(c.congestionWindow) * c.renoBeta())
 	} else {
 		c.congestionWindow = c.cubic.CongestionWindowAfterPacketLoss(c.congestionWindow)
@@ -294,9 +276,4 @@ func (c *cubicSender) OnConnectionMigration() {
 	c.congestionWindow = c.initialCongestionWindow
 	c.slowStartThreshold = c.initialMaxCongestionWindow
 	c.maxCongestionWindow = c.initialMaxCongestionWindow
-}
-
-// SetSlowStartLargeReduction allows enabling the SSLR experiment
-func (c *cubicSender) SetSlowStartLargeReduction(enabled bool) {
-	c.slowStartLargeReduction = enabled
 }
