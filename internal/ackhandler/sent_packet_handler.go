@@ -103,6 +103,7 @@ func newSentPacketHandler(
 		congestion.DefaultClock{},
 		rttStats,
 		true, // use Reno
+		tracer,
 	)
 
 	return &sentPacketHandler{

@@ -5,16 +5,15 @@
 package mocks
 
 import (
-	"net"
-	"reflect"
-	"time"
+	net "net"
+	reflect "reflect"
+	time "time"
 
-	"github.com/lucas-clemente/quic-go/internal/utils"
-
-	"github.com/golang/mock/gomock"
-	"github.com/lucas-clemente/quic-go/internal/protocol"
-	"github.com/lucas-clemente/quic-go/internal/wire"
-	"github.com/lucas-clemente/quic-go/logging"
+	gomock "github.com/golang/mock/gomock"
+	protocol "github.com/lucas-clemente/quic-go/internal/protocol"
+	utils "github.com/lucas-clemente/quic-go/internal/utils"
+	wire "github.com/lucas-clemente/quic-go/internal/wire"
+	logging "github.com/lucas-clemente/quic-go/logging"
 )
 
 // MockConnectionTracer is a mock of ConnectionTracer interface
@@ -230,6 +229,18 @@ func (m *MockConnectionTracer) StartedConnection(arg0, arg1 net.Addr, arg2 proto
 func (mr *MockConnectionTracerMockRecorder) StartedConnection(arg0, arg1, arg2, arg3, arg4 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "StartedConnection", reflect.TypeOf((*MockConnectionTracer)(nil).StartedConnection), arg0, arg1, arg2, arg3, arg4)
+}
+
+// UpdatedCongestionState mocks base method
+func (m *MockConnectionTracer) UpdatedCongestionState(arg0 logging.CongestionState) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "UpdatedCongestionState", arg0)
+}
+
+// UpdatedCongestionState indicates an expected call of UpdatedCongestionState
+func (mr *MockConnectionTracerMockRecorder) UpdatedCongestionState(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdatedCongestionState", reflect.TypeOf((*MockConnectionTracer)(nil).UpdatedCongestionState), arg0)
 }
 
 // UpdatedKey mocks base method

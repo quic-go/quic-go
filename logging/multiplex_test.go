@@ -169,6 +169,12 @@ var _ = Describe("Tracing", func() {
 			tracer.DroppedPacket(PacketTypeInitial, 1337, PacketDropHeaderParseError)
 		})
 
+		It("traces the UpdatedCongestionState event", func() {
+			tr1.EXPECT().UpdatedCongestionState(CongestionStateRecovery)
+			tr2.EXPECT().UpdatedCongestionState(CongestionStateRecovery)
+			tracer.UpdatedCongestionState(CongestionStateRecovery)
+		})
+
 		It("traces the UpdatedMetrics event", func() {
 			rttStats := &RTTStats{}
 			rttStats.UpdateRTT(time.Second, 0, time.Now())

@@ -172,6 +172,7 @@ func (t *connTracer) ReceivedPacket(*logging.ExtendedHeader, logging.ByteCount, 
 }
 func (t *connTracer) BufferedPacket(logging.PacketType)                                             {}
 func (t *connTracer) DroppedPacket(logging.PacketType, logging.ByteCount, logging.PacketDropReason) {}
+func (t *connTracer) UpdatedCongestionState(logging.CongestionState)                                {}
 func (t *connTracer) UpdatedMetrics(*logging.RTTStats, logging.ByteCount, logging.ByteCount, int)   {}
 func (t *connTracer) LostPacket(encLevel logging.EncryptionLevel, _ logging.PacketNumber, reason logging.PacketLossReason) {
 	stats.RecordWithTags(

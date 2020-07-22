@@ -81,3 +81,16 @@ const (
 	// This reason is not defined in the qlog draft, but very useful for debugging.
 	TimeoutReasonIdle
 )
+
+type CongestionState uint8
+
+const (
+	// CongestionStateSlowStart is the slow start phase of Reno / Cubic
+	CongestionStateSlowStart CongestionState = iota
+	// CongestionStateCongestionAvoidance is the slow start phase of Reno / Cubic
+	CongestionStateCongestionAvoidance
+	// CongestionStateCongestionAvoidance is the recovery phase of Reno / Cubic
+	CongestionStateRecovery
+	// CongestionStateApplicationLimited means that the congestion controller is application limited
+	CongestionStateApplicationLimited
+)

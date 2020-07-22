@@ -106,6 +106,7 @@ type ConnectionTracer interface {
 	DroppedPacket(PacketType, ByteCount, PacketDropReason)
 	UpdatedMetrics(rttStats *RTTStats, cwnd, bytesInFlight ByteCount, packetsInFlight int)
 	LostPacket(EncryptionLevel, PacketNumber, PacketLossReason)
+	UpdatedCongestionState(CongestionState)
 	UpdatedPTOCount(value uint32)
 	UpdatedKeyFromTLS(EncryptionLevel, Perspective)
 	UpdatedKey(generation KeyPhase, remote bool)
