@@ -422,3 +422,15 @@ func (e eventLossTimerCanceled) IsNil() bool        { return false }
 func (e eventLossTimerCanceled) MarshalJSONObject(enc *gojay.Encoder) {
 	enc.StringKey("event_type", "cancelled")
 }
+
+type eventCongestionStateUpdated struct {
+	state congestionState
+}
+
+func (e eventCongestionStateUpdated) Category() category { return categoryRecovery }
+func (e eventCongestionStateUpdated) Name() string       { return "congestion_state_updated" }
+func (e eventCongestionStateUpdated) IsNil() bool        { return false }
+
+func (e eventCongestionStateUpdated) MarshalJSONObject(enc *gojay.Encoder) {
+	enc.StringKey("new", e.state.String())
+}

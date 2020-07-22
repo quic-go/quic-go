@@ -527,6 +527,16 @@ var _ = Describe("Tracing", func() {
 				Expect(ev).To(HaveKeyWithValue("trigger", "reordering_threshold"))
 			})
 
+			It("records congestion state updates", func() {
+				tracer.UpdatedCongestionState(logging.CongestionStateCongestionAvoidance)
+				entry := exportAndParseSingle()
+				Expect(entry.Time).To(BeTemporally("~", time.Now(), scaleDuration(10*time.Millisecond)))
+				Expect(entry.Category).To(Equal("recovery"))
+				Expect(entry.Name).To(Equal("congestion_state_updated"))
+				ev := entry.Event
+				Expect(ev).To(HaveKeyWithValue("new", "congestion_avoidance"))
+			})
+
 			It("records PTO changes", func() {
 				tracer.UpdatedPTOCount(42)
 				entry := exportAndParseSingle()

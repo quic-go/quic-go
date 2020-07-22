@@ -316,7 +316,11 @@ func (t *connectionTracer) LostPacket(encLevel protocol.EncryptionLevel, pn prot
 	t.mutex.Unlock()
 }
 
-func (t *connectionTracer) UpdatedCongestionState(logging.CongestionState) {}
+func (t *connectionTracer) UpdatedCongestionState(state logging.CongestionState) {
+	t.mutex.Lock()
+	t.recordEvent(time.Now(), &eventCongestionStateUpdated{state: congestionState(state)})
+	t.mutex.Unlock()
+}
 
 func (t *connectionTracer) UpdatedPTOCount(value uint32) {
 	t.mutex.Lock()
