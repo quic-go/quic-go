@@ -6,7 +6,8 @@ import (
 	"net"
 	"time"
 
-	"github.com/lucas-clemente/quic-go/internal/congestion"
+	"github.com/lucas-clemente/quic-go/internal/utils"
+
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/internal/qerr"
 	"github.com/lucas-clemente/quic-go/internal/wire"
@@ -49,7 +50,7 @@ type (
 	ApplicationError = qerr.ErrorCode
 
 	// The RTTStats contain statistics used by the congestion controller.
-	RTTStats = congestion.RTTStats
+	RTTStats = utils.RTTStats
 )
 
 const (

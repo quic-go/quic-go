@@ -20,7 +20,7 @@ const (
 
 type cubicSender struct {
 	hybridSlowStart HybridSlowStart
-	rttStats        *RTTStats
+	rttStats        *utils.RTTStats
 	cubic           *Cubic
 	pacer           *pacer
 	clock           Clock
@@ -63,11 +63,11 @@ var _ SendAlgorithm = &cubicSender{}
 var _ SendAlgorithmWithDebugInfos = &cubicSender{}
 
 // NewCubicSender makes a new cubic sender
-func NewCubicSender(clock Clock, rttStats *RTTStats, reno bool) *cubicSender {
+func NewCubicSender(clock Clock, rttStats *utils.RTTStats, reno bool) *cubicSender {
 	return newCubicSender(clock, rttStats, reno, initialCongestionWindow, maxCongestionWindow)
 }
 
-func newCubicSender(clock Clock, rttStats *RTTStats, reno bool, initialCongestionWindow, initialMaxCongestionWindow protocol.ByteCount) *cubicSender {
+func newCubicSender(clock Clock, rttStats *utils.RTTStats, reno bool, initialCongestionWindow, initialMaxCongestionWindow protocol.ByteCount) *cubicSender {
 	c := &cubicSender{
 		rttStats:                   rttStats,
 		largestSentPacketNumber:    protocol.InvalidPacketNumber,

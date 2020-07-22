@@ -3,7 +3,6 @@ package flowcontrol
 import (
 	"time"
 
-	"github.com/lucas-clemente/quic-go/internal/congestion"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/internal/utils"
 	. "github.com/onsi/ginkgo"
@@ -18,7 +17,7 @@ var _ = Describe("Stream Flow controller", func() {
 
 	BeforeEach(func() {
 		queuedWindowUpdate = false
-		rttStats := &congestion.RTTStats{}
+		rttStats := &utils.RTTStats{}
 		controller = &streamFlowController{
 			streamID:   10,
 			connection: NewConnectionFlowController(1000, 1000, func() {}, rttStats, utils.DefaultLogger).(*connectionFlowController),
@@ -30,7 +29,7 @@ var _ = Describe("Stream Flow controller", func() {
 	})
 
 	Context("Constructor", func() {
-		rttStats := &congestion.RTTStats{}
+		rttStats := &utils.RTTStats{}
 		receiveWindow := protocol.ByteCount(2000)
 		maxReceiveWindow := protocol.ByteCount(3000)
 		sendWindow := protocol.ByteCount(4000)

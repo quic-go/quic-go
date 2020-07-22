@@ -31,7 +31,7 @@ var _ = Describe("Cubic Sender", func() {
 		bytesInFlight     protocol.ByteCount
 		packetNumber      protocol.PacketNumber
 		ackedPacketNumber protocol.PacketNumber
-		rttStats          *RTTStats
+		rttStats          *utils.RTTStats
 	)
 
 	BeforeEach(func() {
@@ -39,7 +39,7 @@ var _ = Describe("Cubic Sender", func() {
 		packetNumber = 1
 		ackedPacketNumber = 0
 		clock = mockClock{}
-		rttStats = NewRTTStats()
+		rttStats = utils.NewRTTStats()
 		sender = newCubicSender(&clock, rttStats, true /*reno*/, initialCongestionWindowPackets*maxDatagramSize, MaxCongestionWindow)
 	})
 

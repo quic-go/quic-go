@@ -3,7 +3,6 @@ package ackhandler
 import (
 	"time"
 
-	"github.com/lucas-clemente/quic-go/internal/congestion"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/internal/utils"
 	"github.com/lucas-clemente/quic-go/internal/wire"
@@ -15,11 +14,11 @@ import (
 var _ = Describe("Received Packet Tracker", func() {
 	var (
 		tracker  *receivedPacketTracker
-		rttStats *congestion.RTTStats
+		rttStats *utils.RTTStats
 	)
 
 	BeforeEach(func() {
-		rttStats = &congestion.RTTStats{}
+		rttStats = &utils.RTTStats{}
 		tracker = newReceivedPacketTracker(rttStats, utils.DefaultLogger, protocol.VersionWhatever)
 	})
 

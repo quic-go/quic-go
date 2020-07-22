@@ -5,7 +5,6 @@ import (
 
 	"github.com/golang/mock/gomock"
 
-	"github.com/lucas-clemente/quic-go/internal/congestion"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/internal/utils"
 	"github.com/lucas-clemente/quic-go/internal/wire"
@@ -22,7 +21,7 @@ var _ = Describe("Received Packet Handler", func() {
 		sentPackets = NewMockSentPacketTracker(mockCtrl)
 		handler = newReceivedPacketHandler(
 			sentPackets,
-			&congestion.RTTStats{},
+			&utils.RTTStats{},
 			utils.DefaultLogger,
 			protocol.VersionWhatever,
 		)

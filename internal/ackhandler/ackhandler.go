@@ -1,7 +1,6 @@
 package ackhandler
 
 import (
-	"github.com/lucas-clemente/quic-go/internal/congestion"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/internal/utils"
 	"github.com/lucas-clemente/quic-go/logging"
@@ -11,7 +10,7 @@ import (
 // NewAckHandler creates a new SentPacketHandler and a new ReceivedPacketHandler
 func NewAckHandler(
 	initialPacketNumber protocol.PacketNumber,
-	rttStats *congestion.RTTStats,
+	rttStats *utils.RTTStats,
 	pers protocol.Perspective,
 	traceCallback func(quictrace.Event),
 	tracer logging.ConnectionTracer,

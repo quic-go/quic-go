@@ -5,13 +5,14 @@
 package logging
 
 import (
-	gomock "github.com/golang/mock/gomock"
-	congestion "github.com/lucas-clemente/quic-go/internal/congestion"
-	protocol "github.com/lucas-clemente/quic-go/internal/protocol"
-	wire "github.com/lucas-clemente/quic-go/internal/wire"
-	net "net"
-	reflect "reflect"
-	time "time"
+	"net"
+	"reflect"
+	"time"
+
+	"github.com/golang/mock/gomock"
+	"github.com/lucas-clemente/quic-go/internal/protocol"
+	"github.com/lucas-clemente/quic-go/internal/utils"
+	"github.com/lucas-clemente/quic-go/internal/wire"
 )
 
 // MockConnectionTracer is a mock of ConnectionTracer interface
@@ -254,7 +255,7 @@ func (mr *MockConnectionTracerMockRecorder) UpdatedKeyFromTLS(arg0, arg1 interfa
 }
 
 // UpdatedMetrics mocks base method
-func (m *MockConnectionTracer) UpdatedMetrics(arg0 *congestion.RTTStats, arg1, arg2 protocol.ByteCount, arg3 int) {
+func (m *MockConnectionTracer) UpdatedMetrics(arg0 *utils.RTTStats, arg1, arg2 protocol.ByteCount, arg3 int) {
 	m.ctrl.T.Helper()
 	m.ctrl.Call(m, "UpdatedMetrics", arg0, arg1, arg2, arg3)
 }

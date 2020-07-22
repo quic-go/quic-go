@@ -5,7 +5,8 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/lucas-clemente/quic-go/internal/congestion"
+	"github.com/lucas-clemente/quic-go/internal/utils"
+
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -27,7 +28,7 @@ var _ = Describe("Base Flow controller", func() {
 
 	BeforeEach(func() {
 		controller = &baseFlowController{}
-		controller.rttStats = &congestion.RTTStats{}
+		controller.rttStats = &utils.RTTStats{}
 	})
 
 	Context("send flow control", func() {
