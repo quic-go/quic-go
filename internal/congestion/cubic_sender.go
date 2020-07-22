@@ -21,7 +21,6 @@ const (
 type cubicSender struct {
 	hybridSlowStart HybridSlowStart
 	rttStats        *RTTStats
-	stats           connectionStats
 	cubic           *Cubic
 	pacer           *pacer
 	clock           Clock
@@ -169,8 +168,6 @@ func (c *cubicSender) OnPacketLost(
 	// already sent should be treated as a single loss event, since it's expected.
 	if packetNumber <= c.largestSentAtLastCutback {
 		if c.lastCutbackExitedSlowstart {
-			c.stats.slowstartPacketsLost++
-			c.stats.slowstartBytesLost += lostBytes
 			if c.slowStartLargeReduction {
 				// Reduce congestion window by lost_bytes for every loss.
 				c.congestionWindow = utils.MaxByteCount(c.congestionWindow-lostBytes, c.minSlowStartExitWindow)
@@ -180,9 +177,6 @@ func (c *cubicSender) OnPacketLost(
 		return
 	}
 	c.lastCutbackExitedSlowstart = c.InSlowStart()
-	if c.InSlowStart() {
-		c.stats.slowstartPacketsLost++
-	}
 
 	// TODO(chromium): Separate out all of slow start into a separate class.
 	if c.slowStartLargeReduction && c.InSlowStart() {
