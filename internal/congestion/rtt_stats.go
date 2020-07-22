@@ -8,10 +8,10 @@ import (
 )
 
 const (
-	rttAlpha      float32 = 0.125
-	oneMinusAlpha float32 = (1 - rttAlpha)
-	rttBeta       float32 = 0.25
-	oneMinusBeta  float32 = (1 - rttBeta)
+	rttAlpha      = 0.125
+	oneMinusAlpha = 1 - rttAlpha
+	rttBeta       = 0.25
+	oneMinusBeta  = 1 - rttBeta
 	// The default RTT used before an RTT sample is taken.
 	defaultInitialRTT = 100 * time.Millisecond
 )
@@ -41,14 +41,14 @@ func (r *RTTStats) MinRTT() time.Duration { return r.minRTT }
 // May return Zero if no valid updates have occurred.
 func (r *RTTStats) LatestRTT() time.Duration { return r.latestRTT }
 
-// SmoothedRTT returns the EWMA smoothed RTT for the connection.
+// SmoothedRTT returns the smoothed RTT for the connection.
 // May return Zero if no valid updates have occurred.
 func (r *RTTStats) SmoothedRTT() time.Duration { return r.smoothedRTT }
 
 // MeanDeviation gets the mean deviation
 func (r *RTTStats) MeanDeviation() time.Duration { return r.meanDeviation }
 
-// MaxAckDelay gets the max_ack_delay advertized by the peer
+// MaxAckDelay gets the max_ack_delay advertised by the peer
 func (r *RTTStats) MaxAckDelay() time.Duration { return r.maxAckDelay }
 
 // PTO gets the probe timeout duration.
