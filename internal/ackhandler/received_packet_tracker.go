@@ -3,7 +3,6 @@ package ackhandler
 import (
 	"time"
 
-	"github.com/lucas-clemente/quic-go/internal/congestion"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/internal/utils"
 	"github.com/lucas-clemente/quic-go/internal/wire"
@@ -17,7 +16,7 @@ type receivedPacketTracker struct {
 	packetHistory *receivedPacketHistory
 
 	maxAckDelay time.Duration
-	rttStats    *congestion.RTTStats
+	rttStats    *utils.RTTStats
 
 	hasNewAck bool // true as soon as we received an ack-eliciting new packet
 	ackQueued bool // true once we received more than 2 (or later in the connection 10) ack-eliciting packets
@@ -32,7 +31,7 @@ type receivedPacketTracker struct {
 }
 
 func newReceivedPacketTracker(
-	rttStats *congestion.RTTStats,
+	rttStats *utils.RTTStats,
 	logger utils.Logger,
 	version protocol.VersionNumber,
 ) *receivedPacketTracker {

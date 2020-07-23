@@ -308,3 +308,20 @@ func (r timeoutReason) String() string {
 		panic("unknown close reason")
 	}
 }
+
+type congestionState logging.CongestionState
+
+func (s congestionState) String() string {
+	switch logging.CongestionState(s) {
+	case logging.CongestionStateSlowStart:
+		return "slow_start"
+	case logging.CongestionStateCongestionAvoidance:
+		return "congestion_avoidance"
+	case logging.CongestionStateRecovery:
+		return "recovery"
+	case logging.CongestionStateApplicationLimited:
+		return "application_limited"
+	default:
+		panic("unknown congestion state")
+	}
+}

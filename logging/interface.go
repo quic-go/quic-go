@@ -6,7 +6,8 @@ import (
 	"net"
 	"time"
 
-	"github.com/lucas-clemente/quic-go/internal/congestion"
+	"github.com/lucas-clemente/quic-go/internal/utils"
+
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/internal/qerr"
 	"github.com/lucas-clemente/quic-go/internal/wire"
@@ -49,7 +50,7 @@ type (
 	ApplicationError = qerr.ErrorCode
 
 	// The RTTStats contain statistics used by the congestion controller.
-	RTTStats = congestion.RTTStats
+	RTTStats = utils.RTTStats
 )
 
 const (
@@ -105,6 +106,7 @@ type ConnectionTracer interface {
 	DroppedPacket(PacketType, ByteCount, PacketDropReason)
 	UpdatedMetrics(rttStats *RTTStats, cwnd, bytesInFlight ByteCount, packetsInFlight int)
 	LostPacket(EncryptionLevel, PacketNumber, PacketLossReason)
+	UpdatedCongestionState(CongestionState)
 	UpdatedPTOCount(value uint32)
 	UpdatedKeyFromTLS(EncryptionLevel, Perspective)
 	UpdatedKey(generation KeyPhase, remote bool)

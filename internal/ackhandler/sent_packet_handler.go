@@ -69,7 +69,7 @@ type sentPacketHandler struct {
 	bytesInFlight protocol.ByteCount
 
 	congestion congestion.SendAlgorithmWithDebugInfos
-	rttStats   *congestion.RTTStats
+	rttStats   *utils.RTTStats
 
 	// The number of times a PTO has been sent without receiving an ack.
 	ptoCount uint32
@@ -93,7 +93,7 @@ var _ sentPacketTracker = &sentPacketHandler{}
 
 func newSentPacketHandler(
 	initialPacketNumber protocol.PacketNumber,
-	rttStats *congestion.RTTStats,
+	rttStats *utils.RTTStats,
 	pers protocol.Perspective,
 	traceCallback func(quictrace.Event),
 	tracer logging.ConnectionTracer,
@@ -103,6 +103,7 @@ func newSentPacketHandler(
 		congestion.DefaultClock{},
 		rttStats,
 		true, // use Reno
+		tracer,
 	)
 
 	return &sentPacketHandler{

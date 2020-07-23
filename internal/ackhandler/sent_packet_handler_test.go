@@ -5,7 +5,6 @@ import (
 	"time"
 
 	"github.com/golang/mock/gomock"
-	"github.com/lucas-clemente/quic-go/internal/congestion"
 	"github.com/lucas-clemente/quic-go/internal/mocks"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/internal/utils"
@@ -27,7 +26,7 @@ var _ = Describe("SentPacketHandler", func() {
 
 	JustBeforeEach(func() {
 		lostPackets = nil
-		rttStats := &congestion.RTTStats{}
+		rttStats := &utils.RTTStats{}
 		handler = newSentPacketHandler(42, rttStats, perspective, nil, nil, utils.DefaultLogger)
 		streamFrame = wire.StreamFrame{
 			StreamID: 5,

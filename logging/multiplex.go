@@ -120,6 +120,12 @@ func (m *connTracerMultiplexer) DroppedPacket(typ PacketType, size ByteCount, re
 	}
 }
 
+func (m *connTracerMultiplexer) UpdatedCongestionState(state CongestionState) {
+	for _, t := range m.tracers {
+		t.UpdatedCongestionState(state)
+	}
+}
+
 func (m *connTracerMultiplexer) UpdatedMetrics(rttStats *RTTStats, cwnd, bytesInFLight ByteCount, packetsInFlight int) {
 	for _, t := range m.tracers {
 		t.UpdatedMetrics(rttStats, cwnd, bytesInFLight, packetsInFlight)

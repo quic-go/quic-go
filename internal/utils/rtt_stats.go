@@ -1,17 +1,16 @@
-package congestion
+package utils
 
 import (
 	"time"
 
 	"github.com/lucas-clemente/quic-go/internal/protocol"
-	"github.com/lucas-clemente/quic-go/internal/utils"
 )
 
 const (
-	rttAlpha      float32 = 0.125
-	oneMinusAlpha float32 = (1 - rttAlpha)
-	rttBeta       float32 = 0.25
-	oneMinusBeta  float32 = (1 - rttBeta)
+	rttAlpha      = 0.125
+	oneMinusAlpha = 1 - rttAlpha
+	rttBeta       = 0.25
+	oneMinusBeta  = 1 - rttBeta
 	// The default RTT used before an RTT sample is taken.
 	defaultInitialRTT = 100 * time.Millisecond
 )
@@ -41,14 +40,14 @@ func (r *RTTStats) MinRTT() time.Duration { return r.minRTT }
 // May return Zero if no valid updates have occurred.
 func (r *RTTStats) LatestRTT() time.Duration { return r.latestRTT }
 
-// SmoothedRTT returns the EWMA smoothed RTT for the connection.
+// SmoothedRTT returns the smoothed RTT for the connection.
 // May return Zero if no valid updates have occurred.
 func (r *RTTStats) SmoothedRTT() time.Duration { return r.smoothedRTT }
 
 // MeanDeviation gets the mean deviation
 func (r *RTTStats) MeanDeviation() time.Duration { return r.meanDeviation }
 
-// MaxAckDelay gets the max_ack_delay advertized by the peer
+// MaxAckDelay gets the max_ack_delay advertised by the peer
 func (r *RTTStats) MaxAckDelay() time.Duration { return r.maxAckDelay }
 
 // PTO gets the probe timeout duration.
@@ -56,7 +55,7 @@ func (r *RTTStats) PTO(includeMaxAckDelay bool) time.Duration {
 	if r.SmoothedRTT() == 0 {
 		return 2 * defaultInitialRTT
 	}
-	pto := r.SmoothedRTT() + utils.MaxDuration(4*r.MeanDeviation(), protocol.TimerGranularity)
+	pto := r.SmoothedRTT() + MaxDuration(4*r.MeanDeviation(), protocol.TimerGranularity)
 	if includeMaxAckDelay {
 		pto += r.MaxAckDelay()
 	}
@@ -65,7 +64,7 @@ func (r *RTTStats) PTO(includeMaxAckDelay bool) time.Duration {
 
 // UpdateRTT updates the RTT based on a new sample.
 func (r *RTTStats) UpdateRTT(sendDelta, ackDelay time.Duration, now time.Time) {
-	if sendDelta == utils.InfDuration || sendDelta <= 0 {
+	if sendDelta == InfDuration || sendDelta <= 0 {
 		return
 	}
 
@@ -91,7 +90,7 @@ func (r *RTTStats) UpdateRTT(sendDelta, ackDelay time.Duration, now time.Time) {
 		r.smoothedRTT = sample
 		r.meanDeviation = sample / 2
 	} else {
-		r.meanDeviation = time.Duration(oneMinusBeta*float32(r.meanDeviation/time.Microsecond)+rttBeta*float32(utils.AbsDuration(r.smoothedRTT-sample)/time.Microsecond)) * time.Microsecond
+		r.meanDeviation = time.Duration(oneMinusBeta*float32(r.meanDeviation/time.Microsecond)+rttBeta*float32(AbsDuration(r.smoothedRTT-sample)/time.Microsecond)) * time.Microsecond
 		r.smoothedRTT = time.Duration((float32(r.smoothedRTT/time.Microsecond)*oneMinusAlpha)+(float32(sample/time.Microsecond)*rttAlpha)) * time.Microsecond
 	}
 }
@@ -123,6 +122,6 @@ func (r *RTTStats) OnConnectionMigration() {
 // is larger. The mean deviation is increased to the most recent deviation if
 // it's larger.
 func (r *RTTStats) ExpireSmoothedMetrics() {
-	r.meanDeviation = utils.MaxDuration(r.meanDeviation, utils.AbsDuration(r.smoothedRTT-r.latestRTT))
-	r.smoothedRTT = utils.MaxDuration(r.smoothedRTT, r.latestRTT)
+	r.meanDeviation = MaxDuration(r.meanDeviation, AbsDuration(r.smoothedRTT-r.latestRTT))
+	r.smoothedRTT = MaxDuration(r.smoothedRTT, r.latestRTT)
 }

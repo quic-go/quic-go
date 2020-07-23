@@ -4,7 +4,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/lucas-clemente/quic-go/internal/congestion"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/internal/utils"
 )
@@ -25,7 +24,7 @@ type baseFlowController struct {
 
 	epochStartTime   time.Time
 	epochStartOffset protocol.ByteCount
-	rttStats         *congestion.RTTStats
+	rttStats         *utils.RTTStats
 
 	logger utils.Logger
 }

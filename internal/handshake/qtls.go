@@ -6,9 +6,9 @@ import (
 	"time"
 	"unsafe"
 
-	"github.com/marten-seemann/qtls"
+	"github.com/lucas-clemente/quic-go/internal/utils"
 
-	"github.com/lucas-clemente/quic-go/internal/congestion"
+	"github.com/marten-seemann/qtls"
 )
 
 func init() {
@@ -46,7 +46,7 @@ func tlsConfigToQtlsConfig(
 	c *tls.Config,
 	recordLayer qtls.RecordLayer,
 	extHandler tlsExtensionHandler,
-	rttStats *congestion.RTTStats,
+	rttStats *utils.RTTStats,
 	getDataForSessionState func() []byte,
 	setDataFromSessionState func([]byte),
 	accept0RTT func([]byte) bool,

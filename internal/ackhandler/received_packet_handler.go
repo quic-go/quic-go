@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/lucas-clemente/quic-go/internal/congestion"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/internal/utils"
 	"github.com/lucas-clemente/quic-go/internal/wire"
@@ -45,7 +44,7 @@ var _ ReceivedPacketHandler = &receivedPacketHandler{}
 
 func newReceivedPacketHandler(
 	sentPackets sentPacketTracker,
-	rttStats *congestion.RTTStats,
+	rttStats *utils.RTTStats,
 	logger utils.Logger,
 	version protocol.VersionNumber,
 ) ReceivedPacketHandler {

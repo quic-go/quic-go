@@ -6,8 +6,8 @@ package logging
 
 import (
 	gomock "github.com/golang/mock/gomock"
-	congestion "github.com/lucas-clemente/quic-go/internal/congestion"
 	protocol "github.com/lucas-clemente/quic-go/internal/protocol"
+	utils "github.com/lucas-clemente/quic-go/internal/utils"
 	wire "github.com/lucas-clemente/quic-go/internal/wire"
 	net "net"
 	reflect "reflect"
@@ -229,6 +229,18 @@ func (mr *MockConnectionTracerMockRecorder) StartedConnection(arg0, arg1, arg2, 
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "StartedConnection", reflect.TypeOf((*MockConnectionTracer)(nil).StartedConnection), arg0, arg1, arg2, arg3, arg4)
 }
 
+// UpdatedCongestionState mocks base method
+func (m *MockConnectionTracer) UpdatedCongestionState(arg0 CongestionState) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "UpdatedCongestionState", arg0)
+}
+
+// UpdatedCongestionState indicates an expected call of UpdatedCongestionState
+func (mr *MockConnectionTracerMockRecorder) UpdatedCongestionState(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdatedCongestionState", reflect.TypeOf((*MockConnectionTracer)(nil).UpdatedCongestionState), arg0)
+}
+
 // UpdatedKey mocks base method
 func (m *MockConnectionTracer) UpdatedKey(arg0 protocol.KeyPhase, arg1 bool) {
 	m.ctrl.T.Helper()
@@ -254,7 +266,7 @@ func (mr *MockConnectionTracerMockRecorder) UpdatedKeyFromTLS(arg0, arg1 interfa
 }
 
 // UpdatedMetrics mocks base method
-func (m *MockConnectionTracer) UpdatedMetrics(arg0 *congestion.RTTStats, arg1, arg2 protocol.ByteCount, arg3 int) {
+func (m *MockConnectionTracer) UpdatedMetrics(arg0 *utils.RTTStats, arg1, arg2 protocol.ByteCount, arg3 int) {
 	m.ctrl.T.Helper()
 	m.ctrl.Call(m, "UpdatedMetrics", arg0, arg1, arg2, arg3)
 }

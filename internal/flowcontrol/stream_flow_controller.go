@@ -3,7 +3,6 @@ package flowcontrol
 import (
 	"fmt"
 
-	"github.com/lucas-clemente/quic-go/internal/congestion"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/internal/qerr"
 	"github.com/lucas-clemente/quic-go/internal/utils"
@@ -31,7 +30,7 @@ func NewStreamFlowController(
 	maxReceiveWindow protocol.ByteCount,
 	initialSendWindow protocol.ByteCount,
 	queueWindowUpdate func(protocol.StreamID),
-	rttStats *congestion.RTTStats,
+	rttStats *utils.RTTStats,
 	logger utils.Logger,
 ) StreamFlowController {
 	return &streamFlowController{

@@ -10,7 +10,8 @@ import (
 	"os"
 	"time"
 
-	"github.com/lucas-clemente/quic-go/internal/congestion"
+	"github.com/lucas-clemente/quic-go/internal/utils"
+
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/logging"
 
@@ -438,7 +439,7 @@ var _ = Describe("Tracing", func() {
 
 			It("records metrics updates", func() {
 				now := time.Now()
-				rttStats := congestion.NewRTTStats()
+				rttStats := utils.NewRTTStats()
 				rttStats.UpdateRTT(15*time.Millisecond, 0, now)
 				rttStats.UpdateRTT(20*time.Millisecond, 0, now)
 				rttStats.UpdateRTT(25*time.Millisecond, 0, now)
@@ -472,13 +473,13 @@ var _ = Describe("Tracing", func() {
 
 			It("only logs the diff between two metrics updates", func() {
 				now := time.Now()
-				rttStats := congestion.NewRTTStats()
+				rttStats := utils.NewRTTStats()
 				rttStats.UpdateRTT(15*time.Millisecond, 0, now)
 				rttStats.UpdateRTT(20*time.Millisecond, 0, now)
 				rttStats.UpdateRTT(25*time.Millisecond, 0, now)
 				Expect(rttStats.MinRTT()).To(Equal(15 * time.Millisecond))
 
-				rttStats2 := congestion.NewRTTStats()
+				rttStats2 := utils.NewRTTStats()
 				rttStats2.UpdateRTT(15*time.Millisecond, 0, now)
 				rttStats2.UpdateRTT(15*time.Millisecond, 0, now)
 				rttStats2.UpdateRTT(15*time.Millisecond, 0, now)
@@ -524,6 +525,16 @@ var _ = Describe("Tracing", func() {
 				Expect(ev).To(HaveKeyWithValue("packet_type", "handshake"))
 				Expect(ev).To(HaveKeyWithValue("packet_number", float64(42)))
 				Expect(ev).To(HaveKeyWithValue("trigger", "reordering_threshold"))
+			})
+
+			It("records congestion state updates", func() {
+				tracer.UpdatedCongestionState(logging.CongestionStateCongestionAvoidance)
+				entry := exportAndParseSingle()
+				Expect(entry.Time).To(BeTemporally("~", time.Now(), scaleDuration(10*time.Millisecond)))
+				Expect(entry.Category).To(Equal("recovery"))
+				Expect(entry.Name).To(Equal("congestion_state_updated"))
+				ev := entry.Event
+				Expect(ev).To(HaveKeyWithValue("new", "congestion_avoidance"))
 			})
 
 			It("records PTO changes", func() {

@@ -10,7 +10,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/lucas-clemente/quic-go/internal/congestion"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/internal/qerr"
 	"github.com/lucas-clemente/quic-go/internal/utils"
@@ -92,7 +91,7 @@ type cryptoSetup struct {
 	// for clients: to see if a ServerHello is a HelloRetryRequest
 	writeRecord chan struct{}
 
-	rttStats *congestion.RTTStats
+	rttStats *utils.RTTStats
 
 	tracer logging.ConnectionTracer
 	logger utils.Logger
@@ -136,7 +135,7 @@ func NewCryptoSetupClient(
 	runner handshakeRunner,
 	tlsConf *tls.Config,
 	enable0RTT bool,
-	rttStats *congestion.RTTStats,
+	rttStats *utils.RTTStats,
 	tracer logging.ConnectionTracer,
 	logger utils.Logger,
 ) (CryptoSetup, <-chan *wire.TransportParameters /* ClientHello written. Receive nil for non-0-RTT */) {
@@ -168,7 +167,7 @@ func NewCryptoSetupServer(
 	runner handshakeRunner,
 	tlsConf *tls.Config,
 	enable0RTT bool,
-	rttStats *congestion.RTTStats,
+	rttStats *utils.RTTStats,
 	tracer logging.ConnectionTracer,
 	logger utils.Logger,
 ) CryptoSetup {
@@ -197,7 +196,7 @@ func newCryptoSetup(
 	runner handshakeRunner,
 	tlsConf *tls.Config,
 	enable0RTT bool,
-	rttStats *congestion.RTTStats,
+	rttStats *utils.RTTStats,
 	tracer logging.ConnectionTracer,
 	logger utils.Logger,
 	perspective protocol.Perspective,

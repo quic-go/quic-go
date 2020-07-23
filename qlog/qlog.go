@@ -9,7 +9,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/lucas-clemente/quic-go/internal/congestion"
+	"github.com/lucas-clemente/quic-go/internal/utils"
+
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/internal/wire"
 	"github.com/lucas-clemente/quic-go/logging"
@@ -286,7 +287,7 @@ func (t *connectionTracer) DroppedPacket(pt logging.PacketType, size protocol.By
 	t.mutex.Unlock()
 }
 
-func (t *connectionTracer) UpdatedMetrics(rttStats *congestion.RTTStats, cwnd, bytesInFlight protocol.ByteCount, packetsInFlight int) {
+func (t *connectionTracer) UpdatedMetrics(rttStats *utils.RTTStats, cwnd, bytesInFlight protocol.ByteCount, packetsInFlight int) {
 	m := &metrics{
 		MinRTT:           rttStats.MinRTT(),
 		SmoothedRTT:      rttStats.SmoothedRTT(),
@@ -312,6 +313,12 @@ func (t *connectionTracer) LostPacket(encLevel protocol.EncryptionLevel, pn prot
 		PacketNumber: pn,
 		Trigger:      packetLossReason(lossReason),
 	})
+	t.mutex.Unlock()
+}
+
+func (t *connectionTracer) UpdatedCongestionState(state logging.CongestionState) {
+	t.mutex.Lock()
+	t.recordEvent(time.Now(), &eventCongestionStateUpdated{state: congestionState(state)})
 	t.mutex.Unlock()
 }
 

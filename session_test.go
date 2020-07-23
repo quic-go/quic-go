@@ -91,6 +91,7 @@ var _ = Describe("Session", func() {
 		tracer = mocks.NewMockConnectionTracer(mockCtrl)
 		tracer.EXPECT().SentTransportParameters(gomock.Any())
 		tracer.EXPECT().UpdatedKeyFromTLS(gomock.Any(), gomock.Any()).AnyTimes()
+		tracer.EXPECT().UpdatedCongestionState(gomock.Any())
 		sess = newSession(
 			mconn,
 			sessionRunner,
@@ -2154,6 +2155,7 @@ var _ = Describe("Client Session", func() {
 		tracer = mocks.NewMockConnectionTracer(mockCtrl)
 		tracer.EXPECT().SentTransportParameters(gomock.Any())
 		tracer.EXPECT().UpdatedKeyFromTLS(gomock.Any(), gomock.Any()).AnyTimes()
+		tracer.EXPECT().UpdatedCongestionState(gomock.Any())
 		sess = newClientSession(
 			mconn,
 			sessionRunner,

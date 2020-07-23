@@ -9,7 +9,6 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/lucas-clemente/quic-go/internal/congestion"
 	"github.com/lucas-clemente/quic-go/internal/qerr"
 	"github.com/lucas-clemente/quic-go/internal/utils"
 	"github.com/lucas-clemente/quic-go/logging"
@@ -72,7 +71,7 @@ type updatableAEAD struct {
 	headerDecrypter headerProtector
 	headerEncrypter headerProtector
 
-	rttStats *congestion.RTTStats
+	rttStats *utils.RTTStats
 
 	tracer logging.ConnectionTracer
 	logger utils.Logger
@@ -84,7 +83,7 @@ type updatableAEAD struct {
 var _ ShortHeaderOpener = &updatableAEAD{}
 var _ ShortHeaderSealer = &updatableAEAD{}
 
-func newUpdatableAEAD(rttStats *congestion.RTTStats, tracer logging.ConnectionTracer, logger utils.Logger) *updatableAEAD {
+func newUpdatableAEAD(rttStats *utils.RTTStats, tracer logging.ConnectionTracer, logger utils.Logger) *updatableAEAD {
 	return &updatableAEAD{
 		firstPacketNumber:       protocol.InvalidPacketNumber,
 		largestAcked:            protocol.InvalidPacketNumber,

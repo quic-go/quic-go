@@ -11,7 +11,6 @@ import (
 	"math/big"
 	"time"
 
-	"github.com/lucas-clemente/quic-go/internal/congestion"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/internal/qerr"
 	"github.com/lucas-clemente/quic-go/internal/testdata"
@@ -99,7 +98,7 @@ var _ = Describe("Crypto Setup TLS", func() {
 			NewMockHandshakeRunner(mockCtrl),
 			tlsConf,
 			false,
-			&congestion.RTTStats{},
+			&utils.RTTStats{},
 			nil,
 			utils.DefaultLogger.WithPrefix("server"),
 		)
@@ -133,7 +132,7 @@ var _ = Describe("Crypto Setup TLS", func() {
 			runner,
 			testdata.GetTLSConfig(),
 			false,
-			&congestion.RTTStats{},
+			&utils.RTTStats{},
 			nil,
 			utils.DefaultLogger.WithPrefix("server"),
 		)
@@ -173,7 +172,7 @@ var _ = Describe("Crypto Setup TLS", func() {
 			runner,
 			testdata.GetTLSConfig(),
 			false,
-			&congestion.RTTStats{},
+			&utils.RTTStats{},
 			nil,
 			utils.DefaultLogger.WithPrefix("server"),
 		)
@@ -216,7 +215,7 @@ var _ = Describe("Crypto Setup TLS", func() {
 			runner,
 			serverConf,
 			false,
-			&congestion.RTTStats{},
+			&utils.RTTStats{},
 			nil,
 			utils.DefaultLogger.WithPrefix("server"),
 		)
@@ -252,7 +251,7 @@ var _ = Describe("Crypto Setup TLS", func() {
 			NewMockHandshakeRunner(mockCtrl),
 			serverConf,
 			false,
-			&congestion.RTTStats{},
+			&utils.RTTStats{},
 			nil,
 			utils.DefaultLogger.WithPrefix("server"),
 		)
@@ -287,8 +286,8 @@ var _ = Describe("Crypto Setup TLS", func() {
 			}
 		}
 
-		newRTTStatsWithRTT := func(rtt time.Duration) *congestion.RTTStats {
-			rttStats := &congestion.RTTStats{}
+		newRTTStatsWithRTT := func(rtt time.Duration) *utils.RTTStats {
+			rttStats := &utils.RTTStats{}
 			rttStats.UpdateRTT(rtt, 0, time.Now())
 			ExpectWithOffset(1, rttStats.SmoothedRTT()).To(Equal(rtt))
 			return rttStats
@@ -328,7 +327,7 @@ var _ = Describe("Crypto Setup TLS", func() {
 
 		handshakeWithTLSConf := func(
 			clientConf, serverConf *tls.Config,
-			clientRTTStats, serverRTTStats *congestion.RTTStats,
+			clientRTTStats, serverRTTStats *utils.RTTStats,
 			clientTransportParameters, serverTransportParameters *wire.TransportParameters,
 			enable0RTT bool,
 		) (<-chan *wire.TransportParameters /* clientHelloWrittenChan */, CryptoSetup /* client */, error /* client error */, CryptoSetup /* server */, error /* server error */) {
@@ -399,7 +398,7 @@ var _ = Describe("Crypto Setup TLS", func() {
 		It("handshakes", func() {
 			_, _, clientErr, _, serverErr := handshakeWithTLSConf(
 				clientConf, serverConf,
-				&congestion.RTTStats{}, &congestion.RTTStats{},
+				&utils.RTTStats{}, &utils.RTTStats{},
 				&wire.TransportParameters{}, &wire.TransportParameters{},
 				false,
 			)
@@ -411,7 +410,7 @@ var _ = Describe("Crypto Setup TLS", func() {
 			serverConf.CurvePreferences = []tls.CurveID{tls.CurveP384}
 			_, _, clientErr, _, serverErr := handshakeWithTLSConf(
 				clientConf, serverConf,
-				&congestion.RTTStats{}, &congestion.RTTStats{},
+				&utils.RTTStats{}, &utils.RTTStats{},
 				&wire.TransportParameters{}, &wire.TransportParameters{},
 				false,
 			)
@@ -424,7 +423,7 @@ var _ = Describe("Crypto Setup TLS", func() {
 			serverConf.ClientAuth = qtls.RequireAnyClientCert
 			_, _, clientErr, _, serverErr := handshakeWithTLSConf(
 				clientConf, serverConf,
-				&congestion.RTTStats{}, &congestion.RTTStats{},
+				&utils.RTTStats{}, &utils.RTTStats{},
 				&wire.TransportParameters{}, &wire.TransportParameters{},
 				false,
 			)
@@ -445,7 +444,7 @@ var _ = Describe("Crypto Setup TLS", func() {
 				runner,
 				&tls.Config{InsecureSkipVerify: true},
 				false,
-				&congestion.RTTStats{},
+				&utils.RTTStats{},
 				nil,
 				utils.DefaultLogger.WithPrefix("client"),
 			)
@@ -487,7 +486,7 @@ var _ = Describe("Crypto Setup TLS", func() {
 				cRunner,
 				clientConf,
 				false,
-				&congestion.RTTStats{},
+				&utils.RTTStats{},
 				nil,
 				utils.DefaultLogger.WithPrefix("client"),
 			)
@@ -511,7 +510,7 @@ var _ = Describe("Crypto Setup TLS", func() {
 				sRunner,
 				serverConf,
 				false,
-				&congestion.RTTStats{},
+				&utils.RTTStats{},
 				nil,
 				utils.DefaultLogger.WithPrefix("server"),
 			)
@@ -544,7 +543,7 @@ var _ = Describe("Crypto Setup TLS", func() {
 					cRunner,
 					clientConf,
 					false,
-					&congestion.RTTStats{},
+					&utils.RTTStats{},
 					nil,
 					utils.DefaultLogger.WithPrefix("client"),
 				)
@@ -564,7 +563,7 @@ var _ = Describe("Crypto Setup TLS", func() {
 					sRunner,
 					serverConf,
 					false,
-					&congestion.RTTStats{},
+					&utils.RTTStats{},
 					nil,
 					utils.DefaultLogger.WithPrefix("server"),
 				)
@@ -604,7 +603,7 @@ var _ = Describe("Crypto Setup TLS", func() {
 					cRunner,
 					clientConf,
 					false,
-					&congestion.RTTStats{},
+					&utils.RTTStats{},
 					nil,
 					utils.DefaultLogger.WithPrefix("client"),
 				)
@@ -624,7 +623,7 @@ var _ = Describe("Crypto Setup TLS", func() {
 					sRunner,
 					serverConf,
 					false,
-					&congestion.RTTStats{},
+					&utils.RTTStats{},
 					nil,
 					utils.DefaultLogger.WithPrefix("server"),
 				)
@@ -661,7 +660,7 @@ var _ = Describe("Crypto Setup TLS", func() {
 				clientOrigRTTStats := newRTTStatsWithRTT(clientRTT)
 				clientHelloWrittenChan, client, clientErr, server, serverErr := handshakeWithTLSConf(
 					clientConf, serverConf,
-					clientOrigRTTStats, &congestion.RTTStats{},
+					clientOrigRTTStats, &utils.RTTStats{},
 					&wire.TransportParameters{}, &wire.TransportParameters{},
 					false,
 				)
@@ -674,10 +673,10 @@ var _ = Describe("Crypto Setup TLS", func() {
 
 				csc.EXPECT().Get(gomock.Any()).Return(state, true)
 				csc.EXPECT().Put(gomock.Any(), gomock.Any()).MaxTimes(1)
-				clientRTTStats := &congestion.RTTStats{}
+				clientRTTStats := &utils.RTTStats{}
 				clientHelloWrittenChan, client, clientErr, server, serverErr = handshakeWithTLSConf(
 					clientConf, serverConf,
-					clientRTTStats, &congestion.RTTStats{},
+					clientRTTStats, &utils.RTTStats{},
 					&wire.TransportParameters{}, &wire.TransportParameters{},
 					false,
 				)
@@ -702,7 +701,7 @@ var _ = Describe("Crypto Setup TLS", func() {
 				clientConf.ClientSessionCache = csc
 				_, client, clientErr, server, serverErr := handshakeWithTLSConf(
 					clientConf, serverConf,
-					&congestion.RTTStats{}, &congestion.RTTStats{},
+					&utils.RTTStats{}, &utils.RTTStats{},
 					&wire.TransportParameters{}, &wire.TransportParameters{},
 					false,
 				)
@@ -716,7 +715,7 @@ var _ = Describe("Crypto Setup TLS", func() {
 				csc.EXPECT().Get(gomock.Any()).Return(state, true)
 				_, client, clientErr, server, serverErr = handshakeWithTLSConf(
 					clientConf, serverConf,
-					&congestion.RTTStats{}, &congestion.RTTStats{},
+					&utils.RTTStats{}, &utils.RTTStats{},
 					&wire.TransportParameters{}, &wire.TransportParameters{},
 					false,
 				)
@@ -759,8 +758,8 @@ var _ = Describe("Crypto Setup TLS", func() {
 				csc.EXPECT().Put(gomock.Any(), nil)
 				csc.EXPECT().Put(gomock.Any(), gomock.Any()).MaxTimes(1)
 
-				clientRTTStats := &congestion.RTTStats{}
-				serverRTTStats := &congestion.RTTStats{}
+				clientRTTStats := &utils.RTTStats{}
+				serverRTTStats := &utils.RTTStats{}
 				clientHelloWrittenChan, client, clientErr, server, serverErr = handshakeWithTLSConf(
 					clientConf, serverConf,
 					clientRTTStats, serverRTTStats,
@@ -797,7 +796,7 @@ var _ = Describe("Crypto Setup TLS", func() {
 				const initialMaxData protocol.ByteCount = 1337
 				clientHelloWrittenChan, client, clientErr, server, serverErr := handshakeWithTLSConf(
 					clientConf, serverConf,
-					clientOrigRTTStats, &congestion.RTTStats{},
+					clientOrigRTTStats, &utils.RTTStats{},
 					&wire.TransportParameters{}, &wire.TransportParameters{InitialMaxData: initialMaxData},
 					true,
 				)
@@ -812,10 +811,10 @@ var _ = Describe("Crypto Setup TLS", func() {
 				csc.EXPECT().Put(gomock.Any(), nil)
 				csc.EXPECT().Put(gomock.Any(), gomock.Any()).MaxTimes(1)
 
-				clientRTTStats := &congestion.RTTStats{}
+				clientRTTStats := &utils.RTTStats{}
 				clientHelloWrittenChan, client, clientErr, server, serverErr = handshakeWithTLSConf(
 					clientConf, serverConf,
-					clientRTTStats, &congestion.RTTStats{},
+					clientRTTStats, &utils.RTTStats{},
 					&wire.TransportParameters{}, &wire.TransportParameters{InitialMaxData: initialMaxData + 1},
 					true,
 				)

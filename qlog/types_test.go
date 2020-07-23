@@ -124,4 +124,11 @@ var _ = Describe("Types", func() {
 			Expect(transportError(1337).String()).To(BeEmpty())
 		})
 	})
+
+	It("has a string representation for congestion state updates", func() {
+		Expect(congestionState(logging.CongestionStateSlowStart).String()).To(Equal("slow_start"))
+		Expect(congestionState(logging.CongestionStateCongestionAvoidance).String()).To(Equal("congestion_avoidance"))
+		Expect(congestionState(logging.CongestionStateApplicationLimited).String()).To(Equal("application_limited"))
+		Expect(congestionState(logging.CongestionStateRecovery).String()).To(Equal("recovery"))
+	})
 })
