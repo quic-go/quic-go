@@ -10,12 +10,12 @@ import (
 const (
 	// maxDatagramSize is the default maximum packet size used in the Linux TCP implementation.
 	// Used in QUIC for congestion window computations in bytes.
-	maxDatagramSize                 = protocol.ByteCount(protocol.MaxPacketSizeIPv4)
-	maxBurstBytes                   = 3 * maxDatagramSize
-	renoBeta                float32 = 0.7 // Reno backoff factor.
-	maxCongestionWindow             = protocol.MaxCongestionWindowPackets * maxDatagramSize
-	minCongestionWindow             = 2 * maxDatagramSize
-	initialCongestionWindow         = 32 * maxDatagramSize
+	maxDatagramSize         = protocol.ByteCount(protocol.MaxPacketSizeIPv4)
+	maxBurstBytes           = 3 * maxDatagramSize
+	renoBeta                = 0.7 // Reno backoff factor.
+	maxCongestionWindow     = protocol.MaxCongestionWindowPackets * maxDatagramSize
+	minCongestionWindow     = 2 * maxDatagramSize
+	initialCongestionWindow = 32 * maxDatagramSize
 )
 
 type cubicSender struct {
@@ -52,9 +52,6 @@ type cubicSender struct {
 	// Slow start congestion window in bytes, aka ssthresh.
 	slowStartThreshold protocol.ByteCount
 
-	// Number of connections to simulate.
-	numConnections int
-
 	// ACK counter for the Reno implementation.
 	numAckedPackets uint64
 
@@ -82,7 +79,6 @@ func newCubicSender(clock Clock, rttStats *RTTStats, reno bool, initialCongestio
 		minCongestionWindow:        minCongestionWindow,
 		slowStartThreshold:         initialMaxCongestionWindow,
 		maxCongestionWindow:        initialMaxCongestionWindow,
-		numConnections:             defaultNumConnections,
 		cubic:                      NewCubic(clock),
 		clock:                      clock,
 		reno:                       reno,
@@ -167,7 +163,7 @@ func (c *cubicSender) OnPacketLost(
 	c.lastCutbackExitedSlowstart = c.InSlowStart()
 
 	if c.reno {
-		c.congestionWindow = protocol.ByteCount(float32(c.congestionWindow) * c.renoBeta())
+		c.congestionWindow = protocol.ByteCount(float64(c.congestionWindow) * renoBeta)
 	} else {
 		c.congestionWindow = c.cubic.CongestionWindowAfterPacketLoss(c.congestionWindow)
 	}
@@ -179,14 +175,6 @@ func (c *cubicSender) OnPacketLost(
 	// reset packet count from congestion avoidance mode. We start
 	// counting again when we're out of recovery.
 	c.numAckedPackets = 0
-}
-
-func (c *cubicSender) renoBeta() float32 {
-	// kNConnectionBeta is the backoff factor after loss for our N-connection
-	// emulation, which emulates the effective backoff of an ensemble of N
-	// TCP-Reno connections on a single loss event. The effective multiplier is
-	// computed as:
-	return (float32(c.numConnections) - 1. + renoBeta) / float32(c.numConnections)
 }
 
 // Called when we receive an ack. Normal TCP tracks how many packets one ack
@@ -215,9 +203,7 @@ func (c *cubicSender) maybeIncreaseCwnd(
 	if c.reno {
 		// Classic Reno congestion avoidance.
 		c.numAckedPackets++
-		// Divide by num_connections to smoothly increase the CWND at a faster
-		// rate than conventional Reno.
-		if c.numAckedPackets*uint64(c.numConnections) >= uint64(c.congestionWindow)/uint64(maxDatagramSize) {
+		if c.numAckedPackets >= uint64(c.congestionWindow/maxDatagramSize) {
 			c.congestionWindow += maxDatagramSize
 			c.numAckedPackets = 0
 		}
@@ -244,12 +230,6 @@ func (c *cubicSender) BandwidthEstimate() Bandwidth {
 		return infBandwidth
 	}
 	return BandwidthFromDelta(c.GetCongestionWindow(), srtt)
-}
-
-// SetNumEmulatedConnections sets the number of emulated connections
-func (c *cubicSender) SetNumEmulatedConnections(n int) {
-	c.numConnections = utils.Max(n, 1)
-	c.cubic.SetNumConnections(c.numConnections)
 }
 
 // OnRetransmissionTimeout is called on an retransmission timeout
