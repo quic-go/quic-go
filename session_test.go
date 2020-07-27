@@ -1597,13 +1597,11 @@ var _ = Describe("Session", func() {
 		Eventually(sess.Context().Done()).Should(BeClosed())
 	})
 
-	It("cancels the HandshakeComplete context and informs the SentPacketHandler when the handshake completes", func() {
+	It("cancels the HandshakeComplete context when the handshake completes", func() {
 		packer.EXPECT().PackCoalescedPacket(protocol.MaxByteCount).AnyTimes()
 		finishHandshake := make(chan struct{})
 		sph := mockackhandler.NewMockSentPacketHandler(mockCtrl)
 		sess.sentPacketHandler = sph
-		sphNotified := make(chan struct{})
-		sph.EXPECT().SetHandshakeComplete().Do(func() { close(sphNotified) })
 		sph.EXPECT().GetLossDetectionTimeout().AnyTimes()
 		sph.EXPECT().TimeUntilSend().AnyTimes()
 		sph.EXPECT().SendMode().AnyTimes()
@@ -1621,7 +1619,6 @@ var _ = Describe("Session", func() {
 		Consistently(handshakeCtx.Done()).ShouldNot(BeClosed())
 		close(finishHandshake)
 		Eventually(handshakeCtx.Done()).Should(BeClosed())
-		Eventually(sphNotified).Should(BeClosed())
 		// make sure the go routine returns
 		streamManager.EXPECT().CloseWithError(gomock.Any())
 		expectReplaceWithClosed()
@@ -1704,7 +1701,6 @@ var _ = Describe("Session", func() {
 		sph := mockackhandler.NewMockSentPacketHandler(mockCtrl)
 		sph.EXPECT().SendMode().Return(ackhandler.SendAny).AnyTimes()
 		sph.EXPECT().AmplificationWindow().Return(protocol.MaxByteCount)
-		sph.EXPECT().SetHandshakeComplete()
 		sph.EXPECT().GetLossDetectionTimeout().AnyTimes()
 		sph.EXPECT().TimeUntilSend().AnyTimes()
 		sph.EXPECT().HasPacingBudget().Return(true)

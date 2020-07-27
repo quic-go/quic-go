@@ -229,16 +229,16 @@ func (mr *MockSentPacketHandlerMockRecorder) SentPacket(arg0 interface{}) *gomoc
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SentPacket", reflect.TypeOf((*MockSentPacketHandler)(nil).SentPacket), arg0)
 }
 
-// SetHandshakeComplete mocks base method
-func (m *MockSentPacketHandler) SetHandshakeComplete() {
+// SetHandshakeConfirmed mocks base method
+func (m *MockSentPacketHandler) SetHandshakeConfirmed() {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "SetHandshakeComplete")
+	m.ctrl.Call(m, "SetHandshakeConfirmed")
 }
 
-// SetHandshakeComplete indicates an expected call of SetHandshakeComplete
-func (mr *MockSentPacketHandlerMockRecorder) SetHandshakeComplete() *gomock.Call {
+// SetHandshakeConfirmed indicates an expected call of SetHandshakeConfirmed
+func (mr *MockSentPacketHandlerMockRecorder) SetHandshakeConfirmed() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetHandshakeComplete", reflect.TypeOf((*MockSentPacketHandler)(nil).SetHandshakeComplete))
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetHandshakeConfirmed", reflect.TypeOf((*MockSentPacketHandler)(nil).SetHandshakeConfirmed))
 }
 
 // TimeUntilSend mocks base method
