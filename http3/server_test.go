@@ -200,7 +200,7 @@ var _ = Describe("Server", func() {
 				str.EXPECT().Write(gomock.Any()).DoAndReturn(func(p []byte) (int, error) {
 					return responseBuf.Write(p)
 				}).AnyTimes()
-				str.EXPECT().CancelRead(quic.ErrorCode(errorEarlyResponse))
+				str.EXPECT().CancelRead(quic.ErrorCode(errorNoError))
 				str.EXPECT().Close().Do(func() { close(done) })
 
 				s.handleConn(sess)
@@ -305,7 +305,7 @@ var _ = Describe("Server", func() {
 			str.EXPECT().Write(gomock.Any()).DoAndReturn(func(p []byte) (int, error) {
 				return len(p), nil
 			}).AnyTimes()
-			str.EXPECT().CancelRead(quic.ErrorCode(errorEarlyResponse))
+			str.EXPECT().CancelRead(quic.ErrorCode(errorNoError))
 
 			serr := s.handleRequest(sess, str, qpackDecoder, nil)
 			Expect(serr.err).ToNot(HaveOccurred())
@@ -328,7 +328,7 @@ var _ = Describe("Server", func() {
 			str.EXPECT().Write(gomock.Any()).DoAndReturn(func(p []byte) (int, error) {
 				return len(p), nil
 			}).AnyTimes()
-			str.EXPECT().CancelRead(quic.ErrorCode(errorEarlyResponse))
+			str.EXPECT().CancelRead(quic.ErrorCode(errorNoError))
 
 			serr := s.handleRequest(sess, str, qpackDecoder, nil)
 			Expect(serr.err).ToNot(HaveOccurred())
