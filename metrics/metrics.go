@@ -19,6 +19,7 @@ var (
 	connections = stats.Int64("quic-go/connections", "number of QUIC connections", stats.UnitDimensionless)
 	lostPackets = stats.Int64("quic-go/lost-packets", "number of packets declared lost", stats.UnitDimensionless)
 	sentPackets = stats.Int64("quic-go/sent-packets", "number of packets sent", stats.UnitDimensionless)
+	ptos        = stats.Int64("quic-go/ptos", "number of times the PTO timer fired", stats.UnitDimensionless)
 	closes      = stats.Int64("quic-go/close", "number of connections closed", stats.UnitDimensionless)
 )
 
@@ -32,6 +33,7 @@ var (
 	keyCloseReason, _      = tag.NewKey("close_reason")
 	keyCloseRemote, _      = tag.NewKey("close_remote")
 	keyErrorCode, _        = tag.NewKey("error_code")
+	keyHandshakePhase, _   = tag.NewKey("handshake_phase")
 )
 
 // Views
@@ -49,6 +51,11 @@ var (
 	SentPacketsView = &view.View{
 		Measure:     sentPackets,
 		TagKeys:     []tag.Key{keyPacketType},
+		Aggregation: view.Count(),
+	}
+	PTOView = &view.View{
+		Measure:     ptos,
+		TagKeys:     []tag.Key{keyHandshakePhase},
 		Aggregation: view.Count(),
 	}
 	CloseView = &view.View{
@@ -93,6 +100,8 @@ func (t *tracer) DroppedPacket(net.Addr, logging.PacketType, logging.ByteCount, 
 type connTracer struct {
 	perspective logging.Perspective
 	tracer      logging.Tracer
+
+	handshakeComplete bool
 }
 
 func newConnTracer(tracer logging.Tracer, perspective logging.Perspective) logging.ConnectionTracer {
@@ -158,10 +167,14 @@ func (t *connTracer) ClosedConnection(r logging.CloseReason) {
 func (t *connTracer) SentTransportParameters(*logging.TransportParameters)     {}
 func (t *connTracer) ReceivedTransportParameters(*logging.TransportParameters) {}
 func (t *connTracer) SentPacket(hdr *logging.ExtendedHeader, _ logging.ByteCount, _ *logging.AckFrame, _ []logging.Frame) {
+	typ := logging.PacketTypeFromHeader(&hdr.Header)
+	if typ == logging.PacketType1RTT {
+		t.handshakeComplete = true
+	}
 	stats.RecordWithTags(
 		context.Background(),
 		[]tag.Mutator{
-			tag.Upsert(keyPacketType, packetType(logging.PacketTypeFromHeader(&hdr.Header)).String()),
+			tag.Upsert(keyPacketType, packetType(typ).String()),
 		},
 		sentPackets.M(1),
 	)
@@ -184,7 +197,20 @@ func (t *connTracer) LostPacket(encLevel logging.EncryptionLevel, _ logging.Pack
 		lostPackets.M(1),
 	)
 }
-func (t *connTracer) UpdatedPTOCount(value uint32)                                       {}
+func (t *connTracer) UpdatedPTOCount(value uint32) {
+	if value == 0 {
+		return
+	}
+	phase := "during_handshake"
+	if t.handshakeComplete {
+		phase = "after_handshake"
+	}
+	stats.RecordWithTags(
+		context.Background(),
+		[]tag.Mutator{tag.Upsert(keyHandshakePhase, phase)},
+		ptos.M(1),
+	)
+}
 func (t *connTracer) UpdatedKeyFromTLS(logging.EncryptionLevel, logging.Perspective)     {}
 func (t *connTracer) UpdatedKey(logging.KeyPhase, bool)                                  {}
 func (t *connTracer) DroppedEncryptionLevel(logging.EncryptionLevel)                     {}
