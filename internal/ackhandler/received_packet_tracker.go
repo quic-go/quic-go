@@ -8,6 +8,9 @@ import (
 	"github.com/lucas-clemente/quic-go/internal/wire"
 )
 
+// number of ack-eliciting packets received before sending an ack.
+const packetsBeforeAck = 2
+
 type receivedPacketTracker struct {
 	largestObserved             protocol.PacketNumber
 	ignoreBelow                 protocol.PacketNumber
@@ -58,10 +61,12 @@ func (h *receivedPacketTracker) ReceivedPacket(packetNumber protocol.PacketNumbe
 	if isNew := h.packetHistory.ReceivedPacket(packetNumber); isNew && shouldInstigateAck {
 		h.hasNewAck = true
 	}
-	h.maybeQueueAck(packetNumber, rcvTime, shouldInstigateAck, isMissing)
+	if shouldInstigateAck {
+		h.maybeQueueAck(packetNumber, rcvTime, isMissing)
+	}
 }
 
-// IgnoreBelow sets a lower limit for acking packets.
+// IgnoreBelow sets a lower limit for acknowledging packets.
 // Packets with packet numbers smaller than p will not be acked.
 func (h *receivedPacketTracker) IgnoreBelow(p protocol.PacketNumber) {
 	if p <= h.ignoreBelow {
@@ -87,14 +92,12 @@ func (h *receivedPacketTracker) hasNewMissingPackets() bool {
 		return false
 	}
 	highestRange := h.packetHistory.GetHighestAckRange()
-	return highestRange.Smallest >= h.lastAck.LargestAcked() && highestRange.Len() <= maxPacketsAfterNewMissing
+	return highestRange.Smallest > h.lastAck.LargestAcked()+1 && highestRange.Len() == 1
 }
 
 // maybeQueueAck queues an ACK, if necessary.
-// It is implemented analogously to Chrome's QuicConnection::MaybeQueueAck()
-// in ACK_DECIMATION_WITH_REORDERING mode.
-func (h *receivedPacketTracker) maybeQueueAck(packetNumber protocol.PacketNumber, rcvTime time.Time, shouldInstigateAck, wasMissing bool) {
-	// always ack the first packet
+func (h *receivedPacketTracker) maybeQueueAck(pn protocol.PacketNumber, rcvTime time.Time, wasMissing bool) {
+	// always acknowledge the first packet
 	if h.lastAck == nil {
 		if !h.ackQueued {
 			h.logger.Debugf("\tQueueing ACK because the first packet should be acknowledged.")
@@ -103,60 +106,39 @@ func (h *receivedPacketTracker) maybeQueueAck(packetNumber protocol.PacketNumber
 		return
 	}
 
+	if h.ackQueued {
+		return
+	}
+
+	h.ackElicitingPacketsReceivedSinceLastAck++
+
 	// Send an ACK if this packet was reported missing in an ACK sent before.
 	// Ack decimation with reordering relies on the timer to send an ACK, but if
 	// missing packets we reported in the previous ack, send an ACK immediately.
 	if wasMissing {
 		if h.logger.Debug() {
-			h.logger.Debugf("\tQueueing ACK because packet %d was missing before.", packetNumber)
+			h.logger.Debugf("\tQueueing ACK because packet %d was missing before.", pn)
 		}
 		h.ackQueued = true
 	}
 
-	if !h.ackQueued && shouldInstigateAck {
-		h.ackElicitingPacketsReceivedSinceLastAck++
+	// send an ACK every 2 ack-eliciting packets
+	if h.ackElicitingPacketsReceivedSinceLastAck >= packetsBeforeAck {
+		if h.logger.Debug() {
+			h.logger.Debugf("\tQueueing ACK because packet %d packets were received after the last ACK (using initial threshold: %d).", h.ackElicitingPacketsReceivedSinceLastAck, packetsBeforeAck)
+		}
+		h.ackQueued = true
+	} else if h.ackAlarm.IsZero() {
+		if h.logger.Debug() {
+			h.logger.Debugf("\tSetting ACK timer to max ack delay: %s", h.maxAckDelay)
+		}
+		h.ackAlarm = rcvTime.Add(h.maxAckDelay)
+	}
 
-		if packetNumber > minReceivedBeforeAckDecimation {
-			// ack up to 10 packets at once
-			if h.ackElicitingPacketsReceivedSinceLastAck >= ackElicitingPacketsBeforeAck {
-				h.ackQueued = true
-				if h.logger.Debug() {
-					h.logger.Debugf("\tQueueing ACK because packet %d packets were received after the last ACK (using threshold: %d).", h.ackElicitingPacketsReceivedSinceLastAck, ackElicitingPacketsBeforeAck)
-				}
-			} else if h.ackAlarm.IsZero() {
-				// wait for the minimum of the ack decimation delay or the delayed ack time before sending an ack
-				ackDelay := utils.MinDuration(h.maxAckDelay, time.Duration(float64(h.rttStats.MinRTT())*float64(ackDecimationDelay)))
-				h.ackAlarm = rcvTime.Add(ackDelay)
-				if h.logger.Debug() {
-					h.logger.Debugf("\tSetting ACK timer to min(1/4 min-RTT, max ack delay): %s (%s from now)", ackDelay, time.Until(h.ackAlarm))
-				}
-			}
-		} else {
-			// send an ACK every 2 ack-eliciting packets
-			if h.ackElicitingPacketsReceivedSinceLastAck >= initialAckElicitingPacketsBeforeAck {
-				if h.logger.Debug() {
-					h.logger.Debugf("\tQueueing ACK because packet %d packets were received after the last ACK (using initial threshold: %d).", h.ackElicitingPacketsReceivedSinceLastAck, initialAckElicitingPacketsBeforeAck)
-				}
-				h.ackQueued = true
-			} else if h.ackAlarm.IsZero() {
-				if h.logger.Debug() {
-					h.logger.Debugf("\tSetting ACK timer to max ack delay: %s", h.maxAckDelay)
-				}
-				h.ackAlarm = rcvTime.Add(h.maxAckDelay)
-			}
-		}
-		// If there are new missing packets to report, set a short timer to send an ACK.
-		if h.hasNewMissingPackets() {
-			// wait the minimum of 1/8 min RTT and the existing ack time
-			ackDelay := time.Duration(float64(h.rttStats.MinRTT()) * float64(shortAckDecimationDelay))
-			ackTime := rcvTime.Add(ackDelay)
-			if h.ackAlarm.IsZero() || h.ackAlarm.After(ackTime) {
-				h.ackAlarm = ackTime
-				if h.logger.Debug() {
-					h.logger.Debugf("\tSetting ACK timer to 1/8 min-RTT: %s (%s from now)", ackDelay, time.Until(h.ackAlarm))
-				}
-			}
-		}
+	// Queue an ACK if there are new missing packets to report.
+	if h.hasNewMissingPackets() {
+		h.logger.Debugf("\tQueuing ACK because there's a new missing packet to report.")
+		h.ackQueued = true
 	}
 
 	if h.ackQueued {
