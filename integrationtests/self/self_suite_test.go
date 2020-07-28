@@ -102,6 +102,10 @@ func init() {
 	flag.BoolVar(&enableQlog, "qlog", false, "enable qlog")
 	// metrics won't be accessible anywhere, but it's useful to exercise the code
 	flag.BoolVar(&enableMetrics, "metrics", false, "enable metrics")
+}
+
+var _ = BeforeSuite(func() {
+	mrand.Seed(GinkgoRandomSeed())
 
 	ca, caPrivateKey, err := generateCA()
 	if err != nil {
@@ -157,7 +161,7 @@ func init() {
 	} else if enableMetrics {
 		tracer = metricsTracer
 	}
-}
+})
 
 func generateCA() (*x509.Certificate, *rsa.PrivateKey, error) {
 	certTempl := &x509.Certificate{
@@ -317,7 +321,3 @@ func TestSelf(t *testing.T) {
 	RegisterFailHandler(Fail)
 	RunSpecs(t, "Self integration tests")
 }
-
-var _ = BeforeSuite(func() {
-	mrand.Seed(GinkgoRandomSeed())
-})
