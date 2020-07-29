@@ -683,7 +683,6 @@ func (s *session) handleHandshakeComplete() {
 	s.handshakeCtxCancel()
 
 	s.connIDGenerator.SetHandshakeComplete()
-	s.sentPacketHandler.SetHandshakeComplete()
 
 	if s.perspective == protocol.PerspectiveServer {
 		ticket, err := s.cryptoStreamHandler.GetSessionTicket()
@@ -1331,6 +1330,7 @@ func (s *session) handleCloseError(closeErr closeError) {
 func (s *session) dropEncryptionLevel(encLevel protocol.EncryptionLevel) {
 	if encLevel == protocol.EncryptionHandshake {
 		s.handshakeConfirmed = true
+		s.sentPacketHandler.SetHandshakeConfirmed()
 	}
 	s.sentPacketHandler.DropPackets(encLevel)
 	s.receivedPacketHandler.DropPackets(encLevel)

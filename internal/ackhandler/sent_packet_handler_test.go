@@ -604,7 +604,7 @@ var _ = Describe("SentPacketHandler", func() {
 		})
 
 		It("implements exponential backoff", func() {
-			handler.SetHandshakeComplete()
+			handler.SetHandshakeConfirmed()
 			sendTime := time.Now().Add(-time.Hour)
 			handler.SentPacket(ackElicitingPacket(&Packet{PacketNumber: 1, SendTime: sendTime}))
 			timeout := handler.GetLossDetectionTimeout().Sub(sendTime)
@@ -620,7 +620,7 @@ var _ = Describe("SentPacketHandler", func() {
 		It("reset the PTO count when receiving an ACK", func() {
 			handler.ReceivedPacket(protocol.EncryptionHandshake)
 			now := time.Now()
-			handler.SetHandshakeComplete()
+			handler.SetHandshakeConfirmed()
 			handler.SentPacket(ackElicitingPacket(&Packet{PacketNumber: 1, SendTime: now.Add(-time.Minute)}))
 			handler.SentPacket(ackElicitingPacket(&Packet{PacketNumber: 2, SendTime: now.Add(-time.Minute)}))
 			Expect(handler.GetLossDetectionTimeout()).To(BeTemporally("~", now.Add(-time.Minute), time.Second))
@@ -659,7 +659,7 @@ var _ = Describe("SentPacketHandler", func() {
 			Expect(handler.ptoCount).To(BeEquivalentTo(1))
 			Expect(handler.SendMode()).To(Equal(SendPTOHandshake))
 			Expect(handler.GetLossDetectionTimeout()).To(Equal(sendTimeHandshake.Add(handler.rttStats.PTO(false) << 1)))
-			handler.SetHandshakeComplete()
+			handler.SetHandshakeConfirmed()
 			handler.DropPackets(protocol.EncryptionHandshake)
 			// PTO timer based on the 1-RTT packet
 			Expect(handler.GetLossDetectionTimeout()).To(Equal(sendTimeAppData.Add(handler.rttStats.PTO(true)))) // no backoff. PTO count = 0
@@ -669,7 +669,7 @@ var _ = Describe("SentPacketHandler", func() {
 
 		It("allows two 1-RTT PTOs", func() {
 			handler.ReceivedPacket(protocol.EncryptionHandshake)
-			handler.SetHandshakeComplete()
+			handler.SetHandshakeConfirmed()
 			var lostPackets []protocol.PacketNumber
 			handler.SentPacket(ackElicitingPacket(&Packet{
 				PacketNumber: 1,
@@ -688,7 +688,7 @@ var _ = Describe("SentPacketHandler", func() {
 
 		It("only counts ack-eliciting packets as probe packets", func() {
 			handler.ReceivedPacket(protocol.EncryptionHandshake)
-			handler.SetHandshakeComplete()
+			handler.SetHandshakeConfirmed()
 			handler.SentPacket(ackElicitingPacket(&Packet{PacketNumber: 1, SendTime: time.Now().Add(-time.Hour)}))
 			Expect(handler.OnLossDetectionTimeout()).To(Succeed())
 			Expect(handler.SendMode()).To(Equal(SendPTOAppData))
@@ -704,7 +704,7 @@ var _ = Describe("SentPacketHandler", func() {
 
 		It("gets two probe packets if PTO expires", func() {
 			handler.ReceivedPacket(protocol.EncryptionHandshake)
-			handler.SetHandshakeComplete()
+			handler.SetHandshakeConfirmed()
 			handler.SentPacket(ackElicitingPacket(&Packet{PacketNumber: 1}))
 			handler.SentPacket(ackElicitingPacket(&Packet{PacketNumber: 2}))
 
@@ -752,7 +752,7 @@ var _ = Describe("SentPacketHandler", func() {
 			Expect(handler.OnLossDetectionTimeout()).To(Succeed()) // TLP
 			Expect(handler.GetLossDetectionTimeout()).To(BeZero())
 			Expect(handler.SendMode()).To(Equal(SendAny))
-			handler.SetHandshakeComplete()
+			handler.SetHandshakeConfirmed()
 			Expect(handler.GetLossDetectionTimeout()).ToNot(BeZero())
 			Expect(handler.OnLossDetectionTimeout()).To(Succeed())
 			Expect(handler.SendMode()).To(Equal(SendPTOAppData))
@@ -760,7 +760,7 @@ var _ = Describe("SentPacketHandler", func() {
 
 		It("resets the send mode when it receives an acknowledgement after queueing probe packets", func() {
 			handler.ReceivedPacket(protocol.EncryptionHandshake)
-			handler.SetHandshakeComplete()
+			handler.SetHandshakeConfirmed()
 			handler.SentPacket(ackElicitingPacket(&Packet{PacketNumber: 1, SendTime: time.Now().Add(-time.Hour)}))
 			handler.rttStats.UpdateRTT(time.Second, 0, time.Now())
 			Expect(handler.OnLossDetectionTimeout()).To(Succeed())
@@ -902,7 +902,7 @@ var _ = Describe("SentPacketHandler", func() {
 
 		It("sets the early retransmit alarm", func() {
 			handler.ReceivedPacket(protocol.EncryptionHandshake)
-			handler.handshakeComplete = true
+			handler.handshakeConfirmed = true
 			now := time.Now()
 			handler.SentPacket(ackElicitingPacket(&Packet{PacketNumber: 1, SendTime: now.Add(-2 * time.Second)}))
 			handler.SentPacket(ackElicitingPacket(&Packet{PacketNumber: 2, SendTime: now.Add(-2 * time.Second)}))

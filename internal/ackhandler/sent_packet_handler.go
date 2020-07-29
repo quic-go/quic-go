@@ -58,7 +58,7 @@ type sentPacketHandler struct {
 	// Always true for the client.
 	peerAddressValidated bool
 
-	handshakeComplete bool
+	handshakeConfirmed bool
 
 	// lowestNotConfirmedAcked is the lowest packet number that we sent an ACK for, but haven't received confirmation, that this ACK actually arrived
 	// example: we send an ACK for packets 90-100 with packet number 20
@@ -444,7 +444,7 @@ func (h *sentPacketHandler) getPTOTimeAndSpace() (time.Time, protocol.Encryption
 			encLevel = protocol.EncryptionHandshake
 		}
 	}
-	if h.handshakeComplete && !h.appDataPackets.lastAckElicitingPacketTime.IsZero() {
+	if h.handshakeConfirmed && !h.appDataPackets.lastAckElicitingPacketTime.IsZero() {
 		t := h.appDataPackets.lastAckElicitingPacketTime.Add(h.rttStats.PTO(true) << h.ptoCount)
 		if pto.IsZero() || (!t.IsZero() && t.Before(pto)) {
 			pto = t
@@ -468,7 +468,7 @@ func (h *sentPacketHandler) hasOutstandingCryptoPackets() bool {
 func (h *sentPacketHandler) hasOutstandingPackets() bool {
 	// We only send application data probe packets once the handshake completes,
 	// because before that, we don't have the keys to decrypt ACKs sent in 1-RTT packets.
-	return (h.handshakeComplete && h.appDataPackets.history.HasOutstandingPackets()) ||
+	return (h.handshakeConfirmed && h.appDataPackets.history.HasOutstandingPackets()) ||
 		h.hasOutstandingCryptoPackets()
 }
 
@@ -802,8 +802,8 @@ func (h *sentPacketHandler) ResetForRetry() error {
 	return nil
 }
 
-func (h *sentPacketHandler) SetHandshakeComplete() {
-	h.handshakeComplete = true
+func (h *sentPacketHandler) SetHandshakeConfirmed() {
+	h.handshakeConfirmed = true
 	// We don't send PTOs for application data packets before the handshake completes.
 	// Make sure the timer is armed now, if necessary.
 	h.setLossDetectionTimer()
