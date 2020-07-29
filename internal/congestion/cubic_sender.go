@@ -277,4 +277,5 @@ func (c *cubicSender) maybeTraceStateChange(new logging.CongestionState) {
 		return
 	}
 	c.tracer.UpdatedCongestionState(new)
+	c.lastState = new
 }
