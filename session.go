@@ -1055,7 +1055,7 @@ func (s *session) handleUnpackedPacket(
 		}
 	}
 
-	return s.receivedPacketHandler.ReceivedPacket(packet.packetNumber, packet.encryptionLevel, rcvTime, isAckEliciting)
+	return s.receivedPacketHandler.ReceivedPacket(packet.packetNumber, packet.encryptionLevel, time.Now(), isAckEliciting)
 }
 
 func (s *session) handleFrame(f wire.Frame, encLevel protocol.EncryptionLevel, destConnID protocol.ConnectionID) error {
