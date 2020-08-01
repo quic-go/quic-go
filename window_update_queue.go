@@ -48,7 +48,7 @@ func (q *windowUpdateQueue) QueueAll() {
 	q.mutex.Lock()
 	// queue a connection-level window update
 	if q.queuedConn {
-		q.callback(&wire.MaxDataFrame{ByteOffset: q.connFlowController.GetWindowUpdate()})
+		q.callback(&wire.MaxDataFrame{MaximumData: q.connFlowController.GetWindowUpdate()})
 		q.queuedConn = false
 	}
 	// queue all stream-level window updates
@@ -63,8 +63,8 @@ func (q *windowUpdateQueue) QueueAll() {
 			continue
 		}
 		q.callback(&wire.MaxStreamDataFrame{
-			StreamID:   id,
-			ByteOffset: offset,
+			StreamID:          id,
+			MaximumStreamData: offset,
 		})
 	}
 	q.mutex.Unlock()

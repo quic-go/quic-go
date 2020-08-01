@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/lucas-clemente/quic-go/internal/congestion"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/internal/qerr"
 	"github.com/lucas-clemente/quic-go/internal/utils"
@@ -24,7 +23,7 @@ func NewConnectionFlowController(
 	receiveWindow protocol.ByteCount,
 	maxReceiveWindow protocol.ByteCount,
 	queueWindowUpdate func(),
-	rttStats *congestion.RTTStats,
+	rttStats *utils.RTTStats,
 	logger utils.Logger,
 ) ConnectionFlowController {
 	return &connectionFlowController{

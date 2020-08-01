@@ -38,12 +38,12 @@ var _ = Describe("Frame logging", func() {
 
 	It("logs sent frames", func() {
 		LogFrame(logger, &ResetStreamFrame{}, true)
-		Expect(buf.String()).To(ContainSubstring("\t-> &wire.ResetStreamFrame{StreamID: 0, ErrorCode: 0x0, ByteOffset: 0}\n"))
+		Expect(buf.String()).To(ContainSubstring("\t-> &wire.ResetStreamFrame{StreamID: 0, ErrorCode: 0x0, FinalSize: 0}\n"))
 	})
 
 	It("logs received frames", func() {
 		LogFrame(logger, &ResetStreamFrame{}, false)
-		Expect(buf.String()).To(ContainSubstring("\t<- &wire.ResetStreamFrame{StreamID: 0, ErrorCode: 0x0, ByteOffset: 0}\n"))
+		Expect(buf.String()).To(ContainSubstring("\t<- &wire.ResetStreamFrame{StreamID: 0, ErrorCode: 0x0, FinalSize: 0}\n"))
 	})
 
 	It("logs CRYPTO frames", func() {
@@ -63,7 +63,7 @@ var _ = Describe("Frame logging", func() {
 			Data:     bytes.Repeat([]byte{'f'}, 100),
 		}
 		LogFrame(logger, frame, false)
-		Expect(buf.String()).To(ContainSubstring("\t<- &wire.StreamFrame{StreamID: 42, FinBit: false, Offset: 1337, Data length: 100, Offset + Data length: 1437}\n"))
+		Expect(buf.String()).To(ContainSubstring("\t<- &wire.StreamFrame{StreamID: 42, Fin: false, Offset: 1337, Data length: 100, Offset + Data length: 1437}\n"))
 	})
 
 	It("logs ACK frames without missing packets", func() {
@@ -98,36 +98,36 @@ var _ = Describe("Frame logging", func() {
 
 	It("logs MAX_DATA frames", func() {
 		frame := &MaxDataFrame{
-			ByteOffset: 42,
+			MaximumData: 42,
 		}
 		LogFrame(logger, frame, false)
-		Expect(buf.String()).To(ContainSubstring("\t<- &wire.MaxDataFrame{ByteOffset: 42}\n"))
+		Expect(buf.String()).To(ContainSubstring("\t<- &wire.MaxDataFrame{MaximumData: 42}\n"))
 	})
 
 	It("logs MAX_STREAM_DATA frames", func() {
 		frame := &MaxStreamDataFrame{
-			StreamID:   10,
-			ByteOffset: 42,
+			StreamID:          10,
+			MaximumStreamData: 42,
 		}
 		LogFrame(logger, frame, false)
-		Expect(buf.String()).To(ContainSubstring("\t<- &wire.MaxStreamDataFrame{StreamID: 10, ByteOffset: 42}\n"))
+		Expect(buf.String()).To(ContainSubstring("\t<- &wire.MaxStreamDataFrame{StreamID: 10, MaximumStreamData: 42}\n"))
 	})
 
 	It("logs DATA_BLOCKED frames", func() {
 		frame := &DataBlockedFrame{
-			DataLimit: 1000,
+			MaximumData: 1000,
 		}
 		LogFrame(logger, frame, false)
-		Expect(buf.String()).To(ContainSubstring("\t<- &wire.DataBlockedFrame{DataLimit: 1000}\n"))
+		Expect(buf.String()).To(ContainSubstring("\t<- &wire.DataBlockedFrame{MaximumData: 1000}\n"))
 	})
 
 	It("logs STREAM_DATA_BLOCKED frames", func() {
 		frame := &StreamDataBlockedFrame{
-			StreamID:  42,
-			DataLimit: 1000,
+			StreamID:          42,
+			MaximumStreamData: 1000,
 		}
 		LogFrame(logger, frame, false)
-		Expect(buf.String()).To(ContainSubstring("\t<- &wire.StreamDataBlockedFrame{StreamID: 42, DataLimit: 1000}\n"))
+		Expect(buf.String()).To(ContainSubstring("\t<- &wire.StreamDataBlockedFrame{StreamID: 42, MaximumStreamData: 1000}\n"))
 	})
 
 	It("logs STREAMS_BLOCKED frames", func() {
@@ -143,7 +143,7 @@ var _ = Describe("Frame logging", func() {
 		LogFrame(logger, &NewConnectionIDFrame{
 			SequenceNumber:      42,
 			ConnectionID:        protocol.ConnectionID{0xde, 0xad, 0xbe, 0xef},
-			StatelessResetToken: [16]byte{0x1, 0x2, 0x3, 0x4, 0x5, 0x6, 0x7, 0x8, 0x9, 0xa, 0xb, 0xc, 0xd, 0xe, 0xf, 0x10},
+			StatelessResetToken: protocol.StatelessResetToken{0x1, 0x2, 0x3, 0x4, 0x5, 0x6, 0x7, 0x8, 0x9, 0xa, 0xb, 0xc, 0xd, 0xe, 0xf, 0x10},
 		}, false)
 		Expect(buf.String()).To(ContainSubstring("\t<- &wire.NewConnectionIDFrame{SequenceNumber: 42, ConnectionID: 0xdeadbeef, StatelessResetToken: 0x0102030405060708090a0b0c0d0e0f10}"))
 	})

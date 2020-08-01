@@ -23,7 +23,6 @@ const (
 	errorRequestRejected      errorCode = 0x10b
 	errorRequestCanceled      errorCode = 0x10c
 	errorRequestIncomplete    errorCode = 0x10d
-	errorEarlyResponse        errorCode = 0x10e
 	errorConnectError         errorCode = 0x10f
 	errorVersionFallback      errorCode = 0x110
 )
@@ -58,8 +57,6 @@ func (e errorCode) String() string {
 		return "H3_REQUEST_CANCELLED"
 	case errorRequestIncomplete:
 		return "H3_INCOMPLETE_REQUEST"
-	case errorEarlyResponse:
-		return "H3_EARLY_RESPONSE"
 	case errorConnectError:
 		return "H3_CONNECT_ERROR"
 	case errorVersionFallback:

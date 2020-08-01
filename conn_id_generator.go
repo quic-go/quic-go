@@ -17,7 +17,7 @@ type connIDGenerator struct {
 	initialClientDestConnID protocol.ConnectionID
 
 	addConnectionID        func(protocol.ConnectionID)
-	getStatelessResetToken func(protocol.ConnectionID) [16]byte
+	getStatelessResetToken func(protocol.ConnectionID) protocol.StatelessResetToken
 	removeConnectionID     func(protocol.ConnectionID)
 	retireConnectionID     func(protocol.ConnectionID)
 	replaceWithClosed      func(protocol.ConnectionID, packetHandler)
@@ -28,7 +28,7 @@ func newConnIDGenerator(
 	initialConnectionID protocol.ConnectionID,
 	initialClientDestConnID protocol.ConnectionID, // nil for the client
 	addConnectionID func(protocol.ConnectionID),
-	getStatelessResetToken func(protocol.ConnectionID) [16]byte,
+	getStatelessResetToken func(protocol.ConnectionID) protocol.StatelessResetToken,
 	removeConnectionID func(protocol.ConnectionID),
 	retireConnectionID func(protocol.ConnectionID),
 	replaceWithClosed func(protocol.ConnectionID, packetHandler),
@@ -67,7 +67,7 @@ func (m *connIDGenerator) SetMaxActiveConnIDs(limit uint64) error {
 	return nil
 }
 
-func (m *connIDGenerator) Retire(seq uint64) error {
+func (m *connIDGenerator) Retire(seq uint64, sentWithDestConnID protocol.ConnectionID) error {
 	if seq > m.highestSeq {
 		return qerr.NewError(qerr.ProtocolViolation, fmt.Sprintf("tried to retire connection ID %d. Highest issued: %d", seq, m.highestSeq))
 	}
@@ -75,6 +75,9 @@ func (m *connIDGenerator) Retire(seq uint64) error {
 	// We might already have deleted this connection ID, if this is a duplicate frame.
 	if !ok {
 		return nil
+	}
+	if connID.Equal(sentWithDestConnID) && !RetireBugBackwardsCompatibilityMode {
+		return qerr.NewError(qerr.ProtocolViolation, fmt.Sprintf("tried to retire connection ID %d (%s), which was used as the Destination Connection ID on this packet", seq, connID))
 	}
 	m.retireConnectionID(connID)
 	delete(m.activeSrcConnIDs, seq)
@@ -86,6 +89,9 @@ func (m *connIDGenerator) Retire(seq uint64) error {
 }
 
 func (m *connIDGenerator) issueNewConnID() error {
+	if RetireBugBackwardsCompatibilityMode {
+		return nil
+	}
 	connID, err := protocol.GenerateConnectionID(m.connIDLen)
 	if err != nil {
 		return err

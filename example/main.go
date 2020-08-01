@@ -22,6 +22,8 @@ import (
 	"github.com/lucas-clemente/quic-go/http3"
 	"github.com/lucas-clemente/quic-go/internal/testdata"
 	"github.com/lucas-clemente/quic-go/internal/utils"
+	"github.com/lucas-clemente/quic-go/logging"
+	"github.com/lucas-clemente/quic-go/qlog"
 	"github.com/lucas-clemente/quic-go/quictrace"
 )
 
@@ -187,7 +189,7 @@ func main() {
 	www := flag.String("www", "", "www data")
 	tcp := flag.Bool("tcp", false, "also listen on TCP")
 	trace := flag.Bool("trace", false, "enable quic-trace")
-	qlog := flag.Bool("qlog", false, "output a qlog (in the same directory)")
+	enableQlog := flag.Bool("qlog", false, "output a qlog (in the same directory)")
 	flag.Parse()
 
 	logger := utils.DefaultLogger
@@ -208,8 +210,8 @@ func main() {
 	if *trace {
 		quicConf.QuicTracer = tracer
 	}
-	if *qlog {
-		quicConf.GetLogWriter = func(connID []byte) io.WriteCloser {
+	if *enableQlog {
+		quicConf.Tracer = qlog.NewTracer(func(_ logging.Perspective, connID []byte) io.WriteCloser {
 			filename := fmt.Sprintf("server_%x.qlog", connID)
 			f, err := os.Create(filename)
 			if err != nil {
@@ -217,7 +219,7 @@ func main() {
 			}
 			log.Printf("Creating qlog file %s.\n", filename)
 			return utils.NewBufferedWriteCloser(bufio.NewWriter(f), f)
-		}
+		})
 	}
 
 	var wg sync.WaitGroup

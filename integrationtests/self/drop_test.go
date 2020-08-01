@@ -31,7 +31,7 @@ var _ = Describe("Drop Tests", func() {
 		ln, err = quic.ListenAddr(
 			"localhost:0",
 			getTLSConfig(),
-			getQuicConfigForServer(&quic.Config{Versions: []protocol.VersionNumber{version}}),
+			getQuicConfig(&quic.Config{Versions: []protocol.VersionNumber{version}}),
 		)
 		Expect(err).ToNot(HaveOccurred())
 		serverPort := ln.Addr().(*net.UDPAddr).Port
@@ -104,7 +104,7 @@ var _ = Describe("Drop Tests", func() {
 						sess, err := quic.DialAddr(
 							fmt.Sprintf("localhost:%d", proxy.LocalPort()),
 							getTLSClientConfig(),
-							getQuicConfigForClient(&quic.Config{Versions: []protocol.VersionNumber{version}}),
+							getQuicConfig(&quic.Config{Versions: []protocol.VersionNumber{version}}),
 						)
 						Expect(err).ToNot(HaveOccurred())
 						defer sess.CloseWithError(0, "")

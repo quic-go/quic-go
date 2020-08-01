@@ -6,10 +6,19 @@ import (
 	"time"
 	"unsafe"
 
-	"github.com/marten-seemann/qtls"
+	"github.com/lucas-clemente/quic-go/internal/utils"
 
-	"github.com/lucas-clemente/quic-go/internal/congestion"
+	"github.com/marten-seemann/qtls"
 )
+
+func init() {
+	if !structsEqual(&tls.ClientHelloInfo{}, &clientHelloInfo{}) {
+		panic("clientHelloInfo not compatible with tls.ClientHelloInfo")
+	}
+	if !structsEqual(&qtls.ClientHelloInfo{}, &qtlsClientHelloInfo{}) {
+		panic("qtlsClientHelloInfo not compatible with qtls.ClientHelloInfo")
+	}
+}
 
 type conn struct {
 	localAddr, remoteAddr net.Addr
@@ -37,7 +46,7 @@ func tlsConfigToQtlsConfig(
 	c *tls.Config,
 	recordLayer qtls.RecordLayer,
 	extHandler tlsExtensionHandler,
-	rttStats *congestion.RTTStats,
+	rttStats *utils.RTTStats,
 	getDataForSessionState func() []byte,
 	setDataFromSessionState func([]byte),
 	accept0RTT func([]byte) bool,
@@ -87,7 +96,7 @@ func tlsConfigToQtlsConfig(
 	}
 	var csc qtls.ClientSessionCache
 	if c.ClientSessionCache != nil {
-		csc = newClientSessionCache(c.ClientSessionCache, rttStats, getDataForSessionState, setDataFromSessionState)
+		csc = &clientSessionCache{c.ClientSessionCache}
 	}
 	conf := &qtls.Config{
 		Rand:         c.Rand,
@@ -117,16 +126,108 @@ func tlsConfigToQtlsConfig(
 		CurvePreferences:            c.CurvePreferences,
 		DynamicRecordSizingDisabled: c.DynamicRecordSizingDisabled,
 		// no need to copy Renegotiation, it's not supported by TLS 1.3
-		KeyLogWriter:           c.KeyLogWriter,
-		AlternativeRecordLayer: recordLayer,
-		GetExtensions:          extHandler.GetExtensions,
-		ReceivedExtensions:     extHandler.ReceivedExtensions,
-		Accept0RTT:             accept0RTT,
-		Rejected0RTT:           rejected0RTT,
+		KeyLogWriter:               c.KeyLogWriter,
+		AlternativeRecordLayer:     recordLayer,
+		GetExtensions:              extHandler.GetExtensions,
+		ReceivedExtensions:         extHandler.ReceivedExtensions,
+		Accept0RTT:                 accept0RTT,
+		Rejected0RTT:               rejected0RTT,
+		GetAppDataForSessionState:  getDataForSessionState,
+		SetAppDataFromSessionState: setDataFromSessionState,
 	}
 	if enable0RTT {
 		conf.Enable0RTT = true
 		conf.MaxEarlyData = 0xffffffff
 	}
 	return conf
+}
+
+type clientSessionCache struct {
+	tls.ClientSessionCache
+}
+
+var _ qtls.ClientSessionCache = &clientSessionCache{}
+
+func (c *clientSessionCache) Get(sessionKey string) (*qtls.ClientSessionState, bool) {
+	sess, ok := c.ClientSessionCache.Get(sessionKey)
+	if sess == nil {
+		return nil, ok
+	}
+	// qtls.ClientSessionState is identical to the tls.ClientSessionState.
+	// In order to allow users of quic-go to use a tls.Config,
+	// we need this workaround to use the ClientSessionCache.
+	// In unsafe.go we check that the two structs are actually identical.
+	return (*qtls.ClientSessionState)(unsafe.Pointer(sess)), ok
+}
+
+func (c *clientSessionCache) Put(sessionKey string, cs *qtls.ClientSessionState) {
+	if cs == nil {
+		c.ClientSessionCache.Put(sessionKey, nil)
+		return
+	}
+	// qtls.ClientSessionState is identical to the tls.ClientSessionState.
+	// In order to allow users of quic-go to use a tls.Config,
+	// we need this workaround to use the ClientSessionCache.
+	// In unsafe.go we check that the two structs are actually identical.
+	c.ClientSessionCache.Put(sessionKey, (*tls.ClientSessionState)(unsafe.Pointer(cs)))
+}
+
+type clientHelloInfo struct {
+	CipherSuites      []uint16
+	ServerName        string
+	SupportedCurves   []tls.CurveID
+	SupportedPoints   []uint8
+	SignatureSchemes  []tls.SignatureScheme
+	SupportedProtos   []string
+	SupportedVersions []uint16
+	Conn              net.Conn
+
+	config *tls.Config
+}
+
+type qtlsClientHelloInfo struct {
+	CipherSuites      []uint16
+	ServerName        string
+	SupportedCurves   []tls.CurveID
+	SupportedPoints   []uint8
+	SignatureSchemes  []tls.SignatureScheme
+	SupportedProtos   []string
+	SupportedVersions []uint16
+	Conn              net.Conn
+
+	config *qtls.Config
+}
+
+func toTLSClientHelloInfo(chi *qtls.ClientHelloInfo) *tls.ClientHelloInfo {
+	if chi == nil {
+		return nil
+	}
+	qtlsCHI := (*qtlsClientHelloInfo)(unsafe.Pointer(chi))
+	var config *tls.Config
+	if qtlsCHI.config != nil {
+		config = qtlsConfigToTLSConfig((*qtls.Config)(unsafe.Pointer(qtlsCHI.config)))
+	}
+	return (*tls.ClientHelloInfo)(unsafe.Pointer(&clientHelloInfo{
+		CipherSuites:      chi.CipherSuites,
+		ServerName:        chi.ServerName,
+		SupportedCurves:   chi.SupportedCurves,
+		SupportedPoints:   chi.SupportedPoints,
+		SignatureSchemes:  chi.SignatureSchemes,
+		SupportedProtos:   chi.SupportedProtos,
+		SupportedVersions: chi.SupportedVersions,
+		Conn:              chi.Conn,
+		config:            config,
+	}))
+}
+
+// qtlsConfigToTLSConfig is used to transform a qtls.Config to a tls.Config.
+// It is used to create the tls.Config in the ClientHelloInfo.
+// It doesn't copy all values, but only those used by ClientHelloInfo.SupportsCertificate.
+func qtlsConfigToTLSConfig(config *qtls.Config) *tls.Config {
+	return &tls.Config{
+		MinVersion:       config.MinVersion,
+		MaxVersion:       config.MaxVersion,
+		CipherSuites:     config.CipherSuites,
+		CurvePreferences: config.CurvePreferences,
+	}
 }

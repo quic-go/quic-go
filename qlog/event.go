@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/lucas-clemente/quic-go/internal/protocol"
+	"github.com/lucas-clemente/quic-go/logging"
 
 	"github.com/francoispqt/gojay"
 )
@@ -93,7 +94,7 @@ func (e eventConnectionStarted) MarshalJSONObject(enc *gojay.Encoder) {
 }
 
 type eventConnectionClosed struct {
-	Reason CloseReason
+	Reason timeoutReason
 }
 
 func (e eventConnectionClosed) Category() category { return categoryTransport }
@@ -106,7 +107,7 @@ func (e eventConnectionClosed) MarshalJSONObject(enc *gojay.Encoder) {
 }
 
 type eventPacketSent struct {
-	PacketType  PacketType
+	PacketType  packetType
 	Header      packetHeader
 	Frames      frames
 	IsCoalesced bool
@@ -128,7 +129,7 @@ func (e eventPacketSent) MarshalJSONObject(enc *gojay.Encoder) {
 }
 
 type eventPacketReceived struct {
-	PacketType  PacketType
+	PacketType  packetType
 	Header      packetHeader
 	Frames      frames
 	IsCoalesced bool
@@ -158,7 +159,7 @@ func (e eventRetryReceived) Name() string       { return "packet_received" }
 func (e eventRetryReceived) IsNil() bool        { return false }
 
 func (e eventRetryReceived) MarshalJSONObject(enc *gojay.Encoder) {
-	enc.StringKey("packet_type", PacketTypeRetry.String())
+	enc.StringKey("packet_type", packetType(logging.PacketTypeRetry).String())
 	enc.ObjectKey("header", e.Header)
 }
 
@@ -172,13 +173,13 @@ func (e eventVersionNegotiationReceived) Name() string       { return "packet_re
 func (e eventVersionNegotiationReceived) IsNil() bool        { return false }
 
 func (e eventVersionNegotiationReceived) MarshalJSONObject(enc *gojay.Encoder) {
-	enc.StringKey("packet_type", PacketTypeVersionNegotiation.String())
+	enc.StringKey("packet_type", packetType(logging.PacketTypeVersionNegotiation).String())
 	enc.ObjectKey("header", e.Header)
 	enc.ArrayKey("supported_versions", versions(e.SupportedVersions))
 }
 
 type eventStatelessResetReceived struct {
-	Token *[16]byte
+	Token protocol.StatelessResetToken
 }
 
 func (e eventStatelessResetReceived) Category() category { return categoryTransport }
@@ -186,12 +187,12 @@ func (e eventStatelessResetReceived) Name() string       { return "packet_receiv
 func (e eventStatelessResetReceived) IsNil() bool        { return false }
 
 func (e eventStatelessResetReceived) MarshalJSONObject(enc *gojay.Encoder) {
-	enc.StringKey("packet_type", PacketTypeStatelessReset.String())
-	enc.StringKey("stateless_reset_token", fmt.Sprintf("%x", *e.Token))
+	enc.StringKey("packet_type", packetType(logging.PacketTypeStatelessReset).String())
+	enc.StringKey("stateless_reset_token", fmt.Sprintf("%x", e.Token))
 }
 
 type eventPacketBuffered struct {
-	PacketType PacketType
+	PacketType packetType
 }
 
 func (e eventPacketBuffered) Category() category { return categoryTransport }
@@ -204,9 +205,9 @@ func (e eventPacketBuffered) MarshalJSONObject(enc *gojay.Encoder) {
 }
 
 type eventPacketDropped struct {
-	PacketType PacketType
+	PacketType packetType
 	PacketSize protocol.ByteCount
-	Trigger    PacketDropReason
+	Trigger    packetDropReason
 }
 
 func (e eventPacketDropped) Category() category { return categoryTransport }
@@ -277,9 +278,9 @@ func (e eventUpdatedPTO) MarshalJSONObject(enc *gojay.Encoder) {
 }
 
 type eventPacketLost struct {
-	PacketType   PacketType
+	PacketType   packetType
 	PacketNumber protocol.PacketNumber
-	Trigger      PacketLossReason
+	Trigger      packetLossReason
 }
 
 func (e eventPacketLost) Category() category { return categoryRecovery }
@@ -331,7 +332,7 @@ type eventTransportParameters struct {
 	InitialSourceConnectionID       protocol.ConnectionID
 	RetrySourceConnectionID         *protocol.ConnectionID
 
-	StatelessResetToken     *[16]byte
+	StatelessResetToken     *protocol.StatelessResetToken
 	DisableActiveMigration  bool
 	MaxIdleTimeout          time.Duration
 	MaxUDPPayloadSize       protocol.ByteCount
@@ -381,7 +382,7 @@ func (e eventTransportParameters) MarshalJSONObject(enc *gojay.Encoder) {
 }
 
 type eventLossTimerSet struct {
-	TimerType TimerType
+	TimerType timerType
 	EncLevel  protocol.EncryptionLevel
 	Delta     time.Duration
 }
@@ -398,7 +399,7 @@ func (e eventLossTimerSet) MarshalJSONObject(enc *gojay.Encoder) {
 }
 
 type eventLossTimerExpired struct {
-	TimerType TimerType
+	TimerType timerType
 	EncLevel  protocol.EncryptionLevel
 }
 
@@ -420,4 +421,16 @@ func (e eventLossTimerCanceled) IsNil() bool        { return false }
 
 func (e eventLossTimerCanceled) MarshalJSONObject(enc *gojay.Encoder) {
 	enc.StringKey("event_type", "cancelled")
+}
+
+type eventCongestionStateUpdated struct {
+	state congestionState
+}
+
+func (e eventCongestionStateUpdated) Category() category { return categoryRecovery }
+func (e eventCongestionStateUpdated) Name() string       { return "congestion_state_updated" }
+func (e eventCongestionStateUpdated) IsNil() bool        { return false }
+
+func (e eventCongestionStateUpdated) MarshalJSONObject(enc *gojay.Encoder) {
+	enc.StringKey("new", e.state.String())
 }

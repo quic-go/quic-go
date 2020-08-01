@@ -36,8 +36,8 @@ var _ = Describe("Window Update Queue", func() {
 		q.AddStream(3)
 		q.AddStream(1)
 		q.QueueAll()
-		Expect(queuedFrames).To(ContainElement(&wire.MaxStreamDataFrame{StreamID: 1, ByteOffset: 10}))
-		Expect(queuedFrames).To(ContainElement(&wire.MaxStreamDataFrame{StreamID: 3, ByteOffset: 30}))
+		Expect(queuedFrames).To(ContainElement(&wire.MaxStreamDataFrame{StreamID: 1, MaximumStreamData: 10}))
+		Expect(queuedFrames).To(ContainElement(&wire.MaxStreamDataFrame{StreamID: 3, MaximumStreamData: 30}))
 	})
 
 	It("deletes the entry after getting the MAX_STREAM_DATA frame", func() {
@@ -94,7 +94,7 @@ var _ = Describe("Window Update Queue", func() {
 		q.AddConnection()
 		q.QueueAll()
 		Expect(queuedFrames).To(Equal([]wire.Frame{
-			&wire.MaxDataFrame{ByteOffset: 0x1337},
+			&wire.MaxDataFrame{MaximumData: 0x1337},
 		}))
 	})
 
@@ -106,7 +106,7 @@ var _ = Describe("Window Update Queue", func() {
 		q.AddStream(10)
 		q.QueueAll()
 		Expect(queuedFrames).To(Equal([]wire.Frame{
-			&wire.MaxStreamDataFrame{StreamID: 10, ByteOffset: 200},
+			&wire.MaxStreamDataFrame{StreamID: 10, MaximumStreamData: 200},
 		}))
 	})
 })

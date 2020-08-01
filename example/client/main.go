@@ -17,6 +17,8 @@ import (
 	"github.com/lucas-clemente/quic-go/http3"
 	"github.com/lucas-clemente/quic-go/internal/testdata"
 	"github.com/lucas-clemente/quic-go/internal/utils"
+	"github.com/lucas-clemente/quic-go/logging"
+	"github.com/lucas-clemente/quic-go/qlog"
 )
 
 func main() {
@@ -24,7 +26,7 @@ func main() {
 	quiet := flag.Bool("q", false, "don't print the data")
 	keyLogFile := flag.String("keylog", "", "key log file")
 	insecure := flag.Bool("insecure", false, "skip certificate verification")
-	qlog := flag.Bool("qlog", false, "output a qlog (in the same directory)")
+	enableQlog := flag.Bool("qlog", false, "output a qlog (in the same directory)")
 	flag.Parse()
 	urls := flag.Args()
 
@@ -54,8 +56,8 @@ func main() {
 	testdata.AddRootCA(pool)
 
 	var qconf quic.Config
-	if *qlog {
-		qconf.GetLogWriter = func(connID []byte) io.WriteCloser {
+	if *enableQlog {
+		qconf.Tracer = qlog.NewTracer(func(_ logging.Perspective, connID []byte) io.WriteCloser {
 			filename := fmt.Sprintf("client_%x.qlog", connID)
 			f, err := os.Create(filename)
 			if err != nil {
@@ -63,7 +65,7 @@ func main() {
 			}
 			log.Printf("Creating qlog file %s.\n", filename)
 			return utils.NewBufferedWriteCloser(bufio.NewWriter(f), f)
-		}
+		})
 	}
 	roundTripper := &http3.RoundTripper{
 		TLSClientConfig: &tls.Config{

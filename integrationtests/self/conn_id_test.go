@@ -60,11 +60,11 @@ var _ = Describe("Connection ID lengths tests", func() {
 	}
 
 	It("downloads a file using a 0-byte connection ID for the client", func() {
-		serverConf := getQuicConfigForServer(&quic.Config{
+		serverConf := getQuicConfig(&quic.Config{
 			ConnectionIDLength: randomConnIDLen(),
 			Versions:           []protocol.VersionNumber{protocol.VersionTLS},
 		})
-		clientConf := getQuicConfigForClient(&quic.Config{
+		clientConf := getQuicConfig(&quic.Config{
 			Versions: []protocol.VersionNumber{protocol.VersionTLS},
 		})
 
@@ -74,11 +74,11 @@ var _ = Describe("Connection ID lengths tests", func() {
 	})
 
 	It("downloads a file when both client and server use a random connection ID length", func() {
-		serverConf := getQuicConfigForServer(&quic.Config{
+		serverConf := getQuicConfig(&quic.Config{
 			ConnectionIDLength: randomConnIDLen(),
 			Versions:           []protocol.VersionNumber{protocol.VersionTLS},
 		})
-		clientConf := getQuicConfigForClient(&quic.Config{
+		clientConf := getQuicConfig(&quic.Config{
 			ConnectionIDLength: randomConnIDLen(),
 			Versions:           []protocol.VersionNumber{protocol.VersionTLS},
 		})

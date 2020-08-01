@@ -21,6 +21,9 @@ import (
 
 	"github.com/lucas-clemente/quic-go"
 	"github.com/lucas-clemente/quic-go/internal/utils"
+	"github.com/lucas-clemente/quic-go/logging"
+	"github.com/lucas-clemente/quic-go/metrics"
+	"github.com/lucas-clemente/quic-go/qlog"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -80,14 +83,16 @@ func (b *syncedBuffer) Reset() {
 }
 
 var (
-	logFileName string // the log file set in the ginkgo flags
-	logBufOnce  sync.Once
-	logBuf      *syncedBuffer
-	enableQlog  bool
+	logFileName   string // the log file set in the ginkgo flags
+	logBufOnce    sync.Once
+	logBuf        *syncedBuffer
+	enableQlog    bool
+	enableMetrics bool
 
 	tlsConfig          *tls.Config
 	tlsConfigLongChain *tls.Config
 	tlsClientConfig    *tls.Config
+	tracer             logging.Tracer
 )
 
 // read the logfile command line flag
@@ -95,6 +100,12 @@ var (
 func init() {
 	flag.StringVar(&logFileName, "logfile", "", "log file")
 	flag.BoolVar(&enableQlog, "qlog", false, "enable qlog")
+	// metrics won't be accessible anywhere, but it's useful to exercise the code
+	flag.BoolVar(&enableMetrics, "metrics", false, "enable metrics")
+}
+
+var _ = BeforeSuite(func() {
+	mrand.Seed(GinkgoRandomSeed())
 
 	ca, caPrivateKey, err := generateCA()
 	if err != nil {
@@ -123,7 +134,34 @@ func init() {
 		RootCAs:    root,
 		NextProtos: []string{alpn},
 	}
-}
+
+	var qlogTracer, metricsTracer logging.Tracer
+	if enableQlog {
+		qlogTracer = qlog.NewTracer(func(p logging.Perspective, connectionID []byte) io.WriteCloser {
+			role := "server"
+			if p == logging.PerspectiveClient {
+				role = "client"
+			}
+			filename := fmt.Sprintf("log_%x_%s.qlog", connectionID, role)
+			fmt.Fprintf(GinkgoWriter, "Creating %s.\n", filename)
+			f, err := os.Create(filename)
+			Expect(err).ToNot(HaveOccurred())
+			bw := bufio.NewWriter(f)
+			return utils.NewBufferedWriteCloser(bw, f)
+		})
+	}
+	if enableMetrics {
+		metricsTracer = metrics.NewTracer()
+	}
+
+	if enableQlog && enableMetrics {
+		tracer = logging.NewMultiplexedTracer(qlogTracer, metricsTracer)
+	} else if enableQlog {
+		tracer = qlogTracer
+	} else if enableMetrics {
+		tracer = metricsTracer
+	}
+})
 
 func generateCA() (*x509.Certificate, *rsa.PrivateKey, error) {
 	certTempl := &x509.Certificate{
@@ -242,31 +280,13 @@ func getTLSClientConfig() *tls.Config {
 	return tlsClientConfig.Clone()
 }
 
-func getQuicConfigForClient(conf *quic.Config) *quic.Config {
-	return getQuicConfigForRole("client", conf)
-}
-
-func getQuicConfigForServer(conf *quic.Config) *quic.Config {
-	return getQuicConfigForRole("server", conf)
-}
-
-func getQuicConfigForRole(role string, conf *quic.Config) *quic.Config {
+func getQuicConfig(conf *quic.Config) *quic.Config {
 	if conf == nil {
 		conf = &quic.Config{}
 	} else {
 		conf = conf.Clone()
 	}
-	if !enableQlog {
-		return conf
-	}
-	conf.GetLogWriter = func(connectionID []byte) io.WriteCloser {
-		filename := fmt.Sprintf("log_%x_%s.qlog", connectionID, role)
-		fmt.Fprintf(GinkgoWriter, "Creating %s.\n", filename)
-		f, err := os.Create(filename)
-		Expect(err).ToNot(HaveOccurred())
-		bw := bufio.NewWriter(f)
-		return utils.NewBufferedWriteCloser(bw, f)
-	}
+	conf.Tracer = tracer
 	return conf
 }
 
@@ -301,7 +321,3 @@ func TestSelf(t *testing.T) {
 	RegisterFailHandler(Fail)
 	RunSpecs(t, "Self integration tests")
 }
-
-var _ = BeforeSuite(func() {
-	mrand.Seed(GinkgoRandomSeed())
-})

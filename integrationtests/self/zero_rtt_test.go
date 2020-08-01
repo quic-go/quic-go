@@ -59,7 +59,7 @@ var _ = Describe("0-RTT", func() {
 				sess, err := quic.DialAddr(
 					fmt.Sprintf("localhost:%d", proxyPort),
 					clientConf,
-					getQuicConfigForClient(&quic.Config{Versions: []protocol.VersionNumber{version}}),
+					getQuicConfig(&quic.Config{Versions: []protocol.VersionNumber{version}}),
 				)
 				Expect(err).ToNot(HaveOccurred())
 				Eventually(puts).Should(Receive())
@@ -93,7 +93,7 @@ var _ = Describe("0-RTT", func() {
 				sess, err := quic.DialAddrEarly(
 					fmt.Sprintf("localhost:%d", proxyPort),
 					clientConf,
-					getQuicConfigForClient(&quic.Config{Versions: []protocol.VersionNumber{version}}),
+					getQuicConfig(&quic.Config{Versions: []protocol.VersionNumber{version}}),
 				)
 				Expect(err).ToNot(HaveOccurred())
 				str, err := sess.OpenUniStream()
@@ -109,7 +109,7 @@ var _ = Describe("0-RTT", func() {
 				ln, err := quic.ListenAddrEarly(
 					"localhost:0",
 					getTLSConfig(),
-					getQuicConfigForServer(&quic.Config{
+					getQuicConfig(&quic.Config{
 						Versions:    []protocol.VersionNumber{version},
 						AcceptToken: func(_ net.Addr, _ *quic.Token) bool { return true },
 					}),
@@ -171,7 +171,7 @@ var _ = Describe("0-RTT", func() {
 				sess, err := quic.DialAddrEarly(
 					fmt.Sprintf("localhost:%d", proxy.LocalPort()),
 					clientConf,
-					getQuicConfigForClient(&quic.Config{Versions: []protocol.VersionNumber{version}}),
+					getQuicConfig(&quic.Config{Versions: []protocol.VersionNumber{version}}),
 				)
 				Expect(err).ToNot(HaveOccurred())
 				sent0RTT := make(chan struct{})
@@ -210,7 +210,7 @@ var _ = Describe("0-RTT", func() {
 				ln, err := quic.ListenAddrEarly(
 					"localhost:0",
 					getTLSConfig(),
-					getQuicConfigForServer(&quic.Config{
+					getQuicConfig(&quic.Config{
 						Versions:    []protocol.VersionNumber{version},
 						AcceptToken: func(_ net.Addr, _ *quic.Token) bool { return true },
 					}),
@@ -264,7 +264,7 @@ var _ = Describe("0-RTT", func() {
 				ln, err := quic.ListenAddrEarly(
 					"localhost:0",
 					getTLSConfig(),
-					getQuicConfigForServer(&quic.Config{Versions: []protocol.VersionNumber{version}}),
+					getQuicConfig(&quic.Config{Versions: []protocol.VersionNumber{version}}),
 				)
 				Expect(err).ToNot(HaveOccurred())
 				defer ln.Close()
@@ -330,7 +330,7 @@ var _ = Describe("0-RTT", func() {
 				ln, err := quic.ListenAddrEarly(
 					"localhost:0",
 					tlsConf,
-					getQuicConfigForServer(&quic.Config{
+					getQuicConfig(&quic.Config{
 						Versions:           []protocol.VersionNumber{version},
 						AcceptToken:        func(_ net.Addr, _ *quic.Token) bool { return true },
 						MaxIncomingStreams: maxStreams,
@@ -345,7 +345,7 @@ var _ = Describe("0-RTT", func() {
 				ln, err = quic.ListenAddrEarly(
 					"localhost:0",
 					tlsConf,
-					getQuicConfigForServer(&quic.Config{
+					getQuicConfig(&quic.Config{
 						Versions:           []protocol.VersionNumber{version},
 						AcceptToken:        func(_ net.Addr, _ *quic.Token) bool { return true },
 						MaxIncomingStreams: maxStreams + 1,
@@ -367,7 +367,7 @@ var _ = Describe("0-RTT", func() {
 				ln, err := quic.ListenAddrEarly(
 					"localhost:0",
 					tlsConf,
-					getQuicConfigForServer(&quic.Config{
+					getQuicConfig(&quic.Config{
 						Versions:    []protocol.VersionNumber{version},
 						AcceptToken: func(_ net.Addr, _ *quic.Token) bool { return true },
 					}),
@@ -383,7 +383,7 @@ var _ = Describe("0-RTT", func() {
 				ln, err = quic.ListenAddrEarly(
 					"localhost:0",
 					tlsConf,
-					getQuicConfigForServer(&quic.Config{
+					getQuicConfig(&quic.Config{
 						Versions:    []protocol.VersionNumber{version},
 						AcceptToken: func(_ net.Addr, _ *quic.Token) bool { return true },
 					}),

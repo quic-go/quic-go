@@ -11,9 +11,9 @@ var _ = Describe("Connection ID Manager", func() {
 	var (
 		m             *connIDManager
 		frameQueue    []wire.Frame
-		tokenAdded    *[16]byte
-		retiredTokens [][16]byte
-		removedTokens [][16]byte
+		tokenAdded    *protocol.StatelessResetToken
+		retiredTokens []protocol.StatelessResetToken
+		removedTokens []protocol.StatelessResetToken
 	)
 	initialConnID := protocol.ConnectionID{0, 0, 0, 0}
 
@@ -24,18 +24,18 @@ var _ = Describe("Connection ID Manager", func() {
 		removedTokens = nil
 		m = newConnIDManager(
 			initialConnID,
-			func(token [16]byte) { tokenAdded = &token },
-			func(token [16]byte) { removedTokens = append(removedTokens, token) },
-			func(token [16]byte) { retiredTokens = append(retiredTokens, token) },
+			func(token protocol.StatelessResetToken) { tokenAdded = &token },
+			func(token protocol.StatelessResetToken) { removedTokens = append(removedTokens, token) },
+			func(token protocol.StatelessResetToken) { retiredTokens = append(retiredTokens, token) },
 			func(f wire.Frame,
 			) {
 				frameQueue = append(frameQueue, f)
 			})
 	})
 
-	get := func() (protocol.ConnectionID, *[16]byte) {
+	get := func() (protocol.ConnectionID, protocol.StatelessResetToken) {
 		if m.queue.Len() == 0 {
-			return nil, nil
+			return nil, protocol.StatelessResetToken{}
 		}
 		val := m.queue.Remove(m.queue.Front())
 		return val.ConnectionID, val.StatelessResetToken
@@ -51,7 +51,7 @@ var _ = Describe("Connection ID Manager", func() {
 	})
 
 	It("sets the token for the first connection ID", func() {
-		token := [16]byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16}
+		token := protocol.StatelessResetToken{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16}
 		m.SetStatelessResetToken(token)
 		Expect(*m.activeStatelessResetToken).To(Equal(token))
 		Expect(*tokenAdded).To(Equal(token))
@@ -61,50 +61,48 @@ var _ = Describe("Connection ID Manager", func() {
 		Expect(m.Add(&wire.NewConnectionIDFrame{
 			SequenceNumber:      10,
 			ConnectionID:        protocol.ConnectionID{2, 3, 4, 5},
-			StatelessResetToken: [16]byte{0xe, 0xd, 0xc, 0xb, 0xa, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0},
+			StatelessResetToken: protocol.StatelessResetToken{0xe, 0xd, 0xc, 0xb, 0xa, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0},
 		})).To(Succeed())
 		Expect(m.Add(&wire.NewConnectionIDFrame{
 			SequenceNumber:      4,
 			ConnectionID:        protocol.ConnectionID{1, 2, 3, 4},
-			StatelessResetToken: [16]byte{0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 0xa, 0xb, 0xc, 0xd, 0xe},
+			StatelessResetToken: protocol.StatelessResetToken{0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 0xa, 0xb, 0xc, 0xd, 0xe},
 		})).To(Succeed())
 		c1, rt1 := get()
 		Expect(c1).To(Equal(protocol.ConnectionID{1, 2, 3, 4}))
-		Expect(*rt1).To(Equal([16]byte{0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 0xa, 0xb, 0xc, 0xd, 0xe}))
+		Expect(rt1).To(Equal(protocol.StatelessResetToken{0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 0xa, 0xb, 0xc, 0xd, 0xe}))
 		c2, rt2 := get()
 		Expect(c2).To(Equal(protocol.ConnectionID{2, 3, 4, 5}))
-		Expect(*rt2).To(Equal([16]byte{0xe, 0xd, 0xc, 0xb, 0xa, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0}))
-		c3, rt3 := get()
+		Expect(rt2).To(Equal(protocol.StatelessResetToken{0xe, 0xd, 0xc, 0xb, 0xa, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0}))
+		c3, _ := get()
 		Expect(c3).To(BeNil())
-		Expect(rt3).To(BeNil())
 	})
 
 	It("accepts duplicates", func() {
 		f1 := &wire.NewConnectionIDFrame{
 			SequenceNumber:      1,
 			ConnectionID:        protocol.ConnectionID{1, 2, 3, 4},
-			StatelessResetToken: [16]byte{0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 0xa, 0xb, 0xc, 0xd, 0xe},
+			StatelessResetToken: protocol.StatelessResetToken{0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 0xa, 0xb, 0xc, 0xd, 0xe},
 		}
 		f2 := &wire.NewConnectionIDFrame{
 			SequenceNumber:      1,
 			ConnectionID:        protocol.ConnectionID{1, 2, 3, 4},
-			StatelessResetToken: [16]byte{0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 0xa, 0xb, 0xc, 0xd, 0xe},
+			StatelessResetToken: protocol.StatelessResetToken{0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 0xa, 0xb, 0xc, 0xd, 0xe},
 		}
 		Expect(m.Add(f1)).To(Succeed())
 		Expect(m.Add(f2)).To(Succeed())
 		c1, rt1 := get()
 		Expect(c1).To(Equal(protocol.ConnectionID{1, 2, 3, 4}))
-		Expect(*rt1).To(Equal([16]byte{0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 0xa, 0xb, 0xc, 0xd, 0xe}))
-		c2, rt2 := get()
+		Expect(rt1).To(Equal(protocol.StatelessResetToken{0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 0xa, 0xb, 0xc, 0xd, 0xe}))
+		c2, _ := get()
 		Expect(c2).To(BeNil())
-		Expect(rt2).To(BeNil())
 	})
 
 	It("ignores duplicates for the currently used connection ID", func() {
 		f := &wire.NewConnectionIDFrame{
 			SequenceNumber:      1,
 			ConnectionID:        protocol.ConnectionID{1, 2, 3, 4},
-			StatelessResetToken: [16]byte{0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 0xa, 0xb, 0xc, 0xd, 0xe},
+			StatelessResetToken: protocol.StatelessResetToken{0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 0xa, 0xb, 0xc, 0xd, 0xe},
 		}
 		Expect(m.Add(f)).To(Succeed())
 		Expect(m.Get()).To(Equal(protocol.ConnectionID{1, 2, 3, 4}))
@@ -131,12 +129,12 @@ var _ = Describe("Connection ID Manager", func() {
 		Expect(m.Add(&wire.NewConnectionIDFrame{
 			SequenceNumber:      42,
 			ConnectionID:        protocol.ConnectionID{1, 2, 3, 4},
-			StatelessResetToken: [16]byte{0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 0xa, 0xb, 0xc, 0xd, 0xe},
+			StatelessResetToken: protocol.StatelessResetToken{0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 0xa, 0xb, 0xc, 0xd, 0xe},
 		})).To(Succeed())
 		Expect(m.Add(&wire.NewConnectionIDFrame{
 			SequenceNumber:      42,
 			ConnectionID:        protocol.ConnectionID{1, 2, 3, 4},
-			StatelessResetToken: [16]byte{0xe, 0xd, 0xc, 0xb, 0xa, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0},
+			StatelessResetToken: protocol.StatelessResetToken{0xe, 0xd, 0xc, 0xb, 0xa, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0},
 		})).To(MatchError("received conflicting stateless reset tokens for sequence number 42"))
 	})
 
@@ -201,18 +199,39 @@ var _ = Describe("Connection ID Manager", func() {
 		Expect(frameQueue[0].(*wire.RetireConnectionIDFrame).SequenceNumber).To(BeEquivalentTo(9))
 	})
 
+	It("accepts retransmissions for the connection ID that is in use", func() {
+		connID := protocol.ConnectionID{1, 2, 3, 4}
+
+		Expect(m.Add(&wire.NewConnectionIDFrame{
+			SequenceNumber: 1,
+			ConnectionID:   connID,
+		})).To(Succeed())
+		Expect(frameQueue).To(BeEmpty())
+		Expect(m.Get()).To(Equal(connID))
+		Expect(frameQueue).To(HaveLen(1))
+		Expect(frameQueue[0]).To(BeAssignableToTypeOf(&wire.RetireConnectionIDFrame{}))
+		Expect(frameQueue[0].(*wire.RetireConnectionIDFrame).SequenceNumber).To(BeZero())
+		frameQueue = nil
+
+		Expect(m.Add(&wire.NewConnectionIDFrame{
+			SequenceNumber: 1,
+			ConnectionID:   connID,
+		})).To(Succeed())
+		Expect(frameQueue).To(BeEmpty())
+	})
+
 	It("errors when the peer sends too connection IDs", func() {
 		for i := uint8(1); i < protocol.MaxActiveConnectionIDs; i++ {
 			Expect(m.Add(&wire.NewConnectionIDFrame{
 				SequenceNumber:      uint64(i),
 				ConnectionID:        protocol.ConnectionID{i, i, i, i},
-				StatelessResetToken: [16]byte{i, i, i, i, i, i, i, i, i, i, i, i, i, i, i, i},
+				StatelessResetToken: protocol.StatelessResetToken{i, i, i, i, i, i, i, i, i, i, i, i, i, i, i, i},
 			})).To(Succeed())
 		}
 		Expect(m.Add(&wire.NewConnectionIDFrame{
 			SequenceNumber:      uint64(9999),
 			ConnectionID:        protocol.ConnectionID{1, 2, 3, 4},
-			StatelessResetToken: [16]byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16},
+			StatelessResetToken: protocol.StatelessResetToken{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16},
 		})).To(MatchError("CONNECTION_ID_LIMIT_ERROR"))
 	})
 
@@ -221,7 +240,7 @@ var _ = Describe("Connection ID Manager", func() {
 		Expect(m.Add(&wire.NewConnectionIDFrame{
 			SequenceNumber:      1,
 			ConnectionID:        protocol.ConnectionID{1, 2, 3, 4},
-			StatelessResetToken: [16]byte{16, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1},
+			StatelessResetToken: protocol.StatelessResetToken{16, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1},
 		})).To(Succeed())
 		Expect(m.Get()).To(Equal(protocol.ConnectionID{1, 2, 3, 4}))
 
@@ -233,7 +252,7 @@ var _ = Describe("Connection ID Manager", func() {
 			Expect(m.Add(&wire.NewConnectionIDFrame{
 				SequenceNumber:      uint64(s),
 				ConnectionID:        protocol.ConnectionID{s, s, s, s},
-				StatelessResetToken: [16]byte{s, s, s, s, s, s, s, s, s, s, s, s, s, s, s, s},
+				StatelessResetToken: protocol.StatelessResetToken{s, s, s, s, s, s, s, s, s, s, s, s, s, s, s, s},
 			})).To(Succeed())
 		}
 
@@ -253,7 +272,7 @@ var _ = Describe("Connection ID Manager", func() {
 				Expect(m.Add(&wire.NewConnectionIDFrame{
 					SequenceNumber:      uint64(s),
 					ConnectionID:        protocol.ConnectionID{s, s, s, s},
-					StatelessResetToken: [16]byte{s, s, s, s, s, s, s, s, s, s, s, s, s, s, s, s},
+					StatelessResetToken: protocol.StatelessResetToken{s, s, s, s, s, s, s, s, s, s, s, s, s, s, s, s},
 				})).To(Succeed())
 				s++
 			}
@@ -266,7 +285,7 @@ var _ = Describe("Connection ID Manager", func() {
 			Expect(m.Add(&wire.NewConnectionIDFrame{
 				SequenceNumber:      uint64(s),
 				ConnectionID:        protocol.ConnectionID{s, s, s, s},
-				StatelessResetToken: [16]byte{s, s, s, s, s, s, s, s, s, s, s, s, s, s, s, s},
+				StatelessResetToken: protocol.StatelessResetToken{s, s, s, s, s, s, s, s, s, s, s, s, s, s, s, s},
 			})).To(Succeed())
 		}
 		Expect(m.Get()).To(Equal(protocol.ConnectionID{10, 10, 10, 10}))
@@ -283,7 +302,7 @@ var _ = Describe("Connection ID Manager", func() {
 		Expect(m.Add(&wire.NewConnectionIDFrame{
 			SequenceNumber:      uint64(5),
 			ConnectionID:        protocol.ConnectionID{5, 5, 5, 5},
-			StatelessResetToken: [16]byte{5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5},
+			StatelessResetToken: protocol.StatelessResetToken{5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5},
 		})).To(Succeed())
 		Expect(m.queue.Front().Value.ConnectionID).To(Equal(protocol.ConnectionID{12, 12, 12, 12}))
 		Expect(frameQueue).To(HaveLen(1))
@@ -295,7 +314,7 @@ var _ = Describe("Connection ID Manager", func() {
 			Expect(m.Add(&wire.NewConnectionIDFrame{
 				SequenceNumber:      uint64(i),
 				ConnectionID:        protocol.ConnectionID{i, i, i, i},
-				StatelessResetToken: [16]byte{i, i, i, i, i, i, i, i, i, i, i, i, i, i, i, i},
+				StatelessResetToken: protocol.StatelessResetToken{i, i, i, i, i, i, i, i, i, i, i, i, i, i, i, i},
 			})).To(Succeed())
 		}
 		Expect(m.Get()).To(Equal(protocol.ConnectionID{1, 1, 1, 1}))
@@ -309,7 +328,7 @@ var _ = Describe("Connection ID Manager", func() {
 		})).To(Succeed())
 		Expect(m.Get()).To(Equal(protocol.ConnectionID{2, 2, 2, 2}))
 		Expect(retiredTokens).To(HaveLen(1))
-		Expect(retiredTokens[0]).To(Equal([16]byte{1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1}))
+		Expect(retiredTokens[0]).To(Equal(protocol.StatelessResetToken{1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1}))
 	})
 
 	It("removes the currently active stateless reset token when it is closed", func() {
@@ -319,12 +338,12 @@ var _ = Describe("Connection ID Manager", func() {
 		Expect(m.Add(&wire.NewConnectionIDFrame{
 			SequenceNumber:      1,
 			ConnectionID:        protocol.ConnectionID{1, 2, 3, 4},
-			StatelessResetToken: [16]byte{16, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1},
+			StatelessResetToken: protocol.StatelessResetToken{16, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1},
 		})).To(Succeed())
 		Expect(m.Get()).To(Equal(protocol.ConnectionID{1, 2, 3, 4}))
 		m.Close()
 		Expect(retiredTokens).To(BeEmpty())
 		Expect(removedTokens).To(HaveLen(1))
-		Expect(removedTokens[0]).To(Equal([16]byte{16, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1}))
+		Expect(removedTokens[0]).To(Equal(protocol.StatelessResetToken{16, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1}))
 	})
 })

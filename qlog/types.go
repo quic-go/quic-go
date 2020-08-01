@@ -5,6 +5,7 @@ import (
 
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/internal/qerr"
+	"github.com/lucas-clemente/quic-go/logging"
 )
 
 type owner uint8
@@ -23,12 +24,6 @@ func (o owner) String() string {
 	default:
 		panic("unknown owner")
 	}
-}
-
-type versionNumber protocol.VersionNumber
-
-func (v versionNumber) String() string {
-	return fmt.Sprintf("%x", uint32(v))
 }
 
 type streamType protocol.StreamType
@@ -75,50 +70,13 @@ func (c category) String() string {
 	}
 }
 
-// PacketType is the packet type of a QUIC packet
-type PacketType protocol.PacketType
+type versionNumber protocol.VersionNumber
 
-const (
-	// PacketTypeInitial is the packet type of an Initial packet
-	PacketTypeInitial PacketType = iota
-	// PacketTypeHandshake is the packet type of a Handshake packet
-	PacketTypeHandshake
-	// PacketTypeRetry is the packet type of a Retry packet
-	PacketTypeRetry
-	// PacketType0RTT is the packet type of a 0-RTT packet
-	PacketType0RTT
-	// PacketTypeVersionNegotiation is the packet type of a Version Negotiation packet
-	PacketTypeVersionNegotiation
-	// PacketType1RTT is a 1-RTT packet
-	PacketType1RTT
-	// PacketTypeStatelessReset is a stateless reset
-	PacketTypeStatelessReset
-	// PacketTypeNotDetermined is the packet type when it could not be determined
-	PacketTypeNotDetermined
-)
-
-func (t PacketType) String() string {
-	switch t {
-	case PacketTypeInitial:
-		return "initial"
-	case PacketTypeHandshake:
-		return "handshake"
-	case PacketTypeRetry:
-		return "retry"
-	case PacketType0RTT:
-		return "0RTT"
-	case PacketTypeVersionNegotiation:
-		return "version_negotiation"
-	case PacketTypeStatelessReset:
-		return "stateless_reset"
-	case PacketType1RTT:
-		return "1RTT"
-	case PacketTypeNotDetermined:
-		return ""
-	default:
-		panic("unknown packet type")
-	}
+func (v versionNumber) String() string {
+	return fmt.Sprintf("%x", uint32(v))
 }
+
+func (packetHeader) IsNil() bool { return false }
 
 func encLevelToPacketNumberSpace(encLevel protocol.EncryptionLevel) string {
 	switch encLevel {
@@ -130,26 +88,6 @@ func encLevelToPacketNumberSpace(encLevel protocol.EncryptionLevel) string {
 		return "application_data"
 	default:
 		panic("unknown encryption level")
-	}
-}
-
-type PacketLossReason uint8
-
-const (
-	// PacketLossReorderingThreshold: when a packet is deemed lost due to reordering threshold
-	PacketLossReorderingThreshold PacketLossReason = iota
-	// PacketLossTimeThreshold: when a packet is deemed lost due to time threshold
-	PacketLossTimeThreshold
-)
-
-func (r PacketLossReason) String() string {
-	switch r {
-	case PacketLossReorderingThreshold:
-		return "reordering_threshold"
-	case PacketLossTimeThreshold:
-		return "time_threshold"
-	default:
-		panic("unknown loss reason")
 	}
 }
 
@@ -239,62 +177,6 @@ func (t keyUpdateTrigger) String() string {
 	}
 }
 
-type PacketDropReason uint8
-
-const (
-	// PacketDropKeyUnavailable is used when a packet is dropped because keys are unavailable
-	PacketDropKeyUnavailable PacketDropReason = iota
-	// PacketDropUnknownConnectionID is used when a packet is dropped because the connection ID is unknown
-	PacketDropUnknownConnectionID
-	// PacketDropHeaderParseError is used when a packet is dropped because header parsing failed
-	PacketDropHeaderParseError
-	// PacketDropPayloadDecryptError is used when a packet is dropped because decrypting the payload failed
-	PacketDropPayloadDecryptError
-	// PacketDropProtocolViolation is used when a packet is dropped due to a protocol violation
-	PacketDropProtocolViolation
-	// PacketDropDOSPrevention is used when a packet is dropped to mitigate a DoS attack
-	PacketDropDOSPrevention
-	// PacketDropUnsupportedVersion is used when a packet is dropped because the version is not supported
-	PacketDropUnsupportedVersion
-	// PacketDropUnexpectedPacket is used when an unexpected packet is received
-	PacketDropUnexpectedPacket
-	// PacketDropUnexpectedSourceConnectionID is used when a packet with an unexpected source connection ID is received
-	PacketDropUnexpectedSourceConnectionID
-	// PacketDropUnexpectedVersion is used when a packet with an unexpected version is received
-	PacketDropUnexpectedVersion
-	// PacketDropDuplicate is used when a duplicate packet is received
-	PacketDropDuplicate
-)
-
-func (r PacketDropReason) String() string {
-	switch r {
-	case PacketDropKeyUnavailable:
-		return "key_unavailable"
-	case PacketDropUnknownConnectionID:
-		return "unknown_connection_id"
-	case PacketDropHeaderParseError:
-		return "header_parse_error"
-	case PacketDropPayloadDecryptError:
-		return "payload_decrypt_error"
-	case PacketDropProtocolViolation:
-		return "protocol_violation"
-	case PacketDropDOSPrevention:
-		return "dos_prevention"
-	case PacketDropUnsupportedVersion:
-		return "unsupported_version"
-	case PacketDropUnexpectedPacket:
-		return "unexpected_packet"
-	case PacketDropUnexpectedSourceConnectionID:
-		return "unexpected_source_connection_id"
-	case PacketDropUnexpectedVersion:
-		return "unexpected_version"
-	case PacketDropDuplicate:
-		return "duplicate"
-	default:
-		panic("unknown packet drop reason")
-	}
-}
-
 type transportError uint64
 
 func (e transportError) String() string {
@@ -332,46 +214,114 @@ func (e transportError) String() string {
 	}
 }
 
-// TimerType is the type of the loss detection timer
-type TimerType uint8
+type packetType logging.PacketType
 
-const (
-	// TimerTypeACK is the timer type for the early retransmit timer
-	TimerTypeACK TimerType = iota
-	// TimerTypePTO is the timer type for the PTO retransmit timer
-	TimerTypePTO
-)
+func (t packetType) String() string {
+	switch logging.PacketType(t) {
+	case logging.PacketTypeInitial:
+		return "initial"
+	case logging.PacketTypeHandshake:
+		return "handshake"
+	case logging.PacketTypeRetry:
+		return "retry"
+	case logging.PacketType0RTT:
+		return "0RTT"
+	case logging.PacketTypeVersionNegotiation:
+		return "version_negotiation"
+	case logging.PacketTypeStatelessReset:
+		return "stateless_reset"
+	case logging.PacketType1RTT:
+		return "1RTT"
+	case logging.PacketTypeNotDetermined:
+		return ""
+	default:
+		panic("unknown packet type")
+	}
+}
 
-func (t TimerType) String() string {
-	switch t {
-	case TimerTypeACK:
+type packetLossReason logging.PacketLossReason
+
+func (r packetLossReason) String() string {
+	switch logging.PacketLossReason(r) {
+	case logging.PacketLossReorderingThreshold:
+		return "reordering_threshold"
+	case logging.PacketLossTimeThreshold:
+		return "time_threshold"
+	default:
+		panic("unknown loss reason")
+	}
+}
+
+type packetDropReason logging.PacketDropReason
+
+func (r packetDropReason) String() string {
+	switch logging.PacketDropReason(r) {
+	case logging.PacketDropKeyUnavailable:
+		return "key_unavailable"
+	case logging.PacketDropUnknownConnectionID:
+		return "unknown_connection_id"
+	case logging.PacketDropHeaderParseError:
+		return "header_parse_error"
+	case logging.PacketDropPayloadDecryptError:
+		return "payload_decrypt_error"
+	case logging.PacketDropProtocolViolation:
+		return "protocol_violation"
+	case logging.PacketDropDOSPrevention:
+		return "dos_prevention"
+	case logging.PacketDropUnsupportedVersion:
+		return "unsupported_version"
+	case logging.PacketDropUnexpectedPacket:
+		return "unexpected_packet"
+	case logging.PacketDropUnexpectedSourceConnectionID:
+		return "unexpected_source_connection_id"
+	case logging.PacketDropUnexpectedVersion:
+		return "unexpected_version"
+	case logging.PacketDropDuplicate:
+		return "duplicate"
+	default:
+		panic("unknown packet drop reason")
+	}
+}
+
+type timerType logging.TimerType
+
+func (t timerType) String() string {
+	switch logging.TimerType(t) {
+	case logging.TimerTypeACK:
 		return "ack"
-	case TimerTypePTO:
+	case logging.TimerTypePTO:
 		return "pto"
 	default:
 		panic("unknown timer type")
 	}
 }
 
-// CloseReason is the reason why a session is closed
-type CloseReason uint8
+type timeoutReason logging.TimeoutReason
 
-const (
-	// CloseReasonHandshakeTimeout is used when the session is closed due to a handshake timeout
-	// This reason is not defined in the qlog draft, but very useful for debugging.
-	CloseReasonHandshakeTimeout CloseReason = iota
-	// CloseReasonIdleTimeout is used when the session is closed due to an idle timeout
-	// This reason is not defined in the qlog draft, but very useful for debugging.
-	CloseReasonIdleTimeout
-)
-
-func (r CloseReason) String() string {
-	switch r {
-	case CloseReasonHandshakeTimeout:
+func (r timeoutReason) String() string {
+	switch logging.TimeoutReason(r) {
+	case logging.TimeoutReasonHandshake:
 		return "handshake_timeout"
-	case CloseReasonIdleTimeout:
+	case logging.TimeoutReasonIdle:
 		return "idle_timeout"
 	default:
 		panic("unknown close reason")
+	}
+}
+
+type congestionState logging.CongestionState
+
+func (s congestionState) String() string {
+	switch logging.CongestionState(s) {
+	case logging.CongestionStateSlowStart:
+		return "slow_start"
+	case logging.CongestionStateCongestionAvoidance:
+		return "congestion_avoidance"
+	case logging.CongestionStateRecovery:
+		return "recovery"
+	case logging.CongestionStateApplicationLimited:
+		return "application_limited"
+	default:
+		panic("unknown congestion state")
 	}
 }

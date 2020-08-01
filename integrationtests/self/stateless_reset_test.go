@@ -24,7 +24,7 @@ var _ = Describe("Stateless Resets", func() {
 		It(fmt.Sprintf("sends and recognizes stateless resets, for %d byte connection IDs", connIDLen), func() {
 			statelessResetKey := make([]byte, 32)
 			rand.Read(statelessResetKey)
-			serverConfig := getQuicConfigForServer(&quic.Config{StatelessResetKey: statelessResetKey})
+			serverConfig := getQuicConfig(&quic.Config{StatelessResetKey: statelessResetKey})
 
 			ln, err := quic.ListenAddr("localhost:0", getTLSConfig(), serverConfig)
 			Expect(err).ToNot(HaveOccurred())
@@ -58,7 +58,7 @@ var _ = Describe("Stateless Resets", func() {
 			sess, err := quic.DialAddr(
 				fmt.Sprintf("localhost:%d", proxy.LocalPort()),
 				getTLSClientConfig(),
-				getQuicConfigForClient(&quic.Config{
+				getQuicConfig(&quic.Config{
 					ConnectionIDLength: connIDLen,
 					MaxIdleTimeout:     2 * time.Second,
 				}),

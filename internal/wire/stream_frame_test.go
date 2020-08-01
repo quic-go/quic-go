@@ -22,7 +22,7 @@ var _ = Describe("STREAM frame", func() {
 			Expect(err).ToNot(HaveOccurred())
 			Expect(frame.StreamID).To(Equal(protocol.StreamID(0x12345)))
 			Expect(frame.Data).To(Equal([]byte("foobar")))
-			Expect(frame.FinBit).To(BeFalse())
+			Expect(frame.Fin).To(BeFalse())
 			Expect(frame.Offset).To(Equal(protocol.ByteCount(0xdecafbad)))
 			Expect(r.Len()).To(BeZero())
 		})
@@ -37,7 +37,7 @@ var _ = Describe("STREAM frame", func() {
 			Expect(err).ToNot(HaveOccurred())
 			Expect(frame.StreamID).To(Equal(protocol.StreamID(0x12345)))
 			Expect(frame.Data).To(Equal([]byte("foob")))
-			Expect(frame.FinBit).To(BeFalse())
+			Expect(frame.Fin).To(BeFalse())
 			Expect(frame.Offset).To(BeZero())
 			Expect(r.Len()).To(Equal(2))
 		})
@@ -51,7 +51,7 @@ var _ = Describe("STREAM frame", func() {
 			Expect(err).ToNot(HaveOccurred())
 			Expect(frame.StreamID).To(Equal(protocol.StreamID(9)))
 			Expect(frame.Data).To(Equal([]byte("foobar")))
-			Expect(frame.FinBit).To(BeTrue())
+			Expect(frame.Fin).To(BeTrue())
 			Expect(frame.Offset).To(BeZero())
 			Expect(r.Len()).To(BeZero())
 		})
@@ -66,7 +66,7 @@ var _ = Describe("STREAM frame", func() {
 			Expect(f.StreamID).To(Equal(protocol.StreamID(0x1337)))
 			Expect(f.Offset).To(Equal(protocol.ByteCount(0x12345)))
 			Expect(f.Data).To(BeEmpty())
-			Expect(f.FinBit).To(BeFalse())
+			Expect(f.Fin).To(BeFalse())
 		})
 
 		It("rejects frames that overflow the maximum offset", func() {
@@ -115,7 +115,7 @@ var _ = Describe("STREAM frame", func() {
 			Expect(frame.StreamID).To(Equal(protocol.StreamID(0x12345)))
 			Expect(frame.Data).To(Equal(bytes.Repeat([]byte{'f'}, protocol.MinStreamFrameBufferSize)))
 			Expect(frame.DataLen()).To(BeEquivalentTo(protocol.MinStreamFrameBufferSize))
-			Expect(frame.FinBit).To(BeFalse())
+			Expect(frame.Fin).To(BeFalse())
 			Expect(frame.fromPool).To(BeTrue())
 			Expect(r.Len()).To(BeZero())
 			Expect(frame.PutBack).ToNot(Panic())
@@ -131,7 +131,7 @@ var _ = Describe("STREAM frame", func() {
 			Expect(frame.StreamID).To(Equal(protocol.StreamID(0x12345)))
 			Expect(frame.Data).To(Equal(bytes.Repeat([]byte{'f'}, protocol.MinStreamFrameBufferSize-1)))
 			Expect(frame.DataLen()).To(BeEquivalentTo(protocol.MinStreamFrameBufferSize - 1))
-			Expect(frame.FinBit).To(BeFalse())
+			Expect(frame.Fin).To(BeFalse())
 			Expect(frame.fromPool).To(BeFalse())
 			Expect(r.Len()).To(BeZero())
 			Expect(frame.PutBack).ToNot(Panic())
@@ -173,7 +173,7 @@ var _ = Describe("STREAM frame", func() {
 			f := &StreamFrame{
 				StreamID: 0x1337,
 				Offset:   0x123456,
-				FinBit:   true,
+				Fin:      true,
 			}
 			b := &bytes.Buffer{}
 			err := f.Write(b, versionIETFFrames)
@@ -373,7 +373,7 @@ var _ = Describe("STREAM frame", func() {
 		It("preserves the FIN bit", func() {
 			f := &StreamFrame{
 				StreamID: 0x1337,
-				FinBit:   true,
+				Fin:      true,
 				Offset:   0xdeadbeef,
 				Data:     make([]byte, 100),
 			}
@@ -381,8 +381,8 @@ var _ = Describe("STREAM frame", func() {
 			Expect(needsSplit).To(BeTrue())
 			Expect(frame).ToNot(BeNil())
 			Expect(frame.Offset).To(BeNumerically("<", f.Offset))
-			Expect(f.FinBit).To(BeTrue())
-			Expect(frame.FinBit).To(BeFalse())
+			Expect(f.Fin).To(BeTrue())
+			Expect(frame.Fin).To(BeFalse())
 		})
 
 		It("produces frames of the correct length, without data len", func() {

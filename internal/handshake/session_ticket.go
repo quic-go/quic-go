@@ -39,7 +39,7 @@ func (t *sessionTicket) Unmarshal(b []byte) error {
 		return errors.New("failed to read RTT")
 	}
 	var tp wire.TransportParameters
-	if err := tp.UnmarshalFromSessionTicket(b[len(b)-r.Len():]); err != nil {
+	if err := tp.UnmarshalFromSessionTicket(r); err != nil {
 		return fmt.Errorf("unmarshaling transport parameters from session ticket failed: %s", err.Error())
 	}
 	t.Parameters = &tp

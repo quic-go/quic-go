@@ -1,10 +1,10 @@
-package congestion
+package utils
 
 import (
 	"time"
 
 	"github.com/lucas-clemente/quic-go/internal/protocol"
-	"github.com/lucas-clemente/quic-go/internal/utils"
+
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 )
@@ -113,7 +113,7 @@ var _ = Describe("RTT stats", func() {
 
 		badSendDeltas := []time.Duration{
 			0,
-			utils.InfDuration,
+			InfDuration,
 			-1000 * time.Microsecond,
 		}
 		// log.StartCapturingLogs();

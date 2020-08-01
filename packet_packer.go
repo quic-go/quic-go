@@ -313,9 +313,9 @@ func (p *packetPacker) MaybePackAckPacket(handshakeConfirmed bool) (*packedPacke
 }
 
 func (p *packetPacker) padPacket(buffer *packetBuffer) {
-	if dataLen := len(buffer.Data); dataLen < protocol.MinInitialPacketSize {
-		buffer.Data = buffer.Data[:protocol.MinInitialPacketSize]
-		for n := dataLen; n < protocol.MinInitialPacketSize; n++ {
+	if dataLen := protocol.ByteCount(len(buffer.Data)); dataLen < p.maxPacketSize {
+		buffer.Data = buffer.Data[:p.maxPacketSize]
+		for n := dataLen; n < p.maxPacketSize; n++ {
 			buffer.Data[n] = 0
 		}
 	}

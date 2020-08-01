@@ -11,8 +11,7 @@ import (
 
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/internal/utils"
-	"github.com/lucas-clemente/quic-go/internal/wire"
-	"github.com/lucas-clemente/quic-go/qlog"
+	"github.com/lucas-clemente/quic-go/logging"
 )
 
 type client struct {
@@ -27,37 +26,28 @@ type client struct {
 
 	packetHandlers packetHandlerManager
 
-	versionNegotiated                utils.AtomicBool // has the server accepted our version
-	receivedVersionNegotiationPacket bool
-	negotiatedVersions               []protocol.VersionNumber // the list of versions from the version negotiation packet
-
 	tlsConf *tls.Config
 	config  *Config
 
 	srcConnID  protocol.ConnectionID
 	destConnID protocol.ConnectionID
 
-	initialPacketNumber protocol.PacketNumber
-
-	initialVersion protocol.VersionNumber
-	version        protocol.VersionNumber
+	initialPacketNumber  protocol.PacketNumber
+	hasNegotiatedVersion bool
+	version              protocol.VersionNumber
 
 	handshakeChan chan struct{}
 
 	session quicSession
 
-	qlogger qlog.Tracer
-	logger  utils.Logger
+	tracer logging.ConnectionTracer
+	logger utils.Logger
 }
-
-var _ packetHandler = &client{}
 
 var (
 	// make it possible to mock connection ID generation in the tests
 	generateConnectionID           = protocol.GenerateConnectionID
 	generateConnectionIDForInitial = protocol.GenerateConnectionIDForInitial
-	// make it possible to the qlogger
-	newQlogger = qlog.NewTracer
 )
 
 // DialAddr establishes a new QUIC connection to a server.
@@ -144,7 +134,7 @@ func DialEarly(
 	host string,
 	tlsConf *tls.Config,
 	config *Config,
-) (Session, error) {
+) (EarlySession, error) {
 	return dialContext(context.Background(), pconn, remoteAddr, host, tlsConf, config, true, false)
 }
 
@@ -175,7 +165,7 @@ func dialContext(
 		return nil, errors.New("quic: tls.Config not set")
 	}
 	config = populateClientConfig(config, createdPacketConn)
-	packetHandlers, err := getMultiplexer().AddConn(pconn, config.ConnectionIDLength, config.StatelessResetKey)
+	packetHandlers, err := getMultiplexer().AddConn(pconn, config.ConnectionIDLength, config.StatelessResetKey, config.Tracer)
 	if err != nil {
 		return nil, err
 	}
@@ -185,10 +175,8 @@ func dialContext(
 	}
 	c.packetHandlers = packetHandlers
 
-	if c.config.GetLogWriter != nil {
-		if w := c.config.GetLogWriter(c.destConnID); w != nil {
-			c.qlogger = newQlogger(w, protocol.PerspectiveClient, c.destConnID)
-		}
+	if c.config.Tracer != nil {
+		c.tracer = c.config.Tracer.TracerForConnection(protocol.PerspectiveClient, c.destConnID)
 	}
 	if err := c.dial(ctx); err != nil {
 		return nil, err
@@ -255,8 +243,8 @@ func newClient(
 
 func (c *client) dial(ctx context.Context) error {
 	c.logger.Infof("Starting new connection to %s (%s -> %s), source connection ID %s, destination connection ID %s, version %s", c.tlsConf.ServerName, c.conn.LocalAddr(), c.conn.RemoteAddr(), c.srcConnID, c.destConnID, c.version)
-	if c.qlogger != nil {
-		c.qlogger.StartedConnection(c.conn.LocalAddr(), c.conn.RemoteAddr(), c.version, c.srcConnID, c.destConnID)
+	if c.tracer != nil {
+		c.tracer.StartedConnection(c.conn.LocalAddr(), c.conn.RemoteAddr(), c.version, c.srcConnID, c.destConnID)
 	}
 
 	c.mutex.Lock()
@@ -268,19 +256,20 @@ func (c *client) dial(ctx context.Context) error {
 		c.config,
 		c.tlsConf,
 		c.initialPacketNumber,
-		c.initialVersion,
+		c.version,
 		c.use0RTT,
-		c.qlogger,
+		c.hasNegotiatedVersion,
+		c.tracer,
 		c.logger,
 		c.version,
 	)
 	c.mutex.Unlock()
-	c.packetHandlers.Add(c.srcConnID, c)
+	c.packetHandlers.Add(c.srcConnID, c.session)
 
 	errorChan := make(chan error, 1)
 	go func() {
 		err := c.session.run() // returns as soon as the session is closed
-		if err != errCloseForRecreating && c.createdPacketConn {
+		if !errors.Is(err, errCloseForRecreating{}) && c.createdPacketConn {
 			c.packetHandlers.Destroy()
 		}
 		errorChan <- err
@@ -298,7 +287,11 @@ func (c *client) dial(ctx context.Context) error {
 		c.session.shutdown()
 		return ctx.Err()
 	case err := <-errorChan:
-		if err == errCloseForRecreating {
+		var recreateErr *errCloseForRecreating
+		if errors.As(err, &recreateErr) {
+			c.initialPacketNumber = recreateErr.nextPacketNumber
+			c.version = recreateErr.nextVersion
+			c.hasNegotiatedVersion = true
 			return c.dial(ctx)
 		}
 		return err
@@ -309,103 +302,4 @@ func (c *client) dial(ctx context.Context) error {
 		// handshake successfully completed
 		return nil
 	}
-}
-
-func (c *client) handlePacket(p *receivedPacket) {
-	if wire.IsVersionNegotiationPacket(p.data) {
-		go c.handleVersionNegotiationPacket(p)
-		return
-	}
-
-	// this is the first packet we are receiving
-	// since it is not a Version Negotiation Packet, this means the server supports the suggested version
-	if !c.versionNegotiated.Get() {
-		c.versionNegotiated.Set(true)
-	}
-
-	c.session.handlePacket(p)
-}
-
-func (c *client) handleVersionNegotiationPacket(p *receivedPacket) {
-	c.mutex.Lock()
-	defer c.mutex.Unlock()
-
-	hdr, _, _, err := wire.ParsePacket(p.data, 0)
-	if err != nil {
-		if c.qlogger != nil {
-			c.qlogger.DroppedPacket(qlog.PacketTypeVersionNegotiation, protocol.ByteCount(len(p.data)), qlog.PacketDropHeaderParseError)
-		}
-		c.logger.Debugf("Error parsing Version Negotiation packet: %s", err)
-		return
-	}
-
-	// ignore delayed / duplicated version negotiation packets
-	if c.receivedVersionNegotiationPacket || c.versionNegotiated.Get() {
-		if c.qlogger != nil {
-			c.qlogger.DroppedPacket(qlog.PacketTypeVersionNegotiation, protocol.ByteCount(len(p.data)), qlog.PacketDropUnexpectedPacket)
-		}
-		c.logger.Debugf("Received a delayed Version Negotiation packet.")
-		return
-	}
-
-	for _, v := range hdr.SupportedVersions {
-		if v == c.version {
-			if c.qlogger != nil {
-				c.qlogger.DroppedPacket(qlog.PacketTypeVersionNegotiation, protocol.ByteCount(len(p.data)), qlog.PacketDropUnexpectedVersion)
-			}
-			// The Version Negotiation packet contains the version that we offered.
-			// This might be a packet sent by an attacker (or by a terribly broken server implementation).
-			return
-		}
-	}
-
-	c.logger.Infof("Received a Version Negotiation packet. Supported Versions: %s", hdr.SupportedVersions)
-	if c.qlogger != nil {
-		c.qlogger.ReceivedVersionNegotiationPacket(hdr)
-	}
-	newVersion, ok := protocol.ChooseSupportedVersion(c.config.Versions, hdr.SupportedVersions)
-	if !ok {
-		//nolint:stylecheck
-		c.session.destroy(fmt.Errorf("No compatible QUIC version found. We support %s, server offered %s", c.config.Versions, hdr.SupportedVersions))
-		c.logger.Debugf("No compatible QUIC version found.")
-		return
-	}
-	c.receivedVersionNegotiationPacket = true
-	c.negotiatedVersions = hdr.SupportedVersions
-
-	// switch to negotiated version
-	c.initialVersion = c.version
-	c.version = newVersion
-
-	c.logger.Infof("Switching to QUIC version %s. New connection ID: %s", newVersion, c.destConnID)
-	c.initialPacketNumber = c.session.closeForRecreating()
-}
-
-func (c *client) shutdown() {
-	c.mutex.Lock()
-	defer c.mutex.Unlock()
-	if c.session == nil {
-		return
-	}
-	c.session.shutdown()
-}
-
-func (c *client) destroy(e error) {
-	c.mutex.Lock()
-	defer c.mutex.Unlock()
-	if c.session == nil {
-		return
-	}
-	c.session.destroy(e)
-}
-
-func (c *client) GetVersion() protocol.VersionNumber {
-	c.mutex.Lock()
-	v := c.version
-	c.mutex.Unlock()
-	return v
-}
-
-func (c *client) getPerspective() protocol.Perspective {
-	return protocol.PerspectiveClient
 }

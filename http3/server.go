@@ -298,7 +298,7 @@ func (s *Server) handleRequest(sess quic.Session, str quic.Stream, decoder *qpac
 	}
 
 	// If the EOF was read by the handler, CancelRead() is a no-op.
-	str.CancelRead(quic.ErrorCode(errorEarlyResponse))
+	str.CancelRead(quic.ErrorCode(errorNoError))
 	return requestError{}
 }
 

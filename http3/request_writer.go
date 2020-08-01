@@ -1,7 +1,6 @@
 package http3
 
 import (
-	"bufio"
 	"bytes"
 	"fmt"
 	"io"
@@ -40,16 +39,15 @@ func newRequestWriter(logger utils.Logger) *requestWriter {
 }
 
 func (w *requestWriter) WriteRequest(str quic.Stream, req *http.Request, gzip bool) error {
-	wr := bufio.NewWriter(str)
-
-	if err := w.writeHeaders(wr, req, gzip); err != nil {
+	buf := &bytes.Buffer{}
+	if err := w.writeHeaders(buf, req, gzip); err != nil {
+		return err
+	}
+	if _, err := str.Write(buf.Bytes()); err != nil {
 		return err
 	}
 	// TODO: add support for trailers
 	if req.Body == nil {
-		if err := wr.Flush(); err != nil {
-			return err
-		}
 		str.Close()
 		return nil
 	}
@@ -59,30 +57,32 @@ func (w *requestWriter) WriteRequest(str quic.Stream, req *http.Request, gzip bo
 		defer req.Body.Close()
 		b := make([]byte, bodyCopyBufferSize)
 		for {
-			n, err := req.Body.Read(b)
-			if err == io.EOF {
-				break
-			}
-			if err != nil {
-				str.CancelWrite(quic.ErrorCode(errorRequestCanceled))
-				w.logger.Errorf("Error writing request: %s", err)
-				return
+			n, rerr := req.Body.Read(b)
+			if n == 0 {
+				if rerr == nil {
+					continue
+				} else if rerr == io.EOF {
+					break
+				}
 			}
 			buf := &bytes.Buffer{}
 			(&dataFrame{Length: uint64(n)}).Write(buf)
-			if _, err := wr.Write(buf.Bytes()); err != nil {
+			if _, err := str.Write(buf.Bytes()); err != nil {
 				w.logger.Errorf("Error writing request: %s", err)
 				return
 			}
-			if _, err := wr.Write(b[:n]); err != nil {
+			if _, err := str.Write(b[:n]); err != nil {
 				w.logger.Errorf("Error writing request: %s", err)
 				return
 			}
-		}
-		if err := wr.Flush(); err != nil {
-			fmt.Println(err)
-			w.logger.Errorf("Error writing request: %s", err)
-			return
+			if rerr != nil {
+				if rerr == io.EOF {
+					break
+				}
+				str.CancelWrite(quic.ErrorCode(errorRequestCanceled))
+				w.logger.Errorf("Error writing request: %s", rerr)
+				return
+			}
 		}
 		str.Close()
 	}()

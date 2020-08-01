@@ -34,7 +34,7 @@ var _ = Describe("Handshake drop tests", func() {
 	const timeout = 10 * time.Minute
 
 	startListenerAndProxy := func(dropCallback quicproxy.DropCallback, doRetry bool, longCertChain bool, version protocol.VersionNumber) {
-		conf := getQuicConfigForServer(&quic.Config{
+		conf := getQuicConfig(&quic.Config{
 			MaxIdleTimeout:   timeout,
 			HandshakeTimeout: timeout,
 			Versions:         []protocol.VersionNumber{version},
@@ -86,7 +86,7 @@ var _ = Describe("Handshake drop tests", func() {
 			sess, err := quic.DialAddr(
 				fmt.Sprintf("localhost:%d", proxy.LocalPort()),
 				getTLSClientConfig(),
-				getQuicConfigForClient(&quic.Config{
+				getQuicConfig(&quic.Config{
 					MaxIdleTimeout:   timeout,
 					HandshakeTimeout: timeout,
 					Versions:         []protocol.VersionNumber{version},
@@ -122,7 +122,7 @@ var _ = Describe("Handshake drop tests", func() {
 			sess, err := quic.DialAddr(
 				fmt.Sprintf("localhost:%d", proxy.LocalPort()),
 				getTLSClientConfig(),
-				getQuicConfigForClient(&quic.Config{
+				getQuicConfig(&quic.Config{
 					MaxIdleTimeout:   timeout,
 					HandshakeTimeout: timeout,
 					Versions:         []protocol.VersionNumber{version},
@@ -156,7 +156,7 @@ var _ = Describe("Handshake drop tests", func() {
 			sess, err := quic.DialAddr(
 				fmt.Sprintf("localhost:%d", proxy.LocalPort()),
 				getTLSClientConfig(),
-				getQuicConfigForClient(&quic.Config{
+				getQuicConfig(&quic.Config{
 					MaxIdleTimeout:   timeout,
 					HandshakeTimeout: timeout,
 					Versions:         []protocol.VersionNumber{version},

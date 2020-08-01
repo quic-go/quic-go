@@ -31,7 +31,7 @@ var _ = Describe("Cubic Sender", func() {
 		bytesInFlight     protocol.ByteCount
 		packetNumber      protocol.PacketNumber
 		ackedPacketNumber protocol.PacketNumber
-		rttStats          *RTTStats
+		rttStats          *utils.RTTStats
 	)
 
 	BeforeEach(func() {
@@ -39,8 +39,8 @@ var _ = Describe("Cubic Sender", func() {
 		packetNumber = 1
 		ackedPacketNumber = 0
 		clock = mockClock{}
-		rttStats = NewRTTStats()
-		sender = newCubicSender(&clock, rttStats, true /*reno*/, initialCongestionWindowPackets*maxDatagramSize, MaxCongestionWindow)
+		rttStats = utils.NewRTTStats()
+		sender = newCubicSender(&clock, rttStats, true /*reno*/, initialCongestionWindowPackets*maxDatagramSize, MaxCongestionWindow, nil)
 	})
 
 	SendAvailableSendWindowLen := func(packetLength protocol.ByteCount) int {
@@ -98,6 +98,7 @@ var _ = Describe("Cubic Sender", func() {
 	})
 
 	It("paces", func() {
+		rttStats.UpdateRTT(10*time.Millisecond, 0, time.Now())
 		clock.Advance(time.Hour)
 		// Fill the send window with data, then verify that we can't send.
 		SendAvailableSendWindow()
@@ -129,7 +130,7 @@ var _ = Describe("Cubic Sender", func() {
 		// At startup make sure we can send.
 		Expect(sender.CanSend(0)).To(BeTrue())
 		Expect(sender.TimeUntilSend(0)).To(BeZero())
-		Expect(sender.BandwidthEstimate()).To(BeZero())
+		Expect(sender.BandwidthEstimate()).To(Equal(infBandwidth))
 		// Make sure we can send.
 		Expect(sender.TimeUntilSend(0)).To(BeZero())
 
@@ -144,7 +145,6 @@ var _ = Describe("Cubic Sender", func() {
 	})
 
 	It("slow start packet loss", func() {
-		sender.SetNumEmulatedConnections(1)
 		const numberOfAcks = 10
 		for i := 0; i < numberOfAcks; i++ {
 			// Send our full send window.
@@ -181,91 +181,12 @@ var _ = Describe("Cubic Sender", func() {
 		Expect(sender.GetCongestionWindow()).To(Equal(expectedSendWindow))
 
 		// Now RTO and ensure slow start gets reset.
-		Expect(sender.HybridSlowStart().Started()).To(BeTrue())
+		Expect(sender.hybridSlowStart.Started()).To(BeTrue())
 		sender.OnRetransmissionTimeout(true)
-		Expect(sender.HybridSlowStart().Started()).To(BeFalse())
-	})
-
-	It("slow start packet loss with large reduction", func() {
-		sender.SetSlowStartLargeReduction(true)
-
-		sender.SetNumEmulatedConnections(1)
-		const numberOfAcks = 10
-		for i := 0; i < numberOfAcks; i++ {
-			// Send our full send window.
-			SendAvailableSendWindow()
-			AckNPackets(2)
-		}
-		SendAvailableSendWindow()
-		expectedSendWindow := defaultWindowTCP + (maxDatagramSize * 2 * numberOfAcks)
-		Expect(sender.GetCongestionWindow()).To(Equal(expectedSendWindow))
-
-		// Lose a packet to exit slow start. We should now have fallen out of
-		// slow start with a window reduced by 1.
-		LoseNPackets(1)
-		expectedSendWindow -= maxDatagramSize
-		Expect(sender.GetCongestionWindow()).To(Equal(expectedSendWindow))
-
-		// Lose 5 packets in recovery and verify that congestion window is reduced
-		// further.
-		LoseNPackets(5)
-		expectedSendWindow -= 5 * maxDatagramSize
-		Expect(sender.GetCongestionWindow()).To(Equal(expectedSendWindow))
-
-		packetsInRecoveryWindow := expectedSendWindow / maxDatagramSize
-
-		// Recovery phase. We need to ack every packet in the recovery window before
-		// we exit recovery.
-		numberOfPacketsInWindow := expectedSendWindow / maxDatagramSize
-		AckNPackets(int(packetsInRecoveryWindow))
-		SendAvailableSendWindow()
-		Expect(sender.GetCongestionWindow()).To(Equal(expectedSendWindow))
-
-		// We need to ack the rest of the window before cwnd increases by 1.
-		AckNPackets(int(numberOfPacketsInWindow - 1))
-		SendAvailableSendWindow()
-		Expect(sender.GetCongestionWindow()).To(Equal(expectedSendWindow))
-
-		// Next ack should increase cwnd by 1.
-		AckNPackets(1)
-		expectedSendWindow += maxDatagramSize
-		Expect(sender.GetCongestionWindow()).To(Equal(expectedSendWindow))
-
-		// Now RTO and ensure slow start gets reset.
-		Expect(sender.HybridSlowStart().Started()).To(BeTrue())
-		sender.OnRetransmissionTimeout(true)
-		Expect(sender.HybridSlowStart().Started()).To(BeFalse())
-	})
-
-	It("slow start half packet loss with large reduction", func() {
-		sender.SetSlowStartLargeReduction(true)
-
-		sender.SetNumEmulatedConnections(1)
-		const numberOfAcks = 10
-		for i := 0; i < numberOfAcks; i++ {
-			// Send our full send window in half sized packets.
-			SendAvailableSendWindowLen(maxDatagramSize / 2)
-			AckNPackets(2)
-		}
-		SendAvailableSendWindowLen(maxDatagramSize / 2)
-		expectedSendWindow := defaultWindowTCP + (maxDatagramSize * 2 * numberOfAcks)
-		Expect(sender.GetCongestionWindow()).To(Equal(expectedSendWindow))
-
-		// Lose a packet to exit slow start. We should now have fallen out of
-		// slow start with a window reduced by 1.
-		LoseNPackets(1)
-		expectedSendWindow -= maxDatagramSize
-		Expect(sender.GetCongestionWindow()).To(Equal(expectedSendWindow))
-
-		// Lose 10 packets in recovery and verify that congestion window is reduced
-		// by 5 packets.
-		LoseNPacketsLen(10, maxDatagramSize/2)
-		expectedSendWindow -= 5 * maxDatagramSize
-		Expect(sender.GetCongestionWindow()).To(Equal(expectedSendWindow))
+		Expect(sender.hybridSlowStart.Started()).To(BeFalse())
 	})
 
 	It("slow start packet loss PRR", func() {
-		sender.SetNumEmulatedConnections(1)
 		// Test based on the first example in RFC6937.
 		// Ack 10 packets in 5 acks to raise the CWND to 20, as in the example.
 		const numberOfAcks = 5
@@ -312,7 +233,6 @@ var _ = Describe("Cubic Sender", func() {
 	})
 
 	It("slow start burst packet loss PRR", func() {
-		sender.SetNumEmulatedConnections(1)
 		// Test based on the second example in RFC6937, though we also implement
 		// forward acknowledgements, so the first two incoming acks will trigger
 		// PRR immediately.
@@ -367,13 +287,13 @@ var _ = Describe("Cubic Sender", func() {
 
 	It("RTO congestion window", func() {
 		Expect(sender.GetCongestionWindow()).To(Equal(defaultWindowTCP))
-		Expect(sender.SlowstartThreshold()).To(Equal(MaxCongestionWindow))
+		Expect(sender.slowStartThreshold).To(Equal(MaxCongestionWindow))
 
 		// Expect the window to decrease to the minimum once the RTO fires
 		// and slow start threshold to be set to 1/2 of the CWND.
 		sender.OnRetransmissionTimeout(true)
 		Expect(sender.GetCongestionWindow()).To(Equal(2 * maxDatagramSize))
-		Expect(sender.SlowstartThreshold()).To(Equal(5 * maxDatagramSize))
+		Expect(sender.slowStartThreshold).To(Equal(5 * maxDatagramSize))
 	})
 
 	It("RTO congestion window no retransmission", func() {
@@ -388,7 +308,7 @@ var _ = Describe("Cubic Sender", func() {
 	It("tcp cubic reset epoch on quiescence", func() {
 		const maxCongestionWindow = 50
 		const maxCongestionWindowBytes = maxCongestionWindow * maxDatagramSize
-		sender = newCubicSender(&clock, rttStats, false, initialCongestionWindowPackets*maxDatagramSize, maxCongestionWindowBytes)
+		sender = newCubicSender(&clock, rttStats, false, initialCongestionWindowPackets*maxDatagramSize, maxCongestionWindowBytes, nil)
 
 		numSent := SendAvailableSendWindow()
 
@@ -441,63 +361,7 @@ var _ = Describe("Cubic Sender", func() {
 		Expect(postLossWindow).To(BeNumerically(">", sender.GetCongestionWindow()))
 	})
 
-	It("2 connection congestion avoidance at end of recovery", func() {
-		sender.SetNumEmulatedConnections(2)
-		// Ack 10 packets in 5 acks to raise the CWND to 20.
-		const numberOfAcks = 5
-		for i := 0; i < numberOfAcks; i++ {
-			// Send our full send window.
-			SendAvailableSendWindow()
-			AckNPackets(2)
-		}
-		SendAvailableSendWindow()
-		expectedSendWindow := defaultWindowTCP + (maxDatagramSize * 2 * numberOfAcks)
-		Expect(sender.GetCongestionWindow()).To(Equal(expectedSendWindow))
-
-		LoseNPackets(1)
-
-		// We should now have fallen out of slow start with a reduced window.
-		expectedSendWindow = protocol.ByteCount(float32(expectedSendWindow) * sender.RenoBeta())
-		Expect(sender.GetCongestionWindow()).To(Equal(expectedSendWindow))
-
-		// No congestion window growth should occur in recovery phase, i.e., until the
-		// currently outstanding 20 packets are acked.
-		for i := 0; i < 10; i++ {
-			// Send our full send window.
-			SendAvailableSendWindow()
-			Expect(sender.InRecovery()).To(BeTrue())
-			AckNPackets(2)
-			Expect(sender.GetCongestionWindow()).To(Equal(expectedSendWindow))
-		}
-		Expect(sender.InRecovery()).To(BeFalse())
-
-		// Out of recovery now. Congestion window should not grow for half an RTT.
-		packetsInSendWindow := expectedSendWindow / maxDatagramSize
-		SendAvailableSendWindow()
-		AckNPackets(int(packetsInSendWindow/2 - 2))
-		Expect(sender.GetCongestionWindow()).To(Equal(expectedSendWindow))
-
-		// Next ack should increase congestion window by 1MSS.
-		SendAvailableSendWindow()
-		AckNPackets(2)
-		expectedSendWindow += maxDatagramSize
-		packetsInSendWindow++
-		Expect(sender.GetCongestionWindow()).To(Equal(expectedSendWindow))
-
-		// Congestion window should remain steady again for half an RTT.
-		SendAvailableSendWindow()
-		AckNPackets(int(packetsInSendWindow/2 - 1))
-		Expect(sender.GetCongestionWindow()).To(Equal(expectedSendWindow))
-
-		// Next ack should cause congestion window to grow by 1MSS.
-		SendAvailableSendWindow()
-		AckNPackets(2)
-		expectedSendWindow += maxDatagramSize
-		Expect(sender.GetCongestionWindow()).To(Equal(expectedSendWindow))
-	})
-
 	It("1 connection congestion avoidance at end of recovery", func() {
-		sender.SetNumEmulatedConnections(1)
 		// Ack 10 packets in 5 acks to raise the CWND to 20.
 		const numberOfAcks = 5
 		for i := 0; i < numberOfAcks; i++ {
@@ -542,8 +406,6 @@ var _ = Describe("Cubic Sender", func() {
 	})
 
 	It("no PRR", func() {
-		sender.SetNumEmulatedConnections(1)
-
 		SendAvailableSendWindow()
 		LoseNPackets(9)
 		AckNPackets(1)
@@ -556,10 +418,9 @@ var _ = Describe("Cubic Sender", func() {
 
 	It("reset after connection migration", func() {
 		Expect(sender.GetCongestionWindow()).To(Equal(defaultWindowTCP))
-		Expect(sender.SlowstartThreshold()).To(Equal(MaxCongestionWindow))
+		Expect(sender.slowStartThreshold).To(Equal(MaxCongestionWindow))
 
 		// Starts with slow start.
-		sender.SetNumEmulatedConnections(1)
 		const numberOfAcks = 10
 		for i := 0; i < numberOfAcks; i++ {
 			// Send our full send window.
@@ -577,17 +438,17 @@ var _ = Describe("Cubic Sender", func() {
 		// start threshold is also updated.
 		expectedSendWindow = protocol.ByteCount(float32(expectedSendWindow) * renoBeta)
 		Expect(sender.GetCongestionWindow()).To(Equal(expectedSendWindow))
-		Expect(sender.SlowstartThreshold()).To(Equal(expectedSendWindow))
+		Expect(sender.slowStartThreshold).To(Equal(expectedSendWindow))
 
 		// Resets cwnd and slow start threshold on connection migrations.
 		sender.OnConnectionMigration()
 		Expect(sender.GetCongestionWindow()).To(Equal(defaultWindowTCP))
-		Expect(sender.SlowstartThreshold()).To(Equal(MaxCongestionWindow))
-		Expect(sender.HybridSlowStart().Started()).To(BeFalse())
+		Expect(sender.slowStartThreshold).To(Equal(MaxCongestionWindow))
+		Expect(sender.hybridSlowStart.Started()).To(BeFalse())
 	})
 
 	It("default max cwnd", func() {
-		sender = newCubicSender(&clock, rttStats, true /*reno*/, initialCongestionWindowPackets*maxDatagramSize, maxCongestionWindow)
+		sender = newCubicSender(&clock, rttStats, true /*reno*/, initialCongestionWindowPackets*maxDatagramSize, maxCongestionWindow, nil)
 
 		defaultMaxCongestionWindowPackets := maxCongestionWindow / maxDatagramSize
 		for i := 1; i < int(defaultMaxCongestionWindowPackets); i++ {
@@ -599,7 +460,7 @@ var _ = Describe("Cubic Sender", func() {
 
 	It("limit cwnd increase in congestion avoidance", func() {
 		// Enable Cubic.
-		sender = newCubicSender(&clock, rttStats, false, initialCongestionWindowPackets*maxDatagramSize, MaxCongestionWindow)
+		sender = newCubicSender(&clock, rttStats, false, initialCongestionWindowPackets*maxDatagramSize, MaxCongestionWindow, nil)
 		numSent := SendAvailableSendWindow()
 
 		// Make sure we fall out of slow start.

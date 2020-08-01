@@ -19,11 +19,22 @@ import (
 
 type packetData []byte
 
+func isProxyRunning() bool {
+	var b bytes.Buffer
+	pprof.Lookup("goroutine").WriteTo(&b, 1)
+	return strings.Contains(b.String(), "proxy.(*QuicProxy).runIncomingConnection") ||
+		strings.Contains(b.String(), "proxy.(*QuicProxy).runOutgoingConnection")
+}
+
 var _ = Describe("QUIC Proxy", func() {
 	makePacket := func(p protocol.PacketNumber, payload []byte) []byte {
 		b := &bytes.Buffer{}
 		hdr := wire.ExtendedHeader{
 			Header: wire.Header{
+				IsLongHeader:     true,
+				Type:             protocol.PacketTypeInitial,
+				Version:          protocol.VersionTLS,
+				Length:           4 + protocol.ByteCount(len(payload)),
 				DestConnectionID: protocol.ConnectionID{0xde, 0xad, 0xbe, 0xef, 0, 0, 0x13, 0x37},
 				SrcConnectionID:  protocol.ConnectionID{0xde, 0xad, 0xbe, 0xef, 0, 0, 0x13, 0x37},
 			},
@@ -35,6 +46,19 @@ var _ = Describe("QUIC Proxy", func() {
 		raw = append(raw, payload...)
 		return raw
 	}
+
+	readPacketNumber := func(b []byte) protocol.PacketNumber {
+		hdr, data, _, err := wire.ParsePacket(b, 0)
+		ExpectWithOffset(1, err).ToNot(HaveOccurred())
+		Expect(hdr.Type).To(Equal(protocol.PacketTypeInitial))
+		extHdr, err := hdr.ParseExtended(bytes.NewReader(data), protocol.VersionTLS)
+		ExpectWithOffset(1, err).ToNot(HaveOccurred())
+		return extHdr.PacketNumber
+	}
+
+	AfterEach(func() {
+		Eventually(isProxyRunning).Should(BeFalse())
+	})
 
 	Context("Proxy setup and teardown", func() {
 		It("sets up the UDPProxy", func() {
@@ -80,12 +104,6 @@ var _ = Describe("QUIC Proxy", func() {
 		})
 
 		It("stops listening for proxied connections", func() {
-			isConnRunning := func() bool {
-				var b bytes.Buffer
-				pprof.Lookup("goroutine").WriteTo(&b, 1)
-				return strings.Contains(b.String(), "proxy.(*QuicProxy).runConnection")
-			}
-
 			serverAddr, err := net.ResolveUDPAddr("udp", "localhost:0")
 			Expect(err).ToNot(HaveOccurred())
 			serverConn, err := net.ListenUDP("udp", serverAddr)
@@ -94,16 +112,16 @@ var _ = Describe("QUIC Proxy", func() {
 
 			proxy, err := NewQuicProxy("localhost:0", &Opts{RemoteAddr: serverConn.LocalAddr().String()})
 			Expect(err).ToNot(HaveOccurred())
-			Expect(isConnRunning()).To(BeFalse())
+			Expect(isProxyRunning()).To(BeFalse())
 
 			// check that the proxy port is not in use anymore
 			conn, err := net.DialUDP("udp", nil, proxy.LocalAddr().(*net.UDPAddr))
 			Expect(err).ToNot(HaveOccurred())
 			_, err = conn.Write(makePacket(1, []byte("foobar")))
 			Expect(err).ToNot(HaveOccurred())
-			Eventually(isConnRunning).Should(BeTrue())
+			Eventually(isProxyRunning).Should(BeTrue())
 			Expect(proxy.Close()).To(Succeed())
-			Eventually(isConnRunning).Should(BeFalse())
+			Eventually(isProxyRunning).Should(BeFalse())
 		})
 
 		It("has the correct LocalAddr and LocalPort", func() {
@@ -284,16 +302,16 @@ var _ = Describe("QUIC Proxy", func() {
 		})
 
 		Context("Delay Callback", func() {
-			expectDelay := func(startTime time.Time, rtt time.Duration, numRTTs int) {
-				expectedReceiveTime := startTime.Add(time.Duration(numRTTs) * rtt)
+			const delay = 200 * time.Millisecond
+			expectDelay := func(startTime time.Time, numRTTs int) {
+				expectedReceiveTime := startTime.Add(time.Duration(numRTTs) * delay)
 				Expect(time.Now()).To(SatisfyAll(
 					BeTemporally(">=", expectedReceiveTime),
-					BeTemporally("<", expectedReceiveTime.Add(rtt/2)),
+					BeTemporally("<", expectedReceiveTime.Add(delay/2)),
 				))
 			}
 
 			It("delays incoming packets", func() {
-				delay := 300 * time.Millisecond
 				var counter int32
 				opts := &Opts{
 					RemoteAddr: serverConn.LocalAddr().String(),
@@ -317,16 +335,75 @@ var _ = Describe("QUIC Proxy", func() {
 					Expect(err).ToNot(HaveOccurred())
 				}
 				Eventually(serverReceivedPackets).Should(HaveLen(1))
-				expectDelay(start, delay, 1)
+				expectDelay(start, 1)
 				Eventually(serverReceivedPackets).Should(HaveLen(2))
-				expectDelay(start, delay, 2)
+				expectDelay(start, 2)
 				Eventually(serverReceivedPackets).Should(HaveLen(3))
-				expectDelay(start, delay, 3)
+				expectDelay(start, 3)
+				Expect(readPacketNumber(<-serverReceivedPackets)).To(Equal(protocol.PacketNumber(1)))
+				Expect(readPacketNumber(<-serverReceivedPackets)).To(Equal(protocol.PacketNumber(2)))
+				Expect(readPacketNumber(<-serverReceivedPackets)).To(Equal(protocol.PacketNumber(3)))
+			})
+
+			It("handles reordered packets", func() {
+				var counter int32
+				opts := &Opts{
+					RemoteAddr: serverConn.LocalAddr().String(),
+					// delay packet 1 by 600 ms
+					// delay packet 2 by 400 ms
+					// delay packet 3 by 200 ms
+					DelayPacket: func(d Direction, _ []byte) time.Duration {
+						if d == DirectionOutgoing {
+							return 0
+						}
+						p := atomic.AddInt32(&counter, 1)
+						return 600*time.Millisecond - time.Duration(p-1)*delay
+					},
+				}
+				startProxy(opts)
+
+				// send 3 packets
+				start := time.Now()
+				for i := 1; i <= 3; i++ {
+					_, err := clientConn.Write(makePacket(protocol.PacketNumber(i), []byte("foobar"+strconv.Itoa(i))))
+					Expect(err).ToNot(HaveOccurred())
+				}
+				Eventually(serverReceivedPackets).Should(HaveLen(1))
+				expectDelay(start, 1)
+				Eventually(serverReceivedPackets).Should(HaveLen(2))
+				expectDelay(start, 2)
+				Eventually(serverReceivedPackets).Should(HaveLen(3))
+				expectDelay(start, 3)
+				Expect(readPacketNumber(<-serverReceivedPackets)).To(Equal(protocol.PacketNumber(3)))
+				Expect(readPacketNumber(<-serverReceivedPackets)).To(Equal(protocol.PacketNumber(2)))
+				Expect(readPacketNumber(<-serverReceivedPackets)).To(Equal(protocol.PacketNumber(1)))
+			})
+
+			It("doesn't reorder packets when a constant delay is used", func() {
+				opts := &Opts{
+					RemoteAddr: serverConn.LocalAddr().String(),
+					DelayPacket: func(d Direction, _ []byte) time.Duration {
+						if d == DirectionOutgoing {
+							return 0
+						}
+						return 100 * time.Millisecond
+					},
+				}
+				startProxy(opts)
+
+				// send 100 packets
+				for i := 0; i < 100; i++ {
+					_, err := clientConn.Write(makePacket(protocol.PacketNumber(i), []byte("foobar"+strconv.Itoa(i))))
+					Expect(err).ToNot(HaveOccurred())
+				}
+				Eventually(serverReceivedPackets).Should(HaveLen(100))
+				for i := 0; i < 100; i++ {
+					Expect(readPacketNumber(<-serverReceivedPackets)).To(Equal(protocol.PacketNumber(i)))
+				}
 			})
 
 			It("delays outgoing packets", func() {
 				const numPackets = 3
-				delay := 300 * time.Millisecond
 				var counter int32
 				opts := &Opts{
 					RemoteAddr: serverConn.LocalAddr().String(),
@@ -365,13 +442,16 @@ var _ = Describe("QUIC Proxy", func() {
 				}
 				// the packets should have arrived immediately at the server
 				Eventually(serverReceivedPackets).Should(HaveLen(3))
-				expectDelay(start, delay, 0)
+				expectDelay(start, 0)
 				Eventually(clientReceivedPackets).Should(HaveLen(1))
-				expectDelay(start, delay, 1)
+				expectDelay(start, 1)
 				Eventually(clientReceivedPackets).Should(HaveLen(2))
-				expectDelay(start, delay, 2)
+				expectDelay(start, 2)
 				Eventually(clientReceivedPackets).Should(HaveLen(3))
-				expectDelay(start, delay, 3)
+				expectDelay(start, 3)
+				Expect(readPacketNumber(<-clientReceivedPackets)).To(Equal(protocol.PacketNumber(1)))
+				Expect(readPacketNumber(<-clientReceivedPackets)).To(Equal(protocol.PacketNumber(2)))
+				Expect(readPacketNumber(<-clientReceivedPackets)).To(Equal(protocol.PacketNumber(3)))
 			})
 		})
 	})

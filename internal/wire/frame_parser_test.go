@@ -82,9 +82,9 @@ var _ = Describe("Frame parsing", func() {
 
 	It("unpacks RESET_STREAM frames", func() {
 		f := &ResetStreamFrame{
-			StreamID:   0xdeadbeef,
-			ByteOffset: 0xdecafbad1234,
-			ErrorCode:  0x1337,
+			StreamID:  0xdeadbeef,
+			FinalSize: 0xdecafbad1234,
+			ErrorCode: 0x1337,
 		}
 		err := f.Write(buf, versionIETFFrames)
 		Expect(err).ToNot(HaveOccurred())
@@ -130,7 +130,7 @@ var _ = Describe("Frame parsing", func() {
 		f := &StreamFrame{
 			StreamID: 0x42,
 			Offset:   0x1337,
-			FinBit:   true,
+			Fin:      true,
 			Data:     []byte("foobar"),
 		}
 		err := f.Write(buf, versionIETFFrames)
@@ -143,7 +143,7 @@ var _ = Describe("Frame parsing", func() {
 
 	It("unpacks MAX_DATA frames", func() {
 		f := &MaxDataFrame{
-			ByteOffset: 0xcafe,
+			MaximumData: 0xcafe,
 		}
 		buf := &bytes.Buffer{}
 		err := f.Write(buf, versionIETFFrames)
@@ -155,8 +155,8 @@ var _ = Describe("Frame parsing", func() {
 
 	It("unpacks MAX_STREAM_DATA frames", func() {
 		f := &MaxStreamDataFrame{
-			StreamID:   0xdeadbeef,
-			ByteOffset: 0xdecafbad,
+			StreamID:          0xdeadbeef,
+			MaximumStreamData: 0xdecafbad,
 		}
 		buf := &bytes.Buffer{}
 		err := f.Write(buf, versionIETFFrames)
@@ -180,7 +180,7 @@ var _ = Describe("Frame parsing", func() {
 	})
 
 	It("unpacks DATA_BLOCKED frames", func() {
-		f := &DataBlockedFrame{DataLimit: 0x1234}
+		f := &DataBlockedFrame{MaximumData: 0x1234}
 		buf := &bytes.Buffer{}
 		err := f.Write(buf, versionIETFFrames)
 		Expect(err).ToNot(HaveOccurred())
@@ -191,8 +191,8 @@ var _ = Describe("Frame parsing", func() {
 
 	It("unpacks STREAM_DATA_BLOCKED frames", func() {
 		f := &StreamDataBlockedFrame{
-			StreamID:  0xdeadbeef,
-			DataLimit: 0xdead,
+			StreamID:          0xdeadbeef,
+			MaximumStreamData: 0xdead,
 		}
 		err := f.Write(buf, versionIETFFrames)
 		Expect(err).ToNot(HaveOccurred())
@@ -218,7 +218,7 @@ var _ = Describe("Frame parsing", func() {
 		f := &NewConnectionIDFrame{
 			SequenceNumber:      0x1337,
 			ConnectionID:        protocol.ConnectionID{0xde, 0xad, 0xbe, 0xef},
-			StatelessResetToken: [16]byte{0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15},
+			StatelessResetToken: protocol.StatelessResetToken{0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15},
 		}
 		buf := &bytes.Buffer{}
 		Expect(f.Write(buf, versionIETFFrames)).To(Succeed())
@@ -287,8 +287,8 @@ var _ = Describe("Frame parsing", func() {
 
 	It("errors on invalid frames", func() {
 		f := &MaxStreamDataFrame{
-			StreamID:   0x1337,
-			ByteOffset: 0xdeadbeef,
+			StreamID:          0x1337,
+			MaximumStreamData: 0xdeadbeef,
 		}
 		b := &bytes.Buffer{}
 		f.Write(b, versionIETFFrames)

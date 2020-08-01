@@ -259,7 +259,7 @@ var _ = Describe("Packet packer", func() {
 				sealingManager.EXPECT().Get0RTTSealer().Return(getSealer(), nil).AnyTimes()
 				pnManager.EXPECT().PeekPacketNumber(protocol.Encryption0RTT).Return(protocol.PacketNumber(0x42), protocol.PacketNumberLen2)
 				pnManager.EXPECT().PopPacketNumber(protocol.Encryption0RTT).Return(protocol.PacketNumber(0x42))
-				cf := ackhandler.Frame{Frame: &wire.MaxDataFrame{ByteOffset: 0x1337}}
+				cf := ackhandler.Frame{Frame: &wire.MaxDataFrame{MaximumData: 0x1337}}
 				framer.EXPECT().HasData().Return(true)
 				framer.EXPECT().AppendControlFrames(nil, gomock.Any()).DoAndReturn(func(frames []ackhandler.Frame, _ protocol.ByteCount) ([]ackhandler.Frame, protocol.ByteCount) {
 					return append(frames, cf), cf.Length(packer.version)
@@ -403,7 +403,8 @@ var _ = Describe("Packet packer", func() {
 				p, err := packer.PackConnectionClose(qerr.NewApplicationError(0x1337, "test error"))
 				Expect(err).ToNot(HaveOccurred())
 				Expect(p.packets).To(HaveLen(2))
-				Expect(p.buffer.Len()).To(BeEquivalentTo(protocol.MinInitialPacketSize))
+				Expect(p.buffer.Len()).To(BeNumerically(">=", protocol.MinInitialPacketSize))
+				Expect(p.buffer.Len()).To(BeEquivalentTo(maxPacketSize))
 				Expect(p.packets[0].header.Type).To(Equal(protocol.PacketTypeInitial))
 				Expect(p.packets[0].header.PacketNumber).To(Equal(protocol.PacketNumber(1)))
 				Expect(p.packets[0].frames).To(HaveLen(1))
@@ -565,7 +566,7 @@ var _ = Describe("Packet packer", func() {
 			It("pads if payload length + packet number length is smaller than 4", func() {
 				f := &wire.StreamFrame{
 					StreamID: 0x10, // small stream ID, such that only a single byte is consumed
-					FinBit:   true,
+					Fin:      true,
 				}
 				Expect(f.Length(packer.version)).To(BeEquivalentTo(2))
 				pnManager.EXPECT().PeekPacketNumber(protocol.Encryption1RTT).Return(protocol.PacketNumber(0x42), protocol.PacketNumberLen1)
@@ -598,7 +599,7 @@ var _ = Describe("Packet packer", func() {
 				Expect(frame).To(BeAssignableToTypeOf(&wire.StreamFrame{}))
 				sf := frame.(*wire.StreamFrame)
 				Expect(sf.StreamID).To(Equal(f.StreamID))
-				Expect(sf.FinBit).To(Equal(f.FinBit))
+				Expect(sf.Fin).To(Equal(f.Fin))
 				Expect(sf.Data).To(BeEmpty())
 				Expect(r.Len()).To(BeZero())
 			})
@@ -880,7 +881,8 @@ var _ = Describe("Packet packer", func() {
 				expectAppendStreamFrames(ackhandler.Frame{Frame: &wire.StreamFrame{Data: []byte("foobar")}})
 				p, err := packer.PackCoalescedPacket(protocol.MaxByteCount)
 				Expect(err).ToNot(HaveOccurred())
-				Expect(p.buffer.Data).To(HaveLen(protocol.MinInitialPacketSize))
+				Expect(p.buffer.Len()).To(BeNumerically(">=", protocol.MinInitialPacketSize))
+				Expect(p.buffer.Len()).To(BeEquivalentTo(maxPacketSize))
 				Expect(p.packets).To(HaveLen(2))
 				Expect(p.packets[0].EncryptionLevel()).To(Equal(protocol.EncryptionInitial))
 				Expect(p.packets[0].frames).To(HaveLen(1))
@@ -1128,7 +1130,8 @@ var _ = Describe("Packet packer", func() {
 				packer.perspective = protocol.PerspectiveClient
 				p, err := packer.PackCoalescedPacket(protocol.MaxByteCount)
 				Expect(err).ToNot(HaveOccurred())
-				Expect(p.buffer.Len()).To(BeEquivalentTo(protocol.MinInitialPacketSize))
+				Expect(p.buffer.Len()).To(BeNumerically(">=", protocol.MinInitialPacketSize))
+				Expect(p.buffer.Len()).To(BeEquivalentTo(maxPacketSize))
 				Expect(p.packets).To(HaveLen(1))
 				Expect(p.packets[0].header.Token).To(Equal(token))
 				Expect(p.packets[0].frames).To(HaveLen(1))
@@ -1155,7 +1158,7 @@ var _ = Describe("Packet packer", func() {
 				Expect(p.packets).To(HaveLen(1))
 				Expect(p.packets[0].ack).To(Equal(ack))
 				Expect(p.packets[0].frames).To(HaveLen(1))
-				Expect(p.buffer.Len()).To(BeEquivalentTo(protocol.MinInitialPacketSize))
+				Expect(p.buffer.Len()).To(BeEquivalentTo(maxPacketSize))
 			})
 		})
 
@@ -1193,7 +1196,8 @@ var _ = Describe("Packet packer", func() {
 				Expect(err).ToNot(HaveOccurred())
 				Expect(packet).ToNot(BeNil())
 				Expect(packet.EncryptionLevel()).To(Equal(protocol.EncryptionInitial))
-				Expect(packet.buffer.Len()).To(BeEquivalentTo(protocol.MinInitialPacketSize))
+				Expect(packet.buffer.Len()).To(BeNumerically(">=", protocol.MinInitialPacketSize))
+				Expect(packet.buffer.Len()).To(BeEquivalentTo(maxPacketSize))
 				Expect(packet.frames).To(HaveLen(1))
 				Expect(packet.frames[0].Frame).To(Equal(f))
 			})

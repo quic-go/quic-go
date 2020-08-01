@@ -4,31 +4,9 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/lucas-clemente/quic-go/internal/congestion"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/internal/utils"
 	"github.com/lucas-clemente/quic-go/internal/wire"
-)
-
-const (
-	// initial maximum number of ack-eliciting packets received before sending an ack.
-	initialAckElicitingPacketsBeforeAck = 2
-	// number of ack-eliciting that an ACK is sent for
-	ackElicitingPacketsBeforeAck = 10
-	// 1/5 RTT delay when doing ack decimation
-	ackDecimationDelay = 1.0 / 4
-	// 1/8 RTT delay when doing ack decimation
-	shortAckDecimationDelay = 1.0 / 8
-	// Minimum number of packets received before ack decimation is enabled.
-	// This intends to avoid the beginning of slow start, when CWNDs may be
-	// rapidly increasing.
-	minReceivedBeforeAckDecimation = 100
-	// Maximum number of packets to ack immediately after a missing packet for
-	// fast retransmission to kick in at the sender.  This limit is created to
-	// reduce the number of acks sent that have no benefit for fast retransmission.
-	// Set to the number of nacks needed for fast retransmit plus one for protection
-	// against an ack loss
-	maxPacketsAfterNewMissing = 4
 )
 
 type receivedPacketHandler struct {
@@ -45,7 +23,7 @@ var _ ReceivedPacketHandler = &receivedPacketHandler{}
 
 func newReceivedPacketHandler(
 	sentPackets sentPacketTracker,
-	rttStats *congestion.RTTStats,
+	rttStats *utils.RTTStats,
 	logger utils.Logger,
 	version protocol.VersionNumber,
 ) ReceivedPacketHandler {
