@@ -235,6 +235,8 @@ type Config struct {
 	// The key used to store tokens is the ServerName from the tls.Config, if set
 	// otherwise the token is associated with the server's IP address.
 	TokenStore TokenStore
+	// MaxPacketSize is the maximum UDP payload size that we use for sending IPv4/6 packets.
+	MaxPacketSize uint64
 	// MaxReceiveStreamFlowControlWindow is the maximum stream-level flow control window for receiving data.
 	// If this value is zero, it will default to 1 MB for the server and 6 MB for the client.
 	MaxReceiveStreamFlowControlWindow uint64

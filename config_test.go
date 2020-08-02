@@ -38,6 +38,8 @@ var _ = Describe("Config", func() {
 				f.Set(reflect.ValueOf(time.Second))
 			case "MaxIdleTimeout":
 				f.Set(reflect.ValueOf(time.Hour))
+			case "MaxPacketSize":
+				f.Set(reflect.ValueOf(uint64(0)))
 			case "TokenStore":
 				f.Set(reflect.ValueOf(NewLRUTokenStore(2, 3)))
 			case "MaxReceiveStreamFlowControlWindow":

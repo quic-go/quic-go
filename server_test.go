@@ -920,7 +920,7 @@ var _ = Describe("Server", func() {
 					return true
 				})
 				tracer.EXPECT().TracerForConnection(protocol.PerspectiveServer, gomock.Any())
-				serv.createNewSession(&net.UDPAddr{}, nil, nil, nil, nil, nil, protocol.VersionWhatever)
+				serv.createNewSession(&net.UDPAddr{}, nil, nil, nil, nil, nil, protocol.VersionWhatever, 0)
 				Consistently(done).ShouldNot(BeClosed())
 				cancel() // complete the handshake
 				Eventually(done).Should(BeClosed())
@@ -988,7 +988,7 @@ var _ = Describe("Server", func() {
 				fn()
 				return true
 			})
-			serv.createNewSession(&net.UDPAddr{}, nil, nil, nil, nil, nil, protocol.VersionWhatever)
+			serv.createNewSession(&net.UDPAddr{}, nil, nil, nil, nil, nil, protocol.VersionWhatever, 0)
 			Consistently(done).ShouldNot(BeClosed())
 			close(ready)
 			Eventually(done).Should(BeClosed())

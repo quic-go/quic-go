@@ -181,7 +181,13 @@ func newPacketPacker(
 	acks ackFrameSource,
 	perspective protocol.Perspective,
 	version protocol.VersionNumber,
+	maxPacketSize uint64,
 ) *packetPacker {
+	mps := protocol.ByteCount(maxPacketSize)
+	if maxPacketSize <= 0 {
+		mps = getMaxPacketSize(remoteAddr)
+	}
+
 	return &packetPacker{
 		cryptoSetup:         cryptoSetup,
 		getDestConnID:       getDestConnID,
@@ -194,7 +200,7 @@ func newPacketPacker(
 		framer:              framer,
 		acks:                acks,
 		pnManager:           packetNumberManager,
-		maxPacketSize:       getMaxPacketSize(remoteAddr),
+		maxPacketSize:       mps,
 	}
 }
 

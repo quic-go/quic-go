@@ -434,6 +434,7 @@ func (s *baseServer) handleInitialImpl(p *receivedPacket, hdr *wire.Header) erro
 		hdr.SrcConnectionID,
 		connID,
 		hdr.Version,
+		p.Size(),
 	)
 	if sess == nil {
 		p.buffer.Release()
@@ -458,6 +459,7 @@ func (s *baseServer) createNewSession(
 	destConnID protocol.ConnectionID,
 	srcConnID protocol.ConnectionID,
 	version protocol.VersionNumber,
+	maxPacketSize protocol.ByteCount,
 ) quicSession {
 	var sess quicSession
 	if added := s.sessionHandler.AddWithConnID(clientDestConnID, srcConnID, func() packetHandler {
@@ -470,6 +472,8 @@ func (s *baseServer) createNewSession(
 			}
 			tracer = s.config.Tracer.TracerForConnection(protocol.PerspectiveServer, connID)
 		}
+		config := *s.config
+		config.MaxPacketSize = uint64(maxPacketSize)
 		sess = s.newSession(
 			&conn{pconn: s.conn, currentAddr: remoteAddr},
 			s.sessionHandler,
@@ -479,7 +483,7 @@ func (s *baseServer) createNewSession(
 			destConnID,
 			srcConnID,
 			s.sessionHandler.GetStatelessResetToken(srcConnID),
-			s.config,
+			&config,
 			s.tlsConf,
 			s.tokenGenerator,
 			s.acceptEarlySessions,

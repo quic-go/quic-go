@@ -53,7 +53,7 @@ type StatelessResetToken [16]byte
 const MaxReceivePacketSize ByteCount = 1452
 
 // MinInitialPacketSize is the minimum size an Initial packet is required to have.
-const MinInitialPacketSize = 1200
+const MinInitialPacketSize = 524
 
 // MinStatelessResetSize is the minimum size of a stateless reset packet that we send
 const MinStatelessResetSize = 1 /* first byte */ + 20 /* max. conn ID length */ + 4 /* max. packet number length */ + 1 /* min. payload length */ + 16 /* token */

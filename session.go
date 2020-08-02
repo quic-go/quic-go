@@ -334,6 +334,7 @@ var newSession = func(
 		s.receivedPacketHandler,
 		s.perspective,
 		s.version,
+		conf.MaxPacketSize,
 	)
 	s.unpacker = newPacketUnpacker(cs, s.version)
 	s.cryptoStreamManager = newCryptoStreamManager(cs, initialStream, handshakeStream, s.oneRTTStream)
@@ -453,6 +454,7 @@ var newClientSession = func(
 		s.receivedPacketHandler,
 		s.perspective,
 		s.version,
+		conf.MaxPacketSize,
 	)
 	if len(tlsConf.ServerName) > 0 {
 		s.tokenStoreKey = tlsConf.ServerName

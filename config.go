@@ -74,6 +74,7 @@ func populateConfig(config *Config) *Config {
 		MaxIdleTimeout:                        idleTimeout,
 		AcceptToken:                           config.AcceptToken,
 		KeepAlive:                             config.KeepAlive,
+		MaxPacketSize:                         config.MaxPacketSize,
 		MaxReceiveStreamFlowControlWindow:     maxReceiveStreamFlowControlWindow,
 		MaxReceiveConnectionFlowControlWindow: maxReceiveConnectionFlowControlWindow,
 		MaxIncomingStreams:                    maxIncomingStreams,
