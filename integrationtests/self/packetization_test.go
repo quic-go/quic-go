@@ -7,8 +7,8 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/lucas-clemente/quic-go"
-	quicproxy "github.com/lucas-clemente/quic-go/integrationtests/tools/proxy"
+	"github.com/shanebarnes/quic-go"
+	quicproxy "github.com/shanebarnes/quic-go/integrationtests/tools/proxy"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"

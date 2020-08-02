@@ -12,16 +12,16 @@ import (
 	"sync"
 	"time"
 
-	"github.com/lucas-clemente/quic-go/internal/ackhandler"
-	"github.com/lucas-clemente/quic-go/internal/flowcontrol"
-	"github.com/lucas-clemente/quic-go/internal/handshake"
-	"github.com/lucas-clemente/quic-go/internal/logutils"
-	"github.com/lucas-clemente/quic-go/internal/protocol"
-	"github.com/lucas-clemente/quic-go/internal/qerr"
-	"github.com/lucas-clemente/quic-go/internal/utils"
-	"github.com/lucas-clemente/quic-go/internal/wire"
-	"github.com/lucas-clemente/quic-go/logging"
-	"github.com/lucas-clemente/quic-go/quictrace"
+	"github.com/shanebarnes/quic-go/internal/ackhandler"
+	"github.com/shanebarnes/quic-go/internal/flowcontrol"
+	"github.com/shanebarnes/quic-go/internal/handshake"
+	"github.com/shanebarnes/quic-go/internal/logutils"
+	"github.com/shanebarnes/quic-go/internal/protocol"
+	"github.com/shanebarnes/quic-go/internal/qerr"
+	"github.com/shanebarnes/quic-go/internal/utils"
+	"github.com/shanebarnes/quic-go/internal/wire"
+	"github.com/shanebarnes/quic-go/logging"
+	"github.com/shanebarnes/quic-go/quictrace"
 )
 
 type unpacker interface {

@@ -1,6 +1,6 @@
 package logging
 
-import "github.com/lucas-clemente/quic-go/internal/protocol"
+import "github.com/shanebarnes/quic-go/internal/protocol"
 
 // PacketType is the packet type of a QUIC packet
 type PacketType = protocol.PacketType

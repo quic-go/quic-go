@@ -6,7 +6,7 @@ import (
 	"net"
 	"unsafe"
 
-	"github.com/lucas-clemente/quic-go/internal/utils"
+	"github.com/shanebarnes/quic-go/internal/utils"
 
 	"github.com/marten-seemann/qtls"
 	. "github.com/onsi/ginkgo"

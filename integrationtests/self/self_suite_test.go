@@ -19,11 +19,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/lucas-clemente/quic-go"
-	"github.com/lucas-clemente/quic-go/internal/utils"
-	"github.com/lucas-clemente/quic-go/logging"
-	"github.com/lucas-clemente/quic-go/metrics"
-	"github.com/lucas-clemente/quic-go/qlog"
+	"github.com/shanebarnes/quic-go"
+	"github.com/shanebarnes/quic-go/internal/utils"
+	"github.com/shanebarnes/quic-go/logging"
+	"github.com/shanebarnes/quic-go/metrics"
+	"github.com/shanebarnes/quic-go/qlog"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"

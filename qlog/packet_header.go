@@ -2,9 +2,9 @@ package qlog
 
 import (
 	"github.com/francoispqt/gojay"
-	"github.com/lucas-clemente/quic-go/internal/protocol"
-	"github.com/lucas-clemente/quic-go/internal/wire"
-	"github.com/lucas-clemente/quic-go/logging"
+	"github.com/shanebarnes/quic-go/internal/protocol"
+	"github.com/shanebarnes/quic-go/internal/wire"
+	"github.com/shanebarnes/quic-go/logging"
 )
 
 func getPacketTypeFromEncryptionLevel(encLevel protocol.EncryptionLevel) packetType {

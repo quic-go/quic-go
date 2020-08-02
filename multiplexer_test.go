@@ -3,7 +3,7 @@ package quic
 import (
 	"net"
 
-	"github.com/lucas-clemente/quic-go/internal/mocks"
+	"github.com/shanebarnes/quic-go/internal/mocks"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"

@@ -1,4 +1,4 @@
-module github.com/lucas-clemente/quic-go
+module github.com/shanebarnes/quic-go
 
 go 1.14
 

@@ -5,8 +5,8 @@ import (
 	"io"
 	"time"
 
-	"github.com/lucas-clemente/quic-go/internal/protocol"
-	"github.com/lucas-clemente/quic-go/internal/wire"
+	"github.com/shanebarnes/quic-go/internal/protocol"
+	"github.com/shanebarnes/quic-go/internal/wire"
 	"github.com/marten-seemann/qtls"
 )
 
