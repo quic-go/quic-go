@@ -20,7 +20,7 @@ if [ ${TESTMODE} == "gogenerate" ]; then
   find . -type f -name "*.go" -exec shasum {} \; > checksums_after.txt
   DIFF=`diff checksums_before.txt checksums_after.txt`
   echo $DIFF
-  if [ ! -z "$var" ]; then
+  if [ -n "$DIFF" ]; then
     exit 1
   fi
 fi
