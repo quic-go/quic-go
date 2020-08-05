@@ -25,10 +25,6 @@ if [ ${TESTMODE} == "gogenerate" ]; then
   fi
 fi
 
-if [ ${TESTMODE} == "fuzz" ]; then
-  .travis/fuzzit.sh
-fi
-
 if [ ${TESTMODE} == "unit" ]; then
   ginkgo -r -v -cover -randomizeAllSpecs -randomizeSuites -trace -skipPackage integrationtests,benchmark
   # run unit tests with the Go race detector
