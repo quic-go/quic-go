@@ -1,5 +1,3 @@
-// +build gofuzz
-
 package header
 
 import (
@@ -12,6 +10,7 @@ import (
 
 const version = protocol.VersionTLS
 
+//go:generate go run ./cmd/corpus.go
 func Fuzz(data []byte) int {
 	if len(data) < 1 {
 		return 0

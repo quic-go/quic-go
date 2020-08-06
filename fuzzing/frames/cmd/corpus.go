@@ -1,5 +1,3 @@
-// +build !gofuzz
-
 package main
 
 import (
