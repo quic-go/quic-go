@@ -22,6 +22,7 @@ linters:
     - depguard
     - goconst
     - goimports
+    - gofmt
     - gosimple
     - ineffassign
     - misspell

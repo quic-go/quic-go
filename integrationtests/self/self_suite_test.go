@@ -116,7 +116,7 @@ var _ = BeforeSuite(func() {
 		panic(err)
 	}
 	tlsConfig = &tls.Config{
-		Certificates: []tls.Certificate{tls.Certificate{
+		Certificates: []tls.Certificate{{
 			Certificate: [][]byte{leafCert.Raw},
 			PrivateKey:  leafPrivateKey,
 		}},
@@ -260,7 +260,7 @@ func generateTLSConfigWithLongCertChain(ca *x509.Certificate, caPrivateKey *rsa.
 	rawCerts[0] = leafCert.Raw
 
 	return &tls.Config{
-		Certificates: []tls.Certificate{tls.Certificate{
+		Certificates: []tls.Certificate{{
 			Certificate: rawCerts,
 			PrivateKey:  leafPrivateKey,
 		}},
