@@ -2,11 +2,6 @@
 
 set -ex
 
-if [ "${TESTMODE}" == "lint" ]; then
-  .travis/no_ginkgo.sh
-  ./bin/golangci-lint run ./...
-fi
-
 if [ "${TESTMODE}" == "unit" ]; then
   ginkgo -r -v -cover -randomizeAllSpecs -randomizeSuites -trace -skipPackage integrationtests,benchmark
   # run unit tests with the Go race detector
