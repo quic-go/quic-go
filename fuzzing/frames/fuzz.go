@@ -1,5 +1,3 @@
-// +build gofuzz
-
 package frames
 
 import (
@@ -10,9 +8,10 @@ import (
 	"github.com/lucas-clemente/quic-go/internal/wire"
 )
 
-const version = protocol.VersionTLS
-
+//go:generate go run ./cmd/corpus.go
 func Fuzz(data []byte) int {
+	const version = protocol.VersionTLS
+
 	if len(data) < 1 {
 		return 0
 	}
