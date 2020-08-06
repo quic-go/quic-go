@@ -2,12 +2,12 @@
 
 set -ex
 
-if [ ${TESTMODE} == "lint" ]; then
+if [ "${TESTMODE}" == "lint" ]; then
   .travis/no_ginkgo.sh
   ./bin/golangci-lint run ./...
 fi
 
-if [ ${TESTMODE} == "gogenerate" ]; then
+if [ "${TESTMODE}" == "gogenerate" ]; then
   find . -type f -name "*.go" -exec shasum {} \; > checksums_before.txt
   # delete all go-generated files generated (that adhere to the comment convention)
   grep --include \*.go --exclude-dir quictrace/ -lrIZ "^// Code generated .* DO NOT EDIT\.$" . | xargs --null rm
@@ -18,28 +18,28 @@ if [ ${TESTMODE} == "gogenerate" ]; then
   # now generate everything
   go generate ./...
   find . -type f -name "*.go" -exec shasum {} \; > checksums_after.txt
-  DIFF=`diff checksums_before.txt checksums_after.txt`
-  echo $DIFF
-  if [ ! -z "$var" ]; then
+  DIFF=$(diff checksums_before.txt checksums_after.txt)
+  echo "$DIFF"
+  if [ -n "$DIFF" ]; then
     exit 1
   fi
 fi
 
-if [ ${TESTMODE} == "unit" ]; then
+if [ "${TESTMODE}" == "unit" ]; then
   ginkgo -r -v -cover -randomizeAllSpecs -randomizeSuites -trace -skipPackage integrationtests,benchmark
   # run unit tests with the Go race detector
   # The Go race detector only works on amd64.
-  if [ ${TRAVIS_GOARCH} == 'amd64' ]; then
+  if [ "${TRAVIS_GOARCH}" == 'amd64' ]; then
     ginkgo -race -r -v -randomizeAllSpecs -randomizeSuites -trace -skipPackage integrationtests,benchmark
   fi
 fi
 
-if [ ${TESTMODE} == "integration" ]; then
+if [ "${TESTMODE}" == "integration" ]; then
   # run benchmark tests
   ginkgo -randomizeAllSpecs -randomizeSuites -trace benchmark -- -size=10
   # run benchmark tests with the Go race detector
   # The Go race detector only works on amd64.
-  if [ ${TRAVIS_GOARCH} == 'amd64' ]; then
+  if [ "${TRAVIS_GOARCH}" == 'amd64' ]; then
     ginkgo -race -randomizeAllSpecs -randomizeSuites -trace benchmark -- -size=5
   fi
   # run integration tests
