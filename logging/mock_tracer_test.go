@@ -5,11 +5,12 @@
 package logging
 
 import (
+	net "net"
+	reflect "reflect"
+
 	gomock "github.com/golang/mock/gomock"
 	protocol "github.com/lucas-clemente/quic-go/internal/protocol"
 	wire "github.com/lucas-clemente/quic-go/internal/wire"
-	net "net"
-	reflect "reflect"
 )
 
 // MockTracer is a mock of Tracer interface
