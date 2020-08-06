@@ -19,7 +19,9 @@ func Fuzz(data []byte) int {
 	connIDLen := int(data[0] % 21)
 	data = data[1:]
 
-	isVNP := wire.IsVersionNegotiationPacket(data)
+	if wire.IsVersionNegotiationPacket(data) {
+		return fuzzVNP(data)
+	}
 	connID, err := wire.ParseConnectionID(data, connIDLen)
 	if err != nil {
 		return 0
@@ -48,17 +50,37 @@ func Fuzz(data []byte) int {
 		// We are able to parse packets with connection IDs longer than 20 bytes,
 		// but in QUIC version 1, we don't write headers with longer connection IDs.
 		if hdr.DestConnectionID.Len() <= protocol.MaxConnIDLen &&
-			hdr.SrcConnectionID.Len() <= protocol.MaxConnIDLen &&
-			hdr.OrigDestConnectionID.Len() <= protocol.MaxConnIDLen {
+			hdr.SrcConnectionID.Len() <= protocol.MaxConnIDLen {
 			panic(err)
 		}
 		return 0
 	}
-	// GetLength is not implemented for Retry and Version Negotiation.
-	if !isVNP && hdr.Type != protocol.PacketTypeRetry {
+	// GetLength is not implemented for Retry packets
+	if hdr.Type != protocol.PacketTypeRetry {
 		if expLen := extHdr.GetLength(version); expLen != protocol.ByteCount(b.Len()) {
 			panic(fmt.Sprintf("inconsistent header length: %#v. Expected %d, got %d", extHdr, expLen, b.Len()))
 		}
+	}
+	return 0
+}
+
+func fuzzVNP(data []byte) int {
+	connID, err := wire.ParseConnectionID(data, 0)
+	if err != nil {
+		return 0
+	}
+	hdr, versions, err := wire.ParseVersionNegotiationPacket(bytes.NewReader(data))
+	if err != nil {
+		return 0
+	}
+	if !hdr.DestConnectionID.Equal(connID) {
+		panic("connection IDs don't match")
+	}
+	if len(versions) == 0 {
+		panic("no versions")
+	}
+	if _, err := wire.ComposeVersionNegotiation(hdr.SrcConnectionID, hdr.DestConnectionID, versions); err != nil {
+		panic(err)
 	}
 	return 0
 }
