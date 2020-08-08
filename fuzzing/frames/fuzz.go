@@ -75,5 +75,5 @@ func Fuzz(data []byte) int {
 	if b.Len() > parsedLen {
 		panic(fmt.Sprintf("Serialized length (%d) is longer than parsed length (%d)", b.Len(), parsedLen))
 	}
-	return 0
+	return 1
 }
