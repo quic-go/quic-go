@@ -358,9 +358,11 @@ func (p *TransportParameters) Marshal(pers protocol.Perspective) []byte {
 	}
 	if pers == protocol.PerspectiveServer {
 		// stateless_reset_token
-		utils.WriteVarInt(b, uint64(statelessResetTokenParameterID))
-		utils.WriteVarInt(b, 16)
-		b.Write(p.StatelessResetToken[:])
+		if p.StatelessResetToken != nil {
+			utils.WriteVarInt(b, uint64(statelessResetTokenParameterID))
+			utils.WriteVarInt(b, 16)
+			b.Write(p.StatelessResetToken[:])
+		}
 		// original_destination_connection_id
 		utils.WriteVarInt(b, uint64(originalDestinationConnectionIDParameterID))
 		utils.WriteVarInt(b, uint64(p.OriginalDestinationConnectionID.Len()))
