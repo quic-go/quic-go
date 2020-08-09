@@ -11,7 +11,7 @@ import (
 // When receiving packets for such a session, we need to retransmit the packet containing the CONNECTION_CLOSE frame,
 // with an exponential backoff.
 type closedLocalSession struct {
-	conn            connection
+	conn            sendConn
 	connClosePacket []byte
 
 	closeOnce sync.Once
@@ -29,7 +29,7 @@ var _ packetHandler = &closedLocalSession{}
 
 // newClosedLocalSession creates a new closedLocalSession and runs it.
 func newClosedLocalSession(
-	conn connection,
+	conn sendConn,
 	connClosePacket []byte,
 	perspective protocol.Perspective,
 	logger utils.Logger,

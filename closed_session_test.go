@@ -15,11 +15,11 @@ import (
 var _ = Describe("Closed local session", func() {
 	var (
 		sess  packetHandler
-		mconn *MockConnection
+		mconn *MockSendConn
 	)
 
 	BeforeEach(func() {
-		mconn = NewMockConnection(mockCtrl)
+		mconn = NewMockSendConn(mockCtrl)
 		sess = newClosedLocalSession(mconn, []byte("close"), protocol.PerspectiveClient, utils.DefaultLogger)
 	})
 

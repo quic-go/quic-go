@@ -35,7 +35,7 @@ var _ = Describe("Client", func() {
 		config          *Config
 
 		originalClientSessConstructor func(
-			conn connection,
+			conn sendConn,
 			runner sessionRunner,
 			destConnID protocol.ConnectionID,
 			srcConnID protocol.ConnectionID,
@@ -80,7 +80,7 @@ var _ = Describe("Client", func() {
 			srcConnID:  connID,
 			destConnID: connID,
 			version:    protocol.SupportedVersions[0],
-			conn:       &conn{pconn: packetConn, currentAddr: addr},
+			conn:       newSendConn(packetConn, addr),
 			tracer:     tracer,
 			logger:     utils.DefaultLogger,
 		}
@@ -135,7 +135,7 @@ var _ = Describe("Client", func() {
 
 			remoteAddrChan := make(chan string, 1)
 			newClientSession = func(
-				conn connection,
+				conn sendConn,
 				_ sessionRunner,
 				_ protocol.ConnectionID,
 				_ protocol.ConnectionID,
@@ -168,7 +168,7 @@ var _ = Describe("Client", func() {
 
 			hostnameChan := make(chan string, 1)
 			newClientSession = func(
-				_ connection,
+				_ sendConn,
 				_ sessionRunner,
 				_ protocol.ConnectionID,
 				_ protocol.ConnectionID,
@@ -201,7 +201,7 @@ var _ = Describe("Client", func() {
 
 			hostnameChan := make(chan string, 1)
 			newClientSession = func(
-				_ connection,
+				_ sendConn,
 				_ sessionRunner,
 				_ protocol.ConnectionID,
 				_ protocol.ConnectionID,
@@ -240,7 +240,7 @@ var _ = Describe("Client", func() {
 
 			run := make(chan struct{})
 			newClientSession = func(
-				_ connection,
+				_ sendConn,
 				runner sessionRunner,
 				_ protocol.ConnectionID,
 				_ protocol.ConnectionID,
@@ -283,7 +283,7 @@ var _ = Describe("Client", func() {
 			readyChan := make(chan struct{})
 			done := make(chan struct{})
 			newClientSession = func(
-				_ connection,
+				_ sendConn,
 				runner sessionRunner,
 				_ protocol.ConnectionID,
 				_ protocol.ConnectionID,
@@ -331,7 +331,7 @@ var _ = Describe("Client", func() {
 
 			testErr := errors.New("early handshake error")
 			newClientSession = func(
-				_ connection,
+				_ sendConn,
 				_ sessionRunner,
 				_ protocol.ConnectionID,
 				_ protocol.ConnectionID,
@@ -375,7 +375,7 @@ var _ = Describe("Client", func() {
 			})
 			sess.EXPECT().HandshakeComplete().Return(context.Background())
 			newClientSession = func(
-				_ connection,
+				_ sendConn,
 				_ sessionRunner,
 				_ protocol.ConnectionID,
 				_ protocol.ConnectionID,
@@ -422,12 +422,12 @@ var _ = Describe("Client", func() {
 			mockMultiplexer.EXPECT().AddConn(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(manager, nil)
 			manager.EXPECT().Add(gomock.Any(), gomock.Any())
 
-			var conn connection
+			var conn sendConn
 			run := make(chan struct{})
 			sessionCreated := make(chan struct{})
 			sess := NewMockQuicSession(mockCtrl)
 			newClientSession = func(
-				connP connection,
+				connP sendConn,
 				_ sessionRunner,
 				_ protocol.ConnectionID,
 				_ protocol.ConnectionID,
@@ -544,11 +544,11 @@ var _ = Describe("Client", func() {
 
 			config := &Config{Versions: []protocol.VersionNumber{protocol.VersionTLS}}
 			c := make(chan struct{})
-			var cconn connection
+			var cconn sendConn
 			var version protocol.VersionNumber
 			var conf *Config
 			newClientSession = func(
-				connP connection,
+				connP sendConn,
 				_ sessionRunner,
 				_ protocol.ConnectionID,
 				_ protocol.ConnectionID,
@@ -575,7 +575,7 @@ var _ = Describe("Client", func() {
 			_, err := Dial(packetConn, addr, "localhost:1337", tlsConf, config)
 			Expect(err).ToNot(HaveOccurred())
 			Eventually(c).Should(BeClosed())
-			Expect(cconn.(*conn).pconn).To(Equal(packetConn))
+			Expect(cconn.(*conn).PacketConn).To(Equal(packetConn))
 			Expect(version).To(Equal(config.Versions[0]))
 			Expect(conf.Versions).To(Equal(config.Versions))
 		})
@@ -590,7 +590,7 @@ var _ = Describe("Client", func() {
 
 			var counter int
 			newClientSession = func(
-				_ connection,
+				_ sendConn,
 				_ sessionRunner,
 				_ protocol.ConnectionID,
 				_ protocol.ConnectionID,
