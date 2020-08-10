@@ -12,23 +12,23 @@ type sendConn interface {
 	RemoteAddr() net.Addr
 }
 
-type conn struct {
+type sconn struct {
 	net.PacketConn
 
 	remoteAddr net.Addr
 }
 
-var _ sendConn = &conn{}
+var _ sendConn = &sconn{}
 
 func newSendConn(c net.PacketConn, remote net.Addr) sendConn {
-	return &conn{PacketConn: c, remoteAddr: remote}
+	return &sconn{PacketConn: c, remoteAddr: remote}
 }
 
-func (c *conn) Write(p []byte) error {
+func (c *sconn) Write(p []byte) error {
 	_, err := c.PacketConn.WriteTo(p, c.remoteAddr)
 	return err
 }
 
-func (c *conn) RemoteAddr() net.Addr {
+func (c *sconn) RemoteAddr() net.Addr {
 	return c.remoteAddr
 }

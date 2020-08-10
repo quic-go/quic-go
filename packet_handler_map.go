@@ -31,7 +31,7 @@ func (e statelessResetErr) Error() string {
 type packetHandlerMap struct {
 	mutex sync.RWMutex
 
-	conn      net.PacketConn
+	conn      connection
 	connIDLen int
 
 	handlers    map[string] /* string(ConnectionID)*/ packetHandler
@@ -54,12 +54,16 @@ type packetHandlerMap struct {
 var _ packetHandlerManager = &packetHandlerMap{}
 
 func newPacketHandlerMap(
-	conn net.PacketConn,
+	c net.PacketConn,
 	connIDLen int,
 	statelessResetKey []byte,
 	tracer logging.Tracer,
 	logger utils.Logger,
-) packetHandlerManager {
+) (packetHandlerManager, error) {
+	conn, err := wrapConn(c)
+	if err != nil {
+		return nil, err
+	}
 	m := &packetHandlerMap{
 		conn:                       conn,
 		connIDLen:                  connIDLen,
@@ -78,7 +82,7 @@ func newPacketHandlerMap(
 		go m.logUsage()
 	}
 
-	return m
+	return m, nil
 }
 
 func (h *packetHandlerMap) logUsage() {
@@ -253,55 +257,40 @@ func (h *packetHandlerMap) close(e error) error {
 func (h *packetHandlerMap) listen() {
 	defer close(h.listening)
 	for {
-		buffer := getPacketBuffer()
-		data := buffer.Data[:protocol.MaxReceivePacketSize]
-		// The packet size should not exceed protocol.MaxReceivePacketSize bytes
-		// If it does, we only read a truncated packet, which will then end up undecryptable
-		n, addr, err := h.conn.ReadFrom(data)
+		p, err := h.conn.ReadPacket()
 		if err != nil {
 			h.close(err)
 			return
 		}
-		h.handlePacket(addr, buffer, data[:n])
+		h.handlePacket(p)
 	}
 }
 
-func (h *packetHandlerMap) handlePacket(
-	addr net.Addr,
-	buffer *packetBuffer,
-	data []byte,
-) {
-	connID, err := wire.ParseConnectionID(data, h.connIDLen)
+func (h *packetHandlerMap) handlePacket(p *receivedPacket) {
+	connID, err := wire.ParseConnectionID(p.data, h.connIDLen)
 	if err != nil {
-		buffer.MaybeRelease()
-		h.logger.Debugf("error parsing connection ID on packet from %s: %s", addr, err)
+		h.logger.Debugf("error parsing connection ID on packet from %s: %s", p.remoteAddr, err)
 		if h.tracer != nil {
-			h.tracer.DroppedPacket(addr, logging.PacketTypeNotDetermined, protocol.ByteCount(len(data)), logging.PacketDropHeaderParseError)
+			h.tracer.DroppedPacket(p.remoteAddr, logging.PacketTypeNotDetermined, p.Size(), logging.PacketDropHeaderParseError)
 		}
+		p.buffer.MaybeRelease()
 		return
 	}
-	rcvTime := time.Now()
 
 	h.mutex.RLock()
 	defer h.mutex.RUnlock()
 
-	if isStatelessReset := h.maybeHandleStatelessReset(data); isStatelessReset {
+	if isStatelessReset := h.maybeHandleStatelessReset(p.data); isStatelessReset {
 		return
 	}
 
 	handler, handlerFound := h.handlers[string(connID)]
 
-	p := &receivedPacket{
-		remoteAddr: addr,
-		rcvTime:    rcvTime,
-		buffer:     buffer,
-		data:       data,
-	}
 	if handlerFound { // existing session
 		handler.handlePacket(p)
 		return
 	}
-	if data[0]&0x80 == 0 {
+	if p.data[0]&0x80 == 0 {
 		go h.maybeSendStatelessReset(p, connID)
 		return
 	}

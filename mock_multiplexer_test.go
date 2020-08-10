@@ -51,7 +51,7 @@ func (mr *MockMultiplexerMockRecorder) AddConn(arg0, arg1, arg2, arg3 interface{
 }
 
 // RemoveConn mocks base method
-func (m *MockMultiplexer) RemoveConn(arg0 net.PacketConn) error {
+func (m *MockMultiplexer) RemoveConn(arg0 indexableConn) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "RemoveConn", arg0)
 	ret0, _ := ret[0].(error)

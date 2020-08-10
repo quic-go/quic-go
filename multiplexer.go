@@ -15,9 +15,13 @@ var (
 	connMuxer     multiplexer
 )
 
+type indexableConn interface {
+	LocalAddr() net.Addr
+}
+
 type multiplexer interface {
 	AddConn(c net.PacketConn, connIDLen int, statelessResetKey []byte, tracer logging.Tracer) (packetHandlerManager, error)
-	RemoveConn(net.PacketConn) error
+	RemoveConn(indexableConn) error
 }
 
 type connManager struct {
@@ -33,7 +37,7 @@ type connMultiplexer struct {
 	mutex sync.Mutex
 
 	conns                   map[string] /* LocalAddr().String() */ connManager
-	newPacketHandlerManager func(net.PacketConn, int, []byte, logging.Tracer, utils.Logger) packetHandlerManager // so it can be replaced in the tests
+	newPacketHandlerManager func(net.PacketConn, int, []byte, logging.Tracer, utils.Logger) (packetHandlerManager, error) // so it can be replaced in the tests
 
 	logger utils.Logger
 }
@@ -63,7 +67,10 @@ func (m *connMultiplexer) AddConn(
 	connIndex := c.LocalAddr().Network() + " " + c.LocalAddr().String()
 	p, ok := m.conns[connIndex]
 	if !ok {
-		manager := m.newPacketHandlerManager(c, connIDLen, statelessResetKey, tracer, m.logger)
+		manager, err := m.newPacketHandlerManager(c, connIDLen, statelessResetKey, tracer, m.logger)
+		if err != nil {
+			return nil, err
+		}
 		p = connManager{
 			connIDLen:         connIDLen,
 			statelessResetKey: statelessResetKey,
@@ -85,7 +92,7 @@ func (m *connMultiplexer) AddConn(
 	return p.manager, nil
 }
 
-func (m *connMultiplexer) RemoveConn(c net.PacketConn) error {
+func (m *connMultiplexer) RemoveConn(c indexableConn) error {
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
 

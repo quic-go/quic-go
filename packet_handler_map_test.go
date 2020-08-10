@@ -56,7 +56,9 @@ var _ = Describe("Packet Handler Map", func() {
 
 	JustBeforeEach(func() {
 		conn = newMockPacketConn()
-		handler = newPacketHandlerMap(conn, connIDLen, statelessResetKey, tracer, utils.DefaultLogger).(*packetHandlerMap)
+		phm, err := newPacketHandlerMap(conn, connIDLen, statelessResetKey, tracer, utils.DefaultLogger)
+		Expect(err).ToNot(HaveOccurred())
+		handler = phm.(*packetHandlerMap)
 	})
 
 	AfterEach(func() {
@@ -130,7 +132,11 @@ var _ = Describe("Packet Handler Map", func() {
 		It("drops unparseable packets", func() {
 			addr := &net.UDPAddr{IP: net.IPv4(9, 8, 7, 6), Port: 1234}
 			tracer.EXPECT().DroppedPacket(addr, logging.PacketTypeNotDetermined, protocol.ByteCount(4), logging.PacketDropHeaderParseError)
-			handler.handlePacket(addr, getPacketBuffer(), []byte{0, 1, 2, 3})
+			handler.handlePacket(&receivedPacket{
+				buffer:     getPacketBuffer(),
+				remoteAddr: addr,
+				data:       []byte{0, 1, 2, 3},
+			})
 		})
 
 		It("deletes removed sessions immediately", func() {
@@ -138,7 +144,7 @@ var _ = Describe("Packet Handler Map", func() {
 			connID := protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8}
 			handler.Add(connID, NewMockPacketHandler(mockCtrl))
 			handler.Remove(connID)
-			handler.handlePacket(nil, nil, getPacket(connID))
+			handler.handlePacket(&receivedPacket{data: getPacket(connID)})
 			// don't EXPECT any calls to handlePacket of the MockPacketHandler
 		})
 
@@ -149,7 +155,7 @@ var _ = Describe("Packet Handler Map", func() {
 			handler.Add(connID, sess)
 			handler.Retire(connID)
 			time.Sleep(scaleDuration(30 * time.Millisecond))
-			handler.handlePacket(nil, nil, getPacket(connID))
+			handler.handlePacket(&receivedPacket{data: getPacket(connID)})
 			// don't EXPECT any calls to handlePacket of the MockPacketHandler
 		})
 
@@ -163,13 +169,13 @@ var _ = Describe("Packet Handler Map", func() {
 			})
 			handler.Add(connID, packetHandler)
 			handler.Retire(connID)
-			handler.handlePacket(nil, nil, getPacket(connID))
+			handler.handlePacket(&receivedPacket{data: getPacket(connID)})
 			Eventually(handled).Should(BeClosed())
 		})
 
 		It("drops packets for unknown receivers", func() {
 			connID := protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8}
-			handler.handlePacket(nil, nil, getPacket(connID))
+			handler.handlePacket(&receivedPacket{data: getPacket(connID)})
 		})
 
 		It("closes the packet handlers when reading from the conn fails", func() {
@@ -210,7 +216,7 @@ var _ = Describe("Packet Handler Map", func() {
 				Expect(cid).To(Equal(connID))
 			})
 			handler.SetServer(server)
-			handler.handlePacket(nil, nil, p)
+			handler.handlePacket(&receivedPacket{data: p})
 		})
 
 		It("closes all server sessions", func() {
@@ -232,7 +238,7 @@ var _ = Describe("Packet Handler Map", func() {
 			// don't EXPECT any calls to server.handlePacket
 			handler.SetServer(server)
 			handler.CloseServer()
-			handler.handlePacket(nil, nil, p)
+			handler.handlePacket(&receivedPacket{data: p})
 		})
 	})
 
@@ -297,7 +303,7 @@ var _ = Describe("Packet Handler Map", func() {
 				p = append(p, token[:]...)
 
 				time.Sleep(scaleDuration(30 * time.Millisecond))
-				handler.handlePacket(nil, nil, p)
+				handler.handlePacket(&receivedPacket{data: p})
 			})
 
 			It("ignores packets too small to contain a stateless reset", func() {
@@ -332,7 +338,11 @@ var _ = Describe("Packet Handler Map", func() {
 			It("sends stateless resets", func() {
 				addr := &net.UDPAddr{IP: net.IPv4(192, 168, 0, 1), Port: 1337}
 				p := append([]byte{40}, make([]byte, 100)...)
-				handler.handlePacket(addr, getPacketBuffer(), p)
+				handler.handlePacket(&receivedPacket{
+					buffer:     getPacketBuffer(),
+					remoteAddr: addr,
+					data:       p,
+				})
 				var reset mockPacketConnWrite
 				Eventually(conn.dataWritten).Should(Receive(&reset))
 				Expect(reset.to).To(Equal(addr))
@@ -343,7 +353,11 @@ var _ = Describe("Packet Handler Map", func() {
 			It("doesn't send stateless resets for small packets", func() {
 				addr := &net.UDPAddr{IP: net.IPv4(192, 168, 0, 1), Port: 1337}
 				p := append([]byte{40}, make([]byte, protocol.MinStatelessResetSize-2)...)
-				handler.handlePacket(addr, getPacketBuffer(), p)
+				handler.handlePacket(&receivedPacket{
+					buffer:     getPacketBuffer(),
+					remoteAddr: addr,
+					data:       p,
+				})
 				Consistently(conn.dataWritten).ShouldNot(Receive())
 			})
 		})
@@ -352,7 +366,11 @@ var _ = Describe("Packet Handler Map", func() {
 			It("doesn't send stateless resets", func() {
 				addr := &net.UDPAddr{IP: net.IPv4(192, 168, 0, 1), Port: 1337}
 				p := append([]byte{40}, make([]byte, 100)...)
-				handler.handlePacket(addr, getPacketBuffer(), p)
+				handler.handlePacket(&receivedPacket{
+					buffer:     getPacketBuffer(),
+					remoteAddr: addr,
+					data:       p,
+				})
 				Consistently(conn.dataWritten).ShouldNot(Receive())
 			})
 		})

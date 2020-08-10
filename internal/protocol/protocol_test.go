@@ -15,4 +15,11 @@ var _ = Describe("Protocol", func() {
 			Expect(PacketType(10).String()).To(Equal("unknown packet type: 10"))
 		})
 	})
+
+	It("converts ECN bits from the IP header wire to the correct types", func() {
+		Expect(ECN(0)).To(Equal(ECNNon))
+		Expect(ECN(0b00000010)).To(Equal(ECT0))
+		Expect(ECN(0b00000001)).To(Equal(ECT1))
+		Expect(ECN(0b00000011)).To(Equal(ECNCE))
+	})
 })

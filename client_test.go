@@ -575,7 +575,7 @@ var _ = Describe("Client", func() {
 			_, err := Dial(packetConn, addr, "localhost:1337", tlsConf, config)
 			Expect(err).ToNot(HaveOccurred())
 			Eventually(c).Should(BeClosed())
-			Expect(cconn.(*conn).PacketConn).To(Equal(packetConn))
+			Expect(cconn.(*sconn).PacketConn).To(Equal(packetConn))
 			Expect(version).To(Equal(config.Versions[0]))
 			Expect(conf.Versions).To(Equal(config.Versions))
 		})
