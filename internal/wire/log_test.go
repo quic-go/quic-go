@@ -75,6 +75,18 @@ var _ = Describe("Frame logging", func() {
 		Expect(buf.String()).To(ContainSubstring("\t<- &wire.AckFrame{LargestAcked: 1337, LowestAcked: 42, DelayTime: 1ms}\n"))
 	})
 
+	It("logs ACK frames with ECN", func() {
+		frame := &AckFrame{
+			AckRanges: []AckRange{{Smallest: 42, Largest: 1337}},
+			DelayTime: 1 * time.Millisecond,
+			ECT0:      5,
+			ECT1:      66,
+			ECNCE:     777,
+		}
+		LogFrame(logger, frame, false)
+		Expect(buf.String()).To(ContainSubstring("\t<- &wire.AckFrame{LargestAcked: 1337, LowestAcked: 42, DelayTime: 1ms, ECT0: 5, ECT1: 66, CE: 777}\n"))
+	})
+
 	It("logs ACK frames with missing packets", func() {
 		frame := &AckFrame{
 			AckRanges: []AckRange{

@@ -102,6 +102,11 @@ func marshalAckFrame(enc *gojay.Encoder, f *logging.AckFrame) {
 	enc.StringKey("frame_type", "ack")
 	enc.FloatKeyOmitEmpty("ack_delay", milliseconds(f.DelayTime))
 	enc.ArrayKey("acked_ranges", ackRanges(f.AckRanges))
+	if hasECN := f.ECT0 > 0 || f.ECT1 > 0 || f.ECNCE > 0; hasECN {
+		enc.Uint64Key("ect0", f.ECT0)
+		enc.Uint64Key("ect1", f.ECT1)
+		enc.Uint64Key("ce", f.ECNCE)
+	}
 }
 
 func marshalResetStreamFrame(enc *gojay.Encoder, f *logging.ResetStreamFrame) {
