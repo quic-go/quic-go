@@ -59,11 +59,13 @@ type cryptoStreamHandler interface {
 }
 
 type receivedPacket struct {
+	buffer *packetBuffer
+
 	remoteAddr net.Addr
 	rcvTime    time.Time
 	data       []byte
 
-	buffer *packetBuffer
+	ecn protocol.ECN
 }
 
 func (p *receivedPacket) Size() protocol.ByteCount { return protocol.ByteCount(len(p.data)) }
@@ -74,6 +76,7 @@ func (p *receivedPacket) Clone() *receivedPacket {
 		rcvTime:    p.rcvTime,
 		data:       p.data,
 		buffer:     p.buffer,
+		ecn:        p.ecn,
 	}
 }
 
@@ -1067,7 +1070,7 @@ func (s *session) handleUnpackedPacket(
 		}
 	}
 
-	return s.receivedPacketHandler.ReceivedPacket(packet.packetNumber, packet.encryptionLevel, rcvTime, isAckEliciting)
+	return s.receivedPacketHandler.ReceivedPacket(packet.packetNumber, protocol.ECNNon, packet.encryptionLevel, rcvTime, isAckEliciting)
 }
 
 func (s *session) handleFrame(f wire.Frame, encLevel protocol.EncryptionLevel, destConnID protocol.ConnectionID) error {
