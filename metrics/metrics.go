@@ -6,6 +6,8 @@ import (
 	"net"
 	"time"
 
+	"github.com/lucas-clemente/quic-go/internal/utils"
+
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/logging"
 
@@ -118,13 +120,10 @@ func (t *connTracer) StartedConnection(local, _ net.Addr, _ logging.VersionNumbe
 
 	var ipVersionTag tag.Mutator
 	if udpAddr, ok := local.(*net.UDPAddr); ok {
-		// If ip is not an IPv4 address, To4 returns nil.
-		// Note that there might be some corner cases, where this is not correct.
-		// See https://stackoverflow.com/questions/22751035/golang-distinguish-ipv4-ipv6.
-		if udpAddr.IP.To4() == nil {
-			ipVersionTag = tag.Upsert(keyIPVersion, "IPv6")
-		} else {
+		if utils.IsIPv4(udpAddr.IP) {
 			ipVersionTag = tag.Upsert(keyIPVersion, "IPv4")
+		} else {
+			ipVersionTag = tag.Upsert(keyIPVersion, "IPv6")
 		}
 	} else {
 		ipVersionTag = tag.Upsert(keyIPVersion, "unknown")
