@@ -130,7 +130,7 @@ var _ = Describe("Packet Handler Map", func() {
 		It("drops unparseable packets", func() {
 			addr := &net.UDPAddr{IP: net.IPv4(9, 8, 7, 6), Port: 1234}
 			tracer.EXPECT().DroppedPacket(addr, logging.PacketTypeNotDetermined, protocol.ByteCount(4), logging.PacketDropHeaderParseError)
-			handler.handlePacket(addr, nil, []byte{0, 1, 2, 3})
+			handler.handlePacket(addr, getPacketBuffer(), []byte{0, 1, 2, 3})
 		})
 
 		It("deletes removed sessions immediately", func() {
