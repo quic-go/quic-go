@@ -487,8 +487,8 @@ var _ = Describe("Client", func() {
 				c := populateClientConfig(config, false)
 				Expect(c.HandshakeTimeout).To(Equal(1337 * time.Minute))
 				Expect(c.MaxIdleTimeout).To(Equal(42 * time.Hour))
-				Expect(c.MaxIncomingStreams).To(Equal(1234))
-				Expect(c.MaxIncomingUniStreams).To(Equal(4321))
+				Expect(c.MaxIncomingStreams).To(BeEquivalentTo(1234))
+				Expect(c.MaxIncomingUniStreams).To(BeEquivalentTo(4321))
 				Expect(c.ConnectionIDLength).To(Equal(13))
 				Expect(c.StatelessResetKey).To(Equal([]byte("foobar")))
 				Expect(c.QuicTracer).To(Equal(tracer))
@@ -511,7 +511,7 @@ var _ = Describe("Client", func() {
 				}
 				c := populateClientConfig(config, false)
 				Expect(c.MaxIncomingStreams).To(BeZero())
-				Expect(c.MaxIncomingUniStreams).To(Equal(4321))
+				Expect(c.MaxIncomingUniStreams).To(BeEquivalentTo(4321))
 			})
 
 			It("disables unidirectional streams", func() {
@@ -520,7 +520,7 @@ var _ = Describe("Client", func() {
 					MaxIncomingUniStreams: -1,
 				}
 				c := populateClientConfig(config, false)
-				Expect(c.MaxIncomingStreams).To(Equal(1234))
+				Expect(c.MaxIncomingStreams).To(BeEquivalentTo(1234))
 				Expect(c.MaxIncomingUniStreams).To(BeZero())
 			})
 

@@ -45,9 +45,9 @@ var _ = Describe("Config", func() {
 			case "MaxReceiveConnectionFlowControlWindow":
 				f.Set(reflect.ValueOf(uint64(10)))
 			case "MaxIncomingStreams":
-				f.Set(reflect.ValueOf(11))
+				f.Set(reflect.ValueOf(int64(11)))
 			case "MaxIncomingUniStreams":
-				f.Set(reflect.ValueOf(12))
+				f.Set(reflect.ValueOf(int64(12)))
 			case "StatelessResetKey":
 				f.Set(reflect.ValueOf([]byte{1, 2, 3, 4}))
 			case "KeepAlive":
@@ -114,8 +114,8 @@ var _ = Describe("Config", func() {
 			Expect(c.HandshakeTimeout).To(Equal(protocol.DefaultHandshakeTimeout))
 			Expect(c.MaxReceiveStreamFlowControlWindow).To(BeEquivalentTo(protocol.DefaultMaxReceiveStreamFlowControlWindow))
 			Expect(c.MaxReceiveConnectionFlowControlWindow).To(BeEquivalentTo(protocol.DefaultMaxReceiveConnectionFlowControlWindow))
-			Expect(c.MaxIncomingStreams).To(Equal(protocol.DefaultMaxIncomingStreams))
-			Expect(c.MaxIncomingUniStreams).To(Equal(protocol.DefaultMaxIncomingUniStreams))
+			Expect(c.MaxIncomingStreams).To(BeEquivalentTo(protocol.DefaultMaxIncomingStreams))
+			Expect(c.MaxIncomingUniStreams).To(BeEquivalentTo(protocol.DefaultMaxIncomingUniStreams))
 		})
 
 		It("populates empty fields with default values, for the server", func() {
