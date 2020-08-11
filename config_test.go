@@ -15,6 +15,24 @@ import (
 )
 
 var _ = Describe("Config", func() {
+	Context("validating", func() {
+		It("validates a nil config", func() {
+			Expect(validateConfig(nil)).To(Succeed())
+		})
+
+		It("validates a config with normal values", func() {
+			Expect(validateConfig(populateServerConfig(&Config{}))).To(Succeed())
+		})
+
+		It("errors on too large values for MaxIncomingStreams", func() {
+			Expect(validateConfig(&Config{MaxIncomingStreams: 1<<60 + 1})).To(MatchError("invalid value for Config.MaxIncomingStreams"))
+		})
+
+		It("errors on too large values for MaxIncomingUniStreams", func() {
+			Expect(validateConfig(&Config{MaxIncomingUniStreams: 1<<60 + 1})).To(MatchError("invalid value for Config.MaxIncomingUniStreams"))
+		})
+	})
+
 	configWithNonZeroNonFunctionFields := func() *Config {
 		c := &Config{}
 		v := reflect.ValueOf(c).Elem()

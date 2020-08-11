@@ -171,6 +171,9 @@ func listen(conn net.PacketConn, tlsConf *tls.Config, config *Config, acceptEarl
 	if tlsConf == nil {
 		return nil, errors.New("quic: tls.Config not set")
 	}
+	if err := validateConfig(config); err != nil {
+		return nil, err
+	}
 	config = populateServerConfig(config)
 	for _, v := range config.Versions {
 		if !protocol.IsValidVersion(v) {
