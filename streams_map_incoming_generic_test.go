@@ -1,6 +1,7 @@
 package quic
 
 import (
+	"bytes"
 	"context"
 	"errors"
 
@@ -25,17 +26,25 @@ func (s *mockGenericStream) closeForShutdown(err error) {
 }
 
 var _ = Describe("Streams Map (incoming)", func() {
-	const (
-		maxNumStreams uint64 = 5
-	)
-
 	var (
 		m              *incomingItemsMap
 		newItemCounter int
 		mockSender     *MockStreamSender
+		maxNumStreams  uint64
 	)
 
-	BeforeEach(func() {
+	// check that the frame can be serialized and deserialized
+	checkFrameSerialization := func(f wire.Frame) {
+		b := &bytes.Buffer{}
+		ExpectWithOffset(1, f.Write(b, protocol.VersionTLS)).To(Succeed())
+		frame, err := wire.NewFrameParser(protocol.VersionTLS).ParseNext(bytes.NewReader(b.Bytes()), protocol.Encryption1RTT)
+		ExpectWithOffset(1, err).ToNot(HaveOccurred())
+		Expect(f).To(Equal(frame))
+	}
+
+	BeforeEach(func() { maxNumStreams = 5 })
+
+	JustBeforeEach(func() {
 		newItemCounter = 0
 		mockSender = NewMockStreamSender(mockCtrl)
 		m = newIncomingItemsMap(
@@ -211,11 +220,41 @@ var _ = Describe("Streams Map (incoming)", func() {
 		}
 		mockSender.EXPECT().queueControlFrame(gomock.Any()).Do(func(f wire.Frame) {
 			Expect(f.(*wire.MaxStreamsFrame).MaxStreamNum).To(Equal(protocol.StreamNum(maxNumStreams + 1)))
+			checkFrameSerialization(f)
 		})
 		Expect(m.DeleteStream(3)).To(Succeed())
 		mockSender.EXPECT().queueControlFrame(gomock.Any()).Do(func(f wire.Frame) {
 			Expect(f.(*wire.MaxStreamsFrame).MaxStreamNum).To(Equal(protocol.StreamNum(maxNumStreams + 2)))
+			checkFrameSerialization(f)
 		})
 		Expect(m.DeleteStream(4)).To(Succeed())
+	})
+
+	Context("using high stream limits", func() {
+		BeforeEach(func() { maxNumStreams = uint64(protocol.MaxStreamCount) - 2 })
+
+		It("doesn't send MAX_STREAMS frames if they would overflow 2^60 (the maximum stream count)", func() {
+			// open a bunch of streams
+			_, err := m.GetOrOpenStream(5)
+			Expect(err).ToNot(HaveOccurred())
+			// accept all streams
+			for i := 0; i < 5; i++ {
+				_, err := m.AcceptStream(context.Background())
+				Expect(err).ToNot(HaveOccurred())
+			}
+			mockSender.EXPECT().queueControlFrame(gomock.Any()).Do(func(f wire.Frame) {
+				Expect(f.(*wire.MaxStreamsFrame).MaxStreamNum).To(Equal(protocol.MaxStreamCount - 1))
+				checkFrameSerialization(f)
+			})
+			Expect(m.DeleteStream(4)).To(Succeed())
+			mockSender.EXPECT().queueControlFrame(gomock.Any()).Do(func(f wire.Frame) {
+				Expect(f.(*wire.MaxStreamsFrame).MaxStreamNum).To(Equal(protocol.MaxStreamCount))
+				checkFrameSerialization(f)
+			})
+			Expect(m.DeleteStream(3)).To(Succeed())
+			// at this point, we can't increase the stream limit any further, so no more MAX_STREAMS frames will be sent
+			Expect(m.DeleteStream(2)).To(Succeed())
+			Expect(m.DeleteStream(1)).To(Succeed())
+		})
 	})
 })
