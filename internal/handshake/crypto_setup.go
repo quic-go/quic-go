@@ -12,10 +12,10 @@ import (
 
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/internal/qerr"
+	"github.com/lucas-clemente/quic-go/internal/qtls"
 	"github.com/lucas-clemente/quic-go/internal/utils"
 	"github.com/lucas-clemente/quic-go/internal/wire"
 	"github.com/lucas-clemente/quic-go/logging"
-	"github.com/marten-seemann/qtls"
 )
 
 // TLS unexpected_message alert
@@ -60,9 +60,32 @@ func (m messageType) String() string {
 
 const clientSessionStateRevision = 3
 
+type conn struct {
+	localAddr, remoteAddr net.Addr
+}
+
+func newConn(local, remote net.Addr) net.Conn {
+	return &conn{
+		localAddr:  local,
+		remoteAddr: remote,
+	}
+}
+
+var _ net.Conn = &conn{}
+
+func (c *conn) Read([]byte) (int, error)         { return 0, nil }
+func (c *conn) Write([]byte) (int, error)        { return 0, nil }
+func (c *conn) Close() error                     { return nil }
+func (c *conn) RemoteAddr() net.Addr             { return c.remoteAddr }
+func (c *conn) LocalAddr() net.Addr              { return c.localAddr }
+func (c *conn) SetReadDeadline(time.Time) error  { return nil }
+func (c *conn) SetWriteDeadline(time.Time) error { return nil }
+func (c *conn) SetDeadline(time.Time) error      { return nil }
+
 type cryptoSetup struct {
-	tlsConf *qtls.Config
-	conn    *qtls.Conn
+	tlsConf   *tls.Config
+	extraConf *qtls.ExtraConfig
+	conn      *qtls.Conn
 
 	messageChan chan []byte
 
@@ -152,7 +175,7 @@ func NewCryptoSetupClient(
 		logger,
 		protocol.PerspectiveClient,
 	)
-	cs.conn = qtls.Client(newConn(localAddr, remoteAddr), cs.tlsConf)
+	cs.conn = qtls.Client(newConn(localAddr, remoteAddr), cs.tlsConf, cs.extraConf)
 	return cs, clientHelloWritten
 }
 
@@ -184,7 +207,7 @@ func NewCryptoSetupServer(
 		logger,
 		protocol.PerspectiveServer,
 	)
-	cs.conn = qtls.Server(newConn(localAddr, remoteAddr), cs.tlsConf)
+	cs.conn = qtls.Server(newConn(localAddr, remoteAddr), cs.tlsConf, cs.extraConf)
 	return cs
 }
 
@@ -208,6 +231,7 @@ func newCryptoSetup(
 	}
 	extHandler := newExtensionHandler(tp.Marshal(perspective), perspective)
 	cs := &cryptoSetup{
+		tlsConf:                tlsConf,
 		initialStream:          initialStream,
 		initialSealer:          initialSealer,
 		initialOpener:          initialOpener,
@@ -231,8 +255,22 @@ func newCryptoSetup(
 		writeRecord:            make(chan struct{}, 1),
 		closeChan:              make(chan struct{}),
 	}
-	qtlsConf := tlsConfigToQtlsConfig(tlsConf, cs, extHandler, rttStats, cs.marshalDataForSessionState, cs.handleDataFromSessionState, cs.accept0RTT, cs.rejected0RTT, enable0RTT)
-	cs.tlsConf = qtlsConf
+	var maxEarlyData uint32
+	if enable0RTT {
+		maxEarlyData = 0xffffffff
+	}
+	cs.extraConf = &qtls.ExtraConfig{
+		GetExtensions:              extHandler.GetExtensions,
+		ReceivedExtensions:         extHandler.ReceivedExtensions,
+		AlternativeRecordLayer:     cs,
+		EnforceNextProtoSelection:  true,
+		MaxEarlyData:               maxEarlyData,
+		Accept0RTT:                 cs.accept0RTT,
+		Rejected0RTT:               cs.rejected0RTT,
+		Enable0RTT:                 enable0RTT,
+		GetAppDataForSessionState:  cs.marshalDataForSessionState,
+		SetAppDataFromSessionState: cs.handleDataFromSessionState,
+	}
 	return cs, cs.clientHelloWrittenChan
 }
 
@@ -499,7 +537,7 @@ func (h *cryptoSetup) handleDataFromSessionStateImpl(data []byte) (*wire.Transpo
 func (h *cryptoSetup) GetSessionTicket() ([]byte, error) {
 	var appData []byte
 	// Save transport parameters to the session ticket if we're allowing 0-RTT.
-	if h.tlsConf.MaxEarlyData > 0 {
+	if h.extraConf.MaxEarlyData > 0 {
 		appData = (&sessionTicket{
 			Parameters: h.ourParams,
 			RTT:        h.rttStats.SmoothedRTT(),
@@ -819,5 +857,5 @@ func (h *cryptoSetup) Get1RTTOpener() (ShortHeaderOpener, error) {
 }
 
 func (h *cryptoSetup) ConnectionState() ConnectionState {
-	return h.conn.ConnectionState()
+	return qtls.GetConnectionState(h.conn)
 }

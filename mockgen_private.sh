@@ -10,6 +10,7 @@ echo -e "package $1\n" > $TMPFILE
 echo "type $INTERFACE_NAME = $4" >> $TMPFILE
 
 mockgen -package $1 -self_package $PACKAGE -destination $2 $PACKAGE $INTERFACE_NAME
+mv $2 $TMPFILE && sed 's/qtls.ConnectionState/ConnectionState/g' $TMPFILE > $2
 goimports -w $2
 
 rm $TMPFILE

@@ -12,7 +12,6 @@ import (
 	gomock "github.com/golang/mock/gomock"
 	quic "github.com/lucas-clemente/quic-go"
 	protocol "github.com/lucas-clemente/quic-go/internal/protocol"
-	qtls "github.com/marten-seemann/qtls"
 )
 
 // MockEarlySession is a mock of EarlySession interface
@@ -83,10 +82,10 @@ func (mr *MockEarlySessionMockRecorder) CloseWithError(arg0, arg1 interface{}) *
 }
 
 // ConnectionState mocks base method
-func (m *MockEarlySession) ConnectionState() qtls.ConnectionState {
+func (m *MockEarlySession) ConnectionState() quic.ConnectionState {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ConnectionState")
-	ret0, _ := ret[0].(qtls.ConnectionState)
+	ret0, _ := ret[0].(quic.ConnectionState)
 	return ret0
 }
 
