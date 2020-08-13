@@ -4,6 +4,12 @@ run:
     - internal/handshake/unsafe_test.go
 
 linters-settings:
+  depguard:
+    type: blacklist
+    packages:
+      - github.com/marten-seemann/qtls
+    packages-with-error-message:
+      - github.com/marten-seemann/qtls: "importing qtls only allowed in internal/qtls"
   misspell:
     ignore-words:
       - ect
@@ -12,6 +18,7 @@ linters:
   disable-all: true
   enable:
     - deadcode
+    - depguard
     - goconst
     - goimports
     - gosimple
@@ -33,3 +40,6 @@ issues:
     - path: qlog/
       linters:
         - goconst
+    - path: internal/qtls
+      linters:
+        - depguard
