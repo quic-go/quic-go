@@ -91,7 +91,7 @@ func tlsConfigToQtlsConfig(
 			if cert == nil {
 				return nil, nil
 			}
-			return (*qtls.Certificate)(unsafe.Pointer(cert)), nil
+			return (*qtls.Certificate)(cert), nil
 		}
 	}
 	var csc qtls.ClientSessionCache
@@ -205,7 +205,7 @@ func toTLSClientHelloInfo(chi *qtls.ClientHelloInfo) *tls.ClientHelloInfo {
 	qtlsCHI := (*qtlsClientHelloInfo)(unsafe.Pointer(chi))
 	var config *tls.Config
 	if qtlsCHI.config != nil {
-		config = qtlsConfigToTLSConfig((*qtls.Config)(unsafe.Pointer(qtlsCHI.config)))
+		config = qtlsConfigToTLSConfig(qtlsCHI.config)
 	}
 	return (*tls.ClientHelloInfo)(unsafe.Pointer(&clientHelloInfo{
 		CipherSuites:      chi.CipherSuites,
