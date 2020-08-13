@@ -5,6 +5,7 @@ language: go
 
 go:
   - "1.14.x"
+  - "1.15.x"
 
 # first part of the GOARCH workaround
 # setting the GOARCH directly doesn't work, since the value will be overwritten later
@@ -12,6 +13,7 @@ go:
 env:
   global:
     - TIMESCALE_FACTOR=20
+    - GODEBUG=x509ignoreCN=0
   matrix:
     - TRAVIS_GOARCH=amd64 TESTMODE=unit
     - TRAVIS_GOARCH=amd64 TESTMODE=integration

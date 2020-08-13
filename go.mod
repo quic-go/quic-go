@@ -6,10 +6,11 @@ require (
 	github.com/cheekybits/genny v1.0.0
 	github.com/francoispqt/gojay v1.2.13
 	github.com/golang/groupcache v0.0.0-20191027212112-611e8accdfc9 // indirect
-	github.com/golang/mock v1.4.0
+	github.com/golang/mock v1.4.4
 	github.com/golang/protobuf v1.4.2
 	github.com/marten-seemann/qpack v0.2.0
 	github.com/marten-seemann/qtls v0.10.0
+	github.com/marten-seemann/qtls-go1-15 v0.1.0
 	github.com/onsi/ginkgo v1.14.0
 	github.com/onsi/gomega v1.10.1
 	go.opencensus.io v0.22.2

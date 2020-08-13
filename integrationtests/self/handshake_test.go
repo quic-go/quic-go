@@ -371,7 +371,6 @@ var _ = Describe("Handshake tests", func() {
 				Expect(err).ToNot(HaveOccurred())
 				cs := sess.ConnectionState()
 				Expect(cs.NegotiatedProtocol).To(Equal(alpn))
-				Expect(cs.NegotiatedProtocolIsMutual).To(BeTrue())
 				close(done)
 			}()
 
@@ -384,7 +383,6 @@ var _ = Describe("Handshake tests", func() {
 			defer sess.CloseWithError(0, "")
 			cs := sess.ConnectionState()
 			Expect(cs.NegotiatedProtocol).To(Equal(alpn))
-			Expect(cs.NegotiatedProtocolIsMutual).To(BeTrue())
 			Eventually(done).Should(BeClosed())
 			Expect(ln.Close()).To(Succeed())
 		})

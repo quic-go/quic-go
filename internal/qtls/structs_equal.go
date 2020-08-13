@@ -1,3 +1,5 @@
+// +build !go1.15
+
 package qtls
 
 import "reflect"
