@@ -1,6 +1,6 @@
 package quic
 
-//go:generate sh -c "./mockgen_private.sh quic mock_connection_test.go github.com/lucas-clemente/quic-go connection"
+//go:generate sh -c "./mockgen_private.sh quic mock_send_conn_test.go github.com/lucas-clemente/quic-go sendConn"
 //go:generate sh -c "./mockgen_private.sh quic mock_stream_internal_test.go github.com/lucas-clemente/quic-go streamI"
 //go:generate sh -c "./mockgen_private.sh quic mock_crypto_stream_test.go github.com/lucas-clemente/quic-go cryptoStream"
 //go:generate sh -c "./mockgen_private.sh quic mock_receive_stream_internal_test.go github.com/lucas-clemente/quic-go receiveStreamI"

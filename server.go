@@ -74,7 +74,7 @@ type baseServer struct {
 
 	// set as a member, so they can be set in the tests
 	newSession func(
-		connection,
+		sendConn,
 		sessionRunner,
 		protocol.ConnectionID, /* original dest connection ID */
 		*protocol.ConnectionID, /* retry src connection ID */
@@ -471,7 +471,7 @@ func (s *baseServer) createNewSession(
 			tracer = s.config.Tracer.TracerForConnection(protocol.PerspectiveServer, connID)
 		}
 		sess = s.newSession(
-			&conn{pconn: s.conn, currentAddr: remoteAddr},
+			newSendConn(s.conn, remoteAddr),
 			s.sessionHandler,
 			origDestConnID,
 			retrySrcConnID,

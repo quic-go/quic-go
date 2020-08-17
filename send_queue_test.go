@@ -10,10 +10,10 @@ import (
 
 var _ = Describe("Send Queue", func() {
 	var q *sendQueue
-	var c *MockConnection
+	var c *MockSendConn
 
 	BeforeEach(func() {
-		c = NewMockConnection(mockCtrl)
+		c = NewMockSendConn(mockCtrl)
 		q = newSendQueue(c)
 	})
 

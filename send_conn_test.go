@@ -66,8 +66,8 @@ func (c *mockPacketConn) SetWriteDeadline(t time.Time) error { panic("not implem
 
 var _ net.PacketConn = &mockPacketConn{}
 
-var _ = Describe("Connection", func() {
-	var c *conn
+var _ = Describe("Send-Connection", func() {
+	var c sendConn
 	var packetConn *mockPacketConn
 
 	BeforeEach(func() {
@@ -76,10 +76,7 @@ var _ = Describe("Connection", func() {
 			Port: 1337,
 		}
 		packetConn = newMockPacketConn()
-		c = &conn{
-			currentAddr: addr,
-			pconn:       packetConn,
-		}
+		c = newSendConn(packetConn, addr)
 	})
 
 	It("writes", func() {
@@ -88,17 +85,6 @@ var _ = Describe("Connection", func() {
 		Expect(packetConn.dataWritten).To(Receive(&write))
 		Expect(write.to.String()).To(Equal("192.168.100.200:1337"))
 		Expect(write.data).To(Equal([]byte("foobar")))
-	})
-
-	It("reads", func() {
-		packetConn.dataToRead <- []byte("foo")
-		packetConn.dataReadFrom = &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 1336}
-		p := make([]byte, 10)
-		n, raddr, err := c.Read(p)
-		Expect(err).ToNot(HaveOccurred())
-		Expect(raddr.String()).To(Equal("127.0.0.1:1336"))
-		Expect(n).To(Equal(3))
-		Expect(p[0:3]).To(Equal([]byte("foo")))
 	})
 
 	It("gets the remote address", func() {
@@ -112,15 +98,6 @@ var _ = Describe("Connection", func() {
 		}
 		packetConn.addr = addr
 		Expect(c.LocalAddr()).To(Equal(addr))
-	})
-
-	It("changes the remote address", func() {
-		addr := &net.UDPAddr{
-			IP:   net.IPv4(127, 0, 0, 1),
-			Port: 7331,
-		}
-		c.SetCurrentRemoteAddr(addr)
-		Expect(c.RemoteAddr().String()).To(Equal(addr.String()))
 	})
 
 	It("closes", func() {

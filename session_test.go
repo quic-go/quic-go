@@ -46,7 +46,7 @@ var _ = Describe("Session", func() {
 	var (
 		sess          *session
 		sessionRunner *MockSessionRunner
-		mconn         *MockConnection
+		mconn         *MockSendConn
 		streamManager *MockStreamManager
 		packer        *MockPacker
 		cryptoSetup   *mocks.MockCryptoSetup
@@ -83,7 +83,7 @@ var _ = Describe("Session", func() {
 		Eventually(areSessionsRunning).Should(BeFalse())
 
 		sessionRunner = NewMockSessionRunner(mockCtrl)
-		mconn = NewMockConnection(mockCtrl)
+		mconn = NewMockSendConn(mockCtrl)
 		mconn.EXPECT().RemoteAddr().Return(remoteAddr).AnyTimes()
 		mconn.EXPECT().LocalAddr().Return(localAddr).AnyTimes()
 		tokenGenerator, err := handshake.NewTokenGenerator()
@@ -615,7 +615,7 @@ var _ = Describe("Session", func() {
 
 		It("closes when the sendQueue encounters an error", func() {
 			sess.handshakeConfirmed = true
-			conn := NewMockConnection(mockCtrl)
+			conn := NewMockSendConn(mockCtrl)
 			conn.EXPECT().Write(gomock.Any()).Return(io.ErrClosedPipe).AnyTimes()
 			sess.sendQueue = newSendQueue(conn)
 			sph := mockackhandler.NewMockSentPacketHandler(mockCtrl)
@@ -2107,7 +2107,7 @@ var _ = Describe("Client Session", func() {
 		sess          *session
 		sessionRunner *MockSessionRunner
 		packer        *MockPacker
-		mconn         *MockConnection
+		mconn         *MockSendConn
 		cryptoSetup   *mocks.MockCryptoSetup
 		tracer        *mocks.MockConnectionTracer
 		tlsConf       *tls.Config
@@ -2140,7 +2140,7 @@ var _ = Describe("Client Session", func() {
 	JustBeforeEach(func() {
 		Eventually(areSessionsRunning).Should(BeFalse())
 
-		mconn = NewMockConnection(mockCtrl)
+		mconn = NewMockSendConn(mockCtrl)
 		mconn.EXPECT().RemoteAddr().Return(&net.UDPAddr{}).Times(2)
 		mconn.EXPECT().LocalAddr().Return(&net.UDPAddr{})
 		if tlsConf == nil {
