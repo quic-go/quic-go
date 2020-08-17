@@ -129,10 +129,7 @@ func (s *stream) StreamID() protocol.StreamID {
 }
 
 func (s *stream) Close() error {
-	if err := s.sendStream.Close(); err != nil {
-		return err
-	}
-	return nil
+	return s.sendStream.Close()
 }
 
 func (s *stream) SetDeadline(t time.Time) error {
