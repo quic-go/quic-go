@@ -60,7 +60,7 @@ func Fuzz(data []byte) int {
 			panic(fmt.Sprintf("inconsistent header length: %#v. Expected %d, got %d", extHdr, expLen, b.Len()))
 		}
 	}
-	return 0
+	return 1
 }
 
 func fuzzVNP(data []byte) int {
@@ -81,5 +81,5 @@ func fuzzVNP(data []byte) int {
 	if _, err := wire.ComposeVersionNegotiation(hdr.SrcConnectionID, hdr.DestConnectionID, versions); err != nil {
 		panic(err)
 	}
-	return 0
+	return 1
 }
