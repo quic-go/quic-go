@@ -1,11 +1,28 @@
 package quic
 
-import "github.com/lucas-clemente/quic-go/internal/protocol"
+import (
+	"errors"
+
+	"github.com/lucas-clemente/quic-go/internal/protocol"
+)
 
 // Clone clones a Config
 func (c *Config) Clone() *Config {
 	copy := *c
 	return &copy
+}
+
+func validateConfig(config *Config) error {
+	if config == nil {
+		return nil
+	}
+	if config.MaxIncomingStreams > 1<<60 {
+		return errors.New("invalid value for Config.MaxIncomingStreams")
+	}
+	if config.MaxIncomingUniStreams > 1<<60 {
+		return errors.New("invalid value for Config.MaxIncomingUniStreams")
+	}
+	return nil
 }
 
 // populateServerConfig populates fields in the quic.Config with their default values, if none are set
