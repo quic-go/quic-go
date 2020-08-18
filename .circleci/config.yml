@@ -10,7 +10,6 @@ executors:
       - image: "circleci/golang:1.15"
     environment:
       runrace: true
-      GODEBUG: x509ignoreCN=0
  
 jobs:
   "test": &test
