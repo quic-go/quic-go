@@ -13,7 +13,6 @@ env:
   global:
     - TIMESCALE_FACTOR=20
   matrix:
-    - TRAVIS_GOARCH=amd64 TESTMODE=lint
     - TRAVIS_GOARCH=amd64 TESTMODE=unit
     - TRAVIS_GOARCH=amd64 TESTMODE=integration
     - TRAVIS_GOARCH=386 TESTMODE=unit
@@ -30,10 +29,6 @@ before_install:
   - travis_retry go get -t ./...
 
 script:
-  - | 
-    if [ ${TESTMODE} == "lint" ]; then
-      travis_retry curl -sfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s v1.27.0
-    fi
   - .travis/script.sh
 
 
