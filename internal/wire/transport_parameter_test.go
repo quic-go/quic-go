@@ -248,16 +248,16 @@ var _ = Describe("Transport Parameters", func() {
 		Expect(err.Error()).To(ContainSubstring("TRANSPORT_PARAMETER_ERROR: inconsistent transport parameter length"))
 	})
 
-	It("handles max_ack_delays that decode to a negative duration", func() {
+	It("handles huge max_ack_delay values", func() {
 		b := &bytes.Buffer{}
 		val := uint64(math.MaxUint64) / 5
 		utils.WriteVarInt(b, uint64(maxAckDelayParameterID))
 		utils.WriteVarInt(b, uint64(utils.VarIntLen(val)))
 		utils.WriteVarInt(b, val)
 		addInitialSourceConnectionID(b)
-		p := &TransportParameters{}
-		Expect(p.Unmarshal(b.Bytes(), protocol.PerspectiveClient)).To(Succeed())
-		Expect(p.MaxAckDelay).To(BeNumerically(">", 290*365*24*time.Hour))
+		err := (&TransportParameters{}).Unmarshal(b.Bytes(), protocol.PerspectiveClient)
+		Expect(err).To(HaveOccurred())
+		Expect(err.Error()).To(ContainSubstring("invalid value for max_ack_delay"))
 	})
 
 	It("skips unknown parameters", func() {
