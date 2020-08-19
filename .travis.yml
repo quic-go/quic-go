@@ -1,8 +1,11 @@
-dist: xenial
-group: travis_latest
+os: linux
+arch: 
+  - arm64
+  - amd64
+  - i386
+dist: bionic
 
 language: go
-
 go:
   - "1.14.x"
   - "1.15.x"
@@ -13,11 +16,9 @@ go:
 env:
   global:
     - TIMESCALE_FACTOR=20
-  matrix:
-    - TRAVIS_GOARCH=amd64 TESTMODE=unit
-    - TRAVIS_GOARCH=amd64 TESTMODE=integration
-    - TRAVIS_GOARCH=386 TESTMODE=unit
-    - TRAVIS_GOARCH=386 TESTMODE=integration
+  jobs:
+    - TESTMODE=unit
+    - TESTMODE=integration
 
 # second part of the GOARCH workaround
 # now actually set the GOARCH env variable to the value of the temporary variable set earlier
@@ -25,13 +26,11 @@ before_install:
   - travis_retry go get golang.org/x/tools/cmd/cover
   - travis_retry go get github.com/onsi/ginkgo/ginkgo
   - travis_retry go get github.com/onsi/gomega
-  - export GOARCH=$TRAVIS_GOARCH
   - go env # for debugging
   - travis_retry go get -t ./...
 
 script:
   - .travis/script.sh
-
 
 after_success:
   - .travis/after_success.sh
