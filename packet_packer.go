@@ -91,7 +91,7 @@ func (p *packetContents) ToAckHandlerPacket(now time.Time, q *retransmissionQueu
 			p.frames[i].OnLost = q.AddInitial
 		case protocol.EncryptionHandshake:
 			p.frames[i].OnLost = q.AddHandshake
-		case protocol.Encryption1RTT:
+		case protocol.Encryption0RTT, protocol.Encryption1RTT:
 			p.frames[i].OnLost = q.AddAppData
 		}
 	}
