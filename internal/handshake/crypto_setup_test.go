@@ -1,22 +1,20 @@
 package handshake
 
 import (
-	"bytes"
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/tls"
 	"crypto/x509"
 	"crypto/x509/pkix"
-	"errors"
 	"math/big"
 	"time"
 
+	mocktls "github.com/lucas-clemente/quic-go/internal/mocks/tls"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/internal/qerr"
 	"github.com/lucas-clemente/quic-go/internal/testdata"
 	"github.com/lucas-clemente/quic-go/internal/utils"
 	"github.com/lucas-clemente/quic-go/internal/wire"
-	"github.com/marten-seemann/qtls"
 
 	"github.com/golang/mock/gomock"
 
@@ -72,48 +70,6 @@ var _ = Describe("Crypto Setup TLS", func() {
 			RootCAs:    testdata.GetRootCA(),
 			NextProtos: []string{"crypto-setup"},
 		}
-	})
-
-	It("creates a qtls.Config", func() {
-		tlsConf := &tls.Config{
-			ServerName: "quic.clemente.io",
-			GetCertificate: func(*tls.ClientHelloInfo) (*tls.Certificate, error) {
-				return nil, errors.New("GetCertificate")
-			},
-			GetClientCertificate: func(*tls.CertificateRequestInfo) (*tls.Certificate, error) {
-				return nil, errors.New("GetClientCertificate")
-			},
-			GetConfigForClient: func(ch *tls.ClientHelloInfo) (*tls.Config, error) {
-				return &tls.Config{ServerName: ch.ServerName}, nil
-			},
-		}
-		var token protocol.StatelessResetToken
-		server := NewCryptoSetupServer(
-			&bytes.Buffer{},
-			&bytes.Buffer{},
-			protocol.ConnectionID{},
-			nil,
-			nil,
-			&wire.TransportParameters{StatelessResetToken: &token},
-			NewMockHandshakeRunner(mockCtrl),
-			tlsConf,
-			false,
-			&utils.RTTStats{},
-			nil,
-			utils.DefaultLogger.WithPrefix("server"),
-		)
-		qtlsConf := server.(*cryptoSetup).tlsConf
-		Expect(qtlsConf.ServerName).To(Equal(tlsConf.ServerName))
-		_, getCertificateErr := qtlsConf.GetCertificate(nil)
-		Expect(getCertificateErr).To(MatchError("GetCertificate"))
-		_, getClientCertificateErr := qtlsConf.GetClientCertificate(nil)
-		Expect(getClientCertificateErr).To(MatchError("GetClientCertificate"))
-		cconf, err := qtlsConf.GetConfigForClient(&qtls.ClientHelloInfo{ServerName: "foo.bar"})
-		Expect(err).ToNot(HaveOccurred())
-		Expect(cconf.ServerName).To(Equal("foo.bar"))
-		Expect(cconf.AlternativeRecordLayer).ToNot(BeNil())
-		Expect(cconf.GetExtensions).ToNot(BeNil())
-		Expect(cconf.ReceivedExtensions).ToNot(BeNil())
 	})
 
 	It("returns Handshake() when an error occurs in qtls", func() {
@@ -420,7 +376,7 @@ var _ = Describe("Crypto Setup TLS", func() {
 
 		It("handshakes with client auth", func() {
 			clientConf.Certificates = []tls.Certificate{generateCert()}
-			serverConf.ClientAuth = qtls.RequireAnyClientCert
+			serverConf.ClientAuth = tls.RequireAnyClientCert
 			_, _, clientErr, _, serverErr := handshakeWithTLSConf(
 				clientConf, serverConf,
 				&utils.RTTStats{}, &utils.RTTStats{},
@@ -647,7 +603,7 @@ var _ = Describe("Crypto Setup TLS", func() {
 			})
 
 			It("uses session resumption", func() {
-				csc := NewMockClientSessionCache(mockCtrl)
+				csc := mocktls.NewMockClientSessionCache(mockCtrl)
 				var state *tls.ClientSessionState
 				receivedSessionTicket := make(chan struct{})
 				csc.EXPECT().Get(gomock.Any())
@@ -690,7 +646,7 @@ var _ = Describe("Crypto Setup TLS", func() {
 			})
 
 			It("doesn't use session resumption if the server disabled it", func() {
-				csc := NewMockClientSessionCache(mockCtrl)
+				csc := mocktls.NewMockClientSessionCache(mockCtrl)
 				var state *tls.ClientSessionState
 				receivedSessionTicket := make(chan struct{})
 				csc.EXPECT().Get(gomock.Any())
@@ -727,7 +683,7 @@ var _ = Describe("Crypto Setup TLS", func() {
 			})
 
 			It("uses 0-RTT", func() {
-				csc := NewMockClientSessionCache(mockCtrl)
+				csc := mocktls.NewMockClientSessionCache(mockCtrl)
 				var state *tls.ClientSessionState
 				receivedSessionTicket := make(chan struct{})
 				csc.EXPECT().Get(gomock.Any())
@@ -782,7 +738,7 @@ var _ = Describe("Crypto Setup TLS", func() {
 			})
 
 			It("rejects 0-RTT, whent the transport parameters changed", func() {
-				csc := NewMockClientSessionCache(mockCtrl)
+				csc := mocktls.NewMockClientSessionCache(mockCtrl)
 				var state *tls.ClientSessionState
 				receivedSessionTicket := make(chan struct{})
 				csc.EXPECT().Get(gomock.Any())

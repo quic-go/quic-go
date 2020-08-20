@@ -1,4 +1,6 @@
-package handshake
+// +build !go1.15
+
+package qtls
 
 import (
 	. "github.com/onsi/ginkgo"
