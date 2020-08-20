@@ -1278,6 +1278,7 @@ var _ = Describe("Session", func() {
 				var getFrame func(protocol.ByteCount) wire.Frame
 
 				BeforeEach(func() {
+					//nolint:exhaustive
 					switch encLevel {
 					case protocol.EncryptionInitial:
 						sendMode = ackhandler.SendPTOInitial

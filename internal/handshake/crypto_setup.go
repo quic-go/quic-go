@@ -612,6 +612,7 @@ func (h *cryptoSetup) WriteRecord(p []byte) (int, error) {
 	h.mutex.Lock()
 	defer h.mutex.Unlock()
 
+	//nolint:exhaustive // LS records can only be written for Initial and Handshake.
 	switch h.writeEncLevel {
 	case protocol.EncryptionInitial:
 		// assume that the first WriteRecord call contains the ClientHello

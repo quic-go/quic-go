@@ -128,6 +128,7 @@ func (h *ExtendedHeader) Write(b *bytes.Buffer, ver protocol.VersionNumber) erro
 
 func (h *ExtendedHeader) writeLongHeader(b *bytes.Buffer, _ protocol.VersionNumber) error {
 	var packetType uint8
+	//nolint:exhaustive
 	switch h.Type {
 	case protocol.PacketTypeInitial:
 		packetType = 0x0
@@ -151,6 +152,7 @@ func (h *ExtendedHeader) writeLongHeader(b *bytes.Buffer, _ protocol.VersionNumb
 	b.WriteByte(uint8(h.SrcConnectionID.Len()))
 	b.Write(h.SrcConnectionID.Bytes())
 
+	//nolint:exhaustive
 	switch h.Type {
 	case protocol.PacketTypeRetry:
 		b.Write(h.Token)

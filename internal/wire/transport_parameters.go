@@ -268,6 +268,7 @@ func (p *TransportParameters) readNumericTransportParameter(
 	if remainingLen-r.Len() != expectedLen {
 		return fmt.Errorf("inconsistent transport parameter length for %d", paramID)
 	}
+	//nolint:exhaustive // This only covers the numeric transport parameters.
 	switch paramID {
 	case initialMaxStreamDataBidiLocalParameterID:
 		p.InitialMaxStreamDataBidiLocal = protocol.ByteCount(val)

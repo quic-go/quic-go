@@ -67,6 +67,7 @@ func (h *receivedPacketHandler) ReceivedPacket(
 }
 
 func (h *receivedPacketHandler) DropPackets(encLevel protocol.EncryptionLevel) {
+	//nolint:exhaustive // 1-RTT packet number space is never dropped.
 	switch encLevel {
 	case protocol.EncryptionInitial:
 		h.initialPackets = nil
@@ -94,6 +95,7 @@ func (h *receivedPacketHandler) GetAlarmTimeout() time.Time {
 
 func (h *receivedPacketHandler) GetAckFrame(encLevel protocol.EncryptionLevel, onlyIfQueued bool) *wire.AckFrame {
 	var ack *wire.AckFrame
+	//nolint:exhaustive // 0-RTT packets can't contain ACK frames.
 	switch encLevel {
 	case protocol.EncryptionInitial:
 		if h.initialPackets != nil {

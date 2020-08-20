@@ -124,6 +124,8 @@ func getEncryptionLevel(encLevel protocol.EncryptionLevel) *pb.EncryptionLevel {
 		enc = pb.EncryptionLevel_ENCRYPTION_INITIAL
 	case protocol.EncryptionHandshake:
 		enc = pb.EncryptionLevel_ENCRYPTION_HANDSHAKE
+	case protocol.Encryption0RTT:
+		enc = pb.EncryptionLevel_ENCRYPTION_0RTT
 	case protocol.Encryption1RTT:
 		enc = pb.EncryptionLevel_ENCRYPTION_1RTT
 	}

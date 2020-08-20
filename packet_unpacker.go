@@ -65,6 +65,7 @@ func (u *packetUnpacker) Unpack(hdr *wire.Header, rcvTime time.Time, data []byte
 	var encLevel protocol.EncryptionLevel
 	var extHdr *wire.ExtendedHeader
 	var decrypted []byte
+	//nolint:exhaustive // Retry packets can't be unpacked.
 	switch hdr.Type {
 	case protocol.PacketTypeInitial:
 		encLevel = protocol.EncryptionInitial
