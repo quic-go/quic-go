@@ -297,10 +297,10 @@ func (p *TransportParameters) readNumericTransportParameter(
 		}
 		p.AckDelayExponent = uint8(val)
 	case maxAckDelayParameterID:
-		maxAckDelay := time.Duration(val) * time.Millisecond
-		if maxAckDelay >= protocol.MaxMaxAckDelay {
-			return fmt.Errorf("invalid value for max_ack_delay: %dms (maximum %dms)", maxAckDelay/time.Millisecond, (protocol.MaxMaxAckDelay-time.Millisecond)/time.Millisecond)
+		if val > uint64(protocol.MaxMaxAckDelay/time.Millisecond) {
+			return fmt.Errorf("invalid value for max_ack_delay: %dms (maximum %dms)", val, protocol.MaxMaxAckDelay/time.Millisecond)
 		}
+		maxAckDelay := time.Duration(val) * time.Millisecond
 		if maxAckDelay < 0 {
 			maxAckDelay = utils.InfDuration
 		}

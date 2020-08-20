@@ -71,7 +71,7 @@ const MaxAckDelayExponent = 20
 const DefaultMaxAckDelay = 25 * time.Millisecond
 
 // MaxMaxAckDelay is the maximum max_ack_delay
-const MaxMaxAckDelay = 1 << 14 * time.Millisecond
+const MaxMaxAckDelay = (1<<14 - 1) * time.Millisecond
 
 // MaxConnIDLen is the maximum length of the connection ID
 const MaxConnIDLen = 20
