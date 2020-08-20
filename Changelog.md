@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.17.1 (2020-06-20)
+
+- Supports QUIC WG draft-29.
+- Improve bundling of ACK frames (#2543).
+
 ## v0.16.0 (2020-05-31)
 
 - Supports QUIC WG draft-28.
