@@ -69,8 +69,6 @@ const (
 	Encryption1RTT EncryptionLevel = protocol.Encryption1RTT
 	// Encryption0RTT is the 0-RTT encryption level
 	Encryption0RTT EncryptionLevel = protocol.Encryption0RTT
-	// EncryptionNone is no encryption
-	EncryptionNone EncryptionLevel = protocol.EncryptionUnspecified
 )
 
 const (

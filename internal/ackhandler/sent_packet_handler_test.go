@@ -42,7 +42,7 @@ var _ = Describe("SentPacketHandler", func() {
 	}
 
 	ackElicitingPacket := func(p *Packet) *Packet {
-		if p.EncryptionLevel == protocol.EncryptionUnspecified {
+		if p.EncryptionLevel == 0 {
 			p.EncryptionLevel = protocol.Encryption1RTT
 		}
 		if p.Length == 0 {

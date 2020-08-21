@@ -68,7 +68,7 @@ func (p *packetContents) EncryptionLevel() protocol.EncryptionLevel {
 	case protocol.PacketType0RTT:
 		return protocol.Encryption0RTT
 	default:
-		return protocol.EncryptionUnspecified
+		panic("can't determine encryption level")
 	}
 }
 
