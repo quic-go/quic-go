@@ -634,7 +634,7 @@ func (h *sentPacketHandler) onVerifiedLossDetectionTimeout() error {
 		case protocol.Encryption1RTT:
 			h.ptoMode = SendPTOAppData
 		default:
-			return fmt.Errorf("TPO timer in unexpected encryption level: %s", encLevel)
+			return fmt.Errorf("PTO timer in unexpected encryption level: %s", encLevel)
 		}
 	} else {
 		if h.perspective == protocol.PerspectiveServer {
