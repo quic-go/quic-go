@@ -112,6 +112,9 @@ func (p *TransportParameters) unmarshal(r *bytes.Reader, sentBy protocol.Perspec
 		if err != nil {
 			return err
 		}
+		if uint64(r.Len()) < paramLen {
+			return fmt.Errorf("remaining length (%d) smaller than parameter length (%d)", r.Len(), paramLen)
+		}
 		parameterIDs = append(parameterIDs, paramID)
 		switch paramID {
 		case ackDelayExponentParameterID:
@@ -136,51 +139,45 @@ func (p *TransportParameters) unmarshal(r *bytes.Reader, sentBy protocol.Perspec
 			if err := p.readNumericTransportParameter(r, paramID, int(paramLen)); err != nil {
 				return err
 			}
+		case preferredAddressParameterID:
+			if sentBy == protocol.PerspectiveClient {
+				return errors.New("client sent a preferred_address")
+			}
+			if err := p.readPreferredAddress(r, int(paramLen)); err != nil {
+				return err
+			}
+		case disableActiveMigrationParameterID:
+			if paramLen != 0 {
+				return fmt.Errorf("wrong length for disable_active_migration: %d (expected empty)", paramLen)
+			}
+			p.DisableActiveMigration = true
+		case statelessResetTokenParameterID:
+			if sentBy == protocol.PerspectiveClient {
+				return errors.New("client sent a stateless_reset_token")
+			}
+			if paramLen != 16 {
+				return fmt.Errorf("wrong length for stateless_reset_token: %d (expected 16)", paramLen)
+			}
+			var token protocol.StatelessResetToken
+			r.Read(token[:])
+			p.StatelessResetToken = &token
+		case originalDestinationConnectionIDParameterID:
+			if sentBy == protocol.PerspectiveClient {
+				return errors.New("client sent an original_destination_connection_id")
+			}
+			p.OriginalDestinationConnectionID, _ = protocol.ReadConnectionID(r, int(paramLen))
+			readOriginalDestinationConnectionID = true
+		case initialSourceConnectionIDParameterID:
+			p.InitialSourceConnectionID, _ = protocol.ReadConnectionID(r, int(paramLen))
+			readInitialSourceConnectionID = true
+		case retrySourceConnectionIDParameterID:
+			if sentBy == protocol.PerspectiveClient {
+				return errors.New("client sent a retry_source_connection_id")
+			}
+			connID, _ := protocol.ReadConnectionID(r, int(paramLen))
+			p.RetrySourceConnectionID = &connID
 		default:
-			if uint64(r.Len()) < paramLen {
-				return fmt.Errorf("remaining length (%d) smaller than parameter length (%d)", r.Len(), paramLen)
-			}
-			switch paramID {
-			case preferredAddressParameterID:
-				if sentBy == protocol.PerspectiveClient {
-					return errors.New("client sent a preferred_address")
-				}
-				if err := p.readPreferredAddress(r, int(paramLen)); err != nil {
-					return err
-				}
-			case disableActiveMigrationParameterID:
-				if paramLen != 0 {
-					return fmt.Errorf("wrong length for disable_active_migration: %d (expected empty)", paramLen)
-				}
-				p.DisableActiveMigration = true
-			case statelessResetTokenParameterID:
-				if sentBy == protocol.PerspectiveClient {
-					return errors.New("client sent a stateless_reset_token")
-				}
-				if paramLen != 16 {
-					return fmt.Errorf("wrong length for stateless_reset_token: %d (expected 16)", paramLen)
-				}
-				var token protocol.StatelessResetToken
-				r.Read(token[:])
-				p.StatelessResetToken = &token
-			case originalDestinationConnectionIDParameterID:
-				if sentBy == protocol.PerspectiveClient {
-					return errors.New("client sent an original_destination_connection_id")
-				}
-				p.OriginalDestinationConnectionID, _ = protocol.ReadConnectionID(r, int(paramLen))
-				readOriginalDestinationConnectionID = true
-			case initialSourceConnectionIDParameterID:
-				p.InitialSourceConnectionID, _ = protocol.ReadConnectionID(r, int(paramLen))
-				readInitialSourceConnectionID = true
-			case retrySourceConnectionIDParameterID:
-				if sentBy == protocol.PerspectiveClient {
-					return errors.New("client sent a retry_source_connection_id")
-				}
-				connID, _ := protocol.ReadConnectionID(r, int(paramLen))
-				p.RetrySourceConnectionID = &connID
-			default:
-				r.Seek(int64(paramLen), io.SeekCurrent)
-			}
+			r.Seek(int64(paramLen), io.SeekCurrent)
 		}
 	}
 
