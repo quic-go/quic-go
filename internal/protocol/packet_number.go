@@ -11,8 +11,6 @@ const InvalidPacketNumber PacketNumber = -1
 type PacketNumberLen uint8
 
 const (
-	// PacketNumberLenInvalid is the default value and not a valid length for a packet number
-	PacketNumberLenInvalid PacketNumberLen = 0
 	// PacketNumberLen1 is a packet number length of 1 byte
 	PacketNumberLen1 PacketNumberLen = 1
 	// PacketNumberLen2 is a packet number length of 2 bytes
