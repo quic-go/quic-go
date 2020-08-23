@@ -3,6 +3,7 @@ package handshake
 import (
 	"encoding/asn1"
 	"fmt"
+	"io"
 	"net"
 	"time"
 
@@ -39,8 +40,8 @@ type TokenGenerator struct {
 }
 
 // NewTokenGenerator initializes a new TookenGenerator
-func NewTokenGenerator() (*TokenGenerator, error) {
-	tokenProtector, err := newTokenProtector()
+func NewTokenGenerator(rand io.Reader) (*TokenGenerator, error) {
+	tokenProtector, err := newTokenProtector(rand)
 	if err != nil {
 		return nil, err
 	}

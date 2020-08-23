@@ -1,6 +1,7 @@
 package handshake
 
 import (
+	"crypto/rand"
 	"encoding/asn1"
 	"net"
 	"time"
@@ -16,7 +17,7 @@ var _ = Describe("Token Generator", func() {
 
 	BeforeEach(func() {
 		var err error
-		tokenGen, err = NewTokenGenerator()
+		tokenGen, err = NewTokenGenerator(rand.Reader)
 		Expect(err).ToNot(HaveOccurred())
 	})
 
