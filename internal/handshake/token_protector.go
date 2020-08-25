@@ -3,7 +3,6 @@ package handshake
 import (
 	"crypto/aes"
 	"crypto/cipher"
-	"crypto/rand"
 	"crypto/sha256"
 	"fmt"
 	"io"
@@ -26,22 +25,26 @@ const (
 
 // tokenProtector is used to create and verify a token
 type tokenProtectorImpl struct {
+	rand   io.Reader
 	secret []byte
 }
 
 // newTokenProtector creates a source for source address tokens
-func newTokenProtector() (tokenProtector, error) {
+func newTokenProtector(rand io.Reader) (tokenProtector, error) {
 	secret := make([]byte, tokenSecretSize)
 	if _, err := rand.Read(secret); err != nil {
 		return nil, err
 	}
-	return &tokenProtectorImpl{secret: secret}, nil
+	return &tokenProtectorImpl{
+		rand:   rand,
+		secret: secret,
+	}, nil
 }
 
 // NewToken encodes data into a new token.
 func (s *tokenProtectorImpl) NewToken(data []byte) ([]byte, error) {
 	nonce := make([]byte, tokenNonceSize)
-	if _, err := rand.Read(nonce); err != nil {
+	if _, err := s.rand.Read(nonce); err != nil {
 		return nil, err
 	}
 	aead, aeadNonce, err := s.createAEAD(nonce)

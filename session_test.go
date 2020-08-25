@@ -86,7 +86,7 @@ var _ = Describe("Session", func() {
 		mconn = NewMockSendConn(mockCtrl)
 		mconn.EXPECT().RemoteAddr().Return(remoteAddr).AnyTimes()
 		mconn.EXPECT().LocalAddr().Return(localAddr).AnyTimes()
-		tokenGenerator, err := handshake.NewTokenGenerator()
+		tokenGenerator, err := handshake.NewTokenGenerator(rand.Reader)
 		Expect(err).ToNot(HaveOccurred())
 		tracer = mocks.NewMockConnectionTracer(mockCtrl)
 		tracer.EXPECT().SentTransportParameters(gomock.Any())
