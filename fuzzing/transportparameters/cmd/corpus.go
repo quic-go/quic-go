@@ -1,14 +1,15 @@
 package main
 
 import (
-	"fmt"
+	"bytes"
 	"log"
 	"math"
 	"math/rand"
 	"net"
-	"os"
 	"time"
 
+	"github.com/lucas-clemente/quic-go/fuzzing/internal/helper"
+	"github.com/lucas-clemente/quic-go/fuzzing/transportparameters"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 
 	"github.com/lucas-clemente/quic-go/internal/wire"
@@ -26,8 +27,7 @@ func getRandomValue() uint64 {
 }
 
 func main() {
-	rand.Seed(1337)
-	for i := 0; i < 20; i++ {
+	for i := 0; i < 30; i++ {
 		tp := &wire.TransportParameters{
 			InitialMaxStreamDataBidiLocal:  protocol.ByteCount(getRandomValue()),
 			InitialMaxStreamDataBidiRemote: protocol.ByteCount(getRandomValue()),
@@ -69,24 +69,21 @@ func main() {
 				StatelessResetToken: token,
 			}
 		}
-		pers := protocol.PerspectiveServer
+
+		var data []byte
 		if rand.Int()%2 == 0 {
-			pers = protocol.PerspectiveClient
+			pers := protocol.PerspectiveServer
+			if rand.Int()%2 == 0 {
+				pers = protocol.PerspectiveClient
+			}
+			data = tp.Marshal(pers)
+		} else {
+			b := &bytes.Buffer{}
+			tp.MarshalForSessionTicket(b)
+			data = b.Bytes()
 		}
-		if err := writeCorpusFile(fmt.Sprintf("tp%d", i), tp.Marshal(pers)); err != nil {
+		if err := helper.WriteCorpusFileWithPrefix("corpus", data, transportparameters.PrefixLen); err != nil {
 			log.Fatal(err)
 		}
 	}
-}
-
-func writeCorpusFile(name string, data []byte) error {
-	file, err := os.Create("corpus/" + name)
-	if err != nil {
-		return err
-	}
-	data = append(getRandomData(2), data...)
-	if _, err := file.Write(data); err != nil {
-		return err
-	}
-	return file.Close()
 }

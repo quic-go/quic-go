@@ -2,12 +2,12 @@ package main
 
 import (
 	"bytes"
-	"fmt"
+	"log"
 	"math/rand"
-	"os"
 	"time"
 
 	"github.com/lucas-clemente/quic-go"
+	"github.com/lucas-clemente/quic-go/fuzzing/internal/helper"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/internal/qerr"
 	"github.com/lucas-clemente/quic-go/internal/wire"
@@ -246,19 +246,17 @@ func getFrames() []wire.Frame {
 }
 
 func main() {
-	rand.Seed(42)
-
-	for i, f := range getFrames() {
+	for _, f := range getFrames() {
 		b := &bytes.Buffer{}
 		if err := f.Write(b, version); err != nil {
-			panic(err)
+			log.Fatal(err)
 		}
-		if err := writeCorpusFile(fmt.Sprintf("single-frame-%d", i), b.Bytes()); err != nil {
-			panic(err)
+		if err := helper.WriteCorpusFileWithPrefix("corpus", b.Bytes(), 1); err != nil {
+			log.Fatal(err)
 		}
 	}
 
-	for i := 0; i < 25; i++ {
+	for i := 0; i < 30; i++ {
 		frames := getFrames()
 
 		b := &bytes.Buffer{}
@@ -268,26 +266,14 @@ func main() {
 			}
 			f := frames[rand.Intn(len(frames))]
 			if err := f.Write(b, version); err != nil {
-				panic(err)
+				log.Fatal(err)
 			}
 			if rand.Intn(10) == 0 { // write a PADDING frame
 				b.WriteByte(0x0)
 			}
 		}
-		if err := writeCorpusFile(fmt.Sprintf("multiple-frames-%d", i), b.Bytes()); err != nil {
-			panic(err)
+		if err := helper.WriteCorpusFileWithPrefix("corpus", b.Bytes(), 1); err != nil {
+			log.Fatal(err)
 		}
 	}
-}
-
-func writeCorpusFile(name string, data []byte) error {
-	file, err := os.Create("corpus/" + name)
-	if err != nil {
-		return err
-	}
-	data = append(getRandomData(1), data...)
-	if _, err := file.Write(data); err != nil {
-		return err
-	}
-	return file.Close()
 }

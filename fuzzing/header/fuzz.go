@@ -10,13 +10,17 @@ import (
 
 const version = protocol.VersionTLS
 
+// PrefixLen is the number of bytes used for configuration
+const PrefixLen = 1
+
+// Fuzz fuzzes the QUIC header.
 //go:generate go run ./cmd/corpus.go
 func Fuzz(data []byte) int {
-	if len(data) < 1 {
+	if len(data) < PrefixLen {
 		return 0
 	}
 	connIDLen := int(data[0] % 21)
-	data = data[1:]
+	data = data[PrefixLen:]
 
 	if wire.IsVersionNegotiationPacket(data) {
 		return fuzzVNP(data)
