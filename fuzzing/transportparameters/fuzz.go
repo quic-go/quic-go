@@ -4,28 +4,32 @@ import (
 	"bytes"
 	"fmt"
 
+	"github.com/lucas-clemente/quic-go/fuzzing/internal/helper"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/internal/wire"
 )
 
+// PrefixLen is the number of bytes used for configuration
+const PrefixLen = 1
+
+// Fuzz fuzzes the QUIC transport parameters.
 //go:generate go run ./cmd/corpus.go
 func Fuzz(data []byte) int {
-	if len(data) <= 1 {
+	if len(data) <= PrefixLen {
 		return 0
 	}
 
-	if data[0]%2 == 0 {
-		return fuzzTransportParametersForSessionTicket(data[1:])
+	if helper.NthBit(data[0], 0) {
+		return fuzzTransportParametersForSessionTicket(data[PrefixLen:])
 	}
-	return fuzzTransportParameters(data[1:])
+	return fuzzTransportParameters(data[PrefixLen:], helper.NthBit(data[0], 1))
 }
 
-func fuzzTransportParameters(data []byte) int {
-	perspective := protocol.PerspectiveServer
-	if data[0]%2 == 1 {
+func fuzzTransportParameters(data []byte, isServer bool) int {
+	perspective := protocol.PerspectiveClient
+	if isServer {
 		perspective = protocol.PerspectiveServer
 	}
-	data = data[1:]
 
 	tp := &wire.TransportParameters{}
 	if err := tp.Unmarshal(data, perspective); err != nil {

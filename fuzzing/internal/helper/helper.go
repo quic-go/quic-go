@@ -8,6 +8,14 @@ import (
 	"path/filepath"
 )
 
+// NthBit gets the n-th bit of a byte (counting starts at 0).
+func NthBit(val uint8, n int) bool {
+	if n < 0 || n > 7 {
+		panic("invalid value for n")
+	}
+	return val>>n&0x1 == 1
+}
+
 // WriteCorpusFile writes data to a corpus file in directory path.
 // The filename is calculated from the SHA1 sum of the file contents.
 func WriteCorpusFile(path string, data []byte) error {

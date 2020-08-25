@@ -57,4 +57,16 @@ var _ = Describe("exporting", func() {
 		Expect(WriteCorpusFile(subdir, []byte("lorem ipsum"))).To(Succeed())
 		Expect(subdir).To(BeADirectory())
 	})
+
+	It("gets the nth bit of a byte", func() {
+		const val = 0b10010001
+		Expect(NthBit(val, 0)).To(BeTrue())
+		Expect(NthBit(val, 1)).To(BeFalse())
+		Expect(NthBit(val, 2)).To(BeFalse())
+		Expect(NthBit(val, 3)).To(BeFalse())
+		Expect(NthBit(val, 4)).To(BeTrue())
+		Expect(NthBit(val, 5)).To(BeFalse())
+		Expect(NthBit(val, 6)).To(BeFalse())
+		Expect(NthBit(val, 7)).To(BeTrue())
+	})
 })
