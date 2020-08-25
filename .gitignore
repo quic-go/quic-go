@@ -11,5 +11,3 @@ fuzzing/*/crashers
 fuzzing/*/sonarprofile
 fuzzing/*/suppressions
 fuzzing/*/corpus/
-!fuzzing/frames/single-frame*
-!fuzzing/frames/multiple-frame*
