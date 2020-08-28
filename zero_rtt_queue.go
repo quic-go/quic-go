@@ -13,12 +13,16 @@ type zeroRTTQueueEntry struct {
 }
 
 type zeroRTTQueue struct {
-	mutex sync.Mutex
-	queue map[string]*zeroRTTQueueEntry
+	mutex         sync.Mutex
+	queue         map[string]*zeroRTTQueueEntry
+	queueDuration time.Duration // so we can set it in tests
 }
 
 func newZeroRTTQueue() *zeroRTTQueue {
-	return &zeroRTTQueue{queue: make(map[string]*zeroRTTQueueEntry)}
+	return &zeroRTTQueue{
+		queue:         make(map[string]*zeroRTTQueueEntry),
+		queueDuration: protocol.Max0RTTQueueingDuration,
+	}
 }
 
 func (h *zeroRTTQueue) Enqueue(connID protocol.ConnectionID, p *receivedPacket) {
@@ -30,7 +34,9 @@ func (h *zeroRTTQueue) Enqueue(connID protocol.ConnectionID, p *receivedPacket) 
 		if len(h.queue) >= protocol.Max0RTTQueues {
 			return
 		}
-		h.queue[cid] = &zeroRTTQueueEntry{timer: time.AfterFunc(protocol.Max0RTTQueueingDuration, func() { h.deleteQueue(connID) })}
+		h.queue[cid] = &zeroRTTQueueEntry{timer: time.AfterFunc(h.queueDuration, func() {
+			h.deleteQueue(connID)
+		})}
 	}
 	entry := h.queue[cid]
 	if len(entry.packets) >= protocol.Max0RTTQueueLen {

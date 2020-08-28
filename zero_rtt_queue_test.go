@@ -12,9 +12,11 @@ import (
 
 var _ = Describe("0-RTT queue", func() {
 	var q *zeroRTTQueue
+	queueDuration := scaleDuration(20 * time.Millisecond)
 
 	BeforeEach(func() {
 		q = newZeroRTTQueue()
+		q.queueDuration = queueDuration
 	})
 
 	AfterEach(func() {
@@ -107,7 +109,7 @@ var _ = Describe("0-RTT queue", func() {
 		connID := protocol.ConnectionID{0xde, 0xad, 0xbe, 0xef}
 		p := &receivedPacket{data: []byte("foobar"), buffer: getPacketBuffer()}
 		q.Enqueue(connID, p)
-		time.Sleep(protocol.Max0RTTQueueingDuration * 3 / 2)
+		time.Sleep(queueDuration * 3 / 2)
 		Expect(q.Dequeue(connID)).To(BeNil())
 	})
 })
