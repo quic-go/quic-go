@@ -31,7 +31,3 @@ before_install:
 
 script:
   - .travis/script.sh
-
-
-after_success:
-  - .travis/after_success.sh

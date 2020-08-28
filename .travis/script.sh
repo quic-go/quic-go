@@ -3,12 +3,7 @@
 set -ex
 
 if [ "${TESTMODE}" == "unit" ]; then
-  ginkgo -r -v -cover -randomizeAllSpecs -randomizeSuites -trace -skipPackage integrationtests,benchmark
-  # run unit tests with the Go race detector
-  # The Go race detector only works on amd64.
-  if [ "${TRAVIS_GOARCH}" == 'amd64' ]; then
-    ginkgo -race -r -v -randomizeAllSpecs -randomizeSuites -trace -skipPackage integrationtests,benchmark
-  fi
+  ginkgo -r -v -randomizeAllSpecs -randomizeSuites -trace -skipPackage integrationtests,benchmark
 fi
 
 if [ "${TESTMODE}" == "integration" ]; then
