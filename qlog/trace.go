@@ -9,14 +9,15 @@ import (
 )
 
 type topLevel struct {
-	traces traces
+	trace trace
 }
 
 func (topLevel) IsNil() bool { return false }
 func (l topLevel) MarshalJSONObject(enc *gojay.Encoder) {
-	enc.StringKey("qlog_version", "draft-02-wip")
+	enc.StringKey("qlog_format", "NDJSON")
+	enc.StringKey("qlog_version", "draft-02")
 	enc.StringKeyOmitEmpty("title", "quic-go qlog")
-	enc.ArrayKey("traces", l.traces)
+	enc.ObjectKey("trace", l.trace)
 }
 
 type vantagePoint struct {
@@ -51,26 +52,13 @@ func (f commonFields) MarshalJSONObject(enc *gojay.Encoder) {
 
 func (f commonFields) IsNil() bool { return false }
 
-type traces []trace
-
-func (t traces) IsNil() bool { return t == nil }
-func (t traces) MarshalJSONArray(enc *gojay.Encoder) {
-	for _, tr := range t {
-		enc.Object(tr)
-	}
-}
-
 type trace struct {
 	VantagePoint vantagePoint
 	CommonFields commonFields
-	EventFields  []string
-	Events       events
 }
 
 func (trace) IsNil() bool { return false }
 func (t trace) MarshalJSONObject(enc *gojay.Encoder) {
 	enc.ObjectKey("vantage_point", t.VantagePoint)
 	enc.ObjectKey("common_fields", t.CommonFields)
-	enc.SliceStringKey("event_fields", t.EventFields)
-	enc.ArrayKey("events", t.Events)
 }
