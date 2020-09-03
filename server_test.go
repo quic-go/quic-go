@@ -653,10 +653,10 @@ var _ = Describe("Server", func() {
 					<-acceptSession
 					atomic.AddUint32(&counter, 1)
 					sess := NewMockQuicSession(mockCtrl)
-					sess.EXPECT().handlePacket(gomock.Any())
-					sess.EXPECT().run()
-					sess.EXPECT().Context().Return(context.Background())
-					sess.EXPECT().HandshakeComplete().Return(context.Background())
+					sess.EXPECT().handlePacket(gomock.Any()).MaxTimes(1)
+					sess.EXPECT().run().MaxTimes(1)
+					sess.EXPECT().Context().Return(context.Background()).MaxTimes(1)
+					sess.EXPECT().HandshakeComplete().Return(context.Background()).MaxTimes(1)
 					return sess
 				}
 

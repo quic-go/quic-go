@@ -155,7 +155,7 @@ var _ = Describe("Base Flow controller", func() {
 
 			It("increases the window size if read so fast that the window would be consumed in less than 4 RTTs", func() {
 				bytesRead := controller.bytesRead
-				rtt := scaleDuration(20 * time.Millisecond)
+				rtt := scaleDuration(50 * time.Millisecond)
 				setRtt(rtt)
 				// consume more than 2/3 of the window...
 				dataRead := receiveWindowSize*2/3 + 1

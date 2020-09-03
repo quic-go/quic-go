@@ -1,0 +1,42 @@
+on: [push, pull_request]
+
+
+jobs:
+  unit:
+    strategy:
+      matrix:
+        os: [ "ubuntu", "windows", "macos" ]
+        go: [ "1.14", "1.15" ]
+    runs-on: ${{ matrix.os }}-latest
+    name: Unit tests (${{ matrix.os}}, Go ${{ matrix.go }})
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions/setup-go@v2.1.1
+        with: 
+          go-version: ${{ matrix.go }}
+      - run: go version
+      - name: Install test tools
+        run: |
+          go get golang.org/x/tools/cmd/cover
+          go get github.com/onsi/ginkgo/ginkgo
+          go get github.com/onsi/gomega
+      - name: Install dependencies
+        run: go build
+      - name: Run tests
+        env:
+          TIMESCALE_FACTOR: 10
+        run: ginkgo -r -v -cover -randomizeAllSpecs -randomizeSuites -trace -skipPackage integrationtests,benchmark
+      - name: Run tests with race detector
+        if: ${{ matrix.os == 'ubuntu' }} # speed things up. Windows and OSX VMs are slow
+        env:
+          TIMESCALE_FACTOR: 20
+        run: ginkgo -r -v -race -randomizeAllSpecs -randomizeSuites -trace -skipPackage integrationtests,benchmark
+      - name: Gather coverage reports
+        if: ${{ matrix.os != 'windows' }} # TODO: figure out how to upload windows logs
+        run: cat `find . -name "*.coverprofile"` > coverage.txt
+      - name: Upload coverage to Codecov
+        if: ${{ matrix.os != 'windows' }} # TODO: figure out how to upload windows logs
+        uses: codecov/codecov-action@v1
+        with:
+          file: ./coverage.txt
+          env_vars: OS=${{ matrix.os }}, GO=${{ matrix.go }}
