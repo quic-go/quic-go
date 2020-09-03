@@ -1,16 +1,33 @@
 package handshake
 
 import (
+	"crypto/rand"
+	"crypto/rsa"
 	"crypto/tls"
+	"crypto/x509"
 	"fmt"
+	"log"
 
 	"github.com/lucas-clemente/quic-go/fuzzing/internal/helper"
 	"github.com/lucas-clemente/quic-go/internal/handshake"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
-	"github.com/lucas-clemente/quic-go/internal/testdata"
 	"github.com/lucas-clemente/quic-go/internal/utils"
 	"github.com/lucas-clemente/quic-go/internal/wire"
 )
+
+var cert *tls.Certificate
+var certPool *x509.CertPool
+
+func init() {
+	priv, err := rsa.GenerateKey(rand.Reader, 1024)
+	if err != nil {
+		log.Fatal(err)
+	}
+	cert, certPool, err = helper.GenerateCertificate(priv)
+	if err != nil {
+		log.Fatal(err)
+	}
+}
 
 type messageType uint8
 
@@ -137,7 +154,7 @@ func Fuzz(data []byte) int {
 	clientConf := &tls.Config{
 		ServerName: "localhost",
 		NextProtos: []string{alpn},
-		RootCAs:    testdata.GetRootCA(),
+		RootCAs:    certPool,
 	}
 	if useSessionTicketCache {
 		clientConf.ClientSessionCache = tls.NewLRUClientSessionCache(5)
@@ -161,8 +178,6 @@ func Fuzz(data []byte) int {
 	)
 
 	sChunkChan, sInitialStream, sHandshakeStream := initStreams()
-	config := testdata.GetTLSConfig()
-	config.NextProtos = []string{alpn}
 	serverRunner := newRunner(&client, &server, "server")
 	server = handshake.NewCryptoSetupServer(
 		sInitialStream,
@@ -172,7 +187,10 @@ func Fuzz(data []byte) int {
 		nil,
 		&wire.TransportParameters{},
 		serverRunner,
-		config,
+		&tls.Config{
+			Certificates: []tls.Certificate{*cert},
+			NextProtos:   []string{alpn},
+		},
 		enable0RTTServer,
 		utils.NewRTTStats(),
 		nil,
