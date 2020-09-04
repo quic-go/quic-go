@@ -116,6 +116,9 @@ func newRunner(client, server *handshake.CryptoSetup, role string) *runner {
 func (r *runner) OnReceivedParams(*wire.TransportParameters) {}
 func (r *runner) OnHandshakeComplete()                       {}
 func (r *runner) OnError(err error) {
+	if r.errored {
+		return
+	}
 	r.errored = true
 	(*r.client).Close()
 	(*r.server).Close()
