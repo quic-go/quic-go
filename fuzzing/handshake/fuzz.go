@@ -138,6 +138,27 @@ func toEncryptionLevel(n uint8) protocol.EncryptionLevel {
 	}
 }
 
+func maxEncLevel(cs handshake.CryptoSetup, encLevel protocol.EncryptionLevel) protocol.EncryptionLevel {
+	switch encLevel {
+	case protocol.EncryptionInitial:
+		return protocol.EncryptionInitial
+	case protocol.EncryptionHandshake:
+		// Handshake opener not available. We can't possibly read a Handshake handshake message.
+		if opener, err := cs.GetHandshakeOpener(); err != nil || opener == nil {
+			return protocol.EncryptionInitial
+		}
+		return protocol.EncryptionHandshake
+	case protocol.Encryption1RTT:
+		// 1-RTT opener not available. We can't possibly read a post-handshake message.
+		if opener, err := cs.Get1RTTOpener(); err != nil || opener == nil {
+			return maxEncLevel(cs, protocol.EncryptionHandshake)
+		}
+		return protocol.Encryption1RTT
+	default:
+		panic("unexpected encryption level")
+	}
+}
+
 // PrefixLen is the number of bytes used for configuration
 const PrefixLen = 2
 
@@ -233,7 +254,7 @@ messageLoop:
 			if len(b) > 0 && b[0] == messageToReplace {
 				fmt.Println("replacing message to the server", messageType(b[0]).String())
 				b = data
-				encLevel = messageToReplaceEncLevel
+				encLevel = maxEncLevel(server, messageToReplaceEncLevel)
 			}
 			server.HandleMessage(b, encLevel)
 		case c := <-sChunkChan:
@@ -242,7 +263,7 @@ messageLoop:
 			if len(b) > 0 && b[0] == messageToReplace {
 				fmt.Println("replacing message to the client", messageType(b[0]).String())
 				b = data
-				encLevel = messageToReplaceEncLevel
+				encLevel = maxEncLevel(client, messageToReplaceEncLevel)
 			}
 			client.HandleMessage(b, encLevel)
 		case <-done: // test done
