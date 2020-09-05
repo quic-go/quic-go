@@ -81,9 +81,10 @@ func main() {
 		&wire.TransportParameters{},
 		runner,
 		&tls.Config{
-			ServerName: "localhost",
-			NextProtos: []string{alpn},
-			RootCAs:    testdata.GetRootCA(),
+			ServerName:         "localhost",
+			NextProtos:         []string{alpn},
+			RootCAs:            testdata.GetRootCA(),
+			ClientSessionCache: tls.NewLRUClientSessionCache(1),
 		},
 		false,
 		utils.NewRTTStats(),
@@ -142,6 +143,15 @@ messageLoop:
 			break messageLoop
 		}
 	}
+
+	ticket, err := server.GetSessionTicket()
+	if err != nil {
+		log.Fatal(err)
+	}
+	if ticket == nil {
+		log.Fatal("expected a session ticket")
+	}
+	messages = append(messages, ticket)
 
 	for _, m := range messages {
 		if err := helper.WriteCorpusFileWithPrefix("corpus", m, fuzzhandshake.PrefixLen); err != nil {
