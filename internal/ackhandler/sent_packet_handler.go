@@ -278,27 +278,28 @@ func (h *sentPacketHandler) ReceivedAck(ack *wire.AckFrame, encLevel protocol.En
 		h.setLossDetectionTimer()
 	}
 
-	// maybe update the RTT
-	if p := pnSpace.history.GetPacket(ack.LargestAcked()); p != nil {
-		// don't use the ack delay for Initial and Handshake packets
-		var ackDelay time.Duration
-		if encLevel == protocol.Encryption1RTT {
-			ackDelay = utils.MinDuration(ack.DelayTime, h.rttStats.MaxAckDelay())
-		}
-		h.rttStats.UpdateRTT(rcvTime.Sub(p.SendTime), ackDelay, rcvTime)
-		if h.logger.Debug() {
-			h.logger.Debugf("\tupdated RTT: %s (σ: %s)", h.rttStats.SmoothedRTT(), h.rttStats.MeanDeviation())
-		}
-		h.congestion.MaybeExitSlowStart()
-		if h.tracer != nil {
-			h.tracer.UpdatedMetrics(h.rttStats, h.congestion.GetCongestionWindow(), h.bytesInFlight, h.packetsInFlight())
-		}
-	}
-
 	priorInFlight := h.bytesInFlight
 	ackedPackets, err := h.detectAndRemoveAckedPackets(ack, encLevel)
 	if err != nil || len(ackedPackets) == 0 {
 		return err
+	}
+	// update the RTT, if the largest acked is newly acknowledged
+	if len(ackedPackets) > 0 {
+		if p := ackedPackets[len(ackedPackets)-1]; p.PacketNumber == ack.LargestAcked() {
+			// don't use the ack delay for Initial and Handshake packets
+			var ackDelay time.Duration
+			if encLevel == protocol.Encryption1RTT {
+				ackDelay = utils.MinDuration(ack.DelayTime, h.rttStats.MaxAckDelay())
+			}
+			h.rttStats.UpdateRTT(rcvTime.Sub(p.SendTime), ackDelay, rcvTime)
+			if h.logger.Debug() {
+				h.logger.Debugf("\tupdated RTT: %s (σ: %s)", h.rttStats.SmoothedRTT(), h.rttStats.MeanDeviation())
+			}
+			h.congestion.MaybeExitSlowStart()
+			if h.tracer != nil {
+				h.tracer.UpdatedMetrics(h.rttStats, h.congestion.GetCongestionWindow(), h.bytesInFlight, h.packetsInFlight())
+			}
+		}
 	}
 	lostPackets, err := h.detectAndRemoveLostPackets(rcvTime, encLevel)
 	if err != nil {
@@ -330,6 +331,7 @@ func (h *sentPacketHandler) GetLowestPacketNotConfirmedAcked() protocol.PacketNu
 	return h.lowestNotConfirmedAcked
 }
 
+// Packets are returned in ascending packet number order.
 func (h *sentPacketHandler) detectAndRemoveAckedPackets(ack *wire.AckFrame, encLevel protocol.EncryptionLevel) ([]*Packet, error) {
 	pnSpace := h.getPacketNumberSpace(encLevel)
 	var ackedPackets []*Packet
@@ -374,9 +376,6 @@ func (h *sentPacketHandler) detectAndRemoveAckedPackets(ack *wire.AckFrame, encL
 	}
 
 	for _, p := range ackedPackets {
-		if packet := pnSpace.history.GetPacket(p.PacketNumber); packet == nil {
-			continue
-		}
 		if p.LargestAcked != protocol.InvalidPacketNumber && encLevel == protocol.Encryption1RTT {
 			h.lowestNotConfirmedAcked = utils.MaxPacketNumber(h.lowestNotConfirmedAcked, p.LargestAcked+1)
 		}
