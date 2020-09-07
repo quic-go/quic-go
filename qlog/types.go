@@ -211,6 +211,8 @@ func (e transportError) String() string {
 		return "crypto_buffer_exceeded"
 	case qerr.KeyUpdateError:
 		return "key_update_error"
+	case qerr.AEADLimitReached:
+		return "aead_limit_reached"
 	default:
 		return ""
 	}
