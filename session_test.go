@@ -882,12 +882,11 @@ var _ = Describe("Session", func() {
 			Eventually(sess.Context().Done()).Should(BeClosed())
 		})
 
-		It("ignores packets when unpacking fails for any other reason", func() {
-			testErr := errors.New("test err")
+		It("ignores packets when unpacking the header fails", func() {
+			testErr := &headerParseError{errors.New("test error")}
 			unpacker.EXPECT().Unpack(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil, testErr)
 			streamManager.EXPECT().CloseWithError(gomock.Any())
 			cryptoSetup.EXPECT().Close()
-			packer.EXPECT().PackConnectionClose(gomock.Any()).Return(&coalescedPacket{buffer: getPacketBuffer()}, nil)
 			runErr := make(chan error)
 			go func() {
 				defer GinkgoRecover()
@@ -895,17 +894,44 @@ var _ = Describe("Session", func() {
 				runErr <- sess.run()
 			}()
 			expectReplaceWithClosed()
-			tracer.EXPECT().DroppedPacket(logging.PacketType1RTT, gomock.Any(), logging.PacketDropPayloadDecryptError)
+			tracer.EXPECT().DroppedPacket(logging.PacketType1RTT, gomock.Any(), logging.PacketDropHeaderParseError)
 			sess.handlePacket(getPacket(&wire.ExtendedHeader{
 				Header:          wire.Header{DestConnectionID: srcConnID},
 				PacketNumberLen: protocol.PacketNumberLen1,
 			}, nil))
 			Consistently(runErr).ShouldNot(Receive())
 			// make the go routine return
+			packer.EXPECT().PackConnectionClose(gomock.Any()).Return(&coalescedPacket{buffer: getPacketBuffer()}, nil)
 			tracer.EXPECT().ClosedConnection(gomock.Any())
 			tracer.EXPECT().Close()
 			mconn.EXPECT().Write(gomock.Any())
 			sess.shutdown()
+			Eventually(sess.Context().Done()).Should(BeClosed())
+		})
+
+		It("closes the session when unpacking fails because of an error other than a decryption error", func() {
+			unpacker.EXPECT().Unpack(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil, qerr.ConnectionIDLimitError)
+			streamManager.EXPECT().CloseWithError(gomock.Any())
+			cryptoSetup.EXPECT().Close()
+			packer.EXPECT().PackConnectionClose(gomock.Any()).Return(&coalescedPacket{buffer: getPacketBuffer()}, nil)
+			done := make(chan struct{})
+			go func() {
+				defer GinkgoRecover()
+				cryptoSetup.EXPECT().RunHandshake().MaxTimes(1)
+				err := sess.run()
+				Expect(err).To(HaveOccurred())
+				Expect(err.(qerr.ErrorCode)).To(Equal(qerr.ConnectionIDLimitError))
+				close(done)
+			}()
+			expectReplaceWithClosed()
+			mconn.EXPECT().Write(gomock.Any())
+			packet := getPacket(&wire.ExtendedHeader{
+				Header:          wire.Header{DestConnectionID: srcConnID},
+				PacketNumberLen: protocol.PacketNumberLen1,
+			}, nil)
+			tracer.EXPECT().ClosedConnection(gomock.Any())
+			tracer.EXPECT().Close()
+			sess.handlePacket(packet)
 			Eventually(sess.Context().Done()).Should(BeClosed())
 		})
 

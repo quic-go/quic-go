@@ -816,13 +816,25 @@ func (s *session) handleSinglePacket(p *receivedPacket, hdr *wire.Header) bool /
 			s.tryQueueingUndecryptablePacket(p, hdr)
 		case wire.ErrInvalidReservedBits:
 			s.closeLocal(qerr.NewError(qerr.ProtocolViolation, err.Error()))
-		default:
-			// This might be a packet injected by an attacker.
-			// Drop it.
+		case handshake.ErrDecryptionFailed:
+			// This might be a packet injected by an attacker. Drop it.
 			if s.tracer != nil {
 				s.tracer.DroppedPacket(logging.PacketTypeFromHeader(hdr), p.Size(), logging.PacketDropPayloadDecryptError)
 			}
 			s.logger.Debugf("Dropping %s packet (%d bytes) that could not be unpacked. Error: %s", hdr.PacketType(), p.Size(), err)
+		default:
+			var headerErr *headerParseError
+			if errors.As(err, &headerErr) {
+				// This might be a packet injected by an attacker. Drop it.
+				if s.tracer != nil {
+					s.tracer.DroppedPacket(logging.PacketTypeFromHeader(hdr), p.Size(), logging.PacketDropHeaderParseError)
+				}
+				s.logger.Debugf("Dropping %s packet (%d bytes) for which we couldn't unpack the header. Error: %s", hdr.PacketType(), p.Size(), err)
+			} else {
+				// This is an error returned by the AEAD (other than ErrDecryptionFailed).
+				// For example, a PROTOCOL_VIOLATION due to key updates.
+				s.closeLocal(err)
+			}
 		}
 		return false
 	}

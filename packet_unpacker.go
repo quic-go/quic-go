@@ -15,6 +15,24 @@ type headerDecryptor interface {
 	DecryptHeader(sample []byte, firstByte *byte, pnBytes []byte)
 }
 
+type headerParseError struct {
+	err error
+}
+
+func (e *headerParseError) Is(err error) bool {
+	_, ok := err.(*headerParseError)
+	return ok
+}
+
+func (e *headerParseError) Unwrap() error {
+	fmt.Println("unwrap")
+	return e.err
+}
+
+func (e *headerParseError) Error() string {
+	return e.err.Error()
+}
+
 type unpackedPacket struct {
 	packetNumber    protocol.PacketNumber // the decoded packet number
 	hdr             *wire.ExtendedHeader
@@ -40,6 +58,9 @@ func newPacketUnpacker(cs handshake.CryptoSetup, version protocol.VersionNumber)
 	}
 }
 
+// If the reserved bits are invalid, the error is wire.ErrInvalidReservedBits.
+// If any other error occurred when parsing the header, the error is of type headerParseError.
+// If decrypting the payload fails for any reason, the error is the error returned by the AEAD.
 func (u *packetUnpacker) Unpack(hdr *wire.Header, rcvTime time.Time, data []byte) (*unpackedPacket, error) {
 	var encLevel protocol.EncryptionLevel
 	var extHdr *wire.ExtendedHeader
@@ -107,7 +128,7 @@ func (u *packetUnpacker) unpackLongHeaderPacket(opener handshake.LongHeaderOpene
 	// This avoids a timing side-channel, which otherwise might allow an attacker
 	// to gain information about the header encryption.
 	if parseErr != nil && parseErr != wire.ErrInvalidReservedBits {
-		return nil, nil, fmt.Errorf("error parsing extended header: %s", parseErr)
+		return nil, nil, parseErr
 	}
 	extHdrLen := extHdr.ParsedLen()
 	decrypted, err := opener.Open(data[extHdrLen:extHdrLen], data[extHdrLen:], extHdr.PacketNumber, data[:extHdrLen])
@@ -144,10 +165,11 @@ func (u *packetUnpacker) unpackShortHeaderPacket(
 	return extHdr, decrypted, nil
 }
 
+// The error is either nil, a wire.ErrInvalidReservedBits or of type headerParseError.
 func (u *packetUnpacker) unpackHeader(hd headerDecryptor, hdr *wire.Header, data []byte) (*wire.ExtendedHeader, error) {
 	extHdr, err := unpackHeader(hd, hdr, data, u.version)
 	if err != nil && err != wire.ErrInvalidReservedBits {
-		return nil, err
+		return nil, &headerParseError{err: err}
 	}
 	extHdr.PacketNumber = protocol.DecodePacketNumber(
 		extHdr.PacketNumberLen,
