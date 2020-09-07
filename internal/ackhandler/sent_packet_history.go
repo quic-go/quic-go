@@ -31,7 +31,6 @@ func (h *sentPacketHistory) GetPacket(p protocol.PacketNumber) *Packet {
 }
 
 // Iterate iterates through all packets.
-// The callback must not modify the history.
 func (h *sentPacketHistory) Iterate(cb func(*Packet) (cont bool, err error)) error {
 	cont := true
 	for el := h.packetList.Front(); cont && el != nil; el = el.Next() {
@@ -45,8 +44,6 @@ func (h *sentPacketHistory) Iterate(cb func(*Packet) (cont bool, err error)) err
 }
 
 // FirstOutStanding returns the first outstanding packet.
-// It must not be modified (e.g. retransmitted).
-// Use DequeueFirstPacketForRetransmission() to retransmit it.
 func (h *sentPacketHistory) FirstOutstanding() *Packet {
 	if !h.HasOutstandingPackets() {
 		return nil
