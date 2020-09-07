@@ -9,6 +9,7 @@ import (
 
 	mocklogging "github.com/lucas-clemente/quic-go/internal/mocks/logging"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
+	"github.com/lucas-clemente/quic-go/internal/qerr"
 	"github.com/lucas-clemente/quic-go/internal/qtls"
 	"github.com/lucas-clemente/quic-go/internal/utils"
 
@@ -114,6 +115,16 @@ var _ = Describe("Updatable AEAD", func() {
 					encrypted := server.Seal(nil, msg, 0x1337, ad)
 					_, err := client.Open(nil, encrypted, time.Now(), 0x42, protocol.KeyPhaseZero, ad)
 					Expect(err).To(MatchError(ErrDecryptionFailed))
+				})
+
+				It("returns an AEAD_LIMIT_REACHED error when reaching the AEAD limit", func() {
+					client.invalidPacketLimit = 10
+					for i := 0; i < 9; i++ {
+						_, err := client.Open(nil, []byte("foobar"), time.Now(), protocol.PacketNumber(i), protocol.KeyPhaseZero, []byte("ad"))
+						Expect(err).To(MatchError(ErrDecryptionFailed))
+					}
+					_, err := client.Open(nil, []byte("foobar"), time.Now(), 10, protocol.KeyPhaseZero, []byte("ad"))
+					Expect(err).To(MatchError(qerr.AEADLimitReached))
 				})
 
 				Context("key updates", func() {
