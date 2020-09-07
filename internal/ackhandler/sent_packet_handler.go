@@ -209,9 +209,7 @@ func (h *sentPacketHandler) SentPacket(packet *Packet) {
 		h.dropPackets(protocol.EncryptionInitial)
 	}
 	isAckEliciting := h.sentPacketImpl(packet)
-	if isAckEliciting {
-		h.getPacketNumberSpace(packet.EncryptionLevel).history.SentPacket(packet)
-	}
+	h.getPacketNumberSpace(packet.EncryptionLevel).history.SentPacket(packet, isAckEliciting)
 	if h.tracer != nil && isAckEliciting {
 		h.tracer.UpdatedMetrics(h.rttStats, h.congestion.GetCongestionWindow(), h.bytesInFlight, h.packetsInFlight())
 	}

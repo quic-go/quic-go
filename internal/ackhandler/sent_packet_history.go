@@ -22,7 +22,10 @@ func newSentPacketHistory(rttStats *utils.RTTStats) *sentPacketHistory {
 	}
 }
 
-func (h *sentPacketHistory) SentPacket(p *Packet) {
+func (h *sentPacketHistory) SentPacket(p *Packet, isAckEliciting bool) {
+	if !isAckEliciting {
+		return
+	}
 	el := h.packetList.PushBack(*p)
 	h.packetMap[p.PacketNumber] = el
 }

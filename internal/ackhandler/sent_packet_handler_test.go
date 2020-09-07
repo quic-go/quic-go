@@ -141,13 +141,6 @@ var _ = Describe("SentPacketHandler", func() {
 			handler.SentPacket(ackElicitingPacket(&Packet{PacketNumber: 2, SendTime: sendTime.Add(time.Hour), EncryptionLevel: protocol.Encryption1RTT}))
 			Expect(handler.initialPackets.lastAckElicitingPacketTime).To(Equal(sendTime))
 		})
-
-		It("does not store non-ack-eliciting packets", func() {
-			handler.SentPacket(nonAckElicitingPacket(&Packet{PacketNumber: 1}))
-			Expect(handler.appDataPackets.history.Len()).To(BeZero())
-			Expect(handler.appDataPackets.lastAckElicitingPacketTime).To(BeZero())
-			Expect(handler.bytesInFlight).To(BeZero())
-		})
 	})
 
 	Context("ACK processing", func() {
