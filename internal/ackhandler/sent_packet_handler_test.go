@@ -1036,7 +1036,7 @@ var _ = Describe("SentPacketHandler", func() {
 					EncryptionLevel: protocol.Encryption0RTT,
 				}))
 			}
-			for i := protocol.PacketNumber(0); i < 6; i++ {
+			for i := protocol.PacketNumber(6); i < 12; i++ {
 				handler.SentPacket(ackElicitingPacket(&Packet{PacketNumber: i}))
 			}
 			Expect(handler.bytesInFlight).To(Equal(protocol.ByteCount(12)))

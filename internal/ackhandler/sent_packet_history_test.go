@@ -90,36 +90,46 @@ var _ = Describe("SentPacketHistory", func() {
 
 		It("iterates over all packets", func() {
 			var iterations []protocol.PacketNumber
-			err := hist.Iterate(func(p *Packet) (bool, error) {
+			Expect(hist.Iterate(func(p *Packet) (bool, error) {
 				iterations = append(iterations, p.PacketNumber)
 				return true, nil
-			})
-			Expect(err).ToNot(HaveOccurred())
+			})).To(Succeed())
 			Expect(iterations).To(Equal([]protocol.PacketNumber{10, 14, 18}))
 		})
 
 		It("stops iterating", func() {
 			var iterations []protocol.PacketNumber
-			err := hist.Iterate(func(p *Packet) (bool, error) {
+			Expect(hist.Iterate(func(p *Packet) (bool, error) {
 				iterations = append(iterations, p.PacketNumber)
 				return p.PacketNumber != 14, nil
-			})
-			Expect(err).ToNot(HaveOccurred())
+			})).To(Succeed())
 			Expect(iterations).To(Equal([]protocol.PacketNumber{10, 14}))
 		})
 
 		It("returns the error", func() {
 			testErr := errors.New("test error")
 			var iterations []protocol.PacketNumber
-			err := hist.Iterate(func(p *Packet) (bool, error) {
+			Expect(hist.Iterate(func(p *Packet) (bool, error) {
 				iterations = append(iterations, p.PacketNumber)
 				if p.PacketNumber == 14 {
 					return false, testErr
 				}
 				return true, nil
-			})
-			Expect(err).To(MatchError(testErr))
+			})).To(MatchError(testErr))
 			Expect(iterations).To(Equal([]protocol.PacketNumber{10, 14}))
+		})
+
+		It("allows deletions", func() {
+			var iterations []protocol.PacketNumber
+			Expect(hist.Iterate(func(p *Packet) (bool, error) {
+				iterations = append(iterations, p.PacketNumber)
+				if p.PacketNumber == 14 {
+					Expect(hist.Remove(14)).To(Succeed())
+				}
+				return true, nil
+			})).To(Succeed())
+			expectInHistory([]protocol.PacketNumber{10, 18})
+			Expect(iterations).To(Equal([]protocol.PacketNumber{10, 14, 18}))
 		})
 	})
 
