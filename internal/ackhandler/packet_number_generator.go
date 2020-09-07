@@ -5,19 +5,16 @@ import (
 	"math"
 
 	"github.com/lucas-clemente/quic-go/internal/protocol"
-	"github.com/lucas-clemente/quic-go/internal/wire"
 )
 
 // The packetNumberGenerator generates the packet number for the next packet
-// it randomly skips a packet number every averagePeriod packets (on average)
-// it is guarantued to never skip two consecutive packet numbers
+// it randomly skips a packet number every averagePeriod packets (on average).
+// It is guaranteed to never skip two consecutive packet numbers.
 type packetNumberGenerator struct {
 	averagePeriod protocol.PacketNumber
 
 	next       protocol.PacketNumber
 	nextToSkip protocol.PacketNumber
-
-	history []protocol.PacketNumber
 }
 
 func newPacketNumberGenerator(initial, averagePeriod protocol.PacketNumber) *packetNumberGenerator {
@@ -40,14 +37,9 @@ func (p *packetNumberGenerator) Pop() protocol.PacketNumber {
 	p.next++
 
 	if p.next == p.nextToSkip {
-		if len(p.history)+1 > protocol.MaxTrackedSkippedPackets {
-			p.history = p.history[1:]
-		}
-		p.history = append(p.history, p.next)
 		p.next++
 		p.generateNewSkip()
 	}
-
 	return next
 }
 
@@ -66,13 +58,4 @@ func (p *packetNumberGenerator) getRandomNumber() uint16 {
 
 	num := uint16(b[0])<<8 + uint16(b[1])
 	return num
-}
-
-func (p *packetNumberGenerator) Validate(ack *wire.AckFrame) bool {
-	for _, pn := range p.history {
-		if ack.AcksPacket(pn) {
-			return false
-		}
-	}
-	return true
 }
