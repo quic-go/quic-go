@@ -2,6 +2,9 @@ package ackhandler
 
 import (
 	"errors"
+	"time"
+
+	"github.com/lucas-clemente/quic-go/internal/utils"
 
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 	. "github.com/onsi/ginkgo"
@@ -9,7 +12,10 @@ import (
 )
 
 var _ = Describe("SentPacketHistory", func() {
-	var hist *sentPacketHistory
+	var (
+		hist     *sentPacketHistory
+		rttStats *utils.RTTStats
+	)
 
 	expectInHistory := func(packetNumbers []protocol.PacketNumber) {
 		ExpectWithOffset(1, hist.packetMap).To(HaveLen(len(packetNumbers)))
@@ -26,7 +32,8 @@ var _ = Describe("SentPacketHistory", func() {
 	}
 
 	BeforeEach(func() {
-		hist = newSentPacketHistory()
+		rttStats = utils.NewRTTStats()
+		hist = newSentPacketHistory(rttStats)
 	})
 
 	It("saves sent packets", func() {
@@ -153,6 +160,34 @@ var _ = Describe("SentPacketHistory", func() {
 			Expect(hist.HasOutstandingPackets()).To(BeTrue())
 			Expect(hist.Remove(10)).To(Succeed())
 			Expect(hist.HasOutstandingPackets()).To(BeFalse())
+		})
+	})
+
+	Context("deleting old packets", func() {
+		const pto = 3 * time.Second
+
+		BeforeEach(func() {
+			rttStats.UpdateRTT(time.Second, 0, time.Time{})
+			Expect(rttStats.PTO(false)).To(Equal(pto))
+		})
+
+		It("deletes old packets after 3 PTOs", func() {
+			now := time.Now()
+			hist.SentPacket(&Packet{PacketNumber: 10, SendTime: now.Add(-3 * pto), declaredLost: true})
+			Expect(hist.Len()).To(Equal(1))
+			hist.DeleteOldPackets(now.Add(-time.Nanosecond))
+			Expect(hist.Len()).To(Equal(1))
+			hist.DeleteOldPackets(now)
+			Expect(hist.Len()).To(BeZero())
+		})
+
+		It("doesn't delete a packet if it hasn't been declared lost yet", func() {
+			now := time.Now()
+			hist.SentPacket(&Packet{PacketNumber: 10, SendTime: now.Add(-3 * pto), declaredLost: true})
+			hist.SentPacket(&Packet{PacketNumber: 11, SendTime: now.Add(-3 * pto), declaredLost: false})
+			Expect(hist.Len()).To(Equal(2))
+			hist.DeleteOldPackets(now)
+			Expect(hist.Len()).To(Equal(1))
 		})
 	})
 })
