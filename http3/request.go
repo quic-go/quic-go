@@ -37,13 +37,28 @@ func requestFromHeaders(headers []qpack.HeaderField) (*http.Request, error) {
 		httpHeaders.Set("Cookie", strings.Join(httpHeaders["Cookie"], "; "))
 	}
 
-	if len(path) == 0 || len(authority) == 0 || len(method) == 0 {
+	isConnect := method == "CONNECT"
+	if isConnect {
+		if path != "" || authority == "" {
+			return nil, errors.New(":path must be empty and :authority must not be empty")
+		}
+	} else if len(path) == 0 || len(authority) == 0 || len(method) == 0 {
 		return nil, errors.New(":path, :authority and :method must not be empty")
 	}
 
-	u, err := url.ParseRequestURI(path)
-	if err != nil {
-		return nil, err
+	var url_ *url.URL
+	var requestURI string
+	var err error
+
+	if isConnect {
+		url_ = &url.URL{Host: authority}
+		requestURI = authority
+	} else {
+		url_, err = url.ParseRequestURI(path)
+		if err != nil {
+			return nil, err
+		}
+		requestURI = path
 	}
 
 	var contentLength int64
@@ -56,7 +71,7 @@ func requestFromHeaders(headers []qpack.HeaderField) (*http.Request, error) {
 
 	return &http.Request{
 		Method:        method,
-		URL:           u,
+		URL:           url_,
 		Proto:         "HTTP/3",
 		ProtoMajor:    3,
 		ProtoMinor:    0,
@@ -64,7 +79,7 @@ func requestFromHeaders(headers []qpack.HeaderField) (*http.Request, error) {
 		Body:          nil,
 		ContentLength: contentLength,
 		Host:          authority,
-		RequestURI:    path,
+		RequestURI:    requestURI,
 		TLS:           &tls.ConnectionState{},
 	}, nil
 }
