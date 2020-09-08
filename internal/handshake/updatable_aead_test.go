@@ -4,7 +4,6 @@ import (
 	"crypto/rand"
 	"crypto/tls"
 	"fmt"
-	"os"
 	"time"
 
 	"github.com/golang/mock/gomock"
@@ -450,29 +449,6 @@ var _ = Describe("Updatable AEAD", func() {
 							b = client.Seal(nil, []byte("foobar"), 3, []byte("ad"))
 							_, err = server.Open(nil, b, now.Add(10*rttStats.PTO(true)), 3, protocol.KeyPhaseOne, []byte("ad"))
 							Expect(err).ToNot(HaveOccurred())
-						})
-					})
-
-					Context("reading the key update env", func() {
-						AfterEach(func() {
-							os.Setenv(keyUpdateEnv, "")
-							setKeyUpdateInterval()
-						})
-
-						It("uses the default value if the env is not set", func() {
-							setKeyUpdateInterval()
-							Expect(keyUpdateInterval).To(BeEquivalentTo(protocol.KeyUpdateInterval))
-						})
-
-						It("uses the env", func() {
-							os.Setenv(keyUpdateEnv, "1337")
-							setKeyUpdateInterval()
-							Expect(keyUpdateInterval).To(BeEquivalentTo(1337))
-						})
-
-						It("panics when it can't parse the env", func() {
-							os.Setenv(keyUpdateEnv, "foobar")
-							Expect(setKeyUpdateInterval).To(Panic())
 						})
 					})
 				})

@@ -6,8 +6,6 @@ import (
 	"crypto/tls"
 	"encoding/binary"
 	"fmt"
-	"os"
-	"strconv"
 	"time"
 
 	"github.com/lucas-clemente/quic-go/internal/protocol"
@@ -17,30 +15,9 @@ import (
 	"github.com/lucas-clemente/quic-go/logging"
 )
 
-// By setting this environment variable, the key update interval can be adjusted.
-// This is not needed in production, but useful for integration and interop testing.
-// Note that no matter what value is set, a key update is only initiated once it is
-// permitted (i.e. once an ACK for a packet sent at the current key phase has been received).
-const keyUpdateEnv = "QUIC_GO_KEY_UPDATE_INTERVAL"
-
-var keyUpdateInterval uint64
-
-func init() {
-	setKeyUpdateInterval()
-}
-
-func setKeyUpdateInterval() {
-	env := os.Getenv(keyUpdateEnv)
-	if env == "" {
-		keyUpdateInterval = protocol.KeyUpdateInterval
-		return
-	}
-	interval, err := strconv.ParseUint(env, 10, 64)
-	if err != nil {
-		panic(fmt.Sprintf("Cannot parse %s: %s", keyUpdateEnv, err))
-	}
-	keyUpdateInterval = interval
-}
+// KeyUpdateInterval is the maximum number of packets we send or receive before initiating a key update.
+// It's a package-level variable to allow modifying it for testing purposes.
+var KeyUpdateInterval uint64 = protocol.KeyUpdateInterval
 
 type updatableAEAD struct {
 	suite *qtls.CipherSuiteTLS13
@@ -92,7 +69,7 @@ func newUpdatableAEAD(rttStats *utils.RTTStats, tracer logging.ConnectionTracer,
 		largestAcked:            protocol.InvalidPacketNumber,
 		firstRcvdWithCurrentKey: protocol.InvalidPacketNumber,
 		firstSentWithCurrentKey: protocol.InvalidPacketNumber,
-		keyUpdateInterval:       keyUpdateInterval,
+		keyUpdateInterval:       KeyUpdateInterval,
 		rttStats:                rttStats,
 		tracer:                  tracer,
 		logger:                  logger,

@@ -160,7 +160,7 @@ const MaxAckDelay = 25 * time.Millisecond
 // This is the value that should be advertised to the peer.
 const MaxAckDelayInclGranularity = MaxAckDelay + TimerGranularity
 
-// KeyUpdateInterval is the maximum number of packets we send or receive before initiating a key udpate.
+// KeyUpdateInterval is the maximum number of packets we send or receive before initiating a key update.
 const KeyUpdateInterval = 100 * 1000
 
 // Max0RTTQueueingDuration is the maximum time that we store 0-RTT packets in order to wait for the corresponding Initial to be received.

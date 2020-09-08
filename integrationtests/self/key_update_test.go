@@ -5,9 +5,10 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net"
-	"os"
 
 	quic "github.com/lucas-clemente/quic-go"
+	"github.com/lucas-clemente/quic-go/internal/handshake"
+
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 )
@@ -35,7 +36,7 @@ var _ = Describe("Key Update tests", func() {
 
 	BeforeEach(func() {
 		// update keys as frequently as possible
-		os.Setenv("QUIC_GO_KEY_UPDATE_INTERVAL", "1")
+		handshake.KeyUpdateInterval = 1
 		runServer()
 	})
 
