@@ -39,6 +39,7 @@ var _ = Describe("Packet Header", func() {
 					KeyPhase:     protocol.KeyPhaseZero,
 				},
 				map[string]interface{}{
+					"packet_type":   "1RTT",
 					"packet_number": 42,
 					"dcil":          0,
 					"key_phase_bit": "0",
@@ -58,6 +59,7 @@ var _ = Describe("Packet Header", func() {
 					},
 				},
 				map[string]interface{}{
+					"packet_type":    "initial",
 					"packet_number":  42,
 					"payload_length": 123,
 					"dcil":           0,
@@ -78,6 +80,7 @@ var _ = Describe("Packet Header", func() {
 					},
 				},
 				map[string]interface{}{
+					"packet_type":   "handshake",
 					"packet_number": 0,
 					"dcil":          0,
 					"scil":          0,
@@ -98,6 +101,7 @@ var _ = Describe("Packet Header", func() {
 					},
 				},
 				map[string]interface{}{
+					"packet_type":   "handshake",
 					"packet_number": 42,
 					"dcil":          0,
 					"scil":          16,
@@ -115,6 +119,7 @@ var _ = Describe("Packet Header", func() {
 					KeyPhase:     protocol.KeyPhaseOne,
 				},
 				map[string]interface{}{
+					"packet_type":   "1RTT",
 					"packet_number": 42,
 					"dcil":          4,
 					"dcid":          "deadbeef",

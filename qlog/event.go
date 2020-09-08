@@ -105,7 +105,6 @@ func (e eventConnectionClosed) MarshalJSONObject(enc *gojay.Encoder) {
 }
 
 type eventPacketSent struct {
-	PacketType  packetType
 	Header      packetHeader
 	Frames      frames
 	IsCoalesced bool
@@ -119,7 +118,6 @@ func (e eventPacketSent) Name() string       { return "packet_sent" }
 func (e eventPacketSent) IsNil() bool        { return false }
 
 func (e eventPacketSent) MarshalJSONObject(enc *gojay.Encoder) {
-	enc.StringKey("packet_type", e.PacketType.String())
 	enc.ObjectKey("header", e.Header)
 	enc.ArrayKeyOmitEmpty("frames", e.Frames)
 	enc.BoolKeyOmitEmpty("is_coalesced", e.IsCoalesced)
@@ -127,7 +125,6 @@ func (e eventPacketSent) MarshalJSONObject(enc *gojay.Encoder) {
 }
 
 type eventPacketReceived struct {
-	PacketType  packetType
 	Header      packetHeader
 	Frames      frames
 	IsCoalesced bool
@@ -141,7 +138,6 @@ func (e eventPacketReceived) Name() string       { return "packet_received" }
 func (e eventPacketReceived) IsNil() bool        { return false }
 
 func (e eventPacketReceived) MarshalJSONObject(enc *gojay.Encoder) {
-	enc.StringKey("packet_type", e.PacketType.String())
 	enc.ObjectKey("header", e.Header)
 	enc.ArrayKeyOmitEmpty("frames", e.Frames)
 	enc.BoolKeyOmitEmpty("is_coalesced", e.IsCoalesced)
@@ -157,7 +153,6 @@ func (e eventRetryReceived) Name() string       { return "packet_received" }
 func (e eventRetryReceived) IsNil() bool        { return false }
 
 func (e eventRetryReceived) MarshalJSONObject(enc *gojay.Encoder) {
-	enc.StringKey("packet_type", packetType(logging.PacketTypeRetry).String())
 	enc.ObjectKey("header", e.Header)
 }
 
@@ -171,7 +166,6 @@ func (e eventVersionNegotiationReceived) Name() string       { return "packet_re
 func (e eventVersionNegotiationReceived) IsNil() bool        { return false }
 
 func (e eventVersionNegotiationReceived) MarshalJSONObject(enc *gojay.Encoder) {
-	enc.StringKey("packet_type", packetType(logging.PacketTypeVersionNegotiation).String())
 	enc.ObjectKey("header", e.Header)
 	enc.ArrayKey("supported_versions", versions(e.SupportedVersions))
 }

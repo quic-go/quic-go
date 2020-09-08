@@ -1,10 +1,11 @@
 package qlog
 
 import (
-	"github.com/francoispqt/gojay"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/internal/wire"
 	"github.com/lucas-clemente/quic-go/logging"
+
+	"github.com/francoispqt/gojay"
 )
 
 func getPacketTypeFromEncryptionLevel(encLevel protocol.EncryptionLevel) packetType {
@@ -59,6 +60,7 @@ func transformExtendedHeader(hdr *wire.ExtendedHeader) *packetHeader {
 }
 
 func (h packetHeader) MarshalJSONObject(enc *gojay.Encoder) {
+	enc.StringKey("packet_type", packetType(h.PacketType).String())
 	if h.PacketType != logging.PacketTypeRetry && h.PacketType != logging.PacketTypeVersionNegotiation {
 		enc.Int64Key("packet_number", int64(h.PacketNumber))
 	}

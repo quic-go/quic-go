@@ -323,9 +323,9 @@ var _ = Describe("Tracing", func() {
 				Expect(entry.Category).To(Equal("transport"))
 				Expect(entry.Name).To(Equal("packet_sent"))
 				ev := entry.Event
-				Expect(ev).To(HaveKeyWithValue("packet_type", "handshake"))
 				Expect(ev).To(HaveKey("header"))
 				hdr := ev["header"].(map[string]interface{})
+				Expect(hdr).To(HaveKeyWithValue("packet_type", "handshake"))
 				Expect(hdr).To(HaveKeyWithValue("packet_size", float64(987)))
 				Expect(hdr).To(HaveKeyWithValue("packet_number", float64(1337)))
 				Expect(hdr).To(HaveKeyWithValue("scid", "04030201"))
@@ -348,8 +348,10 @@ var _ = Describe("Tracing", func() {
 				)
 				entry := exportAndParseSingle()
 				ev := entry.Event
-				Expect(ev).To(HaveKeyWithValue("packet_type", "1RTT"))
 				Expect(ev).To(HaveKey("header"))
+				hdr := ev["header"].(map[string]interface{})
+				Expect(hdr).To(HaveKeyWithValue("packet_type", "1RTT"))
+				Expect(hdr).To(HaveKeyWithValue("packet_number", float64(1337)))
 				Expect(ev).To(HaveKey("frames"))
 				frames := ev["frames"].([]interface{})
 				Expect(frames).To(HaveLen(2))
@@ -380,9 +382,9 @@ var _ = Describe("Tracing", func() {
 				Expect(entry.Category).To(Equal("transport"))
 				Expect(entry.Name).To(Equal("packet_received"))
 				ev := entry.Event
-				Expect(ev).To(HaveKeyWithValue("packet_type", "initial"))
 				Expect(ev).To(HaveKey("header"))
 				hdr := ev["header"].(map[string]interface{})
+				Expect(hdr).To(HaveKeyWithValue("packet_type", "initial"))
 				Expect(hdr).To(HaveKeyWithValue("packet_size", float64(789)))
 				Expect(hdr).To(HaveKeyWithValue("packet_number", float64(1337)))
 				Expect(hdr).To(HaveKeyWithValue("scid", "04030201"))
@@ -405,9 +407,9 @@ var _ = Describe("Tracing", func() {
 				Expect(entry.Category).To(Equal("transport"))
 				Expect(entry.Name).To(Equal("packet_received"))
 				ev := entry.Event
-				Expect(ev).To(HaveKeyWithValue("packet_type", "retry"))
 				Expect(ev).To(HaveKey("header"))
 				header := ev["header"]
+				Expect(header).To(HaveKeyWithValue("packet_type", "retry"))
 				Expect(header).ToNot(HaveKey("packet_number"))
 				Expect(header).To(HaveKey("version"))
 				Expect(header).To(HaveKey("dcid"))
@@ -430,12 +432,12 @@ var _ = Describe("Tracing", func() {
 				Expect(entry.Category).To(Equal("transport"))
 				Expect(entry.Name).To(Equal("packet_received"))
 				ev := entry.Event
-				Expect(ev).To(HaveKeyWithValue("packet_type", "version_negotiation"))
 				Expect(ev).To(HaveKey("header"))
 				Expect(ev).ToNot(HaveKey("frames"))
 				Expect(ev).To(HaveKey("supported_versions"))
 				Expect(ev["supported_versions"].([]interface{})).To(Equal([]interface{}{"deadbeef", "decafbad"}))
 				header := ev["header"]
+				Expect(header).To(HaveKeyWithValue("packet_type", "version_negotiation"))
 				Expect(header).ToNot(HaveKey("packet_number"))
 				Expect(header).ToNot(HaveKey("version"))
 				Expect(header).To(HaveKey("dcid"))
