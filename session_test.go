@@ -17,6 +17,7 @@ import (
 	"github.com/lucas-clemente/quic-go/internal/handshake"
 	"github.com/lucas-clemente/quic-go/internal/mocks"
 	mockackhandler "github.com/lucas-clemente/quic-go/internal/mocks/ackhandler"
+	mocklogging "github.com/lucas-clemente/quic-go/internal/mocks/logging"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/internal/qerr"
 	"github.com/lucas-clemente/quic-go/internal/testutils"
@@ -50,7 +51,7 @@ var _ = Describe("Session", func() {
 		streamManager *MockStreamManager
 		packer        *MockPacker
 		cryptoSetup   *mocks.MockCryptoSetup
-		tracer        *mocks.MockConnectionTracer
+		tracer        *mocklogging.MockConnectionTracer
 	)
 	remoteAddr := &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 1337}
 	localAddr := &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 7331}
@@ -88,7 +89,7 @@ var _ = Describe("Session", func() {
 		mconn.EXPECT().LocalAddr().Return(localAddr).AnyTimes()
 		tokenGenerator, err := handshake.NewTokenGenerator(rand.Reader)
 		Expect(err).ToNot(HaveOccurred())
-		tracer = mocks.NewMockConnectionTracer(mockCtrl)
+		tracer = mocklogging.NewMockConnectionTracer(mockCtrl)
 		tracer.EXPECT().SentTransportParameters(gomock.Any())
 		tracer.EXPECT().UpdatedKeyFromTLS(gomock.Any(), gomock.Any()).AnyTimes()
 		tracer.EXPECT().UpdatedCongestionState(gomock.Any())
@@ -2109,7 +2110,7 @@ var _ = Describe("Client Session", func() {
 		packer        *MockPacker
 		mconn         *MockSendConn
 		cryptoSetup   *mocks.MockCryptoSetup
-		tracer        *mocks.MockConnectionTracer
+		tracer        *mocklogging.MockConnectionTracer
 		tlsConf       *tls.Config
 		quicConf      *Config
 	)
@@ -2148,7 +2149,7 @@ var _ = Describe("Client Session", func() {
 			tlsConf = &tls.Config{}
 		}
 		sessionRunner = NewMockSessionRunner(mockCtrl)
-		tracer = mocks.NewMockConnectionTracer(mockCtrl)
+		tracer = mocklogging.NewMockConnectionTracer(mockCtrl)
 		tracer.EXPECT().SentTransportParameters(gomock.Any())
 		tracer.EXPECT().UpdatedKeyFromTLS(gomock.Any(), gomock.Any()).AnyTimes()
 		tracer.EXPECT().UpdatedCongestionState(gomock.Any())

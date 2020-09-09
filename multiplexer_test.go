@@ -3,7 +3,7 @@ package quic
 import (
 	"net"
 
-	"github.com/lucas-clemente/quic-go/internal/mocks"
+	mocklogging "github.com/lucas-clemente/quic-go/internal/mocks/logging"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -25,7 +25,7 @@ var _ = Describe("Client Multiplexer", func() {
 		pconn := newMockPacketConn()
 		pconn.addr = &net.UDPAddr{IP: net.IPv4(1, 2, 3, 4), Port: 4321}
 		conn := testConn{PacketConn: pconn}
-		tracer := mocks.NewMockTracer(mockCtrl)
+		tracer := mocklogging.NewMockTracer(mockCtrl)
 		_, err := getMultiplexer().AddConn(conn, 8, []byte("foobar"), tracer)
 		Expect(err).ToNot(HaveOccurred())
 		conn.counter++
@@ -52,9 +52,9 @@ var _ = Describe("Client Multiplexer", func() {
 
 	It("errors when adding an existing conn with different tracers", func() {
 		conn := newMockPacketConn()
-		_, err := getMultiplexer().AddConn(conn, 7, nil, mocks.NewMockTracer(mockCtrl))
+		_, err := getMultiplexer().AddConn(conn, 7, nil, mocklogging.NewMockTracer(mockCtrl))
 		Expect(err).ToNot(HaveOccurred())
-		_, err = getMultiplexer().AddConn(conn, 7, nil, mocks.NewMockTracer(mockCtrl))
+		_, err = getMultiplexer().AddConn(conn, 7, nil, mocklogging.NewMockTracer(mockCtrl))
 		Expect(err).To(MatchError("cannot use different tracers on the same packet conn"))
 	})
 })
