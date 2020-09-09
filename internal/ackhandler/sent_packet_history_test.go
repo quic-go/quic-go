@@ -56,16 +56,6 @@ var _ = Describe("SentPacketHistory", func() {
 		})
 	})
 
-	It("gets a packet by packet number", func() {
-		p := &Packet{PacketNumber: 2}
-		hist.SentPacket(p)
-		Expect(hist.GetPacket(2)).To(Equal(p))
-	})
-
-	It("returns nil if the packet doesn't exist", func() {
-		Expect(hist.GetPacket(1337)).To(BeNil())
-	})
-
 	It("removes packets", func() {
 		hist.SentPacket(&Packet{PacketNumber: 1})
 		hist.SentPacket(&Packet{PacketNumber: 4})
