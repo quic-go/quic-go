@@ -307,7 +307,9 @@ func (e eventKeyUpdated) IsNil() bool        { return false }
 func (e eventKeyUpdated) MarshalJSONObject(enc *gojay.Encoder) {
 	enc.StringKey("trigger", e.Trigger.String())
 	enc.StringKey("key_type", e.KeyType.String())
-	enc.Uint64KeyOmitEmpty("generation", uint64(e.Generation))
+	if e.KeyType == keyTypeClient1RTT || e.KeyType == keyTypeServer1RTT {
+		enc.Uint64Key("generation", uint64(e.Generation))
+	}
 }
 
 type eventKeyRetired struct {
