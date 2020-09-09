@@ -14,9 +14,8 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/lucas-clemente/quic-go/internal/mocks"
-
 	"github.com/lucas-clemente/quic-go/internal/handshake"
+	mocklogging "github.com/lucas-clemente/quic-go/internal/mocks/logging"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/internal/qerr"
 	"github.com/lucas-clemente/quic-go/internal/testdata"
@@ -186,11 +185,11 @@ var _ = Describe("Server", func() {
 		var (
 			serv   *baseServer
 			phm    *MockPacketHandlerManager
-			tracer *mocks.MockTracer
+			tracer *mocklogging.MockTracer
 		)
 
 		BeforeEach(func() {
-			tracer = mocks.NewMockTracer(mockCtrl)
+			tracer = mocklogging.NewMockTracer(mockCtrl)
 			ln, err := Listen(conn, tlsConf, &Config{Tracer: tracer})
 			Expect(err).ToNot(HaveOccurred())
 			serv = ln.(*baseServer)

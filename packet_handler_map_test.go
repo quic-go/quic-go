@@ -7,7 +7,7 @@ import (
 	"net"
 	"time"
 
-	"github.com/lucas-clemente/quic-go/internal/mocks"
+	mocklogging "github.com/lucas-clemente/quic-go/internal/mocks/logging"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/internal/utils"
 	"github.com/lucas-clemente/quic-go/internal/wire"
@@ -23,7 +23,7 @@ var _ = Describe("Packet Handler Map", func() {
 	var (
 		handler *packetHandlerMap
 		conn    *mockPacketConn
-		tracer  *mocks.MockTracer
+		tracer  *mocklogging.MockTracer
 
 		connIDLen         int
 		statelessResetKey []byte
@@ -51,7 +51,7 @@ var _ = Describe("Packet Handler Map", func() {
 	BeforeEach(func() {
 		statelessResetKey = nil
 		connIDLen = 0
-		tracer = mocks.NewMockTracer(mockCtrl)
+		tracer = mocklogging.NewMockTracer(mockCtrl)
 	})
 
 	JustBeforeEach(func() {

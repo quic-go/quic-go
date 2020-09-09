@@ -6,7 +6,7 @@ import (
 	"reflect"
 	"time"
 
-	"github.com/lucas-clemente/quic-go/internal/mocks"
+	mocklogging "github.com/lucas-clemente/quic-go/internal/mocks/logging"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/quictrace"
 
@@ -73,7 +73,7 @@ var _ = Describe("Config", func() {
 			case "QuicTracer":
 				f.Set(reflect.ValueOf(quictrace.NewTracer()))
 			case "Tracer":
-				f.Set(reflect.ValueOf(mocks.NewMockTracer(mockCtrl)))
+				f.Set(reflect.ValueOf(mocklogging.NewMockTracer(mockCtrl)))
 			default:
 				Fail(fmt.Sprintf("all fields must be accounted for, but saw unknown field %q", fn))
 			}

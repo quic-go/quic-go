@@ -9,14 +9,14 @@ import (
 	"os"
 	"time"
 
-	"github.com/lucas-clemente/quic-go/logging"
-
-	"github.com/golang/mock/gomock"
-	"github.com/lucas-clemente/quic-go/internal/mocks"
+	mocklogging "github.com/lucas-clemente/quic-go/internal/mocks/logging"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/internal/utils"
 	"github.com/lucas-clemente/quic-go/internal/wire"
+	"github.com/lucas-clemente/quic-go/logging"
 	"github.com/lucas-clemente/quic-go/quictrace"
+
+	"github.com/golang/mock/gomock"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -31,7 +31,7 @@ var _ = Describe("Client", func() {
 		mockMultiplexer *MockMultiplexer
 		origMultiplexer multiplexer
 		tlsConf         *tls.Config
-		tracer          *mocks.MockConnectionTracer
+		tracer          *mocklogging.MockConnectionTracer
 		config          *Config
 
 		originalClientSessConstructor func(
@@ -66,8 +66,8 @@ var _ = Describe("Client", func() {
 		tlsConf = &tls.Config{NextProtos: []string{"proto1"}}
 		connID = protocol.ConnectionID{0, 0, 0, 0, 0, 0, 0x13, 0x37}
 		originalClientSessConstructor = newClientSession
-		tracer = mocks.NewMockConnectionTracer(mockCtrl)
-		tr := mocks.NewMockTracer(mockCtrl)
+		tracer = mocklogging.NewMockConnectionTracer(mockCtrl)
+		tr := mocklogging.NewMockTracer(mockCtrl)
 		tr.EXPECT().TracerForConnection(protocol.PerspectiveClient, gomock.Any()).Return(tracer).MaxTimes(1)
 		config = &Config{Tracer: tr}
 		Eventually(areSessionsRunning).Should(BeFalse())
