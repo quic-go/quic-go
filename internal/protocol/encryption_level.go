@@ -2,7 +2,7 @@ package protocol
 
 // EncryptionLevel is the encryption level
 // Default value is Unencrypted
-type EncryptionLevel int
+type EncryptionLevel uint8
 
 const (
 	// EncryptionUnspecified is a not specified encryption level
