@@ -207,7 +207,15 @@ var _ = Describe("Updatable AEAD", func() {
 							client.rollKeys(time.Now())
 							encrypted := client.Seal(nil, msg, 0x1337, ad)
 							_, err := server.Open(nil, encrypted, time.Now(), 0x1337, protocol.KeyPhaseOne, ad)
-							Expect(err).To(MatchError("PROTOCOL_VIOLATION: wrong initial keyphase"))
+							Expect(err).To(MatchError("PROTOCOL_VIOLATION: wrong initial key phase"))
+						})
+
+						It("only errors when the peer starts with key phase 1 if decrypting the packet succeeds", func() {
+							client.rollKeys(time.Now())
+							encrypted := client.Seal(nil, msg, 0x1337, ad)
+							encrypted = encrypted[:len(encrypted)-1]
+							_, err := server.Open(nil, encrypted, time.Now(), 0x1337, protocol.KeyPhaseOne, ad)
+							Expect(err).To(MatchError(ErrDecryptionFailed))
 						})
 
 						It("errors when the peer updates keys too frequently", func() {

@@ -153,26 +153,31 @@ func (a *updatableAEAD) Open(dst, src []byte, rcvTime time.Time, pn protocol.Pac
 	}
 	binary.BigEndian.PutUint64(a.nonceBuf[len(a.nonceBuf)-8:], uint64(pn))
 	if kp != a.keyPhase.Bit() {
+		var receivedWrongInitialKeyPhase bool
 		if a.firstRcvdWithCurrentKey == protocol.InvalidPacketNumber || pn < a.firstRcvdWithCurrentKey {
 			if a.keyPhase == 0 {
 				// This can only occur when the first packet received has key phase 1.
 				// This is an error, since the key phase starts at 0,
 				// and peers are only allowed to update keys after the handshake is confirmed.
-				return nil, qerr.NewError(qerr.ProtocolViolation, "wrong initial keyphase")
+				// Proceed from here, and only return an error if decryption of the packet succeeds.
+				receivedWrongInitialKeyPhase = true
+			} else {
+				if a.prevRcvAEAD == nil {
+					return nil, ErrKeysDropped
+				}
+				// we updated the key, but the peer hasn't updated yet
+				dec, err := a.prevRcvAEAD.Open(dst, a.nonceBuf, src, ad)
+				if err != nil {
+					err = ErrDecryptionFailed
+				}
+				return dec, err
 			}
-			if a.prevRcvAEAD == nil {
-				return nil, ErrKeysDropped
-			}
-			// we updated the key, but the peer hasn't updated yet
-			dec, err := a.prevRcvAEAD.Open(dst, a.nonceBuf, src, ad)
-			if err != nil {
-				err = ErrDecryptionFailed
-			}
-			return dec, err
 		}
 		// try opening the packet with the next key phase
 		dec, err := a.nextRcvAEAD.Open(dst, a.nonceBuf, src, ad)
-		if err != nil {
+		if err == nil && receivedWrongInitialKeyPhase {
+			return nil, qerr.NewError(qerr.ProtocolViolation, "wrong initial key phase")
+		} else if err != nil {
 			return nil, ErrDecryptionFailed
 		}
 		// Opening succeeded. Check if the peer was allowed to update.
