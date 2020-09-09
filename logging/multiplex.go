@@ -162,6 +162,12 @@ func (m *connTracerMultiplexer) DroppedEncryptionLevel(encLevel EncryptionLevel)
 	}
 }
 
+func (m *connTracerMultiplexer) DroppedKey(generation KeyPhase) {
+	for _, t := range m.tracers {
+		t.DroppedKey(generation)
+	}
+}
+
 func (m *connTracerMultiplexer) SetLossTimer(typ TimerType, encLevel EncryptionLevel, exp time.Time) {
 	for _, t := range m.tracers {
 		t.SetLossTimer(typ, encLevel, exp)

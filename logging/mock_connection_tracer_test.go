@@ -86,6 +86,18 @@ func (mr *MockConnectionTracerMockRecorder) DroppedEncryptionLevel(arg0 interfac
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DroppedEncryptionLevel", reflect.TypeOf((*MockConnectionTracer)(nil).DroppedEncryptionLevel), arg0)
 }
 
+// DroppedKey mocks base method
+func (m *MockConnectionTracer) DroppedKey(arg0 protocol.KeyPhase) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "DroppedKey", arg0)
+}
+
+// DroppedKey indicates an expected call of DroppedKey
+func (mr *MockConnectionTracerMockRecorder) DroppedKey(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DroppedKey", reflect.TypeOf((*MockConnectionTracer)(nil).DroppedKey), arg0)
+}
+
 // DroppedPacket mocks base method
 func (m *MockConnectionTracer) DroppedPacket(arg0 protocol.PacketType, arg1 protocol.ByteCount, arg2 PacketDropReason) {
 	m.ctrl.T.Helper()

@@ -214,6 +214,7 @@ func (t *connTracer) UpdatedPTOCount(value uint32) {
 func (t *connTracer) UpdatedKeyFromTLS(logging.EncryptionLevel, logging.Perspective)     {}
 func (t *connTracer) UpdatedKey(logging.KeyPhase, bool)                                  {}
 func (t *connTracer) DroppedEncryptionLevel(logging.EncryptionLevel)                     {}
+func (t *connTracer) DroppedKey(logging.KeyPhase)                                        {}
 func (t *connTracer) SetLossTimer(logging.TimerType, logging.EncryptionLevel, time.Time) {}
 func (t *connTracer) LossTimerExpired(logging.TimerType, logging.EncryptionLevel)        {}
 func (t *connTracer) LossTimerCanceled()                                                 {}

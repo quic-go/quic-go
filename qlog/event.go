@@ -322,8 +322,13 @@ func (e eventKeyRetired) Name() string       { return "key_retired" }
 func (e eventKeyRetired) IsNil() bool        { return false }
 
 func (e eventKeyRetired) MarshalJSONObject(enc *gojay.Encoder) {
-	enc.StringKey("trigger", "tls")
+	if e.KeyType != keyTypeClient1RTT && e.KeyType != keyTypeServer1RTT {
+		enc.StringKey("trigger", "tls")
+	}
 	enc.StringKey("key_type", e.KeyType.String())
+	if e.KeyType == keyTypeClient1RTT || e.KeyType == keyTypeServer1RTT {
+		enc.Uint64Key("generation", uint64(e.Generation))
+	}
 }
 
 type eventTransportParameters struct {

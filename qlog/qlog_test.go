@@ -611,6 +611,25 @@ var _ = Describe("Tracing", func() {
 				Expect(keyTypes).To(ContainElement("client_initial_secret"))
 			})
 
+			It("records dropped keys", func() {
+				tracer.DroppedKey(42)
+				entries := exportAndParse()
+				Expect(entries).To(HaveLen(2))
+				var keyTypes []string
+				for _, entry := range entries {
+					Expect(entry.Time).To(BeTemporally("~", time.Now(), scaleDuration(10*time.Millisecond)))
+					Expect(entry.Category).To(Equal("security"))
+					Expect(entry.Name).To(Equal("key_retired"))
+					ev := entry.Event
+					Expect(ev).To(HaveKeyWithValue("generation", float64(42)))
+					Expect(ev).ToNot(HaveKey("trigger"))
+					Expect(ev).To(HaveKey("key_type"))
+					keyTypes = append(keyTypes, ev["key_type"].(string))
+				}
+				Expect(keyTypes).To(ContainElement("server_1rtt_secret"))
+				Expect(keyTypes).To(ContainElement("client_1rtt_secret"))
+			})
+
 			It("records when the timer is set", func() {
 				timeout := time.Now().Add(137 * time.Millisecond)
 				tracer.SetLossTimer(logging.TimerTypePTO, protocol.EncryptionHandshake, timeout)
