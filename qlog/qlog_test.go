@@ -560,6 +560,20 @@ var _ = Describe("Tracing", func() {
 				Expect(ev).ToNot(HaveKey("new"))
 			})
 
+			It("records TLS key updates, for 1-RTT keys", func() {
+				tracer.UpdatedKeyFromTLS(protocol.Encryption1RTT, protocol.PerspectiveServer)
+				entry := exportAndParseSingle()
+				Expect(entry.Time).To(BeTemporally("~", time.Now(), scaleDuration(10*time.Millisecond)))
+				Expect(entry.Category).To(Equal("security"))
+				Expect(entry.Name).To(Equal("key_updated"))
+				ev := entry.Event
+				Expect(ev).To(HaveKeyWithValue("key_type", "server_1rtt_secret"))
+				Expect(ev).To(HaveKeyWithValue("trigger", "tls"))
+				Expect(ev).To(HaveKeyWithValue("generation", float64(0)))
+				Expect(ev).ToNot(HaveKey("old"))
+				Expect(ev).ToNot(HaveKey("new"))
+			})
+
 			It("records QUIC key updates", func() {
 				tracer.UpdatedKey(1337, true)
 				entries := exportAndParse()
