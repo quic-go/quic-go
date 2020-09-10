@@ -81,6 +81,17 @@ var _ = Describe("Request", func() {
 		}))
 	})
 
+	It("handles CONNECT method", func() {
+		headers := []qpack.HeaderField{
+			{Name: ":authority", Value: "quic.clemente.io"},
+			{Name: ":method", Value: http.MethodConnect},
+		}
+		req, err := requestFromHeaders(headers)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(req.Method).To(Equal(http.MethodConnect))
+		Expect(req.RequestURI).To(Equal("quic.clemente.io"))
+	})
+
 	It("errors with missing path", func() {
 		headers := []qpack.HeaderField{
 			{Name: ":authority", Value: "quic.clemente.io"},
@@ -106,6 +117,24 @@ var _ = Describe("Request", func() {
 		}
 		_, err := requestFromHeaders(headers)
 		Expect(err).To(MatchError(":path, :authority and :method must not be empty"))
+	})
+
+	It("errors with missing authority in CONNECT method", func() {
+		headers := []qpack.HeaderField{
+			{Name: ":method", Value: http.MethodConnect},
+		}
+		_, err := requestFromHeaders(headers)
+		Expect(err).To(MatchError(":path must be empty and :authority must not be empty"))
+	})
+
+	It("errors with extra path in CONNECT method", func() {
+		headers := []qpack.HeaderField{
+			{Name: ":path", Value: "/foo"},
+			{Name: ":authority", Value: "quic.clemente.io"},
+			{Name: ":method", Value: http.MethodConnect},
+		}
+		_, err := requestFromHeaders(headers)
+		Expect(err).To(MatchError(":path must be empty and :authority must not be empty"))
 	})
 
 	Context("extracting the hostname from a request", func() {
