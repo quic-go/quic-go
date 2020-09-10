@@ -112,7 +112,9 @@ func (a *updatableAEAD) rollKeys() {
 }
 
 func (a *updatableAEAD) startKeyDropTimer(now time.Time) {
-	a.prevRcvAEADExpiry = now.Add(3 * a.rttStats.PTO(true))
+	d := 3 * a.rttStats.PTO(true)
+	a.logger.Debugf("Starting key drop timer to drop key phase %d (in %s)", a.keyPhase-1, d)
+	a.prevRcvAEADExpiry = now.Add(d)
 }
 
 func (a *updatableAEAD) getNextTrafficSecret(hash crypto.Hash, ts []byte) []byte {
@@ -152,6 +154,7 @@ func (a *updatableAEAD) SetWriteKey(suite *qtls.CipherSuiteTLS13, trafficSecret 
 func (a *updatableAEAD) Open(dst, src []byte, rcvTime time.Time, pn protocol.PacketNumber, kp protocol.KeyPhaseBit, ad []byte) ([]byte, error) {
 	if a.prevRcvAEAD != nil && !a.prevRcvAEADExpiry.IsZero() && rcvTime.After(a.prevRcvAEADExpiry) {
 		a.prevRcvAEAD = nil
+		a.logger.Debugf("Dropping key phase %d", a.keyPhase-1)
 		a.prevRcvAEADExpiry = time.Time{}
 		if a.tracer != nil {
 			a.tracer.DroppedKey(a.keyPhase - 1)
@@ -211,7 +214,10 @@ func (a *updatableAEAD) Open(dst, src []byte, rcvTime time.Time, pn protocol.Pac
 	if a.firstRcvdWithCurrentKey == protocol.InvalidPacketNumber {
 		// We initiated the key updated, and now we received the first packet protected with the new key phase.
 		// Therefore, we are certain that the peer rolled its keys as well. Start a timer to drop the old keys.
-		a.startKeyDropTimer(rcvTime)
+		if a.keyPhase > 0 {
+			a.logger.Debugf("Peer confirmed key update to phase %d", a.keyPhase)
+			a.startKeyDropTimer(rcvTime)
+		}
 		a.firstRcvdWithCurrentKey = pn
 	}
 	return dec, err
