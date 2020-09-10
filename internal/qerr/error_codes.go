@@ -25,6 +25,7 @@ const (
 	InvalidToken            ErrorCode = 0xb
 	ApplicationError        ErrorCode = 0xc
 	CryptoBufferExceeded    ErrorCode = 0xd
+	KeyUpdateError          ErrorCode = 0xe
 )
 
 func (e ErrorCode) isCryptoError() bool {
@@ -77,6 +78,8 @@ func (e ErrorCode) String() string {
 		return "APPLICATION_ERROR"
 	case CryptoBufferExceeded:
 		return "CRYPTO_BUFFER_EXCEEDED"
+	case KeyUpdateError:
+		return "KEY_UPDATE_ERROR"
 	default:
 		if e.isCryptoError() {
 			return "CRYPTO_ERROR"

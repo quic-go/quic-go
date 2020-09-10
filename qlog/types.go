@@ -209,6 +209,8 @@ func (e transportError) String() string {
 		return "application_error"
 	case qerr.CryptoBufferExceeded:
 		return "crypto_buffer_exceeded"
+	case qerr.KeyUpdateError:
+		return "key_update_error"
 	default:
 		return ""
 	}
