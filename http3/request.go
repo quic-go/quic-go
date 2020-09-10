@@ -37,7 +37,7 @@ func requestFromHeaders(headers []qpack.HeaderField) (*http.Request, error) {
 		httpHeaders.Set("Cookie", strings.Join(httpHeaders["Cookie"], "; "))
 	}
 
-	isConnect := method == "CONNECT"
+	isConnect := method == http.MethodConnect
 	if isConnect {
 		if path != "" || authority == "" {
 			return nil, errors.New(":path must be empty and :authority must not be empty")
@@ -46,15 +46,15 @@ func requestFromHeaders(headers []qpack.HeaderField) (*http.Request, error) {
 		return nil, errors.New(":path, :authority and :method must not be empty")
 	}
 
-	var url_ *url.URL
+	var u *url.URL
 	var requestURI string
 	var err error
 
 	if isConnect {
-		url_ = &url.URL{Host: authority}
+		u = &url.URL{Host: authority}
 		requestURI = authority
 	} else {
-		url_, err = url.ParseRequestURI(path)
+		u, err = url.ParseRequestURI(path)
 		if err != nil {
 			return nil, err
 		}
@@ -71,7 +71,7 @@ func requestFromHeaders(headers []qpack.HeaderField) (*http.Request, error) {
 
 	return &http.Request{
 		Method:        method,
-		URL:           url_,
+		URL:           u,
 		Proto:         "HTTP/3",
 		ProtoMajor:    3,
 		ProtoMinor:    0,

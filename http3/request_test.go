@@ -84,11 +84,12 @@ var _ = Describe("Request", func() {
 	It("handles CONNECT method", func() {
 		headers := []qpack.HeaderField{
 			{Name: ":authority", Value: "quic.clemente.io"},
-			{Name: ":method", Value: "CONNECT"},
+			{Name: ":method", Value: http.MethodConnect},
 		}
 		req, err := requestFromHeaders(headers)
 		Expect(err).NotTo(HaveOccurred())
-		Expect(req.Method).To(Equal("CONNECT"))
+		Expect(req.Method).To(Equal(http.MethodConnect))
+		Expect(req.RequestURI).To(Equal("quic.clemente.io"))
 	})
 
 	It("errors with missing path", func() {
@@ -120,7 +121,7 @@ var _ = Describe("Request", func() {
 
 	It("errors with missing authority in CONNECT method", func() {
 		headers := []qpack.HeaderField{
-			{Name: ":method", Value: "CONNECT"},
+			{Name: ":method", Value: http.MethodConnect},
 		}
 		_, err := requestFromHeaders(headers)
 		Expect(err).To(MatchError(":path must be empty and :authority must not be empty"))
@@ -130,7 +131,7 @@ var _ = Describe("Request", func() {
 		headers := []qpack.HeaderField{
 			{Name: ":path", Value: "/foo"},
 			{Name: ":authority", Value: "quic.clemente.io"},
-			{Name: ":method", Value: "CONNECT"},
+			{Name: ":method", Value: http.MethodConnect},
 		}
 		_, err := requestFromHeaders(headers)
 		Expect(err).To(MatchError(":path must be empty and :authority must not be empty"))
