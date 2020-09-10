@@ -31,7 +31,7 @@ var _ = Describe("Handshake drop tests", func() {
 		ln    quic.Listener
 	)
 
-	const timeout = 10 * time.Minute
+	const timeout = 2 * time.Minute
 
 	startListenerAndProxy := func(dropCallback quicproxy.DropCallback, doRetry bool, longCertChain bool, version protocol.VersionNumber) {
 		conf := getQuicConfig(&quic.Config{
