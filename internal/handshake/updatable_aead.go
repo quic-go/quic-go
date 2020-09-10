@@ -95,14 +95,13 @@ func newUpdatableAEAD(rttStats *utils.RTTStats, tracer logging.ConnectionTracer,
 	}
 }
 
-func (a *updatableAEAD) rollKeys(now time.Time) {
+func (a *updatableAEAD) rollKeys() {
 	a.keyPhase++
 	a.firstRcvdWithCurrentKey = protocol.InvalidPacketNumber
 	a.firstSentWithCurrentKey = protocol.InvalidPacketNumber
 	a.numRcvdWithCurrentKey = 0
 	a.numSentWithCurrentKey = 0
 	a.prevRcvAEAD = a.rcvAEAD
-	a.prevRcvAEADExpiry = now.Add(3 * a.rttStats.PTO(true))
 	a.rcvAEAD = a.nextRcvAEAD
 	a.sendAEAD = a.nextSendAEAD
 
@@ -110,6 +109,10 @@ func (a *updatableAEAD) rollKeys(now time.Time) {
 	a.nextSendTrafficSecret = a.getNextTrafficSecret(a.suite.Hash, a.nextSendTrafficSecret)
 	a.nextRcvAEAD = createAEAD(a.suite, a.nextRcvTrafficSecret)
 	a.nextSendAEAD = createAEAD(a.suite, a.nextSendTrafficSecret)
+}
+
+func (a *updatableAEAD) startKeyDropTimer(now time.Time) {
+	a.prevRcvAEADExpiry = now.Add(3 * a.rttStats.PTO(true))
 }
 
 func (a *updatableAEAD) getNextTrafficSecret(hash crypto.Hash, ts []byte) []byte {
@@ -147,7 +150,7 @@ func (a *updatableAEAD) SetWriteKey(suite *qtls.CipherSuiteTLS13, trafficSecret 
 }
 
 func (a *updatableAEAD) Open(dst, src []byte, rcvTime time.Time, pn protocol.PacketNumber, kp protocol.KeyPhaseBit, ad []byte) ([]byte, error) {
-	if a.prevRcvAEAD != nil && rcvTime.After(a.prevRcvAEADExpiry) {
+	if a.prevRcvAEAD != nil && !a.prevRcvAEADExpiry.IsZero() && rcvTime.After(a.prevRcvAEADExpiry) {
 		a.prevRcvAEAD = nil
 		a.prevRcvAEADExpiry = time.Time{}
 		if a.tracer != nil {
@@ -187,7 +190,10 @@ func (a *updatableAEAD) Open(dst, src []byte, rcvTime time.Time, pn protocol.Pac
 		if a.firstSentWithCurrentKey == protocol.InvalidPacketNumber {
 			return nil, qerr.NewError(qerr.ProtocolViolation, "keys updated too quickly")
 		}
-		a.rollKeys(rcvTime)
+		a.rollKeys()
+		// The peer initiated this key update. It's safe to drop the keys for the previous generation now.
+		// Start a timer to drop the previous key generation.
+		a.startKeyDropTimer(rcvTime)
 		a.logger.Debugf("Peer updated keys to %s", a.keyPhase)
 		if a.tracer != nil {
 			a.tracer.UpdatedKey(a.keyPhase, true)
@@ -199,12 +205,14 @@ func (a *updatableAEAD) Open(dst, src []byte, rcvTime time.Time, pn protocol.Pac
 	// It uses the nonce provided here and XOR it with the IV.
 	dec, err := a.rcvAEAD.Open(dst, a.nonceBuf, src, ad)
 	if err != nil {
-		err = ErrDecryptionFailed
-	} else {
-		a.numRcvdWithCurrentKey++
-		if a.firstRcvdWithCurrentKey == protocol.InvalidPacketNumber {
-			a.firstRcvdWithCurrentKey = pn
-		}
+		return dec, ErrDecryptionFailed
+	}
+	a.numRcvdWithCurrentKey++
+	if a.firstRcvdWithCurrentKey == protocol.InvalidPacketNumber {
+		// We initiated the key updated, and now we received the first packet protected with the new key phase.
+		// Therefore, we are certain that the peer rolled its keys as well. Start a timer to drop the old keys.
+		a.startKeyDropTimer(rcvTime)
+		a.firstRcvdWithCurrentKey = pn
 	}
 	return dec, err
 }
@@ -250,7 +258,7 @@ func (a *updatableAEAD) shouldInitiateKeyUpdate() bool {
 
 func (a *updatableAEAD) KeyPhase() protocol.KeyPhaseBit {
 	if a.shouldInitiateKeyUpdate() {
-		a.rollKeys(time.Now())
+		a.rollKeys()
 		a.logger.Debugf("Initiating key update to key phase %s", a.keyPhase)
 		if a.tracer != nil {
 			a.tracer.UpdatedKey(a.keyPhase, false)
