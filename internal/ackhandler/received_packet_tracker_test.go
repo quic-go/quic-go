@@ -25,26 +25,26 @@ var _ = Describe("Received Packet Tracker", func() {
 	Context("accepting packets", func() {
 		It("saves the time when each packet arrived", func() {
 			tracker.ReceivedPacket(protocol.PacketNumber(3), time.Now(), true)
-			Expect(tracker.largestObservedReceivedTime).To(BeTemporally("~", time.Now(), 10*time.Millisecond))
+			Expect(tracker.largestObservedProcessedTime).To(BeTemporally("~", time.Now(), 10*time.Millisecond))
 		})
 
-		It("updates the largestObserved and the largestObservedReceivedTime", func() {
+		It("updates the largestObserved and the largestObservedProcessedTime", func() {
 			now := time.Now()
 			tracker.largestObserved = 3
-			tracker.largestObservedReceivedTime = now.Add(-1 * time.Second)
+			tracker.largestObservedProcessedTime = now.Add(-1 * time.Second)
 			tracker.ReceivedPacket(5, now, true)
 			Expect(tracker.largestObserved).To(Equal(protocol.PacketNumber(5)))
-			Expect(tracker.largestObservedReceivedTime).To(Equal(now))
+			Expect(tracker.largestObservedProcessedTime).To(Equal(now))
 		})
 
-		It("doesn't update the largestObserved and the largestObservedReceivedTime for a belated packet", func() {
+		It("doesn't update the largestObserved and the largestObservedProcessedTime for a belated packet", func() {
 			now := time.Now()
 			timestamp := now.Add(-1 * time.Second)
 			tracker.largestObserved = 5
-			tracker.largestObservedReceivedTime = timestamp
+			tracker.largestObservedProcessedTime = timestamp
 			tracker.ReceivedPacket(4, now, true)
 			Expect(tracker.largestObserved).To(Equal(protocol.PacketNumber(5)))
-			Expect(tracker.largestObservedReceivedTime).To(Equal(timestamp))
+			Expect(tracker.largestObservedProcessedTime).To(Equal(timestamp))
 		})
 	})
 

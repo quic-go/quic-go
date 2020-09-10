@@ -766,7 +766,9 @@ var _ = Describe("Session", func() {
 			rph := mockackhandler.NewMockReceivedPacketHandler(mockCtrl)
 			gomock.InOrder(
 				rph.EXPECT().IsPotentiallyDuplicate(protocol.PacketNumber(0x1337), protocol.EncryptionInitial),
-				rph.EXPECT().ReceivedPacket(protocol.PacketNumber(0x1337), protocol.EncryptionInitial, rcvTime, false),
+				rph.EXPECT().ReceivedPacket(protocol.PacketNumber(0x1337), protocol.EncryptionInitial, gomock.Any(), false).Do(func(_ protocol.PacketNumber, _ protocol.EncryptionLevel, t time.Time, _ bool) {
+					Expect(t).To(BeTemporally("~", time.Now(), scaleDuration(10*time.Millisecond)))
+				}),
 			)
 			sess.receivedPacketHandler = rph
 			packet.rcvTime = rcvTime
@@ -794,7 +796,9 @@ var _ = Describe("Session", func() {
 			rph := mockackhandler.NewMockReceivedPacketHandler(mockCtrl)
 			gomock.InOrder(
 				rph.EXPECT().IsPotentiallyDuplicate(protocol.PacketNumber(0x1337), protocol.Encryption1RTT),
-				rph.EXPECT().ReceivedPacket(protocol.PacketNumber(0x1337), protocol.Encryption1RTT, rcvTime, true),
+				rph.EXPECT().ReceivedPacket(protocol.PacketNumber(0x1337), protocol.Encryption1RTT, gomock.Any(), true).Do(func(_ protocol.PacketNumber, _ protocol.EncryptionLevel, t time.Time, _ bool) {
+					Expect(t).To(BeTemporally("~", time.Now(), scaleDuration(10*time.Millisecond)))
+				}),
 			)
 			sess.receivedPacketHandler = rph
 			packet.rcvTime = rcvTime

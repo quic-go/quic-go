@@ -12,9 +12,9 @@ import (
 const packetsBeforeAck = 2
 
 type receivedPacketTracker struct {
-	largestObserved             protocol.PacketNumber
-	ignoreBelow                 protocol.PacketNumber
-	largestObservedReceivedTime time.Time
+	largestObserved              protocol.PacketNumber
+	ignoreBelow                  protocol.PacketNumber
+	largestObservedProcessedTime time.Time
 
 	packetHistory *receivedPacketHistory
 
@@ -47,7 +47,7 @@ func newReceivedPacketTracker(
 	}
 }
 
-func (h *receivedPacketTracker) ReceivedPacket(packetNumber protocol.PacketNumber, rcvTime time.Time, shouldInstigateAck bool) {
+func (h *receivedPacketTracker) ReceivedPacket(packetNumber protocol.PacketNumber, processedTime time.Time, shouldInstigateAck bool) {
 	if packetNumber < h.ignoreBelow {
 		return
 	}
@@ -55,14 +55,14 @@ func (h *receivedPacketTracker) ReceivedPacket(packetNumber protocol.PacketNumbe
 	isMissing := h.isMissing(packetNumber)
 	if packetNumber >= h.largestObserved {
 		h.largestObserved = packetNumber
-		h.largestObservedReceivedTime = rcvTime
+		h.largestObservedProcessedTime = processedTime
 	}
 
 	if isNew := h.packetHistory.ReceivedPacket(packetNumber); isNew && shouldInstigateAck {
 		h.hasNewAck = true
 	}
 	if shouldInstigateAck {
-		h.maybeQueueAck(packetNumber, rcvTime, isMissing)
+		h.maybeQueueAck(packetNumber, processedTime, isMissing)
 	}
 }
 
@@ -165,7 +165,7 @@ func (h *receivedPacketTracker) GetAckFrame(onlyIfQueued bool) *wire.AckFrame {
 		AckRanges: h.packetHistory.GetAckRanges(),
 		// Make sure that the DelayTime is always positive.
 		// This is not guaranteed on systems that don't have a monotonic clock.
-		DelayTime: utils.MaxDuration(0, now.Sub(h.largestObservedReceivedTime)),
+		DelayTime: utils.MaxDuration(0, now.Sub(h.largestObservedProcessedTime)),
 	}
 
 	h.lastAck = ack
