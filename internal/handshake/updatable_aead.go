@@ -191,10 +191,10 @@ func (a *updatableAEAD) Open(dst, src []byte, rcvTime time.Time, pn protocol.Pac
 			return nil, qerr.NewError(qerr.ProtocolViolation, "keys updated too quickly")
 		}
 		a.rollKeys()
+		a.logger.Debugf("Peer updated keys to %d", a.keyPhase)
 		// The peer initiated this key update. It's safe to drop the keys for the previous generation now.
 		// Start a timer to drop the previous key generation.
 		a.startKeyDropTimer(rcvTime)
-		a.logger.Debugf("Peer updated keys to %s", a.keyPhase)
 		if a.tracer != nil {
 			a.tracer.UpdatedKey(a.keyPhase, true)
 		}
@@ -246,11 +246,11 @@ func (a *updatableAEAD) shouldInitiateKeyUpdate() bool {
 		return false
 	}
 	if a.numRcvdWithCurrentKey >= a.keyUpdateInterval {
-		a.logger.Debugf("Received %d packets with current key phase. Initiating key update to the next key phase: %s", a.numRcvdWithCurrentKey, a.keyPhase+1)
+		a.logger.Debugf("Received %d packets with current key phase. Initiating key update to the next key phase: %d", a.numRcvdWithCurrentKey, a.keyPhase+1)
 		return true
 	}
 	if a.numSentWithCurrentKey >= a.keyUpdateInterval {
-		a.logger.Debugf("Sent %d packets with current key phase. Initiating key update to the next key phase: %s", a.numSentWithCurrentKey, a.keyPhase+1)
+		a.logger.Debugf("Sent %d packets with current key phase. Initiating key update to the next key phase: %d", a.numSentWithCurrentKey, a.keyPhase+1)
 		return true
 	}
 	return false
@@ -259,7 +259,7 @@ func (a *updatableAEAD) shouldInitiateKeyUpdate() bool {
 func (a *updatableAEAD) KeyPhase() protocol.KeyPhaseBit {
 	if a.shouldInitiateKeyUpdate() {
 		a.rollKeys()
-		a.logger.Debugf("Initiating key update to key phase %s", a.keyPhase)
+		a.logger.Debugf("Initiating key update to key phase %d", a.keyPhase)
 		if a.tracer != nil {
 			a.tracer.UpdatedKey(a.keyPhase, false)
 		}
