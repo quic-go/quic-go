@@ -365,6 +365,20 @@ func (t *connectionTracer) DroppedEncryptionLevel(encLevel protocol.EncryptionLe
 	t.mutex.Unlock()
 }
 
+func (t *connectionTracer) DroppedKey(generation protocol.KeyPhase) {
+	t.mutex.Lock()
+	now := time.Now()
+	t.recordEvent(now, &eventKeyRetired{
+		KeyType:    encLevelToKeyType(protocol.Encryption1RTT, protocol.PerspectiveServer),
+		Generation: generation,
+	})
+	t.recordEvent(now, &eventKeyRetired{
+		KeyType:    encLevelToKeyType(protocol.Encryption1RTT, protocol.PerspectiveClient),
+		Generation: generation,
+	})
+	t.mutex.Unlock()
+}
+
 func (t *connectionTracer) SetLossTimer(tt logging.TimerType, encLevel protocol.EncryptionLevel, timeout time.Time) {
 	t.mutex.Lock()
 	now := time.Now()

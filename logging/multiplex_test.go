@@ -213,6 +213,12 @@ var _ = Describe("Tracing", func() {
 			tracer.DroppedEncryptionLevel(EncryptionHandshake)
 		})
 
+		It("traces the DroppedKey event", func() {
+			tr1.EXPECT().DroppedKey(KeyPhase(123))
+			tr2.EXPECT().DroppedKey(KeyPhase(123))
+			tracer.DroppedKey(123)
+		})
+
 		It("traces the SetLossTimer event", func() {
 			now := time.Now()
 			tr1.EXPECT().SetLossTimer(TimerTypePTO, EncryptionHandshake, now)

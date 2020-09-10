@@ -195,6 +195,7 @@ var _ = Describe("Updatable AEAD", func() {
 							encrypted1 := client.Seal(nil, msg, 0x44, ad)
 							Expect(server.KeyPhase()).To(Equal(protocol.KeyPhaseZero))
 							serverTracer.EXPECT().UpdatedKey(protocol.KeyPhase(1), true)
+							serverTracer.EXPECT().DroppedKey(protocol.KeyPhase(0))
 							_, err = server.Open(nil, encrypted1, now, 0x44, protocol.KeyPhaseOne, ad)
 							Expect(err).ToNot(HaveOccurred())
 							Expect(server.KeyPhase()).To(Equal(protocol.KeyPhaseOne))

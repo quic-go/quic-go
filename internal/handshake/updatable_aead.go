@@ -150,6 +150,9 @@ func (a *updatableAEAD) Open(dst, src []byte, rcvTime time.Time, pn protocol.Pac
 	if a.prevRcvAEAD != nil && rcvTime.After(a.prevRcvAEADExpiry) {
 		a.prevRcvAEAD = nil
 		a.prevRcvAEADExpiry = time.Time{}
+		if a.tracer != nil {
+			a.tracer.DroppedKey(a.keyPhase - 1)
+		}
 	}
 	binary.BigEndian.PutUint64(a.nonceBuf[len(a.nonceBuf)-8:], uint64(pn))
 	if kp != a.keyPhase.Bit() {

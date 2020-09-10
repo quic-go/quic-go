@@ -111,6 +111,7 @@ type ConnectionTracer interface {
 	UpdatedKeyFromTLS(EncryptionLevel, Perspective)
 	UpdatedKey(generation KeyPhase, remote bool)
 	DroppedEncryptionLevel(EncryptionLevel)
+	DroppedKey(generation KeyPhase)
 	SetLossTimer(TimerType, EncryptionLevel, time.Time)
 	LossTimerExpired(TimerType, EncryptionLevel)
 	LossTimerCanceled()
