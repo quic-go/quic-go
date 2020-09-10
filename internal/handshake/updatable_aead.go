@@ -182,13 +182,13 @@ func (a *updatableAEAD) Open(dst, src []byte, rcvTime time.Time, pn protocol.Pac
 		// try opening the packet with the next key phase
 		dec, err := a.nextRcvAEAD.Open(dst, a.nonceBuf, src, ad)
 		if err == nil && receivedWrongInitialKeyPhase {
-			return nil, qerr.NewError(qerr.ProtocolViolation, "wrong initial key phase")
+			return nil, qerr.NewError(qerr.KeyUpdateError, "wrong initial key phase")
 		} else if err != nil {
 			return nil, ErrDecryptionFailed
 		}
 		// Opening succeeded. Check if the peer was allowed to update.
 		if a.firstSentWithCurrentKey == protocol.InvalidPacketNumber {
-			return nil, qerr.NewError(qerr.ProtocolViolation, "keys updated too quickly")
+			return nil, qerr.NewError(qerr.KeyUpdateError, "keys updated too quickly")
 		}
 		a.rollKeys()
 		// The peer initiated this key update. It's safe to drop the keys for the previous generation now.
