@@ -340,8 +340,8 @@ func (s *sendStream) getDataForWriting(f *wire.StreamFrame, maxBytes protocol.By
 	}
 }
 
-func (s *sendStream) frameAcked(f wire.Frame) {
-	f.(*wire.StreamFrame).PutBack()
+func (s *sendStream) frameAcked(f *ackhandler.Frame) {
+	f.Frame.(*wire.StreamFrame).PutBack()
 
 	s.mutex.Lock()
 	s.numOutstandingFrames--
@@ -365,8 +365,8 @@ func (s *sendStream) isNewlyCompleted() bool {
 	return false
 }
 
-func (s *sendStream) queueRetransmission(f wire.Frame) {
-	sf := f.(*wire.StreamFrame)
+func (s *sendStream) queueRetransmission(f *ackhandler.Frame) {
+	sf := f.Frame.(*wire.StreamFrame)
 	sf.DataLenPresent = true
 	s.mutex.Lock()
 	s.retransmissionQueue = append(s.retransmissionQueue, sf)

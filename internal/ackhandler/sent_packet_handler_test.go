@@ -53,7 +53,7 @@ var _ = Describe("SentPacketHandler", func() {
 		}
 		if len(p.Frames) == 0 {
 			p.Frames = []*Frame{
-				{Frame: &wire.PingFrame{}, OnLost: func(wire.Frame) { lostPackets = append(lostPackets, p.PacketNumber) }},
+				{Frame: &wire.PingFrame{}, OnLost: func(*Frame) { lostPackets = append(lostPackets, p.PacketNumber) }},
 			}
 		}
 		return p
@@ -232,8 +232,8 @@ var _ = Describe("SentPacketHandler", func() {
 				ping := &wire.PingFrame{}
 				handler.SentPacket(ackElicitingPacket(&Packet{
 					PacketNumber: 13,
-					Frames: []*Frame{{Frame: ping, OnAcked: func(f wire.Frame) {
-						Expect(f).To(Equal(ping))
+					Frames: []*Frame{{Frame: ping, OnAcked: func(f *Frame) {
+						Expect(f.Frame).To(Equal(ping))
 						acked = true
 					},
 					}},
@@ -369,20 +369,20 @@ var _ = Describe("SentPacketHandler", func() {
 					{
 						PacketNumber:    13,
 						LargestAcked:    100,
-						Frames:          []*Frame{{Frame: &streamFrame, OnLost: func(wire.Frame) {}}},
+						Frames:          []*Frame{{Frame: &streamFrame, OnLost: func(*Frame) {}}},
 						Length:          1,
 						EncryptionLevel: protocol.Encryption1RTT,
 					},
 					{
 						PacketNumber:    14,
 						LargestAcked:    200,
-						Frames:          []*Frame{{Frame: &streamFrame, OnLost: func(wire.Frame) {}}},
+						Frames:          []*Frame{{Frame: &streamFrame, OnLost: func(*Frame) {}}},
 						Length:          1,
 						EncryptionLevel: protocol.Encryption1RTT,
 					},
 					{
 						PacketNumber:    15,
-						Frames:          []*Frame{{Frame: &streamFrame, OnLost: func(wire.Frame) {}}},
+						Frames:          []*Frame{{Frame: &streamFrame, OnLost: func(*Frame) {}}},
 						Length:          1,
 						EncryptionLevel: protocol.Encryption1RTT,
 					},
@@ -437,7 +437,7 @@ var _ = Describe("SentPacketHandler", func() {
 			handler.SentPacket(&Packet{
 				PacketNumber:    1,
 				Length:          42,
-				Frames:          []*Frame{{Frame: &wire.PingFrame{}, OnLost: func(wire.Frame) {}}},
+				Frames:          []*Frame{{Frame: &wire.PingFrame{}, OnLost: func(*Frame) {}}},
 				EncryptionLevel: protocol.Encryption1RTT,
 			})
 		})
@@ -681,7 +681,7 @@ var _ = Describe("SentPacketHandler", func() {
 				PacketNumber: 1,
 				SendTime:     time.Now().Add(-time.Hour),
 				Frames: []*Frame{
-					{Frame: &wire.PingFrame{}, OnLost: func(wire.Frame) { lostPackets = append(lostPackets, 1) }},
+					{Frame: &wire.PingFrame{}, OnLost: func(*Frame) { lostPackets = append(lostPackets, 1) }},
 				},
 			}))
 			Expect(handler.OnLossDetectionTimeout()).To(Succeed())
@@ -701,7 +701,7 @@ var _ = Describe("SentPacketHandler", func() {
 				PacketNumber: pn,
 				SendTime:     time.Now().Add(-time.Hour),
 				Frames: []*Frame{
-					{Frame: &wire.PingFrame{}, OnLost: func(wire.Frame) { lostPackets = append(lostPackets, 1) }},
+					{Frame: &wire.PingFrame{}, OnLost: func(*Frame) { lostPackets = append(lostPackets, 1) }},
 				},
 			}))
 			Expect(handler.OnLossDetectionTimeout()).To(Succeed())
@@ -1136,7 +1136,7 @@ var _ = Describe("SentPacketHandler", func() {
 				PacketNumber:    13,
 				EncryptionLevel: protocol.EncryptionInitial,
 				Frames: []*Frame{
-					{Frame: &wire.CryptoFrame{Data: []byte("foobar")}, OnLost: func(wire.Frame) { lostInitial = true }},
+					{Frame: &wire.CryptoFrame{Data: []byte("foobar")}, OnLost: func(*Frame) { lostInitial = true }},
 				},
 				Length: 100,
 			})
@@ -1145,7 +1145,7 @@ var _ = Describe("SentPacketHandler", func() {
 				PacketNumber:    pn,
 				EncryptionLevel: protocol.Encryption0RTT,
 				Frames: []*Frame{
-					{Frame: &wire.StreamFrame{Data: []byte("foobar")}, OnLost: func(wire.Frame) { lost0RTT = true }},
+					{Frame: &wire.StreamFrame{Data: []byte("foobar")}, OnLost: func(*Frame) { lost0RTT = true }},
 				},
 				Length: 999,
 			})

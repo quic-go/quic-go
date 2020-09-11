@@ -884,7 +884,7 @@ var _ = Describe("Send Stream", func() {
 				DataLenPresent: false,
 			}
 			mockSender.EXPECT().onHasStreamData(streamID)
-			str.queueRetransmission(f)
+			str.queueRetransmission(&ackhandler.Frame{Frame: f})
 			frame, _ := str.popStreamFrame(protocol.MaxByteCount)
 			Expect(frame).ToNot(BeNil())
 			f = frame.Frame.(*wire.StreamFrame)
@@ -901,7 +901,7 @@ var _ = Describe("Send Stream", func() {
 				DataLenPresent: false,
 			}
 			mockSender.EXPECT().onHasStreamData(streamID)
-			str.queueRetransmission(sf)
+			str.queueRetransmission(&ackhandler.Frame{Frame: sf})
 			frame, hasMoreData := str.popStreamFrame(sf.Length(str.version) - 3)
 			Expect(frame).ToNot(BeNil())
 			f := frame.Frame.(*wire.StreamFrame)
@@ -925,7 +925,7 @@ var _ = Describe("Send Stream", func() {
 				DataLenPresent: false,
 			}
 			mockSender.EXPECT().onHasStreamData(streamID)
-			str.queueRetransmission(f)
+			str.queueRetransmission(&ackhandler.Frame{Frame: f})
 			frame, hasMoreData := str.popStreamFrame(2)
 			Expect(hasMoreData).To(BeTrue())
 			Expect(frame).To(BeNil())
@@ -950,7 +950,7 @@ var _ = Describe("Send Stream", func() {
 
 			// now lose the frame
 			mockSender.EXPECT().onHasStreamData(streamID)
-			frame.OnLost(frame.Frame)
+			frame.OnLost(&ackhandler.Frame{Frame: frame.Frame})
 			newFrame, _ := str.popStreamFrame(protocol.MaxByteCount)
 			Expect(newFrame).ToNot(BeNil())
 			Expect(newFrame.Frame.(*wire.StreamFrame).Data).To(Equal([]byte("foobar")))
@@ -964,7 +964,7 @@ var _ = Describe("Send Stream", func() {
 				DataLenPresent: false,
 			}
 			mockSender.EXPECT().onHasStreamData(streamID)
-			str.queueRetransmission(f)
+			str.queueRetransmission(&ackhandler.Frame{Frame: f})
 			mockSender.EXPECT().queueControlFrame(gomock.Any())
 			str.CancelWrite(0)
 			frame, hasMoreData := str.popStreamFrame(protocol.MaxByteCount)
@@ -991,13 +991,13 @@ var _ = Describe("Send Stream", func() {
 			waitForWrite()
 
 			// get a bunch of small frames (max. 20 bytes)
-			var frames []ackhandler.Frame
+			var frames []*ackhandler.Frame
 			for {
 				frame, hasMoreData := str.popStreamFrame(20)
 				if frame == nil {
 					continue
 				}
-				frames = append(frames, *frame)
+				frames = append(frames, frame)
 				if !hasMoreData {
 					break
 				}
@@ -1007,7 +1007,7 @@ var _ = Describe("Send Stream", func() {
 			// Acknowledge all frames.
 			// We don't expect the stream to be completed, since we still need to send the FIN.
 			for _, f := range frames {
-				f.OnAcked(f.Frame)
+				f.OnAcked(f)
 			}
 
 			// Now close the stream and acknowledge the FIN.
@@ -1016,7 +1016,7 @@ var _ = Describe("Send Stream", func() {
 			frame, _ := str.popStreamFrame(protocol.MaxByteCount)
 			Expect(frame).ToNot(BeNil())
 			mockSender.EXPECT().onStreamCompleted(streamID)
-			frame.OnAcked(frame.Frame)
+			frame.OnAcked(frame)
 		})
 
 		It("says when a stream is completed, if Close() is called before popping the frame", func() {
@@ -1038,7 +1038,7 @@ var _ = Describe("Send Stream", func() {
 			Expect(frame.Frame.(*wire.StreamFrame).Fin).To(BeTrue())
 
 			mockSender.EXPECT().onStreamCompleted(streamID)
-			frame.OnAcked(frame.Frame)
+			frame.OnAcked(frame)
 		})
 
 		It("doesn't say it's completed when there are frames waiting to be retransmitted", func() {
@@ -1055,13 +1055,13 @@ var _ = Describe("Send Stream", func() {
 			waitForWrite()
 
 			// get a bunch of small frames (max. 20 bytes)
-			var frames []ackhandler.Frame
+			var frames []*ackhandler.Frame
 			for {
 				frame, _ := str.popStreamFrame(20)
 				if frame == nil {
 					continue
 				}
-				frames = append(frames, *frame)
+				frames = append(frames, frame)
 				if frame.Frame.(*wire.StreamFrame).Fin {
 					break
 				}
@@ -1070,16 +1070,16 @@ var _ = Describe("Send Stream", func() {
 
 			// lose the first frame, acknowledge all others
 			for _, f := range frames[1:] {
-				f.OnAcked(f.Frame)
+				f.OnAcked(f)
 			}
 			mockSender.EXPECT().onHasStreamData(streamID)
-			frames[0].OnLost(frames[0].Frame)
+			frames[0].OnLost(frames[0])
 
 			// get the retransmission and acknowledge it
 			ret, _ := str.popStreamFrame(protocol.MaxByteCount)
 			Expect(ret).ToNot(BeNil())
 			mockSender.EXPECT().onStreamCompleted(streamID)
-			ret.OnAcked(ret.Frame)
+			ret.OnAcked(ret)
 		})
 
 		// This test is kind of an integration test.
@@ -1123,9 +1123,9 @@ var _ = Describe("Send Stream", func() {
 				// 50%: lose the frame
 				if mrand.Intn(100) < 50 {
 					copy(received[sf.Offset:sf.Offset+sf.DataLen()], sf.Data)
-					f.OnAcked(f.Frame)
+					f.OnAcked(f)
 				} else {
-					f.OnLost(f.Frame)
+					f.OnLost(f)
 				}
 			}
 			Expect(received).To(Equal(data))

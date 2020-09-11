@@ -1514,11 +1514,11 @@ func (s *session) sendProbePacket(encLevel protocol.EncryptionLevel) error {
 	if packet == nil {
 		switch encLevel {
 		case protocol.EncryptionInitial:
-			s.retransmissionQueue.AddInitial(&wire.PingFrame{})
+			s.retransmissionQueue.AddInitial(&ackhandler.Frame{Frame: &wire.PingFrame{}})
 		case protocol.EncryptionHandshake:
-			s.retransmissionQueue.AddHandshake(&wire.PingFrame{})
+			s.retransmissionQueue.AddHandshake(&ackhandler.Frame{Frame: &wire.PingFrame{}})
 		case protocol.Encryption1RTT:
-			s.retransmissionQueue.AddAppData(&wire.PingFrame{})
+			s.retransmissionQueue.AddAppData(&ackhandler.Frame{Frame: &wire.PingFrame{}})
 		default:
 			panic("unexpected encryption level")
 		}

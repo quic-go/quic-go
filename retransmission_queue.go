@@ -3,18 +3,19 @@ package quic
 import (
 	"fmt"
 
+	"github.com/lucas-clemente/quic-go/internal/ackhandler"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/internal/wire"
 )
 
 type retransmissionQueue struct {
-	initial           []wire.Frame
+	initial           []*ackhandler.Frame
 	initialCryptoData []*wire.CryptoFrame
 
-	handshake           []wire.Frame
+	handshake           []*ackhandler.Frame
 	handshakeCryptoData []*wire.CryptoFrame
 
-	appData []wire.Frame
+	appData []*ackhandler.Frame
 
 	version protocol.VersionNumber
 }
@@ -23,16 +24,16 @@ func newRetransmissionQueue(ver protocol.VersionNumber) *retransmissionQueue {
 	return &retransmissionQueue{version: ver}
 }
 
-func (q *retransmissionQueue) AddInitial(f wire.Frame) {
-	if cf, ok := f.(*wire.CryptoFrame); ok {
+func (q *retransmissionQueue) AddInitial(f *ackhandler.Frame) {
+	if cf, ok := f.Frame.(*wire.CryptoFrame); ok {
 		q.initialCryptoData = append(q.initialCryptoData, cf)
 		return
 	}
 	q.initial = append(q.initial, f)
 }
 
-func (q *retransmissionQueue) AddHandshake(f wire.Frame) {
-	if cf, ok := f.(*wire.CryptoFrame); ok {
+func (q *retransmissionQueue) AddHandshake(f *ackhandler.Frame) {
+	if cf, ok := f.Frame.(*wire.CryptoFrame); ok {
 		q.handshakeCryptoData = append(q.handshakeCryptoData, cf)
 		return
 	}
@@ -51,8 +52,8 @@ func (q *retransmissionQueue) HasAppData() bool {
 	return len(q.appData) > 0
 }
 
-func (q *retransmissionQueue) AddAppData(f wire.Frame) {
-	if _, ok := f.(*wire.StreamFrame); ok {
+func (q *retransmissionQueue) AddAppData(f *ackhandler.Frame) {
+	if _, ok := f.Frame.(*wire.StreamFrame); ok {
 		panic("STREAM frames are handled with their respective streams.")
 	}
 	q.appData = append(q.appData, f)
@@ -78,7 +79,7 @@ func (q *retransmissionQueue) GetInitialFrame(maxLen protocol.ByteCount) wire.Fr
 		return nil
 	}
 	q.initial = q.initial[1:]
-	return f
+	return f.Frame
 }
 
 func (q *retransmissionQueue) GetHandshakeFrame(maxLen protocol.ByteCount) wire.Frame {
@@ -101,7 +102,7 @@ func (q *retransmissionQueue) GetHandshakeFrame(maxLen protocol.ByteCount) wire.
 		return nil
 	}
 	q.handshake = q.handshake[1:]
-	return f
+	return f.Frame
 }
 
 func (q *retransmissionQueue) GetAppDataFrame(maxLen protocol.ByteCount) wire.Frame {
@@ -113,7 +114,7 @@ func (q *retransmissionQueue) GetAppDataFrame(maxLen protocol.ByteCount) wire.Fr
 		return nil
 	}
 	q.appData = q.appData[1:]
-	return f
+	return f.Frame
 }
 
 func (q *retransmissionQueue) DropPackets(encLevel protocol.EncryptionLevel) {

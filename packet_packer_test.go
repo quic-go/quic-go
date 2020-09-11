@@ -534,7 +534,7 @@ var _ = Describe("Packet packer", func() {
 				sealingManager.EXPECT().GetInitialSealer().Return(nil, handshake.ErrKeysDropped)
 				sealingManager.EXPECT().GetHandshakeSealer().Return(sealer, nil)
 				sealingManager.EXPECT().Get1RTTSealer().Return(nil, handshake.ErrKeysNotYetAvailable)
-				packer.retransmissionQueue.AddHandshake(&wire.PingFrame{})
+				packer.retransmissionQueue.AddHandshake(&ackhandler.Frame{Frame: &wire.PingFrame{}})
 				handshakeStream.EXPECT().HasData()
 				ackFramer.EXPECT().GetAckFrame(protocol.EncryptionHandshake, false)
 				packet, err := packer.PackCoalescedPacket(protocol.MaxByteCount)
@@ -1022,7 +1022,7 @@ var _ = Describe("Packet packer", func() {
 				sealingManager.EXPECT().GetInitialSealer().Return(nil, handshake.ErrKeysDropped)
 				sealingManager.EXPECT().GetHandshakeSealer().Return(sealer, nil)
 				sealingManager.EXPECT().Get1RTTSealer().Return(nil, handshake.ErrKeysNotYetAvailable)
-				packer.retransmissionQueue.AddHandshake(&wire.PingFrame{})
+				packer.retransmissionQueue.AddHandshake(&ackhandler.Frame{Frame: &wire.PingFrame{}})
 				handshakeStream.EXPECT().HasData()
 				ackFramer.EXPECT().GetAckFrame(protocol.EncryptionHandshake, false)
 				packet, err := packer.PackCoalescedPacket(protocol.MaxByteCount)
@@ -1055,8 +1055,8 @@ var _ = Describe("Packet packer", func() {
 
 			It("adds retransmissions", func() {
 				f := &wire.CryptoFrame{Data: []byte("Initial")}
-				retransmissionQueue.AddInitial(f)
-				retransmissionQueue.AddHandshake(&wire.CryptoFrame{Data: []byte("Handshake")})
+				retransmissionQueue.AddInitial(&ackhandler.Frame{Frame: f})
+				retransmissionQueue.AddHandshake(&ackhandler.Frame{Frame: &wire.CryptoFrame{Data: []byte("Handshake")}})
 				pnManager.EXPECT().PeekPacketNumber(protocol.EncryptionInitial).Return(protocol.PacketNumber(0x42), protocol.PacketNumberLen2)
 				pnManager.EXPECT().PopPacketNumber(protocol.EncryptionInitial).Return(protocol.PacketNumber(0x42))
 				sealingManager.EXPECT().GetInitialSealer().Return(getSealer(), nil)
@@ -1167,7 +1167,7 @@ var _ = Describe("Packet packer", func() {
 		Context("packing probe packets", func() {
 			It("packs an Initial probe packet", func() {
 				f := &wire.CryptoFrame{Data: []byte("Initial")}
-				retransmissionQueue.AddInitial(f)
+				retransmissionQueue.AddInitial(&ackhandler.Frame{Frame: f})
 				sealingManager.EXPECT().GetInitialSealer().Return(getSealer(), nil)
 				ackFramer.EXPECT().GetAckFrame(protocol.EncryptionInitial, false)
 				initialStream.EXPECT().HasData()
@@ -1187,7 +1187,7 @@ var _ = Describe("Packet packer", func() {
 			It("packs an Initial probe packet and pads it, for the client", func() {
 				packer.perspective = protocol.PerspectiveClient
 				f := &wire.CryptoFrame{Data: []byte("Initial")}
-				retransmissionQueue.AddInitial(f)
+				retransmissionQueue.AddInitial(&ackhandler.Frame{Frame: f})
 				sealingManager.EXPECT().GetInitialSealer().Return(getSealer(), nil)
 				ackFramer.EXPECT().GetAckFrame(protocol.EncryptionInitial, false)
 				initialStream.EXPECT().HasData()
@@ -1206,7 +1206,7 @@ var _ = Describe("Packet packer", func() {
 
 			It("packs a Handshake probe packet", func() {
 				f := &wire.CryptoFrame{Data: []byte("Handshake")}
-				retransmissionQueue.AddHandshake(f)
+				retransmissionQueue.AddHandshake(&ackhandler.Frame{Frame: f})
 				sealingManager.EXPECT().GetHandshakeSealer().Return(getSealer(), nil)
 				ackFramer.EXPECT().GetAckFrame(protocol.EncryptionHandshake, false)
 				handshakeStream.EXPECT().HasData()
@@ -1224,7 +1224,7 @@ var _ = Describe("Packet packer", func() {
 
 			It("packs a 1-RTT probe packet", func() {
 				f := &wire.StreamFrame{Data: []byte("1-RTT")}
-				retransmissionQueue.AddInitial(f)
+				retransmissionQueue.AddInitial(&ackhandler.Frame{Frame: f})
 				sealingManager.EXPECT().Get1RTTSealer().Return(getSealer(), nil)
 				ackFramer.EXPECT().GetAckFrame(protocol.Encryption1RTT, false)
 				pnManager.EXPECT().PeekPacketNumber(protocol.Encryption1RTT).Return(protocol.PacketNumber(0x42), protocol.PacketNumberLen2)
@@ -1288,13 +1288,13 @@ var _ = Describe("Converting to AckHandler packets", func() {
 				header: &wire.ExtendedHeader{Header: hdr},
 				frames: []*ackhandler.Frame{
 					{Frame: &wire.MaxDataFrame{}},
-					{Frame: &wire.PingFrame{}, OnLost: func(wire.Frame) { pingLost = true }},
+					{Frame: &wire.PingFrame{}, OnLost: func(*ackhandler.Frame) { pingLost = true }},
 				},
 			}
 			p := packet.ToAckHandlerPacket(time.Now(), newRetransmissionQueue(protocol.VersionTLS))
 			Expect(p.Frames).To(HaveLen(2))
 			Expect(p.Frames[0].OnLost).ToNot(BeNil())
-			p.Frames[1].OnLost(nil)
+			p.Frames[1].OnLost(&ackhandler.Frame{})
 			Expect(pingLost).To(BeTrue())
 		},
 		Entry(protocol.EncryptionInitial.String(), wire.Header{IsLongHeader: true, Type: protocol.PacketTypeInitial}),
