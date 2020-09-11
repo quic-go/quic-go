@@ -101,16 +101,14 @@ type handshakeRunner interface {
 }
 
 type runner struct {
-	role    string // only used for logging
-	errored bool
-
+	errored        bool
 	client, server *handshake.CryptoSetup
 }
 
 var _ handshakeRunner = &runner{}
 
-func newRunner(client, server *handshake.CryptoSetup, role string) *runner {
-	return &runner{role: role, client: client, server: server}
+func newRunner(client, server *handshake.CryptoSetup) *runner {
+	return &runner{client: client, server: server}
 }
 
 func (r *runner) OnReceivedParams(*wire.TransportParameters) {}
@@ -171,6 +169,8 @@ func Fuzz(data []byte) int {
 	enable0RTTClient := helper.NthBit(data[0], 0)
 	enable0RTTServer := helper.NthBit(data[0], 1)
 	useSessionTicketCache := helper.NthBit(data[0], 2)
+	sendPostHandshakeMessageToClient := helper.NthBit(data[0], 3)
+	sendPostHandshakeMessageToServer := helper.NthBit(data[0], 4)
 	messageToReplace := data[1] % 32
 	messageToReplaceEncLevel := toEncryptionLevel(data[1] >> 6)
 	data = data[PrefixLen:]
@@ -185,7 +185,7 @@ func Fuzz(data []byte) int {
 	}
 	cChunkChan, cInitialStream, cHandshakeStream := initStreams()
 	var client, server handshake.CryptoSetup
-	clientRunner := newRunner(&client, &server, "client")
+	runner := newRunner(&client, &server)
 	client, _ = handshake.NewCryptoSetupClient(
 		cInitialStream,
 		cHandshakeStream,
@@ -193,7 +193,7 @@ func Fuzz(data []byte) int {
 		nil,
 		nil,
 		&wire.TransportParameters{},
-		clientRunner,
+		runner,
 		clientConf,
 		enable0RTTClient,
 		utils.NewRTTStats(),
@@ -202,7 +202,6 @@ func Fuzz(data []byte) int {
 	)
 
 	sChunkChan, sInitialStream, sHandshakeStream := initStreams()
-	serverRunner := newRunner(&client, &server, "server")
 	server = handshake.NewCryptoSetupServer(
 		sInitialStream,
 		sHandshakeStream,
@@ -210,7 +209,7 @@ func Fuzz(data []byte) int {
 		nil,
 		nil,
 		&wire.TransportParameters{},
-		serverRunner,
+		runner,
 		&tls.Config{
 			Certificates: []tls.Certificate{*cert},
 			NextProtos:   []string{alpn},
@@ -229,7 +228,6 @@ func Fuzz(data []byte) int {
 	go func() {
 		defer close(serverHandshakeCompleted)
 		server.RunHandshake()
-		// TODO: send session ticket
 	}()
 
 	clientHandshakeCompleted := make(chan struct{})
@@ -269,13 +267,24 @@ messageLoop:
 		case <-done: // test done
 			break messageLoop
 		}
-		if clientRunner.errored || serverRunner.errored {
+		if runner.errored {
 			break messageLoop
 		}
 	}
 
-	<-serverHandshakeCompleted
-	<-clientHandshakeCompleted
+	<-done
+	if runner.errored {
+		return 1
+	}
+	if sendPostHandshakeMessageToClient {
+		if _, err := server.GetSessionTicket(); err != nil {
+			panic(err)
+		}
+		client.HandleMessage(data, messageToReplaceEncLevel)
+	}
+	if sendPostHandshakeMessageToServer {
+		server.HandleMessage(data, messageToReplaceEncLevel)
+	}
 
 	return 1
 }
