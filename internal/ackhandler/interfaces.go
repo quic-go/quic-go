@@ -19,6 +19,7 @@ type Packet struct {
 
 	includedInBytesInFlight bool
 	declaredLost            bool
+	skippedPacket           bool
 }
 
 // SentPacketHandler handles ACKs received for outgoing packets

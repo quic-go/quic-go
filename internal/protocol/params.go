@@ -48,9 +48,6 @@ const MaxSessionUnprocessedPackets = 256
 // SkipPacketAveragePeriodLength is the average period length in which one packet number is skipped to prevent an Optimistic ACK attack
 const SkipPacketAveragePeriodLength PacketNumber = 500
 
-// MaxTrackedSkippedPackets is the maximum number of skipped packet numbers the SentPacketHandler keep track of for Optimistic ACK attack mitigation
-const MaxTrackedSkippedPackets = 10
-
 // MaxAcceptQueueSize is the maximum number of sessions that the server queues for accepting.
 // If the queue is full, new connection attempts will be rejected.
 const MaxAcceptQueueSize = 32

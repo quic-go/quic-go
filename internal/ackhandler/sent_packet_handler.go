@@ -161,6 +161,9 @@ func (h *sentPacketHandler) dropPackets(encLevel protocol.EncryptionLevel) {
 	case protocol.Encryption0RTT:
 		// TODO(#2067): invalidate sent data
 		h.appDataPackets.history.Iterate(func(p *Packet) (bool, error) {
+			if p.skippedPacket {
+				return true, nil
+			}
 			if p.EncryptionLevel != protocol.Encryption0RTT {
 				return false, nil
 			}
@@ -209,9 +212,7 @@ func (h *sentPacketHandler) SentPacket(packet *Packet) {
 		h.dropPackets(protocol.EncryptionInitial)
 	}
 	isAckEliciting := h.sentPacketImpl(packet)
-	if isAckEliciting {
-		h.getPacketNumberSpace(packet.EncryptionLevel).history.SentPacket(packet)
-	}
+	h.getPacketNumberSpace(packet.EncryptionLevel).history.SentPacket(packet, isAckEliciting)
 	if h.tracer != nil && isAckEliciting {
 		h.tracer.UpdatedMetrics(h.rttStats, h.congestion.GetCongestionWindow(), h.bytesInFlight, h.packetsInFlight())
 	}
@@ -268,10 +269,6 @@ func (h *sentPacketHandler) ReceivedAck(ack *wire.AckFrame, encLevel protocol.En
 
 	pnSpace.largestAcked = utils.MaxPacketNumber(pnSpace.largestAcked, largestAcked)
 
-	if !pnSpace.pns.Validate(ack) {
-		return qerr.NewError(qerr.ProtocolViolation, "Received an ACK for a skipped packet number")
-	}
-
 	// Servers complete address validation when a protected packet is received.
 	if h.perspective == protocol.PerspectiveClient && !h.peerCompletedAddressValidation &&
 		(encLevel == protocol.EncryptionHandshake || encLevel == protocol.Encryption1RTT) {
@@ -312,6 +309,9 @@ func (h *sentPacketHandler) ReceivedAck(ack *wire.AckFrame, encLevel protocol.En
 		h.congestion.OnPacketLost(p.PacketNumber, p.Length, priorInFlight)
 	}
 	for _, p := range ackedPackets {
+		if p.skippedPacket {
+			return fmt.Errorf("received an ACK for skipped packet number: %d (%s)", p.PacketNumber, encLevel)
+		}
 		if p.includedInBytesInFlight && !p.declaredLost {
 			h.congestion.OnPacketAcked(p.PacketNumber, p.Length, priorInFlight, rcvTime)
 		}
@@ -520,7 +520,7 @@ func (h *sentPacketHandler) detectLostPackets(now time.Time, encLevel protocol.E
 		if packet.PacketNumber > pnSpace.largestAcked {
 			return false, nil
 		}
-		if packet.declaredLost {
+		if packet.declaredLost || packet.skippedPacket {
 			return true, nil
 		}
 
@@ -765,7 +765,7 @@ func (h *sentPacketHandler) ResetForRetry() error {
 		if firstPacketSendTime.IsZero() {
 			firstPacketSendTime = p.SendTime
 		}
-		if p.declaredLost {
+		if p.declaredLost || p.skippedPacket {
 			return true, nil
 		}
 		h.queueFramesForRetransmission(p)
@@ -774,7 +774,7 @@ func (h *sentPacketHandler) ResetForRetry() error {
 	// All application data packets sent at this point are 0-RTT packets.
 	// In the case of a Retry, we can assume that the server dropped all of them.
 	h.appDataPackets.history.Iterate(func(p *Packet) (bool, error) {
-		if !p.declaredLost {
+		if !p.declaredLost && !p.skippedPacket {
 			h.queueFramesForRetransmission(p)
 		}
 		return true, nil

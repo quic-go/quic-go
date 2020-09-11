@@ -9,22 +9,41 @@ import (
 )
 
 type sentPacketHistory struct {
-	rttStats   *utils.RTTStats
-	packetList *PacketList
-	packetMap  map[protocol.PacketNumber]*PacketElement
+	rttStats    *utils.RTTStats
+	packetList  *PacketList
+	packetMap   map[protocol.PacketNumber]*PacketElement
+	highestSent protocol.PacketNumber
 }
 
 func newSentPacketHistory(rttStats *utils.RTTStats) *sentPacketHistory {
 	return &sentPacketHistory{
-		rttStats:   rttStats,
-		packetList: NewPacketList(),
-		packetMap:  make(map[protocol.PacketNumber]*PacketElement),
+		rttStats:    rttStats,
+		packetList:  NewPacketList(),
+		packetMap:   make(map[protocol.PacketNumber]*PacketElement),
+		highestSent: protocol.InvalidPacketNumber,
 	}
 }
 
-func (h *sentPacketHistory) SentPacket(p *Packet) {
-	el := h.packetList.PushBack(*p)
-	h.packetMap[p.PacketNumber] = el
+func (h *sentPacketHistory) SentPacket(p *Packet, isAckEliciting bool) {
+	if p.PacketNumber <= h.highestSent {
+		panic("non-sequential packet number use")
+	}
+	// Skipped packet numbers.
+	for pn := h.highestSent + 1; pn < p.PacketNumber; pn++ {
+		el := h.packetList.PushBack(Packet{
+			PacketNumber:    pn,
+			EncryptionLevel: p.EncryptionLevel,
+			SendTime:        p.SendTime,
+			skippedPacket:   true,
+		})
+		h.packetMap[pn] = el
+	}
+	h.highestSent = p.PacketNumber
+
+	if isAckEliciting {
+		el := h.packetList.PushBack(*p)
+		h.packetMap[p.PacketNumber] = el
+	}
 }
 
 // Iterate iterates through all packets.
@@ -45,7 +64,7 @@ func (h *sentPacketHistory) Iterate(cb func(*Packet) (cont bool, err error)) err
 // FirstOutStanding returns the first outstanding packet.
 func (h *sentPacketHistory) FirstOutstanding() *Packet {
 	for el := h.packetList.Front(); el != nil; el = el.Next() {
-		if !el.Value.declaredLost {
+		if !el.Value.declaredLost && !el.Value.skippedPacket {
 			return &el.Value
 		}
 	}
@@ -79,7 +98,7 @@ func (h *sentPacketHistory) DeleteOldPackets(now time.Time) {
 		if p.SendTime.After(now.Add(-maxAge)) {
 			break
 		}
-		if !p.declaredLost { // should only happen in the case of drastic RTT changes
+		if !p.skippedPacket && !p.declaredLost { // should only happen in the case of drastic RTT changes
 			continue
 		}
 		delete(h.packetMap, p.PacketNumber)

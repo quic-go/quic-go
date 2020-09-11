@@ -88,7 +88,7 @@ var _ = Describe("SentPacketHandler", func() {
 		pnSpace := handler.getPacketNumberSpace(encLevel)
 		var length int
 		pnSpace.history.Iterate(func(p *Packet) (bool, error) {
-			if !p.declaredLost {
+			if !p.declaredLost && !p.skippedPacket {
 				length++
 			}
 			return true, nil
@@ -140,13 +140,6 @@ var _ = Describe("SentPacketHandler", func() {
 			handler.SentPacket(ackElicitingPacket(&Packet{PacketNumber: 1, SendTime: sendTime, EncryptionLevel: protocol.EncryptionInitial}))
 			handler.SentPacket(ackElicitingPacket(&Packet{PacketNumber: 2, SendTime: sendTime.Add(time.Hour), EncryptionLevel: protocol.Encryption1RTT}))
 			Expect(handler.initialPackets.lastAckElicitingPacketTime).To(Equal(sendTime))
-		})
-
-		It("does not store non-ack-eliciting packets", func() {
-			handler.SentPacket(nonAckElicitingPacket(&Packet{PacketNumber: 1}))
-			Expect(handler.appDataPackets.history.Len()).To(BeZero())
-			Expect(handler.appDataPackets.lastAckElicitingPacketTime).To(BeZero())
-			Expect(handler.bytesInFlight).To(BeZero())
 		})
 	})
 
@@ -557,11 +550,10 @@ var _ = Describe("SentPacketHandler", func() {
 			handler.ReceivedPacket(protocol.EncryptionHandshake)
 			cong.EXPECT().CanSend(gomock.Any()).Return(true).AnyTimes()
 			cong.EXPECT().OnPacketSent(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
-			for i := protocol.PacketNumber(1); i < protocol.MaxOutstandingSentPackets; i++ {
-				handler.SentPacket(ackElicitingPacket(&Packet{PacketNumber: i}))
+			for i := protocol.PacketNumber(0); i < protocol.MaxOutstandingSentPackets; i++ {
 				Expect(handler.SendMode()).To(Equal(SendAny))
+				handler.SentPacket(ackElicitingPacket(&Packet{PacketNumber: i}))
 			}
-			handler.SentPacket(ackElicitingPacket(&Packet{PacketNumber: protocol.MaxOutstandingSentPackets}))
 			Expect(handler.SendMode()).To(Equal(SendAck))
 		})
 
@@ -754,7 +746,7 @@ var _ = Describe("SentPacketHandler", func() {
 			Expect(handler.SendMode()).To(Equal(SendPTOInitial))
 			handler.SentPacket(initialPacket(&Packet{PacketNumber: 3}))
 			Expect(handler.SendMode()).To(Equal(SendPTOInitial))
-			handler.SentPacket(initialPacket(&Packet{PacketNumber: 3}))
+			handler.SentPacket(initialPacket(&Packet{PacketNumber: 4}))
 
 			Expect(handler.SendMode()).To(Equal(SendAny))
 		})
@@ -1045,6 +1037,9 @@ var _ = Describe("SentPacketHandler", func() {
 		// TODO(#2067): invalidate 0-RTT data when 0-RTT is rejected
 		It("retransmits 0-RTT packets when 0-RTT keys are dropped", func() {
 			for i := protocol.PacketNumber(0); i < 6; i++ {
+				if i == 3 {
+					continue
+				}
 				handler.SentPacket(ackElicitingPacket(&Packet{
 					PacketNumber:    i,
 					EncryptionLevel: protocol.Encryption0RTT,
@@ -1053,9 +1048,9 @@ var _ = Describe("SentPacketHandler", func() {
 			for i := protocol.PacketNumber(6); i < 12; i++ {
 				handler.SentPacket(ackElicitingPacket(&Packet{PacketNumber: i}))
 			}
-			Expect(handler.bytesInFlight).To(Equal(protocol.ByteCount(12)))
+			Expect(handler.bytesInFlight).To(Equal(protocol.ByteCount(11)))
 			handler.DropPackets(protocol.Encryption0RTT)
-			Expect(lostPackets).To(Equal([]protocol.PacketNumber{0, 1, 2, 3, 4, 5}))
+			Expect(lostPackets).To(Equal([]protocol.PacketNumber{0, 1, 2, 4, 5}))
 			Expect(handler.bytesInFlight).To(Equal(protocol.ByteCount(6)))
 		})
 
