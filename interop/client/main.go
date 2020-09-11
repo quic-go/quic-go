@@ -16,6 +16,7 @@ import (
 
 	"github.com/lucas-clemente/quic-go"
 	"github.com/lucas-clemente/quic-go/http3"
+	"github.com/lucas-clemente/quic-go/internal/handshake"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/interop/http09"
 	"github.com/lucas-clemente/quic-go/interop/utils"
@@ -86,6 +87,8 @@ func runTestcase(testcase string) error {
 
 	switch testcase {
 	case "handshake", "transfer", "retry":
+	case "keyupdate":
+		handshake.KeyUpdateInterval = 100
 	case "chacha20":
 		tlsConf.CipherSuites = []uint16{tls.TLS_CHACHA20_POLY1305_SHA256}
 	case "multiconnect":
