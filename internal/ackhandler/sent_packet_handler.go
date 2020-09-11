@@ -632,6 +632,8 @@ func (h *sentPacketHandler) onVerifiedLossDetectionTimeout() error {
 		case protocol.EncryptionHandshake:
 			h.ptoMode = SendPTOHandshake
 		case protocol.Encryption1RTT:
+			// skip a packet number in order to elicit an immediate ACK
+			_ = h.PopPacketNumber(protocol.Encryption1RTT)
 			h.ptoMode = SendPTOAppData
 		default:
 			return fmt.Errorf("PTO timer in unexpected encryption level: %s", encLevel)

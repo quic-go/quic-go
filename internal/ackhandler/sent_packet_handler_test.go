@@ -692,6 +692,23 @@ var _ = Describe("SentPacketHandler", func() {
 			Expect(handler.SendMode()).ToNot(Equal(SendPTOAppData))
 		})
 
+		It("skips a packet number for 1-RTT PTOs", func() {
+			handler.ReceivedPacket(protocol.EncryptionHandshake)
+			handler.SetHandshakeConfirmed()
+			var lostPackets []protocol.PacketNumber
+			pn := handler.PopPacketNumber(protocol.Encryption1RTT)
+			handler.SentPacket(ackElicitingPacket(&Packet{
+				PacketNumber: pn,
+				SendTime:     time.Now().Add(-time.Hour),
+				Frames: []Frame{
+					{Frame: &wire.PingFrame{}, OnLost: func(wire.Frame) { lostPackets = append(lostPackets, 1) }},
+				},
+			}))
+			Expect(handler.OnLossDetectionTimeout()).To(Succeed())
+			Expect(handler.SendMode()).To(Equal(SendPTOAppData))
+			Expect(handler.PopPacketNumber(protocol.Encryption1RTT)).To(Equal(pn + 2))
+		})
+
 		It("only counts ack-eliciting packets as probe packets", func() {
 			handler.ReceivedPacket(protocol.EncryptionHandshake)
 			handler.SetHandshakeConfirmed()
