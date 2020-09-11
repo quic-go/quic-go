@@ -2,17 +2,21 @@ package ackhandler
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/lucas-clemente/quic-go/internal/protocol"
+	"github.com/lucas-clemente/quic-go/internal/utils"
 )
 
 type sentPacketHistory struct {
+	rttStats   *utils.RTTStats
 	packetList *PacketList
 	packetMap  map[protocol.PacketNumber]*PacketElement
 }
 
-func newSentPacketHistory() *sentPacketHistory {
+func newSentPacketHistory(rttStats *utils.RTTStats) *sentPacketHistory {
 	return &sentPacketHistory{
+		rttStats:   rttStats,
 		packetList: NewPacketList(),
 		packetMap:  make(map[protocol.PacketNumber]*PacketElement),
 	}
@@ -40,10 +44,12 @@ func (h *sentPacketHistory) Iterate(cb func(*Packet) (cont bool, err error)) err
 
 // FirstOutStanding returns the first outstanding packet.
 func (h *sentPacketHistory) FirstOutstanding() *Packet {
-	if !h.HasOutstandingPackets() {
-		return nil
+	for el := h.packetList.Front(); el != nil; el = el.Next() {
+		if !el.Value.declaredLost {
+			return &el.Value
+		}
 	}
-	return &h.packetList.Front().Value
+	return nil
 }
 
 func (h *sentPacketHistory) Len() int {
@@ -61,5 +67,22 @@ func (h *sentPacketHistory) Remove(p protocol.PacketNumber) error {
 }
 
 func (h *sentPacketHistory) HasOutstandingPackets() bool {
-	return h.packetList.Len() > 0
+	return h.FirstOutstanding() != nil
+}
+
+func (h *sentPacketHistory) DeleteOldPackets(now time.Time) {
+	maxAge := 3 * h.rttStats.PTO(false)
+	var nextEl *PacketElement
+	for el := h.packetList.Front(); el != nil; el = nextEl {
+		nextEl = el.Next()
+		p := el.Value
+		if p.SendTime.After(now.Add(-maxAge)) {
+			break
+		}
+		if !p.declaredLost { // should only happen in the case of drastic RTT changes
+			continue
+		}
+		delete(h.packetMap, p.PacketNumber)
+		h.packetList.Remove(el)
+	}
 }

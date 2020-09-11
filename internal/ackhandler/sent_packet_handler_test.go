@@ -26,7 +26,7 @@ var _ = Describe("SentPacketHandler", func() {
 
 	JustBeforeEach(func() {
 		lostPackets = nil
-		rttStats := &utils.RTTStats{}
+		rttStats := utils.NewRTTStats()
 		handler = newSentPacketHandler(42, rttStats, perspective, nil, nil, utils.DefaultLogger)
 		streamFrame = wire.StreamFrame{
 			StreamID: 5,
@@ -86,7 +86,14 @@ var _ = Describe("SentPacketHandler", func() {
 
 	expectInPacketHistory := func(expected []protocol.PacketNumber, encLevel protocol.EncryptionLevel) {
 		pnSpace := handler.getPacketNumberSpace(encLevel)
-		ExpectWithOffset(1, pnSpace.history.Len()).To(Equal(len(expected)))
+		var length int
+		pnSpace.history.Iterate(func(p *Packet) (bool, error) {
+			if !p.declaredLost {
+				length++
+			}
+			return true, nil
+		})
+		ExpectWithOffset(1, length).To(Equal(len(expected)))
 		for _, p := range expected {
 			ExpectWithOffset(2, pnSpace.history.packetMap).To(HaveKey(p))
 		}
@@ -190,7 +197,14 @@ var _ = Describe("SentPacketHandler", func() {
 		Context("acks the right packets", func() {
 			expectInPacketHistoryOrLost := func(expected []protocol.PacketNumber, encLevel protocol.EncryptionLevel) {
 				pnSpace := handler.getPacketNumberSpace(encLevel)
-				ExpectWithOffset(1, pnSpace.history.Len()+len(lostPackets)).To(Equal(len(expected)))
+				var length int
+				pnSpace.history.Iterate(func(p *Packet) (bool, error) {
+					if !p.declaredLost {
+						length++
+					}
+					return true, nil
+				})
+				ExpectWithOffset(1, length+len(lostPackets)).To(Equal(len(expected)))
 			expectedLoop:
 				for _, p := range expected {
 					if _, ok := pnSpace.history.packetMap[p]; ok {
