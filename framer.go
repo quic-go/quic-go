@@ -9,14 +9,16 @@ import (
 	"github.com/lucas-clemente/quic-go/internal/wire"
 )
 
-type framer interface {
+type frameSource interface {
 	HasData() bool
+	AppendStreamFrames([]*ackhandler.Frame, protocol.ByteCount) ([]*ackhandler.Frame, protocol.ByteCount)
+	AppendControlFrames([]*ackhandler.Frame, protocol.ByteCount) ([]*ackhandler.Frame, protocol.ByteCount)
+}
 
+type framer interface {
+	frameSource
 	QueueControlFrame(wire.Frame)
-	AppendControlFrames([]ackhandler.Frame, protocol.ByteCount) ([]ackhandler.Frame, protocol.ByteCount)
-
 	AddActiveStream(protocol.StreamID)
-	AppendStreamFrames([]ackhandler.Frame, protocol.ByteCount) ([]ackhandler.Frame, protocol.ByteCount)
 }
 
 type framerI struct {
@@ -64,7 +66,7 @@ func (f *framerI) QueueControlFrame(frame wire.Frame) {
 	f.controlFrameMutex.Unlock()
 }
 
-func (f *framerI) AppendControlFrames(frames []ackhandler.Frame, maxLen protocol.ByteCount) ([]ackhandler.Frame, protocol.ByteCount) {
+func (f *framerI) AppendControlFrames(frames []*ackhandler.Frame, maxLen protocol.ByteCount) ([]*ackhandler.Frame, protocol.ByteCount) {
 	var length protocol.ByteCount
 	f.controlFrameMutex.Lock()
 	for len(f.controlFrames) > 0 {
@@ -73,7 +75,7 @@ func (f *framerI) AppendControlFrames(frames []ackhandler.Frame, maxLen protocol
 		if length+frameLen > maxLen {
 			break
 		}
-		frames = append(frames, ackhandler.Frame{Frame: frame})
+		frames = append(frames, &ackhandler.Frame{Frame: frame})
 		length += frameLen
 		f.controlFrames = f.controlFrames[:len(f.controlFrames)-1]
 	}
@@ -90,7 +92,7 @@ func (f *framerI) AddActiveStream(id protocol.StreamID) {
 	f.mutex.Unlock()
 }
 
-func (f *framerI) AppendStreamFrames(frames []ackhandler.Frame, maxLen protocol.ByteCount) ([]ackhandler.Frame, protocol.ByteCount) {
+func (f *framerI) AppendStreamFrames(frames []*ackhandler.Frame, maxLen protocol.ByteCount) ([]*ackhandler.Frame, protocol.ByteCount) {
 	var length protocol.ByteCount
 	var lastFrame *ackhandler.Frame
 	f.mutex.Lock()
@@ -127,7 +129,7 @@ func (f *framerI) AppendStreamFrames(frames []ackhandler.Frame, maxLen protocol.
 		if frame == nil {
 			continue
 		}
-		frames = append(frames, *frame)
+		frames = append(frames, frame)
 		length += frame.Length(f.version)
 		lastFrame = frame
 	}

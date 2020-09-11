@@ -11,7 +11,7 @@ import (
 // A Packet is a packet
 type Packet struct {
 	PacketNumber    protocol.PacketNumber
-	Frames          []Frame
+	Frames          []*Frame
 	LargestAcked    protocol.PacketNumber // InvalidPacketNumber if the packet doesn't contain an ACK
 	Length          protocol.ByteCount
 	EncryptionLevel protocol.EncryptionLevel

@@ -46,7 +46,7 @@ var _ = Describe("Packet packer", func() {
 		ExpectWithOffset(1, extHdr.Length).To(BeEquivalentTo(r.Len() + int(extHdr.PacketNumberLen)))
 	}
 
-	appendFrames := func(fs, frames []ackhandler.Frame) ([]ackhandler.Frame, protocol.ByteCount) {
+	appendFrames := func(fs, frames []*ackhandler.Frame) ([]*ackhandler.Frame, protocol.ByteCount) {
 		var length protocol.ByteCount
 		for _, f := range frames {
 			length += f.Frame.Length(packer.version)
@@ -54,14 +54,14 @@ var _ = Describe("Packet packer", func() {
 		return append(fs, frames...), length
 	}
 
-	expectAppendStreamFrames := func(frames ...ackhandler.Frame) {
-		framer.EXPECT().AppendStreamFrames(gomock.Any(), gomock.Any()).DoAndReturn(func(fs []ackhandler.Frame, _ protocol.ByteCount) ([]ackhandler.Frame, protocol.ByteCount) {
+	expectAppendStreamFrames := func(frames ...*ackhandler.Frame) {
+		framer.EXPECT().AppendStreamFrames(gomock.Any(), gomock.Any()).DoAndReturn(func(fs []*ackhandler.Frame, _ protocol.ByteCount) ([]*ackhandler.Frame, protocol.ByteCount) {
 			return appendFrames(fs, frames)
 		})
 	}
 
-	expectAppendControlFrames := func(frames ...ackhandler.Frame) {
-		framer.EXPECT().AppendControlFrames(gomock.Any(), gomock.Any()).DoAndReturn(func(fs []ackhandler.Frame, _ protocol.ByteCount) ([]ackhandler.Frame, protocol.ByteCount) {
+	expectAppendControlFrames := func(frames ...*ackhandler.Frame) {
+		framer.EXPECT().AppendControlFrames(gomock.Any(), gomock.Any()).DoAndReturn(func(fs []*ackhandler.Frame, _ protocol.ByteCount) ([]*ackhandler.Frame, protocol.ByteCount) {
 			return appendFrames(fs, frames)
 		})
 	}
@@ -178,12 +178,12 @@ var _ = Describe("Packet packer", func() {
 			ackFramer.EXPECT().GetAckFrame(protocol.Encryption1RTT, false)
 			expectAppendControlFrames()
 			f := &wire.StreamFrame{Data: []byte{0xde, 0xca, 0xfb, 0xad}}
-			expectAppendStreamFrames(ackhandler.Frame{Frame: f})
+			expectAppendStreamFrames(&ackhandler.Frame{Frame: f})
 			p, err := packer.PackCoalescedPacket(protocol.MaxByteCount)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(p).ToNot(BeNil())
 			Expect(p.packets).To(HaveLen(1))
-			Expect(p.packets[0].frames).To(Equal([]ackhandler.Frame{{Frame: f}}))
+			Expect(p.packets[0].frames).To(Equal([]*ackhandler.Frame{{Frame: f}}))
 			hdrRawEncrypted := append([]byte{}, hdrRaw...)
 			hdrRawEncrypted[0] ^= 0xff
 			hdrRawEncrypted[len(hdrRaw)-2] ^= 0xff
@@ -261,13 +261,13 @@ var _ = Describe("Packet packer", func() {
 				sealingManager.EXPECT().Get0RTTSealer().Return(getSealer(), nil).AnyTimes()
 				pnManager.EXPECT().PeekPacketNumber(protocol.Encryption0RTT).Return(protocol.PacketNumber(0x42), protocol.PacketNumberLen2)
 				pnManager.EXPECT().PopPacketNumber(protocol.Encryption0RTT).Return(protocol.PacketNumber(0x42))
-				cf := ackhandler.Frame{Frame: &wire.MaxDataFrame{MaximumData: 0x1337}}
+				cf := &ackhandler.Frame{Frame: &wire.MaxDataFrame{MaximumData: 0x1337}}
 				framer.EXPECT().HasData().Return(true)
-				framer.EXPECT().AppendControlFrames(nil, gomock.Any()).DoAndReturn(func(frames []ackhandler.Frame, _ protocol.ByteCount) ([]ackhandler.Frame, protocol.ByteCount) {
+				framer.EXPECT().AppendControlFrames(nil, gomock.Any()).DoAndReturn(func(frames []*ackhandler.Frame, _ protocol.ByteCount) ([]*ackhandler.Frame, protocol.ByteCount) {
 					return append(frames, cf), cf.Length(packer.version)
 				})
 				// TODO: check sizes
-				framer.EXPECT().AppendStreamFrames(gomock.Any(), gomock.Any()).DoAndReturn(func(frames []ackhandler.Frame, _ protocol.ByteCount) ([]ackhandler.Frame, protocol.ByteCount) {
+				framer.EXPECT().AppendStreamFrames(gomock.Any(), gomock.Any()).DoAndReturn(func(frames []*ackhandler.Frame, _ protocol.ByteCount) ([]*ackhandler.Frame, protocol.ByteCount) {
 					return frames, 0
 				})
 				p, err := packer.PackCoalescedPacket(protocol.MaxByteCount)
@@ -276,7 +276,7 @@ var _ = Describe("Packet packer", func() {
 				Expect(p.packets).To(HaveLen(1))
 				Expect(p.packets[0].header.Type).To(Equal(protocol.PacketType0RTT))
 				Expect(p.packets[0].EncryptionLevel()).To(Equal(protocol.Encryption0RTT))
-				Expect(p.packets[0].frames).To(Equal([]ackhandler.Frame{cf}))
+				Expect(p.packets[0].frames).To(Equal([]*ackhandler.Frame{cf}))
 			})
 		})
 
@@ -449,13 +449,13 @@ var _ = Describe("Packet packer", func() {
 					StreamID: 5,
 					Data:     []byte{0xde, 0xca, 0xfb, 0xad},
 				}
-				expectAppendStreamFrames(ackhandler.Frame{Frame: f})
+				expectAppendStreamFrames(&ackhandler.Frame{Frame: f})
 				p, err := packer.PackPacket()
 				Expect(err).ToNot(HaveOccurred())
 				Expect(p).ToNot(BeNil())
 				b := &bytes.Buffer{}
 				f.Write(b, packer.version)
-				Expect(p.frames).To(Equal([]ackhandler.Frame{{Frame: f}}))
+				Expect(p.frames).To(Equal([]*ackhandler.Frame{{Frame: f}}))
 				Expect(p.buffer.Data).To(ContainSubstring(b.String()))
 			})
 
@@ -466,7 +466,7 @@ var _ = Describe("Packet packer", func() {
 				framer.EXPECT().HasData().Return(true)
 				ackFramer.EXPECT().GetAckFrame(protocol.Encryption1RTT, false)
 				expectAppendControlFrames()
-				expectAppendStreamFrames(ackhandler.Frame{Frame: &wire.StreamFrame{
+				expectAppendStreamFrames(&ackhandler.Frame{Frame: &wire.StreamFrame{
 					StreamID: 5,
 					Data:     []byte("foobar"),
 				}})
@@ -494,7 +494,7 @@ var _ = Describe("Packet packer", func() {
 				sealingManager.EXPECT().Get1RTTSealer().Return(getSealer(), nil)
 				framer.EXPECT().HasData().Return(true)
 				ackFramer.EXPECT().GetAckFrame(protocol.Encryption1RTT, false)
-				frames := []ackhandler.Frame{
+				frames := []*ackhandler.Frame{
 					{Frame: &wire.ResetStreamFrame{}},
 					{Frame: &wire.MaxDataFrame{}},
 				}
@@ -514,11 +514,11 @@ var _ = Describe("Packet packer", func() {
 				ackFramer.EXPECT().GetAckFrame(protocol.Encryption1RTT, false)
 				var maxSize protocol.ByteCount
 				gomock.InOrder(
-					framer.EXPECT().AppendControlFrames(gomock.Any(), gomock.Any()).DoAndReturn(func(fs []ackhandler.Frame, maxLen protocol.ByteCount) ([]ackhandler.Frame, protocol.ByteCount) {
+					framer.EXPECT().AppendControlFrames(gomock.Any(), gomock.Any()).DoAndReturn(func(fs []*ackhandler.Frame, maxLen protocol.ByteCount) ([]*ackhandler.Frame, protocol.ByteCount) {
 						maxSize = maxLen
 						return fs, 444
 					}),
-					framer.EXPECT().AppendStreamFrames(gomock.Any(), gomock.Any()).Do(func(fs []ackhandler.Frame, maxLen protocol.ByteCount) ([]ackhandler.Frame, protocol.ByteCount) {
+					framer.EXPECT().AppendStreamFrames(gomock.Any(), gomock.Any()).Do(func(fs []*ackhandler.Frame, maxLen protocol.ByteCount) ([]*ackhandler.Frame, protocol.ByteCount) {
 						Expect(maxLen).To(Equal(maxSize - 444))
 						return fs, 0
 					}),
@@ -578,7 +578,7 @@ var _ = Describe("Packet packer", func() {
 				framer.EXPECT().HasData().Return(true)
 				ackFramer.EXPECT().GetAckFrame(protocol.Encryption1RTT, false)
 				expectAppendControlFrames()
-				expectAppendStreamFrames(ackhandler.Frame{Frame: f})
+				expectAppendStreamFrames(&ackhandler.Frame{Frame: f})
 				packet, err := packer.PackPacket()
 				Expect(err).ToNot(HaveOccurred())
 				// cut off the tag that the mock sealer added
@@ -628,7 +628,7 @@ var _ = Describe("Packet packer", func() {
 				framer.EXPECT().HasData().Return(true)
 				ackFramer.EXPECT().GetAckFrame(protocol.Encryption1RTT, false)
 				expectAppendControlFrames()
-				expectAppendStreamFrames(ackhandler.Frame{Frame: f1}, ackhandler.Frame{Frame: f2}, ackhandler.Frame{Frame: f3})
+				expectAppendStreamFrames(&ackhandler.Frame{Frame: f1}, &ackhandler.Frame{Frame: f2}, &ackhandler.Frame{Frame: f3})
 				p, err := packer.PackPacket()
 				Expect(p).ToNot(BeNil())
 				Expect(err).ToNot(HaveOccurred())
@@ -668,7 +668,7 @@ var _ = Describe("Packet packer", func() {
 					p, err := packer.PackPacket()
 					Expect(p).ToNot(BeNil())
 					Expect(err).ToNot(HaveOccurred())
-					Expect(p.frames).To(ContainElement(ackhandler.Frame{Frame: &wire.PingFrame{}}))
+					Expect(p.frames).To(ContainElement(&ackhandler.Frame{Frame: &wire.PingFrame{}}))
 					// make sure the next packet doesn't contain another PING
 					pnManager.EXPECT().PeekPacketNumber(protocol.Encryption1RTT).Return(protocol.PacketNumber(0x42), protocol.PacketNumberLen2)
 					pnManager.EXPECT().PopPacketNumber(protocol.Encryption1RTT).Return(protocol.PacketNumber(0x42))
@@ -708,7 +708,7 @@ var _ = Describe("Packet packer", func() {
 					p, err = packer.PackPacket()
 					Expect(err).ToNot(HaveOccurred())
 					Expect(p.ack).To(Equal(ack))
-					Expect(p.frames).To(Equal([]ackhandler.Frame{{Frame: &wire.PingFrame{}}}))
+					Expect(p.frames).To(Equal([]*ackhandler.Frame{{Frame: &wire.PingFrame{}}}))
 				})
 
 				It("doesn't send a PING if it already sent another ack-eliciting frame", func() {
@@ -719,7 +719,7 @@ var _ = Describe("Packet packer", func() {
 					framer.EXPECT().HasData().Return(true)
 					ackFramer.EXPECT().GetAckFrame(protocol.Encryption1RTT, false)
 					expectAppendStreamFrames()
-					expectAppendControlFrames(ackhandler.Frame{Frame: &wire.MaxDataFrame{}})
+					expectAppendControlFrames(&ackhandler.Frame{Frame: &wire.MaxDataFrame{}})
 					p, err := packer.PackPacket()
 					Expect(err).ToNot(HaveOccurred())
 					Expect(p).ToNot(BeNil())
@@ -734,7 +734,7 @@ var _ = Describe("Packet packer", func() {
 					framer.EXPECT().HasData().Return(true).Times(2)
 					ackFramer.EXPECT().GetAckFrame(protocol.Encryption1RTT, false).Times(2)
 					var initialMaxPacketSize protocol.ByteCount
-					framer.EXPECT().AppendControlFrames(gomock.Any(), gomock.Any()).Do(func(_ []ackhandler.Frame, maxLen protocol.ByteCount) ([]ackhandler.Frame, protocol.ByteCount) {
+					framer.EXPECT().AppendControlFrames(gomock.Any(), gomock.Any()).Do(func(_ []*ackhandler.Frame, maxLen protocol.ByteCount) ([]*ackhandler.Frame, protocol.ByteCount) {
 						initialMaxPacketSize = maxLen
 						return nil, 0
 					})
@@ -745,7 +745,7 @@ var _ = Describe("Packet packer", func() {
 					packer.HandleTransportParameters(&wire.TransportParameters{
 						MaxUDPPayloadSize: maxPacketSize - 10,
 					})
-					framer.EXPECT().AppendControlFrames(gomock.Any(), gomock.Any()).Do(func(_ []ackhandler.Frame, maxLen protocol.ByteCount) ([]ackhandler.Frame, protocol.ByteCount) {
+					framer.EXPECT().AppendControlFrames(gomock.Any(), gomock.Any()).Do(func(_ []*ackhandler.Frame, maxLen protocol.ByteCount) ([]*ackhandler.Frame, protocol.ByteCount) {
 						Expect(maxLen).To(Equal(initialMaxPacketSize - 10))
 						return nil, 0
 					})
@@ -760,7 +760,7 @@ var _ = Describe("Packet packer", func() {
 					framer.EXPECT().HasData().Return(true).Times(2)
 					ackFramer.EXPECT().GetAckFrame(protocol.Encryption1RTT, false).Times(2)
 					var initialMaxPacketSize protocol.ByteCount
-					framer.EXPECT().AppendControlFrames(gomock.Any(), gomock.Any()).Do(func(_ []ackhandler.Frame, maxLen protocol.ByteCount) ([]ackhandler.Frame, protocol.ByteCount) {
+					framer.EXPECT().AppendControlFrames(gomock.Any(), gomock.Any()).Do(func(_ []*ackhandler.Frame, maxLen protocol.ByteCount) ([]*ackhandler.Frame, protocol.ByteCount) {
 						initialMaxPacketSize = maxLen
 						return nil, 0
 					})
@@ -771,7 +771,7 @@ var _ = Describe("Packet packer", func() {
 					packer.HandleTransportParameters(&wire.TransportParameters{
 						MaxUDPPayloadSize: maxPacketSize + 10,
 					})
-					framer.EXPECT().AppendControlFrames(gomock.Any(), gomock.Any()).Do(func(_ []ackhandler.Frame, maxLen protocol.ByteCount) ([]ackhandler.Frame, protocol.ByteCount) {
+					framer.EXPECT().AppendControlFrames(gomock.Any(), gomock.Any()).Do(func(_ []*ackhandler.Frame, maxLen protocol.ByteCount) ([]*ackhandler.Frame, protocol.ByteCount) {
 						Expect(maxLen).To(Equal(initialMaxPacketSize))
 						return nil, 0
 					})
@@ -880,7 +880,7 @@ var _ = Describe("Packet packer", func() {
 					return &wire.CryptoFrame{Offset: 0x42, Data: []byte("initial")}
 				})
 				expectAppendControlFrames()
-				expectAppendStreamFrames(ackhandler.Frame{Frame: &wire.StreamFrame{Data: []byte("foobar")}})
+				expectAppendStreamFrames(&ackhandler.Frame{Frame: &wire.StreamFrame{Data: []byte("foobar")}})
 				p, err := packer.PackCoalescedPacket(protocol.MaxByteCount)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(p.buffer.Len()).To(BeNumerically(">=", protocol.MinInitialPacketSize))
@@ -917,7 +917,7 @@ var _ = Describe("Packet packer", func() {
 					return &wire.CryptoFrame{Offset: 0x1337, Data: []byte("handshake")}
 				})
 				expectAppendControlFrames()
-				expectAppendStreamFrames(ackhandler.Frame{Frame: &wire.StreamFrame{Data: []byte("foobar")}})
+				expectAppendStreamFrames(&ackhandler.Frame{Frame: &wire.StreamFrame{Data: []byte("foobar")}})
 				p, err := packer.PackCoalescedPacket(protocol.MaxByteCount)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(p.packets).To(HaveLen(2))
@@ -1003,10 +1003,10 @@ var _ = Describe("Packet packer", func() {
 				})
 				expectAppendControlFrames()
 				var appDataSize protocol.ByteCount
-				framer.EXPECT().AppendStreamFrames(gomock.Any(), gomock.Any()).DoAndReturn(func(frames []ackhandler.Frame, maxSize protocol.ByteCount) ([]ackhandler.Frame, protocol.ByteCount) {
+				framer.EXPECT().AppendStreamFrames(gomock.Any(), gomock.Any()).DoAndReturn(func(frames []*ackhandler.Frame, maxSize protocol.ByteCount) ([]*ackhandler.Frame, protocol.ByteCount) {
 					appDataSize = maxSize
 					f := &wire.StreamFrame{Data: []byte("foobar")}
-					return append(frames, ackhandler.Frame{Frame: f}), f.Length(packer.version)
+					return append(frames, &ackhandler.Frame{Frame: f}), f.Length(packer.version)
 				})
 				p, err := packer.PackCoalescedPacket(size)
 				Expect(err).ToNot(HaveOccurred())
@@ -1068,7 +1068,7 @@ var _ = Describe("Packet packer", func() {
 				Expect(err).ToNot(HaveOccurred())
 				Expect(p.packets).To(HaveLen(1))
 				Expect(p.packets[0].EncryptionLevel()).To(Equal(protocol.EncryptionInitial))
-				Expect(p.packets[0].frames).To(Equal([]ackhandler.Frame{{Frame: f}}))
+				Expect(p.packets[0].frames).To(Equal([]*ackhandler.Frame{{Frame: f}}))
 				Expect(p.packets[0].header.IsLongHeader).To(BeTrue())
 				checkLength(p.buffer.Data)
 			})
@@ -1231,7 +1231,7 @@ var _ = Describe("Packet packer", func() {
 				pnManager.EXPECT().PopPacketNumber(protocol.Encryption1RTT).Return(protocol.PacketNumber(0x42))
 				framer.EXPECT().HasData().Return(true)
 				expectAppendControlFrames()
-				expectAppendStreamFrames(ackhandler.Frame{Frame: f})
+				expectAppendStreamFrames(&ackhandler.Frame{Frame: f})
 
 				packet, err := packer.MaybePackProbePacket(protocol.Encryption1RTT)
 				Expect(err).ToNot(HaveOccurred())
@@ -1259,7 +1259,7 @@ var _ = Describe("Converting to AckHandler packets", func() {
 	It("convert a packet", func() {
 		packet := &packetContents{
 			header: &wire.ExtendedHeader{Header: wire.Header{}},
-			frames: []ackhandler.Frame{{Frame: &wire.MaxDataFrame{}}, {Frame: &wire.PingFrame{}}},
+			frames: []*ackhandler.Frame{{Frame: &wire.MaxDataFrame{}}, {Frame: &wire.PingFrame{}}},
 			ack:    &wire.AckFrame{AckRanges: []wire.AckRange{{Largest: 100, Smallest: 80}}},
 			length: 42,
 		}
@@ -1274,7 +1274,7 @@ var _ = Describe("Converting to AckHandler packets", func() {
 	It("sets the LargestAcked to invalid, if the packet doesn't have an ACK frame", func() {
 		packet := &packetContents{
 			header: &wire.ExtendedHeader{Header: wire.Header{}},
-			frames: []ackhandler.Frame{{Frame: &wire.MaxDataFrame{}}, {Frame: &wire.PingFrame{}}},
+			frames: []*ackhandler.Frame{{Frame: &wire.MaxDataFrame{}}, {Frame: &wire.PingFrame{}}},
 		}
 		p := packet.ToAckHandlerPacket(time.Now(), nil)
 		Expect(p.LargestAcked).To(Equal(protocol.InvalidPacketNumber))
@@ -1286,7 +1286,7 @@ var _ = Describe("Converting to AckHandler packets", func() {
 			var pingLost bool
 			packet := &packetContents{
 				header: &wire.ExtendedHeader{Header: hdr},
-				frames: []ackhandler.Frame{
+				frames: []*ackhandler.Frame{
 					{Frame: &wire.MaxDataFrame{}},
 					{Frame: &wire.PingFrame{}, OnLost: func(wire.Frame) { pingLost = true }},
 				},
