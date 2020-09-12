@@ -20,6 +20,7 @@ linters:
     - asciicheck
     - deadcode
     - depguard
+    - exportloopref
     - goconst
     - goimports
     - gofmt
