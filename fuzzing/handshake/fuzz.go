@@ -17,6 +17,7 @@ import (
 
 var cert *tls.Certificate
 var certPool *x509.CertPool
+var sessionTicketKey = [32]byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32}
 
 func init() {
 	priv, err := rsa.GenerateKey(rand.Reader, 1024)
@@ -158,7 +159,7 @@ func maxEncLevel(cs handshake.CryptoSetup, encLevel protocol.EncryptionLevel) pr
 }
 
 // PrefixLen is the number of bytes used for configuration
-const PrefixLen = 2
+const PrefixLen = 4
 
 // Fuzz fuzzes the TLS 1.3 handshake used by QUIC.
 //go:generate go run ./cmd/corpus.go
@@ -166,13 +167,10 @@ func Fuzz(data []byte) int {
 	if len(data) < PrefixLen {
 		return -1
 	}
-	enable0RTTClient := helper.NthBit(data[0], 0)
-	enable0RTTServer := helper.NthBit(data[0], 1)
-	useSessionTicketCache := helper.NthBit(data[0], 2)
-	sendPostHandshakeMessageToClient := helper.NthBit(data[0], 3)
-	sendPostHandshakeMessageToServer := helper.NthBit(data[0], 4)
-	messageToReplace := data[1] % 32
-	messageToReplaceEncLevel := toEncryptionLevel(data[1] >> 6)
+	runConfig1 := data[0]
+	messageConfig1 := data[1]
+	runConfig2 := data[2]
+	messageConfig2 := data[3]
 	data = data[PrefixLen:]
 
 	clientConf := &tls.Config{
@@ -180,9 +178,27 @@ func Fuzz(data []byte) int {
 		NextProtos: []string{alpn},
 		RootCAs:    certPool,
 	}
+	useSessionTicketCache := helper.NthBit(runConfig1, 2)
 	if useSessionTicketCache {
 		clientConf.ClientSessionCache = tls.NewLRUClientSessionCache(5)
 	}
+
+	if val := runHandshake(runConfig1, messageConfig1, clientConf, data); val != 1 {
+		return val
+	}
+	return runHandshake(runConfig2, messageConfig2, clientConf, data)
+}
+
+func runHandshake(runConfig uint8, messageConfig uint8, clientConf *tls.Config, data []byte) int {
+	enable0RTTClient := helper.NthBit(runConfig, 0)
+	enable0RTTServer := helper.NthBit(runConfig, 1)
+	sendPostHandshakeMessageToClient := helper.NthBit(runConfig, 3)
+	sendPostHandshakeMessageToServer := helper.NthBit(runConfig, 4)
+	sendSessionTicket := helper.NthBit(runConfig, 5)
+
+	messageToReplace := messageConfig % 32
+	messageToReplaceEncLevel := toEncryptionLevel(messageConfig >> 6)
+
 	cChunkChan, cInitialStream, cHandshakeStream := initStreams()
 	var client, server handshake.CryptoSetup
 	runner := newRunner(&client, &server)
@@ -211,8 +227,9 @@ func Fuzz(data []byte) int {
 		&wire.TransportParameters{},
 		runner,
 		&tls.Config{
-			Certificates: []tls.Certificate{*cert},
-			NextProtos:   []string{alpn},
+			Certificates:     []tls.Certificate{*cert},
+			NextProtos:       []string{alpn},
+			SessionTicketKey: sessionTicketKey,
 		},
 		enable0RTTServer,
 		utils.NewRTTStats(),
@@ -273,13 +290,22 @@ messageLoop:
 	}
 
 	<-done
+	_ = client.ConnectionState()
+	_ = server.ConnectionState()
 	if runner.errored {
-		return 1
+		return 0
 	}
-	if sendPostHandshakeMessageToClient {
-		if _, err := server.GetSessionTicket(); err != nil {
+	if sendSessionTicket {
+		ticket, err := server.GetSessionTicket()
+		if err != nil {
 			panic(err)
 		}
+		if ticket == nil {
+			panic("empty ticket")
+		}
+		client.HandleMessage(ticket, protocol.Encryption1RTT)
+	}
+	if sendPostHandshakeMessageToClient {
 		client.HandleMessage(data, messageToReplaceEncLevel)
 	}
 	if sendPostHandshakeMessageToServer {
