@@ -1275,7 +1275,7 @@ var _ = Describe("Session", func() {
 
 			Context(fmt.Sprintf("sending %s probe packets", encLevel), func() {
 				var sendMode ackhandler.SendMode
-				var getFrame func(protocol.ByteCount) wire.Frame
+				var getFrame func(protocol.ByteCount) *ackhandler.Frame
 
 				BeforeEach(func() {
 					switch encLevel {
@@ -1333,7 +1333,9 @@ var _ = Describe("Session", func() {
 					Eventually(sent).Should(BeClosed())
 					// We're using a mock packet packer in this test.
 					// We therefore need to test separately that the PING was actually queued.
-					Expect(getFrame(1000)).To(BeAssignableToTypeOf(&wire.PingFrame{}))
+					f := getFrame(protocol.MaxByteCount)
+					Expect(f).ToNot(BeNil())
+					Expect(f.Frame).To(BeAssignableToTypeOf(&wire.PingFrame{}))
 				})
 			})
 		}
