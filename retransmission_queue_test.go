@@ -2,6 +2,8 @@ package quic
 
 import (
 	"fmt"
+	"reflect"
+	"unsafe"
 
 	"github.com/lucas-clemente/quic-go/internal/ackhandler"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
@@ -19,6 +21,12 @@ var _ = Describe("Retransmission queue", func() {
 	BeforeEach(func() {
 		q = newRetransmissionQueue(version)
 	})
+
+	getRetransmittedAs := func(f *ackhandler.Frame) []*ackhandler.Frame {
+		rf := reflect.ValueOf(f).Elem().FieldByName("retransmittedAs")
+		rf = reflect.NewAt(rf.Type(), unsafe.Pointer(rf.UnsafeAddr())).Elem()
+		return rf.Interface().([]*ackhandler.Frame)
+	}
 
 	for _, el := range []protocol.EncryptionLevel{protocol.EncryptionInitial, protocol.EncryptionHandshake} {
 		encLevel := el
@@ -52,20 +60,30 @@ var _ = Describe("Retransmission queue", func() {
 			})
 
 			It("queues and retrieves a control frame", func() {
-				f := &wire.MaxDataFrame{MaximumData: 0x42}
-				add(&ackhandler.Frame{Frame: f})
+				mdf := &wire.MaxDataFrame{MaximumData: 0x42}
+				f := &ackhandler.Frame{Frame: mdf}
+				add(f)
 				Expect(hasData()).To(BeTrue())
 				Expect(getFrame(f.Length(version) - 1)).To(BeNil())
-				Expect(getFrame(f.Length(version)).Frame).To(Equal(f))
+				retransmission := getFrame(f.Length(version))
+				Expect(retransmission).ToNot(BeNil())
+				Expect(retransmission.Frame).To(Equal(mdf))
 				Expect(hasData()).To(BeFalse())
+				Expect(f.Frame).To(BeNil())
+				Expect(getRetransmittedAs(f)).To(Equal([]*ackhandler.Frame{retransmission}))
 			})
 
 			It("queues and retrieves a CRYPTO frame", func() {
-				f := &wire.CryptoFrame{Data: []byte("foobar")}
-				add(&ackhandler.Frame{Frame: f})
+				cf := &wire.CryptoFrame{Data: []byte("foobar")}
+				f := &ackhandler.Frame{Frame: cf}
+				add(f)
 				Expect(hasData()).To(BeTrue())
-				Expect(getFrame(f.Length(version)).Frame).To(Equal(f))
+				retransmission := getFrame(f.Length(version))
+				Expect(retransmission).ToNot(BeNil())
+				Expect(retransmission.Frame).To(Equal(cf))
 				Expect(hasData()).To(BeFalse())
+				Expect(f.Frame).To(BeNil())
+				Expect(getRetransmittedAs(f)).To(Equal([]*ackhandler.Frame{retransmission}))
 			})
 
 			It("returns split CRYPTO frames", func() {
@@ -81,12 +99,16 @@ var _ = Describe("Retransmission queue", func() {
 				Expect(f1.Frame.(*wire.CryptoFrame).Data).To(Equal([]byte("foo")))
 				Expect(f1.Frame.(*wire.CryptoFrame).Offset).To(Equal(protocol.ByteCount(100)))
 				Expect(hasData()).To(BeTrue())
+				Expect(f.Frame).ToNot(BeNil())
+				Expect(getRetransmittedAs(f)).To(Equal([]*ackhandler.Frame{f1}))
 				f2 := getFrame(protocol.MaxByteCount)
 				Expect(f2).ToNot(BeNil())
 				Expect(f2.Frame).To(BeAssignableToTypeOf(&wire.CryptoFrame{}))
 				Expect(f2.Frame.(*wire.CryptoFrame).Data).To(Equal([]byte("bar")))
 				Expect(f2.Frame.(*wire.CryptoFrame).Offset).To(Equal(protocol.ByteCount(103)))
 				Expect(hasData()).To(BeFalse())
+				Expect(f.Frame).To(BeNil())
+				Expect(getRetransmittedAs(f)).To(Equal([]*ackhandler.Frame{f1, f2}))
 			})
 
 			It("returns other frames when a CRYPTO frame wouldn't fit", func() {
@@ -129,13 +151,18 @@ var _ = Describe("Retransmission queue", func() {
 		})
 
 		It("queues and retrieves a control frame", func() {
-			f := &wire.MaxDataFrame{MaximumData: 0x42}
+			mdf := &wire.MaxDataFrame{MaximumData: 0x42}
+			f := &ackhandler.Frame{Frame: mdf}
 			Expect(q.HasAppData()).To(BeFalse())
-			q.AddAppData(&ackhandler.Frame{Frame: f})
+			q.AddAppData(f)
 			Expect(q.HasAppData()).To(BeTrue())
 			Expect(q.GetAppDataFrame(f.Length(version) - 1)).To(BeNil())
-			Expect(q.GetAppDataFrame(f.Length(version)).Frame).To(Equal(f))
+			retransmission := q.GetAppDataFrame(f.Length(version))
+			Expect(retransmission).ToNot(BeNil())
+			Expect(retransmission.Frame).To(Equal(mdf))
 			Expect(q.HasAppData()).To(BeFalse())
+			Expect(f.Frame).To(BeNil())
+			Expect(getRetransmittedAs(f)).To(Equal([]*ackhandler.Frame{retransmission}))
 		})
 	})
 })

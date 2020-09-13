@@ -64,11 +64,16 @@ func (q *retransmissionQueue) GetInitialFrame(maxLen protocol.ByteCount) *ackhan
 		f := q.initialCryptoData[0]
 		newFrame, needsSplit := f.Frame.(*wire.CryptoFrame).MaybeSplitOffFrame(maxLen, q.version)
 		if newFrame == nil && !needsSplit { // the whole frame fits
+			r := &ackhandler.Frame{Frame: f.Frame}
+			f.Frame = nil
+			f.RetransmittedAs(r)
 			q.initialCryptoData = q.initialCryptoData[1:]
-			return f
+			return r
 		}
 		if newFrame != nil { // frame was split. Leave the original frame in the queue.
-			return &ackhandler.Frame{Frame: newFrame}
+			cf := &ackhandler.Frame{Frame: newFrame}
+			f.RetransmittedAs(cf)
+			return cf
 		}
 	}
 	if len(q.initial) == 0 {
@@ -78,8 +83,11 @@ func (q *retransmissionQueue) GetInitialFrame(maxLen protocol.ByteCount) *ackhan
 	if f.Length(q.version) > maxLen {
 		return nil
 	}
+	r := &ackhandler.Frame{Frame: f.Frame}
+	f.Frame = nil
+	f.RetransmittedAs(r)
 	q.initial = q.initial[1:]
-	return &ackhandler.Frame{Frame: f.Frame}
+	return r
 }
 
 func (q *retransmissionQueue) GetHandshakeFrame(maxLen protocol.ByteCount) *ackhandler.Frame {
@@ -87,10 +95,15 @@ func (q *retransmissionQueue) GetHandshakeFrame(maxLen protocol.ByteCount) *ackh
 		f := q.handshakeCryptoData[0]
 		newFrame, needsSplit := f.Frame.(*wire.CryptoFrame).MaybeSplitOffFrame(maxLen, q.version)
 		if newFrame == nil && !needsSplit { // the whole frame fits
+			r := &ackhandler.Frame{Frame: f.Frame}
+			f.Frame = nil
+			f.RetransmittedAs(r)
 			q.handshakeCryptoData = q.handshakeCryptoData[1:]
-			return f
+			return r
 		}
 		if newFrame != nil { // frame was split. Leave the original frame in the queue.
+			cf := &ackhandler.Frame{Frame: newFrame}
+			f.RetransmittedAs(cf)
 			return &ackhandler.Frame{Frame: newFrame}
 		}
 	}
@@ -101,8 +114,11 @@ func (q *retransmissionQueue) GetHandshakeFrame(maxLen protocol.ByteCount) *ackh
 	if f.Length(q.version) > maxLen {
 		return nil
 	}
+	r := &ackhandler.Frame{Frame: f.Frame}
+	f.Frame = nil
+	f.RetransmittedAs(r)
 	q.handshake = q.handshake[1:]
-	return &ackhandler.Frame{Frame: f.Frame}
+	return r
 }
 
 func (q *retransmissionQueue) GetAppDataFrame(maxLen protocol.ByteCount) *ackhandler.Frame {
@@ -113,8 +129,11 @@ func (q *retransmissionQueue) GetAppDataFrame(maxLen protocol.ByteCount) *ackhan
 	if f.Length(q.version) > maxLen {
 		return nil
 	}
+	r := &ackhandler.Frame{Frame: f.Frame}
+	f.Frame = nil
+	f.RetransmittedAs(r)
 	q.appData = q.appData[1:]
-	return f
+	return r
 }
 
 func (q *retransmissionQueue) DropPackets(encLevel protocol.EncryptionLevel) {

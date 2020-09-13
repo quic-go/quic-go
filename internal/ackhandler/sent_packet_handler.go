@@ -389,9 +389,7 @@ func (h *sentPacketHandler) detectAndRemoveAckedPackets(ack *wire.AckFrame, encL
 		}
 
 		for _, f := range p.Frames {
-			if f.OnAcked != nil {
-				f.OnAcked(f)
-			}
+			f.onAcked()
 		}
 		if err := pnSpace.history.Remove(p.PacketNumber); err != nil {
 			return nil, err
