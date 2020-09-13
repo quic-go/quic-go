@@ -27,7 +27,7 @@ type sendStream struct {
 	mutex sync.Mutex
 
 	numOutstandingFrames int64
-	retransmissionQueue  []*wire.StreamFrame
+	retransmissionQueue  []*ackhandler.Frame
 
 	ctx       context.Context
 	ctxCancel context.CancelFunc
@@ -308,7 +308,8 @@ func (s *sendStream) popNewStreamFrameWithoutBuffer(f *wire.StreamFrame, maxByte
 }
 
 func (s *sendStream) maybeGetRetransmission(maxBytes protocol.ByteCount) (*wire.StreamFrame, bool /* has more retransmissions */) {
-	f := s.retransmissionQueue[0]
+	f := s.retransmissionQueue[0].Frame.(*wire.StreamFrame)
+	f.DataLenPresent = true
 	newFrame, needsSplit := f.MaybeSplitOffFrame(maxBytes, s.version)
 	if needsSplit {
 		return newFrame, true
@@ -366,10 +367,8 @@ func (s *sendStream) isNewlyCompleted() bool {
 }
 
 func (s *sendStream) queueRetransmission(f *ackhandler.Frame) {
-	sf := f.Frame.(*wire.StreamFrame)
-	sf.DataLenPresent = true
 	s.mutex.Lock()
-	s.retransmissionQueue = append(s.retransmissionQueue, sf)
+	s.retransmissionQueue = append(s.retransmissionQueue, f)
 	s.numOutstandingFrames--
 	if s.numOutstandingFrames < 0 {
 		panic("numOutStandingFrames negative")

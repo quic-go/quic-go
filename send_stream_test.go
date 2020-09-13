@@ -898,11 +898,13 @@ var _ = Describe("Send Stream", func() {
 			sf := &wire.StreamFrame{
 				Data:           []byte("foobar"),
 				Offset:         0x42,
-				DataLenPresent: false,
+				DataLenPresent: true,
 			}
+			length := sf.Length(str.version)
+			sf.DataLenPresent = false
 			mockSender.EXPECT().onHasStreamData(streamID)
 			str.queueRetransmission(&ackhandler.Frame{Frame: sf})
-			frame, hasMoreData := str.popStreamFrame(sf.Length(str.version) - 3)
+			frame, hasMoreData := str.popStreamFrame(length - 3)
 			Expect(frame).ToNot(BeNil())
 			f := frame.Frame.(*wire.StreamFrame)
 			Expect(hasMoreData).To(BeTrue())
