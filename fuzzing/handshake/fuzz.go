@@ -11,6 +11,7 @@ import (
 	"log"
 	"math"
 	mrand "math/rand"
+	"sync"
 	"time"
 
 	"github.com/lucas-clemente/quic-go/fuzzing/internal/helper"
@@ -159,6 +160,7 @@ type handshakeRunner interface {
 }
 
 type runner struct {
+	sync.Mutex
 	errored        bool
 	client, server *handshake.CryptoSetup
 }
@@ -172,12 +174,19 @@ func newRunner(client, server *handshake.CryptoSetup) *runner {
 func (r *runner) OnReceivedParams(*wire.TransportParameters) {}
 func (r *runner) OnHandshakeComplete()                       {}
 func (r *runner) OnError(err error) {
+	r.Lock()
+	defer r.Unlock()
 	if r.errored {
 		return
 	}
 	r.errored = true
 	(*r.client).Close()
 	(*r.server).Close()
+}
+func (r *runner) Errored() bool {
+	r.Lock()
+	defer r.Unlock()
+	return r.errored
 }
 func (r *runner) DropKeys(protocol.EncryptionLevel) {}
 
@@ -435,7 +444,7 @@ messageLoop:
 		case <-done: // test done
 			break messageLoop
 		}
-		if runner.errored {
+		if runner.Errored() {
 			break messageLoop
 		}
 	}
@@ -443,7 +452,7 @@ messageLoop:
 	<-done
 	_ = client.ConnectionState()
 	_ = server.ConnectionState()
-	if runner.errored {
+	if runner.Errored() {
 		return 0
 	}
 
