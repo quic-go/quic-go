@@ -133,6 +133,9 @@ func (h *sentPacketHandler) DropPackets(encLevel protocol.EncryptionLevel) {
 
 func (h *sentPacketHandler) removeFromBytesInFlight(p *Packet) {
 	if p.includedInBytesInFlight {
+		if p.Length > h.bytesInFlight {
+			panic("negative bytes_in_flight")
+		}
 		h.bytesInFlight -= p.Length
 		p.includedInBytesInFlight = false
 	}
