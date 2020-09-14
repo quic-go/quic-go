@@ -1,6 +1,7 @@
 package handshake
 
 import (
+	"bytes"
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/tls"
@@ -21,6 +22,13 @@ import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 )
+
+var helloRetryRequestRandom = []byte{ // See RFC 8446, Section 4.1.3.
+	0xCF, 0x21, 0xAD, 0x74, 0xE5, 0x9A, 0x61, 0x11,
+	0xBE, 0x1D, 0x8C, 0x02, 0x1E, 0x65, 0xB8, 0x91,
+	0xC2, 0xA2, 0x11, 0x16, 0x7A, 0xBB, 0x8C, 0x5E,
+	0x07, 0x9E, 0x09, 0xE2, 0xC8, 0xA8, 0x33, 0x9C,
+}
 
 type chunk struct {
 	data     []byte
@@ -257,9 +265,27 @@ var _ = Describe("Crypto Setup TLS", func() {
 				for {
 					select {
 					case c := <-cChunkChan:
-						server.HandleMessage(c.data, c.encLevel)
+						msgType := messageType(c.data[0])
+						finished := server.HandleMessage(c.data, c.encLevel)
+						if msgType == typeFinished {
+							Expect(finished).To(BeTrue())
+						} else if msgType == typeClientHello {
+							// If this ClientHello didn't elicit a HelloRetryRequest, we're done with Initial keys.
+							_, err := server.GetHandshakeOpener()
+							Expect(finished).To(Equal(err == nil))
+						} else {
+							Expect(finished).To(BeFalse())
+						}
 					case c := <-sChunkChan:
-						client.HandleMessage(c.data, c.encLevel)
+						msgType := messageType(c.data[0])
+						finished := client.HandleMessage(c.data, c.encLevel)
+						if msgType == typeFinished {
+							Expect(finished).To(BeTrue())
+						} else if msgType == typeServerHello {
+							Expect(finished).To(Equal(!bytes.Equal(c.data[6:6+32], helloRetryRequestRandom)))
+						} else {
+							Expect(finished).To(BeFalse())
+						}
 					case <-done: // handshake complete
 						return
 					}
