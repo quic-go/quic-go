@@ -85,7 +85,7 @@ func runTestcase(testcase string) error {
 	defer r.Close()
 
 	switch testcase {
-	case "handshake", "transfer", "retry":
+	case "handshake", "transfer", "retry", "ecn":
 	case "chacha20":
 		tlsConf.CipherSuites = []uint16{tls.TLS_CHACHA20_POLY1305_SHA256}
 	case "multiconnect":
