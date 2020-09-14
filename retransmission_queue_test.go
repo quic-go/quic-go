@@ -13,6 +13,12 @@ import (
 	. "github.com/onsi/gomega"
 )
 
+func getRetransmittedAs(f *ackhandler.Frame) []*ackhandler.Frame {
+	rf := reflect.ValueOf(f).Elem().FieldByName("retransmittedAs")
+	rf = reflect.NewAt(rf.Type(), unsafe.Pointer(rf.UnsafeAddr())).Elem()
+	return rf.Interface().([]*ackhandler.Frame)
+}
+
 var _ = Describe("Retransmission queue", func() {
 	const version = protocol.VersionTLS
 
@@ -21,12 +27,6 @@ var _ = Describe("Retransmission queue", func() {
 	BeforeEach(func() {
 		q = newRetransmissionQueue(version)
 	})
-
-	getRetransmittedAs := func(f *ackhandler.Frame) []*ackhandler.Frame {
-		rf := reflect.ValueOf(f).Elem().FieldByName("retransmittedAs")
-		rf = reflect.NewAt(rf.Type(), unsafe.Pointer(rf.UnsafeAddr())).Elem()
-		return rf.Interface().([]*ackhandler.Frame)
-	}
 
 	for _, el := range []protocol.EncryptionLevel{protocol.EncryptionInitial, protocol.EncryptionHandshake} {
 		encLevel := el

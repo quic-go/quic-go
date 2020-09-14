@@ -878,19 +878,22 @@ var _ = Describe("Send Stream", func() {
 	Context("retransmissions", func() {
 		It("queues and retrieves frames", func() {
 			str.numOutstandingFrames = 1
-			f := &wire.StreamFrame{
+			sf := &wire.StreamFrame{
 				Data:           []byte("foobar"),
 				Offset:         0x42,
 				DataLenPresent: false,
 			}
 			mockSender.EXPECT().onHasStreamData(streamID)
-			str.queueRetransmission(&ackhandler.Frame{Frame: f})
-			frame, _ := str.popStreamFrame(protocol.MaxByteCount)
-			Expect(frame).ToNot(BeNil())
-			f = frame.Frame.(*wire.StreamFrame)
-			Expect(f.Offset).To(Equal(protocol.ByteCount(0x42)))
-			Expect(f.Data).To(Equal([]byte("foobar")))
-			Expect(f.DataLenPresent).To(BeTrue())
+			f := &ackhandler.Frame{Frame: sf}
+			str.queueRetransmission(f)
+			r, _ := str.popStreamFrame(protocol.MaxByteCount)
+			Expect(r).ToNot(BeNil())
+			rsf := r.Frame.(*wire.StreamFrame)
+			Expect(rsf.Offset).To(Equal(protocol.ByteCount(0x42)))
+			Expect(rsf.Data).To(Equal([]byte("foobar")))
+			Expect(rsf.DataLenPresent).To(BeTrue())
+			Expect(f.Frame).To(BeNil())
+			Expect(getRetransmittedAs(f)).To(Equal([]*ackhandler.Frame{r}))
 		})
 
 		It("splits a retransmission", func() {
@@ -903,34 +906,41 @@ var _ = Describe("Send Stream", func() {
 			length := sf.Length(str.version)
 			sf.DataLenPresent = false
 			mockSender.EXPECT().onHasStreamData(streamID)
-			str.queueRetransmission(&ackhandler.Frame{Frame: sf})
-			frame, hasMoreData := str.popStreamFrame(length - 3)
-			Expect(frame).ToNot(BeNil())
-			f := frame.Frame.(*wire.StreamFrame)
+			f := &ackhandler.Frame{Frame: sf}
+			str.queueRetransmission(f)
+			f1, hasMoreData := str.popStreamFrame(length - 3)
+			Expect(f1).ToNot(BeNil())
+			sf1 := f1.Frame.(*wire.StreamFrame)
 			Expect(hasMoreData).To(BeTrue())
-			Expect(f.Offset).To(Equal(protocol.ByteCount(0x42)))
-			Expect(f.Data).To(Equal([]byte("foo")))
-			Expect(f.DataLenPresent).To(BeTrue())
-			frame, _ = str.popStreamFrame(protocol.MaxByteCount)
-			Expect(frame).ToNot(BeNil())
-			f = frame.Frame.(*wire.StreamFrame)
-			Expect(f.Offset).To(Equal(protocol.ByteCount(0x45)))
-			Expect(f.Data).To(Equal([]byte("bar")))
-			Expect(f.DataLenPresent).To(BeTrue())
+			Expect(sf1.Offset).To(Equal(protocol.ByteCount(0x42)))
+			Expect(sf1.Data).To(Equal([]byte("foo")))
+			Expect(sf1.DataLenPresent).To(BeTrue())
+			Expect(f.Frame).ToNot(BeNil())
+			Expect(getRetransmittedAs(f)).To(Equal([]*ackhandler.Frame{f1}))
+			f2, _ := str.popStreamFrame(protocol.MaxByteCount)
+			Expect(f2).ToNot(BeNil())
+			sf2 := f2.Frame.(*wire.StreamFrame)
+			Expect(sf2.Offset).To(Equal(protocol.ByteCount(0x45)))
+			Expect(sf2.Data).To(Equal([]byte("bar")))
+			Expect(sf2.DataLenPresent).To(BeTrue())
+			Expect(f.Frame).To(BeNil())
+			Expect(getRetransmittedAs(f)).To(Equal([]*ackhandler.Frame{f1, f2}))
 		})
 
 		It("returns nil if the size is too small", func() {
 			str.numOutstandingFrames = 1
-			f := &wire.StreamFrame{
+			sf := &wire.StreamFrame{
 				Data:           []byte("foobar"),
 				Offset:         0x42,
 				DataLenPresent: false,
 			}
 			mockSender.EXPECT().onHasStreamData(streamID)
-			str.queueRetransmission(&ackhandler.Frame{Frame: f})
+			f := &ackhandler.Frame{Frame: sf}
+			str.queueRetransmission(f)
 			frame, hasMoreData := str.popStreamFrame(2)
 			Expect(hasMoreData).To(BeTrue())
 			Expect(frame).To(BeNil())
+			Expect(getRetransmittedAs(f)).To(BeEmpty())
 		})
 
 		It("queues lost STREAM frames", func() {

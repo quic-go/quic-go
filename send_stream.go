@@ -201,14 +201,18 @@ func (s *sendStream) popStreamFrame(maxBytes protocol.ByteCount) (*ackhandler.Fr
 		s.numOutstandingFrames++
 	}
 	s.mutex.Unlock()
-
-	if f == nil {
-		return nil, hasMoreData
-	}
-	return &ackhandler.Frame{Frame: f, OnLost: s.queueRetransmission, OnAcked: s.frameAcked}, hasMoreData
+	return f, hasMoreData
 }
 
-func (s *sendStream) popNewOrRetransmittedStreamFrame(maxBytes protocol.ByteCount) (*wire.StreamFrame, bool /* has more data to send */) {
+func (s *sendStream) toAckHandlerFrame(f *wire.StreamFrame) *ackhandler.Frame {
+	return &ackhandler.Frame{
+		Frame:   f,
+		OnAcked: s.frameAcked,
+		OnLost:  s.queueRetransmission,
+	}
+}
+
+func (s *sendStream) popNewOrRetransmittedStreamFrame(maxBytes protocol.ByteCount) (*ackhandler.Frame, bool /* has more data to send */) {
 	if s.canceledWrite || s.closeForShutdownErr != nil {
 		return nil, false
 	}
@@ -228,12 +232,12 @@ func (s *sendStream) popNewOrRetransmittedStreamFrame(maxBytes protocol.ByteCoun
 	if len(s.dataForWriting) == 0 && s.nextFrame == nil {
 		if s.finishedWriting && !s.finSent {
 			s.finSent = true
-			return &wire.StreamFrame{
+			return s.toAckHandlerFrame(&wire.StreamFrame{
 				StreamID:       s.streamID,
 				Offset:         s.writeOffset,
 				DataLenPresent: true,
 				Fin:            true,
-			}, false
+			}), false
 		}
 		return nil, false
 	}
@@ -259,7 +263,7 @@ func (s *sendStream) popNewOrRetransmittedStreamFrame(maxBytes protocol.ByteCoun
 	if f.Fin {
 		s.finSent = true
 	}
-	return f, hasMoreData
+	return s.toAckHandlerFrame(f), hasMoreData
 }
 
 func (s *sendStream) popNewStreamFrame(maxBytes, sendWindow protocol.ByteCount) (*wire.StreamFrame, bool) {
@@ -307,15 +311,24 @@ func (s *sendStream) popNewStreamFrameWithoutBuffer(f *wire.StreamFrame, maxByte
 	return s.dataForWriting != nil || s.nextFrame != nil || s.finishedWriting
 }
 
-func (s *sendStream) maybeGetRetransmission(maxBytes protocol.ByteCount) (*wire.StreamFrame, bool /* has more retransmissions */) {
-	f := s.retransmissionQueue[0].Frame.(*wire.StreamFrame)
-	f.DataLenPresent = true
-	newFrame, needsSplit := f.MaybeSplitOffFrame(maxBytes, s.version)
+func (s *sendStream) maybeGetRetransmission(maxBytes protocol.ByteCount) (*ackhandler.Frame, bool /* has more retransmissions */) {
+	f := s.retransmissionQueue[0]
+	sf := f.Frame.(*wire.StreamFrame)
+	sf.DataLenPresent = true
+	newFrame, needsSplit := sf.MaybeSplitOffFrame(maxBytes, s.version)
 	if needsSplit {
-		return newFrame, true
+		if newFrame == nil {
+			return nil, true
+		}
+		r := s.toAckHandlerFrame(newFrame)
+		f.RetransmittedAs(r)
+		return r, true
 	}
 	s.retransmissionQueue = s.retransmissionQueue[1:]
-	return f, len(s.retransmissionQueue) > 0
+	f.Frame = nil
+	r := s.toAckHandlerFrame(sf)
+	f.RetransmittedAs(r)
+	return r, len(s.retransmissionQueue) > 0
 }
 
 func (s *sendStream) hasData() bool {
