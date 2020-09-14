@@ -26,6 +26,7 @@ const (
 	ApplicationError        ErrorCode = 0xc
 	CryptoBufferExceeded    ErrorCode = 0xd
 	KeyUpdateError          ErrorCode = 0xe
+	AEADLimitReached        ErrorCode = 0xf
 )
 
 func (e ErrorCode) isCryptoError() bool {
@@ -80,6 +81,8 @@ func (e ErrorCode) String() string {
 		return "CRYPTO_BUFFER_EXCEEDED"
 	case KeyUpdateError:
 		return "KEY_UPDATE_ERROR"
+	case AEADLimitReached:
+		return "AEAD_LIMIT_REACHED"
 	default:
 		if e.isCryptoError() {
 			return "CRYPTO_ERROR"

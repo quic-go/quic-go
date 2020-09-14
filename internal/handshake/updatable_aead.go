@@ -3,6 +3,7 @@ package handshake
 import (
 	"crypto"
 	"crypto/cipher"
+	"crypto/tls"
 	"encoding/binary"
 	"fmt"
 	"os"
@@ -18,7 +19,7 @@ import (
 
 // By setting this environment variable, the key update interval can be adjusted.
 // This is not needed in production, but useful for integration and interop testing.
-// Note that no mattter what value is set, a key update is only initiated once it is
+// Note that no matter what value is set, a key update is only initiated once it is
 // permitted (i.e. once an ACK for a packet sent at the current key phase has been received).
 const keyUpdateEnv = "QUIC_GO_KEY_UPDATE_INTERVAL"
 
@@ -47,7 +48,10 @@ type updatableAEAD struct {
 	keyPhase          protocol.KeyPhase
 	largestAcked      protocol.PacketNumber
 	firstPacketNumber protocol.PacketNumber
-	keyUpdateInterval uint64
+
+	keyUpdateInterval  uint64
+	invalidPacketLimit uint64
+	invalidPacketCount uint64
 
 	// Time when the keys should be dropped. Keys are dropped on the next call to Open().
 	prevRcvAEADExpiry time.Time
@@ -127,9 +131,7 @@ func (a *updatableAEAD) SetReadKey(suite *qtls.CipherSuiteTLS13, trafficSecret [
 	a.rcvAEAD = createAEAD(suite, trafficSecret)
 	a.headerDecrypter = newHeaderProtector(suite, trafficSecret, false)
 	if a.suite == nil {
-		a.nonceBuf = make([]byte, a.rcvAEAD.NonceSize())
-		a.aeadOverhead = a.rcvAEAD.Overhead()
-		a.suite = suite
+		a.setAEADParameters(a.rcvAEAD, suite)
 	}
 
 	a.nextRcvTrafficSecret = a.getNextTrafficSecret(suite.Hash, trafficSecret)
@@ -142,16 +144,39 @@ func (a *updatableAEAD) SetWriteKey(suite *qtls.CipherSuiteTLS13, trafficSecret 
 	a.sendAEAD = createAEAD(suite, trafficSecret)
 	a.headerEncrypter = newHeaderProtector(suite, trafficSecret, false)
 	if a.suite == nil {
-		a.nonceBuf = make([]byte, a.sendAEAD.NonceSize())
-		a.aeadOverhead = a.sendAEAD.Overhead()
-		a.suite = suite
+		a.setAEADParameters(a.sendAEAD, suite)
 	}
 
 	a.nextSendTrafficSecret = a.getNextTrafficSecret(suite.Hash, trafficSecret)
 	a.nextSendAEAD = createAEAD(suite, a.nextSendTrafficSecret)
 }
 
+func (a *updatableAEAD) setAEADParameters(aead cipher.AEAD, suite *qtls.CipherSuiteTLS13) {
+	a.nonceBuf = make([]byte, aead.NonceSize())
+	a.aeadOverhead = aead.Overhead()
+	a.suite = suite
+	switch suite.ID {
+	case tls.TLS_AES_128_GCM_SHA256, tls.TLS_AES_256_GCM_SHA384:
+		a.invalidPacketLimit = protocol.InvalidPacketLimitAES
+	case tls.TLS_CHACHA20_POLY1305_SHA256:
+		a.invalidPacketLimit = protocol.InvalidPacketLimitChaCha
+	default:
+		panic(fmt.Sprintf("unknown cipher suite %d", suite.ID))
+	}
+}
+
 func (a *updatableAEAD) Open(dst, src []byte, rcvTime time.Time, pn protocol.PacketNumber, kp protocol.KeyPhaseBit, ad []byte) ([]byte, error) {
+	dec, err := a.open(dst, src, rcvTime, pn, kp, ad)
+	if err == ErrDecryptionFailed {
+		a.invalidPacketCount++
+		if a.invalidPacketCount >= a.invalidPacketLimit {
+			return nil, qerr.AEADLimitReached
+		}
+	}
+	return dec, err
+}
+
+func (a *updatableAEAD) open(dst, src []byte, rcvTime time.Time, pn protocol.PacketNumber, kp protocol.KeyPhaseBit, ad []byte) ([]byte, error) {
 	if a.prevRcvAEAD != nil && !a.prevRcvAEADExpiry.IsZero() && rcvTime.After(a.prevRcvAEADExpiry) {
 		a.prevRcvAEAD = nil
 		a.logger.Debugf("Dropping key phase %d", a.keyPhase-1)
