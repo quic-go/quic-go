@@ -112,7 +112,9 @@ func (a *updatableAEAD) rollKeys() {
 }
 
 func (a *updatableAEAD) startKeyDropTimer(now time.Time) {
-	a.prevRcvAEADExpiry = now.Add(3 * a.rttStats.PTO(true))
+	d := 3 * a.rttStats.PTO(true)
+	a.logger.Debugf("Starting key drop timer to drop key phase %d (in %s)", a.keyPhase-1, d)
+	a.prevRcvAEADExpiry = now.Add(d)
 }
 
 func (a *updatableAEAD) getNextTrafficSecret(hash crypto.Hash, ts []byte) []byte {
@@ -152,6 +154,7 @@ func (a *updatableAEAD) SetWriteKey(suite *qtls.CipherSuiteTLS13, trafficSecret 
 func (a *updatableAEAD) Open(dst, src []byte, rcvTime time.Time, pn protocol.PacketNumber, kp protocol.KeyPhaseBit, ad []byte) ([]byte, error) {
 	if a.prevRcvAEAD != nil && !a.prevRcvAEADExpiry.IsZero() && rcvTime.After(a.prevRcvAEADExpiry) {
 		a.prevRcvAEAD = nil
+		a.logger.Debugf("Dropping key phase %d", a.keyPhase-1)
 		a.prevRcvAEADExpiry = time.Time{}
 		if a.tracer != nil {
 			a.tracer.DroppedKey(a.keyPhase - 1)
@@ -191,10 +194,10 @@ func (a *updatableAEAD) Open(dst, src []byte, rcvTime time.Time, pn protocol.Pac
 			return nil, qerr.NewError(qerr.ProtocolViolation, "keys updated too quickly")
 		}
 		a.rollKeys()
+		a.logger.Debugf("Peer updated keys to %d", a.keyPhase)
 		// The peer initiated this key update. It's safe to drop the keys for the previous generation now.
 		// Start a timer to drop the previous key generation.
 		a.startKeyDropTimer(rcvTime)
-		a.logger.Debugf("Peer updated keys to %s", a.keyPhase)
 		if a.tracer != nil {
 			a.tracer.UpdatedKey(a.keyPhase, true)
 		}
@@ -211,7 +214,10 @@ func (a *updatableAEAD) Open(dst, src []byte, rcvTime time.Time, pn protocol.Pac
 	if a.firstRcvdWithCurrentKey == protocol.InvalidPacketNumber {
 		// We initiated the key updated, and now we received the first packet protected with the new key phase.
 		// Therefore, we are certain that the peer rolled its keys as well. Start a timer to drop the old keys.
-		a.startKeyDropTimer(rcvTime)
+		if a.keyPhase > 0 {
+			a.logger.Debugf("Peer confirmed key update to phase %d", a.keyPhase)
+			a.startKeyDropTimer(rcvTime)
+		}
 		a.firstRcvdWithCurrentKey = pn
 	}
 	return dec, err
@@ -246,11 +252,11 @@ func (a *updatableAEAD) shouldInitiateKeyUpdate() bool {
 		return false
 	}
 	if a.numRcvdWithCurrentKey >= a.keyUpdateInterval {
-		a.logger.Debugf("Received %d packets with current key phase. Initiating key update to the next key phase: %s", a.numRcvdWithCurrentKey, a.keyPhase+1)
+		a.logger.Debugf("Received %d packets with current key phase. Initiating key update to the next key phase: %d", a.numRcvdWithCurrentKey, a.keyPhase+1)
 		return true
 	}
 	if a.numSentWithCurrentKey >= a.keyUpdateInterval {
-		a.logger.Debugf("Sent %d packets with current key phase. Initiating key update to the next key phase: %s", a.numSentWithCurrentKey, a.keyPhase+1)
+		a.logger.Debugf("Sent %d packets with current key phase. Initiating key update to the next key phase: %d", a.numSentWithCurrentKey, a.keyPhase+1)
 		return true
 	}
 	return false
@@ -259,7 +265,7 @@ func (a *updatableAEAD) shouldInitiateKeyUpdate() bool {
 func (a *updatableAEAD) KeyPhase() protocol.KeyPhaseBit {
 	if a.shouldInitiateKeyUpdate() {
 		a.rollKeys()
-		a.logger.Debugf("Initiating key update to key phase %s", a.keyPhase)
+		a.logger.Debugf("Initiating key update to key phase %d", a.keyPhase)
 		if a.tracer != nil {
 			a.tracer.UpdatedKey(a.keyPhase, false)
 		}

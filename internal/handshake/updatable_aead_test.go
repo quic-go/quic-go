@@ -298,6 +298,26 @@ var _ = Describe("Updatable AEAD", func() {
 							_, err = server.Open(nil, dataKeyPhaseZero, t.Add(threePTO).Add(time.Nanosecond), 1, protocol.KeyPhaseZero, ad)
 							Expect(err).To(MatchError(ErrKeysDropped))
 						})
+
+						It("doesn't drop the first key generation too early", func() {
+							now := time.Now()
+							data1 := client.Seal(nil, msg, 1, ad)
+							_, err := server.Open(nil, data1, now, 1, protocol.KeyPhaseZero, ad)
+							Expect(err).ToNot(HaveOccurred())
+							for i := 0; i < keyUpdateInterval; i++ {
+								pn := protocol.PacketNumber(i)
+								Expect(server.KeyPhase()).To(Equal(protocol.KeyPhaseZero))
+								server.Seal(nil, msg, pn, ad)
+								server.SetLargestAcked(pn)
+							}
+							serverTracer.EXPECT().UpdatedKey(protocol.KeyPhase(1), false)
+							Expect(server.KeyPhase()).To(Equal(protocol.KeyPhaseOne))
+							// The server never received a packet at key phase 1.
+							// Make sure the key phase 0 is still there at a much later point.
+							data2 := client.Seal(nil, msg, 1, ad)
+							_, err = server.Open(nil, data2, now.Add(10*rttStats.PTO(true)), 1, protocol.KeyPhaseZero, ad)
+							Expect(err).ToNot(HaveOccurred())
+						})
 					})
 
 					Context("reading the key update env", func() {
