@@ -256,7 +256,7 @@ var _ = Describe("Receive Stream", func() {
 				n, err := strWithTimeout.Read(b)
 				Expect(err).To(MatchError(errDeadline))
 				Expect(n).To(BeZero())
-				Expect(time.Now()).To(BeTemporally("~", deadline, scaleDuration(10*time.Millisecond)))
+				Expect(time.Now()).To(BeTemporally("~", deadline, scaleDuration(20*time.Millisecond)))
 			})
 
 			It("doesn't unblock if the deadline is changed before the first one expires", func() {
