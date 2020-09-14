@@ -17,10 +17,13 @@ linters-settings:
 linters:
   disable-all: true
   enable:
+    - asciicheck
     - deadcode
     - depguard
+    - exportloopref
     - goconst
     - goimports
+    - gofmt
     - gosimple
     - ineffassign
     - misspell
