@@ -110,13 +110,10 @@ func getMaxPacketSize(addr net.Addr) protocol.ByteCount {
 	// If this is not a UDP address, we don't know anything about the MTU.
 	// Use the minimum size of an Initial packet as the max packet size.
 	if udpAddr, ok := addr.(*net.UDPAddr); ok {
-		// If ip is not an IPv4 address, To4 returns nil.
-		// Note that there might be some corner cases, where this is not correct.
-		// See https://stackoverflow.com/questions/22751035/golang-distinguish-ipv4-ipv6.
-		if udpAddr.IP.To4() == nil {
-			maxSize = protocol.MaxPacketSizeIPv6
-		} else {
+		if utils.IsIPv4(udpAddr.IP) {
 			maxSize = protocol.MaxPacketSizeIPv4
+		} else {
+			maxSize = protocol.MaxPacketSizeIPv6
 		}
 	}
 	return maxSize

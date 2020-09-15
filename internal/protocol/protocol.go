@@ -34,6 +34,15 @@ func (t PacketType) String() string {
 	}
 }
 
+type ECN uint8
+
+const (
+	ECNNon ECN = iota // 00
+	ECT1              // 01
+	ECT0              // 10
+	ECNCE             // 11
+)
+
 // A ByteCount in QUIC
 type ByteCount uint64
 

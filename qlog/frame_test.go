@@ -60,6 +60,24 @@ var _ = Describe("Frames", func() {
 		)
 	})
 
+	It("marshals ACK frames with ECN counts", func() {
+		check(
+			&logging.AckFrame{
+				AckRanges: []logging.AckRange{{Smallest: 120, Largest: 120}},
+				ECT0:      10,
+				ECT1:      100,
+				ECNCE:     1000,
+			},
+			map[string]interface{}{
+				"frame_type":   "ack",
+				"acked_ranges": [][]float64{{120}},
+				"ect0":         10,
+				"ect1":         100,
+				"ce":           1000,
+			},
+		)
+	})
+
 	It("marshals ACK frames with a range acknowledging ranges of packets", func() {
 		check(
 			&logging.AckFrame{

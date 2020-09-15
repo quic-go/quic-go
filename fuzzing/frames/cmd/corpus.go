@@ -115,6 +115,13 @@ func getFrames() []wire.Frame {
 			AckRanges: getAckRanges(300),
 			DelayTime: time.Duration(getRandomNumber()),
 		},
+		&wire.AckFrame{
+			AckRanges: getAckRanges(3),
+			DelayTime: time.Duration(getRandomNumber()),
+			ECT0:      getRandomNumber(),
+			ECT1:      getRandomNumber(),
+			ECNCE:     getRandomNumber(),
+		},
 		&wire.PingFrame{},
 		&wire.ResetStreamFrame{
 			StreamID:  protocol.StreamID(getRandomNumber()),

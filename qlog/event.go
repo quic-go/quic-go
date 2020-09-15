@@ -5,6 +5,8 @@ import (
 	"net"
 	"time"
 
+	"github.com/lucas-clemente/quic-go/internal/utils"
+
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/logging"
 
@@ -75,14 +77,10 @@ func (e eventConnectionStarted) Name() string       { return "connection_started
 func (e eventConnectionStarted) IsNil() bool        { return false }
 
 func (e eventConnectionStarted) MarshalJSONObject(enc *gojay.Encoder) {
-	// If ip is not an IPv4 address, To4 returns nil.
-	// Note that there might be some corner cases, where this is not correct.
-	// See https://stackoverflow.com/questions/22751035/golang-distinguish-ipv4-ipv6.
-	isIPv6 := e.SrcAddr.IP.To4() == nil
-	if isIPv6 {
-		enc.StringKey("ip_version", "ipv6")
-	} else {
+	if utils.IsIPv4(e.SrcAddr.IP) {
 		enc.StringKey("ip_version", "ipv4")
+	} else {
+		enc.StringKey("ip_version", "ipv6")
 	}
 	enc.StringKey("src_ip", e.SrcAddr.IP.String())
 	enc.IntKey("src_port", e.SrcAddr.Port)

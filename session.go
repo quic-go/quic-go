@@ -59,11 +59,13 @@ type cryptoStreamHandler interface {
 }
 
 type receivedPacket struct {
+	buffer *packetBuffer
+
 	remoteAddr net.Addr
 	rcvTime    time.Time
 	data       []byte
 
-	buffer *packetBuffer
+	ecn protocol.ECN
 }
 
 func (p *receivedPacket) Size() protocol.ByteCount { return protocol.ByteCount(len(p.data)) }
@@ -74,6 +76,7 @@ func (p *receivedPacket) Clone() *receivedPacket {
 		rcvTime:    p.rcvTime,
 		data:       p.data,
 		buffer:     p.buffer,
+		ecn:        p.ecn,
 	}
 }
 
@@ -852,7 +855,7 @@ func (s *session) handleSinglePacket(p *receivedPacket, hdr *wire.Header) bool /
 		return false
 	}
 
-	if err := s.handleUnpackedPacket(packet, p.rcvTime, p.Size()); err != nil {
+	if err := s.handleUnpackedPacket(packet, p.ecn, p.rcvTime, p.Size()); err != nil {
 		s.closeLocal(err)
 		return false
 	}
@@ -970,6 +973,7 @@ func (s *session) handleVersionNegotiationPacket(p *receivedPacket) {
 
 func (s *session) handleUnpackedPacket(
 	packet *unpackedPacket,
+	ecn protocol.ECN,
 	rcvTime time.Time,
 	packetSize protocol.ByteCount, // only for logging
 ) error {
@@ -1067,7 +1071,7 @@ func (s *session) handleUnpackedPacket(
 		}
 	}
 
-	return s.receivedPacketHandler.ReceivedPacket(packet.packetNumber, packet.encryptionLevel, rcvTime, isAckEliciting)
+	return s.receivedPacketHandler.ReceivedPacket(packet.packetNumber, ecn, packet.encryptionLevel, rcvTime, isAckEliciting)
 }
 
 func (s *session) handleFrame(f wire.Frame, encLevel protocol.EncryptionLevel, destConnID protocol.ConnectionID) error {
