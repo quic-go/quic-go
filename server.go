@@ -148,6 +148,8 @@ func listenAddr(addr string, tlsConf *tls.Config, config *Config, acceptEarly bo
 }
 
 // Listen listens for QUIC connections on a given net.PacketConn.
+// If the PacketConn satisfies the ECNCapablePacketConn interface (as a net.UDPConn does), ECN support will be enabled.
+// In this case, ReadMsgUDP will be used instead of ReadFrom to read packets.
 // A single net.PacketConn only be used for a single call to Listen.
 // The PacketConn can be used for simultaneous calls to Dial.
 // QUIC connection IDs are used for demultiplexing the different connections.

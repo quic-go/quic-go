@@ -4,7 +4,6 @@ package quic
 
 import (
 	"errors"
-	"net"
 	"syscall"
 	"time"
 
@@ -15,13 +14,13 @@ import (
 const ecnMask uint8 = 0x3
 
 type ecnConn struct {
-	*net.UDPConn
+	ECNCapablePacketConn
 	oobBuffer []byte
 }
 
 var _ connection = &ecnConn{}
 
-func newConn(c *net.UDPConn) (*ecnConn, error) {
+func newConn(c ECNCapablePacketConn) (*ecnConn, error) {
 	rawConn, err := c.SyscallConn()
 	if err != nil {
 		return nil, err
@@ -51,8 +50,8 @@ func newConn(c *net.UDPConn) (*ecnConn, error) {
 		return nil, errors.New("activating ECN failed for both IPv4 and IPv6")
 	}
 	return &ecnConn{
-		UDPConn:   c,
-		oobBuffer: make([]byte, 128),
+		ECNCapablePacketConn: c,
+		oobBuffer:            make([]byte, 128),
 	}, nil
 }
 
@@ -62,7 +61,7 @@ func (c *ecnConn) ReadPacket() (*receivedPacket, error) {
 	// If it does, we only read a truncated packet, which will then end up undecryptable
 	buffer.Data = buffer.Data[:protocol.MaxReceivePacketSize]
 	c.oobBuffer = c.oobBuffer[:cap(c.oobBuffer)]
-	n, oobn, _, addr, err := c.UDPConn.ReadMsgUDP(buffer.Data, c.oobBuffer)
+	n, oobn, _, addr, err := c.ECNCapablePacketConn.ReadMsgUDP(buffer.Data, c.oobBuffer)
 	if err != nil {
 		return nil, err
 	}

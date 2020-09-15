@@ -3,11 +3,11 @@ package quic
 import (
 	"io"
 	"net"
+	"syscall"
 	"time"
 
-	"github.com/lucas-clemente/quic-go/internal/utils"
-
 	"github.com/lucas-clemente/quic-go/internal/protocol"
+	"github.com/lucas-clemente/quic-go/internal/utils"
 )
 
 type connection interface {
@@ -17,13 +17,23 @@ type connection interface {
 	io.Closer
 }
 
+// If the PacketConn passed to Dial or Listen satisfies this interface, quic-go will read the ECN bits from the IP header.
+// In this case, ReadMsgUDP() will be used instead of ReadFrom() to read packets.
+type ECNCapablePacketConn interface {
+	net.PacketConn
+	SyscallConn() (syscall.RawConn, error)
+	ReadMsgUDP(b, oob []byte) (n, oobn, flags int, addr *net.UDPAddr, err error)
+}
+
+var _ ECNCapablePacketConn = &net.UDPConn{}
+
 func wrapConn(pc net.PacketConn) (connection, error) {
-	udpConn, ok := pc.(*net.UDPConn)
+	c, ok := pc.(ECNCapablePacketConn)
 	if !ok {
 		utils.DefaultLogger.Infof("PacketConn is not a net.UDPConn. Disabling optimizations possible on UDP connections.")
 		return &basicConn{PacketConn: pc}, nil
 	}
-	return newConn(udpConn)
+	return newConn(c)
 }
 
 type basicConn struct {
