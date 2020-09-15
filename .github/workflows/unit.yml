@@ -26,6 +26,12 @@ jobs:
         env:
           TIMESCALE_FACTOR: 10
         run: ginkgo -r -v -cover -randomizeAllSpecs -randomizeSuites -trace -skipPackage integrationtests,benchmark
+      - name: Run tests (32 bit)
+        if: ${{ matrix.os != 'macos' }} # can't run 32 bit tests on OSX.
+        env:
+          TIMESCALE_FACTOR: 10
+          GOARCH: 386
+        run: ginkgo -r -v -cover -randomizeAllSpecs -randomizeSuites -trace -skipPackage integrationtests,benchmark
       - name: Run tests with race detector
         if: ${{ matrix.os == 'ubuntu' }} # speed things up. Windows and OSX VMs are slow
         env:
