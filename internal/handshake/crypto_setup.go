@@ -275,8 +275,8 @@ func (h *cryptoSetup) ChangeConnectionID(id protocol.ConnectionID) {
 	}
 }
 
-func (h *cryptoSetup) SetLargest1RTTAcked(pn protocol.PacketNumber) {
-	h.aead.SetLargestAcked(pn)
+func (h *cryptoSetup) SetLargest1RTTAcked(pn protocol.PacketNumber) error {
+	return h.aead.SetLargestAcked(pn)
 }
 
 func (h *cryptoSetup) RunHandshake() {
