@@ -706,7 +706,8 @@ var _ = Describe("SentPacketHandler", func() {
 			}))
 			Expect(handler.OnLossDetectionTimeout()).To(Succeed())
 			Expect(handler.SendMode()).To(Equal(SendPTOAppData))
-			Expect(handler.PopPacketNumber(protocol.Encryption1RTT)).To(Equal(pn + 2))
+			// The packet number generator might have introduced another skipped a packet number.
+			Expect(handler.PopPacketNumber(protocol.Encryption1RTT)).To(BeNumerically(">=", pn+2))
 		})
 
 		It("only counts ack-eliciting packets as probe packets", func() {
