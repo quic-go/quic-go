@@ -262,8 +262,13 @@ func (a *updatableAEAD) Seal(dst, src []byte, pn protocol.PacketNumber, ad []byt
 	return a.sendAEAD.Seal(dst, a.nonceBuf, src, ad)
 }
 
-func (a *updatableAEAD) SetLargestAcked(pn protocol.PacketNumber) {
+func (a *updatableAEAD) SetLargestAcked(pn protocol.PacketNumber) error {
+	if a.firstSentWithCurrentKey != protocol.InvalidPacketNumber &&
+		pn >= a.firstSentWithCurrentKey && a.numRcvdWithCurrentKey == 0 {
+		return qerr.NewError(qerr.KeyUpdateError, fmt.Sprintf("received ACK for key phase %d, but peer didn't update keys", a.keyPhase))
+	}
 	a.largestAcked = pn
+	return nil
 }
 
 func (a *updatableAEAD) updateAllowed() bool {

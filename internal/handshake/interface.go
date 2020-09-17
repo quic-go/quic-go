@@ -76,7 +76,7 @@ type CryptoSetup interface {
 	GetSessionTicket() ([]byte, error)
 
 	HandleMessage([]byte, protocol.EncryptionLevel) bool
-	SetLargest1RTTAcked(protocol.PacketNumber)
+	SetLargest1RTTAcked(protocol.PacketNumber) error
 	DropHandshakeKeys()
 	ConnectionState() ConnectionState
 

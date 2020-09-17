@@ -51,7 +51,7 @@ type streamManager interface {
 type cryptoStreamHandler interface {
 	RunHandshake()
 	ChangeConnectionID(protocol.ConnectionID)
-	SetLargest1RTTAcked(protocol.PacketNumber)
+	SetLargest1RTTAcked(protocol.PacketNumber) error
 	DropHandshakeKeys()
 	GetSessionTicket() ([]byte, error)
 	io.Closer
@@ -1243,10 +1243,10 @@ func (s *session) handleAckFrame(frame *wire.AckFrame, encLevel protocol.Encrypt
 	if err := s.sentPacketHandler.ReceivedAck(frame, encLevel, s.lastPacketReceivedTime); err != nil {
 		return err
 	}
-	if encLevel == protocol.Encryption1RTT {
-		s.cryptoStreamHandler.SetLargest1RTTAcked(frame.LargestAcked())
+	if encLevel != protocol.Encryption1RTT {
+		return nil
 	}
-	return nil
+	return s.cryptoStreamHandler.SetLargest1RTTAcked(frame.LargestAcked())
 }
 
 // closeLocal closes the session and send a CONNECTION_CLOSE containing the error

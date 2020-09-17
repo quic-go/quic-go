@@ -250,9 +250,11 @@ func (mr *MockCryptoSetupMockRecorder) RunHandshake() *gomock.Call {
 }
 
 // SetLargest1RTTAcked mocks base method
-func (m *MockCryptoSetup) SetLargest1RTTAcked(arg0 protocol.PacketNumber) {
+func (m *MockCryptoSetup) SetLargest1RTTAcked(arg0 protocol.PacketNumber) error {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "SetLargest1RTTAcked", arg0)
+	ret := m.ctrl.Call(m, "SetLargest1RTTAcked", arg0)
+	ret0, _ := ret[0].(error)
+	return ret0
 }
 
 // SetLargest1RTTAcked indicates an expected call of SetLargest1RTTAcked

@@ -259,9 +259,55 @@ var _ = Describe("Updatable AEAD", func() {
 							}
 							// no update allowed before receiving an acknowledgement for the current key phase
 							Expect(server.KeyPhase()).To(Equal(protocol.KeyPhaseZero))
-							server.SetLargestAcked(0)
+							// receive an ACK for a packet sent in key phase 0
+							b := client.Seal(nil, []byte("foobar"), 1, []byte("ad"))
+							_, err := server.Open(nil, b, time.Now(), 1, protocol.KeyPhaseZero, []byte("ad"))
+							Expect(err).ToNot(HaveOccurred())
+							ExpectWithOffset(1, server.SetLargestAcked(0)).To(Succeed())
 							serverTracer.EXPECT().UpdatedKey(protocol.KeyPhase(1), false)
 							Expect(server.KeyPhase()).To(Equal(protocol.KeyPhaseOne))
+						})
+
+						It("errors if the peer acknowledges a packet sent in the next key phase using the old key phase", func() {
+							// First make sure that we update our keys.
+							for i := 0; i < keyUpdateInterval; i++ {
+								pn := protocol.PacketNumber(i)
+								Expect(server.KeyPhase()).To(Equal(protocol.KeyPhaseZero))
+								server.Seal(nil, msg, pn, ad)
+							}
+							Expect(server.KeyPhase()).To(Equal(protocol.KeyPhaseZero))
+							b := client.Seal(nil, []byte("foobar"), 1, []byte("ad"))
+							_, err := server.Open(nil, b, time.Now(), 1, protocol.KeyPhaseZero, []byte("ad"))
+							Expect(err).ToNot(HaveOccurred())
+							ExpectWithOffset(1, server.SetLargestAcked(0)).To(Succeed())
+							serverTracer.EXPECT().UpdatedKey(protocol.KeyPhase(1), false)
+							// Now that our keys are updated, send a packet using the new keys.
+							Expect(server.KeyPhase()).To(Equal(protocol.KeyPhaseOne))
+							const nextPN = keyUpdateInterval + 1
+							server.Seal(nil, msg, nextPN, ad)
+							// We haven't decrypted any packet in the new key phase yet.
+							// This means that the ACK must have been sent in the old key phase.
+							Expect(server.SetLargestAcked(nextPN)).To(MatchError("KEY_UPDATE_ERROR: received ACK for key phase 1, but peer didn't update keys"))
+						})
+
+						It("doesn't error before actually sending a packet in the new key phase", func() {
+							// First make sure that we update our keys.
+							for i := 0; i < keyUpdateInterval; i++ {
+								pn := protocol.PacketNumber(i)
+								Expect(server.KeyPhase()).To(Equal(protocol.KeyPhaseZero))
+								server.Seal(nil, msg, pn, ad)
+							}
+							Expect(server.KeyPhase()).To(Equal(protocol.KeyPhaseZero))
+							b := client.Seal(nil, []byte("foobar"), 1, []byte("ad"))
+							_, err := server.Open(nil, b, time.Now(), 1, protocol.KeyPhaseZero, []byte("ad"))
+							Expect(err).ToNot(HaveOccurred())
+							ExpectWithOffset(1, server.SetLargestAcked(0)).To(Succeed())
+							serverTracer.EXPECT().UpdatedKey(protocol.KeyPhase(1), false)
+							// Now that our keys are updated, send a packet using the new keys.
+							Expect(server.KeyPhase()).To(Equal(protocol.KeyPhaseOne))
+							// We haven't decrypted any packet in the new key phase yet.
+							// This means that the ACK must have been sent in the old key phase.
+							Expect(server.SetLargestAcked(1)).ToNot(HaveOccurred())
 						})
 
 						It("initiates a key update after opening the maximum number of packets", func() {
@@ -275,7 +321,7 @@ var _ = Describe("Updatable AEAD", func() {
 							// no update allowed before receiving an acknowledgement for the current key phase
 							Expect(server.KeyPhase()).To(Equal(protocol.KeyPhaseZero))
 							server.Seal(nil, msg, 1, ad)
-							server.SetLargestAcked(1)
+							Expect(server.SetLargestAcked(1)).To(Succeed())
 							serverTracer.EXPECT().UpdatedKey(protocol.KeyPhase(1), false)
 							Expect(server.KeyPhase()).To(Equal(protocol.KeyPhaseOne))
 						})
@@ -286,13 +332,16 @@ var _ = Describe("Updatable AEAD", func() {
 								pn := protocol.PacketNumber(i)
 								Expect(server.KeyPhase()).To(Equal(protocol.KeyPhaseZero))
 								server.Seal(nil, msg, pn, ad)
-								server.SetLargestAcked(pn)
 							}
+							b := client.Seal(nil, []byte("foobar"), 1, []byte("ad"))
+							_, err := server.Open(nil, b, now, 1, protocol.KeyPhaseZero, []byte("ad"))
+							Expect(err).ToNot(HaveOccurred())
+							Expect(server.SetLargestAcked(0)).To(Succeed())
 							// Now we've initiated the first key update.
 							// Decrypt a message sent from the client more than 3 PTO later to make sure the key is still there
 							threePTO := 3 * rttStats.PTO(false)
 							dataKeyPhaseZero := client.Seal(nil, msg, 1, ad)
-							_, err := server.Open(nil, dataKeyPhaseZero, now.Add(threePTO).Add(time.Second), 1, protocol.KeyPhaseZero, ad)
+							_, err = server.Open(nil, dataKeyPhaseZero, now.Add(threePTO).Add(time.Second), 1, protocol.KeyPhaseZero, ad)
 							Expect(err).ToNot(HaveOccurred())
 							// Now receive a packet with key phase 1.
 							// This should start the timer to drop the keys after 3 PTOs.
@@ -319,7 +368,7 @@ var _ = Describe("Updatable AEAD", func() {
 								pn := protocol.PacketNumber(i)
 								Expect(server.KeyPhase()).To(Equal(protocol.KeyPhaseZero))
 								server.Seal(nil, msg, pn, ad)
-								server.SetLargestAcked(pn)
+								Expect(server.SetLargestAcked(pn)).To(Succeed())
 							}
 							serverTracer.EXPECT().UpdatedKey(protocol.KeyPhase(1), false)
 							Expect(server.KeyPhase()).To(Equal(protocol.KeyPhaseOne))
