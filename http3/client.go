@@ -271,3 +271,24 @@ func (c *client) doRequest(
 
 	return res, requestError{}
 }
+
+// Take an http client and replace the transport with an http3 roundtripper.
+// Copies the TLS config from the client if it exists or else uses the default.
+func UpgradeClient(client *http.Client) error {
+	transport, ok := client.Transport.(*http.Transport)
+	if !ok {
+		return errors.New("could not extract transport from client, must be of type *http.Transport")
+	}
+	tlsConf := transport.TLSClientConfig
+	if tlsConf == nil {
+		tlsConf = &tls.Config{}
+	} else {
+		tlsConf = tlsConf.Clone()
+	}
+	roundtripper := &RoundTripper{
+		TLSClientConfig: tlsConf,
+		QuicConfig:      &quic.Config{},
+	}
+	client.Transport = roundtripper
+	return nil
+}
