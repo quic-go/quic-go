@@ -152,6 +152,53 @@ var _ = Describe("Client", func() {
 		Expect(err).ToNot(HaveOccurred())
 	})
 
+	Context("Upgrading client", func() {
+		It("replaces transport with http3 round tripper", func() {
+			transport := &http.Transport{}
+			hclient := &http.Client{
+				Transport: transport,
+			}
+			UpgradeClient(hclient)
+
+			_, ok := hclient.Transport.(*RoundTripper)
+			Expect(ok).To(BeTrue())
+		})
+
+		It("uses default tls config if none is configured on client", func() {
+			transport := &http.Transport{}
+			hclient := &http.Client{
+				Transport: transport,
+			}
+			UpgradeClient(hclient)
+
+			rt, _ := hclient.Transport.(*RoundTripper)
+			Expect(rt.TLSClientConfig).To(Equal(&tls.Config{}))
+		})
+
+		It("returns error when client does not use http.Transport", func() {
+			transport := &RoundTripper{}
+			hclient := &http.Client{
+				Transport: transport,
+			}
+			err := UpgradeClient(hclient)
+			Expect(err).ToNot(Equal(nil))
+		})
+
+		It("copies transport tls configuration from the client", func() {
+			tlsConf := &tls.Config{ServerName: "foo.bar"}
+			transport := &http.Transport{
+				TLSClientConfig: tlsConf,
+			}
+			hclient := &http.Client{
+				Transport: transport,
+			}
+			UpgradeClient(hclient)
+
+			rt, _ := hclient.Transport.(*RoundTripper)
+			Expect(rt.TLSClientConfig).To(Equal(tlsConf))
+		})
+	})
+
 	Context("Doing requests", func() {
 		var (
 			request *http.Request
