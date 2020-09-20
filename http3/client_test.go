@@ -171,6 +171,23 @@ var _ = Describe("Client", func() {
 		Expect(client.Close()).To(Succeed())
 	})
 
+	Context("Configuring an http1 client", func() {
+		It("uses an empty tls config if none exists", func() {
+			t1 := &http.Transport{}
+			t2 := ConfigureTransports(t1)
+			Expect(t2.TLSClientConfig).To(BeNil())
+		})
+
+		It("uses tls configuration from the original transport", func() {
+			tlsConf := &tls.Config{ServerName: "foo.bar"}
+			t1 := &http.Transport{
+				TLSClientConfig: tlsConf,
+			}
+			t2 := ConfigureTransports(t1)
+			Expect(t2.TLSClientConfig).To(Equal(tlsConf))
+		})
+	})
+
 	Context("Doing requests", func() {
 		var (
 			request *http.Request

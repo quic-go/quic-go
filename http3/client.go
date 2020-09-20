@@ -285,3 +285,14 @@ func (c *client) doRequest(
 
 	return res, requestError{}
 }
+
+// ConfigureTransports converts an net/http HTTP/1 Transport to a http3.RoundTripper
+// Uses the original TLS config, if present, relying on the clone created on a
+// new connection.
+func ConfigureTransports(t1 *http.Transport) *RoundTripper {
+	roundtripper := &RoundTripper{
+		TLSClientConfig: t1.TLSClientConfig,
+		QuicConfig:      &quic.Config{},
+	}
+	return roundtripper
+}
