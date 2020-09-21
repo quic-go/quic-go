@@ -27,7 +27,6 @@ FROM martenseemann/quic-network-simulator-endpoint:latest
 
 WORKDIR /quic-go
 
-COPY --from=builder /quic-go/internal/testdata/cert.pem /quic-go/internal/testdata/priv.key internal/testdata/
 COPY --from=builder /quic-go/commit.txt /quic-go/server /quic-go/client ./
 
 COPY run_endpoint.sh .

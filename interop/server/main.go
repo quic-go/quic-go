@@ -10,7 +10,6 @@ import (
 
 	"github.com/lucas-clemente/quic-go"
 	"github.com/lucas-clemente/quic-go/http3"
-	"github.com/lucas-clemente/quic-go/internal/testdata"
 	"github.com/lucas-clemente/quic-go/interop/http09"
 	"github.com/lucas-clemente/quic-go/interop/utils"
 	"github.com/lucas-clemente/quic-go/qlog"
@@ -48,8 +47,15 @@ func main() {
 		AcceptToken: func(_ net.Addr, _ *quic.Token) bool { return true },
 		Tracer:      qlog.NewTracer(getLogWriter),
 	}
-	tlsConf = testdata.GetTLSConfig()
-	tlsConf.KeyLogWriter = keyLog
+	cert, err := tls.LoadX509KeyPair("/certs/cert.pem", "/certs/priv.key")
+	if err != nil {
+		fmt.Println(err)
+		os.Exit(1)
+	}
+	tlsConf = &tls.Config{
+		Certificates: []tls.Certificate{cert},
+		KeyLogWriter: keyLog,
+	}
 
 	switch testcase {
 	case "versionnegotiation", "handshake", "transfer", "resumption", "zerortt", "multiconnect":
