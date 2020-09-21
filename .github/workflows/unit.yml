@@ -31,18 +31,14 @@ jobs:
         env:
           TIMESCALE_FACTOR: 10
           GOARCH: 386
-        run: ginkgo -r -v -cover -randomizeAllSpecs -randomizeSuites -trace -skipPackage integrationtests,benchmark
+        run: ginkgo -r -v -cover -coverprofile coverage.txt -outputdir . -randomizeAllSpecs -randomizeSuites -trace -skipPackage integrationtests,benchmark
       - name: Run tests with race detector
         if: ${{ matrix.os == 'ubuntu' }} # speed things up. Windows and OSX VMs are slow
         env:
           TIMESCALE_FACTOR: 20
         run: ginkgo -r -v -race -randomizeAllSpecs -randomizeSuites -trace -skipPackage integrationtests,benchmark
-      - name: Gather coverage reports
-        if: ${{ matrix.os != 'windows' }} # TODO: figure out how to upload windows logs
-        run: cat `find . -name "*.coverprofile"` > coverage.txt
       - name: Upload coverage to Codecov
-        if: ${{ matrix.os != 'windows' }} # TODO: figure out how to upload windows logs
         uses: codecov/codecov-action@v1
         with:
-          file: ./coverage.txt
+          file: coverage.txt
           env_vars: OS=${{ matrix.os }}, GO=${{ matrix.go }}
