@@ -52,7 +52,7 @@ func main() {
 	tlsConf.KeyLogWriter = keyLog
 
 	switch testcase {
-	case "versionnegotiation", "handshake", "transfer", "resumption", "zerortt", "multiconnect", "ecn":
+	case "versionnegotiation", "handshake", "transfer", "resumption", "zerortt", "multiconnect":
 		err = runHTTP09Server(quicConf)
 	case "retry":
 		// By default, quic-go performs a Retry on every incoming connection.
