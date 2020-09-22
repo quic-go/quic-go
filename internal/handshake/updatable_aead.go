@@ -100,6 +100,14 @@ func newUpdatableAEAD(rttStats *utils.RTTStats, tracer logging.ConnectionTracer,
 }
 
 func (a *updatableAEAD) rollKeys() {
+	if a.prevRcvAEAD != nil {
+		a.logger.Debugf("Dropping key phase %d ahead of scheduled time. Drop time was: %s", a.keyPhase-1, a.prevRcvAEADExpiry)
+		if a.tracer != nil {
+			a.tracer.DroppedKey(a.keyPhase - 1)
+		}
+		a.prevRcvAEADExpiry = time.Time{}
+	}
+
 	a.keyPhase++
 	a.firstRcvdWithCurrentKey = protocol.InvalidPacketNumber
 	a.firstSentWithCurrentKey = protocol.InvalidPacketNumber
