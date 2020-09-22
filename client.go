@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"net"
 	"strings"
-	"sync"
 
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/internal/utils"
@@ -15,8 +14,6 @@ import (
 )
 
 type client struct {
-	mutex sync.Mutex
-
 	conn sendConn
 	// If the client is created with DialAddr, we create a packet conn.
 	// If it is started with Dial, we take a packet conn as a parameter.
@@ -252,7 +249,6 @@ func (c *client) dial(ctx context.Context) error {
 		c.tracer.StartedConnection(c.conn.LocalAddr(), c.conn.RemoteAddr(), c.version, c.srcConnID, c.destConnID)
 	}
 
-	c.mutex.Lock()
 	c.session = newClientSession(
 		c.conn,
 		c.packetHandlers,
@@ -268,7 +264,6 @@ func (c *client) dial(ctx context.Context) error {
 		c.logger,
 		c.version,
 	)
-	c.mutex.Unlock()
 	c.packetHandlers.Add(c.srcConnID, c.session)
 
 	errorChan := make(chan error, 1)
