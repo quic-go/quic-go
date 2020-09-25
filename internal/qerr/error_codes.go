@@ -85,7 +85,7 @@ func (e ErrorCode) String() string {
 		return "AEAD_LIMIT_REACHED"
 	default:
 		if e.isCryptoError() {
-			return "CRYPTO_ERROR"
+			return fmt.Sprintf("CRYPTO_ERROR (%#x)", uint16(e))
 		}
 		return fmt.Sprintf("unknown error code: %#x", uint16(e))
 	}
