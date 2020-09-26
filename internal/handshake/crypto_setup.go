@@ -340,7 +340,11 @@ readLoop:
 	for {
 		select {
 		case data := <-h.paramsChan:
-			h.handleTransportParameters(data)
+			if data == nil {
+				h.onError(0x6d, "missing quic_transport_parameters extension")
+			} else {
+				h.handleTransportParameters(data)
+			}
 		case <-h.isReadingHandshakeMessage:
 			break readLoop
 		case <-h.handshakeDone:
