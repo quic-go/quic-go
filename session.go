@@ -902,8 +902,11 @@ func (s *session) handleRetryPacket(hdr *wire.Header, data []byte) bool /* was t
 		return false
 	}
 
-	s.logger.Debugf("<- Received Retry: %#v", hdr)
-	s.logger.Debugf("Switching destination connection ID to: %s", hdr.SrcConnectionID)
+	if s.logger.Debug() {
+		s.logger.Debugf("<- Received Retry:")
+		(&wire.ExtendedHeader{Header: *hdr}).Log(s.logger)
+		s.logger.Debugf("Switching destination connection ID to: %s", hdr.SrcConnectionID)
+	}
 	if s.tracer != nil {
 		s.tracer.ReceivedRetry(hdr)
 	}
