@@ -299,7 +299,6 @@ func (h *cryptoSetup) RunHandshake() {
 		h.mutex.Unlock()
 		h.runner.OnHandshakeComplete()
 	case <-h.closeChan:
-		close(h.messageChan)
 		// wait until the Handshake() go routine has returned
 		<-h.handshakeDone
 	case alert := <-h.alertChan:
@@ -345,6 +344,8 @@ readLoop:
 		case <-h.isReadingHandshakeMessage:
 			break readLoop
 		case <-h.handshakeDone:
+			break readLoop
+		case <-h.closeChan:
 			break readLoop
 		}
 	}
@@ -504,13 +505,18 @@ func (h *cryptoSetup) ReadHandshakeMessage() ([]byte, error) {
 	if !h.readFirstHandshakeMessage {
 		h.readFirstHandshakeMessage = true
 	} else {
-		h.isReadingHandshakeMessage <- struct{}{}
+		select {
+		case h.isReadingHandshakeMessage <- struct{}{}:
+		case <-h.closeChan:
+			return nil, errors.New("error while handling the handshake message")
+		}
 	}
-	msg, ok := <-h.messageChan
-	if !ok {
+	select {
+	case msg := <-h.messageChan:
+		return msg, nil
+	case <-h.closeChan:
 		return nil, errors.New("error while handling the handshake message")
 	}
-	return msg, nil
 }
 
 func (h *cryptoSetup) SetReadKey(encLevel qtls.EncryptionLevel, suite *qtls.CipherSuiteTLS13, trafficSecret []byte) {
@@ -625,7 +631,11 @@ func (h *cryptoSetup) WriteRecord(p []byte) (int, error) {
 }
 
 func (h *cryptoSetup) SendAlert(alert uint8) {
-	h.alertChan <- alert
+	select {
+	case h.alertChan <- alert:
+	case <-h.closeChan:
+		// no need to send an alert when we've already closed
+	}
 }
 
 // used a callback in the handshakeSealer and handshakeOpener
