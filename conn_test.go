@@ -4,16 +4,23 @@ import (
 	"net"
 	"time"
 
+	"github.com/lucas-clemente/quic-go/internal/protocol"
+
+	"github.com/golang/mock/gomock"
+
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 )
 
 var _ = Describe("Basic Conn Test", func() {
 	It("reads a packet", func() {
-		c := newMockPacketConn()
+		c := NewMockPacketConn(mockCtrl)
 		addr := &net.UDPAddr{IP: net.IPv4(1, 2, 3, 4), Port: 1234}
-		c.dataReadFrom = addr
-		c.dataToRead <- []byte("foobar")
+		c.EXPECT().ReadFrom(gomock.Any()).DoAndReturn(func(b []byte) (int, net.Addr, error) {
+			data := []byte("foobar")
+			Expect(b).To(HaveLen(int(protocol.MaxReceivePacketSize)))
+			return copy(b, data), addr, nil
+		})
 
 		conn, err := wrapConn(c)
 		Expect(err).ToNot(HaveOccurred())

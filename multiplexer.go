@@ -64,7 +64,8 @@ func (m *connMultiplexer) AddConn(
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
 
-	connIndex := c.LocalAddr().Network() + " " + c.LocalAddr().String()
+	addr := c.LocalAddr()
+	connIndex := addr.Network() + " " + addr.String()
 	p, ok := m.conns[connIndex]
 	if !ok {
 		manager, err := m.newPacketHandlerManager(c, connIDLen, statelessResetKey, tracer, m.logger)

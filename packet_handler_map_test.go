@@ -20,10 +20,17 @@ import (
 )
 
 var _ = Describe("Packet Handler Map", func() {
+	type packetToRead struct {
+		addr net.Addr
+		data []byte
+		err  error
+	}
+
 	var (
-		handler *packetHandlerMap
-		conn    *mockPacketConn
-		tracer  *mocklogging.MockTracer
+		handler    *packetHandlerMap
+		conn       *MockPacketConn
+		tracer     *mocklogging.MockTracer
+		packetChan chan packetToRead
 
 		connIDLen         int
 		statelessResetKey []byte
@@ -52,26 +59,22 @@ var _ = Describe("Packet Handler Map", func() {
 		statelessResetKey = nil
 		connIDLen = 0
 		tracer = mocklogging.NewMockTracer(mockCtrl)
+		packetChan = make(chan packetToRead, 10)
 	})
 
 	JustBeforeEach(func() {
-		conn = newMockPacketConn()
+		conn = NewMockPacketConn(mockCtrl)
+		conn.EXPECT().LocalAddr().Return(&net.UDPAddr{}).AnyTimes()
+		conn.EXPECT().ReadFrom(gomock.Any()).DoAndReturn(func(b []byte) (int, net.Addr, error) {
+			p, ok := <-packetChan
+			if !ok {
+				return 0, nil, errors.New("closed")
+			}
+			return copy(b, p.data), p.addr, p.err
+		}).AnyTimes()
 		phm, err := newPacketHandlerMap(conn, connIDLen, statelessResetKey, tracer, utils.DefaultLogger)
 		Expect(err).ToNot(HaveOccurred())
 		handler = phm.(*packetHandlerMap)
-	})
-
-	AfterEach(func() {
-		// delete sessions and the server before closing
-		// They might be mock implementations, and we'd have to register the expected calls before otherwise.
-		handler.mutex.Lock()
-		for connID := range handler.handlers {
-			delete(handler.handlers, connID)
-		}
-		handler.server = nil
-		handler.mutex.Unlock()
-		handler.Destroy()
-		Eventually(handler.listening).Should(BeClosed())
 	})
 
 	It("closes", func() {
@@ -94,284 +97,307 @@ var _ = Describe("Packet Handler Map", func() {
 		handler.Add(protocol.ConnectionID{2, 2, 2, 2}, sess2)
 		mockMultiplexer.EXPECT().RemoveConn(gomock.Any())
 		handler.close(testErr)
+		close(packetChan)
+		Eventually(handler.listening).Should(BeClosed())
 	})
 
-	Context("handling packets", func() {
-		BeforeEach(func() {
-			connIDLen = 5
+	Context("other operations", func() {
+		AfterEach(func() {
+			// delete sessions and the server before closing
+			// They might be mock implementations, and we'd have to register the expected calls before otherwise.
+			handler.mutex.Lock()
+			for connID := range handler.handlers {
+				delete(handler.handlers, connID)
+			}
+			handler.server = nil
+			handler.mutex.Unlock()
+			conn.EXPECT().Close().MaxTimes(1)
+			close(packetChan)
+			handler.Destroy()
+			Eventually(handler.listening).Should(BeClosed())
 		})
 
-		It("handles packets for different packet handlers on the same packet conn", func() {
-			connID1 := protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8}
-			connID2 := protocol.ConnectionID{8, 7, 6, 5, 4, 3, 2, 1}
-			packetHandler1 := NewMockPacketHandler(mockCtrl)
-			packetHandler2 := NewMockPacketHandler(mockCtrl)
-			handledPacket1 := make(chan struct{})
-			handledPacket2 := make(chan struct{})
-			packetHandler1.EXPECT().handlePacket(gomock.Any()).Do(func(p *receivedPacket) {
-				connID, err := wire.ParseConnectionID(p.data, 0)
-				Expect(err).ToNot(HaveOccurred())
-				Expect(connID).To(Equal(connID1))
-				close(handledPacket1)
+		Context("handling packets", func() {
+			BeforeEach(func() {
+				connIDLen = 5
 			})
-			packetHandler2.EXPECT().handlePacket(gomock.Any()).Do(func(p *receivedPacket) {
-				connID, err := wire.ParseConnectionID(p.data, 0)
-				Expect(err).ToNot(HaveOccurred())
-				Expect(connID).To(Equal(connID2))
-				close(handledPacket2)
-			})
-			handler.Add(connID1, packetHandler1)
-			handler.Add(connID2, packetHandler2)
 
-			conn.dataToRead <- getPacket(connID1)
-			conn.dataToRead <- getPacket(connID2)
-			Eventually(handledPacket1).Should(BeClosed())
-			Eventually(handledPacket2).Should(BeClosed())
-		})
-
-		It("drops unparseable packets", func() {
-			addr := &net.UDPAddr{IP: net.IPv4(9, 8, 7, 6), Port: 1234}
-			tracer.EXPECT().DroppedPacket(addr, logging.PacketTypeNotDetermined, protocol.ByteCount(4), logging.PacketDropHeaderParseError)
-			handler.handlePacket(&receivedPacket{
-				buffer:     getPacketBuffer(),
-				remoteAddr: addr,
-				data:       []byte{0, 1, 2, 3},
-			})
-		})
-
-		It("deletes removed sessions immediately", func() {
-			handler.deleteRetiredSessionsAfter = time.Hour
-			connID := protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8}
-			handler.Add(connID, NewMockPacketHandler(mockCtrl))
-			handler.Remove(connID)
-			handler.handlePacket(&receivedPacket{data: getPacket(connID)})
-			// don't EXPECT any calls to handlePacket of the MockPacketHandler
-		})
-
-		It("deletes retired session entries after a wait time", func() {
-			handler.deleteRetiredSessionsAfter = scaleDuration(10 * time.Millisecond)
-			connID := protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8}
-			sess := NewMockPacketHandler(mockCtrl)
-			handler.Add(connID, sess)
-			handler.Retire(connID)
-			time.Sleep(scaleDuration(30 * time.Millisecond))
-			handler.handlePacket(&receivedPacket{data: getPacket(connID)})
-			// don't EXPECT any calls to handlePacket of the MockPacketHandler
-		})
-
-		It("passes packets arriving late for closed sessions to that session", func() {
-			handler.deleteRetiredSessionsAfter = time.Hour
-			connID := protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8}
-			packetHandler := NewMockPacketHandler(mockCtrl)
-			handled := make(chan struct{})
-			packetHandler.EXPECT().handlePacket(gomock.Any()).Do(func(p *receivedPacket) {
-				close(handled)
-			})
-			handler.Add(connID, packetHandler)
-			handler.Retire(connID)
-			handler.handlePacket(&receivedPacket{data: getPacket(connID)})
-			Eventually(handled).Should(BeClosed())
-		})
-
-		It("drops packets for unknown receivers", func() {
-			connID := protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8}
-			handler.handlePacket(&receivedPacket{data: getPacket(connID)})
-		})
-
-		It("closes the packet handlers when reading from the conn fails", func() {
-			done := make(chan struct{})
-			packetHandler := NewMockPacketHandler(mockCtrl)
-			packetHandler.EXPECT().destroy(gomock.Any()).Do(func(e error) {
-				Expect(e).To(HaveOccurred())
-				close(done)
-			})
-			handler.Add(protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8}, packetHandler)
-			conn.Close()
-			Eventually(done).Should(BeClosed())
-		})
-
-		It("says if a connection ID is already taken", func() {
-			connID := protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8}
-			Expect(handler.Add(connID, NewMockPacketHandler(mockCtrl))).To(BeTrue())
-			Expect(handler.Add(connID, NewMockPacketHandler(mockCtrl))).To(BeFalse())
-		})
-
-		It("says if a connection ID is already taken, for AddWithConnID", func() {
-			clientDestConnID := protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8}
-			newConnID1 := protocol.ConnectionID{1, 2, 3, 4}
-			newConnID2 := protocol.ConnectionID{4, 3, 2, 1}
-			Expect(handler.AddWithConnID(clientDestConnID, newConnID1, func() packetHandler { return NewMockPacketHandler(mockCtrl) })).To(BeTrue())
-			Expect(handler.AddWithConnID(clientDestConnID, newConnID2, func() packetHandler { return NewMockPacketHandler(mockCtrl) })).To(BeFalse())
-		})
-	})
-
-	Context("running a server", func() {
-		It("adds a server", func() {
-			connID := protocol.ConnectionID{0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88}
-			p := getPacket(connID)
-			server := NewMockUnknownPacketHandler(mockCtrl)
-			server.EXPECT().handlePacket(gomock.Any()).Do(func(p *receivedPacket) {
-				cid, err := wire.ParseConnectionID(p.data, 0)
-				Expect(err).ToNot(HaveOccurred())
-				Expect(cid).To(Equal(connID))
-			})
-			handler.SetServer(server)
-			handler.handlePacket(&receivedPacket{data: p})
-		})
-
-		It("closes all server sessions", func() {
-			clientSess := NewMockPacketHandler(mockCtrl)
-			clientSess.EXPECT().getPerspective().Return(protocol.PerspectiveClient)
-			serverSess := NewMockPacketHandler(mockCtrl)
-			serverSess.EXPECT().getPerspective().Return(protocol.PerspectiveServer)
-			serverSess.EXPECT().shutdown()
-
-			handler.Add(protocol.ConnectionID{1, 1, 1, 1}, clientSess)
-			handler.Add(protocol.ConnectionID{2, 2, 2, 2}, serverSess)
-			handler.CloseServer()
-		})
-
-		It("stops handling packets with unknown connection IDs after the server is closed", func() {
-			connID := protocol.ConnectionID{0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88}
-			p := getPacket(connID)
-			server := NewMockUnknownPacketHandler(mockCtrl)
-			// don't EXPECT any calls to server.handlePacket
-			handler.SetServer(server)
-			handler.CloseServer()
-			handler.handlePacket(&receivedPacket{data: p})
-		})
-	})
-
-	Context("stateless resets", func() {
-		BeforeEach(func() {
-			connIDLen = 5
-		})
-
-		Context("handling", func() {
-			It("handles stateless resets", func() {
-				packetHandler := NewMockPacketHandler(mockCtrl)
-				token := protocol.StatelessResetToken{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16}
-				handler.AddResetToken(token, packetHandler)
-				packet := append([]byte{0x40} /* short header packet */, make([]byte, 50)...)
-				packet = append(packet, token[:]...)
-				destroyed := make(chan struct{})
-				packetHandler.EXPECT().destroy(gomock.Any()).Do(func(err error) {
-					defer GinkgoRecover()
-					Expect(err).To(HaveOccurred())
-					var resetErr statelessResetErr
-					Expect(errors.As(err, &resetErr)).To(BeTrue())
-					Expect(err.Error()).To(ContainSubstring("received a stateless reset"))
-					Expect(resetErr.token).To(Equal(token))
-					close(destroyed)
+			It("handles packets for different packet handlers on the same packet conn", func() {
+				connID1 := protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8}
+				connID2 := protocol.ConnectionID{8, 7, 6, 5, 4, 3, 2, 1}
+				packetHandler1 := NewMockPacketHandler(mockCtrl)
+				packetHandler2 := NewMockPacketHandler(mockCtrl)
+				handledPacket1 := make(chan struct{})
+				handledPacket2 := make(chan struct{})
+				packetHandler1.EXPECT().handlePacket(gomock.Any()).Do(func(p *receivedPacket) {
+					connID, err := wire.ParseConnectionID(p.data, 0)
+					Expect(err).ToNot(HaveOccurred())
+					Expect(connID).To(Equal(connID1))
+					close(handledPacket1)
 				})
-				conn.dataToRead <- packet
-				Eventually(destroyed).Should(BeClosed())
-			})
-
-			It("handles stateless resets for 0-length connection IDs", func() {
-				handler.connIDLen = 0
-				packetHandler := NewMockPacketHandler(mockCtrl)
-				token := protocol.StatelessResetToken{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16}
-				handler.AddResetToken(token, packetHandler)
-				packet := append([]byte{0x40} /* short header packet */, make([]byte, 50)...)
-				packet = append(packet, token[:]...)
-				destroyed := make(chan struct{})
-				packetHandler.EXPECT().destroy(gomock.Any()).Do(func(err error) {
-					defer GinkgoRecover()
-					Expect(err).To(HaveOccurred())
-					var resetErr statelessResetErr
-					Expect(errors.As(err, &resetErr)).To(BeTrue())
-					Expect(err.Error()).To(ContainSubstring("received a stateless reset"))
-					Expect(resetErr.token).To(Equal(token))
-					close(destroyed)
+				packetHandler2.EXPECT().handlePacket(gomock.Any()).Do(func(p *receivedPacket) {
+					connID, err := wire.ParseConnectionID(p.data, 0)
+					Expect(err).ToNot(HaveOccurred())
+					Expect(connID).To(Equal(connID2))
+					close(handledPacket2)
 				})
-				conn.dataToRead <- packet
-				Eventually(destroyed).Should(BeClosed())
+				handler.Add(connID1, packetHandler1)
+				handler.Add(connID2, packetHandler2)
+				packetChan <- packetToRead{data: getPacket(connID1)}
+				packetChan <- packetToRead{data: getPacket(connID2)}
+
+				Eventually(handledPacket1).Should(BeClosed())
+				Eventually(handledPacket2).Should(BeClosed())
 			})
 
-			It("retires reset tokens", func() {
+			It("drops unparseable packets", func() {
+				addr := &net.UDPAddr{IP: net.IPv4(9, 8, 7, 6), Port: 1234}
+				tracer.EXPECT().DroppedPacket(addr, logging.PacketTypeNotDetermined, protocol.ByteCount(4), logging.PacketDropHeaderParseError)
+				handler.handlePacket(&receivedPacket{
+					buffer:     getPacketBuffer(),
+					remoteAddr: addr,
+					data:       []byte{0, 1, 2, 3},
+				})
+			})
+
+			It("deletes removed sessions immediately", func() {
+				handler.deleteRetiredSessionsAfter = time.Hour
+				connID := protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8}
+				handler.Add(connID, NewMockPacketHandler(mockCtrl))
+				handler.Remove(connID)
+				handler.handlePacket(&receivedPacket{data: getPacket(connID)})
+				// don't EXPECT any calls to handlePacket of the MockPacketHandler
+			})
+
+			It("deletes retired session entries after a wait time", func() {
 				handler.deleteRetiredSessionsAfter = scaleDuration(10 * time.Millisecond)
-				connID := protocol.ConnectionID{0xde, 0xad, 0xbe, 0xef, 0x42}
-				packetHandler := NewMockPacketHandler(mockCtrl)
-				handler.Add(connID, packetHandler)
-				token := protocol.StatelessResetToken{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16}
-				handler.AddResetToken(token, NewMockPacketHandler(mockCtrl))
-				handler.RetireResetToken(token)
-				packetHandler.EXPECT().handlePacket(gomock.Any())
-				p := append([]byte{0x40} /* short header packet */, connID.Bytes()...)
-				p = append(p, make([]byte, 50)...)
-				p = append(p, token[:]...)
-
+				connID := protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8}
+				sess := NewMockPacketHandler(mockCtrl)
+				handler.Add(connID, sess)
+				handler.Retire(connID)
 				time.Sleep(scaleDuration(30 * time.Millisecond))
+				handler.handlePacket(&receivedPacket{data: getPacket(connID)})
+				// don't EXPECT any calls to handlePacket of the MockPacketHandler
+			})
+
+			It("passes packets arriving late for closed sessions to that session", func() {
+				handler.deleteRetiredSessionsAfter = time.Hour
+				connID := protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8}
+				packetHandler := NewMockPacketHandler(mockCtrl)
+				handled := make(chan struct{})
+				packetHandler.EXPECT().handlePacket(gomock.Any()).Do(func(p *receivedPacket) {
+					close(handled)
+				})
+				handler.Add(connID, packetHandler)
+				handler.Retire(connID)
+				handler.handlePacket(&receivedPacket{data: getPacket(connID)})
+				Eventually(handled).Should(BeClosed())
+			})
+
+			It("drops packets for unknown receivers", func() {
+				connID := protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8}
+				handler.handlePacket(&receivedPacket{data: getPacket(connID)})
+			})
+
+			It("closes the packet handlers when reading from the conn fails", func() {
+				done := make(chan struct{})
+				packetHandler := NewMockPacketHandler(mockCtrl)
+				packetHandler.EXPECT().destroy(gomock.Any()).Do(func(e error) {
+					Expect(e).To(HaveOccurred())
+					close(done)
+				})
+				handler.Add(protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8}, packetHandler)
+				packetChan <- packetToRead{err: errors.New("read failed")}
+				Eventually(done).Should(BeClosed())
+			})
+
+			It("says if a connection ID is already taken", func() {
+				connID := protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8}
+				Expect(handler.Add(connID, NewMockPacketHandler(mockCtrl))).To(BeTrue())
+				Expect(handler.Add(connID, NewMockPacketHandler(mockCtrl))).To(BeFalse())
+			})
+
+			It("says if a connection ID is already taken, for AddWithConnID", func() {
+				clientDestConnID := protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8}
+				newConnID1 := protocol.ConnectionID{1, 2, 3, 4}
+				newConnID2 := protocol.ConnectionID{4, 3, 2, 1}
+				Expect(handler.AddWithConnID(clientDestConnID, newConnID1, func() packetHandler { return NewMockPacketHandler(mockCtrl) })).To(BeTrue())
+				Expect(handler.AddWithConnID(clientDestConnID, newConnID2, func() packetHandler { return NewMockPacketHandler(mockCtrl) })).To(BeFalse())
+			})
+		})
+
+		Context("running a server", func() {
+			It("adds a server", func() {
+				connID := protocol.ConnectionID{0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88}
+				p := getPacket(connID)
+				server := NewMockUnknownPacketHandler(mockCtrl)
+				server.EXPECT().handlePacket(gomock.Any()).Do(func(p *receivedPacket) {
+					cid, err := wire.ParseConnectionID(p.data, 0)
+					Expect(err).ToNot(HaveOccurred())
+					Expect(cid).To(Equal(connID))
+				})
+				handler.SetServer(server)
 				handler.handlePacket(&receivedPacket{data: p})
 			})
 
-			It("ignores packets too small to contain a stateless reset", func() {
-				handler.connIDLen = 0
-				packetHandler := NewMockPacketHandler(mockCtrl)
-				token := protocol.StatelessResetToken{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16}
-				handler.AddResetToken(token, packetHandler)
-				packet := append([]byte{0x40} /* short header packet */, token[:15]...)
-				done := make(chan struct{})
-				// don't EXPECT any calls here, but register the closing of the done channel
-				packetHandler.EXPECT().destroy(gomock.Any()).Do(func(error) {
-					close(done)
-				}).AnyTimes()
-				conn.dataToRead <- packet
-				Consistently(done).ShouldNot(BeClosed())
+			It("closes all server sessions", func() {
+				clientSess := NewMockPacketHandler(mockCtrl)
+				clientSess.EXPECT().getPerspective().Return(protocol.PerspectiveClient)
+				serverSess := NewMockPacketHandler(mockCtrl)
+				serverSess.EXPECT().getPerspective().Return(protocol.PerspectiveServer)
+				serverSess.EXPECT().shutdown()
+
+				handler.Add(protocol.ConnectionID{1, 1, 1, 1}, clientSess)
+				handler.Add(protocol.ConnectionID{2, 2, 2, 2}, serverSess)
+				handler.CloseServer()
+			})
+
+			It("stops handling packets with unknown connection IDs after the server is closed", func() {
+				connID := protocol.ConnectionID{0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88}
+				p := getPacket(connID)
+				server := NewMockUnknownPacketHandler(mockCtrl)
+				// don't EXPECT any calls to server.handlePacket
+				handler.SetServer(server)
+				handler.CloseServer()
+				handler.handlePacket(&receivedPacket{data: p})
 			})
 		})
 
-		Context("generating", func() {
+		Context("stateless resets", func() {
 			BeforeEach(func() {
-				key := make([]byte, 32)
-				rand.Read(key)
-				statelessResetKey = key
+				connIDLen = 5
 			})
 
-			It("generates stateless reset tokens", func() {
-				connID1 := []byte{0xde, 0xad, 0xbe, 0xef}
-				connID2 := []byte{0xde, 0xca, 0xfb, 0xad}
-				Expect(handler.GetStatelessResetToken(connID1)).ToNot(Equal(handler.GetStatelessResetToken(connID2)))
-			})
-
-			It("sends stateless resets", func() {
-				addr := &net.UDPAddr{IP: net.IPv4(192, 168, 0, 1), Port: 1337}
-				p := append([]byte{40}, make([]byte, 100)...)
-				handler.handlePacket(&receivedPacket{
-					buffer:     getPacketBuffer(),
-					remoteAddr: addr,
-					data:       p,
+			Context("handling", func() {
+				It("handles stateless resets", func() {
+					packetHandler := NewMockPacketHandler(mockCtrl)
+					token := protocol.StatelessResetToken{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16}
+					handler.AddResetToken(token, packetHandler)
+					destroyed := make(chan struct{})
+					packet := append([]byte{0x40} /* short header packet */, make([]byte, 50)...)
+					packet = append(packet, token[:]...)
+					packetHandler.EXPECT().destroy(gomock.Any()).Do(func(err error) {
+						defer GinkgoRecover()
+						defer close(destroyed)
+						Expect(err).To(HaveOccurred())
+						var resetErr statelessResetErr
+						Expect(errors.As(err, &resetErr)).To(BeTrue())
+						Expect(err.Error()).To(ContainSubstring("received a stateless reset"))
+						Expect(resetErr.token).To(Equal(token))
+					})
+					packetChan <- packetToRead{data: packet}
+					Eventually(destroyed).Should(BeClosed())
+					time.Sleep(time.Second)
 				})
-				var reset mockPacketConnWrite
-				Eventually(conn.dataWritten).Should(Receive(&reset))
-				Expect(reset.to).To(Equal(addr))
-				Expect(reset.data[0] & 0x80).To(BeZero()) // short header packet
-				Expect(reset.data).To(HaveLen(protocol.MinStatelessResetSize))
+
+				It("handles stateless resets for 0-length connection IDs", func() {
+					handler.connIDLen = 0
+					packetHandler := NewMockPacketHandler(mockCtrl)
+					token := protocol.StatelessResetToken{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16}
+					handler.AddResetToken(token, packetHandler)
+					destroyed := make(chan struct{})
+					packet := append([]byte{0x40} /* short header packet */, make([]byte, 50)...)
+					packet = append(packet, token[:]...)
+					packetHandler.EXPECT().destroy(gomock.Any()).Do(func(err error) {
+						defer GinkgoRecover()
+						Expect(err).To(HaveOccurred())
+						var resetErr statelessResetErr
+						Expect(errors.As(err, &resetErr)).To(BeTrue())
+						Expect(err.Error()).To(ContainSubstring("received a stateless reset"))
+						Expect(resetErr.token).To(Equal(token))
+						close(destroyed)
+					})
+					packetChan <- packetToRead{data: packet}
+					Eventually(destroyed).Should(BeClosed())
+				})
+
+				It("retires reset tokens", func() {
+					handler.deleteRetiredSessionsAfter = scaleDuration(10 * time.Millisecond)
+					connID := protocol.ConnectionID{0xde, 0xad, 0xbe, 0xef, 0x42}
+					packetHandler := NewMockPacketHandler(mockCtrl)
+					handler.Add(connID, packetHandler)
+					token := protocol.StatelessResetToken{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16}
+					handler.AddResetToken(token, NewMockPacketHandler(mockCtrl))
+					handler.RetireResetToken(token)
+					packetHandler.EXPECT().handlePacket(gomock.Any())
+					p := append([]byte{0x40} /* short header packet */, connID.Bytes()...)
+					p = append(p, make([]byte, 50)...)
+					p = append(p, token[:]...)
+
+					time.Sleep(scaleDuration(30 * time.Millisecond))
+					handler.handlePacket(&receivedPacket{data: p})
+				})
+
+				It("ignores packets too small to contain a stateless reset", func() {
+					handler.connIDLen = 0
+					packetHandler := NewMockPacketHandler(mockCtrl)
+					token := protocol.StatelessResetToken{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16}
+					handler.AddResetToken(token, packetHandler)
+					done := make(chan struct{})
+					// don't EXPECT any calls here, but register the closing of the done channel
+					packetHandler.EXPECT().destroy(gomock.Any()).Do(func(error) {
+						close(done)
+					}).AnyTimes()
+					packetChan <- packetToRead{data: append([]byte{0x40} /* short header packet */, token[:15]...)}
+					Consistently(done).ShouldNot(BeClosed())
+				})
 			})
 
-			It("doesn't send stateless resets for small packets", func() {
-				addr := &net.UDPAddr{IP: net.IPv4(192, 168, 0, 1), Port: 1337}
-				p := append([]byte{40}, make([]byte, protocol.MinStatelessResetSize-2)...)
-				handler.handlePacket(&receivedPacket{
-					buffer:     getPacketBuffer(),
-					remoteAddr: addr,
-					data:       p,
+			Context("generating", func() {
+				BeforeEach(func() {
+					key := make([]byte, 32)
+					rand.Read(key)
+					statelessResetKey = key
 				})
-				Consistently(conn.dataWritten).ShouldNot(Receive())
-			})
-		})
 
-		Context("if no key is configured", func() {
-			It("doesn't send stateless resets", func() {
-				addr := &net.UDPAddr{IP: net.IPv4(192, 168, 0, 1), Port: 1337}
-				p := append([]byte{40}, make([]byte, 100)...)
-				handler.handlePacket(&receivedPacket{
-					buffer:     getPacketBuffer(),
-					remoteAddr: addr,
-					data:       p,
+				It("generates stateless reset tokens", func() {
+					connID1 := []byte{0xde, 0xad, 0xbe, 0xef}
+					connID2 := []byte{0xde, 0xca, 0xfb, 0xad}
+					Expect(handler.GetStatelessResetToken(connID1)).ToNot(Equal(handler.GetStatelessResetToken(connID2)))
 				})
-				Consistently(conn.dataWritten).ShouldNot(Receive())
+
+				It("sends stateless resets", func() {
+					addr := &net.UDPAddr{IP: net.IPv4(192, 168, 0, 1), Port: 1337}
+					p := append([]byte{40}, make([]byte, 100)...)
+					done := make(chan struct{})
+					conn.EXPECT().WriteTo(gomock.Any(), addr).Do(func(b []byte, _ net.Addr) {
+						defer close(done)
+						Expect(b[0] & 0x80).To(BeZero()) // short header packet
+						Expect(b).To(HaveLen(protocol.MinStatelessResetSize))
+					})
+					handler.handlePacket(&receivedPacket{
+						buffer:     getPacketBuffer(),
+						remoteAddr: addr,
+						data:       p,
+					})
+					Eventually(done).Should(BeClosed())
+				})
+
+				It("doesn't send stateless resets for small packets", func() {
+					addr := &net.UDPAddr{IP: net.IPv4(192, 168, 0, 1), Port: 1337}
+					p := append([]byte{40}, make([]byte, protocol.MinStatelessResetSize-2)...)
+					handler.handlePacket(&receivedPacket{
+						buffer:     getPacketBuffer(),
+						remoteAddr: addr,
+						data:       p,
+					})
+					// make sure there are no Write calls on the packet conn
+					time.Sleep(50 * time.Millisecond)
+				})
+			})
+
+			Context("if no key is configured", func() {
+				It("doesn't send stateless resets", func() {
+					addr := &net.UDPAddr{IP: net.IPv4(192, 168, 0, 1), Port: 1337}
+					p := append([]byte{40}, make([]byte, 100)...)
+					handler.handlePacket(&receivedPacket{
+						buffer:     getPacketBuffer(),
+						remoteAddr: addr,
+						data:       p,
+					})
+					// make sure there are no Write calls on the packet conn
+					time.Sleep(50 * time.Millisecond)
+				})
 			})
 		})
 	})
