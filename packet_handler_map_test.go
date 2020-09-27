@@ -211,6 +211,16 @@ var _ = Describe("Packet Handler Map", func() {
 				Eventually(done).Should(BeClosed())
 			})
 
+			It("continues listening for temporary errors", func() {
+				packetHandler := NewMockPacketHandler(mockCtrl)
+				handler.Add(protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8}, packetHandler)
+				err := deadlineError{}
+				Expect(err.Temporary()).To(BeTrue())
+				packetChan <- packetToRead{err: err}
+				// don't EXPECT any calls to packetHandler.destroy
+				time.Sleep(50 * time.Millisecond)
+			})
+
 			It("says if a connection ID is already taken", func() {
 				connID := protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8}
 				Expect(handler.Add(connID, NewMockPacketHandler(mockCtrl))).To(BeTrue())
