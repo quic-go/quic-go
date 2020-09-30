@@ -653,6 +653,7 @@ func (h *cryptoSetup) dropInitialKeys() {
 }
 
 func (h *cryptoSetup) SetHandshakeConfirmed() {
+	h.aead.SetHandshakeConfirmed()
 	// drop Handshake keys
 	var dropped bool
 	h.mutex.Lock()
