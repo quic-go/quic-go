@@ -76,18 +76,6 @@ func (mr *MockCryptoSetupMockRecorder) ConnectionState() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ConnectionState", reflect.TypeOf((*MockCryptoSetup)(nil).ConnectionState))
 }
 
-// DropHandshakeKeys mocks base method
-func (m *MockCryptoSetup) DropHandshakeKeys() {
-	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "DropHandshakeKeys")
-}
-
-// DropHandshakeKeys indicates an expected call of DropHandshakeKeys
-func (mr *MockCryptoSetupMockRecorder) DropHandshakeKeys() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DropHandshakeKeys", reflect.TypeOf((*MockCryptoSetup)(nil).DropHandshakeKeys))
-}
-
 // Get0RTTOpener mocks base method
 func (m *MockCryptoSetup) Get0RTTOpener() (handshake.LongHeaderOpener, error) {
 	m.ctrl.T.Helper()
@@ -247,6 +235,18 @@ func (m *MockCryptoSetup) RunHandshake() {
 func (mr *MockCryptoSetupMockRecorder) RunHandshake() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RunHandshake", reflect.TypeOf((*MockCryptoSetup)(nil).RunHandshake))
+}
+
+// SetHandshakeConfirmed mocks base method
+func (m *MockCryptoSetup) SetHandshakeConfirmed() {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "SetHandshakeConfirmed")
+}
+
+// SetHandshakeConfirmed indicates an expected call of SetHandshakeConfirmed
+func (mr *MockCryptoSetupMockRecorder) SetHandshakeConfirmed() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetHandshakeConfirmed", reflect.TypeOf((*MockCryptoSetup)(nil).SetHandshakeConfirmed))
 }
 
 // SetLargest1RTTAcked mocks base method

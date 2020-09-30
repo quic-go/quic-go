@@ -52,7 +52,7 @@ type cryptoStreamHandler interface {
 	RunHandshake()
 	ChangeConnectionID(protocol.ConnectionID)
 	SetLargest1RTTAcked(protocol.PacketNumber) error
-	DropHandshakeKeys()
+	SetHandshakeConfirmed()
 	GetSessionTicket() ([]byte, error)
 	io.Closer
 	ConnectionState() handshake.ConnectionState
@@ -705,7 +705,7 @@ func (s *session) handleHandshakeComplete() {
 			s.closeLocal(err)
 		}
 		s.queueControlFrame(&wire.NewTokenFrame{Token: token})
-		s.cryptoStreamHandler.DropHandshakeKeys()
+		s.cryptoStreamHandler.SetHandshakeConfirmed()
 		s.queueControlFrame(&wire.HandshakeDoneFrame{})
 	}
 }
@@ -1242,7 +1242,7 @@ func (s *session) handleHandshakeDoneFrame() error {
 	}
 	s.handshakeConfirmed = true
 	s.sentPacketHandler.SetHandshakeConfirmed()
-	s.cryptoStreamHandler.DropHandshakeKeys()
+	s.cryptoStreamHandler.SetHandshakeConfirmed()
 	return nil
 }
 

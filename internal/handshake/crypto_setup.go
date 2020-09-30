@@ -652,7 +652,8 @@ func (h *cryptoSetup) dropInitialKeys() {
 	h.logger.Debugf("Dropping Initial keys.")
 }
 
-func (h *cryptoSetup) DropHandshakeKeys() {
+func (h *cryptoSetup) SetHandshakeConfirmed() {
+	// drop Handshake keys
 	var dropped bool
 	h.mutex.Lock()
 	if h.handshakeOpener != nil {
