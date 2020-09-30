@@ -688,6 +688,8 @@ func (s *session) handleHandshakeComplete() {
 	s.connIDGenerator.SetHandshakeComplete()
 
 	if s.perspective == protocol.PerspectiveServer {
+		s.handshakeConfirmed = true
+		s.sentPacketHandler.SetHandshakeConfirmed()
 		ticket, err := s.cryptoStreamHandler.GetSessionTicket()
 		if err != nil {
 			s.closeLocal(err)
@@ -1238,6 +1240,8 @@ func (s *session) handleHandshakeDoneFrame() error {
 	if s.perspective == protocol.PerspectiveServer {
 		return qerr.NewError(qerr.ProtocolViolation, "received a HANDSHAKE_DONE frame")
 	}
+	s.handshakeConfirmed = true
+	s.sentPacketHandler.SetHandshakeConfirmed()
 	s.cryptoStreamHandler.DropHandshakeKeys()
 	return nil
 }
@@ -1347,10 +1351,6 @@ func (s *session) handleCloseError(closeErr closeError) {
 }
 
 func (s *session) dropEncryptionLevel(encLevel protocol.EncryptionLevel) {
-	if encLevel == protocol.EncryptionHandshake {
-		s.handshakeConfirmed = true
-		s.sentPacketHandler.SetHandshakeConfirmed()
-	}
 	s.sentPacketHandler.DropPackets(encLevel)
 	s.receivedPacketHandler.DropPackets(encLevel)
 	if s.tracer != nil {
