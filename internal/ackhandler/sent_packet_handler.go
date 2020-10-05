@@ -156,6 +156,7 @@ func (h *sentPacketHandler) dropPackets(encLevel protocol.EncryptionLevel) {
 		})
 	}
 	// drop the packet history
+	//nolint:exhaustive // Not every packet number space can be dropped.
 	switch encLevel {
 	case protocol.EncryptionInitial:
 		h.initialPackets = nil
@@ -629,6 +630,7 @@ func (h *sentPacketHandler) onVerifiedLossDetectionTimeout() error {
 			h.tracer.UpdatedPTOCount(h.ptoCount)
 		}
 		h.numProbesToSend += 2
+		//nolint:exhaustive // We never arm a PTO timer for 0-RTT packets.
 		switch encLevel {
 		case protocol.EncryptionInitial:
 			h.ptoMode = SendPTOInitial

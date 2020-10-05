@@ -37,6 +37,7 @@ var _ = Describe("Packetization", func() {
 		proxy, err = quicproxy.NewQuicProxy("localhost:0", &quicproxy.Opts{
 			RemoteAddr: serverAddr,
 			DelayPacket: func(dir quicproxy.Direction, _ []byte) time.Duration {
+				//nolint:exhaustive
 				switch dir {
 				case quicproxy.DirectionIncoming:
 					atomic.AddUint32(&incoming, 1)

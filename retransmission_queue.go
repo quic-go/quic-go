@@ -117,6 +117,7 @@ func (q *retransmissionQueue) GetAppDataFrame(maxLen protocol.ByteCount) wire.Fr
 }
 
 func (q *retransmissionQueue) DropPackets(encLevel protocol.EncryptionLevel) {
+	//nolint:exhaustive // Can only drop Initial and Handshake packet number space.
 	switch encLevel {
 	case protocol.EncryptionInitial:
 		q.initial = nil

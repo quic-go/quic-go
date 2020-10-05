@@ -205,6 +205,7 @@ func toEncryptionLevel(n uint8) protocol.EncryptionLevel {
 }
 
 func maxEncLevel(cs handshake.CryptoSetup, encLevel protocol.EncryptionLevel) protocol.EncryptionLevel {
+	//nolint:exhaustive
 	switch encLevel {
 	case protocol.EncryptionInitial:
 		return protocol.EncryptionInitial

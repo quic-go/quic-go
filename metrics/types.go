@@ -11,7 +11,7 @@ func (p perspective) String() string {
 	case logging.PerspectiveServer:
 		return "server"
 	default:
-		panic("unknown perspective")
+		return "unknown perspective"
 	}
 }
 
@@ -28,7 +28,7 @@ func (e encryptionLevel) String() string {
 	case logging.Encryption1RTT:
 		return "1-RTT"
 	default:
-		panic("unknown encryption level")
+		return "unknown encryption level"
 	}
 }
 
@@ -41,7 +41,7 @@ func (r packetLossReason) String() string {
 	case logging.PacketLossReorderingThreshold:
 		return "reordering_threshold"
 	default:
-		panic("unknown packet loss reason")
+		return "unknown packet loss reason"
 	}
 }
 
@@ -62,7 +62,7 @@ func (t packetType) String() string {
 	case logging.PacketType1RTT:
 		return "1-RTT"
 	default:
-		panic("unknown packet type")
+		return "unknown packet type"
 	}
 }
 
@@ -75,6 +75,6 @@ func (r timeoutReason) String() string {
 	case logging.TimeoutReasonIdle:
 		return "idle_timeout"
 	default:
-		panic("unknown timeout reason")
+		return "unknown timeout reason"
 	}
 }
