@@ -20,6 +20,19 @@ import (
 
 const eventChanSize = 50
 
+// An ExternalEvent is an event that doesn't happen at the transport layer.
+type ExternalEvent interface {
+	Category() string
+	Name() string
+	gojay.MarshalerJSONObject
+}
+
+// A ConnectionTracer is a logging.ConnectionTracer that also allows the logging of external events.
+type ConnectionTracer interface {
+	logging.ConnectionTracer
+	LogExternalEvent(ExternalEvent)
+}
+
 type tracer struct {
 	getLogWriter func(p logging.Perspective, connectionID []byte) io.WriteCloser
 }
@@ -31,6 +44,8 @@ func NewTracer(getLogWriter func(p logging.Perspective, connectionID []byte) io.
 	return &tracer{getLogWriter: getLogWriter}
 }
 
+// TracerForConnection returns a new tracer for a connection.
+// It is guaranteed to return a qlog.ConnectionTracer.
 func (t *tracer) TracerForConnection(p logging.Perspective, odcid protocol.ConnectionID) logging.ConnectionTracer {
 	if w := t.getLogWriter(p, odcid.Bytes()); w != nil {
 		return newConnectionTracer(w, p, odcid)
@@ -59,9 +74,10 @@ type connectionTracer struct {
 }
 
 var _ logging.ConnectionTracer = &connectionTracer{}
+var _ ConnectionTracer = &connectionTracer{}
 
 // newTracer creates a new connectionTracer to record a qlog.
-func newConnectionTracer(w io.WriteCloser, p protocol.Perspective, odcid protocol.ConnectionID) logging.ConnectionTracer {
+func newConnectionTracer(w io.WriteCloser, p protocol.Perspective, odcid protocol.ConnectionID) ConnectionTracer {
 	t := &connectionTracer{
 		w:             w,
 		perspective:   p,
@@ -402,5 +418,11 @@ func (t *connectionTracer) LossTimerExpired(tt logging.TimerType, encLevel proto
 func (t *connectionTracer) LossTimerCanceled() {
 	t.mutex.Lock()
 	t.recordEvent(time.Now(), &eventLossTimerCanceled{})
+	t.mutex.Unlock()
+}
+
+func (t *connectionTracer) LogExternalEvent(e ExternalEvent) {
+	t.mutex.Lock()
+	t.recordEvent(time.Now(), e)
 	t.mutex.Unlock()
 }

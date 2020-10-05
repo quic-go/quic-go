@@ -10,6 +10,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/francoispqt/gojay"
 	"github.com/lucas-clemente/quic-go/internal/utils"
 
 	"github.com/lucas-clemente/quic-go/internal/protocol"
@@ -49,6 +50,19 @@ type entry struct {
 	Event    map[string]interface{}
 }
 
+type externalEvent struct {
+	name     string
+	category string
+	marshal  func(*gojay.Encoder)
+}
+
+var _ ExternalEvent = &externalEvent{}
+
+func (e *externalEvent) Name() string                         { return e.name }
+func (e *externalEvent) Category() string                     { return e.category }
+func (e *externalEvent) IsNil() bool                          { return e == nil }
+func (e *externalEvent) MarshalJSONObject(enc *gojay.Encoder) { e.marshal(enc) }
+
 var _ = Describe("Tracing", func() {
 	Context("tracer", func() {
 		It("returns nil when there's no io.WriteCloser", func() {
@@ -59,14 +73,14 @@ var _ = Describe("Tracing", func() {
 
 	Context("connection tracer", func() {
 		var (
-			tracer logging.ConnectionTracer
+			tracer ConnectionTracer
 			buf    *bytes.Buffer
 		)
 
 		BeforeEach(func() {
 			buf = &bytes.Buffer{}
 			t := NewTracer(func(logging.Perspective, []byte) io.WriteCloser { return nopWriteCloser(buf) })
-			tracer = t.TracerForConnection(logging.PerspectiveServer, logging.ConnectionID{0xde, 0xad, 0xbe, 0xef})
+			tracer = t.TracerForConnection(logging.PerspectiveServer, logging.ConnectionID{0xde, 0xad, 0xbe, 0xef}).(ConnectionTracer)
 		})
 
 		It("exports a trace that has the right metadata", func() {
@@ -669,6 +683,25 @@ var _ = Describe("Tracing", func() {
 				ev := entry.Event
 				Expect(ev).To(HaveLen(1))
 				Expect(ev).To(HaveKeyWithValue("event_type", "cancelled"))
+			})
+
+			It("records external events", func() {
+				ee := &externalEvent{
+					name:     "external_event",
+					category: "application_protocol",
+					marshal: func(enc *gojay.Encoder) {
+						enc.StringKey("event_type", "foobar")
+					},
+				}
+				tracer.LogExternalEvent(ee)
+
+				entry := exportAndParseSingle()
+				Expect(entry.Time).To(BeTemporally("~", time.Now(), scaleDuration(10*time.Millisecond)))
+				Expect(entry.Category).To(Equal("application_protocol"))
+				Expect(entry.Name).To(Equal("external_event"))
+				ev := entry.Event
+				Expect(ev).To(HaveLen(1))
+				Expect(ev).To(HaveKeyWithValue("event_type", "foobar"))
 			})
 		})
 	})
