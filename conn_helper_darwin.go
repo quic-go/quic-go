@@ -5,6 +5,7 @@ package quic
 import "syscall"
 
 const (
+	//nolint:stylecheck
 	ip_recvtos   = 27
 	msgTypeIPTOS = ip_recvtos
 )
