@@ -30,7 +30,7 @@ func (e events) MarshalJSONArray(enc *gojay.Encoder) {
 }
 
 type eventDetails interface {
-	Category() category
+	Category() string
 	Name() string
 	gojay.MarshalerJSONObject
 }
@@ -45,7 +45,7 @@ var _ gojay.MarshalerJSONArray = event{}
 func (e event) IsNil() bool { return false }
 func (e event) MarshalJSONArray(enc *gojay.Encoder) {
 	enc.Float64(milliseconds(e.RelativeTime))
-	enc.String(e.Category().String())
+	enc.String(e.Category())
 	enc.String(e.Name())
 	enc.Object(e.eventDetails)
 }
@@ -72,9 +72,9 @@ type eventConnectionStarted struct {
 
 var _ eventDetails = &eventConnectionStarted{}
 
-func (e eventConnectionStarted) Category() category { return categoryTransport }
-func (e eventConnectionStarted) Name() string       { return "connection_started" }
-func (e eventConnectionStarted) IsNil() bool        { return false }
+func (e eventConnectionStarted) Category() string { return categoryTransport }
+func (e eventConnectionStarted) Name() string     { return "connection_started" }
+func (e eventConnectionStarted) IsNil() bool      { return false }
 
 func (e eventConnectionStarted) MarshalJSONObject(enc *gojay.Encoder) {
 	if utils.IsIPv4(e.SrcAddr.IP) {
@@ -95,9 +95,9 @@ type eventConnectionClosed struct {
 	Reason timeoutReason
 }
 
-func (e eventConnectionClosed) Category() category { return categoryTransport }
-func (e eventConnectionClosed) Name() string       { return "connection_state_updated" }
-func (e eventConnectionClosed) IsNil() bool        { return false }
+func (e eventConnectionClosed) Category() string { return categoryTransport }
+func (e eventConnectionClosed) Name() string     { return "connection_state_updated" }
+func (e eventConnectionClosed) IsNil() bool      { return false }
 
 func (e eventConnectionClosed) MarshalJSONObject(enc *gojay.Encoder) {
 	enc.StringKey("new", "closed")
@@ -114,9 +114,9 @@ type eventPacketSent struct {
 
 var _ eventDetails = eventPacketSent{}
 
-func (e eventPacketSent) Category() category { return categoryTransport }
-func (e eventPacketSent) Name() string       { return "packet_sent" }
-func (e eventPacketSent) IsNil() bool        { return false }
+func (e eventPacketSent) Category() string { return categoryTransport }
+func (e eventPacketSent) Name() string     { return "packet_sent" }
+func (e eventPacketSent) IsNil() bool      { return false }
 
 func (e eventPacketSent) MarshalJSONObject(enc *gojay.Encoder) {
 	enc.StringKey("packet_type", e.PacketType.String())
@@ -136,9 +136,9 @@ type eventPacketReceived struct {
 
 var _ eventDetails = eventPacketReceived{}
 
-func (e eventPacketReceived) Category() category { return categoryTransport }
-func (e eventPacketReceived) Name() string       { return "packet_received" }
-func (e eventPacketReceived) IsNil() bool        { return false }
+func (e eventPacketReceived) Category() string { return categoryTransport }
+func (e eventPacketReceived) Name() string     { return "packet_received" }
+func (e eventPacketReceived) IsNil() bool      { return false }
 
 func (e eventPacketReceived) MarshalJSONObject(enc *gojay.Encoder) {
 	enc.StringKey("packet_type", e.PacketType.String())
@@ -152,9 +152,9 @@ type eventRetryReceived struct {
 	Header packetHeader
 }
 
-func (e eventRetryReceived) Category() category { return categoryTransport }
-func (e eventRetryReceived) Name() string       { return "packet_received" }
-func (e eventRetryReceived) IsNil() bool        { return false }
+func (e eventRetryReceived) Category() string { return categoryTransport }
+func (e eventRetryReceived) Name() string     { return "packet_received" }
+func (e eventRetryReceived) IsNil() bool      { return false }
 
 func (e eventRetryReceived) MarshalJSONObject(enc *gojay.Encoder) {
 	enc.StringKey("packet_type", packetType(logging.PacketTypeRetry).String())
@@ -166,9 +166,9 @@ type eventVersionNegotiationReceived struct {
 	SupportedVersions []versionNumber
 }
 
-func (e eventVersionNegotiationReceived) Category() category { return categoryTransport }
-func (e eventVersionNegotiationReceived) Name() string       { return "packet_received" }
-func (e eventVersionNegotiationReceived) IsNil() bool        { return false }
+func (e eventVersionNegotiationReceived) Category() string { return categoryTransport }
+func (e eventVersionNegotiationReceived) Name() string     { return "packet_received" }
+func (e eventVersionNegotiationReceived) IsNil() bool      { return false }
 
 func (e eventVersionNegotiationReceived) MarshalJSONObject(enc *gojay.Encoder) {
 	enc.StringKey("packet_type", packetType(logging.PacketTypeVersionNegotiation).String())
@@ -180,9 +180,9 @@ type eventStatelessResetReceived struct {
 	Token protocol.StatelessResetToken
 }
 
-func (e eventStatelessResetReceived) Category() category { return categoryTransport }
-func (e eventStatelessResetReceived) Name() string       { return "packet_received" }
-func (e eventStatelessResetReceived) IsNil() bool        { return false }
+func (e eventStatelessResetReceived) Category() string { return categoryTransport }
+func (e eventStatelessResetReceived) Name() string     { return "packet_received" }
+func (e eventStatelessResetReceived) IsNil() bool      { return false }
 
 func (e eventStatelessResetReceived) MarshalJSONObject(enc *gojay.Encoder) {
 	enc.StringKey("packet_type", packetType(logging.PacketTypeStatelessReset).String())
@@ -193,9 +193,9 @@ type eventPacketBuffered struct {
 	PacketType packetType
 }
 
-func (e eventPacketBuffered) Category() category { return categoryTransport }
-func (e eventPacketBuffered) Name() string       { return "packet_buffered" }
-func (e eventPacketBuffered) IsNil() bool        { return false }
+func (e eventPacketBuffered) Category() string { return categoryTransport }
+func (e eventPacketBuffered) Name() string     { return "packet_buffered" }
+func (e eventPacketBuffered) IsNil() bool      { return false }
 
 func (e eventPacketBuffered) MarshalJSONObject(enc *gojay.Encoder) {
 	enc.StringKey("packet_type", e.PacketType.String())
@@ -208,9 +208,9 @@ type eventPacketDropped struct {
 	Trigger    packetDropReason
 }
 
-func (e eventPacketDropped) Category() category { return categoryTransport }
-func (e eventPacketDropped) Name() string       { return "packet_dropped" }
-func (e eventPacketDropped) IsNil() bool        { return false }
+func (e eventPacketDropped) Category() string { return categoryTransport }
+func (e eventPacketDropped) Name() string     { return "packet_dropped" }
+func (e eventPacketDropped) IsNil() bool      { return false }
 
 func (e eventPacketDropped) MarshalJSONObject(enc *gojay.Encoder) {
 	enc.StringKeyOmitEmpty("packet_type", e.PacketType.String())
@@ -234,9 +234,9 @@ type eventMetricsUpdated struct {
 	Current *metrics
 }
 
-func (e eventMetricsUpdated) Category() category { return categoryRecovery }
-func (e eventMetricsUpdated) Name() string       { return "metrics_updated" }
-func (e eventMetricsUpdated) IsNil() bool        { return false }
+func (e eventMetricsUpdated) Category() string { return categoryRecovery }
+func (e eventMetricsUpdated) Name() string     { return "metrics_updated" }
+func (e eventMetricsUpdated) IsNil() bool      { return false }
 
 func (e eventMetricsUpdated) MarshalJSONObject(enc *gojay.Encoder) {
 	if e.Last == nil || e.Last.MinRTT != e.Current.MinRTT {
@@ -267,9 +267,9 @@ type eventUpdatedPTO struct {
 	Value uint32
 }
 
-func (e eventUpdatedPTO) Category() category { return categoryRecovery }
-func (e eventUpdatedPTO) Name() string       { return "metrics_updated" }
-func (e eventUpdatedPTO) IsNil() bool        { return false }
+func (e eventUpdatedPTO) Category() string { return categoryRecovery }
+func (e eventUpdatedPTO) Name() string     { return "metrics_updated" }
+func (e eventUpdatedPTO) IsNil() bool      { return false }
 
 func (e eventUpdatedPTO) MarshalJSONObject(enc *gojay.Encoder) {
 	enc.Uint32Key("pto_count", e.Value)
@@ -281,9 +281,9 @@ type eventPacketLost struct {
 	Trigger      packetLossReason
 }
 
-func (e eventPacketLost) Category() category { return categoryRecovery }
-func (e eventPacketLost) Name() string       { return "packet_lost" }
-func (e eventPacketLost) IsNil() bool        { return false }
+func (e eventPacketLost) Category() string { return categoryRecovery }
+func (e eventPacketLost) Name() string     { return "packet_lost" }
+func (e eventPacketLost) IsNil() bool      { return false }
 
 func (e eventPacketLost) MarshalJSONObject(enc *gojay.Encoder) {
 	enc.StringKey("packet_type", e.PacketType.String())
@@ -298,9 +298,9 @@ type eventKeyUpdated struct {
 	// we don't log the keys here, so we don't need `old` and `new`.
 }
 
-func (e eventKeyUpdated) Category() category { return categorySecurity }
-func (e eventKeyUpdated) Name() string       { return "key_updated" }
-func (e eventKeyUpdated) IsNil() bool        { return false }
+func (e eventKeyUpdated) Category() string { return categorySecurity }
+func (e eventKeyUpdated) Name() string     { return "key_updated" }
+func (e eventKeyUpdated) IsNil() bool      { return false }
 
 func (e eventKeyUpdated) MarshalJSONObject(enc *gojay.Encoder) {
 	enc.StringKey("trigger", e.Trigger.String())
@@ -315,9 +315,9 @@ type eventKeyRetired struct {
 	Generation protocol.KeyPhase
 }
 
-func (e eventKeyRetired) Category() category { return categorySecurity }
-func (e eventKeyRetired) Name() string       { return "key_retired" }
-func (e eventKeyRetired) IsNil() bool        { return false }
+func (e eventKeyRetired) Category() string { return categorySecurity }
+func (e eventKeyRetired) Name() string     { return "key_retired" }
+func (e eventKeyRetired) IsNil() bool      { return false }
 
 func (e eventKeyRetired) MarshalJSONObject(enc *gojay.Encoder) {
 	if e.KeyType != keyTypeClient1RTT && e.KeyType != keyTypeServer1RTT {
@@ -355,9 +355,9 @@ type eventTransportParameters struct {
 	// TODO: add the preferred_address
 }
 
-func (e eventTransportParameters) Category() category { return categoryTransport }
-func (e eventTransportParameters) Name() string       { return "parameters_set" }
-func (e eventTransportParameters) IsNil() bool        { return false }
+func (e eventTransportParameters) Category() string { return categoryTransport }
+func (e eventTransportParameters) Name() string     { return "parameters_set" }
+func (e eventTransportParameters) IsNil() bool      { return false }
 
 func (e eventTransportParameters) MarshalJSONObject(enc *gojay.Encoder) {
 	enc.StringKey("owner", e.Owner.String())
@@ -392,9 +392,9 @@ type eventLossTimerSet struct {
 	Delta     time.Duration
 }
 
-func (e eventLossTimerSet) Category() category { return categoryRecovery }
-func (e eventLossTimerSet) Name() string       { return "loss_timer_updated" }
-func (e eventLossTimerSet) IsNil() bool        { return false }
+func (e eventLossTimerSet) Category() string { return categoryRecovery }
+func (e eventLossTimerSet) Name() string     { return "loss_timer_updated" }
+func (e eventLossTimerSet) IsNil() bool      { return false }
 
 func (e eventLossTimerSet) MarshalJSONObject(enc *gojay.Encoder) {
 	enc.StringKey("event_type", "set")
@@ -408,9 +408,9 @@ type eventLossTimerExpired struct {
 	EncLevel  protocol.EncryptionLevel
 }
 
-func (e eventLossTimerExpired) Category() category { return categoryRecovery }
-func (e eventLossTimerExpired) Name() string       { return "loss_timer_updated" }
-func (e eventLossTimerExpired) IsNil() bool        { return false }
+func (e eventLossTimerExpired) Category() string { return categoryRecovery }
+func (e eventLossTimerExpired) Name() string     { return "loss_timer_updated" }
+func (e eventLossTimerExpired) IsNil() bool      { return false }
 
 func (e eventLossTimerExpired) MarshalJSONObject(enc *gojay.Encoder) {
 	enc.StringKey("event_type", "expired")
@@ -420,9 +420,9 @@ func (e eventLossTimerExpired) MarshalJSONObject(enc *gojay.Encoder) {
 
 type eventLossTimerCanceled struct{}
 
-func (e eventLossTimerCanceled) Category() category { return categoryRecovery }
-func (e eventLossTimerCanceled) Name() string       { return "loss_timer_updated" }
-func (e eventLossTimerCanceled) IsNil() bool        { return false }
+func (e eventLossTimerCanceled) Category() string { return categoryRecovery }
+func (e eventLossTimerCanceled) Name() string     { return "loss_timer_updated" }
+func (e eventLossTimerCanceled) IsNil() bool      { return false }
 
 func (e eventLossTimerCanceled) MarshalJSONObject(enc *gojay.Encoder) {
 	enc.StringKey("event_type", "cancelled")
@@ -432,9 +432,9 @@ type eventCongestionStateUpdated struct {
 	state congestionState
 }
 
-func (e eventCongestionStateUpdated) Category() category { return categoryRecovery }
-func (e eventCongestionStateUpdated) Name() string       { return "congestion_state_updated" }
-func (e eventCongestionStateUpdated) IsNil() bool        { return false }
+func (e eventCongestionStateUpdated) Category() string { return categoryRecovery }
+func (e eventCongestionStateUpdated) Name() string     { return "congestion_state_updated" }
+func (e eventCongestionStateUpdated) IsNil() bool      { return false }
 
 func (e eventCongestionStateUpdated) MarshalJSONObject(enc *gojay.Encoder) {
 	enc.StringKey("new", e.state.String())

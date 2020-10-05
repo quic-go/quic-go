@@ -45,30 +45,12 @@ func (c connectionID) String() string {
 	return fmt.Sprintf("%x", []byte(c))
 }
 
-// category is the qlog event category.
-type category uint8
-
 const (
-	categoryConnectivity category = iota
-	categoryTransport
-	categorySecurity
-	categoryRecovery
+	categoryConnectivity = "connectivity"
+	categoryTransport    = "transport"
+	categorySecurity     = "security"
+	categoryRecovery     = "recovery"
 )
-
-func (c category) String() string {
-	switch c {
-	case categoryConnectivity:
-		return "connectivity"
-	case categoryTransport:
-		return "transport"
-	case categorySecurity:
-		return "security"
-	case categoryRecovery:
-		return "recovery"
-	default:
-		return "unknown category"
-	}
-}
 
 type versionNumber protocol.VersionNumber
 

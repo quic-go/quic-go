@@ -22,11 +22,11 @@ var _ = Describe("Types", func() {
 		Expect(ownerRemote.String()).To(Equal("remote"))
 	})
 
-	It("has a string representation for the category", func() {
-		Expect(categoryConnectivity.String()).To(Equal("connectivity"))
-		Expect(categoryTransport.String()).To(Equal("transport"))
-		Expect(categoryRecovery.String()).To(Equal("recovery"))
-		Expect(categorySecurity.String()).To(Equal("security"))
+	It("has the correct string representation for the category", func() {
+		Expect(categoryConnectivity).To(Equal("connectivity"))
+		Expect(categoryTransport).To(Equal("transport"))
+		Expect(categoryRecovery).To(Equal("recovery"))
+		Expect(categorySecurity).To(Equal("security"))
 	})
 
 	It("has a string representation for the packet type", func() {

@@ -15,7 +15,7 @@ type mevent struct{}
 
 var _ eventDetails = mevent{}
 
-func (mevent) Category() category                   { return categoryConnectivity }
+func (mevent) Category() string                     { return categoryConnectivity }
 func (mevent) Name() string                         { return "mevent" }
 func (mevent) IsNil() bool                          { return false }
 func (mevent) MarshalJSONObject(enc *gojay.Encoder) { enc.StringKey("event", "details") }
@@ -39,7 +39,7 @@ var _ = Describe("Events", func() {
 
 		// 2nd field
 		Expect(eventFields[1]).To(Equal("category"))
-		Expect(decoded[1].(string)).To(Equal(categoryConnectivity.String()))
+		Expect(decoded[1].(string)).To(Equal(categoryConnectivity))
 
 		// 3rd field
 		Expect(eventFields[2]).To(Equal("event"))
