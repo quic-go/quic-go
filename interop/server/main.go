@@ -60,6 +60,9 @@ func main() {
 	switch testcase {
 	case "versionnegotiation", "handshake", "transfer", "resumption", "zerortt", "multiconnect":
 		err = runHTTP09Server(quicConf)
+	case "chacha20":
+		tlsConf.CipherSuites = []uint16{tls.TLS_CHACHA20_POLY1305_SHA256}
+		err = runHTTP09Server(quicConf)
 	case "retry":
 		// By default, quic-go performs a Retry on every incoming connection.
 		quicConf.AcceptToken = nil
