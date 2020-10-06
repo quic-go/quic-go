@@ -499,7 +499,11 @@ func (h *cryptoSetup) handlePostHandshakeMessage() {
 	}()
 
 	if err := h.conn.HandlePostHandshakeMessage(); err != nil {
-		h.onError(<-alertChan, err.Error())
+		select {
+		case <-h.closeChan:
+		case alert := <-alertChan:
+			h.onError(alert, err.Error())
+		}
 	}
 }
 
