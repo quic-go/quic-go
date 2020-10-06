@@ -1,3 +1,5 @@
+// +build quictrace
+
 package quictrace
 
 import (
