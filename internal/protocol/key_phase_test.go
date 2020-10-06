@@ -6,6 +6,11 @@ import (
 )
 
 var _ = Describe("Key Phases", func() {
+	It("has undefined as its default value", func() {
+		var k KeyPhaseBit
+		Expect(k).To(Equal(KeyPhaseUndefined))
+	})
+
 	It("has the correct string representation", func() {
 		Expect(KeyPhaseZero.String()).To(Equal("0"))
 		Expect(KeyPhaseOne.String()).To(Equal("1"))

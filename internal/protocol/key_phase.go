@@ -3,23 +3,34 @@ package protocol
 // KeyPhase is the key phase
 type KeyPhase uint64
 
+// Bit determines the key phase bit
 func (p KeyPhase) Bit() KeyPhaseBit {
-	return p%2 == 1
+	if p%2 == 0 {
+		return KeyPhaseZero
+	}
+	return KeyPhaseOne
 }
 
 // KeyPhaseBit is the key phase bit
-type KeyPhaseBit bool
+type KeyPhaseBit uint8
 
 const (
+	// KeyPhaseUndefined is an undefined key phase
+	KeyPhaseUndefined KeyPhaseBit = iota
 	// KeyPhaseZero is key phase 0
-	KeyPhaseZero KeyPhaseBit = false
+	KeyPhaseZero
 	// KeyPhaseOne is key phase 1
-	KeyPhaseOne KeyPhaseBit = true
+	KeyPhaseOne
 )
 
 func (p KeyPhaseBit) String() string {
-	if p == KeyPhaseZero {
+	//nolint:exhaustive
+	switch p {
+	case KeyPhaseZero:
 		return "0"
+	case KeyPhaseOne:
+		return "1"
+	default:
+		return "undefined"
 	}
-	return "1"
 }

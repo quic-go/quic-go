@@ -34,7 +34,10 @@ var _ = Describe("Packet Header", func() {
 
 		It("marshals a header for a 1-RTT packet", func() {
 			check(
-				&wire.ExtendedHeader{PacketNumber: 42},
+				&wire.ExtendedHeader{
+					PacketNumber: 42,
+					KeyPhase:     protocol.KeyPhaseZero,
+				},
 				map[string]interface{}{
 					"packet_number": 42,
 					"dcil":          0,
