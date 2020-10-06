@@ -258,6 +258,10 @@ func (h *packetHandlerMap) listen() {
 	defer close(h.listening)
 	for {
 		p, err := h.conn.ReadPacket()
+		if nerr, ok := err.(net.Error); ok && nerr.Temporary() {
+			h.logger.Debugf("Temporary error reading from conn: %w", err)
+			continue
+		}
 		if err != nil {
 			h.close(err)
 			return

@@ -1,7 +1,6 @@
 package quic
 
 import (
-	"bytes"
 	"context"
 	"crypto/tls"
 	"errors"
@@ -12,7 +11,6 @@ import (
 	mocklogging "github.com/lucas-clemente/quic-go/internal/mocks/logging"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/internal/utils"
-	"github.com/lucas-clemente/quic-go/internal/wire"
 	"github.com/lucas-clemente/quic-go/logging"
 	"github.com/lucas-clemente/quic-go/quictrace"
 
@@ -25,7 +23,7 @@ import (
 var _ = Describe("Client", func() {
 	var (
 		cl              *client
-		packetConn      *mockPacketConn
+		packetConn      *MockPacketConn
 		addr            net.Addr
 		connID          protocol.ConnectionID
 		mockMultiplexer *MockMultiplexer
@@ -51,17 +49,6 @@ var _ = Describe("Client", func() {
 		) quicSession
 	)
 
-	// generate a packet sent by the server that accepts the QUIC version suggested by the client
-	acceptClientVersionPacket := func(connID protocol.ConnectionID) []byte {
-		b := &bytes.Buffer{}
-		Expect((&wire.ExtendedHeader{
-			Header:          wire.Header{DestConnectionID: connID},
-			PacketNumber:    1,
-			PacketNumberLen: 1,
-		}).Write(b, protocol.VersionWhatever)).To(Succeed())
-		return b.Bytes()
-	}
-
 	BeforeEach(func() {
 		tlsConf = &tls.Config{NextProtos: []string{"proto1"}}
 		connID = protocol.ConnectionID{0, 0, 0, 0, 0, 0, 0x13, 0x37}
@@ -73,9 +60,8 @@ var _ = Describe("Client", func() {
 		Eventually(areSessionsRunning).Should(BeFalse())
 		// sess = NewMockQuicSession(mockCtrl)
 		addr = &net.UDPAddr{IP: net.IPv4(192, 168, 100, 200), Port: 1337}
-		packetConn = newMockPacketConn()
-		packetConn.addr = &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 1234}
-		packetConn.dataReadFrom = addr
+		packetConn = NewMockPacketConn(mockCtrl)
+		packetConn.EXPECT().LocalAddr().Return(&net.UDPAddr{}).AnyTimes()
 		cl = &client{
 			srcConnID:  connID,
 			destConnID: connID,
@@ -221,7 +207,7 @@ var _ = Describe("Client", func() {
 				sess.EXPECT().run()
 				return sess
 			}
-			tracer.EXPECT().StartedConnection(packetConn.addr, addr, protocol.VersionTLS, gomock.Any(), gomock.Any())
+			tracer.EXPECT().StartedConnection(packetConn.LocalAddr(), addr, protocol.VersionTLS, gomock.Any(), gomock.Any())
 			_, err := Dial(
 				packetConn,
 				addr,
@@ -350,7 +336,6 @@ var _ = Describe("Client", func() {
 				sess.EXPECT().HandshakeComplete().Return(context.Background())
 				return sess
 			}
-			packetConn.dataToRead <- acceptClientVersionPacket(cl.srcConnID)
 			tracer.EXPECT().StartedConnection(gomock.Any(), gomock.Any(), protocol.VersionTLS, gomock.Any(), gomock.Any())
 			_, err := Dial(
 				packetConn,
