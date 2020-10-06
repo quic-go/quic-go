@@ -37,6 +37,9 @@ type packetHeader struct {
 	Version          logging.VersionNumber
 	SrcConnectionID  logging.ConnectionID
 	DestConnectionID logging.ConnectionID
+
+	hasKeyPhase bool
+	KeyPhaseBit logging.KeyPhaseBit
 }
 
 func transformHeader(hdr *wire.Header) *packetHeader {
@@ -52,6 +55,10 @@ func transformHeader(hdr *wire.Header) *packetHeader {
 func transformExtendedHeader(hdr *wire.ExtendedHeader) *packetHeader {
 	h := transformHeader(&hdr.Header)
 	h.PacketNumber = hdr.PacketNumber
+	if !hdr.IsLongHeader {
+		h.hasKeyPhase = true
+		h.KeyPhaseBit = hdr.KeyPhase
+	}
 	return h
 }
 
@@ -73,5 +80,13 @@ func (h packetHeader) MarshalJSONObject(enc *gojay.Encoder) {
 	enc.IntKey("dcil", h.DestConnectionID.Len())
 	if h.DestConnectionID.Len() > 0 {
 		enc.StringKey("dcid", connectionID(h.DestConnectionID).String())
+	}
+	if h.hasKeyPhase {
+		switch h.KeyPhaseBit {
+		case logging.KeyPhaseZero:
+			enc.StringKey("key_phase_bit", "0")
+		case logging.KeyPhaseOne:
+			enc.StringKey("key_phase_bit", "1")
+		}
 	}
 }

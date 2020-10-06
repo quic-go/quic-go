@@ -38,6 +38,7 @@ var _ = Describe("Packet Header", func() {
 				map[string]interface{}{
 					"packet_number": 42,
 					"dcil":          0,
+					"key_phase_bit": "0",
 				},
 			)
 		})
@@ -108,11 +109,13 @@ var _ = Describe("Packet Header", func() {
 				&wire.ExtendedHeader{
 					PacketNumber: 42,
 					Header:       wire.Header{DestConnectionID: protocol.ConnectionID{0xde, 0xad, 0xbe, 0xef}},
+					KeyPhase:     protocol.KeyPhaseOne,
 				},
 				map[string]interface{}{
 					"packet_number": 42,
 					"dcil":          4,
 					"dcid":          "deadbeef",
+					"key_phase_bit": "1",
 				},
 			)
 		})

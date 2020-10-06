@@ -22,6 +22,8 @@ type (
 	EncryptionLevel = protocol.EncryptionLevel
 	// The KeyPhase is the key phase of the 1-RTT keys.
 	KeyPhase = protocol.KeyPhase
+	// The KeyPhaseBit is the value of the key phase bit of the 1-RTT packets.
+	KeyPhaseBit = protocol.KeyPhaseBit
 	// The PacketNumber is the packet number of a packet.
 	PacketNumber = protocol.PacketNumber
 	// The Perspective is the role of a QUIC endpoint (client or server).
@@ -51,6 +53,13 @@ type (
 
 	// The RTTStats contain statistics used by the congestion controller.
 	RTTStats = utils.RTTStats
+)
+
+const (
+	// KeyPhaseZero is key phase bit 0
+	KeyPhaseZero KeyPhaseBit = protocol.KeyPhaseZero
+	// KeyPhaseOne is key phase bit 1
+	KeyPhaseOne KeyPhaseBit = protocol.KeyPhaseOne
 )
 
 const (
