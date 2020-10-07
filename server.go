@@ -321,6 +321,13 @@ func (s *baseServer) handlePacket(p *receivedPacket) {
 }
 
 func (s *baseServer) handlePacketImpl(p *receivedPacket) bool /* is the buffer still in use? */ {
+	if wire.IsVersionNegotiationPacket(p.data) {
+		s.logger.Debugf("Dropping Version Negotiation packet.")
+		if s.config.Tracer != nil {
+			s.config.Tracer.DroppedPacket(p.remoteAddr, logging.PacketTypeVersionNegotiation, p.Size(), logging.PacketDropUnexpectedPacket)
+		}
+		return false
+	}
 	// If we're creating a new session, the packet will be passed to the session.
 	// The header will then be parsed again.
 	hdr, _, _, err := wire.ParsePacket(p.data, s.config.ConnectionIDLength)

@@ -409,6 +409,28 @@ var _ = Describe("Server", func() {
 				Eventually(done).Should(BeClosed())
 			})
 
+			It("ignores Version Negotiation packets", func() {
+				data, err := wire.ComposeVersionNegotiation(
+					protocol.ConnectionID{1, 2, 3, 4},
+					protocol.ConnectionID{4, 3, 2, 1},
+					[]protocol.VersionNumber{1, 2, 3},
+				)
+				Expect(err).ToNot(HaveOccurred())
+				raddr := &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 1337}
+				done := make(chan struct{})
+				tracer.EXPECT().DroppedPacket(raddr, logging.PacketTypeVersionNegotiation, protocol.ByteCount(len(data)), logging.PacketDropUnexpectedPacket).Do(func(net.Addr, logging.PacketType, protocol.ByteCount, logging.PacketDropReason) {
+					close(done)
+				})
+				serv.handlePacket(&receivedPacket{
+					remoteAddr: raddr,
+					data:       data,
+					buffer:     getPacketBuffer(),
+				})
+				Eventually(done).Should(BeClosed())
+				// make sure no other packet is sent
+				time.Sleep(scaleDuration(20 * time.Millisecond))
+			})
+
 			It("replies with a Retry packet, if a Token is required", func() {
 				serv.config.AcceptToken = func(_ net.Addr, _ *Token) bool { return false }
 				hdr := &wire.Header{
