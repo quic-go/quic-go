@@ -94,6 +94,25 @@ var _ = Describe("Timeout tests", func() {
 		Expect(err).To(MatchError(context.DeadlineExceeded))
 	})
 
+	It("returns the context error when the context expires with 0RTT enabled", func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
+		defer cancel()
+		errChan := make(chan error)
+		go func() {
+			_, err := quic.DialAddrEarlyContext(
+				ctx,
+				"localhost:12345",
+				getTLSClientConfig(),
+				getQuicConfig(nil),
+			)
+			errChan <- err
+		}()
+		var err error
+		Eventually(errChan).Should(Receive(&err))
+		// This is not a net.Error timeout error
+		Expect(err).To(MatchError(context.DeadlineExceeded))
+	})
+
 	It("returns net.Error timeout errors when an idle timeout occurs", func() {
 		const idleTimeout = 100 * time.Millisecond
 
