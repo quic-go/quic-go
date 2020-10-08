@@ -385,7 +385,7 @@ var _ = Describe("Server", func() {
 					SrcConnectionID:  srcConnID,
 					DestConnectionID: destConnID,
 					Version:          0x42,
-				}, make([]byte, protocol.MinInitialPacketSize))
+				}, make([]byte, protocol.MinUnknownVersionPacketSize))
 				raddr := &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 1337}
 				packet.remoteAddr = raddr
 				tracer.EXPECT().SentPacket(packet.remoteAddr, gomock.Any(), gomock.Any(), nil).Do(func(_ net.Addr, replyHdr *logging.Header, _ logging.ByteCount, _ []logging.Frame) {
@@ -426,6 +426,29 @@ var _ = Describe("Server", func() {
 					data:       data,
 					buffer:     getPacketBuffer(),
 				})
+				Eventually(done).Should(BeClosed())
+				// make sure no other packet is sent
+				time.Sleep(scaleDuration(20 * time.Millisecond))
+			})
+
+			It("doesn't send a Version Negotiation Packet for unsupported versions, if the packet is too small", func() {
+				srcConnID := protocol.ConnectionID{1, 2, 3, 4, 5}
+				destConnID := protocol.ConnectionID{1, 2, 3, 4, 5, 6}
+				p := getPacket(&wire.Header{
+					IsLongHeader:     true,
+					Type:             protocol.PacketTypeHandshake,
+					SrcConnectionID:  srcConnID,
+					DestConnectionID: destConnID,
+					Version:          0x42,
+				}, make([]byte, protocol.MinUnknownVersionPacketSize-50))
+				Expect(p.Size()).To(BeNumerically("<", protocol.MinUnknownVersionPacketSize))
+				raddr := &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 1337}
+				p.remoteAddr = raddr
+				done := make(chan struct{})
+				tracer.EXPECT().DroppedPacket(raddr, logging.PacketTypeNotDetermined, p.Size(), logging.PacketDropUnexpectedPacket).Do(func(net.Addr, logging.PacketType, protocol.ByteCount, logging.PacketDropReason) {
+					close(done)
+				})
+				serv.handlePacket(p)
 				Eventually(done).Should(BeClosed())
 				// make sure no other packet is sent
 				time.Sleep(scaleDuration(20 * time.Millisecond))
