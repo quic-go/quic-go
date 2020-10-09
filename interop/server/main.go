@@ -83,7 +83,7 @@ func main() {
 func runHTTP09Server(quicConf *quic.Config) error {
 	server := http09.Server{
 		Server: &http.Server{
-			Addr:      "0.0.0.0:443",
+			Addr:      ":443",
 			TLSConfig: tlsConf,
 		},
 		QuicConfig: quicConf,
@@ -95,7 +95,7 @@ func runHTTP09Server(quicConf *quic.Config) error {
 func runHTTP3Server(quicConf *quic.Config) error {
 	server := http3.Server{
 		Server: &http.Server{
-			Addr:      "0.0.0.0:443",
+			Addr:      ":443",
 			TLSConfig: tlsConf,
 		},
 		QuicConfig: quicConf,
