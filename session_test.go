@@ -325,7 +325,7 @@ var _ = Describe("Session", func() {
 			Expect(err).NotTo(HaveOccurred())
 		})
 
-		It("handles STREAM_ID_BLOCKED frames", func() {
+		It("handles STREAMS_BLOCKED frames", func() {
 			err := sess.handleFrame(&wire.StreamsBlockedFrame{}, protocol.Encryption1RTT, protocol.ConnectionID{})
 			Expect(err).NotTo(HaveOccurred())
 		})
