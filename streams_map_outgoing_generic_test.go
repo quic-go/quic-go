@@ -18,6 +18,15 @@ var _ = Describe("Streams Map (outgoing)", func() {
 		mockSender *MockStreamSender
 	)
 
+	// waitForEnqueued waits until there are n go routines waiting on OpenStreamSync()
+	waitForEnqueued := func(n int) {
+		Eventually(func() bool {
+			m.mutex.Lock()
+			defer m.mutex.Unlock()
+			return len(m.openQueue) == n
+		}).Should(BeTrue())
+	}
+
 	BeforeEach(func() {
 		newItem = func(num protocol.StreamNum) item {
 			return &mockGenericStream{num: num}
@@ -124,8 +133,8 @@ var _ = Describe("Streams Map (outgoing)", func() {
 				Expect(str.(*mockGenericStream).num).To(Equal(protocol.StreamNum(1)))
 				close(done)
 			}()
+			waitForEnqueued(1)
 
-			Consistently(done).ShouldNot(BeClosed())
 			m.SetMaxStream(1)
 			Eventually(done).Should(BeClosed())
 		})
@@ -140,12 +149,12 @@ var _ = Describe("Streams Map (outgoing)", func() {
 				Expect(err).To(MatchError("context canceled"))
 				close(done)
 			}()
+			waitForEnqueued(1)
 
-			Consistently(done).ShouldNot(BeClosed())
 			cancel()
 			Eventually(done).Should(BeClosed())
 
-			// make sure that the next stream openend is stream 1
+			// make sure that the next stream opened is stream 1
 			m.SetMaxStream(1000)
 			str, err := m.OpenStream()
 			Expect(err).ToNot(HaveOccurred())
@@ -162,7 +171,8 @@ var _ = Describe("Streams Map (outgoing)", func() {
 				Expect(str.(*mockGenericStream).num).To(Equal(protocol.StreamNum(1)))
 				close(done1)
 			}()
-			Consistently(done1).ShouldNot(BeClosed())
+			waitForEnqueued(1)
+
 			done2 := make(chan struct{})
 			go func() {
 				defer GinkgoRecover()
@@ -171,7 +181,7 @@ var _ = Describe("Streams Map (outgoing)", func() {
 				Expect(str.(*mockGenericStream).num).To(Equal(protocol.StreamNum(2)))
 				close(done2)
 			}()
-			Consistently(done2).ShouldNot(BeClosed())
+			waitForEnqueued(2)
 
 			m.SetMaxStream(1)
 			Eventually(done1).Should(BeClosed())
@@ -195,14 +205,14 @@ var _ = Describe("Streams Map (outgoing)", func() {
 				Expect(err).ToNot(HaveOccurred())
 				done <- struct{}{}
 			}()
-			Consistently(done).ShouldNot(Receive())
+			waitForEnqueued(2)
 			go func() {
 				defer GinkgoRecover()
 				_, err := m.OpenStreamSync(context.Background())
 				Expect(err).To(MatchError("test done"))
 				done <- struct{}{}
 			}()
-			Consistently(done).ShouldNot(Receive())
+			waitForEnqueued(3)
 
 			m.SetMaxStream(2)
 			Eventually(done).Should(Receive())
@@ -223,7 +233,7 @@ var _ = Describe("Streams Map (outgoing)", func() {
 				Expect(str.(*mockGenericStream).num).To(Equal(protocol.StreamNum(1)))
 				close(openedSync)
 			}()
-			Consistently(openedSync).ShouldNot(BeClosed())
+			waitForEnqueued(1)
 
 			start := make(chan struct{})
 			openend := make(chan struct{})
