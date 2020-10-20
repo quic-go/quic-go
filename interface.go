@@ -4,6 +4,7 @@ import (
 	"context"
 	"io"
 	"net"
+	"syscall"
 	"time"
 
 	"github.com/lucas-clemente/quic-go/logging"
@@ -22,6 +23,19 @@ import (
 // running quic-go <= v0.17.2.
 // This flag will be removed in a future version of quic-go.
 var RetireBugBackwardsCompatibilityMode bool
+
+// UDPConn is an interface that captures features of a net.UDPConn.
+// The net.UDPConn satisfies this interface.
+// If the PacketConn passed to Dial or Listen satisfies this interface,
+// quic-go will apply optimizations:
+// * read the ECN bits from the IP header (using ReadMsgUDP() instead of ReadFrom() to read packets)
+// * increase the kernel receive buffer size
+type UDPConn interface {
+	net.PacketConn
+	SyscallConn() (syscall.RawConn, error)
+	ReadMsgUDP(b, oob []byte) (n, oobn, flags int, addr *net.UDPAddr, err error)
+	SetReadBuffer(int) error
+}
 
 // The StreamID is the ID of a QUIC stream.
 type StreamID = protocol.StreamID

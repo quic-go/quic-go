@@ -17,18 +17,17 @@ type connection interface {
 	io.Closer
 }
 
-// If the PacketConn passed to Dial or Listen satisfies this interface, quic-go will read the ECN bits from the IP header.
-// In this case, ReadMsgUDP() will be used instead of ReadFrom() to read packets.
-type ECNCapablePacketConn interface {
+type ecnCapablePacketConn interface {
 	net.PacketConn
 	SyscallConn() (syscall.RawConn, error)
 	ReadMsgUDP(b, oob []byte) (n, oobn, flags int, addr *net.UDPAddr, err error)
 }
 
-var _ ECNCapablePacketConn = &net.UDPConn{}
+var _ ecnCapablePacketConn = (UDPConn)(nil)
+var _ ecnCapablePacketConn = &net.UDPConn{}
 
 func wrapConn(pc net.PacketConn) (connection, error) {
-	c, ok := pc.(ECNCapablePacketConn)
+	c, ok := pc.(ecnCapablePacketConn)
 	if !ok {
 		utils.DefaultLogger.Infof("PacketConn is not a net.UDPConn. Disabling optimizations possible on UDP connections.")
 		return &basicConn{PacketConn: pc}, nil

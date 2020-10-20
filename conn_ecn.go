@@ -14,13 +14,13 @@ import (
 const ecnMask uint8 = 0x3
 
 type ecnConn struct {
-	ECNCapablePacketConn
+	ecnCapablePacketConn
 	oobBuffer []byte
 }
 
 var _ connection = &ecnConn{}
 
-func newConn(c ECNCapablePacketConn) (*ecnConn, error) {
+func newConn(c ecnCapablePacketConn) (*ecnConn, error) {
 	rawConn, err := c.SyscallConn()
 	if err != nil {
 		return nil, err
@@ -50,7 +50,7 @@ func newConn(c ECNCapablePacketConn) (*ecnConn, error) {
 		return nil, errors.New("activating ECN failed for both IPv4 and IPv6")
 	}
 	return &ecnConn{
-		ECNCapablePacketConn: c,
+		ecnCapablePacketConn: c,
 		oobBuffer:            make([]byte, 128),
 	}, nil
 }
@@ -61,7 +61,7 @@ func (c *ecnConn) ReadPacket() (*receivedPacket, error) {
 	// If it does, we only read a truncated packet, which will then end up undecryptable
 	buffer.Data = buffer.Data[:protocol.MaxReceivePacketSize]
 	c.oobBuffer = c.oobBuffer[:cap(c.oobBuffer)]
-	n, oobn, _, addr, err := c.ECNCapablePacketConn.ReadMsgUDP(buffer.Data, c.oobBuffer)
+	n, oobn, _, addr, err := c.ecnCapablePacketConn.ReadMsgUDP(buffer.Data, c.oobBuffer)
 	if err != nil {
 		return nil, err
 	}
