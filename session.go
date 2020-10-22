@@ -268,6 +268,7 @@ var newSession = func(
 		runner.Retire,
 		runner.ReplaceWithClosed,
 		s.queueControlFrame,
+		s.version,
 	)
 	s.preSetup()
 	s.sentPacketHandler, s.receivedPacketHandler = ackhandler.NewAckHandler(
@@ -390,6 +391,7 @@ var newClientSession = func(
 		runner.Retire,
 		runner.ReplaceWithClosed,
 		s.queueControlFrame,
+		s.version,
 	)
 	s.preSetup()
 	s.sentPacketHandler, s.receivedPacketHandler = ackhandler.NewAckHandler(
