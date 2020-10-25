@@ -576,7 +576,7 @@ func (p *packetPacker) MaybePackProbePacket(encLevel protocol.EncryptionLevel) (
 	var contents *packetContents
 	var err error
 	buffer := getPacketBuffer()
-	//nolint:exhaustive Probe packets are never sent for 0-RTT.
+	//nolint:exhaustive // Probe packets are never sent for 0-RTT.
 	switch encLevel {
 	case protocol.EncryptionInitial:
 		contents, err = p.maybeAppendCryptoPacket(buffer, p.maxPacketSize, protocol.EncryptionInitial)
