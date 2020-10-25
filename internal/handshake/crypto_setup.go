@@ -137,8 +137,10 @@ type cryptoSetup struct {
 	has1RTTOpener bool
 }
 
-var _ qtls.RecordLayer = &cryptoSetup{}
-var _ CryptoSetup = &cryptoSetup{}
+var (
+	_ qtls.RecordLayer = &cryptoSetup{}
+	_ CryptoSetup      = &cryptoSetup{}
+)
 
 // NewCryptoSetupClient creates a new crypto setup for the client
 func NewCryptoSetupClient(

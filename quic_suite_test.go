@@ -2,12 +2,11 @@ package quic
 
 import (
 	"sync"
+	"testing"
 
 	"github.com/golang/mock/gomock"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
-
-	"testing"
 )
 
 func TestQuicGo(t *testing.T) {

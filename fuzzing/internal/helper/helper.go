@@ -33,7 +33,7 @@ func WriteCorpusFile(path string, data []byte) error {
 		}
 	}
 	hash := sha1.Sum(data)
-	return ioutil.WriteFile(filepath.Join(path, hex.EncodeToString(hash[:])), data, 0644)
+	return ioutil.WriteFile(filepath.Join(path, hex.EncodeToString(hash[:])), data, 0o644)
 }
 
 // WriteCorpusFileWithPrefix writes data to a corpus file in directory path.

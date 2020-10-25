@@ -23,6 +23,7 @@ type mockClient struct {
 func (m *mockClient) RoundTrip(req *http.Request) (*http.Response, error) {
 	return &http.Response{Request: req}, nil
 }
+
 func (m *mockClient) Close() error {
 	m.closed = true
 	return nil

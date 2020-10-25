@@ -9,9 +9,7 @@ import (
 )
 
 var _ = Describe("receivedPacketHistory", func() {
-	var (
-		hist *receivedPacketHistory
-	)
+	var hist *receivedPacketHistory
 
 	BeforeEach(func() {
 		hist = newReceivedPacketHistory()

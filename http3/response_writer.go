@@ -22,8 +22,10 @@ type responseWriter struct {
 	logger utils.Logger
 }
 
-var _ http.ResponseWriter = &responseWriter{}
-var _ http.Flusher = &responseWriter{}
+var (
+	_ http.ResponseWriter = &responseWriter{}
+	_ http.Flusher        = &responseWriter{}
+)
 
 func newResponseWriter(stream io.Writer, logger utils.Logger) *responseWriter {
 	return &responseWriter{

@@ -9,8 +9,10 @@ import (
 	. "github.com/onsi/gomega"
 )
 
-const initialCongestionWindowPackets = 10
-const defaultWindowTCP = protocol.ByteCount(initialCongestionWindowPackets) * maxDatagramSize
+const (
+	initialCongestionWindowPackets = 10
+	defaultWindowTCP               = protocol.ByteCount(initialCongestionWindowPackets) * maxDatagramSize
+)
 
 type mockClock time.Time
 

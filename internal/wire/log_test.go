@@ -53,7 +53,6 @@ var _ = Describe("Frame logging", func() {
 		}
 		LogFrame(logger, frame, false)
 		Expect(buf.String()).To(ContainSubstring("\t<- &wire.CryptoFrame{Offset: 42, Data length: 123, Offset + Data length: 165}\n"))
-
 	})
 
 	It("logs STREAM frames", func() {

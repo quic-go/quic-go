@@ -197,7 +197,6 @@ var _ = Describe("ACK Frame (for IETF QUIC)", func() {
 					Expect(err).To(MatchError(io.EOF))
 				}
 			})
-
 		})
 	})
 

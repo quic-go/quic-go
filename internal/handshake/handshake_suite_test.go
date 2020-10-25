@@ -4,6 +4,7 @@ import (
 	"crypto/tls"
 	"encoding/hex"
 	"strings"
+	"testing"
 
 	"github.com/lucas-clemente/quic-go/internal/qtls"
 
@@ -11,8 +12,6 @@ import (
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
-
-	"testing"
 )
 
 func TestHandshake(t *testing.T) {

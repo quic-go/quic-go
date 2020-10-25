@@ -213,9 +213,11 @@ type session struct {
 	logger utils.Logger
 }
 
-var _ Session = &session{}
-var _ EarlySession = &session{}
-var _ streamSender = &session{}
+var (
+	_ Session      = &session{}
+	_ EarlySession = &session{}
+	_ streamSender = &session{}
+)
 
 var newSession = func(
 	conn sendConn,

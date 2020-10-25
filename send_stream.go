@@ -57,8 +57,10 @@ type sendStream struct {
 	version protocol.VersionNumber
 }
 
-var _ SendStream = &sendStream{}
-var _ sendStreamI = &sendStream{}
+var (
+	_ SendStream  = &sendStream{}
+	_ sendStreamI = &sendStream{}
+)
 
 func newSendStream(
 	streamID protocol.StreamID,

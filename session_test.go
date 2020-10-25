@@ -2701,6 +2701,5 @@ var _ = Describe("Client Session", func() {
 			tracer.EXPECT().DroppedPacket(gomock.Any(), gomock.Any(), gomock.Any())
 			Expect(sess.handlePacketImpl(wrapPacket(initialPacket))).To(BeFalse())
 		})
-
 	})
 })

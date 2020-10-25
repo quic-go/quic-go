@@ -89,7 +89,8 @@ func (t *connectionTracer) run() {
 				},
 				EventFields: eventFields[:],
 			},
-		}}
+		},
+	}
 	if err := enc.Encode(tl); err != nil {
 		panic(fmt.Sprintf("qlog encoding into a bytes.Buffer failed: %s", err))
 	}

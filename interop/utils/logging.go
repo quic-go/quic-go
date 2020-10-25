@@ -33,7 +33,7 @@ func GetQLOGWriter() (func(perspective logging.Perspective, connID []byte) io.Wr
 		return nil, nil
 	}
 	if _, err := os.Stat(qlogDir); os.IsNotExist(err) {
-		if err := os.MkdirAll(qlogDir, 0666); err != nil {
+		if err := os.MkdirAll(qlogDir, 0o666); err != nil {
 			return nil, fmt.Errorf("failed to create qlog dir %s: %s", qlogDir, err.Error())
 		}
 	}

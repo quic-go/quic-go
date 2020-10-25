@@ -9,11 +9,13 @@ import (
 	. "github.com/onsi/gomega"
 )
 
-const numConnections uint32 = 2
-const nConnectionBeta float32 = (float32(numConnections) - 1 + beta) / float32(numConnections)
-const nConnectionBetaLastMax float32 = (float32(numConnections) - 1 + betaLastMax) / float32(numConnections)
-const nConnectionAlpha float32 = 3 * float32(numConnections) * float32(numConnections) * (1 - nConnectionBeta) / (1 + nConnectionBeta)
-const maxCubicTimeInterval = 30 * time.Millisecond
+const (
+	numConnections         uint32  = 2
+	nConnectionBeta        float32 = (float32(numConnections) - 1 + beta) / float32(numConnections)
+	nConnectionBetaLastMax float32 = (float32(numConnections) - 1 + betaLastMax) / float32(numConnections)
+	nConnectionAlpha       float32 = 3 * float32(numConnections) * float32(numConnections) * (1 - nConnectionBeta) / (1 + nConnectionBeta)
+	maxCubicTimeInterval           = 30 * time.Millisecond
+)
 
 var _ = Describe("Cubic", func() {
 	var (
