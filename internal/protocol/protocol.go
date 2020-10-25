@@ -91,7 +91,7 @@ const MaxConnIDLen = 20
 
 // InvalidPacketLimitAES is the maximum number of packets that we can fail to decrypt when using
 // AEAD_AES_128_GCM or AEAD_AES_265_GCM.
-const InvalidPacketLimitAES = 1 << 54
+const InvalidPacketLimitAES = 1 << 52
 
 // InvalidPacketLimitChaCha is the maximum number of packets that we can fail to decrypt when using AEAD_CHACHA20_POLY1305.
 const InvalidPacketLimitChaCha = 1 << 36
