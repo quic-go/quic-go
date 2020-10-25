@@ -14,6 +14,8 @@ var _ = Describe("Version", func() {
 		Expect(IsValidVersion(VersionTLS)).To(BeTrue())
 		Expect(IsValidVersion(VersionWhatever)).To(BeFalse())
 		Expect(IsValidVersion(VersionUnknown)).To(BeFalse())
+		Expect(IsValidVersion(VersionDraft29)).To(BeFalse())
+		Expect(IsValidVersion(VersionDraft32)).To(BeFalse())
 		Expect(IsValidVersion(1234)).To(BeFalse())
 	})
 
@@ -25,6 +27,8 @@ var _ = Describe("Version", func() {
 		Expect(VersionTLS.String()).To(ContainSubstring("TLS"))
 		Expect(VersionWhatever.String()).To(Equal("whatever"))
 		Expect(VersionUnknown.String()).To(Equal("unknown"))
+		Expect(VersionDraft29.String()).To(Equal("draft-29"))
+		Expect(VersionDraft32.String()).To(Equal("draft-32"))
 		// check with unsupported version numbers from the wiki
 		Expect(VersionNumber(0x51303039).String()).To(Equal("gQUIC 9"))
 		Expect(VersionNumber(0x51303133).String()).To(Equal("gQUIC 13"))
@@ -43,6 +47,13 @@ var _ = Describe("Version", func() {
 		for i := 0; i < len(SupportedVersions)-1; i++ {
 			Expect(SupportedVersions[i]).To(BeNumerically(">", SupportedVersions[i+1]))
 		}
+	})
+
+	It("says if backwards compatibility mode should be used", func() {
+		Expect(UseRetireBugBackwardsCompatibilityMode(true, VersionDraft29)).To(BeTrue())
+		Expect(UseRetireBugBackwardsCompatibilityMode(true, VersionDraft32)).To(BeFalse())
+		Expect(UseRetireBugBackwardsCompatibilityMode(false, VersionDraft29)).To(BeFalse())
+		Expect(UseRetireBugBackwardsCompatibilityMode(false, VersionDraft32)).To(BeFalse())
 	})
 
 	Context("highest supported version", func() {

@@ -41,6 +41,7 @@ var _ = Describe("Connection ID Generator", func() {
 			func(c protocol.ConnectionID) { retiredConnIDs = append(retiredConnIDs, c) },
 			func(c protocol.ConnectionID, h packetHandler) { replacedWithClosed[string(c)] = h },
 			func(f wire.Frame) { queuedFrames = append(queuedFrames, f) },
+			protocol.VersionDraft29,
 		)
 	})
 
