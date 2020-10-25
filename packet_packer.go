@@ -51,8 +51,7 @@ type packetContents struct {
 }
 
 type coalescedPacket struct {
-	buffer *packetBuffer
-
+	buffer  *packetBuffer
 	packets []*packetContents
 }
 
@@ -267,10 +266,7 @@ func (p *packetPacker) PackConnectionClose(quicErr *qerr.QuicError) (*coalescedP
 		contents = append(contents, c)
 	}
 
-	if p.perspective == protocol.PerspectiveClient && contents[0].header.Type == protocol.PacketTypeInitial {
-		p.padPacket(buffer)
-	}
-
+	p.maybePadPacket(contents[0], buffer)
 	return &coalescedPacket{buffer: buffer, packets: contents}, nil
 }
 
@@ -310,7 +306,11 @@ func (p *packetPacker) MaybePackAckPacket(handshakeConfirmed bool) (*packedPacke
 	return p.writeSinglePacket(hdr, payload, encLevel, sealer)
 }
 
-func (p *packetPacker) padPacket(buffer *packetBuffer) {
+func (p *packetPacker) maybePadPacket(firstPacket *packetContents, buffer *packetBuffer) {
+	// Only Initial packets need to be padded.
+	if firstPacket.header.Type != protocol.PacketTypeInitial || p.perspective == protocol.PerspectiveServer {
+		return
+	}
 	if dataLen := protocol.ByteCount(len(buffer.Data)); dataLen < p.maxPacketSize {
 		buffer.Data = buffer.Data[:p.maxPacketSize]
 		for n := dataLen; n < p.maxPacketSize; n++ {
@@ -334,10 +334,7 @@ func (p *packetPacker) PackCoalescedPacket(maxPacketSize protocol.ByteCount) (*c
 		return nil, nil
 	}
 
-	if p.perspective == protocol.PerspectiveClient && packet.packets[0].header.Type == protocol.PacketTypeInitial {
-		p.padPacket(buffer)
-	}
-
+	p.maybePadPacket(packet.packets[0], buffer)
 	return packet, nil
 }
 
@@ -584,9 +581,7 @@ func (p *packetPacker) MaybePackProbePacket(encLevel protocol.EncryptionLevel) (
 	if err != nil || contents == nil {
 		return nil, err
 	}
-	if p.perspective == protocol.PerspectiveClient && encLevel == protocol.EncryptionInitial {
-		p.padPacket(buffer)
-	}
+	p.maybePadPacket(contents, buffer)
 	return &packedPacket{
 		buffer:         buffer,
 		packetContents: contents,
