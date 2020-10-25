@@ -303,12 +303,21 @@ func (p *packetPacker) MaybePackAckPacket(handshakeConfirmed bool) (*packedPacke
 	if err != nil {
 		return nil, err
 	}
-	return p.writeSinglePacket(hdr, payload, encLevel, sealer)
+	packet, err := p.writeSinglePacket(hdr, payload, encLevel, sealer)
+	if err != nil {
+		return nil, err
+	}
+	p.maybePadPacket(packet.packetContents, packet.buffer)
+	return packet, nil
 }
 
 func (p *packetPacker) maybePadPacket(firstPacket *packetContents, buffer *packetBuffer) {
 	// Only Initial packets need to be padded.
-	if firstPacket.header.Type != protocol.PacketTypeInitial || p.perspective == protocol.PerspectiveServer {
+	if firstPacket.header.Type != protocol.PacketTypeInitial {
+		return
+	}
+	// For the server, only ack-eliciting Initial packets need to be padded.
+	if p.perspective == protocol.PerspectiveServer && !ackhandler.HasAckElicitingFrames(firstPacket.frames) {
 		return
 	}
 	if dataLen := protocol.ByteCount(len(buffer.Data)); dataLen < p.maxPacketSize {
