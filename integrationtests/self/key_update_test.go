@@ -16,8 +16,10 @@ import (
 	. "github.com/onsi/gomega"
 )
 
-var sentHeaders []*logging.ExtendedHeader
-var receivedHeaders []*logging.ExtendedHeader
+var (
+	sentHeaders     []*logging.ExtendedHeader
+	receivedHeaders []*logging.ExtendedHeader
+)
 
 func countKeyPhases() (sent, received int) {
 	lastKeyPhase := protocol.KeyPhaseOne
@@ -75,6 +77,7 @@ func (t *connTracer) BufferedPacket(logging.PacketType)                         
 func (t *connTracer) DroppedPacket(logging.PacketType, logging.ByteCount, logging.PacketDropReason) {}
 func (t *connTracer) UpdatedMetrics(rttStats *logging.RTTStats, cwnd, bytesInFlight logging.ByteCount, packetsInFlight int) {
 }
+
 func (t *connTracer) LostPacket(logging.EncryptionLevel, logging.PacketNumber, logging.PacketLossReason) {
 }
 func (t *connTracer) UpdatedCongestionState(logging.CongestionState)                     {}

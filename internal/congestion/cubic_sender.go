@@ -63,8 +63,10 @@ type cubicSender struct {
 	tracer    logging.ConnectionTracer
 }
 
-var _ SendAlgorithm = &cubicSender{}
-var _ SendAlgorithmWithDebugInfos = &cubicSender{}
+var (
+	_ SendAlgorithm               = &cubicSender{}
+	_ SendAlgorithmWithDebugInfos = &cubicSender{}
+)
 
 // NewCubicSender makes a new cubic sender
 func NewCubicSender(clock Clock, rttStats *utils.RTTStats, reno bool, tracer logging.ConnectionTracer) *cubicSender {

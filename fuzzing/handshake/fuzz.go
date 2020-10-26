@@ -21,9 +21,11 @@ import (
 	"github.com/lucas-clemente/quic-go/internal/wire"
 )
 
-var cert, clientCert *tls.Certificate
-var certPool, clientCertPool *x509.CertPool
-var sessionTicketKey = [32]byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32}
+var (
+	cert, clientCert         *tls.Certificate
+	certPool, clientCertPool *x509.CertPool
+	sessionTicketKey         = [32]byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32}
+)
 
 func init() {
 	priv, err := rsa.GenerateKey(rand.Reader, 1024)
@@ -183,6 +185,7 @@ func (r *runner) OnError(err error) {
 	(*r.client).Close()
 	(*r.server).Close()
 }
+
 func (r *runner) Errored() bool {
 	r.Lock()
 	defer r.Unlock()
@@ -190,8 +193,10 @@ func (r *runner) Errored() bool {
 }
 func (r *runner) DropKeys(protocol.EncryptionLevel) {}
 
-const alpn = "fuzzing"
-const alpnWrong = "wrong"
+const (
+	alpn      = "fuzzing"
+	alpnWrong = "wrong"
+)
 
 func toEncryptionLevel(n uint8) protocol.EncryptionLevel {
 	switch n % 3 {
@@ -238,8 +243,10 @@ func getTransportParameters(seed uint8) *wire.TransportParameters {
 }
 
 // PrefixLen is the number of bytes used for configuration
-const PrefixLen = 12
-const confLen = 5
+const (
+	PrefixLen = 12
+	confLen   = 5
+)
 
 // Fuzz fuzzes the TLS 1.3 handshake used by QUIC.
 //go:generate go run ./cmd/corpus.go

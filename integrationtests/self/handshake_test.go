@@ -356,7 +356,6 @@ var _ = Describe("Handshake tests", func() {
 			Expect(err).To(HaveOccurred())
 			Expect(err.(*qerr.QuicError).ErrorCode).To(Equal(qerr.ConnectionRefused))
 		})
-
 	})
 
 	Context("ALPN", func() {

@@ -103,8 +103,10 @@ type baseServer struct {
 	logger utils.Logger
 }
 
-var _ Listener = &baseServer{}
-var _ unknownPacketHandler = &baseServer{}
+var (
+	_ Listener             = &baseServer{}
+	_ unknownPacketHandler = &baseServer{}
+)
 
 type earlyServer struct{ *baseServer }
 

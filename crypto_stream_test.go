@@ -22,9 +22,7 @@ func createHandshakeMessage(len int) []byte {
 }
 
 var _ = Describe("Crypto Stream", func() {
-	var (
-		str cryptoStream
-	)
+	var str cryptoStream
 
 	BeforeEach(func() {
 		str = newCryptoStream()

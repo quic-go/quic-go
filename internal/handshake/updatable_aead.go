@@ -61,8 +61,10 @@ type updatableAEAD struct {
 	nonceBuf []byte
 }
 
-var _ ShortHeaderOpener = &updatableAEAD{}
-var _ ShortHeaderSealer = &updatableAEAD{}
+var (
+	_ ShortHeaderOpener = &updatableAEAD{}
+	_ ShortHeaderSealer = &updatableAEAD{}
+)
 
 func newUpdatableAEAD(rttStats *utils.RTTStats, tracer logging.ConnectionTracer, logger utils.Logger) *updatableAEAD {
 	return &updatableAEAD{

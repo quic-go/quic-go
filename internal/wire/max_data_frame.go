@@ -27,7 +27,7 @@ func parseMaxDataFrame(r *bytes.Reader, _ protocol.VersionNumber) (*MaxDataFrame
 	return frame, nil
 }
 
-//Write writes a MAX_STREAM_DATA frame
+// Write writes a MAX_STREAM_DATA frame
 func (f *MaxDataFrame) Write(b *bytes.Buffer, version protocol.VersionNumber) error {
 	b.WriteByte(0x10)
 	utils.WriteVarInt(b, uint64(f.MaximumData))

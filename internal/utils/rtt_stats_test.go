@@ -10,9 +10,7 @@ import (
 )
 
 var _ = Describe("RTT stats", func() {
-	var (
-		rttStats *RTTStats
-	)
+	var rttStats *RTTStats
 
 	BeforeEach(func() {
 		rttStats = NewRTTStats()

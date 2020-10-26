@@ -52,7 +52,6 @@ var _ = Describe("QUIC Transport Errors", func() {
 			err := NewCryptoError(42, "")
 			Expect(err.IsCryptoError()).To(BeTrue())
 			Expect(err.IsApplicationError()).To(BeFalse())
-
 		})
 	})
 

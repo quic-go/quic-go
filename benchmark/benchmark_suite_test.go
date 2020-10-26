@@ -3,11 +3,10 @@ package benchmark
 import (
 	"flag"
 	"math/rand"
+	"testing"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
-
-	"testing"
 )
 
 func TestBenchmark(t *testing.T) {
@@ -15,9 +14,7 @@ func TestBenchmark(t *testing.T) {
 	RunSpecs(t, "Benchmark Suite")
 }
 
-var (
-	size int // file size in MB, will be read from flags
-)
+var size int // file size in MB, will be read from flags
 
 func init() {
 	flag.IntVar(&size, "size", 50, "data length (in MB)")

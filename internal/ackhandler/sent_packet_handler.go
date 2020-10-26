@@ -88,8 +88,10 @@ type sentPacketHandler struct {
 	logger        utils.Logger
 }
 
-var _ SentPacketHandler = &sentPacketHandler{}
-var _ sentPacketTracker = &sentPacketHandler{}
+var (
+	_ SentPacketHandler = &sentPacketHandler{}
+	_ sentPacketTracker = &sentPacketHandler{}
+)
 
 func newSentPacketHandler(
 	initialPacketNumber protocol.PacketNumber,

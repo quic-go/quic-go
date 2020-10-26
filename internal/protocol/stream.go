@@ -61,7 +61,7 @@ func (s StreamID) InitiatedBy() Perspective {
 	return PerspectiveServer
 }
 
-//Type says if this is a unidirectional or bidirectional stream
+// Type says if this is a unidirectional or bidirectional stream
 func (s StreamID) Type() StreamType {
 	if s%4 >= 2 {
 		return StreamTypeUni

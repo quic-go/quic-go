@@ -315,7 +315,7 @@ func (p *TransportParameters) readNumericTransportParameter(
 func (p *TransportParameters) Marshal(pers protocol.Perspective) []byte {
 	b := &bytes.Buffer{}
 
-	//add a greased value
+	// add a greased value
 	utils.WriteVarInt(b, uint64(27+31*rand.Intn(100)))
 	length := rand.Intn(16)
 	randomData := make([]byte, length)

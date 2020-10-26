@@ -35,13 +35,11 @@ type contextKey struct {
 
 func (k *contextKey) String() string { return "quic-go/http3 context value " + k.name }
 
-var (
-	// ServerContextKey is a context key. It can be used in HTTP
-	// handlers with Context.Value to access the server that
-	// started the handler. The associated value will be of
-	// type *http3.Server.
-	ServerContextKey = &contextKey{"http3-server"}
-)
+// ServerContextKey is a context key. It can be used in HTTP
+// handlers with Context.Value to access the server that
+// started the handler. The associated value will be of
+// type *http3.Server.
+var ServerContextKey = &contextKey{"http3-server"}
 
 type requestError struct {
 	err       error

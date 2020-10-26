@@ -52,8 +52,10 @@ type receiveStream struct {
 	version        protocol.VersionNumber
 }
 
-var _ ReceiveStream = &receiveStream{}
-var _ receiveStreamI = &receiveStream{}
+var (
+	_ ReceiveStream  = &receiveStream{}
+	_ receiveStreamI = &receiveStream{}
+)
 
 func newReceiveStream(
 	streamID protocol.StreamID,

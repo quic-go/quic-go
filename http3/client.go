@@ -19,8 +19,10 @@ import (
 // Note that 0-RTT data doesn't provide replay protection.
 const MethodGet0RTT = "GET_0RTT"
 
-const defaultUserAgent = "quic-go HTTP/3"
-const defaultMaxResponseHeaderBytes = 10 * 1 << 20 // 10 MB
+const (
+	defaultUserAgent              = "quic-go HTTP/3"
+	defaultMaxResponseHeaderBytes = 10 * 1 << 20 // 10 MB
+)
 
 var defaultQuicConfig = &quic.Config{
 	MaxIncomingStreams: -1, // don't allow the server to create bidirectional streams

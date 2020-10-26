@@ -243,7 +243,6 @@ var _ = Describe("Connection ID Manager", func() {
 			StatelessResetToken: protocol.StatelessResetToken{16, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1},
 		})).To(Succeed())
 		Expect(m.Get()).To(Equal(protocol.ConnectionID{1, 2, 3, 4}))
-
 	})
 
 	It("initiates subsequent updates when enough packets are sent", func() {

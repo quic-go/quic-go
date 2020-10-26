@@ -26,7 +26,6 @@ func newHeaderProtector(suite *qtls.CipherSuiteTLS13, trafficSecret []byte, isLo
 	default:
 		panic(fmt.Sprintf("Invalid cipher suite id: %d", suite.ID))
 	}
-
 }
 
 type aesHeaderProtector struct {

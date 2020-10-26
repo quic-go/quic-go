@@ -232,10 +232,11 @@ var _ = Describe("SentPacketHandler", func() {
 				ping := &wire.PingFrame{}
 				handler.SentPacket(ackElicitingPacket(&Packet{
 					PacketNumber: 13,
-					Frames: []Frame{{Frame: ping, OnAcked: func(f wire.Frame) {
-						Expect(f).To(Equal(ping))
-						acked = true
-					},
+					Frames: []Frame{{
+						Frame: ping, OnAcked: func(f wire.Frame) {
+							Expect(f).To(Equal(ping))
+							acked = true
+						},
 					}},
 				}))
 				ack := &wire.AckFrame{AckRanges: []wire.AckRange{{Smallest: 13, Largest: 13}}}

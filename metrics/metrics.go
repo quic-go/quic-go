@@ -196,6 +196,7 @@ func (t *connTracer) LostPacket(encLevel logging.EncryptionLevel, _ logging.Pack
 		lostPackets.M(1),
 	)
 }
+
 func (t *connTracer) UpdatedPTOCount(value uint32) {
 	if value == 0 {
 		return
