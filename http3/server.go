@@ -17,6 +17,7 @@ import (
 
 	"github.com/lucas-clemente/quic-go"
 	"github.com/lucas-clemente/quic-go/internal/handshake"
+	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/internal/utils"
 	"github.com/marten-seemann/qpack"
 )
@@ -32,7 +33,17 @@ const (
 	nextProtoH3Draft32 = "h3-32"
 )
 
-var supportedVersions = []string{nextProtoH3Draft29, nextProtoH3Draft32}
+func versionToALPN(v protocol.VersionNumber) string {
+	//nolint:exhaustive
+	switch v {
+	case protocol.VersionTLS, protocol.VersionDraft29:
+		return nextProtoH3Draft29
+	case protocol.VersionDraft32:
+		return nextProtoH3Draft32
+	default:
+		return ""
+	}
+}
 
 // contextKey is a value for use with context.WithValue. It's used as
 // a pointer so it fits in an interface{} without allocation.
@@ -355,9 +366,17 @@ func (s *Server) SetQuicHeaders(hdr http.Header) error {
 		atomic.StoreUint32(&s.port, port)
 	}
 
-	altSvc := make([]string, len(supportedVersions))
-	for i, v := range supportedVersions {
-		altSvc[i] = fmt.Sprintf(`%s=":%d"; ma=2592000`, v, port)
+	// This code assumes that we will use protocol.SupportedVersions if no quic.Config is passed.
+	supportedVersions := protocol.SupportedVersions
+	if s.QuicConfig != nil && len(s.QuicConfig.Versions) > 0 {
+		supportedVersions = s.QuicConfig.Versions
+	}
+	altSvc := make([]string, 0, len(supportedVersions))
+	for _, version := range supportedVersions {
+		v := versionToALPN(version)
+		if len(v) > 0 {
+			altSvc = append(altSvc, fmt.Sprintf(`%s=":%d"; ma=2592000`, v, port))
+		}
 	}
 	hdr.Add("Alt-Svc", strings.Join(altSvc, ","))
 	return nil
