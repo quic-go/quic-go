@@ -69,7 +69,7 @@ func newClient(
 		tlsConf = tlsConf.Clone()
 	}
 	// Replace existing ALPNs by H3
-	tlsConf.NextProtos = []string{nextProtoH3}
+	tlsConf.NextProtos = []string{nextProtoH3Draft29}
 	if quicConfig == nil {
 		quicConfig = defaultQuicConfig
 	}
