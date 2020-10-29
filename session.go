@@ -986,7 +986,7 @@ func (s *session) handleUnpackedPacket(
 	packet *unpackedPacket,
 	ecn protocol.ECN,
 	rcvTime time.Time,
-	packetSize protocol.ByteCount, // only for logging
+	packetSize protocol.ByteCount,
 ) error {
 	if len(packet.data) == 0 {
 		return qerr.NewError(qerr.ProtocolViolation, "empty packet")
@@ -1007,6 +1007,7 @@ func (s *session) handleUnpackedPacket(
 		// we might have create a session with an incorrect source connection ID.
 		// Once we authenticate the first packet, we need to update it.
 		if s.perspective == protocol.PerspectiveServer {
+			s.packer.SetFirstClientDatagramSize(packetSize)
 			if !packet.hdr.SrcConnectionID.Equal(s.handshakeDestConnID) {
 				s.handshakeDestConnID = packet.hdr.SrcConnectionID
 				s.connIDManager.ChangeInitialConnID(packet.hdr.SrcConnectionID)
