@@ -238,6 +238,10 @@ func (h *packetHandlerMap) SetServer(s unknownPacketHandler) {
 
 func (h *packetHandlerMap) CloseServer() {
 	h.mutex.Lock()
+	if h.server == nil {
+		h.mutex.Unlock()
+		return
+	}
 	h.server = nil
 	var wg sync.WaitGroup
 	for _, handler := range h.handlers {
