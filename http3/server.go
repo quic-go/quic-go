@@ -34,15 +34,13 @@ const (
 )
 
 func versionToALPN(v protocol.VersionNumber) string {
-	//nolint:exhaustive
-	switch v {
-	case protocol.VersionTLS, protocol.VersionDraft29:
+	if v == protocol.VersionTLS || v == protocol.VersionDraft29 {
 		return nextProtoH3Draft29
-	case protocol.VersionDraft32:
-		return nextProtoH3Draft32
-	default:
-		return ""
 	}
+	if v == protocol.VersionDraft32 {
+		return nextProtoH3Draft32
+	}
+	return ""
 }
 
 // contextKey is a value for use with context.WithValue. It's used as

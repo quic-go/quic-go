@@ -35,6 +35,12 @@ func IsValidVersion(v VersionNumber) bool {
 }
 
 func (vn VersionNumber) String() string {
+	// For releases, VersionTLS will be set to a draft version.
+	// A switch statement can't contain duplicate cases.
+	if vn == VersionTLS && VersionTLS != VersionDraft29 && VersionTLS != VersionDraft32 {
+		return "TLS dev version (WIP)"
+	}
+	//nolint:exhaustive
 	switch vn {
 	case VersionWhatever:
 		return "whatever"
@@ -44,8 +50,6 @@ func (vn VersionNumber) String() string {
 		return "draft-29"
 	case VersionDraft32:
 		return "draft-32"
-	case VersionTLS:
-		return "TLS dev version (WIP)"
 	default:
 		if vn.isGQUIC() {
 			return fmt.Sprintf("gQUIC %d", vn.toGQUICVersion())
