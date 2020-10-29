@@ -130,7 +130,8 @@ func (r *RoundTripper) getClient(hostname string, onlyCached bool) (http.RoundTr
 		if onlyCached {
 			return nil, ErrNoCachedConn
 		}
-		client = newClient(
+		var err error
+		client, err = newClient(
 			hostname,
 			r.TLSClientConfig,
 			&roundTripperOpts{
@@ -140,6 +141,9 @@ func (r *RoundTripper) getClient(hostname string, onlyCached bool) (http.RoundTr
 			r.QuicConfig,
 			r.Dial,
 		)
+		if err != nil {
+			return nil, err
+		}
 		r.clients[hostname] = client
 	}
 	return client, nil
