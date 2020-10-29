@@ -11,6 +11,7 @@ import (
 	"sync"
 
 	"github.com/lucas-clemente/quic-go"
+	"github.com/lucas-clemente/quic-go/internal/qtls"
 	"github.com/lucas-clemente/quic-go/internal/utils"
 	"github.com/marten-seemann/qpack"
 )
@@ -240,10 +241,12 @@ func (c *client) doRequest(
 		return nil, newConnError(errorGeneralProtocolError, err)
 	}
 
+	connState := qtls.ToTLSConnectionState(c.session.ConnectionState())
 	res := &http.Response{
 		Proto:      "HTTP/3",
 		ProtoMajor: 3,
 		Header:     http.Header{},
+		TLS:        &connState,
 	}
 	for _, hf := range hfs {
 		switch hf.Name {
