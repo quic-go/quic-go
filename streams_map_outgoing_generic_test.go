@@ -333,7 +333,7 @@ var _ = Describe("Streams Map (outgoing)", func() {
 			Expect(str.(*mockGenericStream).num).To(Equal(protocol.StreamNum(2)))
 		})
 
-		It("queues a STREAM_ID_BLOCKED frame if no stream can be opened", func() {
+		It("queues a STREAMS_BLOCKED frame if no stream can be opened", func() {
 			m.SetMaxStream(6)
 			// open the 6 allowed streams
 			for i := 0; i < 6; i++ {
@@ -349,18 +349,47 @@ var _ = Describe("Streams Map (outgoing)", func() {
 			Expect(err.Error()).To(Equal(errTooManyOpenStreams.Error()))
 		})
 
-		It("only sends one STREAM_ID_BLOCKED frame for one stream ID", func() {
+		It("only sends one STREAMS_BLOCKED frame for one stream ID", func() {
 			m.SetMaxStream(1)
 			mockSender.EXPECT().queueControlFrame(gomock.Any()).Do(func(f wire.Frame) {
 				Expect(f.(*wire.StreamsBlockedFrame).StreamLimit).To(BeEquivalentTo(1))
 			})
 			_, err := m.OpenStream()
 			Expect(err).ToNot(HaveOccurred())
-			// try to open a stream twice, but expect only one STREAM_ID_BLOCKED to be sent
+			// try to open a stream twice, but expect only one STREAMS_BLOCKED to be sent
 			_, err = m.OpenStream()
 			expectTooManyStreamsError(err)
 			_, err = m.OpenStream()
 			expectTooManyStreamsError(err)
+		})
+
+		It("queues a STREAMS_BLOCKED frame when there more streams waiting for OpenStreamSync than MAX_STREAMS allows", func() {
+			mockSender.EXPECT().queueControlFrame(gomock.Any()).Do(func(f wire.Frame) {
+				Expect(f.(*wire.StreamsBlockedFrame).StreamLimit).To(BeEquivalentTo(0))
+			})
+			done := make(chan struct{}, 2)
+			go func() {
+				defer GinkgoRecover()
+				_, err := m.OpenStreamSync(context.Background())
+				Expect(err).ToNot(HaveOccurred())
+				done <- struct{}{}
+			}()
+			go func() {
+				defer GinkgoRecover()
+				_, err := m.OpenStreamSync(context.Background())
+				Expect(err).ToNot(HaveOccurred())
+				done <- struct{}{}
+			}()
+			waitForEnqueued(2)
+
+			mockSender.EXPECT().queueControlFrame(gomock.Any()).Do(func(f wire.Frame) {
+				Expect(f.(*wire.StreamsBlockedFrame).StreamLimit).To(BeEquivalentTo(1))
+			})
+			m.SetMaxStream(1)
+			Eventually(done).Should(Receive())
+			Consistently(done).ShouldNot(Receive())
+			m.SetMaxStream(2)
+			Eventually(done).Should(Receive())
 		})
 	})
 
@@ -370,8 +399,10 @@ var _ = Describe("Streams Map (outgoing)", func() {
 			const n = 100
 			fmt.Fprintf(GinkgoWriter, "Opening %d streams concurrently.\n", n)
 
-			// TODO(#2826): check stream limits sent in STREAMS_BLOCKED frames
-			mockSender.EXPECT().queueControlFrame(gomock.Any()).AnyTimes()
+			var blockedAt []protocol.StreamNum
+			mockSender.EXPECT().queueControlFrame(gomock.Any()).Do(func(f wire.Frame) {
+				blockedAt = append(blockedAt, f.(*wire.StreamsBlockedFrame).StreamLimit)
+			}).AnyTimes()
 			done := make(map[int]chan struct{})
 			for i := 1; i <= n; i++ {
 				c := make(chan struct{})
@@ -388,8 +419,12 @@ var _ = Describe("Streams Map (outgoing)", func() {
 			}
 
 			var limit int
+			limits := []protocol.StreamNum{0}
 			for limit < n {
 				limit += rand.Intn(n/5) + 1
+				if limit <= n {
+					limits = append(limits, protocol.StreamNum(limit))
+				}
 				fmt.Fprintf(GinkgoWriter, "Setting stream limit to %d.\n", limit)
 				m.SetMaxStream(protocol.StreamNum(limit))
 				for i := 1; i <= n; i++ {
@@ -407,6 +442,7 @@ var _ = Describe("Streams Map (outgoing)", func() {
 					Expect(str.(*mockGenericStream).num).To(Equal(protocol.StreamNum(n + 1)))
 				}
 			}
+			Expect(blockedAt).To(Equal(limits))
 		})
 
 		It("opens streams, when some of them are getting canceled", func() {
@@ -414,8 +450,10 @@ var _ = Describe("Streams Map (outgoing)", func() {
 			const n = 100
 			fmt.Fprintf(GinkgoWriter, "Opening %d streams concurrently.\n", n)
 
-			// TODO(#2826): check stream limits sent in STREAMS_BLOCKED frames
-			mockSender.EXPECT().queueControlFrame(gomock.Any()).AnyTimes()
+			var blockedAt []protocol.StreamNum
+			mockSender.EXPECT().queueControlFrame(gomock.Any()).Do(func(f wire.Frame) {
+				blockedAt = append(blockedAt, f.(*wire.StreamsBlockedFrame).StreamLimit)
+			}).AnyTimes()
 
 			ctx, cancel := context.WithCancel(context.Background())
 			streamsToCancel := make(map[protocol.StreamNum]struct{}) // used as a set
@@ -463,7 +501,9 @@ var _ = Describe("Streams Map (outgoing)", func() {
 			}
 			var limit int
 			numStreams := n - len(streamsToCancel)
+			var limits []protocol.StreamNum
 			for limit < numStreams {
+				limits = append(limits, protocol.StreamNum(limit))
 				limit += rand.Intn(n/5) + 1
 				fmt.Fprintf(GinkgoWriter, "Setting stream limit to %d.\n", limit)
 				m.SetMaxStream(protocol.StreamNum(limit))
@@ -483,6 +523,7 @@ var _ = Describe("Streams Map (outgoing)", func() {
 					Expect(streamIDs[i]).To(Equal(i + 1))
 				}
 			}
+			Expect(blockedAt).To(Equal(limits))
 		})
 	})
 })

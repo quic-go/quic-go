@@ -117,6 +117,8 @@ func (m *outgoingItemsMap) openStream() item {
 	return s
 }
 
+// maybeSendBlockedFrame queues a STREAMS_BLOCKED frame for the current stream offset,
+// if we haven't sent one for this offset yet
 func (m *outgoingItemsMap) maybeSendBlockedFrame() {
 	if m.blockedSent {
 		return
@@ -170,8 +172,10 @@ func (m *outgoingItemsMap) SetMaxStream(num protocol.StreamNum) {
 	}
 	m.maxStream = num
 	m.blockedSent = false
+	if m.maxStream < m.nextStream-1+protocol.StreamNum(len(m.openQueue)) {
+		m.maybeSendBlockedFrame()
+	}
 	m.unblockOpenSync()
-	// TODO(#2826): it might be necessary to send a STREAMS_BLOCKED frame
 }
 
 // unblockOpenSync unblocks the next OpenStreamSync go-routine to open a new stream
