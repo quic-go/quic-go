@@ -274,12 +274,12 @@ func (s *baseServer) accept(ctx context.Context) (quicSession, error) {
 
 // Close the server
 func (s *baseServer) Close() error {
+	s.sessionHandler.CloseServer()
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
 	if s.closed {
 		return nil
 	}
-	s.sessionHandler.CloseServer()
 	if s.serverError == nil {
 		s.serverError = errors.New("server closed")
 	}
