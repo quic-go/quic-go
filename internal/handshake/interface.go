@@ -3,6 +3,7 @@ package handshake
 import (
 	"errors"
 	"io"
+	"net"
 	"time"
 
 	"github.com/lucas-clemente/quic-go/internal/protocol"
@@ -89,4 +90,11 @@ type CryptoSetup interface {
 	GetHandshakeSealer() (LongHeaderSealer, error)
 	Get0RTTSealer() (LongHeaderSealer, error)
 	Get1RTTSealer() (ShortHeaderSealer, error)
+}
+
+// ConnWithVersion is the connection used in the ClientHelloInfo.
+// It can be used to determine the QUIC version in use.
+type ConnWithVersion interface {
+	net.Conn
+	GetQUICVersion() protocol.VersionNumber
 }

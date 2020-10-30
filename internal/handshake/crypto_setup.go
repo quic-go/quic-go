@@ -62,25 +62,30 @@ const clientSessionStateRevision = 3
 
 type conn struct {
 	localAddr, remoteAddr net.Addr
+	version               protocol.VersionNumber
 }
 
-func newConn(local, remote net.Addr) net.Conn {
+var _ ConnWithVersion = &conn{}
+
+func newConn(local, remote net.Addr, version protocol.VersionNumber) ConnWithVersion {
 	return &conn{
 		localAddr:  local,
 		remoteAddr: remote,
+		version:    version,
 	}
 }
 
 var _ net.Conn = &conn{}
 
-func (c *conn) Read([]byte) (int, error)         { return 0, nil }
-func (c *conn) Write([]byte) (int, error)        { return 0, nil }
-func (c *conn) Close() error                     { return nil }
-func (c *conn) RemoteAddr() net.Addr             { return c.remoteAddr }
-func (c *conn) LocalAddr() net.Addr              { return c.localAddr }
-func (c *conn) SetReadDeadline(time.Time) error  { return nil }
-func (c *conn) SetWriteDeadline(time.Time) error { return nil }
-func (c *conn) SetDeadline(time.Time) error      { return nil }
+func (c *conn) Read([]byte) (int, error)               { return 0, nil }
+func (c *conn) Write([]byte) (int, error)              { return 0, nil }
+func (c *conn) Close() error                           { return nil }
+func (c *conn) RemoteAddr() net.Addr                   { return c.remoteAddr }
+func (c *conn) LocalAddr() net.Addr                    { return c.localAddr }
+func (c *conn) SetReadDeadline(time.Time) error        { return nil }
+func (c *conn) SetWriteDeadline(time.Time) error       { return nil }
+func (c *conn) SetDeadline(time.Time) error            { return nil }
+func (c *conn) GetQUICVersion() protocol.VersionNumber { return c.version }
 
 type cryptoSetup struct {
 	tlsConf   *tls.Config
@@ -156,6 +161,7 @@ func NewCryptoSetupClient(
 	rttStats *utils.RTTStats,
 	tracer logging.ConnectionTracer,
 	logger utils.Logger,
+	version protocol.VersionNumber,
 ) (CryptoSetup, <-chan *wire.TransportParameters /* ClientHello written. Receive nil for non-0-RTT */) {
 	cs, clientHelloWritten := newCryptoSetup(
 		initialStream,
@@ -170,7 +176,7 @@ func NewCryptoSetupClient(
 		logger,
 		protocol.PerspectiveClient,
 	)
-	cs.conn = qtls.Client(newConn(localAddr, remoteAddr), cs.tlsConf, cs.extraConf)
+	cs.conn = qtls.Client(newConn(localAddr, remoteAddr, version), cs.tlsConf, cs.extraConf)
 	return cs, clientHelloWritten
 }
 
@@ -188,6 +194,7 @@ func NewCryptoSetupServer(
 	rttStats *utils.RTTStats,
 	tracer logging.ConnectionTracer,
 	logger utils.Logger,
+	version protocol.VersionNumber,
 ) CryptoSetup {
 	cs, _ := newCryptoSetup(
 		initialStream,
@@ -202,7 +209,7 @@ func NewCryptoSetupServer(
 		logger,
 		protocol.PerspectiveServer,
 	)
-	cs.conn = qtls.Server(newConn(localAddr, remoteAddr), cs.tlsConf, cs.extraConf)
+	cs.conn = qtls.Server(newConn(localAddr, remoteAddr, version), cs.tlsConf, cs.extraConf)
 	return cs
 }
 

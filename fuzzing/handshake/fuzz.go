@@ -387,6 +387,7 @@ func runHandshake(runConfig [confLen]byte, messageConfig uint8, clientConf *tls.
 		utils.NewRTTStats(),
 		nil,
 		utils.DefaultLogger.WithPrefix("client"),
+		protocol.VersionTLS,
 	)
 
 	sChunkChan, sInitialStream, sHandshakeStream := initStreams()
@@ -403,6 +404,7 @@ func runHandshake(runConfig [confLen]byte, messageConfig uint8, clientConf *tls.
 		utils.NewRTTStats(),
 		nil,
 		utils.DefaultLogger.WithPrefix("server"),
+		protocol.VersionTLS,
 	)
 
 	if len(data) == 0 {
