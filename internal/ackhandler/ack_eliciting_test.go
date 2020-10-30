@@ -11,8 +11,8 @@ import (
 var _ = Describe("ack-eliciting frames", func() {
 	for fl, el := range map[wire.Frame]bool{
 		&wire.AckFrame{}:             false,
+		&wire.ConnectionCloseFrame{}: false,
 		&wire.DataBlockedFrame{}:     true,
-		&wire.ConnectionCloseFrame{}: true,
 		&wire.PingFrame{}:            true,
 		&wire.ResetStreamFrame{}:     true,
 		&wire.StreamFrame{}:          true,
