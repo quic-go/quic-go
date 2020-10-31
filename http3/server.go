@@ -168,14 +168,16 @@ func (s *Server) serveImpl(tlsConf *tls.Config, conn net.PacketConn) error {
 		return err
 	}
 	s.addListener(&ln)
-	defer s.removeListener(&ln)
 
 	for {
 		sess, err := ln.Accept(context.Background())
 		if err != nil {
 			return err
 		}
-		go s.handleConn(sess)
+		go func() {
+			defer s.removeListener(&ln)
+			s.handleConn(sess)
+		}()
 	}
 }
 
