@@ -352,7 +352,7 @@ type eventTransportParameters struct {
 	InitialMaxStreamsBidi          int64
 	InitialMaxStreamsUni           int64
 
-	// TODO: add the preferred_address
+	PreferredAddress *preferredAddress
 }
 
 func (e eventTransportParameters) Category() category { return categoryTransport }
@@ -384,6 +384,29 @@ func (e eventTransportParameters) MarshalJSONObject(enc *gojay.Encoder) {
 	enc.Int64KeyOmitEmpty("initial_max_stream_data_uni", int64(e.InitialMaxStreamDataUni))
 	enc.Int64KeyOmitEmpty("initial_max_streams_bidi", e.InitialMaxStreamsBidi)
 	enc.Int64KeyOmitEmpty("initial_max_streams_uni", e.InitialMaxStreamsUni)
+
+	if e.PreferredAddress != nil {
+		enc.ObjectKey("preferred_address", e.PreferredAddress)
+	}
+}
+
+type preferredAddress struct {
+	IPv4, IPv6          net.IP
+	PortV4, PortV6      uint16
+	ConnectionID        protocol.ConnectionID
+	StatelessResetToken protocol.StatelessResetToken
+}
+
+var _ gojay.MarshalerJSONObject = &preferredAddress{}
+
+func (a preferredAddress) IsNil() bool { return false }
+func (a preferredAddress) MarshalJSONObject(enc *gojay.Encoder) {
+	enc.StringKey("ip_v4", a.IPv4.String())
+	enc.Uint16Key("port_v4", a.PortV4)
+	enc.StringKey("ip_v6", a.IPv6.String())
+	enc.Uint16Key("port_v6", a.PortV6)
+	enc.StringKey("connection_id", connectionID(a.ConnectionID).String())
+	enc.StringKey("stateless_reset_token", fmt.Sprintf("%x", a.StatelessResetToken))
 }
 
 type eventLossTimerSet struct {

@@ -232,6 +232,7 @@ var _ = Describe("Tracing", func() {
 				Expect(ev).To(HaveKeyWithValue("initial_max_stream_data_uni", float64(3000)))
 				Expect(ev).To(HaveKeyWithValue("initial_max_streams_bidi", float64(10)))
 				Expect(ev).To(HaveKeyWithValue("initial_max_streams_uni", float64(20)))
+				Expect(ev).ToNot(HaveKey("preferred_address"))
 			})
 
 			It("records the server's transport parameters, without a stateless reset token", func() {
@@ -258,6 +259,33 @@ var _ = Describe("Tracing", func() {
 				ev := entry.Event
 				Expect(ev).To(HaveKeyWithValue("owner", "local"))
 				Expect(ev).ToNot(HaveKey("retry_source_connection_id"))
+			})
+
+			It("records transport parameters with a preferred address", func() {
+				tracer.SentTransportParameters(&logging.TransportParameters{
+					PreferredAddress: &logging.PreferredAddress{
+						IPv4:                net.IPv4(12, 34, 56, 78),
+						IPv4Port:            123,
+						IPv6:                net.IP{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16},
+						IPv6Port:            456,
+						ConnectionID:        protocol.ConnectionID{8, 7, 6, 5, 4, 3, 2, 1},
+						StatelessResetToken: protocol.StatelessResetToken{15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0},
+					},
+				})
+				entry := exportAndParseSingle()
+				Expect(entry.Time).To(BeTemporally("~", time.Now(), scaleDuration(10*time.Millisecond)))
+				Expect(entry.Category).To(Equal("transport"))
+				Expect(entry.Name).To(Equal("parameters_set"))
+				ev := entry.Event
+				Expect(ev).To(HaveKeyWithValue("owner", "local"))
+				Expect(ev).To(HaveKey("preferred_address"))
+				pa := ev["preferred_address"].(map[string]interface{})
+				Expect(pa).To(HaveKeyWithValue("ip_v4", "12.34.56.78"))
+				Expect(pa).To(HaveKeyWithValue("port_v4", float64(123)))
+				Expect(pa).To(HaveKeyWithValue("ip_v6", "102:304:506:708:90a:b0c:d0e:f10"))
+				Expect(pa).To(HaveKeyWithValue("port_v6", float64(456)))
+				Expect(pa).To(HaveKeyWithValue("connection_id", "0807060504030201"))
+				Expect(pa).To(HaveKeyWithValue("stateless_reset_token", "0f0e0d0c0b0a09080706050403020100"))
 			})
 
 			It("records received transport parameters", func() {
