@@ -968,7 +968,7 @@ var _ = Describe("Session", func() {
 			hdr1 := &wire.ExtendedHeader{
 				Header: wire.Header{
 					IsLongHeader:     true,
-					Type:             protocol.PacketTypeHandshake,
+					Type:             protocol.PacketTypeInitial,
 					DestConnectionID: destConnID,
 					SrcConnectionID:  srcConnID,
 					Length:           1,
@@ -980,7 +980,7 @@ var _ = Describe("Session", func() {
 			hdr2 := &wire.ExtendedHeader{
 				Header: wire.Header{
 					IsLongHeader:     true,
-					Type:             protocol.PacketTypeHandshake,
+					Type:             protocol.PacketTypeInitial,
 					DestConnectionID: destConnID,
 					SrcConnectionID:  protocol.ConnectionID{0xde, 0xad, 0xbe, 0xef},
 					Length:           1,
@@ -1003,7 +1003,7 @@ var _ = Describe("Session", func() {
 			Expect(sess.handlePacketImpl(p1)).To(BeTrue())
 			// The next packet has to be ignored, since the source connection ID doesn't match.
 			p2 := getPacket(hdr2, nil)
-			tracer.EXPECT().DroppedPacket(logging.PacketTypeHandshake, protocol.ByteCount(len(p2.data)), logging.PacketDropUnknownConnectionID)
+			tracer.EXPECT().DroppedPacket(logging.PacketTypeInitial, protocol.ByteCount(len(p2.data)), logging.PacketDropUnknownConnectionID)
 			Expect(sess.handlePacketImpl(p2)).To(BeFalse())
 		})
 
