@@ -352,6 +352,10 @@ var _ = Describe("Server", func() {
 	})
 
 	Context("setting http headers", func() {
+		BeforeEach(func() {
+			s.QuicConfig = &quic.Config{Versions: []protocol.VersionNumber{protocol.VersionDraft29}}
+		})
+
 		expected := http.Header{
 			"Alt-Svc": {`h3-29=":443"; ma=2592000`},
 		}
@@ -389,7 +393,7 @@ var _ = Describe("Server", func() {
 
 		It("works if the quic.Config sets QUIC versions", func() {
 			s.Server.Addr = ":443"
-			s.QuicConfig = &quic.Config{Versions: []quic.VersionNumber{quic.VersionDraft32, quic.VersionDraft29}}
+			s.QuicConfig.Versions = []quic.VersionNumber{quic.VersionDraft32, quic.VersionDraft29}
 			hdr := http.Header{}
 			Expect(s.SetQuicHeaders(hdr)).To(Succeed())
 			Expect(hdr).To(Equal(http.Header{"Alt-Svc": {`h3-32=":443"; ma=2592000,h3-29=":443"; ma=2592000`}}))
