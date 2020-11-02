@@ -691,6 +691,7 @@ func (s *session) handleHandshakeComplete() {
 	s.handshakeCompleteChan = nil // prevent this case from ever being selected again
 	s.handshakeCtxCancel()
 
+	s.connIDManager.SetHandshakeComplete()
 	s.connIDGenerator.SetHandshakeComplete()
 
 	if s.perspective == protocol.PerspectiveServer {

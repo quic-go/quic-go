@@ -15,6 +15,7 @@ import (
 type connIDManager struct {
 	queue utils.NewConnectionIDList
 
+	handshakeComplete         bool
 	activeSequenceNumber      uint64
 	highestRetired            uint64
 	activeConnectionID        protocol.ConnectionID
@@ -190,7 +191,10 @@ func (h *connIDManager) SentPacket() {
 }
 
 func (h *connIDManager) shouldUpdateConnID() bool {
-	// initiate the first change as early as possible
+	if !h.handshakeComplete {
+		return false
+	}
+	// initiate the first change as early as possible (after handshake completion)
 	if h.queue.Len() > 0 && h.activeSequenceNumber == 0 {
 		return true
 	}
@@ -206,4 +210,8 @@ func (h *connIDManager) Get() protocol.ConnectionID {
 		h.updateConnectionID()
 	}
 	return h.activeConnectionID
+}
+
+func (h *connIDManager) SetHandshakeComplete() {
+	h.handshakeComplete = true
 }
