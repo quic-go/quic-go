@@ -38,20 +38,6 @@ func (m *MockSentPacketHandler) EXPECT() *MockSentPacketHandlerMockRecorder {
 	return m.recorder
 }
 
-// AmplificationWindow mocks base method
-func (m *MockSentPacketHandler) AmplificationWindow() protocol.ByteCount {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "AmplificationWindow")
-	ret0, _ := ret[0].(protocol.ByteCount)
-	return ret0
-}
-
-// AmplificationWindow indicates an expected call of AmplificationWindow
-func (mr *MockSentPacketHandlerMockRecorder) AmplificationWindow() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AmplificationWindow", reflect.TypeOf((*MockSentPacketHandler)(nil).AmplificationWindow))
-}
-
 // DropPackets mocks base method
 func (m *MockSentPacketHandler) DropPackets(arg0 protocol.EncryptionLevel) {
 	m.ctrl.T.Helper()

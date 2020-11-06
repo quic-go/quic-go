@@ -692,7 +692,7 @@ func (h *sentPacketHandler) SendMode() SendMode {
 		numTrackedPackets += h.handshakePackets.history.Len()
 	}
 
-	if h.AmplificationWindow() == 0 {
+	if h.isAmplificationLimited() {
 		h.logger.Debugf("Amplification window limited. Received %d bytes, already sent out %d bytes", h.bytesReceived, h.bytesSent)
 		return SendNone
 	}
@@ -733,14 +733,11 @@ func (h *sentPacketHandler) HasPacingBudget() bool {
 	return h.congestion.HasPacingBudget()
 }
 
-func (h *sentPacketHandler) AmplificationWindow() protocol.ByteCount {
+func (h *sentPacketHandler) isAmplificationLimited() bool {
 	if h.peerAddressValidated {
-		return protocol.MaxByteCount
+		return false
 	}
-	if h.bytesSent >= amplificationFactor*h.bytesReceived {
-		return 0
-	}
-	return amplificationFactor*h.bytesReceived - h.bytesSent
+	return h.bytesSent >= amplificationFactor*h.bytesReceived
 }
 
 func (h *sentPacketHandler) QueueProbePacket(encLevel protocol.EncryptionLevel) bool {
