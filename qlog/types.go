@@ -213,6 +213,8 @@ func (e transportError) String() string {
 		return "key_update_error"
 	case qerr.AEADLimitReached:
 		return "aead_limit_reached"
+	case qerr.NoViablePathError:
+		return "no_viable_path"
 	default:
 		return ""
 	}
