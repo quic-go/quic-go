@@ -357,6 +357,7 @@ var _ = Describe("Tracing", func() {
 							Type:             protocol.PacketTypeInitial,
 							DestConnectionID: protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8},
 							SrcConnectionID:  protocol.ConnectionID{4, 3, 2, 1},
+							Token:            []byte{0xde, 0xad, 0xbe, 0xef},
 							Version:          protocol.VersionTLS,
 						},
 						PacketNumber: 1337,
@@ -377,6 +378,9 @@ var _ = Describe("Tracing", func() {
 				Expect(hdr).To(HaveKeyWithValue("packet_size", float64(789)))
 				Expect(hdr).To(HaveKeyWithValue("packet_number", float64(1337)))
 				Expect(hdr).To(HaveKeyWithValue("scid", "04030201"))
+				Expect(hdr).To(HaveKey("token"))
+				token := hdr["token"].(map[string]interface{})
+				Expect(token).To(HaveKeyWithValue("data", "deadbeef"))
 				Expect(ev).To(HaveKey("frames"))
 				Expect(ev["frames"].([]interface{})).To(HaveLen(2))
 			})
@@ -388,6 +392,7 @@ var _ = Describe("Tracing", func() {
 						Type:             protocol.PacketTypeRetry,
 						DestConnectionID: protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8},
 						SrcConnectionID:  protocol.ConnectionID{4, 3, 2, 1},
+						Token:            []byte{0xde, 0xad, 0xbe, 0xef},
 						Version:          protocol.VersionTLS,
 					},
 				)
@@ -396,12 +401,15 @@ var _ = Describe("Tracing", func() {
 				Expect(entry.Name).To(Equal("transport:packet_received"))
 				ev := entry.Event
 				Expect(ev).To(HaveKey("header"))
-				header := ev["header"]
+				header := ev["header"].(map[string]interface{})
 				Expect(header).To(HaveKeyWithValue("packet_type", "retry"))
 				Expect(header).ToNot(HaveKey("packet_number"))
 				Expect(header).To(HaveKey("version"))
 				Expect(header).To(HaveKey("dcid"))
 				Expect(header).To(HaveKey("scid"))
+				Expect(header).To(HaveKey("token"))
+				token := header["token"].(map[string]interface{})
+				Expect(token).To(HaveKeyWithValue("data", "deadbeef"))
 				Expect(ev).ToNot(HaveKey("frames"))
 			})
 

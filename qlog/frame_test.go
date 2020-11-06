@@ -149,8 +149,7 @@ var _ = Describe("Frames", func() {
 			},
 			map[string]interface{}{
 				"frame_type": "new_token",
-				"length":     4,
-				"token":      "deadbeef",
+				"token":      map[string]interface{}{"data": "deadbeef"},
 			},
 		)
 	})

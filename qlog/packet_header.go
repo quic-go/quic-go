@@ -1,6 +1,8 @@
 package qlog
 
 import (
+	"fmt"
+
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/internal/wire"
 	"github.com/lucas-clemente/quic-go/logging"
@@ -25,10 +27,22 @@ func getPacketTypeFromEncryptionLevel(encLevel protocol.EncryptionLevel) packetT
 	return packetType(t)
 }
 
+type token struct {
+	Raw []byte
+}
+
+var _ gojay.MarshalerJSONObject = &token{}
+
+func (t token) IsNil() bool { return false }
+func (t token) MarshalJSONObject(enc *gojay.Encoder) {
+	enc.StringKey("data", fmt.Sprintf("%x", t.Raw))
+}
+
 // PacketHeader is a QUIC packet header.
 type packetHeader struct {
 	PacketType logging.PacketType
 
+	KeyPhaseBit   logging.KeyPhaseBit
 	PacketNumber  logging.PacketNumber
 	PayloadLength logging.ByteCount
 	// Size of the QUIC packet (QUIC header + payload).
@@ -39,17 +53,21 @@ type packetHeader struct {
 	SrcConnectionID  logging.ConnectionID
 	DestConnectionID logging.ConnectionID
 
-	KeyPhaseBit logging.KeyPhaseBit
+	Token *token
 }
 
 func transformHeader(hdr *wire.Header) *packetHeader {
-	return &packetHeader{
+	h := &packetHeader{
 		PacketType:       logging.PacketTypeFromHeader(hdr),
 		PayloadLength:    hdr.Length,
 		SrcConnectionID:  hdr.SrcConnectionID,
 		DestConnectionID: hdr.DestConnectionID,
 		Version:          hdr.Version,
 	}
+	if len(hdr.Token) > 0 {
+		h.Token = &token{Raw: hdr.Token}
+	}
+	return h
 }
 
 func transformExtendedHeader(hdr *wire.ExtendedHeader) *packetHeader {
@@ -81,5 +99,8 @@ func (h packetHeader) MarshalJSONObject(enc *gojay.Encoder) {
 	}
 	if h.KeyPhaseBit == logging.KeyPhaseZero || h.KeyPhaseBit == logging.KeyPhaseOne {
 		enc.StringKey("key_phase_bit", h.KeyPhaseBit.String())
+	}
+	if h.Token != nil {
+		enc.ObjectKey("token", h.Token)
 	}
 }
