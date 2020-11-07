@@ -412,7 +412,7 @@ func ListenAndServe(addr, certFile, keyFile string, handler http.Handler) error 
 }
 
 // ListenAndServeCfg listens on the given network address for both, TLS and QUIC
-// connetions in parallel. It returns if one of the two returns an error.
+// connections in parallel. It returns if one of the two returns an error.
 // http.DefaultServeMux is used when handler is nil.
 // The correct Alt-Svc headers for QUIC are set.
 func ListenAndServeCfg(addr string, config *tls.Config, handler http.Handler) error {
