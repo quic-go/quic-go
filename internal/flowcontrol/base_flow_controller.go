@@ -15,7 +15,7 @@ type baseFlowController struct {
 	lastBlockedAt protocol.ByteCount
 
 	// for receiving data
-	mutex                sync.RWMutex
+	mutex                sync.Mutex
 	bytesRead            protocol.ByteCount
 	highestReceived      protocol.ByteCount
 	receiveWindow        protocol.ByteCount
