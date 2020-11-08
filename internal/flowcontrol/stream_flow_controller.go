@@ -50,9 +50,6 @@ func NewStreamFlowController(
 
 // UpdateHighestReceived updates the highestReceived value, if the offset is higher.
 func (c *streamFlowController) UpdateHighestReceived(offset protocol.ByteCount, final bool) error {
-	c.mutex.Lock()
-	defer c.mutex.Unlock()
-
 	// If the final offset for this stream is already known, check for consistency.
 	if c.receivedFinalOffset {
 		// If we receive another final offset, check that it's the same.
@@ -110,8 +107,11 @@ func (c *streamFlowController) SendWindowSize() protocol.ByteCount {
 }
 
 func (c *streamFlowController) maybeQueueWindowUpdate() {
+	if c.receivedFinalOffset {
+		return
+	}
 	c.mutex.Lock()
-	hasWindowUpdate := !c.receivedFinalOffset && c.hasWindowUpdate()
+	hasWindowUpdate := c.hasWindowUpdate()
 	c.mutex.Unlock()
 	if hasWindowUpdate {
 		c.queueWindowUpdate()
@@ -119,14 +119,13 @@ func (c *streamFlowController) maybeQueueWindowUpdate() {
 }
 
 func (c *streamFlowController) GetWindowUpdate() protocol.ByteCount {
-	// don't use defer for unlocking the mutex here, GetWindowUpdate() is called frequently and defer shows up in the profiler
-	c.mutex.Lock()
-	// if we already received the final offset for this stream, the peer won't need any additional flow control credit
+	// If we already received the final offset for this stream, the peer won't need any additional flow control credit.
 	if c.receivedFinalOffset {
-		c.mutex.Unlock()
 		return 0
 	}
 
+	// Don't use defer for unlocking the mutex here, GetWindowUpdate() is called frequently and defer shows up in the profiler
+	c.mutex.Lock()
 	oldWindowSize := c.receiveWindowSize
 	offset := c.baseFlowController.getWindowUpdate()
 	if c.receiveWindowSize > oldWindowSize { // auto-tuning enlarged the window size
