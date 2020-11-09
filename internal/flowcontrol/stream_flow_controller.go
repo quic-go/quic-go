@@ -86,8 +86,13 @@ func (c *streamFlowController) UpdateHighestReceived(offset protocol.ByteCount, 
 }
 
 func (c *streamFlowController) AddBytesRead(n protocol.ByteCount) {
-	c.baseFlowController.AddBytesRead(n)
-	c.maybeQueueWindowUpdate()
+	c.mutex.Lock()
+	c.baseFlowController.addBytesRead(n)
+	shouldQueueWindowUpdate := c.shouldQueueWindowUpdate()
+	c.mutex.Unlock()
+	if shouldQueueWindowUpdate {
+		c.queueWindowUpdate()
+	}
 	c.connection.AddBytesRead(n)
 }
 
@@ -106,16 +111,8 @@ func (c *streamFlowController) SendWindowSize() protocol.ByteCount {
 	return utils.MinByteCount(c.baseFlowController.sendWindowSize(), c.connection.SendWindowSize())
 }
 
-func (c *streamFlowController) maybeQueueWindowUpdate() {
-	if c.receivedFinalOffset {
-		return
-	}
-	c.mutex.Lock()
-	hasWindowUpdate := c.hasWindowUpdate()
-	c.mutex.Unlock()
-	if hasWindowUpdate {
-		c.queueWindowUpdate()
-	}
+func (c *streamFlowController) shouldQueueWindowUpdate() bool {
+	return !c.receivedFinalOffset && c.hasWindowUpdate()
 }
 
 func (c *streamFlowController) GetWindowUpdate() protocol.ByteCount {
