@@ -27,6 +27,7 @@ const (
 	CryptoBufferExceeded    ErrorCode = 0xd
 	KeyUpdateError          ErrorCode = 0xe
 	AEADLimitReached        ErrorCode = 0xf
+	NoViablePathError       ErrorCode = 0x10
 )
 
 func (e ErrorCode) isCryptoError() bool {
@@ -83,6 +84,8 @@ func (e ErrorCode) String() string {
 		return "KEY_UPDATE_ERROR"
 	case AEADLimitReached:
 		return "AEAD_LIMIT_REACHED"
+	case NoViablePathError:
+		return "NO_VIABLE_PATH"
 	default:
 		if e.isCryptoError() {
 			return fmt.Sprintf("CRYPTO_ERROR (%#x)", uint16(e))
