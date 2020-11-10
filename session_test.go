@@ -2248,6 +2248,7 @@ var _ = Describe("Client Session", func() {
 		unpacker := NewMockUnpacker(mockCtrl)
 		sess.unpacker = unpacker
 		sessionRunner.EXPECT().AddResetToken(gomock.Any(), gomock.Any())
+		sess.connIDManager.SetHandshakeComplete()
 		sess.handleNewConnectionIDFrame(&wire.NewConnectionIDFrame{
 			SequenceNumber: 1,
 			ConnectionID:   protocol.ConnectionID{1, 2, 3, 4, 5},
@@ -2491,6 +2492,7 @@ var _ = Describe("Client Session", func() {
 			packer.EXPECT().PackCoalescedPacket().MaxTimes(1)
 			tracer.EXPECT().ReceivedTransportParameters(params)
 			sess.processTransportParameters(params)
+			sess.connIDManager.SetHandshakeComplete()
 			// make sure the connection ID is not retired
 			cf, _ := sess.framer.AppendControlFrames(nil, protocol.MaxByteCount)
 			Expect(cf).To(BeEmpty())
