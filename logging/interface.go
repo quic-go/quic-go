@@ -45,6 +45,8 @@ type (
 	ExtendedHeader = wire.ExtendedHeader
 	// The TransportParameters are QUIC transport parameters.
 	TransportParameters = wire.TransportParameters
+	// The PreferredAddress is the preferred address sent in the transport parameters.
+	PreferredAddress = wire.PreferredAddress
 
 	// A TransportError is a transport-level error code.
 	TransportError = qerr.ErrorCode
