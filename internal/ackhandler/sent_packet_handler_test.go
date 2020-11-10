@@ -512,31 +512,27 @@ var _ = Describe("SentPacketHandler", func() {
 			handler.SendMode()
 		})
 
-		It("returns SendNone if limited by the 3x limit", func() {
-			handler.ReceivedBytes(100)
-			cong.EXPECT().OnPacketSent(gomock.Any(), protocol.ByteCount(300), gomock.Any(), protocol.ByteCount(300), true)
-			handler.SentPacket(&Packet{
-				Length:          300,
-				EncryptionLevel: protocol.EncryptionInitial,
-				Frames:          []Frame{{Frame: &wire.PingFrame{}}},
-				SendTime:        time.Now(),
-			})
-			cong.EXPECT().CanSend(protocol.ByteCount(300)).Return(true).AnyTimes()
-			Expect(handler.AmplificationWindow()).To(BeZero())
-			Expect(handler.SendMode()).To(Equal(SendNone))
-		})
-
 		It("limits the window to 3x the bytes received, to avoid amplification attacks", func() {
 			handler.ReceivedPacket(protocol.EncryptionInitial) // receiving an Initial packet doesn't validate the client's address
-			cong.EXPECT().OnPacketSent(gomock.Any(), protocol.ByteCount(50), gomock.Any(), protocol.ByteCount(50), true)
+			handler.ReceivedBytes(200)
+			cong.EXPECT().OnPacketSent(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), true).Times(2)
 			handler.SentPacket(&Packet{
-				Length:          50,
+				PacketNumber:    1,
+				Length:          599,
 				EncryptionLevel: protocol.EncryptionInitial,
 				Frames:          []Frame{{Frame: &wire.PingFrame{}}},
 				SendTime:        time.Now(),
 			})
-			handler.ReceivedBytes(100)
-			Expect(handler.AmplificationWindow()).To(Equal(protocol.ByteCount(3*100 - 50)))
+			cong.EXPECT().CanSend(protocol.ByteCount(599)).Return(true)
+			Expect(handler.SendMode()).To(Equal(SendAny))
+			handler.SentPacket(&Packet{
+				PacketNumber:    2,
+				Length:          1,
+				EncryptionLevel: protocol.EncryptionInitial,
+				Frames:          []Frame{{Frame: &wire.PingFrame{}}},
+				SendTime:        time.Now(),
+			})
+			Expect(handler.SendMode()).To(Equal(SendNone))
 		})
 
 		It("allows sending of ACKs when congestion limited", func() {

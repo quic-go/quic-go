@@ -17,7 +17,7 @@ import (
 )
 
 type packer interface {
-	PackCoalescedPacket(protocol.ByteCount) (*coalescedPacket, error)
+	PackCoalescedPacket() (*coalescedPacket, error)
 	PackPacket() (*packedPacket, error)
 	MaybePackProbePacket(protocol.EncryptionLevel) (*packedPacket, error)
 	MaybePackAckPacket(handshakeConfirmed bool) (*packedPacket, error)
@@ -331,9 +331,9 @@ func (p *packetPacker) maybePadPacket(firstPacket *packetContents, buffer *packe
 // PackCoalescedPacket packs a new packet.
 // It packs an Initial / Handshake if there is data to send in these packet number spaces.
 // It should only be called before the handshake is confirmed.
-func (p *packetPacker) PackCoalescedPacket(maxPacketSize protocol.ByteCount) (*coalescedPacket, error) {
+func (p *packetPacker) PackCoalescedPacket() (*coalescedPacket, error) {
 	buffer := getPacketBuffer()
-	packet, err := p.packCoalescedPacket(buffer, maxPacketSize)
+	packet, err := p.packCoalescedPacket(buffer)
 	if err != nil {
 		return nil, err
 	}
@@ -347,15 +347,11 @@ func (p *packetPacker) PackCoalescedPacket(maxPacketSize protocol.ByteCount) (*c
 	return packet, nil
 }
 
-func (p *packetPacker) packCoalescedPacket(buffer *packetBuffer, maxPacketSize protocol.ByteCount) (*coalescedPacket, error) {
-	maxPacketSize = utils.MinByteCount(maxPacketSize, p.maxPacketSize)
+func (p *packetPacker) packCoalescedPacket(buffer *packetBuffer) (*coalescedPacket, error) {
+	maxPacketSize := p.maxPacketSize
 	if p.perspective == protocol.PerspectiveClient {
 		maxPacketSize = protocol.MinInitialPacketSize
 	}
-	if maxPacketSize < protocol.MinCoalescedPacketSize {
-		return nil, nil
-	}
-
 	packet := &coalescedPacket{
 		buffer:  buffer,
 		packets: make([]*packetContents, 0, 3),
