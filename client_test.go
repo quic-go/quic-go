@@ -56,7 +56,7 @@ var _ = Describe("Client", func() {
 		tracer = mocklogging.NewMockConnectionTracer(mockCtrl)
 		tr := mocklogging.NewMockTracer(mockCtrl)
 		tr.EXPECT().TracerForConnection(protocol.PerspectiveClient, gomock.Any()).Return(tracer).MaxTimes(1)
-		config = &Config{Tracer: tr}
+		config = &Config{Tracer: tr, Versions: []protocol.VersionNumber{protocol.VersionTLS}}
 		Eventually(areSessionsRunning).Should(BeFalse())
 		// sess = NewMockQuicSession(mockCtrl)
 		addr = &net.UDPAddr{IP: net.IPv4(192, 168, 100, 200), Port: 1337}
@@ -65,7 +65,7 @@ var _ = Describe("Client", func() {
 		cl = &client{
 			srcConnID:  connID,
 			destConnID: connID,
-			version:    protocol.SupportedVersions[0],
+			version:    protocol.VersionTLS,
 			conn:       newSendConn(packetConn, addr),
 			tracer:     tracer,
 			logger:     utils.DefaultLogger,
