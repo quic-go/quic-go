@@ -30,7 +30,7 @@ func (e statelessResetErr) Error() string {
 // * by the server to store sessions
 // * when multiplexing outgoing connections to store clients
 type packetHandlerMap struct {
-	mutex sync.RWMutex
+	mutex sync.Mutex
 
 	conn      connection
 	connIDLen int
@@ -320,16 +320,14 @@ func (h *packetHandlerMap) handlePacket(p *receivedPacket) {
 		return
 	}
 
-	h.mutex.RLock()
-	defer h.mutex.RUnlock()
+	h.mutex.Lock()
+	defer h.mutex.Unlock()
 
 	if isStatelessReset := h.maybeHandleStatelessReset(p.data); isStatelessReset {
 		return
 	}
 
-	handler, handlerFound := h.handlers[string(connID)]
-
-	if handlerFound { // existing session
+	if handler, ok := h.handlers[string(connID)]; ok { // existing session
 		handler.handlePacket(p)
 		return
 	}
