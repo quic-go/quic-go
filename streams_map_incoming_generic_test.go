@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"math/rand"
+	"time"
 
 	"github.com/golang/mock/gomock"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
@@ -255,6 +257,46 @@ var _ = Describe("Streams Map (incoming)", func() {
 			// at this point, we can't increase the stream limit any further, so no more MAX_STREAMS frames will be sent
 			Expect(m.DeleteStream(2)).To(Succeed())
 			Expect(m.DeleteStream(1)).To(Succeed())
+		})
+	})
+
+	Context("randomized tests", func() {
+		const num = 1000
+
+		BeforeEach(func() { maxNumStreams = num })
+
+		It("opens and accepts streams", func() {
+			rand.Seed(GinkgoRandomSeed())
+			ids := make([]protocol.StreamNum, num)
+			for i := 0; i < num; i++ {
+				ids[i] = protocol.StreamNum(i + 1)
+			}
+			rand.Shuffle(len(ids), func(i, j int) { ids[i], ids[j] = ids[j], ids[i] })
+
+			const timeout = 5 * time.Second
+			done := make(chan struct{}, 2)
+			go func() {
+				defer GinkgoRecover()
+				ctx, cancel := context.WithTimeout(context.Background(), timeout)
+				defer cancel()
+				for i := 0; i < num; i++ {
+					_, err := m.AcceptStream(ctx)
+					Expect(err).ToNot(HaveOccurred())
+				}
+				done <- struct{}{}
+			}()
+
+			go func() {
+				defer GinkgoRecover()
+				for i := 0; i < num; i++ {
+					_, err := m.GetOrOpenStream(ids[i])
+					Expect(err).ToNot(HaveOccurred())
+				}
+				done <- struct{}{}
+			}()
+
+			Eventually(done, timeout*3/2).Should(Receive())
+			Eventually(done, timeout*3/2).Should(Receive())
 		})
 	})
 })
