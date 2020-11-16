@@ -161,8 +161,7 @@ func (h *ExtendedHeader) writeLongHeader(b *bytes.Buffer, _ protocol.VersionNumb
 		utils.WriteVarInt(b, uint64(len(h.Token)))
 		b.Write(h.Token)
 	}
-
-	utils.WriteVarInt(b, uint64(h.Length))
+	utils.WriteVarIntWithLen(b, uint64(h.Length), 2)
 	return h.writePacketNumber(b)
 }
 
@@ -201,7 +200,7 @@ func (h *ExtendedHeader) ParsedLen() protocol.ByteCount {
 // GetLength determines the length of the Header.
 func (h *ExtendedHeader) GetLength(v protocol.VersionNumber) protocol.ByteCount {
 	if h.IsLongHeader {
-		length := 1 /* type byte */ + 4 /* version */ + 1 /* dest conn ID len */ + protocol.ByteCount(h.DestConnectionID.Len()) + 1 /* src conn ID len */ + protocol.ByteCount(h.SrcConnectionID.Len()) + protocol.ByteCount(h.PacketNumberLen) + utils.VarIntLen(uint64(h.Length))
+		length := 1 /* type byte */ + 4 /* version */ + 1 /* dest conn ID len */ + protocol.ByteCount(h.DestConnectionID.Len()) + 1 /* src conn ID len */ + protocol.ByteCount(h.SrcConnectionID.Len()) + protocol.ByteCount(h.PacketNumberLen) + 2 /* length */
 		if h.Type == protocol.PacketTypeInitial {
 			length += utils.VarIntLen(uint64(len(h.Token))) + protocol.ByteCount(len(h.Token))
 		}
