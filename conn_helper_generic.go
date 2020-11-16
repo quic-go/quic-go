@@ -1,4 +1,4 @@
-// +build !darwin,!windows
+// +build !darwin,!windows,!freebsd,!dragonfly
 
 package quic
 
