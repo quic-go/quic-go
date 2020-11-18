@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/tls"
 	"fmt"
+	"io/ioutil"
 	mrand "math/rand"
 	"net"
 	"sync/atomic"
@@ -31,6 +32,7 @@ var _ = Describe("Handshake drop tests", func() {
 		ln    quic.Listener
 	)
 
+	data := GeneratePRData(5000)
 	const timeout = 2 * time.Minute
 
 	startListenerAndProxy := func(dropCallback quicproxy.DropCallback, doRetry bool, longCertChain bool, version protocol.VersionNumber) {
@@ -77,10 +79,9 @@ var _ = Describe("Handshake drop tests", func() {
 				defer sess.CloseWithError(0, "")
 				str, err := sess.AcceptStream(context.Background())
 				Expect(err).ToNot(HaveOccurred())
-				b := make([]byte, 6)
-				_, err = gbytes.TimeoutReader(str, 10*time.Second).Read(b)
+				b, err := ioutil.ReadAll(gbytes.TimeoutReader(str, timeout))
 				Expect(err).ToNot(HaveOccurred())
-				Expect(string(b)).To(Equal("foobar"))
+				Expect(b).To(Equal(data))
 				serverSessionChan <- sess
 			}()
 			sess, err := quic.DialAddr(
@@ -95,8 +96,9 @@ var _ = Describe("Handshake drop tests", func() {
 			Expect(err).ToNot(HaveOccurred())
 			str, err := sess.OpenStream()
 			Expect(err).ToNot(HaveOccurred())
-			_, err = str.Write([]byte("foobar"))
+			_, err = str.Write(data)
 			Expect(err).ToNot(HaveOccurred())
+			Expect(str.Close()).To(Succeed())
 
 			var serverSession quic.Session
 			Eventually(serverSessionChan, timeout).Should(Receive(&serverSession))
@@ -115,8 +117,9 @@ var _ = Describe("Handshake drop tests", func() {
 				Expect(err).ToNot(HaveOccurred())
 				str, err := sess.OpenStream()
 				Expect(err).ToNot(HaveOccurred())
-				_, err = str.Write([]byte("foobar"))
+				_, err = str.Write(data)
 				Expect(err).ToNot(HaveOccurred())
+				Expect(str.Close()).To(Succeed())
 				serverSessionChan <- sess
 			}()
 			sess, err := quic.DialAddr(
@@ -131,10 +134,9 @@ var _ = Describe("Handshake drop tests", func() {
 			Expect(err).ToNot(HaveOccurred())
 			str, err := sess.AcceptStream(context.Background())
 			Expect(err).ToNot(HaveOccurred())
-			b := make([]byte, 6)
-			_, err = gbytes.TimeoutReader(str, 10*time.Second).Read(b)
+			b, err := ioutil.ReadAll(gbytes.TimeoutReader(str, timeout))
 			Expect(err).ToNot(HaveOccurred())
-			Expect(string(b)).To(Equal("foobar"))
+			Expect(b).To(Equal(data))
 
 			var serverSession quic.Session
 			Eventually(serverSessionChan, timeout).Should(Receive(&serverSession))
