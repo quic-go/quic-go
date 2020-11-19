@@ -28,7 +28,7 @@ func parseAckFrame(r *bytes.Reader, ackDelayExponent uint8, _ protocol.VersionNu
 	}
 	ecn := typeByte&0x1 > 0
 
-	frame := &AckFrame{}
+	frame := GetAckFrame()
 
 	la, err := utils.ReadVarInt(r)
 	if err != nil {
@@ -64,6 +64,7 @@ func parseAckFrame(r *bytes.Reader, ackDelayExponent uint8, _ protocol.VersionNu
 	smallest := largestAcked - ackBlock
 
 	// read all the other ACK ranges
+	frame.AckRanges = frame.AckRanges[:0]
 	frame.AckRanges = append(frame.AckRanges, AckRange{Smallest: smallest, Largest: largestAcked})
 	for i := uint64(0); i < numBlocks; i++ {
 		g, err := utils.ReadVarInt(r)
@@ -247,4 +248,8 @@ func (f *AckFrame) AcksPacket(p protocol.PacketNumber) bool {
 
 func encodeAckDelay(delay time.Duration) uint64 {
 	return uint64(delay.Nanoseconds() / (1000 * (1 << protocol.AckDelayExponent)))
+}
+
+func (f *AckFrame) PutBack() {
+	putAckFrame(f)
 }
