@@ -1,4 +1,4 @@
-// +build !darwin,!windows
+// +build linux
 
 package quic
 
