@@ -48,6 +48,11 @@ func Fuzz(data []byte) int {
 			return 0
 		}
 	}
+	// We always use a 2-byte encoding for the Length field in Long Header packets.
+	// Serializing the header will fail when using a higher value.
+	if hdr.IsLongHeader && hdr.Length > 16383 {
+		return 1
+	}
 	b := &bytes.Buffer{}
 	if err := extHdr.Write(b, version); err != nil {
 		// We are able to parse packets with connection IDs longer than 20 bytes,
