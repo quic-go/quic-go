@@ -128,7 +128,7 @@ const MaxAckFrameSize ByteCount = 1000
 // MaxNumAckRanges is the maximum number of ACK ranges that we send in an ACK frame.
 // It also serves as a limit for the packet history.
 // If at any point we keep track of more ranges, old ranges are discarded.
-const MaxNumAckRanges = 500
+const MaxNumAckRanges = 32
 
 // MinPacingDelay is the minimum duration that is used for packet pacing
 // If the packet packing frequency is higher, multiple packets might be sent at once.
