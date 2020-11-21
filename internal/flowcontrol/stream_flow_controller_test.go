@@ -43,7 +43,7 @@ var _ = Describe("Stream Flow controller", func() {
 			Expect(fc.sendWindow).To(Equal(sendWindow))
 		})
 
-		It("queues window updates with the correction stream ID", func() {
+		It("queues window updates with the correct stream ID", func() {
 			var queued bool
 			queueWindowUpdate := func(id protocol.StreamID) {
 				Expect(id).To(Equal(protocol.StreamID(5)))
