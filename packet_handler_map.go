@@ -147,32 +147,29 @@ func (h *packetHandlerMap) logUsage() {
 }
 
 func (h *packetHandlerMap) Add(id protocol.ConnectionID, handler packetHandler) bool /* was added */ {
-	sid := string(id)
-
 	h.mutex.Lock()
 	defer h.mutex.Unlock()
 
-	if _, ok := h.handlers[sid]; ok {
+	if _, ok := h.handlers[string(id)]; ok {
 		h.logger.Debugf("Not adding connection ID %s, as it already exists.", id)
 		return false
 	}
-	h.handlers[sid] = handler
+	h.handlers[string(id)] = handler
 	h.logger.Debugf("Adding connection ID %s.", id)
 	return true
 }
 
 func (h *packetHandlerMap) AddWithConnID(clientDestConnID, newConnID protocol.ConnectionID, fn func() packetHandler) bool {
-	sid := string(clientDestConnID)
 	h.mutex.Lock()
 	defer h.mutex.Unlock()
 
-	if _, ok := h.handlers[sid]; ok {
+	if _, ok := h.handlers[string(clientDestConnID)]; ok {
 		h.logger.Debugf("Not adding connection ID %s for a new session, as it already exists.", clientDestConnID)
 		return false
 	}
 
 	sess := fn()
-	h.handlers[sid] = sess
+	h.handlers[string(clientDestConnID)] = sess
 	h.handlers[string(newConnID)] = sess
 	h.logger.Debugf("Adding connection IDs %s and %s for a new session.", clientDestConnID, newConnID)
 	return true
