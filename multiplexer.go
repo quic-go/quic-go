@@ -15,13 +15,9 @@ var (
 	connMuxer     multiplexer
 )
 
-type indexableConn interface {
-	LocalAddr() net.Addr
-}
-
 type multiplexer interface {
 	AddConn(c net.PacketConn, connIDLen int, statelessResetKey []byte, tracer logging.Tracer) (packetHandlerManager, error)
-	RemoveConn(indexableConn) error
+	RemoveConn(conn net.PacketConn) error
 }
 
 type connManager struct {
@@ -36,7 +32,7 @@ type connManager struct {
 type connMultiplexer struct {
 	mutex sync.Mutex
 
-	conns                   map[string] /* LocalAddr().String() */ connManager
+	conns                   map[net.PacketConn]connManager
 	newPacketHandlerManager func(net.PacketConn, int, []byte, logging.Tracer, utils.Logger) (packetHandlerManager, error) // so it can be replaced in the tests
 
 	logger utils.Logger
@@ -47,7 +43,7 @@ var _ multiplexer = &connMultiplexer{}
 func getMultiplexer() multiplexer {
 	connMuxerOnce.Do(func() {
 		connMuxer = &connMultiplexer{
-			conns:                   make(map[string]connManager),
+			conns:                   make(map[net.PacketConn]connManager),
 			logger:                  utils.DefaultLogger.WithPrefix("muxer"),
 			newPacketHandlerManager: newPacketHandlerMap,
 		}
@@ -64,9 +60,7 @@ func (m *connMultiplexer) AddConn(
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
 
-	addr := c.LocalAddr()
-	connIndex := addr.Network() + " " + addr.String()
-	p, ok := m.conns[connIndex]
+	p, ok := m.conns[c]
 	if !ok {
 		manager, err := m.newPacketHandlerManager(c, connIDLen, statelessResetKey, tracer, m.logger)
 		if err != nil {
@@ -78,7 +72,7 @@ func (m *connMultiplexer) AddConn(
 			manager:           manager,
 			tracer:            tracer,
 		}
-		m.conns[connIndex] = p
+		m.conns[c] = p
 	} else {
 		if p.connIDLen != connIDLen {
 			return nil, fmt.Errorf("cannot use %d byte connection IDs on a connection that is already using %d byte connction IDs", connIDLen, p.connIDLen)
@@ -93,15 +87,14 @@ func (m *connMultiplexer) AddConn(
 	return p.manager, nil
 }
 
-func (m *connMultiplexer) RemoveConn(c indexableConn) error {
+func (m *connMultiplexer) RemoveConn(c net.PacketConn) error {
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
 
-	connIndex := c.LocalAddr().Network() + " " + c.LocalAddr().String()
-	if _, ok := m.conns[connIndex]; !ok {
+	if _, ok := m.conns[c]; !ok {
 		return fmt.Errorf("cannote remove connection, connection is unknown")
 	}
 
-	delete(m.conns, connIndex)
+	delete(m.conns, c)
 	return nil
 }

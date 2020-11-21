@@ -32,6 +32,7 @@ func (e statelessResetErr) Error() string {
 type packetHandlerMap struct {
 	mutex sync.Mutex
 
+	baseConn  net.PacketConn // only needed to call multiplexer.Remove()
 	conn      connection
 	connIDLen int
 
@@ -96,12 +97,13 @@ func newPacketHandlerMap(
 	logger utils.Logger,
 ) (packetHandlerManager, error) {
 	setReceiveBuffer(c, logger)
-	conn, err := wrapConn(c)
+	wrappedConn, err := wrapConn(c)
 	if err != nil {
 		return nil, err
 	}
 	m := &packetHandlerMap{
-		conn:                       conn,
+		baseConn:                   c,
+		conn:                       wrappedConn,
 		connIDLen:                  connIDLen,
 		listening:                  make(chan struct{}),
 		handlers:                   make(map[string]packetHandler),
@@ -290,7 +292,7 @@ func (h *packetHandlerMap) close(e error) error {
 	h.closed = true
 	h.mutex.Unlock()
 	wg.Wait()
-	return getMultiplexer().RemoveConn(h.conn)
+	return getMultiplexer().RemoveConn(h.baseConn)
 }
 
 func (h *packetHandlerMap) listen() {

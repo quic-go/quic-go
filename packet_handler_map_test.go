@@ -95,7 +95,7 @@ var _ = Describe("Packet Handler Map", func() {
 		sess2.EXPECT().destroy(testErr)
 		handler.Add(protocol.ConnectionID{1, 1, 1, 1}, sess1)
 		handler.Add(protocol.ConnectionID{2, 2, 2, 2}, sess2)
-		mockMultiplexer.EXPECT().RemoveConn(gomock.Any())
+		mockMultiplexer.EXPECT().RemoveConn(conn)
 		handler.close(testErr)
 		close(packetChan)
 		Eventually(handler.listening).Should(BeClosed())
