@@ -171,6 +171,13 @@ var _ = Describe("SentPacketHandler", func() {
 				Expect(handler.appDataPackets.largestAcked).To(Equal(protocol.PacketNumber(4)))
 			})
 
+			It("rejects ACKs that acknowledge a skipped packet number", func() {
+				handler.SentPacket(ackElicitingPacket(&Packet{PacketNumber: 100}))
+				handler.SentPacket(ackElicitingPacket(&Packet{PacketNumber: 102}))
+				ack := &wire.AckFrame{AckRanges: []wire.AckRange{{Smallest: 100, Largest: 102}}}
+				Expect(handler.ReceivedAck(ack, protocol.Encryption1RTT, time.Now())).To(MatchError("received an ACK for skipped packet number: 101 (1-RTT)"))
+			})
+
 			It("rejects ACKs with a too high LargestAcked packet number", func() {
 				ack := &wire.AckFrame{AckRanges: []wire.AckRange{{Smallest: 0, Largest: 9999}}}
 				Expect(handler.ReceivedAck(ack, protocol.Encryption1RTT, time.Now())).To(MatchError("PROTOCOL_VIOLATION: Received ACK for an unsent packet"))
