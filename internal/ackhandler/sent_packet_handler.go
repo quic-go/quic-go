@@ -307,12 +307,8 @@ func (h *sentPacketHandler) ReceivedAck(ack *wire.AckFrame, encLevel protocol.En
 			}
 		}
 	}
-	lostPackets, err := h.detectLostPackets(rcvTime, encLevel)
-	if err != nil {
+	if err := h.detectLostPackets(rcvTime, encLevel); err != nil {
 		return err
-	}
-	for _, p := range lostPackets {
-		h.congestion.OnPacketLost(p.PacketNumber, p.Length, priorInFlight)
 	}
 	for _, p := range ackedPackets {
 		if p.skippedPacket {
@@ -508,7 +504,7 @@ func (h *sentPacketHandler) setLossDetectionTimer() {
 	}
 }
 
-func (h *sentPacketHandler) detectLostPackets(now time.Time, encLevel protocol.EncryptionLevel) ([]*Packet, error) {
+func (h *sentPacketHandler) detectLostPackets(now time.Time, encLevel protocol.EncryptionLevel) error {
 	pnSpace := h.getPacketNumberSpace(encLevel)
 	pnSpace.lossTime = time.Time{}
 
@@ -521,8 +517,8 @@ func (h *sentPacketHandler) detectLostPackets(now time.Time, encLevel protocol.E
 	// Packets sent before this time are deemed lost.
 	lostSendTime := now.Add(-lossDelay)
 
-	var lostPackets []*Packet
-	if err := pnSpace.history.Iterate(func(p *Packet) (bool, error) {
+	priorInFlight := h.bytesInFlight
+	return pnSpace.history.Iterate(func(p *Packet) (bool, error) {
 		if p.PacketNumber > pnSpace.largestAcked {
 			return false, nil
 		}
@@ -530,13 +526,20 @@ func (h *sentPacketHandler) detectLostPackets(now time.Time, encLevel protocol.E
 			return true, nil
 		}
 
+		var packetLost bool
 		if p.SendTime.Before(lostSendTime) {
-			lostPackets = append(lostPackets, p)
+			packetLost = true
+			if h.logger.Debug() {
+				h.logger.Debugf("\tlost packet %d (time threshold)", p.PacketNumber)
+			}
 			if h.tracer != nil {
 				h.tracer.LostPacket(p.EncryptionLevel, p.PacketNumber, logging.PacketLossTimeThreshold)
 			}
 		} else if pnSpace.largestAcked >= p.PacketNumber+packetThreshold {
-			lostPackets = append(lostPackets, p)
+			packetLost = true
+			if h.logger.Debug() {
+				h.logger.Debugf("\tlost packet %d (reordering threshold)", p.PacketNumber)
+			}
 			if h.tracer != nil {
 				h.tracer.LostPacket(p.EncryptionLevel, p.PacketNumber, logging.PacketLossReorderingThreshold)
 			}
@@ -548,41 +551,30 @@ func (h *sentPacketHandler) detectLostPackets(now time.Time, encLevel protocol.E
 			}
 			pnSpace.lossTime = lossTime
 		}
-		return true, nil
-	}); err != nil {
-		return nil, err
-	}
-
-	if h.logger.Debug() && len(lostPackets) > 0 {
-		pns := make([]protocol.PacketNumber, len(lostPackets))
-		for i, p := range lostPackets {
-			pns[i] = p.PacketNumber
-		}
-		h.logger.Debugf("\tlost packets (%d): %d", len(pns), pns)
-	}
-
-	for _, p := range lostPackets {
-		p.declaredLost = true
-		h.queueFramesForRetransmission(p)
-		// the bytes in flight need to be reduced no matter if this packet will be retransmitted
-		h.removeFromBytesInFlight(p)
-		if h.traceCallback != nil {
-			frames := make([]wire.Frame, 0, len(p.Frames))
-			for _, f := range p.Frames {
-				frames = append(frames, f.Frame)
+		if packetLost {
+			h.congestion.OnPacketLost(p.PacketNumber, p.Length, priorInFlight)
+			p.declaredLost = true
+			h.queueFramesForRetransmission(p)
+			// the bytes in flight need to be reduced no matter if this packet will be retransmitted
+			h.removeFromBytesInFlight(p)
+			if h.traceCallback != nil {
+				frames := make([]wire.Frame, 0, len(p.Frames))
+				for _, f := range p.Frames {
+					frames = append(frames, f.Frame)
+				}
+				h.traceCallback(quictrace.Event{
+					Time:            now,
+					EventType:       quictrace.PacketLost,
+					EncryptionLevel: p.EncryptionLevel,
+					PacketNumber:    p.PacketNumber,
+					PacketSize:      p.Length,
+					Frames:          frames,
+					TransportState:  h.GetStats(),
+				})
 			}
-			h.traceCallback(quictrace.Event{
-				Time:            now,
-				EventType:       quictrace.PacketLost,
-				EncryptionLevel: p.EncryptionLevel,
-				PacketNumber:    p.PacketNumber,
-				PacketSize:      p.Length,
-				Frames:          frames,
-				TransportState:  h.GetStats(),
-			})
 		}
-	}
-	return lostPackets, nil
+		return true, nil
+	})
 }
 
 func (h *sentPacketHandler) OnLossDetectionTimeout() error {
@@ -609,15 +601,7 @@ func (h *sentPacketHandler) onVerifiedLossDetectionTimeout() error {
 			h.tracer.LossTimerExpired(logging.TimerTypeACK, encLevel)
 		}
 		// Early retransmit or time loss detection
-		priorInFlight := h.bytesInFlight
-		lostPackets, err := h.detectLostPackets(time.Now(), encLevel)
-		if err != nil {
-			return err
-		}
-		for _, p := range lostPackets {
-			h.congestion.OnPacketLost(p.PacketNumber, p.Length, priorInFlight)
-		}
-		return nil
+		return h.detectLostPackets(time.Now(), encLevel)
 	}
 
 	// PTO
