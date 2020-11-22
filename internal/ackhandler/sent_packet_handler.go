@@ -66,6 +66,8 @@ type sentPacketHandler struct {
 	// Only applies to the application-data packet number space.
 	lowestNotConfirmedAcked protocol.PacketNumber
 
+	ackedPackets []*Packet // to avoid allocations in detectAndRemoveAckedPackets
+
 	bytesInFlight protocol.ByteCount
 
 	congestion congestion.SendAlgorithmWithDebugInfos
@@ -345,7 +347,7 @@ func (h *sentPacketHandler) GetLowestPacketNotConfirmedAcked() protocol.PacketNu
 // Packets are returned in ascending packet number order.
 func (h *sentPacketHandler) detectAndRemoveAckedPackets(ack *wire.AckFrame, encLevel protocol.EncryptionLevel) ([]*Packet, error) {
 	pnSpace := h.getPacketNumberSpace(encLevel)
-	var ackedPackets []*Packet
+	h.ackedPackets = h.ackedPackets[:0]
 	ackRangeIndex := 0
 	lowestAcked := ack.LowestAcked()
 	largestAcked := ack.LargestAcked()
@@ -371,22 +373,22 @@ func (h *sentPacketHandler) detectAndRemoveAckedPackets(ack *wire.AckFrame, encL
 				if p.PacketNumber > ackRange.Largest {
 					return false, fmt.Errorf("BUG: ackhandler would have acked wrong packet %d, while evaluating range %d -> %d", p.PacketNumber, ackRange.Smallest, ackRange.Largest)
 				}
-				ackedPackets = append(ackedPackets, p)
+				h.ackedPackets = append(h.ackedPackets, p)
 			}
 		} else {
-			ackedPackets = append(ackedPackets, p)
+			h.ackedPackets = append(h.ackedPackets, p)
 		}
 		return true, nil
 	})
-	if h.logger.Debug() && len(ackedPackets) > 0 {
-		pns := make([]protocol.PacketNumber, len(ackedPackets))
-		for i, p := range ackedPackets {
+	if h.logger.Debug() && len(h.ackedPackets) > 0 {
+		pns := make([]protocol.PacketNumber, len(h.ackedPackets))
+		for i, p := range h.ackedPackets {
 			pns[i] = p.PacketNumber
 		}
 		h.logger.Debugf("\tnewly acked packets (%d): %d", len(pns), pns)
 	}
 
-	for _, p := range ackedPackets {
+	for _, p := range h.ackedPackets {
 		if p.LargestAcked != protocol.InvalidPacketNumber && encLevel == protocol.Encryption1RTT {
 			h.lowestNotConfirmedAcked = utils.MaxPacketNumber(h.lowestNotConfirmedAcked, p.LargestAcked+1)
 		}
@@ -401,7 +403,7 @@ func (h *sentPacketHandler) detectAndRemoveAckedPackets(ack *wire.AckFrame, encL
 		}
 	}
 
-	return ackedPackets, err
+	return h.ackedPackets, err
 }
 
 func (h *sentPacketHandler) getLossTimeAndSpace() (time.Time, protocol.EncryptionLevel) {
