@@ -117,6 +117,20 @@ var _ = Describe("Updatable AEAD", func() {
 					Expect(err).To(MatchError(ErrDecryptionFailed))
 				})
 
+				It("decodes the packet number", func() {
+					encrypted := server.Seal(nil, msg, 0x1337, ad)
+					_, err := client.Open(nil, encrypted, time.Now(), 0x1337, protocol.KeyPhaseZero, ad)
+					Expect(err).ToNot(HaveOccurred())
+					Expect(client.DecodePacketNumber(0x38, protocol.PacketNumberLen1)).To(BeEquivalentTo(0x1338))
+				})
+
+				It("ignores packets it can't decrypt for packet number derivation", func() {
+					encrypted := server.Seal(nil, msg, 0x1337, ad)
+					_, err := client.Open(nil, encrypted[:len(encrypted)-1], time.Now(), 0x1337, protocol.KeyPhaseZero, ad)
+					Expect(err).To(HaveOccurred())
+					Expect(client.DecodePacketNumber(0x38, protocol.PacketNumberLen1)).To(BeEquivalentTo(0x38))
+				})
+
 				It("returns an AEAD_LIMIT_REACHED error when reaching the AEAD limit", func() {
 					client.invalidPacketLimit = 10
 					for i := 0; i < 9; i++ {

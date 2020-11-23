@@ -7,7 +7,6 @@ import (
 
 	"github.com/lucas-clemente/quic-go/internal/handshake"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
-	"github.com/lucas-clemente/quic-go/internal/utils"
 	"github.com/lucas-clemente/quic-go/internal/wire"
 )
 
@@ -43,8 +42,6 @@ type unpackedPacket struct {
 // The packetUnpacker unpacks QUIC packets.
 type packetUnpacker struct {
 	cs handshake.CryptoSetup
-
-	largestRcvdPacketNumber protocol.PacketNumber
 
 	version protocol.VersionNumber
 }
@@ -112,9 +109,6 @@ func (u *packetUnpacker) Unpack(hdr *wire.Header, rcvTime time.Time, data []byte
 		}
 	}
 
-	// Only do this after decrypting, so we are sure the packet is not attacker-controlled
-	u.largestRcvdPacketNumber = utils.MaxPacketNumber(u.largestRcvdPacketNumber, extHdr.PacketNumber)
-
 	return &unpackedPacket{
 		hdr:             extHdr,
 		packetNumber:    extHdr.PacketNumber,
@@ -132,6 +126,7 @@ func (u *packetUnpacker) unpackLongHeaderPacket(opener handshake.LongHeaderOpene
 		return nil, nil, parseErr
 	}
 	extHdrLen := extHdr.ParsedLen()
+	extHdr.PacketNumber = opener.DecodePacketNumber(extHdr.PacketNumber, extHdr.PacketNumberLen)
 	decrypted, err := opener.Open(data[extHdrLen:extHdrLen], data[extHdrLen:], extHdr.PacketNumber, data[:extHdrLen])
 	if err != nil {
 		return nil, nil, err
@@ -155,6 +150,7 @@ func (u *packetUnpacker) unpackShortHeaderPacket(
 	if parseErr != nil && parseErr != wire.ErrInvalidReservedBits {
 		return nil, nil, parseErr
 	}
+	extHdr.PacketNumber = opener.DecodePacketNumber(extHdr.PacketNumber, extHdr.PacketNumberLen)
 	extHdrLen := extHdr.ParsedLen()
 	decrypted, err := opener.Open(data[extHdrLen:extHdrLen], data[extHdrLen:], rcvTime, extHdr.PacketNumber, extHdr.KeyPhase, data[:extHdrLen])
 	if err != nil {
@@ -172,11 +168,6 @@ func (u *packetUnpacker) unpackHeader(hd headerDecryptor, hdr *wire.Header, data
 	if err != nil && err != wire.ErrInvalidReservedBits {
 		return nil, &headerParseError{err: err}
 	}
-	extHdr.PacketNumber = protocol.DecodePacketNumber(
-		extHdr.PacketNumberLen,
-		u.largestRcvdPacketNumber,
-		extHdr.PacketNumber,
-	)
 	return extHdr, err
 }
 

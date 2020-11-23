@@ -34,6 +34,20 @@ func (m *MockLongHeaderOpener) EXPECT() *MockLongHeaderOpenerMockRecorder {
 	return m.recorder
 }
 
+// DecodePacketNumber mocks base method
+func (m *MockLongHeaderOpener) DecodePacketNumber(arg0 protocol.PacketNumber, arg1 protocol.PacketNumberLen) protocol.PacketNumber {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "DecodePacketNumber", arg0, arg1)
+	ret0, _ := ret[0].(protocol.PacketNumber)
+	return ret0
+}
+
+// DecodePacketNumber indicates an expected call of DecodePacketNumber
+func (mr *MockLongHeaderOpenerMockRecorder) DecodePacketNumber(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DecodePacketNumber", reflect.TypeOf((*MockLongHeaderOpener)(nil).DecodePacketNumber), arg0, arg1)
+}
+
 // DecryptHeader mocks base method
 func (m *MockLongHeaderOpener) DecryptHeader(arg0 []byte, arg1 *byte, arg2 []byte) {
 	m.ctrl.T.Helper()
