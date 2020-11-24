@@ -6,7 +6,6 @@ import (
 	"crypto/sha256"
 	"fmt"
 	"hash"
-	"log"
 	"net"
 	"sync"
 	"time"
@@ -62,27 +61,27 @@ func setReceiveBuffer(c net.PacketConn, logger utils.Logger) {
 	}
 	size, err := inspectReadBuffer(c)
 	if err != nil {
-		log.Printf("Failed to determine receive buffer size: %s", err)
+		logger.Errorf("Failed to determine receive buffer size: %s", err)
 		return
 	}
 	if size >= protocol.DesiredReceiveBufferSize {
 		logger.Debugf("Conn has receive buffer of %d kiB (wanted: at least %d kiB)", size/1024, protocol.DesiredReceiveBufferSize/1024)
 	}
 	if err := conn.SetReadBuffer(protocol.DesiredReceiveBufferSize); err != nil {
-		log.Printf("Failed to increase receive buffer size: %s\n", err)
+		logger.Errorf("Failed to increase receive buffer size: %s\n", err)
 		return
 	}
 	newSize, err := inspectReadBuffer(c)
 	if err != nil {
-		log.Printf("Failed to determine receive buffer size: %s", err)
+		logger.Errorf("Failed to determine receive buffer size: %s", err)
 		return
 	}
 	if newSize == size {
-		log.Printf("Failed to determine receive buffer size: %s", err)
+		logger.Errorf("Failed to determine receive buffer size: %s", err)
 		return
 	}
 	if newSize < protocol.DesiredReceiveBufferSize {
-		log.Printf("Failed to sufficiently increase receive buffer size. Was: %d kiB, wanted: %d kiB, got: %d kiB.", size/1024, protocol.DesiredReceiveBufferSize/1024, newSize/1024)
+		logger.Errorf("Failed to sufficiently increase receive buffer size. Was: %d kiB, wanted: %d kiB, got: %d kiB.", size/1024, protocol.DesiredReceiveBufferSize/1024, newSize/1024)
 		return
 	}
 	logger.Debugf("Increased receive buffer size to %d kiB", newSize/1024)
