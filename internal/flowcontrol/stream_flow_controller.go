@@ -2,6 +2,7 @@ package flowcontrol
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/internal/qerr"
@@ -124,11 +125,53 @@ func (c *streamFlowController) GetWindowUpdate() protocol.ByteCount {
 	// Don't use defer for unlocking the mutex here, GetWindowUpdate() is called frequently and defer shows up in the profiler
 	c.mutex.Lock()
 	oldWindowSize := c.receiveWindowSize
-	offset := c.baseFlowController.getWindowUpdate()
+	offset := c.getWindowUpdate()
 	if c.receiveWindowSize > oldWindowSize { // auto-tuning enlarged the window size
 		c.logger.Debugf("Increasing receive flow control window for stream %d to %d kB", c.streamID, c.receiveWindowSize/(1<<10))
 		c.connection.EnsureMinimumWindowSize(protocol.ByteCount(float64(c.receiveWindowSize) * protocol.ConnectionFlowControlMultiplier))
 	}
 	c.mutex.Unlock()
 	return offset
+}
+
+// getWindowUpdate updates the receive window, if necessary
+// it returns the new offset
+func (c *streamFlowController) getWindowUpdate() protocol.ByteCount {
+	if !c.hasWindowUpdate() {
+		return 0
+	}
+
+	c.maybeAdjustWindowSize()
+	c.receiveWindow = c.bytesRead + c.receiveWindowSize
+	return c.receiveWindow
+}
+
+// maybeAdjustWindowSize increases the receiveWindowSize if we're sending updates too often.
+// For details about auto-tuning, see https://docs.google.com/document/d/1SExkMmGiz8VYzV3s9E35JQlJ73vhzCekKkDi85F1qCE/edit?usp=sharing.
+func (c *streamFlowController) maybeAdjustWindowSize() {
+	bytesReadInEpoch := c.bytesRead - c.epochStartOffset
+	// don't do anything if less than half the window has been consumed
+	if bytesReadInEpoch <= c.receiveWindowSize/2 {
+		return
+	}
+	rtt := c.rttStats.SmoothedRTT()
+	if rtt == 0 {
+		return
+	}
+
+	fraction := float64(bytesReadInEpoch) / float64(c.receiveWindowSize)
+	now := time.Now()
+	since := now.Sub(c.epochStartTime)
+	comp := time.Duration(4 * fraction * float64(rtt))
+	fmt.Printf("stream %d. Fraction used: %.3f after %s (%d of %d). Comparing to %s.", c.streamID, fraction, since, bytesReadInEpoch, c.receiveWindow, comp)
+	if since < comp {
+		// window is consumed too fast, try to increase the window size
+		newSize := utils.MinByteCount(2*c.receiveWindowSize, c.maxReceiveWindowSize)
+		fmt.Printf("Increasing from %d to %d.\n", c.receiveWindowSize, newSize)
+		c.receiveWindowSize = newSize
+	} else {
+		fmt.Printf("Not increasing.\n")
+	}
+	fmt.Printf("stream %d. starting new autotuning epoch at %d. Receive window: %d\n", c.streamID, c.bytesRead, c.receiveWindowSize)
+	c.startNewAutoTuningEpoch(now)
 }

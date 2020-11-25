@@ -67,7 +67,7 @@ func (c *connectionFlowController) AddBytesRead(n protocol.ByteCount) {
 func (c *connectionFlowController) GetWindowUpdate() protocol.ByteCount {
 	c.mutex.Lock()
 	oldWindowSize := c.receiveWindowSize
-	offset := c.baseFlowController.getWindowUpdate()
+	offset := c.getWindowUpdate()
 	if oldWindowSize < c.receiveWindowSize {
 		c.logger.Debugf("Increasing receive flow control window for the connection to %d kB", c.receiveWindowSize/(1<<10))
 	}
@@ -85,4 +85,38 @@ func (c *connectionFlowController) EnsureMinimumWindowSize(inc protocol.ByteCoun
 		c.startNewAutoTuningEpoch(time.Now())
 	}
 	c.mutex.Unlock()
+}
+
+// getWindowUpdate updates the receive window, if necessary
+// it returns the new offset
+func (c *connectionFlowController) getWindowUpdate() protocol.ByteCount {
+	if !c.hasWindowUpdate() {
+		return 0
+	}
+
+	c.maybeAdjustWindowSize()
+	c.receiveWindow = c.bytesRead + c.receiveWindowSize
+	return c.receiveWindow
+}
+
+// maybeAdjustWindowSize increases the receiveWindowSize if we're sending updates too often.
+// For details about auto-tuning, see https://docs.google.com/document/d/1SExkMmGiz8VYzV3s9E35JQlJ73vhzCekKkDi85F1qCE/edit?usp=sharing.
+func (c *connectionFlowController) maybeAdjustWindowSize() {
+	bytesReadInEpoch := c.bytesRead - c.epochStartOffset
+	// don't do anything if less than half the window has been consumed
+	if bytesReadInEpoch <= c.receiveWindowSize/2 {
+		return
+	}
+	rtt := c.rttStats.SmoothedRTT()
+	if rtt == 0 {
+		return
+	}
+
+	fraction := float64(bytesReadInEpoch) / float64(c.receiveWindowSize)
+	now := time.Now()
+	if now.Sub(c.epochStartTime) < time.Duration(4*fraction*float64(rtt)) {
+		// window is consumed too fast, try to increase the window size
+		c.receiveWindowSize = utils.MinByteCount(2*c.receiveWindowSize, c.maxReceiveWindowSize)
+	}
+	c.startNewAutoTuningEpoch(now)
 }
