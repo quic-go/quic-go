@@ -67,8 +67,11 @@ func (t *connTracer) SentShortHeaderPacket(_ logging.ConnectionID, _ logging.Pac
 }
 func (t *connTracer) ReceivedVersionNegotiationPacket(*logging.Header, []logging.VersionNumber) {}
 func (t *connTracer) ReceivedRetry(*logging.Header)                                             {}
-func (t *connTracer) ReceivedPacket(hdr *logging.ExtendedHeader, size logging.ByteCount, frames []logging.Frame) {
-	receivedKeyPhases = append(receivedKeyPhases, hdr.KeyPhase)
+func (t *connTracer) ReceivedLongHeaderPacket(*logging.ExtendedHeader, logging.ByteCount, []logging.Frame) {
+}
+
+func (t *connTracer) ReceivedShortHeaderPacket(_ logging.ConnectionID, _ logging.PacketNumber, kp logging.KeyPhaseBit, _ logging.ByteCount, _ []logging.Frame) {
+	receivedKeyPhases = append(receivedKeyPhases, kp)
 }
 func (t *connTracer) BufferedPacket(logging.PacketType)                                             {}
 func (t *connTracer) DroppedPacket(logging.PacketType, logging.ByteCount, logging.PacketDropReason) {}

@@ -157,12 +157,19 @@ var _ = Describe("Tracing", func() {
 			tracer.ReceivedRetry(hdr)
 		})
 
-		It("traces the ReceivedPacket event", func() {
+		It("traces the ReceivedLongHeaderPacket event", func() {
 			hdr := &ExtendedHeader{Header: Header{DestConnectionID: ConnectionID{1, 2, 3}}}
 			ping := &PingFrame{}
-			tr1.EXPECT().ReceivedPacket(hdr, ByteCount(1337), []Frame{ping})
-			tr2.EXPECT().ReceivedPacket(hdr, ByteCount(1337), []Frame{ping})
-			tracer.ReceivedPacket(hdr, 1337, []Frame{ping})
+			tr1.EXPECT().ReceivedLongHeaderPacket(hdr, ByteCount(1337), []Frame{ping})
+			tr2.EXPECT().ReceivedLongHeaderPacket(hdr, ByteCount(1337), []Frame{ping})
+			tracer.ReceivedLongHeaderPacket(hdr, 1337, []Frame{ping})
+		})
+
+		It("traces the ReceivedShortHeaderPacket event", func() {
+			ping := &PingFrame{}
+			tr1.EXPECT().ReceivedShortHeaderPacket(ConnectionID{1, 2, 3}, PacketNumber(123), KeyPhaseOne, ByteCount(1337), []Frame{ping})
+			tr2.EXPECT().ReceivedShortHeaderPacket(ConnectionID{1, 2, 3}, PacketNumber(123), KeyPhaseOne, ByteCount(1337), []Frame{ping})
+			tracer.ReceivedShortHeaderPacket(ConnectionID{1, 2, 3}, 123, KeyPhaseOne, 1337, []Frame{ping})
 		})
 
 		It("traces the BufferedPacket event", func() {

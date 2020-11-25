@@ -257,7 +257,7 @@ func (t *connectionTracer) SentShortHeaderPacket(destConnID logging.ConnectionID
 	t.mutex.Unlock()
 }
 
-func (t *connectionTracer) ReceivedPacket(hdr *wire.ExtendedHeader, packetSize protocol.ByteCount, frames []logging.Frame) {
+func (t *connectionTracer) ReceivedLongHeaderPacket(hdr *wire.ExtendedHeader, packetSize protocol.ByteCount, frames []logging.Frame) {
 	fs := make([]frame, len(frames))
 	for i, f := range frames {
 		fs[i] = frame{Frame: f}
@@ -267,6 +267,25 @@ func (t *connectionTracer) ReceivedPacket(hdr *wire.ExtendedHeader, packetSize p
 	t.mutex.Lock()
 	t.recordEvent(time.Now(), &eventPacketReceived{
 		Header: header,
+		Frames: fs,
+	})
+	t.mutex.Unlock()
+}
+
+func (t *connectionTracer) ReceivedShortHeaderPacket(destConnID logging.ConnectionID, pn logging.PacketNumber, kp logging.KeyPhaseBit, size protocol.ByteCount, frames []logging.Frame) {
+	fs := make([]frame, len(frames))
+	for i, f := range frames {
+		fs[i] = frame{Frame: f}
+	}
+	t.mutex.Lock()
+	t.recordEvent(time.Now(), &eventPacketReceived{
+		Header: packetHeader{
+			PacketType:       logging.PacketType1RTT,
+			DestConnectionID: destConnID,
+			PacketNumber:     pn,
+			KeyPhaseBit:      kp,
+			PacketSize:       size,
+		},
 		Frames: fs,
 	})
 	t.mutex.Unlock()
