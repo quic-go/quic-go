@@ -207,16 +207,28 @@ func (mr *MockConnectionTracerMockRecorder) ReceivedVersionNegotiationPacket(arg
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReceivedVersionNegotiationPacket", reflect.TypeOf((*MockConnectionTracer)(nil).ReceivedVersionNegotiationPacket), arg0, arg1)
 }
 
-// SentPacket mocks base method
-func (m *MockConnectionTracer) SentPacket(arg0 *wire.ExtendedHeader, arg1 protocol.ByteCount, arg2 *wire.AckFrame, arg3 []logging.Frame) {
+// SentLongHeaderPacket mocks base method
+func (m *MockConnectionTracer) SentLongHeaderPacket(arg0 *wire.ExtendedHeader, arg1 protocol.ByteCount, arg2 *wire.AckFrame, arg3 []logging.Frame) {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "SentPacket", arg0, arg1, arg2, arg3)
+	m.ctrl.Call(m, "SentLongHeaderPacket", arg0, arg1, arg2, arg3)
 }
 
-// SentPacket indicates an expected call of SentPacket
-func (mr *MockConnectionTracerMockRecorder) SentPacket(arg0, arg1, arg2, arg3 interface{}) *gomock.Call {
+// SentLongHeaderPacket indicates an expected call of SentLongHeaderPacket
+func (mr *MockConnectionTracerMockRecorder) SentLongHeaderPacket(arg0, arg1, arg2, arg3 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SentPacket", reflect.TypeOf((*MockConnectionTracer)(nil).SentPacket), arg0, arg1, arg2, arg3)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SentLongHeaderPacket", reflect.TypeOf((*MockConnectionTracer)(nil).SentLongHeaderPacket), arg0, arg1, arg2, arg3)
+}
+
+// SentShortHeaderPacket mocks base method
+func (m *MockConnectionTracer) SentShortHeaderPacket(arg0 protocol.ConnectionID, arg1 protocol.PacketNumber, arg2 protocol.KeyPhaseBit, arg3 protocol.ByteCount, arg4 *wire.AckFrame, arg5 []logging.Frame) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "SentShortHeaderPacket", arg0, arg1, arg2, arg3, arg4, arg5)
+}
+
+// SentShortHeaderPacket indicates an expected call of SentShortHeaderPacket
+func (mr *MockConnectionTracerMockRecorder) SentShortHeaderPacket(arg0, arg1, arg2, arg3, arg4, arg5 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SentShortHeaderPacket", reflect.TypeOf((*MockConnectionTracer)(nil).SentShortHeaderPacket), arg0, arg1, arg2, arg3, arg4, arg5)
 }
 
 // SentTransportParameters mocks base method

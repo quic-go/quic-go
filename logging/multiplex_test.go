@@ -126,13 +126,21 @@ var _ = Describe("Tracing", func() {
 			tracer.ReceivedTransportParameters(tp)
 		})
 
-		It("traces the SentPacket event", func() {
+		It("traces the SentLongHeaderPacket event", func() {
 			hdr := &ExtendedHeader{Header: Header{DestConnectionID: ConnectionID{1, 2, 3}}}
 			ack := &AckFrame{AckRanges: []AckRange{{Smallest: 1, Largest: 10}}}
 			ping := &PingFrame{}
-			tr1.EXPECT().SentPacket(hdr, ByteCount(1337), ack, []Frame{ping})
-			tr2.EXPECT().SentPacket(hdr, ByteCount(1337), ack, []Frame{ping})
-			tracer.SentPacket(hdr, 1337, ack, []Frame{ping})
+			tr1.EXPECT().SentLongHeaderPacket(hdr, ByteCount(1337), ack, []Frame{ping})
+			tr2.EXPECT().SentLongHeaderPacket(hdr, ByteCount(1337), ack, []Frame{ping})
+			tracer.SentLongHeaderPacket(hdr, 1337, ack, []Frame{ping})
+		})
+
+		It("traces the SentShortHeaderPacket event", func() {
+			ack := &AckFrame{AckRanges: []AckRange{{Smallest: 1, Largest: 10}}}
+			ping := &PingFrame{}
+			tr1.EXPECT().SentShortHeaderPacket(ConnectionID{1, 2, 3}, PacketNumber(123), KeyPhaseOne, ByteCount(1337), ack, []Frame{ping})
+			tr2.EXPECT().SentShortHeaderPacket(ConnectionID{1, 2, 3}, PacketNumber(123), KeyPhaseOne, ByteCount(1337), ack, []Frame{ping})
+			tracer.SentShortHeaderPacket(ConnectionID{1, 2, 3}, 123, KeyPhaseOne, 1337, ack, []Frame{ping})
 		})
 
 		It("traces the ReceivedVersionNegotiationPacket event", func() {

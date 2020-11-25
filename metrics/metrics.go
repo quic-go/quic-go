@@ -165,15 +165,24 @@ func (t *connTracer) ClosedConnection(r logging.CloseReason) {
 }
 func (t *connTracer) SentTransportParameters(*logging.TransportParameters)     {}
 func (t *connTracer) ReceivedTransportParameters(*logging.TransportParameters) {}
-func (t *connTracer) SentPacket(hdr *logging.ExtendedHeader, _ logging.ByteCount, _ *logging.AckFrame, _ []logging.Frame) {
+func (t *connTracer) SentLongHeaderPacket(hdr *logging.ExtendedHeader, _ logging.ByteCount, _ *logging.AckFrame, _ []logging.Frame) {
 	typ := logging.PacketTypeFromHeader(&hdr.Header)
-	if typ == logging.PacketType1RTT {
-		t.handshakeComplete = true
-	}
+
 	stats.RecordWithTags(
 		context.Background(),
 		[]tag.Mutator{
 			tag.Upsert(keyPacketType, packetType(typ).String()),
+		},
+		sentPackets.M(1),
+	)
+}
+
+func (t *connTracer) SentShortHeaderPacket(logging.ConnectionID, logging.PacketNumber, logging.KeyPhaseBit, logging.ByteCount, *logging.AckFrame, []logging.Frame) {
+	t.handshakeComplete = true
+	stats.RecordWithTags(
+		context.Background(),
+		[]tag.Mutator{
+			tag.Upsert(keyPacketType, packetType(logging.PacketType1RTT).String()),
 		},
 		sentPackets.M(1),
 	)

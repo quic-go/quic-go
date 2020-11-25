@@ -1576,7 +1576,11 @@ func (s *session) logPacketContents(p *packetContents) {
 		for _, f := range p.frames {
 			frames = append(frames, logutils.ConvertFrame(f.Frame))
 		}
-		s.tracer.SentPacket(p.header, p.length, p.ack, frames)
+		if p.header.IsLongHeader {
+			s.tracer.SentLongHeaderPacket(p.header, p.length, p.ack, frames)
+		} else {
+			s.tracer.SentShortHeaderPacket(p.header.DestConnectionID, p.header.PacketNumber, p.header.KeyPhase, p.length, p.ack, frames)
+		}
 	}
 
 	// quic-go logging
