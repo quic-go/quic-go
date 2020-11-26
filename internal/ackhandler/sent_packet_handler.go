@@ -37,7 +37,7 @@ type packetNumberSpace struct {
 func newPacketNumberSpace(initialPN protocol.PacketNumber, skipPNs bool, rttStats *utils.RTTStats) *packetNumberSpace {
 	var pns packetNumberGenerator
 	if skipPNs {
-		pns = newSkippingPacketNumberGenerator(initialPN, protocol.SkipPacketAveragePeriodLength)
+		pns = newSkippingPacketNumberGenerator(initialPN, protocol.SkipPacketInitialPeriod, protocol.SkipPacketMaxPeriod)
 	} else {
 		pns = newSequentialPacketNumberGenerator(initialPN)
 	}

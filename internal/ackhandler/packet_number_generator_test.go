@@ -1,7 +1,10 @@
 package ackhandler
 
 import (
+	"fmt"
+
 	"github.com/lucas-clemente/quic-go/internal/protocol"
+
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 )
@@ -20,24 +23,17 @@ var _ = Describe("Sequential Packet Number Generator", func() {
 })
 
 var _ = Describe("Skipping Packet Number Generator", func() {
-	var png *skippingPacketNumberGenerator
 	const initialPN protocol.PacketNumber = 8
-
-	BeforeEach(func() {
-		png = newSkippingPacketNumberGenerator(initialPN, 100).(*skippingPacketNumberGenerator)
-	})
+	const initialPeriod protocol.PacketNumber = 25
+	const maxPeriod protocol.PacketNumber = 300
 
 	It("can be initialized to return any first packet number", func() {
-		png = newSkippingPacketNumberGenerator(12345, 100).(*skippingPacketNumberGenerator)
+		png := newSkippingPacketNumberGenerator(12345, initialPeriod, maxPeriod)
 		Expect(png.Pop()).To(Equal(protocol.PacketNumber(12345)))
 	})
 
-	It("gets the first packet number", func() {
-		num := png.Pop()
-		Expect(num).To(Equal(initialPN))
-	})
-
 	It("allows peeking", func() {
+		png := newSkippingPacketNumberGenerator(initialPN, initialPeriod, maxPeriod).(*skippingPacketNumberGenerator)
 		png.nextToSkip = 1000
 		Expect(png.Peek()).To(Equal(initialPN))
 		Expect(png.Peek()).To(Equal(initialPN))
@@ -47,6 +43,7 @@ var _ = Describe("Skipping Packet Number Generator", func() {
 	})
 
 	It("skips a packet number", func() {
+		png := newSkippingPacketNumberGenerator(initialPN, initialPeriod, maxPeriod)
 		var last protocol.PacketNumber
 		var skipped bool
 		for i := 0; i < 1000; i++ {
@@ -60,35 +57,38 @@ var _ = Describe("Skipping Packet Number Generator", func() {
 		Expect(skipped).To(BeTrue())
 	})
 
-	It("skips a specific packet number", func() {
-		png.nextToSkip = initialPN + 1
-		Expect(png.Pop()).To(Equal(initialPN))
-		Expect(png.Peek()).To(Equal(initialPN + 2))
-		Expect(png.Pop()).To(Equal(initialPN + 2))
-	})
-
 	It("generates a new packet number to skip", func() {
-		const averagePeriod = 25
-		png.averagePeriod = averagePeriod
+		const rep = 500
+		periods := make([][]protocol.PacketNumber, rep)
+		expectedPeriods := []protocol.PacketNumber{25, 50, 100, 200, 300, 300, 300}
 
-		periods := make([]protocol.PacketNumber, 0, 500)
-		last := initialPN
-		var lastSkip protocol.PacketNumber
-		for len(periods) < cap(periods) {
-			next := png.Pop()
-			if next > last+1 {
-				skipped := next - 1
-				Expect(skipped).To(BeNumerically(">", lastSkip+1))
-				periods = append(periods, skipped-lastSkip-1)
-				lastSkip = skipped
+		for i := 0; i < rep; i++ {
+			png := newSkippingPacketNumberGenerator(initialPN, initialPeriod, maxPeriod)
+			last := initialPN
+			lastSkip := initialPN
+			for len(periods[i]) < len(expectedPeriods) {
+				next := png.Pop()
+				if next > last+1 {
+					skipped := next - 1
+					Expect(skipped).To(BeNumerically(">", lastSkip+1))
+					periods[i] = append(periods[i], skipped-lastSkip-1)
+					lastSkip = skipped
+				}
+				last = next
 			}
-			last = next
 		}
 
-		var average float64
-		for _, p := range periods {
-			average += float64(p) / float64(len(periods))
+		for j := 0; j < len(expectedPeriods); j++ {
+			var average float64
+			for i := 0; i < rep; i++ {
+				average += float64(periods[i][j]) / float64(len(periods))
+			}
+			fmt.Fprintf(GinkgoWriter, "Period %d: %.2f (expected %d)\n", j, average, expectedPeriods[j])
+			tolerance := protocol.PacketNumber(5)
+			if t := expectedPeriods[j] / 10; t > tolerance {
+				tolerance = t
+			}
+			Expect(average).To(BeNumerically("~", expectedPeriods[j]+1 /* we never skip two packet numbers at the same time */, tolerance))
 		}
-		Expect(average).To(BeNumerically("~", averagePeriod+1 /* we never skip two packet numbers at the same time */, 5))
 	})
 })

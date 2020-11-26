@@ -6,6 +6,7 @@ import (
 	mrand "math/rand"
 
 	"github.com/lucas-clemente/quic-go/internal/protocol"
+	"github.com/lucas-clemente/quic-go/internal/utils"
 )
 
 type packetNumberGenerator interface {
@@ -37,8 +38,9 @@ func (p *sequentialPacketNumberGenerator) Pop() protocol.PacketNumber {
 // it randomly skips a packet number every averagePeriod packets (on average).
 // It is guaranteed to never skip two consecutive packet numbers.
 type skippingPacketNumberGenerator struct {
-	rand          *mrand.Rand
-	averagePeriod protocol.PacketNumber
+	rand      *mrand.Rand
+	period    protocol.PacketNumber
+	maxPeriod protocol.PacketNumber
 
 	next       protocol.PacketNumber
 	nextToSkip protocol.PacketNumber
@@ -46,13 +48,14 @@ type skippingPacketNumberGenerator struct {
 
 var _ packetNumberGenerator = &skippingPacketNumberGenerator{}
 
-func newSkippingPacketNumberGenerator(initial, averagePeriod protocol.PacketNumber) packetNumberGenerator {
+func newSkippingPacketNumberGenerator(initial, initialPeriod, maxPeriod protocol.PacketNumber) packetNumberGenerator {
 	b := make([]byte, 8)
 	rand.Read(b) // it's not the end of the world if we don't get perfect random here
 	g := &skippingPacketNumberGenerator{
-		rand:          mrand.New(mrand.NewSource(int64(binary.LittleEndian.Uint64(b)))),
-		next:          initial,
-		averagePeriod: averagePeriod,
+		rand:      mrand.New(mrand.NewSource(int64(binary.LittleEndian.Uint64(b)))),
+		next:      initial,
+		period:    initialPeriod,
+		maxPeriod: maxPeriod,
 	}
 	g.generateNewSkip()
 	return g
@@ -74,5 +77,6 @@ func (p *skippingPacketNumberGenerator) Pop() protocol.PacketNumber {
 
 func (p *skippingPacketNumberGenerator) generateNewSkip() {
 	// make sure that there are never two consecutive packet numbers that are skipped
-	p.nextToSkip = p.next + 2 + protocol.PacketNumber(p.rand.Int31n(int32(2*p.averagePeriod)))
+	p.nextToSkip = p.next + 2 + protocol.PacketNumber(p.rand.Int63n(int64(2*p.period)))
+	p.period = utils.MinPacketNumber(2*p.period, p.maxPeriod)
 }
