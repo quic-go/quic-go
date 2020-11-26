@@ -6,16 +6,29 @@ import (
 	. "github.com/onsi/gomega"
 )
 
-var _ = Describe("Packet Number Generator", func() {
-	var png *packetNumberGenerator
+var _ = Describe("Sequential Packet Number Generator", func() {
+	It("generates sequential packet numbers", func() {
+		const initialPN protocol.PacketNumber = 123
+		png := newSequentialPacketNumberGenerator(initialPN)
+
+		for i := initialPN; i < initialPN+1000; i++ {
+			Expect(png.Peek()).To(Equal(i))
+			Expect(png.Peek()).To(Equal(i))
+			Expect(png.Pop()).To(Equal(i))
+		}
+	})
+})
+
+var _ = Describe("Skipping Packet Number Generator", func() {
+	var png *skippingPacketNumberGenerator
 	const initialPN protocol.PacketNumber = 8
 
 	BeforeEach(func() {
-		png = newPacketNumberGenerator(initialPN, 100)
+		png = newSkippingPacketNumberGenerator(initialPN, 100).(*skippingPacketNumberGenerator)
 	})
 
 	It("can be initialized to return any first packet number", func() {
-		png = newPacketNumberGenerator(12345, 100)
+		png = newSkippingPacketNumberGenerator(12345, 100).(*skippingPacketNumberGenerator)
 		Expect(png.Pop()).To(Equal(protocol.PacketNumber(12345)))
 	})
 
