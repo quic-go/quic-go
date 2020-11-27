@@ -18,6 +18,8 @@ type receivedPacketHandler struct {
 	appDataPackets   *receivedPacketTracker
 
 	lowest1RTTPacket protocol.PacketNumber
+
+	tracer logging.ConnectionTracer
 }
 
 var _ ReceivedPacketHandler = &receivedPacketHandler{}
@@ -35,6 +37,7 @@ func newReceivedPacketHandler(
 		handshakePackets: newReceivedPacketTracker(rttStats, tracer, logger, version),
 		appDataPackets:   newReceivedPacketTracker(rttStats, tracer, logger, version),
 		lowest1RTTPacket: protocol.InvalidPacketNumber,
+		tracer:           tracer,
 	}
 }
 
@@ -109,7 +112,11 @@ func (h *receivedPacketHandler) GetAckFrame(encLevel protocol.EncryptionLevel, o
 		}
 	case protocol.Encryption1RTT:
 		// 0-RTT packets can't contain ACK frames
-		return h.appDataPackets.GetAckFrame(onlyIfQueued)
+		ack := h.appDataPackets.GetAckFrame(onlyIfQueued)
+		if h.tracer != nil {
+			h.tracer.Log("get_ack_frame", fmt.Sprintf("onlyIfQueued: %t, returned: %t", onlyIfQueued, ack != nil))
+		}
+		return ack
 	default:
 		return nil
 	}
