@@ -574,7 +574,11 @@ runLoop:
 			// Only reset the timers if this packet was actually processed.
 			// This avoids modifying any state when handling undecryptable packets,
 			// which could be injected by an attacker.
-			if wasProcessed := s.handlePacketImpl(p); !wasProcessed {
+			wasProcessed := s.handlePacketImpl(p)
+			if s.tracer != nil {
+				s.tracer.Log("handled_packet", fmt.Sprintf("was processed: %t", wasProcessed))
+			}
+			if !wasProcessed {
 				continue
 			}
 			// Don't set timers and send packets if the packet made us close the session.
@@ -1451,7 +1455,11 @@ func (s *session) sendPackets() error {
 
 	var sentPacket bool // only used in for packets sent in send mode SendAny
 	for {
-		switch sendMode := s.sentPacketHandler.SendMode(); sendMode {
+		sendMode := s.sentPacketHandler.SendMode()
+		if s.tracer != nil {
+			s.tracer.Log("send_mode", sendMode.String())
+		}
+		switch sendMode {
 		case ackhandler.SendNone:
 			return nil
 		case ackhandler.SendAck:
