@@ -1488,6 +1488,9 @@ func (s *session) sendPackets() error {
 		case ackhandler.SendAny:
 			if s.handshakeComplete && !s.sentPacketHandler.HasPacingBudget() {
 				s.pacingDeadline = s.sentPacketHandler.TimeUntilSend()
+				if s.tracer != nil {
+					s.tracer.Log("send_mode_any", "no pacing budget")
+				}
 				return nil
 			}
 			sent, err := s.sendPacket()
@@ -1580,6 +1583,9 @@ func (s *session) sendPacket() (bool, error) {
 	}
 	packet, err := s.packer.PackPacket()
 	if err != nil || packet == nil {
+		if s.tracer != nil {
+			s.tracer.Log("pack_packet", "returned nil")
+		}
 		return false, err
 	}
 	s.sendPackedPacket(packet)
