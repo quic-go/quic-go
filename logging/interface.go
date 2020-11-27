@@ -126,4 +126,5 @@ type ConnectionTracer interface {
 	LossTimerCanceled()
 	// Close is called when the connection is closed.
 	Close()
+	Debug(name, msg string)
 }

@@ -186,6 +186,12 @@ func (m *connTracerMultiplexer) LossTimerCanceled() {
 	}
 }
 
+func (m *connTracerMultiplexer) Debug(name, msg string) {
+	for _, t := range m.tracers {
+		t.Debug(name, msg)
+	}
+}
+
 func (m *connTracerMultiplexer) Close() {
 	for _, t := range m.tracers {
 		t.Close()

@@ -218,4 +218,5 @@ func (t *connTracer) DroppedKey(logging.KeyPhase)                               
 func (t *connTracer) SetLossTimer(logging.TimerType, logging.EncryptionLevel, time.Time) {}
 func (t *connTracer) LossTimerExpired(logging.TimerType, logging.EncryptionLevel)        {}
 func (t *connTracer) LossTimerCanceled()                                                 {}
+func (t *connTracer) Debug(string, string)                                               {}
 func (t *connTracer) Close()                                                             {}

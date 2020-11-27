@@ -698,6 +698,17 @@ var _ = Describe("Tracing", func() {
 				Expect(ev).To(HaveLen(1))
 				Expect(ev).To(HaveKeyWithValue("event_type", "cancelled"))
 			})
+
+			It("records a generic event", func() {
+				tracer.Debug("foo", "bar")
+				entry := exportAndParseSingle()
+				Expect(entry.Time).To(BeTemporally("~", time.Now(), scaleDuration(10*time.Millisecond)))
+				Expect(entry.Category).To(Equal("transport"))
+				Expect(entry.Name).To(Equal("foo"))
+				ev := entry.Event
+				Expect(ev).To(HaveLen(1))
+				Expect(ev).To(HaveKeyWithValue("details", "bar"))
+			})
 		})
 	})
 })
