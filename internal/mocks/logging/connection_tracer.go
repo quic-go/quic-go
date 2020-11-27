@@ -111,6 +111,18 @@ func (mr *MockConnectionTracerMockRecorder) DroppedPacket(arg0, arg1, arg2 inter
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DroppedPacket", reflect.TypeOf((*MockConnectionTracer)(nil).DroppedPacket), arg0, arg1, arg2)
 }
 
+// Log mocks base method
+func (m *MockConnectionTracer) Log(arg0, arg1 string) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "Log", arg0, arg1)
+}
+
+// Log indicates an expected call of Log
+func (mr *MockConnectionTracerMockRecorder) Log(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Log", reflect.TypeOf((*MockConnectionTracer)(nil).Log), arg0, arg1)
+}
+
 // LossTimerCanceled mocks base method
 func (m *MockConnectionTracer) LossTimerCanceled() {
 	m.ctrl.T.Helper()
