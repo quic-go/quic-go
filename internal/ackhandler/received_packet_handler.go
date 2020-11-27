@@ -7,6 +7,7 @@ import (
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/internal/utils"
 	"github.com/lucas-clemente/quic-go/internal/wire"
+	"github.com/lucas-clemente/quic-go/logging"
 )
 
 type receivedPacketHandler struct {
@@ -24,14 +25,15 @@ var _ ReceivedPacketHandler = &receivedPacketHandler{}
 func newReceivedPacketHandler(
 	sentPackets sentPacketTracker,
 	rttStats *utils.RTTStats,
+	tracer logging.ConnectionTracer,
 	logger utils.Logger,
 	version protocol.VersionNumber,
 ) ReceivedPacketHandler {
 	return &receivedPacketHandler{
 		sentPackets:      sentPackets,
-		initialPackets:   newReceivedPacketTracker(rttStats, logger, version),
-		handshakePackets: newReceivedPacketTracker(rttStats, logger, version),
-		appDataPackets:   newReceivedPacketTracker(rttStats, logger, version),
+		initialPackets:   newReceivedPacketTracker(rttStats, tracer, logger, version),
+		handshakePackets: newReceivedPacketTracker(rttStats, tracer, logger, version),
+		appDataPackets:   newReceivedPacketTracker(rttStats, tracer, logger, version),
 		lowest1RTTPacket: protocol.InvalidPacketNumber,
 	}
 }

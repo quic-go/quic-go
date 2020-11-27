@@ -18,5 +18,5 @@ func NewAckHandler(
 	version protocol.VersionNumber,
 ) (SentPacketHandler, ReceivedPacketHandler) {
 	sph := newSentPacketHandler(initialPacketNumber, rttStats, pers, traceCallback, tracer, logger)
-	return sph, newReceivedPacketHandler(sph, rttStats, logger, version)
+	return sph, newReceivedPacketHandler(sph, rttStats, tracer, logger, version)
 }

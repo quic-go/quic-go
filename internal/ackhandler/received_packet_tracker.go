@@ -1,11 +1,13 @@
 package ackhandler
 
 import (
+	"fmt"
 	"time"
 
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/internal/utils"
 	"github.com/lucas-clemente/quic-go/internal/wire"
+	"github.com/lucas-clemente/quic-go/logging"
 )
 
 // number of ack-eliciting packets received before sending an ack.
@@ -29,6 +31,7 @@ type receivedPacketTracker struct {
 	ackAlarm                                time.Time
 	lastAck                                 *wire.AckFrame
 
+	tracer logging.ConnectionTracer
 	logger utils.Logger
 
 	version protocol.VersionNumber
@@ -36,6 +39,7 @@ type receivedPacketTracker struct {
 
 func newReceivedPacketTracker(
 	rttStats *utils.RTTStats,
+	tracer logging.ConnectionTracer,
 	logger utils.Logger,
 	version protocol.VersionNumber,
 ) *receivedPacketTracker {
@@ -43,6 +47,7 @@ func newReceivedPacketTracker(
 		packetHistory: newReceivedPacketHistory(),
 		maxAckDelay:   protocol.MaxAckDelay,
 		rttStats:      rttStats,
+		tracer:        tracer,
 		logger:        logger,
 		version:       version,
 	}
@@ -59,11 +64,15 @@ func (h *receivedPacketTracker) ReceivedPacket(packetNumber protocol.PacketNumbe
 		h.largestObservedReceivedTime = rcvTime
 	}
 
-	if isNew := h.packetHistory.ReceivedPacket(packetNumber); isNew && shouldInstigateAck {
+	isNew := h.packetHistory.ReceivedPacket(packetNumber)
+	if isNew && shouldInstigateAck {
 		h.hasNewAck = true
 	}
 	if shouldInstigateAck {
 		h.maybeQueueAck(packetNumber, rcvTime, isMissing)
+	}
+	if h.tracer != nil {
+		h.tracer.Log("received_packet", fmt.Sprintf("rcvd %d (ack-eliciting: %t). isNew: %t, ackQueued: %t", packetNumber, shouldInstigateAck, isNew, h.ackQueued))
 	}
 	switch ecn {
 	case protocol.ECNNon:
