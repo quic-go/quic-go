@@ -1446,12 +1446,27 @@ var _ = Describe("Session", func() {
 
 		It("sends multiple packets, when the pacer allows immediate sending", func() {
 			sph.EXPECT().SentPacket(gomock.Any())
-			sph.EXPECT().HasPacingBudget()
 			sph.EXPECT().HasPacingBudget().Return(true).AnyTimes()
-			sph.EXPECT().TimeUntilSend() // return the zero value of time.Time{}
-			sph.EXPECT().SendMode().Return(ackhandler.SendAny).Times(3)
+			sph.EXPECT().SendMode().Return(ackhandler.SendAny).Times(2)
 			packer.EXPECT().PackPacket().Return(getPacket(10), nil)
 			packer.EXPECT().PackPacket().Return(nil, nil)
+			sender.EXPECT().WouldBlock().AnyTimes()
+			sender.EXPECT().Send(gomock.Any())
+			go func() {
+				defer GinkgoRecover()
+				cryptoSetup.EXPECT().RunHandshake().MaxTimes(1)
+				sess.run()
+			}()
+			sess.scheduleSending()
+			time.Sleep(50 * time.Millisecond) // make sure that only 1 packet is sent
+		})
+
+		It("allows an ACK to be sent when pacing limited", func() {
+			sph.EXPECT().SentPacket(gomock.Any())
+			sph.EXPECT().HasPacingBudget()
+			sph.EXPECT().TimeUntilSend().Return(time.Now().Add(time.Hour))
+			sph.EXPECT().SendMode().Return(ackhandler.SendAny)
+			packer.EXPECT().MaybePackAckPacket(gomock.Any()).Return(getPacket(10), nil)
 			sender.EXPECT().WouldBlock().AnyTimes()
 			sender.EXPECT().Send(gomock.Any())
 			go func() {
