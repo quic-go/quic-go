@@ -625,6 +625,7 @@ var _ = Describe("Session", func() {
 			sph.EXPECT().HasPacingBudget().Return(true).AnyTimes()
 			// only expect a single SentPacket() call
 			sph.EXPECT().SentPacket(gomock.Any())
+			sph.EXPECT().SetLossDetectionTimer()
 			tracer.EXPECT().SentPacket(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any())
 			tracer.EXPECT().ClosedConnection(gomock.Any())
 			tracer.EXPECT().Close()
@@ -1198,6 +1199,7 @@ var _ = Describe("Session", func() {
 			sph.EXPECT().SendMode().Return(ackhandler.SendAny).AnyTimes()
 			sph.EXPECT().HasPacingBudget().Return(true).AnyTimes()
 			sph.EXPECT().SentPacket(gomock.Any())
+			sph.EXPECT().SetLossDetectionTimer()
 			sess.sentPacketHandler = sph
 			runSession()
 			p := getPacket(1)
@@ -1240,6 +1242,7 @@ var _ = Describe("Session", func() {
 			sph.EXPECT().SendMode().Return(ackhandler.SendAny).AnyTimes()
 			sph.EXPECT().HasPacingBudget().Return(true).AnyTimes()
 			sph.EXPECT().SentPacket(gomock.Any())
+			sph.EXPECT().SetLossDetectionTimer()
 			sess.sentPacketHandler = sph
 			fc := mocks.NewMockConnectionFlowController(mockCtrl)
 			fc.EXPECT().IsNewlyBlocked().Return(true, protocol.ByteCount(1337))
@@ -1303,6 +1306,7 @@ var _ = Describe("Session", func() {
 					sph.EXPECT().SentPacket(gomock.Any()).Do(func(packet *ackhandler.Packet) {
 						Expect(packet.PacketNumber).To(Equal(protocol.PacketNumber(123)))
 					})
+					sph.EXPECT().SetLossDetectionTimer()
 					sess.sentPacketHandler = sph
 					runSession()
 					sent := make(chan struct{})
@@ -1324,6 +1328,7 @@ var _ = Describe("Session", func() {
 					sph.EXPECT().SentPacket(gomock.Any()).Do(func(packet *ackhandler.Packet) {
 						Expect(packet.PacketNumber).To(Equal(protocol.PacketNumber(123)))
 					})
+					sph.EXPECT().SetLossDetectionTimer()
 					sess.sentPacketHandler = sph
 					runSession()
 					sent := make(chan struct{})
@@ -1364,8 +1369,9 @@ var _ = Describe("Session", func() {
 			Eventually(sess.Context().Done()).Should(BeClosed())
 		})
 
-		It("sends multiple packets one by one immediately", func() {
+		It("sends multiple packets immediately", func() {
 			sph.EXPECT().SentPacket(gomock.Any()).Times(2)
+			sph.EXPECT().SetLossDetectionTimer()
 			sph.EXPECT().HasPacingBudget().Return(true).Times(2)
 			sph.EXPECT().HasPacingBudget()
 			sph.EXPECT().TimeUntilSend().Return(time.Now().Add(time.Hour))
@@ -1379,13 +1385,14 @@ var _ = Describe("Session", func() {
 				sess.run()
 			}()
 			sess.scheduleSending()
-			time.Sleep(50 * time.Millisecond) // make sure that only 2 packes are sent
+			time.Sleep(50 * time.Millisecond) // make sure that only 2 packets are sent
 		})
 
 		// when becoming congestion limited, at some point the SendMode will change from SendAny to SendAck
 		// we shouldn't send the ACK in the same run
 		It("doesn't send an ACK right after becoming congestion limited", func() {
 			sph.EXPECT().SentPacket(gomock.Any())
+			sph.EXPECT().SetLossDetectionTimer()
 			sph.EXPECT().HasPacingBudget().Return(true)
 			sph.EXPECT().SendMode().Return(ackhandler.SendAny)
 			sph.EXPECT().SendMode().Return(ackhandler.SendAck)
@@ -1409,11 +1416,13 @@ var _ = Describe("Session", func() {
 				sph.EXPECT().SentPacket(gomock.Any()),
 				sph.EXPECT().HasPacingBudget(),
 				sph.EXPECT().TimeUntilSend().Return(time.Now().Add(pacingDelay)),
+				sph.EXPECT().SetLossDetectionTimer(),
 				sph.EXPECT().HasPacingBudget().Return(true),
 				packer.EXPECT().PackPacket().Return(getPacket(101), nil),
 				sph.EXPECT().SentPacket(gomock.Any()),
 				sph.EXPECT().HasPacingBudget(),
 				sph.EXPECT().TimeUntilSend().Return(time.Now().Add(time.Hour)),
+				sph.EXPECT().SetLossDetectionTimer(),
 			)
 			written := make(chan struct{}, 2)
 			mconn.EXPECT().Write(gomock.Any()).DoAndReturn(func(p []byte) (int, error) {
@@ -1433,6 +1442,7 @@ var _ = Describe("Session", func() {
 
 		It("sends multiple packets at once", func() {
 			sph.EXPECT().SentPacket(gomock.Any()).Times(3)
+			sph.EXPECT().SetLossDetectionTimer()
 			sph.EXPECT().HasPacingBudget().Return(true).Times(3)
 			sph.EXPECT().HasPacingBudget()
 			sph.EXPECT().TimeUntilSend().Return(time.Now().Add(time.Hour))
@@ -1494,6 +1504,7 @@ var _ = Describe("Session", func() {
 			sph.EXPECT().SendMode().Return(ackhandler.SendAny).AnyTimes()
 			sph.EXPECT().HasPacingBudget().Return(true).AnyTimes()
 			sph.EXPECT().SentPacket(gomock.Any())
+			sph.EXPECT().SetLossDetectionTimer()
 			sess.sentPacketHandler = sph
 			packer.EXPECT().PackPacket().Return(getPacket(1), nil)
 			packer.EXPECT().PackPacket().Return(nil, nil)
@@ -1523,6 +1534,7 @@ var _ = Describe("Session", func() {
 			sph.EXPECT().SentPacket(gomock.Any()).Do(func(p *ackhandler.Packet) {
 				Expect(p.PacketNumber).To(Equal(protocol.PacketNumber(1234)))
 			})
+			sph.EXPECT().SetLossDetectionTimer()
 			sess.sentPacketHandler = sph
 			rph := mockackhandler.NewMockReceivedPacketHandler(mockCtrl)
 			rph.EXPECT().GetAlarmTimeout().Return(time.Now().Add(10 * time.Millisecond))
@@ -1590,6 +1602,7 @@ var _ = Describe("Session", func() {
 				Expect(p.PacketNumber).To(Equal(protocol.PacketNumber(37)))
 				Expect(p.Length).To(BeEquivalentTo(1234))
 			}),
+			sph.EXPECT().SetLossDetectionTimer(),
 		)
 		gomock.InOrder(
 			tracer.EXPECT().SentPacket(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Do(func(hdr *wire.ExtendedHeader, _ protocol.ByteCount, _ *wire.AckFrame, _ []logging.Frame) {
@@ -1733,6 +1746,7 @@ var _ = Describe("Session", func() {
 		sph.EXPECT().HasPacingBudget().Return(true).AnyTimes()
 		sph.EXPECT().SetHandshakeConfirmed()
 		sph.EXPECT().SentPacket(gomock.Any())
+		sph.EXPECT().SetLossDetectionTimer()
 		mconn.EXPECT().Write(gomock.Any())
 		tracer.EXPECT().SentPacket(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any())
 		sess.sentPacketHandler = sph

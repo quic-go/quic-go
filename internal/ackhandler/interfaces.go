@@ -24,7 +24,10 @@ type Packet struct {
 
 // SentPacketHandler handles ACKs received for outgoing packets
 type SentPacketHandler interface {
-	// SentPacket may modify the packet
+	// SentPacket may modify the packet.
+	// Note that SentPacket *does not* reset the loss detection timer.
+	// Callers need to make sure to call SetLossDetectionTimer after SentPacket.
+	// This makes it possible to send multiple packets in a batch.
 	SentPacket(packet *Packet)
 	ReceivedAck(ackFrame *wire.AckFrame, encLevel protocol.EncryptionLevel, recvTime time.Time) error
 	ReceivedBytes(protocol.ByteCount)
@@ -46,6 +49,7 @@ type SentPacketHandler interface {
 	PeekPacketNumber(protocol.EncryptionLevel) (protocol.PacketNumber, protocol.PacketNumberLen)
 	PopPacketNumber(protocol.EncryptionLevel) protocol.PacketNumber
 
+	SetLossDetectionTimer()
 	GetLossDetectionTimeout() time.Time
 	OnLossDetectionTimeout() error
 

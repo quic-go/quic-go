@@ -1450,16 +1450,17 @@ func (s *session) sendPackets() error {
 	s.pacingDeadline = time.Time{}
 
 	var sentPacket bool // only used in for packets sent in send mode SendAny
+sendLoop:
 	for {
 		switch sendMode := s.sentPacketHandler.SendMode(); sendMode {
 		case ackhandler.SendNone:
-			return nil
+			break sendLoop
 		case ackhandler.SendAck:
 			// If we already sent packets, and the send mode switches to SendAck,
 			// as we've just become congestion limited.
 			// There's no need to try to send an ACK at this moment.
 			if sentPacket {
-				return nil
+				break sendLoop
 			}
 			// We can at most send a single ACK only packet.
 			// There will only be a new ACK after receiving new packets.
@@ -1469,28 +1470,38 @@ func (s *session) sendPackets() error {
 			if err := s.sendProbePacket(protocol.EncryptionInitial); err != nil {
 				return err
 			}
+			sentPacket = true
 		case ackhandler.SendPTOHandshake:
 			if err := s.sendProbePacket(protocol.EncryptionHandshake); err != nil {
 				return err
 			}
+			sentPacket = true
 		case ackhandler.SendPTOAppData:
 			if err := s.sendProbePacket(protocol.Encryption1RTT); err != nil {
 				return err
 			}
+			sentPacket = true
 		case ackhandler.SendAny:
 			if s.handshakeComplete && !s.sentPacketHandler.HasPacingBudget() {
 				s.pacingDeadline = s.sentPacketHandler.TimeUntilSend()
-				return nil
+				break sendLoop
 			}
 			sent, err := s.sendPacket()
-			if err != nil || !sent {
+			if err != nil {
 				return err
+			}
+			if !sent {
+				break sendLoop
 			}
 			sentPacket = true
 		default:
 			return fmt.Errorf("BUG: invalid send mode %d", sendMode)
 		}
 	}
+	if sentPacket {
+		s.sentPacketHandler.SetLossDetectionTimer()
+	}
+	return nil
 }
 
 func (s *session) maybeSendAckOnlyPacket() error {

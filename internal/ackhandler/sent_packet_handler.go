@@ -501,10 +501,16 @@ func (h *sentPacketHandler) setLossDetectionTimer() {
 	}
 
 	// PTO alarm
+	h.SetLossDetectionTimer()
+}
+
+func (h *sentPacketHandler) SetLossDetectionTimer() {
 	ptoTime, encLevel := h.getPTOTimeAndSpace()
-	h.alarm = ptoTime
-	if h.tracer != nil && h.alarm != oldAlarm {
-		h.tracer.SetLossTimer(logging.TimerTypePTO, encLevel, h.alarm)
+	if ptoTime != h.alarm {
+		h.alarm = ptoTime
+		if h.tracer != nil {
+			h.tracer.SetLossTimer(logging.TimerTypePTO, encLevel, h.alarm)
+		}
 	}
 }
 

@@ -227,6 +227,18 @@ func (mr *MockSentPacketHandlerMockRecorder) SetHandshakeConfirmed() *gomock.Cal
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetHandshakeConfirmed", reflect.TypeOf((*MockSentPacketHandler)(nil).SetHandshakeConfirmed))
 }
 
+// SetLossDetectionTimer mocks base method
+func (m *MockSentPacketHandler) SetLossDetectionTimer() {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "SetLossDetectionTimer")
+}
+
+// SetLossDetectionTimer indicates an expected call of SetLossDetectionTimer
+func (mr *MockSentPacketHandlerMockRecorder) SetLossDetectionTimer() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetLossDetectionTimer", reflect.TypeOf((*MockSentPacketHandler)(nil).SetLossDetectionTimer))
+}
+
 // TimeUntilSend mocks base method
 func (m *MockSentPacketHandler) TimeUntilSend() time.Time {
 	m.ctrl.T.Helper()
