@@ -1583,9 +1583,9 @@ func (s *session) sendPackedPacket(packet *packedPacket) {
 	if s.firstAckElicitingPacketAfterIdleSentTime.IsZero() && packet.IsAckEliciting() {
 		s.firstAckElicitingPacketAfterIdleSentTime = now
 	}
+	s.logPacket(now, packet)
 	s.sentPacketHandler.SentPacket(packet.ToAckHandlerPacket(time.Now(), s.retransmissionQueue))
 	s.connIDManager.SentPacket()
-	s.logPacket(now, packet)
 	s.sendQueue.Send(packet.buffer)
 }
 
