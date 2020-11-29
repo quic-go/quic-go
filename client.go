@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net"
 	"strings"
+	"sync/atomic"
 
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/internal/utils"
@@ -34,6 +35,8 @@ type client struct {
 	version              protocol.VersionNumber
 
 	handshakeChan chan struct{}
+
+	closed int32
 
 	session quicSession
 
@@ -296,7 +299,13 @@ func (c *client) dial(ctx context.Context) error {
 		if !errors.Is(err, errCloseForRecreating{}) && c.createdPacketConn {
 			c.packetHandlers.Destroy()
 		}
-		errorChan <- err
+		if atomic.LoadInt32(&c.closed) == 0 {
+			errorChan <- err
+		}
+	}()
+	defer func() {
+		atomic.StoreInt32(&c.closed, 1)
+		close(errorChan)
 	}()
 
 	// only set when we're using 0-RTT
