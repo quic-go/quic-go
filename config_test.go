@@ -8,7 +8,6 @@ import (
 
 	mocklogging "github.com/lucas-clemente/quic-go/internal/mocks/logging"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
-	"github.com/lucas-clemente/quic-go/quictrace"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -70,8 +69,6 @@ var _ = Describe("Config", func() {
 				f.Set(reflect.ValueOf([]byte{1, 2, 3, 4}))
 			case "KeepAlive":
 				f.Set(reflect.ValueOf(true))
-			case "QuicTracer":
-				f.Set(reflect.ValueOf(quictrace.NewTracer()))
 			case "Tracer":
 				f.Set(reflect.ValueOf(mocklogging.NewMockTracer(mockCtrl)))
 			default:
