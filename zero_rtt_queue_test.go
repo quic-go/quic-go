@@ -2,7 +2,8 @@ package quic
 
 import (
 	"encoding/binary"
-	"time"
+
+	"github.com/benbjohnson/clock"
 
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 
@@ -12,11 +13,11 @@ import (
 
 var _ = Describe("0-RTT queue", func() {
 	var q *zeroRTTQueue
-	queueDuration := scaleDuration(20 * time.Millisecond)
+	var cl *clock.Mock
 
 	BeforeEach(func() {
-		q = newZeroRTTQueue()
-		q.queueDuration = queueDuration
+		cl = clock.NewMock()
+		q = newZeroRTTQueue(cl)
 	})
 
 	AfterEach(func() {
@@ -109,7 +110,7 @@ var _ = Describe("0-RTT queue", func() {
 		connID := protocol.ConnectionID{0xde, 0xad, 0xbe, 0xef}
 		p := &receivedPacket{data: []byte("foobar"), buffer: getPacketBuffer()}
 		q.Enqueue(connID, p)
-		time.Sleep(queueDuration * 3 / 2)
+		cl.Add(protocol.Max0RTTQueueingDuration)
 		Expect(q.Dequeue(connID)).To(BeNil())
 	})
 })

@@ -3,6 +3,7 @@ module github.com/lucas-clemente/quic-go
 go 1.14
 
 require (
+	github.com/benbjohnson/clock v1.1.0
 	github.com/cheekybits/genny v1.0.0
 	github.com/francoispqt/gojay v1.2.13
 	github.com/golang/groupcache v0.0.0-20191027212112-611e8accdfc9 // indirect

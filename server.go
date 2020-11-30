@@ -12,6 +12,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/benbjohnson/clock"
+
 	"github.com/lucas-clemente/quic-go/internal/handshake"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/internal/qerr"
@@ -200,7 +202,7 @@ func listen(conn net.PacketConn, tlsConf *tls.Config, config *Config, acceptEarl
 		config:              config,
 		tokenGenerator:      tokenGenerator,
 		sessionHandler:      sessionHandler,
-		zeroRTTQueue:        newZeroRTTQueue(),
+		zeroRTTQueue:        newZeroRTTQueue(clock.New()),
 		sessionQueue:        make(chan quicSession),
 		errorChan:           make(chan struct{}),
 		running:             make(chan struct{}),

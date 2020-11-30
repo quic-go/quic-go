@@ -2,26 +2,28 @@ package quic
 
 import (
 	"sync"
-	"time"
+
+	"github.com/benbjohnson/clock"
 
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 )
 
 type zeroRTTQueueEntry struct {
-	timer   *time.Timer
+	timer   *clock.Timer
 	packets []*receivedPacket
 }
 
 type zeroRTTQueue struct {
-	mutex         sync.Mutex
-	queue         map[string]*zeroRTTQueueEntry
-	queueDuration time.Duration // so we can set it in tests
+	clock clock.Clock
+
+	mutex sync.Mutex
+	queue map[string]*zeroRTTQueueEntry
 }
 
-func newZeroRTTQueue() *zeroRTTQueue {
+func newZeroRTTQueue(clock clock.Clock) *zeroRTTQueue {
 	return &zeroRTTQueue{
-		queue:         make(map[string]*zeroRTTQueueEntry),
-		queueDuration: protocol.Max0RTTQueueingDuration,
+		clock: clock,
+		queue: make(map[string]*zeroRTTQueueEntry),
 	}
 }
 
@@ -34,7 +36,7 @@ func (h *zeroRTTQueue) Enqueue(connID protocol.ConnectionID, p *receivedPacket) 
 		if len(h.queue) >= protocol.Max0RTTQueues {
 			return
 		}
-		h.queue[cid] = &zeroRTTQueueEntry{timer: time.AfterFunc(h.queueDuration, func() {
+		h.queue[cid] = &zeroRTTQueueEntry{timer: h.clock.AfterFunc(protocol.Max0RTTQueueingDuration, func() {
 			h.deleteQueue(connID)
 		})}
 	}
