@@ -6,6 +6,8 @@ import (
 	"net"
 	"sync"
 
+	"github.com/benbjohnson/clock"
+
 	"github.com/lucas-clemente/quic-go/internal/utils"
 	"github.com/lucas-clemente/quic-go/logging"
 )
@@ -37,7 +39,7 @@ type connMultiplexer struct {
 	mutex sync.Mutex
 
 	conns                   map[string] /* LocalAddr().String() */ connManager
-	newPacketHandlerManager func(net.PacketConn, int, []byte, logging.Tracer, utils.Logger) (packetHandlerManager, error) // so it can be replaced in the tests
+	newPacketHandlerManager func(net.PacketConn, int, []byte, clock.Clock, logging.Tracer, utils.Logger) (packetHandlerManager, error) // so it can be replaced in the tests
 
 	logger utils.Logger
 }
@@ -68,7 +70,7 @@ func (m *connMultiplexer) AddConn(
 	connIndex := addr.Network() + " " + addr.String()
 	p, ok := m.conns[connIndex]
 	if !ok {
-		manager, err := m.newPacketHandlerManager(c, connIDLen, statelessResetKey, tracer, m.logger)
+		manager, err := m.newPacketHandlerManager(c, connIDLen, statelessResetKey, clock.New(), tracer, m.logger)
 		if err != nil {
 			return nil, err
 		}

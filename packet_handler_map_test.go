@@ -7,13 +7,14 @@ import (
 	"net"
 	"time"
 
+	"github.com/benbjohnson/clock"
+	"github.com/golang/mock/gomock"
+
 	mocklogging "github.com/lucas-clemente/quic-go/internal/mocks/logging"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/internal/utils"
 	"github.com/lucas-clemente/quic-go/internal/wire"
 	"github.com/lucas-clemente/quic-go/logging"
-
-	"github.com/golang/mock/gomock"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -31,6 +32,7 @@ var _ = Describe("Packet Handler Map", func() {
 		conn       *MockPacketConn
 		tracer     *mocklogging.MockTracer
 		packetChan chan packetToRead
+		cl         *clock.Mock
 
 		connIDLen         int
 		statelessResetKey []byte
@@ -60,6 +62,7 @@ var _ = Describe("Packet Handler Map", func() {
 		connIDLen = 0
 		tracer = mocklogging.NewMockTracer(mockCtrl)
 		packetChan = make(chan packetToRead, 10)
+		cl = clock.NewMock()
 	})
 
 	JustBeforeEach(func() {
@@ -72,7 +75,7 @@ var _ = Describe("Packet Handler Map", func() {
 			}
 			return copy(b, p.data), p.addr, p.err
 		}).AnyTimes()
-		phm, err := newPacketHandlerMap(conn, connIDLen, statelessResetKey, tracer, utils.DefaultLogger)
+		phm, err := newPacketHandlerMap(conn, connIDLen, statelessResetKey, cl, tracer, utils.DefaultLogger)
 		Expect(err).ToNot(HaveOccurred())
 		handler = phm.(*packetHandlerMap)
 	})
@@ -161,7 +164,6 @@ var _ = Describe("Packet Handler Map", func() {
 			})
 
 			It("deletes removed sessions immediately", func() {
-				handler.deleteRetiredSessionsAfter = time.Hour
 				connID := protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8}
 				handler.Add(connID, NewMockPacketHandler(mockCtrl))
 				handler.Remove(connID)
@@ -170,18 +172,16 @@ var _ = Describe("Packet Handler Map", func() {
 			})
 
 			It("deletes retired session entries after a wait time", func() {
-				handler.deleteRetiredSessionsAfter = scaleDuration(10 * time.Millisecond)
 				connID := protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8}
 				sess := NewMockPacketHandler(mockCtrl)
 				handler.Add(connID, sess)
 				handler.Retire(connID)
-				time.Sleep(scaleDuration(30 * time.Millisecond))
+				cl.Add(protocol.RetiredConnectionIDDeleteTimeout)
 				handler.handlePacket(&receivedPacket{data: getPacket(connID)})
 				// don't EXPECT any calls to handlePacket of the MockPacketHandler
 			})
 
 			It("passes packets arriving late for closed sessions to that session", func() {
-				handler.deleteRetiredSessionsAfter = time.Hour
 				connID := protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8}
 				packetHandler := NewMockPacketHandler(mockCtrl)
 				handled := make(chan struct{})
@@ -218,7 +218,7 @@ var _ = Describe("Packet Handler Map", func() {
 				Expect(err.Temporary()).To(BeTrue())
 				packetChan <- packetToRead{err: err}
 				// don't EXPECT any calls to packetHandler.destroy
-				time.Sleep(50 * time.Millisecond)
+				time.Sleep(scaleDuration(20 * time.Millisecond))
 			})
 
 			It("says if a connection ID is already taken", func() {
@@ -323,7 +323,6 @@ var _ = Describe("Packet Handler Map", func() {
 				})
 
 				It("retires reset tokens", func() {
-					handler.deleteRetiredSessionsAfter = scaleDuration(10 * time.Millisecond)
 					connID := protocol.ConnectionID{0xde, 0xad, 0xbe, 0xef, 0x42}
 					packetHandler := NewMockPacketHandler(mockCtrl)
 					handler.Add(connID, packetHandler)
@@ -335,7 +334,7 @@ var _ = Describe("Packet Handler Map", func() {
 					p = append(p, make([]byte, 50)...)
 					p = append(p, token[:]...)
 
-					time.Sleep(scaleDuration(30 * time.Millisecond))
+					cl.Add(protocol.RetiredConnectionIDDeleteTimeout)
 					handler.handlePacket(&receivedPacket{data: p})
 				})
 
@@ -393,7 +392,7 @@ var _ = Describe("Packet Handler Map", func() {
 						data:       p,
 					})
 					// make sure there are no Write calls on the packet conn
-					time.Sleep(50 * time.Millisecond)
+					time.Sleep(scaleDuration(20 * time.Millisecond))
 				})
 			})
 
@@ -407,7 +406,7 @@ var _ = Describe("Packet Handler Map", func() {
 						data:       p,
 					})
 					// make sure there are no Write calls on the packet conn
-					time.Sleep(50 * time.Millisecond)
+					time.Sleep(scaleDuration(20 * time.Millisecond))
 				})
 			})
 		})

@@ -11,6 +11,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/benbjohnson/clock"
+
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/internal/utils"
 	"github.com/lucas-clemente/quic-go/internal/wire"
@@ -30,6 +32,8 @@ func (e statelessResetErr) Error() string {
 // * by the server to store sessions
 // * when multiplexing outgoing connections to store clients
 type packetHandlerMap struct {
+	clock clock.Clock
+
 	mutex sync.Mutex
 
 	conn      connection
@@ -41,8 +45,6 @@ type packetHandlerMap struct {
 
 	listening chan struct{} // is closed when listen returns
 	closed    bool
-
-	deleteRetiredSessionsAfter time.Duration
 
 	statelessResetEnabled bool
 	statelessResetMutex   sync.Mutex
@@ -92,6 +94,7 @@ func newPacketHandlerMap(
 	c net.PacketConn,
 	connIDLen int,
 	statelessResetKey []byte,
+	clock clock.Clock,
 	tracer logging.Tracer,
 	logger utils.Logger,
 ) (packetHandlerManager, error) {
@@ -101,16 +104,16 @@ func newPacketHandlerMap(
 		return nil, err
 	}
 	m := &packetHandlerMap{
-		conn:                       conn,
-		connIDLen:                  connIDLen,
-		listening:                  make(chan struct{}),
-		handlers:                   make(map[string]packetHandler),
-		resetTokens:                make(map[protocol.StatelessResetToken]packetHandler),
-		deleteRetiredSessionsAfter: protocol.RetiredConnectionIDDeleteTimeout,
-		statelessResetEnabled:      len(statelessResetKey) > 0,
-		statelessResetHasher:       hmac.New(sha256.New, statelessResetKey),
-		tracer:                     tracer,
-		logger:                     logger,
+		clock:                 clock,
+		conn:                  conn,
+		connIDLen:             connIDLen,
+		listening:             make(chan struct{}),
+		handlers:              make(map[string]packetHandler),
+		resetTokens:           make(map[protocol.StatelessResetToken]packetHandler),
+		statelessResetEnabled: len(statelessResetKey) > 0,
+		statelessResetHasher:  hmac.New(sha256.New, statelessResetKey),
+		tracer:                tracer,
+		logger:                logger,
 	}
 	go m.listen()
 
@@ -186,8 +189,8 @@ func (h *packetHandlerMap) Remove(id protocol.ConnectionID) {
 }
 
 func (h *packetHandlerMap) Retire(id protocol.ConnectionID) {
-	h.logger.Debugf("Retiring connection ID %s in %s.", id, h.deleteRetiredSessionsAfter)
-	time.AfterFunc(h.deleteRetiredSessionsAfter, func() {
+	h.logger.Debugf("Retiring connection ID %s in %s.", id, protocol.RetiredConnectionIDDeleteTimeout)
+	h.clock.AfterFunc(protocol.RetiredConnectionIDDeleteTimeout, func() {
 		h.mutex.Lock()
 		delete(h.handlers, string(id))
 		h.mutex.Unlock()
@@ -201,7 +204,7 @@ func (h *packetHandlerMap) ReplaceWithClosed(id protocol.ConnectionID, handler p
 	h.mutex.Unlock()
 	h.logger.Debugf("Replacing session for connection ID %s with a closed session.", id)
 
-	time.AfterFunc(h.deleteRetiredSessionsAfter, func() {
+	h.clock.AfterFunc(protocol.RetiredConnectionIDDeleteTimeout, func() {
 		h.mutex.Lock()
 		handler.shutdown()
 		delete(h.handlers, string(id))
@@ -223,7 +226,7 @@ func (h *packetHandlerMap) RemoveResetToken(token protocol.StatelessResetToken) 
 }
 
 func (h *packetHandlerMap) RetireResetToken(token protocol.StatelessResetToken) {
-	time.AfterFunc(h.deleteRetiredSessionsAfter, func() {
+	h.clock.AfterFunc(protocol.RetiredConnectionIDDeleteTimeout, func() {
 		h.mutex.Lock()
 		delete(h.resetTokens, token)
 		h.mutex.Unlock()
