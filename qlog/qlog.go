@@ -9,13 +9,13 @@ import (
 	"sync"
 	"time"
 
-	"github.com/lucas-clemente/quic-go/internal/utils"
+	"github.com/benbjohnson/clock"
+	"github.com/francoispqt/gojay"
 
 	"github.com/lucas-clemente/quic-go/internal/protocol"
+	"github.com/lucas-clemente/quic-go/internal/utils"
 	"github.com/lucas-clemente/quic-go/internal/wire"
 	"github.com/lucas-clemente/quic-go/logging"
-
-	"github.com/francoispqt/gojay"
 )
 
 const eventChanSize = 50
@@ -43,6 +43,8 @@ func (t *tracer) DroppedPacket(net.Addr, logging.PacketType, protocol.ByteCount,
 }
 
 type connectionTracer struct {
+	clock clock.Clock
+
 	mutex sync.Mutex
 
 	w             io.WriteCloser
@@ -63,13 +65,14 @@ var _ logging.ConnectionTracer = &connectionTracer{}
 // newTracer creates a new connectionTracer to record a qlog.
 func newConnectionTracer(w io.WriteCloser, p protocol.Perspective, odcid protocol.ConnectionID) logging.ConnectionTracer {
 	t := &connectionTracer{
-		w:             w,
-		perspective:   p,
-		odcid:         odcid,
-		runStopped:    make(chan struct{}),
-		events:        make(chan event, eventChanSize),
-		referenceTime: time.Now(),
+		clock:       clock.New(),
+		w:           w,
+		perspective: p,
+		odcid:       odcid,
+		runStopped:  make(chan struct{}),
+		events:      make(chan event, eventChanSize),
 	}
+	t.referenceTime = t.clock.Now()
 	go t.run()
 	return t
 }
@@ -152,7 +155,7 @@ func (t *connectionTracer) StartedConnection(local, remote net.Addr, version pro
 		return
 	}
 	t.mutex.Lock()
-	t.recordEvent(time.Now(), &eventConnectionStarted{
+	t.recordEvent(t.clock.Now(), &eventConnectionStarted{
 		SrcAddr:          localAddr,
 		DestAddr:         remoteAddr,
 		Version:          version,
@@ -167,9 +170,9 @@ func (t *connectionTracer) ClosedConnection(r logging.CloseReason) {
 	defer t.mutex.Unlock()
 
 	if reason, ok := r.Timeout(); ok {
-		t.recordEvent(time.Now(), &eventConnectionClosed{Reason: timeoutReason(reason)})
+		t.recordEvent(t.clock.Now(), &eventConnectionClosed{Reason: timeoutReason(reason)})
 	} else if token, ok := r.StatelessReset(); ok {
-		t.recordEvent(time.Now(), &eventStatelessResetReceived{
+		t.recordEvent(t.clock.Now(), &eventStatelessResetReceived{
 			Token: token,
 		})
 	}
@@ -200,7 +203,7 @@ func (t *connectionTracer) recordTransportParameters(sentBy protocol.Perspective
 		}
 	}
 	t.mutex.Lock()
-	t.recordEvent(time.Now(), &eventTransportParameters{
+	t.recordEvent(t.clock.Now(), &eventTransportParameters{
 		Owner:                           owner,
 		SentBy:                          sentBy,
 		OriginalDestinationConnectionID: tp.OriginalDestinationConnectionID,
@@ -239,7 +242,7 @@ func (t *connectionTracer) SentPacket(hdr *wire.ExtendedHeader, packetSize proto
 	header := *transformExtendedHeader(hdr)
 	header.PacketSize = packetSize
 	t.mutex.Lock()
-	t.recordEvent(time.Now(), &eventPacketSent{
+	t.recordEvent(t.clock.Now(), &eventPacketSent{
 		PacketType: packetType(logging.PacketTypeFromHeader(&hdr.Header)),
 		Header:     header,
 		Frames:     fs,
@@ -255,7 +258,7 @@ func (t *connectionTracer) ReceivedPacket(hdr *wire.ExtendedHeader, packetSize p
 	header := *transformExtendedHeader(hdr)
 	header.PacketSize = packetSize
 	t.mutex.Lock()
-	t.recordEvent(time.Now(), &eventPacketReceived{
+	t.recordEvent(t.clock.Now(), &eventPacketReceived{
 		PacketType: packetType(logging.PacketTypeFromHeader(&hdr.Header)),
 		Header:     header,
 		Frames:     fs,
@@ -265,7 +268,7 @@ func (t *connectionTracer) ReceivedPacket(hdr *wire.ExtendedHeader, packetSize p
 
 func (t *connectionTracer) ReceivedRetry(hdr *wire.Header) {
 	t.mutex.Lock()
-	t.recordEvent(time.Now(), &eventRetryReceived{
+	t.recordEvent(t.clock.Now(), &eventRetryReceived{
 		Header: *transformHeader(hdr),
 	})
 	t.mutex.Unlock()
@@ -277,7 +280,7 @@ func (t *connectionTracer) ReceivedVersionNegotiationPacket(hdr *wire.Header, ve
 		ver[i] = versionNumber(v)
 	}
 	t.mutex.Lock()
-	t.recordEvent(time.Now(), &eventVersionNegotiationReceived{
+	t.recordEvent(t.clock.Now(), &eventVersionNegotiationReceived{
 		Header:            *transformHeader(hdr),
 		SupportedVersions: ver,
 	})
@@ -286,13 +289,13 @@ func (t *connectionTracer) ReceivedVersionNegotiationPacket(hdr *wire.Header, ve
 
 func (t *connectionTracer) BufferedPacket(pt logging.PacketType) {
 	t.mutex.Lock()
-	t.recordEvent(time.Now(), &eventPacketBuffered{PacketType: packetType(pt)})
+	t.recordEvent(t.clock.Now(), &eventPacketBuffered{PacketType: packetType(pt)})
 	t.mutex.Unlock()
 }
 
 func (t *connectionTracer) DroppedPacket(pt logging.PacketType, size protocol.ByteCount, reason logging.PacketDropReason) {
 	t.mutex.Lock()
-	t.recordEvent(time.Now(), &eventPacketDropped{
+	t.recordEvent(t.clock.Now(), &eventPacketDropped{
 		PacketType: packetType(pt),
 		PacketSize: size,
 		Trigger:    packetDropReason(reason),
@@ -311,7 +314,7 @@ func (t *connectionTracer) UpdatedMetrics(rttStats *utils.RTTStats, cwnd, bytesI
 		PacketsInFlight:  packetsInFlight,
 	}
 	t.mutex.Lock()
-	t.recordEvent(time.Now(), &eventMetricsUpdated{
+	t.recordEvent(t.clock.Now(), &eventMetricsUpdated{
 		Last:    t.lastMetrics,
 		Current: m,
 	})
@@ -321,7 +324,7 @@ func (t *connectionTracer) UpdatedMetrics(rttStats *utils.RTTStats, cwnd, bytesI
 
 func (t *connectionTracer) LostPacket(encLevel protocol.EncryptionLevel, pn protocol.PacketNumber, lossReason logging.PacketLossReason) {
 	t.mutex.Lock()
-	t.recordEvent(time.Now(), &eventPacketLost{
+	t.recordEvent(t.clock.Now(), &eventPacketLost{
 		PacketType:   getPacketTypeFromEncryptionLevel(encLevel),
 		PacketNumber: pn,
 		Trigger:      packetLossReason(lossReason),
@@ -331,19 +334,19 @@ func (t *connectionTracer) LostPacket(encLevel protocol.EncryptionLevel, pn prot
 
 func (t *connectionTracer) UpdatedCongestionState(state logging.CongestionState) {
 	t.mutex.Lock()
-	t.recordEvent(time.Now(), &eventCongestionStateUpdated{state: congestionState(state)})
+	t.recordEvent(t.clock.Now(), &eventCongestionStateUpdated{state: congestionState(state)})
 	t.mutex.Unlock()
 }
 
 func (t *connectionTracer) UpdatedPTOCount(value uint32) {
 	t.mutex.Lock()
-	t.recordEvent(time.Now(), &eventUpdatedPTO{Value: value})
+	t.recordEvent(t.clock.Now(), &eventUpdatedPTO{Value: value})
 	t.mutex.Unlock()
 }
 
 func (t *connectionTracer) UpdatedKeyFromTLS(encLevel protocol.EncryptionLevel, pers protocol.Perspective) {
 	t.mutex.Lock()
-	t.recordEvent(time.Now(), &eventKeyUpdated{
+	t.recordEvent(t.clock.Now(), &eventKeyUpdated{
 		Trigger: keyUpdateTLS,
 		KeyType: encLevelToKeyType(encLevel, pers),
 	})
@@ -356,7 +359,7 @@ func (t *connectionTracer) UpdatedKey(generation protocol.KeyPhase, remote bool)
 		trigger = keyUpdateRemote
 	}
 	t.mutex.Lock()
-	now := time.Now()
+	now := t.clock.Now()
 	t.recordEvent(now, &eventKeyUpdated{
 		Trigger:    trigger,
 		KeyType:    keyTypeClient1RTT,
@@ -372,7 +375,7 @@ func (t *connectionTracer) UpdatedKey(generation protocol.KeyPhase, remote bool)
 
 func (t *connectionTracer) DroppedEncryptionLevel(encLevel protocol.EncryptionLevel) {
 	t.mutex.Lock()
-	now := time.Now()
+	now := t.clock.Now()
 	t.recordEvent(now, &eventKeyRetired{KeyType: encLevelToKeyType(encLevel, protocol.PerspectiveServer)})
 	t.recordEvent(now, &eventKeyRetired{KeyType: encLevelToKeyType(encLevel, protocol.PerspectiveClient)})
 	t.mutex.Unlock()
@@ -380,7 +383,7 @@ func (t *connectionTracer) DroppedEncryptionLevel(encLevel protocol.EncryptionLe
 
 func (t *connectionTracer) DroppedKey(generation protocol.KeyPhase) {
 	t.mutex.Lock()
-	now := time.Now()
+	now := t.clock.Now()
 	t.recordEvent(now, &eventKeyRetired{
 		KeyType:    encLevelToKeyType(protocol.Encryption1RTT, protocol.PerspectiveServer),
 		Generation: generation,
@@ -394,7 +397,7 @@ func (t *connectionTracer) DroppedKey(generation protocol.KeyPhase) {
 
 func (t *connectionTracer) SetLossTimer(tt logging.TimerType, encLevel protocol.EncryptionLevel, timeout time.Time) {
 	t.mutex.Lock()
-	now := time.Now()
+	now := t.clock.Now()
 	t.recordEvent(now, &eventLossTimerSet{
 		TimerType: timerType(tt),
 		EncLevel:  encLevel,
@@ -405,7 +408,7 @@ func (t *connectionTracer) SetLossTimer(tt logging.TimerType, encLevel protocol.
 
 func (t *connectionTracer) LossTimerExpired(tt logging.TimerType, encLevel protocol.EncryptionLevel) {
 	t.mutex.Lock()
-	t.recordEvent(time.Now(), &eventLossTimerExpired{
+	t.recordEvent(t.clock.Now(), &eventLossTimerExpired{
 		TimerType: timerType(tt),
 		EncLevel:  encLevel,
 	})
@@ -414,6 +417,6 @@ func (t *connectionTracer) LossTimerExpired(tt logging.TimerType, encLevel proto
 
 func (t *connectionTracer) LossTimerCanceled() {
 	t.mutex.Lock()
-	t.recordEvent(time.Now(), &eventLossTimerCanceled{})
+	t.recordEvent(t.clock.Now(), &eventLossTimerCanceled{})
 	t.mutex.Unlock()
 }

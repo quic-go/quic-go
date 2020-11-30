@@ -10,9 +10,10 @@ import (
 	"os"
 	"time"
 
-	"github.com/lucas-clemente/quic-go/internal/utils"
+	"github.com/benbjohnson/clock"
 
 	"github.com/lucas-clemente/quic-go/internal/protocol"
+	"github.com/lucas-clemente/quic-go/internal/utils"
 	"github.com/lucas-clemente/quic-go/logging"
 
 	. "github.com/onsi/ginkgo"
@@ -61,12 +62,16 @@ var _ = Describe("Tracing", func() {
 		var (
 			tracer logging.ConnectionTracer
 			buf    *bytes.Buffer
+			cl     *clock.Mock
 		)
 
 		BeforeEach(func() {
 			buf = &bytes.Buffer{}
+			cl = clock.NewMock()
 			t := NewTracer(func(logging.Perspective, []byte) io.WriteCloser { return nopWriteCloser(buf) })
 			tracer = t.TracerForConnection(logging.PerspectiveServer, logging.ConnectionID{0xde, 0xad, 0xbe, 0xef})
+			tracer.(*connectionTracer).clock = cl
+			tracer.(*connectionTracer).referenceTime = cl.Now()
 		})
 
 		It("exports a trace that has the right metadata", func() {
@@ -86,7 +91,7 @@ var _ = Describe("Tracing", func() {
 			Expect(commonFields).To(HaveKeyWithValue("group_id", "deadbeef"))
 			Expect(commonFields).To(HaveKey("reference_time"))
 			referenceTime := time.Unix(0, int64(commonFields["reference_time"].(float64)*1e6))
-			Expect(referenceTime).To(BeTemporally("~", time.Now(), scaleDuration(10*time.Millisecond)))
+			Expect(referenceTime).To(Equal(cl.Now()))
 			Expect(trace).To(HaveKey("event_fields"))
 			for i, ef := range trace["event_fields"].([]interface{}) {
 				Expect(ef.(string)).To(Equal(eventFields[i]))
@@ -157,7 +162,7 @@ var _ = Describe("Tracing", func() {
 					protocol.ConnectionID{5, 6, 7, 8},
 				)
 				entry := exportAndParseSingle()
-				Expect(entry.Time).To(BeTemporally("~", time.Now(), scaleDuration(10*time.Millisecond)))
+				Expect(entry.Time).To(Equal(cl.Now()))
 				Expect(entry.Category).To(Equal("transport"))
 				Expect(entry.Name).To(Equal("connection_started"))
 				ev := entry.Event
@@ -174,7 +179,7 @@ var _ = Describe("Tracing", func() {
 			It("records connection closes", func() {
 				tracer.ClosedConnection(logging.NewTimeoutCloseReason(logging.TimeoutReasonIdle))
 				entry := exportAndParseSingle()
-				Expect(entry.Time).To(BeTemporally("~", time.Now(), scaleDuration(10*time.Millisecond)))
+				Expect(entry.Time).To(Equal(cl.Now()))
 				Expect(entry.Category).To(Equal("transport"))
 				Expect(entry.Name).To(Equal("connection_state_updated"))
 				ev := entry.Event
@@ -185,7 +190,7 @@ var _ = Describe("Tracing", func() {
 			It("records a received stateless reset packet", func() {
 				tracer.ClosedConnection(logging.NewStatelessResetCloseReason(logging.StatelessResetToken{0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88, 0x99, 0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff}))
 				entry := exportAndParseSingle()
-				Expect(entry.Time).To(BeTemporally("~", time.Now(), scaleDuration(10*time.Millisecond)))
+				Expect(entry.Time).To(Equal(cl.Now()))
 				Expect(entry.Category).To(Equal("transport"))
 				Expect(entry.Name).To(Equal("packet_received"))
 				ev := entry.Event
@@ -213,7 +218,7 @@ var _ = Describe("Tracing", func() {
 					ActiveConnectionIDLimit:         7,
 				})
 				entry := exportAndParseSingle()
-				Expect(entry.Time).To(BeTemporally("~", time.Now(), scaleDuration(10*time.Millisecond)))
+				Expect(entry.Time).To(Equal(cl.Now()))
 				Expect(entry.Category).To(Equal("transport"))
 				Expect(entry.Name).To(Equal("parameters_set"))
 				ev := entry.Event
@@ -241,7 +246,7 @@ var _ = Describe("Tracing", func() {
 					ActiveConnectionIDLimit:         7,
 				})
 				entry := exportAndParseSingle()
-				Expect(entry.Time).To(BeTemporally("~", time.Now(), scaleDuration(10*time.Millisecond)))
+				Expect(entry.Time).To(Equal(cl.Now()))
 				Expect(entry.Category).To(Equal("transport"))
 				Expect(entry.Name).To(Equal("parameters_set"))
 				ev := entry.Event
@@ -253,7 +258,7 @@ var _ = Describe("Tracing", func() {
 					StatelessResetToken: &protocol.StatelessResetToken{0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88, 0x99, 0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff, 0x00},
 				})
 				entry := exportAndParseSingle()
-				Expect(entry.Time).To(BeTemporally("~", time.Now(), scaleDuration(10*time.Millisecond)))
+				Expect(entry.Time).To(Equal(cl.Now()))
 				Expect(entry.Category).To(Equal("transport"))
 				Expect(entry.Name).To(Equal("parameters_set"))
 				ev := entry.Event
@@ -273,7 +278,7 @@ var _ = Describe("Tracing", func() {
 					},
 				})
 				entry := exportAndParseSingle()
-				Expect(entry.Time).To(BeTemporally("~", time.Now(), scaleDuration(10*time.Millisecond)))
+				Expect(entry.Time).To(Equal(cl.Now()))
 				Expect(entry.Category).To(Equal("transport"))
 				Expect(entry.Name).To(Equal("parameters_set"))
 				ev := entry.Event
@@ -291,7 +296,7 @@ var _ = Describe("Tracing", func() {
 			It("records received transport parameters", func() {
 				tracer.ReceivedTransportParameters(&logging.TransportParameters{})
 				entry := exportAndParseSingle()
-				Expect(entry.Time).To(BeTemporally("~", time.Now(), scaleDuration(10*time.Millisecond)))
+				Expect(entry.Time).To(Equal(cl.Now()))
 				Expect(entry.Category).To(Equal("transport"))
 				Expect(entry.Name).To(Equal("parameters_set"))
 				ev := entry.Event
@@ -319,7 +324,7 @@ var _ = Describe("Tracing", func() {
 					},
 				)
 				entry := exportAndParseSingle()
-				Expect(entry.Time).To(BeTemporally("~", time.Now(), scaleDuration(10*time.Millisecond)))
+				Expect(entry.Time).To(Equal(cl.Now()))
 				Expect(entry.Category).To(Equal("transport"))
 				Expect(entry.Name).To(Equal("packet_sent"))
 				ev := entry.Event
@@ -376,7 +381,7 @@ var _ = Describe("Tracing", func() {
 					},
 				)
 				entry := exportAndParseSingle()
-				Expect(entry.Time).To(BeTemporally("~", time.Now(), scaleDuration(10*time.Millisecond)))
+				Expect(entry.Time).To(Equal(cl.Now()))
 				Expect(entry.Category).To(Equal("transport"))
 				Expect(entry.Name).To(Equal("packet_received"))
 				ev := entry.Event
@@ -401,7 +406,7 @@ var _ = Describe("Tracing", func() {
 					},
 				)
 				entry := exportAndParseSingle()
-				Expect(entry.Time).To(BeTemporally("~", time.Now(), scaleDuration(10*time.Millisecond)))
+				Expect(entry.Time).To(Equal(cl.Now()))
 				Expect(entry.Category).To(Equal("transport"))
 				Expect(entry.Name).To(Equal("packet_received"))
 				ev := entry.Event
@@ -426,7 +431,7 @@ var _ = Describe("Tracing", func() {
 					[]protocol.VersionNumber{0xdeadbeef, 0xdecafbad},
 				)
 				entry := exportAndParseSingle()
-				Expect(entry.Time).To(BeTemporally("~", time.Now(), scaleDuration(10*time.Millisecond)))
+				Expect(entry.Time).To(Equal(cl.Now()))
 				Expect(entry.Category).To(Equal("transport"))
 				Expect(entry.Name).To(Equal("packet_received"))
 				ev := entry.Event
@@ -445,7 +450,7 @@ var _ = Describe("Tracing", func() {
 			It("records buffered packets", func() {
 				tracer.BufferedPacket(logging.PacketTypeHandshake)
 				entry := exportAndParseSingle()
-				Expect(entry.Time).To(BeTemporally("~", time.Now(), scaleDuration(10*time.Millisecond)))
+				Expect(entry.Time).To(Equal(cl.Now()))
 				Expect(entry.Category).To(Equal("transport"))
 				Expect(entry.Name).To(Equal("packet_buffered"))
 				ev := entry.Event
@@ -456,7 +461,7 @@ var _ = Describe("Tracing", func() {
 			It("records dropped packets", func() {
 				tracer.DroppedPacket(logging.PacketTypeHandshake, 1337, logging.PacketDropPayloadDecryptError)
 				entry := exportAndParseSingle()
-				Expect(entry.Time).To(BeTemporally("~", time.Now(), scaleDuration(10*time.Millisecond)))
+				Expect(entry.Time).To(Equal(cl.Now()))
 				Expect(entry.Category).To(Equal("transport"))
 				Expect(entry.Name).To(Equal("packet_dropped"))
 				ev := entry.Event
@@ -466,7 +471,7 @@ var _ = Describe("Tracing", func() {
 			})
 
 			It("records metrics updates", func() {
-				now := time.Now()
+				now := cl.Now()
 				rttStats := utils.NewRTTStats()
 				rttStats.UpdateRTT(15*time.Millisecond, 0, now)
 				rttStats.UpdateRTT(20*time.Millisecond, 0, now)
@@ -484,7 +489,7 @@ var _ = Describe("Tracing", func() {
 					42,
 				)
 				entry := exportAndParseSingle()
-				Expect(entry.Time).To(BeTemporally("~", time.Now(), scaleDuration(10*time.Millisecond)))
+				Expect(entry.Time).To(Equal(now))
 				Expect(entry.Category).To(Equal("recovery"))
 				Expect(entry.Name).To(Equal("metrics_updated"))
 				ev := entry.Event
@@ -500,26 +505,30 @@ var _ = Describe("Tracing", func() {
 			})
 
 			It("only logs the diff between two metrics updates", func() {
-				now := time.Now()
+				t1 := cl.Now()
 				rttStats := utils.NewRTTStats()
-				rttStats.UpdateRTT(15*time.Millisecond, 0, now)
-				rttStats.UpdateRTT(20*time.Millisecond, 0, now)
-				rttStats.UpdateRTT(25*time.Millisecond, 0, now)
+				rttStats.UpdateRTT(15*time.Millisecond, 0, cl.Now())
+				rttStats.UpdateRTT(20*time.Millisecond, 0, cl.Now())
+				rttStats.UpdateRTT(25*time.Millisecond, 0, cl.Now())
 				Expect(rttStats.MinRTT()).To(Equal(15 * time.Millisecond))
-
-				rttStats2 := utils.NewRTTStats()
-				rttStats2.UpdateRTT(15*time.Millisecond, 0, now)
-				rttStats2.UpdateRTT(15*time.Millisecond, 0, now)
-				rttStats2.UpdateRTT(15*time.Millisecond, 0, now)
-				Expect(rttStats2.MinRTT()).To(Equal(15 * time.Millisecond))
-
 				Expect(rttStats.LatestRTT()).To(Equal(25 * time.Millisecond))
+
 				tracer.UpdatedMetrics(
 					rttStats,
 					4321,
 					1234,
 					42,
 				)
+
+				cl.Add(time.Second)
+				t2 := cl.Now()
+
+				rttStats2 := utils.NewRTTStats()
+				rttStats2.UpdateRTT(15*time.Millisecond, 0, t2)
+				rttStats2.UpdateRTT(15*time.Millisecond, 0, t2)
+				rttStats2.UpdateRTT(15*time.Millisecond, 0, t2)
+				Expect(rttStats2.MinRTT()).To(Equal(15 * time.Millisecond))
+
 				tracer.UpdatedMetrics(
 					rttStats2,
 					4321,
@@ -528,11 +537,11 @@ var _ = Describe("Tracing", func() {
 				)
 				entries := exportAndParse()
 				Expect(entries).To(HaveLen(2))
-				Expect(entries[0].Time).To(BeTemporally("~", time.Now(), scaleDuration(10*time.Millisecond)))
+				Expect(entries[0].Time).To(Equal(t1))
 				Expect(entries[0].Category).To(Equal("recovery"))
 				Expect(entries[0].Name).To(Equal("metrics_updated"))
 				Expect(entries[0].Event).To(HaveLen(7))
-				Expect(entries[1].Time).To(BeTemporally("~", time.Now(), scaleDuration(10*time.Millisecond)))
+				Expect(entries[1].Time).To(Equal(t2))
 				Expect(entries[1].Category).To(Equal("recovery"))
 				Expect(entries[1].Name).To(Equal("metrics_updated"))
 				ev := entries[1].Event
@@ -546,7 +555,7 @@ var _ = Describe("Tracing", func() {
 			It("records lost packets", func() {
 				tracer.LostPacket(protocol.EncryptionHandshake, 42, logging.PacketLossReorderingThreshold)
 				entry := exportAndParseSingle()
-				Expect(entry.Time).To(BeTemporally("~", time.Now(), scaleDuration(10*time.Millisecond)))
+				Expect(entry.Time).To(Equal(cl.Now()))
 				Expect(entry.Category).To(Equal("recovery"))
 				Expect(entry.Name).To(Equal("packet_lost"))
 				ev := entry.Event
@@ -558,7 +567,7 @@ var _ = Describe("Tracing", func() {
 			It("records congestion state updates", func() {
 				tracer.UpdatedCongestionState(logging.CongestionStateCongestionAvoidance)
 				entry := exportAndParseSingle()
-				Expect(entry.Time).To(BeTemporally("~", time.Now(), scaleDuration(10*time.Millisecond)))
+				Expect(entry.Time).To(Equal(cl.Now()))
 				Expect(entry.Category).To(Equal("recovery"))
 				Expect(entry.Name).To(Equal("congestion_state_updated"))
 				ev := entry.Event
@@ -568,7 +577,7 @@ var _ = Describe("Tracing", func() {
 			It("records PTO changes", func() {
 				tracer.UpdatedPTOCount(42)
 				entry := exportAndParseSingle()
-				Expect(entry.Time).To(BeTemporally("~", time.Now(), scaleDuration(10*time.Millisecond)))
+				Expect(entry.Time).To(Equal(cl.Now()))
 				Expect(entry.Category).To(Equal("recovery"))
 				Expect(entry.Name).To(Equal("metrics_updated"))
 				Expect(entry.Event).To(HaveKeyWithValue("pto_count", float64(42)))
@@ -577,7 +586,7 @@ var _ = Describe("Tracing", func() {
 			It("records TLS key updates", func() {
 				tracer.UpdatedKeyFromTLS(protocol.EncryptionHandshake, protocol.PerspectiveClient)
 				entry := exportAndParseSingle()
-				Expect(entry.Time).To(BeTemporally("~", time.Now(), scaleDuration(10*time.Millisecond)))
+				Expect(entry.Time).To(Equal(cl.Now()))
 				Expect(entry.Category).To(Equal("security"))
 				Expect(entry.Name).To(Equal("key_updated"))
 				ev := entry.Event
@@ -591,7 +600,7 @@ var _ = Describe("Tracing", func() {
 			It("records TLS key updates, for 1-RTT keys", func() {
 				tracer.UpdatedKeyFromTLS(protocol.Encryption1RTT, protocol.PerspectiveServer)
 				entry := exportAndParseSingle()
-				Expect(entry.Time).To(BeTemporally("~", time.Now(), scaleDuration(10*time.Millisecond)))
+				Expect(entry.Time).To(Equal(cl.Now()))
 				Expect(entry.Category).To(Equal("security"))
 				Expect(entry.Name).To(Equal("key_updated"))
 				ev := entry.Event
@@ -608,7 +617,7 @@ var _ = Describe("Tracing", func() {
 				Expect(entries).To(HaveLen(2))
 				var keyTypes []string
 				for _, entry := range entries {
-					Expect(entry.Time).To(BeTemporally("~", time.Now(), scaleDuration(10*time.Millisecond)))
+					Expect(entry.Time).To(Equal(cl.Now()))
 					Expect(entry.Category).To(Equal("security"))
 					Expect(entry.Name).To(Equal("key_updated"))
 					ev := entry.Event
@@ -627,7 +636,7 @@ var _ = Describe("Tracing", func() {
 				Expect(entries).To(HaveLen(2))
 				var keyTypes []string
 				for _, entry := range entries {
-					Expect(entry.Time).To(BeTemporally("~", time.Now(), scaleDuration(10*time.Millisecond)))
+					Expect(entry.Time).To(Equal(cl.Now()))
 					Expect(entry.Category).To(Equal("security"))
 					Expect(entry.Name).To(Equal("key_retired"))
 					ev := entry.Event
@@ -645,7 +654,7 @@ var _ = Describe("Tracing", func() {
 				Expect(entries).To(HaveLen(2))
 				var keyTypes []string
 				for _, entry := range entries {
-					Expect(entry.Time).To(BeTemporally("~", time.Now(), scaleDuration(10*time.Millisecond)))
+					Expect(entry.Time).To(Equal(cl.Now()))
 					Expect(entry.Category).To(Equal("security"))
 					Expect(entry.Name).To(Equal("key_retired"))
 					ev := entry.Event
@@ -659,10 +668,10 @@ var _ = Describe("Tracing", func() {
 			})
 
 			It("records when the timer is set", func() {
-				timeout := time.Now().Add(137 * time.Millisecond)
+				timeout := cl.Now().Add(137 * time.Millisecond)
 				tracer.SetLossTimer(logging.TimerTypePTO, protocol.EncryptionHandshake, timeout)
 				entry := exportAndParseSingle()
-				Expect(entry.Time).To(BeTemporally("~", time.Now(), scaleDuration(10*time.Millisecond)))
+				Expect(entry.Time).To(Equal(cl.Now()))
 				Expect(entry.Category).To(Equal("recovery"))
 				Expect(entry.Name).To(Equal("loss_timer_updated"))
 				ev := entry.Event
@@ -678,7 +687,7 @@ var _ = Describe("Tracing", func() {
 			It("records when the loss timer expires", func() {
 				tracer.LossTimerExpired(logging.TimerTypeACK, protocol.Encryption1RTT)
 				entry := exportAndParseSingle()
-				Expect(entry.Time).To(BeTemporally("~", time.Now(), scaleDuration(10*time.Millisecond)))
+				Expect(entry.Time).To(Equal(cl.Now()))
 				Expect(entry.Category).To(Equal("recovery"))
 				Expect(entry.Name).To(Equal("loss_timer_updated"))
 				ev := entry.Event
@@ -691,7 +700,7 @@ var _ = Describe("Tracing", func() {
 			It("records when the timer is canceled", func() {
 				tracer.LossTimerCanceled()
 				entry := exportAndParseSingle()
-				Expect(entry.Time).To(BeTemporally("~", time.Now(), scaleDuration(10*time.Millisecond)))
+				Expect(entry.Time).To(Equal(cl.Now()))
 				Expect(entry.Category).To(Equal("recovery"))
 				Expect(entry.Name).To(Equal("loss_timer_updated"))
 				ev := entry.Event
