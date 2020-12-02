@@ -25,7 +25,6 @@ func (e *headerParseError) Is(err error) bool {
 }
 
 func (e *headerParseError) Unwrap() error {
-	fmt.Println("unwrap")
 	return e.err
 }
 

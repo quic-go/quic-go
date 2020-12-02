@@ -102,7 +102,7 @@ var _ = Describe("Base Flow controller", func() {
 
 		It("adds bytes read", func() {
 			controller.bytesRead = 5
-			controller.AddBytesRead(6)
+			controller.addBytesRead(6)
 			Expect(controller.bytesRead).To(Equal(protocol.ByteCount(5 + 6)))
 		})
 
@@ -147,7 +147,7 @@ var _ = Describe("Base Flow controller", func() {
 			It("doesn't increase the window size when no RTT estimate is available", func() {
 				setRtt(0)
 				controller.startNewAutoTuningEpoch(time.Now())
-				controller.AddBytesRead(400)
+				controller.addBytesRead(400)
 				offset := controller.getWindowUpdate()
 				Expect(offset).ToNot(BeZero()) // make sure a window update is sent
 				Expect(controller.receiveWindowSize).To(Equal(oldWindowSize))
@@ -162,7 +162,7 @@ var _ = Describe("Base Flow controller", func() {
 				// ... in 4*2/3 of the RTT
 				controller.epochStartOffset = controller.bytesRead
 				controller.epochStartTime = time.Now().Add(-rtt * 4 * 2 / 3)
-				controller.AddBytesRead(dataRead)
+				controller.addBytesRead(dataRead)
 				offset := controller.getWindowUpdate()
 				Expect(offset).ToNot(BeZero())
 				// check that the window size was increased
@@ -183,7 +183,7 @@ var _ = Describe("Base Flow controller", func() {
 				// ... in 4*2/3 of the RTT
 				controller.epochStartOffset = controller.bytesRead
 				controller.epochStartTime = time.Now().Add(-rtt * 4 * 1 / 3)
-				controller.AddBytesRead(dataRead)
+				controller.addBytesRead(dataRead)
 				offset := controller.getWindowUpdate()
 				Expect(offset).ToNot(BeZero())
 				// check that the window size was not increased
@@ -202,7 +202,7 @@ var _ = Describe("Base Flow controller", func() {
 				// ... in 4*2/3 of the RTT
 				controller.epochStartOffset = controller.bytesRead
 				controller.epochStartTime = time.Now().Add(-rtt * 4 * 2 / 3)
-				controller.AddBytesRead(dataRead)
+				controller.addBytesRead(dataRead)
 				offset := controller.getWindowUpdate()
 				Expect(offset).ToNot(BeZero())
 				// check that the window size was not increased
@@ -216,7 +216,7 @@ var _ = Describe("Base Flow controller", func() {
 					// make sure the next call to maybeAdjustWindowSize will increase the window
 					controller.epochStartTime = time.Now().Add(-time.Millisecond)
 					controller.epochStartOffset = controller.bytesRead
-					controller.AddBytesRead(controller.receiveWindowSize/2 + 1)
+					controller.addBytesRead(controller.receiveWindowSize/2 + 1)
 				}
 				setRtt(scaleDuration(20 * time.Millisecond))
 				resetEpoch()
