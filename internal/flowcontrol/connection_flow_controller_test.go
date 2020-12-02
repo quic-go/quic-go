@@ -3,9 +3,8 @@ package flowcontrol
 import (
 	"time"
 
-	"github.com/Psiphon-Labs/quic-go/internal/congestion"
-	"github.com/Psiphon-Labs/quic-go/internal/protocol"
-	"github.com/Psiphon-Labs/quic-go/internal/utils"
+	"github.com/lucas-clemente/quic-go/internal/protocol"
+	"github.com/lucas-clemente/quic-go/internal/utils"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 )
@@ -25,13 +24,13 @@ var _ = Describe("Connection Flow controller", func() {
 	BeforeEach(func() {
 		queuedWindowUpdate = false
 		controller = &connectionFlowController{}
-		controller.rttStats = &congestion.RTTStats{}
+		controller.rttStats = &utils.RTTStats{}
 		controller.logger = utils.DefaultLogger
 		controller.queueWindowUpdate = func() { queuedWindowUpdate = true }
 	})
 
 	Context("Constructor", func() {
-		rttStats := &congestion.RTTStats{}
+		rttStats := &utils.RTTStats{}
 
 		It("sets the send and receive windows", func() {
 			receiveWindow := protocol.ByteCount(2000)

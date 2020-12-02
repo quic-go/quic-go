@@ -51,7 +51,7 @@ var _ = Describe("Connection ID lengths tests", func() {
 			conf,
 		)
 		Expect(err).ToNot(HaveOccurred())
-		defer cl.Close()
+		defer cl.CloseWithError(0, "")
 		str, err := cl.AcceptStream(context.Background())
 		Expect(err).ToNot(HaveOccurred())
 		data, err := ioutil.ReadAll(str)
@@ -60,13 +60,13 @@ var _ = Describe("Connection ID lengths tests", func() {
 	}
 
 	It("downloads a file using a 0-byte connection ID for the client", func() {
-		serverConf := &quic.Config{
+		serverConf := getQuicConfig(&quic.Config{
 			ConnectionIDLength: randomConnIDLen(),
 			Versions:           []protocol.VersionNumber{protocol.VersionTLS},
-		}
-		clientConf := &quic.Config{
+		})
+		clientConf := getQuicConfig(&quic.Config{
 			Versions: []protocol.VersionNumber{protocol.VersionTLS},
-		}
+		})
 
 		ln := runServer(serverConf)
 		defer ln.Close()
@@ -74,14 +74,14 @@ var _ = Describe("Connection ID lengths tests", func() {
 	})
 
 	It("downloads a file when both client and server use a random connection ID length", func() {
-		serverConf := &quic.Config{
+		serverConf := getQuicConfig(&quic.Config{
 			ConnectionIDLength: randomConnIDLen(),
 			Versions:           []protocol.VersionNumber{protocol.VersionTLS},
-		}
-		clientConf := &quic.Config{
+		})
+		clientConf := getQuicConfig(&quic.Config{
 			ConnectionIDLength: randomConnIDLen(),
 			Versions:           []protocol.VersionNumber{protocol.VersionTLS},
-		}
+		})
 
 		ln := runServer(serverConf)
 		defer ln.Close()

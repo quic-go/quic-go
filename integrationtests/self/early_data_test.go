@@ -25,12 +25,13 @@ var _ = Describe("early data", func() {
 				ln, err := quic.ListenAddrEarly(
 					"localhost:0",
 					getTLSConfig(),
-					&quic.Config{Versions: []protocol.VersionNumber{version}},
+					getQuicConfig(&quic.Config{Versions: []protocol.VersionNumber{version}}),
 				)
 				Expect(err).ToNot(HaveOccurred())
 				done := make(chan struct{})
 				go func() {
 					defer GinkgoRecover()
+					defer close(done)
 					sess, err := ln.Accept(context.Background())
 					Expect(err).ToNot(HaveOccurred())
 					str, err := sess.OpenUniStream()
@@ -40,8 +41,7 @@ var _ = Describe("early data", func() {
 					Expect(str.Close()).To(Succeed())
 					// make sure the Write finished before the handshake completed
 					Expect(sess.HandshakeComplete().Done()).ToNot(BeClosed())
-					Eventually(sess.HandshakeComplete().Done(), protocol.DefaultHandshakeTimeout).Should(BeClosed())
-					close(done)
+					Eventually(sess.Context().Done()).Should(BeClosed())
 				}()
 				serverPort := ln.Addr().(*net.UDPAddr).Port
 				proxy, err := quicproxy.NewQuicProxy("localhost:0", &quicproxy.Opts{
@@ -56,7 +56,7 @@ var _ = Describe("early data", func() {
 				sess, err := quic.DialAddr(
 					fmt.Sprintf("localhost:%d", proxy.LocalPort()),
 					getTLSClientConfig(),
-					&quic.Config{Versions: []protocol.VersionNumber{version}},
+					getQuicConfig(&quic.Config{Versions: []protocol.VersionNumber{version}}),
 				)
 				Expect(err).ToNot(HaveOccurred())
 				str, err := sess.AcceptUniStream(context.Background())
@@ -64,7 +64,7 @@ var _ = Describe("early data", func() {
 				data, err := ioutil.ReadAll(str)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(data).To(Equal([]byte("early data")))
-				sess.Close()
+				sess.CloseWithError(0, "")
 				Eventually(done).Should(BeClosed())
 			})
 		})

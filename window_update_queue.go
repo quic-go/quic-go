@@ -11,8 +11,8 @@ import (
 type windowUpdateQueue struct {
 	mutex sync.Mutex
 
-	queue      map[protocol.StreamID]bool // used as a set
-	queuedConn bool                       // connection-level window update
+	queue      map[protocol.StreamID]struct{} // used as a set
+	queuedConn bool                           // connection-level window update
 
 	streamGetter       streamGetter
 	connFlowController flowcontrol.ConnectionFlowController
@@ -25,7 +25,7 @@ func newWindowUpdateQueue(
 	cb func(wire.Frame),
 ) *windowUpdateQueue {
 	return &windowUpdateQueue{
-		queue:              make(map[protocol.StreamID]bool),
+		queue:              make(map[protocol.StreamID]struct{}),
 		streamGetter:       streamGetter,
 		connFlowController: connFC,
 		callback:           cb,
@@ -34,7 +34,7 @@ func newWindowUpdateQueue(
 
 func (q *windowUpdateQueue) AddStream(id protocol.StreamID) {
 	q.mutex.Lock()
-	q.queue[id] = true
+	q.queue[id] = struct{}{}
 	q.mutex.Unlock()
 }
 
@@ -48,11 +48,12 @@ func (q *windowUpdateQueue) QueueAll() {
 	q.mutex.Lock()
 	// queue a connection-level window update
 	if q.queuedConn {
-		q.callback(&wire.MaxDataFrame{ByteOffset: q.connFlowController.GetWindowUpdate()})
+		q.callback(&wire.MaxDataFrame{MaximumData: q.connFlowController.GetWindowUpdate()})
 		q.queuedConn = false
 	}
 	// queue all stream-level window updates
 	for id := range q.queue {
+		delete(q.queue, id)
 		str, err := q.streamGetter.GetOrOpenReceiveStream(id)
 		if err != nil || str == nil { // the stream can be nil if it was completed before dequeing the window update
 			continue
@@ -62,10 +63,9 @@ func (q *windowUpdateQueue) QueueAll() {
 			continue
 		}
 		q.callback(&wire.MaxStreamDataFrame{
-			StreamID:   id,
-			ByteOffset: offset,
+			StreamID:          id,
+			MaximumStreamData: offset,
 		})
-		delete(q.queue, id)
 	}
 	q.mutex.Unlock()
 }

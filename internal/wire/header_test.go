@@ -111,47 +111,6 @@ var _ = Describe("Header Parsing", func() {
 		})
 	})
 
-	Context("Version Negotiation Packets", func() {
-		It("parses", func() {
-			srcConnID := protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12}
-			destConnID := protocol.ConnectionID{9, 8, 7, 6, 5, 4, 3, 2, 1}
-			versions := []protocol.VersionNumber{0x22334455, 0x33445566}
-			vnp, err := ComposeVersionNegotiation(destConnID, srcConnID, versions)
-			Expect(err).ToNot(HaveOccurred())
-			Expect(IsVersionNegotiationPacket(vnp)).To(BeTrue())
-			hdr, _, rest, err := ParsePacket(vnp, 0)
-			Expect(err).ToNot(HaveOccurred())
-			Expect(hdr.DestConnectionID).To(Equal(destConnID))
-			Expect(hdr.SrcConnectionID).To(Equal(srcConnID))
-			Expect(hdr.IsLongHeader).To(BeTrue())
-			Expect(hdr.Version).To(BeZero())
-			for _, v := range versions {
-				Expect(hdr.SupportedVersions).To(ContainElement(v))
-			}
-			Expect(rest).To(BeEmpty())
-		})
-
-		It("errors if it contains versions of the wrong length", func() {
-			connID := protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8}
-			versions := []protocol.VersionNumber{0x22334455, 0x33445566}
-			data, err := ComposeVersionNegotiation(connID, connID, versions)
-			Expect(err).ToNot(HaveOccurred())
-			_, _, _, err = ParsePacket(data[:len(data)-2], 0)
-			Expect(err).To(MatchError("Version Negotiation packet has a version list with an invalid length"))
-		})
-
-		It("errors if the version list is empty", func() {
-			connID := protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8}
-			versions := []protocol.VersionNumber{0x22334455}
-			data, err := ComposeVersionNegotiation(connID, connID, versions)
-			Expect(err).ToNot(HaveOccurred())
-			// remove 8 bytes (two versions), since ComposeVersionNegotiation also added a reserved version number
-			data = data[:len(data)-8]
-			_, _, _, err = ParsePacket(data, 0)
-			Expect(err).To(MatchError("Version Negotiation packet has empty version list"))
-		})
-	})
-
 	Context("Long Headers", func() {
 		It("parses a Long Header", func() {
 			destConnID := protocol.ConnectionID{9, 8, 7, 6, 5, 4, 3, 2, 1}
@@ -188,6 +147,7 @@ var _ = Describe("Header Parsing", func() {
 			Expect(extHdr.PacketNumberLen).To(Equal(protocol.PacketNumberLen4))
 			Expect(b.Len()).To(Equal(6)) // foobar
 			Expect(hdr.ParsedLen()).To(BeEquivalentTo(hdrLen))
+			Expect(extHdr.ParsedLen()).To(Equal(hdr.ParsedLen() + 4))
 		})
 
 		It("errors if 0x40 is not set", func() {
@@ -212,7 +172,7 @@ var _ = Describe("Header Parsing", func() {
 				'f', 'o', 'o', 'b', 'a', 'r', // unspecified bytes
 			}
 			hdr, _, rest, err := ParsePacket(data, 0)
-			Expect(err).ToNot(HaveOccurred())
+			Expect(err).To(MatchError(ErrUnsupportedVersion))
 			Expect(hdr.IsLongHeader).To(BeTrue())
 			Expect(hdr.Version).To(Equal(protocol.VersionNumber(0xdeadbeef)))
 			Expect(hdr.DestConnectionID).To(Equal(protocol.ConnectionID{0x1, 0x2, 0x3, 0x4, 0x5, 0x6, 0x7, 0x8}))
@@ -270,17 +230,31 @@ var _ = Describe("Header Parsing", func() {
 		It("parses a Retry packet", func() {
 			data := []byte{0xc0 | 0x3<<4 | (10 - 3) /* connection ID length */}
 			data = appendVersion(data, versionIETFFrames)
-			data = append(data, []byte{0x0, 0x0}...)                      // dest and src conn ID lengths
-			data = append(data, 0xa)                                      // orig dest conn ID len
+			data = append(data, []byte{6}...)                             // dest conn ID len
+			data = append(data, []byte{6, 5, 4, 3, 2, 1}...)              // dest conn ID
+			data = append(data, []byte{10}...)                            // src conn ID len
 			data = append(data, []byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}...) // source connection ID
 			data = append(data, []byte{'f', 'o', 'o', 'b', 'a', 'r'}...)  // token
+			data = append(data, []byte{16, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1}...)
 			hdr, pdata, rest, err := ParsePacket(data, 0)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(hdr.Type).To(Equal(protocol.PacketTypeRetry))
-			Expect(hdr.OrigDestConnectionID).To(Equal(protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}))
+			Expect(hdr.DestConnectionID).To(Equal(protocol.ConnectionID{6, 5, 4, 3, 2, 1}))
+			Expect(hdr.SrcConnectionID).To(Equal(protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}))
 			Expect(hdr.Token).To(Equal([]byte("foobar")))
 			Expect(pdata).To(Equal(data))
 			Expect(rest).To(BeEmpty())
+		})
+
+		It("errors if the Retry packet is too short for the integrity tag", func() {
+			data := []byte{0xc0 | 0x3<<4 | (10 - 3) /* connection ID length */}
+			data = appendVersion(data, versionIETFFrames)
+			data = append(data, []byte{0, 0}...)                         // conn ID lens
+			data = append(data, []byte{'f', 'o', 'o', 'b', 'a', 'r'}...) // token
+			data = append(data, []byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}...)
+			// this results in a token length of 0
+			_, _, _, err := ParsePacket(data, 0)
+			Expect(err).To(MatchError(io.EOF))
 		})
 
 		It("errors if the token length is too large", func() {
@@ -382,6 +356,7 @@ var _ = Describe("Header Parsing", func() {
 				Expect(data).To(Equal(append(hdrRaw, []byte("foobar")...)))
 				Expect(rest).To(Equal([]byte("raboof")))
 			})
+
 			It("errors on packets that are smaller than the length in the packet header, for too small packet number", func() {
 				buf := &bytes.Buffer{}
 				Expect((&ExtendedHeader{
@@ -438,6 +413,8 @@ var _ = Describe("Header Parsing", func() {
 			Expect(extHdr.DestConnectionID).To(Equal(connID))
 			Expect(extHdr.SrcConnectionID).To(BeEmpty())
 			Expect(extHdr.PacketNumber).To(Equal(protocol.PacketNumber(0x42)))
+			Expect(hdr.ParsedLen()).To(BeEquivalentTo(len(data) - 1))
+			Expect(extHdr.ParsedLen()).To(Equal(hdr.ParsedLen() + 1))
 			Expect(pdata).To(Equal(data))
 			Expect(rest).To(BeEmpty())
 		})

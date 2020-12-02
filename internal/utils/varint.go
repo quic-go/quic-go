@@ -83,6 +83,34 @@ func WriteVarInt(b *bytes.Buffer, i uint64) {
 	}
 }
 
+// WriteVarIntWithLen writes a number in the QUIC varint format, with the desired length.
+func WriteVarIntWithLen(b *bytes.Buffer, i uint64, length protocol.ByteCount) {
+	if length != 1 && length != 2 && length != 4 && length != 8 {
+		panic("invalid varint length")
+	}
+	l := VarIntLen(i)
+	if l == length {
+		WriteVarInt(b, i)
+		return
+	}
+	if l > length {
+		panic(fmt.Sprintf("cannot encode %d in %d bytes", i, length))
+	}
+	if length == 2 {
+		b.WriteByte(0b01000000)
+	} else if length == 4 {
+		b.WriteByte(0b10000000)
+	} else if length == 8 {
+		b.WriteByte(0b11000000)
+	}
+	for j := protocol.ByteCount(1); j < length-l; j++ {
+		b.WriteByte(0)
+	}
+	for j := protocol.ByteCount(0); j < l; j++ {
+		b.WriteByte(uint8(i >> (8 * (l - 1 - j))))
+	}
+}
+
 // VarIntLen determines the number of bytes that will be needed to write a number
 func VarIntLen(i uint64) protocol.ByteCount {
 	if i <= maxVarInt1 {

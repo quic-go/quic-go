@@ -9,9 +9,7 @@ import (
 )
 
 var _ = Describe("Hybrid slow start", func() {
-	var (
-		slowStart HybridSlowStart
-	)
+	var slowStart HybridSlowStart
 
 	BeforeEach(func() {
 		slowStart = HybridSlowStart{}
@@ -71,5 +69,4 @@ var _ = Describe("Hybrid slow start", func() {
 		// RTT provided.
 		Expect(slowStart.ShouldExitSlowStart(rtt+10*time.Millisecond, rtt, 100)).To(BeTrue())
 	})
-
 })

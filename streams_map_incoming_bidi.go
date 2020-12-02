@@ -22,13 +22,12 @@ type incomingBidiStreamsMap struct {
 	streamsToDelete map[protocol.StreamNum]struct{} // used as a set
 
 	nextStreamToAccept protocol.StreamNum // the next stream that will be returned by AcceptStream()
-	nextStreamToOpen   protocol.StreamNum // the highest stream that the peer openend
+	nextStreamToOpen   protocol.StreamNum // the highest stream that the peer opened
 	maxStream          protocol.StreamNum // the highest stream that the peer is allowed to open
 	maxNumStreams      uint64             // maximum number of streams
 
 	newStream        func(protocol.StreamNum) streamI
 	queueMaxStreamID func(*wire.MaxStreamsFrame)
-	// streamNumToID    func(protocol.StreamNum) protocol.StreamID // only used for generating errors
 
 	closeErr error
 }
@@ -39,7 +38,7 @@ func newIncomingBidiStreamsMap(
 	queueControlFrame func(wire.Frame),
 ) *incomingBidiStreamsMap {
 	return &incomingBidiStreamsMap{
-		newStreamChan:      make(chan struct{}),
+		newStreamChan:      make(chan struct{}, 1),
 		streams:            make(map[protocol.StreamNum]streamI),
 		streamsToDelete:    make(map[protocol.StreamNum]struct{}),
 		maxStream:          protocol.StreamNum(maxStreams),
@@ -52,6 +51,12 @@ func newIncomingBidiStreamsMap(
 }
 
 func (m *incomingBidiStreamsMap) AcceptStream(ctx context.Context) (streamI, error) {
+	// drain the newStreamChan, so we don't check the map twice if the stream doesn't exist
+	select {
+	case <-m.newStreamChan:
+	default:
+	}
+
 	m.mutex.Lock()
 
 	var num protocol.StreamNum
@@ -159,12 +164,15 @@ func (m *incomingBidiStreamsMap) deleteStream(num protocol.StreamNum) error {
 	delete(m.streams, num)
 	// queue a MAX_STREAM_ID frame, giving the peer the option to open a new stream
 	if m.maxNumStreams > uint64(len(m.streams)) {
-		numNewStreams := m.maxNumStreams - uint64(len(m.streams))
-		m.maxStream = m.nextStreamToOpen + protocol.StreamNum(numNewStreams) - 1
-		m.queueMaxStreamID(&wire.MaxStreamsFrame{
-			Type:         protocol.StreamTypeBidi,
-			MaxStreamNum: m.maxStream,
-		})
+		maxStream := m.nextStreamToOpen + protocol.StreamNum(m.maxNumStreams-uint64(len(m.streams))) - 1
+		// Never send a value larger than protocol.MaxStreamCount.
+		if maxStream <= protocol.MaxStreamCount {
+			m.maxStream = maxStream
+			m.queueMaxStreamID(&wire.MaxStreamsFrame{
+				Type:         protocol.StreamTypeBidi,
+				MaxStreamNum: m.maxStream,
+			})
+		}
 	}
 	return nil
 }

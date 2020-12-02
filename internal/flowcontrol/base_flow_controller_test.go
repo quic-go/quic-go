@@ -5,8 +5,9 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/Psiphon-Labs/quic-go/internal/congestion"
-	"github.com/Psiphon-Labs/quic-go/internal/protocol"
+	"github.com/lucas-clemente/quic-go/internal/utils"
+
+	"github.com/lucas-clemente/quic-go/internal/protocol"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 )
@@ -27,7 +28,7 @@ var _ = Describe("Base Flow controller", func() {
 
 	BeforeEach(func() {
 		controller = &baseFlowController{}
-		controller.rttStats = &congestion.RTTStats{}
+		controller.rttStats = &utils.RTTStats{}
 	})
 
 	Context("send flow control", func() {
@@ -145,7 +146,7 @@ var _ = Describe("Base Flow controller", func() {
 
 			It("doesn't increase the window size when no RTT estimate is available", func() {
 				setRtt(0)
-				controller.startNewAutoTuningEpoch()
+				controller.startNewAutoTuningEpoch(time.Now())
 				controller.AddBytesRead(400)
 				offset := controller.getWindowUpdate()
 				Expect(offset).ToNot(BeZero()) // make sure a window update is sent
@@ -154,7 +155,7 @@ var _ = Describe("Base Flow controller", func() {
 
 			It("increases the window size if read so fast that the window would be consumed in less than 4 RTTs", func() {
 				bytesRead := controller.bytesRead
-				rtt := scaleDuration(20 * time.Millisecond)
+				rtt := scaleDuration(50 * time.Millisecond)
 				setRtt(rtt)
 				// consume more than 2/3 of the window...
 				dataRead := receiveWindowSize*2/3 + 1

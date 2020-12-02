@@ -1,8 +1,8 @@
 package handshake
 
 import (
-	"github.com/Psiphon-Labs/quic-go/internal/protocol"
-	"github.com/marten-seemann/qtls"
+	"github.com/lucas-clemente/quic-go/internal/protocol"
+	"github.com/lucas-clemente/quic-go/internal/qtls"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -84,12 +84,15 @@ var _ = Describe("TLS Extension Handler, for the server", func() {
 			})
 
 			It("ignores extensions that are not sent with the ClientHello", func() {
+				done := make(chan struct{})
 				go func() {
 					defer GinkgoRecover()
 					handlerServer.ReceivedExtensions(uint8(typeFinished), chExts)
+					close(done)
 				}()
 
 				Consistently(handlerServer.TransportParameters()).ShouldNot(Receive())
+				Eventually(done).Should(BeClosed())
 			})
 		})
 	})
@@ -153,12 +156,15 @@ var _ = Describe("TLS Extension Handler, for the server", func() {
 			})
 
 			It("ignores extensions that are not sent with the EncryptedExtensions", func() {
+				done := make(chan struct{})
 				go func() {
 					defer GinkgoRecover()
 					handlerClient.ReceivedExtensions(uint8(typeFinished), chExts)
+					close(done)
 				}()
 
 				Consistently(handlerClient.TransportParameters()).ShouldNot(Receive())
+				Eventually(done).Should(BeClosed())
 			})
 		})
 	})

@@ -1,10 +1,10 @@
 package utils
 
 import (
+	"testing"
+
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
-
-	"testing"
 )
 
 func TestCrypto(t *testing.T) {

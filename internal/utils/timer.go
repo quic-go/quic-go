@@ -46,3 +46,8 @@ func (t *Timer) Reset(deadline time.Time) {
 func (t *Timer) SetRead() {
 	t.read = true
 }
+
+// Stop stops the timer
+func (t *Timer) Stop() {
+	t.t.Stop()
+}

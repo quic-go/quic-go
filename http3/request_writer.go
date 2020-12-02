@@ -18,6 +18,8 @@ import (
 	"golang.org/x/net/idna"
 )
 
+const bodyCopyBufferSize = 8 * 1024
+
 type requestWriter struct {
 	mutex     sync.Mutex
 	encoder   *qpack.Encoder
@@ -37,11 +39,11 @@ func newRequestWriter(logger utils.Logger) *requestWriter {
 }
 
 func (w *requestWriter) WriteRequest(str quic.Stream, req *http.Request, gzip bool) error {
-	headers, err := w.getHeaders(req, gzip)
-	if err != nil {
+	buf := &bytes.Buffer{}
+	if err := w.writeHeaders(buf, req, gzip); err != nil {
 		return err
 	}
-	if _, err := str.Write(headers); err != nil {
+	if _, err := str.Write(buf.Bytes()); err != nil {
 		return err
 	}
 	// TODO: add support for trailers
@@ -52,9 +54,35 @@ func (w *requestWriter) WriteRequest(str quic.Stream, req *http.Request, gzip bo
 
 	// send the request body asynchronously
 	go func() {
-		if err := w.sendRequestBody(req.Body, str); err != nil {
-			w.logger.Errorf("Error writing request: %s", err)
-			return
+		defer req.Body.Close()
+		b := make([]byte, bodyCopyBufferSize)
+		for {
+			n, rerr := req.Body.Read(b)
+			if n == 0 {
+				if rerr == nil {
+					continue
+				} else if rerr == io.EOF {
+					break
+				}
+			}
+			buf := &bytes.Buffer{}
+			(&dataFrame{Length: uint64(n)}).Write(buf)
+			if _, err := str.Write(buf.Bytes()); err != nil {
+				w.logger.Errorf("Error writing request: %s", err)
+				return
+			}
+			if _, err := str.Write(b[:n]); err != nil {
+				w.logger.Errorf("Error writing request: %s", err)
+				return
+			}
+			if rerr != nil {
+				if rerr == io.EOF {
+					break
+				}
+				str.CancelWrite(quic.ErrorCode(errorRequestCanceled))
+				w.logger.Errorf("Error writing request: %s", rerr)
+				return
+			}
 		}
 		str.Close()
 	}()
@@ -62,46 +90,25 @@ func (w *requestWriter) WriteRequest(str quic.Stream, req *http.Request, gzip bo
 	return nil
 }
 
-func (w *requestWriter) getHeaders(req *http.Request, gzip bool) ([]byte, error) {
+func (w *requestWriter) writeHeaders(wr io.Writer, req *http.Request, gzip bool) error {
 	w.mutex.Lock()
 	defer w.mutex.Unlock()
 	defer w.encoder.Close()
 
 	if err := w.encodeHeaders(req, gzip, "", actualContentLength(req)); err != nil {
-		return nil, err
+		return err
 	}
 
 	buf := &bytes.Buffer{}
 	hf := headersFrame{Length: uint64(w.headerBuf.Len())}
 	hf.Write(buf)
-	if _, err := io.Copy(buf, w.headerBuf); err != nil {
-		return nil, err
+	if _, err := wr.Write(buf.Bytes()); err != nil {
+		return err
+	}
+	if _, err := wr.Write(w.headerBuf.Bytes()); err != nil {
+		return err
 	}
 	w.headerBuf.Reset()
-	return buf.Bytes(), nil
-}
-
-func (w *requestWriter) sendRequestBody(req io.ReadCloser, str quic.Stream) error {
-	b := make([]byte, 8*1024)
-	for {
-		n, err := req.Read(b)
-		if err == io.EOF {
-			break
-		}
-		if err != nil {
-			str.CancelWrite(quic.ErrorCode(errorRequestCanceled))
-			return err
-		}
-		buf := &bytes.Buffer{}
-		(&dataFrame{Length: uint64(n)}).Write(buf)
-		if _, err := str.Write(buf.Bytes()); err != nil {
-			return err
-		}
-		if _, err := str.Write(b[:n]); err != nil {
-			return err
-		}
-	}
-	req.Close()
 	return nil
 }
 

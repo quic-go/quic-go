@@ -35,10 +35,10 @@ func (m *MockSessionRunner) EXPECT() *MockSessionRunnerMockRecorder {
 }
 
 // Add mocks base method
-func (m *MockSessionRunner) Add(arg0 protocol.ConnectionID, arg1 packetHandler) [16]byte {
+func (m *MockSessionRunner) Add(arg0 protocol.ConnectionID, arg1 packetHandler) bool {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Add", arg0, arg1)
-	ret0, _ := ret[0].([16]byte)
+	ret0, _ := ret[0].(bool)
 	return ret0
 }
 
@@ -49,7 +49,7 @@ func (mr *MockSessionRunnerMockRecorder) Add(arg0, arg1 interface{}) *gomock.Cal
 }
 
 // AddResetToken mocks base method
-func (m *MockSessionRunner) AddResetToken(arg0 [16]byte, arg1 packetHandler) {
+func (m *MockSessionRunner) AddResetToken(arg0 protocol.StatelessResetToken, arg1 packetHandler) {
 	m.ctrl.T.Helper()
 	m.ctrl.Call(m, "AddResetToken", arg0, arg1)
 }
@@ -58,6 +58,20 @@ func (m *MockSessionRunner) AddResetToken(arg0 [16]byte, arg1 packetHandler) {
 func (mr *MockSessionRunnerMockRecorder) AddResetToken(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddResetToken", reflect.TypeOf((*MockSessionRunner)(nil).AddResetToken), arg0, arg1)
+}
+
+// GetStatelessResetToken mocks base method
+func (m *MockSessionRunner) GetStatelessResetToken(arg0 protocol.ConnectionID) protocol.StatelessResetToken {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetStatelessResetToken", arg0)
+	ret0, _ := ret[0].(protocol.StatelessResetToken)
+	return ret0
+}
+
+// GetStatelessResetToken indicates an expected call of GetStatelessResetToken
+func (mr *MockSessionRunnerMockRecorder) GetStatelessResetToken(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetStatelessResetToken", reflect.TypeOf((*MockSessionRunner)(nil).GetStatelessResetToken), arg0)
 }
 
 // Remove mocks base method
@@ -73,7 +87,7 @@ func (mr *MockSessionRunnerMockRecorder) Remove(arg0 interface{}) *gomock.Call {
 }
 
 // RemoveResetToken mocks base method
-func (m *MockSessionRunner) RemoveResetToken(arg0 [16]byte) {
+func (m *MockSessionRunner) RemoveResetToken(arg0 protocol.StatelessResetToken) {
 	m.ctrl.T.Helper()
 	m.ctrl.Call(m, "RemoveResetToken", arg0)
 }
@@ -109,7 +123,7 @@ func (mr *MockSessionRunnerMockRecorder) Retire(arg0 interface{}) *gomock.Call {
 }
 
 // RetireResetToken mocks base method
-func (m *MockSessionRunner) RetireResetToken(arg0 [16]byte) {
+func (m *MockSessionRunner) RetireResetToken(arg0 protocol.StatelessResetToken) {
 	m.ctrl.T.Helper()
 	m.ctrl.Call(m, "RetireResetToken", arg0)
 }

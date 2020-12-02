@@ -1,7 +1,6 @@
 package quic
 
 import (
-	"errors"
 	"fmt"
 	"io"
 
@@ -22,35 +21,6 @@ type cryptoStream interface {
 	PopCryptoFrame(protocol.ByteCount) *wire.CryptoFrame
 }
 
-type postHandshakeCryptoStream struct {
-	cryptoStream
-
-	framer framer
-}
-
-func newPostHandshakeCryptoStream(framer framer) cryptoStream {
-	return &postHandshakeCryptoStream{
-		cryptoStream: newCryptoStream(),
-		framer:       framer,
-	}
-}
-
-// Write writes post-handshake messages.
-// For simplicity, post-handshake crypto messages are treated as control frames.
-// The framer functions as a stack (LIFO), so if there are multiple writes,
-// they will be returned in the opposite order.
-// This is acceptable, since post-handshake crypto messages are very rare.
-func (s *postHandshakeCryptoStream) Write(p []byte) (int, error) {
-	n, err := s.cryptoStream.Write(p)
-	if err != nil {
-		return n, err
-	}
-	for s.cryptoStream.HasData() {
-		s.framer.QueueControlFrame(s.PopCryptoFrame(protocol.MaxPostHandshakeCryptoFrameSize))
-	}
-	return n, nil
-}
-
 type cryptoStreamImpl struct {
 	queue  *frameSorter
 	msgBuf []byte
@@ -69,12 +39,12 @@ func newCryptoStream() cryptoStream {
 func (s *cryptoStreamImpl) HandleCryptoFrame(f *wire.CryptoFrame) error {
 	highestOffset := f.Offset + protocol.ByteCount(len(f.Data))
 	if maxOffset := highestOffset; maxOffset > protocol.MaxCryptoStreamOffset {
-		return qerr.Error(qerr.CryptoBufferExceeded, fmt.Sprintf("received invalid offset %d on crypto stream, maximum allowed %d", maxOffset, protocol.MaxCryptoStreamOffset))
+		return qerr.NewError(qerr.CryptoBufferExceeded, fmt.Sprintf("received invalid offset %d on crypto stream, maximum allowed %d", maxOffset, protocol.MaxCryptoStreamOffset))
 	}
 	if s.finished {
 		if highestOffset > s.highestOffset {
 			// reject crypto data received after this stream was already finished
-			return qerr.Error(qerr.ProtocolViolation, "received crypto data after change of encryption level")
+			return qerr.NewError(qerr.ProtocolViolation, "received crypto data after change of encryption level")
 		}
 		// ignore data with a smaller offset than the highest received
 		// could e.g. be a retransmission
@@ -110,7 +80,7 @@ func (s *cryptoStreamImpl) GetCryptoData() []byte {
 
 func (s *cryptoStreamImpl) Finish() error {
 	if s.queue.HasMoreData() {
-		return errors.New("encryption level changed, but crypto stream has more data to read")
+		return qerr.NewError(qerr.ProtocolViolation, "encryption level changed, but crypto stream has more data to read")
 	}
 	s.finished = true
 	return nil

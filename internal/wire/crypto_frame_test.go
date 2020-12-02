@@ -102,4 +102,46 @@ var _ = Describe("CRYPTO frame", func() {
 			Expect(f.Length(versionIETFFrames)).To(Equal(1 + utils.VarIntLen(0x1337) + utils.VarIntLen(6) + 6))
 		})
 	})
+
+	Context("splitting", func() {
+		It("splits a frame", func() {
+			f := &CryptoFrame{
+				Offset: 0x1337,
+				Data:   []byte("foobar"),
+			}
+			hdrLen := f.Length(versionIETFFrames) - 6
+			new, needsSplit := f.MaybeSplitOffFrame(hdrLen+3, versionIETFFrames)
+			Expect(needsSplit).To(BeTrue())
+			Expect(new.Data).To(Equal([]byte("foo")))
+			Expect(new.Offset).To(Equal(protocol.ByteCount(0x1337)))
+			Expect(f.Data).To(Equal([]byte("bar")))
+			Expect(f.Offset).To(Equal(protocol.ByteCount(0x1337 + 3)))
+		})
+
+		It("doesn't split if there's enough space in the frame", func() {
+			f := &CryptoFrame{
+				Offset: 0x1337,
+				Data:   []byte("foobar"),
+			}
+			f, needsSplit := f.MaybeSplitOffFrame(f.Length(versionIETFFrames), versionIETFFrames)
+			Expect(needsSplit).To(BeFalse())
+			Expect(f).To(BeNil())
+		})
+
+		It("doesn't split if the size is too small", func() {
+			f := &CryptoFrame{
+				Offset: 0x1337,
+				Data:   []byte("foobar"),
+			}
+			length := f.Length(versionIETFFrames) - 6
+			for i := protocol.ByteCount(0); i <= length; i++ {
+				f, needsSplit := f.MaybeSplitOffFrame(i, versionIETFFrames)
+				Expect(needsSplit).To(BeTrue())
+				Expect(f).To(BeNil())
+			}
+			f, needsSplit := f.MaybeSplitOffFrame(length+1, versionIETFFrames)
+			Expect(needsSplit).To(BeTrue())
+			Expect(f).ToNot(BeNil())
+		})
+	})
 })

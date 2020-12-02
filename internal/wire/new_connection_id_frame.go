@@ -15,7 +15,7 @@ type NewConnectionIDFrame struct {
 	SequenceNumber      uint64
 	RetirePriorTo       uint64
 	ConnectionID        protocol.ConnectionID
-	StatelessResetToken [16]byte
+	StatelessResetToken protocol.StatelessResetToken
 }
 
 func parseNewConnectionIDFrame(r *bytes.Reader, _ protocol.VersionNumber) (*NewConnectionIDFrame, error) {

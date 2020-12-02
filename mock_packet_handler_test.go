@@ -34,20 +34,6 @@ func (m *MockPacketHandler) EXPECT() *MockPacketHandlerMockRecorder {
 	return m.recorder
 }
 
-// Close mocks base method
-func (m *MockPacketHandler) Close() error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Close")
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// Close indicates an expected call of Close
-func (mr *MockPacketHandlerMockRecorder) Close() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Close", reflect.TypeOf((*MockPacketHandler)(nil).Close))
-}
-
 // destroy mocks base method
 func (m *MockPacketHandler) destroy(arg0 error) {
 	m.ctrl.T.Helper()
@@ -84,4 +70,16 @@ func (m *MockPacketHandler) handlePacket(arg0 *receivedPacket) {
 func (mr *MockPacketHandlerMockRecorder) handlePacket(arg0 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "handlePacket", reflect.TypeOf((*MockPacketHandler)(nil).handlePacket), arg0)
+}
+
+// shutdown mocks base method
+func (m *MockPacketHandler) shutdown() {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "shutdown")
+}
+
+// shutdown indicates an expected call of shutdown
+func (mr *MockPacketHandlerMockRecorder) shutdown() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "shutdown", reflect.TypeOf((*MockPacketHandler)(nil).shutdown))
 }

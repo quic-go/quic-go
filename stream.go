@@ -1,7 +1,6 @@
 package quic
 
 import (
-	"net"
 	"sync"
 	"time"
 
@@ -54,8 +53,10 @@ type streamI interface {
 	handleMaxStreamDataFrame(*wire.MaxStreamDataFrame)
 }
 
-var _ receiveStreamI = (streamI)(nil)
-var _ sendStreamI = (streamI)(nil)
+var (
+	_ receiveStreamI = (streamI)(nil)
+	_ sendStreamI    = (streamI)(nil)
+)
 
 // A Stream assembles the data from StreamFrames and provides a super-convenient Read-Interface
 //
@@ -73,14 +74,6 @@ type stream struct {
 }
 
 var _ Stream = &stream{}
-
-type deadlineError struct{}
-
-func (deadlineError) Error() string   { return "deadline exceeded" }
-func (deadlineError) Temporary() bool { return true }
-func (deadlineError) Timeout() bool   { return true }
-
-var errDeadline net.Error = &deadlineError{}
 
 type streamCanceledError struct {
 	error
@@ -129,10 +122,7 @@ func (s *stream) StreamID() protocol.StreamID {
 }
 
 func (s *stream) Close() error {
-	if err := s.sendStream.Close(); err != nil {
-		return err
-	}
-	return nil
+	return s.sendStream.Close()
 }
 
 func (s *stream) SetDeadline(t time.Time) error {
@@ -147,10 +137,6 @@ func (s *stream) SetDeadline(t time.Time) error {
 func (s *stream) closeForShutdown(err error) {
 	s.sendStream.closeForShutdown(err)
 	s.receiveStream.closeForShutdown(err)
-}
-
-func (s *stream) handleResetStreamFrame(frame *wire.ResetStreamFrame) error {
-	return s.receiveStream.handleResetStreamFrame(frame)
 }
 
 // checkIfCompleted is called from the uniStreamSender, when one of the stream halves is completed.

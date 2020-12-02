@@ -4,9 +4,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/Psiphon-Labs/quic-go/internal/congestion"
-	"github.com/Psiphon-Labs/quic-go/internal/protocol"
-	"github.com/Psiphon-Labs/quic-go/internal/utils"
+	"github.com/lucas-clemente/quic-go/internal/protocol"
+	"github.com/lucas-clemente/quic-go/internal/utils"
 )
 
 type baseFlowController struct {
@@ -16,7 +15,7 @@ type baseFlowController struct {
 	lastBlockedAt protocol.ByteCount
 
 	// for receiving data
-	mutex                sync.RWMutex
+	mutex                sync.Mutex
 	bytesRead            protocol.ByteCount
 	highestReceived      protocol.ByteCount
 	receiveWindow        protocol.ByteCount
@@ -25,7 +24,7 @@ type baseFlowController struct {
 
 	epochStartTime   time.Time
 	epochStartOffset protocol.ByteCount
-	rttStats         *congestion.RTTStats
+	rttStats         *utils.RTTStats
 
 	logger utils.Logger
 }
@@ -68,7 +67,7 @@ func (c *baseFlowController) AddBytesRead(n protocol.ByteCount) {
 	// pretend we sent a WindowUpdate when reading the first byte
 	// this way auto-tuning of the window size already works for the first WindowUpdate
 	if c.bytesRead == 0 {
-		c.startNewAutoTuningEpoch()
+		c.startNewAutoTuningEpoch(time.Now())
 	}
 	c.bytesRead += n
 }
@@ -76,7 +75,7 @@ func (c *baseFlowController) AddBytesRead(n protocol.ByteCount) {
 func (c *baseFlowController) hasWindowUpdate() bool {
 	bytesRemaining := c.receiveWindow - c.bytesRead
 	// update the window when more than the threshold was consumed
-	return bytesRemaining <= protocol.ByteCount((float64(c.receiveWindowSize) * float64((1 - protocol.WindowUpdateThreshold))))
+	return bytesRemaining <= protocol.ByteCount(float64(c.receiveWindowSize)*(1-protocol.WindowUpdateThreshold))
 }
 
 // getWindowUpdate updates the receive window, if necessary
@@ -105,15 +104,16 @@ func (c *baseFlowController) maybeAdjustWindowSize() {
 	}
 
 	fraction := float64(bytesReadInEpoch) / float64(c.receiveWindowSize)
-	if time.Since(c.epochStartTime) < time.Duration(4*fraction*float64(rtt)) {
+	now := time.Now()
+	if now.Sub(c.epochStartTime) < time.Duration(4*fraction*float64(rtt)) {
 		// window is consumed too fast, try to increase the window size
 		c.receiveWindowSize = utils.MinByteCount(2*c.receiveWindowSize, c.maxReceiveWindowSize)
 	}
-	c.startNewAutoTuningEpoch()
+	c.startNewAutoTuningEpoch(now)
 }
 
-func (c *baseFlowController) startNewAutoTuningEpoch() {
-	c.epochStartTime = time.Now()
+func (c *baseFlowController) startNewAutoTuningEpoch(now time.Time) {
+	c.epochStartTime = now
 	c.epochStartOffset = c.bytesRead
 }
 

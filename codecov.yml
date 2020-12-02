@@ -14,6 +14,7 @@ coverage:
     - internal/utils/linkedlist/linkedlist.go
     - quictrace/
     - fuzzing/
+    - metrics/
   status:
     project:
       default:

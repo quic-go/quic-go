@@ -1,5 +1,3 @@
-// +build gofuzz
-
 package frames
 
 import (
@@ -12,24 +10,32 @@ import (
 
 const version = protocol.VersionTLS
 
+// PrefixLen is the number of bytes used for configuration
+const PrefixLen = 1
+
+func toEncLevel(v uint8) protocol.EncryptionLevel {
+	switch v % 3 {
+	default:
+		return protocol.EncryptionInitial
+	case 1:
+		return protocol.EncryptionHandshake
+	case 2:
+		return protocol.Encryption1RTT
+	}
+}
+
+// Fuzz fuzzes the QUIC frames.
+//go:generate go run ./cmd/corpus.go
 func Fuzz(data []byte) int {
-	if len(data) < 1 {
+	if len(data) < PrefixLen {
 		return 0
 	}
+	encLevel := toEncLevel(data[0])
+	data = data[PrefixLen:]
+
 	parser := wire.NewFrameParser(version)
 	parser.SetAckDelayExponent(protocol.DefaultAckDelayExponent)
 
-	var encLevel protocol.EncryptionLevel
-	switch data[0] % 3 {
-	case 0:
-		encLevel = protocol.EncryptionInitial
-	case 1:
-		encLevel = protocol.EncryptionHandshake
-	case 2:
-		encLevel = protocol.Encryption1RTT
-	}
-
-	data = data[1:]
 	r := bytes.NewReader(data)
 	initialLen := r.Len()
 
@@ -76,5 +82,5 @@ func Fuzz(data []byte) int {
 	if b.Len() > parsedLen {
 		panic(fmt.Sprintf("Serialized length (%d) is longer than parsed length (%d)", b.Len(), parsedLen))
 	}
-	return 0
+	return 1
 }

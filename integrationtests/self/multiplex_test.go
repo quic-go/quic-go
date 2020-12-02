@@ -46,10 +46,10 @@ var _ = Describe("Multiplexing", func() {
 					addr,
 					fmt.Sprintf("localhost:%d", addr.(*net.UDPAddr).Port),
 					getTLSClientConfig(),
-					&quic.Config{Versions: []protocol.VersionNumber{version}},
+					getQuicConfig(&quic.Config{Versions: []protocol.VersionNumber{version}}),
 				)
 				Expect(err).ToNot(HaveOccurred())
-				defer sess.Close()
+				defer sess.CloseWithError(0, "")
 				str, err := sess.AcceptStream(context.Background())
 				Expect(err).ToNot(HaveOccurred())
 				data, err := ioutil.ReadAll(str)
@@ -62,7 +62,7 @@ var _ = Describe("Multiplexing", func() {
 					ln, err := quic.ListenAddr(
 						"localhost:0",
 						getTLSConfig(),
-						&quic.Config{Versions: []protocol.VersionNumber{version}},
+						getQuicConfig(&quic.Config{Versions: []protocol.VersionNumber{version}}),
 					)
 					Expect(err).ToNot(HaveOccurred())
 					return ln
@@ -145,7 +145,7 @@ var _ = Describe("Multiplexing", func() {
 					server, err := quic.Listen(
 						conn,
 						getTLSConfig(),
-						&quic.Config{Versions: []protocol.VersionNumber{version}},
+						getQuicConfig(&quic.Config{Versions: []protocol.VersionNumber{version}}),
 					)
 					Expect(err).ToNot(HaveOccurred())
 					runServer(server)
@@ -181,7 +181,7 @@ var _ = Describe("Multiplexing", func() {
 					server1, err := quic.Listen(
 						conn1,
 						getTLSConfig(),
-						&quic.Config{Versions: []protocol.VersionNumber{version}},
+						getQuicConfig(&quic.Config{Versions: []protocol.VersionNumber{version}}),
 					)
 					Expect(err).ToNot(HaveOccurred())
 					runServer(server1)
@@ -190,7 +190,7 @@ var _ = Describe("Multiplexing", func() {
 					server2, err := quic.Listen(
 						conn2,
 						getTLSConfig(),
-						&quic.Config{Versions: []protocol.VersionNumber{version}},
+						getQuicConfig(&quic.Config{Versions: []protocol.VersionNumber{version}}),
 					)
 					Expect(err).ToNot(HaveOccurred())
 					runServer(server2)

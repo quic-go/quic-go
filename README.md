@@ -7,9 +7,8 @@
 [![CircleCI Build Status](https://img.shields.io/circleci/project/github/lucas-clemente/quic-go.svg?style=flat-square&label=CircleCI+build)](https://circleci.com/gh/lucas-clemente/quic-go)
 [![Windows Build Status](https://img.shields.io/appveyor/ci/lucas-clemente/quic-go/master.svg?style=flat-square&label=windows+build)](https://ci.appveyor.com/project/lucas-clemente/quic-go/branch/master)
 [![Code Coverage](https://img.shields.io/codecov/c/github/lucas-clemente/quic-go/master.svg?style=flat-square)](https://codecov.io/gh/lucas-clemente/quic-go/)
-[![fuzzit](https://app.fuzzit.dev/badge?org_id=quic-go&branch=master)](https://fuzzit.dev)
 
-quic-go is an implementation of the [QUIC](https://en.wikipedia.org/wiki/QUIC) protocol in Go. It roughly implements the [IETF QUIC draft](https://github.com/quicwg/base-drafts), although we don't fully support any of the draft versions at the moment.
+quic-go is an implementation of the [QUIC](https://en.wikipedia.org/wiki/QUIC) protocol in Go. It implements the [IETF QUIC draft-29](https://tools.ietf.org/html/draft-ietf-quic-transport-29) and [draft-32](https://tools.ietf.org/html/draft-ietf-quic-transport-32).
 
 ## Version compatibility
 
@@ -19,11 +18,7 @@ If you want to use quic-go as a library in other projects, please consider using
 
 ## Guides
 
-*We currently support Go 1.13+, with [Go modules](https://github.com/golang/go/wiki/Modules) support enabled.*
-
-Installing and updating dependencies:
-
-    go get -u ./...
+*We currently support Go 1.14+, with [Go modules](https://github.com/golang/go/wiki/Modules) support enabled.*
 
 Running tests:
 

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"crypto/md5"
 	"errors"
 	"flag"
@@ -17,11 +18,13 @@ import (
 
 	_ "net/http/pprof"
 
-	"github.com/Psiphon-Labs/quic-go"
-	"github.com/Psiphon-Labs/quic-go/http3"
-	"github.com/Psiphon-Labs/quic-go/internal/testdata"
-	"github.com/Psiphon-Labs/quic-go/internal/utils"
-	"github.com/Psiphon-Labs/quic-go/quictrace"
+	"github.com/lucas-clemente/quic-go"
+	"github.com/lucas-clemente/quic-go/http3"
+	"github.com/lucas-clemente/quic-go/internal/testdata"
+	"github.com/lucas-clemente/quic-go/internal/utils"
+	"github.com/lucas-clemente/quic-go/logging"
+	"github.com/lucas-clemente/quic-go/qlog"
+	"github.com/lucas-clemente/quic-go/quictrace"
 )
 
 type binds []string
@@ -85,7 +88,7 @@ var _ http.Handler = &tracingHandler{}
 func (h *tracingHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	h.handler.ServeHTTP(w, r)
 	if err := exportTraces(); err != nil {
-		panic(err)
+		log.Fatal(err)
 	}
 }
 
@@ -186,6 +189,7 @@ func main() {
 	www := flag.String("www", "", "www data")
 	tcp := flag.Bool("tcp", false, "also listen on TCP")
 	trace := flag.Bool("trace", false, "enable quic-trace")
+	enableQlog := flag.Bool("qlog", false, "output a qlog (in the same directory)")
 	flag.Parse()
 
 	logger := utils.DefaultLogger
@@ -202,9 +206,20 @@ func main() {
 	}
 
 	handler := setupHandler(*www, *trace)
-	var quicConf *quic.Config
+	quicConf := &quic.Config{}
 	if *trace {
-		quicConf = &quic.Config{QuicTracer: tracer}
+		quicConf.QuicTracer = tracer
+	}
+	if *enableQlog {
+		quicConf.Tracer = qlog.NewTracer(func(_ logging.Perspective, connID []byte) io.WriteCloser {
+			filename := fmt.Sprintf("server_%x.qlog", connID)
+			f, err := os.Create(filename)
+			if err != nil {
+				log.Fatal(err)
+			}
+			log.Printf("Creating qlog file %s.\n", filename)
+			return utils.NewBufferedWriteCloser(bufio.NewWriter(f), f)
+		})
 	}
 
 	var wg sync.WaitGroup

@@ -31,9 +31,7 @@ var _ = Describe("Drop Tests", func() {
 		ln, err = quic.ListenAddr(
 			"localhost:0",
 			getTLSConfig(),
-			&quic.Config{
-				Versions: []protocol.VersionNumber{version},
-			},
+			getQuicConfig(&quic.Config{Versions: []protocol.VersionNumber{version}}),
 		)
 		Expect(err).ToNot(HaveOccurred())
 		serverPort := ln.Addr().(*net.UDPAddr).Port
@@ -100,16 +98,16 @@ var _ = Describe("Drop Tests", func() {
 								time.Sleep(messageInterval)
 							}
 							<-done
-							Expect(sess.Close()).To(Succeed())
+							Expect(sess.CloseWithError(0, "")).To(Succeed())
 						}()
 
 						sess, err := quic.DialAddr(
 							fmt.Sprintf("localhost:%d", proxy.LocalPort()),
 							getTLSClientConfig(),
-							&quic.Config{Versions: []protocol.VersionNumber{version}},
+							getQuicConfig(&quic.Config{Versions: []protocol.VersionNumber{version}}),
 						)
 						Expect(err).ToNot(HaveOccurred())
-						defer sess.Close()
+						defer sess.CloseWithError(0, "")
 						str, err := sess.AcceptStream(context.Background())
 						Expect(err).ToNot(HaveOccurred())
 						for i := uint8(1); i <= numMessages; i++ {

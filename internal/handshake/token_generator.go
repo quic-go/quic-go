@@ -3,6 +3,7 @@ package handshake
 import (
 	"encoding/asn1"
 	"fmt"
+	"io"
 	"net"
 	"time"
 
@@ -21,6 +22,7 @@ type Token struct {
 	SentTime     time.Time
 	// only set for retry tokens
 	OriginalDestConnectionID protocol.ConnectionID
+	RetrySrcConnectionID     protocol.ConnectionID
 }
 
 // token is the struct that is used for ASN1 serialization and deserialization
@@ -29,6 +31,7 @@ type token struct {
 	RemoteAddr               []byte
 	Timestamp                int64
 	OriginalDestConnectionID []byte
+	RetrySrcConnectionID     []byte
 }
 
 // A TokenGenerator generates tokens
@@ -37,8 +40,8 @@ type TokenGenerator struct {
 }
 
 // NewTokenGenerator initializes a new TookenGenerator
-func NewTokenGenerator() (*TokenGenerator, error) {
-	tokenProtector, err := newTokenProtector()
+func NewTokenGenerator(rand io.Reader) (*TokenGenerator, error) {
+	tokenProtector, err := newTokenProtector(rand)
 	if err != nil {
 		return nil, err
 	}
@@ -48,11 +51,16 @@ func NewTokenGenerator() (*TokenGenerator, error) {
 }
 
 // NewRetryToken generates a new token for a Retry for a given source address
-func (g *TokenGenerator) NewRetryToken(raddr net.Addr, origConnID protocol.ConnectionID) ([]byte, error) {
+func (g *TokenGenerator) NewRetryToken(
+	raddr net.Addr,
+	origDestConnID protocol.ConnectionID,
+	retrySrcConnID protocol.ConnectionID,
+) ([]byte, error) {
 	data, err := asn1.Marshal(token{
 		IsRetryToken:             true,
 		RemoteAddr:               encodeRemoteAddr(raddr),
-		OriginalDestConnectionID: origConnID,
+		OriginalDestConnectionID: origDestConnID,
+		RetrySrcConnectionID:     retrySrcConnID,
 		Timestamp:                time.Now().UnixNano(),
 	})
 	if err != nil {
@@ -97,8 +105,9 @@ func (g *TokenGenerator) DecodeToken(encrypted []byte) (*Token, error) {
 		RemoteAddr:   decodeRemoteAddr(t.RemoteAddr),
 		SentTime:     time.Unix(0, t.Timestamp),
 	}
-	if len(t.OriginalDestConnectionID) > 0 {
+	if t.IsRetryToken {
 		token.OriginalDestConnectionID = protocol.ConnectionID(t.OriginalDestConnectionID)
+		token.RetrySrcConnectionID = protocol.ConnectionID(t.RetrySrcConnectionID)
 	}
 	return token, nil
 }

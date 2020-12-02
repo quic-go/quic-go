@@ -1,11 +1,11 @@
 package flowcontrol
 
 import (
+	"testing"
+
 	"github.com/golang/mock/gomock"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
-
-	"testing"
 )
 
 func TestCrypto(t *testing.T) {

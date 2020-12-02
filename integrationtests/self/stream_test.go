@@ -33,7 +33,7 @@ var _ = Describe("Bidirectional streams", func() {
 					Versions:           []protocol.VersionNumber{version},
 					MaxIncomingStreams: 0,
 				}
-				server, err = quic.ListenAddr("localhost:0", getTLSConfig(), qconf)
+				server, err = quic.ListenAddr("localhost:0", getTLSConfig(), getQuicConfig(qconf))
 				Expect(err).ToNot(HaveOccurred())
 				serverAddr = fmt.Sprintf("localhost:%d", server.Addr().(*net.UDPAddr).Port)
 			})
@@ -100,7 +100,7 @@ var _ = Describe("Bidirectional streams", func() {
 				client, err := quic.DialAddr(
 					serverAddr,
 					getTLSClientConfig(),
-					qconf,
+					getQuicConfig(qconf),
 				)
 				Expect(err).ToNot(HaveOccurred())
 				runSendingPeer(client)
@@ -112,13 +112,13 @@ var _ = Describe("Bidirectional streams", func() {
 					sess, err := server.Accept(context.Background())
 					Expect(err).ToNot(HaveOccurred())
 					runSendingPeer(sess)
-					sess.Close()
+					sess.CloseWithError(0, "")
 				}()
 
 				client, err := quic.DialAddr(
 					serverAddr,
 					getTLSClientConfig(),
-					qconf,
+					getQuicConfig(qconf),
 				)
 				Expect(err).ToNot(HaveOccurred())
 				runReceivingPeer(client)
@@ -145,7 +145,7 @@ var _ = Describe("Bidirectional streams", func() {
 				client, err := quic.DialAddr(
 					serverAddr,
 					getTLSClientConfig(),
-					qconf,
+					getQuicConfig(qconf),
 				)
 				Expect(err).ToNot(HaveOccurred())
 				done2 := make(chan struct{})

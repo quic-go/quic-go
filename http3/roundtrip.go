@@ -44,7 +44,7 @@ type RoundTripper struct {
 	// Dial specifies an optional dial function for creating QUIC
 	// connections for requests.
 	// If Dial is nil, quic.DialAddr will be used.
-	Dial func(network, addr string, tlsCfg *tls.Config, cfg *quic.Config) (quic.Session, error)
+	Dial func(network, addr string, tlsCfg *tls.Config, cfg *quic.Config) (quic.EarlySession, error)
 
 	// MaxResponseHeaderBytes specifies a limit on how many response bytes are
 	// allowed in the server's response header.
@@ -130,7 +130,8 @@ func (r *RoundTripper) getClient(hostname string, onlyCached bool) (http.RoundTr
 		if onlyCached {
 			return nil, ErrNoCachedConn
 		}
-		client = newClient(
+		var err error
+		client, err = newClient(
 			hostname,
 			r.TLSClientConfig,
 			&roundTripperOpts{
@@ -140,6 +141,9 @@ func (r *RoundTripper) getClient(hostname string, onlyCached bool) (http.RoundTr
 			r.QuicConfig,
 			r.Dial,
 		)
+		if err != nil {
+			return nil, err
+		}
 		r.clients[hostname] = client
 	}
 	return client, nil

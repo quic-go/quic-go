@@ -1,9 +1,31 @@
 # Changelog
 
-## v0.13.0 (unreleased)
+## v0.17.1 (2020-06-20)
 
+- Supports QUIC WG draft-29.
+- Improve bundling of ACK frames (#2543).
+
+## v0.16.0 (2020-05-31)
+
+- Supports QUIC WG draft-28.
+
+## v0.15.0 (2020-03-01)
+
+- Supports QUIC WG draft-27.
+- Add support for 0-RTT.
+- Remove `Session.Close()`. Applications need to pass an application error code to the transport using `Session.CloseWithError()`.
+- Make the TLS Cipher Suites configurable (via `tls.Config.CipherSuites`).
+
+## v0.14.0 (2019-12-04)
+
+- Supports QUIC WG draft-24.
+
+## v0.13.0 (2019-11-05)
+
+- Supports QUIC WG draft-23.
 - Add an `EarlyListener` that allows sending of 0.5-RTT data.
 - Add a `TokenStore` to store address validation tokens.
+- Issue and use new connection IDs during a connection.
 
 ## v0.12.0 (2019-08-05)
 

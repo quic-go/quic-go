@@ -15,7 +15,7 @@ type StreamFrame struct {
 	StreamID       protocol.StreamID
 	Offset         protocol.ByteCount
 	Data           []byte
-	FinBit         bool
+	Fin            bool
 	DataLenPresent bool
 
 	fromPool bool
@@ -70,7 +70,7 @@ func parseStreamFrame(r *bytes.Reader, _ protocol.VersionNumber) (*StreamFrame, 
 
 	frame.StreamID = protocol.StreamID(streamID)
 	frame.Offset = protocol.ByteCount(offset)
-	frame.FinBit = fin
+	frame.Fin = fin
 	frame.DataLenPresent = hasDataLen
 
 	if dataLen != 0 {
@@ -79,19 +79,19 @@ func parseStreamFrame(r *bytes.Reader, _ protocol.VersionNumber) (*StreamFrame, 
 		}
 	}
 	if frame.Offset+frame.DataLen() > protocol.MaxByteCount {
-		return nil, qerr.Error(qerr.FrameEncodingError, "stream data overflows maximum offset")
+		return nil, qerr.NewError(qerr.FrameEncodingError, "stream data overflows maximum offset")
 	}
 	return frame, nil
 }
 
 // Write writes a STREAM frame
 func (f *StreamFrame) Write(b *bytes.Buffer, version protocol.VersionNumber) error {
-	if len(f.Data) == 0 && !f.FinBit {
+	if len(f.Data) == 0 && !f.Fin {
 		return errors.New("StreamFrame: attempting to write empty frame without FIN")
 	}
 
 	typeByte := byte(0x8)
-	if f.FinBit {
+	if f.Fin {
 		typeByte ^= 0x1
 	}
 	hasOffset := f.Offset != 0
@@ -170,7 +170,7 @@ func (f *StreamFrame) MaybeSplitOffFrame(maxSize protocol.ByteCount, version pro
 	new := GetStreamFrame()
 	new.StreamID = f.StreamID
 	new.Offset = f.Offset
-	new.FinBit = false
+	new.Fin = false
 	new.DataLenPresent = f.DataLenPresent
 
 	// swap the data slices

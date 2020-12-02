@@ -3,10 +3,13 @@ package handshake
 import (
 	"crypto/aes"
 	"crypto/cipher"
+	"crypto/tls"
+	"encoding/binary"
 	"fmt"
 
-	"github.com/Psiphon-Labs/chacha20"
-	"github.com/marten-seemann/qtls"
+	"golang.org/x/crypto/chacha20"
+
+	"github.com/lucas-clemente/quic-go/internal/qtls"
 )
 
 type headerProtector interface {
@@ -16,14 +19,13 @@ type headerProtector interface {
 
 func newHeaderProtector(suite *qtls.CipherSuiteTLS13, trafficSecret []byte, isLongHeader bool) headerProtector {
 	switch suite.ID {
-	case qtls.TLS_AES_128_GCM_SHA256, qtls.TLS_AES_256_GCM_SHA384:
+	case tls.TLS_AES_128_GCM_SHA256, tls.TLS_AES_256_GCM_SHA384:
 		return newAESHeaderProtector(suite, trafficSecret, isLongHeader)
-	case qtls.TLS_CHACHA20_POLY1305_SHA256:
+	case tls.TLS_CHACHA20_POLY1305_SHA256:
 		return newChaChaHeaderProtector(suite, trafficSecret, isLongHeader)
 	default:
 		panic(fmt.Sprintf("Invalid cipher suite id: %d", suite.ID))
 	}
-
 }
 
 type aesHeaderProtector struct {
@@ -35,7 +37,7 @@ type aesHeaderProtector struct {
 var _ headerProtector = &aesHeaderProtector{}
 
 func newAESHeaderProtector(suite *qtls.CipherSuiteTLS13, trafficSecret []byte, isLongHeader bool) headerProtector {
-	hpKey := qtls.HkdfExpandLabel(suite.Hash, trafficSecret, []byte{}, "quic hp", suite.KeyLen)
+	hpKey := hkdfExpandLabel(suite.Hash, trafficSecret, []byte{}, "quic hp", suite.KeyLen)
 	block, err := aes.NewCipher(hpKey)
 	if err != nil {
 		panic(fmt.Sprintf("error creating new AES cipher: %s", err))
@@ -74,14 +76,13 @@ type chachaHeaderProtector struct {
 	mask [5]byte
 
 	key          [32]byte
-	sampleBuf    [16]byte
 	isLongHeader bool
 }
 
 var _ headerProtector = &chachaHeaderProtector{}
 
 func newChaChaHeaderProtector(suite *qtls.CipherSuiteTLS13, trafficSecret []byte, isLongHeader bool) headerProtector {
-	hpKey := qtls.HkdfExpandLabel(suite.Hash, trafficSecret, []byte{}, "quic hp", suite.KeyLen)
+	hpKey := hkdfExpandLabel(suite.Hash, trafficSecret, []byte{}, "quic hp", suite.KeyLen)
 
 	p := &chachaHeaderProtector{
 		isLongHeader: isLongHeader,
@@ -99,15 +100,22 @@ func (p *chachaHeaderProtector) EncryptHeader(sample []byte, firstByte *byte, hd
 }
 
 func (p *chachaHeaderProtector) apply(sample []byte, firstByte *byte, hdrBytes []byte) {
-	if len(sample) < len(p.mask) {
+	if len(sample) != 16 {
 		panic("invalid sample size")
 	}
 	for i := 0; i < 5; i++ {
 		p.mask[i] = 0
 	}
-	copy(p.sampleBuf[:], sample)
-	chacha20.XORKeyStream(p.mask[:], p.mask[:], &p.sampleBuf, &p.key)
+	cipher, err := chacha20.NewUnauthenticatedCipher(p.key[:], sample[4:])
+	if err != nil {
+		panic(err)
+	}
+	cipher.SetCounter(binary.LittleEndian.Uint32(sample[:4]))
+	cipher.XORKeyStream(p.mask[:], p.mask[:])
+	p.applyMask(firstByte, hdrBytes)
+}
 
+func (p *chachaHeaderProtector) applyMask(firstByte *byte, hdrBytes []byte) {
 	if p.isLongHeader {
 		*firstByte ^= p.mask[0] & 0xf
 	} else {

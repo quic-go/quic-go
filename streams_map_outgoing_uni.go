@@ -106,6 +106,7 @@ func (m *outgoingUniStreamsMap) OpenStreamSync(ctx context.Context) (sendStreamI
 		}
 		str := m.openStream()
 		delete(m.openQueue, queuePos)
+		m.lowestInQueue = queuePos + 1
 		m.unblockOpenSync()
 		return str, nil
 	}
@@ -118,6 +119,8 @@ func (m *outgoingUniStreamsMap) openStream() sendStreamI {
 	return s
 }
 
+// maybeSendBlockedFrame queues a STREAMS_BLOCKED frame for the current stream offset,
+// if we haven't sent one for this offset yet
 func (m *outgoingUniStreamsMap) maybeSendBlockedFrame() {
 	if m.blockedSent {
 		return
@@ -171,9 +174,13 @@ func (m *outgoingUniStreamsMap) SetMaxStream(num protocol.StreamNum) {
 	}
 	m.maxStream = num
 	m.blockedSent = false
+	if m.maxStream < m.nextStream-1+protocol.StreamNum(len(m.openQueue)) {
+		m.maybeSendBlockedFrame()
+	}
 	m.unblockOpenSync()
 }
 
+// unblockOpenSync unblocks the next OpenStreamSync go-routine to open a new stream
 func (m *outgoingUniStreamsMap) unblockOpenSync() {
 	if len(m.openQueue) == 0 {
 		return
@@ -183,9 +190,12 @@ func (m *outgoingUniStreamsMap) unblockOpenSync() {
 		if !ok { // entry was deleted because the context was canceled
 			continue
 		}
-		close(c)
-		m.openQueue[qp] = nil
-		m.lowestInQueue = qp + 1
+		// unblockOpenSync is called both from OpenStreamSync and from SetMaxStream.
+		// It's sufficient to only unblock OpenStreamSync once.
+		select {
+		case c <- struct{}{}:
+		default:
+		}
 		return
 	}
 }

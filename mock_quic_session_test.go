@@ -6,7 +6,6 @@ package quic
 
 import (
 	context "context"
-	tls "crypto/tls"
 	net "net"
 	reflect "reflect"
 
@@ -67,20 +66,6 @@ func (mr *MockQuicSessionMockRecorder) AcceptUniStream(arg0 interface{}) *gomock
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AcceptUniStream", reflect.TypeOf((*MockQuicSession)(nil).AcceptUniStream), arg0)
 }
 
-// Close mocks base method
-func (m *MockQuicSession) Close() error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Close")
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// Close indicates an expected call of Close
-func (mr *MockQuicSessionMockRecorder) Close() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Close", reflect.TypeOf((*MockQuicSession)(nil).Close))
-}
-
 // CloseWithError mocks base method
 func (m *MockQuicSession) CloseWithError(arg0 protocol.ApplicationErrorCode, arg1 string) error {
 	m.ctrl.T.Helper()
@@ -96,10 +81,10 @@ func (mr *MockQuicSessionMockRecorder) CloseWithError(arg0, arg1 interface{}) *g
 }
 
 // ConnectionState mocks base method
-func (m *MockQuicSession) ConnectionState() tls.ConnectionState {
+func (m *MockQuicSession) ConnectionState() ConnectionState {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ConnectionState")
-	ret0, _ := ret[0].(tls.ConnectionState)
+	ret0, _ := ret[0].(ConnectionState)
 	return ret0
 }
 
@@ -239,32 +224,6 @@ func (mr *MockQuicSessionMockRecorder) RemoteAddr() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RemoteAddr", reflect.TypeOf((*MockQuicSession)(nil).RemoteAddr))
 }
 
-// closeForRecreating mocks base method
-func (m *MockQuicSession) closeForRecreating() protocol.PacketNumber {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "closeForRecreating")
-	ret0, _ := ret[0].(protocol.PacketNumber)
-	return ret0
-}
-
-// closeForRecreating indicates an expected call of closeForRecreating
-func (mr *MockQuicSessionMockRecorder) closeForRecreating() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "closeForRecreating", reflect.TypeOf((*MockQuicSession)(nil).closeForRecreating))
-}
-
-// closeRemote mocks base method
-func (m *MockQuicSession) closeRemote(arg0 error) {
-	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "closeRemote", arg0)
-}
-
-// closeRemote indicates an expected call of closeRemote
-func (mr *MockQuicSessionMockRecorder) closeRemote(arg0 interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "closeRemote", reflect.TypeOf((*MockQuicSession)(nil).closeRemote), arg0)
-}
-
 // destroy mocks base method
 func (m *MockQuicSession) destroy(arg0 error) {
 	m.ctrl.T.Helper()
@@ -329,4 +288,16 @@ func (m *MockQuicSession) run() error {
 func (mr *MockQuicSessionMockRecorder) run() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "run", reflect.TypeOf((*MockQuicSession)(nil).run))
+}
+
+// shutdown mocks base method
+func (m *MockQuicSession) shutdown() {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "shutdown")
+}
+
+// shutdown indicates an expected call of shutdown
+func (mr *MockQuicSessionMockRecorder) shutdown() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "shutdown", reflect.TypeOf((*MockQuicSession)(nil).shutdown))
 }

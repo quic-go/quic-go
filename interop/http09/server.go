@@ -16,7 +16,7 @@ import (
 	"github.com/Psiphon-Labs/quic-go"
 )
 
-const h09alpn = "hq-24"
+const h09alpn = "hq-29"
 
 type responseWriter struct {
 	io.Writer
@@ -41,7 +41,7 @@ type Server struct {
 	QuicConfig *quic.Config
 
 	mutex    sync.Mutex
-	listener quic.Listener
+	listener quic.EarlyListener
 }
 
 // Close closes the server.
@@ -69,7 +69,7 @@ func (s *Server) ListenAndServe() error {
 
 	tlsConf := s.TLSConfig.Clone()
 	tlsConf.NextProtos = []string{h09alpn}
-	ln, err := quic.Listen(conn, tlsConf, s.QuicConfig)
+	ln, err := quic.ListenEarly(conn, tlsConf, s.QuicConfig)
 	if err != nil {
 		return err
 	}
@@ -95,7 +95,7 @@ func (s *Server) handleConn(sess quic.Session) {
 		}
 		go func() {
 			if err := s.handleStream(str); err != nil {
-				log.Printf("Handling stream failed: %s", err.Error())
+				log.Printf("Handling stream failed: %s\n", err.Error())
 			}
 		}()
 	}
@@ -109,6 +109,9 @@ func (s *Server) handleStream(str quic.Stream) error {
 	request := string(reqBytes)
 	request = strings.TrimRight(request, "\r\n")
 	request = strings.TrimRight(request, " ")
+
+	log.Printf("Received request: %s\n", request)
+
 	if request[:5] != "GET /" {
 		str.CancelWrite(42)
 		return nil

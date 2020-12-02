@@ -33,7 +33,7 @@ func (p *frameParser) ParseNext(r *bytes.Reader, encLevel protocol.EncryptionLev
 
 		f, err := p.parseFrame(r, typeByte, encLevel)
 		if err != nil {
-			return nil, qerr.ErrorWithFrameType(qerr.FrameEncodingError, uint64(typeByte), err.Error())
+			return nil, qerr.NewErrorWithFrameType(qerr.FrameEncodingError, uint64(typeByte), err.Error())
 		}
 		return f, nil
 	}
@@ -85,6 +85,8 @@ func (p *frameParser) parseFrame(r *bytes.Reader, typeByte byte, encLevel protoc
 			frame, err = parsePathResponseFrame(r, p.version)
 		case 0x1c, 0x1d:
 			frame, err = parseConnectionCloseFrame(r, p.version)
+		case 0x1e:
+			frame, err = parseHandshakeDoneFrame(r, p.version)
 		default:
 			err = errors.New("unknown frame type")
 		}
@@ -104,11 +106,21 @@ func (p *frameParser) isAllowedAtEncLevel(f Frame, encLevel protocol.EncryptionL
 		switch f.(type) {
 		case *CryptoFrame, *AckFrame, *ConnectionCloseFrame, *PingFrame:
 			return true
+		default:
+			return false
+		}
+	case protocol.Encryption0RTT:
+		switch f.(type) {
+		case *CryptoFrame, *AckFrame, *ConnectionCloseFrame, *NewTokenFrame, *PathResponseFrame, *RetireConnectionIDFrame:
+			return false
+		default:
+			return true
 		}
 	case protocol.Encryption1RTT:
 		return true
+	default:
+		panic("unknown encryption level")
 	}
-	return false
 }
 
 func (p *frameParser) SetAckDelayExponent(exp uint8) {

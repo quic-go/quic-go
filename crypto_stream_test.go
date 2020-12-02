@@ -22,9 +22,7 @@ func createHandshakeMessage(len int) []byte {
 }
 
 var _ = Describe("Crypto Stream", func() {
-	var (
-		str cryptoStream
-	)
+	var str cryptoStream
 
 	BeforeEach(func() {
 		str = newCryptoStream()
@@ -97,7 +95,7 @@ var _ = Describe("Crypto Stream", func() {
 					Offset: 10,
 				})).To(Succeed())
 				err := str.Finish()
-				Expect(err).To(MatchError("encryption level changed, but crypto stream has more data to read"))
+				Expect(err).To(MatchError("PROTOCOL_VIOLATION: encryption level changed, but crypto stream has more data to read"))
 			})
 
 			It("works with reordered data", func() {
@@ -179,47 +177,4 @@ var _ = Describe("Crypto Stream", func() {
 			Expect(f.Data).To(Equal([]byte("bar")))
 		})
 	})
-})
-
-var _ = Describe("Post Handshake Crypto Stream", func() {
-	var (
-		cs     cryptoStream
-		framer framer
-	)
-
-	BeforeEach(func() {
-		framer = newFramer(NewMockStreamGetter(mockCtrl), protocol.VersionTLS)
-		cs = newPostHandshakeCryptoStream(framer)
-	})
-
-	It("queues CRYPTO frames when writing data", func() {
-		n, err := cs.Write([]byte("foo"))
-		Expect(err).ToNot(HaveOccurred())
-		Expect(n).To(Equal(3))
-		n, err = cs.Write([]byte("bar"))
-		Expect(err).ToNot(HaveOccurred())
-		Expect(n).To(Equal(3))
-		frames, _ := framer.AppendControlFrames(nil, 1000)
-		Expect(frames).To(HaveLen(2))
-		fs := []wire.Frame{frames[0].Frame, frames[1].Frame}
-		Expect(fs).To(ContainElement(&wire.CryptoFrame{Data: []byte("foo")}))
-		Expect(fs).To(ContainElement(&wire.CryptoFrame{Data: []byte("bar"), Offset: 3}))
-	})
-
-	It("splits large writes into multiple frames", func() {
-		size := 10 * protocol.MaxPostHandshakeCryptoFrameSize
-		n, err := cs.Write(make([]byte, size))
-		Expect(err).ToNot(HaveOccurred())
-		Expect(n).To(BeEquivalentTo(size))
-		frames, _ := framer.AppendControlFrames(nil, protocol.MaxByteCount)
-		Expect(frames).To(HaveLen(11)) // one more for framing overhead
-		var dataLen int
-		for _, f := range frames {
-			Expect(f.Frame.Length(protocol.VersionTLS)).To(BeNumerically("<=", protocol.MaxPostHandshakeCryptoFrameSize))
-			Expect(f.Frame).To(BeAssignableToTypeOf(&wire.CryptoFrame{}))
-			dataLen += len(f.Frame.(*wire.CryptoFrame).Data)
-		}
-		Expect(dataLen).To(BeEquivalentTo(size))
-	})
-
 })

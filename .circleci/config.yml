@@ -1,20 +1,20 @@
 version: 2.1
 executors:
-  test:
+  test-go114:
     docker:
-      - image: "circleci/golang:1.13"
+      - image: "circleci/golang:1.14"
     environment:
       runrace: true
-  interop:
+  test-go115:
     docker:
-      - image: circleci/buildpack-deps:stretch
+      - image: "circleci/golang:1.15"
     environment:
-      IMAGE_NAME: martenseemann/quic-go-interop
-
+      runrace: true
+ 
 jobs:
-  test:
-    executor: test
-    working_directory: /go/src/github.com/Psiphon-Labs/quic-go
+  "test": &test
+    executor: test-go114
+    working_directory: /go/src/github.com/lucas-clemente/quic-go
     steps:
       - checkout
       - run:
@@ -40,49 +40,17 @@ jobs:
       - run:
           name: "Run self integration tests with race detector"
           command: ginkgo -race -v -randomizeAllSpecs -trace integrationtests/self
-  interop-build:
-    executor: interop
-    steps:
-      - checkout
-      - setup_remote_docker:
-          docker_layer_caching: true
       - run:
-          name: Build docker image
-          command: cd interop && docker build . -t $IMAGE_NAME:latest --pull --build-arg CACHEBUST=$(date +%s)
-      - run:
-          name: Archive Docker image
-          command: docker save -o image.tar $IMAGE_NAME
-      - persist_to_workspace:
-          root: .
-          paths:
-            - ./image.tar
-  interop-publish:
-    executor: interop
-    steps:
-      - attach_workspace:
-          at: /tmp/workspace
-      - setup_remote_docker
-      - run:
-          name: Load archived Docker image 
-          command: docker load -i /tmp/workspace/image.tar
-      - run:
-          name: Publish quic-go-interop
-          command: |
-            echo "$DOCKERHUB_PASS" | docker login -u "$DOCKERHUB_USERNAME" --password-stdin
-            docker push $IMAGE_NAME:latest
+          name: "Run self integration tests with qlog and metrics"
+          command: ginkgo -v -randomizeAllSpecs -trace integrationtests/self -- -qlog -metrics
+  go114:
+    <<: *test
+  go115:
+    <<: *test
+    executor: test-go115
 
 workflows:
   workflow:
     jobs:
-      - test
-      - interop-build:
-          filters:
-            branches:
-              only: interop
-      - interop-publish:
-          requires:
-            - test
-            - interop-build
-          filters:
-            branches:
-              only: interop
+      - go114
+      - go115

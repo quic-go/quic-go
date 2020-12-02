@@ -1,39 +1,52 @@
 package quic
 
 type sendQueue struct {
-	queue     chan *packedPacket
-	closeChan chan struct{}
-	conn      connection
+	queue       chan *packetBuffer
+	closeCalled chan struct{} // runStopped when Close() is called
+	runStopped  chan struct{} // runStopped when the run loop returns
+	conn        sendConn
 }
 
-func newSendQueue(conn connection) *sendQueue {
+func newSendQueue(conn sendConn) *sendQueue {
 	s := &sendQueue{
-		conn:      conn,
-		closeChan: make(chan struct{}),
-		queue:     make(chan *packedPacket, 1),
+		conn:        conn,
+		runStopped:  make(chan struct{}),
+		closeCalled: make(chan struct{}),
+		queue:       make(chan *packetBuffer, 1),
 	}
 	return s
 }
 
-func (h *sendQueue) Send(p *packedPacket) {
-	h.queue <- p
+func (h *sendQueue) Send(p *packetBuffer) {
+	select {
+	case h.queue <- p:
+	case <-h.runStopped:
+	}
 }
 
 func (h *sendQueue) Run() error {
-	var p *packedPacket
+	defer close(h.runStopped)
+	var shouldClose bool
 	for {
-		select {
-		case <-h.closeChan:
+		if shouldClose && len(h.queue) == 0 {
 			return nil
-		case p = <-h.queue:
 		}
-		if err := h.conn.Write(p.raw); err != nil {
-			return err
+		select {
+		case <-h.closeCalled:
+			h.closeCalled = nil // prevent this case from being selected again
+			// make sure that all queued packets are actually sent out
+			shouldClose = true
+		case p := <-h.queue:
+			if err := h.conn.Write(p.Data); err != nil {
+				return err
+			}
+			p.Release()
 		}
-		p.buffer.Release()
 	}
 }
 
 func (h *sendQueue) Close() {
-	close(h.closeChan)
+	close(h.closeCalled)
+	// wait until the run loop returned
+	<-h.runStopped
 }

@@ -8,5 +8,5 @@ import (
 type NewConnectionID struct {
 	SequenceNumber      uint64
 	ConnectionID        protocol.ConnectionID
-	StatelessResetToken *[16]byte
+	StatelessResetToken protocol.StatelessResetToken
 }

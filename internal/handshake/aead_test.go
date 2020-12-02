@@ -1,12 +1,14 @@
 package handshake
 
 import (
+	"bytes"
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/rand"
 	"fmt"
 
-	"github.com/Psiphon-Labs/quic-go/internal/protocol"
+	"github.com/lucas-clemente/quic-go/internal/protocol"
+	"github.com/lucas-clemente/quic-go/internal/qtls"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -16,7 +18,7 @@ var _ = Describe("Long Header AEAD", func() {
 	for i := range cipherSuites {
 		cs := cipherSuites[i]
 
-		Context(fmt.Sprintf("using %s", cipherSuiteName(cs.ID)), func() {
+		Context(fmt.Sprintf("using %s", qtls.CipherSuiteName(cs.ID)), func() {
 			getSealerAndOpener := func() (LongHeaderSealer, LongHeaderOpener) {
 				key := make([]byte, 16)
 				hpKey := make([]byte, 16)
@@ -77,6 +79,24 @@ var _ = Describe("Long Header AEAD", func() {
 						Expect(header).To(Equal([]byte{0xb5, 1, 2, 3, 4, 5, 6, 7, 8, 0xde, 0xad, 0xbe, 0xef}))
 					}
 					Expect(lastFourBitsDifferent).To(BeNumerically(">", 75))
+				})
+
+				It("encrypts and encrypts the header, for a 0xfff..fff sample", func() {
+					sealer, opener := getSealerAndOpener()
+					var lastFourBitsDifferent int
+					for i := 0; i < 100; i++ {
+						sample := bytes.Repeat([]byte{0xff}, 16)
+						header := []byte{0xb5, 1, 2, 3, 4, 5, 6, 7, 8, 0xde, 0xad, 0xbe, 0xef}
+						sealer.EncryptHeader(sample, &header[0], header[9:13])
+						if header[0]&0xf != 0xb5&0xf {
+							lastFourBitsDifferent++
+						}
+						Expect(header[0] & 0xf0).To(Equal(byte(0xb5 & 0xf0)))
+						Expect(header[1:9]).To(Equal([]byte{1, 2, 3, 4, 5, 6, 7, 8}))
+						Expect(header[9:13]).ToNot(Equal([]byte{0xde, 0xad, 0xbe, 0xef}))
+						opener.DecryptHeader(sample, &header[0], header[9:13])
+						Expect(header).To(Equal([]byte{0xb5, 1, 2, 3, 4, 5, 6, 7, 8, 0xde, 0xad, 0xbe, 0xef}))
+					}
 				})
 
 				It("fails to decrypt the header when using a different sample", func() {

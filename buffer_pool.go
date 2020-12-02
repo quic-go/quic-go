@@ -7,9 +7,9 @@ import (
 )
 
 type packetBuffer struct {
-	Slice []byte
+	Data []byte
 
-	// refCount counts how many packets the Slice is used in.
+	// refCount counts how many packets Data is used in.
 	// It doesn't support concurrent use.
 	// It is > 1 when used for coalesced packet.
 	refCount int
@@ -50,8 +50,13 @@ func (b *packetBuffer) Release() {
 	b.putBack()
 }
 
+// Len returns the length of Data
+func (b *packetBuffer) Len() protocol.ByteCount {
+	return protocol.ByteCount(len(b.Data))
+}
+
 func (b *packetBuffer) putBack() {
-	if cap(b.Slice) != int(protocol.MaxReceivePacketSize) {
+	if cap(b.Data) != int(protocol.MaxReceivePacketSize) {
 		panic("putPacketBuffer called with packet of wrong size!")
 	}
 	bufferPool.Put(b)
@@ -62,14 +67,14 @@ var bufferPool sync.Pool
 func getPacketBuffer() *packetBuffer {
 	buf := bufferPool.Get().(*packetBuffer)
 	buf.refCount = 1
-	buf.Slice = buf.Slice[:protocol.MaxReceivePacketSize]
+	buf.Data = buf.Data[:0]
 	return buf
 }
 
 func init() {
 	bufferPool.New = func() interface{} {
 		return &packetBuffer{
-			Slice: make([]byte, 0, protocol.MaxReceivePacketSize),
+			Data: make([]byte, 0, protocol.MaxReceivePacketSize),
 		}
 	}
 }

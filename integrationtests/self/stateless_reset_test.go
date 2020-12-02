@@ -24,7 +24,7 @@ var _ = Describe("Stateless Resets", func() {
 		It(fmt.Sprintf("sends and recognizes stateless resets, for %d byte connection IDs", connIDLen), func() {
 			statelessResetKey := make([]byte, 32)
 			rand.Read(statelessResetKey)
-			serverConfig := &quic.Config{StatelessResetKey: statelessResetKey}
+			serverConfig := getQuicConfig(&quic.Config{StatelessResetKey: statelessResetKey})
 
 			ln, err := quic.ListenAddr("localhost:0", getTLSConfig(), serverConfig)
 			Expect(err).ToNot(HaveOccurred())
@@ -58,10 +58,10 @@ var _ = Describe("Stateless Resets", func() {
 			sess, err := quic.DialAddr(
 				fmt.Sprintf("localhost:%d", proxy.LocalPort()),
 				getTLSClientConfig(),
-				&quic.Config{
+				getQuicConfig(&quic.Config{
 					ConnectionIDLength: connIDLen,
-					IdleTimeout:        2 * time.Second,
-				},
+					MaxIdleTimeout:     2 * time.Second,
+				}),
 			)
 			Expect(err).ToNot(HaveOccurred())
 			str, err := sess.AcceptStream(context.Background())
@@ -98,7 +98,8 @@ var _ = Describe("Stateless Resets", func() {
 			if serr == nil {
 				_, serr = str.Read([]byte{0})
 			}
-			Expect(serr).To(MatchError("INTERNAL_ERROR: received a stateless reset"))
+			Expect(serr).To(HaveOccurred())
+			Expect(serr.Error()).To(ContainSubstring("INTERNAL_ERROR: received a stateless reset"))
 
 			Expect(ln2.Close()).To(Succeed())
 			Eventually(acceptStopped).Should(BeClosed())

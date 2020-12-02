@@ -16,6 +16,12 @@ import (
 	. "github.com/onsi/gomega"
 )
 
+type foobarReader struct{}
+
+func (r *foobarReader) Read(b []byte) (int, error) {
+	return copy(b, []byte("foobar")), io.EOF
+}
+
 var _ = Describe("Request Writer", func() {
 	var (
 		rw     *requestWriter
@@ -25,15 +31,15 @@ var _ = Describe("Request Writer", func() {
 
 	decode := func(str io.Reader) map[string]string {
 		frame, err := parseNextFrame(str)
-		Expect(err).ToNot(HaveOccurred())
-		Expect(frame).To(BeAssignableToTypeOf(&headersFrame{}))
+		ExpectWithOffset(1, err).ToNot(HaveOccurred())
+		ExpectWithOffset(1, frame).To(BeAssignableToTypeOf(&headersFrame{}))
 		headersFrame := frame.(*headersFrame)
 		data := make([]byte, headersFrame.Length)
 		_, err = io.ReadFull(str, data)
-		Expect(err).ToNot(HaveOccurred())
+		ExpectWithOffset(1, err).ToNot(HaveOccurred())
 		decoder := qpack.NewDecoder(nil)
 		hfs, err := decoder.DecodeFull(data)
-		Expect(err).ToNot(HaveOccurred())
+		ExpectWithOffset(1, err).ToNot(HaveOccurred())
 		values := make(map[string]string)
 		for _, hf := range hfs {
 			values[hf.Name] = hf.Value
@@ -70,6 +76,8 @@ var _ = Describe("Request Writer", func() {
 		req, err := http.NewRequest("POST", "https://quic.clemente.io/upload.html", postData)
 		Expect(err).ToNot(HaveOccurred())
 		Expect(rw.WriteRequest(str, req, false)).To(Succeed())
+
+		Eventually(closed).Should(BeClosed())
 		headerFields := decode(strBuf)
 		Expect(headerFields).To(HaveKeyWithValue(":method", "POST"))
 		Expect(headerFields).To(HaveKey("content-length"))
@@ -77,7 +85,23 @@ var _ = Describe("Request Writer", func() {
 		Expect(err).ToNot(HaveOccurred())
 		Expect(contentLength).To(BeNumerically(">", 0))
 
+		frame, err := parseNextFrame(strBuf)
+		Expect(err).ToNot(HaveOccurred())
+		Expect(frame).To(BeAssignableToTypeOf(&dataFrame{}))
+		Expect(frame.(*dataFrame).Length).To(BeEquivalentTo(6))
+	})
+
+	It("writes a POST request, if the Body returns an EOF immediately", func() {
+		closed := make(chan struct{})
+		str.EXPECT().Close().Do(func() { close(closed) })
+		req, err := http.NewRequest("POST", "https://quic.clemente.io/upload.html", &foobarReader{})
+		Expect(err).ToNot(HaveOccurred())
+		Expect(rw.WriteRequest(str, req, false)).To(Succeed())
+
 		Eventually(closed).Should(BeClosed())
+		headerFields := decode(strBuf)
+		Expect(headerFields).To(HaveKeyWithValue(":method", "POST"))
+
 		frame, err := parseNextFrame(strBuf)
 		Expect(err).ToNot(HaveOccurred())
 		Expect(frame).To(BeAssignableToTypeOf(&dataFrame{}))

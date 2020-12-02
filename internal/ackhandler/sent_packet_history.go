@@ -2,40 +2,57 @@ package ackhandler
 
 import (
 	"fmt"
+	"time"
 
-	"github.com/Psiphon-Labs/quic-go/internal/protocol"
+	"github.com/lucas-clemente/quic-go/internal/protocol"
+	"github.com/lucas-clemente/quic-go/internal/utils"
 )
 
 type sentPacketHistory struct {
-	packetList *PacketList
-	packetMap  map[protocol.PacketNumber]*PacketElement
+	rttStats    *utils.RTTStats
+	packetList  *PacketList
+	packetMap   map[protocol.PacketNumber]*PacketElement
+	highestSent protocol.PacketNumber
 }
 
-func newSentPacketHistory() *sentPacketHistory {
+func newSentPacketHistory(rttStats *utils.RTTStats) *sentPacketHistory {
 	return &sentPacketHistory{
-		packetList: NewPacketList(),
-		packetMap:  make(map[protocol.PacketNumber]*PacketElement),
+		rttStats:    rttStats,
+		packetList:  NewPacketList(),
+		packetMap:   make(map[protocol.PacketNumber]*PacketElement),
+		highestSent: protocol.InvalidPacketNumber,
 	}
 }
 
-func (h *sentPacketHistory) SentPacket(p *Packet) {
-	el := h.packetList.PushBack(*p)
-	h.packetMap[p.PacketNumber] = el
-}
-
-func (h *sentPacketHistory) GetPacket(p protocol.PacketNumber) *Packet {
-	if el, ok := h.packetMap[p]; ok {
-		return &el.Value
+func (h *sentPacketHistory) SentPacket(p *Packet, isAckEliciting bool) {
+	if p.PacketNumber <= h.highestSent {
+		panic("non-sequential packet number use")
 	}
-	return nil
+	// Skipped packet numbers.
+	for pn := h.highestSent + 1; pn < p.PacketNumber; pn++ {
+		el := h.packetList.PushBack(Packet{
+			PacketNumber:    pn,
+			EncryptionLevel: p.EncryptionLevel,
+			SendTime:        p.SendTime,
+			skippedPacket:   true,
+		})
+		h.packetMap[pn] = el
+	}
+	h.highestSent = p.PacketNumber
+
+	if isAckEliciting {
+		el := h.packetList.PushBack(*p)
+		h.packetMap[p.PacketNumber] = el
+	}
 }
 
 // Iterate iterates through all packets.
-// The callback must not modify the history.
 func (h *sentPacketHistory) Iterate(cb func(*Packet) (cont bool, err error)) error {
 	cont := true
-	for el := h.packetList.Front(); cont && el != nil; el = el.Next() {
+	var next *PacketElement
+	for el := h.packetList.Front(); cont && el != nil; el = next {
 		var err error
+		next = el.Next()
 		cont, err = cb(&el.Value)
 		if err != nil {
 			return err
@@ -45,13 +62,13 @@ func (h *sentPacketHistory) Iterate(cb func(*Packet) (cont bool, err error)) err
 }
 
 // FirstOutStanding returns the first outstanding packet.
-// It must not be modified (e.g. retransmitted).
-// Use DequeueFirstPacketForRetransmission() to retransmit it.
 func (h *sentPacketHistory) FirstOutstanding() *Packet {
-	if !h.HasOutstandingPackets() {
-		return nil
+	for el := h.packetList.Front(); el != nil; el = el.Next() {
+		if !el.Value.declaredLost && !el.Value.skippedPacket {
+			return &el.Value
+		}
 	}
-	return &h.packetList.Front().Value
+	return nil
 }
 
 func (h *sentPacketHistory) Len() int {
@@ -69,5 +86,22 @@ func (h *sentPacketHistory) Remove(p protocol.PacketNumber) error {
 }
 
 func (h *sentPacketHistory) HasOutstandingPackets() bool {
-	return h.packetList.Len() > 0
+	return h.FirstOutstanding() != nil
+}
+
+func (h *sentPacketHistory) DeleteOldPackets(now time.Time) {
+	maxAge := 3 * h.rttStats.PTO(false)
+	var nextEl *PacketElement
+	for el := h.packetList.Front(); el != nil; el = nextEl {
+		nextEl = el.Next()
+		p := el.Value
+		if p.SendTime.After(now.Add(-maxAge)) {
+			break
+		}
+		if !p.skippedPacket && !p.declaredLost { // should only happen in the case of drastic RTT changes
+			continue
+		}
+		delete(h.packetMap, p.PacketNumber)
+		h.packetList.Remove(el)
+	}
 }

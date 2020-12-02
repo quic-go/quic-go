@@ -20,7 +20,7 @@ var _ = Describe("RESET_STREAM frame", func() {
 			frame, err := parseResetStreamFrame(b, versionIETFFrames)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(frame.StreamID).To(Equal(protocol.StreamID(0xdeadbeef)))
-			Expect(frame.ByteOffset).To(Equal(protocol.ByteCount(0x987654321)))
+			Expect(frame.FinalSize).To(Equal(protocol.ByteCount(0x987654321)))
 			Expect(frame.ErrorCode).To(Equal(protocol.ApplicationErrorCode(0x1337)))
 		})
 
@@ -41,9 +41,9 @@ var _ = Describe("RESET_STREAM frame", func() {
 	Context("when writing", func() {
 		It("writes a sample frame", func() {
 			frame := ResetStreamFrame{
-				StreamID:   0x1337,
-				ByteOffset: 0x11223344decafbad,
-				ErrorCode:  0xcafe,
+				StreamID:  0x1337,
+				FinalSize: 0x11223344decafbad,
+				ErrorCode: 0xcafe,
 			}
 			b := &bytes.Buffer{}
 			err := frame.Write(b, versionIETFFrames)
@@ -57,9 +57,9 @@ var _ = Describe("RESET_STREAM frame", func() {
 
 		It("has the correct min length", func() {
 			rst := ResetStreamFrame{
-				StreamID:   0x1337,
-				ByteOffset: 0x1234567,
-				ErrorCode:  0xde,
+				StreamID:  0x1337,
+				FinalSize: 0x1234567,
+				ErrorCode: 0xde,
 			}
 			expectedLen := 1 + utils.VarIntLen(0x1337) + utils.VarIntLen(0x1234567) + 2
 			Expect(rst.Length(versionIETFFrames)).To(Equal(expectedLen))

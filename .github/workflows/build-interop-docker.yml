@@ -1,0 +1,20 @@
+name: Build interop Docker image
+on: 
+  push:
+    branches: [ interop ]
+  
+jobs:
+  interop:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - uses: docker/build-push-action@v1
+        with:
+          always_pull: true
+          path: interop/
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+          repository: martenseemann/quic-go-interop
+          tags: latest
+          tag_with_ref: true
+          add_git_labels: true

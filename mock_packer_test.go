@@ -11,6 +11,9 @@ import (
 	protocol "github.com/Psiphon-Labs/quic-go/internal/protocol"
 	wire "github.com/Psiphon-Labs/quic-go/internal/wire"
 	gomock "github.com/golang/mock/gomock"
+	protocol "github.com/lucas-clemente/quic-go/internal/protocol"
+	qerr "github.com/lucas-clemente/quic-go/internal/qerr"
+	wire "github.com/lucas-clemente/quic-go/internal/wire"
 )
 
 // MockPacker is a mock of Packer interface
@@ -37,7 +40,7 @@ func (m *MockPacker) EXPECT() *MockPackerMockRecorder {
 }
 
 // HandleTransportParameters mocks base method
-func (m *MockPacker) HandleTransportParameters(arg0 *handshake.TransportParameters) {
+func (m *MockPacker) HandleTransportParameters(arg0 *wire.TransportParameters) {
 	m.ctrl.T.Helper()
 	m.ctrl.Call(m, "HandleTransportParameters", arg0)
 }
@@ -49,18 +52,18 @@ func (mr *MockPackerMockRecorder) HandleTransportParameters(arg0 interface{}) *g
 }
 
 // MaybePackAckPacket mocks base method
-func (m *MockPacker) MaybePackAckPacket() (*packedPacket, error) {
+func (m *MockPacker) MaybePackAckPacket(arg0 bool) (*packedPacket, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "MaybePackAckPacket")
+	ret := m.ctrl.Call(m, "MaybePackAckPacket", arg0)
 	ret0, _ := ret[0].(*packedPacket)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // MaybePackAckPacket indicates an expected call of MaybePackAckPacket
-func (mr *MockPackerMockRecorder) MaybePackAckPacket() *gomock.Call {
+func (mr *MockPackerMockRecorder) MaybePackAckPacket(arg0 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MaybePackAckPacket", reflect.TypeOf((*MockPacker)(nil).MaybePackAckPacket))
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MaybePackAckPacket", reflect.TypeOf((*MockPacker)(nil).MaybePackAckPacket), arg0)
 }
 
 // MaybePackProbePacket mocks base method
@@ -78,11 +81,26 @@ func (mr *MockPackerMockRecorder) MaybePackProbePacket(arg0 interface{}) *gomock
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MaybePackProbePacket", reflect.TypeOf((*MockPacker)(nil).MaybePackProbePacket), arg0)
 }
 
+// PackCoalescedPacket mocks base method
+func (m *MockPacker) PackCoalescedPacket() (*coalescedPacket, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "PackCoalescedPacket")
+	ret0, _ := ret[0].(*coalescedPacket)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// PackCoalescedPacket indicates an expected call of PackCoalescedPacket
+func (mr *MockPackerMockRecorder) PackCoalescedPacket() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PackCoalescedPacket", reflect.TypeOf((*MockPacker)(nil).PackCoalescedPacket))
+}
+
 // PackConnectionClose mocks base method
-func (m *MockPacker) PackConnectionClose(arg0 *wire.ConnectionCloseFrame) (*packedPacket, error) {
+func (m *MockPacker) PackConnectionClose(arg0 *qerr.QuicError) (*coalescedPacket, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "PackConnectionClose", arg0)
-	ret0, _ := ret[0].(*packedPacket)
+	ret0, _ := ret[0].(*coalescedPacket)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }

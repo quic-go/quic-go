@@ -10,6 +10,8 @@ import (
 )
 
 type framer interface {
+	HasData() bool
+
 	QueueControlFrame(wire.Frame)
 	AppendControlFrames([]ackhandler.Frame, protocol.ByteCount) ([]ackhandler.Frame, protocol.ByteCount)
 
@@ -41,6 +43,19 @@ func newFramer(
 		activeStreams: make(map[protocol.StreamID]struct{}),
 		version:       v,
 	}
+}
+
+func (f *framerI) HasData() bool {
+	f.mutex.Lock()
+	hasData := len(f.streamQueue) > 0
+	f.mutex.Unlock()
+	if hasData {
+		return true
+	}
+	f.controlFrameMutex.Lock()
+	hasData = len(f.controlFrames) > 0
+	f.controlFrameMutex.Unlock()
+	return hasData
 }
 
 func (f *framerI) QueueControlFrame(frame wire.Frame) {

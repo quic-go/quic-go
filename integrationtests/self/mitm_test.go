@@ -63,10 +63,10 @@ var _ = Describe("MITM test", func() {
 			}
 
 			BeforeEach(func() {
-				serverConfig = &quic.Config{
+				serverConfig = getQuicConfig(&quic.Config{
 					Versions:           []protocol.VersionNumber{version},
 					ConnectionIDLength: connIDLen,
-				}
+				})
 				addr, err := net.ResolveUDPAddr("udp", "localhost:0")
 				Expect(err).ToNot(HaveOccurred())
 				clientConn, err = net.ListenUDP("udp", addr)
@@ -128,10 +128,10 @@ var _ = Describe("MITM test", func() {
 							raddr,
 							fmt.Sprintf("localhost:%d", proxy.LocalPort()),
 							getTLSClientConfig(),
-							&quic.Config{
+							getQuicConfig(&quic.Config{
 								Versions:           []protocol.VersionNumber{version},
 								ConnectionIDLength: connIDLen,
-							},
+							}),
 						)
 						Expect(err).ToNot(HaveOccurred())
 						str, err := sess.AcceptUniStream(context.Background())
@@ -139,7 +139,7 @@ var _ = Describe("MITM test", func() {
 						data, err := ioutil.ReadAll(str)
 						Expect(err).ToNot(HaveOccurred())
 						Expect(data).To(Equal(PRData))
-						Expect(sess.Close()).To(Succeed())
+						Expect(sess.CloseWithError(0, "")).To(Succeed())
 					}
 
 					It("downloads a message when the packets are injected towards the server", func() {
@@ -174,10 +174,10 @@ var _ = Describe("MITM test", func() {
 						raddr,
 						fmt.Sprintf("localhost:%d", proxy.LocalPort()),
 						getTLSClientConfig(),
-						&quic.Config{
+						getQuicConfig(&quic.Config{
 							Versions:           []protocol.VersionNumber{version},
 							ConnectionIDLength: connIDLen,
-						},
+						}),
 					)
 					Expect(err).ToNot(HaveOccurred())
 					str, err := sess.AcceptUniStream(context.Background())
@@ -185,7 +185,7 @@ var _ = Describe("MITM test", func() {
 					data, err := ioutil.ReadAll(str)
 					Expect(err).ToNot(HaveOccurred())
 					Expect(data).To(Equal(PRData))
-					Expect(sess.Close()).To(Succeed())
+					Expect(sess.CloseWithError(0, "")).To(Succeed())
 				}
 
 				Context("duplicating packets", func() {
@@ -222,7 +222,7 @@ var _ = Describe("MITM test", func() {
 
 					BeforeEach(func() {
 						numCorrupted = 0
-						serverConfig.IdleTimeout = idleTimeout
+						serverConfig.MaxIdleTimeout = idleTimeout
 					})
 
 					AfterEach(func() {
@@ -253,8 +253,7 @@ var _ = Describe("MITM test", func() {
 					It("downloads a message when packet are corrupted towards the client", func() {
 						dropCb := func(dir quicproxy.Direction, raw []byte) bool {
 							defer GinkgoRecover()
-							isRetry := raw[0]&0xc0 == 0xc0 // don't corrupt Retry packets
-							if dir == quicproxy.DirectionOutgoing && mrand.Intn(interval) == 0 && !isRetry {
+							if dir == quicproxy.DirectionOutgoing && mrand.Intn(interval) == 0 {
 								pos := mrand.Intn(len(raw))
 								raw[pos] = byte(mrand.Intn(256))
 								_, err := serverConn.WriteTo(raw, clientConn.LocalAddr())
@@ -336,11 +335,11 @@ var _ = Describe("MITM test", func() {
 						raddr,
 						fmt.Sprintf("localhost:%d", proxy.LocalPort()),
 						getTLSClientConfig(),
-						&quic.Config{
+						getQuicConfig(&quic.Config{
 							Versions:           []protocol.VersionNumber{version},
 							ConnectionIDLength: connIDLen,
 							HandshakeTimeout:   2 * time.Second,
-						},
+						}),
 					)
 					return err
 				}
@@ -419,18 +418,15 @@ var _ = Describe("MITM test", func() {
 
 				// client connection closes immediately on receiving ack for unsent packet
 				It("fails when a forged initial packet with ack for unsent packet is sent to client", func() {
+					clientAddr := clientConn.LocalAddr()
 					delayCb := func(dir quicproxy.Direction, raw []byte) time.Duration {
 						if dir == quicproxy.DirectionIncoming {
-							defer GinkgoRecover()
-
 							hdr, _, _, err := wire.ParsePacket(raw, connIDLen)
 							Expect(err).ToNot(HaveOccurred())
-
 							if hdr.Type != protocol.PacketTypeInitial {
 								return 0
 							}
-
-							sendForgedInitialPacketWithAck(serverConn, clientConn.LocalAddr(), hdr)
+							sendForgedInitialPacketWithAck(serverConn, clientAddr, hdr)
 						}
 						return rtt
 					}
@@ -440,7 +436,6 @@ var _ = Describe("MITM test", func() {
 					Expect(err.(*qerr.QuicError).ErrorCode).To(Equal(qerr.ProtocolViolation))
 					Expect(err.Error()).To(ContainSubstring("Received ACK for an unsent packet"))
 				})
-
 			})
 		})
 	}

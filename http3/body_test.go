@@ -155,13 +155,6 @@ var _ = Describe("Body", func() {
 				Expect(errorCbCalled).To(BeTrue())
 			})
 
-			if bodyType == bodyTypeRequest {
-				It("closes requests", func() {
-					str.EXPECT().Close()
-					Expect(rb.Close()).To(Succeed())
-				})
-			}
-
 			if bodyType == bodyTypeResponse {
 				It("closes the reqDone channel when Read errors", func() {
 					buf.Write([]byte("invalid"))

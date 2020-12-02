@@ -6,7 +6,8 @@ import (
 	"net"
 	"sync"
 
-	"github.com/Psiphon-Labs/quic-go/internal/utils"
+	"github.com/lucas-clemente/quic-go/internal/utils"
+	"github.com/lucas-clemente/quic-go/logging"
 )
 
 var (
@@ -14,14 +15,19 @@ var (
 	connMuxer     multiplexer
 )
 
+type indexableConn interface {
+	LocalAddr() net.Addr
+}
+
 type multiplexer interface {
-	AddConn(c net.PacketConn, connIDLen int, statelessResetKey []byte) (packetHandlerManager, error)
-	RemoveConn(net.PacketConn) error
+	AddConn(c net.PacketConn, connIDLen int, statelessResetKey []byte, tracer logging.Tracer) (packetHandlerManager, error)
+	RemoveConn(indexableConn) error
 }
 
 type connManager struct {
 	connIDLen         int
 	statelessResetKey []byte
+	tracer            logging.Tracer
 	manager           packetHandlerManager
 }
 
@@ -31,7 +37,7 @@ type connMultiplexer struct {
 	mutex sync.Mutex
 
 	conns                   map[string] /* LocalAddr().String() */ connManager
-	newPacketHandlerManager func(net.PacketConn, int, []byte, utils.Logger) packetHandlerManager // so it can be replaced in the tests
+	newPacketHandlerManager func(net.PacketConn, int, []byte, logging.Tracer, utils.Logger) (packetHandlerManager, error) // so it can be replaced in the tests
 
 	logger utils.Logger
 }
@@ -53,31 +59,41 @@ func (m *connMultiplexer) AddConn(
 	c net.PacketConn,
 	connIDLen int,
 	statelessResetKey []byte,
+	tracer logging.Tracer,
 ) (packetHandlerManager, error) {
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
 
-	connIndex := c.LocalAddr().Network() + " " + c.LocalAddr().String()
+	addr := c.LocalAddr()
+	connIndex := addr.Network() + " " + addr.String()
 	p, ok := m.conns[connIndex]
 	if !ok {
-		manager := m.newPacketHandlerManager(c, connIDLen, statelessResetKey, m.logger)
+		manager, err := m.newPacketHandlerManager(c, connIDLen, statelessResetKey, tracer, m.logger)
+		if err != nil {
+			return nil, err
+		}
 		p = connManager{
 			connIDLen:         connIDLen,
 			statelessResetKey: statelessResetKey,
 			manager:           manager,
+			tracer:            tracer,
 		}
 		m.conns[connIndex] = p
-	}
-	if p.connIDLen != connIDLen {
-		return nil, fmt.Errorf("cannot use %d byte connection IDs on a connection that is already using %d byte connction IDs", connIDLen, p.connIDLen)
-	}
-	if statelessResetKey != nil && !bytes.Equal(p.statelessResetKey, statelessResetKey) {
-		return nil, fmt.Errorf("cannot use different stateless reset keys on the same packet conn")
+	} else {
+		if p.connIDLen != connIDLen {
+			return nil, fmt.Errorf("cannot use %d byte connection IDs on a connection that is already using %d byte connction IDs", connIDLen, p.connIDLen)
+		}
+		if statelessResetKey != nil && !bytes.Equal(p.statelessResetKey, statelessResetKey) {
+			return nil, fmt.Errorf("cannot use different stateless reset keys on the same packet conn")
+		}
+		if tracer != p.tracer {
+			return nil, fmt.Errorf("cannot use different tracers on the same packet conn")
+		}
 	}
 	return p.manager, nil
 }
 
-func (m *connMultiplexer) RemoveConn(c net.PacketConn) error {
+func (m *connMultiplexer) RemoveConn(c indexableConn) error {
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
 

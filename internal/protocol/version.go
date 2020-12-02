@@ -18,16 +18,16 @@ const (
 
 // The version numbers, making grepping easier
 const (
-	VersionTLS      VersionNumber = VersionMilestone0_14
-	VersionWhatever VersionNumber = 1 // for when the version doesn't matter
+	VersionTLS      VersionNumber = 0xff00001d // draft-29
+	VersionWhatever VersionNumber = 1          // for when the version doesn't matter
 	VersionUnknown  VersionNumber = math.MaxUint32
-
-	VersionMilestone0_14 VersionNumber = 0xff000018 // QUIC WG draft-24
+	VersionDraft29  VersionNumber = 0xff00001d
+	VersionDraft32  VersionNumber = 0xff000020
 )
 
 // SupportedVersions lists the versions that the server supports
 // must be in sorted descending order
-var SupportedVersions = []VersionNumber{VersionMilestone0_14}
+var SupportedVersions = []VersionNumber{VersionDraft32, VersionDraft29}
 
 // IsValidVersion says if the version is known to quic-go
 func IsValidVersion(v VersionNumber) bool {
@@ -35,13 +35,21 @@ func IsValidVersion(v VersionNumber) bool {
 }
 
 func (vn VersionNumber) String() string {
+	// For releases, VersionTLS will be set to a draft version.
+	// A switch statement can't contain duplicate cases.
+	if vn == VersionTLS && VersionTLS != VersionDraft29 && VersionTLS != VersionDraft32 {
+		return "TLS dev version (WIP)"
+	}
+	//nolint:exhaustive
 	switch vn {
 	case VersionWhatever:
 		return "whatever"
 	case VersionUnknown:
 		return "unknown"
-	case VersionMilestone0_14:
-		return "QUIC WG draft-24"
+	case VersionDraft29:
+		return "draft-29"
+	case VersionDraft32:
+		return "draft-32"
 	default:
 		if vn.isGQUIC() {
 			return fmt.Sprintf("gQUIC %d", vn.toGQUICVersion())
@@ -56,6 +64,12 @@ func (vn VersionNumber) isGQUIC() bool {
 
 func (vn VersionNumber) toGQUICVersion() int {
 	return int(10*(vn-gquicVersion0)/0x100) + int(vn%0x10)
+}
+
+// UseRetireBugBackwardsCompatibilityMode says if it is necessary to use the backwards compatilibity mode.
+// This is only the case if it 1. is enabled and 2. draft-29 is used.
+func UseRetireBugBackwardsCompatibilityMode(enabled bool, v VersionNumber) bool {
+	return enabled && v == VersionDraft29
 }
 
 // IsSupportedVersion returns true if the server supports this version

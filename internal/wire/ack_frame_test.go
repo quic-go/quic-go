@@ -197,7 +197,6 @@ var _ = Describe("ACK Frame (for IETF QUIC)", func() {
 					Expect(err).To(MatchError(io.EOF))
 				}
 			})
-
 		})
 	})
 
@@ -207,13 +206,33 @@ var _ = Describe("ACK Frame (for IETF QUIC)", func() {
 			f := &AckFrame{
 				AckRanges: []AckRange{{Smallest: 100, Largest: 1337}},
 			}
-			err := f.Write(buf, versionIETFFrames)
-			Expect(err).ToNot(HaveOccurred())
+			Expect(f.Write(buf, versionIETFFrames)).To(Succeed())
 			expected := []byte{0x2}
 			expected = append(expected, encodeVarInt(1337)...) // largest acked
 			expected = append(expected, 0)                     // delay
 			expected = append(expected, encodeVarInt(0)...)    // num ranges
 			expected = append(expected, encodeVarInt(1337-100)...)
+			Expect(buf.Bytes()).To(Equal(expected))
+		})
+
+		It("writes an ACK-ECN frame", func() {
+			buf := &bytes.Buffer{}
+			f := &AckFrame{
+				AckRanges: []AckRange{{Smallest: 10, Largest: 2000}},
+				ECT0:      13,
+				ECT1:      37,
+				ECNCE:     12345,
+			}
+			Expect(f.Write(buf, versionIETFFrames)).To(Succeed())
+			Expect(f.Length(versionIETFFrames)).To(BeEquivalentTo(buf.Len()))
+			expected := []byte{0x3}
+			expected = append(expected, encodeVarInt(2000)...) // largest acked
+			expected = append(expected, 0)                     // delay
+			expected = append(expected, encodeVarInt(0)...)    // num ranges
+			expected = append(expected, encodeVarInt(2000-10)...)
+			expected = append(expected, encodeVarInt(13)...)
+			expected = append(expected, encodeVarInt(37)...)
+			expected = append(expected, encodeVarInt(12345)...)
 			Expect(buf.Bytes()).To(Equal(expected))
 		})
 
@@ -223,8 +242,7 @@ var _ = Describe("ACK Frame (for IETF QUIC)", func() {
 				AckRanges: []AckRange{{Smallest: 0x2eadbeef, Largest: 0x2eadbeef}},
 				DelayTime: 18 * time.Millisecond,
 			}
-			err := f.Write(buf, versionIETFFrames)
-			Expect(err).ToNot(HaveOccurred())
+			Expect(f.Write(buf, versionIETFFrames)).To(Succeed())
 			Expect(f.Length(versionIETFFrames)).To(BeEquivalentTo(buf.Len()))
 			b := bytes.NewReader(buf.Bytes())
 			frame, err := parseAckFrame(b, protocol.AckDelayExponent, versionIETFFrames)
@@ -240,8 +258,7 @@ var _ = Describe("ACK Frame (for IETF QUIC)", func() {
 			f := &AckFrame{
 				AckRanges: []AckRange{{Smallest: 0x1337, Largest: 0x2eadbeef}},
 			}
-			err := f.Write(buf, versionIETFFrames)
-			Expect(err).ToNot(HaveOccurred())
+			Expect(f.Write(buf, versionIETFFrames)).To(Succeed())
 			Expect(f.Length(versionIETFFrames)).To(BeEquivalentTo(buf.Len()))
 			b := bytes.NewReader(buf.Bytes())
 			frame, err := parseAckFrame(b, protocol.AckDelayExponent, versionIETFFrames)
@@ -282,8 +299,7 @@ var _ = Describe("ACK Frame (for IETF QUIC)", func() {
 				},
 			}
 			Expect(f.validateAckRanges()).To(BeTrue())
-			err := f.Write(buf, versionIETFFrames)
-			Expect(err).ToNot(HaveOccurred())
+			Expect(f.Write(buf, versionIETFFrames)).To(Succeed())
 			Expect(f.Length(versionIETFFrames)).To(BeEquivalentTo(buf.Len()))
 			b := bytes.NewReader(buf.Bytes())
 			frame, err := parseAckFrame(b, protocol.AckDelayExponent, versionIETFFrames)
@@ -302,8 +318,7 @@ var _ = Describe("ACK Frame (for IETF QUIC)", func() {
 			}
 			f := &AckFrame{AckRanges: ackRanges}
 			Expect(f.validateAckRanges()).To(BeTrue())
-			err := f.Write(buf, versionIETFFrames)
-			Expect(err).ToNot(HaveOccurred())
+			Expect(f.Write(buf, versionIETFFrames)).To(Succeed())
 			Expect(f.Length(versionIETFFrames)).To(BeEquivalentTo(buf.Len()))
 			// make sure the ACK frame is *a little bit* smaller than the MaxAckFrameSize
 			Expect(buf.Len()).To(BeNumerically(">", protocol.MaxAckFrameSize-5))

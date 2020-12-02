@@ -1,0 +1,19 @@
+on: [push, pull_request]
+jobs:
+  gogenerate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions/setup-go@v2
+      - name: Install dependencies
+        run: go build
+      - name: Install code generators
+        run: |
+          go install -v github.com/cheekybits/genny
+          go install -v github.com/golang/mock/mockgen
+          go install -v golang.org/x/tools/cmd/goimports
+      - name: Run code generators
+        run: |
+          export GOPATH=$(go env GOPATH)
+          export PATH=$PATH:$GOPATH/bin
+          .github/workflows/go-generate.sh

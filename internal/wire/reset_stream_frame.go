@@ -9,9 +9,9 @@ import (
 
 // A ResetStreamFrame is a RESET_STREAM frame in QUIC
 type ResetStreamFrame struct {
-	StreamID   protocol.StreamID
-	ErrorCode  protocol.ApplicationErrorCode
-	ByteOffset protocol.ByteCount
+	StreamID  protocol.StreamID
+	ErrorCode protocol.ApplicationErrorCode
+	FinalSize protocol.ByteCount
 }
 
 func parseResetStreamFrame(r *bytes.Reader, _ protocol.VersionNumber) (*ResetStreamFrame, error) {
@@ -37,9 +37,9 @@ func parseResetStreamFrame(r *bytes.Reader, _ protocol.VersionNumber) (*ResetStr
 	byteOffset = protocol.ByteCount(bo)
 
 	return &ResetStreamFrame{
-		StreamID:   streamID,
-		ErrorCode:  protocol.ApplicationErrorCode(errorCode),
-		ByteOffset: byteOffset,
+		StreamID:  streamID,
+		ErrorCode: protocol.ApplicationErrorCode(errorCode),
+		FinalSize: byteOffset,
 	}, nil
 }
 
@@ -47,11 +47,11 @@ func (f *ResetStreamFrame) Write(b *bytes.Buffer, _ protocol.VersionNumber) erro
 	b.WriteByte(0x4)
 	utils.WriteVarInt(b, uint64(f.StreamID))
 	utils.WriteVarInt(b, uint64(f.ErrorCode))
-	utils.WriteVarInt(b, uint64(f.ByteOffset))
+	utils.WriteVarInt(b, uint64(f.FinalSize))
 	return nil
 }
 
 // Length of a written frame
 func (f *ResetStreamFrame) Length(version protocol.VersionNumber) protocol.ByteCount {
-	return 1 + utils.VarIntLen(uint64(f.StreamID)) + utils.VarIntLen(uint64(f.ErrorCode)) + utils.VarIntLen(uint64(f.ByteOffset))
+	return 1 + utils.VarIntLen(uint64(f.StreamID)) + utils.VarIntLen(uint64(f.ErrorCode)) + utils.VarIntLen(uint64(f.FinalSize))
 }

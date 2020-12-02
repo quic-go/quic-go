@@ -2,13 +2,12 @@ package wire
 
 import (
 	"bytes"
+	"testing"
 
 	"github.com/Psiphon-Labs/quic-go/internal/protocol"
 	"github.com/Psiphon-Labs/quic-go/internal/utils"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
-
-	"testing"
 )
 
 func TestWire(t *testing.T) {

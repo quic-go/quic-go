@@ -70,7 +70,7 @@ var _ = Describe("NEW_CONNECTION_ID frame", func() {
 
 	Context("when writing", func() {
 		It("writes a sample frame", func() {
-			token := [16]byte{0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15}
+			token := protocol.StatelessResetToken{0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15}
 			frame := &NewConnectionIDFrame{
 				SequenceNumber:      0x1337,
 				RetirePriorTo:       0x42,
@@ -89,7 +89,7 @@ var _ = Describe("NEW_CONNECTION_ID frame", func() {
 		})
 
 		It("has the correct length", func() {
-			token := [16]byte{0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15}
+			token := protocol.StatelessResetToken{0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15}
 			frame := &NewConnectionIDFrame{
 				SequenceNumber:      0xdecafbad,
 				RetirePriorTo:       0xdeadbeefcafe,
