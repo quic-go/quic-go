@@ -96,7 +96,7 @@ func newPacketHandlerMap(
 ) (packetHandlerManager, error) {
 	if err := setReceiveBuffer(c, logger); err != nil {
 		receiveBufferWarningOnce.Do(func() {
-			log.Println(err)
+			log.Printf("%s. See https://github.com/lucas-clemente/quic-go/wiki/UDP-Receive-Buffer-Size for details.", err)
 		})
 	}
 	conn, err := wrapConn(c)
