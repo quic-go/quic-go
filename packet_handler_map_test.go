@@ -4,7 +4,10 @@ import (
 	"bytes"
 	"crypto/rand"
 	"errors"
+	"io/ioutil"
+	"log"
 	"net"
+	"os"
 	"time"
 
 	mocklogging "github.com/lucas-clemente/quic-go/internal/mocks/logging"
@@ -63,6 +66,7 @@ var _ = Describe("Packet Handler Map", func() {
 	})
 
 	JustBeforeEach(func() {
+		log.SetOutput(ioutil.Discard)
 		conn = NewMockPacketConn(mockCtrl)
 		conn.EXPECT().LocalAddr().Return(&net.UDPAddr{}).AnyTimes()
 		conn.EXPECT().ReadFrom(gomock.Any()).DoAndReturn(func(b []byte) (int, net.Addr, error) {
@@ -76,6 +80,8 @@ var _ = Describe("Packet Handler Map", func() {
 		Expect(err).ToNot(HaveOccurred())
 		handler = phm.(*packetHandlerMap)
 	})
+
+	AfterEach(func() { log.SetOutput(os.Stdout) })
 
 	It("closes", func() {
 		getMultiplexer() // make the sync.Once execute

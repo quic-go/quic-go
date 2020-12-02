@@ -4,6 +4,7 @@ import (
 	"crypto/hmac"
 	"crypto/rand"
 	"crypto/sha256"
+	"errors"
 	"fmt"
 	"hash"
 	"log"
@@ -54,39 +55,37 @@ type packetHandlerMap struct {
 
 var _ packetHandlerManager = &packetHandlerMap{}
 
-func setReceiveBuffer(c net.PacketConn, logger utils.Logger) {
+func setReceiveBuffer(c net.PacketConn, logger utils.Logger) error {
 	conn, ok := c.(interface{ SetReadBuffer(int) error })
 	if !ok {
-		logger.Debugf("Connection doesn't allow setting of receive buffer size")
-		return
+		return errors.New("connection doesn't allow setting of receive buffer size")
 	}
 	size, err := inspectReadBuffer(c)
 	if err != nil {
-		log.Printf("Failed to determine receive buffer size: %s", err)
-		return
+		return fmt.Errorf("failed to determine receive buffer size: %w", err)
 	}
 	if size >= protocol.DesiredReceiveBufferSize {
 		logger.Debugf("Conn has receive buffer of %d kiB (wanted: at least %d kiB)", size/1024, protocol.DesiredReceiveBufferSize/1024)
 	}
 	if err := conn.SetReadBuffer(protocol.DesiredReceiveBufferSize); err != nil {
-		log.Printf("Failed to increase receive buffer size: %s\n", err)
-		return
+		return fmt.Errorf("failed to increase receive buffer size: %w", err)
 	}
 	newSize, err := inspectReadBuffer(c)
 	if err != nil {
-		log.Printf("Failed to determine receive buffer size: %s", err)
-		return
+		return fmt.Errorf("failed to determine receive buffer size: %w", err)
 	}
 	if newSize == size {
-		log.Printf("Failed to determine receive buffer size: %s", err)
-		return
+		return fmt.Errorf("failed to determine receive buffer size: %w", err)
 	}
 	if newSize < protocol.DesiredReceiveBufferSize {
-		log.Printf("Failed to sufficiently increase receive buffer size. Was: %d kiB, wanted: %d kiB, got: %d kiB.", size/1024, protocol.DesiredReceiveBufferSize/1024, newSize/1024)
-		return
+		return fmt.Errorf("failed to sufficiently increase receive buffer size (was: %d kiB, wanted: %d kiB, got: %d kiB)", size/1024, protocol.DesiredReceiveBufferSize/1024, newSize/1024)
 	}
 	logger.Debugf("Increased receive buffer size to %d kiB", newSize/1024)
+	return nil
 }
+
+// only print warnings about the UPD receive buffer size once
+var receiveBufferWarningOnce sync.Once
 
 func newPacketHandlerMap(
 	c net.PacketConn,
@@ -95,7 +94,11 @@ func newPacketHandlerMap(
 	tracer logging.Tracer,
 	logger utils.Logger,
 ) (packetHandlerManager, error) {
-	setReceiveBuffer(c, logger)
+	if err := setReceiveBuffer(c, logger); err != nil {
+		receiveBufferWarningOnce.Do(func() {
+			log.Println(err)
+		})
+	}
 	conn, err := wrapConn(c)
 	if err != nil {
 		return nil, err
