@@ -518,19 +518,6 @@ func (s *session) preSetup() {
 	}
 }
 
-// [Psiphon]
-//
-// Backport https://github.com/lucas-clemente/quic-go/commit/079279b9cf4cb5dafc8b7f673a2e7e47a4b6a06e:
-//   > session.maybeResetTimer() and session.run() were using slightly
-//   > different definitions of when a keep-alive PING should be sent. Under
-//   > certain conditions, this would make us repeatedly set a timer for the
-//   > keep-alive, but on timer expiration no keep-alive would be sent.
-//
-// This changes session.run and session.maybeResetTimer. As we don't yet have
-// https://github.com/lucas-clemente/quic-go/commit/27549c56656665859354255d3912f6428bfcb9f0,
-// "use the minimum of the two peers' max_idle_timeouts", s.config.IdleTimeout is used
-// in place of s.idleTimeout.
-
 // run the session main loop
 func (s *session) run() error {
 	defer s.ctxCancel()
@@ -632,10 +619,6 @@ runLoop:
 			s.closeLocal(err)
 		}
 	}
-
-	// [Psiphon]
-	// Stop timer to immediately release resources
-	s.timer.Reset(time.Time{})
 
 	s.handleCloseError(closeErr)
 	if !errors.Is(closeErr.err, errCloseForRecreating{}) && s.tracer != nil {

@@ -54,7 +54,12 @@ type client struct {
 	decoder *qpack.Decoder
 
 	hostname string
-	session  quic.EarlySession
+
+	// [Psiphon]
+	// Enable Close to be called concurrently with dial.
+	sessionMutex sync.Mutex
+	closed       bool
+	session      quic.EarlySession
 
 	logger utils.Logger
 }
@@ -75,7 +80,14 @@ func newClient(
 	if len(quicConfig.Versions) != 1 {
 		return nil, errors.New("can only use a single QUIC version for dialing a HTTP/3 connection")
 	}
-	quicConfig.MaxIncomingStreams = -1 // don't allow any bidirectional streams
+
+	// [Psiphon]
+	// Avoid race condition the results from concurrent RoundTrippers using
+	// defaultQuicConfig.
+	if quicConfig.MaxIncomingStreams != -1 {
+		quicConfig.MaxIncomingStreams = -1 // don't allow any bidirectional streams
+	}
+
 	logger := utils.DefaultLogger.WithPrefix("h3 client")
 
 	if tlsConf == nil {
@@ -100,7 +112,7 @@ func newClient(
 
 func (c *client) dial() error {
 	var err error
-	var session quic.Session
+	var session quic.EarlySession
 	if c.dialer != nil {
 		session, err = c.dialer("udp", c.hostname, c.tlsConf, c.config)
 	} else {
@@ -108,9 +120,14 @@ func (c *client) dial() error {
 	}
 
 	// [Psiphon]
-	c.setSession.Lock()
-	c.session = session
-	c.setSession.Unlock()
+	c.sessionMutex.Lock()
+	if c.closed {
+		session.CloseWithError(quic.ErrorCode(errorNoError), "")
+		err = errors.New("closed while dialing")
+	} else {
+		c.session = session
+	}
+	c.sessionMutex.Unlock()
 
 	if err != nil {
 		return err
@@ -146,10 +163,17 @@ func (c *client) setupSession() error {
 }
 
 func (c *client) Close() error {
-	if c.session == nil {
+
+	// [Psiphon]
+	c.sessionMutex.Lock()
+	session := c.session
+	c.closed = true
+	c.sessionMutex.Unlock()
+
+	if session == nil {
 		return nil
 	}
-	return c.session.CloseWithError(quic.ErrorCode(errorNoError), "")
+	return session.CloseWithError(quic.ErrorCode(errorNoError), "")
 }
 
 func (c *client) maxHeaderBytes() uint64 {
