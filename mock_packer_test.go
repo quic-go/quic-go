@@ -9,11 +9,9 @@ import (
 
 	handshake "github.com/Psiphon-Labs/quic-go/internal/handshake"
 	protocol "github.com/Psiphon-Labs/quic-go/internal/protocol"
+	qerr "github.com/Psiphon-Labs/quic-go/internal/qerr"
 	wire "github.com/Psiphon-Labs/quic-go/internal/wire"
 	gomock "github.com/golang/mock/gomock"
-	protocol "github.com/lucas-clemente/quic-go/internal/protocol"
-	qerr "github.com/lucas-clemente/quic-go/internal/qerr"
-	wire "github.com/lucas-clemente/quic-go/internal/wire"
 )
 
 // MockPacker is a mock of Packer interface

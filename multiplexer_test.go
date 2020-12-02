@@ -3,8 +3,8 @@ package quic
 import (
 	"net"
 
+	mocklogging "github.com/Psiphon-Labs/quic-go/internal/mocks/logging"
 	"github.com/golang/mock/gomock"
-	mocklogging "github.com/lucas-clemente/quic-go/internal/mocks/logging"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"

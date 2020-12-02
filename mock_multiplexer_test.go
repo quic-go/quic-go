@@ -8,8 +8,8 @@ import (
 	net "net"
 	reflect "reflect"
 
+	logging "github.com/Psiphon-Labs/quic-go/logging"
 	gomock "github.com/golang/mock/gomock"
-	logging "github.com/lucas-clemente/quic-go/logging"
 )
 
 // MockMultiplexer is a mock of Multiplexer interface

@@ -9,10 +9,8 @@ import (
 
 	handshake "github.com/Psiphon-Labs/quic-go/internal/handshake"
 	protocol "github.com/Psiphon-Labs/quic-go/internal/protocol"
+	qtls "github.com/Psiphon-Labs/quic-go/internal/qtls"
 	gomock "github.com/golang/mock/gomock"
-	handshake "github.com/lucas-clemente/quic-go/internal/handshake"
-	protocol "github.com/lucas-clemente/quic-go/internal/protocol"
-	qtls "github.com/lucas-clemente/quic-go/internal/qtls"
 )
 
 // MockCryptoSetup is a mock of CryptoSetup interface

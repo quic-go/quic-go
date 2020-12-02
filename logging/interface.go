@@ -6,11 +6,11 @@ import (
 	"net"
 	"time"
 
-	"github.com/lucas-clemente/quic-go/internal/utils"
+	"github.com/Psiphon-Labs/quic-go/internal/utils"
 
-	"github.com/lucas-clemente/quic-go/internal/protocol"
-	"github.com/lucas-clemente/quic-go/internal/qerr"
-	"github.com/lucas-clemente/quic-go/internal/wire"
+	"github.com/Psiphon-Labs/quic-go/internal/protocol"
+	"github.com/Psiphon-Labs/quic-go/internal/qerr"
+	"github.com/Psiphon-Labs/quic-go/internal/wire"
 )
 
 type (

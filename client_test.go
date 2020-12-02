@@ -8,11 +8,11 @@ import (
 	"os"
 	"time"
 
-	mocklogging "github.com/lucas-clemente/quic-go/internal/mocks/logging"
-	"github.com/lucas-clemente/quic-go/internal/protocol"
-	"github.com/lucas-clemente/quic-go/internal/utils"
-	"github.com/lucas-clemente/quic-go/logging"
-	"github.com/lucas-clemente/quic-go/quictrace"
+	mocklogging "github.com/Psiphon-Labs/quic-go/internal/mocks/logging"
+	"github.com/Psiphon-Labs/quic-go/internal/protocol"
+	"github.com/Psiphon-Labs/quic-go/internal/utils"
+	"github.com/Psiphon-Labs/quic-go/logging"
+	"github.com/Psiphon-Labs/quic-go/quictrace"
 
 	"github.com/golang/mock/gomock"
 

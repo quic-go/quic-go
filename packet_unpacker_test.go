@@ -5,7 +5,7 @@ import (
 	"errors"
 	"time"
 
-	"github.com/lucas-clemente/quic-go/internal/qerr"
+	"github.com/Psiphon-Labs/quic-go/internal/qerr"
 
 	"github.com/golang/mock/gomock"
 
