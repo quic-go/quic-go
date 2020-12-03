@@ -616,6 +616,22 @@ var _ = Describe("Server", func() {
 			Expect(conf.NextProtos).To(Equal([]string{"foo", "bar"}))
 			checkGetConfigForClientVersions(receivedConf)
 		})
+
+		It("works if GetConfigForClient returns a nil tls.Config", func() {
+			tlsConf := &tls.Config{GetConfigForClient: func(*tls.ClientHelloInfo) (*tls.Config, error) { return nil, nil }}
+
+			var receivedConf *tls.Config
+			quicListenAddr = func(addr string, conf *tls.Config, _ *quic.Config) (quic.EarlyListener, error) {
+				receivedConf = conf
+				return nil, errors.New("listen err")
+			}
+			s.TLSConfig = tlsConf
+			Expect(s.ListenAndServe()).To(HaveOccurred())
+			conf, err := receivedConf.GetConfigForClient(&tls.ClientHelloInfo{})
+			Expect(err).ToNot(HaveOccurred())
+			Expect(conf).ToNot(BeNil())
+			checkGetConfigForClientVersions(receivedConf)
+		})
 	})
 
 	It("closes gracefully", func() {
