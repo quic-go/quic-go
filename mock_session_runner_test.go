@@ -121,15 +121,3 @@ func (mr *MockSessionRunnerMockRecorder) Retire(arg0 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Retire", reflect.TypeOf((*MockSessionRunner)(nil).Retire), arg0)
 }
-
-// RetireResetToken mocks base method
-func (m *MockSessionRunner) RetireResetToken(arg0 protocol.StatelessResetToken) {
-	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "RetireResetToken", arg0)
-}
-
-// RetireResetToken indicates an expected call of RetireResetToken
-func (mr *MockSessionRunnerMockRecorder) RetireResetToken(arg0 interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RetireResetToken", reflect.TypeOf((*MockSessionRunner)(nil).RetireResetToken), arg0)
-}

@@ -321,20 +321,19 @@ var _ = Describe("Packet Handler Map", func() {
 					Eventually(destroyed).Should(BeClosed())
 				})
 
-				It("retires reset tokens", func() {
-					handler.deleteRetiredSessionsAfter = scaleDuration(10 * time.Millisecond)
+				It("removes reset tokens", func() {
 					connID := protocol.ConnectionID{0xde, 0xad, 0xbe, 0xef, 0x42}
 					packetHandler := NewMockPacketHandler(mockCtrl)
 					handler.Add(connID, packetHandler)
 					token := protocol.StatelessResetToken{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16}
 					handler.AddResetToken(token, NewMockPacketHandler(mockCtrl))
-					handler.RetireResetToken(token)
+					handler.RemoveResetToken(token)
+					// don't EXPECT any call to packetHandler.destroy()
 					packetHandler.EXPECT().handlePacket(gomock.Any())
 					p := append([]byte{0x40} /* short header packet */, connID.Bytes()...)
 					p = append(p, make([]byte, 50)...)
 					p = append(p, token[:]...)
 
-					time.Sleep(scaleDuration(30 * time.Millisecond))
 					handler.handlePacket(&receivedPacket{data: p})
 				})
 

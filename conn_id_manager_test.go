@@ -12,7 +12,6 @@ var _ = Describe("Connection ID Manager", func() {
 		m             *connIDManager
 		frameQueue    []wire.Frame
 		tokenAdded    *protocol.StatelessResetToken
-		retiredTokens []protocol.StatelessResetToken
 		removedTokens []protocol.StatelessResetToken
 	)
 	initialConnID := protocol.ConnectionID{0, 0, 0, 0}
@@ -20,13 +19,11 @@ var _ = Describe("Connection ID Manager", func() {
 	BeforeEach(func() {
 		frameQueue = nil
 		tokenAdded = nil
-		retiredTokens = nil
 		removedTokens = nil
 		m = newConnIDManager(
 			initialConnID,
 			func(token protocol.StatelessResetToken) { tokenAdded = &token },
 			func(token protocol.StatelessResetToken) { removedTokens = append(removedTokens, token) },
-			func(token protocol.StatelessResetToken) { retiredTokens = append(retiredTokens, token) },
 			func(f wire.Frame,
 			) {
 				frameQueue = append(frameQueue, f)
@@ -282,8 +279,8 @@ var _ = Describe("Connection ID Manager", func() {
 			if !connID.Equal(lastConnID) {
 				counter++
 				lastConnID = connID
-				Expect(retiredTokens).To(HaveLen(1))
-				retiredTokens = nil
+				Expect(removedTokens).To(HaveLen(1))
+				removedTokens = nil
 				Expect(m.Add(&wire.NewConnectionIDFrame{
 					SequenceNumber:      uint64(s),
 					ConnectionID:        protocol.ConnectionID{s, s, s, s},
@@ -344,13 +341,12 @@ var _ = Describe("Connection ID Manager", func() {
 			ConnectionID:   protocol.ConnectionID{1, 3, 3, 7},
 		})).To(Succeed())
 		Expect(m.Get()).To(Equal(protocol.ConnectionID{2, 2, 2, 2}))
-		Expect(retiredTokens).To(HaveLen(1))
-		Expect(retiredTokens[0]).To(Equal(protocol.StatelessResetToken{1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1}))
+		Expect(removedTokens).To(HaveLen(1))
+		Expect(removedTokens[0]).To(Equal(protocol.StatelessResetToken{1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1}))
 	})
 
 	It("removes the currently active stateless reset token when it is closed", func() {
 		m.Close()
-		Expect(retiredTokens).To(BeEmpty())
 		Expect(removedTokens).To(BeEmpty())
 		Expect(m.Add(&wire.NewConnectionIDFrame{
 			SequenceNumber:      1,
@@ -360,7 +356,6 @@ var _ = Describe("Connection ID Manager", func() {
 		m.SetHandshakeComplete()
 		Expect(m.Get()).To(Equal(protocol.ConnectionID{1, 2, 3, 4}))
 		m.Close()
-		Expect(retiredTokens).To(BeEmpty())
 		Expect(removedTokens).To(HaveLen(1))
 		Expect(removedTokens[0]).To(Equal(protocol.StatelessResetToken{16, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1}))
 	})
