@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"net"
 	"net/http"
 	"runtime"
@@ -21,6 +22,13 @@ import (
 	"github.com/lucas-clemente/quic-go/internal/utils"
 	"github.com/marten-seemann/qpack"
 )
+
+func init() {
+	// Chrome compatibility mode:
+	// Chrome 87 doesn't support key updates (support was added in Chrome 88).
+	// Don't initiate key updates to avoid breaking large downloads.
+	handshake.KeyUpdateInterval = math.MaxUint64
+}
 
 // allows mocking of quic.Listen and quic.ListenAddr
 var (
