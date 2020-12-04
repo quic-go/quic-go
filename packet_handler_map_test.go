@@ -298,7 +298,6 @@ var _ = Describe("Packet Handler Map", func() {
 					})
 					packetChan <- packetToRead{data: packet}
 					Eventually(destroyed).Should(BeClosed())
-					time.Sleep(time.Second)
 				})
 
 				It("handles stateless resets for 0-length connection IDs", func() {
