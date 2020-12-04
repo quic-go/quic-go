@@ -140,18 +140,24 @@ func (s *Server) serveImpl(tlsConf *tls.Config, conn net.PacketConn) error {
 			if qconn, ok := ch.Conn.(handshake.ConnWithVersion); ok && qconn.GetQUICVersion() == quic.VersionDraft32 {
 				proto = nextProtoH3Draft32
 			}
-			conf := tlsConf
+			config := tlsConf
 			if tlsConf.GetConfigForClient != nil {
 				getConfigForClient := tlsConf.GetConfigForClient
 				var err error
-				conf, err = getConfigForClient(ch)
+				conf, err := getConfigForClient(ch)
 				if err != nil {
 					return nil, err
 				}
+				if conf != nil {
+					config = conf
+				}
 			}
-			conf = conf.Clone()
-			conf.NextProtos = []string{proto}
-			return conf, nil
+			if config == nil {
+				return nil, nil
+			}
+			config = config.Clone()
+			config.NextProtos = []string{proto}
+			return config, nil
 		},
 	}
 
