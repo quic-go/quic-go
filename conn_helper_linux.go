@@ -2,10 +2,6 @@
 
 package quic
 
-import "syscall"
+import "golang.org/x/sys/unix"
 
-const msgTypeIPTOS = syscall.IP_TOS
-
-func setRECVTOS(fd uintptr) error {
-	return syscall.SetsockoptInt(int(fd), syscall.IPPROTO_IP, syscall.IP_RECVTOS, 1)
-}
+const msgTypeIPTOS = unix.IP_TOS

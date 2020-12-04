@@ -4,8 +4,9 @@ package quic
 
 import (
 	"net"
-	"syscall"
 	"time"
+
+	"golang.org/x/sys/unix"
 
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/internal/utils"
@@ -60,7 +61,7 @@ var _ = Describe("Basic Conn Test", func() {
 				"udp4",
 				conn.LocalAddr().(*net.UDPAddr),
 				func(fd uintptr) {
-					Expect(syscall.SetsockoptInt(int(fd), syscall.IPPROTO_IP, syscall.IP_TOS, 2)).To(Succeed())
+					Expect(unix.SetsockoptInt(int(fd), unix.IPPROTO_IP, unix.IP_TOS, 2)).To(Succeed())
 				},
 			)
 
@@ -80,7 +81,7 @@ var _ = Describe("Basic Conn Test", func() {
 				"udp6",
 				conn.LocalAddr().(*net.UDPAddr),
 				func(fd uintptr) {
-					Expect(syscall.SetsockoptInt(int(fd), syscall.IPPROTO_IPV6, syscall.IPV6_TCLASS, 3)).To(Succeed())
+					Expect(unix.SetsockoptInt(int(fd), unix.IPPROTO_IPV6, unix.IPV6_TCLASS, 3)).To(Succeed())
 				},
 			)
 
@@ -102,7 +103,7 @@ var _ = Describe("Basic Conn Test", func() {
 				"udp4",
 				&net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: port},
 				func(fd uintptr) {
-					Expect(syscall.SetsockoptInt(int(fd), syscall.IPPROTO_IP, syscall.IP_TOS, 3)).To(Succeed())
+					Expect(unix.SetsockoptInt(int(fd), unix.IPPROTO_IP, unix.IP_TOS, 3)).To(Succeed())
 				},
 			)
 
@@ -116,7 +117,7 @@ var _ = Describe("Basic Conn Test", func() {
 				"udp6",
 				&net.UDPAddr{IP: net.IPv6loopback, Port: port},
 				func(fd uintptr) {
-					Expect(syscall.SetsockoptInt(int(fd), syscall.IPPROTO_IPV6, syscall.IPV6_TCLASS, 1)).To(Succeed())
+					Expect(unix.SetsockoptInt(int(fd), unix.IPPROTO_IPV6, unix.IPV6_TCLASS, 1)).To(Succeed())
 				},
 			)
 
