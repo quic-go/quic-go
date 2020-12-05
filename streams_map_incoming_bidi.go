@@ -12,14 +12,18 @@ import (
 	"github.com/lucas-clemente/quic-go/internal/wire"
 )
 
+// When a stream is deleted before it was accepted, we can't delete it from the map immediately.
+// We need to wait until the application accepts it, and delete it then.
+type streamIEntry struct {
+	stream       streamI
+	shouldDelete bool
+}
+
 type incomingBidiStreamsMap struct {
 	mutex         sync.RWMutex
 	newStreamChan chan struct{}
 
-	streams map[protocol.StreamNum]streamI
-	// When a stream is deleted before it was accepted, we can't delete it immediately.
-	// We need to wait until the application accepts it, and delete it immediately then.
-	streamsToDelete map[protocol.StreamNum]struct{} // used as a set
+	streams map[protocol.StreamNum]streamIEntry
 
 	nextStreamToAccept protocol.StreamNum // the next stream that will be returned by AcceptStream()
 	nextStreamToOpen   protocol.StreamNum // the highest stream that the peer opened
@@ -39,8 +43,7 @@ func newIncomingBidiStreamsMap(
 ) *incomingBidiStreamsMap {
 	return &incomingBidiStreamsMap{
 		newStreamChan:      make(chan struct{}, 1),
-		streams:            make(map[protocol.StreamNum]streamI),
-		streamsToDelete:    make(map[protocol.StreamNum]struct{}),
+		streams:            make(map[protocol.StreamNum]streamIEntry),
 		maxStream:          protocol.StreamNum(maxStreams),
 		maxNumStreams:      maxStreams,
 		newStream:          newStream,
@@ -60,7 +63,7 @@ func (m *incomingBidiStreamsMap) AcceptStream(ctx context.Context) (streamI, err
 	m.mutex.Lock()
 
 	var num protocol.StreamNum
-	var str streamI
+	var entry streamIEntry
 	for {
 		num = m.nextStreamToAccept
 		if m.closeErr != nil {
@@ -68,7 +71,7 @@ func (m *incomingBidiStreamsMap) AcceptStream(ctx context.Context) (streamI, err
 			return nil, m.closeErr
 		}
 		var ok bool
-		str, ok = m.streams[num]
+		entry, ok = m.streams[num]
 		if ok {
 			break
 		}
@@ -82,15 +85,14 @@ func (m *incomingBidiStreamsMap) AcceptStream(ctx context.Context) (streamI, err
 	}
 	m.nextStreamToAccept++
 	// If this stream was completed before being accepted, we can delete it now.
-	if _, ok := m.streamsToDelete[num]; ok {
-		delete(m.streamsToDelete, num)
+	if entry.shouldDelete {
 		if err := m.deleteStream(num); err != nil {
 			m.mutex.Unlock()
 			return nil, err
 		}
 	}
 	m.mutex.Unlock()
-	return str, nil
+	return entry.stream, nil
 }
 
 func (m *incomingBidiStreamsMap) GetOrOpenStream(num protocol.StreamNum) (streamI, error) {
@@ -108,8 +110,8 @@ func (m *incomingBidiStreamsMap) GetOrOpenStream(num protocol.StreamNum) (stream
 	if num < m.nextStreamToOpen {
 		var s streamI
 		// If the stream was already queued for deletion, and is just waiting to be accepted, don't return it.
-		if _, ok := m.streamsToDelete[num]; !ok {
-			s = m.streams[num]
+		if entry, ok := m.streams[num]; ok && !entry.shouldDelete {
+			s = entry.stream
 		}
 		m.mutex.RUnlock()
 		return s, nil
@@ -121,16 +123,16 @@ func (m *incomingBidiStreamsMap) GetOrOpenStream(num protocol.StreamNum) (stream
 	// * maxStream can only increase, so if the id was valid before, it definitely is valid now
 	// * highestStream is only modified by this function
 	for newNum := m.nextStreamToOpen; newNum <= num; newNum++ {
-		m.streams[newNum] = m.newStream(newNum)
+		m.streams[newNum] = streamIEntry{stream: m.newStream(newNum)}
 		select {
 		case m.newStreamChan <- struct{}{}:
 		default:
 		}
 	}
 	m.nextStreamToOpen = num + 1
-	s := m.streams[num]
+	entry := m.streams[num]
 	m.mutex.Unlock()
-	return s, nil
+	return entry.stream, nil
 }
 
 func (m *incomingBidiStreamsMap) DeleteStream(num protocol.StreamNum) error {
@@ -151,13 +153,15 @@ func (m *incomingBidiStreamsMap) deleteStream(num protocol.StreamNum) error {
 	// Don't delete this stream yet, if it was not yet accepted.
 	// Just save it to streamsToDelete map, to make sure it is deleted as soon as it gets accepted.
 	if num >= m.nextStreamToAccept {
-		if _, ok := m.streamsToDelete[num]; ok {
+		entry, ok := m.streams[num]
+		if ok && entry.shouldDelete {
 			return streamError{
 				message: "Tried to delete incoming stream %d multiple times",
 				nums:    []protocol.StreamNum{num},
 			}
 		}
-		m.streamsToDelete[num] = struct{}{}
+		entry.shouldDelete = true
+		m.streams[num] = entry // can't assign to struct in map, so we need to reassign
 		return nil
 	}
 
@@ -180,8 +184,8 @@ func (m *incomingBidiStreamsMap) deleteStream(num protocol.StreamNum) error {
 func (m *incomingBidiStreamsMap) CloseWithError(err error) {
 	m.mutex.Lock()
 	m.closeErr = err
-	for _, str := range m.streams {
-		str.closeForShutdown(err)
+	for _, entry := range m.streams {
+		entry.stream.closeForShutdown(err)
 	}
 	m.mutex.Unlock()
 	close(m.newStreamChan)
