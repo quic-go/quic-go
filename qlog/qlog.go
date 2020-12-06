@@ -9,9 +9,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/lucas-clemente/quic-go/internal/utils"
-
 	"github.com/lucas-clemente/quic-go/internal/protocol"
+	"github.com/lucas-clemente/quic-go/internal/utils"
 	"github.com/lucas-clemente/quic-go/internal/wire"
 	"github.com/lucas-clemente/quic-go/logging"
 
@@ -157,15 +156,8 @@ func (t *connectionTracer) StartedConnection(local, remote net.Addr, version pro
 
 func (t *connectionTracer) ClosedConnection(r logging.CloseReason) {
 	t.mutex.Lock()
-	defer t.mutex.Unlock()
-
-	if reason, ok := r.Timeout(); ok {
-		t.recordEvent(time.Now(), &eventConnectionClosed{Reason: timeoutReason(reason)})
-	} else if token, ok := r.StatelessReset(); ok {
-		t.recordEvent(time.Now(), &eventStatelessResetReceived{
-			Token: token,
-		})
-	}
+	t.recordEvent(time.Now(), &eventConnectionClosed{Reason: r})
+	t.mutex.Unlock()
 }
 
 func (t *connectionTracer) SentTransportParameters(tp *wire.TransportParameters) {

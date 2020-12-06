@@ -77,16 +77,42 @@ func (e eventConnectionStarted) MarshalJSONObject(enc *gojay.Encoder) {
 }
 
 type eventConnectionClosed struct {
-	Reason timeoutReason
+	Reason logging.CloseReason
 }
 
 func (e eventConnectionClosed) Category() category { return categoryTransport }
-func (e eventConnectionClosed) Name() string       { return "connection_state_updated" }
+func (e eventConnectionClosed) Name() string       { return "connection_closed" }
 func (e eventConnectionClosed) IsNil() bool        { return false }
 
 func (e eventConnectionClosed) MarshalJSONObject(enc *gojay.Encoder) {
-	enc.StringKey("new", "closed")
-	enc.StringKey("trigger", e.Reason.String())
+	// TODO: add version mismatch
+	if token, ok := e.Reason.StatelessReset(); ok {
+		enc.StringKey("owner", ownerRemote.String())
+		enc.StringKey("trigger", "stateless_reset")
+		enc.StringKey("stateless_reset_token", fmt.Sprintf("%x", token))
+		return
+	}
+	if timeout, ok := e.Reason.Timeout(); ok {
+		enc.StringKey("owner", ownerLocal.String())
+		enc.StringKey("trigger", timeoutReason(timeout).String())
+		return
+	}
+	if code, remote, ok := e.Reason.ApplicationError(); ok {
+		owner := ownerLocal
+		if remote {
+			owner = ownerRemote
+		}
+		enc.StringKey("owner", owner.String())
+		enc.Uint64Key("application_code", uint64(code))
+	}
+	if code, remote, ok := e.Reason.TransportError(); ok {
+		owner := ownerLocal
+		if remote {
+			owner = ownerRemote
+		}
+		enc.StringKey("owner", owner.String())
+		enc.StringKey("connection_code", transportError(code).String())
+	}
 }
 
 type eventPacketSent struct {
@@ -153,19 +179,6 @@ func (e eventVersionNegotiationReceived) IsNil() bool        { return false }
 func (e eventVersionNegotiationReceived) MarshalJSONObject(enc *gojay.Encoder) {
 	enc.ObjectKey("header", e.Header)
 	enc.ArrayKey("supported_versions", versions(e.SupportedVersions))
-}
-
-type eventStatelessResetReceived struct {
-	Token protocol.StatelessResetToken
-}
-
-func (e eventStatelessResetReceived) Category() category { return categoryTransport }
-func (e eventStatelessResetReceived) Name() string       { return "packet_received" }
-func (e eventStatelessResetReceived) IsNil() bool        { return false }
-
-func (e eventStatelessResetReceived) MarshalJSONObject(enc *gojay.Encoder) {
-	enc.StringKey("packet_type", packetType(logging.PacketTypeStatelessReset).String())
-	enc.StringKey("stateless_reset_token", fmt.Sprintf("%x", e.Token))
 }
 
 type eventPacketBuffered struct {
