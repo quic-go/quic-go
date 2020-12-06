@@ -18,6 +18,11 @@ var _ = Describe("Header Parsing", func() {
 		return data
 	}
 
+	It("distinguishes between long and short header packets", func() {
+		Expect(IsLongHeader(0b10101011)).To(BeTrue())
+		Expect(IsLongHeader(0b00101011)).To(BeFalse())
+	})
+
 	Context("Parsing the Connection ID", func() {
 		It("parses the connection ID of a long header packet", func() {
 			buf := &bytes.Buffer{}

@@ -10,6 +10,11 @@ import (
 	"github.com/lucas-clemente/quic-go/internal/utils"
 )
 
+// IsLongHeader says if a packet is a long header packet.
+func IsLongHeader(firstByte byte) bool {
+	return firstByte&0x80 > 0
+}
+
 // ParseConnectionID parses the destination connection ID of a packet.
 // It uses the data slice for the connection ID.
 // That means that the connection ID must not be used after the packet buffer is released.
