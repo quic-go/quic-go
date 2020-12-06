@@ -31,6 +31,43 @@ func ReadKeyPhaseBit(firstByte byte) protocol.KeyPhaseBit {
 	return protocol.KeyPhaseZero
 }
 
+// ReadPacketNumber parses the packet number of both long and short header packets.
+// The length of the packet number encoding is determined from the first byte of the packet.
+// It must be called after header protection is removed.
+func ReadPacketNumber(b *bytes.Reader, firstByte byte) (protocol.PacketNumber, protocol.PacketNumberLen, error) {
+	var pn protocol.PacketNumber
+	pnLen := protocol.PacketNumberLen(firstByte&0x3) + 1
+	switch pnLen {
+	case protocol.PacketNumberLen1:
+		n, err := b.ReadByte()
+		if err != nil {
+			return 0, 0, err
+		}
+		pn = protocol.PacketNumber(n)
+	case protocol.PacketNumberLen2:
+		n, err := utils.BigEndian.ReadUint16(b)
+		if err != nil {
+			return 0, 0, err
+		}
+		pn = protocol.PacketNumber(n)
+	case protocol.PacketNumberLen3:
+		n, err := utils.BigEndian.ReadUint24(b)
+		if err != nil {
+			return 0, 0, err
+		}
+		pn = protocol.PacketNumber(n)
+	case protocol.PacketNumberLen4:
+		n, err := utils.BigEndian.ReadUint32(b)
+		if err != nil {
+			return 0, 0, err
+		}
+		pn = protocol.PacketNumber(n)
+	default:
+		panic("invalid packet number length")
+	}
+	return pn, pnLen, nil
+}
+
 // ExtendedHeader is the header of a QUIC packet.
 type ExtendedHeader struct {
 	Header
@@ -70,9 +107,12 @@ func (h *ExtendedHeader) parse(b *bytes.Reader, v protocol.VersionNumber) (bool 
 }
 
 func (h *ExtendedHeader) parseLongHeader(b *bytes.Reader, _ protocol.VersionNumber) (bool /* reserved bits valid */, error) {
-	if err := h.readPacketNumber(b); err != nil {
+	pn, pnLen, err := ReadPacketNumber(b, h.typeByte)
+	if err != nil {
 		return false, err
 	}
+	h.PacketNumber = pn
+	h.PacketNumberLen = pnLen
 	if h.typeByte&0xc != 0 {
 		return false, nil
 	}
@@ -82,46 +122,16 @@ func (h *ExtendedHeader) parseLongHeader(b *bytes.Reader, _ protocol.VersionNumb
 func (h *ExtendedHeader) parseShortHeader(b *bytes.Reader, _ protocol.VersionNumber) (bool /* reserved bits valid */, error) {
 	h.KeyPhase = ReadKeyPhaseBit(h.typeByte)
 
-	if err := h.readPacketNumber(b); err != nil {
+	pn, pnLen, err := ReadPacketNumber(b, h.typeByte)
+	if err != nil {
 		return false, err
 	}
+	h.PacketNumber = pn
+	h.PacketNumberLen = pnLen
 	if !CheckShortHeaderReservedBits(h.typeByte) {
 		return false, nil
 	}
 	return true, nil
-}
-
-func (h *ExtendedHeader) readPacketNumber(b *bytes.Reader) error {
-	h.PacketNumberLen = protocol.PacketNumberLen(h.typeByte&0x3) + 1
-	switch h.PacketNumberLen {
-	case protocol.PacketNumberLen1:
-		n, err := b.ReadByte()
-		if err != nil {
-			return err
-		}
-		h.PacketNumber = protocol.PacketNumber(n)
-	case protocol.PacketNumberLen2:
-		n, err := utils.BigEndian.ReadUint16(b)
-		if err != nil {
-			return err
-		}
-		h.PacketNumber = protocol.PacketNumber(n)
-	case protocol.PacketNumberLen3:
-		n, err := utils.BigEndian.ReadUint24(b)
-		if err != nil {
-			return err
-		}
-		h.PacketNumber = protocol.PacketNumber(n)
-	case protocol.PacketNumberLen4:
-		n, err := utils.BigEndian.ReadUint32(b)
-		if err != nil {
-			return err
-		}
-		h.PacketNumber = protocol.PacketNumber(n)
-	default:
-		return fmt.Errorf("invalid packet number length: %d", h.PacketNumberLen)
-	}
-	return nil
 }
 
 // Write writes the Header.

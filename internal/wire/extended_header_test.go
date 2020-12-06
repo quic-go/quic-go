@@ -26,6 +26,34 @@ var _ = Describe("Header", func() {
 		Expect(ReadKeyPhaseBit(0b00000111)).To(Equal(protocol.KeyPhaseOne))
 	})
 
+	It("reads a 1-byte packet number", func() {
+		pn, pnLen, err := ReadPacketNumber(bytes.NewReader([]byte{0x24}), 0b11111100)
+		Expect(err).ToNot(HaveOccurred())
+		Expect(pnLen).To(Equal(protocol.PacketNumberLen1))
+		Expect(pn).To(Equal(protocol.PacketNumber(0x24)))
+	})
+
+	It("reads a 2-byte packet number", func() {
+		pn, pnLen, err := ReadPacketNumber(bytes.NewReader([]byte{0x13, 0x37}), 0b11111101)
+		Expect(err).ToNot(HaveOccurred())
+		Expect(pnLen).To(Equal(protocol.PacketNumberLen2))
+		Expect(pn).To(Equal(protocol.PacketNumber(0x1337)))
+	})
+
+	It("reads a 3-byte packet number", func() {
+		pn, pnLen, err := ReadPacketNumber(bytes.NewReader([]byte{0x13, 0x33, 0x37}), 0b11111110)
+		Expect(err).ToNot(HaveOccurred())
+		Expect(pnLen).To(Equal(protocol.PacketNumberLen3))
+		Expect(pn).To(Equal(protocol.PacketNumber(0x133337)))
+	})
+
+	It("reads a 4-byte packet number", func() {
+		pn, pnLen, err := ReadPacketNumber(bytes.NewReader([]byte{0xde, 0xad, 0xbe, 0xef}), 0b11111111)
+		Expect(err).ToNot(HaveOccurred())
+		Expect(pnLen).To(Equal(protocol.PacketNumberLen4))
+		Expect(pn).To(Equal(protocol.PacketNumber(0xdeadbeef)))
+	})
+
 	Context("Writing", func() {
 		var buf *bytes.Buffer
 
