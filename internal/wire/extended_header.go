@@ -74,7 +74,7 @@ type ExtendedHeader struct {
 
 	typeByte byte
 
-	KeyPhase protocol.KeyPhaseBit
+	KeyPhase protocol.KeyPhaseBit // TODO: remove. Unused for unpacking. Only used for packing and logging.
 
 	PacketNumberLen protocol.PacketNumberLen
 	PacketNumber    protocol.PacketNumber
@@ -93,12 +93,7 @@ func (h *ExtendedHeader) parse(b *bytes.Reader, v protocol.VersionNumber) (bool 
 	if _, err := b.Seek(int64(h.Header.ParsedLen())-1, io.SeekCurrent); err != nil {
 		return false, err
 	}
-	var reservedBitsValid bool
-	if h.IsLongHeader {
-		reservedBitsValid, err = h.parseLongHeader(b, v)
-	} else {
-		reservedBitsValid, err = h.parseShortHeader(b, v)
-	}
+	reservedBitsValid, err := h.parseLongHeader(b, v)
 	if err != nil {
 		return false, err
 	}
@@ -114,21 +109,6 @@ func (h *ExtendedHeader) parseLongHeader(b *bytes.Reader, _ protocol.VersionNumb
 	h.PacketNumber = pn
 	h.PacketNumberLen = pnLen
 	if h.typeByte&0xc != 0 {
-		return false, nil
-	}
-	return true, nil
-}
-
-func (h *ExtendedHeader) parseShortHeader(b *bytes.Reader, _ protocol.VersionNumber) (bool /* reserved bits valid */, error) {
-	h.KeyPhase = ReadKeyPhaseBit(h.typeByte)
-
-	pn, pnLen, err := ReadPacketNumber(b, h.typeByte)
-	if err != nil {
-		return false, err
-	}
-	h.PacketNumber = pn
-	h.PacketNumberLen = pnLen
-	if !CheckShortHeaderReservedBits(h.typeByte) {
 		return false, nil
 	}
 	return true, nil
@@ -184,7 +164,7 @@ func (h *ExtendedHeader) writeLongHeader(b *bytes.Buffer, _ protocol.VersionNumb
 		b.Write(h.Token)
 	}
 	utils.WriteVarIntWithLen(b, uint64(h.Length), 2)
-	return h.writePacketNumber(b)
+	return writePacketNumber(b, h.PacketNumber, h.PacketNumberLen)
 }
 
 func (h *ExtendedHeader) writeShortHeader(b *bytes.Buffer, _ protocol.VersionNumber) error {
@@ -195,21 +175,21 @@ func (h *ExtendedHeader) writeShortHeader(b *bytes.Buffer, _ protocol.VersionNum
 
 	b.WriteByte(typeByte)
 	b.Write(h.DestConnectionID.Bytes())
-	return h.writePacketNumber(b)
+	return writePacketNumber(b, h.PacketNumber, h.PacketNumberLen)
 }
 
-func (h *ExtendedHeader) writePacketNumber(b *bytes.Buffer) error {
-	switch h.PacketNumberLen {
+func writePacketNumber(b *bytes.Buffer, pn protocol.PacketNumber, pnLen protocol.PacketNumberLen) error {
+	switch pnLen {
 	case protocol.PacketNumberLen1:
-		b.WriteByte(uint8(h.PacketNumber))
+		b.WriteByte(uint8(pn))
 	case protocol.PacketNumberLen2:
-		utils.BigEndian.WriteUint16(b, uint16(h.PacketNumber))
+		utils.BigEndian.WriteUint16(b, uint16(pn))
 	case protocol.PacketNumberLen3:
-		utils.BigEndian.WriteUint24(b, uint32(h.PacketNumber))
+		utils.BigEndian.WriteUint24(b, uint32(pn))
 	case protocol.PacketNumberLen4:
-		utils.BigEndian.WriteUint32(b, uint32(h.PacketNumber))
+		utils.BigEndian.WriteUint32(b, uint32(pn))
 	default:
-		return fmt.Errorf("invalid packet number length: %d", h.PacketNumberLen)
+		return fmt.Errorf("invalid packet number length: %d", pnLen)
 	}
 	return nil
 }
