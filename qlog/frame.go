@@ -130,8 +130,7 @@ func marshalCryptoFrame(enc *gojay.Encoder, f *logging.CryptoFrame) {
 
 func marshalNewTokenFrame(enc *gojay.Encoder, f *logging.NewTokenFrame) {
 	enc.StringKey("frame_type", "new_token")
-	enc.IntKey("length", len(f.Token))
-	enc.StringKey("token", fmt.Sprintf("%x", f.Token))
+	enc.ObjectKey("token", &token{Raw: f.Token})
 }
 
 func marshalStreamFrame(enc *gojay.Encoder, f *logging.StreamFrame) {
