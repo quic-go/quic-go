@@ -10,9 +10,8 @@ import (
 	"os"
 	"time"
 
-	"github.com/lucas-clemente/quic-go/internal/utils"
-
 	"github.com/lucas-clemente/quic-go/internal/protocol"
+	"github.com/lucas-clemente/quic-go/internal/utils"
 	"github.com/lucas-clemente/quic-go/logging"
 
 	. "github.com/onsi/ginkgo"
@@ -43,10 +42,9 @@ func (w *limitedWriter) Write(p []byte) (int, error) {
 }
 
 type entry struct {
-	Time     time.Time
-	Category string
-	Name     string
-	Event    map[string]interface{}
+	Time  time.Time
+	Name  string
+	Event map[string]interface{}
 }
 
 var _ = Describe("Tracing", func() {
@@ -55,6 +53,24 @@ var _ = Describe("Tracing", func() {
 			t := NewTracer(func(logging.Perspective, []byte) io.WriteCloser { return nil })
 			Expect(t.TracerForConnection(logging.PerspectiveClient, logging.ConnectionID{1, 2, 3, 4})).To(BeNil())
 		})
+	})
+
+	It("stops writing when encountering an error", func() {
+		buf := &bytes.Buffer{}
+		t := newConnectionTracer(
+			&limitedWriter{WriteCloser: nopWriteCloser(buf), N: 250},
+			protocol.PerspectiveServer,
+			protocol.ConnectionID{0xde, 0xad, 0xbe, 0xef},
+		)
+		for i := uint32(0); i < 1000; i++ {
+			t.UpdatedPTOCount(i)
+		}
+
+		b := &bytes.Buffer{}
+		log.SetOutput(b)
+		defer log.SetOutput(os.Stdout)
+		t.Close()
+		Expect(b.String()).To(ContainSubstring("writer full"))
 	})
 
 	Context("connection tracer", func() {
@@ -74,12 +90,10 @@ var _ = Describe("Tracing", func() {
 
 			m := make(map[string]interface{})
 			Expect(json.Unmarshal(buf.Bytes(), &m)).To(Succeed())
-			Expect(m).To(HaveKeyWithValue("qlog_version", "draft-02-wip"))
+			Expect(m).To(HaveKeyWithValue("qlog_version", "draft-02"))
 			Expect(m).To(HaveKey("title"))
-			Expect(m).To(HaveKey("traces"))
-			traces := m["traces"].([]interface{})
-			Expect(traces).To(HaveLen(1))
-			trace := traces[0].(map[string]interface{})
+			Expect(m).To(HaveKey("trace"))
+			trace := m["trace"].(map[string]interface{})
 			Expect(trace).To(HaveKey(("common_fields")))
 			commonFields := trace["common_fields"].(map[string]interface{})
 			Expect(commonFields).To(HaveKeyWithValue("ODCID", "deadbeef"))
@@ -87,30 +101,9 @@ var _ = Describe("Tracing", func() {
 			Expect(commonFields).To(HaveKey("reference_time"))
 			referenceTime := time.Unix(0, int64(commonFields["reference_time"].(float64)*1e6))
 			Expect(referenceTime).To(BeTemporally("~", time.Now(), scaleDuration(10*time.Millisecond)))
-			Expect(trace).To(HaveKey("event_fields"))
-			for i, ef := range trace["event_fields"].([]interface{}) {
-				Expect(ef.(string)).To(Equal(eventFields[i]))
-			}
 			Expect(trace).To(HaveKey("vantage_point"))
 			vantagePoint := trace["vantage_point"].(map[string]interface{})
 			Expect(vantagePoint).To(HaveKeyWithValue("type", "server"))
-		})
-
-		It("stops writing when encountering an error", func() {
-			tracer = newConnectionTracer(
-				&limitedWriter{WriteCloser: nopWriteCloser(buf), N: 250},
-				protocol.PerspectiveServer,
-				protocol.ConnectionID{0xde, 0xad, 0xbe, 0xef},
-			)
-			for i := uint32(0); i < 1000; i++ {
-				tracer.UpdatedPTOCount(i)
-			}
-
-			buf := &bytes.Buffer{}
-			log.SetOutput(buf)
-			defer log.SetOutput(os.Stdout)
-			tracer.Close()
-			Expect(buf.String()).To(ContainSubstring("writer full"))
 		})
 
 		Context("Events", func() {
@@ -118,25 +111,31 @@ var _ = Describe("Tracing", func() {
 				tracer.Close()
 
 				m := make(map[string]interface{})
-				Expect(json.Unmarshal(buf.Bytes(), &m)).To(Succeed())
-				Expect(m).To(HaveKey("traces"))
+				line, err := buf.ReadBytes('\n')
+				Expect(err).ToNot(HaveOccurred())
+				Expect(json.Unmarshal(line, &m)).To(Succeed())
+				Expect(m).To(HaveKey("trace"))
 				var entries []entry
-				traces := m["traces"].([]interface{})
-				Expect(traces).To(HaveLen(1))
-				trace := traces[0].(map[string]interface{})
+				trace := m["trace"].(map[string]interface{})
 				Expect(trace).To(HaveKey("common_fields"))
 				commonFields := trace["common_fields"].(map[string]interface{})
 				Expect(commonFields).To(HaveKey("reference_time"))
 				referenceTime := time.Unix(0, int64(commonFields["reference_time"].(float64)*1e6))
-				Expect(trace).To(HaveKey("events"))
-				for _, e := range trace["events"].([]interface{}) {
-					ev := e.([]interface{})
-					Expect(ev).To(HaveLen(4))
+				Expect(trace).ToNot(HaveKey("events"))
+
+				for buf.Len() > 0 {
+					line, err := buf.ReadBytes('\n')
+					Expect(err).ToNot(HaveOccurred())
+					ev := make(map[string]interface{})
+					Expect(json.Unmarshal(line, &ev)).To(Succeed())
+					Expect(ev).To(HaveLen(3))
+					Expect(ev).To(HaveKey("time"))
+					Expect(ev).To(HaveKey("name"))
+					Expect(ev).To(HaveKey("data"))
 					entries = append(entries, entry{
-						Time:     referenceTime.Add(time.Duration(ev[0].(float64)*1e6) * time.Nanosecond),
-						Category: ev[1].(string),
-						Name:     ev[2].(string),
-						Event:    ev[3].(map[string]interface{}),
+						Time:  referenceTime.Add(time.Duration(ev["time"].(float64)*1e6) * time.Nanosecond),
+						Name:  ev["name"].(string),
+						Event: ev["data"].(map[string]interface{}),
 					})
 				}
 				return entries
@@ -158,8 +157,7 @@ var _ = Describe("Tracing", func() {
 				)
 				entry := exportAndParseSingle()
 				Expect(entry.Time).To(BeTemporally("~", time.Now(), scaleDuration(10*time.Millisecond)))
-				Expect(entry.Category).To(Equal("transport"))
-				Expect(entry.Name).To(Equal("connection_started"))
+				Expect(entry.Name).To(Equal("transport:connection_started"))
 				ev := entry.Event
 				Expect(ev).To(HaveKeyWithValue("ip_version", "ipv4"))
 				Expect(ev).To(HaveKeyWithValue("src_ip", "192.168.13.37"))
@@ -175,8 +173,7 @@ var _ = Describe("Tracing", func() {
 				tracer.ClosedConnection(logging.NewTimeoutCloseReason(logging.TimeoutReasonIdle))
 				entry := exportAndParseSingle()
 				Expect(entry.Time).To(BeTemporally("~", time.Now(), scaleDuration(10*time.Millisecond)))
-				Expect(entry.Category).To(Equal("transport"))
-				Expect(entry.Name).To(Equal("connection_state_updated"))
+				Expect(entry.Name).To(Equal("transport:connection_state_updated"))
 				ev := entry.Event
 				Expect(ev).To(HaveKeyWithValue("new", "closed"))
 				Expect(ev).To(HaveKeyWithValue("trigger", "idle_timeout"))
@@ -186,8 +183,7 @@ var _ = Describe("Tracing", func() {
 				tracer.ClosedConnection(logging.NewStatelessResetCloseReason(logging.StatelessResetToken{0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88, 0x99, 0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff}))
 				entry := exportAndParseSingle()
 				Expect(entry.Time).To(BeTemporally("~", time.Now(), scaleDuration(10*time.Millisecond)))
-				Expect(entry.Category).To(Equal("transport"))
-				Expect(entry.Name).To(Equal("packet_received"))
+				Expect(entry.Name).To(Equal("transport:packet_received"))
 				ev := entry.Event
 				Expect(ev).To(HaveKeyWithValue("packet_type", "stateless_reset"))
 				Expect(ev).To(HaveKeyWithValue("stateless_reset_token", "00112233445566778899aabbccddeeff"))
@@ -214,8 +210,7 @@ var _ = Describe("Tracing", func() {
 				})
 				entry := exportAndParseSingle()
 				Expect(entry.Time).To(BeTemporally("~", time.Now(), scaleDuration(10*time.Millisecond)))
-				Expect(entry.Category).To(Equal("transport"))
-				Expect(entry.Name).To(Equal("parameters_set"))
+				Expect(entry.Name).To(Equal("transport:parameters_set"))
 				ev := entry.Event
 				Expect(ev).To(HaveKeyWithValue("owner", "local"))
 				Expect(ev).To(HaveKeyWithValue("original_destination_connection_id", "deadc0de"))
@@ -242,8 +237,7 @@ var _ = Describe("Tracing", func() {
 				})
 				entry := exportAndParseSingle()
 				Expect(entry.Time).To(BeTemporally("~", time.Now(), scaleDuration(10*time.Millisecond)))
-				Expect(entry.Category).To(Equal("transport"))
-				Expect(entry.Name).To(Equal("parameters_set"))
+				Expect(entry.Name).To(Equal("transport:parameters_set"))
 				ev := entry.Event
 				Expect(ev).ToNot(HaveKey("stateless_reset_token"))
 			})
@@ -254,8 +248,7 @@ var _ = Describe("Tracing", func() {
 				})
 				entry := exportAndParseSingle()
 				Expect(entry.Time).To(BeTemporally("~", time.Now(), scaleDuration(10*time.Millisecond)))
-				Expect(entry.Category).To(Equal("transport"))
-				Expect(entry.Name).To(Equal("parameters_set"))
+				Expect(entry.Name).To(Equal("transport:parameters_set"))
 				ev := entry.Event
 				Expect(ev).To(HaveKeyWithValue("owner", "local"))
 				Expect(ev).ToNot(HaveKey("retry_source_connection_id"))
@@ -274,8 +267,7 @@ var _ = Describe("Tracing", func() {
 				})
 				entry := exportAndParseSingle()
 				Expect(entry.Time).To(BeTemporally("~", time.Now(), scaleDuration(10*time.Millisecond)))
-				Expect(entry.Category).To(Equal("transport"))
-				Expect(entry.Name).To(Equal("parameters_set"))
+				Expect(entry.Name).To(Equal("transport:parameters_set"))
 				ev := entry.Event
 				Expect(ev).To(HaveKeyWithValue("owner", "local"))
 				Expect(ev).To(HaveKey("preferred_address"))
@@ -292,8 +284,7 @@ var _ = Describe("Tracing", func() {
 				tracer.ReceivedTransportParameters(&logging.TransportParameters{})
 				entry := exportAndParseSingle()
 				Expect(entry.Time).To(BeTemporally("~", time.Now(), scaleDuration(10*time.Millisecond)))
-				Expect(entry.Category).To(Equal("transport"))
-				Expect(entry.Name).To(Equal("parameters_set"))
+				Expect(entry.Name).To(Equal("transport:parameters_set"))
 				ev := entry.Event
 				Expect(ev).To(HaveKeyWithValue("owner", "remote"))
 				Expect(ev).ToNot(HaveKey("original_destination_connection_id"))
@@ -320,8 +311,7 @@ var _ = Describe("Tracing", func() {
 				)
 				entry := exportAndParseSingle()
 				Expect(entry.Time).To(BeTemporally("~", time.Now(), scaleDuration(10*time.Millisecond)))
-				Expect(entry.Category).To(Equal("transport"))
-				Expect(entry.Name).To(Equal("packet_sent"))
+				Expect(entry.Name).To(Equal("transport:packet_sent"))
 				ev := entry.Event
 				Expect(ev).To(HaveKeyWithValue("packet_type", "handshake"))
 				Expect(ev).To(HaveKey("header"))
@@ -377,8 +367,7 @@ var _ = Describe("Tracing", func() {
 				)
 				entry := exportAndParseSingle()
 				Expect(entry.Time).To(BeTemporally("~", time.Now(), scaleDuration(10*time.Millisecond)))
-				Expect(entry.Category).To(Equal("transport"))
-				Expect(entry.Name).To(Equal("packet_received"))
+				Expect(entry.Name).To(Equal("transport:packet_received"))
 				ev := entry.Event
 				Expect(ev).To(HaveKeyWithValue("packet_type", "initial"))
 				Expect(ev).To(HaveKey("header"))
@@ -402,8 +391,7 @@ var _ = Describe("Tracing", func() {
 				)
 				entry := exportAndParseSingle()
 				Expect(entry.Time).To(BeTemporally("~", time.Now(), scaleDuration(10*time.Millisecond)))
-				Expect(entry.Category).To(Equal("transport"))
-				Expect(entry.Name).To(Equal("packet_received"))
+				Expect(entry.Name).To(Equal("transport:packet_received"))
 				ev := entry.Event
 				Expect(ev).To(HaveKeyWithValue("packet_type", "retry"))
 				Expect(ev).To(HaveKey("header"))
@@ -427,8 +415,7 @@ var _ = Describe("Tracing", func() {
 				)
 				entry := exportAndParseSingle()
 				Expect(entry.Time).To(BeTemporally("~", time.Now(), scaleDuration(10*time.Millisecond)))
-				Expect(entry.Category).To(Equal("transport"))
-				Expect(entry.Name).To(Equal("packet_received"))
+				Expect(entry.Name).To(Equal("transport:packet_received"))
 				ev := entry.Event
 				Expect(ev).To(HaveKeyWithValue("packet_type", "version_negotiation"))
 				Expect(ev).To(HaveKey("header"))
@@ -446,8 +433,7 @@ var _ = Describe("Tracing", func() {
 				tracer.BufferedPacket(logging.PacketTypeHandshake)
 				entry := exportAndParseSingle()
 				Expect(entry.Time).To(BeTemporally("~", time.Now(), scaleDuration(10*time.Millisecond)))
-				Expect(entry.Category).To(Equal("transport"))
-				Expect(entry.Name).To(Equal("packet_buffered"))
+				Expect(entry.Name).To(Equal("transport:packet_buffered"))
 				ev := entry.Event
 				Expect(ev).To(HaveKeyWithValue("packet_type", "handshake"))
 				Expect(ev).To(HaveKeyWithValue("trigger", "keys_unavailable"))
@@ -457,8 +443,7 @@ var _ = Describe("Tracing", func() {
 				tracer.DroppedPacket(logging.PacketTypeHandshake, 1337, logging.PacketDropPayloadDecryptError)
 				entry := exportAndParseSingle()
 				Expect(entry.Time).To(BeTemporally("~", time.Now(), scaleDuration(10*time.Millisecond)))
-				Expect(entry.Category).To(Equal("transport"))
-				Expect(entry.Name).To(Equal("packet_dropped"))
+				Expect(entry.Name).To(Equal("transport:packet_dropped"))
 				ev := entry.Event
 				Expect(ev).To(HaveKeyWithValue("packet_type", "handshake"))
 				Expect(ev).To(HaveKeyWithValue("packet_size", float64(1337)))
@@ -485,8 +470,7 @@ var _ = Describe("Tracing", func() {
 				)
 				entry := exportAndParseSingle()
 				Expect(entry.Time).To(BeTemporally("~", time.Now(), scaleDuration(10*time.Millisecond)))
-				Expect(entry.Category).To(Equal("recovery"))
-				Expect(entry.Name).To(Equal("metrics_updated"))
+				Expect(entry.Name).To(Equal("recovery:metrics_updated"))
 				ev := entry.Event
 				Expect(ev).To(HaveKeyWithValue("min_rtt", float64(15)))
 				Expect(ev).To(HaveKeyWithValue("latest_rtt", float64(25)))
@@ -529,12 +513,10 @@ var _ = Describe("Tracing", func() {
 				entries := exportAndParse()
 				Expect(entries).To(HaveLen(2))
 				Expect(entries[0].Time).To(BeTemporally("~", time.Now(), scaleDuration(10*time.Millisecond)))
-				Expect(entries[0].Category).To(Equal("recovery"))
-				Expect(entries[0].Name).To(Equal("metrics_updated"))
+				Expect(entries[0].Name).To(Equal("recovery:metrics_updated"))
 				Expect(entries[0].Event).To(HaveLen(7))
 				Expect(entries[1].Time).To(BeTemporally("~", time.Now(), scaleDuration(10*time.Millisecond)))
-				Expect(entries[1].Category).To(Equal("recovery"))
-				Expect(entries[1].Name).To(Equal("metrics_updated"))
+				Expect(entries[1].Name).To(Equal("recovery:metrics_updated"))
 				ev := entries[1].Event
 				Expect(ev).ToNot(HaveKey("min_rtt"))
 				Expect(ev).ToNot(HaveKey("congestion_window"))
@@ -547,8 +529,7 @@ var _ = Describe("Tracing", func() {
 				tracer.LostPacket(protocol.EncryptionHandshake, 42, logging.PacketLossReorderingThreshold)
 				entry := exportAndParseSingle()
 				Expect(entry.Time).To(BeTemporally("~", time.Now(), scaleDuration(10*time.Millisecond)))
-				Expect(entry.Category).To(Equal("recovery"))
-				Expect(entry.Name).To(Equal("packet_lost"))
+				Expect(entry.Name).To(Equal("recovery:packet_lost"))
 				ev := entry.Event
 				Expect(ev).To(HaveKeyWithValue("packet_type", "handshake"))
 				Expect(ev).To(HaveKeyWithValue("packet_number", float64(42)))
@@ -559,8 +540,7 @@ var _ = Describe("Tracing", func() {
 				tracer.UpdatedCongestionState(logging.CongestionStateCongestionAvoidance)
 				entry := exportAndParseSingle()
 				Expect(entry.Time).To(BeTemporally("~", time.Now(), scaleDuration(10*time.Millisecond)))
-				Expect(entry.Category).To(Equal("recovery"))
-				Expect(entry.Name).To(Equal("congestion_state_updated"))
+				Expect(entry.Name).To(Equal("recovery:congestion_state_updated"))
 				ev := entry.Event
 				Expect(ev).To(HaveKeyWithValue("new", "congestion_avoidance"))
 			})
@@ -569,8 +549,7 @@ var _ = Describe("Tracing", func() {
 				tracer.UpdatedPTOCount(42)
 				entry := exportAndParseSingle()
 				Expect(entry.Time).To(BeTemporally("~", time.Now(), scaleDuration(10*time.Millisecond)))
-				Expect(entry.Category).To(Equal("recovery"))
-				Expect(entry.Name).To(Equal("metrics_updated"))
+				Expect(entry.Name).To(Equal("recovery:metrics_updated"))
 				Expect(entry.Event).To(HaveKeyWithValue("pto_count", float64(42)))
 			})
 
@@ -578,8 +557,7 @@ var _ = Describe("Tracing", func() {
 				tracer.UpdatedKeyFromTLS(protocol.EncryptionHandshake, protocol.PerspectiveClient)
 				entry := exportAndParseSingle()
 				Expect(entry.Time).To(BeTemporally("~", time.Now(), scaleDuration(10*time.Millisecond)))
-				Expect(entry.Category).To(Equal("security"))
-				Expect(entry.Name).To(Equal("key_updated"))
+				Expect(entry.Name).To(Equal("security:key_updated"))
 				ev := entry.Event
 				Expect(ev).To(HaveKeyWithValue("key_type", "client_handshake_secret"))
 				Expect(ev).To(HaveKeyWithValue("trigger", "tls"))
@@ -592,8 +570,7 @@ var _ = Describe("Tracing", func() {
 				tracer.UpdatedKeyFromTLS(protocol.Encryption1RTT, protocol.PerspectiveServer)
 				entry := exportAndParseSingle()
 				Expect(entry.Time).To(BeTemporally("~", time.Now(), scaleDuration(10*time.Millisecond)))
-				Expect(entry.Category).To(Equal("security"))
-				Expect(entry.Name).To(Equal("key_updated"))
+				Expect(entry.Name).To(Equal("security:key_updated"))
 				ev := entry.Event
 				Expect(ev).To(HaveKeyWithValue("key_type", "server_1rtt_secret"))
 				Expect(ev).To(HaveKeyWithValue("trigger", "tls"))
@@ -609,8 +586,7 @@ var _ = Describe("Tracing", func() {
 				var keyTypes []string
 				for _, entry := range entries {
 					Expect(entry.Time).To(BeTemporally("~", time.Now(), scaleDuration(10*time.Millisecond)))
-					Expect(entry.Category).To(Equal("security"))
-					Expect(entry.Name).To(Equal("key_updated"))
+					Expect(entry.Name).To(Equal("security:key_updated"))
 					ev := entry.Event
 					Expect(ev).To(HaveKeyWithValue("generation", float64(1337)))
 					Expect(ev).To(HaveKeyWithValue("trigger", "remote_update"))
@@ -628,8 +604,7 @@ var _ = Describe("Tracing", func() {
 				var keyTypes []string
 				for _, entry := range entries {
 					Expect(entry.Time).To(BeTemporally("~", time.Now(), scaleDuration(10*time.Millisecond)))
-					Expect(entry.Category).To(Equal("security"))
-					Expect(entry.Name).To(Equal("key_retired"))
+					Expect(entry.Name).To(Equal("security:key_retired"))
 					ev := entry.Event
 					Expect(ev).To(HaveKeyWithValue("trigger", "tls"))
 					Expect(ev).To(HaveKey("key_type"))
@@ -646,8 +621,7 @@ var _ = Describe("Tracing", func() {
 				var keyTypes []string
 				for _, entry := range entries {
 					Expect(entry.Time).To(BeTemporally("~", time.Now(), scaleDuration(10*time.Millisecond)))
-					Expect(entry.Category).To(Equal("security"))
-					Expect(entry.Name).To(Equal("key_retired"))
+					Expect(entry.Name).To(Equal("security:key_retired"))
 					ev := entry.Event
 					Expect(ev).To(HaveKeyWithValue("generation", float64(42)))
 					Expect(ev).ToNot(HaveKey("trigger"))
@@ -663,8 +637,7 @@ var _ = Describe("Tracing", func() {
 				tracer.SetLossTimer(logging.TimerTypePTO, protocol.EncryptionHandshake, timeout)
 				entry := exportAndParseSingle()
 				Expect(entry.Time).To(BeTemporally("~", time.Now(), scaleDuration(10*time.Millisecond)))
-				Expect(entry.Category).To(Equal("recovery"))
-				Expect(entry.Name).To(Equal("loss_timer_updated"))
+				Expect(entry.Name).To(Equal("recovery:loss_timer_updated"))
 				ev := entry.Event
 				Expect(ev).To(HaveLen(4))
 				Expect(ev).To(HaveKeyWithValue("event_type", "set"))
@@ -679,8 +652,7 @@ var _ = Describe("Tracing", func() {
 				tracer.LossTimerExpired(logging.TimerTypeACK, protocol.Encryption1RTT)
 				entry := exportAndParseSingle()
 				Expect(entry.Time).To(BeTemporally("~", time.Now(), scaleDuration(10*time.Millisecond)))
-				Expect(entry.Category).To(Equal("recovery"))
-				Expect(entry.Name).To(Equal("loss_timer_updated"))
+				Expect(entry.Name).To(Equal("recovery:loss_timer_updated"))
 				ev := entry.Event
 				Expect(ev).To(HaveLen(3))
 				Expect(ev).To(HaveKeyWithValue("event_type", "expired"))
@@ -692,8 +664,7 @@ var _ = Describe("Tracing", func() {
 				tracer.LossTimerCanceled()
 				entry := exportAndParseSingle()
 				Expect(entry.Time).To(BeTemporally("~", time.Now(), scaleDuration(10*time.Millisecond)))
-				Expect(entry.Category).To(Equal("recovery"))
-				Expect(entry.Name).To(Equal("loss_timer_updated"))
+				Expect(entry.Name).To(Equal("recovery:loss_timer_updated"))
 				ev := entry.Event
 				Expect(ev).To(HaveLen(1))
 				Expect(ev).To(HaveKeyWithValue("event_type", "cancelled"))
@@ -703,8 +674,7 @@ var _ = Describe("Tracing", func() {
 				tracer.Debug("foo", "bar")
 				entry := exportAndParseSingle()
 				Expect(entry.Time).To(BeTemporally("~", time.Now(), scaleDuration(10*time.Millisecond)))
-				Expect(entry.Category).To(Equal("transport"))
-				Expect(entry.Name).To(Equal("foo"))
+				Expect(entry.Name).To(Equal("transport:foo"))
 				ev := entry.Event
 				Expect(ev).To(HaveLen(1))
 				Expect(ev).To(HaveKeyWithValue("details", "bar"))

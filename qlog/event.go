@@ -15,20 +15,6 @@ import (
 
 func milliseconds(dur time.Duration) float64 { return float64(dur.Nanoseconds()) / 1e6 }
 
-var eventFields = [4]string{"relative_time", "category", "event", "data"}
-
-type events []event
-
-var _ gojay.MarshalerJSONArray = events{}
-
-func (e events) IsNil() bool { return e == nil }
-
-func (e events) MarshalJSONArray(enc *gojay.Encoder) {
-	for _, ev := range e {
-		enc.Array(ev)
-	}
-}
-
 type eventDetails interface {
 	Category() category
 	Name() string
@@ -40,14 +26,13 @@ type event struct {
 	eventDetails
 }
 
-var _ gojay.MarshalerJSONArray = event{}
+var _ gojay.MarshalerJSONObject = event{}
 
 func (e event) IsNil() bool { return false }
-func (e event) MarshalJSONArray(enc *gojay.Encoder) {
-	enc.Float64(milliseconds(e.RelativeTime))
-	enc.String(e.Category().String())
-	enc.String(e.Name())
-	enc.Object(e.eventDetails)
+func (e event) MarshalJSONObject(enc *gojay.Encoder) {
+	enc.Float64Key("time", milliseconds(e.RelativeTime))
+	enc.StringKey("name", e.Category().String()+":"+e.Name())
+	enc.ObjectKey("data", e.eventDetails)
 }
 
 type versions []versionNumber

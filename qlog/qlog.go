@@ -50,7 +50,6 @@ type connectionTracer struct {
 	perspective   protocol.Perspective
 	referenceTime time.Time
 
-	suffix     []byte
 	events     chan event
 	encodeErr  error
 	runStopped chan struct{}
@@ -79,39 +78,36 @@ func (t *connectionTracer) run() {
 	buf := &bytes.Buffer{}
 	enc := gojay.NewEncoder(buf)
 	tl := &topLevel{
-		traces: traces{
-			{
-				VantagePoint: vantagePoint{Type: t.perspective},
-				CommonFields: commonFields{
-					ODCID:         connectionID(t.odcid),
-					GroupID:       connectionID(t.odcid),
-					ReferenceTime: t.referenceTime,
-				},
-				EventFields: eventFields[:],
+		trace: trace{
+			VantagePoint: vantagePoint{Type: t.perspective},
+			CommonFields: commonFields{
+				ODCID:         connectionID(t.odcid),
+				GroupID:       connectionID(t.odcid),
+				ReferenceTime: t.referenceTime,
 			},
 		},
 	}
 	if err := enc.Encode(tl); err != nil {
 		panic(fmt.Sprintf("qlog encoding into a bytes.Buffer failed: %s", err))
 	}
-	data := buf.Bytes()
-	t.suffix = data[buf.Len()-4:]
-	if _, err := t.w.Write(data[:buf.Len()-4]); err != nil {
+	if err := buf.WriteByte('\n'); err != nil {
+		panic(fmt.Sprintf("qlog encoding into a bytes.Buffer failed: %s", err))
+	}
+	if _, err := t.w.Write(buf.Bytes()); err != nil {
 		t.encodeErr = err
 	}
 	enc = gojay.NewEncoder(t.w)
-	isFirst := true
 	for ev := range t.events {
 		if t.encodeErr != nil { // if encoding failed, just continue draining the event channel
 			continue
 		}
-		if !isFirst {
-			t.w.Write([]byte(","))
-		}
 		if err := enc.Encode(ev); err != nil {
 			t.encodeErr = err
+			continue
 		}
-		isFirst = false
+		if _, err := t.w.Write([]byte{'\n'}); err != nil {
+			t.encodeErr = err
+		}
 	}
 }
 
@@ -127,9 +123,6 @@ func (t *connectionTracer) export() error {
 	<-t.runStopped
 	if t.encodeErr != nil {
 		return t.encodeErr
-	}
-	if _, err := t.w.Write(t.suffix); err != nil {
-		return err
 	}
 	return t.w.Close()
 }
