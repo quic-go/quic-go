@@ -462,3 +462,16 @@ func (e eventCongestionStateUpdated) IsNil() bool        { return false }
 func (e eventCongestionStateUpdated) MarshalJSONObject(enc *gojay.Encoder) {
 	enc.StringKey("new", e.state.String())
 }
+
+type eventGeneric struct {
+	name string
+	msg  string
+}
+
+func (e eventGeneric) Category() category { return categoryTransport }
+func (e eventGeneric) Name() string       { return e.name }
+func (e eventGeneric) IsNil() bool        { return false }
+
+func (e eventGeneric) MarshalJSONObject(enc *gojay.Encoder) {
+	enc.StringKey("details", e.msg)
+}

@@ -417,3 +417,12 @@ func (t *connectionTracer) LossTimerCanceled() {
 	t.recordEvent(time.Now(), &eventLossTimerCanceled{})
 	t.mutex.Unlock()
 }
+
+func (t *connectionTracer) Debug(name, msg string) {
+	t.mutex.Lock()
+	t.recordEvent(time.Now(), &eventGeneric{
+		name: name,
+		msg:  msg,
+	})
+	t.mutex.Unlock()
+}
