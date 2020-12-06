@@ -22,6 +22,15 @@ func CheckShortHeaderReservedBits(firstByte byte) bool {
 	return firstByte&0x18 == 0
 }
 
+// ReadKeyPhaseBit reads the key phase bit from the first byte of a short header packet.
+// It must be called after header protection is removed.
+func ReadKeyPhaseBit(firstByte byte) protocol.KeyPhaseBit {
+	if firstByte&0x4 > 0 {
+		return protocol.KeyPhaseOne
+	}
+	return protocol.KeyPhaseZero
+}
+
 // ExtendedHeader is the header of a QUIC packet.
 type ExtendedHeader struct {
 	Header
@@ -71,10 +80,7 @@ func (h *ExtendedHeader) parseLongHeader(b *bytes.Reader, _ protocol.VersionNumb
 }
 
 func (h *ExtendedHeader) parseShortHeader(b *bytes.Reader, _ protocol.VersionNumber) (bool /* reserved bits valid */, error) {
-	h.KeyPhase = protocol.KeyPhaseZero
-	if h.typeByte&0x4 > 0 {
-		h.KeyPhase = protocol.KeyPhaseOne
-	}
+	h.KeyPhase = ReadKeyPhaseBit(h.typeByte)
 
 	if err := h.readPacketNumber(b); err != nil {
 		return false, err

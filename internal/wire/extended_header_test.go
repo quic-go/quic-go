@@ -21,6 +21,11 @@ var _ = Describe("Header", func() {
 		Expect(CheckShortHeaderReservedBits(0b01111111)).To(BeFalse())
 	})
 
+	It("reads the value of the key phase bit", func() {
+		Expect(ReadKeyPhaseBit(0b00000011)).To(Equal(protocol.KeyPhaseZero))
+		Expect(ReadKeyPhaseBit(0b00000111)).To(Equal(protocol.KeyPhaseOne))
+	})
+
 	Context("Writing", func() {
 		var buf *bytes.Buffer
 
