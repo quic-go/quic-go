@@ -22,7 +22,6 @@ import (
 	"github.com/lucas-clemente/quic-go/internal/utils"
 	"github.com/lucas-clemente/quic-go/internal/wire"
 	"github.com/lucas-clemente/quic-go/logging"
-	"github.com/lucas-clemente/quic-go/quictrace"
 
 	"github.com/golang/mock/gomock"
 
@@ -136,7 +135,6 @@ var _ = Describe("Server", func() {
 	It("setups with the right values", func() {
 		supportedVersions := []protocol.VersionNumber{protocol.VersionTLS}
 		acceptToken := func(_ net.Addr, _ *Token) bool { return true }
-		tracer := quictrace.NewTracer()
 		config := Config{
 			Versions:          supportedVersions,
 			AcceptToken:       acceptToken,
@@ -144,7 +142,6 @@ var _ = Describe("Server", func() {
 			MaxIdleTimeout:    42 * time.Minute,
 			KeepAlive:         true,
 			StatelessResetKey: []byte("foobar"),
-			QuicTracer:        tracer,
 		}
 		ln, err := Listen(conn, tlsConf, &config)
 		Expect(err).ToNot(HaveOccurred())
@@ -156,7 +153,6 @@ var _ = Describe("Server", func() {
 		Expect(reflect.ValueOf(server.config.AcceptToken)).To(Equal(reflect.ValueOf(acceptToken)))
 		Expect(server.config.KeepAlive).To(BeTrue())
 		Expect(server.config.StatelessResetKey).To(Equal([]byte("foobar")))
-		Expect(server.config.QuicTracer).To(Equal(tracer))
 		// stop the listener
 		Expect(ln.Close()).To(Succeed())
 	})

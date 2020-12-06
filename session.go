@@ -21,7 +21,6 @@ import (
 	"github.com/lucas-clemente/quic-go/internal/utils"
 	"github.com/lucas-clemente/quic-go/internal/wire"
 	"github.com/lucas-clemente/quic-go/logging"
-	"github.com/lucas-clemente/quic-go/quictrace"
 )
 
 type unpacker interface {
@@ -205,8 +204,6 @@ type session struct {
 	keepAlivePingSent bool
 	keepAliveInterval time.Duration
 
-	traceCallback func(quictrace.Event)
-
 	logID  string
 	tracer logging.ConnectionTracer
 	logger utils.Logger
@@ -275,7 +272,6 @@ var newSession = func(
 		0,
 		s.rttStats,
 		s.perspective,
-		s.traceCallback,
 		s.tracer,
 		s.logger,
 		s.version,
@@ -398,7 +394,6 @@ var newClientSession = func(
 		initialPacketNumber,
 		s.rttStats,
 		s.perspective,
-		s.traceCallback,
 		s.tracer,
 		s.logger,
 		s.version,
@@ -507,12 +502,6 @@ func (s *session) preSetup() {
 	s.sessionCreationTime = now
 
 	s.windowUpdateQueue = newWindowUpdateQueue(s.streamsMap, s.connFlowController, s.framer.QueueControlFrame)
-
-	if s.config.QuicTracer != nil {
-		s.traceCallback = func(ev quictrace.Event) {
-			s.config.QuicTracer.Trace(s.origDestConnID, ev)
-		}
-	}
 }
 
 // run the session main loop
@@ -1030,8 +1019,6 @@ func (s *session) handleUnpackedPacket(
 	// Only used for tracing.
 	// If we're not tracing, this slice will always remain empty.
 	var frames []wire.Frame
-	var transportState *quictrace.TransportState
-
 	r := bytes.NewReader(packet.data)
 	var isAckEliciting bool
 	for {
@@ -1045,30 +1032,17 @@ func (s *session) handleUnpackedPacket(
 		if ackhandler.IsFrameAckEliciting(frame) {
 			isAckEliciting = true
 		}
-		if s.traceCallback != nil || s.tracer != nil {
-			frames = append(frames, frame)
-		}
 		// Only process frames now if we're not logging.
 		// If we're logging, we need to make sure that the packet_received event is logged first.
 		if s.tracer == nil {
 			if err := s.handleFrame(frame, packet.encryptionLevel, packet.hdr.DestConnectionID); err != nil {
 				return err
 			}
+		} else {
+			frames = append(frames, frame)
 		}
 	}
 
-	if s.traceCallback != nil {
-		transportState = s.sentPacketHandler.GetStats()
-		s.traceCallback(quictrace.Event{
-			Time:            rcvTime,
-			EventType:       quictrace.PacketReceived,
-			TransportState:  transportState,
-			EncryptionLevel: packet.encryptionLevel,
-			PacketNumber:    packet.packetNumber,
-			PacketSize:      protocol.ByteCount(len(packet.data)),
-			Frames:          frames,
-		})
-	}
 	if s.tracer != nil {
 		fs := make([]logging.Frame, len(frames))
 		for i, frame := range frames {
@@ -1556,7 +1530,7 @@ func (s *session) sendPacket() (bool, error) {
 		if err != nil || packet == nil {
 			return false, err
 		}
-		s.logCoalescedPacket(now, packet)
+		s.logCoalescedPacket(packet)
 		for _, p := range packet.packets {
 			if s.firstAckElicitingPacketAfterIdleSentTime.IsZero() && p.IsAckEliciting() {
 				s.firstAckElicitingPacketAfterIdleSentTime = now
@@ -1580,7 +1554,7 @@ func (s *session) sendPackedPacket(packet *packedPacket) {
 	if s.firstAckElicitingPacketAfterIdleSentTime.IsZero() && packet.IsAckEliciting() {
 		s.firstAckElicitingPacketAfterIdleSentTime = now
 	}
-	s.logPacket(now, packet)
+	s.logPacket(packet)
 	s.sentPacketHandler.SentPacket(packet.ToAckHandlerPacket(time.Now(), s.retransmissionQueue))
 	s.connIDManager.SentPacket()
 	s.sendQueue.Send(packet.buffer)
@@ -1591,11 +1565,11 @@ func (s *session) sendConnectionClose(quicErr *qerr.QuicError) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	s.logCoalescedPacket(time.Now(), packet)
+	s.logCoalescedPacket(packet)
 	return packet.buffer.Data, s.conn.Write(packet.buffer.Data)
 }
 
-func (s *session) logPacketContents(now time.Time, p *packetContents) {
+func (s *session) logPacketContents(p *packetContents) {
 	// tracing
 	if s.tracer != nil {
 		frames := make([]logging.Frame, 0, len(p.frames))
@@ -1603,23 +1577,6 @@ func (s *session) logPacketContents(now time.Time, p *packetContents) {
 			frames = append(frames, logutils.ConvertFrame(f.Frame))
 		}
 		s.tracer.SentPacket(p.header, p.length, p.ack, frames)
-	}
-
-	// quic-trace
-	if s.traceCallback != nil {
-		frames := make([]wire.Frame, 0, len(p.frames))
-		for _, f := range p.frames {
-			frames = append(frames, f.Frame)
-		}
-		s.traceCallback(quictrace.Event{
-			Time:            now,
-			EventType:       quictrace.PacketSent,
-			TransportState:  s.sentPacketHandler.GetStats(),
-			EncryptionLevel: p.EncryptionLevel(),
-			PacketNumber:    p.header.PacketNumber,
-			PacketSize:      p.length,
-			Frames:          frames,
-		})
 	}
 
 	// quic-go logging
@@ -1635,7 +1592,7 @@ func (s *session) logPacketContents(now time.Time, p *packetContents) {
 	}
 }
 
-func (s *session) logCoalescedPacket(now time.Time, packet *coalescedPacket) {
+func (s *session) logCoalescedPacket(packet *coalescedPacket) {
 	if s.logger.Debug() {
 		if len(packet.packets) > 1 {
 			s.logger.Debugf("-> Sending coalesced packet (%d parts, %d bytes) for connection %s", len(packet.packets), packet.buffer.Len(), s.logID)
@@ -1644,15 +1601,15 @@ func (s *session) logCoalescedPacket(now time.Time, packet *coalescedPacket) {
 		}
 	}
 	for _, p := range packet.packets {
-		s.logPacketContents(now, p)
+		s.logPacketContents(p)
 	}
 }
 
-func (s *session) logPacket(now time.Time, packet *packedPacket) {
+func (s *session) logPacket(packet *packedPacket) {
 	if s.logger.Debug() {
 		s.logger.Debugf("-> Sending packet %d (%d bytes) for connection %s, %s", packet.header.PacketNumber, packet.buffer.Len(), s.logID, packet.EncryptionLevel())
 	}
-	s.logPacketContents(now, packet.packetContents)
+	s.logPacketContents(packet.packetContents)
 }
 
 // AcceptStream returns the next stream openend by the peer

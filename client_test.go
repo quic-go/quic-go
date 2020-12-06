@@ -12,7 +12,6 @@ import (
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/internal/utils"
 	"github.com/lucas-clemente/quic-go/logging"
-	"github.com/lucas-clemente/quic-go/quictrace"
 
 	"github.com/golang/mock/gomock"
 
@@ -457,7 +456,6 @@ var _ = Describe("Client", func() {
 
 		Context("quic.Config", func() {
 			It("setups with the right values", func() {
-				tracer := quictrace.NewTracer()
 				tokenStore := NewLRUTokenStore(10, 4)
 				config := &Config{
 					HandshakeTimeout:      1337 * time.Minute,
@@ -466,7 +464,6 @@ var _ = Describe("Client", func() {
 					MaxIncomingUniStreams: 4321,
 					ConnectionIDLength:    13,
 					StatelessResetKey:     []byte("foobar"),
-					QuicTracer:            tracer,
 					TokenStore:            tokenStore,
 				}
 				c := populateClientConfig(config, false)
@@ -476,7 +473,6 @@ var _ = Describe("Client", func() {
 				Expect(c.MaxIncomingUniStreams).To(BeEquivalentTo(4321))
 				Expect(c.ConnectionIDLength).To(Equal(13))
 				Expect(c.StatelessResetKey).To(Equal([]byte("foobar")))
-				Expect(c.QuicTracer).To(Equal(tracer))
 				Expect(c.TokenStore).To(Equal(tokenStore))
 			})
 

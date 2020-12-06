@@ -5,7 +5,6 @@ import (
 
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/internal/wire"
-	"github.com/lucas-clemente/quic-go/quictrace"
 )
 
 // A Packet is a packet
@@ -48,9 +47,6 @@ type SentPacketHandler interface {
 
 	GetLossDetectionTimeout() time.Time
 	OnLossDetectionTimeout() error
-
-	// report some congestion statistics. For tracing only.
-	GetStats() *quictrace.TransportState
 }
 
 type sentPacketTracker interface {
