@@ -14,6 +14,13 @@ import (
 var _ = Describe("Header", func() {
 	const versionIETFHeader = protocol.VersionTLS // a QUIC version that uses the IETF Header format
 
+	It("checks the value of the reserved bits in a short header packet", func() {
+		Expect(CheckShortHeaderReservedBits(0b01100111)).To(BeTrue())
+		Expect(CheckShortHeaderReservedBits(0b01110111)).To(BeFalse())
+		Expect(CheckShortHeaderReservedBits(0b01111011)).To(BeFalse())
+		Expect(CheckShortHeaderReservedBits(0b01111111)).To(BeFalse())
+	})
+
 	Context("Writing", func() {
 		var buf *bytes.Buffer
 

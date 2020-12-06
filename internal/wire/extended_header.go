@@ -16,6 +16,12 @@ import (
 // in order to avoid a timing side-channel.
 var ErrInvalidReservedBits = errors.New("invalid reserved bits")
 
+// CheckShortHeaderReservedBits checks if the reserved bits in a short header packet have the correct value.
+// It must be called after header protection is removed.
+func CheckShortHeaderReservedBits(firstByte byte) bool {
+	return firstByte&0x18 == 0
+}
+
 // ExtendedHeader is the header of a QUIC packet.
 type ExtendedHeader struct {
 	Header
@@ -73,7 +79,7 @@ func (h *ExtendedHeader) parseShortHeader(b *bytes.Reader, _ protocol.VersionNum
 	if err := h.readPacketNumber(b); err != nil {
 		return false, err
 	}
-	if h.typeByte&0x18 != 0 {
+	if !CheckShortHeaderReservedBits(h.typeByte) {
 		return false, nil
 	}
 	return true, nil
