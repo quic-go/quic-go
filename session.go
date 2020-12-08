@@ -587,18 +587,22 @@ runLoop:
 			s.logger.Debugf("Sending a keep-alive PING to keep the connection alive.")
 			s.framer.QueueControlFrame(&wire.PingFrame{})
 			s.keepAlivePingSent = true
-		} else if !s.handshakeComplete && now.Sub(s.sessionCreationTime) >= s.config.HandshakeTimeout {
+		} else if !s.handshakeComplete && now.Sub(s.sessionCreationTime) >= s.config.handshakeTimeout() {
 			if s.tracer != nil {
 				s.tracer.ClosedConnection(logging.NewTimeoutCloseReason(logging.TimeoutReasonHandshake))
 			}
 			s.destroyImpl(qerr.NewTimeoutError("Handshake did not complete in time"))
 			continue
-		} else if s.handshakeComplete && now.Sub(s.idleTimeoutStartTime()) >= s.idleTimeout {
-			if s.tracer != nil {
-				s.tracer.ClosedConnection(logging.NewTimeoutCloseReason(logging.TimeoutReasonIdle))
+		} else {
+			idleTimeoutStartTime := s.idleTimeoutStartTime()
+			if (!s.handshakeComplete && now.Sub(idleTimeoutStartTime) >= s.config.HandshakeIdleTimeout) ||
+				(s.handshakeComplete && now.Sub(idleTimeoutStartTime) >= s.idleTimeout) {
+				if s.tracer != nil {
+					s.tracer.ClosedConnection(logging.NewTimeoutCloseReason(logging.TimeoutReasonIdle))
+				}
+				s.destroyImpl(qerr.NewTimeoutError("No recent network activity"))
+				continue
 			}
-			s.destroyImpl(qerr.NewTimeoutError("No recent network activity"))
-			continue
 		}
 
 		if err := s.sendPackets(); err != nil {
@@ -646,7 +650,7 @@ func (s *session) nextKeepAliveTime() time.Time {
 func (s *session) maybeResetTimer() {
 	var deadline time.Time
 	if !s.handshakeComplete {
-		deadline = s.sessionCreationTime.Add(s.config.HandshakeTimeout)
+		deadline = s.sessionCreationTime.Add(utils.MinDuration(s.config.handshakeTimeout(), s.config.HandshakeIdleTimeout))
 	} else {
 		if keepAliveTime := s.nextKeepAliveTime(); !keepAliveTime.IsZero() {
 			deadline = keepAliveTime

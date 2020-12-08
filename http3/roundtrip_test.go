@@ -109,7 +109,7 @@ var _ = Describe("RoundTripper", func() {
 		})
 
 		It("uses the quic.Config, if provided", func() {
-			config := &quic.Config{HandshakeTimeout: time.Millisecond}
+			config := &quic.Config{HandshakeIdleTimeout: time.Millisecond}
 			var receivedConfig *quic.Config
 			dialAddr = func(addr string, tlsConf *tls.Config, config *quic.Config) (quic.EarlySession, error) {
 				receivedConfig = config
@@ -118,7 +118,7 @@ var _ = Describe("RoundTripper", func() {
 			rt.QuicConfig = config
 			_, err := rt.RoundTrip(req1)
 			Expect(err).To(MatchError("handshake error"))
-			Expect(receivedConfig.HandshakeTimeout).To(Equal(config.HandshakeTimeout))
+			Expect(receivedConfig.HandshakeIdleTimeout).To(Equal(config.HandshakeIdleTimeout))
 		})
 
 		It("uses the custom dialer, if provided", func() {

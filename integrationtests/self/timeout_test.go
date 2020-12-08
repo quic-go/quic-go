@@ -66,7 +66,7 @@ var _ = Describe("Timeout tests", func() {
 			_, err := quic.DialAddr(
 				"localhost:12345",
 				getTLSClientConfig(),
-				getQuicConfig(&quic.Config{HandshakeTimeout: 10 * time.Millisecond}),
+				getQuicConfig(&quic.Config{HandshakeIdleTimeout: 10 * time.Millisecond}),
 			)
 			errChan <- err
 		}()
@@ -431,8 +431,8 @@ var _ = Describe("Timeout tests", func() {
 					fmt.Sprintf("localhost:%d", ln.Addr().(*net.UDPAddr).Port),
 					getTLSClientConfig(),
 					getQuicConfig(&quic.Config{
-						HandshakeTimeout: handshakeTimeout,
-						MaxIdleTimeout:   handshakeTimeout,
+						HandshakeIdleTimeout: handshakeTimeout,
+						MaxIdleTimeout:       handshakeTimeout,
 					}),
 				)
 				if err != nil {
@@ -464,9 +464,9 @@ var _ = Describe("Timeout tests", func() {
 				"localhost:0",
 				getTLSConfig(),
 				getQuicConfig(&quic.Config{
-					HandshakeTimeout: handshakeTimeout,
-					MaxIdleTimeout:   handshakeTimeout,
-					KeepAlive:        true,
+					HandshakeIdleTimeout: handshakeTimeout,
+					MaxIdleTimeout:       handshakeTimeout,
+					KeepAlive:            true,
 				}),
 			)
 			Expect(err).ToNot(HaveOccurred())

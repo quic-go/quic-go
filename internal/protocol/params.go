@@ -98,6 +98,9 @@ const MinRemoteIdleTimeout = 5 * time.Second
 // DefaultIdleTimeout is the default idle timeout
 const DefaultIdleTimeout = 30 * time.Second
 
+// DefaultHandshakeIdleTimeout is the default idle timeout used before handshake completion.
+const DefaultHandshakeIdleTimeout = 5 * time.Second
+
 // DefaultHandshakeTimeout is the default timeout for a connection until the crypto handshake succeeds.
 const DefaultHandshakeTimeout = 10 * time.Second
 

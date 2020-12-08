@@ -37,9 +37,9 @@ var _ = Describe("Handshake drop tests", func() {
 
 	startListenerAndProxy := func(dropCallback quicproxy.DropCallback, doRetry bool, longCertChain bool, version protocol.VersionNumber) {
 		conf := getQuicConfig(&quic.Config{
-			MaxIdleTimeout:   timeout,
-			HandshakeTimeout: timeout,
-			Versions:         []protocol.VersionNumber{version},
+			MaxIdleTimeout:       timeout,
+			HandshakeIdleTimeout: timeout,
+			Versions:             []protocol.VersionNumber{version},
 		})
 		if !doRetry {
 			conf.AcceptToken = func(net.Addr, *quic.Token) bool { return true }
@@ -88,9 +88,9 @@ var _ = Describe("Handshake drop tests", func() {
 				fmt.Sprintf("localhost:%d", proxy.LocalPort()),
 				getTLSClientConfig(),
 				getQuicConfig(&quic.Config{
-					MaxIdleTimeout:   timeout,
-					HandshakeTimeout: timeout,
-					Versions:         []protocol.VersionNumber{version},
+					MaxIdleTimeout:       timeout,
+					HandshakeIdleTimeout: timeout,
+					Versions:             []protocol.VersionNumber{version},
 				}),
 			)
 			Expect(err).ToNot(HaveOccurred())
@@ -126,9 +126,9 @@ var _ = Describe("Handshake drop tests", func() {
 				fmt.Sprintf("localhost:%d", proxy.LocalPort()),
 				getTLSClientConfig(),
 				getQuicConfig(&quic.Config{
-					MaxIdleTimeout:   timeout,
-					HandshakeTimeout: timeout,
-					Versions:         []protocol.VersionNumber{version},
+					MaxIdleTimeout:       timeout,
+					HandshakeIdleTimeout: timeout,
+					Versions:             []protocol.VersionNumber{version},
 				}),
 			)
 			Expect(err).ToNot(HaveOccurred())
@@ -159,9 +159,9 @@ var _ = Describe("Handshake drop tests", func() {
 				fmt.Sprintf("localhost:%d", proxy.LocalPort()),
 				getTLSClientConfig(),
 				getQuicConfig(&quic.Config{
-					MaxIdleTimeout:   timeout,
-					HandshakeTimeout: timeout,
-					Versions:         []protocol.VersionNumber{version},
+					MaxIdleTimeout:       timeout,
+					HandshakeIdleTimeout: timeout,
+					Versions:             []protocol.VersionNumber{version},
 				}),
 			)
 			Expect(err).ToNot(HaveOccurred())

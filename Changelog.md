@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.20.0 (unreleased)
+
+- Remove the `quic.Config.HandshakeTimeout`. Introduce a `quic.Config.HandshakeIdleTimeout`.
+
 ## v0.17.1 (2020-06-20)
 
 - Supports QUIC WG draft-29.

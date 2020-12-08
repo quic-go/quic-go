@@ -217,10 +217,10 @@ type Config struct {
 	// If used for a server, or dialing on a packet conn, a 4 byte connection ID will be used.
 	// When dialing on a packet conn, the ConnectionIDLength value must be the same for every Dial call.
 	ConnectionIDLength int
-	// HandshakeTimeout is the maximum duration that the cryptographic handshake may take.
-	// If the timeout is exceeded, the connection is closed.
-	// If this value is zero, the timeout is set to 10 seconds.
-	HandshakeTimeout time.Duration
+	// HandshakeIdleTimeout is the idle timeout before completion of the handshake.
+	// Specifically, if we don't receive any packet from the peer within this time, the connection attempt is aborted.
+	// If this value is zero, the timeout is set to 5 seconds.
+	HandshakeIdleTimeout time.Duration
 	// MaxIdleTimeout is the maximum duration that may pass without any incoming network activity.
 	// The actual value for the idle timeout is the minimum of this value and the peer's.
 	// This value only applies after the handshake has completed.

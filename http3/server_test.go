@@ -522,7 +522,7 @@ var _ = Describe("Server", func() {
 		}
 
 		It("uses the quic.Config to start the QUIC server", func() {
-			conf := &quic.Config{HandshakeTimeout: time.Nanosecond}
+			conf := &quic.Config{HandshakeIdleTimeout: time.Nanosecond}
 			var receivedConf *quic.Config
 			quicListenAddr = func(addr string, _ *tls.Config, config *quic.Config) (quic.EarlyListener, error) {
 				receivedConf = config

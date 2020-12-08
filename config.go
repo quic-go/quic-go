@@ -2,6 +2,9 @@ package quic
 
 import (
 	"errors"
+	"time"
+
+	"github.com/lucas-clemente/quic-go/internal/utils"
 
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 )
@@ -10,6 +13,10 @@ import (
 func (c *Config) Clone() *Config {
 	copy := *c
 	return &copy
+}
+
+func (c *Config) handshakeTimeout() time.Duration {
+	return utils.MaxDuration(protocol.DefaultHandshakeTimeout, 2*c.HandshakeIdleTimeout)
 }
 
 func validateConfig(config *Config) error {
@@ -56,9 +63,9 @@ func populateConfig(config *Config) *Config {
 	if len(versions) == 0 {
 		versions = protocol.SupportedVersions
 	}
-	handshakeTimeout := protocol.DefaultHandshakeTimeout
-	if config.HandshakeTimeout != 0 {
-		handshakeTimeout = config.HandshakeTimeout
+	handshakeIdleTimeout := protocol.DefaultHandshakeIdleTimeout
+	if config.HandshakeIdleTimeout != 0 {
+		handshakeIdleTimeout = config.HandshakeIdleTimeout
 	}
 	idleTimeout := protocol.DefaultIdleTimeout
 	if config.MaxIdleTimeout != 0 {
@@ -87,7 +94,7 @@ func populateConfig(config *Config) *Config {
 
 	return &Config{
 		Versions:                              versions,
-		HandshakeTimeout:                      handshakeTimeout,
+		HandshakeIdleTimeout:                  handshakeIdleTimeout,
 		MaxIdleTimeout:                        idleTimeout,
 		AcceptToken:                           config.AcceptToken,
 		KeepAlive:                             config.KeepAlive,
