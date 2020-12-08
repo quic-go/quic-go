@@ -1,0 +1,25 @@
+on: [push, pull_request]
+
+jobs:
+  unit:
+    strategy:
+      matrix:
+        go: [ "1.14", "1.15" ]
+    runs-on: ubuntu-latest
+    name: Integration Tests, Go ${{ matrix.go }})
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions/setup-go@v2
+        with:
+          go-version: ${{ matrix.go }}
+      - run: go version
+      - name: Install Ginkgo
+        run: go install github.com/onsi/ginkgo/ginkgo
+      - name: Install dependencies
+        run: go install
+      - name: Run tests
+        run: ginkgo -r -v -randomizeAllSpecs -randomizeSuites -trace integrationtests
+      - name: Run tests (32 bit)
+        env:
+          GOARCH: 386
+        run: ginkgo -r -v -randomizeAllSpecs -randomizeSuites -trace integrationtests
