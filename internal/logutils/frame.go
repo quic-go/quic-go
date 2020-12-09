@@ -23,6 +23,10 @@ func ConvertFrame(frame wire.Frame) logging.Frame {
 			Length:   f.DataLen(),
 			Fin:      f.Fin,
 		}
+	case *wire.DatagramFrame:
+		return &logging.DatagramFrame{
+			Length: logging.ByteCount(len(f.Data)),
+		}
 	default:
 		return logging.Frame(frame)
 	}

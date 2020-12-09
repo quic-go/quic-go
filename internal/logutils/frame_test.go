@@ -34,6 +34,13 @@ var _ = Describe("CRYPTO frame", func() {
 		Expect(sf.Fin).To(BeTrue())
 	})
 
+	It("converts DATAGRAM frames", func() {
+		f := ConvertFrame(&wire.DatagramFrame{Data: []byte("foobar")})
+		Expect(f).To(BeAssignableToTypeOf(&logging.DatagramFrame{}))
+		df := f.(*logging.DatagramFrame)
+		Expect(df.Length).To(Equal(logging.ByteCount(6)))
+	})
+
 	It("converts other frames", func() {
 		f := ConvertFrame(&wire.MaxDataFrame{MaximumData: 1234})
 		Expect(f).To(BeAssignableToTypeOf(&logging.MaxDataFrame{}))

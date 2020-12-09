@@ -364,4 +364,14 @@ var _ = Describe("Frames", func() {
 			},
 		)
 	})
+
+	It("marshals DATAGRAM frames", func() {
+		check(
+			&logging.DatagramFrame{Length: 1337},
+			map[string]interface{}{
+				"frame_type": "datagram",
+				"length":     1337,
+			},
+		)
+	})
 })
