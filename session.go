@@ -675,6 +675,9 @@ func (s *session) handleHandshakeComplete() {
 	s.handshakeComplete = true
 	s.handshakeCompleteChan = nil // prevent this case from ever being selected again
 	s.handshakeCtxCancel()
+	// Once the handshake completes, we have derived 1-RTT keys.
+	// There's no point in queueing undecryptable packets for later decryption any more.
+	s.undecryptablePackets = nil
 
 	s.connIDManager.SetHandshakeComplete()
 	s.connIDGenerator.SetHandshakeComplete()
