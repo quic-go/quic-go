@@ -1674,6 +1674,9 @@ func (s *session) scheduleSending() {
 }
 
 func (s *session) tryQueueingUndecryptablePacket(p *receivedPacket, hdr *wire.Header) {
+	if s.handshakeComplete {
+		panic("shouldn't queue undecryptable packets after handshake completion")
+	}
 	if len(s.undecryptablePackets)+1 > protocol.MaxUndecryptablePackets {
 		if s.tracer != nil {
 			s.tracer.DroppedPacket(logging.PacketTypeFromHeader(hdr), p.Size(), logging.PacketDropDOSPrevention)
