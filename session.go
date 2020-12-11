@@ -493,7 +493,6 @@ func (s *session) preSetup() {
 	s.receivedPackets = make(chan *receivedPacket, protocol.MaxSessionUnprocessedPackets)
 	s.closeChan = make(chan closeError, 1)
 	s.sendingScheduled = make(chan struct{}, 1)
-	s.undecryptablePackets = make([]*receivedPacket, 0, protocol.MaxUndecryptablePackets)
 	s.ctx, s.ctxCancel = context.WithCancel(context.Background())
 	s.handshakeCtx, s.handshakeCtxCancel = context.WithCancel(context.Background())
 
