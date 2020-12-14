@@ -566,10 +566,15 @@ func (s *baseServer) sendRetry(remoteAddr net.Addr, hdr *wire.Header) error {
 	replyHdr.SrcConnectionID = srcConnID
 	replyHdr.DestConnectionID = hdr.SrcConnectionID
 	replyHdr.Token = token
-	s.logger.Debugf("Changing connection ID to %s.", srcConnID)
-	s.logger.Debugf("-> Sending Retry")
-	replyHdr.Log(s.logger)
-	buf := &bytes.Buffer{}
+	if s.logger.Debug() {
+		s.logger.Debugf("Changing connection ID to %s.", srcConnID)
+		s.logger.Debugf("-> Sending Retry")
+		replyHdr.Log(s.logger)
+	}
+
+	packetBuffer := getPacketBuffer()
+	defer packetBuffer.Release()
+	buf := bytes.NewBuffer(packetBuffer.Data)
 	if err := replyHdr.Write(buf, hdr.Version); err != nil {
 		return err
 	}
