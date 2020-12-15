@@ -25,7 +25,7 @@ const (
 
 type packetNumberSpace struct {
 	history *sentPacketHistory
-	pns     *packetNumberGenerator
+	pns     packetNumberGenerator
 
 	lossTime                   time.Time
 	lastAckElicitingPacketTime time.Time
@@ -34,10 +34,16 @@ type packetNumberSpace struct {
 	largestSent  protocol.PacketNumber
 }
 
-func newPacketNumberSpace(initialPN protocol.PacketNumber, rttStats *utils.RTTStats) *packetNumberSpace {
+func newPacketNumberSpace(initialPN protocol.PacketNumber, skipPNs bool, rttStats *utils.RTTStats) *packetNumberSpace {
+	var pns packetNumberGenerator
+	if skipPNs {
+		pns = newSkippingPacketNumberGenerator(initialPN, protocol.SkipPacketInitialPeriod, protocol.SkipPacketMaxPeriod)
+	} else {
+		pns = newSequentialPacketNumberGenerator(initialPN)
+	}
 	return &packetNumberSpace{
 		history:      newSentPacketHistory(rttStats),
-		pns:          newPacketNumberGenerator(initialPN, protocol.SkipPacketAveragePeriodLength),
+		pns:          pns,
 		largestSent:  protocol.InvalidPacketNumber,
 		largestAcked: protocol.InvalidPacketNumber,
 	}
@@ -94,7 +100,7 @@ var (
 )
 
 func newSentPacketHandler(
-	initialPacketNumber protocol.PacketNumber,
+	initialPN protocol.PacketNumber,
 	rttStats *utils.RTTStats,
 	pers protocol.Perspective,
 	tracer logging.ConnectionTracer,
@@ -110,9 +116,9 @@ func newSentPacketHandler(
 	return &sentPacketHandler{
 		peerCompletedAddressValidation: pers == protocol.PerspectiveServer,
 		peerAddressValidated:           pers == protocol.PerspectiveClient,
-		initialPackets:                 newPacketNumberSpace(initialPacketNumber, rttStats),
-		handshakePackets:               newPacketNumberSpace(0, rttStats),
-		appDataPackets:                 newPacketNumberSpace(0, rttStats),
+		initialPackets:                 newPacketNumberSpace(initialPN, false, rttStats),
+		handshakePackets:               newPacketNumberSpace(0, false, rttStats),
+		appDataPackets:                 newPacketNumberSpace(0, true, rttStats),
 		rttStats:                       rttStats,
 		congestion:                     congestion,
 		perspective:                    pers,
@@ -765,8 +771,8 @@ func (h *sentPacketHandler) ResetForRetry() error {
 			h.tracer.UpdatedMetrics(h.rttStats, h.congestion.GetCongestionWindow(), h.bytesInFlight, h.packetsInFlight())
 		}
 	}
-	h.initialPackets = newPacketNumberSpace(h.initialPackets.pns.Pop(), h.rttStats)
-	h.appDataPackets = newPacketNumberSpace(h.appDataPackets.pns.Pop(), h.rttStats)
+	h.initialPackets = newPacketNumberSpace(h.initialPackets.pns.Pop(), false, h.rttStats)
+	h.appDataPackets = newPacketNumberSpace(h.appDataPackets.pns.Pop(), true, h.rttStats)
 	oldAlarm := h.alarm
 	h.alarm = time.Time{}
 	if h.tracer != nil {
