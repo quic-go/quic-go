@@ -140,7 +140,7 @@ var _ = Describe("Client", func() {
 				sess.EXPECT().HandshakeComplete().Return(context.Background())
 				return sess
 			}
-			_, err := DialAddr("localhost:17890", tlsConf, &Config{HandshakeTimeout: time.Millisecond})
+			_, err := DialAddr("localhost:17890", tlsConf, &Config{HandshakeIdleTimeout: time.Millisecond})
 			Expect(err).ToNot(HaveOccurred())
 			Eventually(remoteAddrChan).Should(Receive(Equal("127.0.0.1:17890")))
 		})
@@ -458,7 +458,7 @@ var _ = Describe("Client", func() {
 			It("setups with the right values", func() {
 				tokenStore := NewLRUTokenStore(10, 4)
 				config := &Config{
-					HandshakeTimeout:      1337 * time.Minute,
+					HandshakeIdleTimeout:  1337 * time.Minute,
 					MaxIdleTimeout:        42 * time.Hour,
 					MaxIncomingStreams:    1234,
 					MaxIncomingUniStreams: 4321,
@@ -467,7 +467,7 @@ var _ = Describe("Client", func() {
 					TokenStore:            tokenStore,
 				}
 				c := populateClientConfig(config, false)
-				Expect(c.HandshakeTimeout).To(Equal(1337 * time.Minute))
+				Expect(c.HandshakeIdleTimeout).To(Equal(1337 * time.Minute))
 				Expect(c.MaxIdleTimeout).To(Equal(42 * time.Hour))
 				Expect(c.MaxIncomingStreams).To(BeEquivalentTo(1234))
 				Expect(c.MaxIncomingUniStreams).To(BeEquivalentTo(4321))
@@ -513,7 +513,7 @@ var _ = Describe("Client", func() {
 			It("fills in default values if options are not set in the Config", func() {
 				c := populateClientConfig(&Config{}, false)
 				Expect(c.Versions).To(Equal(protocol.SupportedVersions))
-				Expect(c.HandshakeTimeout).To(Equal(protocol.DefaultHandshakeTimeout))
+				Expect(c.HandshakeIdleTimeout).To(Equal(protocol.DefaultHandshakeIdleTimeout))
 				Expect(c.MaxIdleTimeout).To(Equal(protocol.DefaultIdleTimeout))
 			})
 		})

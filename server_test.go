@@ -124,7 +124,7 @@ var _ = Describe("Server", func() {
 		Expect(err).ToNot(HaveOccurred())
 		server := ln.(*baseServer)
 		Expect(server.config.Versions).To(Equal(protocol.SupportedVersions))
-		Expect(server.config.HandshakeTimeout).To(Equal(protocol.DefaultHandshakeTimeout))
+		Expect(server.config.HandshakeIdleTimeout).To(Equal(protocol.DefaultHandshakeIdleTimeout))
 		Expect(server.config.MaxIdleTimeout).To(Equal(protocol.DefaultIdleTimeout))
 		Expect(reflect.ValueOf(server.config.AcceptToken)).To(Equal(reflect.ValueOf(defaultAcceptToken)))
 		Expect(server.config.KeepAlive).To(BeFalse())
@@ -136,19 +136,19 @@ var _ = Describe("Server", func() {
 		supportedVersions := []protocol.VersionNumber{protocol.VersionTLS}
 		acceptToken := func(_ net.Addr, _ *Token) bool { return true }
 		config := Config{
-			Versions:          supportedVersions,
-			AcceptToken:       acceptToken,
-			HandshakeTimeout:  1337 * time.Hour,
-			MaxIdleTimeout:    42 * time.Minute,
-			KeepAlive:         true,
-			StatelessResetKey: []byte("foobar"),
+			Versions:             supportedVersions,
+			AcceptToken:          acceptToken,
+			HandshakeIdleTimeout: 1337 * time.Hour,
+			MaxIdleTimeout:       42 * time.Minute,
+			KeepAlive:            true,
+			StatelessResetKey:    []byte("foobar"),
 		}
 		ln, err := Listen(conn, tlsConf, &config)
 		Expect(err).ToNot(HaveOccurred())
 		server := ln.(*baseServer)
 		Expect(server.sessionHandler).ToNot(BeNil())
 		Expect(server.config.Versions).To(Equal(supportedVersions))
-		Expect(server.config.HandshakeTimeout).To(Equal(1337 * time.Hour))
+		Expect(server.config.HandshakeIdleTimeout).To(Equal(1337 * time.Hour))
 		Expect(server.config.MaxIdleTimeout).To(Equal(42 * time.Minute))
 		Expect(reflect.ValueOf(server.config.AcceptToken)).To(Equal(reflect.ValueOf(acceptToken)))
 		Expect(server.config.KeepAlive).To(BeTrue())

@@ -51,7 +51,7 @@ var _ = Describe("Config", func() {
 				f.Set(reflect.ValueOf([]VersionNumber{1, 2, 3}))
 			case "ConnectionIDLength":
 				f.Set(reflect.ValueOf(8))
-			case "HandshakeTimeout":
+			case "HandshakeIdleTimeout":
 				f.Set(reflect.ValueOf(time.Second))
 			case "MaxIdleTimeout":
 				f.Set(reflect.ValueOf(time.Hour))
@@ -77,6 +77,17 @@ var _ = Describe("Config", func() {
 		}
 		return c
 	}
+
+	It("uses 10s handshake timeout for short handshake idle timeouts", func() {
+		c := &Config{HandshakeIdleTimeout: time.Second}
+		Expect(c.handshakeTimeout()).To(Equal(protocol.DefaultHandshakeTimeout))
+	})
+
+	It("uses twice the handshake idle timeouts for the handshake timeout, for long handshake idle timeouts", func() {
+		c := &Config{HandshakeIdleTimeout: time.Second * 11 / 2}
+		Expect(c.handshakeTimeout()).To(Equal(11 * time.Second))
+	})
+
 	Context("cloning", func() {
 		It("clones function fields", func() {
 			var calledAcceptToken bool
@@ -126,7 +137,7 @@ var _ = Describe("Config", func() {
 		It("populates empty fields with default values", func() {
 			c := populateConfig(&Config{})
 			Expect(c.Versions).To(Equal(protocol.SupportedVersions))
-			Expect(c.HandshakeTimeout).To(Equal(protocol.DefaultHandshakeTimeout))
+			Expect(c.HandshakeIdleTimeout).To(Equal(protocol.DefaultHandshakeIdleTimeout))
 			Expect(c.MaxReceiveStreamFlowControlWindow).To(BeEquivalentTo(protocol.DefaultMaxReceiveStreamFlowControlWindow))
 			Expect(c.MaxReceiveConnectionFlowControlWindow).To(BeEquivalentTo(protocol.DefaultMaxReceiveConnectionFlowControlWindow))
 			Expect(c.MaxIncomingStreams).To(BeEquivalentTo(protocol.DefaultMaxIncomingStreams))

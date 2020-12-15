@@ -145,7 +145,7 @@ var _ = Describe("Handshake RTT tests", func() {
 		serverConfig.AcceptToken = func(_ net.Addr, _ *quic.Token) bool {
 			return false
 		}
-		clientConfig.HandshakeTimeout = 500 * time.Millisecond
+		clientConfig.HandshakeIdleTimeout = 500 * time.Millisecond
 		runServerAndProxy()
 		_, err := quic.DialAddr(
 			fmt.Sprintf("localhost:%d", proxy.LocalAddr().(*net.UDPAddr).Port),
@@ -153,6 +153,8 @@ var _ = Describe("Handshake RTT tests", func() {
 			clientConfig,
 		)
 		Expect(err).To(HaveOccurred())
-		Expect(err.Error()).To(ContainSubstring("Handshake did not complete in time"))
+		nerr, ok := err.(net.Error)
+		Expect(ok).To(BeTrue())
+		Expect(nerr.Timeout()).To(BeTrue())
 	})
 })

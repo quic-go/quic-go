@@ -1978,6 +1978,7 @@ var _ = Describe("Session", func() {
 
 		It("does not use the idle timeout before the handshake complete", func() {
 			sess.handshakeComplete = false
+			sess.config.HandshakeIdleTimeout = 9999 * time.Second
 			sess.config.MaxIdleTimeout = 9999 * time.Second
 			sess.lastPacketReceivedTime = time.Now().Add(-time.Minute)
 			packer.EXPECT().PackConnectionClose(gomock.Any()).DoAndReturn(func(quicErr *qerr.QuicError) (*coalescedPacket, error) {
@@ -2005,6 +2006,35 @@ var _ = Describe("Session", func() {
 			mconn.EXPECT().Write(gomock.Any())
 			sess.shutdown()
 			Eventually(sess.Context().Done()).Should(BeClosed())
+		})
+
+		It("closes the session due to the idle timeout before handshake", func() {
+			sess.config.HandshakeIdleTimeout = 0
+			packer.EXPECT().PackCoalescedPacket().AnyTimes()
+			sessionRunner.EXPECT().Remove(gomock.Any()).AnyTimes()
+			cryptoSetup.EXPECT().Close()
+			gomock.InOrder(
+				tracer.EXPECT().ClosedConnection(gomock.Any()).Do(func(reason logging.CloseReason) {
+					timeout, ok := reason.Timeout()
+					Expect(ok).To(BeTrue())
+					Expect(timeout).To(Equal(logging.TimeoutReasonIdle))
+				}),
+				tracer.EXPECT().Close(),
+			)
+			done := make(chan struct{})
+			sess.handshakeComplete = false
+			go func() {
+				defer GinkgoRecover()
+				cryptoSetup.EXPECT().RunHandshake().MaxTimes(1)
+				cryptoSetup.EXPECT().GetSessionTicket().MaxTimes(1)
+				err := sess.run()
+				nerr, ok := err.(net.Error)
+				Expect(ok).To(BeTrue())
+				Expect(nerr.Timeout()).To(BeTrue())
+				Expect(err.Error()).To(ContainSubstring("No recent network activity"))
+				close(done)
+			}()
+			Eventually(done).Should(BeClosed())
 		})
 
 		It("closes the session due to the idle timeout after handshake", func() {

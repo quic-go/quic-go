@@ -336,9 +336,9 @@ var _ = Describe("MITM test", func() {
 						fmt.Sprintf("localhost:%d", proxy.LocalPort()),
 						getTLSClientConfig(),
 						getQuicConfig(&quic.Config{
-							Versions:           []protocol.VersionNumber{version},
-							ConnectionIDLength: connIDLen,
-							HandshakeTimeout:   2 * time.Second,
+							Versions:             []protocol.VersionNumber{version},
+							ConnectionIDLength:   connIDLen,
+							HandshakeIdleTimeout: 2 * time.Second,
 						}),
 					)
 					return err
