@@ -1117,6 +1117,9 @@ func (s *session) handlePacket(p *receivedPacket) {
 	select {
 	case s.receivedPackets <- p:
 	default:
+		if s.tracer != nil {
+			s.tracer.DroppedPacket(logging.PacketTypeNotDetermined, p.Size(), logging.PacketDropDOSPrevention)
+		}
 	}
 }
 
