@@ -2092,13 +2092,17 @@ var _ = Describe("Session", func() {
 		})
 	})
 
-	It("stores up to MaxSessionUnprocessedPackets packets", func(done Done) {
+	It("stores up to MaxSessionUnprocessedPackets packets", func() {
+		done := make(chan struct{})
+		tracer.EXPECT().DroppedPacket(logging.PacketTypeNotDetermined, logging.ByteCount(6), logging.PacketDropDOSPrevention).Do(func(logging.PacketType, logging.ByteCount, logging.PacketDropReason) {
+			close(done)
+		})
 		// Nothing here should block
-		for i := protocol.PacketNumber(0); i < protocol.MaxSessionUnprocessedPackets+10; i++ {
-			sess.handlePacket(&receivedPacket{})
+		for i := protocol.PacketNumber(0); i < protocol.MaxSessionUnprocessedPackets+1; i++ {
+			sess.handlePacket(&receivedPacket{data: []byte("foobar")})
 		}
-		close(done)
-	}, 0.5)
+		Eventually(done).Should(BeClosed())
+	})
 
 	Context("getting streams", func() {
 		It("opens streams", func() {
