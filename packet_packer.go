@@ -565,7 +565,8 @@ func (p *packetPacker) maybeGetAppDataPacketWithEncLevel(maxPayloadSize protocol
 		// the packet only contains an ACK
 		if p.numNonAckElicitingAcks >= protocol.MaxNonAckElicitingAcks {
 			ping := &wire.PingFrame{}
-			payload.frames = append(payload.frames, ackhandler.Frame{Frame: ping})
+			// don't retransmit the PING frame when it is lost
+			payload.frames = append(payload.frames, ackhandler.Frame{Frame: ping, OnLost: func(wire.Frame) {}})
 			payload.length += ping.Length(p.version)
 			p.numNonAckElicitingAcks = 0
 		} else {
