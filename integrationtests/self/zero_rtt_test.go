@@ -86,7 +86,7 @@ var _ = Describe("0-RTT", func() {
 					data, err := ioutil.ReadAll(str)
 					Expect(err).ToNot(HaveOccurred())
 					Expect(data).To(Equal(testdata))
-					Expect(sess.ConnectionState().Used0RTT).To(Equal(expect0RTT))
+					Expect(sess.ConnectionState().TLS.Used0RTT).To(Equal(expect0RTT))
 					close(done)
 				}()
 
@@ -101,7 +101,7 @@ var _ = Describe("0-RTT", func() {
 				_, err = str.Write(testdata)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(str.Close()).To(Succeed())
-				Expect(sess.ConnectionState().Used0RTT).To(Equal(expect0RTT))
+				Expect(sess.ConnectionState().TLS.Used0RTT).To(Equal(expect0RTT))
 				Eventually(done).Should(BeClosed())
 			}
 

@@ -13,12 +13,17 @@ import (
 type frameParser struct {
 	ackDelayExponent uint8
 
+	supportsDatagrams bool
+
 	version protocol.VersionNumber
 }
 
 // NewFrameParser creates a new frame parser.
-func NewFrameParser(v protocol.VersionNumber) FrameParser {
-	return &frameParser{version: v}
+func NewFrameParser(supportsDatagrams bool, v protocol.VersionNumber) FrameParser {
+	return &frameParser{
+		supportsDatagrams: supportsDatagrams,
+		version:           v,
+	}
 }
 
 // ParseNextFrame parses the next frame
@@ -87,6 +92,12 @@ func (p *frameParser) parseFrame(r *bytes.Reader, typeByte byte, encLevel protoc
 			frame, err = parseConnectionCloseFrame(r, p.version)
 		case 0x1e:
 			frame, err = parseHandshakeDoneFrame(r, p.version)
+		case 0x30, 0x31:
+			if p.supportsDatagrams {
+				frame, err = parseDatagramFrame(r, p.version)
+				break
+			}
+			fallthrough
 		default:
 			err = errors.New("unknown frame type")
 		}

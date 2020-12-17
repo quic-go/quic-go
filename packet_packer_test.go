@@ -7,16 +7,16 @@ import (
 	"net"
 	"time"
 
-	"github.com/lucas-clemente/quic-go/internal/qerr"
-
 	"github.com/lucas-clemente/quic-go/internal/ackhandler"
-
-	"github.com/golang/mock/gomock"
 	"github.com/lucas-clemente/quic-go/internal/handshake"
 	"github.com/lucas-clemente/quic-go/internal/mocks"
 	mockackhandler "github.com/lucas-clemente/quic-go/internal/mocks/ackhandler"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
+	"github.com/lucas-clemente/quic-go/internal/qerr"
+	"github.com/lucas-clemente/quic-go/internal/utils"
 	"github.com/lucas-clemente/quic-go/internal/wire"
+
+	"github.com/golang/mock/gomock"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/ginkgo/extensions/table"
@@ -30,6 +30,7 @@ var _ = Describe("Packet packer", func() {
 	var (
 		packer              *packetPacker
 		retransmissionQueue *retransmissionQueue
+		datagramQueue       *datagramQueue
 		framer              *MockFrameSource
 		ackFramer           *MockAckFrameSource
 		initialStream       *MockCryptoStream
@@ -90,6 +91,7 @@ var _ = Describe("Packet packer", func() {
 		ackFramer = NewMockAckFrameSource(mockCtrl)
 		sealingManager = NewMockSealingManager(mockCtrl)
 		pnManager = mockackhandler.NewMockSentPacketHandler(mockCtrl)
+		datagramQueue = newDatagramQueue(func() {}, utils.DefaultLogger)
 
 		packer = newPacketPacker(
 			protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8},
@@ -102,6 +104,7 @@ var _ = Describe("Packet packer", func() {
 			sealingManager,
 			framer,
 			ackFramer,
+			datagramQueue,
 			protocol.PerspectiveServer,
 			version,
 		)
@@ -537,6 +540,33 @@ var _ = Describe("Packet packer", func() {
 				Expect(p.buffer.Len()).ToNot(BeZero())
 			})
 
+			It("packs DATAGRAM frames", func() {
+				pnManager.EXPECT().PeekPacketNumber(protocol.Encryption1RTT).Return(protocol.PacketNumber(0x42), protocol.PacketNumberLen2)
+				pnManager.EXPECT().PopPacketNumber(protocol.Encryption1RTT).Return(protocol.PacketNumber(0x42))
+				sealingManager.EXPECT().Get1RTTSealer().Return(getSealer(), nil)
+				f := &wire.DatagramFrame{
+					DataLenPresent: true,
+					Data:           []byte("foobar"),
+				}
+				done := make(chan struct{})
+				go func() {
+					defer GinkgoRecover()
+					defer close(done)
+					datagramQueue.AddAndWait(f)
+				}()
+				// make sure the DATAGRAM has actually been queued
+				time.Sleep(scaleDuration(20 * time.Millisecond))
+
+				framer.EXPECT().HasData()
+				p, err := packer.PackPacket()
+				Expect(p).ToNot(BeNil())
+				Expect(err).ToNot(HaveOccurred())
+				Expect(p.frames).To(HaveLen(1))
+				Expect(p.frames[0].Frame).To(Equal(f))
+				Expect(p.buffer.Data).ToNot(BeEmpty())
+				Eventually(done).Should(BeClosed())
+			})
+
 			It("accounts for the space consumed by control frames", func() {
 				pnManager.EXPECT().PeekPacketNumber(protocol.Encryption1RTT).Return(protocol.PacketNumber(0x42), protocol.PacketNumberLen2)
 				sealingManager.EXPECT().Get1RTTSealer().Return(getSealer(), nil)
@@ -588,7 +618,7 @@ var _ = Describe("Packet packer", func() {
 				Expect(err).ToNot(HaveOccurred())
 				Expect(secondPayloadByte).To(Equal(byte(0)))
 				// ... followed by the PING
-				frameParser := wire.NewFrameParser(packer.version)
+				frameParser := wire.NewFrameParser(false, packer.version)
 				frame, err := frameParser.ParseNext(r, protocol.Encryption1RTT)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(frame).To(BeAssignableToTypeOf(&wire.PingFrame{}))
@@ -625,7 +655,7 @@ var _ = Describe("Packet packer", func() {
 				Expect(err).ToNot(HaveOccurred())
 				Expect(firstPayloadByte).To(Equal(byte(0)))
 				// ... followed by the STREAM frame
-				frameParser := wire.NewFrameParser(packer.version)
+				frameParser := wire.NewFrameParser(true, packer.version)
 				frame, err := frameParser.ParseNext(r, protocol.Encryption1RTT)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(frame).To(BeAssignableToTypeOf(&wire.StreamFrame{}))
@@ -1137,7 +1167,7 @@ var _ = Describe("Packet packer", func() {
 				Expect(err).ToNot(HaveOccurred())
 				Expect(secondPayloadByte).To(Equal(byte(0)))
 				// ... followed by the PING
-				frameParser := wire.NewFrameParser(packer.version)
+				frameParser := wire.NewFrameParser(false, packer.version)
 				frame, err := frameParser.ParseNext(r, protocol.Encryption1RTT)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(frame).To(BeAssignableToTypeOf(&wire.PingFrame{}))

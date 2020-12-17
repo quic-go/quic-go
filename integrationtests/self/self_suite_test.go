@@ -15,6 +15,7 @@ import (
 	"math/big"
 	mrand "math/rand"
 	"os"
+	"strconv"
 	"sync"
 	"testing"
 	"time"
@@ -315,6 +316,15 @@ var _ = AfterEach(func() {
 // Debug says if this test is being logged
 func debugLog() bool {
 	return len(logFileName) > 0
+}
+
+func scaleDuration(d time.Duration) time.Duration {
+	scaleFactor := 1
+	if f, err := strconv.Atoi(os.Getenv("TIMESCALE_FACTOR")); err == nil { // parsing "" errors, so this works fine if the env is not set
+		scaleFactor = f
+	}
+	Expect(scaleFactor).ToNot(BeZero())
+	return time.Duration(scaleFactor) * d
 }
 
 func TestSelf(t *testing.T) {

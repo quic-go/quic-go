@@ -170,7 +170,7 @@ var _ = Describe("Handshake tests", func() {
 				data, err := ioutil.ReadAll(str)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(data).To(Equal(PRData))
-				Expect(sess.ConnectionState().CipherSuite).To(Equal(suiteID))
+				Expect(sess.ConnectionState().TLS.CipherSuite).To(Equal(suiteID))
 				Expect(sess.CloseWithError(0, "")).To(Succeed())
 			})
 		}
@@ -369,7 +369,7 @@ var _ = Describe("Handshake tests", func() {
 				sess, err := ln.Accept(context.Background())
 				Expect(err).ToNot(HaveOccurred())
 				cs := sess.ConnectionState()
-				Expect(cs.NegotiatedProtocol).To(Equal(alpn))
+				Expect(cs.TLS.NegotiatedProtocol).To(Equal(alpn))
 				close(done)
 			}()
 
@@ -381,7 +381,7 @@ var _ = Describe("Handshake tests", func() {
 			Expect(err).ToNot(HaveOccurred())
 			defer sess.CloseWithError(0, "")
 			cs := sess.ConnectionState()
-			Expect(cs.NegotiatedProtocol).To(Equal(alpn))
+			Expect(cs.TLS.NegotiatedProtocol).To(Equal(alpn))
 			Eventually(done).Should(BeClosed())
 			Expect(ln.Close()).To(Succeed())
 		})

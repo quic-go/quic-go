@@ -141,8 +141,6 @@ type StreamError interface {
 	ErrorCode() ErrorCode
 }
 
-type ConnectionState = handshake.ConnectionState
-
 // A Session is a QUIC connection between two peers.
 type Session interface {
 	// AcceptStream returns the next stream opened by the peer, blocking until one is available.
@@ -189,6 +187,13 @@ type Session interface {
 	// It blocks until the handshake completes.
 	// Warning: This API should not be considered stable and might change soon.
 	ConnectionState() ConnectionState
+
+	// SendMessage sends a message as a datagram.
+	// See https://datatracker.ietf.org/doc/draft-pauly-quic-datagram/.
+	SendMessage([]byte) error
+	// ReceiveMessage gets a message received in a datagram.
+	// See https://datatracker.ietf.org/doc/draft-pauly-quic-datagram/.
+	ReceiveMessage() ([]byte, error)
 }
 
 // An EarlySession is a session that is handshaking.
@@ -261,7 +266,16 @@ type Config struct {
 	StatelessResetKey []byte
 	// KeepAlive defines whether this peer will periodically send a packet to keep the connection alive.
 	KeepAlive bool
-	Tracer    logging.Tracer
+	// See https://datatracker.ietf.org/doc/draft-ietf-quic-datagram/.
+	// Datagrams will only be available when both peers enable datagram support.
+	EnableDatagrams bool
+	Tracer          logging.Tracer
+}
+
+// ConnectionState records basic details about a QUIC connection
+type ConnectionState struct {
+	TLS               handshake.ConnectionState
+	SupportsDatagrams bool
 }
 
 // A Listener for incoming QUIC connections

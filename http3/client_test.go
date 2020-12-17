@@ -16,7 +16,6 @@ import (
 	mockquic "github.com/lucas-clemente/quic-go/internal/mocks/quic"
 
 	"github.com/lucas-clemente/quic-go/internal/protocol"
-	"github.com/lucas-clemente/quic-go/internal/qtls"
 	"github.com/lucas-clemente/quic-go/internal/utils"
 	"github.com/marten-seemann/qpack"
 
@@ -240,7 +239,7 @@ var _ = Describe("Client", func() {
 			gomock.InOrder(
 				sess.EXPECT().HandshakeComplete().Return(handshakeCtx),
 				sess.EXPECT().OpenStreamSync(context.Background()).Return(str, nil),
-				sess.EXPECT().ConnectionState().Return(qtls.ConnectionState{}),
+				sess.EXPECT().ConnectionState().Return(quic.ConnectionState{}),
 			)
 			str.EXPECT().Write(gomock.Any()).AnyTimes().DoAndReturn(func(p []byte) (int, error) { return len(p), nil })
 			str.EXPECT().Close()
@@ -410,7 +409,7 @@ var _ = Describe("Client", func() {
 				req := request.WithContext(ctx)
 				sess.EXPECT().HandshakeComplete().Return(handshakeCtx)
 				sess.EXPECT().OpenStreamSync(ctx).Return(str, nil)
-				sess.EXPECT().ConnectionState().Return(qtls.ConnectionState{})
+				sess.EXPECT().ConnectionState().Return(quic.ConnectionState{})
 				buf := &bytes.Buffer{}
 				str.EXPECT().Close().MaxTimes(1)
 
@@ -473,7 +472,7 @@ var _ = Describe("Client", func() {
 
 			It("decompresses the response", func() {
 				sess.EXPECT().OpenStreamSync(context.Background()).Return(str, nil)
-				sess.EXPECT().ConnectionState().Return(qtls.ConnectionState{})
+				sess.EXPECT().ConnectionState().Return(quic.ConnectionState{})
 				buf := &bytes.Buffer{}
 				rw := newResponseWriter(buf, utils.DefaultLogger)
 				rw.Header().Set("Content-Encoding", "gzip")
@@ -499,7 +498,7 @@ var _ = Describe("Client", func() {
 
 			It("only decompresses the response if the response contains the right content-encoding header", func() {
 				sess.EXPECT().OpenStreamSync(context.Background()).Return(str, nil)
-				sess.EXPECT().ConnectionState().Return(qtls.ConnectionState{})
+				sess.EXPECT().ConnectionState().Return(quic.ConnectionState{})
 				buf := &bytes.Buffer{}
 				rw := newResponseWriter(buf, utils.DefaultLogger)
 				rw.Write([]byte("not gzipped"))

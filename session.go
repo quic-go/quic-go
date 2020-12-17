@@ -204,6 +204,8 @@ type session struct {
 	keepAlivePingSent bool
 	keepAliveInterval time.Duration
 
+	datagramQueue *datagramQueue
+
 	logID  string
 	tracer logging.ConnectionTracer
 	logger utils.Logger
@@ -295,6 +297,9 @@ var newSession = func(
 		InitialSourceConnectionID:       srcConnID,
 		RetrySourceConnectionID:         retrySrcConnID,
 	}
+	if s.config.EnableDatagrams {
+		params.MaxDatagramFrameSize = protocol.MaxDatagramFrameSize
+	}
 	if s.tracer != nil {
 		s.tracer.SentTransportParameters(params)
 	}
@@ -333,6 +338,7 @@ var newSession = func(
 		cs,
 		s.framer,
 		s.receivedPacketHandler,
+		s.datagramQueue,
 		s.perspective,
 		s.version,
 	)
@@ -414,6 +420,9 @@ var newClientSession = func(
 		ActiveConnectionIDLimit:        protocol.MaxActiveConnectionIDs,
 		InitialSourceConnectionID:      srcConnID,
 	}
+	if s.config.EnableDatagrams {
+		params.MaxDatagramFrameSize = protocol.MaxDatagramFrameSize
+	}
 	if s.tracer != nil {
 		s.tracer.SentTransportParameters(params)
 	}
@@ -452,6 +461,7 @@ var newClientSession = func(
 		cs,
 		s.framer,
 		s.receivedPacketHandler,
+		s.datagramQueue,
 		s.perspective,
 		s.version,
 	)
@@ -471,7 +481,7 @@ var newClientSession = func(
 func (s *session) preSetup() {
 	s.sendQueue = newSendQueue(s.conn)
 	s.retransmissionQueue = newRetransmissionQueue(s.version)
-	s.frameParser = wire.NewFrameParser(s.version)
+	s.frameParser = wire.NewFrameParser(s.config.EnableDatagrams, s.version)
 	s.rttStats = &utils.RTTStats{}
 	s.connFlowController = flowcontrol.NewConnectionFlowController(
 		protocol.InitialMaxData,
@@ -501,6 +511,9 @@ func (s *session) preSetup() {
 	s.sessionCreationTime = now
 
 	s.windowUpdateQueue = newWindowUpdateQueue(s.streamsMap, s.connFlowController, s.framer.QueueControlFrame)
+	if s.config.EnableDatagrams {
+		s.datagramQueue = newDatagramQueue(s.scheduleSending, s.logger)
+	}
 }
 
 // run the session main loop
@@ -633,8 +646,15 @@ func (s *session) Context() context.Context {
 	return s.ctx
 }
 
+func (s *session) supportsDatagrams() bool {
+	return s.peerParams.MaxDatagramFrameSize != protocol.InvalidByteCount
+}
+
 func (s *session) ConnectionState() ConnectionState {
-	return s.cryptoStreamHandler.ConnectionState()
+	return ConnectionState{
+		TLS:               s.cryptoStreamHandler.ConnectionState(),
+		SupportsDatagrams: s.supportsDatagrams(),
+	}
 }
 
 // Time when the next keep-alive packet should be sent.
@@ -1104,6 +1124,8 @@ func (s *session) handleFrame(f wire.Frame, encLevel protocol.EncryptionLevel, d
 		err = s.handleRetireConnectionIDFrame(frame, destConnID)
 	case *wire.HandshakeDoneFrame:
 		err = s.handleHandshakeDoneFrame()
+	case *wire.DatagramFrame:
+		err = s.handleDatagramFrame(frame)
 	default:
 		err = fmt.Errorf("unexpected frame type: %s", reflect.ValueOf(&frame).Elem().Type().Name())
 	}
@@ -1245,6 +1267,14 @@ func (s *session) handleAckFrame(frame *wire.AckFrame, encLevel protocol.Encrypt
 	return s.cryptoStreamHandler.SetLargest1RTTAcked(frame.LargestAcked())
 }
 
+func (s *session) handleDatagramFrame(f *wire.DatagramFrame) error {
+	if f.Length(s.version) > protocol.MaxDatagramFrameSize {
+		return qerr.NewError(qerr.ProtocolViolation, "DATAGRAM frame too large")
+	}
+	s.datagramQueue.HandleDatagramFrame(f)
+	return nil
+}
+
 // closeLocal closes the session and send a CONNECTION_CLOSE containing the error
 func (s *session) closeLocal(e error) {
 	s.closeOnce.Do(func() {
@@ -1307,6 +1337,9 @@ func (s *session) handleCloseError(closeErr closeError) {
 
 	s.streamsMap.CloseWithError(quicErr)
 	s.connIDManager.Close()
+	if s.datagramQueue != nil {
+		s.datagramQueue.CloseWithError(quicErr)
+	}
 
 	if s.tracer != nil {
 		// timeout errors are logged as soon as they occur (to distinguish between handshake and idle timeouts)
@@ -1729,6 +1762,21 @@ func (s *session) onStreamCompleted(id protocol.StreamID) {
 	if err := s.streamsMap.DeleteStream(id); err != nil {
 		s.closeLocal(err)
 	}
+}
+
+func (s *session) SendMessage(p []byte) error {
+	f := &wire.DatagramFrame{DataLenPresent: true}
+	if protocol.ByteCount(len(p)) > f.MaxDataLen(s.peerParams.MaxDatagramFrameSize, s.version) {
+		return errors.New("message too large")
+	}
+	f.Data = make([]byte, len(p))
+	copy(f.Data, p)
+	s.datagramQueue.AddAndWait(f)
+	return nil
+}
+
+func (s *session) ReceiveMessage() ([]byte, error) {
+	return s.datagramQueue.Receive()
 }
 
 func (s *session) LocalAddr() net.Addr {

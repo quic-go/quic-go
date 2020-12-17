@@ -8,9 +8,7 @@ import (
 	"io/ioutil"
 	mrand "math/rand"
 	"net"
-	"os"
 	"runtime/pprof"
-	"strconv"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -180,15 +178,6 @@ var _ = Describe("Timeout tests", func() {
 
 	Context("timing out at the right time", func() {
 		var idleTimeout time.Duration
-
-		scaleDuration := func(d time.Duration) time.Duration {
-			scaleFactor := 1
-			if f, err := strconv.Atoi(os.Getenv("TIMESCALE_FACTOR")); err == nil { // parsing "" errors, so this works fine if the env is not set
-				scaleFactor = f
-			}
-			Expect(scaleFactor).ToNot(BeZero())
-			return time.Duration(scaleFactor) * d
-		}
 
 		BeforeEach(func() {
 			idleTimeout = scaleDuration(100 * time.Millisecond)

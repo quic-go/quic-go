@@ -250,7 +250,7 @@ func (c *client) doRequest(
 		return nil, newConnError(errorGeneralProtocolError, err)
 	}
 
-	connState := qtls.ToTLSConnectionState(c.session.ConnectionState())
+	connState := qtls.ToTLSConnectionState(c.session.ConnectionState().TLS)
 	res := &http.Response{
 		Proto:      "HTTP/3",
 		ProtoMajor: 3,

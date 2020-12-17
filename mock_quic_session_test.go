@@ -210,6 +210,21 @@ func (mr *MockQuicSessionMockRecorder) OpenUniStreamSync(arg0 interface{}) *gomo
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "OpenUniStreamSync", reflect.TypeOf((*MockQuicSession)(nil).OpenUniStreamSync), arg0)
 }
 
+// ReceiveMessage mocks base method
+func (m *MockQuicSession) ReceiveMessage() ([]byte, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ReceiveMessage")
+	ret0, _ := ret[0].([]byte)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ReceiveMessage indicates an expected call of ReceiveMessage
+func (mr *MockQuicSessionMockRecorder) ReceiveMessage() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReceiveMessage", reflect.TypeOf((*MockQuicSession)(nil).ReceiveMessage))
+}
+
 // RemoteAddr mocks base method
 func (m *MockQuicSession) RemoteAddr() net.Addr {
 	m.ctrl.T.Helper()
@@ -222,6 +237,20 @@ func (m *MockQuicSession) RemoteAddr() net.Addr {
 func (mr *MockQuicSessionMockRecorder) RemoteAddr() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RemoteAddr", reflect.TypeOf((*MockQuicSession)(nil).RemoteAddr))
+}
+
+// SendMessage mocks base method
+func (m *MockQuicSession) SendMessage(arg0 []byte) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "SendMessage", arg0)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// SendMessage indicates an expected call of SendMessage
+func (mr *MockQuicSessionMockRecorder) SendMessage(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SendMessage", reflect.TypeOf((*MockQuicSession)(nil).SendMessage), arg0)
 }
 
 // destroy mocks base method
