@@ -1681,16 +1681,12 @@ func (s *session) OpenUniStreamSync(ctx context.Context) (SendStream, error) {
 }
 
 func (s *session) newFlowController(id protocol.StreamID) flowcontrol.StreamFlowController {
-	var initialSendWindow protocol.ByteCount
-	if s.peerParams != nil {
-		if id.Type() == protocol.StreamTypeUni {
-			initialSendWindow = s.peerParams.InitialMaxStreamDataUni
+	initialSendWindow := s.peerParams.InitialMaxStreamDataUni
+	if id.Type() == protocol.StreamTypeBidi {
+		if id.InitiatedBy() == s.perspective {
+			initialSendWindow = s.peerParams.InitialMaxStreamDataBidiRemote
 		} else {
-			if id.InitiatedBy() == s.perspective {
-				initialSendWindow = s.peerParams.InitialMaxStreamDataBidiRemote
-			} else {
-				initialSendWindow = s.peerParams.InitialMaxStreamDataBidiLocal
-			}
+			initialSendWindow = s.peerParams.InitialMaxStreamDataBidiLocal
 		}
 	}
 	return flowcontrol.NewStreamFlowController(
