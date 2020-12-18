@@ -281,7 +281,6 @@ func (c *client) dial(ctx context.Context) error {
 		c.config,
 		c.tlsConf,
 		c.initialPacketNumber,
-		c.version,
 		c.use0RTT,
 		c.hasNegotiatedVersion,
 		c.tracer,
