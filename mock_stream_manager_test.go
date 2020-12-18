@@ -197,11 +197,9 @@ func (mr *MockStreamManagerMockRecorder) OpenUniStreamSync(arg0 interface{}) *go
 }
 
 // UpdateLimits mocks base method
-func (m *MockStreamManager) UpdateLimits(arg0 *wire.TransportParameters) error {
+func (m *MockStreamManager) UpdateLimits(arg0 *wire.TransportParameters) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "UpdateLimits", arg0)
-	ret0, _ := ret[0].(error)
-	return ret0
+	m.ctrl.Call(m, "UpdateLimits", arg0)
 }
 
 // UpdateLimits indicates an expected call of UpdateLimits

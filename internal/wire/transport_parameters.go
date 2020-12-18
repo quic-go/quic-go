@@ -279,8 +279,14 @@ func (p *TransportParameters) readNumericTransportParameter(
 		p.InitialMaxData = protocol.ByteCount(val)
 	case initialMaxStreamsBidiParameterID:
 		p.MaxBidiStreamNum = protocol.StreamNum(val)
+		if p.MaxBidiStreamNum > protocol.MaxStreamCount {
+			return fmt.Errorf("initial_max_streams_bidi too large: %d (maximum %d)", p.MaxBidiStreamNum, protocol.MaxStreamCount)
+		}
 	case initialMaxStreamsUniParameterID:
 		p.MaxUniStreamNum = protocol.StreamNum(val)
+		if p.MaxUniStreamNum > protocol.MaxStreamCount {
+			return fmt.Errorf("initial_max_streams_uni too large: %d (maximum %d)", p.MaxUniStreamNum, protocol.MaxStreamCount)
+		}
 	case maxIdleTimeoutParameterID:
 		p.MaxIdleTimeout = utils.MaxDuration(protocol.MinRemoteIdleTimeout, time.Duration(val)*time.Millisecond)
 	case maxUDPPayloadSizeParameterID:

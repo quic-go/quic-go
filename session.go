@@ -42,7 +42,7 @@ type streamManager interface {
 	AcceptStream(context.Context) (Stream, error)
 	AcceptUniStream(context.Context) (ReceiveStream, error)
 	DeleteStream(protocol.StreamID) error
-	UpdateLimits(*wire.TransportParameters) error
+	UpdateLimits(*wire.TransportParameters)
 	HandleMaxStreamsFrame(*wire.MaxStreamsFrame) error
 	CloseWithError(error)
 }
@@ -1389,10 +1389,7 @@ func (s *session) restoreTransportParameters(params *wire.TransportParameters) {
 	s.peerParams = params
 	s.connIDGenerator.SetMaxActiveConnIDs(params.ActiveConnectionIDLimit)
 	s.connFlowController.UpdateSendWindow(params.InitialMaxData)
-	if err := s.streamsMap.UpdateLimits(params); err != nil {
-		s.closeLocal(err)
-		return
-	}
+	s.streamsMap.UpdateLimits(params)
 }
 
 func (s *session) processTransportParameters(params *wire.TransportParameters) {
@@ -1435,9 +1432,7 @@ func (s *session) processTransportParametersImpl(params *wire.TransportParameter
 	// Our local idle timeout will always be > 0.
 	s.idleTimeout = utils.MinNonZeroDuration(s.config.MaxIdleTimeout, params.MaxIdleTimeout)
 	s.keepAliveInterval = utils.MinDuration(s.idleTimeout/2, protocol.MaxKeepAliveInterval)
-	if err := s.streamsMap.UpdateLimits(params); err != nil {
-		return err
-	}
+	s.streamsMap.UpdateLimits(params)
 	s.packer.HandleTransportParameters(params)
 	s.frameParser.SetAckDelayExponent(params.AckDelayExponent)
 	s.connFlowController.UpdateSendWindow(params.InitialMaxData)
