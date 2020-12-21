@@ -87,9 +87,7 @@ var _ = Describe("Server", func() {
 		encodeRequest := func(req *http.Request) []byte {
 			buf := &bytes.Buffer{}
 			str := mockquic.NewMockStream(mockCtrl)
-			str.EXPECT().Write(gomock.Any()).DoAndReturn(func(p []byte) (int, error) {
-				return buf.Write(p)
-			}).AnyTimes()
+			str.EXPECT().Write(gomock.Any()).DoAndReturn(buf.Write).AnyTimes()
 			closed := make(chan struct{})
 			str.EXPECT().Close().Do(func() { close(closed) })
 			rw := newRequestWriter(utils.DefaultLogger)
@@ -151,9 +149,7 @@ var _ = Describe("Server", func() {
 			responseBuf := &bytes.Buffer{}
 			setRequest(encodeRequest(exampleGetRequest))
 			str.EXPECT().Context().Return(reqContext)
-			str.EXPECT().Write(gomock.Any()).DoAndReturn(func(p []byte) (int, error) {
-				return responseBuf.Write(p)
-			}).AnyTimes()
+			str.EXPECT().Write(gomock.Any()).DoAndReturn(responseBuf.Write).AnyTimes()
 			str.EXPECT().CancelRead(gomock.Any())
 
 			serr := s.handleRequest(sess, str, qpackDecoder, nil)
@@ -170,9 +166,7 @@ var _ = Describe("Server", func() {
 			responseBuf := &bytes.Buffer{}
 			setRequest(encodeRequest(exampleGetRequest))
 			str.EXPECT().Context().Return(reqContext)
-			str.EXPECT().Write(gomock.Any()).DoAndReturn(func(p []byte) (int, error) {
-				return responseBuf.Write(p)
-			}).AnyTimes()
+			str.EXPECT().Write(gomock.Any()).DoAndReturn(responseBuf.Write).AnyTimes()
 			str.EXPECT().CancelRead(gomock.Any())
 
 			serr := s.handleRequest(sess, str, qpackDecoder, nil)
@@ -210,9 +204,7 @@ var _ = Describe("Server", func() {
 				setRequest(append(requestData, buf.Bytes()...))
 				done := make(chan struct{})
 				str.EXPECT().Context().Return(reqContext)
-				str.EXPECT().Write(gomock.Any()).DoAndReturn(func(p []byte) (int, error) {
-					return responseBuf.Write(p)
-				}).AnyTimes()
+				str.EXPECT().Write(gomock.Any()).DoAndReturn(responseBuf.Write).AnyTimes()
 				str.EXPECT().CancelRead(quic.ErrorCode(errorNoError))
 				str.EXPECT().Close().Do(func() { close(done) })
 
@@ -235,9 +227,7 @@ var _ = Describe("Server", func() {
 				responseBuf := &bytes.Buffer{}
 				setRequest(append(requestData, buf.Bytes()...))
 				done := make(chan struct{})
-				str.EXPECT().Write(gomock.Any()).DoAndReturn(func(p []byte) (int, error) {
-					return responseBuf.Write(p)
-				}).AnyTimes()
+				str.EXPECT().Write(gomock.Any()).DoAndReturn(responseBuf.Write).AnyTimes()
 				str.EXPECT().CancelWrite(quic.ErrorCode(errorFrameError)).Do(func(quic.ErrorCode) { close(done) })
 
 				s.handleConn(sess)
