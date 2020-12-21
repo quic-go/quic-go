@@ -40,6 +40,7 @@ const (
 	nextProtoH3Draft29      = "h3-29"
 	nextProtoH3Draft32      = "h3-32"
 	streamTypeControlStream = 0
+	streamTypePushStream    = 1
 )
 
 func versionToALPN(v protocol.VersionNumber) string {
@@ -272,7 +273,13 @@ func (s *Server) handleUnidirectionalStreams(sess quic.EarlySession) {
 				s.logger.Debugf("reading stream type on stream %d failed: %s", str.StreamID(), err)
 				return
 			}
-			if streamType != streamTypeControlStream {
+			// We're only interested in the control stream here.
+			switch streamType {
+			case streamTypeControlStream:
+			case streamTypePushStream: // only the server can push
+				sess.CloseWithError(quic.ErrorCode(errorStreamCreationError), "")
+				return
+			default:
 				return
 			}
 			f, err := parseNextFrame(str)

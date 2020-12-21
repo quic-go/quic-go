@@ -287,6 +287,29 @@ var _ = Describe("Server", func() {
 				s.handleConn(sess)
 				Eventually(done).Should(BeClosed())
 			})
+
+			It("errors when the client opens a push stream", func() {
+				buf := &bytes.Buffer{}
+				utils.WriteVarInt(buf, streamTypePushStream)
+				(&dataFrame{}).Write(buf)
+				controlStr := mockquic.NewMockStream(mockCtrl)
+				controlStr.EXPECT().Read(gomock.Any()).DoAndReturn(buf.Read).AnyTimes()
+				sess.EXPECT().AcceptUniStream(gomock.Any()).DoAndReturn(func(context.Context) (quic.ReceiveStream, error) {
+					return controlStr, nil
+				})
+				sess.EXPECT().AcceptUniStream(gomock.Any()).DoAndReturn(func(context.Context) (quic.ReceiveStream, error) {
+					<-testDone
+					return nil, errors.New("test done")
+				})
+				done := make(chan struct{})
+				sess.EXPECT().CloseWithError(gomock.Any(), gomock.Any()).Do(func(code quic.ErrorCode, _ string) {
+					defer GinkgoRecover()
+					Expect(code).To(BeEquivalentTo(errorStreamCreationError))
+					close(done)
+				})
+				s.handleConn(sess)
+				Eventually(done).Should(BeClosed())
+			})
 		})
 
 		Context("stream- and connection-level errors", func() {
