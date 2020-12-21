@@ -775,4 +775,15 @@ var _ = Describe("Server", func() {
 		fullpem, privkey := testdata.GetCertificatePaths()
 		Expect(ListenAndServeQUIC("", fullpem, privkey, nil)).To(MatchError(testErr))
 	})
+
+	It("supports H3_DATAGRAM", func() {
+		s.EnableDatagrams = true
+		var receivedConf *quic.Config
+		quicListenAddr = func(addr string, _ *tls.Config, config *quic.Config) (quic.EarlyListener, error) {
+			receivedConf = config
+			return nil, errors.New("listen err")
+		}
+		Expect(s.ListenAndServe()).To(HaveOccurred())
+		Expect(receivedConf.EnableDatagrams).To(BeTrue())
+	})
 })

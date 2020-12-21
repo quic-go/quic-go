@@ -89,6 +89,11 @@ type Server struct {
 	// If nil, it uses reasonable default values.
 	QuicConfig *quic.Config
 
+	// Enable support for HTTP/3 datagrams.
+	// If set to true, QuicConfig.EnableDatagram will be set.
+	// See https://www.ietf.org/archive/id/draft-schinazi-masque-h3-datagram-02.html.
+	EnableDatagrams bool
+
 	port uint32 // used atomically
 
 	mutex     sync.Mutex
@@ -173,10 +178,19 @@ func (s *Server) serveImpl(tlsConf *tls.Config, conn net.PacketConn) error {
 
 	var ln quic.EarlyListener
 	var err error
-	if conn == nil {
-		ln, err = quicListenAddr(s.Addr, baseConf, s.QuicConfig)
+	quicConf := s.QuicConfig
+	if quicConf == nil {
+		quicConf = &quic.Config{}
 	} else {
-		ln, err = quicListen(conn, baseConf, s.QuicConfig)
+		quicConf = s.QuicConfig.Clone()
+	}
+	if s.EnableDatagrams {
+		quicConf.EnableDatagrams = true
+	}
+	if conn == nil {
+		ln, err = quicListenAddr(s.Addr, baseConf, quicConf)
+	} else {
+		ln, err = quicListen(conn, baseConf, quicConf)
 	}
 	if err != nil {
 		return err
@@ -223,7 +237,7 @@ func (s *Server) handleConn(sess quic.EarlySession) {
 	}
 	buf := &bytes.Buffer{}
 	utils.WriteVarInt(buf, streamTypeControlStream) // stream type
-	(&settingsFrame{}).Write(buf)
+	(&settingsFrame{Datagram: s.EnableDatagrams}).Write(buf)
 	str.Write(buf.Bytes())
 
 	go s.handleUnidirectionalStreams(sess)
