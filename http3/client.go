@@ -37,6 +37,7 @@ var dialAddr = quic.DialAddrEarly
 
 type roundTripperOpts struct {
 	DisableCompression bool
+	EnableDatagram     bool
 	MaxHeaderBytes     int64
 }
 
@@ -68,7 +69,7 @@ func newClient(
 	dialer func(network, addr string, tlsCfg *tls.Config, cfg *quic.Config) (quic.EarlySession, error),
 ) (*client, error) {
 	if quicConfig == nil {
-		quicConfig = defaultQuicConfig
+		quicConfig = defaultQuicConfig.Clone()
 	} else if len(quicConfig.Versions) == 0 {
 		quicConfig = quicConfig.Clone()
 		quicConfig.Versions = []quic.VersionNumber{defaultQuicConfig.Versions[0]}
@@ -77,6 +78,7 @@ func newClient(
 		return nil, errors.New("can only use a single QUIC version for dialing a HTTP/3 connection")
 	}
 	quicConfig.MaxIncomingStreams = -1 // don't allow any bidirectional streams
+	quicConfig.EnableDatagrams = opts.EnableDatagram
 	logger := utils.DefaultLogger.WithPrefix("h3 client")
 
 	if tlsConf == nil {
@@ -131,7 +133,7 @@ func (c *client) setupSession() error {
 	buf := &bytes.Buffer{}
 	utils.WriteVarInt(buf, streamTypeControlStream)
 	// send the SETTINGS frame
-	(&settingsFrame{}).Write(buf)
+	(&settingsFrame{Datagram: c.opts.EnableDatagram}).Write(buf)
 	_, err = str.Write(buf.Bytes())
 	return err
 }

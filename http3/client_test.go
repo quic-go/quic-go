@@ -136,6 +136,18 @@ var _ = Describe("Client", func() {
 		Expect(dialerCalled).To(BeTrue())
 	})
 
+	It("enables HTTP/3 Datagrams", func() {
+		testErr := errors.New("handshake error")
+		client, err := newClient("localhost:1337", nil, &roundTripperOpts{EnableDatagram: true}, nil, nil)
+		Expect(err).ToNot(HaveOccurred())
+		dialAddr = func(hostname string, _ *tls.Config, quicConf *quic.Config) (quic.EarlySession, error) {
+			Expect(quicConf.EnableDatagrams).To(BeTrue())
+			return nil, testErr
+		}
+		_, err = client.RoundTrip(req)
+		Expect(err).To(MatchError(testErr))
+	})
+
 	It("errors when dialing fails", func() {
 		testErr := errors.New("handshake error")
 		client, err := newClient("localhost:1337", nil, &roundTripperOpts{}, nil, nil)
