@@ -904,11 +904,12 @@ var _ = Describe("SentPacketHandler", func() {
 
 	Context("Packet-based loss detection", func() {
 		It("declares packet below the packet loss threshold as lost", func() {
+			now := time.Now()
 			for i := protocol.PacketNumber(1); i <= 6; i++ {
 				handler.SentPacket(ackElicitingPacket(&Packet{PacketNumber: i}))
 			}
 			ack := &wire.AckFrame{AckRanges: []wire.AckRange{{Smallest: 6, Largest: 6}}}
-			Expect(handler.ReceivedAck(ack, protocol.Encryption1RTT, time.Now())).To(Succeed())
+			Expect(handler.ReceivedAck(ack, protocol.Encryption1RTT, now)).To(Succeed())
 			expectInPacketHistory([]protocol.PacketNumber{4, 5}, protocol.Encryption1RTT)
 			Expect(lostPackets).To(Equal([]protocol.PacketNumber{1, 2, 3}))
 		})
