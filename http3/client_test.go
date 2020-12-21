@@ -169,6 +169,155 @@ var _ = Describe("Client", func() {
 		})
 	})
 
+	Context("control stream handling", func() {
+		var (
+			request              *http.Request
+			sess                 *mockquic.MockEarlySession
+			settingsFrameWritten chan struct{}
+		)
+		testDone := make(chan struct{})
+
+		BeforeEach(func() {
+			settingsFrameWritten = make(chan struct{})
+			controlStr := mockquic.NewMockStream(mockCtrl)
+			controlStr.EXPECT().Write(gomock.Any()).Do(func(b []byte) {
+				defer GinkgoRecover()
+				close(settingsFrameWritten)
+			})
+			sess = mockquic.NewMockEarlySession(mockCtrl)
+			sess.EXPECT().OpenUniStream().Return(controlStr, nil)
+			sess.EXPECT().HandshakeComplete().Return(handshakeCtx)
+			sess.EXPECT().OpenStreamSync(gomock.Any()).Return(nil, errors.New("done"))
+			dialAddr = func(hostname string, _ *tls.Config, _ *quic.Config) (quic.EarlySession, error) { return sess, nil }
+			var err error
+			request, err = http.NewRequest("GET", "https://quic.clemente.io:1337/file1.dat", nil)
+			Expect(err).ToNot(HaveOccurred())
+		})
+
+		AfterEach(func() {
+			testDone <- struct{}{}
+			Eventually(settingsFrameWritten).Should(BeClosed())
+		})
+
+		It("parses the SETTINGS frame", func() {
+			buf := &bytes.Buffer{}
+			utils.WriteVarInt(buf, streamTypeControlStream)
+			(&settingsFrame{}).Write(buf)
+			controlStr := mockquic.NewMockStream(mockCtrl)
+			controlStr.EXPECT().Read(gomock.Any()).DoAndReturn(buf.Read).AnyTimes()
+			sess.EXPECT().AcceptUniStream(gomock.Any()).DoAndReturn(func(context.Context) (quic.ReceiveStream, error) {
+				return controlStr, nil
+			})
+			sess.EXPECT().AcceptUniStream(gomock.Any()).DoAndReturn(func(context.Context) (quic.ReceiveStream, error) {
+				<-testDone
+				return nil, errors.New("test done")
+			})
+			_, err := client.RoundTrip(request)
+			Expect(err).To(MatchError("done"))
+			time.Sleep(scaleDuration(20 * time.Millisecond)) // don't EXPECT any calls to sess.CloseWithError
+		})
+
+		It("ignores streams other than the control stream", func() {
+			controlBuf := &bytes.Buffer{}
+			utils.WriteVarInt(controlBuf, streamTypeControlStream)
+			(&settingsFrame{}).Write(controlBuf)
+			controlStr := mockquic.NewMockStream(mockCtrl)
+			controlStr.EXPECT().Read(gomock.Any()).DoAndReturn(controlBuf.Read).AnyTimes()
+
+			otherBuf := &bytes.Buffer{}
+			utils.WriteVarInt(otherBuf, 1337)
+			otherStr := mockquic.NewMockStream(mockCtrl)
+			otherStr.EXPECT().Read(gomock.Any()).DoAndReturn(otherBuf.Read).AnyTimes()
+
+			sess.EXPECT().AcceptUniStream(gomock.Any()).DoAndReturn(func(context.Context) (quic.ReceiveStream, error) {
+				return otherStr, nil
+			})
+			sess.EXPECT().AcceptUniStream(gomock.Any()).DoAndReturn(func(context.Context) (quic.ReceiveStream, error) {
+				return controlStr, nil
+			})
+			sess.EXPECT().AcceptUniStream(gomock.Any()).DoAndReturn(func(context.Context) (quic.ReceiveStream, error) {
+				<-testDone
+				return nil, errors.New("test done")
+			})
+			_, err := client.RoundTrip(request)
+			Expect(err).To(MatchError("done"))
+			time.Sleep(scaleDuration(20 * time.Millisecond)) // don't EXPECT any calls to sess.CloseWithError
+		})
+
+		It("errors when the first frame on the control stream is not a SETTINGS frame", func() {
+			buf := &bytes.Buffer{}
+			utils.WriteVarInt(buf, streamTypeControlStream)
+			(&dataFrame{}).Write(buf)
+			controlStr := mockquic.NewMockStream(mockCtrl)
+			controlStr.EXPECT().Read(gomock.Any()).DoAndReturn(buf.Read).AnyTimes()
+			sess.EXPECT().AcceptUniStream(gomock.Any()).DoAndReturn(func(context.Context) (quic.ReceiveStream, error) {
+				return controlStr, nil
+			})
+			sess.EXPECT().AcceptUniStream(gomock.Any()).DoAndReturn(func(context.Context) (quic.ReceiveStream, error) {
+				<-testDone
+				return nil, errors.New("test done")
+			})
+			done := make(chan struct{})
+			sess.EXPECT().CloseWithError(gomock.Any(), gomock.Any()).Do(func(code quic.ErrorCode, _ string) {
+				defer GinkgoRecover()
+				Expect(code).To(BeEquivalentTo(errorMissingSettings))
+				close(done)
+			})
+			_, err := client.RoundTrip(request)
+			Expect(err).To(MatchError("done"))
+			Eventually(done).Should(BeClosed())
+		})
+
+		It("errors when parsing the frame on the control stream fails", func() {
+			buf := &bytes.Buffer{}
+			utils.WriteVarInt(buf, streamTypeControlStream)
+			b := &bytes.Buffer{}
+			(&settingsFrame{}).Write(b)
+			buf.Write(b.Bytes()[:b.Len()-1])
+			controlStr := mockquic.NewMockStream(mockCtrl)
+			controlStr.EXPECT().Read(gomock.Any()).DoAndReturn(buf.Read).AnyTimes()
+			sess.EXPECT().AcceptUniStream(gomock.Any()).DoAndReturn(func(context.Context) (quic.ReceiveStream, error) {
+				return controlStr, nil
+			})
+			sess.EXPECT().AcceptUniStream(gomock.Any()).DoAndReturn(func(context.Context) (quic.ReceiveStream, error) {
+				<-testDone
+				return nil, errors.New("test done")
+			})
+			done := make(chan struct{})
+			sess.EXPECT().CloseWithError(gomock.Any(), gomock.Any()).Do(func(code quic.ErrorCode, _ string) {
+				defer GinkgoRecover()
+				Expect(code).To(BeEquivalentTo(errorFrameError))
+				close(done)
+			})
+			_, err := client.RoundTrip(request)
+			Expect(err).To(MatchError("done"))
+			Eventually(done).Should(BeClosed())
+		})
+
+		It("errors when parsing the server opens a push stream", func() {
+			buf := &bytes.Buffer{}
+			utils.WriteVarInt(buf, streamTypePushStream)
+			controlStr := mockquic.NewMockStream(mockCtrl)
+			controlStr.EXPECT().Read(gomock.Any()).DoAndReturn(buf.Read).AnyTimes()
+			sess.EXPECT().AcceptUniStream(gomock.Any()).DoAndReturn(func(context.Context) (quic.ReceiveStream, error) {
+				return controlStr, nil
+			})
+			sess.EXPECT().AcceptUniStream(gomock.Any()).DoAndReturn(func(context.Context) (quic.ReceiveStream, error) {
+				<-testDone
+				return nil, errors.New("test done")
+			})
+			done := make(chan struct{})
+			sess.EXPECT().CloseWithError(gomock.Any(), gomock.Any()).Do(func(code quic.ErrorCode, _ string) {
+				defer GinkgoRecover()
+				Expect(code).To(BeEquivalentTo(errorIDError))
+				close(done)
+			})
+			_, err := client.RoundTrip(request)
+			Expect(err).To(MatchError("done"))
+			Eventually(done).Should(BeClosed())
+		})
+	})
+
 	Context("Doing requests", func() {
 		var (
 			request              *http.Request
@@ -176,6 +325,7 @@ var _ = Describe("Client", func() {
 			sess                 *mockquic.MockEarlySession
 			settingsFrameWritten chan struct{}
 		)
+		testDone := make(chan struct{})
 
 		decodeHeader := func(str io.Reader) map[string]string {
 			fields := make(map[string]string)
@@ -210,15 +360,18 @@ var _ = Describe("Client", func() {
 			str = mockquic.NewMockStream(mockCtrl)
 			sess = mockquic.NewMockEarlySession(mockCtrl)
 			sess.EXPECT().OpenUniStream().Return(controlStr, nil)
-			dialAddr = func(hostname string, _ *tls.Config, _ *quic.Config) (quic.EarlySession, error) {
-				return sess, nil
-			}
+			sess.EXPECT().AcceptUniStream(gomock.Any()).DoAndReturn(func(context.Context) (quic.ReceiveStream, error) {
+				<-testDone
+				return nil, errors.New("test done")
+			})
+			dialAddr = func(hostname string, _ *tls.Config, _ *quic.Config) (quic.EarlySession, error) { return sess, nil }
 			var err error
 			request, err = http.NewRequest("GET", "https://quic.clemente.io:1337/file1.dat", nil)
 			Expect(err).ToNot(HaveOccurred())
 		})
 
 		AfterEach(func() {
+			testDone <- struct{}{}
 			Eventually(settingsFrameWritten).Should(BeClosed())
 		})
 

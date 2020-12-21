@@ -101,6 +101,10 @@ var _ = Describe("RoundTripper", func() {
 			session.EXPECT().OpenUniStream().AnyTimes().Return(nil, testErr)
 			session.EXPECT().HandshakeComplete().Return(handshakeCtx)
 			session.EXPECT().OpenStreamSync(context.Background()).Return(nil, testErr)
+			session.EXPECT().AcceptUniStream(gomock.Any()).DoAndReturn(func(context.Context) (quic.ReceiveStream, error) {
+				<-closed
+				return nil, errors.New("test done")
+			}).MaxTimes(1)
 			session.EXPECT().CloseWithError(gomock.Any(), gomock.Any()).Do(func(quic.ErrorCode, string) { close(closed) })
 			_, err = rt.RoundTrip(req)
 			Expect(err).To(MatchError(testErr))
@@ -139,6 +143,10 @@ var _ = Describe("RoundTripper", func() {
 			session.EXPECT().OpenUniStream().AnyTimes().Return(nil, testErr)
 			session.EXPECT().HandshakeComplete().Return(handshakeCtx).Times(2)
 			session.EXPECT().OpenStreamSync(context.Background()).Return(nil, testErr).Times(2)
+			session.EXPECT().AcceptUniStream(gomock.Any()).DoAndReturn(func(context.Context) (quic.ReceiveStream, error) {
+				<-closed
+				return nil, errors.New("test done")
+			}).MaxTimes(1)
 			session.EXPECT().CloseWithError(gomock.Any(), gomock.Any()).Do(func(quic.ErrorCode, string) { close(closed) })
 			req, err := http.NewRequest("GET", "https://quic.clemente.io/file1.html", nil)
 			Expect(err).ToNot(HaveOccurred())

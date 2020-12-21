@@ -2,6 +2,7 @@ package http3
 
 import (
 	"bytes"
+	"context"
 	"crypto/tls"
 	"errors"
 	"fmt"
@@ -109,7 +110,7 @@ func (c *client) dial() error {
 		return err
 	}
 
-	// run the sesssion setup using 0-RTT data
+	// send the SETTINGs frame, using 0-RTT data, if possible
 	go func() {
 		if err := c.setupSession(); err != nil {
 			c.logger.Debugf("Setting up session failed: %s", err)
@@ -117,6 +118,7 @@ func (c *client) dial() error {
 		}
 	}()
 
+	go c.handleUnidirectionalStreams()
 	return nil
 }
 
@@ -127,15 +129,47 @@ func (c *client) setupSession() error {
 		return err
 	}
 	buf := &bytes.Buffer{}
-	// write the type byte
-	buf.Write([]byte{0x0})
+	utils.WriteVarInt(buf, streamTypeControlStream)
 	// send the SETTINGS frame
 	(&settingsFrame{}).Write(buf)
-	if _, err := str.Write(buf.Bytes()); err != nil {
-		return err
-	}
+	_, err = str.Write(buf.Bytes())
+	return err
+}
 
-	return nil
+func (c *client) handleUnidirectionalStreams() {
+	for {
+		str, err := c.session.AcceptUniStream(context.Background())
+		if err != nil {
+			c.logger.Debugf("accepting unidirectional stream failed: %s", err)
+			return
+		}
+
+		go func() {
+			streamType, err := utils.ReadVarInt(&byteReaderImpl{str})
+			if err != nil {
+				c.logger.Debugf("reading stream type on stream %d failed: %s", str.StreamID(), err)
+				return
+			}
+			// We're only interested in the control stream here.
+			switch streamType {
+			case streamTypeControlStream:
+			case streamTypePushStream:
+				// We never increased the Push ID, so we don't expect any push streams.
+				c.session.CloseWithError(quic.ErrorCode(errorIDError), "")
+				return
+			default:
+				return
+			}
+			f, err := parseNextFrame(str)
+			if err != nil {
+				c.session.CloseWithError(quic.ErrorCode(errorFrameError), "")
+				return
+			}
+			if _, ok := f.(*settingsFrame); !ok {
+				c.session.CloseWithError(quic.ErrorCode(errorMissingSettings), "")
+			}
+		}()
+	}
 }
 
 func (c *client) Close() error {
