@@ -85,8 +85,11 @@ func (f *headersFrame) Write(b *bytes.Buffer) {
 	utils.WriteVarInt(b, f.Length)
 }
 
+const settingDatagram = 0x276
+
 type settingsFrame struct {
-	settings map[uint64]uint64
+	Datagram bool
+	other    map[uint64]uint64 // all settings that we don't explicitly recognize
 }
 
 func parseSettingsFrame(r io.Reader, l uint64) (*settingsFrame, error) {
@@ -100,8 +103,9 @@ func parseSettingsFrame(r io.Reader, l uint64) (*settingsFrame, error) {
 		}
 		return nil, err
 	}
-	frame := &settingsFrame{settings: make(map[uint64]uint64)}
+	frame := &settingsFrame{}
 	b := bytes.NewReader(buf)
+	var readDatagram bool
 	for b.Len() > 0 {
 		id, err := utils.ReadVarInt(b)
 		if err != nil { // should not happen. We allocated the whole frame already.
@@ -111,10 +115,26 @@ func parseSettingsFrame(r io.Reader, l uint64) (*settingsFrame, error) {
 		if err != nil { // should not happen. We allocated the whole frame already.
 			return nil, err
 		}
-		if _, ok := frame.settings[id]; ok {
-			return nil, fmt.Errorf("duplicate setting: %d", id)
+
+		switch id {
+		case settingDatagram:
+			if readDatagram {
+				return nil, fmt.Errorf("duplicate setting: %d", id)
+			}
+			readDatagram = true
+			if val != 0 && val != 1 {
+				return nil, fmt.Errorf("invalid value for H3_DATAGRAM: %d", val)
+			}
+			frame.Datagram = val == 1
+		default:
+			if _, ok := frame.other[id]; ok {
+				return nil, fmt.Errorf("duplicate setting: %d", id)
+			}
+			if frame.other == nil {
+				frame.other = make(map[uint64]uint64)
+			}
+			frame.other[id] = val
 		}
-		frame.settings[id] = val
 	}
 	return frame, nil
 }
@@ -122,11 +142,18 @@ func parseSettingsFrame(r io.Reader, l uint64) (*settingsFrame, error) {
 func (f *settingsFrame) Write(b *bytes.Buffer) {
 	utils.WriteVarInt(b, 0x4)
 	var l protocol.ByteCount
-	for id, val := range f.settings {
+	for id, val := range f.other {
 		l += utils.VarIntLen(id) + utils.VarIntLen(val)
 	}
+	if f.Datagram {
+		l += utils.VarIntLen(settingDatagram) + utils.VarIntLen(1)
+	}
 	utils.WriteVarInt(b, uint64(l))
-	for id, val := range f.settings {
+	if f.Datagram {
+		utils.WriteVarInt(b, settingDatagram)
+		utils.WriteVarInt(b, 1)
+	}
+	for id, val := range f.other {
 		utils.WriteVarInt(b, id)
 		utils.WriteVarInt(b, val)
 	}
