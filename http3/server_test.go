@@ -304,6 +304,32 @@ var _ = Describe("Server", func() {
 				s.handleConn(sess)
 				Eventually(done).Should(BeClosed())
 			})
+
+			It("errors when the client advertises datagram support (and we enabled support for it)", func() {
+				s.EnableDatagrams = true
+				buf := &bytes.Buffer{}
+				utils.WriteVarInt(buf, streamTypeControlStream)
+				(&settingsFrame{Datagram: true}).Write(buf)
+				controlStr := mockquic.NewMockStream(mockCtrl)
+				controlStr.EXPECT().Read(gomock.Any()).DoAndReturn(buf.Read).AnyTimes()
+				sess.EXPECT().AcceptUniStream(gomock.Any()).DoAndReturn(func(context.Context) (quic.ReceiveStream, error) {
+					return controlStr, nil
+				})
+				sess.EXPECT().AcceptUniStream(gomock.Any()).DoAndReturn(func(context.Context) (quic.ReceiveStream, error) {
+					<-testDone
+					return nil, errors.New("test done")
+				})
+				sess.EXPECT().ConnectionState().Return(quic.ConnectionState{SupportsDatagrams: false})
+				done := make(chan struct{})
+				sess.EXPECT().CloseWithError(gomock.Any(), gomock.Any()).Do(func(code quic.ErrorCode, reason string) {
+					defer GinkgoRecover()
+					Expect(code).To(BeEquivalentTo(errorSettingsError))
+					Expect(reason).To(Equal("missing QUIC Datagram support"))
+					close(done)
+				})
+				s.handleConn(sess)
+				Eventually(done).Should(BeClosed())
+			})
 		})
 
 		Context("stream- and connection-level errors", func() {

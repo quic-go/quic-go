@@ -167,8 +167,19 @@ func (c *client) handleUnidirectionalStreams() {
 				c.session.CloseWithError(quic.ErrorCode(errorFrameError), "")
 				return
 			}
-			if _, ok := f.(*settingsFrame); !ok {
+			sf, ok := f.(*settingsFrame)
+			if !ok {
 				c.session.CloseWithError(quic.ErrorCode(errorMissingSettings), "")
+				return
+			}
+			if !sf.Datagram {
+				return
+			}
+			// If datagram support was enabled on our side as well as on the server side,
+			// we can expect it to have been negotiated both on the transport and on the HTTP/3 layer.
+			// Note: ConnectionState() will block until the handshake is complete (relevant when using 0-RTT).
+			if c.opts.EnableDatagram && !c.session.ConnectionState().SupportsDatagrams {
+				c.session.CloseWithError(quic.ErrorCode(errorSettingsError), "missing QUIC Datagram support")
 			}
 		}()
 	}

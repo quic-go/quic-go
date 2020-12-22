@@ -328,6 +328,33 @@ var _ = Describe("Client", func() {
 			Expect(err).To(MatchError("done"))
 			Eventually(done).Should(BeClosed())
 		})
+
+		It("errors when the server advertises datagram support (and we enabled support for it)", func() {
+			client.opts.EnableDatagram = true
+			buf := &bytes.Buffer{}
+			utils.WriteVarInt(buf, streamTypeControlStream)
+			(&settingsFrame{Datagram: true}).Write(buf)
+			controlStr := mockquic.NewMockStream(mockCtrl)
+			controlStr.EXPECT().Read(gomock.Any()).DoAndReturn(buf.Read).AnyTimes()
+			sess.EXPECT().AcceptUniStream(gomock.Any()).DoAndReturn(func(context.Context) (quic.ReceiveStream, error) {
+				return controlStr, nil
+			})
+			sess.EXPECT().AcceptUniStream(gomock.Any()).DoAndReturn(func(context.Context) (quic.ReceiveStream, error) {
+				<-testDone
+				return nil, errors.New("test done")
+			})
+			sess.EXPECT().ConnectionState().Return(quic.ConnectionState{SupportsDatagrams: false})
+			done := make(chan struct{})
+			sess.EXPECT().CloseWithError(gomock.Any(), gomock.Any()).Do(func(code quic.ErrorCode, reason string) {
+				defer GinkgoRecover()
+				Expect(code).To(BeEquivalentTo(errorSettingsError))
+				Expect(reason).To(Equal("missing QUIC Datagram support"))
+				close(done)
+			})
+			_, err := client.RoundTrip(request)
+			Expect(err).To(MatchError("done"))
+			Eventually(done).Should(BeClosed())
+		})
 	})
 
 	Context("Doing requests", func() {
