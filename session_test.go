@@ -2225,7 +2225,6 @@ var _ = Describe("Client Session", func() {
 			quicConf,
 			tlsConf,
 			42, // initial packet number
-			protocol.VersionTLS,
 			false,
 			false,
 			tracer,

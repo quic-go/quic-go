@@ -39,7 +39,6 @@ var _ = Describe("Client", func() {
 			conf *Config,
 			tlsConf *tls.Config,
 			initialPacketNumber protocol.PacketNumber,
-			initialVersion protocol.VersionNumber,
 			enable0RTT bool,
 			hasNegotiatedVersion bool,
 			tracer logging.ConnectionTracer,
@@ -127,7 +126,6 @@ var _ = Describe("Client", func() {
 				_ *Config,
 				_ *tls.Config,
 				_ protocol.PacketNumber,
-				_ protocol.VersionNumber,
 				_ bool,
 				_ bool,
 				_ logging.ConnectionTracer,
@@ -160,7 +158,6 @@ var _ = Describe("Client", func() {
 				_ *Config,
 				tlsConf *tls.Config,
 				_ protocol.PacketNumber,
-				_ protocol.VersionNumber,
 				_ bool,
 				_ bool,
 				_ logging.ConnectionTracer,
@@ -193,7 +190,6 @@ var _ = Describe("Client", func() {
 				_ *Config,
 				tlsConf *tls.Config,
 				_ protocol.PacketNumber,
-				_ protocol.VersionNumber,
 				_ bool,
 				_ bool,
 				_ logging.ConnectionTracer,
@@ -232,7 +228,6 @@ var _ = Describe("Client", func() {
 				_ *Config,
 				_ *tls.Config,
 				_ protocol.PacketNumber,
-				_ protocol.VersionNumber,
 				enable0RTT bool,
 				_ bool,
 				_ logging.ConnectionTracer,
@@ -275,7 +270,6 @@ var _ = Describe("Client", func() {
 				_ *Config,
 				_ *tls.Config,
 				_ protocol.PacketNumber,
-				_ protocol.VersionNumber,
 				enable0RTT bool,
 				_ bool,
 				_ logging.ConnectionTracer,
@@ -323,7 +317,6 @@ var _ = Describe("Client", func() {
 				_ *Config,
 				_ *tls.Config,
 				_ protocol.PacketNumber,
-				_ protocol.VersionNumber,
 				_ bool,
 				_ bool,
 				_ logging.ConnectionTracer,
@@ -366,7 +359,6 @@ var _ = Describe("Client", func() {
 				_ *Config,
 				_ *tls.Config,
 				_ protocol.PacketNumber,
-				_ protocol.VersionNumber,
 				_ bool,
 				_ bool,
 				_ logging.ConnectionTracer,
@@ -418,7 +410,6 @@ var _ = Describe("Client", func() {
 				_ *Config,
 				_ *tls.Config,
 				_ protocol.PacketNumber,
-				_ protocol.VersionNumber,
 				_ bool,
 				_ bool,
 				_ logging.ConnectionTracer,
@@ -538,7 +529,6 @@ var _ = Describe("Client", func() {
 				configP *Config,
 				_ *tls.Config,
 				_ protocol.PacketNumber,
-				_ protocol.VersionNumber, /* initial version */
 				_ bool,
 				_ bool,
 				_ logging.ConnectionTracer,
@@ -580,7 +570,6 @@ var _ = Describe("Client", func() {
 				configP *Config,
 				_ *tls.Config,
 				pn protocol.PacketNumber,
-				version protocol.VersionNumber,
 				_ bool,
 				hasNegotiatedVersion bool,
 				_ logging.ConnectionTracer,
@@ -591,7 +580,6 @@ var _ = Describe("Client", func() {
 				sess.EXPECT().HandshakeComplete().Return(context.Background())
 				if counter == 0 {
 					Expect(pn).To(BeZero())
-					Expect(version).To(Equal(initialVersion))
 					Expect(hasNegotiatedVersion).To(BeFalse())
 					sess.EXPECT().run().Return(&errCloseForRecreating{
 						nextPacketNumber: 109,
@@ -599,8 +587,6 @@ var _ = Describe("Client", func() {
 					})
 				} else {
 					Expect(pn).To(Equal(protocol.PacketNumber(109)))
-					Expect(version).ToNot(Equal(initialVersion))
-					Expect(version).To(Equal(protocol.VersionNumber(789)))
 					Expect(hasNegotiatedVersion).To(BeTrue())
 					sess.EXPECT().run()
 				}

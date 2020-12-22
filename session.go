@@ -132,10 +132,9 @@ type session struct {
 
 	srcConnIDLen int
 
-	perspective    protocol.Perspective
-	initialVersion protocol.VersionNumber // if version negotiation is performed, this is the version we initially tried
-	version        protocol.VersionNumber
-	config         *Config
+	perspective protocol.Perspective
+	version     protocol.VersionNumber
+	config      *Config
 
 	conn      sendConn
 	sendQueue *sendQueue
@@ -356,7 +355,6 @@ var newClientSession = func(
 	conf *Config,
 	tlsConf *tls.Config,
 	initialPacketNumber protocol.PacketNumber,
-	initialVersion protocol.VersionNumber,
 	enable0RTT bool,
 	hasNegotiatedVersion bool,
 	tracer logging.ConnectionTracer,
@@ -374,7 +372,6 @@ var newClientSession = func(
 		logID:                 destConnID.String(),
 		logger:                logger,
 		tracer:                tracer,
-		initialVersion:        initialVersion,
 		versionNegotiated:     hasNegotiatedVersion,
 		version:               v,
 	}
