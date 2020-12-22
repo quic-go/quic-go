@@ -222,15 +222,9 @@ func (m *streamsMap) HandleMaxStreamsFrame(f *wire.MaxStreamsFrame) error {
 	return nil
 }
 
-func (m *streamsMap) UpdateLimits(p *wire.TransportParameters) error {
-	if p.MaxBidiStreamNum > protocol.MaxStreamCount ||
-		p.MaxUniStreamNum > protocol.MaxStreamCount {
-		return qerr.StreamLimitError
-	}
-	// Max{Uni,Bidi}StreamID returns the highest stream ID that the peer is allowed to open.
+func (m *streamsMap) UpdateLimits(p *wire.TransportParameters) {
 	m.outgoingBidiStreams.SetMaxStream(p.MaxBidiStreamNum)
 	m.outgoingUniStreams.SetMaxStream(p.MaxUniStreamNum)
-	return nil
 }
 
 func (m *streamsMap) CloseWithError(err error) {

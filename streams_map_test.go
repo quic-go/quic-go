@@ -10,7 +10,6 @@ import (
 	"github.com/lucas-clemente/quic-go/internal/flowcontrol"
 	"github.com/lucas-clemente/quic-go/internal/mocks"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
-	"github.com/lucas-clemente/quic-go/internal/qerr"
 	"github.com/lucas-clemente/quic-go/internal/wire"
 
 	. "github.com/onsi/ginkgo"
@@ -330,10 +329,10 @@ var _ = Describe("Streams Map", func() {
 						m.perspective = pers
 						_, err := m.OpenStream()
 						expectTooManyStreamsError(err)
-						Expect(m.UpdateLimits(&wire.TransportParameters{
+						m.UpdateLimits(&wire.TransportParameters{
 							MaxBidiStreamNum: 5,
 							MaxUniStreamNum:  8,
-						})).To(Succeed())
+						})
 
 						mockSender.EXPECT().queueControlFrame(gomock.Any()).Times(2)
 						// test we can only 5 bidirectional streams
@@ -354,18 +353,6 @@ var _ = Describe("Streams Map", func() {
 						expectTooManyStreamsError(err)
 					})
 				}
-
-				It("rejects parameters with too large unidirectional stream counts", func() {
-					Expect(m.UpdateLimits(&wire.TransportParameters{
-						MaxUniStreamNum: protocol.MaxStreamCount + 1,
-					})).To(MatchError(qerr.StreamLimitError))
-				})
-
-				It("rejects parameters with too large unidirectional stream counts", func() {
-					Expect(m.UpdateLimits(&wire.TransportParameters{
-						MaxBidiStreamNum: protocol.MaxStreamCount + 1,
-					})).To(MatchError(qerr.StreamLimitError))
-				})
 			})
 
 			Context("handling MAX_STREAMS frames", func() {

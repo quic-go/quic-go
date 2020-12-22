@@ -15,9 +15,17 @@ import (
 )
 
 var _ = Describe("Transport Parameters", func() {
-	getRandomValue := func() uint64 {
+	getRandomValueUpTo := func(max int64) uint64 {
 		maxVals := []int64{math.MaxUint8 / 4, math.MaxUint16 / 4, math.MaxUint32 / 4, math.MaxUint64 / 4}
-		return uint64(rand.Int63n(maxVals[int(rand.Int31n(4))]))
+		m := maxVals[int(rand.Int31n(4))]
+		if m > max {
+			m = max
+		}
+		return uint64(rand.Int63n(m))
+	}
+
+	getRandomValue := func() uint64 {
+		return getRandomValueUpTo(math.MaxInt64)
 	}
 
 	BeforeEach(func() {
@@ -79,8 +87,8 @@ var _ = Describe("Transport Parameters", func() {
 			InitialMaxStreamDataUni:         protocol.ByteCount(getRandomValue()),
 			InitialMaxData:                  protocol.ByteCount(getRandomValue()),
 			MaxIdleTimeout:                  0xcafe * time.Second,
-			MaxBidiStreamNum:                protocol.StreamNum(getRandomValue()),
-			MaxUniStreamNum:                 protocol.StreamNum(getRandomValue()),
+			MaxBidiStreamNum:                protocol.StreamNum(getRandomValueUpTo(int64(protocol.MaxStreamCount))),
+			MaxUniStreamNum:                 protocol.StreamNum(getRandomValueUpTo(int64(protocol.MaxStreamCount))),
 			DisableActiveMigration:          true,
 			StatelessResetToken:             &token,
 			OriginalDestinationConnectionID: protocol.ConnectionID{0xde, 0xad, 0xbe, 0xef},
@@ -252,6 +260,28 @@ var _ = Describe("Transport Parameters", func() {
 		Expect(err.Error()).To(ContainSubstring("TRANSPORT_PARAMETER_ERROR: inconsistent transport parameter length"))
 	})
 
+	It("errors if initial_max_streams_bidi is too large", func() {
+		b := &bytes.Buffer{}
+		utils.WriteVarInt(b, uint64(initialMaxStreamsBidiParameterID))
+		utils.WriteVarInt(b, uint64(utils.VarIntLen(uint64(protocol.MaxStreamCount+1))))
+		utils.WriteVarInt(b, uint64(protocol.MaxStreamCount+1))
+		addInitialSourceConnectionID(b)
+		err := (&TransportParameters{}).Unmarshal(b.Bytes(), protocol.PerspectiveServer)
+		Expect(err).To(HaveOccurred())
+		Expect(err.Error()).To(ContainSubstring("TRANSPORT_PARAMETER_ERROR: initial_max_streams_bidi too large: 1152921504606846977 (maximum 1152921504606846976)"))
+	})
+
+	It("errors if initial_max_streams_uni is too large", func() {
+		b := &bytes.Buffer{}
+		utils.WriteVarInt(b, uint64(initialMaxStreamsUniParameterID))
+		utils.WriteVarInt(b, uint64(utils.VarIntLen(uint64(protocol.MaxStreamCount+1))))
+		utils.WriteVarInt(b, uint64(protocol.MaxStreamCount+1))
+		addInitialSourceConnectionID(b)
+		err := (&TransportParameters{}).Unmarshal(b.Bytes(), protocol.PerspectiveServer)
+		Expect(err).To(HaveOccurred())
+		Expect(err.Error()).To(ContainSubstring("TRANSPORT_PARAMETER_ERROR: initial_max_streams_uni too large: 1152921504606846977 (maximum 1152921504606846976)"))
+	})
+
 	It("handles huge max_ack_delay values", func() {
 		b := &bytes.Buffer{}
 		val := uint64(math.MaxUint64) / 5
@@ -416,8 +446,8 @@ var _ = Describe("Transport Parameters", func() {
 				InitialMaxStreamDataBidiRemote: protocol.ByteCount(getRandomValue()),
 				InitialMaxStreamDataUni:        protocol.ByteCount(getRandomValue()),
 				InitialMaxData:                 protocol.ByteCount(getRandomValue()),
-				MaxBidiStreamNum:               protocol.StreamNum(getRandomValue()),
-				MaxUniStreamNum:                protocol.StreamNum(getRandomValue()),
+				MaxBidiStreamNum:               protocol.StreamNum(getRandomValueUpTo(int64(protocol.MaxStreamCount))),
+				MaxUniStreamNum:                protocol.StreamNum(getRandomValueUpTo(int64(protocol.MaxStreamCount))),
 				ActiveConnectionIDLimit:        getRandomValue(),
 			}
 			Expect(params.ValidFor0RTT(params)).To(BeTrue())
