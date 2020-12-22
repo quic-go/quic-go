@@ -728,7 +728,14 @@ var _ = Describe("Packet packer", func() {
 					p, err := packer.PackPacket()
 					Expect(p).ToNot(BeNil())
 					Expect(err).ToNot(HaveOccurred())
-					Expect(p.frames).To(ContainElement(ackhandler.Frame{Frame: &wire.PingFrame{}}))
+					var hasPing bool
+					for _, f := range p.frames {
+						if _, ok := f.Frame.(*wire.PingFrame); ok {
+							hasPing = true
+							Expect(f.OnLost).ToNot(BeNil()) // make sure the PING is not retransmitted if lost
+						}
+					}
+					Expect(hasPing).To(BeTrue())
 					// make sure the next packet doesn't contain another PING
 					pnManager.EXPECT().PeekPacketNumber(protocol.Encryption1RTT).Return(protocol.PacketNumber(0x42), protocol.PacketNumberLen2)
 					pnManager.EXPECT().PopPacketNumber(protocol.Encryption1RTT).Return(protocol.PacketNumber(0x42))
@@ -768,7 +775,14 @@ var _ = Describe("Packet packer", func() {
 					p, err = packer.PackPacket()
 					Expect(err).ToNot(HaveOccurred())
 					Expect(p.ack).To(Equal(ack))
-					Expect(p.frames).To(Equal([]ackhandler.Frame{{Frame: &wire.PingFrame{}}}))
+					var hasPing bool
+					for _, f := range p.frames {
+						if _, ok := f.Frame.(*wire.PingFrame); ok {
+							hasPing = true
+							Expect(f.OnLost).ToNot(BeNil()) // make sure the PING is not retransmitted if lost
+						}
+					}
+					Expect(hasPing).To(BeTrue())
 				})
 
 				It("doesn't send a PING if it already sent another ack-eliciting frame", func() {
