@@ -37,8 +37,10 @@ var (
 )
 
 const (
-	nextProtoH3Draft29 = "h3-29"
-	nextProtoH3Draft32 = "h3-32"
+	nextProtoH3Draft29      = "h3-29"
+	nextProtoH3Draft32      = "h3-32"
+	streamTypeControlStream = 0
+	streamTypePushStream    = 1
 )
 
 func versionToALPN(v protocol.VersionNumber) string {
@@ -219,9 +221,12 @@ func (s *Server) handleConn(sess quic.EarlySession) {
 		s.logger.Debugf("Opening the control stream failed.")
 		return
 	}
-	buf := bytes.NewBuffer([]byte{0})
+	buf := &bytes.Buffer{}
+	utils.WriteVarInt(buf, streamTypeControlStream) // stream type
 	(&settingsFrame{}).Write(buf)
 	str.Write(buf.Bytes())
+
+	go s.handleUnidirectionalStreams(sess)
 
 	// Process all requests immediately.
 	// It's the client's responsibility to decide which requests are eligible for 0-RTT.
@@ -251,6 +256,41 @@ func (s *Server) handleConn(sess quic.EarlySession) {
 			}
 			str.Close()
 		}()
+	}
+}
+
+func (s *Server) handleUnidirectionalStreams(sess quic.EarlySession) {
+	for {
+		str, err := sess.AcceptUniStream(context.Background())
+		if err != nil {
+			s.logger.Debugf("accepting unidirectional stream failed: %s", err)
+			return
+		}
+
+		go func(str quic.ReceiveStream) {
+			streamType, err := utils.ReadVarInt(&byteReaderImpl{str})
+			if err != nil {
+				s.logger.Debugf("reading stream type on stream %d failed: %s", str.StreamID(), err)
+				return
+			}
+			// We're only interested in the control stream here.
+			switch streamType {
+			case streamTypeControlStream:
+			case streamTypePushStream: // only the server can push
+				sess.CloseWithError(quic.ErrorCode(errorStreamCreationError), "")
+				return
+			default:
+				return
+			}
+			f, err := parseNextFrame(str)
+			if err != nil {
+				sess.CloseWithError(quic.ErrorCode(errorFrameError), "")
+				return
+			}
+			if _, ok := f.(*settingsFrame); !ok {
+				sess.CloseWithError(quic.ErrorCode(errorMissingSettings), "")
+			}
+		}(str)
 	}
 }
 
