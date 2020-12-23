@@ -158,6 +158,7 @@ func (c *client) handleUnidirectionalStreams() {
 				c.session.CloseWithError(quic.ErrorCode(errorIDError), "")
 				return
 			default:
+				str.CancelRead(quic.ErrorCode(errorStreamCreationError))
 				return
 			}
 			f, err := parseNextFrame(str)

@@ -209,29 +209,24 @@ var _ = Describe("Server", func() {
 			})
 
 			It("ignores streams other than the control stream", func() {
-				controlBuf := &bytes.Buffer{}
-				utils.WriteVarInt(controlBuf, streamTypeControlStream)
-				(&settingsFrame{}).Write(controlBuf)
-				controlStr := mockquic.NewMockStream(mockCtrl)
-				controlStr.EXPECT().Read(gomock.Any()).DoAndReturn(controlBuf.Read).AnyTimes()
-
-				otherBuf := &bytes.Buffer{}
-				utils.WriteVarInt(otherBuf, 1337)
-				otherStr := mockquic.NewMockStream(mockCtrl)
-				otherStr.EXPECT().Read(gomock.Any()).DoAndReturn(otherBuf.Read).AnyTimes()
-
-				sess.EXPECT().AcceptUniStream(gomock.Any()).DoAndReturn(func(context.Context) (quic.ReceiveStream, error) {
-					return otherStr, nil
+				buf := &bytes.Buffer{}
+				utils.WriteVarInt(buf, 1337)
+				str := mockquic.NewMockStream(mockCtrl)
+				str.EXPECT().Read(gomock.Any()).DoAndReturn(buf.Read).AnyTimes()
+				done := make(chan struct{})
+				str.EXPECT().CancelRead(quic.ErrorCode(errorStreamCreationError)).Do(func(code quic.ErrorCode) {
+					close(done)
 				})
+
 				sess.EXPECT().AcceptUniStream(gomock.Any()).DoAndReturn(func(context.Context) (quic.ReceiveStream, error) {
-					return controlStr, nil
+					return str, nil
 				})
 				sess.EXPECT().AcceptUniStream(gomock.Any()).DoAndReturn(func(context.Context) (quic.ReceiveStream, error) {
 					<-testDone
 					return nil, errors.New("test done")
 				})
 				s.handleConn(sess)
-				time.Sleep(scaleDuration(20 * time.Millisecond)) // don't EXPECT any calls to sess.CloseWithError
+				Eventually(done).Should(BeClosed())
 			})
 
 			It("errors when the first frame on the control stream is not a SETTINGS frame", func() {
