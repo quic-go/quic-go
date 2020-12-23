@@ -4,13 +4,14 @@ jobs:
   unit:
     strategy:
       matrix:
-        go: [ "1.14", "1.15" ]
+        go: [ "1.14.x", "1.15.x", "1.16.0-beta1" ]
     runs-on: ubuntu-latest
     name: Integration Tests, Go ${{ matrix.go }})
     steps:
       - uses: actions/checkout@v2
       - uses: actions/setup-go@v2
         with:
+          stable: !contains(${{ matrix.go }}, "beta") && !contains(${{ matrix.go }}, "rc")
           go-version: ${{ matrix.go }}
       - run: go version
       - name: Install Ginkgo
