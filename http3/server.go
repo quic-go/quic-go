@@ -89,6 +89,11 @@ type Server struct {
 	// If nil, it uses reasonable default values.
 	QuicConfig *quic.Config
 
+	// Enable support for HTTP/3 datagrams.
+	// If set to true, QuicConfig.EnableDatagram will be set.
+	// See https://www.ietf.org/archive/id/draft-schinazi-masque-h3-datagram-02.html.
+	EnableDatagrams bool
+
 	port uint32 // used atomically
 
 	mutex     sync.Mutex
@@ -173,10 +178,19 @@ func (s *Server) serveImpl(tlsConf *tls.Config, conn net.PacketConn) error {
 
 	var ln quic.EarlyListener
 	var err error
-	if conn == nil {
-		ln, err = quicListenAddr(s.Addr, baseConf, s.QuicConfig)
+	quicConf := s.QuicConfig
+	if quicConf == nil {
+		quicConf = &quic.Config{}
 	} else {
-		ln, err = quicListen(conn, baseConf, s.QuicConfig)
+		quicConf = s.QuicConfig.Clone()
+	}
+	if s.EnableDatagrams {
+		quicConf.EnableDatagrams = true
+	}
+	if conn == nil {
+		ln, err = quicListenAddr(s.Addr, baseConf, quicConf)
+	} else {
+		ln, err = quicListen(conn, baseConf, quicConf)
 	}
 	if err != nil {
 		return err
@@ -223,7 +237,7 @@ func (s *Server) handleConn(sess quic.EarlySession) {
 	}
 	buf := &bytes.Buffer{}
 	utils.WriteVarInt(buf, streamTypeControlStream) // stream type
-	(&settingsFrame{}).Write(buf)
+	(&settingsFrame{Datagram: s.EnableDatagrams}).Write(buf)
 	str.Write(buf.Bytes())
 
 	go s.handleUnidirectionalStreams(sess)
@@ -287,8 +301,19 @@ func (s *Server) handleUnidirectionalStreams(sess quic.EarlySession) {
 				sess.CloseWithError(quic.ErrorCode(errorFrameError), "")
 				return
 			}
-			if _, ok := f.(*settingsFrame); !ok {
+			sf, ok := f.(*settingsFrame)
+			if !ok {
 				sess.CloseWithError(quic.ErrorCode(errorMissingSettings), "")
+				return
+			}
+			if !sf.Datagram {
+				return
+			}
+			// If datagram support was enabled on our side as well as on the client side,
+			// we can expect it to have been negotiated both on the transport and on the HTTP/3 layer.
+			// Note: ConnectionState() will block until the handshake is complete (relevant when using 0-RTT).
+			if s.EnableDatagrams && !sess.ConnectionState().SupportsDatagrams {
+				sess.CloseWithError(quic.ErrorCode(errorSettingsError), "missing QUIC Datagram support")
 			}
 		}(str)
 	}

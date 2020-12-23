@@ -2,6 +2,7 @@ package http3
 
 import (
 	"bytes"
+	"fmt"
 	"io"
 
 	"github.com/lucas-clemente/quic-go/internal/utils"
@@ -84,8 +85,8 @@ var _ = Describe("Frames", func() {
 			Expect(err).ToNot(HaveOccurred())
 			Expect(frame).To(BeAssignableToTypeOf(&settingsFrame{}))
 			sf := frame.(*settingsFrame)
-			Expect(sf.settings).To(HaveKeyWithValue(uint64(13), uint64(37)))
-			Expect(sf.settings).To(HaveKeyWithValue(uint64(0xdead), uint64(0xbeef)))
+			Expect(sf.other).To(HaveKeyWithValue(uint64(13), uint64(37)))
+			Expect(sf.other).To(HaveKeyWithValue(uint64(0xdead), uint64(0xbeef)))
 		})
 
 		It("rejects duplicate settings", func() {
@@ -101,7 +102,7 @@ var _ = Describe("Frames", func() {
 		})
 
 		It("writes", func() {
-			sf := &settingsFrame{settings: map[uint64]uint64{
+			sf := &settingsFrame{other: map[uint64]uint64{
 				1:  2,
 				99: 999,
 				13: 37,
@@ -114,7 +115,7 @@ var _ = Describe("Frames", func() {
 		})
 
 		It("errors on EOF", func() {
-			sf := &settingsFrame{settings: map[uint64]uint64{
+			sf := &settingsFrame{other: map[uint64]uint64{
 				13:         37,
 				0xdeadbeef: 0xdecafbad,
 			}}
@@ -131,6 +132,52 @@ var _ = Describe("Frames", func() {
 				_, err := parseNextFrame(bytes.NewReader(b))
 				Expect(err).To(MatchError(io.EOF))
 			}
+		})
+
+		Context("H3_DATAGRAM", func() {
+			It("reads the H3_DATAGRAM value", func() {
+				settings := appendVarInt(nil, settingDatagram)
+				settings = appendVarInt(settings, 1)
+				data := appendVarInt(nil, 4) // type byte
+				data = appendVarInt(data, uint64(len(settings)))
+				data = append(data, settings...)
+				f, err := parseNextFrame(bytes.NewReader(data))
+				Expect(err).ToNot(HaveOccurred())
+				Expect(f).To(BeAssignableToTypeOf(&settingsFrame{}))
+				sf := f.(*settingsFrame)
+				Expect(sf.Datagram).To(BeTrue())
+			})
+
+			It("rejects duplicate H3_DATAGRAM entries", func() {
+				settings := appendVarInt(nil, settingDatagram)
+				settings = appendVarInt(settings, 1)
+				settings = appendVarInt(settings, settingDatagram)
+				settings = appendVarInt(settings, 1)
+				data := appendVarInt(nil, 4) // type byte
+				data = appendVarInt(data, uint64(len(settings)))
+				data = append(data, settings...)
+				_, err := parseNextFrame(bytes.NewReader(data))
+				Expect(err).To(MatchError(fmt.Sprintf("duplicate setting: %d", settingDatagram)))
+			})
+
+			It("rejects invalid values for the H3_DATAGRAM entry", func() {
+				settings := appendVarInt(nil, settingDatagram)
+				settings = appendVarInt(settings, 1337)
+				data := appendVarInt(nil, 4) // type byte
+				data = appendVarInt(data, uint64(len(settings)))
+				data = append(data, settings...)
+				_, err := parseNextFrame(bytes.NewReader(data))
+				Expect(err).To(MatchError("invalid value for H3_DATAGRAM: 1337"))
+			})
+
+			It("writes the H3_DATAGRAM setting", func() {
+				sf := &settingsFrame{Datagram: true}
+				buf := &bytes.Buffer{}
+				sf.Write(buf)
+				frame, err := parseNextFrame(buf)
+				Expect(err).ToNot(HaveOccurred())
+				Expect(frame).To(Equal(sf))
+			})
 		})
 	})
 })

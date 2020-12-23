@@ -37,6 +37,7 @@ var dialAddr = quic.DialAddrEarly
 
 type roundTripperOpts struct {
 	DisableCompression bool
+	EnableDatagram     bool
 	MaxHeaderBytes     int64
 }
 
@@ -68,7 +69,7 @@ func newClient(
 	dialer func(network, addr string, tlsCfg *tls.Config, cfg *quic.Config) (quic.EarlySession, error),
 ) (*client, error) {
 	if quicConfig == nil {
-		quicConfig = defaultQuicConfig
+		quicConfig = defaultQuicConfig.Clone()
 	} else if len(quicConfig.Versions) == 0 {
 		quicConfig = quicConfig.Clone()
 		quicConfig.Versions = []quic.VersionNumber{defaultQuicConfig.Versions[0]}
@@ -77,6 +78,7 @@ func newClient(
 		return nil, errors.New("can only use a single QUIC version for dialing a HTTP/3 connection")
 	}
 	quicConfig.MaxIncomingStreams = -1 // don't allow any bidirectional streams
+	quicConfig.EnableDatagrams = opts.EnableDatagram
 	logger := utils.DefaultLogger.WithPrefix("h3 client")
 
 	if tlsConf == nil {
@@ -131,7 +133,7 @@ func (c *client) setupSession() error {
 	buf := &bytes.Buffer{}
 	utils.WriteVarInt(buf, streamTypeControlStream)
 	// send the SETTINGS frame
-	(&settingsFrame{}).Write(buf)
+	(&settingsFrame{Datagram: c.opts.EnableDatagram}).Write(buf)
 	_, err = str.Write(buf.Bytes())
 	return err
 }
@@ -165,8 +167,19 @@ func (c *client) handleUnidirectionalStreams() {
 				c.session.CloseWithError(quic.ErrorCode(errorFrameError), "")
 				return
 			}
-			if _, ok := f.(*settingsFrame); !ok {
+			sf, ok := f.(*settingsFrame)
+			if !ok {
 				c.session.CloseWithError(quic.ErrorCode(errorMissingSettings), "")
+				return
+			}
+			if !sf.Datagram {
+				return
+			}
+			// If datagram support was enabled on our side as well as on the server side,
+			// we can expect it to have been negotiated both on the transport and on the HTTP/3 layer.
+			// Note: ConnectionState() will block until the handshake is complete (relevant when using 0-RTT).
+			if c.opts.EnableDatagram && !c.session.ConnectionState().SupportsDatagrams {
+				c.session.CloseWithError(quic.ErrorCode(errorSettingsError), "missing QUIC Datagram support")
 			}
 		}()
 	}

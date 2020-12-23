@@ -136,6 +136,18 @@ var _ = Describe("Client", func() {
 		Expect(dialerCalled).To(BeTrue())
 	})
 
+	It("enables HTTP/3 Datagrams", func() {
+		testErr := errors.New("handshake error")
+		client, err := newClient("localhost:1337", nil, &roundTripperOpts{EnableDatagram: true}, nil, nil)
+		Expect(err).ToNot(HaveOccurred())
+		dialAddr = func(hostname string, _ *tls.Config, quicConf *quic.Config) (quic.EarlySession, error) {
+			Expect(quicConf.EnableDatagrams).To(BeTrue())
+			return nil, testErr
+		}
+		_, err = client.RoundTrip(req)
+		Expect(err).To(MatchError(testErr))
+	})
+
 	It("errors when dialing fails", func() {
 		testErr := errors.New("handshake error")
 		client, err := newClient("localhost:1337", nil, &roundTripperOpts{}, nil, nil)
@@ -310,6 +322,33 @@ var _ = Describe("Client", func() {
 			sess.EXPECT().CloseWithError(gomock.Any(), gomock.Any()).Do(func(code quic.ErrorCode, _ string) {
 				defer GinkgoRecover()
 				Expect(code).To(BeEquivalentTo(errorIDError))
+				close(done)
+			})
+			_, err := client.RoundTrip(request)
+			Expect(err).To(MatchError("done"))
+			Eventually(done).Should(BeClosed())
+		})
+
+		It("errors when the server advertises datagram support (and we enabled support for it)", func() {
+			client.opts.EnableDatagram = true
+			buf := &bytes.Buffer{}
+			utils.WriteVarInt(buf, streamTypeControlStream)
+			(&settingsFrame{Datagram: true}).Write(buf)
+			controlStr := mockquic.NewMockStream(mockCtrl)
+			controlStr.EXPECT().Read(gomock.Any()).DoAndReturn(buf.Read).AnyTimes()
+			sess.EXPECT().AcceptUniStream(gomock.Any()).DoAndReturn(func(context.Context) (quic.ReceiveStream, error) {
+				return controlStr, nil
+			})
+			sess.EXPECT().AcceptUniStream(gomock.Any()).DoAndReturn(func(context.Context) (quic.ReceiveStream, error) {
+				<-testDone
+				return nil, errors.New("test done")
+			})
+			sess.EXPECT().ConnectionState().Return(quic.ConnectionState{SupportsDatagrams: false})
+			done := make(chan struct{})
+			sess.EXPECT().CloseWithError(gomock.Any(), gomock.Any()).Do(func(code quic.ErrorCode, reason string) {
+				defer GinkgoRecover()
+				Expect(code).To(BeEquivalentTo(errorSettingsError))
+				Expect(reason).To(Equal("missing QUIC Datagram support"))
 				close(done)
 			})
 			_, err := client.RoundTrip(request)
