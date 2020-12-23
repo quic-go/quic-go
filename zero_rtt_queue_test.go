@@ -12,7 +12,7 @@ import (
 
 var _ = Describe("0-RTT queue", func() {
 	var q *zeroRTTQueue
-	queueDuration := scaleDuration(20 * time.Millisecond)
+	queueDuration := scaleDuration(50 * time.Millisecond)
 
 	BeforeEach(func() {
 		q = newZeroRTTQueue()
