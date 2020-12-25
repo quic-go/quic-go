@@ -33,6 +33,20 @@ func (m *MockSender) EXPECT() *MockSenderMockRecorder {
 	return m.recorder
 }
 
+// Available mocks base method
+func (m *MockSender) Available() <-chan struct{} {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Available")
+	ret0, _ := ret[0].(<-chan struct{})
+	return ret0
+}
+
+// Available indicates an expected call of Available
+func (mr *MockSenderMockRecorder) Available() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Available", reflect.TypeOf((*MockSender)(nil).Available))
+}
+
 // Close mocks base method
 func (m *MockSender) Close() {
 	m.ctrl.T.Helper()
@@ -69,4 +83,18 @@ func (m *MockSender) Send(arg0 *packetBuffer) {
 func (mr *MockSenderMockRecorder) Send(arg0 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Send", reflect.TypeOf((*MockSender)(nil).Send), arg0)
+}
+
+// WouldBlock mocks base method
+func (m *MockSender) WouldBlock() bool {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "WouldBlock")
+	ret0, _ := ret[0].(bool)
+	return ret0
+}
+
+// WouldBlock indicates an expected call of WouldBlock
+func (mr *MockSenderMockRecorder) WouldBlock() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "WouldBlock", reflect.TypeOf((*MockSender)(nil).WouldBlock))
 }
