@@ -119,6 +119,7 @@ var _ = Describe("Server", func() {
 			sess = mockquic.NewMockEarlySession(mockCtrl)
 			addr := &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 1337}
 			sess.EXPECT().RemoteAddr().Return(addr).AnyTimes()
+			sess.EXPECT().ConnectionState().AnyTimes()
 			sess.EXPECT().LocalAddr().AnyTimes()
 		})
 
@@ -186,6 +187,7 @@ var _ = Describe("Server", func() {
 				sess.EXPECT().OpenUniStream().Return(controlStr, nil)
 				sess.EXPECT().AcceptStream(gomock.Any()).Return(nil, errors.New("done"))
 				sess.EXPECT().RemoteAddr().Return(&net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 1337}).AnyTimes()
+				sess.EXPECT().ConnectionState().AnyTimes()
 				sess.EXPECT().LocalAddr().AnyTimes()
 			})
 
@@ -319,7 +321,6 @@ var _ = Describe("Server", func() {
 					<-testDone
 					return nil, errors.New("test done")
 				})
-				sess.EXPECT().ConnectionState().Return(quic.ConnectionState{SupportsDatagrams: false})
 				done := make(chan struct{})
 				sess.EXPECT().CloseWithError(gomock.Any(), gomock.Any()).Do(func(code quic.ErrorCode, reason string) {
 					defer GinkgoRecover()
@@ -350,6 +351,7 @@ var _ = Describe("Server", func() {
 				sess.EXPECT().AcceptStream(gomock.Any()).Return(str, nil)
 				sess.EXPECT().AcceptStream(gomock.Any()).Return(nil, errors.New("done"))
 				sess.EXPECT().RemoteAddr().Return(addr).AnyTimes()
+				sess.EXPECT().ConnectionState().AnyTimes()
 				sess.EXPECT().LocalAddr().AnyTimes()
 			})
 
