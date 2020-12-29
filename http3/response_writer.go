@@ -8,12 +8,23 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/lucas-clemente/quic-go"
 	"github.com/lucas-clemente/quic-go/internal/utils"
+
 	"github.com/marten-seemann/qpack"
 )
 
+// The DatagramHandler interface is implemented by ResponseWriters that allow an
+// HTTP handler to send QUIC datagrams on the underlying connection.
+// Both endpoints need to negotiate datagram support in order for this to work.
+type DatagramHandler interface {
+	SendMessage([]byte) error
+	ReceiveMessage() ([]byte, error)
+}
+
 type responseWriter struct {
-	stream *bufio.Writer
+	stream  *bufio.Writer
+	session quic.Session // needed to allow access to datagram sending / receiving
 
 	header        http.Header
 	status        int // status code passed to WriteHeader
@@ -25,13 +36,15 @@ type responseWriter struct {
 var (
 	_ http.ResponseWriter = &responseWriter{}
 	_ http.Flusher        = &responseWriter{}
+	_ DatagramHandler     = &responseWriter{}
 )
 
-func newResponseWriter(stream io.Writer, logger utils.Logger) *responseWriter {
+func newResponseWriter(stream io.Writer, session quic.Session, logger utils.Logger) *responseWriter {
 	return &responseWriter{
-		header: http.Header{},
-		stream: bufio.NewWriter(stream),
-		logger: logger,
+		header:  http.Header{},
+		stream:  bufio.NewWriter(stream),
+		session: session,
+		logger:  logger,
 	}
 }
 
@@ -87,6 +100,14 @@ func (w *responseWriter) Flush() {
 	if err := w.stream.Flush(); err != nil {
 		w.logger.Errorf("could not flush to stream: %s", err.Error())
 	}
+}
+
+func (w *responseWriter) SendMessage(b []byte) error {
+	return w.session.SendMessage(b)
+}
+
+func (w *responseWriter) ReceiveMessage() ([]byte, error) {
+	return w.session.ReceiveMessage()
 }
 
 // copied from http2/http2.go

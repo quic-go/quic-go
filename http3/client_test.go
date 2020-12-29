@@ -441,7 +441,7 @@ var _ = Describe("Client", func() {
 
 		It("returns a response", func() {
 			rspBuf := &bytes.Buffer{}
-			rw := newResponseWriter(rspBuf, utils.DefaultLogger)
+			rw := newResponseWriter(rspBuf, nil, utils.DefaultLogger)
 			rw.WriteHeader(418)
 			rw.Flush()
 
@@ -590,7 +590,7 @@ var _ = Describe("Client", func() {
 
 			It("cancels a request after the response arrived", func() {
 				rspBuf := &bytes.Buffer{}
-				rw := newResponseWriter(rspBuf, utils.DefaultLogger)
+				rw := newResponseWriter(rspBuf, nil, utils.DefaultLogger)
 				rw.WriteHeader(418)
 				rw.Flush()
 
@@ -655,7 +655,7 @@ var _ = Describe("Client", func() {
 				sess.EXPECT().OpenStreamSync(context.Background()).Return(str, nil)
 				sess.EXPECT().ConnectionState().Return(quic.ConnectionState{})
 				buf := &bytes.Buffer{}
-				rw := newResponseWriter(buf, utils.DefaultLogger)
+				rw := newResponseWriter(buf, nil, utils.DefaultLogger)
 				rw.Header().Set("Content-Encoding", "gzip")
 				gz := gzip.NewWriter(rw)
 				gz.Write([]byte("gzipped response"))
@@ -679,7 +679,7 @@ var _ = Describe("Client", func() {
 				sess.EXPECT().OpenStreamSync(context.Background()).Return(str, nil)
 				sess.EXPECT().ConnectionState().Return(quic.ConnectionState{})
 				buf := &bytes.Buffer{}
-				rw := newResponseWriter(buf, utils.DefaultLogger)
+				rw := newResponseWriter(buf, nil, utils.DefaultLogger)
 				rw.Write([]byte("not gzipped"))
 				rw.Flush()
 				str.EXPECT().Write(gomock.Any()).AnyTimes().DoAndReturn(func(p []byte) (int, error) { return len(p), nil })

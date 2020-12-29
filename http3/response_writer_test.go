@@ -5,7 +5,9 @@ import (
 	"io"
 	"net/http"
 
+	mockquic "github.com/lucas-clemente/quic-go/internal/mocks/quic"
 	"github.com/lucas-clemente/quic-go/internal/utils"
+
 	"github.com/marten-seemann/qpack"
 
 	. "github.com/onsi/ginkgo"
@@ -16,11 +18,13 @@ var _ = Describe("Response Writer", func() {
 	var (
 		rw     *responseWriter
 		strBuf *bytes.Buffer
+		sess   *mockquic.MockEarlySession
 	)
 
 	BeforeEach(func() {
 		strBuf = &bytes.Buffer{}
-		rw = newResponseWriter(strBuf, utils.DefaultLogger)
+		sess = mockquic.NewMockEarlySession(mockCtrl)
+		rw = newResponseWriter(strBuf, sess, utils.DefaultLogger)
 	})
 
 	decodeHeader := func(str io.Reader) map[string][]string {
@@ -117,5 +121,14 @@ var _ = Describe("Response Writer", func() {
 		n, err := rw.Write([]byte("foobar"))
 		Expect(n).To(BeZero())
 		Expect(err).To(MatchError(http.ErrBodyNotAllowed))
+	})
+
+	It("allows access to the datagram methods", func() {
+		sess.EXPECT().SendMessage([]byte("foobar"))
+		rw.SendMessage([]byte("foobar"))
+		sess.EXPECT().ReceiveMessage().Return([]byte("raboof"), nil)
+		msg, err := rw.ReceiveMessage()
+		Expect(err).ToNot(HaveOccurred())
+		Expect(msg).To(Equal([]byte("raboof")))
 	})
 })
