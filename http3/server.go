@@ -294,6 +294,7 @@ func (s *Server) handleUnidirectionalStreams(sess quic.EarlySession) {
 				sess.CloseWithError(quic.ErrorCode(errorStreamCreationError), "")
 				return
 			default:
+				str.CancelRead(quic.ErrorCode(errorStreamCreationError))
 				return
 			}
 			f, err := parseNextFrame(str)
