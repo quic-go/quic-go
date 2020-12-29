@@ -2,6 +2,7 @@ on: [push, pull_request]
 jobs:
   crosscompile:
     strategy:
+      fail-fast: false
       matrix:
         go: [ "1.14.x", "1.15.x" ]
     runs-on: ubuntu-latest

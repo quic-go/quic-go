@@ -3,6 +3,7 @@ on: [push, pull_request]
 jobs:
   unit:
     strategy:
+      fail-fast: false
       matrix:
         go: [ "1.14", "1.15" ]
     runs-on: ubuntu-latest
