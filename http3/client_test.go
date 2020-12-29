@@ -173,11 +173,15 @@ var _ = Describe("Client", func() {
 			Expect(err).To(MatchError("http3 client BUG: RoundTrip called for the wrong client (expected quic.clemente.io:1337, got quic.clemente.io:1336)"))
 		})
 
-		It("refuses to do plain HTTP requests", func() {
-			req, err := http.NewRequest("https", "http://quic.clemente.io:1337/foobar.html", nil)
+		It("allows requests using a different scheme", func() {
+			testErr := errors.New("handshake error")
+			req, err := http.NewRequest("masque", "masque://quic.clemente.io:1337/foobar.html", nil)
 			Expect(err).ToNot(HaveOccurred())
+			dialAddr = func(hostname string, _ *tls.Config, _ *quic.Config) (quic.EarlySession, error) {
+				return nil, testErr
+			}
 			_, err = client.RoundTrip(req)
-			Expect(err).To(MatchError("http3: unsupported scheme"))
+			Expect(err).To(MatchError(testErr))
 		})
 	})
 
