@@ -11,7 +11,7 @@ jobs:
       - uses: actions/checkout@v2
       - uses: actions/setup-go@v2
         with:
-          stable: !contains(${{ matrix.go }}, "beta") && !contains(${{ matrix.go }}, "rc")
+          stable: '!contains(${{ matrix.go }}, "beta") && !contains(${{ matrix.go }}, "rc")'
           go-version: ${{ matrix.go }}
       - name: Install build utils
         run: sudo apt-get install -y gcc-multilib
