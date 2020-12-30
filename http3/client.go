@@ -61,7 +61,10 @@ type client struct {
 	logger utils.Logger
 }
 
-var _ http.RoundTripper = &client{}
+var (
+	_ http.RoundTripper = &client{}
+	_ DatagramHandler   = &client{}
+)
 
 func newClient(
 	hostname string,
@@ -331,4 +334,12 @@ func (c *client) doRequest(
 	}
 
 	return res, requestError{}
+}
+
+func (c *client) SendMessage(b []byte) error {
+	return c.session.SendMessage(b)
+}
+
+func (c *client) ReceiveMessage() ([]byte, error) {
+	return c.session.ReceiveMessage()
 }
