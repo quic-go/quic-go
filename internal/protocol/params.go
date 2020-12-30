@@ -135,7 +135,7 @@ const MaxAckFrameSize ByteCount = 1000
 // MaxDatagramFrameSize is the maximum size of a DATAGRAM frame as defined in
 // https://datatracker.ietf.org/doc/draft-pauly-quic-datagram/.
 // The size is chosen such that a DATAGRAM frame fits into a QUIC packet.
-const MaxDatagramFrameSize ByteCount = 1200
+const MaxDatagramFrameSize ByteCount = 1220
 
 // DatagramRcvQueueLen is the length of the receive queue for DATAGRAM frames.
 // See https://datatracker.ietf.org/doc/draft-pauly-quic-datagram/.
