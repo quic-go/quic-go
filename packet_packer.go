@@ -640,7 +640,7 @@ func (p *packetPacker) MaybePackProbePacket(encLevel protocol.EncryptionLevel) (
 	var hdr *wire.ExtendedHeader
 	var payload *payload
 	var sealer sealer
-	//nolint:exhaustive Probe packets are never sent for 0-RTT.
+	//nolint:exhaustive // Probe packets are never sent for 0-RTT.
 	switch encLevel {
 	case protocol.EncryptionInitial:
 		var err error
