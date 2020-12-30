@@ -14,8 +14,8 @@ jobs:
           cp go.mod go.mod.orig
           cp go.sum go.sum.orig
           go mod tidy
-          cmp go.mod go.mod.orig
-          cmp go.sum go.sum.orig
+          diff go.mod go.mod.orig
+          diff go.sum go.sum.orig
       - name: golangci-lint
         uses: golangci/golangci-lint-action@v2
         with:
