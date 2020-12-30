@@ -41,7 +41,7 @@ type roundTripperOpts struct {
 	MaxHeaderBytes     int64
 }
 
-// client is a HTTP3 client doing requests
+// client is a http.RoundTripper that performs HTTP/3 requests to a single server.
 type client struct {
 	tlsConf *tls.Config
 	config  *quic.Config
@@ -60,6 +60,8 @@ type client struct {
 
 	logger utils.Logger
 }
+
+var _ http.RoundTripper = &client{}
 
 func newClient(
 	hostname string,

@@ -137,7 +137,7 @@ var _ = Describe("RoundTripper", func() {
 			Expect(dialed).To(BeTrue())
 		})
 
-		It("reuses existing clients", func() {
+		It("creates and reuses existing clients", func() {
 			closed := make(chan struct{})
 			testErr := errors.New("test err")
 			session.EXPECT().OpenUniStream().AnyTimes().Return(nil, testErr)
@@ -161,10 +161,37 @@ var _ = Describe("RoundTripper", func() {
 			Eventually(closed).Should(BeClosed())
 		})
 
+		It("creates and reuses existing clients, for GetRoundTripperForRequest", func() {
+			done := make(chan struct{})
+			defer close(done)
+			testErr := errors.New("test err")
+			session.EXPECT().OpenUniStream().AnyTimes().Return(nil, testErr)
+			session.EXPECT().AcceptUniStream(gomock.Any()).DoAndReturn(func(context.Context) (quic.ReceiveStream, error) {
+				<-done
+				return nil, errors.New("test done")
+			}).MaxTimes(1)
+			req, err := http.NewRequest("GET", "https://quic.clemente.io/file1.html", nil)
+			Expect(err).ToNot(HaveOccurred())
+			cl1, err := rt.GetRoundTripperForRequest(req, RoundTripOpt{})
+			Expect(err).ToNot(HaveOccurred())
+			req2, err := http.NewRequest("GET", "https://quic.clemente.io/file2.html", nil)
+			Expect(err).ToNot(HaveOccurred())
+			cl2, err := rt.GetRoundTripperForRequest(req2, RoundTripOpt{})
+			Expect(err).ToNot(HaveOccurred())
+			Expect(cl1).To(Equal(cl2))
+		})
+
 		It("doesn't create new clients if RoundTripOpt.OnlyCachedConn is set", func() {
 			req, err := http.NewRequest("GET", "https://quic.clemente.io/foobar.html", nil)
 			Expect(err).ToNot(HaveOccurred())
 			_, err = rt.RoundTripOpt(req, RoundTripOpt{OnlyCachedConn: true})
+			Expect(err).To(MatchError(ErrNoCachedConn))
+		})
+
+		It("doesn't create new clients if RoundTripOpt.OnlyCachedConn is set, for GetRoundTripperForRequest", func() {
+			req, err := http.NewRequest("GET", "https://quic.clemente.io/foobar.html", nil)
+			Expect(err).ToNot(HaveOccurred())
+			_, err = rt.GetRoundTripperForRequest(req, RoundTripOpt{OnlyCachedConn: true})
 			Expect(err).To(MatchError(ErrNoCachedConn))
 		})
 	})

@@ -109,12 +109,19 @@ func (r *RoundTripper) RoundTripOpt(req *http.Request, opt RoundTripOpt) (*http.
 		return nil, fmt.Errorf("http3: invalid method %q", req.Method)
 	}
 
-	hostname := authorityAddr("https", hostnameFromRequest(req))
-	cl, err := r.getClient(hostname, opt.OnlyCachedConn)
+	cl, err := r.GetRoundTripperForRequest(req, opt)
 	if err != nil {
 		return nil, err
 	}
 	return cl.RoundTrip(req)
+}
+
+// GetClientForRequests return the http.RoundTripper responsible for performing a request.
+// Most users won't need to use this function, they should use RoundTrip on this struct instead.
+// This function is useful for users that need access to functions on the underlying QUIC connection.
+func (r *RoundTripper) GetRoundTripperForRequest(req *http.Request, opt RoundTripOpt) (http.RoundTripper, error) {
+	hostname := authorityAddr("https", hostnameFromRequest(req))
+	return r.getClient(hostname, opt.OnlyCachedConn)
 }
 
 // RoundTrip does a round trip.
