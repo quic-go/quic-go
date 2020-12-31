@@ -1,5 +1,11 @@
 package quic
 
+type sender interface {
+	Send(p *packetBuffer)
+	Run() error
+	Close()
+}
+
 type sendQueue struct {
 	queue       chan *packetBuffer
 	closeCalled chan struct{} // runStopped when Close() is called
@@ -7,7 +13,9 @@ type sendQueue struct {
 	conn        sendConn
 }
 
-func newSendQueue(conn sendConn) *sendQueue {
+var _ sender = &sendQueue{}
+
+func newSendQueue(conn sendConn) sender {
 	s := &sendQueue{
 		conn:        conn,
 		runStopped:  make(chan struct{}),

@@ -137,7 +137,7 @@ type session struct {
 	config      *Config
 
 	conn      sendConn
-	sendQueue *sendQueue
+	sendQueue sender
 
 	streamsMap      streamManager
 	connIDManager   *connIDManager

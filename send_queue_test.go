@@ -9,7 +9,7 @@ import (
 )
 
 var _ = Describe("Send Queue", func() {
-	var q *sendQueue
+	var q sender
 	var c *MockSendConn
 
 	BeforeEach(func() {
