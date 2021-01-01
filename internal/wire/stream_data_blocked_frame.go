@@ -18,11 +18,11 @@ func parseStreamDataBlockedFrame(r *bytes.Reader, _ protocol.VersionNumber) (*St
 		return nil, err
 	}
 
-	sid, err := quicvarint.ReadVarInt(r)
+	sid, err := quicvarint.Read(r)
 	if err != nil {
 		return nil, err
 	}
-	offset, err := quicvarint.ReadVarInt(r)
+	offset, err := quicvarint.Read(r)
 	if err != nil {
 		return nil, err
 	}
@@ -35,12 +35,12 @@ func parseStreamDataBlockedFrame(r *bytes.Reader, _ protocol.VersionNumber) (*St
 
 func (f *StreamDataBlockedFrame) Write(b *bytes.Buffer, version protocol.VersionNumber) error {
 	b.WriteByte(0x15)
-	quicvarint.WriteVarInt(b, uint64(f.StreamID))
-	quicvarint.WriteVarInt(b, uint64(f.MaximumStreamData))
+	quicvarint.Write(b, uint64(f.StreamID))
+	quicvarint.Write(b, uint64(f.MaximumStreamData))
 	return nil
 }
 
 // Length of a written frame
 func (f *StreamDataBlockedFrame) Length(version protocol.VersionNumber) protocol.ByteCount {
-	return 1 + quicvarint.VarIntLen(uint64(f.StreamID)) + quicvarint.VarIntLen(uint64(f.MaximumStreamData))
+	return 1 + quicvarint.Len(uint64(f.StreamID)) + quicvarint.Len(uint64(f.MaximumStreamData))
 }

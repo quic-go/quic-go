@@ -111,7 +111,7 @@ var _ = Describe("Header", func() {
 					PacketNumberLen: protocol.PacketNumberLen4,
 				}).Write(buf, versionIETFHeader)).To(Succeed())
 				b := &bytes.Buffer{}
-				quicvarint.WriteVarIntWithLen(b, 37, 2)
+				quicvarint.WriteWithLen(b, 37, 2)
 				Expect(buf.Bytes()[buf.Len()-6 : buf.Len()-4]).To(Equal(b.Bytes()))
 			})
 

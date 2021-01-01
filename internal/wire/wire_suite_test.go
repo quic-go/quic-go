@@ -23,6 +23,6 @@ const (
 
 func encodeVarInt(i uint64) []byte {
 	b := &bytes.Buffer{}
-	quicvarint.WriteVarInt(b, i)
+	quicvarint.Write(b, i)
 	return b.Bytes()
 }

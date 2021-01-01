@@ -188,7 +188,7 @@ func (h *Header) parseLongHeader(b *bytes.Reader) error {
 	}
 
 	if h.Type == protocol.PacketTypeInitial {
-		tokenLen, err := quicvarint.ReadVarInt(b)
+		tokenLen, err := quicvarint.Read(b)
 		if err != nil {
 			return err
 		}
@@ -201,7 +201,7 @@ func (h *Header) parseLongHeader(b *bytes.Reader) error {
 		}
 	}
 
-	pl, err := quicvarint.ReadVarInt(b)
+	pl, err := quicvarint.Read(b)
 	if err != nil {
 		return err
 	}

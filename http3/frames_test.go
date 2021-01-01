@@ -14,7 +14,7 @@ import (
 var _ = Describe("Frames", func() {
 	appendVarInt := func(b []byte, val uint64) []byte {
 		buf := &bytes.Buffer{}
-		quicvarint.WriteVarInt(buf, val)
+		quicvarint.Write(buf, val)
 		return append(b, buf.Bytes()...)
 	}
 

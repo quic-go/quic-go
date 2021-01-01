@@ -33,19 +33,19 @@ var _ = Describe("Session Ticket", func() {
 
 	It("refuses to unmarshal if the revision doesn't match", func() {
 		b := &bytes.Buffer{}
-		quicvarint.WriteVarInt(b, 1337)
+		quicvarint.Write(b, 1337)
 		Expect((&sessionTicket{}).Unmarshal(b.Bytes())).To(MatchError("unknown session ticket revision: 1337"))
 	})
 
 	It("refuses to unmarshal if the RTT cannot be read", func() {
 		b := &bytes.Buffer{}
-		quicvarint.WriteVarInt(b, sessionTicketRevision)
+		quicvarint.Write(b, sessionTicketRevision)
 		Expect((&sessionTicket{}).Unmarshal(b.Bytes())).To(MatchError("failed to read RTT"))
 	})
 
 	It("refuses to unmarshal if unmarshaling the transport parameters fails", func() {
 		b := &bytes.Buffer{}
-		quicvarint.WriteVarInt(b, sessionTicketRevision)
+		quicvarint.Write(b, sessionTicketRevision)
 		b.Write([]byte("foobar"))
 		err := (&sessionTicket{}).Unmarshal(b.Bytes())
 		Expect(err).To(HaveOccurred())

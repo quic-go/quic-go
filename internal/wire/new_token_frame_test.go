@@ -60,7 +60,7 @@ var _ = Describe("NEW_TOKEN frame", func() {
 
 		It("has the correct min length", func() {
 			frame := &NewTokenFrame{Token: []byte("foobar")}
-			Expect(frame.Length(protocol.VersionWhatever)).To(Equal(1 + quicvarint.VarIntLen(6) + 6))
+			Expect(frame.Length(protocol.VersionWhatever)).To(Equal(1 + quicvarint.Len(6) + 6))
 		})
 	})
 })

@@ -26,7 +26,7 @@ func parseDatagramFrame(r *bytes.Reader, _ protocol.VersionNumber) (*DatagramFra
 	var length uint64
 	if f.DataLenPresent {
 		var err error
-		len, err := quicvarint.ReadVarInt(r)
+		len, err := quicvarint.Read(r)
 		if err != nil {
 			return nil, err
 		}
@@ -51,7 +51,7 @@ func (f *DatagramFrame) Write(b *bytes.Buffer, _ protocol.VersionNumber) error {
 	}
 	b.WriteByte(typeByte)
 	if f.DataLenPresent {
-		quicvarint.WriteVarInt(b, uint64(len(f.Data)))
+		quicvarint.Write(b, uint64(len(f.Data)))
 	}
 	b.Write(f.Data)
 	return nil
@@ -69,7 +69,7 @@ func (f *DatagramFrame) MaxDataLen(maxSize protocol.ByteCount, version protocol.
 		return 0
 	}
 	maxDataLen := maxSize - headerLen
-	if f.DataLenPresent && quicvarint.VarIntLen(uint64(maxDataLen)) != 1 {
+	if f.DataLenPresent && quicvarint.Len(uint64(maxDataLen)) != 1 {
 		maxDataLen--
 	}
 	return maxDataLen
@@ -79,7 +79,7 @@ func (f *DatagramFrame) MaxDataLen(maxSize protocol.ByteCount, version protocol.
 func (f *DatagramFrame) Length(_ protocol.VersionNumber) protocol.ByteCount {
 	length := 1 + protocol.ByteCount(len(f.Data))
 	if f.DataLenPresent {
-		length += quicvarint.VarIntLen(uint64(len(f.Data)))
+		length += quicvarint.Len(uint64(len(f.Data)))
 	}
 	return length
 }

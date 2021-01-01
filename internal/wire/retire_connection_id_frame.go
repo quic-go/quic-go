@@ -17,7 +17,7 @@ func parseRetireConnectionIDFrame(r *bytes.Reader, _ protocol.VersionNumber) (*R
 		return nil, err
 	}
 
-	seq, err := quicvarint.ReadVarInt(r)
+	seq, err := quicvarint.Read(r)
 	if err != nil {
 		return nil, err
 	}
@@ -26,11 +26,11 @@ func parseRetireConnectionIDFrame(r *bytes.Reader, _ protocol.VersionNumber) (*R
 
 func (f *RetireConnectionIDFrame) Write(b *bytes.Buffer, _ protocol.VersionNumber) error {
 	b.WriteByte(0x19)
-	quicvarint.WriteVarInt(b, f.SequenceNumber)
+	quicvarint.Write(b, f.SequenceNumber)
 	return nil
 }
 
 // Length of a written frame
 func (f *RetireConnectionIDFrame) Length(protocol.VersionNumber) protocol.ByteCount {
-	return 1 + quicvarint.VarIntLen(f.SequenceNumber)
+	return 1 + quicvarint.Len(f.SequenceNumber)
 }

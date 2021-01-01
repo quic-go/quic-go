@@ -19,11 +19,11 @@ func parseStopSendingFrame(r *bytes.Reader, _ protocol.VersionNumber) (*StopSend
 		return nil, err
 	}
 
-	streamID, err := quicvarint.ReadVarInt(r)
+	streamID, err := quicvarint.Read(r)
 	if err != nil {
 		return nil, err
 	}
-	errorCode, err := quicvarint.ReadVarInt(r)
+	errorCode, err := quicvarint.Read(r)
 	if err != nil {
 		return nil, err
 	}
@@ -36,12 +36,12 @@ func parseStopSendingFrame(r *bytes.Reader, _ protocol.VersionNumber) (*StopSend
 
 // Length of a written frame
 func (f *StopSendingFrame) Length(_ protocol.VersionNumber) protocol.ByteCount {
-	return 1 + quicvarint.VarIntLen(uint64(f.StreamID)) + quicvarint.VarIntLen(uint64(f.ErrorCode))
+	return 1 + quicvarint.Len(uint64(f.StreamID)) + quicvarint.Len(uint64(f.ErrorCode))
 }
 
 func (f *StopSendingFrame) Write(b *bytes.Buffer, _ protocol.VersionNumber) error {
 	b.WriteByte(0x5)
-	quicvarint.WriteVarInt(b, uint64(f.StreamID))
-	quicvarint.WriteVarInt(b, uint64(f.ErrorCode))
+	quicvarint.Write(b, uint64(f.StreamID))
+	quicvarint.Write(b, uint64(f.ErrorCode))
 	return nil
 }

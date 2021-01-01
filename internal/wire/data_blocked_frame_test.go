@@ -48,7 +48,7 @@ var _ = Describe("DATA_BLOCKED frame", func() {
 
 		It("has the correct min length", func() {
 			frame := DataBlockedFrame{MaximumData: 0x12345}
-			Expect(frame.Length(versionIETFFrames)).To(Equal(1 + quicvarint.VarIntLen(0x12345)))
+			Expect(frame.Length(versionIETFFrames)).To(Equal(1 + quicvarint.Len(0x12345)))
 		})
 	})
 })

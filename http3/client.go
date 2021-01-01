@@ -132,7 +132,7 @@ func (c *client) setupSession() error {
 		return err
 	}
 	buf := &bytes.Buffer{}
-	quicvarint.WriteVarInt(buf, streamTypeControlStream)
+	quicvarint.Write(buf, streamTypeControlStream)
 	// send the SETTINGS frame
 	(&settingsFrame{Datagram: c.opts.EnableDatagram}).Write(buf)
 	_, err = str.Write(buf.Bytes())
@@ -148,7 +148,7 @@ func (c *client) handleUnidirectionalStreams() {
 		}
 
 		go func() {
-			streamType, err := quicvarint.ReadVarInt(&byteReaderImpl{str})
+			streamType, err := quicvarint.Read(&byteReaderImpl{str})
 			if err != nil {
 				c.logger.Debugf("reading stream type on stream %d failed: %s", str.StreamID(), err)
 				return
