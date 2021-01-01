@@ -226,7 +226,6 @@ func (s *Server) removeListener(l *quic.EarlyListener) {
 }
 
 func (s *Server) handleConn(sess quic.EarlySession) {
-	// TODO: accept control streams
 	decoder := qpack.NewDecoder(nil)
 
 	// send a SETTINGS frame
