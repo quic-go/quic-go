@@ -5,7 +5,7 @@ import (
 	"io"
 
 	"github.com/lucas-clemente/quic-go/internal/protocol"
-	"github.com/lucas-clemente/quic-go/internal/utils"
+	"github.com/lucas-clemente/quic-go/quicvarint"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -48,7 +48,7 @@ var _ = Describe("DATA_BLOCKED frame", func() {
 
 		It("has the correct min length", func() {
 			frame := DataBlockedFrame{MaximumData: 0x12345}
-			Expect(frame.Length(versionIETFFrames)).To(Equal(1 + utils.VarIntLen(0x12345)))
+			Expect(frame.Length(versionIETFFrames)).To(Equal(1 + quicvarint.VarIntLen(0x12345)))
 		})
 	})
 })

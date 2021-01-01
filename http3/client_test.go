@@ -12,8 +12,9 @@ import (
 	"time"
 
 	"github.com/golang/mock/gomock"
-	quic "github.com/lucas-clemente/quic-go"
+	"github.com/lucas-clemente/quic-go"
 	mockquic "github.com/lucas-clemente/quic-go/internal/mocks/quic"
+	"github.com/lucas-clemente/quic-go/quicvarint"
 
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/internal/utils"
@@ -217,7 +218,7 @@ var _ = Describe("Client", func() {
 
 		It("parses the SETTINGS frame", func() {
 			buf := &bytes.Buffer{}
-			utils.WriteVarInt(buf, streamTypeControlStream)
+			quicvarint.WriteVarInt(buf, streamTypeControlStream)
 			(&settingsFrame{}).Write(buf)
 			controlStr := mockquic.NewMockStream(mockCtrl)
 			controlStr.EXPECT().Read(gomock.Any()).DoAndReturn(buf.Read).AnyTimes()
@@ -235,7 +236,7 @@ var _ = Describe("Client", func() {
 
 		It("ignores streams other than the control stream", func() {
 			buf := &bytes.Buffer{}
-			utils.WriteVarInt(buf, 1337)
+			quicvarint.WriteVarInt(buf, 1337)
 			str := mockquic.NewMockStream(mockCtrl)
 			str.EXPECT().Read(gomock.Any()).DoAndReturn(buf.Read).AnyTimes()
 			done := make(chan struct{})
@@ -257,7 +258,7 @@ var _ = Describe("Client", func() {
 
 		It("errors when the first frame on the control stream is not a SETTINGS frame", func() {
 			buf := &bytes.Buffer{}
-			utils.WriteVarInt(buf, streamTypeControlStream)
+			quicvarint.WriteVarInt(buf, streamTypeControlStream)
 			(&dataFrame{}).Write(buf)
 			controlStr := mockquic.NewMockStream(mockCtrl)
 			controlStr.EXPECT().Read(gomock.Any()).DoAndReturn(buf.Read).AnyTimes()
@@ -281,7 +282,7 @@ var _ = Describe("Client", func() {
 
 		It("errors when parsing the frame on the control stream fails", func() {
 			buf := &bytes.Buffer{}
-			utils.WriteVarInt(buf, streamTypeControlStream)
+			quicvarint.WriteVarInt(buf, streamTypeControlStream)
 			b := &bytes.Buffer{}
 			(&settingsFrame{}).Write(b)
 			buf.Write(b.Bytes()[:b.Len()-1])
@@ -307,7 +308,7 @@ var _ = Describe("Client", func() {
 
 		It("errors when parsing the server opens a push stream", func() {
 			buf := &bytes.Buffer{}
-			utils.WriteVarInt(buf, streamTypePushStream)
+			quicvarint.WriteVarInt(buf, streamTypePushStream)
 			controlStr := mockquic.NewMockStream(mockCtrl)
 			controlStr.EXPECT().Read(gomock.Any()).DoAndReturn(buf.Read).AnyTimes()
 			sess.EXPECT().AcceptUniStream(gomock.Any()).DoAndReturn(func(context.Context) (quic.ReceiveStream, error) {
@@ -331,7 +332,7 @@ var _ = Describe("Client", func() {
 		It("errors when the server advertises datagram support (and we enabled support for it)", func() {
 			client.opts.EnableDatagram = true
 			buf := &bytes.Buffer{}
-			utils.WriteVarInt(buf, streamTypeControlStream)
+			quicvarint.WriteVarInt(buf, streamTypeControlStream)
 			(&settingsFrame{Datagram: true}).Write(buf)
 			controlStr := mockquic.NewMockStream(mockCtrl)
 			controlStr.EXPECT().Read(gomock.Any()).DoAndReturn(buf.Read).AnyTimes()
@@ -390,7 +391,7 @@ var _ = Describe("Client", func() {
 			controlStr.EXPECT().Write(gomock.Any()).Do(func(b []byte) {
 				defer GinkgoRecover()
 				r := bytes.NewReader(b)
-				streamType, err := utils.ReadVarInt(r)
+				streamType, err := quicvarint.ReadVarInt(r)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(streamType).To(BeEquivalentTo(streamTypeControlStream))
 				close(settingsFrameWritten)

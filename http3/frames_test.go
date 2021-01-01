@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/lucas-clemente/quic-go/internal/utils"
+	"github.com/lucas-clemente/quic-go/quicvarint"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -14,7 +14,7 @@ import (
 var _ = Describe("Frames", func() {
 	appendVarInt := func(b []byte, val uint64) []byte {
 		buf := &bytes.Buffer{}
-		utils.WriteVarInt(buf, val)
+		quicvarint.WriteVarInt(buf, val)
 		return append(b, buf.Bytes()...)
 	}
 

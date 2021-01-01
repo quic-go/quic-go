@@ -7,6 +7,8 @@ import (
 
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/internal/utils"
+	"github.com/lucas-clemente/quic-go/quicvarint"
+
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 )
@@ -109,7 +111,7 @@ var _ = Describe("Header", func() {
 					PacketNumberLen: protocol.PacketNumberLen4,
 				}).Write(buf, versionIETFHeader)).To(Succeed())
 				b := &bytes.Buffer{}
-				utils.WriteVarIntWithLen(b, 37, 2)
+				quicvarint.WriteVarIntWithLen(b, 37, 2)
 				Expect(buf.Bytes()[buf.Len()-6 : buf.Len()-4]).To(Equal(b.Bytes()))
 			})
 

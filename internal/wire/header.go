@@ -8,6 +8,7 @@ import (
 
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/internal/utils"
+	"github.com/lucas-clemente/quic-go/quicvarint"
 )
 
 // ParseConnectionID parses the destination connection ID of a packet.
@@ -187,7 +188,7 @@ func (h *Header) parseLongHeader(b *bytes.Reader) error {
 	}
 
 	if h.Type == protocol.PacketTypeInitial {
-		tokenLen, err := utils.ReadVarInt(b)
+		tokenLen, err := quicvarint.ReadVarInt(b)
 		if err != nil {
 			return err
 		}
@@ -200,7 +201,7 @@ func (h *Header) parseLongHeader(b *bytes.Reader) error {
 		}
 	}
 
-	pl, err := utils.ReadVarInt(b)
+	pl, err := quicvarint.ReadVarInt(b)
 	if err != nil {
 		return err
 	}

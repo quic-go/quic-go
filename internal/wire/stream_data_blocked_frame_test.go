@@ -4,7 +4,7 @@ import (
 	"bytes"
 
 	"github.com/lucas-clemente/quic-go/internal/protocol"
-	"github.com/lucas-clemente/quic-go/internal/utils"
+	"github.com/lucas-clemente/quic-go/quicvarint"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -43,7 +43,7 @@ var _ = Describe("STREAM_DATA_BLOCKED frame", func() {
 				StreamID:          0x1337,
 				MaximumStreamData: 0xdeadbeef,
 			}
-			Expect(f.Length(0)).To(Equal(1 + utils.VarIntLen(0x1337) + utils.VarIntLen(0xdeadbeef)))
+			Expect(f.Length(0)).To(Equal(1 + quicvarint.VarIntLen(0x1337) + quicvarint.VarIntLen(0xdeadbeef)))
 		})
 
 		It("writes a sample frame", func() {

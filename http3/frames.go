@@ -7,7 +7,7 @@ import (
 	"io/ioutil"
 
 	"github.com/lucas-clemente/quic-go/internal/protocol"
-	"github.com/lucas-clemente/quic-go/internal/utils"
+	"github.com/lucas-clemente/quic-go/quicvarint"
 )
 
 type byteReader interface {
@@ -32,11 +32,11 @@ func parseNextFrame(b io.Reader) (frame, error) {
 	if !ok {
 		br = &byteReaderImpl{b}
 	}
-	t, err := utils.ReadVarInt(br)
+	t, err := quicvarint.ReadVarInt(br)
 	if err != nil {
 		return nil, err
 	}
-	l, err := utils.ReadVarInt(br)
+	l, err := quicvarint.ReadVarInt(br)
 	if err != nil {
 		return nil, err
 	}
@@ -72,8 +72,8 @@ type dataFrame struct {
 }
 
 func (f *dataFrame) Write(b *bytes.Buffer) {
-	utils.WriteVarInt(b, 0x0)
-	utils.WriteVarInt(b, f.Length)
+	quicvarint.WriteVarInt(b, 0x0)
+	quicvarint.WriteVarInt(b, f.Length)
 }
 
 type headersFrame struct {
@@ -81,8 +81,8 @@ type headersFrame struct {
 }
 
 func (f *headersFrame) Write(b *bytes.Buffer) {
-	utils.WriteVarInt(b, 0x1)
-	utils.WriteVarInt(b, f.Length)
+	quicvarint.WriteVarInt(b, 0x1)
+	quicvarint.WriteVarInt(b, f.Length)
 }
 
 const settingDatagram = 0x276
@@ -107,11 +107,11 @@ func parseSettingsFrame(r io.Reader, l uint64) (*settingsFrame, error) {
 	b := bytes.NewReader(buf)
 	var readDatagram bool
 	for b.Len() > 0 {
-		id, err := utils.ReadVarInt(b)
+		id, err := quicvarint.ReadVarInt(b)
 		if err != nil { // should not happen. We allocated the whole frame already.
 			return nil, err
 		}
-		val, err := utils.ReadVarInt(b)
+		val, err := quicvarint.ReadVarInt(b)
 		if err != nil { // should not happen. We allocated the whole frame already.
 			return nil, err
 		}
@@ -140,21 +140,21 @@ func parseSettingsFrame(r io.Reader, l uint64) (*settingsFrame, error) {
 }
 
 func (f *settingsFrame) Write(b *bytes.Buffer) {
-	utils.WriteVarInt(b, 0x4)
+	quicvarint.WriteVarInt(b, 0x4)
 	var l protocol.ByteCount
 	for id, val := range f.other {
-		l += utils.VarIntLen(id) + utils.VarIntLen(val)
+		l += quicvarint.VarIntLen(id) + quicvarint.VarIntLen(val)
 	}
 	if f.Datagram {
-		l += utils.VarIntLen(settingDatagram) + utils.VarIntLen(1)
+		l += quicvarint.VarIntLen(settingDatagram) + quicvarint.VarIntLen(1)
 	}
-	utils.WriteVarInt(b, uint64(l))
+	quicvarint.WriteVarInt(b, uint64(l))
 	if f.Datagram {
-		utils.WriteVarInt(b, settingDatagram)
-		utils.WriteVarInt(b, 1)
+		quicvarint.WriteVarInt(b, settingDatagram)
+		quicvarint.WriteVarInt(b, 1)
 	}
 	for id, val := range f.other {
-		utils.WriteVarInt(b, id)
-		utils.WriteVarInt(b, val)
+		quicvarint.WriteVarInt(b, id)
+		quicvarint.WriteVarInt(b, val)
 	}
 }

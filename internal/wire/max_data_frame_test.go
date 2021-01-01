@@ -4,7 +4,8 @@ import (
 	"bytes"
 
 	"github.com/lucas-clemente/quic-go/internal/protocol"
-	"github.com/lucas-clemente/quic-go/internal/utils"
+	"github.com/lucas-clemente/quic-go/quicvarint"
+
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 )
@@ -38,7 +39,7 @@ var _ = Describe("MAX_DATA frame", func() {
 			f := &MaxDataFrame{
 				MaximumData: 0xdeadbeef,
 			}
-			Expect(f.Length(versionIETFFrames)).To(Equal(1 + utils.VarIntLen(0xdeadbeef)))
+			Expect(f.Length(versionIETFFrames)).To(Equal(1 + quicvarint.VarIntLen(0xdeadbeef)))
 		})
 
 		It("writes a MAX_DATA frame", func() {

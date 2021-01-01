@@ -16,6 +16,7 @@ import (
 	"github.com/lucas-clemente/quic-go/internal/utils"
 	"github.com/lucas-clemente/quic-go/internal/wire"
 	"github.com/lucas-clemente/quic-go/logging"
+	"github.com/lucas-clemente/quic-go/quicvarint"
 )
 
 // TLS unexpected_message alert
@@ -405,8 +406,8 @@ func (h *cryptoSetup) handleTransportParameters(data []byte) {
 // must be called after receiving the transport parameters
 func (h *cryptoSetup) marshalDataForSessionState() []byte {
 	buf := &bytes.Buffer{}
-	utils.WriteVarInt(buf, clientSessionStateRevision)
-	utils.WriteVarInt(buf, uint64(h.rttStats.SmoothedRTT().Microseconds()))
+	quicvarint.WriteVarInt(buf, clientSessionStateRevision)
+	quicvarint.WriteVarInt(buf, uint64(h.rttStats.SmoothedRTT().Microseconds()))
 	h.peerParams.MarshalForSessionTicket(buf)
 	return buf.Bytes()
 }
@@ -422,14 +423,14 @@ func (h *cryptoSetup) handleDataFromSessionState(data []byte) {
 
 func (h *cryptoSetup) handleDataFromSessionStateImpl(data []byte) (*wire.TransportParameters, error) {
 	r := bytes.NewReader(data)
-	ver, err := utils.ReadVarInt(r)
+	ver, err := quicvarint.ReadVarInt(r)
 	if err != nil {
 		return nil, err
 	}
 	if ver != clientSessionStateRevision {
 		return nil, fmt.Errorf("mismatching version. Got %d, expected %d", ver, clientSessionStateRevision)
 	}
-	rtt, err := utils.ReadVarInt(r)
+	rtt, err := quicvarint.ReadVarInt(r)
 	if err != nil {
 		return nil, err
 	}

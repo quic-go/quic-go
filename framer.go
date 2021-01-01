@@ -5,8 +5,8 @@ import (
 
 	"github.com/lucas-clemente/quic-go/internal/ackhandler"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
-	"github.com/lucas-clemente/quic-go/internal/utils"
 	"github.com/lucas-clemente/quic-go/internal/wire"
+	"github.com/lucas-clemente/quic-go/quicvarint"
 )
 
 type framer interface {
@@ -114,7 +114,7 @@ func (f *framerI) AppendStreamFrames(frames []ackhandler.Frame, maxLen protocol.
 		// For the last STREAM frame, we'll remove the DataLen field later.
 		// Therefore, we can pretend to have more bytes available when popping
 		// the STREAM frame (which will always have the DataLen set).
-		remainingLen += utils.VarIntLen(uint64(remainingLen))
+		remainingLen += quicvarint.VarIntLen(uint64(remainingLen))
 		frame, hasMoreData := str.popStreamFrame(remainingLen)
 		if hasMoreData { // put the stream back in the queue (at the end)
 			f.streamQueue = append(f.streamQueue, id)

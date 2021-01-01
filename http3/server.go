@@ -20,6 +20,7 @@ import (
 	"github.com/lucas-clemente/quic-go/internal/handshake"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/internal/utils"
+	"github.com/lucas-clemente/quic-go/quicvarint"
 	"github.com/marten-seemann/qpack"
 )
 
@@ -236,7 +237,7 @@ func (s *Server) handleConn(sess quic.EarlySession) {
 		return
 	}
 	buf := &bytes.Buffer{}
-	utils.WriteVarInt(buf, streamTypeControlStream) // stream type
+	quicvarint.WriteVarInt(buf, streamTypeControlStream) // stream type
 	(&settingsFrame{Datagram: s.EnableDatagrams}).Write(buf)
 	str.Write(buf.Bytes())
 
@@ -282,7 +283,7 @@ func (s *Server) handleUnidirectionalStreams(sess quic.EarlySession) {
 		}
 
 		go func(str quic.ReceiveStream) {
-			streamType, err := utils.ReadVarInt(&byteReaderImpl{str})
+			streamType, err := quicvarint.ReadVarInt(&byteReaderImpl{str})
 			if err != nil {
 				s.logger.Debugf("reading stream type on stream %d failed: %s", str.StreamID(), err)
 				return

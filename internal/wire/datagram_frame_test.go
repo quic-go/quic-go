@@ -5,7 +5,8 @@ import (
 	"io"
 
 	"github.com/lucas-clemente/quic-go/internal/protocol"
-	"github.com/lucas-clemente/quic-go/internal/utils"
+	"github.com/lucas-clemente/quic-go/quicvarint"
+
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 )
@@ -87,7 +88,7 @@ var _ = Describe("STREAM frame", func() {
 				DataLenPresent: true,
 				Data:           []byte("foobar"),
 			}
-			Expect(f.Length(versionIETFFrames)).To(Equal(1 + utils.VarIntLen(6) + 6))
+			Expect(f.Length(versionIETFFrames)).To(Equal(1 + quicvarint.VarIntLen(6) + 6))
 		})
 
 		It("has the right length for a frame without length", func() {

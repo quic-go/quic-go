@@ -4,7 +4,8 @@ import (
 	"bytes"
 
 	"github.com/lucas-clemente/quic-go/internal/protocol"
-	"github.com/lucas-clemente/quic-go/internal/utils"
+	"github.com/lucas-clemente/quic-go/quicvarint"
+
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 )
@@ -99,7 +100,7 @@ var _ = Describe("CRYPTO frame", func() {
 				Offset: 0x1337,
 				Data:   []byte("foobar"),
 			}
-			Expect(f.Length(versionIETFFrames)).To(Equal(1 + utils.VarIntLen(0x1337) + utils.VarIntLen(6) + 6))
+			Expect(f.Length(versionIETFFrames)).To(Equal(1 + quicvarint.VarIntLen(0x1337) + quicvarint.VarIntLen(6) + 6))
 		})
 	})
 

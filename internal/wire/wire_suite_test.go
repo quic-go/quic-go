@@ -5,7 +5,8 @@ import (
 	"testing"
 
 	"github.com/lucas-clemente/quic-go/internal/protocol"
-	"github.com/lucas-clemente/quic-go/internal/utils"
+	"github.com/lucas-clemente/quic-go/quicvarint"
+
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 )
@@ -22,6 +23,6 @@ const (
 
 func encodeVarInt(i uint64) []byte {
 	b := &bytes.Buffer{}
-	utils.WriteVarInt(b, i)
+	quicvarint.WriteVarInt(b, i)
 	return b.Bytes()
 }

@@ -6,7 +6,7 @@ import (
 
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/internal/qerr"
-	"github.com/lucas-clemente/quic-go/internal/utils"
+	"github.com/lucas-clemente/quic-go/quicvarint"
 )
 
 // A ConnectionCloseFrame is a CONNECTION_CLOSE frame
@@ -24,21 +24,21 @@ func parseConnectionCloseFrame(r *bytes.Reader, _ protocol.VersionNumber) (*Conn
 	}
 
 	f := &ConnectionCloseFrame{IsApplicationError: typeByte == 0x1d}
-	ec, err := utils.ReadVarInt(r)
+	ec, err := quicvarint.ReadVarInt(r)
 	if err != nil {
 		return nil, err
 	}
 	f.ErrorCode = qerr.ErrorCode(ec)
 	// read the Frame Type, if this is not an application error
 	if !f.IsApplicationError {
-		ft, err := utils.ReadVarInt(r)
+		ft, err := quicvarint.ReadVarInt(r)
 		if err != nil {
 			return nil, err
 		}
 		f.FrameType = ft
 	}
 	var reasonPhraseLen uint64
-	reasonPhraseLen, err = utils.ReadVarInt(r)
+	reasonPhraseLen, err = quicvarint.ReadVarInt(r)
 	if err != nil {
 		return nil, err
 	}
@@ -60,9 +60,9 @@ func parseConnectionCloseFrame(r *bytes.Reader, _ protocol.VersionNumber) (*Conn
 
 // Length of a written frame
 func (f *ConnectionCloseFrame) Length(version protocol.VersionNumber) protocol.ByteCount {
-	length := 1 + utils.VarIntLen(uint64(f.ErrorCode)) + utils.VarIntLen(uint64(len(f.ReasonPhrase))) + protocol.ByteCount(len(f.ReasonPhrase))
+	length := 1 + quicvarint.VarIntLen(uint64(f.ErrorCode)) + quicvarint.VarIntLen(uint64(len(f.ReasonPhrase))) + protocol.ByteCount(len(f.ReasonPhrase))
 	if !f.IsApplicationError {
-		length += utils.VarIntLen(f.FrameType) // for the frame type
+		length += quicvarint.VarIntLen(f.FrameType) // for the frame type
 	}
 	return length
 }
@@ -74,11 +74,11 @@ func (f *ConnectionCloseFrame) Write(b *bytes.Buffer, version protocol.VersionNu
 		b.WriteByte(0x1c)
 	}
 
-	utils.WriteVarInt(b, uint64(f.ErrorCode))
+	quicvarint.WriteVarInt(b, uint64(f.ErrorCode))
 	if !f.IsApplicationError {
-		utils.WriteVarInt(b, f.FrameType)
+		quicvarint.WriteVarInt(b, f.FrameType)
 	}
-	utils.WriteVarInt(b, uint64(len(f.ReasonPhrase)))
+	quicvarint.WriteVarInt(b, uint64(len(f.ReasonPhrase)))
 	b.WriteString(f.ReasonPhrase)
 	return nil
 }

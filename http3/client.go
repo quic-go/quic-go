@@ -15,6 +15,7 @@ import (
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/internal/qtls"
 	"github.com/lucas-clemente/quic-go/internal/utils"
+	"github.com/lucas-clemente/quic-go/quicvarint"
 	"github.com/marten-seemann/qpack"
 )
 
@@ -131,7 +132,7 @@ func (c *client) setupSession() error {
 		return err
 	}
 	buf := &bytes.Buffer{}
-	utils.WriteVarInt(buf, streamTypeControlStream)
+	quicvarint.WriteVarInt(buf, streamTypeControlStream)
 	// send the SETTINGS frame
 	(&settingsFrame{Datagram: c.opts.EnableDatagram}).Write(buf)
 	_, err = str.Write(buf.Bytes())
@@ -147,7 +148,7 @@ func (c *client) handleUnidirectionalStreams() {
 		}
 
 		go func() {
-			streamType, err := utils.ReadVarInt(&byteReaderImpl{str})
+			streamType, err := quicvarint.ReadVarInt(&byteReaderImpl{str})
 			if err != nil {
 				c.logger.Debugf("reading stream type on stream %d failed: %s", str.StreamID(), err)
 				return
