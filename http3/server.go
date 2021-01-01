@@ -367,8 +367,12 @@ func (s *Server) handleRequest(sess quic.Session, str quic.Stream, decoder *qpac
 	ctx = context.WithValue(ctx, ServerContextKey, s)
 	ctx = context.WithValue(ctx, http.LocalAddrContextKey, sess.LocalAddr())
 	req = req.WithContext(ctx)
-	responseWriter := newResponseWriter(str, s.logger)
-	defer responseWriter.Flush()
+	r := newResponseWriter(str, s.logger)
+	defer func() {
+		if !r.usedDataStream() {
+			r.Flush()
+		}
+	}()
 	handler := s.Handler
 	if handler == nil {
 		handler = http.DefaultServeMux
@@ -386,17 +390,18 @@ func (s *Server) handleRequest(sess quic.Session, str quic.Stream, decoder *qpac
 				panicked = true
 			}
 		}()
-		handler.ServeHTTP(responseWriter, req)
+		handler.ServeHTTP(r, req)
 	}()
 
-	if panicked {
-		responseWriter.WriteHeader(500)
-	} else {
-		responseWriter.WriteHeader(200)
+	if !r.usedDataStream() {
+		if panicked {
+			r.WriteHeader(500)
+		} else {
+			r.WriteHeader(200)
+		}
+		// If the EOF was read by the handler, CancelRead() is a no-op.
+		str.CancelRead(quic.ErrorCode(errorNoError))
 	}
-
-	// If the EOF was read by the handler, CancelRead() is a no-op.
-	str.CancelRead(quic.ErrorCode(errorNoError))
 	return requestError{}
 }
 
