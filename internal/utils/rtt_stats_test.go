@@ -74,8 +74,16 @@ var _ = Describe("RTT stats", func() {
 		Expect(rttStats.PTO(true)).To(Equal(rtt + protocol.TimerGranularity))
 	})
 
+	It("doesn't set a zero RTT", func() {
+		const rtt = 5 * time.Nanosecond
+		rttStats.UpdateRTT(rtt, rtt, time.Time{})
+		Expect(rttStats.SmoothedRTT()).To(Equal(rtt))
+		rttStats.UpdateRTT(rtt, rtt, time.Time{})
+		Expect(rttStats.SmoothedRTT()).To(Equal(time.Nanosecond))
+	})
+
 	It("ExpireSmoothedMetrics", func() {
-		initialRtt := (10 * time.Millisecond)
+		const initialRtt = 10 * time.Millisecond
 		rttStats.UpdateRTT(initialRtt, 0, time.Time{})
 		Expect(rttStats.MinRTT()).To(Equal(initialRtt))
 		Expect(rttStats.SmoothedRTT()).To(Equal(initialRtt))
@@ -83,7 +91,7 @@ var _ = Describe("RTT stats", func() {
 		Expect(rttStats.MeanDeviation()).To(Equal(initialRtt / 2))
 
 		// Update once with a 20ms RTT.
-		doubledRtt := initialRtt * (2)
+		const doubledRtt = 2 * initialRtt
 		rttStats.UpdateRTT(doubledRtt, 0, time.Time{})
 		Expect(rttStats.SmoothedRTT()).To(Equal(time.Duration(float32(initialRtt) * 1.125)))
 

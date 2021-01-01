@@ -93,6 +93,16 @@ func (r *RTTStats) UpdateRTT(sendDelta, ackDelay time.Duration, now time.Time) {
 		r.meanDeviation = time.Duration(oneMinusBeta*float32(r.meanDeviation/time.Microsecond)+rttBeta*float32(AbsDuration(r.smoothedRTT-sample)/time.Microsecond)) * time.Microsecond
 		r.smoothedRTT = time.Duration((float32(r.smoothedRTT/time.Microsecond)*oneMinusAlpha)+(float32(sample/time.Microsecond)*rttAlpha)) * time.Microsecond
 	}
+	// Make sure that we arrive at a non-zero RTT, even on systems with a terrible timer resolution (Windows).
+	if r.smoothedRTT == 0 {
+		r.smoothedRTT = time.Nanosecond
+	}
+	if r.latestRTT == 0 {
+		r.latestRTT = time.Nanosecond
+	}
+	if r.meanDeviation == 0 {
+		r.meanDeviation = time.Nanosecond
+	}
 }
 
 // SetMaxAckDelay sets the max_ack_delay
