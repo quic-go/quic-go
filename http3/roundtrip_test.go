@@ -179,6 +179,15 @@ var _ = Describe("RoundTripper", func() {
 			Expect(req.Body.(*mockBody).closed).To(BeTrue())
 		})
 
+		It("allow non-https schemes if SkipSchemeCheck is set", func() {
+			req, err := http.NewRequest("GET", "masque://www.example.org/", nil)
+			Expect(err).ToNot(HaveOccurred())
+			_, err = rt.RoundTrip(req)
+			Expect(err).To(MatchError("http3: unsupported protocol scheme: masque"))
+			_, err = rt.RoundTripOpt(req, RoundTripOpt{SkipSchemeCheck: true, OnlyCachedConn: true})
+			Expect(err).To(MatchError("http3: no cached connection was available"))
+		})
+
 		It("rejects requests without a URL", func() {
 			req1.URL = nil
 			req1.Body = &mockBody{}
