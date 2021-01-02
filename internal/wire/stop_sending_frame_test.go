@@ -4,7 +4,7 @@ import (
 	"bytes"
 
 	"github.com/lucas-clemente/quic-go/internal/protocol"
-	"github.com/lucas-clemente/quic-go/internal/utils"
+	"github.com/lucas-clemente/quic-go/quicvarint"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -56,7 +56,7 @@ var _ = Describe("STOP_SENDING frame", func() {
 				StreamID:  0xdeadbeef,
 				ErrorCode: 0x1234567,
 			}
-			Expect(frame.Length(versionIETFFrames)).To(Equal(1 + utils.VarIntLen(0xdeadbeef) + utils.VarIntLen(0x1234567)))
+			Expect(frame.Length(versionIETFFrames)).To(Equal(1 + quicvarint.Len(0xdeadbeef) + quicvarint.Len(0x1234567)))
 		})
 	})
 })

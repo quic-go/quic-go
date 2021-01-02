@@ -4,7 +4,7 @@ import (
 	"bytes"
 
 	"github.com/lucas-clemente/quic-go/internal/protocol"
-	"github.com/lucas-clemente/quic-go/internal/utils"
+	"github.com/lucas-clemente/quic-go/quicvarint"
 )
 
 // A StopSendingFrame is a STOP_SENDING frame
@@ -19,11 +19,11 @@ func parseStopSendingFrame(r *bytes.Reader, _ protocol.VersionNumber) (*StopSend
 		return nil, err
 	}
 
-	streamID, err := utils.ReadVarInt(r)
+	streamID, err := quicvarint.Read(r)
 	if err != nil {
 		return nil, err
 	}
-	errorCode, err := utils.ReadVarInt(r)
+	errorCode, err := quicvarint.Read(r)
 	if err != nil {
 		return nil, err
 	}
@@ -36,12 +36,12 @@ func parseStopSendingFrame(r *bytes.Reader, _ protocol.VersionNumber) (*StopSend
 
 // Length of a written frame
 func (f *StopSendingFrame) Length(_ protocol.VersionNumber) protocol.ByteCount {
-	return 1 + utils.VarIntLen(uint64(f.StreamID)) + utils.VarIntLen(uint64(f.ErrorCode))
+	return 1 + quicvarint.Len(uint64(f.StreamID)) + quicvarint.Len(uint64(f.ErrorCode))
 }
 
 func (f *StopSendingFrame) Write(b *bytes.Buffer, _ protocol.VersionNumber) error {
 	b.WriteByte(0x5)
-	utils.WriteVarInt(b, uint64(f.StreamID))
-	utils.WriteVarInt(b, uint64(f.ErrorCode))
+	quicvarint.Write(b, uint64(f.StreamID))
+	quicvarint.Write(b, uint64(f.ErrorCode))
 	return nil
 }

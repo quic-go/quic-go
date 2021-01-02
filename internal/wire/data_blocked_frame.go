@@ -4,7 +4,7 @@ import (
 	"bytes"
 
 	"github.com/lucas-clemente/quic-go/internal/protocol"
-	"github.com/lucas-clemente/quic-go/internal/utils"
+	"github.com/lucas-clemente/quic-go/quicvarint"
 )
 
 // A DataBlockedFrame is a DATA_BLOCKED frame
@@ -16,7 +16,7 @@ func parseDataBlockedFrame(r *bytes.Reader, _ protocol.VersionNumber) (*DataBloc
 	if _, err := r.ReadByte(); err != nil {
 		return nil, err
 	}
-	offset, err := utils.ReadVarInt(r)
+	offset, err := quicvarint.Read(r)
 	if err != nil {
 		return nil, err
 	}
@@ -28,11 +28,11 @@ func parseDataBlockedFrame(r *bytes.Reader, _ protocol.VersionNumber) (*DataBloc
 func (f *DataBlockedFrame) Write(b *bytes.Buffer, version protocol.VersionNumber) error {
 	typeByte := uint8(0x14)
 	b.WriteByte(typeByte)
-	utils.WriteVarInt(b, uint64(f.MaximumData))
+	quicvarint.Write(b, uint64(f.MaximumData))
 	return nil
 }
 
 // Length of a written frame
 func (f *DataBlockedFrame) Length(version protocol.VersionNumber) protocol.ByteCount {
-	return 1 + utils.VarIntLen(uint64(f.MaximumData))
+	return 1 + quicvarint.Len(uint64(f.MaximumData))
 }

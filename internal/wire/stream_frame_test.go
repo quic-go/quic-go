@@ -5,7 +5,8 @@ import (
 	"io"
 
 	"github.com/lucas-clemente/quic-go/internal/protocol"
-	"github.com/lucas-clemente/quic-go/internal/utils"
+	"github.com/lucas-clemente/quic-go/quicvarint"
+
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 )
@@ -235,7 +236,7 @@ var _ = Describe("STREAM frame", func() {
 				StreamID: 0x1337,
 				Data:     []byte("foobar"),
 			}
-			Expect(f.Length(versionIETFFrames)).To(Equal(1 + utils.VarIntLen(0x1337) + 6))
+			Expect(f.Length(versionIETFFrames)).To(Equal(1 + quicvarint.Len(0x1337) + 6))
 		})
 
 		It("has the right length for a frame with offset", func() {
@@ -244,7 +245,7 @@ var _ = Describe("STREAM frame", func() {
 				Offset:   0x42,
 				Data:     []byte("foobar"),
 			}
-			Expect(f.Length(versionIETFFrames)).To(Equal(1 + utils.VarIntLen(0x1337) + utils.VarIntLen(0x42) + 6))
+			Expect(f.Length(versionIETFFrames)).To(Equal(1 + quicvarint.Len(0x1337) + quicvarint.Len(0x42) + 6))
 		})
 
 		It("has the right length for a frame with data length", func() {
@@ -254,7 +255,7 @@ var _ = Describe("STREAM frame", func() {
 				DataLenPresent: true,
 				Data:           []byte("foobar"),
 			}
-			Expect(f.Length(versionIETFFrames)).To(Equal(1 + utils.VarIntLen(0x1337) + utils.VarIntLen(0x1234567) + utils.VarIntLen(6) + 6))
+			Expect(f.Length(versionIETFFrames)).To(Equal(1 + quicvarint.Len(0x1337) + quicvarint.Len(0x1234567) + quicvarint.Len(6) + 6))
 		})
 	})
 

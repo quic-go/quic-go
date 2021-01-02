@@ -5,7 +5,7 @@ import (
 	"fmt"
 
 	"github.com/lucas-clemente/quic-go/internal/protocol"
-	"github.com/lucas-clemente/quic-go/internal/utils"
+	"github.com/lucas-clemente/quic-go/quicvarint"
 )
 
 // A StreamsBlockedFrame is a STREAMS_BLOCKED frame
@@ -27,7 +27,7 @@ func parseStreamsBlockedFrame(r *bytes.Reader, _ protocol.VersionNumber) (*Strea
 	case 0x17:
 		f.Type = protocol.StreamTypeUni
 	}
-	streamLimit, err := utils.ReadVarInt(r)
+	streamLimit, err := quicvarint.Read(r)
 	if err != nil {
 		return nil, err
 	}
@@ -45,11 +45,11 @@ func (f *StreamsBlockedFrame) Write(b *bytes.Buffer, _ protocol.VersionNumber) e
 	case protocol.StreamTypeUni:
 		b.WriteByte(0x17)
 	}
-	utils.WriteVarInt(b, uint64(f.StreamLimit))
+	quicvarint.Write(b, uint64(f.StreamLimit))
 	return nil
 }
 
 // Length of a written frame
 func (f *StreamsBlockedFrame) Length(_ protocol.VersionNumber) protocol.ByteCount {
-	return 1 + utils.VarIntLen(uint64(f.StreamLimit))
+	return 1 + quicvarint.Len(uint64(f.StreamLimit))
 }

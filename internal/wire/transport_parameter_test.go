@@ -9,7 +9,8 @@ import (
 	"time"
 
 	"github.com/lucas-clemente/quic-go/internal/protocol"
-	"github.com/lucas-clemente/quic-go/internal/utils"
+	"github.com/lucas-clemente/quic-go/quicvarint"
+
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 )
@@ -33,8 +34,8 @@ var _ = Describe("Transport Parameters", func() {
 	})
 
 	addInitialSourceConnectionID := func(b *bytes.Buffer) {
-		utils.WriteVarInt(b, uint64(initialSourceConnectionIDParameterID))
-		utils.WriteVarInt(b, 6)
+		quicvarint.Write(b, uint64(initialSourceConnectionIDParameterID))
+		quicvarint.Write(b, 6)
 		b.Write([]byte("foobar"))
 	}
 
@@ -143,32 +144,32 @@ var _ = Describe("Transport Parameters", func() {
 
 	It("errors when the stateless_reset_token has the wrong length", func() {
 		b := &bytes.Buffer{}
-		utils.WriteVarInt(b, uint64(statelessResetTokenParameterID))
-		utils.WriteVarInt(b, 15)
+		quicvarint.Write(b, uint64(statelessResetTokenParameterID))
+		quicvarint.Write(b, 15)
 		b.Write(make([]byte, 15))
 		Expect((&TransportParameters{}).Unmarshal(b.Bytes(), protocol.PerspectiveServer)).To(MatchError("TRANSPORT_PARAMETER_ERROR: wrong length for stateless_reset_token: 15 (expected 16)"))
 	})
 
 	It("errors when the max_packet_size is too small", func() {
 		b := &bytes.Buffer{}
-		utils.WriteVarInt(b, uint64(maxUDPPayloadSizeParameterID))
-		utils.WriteVarInt(b, uint64(utils.VarIntLen(1199)))
-		utils.WriteVarInt(b, 1199)
+		quicvarint.Write(b, uint64(maxUDPPayloadSizeParameterID))
+		quicvarint.Write(b, uint64(quicvarint.Len(1199)))
+		quicvarint.Write(b, 1199)
 		Expect((&TransportParameters{}).Unmarshal(b.Bytes(), protocol.PerspectiveServer)).To(MatchError("TRANSPORT_PARAMETER_ERROR: invalid value for max_packet_size: 1199 (minimum 1200)"))
 	})
 
 	It("errors when disable_active_migration has content", func() {
 		b := &bytes.Buffer{}
-		utils.WriteVarInt(b, uint64(disableActiveMigrationParameterID))
-		utils.WriteVarInt(b, 6)
+		quicvarint.Write(b, uint64(disableActiveMigrationParameterID))
+		quicvarint.Write(b, 6)
 		b.Write([]byte("foobar"))
 		Expect((&TransportParameters{}).Unmarshal(b.Bytes(), protocol.PerspectiveServer)).To(MatchError("TRANSPORT_PARAMETER_ERROR: wrong length for disable_active_migration: 6 (expected empty)"))
 	})
 
 	It("errors when the server doesn't set the original_destination_connection_id", func() {
 		b := &bytes.Buffer{}
-		utils.WriteVarInt(b, uint64(statelessResetTokenParameterID))
-		utils.WriteVarInt(b, 16)
+		quicvarint.Write(b, uint64(statelessResetTokenParameterID))
+		quicvarint.Write(b, 16)
 		b.Write(make([]byte, 16))
 		addInitialSourceConnectionID(b)
 		Expect((&TransportParameters{}).Unmarshal(b.Bytes(), protocol.PerspectiveServer)).To(MatchError("TRANSPORT_PARAMETER_ERROR: missing original_destination_connection_id"))
@@ -204,7 +205,7 @@ var _ = Describe("Transport Parameters", func() {
 			}).Marshal(protocol.PerspectiveServer)
 			dataLen += len(data)
 		}
-		entryLen := utils.VarIntLen(uint64(ackDelayExponentParameterID)) /* parameter id */ + utils.VarIntLen(uint64(utils.VarIntLen(uint64(maxAckDelay.Milliseconds())))) /*length */ + utils.VarIntLen(uint64(maxAckDelay.Milliseconds())) /* value */
+		entryLen := quicvarint.Len(uint64(ackDelayExponentParameterID)) /* parameter id */ + quicvarint.Len(uint64(quicvarint.Len(uint64(maxAckDelay.Milliseconds())))) /*length */ + quicvarint.Len(uint64(maxAckDelay.Milliseconds())) /* value */
 		Expect(float32(dataLen) / num).To(BeNumerically("~", float32(defaultLen)/num+float32(entryLen), 1))
 	})
 
@@ -233,7 +234,7 @@ var _ = Describe("Transport Parameters", func() {
 			}).Marshal(protocol.PerspectiveServer)
 			dataLen += len(data)
 		}
-		entryLen := utils.VarIntLen(uint64(ackDelayExponentParameterID)) /* parameter id */ + utils.VarIntLen(uint64(utils.VarIntLen(protocol.DefaultAckDelayExponent+1))) /* length */ + utils.VarIntLen(protocol.DefaultAckDelayExponent+1) /* value */
+		entryLen := quicvarint.Len(uint64(ackDelayExponentParameterID)) /* parameter id */ + quicvarint.Len(uint64(quicvarint.Len(protocol.DefaultAckDelayExponent+1))) /* length */ + quicvarint.Len(protocol.DefaultAckDelayExponent+1) /* value */
 		Expect(float32(dataLen) / num).To(BeNumerically("~", float32(defaultLen)/num+float32(entryLen), 1))
 	})
 
@@ -249,11 +250,11 @@ var _ = Describe("Transport Parameters", func() {
 
 	It("errors when the varint value has the wrong length", func() {
 		b := &bytes.Buffer{}
-		utils.WriteVarInt(b, uint64(initialMaxStreamDataBidiLocalParameterID))
-		utils.WriteVarInt(b, 2)
+		quicvarint.Write(b, uint64(initialMaxStreamDataBidiLocalParameterID))
+		quicvarint.Write(b, 2)
 		val := uint64(0xdeadbeef)
-		Expect(utils.VarIntLen(val)).ToNot(BeEquivalentTo(2))
-		utils.WriteVarInt(b, val)
+		Expect(quicvarint.Len(val)).ToNot(BeEquivalentTo(2))
+		quicvarint.Write(b, val)
 		addInitialSourceConnectionID(b)
 		err := (&TransportParameters{}).Unmarshal(b.Bytes(), protocol.PerspectiveServer)
 		Expect(err).To(HaveOccurred())
@@ -262,9 +263,9 @@ var _ = Describe("Transport Parameters", func() {
 
 	It("errors if initial_max_streams_bidi is too large", func() {
 		b := &bytes.Buffer{}
-		utils.WriteVarInt(b, uint64(initialMaxStreamsBidiParameterID))
-		utils.WriteVarInt(b, uint64(utils.VarIntLen(uint64(protocol.MaxStreamCount+1))))
-		utils.WriteVarInt(b, uint64(protocol.MaxStreamCount+1))
+		quicvarint.Write(b, uint64(initialMaxStreamsBidiParameterID))
+		quicvarint.Write(b, uint64(quicvarint.Len(uint64(protocol.MaxStreamCount+1))))
+		quicvarint.Write(b, uint64(protocol.MaxStreamCount+1))
 		addInitialSourceConnectionID(b)
 		err := (&TransportParameters{}).Unmarshal(b.Bytes(), protocol.PerspectiveServer)
 		Expect(err).To(HaveOccurred())
@@ -273,9 +274,9 @@ var _ = Describe("Transport Parameters", func() {
 
 	It("errors if initial_max_streams_uni is too large", func() {
 		b := &bytes.Buffer{}
-		utils.WriteVarInt(b, uint64(initialMaxStreamsUniParameterID))
-		utils.WriteVarInt(b, uint64(utils.VarIntLen(uint64(protocol.MaxStreamCount+1))))
-		utils.WriteVarInt(b, uint64(protocol.MaxStreamCount+1))
+		quicvarint.Write(b, uint64(initialMaxStreamsUniParameterID))
+		quicvarint.Write(b, uint64(quicvarint.Len(uint64(protocol.MaxStreamCount+1))))
+		quicvarint.Write(b, uint64(protocol.MaxStreamCount+1))
 		addInitialSourceConnectionID(b)
 		err := (&TransportParameters{}).Unmarshal(b.Bytes(), protocol.PerspectiveServer)
 		Expect(err).To(HaveOccurred())
@@ -285,9 +286,9 @@ var _ = Describe("Transport Parameters", func() {
 	It("handles huge max_ack_delay values", func() {
 		b := &bytes.Buffer{}
 		val := uint64(math.MaxUint64) / 5
-		utils.WriteVarInt(b, uint64(maxAckDelayParameterID))
-		utils.WriteVarInt(b, uint64(utils.VarIntLen(val)))
-		utils.WriteVarInt(b, val)
+		quicvarint.Write(b, uint64(maxAckDelayParameterID))
+		quicvarint.Write(b, uint64(quicvarint.Len(val)))
+		quicvarint.Write(b, val)
 		addInitialSourceConnectionID(b)
 		err := (&TransportParameters{}).Unmarshal(b.Bytes(), protocol.PerspectiveClient)
 		Expect(err).To(HaveOccurred())
@@ -297,17 +298,17 @@ var _ = Describe("Transport Parameters", func() {
 	It("skips unknown parameters", func() {
 		b := &bytes.Buffer{}
 		// write a known parameter
-		utils.WriteVarInt(b, uint64(initialMaxStreamDataBidiLocalParameterID))
-		utils.WriteVarInt(b, uint64(utils.VarIntLen(0x1337)))
-		utils.WriteVarInt(b, 0x1337)
+		quicvarint.Write(b, uint64(initialMaxStreamDataBidiLocalParameterID))
+		quicvarint.Write(b, uint64(quicvarint.Len(0x1337)))
+		quicvarint.Write(b, 0x1337)
 		// write an unknown parameter
-		utils.WriteVarInt(b, 0x42)
-		utils.WriteVarInt(b, 6)
+		quicvarint.Write(b, 0x42)
+		quicvarint.Write(b, 6)
 		b.Write([]byte("foobar"))
 		// write a known parameter
-		utils.WriteVarInt(b, uint64(initialMaxStreamDataBidiRemoteParameterID))
-		utils.WriteVarInt(b, uint64(utils.VarIntLen(0x42)))
-		utils.WriteVarInt(b, 0x42)
+		quicvarint.Write(b, uint64(initialMaxStreamDataBidiRemoteParameterID))
+		quicvarint.Write(b, uint64(quicvarint.Len(0x42)))
+		quicvarint.Write(b, 0x42)
 		addInitialSourceConnectionID(b)
 		p := &TransportParameters{}
 		Expect(p.Unmarshal(b.Bytes(), protocol.PerspectiveClient)).To(Succeed())
@@ -318,17 +319,17 @@ var _ = Describe("Transport Parameters", func() {
 	It("rejects duplicate parameters", func() {
 		b := &bytes.Buffer{}
 		// write first parameter
-		utils.WriteVarInt(b, uint64(initialMaxStreamDataBidiLocalParameterID))
-		utils.WriteVarInt(b, uint64(utils.VarIntLen(0x1337)))
-		utils.WriteVarInt(b, 0x1337)
+		quicvarint.Write(b, uint64(initialMaxStreamDataBidiLocalParameterID))
+		quicvarint.Write(b, uint64(quicvarint.Len(0x1337)))
+		quicvarint.Write(b, 0x1337)
 		// write a second parameter
-		utils.WriteVarInt(b, uint64(initialMaxStreamDataBidiRemoteParameterID))
-		utils.WriteVarInt(b, uint64(utils.VarIntLen(0x42)))
-		utils.WriteVarInt(b, 0x42)
+		quicvarint.Write(b, uint64(initialMaxStreamDataBidiRemoteParameterID))
+		quicvarint.Write(b, uint64(quicvarint.Len(0x42)))
+		quicvarint.Write(b, 0x42)
 		// write first parameter again
-		utils.WriteVarInt(b, uint64(initialMaxStreamDataBidiLocalParameterID))
-		utils.WriteVarInt(b, uint64(utils.VarIntLen(0x1337)))
-		utils.WriteVarInt(b, 0x1337)
+		quicvarint.Write(b, uint64(initialMaxStreamDataBidiLocalParameterID))
+		quicvarint.Write(b, uint64(quicvarint.Len(0x1337)))
+		quicvarint.Write(b, 0x1337)
 		addInitialSourceConnectionID(b)
 		err := (&TransportParameters{}).Unmarshal(b.Bytes(), protocol.PerspectiveClient)
 		Expect(err).To(HaveOccurred())
@@ -337,8 +338,8 @@ var _ = Describe("Transport Parameters", func() {
 
 	It("errors if there's not enough data to read", func() {
 		b := &bytes.Buffer{}
-		utils.WriteVarInt(b, 0x42)
-		utils.WriteVarInt(b, 7)
+		quicvarint.Write(b, 0x42)
+		quicvarint.Write(b, 7)
 		b.Write([]byte("foobar"))
 		p := &TransportParameters{}
 		Expect(p.Unmarshal(b.Bytes(), protocol.PerspectiveServer)).To(MatchError("TRANSPORT_PARAMETER_ERROR: remaining length (6) smaller than parameter length (7)"))
@@ -346,16 +347,16 @@ var _ = Describe("Transport Parameters", func() {
 
 	It("errors if the client sent a stateless_reset_token", func() {
 		b := &bytes.Buffer{}
-		utils.WriteVarInt(b, uint64(statelessResetTokenParameterID))
-		utils.WriteVarInt(b, uint64(utils.VarIntLen(16)))
+		quicvarint.Write(b, uint64(statelessResetTokenParameterID))
+		quicvarint.Write(b, uint64(quicvarint.Len(16)))
 		b.Write(make([]byte, 16))
 		Expect((&TransportParameters{}).Unmarshal(b.Bytes(), protocol.PerspectiveClient)).To(MatchError("TRANSPORT_PARAMETER_ERROR: client sent a stateless_reset_token"))
 	})
 
 	It("errors if the client sent the original_destination_connection_id", func() {
 		b := &bytes.Buffer{}
-		utils.WriteVarInt(b, uint64(originalDestinationConnectionIDParameterID))
-		utils.WriteVarInt(b, 6)
+		quicvarint.Write(b, uint64(originalDestinationConnectionIDParameterID))
+		quicvarint.Write(b, 6)
 		b.Write([]byte("foobar"))
 		Expect((&TransportParameters{}).Unmarshal(b.Bytes(), protocol.PerspectiveClient)).To(MatchError("TRANSPORT_PARAMETER_ERROR: client sent an original_destination_connection_id"))
 	})
@@ -391,8 +392,8 @@ var _ = Describe("Transport Parameters", func() {
 
 		It("errors if the client sent a preferred_address", func() {
 			b := &bytes.Buffer{}
-			utils.WriteVarInt(b, uint64(preferredAddressParameterID))
-			utils.WriteVarInt(b, 6)
+			quicvarint.Write(b, uint64(preferredAddressParameterID))
+			quicvarint.Write(b, 6)
 			b.Write([]byte("foobar"))
 			p := &TransportParameters{}
 			Expect(p.Unmarshal(b.Bytes(), protocol.PerspectiveClient)).To(MatchError("TRANSPORT_PARAMETER_ERROR: client sent a preferred_address"))
@@ -431,7 +432,7 @@ var _ = Describe("Transport Parameters", func() {
 			}
 			for i := 1; i < len(raw); i++ {
 				buf := &bytes.Buffer{}
-				utils.WriteVarInt(buf, uint64(preferredAddressParameterID))
+				quicvarint.Write(buf, uint64(preferredAddressParameterID))
 				buf.Write(raw[:i])
 				p := &TransportParameters{}
 				Expect(p.Unmarshal(buf.Bytes(), protocol.PerspectiveServer)).ToNot(Succeed())
@@ -475,8 +476,8 @@ var _ = Describe("Transport Parameters", func() {
 			p.MarshalForSessionTicket(buf)
 			data := buf.Bytes()
 			b := &bytes.Buffer{}
-			utils.WriteVarInt(b, transportParameterMarshalingVersion+1)
-			b.Write(data[utils.VarIntLen(transportParameterMarshalingVersion):])
+			quicvarint.Write(b, transportParameterMarshalingVersion+1)
+			b.Write(data[quicvarint.Len(transportParameterMarshalingVersion):])
 			Expect(p.UnmarshalFromSessionTicket(bytes.NewReader(b.Bytes()))).To(MatchError(fmt.Sprintf("unknown transport parameter marshaling version: %d", transportParameterMarshalingVersion+1)))
 		})
 
