@@ -13,8 +13,8 @@ for f in $(git diff --cached --name-only); do
 	fi
 done
 
-# Check that all files are properly gofumpt-ed.
-output=$(gofumpt -d $(git diff --cached --name-only))
+# Check that all Go files are properly gofumpt-ed.
+output=$(gofumpt -d $(git diff --cached --name-only -- '*.go'))
 if [ -n "$output" ]; then
 	echo "Found files that are not properly gofumpt-ed."
 	echo "$output"
