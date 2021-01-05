@@ -82,7 +82,7 @@ func newConnError(code errorCode, err error) requestError {
 	return requestError{err: err, connErr: code}
 }
 
-// Server is a HTTP2 server listening for QUIC connections.
+// Server is a HTTP/3 server.
 type Server struct {
 	*http.Server
 
