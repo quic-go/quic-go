@@ -583,19 +583,40 @@ runLoop:
 			case <-s.sendingScheduled:
 				// We do all the interesting stuff after the switch statement, so
 				// nothing to see here.
-			case p := <-s.receivedPackets:
-				s.sentPacketHandler.ReceivedBytes(p.Size())
-				// Only reset the timers if this packet was actually processed.
-				// This avoids modifying any state when handling undecryptable packets,
-				// which could be injected by an attacker.
-				if wasProcessed := s.handlePacketImpl(p); !wasProcessed {
-					continue
-				}
+			case firstPacket := <-s.receivedPackets:
+				s.sentPacketHandler.ReceivedBytes(firstPacket.Size())
+				wasProcessed := s.handlePacketImpl(firstPacket)
 				// Don't set timers and send packets if the packet made us close the session.
 				select {
 				case closeErr = <-s.closeChan:
 					break runLoop
 				default:
+				}
+				// Now process all packets in the receivedPackets channel.
+				// Limit the number of packets to the length of the receivedPackets channel,
+				// so we eventually get a chance to send out an ACK when receiving a lot of packets.
+				numPackets := len(s.receivedPackets)
+			receiveLoop:
+				for i := 0; i < numPackets; i++ {
+					select {
+					case p := <-s.receivedPackets:
+						if processed := s.handlePacketImpl(p); processed {
+							wasProcessed = true
+						}
+						select {
+						case closeErr = <-s.closeChan:
+							break runLoop
+						default:
+						}
+					default:
+						break receiveLoop
+					}
+				}
+				// Only reset the timers if this packet was actually processed.
+				// This avoids modifying any state when handling undecryptable packets,
+				// which could be injected by an attacker.
+				if !wasProcessed {
+					continue
 				}
 			case <-s.handshakeCompleteChan:
 				s.handleHandshakeComplete()
