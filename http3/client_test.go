@@ -440,7 +440,37 @@ var _ = Describe("Client", func() {
 			Expect(decodeHeader(buf)).To(HaveKeyWithValue(":method", "GET"))
 		})
 
-		It("returns a response", func() {
+		It("returns a response containing a body", func() {
+			rspBuf := &bytes.Buffer{}
+			rw := newResponseWriter(rspBuf, utils.DefaultLogger)
+			rw.Header().Add("Content-Type", "application/json")
+			rw.Header().Add("Content-Length", "24")
+			rw.WriteHeader(418)
+			rw.Write([]byte("{\"error\":\"I'm a teapot\"}"))
+			rw.Flush()
+
+			gomock.InOrder(
+				sess.EXPECT().HandshakeComplete().Return(handshakeCtx),
+				sess.EXPECT().OpenStreamSync(context.Background()).Return(str, nil),
+				sess.EXPECT().ConnectionState().Return(quic.ConnectionState{}),
+			)
+			str.EXPECT().Write(gomock.Any()).AnyTimes().DoAndReturn(func(p []byte) (int, error) { return len(p), nil })
+			str.EXPECT().Close()
+			str.EXPECT().Read(gomock.Any()).DoAndReturn(func(p []byte) (int, error) {
+				return rspBuf.Read(p)
+			}).AnyTimes()
+			rsp, err := client.RoundTrip(request)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(rsp.Proto).To(Equal("HTTP/3"))
+			Expect(rsp.ProtoMajor).To(Equal(3))
+			Expect(rsp.StatusCode).To(Equal(418))
+			Expect(rsp.ContentLength).To(Equal(int64(24)))
+			body, err := ioutil.ReadAll(rsp.Body)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(body).To(Equal([]byte("{\"error\":\"I'm a teapot\"}")))
+		})
+
+		It("returns a response without a body", func() {
 			rspBuf := &bytes.Buffer{}
 			rw := newResponseWriter(rspBuf, utils.DefaultLogger)
 			rw.WriteHeader(418)
@@ -461,6 +491,36 @@ var _ = Describe("Client", func() {
 			Expect(rsp.Proto).To(Equal("HTTP/3"))
 			Expect(rsp.ProtoMajor).To(Equal(3))
 			Expect(rsp.StatusCode).To(Equal(418))
+			Expect(rsp.ContentLength).To(Equal(int64(0)))
+		})
+
+		It("returns a response containing a body but without Content-Length", func() {
+			rspBuf := &bytes.Buffer{}
+			rw := newResponseWriter(rspBuf, utils.DefaultLogger)
+			rw.Header().Add("Content-Type", "application/json")
+			rw.WriteHeader(418)
+			rw.Write([]byte("{\"error\":\"I'm a teapot\"}"))
+			rw.Flush()
+
+			gomock.InOrder(
+				sess.EXPECT().HandshakeComplete().Return(handshakeCtx),
+				sess.EXPECT().OpenStreamSync(context.Background()).Return(str, nil),
+				sess.EXPECT().ConnectionState().Return(quic.ConnectionState{}),
+			)
+			str.EXPECT().Write(gomock.Any()).AnyTimes().DoAndReturn(func(p []byte) (int, error) { return len(p), nil })
+			str.EXPECT().Close()
+			str.EXPECT().Read(gomock.Any()).DoAndReturn(func(p []byte) (int, error) {
+				return rspBuf.Read(p)
+			}).AnyTimes()
+			rsp, err := client.RoundTrip(request)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(rsp.Proto).To(Equal("HTTP/3"))
+			Expect(rsp.ProtoMajor).To(Equal(3))
+			Expect(rsp.StatusCode).To(Equal(418))
+			Expect(rsp.ContentLength).To(Equal(int64(-1)))
+			body, err := ioutil.ReadAll(rsp.Body)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(body).To(Equal([]byte("{\"error\":\"I'm a teapot\"}")))
 		})
 
 		Context("requests containing a Body", func() {
@@ -681,6 +741,7 @@ var _ = Describe("Client", func() {
 				sess.EXPECT().ConnectionState().Return(quic.ConnectionState{})
 				buf := &bytes.Buffer{}
 				rw := newResponseWriter(buf, utils.DefaultLogger)
+				rw.Header().Set("Content-Length", "11")
 				rw.Write([]byte("not gzipped"))
 				rw.Flush()
 				str.EXPECT().Write(gomock.Any()).AnyTimes().DoAndReturn(func(p []byte) (int, error) { return len(p), nil })

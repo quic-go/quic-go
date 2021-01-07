@@ -82,6 +82,17 @@ func (r *body) readImpl(b []byte) (int, error) {
 	return n, err
 }
 
+func (r *body) ended() (bool, error) {
+	_, err := r.readImpl(make([]byte, 0))
+	if err == nil {
+		return false, nil
+	} else if err == io.EOF {
+		return true, nil
+	} else {
+		return false, err
+	}
+}
+
 func (r *body) requestDone() {
 	if r.reqDoneClosed || r.reqDone == nil {
 		return
