@@ -174,7 +174,8 @@ type session struct {
 	handshakeCtx       context.Context
 	handshakeCtxCancel context.CancelFunc
 
-	undecryptablePackets []*receivedPacket
+	undecryptablePackets          []*receivedPacket // undecryptable packets, waiting for a change in encryption level
+	undecryptablePacketsToProcess []*receivedPacket
 
 	clientHelloWritten    <-chan *wire.TransportParameters
 	earlySessionReadyChan chan struct{}
@@ -555,22 +556,14 @@ runLoop:
 
 		s.maybeResetTimer()
 
-		select {
-		case closeErr = <-s.closeChan:
-			break runLoop
-		case <-s.timer.Chan():
-			s.timer.SetRead()
-			// We do all the interesting stuff after the switch statement, so
-			// nothing to see here.
-		case <-s.sendingScheduled:
-			// We do all the interesting stuff after the switch statement, so
-			// nothing to see here.
-		case p := <-s.receivedPackets:
-			// Only reset the timers if this packet was actually processed.
-			// This avoids modifying any state when handling undecryptable packets,
-			// which could be injected by an attacker.
-			if wasProcessed := s.handlePacketImpl(p); !wasProcessed {
-				continue
+		var processedUndecryptablePacket bool
+		if len(s.undecryptablePacketsToProcess) > 0 {
+			queue := s.undecryptablePacketsToProcess
+			s.undecryptablePacketsToProcess = nil
+			for _, p := range queue {
+				if processed := s.handlePacketImpl(p); processed {
+					processedUndecryptablePacket = true
+				}
 			}
 			// Don't set timers and send packets if the packet made us close the session.
 			select {
@@ -578,8 +571,34 @@ runLoop:
 				break runLoop
 			default:
 			}
-		case <-s.handshakeCompleteChan:
-			s.handleHandshakeComplete()
+		} else if !processedUndecryptablePacket {
+			select {
+			case closeErr = <-s.closeChan:
+				break runLoop
+			case <-s.timer.Chan():
+				s.timer.SetRead()
+				// We do all the interesting stuff after the switch statement, so
+				// nothing to see here.
+			case <-s.sendingScheduled:
+				// We do all the interesting stuff after the switch statement, so
+				// nothing to see here.
+			case p := <-s.receivedPackets:
+				s.sentPacketHandler.ReceivedBytes(p.Size())
+				// Only reset the timers if this packet was actually processed.
+				// This avoids modifying any state when handling undecryptable packets,
+				// which could be injected by an attacker.
+				if wasProcessed := s.handlePacketImpl(p); !wasProcessed {
+					continue
+				}
+				// Don't set timers and send packets if the packet made us close the session.
+				select {
+				case closeErr = <-s.closeChan:
+					break runLoop
+				default:
+				}
+			case <-s.handshakeCompleteChan:
+				s.handleHandshakeComplete()
+			}
 		}
 
 		now := time.Now()
@@ -737,7 +756,6 @@ func (s *session) handlePacketImpl(rp *receivedPacket) bool {
 	var processed bool
 	data := rp.data
 	p := rp
-	s.sentPacketHandler.ReceivedBytes(protocol.ByteCount(len(data)))
 	for len(data) > 0 {
 		if counter > 0 {
 			p = p.Clone()
@@ -1158,7 +1176,9 @@ func (s *session) handleCryptoFrame(frame *wire.CryptoFrame, encLevel protocol.E
 		return err
 	}
 	if encLevelChanged {
-		s.tryDecryptingQueuedPackets()
+		// Queue all packets for decryption that have been undecryptable so far.
+		s.undecryptablePacketsToProcess = s.undecryptablePackets
+		s.undecryptablePackets = nil
 	}
 	return nil
 }
@@ -1717,13 +1737,6 @@ func (s *session) tryQueueingUndecryptablePacket(p *receivedPacket, hdr *wire.He
 		s.tracer.BufferedPacket(logging.PacketTypeFromHeader(hdr))
 	}
 	s.undecryptablePackets = append(s.undecryptablePackets, p)
-}
-
-func (s *session) tryDecryptingQueuedPackets() {
-	for _, p := range s.undecryptablePackets {
-		s.handlePacket(p)
-	}
-	s.undecryptablePackets = s.undecryptablePackets[:0]
 }
 
 func (s *session) queueControlFrame(f wire.Frame) {
