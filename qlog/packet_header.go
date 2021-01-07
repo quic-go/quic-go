@@ -45,9 +45,6 @@ type packetHeader struct {
 	KeyPhaseBit   logging.KeyPhaseBit
 	PacketNumber  logging.PacketNumber
 	PayloadLength logging.ByteCount
-	// Size of the QUIC packet (QUIC header + payload).
-	// See https://github.com/quiclog/internet-drafts/issues/40.
-	PacketSize logging.ByteCount
 
 	Version          logging.VersionNumber
 	SrcConnectionID  logging.ConnectionID
@@ -83,7 +80,6 @@ func (h packetHeader) MarshalJSONObject(enc *gojay.Encoder) {
 		enc.Int64Key("packet_number", int64(h.PacketNumber))
 	}
 	enc.Int64KeyOmitEmpty("payload_length", int64(h.PayloadLength))
-	enc.Int64KeyOmitEmpty("packet_size", int64(h.PacketSize))
 	if h.Version != 0 {
 		enc.StringKey("version", versionNumber(h.Version).String())
 	}

@@ -209,7 +209,7 @@ func (t *connectionTracer) recordTransportParameters(sentBy protocol.Perspective
 	t.mutex.Unlock()
 }
 
-func (t *connectionTracer) SentPacket(hdr *wire.ExtendedHeader, packetSize protocol.ByteCount, ack *logging.AckFrame, frames []logging.Frame) {
+func (t *connectionTracer) SentPacket(hdr *wire.ExtendedHeader, packetSize logging.ByteCount, ack *logging.AckFrame, frames []logging.Frame) {
 	numFrames := len(frames)
 	if ack != nil {
 		numFrames++
@@ -222,25 +222,25 @@ func (t *connectionTracer) SentPacket(hdr *wire.ExtendedHeader, packetSize proto
 		fs = append(fs, frame{Frame: f})
 	}
 	header := *transformExtendedHeader(hdr)
-	header.PacketSize = packetSize
 	t.mutex.Lock()
 	t.recordEvent(time.Now(), &eventPacketSent{
 		Header: header,
+		Length: packetSize,
 		Frames: fs,
 	})
 	t.mutex.Unlock()
 }
 
-func (t *connectionTracer) ReceivedPacket(hdr *wire.ExtendedHeader, packetSize protocol.ByteCount, frames []logging.Frame) {
+func (t *connectionTracer) ReceivedPacket(hdr *wire.ExtendedHeader, packetSize logging.ByteCount, frames []logging.Frame) {
 	fs := make([]frame, len(frames))
 	for i, f := range frames {
 		fs[i] = frame{Frame: f}
 	}
 	header := *transformExtendedHeader(hdr)
-	header.PacketSize = packetSize
 	t.mutex.Lock()
 	t.recordEvent(time.Now(), &eventPacketReceived{
 		Header: header,
+		Length: packetSize,
 		Frames: fs,
 	})
 	t.mutex.Unlock()
