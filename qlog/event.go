@@ -195,7 +195,7 @@ func (e eventVersionNegotiationReceived) MarshalJSONObject(enc *gojay.Encoder) {
 }
 
 type eventPacketBuffered struct {
-	PacketType packetType
+	PacketType logging.PacketType
 }
 
 func (e eventPacketBuffered) Category() category { return categoryTransport }
@@ -203,12 +203,13 @@ func (e eventPacketBuffered) Name() string       { return "packet_buffered" }
 func (e eventPacketBuffered) IsNil() bool        { return false }
 
 func (e eventPacketBuffered) MarshalJSONObject(enc *gojay.Encoder) {
-	enc.StringKey("packet_type", e.PacketType.String())
+	//nolint:gosimple
+	enc.ObjectKey("header", packetHeaderWithType{PacketType: e.PacketType})
 	enc.StringKey("trigger", "keys_unavailable")
 }
 
 type eventPacketDropped struct {
-	PacketType packetType
+	PacketType logging.PacketType
 	PacketSize protocol.ByteCount
 	Trigger    packetDropReason
 }
@@ -218,7 +219,7 @@ func (e eventPacketDropped) Name() string       { return "packet_dropped" }
 func (e eventPacketDropped) IsNil() bool        { return false }
 
 func (e eventPacketDropped) MarshalJSONObject(enc *gojay.Encoder) {
-	enc.StringKeyOmitEmpty("packet_type", e.PacketType.String())
+	enc.ObjectKey("header", packetHeaderWithType{PacketType: e.PacketType})
 	enc.ObjectKey("raw", rawInfo{Length: e.PacketSize})
 	enc.StringKey("trigger", e.Trigger.String())
 }
@@ -281,7 +282,7 @@ func (e eventUpdatedPTO) MarshalJSONObject(enc *gojay.Encoder) {
 }
 
 type eventPacketLost struct {
-	PacketType   packetType
+	PacketType   logging.PacketType
 	PacketNumber protocol.PacketNumber
 	Trigger      packetLossReason
 }
@@ -291,8 +292,10 @@ func (e eventPacketLost) Name() string       { return "packet_lost" }
 func (e eventPacketLost) IsNil() bool        { return false }
 
 func (e eventPacketLost) MarshalJSONObject(enc *gojay.Encoder) {
-	enc.StringKey("packet_type", e.PacketType.String())
-	enc.Int64Key("packet_number", int64(e.PacketNumber))
+	enc.ObjectKey("header", packetHeaderWithTypeAndPacketNumber{
+		PacketType:   e.PacketType,
+		PacketNumber: e.PacketNumber,
+	})
 	enc.StringKey("trigger", e.Trigger.String())
 }
 

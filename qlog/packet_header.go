@@ -10,21 +10,19 @@ import (
 	"github.com/francoispqt/gojay"
 )
 
-func getPacketTypeFromEncryptionLevel(encLevel protocol.EncryptionLevel) packetType {
-	var t logging.PacketType
+func getPacketTypeFromEncryptionLevel(encLevel protocol.EncryptionLevel) logging.PacketType {
 	switch encLevel {
 	case protocol.EncryptionInitial:
-		t = logging.PacketTypeInitial
+		return logging.PacketTypeInitial
 	case protocol.EncryptionHandshake:
-		t = logging.PacketTypeHandshake
+		return logging.PacketTypeHandshake
 	case protocol.Encryption0RTT:
-		t = logging.PacketType0RTT
+		return logging.PacketType0RTT
 	case protocol.Encryption1RTT:
-		t = logging.PacketType1RTT
+		return logging.PacketType1RTT
 	default:
 		panic("unknown encryption level")
 	}
-	return packetType(t)
 }
 
 type token struct {
@@ -99,4 +97,26 @@ func (h packetHeader) MarshalJSONObject(enc *gojay.Encoder) {
 	if h.Token != nil {
 		enc.ObjectKey("token", h.Token)
 	}
+}
+
+// a minimal header that only outputs the packet type
+type packetHeaderWithType struct {
+	PacketType logging.PacketType
+}
+
+func (h packetHeaderWithType) IsNil() bool { return false }
+func (h packetHeaderWithType) MarshalJSONObject(enc *gojay.Encoder) {
+	enc.StringKey("packet_type", packetType(h.PacketType).String())
+}
+
+// a minimal header that only outputs the packet type
+type packetHeaderWithTypeAndPacketNumber struct {
+	PacketType   logging.PacketType
+	PacketNumber logging.PacketNumber
+}
+
+func (h packetHeaderWithTypeAndPacketNumber) IsNil() bool { return false }
+func (h packetHeaderWithTypeAndPacketNumber) MarshalJSONObject(enc *gojay.Encoder) {
+	enc.StringKey("packet_type", packetType(h.PacketType).String())
+	enc.Int64Key("packet_number", int64(h.PacketNumber))
 }

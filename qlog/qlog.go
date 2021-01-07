@@ -269,14 +269,14 @@ func (t *connectionTracer) ReceivedVersionNegotiationPacket(hdr *wire.Header, ve
 
 func (t *connectionTracer) BufferedPacket(pt logging.PacketType) {
 	t.mutex.Lock()
-	t.recordEvent(time.Now(), &eventPacketBuffered{PacketType: packetType(pt)})
+	t.recordEvent(time.Now(), &eventPacketBuffered{PacketType: pt})
 	t.mutex.Unlock()
 }
 
 func (t *connectionTracer) DroppedPacket(pt logging.PacketType, size protocol.ByteCount, reason logging.PacketDropReason) {
 	t.mutex.Lock()
 	t.recordEvent(time.Now(), &eventPacketDropped{
-		PacketType: packetType(pt),
+		PacketType: pt,
 		PacketSize: size,
 		Trigger:    packetDropReason(reason),
 	})
