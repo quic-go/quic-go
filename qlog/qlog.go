@@ -168,6 +168,10 @@ func (t *connectionTracer) ReceivedTransportParameters(tp *wire.TransportParamet
 	t.recordTransportParameters(t.perspective.Opposite(), tp)
 }
 
+func (t *connectionTracer) RestoredTransportParameters(tp *wire.TransportParameters) {
+	// TODO: implement
+}
+
 func (t *connectionTracer) recordTransportParameters(sentBy protocol.Perspective, tp *wire.TransportParameters) {
 	owner := ownerLocal
 	if sentBy != t.perspective {

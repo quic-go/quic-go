@@ -206,6 +206,18 @@ func (mr *MockConnectionTracerMockRecorder) ReceivedVersionNegotiationPacket(arg
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReceivedVersionNegotiationPacket", reflect.TypeOf((*MockConnectionTracer)(nil).ReceivedVersionNegotiationPacket), arg0, arg1)
 }
 
+// RestoredTransportParameters mocks base method
+func (m *MockConnectionTracer) RestoredTransportParameters(arg0 *wire.TransportParameters) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "RestoredTransportParameters", arg0)
+}
+
+// RestoredTransportParameters indicates an expected call of RestoredTransportParameters
+func (mr *MockConnectionTracerMockRecorder) RestoredTransportParameters(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RestoredTransportParameters", reflect.TypeOf((*MockConnectionTracer)(nil).RestoredTransportParameters), arg0)
+}
+
 // SentPacket mocks base method
 func (m *MockConnectionTracer) SentPacket(arg0 *wire.ExtendedHeader, arg1 protocol.ByteCount, arg2 *wire.AckFrame, arg3 []Frame) {
 	m.ctrl.T.Helper()

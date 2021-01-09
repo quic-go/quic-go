@@ -107,6 +107,7 @@ type ConnectionTracer interface {
 	ClosedConnection(CloseReason)
 	SentTransportParameters(*TransportParameters)
 	ReceivedTransportParameters(*TransportParameters)
+	RestoredTransportParameters(parameters *TransportParameters) // for 0-RTT
 	SentPacket(hdr *ExtendedHeader, size ByteCount, ack *AckFrame, frames []Frame)
 	ReceivedVersionNegotiationPacket(*Header, []VersionNumber)
 	ReceivedRetry(*Header)
