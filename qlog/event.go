@@ -338,8 +338,9 @@ func (e eventKeyRetired) MarshalJSONObject(enc *gojay.Encoder) {
 }
 
 type eventTransportParameters struct {
-	Owner  owner
-	SentBy protocol.Perspective
+	Restore bool
+	Owner   owner
+	SentBy  protocol.Perspective
 
 	OriginalDestinationConnectionID protocol.ConnectionID
 	InitialSourceConnectionID       protocol.ConnectionID
@@ -366,21 +367,28 @@ type eventTransportParameters struct {
 }
 
 func (e eventTransportParameters) Category() category { return categoryTransport }
-func (e eventTransportParameters) Name() string       { return "parameters_set" }
-func (e eventTransportParameters) IsNil() bool        { return false }
+func (e eventTransportParameters) Name() string {
+	if e.Restore {
+		return "parameters_restored"
+	}
+	return "parameters_set"
+}
+func (e eventTransportParameters) IsNil() bool { return false }
 
 func (e eventTransportParameters) MarshalJSONObject(enc *gojay.Encoder) {
-	enc.StringKey("owner", e.Owner.String())
-	if e.SentBy == protocol.PerspectiveServer {
-		enc.StringKey("original_destination_connection_id", connectionID(e.OriginalDestinationConnectionID).String())
-		if e.StatelessResetToken != nil {
-			enc.StringKey("stateless_reset_token", fmt.Sprintf("%x", e.StatelessResetToken[:]))
+	if !e.Restore {
+		enc.StringKey("owner", e.Owner.String())
+		if e.SentBy == protocol.PerspectiveServer {
+			enc.StringKey("original_destination_connection_id", connectionID(e.OriginalDestinationConnectionID).String())
+			if e.StatelessResetToken != nil {
+				enc.StringKey("stateless_reset_token", fmt.Sprintf("%x", e.StatelessResetToken[:]))
+			}
+			if e.RetrySourceConnectionID != nil {
+				enc.StringKey("retry_source_connection_id", connectionID(*e.RetrySourceConnectionID).String())
+			}
 		}
-		if e.RetrySourceConnectionID != nil {
-			enc.StringKey("retry_source_connection_id", connectionID(*e.RetrySourceConnectionID).String())
-		}
+		enc.StringKey("initial_source_connection_id", connectionID(e.InitialSourceConnectionID).String())
 	}
-	enc.StringKey("initial_source_connection_id", connectionID(e.InitialSourceConnectionID).String())
 	enc.BoolKey("disable_active_migration", e.DisableActiveMigration)
 	enc.FloatKeyOmitEmpty("max_idle_timeout", milliseconds(e.MaxIdleTimeout))
 	enc.Int64KeyNullEmpty("max_udp_payload_size", int64(e.MaxUDPPayloadSize))

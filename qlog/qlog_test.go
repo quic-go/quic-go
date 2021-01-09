@@ -340,6 +340,30 @@ var _ = Describe("Tracing", func() {
 				Expect(ev).ToNot(HaveKey("original_destination_connection_id"))
 			})
 
+			It("records restored transport parameters", func() {
+				tracer.RestoredTransportParameters(&logging.TransportParameters{
+					InitialMaxStreamDataBidiLocal:  100,
+					InitialMaxStreamDataBidiRemote: 200,
+					InitialMaxStreamDataUni:        300,
+					InitialMaxData:                 400,
+					MaxIdleTimeout:                 123 * time.Millisecond,
+				})
+				entry := exportAndParseSingle()
+				Expect(entry.Time).To(BeTemporally("~", time.Now(), scaleDuration(10*time.Millisecond)))
+				Expect(entry.Name).To(Equal("transport:parameters_restored"))
+				ev := entry.Event
+				Expect(ev).ToNot(HaveKey("owner"))
+				Expect(ev).ToNot(HaveKey("original_destination_connection_id"))
+				Expect(ev).ToNot(HaveKey("stateless_reset_token"))
+				Expect(ev).ToNot(HaveKey("retry_source_connection_id"))
+				Expect(ev).ToNot(HaveKey("initial_source_connection_id"))
+				Expect(ev).To(HaveKeyWithValue("max_idle_timeout", float64(123)))
+				Expect(ev).To(HaveKeyWithValue("initial_max_data", float64(400)))
+				Expect(ev).To(HaveKeyWithValue("initial_max_stream_data_bidi_local", float64(100)))
+				Expect(ev).To(HaveKeyWithValue("initial_max_stream_data_bidi_remote", float64(200)))
+				Expect(ev).To(HaveKeyWithValue("initial_max_stream_data_uni", float64(300)))
+			})
+
 			It("records a sent packet, without an ACK", func() {
 				tracer.SentPacket(
 					&logging.ExtendedHeader{

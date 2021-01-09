@@ -169,14 +169,28 @@ func (t *connectionTracer) ReceivedTransportParameters(tp *wire.TransportParamet
 }
 
 func (t *connectionTracer) RestoredTransportParameters(tp *wire.TransportParameters) {
-	// TODO: implement
+	ev := t.toTransportParameters(tp)
+	ev.Restore = true
+
+	t.mutex.Lock()
+	t.recordEvent(time.Now(), ev)
+	t.mutex.Unlock()
 }
 
 func (t *connectionTracer) recordTransportParameters(sentBy protocol.Perspective, tp *wire.TransportParameters) {
-	owner := ownerLocal
+	ev := t.toTransportParameters(tp)
+	ev.Owner = ownerLocal
 	if sentBy != t.perspective {
-		owner = ownerRemote
+		ev.Owner = ownerRemote
 	}
+	ev.SentBy = sentBy
+
+	t.mutex.Lock()
+	t.recordEvent(time.Now(), ev)
+	t.mutex.Unlock()
+}
+
+func (t *connectionTracer) toTransportParameters(tp *wire.TransportParameters) *eventTransportParameters {
 	var pa *preferredAddress
 	if tp.PreferredAddress != nil {
 		pa = &preferredAddress{
@@ -188,10 +202,7 @@ func (t *connectionTracer) recordTransportParameters(sentBy protocol.Perspective
 			StatelessResetToken: tp.PreferredAddress.StatelessResetToken,
 		}
 	}
-	t.mutex.Lock()
-	t.recordEvent(time.Now(), &eventTransportParameters{
-		Owner:                           owner,
-		SentBy:                          sentBy,
+	return &eventTransportParameters{
 		OriginalDestinationConnectionID: tp.OriginalDestinationConnectionID,
 		InitialSourceConnectionID:       tp.InitialSourceConnectionID,
 		RetrySourceConnectionID:         tp.RetrySourceConnectionID,
@@ -210,8 +221,7 @@ func (t *connectionTracer) recordTransportParameters(sentBy protocol.Perspective
 		InitialMaxStreamsUni:            int64(tp.MaxUniStreamNum),
 		PreferredAddress:                pa,
 		MaxDatagramFrameSize:            tp.MaxDatagramFrameSize,
-	})
-	t.mutex.Unlock()
+	}
 }
 
 func (t *connectionTracer) SentPacket(hdr *wire.ExtendedHeader, packetSize logging.ByteCount, ack *logging.AckFrame, frames []logging.Frame) {
