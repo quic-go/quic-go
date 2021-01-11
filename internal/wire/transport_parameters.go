@@ -123,24 +123,18 @@ func (p *TransportParameters) unmarshal(r *bytes.Reader, sentBy protocol.Perspec
 		}
 		parameterIDs = append(parameterIDs, paramID)
 		switch paramID {
-		case ackDelayExponentParameterID:
-			if err := p.readNumericTransportParameter(r, paramID, int(paramLen)); err != nil {
-				return err
-			}
-		case maxAckDelayParameterID:
-			if err := p.readNumericTransportParameter(r, paramID, int(paramLen)); err != nil {
-				return err
-			}
-		case initialMaxStreamDataBidiLocalParameterID,
+		case maxIdleTimeoutParameterID,
+			maxUDPPayloadSizeParameterID,
+			initialMaxDataParameterID,
+			initialMaxStreamDataBidiLocalParameterID,
 			initialMaxStreamDataBidiRemoteParameterID,
 			initialMaxStreamDataUniParameterID,
-			initialMaxDataParameterID,
 			initialMaxStreamsBidiParameterID,
 			initialMaxStreamsUniParameterID,
-			maxIdleTimeoutParameterID,
-			maxUDPPayloadSizeParameterID,
+			maxAckDelayParameterID,
 			activeConnectionIDLimitParameterID,
-			maxDatagramFrameSizeParameterID:
+			maxDatagramFrameSizeParameterID,
+			ackDelayExponentParameterID:
 			if err := p.readNumericTransportParameter(r, paramID, int(paramLen)); err != nil {
 				return err
 			}
