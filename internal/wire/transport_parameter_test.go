@@ -32,6 +32,7 @@ func appendInitialSourceConnectionID(b []byte) []byte {
 
 func TestTransportParametersStringRepresentation(t *testing.T) {
 	rcid := protocol.ParseConnectionID([]byte{0xde, 0xad, 0xc0, 0xde})
+	minAckDelay := 42 * time.Millisecond
 	p := &TransportParameters{
 		InitialMaxStreamDataBidiLocal:   1234,
 		InitialMaxStreamDataBidiRemote:  2345,
@@ -49,8 +50,9 @@ func TestTransportParametersStringRepresentation(t *testing.T) {
 		ActiveConnectionIDLimit:         123,
 		MaxDatagramFrameSize:            876,
 		EnableResetStreamAt:             true,
+		MinAckDelay:                     &minAckDelay,
 	}
-	expected := "&wire.TransportParameters{OriginalDestinationConnectionID: deadbeef, InitialSourceConnectionID: decafbad, RetrySourceConnectionID: deadc0de, InitialMaxStreamDataBidiLocal: 1234, InitialMaxStreamDataBidiRemote: 2345, InitialMaxStreamDataUni: 3456, InitialMaxData: 4567, MaxBidiStreamNum: 1337, MaxUniStreamNum: 7331, MaxIdleTimeout: 42s, AckDelayExponent: 14, MaxAckDelay: 37ms, ActiveConnectionIDLimit: 123, StatelessResetToken: 0x112233445566778899aabbccddeeff00, MaxDatagramFrameSize: 876, EnableResetStreamAt: true}"
+	expected := "&wire.TransportParameters{OriginalDestinationConnectionID: deadbeef, InitialSourceConnectionID: decafbad, RetrySourceConnectionID: deadc0de, InitialMaxStreamDataBidiLocal: 1234, InitialMaxStreamDataBidiRemote: 2345, InitialMaxStreamDataUni: 3456, InitialMaxData: 4567, MaxBidiStreamNum: 1337, MaxUniStreamNum: 7331, MaxIdleTimeout: 42s, AckDelayExponent: 14, MaxAckDelay: 37ms, ActiveConnectionIDLimit: 123, StatelessResetToken: 0x112233445566778899aabbccddeeff00, MaxDatagramFrameSize: 876, EnableResetStreamAt: true, MinAckDelay: 42ms}"
 	require.Equal(t, expected, p.String())
 }
 
@@ -78,6 +80,7 @@ func TestMarshalAndUnmarshalTransportParameters(t *testing.T) {
 	var token protocol.StatelessResetToken
 	rand.Read(token[:])
 	rcid := protocol.ParseConnectionID([]byte{0xde, 0xad, 0xc0, 0xde})
+	minAckDelay := 1337 * time.Millisecond
 	params := &TransportParameters{
 		InitialMaxStreamDataBidiLocal:   protocol.ByteCount(getRandomValue()),
 		InitialMaxStreamDataBidiRemote:  protocol.ByteCount(getRandomValue()),
@@ -97,6 +100,7 @@ func TestMarshalAndUnmarshalTransportParameters(t *testing.T) {
 		MaxUDPPayloadSize:               1200 + protocol.ByteCount(getRandomValueUpTo(quicvarint.Max-1200)),
 		MaxDatagramFrameSize:            protocol.ByteCount(getRandomValue()),
 		EnableResetStreamAt:             getRandomValue()%2 == 0,
+		MinAckDelay:                     &minAckDelay,
 	}
 	data := params.Marshal(protocol.PerspectiveServer)
 
@@ -120,6 +124,8 @@ func TestMarshalAndUnmarshalTransportParameters(t *testing.T) {
 	require.Equal(t, params.MaxUDPPayloadSize, p.MaxUDPPayloadSize)
 	require.Equal(t, params.MaxDatagramFrameSize, p.MaxDatagramFrameSize)
 	require.Equal(t, params.EnableResetStreamAt, p.EnableResetStreamAt)
+	require.NotNil(t, p.MinAckDelay)
+	require.Equal(t, minAckDelay, *p.MinAckDelay)
 }
 
 func TestMarshalAdditionalTransportParameters(t *testing.T) {

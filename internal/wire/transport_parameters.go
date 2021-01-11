@@ -47,6 +47,8 @@ const (
 	maxDatagramFrameSizeParameterID transportParameterID = 0x20
 	// https://datatracker.ietf.org/doc/draft-ietf-quic-reliable-stream-reset/06/
 	resetStreamAtParameterID transportParameterID = 0x17f7586d2cb571
+	// https://datatracker.ietf.org/doc/draft-ietf-quic-ack-frequency/11/
+	minAckDelayParameterID transportParameterID = 0xff04de1b
 )
 
 // PreferredAddress is the value encoding in the preferred_address transport parameter
@@ -86,6 +88,7 @@ type TransportParameters struct {
 
 	MaxDatagramFrameSize protocol.ByteCount // RFC 9221
 	EnableResetStreamAt  bool               // https://datatracker.ietf.org/doc/draft-ietf-quic-reliable-stream-reset/06/
+	MinAckDelay          *time.Duration
 }
 
 // Unmarshal the transport parameters
@@ -143,7 +146,8 @@ func (p *TransportParameters) unmarshal(b []byte, sentBy protocol.Perspective, f
 			initialMaxStreamsUniParameterID,
 			maxAckDelayParameterID,
 			maxDatagramFrameSizeParameterID,
-			ackDelayExponentParameterID:
+			ackDelayExponentParameterID,
+			minAckDelayParameterID:
 			if err := p.readNumericTransportParameter(b, paramID, int(paramLen)); err != nil {
 				return err
 			}
@@ -334,6 +338,9 @@ func (p *TransportParameters) readNumericTransportParameter(b []byte, paramID tr
 		p.ActiveConnectionIDLimit = val
 	case maxDatagramFrameSizeParameterID:
 		p.MaxDatagramFrameSize = protocol.ByteCount(val)
+	case minAckDelayParameterID:
+		mad := time.Duration(val) * time.Microsecond
+		p.MinAckDelay = &mad
 	default:
 		return fmt.Errorf("TransportParameter BUG: transport parameter %d not found", paramID)
 	}
@@ -444,6 +451,9 @@ func (p *TransportParameters) Marshal(pers protocol.Perspective) []byte {
 	if p.EnableResetStreamAt {
 		b = quicvarint.Append(b, uint64(resetStreamAtParameterID))
 		b = quicvarint.Append(b, 0)
+	}
+	if p.MinAckDelay != nil {
+		b = p.marshalVarintParam(b, minAckDelayParameterID, uint64(*p.MinAckDelay/time.Microsecond))
 	}
 
 	if pers == protocol.PerspectiveClient && len(AdditionalTransportParametersClient) > 0 {
@@ -561,6 +571,10 @@ func (p *TransportParameters) String() string {
 	}
 	logString += ", EnableResetStreamAt: %t"
 	logParams = append(logParams, p.EnableResetStreamAt)
+	if p.MinAckDelay != nil {
+		logString += ", MinAckDelay: %s"
+		logParams = append(logParams, *p.MinAckDelay)
+	}
 	logString += "}"
 	return fmt.Sprintf(logString, logParams...)
 }
