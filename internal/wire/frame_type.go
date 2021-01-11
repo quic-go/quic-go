@@ -31,6 +31,7 @@ const (
 	FrameTypeApplicationClose   FrameType = 0x1d
 	FrameTypeHandshakeDone      FrameType = 0x1e
 	FrameTypeResetStreamAt      FrameType = 0x24 // https://datatracker.ietf.org/doc/draft-ietf-quic-reliable-stream-reset/06/
+	FrameTypeAckFrequency       FrameType = 0xaf // https://datatracker.ietf.org/doc/draft-ietf-quic-ack-frequency/11/
 
 	FrameTypeDatagramNoLength   FrameType = 0x30
 	FrameTypeDatagramWithLength FrameType = 0x31

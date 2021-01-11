@@ -473,6 +473,7 @@ func (c *Conn) preSetup() {
 	c.frameParser = *wire.NewFrameParser(
 		c.config.EnableDatagrams,
 		c.config.EnableStreamResetPartialDelivery,
+		false, // ACK_FREQUENCY is not supported yet
 	)
 	c.rttStats = &utils.RTTStats{}
 	c.connFlowController = flowcontrol.NewConnectionFlowController(

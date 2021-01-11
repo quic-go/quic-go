@@ -42,6 +42,7 @@ func TestIsFrameTypeAckEliciting(t *testing.T) {
 		wire.FrameTypeResetStreamAt:      true,
 		wire.FrameTypeDatagramNoLength:   true,
 		wire.FrameTypeDatagramWithLength: true,
+		wire.FrameTypeAckFrequency:       true,
 	}
 
 	for ft, expected := range testCases {
@@ -61,6 +62,7 @@ func TestAckElicitingFrames(t *testing.T) {
 		&wire.MaxDataFrame{}:         true,
 		&wire.MaxStreamDataFrame{}:   true,
 		&wire.StopSendingFrame{}:     true,
+		&wire.AckFrequencyFrame{}:    true,
 	}
 
 	for f, expected := range testCases {
