@@ -297,7 +297,8 @@ var newSession = func(
 		RetrySourceConnectionID:         retrySrcConnID,
 	}
 	if s.config.EnableDatagrams {
-		params.MaxDatagramFrameSize = protocol.MaxDatagramFrameSize
+		val := protocol.MaxDatagramFrameSize
+		params.MaxDatagramFrameSize = &val
 	}
 	if s.tracer != nil {
 		s.tracer.SentTransportParameters(params)
@@ -418,7 +419,8 @@ var newClientSession = func(
 		InitialSourceConnectionID:      srcConnID,
 	}
 	if s.config.EnableDatagrams {
-		params.MaxDatagramFrameSize = protocol.MaxDatagramFrameSize
+		val := protocol.MaxDatagramFrameSize
+		params.MaxDatagramFrameSize = &val
 	}
 	if s.tracer != nil {
 		s.tracer.SentTransportParameters(params)
@@ -644,7 +646,7 @@ func (s *session) Context() context.Context {
 }
 
 func (s *session) supportsDatagrams() bool {
-	return s.peerParams.MaxDatagramFrameSize != protocol.InvalidByteCount
+	return s.peerParams.MaxDatagramFrameSize != nil
 }
 
 func (s *session) ConnectionState() ConnectionState {
@@ -1754,7 +1756,7 @@ func (s *session) onStreamCompleted(id protocol.StreamID) {
 
 func (s *session) SendMessage(p []byte) error {
 	f := &wire.DatagramFrame{DataLenPresent: true}
-	if protocol.ByteCount(len(p)) > f.MaxDataLen(s.peerParams.MaxDatagramFrameSize, s.version) {
+	if protocol.ByteCount(len(p)) > f.MaxDataLen(*s.peerParams.MaxDatagramFrameSize, s.version) {
 		return errors.New("message too large")
 	}
 	f.Data = make([]byte, len(p))

@@ -84,7 +84,7 @@ type TransportParameters struct {
 	StatelessResetToken     *protocol.StatelessResetToken
 	ActiveConnectionIDLimit uint64
 
-	MaxDatagramFrameSize protocol.ByteCount
+	MaxDatagramFrameSize *protocol.ByteCount
 }
 
 // Unmarshal the transport parameters
@@ -106,7 +106,6 @@ func (p *TransportParameters) unmarshal(r *bytes.Reader, sentBy protocol.Perspec
 
 	p.AckDelayExponent = protocol.DefaultAckDelayExponent
 	p.MaxAckDelay = protocol.DefaultMaxAckDelay
-	p.MaxDatagramFrameSize = protocol.InvalidByteCount
 
 	for r.Len() > 0 {
 		paramIDInt, err := quicvarint.Read(r)
@@ -311,7 +310,8 @@ func (p *TransportParameters) readNumericTransportParameter(
 	case activeConnectionIDLimitParameterID:
 		p.ActiveConnectionIDLimit = val
 	case maxDatagramFrameSizeParameterID:
-		p.MaxDatagramFrameSize = protocol.ByteCount(val)
+		v := protocol.ByteCount(val)
+		p.MaxDatagramFrameSize = &v
 	default:
 		return fmt.Errorf("TransportParameter BUG: transport parameter %d not found", paramID)
 	}
@@ -398,8 +398,8 @@ func (p *TransportParameters) Marshal(pers protocol.Perspective) []byte {
 		quicvarint.Write(b, uint64(p.RetrySourceConnectionID.Len()))
 		b.Write(p.RetrySourceConnectionID.Bytes())
 	}
-	if p.MaxDatagramFrameSize != protocol.InvalidByteCount {
-		p.marshalVarintParam(b, maxDatagramFrameSizeParameterID, uint64(p.MaxDatagramFrameSize))
+	if p.MaxDatagramFrameSize != nil {
+		p.marshalVarintParam(b, maxDatagramFrameSizeParameterID, uint64(*p.MaxDatagramFrameSize))
 	}
 	return b.Bytes()
 }
@@ -473,9 +473,9 @@ func (p *TransportParameters) String() string {
 		logString += ", StatelessResetToken: %#x"
 		logParams = append(logParams, *p.StatelessResetToken)
 	}
-	if p.MaxDatagramFrameSize != protocol.InvalidByteCount {
+	if p.MaxDatagramFrameSize != nil {
 		logString += ", MaxDatagramFrameSize: %d"
-		logParams = append(logParams, p.MaxDatagramFrameSize)
+		logParams = append(logParams, *p.MaxDatagramFrameSize)
 	}
 	logString += "}"
 	return fmt.Sprintf(logString, logParams...)
