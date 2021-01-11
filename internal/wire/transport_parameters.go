@@ -303,11 +303,7 @@ func (p *TransportParameters) readNumericTransportParameter(
 		if val > uint64(protocol.MaxMaxAckDelay/time.Millisecond) {
 			return fmt.Errorf("invalid value for max_ack_delay: %dms (maximum %dms)", val, protocol.MaxMaxAckDelay/time.Millisecond)
 		}
-		maxAckDelay := time.Duration(val) * time.Millisecond
-		if maxAckDelay < 0 {
-			maxAckDelay = utils.InfDuration
-		}
-		p.MaxAckDelay = maxAckDelay
+		p.MaxAckDelay = time.Duration(val) * time.Millisecond
 	case activeConnectionIDLimitParameterID:
 		p.ActiveConnectionIDLimit = val
 	case maxDatagramFrameSizeParameterID:
