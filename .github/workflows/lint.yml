@@ -16,7 +16,9 @@ jobs:
           go mod tidy
           diff go.mod go.mod.orig
           diff go.sum go.sum.orig
-      - name: staticcheck
+      - run: go get honnef.co/go/tools/cmd/staticcheck
+      - run: staticcheck ./...
+      - name: annotate
         run: |
-          go get honnef.co/go/tools/cmd/staticcheck
-          staticcheck ./...
+          text="Test error"
+          echo "::error file=example/staticerrors/main.go,line=10,col=2::$text"
