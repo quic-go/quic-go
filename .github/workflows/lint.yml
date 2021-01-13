@@ -16,8 +16,7 @@ jobs:
           go mod tidy
           diff go.mod go.mod.orig
           diff go.sum go.sum.orig
-      - name: golangci-lint
-        uses: golangci/golangci-lint-action@v2
-        with:
-          # Required: the version of golangci-lint is required and must be specified without patch version: we always use the latest patch version.
-          version: v1.34.1
+      - name: staticcheck
+        run: |
+          go get honnef.co/go/tools/cmd/staticcheck
+          staticcheck ./...
