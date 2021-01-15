@@ -1,6 +1,7 @@
 on: [push, pull_request]
+
 jobs:
-  lint:
+  check:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
@@ -16,6 +17,10 @@ jobs:
           go mod tidy
           diff go.mod go.mod.orig
           diff go.sum go.sum.orig
+  golangci-lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
       - name: golangci-lint
         uses: golangci/golangci-lint-action@v2
         with:
