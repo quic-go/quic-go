@@ -1,6 +1,8 @@
 package quic
 
 import (
+	"io/ioutil"
+	"log"
 	"sync"
 	"testing"
 
@@ -21,6 +23,10 @@ var _ = BeforeEach(func() {
 
 	// reset the sync.Once
 	connMuxerOnce = *new(sync.Once)
+})
+
+var _ = BeforeSuite(func() {
+	log.SetOutput(ioutil.Discard)
 })
 
 var _ = AfterEach(func() {

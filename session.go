@@ -88,7 +88,6 @@ type sessionRunner interface {
 	ReplaceWithClosed(protocol.ConnectionID, packetHandler)
 	AddResetToken(protocol.StatelessResetToken, packetHandler)
 	RemoveResetToken(protocol.StatelessResetToken)
-	RetireResetToken(protocol.StatelessResetToken)
 }
 
 type handshakeRunner struct {
@@ -258,7 +257,6 @@ var newSession = func(
 		destConnID,
 		func(token protocol.StatelessResetToken) { runner.AddResetToken(token, s) },
 		runner.RemoveResetToken,
-		runner.RetireResetToken,
 		s.queueControlFrame,
 	)
 	s.connIDGenerator = newConnIDGenerator(
@@ -382,7 +380,6 @@ var newClientSession = func(
 		destConnID,
 		func(token protocol.StatelessResetToken) { runner.AddResetToken(token, s) },
 		runner.RemoveResetToken,
-		runner.RetireResetToken,
 		s.queueControlFrame,
 	)
 	s.connIDGenerator = newConnIDGenerator(
@@ -1583,9 +1580,9 @@ func (s *session) sendPackedPacket(packet *packedPacket) {
 	if s.firstAckElicitingPacketAfterIdleSentTime.IsZero() && packet.IsAckEliciting() {
 		s.firstAckElicitingPacketAfterIdleSentTime = now
 	}
+	s.logPacket(now, packet)
 	s.sentPacketHandler.SentPacket(packet.ToAckHandlerPacket(time.Now(), s.retransmissionQueue))
 	s.connIDManager.SentPacket()
-	s.logPacket(now, packet)
 	s.sendQueue.Send(packet.buffer)
 }
 

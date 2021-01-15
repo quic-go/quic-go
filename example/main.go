@@ -230,7 +230,7 @@ func main() {
 			var err error
 			if *tcp {
 				certFile, keyFile := testdata.GetCertificatePaths()
-				err = http3.ListenAndServe(bCap, certFile, keyFile, nil)
+				err = http3.ListenAndServe(bCap, certFile, keyFile, handler)
 			} else {
 				server := http3.Server{
 					Server:     &http.Server{Handler: handler, Addr: bCap},

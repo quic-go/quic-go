@@ -33,12 +33,14 @@ type headerDecryptor interface {
 // LongHeaderOpener opens a long header packet
 type LongHeaderOpener interface {
 	headerDecryptor
+	DecodePacketNumber(wirePN protocol.PacketNumber, wirePNLen protocol.PacketNumberLen) protocol.PacketNumber
 	Open(dst, src []byte, pn protocol.PacketNumber, associatedData []byte) ([]byte, error)
 }
 
 // ShortHeaderOpener opens a short header packet
 type ShortHeaderOpener interface {
 	headerDecryptor
+	DecodePacketNumber(wirePN protocol.PacketNumber, wirePNLen protocol.PacketNumberLen) protocol.PacketNumber
 	Open(dst, src []byte, rcvTime time.Time, pn protocol.PacketNumber, kp protocol.KeyPhaseBit, associatedData []byte) ([]byte, error)
 }
 

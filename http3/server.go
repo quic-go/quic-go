@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"net"
 	"net/http"
 	"runtime"
@@ -21,6 +22,13 @@ import (
 	"github.com/Psiphon-Labs/quic-go/internal/utils"
 	"github.com/marten-seemann/qpack"
 )
+
+func init() {
+	// Chrome compatibility mode:
+	// Chrome 87 doesn't support key updates (support was added in Chrome 88).
+	// Don't initiate key updates to avoid breaking large downloads.
+	handshake.KeyUpdateInterval = math.MaxUint64
+}
 
 // allows mocking of quic.Listen and quic.ListenAddr
 var (
@@ -140,18 +148,24 @@ func (s *Server) serveImpl(tlsConf *tls.Config, conn net.PacketConn) error {
 			if qconn, ok := ch.Conn.(handshake.ConnWithVersion); ok && qconn.GetQUICVersion() == quic.VersionDraft32 {
 				proto = nextProtoH3Draft32
 			}
-			conf := tlsConf
+			config := tlsConf
 			if tlsConf.GetConfigForClient != nil {
 				getConfigForClient := tlsConf.GetConfigForClient
 				var err error
-				conf, err = getConfigForClient(ch)
+				conf, err := getConfigForClient(ch)
 				if err != nil {
 					return nil, err
 				}
+				if conf != nil {
+					config = conf
+				}
 			}
-			conf = conf.Clone()
-			conf.NextProtos = []string{proto}
-			return conf, nil
+			if config == nil {
+				return nil, nil
+			}
+			config = config.Clone()
+			config.NextProtos = []string{proto}
+			return config, nil
 		},
 	}
 
