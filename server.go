@@ -463,13 +463,7 @@ func (s *baseServer) handleInitialImpl(p *receivedPacket, hdr *wire.Header) erro
 		return nil
 	}
 	sess.handlePacket(p)
-	for {
-		p := s.zeroRTTQueue.Dequeue(hdr.DestConnectionID)
-		if p == nil {
-			break
-		}
-		sess.handlePacket(p)
-	}
+	s.zeroRTTQueue.DequeueToSession(hdr.DestConnectionID, sess)
 	return nil
 }
 

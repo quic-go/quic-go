@@ -15,7 +15,7 @@ const MaxPacketSizeIPv6 = 1232
 const MaxCongestionWindowPackets = 10000
 
 // MaxUndecryptablePackets limits the number of undecryptable packets that are queued in the session.
-const MaxUndecryptablePackets = 33
+const MaxUndecryptablePackets = 32
 
 // ConnectionFlowControlMultiplier determines how much larger the connection flow control windows needs to be relative to any stream's flow control window
 // This is the value that Chromium is using
@@ -192,4 +192,4 @@ const Max0RTTQueues = 32
 // When a new session is created, all buffered packets are passed to the session immediately.
 // To avoid blocking, this value has to be smaller than MaxSessionUnprocessedPackets.
 // To avoid packets being dropped as undecryptable by the session, this value has to be smaller than MaxUndecryptablePackets.
-const Max0RTTQueueLen = 32
+const Max0RTTQueueLen = 31

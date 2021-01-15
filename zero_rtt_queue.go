@@ -45,21 +45,23 @@ func (h *zeroRTTQueue) Enqueue(connID protocol.ConnectionID, p *receivedPacket) 
 	entry.packets = append(entry.packets, p)
 }
 
-func (h *zeroRTTQueue) Dequeue(connID protocol.ConnectionID) *receivedPacket {
+func (h *zeroRTTQueue) DequeueToSession(connID protocol.ConnectionID, sess packetHandler) {
 	h.mutex.Lock()
 	defer h.mutex.Unlock()
 
+	h.dequeueToSession(connID, sess)
+}
+
+func (h *zeroRTTQueue) dequeueToSession(connID protocol.ConnectionID, sess packetHandler) {
 	entry, ok := h.queue[string(connID)]
 	if !ok {
-		return nil
+		return
 	}
-	p := entry.packets[0]
-	entry.packets = entry.packets[1:]
-	if len(entry.packets) == 0 {
-		entry.timer.Stop()
-		delete(h.queue, string(connID))
+	entry.timer.Stop()
+	for _, p := range entry.packets {
+		sess.handlePacket(p)
 	}
-	return p
+	delete(h.queue, string(connID))
 }
 
 func (h *zeroRTTQueue) deleteQueue(connID protocol.ConnectionID) {
