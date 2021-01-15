@@ -244,6 +244,7 @@ var _ = Describe("Tracing", func() {
 					InitialSourceConnectionID:       protocol.ConnectionID{0xde, 0xad, 0xbe, 0xef},
 					RetrySourceConnectionID:         &protocol.ConnectionID{0xde, 0xca, 0xfb, 0xad},
 					ActiveConnectionIDLimit:         7,
+					MaxDatagramFrameSize:            protocol.InvalidByteCount,
 				})
 				entry := exportAndParseSingle()
 				Expect(entry.Time).To(BeTemporally("~", time.Now(), scaleDuration(10*time.Millisecond)))
@@ -265,6 +266,7 @@ var _ = Describe("Tracing", func() {
 				Expect(ev).To(HaveKeyWithValue("initial_max_streams_bidi", float64(10)))
 				Expect(ev).To(HaveKeyWithValue("initial_max_streams_uni", float64(20)))
 				Expect(ev).ToNot(HaveKey("preferred_address"))
+				Expect(ev).ToNot(HaveKey("max_datagram_frame_size"))
 			})
 
 			It("records the server's transport parameters, without a stateless reset token", func() {
@@ -315,6 +317,17 @@ var _ = Describe("Tracing", func() {
 				Expect(pa).To(HaveKeyWithValue("port_v6", float64(456)))
 				Expect(pa).To(HaveKeyWithValue("connection_id", "0807060504030201"))
 				Expect(pa).To(HaveKeyWithValue("stateless_reset_token", "0f0e0d0c0b0a09080706050403020100"))
+			})
+
+			It("records transport parameters that enable the datagram extension", func() {
+				tracer.SentTransportParameters(&logging.TransportParameters{
+					MaxDatagramFrameSize: 1337,
+				})
+				entry := exportAndParseSingle()
+				Expect(entry.Time).To(BeTemporally("~", time.Now(), scaleDuration(10*time.Millisecond)))
+				Expect(entry.Name).To(Equal("transport:parameters_set"))
+				ev := entry.Event
+				Expect(ev).To(HaveKeyWithValue("max_datagram_frame_size", float64(1337)))
 			})
 
 			It("records received transport parameters", func() {

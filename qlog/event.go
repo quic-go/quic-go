@@ -361,6 +361,8 @@ type eventTransportParameters struct {
 	InitialMaxStreamsUni           int64
 
 	PreferredAddress *preferredAddress
+
+	MaxDatagramFrameSize protocol.ByteCount
 }
 
 func (e eventTransportParameters) Category() category { return categoryTransport }
@@ -381,7 +383,7 @@ func (e eventTransportParameters) MarshalJSONObject(enc *gojay.Encoder) {
 	enc.StringKey("initial_source_connection_id", connectionID(e.InitialSourceConnectionID).String())
 	enc.BoolKey("disable_active_migration", e.DisableActiveMigration)
 	enc.FloatKeyOmitEmpty("max_idle_timeout", milliseconds(e.MaxIdleTimeout))
-	enc.Uint64KeyNullEmpty("max_udp_payload_size", uint64(e.MaxUDPPayloadSize))
+	enc.Int64KeyNullEmpty("max_udp_payload_size", int64(e.MaxUDPPayloadSize))
 	enc.Uint8KeyOmitEmpty("ack_delay_exponent", e.AckDelayExponent)
 	enc.FloatKeyOmitEmpty("max_ack_delay", milliseconds(e.MaxAckDelay))
 	enc.Uint64KeyOmitEmpty("active_connection_id_limit", e.ActiveConnectionIDLimit)
@@ -395,6 +397,9 @@ func (e eventTransportParameters) MarshalJSONObject(enc *gojay.Encoder) {
 
 	if e.PreferredAddress != nil {
 		enc.ObjectKey("preferred_address", e.PreferredAddress)
+	}
+	if e.MaxDatagramFrameSize != protocol.InvalidByteCount {
+		enc.Int64Key("max_datagram_frame_size", int64(e.MaxDatagramFrameSize))
 	}
 }
 

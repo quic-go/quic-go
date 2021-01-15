@@ -205,6 +205,7 @@ func (t *connectionTracer) recordTransportParameters(sentBy protocol.Perspective
 		InitialMaxStreamsBidi:           int64(tp.MaxBidiStreamNum),
 		InitialMaxStreamsUni:            int64(tp.MaxUniStreamNum),
 		PreferredAddress:                pa,
+		MaxDatagramFrameSize:            tp.MaxDatagramFrameSize,
 	})
 	t.mutex.Unlock()
 }
