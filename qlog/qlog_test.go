@@ -692,7 +692,7 @@ var _ = Describe("Tracing", func() {
 				Expect(ev).To(HaveKeyWithValue("packet_number_space", "handshake"))
 				Expect(ev).To(HaveKey("delta"))
 				delta := time.Duration(ev["delta"].(float64)*1e6) * time.Nanosecond
-				Expect(entry.Time.Add(delta)).To(BeTemporally("~", timeout, 10*time.Microsecond))
+				Expect(entry.Time.Add(delta)).To(BeTemporally("~", timeout, scaleDuration(10*time.Microsecond)))
 			})
 
 			It("records when the loss timer expires", func() {
