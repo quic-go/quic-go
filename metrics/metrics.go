@@ -165,6 +165,7 @@ func (t *connTracer) ClosedConnection(r logging.CloseReason) {
 }
 func (t *connTracer) SentTransportParameters(*logging.TransportParameters)     {}
 func (t *connTracer) ReceivedTransportParameters(*logging.TransportParameters) {}
+func (t *connTracer) RestoredTransportParameters(*logging.TransportParameters) {}
 func (t *connTracer) SentPacket(hdr *logging.ExtendedHeader, _ logging.ByteCount, _ *logging.AckFrame, _ []logging.Frame) {
 	typ := logging.PacketTypeFromHeader(&hdr.Header)
 	if typ == logging.PacketType1RTT {

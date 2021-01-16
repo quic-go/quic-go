@@ -126,6 +126,13 @@ var _ = Describe("Tracing", func() {
 			tracer.ReceivedTransportParameters(tp)
 		})
 
+		It("traces the RestoredTransportParameters event", func() {
+			tp := &wire.TransportParameters{InitialMaxData: 1337}
+			tr1.EXPECT().RestoredTransportParameters(tp)
+			tr2.EXPECT().RestoredTransportParameters(tp)
+			tracer.RestoredTransportParameters(tp)
+		})
+
 		It("traces the SentPacket event", func() {
 			hdr := &ExtendedHeader{Header: Header{DestConnectionID: ConnectionID{1, 2, 3}}}
 			ack := &AckFrame{AckRanges: []AckRange{{Smallest: 1, Largest: 10}}}
