@@ -212,9 +212,10 @@ type session struct {
 }
 
 var (
-	_ Session      = &session{}
-	_ EarlySession = &session{}
-	_ streamSender = &session{}
+	_                       Session      = &session{}
+	_                       EarlySession = &session{}
+	_                       streamSender = &session{}
+	deadlineSendImmediately              = time.Time{}.Add(42 * time.Millisecond) // any value > time.Time{} and before time.Now() is fine
 )
 
 var newSession = func(
@@ -1504,7 +1505,11 @@ func (s *session) sendPackets() error {
 			}
 		case ackhandler.SendAny:
 			if s.handshakeComplete && !s.sentPacketHandler.HasPacingBudget() {
-				s.pacingDeadline = s.sentPacketHandler.TimeUntilSend()
+				deadline := s.sentPacketHandler.TimeUntilSend()
+				if deadline.IsZero() {
+					deadline = deadlineSendImmediately
+				}
+				s.pacingDeadline = deadline
 				return nil
 			}
 			sent, err := s.sendPacket()

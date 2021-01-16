@@ -57,6 +57,7 @@ func (p *pacer) maxBurstSize() protocol.ByteCount {
 }
 
 // TimeUntilSend returns when the next packet should be sent.
+// It returns the zero value of time.Time if a packet can be sent immediately.
 func (p *pacer) TimeUntilSend() time.Time {
 	if p.budgetAtLastSent >= maxDatagramSize {
 		return time.Time{}

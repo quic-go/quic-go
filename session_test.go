@@ -1379,7 +1379,25 @@ var _ = Describe("Session", func() {
 				sess.run()
 			}()
 			sess.scheduleSending()
-			time.Sleep(50 * time.Millisecond) // make sure that only 2 packes are sent
+			time.Sleep(50 * time.Millisecond) // make sure that only 2 packets are sent
+		})
+
+		It("sends multiple packets, when the pacer allows immediate sending", func() {
+			sph.EXPECT().SentPacket(gomock.Any())
+			sph.EXPECT().HasPacingBudget()
+			sph.EXPECT().HasPacingBudget().Return(true).AnyTimes()
+			sph.EXPECT().TimeUntilSend() // return the zero value of time.Time{}
+			sph.EXPECT().SendMode().Return(ackhandler.SendAny).Times(3)
+			packer.EXPECT().PackPacket().Return(getPacket(10), nil)
+			packer.EXPECT().PackPacket().Return(nil, nil)
+			mconn.EXPECT().Write(gomock.Any())
+			go func() {
+				defer GinkgoRecover()
+				cryptoSetup.EXPECT().RunHandshake().MaxTimes(1)
+				sess.run()
+			}()
+			sess.scheduleSending()
+			time.Sleep(50 * time.Millisecond) // make sure that only 1 packet is sent
 		})
 
 		// when becoming congestion limited, at some point the SendMode will change from SendAny to SendAck
