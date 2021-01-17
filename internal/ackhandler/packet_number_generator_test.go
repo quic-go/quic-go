@@ -2,6 +2,7 @@ package ackhandler
 
 import (
 	"fmt"
+	"math"
 
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 
@@ -26,6 +27,10 @@ var _ = Describe("Skipping Packet Number Generator", func() {
 	const initialPN protocol.PacketNumber = 8
 	const initialPeriod protocol.PacketNumber = 25
 	const maxPeriod protocol.PacketNumber = 300
+
+	It("uses a maximum period that is sufficiently small such that using a 32-bit random number is ok", func() {
+		Expect(2 * protocol.SkipPacketMaxPeriod).To(BeNumerically("<", math.MaxInt32))
+	})
 
 	It("can be initialized to return any first packet number", func() {
 		png := newSkippingPacketNumberGenerator(12345, initialPeriod, maxPeriod)
