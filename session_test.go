@@ -1207,9 +1207,16 @@ var _ = Describe("Session", func() {
 	})
 
 	Context("sending packets", func() {
-		var sessionDone chan struct{}
+		var (
+			sessionDone chan struct{}
+			sender      *MockSender
+		)
 
 		BeforeEach(func() {
+			sender = NewMockSender(mockCtrl)
+			sender.EXPECT().Run()
+			sender.EXPECT().WouldBlock().AnyTimes()
+			sess.sendQueue = sender
 			sessionDone = make(chan struct{})
 		})
 
@@ -1221,6 +1228,7 @@ var _ = Describe("Session", func() {
 			mconn.EXPECT().Write(gomock.Any())
 			tracer.EXPECT().ClosedConnection(gomock.Any())
 			tracer.EXPECT().Close()
+			sender.EXPECT().Close()
 			sess.shutdown()
 			Eventually(sess.Context().Done()).Should(BeClosed())
 			Eventually(sessionDone).Should(BeClosed())
@@ -1249,7 +1257,8 @@ var _ = Describe("Session", func() {
 			packer.EXPECT().PackPacket().Return(p, nil)
 			packer.EXPECT().PackPacket().Return(nil, nil).AnyTimes()
 			sent := make(chan struct{})
-			mconn.EXPECT().Write(gomock.Any()).Do(func([]byte) { close(sent) })
+			sender.EXPECT().WouldBlock().AnyTimes()
+			sender.EXPECT().Send(gomock.Any()).Do(func(packet *packetBuffer) { close(sent) })
 			tracer.EXPECT().SentPacket(p.header, p.buffer.Len(), nil, []logging.Frame{})
 			sess.scheduleSending()
 			Eventually(sent).Should(BeClosed())
@@ -1295,7 +1304,7 @@ var _ = Describe("Session", func() {
 			sess.connFlowController = fc
 			runSession()
 			sent := make(chan struct{})
-			mconn.EXPECT().Write(gomock.Any()).Do(func([]byte) { close(sent) })
+			sender.EXPECT().Send(gomock.Any()).Do(func(packet *packetBuffer) { close(sent) })
 			tracer.EXPECT().SentPacket(p.header, p.length, nil, []logging.Frame{})
 			sess.scheduleSending()
 			Eventually(sent).Should(BeClosed())
@@ -1351,7 +1360,7 @@ var _ = Describe("Session", func() {
 					sess.sentPacketHandler = sph
 					runSession()
 					sent := make(chan struct{})
-					mconn.EXPECT().Write(gomock.Any()).Do(func([]byte) { close(sent) })
+					sender.EXPECT().Send(gomock.Any()).Do(func(packet *packetBuffer) { close(sent) })
 					tracer.EXPECT().SentPacket(p.header, p.length, gomock.Any(), gomock.Any())
 					sess.scheduleSending()
 					Eventually(sent).Should(BeClosed())
@@ -1372,7 +1381,7 @@ var _ = Describe("Session", func() {
 					sess.sentPacketHandler = sph
 					runSession()
 					sent := make(chan struct{})
-					mconn.EXPECT().Write(gomock.Any()).Do(func([]byte) { close(sent) })
+					sender.EXPECT().Send(gomock.Any()).Do(func(packet *packetBuffer) { close(sent) })
 					tracer.EXPECT().SentPacket(p.header, p.length, gomock.Any(), gomock.Any())
 					sess.scheduleSending()
 					Eventually(sent).Should(BeClosed())
@@ -1385,7 +1394,10 @@ var _ = Describe("Session", func() {
 	})
 
 	Context("packet pacing", func() {
-		var sph *mockackhandler.MockSentPacketHandler
+		var (
+			sph    *mockackhandler.MockSentPacketHandler
+			sender *MockSender
+		)
 
 		BeforeEach(func() {
 			tracer.EXPECT().SentPacket(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
@@ -1394,6 +1406,9 @@ var _ = Describe("Session", func() {
 			sess.handshakeConfirmed = true
 			sess.handshakeComplete = true
 			sess.sentPacketHandler = sph
+			sender = NewMockSender(mockCtrl)
+			sender.EXPECT().Run()
+			sess.sendQueue = sender
 			streamManager.EXPECT().CloseWithError(gomock.Any())
 		})
 
@@ -1405,6 +1420,7 @@ var _ = Describe("Session", func() {
 			mconn.EXPECT().Write(gomock.Any())
 			tracer.EXPECT().ClosedConnection(gomock.Any())
 			tracer.EXPECT().Close()
+			sender.EXPECT().Close()
 			sess.shutdown()
 			Eventually(sess.Context().Done()).Should(BeClosed())
 		})
@@ -1417,7 +1433,8 @@ var _ = Describe("Session", func() {
 			sph.EXPECT().SendMode().Return(ackhandler.SendAny).Times(3)
 			packer.EXPECT().PackPacket().Return(getPacket(10), nil)
 			packer.EXPECT().PackPacket().Return(getPacket(11), nil)
-			mconn.EXPECT().Write(gomock.Any()).Times(2)
+			sender.EXPECT().WouldBlock().AnyTimes()
+			sender.EXPECT().Send(gomock.Any()).Times(2)
 			go func() {
 				defer GinkgoRecover()
 				cryptoSetup.EXPECT().RunHandshake().MaxTimes(1)
@@ -1435,7 +1452,8 @@ var _ = Describe("Session", func() {
 			sph.EXPECT().SendMode().Return(ackhandler.SendAny).Times(3)
 			packer.EXPECT().PackPacket().Return(getPacket(10), nil)
 			packer.EXPECT().PackPacket().Return(nil, nil)
-			mconn.EXPECT().Write(gomock.Any())
+			sender.EXPECT().WouldBlock().AnyTimes()
+			sender.EXPECT().Send(gomock.Any())
 			go func() {
 				defer GinkgoRecover()
 				cryptoSetup.EXPECT().RunHandshake().MaxTimes(1)
@@ -1453,7 +1471,8 @@ var _ = Describe("Session", func() {
 			sph.EXPECT().SendMode().Return(ackhandler.SendAny)
 			sph.EXPECT().SendMode().Return(ackhandler.SendAck)
 			packer.EXPECT().PackPacket().Return(getPacket(100), nil)
-			mconn.EXPECT().Write(gomock.Any())
+			sender.EXPECT().WouldBlock().AnyTimes()
+			sender.EXPECT().Send(gomock.Any())
 			go func() {
 				defer GinkgoRecover()
 				cryptoSetup.EXPECT().RunHandshake().MaxTimes(1)
@@ -1479,10 +1498,8 @@ var _ = Describe("Session", func() {
 				sph.EXPECT().TimeUntilSend().Return(time.Now().Add(time.Hour)),
 			)
 			written := make(chan struct{}, 2)
-			mconn.EXPECT().Write(gomock.Any()).DoAndReturn(func(p []byte) (int, error) {
-				written <- struct{}{}
-				return len(p), nil
-			}).Times(2)
+			sender.EXPECT().WouldBlock().AnyTimes()
+			sender.EXPECT().Send(gomock.Any()).DoAndReturn(func(p *packetBuffer) { written <- struct{}{} }).Times(2)
 			go func() {
 				defer GinkgoRecover()
 				cryptoSetup.EXPECT().RunHandshake().MaxTimes(1)
@@ -1504,10 +1521,8 @@ var _ = Describe("Session", func() {
 			packer.EXPECT().PackPacket().Return(getPacket(1001), nil)
 			packer.EXPECT().PackPacket().Return(getPacket(1002), nil)
 			written := make(chan struct{}, 3)
-			mconn.EXPECT().Write(gomock.Any()).DoAndReturn(func(p []byte) (int, error) {
-				written <- struct{}{}
-				return len(p), nil
-			}).Times(3)
+			sender.EXPECT().WouldBlock().AnyTimes()
+			sender.EXPECT().Send(gomock.Any()).DoAndReturn(func(p *packetBuffer) { written <- struct{}{} }).Times(3)
 			go func() {
 				defer GinkgoRecover()
 				cryptoSetup.EXPECT().RunHandshake().MaxTimes(1)
@@ -1517,9 +1532,70 @@ var _ = Describe("Session", func() {
 			Eventually(written).Should(HaveLen(3))
 		})
 
+		It("doesn't try to send if the send queue is full", func() {
+			available := make(chan struct{}, 1)
+			sender.EXPECT().WouldBlock().Return(true)
+			sender.EXPECT().Available().Return(available)
+			go func() {
+				defer GinkgoRecover()
+				cryptoSetup.EXPECT().RunHandshake().MaxTimes(1)
+				sess.run()
+			}()
+			sess.scheduleSending()
+			time.Sleep(scaleDuration(50 * time.Millisecond))
+
+			written := make(chan struct{})
+			sender.EXPECT().WouldBlock().AnyTimes()
+			sph.EXPECT().SentPacket(gomock.Any())
+			sph.EXPECT().HasPacingBudget().Return(true).AnyTimes()
+			sph.EXPECT().SendMode().Return(ackhandler.SendAny).AnyTimes()
+			packer.EXPECT().PackPacket().Return(getPacket(1000), nil)
+			packer.EXPECT().PackPacket().Return(nil, nil)
+			sender.EXPECT().Send(gomock.Any()).DoAndReturn(func(p *packetBuffer) { close(written) })
+			available <- struct{}{}
+			Eventually(written).Should(BeClosed())
+		})
+
+		It("stops sending when the send queue is full", func() {
+			sph.EXPECT().SentPacket(gomock.Any())
+			sph.EXPECT().HasPacingBudget().Return(true).AnyTimes()
+			sph.EXPECT().SendMode().Return(ackhandler.SendAny)
+			packer.EXPECT().PackPacket().Return(getPacket(1000), nil)
+			written := make(chan struct{}, 1)
+			sender.EXPECT().WouldBlock()
+			sender.EXPECT().WouldBlock().Return(true).Times(2)
+			sender.EXPECT().Send(gomock.Any()).DoAndReturn(func(p *packetBuffer) { written <- struct{}{} })
+			go func() {
+				defer GinkgoRecover()
+				cryptoSetup.EXPECT().RunHandshake().MaxTimes(1)
+				sess.run()
+			}()
+			available := make(chan struct{}, 1)
+			sender.EXPECT().Available().Return(available)
+			sess.scheduleSending()
+			Eventually(written).Should(Receive())
+			time.Sleep(scaleDuration(50 * time.Millisecond))
+
+			// now make room in the send queue
+			sph.EXPECT().SentPacket(gomock.Any())
+			sph.EXPECT().HasPacingBudget().Return(true).AnyTimes()
+			sph.EXPECT().SendMode().Return(ackhandler.SendAny).AnyTimes()
+			sender.EXPECT().WouldBlock().AnyTimes()
+			packer.EXPECT().PackPacket().Return(getPacket(1001), nil)
+			packer.EXPECT().PackPacket().Return(nil, nil)
+			sender.EXPECT().Send(gomock.Any()).DoAndReturn(func(p *packetBuffer) { written <- struct{}{} })
+			available <- struct{}{}
+			Eventually(written).Should(Receive())
+
+			// The send queue is not full any more. Sending on the available channel should have no effect.
+			available <- struct{}{}
+			time.Sleep(scaleDuration(50 * time.Millisecond))
+		})
+
 		It("doesn't set a pacing timer when there is no data to send", func() {
 			sph.EXPECT().HasPacingBudget().Return(true)
 			sph.EXPECT().SendMode().Return(ackhandler.SendAny).AnyTimes()
+			sender.EXPECT().WouldBlock().AnyTimes()
 			packer.EXPECT().PackPacket()
 			// don't EXPECT any calls to mconn.Write()
 			go func() {
@@ -1533,7 +1609,13 @@ var _ = Describe("Session", func() {
 	})
 
 	Context("scheduling sending", func() {
+		var sender *MockSender
+
 		BeforeEach(func() {
+			sender = NewMockSender(mockCtrl)
+			sender.EXPECT().WouldBlock().AnyTimes()
+			sender.EXPECT().Run()
+			sess.sendQueue = sender
 			sess.handshakeConfirmed = true
 		})
 
@@ -1544,6 +1626,7 @@ var _ = Describe("Session", func() {
 			packer.EXPECT().PackConnectionClose(gomock.Any()).Return(&coalescedPacket{buffer: getPacketBuffer()}, nil)
 			cryptoSetup.EXPECT().Close()
 			mconn.EXPECT().Write(gomock.Any())
+			sender.EXPECT().Close()
 			tracer.EXPECT().ClosedConnection(gomock.Any())
 			tracer.EXPECT().Close()
 			sess.shutdown()
@@ -1570,7 +1653,7 @@ var _ = Describe("Session", func() {
 			time.Sleep(50 * time.Millisecond)
 			// only EXPECT calls after scheduleSending is called
 			written := make(chan struct{})
-			mconn.EXPECT().Write(gomock.Any()).Do(func([]byte) { close(written) })
+			sender.EXPECT().Send(gomock.Any()).Do(func(*packetBuffer) { close(written) })
 			tracer.EXPECT().SentPacket(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
 			sess.scheduleSending()
 			Eventually(written).Should(BeClosed())
@@ -1594,7 +1677,7 @@ var _ = Describe("Session", func() {
 			sess.receivedPacketHandler = rph
 
 			written := make(chan struct{})
-			mconn.EXPECT().Write(gomock.Any()).Do(func([]byte) { close(written) })
+			sender.EXPECT().Send(gomock.Any()).Do(func(*packetBuffer) { close(written) })
 			tracer.EXPECT().SentPacket(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
 			go func() {
 				defer GinkgoRecover()

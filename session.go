@@ -137,7 +137,7 @@ type session struct {
 	config      *Config
 
 	conn      sendConn
-	sendQueue *sendQueue
+	sendQueue sender
 
 	streamsMap      streamManager
 	connIDManager   *connIDManager
@@ -542,7 +542,10 @@ func (s *session) run() error {
 		}
 	}
 
-	var closeErr closeError
+	var (
+		closeErr           closeError
+		sendQueueAvailable <-chan struct{}
+	)
 
 runLoop:
 	for {
@@ -583,6 +586,7 @@ runLoop:
 			case <-s.sendingScheduled:
 				// We do all the interesting stuff after the switch statement, so
 				// nothing to see here.
+			case <-sendQueueAvailable:
 			case firstPacket := <-s.receivedPackets:
 				s.sentPacketHandler.ReceivedBytes(firstPacket.Size())
 				wasProcessed := s.handlePacketImpl(firstPacket)
@@ -655,8 +659,19 @@ runLoop:
 			}
 		}
 
+		if s.sendQueue.WouldBlock() {
+			// The send queue is still busy sending out packets.
+			// Wait until there's space to enqueue new packets.
+			sendQueueAvailable = s.sendQueue.Available()
+			continue
+		}
 		if err := s.sendPackets(); err != nil {
 			s.closeLocal(err)
+		}
+		if s.sendQueue.WouldBlock() {
+			sendQueueAvailable = s.sendQueue.Available()
+		} else {
+			sendQueueAvailable = nil
 		}
 	}
 
@@ -1540,6 +1555,9 @@ func (s *session) sendPackets() error {
 			sentPacket = true
 		default:
 			return fmt.Errorf("BUG: invalid send mode %d", sendMode)
+		}
+		if s.sendQueue.WouldBlock() {
+			return nil
 		}
 	}
 }
