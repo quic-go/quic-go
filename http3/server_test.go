@@ -177,6 +177,21 @@ var _ = Describe("Server", func() {
 			Expect(hfs).To(HaveKeyWithValue(":status", []string{"500"}))
 		})
 
+		It("doesn't close the stream if the handler called DataStream()", func() {
+			s.Handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				str := w.(DataStreamer).DataStream()
+				str.Write([]byte("foobar"))
+			})
+
+			setRequest(encodeRequest(exampleGetRequest))
+			str.EXPECT().Context().Return(reqContext)
+			str.EXPECT().Write([]byte("foobar"))
+			// don't EXPECT CancelRead()
+
+			serr := s.handleRequest(sess, str, qpackDecoder, nil)
+			Expect(serr.err).ToNot(HaveOccurred())
+		})
+
 		Context("control stream handling", func() {
 			var sess *mockquic.MockEarlySession
 			testDone := make(chan struct{})

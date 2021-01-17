@@ -5,7 +5,10 @@ import (
 	"io"
 	"net/http"
 
+	mockquic "github.com/lucas-clemente/quic-go/internal/mocks/quic"
 	"github.com/lucas-clemente/quic-go/internal/utils"
+
+	"github.com/golang/mock/gomock"
 	"github.com/marten-seemann/qpack"
 
 	. "github.com/onsi/ginkgo"
@@ -20,7 +23,9 @@ var _ = Describe("Response Writer", func() {
 
 	BeforeEach(func() {
 		strBuf = &bytes.Buffer{}
-		rw = newResponseWriter(strBuf, utils.DefaultLogger)
+		str := mockquic.NewMockStream(mockCtrl)
+		str.EXPECT().Write(gomock.Any()).Do(strBuf.Write).AnyTimes()
+		rw = newResponseWriter(str, utils.DefaultLogger)
 	})
 
 	decodeHeader := func(str io.Reader) map[string][]string {
