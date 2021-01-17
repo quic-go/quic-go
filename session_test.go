@@ -898,7 +898,6 @@ var _ = Describe("Session", func() {
 			tracer.EXPECT().ClosedConnection(gomock.Any())
 			tracer.EXPECT().Close()
 			mconn.EXPECT().Write(gomock.Any())
-			fmt.Println("close")
 			sess.closeLocal(errors.New("close"))
 			Eventually(sess.Context().Done()).Should(BeClosed())
 		})
