@@ -135,6 +135,6 @@ var _ = Describe("Key Update tests", func() {
 		keyPhasesSent, keyPhasesReceived := countKeyPhases()
 		fmt.Fprintf(GinkgoWriter, "Used %d key phases on outgoing and %d key phases on incoming packets.\n", keyPhasesSent, keyPhasesReceived)
 		Expect(keyPhasesReceived).To(BeNumerically(">", 10))
-		Expect(keyPhasesReceived).To(BeNumerically("~", keyPhasesSent, 1))
+		Expect(keyPhasesReceived).To(BeNumerically("~", keyPhasesSent, 2))
 	})
 })
