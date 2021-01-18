@@ -239,9 +239,10 @@ func (t *connectionTracer) SentPacket(hdr *wire.ExtendedHeader, packetSize loggi
 	header := *transformExtendedHeader(hdr)
 	t.mutex.Lock()
 	t.recordEvent(time.Now(), &eventPacketSent{
-		Header: header,
-		Length: packetSize,
-		Frames: fs,
+		Header:        header,
+		Length:        packetSize,
+		PayloadLength: hdr.Length,
+		Frames:        fs,
 	})
 	t.mutex.Unlock()
 }
@@ -254,9 +255,10 @@ func (t *connectionTracer) ReceivedPacket(hdr *wire.ExtendedHeader, packetSize l
 	header := *transformExtendedHeader(hdr)
 	t.mutex.Lock()
 	t.recordEvent(time.Now(), &eventPacketReceived{
-		Header: header,
-		Length: packetSize,
-		Frames: fs,
+		Header:        header,
+		Length:        packetSize,
+		PayloadLength: hdr.Length,
+		Frames:        fs,
 	})
 	t.mutex.Unlock()
 }

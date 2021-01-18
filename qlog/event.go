@@ -45,12 +45,14 @@ func (v versions) MarshalJSONArray(enc *gojay.Encoder) {
 }
 
 type rawInfo struct {
-	Length logging.ByteCount
+	Length        logging.ByteCount // full packet length, including header and AEAD authentication tag
+	PayloadLength logging.ByteCount // length of the packet payload, excluding AEAD tag
 }
 
 func (i rawInfo) IsNil() bool { return false }
 func (i rawInfo) MarshalJSONObject(enc *gojay.Encoder) {
 	enc.Uint64Key("length", uint64(i.Length))
+	enc.Uint64KeyOmitEmpty("payload_length", uint64(i.PayloadLength))
 }
 
 type eventConnectionStarted struct {
@@ -125,11 +127,12 @@ func (e eventConnectionClosed) MarshalJSONObject(enc *gojay.Encoder) {
 }
 
 type eventPacketSent struct {
-	Header      packetHeader
-	Length      logging.ByteCount
-	Frames      frames
-	IsCoalesced bool
-	Trigger     string
+	Header        packetHeader
+	Length        logging.ByteCount
+	PayloadLength logging.ByteCount
+	Frames        frames
+	IsCoalesced   bool
+	Trigger       string
 }
 
 var _ eventDetails = eventPacketSent{}
@@ -140,18 +143,19 @@ func (e eventPacketSent) IsNil() bool        { return false }
 
 func (e eventPacketSent) MarshalJSONObject(enc *gojay.Encoder) {
 	enc.ObjectKey("header", e.Header)
-	enc.ObjectKey("raw", rawInfo{Length: e.Length})
+	enc.ObjectKey("raw", rawInfo{Length: e.Length, PayloadLength: e.PayloadLength})
 	enc.ArrayKeyOmitEmpty("frames", e.Frames)
 	enc.BoolKeyOmitEmpty("is_coalesced", e.IsCoalesced)
 	enc.StringKeyOmitEmpty("trigger", e.Trigger)
 }
 
 type eventPacketReceived struct {
-	Header      packetHeader
-	Length      logging.ByteCount
-	Frames      frames
-	IsCoalesced bool
-	Trigger     string
+	Header        packetHeader
+	Length        logging.ByteCount
+	PayloadLength logging.ByteCount
+	Frames        frames
+	IsCoalesced   bool
+	Trigger       string
 }
 
 var _ eventDetails = eventPacketReceived{}
@@ -162,7 +166,7 @@ func (e eventPacketReceived) IsNil() bool        { return false }
 
 func (e eventPacketReceived) MarshalJSONObject(enc *gojay.Encoder) {
 	enc.ObjectKey("header", e.Header)
-	enc.ObjectKey("raw", rawInfo{Length: e.Length})
+	enc.ObjectKey("raw", rawInfo{Length: e.Length, PayloadLength: e.PayloadLength})
 	enc.ArrayKeyOmitEmpty("frames", e.Frames)
 	enc.BoolKeyOmitEmpty("is_coalesced", e.IsCoalesced)
 	enc.StringKeyOmitEmpty("trigger", e.Trigger)

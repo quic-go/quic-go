@@ -59,12 +59,11 @@ var _ = Describe("Packet Header", func() {
 					},
 				},
 				map[string]interface{}{
-					"packet_type":    "initial",
-					"packet_number":  42,
-					"payload_length": 123,
-					"dcil":           0,
-					"scil":           0,
-					"version":        "decafbad",
+					"packet_type":   "initial",
+					"packet_number": 42,
+					"dcil":          0,
+					"scil":          0,
+					"version":       "decafbad",
 				},
 			)
 		})
@@ -82,13 +81,12 @@ var _ = Describe("Packet Header", func() {
 					},
 				},
 				map[string]interface{}{
-					"packet_type":    "initial",
-					"packet_number":  4242,
-					"payload_length": 123,
-					"dcil":           0,
-					"scil":           0,
-					"version":        "decafbad",
-					"token":          map[string]interface{}{"data": "deadbeef"},
+					"packet_type":   "initial",
+					"packet_number": 4242,
+					"dcil":          0,
+					"scil":          0,
+					"version":       "decafbad",
+					"token":         map[string]interface{}{"data": "deadbeef"},
 				},
 			)
 		})
