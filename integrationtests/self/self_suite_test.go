@@ -93,7 +93,8 @@ var (
 	tlsConfig          *tls.Config
 	tlsConfigLongChain *tls.Config
 	tlsClientConfig    *tls.Config
-	tracer             logging.Tracer
+	qlogTracer         logging.Tracer
+	metricsTracer      logging.Tracer
 )
 
 // read the logfile command line flag
@@ -136,7 +137,6 @@ var _ = BeforeSuite(func() {
 		NextProtos: []string{alpn},
 	}
 
-	var qlogTracer, metricsTracer logging.Tracer
 	if enableQlog {
 		qlogTracer = qlog.NewTracer(func(p logging.Perspective, connectionID []byte) io.WriteCloser {
 			role := "server"
@@ -153,14 +153,6 @@ var _ = BeforeSuite(func() {
 	}
 	if enableMetrics {
 		metricsTracer = metrics.NewTracer()
-	}
-
-	if enableQlog && enableMetrics {
-		tracer = logging.NewMultiplexedTracer(qlogTracer, metricsTracer)
-	} else if enableQlog {
-		tracer = qlogTracer
-	} else if enableMetrics {
-		tracer = metricsTracer
 	}
 })
 
@@ -287,7 +279,17 @@ func getQuicConfig(conf *quic.Config) *quic.Config {
 	} else {
 		conf = conf.Clone()
 	}
-	conf.Tracer = tracer
+	var tracers []logging.Tracer
+	if qlogTracer != nil {
+		tracers = append(tracers, qlogTracer)
+	}
+	if metricsTracer != nil {
+		tracers = append(tracers, metricsTracer)
+	}
+	if conf.Tracer != nil {
+		tracers = append(tracers, conf.Tracer)
+	}
+	conf.Tracer = logging.NewMultiplexedTracer(tracers...)
 	return conf
 }
 

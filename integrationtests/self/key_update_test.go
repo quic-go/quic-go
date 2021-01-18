@@ -98,7 +98,7 @@ var _ = Describe("Key Update tests", func() {
 
 	runServer := func() {
 		var err error
-		server, err = quic.ListenAddr("localhost:0", getTLSConfig(), nil)
+		server, err = quic.ListenAddr("localhost:0", getTLSConfig(), getQuicConfig(nil))
 		Expect(err).ToNot(HaveOccurred())
 
 		go func() {
@@ -122,7 +122,7 @@ var _ = Describe("Key Update tests", func() {
 		sess, err := quic.DialAddr(
 			fmt.Sprintf("localhost:%d", server.Addr().(*net.UDPAddr).Port),
 			getTLSClientConfig(),
-			&quic.Config{Tracer: &simpleTracer{}},
+			getQuicConfig(&quic.Config{Tracer: &simpleTracer{}}),
 		)
 		Expect(err).ToNot(HaveOccurred())
 		str, err := sess.AcceptUniStream(context.Background())
