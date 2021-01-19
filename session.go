@@ -1513,7 +1513,22 @@ func (s *session) sendPackets() error {
 
 	var sentPacket bool // only used in for packets sent in send mode SendAny
 	for {
-		switch sendMode := s.sentPacketHandler.SendMode(); sendMode {
+		sendMode := s.sentPacketHandler.SendMode()
+		if sendMode == ackhandler.SendAny && s.handshakeComplete && !s.sentPacketHandler.HasPacingBudget() {
+			deadline := s.sentPacketHandler.TimeUntilSend()
+			if deadline.IsZero() {
+				deadline = deadlineSendImmediately
+			}
+			s.pacingDeadline = deadline
+			// Allow sending of an ACK if we're pacing limit (if we haven't sent out a packet yet).
+			// This makes sure that a peer that is mostly receiving data (and thus has an inaccurate cwnd estimate)
+			// sends enough ACKs to allow its peer to utilize the bandwidth.
+			if sentPacket {
+				return nil
+			}
+			sendMode = ackhandler.SendAck
+		}
+		switch sendMode {
 		case ackhandler.SendNone:
 			return nil
 		case ackhandler.SendAck:
@@ -1540,14 +1555,6 @@ func (s *session) sendPackets() error {
 				return err
 			}
 		case ackhandler.SendAny:
-			if s.handshakeComplete && !s.sentPacketHandler.HasPacingBudget() {
-				deadline := s.sentPacketHandler.TimeUntilSend()
-				if deadline.IsZero() {
-					deadline = deadlineSendImmediately
-				}
-				s.pacingDeadline = deadline
-				return nil
-			}
 			sent, err := s.sendPacket()
 			if err != nil || !sent {
 				return err
