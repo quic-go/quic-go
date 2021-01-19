@@ -40,9 +40,8 @@ func (t token) MarshalJSONObject(enc *gojay.Encoder) {
 type packetHeader struct {
 	PacketType logging.PacketType
 
-	KeyPhaseBit   logging.KeyPhaseBit
-	PacketNumber  logging.PacketNumber
-	PayloadLength logging.ByteCount
+	KeyPhaseBit  logging.KeyPhaseBit
+	PacketNumber logging.PacketNumber
 
 	Version          logging.VersionNumber
 	SrcConnectionID  logging.ConnectionID
@@ -54,7 +53,6 @@ type packetHeader struct {
 func transformHeader(hdr *wire.Header) *packetHeader {
 	h := &packetHeader{
 		PacketType:       logging.PacketTypeFromHeader(hdr),
-		PayloadLength:    hdr.Length,
 		SrcConnectionID:  hdr.SrcConnectionID,
 		DestConnectionID: hdr.DestConnectionID,
 		Version:          hdr.Version,
@@ -77,7 +75,6 @@ func (h packetHeader) MarshalJSONObject(enc *gojay.Encoder) {
 	if h.PacketType != logging.PacketTypeRetry && h.PacketType != logging.PacketTypeVersionNegotiation {
 		enc.Int64Key("packet_number", int64(h.PacketNumber))
 	}
-	enc.Int64KeyOmitEmpty("payload_length", int64(h.PayloadLength))
 	if h.Version != 0 {
 		enc.StringKey("version", versionNumber(h.Version).String())
 	}

@@ -372,6 +372,7 @@ var _ = Describe("Tracing", func() {
 							Type:             protocol.PacketTypeHandshake,
 							DestConnectionID: protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8},
 							SrcConnectionID:  protocol.ConnectionID{4, 3, 2, 1},
+							Length:           1337,
 							Version:          protocol.VersionTLS,
 						},
 						PacketNumber: 1337,
@@ -387,9 +388,11 @@ var _ = Describe("Tracing", func() {
 				Expect(entry.Time).To(BeTemporally("~", time.Now(), scaleDuration(10*time.Millisecond)))
 				Expect(entry.Name).To(Equal("transport:packet_sent"))
 				ev := entry.Event
-				Expect(ev).To(HaveKey("header"))
 				Expect(ev).To(HaveKey("raw"))
-				Expect(ev["raw"].(map[string]interface{})).To(HaveKeyWithValue("length", float64(987)))
+				raw := ev["raw"].(map[string]interface{})
+				Expect(raw).To(HaveKeyWithValue("length", float64(987)))
+				Expect(raw).To(HaveKeyWithValue("payload_length", float64(1337)))
+				Expect(ev).To(HaveKey("header"))
 				hdr := ev["header"].(map[string]interface{})
 				Expect(hdr).To(HaveKeyWithValue("packet_type", "handshake"))
 				Expect(hdr).To(HaveKeyWithValue("packet_number", float64(1337)))
@@ -413,6 +416,9 @@ var _ = Describe("Tracing", func() {
 				)
 				entry := exportAndParseSingle()
 				ev := entry.Event
+				raw := ev["raw"].(map[string]interface{})
+				Expect(raw).To(HaveKeyWithValue("length", float64(123)))
+				Expect(raw).ToNot(HaveKey("payload_length"))
 				Expect(ev).To(HaveKey("header"))
 				hdr := ev["header"].(map[string]interface{})
 				Expect(hdr).To(HaveKeyWithValue("packet_type", "1RTT"))
@@ -433,6 +439,7 @@ var _ = Describe("Tracing", func() {
 							DestConnectionID: protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8},
 							SrcConnectionID:  protocol.ConnectionID{4, 3, 2, 1},
 							Token:            []byte{0xde, 0xad, 0xbe, 0xef},
+							Length:           1234,
 							Version:          protocol.VersionTLS,
 						},
 						PacketNumber: 1337,
@@ -447,9 +454,11 @@ var _ = Describe("Tracing", func() {
 				Expect(entry.Time).To(BeTemporally("~", time.Now(), scaleDuration(10*time.Millisecond)))
 				Expect(entry.Name).To(Equal("transport:packet_received"))
 				ev := entry.Event
-				Expect(ev).To(HaveKey("header"))
 				Expect(ev).To(HaveKey("raw"))
-				Expect(ev["raw"].(map[string]interface{})).To(HaveKeyWithValue("length", float64(789)))
+				raw := ev["raw"].(map[string]interface{})
+				Expect(raw).To(HaveKeyWithValue("length", float64(789)))
+				Expect(raw).To(HaveKeyWithValue("payload_length", float64(1234)))
+				Expect(ev).To(HaveKey("header"))
 				hdr := ev["header"].(map[string]interface{})
 				Expect(hdr).To(HaveKeyWithValue("packet_type", "initial"))
 				Expect(hdr).To(HaveKeyWithValue("packet_number", float64(1337)))
@@ -476,6 +485,7 @@ var _ = Describe("Tracing", func() {
 				Expect(entry.Time).To(BeTemporally("~", time.Now(), scaleDuration(10*time.Millisecond)))
 				Expect(entry.Name).To(Equal("transport:packet_received"))
 				ev := entry.Event
+				Expect(ev).ToNot(HaveKey("raw"))
 				Expect(ev).To(HaveKey("header"))
 				header := ev["header"].(map[string]interface{})
 				Expect(header).To(HaveKeyWithValue("packet_type", "retry"))
