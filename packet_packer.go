@@ -579,7 +579,7 @@ func (p *packetPacker) maybeGetAppDataPacketWithEncLevel(maxPayloadSize protocol
 }
 
 func (p *packetPacker) composeNextPacket(maxFrameSize protocol.ByteCount, ackAllowed bool) *payload {
-	payload := &payload{}
+	payload := &payload{frames: make([]ackhandler.Frame, 0, 1)}
 
 	var hasDatagram bool
 	if p.datagramQueue != nil {
