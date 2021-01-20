@@ -1563,6 +1563,11 @@ func (s *session) sendPackets() error {
 		default:
 			return fmt.Errorf("BUG: invalid send mode %d", sendMode)
 		}
+		// Prioritize receiving of packets over sending out more packets.
+		if len(s.receivedPackets) > 0 {
+			s.pacingDeadline = deadlineSendImmediately
+			return nil
+		}
 		if s.sendQueue.WouldBlock() {
 			return nil
 		}
