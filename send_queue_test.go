@@ -43,10 +43,12 @@ var _ = Describe("Send Queue", func() {
 	})
 
 	It("panics when Send() is called although there's no space in the queue", func() {
-		Expect(q.WouldBlock()).To(BeFalse())
-		q.Send(getPacket([]byte("foobar1")))
+		for i := 0; i < sendQueueCapacity; i++ {
+			Expect(q.WouldBlock()).To(BeFalse())
+			q.Send(getPacket([]byte("foobar")))
+		}
 		Expect(q.WouldBlock()).To(BeTrue())
-		Expect(func() { q.Send(getPacket([]byte("foobar2"))) }).To(Panic())
+		Expect(func() { q.Send(getPacket([]byte("raboof"))) }).To(Panic())
 	})
 
 	It("signals when sending is possible again", func() {

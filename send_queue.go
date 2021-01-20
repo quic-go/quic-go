@@ -18,7 +18,7 @@ type sendQueue struct {
 
 var _ sender = &sendQueue{}
 
-const sendQueueCapacity = 1
+const sendQueueCapacity = 8
 
 func newSendQueue(conn sendConn) sender {
 	return &sendQueue{
