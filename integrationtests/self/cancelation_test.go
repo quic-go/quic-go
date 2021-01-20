@@ -347,10 +347,11 @@ var _ = Describe("Stream Cancelations", func() {
 			done := make(chan struct{})
 			go func() {
 				defer GinkgoRecover()
-				var wg sync.WaitGroup
-				wg.Add(numStreams)
+				defer close(done)
 				sess, err := server.Accept(context.Background())
 				Expect(err).ToNot(HaveOccurred())
+				var wg sync.WaitGroup
+				wg.Add(numStreams)
 				for i := 0; i < numStreams; i++ {
 					go func() {
 						defer GinkgoRecover()
@@ -375,7 +376,6 @@ var _ = Describe("Stream Cancelations", func() {
 					}()
 				}
 				wg.Wait()
-				close(done)
 			}()
 
 			sess, err := quic.DialAddr(
@@ -419,13 +419,13 @@ var _ = Describe("Stream Cancelations", func() {
 				}()
 			}
 			wg.Wait()
+			Eventually(done).Should(BeClosed())
 
 			count := atomic.LoadInt32(&counter)
 			Expect(count).To(BeNumerically(">", numStreams/15))
 			fmt.Fprintf(GinkgoWriter, "Successfully read from %d of %d streams.\n", count, numStreams)
 
 			Expect(sess.CloseWithError(0, "")).To(Succeed())
-			Eventually(done).Should(BeClosed())
 			Expect(server.Close()).To(Succeed())
 		})
 	})
