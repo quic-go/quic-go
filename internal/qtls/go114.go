@@ -9,7 +9,7 @@ import (
 	"net"
 	"unsafe"
 
-	"github.com/marten-seemann/qtls"
+	"github.com/Psiphon-Labs/qtls"
 )
 
 type (
@@ -169,7 +169,7 @@ type cipherSuiteTLS13 struct {
 	Hash   crypto.Hash
 }
 
-//go:linkname cipherSuiteTLS13ByID github.com/marten-seemann/qtls.cipherSuiteTLS13ByID
+//go:linkname cipherSuiteTLS13ByID github.com/Psiphon-Labs/qtls.cipherSuiteTLS13ByID
 func cipherSuiteTLS13ByID(id uint16) *cipherSuiteTLS13
 
 // CipherSuiteTLS13ByID gets a TLS 1.3 cipher suite.

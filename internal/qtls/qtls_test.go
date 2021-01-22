@@ -10,7 +10,7 @@ import (
 
 	mocktls "github.com/Psiphon-Labs/quic-go/internal/mocks/tls"
 
-	"github.com/marten-seemann/qtls"
+	"github.com/Psiphon-Labs/qtls"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"

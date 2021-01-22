@@ -7,9 +7,9 @@ linters-settings:
   depguard:
     type: blacklist
     packages:
-      - github.com/marten-seemann/qtls
+      - github.com/Psiphon-Labs/qtls
     packages-with-error-message:
-      - github.com/marten-seemann/qtls: "importing qtls only allowed in internal/qtls"
+      - github.com/Psiphon-Labs/qtls: "importing qtls only allowed in internal/qtls"
   misspell:
     ignore-words:
       - ect
