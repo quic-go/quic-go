@@ -100,5 +100,8 @@ func populateConfig(config *Config) *Config {
 		TokenStore:                            config.TokenStore,
 		QuicTracer:                            config.QuicTracer,
 		Tracer:                                config.Tracer,
+
+		// [Psiphon]
+		ClientHelloSeed: config.ClientHelloSeed,
 	}
 }

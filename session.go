@@ -436,6 +436,10 @@ var newClientSession = func(
 			onHandshakeComplete: func() { close(s.handshakeCompleteChan) },
 		},
 		tlsConf,
+
+		// [Psiphon]
+		conf.ClientHelloSeed,
+
 		enable0RTT,
 		s.rttStats,
 		tracer,

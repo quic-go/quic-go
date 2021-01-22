@@ -121,6 +121,9 @@ func tlsConfigToQtlsConfig(c *tls.Config, ec *ExtraConfig) *Config {
 		SetAppDataFromSessionState: ec.SetAppDataFromSessionState,
 		Enable0RTT:                 ec.Enable0RTT,
 		MaxEarlyData:               ec.MaxEarlyData,
+
+		// [Psiphon]
+		ClientHelloPRNG: ec.ClientHelloPRNG,
 	}
 	return conf
 }

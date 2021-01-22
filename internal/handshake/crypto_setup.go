@@ -10,6 +10,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/Psiphon-Labs/psiphon-tunnel-core/psiphon/common/prng"
 	"github.com/Psiphon-Labs/quic-go/internal/protocol"
 	"github.com/Psiphon-Labs/quic-go/internal/qerr"
 	"github.com/Psiphon-Labs/quic-go/internal/qtls"
@@ -157,12 +158,23 @@ func NewCryptoSetupClient(
 	tp *wire.TransportParameters,
 	runner handshakeRunner,
 	tlsConf *tls.Config,
+	clientHelloSeed *prng.Seed,
 	enable0RTT bool,
 	rttStats *utils.RTTStats,
 	tracer logging.ConnectionTracer,
 	logger utils.Logger,
 	version protocol.VersionNumber,
 ) (CryptoSetup, <-chan *wire.TransportParameters /* ClientHello written. Receive nil for non-0-RTT */) {
+
+	// [Psiphon]
+	// Instantiate the PRNG here as it's used in sequence in two places:
+	// TransportParameters.Marshal, for the quic_transport_parameters extension;
+	// and then in qtls.clientHelloMsg.marshal.
+	var clientHelloPRNG *prng.PRNG
+	if clientHelloSeed != nil {
+		clientHelloPRNG = prng.NewPRNGWithSeed(clientHelloSeed)
+	}
+
 	cs, clientHelloWritten := newCryptoSetup(
 		initialStream,
 		handshakeStream,
@@ -175,7 +187,14 @@ func NewCryptoSetupClient(
 		tracer,
 		logger,
 		protocol.PerspectiveClient,
+
+		// [Psiphon]
+		clientHelloPRNG,
 	)
+
+	// [Psiphon]
+	cs.extraConf.ClientHelloPRNG = clientHelloPRNG
+
 	cs.conn = qtls.Client(newConn(localAddr, remoteAddr, version), cs.tlsConf, cs.extraConf)
 	return cs, clientHelloWritten
 }
@@ -208,6 +227,9 @@ func NewCryptoSetupServer(
 		tracer,
 		logger,
 		protocol.PerspectiveServer,
+
+		// [Psiphon]
+		nil,
 	)
 	cs.conn = qtls.Server(newConn(localAddr, remoteAddr, version), cs.tlsConf, cs.extraConf)
 	return cs
@@ -225,13 +247,14 @@ func newCryptoSetup(
 	tracer logging.ConnectionTracer,
 	logger utils.Logger,
 	perspective protocol.Perspective,
+	clientHelloPRNG *prng.PRNG,
 ) (*cryptoSetup, <-chan *wire.TransportParameters /* ClientHello written. Receive nil for non-0-RTT */) {
 	initialSealer, initialOpener := NewInitialAEAD(connID, perspective)
 	if tracer != nil {
 		tracer.UpdatedKeyFromTLS(protocol.EncryptionInitial, protocol.PerspectiveClient)
 		tracer.UpdatedKeyFromTLS(protocol.EncryptionInitial, protocol.PerspectiveServer)
 	}
-	extHandler := newExtensionHandler(tp.Marshal(perspective), perspective)
+	extHandler := newExtensionHandler(tp.Marshal(perspective, clientHelloPRNG), perspective)
 	cs := &cryptoSetup{
 		tlsConf:                   tlsConf,
 		initialStream:             initialStream,

@@ -12,6 +12,7 @@ import (
 
 	"github.com/Psiphon-Labs/quic-go/internal/qerr"
 
+	"github.com/Psiphon-Labs/psiphon-tunnel-core/psiphon/common/prng"
 	"github.com/Psiphon-Labs/quic-go/internal/protocol"
 	"github.com/Psiphon-Labs/quic-go/internal/utils"
 )
@@ -312,7 +313,14 @@ func (p *TransportParameters) readNumericTransportParameter(
 }
 
 // Marshal the transport parameters
-func (p *TransportParameters) Marshal(pers protocol.Perspective) []byte {
+func (p *TransportParameters) Marshal(pers protocol.Perspective, clientHelloPRNG *prng.PRNG) []byte {
+
+	// [Psiphon]
+	// Randomize the quic_transport_parameters Client Hello extension.
+	if pers == protocol.PerspectiveClient && clientHelloPRNG != nil {
+		return p.marshalClientRandomized(clientHelloPRNG)
+	}
+
 	b := &bytes.Buffer{}
 
 	// add a greased value
@@ -394,6 +402,109 @@ func (p *TransportParameters) Marshal(pers protocol.Perspective) []byte {
 	return b.Bytes()
 }
 
+// [Psiphon]
+// marshalClientRandomized is a randomized variant of Marshal. The original
+// Marshal is retained as-is to ease future merging.
+func (p *TransportParameters) marshalClientRandomized(clientHelloPRNG *prng.PRNG) []byte {
+
+	b := &bytes.Buffer{}
+
+	marshallers := []func(){
+
+		func() {
+			// add a greased value
+			utils.WriteVarInt(b, uint64(27+31*rand.Intn(100)))
+			length := rand.Intn(16)
+			randomData := make([]byte, length)
+			rand.Read(randomData)
+			utils.WriteVarInt(b, uint64(length))
+			b.Write(randomData)
+		},
+
+		func() {
+			// initial_max_stream_data_bidi_local
+			p.marshalVarintParam(b, initialMaxStreamDataBidiLocalParameterID, uint64(p.InitialMaxStreamDataBidiLocal))
+		},
+
+		func() {
+			// initial_max_stream_data_bidi_remote
+			p.marshalVarintParam(b, initialMaxStreamDataBidiRemoteParameterID, uint64(p.InitialMaxStreamDataBidiRemote))
+		},
+
+		func() {
+			// initial_max_stream_data_uni
+			p.marshalVarintParam(b, initialMaxStreamDataUniParameterID, uint64(p.InitialMaxStreamDataUni))
+		},
+
+		func() {
+			// initial_max_data
+			p.marshalVarintParam(b, initialMaxDataParameterID, uint64(p.InitialMaxData))
+		},
+
+		func() {
+			// initial_max_bidi_streams
+			p.marshalVarintParam(b, initialMaxStreamsBidiParameterID, uint64(p.MaxBidiStreamNum))
+		},
+
+		func() {
+			// initial_max_uni_streams
+			p.marshalVarintParam(b, initialMaxStreamsUniParameterID, uint64(p.MaxUniStreamNum))
+		},
+
+		func() {
+			// idle_timeout
+			p.marshalVarintParam(b, maxIdleTimeoutParameterID, uint64(p.MaxIdleTimeout/time.Millisecond))
+		},
+
+		func() {
+			// max_packet_size
+			p.marshalVarintParam(b, maxUDPPayloadSizeParameterID, uint64(protocol.MaxReceivePacketSize))
+		},
+
+		func() {
+			// max_ack_delay
+			// Only send it if is different from the default value.
+			if p.MaxAckDelay != protocol.DefaultMaxAckDelay {
+				p.marshalVarintParam(b, maxAckDelayParameterID, uint64(p.MaxAckDelay/time.Millisecond))
+			}
+		},
+
+		func() {
+			// ack_delay_exponent
+			// Only send it if is different from the default value.
+			if p.AckDelayExponent != protocol.DefaultAckDelayExponent {
+				p.marshalVarintParam(b, ackDelayExponentParameterID, uint64(p.AckDelayExponent))
+			}
+		},
+
+		func() {
+			// disable_active_migration
+			if p.DisableActiveMigration {
+				utils.WriteVarInt(b, uint64(disableActiveMigrationParameterID))
+				utils.WriteVarInt(b, 0)
+			}
+		},
+
+		func() {
+			// active_connection_id_limit
+			p.marshalVarintParam(b, activeConnectionIDLimitParameterID, p.ActiveConnectionIDLimit)
+		},
+
+		func() {
+			// initial_source_connection_id
+			utils.WriteVarInt(b, uint64(initialSourceConnectionIDParameterID))
+			utils.WriteVarInt(b, uint64(p.InitialSourceConnectionID.Len()))
+			b.Write(p.InitialSourceConnectionID.Bytes())
+		},
+	}
+
+	perm := clientHelloPRNG.Perm(len(marshallers))
+	for _, j := range perm {
+		marshallers[j]()
+	}
+
+	return b.Bytes()
+}
 func (p *TransportParameters) marshalVarintParam(b *bytes.Buffer, id transportParameterID, val uint64) {
 	utils.WriteVarInt(b, uint64(id))
 	utils.WriteVarInt(b, uint64(utils.VarIntLen(val)))

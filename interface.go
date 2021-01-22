@@ -6,6 +6,7 @@ import (
 	"net"
 	"time"
 
+	"github.com/Psiphon-Labs/psiphon-tunnel-core/psiphon/common/prng"
 	"github.com/Psiphon-Labs/quic-go/internal/handshake"
 	"github.com/Psiphon-Labs/quic-go/internal/protocol"
 	"github.com/Psiphon-Labs/quic-go/logging"
@@ -267,6 +268,10 @@ type Config struct {
 	// It is disabled by default. Use the "quictrace" build tag to enable (e.g. go build -tags quictrace).
 	QuicTracer quictrace.Tracer
 	Tracer     logging.Tracer
+
+	// [Psiphon]
+	// ClientHelloSeed is used for TLS Client Hello randomization and replay.
+	ClientHelloSeed *prng.Seed
 }
 
 // A Listener for incoming QUIC connections
