@@ -11,7 +11,7 @@ import (
 const (
 	// maxDatagramSize is the default maximum packet size used in the Linux TCP implementation.
 	// Used in QUIC for congestion window computations in bytes.
-	maxDatagramSize         = protocol.ByteCount(protocol.MaxPacketSizeIPv4)
+	maxDatagramSize         = protocol.ByteCount(protocol.InitialPacketSizeIPv4)
 	maxBurstBytes           = 3 * maxDatagramSize
 	renoBeta                = 0.7 // Reno backoff factor.
 	maxCongestionWindow     = protocol.MaxCongestionWindowPackets * maxDatagramSize

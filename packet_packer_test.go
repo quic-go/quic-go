@@ -119,13 +119,13 @@ var _ = Describe("Packet packer", func() {
 
 		It("uses the maximum IPv4 packet size, if the remote address is IPv4", func() {
 			addr := &net.UDPAddr{IP: net.IPv4(11, 12, 13, 14), Port: 1337}
-			Expect(getMaxPacketSize(addr)).To(BeEquivalentTo(protocol.MaxPacketSizeIPv4))
+			Expect(getMaxPacketSize(addr)).To(BeEquivalentTo(protocol.InitialPacketSizeIPv4))
 		})
 
 		It("uses the maximum IPv6 packet size, if the remote address is IPv6", func() {
 			ip := net.ParseIP("2001:0db8:85a3:0000:0000:8a2e:0370:7334")
 			addr := &net.UDPAddr{IP: ip, Port: 1337}
-			Expect(getMaxPacketSize(addr)).To(BeEquivalentTo(protocol.MaxPacketSizeIPv6))
+			Expect(getMaxPacketSize(addr)).To(BeEquivalentTo(protocol.InitialPacketSizeIPv6))
 		})
 	})
 

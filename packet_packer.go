@@ -110,9 +110,9 @@ func getMaxPacketSize(addr net.Addr) protocol.ByteCount {
 	// Use the minimum size of an Initial packet as the max packet size.
 	if udpAddr, ok := addr.(*net.UDPAddr); ok {
 		if utils.IsIPv4(udpAddr.IP) {
-			maxSize = protocol.MaxPacketSizeIPv4
+			maxSize = protocol.InitialPacketSizeIPv4
 		} else {
-			maxSize = protocol.MaxPacketSizeIPv6
+			maxSize = protocol.InitialPacketSizeIPv6
 		}
 	}
 	return maxSize
