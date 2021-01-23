@@ -292,7 +292,8 @@ var _ = Describe("Packet packer", func() {
 				pnManager.EXPECT().PopPacketNumber(protocol.Encryption0RTT).Return(protocol.PacketNumber(0x42))
 				cf := ackhandler.Frame{Frame: &wire.MaxDataFrame{MaximumData: 0x1337}}
 				framer.EXPECT().HasData().Return(true)
-				framer.EXPECT().AppendControlFrames(nil, gomock.Any()).DoAndReturn(func(frames []ackhandler.Frame, _ protocol.ByteCount) ([]ackhandler.Frame, protocol.ByteCount) {
+				framer.EXPECT().AppendControlFrames(gomock.Any(), gomock.Any()).DoAndReturn(func(frames []ackhandler.Frame, _ protocol.ByteCount) ([]ackhandler.Frame, protocol.ByteCount) {
+					Expect(frames).To(BeEmpty())
 					return append(frames, cf), cf.Length(packer.version)
 				})
 				// TODO: check sizes
