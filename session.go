@@ -568,12 +568,12 @@ runLoop:
 				if processed := s.handlePacketImpl(p); processed {
 					processedUndecryptablePacket = true
 				}
-			}
-			// Don't set timers and send packets if the packet made us close the session.
-			select {
-			case closeErr = <-s.closeChan:
-				break runLoop
-			default:
+				// Don't set timers and send packets if the packet made us close the session.
+				select {
+				case closeErr = <-s.closeChan:
+					break runLoop
+				default:
+				}
 			}
 		} else if !processedUndecryptablePacket {
 			select {
