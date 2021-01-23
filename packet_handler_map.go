@@ -250,7 +250,7 @@ func (h *packetHandlerMap) CloseServer() {
 	wg.Wait()
 }
 
-// Destroy the underlying connection and wait until listen() has returned.
+// Destroy closes the underlying connection and waits until listen() has returned.
 // It does not close active sessions.
 func (h *packetHandlerMap) Destroy() error {
 	if err := h.conn.Close(); err != nil {

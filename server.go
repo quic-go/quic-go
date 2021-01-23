@@ -274,25 +274,27 @@ func (s *baseServer) accept(ctx context.Context) (quicSession, error) {
 
 // Close the server
 func (s *baseServer) Close() error {
-	s.sessionHandler.CloseServer()
 	s.mutex.Lock()
-	defer s.mutex.Unlock()
 	if s.closed {
+		s.mutex.Unlock()
 		return nil
 	}
 	if s.serverError == nil {
 		s.serverError = errors.New("server closed")
 	}
-	var err error
 	// If the server was started with ListenAddr, we created the packet conn.
 	// We need to close it in order to make the go routine reading from that conn return.
-	if s.createdPacketConn {
-		err = s.sessionHandler.Destroy()
-	}
+	createdPacketConn := s.createdPacketConn
 	s.closed = true
 	close(s.errorChan)
+	s.mutex.Unlock()
+
 	<-s.running
-	return err
+	s.sessionHandler.CloseServer()
+	if createdPacketConn {
+		return s.sessionHandler.Destroy()
+	}
+	return nil
 }
 
 func (s *baseServer) setCloseError(e error) {
