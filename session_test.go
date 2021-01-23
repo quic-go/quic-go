@@ -1571,6 +1571,32 @@ var _ = Describe("Session", func() {
 			Eventually(written).Should(BeClosed())
 		})
 
+		It("stops sending when there are new packets to receive", func() {
+			sender.EXPECT().WouldBlock().AnyTimes()
+			go func() {
+				defer GinkgoRecover()
+				cryptoSetup.EXPECT().RunHandshake().MaxTimes(1)
+				sess.run()
+			}()
+
+			written := make(chan struct{})
+			sender.EXPECT().WouldBlock().AnyTimes()
+			sph.EXPECT().SentPacket(gomock.Any()).Do(func(*ackhandler.Packet) {
+				sph.EXPECT().ReceivedBytes(gomock.Any())
+				sess.handlePacket(&receivedPacket{buffer: getPacketBuffer()})
+			})
+			sph.EXPECT().HasPacingBudget().Return(true).AnyTimes()
+			sph.EXPECT().SendMode().Return(ackhandler.SendAny).AnyTimes()
+			packer.EXPECT().PackPacket().Return(getPacket(1000), nil)
+			packer.EXPECT().PackPacket().Return(nil, nil)
+			sender.EXPECT().Send(gomock.Any()).DoAndReturn(func(p *packetBuffer) { close(written) })
+
+			sess.scheduleSending()
+			time.Sleep(scaleDuration(50 * time.Millisecond))
+
+			Eventually(written).Should(BeClosed())
+		})
+
 		It("stops sending when the send queue is full", func() {
 			sph.EXPECT().SentPacket(gomock.Any())
 			sph.EXPECT().HasPacingBudget().Return(true).AnyTimes()
