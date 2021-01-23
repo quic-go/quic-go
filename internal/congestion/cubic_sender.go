@@ -83,7 +83,7 @@ func newCubicSender(clock Clock, rttStats *utils.RTTStats, reno bool, initialCon
 		initialMaxCongestionWindow: initialMaxCongestionWindow,
 		congestionWindow:           initialCongestionWindow,
 		minCongestionWindow:        minCongestionWindow,
-		slowStartThreshold:         initialMaxCongestionWindow,
+		slowStartThreshold:         protocol.MaxByteCount,
 		maxCongestionWindow:        initialMaxCongestionWindow,
 		cubic:                      NewCubic(clock),
 		clock:                      clock,

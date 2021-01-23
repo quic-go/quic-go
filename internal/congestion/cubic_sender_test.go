@@ -289,7 +289,7 @@ var _ = Describe("Cubic Sender", func() {
 
 	It("RTO congestion window", func() {
 		Expect(sender.GetCongestionWindow()).To(Equal(defaultWindowTCP))
-		Expect(sender.slowStartThreshold).To(Equal(MaxCongestionWindow))
+		Expect(sender.slowStartThreshold).To(Equal(protocol.MaxByteCount))
 
 		// Expect the window to decrease to the minimum once the RTO fires
 		// and slow start threshold to be set to 1/2 of the CWND.
@@ -420,7 +420,7 @@ var _ = Describe("Cubic Sender", func() {
 
 	It("reset after connection migration", func() {
 		Expect(sender.GetCongestionWindow()).To(Equal(defaultWindowTCP))
-		Expect(sender.slowStartThreshold).To(Equal(MaxCongestionWindow))
+		Expect(sender.slowStartThreshold).To(Equal(protocol.MaxByteCount))
 
 		// Starts with slow start.
 		const numberOfAcks = 10
