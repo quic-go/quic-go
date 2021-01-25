@@ -191,7 +191,7 @@ func (s *sendStream) canBufferStreamFrame() bool {
 	if s.nextFrame != nil {
 		l = s.nextFrame.DataLen()
 	}
-	return l+protocol.ByteCount(len(s.dataForWriting)) <= protocol.MaxReceivePacketSize
+	return l+protocol.ByteCount(len(s.dataForWriting)) <= protocol.MaxPacketBufferSize
 }
 
 // popStreamFrame returns the next STREAM frame that is supposed to be sent on this stream

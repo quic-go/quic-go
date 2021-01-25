@@ -335,7 +335,7 @@ func (p *TransportParameters) Marshal(pers protocol.Perspective) []byte {
 	// idle_timeout
 	p.marshalVarintParam(b, maxIdleTimeoutParameterID, uint64(p.MaxIdleTimeout/time.Millisecond))
 	// max_packet_size
-	p.marshalVarintParam(b, maxUDPPayloadSizeParameterID, uint64(protocol.MaxReceivePacketSize))
+	p.marshalVarintParam(b, maxUDPPayloadSizeParameterID, uint64(protocol.MaxPacketBufferSize))
 	// max_ack_delay
 	// Only send it if is different from the default value.
 	if p.MaxAckDelay != protocol.DefaultMaxAckDelay {
