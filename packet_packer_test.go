@@ -1439,6 +1439,21 @@ var _ = Describe("Packet packer", func() {
 				Expect(err).ToNot(HaveOccurred())
 				Expect(packet).To(BeNil())
 			})
+
+			It("packs an MTU probe packet", func() {
+				sealingManager.EXPECT().Get1RTTSealer().Return(getSealer(), nil)
+				pnManager.EXPECT().PeekPacketNumber(protocol.Encryption1RTT).Return(protocol.PacketNumber(0x43), protocol.PacketNumberLen2)
+				pnManager.EXPECT().PopPacketNumber(protocol.Encryption1RTT).Return(protocol.PacketNumber(0x43))
+				ping := ackhandler.Frame{Frame: &wire.PingFrame{}}
+				const probePacketSize = maxPacketSize + 42
+				p, err := packer.PackMTUProbePacket(ping, probePacketSize)
+				Expect(err).ToNot(HaveOccurred())
+				Expect(p.length).To(BeEquivalentTo(probePacketSize))
+				Expect(p.header.IsLongHeader).To(BeFalse())
+				Expect(p.header.PacketNumber).To(Equal(protocol.PacketNumber(0x43)))
+				Expect(p.EncryptionLevel()).To(Equal(protocol.Encryption1RTT))
+				Expect(p.buffer.Data).To(HaveLen(int(probePacketSize)))
+			})
 		})
 	})
 })
