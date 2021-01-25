@@ -46,7 +46,7 @@ var _ = Describe("Cubic Sender", func() {
 	})
 
 	SendAvailableSendWindowLen := func(packetLength protocol.ByteCount) int {
-		packetsSent := 0
+		var packetsSent int
 		for sender.CanSend(bytesInFlight) {
 			sender.OnPacketSent(clock.Now(), bytesInFlight, packetNumber, packetLength, true)
 			packetNumber++
@@ -449,15 +449,32 @@ var _ = Describe("Cubic Sender", func() {
 		Expect(sender.hybridSlowStart.Started()).To(BeFalse())
 	})
 
-	It("default max cwnd", func() {
-		sender = newCubicSender(&clock, rttStats, true /*reno*/, initialCongestionWindowPackets*maxDatagramSize, maxCongestionWindow, nil)
+	It("slow starts up to the maximum congestion window", func() {
+		sender = newCubicSender(&clock, rttStats, true, initialCongestionWindowPackets*maxDatagramSize, initialMaxCongestionWindow, nil)
 
-		defaultMaxCongestionWindowPackets := maxCongestionWindow / maxDatagramSize
-		for i := 1; i < int(defaultMaxCongestionWindowPackets); i++ {
+		for i := 1; i < protocol.MaxCongestionWindowPackets; i++ {
 			sender.MaybeExitSlowStart()
 			sender.OnPacketAcked(protocol.PacketNumber(i), 1350, sender.GetCongestionWindow(), clock.Now())
 		}
-		Expect(sender.GetCongestionWindow()).To(Equal(maxCongestionWindow))
+		Expect(sender.GetCongestionWindow()).To(Equal(initialMaxCongestionWindow))
+	})
+
+	It("doesn't allow reductions of the maximum packet size", func() {
+		Expect(func() { sender.SetMaxDatagramSize(initialMaxDatagramSize - 1) }).To(Panic())
+	})
+
+	It("slow starts up to maximum congestion window, if larger packets are sent", func() {
+		sender = newCubicSender(&clock, rttStats, true, initialCongestionWindowPackets*maxDatagramSize, initialMaxCongestionWindow, nil)
+		const packetSize = initialMaxDatagramSize + 100
+		sender.SetMaxDatagramSize(packetSize)
+		for i := 1; i < protocol.MaxCongestionWindowPackets; i++ {
+			sender.OnPacketAcked(protocol.PacketNumber(i), packetSize, sender.GetCongestionWindow(), clock.Now())
+		}
+		const maxCwnd = protocol.MaxCongestionWindowPackets * packetSize
+		Expect(sender.GetCongestionWindow()).To(And(
+			BeNumerically(">", maxCwnd),
+			BeNumerically("<=", maxCwnd+packetSize),
+		))
 	})
 
 	It("limit cwnd increase in congestion avoidance", func() {

@@ -707,6 +707,10 @@ func (h *sentPacketHandler) HasPacingBudget() bool {
 	return h.congestion.HasPacingBudget()
 }
 
+func (h *sentPacketHandler) SetMaxDatagramSize(s protocol.ByteCount) {
+	h.congestion.SetMaxDatagramSize(s)
+}
+
 func (h *sentPacketHandler) isAmplificationLimited() bool {
 	if h.peerAddressValidated {
 		return false
