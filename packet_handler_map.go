@@ -58,7 +58,7 @@ var _ packetHandlerManager = &packetHandlerMap{}
 func setReceiveBuffer(c net.PacketConn, logger utils.Logger) error {
 	conn, ok := c.(interface{ SetReadBuffer(int) error })
 	if !ok {
-		return errors.New("connection doesn't allow setting of receive buffer size")
+		return errors.New("connection doesn't allow setting of receive buffer size. Not a *net.UDPConn?")
 	}
 	size, err := inspectReadBuffer(c)
 	if err != nil {
