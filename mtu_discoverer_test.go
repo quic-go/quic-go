@@ -20,7 +20,7 @@ var _ = Describe("MTU Discoverer", func() {
 	)
 
 	var (
-		d             *mtuDiscoverer
+		d             mtuDiscoverer
 		rttStats      *utils.RTTStats
 		now           time.Time
 		discoveredMTU protocol.ByteCount

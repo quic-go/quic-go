@@ -9,6 +9,12 @@ import (
 	"github.com/lucas-clemente/quic-go/internal/wire"
 )
 
+type mtuDiscoverer interface {
+	ShouldSendProbe(now time.Time) bool
+	NextProbeTime() time.Time
+	GetPing() (ping ackhandler.Frame, datagramSize protocol.ByteCount)
+}
+
 const (
 	// At some point, we have to stop searching for a higher MTU.
 	// We're happy to send a packet that's 10 bytes smaller than the actual MTU.
@@ -17,7 +23,7 @@ const (
 	mtuProbeDelay = 5
 )
 
-type mtuDiscoverer struct {
+type mtuFinder struct {
 	lastProbeTime time.Time
 	probeInFlight bool
 	mtuIncreased  func(protocol.ByteCount)
@@ -27,8 +33,10 @@ type mtuDiscoverer struct {
 	max      protocol.ByteCount // the maximum value, as advertised by the peer (or our maximum size buffer)
 }
 
-func newMTUDiscoverer(rttStats *utils.RTTStats, start, max protocol.ByteCount, mtuIncreased func(protocol.ByteCount)) *mtuDiscoverer {
-	return &mtuDiscoverer{
+var _ mtuDiscoverer = &mtuFinder{}
+
+func newMTUDiscoverer(rttStats *utils.RTTStats, start, max protocol.ByteCount, mtuIncreased func(protocol.ByteCount)) mtuDiscoverer {
+	return &mtuFinder{
 		current:       start,
 		rttStats:      rttStats,
 		lastProbeTime: time.Now(), // to make sure the first probe packet is not sent immediately
@@ -37,40 +45,40 @@ func newMTUDiscoverer(rttStats *utils.RTTStats, start, max protocol.ByteCount, m
 	}
 }
 
-func (d *mtuDiscoverer) done() bool {
-	return d.max-d.current <= maxMTUDiff+1
+func (f *mtuFinder) done() bool {
+	return f.max-f.current <= maxMTUDiff+1
 }
 
-func (d *mtuDiscoverer) ShouldSendProbe(now time.Time) bool {
-	if d.probeInFlight || d.done() {
+func (f *mtuFinder) ShouldSendProbe(now time.Time) bool {
+	if f.probeInFlight || f.done() {
 		return false
 	}
-	return !now.Before(d.NextProbeTime())
+	return !now.Before(f.NextProbeTime())
 }
 
 // NextProbeTime returns the time when the next probe packet should be sent.
 // It returns the zero value if no probe packet should be sent.
-func (d *mtuDiscoverer) NextProbeTime() time.Time {
-	if d.probeInFlight || d.done() {
+func (f *mtuFinder) NextProbeTime() time.Time {
+	if f.probeInFlight || f.done() {
 		return time.Time{}
 	}
-	return d.lastProbeTime.Add(mtuProbeDelay * d.rttStats.SmoothedRTT())
+	return f.lastProbeTime.Add(mtuProbeDelay * f.rttStats.SmoothedRTT())
 }
 
-func (d *mtuDiscoverer) GetPing() (ackhandler.Frame, protocol.ByteCount) {
-	size := (d.max + d.current) / 2
-	d.lastProbeTime = time.Now()
-	d.probeInFlight = true
+func (f *mtuFinder) GetPing() (ackhandler.Frame, protocol.ByteCount) {
+	size := (f.max + f.current) / 2
+	f.lastProbeTime = time.Now()
+	f.probeInFlight = true
 	return ackhandler.Frame{
 		Frame: &wire.PingFrame{},
 		OnLost: func(wire.Frame) {
-			d.probeInFlight = false
-			d.max = size
+			f.probeInFlight = false
+			f.max = size
 		},
 		OnAcked: func(wire.Frame) {
-			d.probeInFlight = false
-			d.current = size
-			d.mtuIncreased(size)
+			f.probeInFlight = false
+			f.current = size
+			f.mtuIncreased(size)
 		},
 	}, size
 }
