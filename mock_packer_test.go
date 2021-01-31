@@ -8,6 +8,7 @@ import (
 	reflect "reflect"
 
 	gomock "github.com/golang/mock/gomock"
+	ackhandler "github.com/lucas-clemente/quic-go/internal/ackhandler"
 	protocol "github.com/lucas-clemente/quic-go/internal/protocol"
 	qerr "github.com/lucas-clemente/quic-go/internal/qerr"
 	wire "github.com/lucas-clemente/quic-go/internal/wire"
@@ -108,6 +109,21 @@ func (mr *MockPackerMockRecorder) PackConnectionClose(arg0 interface{}) *gomock.
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PackConnectionClose", reflect.TypeOf((*MockPacker)(nil).PackConnectionClose), arg0)
 }
 
+// PackMTUProbePacket mocks base method.
+func (m *MockPacker) PackMTUProbePacket(ping ackhandler.Frame, size protocol.ByteCount) (*packedPacket, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "PackMTUProbePacket", ping, size)
+	ret0, _ := ret[0].(*packedPacket)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// PackMTUProbePacket indicates an expected call of PackMTUProbePacket.
+func (mr *MockPackerMockRecorder) PackMTUProbePacket(ping, size interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PackMTUProbePacket", reflect.TypeOf((*MockPacker)(nil).PackMTUProbePacket), ping, size)
+}
+
 // PackPacket mocks base method.
 func (m *MockPacker) PackPacket() (*packedPacket, error) {
 	m.ctrl.T.Helper()
@@ -121,6 +137,18 @@ func (m *MockPacker) PackPacket() (*packedPacket, error) {
 func (mr *MockPackerMockRecorder) PackPacket() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PackPacket", reflect.TypeOf((*MockPacker)(nil).PackPacket))
+}
+
+// SetMaxPacketSize mocks base method.
+func (m *MockPacker) SetMaxPacketSize(arg0 protocol.ByteCount) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "SetMaxPacketSize", arg0)
+}
+
+// SetMaxPacketSize indicates an expected call of SetMaxPacketSize.
+func (mr *MockPackerMockRecorder) SetMaxPacketSize(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetMaxPacketSize", reflect.TypeOf((*MockPacker)(nil).SetMaxPacketSize), arg0)
 }
 
 // SetToken mocks base method.

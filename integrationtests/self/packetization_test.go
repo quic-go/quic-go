@@ -29,7 +29,10 @@ var _ = Describe("Packetization", func() {
 		server, err = quic.ListenAddr(
 			"localhost:0",
 			getTLSConfig(),
-			getQuicConfig(&quic.Config{AcceptToken: func(net.Addr, *quic.Token) bool { return true }}),
+			getQuicConfig(&quic.Config{
+				AcceptToken:             func(net.Addr, *quic.Token) bool { return true },
+				DisablePathMTUDiscovery: true,
+			}),
 		)
 		Expect(err).ToNot(HaveOccurred())
 		serverAddr := fmt.Sprintf("localhost:%d", server.Addr().(*net.UDPAddr).Port)
@@ -64,7 +67,7 @@ var _ = Describe("Packetization", func() {
 		sess, err := quic.DialAddr(
 			fmt.Sprintf("localhost:%d", proxy.LocalPort()),
 			getTLSClientConfig(),
-			getQuicConfig(nil),
+			getQuicConfig(&quic.Config{DisablePathMTUDiscovery: true}),
 		)
 		Expect(err).ToNot(HaveOccurred())
 

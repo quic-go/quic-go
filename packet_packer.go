@@ -22,6 +22,9 @@ type packer interface {
 	MaybePackAckPacket(handshakeConfirmed bool) (*packedPacket, error)
 	PackConnectionClose(*qerr.QuicError) (*coalescedPacket, error)
 
+	SetMaxPacketSize(protocol.ByteCount)
+	PackMTUProbePacket(ping ackhandler.Frame, size protocol.ByteCount) (*packedPacket, error)
+
 	HandleTransportParameters(*wire.TransportParameters)
 	SetToken([]byte)
 }
