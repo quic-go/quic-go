@@ -862,6 +862,13 @@ func (p *packetPacker) SetToken(token []byte) {
 	p.token = token
 }
 
+// When a higher MTU is discovered, use it.
+func (p *packetPacker) SetMaxPacketSize(s protocol.ByteCount) {
+	p.maxPacketSize = s
+}
+
+// If the peer sets a max_packet_size that's smaller than the size we're currently using,
+// we need to reduce the size of packets we send.
 func (p *packetPacker) HandleTransportParameters(params *wire.TransportParameters) {
 	if params.MaxUDPPayloadSize != 0 {
 		p.maxPacketSize = utils.MinByteCount(p.maxPacketSize, params.MaxUDPPayloadSize)

@@ -802,8 +802,8 @@ var _ = Describe("Packet packer", func() {
 				})
 			})
 
-			Context("max packet size", func() {
-				It("sets the maximum packet size", func() {
+			Context("handling transport parameters", func() {
+				It("lowers the maximum packet size", func() {
 					pnManager.EXPECT().PeekPacketNumber(protocol.Encryption1RTT).Return(protocol.PacketNumber(0x42), protocol.PacketNumberLen2).Times(2)
 					sealingManager.EXPECT().Get1RTTSealer().Return(getSealer(), nil).Times(2)
 					framer.EXPECT().HasData().Return(true).Times(2)
@@ -848,6 +848,33 @@ var _ = Describe("Packet packer", func() {
 					})
 					framer.EXPECT().AppendControlFrames(gomock.Any(), gomock.Any()).Do(func(_ []ackhandler.Frame, maxLen protocol.ByteCount) ([]ackhandler.Frame, protocol.ByteCount) {
 						Expect(maxLen).To(Equal(initialMaxPacketSize))
+						return nil, 0
+					})
+					expectAppendStreamFrames()
+					_, err = packer.PackPacket()
+					Expect(err).ToNot(HaveOccurred())
+				})
+			})
+
+			Context("max packet size", func() {
+				It("increases the max packet size", func() {
+					pnManager.EXPECT().PeekPacketNumber(protocol.Encryption1RTT).Return(protocol.PacketNumber(0x42), protocol.PacketNumberLen2).Times(2)
+					sealingManager.EXPECT().Get1RTTSealer().Return(getSealer(), nil).Times(2)
+					framer.EXPECT().HasData().Return(true).Times(2)
+					ackFramer.EXPECT().GetAckFrame(protocol.Encryption1RTT, false).Times(2)
+					var initialMaxPacketSize protocol.ByteCount
+					framer.EXPECT().AppendControlFrames(gomock.Any(), gomock.Any()).Do(func(_ []ackhandler.Frame, maxLen protocol.ByteCount) ([]ackhandler.Frame, protocol.ByteCount) {
+						initialMaxPacketSize = maxLen
+						return nil, 0
+					})
+					expectAppendStreamFrames()
+					_, err := packer.PackPacket()
+					Expect(err).ToNot(HaveOccurred())
+					// now reduce the maxPacketSize
+					const packetSizeIncrease = 50
+					packer.SetMaxPacketSize(maxPacketSize + packetSizeIncrease)
+					framer.EXPECT().AppendControlFrames(gomock.Any(), gomock.Any()).Do(func(_ []ackhandler.Frame, maxLen protocol.ByteCount) ([]ackhandler.Frame, protocol.ByteCount) {
+						Expect(maxLen).To(Equal(initialMaxPacketSize + packetSizeIncrease))
 						return nil, 0
 					})
 					expectAppendStreamFrames()
