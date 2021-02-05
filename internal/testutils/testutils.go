@@ -65,7 +65,7 @@ func ComposeAckFrame(smallest protocol.PacketNumber, largest protocol.PacketNumb
 // ComposeInitialPacket returns an Initial packet encrypted under key
 // (the original destination connection ID) containing specified frames
 func ComposeInitialPacket(srcConnID protocol.ConnectionID, destConnID protocol.ConnectionID, version protocol.VersionNumber, key protocol.ConnectionID, frames []wire.Frame) []byte {
-	sealer, _ := handshake.NewInitialAEAD(key, protocol.PerspectiveServer)
+	sealer, _ := handshake.NewInitialAEAD(key, protocol.PerspectiveServer, version)
 
 	// compose payload
 	var payload []byte
