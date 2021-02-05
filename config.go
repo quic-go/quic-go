@@ -106,6 +106,7 @@ func populateConfig(config *Config) *Config {
 		StatelessResetKey:                     config.StatelessResetKey,
 		TokenStore:                            config.TokenStore,
 		EnableDatagrams:                       config.EnableDatagrams,
+		DisablePathMTUDiscovery:               config.DisablePathMTUDiscovery,
 		Tracer:                                config.Tracer,
 	}
 }
