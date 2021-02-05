@@ -23,7 +23,6 @@ import (
 	"github.com/lucas-clemente/quic-go"
 	"github.com/lucas-clemente/quic-go/internal/utils"
 	"github.com/lucas-clemente/quic-go/logging"
-	"github.com/lucas-clemente/quic-go/metrics"
 	"github.com/lucas-clemente/quic-go/qlog"
 
 	. "github.com/onsi/ginkgo"
@@ -84,11 +83,10 @@ func (b *syncedBuffer) Reset() {
 }
 
 var (
-	logFileName   string // the log file set in the ginkgo flags
-	logBufOnce    sync.Once
-	logBuf        *syncedBuffer
-	enableQlog    bool
-	enableMetrics bool
+	logFileName string // the log file set in the ginkgo flags
+	logBufOnce  sync.Once
+	logBuf      *syncedBuffer
+	enableQlog  bool
 
 	tlsConfig          *tls.Config
 	tlsConfigLongChain *tls.Config
@@ -101,8 +99,6 @@ var (
 func init() {
 	flag.StringVar(&logFileName, "logfile", "", "log file")
 	flag.BoolVar(&enableQlog, "qlog", false, "enable qlog")
-	// metrics won't be accessible anywhere, but it's useful to exercise the code
-	flag.BoolVar(&enableMetrics, "metrics", false, "enable metrics")
 }
 
 var _ = BeforeSuite(func() {
@@ -136,9 +132,8 @@ var _ = BeforeSuite(func() {
 		NextProtos: []string{alpn},
 	}
 
-	var qlogTracer, metricsTracer logging.Tracer
 	if enableQlog {
-		qlogTracer = qlog.NewTracer(func(p logging.Perspective, connectionID []byte) io.WriteCloser {
+		tracer = qlog.NewTracer(func(p logging.Perspective, connectionID []byte) io.WriteCloser {
 			role := "server"
 			if p == logging.PerspectiveClient {
 				role = "client"
@@ -150,17 +145,6 @@ var _ = BeforeSuite(func() {
 			bw := bufio.NewWriter(f)
 			return utils.NewBufferedWriteCloser(bw, f)
 		})
-	}
-	if enableMetrics {
-		metricsTracer = metrics.NewTracer()
-	}
-
-	if enableQlog && enableMetrics {
-		tracer = logging.NewMultiplexedTracer(qlogTracer, metricsTracer)
-	} else if enableQlog {
-		tracer = qlogTracer
-	} else if enableMetrics {
-		tracer = metricsTracer
 	}
 })
 
