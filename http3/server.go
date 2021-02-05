@@ -32,6 +32,7 @@ var (
 const (
 	nextProtoH3Draft29      = "h3-29"
 	nextProtoH3Draft32      = "h3-32"
+	nextProtoH3Draft34      = "h3-34"
 	streamTypeControlStream = 0
 	streamTypePushStream    = 1
 )
@@ -42,6 +43,9 @@ func versionToALPN(v protocol.VersionNumber) string {
 	}
 	if v == protocol.VersionDraft32 {
 		return nextProtoH3Draft32
+	}
+	if v == protocol.VersionDraft34 {
+		return nextProtoH3Draft34
 	}
 	return ""
 }
@@ -145,8 +149,13 @@ func (s *Server) serveImpl(tlsConf *tls.Config, conn net.PacketConn) error {
 		GetConfigForClient: func(ch *tls.ClientHelloInfo) (*tls.Config, error) {
 			// determine the ALPN from the QUIC version used
 			proto := nextProtoH3Draft29
-			if qconn, ok := ch.Conn.(handshake.ConnWithVersion); ok && qconn.GetQUICVersion() == quic.VersionDraft32 {
-				proto = nextProtoH3Draft32
+			if qconn, ok := ch.Conn.(handshake.ConnWithVersion); ok {
+				if qconn.GetQUICVersion() == quic.VersionDraft32 {
+					proto = nextProtoH3Draft32
+				}
+				if qconn.GetQUICVersion() == protocol.VersionDraft34 {
+					proto = nextProtoH3Draft34
+				}
 			}
 			config := tlsConf
 			if tlsConf.GetConfigForClient != nil {
