@@ -6,6 +6,7 @@ import (
 	"io"
 	"log"
 	"net"
+	"runtime/debug"
 	"sync"
 	"time"
 
@@ -16,6 +17,34 @@ import (
 
 	"github.com/francoispqt/gojay"
 )
+
+// Setting of this only works when quic-go is used as a library.
+// When building a binary from this repository, the version can be set using the following go build flag:
+// -ldflags="-X github.com/lucas-clemente/quic-go/qlog.quicGoVersion=foobar"
+var quicGoVersion = "(devel)"
+
+func init() {
+	if quicGoVersion != "(devel)" { // variable set by ldflags
+		return
+	}
+	info, ok := debug.ReadBuildInfo()
+	if !ok { // no build info available. This happens when quic-go is not used as a library.
+		return
+	}
+	for _, d := range info.Deps {
+		if d.Path == "github.com/lucas-clemente/quic-go" {
+			quicGoVersion = d.Version
+			if d.Replace != nil {
+				if len(d.Replace.Version) > 0 {
+					quicGoVersion = d.Version
+				} else {
+					quicGoVersion += " (replaced)"
+				}
+			}
+			break
+		}
+	}
+}
 
 const eventChanSize = 50
 

@@ -19,8 +19,8 @@ RUN git clone https://github.com/lucas-clemente/quic-go && \
 WORKDIR /quic-go
 
 RUN git rev-parse HEAD > commit.txt
-RUN go build -o server interop/server/main.go && \
- go build -o client interop/client/main.go
+RUN go build -o server -ldflags="-X github.com/lucas-clemente/quic-go/qlog.quicGoVersion=$(git describe --always --long --dirty)" interop/server/main.go
+RUN go build -o client -ldflags="-X github.com/lucas-clemente/quic-go/qlog.quicGoVersion=$(git describe --always --long --dirty)" interop/client/main.go
 
 
 FROM martenseemann/quic-network-simulator-endpoint:latest

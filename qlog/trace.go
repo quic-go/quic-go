@@ -17,6 +17,7 @@ func (l topLevel) MarshalJSONObject(enc *gojay.Encoder) {
 	enc.StringKey("qlog_format", "NDJSON")
 	enc.StringKey("qlog_version", "draft-02")
 	enc.StringKeyOmitEmpty("title", "quic-go qlog")
+	enc.StringKey("code_version", quicGoVersion)
 	enc.ObjectKey("trace", l.trace)
 }
 
