@@ -58,7 +58,7 @@ var _ = Describe("Tracing", func() {
 
 	It("stops writing when encountering an error", func() {
 		buf := &bytes.Buffer{}
-		t := newConnectionTracer(
+		t := NewConnectionTracer(
 			&limitedWriter{WriteCloser: nopWriteCloser(buf), N: 250},
 			protocol.PerspectiveServer,
 			protocol.ConnectionID{0xde, 0xad, 0xbe, 0xef},
