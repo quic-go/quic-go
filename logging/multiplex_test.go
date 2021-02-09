@@ -94,7 +94,7 @@ var _ = Describe("Tracing", func() {
 		BeforeEach(func() {
 			tr1 = NewMockConnectionTracer(mockCtrl)
 			tr2 = NewMockConnectionTracer(mockCtrl)
-			tracer = newConnectionMultiplexer(tr1, tr2)
+			tracer = NewMultiplexedConnectionTracer(tr1, tr2)
 		})
 
 		It("trace the ConnectionStarted event", func() {
