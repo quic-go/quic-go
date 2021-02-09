@@ -32,7 +32,7 @@ func NewTracer(getLogWriter func(p logging.Perspective, connectionID []byte) io.
 
 func (t *tracer) TracerForConnection(p logging.Perspective, odcid protocol.ConnectionID) logging.ConnectionTracer {
 	if w := t.getLogWriter(p, odcid.Bytes()); w != nil {
-		return newConnectionTracer(w, p, odcid)
+		return NewConnectionTracer(w, p, odcid)
 	}
 	return nil
 }
@@ -58,8 +58,8 @@ type connectionTracer struct {
 
 var _ logging.ConnectionTracer = &connectionTracer{}
 
-// newTracer creates a new connectionTracer to record a qlog.
-func newConnectionTracer(w io.WriteCloser, p protocol.Perspective, odcid protocol.ConnectionID) logging.ConnectionTracer {
+// NewConnectionTracer creates a new tracer to record a qlog for a connection.
+func NewConnectionTracer(w io.WriteCloser, p protocol.Perspective, odcid protocol.ConnectionID) logging.ConnectionTracer {
 	t := &connectionTracer{
 		w:             w,
 		perspective:   p,
