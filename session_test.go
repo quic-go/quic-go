@@ -2745,7 +2745,7 @@ var _ = Describe("Client Session", func() {
 			expectClose()
 			tracer.EXPECT().ReceivedTransportParameters(params)
 			sess.processTransportParameters(params)
-			Eventually(errChan).Should(Receive(MatchError("TRANSPORT_PARAMETER_ERROR: expected initial_source_connection_id to equal 0xdeadbeef, is 0xdecafbad")))
+			Eventually(errChan).Should(Receive(MatchError("TRANSPORT_PARAMETER_ERROR: expected initial_source_connection_id to equal deadbeef, is decafbad")))
 		})
 
 		It("errors if the transport parameters don't contain the retry_source_connection_id, if a Retry was performed", func() {
@@ -2772,7 +2772,7 @@ var _ = Describe("Client Session", func() {
 			expectClose()
 			tracer.EXPECT().ReceivedTransportParameters(params)
 			sess.processTransportParameters(params)
-			Eventually(errChan).Should(Receive(MatchError("TRANSPORT_PARAMETER_ERROR: expected retry_source_connection_id to equal 0xdeadbeef, is 0xdeadc0de")))
+			Eventually(errChan).Should(Receive(MatchError("TRANSPORT_PARAMETER_ERROR: expected retry_source_connection_id to equal deadbeef, is deadc0de")))
 		})
 
 		It("errors if the transport parameters contain the retry_source_connection_id, if no Retry was performed", func() {
@@ -2798,7 +2798,7 @@ var _ = Describe("Client Session", func() {
 			expectClose()
 			tracer.EXPECT().ReceivedTransportParameters(params)
 			sess.processTransportParameters(params)
-			Eventually(errChan).Should(Receive(MatchError("TRANSPORT_PARAMETER_ERROR: expected original_destination_connection_id to equal 0xdeadbeef, is 0xdecafbad")))
+			Eventually(errChan).Should(Receive(MatchError("TRANSPORT_PARAMETER_ERROR: expected original_destination_connection_id to equal deadbeef, is decafbad")))
 		})
 	})
 
