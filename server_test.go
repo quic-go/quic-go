@@ -55,7 +55,7 @@ var _ = Describe("Server", func() {
 		n := buf.Len()
 		buf.Write(p)
 		data := buffer.Data[:buf.Len()]
-		sealer, _ := handshake.NewInitialAEAD(hdr.DestConnectionID, protocol.PerspectiveClient)
+		sealer, _ := handshake.NewInitialAEAD(hdr.DestConnectionID, protocol.PerspectiveClient, hdr.Version)
 		_ = sealer.Seal(data[n:n], data[n:], 0x42, data[:n])
 		data = data[:len(data)+16]
 		sealer.EncryptHeader(data[n:n+16], &data[0], data[n-4:n])
@@ -516,7 +516,7 @@ var _ = Describe("Server", func() {
 					Expect(replyHdr.Type).To(Equal(protocol.PacketTypeInitial))
 					Expect(replyHdr.SrcConnectionID).To(Equal(hdr.DestConnectionID))
 					Expect(replyHdr.DestConnectionID).To(Equal(hdr.SrcConnectionID))
-					_, opener := handshake.NewInitialAEAD(hdr.DestConnectionID, protocol.PerspectiveClient)
+					_, opener := handshake.NewInitialAEAD(hdr.DestConnectionID, protocol.PerspectiveClient, replyHdr.Version)
 					extHdr, err := unpackHeader(opener, replyHdr, b, hdr.Version)
 					Expect(err).ToNot(HaveOccurred())
 					data, err := opener.Open(nil, b[extHdr.ParsedLen():], extHdr.PacketNumber, b[:extHdr.ParsedLen()])

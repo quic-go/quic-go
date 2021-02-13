@@ -93,6 +93,8 @@ type cryptoSetup struct {
 	extraConf *qtls.ExtraConfig
 	conn      *qtls.Conn
 
+	version protocol.VersionNumber
+
 	messageChan               chan []byte
 	isReadingHandshakeMessage chan struct{}
 	readFirstHandshakeMessage bool
@@ -176,6 +178,7 @@ func NewCryptoSetupClient(
 		tracer,
 		logger,
 		protocol.PerspectiveClient,
+		version,
 	)
 	cs.conn = qtls.Client(newConn(localAddr, remoteAddr, version), cs.tlsConf, cs.extraConf)
 	return cs, clientHelloWritten
@@ -209,6 +212,7 @@ func NewCryptoSetupServer(
 		tracer,
 		logger,
 		protocol.PerspectiveServer,
+		version,
 	)
 	cs.conn = qtls.Server(newConn(localAddr, remoteAddr, version), cs.tlsConf, cs.extraConf)
 	return cs
@@ -226,13 +230,14 @@ func newCryptoSetup(
 	tracer logging.ConnectionTracer,
 	logger utils.Logger,
 	perspective protocol.Perspective,
+	version protocol.VersionNumber,
 ) (*cryptoSetup, <-chan *wire.TransportParameters /* ClientHello written. Receive nil for non-0-RTT */) {
-	initialSealer, initialOpener := NewInitialAEAD(connID, perspective)
+	initialSealer, initialOpener := NewInitialAEAD(connID, perspective, version)
 	if tracer != nil {
 		tracer.UpdatedKeyFromTLS(protocol.EncryptionInitial, protocol.PerspectiveClient)
 		tracer.UpdatedKeyFromTLS(protocol.EncryptionInitial, protocol.PerspectiveServer)
 	}
-	extHandler := newExtensionHandler(tp.Marshal(perspective), perspective)
+	extHandler := newExtensionHandler(tp.Marshal(perspective), perspective, version)
 	cs := &cryptoSetup{
 		tlsConf:                   tlsConf,
 		initialStream:             initialStream,
@@ -255,6 +260,7 @@ func newCryptoSetup(
 		messageChan:               make(chan []byte, 100),
 		isReadingHandshakeMessage: make(chan struct{}),
 		closeChan:                 make(chan struct{}),
+		version:                   version,
 	}
 	var maxEarlyData uint32
 	if enable0RTT {
@@ -276,7 +282,7 @@ func newCryptoSetup(
 }
 
 func (h *cryptoSetup) ChangeConnectionID(id protocol.ConnectionID) {
-	initialSealer, initialOpener := NewInitialAEAD(id, h.perspective)
+	initialSealer, initialOpener := NewInitialAEAD(id, h.perspective, h.version)
 	h.initialSealer = initialSealer
 	h.initialOpener = initialOpener
 	if h.tracer != nil {

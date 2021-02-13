@@ -23,6 +23,7 @@ const (
 	VersionUnknown  VersionNumber = math.MaxUint32
 	VersionDraft29  VersionNumber = 0xff00001d
 	VersionDraft32  VersionNumber = 0xff000020
+	VersionDraft34  VersionNumber = 0xff000022 // If everything goes according to plan at the IETF, this will one day be QUIC v1.
 )
 
 // SupportedVersions lists the versions that the server supports
@@ -50,6 +51,8 @@ func (vn VersionNumber) String() string {
 		return "draft-29"
 	case VersionDraft32:
 		return "draft-32"
+	case VersionDraft34:
+		return "draft-34"
 	default:
 		if vn.isGQUIC() {
 			return fmt.Sprintf("gQUIC %d", vn.toGQUICVersion())
