@@ -1480,6 +1480,7 @@ var _ = Describe("Packet packer", func() {
 				Expect(p.header.PacketNumber).To(Equal(protocol.PacketNumber(0x43)))
 				Expect(p.EncryptionLevel()).To(Equal(protocol.Encryption1RTT))
 				Expect(p.buffer.Data).To(HaveLen(int(probePacketSize)))
+				Expect(p.packetContents.isMTUProbePacket).To(BeTrue())
 			})
 		})
 	})
@@ -1508,6 +1509,14 @@ var _ = Describe("Converting to AckHandler packets", func() {
 		}
 		p := packet.ToAckHandlerPacket(time.Now(), nil)
 		Expect(p.LargestAcked).To(Equal(protocol.InvalidPacketNumber))
+	})
+
+	It("marks MTU probe packets", func() {
+		packet := &packetContents{
+			header:           &wire.ExtendedHeader{Header: wire.Header{}},
+			isMTUProbePacket: true,
+		}
+		Expect(packet.ToAckHandlerPacket(time.Now(), nil).IsPathMTUProbePacket).To(BeTrue())
 	})
 
 	DescribeTable(

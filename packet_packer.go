@@ -50,6 +50,8 @@ type packetContents struct {
 	frames []ackhandler.Frame
 
 	length protocol.ByteCount
+
+	isMTUProbePacket bool
 }
 
 type coalescedPacket struct {
@@ -98,12 +100,13 @@ func (p *packetContents) ToAckHandlerPacket(now time.Time, q *retransmissionQueu
 		}
 	}
 	return &ackhandler.Packet{
-		PacketNumber:    p.header.PacketNumber,
-		LargestAcked:    largestAcked,
-		Frames:          p.frames,
-		Length:          p.length,
-		EncryptionLevel: encLevel,
-		SendTime:        now,
+		PacketNumber:         p.header.PacketNumber,
+		LargestAcked:         largestAcked,
+		Frames:               p.frames,
+		Length:               p.length,
+		EncryptionLevel:      encLevel,
+		SendTime:             now,
+		IsPathMTUProbePacket: p.isMTUProbePacket,
 	}
 }
 
@@ -701,6 +704,7 @@ func (p *packetPacker) PackMTUProbePacket(ping ackhandler.Frame, size protocol.B
 	if err != nil {
 		return nil, err
 	}
+	contents.isMTUProbePacket = true
 	return &packedPacket{
 		buffer:         buffer,
 		packetContents: contents,

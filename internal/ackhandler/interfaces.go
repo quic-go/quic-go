@@ -16,6 +16,8 @@ type Packet struct {
 	EncryptionLevel protocol.EncryptionLevel
 	SendTime        time.Time
 
+	IsPathMTUProbePacket bool // We don't report the loss of Path MTU probe packets to the congestion controller.
+
 	includedInBytesInFlight bool
 	declaredLost            bool
 	skippedPacket           bool

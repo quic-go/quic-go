@@ -557,11 +557,13 @@ func (h *sentPacketHandler) detectLostPackets(now time.Time, encLevel protocol.E
 			pnSpace.lossTime = lossTime
 		}
 		if packetLost {
-			h.congestion.OnPacketLost(p.PacketNumber, p.Length, priorInFlight)
 			p.declaredLost = true
-			h.queueFramesForRetransmission(p)
-			// the bytes in flight need to be reduced no matter if this packet will be retransmitted
+			// the bytes in flight need to be reduced no matter if the frames in this packet will be retransmitted
 			h.removeFromBytesInFlight(p)
+			h.queueFramesForRetransmission(p)
+			if !p.IsPathMTUProbePacket {
+				h.congestion.OnPacketLost(p.PacketNumber, p.Length, priorInFlight)
+			}
 		}
 		return true, nil
 	})
