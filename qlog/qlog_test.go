@@ -102,6 +102,7 @@ var _ = Describe("Tracing", func() {
 			Expect(commonFields).To(HaveKey("reference_time"))
 			referenceTime := time.Unix(0, int64(commonFields["reference_time"].(float64)*1e6))
 			Expect(referenceTime).To(BeTemporally("~", time.Now(), scaleDuration(10*time.Millisecond)))
+			Expect(commonFields).To(HaveKeyWithValue("time_format", "relative"))
 			Expect(trace).To(HaveKey("vantage_point"))
 			vantagePoint := trace["vantage_point"].(map[string]interface{})
 			Expect(vantagePoint).To(HaveKeyWithValue("type", "server"))
