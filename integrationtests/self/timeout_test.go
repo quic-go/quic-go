@@ -15,7 +15,9 @@ import (
 
 	quic "github.com/lucas-clemente/quic-go"
 	quicproxy "github.com/lucas-clemente/quic-go/integrationtests/tools/proxy"
+	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/internal/utils"
+	"github.com/lucas-clemente/quic-go/logging"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 )
@@ -42,6 +44,17 @@ func (c *faultyConn) WriteTo(p []byte, addr net.Addr) (int, error) {
 		return c.PacketConn.WriteTo(p, addr)
 	}
 	return 0, io.ErrClosedPipe
+}
+
+type handshakeCompleteTracer struct {
+	connTracer
+	completionTime time.Time
+}
+
+func (t *handshakeCompleteTracer) DroppedEncryptionLevel(l protocol.EncryptionLevel) {
+	if l == protocol.EncryptionHandshake {
+		t.completionTime = time.Now()
+	}
 }
 
 func areHandshakesRunning() bool {
@@ -201,13 +214,13 @@ var _ = Describe("Timeout tests", func() {
 				close(serverSessionClosed)
 			}()
 
+			tr := &handshakeCompleteTracer{}
 			sess, err := quic.DialAddr(
 				fmt.Sprintf("localhost:%d", server.Addr().(*net.UDPAddr).Port),
 				getTLSClientConfig(),
-				getQuicConfig(&quic.Config{MaxIdleTimeout: idleTimeout}),
+				getQuicConfig(&quic.Config{MaxIdleTimeout: idleTimeout, Tracer: newTracer(func() logging.ConnectionTracer { return tr })}),
 			)
 			Expect(err).ToNot(HaveOccurred())
-			startTime := time.Now()
 			done := make(chan struct{})
 			go func() {
 				defer GinkgoRecover()
@@ -216,7 +229,8 @@ var _ = Describe("Timeout tests", func() {
 				close(done)
 			}()
 			Eventually(done, 2*idleTimeout).Should(BeClosed())
-			dur := time.Since(startTime)
+			Expect(tr.completionTime).ToNot(BeZero())
+			dur := time.Since(tr.completionTime)
 			Expect(dur).To(And(
 				BeNumerically(">=", idleTimeout),
 				BeNumerically("<", idleTimeout*6/5),
