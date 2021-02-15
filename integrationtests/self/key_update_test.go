@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net"
-	"time"
 
 	quic "github.com/lucas-clemente/quic-go"
 	"github.com/lucas-clemente/quic-go/internal/handshake"
@@ -45,53 +44,17 @@ func countKeyPhases() (sent, received int) {
 	return
 }
 
-type simpleTracer struct{}
-
-var _ logging.Tracer = &simpleTracer{}
-
-func (t *simpleTracer) TracerForConnection(p logging.Perspective, odcid logging.ConnectionID) logging.ConnectionTracer {
-	return &connTracer{}
-}
-func (t *simpleTracer) SentPacket(net.Addr, *logging.Header, logging.ByteCount, []logging.Frame) {}
-func (t *simpleTracer) DroppedPacket(net.Addr, logging.PacketType, logging.ByteCount, logging.PacketDropReason) {
+type keyUpdateConnTracer struct {
+	connTracer
 }
 
-type connTracer struct{}
-
-var _ logging.ConnectionTracer = &connTracer{}
-
-func (t *connTracer) StartedConnection(local, remote net.Addr, version logging.VersionNumber, srcConnID, destConnID logging.ConnectionID) {
-}
-func (t *connTracer) ClosedConnection(logging.CloseReason)                     {}
-func (t *connTracer) SentTransportParameters(*logging.TransportParameters)     {}
-func (t *connTracer) ReceivedTransportParameters(*logging.TransportParameters) {}
-func (t *connTracer) RestoredTransportParameters(*logging.TransportParameters) {}
-func (t *connTracer) SentPacket(hdr *logging.ExtendedHeader, size logging.ByteCount, ack *logging.AckFrame, frames []logging.Frame) {
+func (t *keyUpdateConnTracer) SentPacket(hdr *logging.ExtendedHeader, size logging.ByteCount, ack *logging.AckFrame, frames []logging.Frame) {
 	sentHeaders = append(sentHeaders, hdr)
 }
-func (t *connTracer) ReceivedVersionNegotiationPacket(*logging.Header, []logging.VersionNumber) {}
-func (t *connTracer) ReceivedRetry(*logging.Header)                                             {}
-func (t *connTracer) ReceivedPacket(hdr *logging.ExtendedHeader, size logging.ByteCount, frames []logging.Frame) {
+
+func (t *keyUpdateConnTracer) ReceivedPacket(hdr *logging.ExtendedHeader, size logging.ByteCount, frames []logging.Frame) {
 	receivedHeaders = append(receivedHeaders, hdr)
 }
-func (t *connTracer) BufferedPacket(logging.PacketType)                                             {}
-func (t *connTracer) DroppedPacket(logging.PacketType, logging.ByteCount, logging.PacketDropReason) {}
-func (t *connTracer) UpdatedMetrics(rttStats *logging.RTTStats, cwnd, bytesInFlight logging.ByteCount, packetsInFlight int) {
-}
-
-func (t *connTracer) LostPacket(logging.EncryptionLevel, logging.PacketNumber, logging.PacketLossReason) {
-}
-func (t *connTracer) UpdatedCongestionState(logging.CongestionState)                     {}
-func (t *connTracer) UpdatedPTOCount(value uint32)                                       {}
-func (t *connTracer) UpdatedKeyFromTLS(logging.EncryptionLevel, logging.Perspective)     {}
-func (t *connTracer) UpdatedKey(generation logging.KeyPhase, remote bool)                {}
-func (t *connTracer) DroppedEncryptionLevel(logging.EncryptionLevel)                     {}
-func (t *connTracer) DroppedKey(logging.KeyPhase)                                        {}
-func (t *connTracer) SetLossTimer(logging.TimerType, logging.EncryptionLevel, time.Time) {}
-func (t *connTracer) LossTimerExpired(logging.TimerType, logging.EncryptionLevel)        {}
-func (t *connTracer) LossTimerCanceled()                                                 {}
-func (t *connTracer) Debug(string, string)                                               {}
-func (t *connTracer) Close()                                                             {}
 
 var _ = Describe("Key Update tests", func() {
 	var server quic.Listener
@@ -122,7 +85,7 @@ var _ = Describe("Key Update tests", func() {
 		sess, err := quic.DialAddr(
 			fmt.Sprintf("localhost:%d", server.Addr().(*net.UDPAddr).Port),
 			getTLSClientConfig(),
-			&quic.Config{Tracer: &simpleTracer{}},
+			&quic.Config{Tracer: newTracer(func() logging.ConnectionTracer { return &keyUpdateConnTracer{} })},
 		)
 		Expect(err).ToNot(HaveOccurred())
 		str, err := sess.AcceptUniStream(context.Background())

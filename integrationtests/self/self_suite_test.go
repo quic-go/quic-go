@@ -14,6 +14,7 @@ import (
 	"log"
 	"math/big"
 	mrand "math/rand"
+	"net"
 	"os"
 	"strconv"
 	"sync"
@@ -91,7 +92,7 @@ var (
 	tlsConfig          *tls.Config
 	tlsConfigLongChain *tls.Config
 	tlsClientConfig    *tls.Config
-	tracer             logging.Tracer
+	quicConfigTracer   logging.Tracer
 )
 
 // read the logfile command line flag
@@ -133,7 +134,7 @@ var _ = BeforeSuite(func() {
 	}
 
 	if enableQlog {
-		tracer = qlog.NewTracer(func(p logging.Perspective, connectionID []byte) io.WriteCloser {
+		quicConfigTracer = qlog.NewTracer(func(p logging.Perspective, connectionID []byte) io.WriteCloser {
 			role := "server"
 			if p == logging.PerspectiveClient {
 				role = "client"
@@ -271,7 +272,7 @@ func getQuicConfig(conf *quic.Config) *quic.Config {
 	} else {
 		conf = conf.Clone()
 	}
-	conf.Tracer = tracer
+	conf.Tracer = quicConfigTracer
 	return conf
 }
 
@@ -310,6 +311,58 @@ func scaleDuration(d time.Duration) time.Duration {
 	Expect(scaleFactor).ToNot(BeZero())
 	return time.Duration(scaleFactor) * d
 }
+
+type tracer struct {
+	createNewConnTracer func() logging.ConnectionTracer
+}
+
+var _ logging.Tracer = &tracer{}
+
+func newTracer(c func() logging.ConnectionTracer) logging.Tracer {
+	return &tracer{createNewConnTracer: c}
+}
+
+func (t *tracer) TracerForConnection(p logging.Perspective, odcid logging.ConnectionID) logging.ConnectionTracer {
+	return t.createNewConnTracer()
+}
+func (t *tracer) SentPacket(net.Addr, *logging.Header, logging.ByteCount, []logging.Frame) {}
+func (t *tracer) DroppedPacket(net.Addr, logging.PacketType, logging.ByteCount, logging.PacketDropReason) {
+}
+
+type connTracer struct{}
+
+var _ logging.ConnectionTracer = &connTracer{}
+
+func (t *connTracer) StartedConnection(local, remote net.Addr, version logging.VersionNumber, srcConnID, destConnID logging.ConnectionID) {
+}
+func (t *connTracer) ClosedConnection(logging.CloseReason)                     {}
+func (t *connTracer) SentTransportParameters(*logging.TransportParameters)     {}
+func (t *connTracer) ReceivedTransportParameters(*logging.TransportParameters) {}
+func (t *connTracer) RestoredTransportParameters(*logging.TransportParameters) {}
+func (t *connTracer) SentPacket(hdr *logging.ExtendedHeader, size logging.ByteCount, ack *logging.AckFrame, frames []logging.Frame) {
+}
+func (t *connTracer) ReceivedVersionNegotiationPacket(*logging.Header, []logging.VersionNumber) {}
+func (t *connTracer) ReceivedRetry(*logging.Header)                                             {}
+func (t *connTracer) ReceivedPacket(hdr *logging.ExtendedHeader, size logging.ByteCount, frames []logging.Frame) {
+}
+func (t *connTracer) BufferedPacket(logging.PacketType)                                             {}
+func (t *connTracer) DroppedPacket(logging.PacketType, logging.ByteCount, logging.PacketDropReason) {}
+func (t *connTracer) UpdatedMetrics(rttStats *logging.RTTStats, cwnd, bytesInFlight logging.ByteCount, packetsInFlight int) {
+}
+
+func (t *connTracer) LostPacket(logging.EncryptionLevel, logging.PacketNumber, logging.PacketLossReason) {
+}
+func (t *connTracer) UpdatedCongestionState(logging.CongestionState)                     {}
+func (t *connTracer) UpdatedPTOCount(value uint32)                                       {}
+func (t *connTracer) UpdatedKeyFromTLS(logging.EncryptionLevel, logging.Perspective)     {}
+func (t *connTracer) UpdatedKey(generation logging.KeyPhase, remote bool)                {}
+func (t *connTracer) DroppedEncryptionLevel(logging.EncryptionLevel)                     {}
+func (t *connTracer) DroppedKey(logging.KeyPhase)                                        {}
+func (t *connTracer) SetLossTimer(logging.TimerType, logging.EncryptionLevel, time.Time) {}
+func (t *connTracer) LossTimerExpired(logging.TimerType, logging.EncryptionLevel)        {}
+func (t *connTracer) LossTimerCanceled()                                                 {}
+func (t *connTracer) Debug(string, string)                                               {}
+func (t *connTracer) Close()                                                             {}
 
 func TestSelf(t *testing.T) {
 	RegisterFailHandler(Fail)
