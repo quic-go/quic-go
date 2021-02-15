@@ -85,7 +85,7 @@ var _ = Describe("Key Update tests", func() {
 		sess, err := quic.DialAddr(
 			fmt.Sprintf("localhost:%d", server.Addr().(*net.UDPAddr).Port),
 			getTLSClientConfig(),
-			&quic.Config{Tracer: newTracer(func() logging.ConnectionTracer { return &keyUpdateConnTracer{} })},
+			getQuicConfig(&quic.Config{Tracer: newTracer(func() logging.ConnectionTracer { return &keyUpdateConnTracer{} })}),
 		)
 		Expect(err).ToNot(HaveOccurred())
 		str, err := sess.AcceptUniStream(context.Background())

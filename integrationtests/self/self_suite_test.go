@@ -272,7 +272,11 @@ func getQuicConfig(conf *quic.Config) *quic.Config {
 	} else {
 		conf = conf.Clone()
 	}
-	conf.Tracer = quicConfigTracer
+	if conf.Tracer == nil {
+		conf.Tracer = quicConfigTracer
+	} else if quicConfigTracer != nil {
+		conf.Tracer = logging.NewMultiplexedTracer(quicConfigTracer, conf.Tracer)
+	}
 	return conf
 }
 
