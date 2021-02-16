@@ -75,7 +75,7 @@ func setReceiveBuffer(c net.PacketConn, logger utils.Logger) error {
 		return fmt.Errorf("failed to determine receive buffer size: %w", err)
 	}
 	if newSize == size {
-		return fmt.Errorf("failed to determine receive buffer size: %w", err)
+		return fmt.Errorf("failed to increase receive buffer size (wanted: %d kiB, got %d kiB)", protocol.DesiredReceiveBufferSize/1024, newSize/1024)
 	}
 	if newSize < protocol.DesiredReceiveBufferSize {
 		return fmt.Errorf("failed to sufficiently increase receive buffer size (was: %d kiB, wanted: %d kiB, got: %d kiB)", size/1024, protocol.DesiredReceiveBufferSize/1024, newSize/1024)
