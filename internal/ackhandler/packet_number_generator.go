@@ -1,9 +1,6 @@
 package ackhandler
 
 import (
-	"crypto/rand"
-	"encoding/binary"
-
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/internal/utils"
 )
@@ -33,28 +30,6 @@ func (p *sequentialPacketNumberGenerator) Pop() protocol.PacketNumber {
 	return next
 }
 
-type rng struct {
-	buf [4]byte
-}
-
-func (r *rng) Int31() int32 {
-	rand.Read(r.buf[:])
-	return int32(binary.BigEndian.Uint32(r.buf[:]) & ^uint32(1<<31))
-}
-
-// copied from the standard library math/rand implementation of Int63n
-func (r *rng) Int31n(n int32) int32 {
-	if n&(n-1) == 0 { // n is power of two, can mask
-		return r.Int31() & (n - 1)
-	}
-	max := int32((1 << 31) - 1 - (1<<31)%uint32(n))
-	v := r.Int31()
-	for v > max {
-		v = r.Int31()
-	}
-	return v % n
-}
-
 // The skippingPacketNumberGenerator generates the packet number for the next packet
 // it randomly skips a packet number every averagePeriod packets (on average).
 // It is guaranteed to never skip two consecutive packet numbers.
@@ -65,7 +40,7 @@ type skippingPacketNumberGenerator struct {
 	next       protocol.PacketNumber
 	nextToSkip protocol.PacketNumber
 
-	rng rng
+	rng utils.Rand
 }
 
 var _ packetNumberGenerator = &skippingPacketNumberGenerator{}
