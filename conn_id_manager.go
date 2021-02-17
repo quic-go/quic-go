@@ -21,9 +21,9 @@ type connIDManager struct {
 	// We change the connection ID after sending on average
 	// protocol.PacketsPerConnectionID packets. The actual value is randomized
 	// hide the packet loss rate from on-path observers.
-	packetsSinceLastChange uint64
 	rand                   utils.Rand
-	packetsPerConnectionID uint64
+	packetsSinceLastChange uint32
+	packetsPerConnectionID uint32
 
 	addStatelessResetToken    func(protocol.StatelessResetToken)
 	removeStatelessResetToken func(protocol.StatelessResetToken)
@@ -148,7 +148,7 @@ func (h *connIDManager) updateConnectionID() {
 	h.activeConnectionID = front.ConnectionID
 	h.activeStatelessResetToken = &front.StatelessResetToken
 	h.packetsSinceLastChange = 0
-	h.packetsPerConnectionID = protocol.PacketsPerConnectionID/2 + uint64(h.rand.Int31n(protocol.PacketsPerConnectionID))
+	h.packetsPerConnectionID = protocol.PacketsPerConnectionID/2 + uint32(h.rand.Int31n(protocol.PacketsPerConnectionID))
 	h.addStatelessResetToken(*h.activeStatelessResetToken)
 }
 
