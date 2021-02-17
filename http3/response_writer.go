@@ -57,7 +57,10 @@ func (w *responseWriter) WriteHeader(status int) {
 	if w.headerWritten {
 		return
 	}
-	w.headerWritten = true
+
+	if status < 100 || status >= 200 {
+		w.headerWritten = true
+	}
 	w.status = status
 
 	var headers bytes.Buffer
