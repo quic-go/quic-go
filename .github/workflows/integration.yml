@@ -5,9 +5,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        go: [ "1.14.x", "1.15.x", "1.16.0-rc1" ]
+        go: [ "1.15.x", "1.16.x" ]
     runs-on: ubuntu-latest
-    name: Integration Tests, Go ${{ matrix.go }})
+    name: Integration Tests (Go ${{ matrix.go }})
     steps:
       - uses: actions/checkout@v2
       - uses: actions/setup-go@v2

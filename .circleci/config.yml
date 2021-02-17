@@ -1,19 +1,19 @@
 version: 2.1
 executors:
-  test-go114:
-    docker:
-      - image: "circleci/golang:1.14"
-    environment:
-      runrace: true
   test-go115:
     docker:
       - image: "circleci/golang:1.15"
     environment:
       runrace: true
+  test-go116:
+    docker:
+      - image: "circleci/golang:1.16"
+    environment:
+      runrace: true
  
 jobs:
   "test": &test
-    executor: test-go114
+    executor: test-go115
     working_directory: /go/src/github.com/lucas-clemente/quic-go
     steps:
       - checkout
@@ -43,14 +43,14 @@ jobs:
       - run:
           name: "Run self integration tests with qlog"
           command: ginkgo -v -randomizeAllSpecs -trace integrationtests/self -- -qlog
-  go114:
-    <<: *test
   go115:
     <<: *test
-    executor: test-go115
+  go116:
+    <<: *test
+    executor: test-go116
 
 workflows:
   workflow:
     jobs:
-      - go114
       - go115
+      - go116
