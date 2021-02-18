@@ -1,6 +1,8 @@
 package quic
 
 import (
+	"net"
+	"os"
 	"sync"
 	"time"
 
@@ -9,6 +11,15 @@ import (
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/internal/wire"
 )
+
+type deadlineError struct{}
+
+func (deadlineError) Error() string   { return "deadline exceeded" }
+func (deadlineError) Temporary() bool { return true }
+func (deadlineError) Timeout() bool   { return true }
+func (deadlineError) Unwrap() error   { return os.ErrDeadlineExceeded }
+
+var errDeadline net.Error = &deadlineError{}
 
 // The streamSender is notified by the stream about various events.
 type streamSender interface {
