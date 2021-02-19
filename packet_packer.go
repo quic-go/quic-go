@@ -323,9 +323,6 @@ func (p *packetPacker) MaybePackAckPacket(handshakeConfirmed bool) (*packedPacke
 		}
 		encLevel = protocol.Encryption1RTT
 	}
-	if ack == nil {
-		return nil, nil
-	}
 	payload := &payload{
 		ack:    ack,
 		length: ack.Length(p.version),
