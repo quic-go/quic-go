@@ -18,7 +18,7 @@ When using quic-go as a library, please always use a [tagged release](https://gi
 
 ## Guides
 
-*We currently support Go 1.14+, with [Go modules](https://github.com/golang/go/wiki/Modules) support enabled.*
+*We currently support Go 1.15+, with [Go modules](https://github.com/golang/go/wiki/Modules) support enabled.*
 
 Running tests:
 
