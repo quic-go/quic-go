@@ -11,30 +11,30 @@ import (
 	protocol "github.com/lucas-clemente/quic-go/internal/protocol"
 )
 
-// MockStreamGetter is a mock of StreamGetter interface
+// MockStreamGetter is a mock of StreamGetter interface.
 type MockStreamGetter struct {
 	ctrl     *gomock.Controller
 	recorder *MockStreamGetterMockRecorder
 }
 
-// MockStreamGetterMockRecorder is the mock recorder for MockStreamGetter
+// MockStreamGetterMockRecorder is the mock recorder for MockStreamGetter.
 type MockStreamGetterMockRecorder struct {
 	mock *MockStreamGetter
 }
 
-// NewMockStreamGetter creates a new mock instance
+// NewMockStreamGetter creates a new mock instance.
 func NewMockStreamGetter(ctrl *gomock.Controller) *MockStreamGetter {
 	mock := &MockStreamGetter{ctrl: ctrl}
 	mock.recorder = &MockStreamGetterMockRecorder{mock}
 	return mock
 }
 
-// EXPECT returns an object that allows the caller to indicate expected use
+// EXPECT returns an object that allows the caller to indicate expected use.
 func (m *MockStreamGetter) EXPECT() *MockStreamGetterMockRecorder {
 	return m.recorder
 }
 
-// GetOrOpenReceiveStream mocks base method
+// GetOrOpenReceiveStream mocks base method.
 func (m *MockStreamGetter) GetOrOpenReceiveStream(arg0 protocol.StreamID) (receiveStreamI, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetOrOpenReceiveStream", arg0)
@@ -43,13 +43,13 @@ func (m *MockStreamGetter) GetOrOpenReceiveStream(arg0 protocol.StreamID) (recei
 	return ret0, ret1
 }
 
-// GetOrOpenReceiveStream indicates an expected call of GetOrOpenReceiveStream
+// GetOrOpenReceiveStream indicates an expected call of GetOrOpenReceiveStream.
 func (mr *MockStreamGetterMockRecorder) GetOrOpenReceiveStream(arg0 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetOrOpenReceiveStream", reflect.TypeOf((*MockStreamGetter)(nil).GetOrOpenReceiveStream), arg0)
 }
 
-// GetOrOpenSendStream mocks base method
+// GetOrOpenSendStream mocks base method.
 func (m *MockStreamGetter) GetOrOpenSendStream(arg0 protocol.StreamID) (sendStreamI, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetOrOpenSendStream", arg0)
@@ -58,7 +58,7 @@ func (m *MockStreamGetter) GetOrOpenSendStream(arg0 protocol.StreamID) (sendStre
 	return ret0, ret1
 }
 
-// GetOrOpenSendStream indicates an expected call of GetOrOpenSendStream
+// GetOrOpenSendStream indicates an expected call of GetOrOpenSendStream.
 func (mr *MockStreamGetterMockRecorder) GetOrOpenSendStream(arg0 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetOrOpenSendStream", reflect.TypeOf((*MockStreamGetter)(nil).GetOrOpenSendStream), arg0)

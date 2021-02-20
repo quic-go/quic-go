@@ -13,42 +13,42 @@ import (
 	wire "github.com/lucas-clemente/quic-go/internal/wire"
 )
 
-// MockReceivedPacketHandler is a mock of ReceivedPacketHandler interface
+// MockReceivedPacketHandler is a mock of ReceivedPacketHandler interface.
 type MockReceivedPacketHandler struct {
 	ctrl     *gomock.Controller
 	recorder *MockReceivedPacketHandlerMockRecorder
 }
 
-// MockReceivedPacketHandlerMockRecorder is the mock recorder for MockReceivedPacketHandler
+// MockReceivedPacketHandlerMockRecorder is the mock recorder for MockReceivedPacketHandler.
 type MockReceivedPacketHandlerMockRecorder struct {
 	mock *MockReceivedPacketHandler
 }
 
-// NewMockReceivedPacketHandler creates a new mock instance
+// NewMockReceivedPacketHandler creates a new mock instance.
 func NewMockReceivedPacketHandler(ctrl *gomock.Controller) *MockReceivedPacketHandler {
 	mock := &MockReceivedPacketHandler{ctrl: ctrl}
 	mock.recorder = &MockReceivedPacketHandlerMockRecorder{mock}
 	return mock
 }
 
-// EXPECT returns an object that allows the caller to indicate expected use
+// EXPECT returns an object that allows the caller to indicate expected use.
 func (m *MockReceivedPacketHandler) EXPECT() *MockReceivedPacketHandlerMockRecorder {
 	return m.recorder
 }
 
-// DropPackets mocks base method
+// DropPackets mocks base method.
 func (m *MockReceivedPacketHandler) DropPackets(arg0 protocol.EncryptionLevel) {
 	m.ctrl.T.Helper()
 	m.ctrl.Call(m, "DropPackets", arg0)
 }
 
-// DropPackets indicates an expected call of DropPackets
+// DropPackets indicates an expected call of DropPackets.
 func (mr *MockReceivedPacketHandlerMockRecorder) DropPackets(arg0 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DropPackets", reflect.TypeOf((*MockReceivedPacketHandler)(nil).DropPackets), arg0)
 }
 
-// GetAckFrame mocks base method
+// GetAckFrame mocks base method.
 func (m *MockReceivedPacketHandler) GetAckFrame(arg0 protocol.EncryptionLevel, arg1 bool) *wire.AckFrame {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetAckFrame", arg0, arg1)
@@ -56,13 +56,13 @@ func (m *MockReceivedPacketHandler) GetAckFrame(arg0 protocol.EncryptionLevel, a
 	return ret0
 }
 
-// GetAckFrame indicates an expected call of GetAckFrame
+// GetAckFrame indicates an expected call of GetAckFrame.
 func (mr *MockReceivedPacketHandlerMockRecorder) GetAckFrame(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetAckFrame", reflect.TypeOf((*MockReceivedPacketHandler)(nil).GetAckFrame), arg0, arg1)
 }
 
-// GetAlarmTimeout mocks base method
+// GetAlarmTimeout mocks base method.
 func (m *MockReceivedPacketHandler) GetAlarmTimeout() time.Time {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetAlarmTimeout")
@@ -70,13 +70,13 @@ func (m *MockReceivedPacketHandler) GetAlarmTimeout() time.Time {
 	return ret0
 }
 
-// GetAlarmTimeout indicates an expected call of GetAlarmTimeout
+// GetAlarmTimeout indicates an expected call of GetAlarmTimeout.
 func (mr *MockReceivedPacketHandlerMockRecorder) GetAlarmTimeout() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetAlarmTimeout", reflect.TypeOf((*MockReceivedPacketHandler)(nil).GetAlarmTimeout))
 }
 
-// IsPotentiallyDuplicate mocks base method
+// IsPotentiallyDuplicate mocks base method.
 func (m *MockReceivedPacketHandler) IsPotentiallyDuplicate(arg0 protocol.PacketNumber, arg1 protocol.EncryptionLevel) bool {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "IsPotentiallyDuplicate", arg0, arg1)
@@ -84,13 +84,13 @@ func (m *MockReceivedPacketHandler) IsPotentiallyDuplicate(arg0 protocol.PacketN
 	return ret0
 }
 
-// IsPotentiallyDuplicate indicates an expected call of IsPotentiallyDuplicate
+// IsPotentiallyDuplicate indicates an expected call of IsPotentiallyDuplicate.
 func (mr *MockReceivedPacketHandlerMockRecorder) IsPotentiallyDuplicate(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IsPotentiallyDuplicate", reflect.TypeOf((*MockReceivedPacketHandler)(nil).IsPotentiallyDuplicate), arg0, arg1)
 }
 
-// ReceivedPacket mocks base method
+// ReceivedPacket mocks base method.
 func (m *MockReceivedPacketHandler) ReceivedPacket(arg0 protocol.PacketNumber, arg1 protocol.ECN, arg2 protocol.EncryptionLevel, arg3 time.Time, arg4 bool) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ReceivedPacket", arg0, arg1, arg2, arg3, arg4)
@@ -98,7 +98,7 @@ func (m *MockReceivedPacketHandler) ReceivedPacket(arg0 protocol.PacketNumber, a
 	return ret0
 }
 
-// ReceivedPacket indicates an expected call of ReceivedPacket
+// ReceivedPacket indicates an expected call of ReceivedPacket.
 func (mr *MockReceivedPacketHandlerMockRecorder) ReceivedPacket(arg0, arg1, arg2, arg3, arg4 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReceivedPacket", reflect.TypeOf((*MockReceivedPacketHandler)(nil).ReceivedPacket), arg0, arg1, arg2, arg3, arg4)

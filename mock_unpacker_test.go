@@ -12,30 +12,30 @@ import (
 	wire "github.com/lucas-clemente/quic-go/internal/wire"
 )
 
-// MockUnpacker is a mock of Unpacker interface
+// MockUnpacker is a mock of Unpacker interface.
 type MockUnpacker struct {
 	ctrl     *gomock.Controller
 	recorder *MockUnpackerMockRecorder
 }
 
-// MockUnpackerMockRecorder is the mock recorder for MockUnpacker
+// MockUnpackerMockRecorder is the mock recorder for MockUnpacker.
 type MockUnpackerMockRecorder struct {
 	mock *MockUnpacker
 }
 
-// NewMockUnpacker creates a new mock instance
+// NewMockUnpacker creates a new mock instance.
 func NewMockUnpacker(ctrl *gomock.Controller) *MockUnpacker {
 	mock := &MockUnpacker{ctrl: ctrl}
 	mock.recorder = &MockUnpackerMockRecorder{mock}
 	return mock
 }
 
-// EXPECT returns an object that allows the caller to indicate expected use
+// EXPECT returns an object that allows the caller to indicate expected use.
 func (m *MockUnpacker) EXPECT() *MockUnpackerMockRecorder {
 	return m.recorder
 }
 
-// Unpack mocks base method
+// Unpack mocks base method.
 func (m *MockUnpacker) Unpack(arg0 *wire.Header, arg1 time.Time, arg2 []byte) (*unpackedPacket, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Unpack", arg0, arg1, arg2)
@@ -44,7 +44,7 @@ func (m *MockUnpacker) Unpack(arg0 *wire.Header, arg1 time.Time, arg2 []byte) (*
 	return ret0, ret1
 }
 
-// Unpack indicates an expected call of Unpack
+// Unpack indicates an expected call of Unpack.
 func (mr *MockUnpackerMockRecorder) Unpack(arg0, arg1, arg2 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Unpack", reflect.TypeOf((*MockUnpacker)(nil).Unpack), arg0, arg1, arg2)

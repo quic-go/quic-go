@@ -12,30 +12,30 @@ import (
 	protocol "github.com/lucas-clemente/quic-go/internal/protocol"
 )
 
-// MockFrameSource is a mock of FrameSource interface
+// MockFrameSource is a mock of FrameSource interface.
 type MockFrameSource struct {
 	ctrl     *gomock.Controller
 	recorder *MockFrameSourceMockRecorder
 }
 
-// MockFrameSourceMockRecorder is the mock recorder for MockFrameSource
+// MockFrameSourceMockRecorder is the mock recorder for MockFrameSource.
 type MockFrameSourceMockRecorder struct {
 	mock *MockFrameSource
 }
 
-// NewMockFrameSource creates a new mock instance
+// NewMockFrameSource creates a new mock instance.
 func NewMockFrameSource(ctrl *gomock.Controller) *MockFrameSource {
 	mock := &MockFrameSource{ctrl: ctrl}
 	mock.recorder = &MockFrameSourceMockRecorder{mock}
 	return mock
 }
 
-// EXPECT returns an object that allows the caller to indicate expected use
+// EXPECT returns an object that allows the caller to indicate expected use.
 func (m *MockFrameSource) EXPECT() *MockFrameSourceMockRecorder {
 	return m.recorder
 }
 
-// AppendControlFrames mocks base method
+// AppendControlFrames mocks base method.
 func (m *MockFrameSource) AppendControlFrames(arg0 []ackhandler.Frame, arg1 protocol.ByteCount) ([]ackhandler.Frame, protocol.ByteCount) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "AppendControlFrames", arg0, arg1)
@@ -44,13 +44,13 @@ func (m *MockFrameSource) AppendControlFrames(arg0 []ackhandler.Frame, arg1 prot
 	return ret0, ret1
 }
 
-// AppendControlFrames indicates an expected call of AppendControlFrames
+// AppendControlFrames indicates an expected call of AppendControlFrames.
 func (mr *MockFrameSourceMockRecorder) AppendControlFrames(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AppendControlFrames", reflect.TypeOf((*MockFrameSource)(nil).AppendControlFrames), arg0, arg1)
 }
 
-// AppendStreamFrames mocks base method
+// AppendStreamFrames mocks base method.
 func (m *MockFrameSource) AppendStreamFrames(arg0 []ackhandler.Frame, arg1 protocol.ByteCount) ([]ackhandler.Frame, protocol.ByteCount) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "AppendStreamFrames", arg0, arg1)
@@ -59,13 +59,13 @@ func (m *MockFrameSource) AppendStreamFrames(arg0 []ackhandler.Frame, arg1 proto
 	return ret0, ret1
 }
 
-// AppendStreamFrames indicates an expected call of AppendStreamFrames
+// AppendStreamFrames indicates an expected call of AppendStreamFrames.
 func (mr *MockFrameSourceMockRecorder) AppendStreamFrames(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AppendStreamFrames", reflect.TypeOf((*MockFrameSource)(nil).AppendStreamFrames), arg0, arg1)
 }
 
-// HasData mocks base method
+// HasData mocks base method.
 func (m *MockFrameSource) HasData() bool {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "HasData")
@@ -73,7 +73,7 @@ func (m *MockFrameSource) HasData() bool {
 	return ret0
 }
 
-// HasData indicates an expected call of HasData
+// HasData indicates an expected call of HasData.
 func (mr *MockFrameSourceMockRecorder) HasData() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HasData", reflect.TypeOf((*MockFrameSource)(nil).HasData))

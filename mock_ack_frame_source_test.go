@@ -12,30 +12,30 @@ import (
 	wire "github.com/lucas-clemente/quic-go/internal/wire"
 )
 
-// MockAckFrameSource is a mock of AckFrameSource interface
+// MockAckFrameSource is a mock of AckFrameSource interface.
 type MockAckFrameSource struct {
 	ctrl     *gomock.Controller
 	recorder *MockAckFrameSourceMockRecorder
 }
 
-// MockAckFrameSourceMockRecorder is the mock recorder for MockAckFrameSource
+// MockAckFrameSourceMockRecorder is the mock recorder for MockAckFrameSource.
 type MockAckFrameSourceMockRecorder struct {
 	mock *MockAckFrameSource
 }
 
-// NewMockAckFrameSource creates a new mock instance
+// NewMockAckFrameSource creates a new mock instance.
 func NewMockAckFrameSource(ctrl *gomock.Controller) *MockAckFrameSource {
 	mock := &MockAckFrameSource{ctrl: ctrl}
 	mock.recorder = &MockAckFrameSourceMockRecorder{mock}
 	return mock
 }
 
-// EXPECT returns an object that allows the caller to indicate expected use
+// EXPECT returns an object that allows the caller to indicate expected use.
 func (m *MockAckFrameSource) EXPECT() *MockAckFrameSourceMockRecorder {
 	return m.recorder
 }
 
-// GetAckFrame mocks base method
+// GetAckFrame mocks base method.
 func (m *MockAckFrameSource) GetAckFrame(arg0 protocol.EncryptionLevel, arg1 bool) *wire.AckFrame {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetAckFrame", arg0, arg1)
@@ -43,7 +43,7 @@ func (m *MockAckFrameSource) GetAckFrame(arg0 protocol.EncryptionLevel, arg1 boo
 	return ret0
 }
 
-// GetAckFrame indicates an expected call of GetAckFrame
+// GetAckFrame indicates an expected call of GetAckFrame.
 func (mr *MockAckFrameSourceMockRecorder) GetAckFrame(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetAckFrame", reflect.TypeOf((*MockAckFrameSource)(nil).GetAckFrame), arg0, arg1)

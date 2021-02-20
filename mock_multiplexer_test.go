@@ -12,30 +12,30 @@ import (
 	logging "github.com/lucas-clemente/quic-go/logging"
 )
 
-// MockMultiplexer is a mock of Multiplexer interface
+// MockMultiplexer is a mock of Multiplexer interface.
 type MockMultiplexer struct {
 	ctrl     *gomock.Controller
 	recorder *MockMultiplexerMockRecorder
 }
 
-// MockMultiplexerMockRecorder is the mock recorder for MockMultiplexer
+// MockMultiplexerMockRecorder is the mock recorder for MockMultiplexer.
 type MockMultiplexerMockRecorder struct {
 	mock *MockMultiplexer
 }
 
-// NewMockMultiplexer creates a new mock instance
+// NewMockMultiplexer creates a new mock instance.
 func NewMockMultiplexer(ctrl *gomock.Controller) *MockMultiplexer {
 	mock := &MockMultiplexer{ctrl: ctrl}
 	mock.recorder = &MockMultiplexerMockRecorder{mock}
 	return mock
 }
 
-// EXPECT returns an object that allows the caller to indicate expected use
+// EXPECT returns an object that allows the caller to indicate expected use.
 func (m *MockMultiplexer) EXPECT() *MockMultiplexerMockRecorder {
 	return m.recorder
 }
 
-// AddConn mocks base method
+// AddConn mocks base method.
 func (m *MockMultiplexer) AddConn(arg0 net.PacketConn, arg1 int, arg2 []byte, arg3 logging.Tracer) (packetHandlerManager, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "AddConn", arg0, arg1, arg2, arg3)
@@ -44,13 +44,13 @@ func (m *MockMultiplexer) AddConn(arg0 net.PacketConn, arg1 int, arg2 []byte, ar
 	return ret0, ret1
 }
 
-// AddConn indicates an expected call of AddConn
+// AddConn indicates an expected call of AddConn.
 func (mr *MockMultiplexerMockRecorder) AddConn(arg0, arg1, arg2, arg3 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddConn", reflect.TypeOf((*MockMultiplexer)(nil).AddConn), arg0, arg1, arg2, arg3)
 }
 
-// RemoveConn mocks base method
+// RemoveConn mocks base method.
 func (m *MockMultiplexer) RemoveConn(arg0 indexableConn) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "RemoveConn", arg0)
@@ -58,7 +58,7 @@ func (m *MockMultiplexer) RemoveConn(arg0 indexableConn) error {
 	return ret0
 }
 
-// RemoveConn indicates an expected call of RemoveConn
+// RemoveConn indicates an expected call of RemoveConn.
 func (mr *MockMultiplexerMockRecorder) RemoveConn(arg0 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RemoveConn", reflect.TypeOf((*MockMultiplexer)(nil).RemoveConn), arg0)
