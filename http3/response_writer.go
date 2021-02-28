@@ -82,6 +82,9 @@ func (w *responseWriter) WriteHeader(status int) {
 	if _, err := w.bufferedStream.Write(headers.Bytes()); err != nil {
 		w.logger.Errorf("could not write header frame payload: %s", err.Error())
 	}
+	if !w.headerWritten {
+		w.Flush()
+	}
 }
 
 func (w *responseWriter) Write(p []byte) (int, error) {
