@@ -246,7 +246,7 @@ type Config struct {
 	// otherwise the token is associated with the server's IP address.
 	TokenStore TokenStore
 	// MaxReceiveStreamFlowControlWindow is the maximum stream-level flow control window for receiving data.
-	// If this value is zero, it will default to 1 MB for the server and 6 MB for the client.
+	// If this value is zero, it will default to 6 MB.
 	MaxReceiveStreamFlowControlWindow uint64
 	// MaxReceiveConnectionFlowControlWindow is the connection-level flow control window for receiving data.
 	// If this value is zero, it will default to 1.5 MB for the server and 15 MB for the client.

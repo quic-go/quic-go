@@ -27,7 +27,7 @@ const InitialMaxStreamData = (1 << 10) * 512 // 512 kb
 // InitialMaxData is the connection-level flow control window for receiving data
 const InitialMaxData = ConnectionFlowControlMultiplier * InitialMaxStreamData
 
-// DefaultMaxReceiveStreamFlowControlWindow is the default maximum stream-level flow control window for receiving data, for the server
+// DefaultMaxReceiveStreamFlowControlWindow is the default maximum stream-level flow control window for receiving data
 const DefaultMaxReceiveStreamFlowControlWindow = 6 * (1 << 20) // 6 MB
 
 // DefaultMaxReceiveConnectionFlowControlWindow is the default connection-level flow control window for receiving data, for the server
