@@ -169,15 +169,14 @@ func (h *sentPacketHandler) dropPackets(encLevel protocol.EncryptionLevel) {
 	case protocol.EncryptionHandshake:
 		h.handshakePackets = nil
 	case protocol.Encryption0RTT:
-		// TODO(#2067): invalidate sent data
+		// This function is only called when 0-RTT is rejected,
+		// and not when the client drops 0-RTT keys when the handshake completes.
+		// When 0-RTT is rejected, all application data sent so far becomes invalid.
+		// Delete the packets from the history and remove them from bytes_in_flight.
 		h.appDataPackets.history.Iterate(func(p *Packet) (bool, error) {
-			if p.skippedPacket {
-				return true, nil
-			}
 			if p.EncryptionLevel != protocol.Encryption0RTT {
 				return false, nil
 			}
-			h.queueFramesForRetransmission(p)
 			h.removeFromBytesInFlight(p)
 			h.appDataPackets.history.Remove(p.PacketNumber)
 			return true, nil
