@@ -249,7 +249,7 @@ type Config struct {
 	// If this value is zero, it will default to 6 MB.
 	MaxReceiveStreamFlowControlWindow uint64
 	// MaxReceiveConnectionFlowControlWindow is the connection-level flow control window for receiving data.
-	// If this value is zero, it will default to 1.5 MB for the server and 15 MB for the client.
+	// If this value is zero, it will default to 15 MB.
 	MaxReceiveConnectionFlowControlWindow uint64
 	// MaxIncomingStreams is the maximum number of concurrent bidirectional streams that a peer is allowed to open.
 	// Values above 2^60 are invalid.
