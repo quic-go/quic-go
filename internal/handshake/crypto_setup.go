@@ -617,6 +617,9 @@ func (h *cryptoSetup) SetWriteKey(encLevel qtls.EncryptionLevel, suite *qtls.Cip
 		if h.zeroRTTSealer != nil {
 			h.zeroRTTSealer = nil
 			h.logger.Debugf("Dropping 0-RTT keys.")
+			if h.tracer != nil {
+				h.tracer.DroppedEncryptionLevel(protocol.Encryption0RTT)
+			}
 		}
 	default:
 		panic("unexpected write encryption level")
@@ -778,6 +781,9 @@ func (h *cryptoSetup) Get1RTTOpener() (ShortHeaderOpener, error) {
 	if h.zeroRTTOpener != nil && time.Since(h.handshakeCompleteTime) > 3*h.rttStats.PTO(true) {
 		h.zeroRTTOpener = nil
 		h.logger.Debugf("Dropping 0-RTT keys.")
+		if h.tracer != nil {
+			h.tracer.DroppedEncryptionLevel(protocol.Encryption0RTT)
+		}
 	}
 
 	if !h.has1RTTOpener {
