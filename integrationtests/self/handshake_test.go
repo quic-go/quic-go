@@ -210,12 +210,16 @@ var _ = Describe("Handshake tests", func() {
 
 				It("errors if the server name doesn't match", func() {
 					runServer(getTLSConfig())
-					_, err := quic.DialAddr(
-						fmt.Sprintf("127.0.0.1:%d", server.Addr().(*net.UDPAddr).Port),
+					conn, err := net.ListenUDP("udp", nil)
+					Expect(err).ToNot(HaveOccurred())
+					_, err = quic.Dial(
+						conn,
+						server.Addr(),
+						"foo.bar",
 						getTLSClientConfig(),
 						clientConfig,
 					)
-					Expect(err).To(MatchError("CRYPTO_ERROR (0x12a): x509: cannot validate certificate for 127.0.0.1 because it doesn't contain any IP SANs"))
+					Expect(err).To(MatchError("CRYPTO_ERROR (0x12a): x509: certificate is valid for localhost, not foo.bar"))
 				})
 
 				It("fails the handshake if the client fails to provide the requested client cert", func() {
@@ -246,13 +250,13 @@ var _ = Describe("Handshake tests", func() {
 				It("uses the ServerName in the tls.Config", func() {
 					runServer(getTLSConfig())
 					tlsConf := getTLSClientConfig()
-					tlsConf.ServerName = "localhost"
+					tlsConf.ServerName = "foo.bar"
 					_, err := quic.DialAddr(
-						fmt.Sprintf("127.0.0.1:%d", server.Addr().(*net.UDPAddr).Port),
+						fmt.Sprintf("localhost:%d", server.Addr().(*net.UDPAddr).Port),
 						tlsConf,
 						clientConfig,
 					)
-					Expect(err).ToNot(HaveOccurred())
+					Expect(err).To(MatchError("CRYPTO_ERROR (0x12a): x509: certificate is valid for localhost, not foo.bar"))
 				})
 			})
 		}
