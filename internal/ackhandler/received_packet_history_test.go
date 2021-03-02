@@ -1,6 +1,10 @@
 package ackhandler
 
 import (
+	"fmt"
+	"math/rand"
+	"sort"
+
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/internal/utils"
 	"github.com/lucas-clemente/quic-go/internal/wire"
@@ -294,6 +298,57 @@ var _ = Describe("receivedPacketHistory", func() {
 			Expect(hist.IsPotentiallyDuplicate(10)).To(BeFalse())
 			Expect(hist.IsPotentiallyDuplicate(11)).To(BeTrue())
 			Expect(hist.IsPotentiallyDuplicate(12)).To(BeFalse())
+		})
+	})
+
+	Context("randomized receiving", func() {
+		It("receiving packets in a random order, with gaps", func() {
+			packets := make(map[protocol.PacketNumber]int)
+			// Make sure we never end up with more than protocol.MaxNumAckRanges ACK ranges, even
+			// when we're receiving packets in a random order.
+			const num = 2 * protocol.MaxNumAckRanges
+			numLostPackets := rand.Intn(protocol.MaxNumAckRanges)
+			numRcvdPackets := num - numLostPackets
+
+			for i := 0; i < num; i++ {
+				packets[protocol.PacketNumber(i)] = 0
+			}
+			lostPackets := make([]protocol.PacketNumber, 0, numLostPackets)
+			for len(lostPackets) < numLostPackets {
+				p := protocol.PacketNumber(rand.Intn(num))
+				if _, ok := packets[p]; ok {
+					lostPackets = append(lostPackets, p)
+					delete(packets, p)
+				}
+			}
+			sort.Slice(lostPackets, func(i, j int) bool { return lostPackets[i] < lostPackets[j] })
+			fmt.Fprintf(GinkgoWriter, "Losing packets: %v\n", lostPackets)
+
+			ordered := make([]protocol.PacketNumber, 0, numRcvdPackets)
+			for p := range packets {
+				ordered = append(ordered, p)
+			}
+			rand.Shuffle(len(ordered), func(i, j int) { ordered[i], ordered[j] = ordered[j], ordered[i] })
+
+			fmt.Fprintf(GinkgoWriter, "Receiving packets: %v\n", ordered)
+			for i, p := range ordered {
+				Expect(hist.ReceivedPacket(p)).To(BeTrue())
+				// sometimes receive a duplicate
+				if i > 0 && rand.Int()%5 == 0 {
+					Expect(hist.ReceivedPacket(ordered[rand.Intn(i)])).To(BeFalse())
+				}
+			}
+			var counter int
+			ackRanges := hist.GetAckRanges()
+			fmt.Fprintf(GinkgoWriter, "ACK ranges: %v\n", ackRanges)
+			Expect(len(ackRanges)).To(BeNumerically("<=", numLostPackets+1))
+			for _, ackRange := range ackRanges {
+				for p := ackRange.Smallest; p <= ackRange.Largest; p++ {
+					counter++
+					Expect(packets).To(HaveKey(p))
+				}
+			}
+			Expect(counter).To(Equal(numRcvdPackets))
 		})
 	})
 })
