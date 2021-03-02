@@ -402,8 +402,12 @@ func (t *connectionTracer) UpdatedKey(generation protocol.KeyPhase, remote bool)
 func (t *connectionTracer) DroppedEncryptionLevel(encLevel protocol.EncryptionLevel) {
 	t.mutex.Lock()
 	now := time.Now()
-	t.recordEvent(now, &eventKeyRetired{KeyType: encLevelToKeyType(encLevel, protocol.PerspectiveServer)})
-	t.recordEvent(now, &eventKeyRetired{KeyType: encLevelToKeyType(encLevel, protocol.PerspectiveClient)})
+	if encLevel == protocol.Encryption0RTT {
+		t.recordEvent(now, &eventKeyRetired{KeyType: encLevelToKeyType(encLevel, t.perspective)})
+	} else {
+		t.recordEvent(now, &eventKeyRetired{KeyType: encLevelToKeyType(encLevel, protocol.PerspectiveServer)})
+		t.recordEvent(now, &eventKeyRetired{KeyType: encLevelToKeyType(encLevel, protocol.PerspectiveClient)})
+	}
 	t.mutex.Unlock()
 }
 

@@ -721,6 +721,18 @@ var _ = Describe("Tracing", func() {
 				Expect(keyTypes).To(ContainElement("client_initial_secret"))
 			})
 
+			It("records dropped 0-RTT keys", func() {
+				tracer.DroppedEncryptionLevel(protocol.Encryption0RTT)
+				entries := exportAndParse()
+				Expect(entries).To(HaveLen(1))
+				entry := entries[0]
+				Expect(entry.Time).To(BeTemporally("~", time.Now(), scaleDuration(10*time.Millisecond)))
+				Expect(entry.Name).To(Equal("security:key_retired"))
+				ev := entry.Event
+				Expect(ev).To(HaveKeyWithValue("trigger", "tls"))
+				Expect(ev).To(HaveKeyWithValue("key_type", "server_0rtt_secret"))
+			})
+
 			It("records dropped keys", func() {
 				tracer.DroppedKey(42)
 				entries := exportAndParse()
