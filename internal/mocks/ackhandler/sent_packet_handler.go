@@ -14,42 +14,42 @@ import (
 	wire "github.com/lucas-clemente/quic-go/internal/wire"
 )
 
-// MockSentPacketHandler is a mock of SentPacketHandler interface
+// MockSentPacketHandler is a mock of SentPacketHandler interface.
 type MockSentPacketHandler struct {
 	ctrl     *gomock.Controller
 	recorder *MockSentPacketHandlerMockRecorder
 }
 
-// MockSentPacketHandlerMockRecorder is the mock recorder for MockSentPacketHandler
+// MockSentPacketHandlerMockRecorder is the mock recorder for MockSentPacketHandler.
 type MockSentPacketHandlerMockRecorder struct {
 	mock *MockSentPacketHandler
 }
 
-// NewMockSentPacketHandler creates a new mock instance
+// NewMockSentPacketHandler creates a new mock instance.
 func NewMockSentPacketHandler(ctrl *gomock.Controller) *MockSentPacketHandler {
 	mock := &MockSentPacketHandler{ctrl: ctrl}
 	mock.recorder = &MockSentPacketHandlerMockRecorder{mock}
 	return mock
 }
 
-// EXPECT returns an object that allows the caller to indicate expected use
+// EXPECT returns an object that allows the caller to indicate expected use.
 func (m *MockSentPacketHandler) EXPECT() *MockSentPacketHandlerMockRecorder {
 	return m.recorder
 }
 
-// DropPackets mocks base method
+// DropPackets mocks base method.
 func (m *MockSentPacketHandler) DropPackets(arg0 protocol.EncryptionLevel) {
 	m.ctrl.T.Helper()
 	m.ctrl.Call(m, "DropPackets", arg0)
 }
 
-// DropPackets indicates an expected call of DropPackets
+// DropPackets indicates an expected call of DropPackets.
 func (mr *MockSentPacketHandlerMockRecorder) DropPackets(arg0 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DropPackets", reflect.TypeOf((*MockSentPacketHandler)(nil).DropPackets), arg0)
 }
 
-// GetLossDetectionTimeout mocks base method
+// GetLossDetectionTimeout mocks base method.
 func (m *MockSentPacketHandler) GetLossDetectionTimeout() time.Time {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetLossDetectionTimeout")
@@ -57,13 +57,13 @@ func (m *MockSentPacketHandler) GetLossDetectionTimeout() time.Time {
 	return ret0
 }
 
-// GetLossDetectionTimeout indicates an expected call of GetLossDetectionTimeout
+// GetLossDetectionTimeout indicates an expected call of GetLossDetectionTimeout.
 func (mr *MockSentPacketHandlerMockRecorder) GetLossDetectionTimeout() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetLossDetectionTimeout", reflect.TypeOf((*MockSentPacketHandler)(nil).GetLossDetectionTimeout))
 }
 
-// HasPacingBudget mocks base method
+// HasPacingBudget mocks base method.
 func (m *MockSentPacketHandler) HasPacingBudget() bool {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "HasPacingBudget")
@@ -71,13 +71,13 @@ func (m *MockSentPacketHandler) HasPacingBudget() bool {
 	return ret0
 }
 
-// HasPacingBudget indicates an expected call of HasPacingBudget
+// HasPacingBudget indicates an expected call of HasPacingBudget.
 func (mr *MockSentPacketHandlerMockRecorder) HasPacingBudget() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HasPacingBudget", reflect.TypeOf((*MockSentPacketHandler)(nil).HasPacingBudget))
 }
 
-// OnLossDetectionTimeout mocks base method
+// OnLossDetectionTimeout mocks base method.
 func (m *MockSentPacketHandler) OnLossDetectionTimeout() error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "OnLossDetectionTimeout")
@@ -85,13 +85,13 @@ func (m *MockSentPacketHandler) OnLossDetectionTimeout() error {
 	return ret0
 }
 
-// OnLossDetectionTimeout indicates an expected call of OnLossDetectionTimeout
+// OnLossDetectionTimeout indicates an expected call of OnLossDetectionTimeout.
 func (mr *MockSentPacketHandlerMockRecorder) OnLossDetectionTimeout() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "OnLossDetectionTimeout", reflect.TypeOf((*MockSentPacketHandler)(nil).OnLossDetectionTimeout))
 }
 
-// PeekPacketNumber mocks base method
+// PeekPacketNumber mocks base method.
 func (m *MockSentPacketHandler) PeekPacketNumber(arg0 protocol.EncryptionLevel) (protocol.PacketNumber, protocol.PacketNumberLen) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "PeekPacketNumber", arg0)
@@ -100,13 +100,13 @@ func (m *MockSentPacketHandler) PeekPacketNumber(arg0 protocol.EncryptionLevel) 
 	return ret0, ret1
 }
 
-// PeekPacketNumber indicates an expected call of PeekPacketNumber
+// PeekPacketNumber indicates an expected call of PeekPacketNumber.
 func (mr *MockSentPacketHandlerMockRecorder) PeekPacketNumber(arg0 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PeekPacketNumber", reflect.TypeOf((*MockSentPacketHandler)(nil).PeekPacketNumber), arg0)
 }
 
-// PopPacketNumber mocks base method
+// PopPacketNumber mocks base method.
 func (m *MockSentPacketHandler) PopPacketNumber(arg0 protocol.EncryptionLevel) protocol.PacketNumber {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "PopPacketNumber", arg0)
@@ -114,13 +114,13 @@ func (m *MockSentPacketHandler) PopPacketNumber(arg0 protocol.EncryptionLevel) p
 	return ret0
 }
 
-// PopPacketNumber indicates an expected call of PopPacketNumber
+// PopPacketNumber indicates an expected call of PopPacketNumber.
 func (mr *MockSentPacketHandlerMockRecorder) PopPacketNumber(arg0 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PopPacketNumber", reflect.TypeOf((*MockSentPacketHandler)(nil).PopPacketNumber), arg0)
 }
 
-// QueueProbePacket mocks base method
+// QueueProbePacket mocks base method.
 func (m *MockSentPacketHandler) QueueProbePacket(arg0 protocol.EncryptionLevel) bool {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "QueueProbePacket", arg0)
@@ -128,13 +128,13 @@ func (m *MockSentPacketHandler) QueueProbePacket(arg0 protocol.EncryptionLevel) 
 	return ret0
 }
 
-// QueueProbePacket indicates an expected call of QueueProbePacket
+// QueueProbePacket indicates an expected call of QueueProbePacket.
 func (mr *MockSentPacketHandlerMockRecorder) QueueProbePacket(arg0 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "QueueProbePacket", reflect.TypeOf((*MockSentPacketHandler)(nil).QueueProbePacket), arg0)
 }
 
-// ReceivedAck mocks base method
+// ReceivedAck mocks base method.
 func (m *MockSentPacketHandler) ReceivedAck(arg0 *wire.AckFrame, arg1 protocol.EncryptionLevel, arg2 time.Time) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ReceivedAck", arg0, arg1, arg2)
@@ -142,25 +142,25 @@ func (m *MockSentPacketHandler) ReceivedAck(arg0 *wire.AckFrame, arg1 protocol.E
 	return ret0
 }
 
-// ReceivedAck indicates an expected call of ReceivedAck
+// ReceivedAck indicates an expected call of ReceivedAck.
 func (mr *MockSentPacketHandlerMockRecorder) ReceivedAck(arg0, arg1, arg2 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReceivedAck", reflect.TypeOf((*MockSentPacketHandler)(nil).ReceivedAck), arg0, arg1, arg2)
 }
 
-// ReceivedBytes mocks base method
+// ReceivedBytes mocks base method.
 func (m *MockSentPacketHandler) ReceivedBytes(arg0 protocol.ByteCount) {
 	m.ctrl.T.Helper()
 	m.ctrl.Call(m, "ReceivedBytes", arg0)
 }
 
-// ReceivedBytes indicates an expected call of ReceivedBytes
+// ReceivedBytes indicates an expected call of ReceivedBytes.
 func (mr *MockSentPacketHandlerMockRecorder) ReceivedBytes(arg0 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReceivedBytes", reflect.TypeOf((*MockSentPacketHandler)(nil).ReceivedBytes), arg0)
 }
 
-// ResetForRetry mocks base method
+// ResetForRetry mocks base method.
 func (m *MockSentPacketHandler) ResetForRetry() error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ResetForRetry")
@@ -168,13 +168,13 @@ func (m *MockSentPacketHandler) ResetForRetry() error {
 	return ret0
 }
 
-// ResetForRetry indicates an expected call of ResetForRetry
+// ResetForRetry indicates an expected call of ResetForRetry.
 func (mr *MockSentPacketHandlerMockRecorder) ResetForRetry() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ResetForRetry", reflect.TypeOf((*MockSentPacketHandler)(nil).ResetForRetry))
 }
 
-// SendMode mocks base method
+// SendMode mocks base method.
 func (m *MockSentPacketHandler) SendMode() ackhandler.SendMode {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "SendMode")
@@ -182,37 +182,37 @@ func (m *MockSentPacketHandler) SendMode() ackhandler.SendMode {
 	return ret0
 }
 
-// SendMode indicates an expected call of SendMode
+// SendMode indicates an expected call of SendMode.
 func (mr *MockSentPacketHandlerMockRecorder) SendMode() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SendMode", reflect.TypeOf((*MockSentPacketHandler)(nil).SendMode))
 }
 
-// SentPacket mocks base method
+// SentPacket mocks base method.
 func (m *MockSentPacketHandler) SentPacket(arg0 *ackhandler.Packet) {
 	m.ctrl.T.Helper()
 	m.ctrl.Call(m, "SentPacket", arg0)
 }
 
-// SentPacket indicates an expected call of SentPacket
+// SentPacket indicates an expected call of SentPacket.
 func (mr *MockSentPacketHandlerMockRecorder) SentPacket(arg0 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SentPacket", reflect.TypeOf((*MockSentPacketHandler)(nil).SentPacket), arg0)
 }
 
-// SetHandshakeConfirmed mocks base method
+// SetHandshakeConfirmed mocks base method.
 func (m *MockSentPacketHandler) SetHandshakeConfirmed() {
 	m.ctrl.T.Helper()
 	m.ctrl.Call(m, "SetHandshakeConfirmed")
 }
 
-// SetHandshakeConfirmed indicates an expected call of SetHandshakeConfirmed
+// SetHandshakeConfirmed indicates an expected call of SetHandshakeConfirmed.
 func (mr *MockSentPacketHandlerMockRecorder) SetHandshakeConfirmed() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetHandshakeConfirmed", reflect.TypeOf((*MockSentPacketHandler)(nil).SetHandshakeConfirmed))
 }
 
-// TimeUntilSend mocks base method
+// TimeUntilSend mocks base method.
 func (m *MockSentPacketHandler) TimeUntilSend() time.Time {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "TimeUntilSend")
@@ -220,7 +220,7 @@ func (m *MockSentPacketHandler) TimeUntilSend() time.Time {
 	return ret0
 }
 
-// TimeUntilSend indicates an expected call of TimeUntilSend
+// TimeUntilSend indicates an expected call of TimeUntilSend.
 func (mr *MockSentPacketHandlerMockRecorder) TimeUntilSend() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "TimeUntilSend", reflect.TypeOf((*MockSentPacketHandler)(nil).TimeUntilSend))
