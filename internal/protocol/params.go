@@ -27,11 +27,11 @@ const InitialMaxStreamData = (1 << 10) * 512 // 512 kb
 // InitialMaxData is the connection-level flow control window for receiving data
 const InitialMaxData = ConnectionFlowControlMultiplier * InitialMaxStreamData
 
-// DefaultMaxReceiveStreamFlowControlWindow is the default maximum stream-level flow control window for receiving data, for the server
+// DefaultMaxReceiveStreamFlowControlWindow is the default maximum stream-level flow control window for receiving data
 const DefaultMaxReceiveStreamFlowControlWindow = 6 * (1 << 20) // 6 MB
 
-// DefaultMaxReceiveConnectionFlowControlWindow is the default connection-level flow control window for receiving data, for the server
-const DefaultMaxReceiveConnectionFlowControlWindow = 15 * (1 << 20) // 12 MB
+// DefaultMaxReceiveConnectionFlowControlWindow is the default connection-level flow control window for receiving data
+const DefaultMaxReceiveConnectionFlowControlWindow = 15 * (1 << 20) // 15 MB
 
 // WindowUpdateThreshold is the fraction of the receive window that has to be consumed before an higher offset is advertised to the client
 const WindowUpdateThreshold = 0.25
