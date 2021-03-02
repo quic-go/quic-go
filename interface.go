@@ -35,6 +35,8 @@ const (
 	VersionDraft32 = protocol.VersionDraft32
 	// VersionDraft34 is IETF QUIC draft-34
 	VersionDraft34 = protocol.VersionDraft34
+	// Version1 is RFC 9000
+	Version1 = protocol.Version1
 )
 
 // A Token can be used to verify the ownership of the client address.

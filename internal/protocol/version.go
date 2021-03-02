@@ -19,11 +19,12 @@ const (
 // The version numbers, making grepping easier
 const (
 	VersionTLS      VersionNumber = 0x51474fff
-	VersionWhatever VersionNumber = 1 // for when the version doesn't matter
+	VersionWhatever VersionNumber = math.MaxUint32 - 1 // for when the version doesn't matter
 	VersionUnknown  VersionNumber = math.MaxUint32
 	VersionDraft29  VersionNumber = 0xff00001d
 	VersionDraft32  VersionNumber = 0xff000020
-	VersionDraft34  VersionNumber = 0xff000022 // If everything goes according to plan at the IETF, this will one day be QUIC v1.
+	VersionDraft34  VersionNumber = 0xff000022
+	Version1        VersionNumber = 0x1
 )
 
 // SupportedVersions lists the versions that the server supports
@@ -38,7 +39,7 @@ func IsValidVersion(v VersionNumber) bool {
 func (vn VersionNumber) String() string {
 	// For releases, VersionTLS will be set to a draft version.
 	// A switch statement can't contain duplicate cases.
-	if vn == VersionTLS && VersionTLS != VersionDraft29 && VersionTLS != VersionDraft32 {
+	if vn == VersionTLS && VersionTLS != VersionDraft29 && VersionTLS != VersionDraft32 && VersionTLS != Version1 {
 		return "TLS dev version (WIP)"
 	}
 	//nolint:exhaustive
@@ -53,6 +54,8 @@ func (vn VersionNumber) String() string {
 		return "draft-32"
 	case VersionDraft34:
 		return "draft-34"
+	case Version1:
+		return "v1"
 	default:
 		if vn.isGQUIC() {
 			return fmt.Sprintf("gQUIC %d", vn.toGQUICVersion())
