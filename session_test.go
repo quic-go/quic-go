@@ -902,6 +902,51 @@ var _ = Describe("Session", func() {
 			Eventually(sess.Context().Done()).Should(BeClosed())
 		})
 
+		It("doesn't processes multiple received packets before sending one before handshake completion", func() {
+			sess.handshakeComplete = false
+			sess.sessionCreationTime = time.Now()
+			var pn protocol.PacketNumber
+			unpacker.EXPECT().Unpack(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(func(hdr *wire.Header, rcvTime time.Time, data []byte) (*unpackedPacket, error) {
+				pn++
+				return &unpackedPacket{
+					data:            []byte{0}, // PADDING frame
+					encryptionLevel: protocol.Encryption1RTT,
+					packetNumber:    pn,
+					hdr:             &wire.ExtendedHeader{Header: *hdr},
+				}, nil
+			}).Times(3)
+			tracer.EXPECT().StartedConnection(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any())
+			tracer.EXPECT().ReceivedPacket(gomock.Any(), gomock.Any(), gomock.Any()).Do(func(hdr *wire.ExtendedHeader, _ protocol.ByteCount, _ []logging.Frame) {
+			}).Times(3)
+			packer.EXPECT().PackCoalescedPacket().Times(3) // only expect a single call
+
+			for i := 0; i < 3; i++ {
+				sess.handlePacket(getPacket(&wire.ExtendedHeader{
+					Header:          wire.Header{DestConnectionID: srcConnID},
+					PacketNumber:    0x1337,
+					PacketNumberLen: protocol.PacketNumberLen2,
+				}, []byte("foobar")))
+			}
+
+			go func() {
+				defer GinkgoRecover()
+				cryptoSetup.EXPECT().RunHandshake().MaxTimes(1)
+				sess.run()
+			}()
+			Consistently(sess.Context().Done()).ShouldNot(BeClosed())
+
+			// make the go routine return
+			streamManager.EXPECT().CloseWithError(gomock.Any())
+			cryptoSetup.EXPECT().Close()
+			packer.EXPECT().PackConnectionClose(gomock.Any()).Return(&coalescedPacket{buffer: getPacketBuffer()}, nil)
+			expectReplaceWithClosed()
+			tracer.EXPECT().ClosedConnection(gomock.Any())
+			tracer.EXPECT().Close()
+			mconn.EXPECT().Write(gomock.Any())
+			sess.closeLocal(errors.New("close"))
+			Eventually(sess.Context().Done()).Should(BeClosed())
+		})
+
 		It("closes the session when unpacking fails because the reserved bits were incorrect", func() {
 			unpacker.EXPECT().Unpack(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil, wire.ErrInvalidReservedBits)
 			streamManager.EXPECT().CloseWithError(gomock.Any())

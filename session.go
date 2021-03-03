@@ -596,24 +596,26 @@ runLoop:
 					break runLoop
 				default:
 				}
-				// Now process all packets in the receivedPackets channel.
-				// Limit the number of packets to the length of the receivedPackets channel,
-				// so we eventually get a chance to send out an ACK when receiving a lot of packets.
-				numPackets := len(s.receivedPackets)
-			receiveLoop:
-				for i := 0; i < numPackets; i++ {
-					select {
-					case p := <-s.receivedPackets:
-						if processed := s.handlePacketImpl(p); processed {
-							wasProcessed = true
-						}
+				if s.handshakeComplete {
+					// Now process all packets in the receivedPackets channel.
+					// Limit the number of packets to the length of the receivedPackets channel,
+					// so we eventually get a chance to send out an ACK when receiving a lot of packets.
+					numPackets := len(s.receivedPackets)
+				receiveLoop:
+					for i := 0; i < numPackets; i++ {
 						select {
-						case closeErr = <-s.closeChan:
-							break runLoop
+						case p := <-s.receivedPackets:
+							if processed := s.handlePacketImpl(p); processed {
+								wasProcessed = true
+							}
+							select {
+							case closeErr = <-s.closeChan:
+								break runLoop
+							default:
+							}
 						default:
+							break receiveLoop
 						}
-					default:
-						break receiveLoop
 					}
 				}
 				// Only reset the timers if this packet was actually processed.
