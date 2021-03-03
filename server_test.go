@@ -476,7 +476,7 @@ var _ = Describe("Server", func() {
 					Expect(replyHdr.SrcConnectionID).ToNot(Equal(hdr.DestConnectionID))
 					Expect(replyHdr.DestConnectionID).To(Equal(hdr.SrcConnectionID))
 					Expect(replyHdr.Token).ToNot(BeEmpty())
-					Expect(b[len(b)-16:]).To(Equal(handshake.GetRetryIntegrityTag(b[:len(b)-16], hdr.DestConnectionID)[:]))
+					Expect(b[len(b)-16:]).To(Equal(handshake.GetRetryIntegrityTag(b[:len(b)-16], hdr.DestConnectionID, hdr.Version)[:]))
 					return len(b), nil
 				})
 				serv.handlePacket(packet)

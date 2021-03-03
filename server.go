@@ -575,7 +575,7 @@ func (s *baseServer) sendRetry(remoteAddr net.Addr, hdr *wire.Header) error {
 		return err
 	}
 	// append the Retry integrity tag
-	tag := handshake.GetRetryIntegrityTag(buf.Bytes(), hdr.DestConnectionID)
+	tag := handshake.GetRetryIntegrityTag(buf.Bytes(), hdr.DestConnectionID, hdr.Version)
 	buf.Write(tag[:])
 	if s.config.Tracer != nil {
 		s.config.Tracer.SentPacket(remoteAddr, &replyHdr.Header, protocol.ByteCount(buf.Len()), nil)

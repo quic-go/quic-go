@@ -2660,7 +2660,7 @@ var _ = Describe("Client Session", func() {
 		getRetryTag := func(hdr *wire.ExtendedHeader) []byte {
 			buf := &bytes.Buffer{}
 			hdr.Write(buf, sess.version)
-			return handshake.GetRetryIntegrityTag(buf.Bytes(), origDestConnID)[:]
+			return handshake.GetRetryIntegrityTag(buf.Bytes(), origDestConnID, hdr.Version)[:]
 		}
 
 		It("handles Retry packets", func() {
