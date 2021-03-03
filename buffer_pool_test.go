@@ -10,7 +10,7 @@ import (
 var _ = Describe("Buffer Pool", func() {
 	It("returns buffers of cap", func() {
 		buf := getPacketBuffer()
-		Expect(buf.Data).To(HaveCap(int(protocol.MaxReceivePacketSize)))
+		Expect(buf.Data).To(HaveCap(int(protocol.MaxPacketBufferSize)))
 	})
 
 	It("releases buffers", func() {

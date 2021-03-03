@@ -82,9 +82,9 @@ func newConn(c ECNCapablePacketConn) (*ecnConn, error) {
 
 func (c *ecnConn) ReadPacket() (*receivedPacket, error) {
 	buffer := getPacketBuffer()
-	// The packet size should not exceed protocol.MaxReceivePacketSize bytes
+	// The packet size should not exceed protocol.MaxPacketBufferSize bytes
 	// If it does, we only read a truncated packet, which will then end up undecryptable
-	buffer.Data = buffer.Data[:protocol.MaxReceivePacketSize]
+	buffer.Data = buffer.Data[:protocol.MaxPacketBufferSize]
 	c.oobBuffer = c.oobBuffer[:cap(c.oobBuffer)]
 	n, oobn, _, addr, err := c.ECNCapablePacketConn.ReadMsgUDP(buffer.Data, c.oobBuffer)
 	if err != nil {

@@ -266,6 +266,9 @@ type Config struct {
 	StatelessResetKey []byte
 	// KeepAlive defines whether this peer will periodically send a packet to keep the connection alive.
 	KeepAlive bool
+	// DisablePathMTUDiscovery disables Path MTU Discovery (RFC 8899).
+	// Packets will then be at most 1252 (IPv4) / 1232 (IPv6) bytes in size.
+	DisablePathMTUDiscovery bool
 	// See https://datatracker.ietf.org/doc/draft-ietf-quic-datagram/.
 	// Datagrams will only be available when both peers enable datagram support.
 	EnableDatagrams bool

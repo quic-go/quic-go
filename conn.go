@@ -44,9 +44,9 @@ var _ connection = &basicConn{}
 
 func (c *basicConn) ReadPacket() (*receivedPacket, error) {
 	buffer := getPacketBuffer()
-	// The packet size should not exceed protocol.MaxReceivePacketSize bytes
+	// The packet size should not exceed protocol.MaxPacketBufferSize bytes
 	// If it does, we only read a truncated packet, which will then end up undecryptable
-	buffer.Data = buffer.Data[:protocol.MaxReceivePacketSize]
+	buffer.Data = buffer.Data[:protocol.MaxPacketBufferSize]
 	n, addr, err := c.PacketConn.ReadFrom(buffer.Data)
 	if err != nil {
 		return nil, err

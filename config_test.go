@@ -71,6 +71,8 @@ var _ = Describe("Config", func() {
 				f.Set(reflect.ValueOf(true))
 			case "EnableDatagrams":
 				f.Set(reflect.ValueOf(true))
+			case "DisablePathMTUDiscovery":
+				f.Set(reflect.ValueOf(true))
 			case "Tracer":
 				f.Set(reflect.ValueOf(mocklogging.NewMockTracer(mockCtrl)))
 			default:
@@ -144,6 +146,7 @@ var _ = Describe("Config", func() {
 			Expect(c.MaxReceiveConnectionFlowControlWindow).To(BeEquivalentTo(protocol.DefaultMaxReceiveConnectionFlowControlWindow))
 			Expect(c.MaxIncomingStreams).To(BeEquivalentTo(protocol.DefaultMaxIncomingStreams))
 			Expect(c.MaxIncomingUniStreams).To(BeEquivalentTo(protocol.DefaultMaxIncomingUniStreams))
+			Expect(c.DisablePathMTUDiscovery).To(BeFalse())
 		})
 
 		It("populates empty fields with default values, for the server", func() {

@@ -482,6 +482,27 @@ var _ = Describe("SentPacketHandler", func() {
 			Expect(handler.ReceivedAck(ack, protocol.Encryption1RTT, time.Now())).To(Succeed())
 		})
 
+		It("doesn't call OnPacketLost when a Path MTU probe packet is lost", func() {
+			cong.EXPECT().OnPacketSent(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Times(2)
+			var mtuPacketDeclaredLost bool
+			handler.SentPacket(ackElicitingPacket(&Packet{
+				PacketNumber:         1,
+				SendTime:             time.Now().Add(-time.Hour),
+				IsPathMTUProbePacket: true,
+				Frames:               []Frame{{Frame: &wire.PingFrame{}, OnLost: func(wire.Frame) { mtuPacketDeclaredLost = true }}},
+			}))
+			handler.SentPacket(ackElicitingPacket(&Packet{PacketNumber: 2}))
+			// lose packet 1, but don't EXPECT any calls to OnPacketLost()
+			gomock.InOrder(
+				cong.EXPECT().MaybeExitSlowStart(),
+				cong.EXPECT().OnPacketAcked(protocol.PacketNumber(2), protocol.ByteCount(1), protocol.ByteCount(2), gomock.Any()),
+			)
+			ack := &wire.AckFrame{AckRanges: []wire.AckRange{{Smallest: 2, Largest: 2}}}
+			Expect(handler.ReceivedAck(ack, protocol.Encryption1RTT, time.Now())).To(Succeed())
+			Expect(mtuPacketDeclaredLost).To(BeTrue())
+			Expect(handler.bytesInFlight).To(BeZero())
+		})
+
 		It("calls OnPacketAcked and OnPacketLost with the right bytes_in_flight value", func() {
 			cong.EXPECT().OnPacketSent(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Times(4)
 			handler.SentPacket(ackElicitingPacket(&Packet{PacketNumber: 1, SendTime: time.Now().Add(-time.Hour)}))

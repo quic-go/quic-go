@@ -82,9 +82,9 @@ var _ = Describe("STREAM frame", func() {
 
 		It("rejects frames that claim to be longer than the packet size", func() {
 			data := []byte{0x8 ^ 0x2}
-			data = append(data, encodeVarInt(0x12345)...)                                 // stream ID
-			data = append(data, encodeVarInt(uint64(protocol.MaxReceivePacketSize)+1)...) // data length
-			data = append(data, make([]byte, protocol.MaxReceivePacketSize+1)...)
+			data = append(data, encodeVarInt(0x12345)...)                                // stream ID
+			data = append(data, encodeVarInt(uint64(protocol.MaxPacketBufferSize)+1)...) // data length
+			data = append(data, make([]byte, protocol.MaxPacketBufferSize+1)...)
 			r := bytes.NewReader(data)
 			_, err := parseStreamFrame(r, versionIETFFrames)
 			Expect(err).To(Equal(io.EOF))
