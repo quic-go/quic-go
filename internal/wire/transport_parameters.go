@@ -446,7 +446,8 @@ func (p *TransportParameters) ValidFor0RTT(tp *TransportParameters) bool {
 		p.InitialMaxStreamDataUni == tp.InitialMaxStreamDataUni &&
 		p.InitialMaxData == tp.InitialMaxData &&
 		p.MaxBidiStreamNum == tp.MaxBidiStreamNum &&
-		p.MaxUniStreamNum == tp.MaxUniStreamNum
+		p.MaxUniStreamNum == tp.MaxUniStreamNum &&
+		p.ActiveConnectionIDLimit == tp.ActiveConnectionIDLimit
 }
 
 // String returns a string representation, intended for logging.
