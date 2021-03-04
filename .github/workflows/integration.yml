@@ -1,12 +1,14 @@
 on: [push, pull_request]
 
 jobs:
-  unit:
+  integration:
     strategy:
       fail-fast: false
       matrix:
         go: [ "1.15.x", "1.16.x" ]
     runs-on: ubuntu-latest
+    env:
+      TIMESCALE_FACTOR: 3
     name: Integration Tests (Go ${{ matrix.go }})
     steps:
       - uses: actions/checkout@v2

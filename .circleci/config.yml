@@ -5,11 +5,13 @@ executors:
       - image: "circleci/golang:1.15"
     environment:
       runrace: true
+      TIMESCALE_FACTOR: 3
   test-go116:
     docker:
       - image: "circleci/golang:1.16"
     environment:
       runrace: true
+      TIMESCALE_FACTOR: 3
  
 jobs:
   "test": &test
