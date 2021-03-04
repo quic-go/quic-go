@@ -49,11 +49,13 @@ func (c *faultyConn) WriteTo(p []byte, addr net.Addr) (int, error) {
 type handshakeCompleteTracer struct {
 	connTracer
 	completionTime time.Time
+	drop           *utils.AtomicBool
 }
 
 func (t *handshakeCompleteTracer) DroppedEncryptionLevel(l protocol.EncryptionLevel) {
 	if l == protocol.EncryptionHandshake {
 		t.completionTime = time.Now()
+		t.drop.Set(true)
 	}
 }
 
@@ -205,6 +207,16 @@ var _ = Describe("Timeout tests", func() {
 			Expect(err).ToNot(HaveOccurred())
 			defer server.Close()
 
+			const rtt = 10 * time.Millisecond
+			drop := utils.AtomicBool{}
+			proxy, err := quicproxy.NewQuicProxy("localhost:0", &quicproxy.Opts{
+				RemoteAddr:  fmt.Sprintf("localhost:%d", server.Addr().(*net.UDPAddr).Port),
+				DelayPacket: func(quicproxy.Direction, []byte) time.Duration { return rtt / 2 },
+				DropPacket:  func(quicproxy.Direction, []byte) bool { return drop.Get() },
+			})
+			Expect(err).ToNot(HaveOccurred())
+			defer proxy.Close()
+
 			serverSessionClosed := make(chan struct{})
 			go func() {
 				defer GinkgoRecover()
@@ -214,9 +226,9 @@ var _ = Describe("Timeout tests", func() {
 				close(serverSessionClosed)
 			}()
 
-			tr := &handshakeCompleteTracer{}
+			tr := &handshakeCompleteTracer{drop: &drop}
 			sess, err := quic.DialAddr(
-				fmt.Sprintf("localhost:%d", server.Addr().(*net.UDPAddr).Port),
+				fmt.Sprintf("localhost:%d", proxy.LocalPort()),
 				getTLSClientConfig(),
 				getQuicConfig(&quic.Config{
 					MaxIdleTimeout:          idleTimeout,
