@@ -45,6 +45,8 @@ type streamManager interface {
 	UpdateLimits(*wire.TransportParameters)
 	HandleMaxStreamsFrame(*wire.MaxStreamsFrame)
 	CloseWithError(error)
+	ResetFor0RTT()
+	UseResetMaps()
 }
 
 type cryptoStreamHandler interface {

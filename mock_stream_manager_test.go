@@ -194,6 +194,18 @@ func (mr *MockStreamManagerMockRecorder) OpenUniStreamSync(arg0 interface{}) *go
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "OpenUniStreamSync", reflect.TypeOf((*MockStreamManager)(nil).OpenUniStreamSync), arg0)
 }
 
+// ResetFor0RTT mocks base method.
+func (m *MockStreamManager) ResetFor0RTT() {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "ResetFor0RTT")
+}
+
+// ResetFor0RTT indicates an expected call of ResetFor0RTT.
+func (mr *MockStreamManagerMockRecorder) ResetFor0RTT() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ResetFor0RTT", reflect.TypeOf((*MockStreamManager)(nil).ResetFor0RTT))
+}
+
 // UpdateLimits mocks base method.
 func (m *MockStreamManager) UpdateLimits(arg0 *wire.TransportParameters) {
 	m.ctrl.T.Helper()
@@ -204,4 +216,16 @@ func (m *MockStreamManager) UpdateLimits(arg0 *wire.TransportParameters) {
 func (mr *MockStreamManagerMockRecorder) UpdateLimits(arg0 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateLimits", reflect.TypeOf((*MockStreamManager)(nil).UpdateLimits), arg0)
+}
+
+// UseResetMaps mocks base method.
+func (m *MockStreamManager) UseResetMaps() {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "UseResetMaps")
+}
+
+// UseResetMaps indicates an expected call of UseResetMaps.
+func (mr *MockStreamManagerMockRecorder) UseResetMaps() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UseResetMaps", reflect.TypeOf((*MockStreamManager)(nil).UseResetMaps))
 }
