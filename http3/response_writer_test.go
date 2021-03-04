@@ -24,7 +24,7 @@ var _ = Describe("Response Writer", func() {
 	BeforeEach(func() {
 		strBuf = &bytes.Buffer{}
 		str := mockquic.NewMockStream(mockCtrl)
-		str.EXPECT().Write(gomock.Any()).Do(strBuf.Write).AnyTimes()
+		str.EXPECT().Write(gomock.Any()).DoAndReturn(strBuf.Write).AnyTimes()
 		rw = newResponseWriter(str, utils.DefaultLogger)
 	})
 
