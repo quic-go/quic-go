@@ -30,11 +30,16 @@ var (
 )
 
 const (
-	nextProtoH3Draft29      = "h3-29"
-	nextProtoH3Draft32      = "h3-32"
-	nextProtoH3Draft34      = "h3-34"
-	streamTypeControlStream = 0
-	streamTypePushStream    = 1
+	nextProtoH3Draft29 = "h3-29"
+	nextProtoH3Draft32 = "h3-32"
+	nextProtoH3Draft34 = "h3-34"
+)
+
+const (
+	streamTypeControlStream      = 0
+	streamTypePushStream         = 1
+	streamTypeQPACKEncoderStream = 2
+	streamTypeQPACKDecoderStream = 3
 )
 
 func versionToALPN(v protocol.VersionNumber) string {
@@ -291,6 +296,10 @@ func (s *Server) handleUnidirectionalStreams(sess quic.EarlySession) {
 			// We're only interested in the control stream here.
 			switch streamType {
 			case streamTypeControlStream:
+			case streamTypeQPACKEncoderStream, streamTypeQPACKDecoderStream:
+				// Our QPACK implementation doesn't use the dynamic table yet.
+				// TODO: check that only one stream of each type is opened.
+				return
 			case streamTypePushStream: // only the server can push
 				sess.CloseWithError(quic.ErrorCode(errorStreamCreationError), "")
 				return
