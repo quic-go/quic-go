@@ -137,6 +137,20 @@ func (mr *MockEarlySessionMockRecorder) LocalAddr() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "LocalAddr", reflect.TypeOf((*MockEarlySession)(nil).LocalAddr))
 }
 
+// NextSession mocks base method.
+func (m *MockEarlySession) NextSession() quic.Session {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "NextSession")
+	ret0, _ := ret[0].(quic.Session)
+	return ret0
+}
+
+// NextSession indicates an expected call of NextSession.
+func (mr *MockEarlySessionMockRecorder) NextSession() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NextSession", reflect.TypeOf((*MockEarlySession)(nil).NextSession))
+}
+
 // OpenStream mocks base method.
 func (m *MockEarlySession) OpenStream() (quic.Stream, error) {
 	m.ctrl.T.Helper()

@@ -1458,6 +1458,15 @@ func (s *session) dropEncryptionLevel(encLevel protocol.EncryptionLevel) {
 	if s.tracer != nil {
 		s.tracer.DroppedEncryptionLevel(encLevel)
 	}
+	if encLevel == protocol.Encryption0RTT {
+		s.streamsMap.ResetFor0RTT()
+		if err := s.connFlowController.Reset(); err != nil {
+			s.closeLocal(err)
+		}
+		if err := s.framer.Handle0RTTRejection(); err != nil {
+			s.closeLocal(err)
+		}
+	}
 }
 
 // is called for the client, when restoring transport parameters saved for 0-RTT
@@ -1883,4 +1892,10 @@ func (s *session) getPerspective() protocol.Perspective {
 
 func (s *session) GetVersion() protocol.VersionNumber {
 	return s.version
+}
+
+func (s *session) NextSession() Session {
+	<-s.HandshakeComplete().Done()
+	s.streamsMap.UseResetMaps()
+	return s
 }

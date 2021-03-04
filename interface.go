@@ -215,6 +215,8 @@ type EarlySession interface {
 	// Data sent before completion of the handshake is encrypted with 1-RTT keys.
 	// Note that the client's identity hasn't been verified yet.
 	HandshakeComplete() context.Context
+
+	NextSession() Session
 }
 
 // Config contains all configuration data needed for a QUIC server or client.
