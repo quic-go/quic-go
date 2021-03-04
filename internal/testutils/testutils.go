@@ -128,5 +128,5 @@ func ComposeRetryPacket(
 		},
 	}
 	data := writePacket(hdr, nil)
-	return append(data, handshake.GetRetryIntegrityTag(data, origDestConnID)[:]...)
+	return append(data, handshake.GetRetryIntegrityTag(data, origDestConnID, version)[:]...)
 }
