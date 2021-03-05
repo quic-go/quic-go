@@ -963,7 +963,6 @@ func (s *session) handleSinglePacket(p *receivedPacket, hdr *wire.Header) bool /
 }
 
 func (s *session) handleRetryPacket(hdr *wire.Header, data []byte) bool /* was this a valid Retry */ {
-	(&wire.ExtendedHeader{Header: *hdr}).Log(s.logger)
 	if s.perspective == protocol.PerspectiveServer {
 		if s.tracer != nil {
 			s.tracer.DroppedPacket(logging.PacketTypeRetry, protocol.ByteCount(len(data)), logging.PacketDropUnexpectedPacket)
