@@ -57,7 +57,10 @@ func (w *responseWriter) WriteHeader(status int) {
 	if w.headerWritten {
 		return
 	}
-	w.headerWritten = true
+
+	if status < 100 || status >= 200 {
+		w.headerWritten = true
+	}
 	w.status = status
 
 	var headers bytes.Buffer
@@ -78,6 +81,9 @@ func (w *responseWriter) WriteHeader(status int) {
 	}
 	if _, err := w.bufferedStream.Write(headers.Bytes()); err != nil {
 		w.logger.Errorf("could not write header frame payload: %s", err.Error())
+	}
+	if !w.headerWritten {
+		w.Flush()
 	}
 }
 
