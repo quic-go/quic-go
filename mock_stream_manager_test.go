@@ -123,11 +123,9 @@ func (mr *MockStreamManagerMockRecorder) GetOrOpenSendStream(arg0 interface{}) *
 }
 
 // HandleMaxStreamsFrame mocks base method.
-func (m *MockStreamManager) HandleMaxStreamsFrame(arg0 *wire.MaxStreamsFrame) error {
+func (m *MockStreamManager) HandleMaxStreamsFrame(arg0 *wire.MaxStreamsFrame) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "HandleMaxStreamsFrame", arg0)
-	ret0, _ := ret[0].(error)
-	return ret0
+	m.ctrl.Call(m, "HandleMaxStreamsFrame", arg0)
 }
 
 // HandleMaxStreamsFrame indicates an expected call of HandleMaxStreamsFrame.
