@@ -7,6 +7,7 @@ import (
 	"io/ioutil"
 	mrand "math/rand"
 	"net"
+	"sort"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -204,8 +205,9 @@ var _ = Describe("0-RTT", func() {
 					"localhost:0",
 					tlsConf,
 					getQuicConfig(&quic.Config{
-						Versions: []protocol.VersionNumber{version},
-						Tracer:   newTracer(func() logging.ConnectionTracer { return tracer }),
+						Versions:    []protocol.VersionNumber{version},
+						AcceptToken: func(_ net.Addr, _ *quic.Token) bool { return true },
+						Tracer:      newTracer(func() logging.ConnectionTracer { return tracer }),
 					}),
 				)
 				Expect(err).ToNot(HaveOccurred())
@@ -219,8 +221,10 @@ var _ = Describe("0-RTT", func() {
 				num0RTT := atomic.LoadUint32(num0RTTPackets)
 				fmt.Fprintf(GinkgoWriter, "Sent %d 0-RTT packets.", num0RTT)
 				Expect(num0RTT).ToNot(BeZero())
-				// TODO(#2629): ensure that this is a contiguous block of packets, starting at packet 0
-				Expect(get0RTTPackets(tracer.getRcvdPackets())).ToNot(BeEmpty())
+				zeroRTTPackets := get0RTTPackets(tracer.getRcvdPackets())
+				Expect(len(zeroRTTPackets)).To(BeNumerically(">", 10))
+				sort.Slice(zeroRTTPackets, func(i, j int) bool { return zeroRTTPackets[i] < zeroRTTPackets[j] })
+				Expect(zeroRTTPackets[0]).To(Equal(protocol.PacketNumber(0)))
 			})
 
 			// Test that data intended to be sent with 1-RTT protection is not sent in 0-RTT packets.
@@ -294,8 +298,7 @@ var _ = Describe("0-RTT", func() {
 				num0RTT := atomic.LoadUint32(num0RTTPackets)
 				fmt.Fprintf(GinkgoWriter, "Sent %d 0-RTT packets.", num0RTT)
 				Expect(num0RTT).To(Or(BeEquivalentTo(2), BeEquivalentTo(3))) // the FIN might be sent in a separate packet
-				// TODO(#2629): check that packets are sent
-				// Expect(get0RTTPackets(tracer.getRcvdPackets())).ToNot(BeEmpty())
+				Expect(get0RTTPackets(tracer.getRcvdPackets())).To(HaveLen(int(num0RTT)))
 			})
 
 			It("transfers 0-RTT data, when 0-RTT packets are lost", func() {
@@ -426,9 +429,8 @@ var _ = Describe("0-RTT", func() {
 				Expect(firstCounter).To(BeNumerically("~", 5000+100 /* framing overhead */, 100)) // the FIN bit might be sent extra
 				Expect(secondCounter).To(BeNumerically("~", firstCounter, 20))
 				zeroRTTPackets := get0RTTPackets(tracer.getRcvdPackets())
-				// TODO(#2629): We should receive 5 packets here.
-				Expect(len(zeroRTTPackets)).To(BeNumerically(">=", 1))
-				Expect(zeroRTTPackets[0]).To(BeNumerically(">", protocol.PacketNumber(1)))
+				Expect(len(zeroRTTPackets)).To(BeNumerically(">=", 5))
+				Expect(zeroRTTPackets[0]).To(BeNumerically(">=", protocol.PacketNumber(5)))
 			})
 
 			It("rejects 0-RTT when the server's transport parameters changed", func() {
@@ -564,6 +566,41 @@ var _ = Describe("0-RTT", func() {
 				fmt.Fprintf(GinkgoWriter, "Sent %d 0-RTT packets.", num0RTT)
 				Expect(num0RTT).ToNot(BeZero())
 				Expect(get0RTTPackets(tracer.getRcvdPackets())).To(BeEmpty())
+			})
+
+			It("queues 0-RTT packets, if the Initial is delayed", func() {
+				tlsConf, clientConf := dialAndReceiveSessionTicket(nil)
+
+				tracer := newRcvdPacketTracer()
+				ln, err := quic.ListenAddrEarly(
+					"localhost:0",
+					tlsConf,
+					getQuicConfig(&quic.Config{
+						Versions:    []protocol.VersionNumber{version},
+						AcceptToken: func(_ net.Addr, _ *quic.Token) bool { return true },
+						Tracer:      newTracer(func() logging.ConnectionTracer { return tracer }),
+					}),
+				)
+				Expect(err).ToNot(HaveOccurred())
+				defer ln.Close()
+				proxy, err := quicproxy.NewQuicProxy("localhost:0", &quicproxy.Opts{
+					RemoteAddr: ln.Addr().String(),
+					DelayPacket: func(dir quicproxy.Direction, data []byte) time.Duration {
+						if dir == quicproxy.DirectionIncoming && data[0]&0x80 > 0 && data[0]&0x30>>4 == 0 { // Initial packet from client
+							return rtt/2 + rtt
+						}
+						return rtt / 2
+					},
+				})
+				Expect(err).ToNot(HaveOccurred())
+				defer proxy.Close()
+
+				transfer0RTTData(ln, proxy.LocalPort(), clientConf, PRData, true)
+
+				Expect(tracer.rcvdPackets[0].Type).To(Equal(protocol.PacketTypeInitial))
+				zeroRTTPackets := get0RTTPackets(tracer.getRcvdPackets())
+				Expect(len(zeroRTTPackets)).To(BeNumerically(">", 10))
+				Expect(zeroRTTPackets[0]).To(Equal(protocol.PacketNumber(0)))
 			})
 		})
 	}
