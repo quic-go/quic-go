@@ -958,6 +958,7 @@ var _ = Describe("Server", func() {
 				}()
 
 				ctx, cancel := context.WithCancel(context.Background()) // handshake context
+				serv.config.AcceptToken = func(_ net.Addr, _ *Token) bool { return true }
 				serv.newSession = func(
 					_ sendConn,
 					runner sessionRunner,
@@ -975,6 +976,7 @@ var _ = Describe("Server", func() {
 					_ utils.Logger,
 					_ protocol.VersionNumber,
 				) quicSession {
+					sess.EXPECT().handlePacket(gomock.Any())
 					sess.EXPECT().HandshakeComplete().Return(ctx)
 					sess.EXPECT().run().Do(func() {})
 					sess.EXPECT().Context().Return(context.Background())
@@ -986,7 +988,10 @@ var _ = Describe("Server", func() {
 					return true
 				})
 				tracer.EXPECT().TracerForConnection(protocol.PerspectiveServer, gomock.Any())
-				serv.createNewSession(&net.UDPAddr{}, nil, nil, nil, nil, nil, protocol.VersionWhatever)
+				serv.handleInitialImpl(
+					&receivedPacket{buffer: getPacketBuffer()},
+					&wire.Header{DestConnectionID: protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8}},
+				)
 				Consistently(done).ShouldNot(BeClosed())
 				cancel() // complete the handshake
 				Eventually(done).Should(BeClosed())
@@ -1026,6 +1031,7 @@ var _ = Describe("Server", func() {
 			}()
 
 			ready := make(chan struct{})
+			serv.config.AcceptToken = func(_ net.Addr, _ *Token) bool { return true }
 			serv.newSession = func(
 				_ sendConn,
 				runner sessionRunner,
@@ -1044,6 +1050,7 @@ var _ = Describe("Server", func() {
 				_ protocol.VersionNumber,
 			) quicSession {
 				Expect(enable0RTT).To(BeTrue())
+				sess.EXPECT().handlePacket(gomock.Any())
 				sess.EXPECT().run().Do(func() {})
 				sess.EXPECT().earlySessionReady().Return(ready)
 				sess.EXPECT().Context().Return(context.Background())
@@ -1054,7 +1061,10 @@ var _ = Describe("Server", func() {
 				fn()
 				return true
 			})
-			serv.createNewSession(&net.UDPAddr{}, nil, nil, nil, nil, nil, protocol.VersionWhatever)
+			serv.handleInitialImpl(
+				&receivedPacket{buffer: getPacketBuffer()},
+				&wire.Header{DestConnectionID: protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8}},
+			)
 			Consistently(done).ShouldNot(BeClosed())
 			close(ready)
 			Eventually(done).Should(BeClosed())
