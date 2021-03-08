@@ -156,6 +156,10 @@ func (c *client) handleUnidirectionalStreams() {
 			// We're only interested in the control stream here.
 			switch streamType {
 			case streamTypeControlStream:
+			case streamTypeQPACKEncoderStream, streamTypeQPACKDecoderStream:
+				// Our QPACK implementation doesn't use the dynamic table yet.
+				// TODO: check that only one stream of each type is opened.
+				return
 			case streamTypePushStream:
 				// We never increased the Push ID, so we don't expect any push streams.
 				c.session.CloseWithError(quic.ErrorCode(errorIDError), "")

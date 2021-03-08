@@ -6,6 +6,7 @@ import (
 	"context"
 	"crypto/tls"
 	"errors"
+	"fmt"
 	"io"
 	"io/ioutil"
 	"net/http"
@@ -234,7 +235,33 @@ var _ = Describe("Client", func() {
 			time.Sleep(scaleDuration(20 * time.Millisecond)) // don't EXPECT any calls to sess.CloseWithError
 		})
 
-		It("ignores streams other than the control stream", func() {
+		for _, t := range []uint64{streamTypeQPACKEncoderStream, streamTypeQPACKDecoderStream} {
+			streamType := t
+			name := "encoder"
+			if streamType == streamTypeQPACKDecoderStream {
+				name = "decoder"
+			}
+
+			It(fmt.Sprintf("ignores the QPACK %s streams", name), func() {
+				buf := &bytes.Buffer{}
+				quicvarint.Write(buf, streamType)
+				str := mockquic.NewMockStream(mockCtrl)
+				str.EXPECT().Read(gomock.Any()).DoAndReturn(buf.Read).AnyTimes()
+
+				sess.EXPECT().AcceptUniStream(gomock.Any()).DoAndReturn(func(context.Context) (quic.ReceiveStream, error) {
+					return str, nil
+				})
+				sess.EXPECT().AcceptUniStream(gomock.Any()).DoAndReturn(func(context.Context) (quic.ReceiveStream, error) {
+					<-testDone
+					return nil, errors.New("test done")
+				})
+				_, err := client.RoundTrip(request)
+				Expect(err).To(MatchError("done"))
+				time.Sleep(scaleDuration(20 * time.Millisecond)) // don't EXPECT any calls to str.CancelRead
+			})
+		}
+
+		It("resets streams other than the control stream and the QPACK streams", func() {
 			buf := &bytes.Buffer{}
 			quicvarint.Write(buf, 1337)
 			str := mockquic.NewMockStream(mockCtrl)
