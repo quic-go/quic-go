@@ -36,12 +36,12 @@ var _ = Describe("Packet Handler Map", func() {
 		statelessResetKey []byte
 	)
 
-	getPacketWithLength := func(connID protocol.ConnectionID, length protocol.ByteCount) []byte {
+	getPacketWithPacketType := func(connID protocol.ConnectionID, t protocol.PacketType, length protocol.ByteCount) []byte {
 		buf := &bytes.Buffer{}
 		Expect((&wire.ExtendedHeader{
 			Header: wire.Header{
 				IsLongHeader:     true,
-				Type:             protocol.PacketTypeHandshake,
+				Type:             t,
 				DestConnectionID: connID,
 				Length:           length,
 				Version:          protocol.VersionTLS,
@@ -52,7 +52,7 @@ var _ = Describe("Packet Handler Map", func() {
 	}
 
 	getPacket := func(connID protocol.ConnectionID) []byte {
-		return getPacketWithLength(connID, 2)
+		return getPacketWithPacketType(connID, protocol.PacketTypeHandshake, 2)
 	}
 
 	BeforeEach(func() {
@@ -271,6 +271,88 @@ var _ = Describe("Packet Handler Map", func() {
 				handler.SetServer(server)
 				handler.CloseServer()
 				handler.handlePacket(&receivedPacket{data: p})
+			})
+		})
+
+		Context("0-RTT", func() {
+			JustBeforeEach(func() {
+				handler.zeroRTTQueueDuration = time.Hour
+				server := NewMockUnknownPacketHandler(mockCtrl)
+				// we don't expect any calls to server.handlePacket
+				handler.SetServer(server)
+			})
+
+			It("queues 0-RTT packets", func() {
+				server := NewMockUnknownPacketHandler(mockCtrl)
+				// don't EXPECT any calls to server.handlePacket
+				handler.SetServer(server)
+				connID := protocol.ConnectionID{0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88}
+				p1 := &receivedPacket{data: getPacketWithPacketType(connID, protocol.PacketType0RTT, 1)}
+				p2 := &receivedPacket{data: getPacketWithPacketType(connID, protocol.PacketType0RTT, 2)}
+				p3 := &receivedPacket{data: getPacketWithPacketType(connID, protocol.PacketType0RTT, 3)}
+				handler.handlePacket(p1)
+				handler.handlePacket(p2)
+				handler.handlePacket(p3)
+				sess := NewMockPacketHandler(mockCtrl)
+				done := make(chan struct{})
+				gomock.InOrder(
+					sess.EXPECT().handlePacket(p1),
+					sess.EXPECT().handlePacket(p2),
+					sess.EXPECT().handlePacket(p3).Do(func(packet *receivedPacket) { close(done) }),
+				)
+				handler.AddWithConnID(connID, protocol.ConnectionID{1, 2, 3, 4}, func() packetHandler { return sess })
+				Eventually(done).Should(BeClosed())
+			})
+
+			It("directs 0-RTT packets to existing sessions", func() {
+				connID := protocol.ConnectionID{0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88}
+				sess := NewMockPacketHandler(mockCtrl)
+				handler.AddWithConnID(connID, protocol.ConnectionID{1, 2, 3, 4}, func() packetHandler { return sess })
+				p1 := &receivedPacket{data: getPacketWithPacketType(connID, protocol.PacketType0RTT, 1)}
+				sess.EXPECT().handlePacket(p1)
+				handler.handlePacket(p1)
+			})
+
+			It("limits the number of 0-RTT queues", func() {
+				for i := 0; i < protocol.Max0RTTQueues; i++ {
+					connID := make(protocol.ConnectionID, 8)
+					rand.Read(connID)
+					p := &receivedPacket{data: getPacketWithPacketType(connID, protocol.PacketType0RTT, 1)}
+					handler.handlePacket(p)
+				}
+				// We're already storing the maximum number of queues. This packet will be dropped.
+				connID := protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8, 9}
+				handler.handlePacket(&receivedPacket{data: getPacketWithPacketType(connID, protocol.PacketType0RTT, 1)})
+				// Don't EXPECT any handlePacket() calls.
+				sess := NewMockPacketHandler(mockCtrl)
+				handler.AddWithConnID(connID, protocol.ConnectionID{1, 2, 3, 4}, func() packetHandler { return sess })
+				time.Sleep(20 * time.Millisecond)
+			})
+
+			It("deletes queues if no session is created for this connection ID", func() {
+				queueDuration := scaleDuration(10 * time.Millisecond)
+				handler.zeroRTTQueueDuration = queueDuration
+
+				server := NewMockUnknownPacketHandler(mockCtrl)
+				// don't EXPECT any calls to server.handlePacket
+				handler.SetServer(server)
+				connID := protocol.ConnectionID{0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88}
+				p1 := &receivedPacket{
+					data:   getPacketWithPacketType(connID, protocol.PacketType0RTT, 1),
+					buffer: getPacketBuffer(),
+				}
+				p2 := &receivedPacket{
+					data:   getPacketWithPacketType(connID, protocol.PacketType0RTT, 2),
+					buffer: getPacketBuffer(),
+				}
+				handler.handlePacket(p1)
+				handler.handlePacket(p2)
+				// wait a bit. The queue should now already be deleted.
+				time.Sleep(queueDuration * 3)
+				// Don't EXPECT any handlePacket() calls.
+				sess := NewMockPacketHandler(mockCtrl)
+				handler.AddWithConnID(connID, protocol.ConnectionID{1, 2, 3, 4}, func() packetHandler { return sess })
+				time.Sleep(20 * time.Millisecond)
 			})
 		})
 

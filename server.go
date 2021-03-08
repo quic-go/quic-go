@@ -68,7 +68,6 @@ type baseServer struct {
 
 	tokenGenerator *handshake.TokenGenerator
 
-	zeroRTTQueue   *zeroRTTQueue
 	sessionHandler packetHandlerManager
 
 	receivedPackets chan *receivedPacket
@@ -200,7 +199,6 @@ func listen(conn net.PacketConn, tlsConf *tls.Config, config *Config, acceptEarl
 		config:              config,
 		tokenGenerator:      tokenGenerator,
 		sessionHandler:      sessionHandler,
-		zeroRTTQueue:        newZeroRTTQueue(),
 		sessionQueue:        make(chan quicSession),
 		errorChan:           make(chan struct{}),
 		running:             make(chan struct{}),
@@ -365,20 +363,15 @@ func (s *baseServer) handlePacketImpl(p *receivedPacket) bool /* is the buffer s
 		go s.sendVersionNegotiationPacket(p, hdr)
 		return false
 	}
-	if hdr.IsLongHeader {
-		if hdr.Type == protocol.PacketType0RTT {
-			s.zeroRTTQueue.Enqueue(hdr.DestConnectionID, p)
-			return true
-		} else if hdr.Type != protocol.PacketTypeInitial {
-			// Drop long header packets.
-			// There's little point in sending a Stateless Reset, since the client
-			// might not have received the token yet.
-			s.logger.Debugf("Dropping long header packet of type %s (%d bytes)", hdr.Type, len(p.data))
-			if s.config.Tracer != nil {
-				s.config.Tracer.DroppedPacket(p.remoteAddr, logging.PacketTypeFromHeader(hdr), p.Size(), logging.PacketDropUnexpectedPacket)
-			}
-			return false
+	if hdr.IsLongHeader && hdr.Type != protocol.PacketTypeInitial {
+		// Drop long header packets.
+		// There's little point in sending a Stateless Reset, since the client
+		// might not have received the token yet.
+		s.logger.Debugf("Dropping long header packet of type %s (%d bytes)", hdr.Type, len(p.data))
+		if s.config.Tracer != nil {
+			s.config.Tracer.DroppedPacket(p.remoteAddr, logging.PacketTypeFromHeader(hdr), p.Size(), logging.PacketDropUnexpectedPacket)
 		}
+		return false
 	}
 
 	s.logger.Debugf("<- Received Initial packet.")
@@ -490,7 +483,6 @@ func (s *baseServer) handleInitialImpl(p *receivedPacket, hdr *wire.Header) erro
 		p.buffer.Release()
 		return nil
 	}
-	s.zeroRTTQueue.DequeueToSession(hdr.DestConnectionID, sess)
 	return nil
 }
 

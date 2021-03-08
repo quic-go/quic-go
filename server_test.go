@@ -629,60 +629,6 @@ var _ = Describe("Server", func() {
 				Eventually(done).Should(BeClosed())
 			})
 
-			It("passes queued 0-RTT packets to the session", func() {
-				serv.config.AcceptToken = func(_ net.Addr, _ *Token) bool { return true }
-				var createdSession bool
-				sess := NewMockQuicSession(mockCtrl)
-				connID := protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8, 9}
-				initialPacket := getInitial(connID)
-				zeroRTTPacket := getPacket(&wire.Header{
-					IsLongHeader:     true,
-					Type:             protocol.PacketType0RTT,
-					SrcConnectionID:  protocol.ConnectionID{5, 4, 3, 2, 1},
-					DestConnectionID: connID,
-					Version:          protocol.VersionTLS,
-				}, []byte("foobar"))
-				sess.EXPECT().Context().Return(context.Background()).MaxTimes(1)
-				sess.EXPECT().HandshakeComplete().Return(context.Background()).MaxTimes(1)
-				sess.EXPECT().run().MaxTimes(1)
-				gomock.InOrder(
-					sess.EXPECT().handlePacket(initialPacket),
-					sess.EXPECT().handlePacket(zeroRTTPacket),
-				)
-				serv.newSession = func(
-					_ sendConn,
-					runner sessionRunner,
-					_ protocol.ConnectionID,
-					_ *protocol.ConnectionID,
-					_ protocol.ConnectionID,
-					_ protocol.ConnectionID,
-					_ protocol.ConnectionID,
-					_ protocol.StatelessResetToken,
-					_ *Config,
-					_ *tls.Config,
-					_ *handshake.TokenGenerator,
-					_ bool,
-					_ logging.ConnectionTracer,
-					_ utils.Logger,
-					_ protocol.VersionNumber,
-				) quicSession {
-					createdSession = true
-					return sess
-				}
-
-				// Receive the 0-RTT packet first.
-				Expect(serv.handlePacketImpl(zeroRTTPacket)).To(BeTrue())
-				// Then receive the Initial packet.
-				phm.EXPECT().GetStatelessResetToken(gomock.Any())
-				phm.EXPECT().AddWithConnID(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(func(_, _ protocol.ConnectionID, fn func() packetHandler) bool {
-					fn()
-					return true
-				})
-				tracer.EXPECT().TracerForConnection(protocol.PerspectiveServer, gomock.Any())
-				Expect(serv.handlePacketImpl(initialPacket)).To(BeTrue())
-				Expect(createdSession).To(BeTrue())
-			})
-
 			It("drops packets if the receive queue is full", func() {
 				phm.EXPECT().AddWithConnID(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(func(_, _ protocol.ConnectionID, fn func() packetHandler) bool {
 					phm.EXPECT().GetStatelessResetToken(gomock.Any())
