@@ -212,14 +212,13 @@ func (m *streamsMap) getOrOpenSendStream(id protocol.StreamID) (sendStreamI, err
 	panic("")
 }
 
-func (m *streamsMap) HandleMaxStreamsFrame(f *wire.MaxStreamsFrame) error {
+func (m *streamsMap) HandleMaxStreamsFrame(f *wire.MaxStreamsFrame) {
 	switch f.Type {
 	case protocol.StreamTypeUni:
 		m.outgoingUniStreams.SetMaxStream(f.MaxStreamNum)
 	case protocol.StreamTypeBidi:
 		m.outgoingBidiStreams.SetMaxStream(f.MaxStreamNum)
 	}
-	return nil
 }
 
 func (m *streamsMap) UpdateLimits(p *wire.TransportParameters) {

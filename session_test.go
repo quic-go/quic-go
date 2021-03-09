@@ -247,16 +247,7 @@ var _ = Describe("Session", func() {
 					MaxStreamNum: 10,
 				}
 				streamManager.EXPECT().HandleMaxStreamsFrame(f)
-				err := sess.handleMaxStreamsFrame(f)
-				Expect(err).ToNot(HaveOccurred())
-			})
-
-			It("returns errors", func() {
-				f := &wire.MaxStreamsFrame{MaxStreamNum: 10}
-				testErr := errors.New("test error")
-				streamManager.EXPECT().HandleMaxStreamsFrame(f).Return(testErr)
-				err := sess.handleMaxStreamsFrame(f)
-				Expect(err).To(MatchError(testErr))
+				sess.handleMaxStreamsFrame(f)
 			})
 		})
 

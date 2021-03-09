@@ -363,10 +363,10 @@ var _ = Describe("Streams Map", func() {
 				It("processes IDs for outgoing bidirectional streams", func() {
 					_, err := m.OpenStream()
 					expectTooManyStreamsError(err)
-					Expect(m.HandleMaxStreamsFrame(&wire.MaxStreamsFrame{
+					m.HandleMaxStreamsFrame(&wire.MaxStreamsFrame{
 						Type:         protocol.StreamTypeBidi,
 						MaxStreamNum: 1,
-					})).To(Succeed())
+					})
 					str, err := m.OpenStream()
 					Expect(err).ToNot(HaveOccurred())
 					Expect(str.StreamID()).To(Equal(ids.firstOutgoingBidiStream))
@@ -377,10 +377,10 @@ var _ = Describe("Streams Map", func() {
 				It("processes IDs for outgoing unidirectional streams", func() {
 					_, err := m.OpenUniStream()
 					expectTooManyStreamsError(err)
-					Expect(m.HandleMaxStreamsFrame(&wire.MaxStreamsFrame{
+					m.HandleMaxStreamsFrame(&wire.MaxStreamsFrame{
 						Type:         protocol.StreamTypeUni,
 						MaxStreamNum: 1,
-					})).To(Succeed())
+					})
 					str, err := m.OpenUniStream()
 					Expect(err).ToNot(HaveOccurred())
 					Expect(str.StreamID()).To(Equal(ids.firstOutgoingUniStream))
