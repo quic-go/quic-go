@@ -340,7 +340,7 @@ var _ = Describe("Handshake tests", func() {
 				Expect(err).ToNot(HaveOccurred())
 				defer sess.CloseWithError(0, "")
 			}
-			time.Sleep(25 * time.Millisecond) // wait a bit for the sessions to be queued
+			time.Sleep(scaleDuration(20 * time.Millisecond)) // wait a bit for the sessions to be queued
 
 			_, err = dial()
 			Expect(err).To(HaveOccurred())
@@ -349,12 +349,13 @@ var _ = Describe("Handshake tests", func() {
 			// Now close the one of the session that are waiting to be accepted.
 			// This should free one spot in the queue.
 			Expect(firstSess.CloseWithError(0, ""))
-			time.Sleep(25 * time.Millisecond)
+			Eventually(firstSess.Context().Done()).Should(BeClosed())
+			time.Sleep(scaleDuration(20 * time.Millisecond))
 
 			// dial again, and expect that this dial succeeds
 			_, err = dial()
 			Expect(err).ToNot(HaveOccurred())
-			time.Sleep(25 * time.Millisecond) // wait a bit for the session to be queued
+			time.Sleep(scaleDuration(20 * time.Millisecond)) // wait a bit for the session to be queued
 
 			_, err = dial()
 			Expect(err).To(HaveOccurred())
