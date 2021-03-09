@@ -482,7 +482,7 @@ var _ = Describe("Transport Parameters", func() {
 		})
 
 		Context("rejects the parameters if they changed", func() {
-			var p *TransportParameters
+			var p TransportParameters
 			params := &TransportParameters{
 				InitialMaxStreamDataBidiLocal:  1,
 				InitialMaxStreamDataBidiRemote: 2,
@@ -490,48 +490,47 @@ var _ = Describe("Transport Parameters", func() {
 				InitialMaxData:                 4,
 				MaxBidiStreamNum:               5,
 				MaxUniStreamNum:                6,
+				ActiveConnectionIDLimit:        7,
 			}
 
 			BeforeEach(func() {
-				p = &TransportParameters{
-					InitialMaxStreamDataBidiLocal:  1,
-					InitialMaxStreamDataBidiRemote: 2,
-					InitialMaxStreamDataUni:        3,
-					InitialMaxData:                 4,
-					MaxBidiStreamNum:               5,
-					MaxUniStreamNum:                6,
-				}
-				Expect(params.ValidFor0RTT(p)).To(BeTrue())
+				p = *params
+				Expect(params.ValidFor0RTT(&p)).To(BeTrue())
 			})
 
 			It("rejects the parameters if the InitialMaxStreamDataBidiLocal changed", func() {
 				p.InitialMaxStreamDataBidiLocal = 0
-				Expect(params.ValidFor0RTT(p)).To(BeFalse())
+				Expect(params.ValidFor0RTT(&p)).To(BeFalse())
 			})
 
 			It("rejects the parameters if the InitialMaxStreamDataBidiRemote changed", func() {
 				p.InitialMaxStreamDataBidiRemote = 0
-				Expect(params.ValidFor0RTT(p)).To(BeFalse())
+				Expect(params.ValidFor0RTT(&p)).To(BeFalse())
 			})
 
 			It("rejects the parameters if the InitialMaxStreamDataUni changed", func() {
 				p.InitialMaxStreamDataUni = 0
-				Expect(params.ValidFor0RTT(p)).To(BeFalse())
+				Expect(params.ValidFor0RTT(&p)).To(BeFalse())
 			})
 
 			It("rejects the parameters if the InitialMaxData changed", func() {
 				p.InitialMaxData = 0
-				Expect(params.ValidFor0RTT(p)).To(BeFalse())
+				Expect(params.ValidFor0RTT(&p)).To(BeFalse())
 			})
 
 			It("rejects the parameters if the MaxBidiStreamNum changed", func() {
 				p.MaxBidiStreamNum = 0
-				Expect(params.ValidFor0RTT(p)).To(BeFalse())
+				Expect(params.ValidFor0RTT(&p)).To(BeFalse())
 			})
 
 			It("rejects the parameters if the MaxUniStreamNum changed", func() {
 				p.MaxUniStreamNum = 0
-				Expect(params.ValidFor0RTT(p)).To(BeFalse())
+				Expect(params.ValidFor0RTT(&p)).To(BeFalse())
+			})
+
+			It("rejects the parameters if the ActiveConnectionIDLimit changed", func() {
+				p.ActiveConnectionIDLimit = 0
+				Expect(params.ValidFor0RTT(&p)).To(BeFalse())
 			})
 		})
 	})
