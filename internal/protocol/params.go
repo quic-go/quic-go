@@ -21,11 +21,11 @@ const MaxUndecryptablePackets = 32
 // This is the value that Chromium is using
 const ConnectionFlowControlMultiplier = 1.5
 
-// InitialMaxStreamData is the stream-level flow control window for receiving data
-const InitialMaxStreamData = (1 << 10) * 512 // 512 kb
+// DefaultInitialMaxStreamData is the default initial stream-level flow control window for receiving data
+const DefaultInitialMaxStreamData = (1 << 10) * 512 // 512 kb
 
 // InitialMaxData is the connection-level flow control window for receiving data
-const InitialMaxData = ConnectionFlowControlMultiplier * InitialMaxStreamData
+const InitialMaxData = ConnectionFlowControlMultiplier * DefaultInitialMaxStreamData
 
 // DefaultMaxReceiveStreamFlowControlWindow is the default maximum stream-level flow control window for receiving data
 const DefaultMaxReceiveStreamFlowControlWindow = 6 * (1 << 20) // 6 MB

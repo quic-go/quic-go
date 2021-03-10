@@ -283,9 +283,9 @@ var newSession = func(
 	initialStream := newCryptoStream()
 	handshakeStream := newCryptoStream()
 	params := &wire.TransportParameters{
-		InitialMaxStreamDataBidiLocal:   protocol.InitialMaxStreamData,
-		InitialMaxStreamDataBidiRemote:  protocol.InitialMaxStreamData,
-		InitialMaxStreamDataUni:         protocol.InitialMaxStreamData,
+		InitialMaxStreamDataBidiLocal:   protocol.ByteCount(s.config.InitialStreamFlowControlWindow),
+		InitialMaxStreamDataBidiRemote:  protocol.ByteCount(s.config.InitialStreamFlowControlWindow),
+		InitialMaxStreamDataUni:         protocol.ByteCount(s.config.InitialStreamFlowControlWindow),
 		InitialMaxData:                  protocol.InitialMaxData,
 		MaxIdleTimeout:                  s.config.MaxIdleTimeout,
 		MaxBidiStreamNum:                protocol.StreamNum(s.config.MaxIncomingStreams),
@@ -407,9 +407,9 @@ var newClientSession = func(
 	initialStream := newCryptoStream()
 	handshakeStream := newCryptoStream()
 	params := &wire.TransportParameters{
-		InitialMaxStreamDataBidiRemote: protocol.InitialMaxStreamData,
-		InitialMaxStreamDataBidiLocal:  protocol.InitialMaxStreamData,
-		InitialMaxStreamDataUni:        protocol.InitialMaxStreamData,
+		InitialMaxStreamDataBidiRemote: protocol.ByteCount(s.config.InitialStreamFlowControlWindow),
+		InitialMaxStreamDataBidiLocal:  protocol.ByteCount(s.config.InitialStreamFlowControlWindow),
+		InitialMaxStreamDataUni:        protocol.ByteCount(s.config.InitialStreamFlowControlWindow),
 		InitialMaxData:                 protocol.InitialMaxData,
 		MaxIdleTimeout:                 s.config.MaxIdleTimeout,
 		MaxBidiStreamNum:               protocol.StreamNum(s.config.MaxIncomingStreams),
@@ -1791,7 +1791,7 @@ func (s *session) newFlowController(id protocol.StreamID) flowcontrol.StreamFlow
 	return flowcontrol.NewStreamFlowController(
 		id,
 		s.connFlowController,
-		protocol.InitialMaxStreamData,
+		protocol.ByteCount(s.config.InitialStreamFlowControlWindow),
 		protocol.ByteCount(s.config.MaxReceiveStreamFlowControlWindow),
 		initialSendWindow,
 		s.onHasStreamWindowUpdate,

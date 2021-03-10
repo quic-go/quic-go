@@ -57,6 +57,8 @@ var _ = Describe("Config", func() {
 				f.Set(reflect.ValueOf(time.Hour))
 			case "TokenStore":
 				f.Set(reflect.ValueOf(NewLRUTokenStore(2, 3)))
+			case "InitialStreamFlowControlWindow":
+				f.Set(reflect.ValueOf(uint64(1234)))
 			case "MaxReceiveStreamFlowControlWindow":
 				f.Set(reflect.ValueOf(uint64(9)))
 			case "MaxReceiveConnectionFlowControlWindow":
@@ -142,6 +144,7 @@ var _ = Describe("Config", func() {
 			c := populateConfig(&Config{})
 			Expect(c.Versions).To(Equal(protocol.SupportedVersions))
 			Expect(c.HandshakeIdleTimeout).To(Equal(protocol.DefaultHandshakeIdleTimeout))
+			Expect(c.InitialStreamFlowControlWindow).To(BeEquivalentTo(protocol.DefaultInitialMaxStreamData))
 			Expect(c.MaxReceiveStreamFlowControlWindow).To(BeEquivalentTo(protocol.DefaultMaxReceiveStreamFlowControlWindow))
 			Expect(c.MaxReceiveConnectionFlowControlWindow).To(BeEquivalentTo(protocol.DefaultMaxReceiveConnectionFlowControlWindow))
 			Expect(c.MaxIncomingStreams).To(BeEquivalentTo(protocol.DefaultMaxIncomingStreams))

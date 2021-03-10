@@ -71,6 +71,10 @@ func populateConfig(config *Config) *Config {
 	if config.MaxIdleTimeout != 0 {
 		idleTimeout = config.MaxIdleTimeout
 	}
+	initialStreamFlowControlWindow := config.InitialStreamFlowControlWindow
+	if initialStreamFlowControlWindow == 0 {
+		initialStreamFlowControlWindow = protocol.DefaultInitialMaxStreamData
+	}
 	maxReceiveStreamFlowControlWindow := config.MaxReceiveStreamFlowControlWindow
 	if maxReceiveStreamFlowControlWindow == 0 {
 		maxReceiveStreamFlowControlWindow = protocol.DefaultMaxReceiveStreamFlowControlWindow
@@ -98,6 +102,7 @@ func populateConfig(config *Config) *Config {
 		MaxIdleTimeout:                        idleTimeout,
 		AcceptToken:                           config.AcceptToken,
 		KeepAlive:                             config.KeepAlive,
+		InitialStreamFlowControlWindow:        initialStreamFlowControlWindow,
 		MaxReceiveStreamFlowControlWindow:     maxReceiveStreamFlowControlWindow,
 		MaxReceiveConnectionFlowControlWindow: maxReceiveConnectionFlowControlWindow,
 		MaxIncomingStreams:                    maxIncomingStreams,
