@@ -61,6 +61,8 @@ var _ = Describe("Config", func() {
 				f.Set(reflect.ValueOf(uint64(1234)))
 			case "MaxReceiveStreamFlowControlWindow":
 				f.Set(reflect.ValueOf(uint64(9)))
+			case "InitialConnectionFlowControlWindow":
+				f.Set(reflect.ValueOf(uint64(4321)))
 			case "MaxReceiveConnectionFlowControlWindow":
 				f.Set(reflect.ValueOf(uint64(10)))
 			case "MaxIncomingStreams":
@@ -146,6 +148,7 @@ var _ = Describe("Config", func() {
 			Expect(c.HandshakeIdleTimeout).To(Equal(protocol.DefaultHandshakeIdleTimeout))
 			Expect(c.InitialStreamFlowControlWindow).To(BeEquivalentTo(protocol.DefaultInitialMaxStreamData))
 			Expect(c.MaxReceiveStreamFlowControlWindow).To(BeEquivalentTo(protocol.DefaultMaxReceiveStreamFlowControlWindow))
+			Expect(c.InitialConnectionFlowControlWindow).To(BeEquivalentTo(protocol.DefaultInitialMaxData))
 			Expect(c.MaxReceiveConnectionFlowControlWindow).To(BeEquivalentTo(protocol.DefaultMaxReceiveConnectionFlowControlWindow))
 			Expect(c.MaxIncomingStreams).To(BeEquivalentTo(protocol.DefaultMaxIncomingStreams))
 			Expect(c.MaxIncomingUniStreams).To(BeEquivalentTo(protocol.DefaultMaxIncomingUniStreams))

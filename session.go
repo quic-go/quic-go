@@ -286,7 +286,7 @@ var newSession = func(
 		InitialMaxStreamDataBidiLocal:   protocol.ByteCount(s.config.InitialStreamFlowControlWindow),
 		InitialMaxStreamDataBidiRemote:  protocol.ByteCount(s.config.InitialStreamFlowControlWindow),
 		InitialMaxStreamDataUni:         protocol.ByteCount(s.config.InitialStreamFlowControlWindow),
-		InitialMaxData:                  protocol.InitialMaxData,
+		InitialMaxData:                  protocol.ByteCount(s.config.InitialConnectionFlowControlWindow),
 		MaxIdleTimeout:                  s.config.MaxIdleTimeout,
 		MaxBidiStreamNum:                protocol.StreamNum(s.config.MaxIncomingStreams),
 		MaxUniStreamNum:                 protocol.StreamNum(s.config.MaxIncomingUniStreams),
@@ -410,7 +410,7 @@ var newClientSession = func(
 		InitialMaxStreamDataBidiRemote: protocol.ByteCount(s.config.InitialStreamFlowControlWindow),
 		InitialMaxStreamDataBidiLocal:  protocol.ByteCount(s.config.InitialStreamFlowControlWindow),
 		InitialMaxStreamDataUni:        protocol.ByteCount(s.config.InitialStreamFlowControlWindow),
-		InitialMaxData:                 protocol.InitialMaxData,
+		InitialMaxData:                 protocol.ByteCount(s.config.InitialConnectionFlowControlWindow),
 		MaxIdleTimeout:                 s.config.MaxIdleTimeout,
 		MaxBidiStreamNum:               protocol.StreamNum(s.config.MaxIncomingStreams),
 		MaxUniStreamNum:                protocol.StreamNum(s.config.MaxIncomingUniStreams),
@@ -484,7 +484,7 @@ func (s *session) preSetup() {
 	s.frameParser = wire.NewFrameParser(s.config.EnableDatagrams, s.version)
 	s.rttStats = &utils.RTTStats{}
 	s.connFlowController = flowcontrol.NewConnectionFlowController(
-		protocol.InitialMaxData,
+		protocol.ByteCount(s.config.InitialConnectionFlowControlWindow),
 		protocol.ByteCount(s.config.MaxReceiveConnectionFlowControlWindow),
 		s.onHasConnectionWindowUpdate,
 		s.rttStats,

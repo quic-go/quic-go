@@ -253,6 +253,11 @@ type Config struct {
 	// MaxReceiveStreamFlowControlWindow is the maximum stream-level flow control window for receiving data.
 	// If this value is zero, it will default to 6 MB.
 	MaxReceiveStreamFlowControlWindow uint64
+	// InitialConnectionFlowControlWindow is the initial size of the stream-level flow control window for receiving data.
+	// If the application is consuming data quickly enough, the flow control auto-tuning algorithm
+	// will increase the window up to MaxReceiveConnectionFlowControlWindow.
+	// If this value is zero, it will default to 512 KB.
+	InitialConnectionFlowControlWindow uint64
 	// MaxReceiveConnectionFlowControlWindow is the connection-level flow control window for receiving data.
 	// If this value is zero, it will default to 15 MB.
 	MaxReceiveConnectionFlowControlWindow uint64
