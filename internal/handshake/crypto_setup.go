@@ -466,7 +466,7 @@ func (h *cryptoSetup) GetSessionTicket() ([]byte, error) {
 func (h *cryptoSetup) accept0RTT(sessionTicketData []byte) bool {
 	var t sessionTicket
 	if err := t.Unmarshal(sessionTicketData); err != nil {
-		h.logger.Debugf("Unmarshaling transport parameters from session ticket failed: %s", err.Error())
+		h.logger.Debugf("Unmarshalling transport parameters from session ticket failed: %s", err.Error())
 		return false
 	}
 	valid := h.ourParams.ValidFor0RTT(t.Parameters)
@@ -476,11 +476,13 @@ func (h *cryptoSetup) accept0RTT(sessionTicketData []byte) bool {
 	} else {
 		h.logger.Debugf("Transport parameters changed. Rejecting 0-RTT.")
 	}
+	fmt.Println("valid:", valid)
 	return valid
 }
 
 // rejected0RTT is called for the client when the server rejects 0-RTT.
 func (h *cryptoSetup) rejected0RTT() {
+	fmt.Println("0-RTT rejected")
 	h.logger.Debugf("0-RTT was rejected. Dropping 0-RTT keys.")
 
 	h.mutex.Lock()
