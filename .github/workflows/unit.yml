@@ -17,13 +17,8 @@ jobs:
           stable: '!contains(${{ matrix.go }}, "beta") && !contains(${{ matrix.go }}, "rc")'
           go-version: ${{ matrix.go }}
       - run: go version
-      - name: Install test tools
-        run: |
-          go get golang.org/x/tools/cmd/cover
-          go get github.com/onsi/ginkgo/ginkgo
-          go get github.com/onsi/gomega
-      - name: Install dependencies
-        run: go build
+      - name: Install Ginkgo
+        run: go install github.com/onsi/ginkgo/ginkgo
       - name: Run tests
         env:
           TIMESCALE_FACTOR: 10
