@@ -2081,7 +2081,7 @@ var _ = Describe("Session", func() {
 			sessionRunner.EXPECT().GetStatelessResetToken(gomock.Any()).Times(2)
 			sessionRunner.EXPECT().Add(gomock.Any(), sess).Times(2)
 			tracer.EXPECT().ReceivedTransportParameters(params)
-			sess.processTransportParameters(params)
+			sess.handleTransportParameters(params)
 			Expect(sess.earlySessionReady()).To(BeClosed())
 		})
 	})
@@ -2091,7 +2091,7 @@ var _ = Describe("Session", func() {
 			streamManager.EXPECT().UpdateLimits(gomock.Any())
 			packer.EXPECT().HandleTransportParameters(gomock.Any())
 			tracer.EXPECT().ReceivedTransportParameters(gomock.Any())
-			sess.processTransportParameters(&wire.TransportParameters{
+			sess.handleTransportParameters(&wire.TransportParameters{
 				MaxIdleTimeout:            t,
 				InitialSourceConnectionID: destConnID,
 			})
@@ -2457,10 +2457,9 @@ var _ = Describe("Client Session", func() {
 		Eventually(areSessionsRunning).Should(BeFalse())
 
 		mconn = NewMockSendConn(mockCtrl)
-		mconn.EXPECT().RemoteAddr().Return(&net.UDPAddr{}).Times(2)
-		mconn.EXPECT().LocalAddr().Return(&net.UDPAddr{})
+		mconn.EXPECT().RemoteAddr().Return(&net.UDPAddr{}).AnyTimes()
+		mconn.EXPECT().LocalAddr().Return(&net.UDPAddr{}).AnyTimes()
 		if tlsConf == nil {
-			mconn.EXPECT().RemoteAddr().Return(&net.UDPAddr{})
 			tlsConf = &tls.Config{}
 		}
 		sessionRunner = NewMockSessionRunner(mockCtrl)
@@ -2774,8 +2773,8 @@ var _ = Describe("Client Session", func() {
 			packer.EXPECT().HandleTransportParameters(gomock.Any())
 			packer.EXPECT().PackCoalescedPacket().MaxTimes(1)
 			tracer.EXPECT().ReceivedTransportParameters(params)
-			sess.processTransportParameters(params)
-			sess.connIDManager.SetHandshakeComplete()
+			sess.handleTransportParameters(params)
+			sess.handleHandshakeComplete()
 			// make sure the connection ID is not retired
 			cf, _ := sess.framer.AppendControlFrames(nil, protocol.MaxByteCount)
 			Expect(cf).To(BeEmpty())
@@ -2795,7 +2794,8 @@ var _ = Describe("Client Session", func() {
 			}
 			packer.EXPECT().HandleTransportParameters(gomock.Any())
 			tracer.EXPECT().ReceivedTransportParameters(params)
-			sess.processTransportParameters(params)
+			sess.handleTransportParameters(params)
+			sess.handleHandshakeComplete()
 			Expect(sess.idleTimeout).To(Equal(18 * time.Second))
 		})
 
@@ -2808,7 +2808,7 @@ var _ = Describe("Client Session", func() {
 			}
 			expectClose()
 			tracer.EXPECT().ReceivedTransportParameters(params)
-			sess.processTransportParameters(params)
+			sess.handleTransportParameters(params)
 			Eventually(errChan).Should(Receive(MatchError("TRANSPORT_PARAMETER_ERROR: expected initial_source_connection_id to equal deadbeef, is decafbad")))
 		})
 
@@ -2821,7 +2821,7 @@ var _ = Describe("Client Session", func() {
 			}
 			expectClose()
 			tracer.EXPECT().ReceivedTransportParameters(params)
-			sess.processTransportParameters(params)
+			sess.handleTransportParameters(params)
 			Eventually(errChan).Should(Receive(MatchError("TRANSPORT_PARAMETER_ERROR: missing retry_source_connection_id")))
 		})
 
@@ -2835,7 +2835,7 @@ var _ = Describe("Client Session", func() {
 			}
 			expectClose()
 			tracer.EXPECT().ReceivedTransportParameters(params)
-			sess.processTransportParameters(params)
+			sess.handleTransportParameters(params)
 			Eventually(errChan).Should(Receive(MatchError("TRANSPORT_PARAMETER_ERROR: expected retry_source_connection_id to equal deadbeef, is deadc0de")))
 		})
 
@@ -2848,7 +2848,7 @@ var _ = Describe("Client Session", func() {
 			}
 			expectClose()
 			tracer.EXPECT().ReceivedTransportParameters(params)
-			sess.processTransportParameters(params)
+			sess.handleTransportParameters(params)
 			Eventually(errChan).Should(Receive(MatchError("TRANSPORT_PARAMETER_ERROR: received retry_source_connection_id, although no Retry was performed")))
 		})
 
@@ -2861,7 +2861,7 @@ var _ = Describe("Client Session", func() {
 			}
 			expectClose()
 			tracer.EXPECT().ReceivedTransportParameters(params)
-			sess.processTransportParameters(params)
+			sess.handleTransportParameters(params)
 			Eventually(errChan).Should(Receive(MatchError("TRANSPORT_PARAMETER_ERROR: expected original_destination_connection_id to equal deadbeef, is decafbad")))
 		})
 	})
