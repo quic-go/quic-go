@@ -7,18 +7,39 @@ import (
 	"io/ioutil"
 	mrand "math/rand"
 	"net"
+	"sort"
 	"sync"
 	"sync/atomic"
 	"time"
 
-	quic "github.com/lucas-clemente/quic-go"
+	"github.com/lucas-clemente/quic-go"
 	quicproxy "github.com/lucas-clemente/quic-go/integrationtests/tools/proxy"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/internal/wire"
+	"github.com/lucas-clemente/quic-go/logging"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 )
+
+type rcvdPacketTracer struct {
+	connTracer
+	closed      chan struct{}
+	rcvdPackets []*logging.ExtendedHeader
+}
+
+func newRcvdPacketTracer() *rcvdPacketTracer {
+	return &rcvdPacketTracer{closed: make(chan struct{})}
+}
+
+func (t *rcvdPacketTracer) ReceivedPacket(hdr *logging.ExtendedHeader, _ logging.ByteCount, _ []logging.Frame) {
+	t.rcvdPackets = append(t.rcvdPackets, hdr)
+}
+func (t *rcvdPacketTracer) Close() { close(t.closed) }
+func (t *rcvdPacketTracer) getRcvdPackets() []*logging.ExtendedHeader {
+	<-t.closed
+	return t.rcvdPackets
+}
 
 var _ = Describe("0-RTT", func() {
 	rtt := scaleDuration(5 * time.Millisecond)
@@ -27,16 +48,6 @@ var _ = Describe("0-RTT", func() {
 		version := v
 
 		Context(fmt.Sprintf("with QUIC version %s", version), func() {
-			runDelayProxy := func(serverPort int) *quicproxy.QuicProxy {
-				proxy, err := quicproxy.NewQuicProxy("localhost:0", &quicproxy.Opts{
-					RemoteAddr:  fmt.Sprintf("localhost:%d", serverPort),
-					DelayPacket: func(_ quicproxy.Direction, data []byte) time.Duration { return rtt / 2 },
-				})
-				Expect(err).ToNot(HaveOccurred())
-
-				return proxy
-			}
-
 			runCountingProxy := func(serverPort int) (*quicproxy.QuicProxy, *uint32) {
 				var num0RTTPackets uint32 // to be used as an atomic
 				proxy, err := quicproxy.NewQuicProxy("localhost:0", &quicproxy.Opts{
@@ -55,12 +66,37 @@ var _ = Describe("0-RTT", func() {
 				return proxy, &num0RTTPackets
 			}
 
-			dialAndReceiveSessionTicket := func(ln quic.EarlyListener, proxyPort int) *tls.Config {
+			dialAndReceiveSessionTicket := func(serverConf *quic.Config) (*tls.Config, *tls.Config) {
+				tlsConf := getTLSConfig()
+				if serverConf == nil {
+					serverConf = getQuicConfig(&quic.Config{
+						AcceptToken: func(_ net.Addr, _ *quic.Token) bool { return true },
+					})
+					serverConf.Versions = []protocol.VersionNumber{version}
+				}
+				ln, err := quic.ListenAddrEarly(
+					"localhost:0",
+					tlsConf,
+					serverConf,
+				)
+				Expect(err).ToNot(HaveOccurred())
+				defer ln.Close()
+
+				proxy, err := quicproxy.NewQuicProxy("localhost:0", &quicproxy.Opts{
+					RemoteAddr:  fmt.Sprintf("localhost:%d", ln.Addr().(*net.UDPAddr).Port),
+					DelayPacket: func(_ quicproxy.Direction, data []byte) time.Duration { return rtt / 2 },
+				})
+				Expect(err).ToNot(HaveOccurred())
+				defer proxy.Close()
+
 				// dial the first session in order to receive a session ticket
+				done := make(chan struct{})
 				go func() {
 					defer GinkgoRecover()
-					_, err := ln.Accept(context.Background())
+					defer close(done)
+					sess, err := ln.Accept(context.Background())
 					Expect(err).ToNot(HaveOccurred())
+					<-sess.Context().Done()
 				}()
 
 				clientConf := getTLSClientConfig()
@@ -68,7 +104,7 @@ var _ = Describe("0-RTT", func() {
 				puts := make(chan string, 100)
 				clientConf.ClientSessionCache = newClientSessionCache(gets, puts)
 				sess, err := quic.DialAddr(
-					fmt.Sprintf("localhost:%d", proxyPort),
+					fmt.Sprintf("localhost:%d", proxy.LocalPort()),
 					clientConf,
 					getQuicConfig(&quic.Config{Versions: []protocol.VersionNumber{version}}),
 				)
@@ -76,7 +112,8 @@ var _ = Describe("0-RTT", func() {
 				Eventually(puts).Should(Receive())
 				// received the session ticket. We're done here.
 				Expect(sess.CloseWithError(0, "")).To(Succeed())
-				return clientConf
+				Eventually(done).Should(BeClosed())
+				return tlsConf, clientConf
 			}
 
 			transfer0RTTData := func(
@@ -98,6 +135,7 @@ var _ = Describe("0-RTT", func() {
 					Expect(err).ToNot(HaveOccurred())
 					Expect(data).To(Equal(testdata))
 					Expect(sess.ConnectionState().TLS.Used0RTT).To(Equal(expect0RTT))
+					Expect(sess.CloseWithError(0, "")).To(Succeed())
 					close(done)
 				}()
 
@@ -107,6 +145,7 @@ var _ = Describe("0-RTT", func() {
 					getQuicConfig(&quic.Config{Versions: []protocol.VersionNumber{version}}),
 				)
 				Expect(err).ToNot(HaveOccurred())
+				defer sess.CloseWithError(0, "")
 				str, err := sess.OpenUniStream()
 				Expect(err).ToNot(HaveOccurred())
 				_, err = str.Write(testdata)
@@ -114,6 +153,7 @@ var _ = Describe("0-RTT", func() {
 				Expect(str.Close()).To(Succeed())
 				Expect(sess.ConnectionState().TLS.Used0RTT).To(Equal(expect0RTT))
 				Eventually(done).Should(BeClosed())
+				Eventually(sess.Context().Done()).Should(BeClosed())
 			}
 
 			check0RTTRejected := func(
@@ -142,15 +182,32 @@ var _ = Describe("0-RTT", func() {
 				Expect(serverSess.ConnectionState().TLS.Used0RTT).To(BeFalse())
 				_, err = serverSess.AcceptUniStream(ctx)
 				Expect(err).To(Equal(context.DeadlineExceeded))
+				Expect(serverSess.CloseWithError(0, "")).To(Succeed())
+				Eventually(sess.Context().Done()).Should(BeClosed())
+			}
+
+			// can be used to extract 0-RTT from a rcvdPacketTracer
+			get0RTTPackets := func(hdrs []*logging.ExtendedHeader) []protocol.PacketNumber {
+				var zeroRTTPackets []protocol.PacketNumber
+				for _, hdr := range hdrs {
+					if hdr.Type == protocol.PacketType0RTT {
+						zeroRTTPackets = append(zeroRTTPackets, hdr.PacketNumber)
+					}
+				}
+				return zeroRTTPackets
 			}
 
 			It("transfers 0-RTT data", func() {
+				tlsConf, clientConf := dialAndReceiveSessionTicket(nil)
+
+				tracer := newRcvdPacketTracer()
 				ln, err := quic.ListenAddrEarly(
 					"localhost:0",
-					getTLSConfig(),
+					tlsConf,
 					getQuicConfig(&quic.Config{
 						Versions:    []protocol.VersionNumber{version},
 						AcceptToken: func(_ net.Addr, _ *quic.Token) bool { return true },
+						Tracer:      newTracer(func() logging.ConnectionTracer { return tracer }),
 					}),
 				)
 				Expect(err).ToNot(HaveOccurred())
@@ -159,37 +216,38 @@ var _ = Describe("0-RTT", func() {
 				proxy, num0RTTPackets := runCountingProxy(ln.Addr().(*net.UDPAddr).Port)
 				defer proxy.Close()
 
-				clientConf := dialAndReceiveSessionTicket(ln, proxy.LocalPort())
 				transfer0RTTData(ln, proxy.LocalPort(), clientConf, PRData, true)
 
 				num0RTT := atomic.LoadUint32(num0RTTPackets)
 				fmt.Fprintf(GinkgoWriter, "Sent %d 0-RTT packets.", num0RTT)
 				Expect(num0RTT).ToNot(BeZero())
+				zeroRTTPackets := get0RTTPackets(tracer.getRcvdPackets())
+				Expect(len(zeroRTTPackets)).To(BeNumerically(">", 10))
+				sort.Slice(zeroRTTPackets, func(i, j int) bool { return zeroRTTPackets[i] < zeroRTTPackets[j] })
+				Expect(zeroRTTPackets[0]).To(Equal(protocol.PacketNumber(0)))
 			})
 
 			// Test that data intended to be sent with 1-RTT protection is not sent in 0-RTT packets.
 			It("waits until a session until the handshake is done", func() {
-				ln, err := quic.ListenAddrEarly(
-					"localhost:0",
-					getTLSConfig(),
-					&quic.Config{
-						Versions:    []protocol.VersionNumber{version},
-						AcceptToken: func(_ net.Addr, _ *quic.Token) bool { return true },
-					},
-				)
-				Expect(err).ToNot(HaveOccurred())
-				defer ln.Close()
-
-				proxy, num0RTTPackets := runCountingProxy(ln.Addr().(*net.UDPAddr).Port)
-				defer proxy.Close()
-
-				clientConf := dialAndReceiveSessionTicket(ln, proxy.LocalPort())
+				tlsConf, clientConf := dialAndReceiveSessionTicket(nil)
 
 				zeroRTTData := GeneratePRData(2 * 1100) // 2 packets
 				oneRTTData := PRData
 
+				tracer := newRcvdPacketTracer()
+				ln, err := quic.ListenAddrEarly(
+					"localhost:0",
+					tlsConf,
+					getQuicConfig(&quic.Config{
+						Versions:    []protocol.VersionNumber{version},
+						AcceptToken: func(_ net.Addr, _ *quic.Token) bool { return true },
+						Tracer:      newTracer(func() logging.ConnectionTracer { return tracer }),
+					}),
+				)
+				Expect(err).ToNot(HaveOccurred())
+				defer ln.Close()
+
 				// now dial the second session, and use 0-RTT to send some data
-				done := make(chan struct{})
 				go func() {
 					defer GinkgoRecover()
 					sess, err := ln.Accept(context.Background())
@@ -204,8 +262,11 @@ var _ = Describe("0-RTT", func() {
 					data, err = ioutil.ReadAll(str)
 					Expect(err).ToNot(HaveOccurred())
 					Expect(data).To(Equal(oneRTTData))
-					close(done)
+					Expect(sess.CloseWithError(0, "")).To(Succeed())
 				}()
+
+				proxy, num0RTTPackets := runCountingProxy(ln.Addr().(*net.UDPAddr).Port)
+				defer proxy.Close()
 
 				sess, err := quic.DialAddrEarly(
 					fmt.Sprintf("localhost:%d", proxy.LocalPort()),
@@ -232,12 +293,12 @@ var _ = Describe("0-RTT", func() {
 				_, err = str.Write(PRData)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(str.Close()).To(Succeed())
-
-				Eventually(done).Should(BeClosed())
+				<-sess.Context().Done()
 
 				num0RTT := atomic.LoadUint32(num0RTTPackets)
 				fmt.Fprintf(GinkgoWriter, "Sent %d 0-RTT packets.", num0RTT)
 				Expect(num0RTT).To(Or(BeEquivalentTo(2), BeEquivalentTo(3))) // the FIN might be sent in a separate packet
+				Expect(get0RTTPackets(tracer.getRcvdPackets())).To(HaveLen(int(num0RTT)))
 			})
 
 			It("transfers 0-RTT data, when 0-RTT packets are lost", func() {
@@ -246,20 +307,22 @@ var _ = Describe("0-RTT", func() {
 					num0RTTDropped uint32
 				)
 
+				tlsConf, clientConf := dialAndReceiveSessionTicket(nil)
+
+				tracer := newRcvdPacketTracer()
 				ln, err := quic.ListenAddrEarly(
 					"localhost:0",
-					getTLSConfig(),
+					tlsConf,
 					getQuicConfig(&quic.Config{
-						Versions:    []protocol.VersionNumber{version},
-						AcceptToken: func(_ net.Addr, _ *quic.Token) bool { return true },
+						Versions: []protocol.VersionNumber{version},
+						Tracer:   newTracer(func() logging.ConnectionTracer { return tracer }),
 					}),
 				)
 				Expect(err).ToNot(HaveOccurred())
 				defer ln.Close()
-				serverPort := ln.Addr().(*net.UDPAddr).Port
 
 				proxy, err := quicproxy.NewQuicProxy("localhost:0", &quicproxy.Opts{
-					RemoteAddr: fmt.Sprintf("localhost:%d", serverPort),
+					RemoteAddr: fmt.Sprintf("localhost:%d", ln.Addr().(*net.UDPAddr).Port),
 					DelayPacket: func(_ quicproxy.Direction, data []byte) time.Duration {
 						hdr, _, _, err := wire.ParsePacket(data, 0)
 						Expect(err).ToNot(HaveOccurred())
@@ -285,7 +348,6 @@ var _ = Describe("0-RTT", func() {
 				Expect(err).ToNot(HaveOccurred())
 				defer proxy.Close()
 
-				clientConf := dialAndReceiveSessionTicket(ln, proxy.LocalPort())
 				transfer0RTTData(ln, proxy.LocalPort(), clientConf, PRData, true)
 
 				num0RTT := atomic.LoadUint32(&num0RTTPackets)
@@ -293,6 +355,7 @@ var _ = Describe("0-RTT", func() {
 				fmt.Fprintf(GinkgoWriter, "Sent %d 0-RTT packets. Dropped %d of those.", num0RTT, numDropped)
 				Expect(numDropped).ToNot(BeZero())
 				Expect(num0RTT).ToNot(BeZero())
+				Expect(get0RTTPackets(tracer.getRcvdPackets())).ToNot(BeEmpty())
 			})
 
 			It("retransmits all 0-RTT data when the server performs a Retry", func() {
@@ -300,14 +363,7 @@ var _ = Describe("0-RTT", func() {
 				var firstConnID, secondConnID protocol.ConnectionID
 				var firstCounter, secondCounter protocol.ByteCount
 
-				ln, err := quic.ListenAddrEarly(
-					"localhost:0",
-					getTLSConfig(),
-					getQuicConfig(&quic.Config{Versions: []protocol.VersionNumber{version}}),
-				)
-				Expect(err).ToNot(HaveOccurred())
-				defer ln.Close()
-				serverPort := ln.Addr().(*net.UDPAddr).Port
+				tlsConf, clientConf := dialAndReceiveSessionTicket(nil)
 
 				countZeroRTTBytes := func(data []byte) (n protocol.ByteCount) {
 					for len(data) > 0 {
@@ -323,8 +379,20 @@ var _ = Describe("0-RTT", func() {
 					return
 				}
 
+				tracer := newRcvdPacketTracer()
+				ln, err := quic.ListenAddrEarly(
+					"localhost:0",
+					tlsConf,
+					getQuicConfig(&quic.Config{
+						Versions: []protocol.VersionNumber{version},
+						Tracer:   newTracer(func() logging.ConnectionTracer { return tracer }),
+					}),
+				)
+				Expect(err).ToNot(HaveOccurred())
+				defer ln.Close()
+
 				proxy, err := quicproxy.NewQuicProxy("localhost:0", &quicproxy.Opts{
-					RemoteAddr: fmt.Sprintf("localhost:%d", serverPort),
+					RemoteAddr: fmt.Sprintf("localhost:%d", ln.Addr().(*net.UDPAddr).Port),
 					DelayPacket: func(dir quicproxy.Direction, data []byte) time.Duration {
 						connID, err := wire.ParseConnectionID(data, 0)
 						Expect(err).ToNot(HaveOccurred())
@@ -354,43 +422,37 @@ var _ = Describe("0-RTT", func() {
 				Expect(err).ToNot(HaveOccurred())
 				defer proxy.Close()
 
-				clientConf := dialAndReceiveSessionTicket(ln, proxy.LocalPort())
 				transfer0RTTData(ln, proxy.LocalPort(), clientConf, GeneratePRData(5000), true) // ~5 packets
 
 				mutex.Lock()
 				defer mutex.Unlock()
 				Expect(firstCounter).To(BeNumerically("~", 5000+100 /* framing overhead */, 100)) // the FIN bit might be sent extra
 				Expect(secondCounter).To(BeNumerically("~", firstCounter, 20))
+				zeroRTTPackets := get0RTTPackets(tracer.getRcvdPackets())
+				Expect(len(zeroRTTPackets)).To(BeNumerically(">=", 5))
+				Expect(zeroRTTPackets[0]).To(BeNumerically(">=", protocol.PacketNumber(5)))
 			})
 
 			It("rejects 0-RTT when the server's transport parameters changed", func() {
 				const maxStreams = 42
-				tlsConf := getTLSConfig()
+				tlsConf, clientConf := dialAndReceiveSessionTicket(getQuicConfig(&quic.Config{
+					MaxIncomingStreams: maxStreams,
+					AcceptToken:        func(_ net.Addr, _ *quic.Token) bool { return true },
+				}))
+
+				tracer := newRcvdPacketTracer()
 				ln, err := quic.ListenAddrEarly(
-					"localhost:0",
-					tlsConf,
-					getQuicConfig(&quic.Config{
-						Versions:           []protocol.VersionNumber{version},
-						AcceptToken:        func(_ net.Addr, _ *quic.Token) bool { return true },
-						MaxIncomingStreams: maxStreams,
-					}),
-				)
-				Expect(err).ToNot(HaveOccurred())
-
-				clientConf := dialAndReceiveSessionTicket(ln, ln.Addr().(*net.UDPAddr).Port)
-
-				// now close the listener and restart it with a different config
-				Expect(ln.Close()).To(Succeed())
-				ln, err = quic.ListenAddrEarly(
 					"localhost:0",
 					tlsConf,
 					getQuicConfig(&quic.Config{
 						Versions:           []protocol.VersionNumber{version},
 						AcceptToken:        func(_ net.Addr, _ *quic.Token) bool { return true },
 						MaxIncomingStreams: maxStreams + 1,
+						Tracer:             newTracer(func() logging.ConnectionTracer { return tracer }),
 					}),
 				)
 				Expect(err).ToNot(HaveOccurred())
+				defer ln.Close()
 				proxy, num0RTTPackets := runCountingProxy(ln.Addr().(*net.UDPAddr).Port)
 				defer proxy.Close()
 				check0RTTRejected(ln, proxy.LocalPort(), clientConf)
@@ -399,37 +461,27 @@ var _ = Describe("0-RTT", func() {
 				num0RTT := atomic.LoadUint32(num0RTTPackets)
 				fmt.Fprintf(GinkgoWriter, "Sent %d 0-RTT packets.", num0RTT)
 				Expect(num0RTT).ToNot(BeZero())
+				Expect(get0RTTPackets(tracer.getRcvdPackets())).To(BeEmpty())
 			})
 
 			It("rejects 0-RTT when the ALPN changed", func() {
-				tlsConf := getTLSConfig()
+				tlsConf, clientConf := dialAndReceiveSessionTicket(nil)
+
+				// now close the listener and dial new connection with a different ALPN
+				clientConf.NextProtos = []string{"new-alpn"}
+				tlsConf.NextProtos = []string{"new-alpn"}
+				tracer := newRcvdPacketTracer()
 				ln, err := quic.ListenAddrEarly(
 					"localhost:0",
 					tlsConf,
 					getQuicConfig(&quic.Config{
 						Versions:    []protocol.VersionNumber{version},
 						AcceptToken: func(_ net.Addr, _ *quic.Token) bool { return true },
+						Tracer:      newTracer(func() logging.ConnectionTracer { return tracer }),
 					}),
 				)
 				Expect(err).ToNot(HaveOccurred())
-
-				delayProxy := runDelayProxy(ln.Addr().(*net.UDPAddr).Port)
-				defer delayProxy.Close()
-				clientConf := dialAndReceiveSessionTicket(ln, delayProxy.LocalPort())
-
-				// now close the listener and dial new connection with a different ALPN
-				Expect(ln.Close()).To(Succeed())
-				clientConf.NextProtos = []string{"new-alpn"}
-				tlsConf.NextProtos = []string{"new-alpn"}
-				ln, err = quic.ListenAddrEarly(
-					"localhost:0",
-					tlsConf,
-					getQuicConfig(&quic.Config{
-						Versions:    []protocol.VersionNumber{version},
-						AcceptToken: func(_ net.Addr, _ *quic.Token) bool { return true },
-					}),
-				)
-				Expect(err).ToNot(HaveOccurred())
+				defer ln.Close()
 				proxy, num0RTTPackets := runCountingProxy(ln.Addr().(*net.UDPAddr).Port)
 				defer proxy.Close()
 
@@ -439,35 +491,24 @@ var _ = Describe("0-RTT", func() {
 				num0RTT := atomic.LoadUint32(num0RTTPackets)
 				fmt.Fprintf(GinkgoWriter, "Sent %d 0-RTT packets.", num0RTT)
 				Expect(num0RTT).ToNot(BeZero())
+				Expect(get0RTTPackets(tracer.getRcvdPackets())).To(BeEmpty())
 			})
 
 			It("correctly deals with 0-RTT rejections", func() {
-				tlsConf := getTLSConfig()
+				tlsConf, clientConf := dialAndReceiveSessionTicket(nil)
+				// now dial new connection with different transport parameters
+				tracer := newRcvdPacketTracer()
 				ln, err := quic.ListenAddrEarly(
-					"localhost:0",
-					tlsConf,
-					getQuicConfig(&quic.Config{
-						Versions:              []protocol.VersionNumber{version},
-						MaxIncomingUniStreams: 2,
-						AcceptToken:           func(_ net.Addr, _ *quic.Token) bool { return true },
-					}),
-				)
-				Expect(err).ToNot(HaveOccurred())
-
-				delayProxy := runDelayProxy(ln.Addr().(*net.UDPAddr).Port)
-				defer delayProxy.Close()
-				clientConf := dialAndReceiveSessionTicket(ln, delayProxy.LocalPort())
-				// now close the listener and dial new connection with different transport parameters
-				Expect(ln.Close()).To(Succeed())
-				ln, err = quic.ListenAddrEarly(
 					"localhost:0",
 					tlsConf,
 					getQuicConfig(&quic.Config{
 						Versions:              []protocol.VersionNumber{version},
 						MaxIncomingUniStreams: 1,
+						Tracer:                newTracer(func() logging.ConnectionTracer { return tracer }),
 					}),
 				)
 				Expect(err).ToNot(HaveOccurred())
+				defer ln.Close()
 				proxy, num0RTTPackets := runCountingProxy(ln.Addr().(*net.UDPAddr).Port)
 				defer proxy.Close()
 
@@ -482,6 +523,7 @@ var _ = Describe("0-RTT", func() {
 					data, err := ioutil.ReadAll(str)
 					Expect(err).ToNot(HaveOccurred())
 					Expect(string(data)).To(Equal("second flight"))
+					Expect(sess.CloseWithError(0, "")).To(Succeed())
 				}()
 
 				sess, err := quic.DialAddrEarly(
@@ -517,11 +559,48 @@ var _ = Describe("0-RTT", func() {
 				Expect(str.Close()).To(Succeed())
 
 				Eventually(done).Should(BeClosed())
+				Eventually(sess.Context().Done()).Should(BeClosed())
 
 				// The client should send 0-RTT packets, but the server doesn't process them.
 				num0RTT := atomic.LoadUint32(num0RTTPackets)
 				fmt.Fprintf(GinkgoWriter, "Sent %d 0-RTT packets.", num0RTT)
 				Expect(num0RTT).ToNot(BeZero())
+				Expect(get0RTTPackets(tracer.getRcvdPackets())).To(BeEmpty())
+			})
+
+			It("queues 0-RTT packets, if the Initial is delayed", func() {
+				tlsConf, clientConf := dialAndReceiveSessionTicket(nil)
+
+				tracer := newRcvdPacketTracer()
+				ln, err := quic.ListenAddrEarly(
+					"localhost:0",
+					tlsConf,
+					getQuicConfig(&quic.Config{
+						Versions:    []protocol.VersionNumber{version},
+						AcceptToken: func(_ net.Addr, _ *quic.Token) bool { return true },
+						Tracer:      newTracer(func() logging.ConnectionTracer { return tracer }),
+					}),
+				)
+				Expect(err).ToNot(HaveOccurred())
+				defer ln.Close()
+				proxy, err := quicproxy.NewQuicProxy("localhost:0", &quicproxy.Opts{
+					RemoteAddr: ln.Addr().String(),
+					DelayPacket: func(dir quicproxy.Direction, data []byte) time.Duration {
+						if dir == quicproxy.DirectionIncoming && data[0]&0x80 > 0 && data[0]&0x30>>4 == 0 { // Initial packet from client
+							return rtt/2 + rtt
+						}
+						return rtt / 2
+					},
+				})
+				Expect(err).ToNot(HaveOccurred())
+				defer proxy.Close()
+
+				transfer0RTTData(ln, proxy.LocalPort(), clientConf, PRData, true)
+
+				Expect(tracer.rcvdPackets[0].Type).To(Equal(protocol.PacketTypeInitial))
+				zeroRTTPackets := get0RTTPackets(tracer.getRcvdPackets())
+				Expect(len(zeroRTTPackets)).To(BeNumerically(">", 10))
+				Expect(zeroRTTPackets[0]).To(Equal(protocol.PacketNumber(0)))
 			})
 		})
 	}
