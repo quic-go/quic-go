@@ -21,11 +21,22 @@ import (
 )
 
 var _ = Describe("0-RTT", func() {
-	const rtt = 50 * time.Millisecond
+	rtt := scaleDuration(5 * time.Millisecond)
+
 	for _, v := range protocol.SupportedVersions {
 		version := v
 
 		Context(fmt.Sprintf("with QUIC version %s", version), func() {
+			runDelayProxy := func(serverPort int) *quicproxy.QuicProxy {
+				proxy, err := quicproxy.NewQuicProxy("localhost:0", &quicproxy.Opts{
+					RemoteAddr:  fmt.Sprintf("localhost:%d", serverPort),
+					DelayPacket: func(_ quicproxy.Direction, data []byte) time.Duration { return rtt / 2 },
+				})
+				Expect(err).ToNot(HaveOccurred())
+
+				return proxy
+			}
+
 			runCountingProxy := func(serverPort int) (*quicproxy.QuicProxy, *uint32) {
 				var num0RTTPackets uint32 // to be used as an atomic
 				proxy, err := quicproxy.NewQuicProxy("localhost:0", &quicproxy.Opts{
@@ -103,6 +114,34 @@ var _ = Describe("0-RTT", func() {
 				Expect(str.Close()).To(Succeed())
 				Expect(sess.ConnectionState().TLS.Used0RTT).To(Equal(expect0RTT))
 				Eventually(done).Should(BeClosed())
+			}
+
+			check0RTTRejected := func(
+				ln quic.EarlyListener,
+				proxyPort int,
+				clientConf *tls.Config,
+			) {
+				sess, err := quic.DialAddrEarly(
+					fmt.Sprintf("localhost:%d", proxyPort),
+					clientConf,
+					getQuicConfig(&quic.Config{Versions: []protocol.VersionNumber{version}}),
+				)
+				Expect(err).ToNot(HaveOccurred())
+				str, err := sess.OpenUniStream()
+				Expect(err).ToNot(HaveOccurred())
+				_, err = str.Write(make([]byte, 3000))
+				Expect(err).ToNot(HaveOccurred())
+				Expect(str.Close()).To(Succeed())
+				Expect(sess.ConnectionState().TLS.Used0RTT).To(BeFalse())
+
+				// make sure the server doesn't process the data
+				ctx, cancel := context.WithTimeout(context.Background(), scaleDuration(50*time.Millisecond))
+				defer cancel()
+				serverSess, err := ln.Accept(ctx)
+				Expect(err).ToNot(HaveOccurred())
+				Expect(serverSess.ConnectionState().TLS.Used0RTT).To(BeFalse())
+				_, err = serverSess.AcceptUniStream(ctx)
+				Expect(err).To(Equal(context.DeadlineExceeded))
 			}
 
 			It("transfers 0-RTT data", func() {
@@ -354,7 +393,7 @@ var _ = Describe("0-RTT", func() {
 				Expect(err).ToNot(HaveOccurred())
 				proxy, num0RTTPackets := runCountingProxy(ln.Addr().(*net.UDPAddr).Port)
 				defer proxy.Close()
-				transfer0RTTData(ln, proxy.LocalPort(), clientConf, PRData, false)
+				check0RTTRejected(ln, proxy.LocalPort(), clientConf)
 
 				// The client should send 0-RTT packets, but the server doesn't process them.
 				num0RTT := atomic.LoadUint32(num0RTTPackets)
@@ -374,7 +413,9 @@ var _ = Describe("0-RTT", func() {
 				)
 				Expect(err).ToNot(HaveOccurred())
 
-				clientConf := dialAndReceiveSessionTicket(ln, ln.Addr().(*net.UDPAddr).Port)
+				delayProxy := runDelayProxy(ln.Addr().(*net.UDPAddr).Port)
+				defer delayProxy.Close()
+				clientConf := dialAndReceiveSessionTicket(ln, delayProxy.LocalPort())
 
 				// now close the listener and dial new connection with a different ALPN
 				Expect(ln.Close()).To(Succeed())
@@ -391,7 +432,91 @@ var _ = Describe("0-RTT", func() {
 				Expect(err).ToNot(HaveOccurred())
 				proxy, num0RTTPackets := runCountingProxy(ln.Addr().(*net.UDPAddr).Port)
 				defer proxy.Close()
-				transfer0RTTData(ln, proxy.LocalPort(), clientConf, PRData, false)
+
+				check0RTTRejected(ln, proxy.LocalPort(), clientConf)
+
+				// The client should send 0-RTT packets, but the server doesn't process them.
+				num0RTT := atomic.LoadUint32(num0RTTPackets)
+				fmt.Fprintf(GinkgoWriter, "Sent %d 0-RTT packets.", num0RTT)
+				Expect(num0RTT).ToNot(BeZero())
+			})
+
+			It("correctly deals with 0-RTT rejections", func() {
+				tlsConf := getTLSConfig()
+				ln, err := quic.ListenAddrEarly(
+					"localhost:0",
+					tlsConf,
+					getQuicConfig(&quic.Config{
+						Versions:              []protocol.VersionNumber{version},
+						MaxIncomingUniStreams: 2,
+						AcceptToken:           func(_ net.Addr, _ *quic.Token) bool { return true },
+					}),
+				)
+				Expect(err).ToNot(HaveOccurred())
+
+				delayProxy := runDelayProxy(ln.Addr().(*net.UDPAddr).Port)
+				defer delayProxy.Close()
+				clientConf := dialAndReceiveSessionTicket(ln, delayProxy.LocalPort())
+				// now close the listener and dial new connection with different transport parameters
+				Expect(ln.Close()).To(Succeed())
+				ln, err = quic.ListenAddrEarly(
+					"localhost:0",
+					tlsConf,
+					getQuicConfig(&quic.Config{
+						Versions:              []protocol.VersionNumber{version},
+						MaxIncomingUniStreams: 1,
+					}),
+				)
+				Expect(err).ToNot(HaveOccurred())
+				proxy, num0RTTPackets := runCountingProxy(ln.Addr().(*net.UDPAddr).Port)
+				defer proxy.Close()
+
+				done := make(chan struct{})
+				go func() {
+					defer GinkgoRecover()
+					defer close(done)
+					sess, err := ln.Accept(context.Background())
+					Expect(err).ToNot(HaveOccurred())
+					str, err := sess.AcceptUniStream(context.Background())
+					Expect(err).ToNot(HaveOccurred())
+					data, err := ioutil.ReadAll(str)
+					Expect(err).ToNot(HaveOccurred())
+					Expect(string(data)).To(Equal("second flight"))
+				}()
+
+				sess, err := quic.DialAddrEarly(
+					fmt.Sprintf("localhost:%d", proxy.LocalPort()),
+					clientConf,
+					getQuicConfig(&quic.Config{Versions: []protocol.VersionNumber{version}}),
+				)
+				Expect(err).ToNot(HaveOccurred())
+				// The client remembers that it was allowed to open 2 uni-directional streams.
+				for i := 0; i < 2; i++ {
+					str, err := sess.OpenUniStream()
+					Expect(err).ToNot(HaveOccurred())
+					go func() {
+						defer GinkgoRecover()
+						_, err = str.Write([]byte("first flight"))
+						Expect(err).ToNot(HaveOccurred())
+					}()
+				}
+
+				ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+				defer cancel()
+				_, err = sess.AcceptStream(ctx)
+				Expect(err).To(Equal(quic.Err0RTTRejected))
+
+				newSess := sess.NextSession()
+				str, err := newSess.OpenUniStream()
+				Expect(err).ToNot(HaveOccurred())
+				_, err = newSess.OpenUniStream()
+				Expect(err).To(HaveOccurred())
+				Expect(err.Error()).To(ContainSubstring("too many open streams"))
+				_, err = str.Write([]byte("second flight"))
+				Expect(err).ToNot(HaveOccurred())
+				Expect(str.Close()).To(Succeed())
+
+				Eventually(done).Should(BeClosed())
 
 				// The client should send 0-RTT packets, but the server doesn't process them.
 				num0RTT := atomic.LoadUint32(num0RTTPackets)

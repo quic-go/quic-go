@@ -1078,8 +1078,7 @@ var _ = Describe("SentPacketHandler", func() {
 			Expect(handler.handshakePackets).To(BeNil())
 		})
 
-		// TODO(#2067): invalidate 0-RTT data when 0-RTT is rejected
-		It("retransmits 0-RTT packets when 0-RTT keys are dropped", func() {
+		It("doesn't retransmit 0-RTT packets when 0-RTT keys are dropped", func() {
 			for i := protocol.PacketNumber(0); i < 6; i++ {
 				if i == 3 {
 					continue
@@ -1094,7 +1093,7 @@ var _ = Describe("SentPacketHandler", func() {
 			}
 			Expect(handler.bytesInFlight).To(Equal(protocol.ByteCount(11)))
 			handler.DropPackets(protocol.Encryption0RTT)
-			Expect(lostPackets).To(Equal([]protocol.PacketNumber{0, 1, 2, 4, 5}))
+			Expect(lostPackets).To(BeEmpty())
 			Expect(handler.bytesInFlight).To(Equal(protocol.ByteCount(6)))
 		})
 

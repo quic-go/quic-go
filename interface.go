@@ -2,6 +2,7 @@ package quic
 
 import (
 	"context"
+	"errors"
 	"io"
 	"net"
 	"time"
@@ -64,6 +65,13 @@ type TokenStore interface {
 // An ErrorCode is an application-defined error code.
 // Valid values range between 0 and MAX_UINT62.
 type ErrorCode = protocol.ApplicationErrorCode
+
+// Err0RTTRejected is the returned from:
+// * Open{Uni}Stream{Sync}
+// * Accept{Uni}Stream
+// * Stream.Read and Stream.Write
+// when the server rejects a 0-RTT connection attempt.
+var Err0RTTRejected = errors.New("0-RTT rejected")
 
 // Stream is the interface implemented by QUIC streams
 type Stream interface {
@@ -207,6 +215,8 @@ type EarlySession interface {
 	// Data sent before completion of the handshake is encrypted with 1-RTT keys.
 	// Note that the client's identity hasn't been verified yet.
 	HandshakeComplete() context.Context
+
+	NextSession() Session
 }
 
 // Config contains all configuration data needed for a QUIC server or client.

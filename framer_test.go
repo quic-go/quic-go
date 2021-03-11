@@ -2,13 +2,13 @@ package quic
 
 import (
 	"bytes"
+	"math/rand"
 
 	"github.com/lucas-clemente/quic-go/internal/ackhandler"
-
-	"github.com/golang/mock/gomock"
-
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/internal/wire"
+
+	"github.com/golang/mock/gomock"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -85,6 +85,26 @@ var _ = Describe("Framer", func() {
 			frames, length = framer.AppendControlFrames(nil, maxSize)
 			Expect(frames).To(HaveLen(1))
 			Expect(length).To(Equal(bfLen))
+		})
+
+		It("drops *_BLOCKED frames when 0-RTT is rejected", func() {
+			ping := &wire.PingFrame{}
+			ncid := &wire.NewConnectionIDFrame{SequenceNumber: 10, ConnectionID: protocol.ConnectionID{0xde, 0xad, 0xbe, 0xef}}
+			frames := []wire.Frame{
+				&wire.DataBlockedFrame{MaximumData: 1337},
+				&wire.StreamDataBlockedFrame{StreamID: 42, MaximumStreamData: 1337},
+				&wire.StreamsBlockedFrame{StreamLimit: 13},
+				ping,
+				ncid,
+			}
+			rand.Shuffle(len(frames), func(i, j int) { frames[i], frames[j] = frames[j], frames[i] })
+			for _, f := range frames {
+				framer.QueueControlFrame(f)
+			}
+			Expect(framer.Handle0RTTRejection()).To(Succeed())
+			fs, length := framer.AppendControlFrames(nil, protocol.MaxByteCount)
+			Expect(fs).To(HaveLen(2))
+			Expect(length).To(Equal(ping.Length(version) + ncid.Length(version)))
 		})
 	})
 
@@ -352,6 +372,14 @@ var _ = Describe("Framer", func() {
 			Expect(fs).To(HaveLen(1))
 			Expect(fs[0].Frame).To(Equal(f))
 			Expect(length).To(Equal(f.Length(version)))
+		})
+
+		It("drops all STREAM frames when 0-RTT is rejected", func() {
+			framer.AddActiveStream(id1)
+			Expect(framer.Handle0RTTRejection()).To(Succeed())
+			fs, length := framer.AppendStreamFrames(nil, protocol.MaxByteCount)
+			Expect(fs).To(BeEmpty())
+			Expect(length).To(BeZero())
 		})
 	})
 })

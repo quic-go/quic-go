@@ -320,39 +320,32 @@ var _ = Describe("Streams Map", func() {
 				})
 			})
 
-			Context("updating stream ID limits", func() {
-				for _, p := range []protocol.Perspective{protocol.PerspectiveClient, protocol.PerspectiveServer} {
-					pers := p
+			It("processes the parameter for outgoing streams", func() {
+				mockSender.EXPECT().queueControlFrame(gomock.Any())
+				_, err := m.OpenStream()
+				expectTooManyStreamsError(err)
+				m.UpdateLimits(&wire.TransportParameters{
+					MaxBidiStreamNum: 5,
+					MaxUniStreamNum:  8,
+				})
 
-					It(fmt.Sprintf("processes the parameter for outgoing streams, as a %s", pers), func() {
-						mockSender.EXPECT().queueControlFrame(gomock.Any())
-						m.perspective = pers
-						_, err := m.OpenStream()
-						expectTooManyStreamsError(err)
-						m.UpdateLimits(&wire.TransportParameters{
-							MaxBidiStreamNum: 5,
-							MaxUniStreamNum:  8,
-						})
-
-						mockSender.EXPECT().queueControlFrame(gomock.Any()).Times(2)
-						// test we can only 5 bidirectional streams
-						for i := 0; i < 5; i++ {
-							str, err := m.OpenStream()
-							Expect(err).ToNot(HaveOccurred())
-							Expect(str.StreamID()).To(Equal(ids.firstOutgoingBidiStream + protocol.StreamID(4*i)))
-						}
-						_, err = m.OpenStream()
-						expectTooManyStreamsError(err)
-						// test we can only 8 unidirectional streams
-						for i := 0; i < 8; i++ {
-							str, err := m.OpenUniStream()
-							Expect(err).ToNot(HaveOccurred())
-							Expect(str.StreamID()).To(Equal(ids.firstOutgoingUniStream + protocol.StreamID(4*i)))
-						}
-						_, err = m.OpenUniStream()
-						expectTooManyStreamsError(err)
-					})
+				mockSender.EXPECT().queueControlFrame(gomock.Any()).Times(2)
+				// test we can only 5 bidirectional streams
+				for i := 0; i < 5; i++ {
+					str, err := m.OpenStream()
+					Expect(err).ToNot(HaveOccurred())
+					Expect(str.StreamID()).To(Equal(ids.firstOutgoingBidiStream + protocol.StreamID(4*i)))
 				}
+				_, err = m.OpenStream()
+				expectTooManyStreamsError(err)
+				// test we can only 8 unidirectional streams
+				for i := 0; i < 8; i++ {
+					str, err := m.OpenUniStream()
+					Expect(err).ToNot(HaveOccurred())
+					Expect(str.StreamID()).To(Equal(ids.firstOutgoingUniStream + protocol.StreamID(4*i)))
+				}
+				_, err = m.OpenUniStream()
+				expectTooManyStreamsError(err)
 			})
 
 			Context("handling MAX_STREAMS frames", func() {
@@ -431,6 +424,28 @@ var _ = Describe("Streams Map", func() {
 				Expect(err).To(HaveOccurred())
 				Expect(err.Error()).To(Equal(testErr.Error()))
 			})
+
+			if perspective == protocol.PerspectiveClient {
+				It("resets for 0-RTT", func() {
+					mockSender.EXPECT().queueControlFrame(gomock.Any()).AnyTimes()
+					m.ResetFor0RTT()
+					// make sure that calls to open / accept streams fail
+					_, err := m.OpenStream()
+					Expect(err).To(MatchError(Err0RTTRejected))
+					_, err = m.AcceptStream(context.Background())
+					Expect(err).To(MatchError(Err0RTTRejected))
+					// make sure that we can still get new streams, as the server might be sending us data
+					str, err := m.GetOrOpenReceiveStream(3)
+					Expect(err).ToNot(HaveOccurred())
+					Expect(str).ToNot(BeNil())
+
+					// now switch to using the new streams map
+					m.UseResetMaps()
+					_, err = m.OpenStream()
+					Expect(err).To(HaveOccurred())
+					Expect(err.Error()).To(ContainSubstring("too many open streams"))
+				})
+			}
 		})
 	}
 })
