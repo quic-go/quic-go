@@ -278,7 +278,9 @@ func (m *streamsMap) HandleMaxStreamsFrame(f *wire.MaxStreamsFrame) {
 }
 
 func (m *streamsMap) UpdateLimits(p *wire.TransportParameters) {
+	m.outgoingBidiStreams.UpdateSendWindow(p.InitialMaxStreamDataBidiRemote)
 	m.outgoingBidiStreams.SetMaxStream(p.MaxBidiStreamNum)
+	m.outgoingUniStreams.UpdateSendWindow(p.InitialMaxStreamDataUni)
 	m.outgoingUniStreams.SetMaxStream(p.MaxUniStreamNum)
 }
 

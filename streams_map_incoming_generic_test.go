@@ -18,13 +18,18 @@ import (
 type mockGenericStream struct {
 	num protocol.StreamNum
 
-	closed   bool
-	closeErr error
+	closed     bool
+	closeErr   error
+	sendWindow protocol.ByteCount
 }
 
 func (s *mockGenericStream) closeForShutdown(err error) {
 	s.closed = true
 	s.closeErr = err
+}
+
+func (s *mockGenericStream) updateSendWindow(limit protocol.ByteCount) {
+	s.sendWindow = limit
 }
 
 var _ = Describe("Streams Map (incoming)", func() {

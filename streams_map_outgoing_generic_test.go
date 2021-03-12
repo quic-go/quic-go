@@ -112,6 +112,16 @@ var _ = Describe("Streams Map (outgoing)", func() {
 			Expect(str2.(*mockGenericStream).closed).To(BeTrue())
 			Expect(str2.(*mockGenericStream).closeErr).To(MatchError(testErr))
 		})
+
+		It("updates the send window", func() {
+			str1, err := m.OpenStream()
+			Expect(err).ToNot(HaveOccurred())
+			str2, err := m.OpenStream()
+			Expect(err).ToNot(HaveOccurred())
+			m.UpdateSendWindow(1337)
+			Expect(str1.(*mockGenericStream).sendWindow).To(BeEquivalentTo(1337))
+			Expect(str2.(*mockGenericStream).sendWindow).To(BeEquivalentTo(1337))
+		})
 	})
 
 	Context("with stream ID limits", func() {
