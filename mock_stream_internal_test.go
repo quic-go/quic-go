@@ -202,18 +202,6 @@ func (mr *MockStreamIMockRecorder) getWindowUpdate() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "getWindowUpdate", reflect.TypeOf((*MockStreamI)(nil).getWindowUpdate))
 }
 
-// handleMaxStreamDataFrame mocks base method.
-func (m *MockStreamI) handleMaxStreamDataFrame(arg0 *wire.MaxStreamDataFrame) {
-	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "handleMaxStreamDataFrame", arg0)
-}
-
-// handleMaxStreamDataFrame indicates an expected call of handleMaxStreamDataFrame.
-func (mr *MockStreamIMockRecorder) handleMaxStreamDataFrame(arg0 interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "handleMaxStreamDataFrame", reflect.TypeOf((*MockStreamI)(nil).handleMaxStreamDataFrame), arg0)
-}
-
 // handleResetStreamFrame mocks base method.
 func (m *MockStreamI) handleResetStreamFrame(arg0 *wire.ResetStreamFrame) error {
 	m.ctrl.T.Helper()
@@ -281,4 +269,16 @@ func (m *MockStreamI) popStreamFrame(maxBytes protocol.ByteCount) (*ackhandler.F
 func (mr *MockStreamIMockRecorder) popStreamFrame(maxBytes interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "popStreamFrame", reflect.TypeOf((*MockStreamI)(nil).popStreamFrame), maxBytes)
+}
+
+// updateSendWindow mocks base method.
+func (m *MockStreamI) updateSendWindow(arg0 protocol.ByteCount) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "updateSendWindow", arg0)
+}
+
+// updateSendWindow indicates an expected call of updateSendWindow.
+func (mr *MockStreamIMockRecorder) updateSendWindow(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "updateSendWindow", reflect.TypeOf((*MockStreamI)(nil).updateSendWindow), arg0)
 }

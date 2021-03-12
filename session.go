@@ -1272,7 +1272,7 @@ func (s *session) handleMaxStreamDataFrame(frame *wire.MaxStreamDataFrame) error
 		// stream is closed and already garbage collected
 		return nil
 	}
-	str.handleMaxStreamDataFrame(frame)
+	str.updateSendWindow(frame.MaximumStreamData)
 	return nil
 }
 
