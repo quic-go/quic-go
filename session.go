@@ -504,7 +504,7 @@ func (s *session) preSetup() {
 	s.rttStats = &utils.RTTStats{}
 	s.connFlowController = flowcontrol.NewConnectionFlowController(
 		protocol.ByteCount(s.config.InitialConnectionReceiveWindow),
-		protocol.ByteCount(s.config.MaxReceiveConnectionFlowControlWindow),
+		protocol.ByteCount(s.config.MaxConnectionReceiveWindow),
 		s.onHasConnectionWindowUpdate,
 		s.rttStats,
 		s.logger,
@@ -1835,7 +1835,7 @@ func (s *session) newFlowController(id protocol.StreamID) flowcontrol.StreamFlow
 		id,
 		s.connFlowController,
 		protocol.ByteCount(s.config.InitialStreamReceiveWindow),
-		protocol.ByteCount(s.config.MaxReceiveStreamFlowControlWindow),
+		protocol.ByteCount(s.config.MaxStreamReceiveWindow),
 		initialSendWindow,
 		s.onHasStreamWindowUpdate,
 		s.rttStats,

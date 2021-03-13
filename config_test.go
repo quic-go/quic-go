@@ -59,11 +59,11 @@ var _ = Describe("Config", func() {
 				f.Set(reflect.ValueOf(NewLRUTokenStore(2, 3)))
 			case "InitialStreamReceiveWindow":
 				f.Set(reflect.ValueOf(uint64(1234)))
-			case "MaxReceiveStreamFlowControlWindow":
+			case "MaxStreamReceiveWindow":
 				f.Set(reflect.ValueOf(uint64(9)))
 			case "InitialConnectionReceiveWindow":
 				f.Set(reflect.ValueOf(uint64(4321)))
-			case "MaxReceiveConnectionFlowControlWindow":
+			case "MaxConnectionReceiveWindow":
 				f.Set(reflect.ValueOf(uint64(10)))
 			case "MaxIncomingStreams":
 				f.Set(reflect.ValueOf(int64(11)))
@@ -147,9 +147,9 @@ var _ = Describe("Config", func() {
 			Expect(c.Versions).To(Equal(protocol.SupportedVersions))
 			Expect(c.HandshakeIdleTimeout).To(Equal(protocol.DefaultHandshakeIdleTimeout))
 			Expect(c.InitialStreamReceiveWindow).To(BeEquivalentTo(protocol.DefaultInitialMaxStreamData))
-			Expect(c.MaxReceiveStreamFlowControlWindow).To(BeEquivalentTo(protocol.DefaultMaxReceiveStreamFlowControlWindow))
+			Expect(c.MaxStreamReceiveWindow).To(BeEquivalentTo(protocol.DefaultMaxReceiveStreamFlowControlWindow))
 			Expect(c.InitialConnectionReceiveWindow).To(BeEquivalentTo(protocol.DefaultInitialMaxData))
-			Expect(c.MaxReceiveConnectionFlowControlWindow).To(BeEquivalentTo(protocol.DefaultMaxReceiveConnectionFlowControlWindow))
+			Expect(c.MaxConnectionReceiveWindow).To(BeEquivalentTo(protocol.DefaultMaxReceiveConnectionFlowControlWindow))
 			Expect(c.MaxIncomingStreams).To(BeEquivalentTo(protocol.DefaultMaxIncomingStreams))
 			Expect(c.MaxIncomingUniStreams).To(BeEquivalentTo(protocol.DefaultMaxIncomingUniStreams))
 			Expect(c.DisablePathMTUDiscovery).To(BeFalse())
