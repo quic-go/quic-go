@@ -71,17 +71,17 @@ func populateConfig(config *Config) *Config {
 	if config.MaxIdleTimeout != 0 {
 		idleTimeout = config.MaxIdleTimeout
 	}
-	initialStreamFlowControlWindow := config.InitialStreamFlowControlWindow
-	if initialStreamFlowControlWindow == 0 {
-		initialStreamFlowControlWindow = protocol.DefaultInitialMaxStreamData
+	initialStreamReceiveWindow := config.InitialStreamReceiveWindow
+	if initialStreamReceiveWindow == 0 {
+		initialStreamReceiveWindow = protocol.DefaultInitialMaxStreamData
 	}
 	maxReceiveStreamFlowControlWindow := config.MaxReceiveStreamFlowControlWindow
 	if maxReceiveStreamFlowControlWindow == 0 {
 		maxReceiveStreamFlowControlWindow = protocol.DefaultMaxReceiveStreamFlowControlWindow
 	}
-	initialConnectionFlowControlWindow := config.InitialConnectionFlowControlWindow
-	if initialConnectionFlowControlWindow == 0 {
-		initialConnectionFlowControlWindow = protocol.DefaultInitialMaxData
+	initialConnectionReceiveWindow := config.InitialConnectionReceiveWindow
+	if initialConnectionReceiveWindow == 0 {
+		initialConnectionReceiveWindow = protocol.DefaultInitialMaxData
 	}
 	maxReceiveConnectionFlowControlWindow := config.MaxReceiveConnectionFlowControlWindow
 	if maxReceiveConnectionFlowControlWindow == 0 {
@@ -106,9 +106,9 @@ func populateConfig(config *Config) *Config {
 		MaxIdleTimeout:                        idleTimeout,
 		AcceptToken:                           config.AcceptToken,
 		KeepAlive:                             config.KeepAlive,
-		InitialStreamFlowControlWindow:        initialStreamFlowControlWindow,
+		InitialStreamReceiveWindow:            initialStreamReceiveWindow,
 		MaxReceiveStreamFlowControlWindow:     maxReceiveStreamFlowControlWindow,
-		InitialConnectionFlowControlWindow:    initialConnectionFlowControlWindow,
+		InitialConnectionReceiveWindow:        initialConnectionReceiveWindow,
 		MaxReceiveConnectionFlowControlWindow: maxReceiveConnectionFlowControlWindow,
 		MaxIncomingStreams:                    maxIncomingStreams,
 		MaxIncomingUniStreams:                 maxIncomingUniStreams,

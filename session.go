@@ -302,10 +302,10 @@ var newSession = func(
 	initialStream := newCryptoStream()
 	handshakeStream := newCryptoStream()
 	params := &wire.TransportParameters{
-		InitialMaxStreamDataBidiLocal:   protocol.ByteCount(s.config.InitialStreamFlowControlWindow),
-		InitialMaxStreamDataBidiRemote:  protocol.ByteCount(s.config.InitialStreamFlowControlWindow),
-		InitialMaxStreamDataUni:         protocol.ByteCount(s.config.InitialStreamFlowControlWindow),
-		InitialMaxData:                  protocol.ByteCount(s.config.InitialConnectionFlowControlWindow),
+		InitialMaxStreamDataBidiLocal:   protocol.ByteCount(s.config.InitialStreamReceiveWindow),
+		InitialMaxStreamDataBidiRemote:  protocol.ByteCount(s.config.InitialStreamReceiveWindow),
+		InitialMaxStreamDataUni:         protocol.ByteCount(s.config.InitialStreamReceiveWindow),
+		InitialMaxData:                  protocol.ByteCount(s.config.InitialConnectionReceiveWindow),
 		MaxIdleTimeout:                  s.config.MaxIdleTimeout,
 		MaxBidiStreamNum:                protocol.StreamNum(s.config.MaxIncomingStreams),
 		MaxUniStreamNum:                 protocol.StreamNum(s.config.MaxIncomingUniStreams),
@@ -426,10 +426,10 @@ var newClientSession = func(
 	initialStream := newCryptoStream()
 	handshakeStream := newCryptoStream()
 	params := &wire.TransportParameters{
-		InitialMaxStreamDataBidiRemote: protocol.ByteCount(s.config.InitialStreamFlowControlWindow),
-		InitialMaxStreamDataBidiLocal:  protocol.ByteCount(s.config.InitialStreamFlowControlWindow),
-		InitialMaxStreamDataUni:        protocol.ByteCount(s.config.InitialStreamFlowControlWindow),
-		InitialMaxData:                 protocol.ByteCount(s.config.InitialConnectionFlowControlWindow),
+		InitialMaxStreamDataBidiRemote: protocol.ByteCount(s.config.InitialStreamReceiveWindow),
+		InitialMaxStreamDataBidiLocal:  protocol.ByteCount(s.config.InitialStreamReceiveWindow),
+		InitialMaxStreamDataUni:        protocol.ByteCount(s.config.InitialStreamReceiveWindow),
+		InitialMaxData:                 protocol.ByteCount(s.config.InitialConnectionReceiveWindow),
 		MaxIdleTimeout:                 s.config.MaxIdleTimeout,
 		MaxBidiStreamNum:               protocol.StreamNum(s.config.MaxIncomingStreams),
 		MaxUniStreamNum:                protocol.StreamNum(s.config.MaxIncomingUniStreams),
@@ -503,7 +503,7 @@ func (s *session) preSetup() {
 	s.frameParser = wire.NewFrameParser(s.config.EnableDatagrams, s.version)
 	s.rttStats = &utils.RTTStats{}
 	s.connFlowController = flowcontrol.NewConnectionFlowController(
-		protocol.ByteCount(s.config.InitialConnectionFlowControlWindow),
+		protocol.ByteCount(s.config.InitialConnectionReceiveWindow),
 		protocol.ByteCount(s.config.MaxReceiveConnectionFlowControlWindow),
 		s.onHasConnectionWindowUpdate,
 		s.rttStats,
@@ -1834,7 +1834,7 @@ func (s *session) newFlowController(id protocol.StreamID) flowcontrol.StreamFlow
 	return flowcontrol.NewStreamFlowController(
 		id,
 		s.connFlowController,
-		protocol.ByteCount(s.config.InitialStreamFlowControlWindow),
+		protocol.ByteCount(s.config.InitialStreamReceiveWindow),
 		protocol.ByteCount(s.config.MaxReceiveStreamFlowControlWindow),
 		initialSendWindow,
 		s.onHasStreamWindowUpdate,
