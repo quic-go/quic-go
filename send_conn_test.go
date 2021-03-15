@@ -17,7 +17,7 @@ var _ = Describe("Connection (for sending packets)", func() {
 	BeforeEach(func() {
 		addr = &net.UDPAddr{IP: net.IPv4(192, 168, 100, 200), Port: 1337}
 		packetConn = NewMockPacketConn(mockCtrl)
-		c = newSendConn(packetConn, addr)
+		c = newSendPconn(packetConn, addr)
 	})
 
 	It("writes", func() {

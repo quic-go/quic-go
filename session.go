@@ -59,6 +59,13 @@ type cryptoStreamHandler interface {
 	ConnectionState() handshake.ConnectionState
 }
 
+type packetInfo struct {
+	addr    net.IP
+	ifIndex uint32
+	once    sync.Once
+	oob     []byte
+}
+
 type receivedPacket struct {
 	buffer *packetBuffer
 
@@ -67,6 +74,8 @@ type receivedPacket struct {
 	data       []byte
 
 	ecn protocol.ECN
+
+	info *packetInfo
 }
 
 func (p *receivedPacket) Size() protocol.ByteCount { return protocol.ByteCount(len(p.data)) }
@@ -78,6 +87,7 @@ func (p *receivedPacket) Clone() *receivedPacket {
 		data:       p.data,
 		buffer:     p.buffer,
 		ecn:        p.ecn,
+		info:       p.info,
 	}
 }
 

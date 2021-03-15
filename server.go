@@ -61,7 +61,7 @@ type baseServer struct {
 	tlsConf *tls.Config
 	config  *Config
 
-	conn net.PacketConn
+	conn connection
 	// If the server is started with ListenAddr, we create a packet conn.
 	// If it is started with Listen, we take a packet conn as a parameter.
 	createdPacketConn bool
@@ -148,16 +148,17 @@ func listenAddr(addr string, tlsConf *tls.Config, config *Config, acceptEarly bo
 	return serv, nil
 }
 
-// Listen listens for QUIC connections on a given net.PacketConn.
-// If the PacketConn satisfies the ECNCapablePacketConn interface (as a net.UDPConn does), ECN support will be enabled.
-// In this case, ReadMsgUDP will be used instead of ReadFrom to read packets.
-// A single net.PacketConn only be used for a single call to Listen.
-// The PacketConn can be used for simultaneous calls to Dial.
-// QUIC connection IDs are used for demultiplexing the different connections.
-// The tls.Config must not be nil and must contain a certificate configuration.
-// The tls.Config.CipherSuites allows setting of TLS 1.3 cipher suites.
-// Furthermore, it must define an application control (using NextProtos).
-// The quic.Config may be nil, in that case the default values will be used.
+// Listen listens for QUIC connections on a given net.PacketConn. If the
+// PacketConn satisfies the OOBCapablePacketConn interface (as a net.UDPConn
+// does), ECN and packet info support will be enabled. In this case, ReadMsgUDP
+// and WriteMsgUDP will be used instead of ReadFrom and WriteTo to read/write
+// packets. A single net.PacketConn only be used for a single call to Listen.
+// The PacketConn can be used for simultaneous calls to Dial. QUIC connection
+// IDs are used for demultiplexing the different connections. The tls.Config
+// must not be nil and must contain a certificate configuration. The
+// tls.Config.CipherSuites allows setting of TLS 1.3 cipher suites. Furthermore,
+// it must define an application control (using NextProtos). The quic.Config may
+// be nil, in that case the default values will be used.
 func Listen(conn net.PacketConn, tlsConf *tls.Config, config *Config) (Listener, error) {
 	return listen(conn, tlsConf, config, false)
 }
@@ -193,8 +194,12 @@ func listen(conn net.PacketConn, tlsConf *tls.Config, config *Config, acceptEarl
 	if err != nil {
 		return nil, err
 	}
+	c, err := wrapConn(conn)
+	if err != nil {
+		return nil, err
+	}
 	s := &baseServer{
-		conn:                conn,
+		conn:                c,
 		tlsConf:             tlsConf,
 		config:              config,
 		tokenGenerator:      tokenGenerator,
@@ -421,7 +426,7 @@ func (s *baseServer) handleInitialImpl(p *receivedPacket, hdr *wire.Header) erro
 				}
 				return
 			}
-			if err := s.sendRetry(p.remoteAddr, hdr); err != nil {
+			if err := s.sendRetry(p.remoteAddr, hdr, p.info); err != nil {
 				s.logger.Debugf("Error sending Retry: %s", err)
 			}
 		}()
@@ -432,7 +437,7 @@ func (s *baseServer) handleInitialImpl(p *receivedPacket, hdr *wire.Header) erro
 		s.logger.Debugf("Rejecting new connection. Server currently busy. Accept queue length: %d (max %d)", queueLen, protocol.MaxAcceptQueueSize)
 		go func() {
 			defer p.buffer.Release()
-			if err := s.sendConnectionRefused(p.remoteAddr, hdr); err != nil {
+			if err := s.sendConnectionRefused(p.remoteAddr, hdr, p.info); err != nil {
 				s.logger.Debugf("Error rejecting connection: %s", err)
 			}
 		}()
@@ -456,7 +461,7 @@ func (s *baseServer) handleInitialImpl(p *receivedPacket, hdr *wire.Header) erro
 			tracer = s.config.Tracer.TracerForConnection(protocol.PerspectiveServer, connID)
 		}
 		sess = s.newSession(
-			newSendConn(s.conn, p.remoteAddr),
+			newSendConn(s.conn, p.remoteAddr, p.info),
 			s.sessionHandler,
 			origDestConnID,
 			retrySrcConnID,
@@ -514,7 +519,7 @@ func (s *baseServer) handleNewSession(sess quicSession) {
 	}
 }
 
-func (s *baseServer) sendRetry(remoteAddr net.Addr, hdr *wire.Header) error {
+func (s *baseServer) sendRetry(remoteAddr net.Addr, hdr *wire.Header, info *packetInfo) error {
 	// Log the Initial packet now.
 	// If no Retry is sent, the packet will be logged by the session.
 	(&wire.ExtendedHeader{Header: *hdr}).Log(s.logger)
@@ -551,7 +556,7 @@ func (s *baseServer) sendRetry(remoteAddr net.Addr, hdr *wire.Header) error {
 	if s.config.Tracer != nil {
 		s.config.Tracer.SentPacket(remoteAddr, &replyHdr.Header, protocol.ByteCount(buf.Len()), nil)
 	}
-	_, err = s.conn.WriteTo(buf.Bytes(), remoteAddr)
+	_, err = s.conn.WritePacket(buf.Bytes(), remoteAddr, info)
 	return err
 }
 
@@ -579,16 +584,16 @@ func (s *baseServer) maybeSendInvalidToken(p *receivedPacket, hdr *wire.Header) 
 	if s.logger.Debug() {
 		s.logger.Debugf("Client sent an invalid retry token. Sending INVALID_TOKEN to %s.", p.remoteAddr)
 	}
-	return s.sendError(p.remoteAddr, hdr, sealer, qerr.InvalidToken)
+	return s.sendError(p.remoteAddr, hdr, sealer, qerr.InvalidToken, p.info)
 }
 
-func (s *baseServer) sendConnectionRefused(remoteAddr net.Addr, hdr *wire.Header) error {
+func (s *baseServer) sendConnectionRefused(remoteAddr net.Addr, hdr *wire.Header, info *packetInfo) error {
 	sealer, _ := handshake.NewInitialAEAD(hdr.DestConnectionID, protocol.PerspectiveServer, hdr.Version)
-	return s.sendError(remoteAddr, hdr, sealer, qerr.ConnectionRefused)
+	return s.sendError(remoteAddr, hdr, sealer, qerr.ConnectionRefused, info)
 }
 
 // sendError sends the error as a response to the packet received with header hdr
-func (s *baseServer) sendError(remoteAddr net.Addr, hdr *wire.Header, sealer handshake.LongHeaderSealer, errorCode qerr.ErrorCode) error {
+func (s *baseServer) sendError(remoteAddr net.Addr, hdr *wire.Header, sealer handshake.LongHeaderSealer, errorCode qerr.ErrorCode, info *packetInfo) error {
 	packetBuffer := getPacketBuffer()
 	defer packetBuffer.Release()
 	buf := bytes.NewBuffer(packetBuffer.Data)
@@ -628,7 +633,7 @@ func (s *baseServer) sendError(remoteAddr net.Addr, hdr *wire.Header, sealer han
 	if s.config.Tracer != nil {
 		s.config.Tracer.SentPacket(remoteAddr, &replyHdr.Header, protocol.ByteCount(len(raw)), []logging.Frame{ccf})
 	}
-	_, err := s.conn.WriteTo(raw, remoteAddr)
+	_, err := s.conn.WritePacket(raw, remoteAddr, info)
 	return err
 }
 
@@ -651,7 +656,7 @@ func (s *baseServer) sendVersionNegotiationPacket(p *receivedPacket, hdr *wire.H
 			nil,
 		)
 	}
-	if _, err := s.conn.WriteTo(data, p.remoteAddr); err != nil {
+	if _, err := s.conn.WritePacket(data, p.remoteAddr, p.info); err != nil {
 		s.logger.Debugf("Error sending Version Negotiation: %s", err)
 	}
 }
