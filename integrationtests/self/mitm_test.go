@@ -371,7 +371,7 @@ var _ = Describe("MITM test", func() {
 					}
 					err := runTest(delayCb)
 					Expect(err).To(HaveOccurred())
-					Expect(err.Error()).To(ContainSubstring("No compatible QUIC version found."))
+					Expect(err.Error()).To(ContainSubstring("no compatible QUIC version found"))
 				})
 
 				// times out, because client doesn't accept subsequent real retry packets from server

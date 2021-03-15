@@ -123,6 +123,15 @@ func (errCloseForRecreating) Is(target error) bool {
 	return ok
 }
 
+type errVersionNegotiation struct {
+	ourVersions   []protocol.VersionNumber
+	theirVersions []protocol.VersionNumber
+}
+
+func (e errVersionNegotiation) Error() string {
+	return fmt.Sprintf("no compatible QUIC version found (we support %s, server offered %s)", e.ourVersions, e.theirVersions)
+}
+
 // A Session is a QUIC session
 type session struct {
 	// Destination connection ID used during the handshake.
@@ -1061,8 +1070,10 @@ func (s *session) handleVersionNegotiationPacket(p *receivedPacket) {
 	}
 	newVersion, ok := protocol.ChooseSupportedVersion(s.config.Versions, supportedVersions)
 	if !ok {
-		//nolint:stylecheck
-		s.destroyImpl(fmt.Errorf("No compatible QUIC version found. We support %s, server offered %s.", s.config.Versions, supportedVersions))
+		s.destroyImpl(errVersionNegotiation{
+			ourVersions:   s.config.Versions,
+			theirVersions: supportedVersions,
+		})
 		s.logger.Infof("No compatible QUIC version found.")
 		return
 	}
@@ -1425,8 +1436,11 @@ func (s *session) handleCloseError(closeErr closeError) {
 		// timeout errors are logged as soon as they occur (to distinguish between handshake and idle timeouts)
 		if nerr, ok := closeErr.err.(net.Error); !ok || !nerr.Timeout() {
 			var resetErr statelessResetErr
+			var vnErr errVersionNegotiation
 			if errors.As(closeErr.err, &resetErr) {
 				s.tracer.ClosedConnection(logging.NewStatelessResetCloseReason(resetErr.token))
+			} else if errors.As(closeErr.err, &vnErr) {
+				s.tracer.ClosedConnection(logging.NewVersionNegotiationError(vnErr.theirVersions))
 			} else if quicErr.IsApplicationError() {
 				s.tracer.ClosedConnection(logging.NewApplicationCloseReason(quicErr.ErrorCode, closeErr.remote))
 			} else {
