@@ -433,7 +433,58 @@ var _ = Describe("0-RTT", func() {
 				Expect(zeroRTTPackets[0]).To(BeNumerically(">=", protocol.PacketNumber(5)))
 			})
 
-			It("rejects 0-RTT when the server's transport parameters changed", func() {
+			It("doesn't reject 0-RTT when the server's transport stream limit increased", func() {
+				const maxStreams = 1
+				tlsConf, clientConf := dialAndReceiveSessionTicket(getQuicConfig(&quic.Config{
+					MaxIncomingUniStreams: maxStreams,
+					AcceptToken:           func(_ net.Addr, _ *quic.Token) bool { return true },
+				}))
+
+				tracer := newRcvdPacketTracer()
+				ln, err := quic.ListenAddrEarly(
+					"localhost:0",
+					tlsConf,
+					getQuicConfig(&quic.Config{
+						Versions:              []protocol.VersionNumber{version},
+						AcceptToken:           func(_ net.Addr, _ *quic.Token) bool { return true },
+						MaxIncomingUniStreams: maxStreams + 1,
+						Tracer:                newTracer(func() logging.ConnectionTracer { return tracer }),
+					}),
+				)
+				Expect(err).ToNot(HaveOccurred())
+				defer ln.Close()
+				proxy, num0RTTPackets := runCountingProxy(ln.Addr().(*net.UDPAddr).Port)
+				defer proxy.Close()
+
+				sess, err := quic.DialAddrEarly(
+					fmt.Sprintf("localhost:%d", proxy.LocalPort()),
+					clientConf,
+					getQuicConfig(&quic.Config{Versions: []protocol.VersionNumber{version}}),
+				)
+				Expect(err).ToNot(HaveOccurred())
+				str, err := sess.OpenUniStream()
+				Expect(err).ToNot(HaveOccurred())
+				_, err = str.Write([]byte("foobar"))
+				Expect(err).ToNot(HaveOccurred())
+				Expect(str.Close()).To(Succeed())
+				// The client remembers the old limit and refuses to open a new stream.
+				_, err = sess.OpenUniStream()
+				Expect(err).To(HaveOccurred())
+				Expect(err.Error()).To(ContainSubstring("too many open streams"))
+				ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+				defer cancel()
+				_, err = sess.OpenUniStreamSync(ctx)
+				Expect(err).ToNot(HaveOccurred())
+				Expect(sess.CloseWithError(0, "")).To(Succeed())
+
+				// The client should send 0-RTT packets.
+				num0RTT := atomic.LoadUint32(num0RTTPackets)
+				fmt.Fprintf(GinkgoWriter, "Sent %d 0-RTT packets.", num0RTT)
+				Expect(num0RTT).ToNot(BeZero())
+				Expect(get0RTTPackets(tracer.getRcvdPackets())).ToNot(BeEmpty())
+			})
+
+			It("rejects 0-RTT when the server's stream limit decreased", func() {
 				const maxStreams = 42
 				tlsConf, clientConf := dialAndReceiveSessionTicket(getQuicConfig(&quic.Config{
 					MaxIncomingStreams: maxStreams,
@@ -447,7 +498,7 @@ var _ = Describe("0-RTT", func() {
 					getQuicConfig(&quic.Config{
 						Versions:           []protocol.VersionNumber{version},
 						AcceptToken:        func(_ net.Addr, _ *quic.Token) bool { return true },
-						MaxIncomingStreams: maxStreams + 1,
+						MaxIncomingStreams: maxStreams - 1,
 						Tracer:             newTracer(func() logging.ConnectionTracer { return tracer }),
 					}),
 				)
