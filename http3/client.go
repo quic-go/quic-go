@@ -323,6 +323,21 @@ func (c *client) doRequest(
 	respBody := newResponseBody(str, reqDone, func() {
 		c.session.CloseWithError(quic.ErrorCode(errorFrameUnexpected), "")
 	})
+
+	// Rules for when to set Content-Length are defined in https://tools.ietf.org/html/rfc7230#section-3.3.2.
+	_, hasTransferEncoding := res.Header["Transfer-Encoding"]
+	isInformational := res.StatusCode >= 100 && res.StatusCode < 200
+	isNoContent := res.StatusCode == 204
+	isSuccessfulConnect := req.Method == http.MethodConnect && res.StatusCode >= 200 && res.StatusCode < 300
+	if !hasTransferEncoding && !isInformational && !isNoContent && !isSuccessfulConnect {
+		res.ContentLength = -1
+		if clens, ok := res.Header["Content-Length"]; ok && len(clens) == 1 {
+			if clen64, err := strconv.ParseInt(clens[0], 10, 64); err == nil {
+				res.ContentLength = clen64
+			}
+		}
+	}
+
 	if requestGzip && res.Header.Get("Content-Encoding") == "gzip" {
 		res.Header.Del("Content-Encoding")
 		res.Header.Del("Content-Length")

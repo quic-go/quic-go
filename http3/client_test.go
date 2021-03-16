@@ -393,6 +393,19 @@ var _ = Describe("Client", func() {
 		)
 		testDone := make(chan struct{})
 
+		getHeadersFrame := func(headers map[string]string) []byte {
+			buf := &bytes.Buffer{}
+			headerBuf := &bytes.Buffer{}
+			enc := qpack.NewEncoder(headerBuf)
+			for name, value := range headers {
+				Expect(enc.WriteField(qpack.HeaderField{Name: name, Value: value})).To(Succeed())
+			}
+			Expect(enc.Close()).To(Succeed())
+			(&headersFrame{Length: uint64(headerBuf.Len())}).Write(buf)
+			buf.Write(headerBuf.Bytes())
+			return buf.Bytes()
+		}
+
 		decodeHeader := func(str io.Reader) map[string]string {
 			fields := make(map[string]string)
 			decoder := qpack.NewDecoder(nil)
@@ -548,15 +561,33 @@ var _ = Describe("Client", func() {
 				Expect(err).To(MatchError("test done"))
 			})
 
+			It("sets the Content-Length", func() {
+				done := make(chan struct{})
+				buf := &bytes.Buffer{}
+				buf.Write(getHeadersFrame(map[string]string{
+					":status":        "200",
+					"Content-Length": "1337",
+				}))
+				(&dataFrame{Length: 0x6}).Write(buf)
+				buf.Write([]byte("foobar"))
+				str.EXPECT().Close().Do(func() { close(done) })
+				sess.EXPECT().ConnectionState().Return(quic.ConnectionState{})
+				str.EXPECT().CancelWrite(gomock.Any()).MaxTimes(1) // when reading the response errors
+				// the response body is sent asynchronously, while already reading the response
+				str.EXPECT().Read(gomock.Any()).DoAndReturn(buf.Read).AnyTimes()
+				req, err := client.RoundTrip(request)
+				Expect(err).ToNot(HaveOccurred())
+				Expect(req.ContentLength).To(BeEquivalentTo(1337))
+				Eventually(done).Should(BeClosed())
+			})
+
 			It("closes the connection when the first frame is not a HEADERS frame", func() {
 				buf := &bytes.Buffer{}
 				(&dataFrame{Length: 0x42}).Write(buf)
 				sess.EXPECT().CloseWithError(quic.ErrorCode(errorFrameUnexpected), gomock.Any())
 				closed := make(chan struct{})
 				str.EXPECT().Close().Do(func() { close(closed) })
-				str.EXPECT().Read(gomock.Any()).DoAndReturn(func(b []byte) (int, error) {
-					return buf.Read(b)
-				}).AnyTimes()
+				str.EXPECT().Read(gomock.Any()).DoAndReturn(buf.Read).AnyTimes()
 				_, err := client.RoundTrip(request)
 				Expect(err).To(MatchError("expected first frame to be a HEADERS frame"))
 				Eventually(closed).Should(BeClosed())
@@ -568,9 +599,7 @@ var _ = Describe("Client", func() {
 				str.EXPECT().CancelWrite(quic.ErrorCode(errorFrameError))
 				closed := make(chan struct{})
 				str.EXPECT().Close().Do(func() { close(closed) })
-				str.EXPECT().Read(gomock.Any()).DoAndReturn(func(b []byte) (int, error) {
-					return buf.Read(b)
-				}).AnyTimes()
+				str.EXPECT().Read(gomock.Any()).DoAndReturn(buf.Read).AnyTimes()
 				_, err := client.RoundTrip(request)
 				Expect(err).To(MatchError("HEADERS frame too large: 1338 bytes (max: 1337)"))
 				Eventually(closed).Should(BeClosed())
@@ -723,7 +752,6 @@ var _ = Describe("Client", func() {
 				Expect(err).ToNot(HaveOccurred())
 				data, err := ioutil.ReadAll(rsp.Body)
 				Expect(err).ToNot(HaveOccurred())
-				Expect(rsp.ContentLength).ToNot(BeEquivalentTo(-1))
 				Expect(string(data)).To(Equal("not gzipped"))
 				Expect(rsp.Header.Get("Content-Encoding")).To(BeEmpty())
 			})
