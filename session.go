@@ -62,8 +62,6 @@ type cryptoStreamHandler interface {
 type packetInfo struct {
 	addr    net.IP
 	ifIndex uint32
-	once    sync.Once
-	oob     []byte
 }
 
 type receivedPacket struct {

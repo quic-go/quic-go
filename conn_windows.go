@@ -35,3 +35,5 @@ func inspectReadBuffer(c net.PacketConn) (int, error) {
 	}
 	return size, serr
 }
+
+func (i *packetInfo) OOB() []byte { return nil }

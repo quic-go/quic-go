@@ -12,7 +12,7 @@ import (
 
 type connection interface {
 	ReadPacket() (*receivedPacket, error)
-	WritePacket(b []byte, addr net.Addr, info *packetInfo) (int, error)
+	WritePacket(b []byte, addr net.Addr, oob []byte) (int, error)
 	LocalAddr() net.Addr
 	io.Closer
 }
@@ -60,6 +60,6 @@ func (c *basicConn) ReadPacket() (*receivedPacket, error) {
 	}, nil
 }
 
-func (c *basicConn) WritePacket(b []byte, addr net.Addr, info *packetInfo) (n int, err error) {
+func (c *basicConn) WritePacket(b []byte, addr net.Addr, _ []byte) (n int, err error) {
 	return c.PacketConn.WriteTo(b, addr)
 }
