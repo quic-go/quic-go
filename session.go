@@ -325,7 +325,7 @@ var newSession = func(
 		conn.RemoteAddr(),
 		params,
 		&handshakeRunner{
-			onReceivedParams: s.processTransportParameters,
+			onReceivedParams: s.handleTransportParameters,
 			onError:          s.closeLocal,
 			dropKeys:         s.dropEncryptionLevel,
 			onHandshakeComplete: func() {
@@ -446,7 +446,7 @@ var newClientSession = func(
 		conn.RemoteAddr(),
 		params,
 		&handshakeRunner{
-			onReceivedParams:    s.processTransportParameters,
+			onReceivedParams:    s.handleTransportParameters,
 			onError:             s.closeLocal,
 			dropKeys:            s.dropEncryptionLevel,
 			onHandshakeComplete: func() { close(s.handshakeCompleteChan) },
@@ -771,7 +771,7 @@ func (s *session) idleTimeoutStartTime() time.Time {
 func (s *session) handleHandshakeComplete() {
 	s.handshakeComplete = true
 	s.handshakeCompleteChan = nil // prevent this case from ever being selected again
-	s.handshakeCtxCancel()
+	defer s.handshakeCtxCancel()
 	// Once the handshake completes, we have derived 1-RTT keys.
 	// There's no point in queueing undecryptable packets for later decryption any more.
 	s.undecryptablePackets = nil
@@ -796,27 +796,30 @@ func (s *session) handleHandshakeComplete() {
 		)
 	}
 
-	if s.perspective == protocol.PerspectiveServer {
-		s.handshakeConfirmed = true
-		s.sentPacketHandler.SetHandshakeConfirmed()
-		ticket, err := s.cryptoStreamHandler.GetSessionTicket()
-		if err != nil {
-			s.closeLocal(err)
-		}
-		if ticket != nil {
-			s.oneRTTStream.Write(ticket)
-			for s.oneRTTStream.HasData() {
-				s.queueControlFrame(s.oneRTTStream.PopCryptoFrame(protocol.MaxPostHandshakeCryptoFrameSize))
-			}
-		}
-		token, err := s.tokenGenerator.NewToken(s.conn.RemoteAddr())
-		if err != nil {
-			s.closeLocal(err)
-		}
-		s.queueControlFrame(&wire.NewTokenFrame{Token: token})
-		s.cryptoStreamHandler.SetHandshakeConfirmed()
-		s.queueControlFrame(&wire.HandshakeDoneFrame{})
+	if s.perspective == protocol.PerspectiveClient {
+		s.applyTransportParameters()
+		return
 	}
+
+	s.handshakeConfirmed = true
+	s.sentPacketHandler.SetHandshakeConfirmed()
+	ticket, err := s.cryptoStreamHandler.GetSessionTicket()
+	if err != nil {
+		s.closeLocal(err)
+	}
+	if ticket != nil {
+		s.oneRTTStream.Write(ticket)
+		for s.oneRTTStream.HasData() {
+			s.queueControlFrame(s.oneRTTStream.PopCryptoFrame(protocol.MaxPostHandshakeCryptoFrameSize))
+		}
+	}
+	token, err := s.tokenGenerator.NewToken(s.conn.RemoteAddr())
+	if err != nil {
+		s.closeLocal(err)
+	}
+	s.queueControlFrame(&wire.NewTokenFrame{Token: token})
+	s.cryptoStreamHandler.SetHandshakeConfirmed()
+	s.queueControlFrame(&wire.HandshakeDoneFrame{})
 }
 
 func (s *session) handlePacketImpl(rp *receivedPacket) bool {
@@ -1491,13 +1494,22 @@ func (s *session) restoreTransportParameters(params *wire.TransportParameters) {
 	s.streamsMap.UpdateLimits(params)
 }
 
-func (s *session) processTransportParameters(params *wire.TransportParameters) {
-	if err := s.processTransportParametersImpl(params); err != nil {
+func (s *session) handleTransportParameters(params *wire.TransportParameters) {
+	if err := s.checkTransportParameters(params); err != nil {
 		s.closeLocal(err)
+	}
+	s.peerParams = params
+	// On the client side we have to wait for handshake completion.
+	// During a 0-RTT connection, we are only allowed to use the new transport parameters for 1-RTT packets.
+	if s.perspective == protocol.PerspectiveServer {
+		s.applyTransportParameters()
+		// On the server side, the early session is ready as soon as we processed
+		// the client's transport parameters.
+		close(s.earlySessionReadyChan)
 	}
 }
 
-func (s *session) processTransportParametersImpl(params *wire.TransportParameters) error {
+func (s *session) checkTransportParameters(params *wire.TransportParameters) error {
 	if s.logger.Debug() {
 		s.logger.Debugf("Processed Transport Parameters: %s", params)
 	}
@@ -1510,24 +1522,28 @@ func (s *session) processTransportParametersImpl(params *wire.TransportParameter
 		return qerr.NewError(qerr.TransportParameterError, fmt.Sprintf("expected initial_source_connection_id to equal %s, is %s", s.handshakeDestConnID, params.InitialSourceConnectionID))
 	}
 
-	if s.perspective == protocol.PerspectiveClient {
-		// check the original_destination_connection_id
-		if !params.OriginalDestinationConnectionID.Equal(s.origDestConnID) {
-			return qerr.NewError(qerr.TransportParameterError, fmt.Sprintf("expected original_destination_connection_id to equal %s, is %s", s.origDestConnID, params.OriginalDestinationConnectionID))
-		}
-		if s.retrySrcConnID != nil { // a Retry was performed
-			if params.RetrySourceConnectionID == nil {
-				return qerr.NewError(qerr.TransportParameterError, "missing retry_source_connection_id")
-			}
-			if !(*params.RetrySourceConnectionID).Equal(*s.retrySrcConnID) {
-				return qerr.NewError(qerr.TransportParameterError, fmt.Sprintf("expected retry_source_connection_id to equal %s, is %s", s.retrySrcConnID, *params.RetrySourceConnectionID))
-			}
-		} else if params.RetrySourceConnectionID != nil {
-			return qerr.NewError(qerr.TransportParameterError, "received retry_source_connection_id, although no Retry was performed")
-		}
+	if s.perspective == protocol.PerspectiveServer {
+		return nil
 	}
+	// check the original_destination_connection_id
+	if !params.OriginalDestinationConnectionID.Equal(s.origDestConnID) {
+		return qerr.NewError(qerr.TransportParameterError, fmt.Sprintf("expected original_destination_connection_id to equal %s, is %s", s.origDestConnID, params.OriginalDestinationConnectionID))
+	}
+	if s.retrySrcConnID != nil { // a Retry was performed
+		if params.RetrySourceConnectionID == nil {
+			return qerr.NewError(qerr.TransportParameterError, "missing retry_source_connection_id")
+		}
+		if !(*params.RetrySourceConnectionID).Equal(*s.retrySrcConnID) {
+			return qerr.NewError(qerr.TransportParameterError, fmt.Sprintf("expected retry_source_connection_id to equal %s, is %s", s.retrySrcConnID, *params.RetrySourceConnectionID))
+		}
+	} else if params.RetrySourceConnectionID != nil {
+		return qerr.NewError(qerr.TransportParameterError, "received retry_source_connection_id, although no Retry was performed")
+	}
+	return nil
+}
 
-	s.peerParams = params
+func (s *session) applyTransportParameters() {
+	params := s.peerParams
 	// Our local idle timeout will always be > 0.
 	s.idleTimeout = utils.MinNonZeroDuration(s.config.MaxIdleTimeout, params.MaxIdleTimeout)
 	s.keepAliveInterval = utils.MinDuration(s.idleTimeout/2, protocol.MaxKeepAliveInterval)
@@ -1545,12 +1561,6 @@ func (s *session) processTransportParametersImpl(params *wire.TransportParameter
 		// Retire the connection ID.
 		s.connIDManager.AddFromPreferredAddress(params.PreferredAddress.ConnectionID, params.PreferredAddress.StatelessResetToken)
 	}
-	// On the server side, the early session is ready as soon as we processed
-	// the client's transport parameters.
-	if s.perspective == protocol.PerspectiveServer {
-		close(s.earlySessionReadyChan)
-	}
-	return nil
 }
 
 func (s *session) sendPackets() error {
