@@ -205,6 +205,17 @@ var _ = Describe("Tracing", func() {
 				Expect(ev).To(HaveKeyWithValue("stateless_reset_token", "00112233445566778899aabbccddeeff"))
 			})
 
+			It("records connection closing due to version negotiation failure", func() {
+				tracer.ClosedConnection(logging.NewVersionNegotiationError([]logging.VersionNumber{1, 2, 3}))
+				entry := exportAndParseSingle()
+				Expect(entry.Time).To(BeTemporally("~", time.Now(), scaleDuration(10*time.Millisecond)))
+				Expect(entry.Name).To(Equal("transport:connection_closed"))
+				ev := entry.Event
+				Expect(ev).To(HaveLen(2))
+				Expect(ev).To(HaveKeyWithValue("owner", "remote"))
+				Expect(ev).To(HaveKeyWithValue("trigger", "version_negotiation"))
+			})
+
 			It("records application errors", func() {
 				tracer.ClosedConnection(logging.NewApplicationCloseReason(1337, true))
 				entry := exportAndParseSingle()

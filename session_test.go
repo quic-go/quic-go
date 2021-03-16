@@ -2628,9 +2628,12 @@ var _ = Describe("Client Session", func() {
 				errChan <- sess.run()
 			}()
 			sessionRunner.EXPECT().Remove(srcConnID).MaxTimes(1)
+			var closeReason logging.CloseReason
 			gomock.InOrder(
 				tracer.EXPECT().ReceivedVersionNegotiationPacket(gomock.Any(), gomock.Any()),
-				tracer.EXPECT().ClosedConnection(gomock.Any()),
+				tracer.EXPECT().ClosedConnection(gomock.Any()).Do(func(r logging.CloseReason) {
+					closeReason = r
+				}),
 				tracer.EXPECT().Close(),
 			)
 			cryptoSetup.EXPECT().Close()
@@ -2639,7 +2642,10 @@ var _ = Describe("Client Session", func() {
 			Eventually(errChan).Should(Receive(&err))
 			Expect(err).To(HaveOccurred())
 			Expect(err).ToNot(BeAssignableToTypeOf(&errCloseForRecreating{}))
-			Expect(err.Error()).To(ContainSubstring("No compatible QUIC version found"))
+			Expect(err.Error()).To(ContainSubstring("no compatible QUIC version found"))
+			vns, ok := closeReason.VersionNegotiation()
+			Expect(ok).To(BeTrue())
+			Expect(vns).To(ContainElement(logging.VersionNumber(12345678)))
 		})
 
 		It("ignores Version Negotiation packets that offer the current version", func() {

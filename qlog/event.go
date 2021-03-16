@@ -96,7 +96,6 @@ func (e eventConnectionClosed) Name() string       { return "connection_closed" 
 func (e eventConnectionClosed) IsNil() bool        { return false }
 
 func (e eventConnectionClosed) MarshalJSONObject(enc *gojay.Encoder) {
-	// TODO: add version mismatch
 	if token, ok := e.Reason.StatelessReset(); ok {
 		enc.StringKey("owner", ownerRemote.String())
 		enc.StringKey("trigger", "stateless_reset")
@@ -123,6 +122,10 @@ func (e eventConnectionClosed) MarshalJSONObject(enc *gojay.Encoder) {
 		}
 		enc.StringKey("owner", owner.String())
 		enc.StringKey("connection_code", transportError(code).String())
+	}
+	if _, ok := e.Reason.VersionNegotiation(); ok {
+		enc.StringKey("owner", ownerRemote.String())
+		enc.StringKey("trigger", "version_negotiation")
 	}
 }
 

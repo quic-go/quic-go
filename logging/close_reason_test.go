@@ -26,6 +26,11 @@ var _ = Describe("Close Reason", func() {
 		ExpectWithOffset(1, ok).To(BeFalse())
 	}
 
+	checkNotVN := func(r CloseReason) {
+		_, ok := r.VersionNegotiation()
+		ExpectWithOffset(1, ok).To(BeFalse())
+	}
+
 	It("application errors", func() {
 		r := NewApplicationCloseReason(1337, true)
 		errorCode, remote, ok := r.ApplicationError()
@@ -35,6 +40,7 @@ var _ = Describe("Close Reason", func() {
 		checkNotTransportError(r)
 		checkNotStatelessReset(r)
 		checkNotTimeout(r)
+		checkNotVN(r)
 	})
 
 	It("transport errors", func() {
@@ -46,6 +52,7 @@ var _ = Describe("Close Reason", func() {
 		checkNotApplicationError(r)
 		checkNotStatelessReset(r)
 		checkNotTimeout(r)
+		checkNotVN(r)
 	})
 
 	It("transport errors", func() {
@@ -55,7 +62,7 @@ var _ = Describe("Close Reason", func() {
 		Expect(timeout).To(Equal(TimeoutReasonIdle))
 		checkNotApplicationError(r)
 		checkNotTransportError(r)
-		checkNotStatelessReset(r)
+		checkNotVN(r)
 	})
 
 	It("stateless resets", func() {
@@ -66,5 +73,17 @@ var _ = Describe("Close Reason", func() {
 		checkNotApplicationError(r)
 		checkNotTransportError(r)
 		checkNotTimeout(r)
+		checkNotVN(r)
+	})
+
+	It("version negotiation errors", func() {
+		r := NewVersionNegotiationError([]VersionNumber{1, 2, 3})
+		vn, ok := r.VersionNegotiation()
+		Expect(ok).To(BeTrue())
+		Expect(vn).To(Equal([]VersionNumber{1, 2, 3}))
+		checkNotApplicationError(r)
+		checkNotTransportError(r)
+		checkNotTimeout(r)
+		checkNotStatelessReset(r)
 	})
 })
