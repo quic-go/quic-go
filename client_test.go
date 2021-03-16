@@ -64,7 +64,7 @@ var _ = Describe("Client", func() {
 			srcConnID:  connID,
 			destConnID: connID,
 			version:    protocol.VersionTLS,
-			conn:       newSendConn(packetConn, addr),
+			conn:       newSendPconn(packetConn, addr),
 			tracer:     tracer,
 			logger:     utils.DefaultLogger,
 		}
@@ -548,7 +548,7 @@ var _ = Describe("Client", func() {
 			_, err := Dial(packetConn, addr, "localhost:1337", tlsConf, config)
 			Expect(err).ToNot(HaveOccurred())
 			Eventually(c).Should(BeClosed())
-			Expect(cconn.(*sconn).PacketConn).To(Equal(packetConn))
+			Expect(cconn.(*spconn).PacketConn).To(Equal(packetConn))
 			Expect(version).To(Equal(config.Versions[0]))
 			Expect(conf.Versions).To(Equal(config.Versions))
 		})

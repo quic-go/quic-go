@@ -116,13 +116,14 @@ func dialAddrContext(
 	return dialContext(ctx, udpConn, udpAddr, addr, tlsConf, config, use0RTT, true)
 }
 
-// Dial establishes a new QUIC connection to a server using a net.PacketConn.
-// If the PacketConn satisfies the ECNCapablePacketConn interface (as a net.UDPConn does), ECN support will be enabled.
-// In this case, ReadMsgUDP will be used instead of ReadFrom to read packets.
-// The same PacketConn can be used for multiple calls to Dial and Listen,
-// QUIC connection IDs are used for demultiplexing the different connections.
-// The host parameter is used for SNI.
-// The tls.Config must define an application protocol (using NextProtos).
+// Dial establishes a new QUIC connection to a server using a net.PacketConn. If
+// the PacketConn satisfies the OOBCapablePacketConn interface (as a net.UDPConn
+// does), ECN and packet info support will be enabled. In this case, ReadMsgUDP
+// and WriteMsgUDP will be used instead of ReadFrom and WriteTo to read/write
+// packets. The same PacketConn can be used for multiple calls to Dial and
+// Listen, QUIC connection IDs are used for demultiplexing the different
+// connections. The host parameter is used for SNI. The tls.Config must define
+// an application protocol (using NextProtos).
 func Dial(
 	pconn net.PacketConn,
 	remoteAddr net.Addr,
@@ -255,7 +256,7 @@ func newClient(
 	c := &client{
 		srcConnID:         srcConnID,
 		destConnID:        destConnID,
-		conn:              newSendConn(pconn, remoteAddr),
+		conn:              newSendPconn(pconn, remoteAddr),
 		createdPacketConn: createdPacketConn,
 		use0RTT:           use0RTT,
 		tlsConf:           tlsConf,
