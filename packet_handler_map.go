@@ -469,7 +469,7 @@ func (h *packetHandlerMap) maybeSendStatelessReset(p *receivedPacket, connID pro
 	rand.Read(data)
 	data[0] = (data[0] & 0x7f) | 0x40
 	data = append(data, token[:]...)
-	if _, err := h.conn.WritePacket(data, p.remoteAddr, p.info); err != nil {
+	if _, err := h.conn.WritePacket(data, p.remoteAddr, p.info.OOB()); err != nil {
 		h.logger.Debugf("Error sending Stateless Reset: %s", err)
 	}
 }

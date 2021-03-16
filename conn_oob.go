@@ -171,8 +171,8 @@ func (c *oobConn) ReadPacket() (*receivedPacket, error) {
 	}, nil
 }
 
-func (c *oobConn) WritePacket(b []byte, addr net.Addr, info *packetInfo) (n int, err error) {
-	n, _, err = c.OOBCapablePacketConn.WriteMsgUDP(b, info.OOB(), addr.(*net.UDPAddr))
+func (c *oobConn) WritePacket(b []byte, addr net.Addr, oob []byte) (n int, err error) {
+	n, _, err = c.OOBCapablePacketConn.WriteMsgUDP(b, oob, addr.(*net.UDPAddr))
 	return n, err
 }
 
@@ -180,11 +180,6 @@ func (info *packetInfo) OOB() []byte {
 	if info == nil {
 		return nil
 	}
-	info.once.Do(info.computeOOB)
-	return info.oob
-}
-
-func (info *packetInfo) computeOOB() {
 	if ip4 := info.addr.To4(); ip4 != nil {
 		// struct in_pktinfo {
 		// 	unsigned int   ipi_ifindex;  /* Interface index */
@@ -208,7 +203,7 @@ func (info *packetInfo) computeOOB() {
 			off += 4
 		}
 		copy(oob[off:], ip4)
-		info.oob = oob
+		return oob
 	} else if len(info.addr) == 16 {
 		// struct in6_pktinfo {
 		// 	struct in6_addr ipi6_addr;    /* src/dst IPv6 address */
@@ -224,8 +219,9 @@ func (info *packetInfo) computeOOB() {
 		off := cmsgLen(0)
 		off += copy(oob[off:], info.addr)
 		binary.LittleEndian.PutUint32(oob[off:], info.ifIndex)
-		info.oob = oob
+		return oob
 	}
+	return nil
 }
 
 func cmsgLen(datalen int) int {

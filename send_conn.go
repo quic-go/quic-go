@@ -17,16 +17,22 @@ type sconn struct {
 
 	remoteAddr net.Addr
 	info       *packetInfo
+	oob        []byte
 }
 
 var _ sendConn = &sconn{}
 
 func newSendConn(c connection, remote net.Addr, info *packetInfo) sendConn {
-	return &sconn{connection: c, remoteAddr: remote, info: info}
+	return &sconn{
+		connection: c,
+		remoteAddr: remote,
+		info:       info,
+		oob:        info.OOB(),
+	}
 }
 
 func (c *sconn) Write(p []byte) error {
-	_, err := c.WritePacket(p, c.remoteAddr, c.info)
+	_, err := c.WritePacket(p, c.remoteAddr, c.oob)
 	return err
 }
 
