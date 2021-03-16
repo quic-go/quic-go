@@ -220,9 +220,8 @@ var _ = Describe("Session", func() {
 				}
 				str := NewMockSendStreamI(mockCtrl)
 				streamManager.EXPECT().GetOrOpenSendStream(protocol.StreamID(12345)).Return(str, nil)
-				str.EXPECT().handleMaxStreamDataFrame(f)
-				err := sess.handleMaxStreamDataFrame(f)
-				Expect(err).ToNot(HaveOccurred())
+				str.EXPECT().updateSendWindow(protocol.ByteCount(0x1337))
+				Expect(sess.handleMaxStreamDataFrame(f)).To(Succeed())
 			})
 
 			It("updates the flow control window of the connection", func() {

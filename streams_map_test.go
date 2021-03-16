@@ -348,6 +348,38 @@ var _ = Describe("Streams Map", func() {
 				expectTooManyStreamsError(err)
 			})
 
+			if perspective == protocol.PerspectiveClient {
+				It("applies parameters to existing streams (needed for 0-RTT)", func() {
+					m.UpdateLimits(&wire.TransportParameters{
+						MaxBidiStreamNum: 1000,
+						MaxUniStreamNum:  1000,
+					})
+					flowControllers := make(map[protocol.StreamID]*mocks.MockStreamFlowController)
+					m.newFlowController = func(id protocol.StreamID) flowcontrol.StreamFlowController {
+						fc := mocks.NewMockStreamFlowController(mockCtrl)
+						flowControllers[id] = fc
+						return fc
+					}
+
+					str, err := m.OpenStream()
+					Expect(err).ToNot(HaveOccurred())
+					unistr, err := m.OpenUniStream()
+					Expect(err).ToNot(HaveOccurred())
+
+					Expect(flowControllers).To(HaveKey(str.StreamID()))
+					flowControllers[str.StreamID()].EXPECT().UpdateSendWindow(protocol.ByteCount(4321))
+					Expect(flowControllers).To(HaveKey(unistr.StreamID()))
+					flowControllers[unistr.StreamID()].EXPECT().UpdateSendWindow(protocol.ByteCount(1234))
+
+					m.UpdateLimits(&wire.TransportParameters{
+						MaxBidiStreamNum:               1000,
+						InitialMaxStreamDataUni:        1234,
+						MaxUniStreamNum:                1000,
+						InitialMaxStreamDataBidiRemote: 4321,
+					})
+				})
+			}
+
 			Context("handling MAX_STREAMS frames", func() {
 				BeforeEach(func() {
 					mockSender.EXPECT().queueControlFrame(gomock.Any()).AnyTimes()

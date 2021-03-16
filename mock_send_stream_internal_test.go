@@ -133,18 +133,6 @@ func (mr *MockSendStreamIMockRecorder) closeForShutdown(arg0 interface{}) *gomoc
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "closeForShutdown", reflect.TypeOf((*MockSendStreamI)(nil).closeForShutdown), arg0)
 }
 
-// handleMaxStreamDataFrame mocks base method.
-func (m *MockSendStreamI) handleMaxStreamDataFrame(arg0 *wire.MaxStreamDataFrame) {
-	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "handleMaxStreamDataFrame", arg0)
-}
-
-// handleMaxStreamDataFrame indicates an expected call of handleMaxStreamDataFrame.
-func (mr *MockSendStreamIMockRecorder) handleMaxStreamDataFrame(arg0 interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "handleMaxStreamDataFrame", reflect.TypeOf((*MockSendStreamI)(nil).handleMaxStreamDataFrame), arg0)
-}
-
 // handleStopSendingFrame mocks base method.
 func (m *MockSendStreamI) handleStopSendingFrame(arg0 *wire.StopSendingFrame) {
 	m.ctrl.T.Helper()
@@ -184,4 +172,16 @@ func (m *MockSendStreamI) popStreamFrame(maxBytes protocol.ByteCount) (*ackhandl
 func (mr *MockSendStreamIMockRecorder) popStreamFrame(maxBytes interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "popStreamFrame", reflect.TypeOf((*MockSendStreamI)(nil).popStreamFrame), maxBytes)
+}
+
+// updateSendWindow mocks base method.
+func (m *MockSendStreamI) updateSendWindow(arg0 protocol.ByteCount) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "updateSendWindow", arg0)
+}
+
+// updateSendWindow indicates an expected call of updateSendWindow.
+func (mr *MockSendStreamIMockRecorder) updateSendWindow(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "updateSendWindow", reflect.TypeOf((*MockSendStreamI)(nil).updateSendWindow), arg0)
 }
