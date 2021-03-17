@@ -441,9 +441,9 @@ func (p *TransportParameters) UnmarshalFromSessionTicket(r *bytes.Reader) error 
 
 // ValidFor0RTT checks if the transport parameters match those saved in the session ticket.
 func (p *TransportParameters) ValidFor0RTT(saved *TransportParameters) bool {
-	return p.InitialMaxStreamDataBidiLocal == saved.InitialMaxStreamDataBidiLocal &&
-		p.InitialMaxStreamDataBidiRemote == saved.InitialMaxStreamDataBidiRemote &&
-		p.InitialMaxStreamDataUni == saved.InitialMaxStreamDataUni &&
+	return p.InitialMaxStreamDataBidiLocal >= saved.InitialMaxStreamDataBidiLocal &&
+		p.InitialMaxStreamDataBidiRemote >= saved.InitialMaxStreamDataBidiRemote &&
+		p.InitialMaxStreamDataUni >= saved.InitialMaxStreamDataUni &&
 		p.InitialMaxData == saved.InitialMaxData &&
 		p.MaxBidiStreamNum >= saved.MaxBidiStreamNum &&
 		p.MaxUniStreamNum >= saved.MaxUniStreamNum &&
