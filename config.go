@@ -71,21 +71,21 @@ func populateConfig(config *Config) *Config {
 	if config.MaxIdleTimeout != 0 {
 		idleTimeout = config.MaxIdleTimeout
 	}
-	initialStreamFlowControlWindow := config.InitialStreamFlowControlWindow
-	if initialStreamFlowControlWindow == 0 {
-		initialStreamFlowControlWindow = protocol.DefaultInitialMaxStreamData
+	initialStreamReceiveWindow := config.InitialStreamReceiveWindow
+	if initialStreamReceiveWindow == 0 {
+		initialStreamReceiveWindow = protocol.DefaultInitialMaxStreamData
 	}
-	maxReceiveStreamFlowControlWindow := config.MaxReceiveStreamFlowControlWindow
-	if maxReceiveStreamFlowControlWindow == 0 {
-		maxReceiveStreamFlowControlWindow = protocol.DefaultMaxReceiveStreamFlowControlWindow
+	maxStreamReceiveWindow := config.MaxStreamReceiveWindow
+	if maxStreamReceiveWindow == 0 {
+		maxStreamReceiveWindow = protocol.DefaultMaxReceiveStreamFlowControlWindow
 	}
-	initialConnectionFlowControlWindow := config.InitialConnectionFlowControlWindow
-	if initialConnectionFlowControlWindow == 0 {
-		initialConnectionFlowControlWindow = protocol.DefaultInitialMaxData
+	initialConnectionReceiveWindow := config.InitialConnectionReceiveWindow
+	if initialConnectionReceiveWindow == 0 {
+		initialConnectionReceiveWindow = protocol.DefaultInitialMaxData
 	}
-	maxReceiveConnectionFlowControlWindow := config.MaxReceiveConnectionFlowControlWindow
-	if maxReceiveConnectionFlowControlWindow == 0 {
-		maxReceiveConnectionFlowControlWindow = protocol.DefaultMaxReceiveConnectionFlowControlWindow
+	maxConnectionReceiveWindow := config.MaxConnectionReceiveWindow
+	if maxConnectionReceiveWindow == 0 {
+		maxConnectionReceiveWindow = protocol.DefaultMaxReceiveConnectionFlowControlWindow
 	}
 	maxIncomingStreams := config.MaxIncomingStreams
 	if maxIncomingStreams == 0 {
@@ -101,22 +101,22 @@ func populateConfig(config *Config) *Config {
 	}
 
 	return &Config{
-		Versions:                              versions,
-		HandshakeIdleTimeout:                  handshakeIdleTimeout,
-		MaxIdleTimeout:                        idleTimeout,
-		AcceptToken:                           config.AcceptToken,
-		KeepAlive:                             config.KeepAlive,
-		InitialStreamFlowControlWindow:        initialStreamFlowControlWindow,
-		MaxReceiveStreamFlowControlWindow:     maxReceiveStreamFlowControlWindow,
-		InitialConnectionFlowControlWindow:    initialConnectionFlowControlWindow,
-		MaxReceiveConnectionFlowControlWindow: maxReceiveConnectionFlowControlWindow,
-		MaxIncomingStreams:                    maxIncomingStreams,
-		MaxIncomingUniStreams:                 maxIncomingUniStreams,
-		ConnectionIDLength:                    config.ConnectionIDLength,
-		StatelessResetKey:                     config.StatelessResetKey,
-		TokenStore:                            config.TokenStore,
-		EnableDatagrams:                       config.EnableDatagrams,
-		DisablePathMTUDiscovery:               config.DisablePathMTUDiscovery,
-		Tracer:                                config.Tracer,
+		Versions:                       versions,
+		HandshakeIdleTimeout:           handshakeIdleTimeout,
+		MaxIdleTimeout:                 idleTimeout,
+		AcceptToken:                    config.AcceptToken,
+		KeepAlive:                      config.KeepAlive,
+		InitialStreamReceiveWindow:     initialStreamReceiveWindow,
+		MaxStreamReceiveWindow:         maxStreamReceiveWindow,
+		InitialConnectionReceiveWindow: initialConnectionReceiveWindow,
+		MaxConnectionReceiveWindow:     maxConnectionReceiveWindow,
+		MaxIncomingStreams:             maxIncomingStreams,
+		MaxIncomingUniStreams:          maxIncomingUniStreams,
+		ConnectionIDLength:             config.ConnectionIDLength,
+		StatelessResetKey:              config.StatelessResetKey,
+		TokenStore:                     config.TokenStore,
+		EnableDatagrams:                config.EnableDatagrams,
+		DisablePathMTUDiscovery:        config.DisablePathMTUDiscovery,
+		Tracer:                         config.Tracer,
 	}
 }
