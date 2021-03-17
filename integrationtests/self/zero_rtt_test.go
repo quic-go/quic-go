@@ -584,20 +584,34 @@ var _ = Describe("0-RTT", func() {
 				)
 				Expect(err).ToNot(HaveOccurred())
 				// The client remembers that it was allowed to open 2 uni-directional streams.
-				for i := 0; i < 2; i++ {
-					str, err := sess.OpenUniStream()
+				firstStr, err := sess.OpenUniStream()
+				Expect(err).ToNot(HaveOccurred())
+				written := make(chan struct{}, 2)
+				go func() {
+					defer GinkgoRecover()
+					defer func() { written <- struct{}{} }()
+					_, err := firstStr.Write([]byte("first flight"))
 					Expect(err).ToNot(HaveOccurred())
-					go func() {
-						defer GinkgoRecover()
-						_, err = str.Write([]byte("first flight"))
-						Expect(err).ToNot(HaveOccurred())
-					}()
-				}
+				}()
+				secondStr, err := sess.OpenUniStream()
+				Expect(err).ToNot(HaveOccurred())
+				go func() {
+					defer GinkgoRecover()
+					defer func() { written <- struct{}{} }()
+					_, err := secondStr.Write([]byte("first flight"))
+					Expect(err).ToNot(HaveOccurred())
+				}()
 
 				ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 				defer cancel()
 				_, err = sess.AcceptStream(ctx)
-				Expect(err).To(Equal(quic.Err0RTTRejected))
+				Expect(err).To(MatchError(quic.Err0RTTRejected))
+				Eventually(written).Should(Receive())
+				Eventually(written).Should(Receive())
+				_, err = firstStr.Write([]byte("foobar"))
+				Expect(err).To(MatchError(quic.Err0RTTRejected))
+				_, err = sess.OpenUniStream()
+				Expect(err).To(MatchError(quic.Err0RTTRejected))
 
 				newSess := sess.NextSession()
 				str, err := newSess.OpenUniStream()
