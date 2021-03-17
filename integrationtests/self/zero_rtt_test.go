@@ -127,7 +127,6 @@ var _ = Describe("0-RTT", func() {
 				proxyPort int,
 				clientConf *tls.Config,
 				testdata []byte, // data to transfer
-				expect0RTT bool, // do we expect that 0-RTT is actually used
 			) {
 				// now dial the second session, and use 0-RTT to send some data
 				done := make(chan struct{})
@@ -140,7 +139,7 @@ var _ = Describe("0-RTT", func() {
 					data, err := ioutil.ReadAll(str)
 					Expect(err).ToNot(HaveOccurred())
 					Expect(data).To(Equal(testdata))
-					Expect(sess.ConnectionState().TLS.Used0RTT).To(Equal(expect0RTT))
+					Expect(sess.ConnectionState().TLS.Used0RTT).To(BeTrue())
 					Expect(sess.CloseWithError(0, "")).To(Succeed())
 					close(done)
 				}()
@@ -157,7 +156,7 @@ var _ = Describe("0-RTT", func() {
 				_, err = str.Write(testdata)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(str.Close()).To(Succeed())
-				Expect(sess.ConnectionState().TLS.Used0RTT).To(Equal(expect0RTT))
+				Expect(sess.ConnectionState().TLS.Used0RTT).To(BeTrue())
 				Eventually(done).Should(BeClosed())
 				Eventually(sess.Context().Done()).Should(BeClosed())
 			}
@@ -222,7 +221,7 @@ var _ = Describe("0-RTT", func() {
 				proxy, num0RTTPackets := runCountingProxy(ln.Addr().(*net.UDPAddr).Port)
 				defer proxy.Close()
 
-				transfer0RTTData(ln, proxy.LocalPort(), clientConf, PRData, true)
+				transfer0RTTData(ln, proxy.LocalPort(), clientConf, PRData)
 
 				num0RTT := atomic.LoadUint32(num0RTTPackets)
 				fmt.Fprintf(GinkgoWriter, "Sent %d 0-RTT packets.", num0RTT)
@@ -354,7 +353,7 @@ var _ = Describe("0-RTT", func() {
 				Expect(err).ToNot(HaveOccurred())
 				defer proxy.Close()
 
-				transfer0RTTData(ln, proxy.LocalPort(), clientConf, PRData, true)
+				transfer0RTTData(ln, proxy.LocalPort(), clientConf, PRData)
 
 				num0RTT := atomic.LoadUint32(&num0RTTPackets)
 				numDropped := atomic.LoadUint32(&num0RTTDropped)
@@ -428,7 +427,7 @@ var _ = Describe("0-RTT", func() {
 				Expect(err).ToNot(HaveOccurred())
 				defer proxy.Close()
 
-				transfer0RTTData(ln, proxy.LocalPort(), clientConf, GeneratePRData(5000), true) // ~5 packets
+				transfer0RTTData(ln, proxy.LocalPort(), clientConf, GeneratePRData(5000)) // ~5 packets
 
 				mutex.Lock()
 				defer mutex.Unlock()
@@ -745,7 +744,7 @@ var _ = Describe("0-RTT", func() {
 				Expect(err).ToNot(HaveOccurred())
 				defer proxy.Close()
 
-				transfer0RTTData(ln, proxy.LocalPort(), clientConf, PRData, true)
+				transfer0RTTData(ln, proxy.LocalPort(), clientConf, PRData)
 
 				Expect(tracer.rcvdPackets[0].hdr.Type).To(Equal(protocol.PacketTypeInitial))
 				zeroRTTPackets := get0RTTPackets(tracer.getRcvdPackets())
