@@ -528,9 +528,14 @@ var _ = Describe("Transport Parameters", func() {
 				Expect(p.ValidFor0RTT(saved)).To(BeTrue())
 			})
 
-			It("rejects the parameters if the InitialMaxData changed", func() {
-				p.InitialMaxData = 0
+			It("rejects the parameters if the InitialMaxData was reduced", func() {
+				p.InitialMaxData = saved.InitialMaxData - 1
 				Expect(p.ValidFor0RTT(saved)).To(BeFalse())
+			})
+
+			It("doesn't reject the parameters if the InitialMaxData was increased", func() {
+				p.InitialMaxData = saved.InitialMaxData + 1
+				Expect(p.ValidFor0RTT(saved)).To(BeTrue())
 			})
 
 			It("rejects the parameters if the MaxBidiStreamNum was reduced", func() {

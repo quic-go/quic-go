@@ -444,7 +444,7 @@ func (p *TransportParameters) ValidFor0RTT(saved *TransportParameters) bool {
 	return p.InitialMaxStreamDataBidiLocal >= saved.InitialMaxStreamDataBidiLocal &&
 		p.InitialMaxStreamDataBidiRemote >= saved.InitialMaxStreamDataBidiRemote &&
 		p.InitialMaxStreamDataUni >= saved.InitialMaxStreamDataUni &&
-		p.InitialMaxData == saved.InitialMaxData &&
+		p.InitialMaxData >= saved.InitialMaxData &&
 		p.MaxBidiStreamNum >= saved.MaxBidiStreamNum &&
 		p.MaxUniStreamNum >= saved.MaxUniStreamNum &&
 		p.ActiveConnectionIDLimit == saved.ActiveConnectionIDLimit
