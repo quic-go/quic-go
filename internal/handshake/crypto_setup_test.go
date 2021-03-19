@@ -776,7 +776,7 @@ var _ = Describe("Crypto Setup TLS", func() {
 				Expect(client.ConnectionState().Used0RTT).To(BeTrue())
 			})
 
-			It("rejects 0-RTT, whent the transport parameters changed", func() {
+			It("rejects 0-RTT, when the transport parameters changed", func() {
 				csc := mocktls.NewMockClientSessionCache(mockCtrl)
 				var state *tls.ClientSessionState
 				receivedSessionTicket := make(chan struct{})
@@ -810,7 +810,7 @@ var _ = Describe("Crypto Setup TLS", func() {
 				clientHelloWrittenChan, client, clientErr, server, serverErr = handshakeWithTLSConf(
 					clientConf, serverConf,
 					clientRTTStats, &utils.RTTStats{},
-					&wire.TransportParameters{}, &wire.TransportParameters{InitialMaxData: initialMaxData + 1},
+					&wire.TransportParameters{}, &wire.TransportParameters{InitialMaxData: initialMaxData - 1},
 					true,
 				)
 				Expect(clientErr).ToNot(HaveOccurred())
