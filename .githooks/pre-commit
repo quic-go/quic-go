@@ -4,7 +4,7 @@
 errored=false
 for f in $(git diff --cached --name-only); do
 	if [[ $f != *_test.go ]]; then continue; fi
-	output=$(grep -n -e "FIt(" -e "FContext(" -e "FDescribe(" "$f")
+	output=$(git show :"$f" | grep -n -e "FIt(" -e "FContext(" -e "FDescribe(")
 	if [ $? -eq 0 ]; then
 		echo "$f contains a focussed test:"
 		echo "$output"
