@@ -23,6 +23,7 @@ import (
 
 	"github.com/lucas-clemente/quic-go"
 	"github.com/lucas-clemente/quic-go/internal/utils"
+	"github.com/lucas-clemente/quic-go/internal/wire"
 	"github.com/lucas-clemente/quic-go/logging"
 	"github.com/lucas-clemente/quic-go/qlog"
 
@@ -367,6 +368,43 @@ func (t *connTracer) LossTimerExpired(logging.TimerType, logging.EncryptionLevel
 func (t *connTracer) LossTimerCanceled()                                                 {}
 func (t *connTracer) Debug(string, string)                                               {}
 func (t *connTracer) Close()                                                             {}
+
+type packet struct {
+	time   time.Time
+	hdr    *logging.ExtendedHeader
+	frames []logging.Frame
+}
+
+type packetTracer struct {
+	connTracer
+	closed     chan struct{}
+	sent, rcvd []packet
+}
+
+func newPacketTracer() *packetTracer {
+	return &packetTracer{closed: make(chan struct{})}
+}
+
+func (t *packetTracer) ReceivedPacket(hdr *logging.ExtendedHeader, _ logging.ByteCount, frames []logging.Frame) {
+	t.rcvd = append(t.rcvd, packet{time: time.Now(), hdr: hdr, frames: frames})
+}
+
+func (t *packetTracer) SentPacket(hdr *logging.ExtendedHeader, _ logging.ByteCount, ack *wire.AckFrame, frames []logging.Frame) {
+	if ack != nil {
+		frames = append(frames, ack)
+	}
+	t.sent = append(t.sent, packet{time: time.Now(), hdr: hdr, frames: frames})
+}
+func (t *packetTracer) Close() { close(t.closed) }
+func (t *packetTracer) getSentPackets() []packet {
+	<-t.closed
+	return t.sent
+}
+
+func (t *packetTracer) getRcvdPackets() []packet {
+	<-t.closed
+	return t.rcvd
+}
 
 func TestSelf(t *testing.T) {
 	RegisterFailHandler(Fail)

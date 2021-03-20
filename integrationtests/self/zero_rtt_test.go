@@ -23,41 +23,6 @@ import (
 	. "github.com/onsi/gomega"
 )
 
-type packet struct {
-	time   time.Time
-	hdr    *logging.ExtendedHeader
-	frames []logging.Frame
-}
-
-type packetTracer struct {
-	connTracer
-	closed     chan struct{}
-	sent, rcvd []packet
-}
-
-func newPacketTracer() *packetTracer {
-	return &packetTracer{closed: make(chan struct{})}
-}
-
-func (t *packetTracer) ReceivedPacket(hdr *logging.ExtendedHeader, _ logging.ByteCount, frames []logging.Frame) {
-	t.rcvd = append(t.rcvd, packet{time: time.Now(), hdr: hdr, frames: frames})
-}
-func (t *packetTracer) SentPacket(hdr *logging.ExtendedHeader, _ logging.ByteCount, ack *wire.AckFrame, frames []logging.Frame) {
-	if ack != nil {
-		frames = append(frames, ack)
-	}
-	t.sent = append(t.sent, packet{time: time.Now(), hdr: hdr, frames: frames})
-}
-func (t *packetTracer) Close() { close(t.closed) }
-func (t *packetTracer) getSentPackets() []packet {
-	<-t.closed
-	return t.sent
-}
-func (t *packetTracer) getRcvdPackets() []packet {
-	<-t.closed
-	return t.rcvd
-}
-
 var _ = Describe("0-RTT", func() {
 	rtt := scaleDuration(5 * time.Millisecond)
 
