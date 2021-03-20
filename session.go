@@ -293,6 +293,7 @@ var newSession = func(
 	s.preSetup()
 	s.sentPacketHandler, s.receivedPacketHandler = ackhandler.NewAckHandler(
 		0,
+		getMaxPacketSize(s.conn.RemoteAddr()),
 		s.rttStats,
 		s.perspective,
 		s.tracer,
@@ -417,6 +418,7 @@ var newClientSession = func(
 	s.preSetup()
 	s.sentPacketHandler, s.receivedPacketHandler = ackhandler.NewAckHandler(
 		initialPacketNumber,
+		getMaxPacketSize(s.conn.RemoteAddr()),
 		s.rttStats,
 		s.perspective,
 		s.tracer,
