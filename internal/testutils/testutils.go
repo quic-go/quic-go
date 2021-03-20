@@ -30,15 +30,6 @@ func packRawPayload(version protocol.VersionNumber, frames []wire.Frame) []byte 
 	return buf.Bytes()
 }
 
-// ComposeConnCloseFrame returns a new Connection Close frame with a generic error
-func ComposeConnCloseFrame() *wire.ConnectionCloseFrame {
-	return &wire.ConnectionCloseFrame{
-		IsApplicationError: true,
-		ErrorCode:          0,
-		ReasonPhrase:       "mitm attacker",
-	}
-}
-
 // ComposeInitialPacket returns an Initial packet encrypted under key
 // (the original destination connection ID) containing specified frames
 func ComposeInitialPacket(srcConnID protocol.ConnectionID, destConnID protocol.ConnectionID, version protocol.VersionNumber, key protocol.ConnectionID, frames []wire.Frame) []byte {
