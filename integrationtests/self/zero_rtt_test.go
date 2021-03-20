@@ -23,28 +23,39 @@ import (
 	. "github.com/onsi/gomega"
 )
 
-type rcvdPacket struct {
+type packet struct {
+	time   time.Time
 	hdr    *logging.ExtendedHeader
 	frames []logging.Frame
 }
 
-type rcvdPacketTracer struct {
+type packetTracer struct {
 	connTracer
-	closed      chan struct{}
-	rcvdPackets []rcvdPacket
+	closed     chan struct{}
+	sent, rcvd []packet
 }
 
-func newRcvdPacketTracer() *rcvdPacketTracer {
-	return &rcvdPacketTracer{closed: make(chan struct{})}
+func newPacketTracer() *packetTracer {
+	return &packetTracer{closed: make(chan struct{})}
 }
 
-func (t *rcvdPacketTracer) ReceivedPacket(hdr *logging.ExtendedHeader, _ logging.ByteCount, frames []logging.Frame) {
-	t.rcvdPackets = append(t.rcvdPackets, rcvdPacket{hdr: hdr, frames: frames})
+func (t *packetTracer) ReceivedPacket(hdr *logging.ExtendedHeader, _ logging.ByteCount, frames []logging.Frame) {
+	t.rcvd = append(t.rcvd, packet{time: time.Now(), hdr: hdr, frames: frames})
 }
-func (t *rcvdPacketTracer) Close() { close(t.closed) }
-func (t *rcvdPacketTracer) getRcvdPackets() []rcvdPacket {
+func (t *packetTracer) SentPacket(hdr *logging.ExtendedHeader, _ logging.ByteCount, ack *wire.AckFrame, frames []logging.Frame) {
+	if ack != nil {
+		frames = append(frames, ack)
+	}
+	t.sent = append(t.sent, packet{time: time.Now(), hdr: hdr, frames: frames})
+}
+func (t *packetTracer) Close() { close(t.closed) }
+func (t *packetTracer) getSentPackets() []packet {
 	<-t.closed
-	return t.rcvdPackets
+	return t.sent
+}
+func (t *packetTracer) getRcvdPackets() []packet {
+	<-t.closed
+	return t.rcvd
 }
 
 var _ = Describe("0-RTT", func() {
@@ -195,8 +206,8 @@ var _ = Describe("0-RTT", func() {
 				Eventually(sess.Context().Done()).Should(BeClosed())
 			}
 
-			// can be used to extract 0-RTT from a rcvdPacketTracer
-			get0RTTPackets := func(packets []rcvdPacket) []protocol.PacketNumber {
+			// can be used to extract 0-RTT from a packetTracer
+			get0RTTPackets := func(packets []packet) []protocol.PacketNumber {
 				var zeroRTTPackets []protocol.PacketNumber
 				for _, p := range packets {
 					if p.hdr.Type == protocol.PacketType0RTT {
@@ -212,7 +223,7 @@ var _ = Describe("0-RTT", func() {
 				It(fmt.Sprintf("transfers 0-RTT data, with %d byte connection IDs", connIDLen), func() {
 					tlsConf, clientTLSConf := dialAndReceiveSessionTicket(nil)
 
-					tracer := newRcvdPacketTracer()
+					tracer := newPacketTracer()
 					ln, err := quic.ListenAddrEarly(
 						"localhost:0",
 						tlsConf,
@@ -270,7 +281,7 @@ var _ = Describe("0-RTT", func() {
 				zeroRTTData := GeneratePRData(2 * 1100) // 2 packets
 				oneRTTData := PRData
 
-				tracer := newRcvdPacketTracer()
+				tracer := newPacketTracer()
 				ln, err := quic.ListenAddrEarly(
 					"localhost:0",
 					tlsConf,
@@ -345,7 +356,7 @@ var _ = Describe("0-RTT", func() {
 
 				tlsConf, clientConf := dialAndReceiveSessionTicket(nil)
 
-				tracer := newRcvdPacketTracer()
+				tracer := newPacketTracer()
 				ln, err := quic.ListenAddrEarly(
 					"localhost:0",
 					tlsConf,
@@ -415,7 +426,7 @@ var _ = Describe("0-RTT", func() {
 					return
 				}
 
-				tracer := newRcvdPacketTracer()
+				tracer := newPacketTracer()
 				ln, err := quic.ListenAddrEarly(
 					"localhost:0",
 					tlsConf,
@@ -476,7 +487,7 @@ var _ = Describe("0-RTT", func() {
 					AcceptToken:           func(_ net.Addr, _ *quic.Token) bool { return true },
 				}))
 
-				tracer := newRcvdPacketTracer()
+				tracer := newPacketTracer()
 				ln, err := quic.ListenAddrEarly(
 					"localhost:0",
 					tlsConf,
@@ -527,7 +538,7 @@ var _ = Describe("0-RTT", func() {
 					AcceptToken:        func(_ net.Addr, _ *quic.Token) bool { return true },
 				}))
 
-				tracer := newRcvdPacketTracer()
+				tracer := newPacketTracer()
 				ln, err := quic.ListenAddrEarly(
 					"localhost:0",
 					tlsConf,
@@ -557,7 +568,7 @@ var _ = Describe("0-RTT", func() {
 				// now close the listener and dial new connection with a different ALPN
 				clientConf.NextProtos = []string{"new-alpn"}
 				tlsConf.NextProtos = []string{"new-alpn"}
-				tracer := newRcvdPacketTracer()
+				tracer := newPacketTracer()
 				ln, err := quic.ListenAddrEarly(
 					"localhost:0",
 					tlsConf,
@@ -583,7 +594,7 @@ var _ = Describe("0-RTT", func() {
 
 			DescribeTable("flow control limits",
 				func(addFlowControlLimit func(*quic.Config, uint64)) {
-					tracer := newRcvdPacketTracer()
+					tracer := newPacketTracer()
 					firstConf := getQuicConfig(&quic.Config{
 						AcceptToken: func(_ net.Addr, _ *quic.Token) bool { return true },
 						Versions:    []protocol.VersionNumber{version},
@@ -666,7 +677,7 @@ var _ = Describe("0-RTT", func() {
 				It(fmt.Sprintf("correctly deals with 0-RTT rejections, for %d byte connection IDs", connIDLen), func() {
 					tlsConf, clientConf := dialAndReceiveSessionTicket(nil)
 					// now dial new connection with different transport parameters
-					tracer := newRcvdPacketTracer()
+					tracer := newPacketTracer()
 					ln, err := quic.ListenAddrEarly(
 						"localhost:0",
 						tlsConf,
@@ -742,7 +753,7 @@ var _ = Describe("0-RTT", func() {
 			It("queues 0-RTT packets, if the Initial is delayed", func() {
 				tlsConf, clientConf := dialAndReceiveSessionTicket(nil)
 
-				tracer := newRcvdPacketTracer()
+				tracer := newPacketTracer()
 				ln, err := quic.ListenAddrEarly(
 					"localhost:0",
 					tlsConf,
@@ -768,7 +779,7 @@ var _ = Describe("0-RTT", func() {
 
 				transfer0RTTData(ln, proxy.LocalPort(), clientConf, nil, PRData)
 
-				Expect(tracer.rcvdPackets[0].hdr.Type).To(Equal(protocol.PacketTypeInitial))
+				Expect(tracer.getRcvdPackets()[0].hdr.Type).To(Equal(protocol.PacketTypeInitial))
 				zeroRTTPackets := get0RTTPackets(tracer.getRcvdPackets())
 				Expect(len(zeroRTTPackets)).To(BeNumerically(">", 10))
 				Expect(zeroRTTPackets[0]).To(Equal(protocol.PacketNumber(0)))
