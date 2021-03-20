@@ -30,17 +30,6 @@ func packRawPayload(version protocol.VersionNumber, frames []wire.Frame) []byte 
 	return buf.Bytes()
 }
 
-// ComposeCryptoFrame returns a new empty crypto frame of the specified
-// type padded to size bytes with zeroes
-func ComposeCryptoFrame(cft CryptoFrameType, size int) *wire.CryptoFrame {
-	data := make([]byte, size)
-	data[0] = byte(cft)
-	return &wire.CryptoFrame{
-		Offset: 0,
-		Data:   data,
-	}
-}
-
 // ComposeConnCloseFrame returns a new Connection Close frame with a generic error
 func ComposeConnCloseFrame() *wire.ConnectionCloseFrame {
 	return &wire.ConnectionCloseFrame{
