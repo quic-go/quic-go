@@ -4,70 +4,54 @@ import (
 	"context"
 	"fmt"
 	"net"
-	"sync/atomic"
 	"time"
 
 	"github.com/lucas-clemente/quic-go"
 	quicproxy "github.com/lucas-clemente/quic-go/integrationtests/tools/proxy"
+	"github.com/lucas-clemente/quic-go/logging"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 )
 
 var _ = Describe("Packetization", func() {
-	var (
-		server   quic.Listener
-		proxy    *quicproxy.QuicProxy
-		incoming uint32
-		outgoing uint32
-	)
-
-	BeforeEach(func() {
-		incoming = 0
-		outgoing = 0
-		var err error
-		server, err = quic.ListenAddr(
-			"localhost:0",
-			getTLSConfig(),
-			getQuicConfig(&quic.Config{
-				AcceptToken:             func(net.Addr, *quic.Token) bool { return true },
-				DisablePathMTUDiscovery: true,
-			}),
-		)
-		Expect(err).ToNot(HaveOccurred())
-		serverAddr := fmt.Sprintf("localhost:%d", server.Addr().(*net.UDPAddr).Port)
-
-		proxy, err = quicproxy.NewQuicProxy("localhost:0", &quicproxy.Opts{
-			RemoteAddr: serverAddr,
-			DelayPacket: func(dir quicproxy.Direction, _ []byte) time.Duration {
-				//nolint:exhaustive
-				switch dir {
-				case quicproxy.DirectionIncoming:
-					atomic.AddUint32(&incoming, 1)
-				case quicproxy.DirectionOutgoing:
-					atomic.AddUint32(&outgoing, 1)
-				}
-				return 5 * time.Millisecond
-			},
-		})
-		Expect(err).ToNot(HaveOccurred())
-	})
-
-	AfterEach(func() {
-		Expect(proxy.Close()).To(Succeed())
-		Expect(server.Close()).To(Succeed())
-	})
-
 	// In this test, the client sends 100 small messages. The server echoes these messages.
 	// This means that every endpoint will send 100 ack-eliciting packets in short succession.
 	// This test then tests that no more than 110 packets are sent in every direction, making sure that ACK are bundled.
 	It("bundles ACKs", func() {
 		const numMsg = 100
 
+		serverTracer := newPacketTracer()
+		server, err := quic.ListenAddr(
+			"localhost:0",
+			getTLSConfig(),
+			getQuicConfig(&quic.Config{
+				AcceptToken:             func(net.Addr, *quic.Token) bool { return true },
+				DisablePathMTUDiscovery: true,
+				Tracer:                  newTracer(func() logging.ConnectionTracer { return serverTracer }),
+			}),
+		)
+		Expect(err).ToNot(HaveOccurred())
+		serverAddr := fmt.Sprintf("localhost:%d", server.Addr().(*net.UDPAddr).Port)
+		defer server.Close()
+
+		proxy, err := quicproxy.NewQuicProxy("localhost:0", &quicproxy.Opts{
+			RemoteAddr: serverAddr,
+			DelayPacket: func(dir quicproxy.Direction, _ []byte) time.Duration {
+				return 5 * time.Millisecond
+			},
+		})
+		Expect(err).ToNot(HaveOccurred())
+		defer proxy.Close()
+
+		clientTracer := newPacketTracer()
 		sess, err := quic.DialAddr(
 			fmt.Sprintf("localhost:%d", proxy.LocalPort()),
 			getTLSClientConfig(),
-			getQuicConfig(&quic.Config{DisablePathMTUDiscovery: true}),
+			getQuicConfig(&quic.Config{
+				DisablePathMTUDiscovery: true,
+				Tracer:                  newTracer(func() logging.ConnectionTracer { return clientTracer }),
+			}),
 		)
 		Expect(err).ToNot(HaveOccurred())
 
@@ -101,17 +85,38 @@ var _ = Describe("Packetization", func() {
 		}
 		Expect(sess.CloseWithError(0, "")).To(Succeed())
 
-		numIncoming := atomic.LoadUint32(&incoming)
-		numOutgoing := atomic.LoadUint32(&outgoing)
-		fmt.Fprintf(GinkgoWriter, "incoming packets: %d\n", numIncoming)
-		fmt.Fprintf(GinkgoWriter, "outgoing packets: %d\n", numOutgoing)
-		Expect(numIncoming).To(And(
-			BeNumerically(">", numMsg),
-			BeNumerically("<", numMsg+10),
+		countBundledPackets := func(packets []packet) (numBundled int) {
+			for _, p := range packets {
+				if p.hdr.IsLongHeader {
+					continue
+				}
+				var hasAck, hasStreamFrame bool
+				for _, f := range p.frames {
+					switch f.(type) {
+					case *logging.AckFrame:
+						hasAck = true
+					case *logging.StreamFrame:
+						hasStreamFrame = true
+					}
+				}
+				if hasAck && hasStreamFrame {
+					numBundled++
+				}
+			}
+			return
+		}
+
+		numBundledIncoming := countBundledPackets(clientTracer.getRcvdPackets())
+		numBundledOutgoing := countBundledPackets(serverTracer.getRcvdPackets())
+		fmt.Fprintf(GinkgoWriter, "bundled incoming packets: %d / %d\n", numBundledIncoming, numMsg)
+		fmt.Fprintf(GinkgoWriter, "bundled outgoing packets: %d / %d\n", numBundledOutgoing, numMsg)
+		Expect(numBundledIncoming).To(And(
+			BeNumerically("<=", numMsg),
+			BeNumerically(">", numMsg*9/10),
 		))
-		Expect(numOutgoing).To(And(
-			BeNumerically(">", numMsg),
-			BeNumerically("<", numMsg+10),
+		Expect(numBundledOutgoing).To(And(
+			BeNumerically("<=", numMsg),
+			BeNumerically(">", numMsg*9/10),
 		))
 	})
 })
