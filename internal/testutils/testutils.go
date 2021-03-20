@@ -50,18 +50,6 @@ func ComposeConnCloseFrame() *wire.ConnectionCloseFrame {
 	}
 }
 
-// ComposeAckFrame returns a new Ack Frame that acknowledges all packets between smallest and largest
-func ComposeAckFrame(smallest protocol.PacketNumber, largest protocol.PacketNumber) *wire.AckFrame {
-	ackRange := wire.AckRange{
-		Smallest: smallest,
-		Largest:  largest,
-	}
-	return &wire.AckFrame{
-		AckRanges: []wire.AckRange{ackRange},
-		DelayTime: 0,
-	}
-}
-
 // ComposeInitialPacket returns an Initial packet encrypted under key
 // (the original destination connection ID) containing specified frames
 func ComposeInitialPacket(srcConnID protocol.ConnectionID, destConnID protocol.ConnectionID, version protocol.VersionNumber, key protocol.ConnectionID, frames []wire.Frame) []byte {
