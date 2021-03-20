@@ -11,9 +11,6 @@ import (
 // Utilities for simulating packet injection and man-in-the-middle (MITM) attacker tests.
 // Do not use for non-testing purposes.
 
-// CryptoFrameType uses same types as messageType in crypto_setup.go
-type CryptoFrameType uint8
-
 // writePacket returns a new raw packet with the specified header and payload
 func writePacket(hdr *wire.ExtendedHeader, data []byte) []byte {
 	buf := &bytes.Buffer{}
