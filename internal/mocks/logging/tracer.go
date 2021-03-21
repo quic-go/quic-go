@@ -38,7 +38,7 @@ func (m *MockTracer) EXPECT() *MockTracerMockRecorder {
 }
 
 // DroppedPacket mocks base method.
-func (m *MockTracer) DroppedPacket(arg0 net.Addr, arg1 protocol.PacketType, arg2 protocol.ByteCount, arg3 logging.PacketDropReason) {
+func (m *MockTracer) DroppedPacket(arg0 net.Addr, arg1 logging.PacketType, arg2 protocol.ByteCount, arg3 logging.PacketDropReason) {
 	m.ctrl.T.Helper()
 	m.ctrl.Call(m, "DroppedPacket", arg0, arg1, arg2, arg3)
 }

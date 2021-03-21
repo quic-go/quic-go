@@ -39,7 +39,7 @@ func (m *MockConnectionTracer) EXPECT() *MockConnectionTracerMockRecorder {
 }
 
 // BufferedPacket mocks base method.
-func (m *MockConnectionTracer) BufferedPacket(arg0 protocol.PacketType) {
+func (m *MockConnectionTracer) BufferedPacket(arg0 PacketType) {
 	m.ctrl.T.Helper()
 	m.ctrl.Call(m, "BufferedPacket", arg0)
 }
@@ -111,7 +111,7 @@ func (mr *MockConnectionTracerMockRecorder) DroppedKey(arg0 interface{}) *gomock
 }
 
 // DroppedPacket mocks base method.
-func (m *MockConnectionTracer) DroppedPacket(arg0 protocol.PacketType, arg1 protocol.ByteCount, arg2 PacketDropReason) {
+func (m *MockConnectionTracer) DroppedPacket(arg0 PacketType, arg1 protocol.ByteCount, arg2 PacketDropReason) {
 	m.ctrl.T.Helper()
 	m.ctrl.Call(m, "DroppedPacket", arg0, arg1, arg2)
 }
