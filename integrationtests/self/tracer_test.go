@@ -36,7 +36,7 @@ type customConnTracer struct{}
 
 var _ logging.ConnectionTracer = &customConnTracer{}
 
-func (t *customConnTracer) StartedConnection(local, remote net.Addr, version logging.VersionNumber, srcConnID, destConnID logging.ConnectionID) {
+func (t *customConnTracer) StartedConnection(local, remote net.Addr, srcConnID, destConnID logging.ConnectionID) {
 }
 func (t *customConnTracer) ClosedConnection(logging.CloseReason)                     {}
 func (t *customConnTracer) SentTransportParameters(*logging.TransportParameters)     {}

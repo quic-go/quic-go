@@ -61,9 +61,9 @@ func NewMultiplexedConnectionTracer(tracers ...ConnectionTracer) ConnectionTrace
 	return &connTracerMultiplexer{tracers: tracers}
 }
 
-func (m *connTracerMultiplexer) StartedConnection(local, remote net.Addr, version VersionNumber, srcConnID, destConnID ConnectionID) {
+func (m *connTracerMultiplexer) StartedConnection(local, remote net.Addr, srcConnID, destConnID ConnectionID) {
 	for _, t := range m.tracers {
-		t.StartedConnection(local, remote, version, srcConnID, destConnID)
+		t.StartedConnection(local, remote, srcConnID, destConnID)
 	}
 }
 

@@ -1124,7 +1124,6 @@ func (s *session) handleUnpackedPacket(
 				s.tracer.StartedConnection(
 					s.conn.LocalAddr(),
 					s.conn.RemoteAddr(),
-					s.version,
 					packet.hdr.SrcConnectionID,
 					packet.hdr.DestConnectionID,
 				)

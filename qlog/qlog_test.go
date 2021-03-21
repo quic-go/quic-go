@@ -153,7 +153,6 @@ var _ = Describe("Tracing", func() {
 				tracer.StartedConnection(
 					&net.UDPAddr{IP: net.IPv4(192, 168, 13, 37), Port: 42},
 					&net.UDPAddr{IP: net.IPv4(192, 168, 12, 34), Port: 24},
-					0xdeadbeef,
 					protocol.ConnectionID{1, 2, 3, 4},
 					protocol.ConnectionID{5, 6, 7, 8},
 				)
@@ -166,7 +165,6 @@ var _ = Describe("Tracing", func() {
 				Expect(ev).To(HaveKeyWithValue("src_port", float64(42)))
 				Expect(ev).To(HaveKeyWithValue("dst_ip", "192.168.12.34"))
 				Expect(ev).To(HaveKeyWithValue("dst_port", float64(24)))
-				Expect(ev).To(HaveKeyWithValue("quic_version", "deadbeef"))
 				Expect(ev).To(HaveKeyWithValue("src_cid", "01020304"))
 				Expect(ev).To(HaveKeyWithValue("dst_cid", "05060708"))
 			})

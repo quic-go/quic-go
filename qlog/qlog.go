@@ -162,7 +162,7 @@ func (t *connectionTracer) recordEvent(eventTime time.Time, details eventDetails
 	}
 }
 
-func (t *connectionTracer) StartedConnection(local, remote net.Addr, version protocol.VersionNumber, srcConnID, destConnID protocol.ConnectionID) {
+func (t *connectionTracer) StartedConnection(local, remote net.Addr, srcConnID, destConnID protocol.ConnectionID) {
 	// ignore this event if we're not dealing with UDP addresses here
 	localAddr, ok := local.(*net.UDPAddr)
 	if !ok {
@@ -176,7 +176,6 @@ func (t *connectionTracer) StartedConnection(local, remote net.Addr, version pro
 	t.recordEvent(time.Now(), &eventConnectionStarted{
 		SrcAddr:          localAddr,
 		DestAddr:         remoteAddr,
-		Version:          version,
 		SrcConnectionID:  srcConnID,
 		DestConnectionID: destConnID,
 	})

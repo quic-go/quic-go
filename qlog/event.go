@@ -59,11 +59,8 @@ type eventConnectionStarted struct {
 	SrcAddr  *net.UDPAddr
 	DestAddr *net.UDPAddr
 
-	Version          protocol.VersionNumber
 	SrcConnectionID  protocol.ConnectionID
 	DestConnectionID protocol.ConnectionID
-
-	// TODO: add ALPN
 }
 
 var _ eventDetails = &eventConnectionStarted{}
@@ -82,7 +79,6 @@ func (e eventConnectionStarted) MarshalJSONObject(enc *gojay.Encoder) {
 	enc.IntKey("src_port", e.SrcAddr.Port)
 	enc.StringKey("dst_ip", e.DestAddr.IP.String())
 	enc.IntKey("dst_port", e.DestAddr.Port)
-	enc.StringKey("quic_version", versionNumber(e.Version).String())
 	enc.StringKey("src_cid", connectionID(e.SrcConnectionID).String())
 	enc.StringKey("dst_cid", connectionID(e.DestConnectionID).String())
 }
