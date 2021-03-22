@@ -1436,7 +1436,7 @@ func (s *session) handleCloseError(closeErr closeError) {
 		s.datagramQueue.CloseWithError(quicErr)
 	}
 
-	if s.tracer != nil {
+	if s.tracer != nil && !errors.Is(closeErr.err, errCloseForRecreating{}) {
 		var resetErr statelessResetErr
 		var vnErr errVersionNegotiation
 		switch {

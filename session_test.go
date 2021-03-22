@@ -2608,7 +2608,6 @@ var _ = Describe("Client Session", func() {
 					ContainElement(protocol.VersionNumber(1337)),
 				))
 			})
-			tracer.EXPECT().ClosedConnection(gomock.Any())
 			cryptoSetup.EXPECT().Close()
 			Expect(sess.handlePacketImpl(getVNP(4321, 1337))).To(BeFalse())
 			var err error
