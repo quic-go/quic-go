@@ -5,6 +5,11 @@ import (
 	"net"
 )
 
+var (
+	ErrIdleTimeout      = newTimeoutError("No recent network activity")
+	ErrHandshakeTimeout = newTimeoutError("Handshake did not complete in time")
+)
+
 // A QuicError consists of an error code plus a error reason
 type QuicError struct {
 	ErrorCode          ErrorCode
@@ -33,8 +38,8 @@ func NewErrorWithFrameType(errorCode ErrorCode, frameType uint64, errorMessage s
 	}
 }
 
-// NewTimeoutError creates a new QuicError instance for a timeout error
-func NewTimeoutError(errorMessage string) *QuicError {
+// newTimeoutError creates a new QuicError instance for a timeout error
+func newTimeoutError(errorMessage string) *QuicError {
 	return &QuicError{
 		ErrorMessage: errorMessage,
 		isTimeout:    true,

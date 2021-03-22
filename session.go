@@ -667,7 +667,7 @@ runLoop:
 			if s.tracer != nil {
 				s.tracer.ClosedConnection(logging.NewTimeoutCloseReason(logging.TimeoutReasonHandshake))
 			}
-			s.destroyImpl(qerr.NewTimeoutError("Handshake did not complete in time"))
+			s.destroyImpl(qerr.ErrHandshakeTimeout)
 			continue
 		} else {
 			idleTimeoutStartTime := s.idleTimeoutStartTime()
@@ -676,7 +676,7 @@ runLoop:
 				if s.tracer != nil {
 					s.tracer.ClosedConnection(logging.NewTimeoutCloseReason(logging.TimeoutReasonIdle))
 				}
-				s.destroyImpl(qerr.NewTimeoutError("No recent network activity"))
+				s.destroyImpl(qerr.ErrIdleTimeout)
 				continue
 			}
 		}
