@@ -2158,6 +2158,7 @@ var _ = Describe("Session", func() {
 		})
 
 		It("doesn't send a PING if the handshake isn't completed yet", func() {
+			sess.config.HandshakeIdleTimeout = time.Hour
 			sess.handshakeComplete = false
 			// Needs to be shorter than our idle timeout.
 			// Otherwise we'll try to send a CONNECTION_CLOSE.
