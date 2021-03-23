@@ -2555,6 +2555,7 @@ var _ = Describe("Client Session", func() {
 	})
 
 	It("handles HANDSHAKE_DONE frames", func() {
+		sess.peerParams = &wire.TransportParameters{}
 		sph := mockackhandler.NewMockSentPacketHandler(mockCtrl)
 		sess.sentPacketHandler = sph
 		sph.EXPECT().SetHandshakeConfirmed()
