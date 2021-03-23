@@ -65,9 +65,14 @@ func (e *QuicError) Error() string {
 		}
 		return fmt.Sprintf("Application error %#x: %s", uint64(e.ErrorCode), e.ErrorMessage)
 	}
-	str := e.ErrorCode.String()
-	if e.FrameType != 0 {
-		str += fmt.Sprintf(" (frame type: %#x)", e.FrameType)
+	var str string
+	if e.isTimeout {
+		str = "Timeout"
+	} else {
+		str = e.ErrorCode.String()
+		if e.FrameType != 0 {
+			str += fmt.Sprintf(" (frame type: %#x)", e.FrameType)
+		}
 	}
 	msg := e.ErrorMessage
 	if len(msg) == 0 {

@@ -33,7 +33,7 @@ var _ = Describe("QUIC Transport Errors", func() {
 	It("has a string representation for timeout errors", func() {
 		err := NewTimeoutError("foobar")
 		Expect(err.Timeout()).To(BeTrue())
-		Expect(err.Error()).To(Equal("NO_ERROR: foobar"))
+		Expect(err.Error()).To(Equal("Timeout: foobar"))
 	})
 
 	Context("crypto errors", func() {
