@@ -460,13 +460,13 @@ var _ = Describe("Cubic Sender", func() {
 	})
 
 	It("doesn't allow reductions of the maximum packet size", func() {
-		Expect(func() { sender.SetMaxDatagramSize(initialMaxDatagramSize - 1) }).To(Panic())
+		Expect(sender.SetMaxDatagramSize(initialMaxDatagramSize - 1)).To(MatchError("congestion BUG: decreased max datagram size from 1252 to 1251 bytes"))
 	})
 
 	It("slow starts up to maximum congestion window, if larger packets are sent", func() {
 		sender = newCubicSender(&clock, rttStats, true, initialCongestionWindowPackets*maxDatagramSize, initialMaxCongestionWindow, nil)
 		const packetSize = initialMaxDatagramSize + 100
-		sender.SetMaxDatagramSize(packetSize)
+		Expect(sender.SetMaxDatagramSize(packetSize)).To(Succeed())
 		for i := 1; i < protocol.MaxCongestionWindowPackets; i++ {
 			sender.OnPacketAcked(protocol.PacketNumber(i), packetSize, sender.GetCongestionWindow(), clock.Now())
 		}

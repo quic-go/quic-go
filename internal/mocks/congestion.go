@@ -166,9 +166,11 @@ func (mr *MockSendAlgorithmWithDebugInfosMockRecorder) OnRetransmissionTimeout(a
 }
 
 // SetMaxDatagramSize mocks base method.
-func (m *MockSendAlgorithmWithDebugInfos) SetMaxDatagramSize(arg0 protocol.ByteCount) {
+func (m *MockSendAlgorithmWithDebugInfos) SetMaxDatagramSize(arg0 protocol.ByteCount) error {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "SetMaxDatagramSize", arg0)
+	ret := m.ctrl.Call(m, "SetMaxDatagramSize", arg0)
+	ret0, _ := ret[0].(error)
+	return ret0
 }
 
 // SetMaxDatagramSize indicates an expected call of SetMaxDatagramSize.

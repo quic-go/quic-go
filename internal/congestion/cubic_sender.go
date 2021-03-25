@@ -1,6 +1,7 @@
 package congestion
 
 import (
+	"fmt"
 	"time"
 
 	"github.com/lucas-clemente/quic-go/internal/protocol"
@@ -281,9 +282,9 @@ func (c *cubicSender) maybeTraceStateChange(new logging.CongestionState) {
 	c.lastState = new
 }
 
-func (c *cubicSender) SetMaxDatagramSize(s protocol.ByteCount) {
+func (c *cubicSender) SetMaxDatagramSize(s protocol.ByteCount) error {
 	if s < c.maxDatagramSize {
-		panic("congestion BUG: decreased max datagram size")
+		return fmt.Errorf("congestion BUG: decreased max datagram size from %d to %d bytes", c.maxDatagramSize, s)
 	}
 	cwndIsMinCwnd := c.congestionWindow == c.minCongestionWindow()
 	c.maxDatagramSize = s
@@ -291,4 +292,5 @@ func (c *cubicSender) SetMaxDatagramSize(s protocol.ByteCount) {
 		c.congestionWindow = c.minCongestionWindow()
 	}
 	c.pacer.SetMaxDatagramSize(s)
+	return nil
 }
