@@ -738,7 +738,7 @@ func (s *session) nextKeepAliveTime() time.Time {
 	if !s.config.KeepAlive || s.keepAlivePingSent || !s.firstAckElicitingPacketAfterIdleSentTime.IsZero() {
 		return time.Time{}
 	}
-	return s.lastPacketReceivedTime.Add(s.keepAliveInterval / 2)
+	return s.lastPacketReceivedTime.Add(s.keepAliveInterval)
 }
 
 func (s *session) maybeResetTimer() {
