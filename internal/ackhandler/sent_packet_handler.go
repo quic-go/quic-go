@@ -393,7 +393,9 @@ func (h *sentPacketHandler) detectAndRemoveAckedPackets(ack *wire.AckFrame, encL
 
 		for _, f := range p.Frames {
 			if f.OnAcked != nil {
-				f.OnAcked(f.Frame)
+				if err := f.OnAcked(f.Frame); err != nil {
+					return nil, err
+				}
 			}
 		}
 		if err := pnSpace.history.Remove(p.PacketNumber); err != nil {
@@ -708,8 +710,8 @@ func (h *sentPacketHandler) HasPacingBudget() bool {
 	return h.congestion.HasPacingBudget()
 }
 
-func (h *sentPacketHandler) SetMaxDatagramSize(s protocol.ByteCount) {
-	h.congestion.SetMaxDatagramSize(s)
+func (h *sentPacketHandler) SetMaxDatagramSize(s protocol.ByteCount) error {
+	return h.congestion.SetMaxDatagramSize(s)
 }
 
 func (h *sentPacketHandler) isAmplificationLimited() bool {

@@ -796,9 +796,9 @@ func (s *session) handleHandshakeComplete() {
 			s.rttStats,
 			getMaxPacketSize(s.conn.RemoteAddr()),
 			maxPacketSize,
-			func(size protocol.ByteCount) {
-				s.sentPacketHandler.SetMaxDatagramSize(size)
+			func(size protocol.ByteCount) error {
 				s.packer.SetMaxPacketSize(size)
+				return s.sentPacketHandler.SetMaxDatagramSize(size)
 			},
 		)
 	}

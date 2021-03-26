@@ -40,7 +40,7 @@ type SentPacketHandler interface {
 	TimeUntilSend() time.Time
 	// HasPacingBudget says if the pacer allows sending of a (full size) packet at this moment.
 	HasPacingBudget() bool
-	SetMaxDatagramSize(count protocol.ByteCount)
+	SetMaxDatagramSize(count protocol.ByteCount) error
 
 	// only to be called once the handshake is complete
 	QueueProbePacket(protocol.EncryptionLevel) bool /* was a packet queued */

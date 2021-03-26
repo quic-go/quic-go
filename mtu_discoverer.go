@@ -26,7 +26,7 @@ const (
 type mtuFinder struct {
 	lastProbeTime time.Time
 	probeInFlight bool
-	mtuIncreased  func(protocol.ByteCount)
+	mtuIncreased  func(protocol.ByteCount) error
 
 	rttStats *utils.RTTStats
 	current  protocol.ByteCount
@@ -35,7 +35,7 @@ type mtuFinder struct {
 
 var _ mtuDiscoverer = &mtuFinder{}
 
-func newMTUDiscoverer(rttStats *utils.RTTStats, start, max protocol.ByteCount, mtuIncreased func(protocol.ByteCount)) mtuDiscoverer {
+func newMTUDiscoverer(rttStats *utils.RTTStats, start, max protocol.ByteCount, mtuIncreased func(protocol.ByteCount) error) mtuDiscoverer {
 	return &mtuFinder{
 		current:       start,
 		rttStats:      rttStats,
@@ -75,10 +75,10 @@ func (f *mtuFinder) GetPing() (ackhandler.Frame, protocol.ByteCount) {
 			f.probeInFlight = false
 			f.max = size
 		},
-		OnAcked: func(wire.Frame) {
+		OnAcked: func(wire.Frame) error {
 			f.probeInFlight = false
 			f.current = size
-			f.mtuIncreased(size)
+			return f.mtuIncreased(size)
 		},
 	}, size
 }

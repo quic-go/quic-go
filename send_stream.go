@@ -342,13 +342,13 @@ func (s *sendStream) getDataForWriting(f *wire.StreamFrame, maxBytes protocol.By
 	}
 }
 
-func (s *sendStream) frameAcked(f wire.Frame) {
+func (s *sendStream) frameAcked(f wire.Frame) error {
 	f.(*wire.StreamFrame).PutBack()
 
 	s.mutex.Lock()
 	if s.canceledWrite {
 		s.mutex.Unlock()
-		return
+		return nil
 	}
 	s.numOutstandingFrames--
 	if s.numOutstandingFrames < 0 {
@@ -360,6 +360,7 @@ func (s *sendStream) frameAcked(f wire.Frame) {
 	if newlyCompleted {
 		s.sender.onStreamCompleted(s.streamID)
 	}
+	return nil
 }
 
 func (s *sendStream) isNewlyCompleted() bool {
