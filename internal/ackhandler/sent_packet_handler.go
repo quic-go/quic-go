@@ -490,6 +490,16 @@ func (h *sentPacketHandler) setLossDetectionTimer() {
 		return
 	}
 
+	// Cancel the alarm if amplification limited.
+	if h.isAmplificationLimited() {
+		h.alarm = time.Time{}
+		h.logger.Debugf("Canceling loss detection timer. Amplification limited.")
+		if h.tracer != nil && !oldAlarm.IsZero() {
+			h.tracer.LossTimerCanceled()
+		}
+		return
+	}
+
 	// Cancel the alarm if no packets are outstanding
 	if !h.hasOutstandingPackets() && h.peerCompletedAddressValidation {
 		h.alarm = time.Time{}

@@ -540,29 +540,6 @@ var _ = Describe("SentPacketHandler", func() {
 			handler.SendMode()
 		})
 
-		It("limits the window to 3x the bytes received, to avoid amplification attacks", func() {
-			handler.ReceivedPacket(protocol.EncryptionInitial) // receiving an Initial packet doesn't validate the client's address
-			handler.ReceivedBytes(200)
-			cong.EXPECT().OnPacketSent(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), true).Times(2)
-			handler.SentPacket(&Packet{
-				PacketNumber:    1,
-				Length:          599,
-				EncryptionLevel: protocol.EncryptionInitial,
-				Frames:          []Frame{{Frame: &wire.PingFrame{}}},
-				SendTime:        time.Now(),
-			})
-			cong.EXPECT().CanSend(protocol.ByteCount(599)).Return(true)
-			Expect(handler.SendMode()).To(Equal(SendAny))
-			handler.SentPacket(&Packet{
-				PacketNumber:    2,
-				Length:          1,
-				EncryptionLevel: protocol.EncryptionInitial,
-				Frames:          []Frame{{Frame: &wire.PingFrame{}}},
-				SendTime:        time.Now(),
-			})
-			Expect(handler.SendMode()).To(Equal(SendNone))
-		})
-
 		It("allows sending of ACKs when congestion limited", func() {
 			handler.ReceivedPacket(protocol.EncryptionHandshake)
 			cong.EXPECT().CanSend(gomock.Any()).Return(true)
@@ -635,6 +612,7 @@ var _ = Describe("SentPacketHandler", func() {
 		})
 
 		It("implements exponential backoff", func() {
+			handler.peerAddressValidated = true
 			handler.SetHandshakeConfirmed()
 			sendTime := time.Now().Add(-time.Hour)
 			handler.SentPacket(ackElicitingPacket(&Packet{PacketNumber: 1, SendTime: sendTime}))
@@ -828,7 +806,42 @@ var _ = Describe("SentPacketHandler", func() {
 		})
 	})
 
-	Context("amplification limit", func() {
+	Context("amplification limit, for the server", func() {
+		It("limits the window to 3x the bytes received, to avoid amplification attacks", func() {
+			handler.ReceivedPacket(protocol.EncryptionInitial) // receiving an Initial packet doesn't validate the client's address
+			handler.ReceivedBytes(200)
+			handler.SentPacket(&Packet{
+				PacketNumber:    1,
+				Length:          599,
+				EncryptionLevel: protocol.EncryptionInitial,
+				Frames:          []Frame{{Frame: &wire.PingFrame{}}},
+				SendTime:        time.Now(),
+			})
+			Expect(handler.SendMode()).To(Equal(SendAny))
+			handler.SentPacket(&Packet{
+				PacketNumber:    2,
+				Length:          1,
+				EncryptionLevel: protocol.EncryptionInitial,
+				Frames:          []Frame{{Frame: &wire.PingFrame{}}},
+				SendTime:        time.Now(),
+			})
+			Expect(handler.SendMode()).To(Equal(SendNone))
+		})
+
+		It("cancels the loss detection timer when it is amplification limited", func() {
+			handler.ReceivedBytes(300)
+			handler.SentPacket(&Packet{
+				PacketNumber:    1,
+				Length:          900,
+				EncryptionLevel: protocol.EncryptionInitial,
+				Frames:          []Frame{{Frame: &wire.PingFrame{}}},
+				SendTime:        time.Now(),
+			})
+			Expect(handler.GetLossDetectionTimeout()).To(BeZero())
+		})
+	})
+
+	Context("amplification limit, for the client", func() {
 		BeforeEach(func() {
 			perspective = protocol.PerspectiveClient
 		})
