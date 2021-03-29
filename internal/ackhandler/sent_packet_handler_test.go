@@ -828,7 +828,7 @@ var _ = Describe("SentPacketHandler", func() {
 			Expect(handler.SendMode()).To(Equal(SendNone))
 		})
 
-		It("cancels the loss detection timer when it is amplification limited", func() {
+		It("cancels the loss detection timer when it is amplification limited, and resets it when becoming unblocked", func() {
 			handler.ReceivedBytes(300)
 			handler.SentPacket(&Packet{
 				PacketNumber:    1,
@@ -837,7 +837,11 @@ var _ = Describe("SentPacketHandler", func() {
 				Frames:          []Frame{{Frame: &wire.PingFrame{}}},
 				SendTime:        time.Now(),
 			})
+			// Amplification limited. We don't need to set a timer now.
 			Expect(handler.GetLossDetectionTimeout()).To(BeZero())
+			// Unblock the server. Now we should fire up the timer.
+			handler.ReceivedBytes(1)
+			Expect(handler.GetLossDetectionTimeout()).ToNot(BeZero())
 		})
 	})
 

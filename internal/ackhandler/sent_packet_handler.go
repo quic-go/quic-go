@@ -194,7 +194,11 @@ func (h *sentPacketHandler) dropPackets(encLevel protocol.EncryptionLevel) {
 }
 
 func (h *sentPacketHandler) ReceivedBytes(n protocol.ByteCount) {
+	wasAmplificationLimit := h.isAmplificationLimited()
 	h.bytesReceived += n
+	if wasAmplificationLimit && !h.isAmplificationLimited() {
+		h.setLossDetectionTimer()
+	}
 }
 
 func (h *sentPacketHandler) ReceivedPacket(encLevel protocol.EncryptionLevel) {
