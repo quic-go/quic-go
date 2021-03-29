@@ -201,9 +201,10 @@ func (h *sentPacketHandler) ReceivedBytes(n protocol.ByteCount) {
 	}
 }
 
-func (h *sentPacketHandler) ReceivedPacket(encLevel protocol.EncryptionLevel) {
-	if h.perspective == protocol.PerspectiveServer && encLevel == protocol.EncryptionHandshake {
+func (h *sentPacketHandler) ReceivedPacket(l protocol.EncryptionLevel) {
+	if h.perspective == protocol.PerspectiveServer && l == protocol.EncryptionHandshake && !h.peerAddressValidated {
 		h.peerAddressValidated = true
+		h.setLossDetectionTimer()
 	}
 }
 
@@ -485,7 +486,8 @@ func (h *sentPacketHandler) hasOutstandingPackets() bool {
 
 func (h *sentPacketHandler) setLossDetectionTimer() {
 	oldAlarm := h.alarm // only needed in case tracing is enabled
-	if lossTime, encLevel := h.getLossTimeAndSpace(); !lossTime.IsZero() {
+	lossTime, encLevel := h.getLossTimeAndSpace()
+	if !lossTime.IsZero() {
 		// Early retransmit timer or time loss detection.
 		h.alarm = lossTime
 		if h.tracer != nil && h.alarm != oldAlarm {
@@ -497,9 +499,11 @@ func (h *sentPacketHandler) setLossDetectionTimer() {
 	// Cancel the alarm if amplification limited.
 	if h.isAmplificationLimited() {
 		h.alarm = time.Time{}
-		h.logger.Debugf("Canceling loss detection timer. Amplification limited.")
-		if h.tracer != nil && !oldAlarm.IsZero() {
-			h.tracer.LossTimerCanceled()
+		if !oldAlarm.IsZero() {
+			h.logger.Debugf("Canceling loss detection timer. Amplification limited.")
+			if h.tracer != nil {
+				h.tracer.LossTimerCanceled()
+			}
 		}
 		return
 	}
@@ -507,9 +511,11 @@ func (h *sentPacketHandler) setLossDetectionTimer() {
 	// Cancel the alarm if no packets are outstanding
 	if !h.hasOutstandingPackets() && h.peerCompletedAddressValidation {
 		h.alarm = time.Time{}
-		h.logger.Debugf("Canceling loss detection timer. No packets in flight.")
-		if h.tracer != nil && !oldAlarm.IsZero() {
-			h.tracer.LossTimerCanceled()
+		if !oldAlarm.IsZero() {
+			h.logger.Debugf("Canceling loss detection timer. No packets in flight.")
+			if h.tracer != nil {
+				h.tracer.LossTimerCanceled()
+			}
 		}
 		return
 	}

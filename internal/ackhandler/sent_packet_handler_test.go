@@ -843,6 +843,21 @@ var _ = Describe("SentPacketHandler", func() {
 			handler.ReceivedBytes(1)
 			Expect(handler.GetLossDetectionTimeout()).ToNot(BeZero())
 		})
+
+		It("resets the loss detection timer when the client's address is validated", func() {
+			handler.ReceivedBytes(300)
+			handler.SentPacket(&Packet{
+				PacketNumber:    1,
+				Length:          900,
+				EncryptionLevel: protocol.EncryptionHandshake,
+				Frames:          []Frame{{Frame: &wire.PingFrame{}}},
+				SendTime:        time.Now(),
+			})
+			// Amplification limited. We don't need to set a timer now.
+			Expect(handler.GetLossDetectionTimeout()).To(BeZero())
+			handler.ReceivedPacket(protocol.EncryptionHandshake)
+			Expect(handler.GetLossDetectionTimeout()).ToNot(BeZero())
+		})
 	})
 
 	Context("amplification limit, for the client", func() {
