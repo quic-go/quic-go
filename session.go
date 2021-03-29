@@ -608,7 +608,6 @@ runLoop:
 				// nothing to see here.
 			case <-sendQueueAvailable:
 			case firstPacket := <-s.receivedPackets:
-				s.sentPacketHandler.ReceivedBytes(firstPacket.Size())
 				wasProcessed := s.handlePacketImpl(firstPacket)
 				// Don't set timers and send packets if the packet made us close the session.
 				select {
@@ -830,6 +829,8 @@ func (s *session) handleHandshakeComplete() {
 }
 
 func (s *session) handlePacketImpl(rp *receivedPacket) bool {
+	s.sentPacketHandler.ReceivedBytes(rp.Size())
+
 	if wire.IsVersionNegotiationPacket(rp.data) {
 		s.handleVersionNegotiationPacket(rp)
 		return false
