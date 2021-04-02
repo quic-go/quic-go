@@ -747,10 +747,10 @@ func (s *session) maybeResetTimer() {
 		} else {
 			deadline = s.idleTimeoutStartTime().Add(s.idleTimeout)
 		}
-		if !s.config.DisablePathMTUDiscovery {
-			if probeTime := s.mtuDiscoverer.NextProbeTime(); !probeTime.IsZero() {
-				deadline = utils.MinTime(deadline, probeTime)
-			}
+	}
+	if s.handshakeConfirmed && !s.config.DisablePathMTUDiscovery {
+		if probeTime := s.mtuDiscoverer.NextProbeTime(); !probeTime.IsZero() {
+			deadline = utils.MinTime(deadline, probeTime)
 		}
 	}
 
@@ -782,6 +782,36 @@ func (s *session) handleHandshakeComplete() {
 	s.connIDManager.SetHandshakeComplete()
 	s.connIDGenerator.SetHandshakeComplete()
 
+	if s.perspective == protocol.PerspectiveClient {
+		s.applyTransportParameters()
+		return
+	}
+
+	s.handleHandshakeConfirmed()
+
+	ticket, err := s.cryptoStreamHandler.GetSessionTicket()
+	if err != nil {
+		s.closeLocal(err)
+	}
+	if ticket != nil {
+		s.oneRTTStream.Write(ticket)
+		for s.oneRTTStream.HasData() {
+			s.queueControlFrame(s.oneRTTStream.PopCryptoFrame(protocol.MaxPostHandshakeCryptoFrameSize))
+		}
+	}
+	token, err := s.tokenGenerator.NewToken(s.conn.RemoteAddr())
+	if err != nil {
+		s.closeLocal(err)
+	}
+	s.queueControlFrame(&wire.NewTokenFrame{Token: token})
+	s.queueControlFrame(&wire.HandshakeDoneFrame{})
+}
+
+func (s *session) handleHandshakeConfirmed() {
+	s.handshakeConfirmed = true
+	s.sentPacketHandler.SetHandshakeConfirmed()
+	s.cryptoStreamHandler.SetHandshakeConfirmed()
+
 	if !s.config.DisablePathMTUDiscovery {
 		maxPacketSize := s.peerParams.MaxUDPPayloadSize
 		if maxPacketSize == 0 {
@@ -798,31 +828,6 @@ func (s *session) handleHandshakeComplete() {
 			},
 		)
 	}
-
-	if s.perspective == protocol.PerspectiveClient {
-		s.applyTransportParameters()
-		return
-	}
-
-	s.handshakeConfirmed = true
-	s.sentPacketHandler.SetHandshakeConfirmed()
-	ticket, err := s.cryptoStreamHandler.GetSessionTicket()
-	if err != nil {
-		s.closeLocal(err)
-	}
-	if ticket != nil {
-		s.oneRTTStream.Write(ticket)
-		for s.oneRTTStream.HasData() {
-			s.queueControlFrame(s.oneRTTStream.PopCryptoFrame(protocol.MaxPostHandshakeCryptoFrameSize))
-		}
-	}
-	token, err := s.tokenGenerator.NewToken(s.conn.RemoteAddr())
-	if err != nil {
-		s.closeLocal(err)
-	}
-	s.queueControlFrame(&wire.NewTokenFrame{Token: token})
-	s.cryptoStreamHandler.SetHandshakeConfirmed()
-	s.queueControlFrame(&wire.HandshakeDoneFrame{})
 }
 
 func (s *session) handlePacketImpl(rp *receivedPacket) bool {
@@ -1349,9 +1354,9 @@ func (s *session) handleHandshakeDoneFrame() error {
 	if s.perspective == protocol.PerspectiveServer {
 		return qerr.NewError(qerr.ProtocolViolation, "received a HANDSHAKE_DONE frame")
 	}
-	s.handshakeConfirmed = true
-	s.sentPacketHandler.SetHandshakeConfirmed()
-	s.cryptoStreamHandler.SetHandshakeConfirmed()
+	if !s.handshakeConfirmed {
+		s.handleHandshakeConfirmed()
+	}
 	return nil
 }
 
@@ -1716,7 +1721,7 @@ func (s *session) sendPacket() (bool, error) {
 		s.sendQueue.Send(packet.buffer)
 		return true, nil
 	}
-	if !s.config.DisablePathMTUDiscovery && s.handshakeComplete && s.mtuDiscoverer.ShouldSendProbe(now) {
+	if !s.config.DisablePathMTUDiscovery && s.mtuDiscoverer.ShouldSendProbe(now) {
 		packet, err := s.packer.PackMTUProbePacket(s.mtuDiscoverer.GetPing())
 		if err != nil {
 			return false, err
