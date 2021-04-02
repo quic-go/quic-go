@@ -1233,6 +1233,21 @@ var _ = Describe("SentPacketHandler", func() {
 			Expect(handler.rttStats.SmoothedRTT()).To(BeNumerically("~", 500*time.Millisecond, 100*time.Millisecond))
 		})
 
+		It("uses a Retry for an RTT estimate, but doesn't set the RTT to a value lower than 5ms", func() {
+			handler.SentPacket(ackElicitingPacket(&Packet{
+				PacketNumber:    42,
+				EncryptionLevel: protocol.EncryptionInitial,
+				SendTime:        time.Now().Add(-500 * time.Microsecond),
+			}))
+			handler.SentPacket(ackElicitingPacket(&Packet{
+				PacketNumber:    43,
+				EncryptionLevel: protocol.EncryptionInitial,
+				SendTime:        time.Now().Add(-10 * time.Microsecond),
+			}))
+			Expect(handler.ResetForRetry()).To(Succeed())
+			Expect(handler.rttStats.SmoothedRTT()).To(Equal(minRTTAfterRetry))
+		})
+
 		It("doesn't use a Retry for an RTT estimate, if it was not retransmitted", func() {
 			handler.SentPacket(ackElicitingPacket(&Packet{
 				PacketNumber:    42,

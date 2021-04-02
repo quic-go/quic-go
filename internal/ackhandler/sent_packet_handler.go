@@ -21,6 +21,8 @@ const (
 	packetThreshold = 3
 	// Before validating the client's address, the server won't send more than 3x bytes than it received.
 	amplificationFactor = 3
+	// We use Retry packets to derive an RTT estimate. Make sure we don't set the RTT to a super low value yet.
+	minRTTAfterRetry = 5 * time.Millisecond
 )
 
 type packetNumberSpace struct {
@@ -792,8 +794,9 @@ func (h *sentPacketHandler) ResetForRetry() error {
 	// Only use the Retry to estimate the RTT if we didn't send any retransmission for the Initial.
 	// Otherwise, we don't know which Initial the Retry was sent in response to.
 	if h.ptoCount == 0 {
+		// Don't set the RTT to a value lower than 5ms here.
 		now := time.Now()
-		h.rttStats.UpdateRTT(now.Sub(firstPacketSendTime), 0, now)
+		h.rttStats.UpdateRTT(utils.MaxDuration(minRTTAfterRetry, now.Sub(firstPacketSendTime)), 0, now)
 		if h.logger.Debug() {
 			h.logger.Debugf("\tupdated RTT: %s (σ: %s)", h.rttStats.SmoothedRTT(), h.rttStats.MeanDeviation())
 		}
