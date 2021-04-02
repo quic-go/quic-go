@@ -2594,6 +2594,7 @@ var _ = Describe("Client Session", func() {
 		It("closes and returns the right error", func() {
 			sph := mockackhandler.NewMockSentPacketHandler(mockCtrl)
 			sess.sentPacketHandler = sph
+			sph.EXPECT().ReceivedBytes(gomock.Any())
 			sph.EXPECT().PeekPacketNumber(protocol.EncryptionInitial).Return(protocol.PacketNumber(128), protocol.PacketNumberLen4)
 			sess.config.Versions = []protocol.VersionNumber{1234, 4321}
 			errChan := make(chan error, 1)
@@ -2692,6 +2693,7 @@ var _ = Describe("Client Session", func() {
 			sph := mockackhandler.NewMockSentPacketHandler(mockCtrl)
 			sess.sentPacketHandler = sph
 			sph.EXPECT().ResetForRetry()
+			sph.EXPECT().ReceivedBytes(gomock.Any())
 			cryptoSetup.EXPECT().ChangeConnectionID(protocol.ConnectionID{0xde, 0xad, 0xbe, 0xef})
 			packer.EXPECT().SetToken([]byte("foobar"))
 			tracer.EXPECT().ReceivedRetry(gomock.Any()).Do(func(hdr *wire.Header) {
@@ -2981,6 +2983,7 @@ var _ = Describe("Client Session", func() {
 		It("ignores Initial packets which use original source id, after accepting a Retry", func() {
 			sph := mockackhandler.NewMockSentPacketHandler(mockCtrl)
 			sess.sentPacketHandler = sph
+			sph.EXPECT().ReceivedBytes(gomock.Any()).Times(2)
 			sph.EXPECT().ResetForRetry()
 			newSrcConnID := protocol.ConnectionID{0xde, 0xad, 0xbe, 0xef}
 			cryptoSetup.EXPECT().ChangeConnectionID(newSrcConnID)
