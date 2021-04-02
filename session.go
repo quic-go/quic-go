@@ -664,19 +664,13 @@ runLoop:
 			s.framer.QueueControlFrame(&wire.PingFrame{})
 			s.keepAlivePingSent = true
 		} else if !s.handshakeComplete && now.Sub(s.sessionCreationTime) >= s.config.handshakeTimeout() {
-			if s.tracer != nil {
-				s.tracer.ClosedConnection(logging.NewTimeoutCloseReason(logging.TimeoutReasonHandshake))
-			}
-			s.destroyImpl(qerr.NewTimeoutError("Handshake did not complete in time"))
+			s.destroyImpl(qerr.ErrHandshakeTimeout)
 			continue
 		} else {
 			idleTimeoutStartTime := s.idleTimeoutStartTime()
 			if (!s.handshakeComplete && now.Sub(idleTimeoutStartTime) >= s.config.HandshakeIdleTimeout) ||
 				(s.handshakeComplete && now.Sub(idleTimeoutStartTime) >= s.idleTimeout) {
-				if s.tracer != nil {
-					s.tracer.ClosedConnection(logging.NewTimeoutCloseReason(logging.TimeoutReasonIdle))
-				}
-				s.destroyImpl(qerr.NewTimeoutError("No recent network activity"))
+				s.destroyImpl(qerr.ErrIdleTimeout)
 				continue
 			}
 		}
@@ -1444,19 +1438,21 @@ func (s *session) handleCloseError(closeErr closeError) {
 	}
 
 	if s.tracer != nil {
-		// timeout errors are logged as soon as they occur (to distinguish between handshake and idle timeouts)
-		if nerr, ok := closeErr.err.(net.Error); !ok || !nerr.Timeout() {
-			var resetErr statelessResetErr
-			var vnErr errVersionNegotiation
-			if errors.As(closeErr.err, &resetErr) {
-				s.tracer.ClosedConnection(logging.NewStatelessResetCloseReason(resetErr.token))
-			} else if errors.As(closeErr.err, &vnErr) {
-				s.tracer.ClosedConnection(logging.NewVersionNegotiationError(vnErr.theirVersions))
-			} else if quicErr.IsApplicationError() {
-				s.tracer.ClosedConnection(logging.NewApplicationCloseReason(quicErr.ErrorCode, closeErr.remote))
-			} else {
-				s.tracer.ClosedConnection(logging.NewTransportCloseReason(quicErr.ErrorCode, closeErr.remote))
-			}
+		var resetErr statelessResetErr
+		var vnErr errVersionNegotiation
+		switch {
+		case errors.Is(closeErr.err, qerr.ErrIdleTimeout):
+			s.tracer.ClosedConnection(logging.NewTimeoutCloseReason(logging.TimeoutReasonIdle))
+		case errors.Is(closeErr.err, qerr.ErrHandshakeTimeout):
+			s.tracer.ClosedConnection(logging.NewTimeoutCloseReason(logging.TimeoutReasonHandshake))
+		case errors.As(closeErr.err, &resetErr):
+			s.tracer.ClosedConnection(logging.NewStatelessResetCloseReason(resetErr.token))
+		case errors.As(closeErr.err, &vnErr):
+			s.tracer.ClosedConnection(logging.NewVersionNegotiationError(vnErr.theirVersions))
+		case quicErr.IsApplicationError():
+			s.tracer.ClosedConnection(logging.NewApplicationCloseReason(quicErr.ErrorCode, closeErr.remote))
+		default:
+			s.tracer.ClosedConnection(logging.NewTransportCloseReason(quicErr.ErrorCode, closeErr.remote))
 		}
 	}
 
