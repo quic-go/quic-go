@@ -202,7 +202,7 @@ var _ = Describe("Client", func() {
 				sess.EXPECT().run()
 				return sess
 			}
-			tracer.EXPECT().StartedConnection(packetConn.LocalAddr(), addr, protocol.VersionTLS, gomock.Any(), gomock.Any())
+			tracer.EXPECT().StartedConnection(packetConn.LocalAddr(), addr, gomock.Any(), gomock.Any())
 			_, err := Dial(
 				packetConn,
 				addr,
@@ -242,7 +242,7 @@ var _ = Describe("Client", func() {
 				sess.EXPECT().HandshakeComplete().Return(ctx)
 				return sess
 			}
-			tracer.EXPECT().StartedConnection(gomock.Any(), gomock.Any(), protocol.VersionTLS, gomock.Any(), gomock.Any())
+			tracer.EXPECT().StartedConnection(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any())
 			s, err := Dial(
 				packetConn,
 				addr,
@@ -287,7 +287,7 @@ var _ = Describe("Client", func() {
 			go func() {
 				defer GinkgoRecover()
 				defer close(done)
-				tracer.EXPECT().StartedConnection(gomock.Any(), gomock.Any(), protocol.VersionTLS, gomock.Any(), gomock.Any())
+				tracer.EXPECT().StartedConnection(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any())
 				s, err := DialEarly(
 					packetConn,
 					addr,
@@ -328,7 +328,7 @@ var _ = Describe("Client", func() {
 				sess.EXPECT().HandshakeComplete().Return(context.Background())
 				return sess
 			}
-			tracer.EXPECT().StartedConnection(gomock.Any(), gomock.Any(), protocol.VersionTLS, gomock.Any(), gomock.Any())
+			tracer.EXPECT().StartedConnection(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any())
 			_, err := Dial(
 				packetConn,
 				addr,
@@ -371,7 +371,7 @@ var _ = Describe("Client", func() {
 			dialed := make(chan struct{})
 			go func() {
 				defer GinkgoRecover()
-				tracer.EXPECT().StartedConnection(gomock.Any(), gomock.Any(), protocol.VersionTLS, gomock.Any(), gomock.Any())
+				tracer.EXPECT().StartedConnection(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any())
 				_, err := DialContext(
 					ctx,
 					packetConn,
@@ -559,8 +559,6 @@ var _ = Describe("Client", func() {
 			manager.EXPECT().Destroy()
 			mockMultiplexer.EXPECT().AddConn(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(manager, nil)
 
-			initialVersion := cl.version
-
 			var counter int
 			newClientSession = func(
 				_ sendConn,
@@ -594,10 +592,7 @@ var _ = Describe("Client", func() {
 				return sess
 			}
 
-			gomock.InOrder(
-				tracer.EXPECT().StartedConnection(gomock.Any(), gomock.Any(), initialVersion, gomock.Any(), gomock.Any()),
-				tracer.EXPECT().StartedConnection(gomock.Any(), gomock.Any(), protocol.VersionNumber(789), gomock.Any(), gomock.Any()),
-			)
+			tracer.EXPECT().StartedConnection(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any())
 			_, err := DialAddr("localhost:7890", tlsConf, config)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(counter).To(Equal(2))

@@ -338,7 +338,7 @@ type connTracer struct{}
 
 var _ logging.ConnectionTracer = &connTracer{}
 
-func (t *connTracer) StartedConnection(local, remote net.Addr, version logging.VersionNumber, srcConnID, destConnID logging.ConnectionID) {
+func (t *connTracer) StartedConnection(local, remote net.Addr, srcConnID, destConnID logging.ConnectionID) {
 }
 func (t *connTracer) ClosedConnection(logging.CloseReason)                     {}
 func (t *connTracer) SentTransportParameters(*logging.TransportParameters)     {}

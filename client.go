@@ -205,6 +205,9 @@ func dialContext(
 	if c.config.Tracer != nil {
 		c.tracer = c.config.Tracer.TracerForConnection(protocol.PerspectiveClient, c.destConnID)
 	}
+	if c.tracer != nil {
+		c.tracer.StartedConnection(c.conn.LocalAddr(), c.conn.RemoteAddr(), c.srcConnID, c.destConnID)
+	}
 	if err := c.dial(ctx); err != nil {
 		return nil, err
 	}
@@ -270,9 +273,6 @@ func newClient(
 
 func (c *client) dial(ctx context.Context) error {
 	c.logger.Infof("Starting new connection to %s (%s -> %s), source connection ID %s, destination connection ID %s, version %s", c.tlsConf.ServerName, c.conn.LocalAddr(), c.conn.RemoteAddr(), c.srcConnID, c.destConnID, c.version)
-	if c.tracer != nil {
-		c.tracer.StartedConnection(c.conn.LocalAddr(), c.conn.RemoteAddr(), c.version, c.srcConnID, c.destConnID)
-	}
 
 	c.session = newClientSession(
 		c.conn,

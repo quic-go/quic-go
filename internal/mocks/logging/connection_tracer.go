@@ -268,15 +268,15 @@ func (mr *MockConnectionTracerMockRecorder) SetLossTimer(arg0, arg1, arg2 interf
 }
 
 // StartedConnection mocks base method.
-func (m *MockConnectionTracer) StartedConnection(arg0, arg1 net.Addr, arg2 protocol.VersionNumber, arg3, arg4 protocol.ConnectionID) {
+func (m *MockConnectionTracer) StartedConnection(arg0, arg1 net.Addr, arg2, arg3 protocol.ConnectionID) {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "StartedConnection", arg0, arg1, arg2, arg3, arg4)
+	m.ctrl.Call(m, "StartedConnection", arg0, arg1, arg2, arg3)
 }
 
 // StartedConnection indicates an expected call of StartedConnection.
-func (mr *MockConnectionTracerMockRecorder) StartedConnection(arg0, arg1, arg2, arg3, arg4 interface{}) *gomock.Call {
+func (mr *MockConnectionTracerMockRecorder) StartedConnection(arg0, arg1, arg2, arg3 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "StartedConnection", reflect.TypeOf((*MockConnectionTracer)(nil).StartedConnection), arg0, arg1, arg2, arg3, arg4)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "StartedConnection", reflect.TypeOf((*MockConnectionTracer)(nil).StartedConnection), arg0, arg1, arg2, arg3)
 }
 
 // UpdatedCongestionState mocks base method.

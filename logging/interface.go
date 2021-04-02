@@ -103,7 +103,7 @@ type Tracer interface {
 
 // A ConnectionTracer records events.
 type ConnectionTracer interface {
-	StartedConnection(local, remote net.Addr, version VersionNumber, srcConnID, destConnID ConnectionID)
+	StartedConnection(local, remote net.Addr, srcConnID, destConnID ConnectionID)
 	ClosedConnection(CloseReason)
 	SentTransportParameters(*TransportParameters)
 	ReceivedTransportParameters(*TransportParameters)
