@@ -18,8 +18,8 @@ var _ = Describe("packet number calculation", func() {
 	})
 
 	It("works with the examples from the draft", func() {
-		Expect(GetPacketNumberLengthForHeader(0xac5c02, 0xabe8bc)).To(Equal(PacketNumberLen2))
-		Expect(GetPacketNumberLengthForHeader(0xace8fe, 0xabe8bc)).To(Equal(PacketNumberLen3))
+		Expect(GetPacketNumberLengthForHeader(0xac5c02, 0xabe8b3)).To(Equal(PacketNumberLen2))
+		Expect(GetPacketNumberLengthForHeader(0xace8fe, 0xabe8b3)).To(Equal(PacketNumberLen3))
 	})
 
 	getEpoch := func(len PacketNumberLen) uint64 {
