@@ -101,6 +101,7 @@ var (
 
 func newSentPacketHandler(
 	initialPN protocol.PacketNumber,
+	initialMaxDatagramSize protocol.ByteCount,
 	rttStats *utils.RTTStats,
 	pers protocol.Perspective,
 	tracer logging.ConnectionTracer,
@@ -109,6 +110,7 @@ func newSentPacketHandler(
 	congestion := congestion.NewCubicSender(
 		congestion.DefaultClock{},
 		rttStats,
+		initialMaxDatagramSize,
 		true, // use Reno
 		tracer,
 	)
