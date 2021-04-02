@@ -399,6 +399,9 @@ func (h *sentPacketHandler) detectAndRemoveAckedPackets(ack *wire.AckFrame, encL
 		if err := pnSpace.history.Remove(p.PacketNumber); err != nil {
 			return nil, err
 		}
+		if h.tracer != nil && !p.skippedPacket {
+			h.tracer.AcknowledgedPacket(encLevel, p.PacketNumber)
+		}
 	}
 
 	return h.ackedPackets, err

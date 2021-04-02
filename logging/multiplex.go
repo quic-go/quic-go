@@ -139,6 +139,12 @@ func (m *connTracerMultiplexer) UpdatedMetrics(rttStats *RTTStats, cwnd, bytesIn
 	}
 }
 
+func (m *connTracerMultiplexer) AcknowledgedPacket(encLevel EncryptionLevel, pn PacketNumber) {
+	for _, t := range m.tracers {
+		t.AcknowledgedPacket(encLevel, pn)
+	}
+}
+
 func (m *connTracerMultiplexer) LostPacket(encLevel EncryptionLevel, pn PacketNumber, reason PacketLossReason) {
 	for _, t := range m.tracers {
 		t.LostPacket(encLevel, pn, reason)

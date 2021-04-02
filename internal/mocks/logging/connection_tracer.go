@@ -39,6 +39,18 @@ func (m *MockConnectionTracer) EXPECT() *MockConnectionTracerMockRecorder {
 	return m.recorder
 }
 
+// AcknowledgedPacket mocks base method.
+func (m *MockConnectionTracer) AcknowledgedPacket(arg0 protocol.EncryptionLevel, arg1 protocol.PacketNumber) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "AcknowledgedPacket", arg0, arg1)
+}
+
+// AcknowledgedPacket indicates an expected call of AcknowledgedPacket.
+func (mr *MockConnectionTracerMockRecorder) AcknowledgedPacket(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AcknowledgedPacket", reflect.TypeOf((*MockConnectionTracer)(nil).AcknowledgedPacket), arg0, arg1)
+}
+
 // BufferedPacket mocks base method.
 func (m *MockConnectionTracer) BufferedPacket(arg0 protocol.PacketType) {
 	m.ctrl.T.Helper()
