@@ -190,6 +190,12 @@ var _ = Describe("Tracing", func() {
 			tracer.UpdatedMetrics(rttStats, 1337, 42, 13)
 		})
 
+		It("traces the AcknowledgedPacket event", func() {
+			tr1.EXPECT().AcknowledgedPacket(EncryptionHandshake, PacketNumber(42))
+			tr2.EXPECT().AcknowledgedPacket(EncryptionHandshake, PacketNumber(42))
+			tracer.AcknowledgedPacket(EncryptionHandshake, 42)
+		})
+
 		It("traces the LostPacket event", func() {
 			tr1.EXPECT().LostPacket(EncryptionHandshake, PacketNumber(42), PacketLossReorderingThreshold)
 			tr2.EXPECT().LostPacket(EncryptionHandshake, PacketNumber(42), PacketLossReorderingThreshold)

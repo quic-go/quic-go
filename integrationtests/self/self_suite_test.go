@@ -355,6 +355,7 @@ func (t *connTracer) DroppedPacket(logging.PacketType, logging.ByteCount, loggin
 func (t *connTracer) UpdatedMetrics(rttStats *logging.RTTStats, cwnd, bytesInFlight logging.ByteCount, packetsInFlight int) {
 }
 
+func (t *connTracer) AcknowledgedPacket(logging.EncryptionLevel, logging.PacketNumber) {}
 func (t *connTracer) LostPacket(logging.EncryptionLevel, logging.PacketNumber, logging.PacketLossReason) {
 }
 func (t *connTracer) UpdatedCongestionState(logging.CongestionState)                     {}
