@@ -311,9 +311,6 @@ func (h *sentPacketHandler) ReceivedAck(ack *wire.AckFrame, encLevel protocol.En
 		return err
 	}
 	for _, p := range ackedPackets {
-		if p.skippedPacket {
-			return fmt.Errorf("received an ACK for skipped packet number: %d (%s)", p.PacketNumber, encLevel)
-		}
 		if p.includedInBytesInFlight && !p.declaredLost {
 			h.congestion.OnPacketAcked(p.PacketNumber, p.Length, priorInFlight, rcvTime)
 		}
@@ -367,15 +364,17 @@ func (h *sentPacketHandler) detectAndRemoveAckedPackets(ack *wire.AckFrame, encL
 				ackRange = ack.AckRanges[len(ack.AckRanges)-1-ackRangeIndex]
 			}
 
-			if p.PacketNumber >= ackRange.Smallest { // packet i contained in ACK range
-				if p.PacketNumber > ackRange.Largest {
-					return false, fmt.Errorf("BUG: ackhandler would have acked wrong packet %d, while evaluating range %d -> %d", p.PacketNumber, ackRange.Smallest, ackRange.Largest)
-				}
-				h.ackedPackets = append(h.ackedPackets, p)
+			if p.PacketNumber < ackRange.Smallest { // packet not contained in ACK range
+				return true, nil
 			}
-		} else {
-			h.ackedPackets = append(h.ackedPackets, p)
+			if p.PacketNumber > ackRange.Largest {
+				return false, fmt.Errorf("BUG: ackhandler would have acked wrong packet %d, while evaluating range %d -> %d", p.PacketNumber, ackRange.Smallest, ackRange.Largest)
+			}
 		}
+		if p.skippedPacket {
+			return false, fmt.Errorf("received an ACK for skipped packet number: %d (%s)", p.PacketNumber, encLevel)
+		}
+		h.ackedPackets = append(h.ackedPackets, p)
 		return true, nil
 	})
 	if h.logger.Debug() && len(h.ackedPackets) > 0 {
@@ -399,7 +398,7 @@ func (h *sentPacketHandler) detectAndRemoveAckedPackets(ack *wire.AckFrame, encL
 		if err := pnSpace.history.Remove(p.PacketNumber); err != nil {
 			return nil, err
 		}
-		if h.tracer != nil && !p.skippedPacket {
+		if h.tracer != nil {
 			h.tracer.AcknowledgedPacket(encLevel, p.PacketNumber)
 		}
 	}
