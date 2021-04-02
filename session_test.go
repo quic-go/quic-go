@@ -2956,8 +2956,8 @@ var _ = Describe("Client Session", func() {
 		// Illustrates that an injected Initial with an ACK frame for an unsent packet causes
 		// the connection to immediately break down
 		It("fails on Initial-level ACK for unsent packet", func() {
-			ackFrame := testutils.ComposeAckFrame(0, 0)
-			initialPacket := testutils.ComposeInitialPacket(destConnID, srcConnID, sess.version, destConnID, []wire.Frame{ackFrame})
+			ack := &wire.AckFrame{AckRanges: []wire.AckRange{{Smallest: 2, Largest: 2}}}
+			initialPacket := testutils.ComposeInitialPacket(destConnID, srcConnID, sess.version, destConnID, []wire.Frame{ack})
 			tracer.EXPECT().ReceivedPacket(gomock.Any(), gomock.Any(), gomock.Any())
 			Expect(sess.handlePacketImpl(wrapPacket(initialPacket))).To(BeFalse())
 		})
@@ -2965,7 +2965,10 @@ var _ = Describe("Client Session", func() {
 		// Illustrates that an injected Initial with a CONNECTION_CLOSE frame causes
 		// the connection to immediately break down
 		It("fails on Initial-level CONNECTION_CLOSE frame", func() {
-			connCloseFrame := testutils.ComposeConnCloseFrame()
+			connCloseFrame := &wire.ConnectionCloseFrame{
+				IsApplicationError: true,
+				ReasonPhrase:       "mitm attacker",
+			}
 			initialPacket := testutils.ComposeInitialPacket(destConnID, srcConnID, sess.version, destConnID, []wire.Frame{connCloseFrame})
 			tracer.EXPECT().ReceivedPacket(gomock.Any(), gomock.Any(), gomock.Any())
 			Expect(sess.handlePacketImpl(wrapPacket(initialPacket))).To(BeTrue())
