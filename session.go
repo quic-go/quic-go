@@ -740,7 +740,10 @@ func (s *session) nextKeepAliveTime() time.Time {
 func (s *session) maybeResetTimer() {
 	var deadline time.Time
 	if !s.handshakeComplete {
-		deadline = s.sessionCreationTime.Add(utils.MinDuration(s.config.handshakeTimeout(), s.config.HandshakeIdleTimeout))
+		deadline = utils.MinTime(
+			s.sessionCreationTime.Add(s.config.handshakeTimeout()),
+			s.idleTimeoutStartTime().Add(s.config.HandshakeIdleTimeout),
+		)
 	} else {
 		if keepAliveTime := s.nextKeepAliveTime(); !keepAliveTime.IsZero() {
 			deadline = keepAliveTime
