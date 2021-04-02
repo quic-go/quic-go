@@ -15,7 +15,6 @@ import (
 
 	quic "github.com/lucas-clemente/quic-go"
 	quicproxy "github.com/lucas-clemente/quic-go/integrationtests/tools/proxy"
-	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/internal/utils"
 	"github.com/lucas-clemente/quic-go/logging"
 	. "github.com/onsi/ginkgo"
@@ -44,17 +43,6 @@ func (c *faultyConn) WriteTo(p []byte, addr net.Addr) (int, error) {
 		return c.PacketConn.WriteTo(p, addr)
 	}
 	return 0, io.ErrClosedPipe
-}
-
-type handshakeCompleteTracer struct {
-	connTracer
-	completionTime time.Time
-}
-
-func (t *handshakeCompleteTracer) DroppedEncryptionLevel(l protocol.EncryptionLevel) {
-	if l == protocol.EncryptionHandshake {
-		t.completionTime = time.Now()
-	}
 }
 
 func areHandshakesRunning() bool {
@@ -214,7 +202,7 @@ var _ = Describe("Timeout tests", func() {
 				close(serverSessionClosed)
 			}()
 
-			tr := &handshakeCompleteTracer{}
+			tr := newPacketTracer()
 			sess, err := quic.DialAddr(
 				fmt.Sprintf("localhost:%d", server.Addr().(*net.UDPAddr).Port),
 				getTLSClientConfig(),
@@ -233,9 +221,26 @@ var _ = Describe("Timeout tests", func() {
 				close(done)
 			}()
 			Eventually(done, 2*idleTimeout).Should(BeClosed())
-			Expect(tr.completionTime).ToNot(BeZero())
-			dur := time.Since(tr.completionTime)
-			Expect(dur).To(And(
+			var lastAckElicitingPacketSentAt time.Time
+			for _, p := range tr.getSentPackets() {
+				var hasAckElicitingFrame bool
+				for _, f := range p.frames {
+					if _, ok := f.(*logging.AckFrame); ok {
+						continue
+					}
+					hasAckElicitingFrame = true
+					break
+				}
+				if hasAckElicitingFrame {
+					lastAckElicitingPacketSentAt = p.time
+				}
+			}
+			rcvdPackets := tr.getRcvdPackets()
+			lastPacketRcvdAt := rcvdPackets[len(rcvdPackets)-1].time
+			// We're ignoring here that only the first ack-eliciting packet sent resets the idle timeout.
+			// This is ok since we're dealing with a lossless connection here,
+			// and we'd expect to receive an ACK for additional other ack-eliciting packet sent.
+			Expect(time.Since(utils.MaxTime(lastAckElicitingPacketSentAt, lastPacketRcvdAt))).To(And(
 				BeNumerically(">=", idleTimeout),
 				BeNumerically("<", idleTimeout*6/5),
 			))
