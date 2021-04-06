@@ -204,7 +204,7 @@ var _ = Describe("Tracing", func() {
 			})
 
 			It("records connection closing due to version negotiation failure", func() {
-				tracer.ClosedConnection(logging.NewVersionNegotiationError([]logging.VersionNumber{1, 2, 3}))
+				tracer.ClosedConnection(logging.NewVersionNegotiationCloseReason([]logging.VersionNumber{1, 2, 3}))
 				entry := exportAndParseSingle()
 				Expect(entry.Time).To(BeTemporally("~", time.Now(), scaleDuration(10*time.Millisecond)))
 				Expect(entry.Name).To(Equal("transport:connection_closed"))

@@ -1,11 +1,12 @@
 package logging
 
 // A CloseReason is the reason why a QUIC connection is closed.
-// It falls in one of 4 categories:
+// It falls in one of 5 categories:
 // 1. The application closed the connection (with an application-specific error code).
 // 2. The transport closed the connection with a transport-error code.
 // 3. The connection timed out, either during the handshake, or due to an idle timeout.
 // 4. A stateless reset was received.
+// 5. Client and server couldn't agree on a QUIC version to use.
 type CloseReason struct {
 	remote           bool
 	applicationError *ApplicationError
@@ -36,8 +37,8 @@ func NewStatelessResetCloseReason(token StatelessResetToken) CloseReason {
 	return CloseReason{statelessResetToken: &token}
 }
 
-// NewVersionNegotiationError creates a new CloseReason for a version negotiation error.
-func NewVersionNegotiationError(versions []VersionNumber) CloseReason {
+// NewVersionNegotiationCloseReason creates a new CloseReason for a version negotiation error.
+func NewVersionNegotiationCloseReason(versions []VersionNumber) CloseReason {
 	return CloseReason{versions: versions}
 }
 

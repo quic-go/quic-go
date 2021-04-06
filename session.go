@@ -1458,7 +1458,7 @@ func (s *session) handleCloseError(closeErr closeError) {
 		case errors.As(closeErr.err, &resetErr):
 			s.tracer.ClosedConnection(logging.NewStatelessResetCloseReason(resetErr.token))
 		case errors.As(closeErr.err, &vnErr):
-			s.tracer.ClosedConnection(logging.NewVersionNegotiationError(vnErr.theirVersions))
+			s.tracer.ClosedConnection(logging.NewVersionNegotiationCloseReason(vnErr.theirVersions))
 		case quicErr.IsApplicationError():
 			s.tracer.ClosedConnection(logging.NewApplicationCloseReason(quicErr.ErrorCode, closeErr.remote))
 		default:

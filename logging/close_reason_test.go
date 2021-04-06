@@ -77,7 +77,7 @@ var _ = Describe("Close Reason", func() {
 	})
 
 	It("version negotiation errors", func() {
-		r := NewVersionNegotiationError([]VersionNumber{1, 2, 3})
+		r := NewVersionNegotiationCloseReason([]VersionNumber{1, 2, 3})
 		vn, ok := r.VersionNegotiation()
 		Expect(ok).To(BeTrue())
 		Expect(vn).To(Equal([]VersionNumber{1, 2, 3}))
