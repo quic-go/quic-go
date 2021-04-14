@@ -451,6 +451,7 @@ func (s *baseServer) handleInitialImpl(p *receivedPacket, hdr *wire.Header) erro
 	}
 	s.logger.Debugf("Changing connection ID to %s.", connID)
 	var sess quicSession
+	tracingID := nextSessionTracingID()
 	if added := s.sessionHandler.AddWithConnID(hdr.DestConnectionID, connID, func() packetHandler {
 		var tracer logging.ConnectionTracer
 		if s.config.Tracer != nil {
@@ -459,7 +460,11 @@ func (s *baseServer) handleInitialImpl(p *receivedPacket, hdr *wire.Header) erro
 			if origDestConnID.Len() > 0 {
 				connID = origDestConnID
 			}
-			tracer = s.config.Tracer.TracerForConnection(protocol.PerspectiveServer, connID)
+			tracer = s.config.Tracer.TracerForConnection(
+				context.WithValue(context.Background(), SessionTracingKey, tracingID),
+				protocol.PerspectiveServer,
+				connID,
+			)
 		}
 		sess = s.newSession(
 			newSendConn(s.conn, p.remoteAddr, p.info),
@@ -475,7 +480,7 @@ func (s *baseServer) handleInitialImpl(p *receivedPacket, hdr *wire.Header) erro
 			s.tokenGenerator,
 			s.acceptEarlySessions,
 			tracer,
-			nextSessionTracingID(),
+			tracingID,
 			s.logger,
 			hdr.Version,
 		)

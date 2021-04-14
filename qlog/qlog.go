@@ -2,6 +2,7 @@ package qlog
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"io"
 	"log"
@@ -59,7 +60,7 @@ func NewTracer(getLogWriter func(p logging.Perspective, connectionID []byte) io.
 	return &tracer{getLogWriter: getLogWriter}
 }
 
-func (t *tracer) TracerForConnection(p logging.Perspective, odcid protocol.ConnectionID) logging.ConnectionTracer {
+func (t *tracer) TracerForConnection(_ context.Context, p logging.Perspective, odcid protocol.ConnectionID) logging.ConnectionTracer {
 	if w := t.getLogWriter(p, odcid.Bytes()); w != nil {
 		return NewConnectionTracer(w, p, odcid)
 	}

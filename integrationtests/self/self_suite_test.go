@@ -3,6 +3,7 @@ package self_test
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/tls"
@@ -327,7 +328,7 @@ func newTracer(c func() logging.ConnectionTracer) logging.Tracer {
 	return &tracer{createNewConnTracer: c}
 }
 
-func (t *tracer) TracerForConnection(p logging.Perspective, odcid logging.ConnectionID) logging.ConnectionTracer {
+func (t *tracer) TracerForConnection(context.Context, logging.Perspective, logging.ConnectionID) logging.ConnectionTracer {
 	return t.createNewConnTracer()
 }
 func (t *tracer) SentPacket(net.Addr, *logging.Header, logging.ByteCount, []logging.Frame) {}

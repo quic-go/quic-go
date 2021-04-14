@@ -322,7 +322,7 @@ var _ = Describe("Server", func() {
 					fn()
 					return true
 				})
-				tracer.EXPECT().TracerForConnection(protocol.PerspectiveServer, protocol.ConnectionID{0xde, 0xad, 0xc0, 0xde})
+				tracer.EXPECT().TracerForConnection(gomock.Any(), protocol.PerspectiveServer, protocol.ConnectionID{0xde, 0xad, 0xc0, 0xde})
 				sess := NewMockQuicSession(mockCtrl)
 				serv.newSession = func(
 					_ sendConn,
@@ -579,7 +579,7 @@ var _ = Describe("Server", func() {
 					fn()
 					return true
 				})
-				tracer.EXPECT().TracerForConnection(protocol.PerspectiveServer, protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8, 9, 10})
+				tracer.EXPECT().TracerForConnection(gomock.Any(), protocol.PerspectiveServer, protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8, 9, 10})
 
 				sess := NewMockQuicSession(mockCtrl)
 				serv.newSession = func(
@@ -637,7 +637,7 @@ var _ = Describe("Server", func() {
 					fn()
 					return true
 				}).AnyTimes()
-				tracer.EXPECT().TracerForConnection(protocol.PerspectiveServer, gomock.Any()).AnyTimes()
+				tracer.EXPECT().TracerForConnection(gomock.Any(), protocol.PerspectiveServer, gomock.Any()).AnyTimes()
 
 				serv.config.AcceptToken = func(net.Addr, *Token) bool { return true }
 				acceptSession := make(chan struct{})
@@ -760,7 +760,7 @@ var _ = Describe("Server", func() {
 					fn()
 					return true
 				}).Times(protocol.MaxAcceptQueueSize)
-				tracer.EXPECT().TracerForConnection(protocol.PerspectiveServer, gomock.Any()).Times(protocol.MaxAcceptQueueSize)
+				tracer.EXPECT().TracerForConnection(gomock.Any(), protocol.PerspectiveServer, gomock.Any()).Times(protocol.MaxAcceptQueueSize)
 
 				var wg sync.WaitGroup
 				wg.Add(protocol.MaxAcceptQueueSize)
@@ -832,7 +832,7 @@ var _ = Describe("Server", func() {
 					fn()
 					return true
 				})
-				tracer.EXPECT().TracerForConnection(protocol.PerspectiveServer, gomock.Any())
+				tracer.EXPECT().TracerForConnection(gomock.Any(), protocol.PerspectiveServer, gomock.Any())
 
 				serv.handlePacket(p)
 				// make sure there are no Write calls on the packet conn
@@ -940,7 +940,7 @@ var _ = Describe("Server", func() {
 					fn()
 					return true
 				})
-				tracer.EXPECT().TracerForConnection(protocol.PerspectiveServer, gomock.Any())
+				tracer.EXPECT().TracerForConnection(gomock.Any(), protocol.PerspectiveServer, gomock.Any())
 				serv.handleInitialImpl(
 					&receivedPacket{buffer: getPacketBuffer()},
 					&wire.Header{DestConnectionID: protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8}},

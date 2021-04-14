@@ -5,6 +5,7 @@
 package logging
 
 import (
+	context "context"
 	net "net"
 	reflect "reflect"
 
@@ -61,15 +62,15 @@ func (mr *MockTracerMockRecorder) SentPacket(arg0, arg1, arg2, arg3 interface{})
 }
 
 // TracerForConnection mocks base method.
-func (m *MockTracer) TracerForConnection(arg0 protocol.Perspective, arg1 protocol.ConnectionID) ConnectionTracer {
+func (m *MockTracer) TracerForConnection(arg0 context.Context, arg1 protocol.Perspective, arg2 protocol.ConnectionID) ConnectionTracer {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "TracerForConnection", arg0, arg1)
+	ret := m.ctrl.Call(m, "TracerForConnection", arg0, arg1, arg2)
 	ret0, _ := ret[0].(ConnectionTracer)
 	return ret0
 }
 
 // TracerForConnection indicates an expected call of TracerForConnection.
-func (mr *MockTracerMockRecorder) TracerForConnection(arg0, arg1 interface{}) *gomock.Call {
+func (mr *MockTracerMockRecorder) TracerForConnection(arg0, arg1, arg2 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "TracerForConnection", reflect.TypeOf((*MockTracer)(nil).TracerForConnection), arg0, arg1)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "TracerForConnection", reflect.TypeOf((*MockTracer)(nil).TracerForConnection), arg0, arg1, arg2)
 }

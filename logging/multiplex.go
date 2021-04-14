@@ -1,6 +1,7 @@
 package logging
 
 import (
+	"context"
 	"net"
 	"time"
 )
@@ -22,10 +23,10 @@ func NewMultiplexedTracer(tracers ...Tracer) Tracer {
 	return &tracerMultiplexer{tracers}
 }
 
-func (m *tracerMultiplexer) TracerForConnection(p Perspective, odcid ConnectionID) ConnectionTracer {
+func (m *tracerMultiplexer) TracerForConnection(ctx context.Context, p Perspective, odcid ConnectionID) ConnectionTracer {
 	var connTracers []ConnectionTracer
 	for _, t := range m.tracers {
-		if ct := t.TracerForConnection(p, odcid); ct != nil {
+		if ct := t.TracerForConnection(ctx, p, odcid); ct != nil {
 			connTracers = append(connTracers, ct)
 		}
 	}

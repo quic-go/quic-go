@@ -3,6 +3,7 @@
 package logging
 
 import (
+	"context"
 	"net"
 	"time"
 
@@ -95,7 +96,7 @@ type Tracer interface {
 	// The ODCID is the original destination connection ID:
 	// The destination connection ID that the client used on the first Initial packet it sent on this connection.
 	// If nil is returned, tracing will be disabled for this connection.
-	TracerForConnection(p Perspective, odcid ConnectionID) ConnectionTracer
+	TracerForConnection(ctx context.Context, p Perspective, odcid ConnectionID) ConnectionTracer
 
 	SentPacket(net.Addr, *Header, ByteCount, []Frame)
 	DroppedPacket(net.Addr, PacketType, ByteCount, PacketDropReason)
