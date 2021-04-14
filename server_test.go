@@ -338,6 +338,7 @@ var _ = Describe("Server", func() {
 					_ *handshake.TokenGenerator,
 					enable0RTT bool,
 					_ logging.ConnectionTracer,
+					_ uint64,
 					_ utils.Logger,
 					_ protocol.VersionNumber,
 				) quicSession {
@@ -595,6 +596,7 @@ var _ = Describe("Server", func() {
 					_ *handshake.TokenGenerator,
 					enable0RTT bool,
 					_ logging.ConnectionTracer,
+					_ uint64,
 					_ utils.Logger,
 					_ protocol.VersionNumber,
 				) quicSession {
@@ -654,6 +656,7 @@ var _ = Describe("Server", func() {
 					_ *handshake.TokenGenerator,
 					_ bool,
 					_ logging.ConnectionTracer,
+					_ uint64,
 					_ utils.Logger,
 					_ protocol.VersionNumber,
 				) quicSession {
@@ -707,6 +710,7 @@ var _ = Describe("Server", func() {
 					_ *handshake.TokenGenerator,
 					_ bool,
 					_ logging.ConnectionTracer,
+					_ uint64,
 					_ utils.Logger,
 					_ protocol.VersionNumber,
 				) quicSession {
@@ -737,6 +741,7 @@ var _ = Describe("Server", func() {
 					_ *handshake.TokenGenerator,
 					_ bool,
 					_ logging.ConnectionTracer,
+					_ uint64,
 					_ utils.Logger,
 					_ protocol.VersionNumber,
 				) quicSession {
@@ -808,6 +813,7 @@ var _ = Describe("Server", func() {
 					_ *handshake.TokenGenerator,
 					_ bool,
 					_ logging.ConnectionTracer,
+					_ uint64,
 					_ utils.Logger,
 					_ protocol.VersionNumber,
 				) quicSession {
@@ -919,6 +925,7 @@ var _ = Describe("Server", func() {
 					_ *handshake.TokenGenerator,
 					_ bool,
 					_ logging.ConnectionTracer,
+					_ uint64,
 					_ utils.Logger,
 					_ protocol.VersionNumber,
 				) quicSession {
@@ -992,6 +999,7 @@ var _ = Describe("Server", func() {
 				_ *handshake.TokenGenerator,
 				enable0RTT bool,
 				_ logging.ConnectionTracer,
+				_ uint64,
 				_ utils.Logger,
 				_ protocol.VersionNumber,
 			) quicSession {
@@ -1034,6 +1042,7 @@ var _ = Describe("Server", func() {
 				_ *handshake.TokenGenerator,
 				_ bool,
 				_ logging.ConnectionTracer,
+				_ uint64,
 				_ utils.Logger,
 				_ protocol.VersionNumber,
 			) quicSession {
@@ -1097,6 +1106,7 @@ var _ = Describe("Server", func() {
 				_ *handshake.TokenGenerator,
 				_ bool,
 				_ logging.ConnectionTracer,
+				_ uint64,
 				_ utils.Logger,
 				_ protocol.VersionNumber,
 			) quicSession {

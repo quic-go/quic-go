@@ -87,6 +87,7 @@ type baseServer struct {
 		*handshake.TokenGenerator,
 		bool, /* enable 0-RTT */
 		logging.ConnectionTracer,
+		uint64,
 		utils.Logger,
 		protocol.VersionNumber,
 	) quicSession
@@ -474,6 +475,7 @@ func (s *baseServer) handleInitialImpl(p *receivedPacket, hdr *wire.Header) erro
 			s.tokenGenerator,
 			s.acceptEarlySessions,
 			tracer,
+			nextSessionTracingID(),
 			s.logger,
 			hdr.Version,
 		)

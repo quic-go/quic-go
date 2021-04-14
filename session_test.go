@@ -107,6 +107,7 @@ var _ = Describe("Session", func() {
 			tokenGenerator,
 			false,
 			tracer,
+			1234,
 			utils.DefaultLogger,
 			protocol.VersionTLS,
 		).(*session)
@@ -2478,6 +2479,7 @@ var _ = Describe("Client Session", func() {
 			false,
 			false,
 			tracer,
+			1234,
 			utils.DefaultLogger,
 			protocol.VersionTLS,
 		).(*session)
