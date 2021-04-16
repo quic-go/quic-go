@@ -832,7 +832,7 @@ var _ = Describe("SentPacketHandler", func() {
 			handler.ReceivedPacket(protocol.EncryptionHandshake)
 			handler.SentPacket(ackElicitingPacket(&Packet{PacketNumber: 1}))
 			updateRTT(time.Hour)
-			Expect(handler.OnLossDetectionTimeout()).To(Succeed()) // TLP
+			Expect(handler.OnLossDetectionTimeout()).To(Succeed())
 			Expect(handler.GetLossDetectionTimeout()).To(BeZero())
 			Expect(handler.SendMode()).To(Equal(SendAny))
 			handler.SetHandshakeConfirmed()
@@ -845,7 +845,7 @@ var _ = Describe("SentPacketHandler", func() {
 			handler.ReceivedPacket(protocol.EncryptionHandshake)
 			handler.SetHandshakeConfirmed()
 			handler.SentPacket(ackElicitingPacket(&Packet{PacketNumber: 1, SendTime: time.Now().Add(-time.Hour)}))
-			handler.rttStats.UpdateRTT(time.Second, 0, time.Now())
+			updateRTT(time.Second)
 			Expect(handler.OnLossDetectionTimeout()).To(Succeed())
 			Expect(handler.SendMode()).To(Equal(SendPTOAppData))
 			ack := &wire.AckFrame{AckRanges: []wire.AckRange{{Smallest: 1, Largest: 1}}}
@@ -857,9 +857,17 @@ var _ = Describe("SentPacketHandler", func() {
 		It("handles ACKs for the original packet", func() {
 			handler.ReceivedPacket(protocol.EncryptionHandshake)
 			handler.SentPacket(ackElicitingPacket(&Packet{PacketNumber: 5, SendTime: time.Now().Add(-time.Hour)}))
-			handler.rttStats.UpdateRTT(time.Second, 0, time.Now())
+			updateRTT(time.Second)
 			Expect(handler.OnLossDetectionTimeout()).To(Succeed())
 			Expect(handler.OnLossDetectionTimeout()).To(Succeed())
+		})
+
+		It("doesn't set the PTO timer for Path MTU probe packets", func() {
+			handler.ReceivedPacket(protocol.EncryptionHandshake)
+			handler.SetHandshakeConfirmed()
+			updateRTT(time.Second)
+			handler.SentPacket(ackElicitingPacket(&Packet{PacketNumber: 5, SendTime: time.Now(), IsPathMTUProbePacket: true}))
+			Expect(handler.GetLossDetectionTimeout()).To(BeZero())
 		})
 	})
 
@@ -1092,6 +1100,26 @@ var _ = Describe("SentPacketHandler", func() {
 			Expect(handler.OnLossDetectionTimeout()).To(Succeed())
 			expectInPacketHistory([]protocol.PacketNumber{3}, protocol.EncryptionInitial)
 			Expect(handler.SendMode()).To(Equal(SendAny))
+		})
+
+		It("sets the early retransmit alarm for Path MTU probe packets", func() {
+			var mtuPacketDeclaredLost bool
+			now := time.Now()
+			handler.SentPacket(ackElicitingPacket(&Packet{
+				PacketNumber:         1,
+				SendTime:             now.Add(-3 * time.Second),
+				IsPathMTUProbePacket: true,
+				Frames:               []Frame{{Frame: &wire.PingFrame{}, OnLost: func(wire.Frame) { mtuPacketDeclaredLost = true }}},
+			}))
+			handler.SentPacket(ackElicitingPacket(&Packet{PacketNumber: 2, SendTime: now.Add(-3 * time.Second)}))
+			ack := &wire.AckFrame{AckRanges: []wire.AckRange{{Smallest: 2, Largest: 2}}}
+			_, err := handler.ReceivedAck(ack, protocol.Encryption1RTT, now.Add(-time.Second))
+			Expect(err).ToNot(HaveOccurred())
+			Expect(mtuPacketDeclaredLost).To(BeFalse())
+			Expect(handler.GetLossDetectionTimeout()).ToNot(BeZero())
+			Expect(handler.OnLossDetectionTimeout()).To(Succeed())
+			Expect(mtuPacketDeclaredLost).To(BeTrue())
+			Expect(handler.GetLossDetectionTimeout()).To(BeZero())
 		})
 	})
 
