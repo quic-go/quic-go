@@ -182,6 +182,29 @@ func (t *connectionTracer) StartedConnection(local, remote net.Addr, srcConnID, 
 	t.mutex.Unlock()
 }
 
+func (t *connectionTracer) NegotiatedVersion(chosen logging.VersionNumber, client, server []logging.VersionNumber) {
+	var clientVersions, serverVersions []versionNumber
+	if len(client) > 0 {
+		clientVersions = make([]versionNumber, len(client))
+		for i, v := range client {
+			clientVersions[i] = versionNumber(v)
+		}
+	}
+	if len(server) > 0 {
+		serverVersions = make([]versionNumber, len(server))
+		for i, v := range server {
+			serverVersions[i] = versionNumber(v)
+		}
+	}
+	t.mutex.Lock()
+	t.recordEvent(time.Now(), &eventVersionNegotiated{
+		clientVersions: clientVersions,
+		serverVersions: serverVersions,
+		chosenVersion:  versionNumber(chosen),
+	})
+	t.mutex.Unlock()
+}
+
 func (t *connectionTracer) ClosedConnection(r logging.CloseReason) {
 	t.mutex.Lock()
 	t.recordEvent(time.Now(), &eventConnectionClosed{Reason: r})

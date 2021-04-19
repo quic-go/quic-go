@@ -340,6 +340,9 @@ var _ logging.ConnectionTracer = &connTracer{}
 
 func (t *connTracer) StartedConnection(local, remote net.Addr, srcConnID, destConnID logging.ConnectionID) {
 }
+
+func (t *connTracer) NegotiatedVersion(chosen logging.VersionNumber, clientVersions, serverVersions []logging.VersionNumber) {
+}
 func (t *connTracer) ClosedConnection(logging.CloseReason)                     {}
 func (t *connTracer) SentTransportParameters(*logging.TransportParameters)     {}
 func (t *connTracer) ReceivedTransportParameters(*logging.TransportParameters) {}
