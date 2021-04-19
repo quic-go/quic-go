@@ -25,7 +25,7 @@ type customTracer struct{}
 
 var _ logging.Tracer = &customTracer{}
 
-func (t *customTracer) TracerForConnection(p logging.Perspective, odcid logging.ConnectionID) logging.ConnectionTracer {
+func (t *customTracer) TracerForConnection(context.Context, logging.Perspective, logging.ConnectionID) logging.ConnectionTracer {
 	return &customConnTracer{}
 }
 func (t *customTracer) SentPacket(net.Addr, *logging.Header, logging.ByteCount, []logging.Frame) {}

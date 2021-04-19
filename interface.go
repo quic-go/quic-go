@@ -75,6 +75,13 @@ type ErrorCode = protocol.ApplicationErrorCode
 // when the server rejects a 0-RTT connection attempt.
 var Err0RTTRejected = errors.New("0-RTT rejected")
 
+// SessionTracingKey can be used to associate a ConnectionTracer with a Session.
+// It is set on the Session.Context() context,
+// as well as on the context passed to logging.Tracer.NewConnectionTracer.
+var SessionTracingKey = sessionTracingCtxKey{}
+
+type sessionTracingCtxKey struct{}
+
 // Stream is the interface implemented by QUIC streams
 type Stream interface {
 	ReceiveStream

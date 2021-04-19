@@ -42,6 +42,7 @@ var _ = Describe("Client", func() {
 			enable0RTT bool,
 			hasNegotiatedVersion bool,
 			tracer logging.ConnectionTracer,
+			tracingID uint64,
 			logger utils.Logger,
 			v protocol.VersionNumber,
 		) quicSession
@@ -53,7 +54,7 @@ var _ = Describe("Client", func() {
 		originalClientSessConstructor = newClientSession
 		tracer = mocklogging.NewMockConnectionTracer(mockCtrl)
 		tr := mocklogging.NewMockTracer(mockCtrl)
-		tr.EXPECT().TracerForConnection(protocol.PerspectiveClient, gomock.Any()).Return(tracer).MaxTimes(1)
+		tr.EXPECT().TracerForConnection(gomock.Any(), protocol.PerspectiveClient, gomock.Any()).Return(tracer).MaxTimes(1)
 		config = &Config{Tracer: tr, Versions: []protocol.VersionNumber{protocol.VersionTLS}}
 		Eventually(areSessionsRunning).Should(BeFalse())
 		// sess = NewMockQuicSession(mockCtrl)
@@ -129,6 +130,7 @@ var _ = Describe("Client", func() {
 				_ bool,
 				_ bool,
 				_ logging.ConnectionTracer,
+				_ uint64,
 				_ utils.Logger,
 				_ protocol.VersionNumber,
 			) quicSession {
@@ -161,6 +163,7 @@ var _ = Describe("Client", func() {
 				_ bool,
 				_ bool,
 				_ logging.ConnectionTracer,
+				_ uint64,
 				_ utils.Logger,
 				_ protocol.VersionNumber,
 			) quicSession {
@@ -193,6 +196,7 @@ var _ = Describe("Client", func() {
 				_ bool,
 				_ bool,
 				_ logging.ConnectionTracer,
+				_ uint64,
 				_ utils.Logger,
 				_ protocol.VersionNumber,
 			) quicSession {
@@ -231,6 +235,7 @@ var _ = Describe("Client", func() {
 				enable0RTT bool,
 				_ bool,
 				_ logging.ConnectionTracer,
+				_ uint64,
 				_ utils.Logger,
 				_ protocol.VersionNumber,
 			) quicSession {
@@ -273,6 +278,7 @@ var _ = Describe("Client", func() {
 				enable0RTT bool,
 				_ bool,
 				_ logging.ConnectionTracer,
+				_ uint64,
 				_ utils.Logger,
 				_ protocol.VersionNumber,
 			) quicSession {
@@ -320,6 +326,7 @@ var _ = Describe("Client", func() {
 				_ bool,
 				_ bool,
 				_ logging.ConnectionTracer,
+				_ uint64,
 				_ utils.Logger,
 				_ protocol.VersionNumber,
 			) quicSession {
@@ -362,6 +369,7 @@ var _ = Describe("Client", func() {
 				_ bool,
 				_ bool,
 				_ logging.ConnectionTracer,
+				_ uint64,
 				_ utils.Logger,
 				_ protocol.VersionNumber,
 			) quicSession {
@@ -413,6 +421,7 @@ var _ = Describe("Client", func() {
 				_ bool,
 				_ bool,
 				_ logging.ConnectionTracer,
+				_ uint64,
 				_ utils.Logger,
 				_ protocol.VersionNumber,
 			) quicSession {
@@ -532,6 +541,7 @@ var _ = Describe("Client", func() {
 				_ bool,
 				_ bool,
 				_ logging.ConnectionTracer,
+				_ uint64,
 				_ utils.Logger,
 				versionP protocol.VersionNumber,
 			) quicSession {
@@ -571,6 +581,7 @@ var _ = Describe("Client", func() {
 				_ bool,
 				hasNegotiatedVersion bool,
 				_ logging.ConnectionTracer,
+				_ uint64,
 				_ utils.Logger,
 				versionP protocol.VersionNumber,
 			) quicSession {

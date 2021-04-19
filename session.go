@@ -10,6 +10,7 @@ import (
 	"net"
 	"reflect"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/lucas-clemente/quic-go/internal/ackhandler"
@@ -140,6 +141,9 @@ func (e errVersionNegotiation) Error() string {
 	return fmt.Sprintf("no compatible QUIC version found (we support %s, server offered %s)", e.ourVersions, e.theirVersions)
 }
 
+var sessionTracingID uint64        // to be accessed atomically
+func nextSessionTracingID() uint64 { return atomic.AddUint64(&sessionTracingID, 1) }
+
 // A Session is a QUIC session
 type session struct {
 	// Destination connection ID used during the handshake.
@@ -252,6 +256,7 @@ var newSession = func(
 	tokenGenerator *handshake.TokenGenerator,
 	enable0RTT bool,
 	tracer logging.ConnectionTracer,
+	tracingID uint64,
 	logger utils.Logger,
 	v protocol.VersionNumber,
 ) quicSession {
@@ -291,6 +296,7 @@ var newSession = func(
 		s.version,
 	)
 	s.preSetup()
+	s.ctx, s.ctxCancel = context.WithCancel(context.WithValue(context.Background(), SessionTracingKey, tracingID))
 	s.sentPacketHandler, s.receivedPacketHandler = ackhandler.NewAckHandler(
 		0,
 		getMaxPacketSize(s.conn.RemoteAddr()),
@@ -381,6 +387,7 @@ var newClientSession = func(
 	enable0RTT bool,
 	hasNegotiatedVersion bool,
 	tracer logging.ConnectionTracer,
+	tracingID uint64,
 	logger utils.Logger,
 	v protocol.VersionNumber,
 ) quicSession {
@@ -416,6 +423,7 @@ var newClientSession = func(
 		s.version,
 	)
 	s.preSetup()
+	s.ctx, s.ctxCancel = context.WithCancel(context.WithValue(context.Background(), SessionTracingKey, tracingID))
 	s.sentPacketHandler, s.receivedPacketHandler = ackhandler.NewAckHandler(
 		initialPacketNumber,
 		getMaxPacketSize(s.conn.RemoteAddr()),
@@ -524,7 +532,6 @@ func (s *session) preSetup() {
 	s.receivedPackets = make(chan *receivedPacket, protocol.MaxSessionUnprocessedPackets)
 	s.closeChan = make(chan closeError, 1)
 	s.sendingScheduled = make(chan struct{}, 1)
-	s.ctx, s.ctxCancel = context.WithCancel(context.Background())
 	s.handshakeCtx, s.handshakeCtxCancel = context.WithCancel(context.Background())
 
 	now := time.Now()
