@@ -11,8 +11,26 @@ import (
 	"golang.org/x/sys/windows"
 )
 
+const IP_DONTFRAGMENT = 14
+
 func newConn(c net.PacketConn) (connection, error) {
-	return &basicConn{PacketConn: c}, nil
+	conn, ok := c.(interface {
+		SyscallConn() (syscall.RawConn, error)
+	})
+	if !ok {
+		return nil, errors.New("doesn't have a SyscallConn")
+	}
+	rawConn, err := conn.SyscallConn()
+	if err != nil {
+		return nil, fmt.Errorf("couldn't get syscall.RawConn: %w", err)
+	}
+	var serr error
+	if err := rawConn.Control(func(fd uintptr) {
+		serr = windows.SetsockoptInt(windows.Handle(fd), windows.IPPROTO_IP, IP_DONTFRAGMENT, 1)
+	}); err != nil {
+		return nil, err
+	}
+	return &basicConn{PacketConn: c}, serr
 }
 
 func inspectReadBuffer(c net.PacketConn) (int, error) {
