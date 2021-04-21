@@ -15,3 +15,5 @@ const (
 	msgTypeIPv4PKTINFO = unix.IP_PKTINFO
 	msgTypeIPv6PKTINFO = 0x2e
 )
+
+const dontFragment = unix.IPPROTO_FRAGMENT

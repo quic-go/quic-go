@@ -41,6 +41,10 @@ func inspectReadBuffer(c interface{}) (int, error) {
 	return size, serr
 }
 
+type syscallerConn interface {
+	SyscallConn() (syscall.RawConn, error)
+}
+
 type oobConn struct {
 	OOBCapablePacketConn
 	oobBuffer []byte
@@ -60,10 +64,11 @@ func newConn(c OOBCapablePacketConn) (*oobConn, error) {
 	// We don't know if this a IPv4-only, IPv6-only or a IPv4-and-IPv6 connection.
 	// Try enabling receiving of ECN and packet info for both IP versions.
 	// We expect at least one of those syscalls to succeed.
-	var errECNIPv4, errECNIPv6, errPIIPv4, errPIIPv6 error
+	var errECNIPv4, errECNIPv6, errPIIPv4, errPIIPv6, errDontFragment error
 	if err := rawConn.Control(func(fd uintptr) {
 		errECNIPv4 = unix.SetsockoptInt(int(fd), unix.IPPROTO_IP, unix.IP_RECVTOS, 1)
 		errECNIPv6 = unix.SetsockoptInt(int(fd), unix.IPPROTO_IPV6, unix.IPV6_RECVTCLASS, 1)
+		errDontFragment = unix.SetsockoptInt(int(fd), unix.IPPROTO_IP, dontFragment, 1)
 
 		if needsPacketInfo {
 			errPIIPv4 = unix.SetsockoptInt(int(fd), unix.IPPROTO_IP, ipv4RECVPKTINFO, 1)
@@ -71,6 +76,9 @@ func newConn(c OOBCapablePacketConn) (*oobConn, error) {
 		}
 	}); err != nil {
 		return nil, err
+	}
+	if errDontFragment != nil {
+		fmt.Printf("Setting DontFragment on IPv4 failed: %v", errDontFragment)
 	}
 	switch {
 	case errECNIPv4 == nil && errECNIPv6 == nil:
