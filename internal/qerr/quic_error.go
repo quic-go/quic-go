@@ -2,82 +2,39 @@ package qerr
 
 import (
 	"fmt"
-	"net"
 )
 
 var (
-	ErrIdleTimeout      = newTimeoutError("No recent network activity")
-	ErrHandshakeTimeout = newTimeoutError("Handshake did not complete in time")
+	ErrHandshakeTimeout = &HandshakeTimeoutError{}
+	ErrIdleTimeout      = &IdleTimeoutError{}
 )
 
-// A QuicError consists of an error code plus a error reason
-type QuicError struct {
-	ErrorCode          ErrorCode
-	FrameType          uint64 // only valid if this not an application error
-	ErrorMessage       string
-	isTimeout          bool
-	isApplicationError bool
+type TransportError struct {
+	Remote       bool
+	FrameType    uint64
+	ErrorCode    TransportErrorCode
+	ErrorMessage string
 }
 
-var _ net.Error = &QuicError{}
+var _ error = &TransportError{}
 
-// NewError creates a new QuicError instance
-func NewError(errorCode ErrorCode, errorMessage string) *QuicError {
-	return &QuicError{
-		ErrorCode:    errorCode,
+// NewCryptoError create a new TransportError instance for a crypto error
+func NewCryptoError(tlsAlert uint8, errorMessage string) *TransportError {
+	return &TransportError{
+		ErrorCode:    0x100 + TransportErrorCode(tlsAlert),
 		ErrorMessage: errorMessage,
 	}
 }
 
-// NewErrorWithFrameType creates a new QuicError instance for a specific frame type
-func NewErrorWithFrameType(errorCode ErrorCode, frameType uint64, errorMessage string) *QuicError {
-	return &QuicError{
-		ErrorCode:    errorCode,
-		FrameType:    frameType,
-		ErrorMessage: errorMessage,
-	}
+func (e *TransportError) Is(target error) bool {
+	_, ok := target.(*TransportError)
+	return ok
 }
 
-// newTimeoutError creates a new QuicError instance for a timeout error
-func newTimeoutError(errorMessage string) *QuicError {
-	return &QuicError{
-		ErrorMessage: errorMessage,
-		isTimeout:    true,
-	}
-}
-
-// NewCryptoError create a new QuicError instance for a crypto error
-func NewCryptoError(tlsAlert uint8, errorMessage string) *QuicError {
-	return &QuicError{
-		ErrorCode:    0x100 + ErrorCode(tlsAlert),
-		ErrorMessage: errorMessage,
-	}
-}
-
-// NewApplicationError creates a new QuicError instance for an application error
-func NewApplicationError(errorCode ErrorCode, errorMessage string) *QuicError {
-	return &QuicError{
-		ErrorCode:          errorCode,
-		ErrorMessage:       errorMessage,
-		isApplicationError: true,
-	}
-}
-
-func (e *QuicError) Error() string {
-	if e.isApplicationError {
-		if len(e.ErrorMessage) == 0 {
-			return fmt.Sprintf("Application error %#x", uint64(e.ErrorCode))
-		}
-		return fmt.Sprintf("Application error %#x: %s", uint64(e.ErrorCode), e.ErrorMessage)
-	}
-	var str string
-	if e.isTimeout {
-		str = "Timeout"
-	} else {
-		str = e.ErrorCode.String()
-		if e.FrameType != 0 {
-			str += fmt.Sprintf(" (frame type: %#x)", e.FrameType)
-		}
+func (e *TransportError) Error() string {
+	str := e.ErrorCode.String()
+	if e.FrameType != 0 {
+		str += fmt.Sprintf(" (frame type: %#x)", e.FrameType)
 	}
 	msg := e.ErrorMessage
 	if len(msg) == 0 {
@@ -89,34 +46,46 @@ func (e *QuicError) Error() string {
 	return str + ": " + msg
 }
 
-// IsCryptoError says if this error is a crypto error
-func (e *QuicError) IsCryptoError() bool {
-	return e.ErrorCode.isCryptoError()
+type ApplicationError struct {
+	Remote       bool
+	ErrorCode    uint64
+	ErrorMessage string
 }
 
-// IsApplicationError says if this error is an application error
-func (e *QuicError) IsApplicationError() bool {
-	return e.isApplicationError
+var _ error = &ApplicationError{}
+
+func (e *ApplicationError) Is(target error) bool {
+	_, ok := target.(*ApplicationError)
+	return ok
 }
 
-// Temporary says if the error is temporary.
-func (e *QuicError) Temporary() bool {
-	return false
-}
-
-// Timeout says if this error is a timeout.
-func (e *QuicError) Timeout() bool {
-	return e.isTimeout
-}
-
-// ToQuicError converts an arbitrary error to a QuicError. It leaves QuicErrors
-// unchanged, and properly handles `ErrorCode`s.
-func ToQuicError(err error) *QuicError {
-	switch e := err.(type) {
-	case *QuicError:
-		return e
-	case ErrorCode:
-		return NewError(e, "")
+func (e *ApplicationError) Error() string {
+	if len(e.ErrorMessage) == 0 {
+		return fmt.Sprintf("Application error %#x", e.ErrorCode)
 	}
-	return NewError(InternalError, err.Error())
+	return fmt.Sprintf("Application error %#x: %s", e.ErrorCode, e.ErrorMessage)
+}
+
+type IdleTimeoutError struct{}
+
+var _ error = &IdleTimeoutError{}
+
+func (e *IdleTimeoutError) Timeout() bool   { return true }
+func (e *IdleTimeoutError) Temporary() bool { return false }
+func (e *IdleTimeoutError) Error() string   { return "timeout: no recent network activity" }
+func (e *IdleTimeoutError) Is(target error) bool {
+	_, ok := target.(*IdleTimeoutError)
+	return ok
+}
+
+type HandshakeTimeoutError struct{}
+
+var _ error = &HandshakeTimeoutError{}
+
+func (e *HandshakeTimeoutError) Timeout() bool   { return true }
+func (e *HandshakeTimeoutError) Temporary() bool { return false }
+func (e *HandshakeTimeoutError) Error() string   { return "timeout: handshake did not complete in time" }
+func (e *HandshakeTimeoutError) Is(target error) bool {
+	_, ok := target.(*HandshakeTimeoutError)
+	return ok
 }

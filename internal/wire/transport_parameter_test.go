@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/lucas-clemente/quic-go/internal/protocol"
+	"github.com/lucas-clemente/quic-go/internal/qerr"
 	"github.com/lucas-clemente/quic-go/quicvarint"
 
 	. "github.com/onsi/ginkgo"
@@ -147,7 +148,10 @@ var _ = Describe("Transport Parameters", func() {
 		quicvarint.Write(b, uint64(statelessResetTokenParameterID))
 		quicvarint.Write(b, 15)
 		b.Write(make([]byte, 15))
-		Expect((&TransportParameters{}).Unmarshal(b.Bytes(), protocol.PerspectiveServer)).To(MatchError("TRANSPORT_PARAMETER_ERROR: wrong length for stateless_reset_token: 15 (expected 16)"))
+		Expect((&TransportParameters{}).Unmarshal(b.Bytes(), protocol.PerspectiveServer)).To(MatchError(&qerr.TransportError{
+			ErrorCode:    qerr.TransportParameterError,
+			ErrorMessage: "wrong length for stateless_reset_token: 15 (expected 16)",
+		}))
 	})
 
 	It("errors when the max_packet_size is too small", func() {
@@ -155,7 +159,10 @@ var _ = Describe("Transport Parameters", func() {
 		quicvarint.Write(b, uint64(maxUDPPayloadSizeParameterID))
 		quicvarint.Write(b, uint64(quicvarint.Len(1199)))
 		quicvarint.Write(b, 1199)
-		Expect((&TransportParameters{}).Unmarshal(b.Bytes(), protocol.PerspectiveServer)).To(MatchError("TRANSPORT_PARAMETER_ERROR: invalid value for max_packet_size: 1199 (minimum 1200)"))
+		Expect((&TransportParameters{}).Unmarshal(b.Bytes(), protocol.PerspectiveServer)).To(MatchError(&qerr.TransportError{
+			ErrorCode:    qerr.TransportParameterError,
+			ErrorMessage: "invalid value for max_packet_size: 1199 (minimum 1200)",
+		}))
 	})
 
 	It("errors when disable_active_migration has content", func() {
@@ -163,7 +170,10 @@ var _ = Describe("Transport Parameters", func() {
 		quicvarint.Write(b, uint64(disableActiveMigrationParameterID))
 		quicvarint.Write(b, 6)
 		b.Write([]byte("foobar"))
-		Expect((&TransportParameters{}).Unmarshal(b.Bytes(), protocol.PerspectiveServer)).To(MatchError("TRANSPORT_PARAMETER_ERROR: wrong length for disable_active_migration: 6 (expected empty)"))
+		Expect((&TransportParameters{}).Unmarshal(b.Bytes(), protocol.PerspectiveServer)).To(MatchError(&qerr.TransportError{
+			ErrorCode:    qerr.TransportParameterError,
+			ErrorMessage: "wrong length for disable_active_migration: 6 (expected empty)",
+		}))
 	})
 
 	It("errors when the server doesn't set the original_destination_connection_id", func() {
@@ -172,11 +182,17 @@ var _ = Describe("Transport Parameters", func() {
 		quicvarint.Write(b, 16)
 		b.Write(make([]byte, 16))
 		addInitialSourceConnectionID(b)
-		Expect((&TransportParameters{}).Unmarshal(b.Bytes(), protocol.PerspectiveServer)).To(MatchError("TRANSPORT_PARAMETER_ERROR: missing original_destination_connection_id"))
+		Expect((&TransportParameters{}).Unmarshal(b.Bytes(), protocol.PerspectiveServer)).To(MatchError(&qerr.TransportError{
+			ErrorCode:    qerr.TransportParameterError,
+			ErrorMessage: "missing original_destination_connection_id",
+		}))
 	})
 
 	It("errors when the initial_source_connection_id is missing", func() {
-		Expect((&TransportParameters{}).Unmarshal([]byte{}, protocol.PerspectiveClient)).To(MatchError("TRANSPORT_PARAMETER_ERROR: missing initial_source_connection_id"))
+		Expect((&TransportParameters{}).Unmarshal([]byte{}, protocol.PerspectiveClient)).To(MatchError(&qerr.TransportError{
+			ErrorCode:    qerr.TransportParameterError,
+			ErrorMessage: "missing initial_source_connection_id",
+		}))
 	})
 
 	It("errors when the max_ack_delay is too large", func() {
@@ -185,7 +201,10 @@ var _ = Describe("Transport Parameters", func() {
 			StatelessResetToken: &protocol.StatelessResetToken{},
 		}).Marshal(protocol.PerspectiveServer)
 		p := &TransportParameters{}
-		Expect(p.Unmarshal(data, protocol.PerspectiveServer)).To(MatchError("TRANSPORT_PARAMETER_ERROR: invalid value for max_ack_delay: 16384ms (maximum 16383ms)"))
+		Expect(p.Unmarshal(data, protocol.PerspectiveServer)).To(MatchError(&qerr.TransportError{
+			ErrorCode:    qerr.TransportParameterError,
+			ErrorMessage: "invalid value for max_ack_delay: 16384ms (maximum 16383ms)",
+		}))
 	})
 
 	It("doesn't send the max_ack_delay, if it has the default value", func() {
@@ -215,7 +234,10 @@ var _ = Describe("Transport Parameters", func() {
 			StatelessResetToken: &protocol.StatelessResetToken{},
 		}).Marshal(protocol.PerspectiveServer)
 		p := &TransportParameters{}
-		Expect(p.Unmarshal(data, protocol.PerspectiveServer)).To(MatchError("TRANSPORT_PARAMETER_ERROR: invalid value for ack_delay_exponent: 21 (maximum 20)"))
+		Expect(p.Unmarshal(data, protocol.PerspectiveServer)).To(MatchError(&qerr.TransportError{
+			ErrorCode:    qerr.TransportParameterError,
+			ErrorMessage: "invalid value for ack_delay_exponent: 21 (maximum 20)",
+		}))
 	})
 
 	It("doesn't send the ack_delay_exponent, if it has the default value", func() {
@@ -256,9 +278,10 @@ var _ = Describe("Transport Parameters", func() {
 		Expect(quicvarint.Len(val)).ToNot(BeEquivalentTo(2))
 		quicvarint.Write(b, val)
 		addInitialSourceConnectionID(b)
-		err := (&TransportParameters{}).Unmarshal(b.Bytes(), protocol.PerspectiveServer)
-		Expect(err).To(HaveOccurred())
-		Expect(err.Error()).To(ContainSubstring("TRANSPORT_PARAMETER_ERROR: inconsistent transport parameter length"))
+		Expect((&TransportParameters{}).Unmarshal(b.Bytes(), protocol.PerspectiveServer)).To(MatchError(&qerr.TransportError{
+			ErrorCode:    qerr.TransportParameterError,
+			ErrorMessage: fmt.Sprintf("inconsistent transport parameter length for transport parameter %#x", initialMaxStreamDataBidiLocalParameterID),
+		}))
 	})
 
 	It("errors if initial_max_streams_bidi is too large", func() {
@@ -267,9 +290,10 @@ var _ = Describe("Transport Parameters", func() {
 		quicvarint.Write(b, uint64(quicvarint.Len(uint64(protocol.MaxStreamCount+1))))
 		quicvarint.Write(b, uint64(protocol.MaxStreamCount+1))
 		addInitialSourceConnectionID(b)
-		err := (&TransportParameters{}).Unmarshal(b.Bytes(), protocol.PerspectiveServer)
-		Expect(err).To(HaveOccurred())
-		Expect(err.Error()).To(ContainSubstring("TRANSPORT_PARAMETER_ERROR: initial_max_streams_bidi too large: 1152921504606846977 (maximum 1152921504606846976)"))
+		Expect((&TransportParameters{}).Unmarshal(b.Bytes(), protocol.PerspectiveServer)).To(MatchError(&qerr.TransportError{
+			ErrorCode:    qerr.TransportParameterError,
+			ErrorMessage: "initial_max_streams_bidi too large: 1152921504606846977 (maximum 1152921504606846976)",
+		}))
 	})
 
 	It("errors if initial_max_streams_uni is too large", func() {
@@ -278,9 +302,10 @@ var _ = Describe("Transport Parameters", func() {
 		quicvarint.Write(b, uint64(quicvarint.Len(uint64(protocol.MaxStreamCount+1))))
 		quicvarint.Write(b, uint64(protocol.MaxStreamCount+1))
 		addInitialSourceConnectionID(b)
-		err := (&TransportParameters{}).Unmarshal(b.Bytes(), protocol.PerspectiveServer)
-		Expect(err).To(HaveOccurred())
-		Expect(err.Error()).To(ContainSubstring("TRANSPORT_PARAMETER_ERROR: initial_max_streams_uni too large: 1152921504606846977 (maximum 1152921504606846976)"))
+		Expect((&TransportParameters{}).Unmarshal(b.Bytes(), protocol.PerspectiveServer)).To(MatchError(&qerr.TransportError{
+			ErrorCode:    qerr.TransportParameterError,
+			ErrorMessage: "initial_max_streams_uni too large: 1152921504606846977 (maximum 1152921504606846976)",
+		}))
 	})
 
 	It("handles huge max_ack_delay values", func() {
@@ -290,9 +315,10 @@ var _ = Describe("Transport Parameters", func() {
 		quicvarint.Write(b, uint64(quicvarint.Len(val)))
 		quicvarint.Write(b, val)
 		addInitialSourceConnectionID(b)
-		err := (&TransportParameters{}).Unmarshal(b.Bytes(), protocol.PerspectiveClient)
-		Expect(err).To(HaveOccurred())
-		Expect(err.Error()).To(ContainSubstring("invalid value for max_ack_delay"))
+		Expect((&TransportParameters{}).Unmarshal(b.Bytes(), protocol.PerspectiveClient)).To(MatchError(&qerr.TransportError{
+			ErrorCode:    qerr.TransportParameterError,
+			ErrorMessage: "invalid value for max_ack_delay: 3689348814741910323ms (maximum 16383ms)",
+		}))
 	})
 
 	It("skips unknown parameters", func() {
@@ -331,9 +357,10 @@ var _ = Describe("Transport Parameters", func() {
 		quicvarint.Write(b, uint64(quicvarint.Len(0x1337)))
 		quicvarint.Write(b, 0x1337)
 		addInitialSourceConnectionID(b)
-		err := (&TransportParameters{}).Unmarshal(b.Bytes(), protocol.PerspectiveClient)
-		Expect(err).To(HaveOccurred())
-		Expect(err.Error()).To(ContainSubstring("received duplicate transport parameter"))
+		Expect((&TransportParameters{}).Unmarshal(b.Bytes(), protocol.PerspectiveClient)).To(MatchError(&qerr.TransportError{
+			ErrorCode:    qerr.TransportParameterError,
+			ErrorMessage: fmt.Sprintf("received duplicate transport parameter %#x", initialMaxStreamDataBidiLocalParameterID),
+		}))
 	})
 
 	It("errors if there's not enough data to read", func() {
@@ -342,7 +369,10 @@ var _ = Describe("Transport Parameters", func() {
 		quicvarint.Write(b, 7)
 		b.Write([]byte("foobar"))
 		p := &TransportParameters{}
-		Expect(p.Unmarshal(b.Bytes(), protocol.PerspectiveServer)).To(MatchError("TRANSPORT_PARAMETER_ERROR: remaining length (6) smaller than parameter length (7)"))
+		Expect(p.Unmarshal(b.Bytes(), protocol.PerspectiveServer)).To(MatchError(&qerr.TransportError{
+			ErrorCode:    qerr.TransportParameterError,
+			ErrorMessage: "remaining length (6) smaller than parameter length (7)",
+		}))
 	})
 
 	It("errors if the client sent a stateless_reset_token", func() {
@@ -350,7 +380,10 @@ var _ = Describe("Transport Parameters", func() {
 		quicvarint.Write(b, uint64(statelessResetTokenParameterID))
 		quicvarint.Write(b, uint64(quicvarint.Len(16)))
 		b.Write(make([]byte, 16))
-		Expect((&TransportParameters{}).Unmarshal(b.Bytes(), protocol.PerspectiveClient)).To(MatchError("TRANSPORT_PARAMETER_ERROR: client sent a stateless_reset_token"))
+		Expect((&TransportParameters{}).Unmarshal(b.Bytes(), protocol.PerspectiveClient)).To(MatchError(&qerr.TransportError{
+			ErrorCode:    qerr.TransportParameterError,
+			ErrorMessage: "client sent a stateless_reset_token",
+		}))
 	})
 
 	It("errors if the client sent the original_destination_connection_id", func() {
@@ -358,7 +391,10 @@ var _ = Describe("Transport Parameters", func() {
 		quicvarint.Write(b, uint64(originalDestinationConnectionIDParameterID))
 		quicvarint.Write(b, 6)
 		b.Write([]byte("foobar"))
-		Expect((&TransportParameters{}).Unmarshal(b.Bytes(), protocol.PerspectiveClient)).To(MatchError("TRANSPORT_PARAMETER_ERROR: client sent an original_destination_connection_id"))
+		Expect((&TransportParameters{}).Unmarshal(b.Bytes(), protocol.PerspectiveClient)).To(MatchError(&qerr.TransportError{
+			ErrorCode:    qerr.TransportParameterError,
+			ErrorMessage: "client sent an original_destination_connection_id",
+		}))
 	})
 
 	Context("preferred address", func() {
@@ -396,7 +432,10 @@ var _ = Describe("Transport Parameters", func() {
 			quicvarint.Write(b, 6)
 			b.Write([]byte("foobar"))
 			p := &TransportParameters{}
-			Expect(p.Unmarshal(b.Bytes(), protocol.PerspectiveClient)).To(MatchError("TRANSPORT_PARAMETER_ERROR: client sent a preferred_address"))
+			Expect(p.Unmarshal(b.Bytes(), protocol.PerspectiveClient)).To(MatchError(&qerr.TransportError{
+				ErrorCode:    qerr.TransportParameterError,
+				ErrorMessage: "client sent a preferred_address",
+			}))
 		})
 
 		It("errors on zero-length connection IDs", func() {
@@ -406,7 +445,10 @@ var _ = Describe("Transport Parameters", func() {
 				StatelessResetToken: &protocol.StatelessResetToken{},
 			}).Marshal(protocol.PerspectiveServer)
 			p := &TransportParameters{}
-			Expect(p.Unmarshal(data, protocol.PerspectiveServer)).To(MatchError("TRANSPORT_PARAMETER_ERROR: invalid connection ID length: 0"))
+			Expect(p.Unmarshal(data, protocol.PerspectiveServer)).To(MatchError(&qerr.TransportError{
+				ErrorCode:    qerr.TransportParameterError,
+				ErrorMessage: "invalid connection ID length: 0",
+			}))
 		})
 
 		It("errors on too long connection IDs", func() {
@@ -417,7 +459,10 @@ var _ = Describe("Transport Parameters", func() {
 				StatelessResetToken: &protocol.StatelessResetToken{},
 			}).Marshal(protocol.PerspectiveServer)
 			p := &TransportParameters{}
-			Expect(p.Unmarshal(data, protocol.PerspectiveServer)).To(MatchError("TRANSPORT_PARAMETER_ERROR: invalid connection ID length: 21"))
+			Expect(p.Unmarshal(data, protocol.PerspectiveServer)).To(MatchError(&qerr.TransportError{
+				ErrorCode:    qerr.TransportParameterError,
+				ErrorMessage: "invalid connection ID length: 21",
+			}))
 		})
 
 		It("errors on EOF", func() {

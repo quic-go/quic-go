@@ -3,6 +3,7 @@ package self_test
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io/ioutil"
 	"math"
@@ -11,7 +12,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	quic "github.com/lucas-clemente/quic-go"
+	"github.com/lucas-clemente/quic-go"
 	quicproxy "github.com/lucas-clemente/quic-go/integrationtests/tools/proxy"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/internal/qerr"
@@ -440,9 +441,10 @@ var _ = Describe("MITM test", func() {
 					}
 					err := runTest(delayCb)
 					Expect(err).To(HaveOccurred())
-					Expect(err).To(BeAssignableToTypeOf(&qerr.QuicError{}))
-					Expect(err.(*qerr.QuicError).ErrorCode).To(Equal(qerr.ProtocolViolation))
-					Expect(err.Error()).To(ContainSubstring("Received ACK for an unsent packet"))
+					var transportErr *qerr.TransportError
+					Expect(errors.As(err, &transportErr)).To(BeTrue())
+					Expect(transportErr.ErrorCode).To(Equal(qerr.ProtocolViolation))
+					Expect(transportErr.ErrorMessage).To(ContainSubstring("received ACK for an unsent packet"))
 				})
 			})
 		})

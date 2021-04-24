@@ -508,7 +508,7 @@ var _ = Describe("Server", func() {
 					Expect(frames[0]).To(BeAssignableToTypeOf(&wire.ConnectionCloseFrame{}))
 					ccf := frames[0].(*logging.ConnectionCloseFrame)
 					Expect(ccf.IsApplicationError).To(BeFalse())
-					Expect(ccf.ErrorCode).To(Equal(qerr.InvalidToken))
+					Expect(ccf.ErrorCode).To(BeEquivalentTo(qerr.InvalidToken))
 				})
 				done := make(chan struct{})
 				conn.EXPECT().WriteTo(gomock.Any(), raddr).DoAndReturn(func(b []byte, _ net.Addr) (int, error) {
@@ -526,7 +526,7 @@ var _ = Describe("Server", func() {
 					Expect(err).ToNot(HaveOccurred())
 					Expect(f).To(BeAssignableToTypeOf(&wire.ConnectionCloseFrame{}))
 					ccf := f.(*wire.ConnectionCloseFrame)
-					Expect(ccf.ErrorCode).To(Equal(qerr.InvalidToken))
+					Expect(ccf.ErrorCode).To(BeEquivalentTo(qerr.InvalidToken))
 					Expect(ccf.ReasonPhrase).To(BeEmpty())
 					return len(b), nil
 				})

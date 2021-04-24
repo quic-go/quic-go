@@ -373,7 +373,7 @@ var _ = Describe("Packet Handler Map", func() {
 						defer GinkgoRecover()
 						defer close(destroyed)
 						Expect(err).To(HaveOccurred())
-						var resetErr statelessResetErr
+						var resetErr *statelessResetErr
 						Expect(errors.As(err, &resetErr)).To(BeTrue())
 						Expect(err.Error()).To(ContainSubstring("received a stateless reset"))
 						Expect(resetErr.token).To(Equal(token))
@@ -393,7 +393,7 @@ var _ = Describe("Packet Handler Map", func() {
 					packetHandler.EXPECT().destroy(gomock.Any()).Do(func(err error) {
 						defer GinkgoRecover()
 						Expect(err).To(HaveOccurred())
-						var resetErr statelessResetErr
+						var resetErr *statelessResetErr
 						Expect(errors.As(err, &resetErr)).To(BeTrue())
 						Expect(err.Error()).To(ContainSubstring("received a stateless reset"))
 						Expect(resetErr.token).To(Equal(token))

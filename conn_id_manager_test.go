@@ -2,7 +2,9 @@ package quic
 
 import (
 	"github.com/lucas-clemente/quic-go/internal/protocol"
+	"github.com/lucas-clemente/quic-go/internal/qerr"
 	"github.com/lucas-clemente/quic-go/internal/wire"
+
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 )
@@ -231,7 +233,7 @@ var _ = Describe("Connection ID Manager", func() {
 			SequenceNumber:      uint64(9999),
 			ConnectionID:        protocol.ConnectionID{1, 2, 3, 4},
 			StatelessResetToken: protocol.StatelessResetToken{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16},
-		})).To(MatchError("CONNECTION_ID_LIMIT_ERROR"))
+		})).To(MatchError(&qerr.TransportError{ErrorCode: qerr.ConnectionIDLimitError}))
 	})
 
 	It("initiates the first connection ID update as soon as possible", func() {

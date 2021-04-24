@@ -7,7 +7,7 @@ import (
 	"net"
 	"time"
 
-	quic "github.com/lucas-clemente/quic-go"
+	"github.com/lucas-clemente/quic-go"
 	quicproxy "github.com/lucas-clemente/quic-go/integrationtests/tools/proxy"
 	"github.com/lucas-clemente/quic-go/internal/utils"
 
@@ -99,7 +99,7 @@ var _ = Describe("Stateless Resets", func() {
 				_, serr = str.Read([]byte{0})
 			}
 			Expect(serr).To(HaveOccurred())
-			Expect(serr.Error()).To(ContainSubstring("INTERNAL_ERROR: received a stateless reset"))
+			Expect(serr.Error()).To(ContainSubstring("received a stateless reset"))
 
 			Expect(ln2.Close()).To(Succeed())
 			Eventually(acceptStopped).Should(BeClosed())

@@ -9,7 +9,6 @@ import (
 	"github.com/lucas-clemente/quic-go"
 	"github.com/lucas-clemente/quic-go/fuzzing/internal/helper"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
-	"github.com/lucas-clemente/quic-go/internal/qerr"
 	"github.com/lucas-clemente/quic-go/internal/wire"
 )
 
@@ -196,23 +195,23 @@ func getFrames() []wire.Frame {
 		},
 		&wire.ConnectionCloseFrame{ // QUIC error with empty reason
 			IsApplicationError: false,
-			ErrorCode:          qerr.ErrorCode(getRandomNumber()),
+			ErrorCode:          getRandomNumber(),
 			ReasonPhrase:       "",
 		},
 		&wire.ConnectionCloseFrame{ // QUIC error with reason
 			IsApplicationError: false,
 			// TODO: add frame type
-			ErrorCode:    qerr.ErrorCode(getRandomNumber()),
+			ErrorCode:    getRandomNumber(),
 			ReasonPhrase: string(getRandomData(100)),
 		},
 		&wire.ConnectionCloseFrame{ // application error with empty reason
 			IsApplicationError: true,
-			ErrorCode:          qerr.ErrorCode(getRandomNumber()),
+			ErrorCode:          getRandomNumber(),
 			ReasonPhrase:       "",
 		},
 		&wire.ConnectionCloseFrame{ // application error with reason
 			IsApplicationError: true,
-			ErrorCode:          qerr.ErrorCode(getRandomNumber()),
+			ErrorCode:          getRandomNumber(),
 			ReasonPhrase:       string(getRandomData(100)),
 		},
 	}

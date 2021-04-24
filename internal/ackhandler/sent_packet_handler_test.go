@@ -5,8 +5,10 @@ import (
 	"time"
 
 	"github.com/golang/mock/gomock"
+
 	"github.com/lucas-clemente/quic-go/internal/mocks"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
+	"github.com/lucas-clemente/quic-go/internal/qerr"
 	"github.com/lucas-clemente/quic-go/internal/utils"
 	"github.com/lucas-clemente/quic-go/internal/wire"
 
@@ -199,13 +201,19 @@ var _ = Describe("SentPacketHandler", func() {
 				handler.SentPacket(ackElicitingPacket(&Packet{PacketNumber: 102}))
 				ack := &wire.AckFrame{AckRanges: []wire.AckRange{{Smallest: 100, Largest: 102}}}
 				_, err := handler.ReceivedAck(ack, protocol.Encryption1RTT, time.Now())
-				Expect(err).To(MatchError("received an ACK for skipped packet number: 101 (1-RTT)"))
+				Expect(err).To(MatchError(&qerr.TransportError{
+					ErrorCode:    qerr.ProtocolViolation,
+					ErrorMessage: "received an ACK for skipped packet number: 101 (1-RTT)",
+				}))
 			})
 
 			It("rejects ACKs with a too high LargestAcked packet number", func() {
 				ack := &wire.AckFrame{AckRanges: []wire.AckRange{{Smallest: 0, Largest: 9999}}}
 				_, err := handler.ReceivedAck(ack, protocol.Encryption1RTT, time.Now())
-				Expect(err).To(MatchError("PROTOCOL_VIOLATION: Received ACK for an unsent packet"))
+				Expect(err).To(MatchError(&qerr.TransportError{
+					ErrorCode:    qerr.ProtocolViolation,
+					ErrorMessage: "received ACK for an unsent packet",
+				}))
 				Expect(handler.bytesInFlight).To(Equal(protocol.ByteCount(10)))
 			})
 
@@ -1131,7 +1139,10 @@ var _ = Describe("SentPacketHandler", func() {
 			}))
 			ack := &wire.AckFrame{AckRanges: []wire.AckRange{{Smallest: 13, Largest: 13}}}
 			_, err := handler.ReceivedAck(ack, protocol.EncryptionHandshake, time.Now())
-			Expect(err).To(MatchError("PROTOCOL_VIOLATION: Received ACK for an unsent packet"))
+			Expect(err).To(MatchError(&qerr.TransportError{
+				ErrorCode:    qerr.ProtocolViolation,
+				ErrorMessage: "received ACK for an unsent packet",
+			}))
 		})
 
 		It("deletes Initial packets, as a server", func() {

@@ -5,7 +5,6 @@ import (
 	"io"
 
 	"github.com/lucas-clemente/quic-go/internal/protocol"
-	"github.com/lucas-clemente/quic-go/internal/qerr"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -24,8 +23,8 @@ var _ = Describe("CONNECTION_CLOSE Frame", func() {
 			frame, err := parseConnectionCloseFrame(b, versionIETFFrames)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(frame.IsApplicationError).To(BeFalse())
-			Expect(frame.ErrorCode).To(Equal(qerr.ErrorCode(0x19)))
-			Expect(frame.FrameType).To(Equal(uint64(0x1337)))
+			Expect(frame.ErrorCode).To(BeEquivalentTo(0x19))
+			Expect(frame.FrameType).To(BeEquivalentTo(0x1337))
 			Expect(frame.ReasonPhrase).To(Equal(reason))
 			Expect(b.Len()).To(BeZero())
 		})
@@ -40,7 +39,7 @@ var _ = Describe("CONNECTION_CLOSE Frame", func() {
 			frame, err := parseConnectionCloseFrame(b, versionIETFFrames)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(frame.IsApplicationError).To(BeTrue())
-			Expect(frame.ErrorCode).To(Equal(qerr.ErrorCode(0xcafe)))
+			Expect(frame.ErrorCode).To(BeEquivalentTo(0xcafe))
 			Expect(frame.ReasonPhrase).To(Equal(reason))
 			Expect(b.Len()).To(BeZero())
 		})

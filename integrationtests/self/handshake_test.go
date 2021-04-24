@@ -3,6 +3,7 @@ package self_test
 import (
 	"context"
 	"crypto/tls"
+	"errors"
 	"fmt"
 	"io/ioutil"
 	"net"
@@ -267,7 +268,11 @@ var _ = Describe("Handshake tests", func() {
 						getTLSClientConfig(),
 						clientConfig,
 					)
-					Expect(err).To(MatchError("CRYPTO_ERROR (0x12a): x509: certificate is valid for localhost, not foo.bar"))
+					Expect(err).To(HaveOccurred())
+					var transportErr *qerr.TransportError
+					Expect(errors.As(err, &transportErr)).To(BeTrue())
+					Expect(transportErr.ErrorCode.IsCryptoError()).To(BeTrue())
+					Expect(transportErr.Error()).To(ContainSubstring("x509: certificate is valid for localhost, not foo.bar"))
 				})
 
 				It("fails the handshake if the client fails to provide the requested client cert", func() {
@@ -292,7 +297,11 @@ var _ = Describe("Handshake tests", func() {
 						}()
 						Eventually(errChan).Should(Receive(&err))
 					}
-					Expect(err).To(MatchError("CRYPTO_ERROR (0x12a): tls: bad certificate"))
+					Expect(err).To(HaveOccurred())
+					var transportErr *qerr.TransportError
+					Expect(errors.As(err, &transportErr)).To(BeTrue())
+					Expect(transportErr.ErrorCode.IsCryptoError()).To(BeTrue())
+					Expect(transportErr.Error()).To(ContainSubstring("tls: bad certificate"))
 				})
 
 				It("uses the ServerName in the tls.Config", func() {
@@ -304,7 +313,11 @@ var _ = Describe("Handshake tests", func() {
 						tlsConf,
 						clientConfig,
 					)
-					Expect(err).To(MatchError("CRYPTO_ERROR (0x12a): x509: certificate is valid for localhost, not foo.bar"))
+					Expect(err).To(HaveOccurred())
+					var transportErr *qerr.TransportError
+					Expect(errors.As(err, &transportErr)).To(BeTrue())
+					Expect(transportErr.ErrorCode.IsCryptoError()).To(BeTrue())
+					Expect(transportErr.Error()).To(ContainSubstring("x509: certificate is valid for localhost, not foo.bar"))
 				})
 			})
 		}
@@ -363,7 +376,9 @@ var _ = Describe("Handshake tests", func() {
 
 			_, err := dial()
 			Expect(err).To(HaveOccurred())
-			Expect(err.(*qerr.QuicError).ErrorCode).To(Equal(qerr.ConnectionRefused))
+			var transportErr *qerr.TransportError
+			Expect(errors.As(err, &transportErr)).To(BeTrue())
+			Expect(transportErr.ErrorCode).To(Equal(qerr.ConnectionRefused))
 
 			// now accept one session, freeing one spot in the queue
 			_, err = server.Accept(context.Background())
@@ -376,7 +391,8 @@ var _ = Describe("Handshake tests", func() {
 
 			_, err = dial()
 			Expect(err).To(HaveOccurred())
-			Expect(err.(*qerr.QuicError).ErrorCode).To(Equal(qerr.ConnectionRefused))
+			Expect(errors.As(err, &transportErr)).To(BeTrue())
+			Expect(transportErr.ErrorCode).To(Equal(qerr.ConnectionRefused))
 		})
 
 		It("removes closed connections from the accept queue", func() {
@@ -392,7 +408,9 @@ var _ = Describe("Handshake tests", func() {
 
 			_, err = dial()
 			Expect(err).To(HaveOccurred())
-			Expect(err.(*qerr.QuicError).ErrorCode).To(Equal(qerr.ConnectionRefused))
+			var transportErr *qerr.TransportError
+			Expect(errors.As(err, &transportErr)).To(BeTrue())
+			Expect(transportErr.ErrorCode).To(Equal(qerr.ConnectionRefused))
 
 			// Now close the one of the session that are waiting to be accepted.
 			// This should free one spot in the queue.
@@ -407,7 +425,8 @@ var _ = Describe("Handshake tests", func() {
 
 			_, err = dial()
 			Expect(err).To(HaveOccurred())
-			Expect(err.(*qerr.QuicError).ErrorCode).To(Equal(qerr.ConnectionRefused))
+			Expect(errors.As(err, &transportErr)).To(BeTrue())
+			Expect(transportErr.ErrorCode).To(Equal(qerr.ConnectionRefused))
 		})
 	})
 
@@ -450,8 +469,10 @@ var _ = Describe("Handshake tests", func() {
 				nil,
 			)
 			Expect(err).To(HaveOccurred())
-			Expect(err.Error()).To(ContainSubstring("CRYPTO_ERROR"))
-			Expect(err.Error()).To(ContainSubstring("no application protocol"))
+			var transportErr *qerr.TransportError
+			Expect(errors.As(err, &transportErr)).To(BeTrue())
+			Expect(transportErr.ErrorCode.IsCryptoError()).To(BeTrue())
+			Expect(transportErr.Error()).To(ContainSubstring("no application protocol"))
 		})
 	})
 
@@ -529,7 +550,9 @@ var _ = Describe("Handshake tests", func() {
 				nil,
 			)
 			Expect(err).To(HaveOccurred())
-			Expect(err.Error()).To(ContainSubstring("INVALID_TOKEN"))
+			var transportErr *qerr.TransportError
+			Expect(errors.As(err, &transportErr)).To(BeTrue())
+			Expect(transportErr.ErrorCode).To(Equal(qerr.InvalidToken))
 			// Receiving a Retry might lead the client to measure a very small RTT.
 			// Then, it sometimes would retransmit the ClientHello before receiving the ServerHello.
 			Expect(len(tokenChan)).To(BeNumerically(">=", 2))
