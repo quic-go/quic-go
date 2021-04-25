@@ -99,8 +99,7 @@ var _ = Describe("Stateless Resets", func() {
 				_, serr = str.Read([]byte{0})
 			}
 			Expect(serr).To(HaveOccurred())
-			Expect(serr.Error()).To(ContainSubstring("received a stateless reset"))
-
+			Expect(serr).To(MatchError(&quic.StatelessResetError{}))
 			Expect(ln2.Close()).To(Succeed())
 			Eventually(acceptStopped).Should(BeClosed())
 		})

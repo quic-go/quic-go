@@ -1483,7 +1483,7 @@ func (s *session) handleCloseError(closeErr *closeError) {
 	switch {
 	case errors.Is(e, qerr.ErrIdleTimeout),
 		errors.Is(e, qerr.ErrHandshakeTimeout),
-		errors.Is(e, &statelessResetErr{}),
+		errors.Is(e, &StatelessResetError{}),
 		errors.Is(e, &VersionNegotiationError{}),
 		errors.Is(e, &errCloseForRecreating{}),
 		errors.Is(e, &qerr.ApplicationError{}),
@@ -1503,7 +1503,7 @@ func (s *session) handleCloseError(closeErr *closeError) {
 
 	if s.tracer != nil && !errors.Is(e, &errCloseForRecreating{}) {
 		var (
-			resetErr       *statelessResetErr
+			resetErr       *StatelessResetError
 			vnErr          *VersionNegotiationError
 			transportErr   *qerr.TransportError
 			applicationErr *qerr.ApplicationError
@@ -1514,7 +1514,7 @@ func (s *session) handleCloseError(closeErr *closeError) {
 		case errors.Is(e, qerr.ErrHandshakeTimeout):
 			s.tracer.ClosedConnection(logging.NewTimeoutCloseReason(logging.TimeoutReasonHandshake))
 		case errors.As(e, &resetErr):
-			s.tracer.ClosedConnection(logging.NewStatelessResetCloseReason(resetErr.token))
+			s.tracer.ClosedConnection(logging.NewStatelessResetCloseReason(resetErr.Token))
 		case errors.As(e, &vnErr):
 			s.tracer.ClosedConnection(logging.NewVersionNegotiationError(vnErr.Theirs))
 		case errors.As(e, &applicationErr):

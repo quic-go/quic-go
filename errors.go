@@ -8,6 +8,7 @@ type (
 	TransportError          = qerr.TransportError
 	ApplicationError        = qerr.ApplicationError
 	VersionNegotiationError = qerr.VersionNegotiationError
+	StatelessResetError     = qerr.StatelessResetError
 )
 
 type (

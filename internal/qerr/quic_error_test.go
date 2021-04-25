@@ -115,4 +115,26 @@ var _ = Describe("QUIC Errors", func() {
 			}).Error()).To(Equal("no compatible QUIC version found (we support [0x2 0x3], server offered [0x4 0x5 0x6])"))
 		})
 	})
+
+	Context("Stateless Reset errors", func() {
+		token := protocol.StatelessResetToken{0x0, 0x1, 0x2, 0x3, 0x4, 0x5, 0x6, 0x7, 0x8, 0x9, 0xa, 0xb, 0xc, 0xd, 0xe, 0xf}
+
+		It("is a Stateless Reset error", func() {
+			Expect(errors.Is(&StatelessResetError{Token: token}, &StatelessResetError{})).To(BeTrue())
+		})
+
+		It("has a string representation", func() {
+			Expect((&StatelessResetError{Token: token}).Error()).To(Equal("received a stateless reset with token 000102030405060708090a0b0c0d0e0f"))
+		})
+
+		It("is a net.Error", func() {
+			//nolint:gosimple // we need to assign to an interface here
+			var err error
+			err = &StatelessResetError{}
+			nerr, ok := err.(net.Error)
+			Expect(ok).To(BeTrue())
+			Expect(nerr.Timeout()).To(BeFalse())
+			Expect(nerr.Temporary()).To(BeTrue())
+		})
+	})
 })

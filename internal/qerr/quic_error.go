@@ -2,6 +2,7 @@ package qerr
 
 import (
 	"fmt"
+	"net"
 
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 )
@@ -109,3 +110,22 @@ func (e *VersionNegotiationError) Is(target error) bool {
 	_, ok := target.(*VersionNegotiationError)
 	return ok
 }
+
+// A StatelessResetError occurs when we receive a stateless reset.
+type StatelessResetError struct {
+	Token protocol.StatelessResetToken
+}
+
+var _ net.Error = &StatelessResetError{}
+
+func (e *StatelessResetError) Error() string {
+	return fmt.Sprintf("received a stateless reset with token %x", e.Token)
+}
+
+func (e *StatelessResetError) Is(target error) bool {
+	_, ok := target.(*StatelessResetError)
+	return ok
+}
+
+func (e *StatelessResetError) Timeout() bool   { return false }
+func (e *StatelessResetError) Temporary() bool { return true }

@@ -658,7 +658,7 @@ var _ = Describe("Session", func() {
 			streamManager.EXPECT().CloseWithError(gomock.Any())
 			sessionRunner.EXPECT().Remove(gomock.Any()).AnyTimes()
 			cryptoSetup.EXPECT().Close()
-			sess.destroy(&statelessResetErr{token: token})
+			sess.destroy(&StatelessResetError{Token: token})
 		})
 	})
 
