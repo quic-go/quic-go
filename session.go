@@ -132,20 +132,6 @@ func (e *errCloseForRecreating) Is(target error) bool {
 	return ok
 }
 
-type errVersionNegotiation struct {
-	ourVersions   []protocol.VersionNumber
-	theirVersions []protocol.VersionNumber
-}
-
-func (e *errVersionNegotiation) Error() string {
-	return fmt.Sprintf("no compatible QUIC version found (we support %s, server offered %s)", e.ourVersions, e.theirVersions)
-}
-
-func (e *errVersionNegotiation) Is(target error) bool {
-	_, ok := target.(*errVersionNegotiation)
-	return ok
-}
-
 var sessionTracingID uint64        // to be accessed atomically
 func nextSessionTracingID() uint64 { return atomic.AddUint64(&sessionTracingID, 1) }
 
@@ -1101,9 +1087,9 @@ func (s *session) handleVersionNegotiationPacket(p *receivedPacket) {
 	}
 	newVersion, ok := protocol.ChooseSupportedVersion(s.config.Versions, supportedVersions)
 	if !ok {
-		s.destroyImpl(&errVersionNegotiation{
-			ourVersions:   s.config.Versions,
-			theirVersions: supportedVersions,
+		s.destroyImpl(&VersionNegotiationError{
+			Ours:   s.config.Versions,
+			Theirs: supportedVersions,
 		})
 		s.logger.Infof("No compatible QUIC version found.")
 		return
@@ -1498,7 +1484,7 @@ func (s *session) handleCloseError(closeErr *closeError) {
 	case errors.Is(e, qerr.ErrIdleTimeout),
 		errors.Is(e, qerr.ErrHandshakeTimeout),
 		errors.Is(e, &statelessResetErr{}),
-		errors.Is(e, &errVersionNegotiation{}),
+		errors.Is(e, &VersionNegotiationError{}),
 		errors.Is(e, &errCloseForRecreating{}),
 		errors.Is(e, &qerr.ApplicationError{}),
 		errors.Is(e, &qerr.TransportError{}):
@@ -1518,7 +1504,7 @@ func (s *session) handleCloseError(closeErr *closeError) {
 	if s.tracer != nil && !errors.Is(e, &errCloseForRecreating{}) {
 		var (
 			resetErr       *statelessResetErr
-			vnErr          *errVersionNegotiation
+			vnErr          *VersionNegotiationError
 			transportErr   *qerr.TransportError
 			applicationErr *qerr.ApplicationError
 		)
@@ -1530,7 +1516,7 @@ func (s *session) handleCloseError(closeErr *closeError) {
 		case errors.As(e, &resetErr):
 			s.tracer.ClosedConnection(logging.NewStatelessResetCloseReason(resetErr.token))
 		case errors.As(e, &vnErr):
-			s.tracer.ClosedConnection(logging.NewVersionNegotiationError(vnErr.theirVersions))
+			s.tracer.ClosedConnection(logging.NewVersionNegotiationError(vnErr.Theirs))
 		case errors.As(e, &applicationErr):
 			s.tracer.ClosedConnection(logging.NewApplicationCloseReason(logging.ApplicationError(applicationErr.ErrorCode), closeErr.remote))
 		case errors.As(e, &transportErr):

@@ -1,10 +1,16 @@
 package quic
 
-import "github.com/lucas-clemente/quic-go/internal/qerr"
+import (
+	"github.com/lucas-clemente/quic-go/internal/qerr"
+)
 
 type (
-	TransportError       = qerr.TransportError
-	ApplicationError     = qerr.ApplicationError
+	TransportError          = qerr.TransportError
+	ApplicationError        = qerr.ApplicationError
+	VersionNegotiationError = qerr.VersionNegotiationError
+)
+
+type (
 	TransportErrorCode   = qerr.TransportErrorCode
 	ApplicationErrorCode = qerr.ApplicationErrorCode
 )

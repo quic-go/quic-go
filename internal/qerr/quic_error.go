@@ -2,6 +2,8 @@ package qerr
 
 import (
 	"fmt"
+
+	"github.com/lucas-clemente/quic-go/internal/protocol"
 )
 
 var (
@@ -90,5 +92,20 @@ func (e *HandshakeTimeoutError) Temporary() bool { return false }
 func (e *HandshakeTimeoutError) Error() string   { return "timeout: handshake did not complete in time" }
 func (e *HandshakeTimeoutError) Is(target error) bool {
 	_, ok := target.(*HandshakeTimeoutError)
+	return ok
+}
+
+// A VersionNegotiationError occurs when the client and the server can't agree on a QUIC version.
+type VersionNegotiationError struct {
+	Ours   []protocol.VersionNumber
+	Theirs []protocol.VersionNumber
+}
+
+func (e *VersionNegotiationError) Error() string {
+	return fmt.Sprintf("no compatible QUIC version found (we support %s, server offered %s)", e.Ours, e.Theirs)
+}
+
+func (e *VersionNegotiationError) Is(target error) bool {
+	_, ok := target.(*VersionNegotiationError)
 	return ok
 }

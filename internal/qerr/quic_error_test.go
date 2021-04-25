@@ -4,6 +4,7 @@ import (
 	"errors"
 	"net"
 
+	"github.com/lucas-clemente/quic-go/internal/protocol"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 )
@@ -99,6 +100,19 @@ var _ = Describe("QUIC Errors", func() {
 			Expect(err.Error()).To(Equal("timeout: no recent network activity"))
 			Expect(errors.Is(err, &HandshakeTimeoutError{})).To(BeFalse())
 			Expect(errors.Is(err, &IdleTimeoutError{})).To(BeTrue())
+		})
+	})
+
+	Context("Version Negotiation errors", func() {
+		It("is a Version Negotiation error", func() {
+			Expect(errors.Is(&VersionNegotiationError{Ours: []protocol.VersionNumber{2, 3}}, &VersionNegotiationError{})).To(BeTrue())
+		})
+
+		It("has a string representation", func() {
+			Expect((&VersionNegotiationError{
+				Ours:   []protocol.VersionNumber{2, 3},
+				Theirs: []protocol.VersionNumber{4, 5, 6},
+			}).Error()).To(Equal("no compatible QUIC version found (we support [0x2 0x3], server offered [0x4 0x5 0x6])"))
 		})
 	})
 })
