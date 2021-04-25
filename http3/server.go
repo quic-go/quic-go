@@ -429,7 +429,6 @@ func (s *Server) handleRequest(sess quic.Session, str quic.Stream, decoder *qpac
 
 	ctx := str.Context()
 	ctx = context.WithValue(ctx, ServerContextKey, s)
-	ctx = context.WithValue(ctx, "x-quic-session", sess)
 	ctx = context.WithValue(ctx, http.LocalAddrContextKey, sess.LocalAddr())
 	req = req.WithContext(ctx)
 	r := newResponseWriter(str, s.logger)
