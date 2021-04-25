@@ -137,6 +137,25 @@ func (s *Server) Serve(conn net.PacketConn) error {
 	return s.serveImpl(s.TLSConfig, conn)
 }
 
+// Init will initialize the Server without handling the accept or doing any
+// other PacketConn-level operation.
+//
+// The server will be used with low-level library accepting sessions, using
+// HandleConn().
+func (s *Server) Init() {
+	s.logger = utils.DefaultLogger.WithPrefix("server")
+	quicConf := s.QuicConfig
+	if quicConf == nil {
+		quicConf = &quic.Config{}
+	} else {
+		quicConf = s.QuicConfig.Clone()
+	}
+	if s.EnableDatagrams {
+		quicConf.EnableDatagrams = true
+	}
+
+}
+
 func (s *Server) serveImpl(tlsConf *tls.Config, conn net.PacketConn) error {
 	if s.closed.Get() {
 		return http.ErrServerClosed
@@ -230,6 +249,14 @@ func (s *Server) removeListener(l *quic.EarlyListener) {
 	s.mutex.Lock()
 	delete(s.listeners, l)
 	s.mutex.Unlock()
+}
+
+// HandleConn can be used with sessions accepted with a quic EarlyListener, if accepting
+// is done using the low-level library.
+// The server will handle all accepted streams. Caller can open streams and send/receive
+// datagrams.
+func (s *Server) HandleConn(sess quic.EarlySession) {
+	s.handleConn(sess)
 }
 
 func (s *Server) handleConn(sess quic.EarlySession) {
@@ -337,6 +364,10 @@ func (s *Server) maxHeaderBytes() uint64 {
 	return uint64(s.Server.MaxHeaderBytes)
 }
 
+func (s *Server) HandleRequest(sess quic.Session, str quic.Stream, decoder *qpack.Decoder, onFrameError func()) requestError {
+	return s.handleRequest(sess, str, decoder, onFrameError)
+}
+
 func (s *Server) handleRequest(sess quic.Session, str quic.Stream, decoder *qpack.Decoder, onFrameError func()) requestError {
 	frame, err := parseNextFrame(str)
 	if err != nil {
@@ -375,6 +406,7 @@ func (s *Server) handleRequest(sess quic.Session, str quic.Stream, decoder *qpac
 
 	ctx := str.Context()
 	ctx = context.WithValue(ctx, ServerContextKey, s)
+	ctx = context.WithValue(ctx, "x-quic-session", sess)
 	ctx = context.WithValue(ctx, http.LocalAddrContextKey, sess.LocalAddr())
 	req = req.WithContext(ctx)
 	r := newResponseWriter(str, s.logger)
