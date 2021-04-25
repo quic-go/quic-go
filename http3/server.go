@@ -288,7 +288,7 @@ func (s *Server) handleConn(sess quic.EarlySession) {
 				sess.CloseWithError(quic.ErrorCode(errorFrameUnexpected), "")
 			})
 			if rerr.err != nil || rerr.streamErr != 0 || rerr.connErr != 0 {
-				s.logger.Debugf("Handling request failed: %s", err)
+				s.logger.Debugf("Handling request failed: %s", rerr.err)
 				if rerr.streamErr != 0 {
 					str.CancelWrite(quic.ErrorCode(rerr.streamErr))
 				}
@@ -364,8 +364,31 @@ func (s *Server) maxHeaderBytes() uint64 {
 	return uint64(s.Server.MaxHeaderBytes)
 }
 
-func (s *Server) HandleRequest(sess quic.Session, str quic.Stream, decoder *qpack.Decoder, onFrameError func()) requestError {
-	return s.handleRequest(sess, str, decoder, onFrameError)
+func (s *Server) HandleRequest(sess quic.Session, str quic.Stream, decoder *qpack.Decoder, onDone func()) requestError {
+	rerr := s.handleRequest(sess, str, decoder, func() {
+		sess.CloseWithError(quic.ErrorCode(errorFrameUnexpected), "")
+	})
+	if rerr.err != nil || rerr.streamErr != 0 || rerr.connErr != 0 {
+		s.logger.Debugf("Handling request failed: %v", rerr)
+		if rerr.streamErr != 0 {
+			str.CancelWrite(quic.ErrorCode(rerr.streamErr))
+		}
+		if rerr.connErr != 0 {
+			var reason string
+			if rerr.err != nil {
+				reason = rerr.err.Error()
+			}
+			sess.CloseWithError(quic.ErrorCode(rerr.connErr), reason)
+		}
+		return rerr
+	}
+	str.Close()
+
+	if onDone != nil {
+		onDone()
+	}
+
+	return rerr
 }
 
 func (s *Server) handleRequest(sess quic.Session, str quic.Stream, decoder *qpack.Decoder, onFrameError func()) requestError {
