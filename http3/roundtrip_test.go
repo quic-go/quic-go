@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"github.com/golang/mock/gomock"
-	quic "github.com/lucas-clemente/quic-go"
+	"github.com/lucas-clemente/quic-go"
 	mockquic "github.com/lucas-clemente/quic-go/internal/mocks/quic"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -105,7 +105,7 @@ var _ = Describe("RoundTripper", func() {
 				<-closed
 				return nil, errors.New("test done")
 			}).MaxTimes(1)
-			session.EXPECT().CloseWithError(gomock.Any(), gomock.Any()).Do(func(quic.ErrorCode, string) { close(closed) })
+			session.EXPECT().CloseWithError(gomock.Any(), gomock.Any()).Do(func(quic.ApplicationErrorCode, string) { close(closed) })
 			_, err = rt.RoundTrip(req)
 			Expect(err).To(MatchError(testErr))
 			Expect(rt.clients).To(HaveLen(1))
@@ -147,7 +147,7 @@ var _ = Describe("RoundTripper", func() {
 				<-closed
 				return nil, errors.New("test done")
 			}).MaxTimes(1)
-			session.EXPECT().CloseWithError(gomock.Any(), gomock.Any()).Do(func(quic.ErrorCode, string) { close(closed) })
+			session.EXPECT().CloseWithError(gomock.Any(), gomock.Any()).Do(func(quic.ApplicationErrorCode, string) { close(closed) })
 			req, err := http.NewRequest("GET", "https://quic.clemente.io/file1.html", nil)
 			Expect(err).ToNot(HaveOccurred())
 			_, err = rt.RoundTrip(req)

@@ -39,7 +39,7 @@ func (m *MockSendStreamI) EXPECT() *MockSendStreamIMockRecorder {
 }
 
 // CancelWrite mocks base method.
-func (m *MockSendStreamI) CancelWrite(arg0 ErrorCode) {
+func (m *MockSendStreamI) CancelWrite(arg0 ApplicationErrorCode) {
 	m.ctrl.T.Helper()
 	m.ctrl.Call(m, "CancelWrite", arg0)
 }

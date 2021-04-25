@@ -9,7 +9,6 @@ import (
 
 	"github.com/lucas-clemente/quic-go/internal/handshake"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
-	"github.com/lucas-clemente/quic-go/internal/qerr"
 	"github.com/lucas-clemente/quic-go/logging"
 )
 
@@ -65,10 +64,6 @@ type TokenStore interface {
 	Put(key string, token *ClientToken)
 }
 
-// An ErrorCode is an application-defined error code.
-// Valid values range between 0 and MAX_UINT62.
-type ErrorCode = qerr.ApplicationErrorCode
-
 // Err0RTTRejected is the returned from:
 // * Open{Uni}Stream{Sync}
 // * Accept{Uni}Stream
@@ -109,7 +104,7 @@ type ReceiveStream interface {
 	// It will ask the peer to stop transmitting stream data.
 	// Read will unblock immediately, and future Read calls will fail.
 	// When called multiple times or after reading the io.EOF it is a no-op.
-	CancelRead(ErrorCode)
+	CancelRead(ApplicationErrorCode)
 	// SetReadDeadline sets the deadline for future Read calls and
 	// any currently-blocked Read call.
 	// A zero value for t means Read will not time out.
@@ -138,7 +133,7 @@ type SendStream interface {
 	// Data already written, but not yet delivered to the peer is not guaranteed to be delivered reliably.
 	// Write will unblock immediately, and future calls to Write will fail.
 	// When called multiple times or after closing the stream it is a no-op.
-	CancelWrite(ErrorCode)
+	CancelWrite(ApplicationErrorCode)
 	// The context is canceled as soon as the write-side of the stream is closed.
 	// This happens when Close() or CancelWrite() is called, or when the peer
 	// cancels the read-side of their stream.
@@ -156,7 +151,7 @@ type SendStream interface {
 type StreamError interface {
 	error
 	Canceled() bool
-	ErrorCode() ErrorCode
+	ErrorCode() ApplicationErrorCode
 }
 
 // A Session is a QUIC connection between two peers.
@@ -195,9 +190,9 @@ type Session interface {
 	LocalAddr() net.Addr
 	// RemoteAddr returns the address of the peer.
 	RemoteAddr() net.Addr
-	// Close the connection with an error.
+	// CloseWithError closes the connection with an error.
 	// The error string will be sent to the peer.
-	CloseWithError(ErrorCode, string) error
+	CloseWithError(ApplicationErrorCode, string) error
 	// The context is cancelled when the session is closed.
 	// Warning: This API should not be considered stable and might change soon.
 	Context() context.Context

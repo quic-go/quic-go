@@ -258,19 +258,19 @@ func (s *Server) handleConn(sess quic.EarlySession) {
 		}
 		go func() {
 			rerr := s.handleRequest(sess, str, decoder, func() {
-				sess.CloseWithError(quic.ErrorCode(errorFrameUnexpected), "")
+				sess.CloseWithError(quic.ApplicationErrorCode(errorFrameUnexpected), "")
 			})
 			if rerr.err != nil || rerr.streamErr != 0 || rerr.connErr != 0 {
 				s.logger.Debugf("Handling request failed: %s", err)
 				if rerr.streamErr != 0 {
-					str.CancelWrite(quic.ErrorCode(rerr.streamErr))
+					str.CancelWrite(quic.ApplicationErrorCode(rerr.streamErr))
 				}
 				if rerr.connErr != 0 {
 					var reason string
 					if rerr.err != nil {
 						reason = rerr.err.Error()
 					}
-					sess.CloseWithError(quic.ErrorCode(rerr.connErr), reason)
+					sess.CloseWithError(quic.ApplicationErrorCode(rerr.connErr), reason)
 				}
 				return
 			}
@@ -301,20 +301,20 @@ func (s *Server) handleUnidirectionalStreams(sess quic.EarlySession) {
 				// TODO: check that only one stream of each type is opened.
 				return
 			case streamTypePushStream: // only the server can push
-				sess.CloseWithError(quic.ErrorCode(errorStreamCreationError), "")
+				sess.CloseWithError(quic.ApplicationErrorCode(errorStreamCreationError), "")
 				return
 			default:
-				str.CancelRead(quic.ErrorCode(errorStreamCreationError))
+				str.CancelRead(quic.ApplicationErrorCode(errorStreamCreationError))
 				return
 			}
 			f, err := parseNextFrame(str)
 			if err != nil {
-				sess.CloseWithError(quic.ErrorCode(errorFrameError), "")
+				sess.CloseWithError(quic.ApplicationErrorCode(errorFrameError), "")
 				return
 			}
 			sf, ok := f.(*settingsFrame)
 			if !ok {
-				sess.CloseWithError(quic.ErrorCode(errorMissingSettings), "")
+				sess.CloseWithError(quic.ApplicationErrorCode(errorMissingSettings), "")
 				return
 			}
 			if !sf.Datagram {
@@ -324,7 +324,7 @@ func (s *Server) handleUnidirectionalStreams(sess quic.EarlySession) {
 			// we can expect it to have been negotiated both on the transport and on the HTTP/3 layer.
 			// Note: ConnectionState() will block until the handshake is complete (relevant when using 0-RTT).
 			if s.EnableDatagrams && !sess.ConnectionState().SupportsDatagrams {
-				sess.CloseWithError(quic.ErrorCode(errorSettingsError), "missing QUIC Datagram support")
+				sess.CloseWithError(quic.ApplicationErrorCode(errorSettingsError), "missing QUIC Datagram support")
 			}
 		}(str)
 	}
@@ -410,7 +410,7 @@ func (s *Server) handleRequest(sess quic.Session, str quic.Stream, decoder *qpac
 			r.WriteHeader(200)
 		}
 		// If the EOF was read by the handler, CancelRead() is a no-op.
-		str.CancelRead(quic.ErrorCode(errorNoError))
+		str.CancelRead(quic.ApplicationErrorCode(errorNoError))
 	}
 	return requestError{}
 }

@@ -1475,7 +1475,7 @@ func (s *session) shutdown() {
 	<-s.ctx.Done()
 }
 
-func (s *session) CloseWithError(code ErrorCode, desc string) error {
+func (s *session) CloseWithError(code ApplicationErrorCode, desc string) error {
 	s.closeLocal(&qerr.ApplicationError{
 		ErrorCode:    code,
 		ErrorMessage: desc,

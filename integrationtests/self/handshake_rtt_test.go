@@ -7,7 +7,7 @@ import (
 	"net"
 	"time"
 
-	quic "github.com/lucas-clemente/quic-go"
+	"github.com/lucas-clemente/quic-go"
 	quicproxy "github.com/lucas-clemente/quic-go/integrationtests/tools/proxy"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 
@@ -86,7 +86,6 @@ var _ = Describe("Handshake RTT tests", func() {
 			clientConfig,
 		)
 		Expect(err).To(HaveOccurred())
-		// Expect(err.(qerr.ErrorCode)).To(Equal(qerr.InvalidVersion))
 		expectDurationInRTTs(1)
 	})
 
