@@ -8,6 +8,7 @@ import (
 
 	"github.com/lucas-clemente/quic-go/internal/flowcontrol"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
+	"github.com/lucas-clemente/quic-go/internal/qerr"
 	"github.com/lucas-clemente/quic-go/internal/utils"
 	"github.com/lucas-clemente/quic-go/internal/wire"
 )
@@ -196,7 +197,7 @@ func (s *receiveStream) dequeueNextFrame() {
 	s.readPosInFrame = 0
 }
 
-func (s *receiveStream) CancelRead(errorCode protocol.ApplicationErrorCode) {
+func (s *receiveStream) CancelRead(errorCode qerr.ApplicationErrorCode) {
 	s.mutex.Lock()
 	completed := s.cancelReadImpl(errorCode)
 	s.mutex.Unlock()
@@ -207,7 +208,7 @@ func (s *receiveStream) CancelRead(errorCode protocol.ApplicationErrorCode) {
 	}
 }
 
-func (s *receiveStream) cancelReadImpl(errorCode protocol.ApplicationErrorCode) bool /* completed */ {
+func (s *receiveStream) cancelReadImpl(errorCode qerr.ApplicationErrorCode) bool /* completed */ {
 	if s.finRead || s.canceledRead || s.resetRemotely {
 		return false
 	}

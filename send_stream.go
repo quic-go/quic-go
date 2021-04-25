@@ -7,9 +7,9 @@ import (
 	"time"
 
 	"github.com/lucas-clemente/quic-go/internal/ackhandler"
-
 	"github.com/lucas-clemente/quic-go/internal/flowcontrol"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
+	"github.com/lucas-clemente/quic-go/internal/qerr"
 	"github.com/lucas-clemente/quic-go/internal/utils"
 	"github.com/lucas-clemente/quic-go/internal/wire"
 )
@@ -407,12 +407,12 @@ func (s *sendStream) Close() error {
 	return nil
 }
 
-func (s *sendStream) CancelWrite(errorCode protocol.ApplicationErrorCode) {
+func (s *sendStream) CancelWrite(errorCode qerr.ApplicationErrorCode) {
 	s.cancelWriteImpl(errorCode, fmt.Errorf("Write on stream %d canceled with error code %d", s.streamID, errorCode))
 }
 
 // must be called after locking the mutex
-func (s *sendStream) cancelWriteImpl(errorCode protocol.ApplicationErrorCode, writeErr error) {
+func (s *sendStream) cancelWriteImpl(errorCode qerr.ApplicationErrorCode, writeErr error) {
 	s.mutex.Lock()
 	if s.canceledWrite {
 		s.mutex.Unlock()

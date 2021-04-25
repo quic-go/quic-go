@@ -9,6 +9,7 @@ import (
 
 	"github.com/lucas-clemente/quic-go/internal/handshake"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
+	"github.com/lucas-clemente/quic-go/internal/qerr"
 	"github.com/lucas-clemente/quic-go/logging"
 )
 
@@ -66,7 +67,7 @@ type TokenStore interface {
 
 // An ErrorCode is an application-defined error code.
 // Valid values range between 0 and MAX_UINT62.
-type ErrorCode = protocol.ApplicationErrorCode
+type ErrorCode = qerr.ApplicationErrorCode
 
 // Err0RTTRejected is the returned from:
 // * Open{Uni}Stream{Sync}

@@ -216,7 +216,7 @@ func (p *packetPacker) PackConnectionClose(e *qerr.TransportError) (*coalescedPa
 
 // PackApplicationClose packs a packet that closes the connection with an application error.
 func (p *packetPacker) PackApplicationClose(e *qerr.ApplicationError) (*coalescedPacket, error) {
-	return p.packConnectionClose(true, e.ErrorCode, 0, e.ErrorMessage)
+	return p.packConnectionClose(true, uint64(e.ErrorCode), 0, e.ErrorMessage)
 }
 
 func (p *packetPacker) packConnectionClose(

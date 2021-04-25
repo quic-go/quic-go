@@ -14,9 +14,10 @@ import (
 	"strconv"
 	"time"
 
-	quic "github.com/lucas-clemente/quic-go"
+	"github.com/lucas-clemente/quic-go"
 	"github.com/lucas-clemente/quic-go/http3"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
+	"github.com/lucas-clemente/quic-go/internal/qerr"
 	"github.com/lucas-clemente/quic-go/internal/testdata"
 
 	. "github.com/onsi/ginkgo"
@@ -26,7 +27,7 @@ import (
 
 type streamCancelError interface {
 	Canceled() bool
-	ErrorCode() protocol.ApplicationErrorCode
+	ErrorCode() qerr.ApplicationErrorCode
 }
 
 var _ = Describe("HTTP tests", func() {

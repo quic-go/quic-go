@@ -46,9 +46,12 @@ func (e *TransportError) Error() string {
 	return str + ": " + msg
 }
 
+// An ApplicationErrorCode is an application-defined error code.
+type ApplicationErrorCode uint64
+
 type ApplicationError struct {
 	Remote       bool
-	ErrorCode    uint64
+	ErrorCode    ApplicationErrorCode
 	ErrorMessage string
 }
 

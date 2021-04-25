@@ -9,6 +9,7 @@ import (
 	"github.com/lucas-clemente/quic-go/internal/ackhandler"
 	"github.com/lucas-clemente/quic-go/internal/flowcontrol"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
+	"github.com/lucas-clemente/quic-go/internal/qerr"
 	"github.com/lucas-clemente/quic-go/internal/wire"
 )
 
@@ -88,11 +89,11 @@ var _ Stream = &stream{}
 
 type streamCanceledError struct {
 	error
-	errorCode protocol.ApplicationErrorCode
+	errorCode qerr.ApplicationErrorCode
 }
 
-func (streamCanceledError) Canceled() bool                             { return true }
-func (e streamCanceledError) ErrorCode() protocol.ApplicationErrorCode { return e.errorCode }
+func (streamCanceledError) Canceled() bool                         { return true }
+func (e streamCanceledError) ErrorCode() qerr.ApplicationErrorCode { return e.errorCode }
 
 var _ StreamError = &streamCanceledError{}
 
