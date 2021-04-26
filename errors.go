@@ -11,6 +11,8 @@ type (
 	ApplicationError        = qerr.ApplicationError
 	VersionNegotiationError = qerr.VersionNegotiationError
 	StatelessResetError     = qerr.StatelessResetError
+	IdleTimeoutError        = qerr.IdleTimeoutError
+	HandshakeTimeoutError   = qerr.HandshakeTimeoutError
 )
 
 type (
