@@ -52,6 +52,9 @@ func (e *TransportError) Error() string {
 // An ApplicationErrorCode is an application-defined error code.
 type ApplicationErrorCode uint64
 
+// A StreamErrorCode is an error code used to cancel streams.
+type StreamErrorCode uint64
+
 type ApplicationError struct {
 	Remote       bool
 	ErrorCode    ApplicationErrorCode

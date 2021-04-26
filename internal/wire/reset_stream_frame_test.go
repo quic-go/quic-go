@@ -23,7 +23,7 @@ var _ = Describe("RESET_STREAM frame", func() {
 			Expect(err).ToNot(HaveOccurred())
 			Expect(frame.StreamID).To(Equal(protocol.StreamID(0xdeadbeef)))
 			Expect(frame.FinalSize).To(Equal(protocol.ByteCount(0x987654321)))
-			Expect(frame.ErrorCode).To(Equal(qerr.ApplicationErrorCode(0x1337)))
+			Expect(frame.ErrorCode).To(Equal(qerr.StreamErrorCode(0x1337)))
 		})
 
 		It("errors on EOFs", func() {

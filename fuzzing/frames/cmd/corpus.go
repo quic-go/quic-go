@@ -124,17 +124,17 @@ func getFrames() []wire.Frame {
 		&wire.PingFrame{},
 		&wire.ResetStreamFrame{
 			StreamID:  protocol.StreamID(getRandomNumber()),
-			ErrorCode: quic.ApplicationErrorCode(getRandomNumber()),
+			ErrorCode: quic.StreamErrorCode(getRandomNumber()),
 			FinalSize: protocol.ByteCount(getRandomNumber()),
 		},
 		&wire.ResetStreamFrame{ // at maximum offset
 			StreamID:  protocol.StreamID(getRandomNumber()),
-			ErrorCode: quic.ApplicationErrorCode(getRandomNumber()),
+			ErrorCode: quic.StreamErrorCode(getRandomNumber()),
 			FinalSize: protocol.MaxByteCount,
 		},
 		&wire.StopSendingFrame{
 			StreamID:  protocol.StreamID(getRandomNumber()),
-			ErrorCode: quic.ApplicationErrorCode(getRandomNumber()),
+			ErrorCode: quic.StreamErrorCode(getRandomNumber()),
 		},
 		&wire.CryptoFrame{
 			Data: getRandomData(100),

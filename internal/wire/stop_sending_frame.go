@@ -11,7 +11,7 @@ import (
 // A StopSendingFrame is a STOP_SENDING frame
 type StopSendingFrame struct {
 	StreamID  protocol.StreamID
-	ErrorCode qerr.ApplicationErrorCode
+	ErrorCode qerr.StreamErrorCode
 }
 
 // parseStopSendingFrame parses a STOP_SENDING frame
@@ -31,7 +31,7 @@ func parseStopSendingFrame(r *bytes.Reader, _ protocol.VersionNumber) (*StopSend
 
 	return &StopSendingFrame{
 		StreamID:  protocol.StreamID(streamID),
-		ErrorCode: qerr.ApplicationErrorCode(errorCode),
+		ErrorCode: qerr.StreamErrorCode(errorCode),
 	}, nil
 }
 

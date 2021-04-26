@@ -1,6 +1,8 @@
 package quic
 
 import (
+	"fmt"
+
 	"github.com/lucas-clemente/quic-go/internal/qerr"
 )
 
@@ -14,6 +16,7 @@ type (
 type (
 	TransportErrorCode   = qerr.TransportErrorCode
 	ApplicationErrorCode = qerr.ApplicationErrorCode
+	StreamErrorCode      = qerr.StreamErrorCode
 )
 
 const (
@@ -35,3 +38,19 @@ const (
 	AEADLimitReached          = qerr.AEADLimitReached
 	NoViablePathError         = qerr.NoViablePathError
 )
+
+// A StreamError is used for Stream.CancelRead and Stream.CancelWrite.
+// It is also returned from Stream.Read and Stream.Write if the peer canceled reading or writing.
+type StreamError struct {
+	StreamID  StreamID
+	ErrorCode StreamErrorCode
+}
+
+func (e *StreamError) Is(target error) bool {
+	_, ok := target.(*StreamError)
+	return ok
+}
+
+func (e *StreamError) Error() string {
+	return fmt.Sprintf("stream %d canceled with error code %d", e.StreamID, e.ErrorCode)
+}

@@ -6,6 +6,7 @@ import (
 	"compress/gzip"
 	"context"
 	"crypto/tls"
+	"errors"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -23,11 +24,6 @@ import (
 	. "github.com/onsi/gomega"
 	"github.com/onsi/gomega/gbytes"
 )
-
-type streamCancelError interface {
-	Canceled() bool
-	ErrorCode() quic.ApplicationErrorCode
-}
 
 var _ = Describe("HTTP tests", func() {
 	var (
@@ -260,10 +256,9 @@ var _ = Describe("HTTP tests", func() {
 					for {
 						if _, err := w.Write([]byte("foobar")); err != nil {
 							Expect(r.Context().Done()).To(BeClosed())
-							serr, ok := err.(streamCancelError)
-							Expect(ok).To(BeTrue())
-							Expect(serr.Canceled()).To(BeTrue())
-							Expect(serr.ErrorCode()).To(BeEquivalentTo(0x10c))
+							var strErr *quic.StreamError
+							Expect(errors.As(err, &strErr)).To(BeTrue())
+							Expect(strErr.ErrorCode).To(Equal(quic.StreamErrorCode(0x10c)))
 							return
 						}
 					}

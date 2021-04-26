@@ -9,7 +9,6 @@ import (
 	"github.com/lucas-clemente/quic-go/internal/ackhandler"
 	"github.com/lucas-clemente/quic-go/internal/flowcontrol"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
-	"github.com/lucas-clemente/quic-go/internal/qerr"
 	"github.com/lucas-clemente/quic-go/internal/wire"
 )
 
@@ -86,16 +85,6 @@ type stream struct {
 }
 
 var _ Stream = &stream{}
-
-type streamCanceledError struct {
-	error
-	errorCode qerr.ApplicationErrorCode
-}
-
-func (streamCanceledError) Canceled() bool                         { return true }
-func (e streamCanceledError) ErrorCode() qerr.ApplicationErrorCode { return e.errorCode }
-
-var _ StreamError = &streamCanceledError{}
 
 // newStream creates a new Stream
 func newStream(streamID protocol.StreamID,

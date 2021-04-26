@@ -104,7 +104,7 @@ type ReceiveStream interface {
 	// It will ask the peer to stop transmitting stream data.
 	// Read will unblock immediately, and future Read calls will fail.
 	// When called multiple times or after reading the io.EOF it is a no-op.
-	CancelRead(ApplicationErrorCode)
+	CancelRead(StreamErrorCode)
 	// SetReadDeadline sets the deadline for future Read calls and
 	// any currently-blocked Read call.
 	// A zero value for t means Read will not time out.
@@ -133,7 +133,7 @@ type SendStream interface {
 	// Data already written, but not yet delivered to the peer is not guaranteed to be delivered reliably.
 	// Write will unblock immediately, and future calls to Write will fail.
 	// When called multiple times or after closing the stream it is a no-op.
-	CancelWrite(ApplicationErrorCode)
+	CancelWrite(StreamErrorCode)
 	// The context is canceled as soon as the write-side of the stream is closed.
 	// This happens when Close() or CancelWrite() is called, or when the peer
 	// cancels the read-side of their stream.
@@ -145,13 +145,6 @@ type SendStream interface {
 	// some of the data was successfully written.
 	// A zero value for t means Write will not time out.
 	SetWriteDeadline(t time.Time) error
-}
-
-// StreamError is returned by Read and Write when the peer cancels the stream.
-type StreamError interface {
-	error
-	Canceled() bool
-	ErrorCode() ApplicationErrorCode
 }
 
 // A Session is a QUIC connection between two peers.

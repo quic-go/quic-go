@@ -9,7 +9,6 @@ import (
 	"github.com/golang/mock/gomock"
 	"github.com/lucas-clemente/quic-go/internal/mocks"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
-	"github.com/lucas-clemente/quic-go/internal/qerr"
 	"github.com/lucas-clemente/quic-go/internal/wire"
 
 	. "github.com/onsi/ginkgo"
@@ -572,10 +571,10 @@ var _ = Describe("Receive Stream", func() {
 				go func() {
 					defer GinkgoRecover()
 					_, err := strWithTimeout.Read([]byte{0})
-					Expect(err).To(MatchError("stream 1337 was reset with error code 1234"))
-					Expect(err).To(BeAssignableToTypeOf(streamCanceledError{}))
-					Expect(err.(streamCanceledError).Canceled()).To(BeTrue())
-					Expect(err.(streamCanceledError).ErrorCode()).To(Equal(qerr.ApplicationErrorCode(1234)))
+					Expect(err).To(MatchError(&StreamError{
+						StreamID:  streamID,
+						ErrorCode: 1234,
+					}))
 					close(done)
 				}()
 				Consistently(done).ShouldNot(BeClosed())
@@ -596,10 +595,10 @@ var _ = Describe("Receive Stream", func() {
 				)
 				Expect(str.handleResetStreamFrame(rst)).To(Succeed())
 				_, err := strWithTimeout.Read([]byte{0})
-				Expect(err).To(MatchError("stream 1337 was reset with error code 1234"))
-				Expect(err).To(BeAssignableToTypeOf(streamCanceledError{}))
-				Expect(err.(streamCanceledError).Canceled()).To(BeTrue())
-				Expect(err.(streamCanceledError).ErrorCode()).To(Equal(qerr.ApplicationErrorCode(1234)))
+				Expect(err).To(MatchError(&StreamError{
+					StreamID:  streamID,
+					ErrorCode: 1234,
+				}))
 			})
 
 			It("errors when receiving a RESET_STREAM with an inconsistent offset", func() {

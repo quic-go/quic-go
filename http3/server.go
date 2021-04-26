@@ -263,7 +263,7 @@ func (s *Server) handleConn(sess quic.EarlySession) {
 			if rerr.err != nil || rerr.streamErr != 0 || rerr.connErr != 0 {
 				s.logger.Debugf("Handling request failed: %s", err)
 				if rerr.streamErr != 0 {
-					str.CancelWrite(quic.ApplicationErrorCode(rerr.streamErr))
+					str.CancelWrite(quic.StreamErrorCode(rerr.streamErr))
 				}
 				if rerr.connErr != 0 {
 					var reason string
@@ -304,7 +304,7 @@ func (s *Server) handleUnidirectionalStreams(sess quic.EarlySession) {
 				sess.CloseWithError(quic.ApplicationErrorCode(errorStreamCreationError), "")
 				return
 			default:
-				str.CancelRead(quic.ApplicationErrorCode(errorStreamCreationError))
+				str.CancelRead(quic.StreamErrorCode(errorStreamCreationError))
 				return
 			}
 			f, err := parseNextFrame(str)
@@ -410,7 +410,7 @@ func (s *Server) handleRequest(sess quic.Session, str quic.Stream, decoder *qpac
 			r.WriteHeader(200)
 		}
 		// If the EOF was read by the handler, CancelRead() is a no-op.
-		str.CancelRead(quic.ApplicationErrorCode(errorNoError))
+		str.CancelRead(quic.StreamErrorCode(errorNoError))
 	}
 	return requestError{}
 }

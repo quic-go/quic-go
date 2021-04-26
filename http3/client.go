@@ -165,7 +165,7 @@ func (c *client) handleUnidirectionalStreams() {
 				c.session.CloseWithError(quic.ApplicationErrorCode(errorIDError), "")
 				return
 			default:
-				str.CancelRead(quic.ApplicationErrorCode(errorStreamCreationError))
+				str.CancelRead(quic.StreamErrorCode(errorStreamCreationError))
 				return
 			}
 			f, err := parseNextFrame(str)
@@ -243,8 +243,8 @@ func (c *client) RoundTrip(req *http.Request) (*http.Response, error) {
 	go func() {
 		select {
 		case <-req.Context().Done():
-			str.CancelWrite(quic.ApplicationErrorCode(errorRequestCanceled))
-			str.CancelRead(quic.ApplicationErrorCode(errorRequestCanceled))
+			str.CancelWrite(quic.StreamErrorCode(errorRequestCanceled))
+			str.CancelRead(quic.StreamErrorCode(errorRequestCanceled))
 		case <-reqDone:
 		}
 	}()
@@ -253,7 +253,7 @@ func (c *client) RoundTrip(req *http.Request) (*http.Response, error) {
 	if rerr.err != nil { // if any error occurred
 		close(reqDone)
 		if rerr.streamErr != 0 { // if it was a stream error
-			str.CancelWrite(quic.ApplicationErrorCode(rerr.streamErr))
+			str.CancelWrite(quic.StreamErrorCode(rerr.streamErr))
 		}
 		if rerr.connErr != 0 { // if it was a connection error
 			var reason string

@@ -12,7 +12,6 @@ import (
 	"github.com/lucas-clemente/quic-go/internal/ackhandler"
 	"github.com/lucas-clemente/quic-go/internal/mocks"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
-	"github.com/lucas-clemente/quic-go/internal/qerr"
 	"github.com/lucas-clemente/quic-go/internal/wire"
 
 	. "github.com/onsi/ginkgo"
@@ -863,10 +862,10 @@ var _ = Describe("Send Stream", func() {
 				go func() {
 					defer GinkgoRecover()
 					_, err := str.Write(getData(5000))
-					Expect(err).To(MatchError("stream 1337 was reset with error code 123"))
-					Expect(err).To(BeAssignableToTypeOf(streamCanceledError{}))
-					Expect(err.(streamCanceledError).Canceled()).To(BeTrue())
-					Expect(err.(streamCanceledError).ErrorCode()).To(Equal(qerr.ApplicationErrorCode(123)))
+					Expect(err).To(MatchError(&StreamError{
+						StreamID:  streamID,
+						ErrorCode: 1234,
+					}))
 					close(done)
 				}()
 				waitForWrite()
@@ -885,10 +884,10 @@ var _ = Describe("Send Stream", func() {
 					ErrorCode: 123,
 				})
 				_, err := str.Write([]byte("foobar"))
-				Expect(err).To(MatchError("stream 1337 was reset with error code 123"))
-				Expect(err).To(BeAssignableToTypeOf(streamCanceledError{}))
-				Expect(err.(streamCanceledError).Canceled()).To(BeTrue())
-				Expect(err.(streamCanceledError).ErrorCode()).To(Equal(qerr.ApplicationErrorCode(123)))
+				Expect(err).To(MatchError(&StreamError{
+					StreamID:  streamID,
+					ErrorCode: 1234,
+				}))
 			})
 		})
 	})

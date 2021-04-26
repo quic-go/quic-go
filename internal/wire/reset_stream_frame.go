@@ -11,7 +11,7 @@ import (
 // A ResetStreamFrame is a RESET_STREAM frame in QUIC
 type ResetStreamFrame struct {
 	StreamID  protocol.StreamID
-	ErrorCode qerr.ApplicationErrorCode
+	ErrorCode qerr.StreamErrorCode
 	FinalSize protocol.ByteCount
 }
 
@@ -39,7 +39,7 @@ func parseResetStreamFrame(r *bytes.Reader, _ protocol.VersionNumber) (*ResetStr
 
 	return &ResetStreamFrame{
 		StreamID:  streamID,
-		ErrorCode: qerr.ApplicationErrorCode(errorCode),
+		ErrorCode: qerr.StreamErrorCode(errorCode),
 		FinalSize: byteOffset,
 	}, nil
 }

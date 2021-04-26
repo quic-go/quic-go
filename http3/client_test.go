@@ -267,7 +267,7 @@ var _ = Describe("Client", func() {
 			str := mockquic.NewMockStream(mockCtrl)
 			str.EXPECT().Read(gomock.Any()).DoAndReturn(buf.Read).AnyTimes()
 			done := make(chan struct{})
-			str.EXPECT().CancelRead(quic.ApplicationErrorCode(errorStreamCreationError)).Do(func(code quic.ApplicationErrorCode) {
+			str.EXPECT().CancelRead(quic.StreamErrorCode(errorStreamCreationError)).Do(func(code quic.StreamErrorCode) {
 				close(done)
 			})
 
@@ -546,7 +546,7 @@ var _ = Describe("Client", func() {
 				request.Body.(*mockBody).readErr = errors.New("testErr")
 				done := make(chan struct{})
 				gomock.InOrder(
-					str.EXPECT().CancelWrite(quic.ApplicationErrorCode(errorRequestCanceled)).Do(func(quic.ApplicationErrorCode) {
+					str.EXPECT().CancelWrite(quic.StreamErrorCode(errorRequestCanceled)).Do(func(quic.StreamErrorCode) {
 						close(done)
 					}),
 					str.EXPECT().CancelWrite(gomock.Any()),
@@ -596,7 +596,7 @@ var _ = Describe("Client", func() {
 			It("cancels the stream when the HEADERS frame is too large", func() {
 				buf := &bytes.Buffer{}
 				(&headersFrame{Length: 1338}).Write(buf)
-				str.EXPECT().CancelWrite(quic.ApplicationErrorCode(errorFrameError))
+				str.EXPECT().CancelWrite(quic.StreamErrorCode(errorFrameError))
 				closed := make(chan struct{})
 				str.EXPECT().Close().Do(func() { close(closed) })
 				str.EXPECT().Read(gomock.Any()).DoAndReturn(buf.Read).AnyTimes()
@@ -635,8 +635,8 @@ var _ = Describe("Client", func() {
 				done := make(chan struct{})
 				canceled := make(chan struct{})
 				gomock.InOrder(
-					str.EXPECT().CancelWrite(quic.ApplicationErrorCode(errorRequestCanceled)).Do(func(quic.ApplicationErrorCode) { close(canceled) }),
-					str.EXPECT().CancelRead(quic.ApplicationErrorCode(errorRequestCanceled)).Do(func(quic.ApplicationErrorCode) { close(done) }),
+					str.EXPECT().CancelWrite(quic.StreamErrorCode(errorRequestCanceled)).Do(func(quic.StreamErrorCode) { close(canceled) }),
+					str.EXPECT().CancelRead(quic.StreamErrorCode(errorRequestCanceled)).Do(func(quic.StreamErrorCode) { close(done) }),
 				)
 				str.EXPECT().CancelWrite(gomock.Any()).MaxTimes(1)
 				str.EXPECT().Read(gomock.Any()).DoAndReturn(func([]byte) (int, error) {
@@ -663,8 +663,8 @@ var _ = Describe("Client", func() {
 				done := make(chan struct{})
 				str.EXPECT().Write(gomock.Any()).DoAndReturn(buf.Write)
 				str.EXPECT().Read(gomock.Any()).DoAndReturn(rspBuf.Read).AnyTimes()
-				str.EXPECT().CancelWrite(quic.ApplicationErrorCode(errorRequestCanceled))
-				str.EXPECT().CancelRead(quic.ApplicationErrorCode(errorRequestCanceled)).Do(func(quic.ApplicationErrorCode) { close(done) })
+				str.EXPECT().CancelWrite(quic.StreamErrorCode(errorRequestCanceled))
+				str.EXPECT().CancelRead(quic.StreamErrorCode(errorRequestCanceled)).Do(func(quic.StreamErrorCode) { close(done) })
 				_, err := client.RoundTrip(req)
 				Expect(err).ToNot(HaveOccurred())
 				cancel()
