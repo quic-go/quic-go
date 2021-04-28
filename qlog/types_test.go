@@ -3,7 +3,7 @@ package qlog
 import (
 	"go/ast"
 	"go/parser"
-	"go/token"
+	gotoken "go/token"
 	"path"
 	"runtime"
 	"strconv"
@@ -96,7 +96,7 @@ var _ = Describe("Types", func() {
 				panic("Failed to get current frame")
 			}
 			filename := path.Join(path.Dir(thisfile), "../internal/qerr/error_codes.go")
-			fileAst, err := parser.ParseFile(token.NewFileSet(), filename, nil, 0)
+			fileAst, err := parser.ParseFile(gotoken.NewFileSet(), filename, nil, 0)
 			Expect(err).NotTo(HaveOccurred())
 			constSpecs := fileAst.Decls[2].(*ast.GenDecl).Specs
 			Expect(len(constSpecs)).To(BeNumerically(">", 4)) // at time of writing

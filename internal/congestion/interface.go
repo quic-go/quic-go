@@ -16,6 +16,7 @@ type SendAlgorithm interface {
 	OnPacketAcked(number protocol.PacketNumber, ackedBytes protocol.ByteCount, priorInFlight protocol.ByteCount, eventTime time.Time)
 	OnPacketLost(number protocol.PacketNumber, lostBytes protocol.ByteCount, priorInFlight protocol.ByteCount)
 	OnRetransmissionTimeout(packetsRetransmitted bool)
+	SetMaxDatagramSize(protocol.ByteCount)
 }
 
 // A SendAlgorithmWithDebugInfos is a SendAlgorithm that exposes some debug infos

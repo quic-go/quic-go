@@ -79,6 +79,37 @@ var _ = Describe("Connection ID Generator", func() {
 		Expect(queuedFrames).To(HaveLen(protocol.MaxIssuedConnectionIDs - 1))
 	})
 
+	// SetMaxActiveConnIDs is called twice when we dialing a 0-RTT connection:
+	// once for the restored from the old connections, once when we receive the transport parameters
+	Context("dealing with 0-RTT", func() {
+		It("doesn't issue new connection IDs when SetMaxActiveConnIDs is called with the same value", func() {
+			Expect(g.SetMaxActiveConnIDs(4)).To(Succeed())
+			Expect(queuedFrames).To(HaveLen(3))
+			queuedFrames = nil
+			Expect(g.SetMaxActiveConnIDs(4)).To(Succeed())
+			Expect(queuedFrames).To(BeEmpty())
+		})
+
+		It("issues more connection IDs if the server allows a higher limit on the resumed connection", func() {
+			Expect(g.SetMaxActiveConnIDs(3)).To(Succeed())
+			Expect(queuedFrames).To(HaveLen(2))
+			queuedFrames = nil
+			Expect(g.SetMaxActiveConnIDs(6)).To(Succeed())
+			Expect(queuedFrames).To(HaveLen(3))
+		})
+
+		It("issues more connection IDs if the server allows a higher limit on the resumed connection, when connection IDs were retired in between", func() {
+			Expect(g.SetMaxActiveConnIDs(3)).To(Succeed())
+			Expect(queuedFrames).To(HaveLen(2))
+			queuedFrames = nil
+			g.Retire(1, protocol.ConnectionID{})
+			Expect(queuedFrames).To(HaveLen(1))
+			queuedFrames = nil
+			Expect(g.SetMaxActiveConnIDs(6)).To(Succeed())
+			Expect(queuedFrames).To(HaveLen(3))
+		})
+	})
+
 	It("errors if the peers tries to retire a connection ID that wasn't yet issued", func() {
 		Expect(g.Retire(1, protocol.ConnectionID{})).To(MatchError("PROTOCOL_VIOLATION: tried to retire connection ID 1. Highest issued: 0"))
 	})

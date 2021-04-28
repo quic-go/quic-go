@@ -17,6 +17,7 @@ var _ = Describe("Version", func() {
 		Expect(IsValidVersion(VersionUnknown)).To(BeFalse())
 		Expect(IsValidVersion(VersionDraft29)).To(BeTrue())
 		Expect(IsValidVersion(VersionDraft32)).To(BeTrue())
+		Expect(IsValidVersion(VersionDraft34)).To(BeTrue())
 		Expect(IsValidVersion(1234)).To(BeFalse())
 	})
 
@@ -29,6 +30,7 @@ var _ = Describe("Version", func() {
 		Expect(VersionUnknown.String()).To(Equal("unknown"))
 		Expect(VersionDraft29.String()).To(Equal("draft-29"))
 		Expect(VersionDraft32.String()).To(Equal("draft-32"))
+		Expect(VersionDraft34.String()).To(Equal("draft-34"))
 		// check with unsupported version numbers from the wiki
 		Expect(VersionNumber(0x51303039).String()).To(Equal("gQUIC 9"))
 		Expect(VersionNumber(0x51303133).String()).To(Equal("gQUIC 13"))
@@ -43,8 +45,9 @@ var _ = Describe("Version", func() {
 		Expect(IsSupportedVersion(SupportedVersions, SupportedVersions[len(SupportedVersions)-1])).To(BeTrue())
 	})
 
-	It("has supported versions in sorted order", func() {
-		for i := 0; i < len(SupportedVersions)-1; i++ {
+	It("defaults to draft-29, and has additional supported versions in sorted order", func() {
+		Expect(SupportedVersions[0]).To(Equal(VersionDraft29))
+		for i := 1; i < len(SupportedVersions)-1; i++ {
 			Expect(SupportedVersions[i]).To(BeNumerically(">", SupportedVersions[i+1]))
 		}
 	})

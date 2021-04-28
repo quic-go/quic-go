@@ -241,7 +241,7 @@ func (p *QuicProxy) newConnection(cliAddr *net.UDPAddr) (*connection, error) {
 // runProxy listens on the proxy address and handles incoming packets.
 func (p *QuicProxy) runProxy() error {
 	for {
-		buffer := make([]byte, protocol.MaxReceivePacketSize)
+		buffer := make([]byte, protocol.MaxPacketBufferSize)
 		n, cliaddr, err := p.conn.ReadFromUDP(buffer)
 		if err != nil {
 			return err
@@ -294,7 +294,7 @@ func (p *QuicProxy) runOutgoingConnection(conn *connection) error {
 	outgoingPackets := make(chan packetEntry, 10)
 	go func() {
 		for {
-			buffer := make([]byte, protocol.MaxReceivePacketSize)
+			buffer := make([]byte, protocol.MaxPacketBufferSize)
 			n, err := conn.ServerConn.Read(buffer)
 			if err != nil {
 				return

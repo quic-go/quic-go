@@ -87,6 +87,14 @@ var _ = Describe("SentPacketHistory", func() {
 			Expect(front).ToNot(BeNil())
 			Expect(front.PacketNumber).To(Equal(protocol.PacketNumber(2)))
 		})
+
+		It("doesn't regard path MTU packets as outstanding", func() {
+			hist.SentPacket(&Packet{PacketNumber: 2}, true)
+			hist.SentPacket(&Packet{PacketNumber: 4, IsPathMTUProbePacket: true}, true)
+			front := hist.FirstOutstanding()
+			Expect(front).ToNot(BeNil())
+			Expect(front.PacketNumber).To(Equal(protocol.PacketNumber(2)))
+		})
 	})
 
 	It("removes packets", func() {

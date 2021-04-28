@@ -29,24 +29,15 @@ var _ = Describe("Events", func() {
 			eventDetails: mevent{},
 		})).To(Succeed())
 
-		var decoded []interface{}
+		var decoded interface{}
 		Expect(json.Unmarshal(buf.Bytes(), &decoded)).To(Succeed())
-		Expect(decoded).To(HaveLen(4))
+		Expect(decoded).To(HaveLen(3))
 
-		// 1st field
-		Expect(eventFields[0]).To(Equal("relative_time"))
-		Expect(decoded[0].(float64)).To(Equal(1.337))
-
-		// 2nd field
-		Expect(eventFields[1]).To(Equal("category"))
-		Expect(decoded[1].(string)).To(Equal(categoryConnectivity.String()))
-
-		// 3rd field
-		Expect(eventFields[2]).To(Equal("event"))
-		Expect(decoded[2].(string)).To(Equal("mevent"))
-
-		// 4th field
-		Expect(eventFields[3]).To(Equal("data"))
-		Expect(decoded[3].(map[string]interface{})["event"]).To(Equal("details"))
+		Expect(decoded).To(HaveKeyWithValue("time", 1.337))
+		Expect(decoded).To(HaveKeyWithValue("name", "connectivity:mevent"))
+		Expect(decoded).To(HaveKey("data"))
+		data := decoded.(map[string]interface{})["data"].(map[string]interface{})
+		Expect(data).To(HaveLen(1))
+		Expect(data).To(HaveKeyWithValue("event", "details"))
 	})
 })

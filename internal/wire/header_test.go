@@ -93,6 +93,24 @@ var _ = Describe("Header Parsing", func() {
 		})
 	})
 
+	Context("identifying 0-RTT packets", func() {
+		var zeroRTTHeader []byte
+
+		BeforeEach(func() {
+			zeroRTTHeader = make([]byte, 5)
+			zeroRTTHeader[0] = 0x80 | 0x1<<4
+			binary.BigEndian.PutUint32(zeroRTTHeader[1:], uint32(versionIETFFrames))
+		})
+
+		It("recognizes 0-RTT packets", func() {
+			Expect(Is0RTTPacket(zeroRTTHeader[:4])).To(BeFalse())                           // too short
+			Expect(Is0RTTPacket([]byte{zeroRTTHeader[0], 1, 2, 3, 4})).To(BeFalse())        // unknown version
+			Expect(Is0RTTPacket([]byte{zeroRTTHeader[0] | 0x80, 1, 2, 3, 4})).To(BeFalse()) // short header
+			Expect(Is0RTTPacket(zeroRTTHeader)).To(BeTrue())
+			Expect(Is0RTTPacket(append(zeroRTTHeader, []byte("foobar")...))).To(BeTrue())
+		})
+	})
+
 	Context("Identifying Version Negotiation Packets", func() {
 		It("identifies version negotiation packets", func() {
 			Expect(IsVersionNegotiationPacket([]byte{0x80 | 0x56, 0, 0, 0, 0})).To(BeTrue())

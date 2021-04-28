@@ -7,7 +7,7 @@ import (
 	"io/ioutil"
 
 	"github.com/Psiphon-Labs/quic-go/internal/protocol"
-	"github.com/Psiphon-Labs/quic-go/internal/utils"
+	"github.com/Psiphon-Labs/quic-go/quicvarint"
 )
 
 type byteReader interface {
@@ -32,11 +32,11 @@ func parseNextFrame(b io.Reader) (frame, error) {
 	if !ok {
 		br = &byteReaderImpl{b}
 	}
-	t, err := utils.ReadVarInt(br)
+	t, err := quicvarint.Read(br)
 	if err != nil {
 		return nil, err
 	}
-	l, err := utils.ReadVarInt(br)
+	l, err := quicvarint.Read(br)
 	if err != nil {
 		return nil, err
 	}
@@ -72,8 +72,8 @@ type dataFrame struct {
 }
 
 func (f *dataFrame) Write(b *bytes.Buffer) {
-	utils.WriteVarInt(b, 0x0)
-	utils.WriteVarInt(b, f.Length)
+	quicvarint.Write(b, 0x0)
+	quicvarint.Write(b, f.Length)
 }
 
 type headersFrame struct {
@@ -81,12 +81,15 @@ type headersFrame struct {
 }
 
 func (f *headersFrame) Write(b *bytes.Buffer) {
-	utils.WriteVarInt(b, 0x1)
-	utils.WriteVarInt(b, f.Length)
+	quicvarint.Write(b, 0x1)
+	quicvarint.Write(b, f.Length)
 }
 
+const settingDatagram = 0x276
+
 type settingsFrame struct {
-	settings map[uint64]uint64
+	Datagram bool
+	other    map[uint64]uint64 // all settings that we don't explicitly recognize
 }
 
 func parseSettingsFrame(r io.Reader, l uint64) (*settingsFrame, error) {
@@ -100,34 +103,58 @@ func parseSettingsFrame(r io.Reader, l uint64) (*settingsFrame, error) {
 		}
 		return nil, err
 	}
-	frame := &settingsFrame{settings: make(map[uint64]uint64)}
+	frame := &settingsFrame{}
 	b := bytes.NewReader(buf)
+	var readDatagram bool
 	for b.Len() > 0 {
-		id, err := utils.ReadVarInt(b)
+		id, err := quicvarint.Read(b)
 		if err != nil { // should not happen. We allocated the whole frame already.
 			return nil, err
 		}
-		val, err := utils.ReadVarInt(b)
+		val, err := quicvarint.Read(b)
 		if err != nil { // should not happen. We allocated the whole frame already.
 			return nil, err
 		}
-		if _, ok := frame.settings[id]; ok {
-			return nil, fmt.Errorf("duplicate setting: %d", id)
+
+		switch id {
+		case settingDatagram:
+			if readDatagram {
+				return nil, fmt.Errorf("duplicate setting: %d", id)
+			}
+			readDatagram = true
+			if val != 0 && val != 1 {
+				return nil, fmt.Errorf("invalid value for H3_DATAGRAM: %d", val)
+			}
+			frame.Datagram = val == 1
+		default:
+			if _, ok := frame.other[id]; ok {
+				return nil, fmt.Errorf("duplicate setting: %d", id)
+			}
+			if frame.other == nil {
+				frame.other = make(map[uint64]uint64)
+			}
+			frame.other[id] = val
 		}
-		frame.settings[id] = val
 	}
 	return frame, nil
 }
 
 func (f *settingsFrame) Write(b *bytes.Buffer) {
-	utils.WriteVarInt(b, 0x4)
+	quicvarint.Write(b, 0x4)
 	var l protocol.ByteCount
-	for id, val := range f.settings {
-		l += utils.VarIntLen(id) + utils.VarIntLen(val)
+	for id, val := range f.other {
+		l += quicvarint.Len(id) + quicvarint.Len(val)
 	}
-	utils.WriteVarInt(b, uint64(l))
-	for id, val := range f.settings {
-		utils.WriteVarInt(b, id)
-		utils.WriteVarInt(b, val)
+	if f.Datagram {
+		l += quicvarint.Len(settingDatagram) + quicvarint.Len(1)
+	}
+	quicvarint.Write(b, uint64(l))
+	if f.Datagram {
+		quicvarint.Write(b, settingDatagram)
+		quicvarint.Write(b, 1)
+	}
+	for id, val := range f.other {
+		quicvarint.Write(b, id)
+		quicvarint.Write(b, val)
 	}
 }

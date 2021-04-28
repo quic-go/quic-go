@@ -14,30 +14,30 @@ import (
 	gomock "github.com/golang/mock/gomock"
 )
 
-// MockEarlyListener is a mock of EarlyListener interface
+// MockEarlyListener is a mock of EarlyListener interface.
 type MockEarlyListener struct {
 	ctrl     *gomock.Controller
 	recorder *MockEarlyListenerMockRecorder
 }
 
-// MockEarlyListenerMockRecorder is the mock recorder for MockEarlyListener
+// MockEarlyListenerMockRecorder is the mock recorder for MockEarlyListener.
 type MockEarlyListenerMockRecorder struct {
 	mock *MockEarlyListener
 }
 
-// NewMockEarlyListener creates a new mock instance
+// NewMockEarlyListener creates a new mock instance.
 func NewMockEarlyListener(ctrl *gomock.Controller) *MockEarlyListener {
 	mock := &MockEarlyListener{ctrl: ctrl}
 	mock.recorder = &MockEarlyListenerMockRecorder{mock}
 	return mock
 }
 
-// EXPECT returns an object that allows the caller to indicate expected use
+// EXPECT returns an object that allows the caller to indicate expected use.
 func (m *MockEarlyListener) EXPECT() *MockEarlyListenerMockRecorder {
 	return m.recorder
 }
 
-// Accept mocks base method
+// Accept mocks base method.
 func (m *MockEarlyListener) Accept(arg0 context.Context) (quic.EarlySession, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Accept", arg0)
@@ -46,13 +46,13 @@ func (m *MockEarlyListener) Accept(arg0 context.Context) (quic.EarlySession, err
 	return ret0, ret1
 }
 
-// Accept indicates an expected call of Accept
+// Accept indicates an expected call of Accept.
 func (mr *MockEarlyListenerMockRecorder) Accept(arg0 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Accept", reflect.TypeOf((*MockEarlyListener)(nil).Accept), arg0)
 }
 
-// Addr mocks base method
+// Addr mocks base method.
 func (m *MockEarlyListener) Addr() net.Addr {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Addr")
@@ -60,13 +60,13 @@ func (m *MockEarlyListener) Addr() net.Addr {
 	return ret0
 }
 
-// Addr indicates an expected call of Addr
+// Addr indicates an expected call of Addr.
 func (mr *MockEarlyListenerMockRecorder) Addr() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Addr", reflect.TypeOf((*MockEarlyListener)(nil).Addr))
 }
 
-// Close mocks base method
+// Close mocks base method.
 func (m *MockEarlyListener) Close() error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Close")
@@ -74,7 +74,7 @@ func (m *MockEarlyListener) Close() error {
 	return ret0
 }
 
-// Close indicates an expected call of Close
+// Close indicates an expected call of Close.
 func (mr *MockEarlyListenerMockRecorder) Close() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Close", reflect.TypeOf((*MockEarlyListener)(nil).Close))

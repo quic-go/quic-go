@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"math"
 	"net"
 	"net/http"
 	"runtime"
@@ -20,15 +19,9 @@ import (
 	"github.com/Psiphon-Labs/quic-go/internal/handshake"
 	"github.com/Psiphon-Labs/quic-go/internal/protocol"
 	"github.com/Psiphon-Labs/quic-go/internal/utils"
+	"github.com/Psiphon-Labs/quic-go/quicvarint"
 	"github.com/marten-seemann/qpack"
 )
-
-func init() {
-	// Chrome compatibility mode:
-	// Chrome 87 doesn't support key updates (support was added in Chrome 88).
-	// Don't initiate key updates to avoid breaking large downloads.
-	handshake.KeyUpdateInterval = math.MaxUint64
-}
 
 // allows mocking of quic.Listen and quic.ListenAddr
 var (
@@ -39,6 +32,14 @@ var (
 const (
 	nextProtoH3Draft29 = "h3-29"
 	nextProtoH3Draft32 = "h3-32"
+	nextProtoH3Draft34 = "h3-34"
+)
+
+const (
+	streamTypeControlStream      = 0
+	streamTypePushStream         = 1
+	streamTypeQPACKEncoderStream = 2
+	streamTypeQPACKDecoderStream = 3
 )
 
 func versionToALPN(v protocol.VersionNumber) string {
@@ -47,6 +48,9 @@ func versionToALPN(v protocol.VersionNumber) string {
 	}
 	if v == protocol.VersionDraft32 {
 		return nextProtoH3Draft32
+	}
+	if v == protocol.VersionDraft34 {
+		return nextProtoH3Draft34
 	}
 	return ""
 }
@@ -79,13 +83,18 @@ func newConnError(code errorCode, err error) requestError {
 	return requestError{err: err, connErr: code}
 }
 
-// Server is a HTTP2 server listening for QUIC connections.
+// Server is a HTTP/3 server.
 type Server struct {
 	*http.Server
 
 	// By providing a quic.Config, it is possible to set parameters of the QUIC connection.
 	// If nil, it uses reasonable default values.
 	QuicConfig *quic.Config
+
+	// Enable support for HTTP/3 datagrams.
+	// If set to true, QuicConfig.EnableDatagram will be set.
+	// See https://www.ietf.org/archive/id/draft-schinazi-masque-h3-datagram-02.html.
+	EnableDatagrams bool
 
 	port uint32 // used atomically
 
@@ -145,8 +154,13 @@ func (s *Server) serveImpl(tlsConf *tls.Config, conn net.PacketConn) error {
 		GetConfigForClient: func(ch *tls.ClientHelloInfo) (*tls.Config, error) {
 			// determine the ALPN from the QUIC version used
 			proto := nextProtoH3Draft29
-			if qconn, ok := ch.Conn.(handshake.ConnWithVersion); ok && qconn.GetQUICVersion() == quic.VersionDraft32 {
-				proto = nextProtoH3Draft32
+			if qconn, ok := ch.Conn.(handshake.ConnWithVersion); ok {
+				if qconn.GetQUICVersion() == quic.VersionDraft32 {
+					proto = nextProtoH3Draft32
+				}
+				if qconn.GetQUICVersion() == protocol.VersionDraft34 {
+					proto = nextProtoH3Draft34
+				}
 			}
 			config := tlsConf
 			if tlsConf.GetConfigForClient != nil {
@@ -171,10 +185,19 @@ func (s *Server) serveImpl(tlsConf *tls.Config, conn net.PacketConn) error {
 
 	var ln quic.EarlyListener
 	var err error
-	if conn == nil {
-		ln, err = quicListenAddr(s.Addr, baseConf, s.QuicConfig)
+	quicConf := s.QuicConfig
+	if quicConf == nil {
+		quicConf = &quic.Config{}
 	} else {
-		ln, err = quicListen(conn, baseConf, s.QuicConfig)
+		quicConf = s.QuicConfig.Clone()
+	}
+	if s.EnableDatagrams {
+		quicConf.EnableDatagrams = true
+	}
+	if conn == nil {
+		ln, err = quicListenAddr(s.Addr, baseConf, quicConf)
+	} else {
+		ln, err = quicListen(conn, baseConf, quicConf)
 	}
 	if err != nil {
 		return err
@@ -210,7 +233,6 @@ func (s *Server) removeListener(l *quic.EarlyListener) {
 }
 
 func (s *Server) handleConn(sess quic.EarlySession) {
-	// TODO: accept control streams
 	decoder := qpack.NewDecoder(nil)
 
 	// send a SETTINGS frame
@@ -219,9 +241,12 @@ func (s *Server) handleConn(sess quic.EarlySession) {
 		s.logger.Debugf("Opening the control stream failed.")
 		return
 	}
-	buf := bytes.NewBuffer([]byte{0})
-	(&settingsFrame{}).Write(buf)
+	buf := &bytes.Buffer{}
+	quicvarint.Write(buf, streamTypeControlStream) // stream type
+	(&settingsFrame{Datagram: s.EnableDatagrams}).Write(buf)
 	str.Write(buf.Bytes())
+
+	go s.handleUnidirectionalStreams(sess)
 
 	// Process all requests immediately.
 	// It's the client's responsibility to decide which requests are eligible for 0-RTT.
@@ -251,6 +276,57 @@ func (s *Server) handleConn(sess quic.EarlySession) {
 			}
 			str.Close()
 		}()
+	}
+}
+
+func (s *Server) handleUnidirectionalStreams(sess quic.EarlySession) {
+	for {
+		str, err := sess.AcceptUniStream(context.Background())
+		if err != nil {
+			s.logger.Debugf("accepting unidirectional stream failed: %s", err)
+			return
+		}
+
+		go func(str quic.ReceiveStream) {
+			streamType, err := quicvarint.Read(&byteReaderImpl{str})
+			if err != nil {
+				s.logger.Debugf("reading stream type on stream %d failed: %s", str.StreamID(), err)
+				return
+			}
+			// We're only interested in the control stream here.
+			switch streamType {
+			case streamTypeControlStream:
+			case streamTypeQPACKEncoderStream, streamTypeQPACKDecoderStream:
+				// Our QPACK implementation doesn't use the dynamic table yet.
+				// TODO: check that only one stream of each type is opened.
+				return
+			case streamTypePushStream: // only the server can push
+				sess.CloseWithError(quic.ErrorCode(errorStreamCreationError), "")
+				return
+			default:
+				str.CancelRead(quic.ErrorCode(errorStreamCreationError))
+				return
+			}
+			f, err := parseNextFrame(str)
+			if err != nil {
+				sess.CloseWithError(quic.ErrorCode(errorFrameError), "")
+				return
+			}
+			sf, ok := f.(*settingsFrame)
+			if !ok {
+				sess.CloseWithError(quic.ErrorCode(errorMissingSettings), "")
+				return
+			}
+			if !sf.Datagram {
+				return
+			}
+			// If datagram support was enabled on our side as well as on the client side,
+			// we can expect it to have been negotiated both on the transport and on the HTTP/3 layer.
+			// Note: ConnectionState() will block until the handshake is complete (relevant when using 0-RTT).
+			if s.EnableDatagrams && !sess.ConnectionState().SupportsDatagrams {
+				sess.CloseWithError(quic.ErrorCode(errorSettingsError), "missing QUIC Datagram support")
+			}
+		}(str)
 	}
 }
 
@@ -301,8 +377,12 @@ func (s *Server) handleRequest(sess quic.Session, str quic.Stream, decoder *qpac
 	ctx = context.WithValue(ctx, ServerContextKey, s)
 	ctx = context.WithValue(ctx, http.LocalAddrContextKey, sess.LocalAddr())
 	req = req.WithContext(ctx)
-	responseWriter := newResponseWriter(str, s.logger)
-	defer responseWriter.Flush()
+	r := newResponseWriter(str, s.logger)
+	defer func() {
+		if !r.usedDataStream() {
+			r.Flush()
+		}
+	}()
 	handler := s.Handler
 	if handler == nil {
 		handler = http.DefaultServeMux
@@ -320,17 +400,18 @@ func (s *Server) handleRequest(sess quic.Session, str quic.Stream, decoder *qpac
 				panicked = true
 			}
 		}()
-		handler.ServeHTTP(responseWriter, req)
+		handler.ServeHTTP(r, req)
 	}()
 
-	if panicked {
-		responseWriter.WriteHeader(500)
-	} else {
-		responseWriter.WriteHeader(200)
+	if !r.usedDataStream() {
+		if panicked {
+			r.WriteHeader(500)
+		} else {
+			r.WriteHeader(200)
+		}
+		// If the EOF was read by the handler, CancelRead() is a no-op.
+		str.CancelRead(quic.ErrorCode(errorNoError))
 	}
-
-	// If the EOF was read by the handler, CancelRead() is a no-op.
-	str.CancelRead(quic.ErrorCode(errorNoError))
 	return requestError{}
 }
 

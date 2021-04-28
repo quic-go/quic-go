@@ -1,54 +1,66 @@
 package qlog
 
 import (
+	"fmt"
+
 	"github.com/Psiphon-Labs/quic-go/internal/protocol"
 	"github.com/Psiphon-Labs/quic-go/internal/wire"
 	"github.com/Psiphon-Labs/quic-go/logging"
+
 	"github.com/francoispqt/gojay"
 )
 
-func getPacketTypeFromEncryptionLevel(encLevel protocol.EncryptionLevel) packetType {
-	var t logging.PacketType
+func getPacketTypeFromEncryptionLevel(encLevel protocol.EncryptionLevel) logging.PacketType {
 	switch encLevel {
 	case protocol.EncryptionInitial:
-		t = logging.PacketTypeInitial
+		return logging.PacketTypeInitial
 	case protocol.EncryptionHandshake:
-		t = logging.PacketTypeHandshake
+		return logging.PacketTypeHandshake
 	case protocol.Encryption0RTT:
-		t = logging.PacketType0RTT
+		return logging.PacketType0RTT
 	case protocol.Encryption1RTT:
-		t = logging.PacketType1RTT
+		return logging.PacketType1RTT
 	default:
 		panic("unknown encryption level")
 	}
-	return packetType(t)
+}
+
+type token struct {
+	Raw []byte
+}
+
+var _ gojay.MarshalerJSONObject = &token{}
+
+func (t token) IsNil() bool { return false }
+func (t token) MarshalJSONObject(enc *gojay.Encoder) {
+	enc.StringKey("data", fmt.Sprintf("%x", t.Raw))
 }
 
 // PacketHeader is a QUIC packet header.
 type packetHeader struct {
 	PacketType logging.PacketType
 
-	PacketNumber  logging.PacketNumber
-	PayloadLength logging.ByteCount
-	// Size of the QUIC packet (QUIC header + payload).
-	// See https://github.com/quiclog/internet-drafts/issues/40.
-	PacketSize logging.ByteCount
+	KeyPhaseBit  logging.KeyPhaseBit
+	PacketNumber logging.PacketNumber
 
 	Version          logging.VersionNumber
 	SrcConnectionID  logging.ConnectionID
 	DestConnectionID logging.ConnectionID
 
-	KeyPhaseBit logging.KeyPhaseBit
+	Token *token
 }
 
 func transformHeader(hdr *wire.Header) *packetHeader {
-	return &packetHeader{
+	h := &packetHeader{
 		PacketType:       logging.PacketTypeFromHeader(hdr),
-		PayloadLength:    hdr.Length,
 		SrcConnectionID:  hdr.SrcConnectionID,
 		DestConnectionID: hdr.DestConnectionID,
 		Version:          hdr.Version,
 	}
+	if len(hdr.Token) > 0 {
+		h.Token = &token{Raw: hdr.Token}
+	}
+	return h
 }
 
 func transformExtendedHeader(hdr *wire.ExtendedHeader) *packetHeader {
@@ -59,11 +71,10 @@ func transformExtendedHeader(hdr *wire.ExtendedHeader) *packetHeader {
 }
 
 func (h packetHeader) MarshalJSONObject(enc *gojay.Encoder) {
+	enc.StringKey("packet_type", packetType(h.PacketType).String())
 	if h.PacketType != logging.PacketTypeRetry && h.PacketType != logging.PacketTypeVersionNegotiation {
 		enc.Int64Key("packet_number", int64(h.PacketNumber))
 	}
-	enc.Int64KeyOmitEmpty("payload_length", int64(h.PayloadLength))
-	enc.Int64KeyOmitEmpty("packet_size", int64(h.PacketSize))
 	if h.Version != 0 {
 		enc.StringKey("version", versionNumber(h.Version).String())
 	}
@@ -80,4 +91,29 @@ func (h packetHeader) MarshalJSONObject(enc *gojay.Encoder) {
 	if h.KeyPhaseBit == logging.KeyPhaseZero || h.KeyPhaseBit == logging.KeyPhaseOne {
 		enc.StringKey("key_phase_bit", h.KeyPhaseBit.String())
 	}
+	if h.Token != nil {
+		enc.ObjectKey("token", h.Token)
+	}
+}
+
+// a minimal header that only outputs the packet type
+type packetHeaderWithType struct {
+	PacketType logging.PacketType
+}
+
+func (h packetHeaderWithType) IsNil() bool { return false }
+func (h packetHeaderWithType) MarshalJSONObject(enc *gojay.Encoder) {
+	enc.StringKey("packet_type", packetType(h.PacketType).String())
+}
+
+// a minimal header that only outputs the packet type
+type packetHeaderWithTypeAndPacketNumber struct {
+	PacketType   logging.PacketType
+	PacketNumber logging.PacketNumber
+}
+
+func (h packetHeaderWithTypeAndPacketNumber) IsNil() bool { return false }
+func (h packetHeaderWithTypeAndPacketNumber) MarshalJSONObject(enc *gojay.Encoder) {
+	enc.StringKey("packet_type", packetType(h.PacketType).String())
+	enc.Int64Key("packet_number", int64(h.PacketNumber))
 }

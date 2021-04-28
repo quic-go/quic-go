@@ -149,8 +149,7 @@ var _ = Describe("Frames", func() {
 			},
 			map[string]interface{}{
 				"frame_type": "new_token",
-				"length":     4,
-				"token":      "deadbeef",
+				"token":      map[string]interface{}{"data": "deadbeef"},
 			},
 		)
 	})
@@ -362,6 +361,16 @@ var _ = Describe("Frames", func() {
 			&logging.HandshakeDoneFrame{},
 			map[string]interface{}{
 				"frame_type": "handshake_done",
+			},
+		)
+	})
+
+	It("marshals DATAGRAM frames", func() {
+		check(
+			&logging.DatagramFrame{Length: 1337},
+			map[string]interface{}{
+				"frame_type": "datagram",
+				"length":     1337,
 			},
 		)
 	})

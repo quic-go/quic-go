@@ -12,7 +12,6 @@ coverage:
     - internal/utils/newconnectionid_linkedlist.go
     - internal/utils/packetinterval_linkedlist.go
     - internal/utils/linkedlist/linkedlist.go
-    - quictrace/
     - fuzzing/
     - metrics/
   status:

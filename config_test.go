@@ -8,7 +8,6 @@ import (
 
 	mocklogging "github.com/Psiphon-Labs/quic-go/internal/mocks/logging"
 	"github.com/Psiphon-Labs/quic-go/internal/protocol"
-	"github.com/Psiphon-Labs/quic-go/quictrace"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -52,15 +51,19 @@ var _ = Describe("Config", func() {
 				f.Set(reflect.ValueOf([]VersionNumber{1, 2, 3}))
 			case "ConnectionIDLength":
 				f.Set(reflect.ValueOf(8))
-			case "HandshakeTimeout":
+			case "HandshakeIdleTimeout":
 				f.Set(reflect.ValueOf(time.Second))
 			case "MaxIdleTimeout":
 				f.Set(reflect.ValueOf(time.Hour))
 			case "TokenStore":
 				f.Set(reflect.ValueOf(NewLRUTokenStore(2, 3)))
-			case "MaxReceiveStreamFlowControlWindow":
+			case "InitialStreamReceiveWindow":
+				f.Set(reflect.ValueOf(uint64(1234)))
+			case "MaxStreamReceiveWindow":
 				f.Set(reflect.ValueOf(uint64(9)))
-			case "MaxReceiveConnectionFlowControlWindow":
+			case "InitialConnectionReceiveWindow":
+				f.Set(reflect.ValueOf(uint64(4321)))
+			case "MaxConnectionReceiveWindow":
 				f.Set(reflect.ValueOf(uint64(10)))
 			case "MaxIncomingStreams":
 				f.Set(reflect.ValueOf(int64(11)))
@@ -70,16 +73,33 @@ var _ = Describe("Config", func() {
 				f.Set(reflect.ValueOf([]byte{1, 2, 3, 4}))
 			case "KeepAlive":
 				f.Set(reflect.ValueOf(true))
-			case "QuicTracer":
-				f.Set(reflect.ValueOf(quictrace.NewTracer()))
+			case "EnableDatagrams":
+				f.Set(reflect.ValueOf(true))
+			case "DisablePathMTUDiscovery":
+				f.Set(reflect.ValueOf(true))
 			case "Tracer":
 				f.Set(reflect.ValueOf(mocklogging.NewMockTracer(mockCtrl)))
+
+				// [Psiphon]
+			case "ClientHelloSeed":
+
 			default:
 				Fail(fmt.Sprintf("all fields must be accounted for, but saw unknown field %q", fn))
 			}
 		}
 		return c
 	}
+
+	It("uses 10s handshake timeout for short handshake idle timeouts", func() {
+		c := &Config{HandshakeIdleTimeout: time.Second}
+		Expect(c.handshakeTimeout()).To(Equal(protocol.DefaultHandshakeTimeout))
+	})
+
+	It("uses twice the handshake idle timeouts for the handshake timeout, for long handshake idle timeouts", func() {
+		c := &Config{HandshakeIdleTimeout: time.Second * 11 / 2}
+		Expect(c.handshakeTimeout()).To(Equal(11 * time.Second))
+	})
+
 	Context("cloning", func() {
 		It("clones function fields", func() {
 			var calledAcceptToken bool
@@ -129,11 +149,14 @@ var _ = Describe("Config", func() {
 		It("populates empty fields with default values", func() {
 			c := populateConfig(&Config{})
 			Expect(c.Versions).To(Equal(protocol.SupportedVersions))
-			Expect(c.HandshakeTimeout).To(Equal(protocol.DefaultHandshakeTimeout))
-			Expect(c.MaxReceiveStreamFlowControlWindow).To(BeEquivalentTo(protocol.DefaultMaxReceiveStreamFlowControlWindow))
-			Expect(c.MaxReceiveConnectionFlowControlWindow).To(BeEquivalentTo(protocol.DefaultMaxReceiveConnectionFlowControlWindow))
+			Expect(c.HandshakeIdleTimeout).To(Equal(protocol.DefaultHandshakeIdleTimeout))
+			Expect(c.InitialStreamReceiveWindow).To(BeEquivalentTo(protocol.DefaultInitialMaxStreamData))
+			Expect(c.MaxStreamReceiveWindow).To(BeEquivalentTo(protocol.DefaultMaxReceiveStreamFlowControlWindow))
+			Expect(c.InitialConnectionReceiveWindow).To(BeEquivalentTo(protocol.DefaultInitialMaxData))
+			Expect(c.MaxConnectionReceiveWindow).To(BeEquivalentTo(protocol.DefaultMaxReceiveConnectionFlowControlWindow))
 			Expect(c.MaxIncomingStreams).To(BeEquivalentTo(protocol.DefaultMaxIncomingStreams))
 			Expect(c.MaxIncomingUniStreams).To(BeEquivalentTo(protocol.DefaultMaxIncomingUniStreams))
+			Expect(c.DisablePathMTUDiscovery).To(BeFalse())
 		})
 
 		It("populates empty fields with default values, for the server", func() {

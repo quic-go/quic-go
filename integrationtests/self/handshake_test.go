@@ -170,7 +170,7 @@ var _ = Describe("Handshake tests", func() {
 				data, err := ioutil.ReadAll(str)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(data).To(Equal(PRData))
-				Expect(sess.ConnectionState().CipherSuite).To(Equal(suiteID))
+				Expect(sess.ConnectionState().TLS.CipherSuite).To(Equal(suiteID))
 				Expect(sess.CloseWithError(0, "")).To(Succeed())
 			})
 		}
@@ -210,12 +210,16 @@ var _ = Describe("Handshake tests", func() {
 
 				It("errors if the server name doesn't match", func() {
 					runServer(getTLSConfig())
-					_, err := quic.DialAddr(
-						fmt.Sprintf("127.0.0.1:%d", server.Addr().(*net.UDPAddr).Port),
+					conn, err := net.ListenUDP("udp", nil)
+					Expect(err).ToNot(HaveOccurred())
+					_, err = quic.Dial(
+						conn,
+						server.Addr(),
+						"foo.bar",
 						getTLSClientConfig(),
 						clientConfig,
 					)
-					Expect(err).To(MatchError("CRYPTO_ERROR (0x12a): x509: cannot validate certificate for 127.0.0.1 because it doesn't contain any IP SANs"))
+					Expect(err).To(MatchError("CRYPTO_ERROR (0x12a): x509: certificate is valid for localhost, not foo.bar"))
 				})
 
 				It("fails the handshake if the client fails to provide the requested client cert", func() {
@@ -246,13 +250,13 @@ var _ = Describe("Handshake tests", func() {
 				It("uses the ServerName in the tls.Config", func() {
 					runServer(getTLSConfig())
 					tlsConf := getTLSClientConfig()
-					tlsConf.ServerName = "localhost"
+					tlsConf.ServerName = "foo.bar"
 					_, err := quic.DialAddr(
-						fmt.Sprintf("127.0.0.1:%d", server.Addr().(*net.UDPAddr).Port),
+						fmt.Sprintf("localhost:%d", server.Addr().(*net.UDPAddr).Port),
 						tlsConf,
 						clientConfig,
 					)
-					Expect(err).ToNot(HaveOccurred())
+					Expect(err).To(MatchError("CRYPTO_ERROR (0x12a): x509: certificate is valid for localhost, not foo.bar"))
 				})
 			})
 		}
@@ -336,7 +340,7 @@ var _ = Describe("Handshake tests", func() {
 				Expect(err).ToNot(HaveOccurred())
 				defer sess.CloseWithError(0, "")
 			}
-			time.Sleep(25 * time.Millisecond) // wait a bit for the sessions to be queued
+			time.Sleep(scaleDuration(20 * time.Millisecond)) // wait a bit for the sessions to be queued
 
 			_, err = dial()
 			Expect(err).To(HaveOccurred())
@@ -345,12 +349,13 @@ var _ = Describe("Handshake tests", func() {
 			// Now close the one of the session that are waiting to be accepted.
 			// This should free one spot in the queue.
 			Expect(firstSess.CloseWithError(0, ""))
-			time.Sleep(25 * time.Millisecond)
+			Eventually(firstSess.Context().Done()).Should(BeClosed())
+			time.Sleep(scaleDuration(20 * time.Millisecond))
 
 			// dial again, and expect that this dial succeeds
 			_, err = dial()
 			Expect(err).ToNot(HaveOccurred())
-			time.Sleep(25 * time.Millisecond) // wait a bit for the session to be queued
+			time.Sleep(scaleDuration(20 * time.Millisecond)) // wait a bit for the session to be queued
 
 			_, err = dial()
 			Expect(err).To(HaveOccurred())
@@ -369,7 +374,7 @@ var _ = Describe("Handshake tests", func() {
 				sess, err := ln.Accept(context.Background())
 				Expect(err).ToNot(HaveOccurred())
 				cs := sess.ConnectionState()
-				Expect(cs.NegotiatedProtocol).To(Equal(alpn))
+				Expect(cs.TLS.NegotiatedProtocol).To(Equal(alpn))
 				close(done)
 			}()
 
@@ -381,7 +386,7 @@ var _ = Describe("Handshake tests", func() {
 			Expect(err).ToNot(HaveOccurred())
 			defer sess.CloseWithError(0, "")
 			cs := sess.ConnectionState()
-			Expect(cs.NegotiatedProtocol).To(Equal(alpn))
+			Expect(cs.TLS.NegotiatedProtocol).To(Equal(alpn))
 			Eventually(done).Should(BeClosed())
 			Expect(ln.Close()).To(Succeed())
 		})

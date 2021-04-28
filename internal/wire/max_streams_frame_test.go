@@ -5,7 +5,8 @@ import (
 	"fmt"
 
 	"github.com/Psiphon-Labs/quic-go/internal/protocol"
-	"github.com/Psiphon-Labs/quic-go/internal/utils"
+	"github.com/Psiphon-Labs/quic-go/quicvarint"
+
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 )
@@ -100,7 +101,7 @@ var _ = Describe("MAX_STREAMS frame", func() {
 
 		It("has the correct min length", func() {
 			frame := MaxStreamsFrame{MaxStreamNum: 0x1337}
-			Expect(frame.Length(protocol.VersionWhatever)).To(Equal(1 + utils.VarIntLen(0x1337)))
+			Expect(frame.Length(protocol.VersionWhatever)).To(Equal(1 + quicvarint.Len(0x1337)))
 		})
 	})
 })

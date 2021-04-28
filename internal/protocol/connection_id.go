@@ -10,7 +10,7 @@ import (
 // A ConnectionID in QUIC
 type ConnectionID []byte
 
-const maxConnectionIDLen = 18
+const maxConnectionIDLen = 20
 
 // GenerateConnectionID generates a connection ID using cryptographic random
 func GenerateConnectionID(len int) (ConnectionID, error) {
@@ -22,7 +22,7 @@ func GenerateConnectionID(len int) (ConnectionID, error) {
 }
 
 // GenerateConnectionIDForInitial generates a connection ID for the Initial packet.
-// It uses a length randomly chosen between 8 and 18 bytes.
+// It uses a length randomly chosen between 8 and 20 bytes.
 func GenerateConnectionIDForInitial() (ConnectionID, error) {
 	r := make([]byte, 1)
 	if _, err := rand.Read(r); err != nil {
@@ -65,5 +65,5 @@ func (c ConnectionID) String() string {
 	if c.Len() == 0 {
 		return "(empty)"
 	}
-	return fmt.Sprintf("%#x", c.Bytes())
+	return fmt.Sprintf("%x", c.Bytes())
 }

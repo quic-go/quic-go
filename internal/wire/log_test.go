@@ -156,7 +156,7 @@ var _ = Describe("Frame logging", func() {
 			ConnectionID:        protocol.ConnectionID{0xde, 0xad, 0xbe, 0xef},
 			StatelessResetToken: protocol.StatelessResetToken{0x1, 0x2, 0x3, 0x4, 0x5, 0x6, 0x7, 0x8, 0x9, 0xa, 0xb, 0xc, 0xd, 0xe, 0xf, 0x10},
 		}, false)
-		Expect(buf.String()).To(ContainSubstring("\t<- &wire.NewConnectionIDFrame{SequenceNumber: 42, ConnectionID: 0xdeadbeef, StatelessResetToken: 0x0102030405060708090a0b0c0d0e0f10}"))
+		Expect(buf.String()).To(ContainSubstring("\t<- &wire.NewConnectionIDFrame{SequenceNumber: 42, ConnectionID: deadbeef, StatelessResetToken: 0x0102030405060708090a0b0c0d0e0f10}"))
 	})
 
 	It("logs NEW_TOKEN frames", func() {

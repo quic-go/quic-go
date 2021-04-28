@@ -25,21 +25,21 @@ var _ = Describe("Connection ID generation", func() {
 	})
 
 	It("generates random length destination connection IDs", func() {
-		var has8ByteConnID, has18ByteConnID bool
+		var has8ByteConnID, has20ByteConnID bool
 		for i := 0; i < 1000; i++ {
 			c, err := GenerateConnectionIDForInitial()
 			Expect(err).ToNot(HaveOccurred())
 			Expect(c.Len()).To(BeNumerically(">=", 8))
-			Expect(c.Len()).To(BeNumerically("<=", 18))
+			Expect(c.Len()).To(BeNumerically("<=", 20))
 			if c.Len() == 8 {
 				has8ByteConnID = true
 			}
-			if c.Len() == 18 {
-				has18ByteConnID = true
+			if c.Len() == 20 {
+				has20ByteConnID = true
 			}
 		}
 		Expect(has8ByteConnID).To(BeTrue())
-		Expect(has18ByteConnID).To(BeTrue())
+		Expect(has20ByteConnID).To(BeTrue())
 	})
 
 	It("says if connection IDs are equal", func() {
@@ -93,12 +93,12 @@ var _ = Describe("Connection ID generation", func() {
 
 	It("has a string representation", func() {
 		c := ConnectionID([]byte{0xde, 0xad, 0xbe, 0xef, 0x42})
-		Expect(c.String()).To(Equal("0xdeadbeef42"))
+		Expect(c.String()).To(Equal("deadbeef42"))
 	})
 
 	It("has a long string representation", func() {
 		c := ConnectionID{0x13, 0x37, 0, 0, 0xde, 0xca, 0xfb, 0xad}
-		Expect(c.String()).To(Equal("0x13370000decafbad"))
+		Expect(c.String()).To(Equal("13370000decafbad"))
 	})
 
 	It("has a string representation for the default value", func() {

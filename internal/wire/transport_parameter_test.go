@@ -9,15 +9,24 @@ import (
 	"time"
 
 	"github.com/Psiphon-Labs/quic-go/internal/protocol"
-	"github.com/Psiphon-Labs/quic-go/internal/utils"
+	"github.com/Psiphon-Labs/quic-go/quicvarint"
+
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 )
 
 var _ = Describe("Transport Parameters", func() {
-	getRandomValue := func() uint64 {
+	getRandomValueUpTo := func(max int64) uint64 {
 		maxVals := []int64{math.MaxUint8 / 4, math.MaxUint16 / 4, math.MaxUint32 / 4, math.MaxUint64 / 4}
-		return uint64(rand.Int63n(maxVals[int(rand.Int31n(4))]))
+		m := maxVals[int(rand.Int31n(4))]
+		if m > max {
+			m = max
+		}
+		return uint64(rand.Int63n(m))
+	}
+
+	getRandomValue := func() uint64 {
+		return getRandomValueUpTo(math.MaxInt64)
 	}
 
 	BeforeEach(func() {
@@ -25,8 +34,8 @@ var _ = Describe("Transport Parameters", func() {
 	})
 
 	addInitialSourceConnectionID := func(b *bytes.Buffer) {
-		utils.WriteVarInt(b, uint64(initialSourceConnectionIDParameterID))
-		utils.WriteVarInt(b, 6)
+		quicvarint.Write(b, uint64(initialSourceConnectionIDParameterID))
+		quicvarint.Write(b, 6)
 		b.Write([]byte("foobar"))
 	}
 
@@ -46,11 +55,12 @@ var _ = Describe("Transport Parameters", func() {
 			MaxAckDelay:                     37 * time.Millisecond,
 			StatelessResetToken:             &protocol.StatelessResetToken{0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88, 0x99, 0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff, 0x00},
 			ActiveConnectionIDLimit:         123,
+			MaxDatagramFrameSize:            876,
 		}
-		Expect(p.String()).To(Equal("&wire.TransportParameters{OriginalDestinationConnectionID: 0xdeadbeef, InitialSourceConnectionID: 0xdecafbad, RetrySourceConnectionID: 0xdeadc0de, InitialMaxStreamDataBidiLocal: 1234, InitialMaxStreamDataBidiRemote: 2345, InitialMaxStreamDataUni: 3456, InitialMaxData: 4567, MaxBidiStreamNum: 1337, MaxUniStreamNum: 7331, MaxIdleTimeout: 42s, AckDelayExponent: 14, MaxAckDelay: 37ms, ActiveConnectionIDLimit: 123, StatelessResetToken: 0x112233445566778899aabbccddeeff00}"))
+		Expect(p.String()).To(Equal("&wire.TransportParameters{OriginalDestinationConnectionID: deadbeef, InitialSourceConnectionID: decafbad, RetrySourceConnectionID: deadc0de, InitialMaxStreamDataBidiLocal: 1234, InitialMaxStreamDataBidiRemote: 2345, InitialMaxStreamDataUni: 3456, InitialMaxData: 4567, MaxBidiStreamNum: 1337, MaxUniStreamNum: 7331, MaxIdleTimeout: 42s, AckDelayExponent: 14, MaxAckDelay: 37ms, ActiveConnectionIDLimit: 123, StatelessResetToken: 0x112233445566778899aabbccddeeff00, MaxDatagramFrameSize: 876}"))
 	})
 
-	It("has a string representation, if there's no stateless reset token and no Retry source connection id", func() {
+	It("has a string representation, if there's no stateless reset token, no Retry source connection id and no datagram support", func() {
 		p := &TransportParameters{
 			InitialMaxStreamDataBidiLocal:   1234,
 			InitialMaxStreamDataBidiRemote:  2345,
@@ -64,8 +74,9 @@ var _ = Describe("Transport Parameters", func() {
 			AckDelayExponent:                14,
 			MaxAckDelay:                     37 * time.Second,
 			ActiveConnectionIDLimit:         89,
+			MaxDatagramFrameSize:            protocol.InvalidByteCount,
 		}
-		Expect(p.String()).To(Equal("&wire.TransportParameters{OriginalDestinationConnectionID: 0xdeadbeef, InitialSourceConnectionID: (empty), InitialMaxStreamDataBidiLocal: 1234, InitialMaxStreamDataBidiRemote: 2345, InitialMaxStreamDataUni: 3456, InitialMaxData: 4567, MaxBidiStreamNum: 1337, MaxUniStreamNum: 7331, MaxIdleTimeout: 42s, AckDelayExponent: 14, MaxAckDelay: 37s, ActiveConnectionIDLimit: 89}"))
+		Expect(p.String()).To(Equal("&wire.TransportParameters{OriginalDestinationConnectionID: deadbeef, InitialSourceConnectionID: (empty), InitialMaxStreamDataBidiLocal: 1234, InitialMaxStreamDataBidiRemote: 2345, InitialMaxStreamDataUni: 3456, InitialMaxData: 4567, MaxBidiStreamNum: 1337, MaxUniStreamNum: 7331, MaxIdleTimeout: 42s, AckDelayExponent: 14, MaxAckDelay: 37s, ActiveConnectionIDLimit: 89}"))
 	})
 
 	It("marshals and unmarshals", func() {
@@ -77,8 +88,8 @@ var _ = Describe("Transport Parameters", func() {
 			InitialMaxStreamDataUni:         protocol.ByteCount(getRandomValue()),
 			InitialMaxData:                  protocol.ByteCount(getRandomValue()),
 			MaxIdleTimeout:                  0xcafe * time.Second,
-			MaxBidiStreamNum:                protocol.StreamNum(getRandomValue()),
-			MaxUniStreamNum:                 protocol.StreamNum(getRandomValue()),
+			MaxBidiStreamNum:                protocol.StreamNum(getRandomValueUpTo(int64(protocol.MaxStreamCount))),
+			MaxUniStreamNum:                 protocol.StreamNum(getRandomValueUpTo(int64(protocol.MaxStreamCount))),
 			DisableActiveMigration:          true,
 			StatelessResetToken:             &token,
 			OriginalDestinationConnectionID: protocol.ConnectionID{0xde, 0xad, 0xbe, 0xef},
@@ -87,6 +98,7 @@ var _ = Describe("Transport Parameters", func() {
 			AckDelayExponent:                13,
 			MaxAckDelay:                     42 * time.Millisecond,
 			ActiveConnectionIDLimit:         getRandomValue(),
+			MaxDatagramFrameSize:            protocol.ByteCount(getRandomValue()),
 		}
 		data := params.Marshal(protocol.PerspectiveServer)
 
@@ -107,6 +119,7 @@ var _ = Describe("Transport Parameters", func() {
 		Expect(p.AckDelayExponent).To(Equal(uint8(13)))
 		Expect(p.MaxAckDelay).To(Equal(42 * time.Millisecond))
 		Expect(p.ActiveConnectionIDLimit).To(Equal(params.ActiveConnectionIDLimit))
+		Expect(p.MaxDatagramFrameSize).To(Equal(params.MaxDatagramFrameSize))
 	})
 
 	It("doesn't marshal a retry_source_connection_id, if no Retry was performed", func() {
@@ -131,32 +144,32 @@ var _ = Describe("Transport Parameters", func() {
 
 	It("errors when the stateless_reset_token has the wrong length", func() {
 		b := &bytes.Buffer{}
-		utils.WriteVarInt(b, uint64(statelessResetTokenParameterID))
-		utils.WriteVarInt(b, 15)
+		quicvarint.Write(b, uint64(statelessResetTokenParameterID))
+		quicvarint.Write(b, 15)
 		b.Write(make([]byte, 15))
 		Expect((&TransportParameters{}).Unmarshal(b.Bytes(), protocol.PerspectiveServer)).To(MatchError("TRANSPORT_PARAMETER_ERROR: wrong length for stateless_reset_token: 15 (expected 16)"))
 	})
 
 	It("errors when the max_packet_size is too small", func() {
 		b := &bytes.Buffer{}
-		utils.WriteVarInt(b, uint64(maxUDPPayloadSizeParameterID))
-		utils.WriteVarInt(b, uint64(utils.VarIntLen(1199)))
-		utils.WriteVarInt(b, 1199)
+		quicvarint.Write(b, uint64(maxUDPPayloadSizeParameterID))
+		quicvarint.Write(b, uint64(quicvarint.Len(1199)))
+		quicvarint.Write(b, 1199)
 		Expect((&TransportParameters{}).Unmarshal(b.Bytes(), protocol.PerspectiveServer)).To(MatchError("TRANSPORT_PARAMETER_ERROR: invalid value for max_packet_size: 1199 (minimum 1200)"))
 	})
 
 	It("errors when disable_active_migration has content", func() {
 		b := &bytes.Buffer{}
-		utils.WriteVarInt(b, uint64(disableActiveMigrationParameterID))
-		utils.WriteVarInt(b, 6)
+		quicvarint.Write(b, uint64(disableActiveMigrationParameterID))
+		quicvarint.Write(b, 6)
 		b.Write([]byte("foobar"))
 		Expect((&TransportParameters{}).Unmarshal(b.Bytes(), protocol.PerspectiveServer)).To(MatchError("TRANSPORT_PARAMETER_ERROR: wrong length for disable_active_migration: 6 (expected empty)"))
 	})
 
 	It("errors when the server doesn't set the original_destination_connection_id", func() {
 		b := &bytes.Buffer{}
-		utils.WriteVarInt(b, uint64(statelessResetTokenParameterID))
-		utils.WriteVarInt(b, 16)
+		quicvarint.Write(b, uint64(statelessResetTokenParameterID))
+		quicvarint.Write(b, 16)
 		b.Write(make([]byte, 16))
 		addInitialSourceConnectionID(b)
 		Expect((&TransportParameters{}).Unmarshal(b.Bytes(), protocol.PerspectiveServer)).To(MatchError("TRANSPORT_PARAMETER_ERROR: missing original_destination_connection_id"))
@@ -192,7 +205,7 @@ var _ = Describe("Transport Parameters", func() {
 			}).Marshal(protocol.PerspectiveServer)
 			dataLen += len(data)
 		}
-		entryLen := utils.VarIntLen(uint64(ackDelayExponentParameterID)) /* parameter id */ + utils.VarIntLen(uint64(utils.VarIntLen(uint64(maxAckDelay.Milliseconds())))) /*length */ + utils.VarIntLen(uint64(maxAckDelay.Milliseconds())) /* value */
+		entryLen := quicvarint.Len(uint64(ackDelayExponentParameterID)) /* parameter id */ + quicvarint.Len(uint64(quicvarint.Len(uint64(maxAckDelay.Milliseconds())))) /*length */ + quicvarint.Len(uint64(maxAckDelay.Milliseconds())) /* value */
 		Expect(float32(dataLen) / num).To(BeNumerically("~", float32(defaultLen)/num+float32(entryLen), 1))
 	})
 
@@ -221,7 +234,7 @@ var _ = Describe("Transport Parameters", func() {
 			}).Marshal(protocol.PerspectiveServer)
 			dataLen += len(data)
 		}
-		entryLen := utils.VarIntLen(uint64(ackDelayExponentParameterID)) /* parameter id */ + utils.VarIntLen(uint64(utils.VarIntLen(protocol.DefaultAckDelayExponent+1))) /* length */ + utils.VarIntLen(protocol.DefaultAckDelayExponent+1) /* value */
+		entryLen := quicvarint.Len(uint64(ackDelayExponentParameterID)) /* parameter id */ + quicvarint.Len(uint64(quicvarint.Len(protocol.DefaultAckDelayExponent+1))) /* length */ + quicvarint.Len(protocol.DefaultAckDelayExponent+1) /* value */
 		Expect(float32(dataLen) / num).To(BeNumerically("~", float32(defaultLen)/num+float32(entryLen), 1))
 	})
 
@@ -237,23 +250,45 @@ var _ = Describe("Transport Parameters", func() {
 
 	It("errors when the varint value has the wrong length", func() {
 		b := &bytes.Buffer{}
-		utils.WriteVarInt(b, uint64(initialMaxStreamDataBidiLocalParameterID))
-		utils.WriteVarInt(b, 2)
+		quicvarint.Write(b, uint64(initialMaxStreamDataBidiLocalParameterID))
+		quicvarint.Write(b, 2)
 		val := uint64(0xdeadbeef)
-		Expect(utils.VarIntLen(val)).ToNot(BeEquivalentTo(2))
-		utils.WriteVarInt(b, val)
+		Expect(quicvarint.Len(val)).ToNot(BeEquivalentTo(2))
+		quicvarint.Write(b, val)
 		addInitialSourceConnectionID(b)
 		err := (&TransportParameters{}).Unmarshal(b.Bytes(), protocol.PerspectiveServer)
 		Expect(err).To(HaveOccurred())
 		Expect(err.Error()).To(ContainSubstring("TRANSPORT_PARAMETER_ERROR: inconsistent transport parameter length"))
 	})
 
+	It("errors if initial_max_streams_bidi is too large", func() {
+		b := &bytes.Buffer{}
+		quicvarint.Write(b, uint64(initialMaxStreamsBidiParameterID))
+		quicvarint.Write(b, uint64(quicvarint.Len(uint64(protocol.MaxStreamCount+1))))
+		quicvarint.Write(b, uint64(protocol.MaxStreamCount+1))
+		addInitialSourceConnectionID(b)
+		err := (&TransportParameters{}).Unmarshal(b.Bytes(), protocol.PerspectiveServer)
+		Expect(err).To(HaveOccurred())
+		Expect(err.Error()).To(ContainSubstring("TRANSPORT_PARAMETER_ERROR: initial_max_streams_bidi too large: 1152921504606846977 (maximum 1152921504606846976)"))
+	})
+
+	It("errors if initial_max_streams_uni is too large", func() {
+		b := &bytes.Buffer{}
+		quicvarint.Write(b, uint64(initialMaxStreamsUniParameterID))
+		quicvarint.Write(b, uint64(quicvarint.Len(uint64(protocol.MaxStreamCount+1))))
+		quicvarint.Write(b, uint64(protocol.MaxStreamCount+1))
+		addInitialSourceConnectionID(b)
+		err := (&TransportParameters{}).Unmarshal(b.Bytes(), protocol.PerspectiveServer)
+		Expect(err).To(HaveOccurred())
+		Expect(err.Error()).To(ContainSubstring("TRANSPORT_PARAMETER_ERROR: initial_max_streams_uni too large: 1152921504606846977 (maximum 1152921504606846976)"))
+	})
+
 	It("handles huge max_ack_delay values", func() {
 		b := &bytes.Buffer{}
 		val := uint64(math.MaxUint64) / 5
-		utils.WriteVarInt(b, uint64(maxAckDelayParameterID))
-		utils.WriteVarInt(b, uint64(utils.VarIntLen(val)))
-		utils.WriteVarInt(b, val)
+		quicvarint.Write(b, uint64(maxAckDelayParameterID))
+		quicvarint.Write(b, uint64(quicvarint.Len(val)))
+		quicvarint.Write(b, val)
 		addInitialSourceConnectionID(b)
 		err := (&TransportParameters{}).Unmarshal(b.Bytes(), protocol.PerspectiveClient)
 		Expect(err).To(HaveOccurred())
@@ -263,17 +298,17 @@ var _ = Describe("Transport Parameters", func() {
 	It("skips unknown parameters", func() {
 		b := &bytes.Buffer{}
 		// write a known parameter
-		utils.WriteVarInt(b, uint64(initialMaxStreamDataBidiLocalParameterID))
-		utils.WriteVarInt(b, uint64(utils.VarIntLen(0x1337)))
-		utils.WriteVarInt(b, 0x1337)
+		quicvarint.Write(b, uint64(initialMaxStreamDataBidiLocalParameterID))
+		quicvarint.Write(b, uint64(quicvarint.Len(0x1337)))
+		quicvarint.Write(b, 0x1337)
 		// write an unknown parameter
-		utils.WriteVarInt(b, 0x42)
-		utils.WriteVarInt(b, 6)
+		quicvarint.Write(b, 0x42)
+		quicvarint.Write(b, 6)
 		b.Write([]byte("foobar"))
 		// write a known parameter
-		utils.WriteVarInt(b, uint64(initialMaxStreamDataBidiRemoteParameterID))
-		utils.WriteVarInt(b, uint64(utils.VarIntLen(0x42)))
-		utils.WriteVarInt(b, 0x42)
+		quicvarint.Write(b, uint64(initialMaxStreamDataBidiRemoteParameterID))
+		quicvarint.Write(b, uint64(quicvarint.Len(0x42)))
+		quicvarint.Write(b, 0x42)
 		addInitialSourceConnectionID(b)
 		p := &TransportParameters{}
 		Expect(p.Unmarshal(b.Bytes(), protocol.PerspectiveClient)).To(Succeed())
@@ -284,17 +319,17 @@ var _ = Describe("Transport Parameters", func() {
 	It("rejects duplicate parameters", func() {
 		b := &bytes.Buffer{}
 		// write first parameter
-		utils.WriteVarInt(b, uint64(initialMaxStreamDataBidiLocalParameterID))
-		utils.WriteVarInt(b, uint64(utils.VarIntLen(0x1337)))
-		utils.WriteVarInt(b, 0x1337)
+		quicvarint.Write(b, uint64(initialMaxStreamDataBidiLocalParameterID))
+		quicvarint.Write(b, uint64(quicvarint.Len(0x1337)))
+		quicvarint.Write(b, 0x1337)
 		// write a second parameter
-		utils.WriteVarInt(b, uint64(initialMaxStreamDataBidiRemoteParameterID))
-		utils.WriteVarInt(b, uint64(utils.VarIntLen(0x42)))
-		utils.WriteVarInt(b, 0x42)
+		quicvarint.Write(b, uint64(initialMaxStreamDataBidiRemoteParameterID))
+		quicvarint.Write(b, uint64(quicvarint.Len(0x42)))
+		quicvarint.Write(b, 0x42)
 		// write first parameter again
-		utils.WriteVarInt(b, uint64(initialMaxStreamDataBidiLocalParameterID))
-		utils.WriteVarInt(b, uint64(utils.VarIntLen(0x1337)))
-		utils.WriteVarInt(b, 0x1337)
+		quicvarint.Write(b, uint64(initialMaxStreamDataBidiLocalParameterID))
+		quicvarint.Write(b, uint64(quicvarint.Len(0x1337)))
+		quicvarint.Write(b, 0x1337)
 		addInitialSourceConnectionID(b)
 		err := (&TransportParameters{}).Unmarshal(b.Bytes(), protocol.PerspectiveClient)
 		Expect(err).To(HaveOccurred())
@@ -303,8 +338,8 @@ var _ = Describe("Transport Parameters", func() {
 
 	It("errors if there's not enough data to read", func() {
 		b := &bytes.Buffer{}
-		utils.WriteVarInt(b, 0x42)
-		utils.WriteVarInt(b, 7)
+		quicvarint.Write(b, 0x42)
+		quicvarint.Write(b, 7)
 		b.Write([]byte("foobar"))
 		p := &TransportParameters{}
 		Expect(p.Unmarshal(b.Bytes(), protocol.PerspectiveServer)).To(MatchError("TRANSPORT_PARAMETER_ERROR: remaining length (6) smaller than parameter length (7)"))
@@ -312,16 +347,16 @@ var _ = Describe("Transport Parameters", func() {
 
 	It("errors if the client sent a stateless_reset_token", func() {
 		b := &bytes.Buffer{}
-		utils.WriteVarInt(b, uint64(statelessResetTokenParameterID))
-		utils.WriteVarInt(b, uint64(utils.VarIntLen(16)))
+		quicvarint.Write(b, uint64(statelessResetTokenParameterID))
+		quicvarint.Write(b, uint64(quicvarint.Len(16)))
 		b.Write(make([]byte, 16))
 		Expect((&TransportParameters{}).Unmarshal(b.Bytes(), protocol.PerspectiveClient)).To(MatchError("TRANSPORT_PARAMETER_ERROR: client sent a stateless_reset_token"))
 	})
 
 	It("errors if the client sent the original_destination_connection_id", func() {
 		b := &bytes.Buffer{}
-		utils.WriteVarInt(b, uint64(originalDestinationConnectionIDParameterID))
-		utils.WriteVarInt(b, 6)
+		quicvarint.Write(b, uint64(originalDestinationConnectionIDParameterID))
+		quicvarint.Write(b, 6)
 		b.Write([]byte("foobar"))
 		Expect((&TransportParameters{}).Unmarshal(b.Bytes(), protocol.PerspectiveClient)).To(MatchError("TRANSPORT_PARAMETER_ERROR: client sent an original_destination_connection_id"))
 	})
@@ -357,8 +392,8 @@ var _ = Describe("Transport Parameters", func() {
 
 		It("errors if the client sent a preferred_address", func() {
 			b := &bytes.Buffer{}
-			utils.WriteVarInt(b, uint64(preferredAddressParameterID))
-			utils.WriteVarInt(b, 6)
+			quicvarint.Write(b, uint64(preferredAddressParameterID))
+			quicvarint.Write(b, 6)
 			b.Write([]byte("foobar"))
 			p := &TransportParameters{}
 			Expect(p.Unmarshal(b.Bytes(), protocol.PerspectiveClient)).To(MatchError("TRANSPORT_PARAMETER_ERROR: client sent a preferred_address"))
@@ -397,7 +432,7 @@ var _ = Describe("Transport Parameters", func() {
 			}
 			for i := 1; i < len(raw); i++ {
 				buf := &bytes.Buffer{}
-				utils.WriteVarInt(buf, uint64(preferredAddressParameterID))
+				quicvarint.Write(buf, uint64(preferredAddressParameterID))
 				buf.Write(raw[:i])
 				p := &TransportParameters{}
 				Expect(p.Unmarshal(buf.Bytes(), protocol.PerspectiveServer)).ToNot(Succeed())
@@ -412,8 +447,8 @@ var _ = Describe("Transport Parameters", func() {
 				InitialMaxStreamDataBidiRemote: protocol.ByteCount(getRandomValue()),
 				InitialMaxStreamDataUni:        protocol.ByteCount(getRandomValue()),
 				InitialMaxData:                 protocol.ByteCount(getRandomValue()),
-				MaxBidiStreamNum:               protocol.StreamNum(getRandomValue()),
-				MaxUniStreamNum:                protocol.StreamNum(getRandomValue()),
+				MaxBidiStreamNum:               protocol.StreamNum(getRandomValueUpTo(int64(protocol.MaxStreamCount))),
+				MaxUniStreamNum:                protocol.StreamNum(getRandomValueUpTo(int64(protocol.MaxStreamCount))),
 				ActiveConnectionIDLimit:        getRandomValue(),
 			}
 			Expect(params.ValidFor0RTT(params)).To(BeTrue())
@@ -441,62 +476,91 @@ var _ = Describe("Transport Parameters", func() {
 			p.MarshalForSessionTicket(buf)
 			data := buf.Bytes()
 			b := &bytes.Buffer{}
-			utils.WriteVarInt(b, transportParameterMarshalingVersion+1)
-			b.Write(data[utils.VarIntLen(transportParameterMarshalingVersion):])
+			quicvarint.Write(b, transportParameterMarshalingVersion+1)
+			b.Write(data[quicvarint.Len(transportParameterMarshalingVersion):])
 			Expect(p.UnmarshalFromSessionTicket(bytes.NewReader(b.Bytes()))).To(MatchError(fmt.Sprintf("unknown transport parameter marshaling version: %d", transportParameterMarshalingVersion+1)))
 		})
 
 		Context("rejects the parameters if they changed", func() {
-			var p *TransportParameters
-			params := &TransportParameters{
+			var p TransportParameters
+			saved := &TransportParameters{
 				InitialMaxStreamDataBidiLocal:  1,
 				InitialMaxStreamDataBidiRemote: 2,
 				InitialMaxStreamDataUni:        3,
 				InitialMaxData:                 4,
 				MaxBidiStreamNum:               5,
 				MaxUniStreamNum:                6,
+				ActiveConnectionIDLimit:        7,
 			}
 
 			BeforeEach(func() {
-				p = &TransportParameters{
-					InitialMaxStreamDataBidiLocal:  1,
-					InitialMaxStreamDataBidiRemote: 2,
-					InitialMaxStreamDataUni:        3,
-					InitialMaxData:                 4,
-					MaxBidiStreamNum:               5,
-					MaxUniStreamNum:                6,
-				}
-				Expect(params.ValidFor0RTT(p)).To(BeTrue())
+				p = *saved
+				Expect(p.ValidFor0RTT(saved)).To(BeTrue())
 			})
 
-			It("rejects the parameters if the InitialMaxStreamDataBidiLocal changed", func() {
-				p.InitialMaxStreamDataBidiLocal = 0
-				Expect(params.ValidFor0RTT(p)).To(BeFalse())
+			It("rejects the parameters if the InitialMaxStreamDataBidiLocal was reduced", func() {
+				p.InitialMaxStreamDataBidiLocal = saved.InitialMaxStreamDataBidiLocal - 1
+				Expect(p.ValidFor0RTT(saved)).To(BeFalse())
 			})
 
-			It("rejects the parameters if the InitialMaxStreamDataBidiRemote changed", func() {
-				p.InitialMaxStreamDataBidiRemote = 0
-				Expect(params.ValidFor0RTT(p)).To(BeFalse())
+			It("doesn't reject the parameters if the InitialMaxStreamDataBidiLocal was increased", func() {
+				p.InitialMaxStreamDataBidiLocal = saved.InitialMaxStreamDataBidiLocal + 1
+				Expect(p.ValidFor0RTT(saved)).To(BeTrue())
 			})
 
-			It("rejects the parameters if the InitialMaxStreamDataUni changed", func() {
-				p.InitialMaxStreamDataUni = 0
-				Expect(params.ValidFor0RTT(p)).To(BeFalse())
+			It("rejects the parameters if the InitialMaxStreamDataBidiRemote was reduced", func() {
+				p.InitialMaxStreamDataBidiRemote = saved.InitialMaxStreamDataBidiRemote - 1
+				Expect(p.ValidFor0RTT(saved)).To(BeFalse())
 			})
 
-			It("rejects the parameters if the InitialMaxData changed", func() {
-				p.InitialMaxData = 0
-				Expect(params.ValidFor0RTT(p)).To(BeFalse())
+			It("doesn't reject the parameters if the InitialMaxStreamDataBidiRemote was increased", func() {
+				p.InitialMaxStreamDataBidiRemote = saved.InitialMaxStreamDataBidiRemote + 1
+				Expect(p.ValidFor0RTT(saved)).To(BeTrue())
 			})
 
-			It("rejects the parameters if the MaxBidiStreamNum changed", func() {
-				p.MaxBidiStreamNum = 0
-				Expect(params.ValidFor0RTT(p)).To(BeFalse())
+			It("rejects the parameters if the InitialMaxStreamDataUni was reduced", func() {
+				p.InitialMaxStreamDataUni = saved.InitialMaxStreamDataUni - 1
+				Expect(p.ValidFor0RTT(saved)).To(BeFalse())
+			})
+
+			It("doesn't reject the parameters if the InitialMaxStreamDataUni was increased", func() {
+				p.InitialMaxStreamDataUni = saved.InitialMaxStreamDataUni + 1
+				Expect(p.ValidFor0RTT(saved)).To(BeTrue())
+			})
+
+			It("rejects the parameters if the InitialMaxData was reduced", func() {
+				p.InitialMaxData = saved.InitialMaxData - 1
+				Expect(p.ValidFor0RTT(saved)).To(BeFalse())
+			})
+
+			It("doesn't reject the parameters if the InitialMaxData was increased", func() {
+				p.InitialMaxData = saved.InitialMaxData + 1
+				Expect(p.ValidFor0RTT(saved)).To(BeTrue())
+			})
+
+			It("rejects the parameters if the MaxBidiStreamNum was reduced", func() {
+				p.MaxBidiStreamNum = saved.MaxBidiStreamNum - 1
+				Expect(p.ValidFor0RTT(saved)).To(BeFalse())
+			})
+
+			It("accepts the parameters if the MaxBidiStreamNum was increased", func() {
+				p.MaxBidiStreamNum = saved.MaxBidiStreamNum + 1
+				Expect(p.ValidFor0RTT(saved)).To(BeTrue())
 			})
 
 			It("rejects the parameters if the MaxUniStreamNum changed", func() {
-				p.MaxUniStreamNum = 0
-				Expect(params.ValidFor0RTT(p)).To(BeFalse())
+				p.MaxUniStreamNum = saved.MaxUniStreamNum - 1
+				Expect(p.ValidFor0RTT(saved)).To(BeFalse())
+			})
+
+			It("accepts the parameters if the MaxUniStreamNum was increased", func() {
+				p.MaxUniStreamNum = saved.MaxUniStreamNum + 1
+				Expect(p.ValidFor0RTT(saved)).To(BeTrue())
+			})
+
+			It("rejects the parameters if the ActiveConnectionIDLimit changed", func() {
+				p.ActiveConnectionIDLimit = 0
+				Expect(p.ValidFor0RTT(saved)).To(BeFalse())
 			})
 		})
 	})

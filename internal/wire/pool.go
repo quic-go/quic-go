@@ -11,7 +11,7 @@ var pool sync.Pool
 func init() {
 	pool.New = func() interface{} {
 		return &StreamFrame{
-			Data:     make([]byte, 0, protocol.MaxReceivePacketSize),
+			Data:     make([]byte, 0, protocol.MaxPacketBufferSize),
 			fromPool: true,
 		}
 	}
@@ -26,7 +26,7 @@ func putStreamFrame(f *StreamFrame) {
 	if !f.fromPool {
 		return
 	}
-	if protocol.ByteCount(cap(f.Data)) != protocol.MaxReceivePacketSize {
+	if protocol.ByteCount(cap(f.Data)) != protocol.MaxPacketBufferSize {
 		panic("wire.PutStreamFrame called with packet of wrong size!")
 	}
 	pool.Put(f)

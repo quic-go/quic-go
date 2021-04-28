@@ -11,6 +11,7 @@ import (
 // This definition must be in a file that Genny doesn't process.
 type item interface {
 	generic.Type
+	updateSendWindow(protocol.ByteCount)
 	closeForShutdown(error)
 }
 

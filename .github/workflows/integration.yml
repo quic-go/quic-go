@@ -1,0 +1,43 @@
+on: [push, pull_request]
+
+jobs:
+  integration:
+    strategy:
+      fail-fast: false
+      matrix:
+        go: [ "1.15.x", "1.16.x" ]
+    runs-on: ubuntu-latest
+    env:
+      DEBUG: false # set this to true to export qlogs and save them as artifacts
+      TIMESCALE_FACTOR: 3
+    name: Integration Tests (Go ${{ matrix.go }})
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions/setup-go@v2
+        with:
+          stable: '!contains(${{ matrix.go }}, "beta") && !contains(${{ matrix.go }}, "rc")'
+          go-version: ${{ matrix.go }}
+      - run: go version
+      - name: Install Ginkgo
+        run: go install github.com/onsi/ginkgo/ginkgo
+      - name: Install dependencies
+        run: go install
+      - name: set qlogger
+        if: env.DEBUG == 'true'
+        run: echo "QLOGFLAG=-- -qlog" >> $GITHUB_ENV
+      - name: Run tests
+        run: |
+          ginkgo -r -v -randomizeAllSpecs -randomizeSuites -trace -skipPackage self integrationtests
+          ginkgo -r -v -randomizeAllSpecs -randomizeSuites -trace integrationtests/self ${{ env.QLOGFLAG }}
+      - name: Run tests (32 bit)
+        env:
+          GOARCH: 386
+        run: |
+          ginkgo -r -v -randomizeAllSpecs -randomizeSuites -trace -skipPackage self integrationtests
+          ginkgo -r -v -randomizeAllSpecs -randomizeSuites -trace integrationtests/self ${{ env.QLOGFLAG }}
+      - name: save qlogs
+        if: ${{ always() && env.DEBUG == 'true' }}
+        uses: actions/upload-artifact@v2
+        with:
+          name: qlogs
+          path: integrationtests/self/*.qlog

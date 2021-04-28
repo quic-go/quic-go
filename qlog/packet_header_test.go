@@ -39,6 +39,7 @@ var _ = Describe("Packet Header", func() {
 					KeyPhase:     protocol.KeyPhaseZero,
 				},
 				map[string]interface{}{
+					"packet_type":   "1RTT",
 					"packet_number": 42,
 					"dcil":          0,
 					"key_phase_bit": "0",
@@ -58,11 +59,56 @@ var _ = Describe("Packet Header", func() {
 					},
 				},
 				map[string]interface{}{
-					"packet_number":  42,
-					"payload_length": 123,
-					"dcil":           0,
-					"scil":           0,
-					"version":        "decafbad",
+					"packet_type":   "initial",
+					"packet_number": 42,
+					"dcil":          0,
+					"scil":          0,
+					"version":       "decafbad",
+				},
+			)
+		})
+
+		It("marshals an Initial with a token", func() {
+			check(
+				&wire.ExtendedHeader{
+					PacketNumber: 4242,
+					Header: wire.Header{
+						IsLongHeader: true,
+						Type:         protocol.PacketTypeInitial,
+						Length:       123,
+						Version:      protocol.VersionNumber(0xdecafbad),
+						Token:        []byte{0xde, 0xad, 0xbe, 0xef},
+					},
+				},
+				map[string]interface{}{
+					"packet_type":   "initial",
+					"packet_number": 4242,
+					"dcil":          0,
+					"scil":          0,
+					"version":       "decafbad",
+					"token":         map[string]interface{}{"data": "deadbeef"},
+				},
+			)
+		})
+
+		It("marshals a Retry packet", func() {
+			check(
+				&wire.ExtendedHeader{
+					Header: wire.Header{
+						IsLongHeader:    true,
+						Type:            protocol.PacketTypeRetry,
+						SrcConnectionID: protocol.ConnectionID{0x11, 0x22, 0x33, 0x44},
+						Version:         protocol.VersionNumber(0xdecafbad),
+						Token:           []byte{0xde, 0xad, 0xbe, 0xef},
+					},
+				},
+				map[string]interface{}{
+					"packet_type": "retry",
+					"dcil":        0,
+					"scil":        4,
+					"scid":        "11223344",
+					"token":       map[string]interface{}{"data": "deadbeef"},
+					"version":     "decafbad",
 				},
 			)
 		})
@@ -78,6 +124,7 @@ var _ = Describe("Packet Header", func() {
 					},
 				},
 				map[string]interface{}{
+					"packet_type":   "handshake",
 					"packet_number": 0,
 					"dcil":          0,
 					"scil":          0,
@@ -98,6 +145,7 @@ var _ = Describe("Packet Header", func() {
 					},
 				},
 				map[string]interface{}{
+					"packet_type":   "handshake",
 					"packet_number": 42,
 					"dcil":          0,
 					"scil":          16,
@@ -115,6 +163,7 @@ var _ = Describe("Packet Header", func() {
 					KeyPhase:     protocol.KeyPhaseOne,
 				},
 				map[string]interface{}{
+					"packet_type":   "1RTT",
 					"packet_number": 42,
 					"dcil":          4,
 					"dcid":          "deadbeef",

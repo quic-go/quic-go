@@ -94,15 +94,15 @@ var _ = Describe("Tracing", func() {
 		BeforeEach(func() {
 			tr1 = NewMockConnectionTracer(mockCtrl)
 			tr2 = NewMockConnectionTracer(mockCtrl)
-			tracer = newConnectionMultiplexer(tr1, tr2)
+			tracer = NewMultiplexedConnectionTracer(tr1, tr2)
 		})
 
 		It("trace the ConnectionStarted event", func() {
 			local := &net.UDPAddr{IP: net.IPv4(1, 2, 3, 4)}
 			remote := &net.UDPAddr{IP: net.IPv4(4, 3, 2, 1)}
-			tr1.EXPECT().StartedConnection(local, remote, VersionNumber(1234), ConnectionID{1, 2, 3, 4}, ConnectionID{4, 3, 2, 1})
-			tr2.EXPECT().StartedConnection(local, remote, VersionNumber(1234), ConnectionID{1, 2, 3, 4}, ConnectionID{4, 3, 2, 1})
-			tracer.StartedConnection(local, remote, VersionNumber(1234), ConnectionID{1, 2, 3, 4}, ConnectionID{4, 3, 2, 1})
+			tr1.EXPECT().StartedConnection(local, remote, ConnectionID{1, 2, 3, 4}, ConnectionID{4, 3, 2, 1})
+			tr2.EXPECT().StartedConnection(local, remote, ConnectionID{1, 2, 3, 4}, ConnectionID{4, 3, 2, 1})
+			tracer.StartedConnection(local, remote, ConnectionID{1, 2, 3, 4}, ConnectionID{4, 3, 2, 1})
 		})
 
 		It("traces the ClosedConnection event", func() {
@@ -124,6 +124,13 @@ var _ = Describe("Tracing", func() {
 			tr1.EXPECT().ReceivedTransportParameters(tp)
 			tr2.EXPECT().ReceivedTransportParameters(tp)
 			tracer.ReceivedTransportParameters(tp)
+		})
+
+		It("traces the RestoredTransportParameters event", func() {
+			tp := &wire.TransportParameters{InitialMaxData: 1337}
+			tr1.EXPECT().RestoredTransportParameters(tp)
+			tr2.EXPECT().RestoredTransportParameters(tp)
+			tracer.RestoredTransportParameters(tp)
 		})
 
 		It("traces the SentPacket event", func() {
@@ -181,6 +188,12 @@ var _ = Describe("Tracing", func() {
 			tr1.EXPECT().UpdatedMetrics(rttStats, ByteCount(1337), ByteCount(42), 13)
 			tr2.EXPECT().UpdatedMetrics(rttStats, ByteCount(1337), ByteCount(42), 13)
 			tracer.UpdatedMetrics(rttStats, 1337, 42, 13)
+		})
+
+		It("traces the AcknowledgedPacket event", func() {
+			tr1.EXPECT().AcknowledgedPacket(EncryptionHandshake, PacketNumber(42))
+			tr2.EXPECT().AcknowledgedPacket(EncryptionHandshake, PacketNumber(42))
+			tracer.AcknowledgedPacket(EncryptionHandshake, 42)
 		})
 
 		It("traces the LostPacket event", func() {

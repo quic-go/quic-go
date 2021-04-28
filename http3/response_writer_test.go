@@ -5,7 +5,10 @@ import (
 	"io"
 	"net/http"
 
+	mockquic "github.com/Psiphon-Labs/quic-go/internal/mocks/quic"
 	"github.com/Psiphon-Labs/quic-go/internal/utils"
+
+	"github.com/golang/mock/gomock"
 	"github.com/marten-seemann/qpack"
 
 	. "github.com/onsi/ginkgo"
@@ -20,7 +23,9 @@ var _ = Describe("Response Writer", func() {
 
 	BeforeEach(func() {
 		strBuf = &bytes.Buffer{}
-		rw = newResponseWriter(strBuf, utils.DefaultLogger)
+		str := mockquic.NewMockStream(mockCtrl)
+		str.EXPECT().Write(gomock.Any()).DoAndReturn(strBuf.Write).AnyTimes()
+		rw = newResponseWriter(str, utils.DefaultLogger)
 	})
 
 	decodeHeader := func(str io.Reader) map[string][]string {
@@ -110,6 +115,30 @@ var _ = Describe("Response Writer", func() {
 		fields := decodeHeader(strBuf)
 		Expect(fields).To(HaveLen(1))
 		Expect(fields).To(HaveKeyWithValue(":status", []string{"200"}))
+	})
+
+	It("allows calling WriteHeader() several times when using the 103 status code", func() {
+		rw.Header().Add("Link", "</style.css>; rel=preload; as=style")
+		rw.Header().Add("Link", "</script.js>; rel=preload; as=script")
+		rw.WriteHeader(http.StatusEarlyHints)
+
+		n, err := rw.Write([]byte("foobar"))
+		Expect(n).To(Equal(6))
+		Expect(err).ToNot(HaveOccurred())
+
+		// Early Hints must have been received
+		fields := decodeHeader(strBuf)
+		Expect(fields).To(HaveLen(2))
+		Expect(fields).To(HaveKeyWithValue(":status", []string{"103"}))
+		Expect(fields).To(HaveKeyWithValue("link", []string{"</style.css>; rel=preload; as=style", "</script.js>; rel=preload; as=script"}))
+
+		// According to the spec, headers sent in the informational response must also be included in the final response
+		fields = decodeHeader(strBuf)
+		Expect(fields).To(HaveLen(2))
+		Expect(fields).To(HaveKeyWithValue(":status", []string{"200"}))
+		Expect(fields).To(HaveKeyWithValue("link", []string{"</style.css>; rel=preload; as=style", "</script.js>; rel=preload; as=script"}))
+
+		Expect(getData(strBuf)).To(Equal([]byte("foobar")))
 	})
 
 	It("doesn't allow writes if the status code doesn't allow a body", func() {

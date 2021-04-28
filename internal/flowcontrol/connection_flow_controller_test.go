@@ -129,4 +129,28 @@ var _ = Describe("Connection Flow controller", func() {
 			Expect(controller.epochStartTime).To(BeTemporally("~", time.Now(), 100*time.Millisecond))
 		})
 	})
+
+	Context("resetting", func() {
+		It("resets", func() {
+			const initialWindow protocol.ByteCount = 1337
+			controller.UpdateSendWindow(initialWindow)
+			controller.AddBytesSent(1000)
+			Expect(controller.SendWindowSize()).To(Equal(initialWindow - 1000))
+			Expect(controller.Reset()).To(Succeed())
+			Expect(controller.SendWindowSize()).To(Equal(initialWindow))
+		})
+
+		It("says if is blocked after resetting", func() {
+			const initialWindow protocol.ByteCount = 1337
+			controller.UpdateSendWindow(initialWindow)
+			controller.AddBytesSent(initialWindow)
+			blocked, _ := controller.IsNewlyBlocked()
+			Expect(blocked).To(BeTrue())
+			Expect(controller.Reset()).To(Succeed())
+			controller.AddBytesSent(initialWindow)
+			blocked, blockedAt := controller.IsNewlyBlocked()
+			Expect(blocked).To(BeTrue())
+			Expect(blockedAt).To(Equal(initialWindow))
+		})
+	})
 })

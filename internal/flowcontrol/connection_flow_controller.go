@@ -1,6 +1,7 @@
 package flowcontrol
 
 import (
+	"errors"
 	"fmt"
 	"time"
 
@@ -85,4 +86,19 @@ func (c *connectionFlowController) EnsureMinimumWindowSize(inc protocol.ByteCoun
 		c.startNewAutoTuningEpoch(time.Now())
 	}
 	c.mutex.Unlock()
+}
+
+// The flow controller is reset when 0-RTT is rejected.
+// All stream data is invalidated, it's if we had never opened a stream and never sent any data.
+// At that point, we only have sent stream data, but we didn't have the keys to open 1-RTT keys yet.
+func (c *connectionFlowController) Reset() error {
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
+
+	if c.bytesRead > 0 || c.highestReceived > 0 || !c.epochStartTime.IsZero() {
+		return errors.New("flow controller reset after reading data")
+	}
+	c.bytesSent = 0
+	c.lastBlockedAt = 0
+	return nil
 }

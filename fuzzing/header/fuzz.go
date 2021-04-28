@@ -29,12 +29,16 @@ func Fuzz(data []byte) int {
 	if err != nil {
 		return 0
 	}
+	is0RTTPacket := wire.Is0RTTPacket(data)
 	hdr, _, _, err := wire.ParsePacket(data, connIDLen)
 	if err != nil {
 		return 0
 	}
 	if !hdr.DestConnectionID.Equal(connID) {
 		panic(fmt.Sprintf("Expected connection IDs to match: %s vs %s", hdr.DestConnectionID, connID))
+	}
+	if (hdr.Type == protocol.PacketType0RTT) != is0RTTPacket {
+		panic("inconsistent 0-RTT packet detection")
 	}
 
 	var extHdr *wire.ExtendedHeader

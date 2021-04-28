@@ -41,6 +41,11 @@ type RoundTripper struct {
 	// If nil, reasonable default values will be used.
 	QuicConfig *quic.Config
 
+	// Enable support for HTTP/3 datagrams.
+	// If set to true, QuicConfig.EnableDatagram will be set.
+	// See https://www.ietf.org/archive/id/draft-schinazi-masque-h3-datagram-02.html.
+	EnableDatagrams bool
+
 	// Dial specifies an optional dial function for creating QUIC
 	// connections for requests.
 	// If Dial is nil, quic.DialAddr will be used.
@@ -56,11 +61,12 @@ type RoundTripper struct {
 
 // RoundTripOpt are options for the Transport.RoundTripOpt method.
 type RoundTripOpt struct {
-	// OnlyCachedConn controls whether the RoundTripper may
-	// create a new QUIC connection. If set true and
-	// no cached connection is available, RoundTrip
-	// will return ErrNoCachedConn.
+	// OnlyCachedConn controls whether the RoundTripper may create a new QUIC connection.
+	// If set true and no cached connection is available, RoundTrip will return ErrNoCachedConn.
 	OnlyCachedConn bool
+	// SkipSchemeCheck controls whether we check if the scheme is https.
+	// This allows the use of different schemes, e.g. masque://target.example.com:443/.
+	SkipSchemeCheck bool
 }
 
 var _ roundTripCloser = &RoundTripper{}
@@ -94,7 +100,7 @@ func (r *RoundTripper) RoundTripOpt(req *http.Request, opt RoundTripOpt) (*http.
 				}
 			}
 		}
-	} else {
+	} else if !opt.SkipSchemeCheck {
 		closeRequestBody(req)
 		return nil, fmt.Errorf("http3: unsupported protocol scheme: %s", req.URL.Scheme)
 	}
@@ -135,6 +141,7 @@ func (r *RoundTripper) getClient(hostname string, onlyCached bool) (http.RoundTr
 			hostname,
 			r.TLSClientConfig,
 			&roundTripperOpts{
+				EnableDatagram:     r.EnableDatagrams,
 				DisableCompression: r.DisableCompression,
 				MaxHeaderBytes:     r.MaxResponseHeaderBytes,
 			},

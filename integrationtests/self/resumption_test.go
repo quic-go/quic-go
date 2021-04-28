@@ -65,11 +65,11 @@ var _ = Describe("TLS session resumption", func() {
 		Expect(err).ToNot(HaveOccurred())
 		var sessionKey string
 		Eventually(puts).Should(Receive(&sessionKey))
-		Expect(sess.ConnectionState().DidResume).To(BeFalse())
+		Expect(sess.ConnectionState().TLS.DidResume).To(BeFalse())
 
 		serverSess, err := server.Accept(context.Background())
 		Expect(err).ToNot(HaveOccurred())
-		Expect(serverSess.ConnectionState().DidResume).To(BeFalse())
+		Expect(serverSess.ConnectionState().TLS.DidResume).To(BeFalse())
 
 		sess, err = quic.DialAddr(
 			fmt.Sprintf("localhost:%d", server.Addr().(*net.UDPAddr).Port),
@@ -78,11 +78,11 @@ var _ = Describe("TLS session resumption", func() {
 		)
 		Expect(err).ToNot(HaveOccurred())
 		Expect(gets).To(Receive(Equal(sessionKey)))
-		Expect(sess.ConnectionState().DidResume).To(BeTrue())
+		Expect(sess.ConnectionState().TLS.DidResume).To(BeTrue())
 
 		serverSess, err = server.Accept(context.Background())
 		Expect(err).ToNot(HaveOccurred())
-		Expect(serverSess.ConnectionState().DidResume).To(BeTrue())
+		Expect(serverSess.ConnectionState().TLS.DidResume).To(BeTrue())
 	})
 
 	It("doesn't use session resumption, if the config disables it", func() {
@@ -104,11 +104,11 @@ var _ = Describe("TLS session resumption", func() {
 		)
 		Expect(err).ToNot(HaveOccurred())
 		Consistently(puts).ShouldNot(Receive())
-		Expect(sess.ConnectionState().DidResume).To(BeFalse())
+		Expect(sess.ConnectionState().TLS.DidResume).To(BeFalse())
 
 		serverSess, err := server.Accept(context.Background())
 		Expect(err).ToNot(HaveOccurred())
-		Expect(serverSess.ConnectionState().DidResume).To(BeFalse())
+		Expect(serverSess.ConnectionState().TLS.DidResume).To(BeFalse())
 
 		sess, err = quic.DialAddr(
 			fmt.Sprintf("localhost:%d", server.Addr().(*net.UDPAddr).Port),
@@ -116,10 +116,10 @@ var _ = Describe("TLS session resumption", func() {
 			nil,
 		)
 		Expect(err).ToNot(HaveOccurred())
-		Expect(sess.ConnectionState().DidResume).To(BeFalse())
+		Expect(sess.ConnectionState().TLS.DidResume).To(BeFalse())
 
 		serverSess, err = server.Accept(context.Background())
 		Expect(err).ToNot(HaveOccurred())
-		Expect(serverSess.ConnectionState().DidResume).To(BeFalse())
+		Expect(serverSess.ConnectionState().TLS.DidResume).To(BeFalse())
 	})
 })

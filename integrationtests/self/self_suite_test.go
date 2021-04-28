@@ -14,15 +14,17 @@ import (
 	"log"
 	"math/big"
 	mrand "math/rand"
+	"net"
 	"os"
+	"strconv"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/Psiphon-Labs/quic-go"
 	"github.com/Psiphon-Labs/quic-go/internal/utils"
+	"github.com/Psiphon-Labs/quic-go/internal/wire"
 	"github.com/Psiphon-Labs/quic-go/logging"
-	"github.com/Psiphon-Labs/quic-go/metrics"
 	"github.com/Psiphon-Labs/quic-go/qlog"
 
 	. "github.com/onsi/ginkgo"
@@ -83,16 +85,15 @@ func (b *syncedBuffer) Reset() {
 }
 
 var (
-	logFileName   string // the log file set in the ginkgo flags
-	logBufOnce    sync.Once
-	logBuf        *syncedBuffer
-	enableQlog    bool
-	enableMetrics bool
+	logFileName string // the log file set in the ginkgo flags
+	logBufOnce  sync.Once
+	logBuf      *syncedBuffer
+	enableQlog  bool
 
 	tlsConfig          *tls.Config
 	tlsConfigLongChain *tls.Config
 	tlsClientConfig    *tls.Config
-	tracer             logging.Tracer
+	quicConfigTracer   logging.Tracer
 )
 
 // read the logfile command line flag
@@ -100,8 +101,6 @@ var (
 func init() {
 	flag.StringVar(&logFileName, "logfile", "", "log file")
 	flag.BoolVar(&enableQlog, "qlog", false, "enable qlog")
-	// metrics won't be accessible anywhere, but it's useful to exercise the code
-	flag.BoolVar(&enableMetrics, "metrics", false, "enable metrics")
 }
 
 var _ = BeforeSuite(func() {
@@ -135,9 +134,8 @@ var _ = BeforeSuite(func() {
 		NextProtos: []string{alpn},
 	}
 
-	var qlogTracer, metricsTracer logging.Tracer
 	if enableQlog {
-		qlogTracer = qlog.NewTracer(func(p logging.Perspective, connectionID []byte) io.WriteCloser {
+		quicConfigTracer = qlog.NewTracer(func(p logging.Perspective, connectionID []byte) io.WriteCloser {
 			role := "server"
 			if p == logging.PerspectiveClient {
 				role = "client"
@@ -149,17 +147,6 @@ var _ = BeforeSuite(func() {
 			bw := bufio.NewWriter(f)
 			return utils.NewBufferedWriteCloser(bw, f)
 		})
-	}
-	if enableMetrics {
-		metricsTracer = metrics.NewTracer()
-	}
-
-	if enableQlog && enableMetrics {
-		tracer = logging.NewMultiplexedTracer(qlogTracer, metricsTracer)
-	} else if enableQlog {
-		tracer = qlogTracer
-	} else if enableMetrics {
-		tracer = metricsTracer
 	}
 })
 
@@ -286,7 +273,11 @@ func getQuicConfig(conf *quic.Config) *quic.Config {
 	} else {
 		conf = conf.Clone()
 	}
-	conf.Tracer = tracer
+	if conf.Tracer == nil {
+		conf.Tracer = quicConfigTracer
+	} else if quicConfigTracer != nil {
+		conf.Tracer = logging.NewMultiplexedTracer(quicConfigTracer, conf.Tracer)
+	}
 	return conf
 }
 
@@ -315,6 +306,105 @@ var _ = AfterEach(func() {
 // Debug says if this test is being logged
 func debugLog() bool {
 	return len(logFileName) > 0
+}
+
+func scaleDuration(d time.Duration) time.Duration {
+	scaleFactor := 1
+	if f, err := strconv.Atoi(os.Getenv("TIMESCALE_FACTOR")); err == nil { // parsing "" errors, so this works fine if the env is not set
+		scaleFactor = f
+	}
+	Expect(scaleFactor).ToNot(BeZero())
+	return time.Duration(scaleFactor) * d
+}
+
+type tracer struct {
+	createNewConnTracer func() logging.ConnectionTracer
+}
+
+var _ logging.Tracer = &tracer{}
+
+func newTracer(c func() logging.ConnectionTracer) logging.Tracer {
+	return &tracer{createNewConnTracer: c}
+}
+
+func (t *tracer) TracerForConnection(p logging.Perspective, odcid logging.ConnectionID) logging.ConnectionTracer {
+	return t.createNewConnTracer()
+}
+func (t *tracer) SentPacket(net.Addr, *logging.Header, logging.ByteCount, []logging.Frame) {}
+func (t *tracer) DroppedPacket(net.Addr, logging.PacketType, logging.ByteCount, logging.PacketDropReason) {
+}
+
+type connTracer struct{}
+
+var _ logging.ConnectionTracer = &connTracer{}
+
+func (t *connTracer) StartedConnection(local, remote net.Addr, srcConnID, destConnID logging.ConnectionID) {
+}
+func (t *connTracer) ClosedConnection(logging.CloseReason)                     {}
+func (t *connTracer) SentTransportParameters(*logging.TransportParameters)     {}
+func (t *connTracer) ReceivedTransportParameters(*logging.TransportParameters) {}
+func (t *connTracer) RestoredTransportParameters(*logging.TransportParameters) {}
+func (t *connTracer) SentPacket(hdr *logging.ExtendedHeader, size logging.ByteCount, ack *logging.AckFrame, frames []logging.Frame) {
+}
+func (t *connTracer) ReceivedVersionNegotiationPacket(*logging.Header, []logging.VersionNumber) {}
+func (t *connTracer) ReceivedRetry(*logging.Header)                                             {}
+func (t *connTracer) ReceivedPacket(hdr *logging.ExtendedHeader, size logging.ByteCount, frames []logging.Frame) {
+}
+func (t *connTracer) BufferedPacket(logging.PacketType)                                             {}
+func (t *connTracer) DroppedPacket(logging.PacketType, logging.ByteCount, logging.PacketDropReason) {}
+func (t *connTracer) UpdatedMetrics(rttStats *logging.RTTStats, cwnd, bytesInFlight logging.ByteCount, packetsInFlight int) {
+}
+
+func (t *connTracer) AcknowledgedPacket(logging.EncryptionLevel, logging.PacketNumber) {}
+func (t *connTracer) LostPacket(logging.EncryptionLevel, logging.PacketNumber, logging.PacketLossReason) {
+}
+func (t *connTracer) UpdatedCongestionState(logging.CongestionState)                     {}
+func (t *connTracer) UpdatedPTOCount(value uint32)                                       {}
+func (t *connTracer) UpdatedKeyFromTLS(logging.EncryptionLevel, logging.Perspective)     {}
+func (t *connTracer) UpdatedKey(generation logging.KeyPhase, remote bool)                {}
+func (t *connTracer) DroppedEncryptionLevel(logging.EncryptionLevel)                     {}
+func (t *connTracer) DroppedKey(logging.KeyPhase)                                        {}
+func (t *connTracer) SetLossTimer(logging.TimerType, logging.EncryptionLevel, time.Time) {}
+func (t *connTracer) LossTimerExpired(logging.TimerType, logging.EncryptionLevel)        {}
+func (t *connTracer) LossTimerCanceled()                                                 {}
+func (t *connTracer) Debug(string, string)                                               {}
+func (t *connTracer) Close()                                                             {}
+
+type packet struct {
+	time   time.Time
+	hdr    *logging.ExtendedHeader
+	frames []logging.Frame
+}
+
+type packetTracer struct {
+	connTracer
+	closed     chan struct{}
+	sent, rcvd []packet
+}
+
+func newPacketTracer() *packetTracer {
+	return &packetTracer{closed: make(chan struct{})}
+}
+
+func (t *packetTracer) ReceivedPacket(hdr *logging.ExtendedHeader, _ logging.ByteCount, frames []logging.Frame) {
+	t.rcvd = append(t.rcvd, packet{time: time.Now(), hdr: hdr, frames: frames})
+}
+
+func (t *packetTracer) SentPacket(hdr *logging.ExtendedHeader, _ logging.ByteCount, ack *wire.AckFrame, frames []logging.Frame) {
+	if ack != nil {
+		frames = append(frames, ack)
+	}
+	t.sent = append(t.sent, packet{time: time.Now(), hdr: hdr, frames: frames})
+}
+func (t *packetTracer) Close() { close(t.closed) }
+func (t *packetTracer) getSentPackets() []packet {
+	<-t.closed
+	return t.sent
+}
+
+func (t *packetTracer) getRcvdPackets() []packet {
+	<-t.closed
+	return t.rcvd
 }
 
 func TestSelf(t *testing.T) {

@@ -2,12 +2,14 @@ package wire
 
 import (
 	"bytes"
+	"encoding/binary"
 	"errors"
 	"fmt"
 	"io"
 
 	"github.com/Psiphon-Labs/quic-go/internal/protocol"
 	"github.com/Psiphon-Labs/quic-go/internal/utils"
+	"github.com/Psiphon-Labs/quic-go/quicvarint"
 )
 
 // ParseConnectionID parses the destination connection ID of a packet.
@@ -40,6 +42,21 @@ func IsVersionNegotiationPacket(b []byte) bool {
 		return false
 	}
 	return b[0]&0x80 > 0 && b[1] == 0 && b[2] == 0 && b[3] == 0 && b[4] == 0
+}
+
+// Is0RTTPacket says if this is a 0-RTT packet.
+// A packet sent with a version we don't understand can never be a 0-RTT packet.
+func Is0RTTPacket(b []byte) bool {
+	if len(b) < 5 {
+		return false
+	}
+	if b[0]&0x80 == 0 {
+		return false
+	}
+	if !protocol.IsSupportedVersion(protocol.SupportedVersions, protocol.VersionNumber(binary.BigEndian.Uint32(b[1:5]))) {
+		return false
+	}
+	return b[0]&0x30>>4 == 0x1
 }
 
 var ErrUnsupportedVersion = errors.New("unsupported version")
@@ -187,7 +204,7 @@ func (h *Header) parseLongHeader(b *bytes.Reader) error {
 	}
 
 	if h.Type == protocol.PacketTypeInitial {
-		tokenLen, err := utils.ReadVarInt(b)
+		tokenLen, err := quicvarint.Read(b)
 		if err != nil {
 			return err
 		}
@@ -200,7 +217,7 @@ func (h *Header) parseLongHeader(b *bytes.Reader) error {
 		}
 	}
 
-	pl, err := utils.ReadVarInt(b)
+	pl, err := quicvarint.Read(b)
 	if err != nil {
 		return err
 	}

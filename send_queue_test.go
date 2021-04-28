@@ -9,7 +9,7 @@ import (
 )
 
 var _ = Describe("Send Queue", func() {
-	var q *sendQueue
+	var q sender
 	var c *MockSendConn
 
 	BeforeEach(func() {
@@ -42,21 +42,22 @@ var _ = Describe("Send Queue", func() {
 		Eventually(done).Should(BeClosed())
 	})
 
-	It("blocks sending when too many packets are queued", func() {
-		q.Send(getPacket([]byte("foobar")))
+	It("panics when Send() is called although there's no space in the queue", func() {
+		for i := 0; i < sendQueueCapacity; i++ {
+			Expect(q.WouldBlock()).To(BeFalse())
+			q.Send(getPacket([]byte("foobar")))
+		}
+		Expect(q.WouldBlock()).To(BeTrue())
+		Expect(func() { q.Send(getPacket([]byte("raboof"))) }).To(Panic())
+	})
 
-		written := make(chan []byte, 2)
-		c.EXPECT().Write(gomock.Any()).Do(func(p []byte) { written <- p }).Times(2)
+	It("signals when sending is possible again", func() {
+		Expect(q.WouldBlock()).To(BeFalse())
+		q.Send(getPacket([]byte("foobar1")))
+		Consistently(q.Available()).ShouldNot(Receive())
 
-		sent := make(chan struct{})
-		go func() {
-			defer GinkgoRecover()
-			q.Send(getPacket([]byte("raboof")))
-			close(sent)
-		}()
-
-		Consistently(sent).ShouldNot(BeClosed())
-
+		// now start sending out packets. This should free up queue space.
+		c.EXPECT().Write(gomock.Any()).MinTimes(1).MaxTimes(2)
 		done := make(chan struct{})
 		go func() {
 			defer GinkgoRecover()
@@ -64,8 +65,10 @@ var _ = Describe("Send Queue", func() {
 			close(done)
 		}()
 
-		Eventually(written).Should(Receive(Equal([]byte("foobar"))))
-		Eventually(written).Should(Receive(Equal([]byte("raboof"))))
+		Eventually(q.Available()).Should(Receive())
+		Expect(q.WouldBlock()).To(BeFalse())
+		Expect(func() { q.Send(getPacket([]byte("foobar2"))) }).ToNot(Panic())
+
 		q.Close()
 		Eventually(done).Should(BeClosed())
 	})

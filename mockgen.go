@@ -1,6 +1,7 @@
 package quic
 
 //go:generate sh -c "./mockgen_private.sh quic mock_send_conn_test.go github.com/Psiphon-Labs/quic-go sendConn"
+//go:generate sh -c "./mockgen_private.sh quic mock_sender_test.go github.com/Psiphon-Labs/quic-go sender"
 //go:generate sh -c "./mockgen_private.sh quic mock_stream_internal_test.go github.com/Psiphon-Labs/quic-go streamI"
 //go:generate sh -c "./mockgen_private.sh quic mock_crypto_stream_test.go github.com/Psiphon-Labs/quic-go cryptoStream"
 //go:generate sh -c "./mockgen_private.sh quic mock_receive_stream_internal_test.go github.com/Psiphon-Labs/quic-go receiveStreamI"
@@ -14,6 +15,7 @@ package quic
 //go:generate sh -c "./mockgen_private.sh quic mock_sealing_manager_test.go github.com/Psiphon-Labs/quic-go sealingManager"
 //go:generate sh -c "./mockgen_private.sh quic mock_unpacker_test.go github.com/Psiphon-Labs/quic-go unpacker"
 //go:generate sh -c "./mockgen_private.sh quic mock_packer_test.go github.com/Psiphon-Labs/quic-go packer"
+//go:generate sh -c "./mockgen_private.sh quic mock_mtu_discoverer_test.go github.com/Psiphon-Labs/quic-go mtuDiscoverer"
 //go:generate sh -c "./mockgen_private.sh quic mock_session_runner_test.go github.com/Psiphon-Labs/quic-go sessionRunner"
 //go:generate sh -c "./mockgen_private.sh quic mock_quic_session_test.go github.com/Psiphon-Labs/quic-go quicSession"
 //go:generate sh -c "./mockgen_private.sh quic mock_packet_handler_test.go github.com/Psiphon-Labs/quic-go packetHandler"

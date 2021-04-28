@@ -1,13 +1,28 @@
 on: [push, pull_request]
+
 jobs:
-  lint:
+  check:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
+      - uses: actions/setup-go@v2
+        with:
+          go-version: "1.16.x"
       - name: Check that no non-test files import Ginkgo or Gomega
         run: .github/workflows/no_ginkgo.sh
+      - name: Check that go.mod is tidied
+        run: |
+          cp go.mod go.mod.orig
+          cp go.sum go.sum.orig
+          go mod tidy
+          diff go.mod go.mod.orig
+          diff go.sum go.sum.orig
+  golangci-lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
       - name: golangci-lint
         uses: golangci/golangci-lint-action@v2
         with:
           # Required: the version of golangci-lint is required and must be specified without patch version: we always use the latest patch version.
-          version: v1.31
+          version: v1.34.1

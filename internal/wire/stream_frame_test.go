@@ -5,7 +5,8 @@ import (
 	"io"
 
 	"github.com/Psiphon-Labs/quic-go/internal/protocol"
-	"github.com/Psiphon-Labs/quic-go/internal/utils"
+	"github.com/Psiphon-Labs/quic-go/quicvarint"
+
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 )
@@ -81,9 +82,9 @@ var _ = Describe("STREAM frame", func() {
 
 		It("rejects frames that claim to be longer than the packet size", func() {
 			data := []byte{0x8 ^ 0x2}
-			data = append(data, encodeVarInt(0x12345)...)                                 // stream ID
-			data = append(data, encodeVarInt(uint64(protocol.MaxReceivePacketSize)+1)...) // data length
-			data = append(data, make([]byte, protocol.MaxReceivePacketSize+1)...)
+			data = append(data, encodeVarInt(0x12345)...)                                // stream ID
+			data = append(data, encodeVarInt(uint64(protocol.MaxPacketBufferSize)+1)...) // data length
+			data = append(data, make([]byte, protocol.MaxPacketBufferSize+1)...)
 			r := bytes.NewReader(data)
 			_, err := parseStreamFrame(r, versionIETFFrames)
 			Expect(err).To(Equal(io.EOF))
@@ -235,7 +236,7 @@ var _ = Describe("STREAM frame", func() {
 				StreamID: 0x1337,
 				Data:     []byte("foobar"),
 			}
-			Expect(f.Length(versionIETFFrames)).To(Equal(1 + utils.VarIntLen(0x1337) + 6))
+			Expect(f.Length(versionIETFFrames)).To(Equal(1 + quicvarint.Len(0x1337) + 6))
 		})
 
 		It("has the right length for a frame with offset", func() {
@@ -244,7 +245,7 @@ var _ = Describe("STREAM frame", func() {
 				Offset:   0x42,
 				Data:     []byte("foobar"),
 			}
-			Expect(f.Length(versionIETFFrames)).To(Equal(1 + utils.VarIntLen(0x1337) + utils.VarIntLen(0x42) + 6))
+			Expect(f.Length(versionIETFFrames)).To(Equal(1 + quicvarint.Len(0x1337) + quicvarint.Len(0x42) + 6))
 		})
 
 		It("has the right length for a frame with data length", func() {
@@ -254,7 +255,7 @@ var _ = Describe("STREAM frame", func() {
 				DataLenPresent: true,
 				Data:           []byte("foobar"),
 			}
-			Expect(f.Length(versionIETFFrames)).To(Equal(1 + utils.VarIntLen(0x1337) + utils.VarIntLen(0x1234567) + utils.VarIntLen(6) + 6))
+			Expect(f.Length(versionIETFFrames)).To(Equal(1 + quicvarint.Len(0x1337) + quicvarint.Len(0x1234567) + quicvarint.Len(6) + 6))
 		})
 	})
 

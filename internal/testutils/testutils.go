@@ -11,9 +11,6 @@ import (
 // Utilities for simulating packet injection and man-in-the-middle (MITM) attacker tests.
 // Do not use for non-testing purposes.
 
-// CryptoFrameType uses same types as messageType in crypto_setup.go
-type CryptoFrameType uint8
-
 // writePacket returns a new raw packet with the specified header and payload
 func writePacket(hdr *wire.ExtendedHeader, data []byte) []byte {
 	buf := &bytes.Buffer{}
@@ -30,42 +27,10 @@ func packRawPayload(version protocol.VersionNumber, frames []wire.Frame) []byte 
 	return buf.Bytes()
 }
 
-// ComposeCryptoFrame returns a new empty crypto frame of the specified
-// type padded to size bytes with zeroes
-func ComposeCryptoFrame(cft CryptoFrameType, size int) *wire.CryptoFrame {
-	data := make([]byte, size)
-	data[0] = byte(cft)
-	return &wire.CryptoFrame{
-		Offset: 0,
-		Data:   data,
-	}
-}
-
-// ComposeConnCloseFrame returns a new Connection Close frame with a generic error
-func ComposeConnCloseFrame() *wire.ConnectionCloseFrame {
-	return &wire.ConnectionCloseFrame{
-		IsApplicationError: true,
-		ErrorCode:          0,
-		ReasonPhrase:       "mitm attacker",
-	}
-}
-
-// ComposeAckFrame returns a new Ack Frame that acknowledges all packets between smallest and largest
-func ComposeAckFrame(smallest protocol.PacketNumber, largest protocol.PacketNumber) *wire.AckFrame {
-	ackRange := wire.AckRange{
-		Smallest: smallest,
-		Largest:  largest,
-	}
-	return &wire.AckFrame{
-		AckRanges: []wire.AckRange{ackRange},
-		DelayTime: 0,
-	}
-}
-
 // ComposeInitialPacket returns an Initial packet encrypted under key
 // (the original destination connection ID) containing specified frames
 func ComposeInitialPacket(srcConnID protocol.ConnectionID, destConnID protocol.ConnectionID, version protocol.VersionNumber, key protocol.ConnectionID, frames []wire.Frame) []byte {
-	sealer, _ := handshake.NewInitialAEAD(key, protocol.PerspectiveServer)
+	sealer, _ := handshake.NewInitialAEAD(key, protocol.PerspectiveServer, version)
 
 	// compose payload
 	var payload []byte
@@ -128,5 +93,5 @@ func ComposeRetryPacket(
 		},
 	}
 	data := writePacket(hdr, nil)
-	return append(data, handshake.GetRetryIntegrityTag(data, origDestConnID)[:]...)
+	return append(data, handshake.GetRetryIntegrityTag(data, origDestConnID, version)[:]...)
 }

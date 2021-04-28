@@ -6,7 +6,8 @@ import (
 	"io"
 
 	"github.com/Psiphon-Labs/quic-go/internal/protocol"
-	"github.com/Psiphon-Labs/quic-go/internal/utils"
+	"github.com/Psiphon-Labs/quic-go/quicvarint"
+
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 )
@@ -101,7 +102,7 @@ var _ = Describe("STREAMS_BLOCKED frame", func() {
 
 		It("has the correct min length", func() {
 			frame := StreamsBlockedFrame{StreamLimit: 0x123456}
-			Expect(frame.Length(0)).To(Equal(protocol.ByteCount(1) + utils.VarIntLen(0x123456)))
+			Expect(frame.Length(0)).To(Equal(protocol.ByteCount(1) + quicvarint.Len(0x123456)))
 		})
 	})
 })

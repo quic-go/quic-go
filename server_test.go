@@ -22,7 +22,6 @@ import (
 	"github.com/Psiphon-Labs/quic-go/internal/utils"
 	"github.com/Psiphon-Labs/quic-go/internal/wire"
 	"github.com/Psiphon-Labs/quic-go/logging"
-	"github.com/Psiphon-Labs/quic-go/quictrace"
 
 	"github.com/golang/mock/gomock"
 
@@ -56,7 +55,7 @@ var _ = Describe("Server", func() {
 		n := buf.Len()
 		buf.Write(p)
 		data := buffer.Data[:buf.Len()]
-		sealer, _ := handshake.NewInitialAEAD(hdr.DestConnectionID, protocol.PerspectiveClient)
+		sealer, _ := handshake.NewInitialAEAD(hdr.DestConnectionID, protocol.PerspectiveClient, hdr.Version)
 		_ = sealer.Seal(data[n:n], data[n:], 0x42, data[:n])
 		data = data[:len(data)+16]
 		sealer.EncryptHeader(data[n:n+16], &data[0], data[n-4:n])
@@ -125,7 +124,7 @@ var _ = Describe("Server", func() {
 		Expect(err).ToNot(HaveOccurred())
 		server := ln.(*baseServer)
 		Expect(server.config.Versions).To(Equal(protocol.SupportedVersions))
-		Expect(server.config.HandshakeTimeout).To(Equal(protocol.DefaultHandshakeTimeout))
+		Expect(server.config.HandshakeIdleTimeout).To(Equal(protocol.DefaultHandshakeIdleTimeout))
 		Expect(server.config.MaxIdleTimeout).To(Equal(protocol.DefaultIdleTimeout))
 		Expect(reflect.ValueOf(server.config.AcceptToken)).To(Equal(reflect.ValueOf(defaultAcceptToken)))
 		Expect(server.config.KeepAlive).To(BeFalse())
@@ -136,27 +135,24 @@ var _ = Describe("Server", func() {
 	It("setups with the right values", func() {
 		supportedVersions := []protocol.VersionNumber{protocol.VersionTLS}
 		acceptToken := func(_ net.Addr, _ *Token) bool { return true }
-		tracer := quictrace.NewTracer()
 		config := Config{
-			Versions:          supportedVersions,
-			AcceptToken:       acceptToken,
-			HandshakeTimeout:  1337 * time.Hour,
-			MaxIdleTimeout:    42 * time.Minute,
-			KeepAlive:         true,
-			StatelessResetKey: []byte("foobar"),
-			QuicTracer:        tracer,
+			Versions:             supportedVersions,
+			AcceptToken:          acceptToken,
+			HandshakeIdleTimeout: 1337 * time.Hour,
+			MaxIdleTimeout:       42 * time.Minute,
+			KeepAlive:            true,
+			StatelessResetKey:    []byte("foobar"),
 		}
 		ln, err := Listen(conn, tlsConf, &config)
 		Expect(err).ToNot(HaveOccurred())
 		server := ln.(*baseServer)
 		Expect(server.sessionHandler).ToNot(BeNil())
 		Expect(server.config.Versions).To(Equal(supportedVersions))
-		Expect(server.config.HandshakeTimeout).To(Equal(1337 * time.Hour))
+		Expect(server.config.HandshakeIdleTimeout).To(Equal(1337 * time.Hour))
 		Expect(server.config.MaxIdleTimeout).To(Equal(42 * time.Minute))
 		Expect(reflect.ValueOf(server.config.AcceptToken)).To(Equal(reflect.ValueOf(acceptToken)))
 		Expect(server.config.KeepAlive).To(BeTrue())
 		Expect(server.config.StatelessResetKey).To(Equal([]byte("foobar")))
-		Expect(server.config.QuicTracer).To(Equal(tracer))
 		// stop the listener
 		Expect(ln.Close()).To(Succeed())
 	})
@@ -480,7 +476,7 @@ var _ = Describe("Server", func() {
 					Expect(replyHdr.SrcConnectionID).ToNot(Equal(hdr.DestConnectionID))
 					Expect(replyHdr.DestConnectionID).To(Equal(hdr.SrcConnectionID))
 					Expect(replyHdr.Token).ToNot(BeEmpty())
-					Expect(b[len(b)-16:]).To(Equal(handshake.GetRetryIntegrityTag(b[:len(b)-16], hdr.DestConnectionID)[:]))
+					Expect(b[len(b)-16:]).To(Equal(handshake.GetRetryIntegrityTag(b[:len(b)-16], hdr.DestConnectionID, hdr.Version)[:]))
 					return len(b), nil
 				})
 				serv.handlePacket(packet)
@@ -520,12 +516,12 @@ var _ = Describe("Server", func() {
 					Expect(replyHdr.Type).To(Equal(protocol.PacketTypeInitial))
 					Expect(replyHdr.SrcConnectionID).To(Equal(hdr.DestConnectionID))
 					Expect(replyHdr.DestConnectionID).To(Equal(hdr.SrcConnectionID))
-					_, opener := handshake.NewInitialAEAD(hdr.DestConnectionID, protocol.PerspectiveClient)
+					_, opener := handshake.NewInitialAEAD(hdr.DestConnectionID, protocol.PerspectiveClient, replyHdr.Version)
 					extHdr, err := unpackHeader(opener, replyHdr, b, hdr.Version)
 					Expect(err).ToNot(HaveOccurred())
 					data, err := opener.Open(nil, b[extHdr.ParsedLen():], extHdr.PacketNumber, b[:extHdr.ParsedLen()])
 					Expect(err).ToNot(HaveOccurred())
-					f, err := wire.NewFrameParser(hdr.Version).ParseNext(bytes.NewReader(data), protocol.EncryptionInitial)
+					f, err := wire.NewFrameParser(false, hdr.Version).ParseNext(bytes.NewReader(data), protocol.EncryptionInitial)
 					Expect(err).ToNot(HaveOccurred())
 					Expect(f).To(BeAssignableToTypeOf(&wire.ConnectionCloseFrame{}))
 					ccf := f.(*wire.ConnectionCloseFrame)
@@ -631,60 +627,6 @@ var _ = Describe("Server", func() {
 				// make sure we're using a server-generated connection ID
 				Eventually(run).Should(BeClosed())
 				Eventually(done).Should(BeClosed())
-			})
-
-			It("passes queued 0-RTT packets to the session", func() {
-				serv.config.AcceptToken = func(_ net.Addr, _ *Token) bool { return true }
-				var createdSession bool
-				sess := NewMockQuicSession(mockCtrl)
-				connID := protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8, 9}
-				initialPacket := getInitial(connID)
-				zeroRTTPacket := getPacket(&wire.Header{
-					IsLongHeader:     true,
-					Type:             protocol.PacketType0RTT,
-					SrcConnectionID:  protocol.ConnectionID{5, 4, 3, 2, 1},
-					DestConnectionID: connID,
-					Version:          protocol.VersionTLS,
-				}, []byte("foobar"))
-				sess.EXPECT().Context().Return(context.Background()).MaxTimes(1)
-				sess.EXPECT().HandshakeComplete().Return(context.Background()).MaxTimes(1)
-				sess.EXPECT().run().MaxTimes(1)
-				gomock.InOrder(
-					sess.EXPECT().handlePacket(initialPacket),
-					sess.EXPECT().handlePacket(zeroRTTPacket),
-				)
-				serv.newSession = func(
-					_ sendConn,
-					runner sessionRunner,
-					_ protocol.ConnectionID,
-					_ *protocol.ConnectionID,
-					_ protocol.ConnectionID,
-					_ protocol.ConnectionID,
-					_ protocol.ConnectionID,
-					_ protocol.StatelessResetToken,
-					_ *Config,
-					_ *tls.Config,
-					_ *handshake.TokenGenerator,
-					_ bool,
-					_ logging.ConnectionTracer,
-					_ utils.Logger,
-					_ protocol.VersionNumber,
-				) quicSession {
-					createdSession = true
-					return sess
-				}
-
-				// Receive the 0-RTT packet first.
-				Expect(serv.handlePacketImpl(zeroRTTPacket)).To(BeTrue())
-				// Then receive the Initial packet.
-				phm.EXPECT().GetStatelessResetToken(gomock.Any())
-				phm.EXPECT().AddWithConnID(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(func(_, _ protocol.ConnectionID, fn func() packetHandler) bool {
-					fn()
-					return true
-				})
-				tracer.EXPECT().TracerForConnection(protocol.PerspectiveServer, gomock.Any())
-				Expect(serv.handlePacketImpl(initialPacket)).To(BeTrue())
-				Expect(createdSession).To(BeTrue())
 			})
 
 			It("drops packets if the receive queue is full", func() {
@@ -962,6 +904,7 @@ var _ = Describe("Server", func() {
 				}()
 
 				ctx, cancel := context.WithCancel(context.Background()) // handshake context
+				serv.config.AcceptToken = func(_ net.Addr, _ *Token) bool { return true }
 				serv.newSession = func(
 					_ sendConn,
 					runner sessionRunner,
@@ -979,6 +922,7 @@ var _ = Describe("Server", func() {
 					_ utils.Logger,
 					_ protocol.VersionNumber,
 				) quicSession {
+					sess.EXPECT().handlePacket(gomock.Any())
 					sess.EXPECT().HandshakeComplete().Return(ctx)
 					sess.EXPECT().run().Do(func() {})
 					sess.EXPECT().Context().Return(context.Background())
@@ -990,7 +934,10 @@ var _ = Describe("Server", func() {
 					return true
 				})
 				tracer.EXPECT().TracerForConnection(protocol.PerspectiveServer, gomock.Any())
-				serv.createNewSession(&net.UDPAddr{}, nil, nil, nil, nil, nil, protocol.VersionWhatever)
+				serv.handleInitialImpl(
+					&receivedPacket{buffer: getPacketBuffer()},
+					&wire.Header{DestConnectionID: protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8}},
+				)
 				Consistently(done).ShouldNot(BeClosed())
 				cancel() // complete the handshake
 				Eventually(done).Should(BeClosed())
@@ -1030,6 +977,7 @@ var _ = Describe("Server", func() {
 			}()
 
 			ready := make(chan struct{})
+			serv.config.AcceptToken = func(_ net.Addr, _ *Token) bool { return true }
 			serv.newSession = func(
 				_ sendConn,
 				runner sessionRunner,
@@ -1048,6 +996,7 @@ var _ = Describe("Server", func() {
 				_ protocol.VersionNumber,
 			) quicSession {
 				Expect(enable0RTT).To(BeTrue())
+				sess.EXPECT().handlePacket(gomock.Any())
 				sess.EXPECT().run().Do(func() {})
 				sess.EXPECT().earlySessionReady().Return(ready)
 				sess.EXPECT().Context().Return(context.Background())
@@ -1058,7 +1007,10 @@ var _ = Describe("Server", func() {
 				fn()
 				return true
 			})
-			serv.createNewSession(&net.UDPAddr{}, nil, nil, nil, nil, nil, protocol.VersionWhatever)
+			serv.handleInitialImpl(
+				&receivedPacket{buffer: getPacketBuffer()},
+				&wire.Header{DestConnectionID: protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8}},
+			)
 			Consistently(done).ShouldNot(BeClosed())
 			close(ready)
 			Eventually(done).Should(BeClosed())

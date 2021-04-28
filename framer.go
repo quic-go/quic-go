@@ -1,12 +1,13 @@
 package quic
 
 import (
+	"errors"
 	"sync"
 
 	"github.com/Psiphon-Labs/quic-go/internal/ackhandler"
 	"github.com/Psiphon-Labs/quic-go/internal/protocol"
-	"github.com/Psiphon-Labs/quic-go/internal/utils"
 	"github.com/Psiphon-Labs/quic-go/internal/wire"
+	"github.com/Psiphon-Labs/quic-go/quicvarint"
 )
 
 type framer interface {
@@ -17,6 +18,8 @@ type framer interface {
 
 	AddActiveStream(protocol.StreamID)
 	AppendStreamFrames([]ackhandler.Frame, protocol.ByteCount) ([]ackhandler.Frame, protocol.ByteCount)
+
+	Handle0RTTRejection() error
 }
 
 type framerI struct {
@@ -114,7 +117,7 @@ func (f *framerI) AppendStreamFrames(frames []ackhandler.Frame, maxLen protocol.
 		// For the last STREAM frame, we'll remove the DataLen field later.
 		// Therefore, we can pretend to have more bytes available when popping
 		// the STREAM frame (which will always have the DataLen set).
-		remainingLen += utils.VarIntLen(uint64(remainingLen))
+		remainingLen += quicvarint.Len(uint64(remainingLen))
 		frame, hasMoreData := str.popStreamFrame(remainingLen)
 		if hasMoreData { // put the stream back in the queue (at the end)
 			f.streamQueue = append(f.streamQueue, id)
@@ -139,4 +142,30 @@ func (f *framerI) AppendStreamFrames(frames []ackhandler.Frame, maxLen protocol.
 		length += lastFrame.Length(f.version) - lastFrameLen
 	}
 	return frames, length
+}
+
+func (f *framerI) Handle0RTTRejection() error {
+	f.mutex.Lock()
+	defer f.mutex.Unlock()
+
+	f.controlFrameMutex.Lock()
+	f.streamQueue = f.streamQueue[:0]
+	for id := range f.activeStreams {
+		delete(f.activeStreams, id)
+	}
+	var j int
+	for i, frame := range f.controlFrames {
+		switch frame.(type) {
+		case *wire.MaxDataFrame, *wire.MaxStreamDataFrame, *wire.MaxStreamsFrame:
+			return errors.New("didn't expect MAX_DATA / MAX_STREAM_DATA / MAX_STREAMS frame to be sent in 0-RTT")
+		case *wire.DataBlockedFrame, *wire.StreamDataBlockedFrame, *wire.StreamsBlockedFrame:
+			continue
+		default:
+			f.controlFrames[j] = f.controlFrames[i]
+			j++
+		}
+	}
+	f.controlFrames = f.controlFrames[:j]
+	f.controlFrameMutex.Unlock()
+	return nil
 }
