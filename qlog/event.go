@@ -83,6 +83,25 @@ func (e eventConnectionStarted) MarshalJSONObject(enc *gojay.Encoder) {
 	enc.StringKey("dst_cid", connectionID(e.DestConnectionID).String())
 }
 
+type eventVersionNegotiated struct {
+	clientVersions, serverVersions []versionNumber
+	chosenVersion                  versionNumber
+}
+
+func (e eventVersionNegotiated) Category() category { return categoryTransport }
+func (e eventVersionNegotiated) Name() string       { return "version_information" }
+func (e eventVersionNegotiated) IsNil() bool        { return false }
+
+func (e eventVersionNegotiated) MarshalJSONObject(enc *gojay.Encoder) {
+	if len(e.clientVersions) > 0 {
+		enc.ArrayKey("client_versions", versions(e.clientVersions))
+	}
+	if len(e.serverVersions) > 0 {
+		enc.ArrayKey("server_versions", versions(e.serverVersions))
+	}
+	enc.StringKey("chosen_version", e.chosenVersion.String())
+}
+
 type eventConnectionClosed struct {
 	Reason logging.CloseReason
 }

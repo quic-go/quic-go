@@ -90,6 +90,7 @@ var _ = Describe("Session", func() {
 		tokenGenerator, err := handshake.NewTokenGenerator(rand.Reader)
 		Expect(err).ToNot(HaveOccurred())
 		tracer = mocklogging.NewMockConnectionTracer(mockCtrl)
+		tracer.EXPECT().NegotiatedVersion(gomock.Any(), gomock.Any(), gomock.Any()).MaxTimes(1)
 		tracer.EXPECT().SentTransportParameters(gomock.Any())
 		tracer.EXPECT().UpdatedKeyFromTLS(gomock.Any(), gomock.Any()).AnyTimes()
 		tracer.EXPECT().UpdatedCongestionState(gomock.Any())
@@ -2465,6 +2466,7 @@ var _ = Describe("Client Session", func() {
 		}
 		sessionRunner = NewMockSessionRunner(mockCtrl)
 		tracer = mocklogging.NewMockConnectionTracer(mockCtrl)
+		tracer.EXPECT().NegotiatedVersion(gomock.Any(), gomock.Any(), gomock.Any()).MaxTimes(1)
 		tracer.EXPECT().SentTransportParameters(gomock.Any())
 		tracer.EXPECT().UpdatedKeyFromTLS(gomock.Any(), gomock.Any()).AnyTimes()
 		tracer.EXPECT().UpdatedCongestionState(gomock.Any())

@@ -1100,6 +1100,9 @@ func (s *session) handleVersionNegotiationPacket(p *receivedPacket) {
 		s.logger.Infof("No compatible QUIC version found.")
 		return
 	}
+	if s.tracer != nil {
+		s.tracer.NegotiatedVersion(newVersion, s.config.Versions, supportedVersions)
+	}
 
 	s.logger.Infof("Switching to QUIC version %s.", newVersion)
 	nextPN, _ := s.sentPacketHandler.PeekPacketNumber(protocol.EncryptionInitial)
@@ -1121,6 +1124,16 @@ func (s *session) handleUnpackedPacket(
 
 	if !s.receivedFirstPacket {
 		s.receivedFirstPacket = true
+		if !s.versionNegotiated && s.tracer != nil {
+			var clientVersions, serverVersions []protocol.VersionNumber
+			switch s.perspective {
+			case protocol.PerspectiveClient:
+				clientVersions = s.config.Versions
+			case protocol.PerspectiveServer:
+				serverVersions = s.config.Versions
+			}
+			s.tracer.NegotiatedVersion(s.version, clientVersions, serverVersions)
+		}
 		// The server can change the source connection ID with the first Handshake packet.
 		if s.perspective == protocol.PerspectiveClient && packet.hdr.IsLongHeader && !packet.hdr.SrcConnectionID.Equal(s.handshakeDestConnID) {
 			cid := packet.hdr.SrcConnectionID

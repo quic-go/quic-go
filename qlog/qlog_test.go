@@ -170,6 +170,30 @@ var _ = Describe("Tracing", func() {
 				Expect(ev).To(HaveKeyWithValue("dst_cid", "05060708"))
 			})
 
+			It("records the version, if no version negotiation happened", func() {
+				tracer.NegotiatedVersion(0x1337, nil, nil)
+				entry := exportAndParseSingle()
+				Expect(entry.Time).To(BeTemporally("~", time.Now(), scaleDuration(10*time.Millisecond)))
+				Expect(entry.Name).To(Equal("transport:version_information"))
+				ev := entry.Event
+				Expect(ev).To(HaveLen(1))
+				Expect(ev).To(HaveKeyWithValue("chosen_version", "1337"))
+			})
+
+			It("records the version, if version negotiation happened", func() {
+				tracer.NegotiatedVersion(0x1337, []logging.VersionNumber{1, 2, 3}, []logging.VersionNumber{4, 5, 6})
+				entry := exportAndParseSingle()
+				Expect(entry.Time).To(BeTemporally("~", time.Now(), scaleDuration(10*time.Millisecond)))
+				Expect(entry.Name).To(Equal("transport:version_information"))
+				ev := entry.Event
+				Expect(ev).To(HaveLen(3))
+				Expect(ev).To(HaveKeyWithValue("chosen_version", "1337"))
+				Expect(ev).To(HaveKey("client_versions"))
+				Expect(ev["client_versions"].([]interface{})).To(Equal([]interface{}{"1", "2", "3"}))
+				Expect(ev).To(HaveKey("server_versions"))
+				Expect(ev["server_versions"].([]interface{})).To(Equal([]interface{}{"4", "5", "6"}))
+			})
+
 			It("records idle timeouts", func() {
 				tracer.ClosedConnection(logging.NewTimeoutCloseReason(logging.TimeoutReasonIdle))
 				entry := exportAndParseSingle()
