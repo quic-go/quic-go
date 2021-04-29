@@ -117,6 +117,9 @@ func (c *client) dial() error {
 	} else {
 		session, err = dialAddr(c.hostname, c.tlsConf, c.config)
 	}
+	if err != nil {
+		return err
+	}
 
 	// [Psiphon]
 	c.sessionMutex.Lock()
@@ -127,10 +130,6 @@ func (c *client) dial() error {
 		c.session = session
 	}
 	c.sessionMutex.Unlock()
-
-	if err != nil {
-		return err
-	}
 
 	// send the SETTINGs frame, using 0-RTT data, if possible
 	go func() {
