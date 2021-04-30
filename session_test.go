@@ -2568,6 +2568,18 @@ var _ = Describe("Client Session", func() {
 		Expect(sess.handleHandshakeDoneFrame()).To(Succeed())
 	})
 
+	It("interprets an ACK for 1-RTT packets as confirmation of the handshake", func() {
+		sess.peerParams = &wire.TransportParameters{}
+		sph := mockackhandler.NewMockSentPacketHandler(mockCtrl)
+		sess.sentPacketHandler = sph
+		ack := &wire.AckFrame{AckRanges: []wire.AckRange{{Smallest: 1, Largest: 3}}}
+		sph.EXPECT().ReceivedAck(ack, protocol.Encryption1RTT, gomock.Any()).Return(true, nil)
+		sph.EXPECT().SetHandshakeConfirmed()
+		cryptoSetup.EXPECT().SetLargest1RTTAcked(protocol.PacketNumber(3))
+		cryptoSetup.EXPECT().SetHandshakeConfirmed()
+		Expect(sess.handleAckFrame(ack, protocol.Encryption1RTT)).To(Succeed())
+	})
+
 	Context("handling tokens", func() {
 		var mockTokenStore *MockTokenStore
 

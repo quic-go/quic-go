@@ -1384,11 +1384,15 @@ func (s *session) handleHandshakeDoneFrame() error {
 }
 
 func (s *session) handleAckFrame(frame *wire.AckFrame, encLevel protocol.EncryptionLevel) error {
-	if err := s.sentPacketHandler.ReceivedAck(frame, encLevel, s.lastPacketReceivedTime); err != nil {
+	acked1RTTPacket, err := s.sentPacketHandler.ReceivedAck(frame, encLevel, s.lastPacketReceivedTime)
+	if err != nil {
 		return err
 	}
-	if encLevel != protocol.Encryption1RTT {
+	if !acked1RTTPacket {
 		return nil
+	}
+	if s.perspective == protocol.PerspectiveClient && !s.handshakeConfirmed {
+		s.handleHandshakeConfirmed()
 	}
 	return s.cryptoStreamHandler.SetLargest1RTTAcked(frame.LargestAcked())
 }

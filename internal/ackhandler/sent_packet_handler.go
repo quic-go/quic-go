@@ -277,12 +277,12 @@ func (h *sentPacketHandler) sentPacketImpl(packet *Packet) bool /* is ack-elicit
 	return isAckEliciting
 }
 
-func (h *sentPacketHandler) ReceivedAck(ack *wire.AckFrame, encLevel protocol.EncryptionLevel, rcvTime time.Time) error {
+func (h *sentPacketHandler) ReceivedAck(ack *wire.AckFrame, encLevel protocol.EncryptionLevel, rcvTime time.Time) (bool /* contained 1-RTT packet */, error) {
 	pnSpace := h.getPacketNumberSpace(encLevel)
 
 	largestAcked := ack.LargestAcked()
 	if largestAcked > pnSpace.largestSent {
-		return qerr.NewError(qerr.ProtocolViolation, "Received ACK for an unsent packet")
+		return false, qerr.NewError(qerr.ProtocolViolation, "Received ACK for an unsent packet")
 	}
 
 	pnSpace.largestAcked = utils.MaxPacketNumber(pnSpace.largestAcked, largestAcked)
@@ -299,7 +299,7 @@ func (h *sentPacketHandler) ReceivedAck(ack *wire.AckFrame, encLevel protocol.En
 	priorInFlight := h.bytesInFlight
 	ackedPackets, err := h.detectAndRemoveAckedPackets(ack, encLevel)
 	if err != nil || len(ackedPackets) == 0 {
-		return err
+		return false, err
 	}
 	// update the RTT, if the largest acked is newly acknowledged
 	if len(ackedPackets) > 0 {
@@ -317,11 +317,15 @@ func (h *sentPacketHandler) ReceivedAck(ack *wire.AckFrame, encLevel protocol.En
 		}
 	}
 	if err := h.detectLostPackets(rcvTime, encLevel); err != nil {
-		return err
+		return false, err
 	}
+	var acked1RTTPacket bool
 	for _, p := range ackedPackets {
 		if p.includedInBytesInFlight && !p.declaredLost {
 			h.congestion.OnPacketAcked(p.PacketNumber, p.Length, priorInFlight, rcvTime)
+		}
+		if p.EncryptionLevel == protocol.Encryption1RTT {
+			acked1RTTPacket = true
 		}
 		h.removeFromBytesInFlight(p)
 	}
@@ -341,7 +345,7 @@ func (h *sentPacketHandler) ReceivedAck(ack *wire.AckFrame, encLevel protocol.En
 
 	pnSpace.history.DeleteOldPackets(rcvTime)
 	h.setLossDetectionTimer()
-	return nil
+	return acked1RTTPacket, nil
 }
 
 func (h *sentPacketHandler) GetLowestPacketNotConfirmedAcked() protocol.PacketNumber {
