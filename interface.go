@@ -79,6 +79,8 @@ var SessionTracingKey = sessionTracingCtxKey{}
 type sessionTracingCtxKey struct{}
 
 // Stream is the interface implemented by QUIC streams
+// In addition to the errors listed on the Session,
+// calls to stream functions can return a StreamError if the stream is canceled.
 type Stream interface {
 	ReceiveStream
 	SendStream
@@ -148,6 +150,13 @@ type SendStream interface {
 }
 
 // A Session is a QUIC connection between two peers.
+// Calls to the session (and to streams) can return the following types of errors:
+// * ApplicationError: for errors triggered by the application running on top of QUIC
+// * TransportError: for errors triggered by the QUIC transport (in many cases a misbehaving peer)
+// * IdleTimeoutError: when the peer goes away unexpectedly (this is a net.Error timeout error)
+// * HandshakeTimeoutError: when the cryptographic handshake takes too long (this is a net.Error timeout error)
+// * StatelessResetError: when we receive a stateless reset (this is a net.Error temporary error)
+// * VersionNegotiationError: returned by the client, when there's no version overlap between the peers
 type Session interface {
 	// AcceptStream returns the next stream opened by the peer, blocking until one is available.
 	// If the session was closed due to a timeout, the error satisfies
