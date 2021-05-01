@@ -343,7 +343,7 @@ var _ = Describe("Frames", func() {
 	It("marshals CONNECTION_CLOSE frames, for transport error codes", func() {
 		check(
 			&logging.ConnectionCloseFrame{
-				ErrorCode:    qerr.FlowControlError,
+				ErrorCode:    uint64(qerr.FlowControlError),
 				ReasonPhrase: "lorem ipsum",
 			},
 			map[string]interface{}{

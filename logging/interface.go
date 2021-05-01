@@ -50,9 +50,9 @@ type (
 	PreferredAddress = wire.PreferredAddress
 
 	// A TransportError is a transport-level error code.
-	TransportError = qerr.ErrorCode
+	TransportError = qerr.TransportErrorCode
 	// An ApplicationError is an application-defined error code.
-	ApplicationError = qerr.ErrorCode
+	ApplicationError = qerr.TransportErrorCode
 
 	// The RTTStats contain statistics used by the congestion controller.
 	RTTStats = utils.RTTStats

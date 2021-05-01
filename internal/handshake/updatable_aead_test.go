@@ -138,7 +138,9 @@ var _ = Describe("Updatable AEAD", func() {
 						Expect(err).To(MatchError(ErrDecryptionFailed))
 					}
 					_, err := client.Open(nil, []byte("foobar"), time.Now(), 10, protocol.KeyPhaseZero, []byte("ad"))
-					Expect(err).To(MatchError(qerr.AEADLimitReached))
+					Expect(err).To(HaveOccurred())
+					Expect(err).To(BeAssignableToTypeOf(&qerr.TransportError{}))
+					Expect(err.(*qerr.TransportError).ErrorCode).To(Equal(qerr.AEADLimitReached))
 				})
 
 				Context("key updates", func() {
@@ -257,7 +259,10 @@ var _ = Describe("Updatable AEAD", func() {
 							client.rollKeys()
 							encrypted1 := client.Seal(nil, msg, 0x42, ad)
 							_, err = server.Open(nil, encrypted1, time.Now(), 0x42, protocol.KeyPhaseZero, ad)
-							Expect(err).To(MatchError("KEY_UPDATE_ERROR: keys updated too quickly"))
+							Expect(err).To(MatchError(&qerr.TransportError{
+								ErrorCode:    qerr.KeyUpdateError,
+								ErrorMessage: "keys updated too quickly",
+							}))
 						})
 					})
 
@@ -315,7 +320,10 @@ var _ = Describe("Updatable AEAD", func() {
 							server.Seal(nil, msg, nextPN, ad)
 							// We haven't decrypted any packet in the new key phase yet.
 							// This means that the ACK must have been sent in the old key phase.
-							Expect(server.SetLargestAcked(nextPN)).To(MatchError("KEY_UPDATE_ERROR: received ACK for key phase 1, but peer didn't update keys"))
+							Expect(server.SetLargestAcked(nextPN)).To(MatchError(&qerr.TransportError{
+								ErrorCode:    qerr.KeyUpdateError,
+								ErrorMessage: "received ACK for key phase 1, but peer didn't update keys",
+							}))
 						})
 
 						It("doesn't error before actually sending a packet in the new key phase", func() {

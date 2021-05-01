@@ -211,9 +211,9 @@ func marshalConnectionCloseFrame(enc *gojay.Encoder, f *logging.ConnectionCloseF
 	if errName := transportError(f.ErrorCode).String(); len(errName) > 0 {
 		enc.StringKey("error_code", errName)
 	} else {
-		enc.Uint64Key("error_code", uint64(f.ErrorCode))
+		enc.Uint64Key("error_code", f.ErrorCode)
 	}
-	enc.Uint64Key("raw_error_code", uint64(f.ErrorCode))
+	enc.Uint64Key("raw_error_code", f.ErrorCode)
 	enc.StringKey("reason", f.ReasonPhrase)
 }
 

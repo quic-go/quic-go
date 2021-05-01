@@ -403,7 +403,10 @@ func (h *cryptoSetup) checkEncryptionLevel(msgType messageType, encLevel protoco
 func (h *cryptoSetup) handleTransportParameters(data []byte) {
 	var tp wire.TransportParameters
 	if err := tp.Unmarshal(data, h.perspective.Opposite()); err != nil {
-		h.runner.OnError(qerr.NewError(qerr.TransportParameterError, err.Error()))
+		h.runner.OnError(&qerr.TransportError{
+			ErrorCode:    qerr.TransportParameterError,
+			ErrorMessage: err.Error(),
+		})
 	}
 	h.peerParams = &tp
 	h.runner.OnReceivedParams(h.peerParams)

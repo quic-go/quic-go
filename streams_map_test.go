@@ -7,9 +7,11 @@ import (
 	"net"
 
 	"github.com/golang/mock/gomock"
+
 	"github.com/lucas-clemente/quic-go/internal/flowcontrol"
 	"github.com/lucas-clemente/quic-go/internal/mocks"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
+	"github.com/lucas-clemente/quic-go/internal/qerr"
 	"github.com/lucas-clemente/quic-go/internal/wire"
 
 	. "github.com/onsi/ginkgo"
@@ -210,22 +212,22 @@ var _ = Describe("Streams Map", func() {
 
 				It("errors when deleting unknown incoming unidirectional streams", func() {
 					id := ids.firstIncomingUniStream + 4
-					Expect(m.DeleteStream(id)).To(MatchError(fmt.Sprintf("Tried to delete unknown incoming stream %d", id)))
+					Expect(m.DeleteStream(id)).To(MatchError(fmt.Sprintf("tried to delete unknown incoming stream %d", id)))
 				})
 
 				It("errors when deleting unknown outgoing unidirectional streams", func() {
 					id := ids.firstOutgoingUniStream + 4
-					Expect(m.DeleteStream(id)).To(MatchError(fmt.Sprintf("Tried to delete unknown outgoing stream %d", id)))
+					Expect(m.DeleteStream(id)).To(MatchError(fmt.Sprintf("tried to delete unknown outgoing stream %d", id)))
 				})
 
 				It("errors when deleting unknown incoming bidirectional streams", func() {
 					id := ids.firstIncomingBidiStream + 4
-					Expect(m.DeleteStream(id)).To(MatchError(fmt.Sprintf("Tried to delete unknown incoming stream %d", id)))
+					Expect(m.DeleteStream(id)).To(MatchError(fmt.Sprintf("tried to delete unknown incoming stream %d", id)))
 				})
 
 				It("errors when deleting unknown outgoing bidirectional streams", func() {
 					id := ids.firstOutgoingBidiStream + 4
-					Expect(m.DeleteStream(id)).To(MatchError(fmt.Sprintf("Tried to delete unknown outgoing stream %d", id)))
+					Expect(m.DeleteStream(id)).To(MatchError(fmt.Sprintf("tried to delete unknown outgoing stream %d", id)))
 				})
 			})
 
@@ -248,7 +250,10 @@ var _ = Describe("Streams Map", func() {
 					It("errors when the peer tries to open a higher outgoing bidirectional stream", func() {
 						id := ids.firstOutgoingBidiStream + 5*4
 						_, err := m.GetOrOpenSendStream(id)
-						Expect(err).To(MatchError(fmt.Sprintf("STREAM_STATE_ERROR: peer attempted to open stream %d", id)))
+						Expect(err).To(MatchError(&qerr.TransportError{
+							ErrorCode:    qerr.StreamStateError,
+							ErrorMessage: fmt.Sprintf("peer attempted to open stream %d", id),
+						}))
 					})
 
 					It("gets an outgoing unidirectional stream", func() {
@@ -264,7 +269,10 @@ var _ = Describe("Streams Map", func() {
 					It("errors when the peer tries to open a higher outgoing bidirectional stream", func() {
 						id := ids.firstOutgoingUniStream + 5*4
 						_, err := m.GetOrOpenSendStream(id)
-						Expect(err).To(MatchError(fmt.Sprintf("STREAM_STATE_ERROR: peer attempted to open stream %d", id)))
+						Expect(err).To(MatchError(&qerr.TransportError{
+							ErrorCode:    qerr.StreamStateError,
+							ErrorMessage: fmt.Sprintf("peer attempted to open stream %d", id),
+						}))
 					})
 
 					It("gets an incoming bidirectional stream", func() {
@@ -277,7 +285,10 @@ var _ = Describe("Streams Map", func() {
 					It("errors when trying to get an incoming unidirectional stream", func() {
 						id := ids.firstIncomingUniStream
 						_, err := m.GetOrOpenSendStream(id)
-						Expect(err).To(MatchError(fmt.Sprintf("STREAM_STATE_ERROR: peer attempted to open send stream %d", id)))
+						Expect(err).To(MatchError(&qerr.TransportError{
+							ErrorCode:    qerr.StreamStateError,
+							ErrorMessage: fmt.Sprintf("peer attempted to open send stream %d", id),
+						}))
 					})
 				})
 
@@ -295,7 +306,10 @@ var _ = Describe("Streams Map", func() {
 					It("errors when the peer tries to open a higher outgoing bidirectional stream", func() {
 						id := ids.firstOutgoingBidiStream + 5*4
 						_, err := m.GetOrOpenReceiveStream(id)
-						Expect(err).To(MatchError(fmt.Sprintf("STREAM_STATE_ERROR: peer attempted to open stream %d", id)))
+						Expect(err).To(MatchError(&qerr.TransportError{
+							ErrorCode:    qerr.StreamStateError,
+							ErrorMessage: fmt.Sprintf("peer attempted to open stream %d", id),
+						}))
 					})
 
 					It("gets an incoming bidirectional stream", func() {
@@ -315,7 +329,10 @@ var _ = Describe("Streams Map", func() {
 					It("errors when trying to get an outgoing unidirectional stream", func() {
 						id := ids.firstOutgoingUniStream
 						_, err := m.GetOrOpenReceiveStream(id)
-						Expect(err).To(MatchError(fmt.Sprintf("STREAM_STATE_ERROR: peer attempted to open receive stream %d", id)))
+						Expect(err).To(MatchError(&qerr.TransportError{
+							ErrorCode:    qerr.StreamStateError,
+							ErrorMessage: fmt.Sprintf("peer attempted to open receive stream %d", id),
+						}))
 					})
 				})
 			})

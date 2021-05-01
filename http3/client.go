@@ -117,7 +117,7 @@ func (c *client) dial() error {
 	go func() {
 		if err := c.setupSession(); err != nil {
 			c.logger.Debugf("Setting up session failed: %s", err)
-			c.session.CloseWithError(quic.ErrorCode(errorInternalError), "")
+			c.session.CloseWithError(quic.ApplicationErrorCode(errorInternalError), "")
 		}
 	}()
 
@@ -162,20 +162,20 @@ func (c *client) handleUnidirectionalStreams() {
 				return
 			case streamTypePushStream:
 				// We never increased the Push ID, so we don't expect any push streams.
-				c.session.CloseWithError(quic.ErrorCode(errorIDError), "")
+				c.session.CloseWithError(quic.ApplicationErrorCode(errorIDError), "")
 				return
 			default:
-				str.CancelRead(quic.ErrorCode(errorStreamCreationError))
+				str.CancelRead(quic.StreamErrorCode(errorStreamCreationError))
 				return
 			}
 			f, err := parseNextFrame(str)
 			if err != nil {
-				c.session.CloseWithError(quic.ErrorCode(errorFrameError), "")
+				c.session.CloseWithError(quic.ApplicationErrorCode(errorFrameError), "")
 				return
 			}
 			sf, ok := f.(*settingsFrame)
 			if !ok {
-				c.session.CloseWithError(quic.ErrorCode(errorMissingSettings), "")
+				c.session.CloseWithError(quic.ApplicationErrorCode(errorMissingSettings), "")
 				return
 			}
 			if !sf.Datagram {
@@ -185,7 +185,7 @@ func (c *client) handleUnidirectionalStreams() {
 			// we can expect it to have been negotiated both on the transport and on the HTTP/3 layer.
 			// Note: ConnectionState() will block until the handshake is complete (relevant when using 0-RTT).
 			if c.opts.EnableDatagram && !c.session.ConnectionState().SupportsDatagrams {
-				c.session.CloseWithError(quic.ErrorCode(errorSettingsError), "missing QUIC Datagram support")
+				c.session.CloseWithError(quic.ApplicationErrorCode(errorSettingsError), "missing QUIC Datagram support")
 			}
 		}()
 	}
@@ -195,7 +195,7 @@ func (c *client) Close() error {
 	if c.session == nil {
 		return nil
 	}
-	return c.session.CloseWithError(quic.ErrorCode(errorNoError), "")
+	return c.session.CloseWithError(quic.ApplicationErrorCode(errorNoError), "")
 }
 
 func (c *client) maxHeaderBytes() uint64 {
@@ -243,8 +243,8 @@ func (c *client) RoundTrip(req *http.Request) (*http.Response, error) {
 	go func() {
 		select {
 		case <-req.Context().Done():
-			str.CancelWrite(quic.ErrorCode(errorRequestCanceled))
-			str.CancelRead(quic.ErrorCode(errorRequestCanceled))
+			str.CancelWrite(quic.StreamErrorCode(errorRequestCanceled))
+			str.CancelRead(quic.StreamErrorCode(errorRequestCanceled))
 		case <-reqDone:
 		}
 	}()
@@ -253,14 +253,14 @@ func (c *client) RoundTrip(req *http.Request) (*http.Response, error) {
 	if rerr.err != nil { // if any error occurred
 		close(reqDone)
 		if rerr.streamErr != 0 { // if it was a stream error
-			str.CancelWrite(quic.ErrorCode(rerr.streamErr))
+			str.CancelWrite(quic.StreamErrorCode(rerr.streamErr))
 		}
 		if rerr.connErr != 0 { // if it was a connection error
 			var reason string
 			if rerr.err != nil {
 				reason = rerr.err.Error()
 			}
-			c.session.CloseWithError(quic.ErrorCode(rerr.connErr), reason)
+			c.session.CloseWithError(quic.ApplicationErrorCode(rerr.connErr), reason)
 		}
 	}
 	return rsp, rerr.err
@@ -321,7 +321,7 @@ func (c *client) doRequest(
 		}
 	}
 	respBody := newResponseBody(str, reqDone, func() {
-		c.session.CloseWithError(quic.ErrorCode(errorFrameUnexpected), "")
+		c.session.CloseWithError(quic.ApplicationErrorCode(errorFrameUnexpected), "")
 	})
 
 	// Rules for when to set Content-Length are defined in https://tools.ietf.org/html/rfc7230#section-3.3.2.

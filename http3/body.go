@@ -93,6 +93,6 @@ func (r *body) requestDone() {
 func (r *body) Close() error {
 	r.requestDone()
 	// If the EOF was read, CancelRead() is a no-op.
-	r.str.CancelRead(quic.ErrorCode(errorRequestCanceled))
+	r.str.CancelRead(quic.StreamErrorCode(errorRequestCanceled))
 	return nil
 }
