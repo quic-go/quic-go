@@ -58,11 +58,6 @@ var _ = Describe("Types", func() {
 		Expect(timerType(logging.TimerTypePTO).String()).To(Equal("pto"))
 	})
 
-	It("has a string representation for the close reason", func() {
-		Expect(timeoutReason(logging.TimeoutReasonHandshake).String()).To(Equal("handshake_timeout"))
-		Expect(timeoutReason(logging.TimeoutReasonIdle).String()).To(Equal("idle_timeout"))
-	})
-
 	It("has a string representation for the key type", func() {
 		Expect(encLevelToKeyType(protocol.EncryptionInitial, protocol.PerspectiveClient).String()).To(Equal("client_initial_secret"))
 		Expect(encLevelToKeyType(protocol.EncryptionInitial, protocol.PerspectiveServer).String()).To(Equal("server_initial_secret"))

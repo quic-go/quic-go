@@ -106,7 +106,7 @@ type Tracer interface {
 type ConnectionTracer interface {
 	StartedConnection(local, remote net.Addr, srcConnID, destConnID ConnectionID)
 	NegotiatedVersion(chosen VersionNumber, clientVersions, serverVersions []VersionNumber)
-	ClosedConnection(CloseReason)
+	ClosedConnection(error)
 	SentTransportParameters(*TransportParameters)
 	ReceivedTransportParameters(*TransportParameters)
 	RestoredTransportParameters(parameters *TransportParameters) // for 0-RTT

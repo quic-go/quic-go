@@ -302,19 +302,6 @@ func (t timerType) String() string {
 	}
 }
 
-type timeoutReason logging.TimeoutReason
-
-func (r timeoutReason) String() string {
-	switch logging.TimeoutReason(r) {
-	case logging.TimeoutReasonHandshake:
-		return "handshake_timeout"
-	case logging.TimeoutReasonIdle:
-		return "idle_timeout"
-	default:
-		return "unknown close reason"
-	}
-}
-
 type congestionState logging.CongestionState
 
 func (s congestionState) String() string {

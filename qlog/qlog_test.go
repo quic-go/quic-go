@@ -11,6 +11,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/lucas-clemente/quic-go"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/internal/qerr"
 	"github.com/lucas-clemente/quic-go/internal/utils"
@@ -195,7 +196,7 @@ var _ = Describe("Tracing", func() {
 			})
 
 			It("records idle timeouts", func() {
-				tracer.ClosedConnection(logging.NewTimeoutCloseReason(logging.TimeoutReasonIdle))
+				tracer.ClosedConnection(&quic.IdleTimeoutError{})
 				entry := exportAndParseSingle()
 				Expect(entry.Time).To(BeTemporally("~", time.Now(), scaleDuration(10*time.Millisecond)))
 				Expect(entry.Name).To(Equal("transport:connection_closed"))
@@ -206,7 +207,7 @@ var _ = Describe("Tracing", func() {
 			})
 
 			It("records handshake timeouts", func() {
-				tracer.ClosedConnection(logging.NewTimeoutCloseReason(logging.TimeoutReasonHandshake))
+				tracer.ClosedConnection(&quic.HandshakeTimeoutError{})
 				entry := exportAndParseSingle()
 				Expect(entry.Time).To(BeTemporally("~", time.Now(), scaleDuration(10*time.Millisecond)))
 				Expect(entry.Name).To(Equal("transport:connection_closed"))
@@ -217,7 +218,9 @@ var _ = Describe("Tracing", func() {
 			})
 
 			It("records a received stateless reset packet", func() {
-				tracer.ClosedConnection(logging.NewStatelessResetCloseReason(logging.StatelessResetToken{0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88, 0x99, 0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff}))
+				tracer.ClosedConnection(&quic.StatelessResetError{
+					Token: protocol.StatelessResetToken{0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88, 0x99, 0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff},
+				})
 				entry := exportAndParseSingle()
 				Expect(entry.Time).To(BeTemporally("~", time.Now(), scaleDuration(10*time.Millisecond)))
 				Expect(entry.Name).To(Equal("transport:connection_closed"))
@@ -229,7 +232,7 @@ var _ = Describe("Tracing", func() {
 			})
 
 			It("records connection closing due to version negotiation failure", func() {
-				tracer.ClosedConnection(logging.NewVersionNegotiationError([]logging.VersionNumber{1, 2, 3}))
+				tracer.ClosedConnection(&quic.VersionNegotiationError{})
 				entry := exportAndParseSingle()
 				Expect(entry.Time).To(BeTemporally("~", time.Now(), scaleDuration(10*time.Millisecond)))
 				Expect(entry.Name).To(Equal("transport:connection_closed"))
@@ -240,7 +243,10 @@ var _ = Describe("Tracing", func() {
 			})
 
 			It("records application errors", func() {
-				tracer.ClosedConnection(logging.NewApplicationCloseReason(1337, true))
+				tracer.ClosedConnection(&quic.ApplicationError{
+					Remote:    true,
+					ErrorCode: 1337,
+				})
 				entry := exportAndParseSingle()
 				Expect(entry.Time).To(BeTemporally("~", time.Now(), scaleDuration(10*time.Millisecond)))
 				Expect(entry.Name).To(Equal("transport:connection_closed"))
@@ -251,7 +257,7 @@ var _ = Describe("Tracing", func() {
 			})
 
 			It("records transport errors", func() {
-				tracer.ClosedConnection(logging.NewTransportCloseReason(qerr.AEADLimitReached, false))
+				tracer.ClosedConnection(&quic.TransportError{ErrorCode: qerr.AEADLimitReached})
 				entry := exportAndParseSingle()
 				Expect(entry.Time).To(BeTemporally("~", time.Now(), scaleDuration(10*time.Millisecond)))
 				Expect(entry.Name).To(Equal("transport:connection_closed"))

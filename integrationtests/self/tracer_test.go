@@ -41,7 +41,7 @@ func (t *customConnTracer) StartedConnection(local, remote net.Addr, srcConnID, 
 
 func (t *customConnTracer) NegotiatedVersion(chosen logging.VersionNumber, clientVersions, serverVersions []logging.VersionNumber) {
 }
-func (t *customConnTracer) ClosedConnection(logging.CloseReason)                     {}
+func (t *customConnTracer) ClosedConnection(error)                                   {}
 func (t *customConnTracer) SentTransportParameters(*logging.TransportParameters)     {}
 func (t *customConnTracer) ReceivedTransportParameters(*logging.TransportParameters) {}
 func (t *customConnTracer) RestoredTransportParameters(*logging.TransportParameters) {}
