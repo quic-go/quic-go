@@ -14,7 +14,7 @@ var (
 )
 
 func getSalt(v protocol.VersionNumber) []byte {
-	if v == protocol.VersionDraft34 {
+	if v == protocol.VersionDraft34 || v == protocol.Version1 {
 		return quicSaltDraft34
 	}
 	return quicSaltOld

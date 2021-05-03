@@ -33,6 +33,7 @@ const (
 	nextProtoH3Draft29 = "h3-29"
 	nextProtoH3Draft32 = "h3-32"
 	nextProtoH3Draft34 = "h3-34"
+	nextProtoH3        = "h3"
 )
 
 const (
@@ -43,6 +44,9 @@ const (
 )
 
 func versionToALPN(v protocol.VersionNumber) string {
+	if v == protocol.Version1 {
+		return nextProtoH3
+	}
 	if v == protocol.VersionTLS || v == protocol.VersionDraft29 {
 		return nextProtoH3Draft29
 	}
@@ -155,11 +159,14 @@ func (s *Server) serveImpl(tlsConf *tls.Config, conn net.PacketConn) error {
 			// determine the ALPN from the QUIC version used
 			proto := nextProtoH3Draft29
 			if qconn, ok := ch.Conn.(handshake.ConnWithVersion); ok {
-				if qconn.GetQUICVersion() == quic.VersionDraft32 {
+				//nolint:exhaustive
+				switch qconn.GetQUICVersion() {
+				case quic.VersionDraft32:
 					proto = nextProtoH3Draft32
-				}
-				if qconn.GetQUICVersion() == protocol.VersionDraft34 {
+				case protocol.VersionDraft34:
 					proto = nextProtoH3Draft34
+				case protocol.Version1:
+					proto = nextProtoH3
 				}
 			}
 			config := tlsConf
