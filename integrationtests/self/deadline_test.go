@@ -7,33 +7,26 @@ import (
 	"net"
 	"time"
 
-	quic "github.com/lucas-clemente/quic-go"
+	"github.com/lucas-clemente/quic-go"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 )
 
 var _ = Describe("Stream deadline tests", func() {
-	var (
-		server    quic.Listener
-		serverStr quic.Stream
-		clientStr quic.Stream
-	)
-
-	BeforeEach(func() {
-		var err error
-		server, err = quic.ListenAddr("localhost:0", getTLSConfig(), getQuicConfig(nil))
+	setup := func() (quic.Listener, quic.Stream, quic.Stream) {
+		server, err := quic.ListenAddr("localhost:0", getTLSConfig(), getQuicConfig(nil))
 		Expect(err).ToNot(HaveOccurred())
-		acceptedStream := make(chan struct{})
+		strChan := make(chan quic.SendStream)
 		go func() {
 			defer GinkgoRecover()
 			sess, err := server.Accept(context.Background())
 			Expect(err).ToNot(HaveOccurred())
-			serverStr, err = sess.AcceptStream(context.Background())
+			str, err := sess.AcceptStream(context.Background())
 			Expect(err).ToNot(HaveOccurred())
-			_, err = serverStr.Read([]byte{0})
+			_, err = str.Read([]byte{0})
 			Expect(err).ToNot(HaveOccurred())
-			close(acceptedStream)
+			strChan <- str
 		}()
 
 		sess, err := quic.DialAddr(
@@ -42,19 +35,20 @@ var _ = Describe("Stream deadline tests", func() {
 			getQuicConfig(nil),
 		)
 		Expect(err).ToNot(HaveOccurred())
-		clientStr, err = sess.OpenStream()
+		clientStr, err := sess.OpenStream()
 		Expect(err).ToNot(HaveOccurred())
 		_, err = clientStr.Write([]byte{0}) // need to write one byte so the server learns about the stream
 		Expect(err).ToNot(HaveOccurred())
-		Eventually(acceptedStream).Should(BeClosed())
-	})
-
-	AfterEach(func() {
-		Expect(server.Close()).To(Succeed())
-	})
+		var serverStr quic.Stream
+		Eventually(strChan).Should(Receive(&serverStr))
+		return server, serverStr, clientStr
+	}
 
 	Context("read deadlines", func() {
 		It("completes a transfer when the deadline is set", func() {
+			server, serverStr, clientStr := setup()
+			defer server.Close()
+
 			const timeout = 20 * time.Millisecond
 			done := make(chan struct{})
 			go func() {
@@ -87,6 +81,9 @@ var _ = Describe("Stream deadline tests", func() {
 		})
 
 		It("completes a transfer when the deadline is set concurrently", func() {
+			server, serverStr, clientStr := setup()
+			defer server.Close()
+
 			const timeout = 20 * time.Millisecond
 			go func() {
 				defer GinkgoRecover()
@@ -134,6 +131,9 @@ var _ = Describe("Stream deadline tests", func() {
 
 	Context("write deadlines", func() {
 		It("completes a transfer when the deadline is set", func() {
+			server, serverStr, clientStr := setup()
+			defer server.Close()
+
 			const timeout = 20 * time.Millisecond
 			done := make(chan struct{})
 			go func() {
@@ -164,6 +164,9 @@ var _ = Describe("Stream deadline tests", func() {
 		})
 
 		It("completes a transfer when the deadline is set concurrently", func() {
+			server, serverStr, clientStr := setup()
+			defer server.Close()
+
 			const timeout = 20 * time.Millisecond
 			readDone := make(chan struct{})
 			go func() {
