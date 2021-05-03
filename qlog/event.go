@@ -138,6 +138,7 @@ func (e eventConnectionClosed) MarshalJSONObject(enc *gojay.Encoder) {
 		}
 		enc.StringKey("owner", owner.String())
 		enc.Uint64Key("application_code", uint64(applicationErr.ErrorCode))
+		enc.StringKey("reason", applicationErr.ErrorMessage)
 	case errors.As(e.e, &transportErr):
 		owner := ownerLocal
 		if transportErr.Remote {
@@ -145,6 +146,7 @@ func (e eventConnectionClosed) MarshalJSONObject(enc *gojay.Encoder) {
 		}
 		enc.StringKey("owner", owner.String())
 		enc.StringKey("connection_code", transportError(transportErr.ErrorCode).String())
+		enc.StringKey("reason", transportErr.ErrorMessage)
 	case errors.As(e.e, &versionNegotiationErr):
 		enc.StringKey("owner", ownerRemote.String())
 		enc.StringKey("trigger", "version_negotiation")

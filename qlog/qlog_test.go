@@ -244,27 +244,33 @@ var _ = Describe("Tracing", func() {
 
 			It("records application errors", func() {
 				tracer.ClosedConnection(&quic.ApplicationError{
-					Remote:    true,
-					ErrorCode: 1337,
+					Remote:       true,
+					ErrorCode:    1337,
+					ErrorMessage: "foobar",
 				})
 				entry := exportAndParseSingle()
 				Expect(entry.Time).To(BeTemporally("~", time.Now(), scaleDuration(10*time.Millisecond)))
 				Expect(entry.Name).To(Equal("transport:connection_closed"))
 				ev := entry.Event
-				Expect(ev).To(HaveLen(2))
+				Expect(ev).To(HaveLen(3))
 				Expect(ev).To(HaveKeyWithValue("owner", "remote"))
 				Expect(ev).To(HaveKeyWithValue("application_code", float64(1337)))
+				Expect(ev).To(HaveKeyWithValue("reason", "foobar"))
 			})
 
 			It("records transport errors", func() {
-				tracer.ClosedConnection(&quic.TransportError{ErrorCode: qerr.AEADLimitReached})
+				tracer.ClosedConnection(&quic.TransportError{
+					ErrorCode:    qerr.AEADLimitReached,
+					ErrorMessage: "foobar",
+				})
 				entry := exportAndParseSingle()
 				Expect(entry.Time).To(BeTemporally("~", time.Now(), scaleDuration(10*time.Millisecond)))
 				Expect(entry.Name).To(Equal("transport:connection_closed"))
 				ev := entry.Event
-				Expect(ev).To(HaveLen(2))
+				Expect(ev).To(HaveLen(3))
 				Expect(ev).To(HaveKeyWithValue("owner", "local"))
 				Expect(ev).To(HaveKeyWithValue("connection_code", "aead_limit_reached"))
+				Expect(ev).To(HaveKeyWithValue("reason", "foobar"))
 			})
 
 			It("records sent transport parameters", func() {
