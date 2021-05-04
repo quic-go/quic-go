@@ -74,9 +74,9 @@ func (m *connTracerMultiplexer) NegotiatedVersion(chosen VersionNumber, clientVe
 	}
 }
 
-func (m *connTracerMultiplexer) ClosedConnection(reason CloseReason) {
+func (m *connTracerMultiplexer) ClosedConnection(e error) {
 	for _, t := range m.tracers {
-		t.ClosedConnection(reason)
+		t.ClosedConnection(e)
 	}
 }
 

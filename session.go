@@ -1502,26 +1502,7 @@ func (s *session) handleCloseError(closeErr *closeError) {
 	}
 
 	if s.tracer != nil && !errors.Is(e, &errCloseForRecreating{}) {
-		var (
-			resetErr       *StatelessResetError
-			vnErr          *VersionNegotiationError
-			transportErr   *qerr.TransportError
-			applicationErr *qerr.ApplicationError
-		)
-		switch {
-		case errors.Is(e, qerr.ErrIdleTimeout):
-			s.tracer.ClosedConnection(logging.NewTimeoutCloseReason(logging.TimeoutReasonIdle))
-		case errors.Is(e, qerr.ErrHandshakeTimeout):
-			s.tracer.ClosedConnection(logging.NewTimeoutCloseReason(logging.TimeoutReasonHandshake))
-		case errors.As(e, &resetErr):
-			s.tracer.ClosedConnection(logging.NewStatelessResetCloseReason(resetErr.Token))
-		case errors.As(e, &vnErr):
-			s.tracer.ClosedConnection(logging.NewVersionNegotiationError(vnErr.Theirs))
-		case errors.As(e, &applicationErr):
-			s.tracer.ClosedConnection(logging.NewApplicationCloseReason(logging.ApplicationError(applicationErr.ErrorCode), closeErr.remote))
-		case errors.As(e, &transportErr):
-			s.tracer.ClosedConnection(logging.NewTransportCloseReason(transportErr.ErrorCode, closeErr.remote))
-		}
+		s.tracer.ClosedConnection(e)
 	}
 
 	// If this is a remote close we're done here

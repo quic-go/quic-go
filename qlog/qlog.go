@@ -206,9 +206,9 @@ func (t *connectionTracer) NegotiatedVersion(chosen logging.VersionNumber, clien
 	t.mutex.Unlock()
 }
 
-func (t *connectionTracer) ClosedConnection(r logging.CloseReason) {
+func (t *connectionTracer) ClosedConnection(e error) {
 	t.mutex.Lock()
-	t.recordEvent(time.Now(), &eventConnectionClosed{Reason: r})
+	t.recordEvent(time.Now(), &eventConnectionClosed{e: e})
 	t.mutex.Unlock()
 }
 
