@@ -10,7 +10,7 @@ import (
 	"net"
 	"unsafe"
 
-	qtls "github.com/marten-seemann/qtls-go1-15"
+	"github.com/marten-seemann/qtls-go1-15"
 )
 
 type (
@@ -61,11 +61,6 @@ func CipherSuiteName(id uint16) string {
 // HkdfExtract generates a pseudorandom key for use with Expand from an input secret and an optional independent salt.
 func HkdfExtract(hash crypto.Hash, newSecret, currentSecret []byte) []byte {
 	return qtls.HkdfExtract(hash, newSecret, currentSecret)
-}
-
-// HkdfExpandLabel HKDF expands a label
-func HkdfExpandLabel(hash crypto.Hash, secret, hashValue []byte, label string, L int) []byte {
-	return qtls.HkdfExpandLabel(hash, secret, hashValue, label, L)
 }
 
 // AEADAESGCMTLS13 creates a new AES-GCM AEAD for TLS 1.3
