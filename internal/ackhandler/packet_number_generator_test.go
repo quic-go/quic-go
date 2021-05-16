@@ -63,7 +63,7 @@ var _ = Describe("Skipping Packet Number Generator", func() {
 	})
 
 	It("generates a new packet number to skip", func() {
-		const rep = 500
+		const rep = 2500
 		periods := make([][]protocol.PacketNumber, rep)
 		expectedPeriods := []protocol.PacketNumber{25, 50, 100, 200, 300, 300, 300}
 
