@@ -1,5 +1,3 @@
-// +build go1.16
-
 package qtls
 
 import (
