@@ -1,4 +1,5 @@
 // +build go1.16
+// +build !go1.17
 
 package qtls
 
@@ -9,7 +10,7 @@ import (
 	"net"
 	"unsafe"
 
-	qtls "github.com/marten-seemann/qtls-go1-16"
+	"github.com/marten-seemann/qtls-go1-16"
 )
 
 type (
