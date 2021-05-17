@@ -371,6 +371,8 @@ func (s *Server) handleRequest(sess quic.Session, str quic.Stream, decoder *qpac
 		return newStreamError(errorGeneralProtocolError, err)
 	}
 
+	copyTLS := sess.ConnectionState().TLS.ConnectionState
+	req.TLS = &copyTLS
 	req.RemoteAddr = sess.RemoteAddr().String()
 	req.Body = newRequestBody(str, onFrameError)
 
