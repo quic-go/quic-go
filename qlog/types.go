@@ -180,7 +180,7 @@ func (t keyUpdateTrigger) String() string {
 type transportError uint64
 
 func (e transportError) String() string {
-	switch qerr.ErrorCode(e) {
+	switch qerr.TransportErrorCode(e) {
 	case qerr.NoError:
 		return "no_error"
 	case qerr.InternalError:
@@ -205,7 +205,7 @@ func (e transportError) String() string {
 		return "protocol_violation"
 	case qerr.InvalidToken:
 		return "invalid_token"
-	case qerr.ApplicationError:
+	case qerr.ApplicationErrorErrorCode:
 		return "application_error"
 	case qerr.CryptoBufferExceeded:
 		return "crypto_buffer_exceeded"
@@ -299,19 +299,6 @@ func (t timerType) String() string {
 		return "pto"
 	default:
 		return "unknown timer type"
-	}
-}
-
-type timeoutReason logging.TimeoutReason
-
-func (r timeoutReason) String() string {
-	switch logging.TimeoutReason(r) {
-	case logging.TimeoutReasonHandshake:
-		return "handshake_timeout"
-	case logging.TimeoutReasonIdle:
-		return "idle_timeout"
-	default:
-		return "unknown close reason"
 	}
 }
 

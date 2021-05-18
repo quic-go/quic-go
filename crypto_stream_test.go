@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/lucas-clemente/quic-go/internal/protocol"
+	"github.com/lucas-clemente/quic-go/internal/qerr"
 	"github.com/lucas-clemente/quic-go/internal/wire"
 
 	. "github.com/onsi/ginkgo"
@@ -49,11 +50,13 @@ var _ = Describe("Crypto Stream", func() {
 		})
 
 		It("errors if the frame exceeds the maximum offset", func() {
-			err := str.HandleCryptoFrame(&wire.CryptoFrame{
+			Expect(str.HandleCryptoFrame(&wire.CryptoFrame{
 				Offset: protocol.MaxCryptoStreamOffset - 5,
 				Data:   []byte("foobar"),
-			})
-			Expect(err).To(MatchError(fmt.Sprintf("CRYPTO_BUFFER_EXCEEDED: received invalid offset %d on crypto stream, maximum allowed %d", protocol.MaxCryptoStreamOffset+1, protocol.MaxCryptoStreamOffset)))
+			})).To(MatchError(&qerr.TransportError{
+				ErrorCode:    qerr.CryptoBufferExceeded,
+				ErrorMessage: fmt.Sprintf("received invalid offset %d on crypto stream, maximum allowed %d", protocol.MaxCryptoStreamOffset+1, protocol.MaxCryptoStreamOffset),
+			}))
 		})
 
 		It("handles messages split over multiple CRYPTO frames", func() {
@@ -94,8 +97,10 @@ var _ = Describe("Crypto Stream", func() {
 					Data:   createHandshakeMessage(5),
 					Offset: 10,
 				})).To(Succeed())
-				err := str.Finish()
-				Expect(err).To(MatchError("PROTOCOL_VIOLATION: encryption level changed, but crypto stream has more data to read"))
+				Expect(str.Finish()).To(MatchError(&qerr.TransportError{
+					ErrorCode:    qerr.ProtocolViolation,
+					ErrorMessage: "encryption level changed, but crypto stream has more data to read",
+				}))
 			})
 
 			It("works with reordered data", func() {
@@ -114,10 +119,12 @@ var _ = Describe("Crypto Stream", func() {
 
 			It("rejects new crypto data after finishing", func() {
 				Expect(str.Finish()).To(Succeed())
-				err := str.HandleCryptoFrame(&wire.CryptoFrame{
+				Expect(str.HandleCryptoFrame(&wire.CryptoFrame{
 					Data: createHandshakeMessage(5),
-				})
-				Expect(err).To(MatchError("PROTOCOL_VIOLATION: received crypto data after change of encryption level"))
+				})).To(MatchError(&qerr.TransportError{
+					ErrorCode:    qerr.ProtocolViolation,
+					ErrorMessage: "received crypto data after change of encryption level",
+				}))
 			})
 
 			It("ignores crypto data below the maximum offset received before finishing", func() {

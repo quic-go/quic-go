@@ -68,9 +68,15 @@ func (m *connTracerMultiplexer) StartedConnection(local, remote net.Addr, srcCon
 	}
 }
 
-func (m *connTracerMultiplexer) ClosedConnection(reason CloseReason) {
+func (m *connTracerMultiplexer) NegotiatedVersion(chosen VersionNumber, clientVersions, serverVersions []VersionNumber) {
 	for _, t := range m.tracers {
-		t.ClosedConnection(reason)
+		t.NegotiatedVersion(chosen, clientVersions, serverVersions)
+	}
+}
+
+func (m *connTracerMultiplexer) ClosedConnection(e error) {
+	for _, t := range m.tracers {
+		t.ClosedConnection(e)
 	}
 }
 

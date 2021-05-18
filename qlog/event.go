@@ -1,13 +1,14 @@
 package qlog
 
 import (
+	"errors"
 	"fmt"
 	"net"
 	"time"
 
-	"github.com/lucas-clemente/quic-go/internal/utils"
-
+	"github.com/lucas-clemente/quic-go"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
+	"github.com/lucas-clemente/quic-go/internal/utils"
 	"github.com/lucas-clemente/quic-go/logging"
 
 	"github.com/francoispqt/gojay"
@@ -83,8 +84,27 @@ func (e eventConnectionStarted) MarshalJSONObject(enc *gojay.Encoder) {
 	enc.StringKey("dst_cid", connectionID(e.DestConnectionID).String())
 }
 
+type eventVersionNegotiated struct {
+	clientVersions, serverVersions []versionNumber
+	chosenVersion                  versionNumber
+}
+
+func (e eventVersionNegotiated) Category() category { return categoryTransport }
+func (e eventVersionNegotiated) Name() string       { return "version_information" }
+func (e eventVersionNegotiated) IsNil() bool        { return false }
+
+func (e eventVersionNegotiated) MarshalJSONObject(enc *gojay.Encoder) {
+	if len(e.clientVersions) > 0 {
+		enc.ArrayKey("client_versions", versions(e.clientVersions))
+	}
+	if len(e.serverVersions) > 0 {
+		enc.ArrayKey("server_versions", versions(e.serverVersions))
+	}
+	enc.StringKey("chosen_version", e.chosenVersion.String())
+}
+
 type eventConnectionClosed struct {
-	Reason logging.CloseReason
+	e error
 }
 
 func (e eventConnectionClosed) Category() category { return categoryTransport }
@@ -92,34 +112,42 @@ func (e eventConnectionClosed) Name() string       { return "connection_closed" 
 func (e eventConnectionClosed) IsNil() bool        { return false }
 
 func (e eventConnectionClosed) MarshalJSONObject(enc *gojay.Encoder) {
-	if token, ok := e.Reason.StatelessReset(); ok {
+	var (
+		statelessResetErr     *quic.StatelessResetError
+		handshakeTimeoutErr   *quic.HandshakeTimeoutError
+		idleTimeoutErr        *quic.IdleTimeoutError
+		applicationErr        *quic.ApplicationError
+		transportErr          *quic.TransportError
+		versionNegotiationErr *quic.VersionNegotiationError
+	)
+	switch {
+	case errors.As(e.e, &statelessResetErr):
 		enc.StringKey("owner", ownerRemote.String())
 		enc.StringKey("trigger", "stateless_reset")
-		enc.StringKey("stateless_reset_token", fmt.Sprintf("%x", token))
-		return
-	}
-	if timeout, ok := e.Reason.Timeout(); ok {
+		enc.StringKey("stateless_reset_token", fmt.Sprintf("%x", statelessResetErr.Token))
+	case errors.As(e.e, &handshakeTimeoutErr):
 		enc.StringKey("owner", ownerLocal.String())
-		enc.StringKey("trigger", timeoutReason(timeout).String())
-		return
-	}
-	if code, remote, ok := e.Reason.ApplicationError(); ok {
+		enc.StringKey("trigger", "handshake_timeout")
+	case errors.As(e.e, &idleTimeoutErr):
+		enc.StringKey("owner", ownerLocal.String())
+		enc.StringKey("trigger", "idle_timeout")
+	case errors.As(e.e, &applicationErr):
 		owner := ownerLocal
-		if remote {
+		if applicationErr.Remote {
 			owner = ownerRemote
 		}
 		enc.StringKey("owner", owner.String())
-		enc.Uint64Key("application_code", uint64(code))
-	}
-	if code, remote, ok := e.Reason.TransportError(); ok {
+		enc.Uint64Key("application_code", uint64(applicationErr.ErrorCode))
+		enc.StringKey("reason", applicationErr.ErrorMessage)
+	case errors.As(e.e, &transportErr):
 		owner := ownerLocal
-		if remote {
+		if transportErr.Remote {
 			owner = ownerRemote
 		}
 		enc.StringKey("owner", owner.String())
-		enc.StringKey("connection_code", transportError(code).String())
-	}
-	if _, ok := e.Reason.VersionNegotiation(); ok {
+		enc.StringKey("connection_code", transportError(transportErr.ErrorCode).String())
+		enc.StringKey("reason", transportErr.ErrorMessage)
+	case errors.As(e.e, &versionNegotiationErr):
 		enc.StringKey("owner", ownerRemote.String())
 		enc.StringKey("trigger", "version_negotiation")
 	}

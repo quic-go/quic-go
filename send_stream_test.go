@@ -862,10 +862,10 @@ var _ = Describe("Send Stream", func() {
 				go func() {
 					defer GinkgoRecover()
 					_, err := str.Write(getData(5000))
-					Expect(err).To(MatchError("stream 1337 was reset with error code 123"))
-					Expect(err).To(BeAssignableToTypeOf(streamCanceledError{}))
-					Expect(err.(streamCanceledError).Canceled()).To(BeTrue())
-					Expect(err.(streamCanceledError).ErrorCode()).To(Equal(protocol.ApplicationErrorCode(123)))
+					Expect(err).To(MatchError(&StreamError{
+						StreamID:  streamID,
+						ErrorCode: 1234,
+					}))
 					close(done)
 				}()
 				waitForWrite()
@@ -884,10 +884,10 @@ var _ = Describe("Send Stream", func() {
 					ErrorCode: 123,
 				})
 				_, err := str.Write([]byte("foobar"))
-				Expect(err).To(MatchError("stream 1337 was reset with error code 123"))
-				Expect(err).To(BeAssignableToTypeOf(streamCanceledError{}))
-				Expect(err.(streamCanceledError).Canceled()).To(BeTrue())
-				Expect(err.(streamCanceledError).ErrorCode()).To(Equal(protocol.ApplicationErrorCode(123)))
+				Expect(err).To(MatchError(&StreamError{
+					StreamID:  streamID,
+					ErrorCode: 1234,
+				}))
 			})
 		})
 	})

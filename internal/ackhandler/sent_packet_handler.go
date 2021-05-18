@@ -277,12 +277,15 @@ func (h *sentPacketHandler) sentPacketImpl(packet *Packet) bool /* is ack-elicit
 	return isAckEliciting
 }
 
-func (h *sentPacketHandler) ReceivedAck(ack *wire.AckFrame, encLevel protocol.EncryptionLevel, rcvTime time.Time) error {
+func (h *sentPacketHandler) ReceivedAck(ack *wire.AckFrame, encLevel protocol.EncryptionLevel, rcvTime time.Time) (bool /* contained 1-RTT packet */, error) {
 	pnSpace := h.getPacketNumberSpace(encLevel)
 
 	largestAcked := ack.LargestAcked()
 	if largestAcked > pnSpace.largestSent {
-		return qerr.NewError(qerr.ProtocolViolation, "Received ACK for an unsent packet")
+		return false, &qerr.TransportError{
+			ErrorCode:    qerr.ProtocolViolation,
+			ErrorMessage: "received ACK for an unsent packet",
+		}
 	}
 
 	pnSpace.largestAcked = utils.MaxPacketNumber(pnSpace.largestAcked, largestAcked)
@@ -299,7 +302,7 @@ func (h *sentPacketHandler) ReceivedAck(ack *wire.AckFrame, encLevel protocol.En
 	priorInFlight := h.bytesInFlight
 	ackedPackets, err := h.detectAndRemoveAckedPackets(ack, encLevel)
 	if err != nil || len(ackedPackets) == 0 {
-		return err
+		return false, err
 	}
 	// update the RTT, if the largest acked is newly acknowledged
 	if len(ackedPackets) > 0 {
@@ -317,11 +320,15 @@ func (h *sentPacketHandler) ReceivedAck(ack *wire.AckFrame, encLevel protocol.En
 		}
 	}
 	if err := h.detectLostPackets(rcvTime, encLevel); err != nil {
-		return err
+		return false, err
 	}
+	var acked1RTTPacket bool
 	for _, p := range ackedPackets {
 		if p.includedInBytesInFlight && !p.declaredLost {
 			h.congestion.OnPacketAcked(p.PacketNumber, p.Length, priorInFlight, rcvTime)
+		}
+		if p.EncryptionLevel == protocol.Encryption1RTT {
+			acked1RTTPacket = true
 		}
 		h.removeFromBytesInFlight(p)
 	}
@@ -341,7 +348,7 @@ func (h *sentPacketHandler) ReceivedAck(ack *wire.AckFrame, encLevel protocol.En
 
 	pnSpace.history.DeleteOldPackets(rcvTime)
 	h.setLossDetectionTimer()
-	return nil
+	return acked1RTTPacket, nil
 }
 
 func (h *sentPacketHandler) GetLowestPacketNotConfirmedAcked() protocol.PacketNumber {
@@ -381,7 +388,10 @@ func (h *sentPacketHandler) detectAndRemoveAckedPackets(ack *wire.AckFrame, encL
 			}
 		}
 		if p.skippedPacket {
-			return false, fmt.Errorf("received an ACK for skipped packet number: %d (%s)", p.PacketNumber, encLevel)
+			return false, &qerr.TransportError{
+				ErrorCode:    qerr.ProtocolViolation,
+				ErrorMessage: fmt.Sprintf("received an ACK for skipped packet number: %d (%s)", p.PacketNumber, encLevel),
+			}
 		}
 		h.ackedPackets = append(h.ackedPackets, p)
 		return true, nil
@@ -435,19 +445,19 @@ func (h *sentPacketHandler) getLossTimeAndSpace() (time.Time, protocol.Encryptio
 }
 
 // same logic as getLossTimeAndSpace, but for lastAckElicitingPacketTime instead of lossTime
-func (h *sentPacketHandler) getPTOTimeAndSpace() (time.Time, protocol.EncryptionLevel) {
-	if !h.hasOutstandingPackets() {
+func (h *sentPacketHandler) getPTOTimeAndSpace() (pto time.Time, encLevel protocol.EncryptionLevel, ok bool) {
+	// We only send application data probe packets once the handshake is confirmed,
+	// because before that, we don't have the keys to decrypt ACKs sent in 1-RTT packets.
+	if !h.handshakeConfirmed && !h.hasOutstandingCryptoPackets() {
+		if h.peerCompletedAddressValidation {
+			return
+		}
 		t := time.Now().Add(h.rttStats.PTO(false) << h.ptoCount)
 		if h.initialPackets != nil {
-			return t, protocol.EncryptionInitial
+			return t, protocol.EncryptionInitial, true
 		}
-		return t, protocol.EncryptionHandshake
+		return t, protocol.EncryptionHandshake, true
 	}
-
-	var (
-		encLevel protocol.EncryptionLevel
-		pto      time.Time
-	)
 
 	if h.initialPackets != nil {
 		encLevel = protocol.EncryptionInitial
@@ -469,7 +479,7 @@ func (h *sentPacketHandler) getPTOTimeAndSpace() (time.Time, protocol.Encryption
 			encLevel = protocol.Encryption1RTT
 		}
 	}
-	return pto, encLevel
+	return pto, encLevel, true
 }
 
 func (h *sentPacketHandler) hasOutstandingCryptoPackets() bool {
@@ -484,10 +494,7 @@ func (h *sentPacketHandler) hasOutstandingCryptoPackets() bool {
 }
 
 func (h *sentPacketHandler) hasOutstandingPackets() bool {
-	// We only send application data probe packets once the handshake completes,
-	// because before that, we don't have the keys to decrypt ACKs sent in 1-RTT packets.
-	return (h.handshakeConfirmed && h.appDataPackets.history.HasOutstandingPackets()) ||
-		h.hasOutstandingCryptoPackets()
+	return h.appDataPackets.history.HasOutstandingPackets() || h.hasOutstandingCryptoPackets()
 }
 
 func (h *sentPacketHandler) setLossDetectionTimer() {
@@ -527,7 +534,10 @@ func (h *sentPacketHandler) setLossDetectionTimer() {
 	}
 
 	// PTO alarm
-	ptoTime, encLevel := h.getPTOTimeAndSpace()
+	ptoTime, encLevel, ok := h.getPTOTimeAndSpace()
+	if !ok {
+		return
+	}
 	h.alarm = ptoTime
 	if h.tracer != nil && h.alarm != oldAlarm {
 		h.tracer.SetLossTimer(logging.TimerTypePTO, encLevel, h.alarm)
@@ -595,20 +605,7 @@ func (h *sentPacketHandler) detectLostPackets(now time.Time, encLevel protocol.E
 }
 
 func (h *sentPacketHandler) OnLossDetectionTimeout() error {
-	// When all outstanding are acknowledged, the alarm is canceled in
-	// setLossDetectionTimer. This doesn't reset the timer in the session though.
-	// When OnAlarm is called, we therefore need to make sure that there are
-	// actually packets outstanding.
-	if h.hasOutstandingPackets() || !h.peerCompletedAddressValidation {
-		if err := h.onVerifiedLossDetectionTimeout(); err != nil {
-			return err
-		}
-	}
-	h.setLossDetectionTimer()
-	return nil
-}
-
-func (h *sentPacketHandler) onVerifiedLossDetectionTimeout() error {
+	defer h.setLossDetectionTimer()
 	earliestLossTime, encLevel := h.getLossTimeAndSpace()
 	if !earliestLossTime.IsZero() {
 		if h.logger.Debug() {
@@ -622,34 +619,12 @@ func (h *sentPacketHandler) onVerifiedLossDetectionTimeout() error {
 	}
 
 	// PTO
-	h.ptoCount++
-	if h.bytesInFlight > 0 {
-		_, encLevel = h.getPTOTimeAndSpace()
-		if h.logger.Debug() {
-			h.logger.Debugf("Loss detection alarm for %s fired in PTO mode. PTO count: %d", encLevel, h.ptoCount)
-		}
-		if h.tracer != nil {
-			h.tracer.LossTimerExpired(logging.TimerTypePTO, encLevel)
-			h.tracer.UpdatedPTOCount(h.ptoCount)
-		}
-		h.numProbesToSend += 2
-		//nolint:exhaustive // We never arm a PTO timer for 0-RTT packets.
-		switch encLevel {
-		case protocol.EncryptionInitial:
-			h.ptoMode = SendPTOInitial
-		case protocol.EncryptionHandshake:
-			h.ptoMode = SendPTOHandshake
-		case protocol.Encryption1RTT:
-			// skip a packet number in order to elicit an immediate ACK
-			_ = h.PopPacketNumber(protocol.Encryption1RTT)
-			h.ptoMode = SendPTOAppData
-		default:
-			return fmt.Errorf("PTO timer in unexpected encryption level: %s", encLevel)
-		}
-	} else {
-		if h.perspective == protocol.PerspectiveServer {
-			return errors.New("sentPacketHandler BUG: PTO fired, but bytes_in_flight is 0")
-		}
+	// When all outstanding are acknowledged, the alarm is canceled in
+	// setLossDetectionTimer. This doesn't reset the timer in the session though.
+	// When OnAlarm is called, we therefore need to make sure that there are
+	// actually packets outstanding.
+	if h.bytesInFlight == 0 && !h.peerCompletedAddressValidation {
+		h.ptoCount++
 		h.numProbesToSend++
 		if h.initialPackets != nil {
 			h.ptoMode = SendPTOInitial
@@ -658,6 +633,37 @@ func (h *sentPacketHandler) onVerifiedLossDetectionTimeout() error {
 		} else {
 			return errors.New("sentPacketHandler BUG: PTO fired, but bytes_in_flight is 0 and Initial and Handshake already dropped")
 		}
+		return nil
+	}
+
+	_, encLevel, ok := h.getPTOTimeAndSpace()
+	if !ok {
+		return nil
+	}
+	if ps := h.getPacketNumberSpace(encLevel); !ps.history.HasOutstandingPackets() && !h.peerCompletedAddressValidation {
+		return nil
+	}
+	h.ptoCount++
+	if h.logger.Debug() {
+		h.logger.Debugf("Loss detection alarm for %s fired in PTO mode. PTO count: %d", encLevel, h.ptoCount)
+	}
+	if h.tracer != nil {
+		h.tracer.LossTimerExpired(logging.TimerTypePTO, encLevel)
+		h.tracer.UpdatedPTOCount(h.ptoCount)
+	}
+	h.numProbesToSend += 2
+	//nolint:exhaustive // We never arm a PTO timer for 0-RTT packets.
+	switch encLevel {
+	case protocol.EncryptionInitial:
+		h.ptoMode = SendPTOInitial
+	case protocol.EncryptionHandshake:
+		h.ptoMode = SendPTOHandshake
+	case protocol.Encryption1RTT:
+		// skip a packet number in order to elicit an immediate ACK
+		_ = h.PopPacketNumber(protocol.Encryption1RTT)
+		h.ptoMode = SendPTOAppData
+	default:
+		return fmt.Errorf("PTO timer in unexpected encryption level: %s", encLevel)
 	}
 	return nil
 }

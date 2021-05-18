@@ -21,9 +21,7 @@ jobs:
       - checkout
       - run:
           name: "Setup build environment"
-          command: |
-            go get github.com/onsi/ginkgo/ginkgo
-            go get github.com/onsi/gomega
+          command: go install github.com/onsi/ginkgo/ginkgo
       - run:
           name: "Build infos"
           command: go version

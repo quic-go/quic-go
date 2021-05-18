@@ -88,7 +88,7 @@ var _ = Describe("Streams Map (outgoing)", func() {
 		It("errors when deleting a non-existing stream", func() {
 			err := m.DeleteStream(1337)
 			Expect(err).To(HaveOccurred())
-			Expect(err.(streamError).TestError()).To(MatchError("Tried to delete unknown outgoing stream 1337"))
+			Expect(err.(streamError).TestError()).To(MatchError("tried to delete unknown outgoing stream 1337"))
 		})
 
 		It("errors when deleting a stream twice", func() {
@@ -97,7 +97,7 @@ var _ = Describe("Streams Map (outgoing)", func() {
 			Expect(m.DeleteStream(1)).To(Succeed())
 			err = m.DeleteStream(1)
 			Expect(err).To(HaveOccurred())
-			Expect(err.(streamError).TestError()).To(MatchError("Tried to delete unknown outgoing stream 1"))
+			Expect(err.(streamError).TestError()).To(MatchError("tried to delete unknown outgoing stream 1"))
 		})
 
 		It("closes all streams when CloseWithError is called", func() {

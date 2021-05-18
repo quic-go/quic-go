@@ -13,10 +13,11 @@ import (
 	"sync/atomic"
 	"time"
 
-	quic "github.com/lucas-clemente/quic-go"
+	"github.com/lucas-clemente/quic-go"
 	quicproxy "github.com/lucas-clemente/quic-go/integrationtests/tools/proxy"
 	"github.com/lucas-clemente/quic-go/internal/utils"
 	"github.com/lucas-clemente/quic-go/logging"
+
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 )
@@ -53,7 +54,7 @@ func areHandshakesRunning() bool {
 
 var _ = Describe("Timeout tests", func() {
 	checkTimeoutError := func(err error) {
-		ExpectWithOffset(1, err).To(HaveOccurred())
+		ExpectWithOffset(1, err).To(MatchError(&quic.IdleTimeoutError{}))
 		nerr, ok := err.(net.Error)
 		ExpectWithOffset(1, ok).To(BeTrue())
 		ExpectWithOffset(1, nerr.Timeout()).To(BeTrue())

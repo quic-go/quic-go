@@ -39,7 +39,7 @@ func (m *MockStreamI) EXPECT() *MockStreamIMockRecorder {
 }
 
 // CancelRead mocks base method.
-func (m *MockStreamI) CancelRead(arg0 ErrorCode) {
+func (m *MockStreamI) CancelRead(arg0 StreamErrorCode) {
 	m.ctrl.T.Helper()
 	m.ctrl.Call(m, "CancelRead", arg0)
 }
@@ -51,7 +51,7 @@ func (mr *MockStreamIMockRecorder) CancelRead(arg0 interface{}) *gomock.Call {
 }
 
 // CancelWrite mocks base method.
-func (m *MockStreamI) CancelWrite(arg0 ErrorCode) {
+func (m *MockStreamI) CancelWrite(arg0 StreamErrorCode) {
 	m.ctrl.T.Helper()
 	m.ctrl.Call(m, "CancelWrite", arg0)
 }

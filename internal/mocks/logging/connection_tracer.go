@@ -76,7 +76,7 @@ func (mr *MockConnectionTracerMockRecorder) Close() *gomock.Call {
 }
 
 // ClosedConnection mocks base method.
-func (m *MockConnectionTracer) ClosedConnection(arg0 logging.CloseReason) {
+func (m *MockConnectionTracer) ClosedConnection(arg0 error) {
 	m.ctrl.T.Helper()
 	m.ctrl.Call(m, "ClosedConnection", arg0)
 }
@@ -169,6 +169,18 @@ func (m *MockConnectionTracer) LostPacket(arg0 protocol.EncryptionLevel, arg1 pr
 func (mr *MockConnectionTracerMockRecorder) LostPacket(arg0, arg1, arg2 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "LostPacket", reflect.TypeOf((*MockConnectionTracer)(nil).LostPacket), arg0, arg1, arg2)
+}
+
+// NegotiatedVersion mocks base method.
+func (m *MockConnectionTracer) NegotiatedVersion(arg0 protocol.VersionNumber, arg1, arg2 []protocol.VersionNumber) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "NegotiatedVersion", arg0, arg1, arg2)
+}
+
+// NegotiatedVersion indicates an expected call of NegotiatedVersion.
+func (mr *MockConnectionTracerMockRecorder) NegotiatedVersion(arg0, arg1, arg2 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NegotiatedVersion", reflect.TypeOf((*MockConnectionTracer)(nil).NegotiatedVersion), arg0, arg1, arg2)
 }
 
 // ReceivedPacket mocks base method.

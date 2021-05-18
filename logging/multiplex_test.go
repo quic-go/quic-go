@@ -2,6 +2,7 @@ package logging
 
 import (
 	"context"
+	"errors"
 	"net"
 	"time"
 
@@ -111,10 +112,10 @@ var _ = Describe("Tracing", func() {
 		})
 
 		It("traces the ClosedConnection event", func() {
-			reason := NewTimeoutCloseReason(TimeoutReasonIdle)
-			tr1.EXPECT().ClosedConnection(reason)
-			tr2.EXPECT().ClosedConnection(reason)
-			tracer.ClosedConnection(reason)
+			e := errors.New("test err")
+			tr1.EXPECT().ClosedConnection(e)
+			tr2.EXPECT().ClosedConnection(e)
+			tracer.ClosedConnection(e)
 		})
 
 		It("traces the SentTransportParameters event", func() {

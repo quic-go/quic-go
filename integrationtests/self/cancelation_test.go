@@ -11,7 +11,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	quic "github.com/lucas-clemente/quic-go"
+	"github.com/lucas-clemente/quic-go"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -45,7 +45,10 @@ var _ = Describe("Stream Cancelations", func() {
 						str, err := sess.OpenUniStreamSync(context.Background())
 						Expect(err).ToNot(HaveOccurred())
 						if _, err := str.Write(PRData); err != nil {
-							Expect(err).To(MatchError(fmt.Sprintf("stream %d was reset with error code %d", str.StreamID(), str.StreamID())))
+							Expect(err).To(MatchError(&quic.StreamError{
+								StreamID:  str.StreamID(),
+								ErrorCode: quic.StreamErrorCode(str.StreamID()),
+							}))
 							atomic.AddInt32(&canceledCounter, 1)
 							return
 						}
@@ -87,7 +90,7 @@ var _ = Describe("Stream Cancelations", func() {
 					// cancel around 2/3 of the streams
 					if rand.Int31()%3 != 0 {
 						atomic.AddInt32(&canceledCounter, 1)
-						str.CancelRead(quic.ErrorCode(str.StreamID()))
+						str.CancelRead(quic.StreamErrorCode(str.StreamID()))
 						return
 					}
 					data, err := ioutil.ReadAll(str)
@@ -133,7 +136,7 @@ var _ = Describe("Stream Cancelations", func() {
 						length := int(rand.Int31n(int32(len(PRData) - 1)))
 						data, err := ioutil.ReadAll(io.LimitReader(str, int64(length)))
 						Expect(err).ToNot(HaveOccurred())
-						str.CancelRead(quic.ErrorCode(str.StreamID()))
+						str.CancelRead(quic.StreamErrorCode(str.StreamID()))
 						Expect(data).To(Equal(PRData[:length]))
 						atomic.AddInt32(&canceledCounter, 1)
 						return
@@ -179,7 +182,10 @@ var _ = Describe("Stream Cancelations", func() {
 					data, err := ioutil.ReadAll(str)
 					if err != nil {
 						atomic.AddInt32(&counter, 1)
-						Expect(err).To(MatchError(fmt.Sprintf("stream %d was reset with error code %d", str.StreamID(), str.StreamID())))
+						Expect(err).To(MatchError(&quic.StreamError{
+							StreamID:  str.StreamID(),
+							ErrorCode: quic.StreamErrorCode(str.StreamID()),
+						}))
 						return
 					}
 					Expect(data).To(Equal(PRData))
@@ -212,7 +218,7 @@ var _ = Describe("Stream Cancelations", func() {
 						Expect(err).ToNot(HaveOccurred())
 						// cancel about 2/3 of the streams
 						if rand.Int31()%3 != 0 {
-							str.CancelWrite(quic.ErrorCode(str.StreamID()))
+							str.CancelWrite(quic.StreamErrorCode(str.StreamID()))
 							atomic.AddInt32(&canceledCounter, 1)
 							return
 						}
@@ -246,7 +252,7 @@ var _ = Describe("Stream Cancelations", func() {
 							length := int(rand.Int31n(int32(len(PRData) - 1)))
 							_, err = str.Write(PRData[:length])
 							Expect(err).ToNot(HaveOccurred())
-							str.CancelWrite(quic.ErrorCode(str.StreamID()))
+							str.CancelWrite(quic.StreamErrorCode(str.StreamID()))
 							atomic.AddInt32(&canceledCounter, 1)
 							return
 						}
@@ -282,11 +288,14 @@ var _ = Describe("Stream Cancelations", func() {
 						Expect(err).ToNot(HaveOccurred())
 						// cancel about half of the streams
 						if rand.Int31()%2 == 0 {
-							str.CancelWrite(quic.ErrorCode(str.StreamID()))
+							str.CancelWrite(quic.StreamErrorCode(str.StreamID()))
 							return
 						}
 						if _, err = str.Write(PRData); err != nil {
-							Expect(err).To(MatchError(fmt.Sprintf("stream %d was reset with error code %d", str.StreamID(), str.StreamID())))
+							Expect(err).To(MatchError(&quic.StreamError{
+								StreamID:  str.StreamID(),
+								ErrorCode: quic.StreamErrorCode(str.StreamID()),
+							}))
 							return
 						}
 						if err := str.Close(); err != nil {
@@ -317,12 +326,15 @@ var _ = Describe("Stream Cancelations", func() {
 					Expect(err).ToNot(HaveOccurred())
 					// cancel around half of the streams
 					if rand.Int31()%2 == 0 {
-						str.CancelRead(quic.ErrorCode(str.StreamID()))
+						str.CancelRead(quic.StreamErrorCode(str.StreamID()))
 						return
 					}
 					data, err := ioutil.ReadAll(str)
 					if err != nil {
-						Expect(err).To(MatchError(fmt.Sprintf("stream %d was reset with error code %d", str.StreamID(), str.StreamID())))
+						Expect(err).To(MatchError(&quic.StreamError{
+							StreamID:  str.StreamID(),
+							ErrorCode: quic.StreamErrorCode(str.StreamID()),
+						}))
 						return
 					}
 					atomic.AddInt32(&counter, 1)
@@ -364,11 +376,14 @@ var _ = Describe("Stream Cancelations", func() {
 							length = int(rand.Int31n(int32(len(PRData) - 1)))
 						}
 						if _, err = str.Write(PRData[:length]); err != nil {
-							Expect(err).To(MatchError(fmt.Sprintf("stream %d was reset with error code %d", str.StreamID(), str.StreamID())))
+							Expect(err).To(MatchError(&quic.StreamError{
+								StreamID:  str.StreamID(),
+								ErrorCode: quic.StreamErrorCode(str.StreamID()),
+							}))
 							return
 						}
 						if length < len(PRData) {
-							str.CancelWrite(quic.ErrorCode(str.StreamID()))
+							str.CancelWrite(quic.StreamErrorCode(str.StreamID()))
 						} else if err := str.Close(); err != nil {
 							Expect(err).To(MatchError(fmt.Sprintf("close called for canceled stream %d", str.StreamID())))
 							return
@@ -405,12 +420,15 @@ var _ = Describe("Stream Cancelations", func() {
 					}
 					data, err := ioutil.ReadAll(r)
 					if err != nil {
-						Expect(err).To(MatchError(fmt.Sprintf("stream %d was reset with error code %d", str.StreamID(), str.StreamID())))
+						Expect(err).To(MatchError(&quic.StreamError{
+							StreamID:  str.StreamID(),
+							ErrorCode: quic.StreamErrorCode(str.StreamID()),
+						}))
 						return
 					}
 					Expect(data).To(Equal(PRData[:length]))
 					if length < len(PRData) {
-						str.CancelRead(quic.ErrorCode(str.StreamID()))
+						str.CancelRead(quic.StreamErrorCode(str.StreamID()))
 						return
 					}
 

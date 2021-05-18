@@ -3,10 +3,10 @@ package http3
 import (
 	"fmt"
 
-	quic "github.com/lucas-clemente/quic-go"
+	"github.com/lucas-clemente/quic-go"
 )
 
-type errorCode quic.ErrorCode
+type errorCode quic.ApplicationErrorCode
 
 const (
 	errorNoError              errorCode = 0x100

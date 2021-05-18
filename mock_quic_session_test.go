@@ -67,7 +67,7 @@ func (mr *MockQuicSessionMockRecorder) AcceptUniStream(arg0 interface{}) *gomock
 }
 
 // CloseWithError mocks base method.
-func (m *MockQuicSession) CloseWithError(arg0 ErrorCode, arg1 string) error {
+func (m *MockQuicSession) CloseWithError(arg0 ApplicationErrorCode, arg1 string) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "CloseWithError", arg0, arg1)
 	ret0, _ := ret[0].(error)

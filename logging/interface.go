@@ -50,9 +50,9 @@ type (
 	PreferredAddress = wire.PreferredAddress
 
 	// A TransportError is a transport-level error code.
-	TransportError = qerr.ErrorCode
+	TransportError = qerr.TransportErrorCode
 	// An ApplicationError is an application-defined error code.
-	ApplicationError = qerr.ErrorCode
+	ApplicationError = qerr.TransportErrorCode
 
 	// The RTTStats contain statistics used by the congestion controller.
 	RTTStats = utils.RTTStats
@@ -105,7 +105,8 @@ type Tracer interface {
 // A ConnectionTracer records events.
 type ConnectionTracer interface {
 	StartedConnection(local, remote net.Addr, srcConnID, destConnID ConnectionID)
-	ClosedConnection(CloseReason)
+	NegotiatedVersion(chosen VersionNumber, clientVersions, serverVersions []VersionNumber)
+	ClosedConnection(error)
 	SentTransportParameters(*TransportParameters)
 	ReceivedTransportParameters(*TransportParameters)
 	RestoredTransportParameters(parameters *TransportParameters) // for 0-RTT
