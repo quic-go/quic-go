@@ -53,11 +53,6 @@ const (
 	EncryptionApplication = qtls.EncryptionApplication
 )
 
-// CipherSuiteName gets the name of a cipher suite.
-func CipherSuiteName(id uint16) string {
-	return qtls.CipherSuiteName(id)
-}
-
 // HkdfExtract generates a pseudorandom key for use with Expand from an input secret and an optional independent salt.
 func HkdfExtract(hash crypto.Hash, newSecret, currentSecret []byte) []byte {
 	return qtls.HkdfExtract(hash, newSecret, currentSecret)

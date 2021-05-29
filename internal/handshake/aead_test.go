@@ -5,10 +5,10 @@ import (
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/rand"
+	"crypto/tls"
 	"fmt"
 
 	"github.com/lucas-clemente/quic-go/internal/protocol"
-	"github.com/lucas-clemente/quic-go/internal/qtls"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -18,7 +18,7 @@ var _ = Describe("Long Header AEAD", func() {
 	for i := range cipherSuites {
 		cs := cipherSuites[i]
 
-		Context(fmt.Sprintf("using %s", qtls.CipherSuiteName(cs.ID)), func() {
+		Context(fmt.Sprintf("using %s", tls.CipherSuiteName(cs.ID)), func() {
 			getSealerAndOpener := func() (LongHeaderSealer, LongHeaderOpener) {
 				key := make([]byte, 16)
 				hpKey := make([]byte, 16)

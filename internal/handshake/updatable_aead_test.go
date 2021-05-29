@@ -11,7 +11,6 @@ import (
 	mocklogging "github.com/lucas-clemente/quic-go/internal/mocks/logging"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/internal/qerr"
-	"github.com/lucas-clemente/quic-go/internal/qtls"
 	"github.com/lucas-clemente/quic-go/internal/utils"
 
 	. "github.com/onsi/ginkgo"
@@ -39,7 +38,7 @@ var _ = Describe("Updatable AEAD", func() {
 	for i := range cipherSuites {
 		cs := cipherSuites[i]
 
-		Context(fmt.Sprintf("using %s", qtls.CipherSuiteName(cs.ID)), func() {
+		Context(fmt.Sprintf("using %s", tls.CipherSuiteName(cs.ID)), func() {
 			var (
 				client, server *updatableAEAD
 				serverTracer   *mocklogging.MockConnectionTracer
