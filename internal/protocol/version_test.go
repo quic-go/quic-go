@@ -14,10 +14,10 @@ var _ = Describe("Version", func() {
 		Expect(IsValidVersion(VersionTLS)).To(BeTrue())
 		Expect(IsValidVersion(VersionWhatever)).To(BeFalse())
 		Expect(IsValidVersion(VersionUnknown)).To(BeFalse())
-		Expect(IsValidVersion(VersionDraft29)).To(BeFalse())
-		Expect(IsValidVersion(VersionDraft32)).To(BeFalse())
-		Expect(IsValidVersion(VersionDraft34)).To(BeFalse())
-		Expect(IsValidVersion(Version1)).To(BeFalse())
+		Expect(IsValidVersion(VersionDraft29)).To(BeTrue())
+		Expect(IsValidVersion(VersionDraft32)).To(BeTrue())
+		Expect(IsValidVersion(VersionDraft34)).To(BeTrue())
+		Expect(IsValidVersion(Version1)).To(BeTrue())
 		Expect(IsValidVersion(1234)).To(BeFalse())
 	})
 
@@ -47,6 +47,7 @@ var _ = Describe("Version", func() {
 	})
 
 	It("has supported versions in sorted order", func() {
+		Expect(SupportedVersions[0]).To(Equal(Version1))
 		for i := 1; i < len(SupportedVersions)-1; i++ {
 			Expect(SupportedVersions[i]).To(BeNumerically(">", SupportedVersions[i+1]))
 		}
