@@ -30,11 +30,23 @@ var _ = Describe("error codes", func() {
 			valString := c.(*ast.ValueSpec).Values[0].(*ast.BasicLit).Value
 			val, err := strconv.ParseInt(valString, 0, 64)
 			Expect(err).NotTo(HaveOccurred())
-			Expect(ErrorCode(val).String()).ToNot(Equal("unknown error code"))
+			Expect(TransportErrorCode(val).String()).ToNot(Equal("unknown error code"))
 		}
 	})
 
 	It("has a string representation for unknown error codes", func() {
-		Expect(ErrorCode(0x1337).String()).To(Equal("unknown error code: 0x1337"))
+		Expect(TransportErrorCode(0x1337).String()).To(Equal("unknown error code: 0x1337"))
+	})
+
+	It("says if an error is a crypto error", func() {
+		for i := 0; i < 0x100; i++ {
+			Expect(TransportErrorCode(i).IsCryptoError()).To(BeFalse())
+		}
+		for i := 0x100; i < 0x200; i++ {
+			Expect(TransportErrorCode(i).IsCryptoError()).To(BeTrue())
+		}
+		for i := 0x200; i < 0x300; i++ {
+			Expect(TransportErrorCode(i).IsCryptoError()).To(BeFalse())
+		}
 	})
 })

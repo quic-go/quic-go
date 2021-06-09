@@ -9,10 +9,10 @@ import (
 	net "net"
 	reflect "reflect"
 
+	"github.com/golang/mock/gomock"
+
 	quic "github.com/Psiphon-Labs/quic-go"
-	quic_go "github.com/Psiphon-Labs/quic-go"
-	protocol "github.com/Psiphon-Labs/quic-go/internal/protocol"
-	gomock "github.com/golang/mock/gomock"
+	qerr "github.com/Psiphon-Labs/quic-go/internal/qerr"
 )
 
 // MockEarlySession is a mock of EarlySession interface.
@@ -69,7 +69,7 @@ func (mr *MockEarlySessionMockRecorder) AcceptUniStream(arg0 interface{}) *gomoc
 }
 
 // CloseWithError mocks base method.
-func (m *MockEarlySession) CloseWithError(arg0 protocol.ApplicationErrorCode, arg1 string) error {
+func (m *MockEarlySession) CloseWithError(arg0 qerr.ApplicationErrorCode, arg1 string) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "CloseWithError", arg0, arg1)
 	ret0, _ := ret[0].(error)

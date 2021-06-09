@@ -36,6 +36,8 @@ const (
 	VersionDraft32 = protocol.VersionDraft32
 	// VersionDraft34 is IETF QUIC draft-34
 	VersionDraft34 = protocol.VersionDraft34
+	// Version1 is RFC 9000
+	Version1 = protocol.Version1
 )
 
 // A Token can be used to verify the ownership of the client address.
@@ -65,10 +67,6 @@ type TokenStore interface {
 	Put(key string, token *ClientToken)
 }
 
-// An ErrorCode is an application-defined error code.
-// Valid values range between 0 and MAX_UINT62.
-type ErrorCode = protocol.ApplicationErrorCode
-
 // Err0RTTRejected is the returned from:
 // * Open{Uni}Stream{Sync}
 // * Accept{Uni}Stream
@@ -76,7 +74,16 @@ type ErrorCode = protocol.ApplicationErrorCode
 // when the server rejects a 0-RTT connection attempt.
 var Err0RTTRejected = errors.New("0-RTT rejected")
 
+// SessionTracingKey can be used to associate a ConnectionTracer with a Session.
+// It is set on the Session.Context() context,
+// as well as on the context passed to logging.Tracer.NewConnectionTracer.
+var SessionTracingKey = sessionTracingCtxKey{}
+
+type sessionTracingCtxKey struct{}
+
 // Stream is the interface implemented by QUIC streams
+// In addition to the errors listed on the Session,
+// calls to stream functions can return a StreamError if the stream is canceled.
 type Stream interface {
 	ReceiveStream
 	SendStream
@@ -102,7 +109,7 @@ type ReceiveStream interface {
 	// It will ask the peer to stop transmitting stream data.
 	// Read will unblock immediately, and future Read calls will fail.
 	// When called multiple times or after reading the io.EOF it is a no-op.
-	CancelRead(ErrorCode)
+	CancelRead(StreamErrorCode)
 	// SetReadDeadline sets the deadline for future Read calls and
 	// any currently-blocked Read call.
 	// A zero value for t means Read will not time out.
@@ -131,7 +138,7 @@ type SendStream interface {
 	// Data already written, but not yet delivered to the peer is not guaranteed to be delivered reliably.
 	// Write will unblock immediately, and future calls to Write will fail.
 	// When called multiple times or after closing the stream it is a no-op.
-	CancelWrite(ErrorCode)
+	CancelWrite(StreamErrorCode)
 	// The context is canceled as soon as the write-side of the stream is closed.
 	// This happens when Close() or CancelWrite() is called, or when the peer
 	// cancels the read-side of their stream.
@@ -145,14 +152,14 @@ type SendStream interface {
 	SetWriteDeadline(t time.Time) error
 }
 
-// StreamError is returned by Read and Write when the peer cancels the stream.
-type StreamError interface {
-	error
-	Canceled() bool
-	ErrorCode() ErrorCode
-}
-
 // A Session is a QUIC connection between two peers.
+// Calls to the session (and to streams) can return the following types of errors:
+// * ApplicationError: for errors triggered by the application running on top of QUIC
+// * TransportError: for errors triggered by the QUIC transport (in many cases a misbehaving peer)
+// * IdleTimeoutError: when the peer goes away unexpectedly (this is a net.Error timeout error)
+// * HandshakeTimeoutError: when the cryptographic handshake takes too long (this is a net.Error timeout error)
+// * StatelessResetError: when we receive a stateless reset (this is a net.Error temporary error)
+// * VersionNegotiationError: returned by the client, when there's no version overlap between the peers
 type Session interface {
 	// AcceptStream returns the next stream opened by the peer, blocking until one is available.
 	// If the session was closed due to a timeout, the error satisfies
@@ -188,9 +195,9 @@ type Session interface {
 	LocalAddr() net.Addr
 	// RemoteAddr returns the address of the peer.
 	RemoteAddr() net.Addr
-	// Close the connection with an error.
+	// CloseWithError closes the connection with an error.
 	// The error string will be sent to the peer.
-	CloseWithError(ErrorCode, string) error
+	CloseWithError(ApplicationErrorCode, string) error
 	// The context is cancelled when the session is closed.
 	// Warning: This API should not be considered stable and might change soon.
 	Context() context.Context

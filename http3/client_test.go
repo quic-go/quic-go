@@ -67,8 +67,8 @@ var _ = Describe("Client", func() {
 		var dialAddrCalled bool
 		dialAddr = func(_ string, tlsConf *tls.Config, quicConf *quic.Config) (quic.EarlySession, error) {
 			Expect(quicConf).To(Equal(defaultQuicConfig))
-			Expect(tlsConf.NextProtos).To(Equal([]string{nextProtoH3Draft29}))
-			Expect(quicConf.Versions).To(Equal([]protocol.VersionNumber{protocol.VersionTLS}))
+			Expect(tlsConf.NextProtos).To(Equal([]string{nextProtoH3}))
+			Expect(quicConf.Versions).To(Equal([]protocol.VersionNumber{protocol.Version1}))
 			dialAddrCalled = true
 			return nil, errors.New("test done")
 		}
@@ -107,7 +107,7 @@ var _ = Describe("Client", func() {
 		) (quic.EarlySession, error) {
 			Expect(hostname).To(Equal("localhost:1337"))
 			Expect(tlsConfP.ServerName).To(Equal(tlsConf.ServerName))
-			Expect(tlsConfP.NextProtos).To(Equal([]string{nextProtoH3Draft29}))
+			Expect(tlsConfP.NextProtos).To(Equal([]string{nextProtoH3}))
 			Expect(quicConfP.MaxIdleTimeout).To(Equal(quicConf.MaxIdleTimeout))
 			dialAddrCalled = true
 			return nil, errors.New("test done")
@@ -267,7 +267,7 @@ var _ = Describe("Client", func() {
 			str := mockquic.NewMockStream(mockCtrl)
 			str.EXPECT().Read(gomock.Any()).DoAndReturn(buf.Read).AnyTimes()
 			done := make(chan struct{})
-			str.EXPECT().CancelRead(quic.ErrorCode(errorStreamCreationError)).Do(func(code quic.ErrorCode) {
+			str.EXPECT().CancelRead(quic.StreamErrorCode(errorStreamCreationError)).Do(func(code quic.StreamErrorCode) {
 				close(done)
 			})
 
@@ -297,7 +297,7 @@ var _ = Describe("Client", func() {
 				return nil, errors.New("test done")
 			})
 			done := make(chan struct{})
-			sess.EXPECT().CloseWithError(gomock.Any(), gomock.Any()).Do(func(code quic.ErrorCode, _ string) {
+			sess.EXPECT().CloseWithError(gomock.Any(), gomock.Any()).Do(func(code quic.ApplicationErrorCode, _ string) {
 				defer GinkgoRecover()
 				Expect(code).To(BeEquivalentTo(errorMissingSettings))
 				close(done)
@@ -323,7 +323,7 @@ var _ = Describe("Client", func() {
 				return nil, errors.New("test done")
 			})
 			done := make(chan struct{})
-			sess.EXPECT().CloseWithError(gomock.Any(), gomock.Any()).Do(func(code quic.ErrorCode, _ string) {
+			sess.EXPECT().CloseWithError(gomock.Any(), gomock.Any()).Do(func(code quic.ApplicationErrorCode, _ string) {
 				defer GinkgoRecover()
 				Expect(code).To(BeEquivalentTo(errorFrameError))
 				close(done)
@@ -346,7 +346,7 @@ var _ = Describe("Client", func() {
 				return nil, errors.New("test done")
 			})
 			done := make(chan struct{})
-			sess.EXPECT().CloseWithError(gomock.Any(), gomock.Any()).Do(func(code quic.ErrorCode, _ string) {
+			sess.EXPECT().CloseWithError(gomock.Any(), gomock.Any()).Do(func(code quic.ApplicationErrorCode, _ string) {
 				defer GinkgoRecover()
 				Expect(code).To(BeEquivalentTo(errorIDError))
 				close(done)
@@ -372,7 +372,7 @@ var _ = Describe("Client", func() {
 			})
 			sess.EXPECT().ConnectionState().Return(quic.ConnectionState{SupportsDatagrams: false})
 			done := make(chan struct{})
-			sess.EXPECT().CloseWithError(gomock.Any(), gomock.Any()).Do(func(code quic.ErrorCode, reason string) {
+			sess.EXPECT().CloseWithError(gomock.Any(), gomock.Any()).Do(func(code quic.ApplicationErrorCode, reason string) {
 				defer GinkgoRecover()
 				Expect(code).To(BeEquivalentTo(errorSettingsError))
 				Expect(reason).To(Equal("missing QUIC Datagram support"))
@@ -546,7 +546,7 @@ var _ = Describe("Client", func() {
 				request.Body.(*mockBody).readErr = errors.New("testErr")
 				done := make(chan struct{})
 				gomock.InOrder(
-					str.EXPECT().CancelWrite(quic.ErrorCode(errorRequestCanceled)).Do(func(quic.ErrorCode) {
+					str.EXPECT().CancelWrite(quic.StreamErrorCode(errorRequestCanceled)).Do(func(quic.StreamErrorCode) {
 						close(done)
 					}),
 					str.EXPECT().CancelWrite(gomock.Any()),
@@ -584,7 +584,7 @@ var _ = Describe("Client", func() {
 			It("closes the connection when the first frame is not a HEADERS frame", func() {
 				buf := &bytes.Buffer{}
 				(&dataFrame{Length: 0x42}).Write(buf)
-				sess.EXPECT().CloseWithError(quic.ErrorCode(errorFrameUnexpected), gomock.Any())
+				sess.EXPECT().CloseWithError(quic.ApplicationErrorCode(errorFrameUnexpected), gomock.Any())
 				closed := make(chan struct{})
 				str.EXPECT().Close().Do(func() { close(closed) })
 				str.EXPECT().Read(gomock.Any()).DoAndReturn(buf.Read).AnyTimes()
@@ -596,7 +596,7 @@ var _ = Describe("Client", func() {
 			It("cancels the stream when the HEADERS frame is too large", func() {
 				buf := &bytes.Buffer{}
 				(&headersFrame{Length: 1338}).Write(buf)
-				str.EXPECT().CancelWrite(quic.ErrorCode(errorFrameError))
+				str.EXPECT().CancelWrite(quic.StreamErrorCode(errorFrameError))
 				closed := make(chan struct{})
 				str.EXPECT().Close().Do(func() { close(closed) })
 				str.EXPECT().Read(gomock.Any()).DoAndReturn(buf.Read).AnyTimes()
@@ -635,8 +635,8 @@ var _ = Describe("Client", func() {
 				done := make(chan struct{})
 				canceled := make(chan struct{})
 				gomock.InOrder(
-					str.EXPECT().CancelWrite(quic.ErrorCode(errorRequestCanceled)).Do(func(quic.ErrorCode) { close(canceled) }),
-					str.EXPECT().CancelRead(quic.ErrorCode(errorRequestCanceled)).Do(func(quic.ErrorCode) { close(done) }),
+					str.EXPECT().CancelWrite(quic.StreamErrorCode(errorRequestCanceled)).Do(func(quic.StreamErrorCode) { close(canceled) }),
+					str.EXPECT().CancelRead(quic.StreamErrorCode(errorRequestCanceled)).Do(func(quic.StreamErrorCode) { close(done) }),
 				)
 				str.EXPECT().CancelWrite(gomock.Any()).MaxTimes(1)
 				str.EXPECT().Read(gomock.Any()).DoAndReturn(func([]byte) (int, error) {
@@ -663,8 +663,8 @@ var _ = Describe("Client", func() {
 				done := make(chan struct{})
 				str.EXPECT().Write(gomock.Any()).DoAndReturn(buf.Write)
 				str.EXPECT().Read(gomock.Any()).DoAndReturn(rspBuf.Read).AnyTimes()
-				str.EXPECT().CancelWrite(quic.ErrorCode(errorRequestCanceled))
-				str.EXPECT().CancelRead(quic.ErrorCode(errorRequestCanceled)).Do(func(quic.ErrorCode) { close(done) })
+				str.EXPECT().CancelWrite(quic.StreamErrorCode(errorRequestCanceled))
+				str.EXPECT().CancelRead(quic.StreamErrorCode(errorRequestCanceled)).Do(func(quic.StreamErrorCode) { close(done) })
 				_, err := client.RoundTrip(req)
 				Expect(err).ToNot(HaveOccurred())
 				cancel()

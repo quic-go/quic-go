@@ -373,10 +373,10 @@ var _ = Describe("Packet Handler Map", func() {
 						defer GinkgoRecover()
 						defer close(destroyed)
 						Expect(err).To(HaveOccurred())
-						var resetErr statelessResetErr
+						var resetErr *StatelessResetError
 						Expect(errors.As(err, &resetErr)).To(BeTrue())
 						Expect(err.Error()).To(ContainSubstring("received a stateless reset"))
-						Expect(resetErr.token).To(Equal(token))
+						Expect(resetErr.Token).To(Equal(token))
 					})
 					packetChan <- packetToRead{data: packet}
 					Eventually(destroyed).Should(BeClosed())
@@ -393,10 +393,10 @@ var _ = Describe("Packet Handler Map", func() {
 					packetHandler.EXPECT().destroy(gomock.Any()).Do(func(err error) {
 						defer GinkgoRecover()
 						Expect(err).To(HaveOccurred())
-						var resetErr statelessResetErr
+						var resetErr *StatelessResetError
 						Expect(errors.As(err, &resetErr)).To(BeTrue())
 						Expect(err.Error()).To(ContainSubstring("received a stateless reset"))
-						Expect(resetErr.token).To(Equal(token))
+						Expect(resetErr.Token).To(Equal(token))
 						close(destroyed)
 					})
 					packetChan <- packetToRead{data: packet}

@@ -77,7 +77,7 @@ var _ = Describe("STREAM frame", func() {
 			data = append(data, []byte("foobar")...)
 			r := bytes.NewReader(data)
 			_, err := parseStreamFrame(r, versionIETFFrames)
-			Expect(err).To(MatchError("FRAME_ENCODING_ERROR: stream data overflows maximum offset"))
+			Expect(err).To(MatchError("stream data overflows maximum offset"))
 		})
 
 		It("rejects frames that claim to be longer than the packet size", func() {

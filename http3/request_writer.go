@@ -79,7 +79,7 @@ func (w *requestWriter) WriteRequest(str quic.Stream, req *http.Request, gzip bo
 				if rerr == io.EOF {
 					break
 				}
-				str.CancelWrite(quic.ErrorCode(errorRequestCanceled))
+				str.CancelWrite(quic.StreamErrorCode(errorRequestCanceled))
 				w.logger.Errorf("Error writing request: %s", rerr)
 				return
 			}

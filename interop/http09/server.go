@@ -16,7 +16,7 @@ import (
 	"github.com/Psiphon-Labs/quic-go"
 )
 
-const h09alpn = "hq-29"
+const h09alpn = "hq-interop"
 
 type responseWriter struct {
 	io.Writer

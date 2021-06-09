@@ -7,7 +7,7 @@ import (
 	"net"
 	"time"
 
-	quic "github.com/Psiphon-Labs/quic-go"
+	"github.com/Psiphon-Labs/quic-go"
 	quicproxy "github.com/Psiphon-Labs/quic-go/integrationtests/tools/proxy"
 	"github.com/Psiphon-Labs/quic-go/internal/utils"
 
@@ -99,8 +99,7 @@ var _ = Describe("Stateless Resets", func() {
 				_, serr = str.Read([]byte{0})
 			}
 			Expect(serr).To(HaveOccurred())
-			Expect(serr.Error()).To(ContainSubstring("INTERNAL_ERROR: received a stateless reset"))
-
+			Expect(serr).To(MatchError(&quic.StatelessResetError{}))
 			Expect(ln2.Close()).To(Succeed())
 			Eventually(acceptStopped).Should(BeClosed())
 		})

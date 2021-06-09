@@ -6,7 +6,6 @@ import (
 	"io"
 
 	"github.com/Psiphon-Labs/quic-go/internal/protocol"
-	"github.com/Psiphon-Labs/quic-go/internal/qerr"
 	"github.com/Psiphon-Labs/quic-go/quicvarint"
 )
 
@@ -79,7 +78,7 @@ func parseStreamFrame(r *bytes.Reader, _ protocol.VersionNumber) (*StreamFrame, 
 		}
 	}
 	if frame.Offset+frame.DataLen() > protocol.MaxByteCount {
-		return nil, qerr.NewError(qerr.FrameEncodingError, "stream data overflows maximum offset")
+		return nil, errors.New("stream data overflows maximum offset")
 	}
 	return frame, nil
 }

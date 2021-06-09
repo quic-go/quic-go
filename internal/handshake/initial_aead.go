@@ -4,6 +4,8 @@ import (
 	"crypto"
 	"crypto/tls"
 
+	"golang.org/x/crypto/hkdf"
+
 	"github.com/Psiphon-Labs/quic-go/internal/protocol"
 	"github.com/Psiphon-Labs/quic-go/internal/qtls"
 )
@@ -14,7 +16,7 @@ var (
 )
 
 func getSalt(v protocol.VersionNumber) []byte {
-	if v == protocol.VersionDraft34 {
+	if v == protocol.VersionDraft34 || v == protocol.Version1 {
 		return quicSaltDraft34
 	}
 	return quicSaltOld
@@ -49,7 +51,7 @@ func NewInitialAEAD(connID protocol.ConnectionID, pers protocol.Perspective, v p
 }
 
 func computeSecrets(connID protocol.ConnectionID, v protocol.VersionNumber) (clientSecret, serverSecret []byte) {
-	initialSecret := qtls.HkdfExtract(crypto.SHA256, connID, getSalt(v))
+	initialSecret := hkdf.Extract(crypto.SHA256.New, connID, getSalt(v))
 	clientSecret = hkdfExpandLabel(crypto.SHA256, initialSecret, []byte{}, "client in", crypto.SHA256.Size())
 	serverSecret = hkdfExpandLabel(crypto.SHA256, initialSecret, []byte{}, "server in", crypto.SHA256.Size())
 	return

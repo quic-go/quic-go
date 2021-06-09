@@ -7,9 +7,9 @@ import (
 	"time"
 
 	"github.com/Psiphon-Labs/quic-go/internal/ackhandler"
-
 	"github.com/Psiphon-Labs/quic-go/internal/flowcontrol"
 	"github.com/Psiphon-Labs/quic-go/internal/protocol"
+	"github.com/Psiphon-Labs/quic-go/internal/qerr"
 	"github.com/Psiphon-Labs/quic-go/internal/utils"
 	"github.com/Psiphon-Labs/quic-go/internal/wire"
 )
@@ -407,12 +407,12 @@ func (s *sendStream) Close() error {
 	return nil
 }
 
-func (s *sendStream) CancelWrite(errorCode protocol.ApplicationErrorCode) {
+func (s *sendStream) CancelWrite(errorCode StreamErrorCode) {
 	s.cancelWriteImpl(errorCode, fmt.Errorf("Write on stream %d canceled with error code %d", s.streamID, errorCode))
 }
 
 // must be called after locking the mutex
-func (s *sendStream) cancelWriteImpl(errorCode protocol.ApplicationErrorCode, writeErr error) {
+func (s *sendStream) cancelWriteImpl(errorCode qerr.StreamErrorCode, writeErr error) {
 	s.mutex.Lock()
 	if s.canceledWrite {
 		s.mutex.Unlock()
@@ -449,11 +449,10 @@ func (s *sendStream) updateSendWindow(limit protocol.ByteCount) {
 }
 
 func (s *sendStream) handleStopSendingFrame(frame *wire.StopSendingFrame) {
-	writeErr := streamCanceledError{
-		errorCode: frame.ErrorCode,
-		error:     fmt.Errorf("stream %d was reset with error code %d", s.streamID, frame.ErrorCode),
-	}
-	s.cancelWriteImpl(frame.ErrorCode, writeErr)
+	s.cancelWriteImpl(frame.ErrorCode, &StreamError{
+		StreamID:  s.streamID,
+		ErrorCode: frame.ErrorCode,
+	})
 }
 
 func (s *sendStream) Context() context.Context {

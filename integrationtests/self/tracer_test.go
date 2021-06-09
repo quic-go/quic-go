@@ -25,7 +25,7 @@ type customTracer struct{}
 
 var _ logging.Tracer = &customTracer{}
 
-func (t *customTracer) TracerForConnection(p logging.Perspective, odcid logging.ConnectionID) logging.ConnectionTracer {
+func (t *customTracer) TracerForConnection(context.Context, logging.Perspective, logging.ConnectionID) logging.ConnectionTracer {
 	return &customConnTracer{}
 }
 func (t *customTracer) SentPacket(net.Addr, *logging.Header, logging.ByteCount, []logging.Frame) {}
@@ -38,7 +38,10 @@ var _ logging.ConnectionTracer = &customConnTracer{}
 
 func (t *customConnTracer) StartedConnection(local, remote net.Addr, srcConnID, destConnID logging.ConnectionID) {
 }
-func (t *customConnTracer) ClosedConnection(logging.CloseReason)                     {}
+
+func (t *customConnTracer) NegotiatedVersion(chosen logging.VersionNumber, clientVersions, serverVersions []logging.VersionNumber) {
+}
+func (t *customConnTracer) ClosedConnection(error)                                   {}
 func (t *customConnTracer) SentTransportParameters(*logging.TransportParameters)     {}
 func (t *customConnTracer) ReceivedTransportParameters(*logging.TransportParameters) {}
 func (t *customConnTracer) RestoredTransportParameters(*logging.TransportParameters) {}
