@@ -124,7 +124,7 @@ func (c *client) dial() error {
 	// [Psiphon]
 	c.sessionMutex.Lock()
 	if c.closed {
-		session.CloseWithError(quic.ErrorCode(errorNoError), "")
+		session.CloseWithError(quic.ApplicationErrorCode(errorNoError), "")
 		err = errors.New("closed while dialing")
 	} else {
 		c.session = session
