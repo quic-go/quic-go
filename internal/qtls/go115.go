@@ -10,7 +10,7 @@ import (
 	"net"
 	"unsafe"
 
-	"github.com/Psphon-Labs/qtls-go1-15"
+	"github.com/Psiphon-Labs/qtls-go1-15"
 )
 
 type (
