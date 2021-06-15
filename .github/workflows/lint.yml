@@ -17,6 +17,10 @@ jobs:
           go mod tidy
           diff go.mod go.mod.orig
           diff go.sum go.sum.orig
+      - name: Check that go mod vendor works
+        run: |
+          cd integrationtests/gomodvendor
+          go mod vendor
   golangci-lint:
     runs-on: ubuntu-latest
     steps:
