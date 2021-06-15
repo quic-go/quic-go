@@ -49,7 +49,7 @@ var _ = Describe("Closed local session", func() {
 	})
 
 	It("destroys sessions", func() {
-		Expect(areClosedSessionsRunning()).To(BeTrue())
+		Eventually(areClosedSessionsRunning).Should(BeTrue())
 		sess.destroy(errors.New("destroy"))
 		Eventually(areClosedSessionsRunning).Should(BeFalse())
 	})
