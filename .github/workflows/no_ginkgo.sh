@@ -7,7 +7,7 @@ set -e
 HAS_TESTING=false
 
 cd ..
-for f in $(find . -name "*.go" ! -name "*_test.go"); do
+for f in $(find . -name "*.go" ! -name "*_test.go" ! -name "tools.go"); do
 	if grep -q "github.com/onsi/ginkgo" $f; then
     echo "$f imports github.com/onsi/ginkgo"
     HAS_TESTING=true
