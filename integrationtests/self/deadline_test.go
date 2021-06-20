@@ -60,9 +60,11 @@ var _ = Describe("Stream deadline tests", func() {
 
 			var bytesRead int
 			var timeoutCounter int
+			var expectedTimeouts int
 			buf := make([]byte, 1<<10)
 			data := make([]byte, len(PRDataLong))
 			clientStr.SetReadDeadline(time.Now().Add(timeout))
+			start := time.Now()
 			for bytesRead < len(PRDataLong) {
 				n, err := clientStr.Read(buf)
 				if nerr, ok := err.(net.Error); ok && nerr.Timeout() {
@@ -71,12 +73,16 @@ var _ = Describe("Stream deadline tests", func() {
 				} else {
 					Expect(err).ToNot(HaveOccurred())
 				}
+				if time.Since(start) >= timeout {
+					expectedTimeouts++
+					start = time.Now()
+				}
 				copy(data[bytesRead:], buf[:n])
 				bytesRead += n
 			}
 			Expect(data).To(Equal(PRDataLong))
 			// make sure the test actually worked an Read actually ran into the deadline a few times
-			Expect(timeoutCounter).To(BeNumerically(">=", 10))
+			Expect(timeoutCounter).To(BeNumerically("==", expectedTimeouts))
 			Eventually(done).Should(BeClosed())
 		})
 
@@ -146,7 +152,9 @@ var _ = Describe("Stream deadline tests", func() {
 
 			var bytesWritten int
 			var timeoutCounter int
+			var expectedTimeouts int
 			clientStr.SetWriteDeadline(time.Now().Add(timeout))
+			start := time.Now()
 			for bytesWritten < len(PRDataLong) {
 				n, err := clientStr.Write(PRDataLong[bytesWritten:])
 				if nerr, ok := err.(net.Error); ok && nerr.Timeout() {
@@ -155,11 +163,15 @@ var _ = Describe("Stream deadline tests", func() {
 				} else {
 					Expect(err).ToNot(HaveOccurred())
 				}
+				if time.Since(start) >= timeout {
+					expectedTimeouts++
+					start = time.Now()
+				}
 				bytesWritten += n
 			}
 			clientStr.Close()
 			// make sure the test actually worked an Read actually ran into the deadline a few times
-			Expect(timeoutCounter).To(BeNumerically(">=", 10))
+			Expect(timeoutCounter).To(BeNumerically("==", expectedTimeouts))
 			Eventually(done).Should(BeClosed())
 		})
 
@@ -194,7 +206,9 @@ var _ = Describe("Stream deadline tests", func() {
 
 			var bytesWritten int
 			var timeoutCounter int
+			var expectedTimeouts int
 			clientStr.SetWriteDeadline(time.Now().Add(timeout))
+			start := time.Now()
 			for bytesWritten < len(PRDataLong) {
 				n, err := clientStr.Write(PRDataLong[bytesWritten:])
 				if nerr, ok := err.(net.Error); ok && nerr.Timeout() {
@@ -202,11 +216,14 @@ var _ = Describe("Stream deadline tests", func() {
 				} else {
 					Expect(err).ToNot(HaveOccurred())
 				}
+				if time.Since(start) >= timeout {
+					expectedTimeouts++
+				}
 				bytesWritten += n
 			}
 			clientStr.Close()
 			// make sure the test actually worked an Read actually ran into the deadline a few times
-			Expect(timeoutCounter).To(BeNumerically(">=", 10))
+			Expect(timeoutCounter).To(BeNumerically("==", expectedTimeouts-1))
 			Eventually(readDone).Should(BeClosed())
 			Eventually(deadlineDone).Should(BeClosed())
 		})
