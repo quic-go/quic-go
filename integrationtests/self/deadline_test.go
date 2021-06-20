@@ -191,11 +191,12 @@ var _ = Describe("Stream deadline tests", func() {
 
 			clientStr.SetWriteDeadline(time.Now().Add(timeout))
 			deadlineDone := make(chan struct{})
+			received := make(chan struct{})
 			go func() {
 				defer close(deadlineDone)
 				for {
 					select {
-					case <-readDone:
+					case <-received:
 						return
 					default:
 						time.Sleep(timeout)
@@ -221,6 +222,7 @@ var _ = Describe("Stream deadline tests", func() {
 				}
 				bytesWritten += n
 			}
+			close(received)
 			clientStr.Close()
 			// make sure the test actually worked an Read actually ran into the deadline a few times
 			Expect(timeoutCounter).To(BeNumerically("==", expectedTimeouts-1))
