@@ -82,7 +82,7 @@ var _ = Describe("Stream deadline tests", func() {
 			}
 			Expect(data).To(Equal(PRDataLong))
 			// make sure the test actually worked an Read actually ran into the deadline a few times
-			Expect(timeoutCounter).To(BeNumerically("==", expectedTimeouts))
+			Expect(timeoutCounter).To(BeNumerically(">=", expectedTimeouts))
 			Eventually(done).Should(BeClosed())
 		})
 
@@ -171,7 +171,7 @@ var _ = Describe("Stream deadline tests", func() {
 			}
 			clientStr.Close()
 			// make sure the test actually worked an Read actually ran into the deadline a few times
-			Expect(timeoutCounter).To(BeNumerically("==", expectedTimeouts))
+			Expect(timeoutCounter).To(BeNumerically(">=", expectedTimeouts))
 			Eventually(done).Should(BeClosed())
 		})
 
@@ -225,7 +225,7 @@ var _ = Describe("Stream deadline tests", func() {
 			close(received)
 			clientStr.Close()
 			// make sure the test actually worked an Read actually ran into the deadline a few times
-			Expect(timeoutCounter).To(BeNumerically("==", expectedTimeouts-1))
+			Expect(timeoutCounter).To(BeNumerically(">=", expectedTimeouts-1))
 			Eventually(readDone).Should(BeClosed())
 			Eventually(deadlineDone).Should(BeClosed())
 		})
