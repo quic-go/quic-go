@@ -127,11 +127,6 @@ func (e *errCloseForRecreating) Error() string {
 	return "closing session in order to recreate it"
 }
 
-func (e *errCloseForRecreating) Is(target error) bool {
-	_, ok := target.(*errCloseForRecreating)
-	return ok
-}
-
 var sessionTracingID uint64        // to be accessed atomically
 func nextSessionTracingID() uint64 { return atomic.AddUint64(&sessionTracingID, 1) }
 
@@ -691,7 +686,7 @@ runLoop:
 	}
 
 	s.handleCloseError(&closeErr)
-	if !errors.Is(closeErr.err, &errCloseForRecreating{}) && s.tracer != nil {
+	if e := (&errCloseForRecreating{}); !errors.As(closeErr.err, &e) && s.tracer != nil {
 		s.tracer.Close()
 	}
 	s.logger.Infof("Connection %s closed.", s.logID)
@@ -1480,14 +1475,21 @@ func (s *session) handleCloseError(closeErr *closeError) {
 		}()
 	}
 
+	var (
+		statelessResetErr     *StatelessResetError
+		versionNegotiationErr *VersionNegotiationError
+		recreateErr           *errCloseForRecreating
+		applicationErr        *ApplicationError
+		transportErr          *TransportError
+	)
 	switch {
 	case errors.Is(e, qerr.ErrIdleTimeout),
 		errors.Is(e, qerr.ErrHandshakeTimeout),
-		errors.Is(e, &StatelessResetError{}),
-		errors.Is(e, &VersionNegotiationError{}),
-		errors.Is(e, &errCloseForRecreating{}),
-		errors.Is(e, &qerr.ApplicationError{}),
-		errors.Is(e, &qerr.TransportError{}):
+		errors.As(e, &statelessResetErr),
+		errors.As(e, &versionNegotiationErr),
+		errors.As(e, &recreateErr),
+		errors.As(e, &applicationErr),
+		errors.As(e, &transportErr):
 	default:
 		e = &qerr.TransportError{
 			ErrorCode:    qerr.InternalError,
@@ -1501,7 +1503,7 @@ func (s *session) handleCloseError(closeErr *closeError) {
 		s.datagramQueue.CloseWithError(e)
 	}
 
-	if s.tracer != nil && !errors.Is(e, &errCloseForRecreating{}) {
+	if s.tracer != nil && !errors.As(e, &recreateErr) {
 		s.tracer.ClosedConnection(e)
 	}
 

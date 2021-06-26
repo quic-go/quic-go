@@ -371,7 +371,8 @@ var _ = Describe("MITM test", func() {
 					}
 					err := runTest(delayCb)
 					Expect(err).To(HaveOccurred())
-					Expect(err).To(MatchError(&quic.VersionNegotiationError{}))
+					vnErr := &quic.VersionNegotiationError{}
+					Expect(errors.As(err, &vnErr)).To(BeTrue())
 				})
 
 				// times out, because client doesn't accept subsequent real retry packets from server

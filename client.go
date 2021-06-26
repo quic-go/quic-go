@@ -300,7 +300,8 @@ func (c *client) dial(ctx context.Context) error {
 	errorChan := make(chan error, 1)
 	go func() {
 		err := c.session.run() // returns as soon as the session is closed
-		if !errors.Is(err, &errCloseForRecreating{}) && c.createdPacketConn {
+
+		if e := (&errCloseForRecreating{}); !errors.As(err, &e) && c.createdPacketConn {
 			c.packetHandlers.Destroy()
 		}
 		errorChan <- err
