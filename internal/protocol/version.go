@@ -121,14 +121,3 @@ func GetGreasedVersions(supported []VersionNumber) []VersionNumber {
 	copy(greased[randPos+1:], supported[randPos:])
 	return greased
 }
-
-// StripGreasedVersions strips all greased versions from a slice of versions
-func StripGreasedVersions(versions []VersionNumber) []VersionNumber {
-	realVersions := make([]VersionNumber, 0, len(versions))
-	for _, v := range versions {
-		if v&0x0f0f0f0f != 0x0a0a0a0a {
-			realVersions = append(realVersions, v)
-		}
-	}
-	return realVersions
-}
