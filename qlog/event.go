@@ -394,7 +394,8 @@ type eventTransportParameters struct {
 	InitialMaxStreamsBidi          int64
 	InitialMaxStreamsUni           int64
 
-	PreferredAddress *preferredAddress
+	PreferredAddress   *preferredAddress
+	VersionInformation *versionInformation
 
 	MaxDatagramFrameSize protocol.ByteCount
 }
@@ -442,6 +443,9 @@ func (e eventTransportParameters) MarshalJSONObject(enc *gojay.Encoder) {
 	if e.MaxDatagramFrameSize != protocol.InvalidByteCount {
 		enc.Int64Key("max_datagram_frame_size", int64(e.MaxDatagramFrameSize))
 	}
+	if e.VersionInformation != nil {
+		enc.ObjectKey("version_information", e.VersionInformation)
+	}
 }
 
 type preferredAddress struct {
@@ -461,6 +465,19 @@ func (a preferredAddress) MarshalJSONObject(enc *gojay.Encoder) {
 	enc.Uint16Key("port_v6", a.PortV6)
 	enc.StringKey("connection_id", a.ConnectionID.String())
 	enc.StringKey("stateless_reset_token", fmt.Sprintf("%x", a.StatelessResetToken))
+}
+
+type versionInformation struct {
+	ChosenVersion     versionNumber
+	AvailableVersions []versionNumber
+}
+
+var _ gojay.MarshalerJSONObject = &versionInformation{}
+
+func (i versionInformation) IsNil() bool { return false }
+func (i versionInformation) MarshalJSONObject(enc *gojay.Encoder) {
+	enc.StringKey("chosen_version", i.ChosenVersion.String())
+	enc.ArrayKey("available_versions", versions(i.AvailableVersions))
 }
 
 type eventLossTimerSet struct {

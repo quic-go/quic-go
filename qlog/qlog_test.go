@@ -15,6 +15,7 @@ import (
 	"github.com/quic-go/quic-go/internal/protocol"
 	"github.com/quic-go/quic-go/internal/qerr"
 	"github.com/quic-go/quic-go/internal/utils"
+	"github.com/quic-go/quic-go/internal/wire"
 	"github.com/quic-go/quic-go/logging"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -323,6 +324,7 @@ var _ = Describe("Tracing", func() {
 				Expect(ev).To(HaveKeyWithValue("initial_max_streams_uni", float64(20)))
 				Expect(ev).ToNot(HaveKey("preferred_address"))
 				Expect(ev).ToNot(HaveKey("max_datagram_frame_size"))
+				Expect(ev).ToNot(HaveKey("version_information"))
 			})
 
 			It("records the server's transport parameters, without a stateless reset token", func() {
@@ -384,6 +386,28 @@ var _ = Describe("Tracing", func() {
 				Expect(entry.Name).To(Equal("transport:parameters_set"))
 				ev := entry.Event
 				Expect(ev).To(HaveKeyWithValue("max_datagram_frame_size", float64(1337)))
+			})
+
+			It("records transport parameters with the version negotiation extension", func() {
+				tracer.SentTransportParameters(&logging.TransportParameters{
+					VersionInformation: &wire.VersionInformation{
+						ChosenVersion:     protocol.Version1,
+						AvailableVersions: []protocol.VersionNumber{protocol.Version1, protocol.VersionDraft29},
+					},
+				})
+				entry := exportAndParseSingle()
+				Expect(entry.Time).To(BeTemporally("~", time.Now(), scaleDuration(10*time.Millisecond)))
+				Expect(entry.Name).To(Equal("transport:parameters_set"))
+				ev := entry.Event
+				Expect(ev).To(HaveKeyWithValue("owner", "local"))
+				Expect(ev).To(HaveKey("version_information"))
+				vi := ev["version_information"].(map[string]interface{})
+				Expect(vi).To(HaveKeyWithValue("chosen_version", "1"))
+				Expect(vi).To(HaveKey("available_versions"))
+				others := vi["available_versions"].([]interface{})
+				Expect(others).To(HaveLen(2))
+				Expect(others[0].(string)).To(Equal("1"))
+				Expect(others[1].(string)).To(Equal("ff00001d"))
 			})
 
 			It("records received transport parameters", func() {

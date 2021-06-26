@@ -252,6 +252,16 @@ func (t *connectionTracer) toTransportParameters(tp *wire.TransportParameters) *
 			StatelessResetToken: tp.PreferredAddress.StatelessResetToken,
 		}
 	}
+	var vi *versionInformation
+	if tp.VersionInformation != nil {
+		vi = &versionInformation{
+			ChosenVersion:     versionNumber(tp.VersionInformation.ChosenVersion),
+			AvailableVersions: make([]versionNumber, 0, len(tp.VersionInformation.AvailableVersions)),
+		}
+		for _, v := range tp.VersionInformation.AvailableVersions {
+			vi.AvailableVersions = append(vi.AvailableVersions, versionNumber(v))
+		}
+	}
 	return &eventTransportParameters{
 		OriginalDestinationConnectionID: tp.OriginalDestinationConnectionID,
 		InitialSourceConnectionID:       tp.InitialSourceConnectionID,
@@ -271,6 +281,7 @@ func (t *connectionTracer) toTransportParameters(tp *wire.TransportParameters) *
 		InitialMaxStreamsUni:            int64(tp.MaxUniStreamNum),
 		PreferredAddress:                pa,
 		MaxDatagramFrameSize:            tp.MaxDatagramFrameSize,
+		VersionInformation:              vi,
 	}
 }
 
