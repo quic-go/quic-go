@@ -40,6 +40,12 @@ var _ = Describe("Transport Parameters", func() {
 		b.Write([]byte("foobar"))
 	}
 
+	addOrigDestConnectionID := func(b *bytes.Buffer) {
+		quicvarint.Write(b, uint64(originalDestinationConnectionIDParameterID))
+		quicvarint.Write(b, 6)
+		b.Write([]byte("foobar"))
+	}
+
 	It("has a string representation", func() {
 		rcid := protocol.ParseConnectionID([]byte{0xde, 0xad, 0xc0, 0xde})
 		p := &TransportParameters{
@@ -58,8 +64,12 @@ var _ = Describe("Transport Parameters", func() {
 			StatelessResetToken:             &protocol.StatelessResetToken{0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88, 0x99, 0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff, 0x00},
 			ActiveConnectionIDLimit:         123,
 			MaxDatagramFrameSize:            876,
+			VersionInformation: &VersionInformation{
+				ChosenVersion:     protocol.Version1,
+				AvailableVersions: []protocol.VersionNumber{protocol.Version1, protocol.VersionDraft29},
+			},
 		}
-		Expect(p.String()).To(Equal("&wire.TransportParameters{OriginalDestinationConnectionID: deadbeef, InitialSourceConnectionID: decafbad, RetrySourceConnectionID: deadc0de, InitialMaxStreamDataBidiLocal: 1234, InitialMaxStreamDataBidiRemote: 2345, InitialMaxStreamDataUni: 3456, InitialMaxData: 4567, MaxBidiStreamNum: 1337, MaxUniStreamNum: 7331, MaxIdleTimeout: 42s, AckDelayExponent: 14, MaxAckDelay: 37ms, ActiveConnectionIDLimit: 123, StatelessResetToken: 0x112233445566778899aabbccddeeff00, MaxDatagramFrameSize: 876}"))
+		Expect(p.String()).To(Equal("&wire.TransportParameters{OriginalDestinationConnectionID: deadbeef, InitialSourceConnectionID: decafbad, RetrySourceConnectionID: deadc0de, InitialMaxStreamDataBidiLocal: 1234, InitialMaxStreamDataBidiRemote: 2345, InitialMaxStreamDataUni: 3456, InitialMaxData: 4567, MaxBidiStreamNum: 1337, MaxUniStreamNum: 7331, MaxIdleTimeout: 42s, AckDelayExponent: 14, MaxAckDelay: 37ms, ActiveConnectionIDLimit: 123, StatelessResetToken: 0x112233445566778899aabbccddeeff00, MaxDatagramFrameSize: 876, VersionInformation: {Chosen: v1, Alternatives: [v1 draft-29]}}"))
 	})
 
 	It("has a string representation, if there's no stateless reset token, no Retry source connection id and no datagram support", func() {
@@ -102,6 +112,10 @@ var _ = Describe("Transport Parameters", func() {
 			MaxAckDelay:                     42 * time.Millisecond,
 			ActiveConnectionIDLimit:         2 + getRandomValueUpTo(math.MaxInt64-2),
 			MaxDatagramFrameSize:            protocol.ByteCount(getRandomValue()),
+			VersionInformation: &VersionInformation{
+				ChosenVersion:     protocol.Version1,
+				AvailableVersions: []protocol.VersionNumber{protocol.VersionDraft29, protocol.Version1},
+			},
 		}
 		data := params.Marshal(protocol.PerspectiveServer)
 
@@ -123,6 +137,7 @@ var _ = Describe("Transport Parameters", func() {
 		Expect(p.MaxAckDelay).To(Equal(42 * time.Millisecond))
 		Expect(p.ActiveConnectionIDLimit).To(Equal(params.ActiveConnectionIDLimit))
 		Expect(p.MaxDatagramFrameSize).To(Equal(params.MaxDatagramFrameSize))
+		Expect(p.VersionInformation).To(Equal(params.VersionInformation))
 	})
 
 	It("doesn't marshal a retry_source_connection_id, if no Retry was performed", func() {
@@ -413,6 +428,75 @@ var _ = Describe("Transport Parameters", func() {
 			ErrorCode:    qerr.TransportParameterError,
 			ErrorMessage: "client sent an original_destination_connection_id",
 		}))
+	})
+
+	// https://datatracker.ietf.org/doc/draft-ietf-quic-version-negotiation/14/
+	Context("Version Information", func() {
+		It("errors when the version_information transport parameter is too small", func() {
+			b := &bytes.Buffer{}
+			quicvarint.Write(b, uint64(versionInformationParameterID))
+			quicvarint.Write(b, 3)
+			b.Write(make([]byte, 3))
+			addInitialSourceConnectionID(b)
+			addOrigDestConnectionID(b)
+			Expect((&TransportParameters{}).Unmarshal(b.Bytes(), protocol.PerspectiveServer)).To(MatchError(&qerr.TransportError{
+				ErrorCode:    qerr.TransportParameterError,
+				ErrorMessage: "invalid Version Information length: expected to read 3 bytes, read 4",
+			}))
+		})
+
+		It("rejects zero chosen versions", func() {
+			data := (&TransportParameters{
+				VersionInformation: &VersionInformation{
+					ChosenVersion:     0,
+					AvailableVersions: []protocol.VersionNumber{protocol.Version1},
+				},
+			}).Marshal(protocol.PerspectiveServer)
+			p := &TransportParameters{}
+			Expect(p.Unmarshal(data, protocol.PerspectiveServer)).To(MatchError(&qerr.TransportError{
+				ErrorCode:    qerr.TransportParameterError,
+				ErrorMessage: "invalid Version Information: zero Chosen Version",
+			}))
+		})
+
+		It("rejects zero alternative versions", func() {
+			data := (&TransportParameters{
+				VersionInformation: &VersionInformation{
+					ChosenVersion:     protocol.Version1,
+					AvailableVersions: []protocol.VersionNumber{protocol.Version1, 0, protocol.Version2},
+				},
+			}).Marshal(protocol.PerspectiveServer)
+			p := &TransportParameters{}
+			Expect(p.Unmarshal(data, protocol.PerspectiveServer)).To(MatchError(&qerr.TransportError{
+				ErrorCode:    qerr.TransportParameterError,
+				ErrorMessage: "invalid Version Information: zero Available Version",
+			}))
+		})
+
+		It("allows the available versions to not include the chosen version, for the server", func() {
+			data := (&TransportParameters{
+				VersionInformation: &VersionInformation{
+					ChosenVersion:     protocol.Version1,
+					AvailableVersions: []protocol.VersionNumber{protocol.Version2},
+				},
+			}).Marshal(protocol.PerspectiveServer)
+			p := &TransportParameters{}
+			Expect(p.Unmarshal(data, protocol.PerspectiveServer)).To(Succeed())
+		})
+
+		It("doesn't allow the available versions to not include the chosen version, for the client", func() {
+			data := (&TransportParameters{
+				VersionInformation: &VersionInformation{
+					ChosenVersion:     protocol.Version1,
+					AvailableVersions: []protocol.VersionNumber{protocol.Version2},
+				},
+			}).Marshal(protocol.PerspectiveClient)
+			p := &TransportParameters{}
+			Expect(p.Unmarshal(data, protocol.PerspectiveClient)).To(MatchError(&qerr.TransportError{
+				ErrorCode:    qerr.TransportParameterError,
+				ErrorMessage: "invalid Version Information: Chosen Version not contained in Available Versions",
+			}))
+		})
 	})
 
 	Context("preferred address", func() {

@@ -43,6 +43,8 @@ const (
 	activeConnectionIDLimitParameterID         transportParameterID = 0xe
 	initialSourceConnectionIDParameterID       transportParameterID = 0xf
 	retrySourceConnectionIDParameterID         transportParameterID = 0x10
+	// https://datatracker.ietf.org/doc/draft-ietf-quic-version-negotiation/14/
+	versionInformationParameterID transportParameterID = 0x11
 	// RFC 9221
 	maxDatagramFrameSizeParameterID transportParameterID = 0x20
 )
@@ -55,6 +57,60 @@ type PreferredAddress struct {
 	IPv6Port            uint16
 	ConnectionID        protocol.ConnectionID
 	StatelessResetToken protocol.StatelessResetToken
+}
+
+type VersionInformation struct {
+	ChosenVersion     protocol.VersionNumber
+	AvailableVersions []protocol.VersionNumber
+}
+
+func (i *VersionInformation) parse(r *bytes.Reader, sentBy protocol.Perspective, expectedLen uint64) error {
+	remainingLen := r.Len()
+	chosen, err := utils.BigEndian.ReadUint32(r)
+	if err != nil {
+		return err
+	}
+	if chosen == 0 {
+		return errors.New("invalid Version Information: zero Chosen Version")
+	}
+	i.ChosenVersion = protocol.VersionNumber(chosen)
+	i.AvailableVersions = make([]protocol.VersionNumber, 0, r.Len()/4)
+	var foundChosen bool
+	for uint64(remainingLen-r.Len()) < expectedLen {
+		v, err := utils.BigEndian.ReadUint32(r)
+		if err != nil {
+			return err
+		}
+		if v == 0 {
+			return errors.New("invalid Version Information: zero Available Version")
+		}
+		vers := protocol.VersionNumber(v)
+		if i.ChosenVersion == vers {
+			foundChosen = true
+		}
+		i.AvailableVersions = append(i.AvailableVersions, vers)
+	}
+	if sentBy == protocol.PerspectiveClient && !foundChosen {
+		return errors.New("invalid Version Information: Chosen Version not contained in Available Versions")
+	}
+	if uint64(remainingLen-r.Len()) != expectedLen {
+		return fmt.Errorf("invalid Version Information length: expected to read %d bytes, read %d", expectedLen, remainingLen-r.Len())
+	}
+	return nil
+}
+
+func (i *VersionInformation) append(b []byte) []byte {
+	b = quicvarint.Append(b, uint64(versionInformationParameterID))
+	b = quicvarint.Append(b, 4+4*uint64(len(i.AvailableVersions)))
+	idx := len(b)
+	b = append(b, make([]byte, 4*(len(i.AvailableVersions)+1))...)
+	binary.BigEndian.PutUint32(b[idx:], uint32(i.ChosenVersion))
+	idx += 4
+	for _, v := range i.AvailableVersions {
+		binary.BigEndian.PutUint32(b[idx:], uint32(v))
+		idx += 4
+	}
+	return b
 }
 
 // TransportParameters are parameters sent to the peer during the handshake
@@ -86,6 +142,8 @@ type TransportParameters struct {
 	ActiveConnectionIDLimit uint64
 
 	MaxDatagramFrameSize protocol.ByteCount
+
+	VersionInformation *VersionInformation
 }
 
 // Unmarshal the transport parameters
@@ -179,6 +237,11 @@ func (p *TransportParameters) unmarshal(r *bytes.Reader, sentBy protocol.Perspec
 			}
 			connID, _ := protocol.ReadConnectionID(r, int(paramLen))
 			p.RetrySourceConnectionID = &connID
+		case versionInformationParameterID:
+			p.VersionInformation = &VersionInformation{}
+			if err := p.VersionInformation.parse(r, sentBy, paramLen); err != nil {
+				return err
+			}
 		default:
 			r.Seek(int64(paramLen), io.SeekCurrent)
 		}
@@ -399,6 +462,9 @@ func (p *TransportParameters) Marshal(pers protocol.Perspective) []byte {
 		b = quicvarint.Append(b, uint64(p.RetrySourceConnectionID.Len()))
 		b = append(b, p.RetrySourceConnectionID.Bytes()...)
 	}
+	if p.VersionInformation != nil {
+		b = p.VersionInformation.append(b)
+	}
 	if p.MaxDatagramFrameSize != protocol.InvalidByteCount {
 		b = p.marshalVarintParam(b, maxDatagramFrameSizeParameterID, uint64(p.MaxDatagramFrameSize))
 	}
@@ -478,6 +544,11 @@ func (p *TransportParameters) String() string {
 	if p.MaxDatagramFrameSize != protocol.InvalidByteCount {
 		logString += ", MaxDatagramFrameSize: %d"
 		logParams = append(logParams, p.MaxDatagramFrameSize)
+	}
+	if p.VersionInformation != nil {
+		logString += ", VersionInformation: {Chosen: %s, Alternatives: %v}"
+		logParams = append(logParams, p.VersionInformation.ChosenVersion)
+		logParams = append(logParams, p.VersionInformation.AvailableVersions)
 	}
 	logString += "}"
 	return fmt.Sprintf(logString, logParams...)
