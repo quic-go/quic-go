@@ -72,12 +72,6 @@ func (vn VersionNumber) toGQUICVersion() int {
 	return int(10*(vn-gquicVersion0)/0x100) + int(vn%0x10)
 }
 
-// UseRetireBugBackwardsCompatibilityMode says if it is necessary to use the backwards compatilibity mode.
-// This is only the case if it 1. is enabled and 2. draft-29 is used.
-func UseRetireBugBackwardsCompatibilityMode(enabled bool, v VersionNumber) bool {
-	return enabled && v == VersionDraft29
-}
-
 // IsSupportedVersion returns true if the server supports this version
 func IsSupportedVersion(supported []VersionNumber, v VersionNumber) bool {
 	for _, t := range supported {

@@ -12,16 +12,6 @@ import (
 	"github.com/lucas-clemente/quic-go/logging"
 )
 
-// RetireBugBackwardsCompatibilityMode controls a backwards compatibility mode, necessary due to a bug in
-// quic-go v0.17.2 (and earlier), where under certain circumstances, an endpoint would retire the connection
-// ID it is currently using. See https://github.com/lucas-clemente/quic-go/issues/2658.
-// The bug has now been fixed, and new deployments have nothing to worry about.
-// Deployments that already have quic-go <= v0.17.2 deployed should active RetireBugBackwardsCompatibilityMode.
-// If activated, quic-go will take steps to avoid the bug from triggering when connected to endpoints that are still
-// running quic-go <= v0.17.2.
-// This flag will be removed in a future version of quic-go.
-var RetireBugBackwardsCompatibilityMode bool
-
 // The StreamID is the ID of a QUIC stream.
 type StreamID = protocol.StreamID
 

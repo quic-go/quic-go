@@ -53,13 +53,6 @@ var _ = Describe("Version", func() {
 		}
 	})
 
-	It("says if backwards compatibility mode should be used", func() {
-		Expect(UseRetireBugBackwardsCompatibilityMode(true, VersionDraft29)).To(BeTrue())
-		Expect(UseRetireBugBackwardsCompatibilityMode(true, VersionDraft32)).To(BeFalse())
-		Expect(UseRetireBugBackwardsCompatibilityMode(false, VersionDraft29)).To(BeFalse())
-		Expect(UseRetireBugBackwardsCompatibilityMode(false, VersionDraft32)).To(BeFalse())
-	})
-
 	Context("highest supported version", func() {
 		It("finds the supported version", func() {
 			supportedVersions := []VersionNumber{1, 2, 3}
