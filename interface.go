@@ -21,10 +21,6 @@ type VersionNumber = protocol.VersionNumber
 const (
 	// VersionDraft29 is IETF QUIC draft-29
 	VersionDraft29 = protocol.VersionDraft29
-	// VersionDraft32 is IETF QUIC draft-32
-	VersionDraft32 = protocol.VersionDraft32
-	// VersionDraft34 is IETF QUIC draft-34
-	VersionDraft34 = protocol.VersionDraft34
 	// Version1 is RFC 9000
 	Version1 = protocol.Version1
 )
