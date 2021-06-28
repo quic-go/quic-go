@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math/rand"
 	"net"
 	"reflect"
 	"sync"
@@ -194,9 +195,10 @@ type connection struct {
 	handshakeComplete     bool
 	handshakeConfirmed    bool
 
-	receivedRetry       bool
-	versionNegotiated   bool
-	receivedFirstPacket bool
+	receivedRetry          bool
+	versionNegotiated      bool
+	receivedFirstPacket    bool
+	quicBitGreasingEnabled bool
 
 	idleTimeout  time.Duration
 	creationTime time.Time
@@ -314,7 +316,7 @@ var newConnection = func(
 		ActiveConnectionIDLimit:         protocol.MaxActiveConnectionIDs,
 		InitialSourceConnectionID:       srcConnID,
 		RetrySourceConnectionID:         retrySrcConnID,
-		GreaseQuicBit:                   !s.config.DisableQUICBitGreasing,
+		GreaseQuicBit:                   s.quicBitGreasingEnabled,
 	}
 	if s.config.EnableDatagrams {
 		params.MaxDatagramFrameSize = protocol.MaxDatagramFrameSize
@@ -443,7 +445,7 @@ var newClientConnection = func(
 		DisableActiveMigration:         true,
 		ActiveConnectionIDLimit:        protocol.MaxActiveConnectionIDs,
 		InitialSourceConnectionID:      srcConnID,
-		GreaseQuicBit:                  !s.config.DisableQUICBitGreasing,
+		GreaseQuicBit:                  s.quicBitGreasingEnabled,
 	}
 	if s.config.EnableDatagrams {
 		params.MaxDatagramFrameSize = protocol.MaxDatagramFrameSize
@@ -544,6 +546,11 @@ func (s *connection) preSetup() {
 
 	s.windowUpdateQueue = newWindowUpdateQueue(s.streamsMap, s.connFlowController, s.framer.QueueControlFrame)
 	s.datagramQueue = newDatagramQueue(s.scheduleSending, s.logger)
+	// Even if greasing is enabled, we don't always enable it.
+	// That way, we grease the greasing mechanism.
+	if !s.config.DisableQUICBitGreasing {
+		s.quicBitGreasingEnabled = rand.Intn(5) != 0
+	}
 }
 
 // run the connection main loop
