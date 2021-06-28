@@ -14,7 +14,7 @@ import (
 // writePacket returns a new raw packet with the specified header and payload
 func writePacket(hdr *wire.ExtendedHeader, data []byte) []byte {
 	buf := &bytes.Buffer{}
-	hdr.Write(buf, hdr.Version)
+	hdr.Write(buf, true, hdr.Version)
 	return append(buf.Bytes(), data...)
 }
 

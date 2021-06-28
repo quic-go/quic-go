@@ -559,7 +559,7 @@ var _ = Describe("Connection", func() {
 				Header:          wire.Header{DestConnectionID: srcConnID},
 				PacketNumberLen: protocol.PacketNumberLen2,
 			}
-			Expect(hdr.Write(buf, conn.version)).To(Succeed())
+			Expect(hdr.Write(buf, true, conn.version)).To(Succeed())
 			unpacker.EXPECT().Unpack(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(func(*wire.Header, time.Time, []byte) (*unpackedPacket, error) {
 				buf := &bytes.Buffer{}
 				Expect((&wire.ConnectionCloseFrame{ErrorCode: uint64(qerr.StreamLimitError)}).Write(buf, conn.version)).To(Succeed())
@@ -641,7 +641,7 @@ var _ = Describe("Connection", func() {
 
 		getPacket := func(extHdr *wire.ExtendedHeader, data []byte) *receivedPacket {
 			buf := &bytes.Buffer{}
-			Expect(extHdr.Write(buf, conn.version)).To(Succeed())
+			Expect(extHdr.Write(buf, true, conn.version)).To(Succeed())
 			return &receivedPacket{
 				data:    append(buf.Bytes(), data...),
 				buffer:  getPacketBuffer(),
@@ -2413,7 +2413,7 @@ var _ = Describe("Client Connection", func() {
 
 	getPacket := func(hdr *wire.ExtendedHeader, data []byte) *receivedPacket {
 		buf := &bytes.Buffer{}
-		Expect(hdr.Write(buf, conn.version)).To(Succeed())
+		Expect(hdr.Write(buf, true, conn.version)).To(Succeed())
 		return &receivedPacket{
 			data:   append(buf.Bytes(), data...),
 			buffer: getPacketBuffer(),
@@ -2691,7 +2691,7 @@ var _ = Describe("Client Connection", func() {
 
 		getRetryTag := func(hdr *wire.ExtendedHeader) []byte {
 			buf := &bytes.Buffer{}
-			hdr.Write(buf, conn.version)
+			hdr.Write(buf, true, conn.version)
 			return handshake.GetRetryIntegrityTag(buf.Bytes(), origDestConnID, hdr.Version)[:]
 		}
 
@@ -2902,7 +2902,7 @@ var _ = Describe("Client Connection", func() {
 
 		getPacket := func(extHdr *wire.ExtendedHeader, data []byte) *receivedPacket {
 			buf := &bytes.Buffer{}
-			Expect(extHdr.Write(buf, conn.version)).To(Succeed())
+			Expect(extHdr.Write(buf, true, conn.version)).To(Succeed())
 			return &receivedPacket{
 				data:   append(buf.Bytes(), data...),
 				buffer: getPacketBuffer(),

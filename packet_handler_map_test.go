@@ -47,7 +47,7 @@ var _ = Describe("Packet Handler Map", func() {
 				Version:          protocol.VersionTLS,
 			},
 			PacketNumberLen: protocol.PacketNumberLen2,
-		}).Write(buf, protocol.VersionWhatever)).To(Succeed())
+		}).Write(buf, true, protocol.VersionWhatever)).To(Succeed())
 		return buf.Bytes()
 	}
 

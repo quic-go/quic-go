@@ -96,7 +96,7 @@ func main() {
 			PacketNumber:    protocol.PacketNumber(rand.Uint64()),
 		}
 		b := &bytes.Buffer{}
-		if err := extHdr.Write(b, version); err != nil {
+		if err := extHdr.Write(b, true, version); err != nil {
 			log.Fatal(err)
 		}
 		if h.Type == protocol.PacketTypeRetry {

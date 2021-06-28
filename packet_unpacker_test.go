@@ -29,7 +29,7 @@ var _ = Describe("Packet Unpacker", func() {
 
 	getHeader := func(extHdr *wire.ExtendedHeader) (*wire.Header, []byte) {
 		buf := &bytes.Buffer{}
-		ExpectWithOffset(1, extHdr.Write(buf, version)).To(Succeed())
+		ExpectWithOffset(1, extHdr.Write(buf, true, version)).To(Succeed())
 		hdrLen := buf.Len()
 		if extHdr.Length > protocol.ByteCount(extHdr.PacketNumberLen) {
 			buf.Write(make([]byte, int(extHdr.Length)-int(extHdr.PacketNumberLen)))

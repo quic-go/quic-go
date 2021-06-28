@@ -115,7 +115,7 @@ var _ = Describe("MITM test", func() {
 							payloadLen := mrand.Int31n(100)
 							replyHdr.Length = protocol.ByteCount(mrand.Int31n(payloadLen + 1))
 							buf := &bytes.Buffer{}
-							Expect(replyHdr.Write(buf, version)).To(Succeed())
+							Expect(replyHdr.Write(buf, true, version)).To(Succeed())
 							b := make([]byte, payloadLen)
 							mrand.Read(b)
 							buf.Write(b)

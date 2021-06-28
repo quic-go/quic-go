@@ -23,7 +23,7 @@ var _ = Describe("Header Parsing", func() {
 					Version:          protocol.Version1,
 				},
 				PacketNumberLen: 2,
-			}).Write(buf, protocol.Version1)).To(Succeed())
+			}).Write(buf, true, protocol.Version1)).To(Succeed())
 			connID, err := ParseConnectionID(buf.Bytes(), 8)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(connID).To(Equal(protocol.ConnectionID{0xde, 0xca, 0xfb, 0xad}))
@@ -36,7 +36,7 @@ var _ = Describe("Header Parsing", func() {
 					DestConnectionID: protocol.ConnectionID{0xde, 0xca, 0xfb, 0xad},
 				},
 				PacketNumberLen: 2,
-			}).Write(buf, protocol.Version1)).To(Succeed())
+			}).Write(buf, true, protocol.Version1)).To(Succeed())
 			buf.Write([]byte("foobar"))
 			connID, err := ParseConnectionID(buf.Bytes(), 4)
 			Expect(err).ToNot(HaveOccurred())
@@ -50,7 +50,7 @@ var _ = Describe("Header Parsing", func() {
 					DestConnectionID: protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8},
 				},
 				PacketNumberLen: 2,
-			}).Write(buf, protocol.Version1)).To(Succeed())
+			}).Write(buf, true, protocol.Version1)).To(Succeed())
 			data := buf.Bytes()[:buf.Len()-2] // cut the packet number
 			_, err := ParseConnectionID(data, 8)
 			Expect(err).ToNot(HaveOccurred())
@@ -73,7 +73,7 @@ var _ = Describe("Header Parsing", func() {
 					Version:          protocol.Version1,
 				},
 				PacketNumberLen: 2,
-			}).Write(buf, protocol.Version1)).To(Succeed())
+			}).Write(buf, true, protocol.Version1)).To(Succeed())
 			data := buf.Bytes()[:buf.Len()-2] // cut the packet number
 			_, err := ParseConnectionID(data, 8)
 			Expect(err).ToNot(HaveOccurred())
@@ -398,7 +398,7 @@ var _ = Describe("Header Parsing", func() {
 					Header:          hdr,
 					PacketNumber:    0x1337,
 					PacketNumberLen: 2,
-				}).Write(buf, protocol.Version1)).To(Succeed())
+				}).Write(buf, true, protocol.Version1)).To(Succeed())
 				hdrRaw := append([]byte{}, buf.Bytes()...)
 				buf.Write([]byte("foobar")) // payload of the first packet
 				buf.Write([]byte("raboof")) // second packet
@@ -422,7 +422,7 @@ var _ = Describe("Header Parsing", func() {
 					},
 					PacketNumber:    0x1337,
 					PacketNumberLen: 2,
-				}).Write(buf, protocol.Version1)).To(Succeed())
+				}).Write(buf, true, protocol.Version1)).To(Succeed())
 				_, _, _, err := ParsePacket(buf.Bytes(), 4, false)
 				Expect(err).To(HaveOccurred())
 				Expect(err.Error()).To(ContainSubstring("packet length (2 bytes) is smaller than the expected length (3 bytes)"))
@@ -440,7 +440,7 @@ var _ = Describe("Header Parsing", func() {
 					},
 					PacketNumber:    0x1337,
 					PacketNumberLen: 2,
-				}).Write(buf, protocol.Version1)).To(Succeed())
+				}).Write(buf, true, protocol.Version1)).To(Succeed())
 				buf.Write(make([]byte, 500-2 /* for packet number length */))
 				_, _, _, err := ParsePacket(buf.Bytes(), 4, false)
 				Expect(err).To(MatchError("packet length (500 bytes) is smaller than the expected length (1000 bytes)"))

@@ -826,7 +826,7 @@ func (p *packetPacker) appendPacket(buffer *packetBuffer, header *wire.ExtendedH
 
 	hdrOffset := buffer.Len()
 	buf := bytes.NewBuffer(buffer.Data)
-	if err := header.Write(buf, p.version); err != nil {
+	if err := header.Write(buf, true, p.version); err != nil {
 		return nil, err
 	}
 	payloadOffset := buf.Len()

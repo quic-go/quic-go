@@ -51,7 +51,7 @@ var _ = Describe("Server", func() {
 			Header:          *hdr,
 			PacketNumber:    0x42,
 			PacketNumberLen: protocol.PacketNumberLen4,
-		}).Write(buf, protocol.VersionTLS)).To(Succeed())
+		}).Write(buf, true, protocol.VersionTLS)).To(Succeed())
 		n := buf.Len()
 		buf.Write(p)
 		data := buffer.Data[:buf.Len()]

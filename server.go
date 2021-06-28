@@ -573,7 +573,7 @@ func (s *baseServer) sendRetry(remoteAddr net.Addr, hdr *wire.Header, info *pack
 	packetBuffer := getPacketBuffer()
 	defer packetBuffer.Release()
 	buf := bytes.NewBuffer(packetBuffer.Data)
-	if err := replyHdr.Write(buf, hdr.Version); err != nil {
+	if err := replyHdr.Write(buf, true, hdr.Version); err != nil {
 		return err
 	}
 	// append the Retry integrity tag
@@ -634,7 +634,7 @@ func (s *baseServer) sendError(remoteAddr net.Addr, hdr *wire.Header, sealer han
 	replyHdr.DestConnectionID = hdr.SrcConnectionID
 	replyHdr.PacketNumberLen = protocol.PacketNumberLen4
 	replyHdr.Length = 4 /* packet number len */ + ccf.Length(hdr.Version) + protocol.ByteCount(sealer.Overhead())
-	if err := replyHdr.Write(buf, hdr.Version); err != nil {
+	if err := replyHdr.Write(buf, true, hdr.Version); err != nil {
 		return err
 	}
 	payloadOffset := buf.Len()

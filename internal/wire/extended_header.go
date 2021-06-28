@@ -114,7 +114,7 @@ func (h *ExtendedHeader) readPacketNumber(b *bytes.Reader) error {
 }
 
 // Write writes the Header.
-func (h *ExtendedHeader) Write(b *bytes.Buffer, ver protocol.VersionNumber) error {
+func (h *ExtendedHeader) Write(b *bytes.Buffer, quicBit bool, ver protocol.VersionNumber) error {
 	if h.DestConnectionID.Len() > protocol.MaxConnIDLen {
 		return fmt.Errorf("invalid connection ID length: %d bytes", h.DestConnectionID.Len())
 	}
@@ -122,12 +122,12 @@ func (h *ExtendedHeader) Write(b *bytes.Buffer, ver protocol.VersionNumber) erro
 		return fmt.Errorf("invalid connection ID length: %d bytes", h.SrcConnectionID.Len())
 	}
 	if h.IsLongHeader {
-		return h.writeLongHeader(b, ver)
+		return h.writeLongHeader(b, quicBit, ver)
 	}
-	return h.writeShortHeader(b, ver)
+	return h.writeShortHeader(b, quicBit, ver)
 }
 
-func (h *ExtendedHeader) writeLongHeader(b *bytes.Buffer, version protocol.VersionNumber) error {
+func (h *ExtendedHeader) writeLongHeader(b *bytes.Buffer, quicBit bool, version protocol.VersionNumber) error {
 	var packetType uint8
 	if version == protocol.Version2 {
 		//nolint:exhaustive
@@ -155,6 +155,9 @@ func (h *ExtendedHeader) writeLongHeader(b *bytes.Buffer, version protocol.Versi
 		}
 	}
 	firstByte := 0xc0 | packetType<<4
+	if !quicBit { // unset the quic bit
+		firstByte ^= 0x40
+	}
 	if h.Type != protocol.PacketTypeRetry {
 		// Retry packets don't have a packet number
 		firstByte |= uint8(h.PacketNumberLen - 1)
@@ -180,8 +183,11 @@ func (h *ExtendedHeader) writeLongHeader(b *bytes.Buffer, version protocol.Versi
 	return h.writePacketNumber(b)
 }
 
-func (h *ExtendedHeader) writeShortHeader(b *bytes.Buffer, _ protocol.VersionNumber) error {
+func (h *ExtendedHeader) writeShortHeader(b *bytes.Buffer, quicBit bool, _ protocol.VersionNumber) error {
 	typeByte := 0x40 | uint8(h.PacketNumberLen-1)
+	if !quicBit { // unset the quic bit
+		typeByte ^= 0x40
+	}
 	if h.KeyPhase == protocol.KeyPhaseOne {
 		typeByte |= byte(1 << 2)
 	}

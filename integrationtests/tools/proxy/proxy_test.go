@@ -41,7 +41,7 @@ var _ = Describe("QUIC Proxy", func() {
 			PacketNumber:    p,
 			PacketNumberLen: protocol.PacketNumberLen4,
 		}
-		Expect(hdr.Write(b, protocol.VersionWhatever)).To(Succeed())
+		Expect(hdr.Write(b, true, protocol.VersionWhatever)).To(Succeed())
 		raw := b.Bytes()
 		raw = append(raw, payload...)
 		return raw

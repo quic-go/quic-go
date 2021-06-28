@@ -59,7 +59,7 @@ func Fuzz(data []byte) int {
 		return 1
 	}
 	b := &bytes.Buffer{}
-	if err := extHdr.Write(b, version); err != nil {
+	if err := extHdr.Write(b, true, version); err != nil {
 		// We are able to parse packets with connection IDs longer than 20 bytes,
 		// but in QUIC version 1, we don't write headers with longer connection IDs.
 		if hdr.DestConnectionID.Len() <= protocol.MaxConnIDLen &&
