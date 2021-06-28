@@ -311,6 +311,9 @@ type Config struct {
 	// This can be useful if version information is exchanged out-of-band.
 	// It has no effect for a client.
 	DisableVersionNegotiationPackets bool
+	// DisableQUICBitGreasing disables greasing of the QUIC bit.
+	// By default, greasing is enabled according to RFC 9287.
+	DisableQUICBitGreasing bool
 	// See https://datatracker.ietf.org/doc/draft-ietf-quic-datagram/.
 	// Datagrams will only be available when both peers enable datagram support.
 	EnableDatagrams bool
