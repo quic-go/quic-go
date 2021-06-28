@@ -11,7 +11,7 @@ import (
 
 // ParseVersionNegotiationPacket parses a Version Negotiation packet.
 func ParseVersionNegotiationPacket(b *bytes.Reader) (*Header, []protocol.VersionNumber, error) {
-	hdr, err := parseHeader(b, 0)
+	hdr, err := parseHeader(b, 0, true)
 	if err != nil {
 		return nil, nil, err
 	}

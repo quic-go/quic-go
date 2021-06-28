@@ -90,8 +90,8 @@ type Header struct {
 // If the packet has a long header, the packet is cut according to the length field.
 // If we understand the version, the packet is header up unto the packet number.
 // Otherwise, only the invariant part of the header is parsed.
-func ParsePacket(data []byte, shortHeaderConnIDLen int) (*Header, []byte /* packet data */, []byte /* rest */, error) {
-	hdr, err := parseHeader(bytes.NewReader(data), shortHeaderConnIDLen)
+func ParsePacket(data []byte, shortHeaderConnIDLen int, ignoreQuicBit bool) (*Header, []byte, []byte, error) {
+	hdr, err := parseHeader(bytes.NewReader(data), shortHeaderConnIDLen, ignoreQuicBit)
 	if err != nil {
 		if err == ErrUnsupportedVersion {
 			return hdr, nil, nil, ErrUnsupportedVersion
@@ -115,9 +115,9 @@ func ParsePacket(data []byte, shortHeaderConnIDLen int) (*Header, []byte /* pack
 // For long header packets:
 // * if we understand the version: up to the packet number
 // * if not, only the invariant part of the header
-func parseHeader(b *bytes.Reader, shortHeaderConnIDLen int) (*Header, error) {
+func parseHeader(b *bytes.Reader, shortHeaderConnIDLen int, ignoreQuicBit bool) (*Header, error) {
 	startLen := b.Len()
-	h, err := parseHeaderImpl(b, shortHeaderConnIDLen)
+	h, err := parseHeaderImpl(b, shortHeaderConnIDLen, ignoreQuicBit)
 	if err != nil {
 		return h, err
 	}
@@ -125,7 +125,7 @@ func parseHeader(b *bytes.Reader, shortHeaderConnIDLen int) (*Header, error) {
 	return h, err
 }
 
-func parseHeaderImpl(b *bytes.Reader, shortHeaderConnIDLen int) (*Header, error) {
+func parseHeaderImpl(b *bytes.Reader, shortHeaderConnIDLen int, ignoreQuicBit bool) (*Header, error) {
 	typeByte, err := b.ReadByte()
 	if err != nil {
 		return nil, err
@@ -137,7 +137,7 @@ func parseHeaderImpl(b *bytes.Reader, shortHeaderConnIDLen int) (*Header, error)
 	}
 
 	if !h.IsLongHeader {
-		if h.typeByte&0x40 == 0 {
+		if h.typeByte&0x40 == 0 && !ignoreQuicBit {
 			return nil, errors.New("not a QUIC packet")
 		}
 		if err := h.parseShortHeader(b, shortHeaderConnIDLen); err != nil {
@@ -145,7 +145,7 @@ func parseHeaderImpl(b *bytes.Reader, shortHeaderConnIDLen int) (*Header, error)
 		}
 		return h, nil
 	}
-	return h, h.parseLongHeader(b)
+	return h, h.parseLongHeader(b, ignoreQuicBit)
 }
 
 func (h *Header) parseShortHeader(b *bytes.Reader, shortHeaderConnIDLen int) error {
@@ -154,13 +154,13 @@ func (h *Header) parseShortHeader(b *bytes.Reader, shortHeaderConnIDLen int) err
 	return err
 }
 
-func (h *Header) parseLongHeader(b *bytes.Reader) error {
+func (h *Header) parseLongHeader(b *bytes.Reader, ignoreQuicBit bool) error {
 	v, err := utils.BigEndian.ReadUint32(b)
 	if err != nil {
 		return err
 	}
 	h.Version = protocol.VersionNumber(v)
-	if h.Version != 0 && h.typeByte&0x40 == 0 {
+	if h.typeByte&0x40 == 0 && !ignoreQuicBit {
 		return errors.New("not a QUIC packet")
 	}
 	destConnIDLen, err := b.ReadByte()
