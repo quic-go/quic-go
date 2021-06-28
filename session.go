@@ -1963,8 +1963,7 @@ func (s *session) SendMessage(p []byte) error {
 	}
 	f.Data = make([]byte, len(p))
 	copy(f.Data, p)
-	s.datagramQueue.AddAndWait(f)
-	return nil
+	return s.datagramQueue.AddAndWait(f)
 }
 
 func (s *session) ReceiveMessage() ([]byte, error) {
