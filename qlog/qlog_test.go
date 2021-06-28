@@ -314,6 +314,7 @@ var _ = Describe("Tracing", func() {
 				Expect(ev).To(HaveKeyWithValue("initial_max_streams_uni", float64(20)))
 				Expect(ev).ToNot(HaveKey("preferred_address"))
 				Expect(ev).ToNot(HaveKey("max_datagram_frame_size"))
+				Expect(ev).ToNot(HaveKey("quic_grease_bit"))
 			})
 
 			It("records the server's transport parameters, without a stateless reset token", func() {
@@ -375,6 +376,17 @@ var _ = Describe("Tracing", func() {
 				Expect(entry.Name).To(Equal("transport:parameters_set"))
 				ev := entry.Event
 				Expect(ev).To(HaveKeyWithValue("max_datagram_frame_size", float64(1337)))
+			})
+
+			It("records transport parameters that enable the Grease QUIC bit extension", func() {
+				tracer.SentTransportParameters(&logging.TransportParameters{
+					GreaseQuicBit: true,
+				})
+				entry := exportAndParseSingle()
+				Expect(entry.Time).To(BeTemporally("~", time.Now(), scaleDuration(10*time.Millisecond)))
+				Expect(entry.Name).To(Equal("transport:parameters_set"))
+				ev := entry.Event
+				Expect(ev).To(HaveKeyWithValue("grease_quic_bit", true))
 			})
 
 			It("records received transport parameters", func() {
