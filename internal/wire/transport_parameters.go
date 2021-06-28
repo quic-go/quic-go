@@ -44,6 +44,8 @@ const (
 	retrySourceConnectionIDParameterID         transportParameterID = 0x10
 	// RFC 9221
 	maxDatagramFrameSizeParameterID transportParameterID = 0x20
+	// RFC 9287
+	greaseQuicBitParameterID transportParameterID = 0x2ab2
 )
 
 // PreferredAddress is the value encoding in the preferred_address transport parameter
@@ -85,6 +87,7 @@ type TransportParameters struct {
 	ActiveConnectionIDLimit uint64
 
 	MaxDatagramFrameSize protocol.ByteCount
+	GreaseQuicBit        bool
 }
 
 // Unmarshal the transport parameters
@@ -178,6 +181,11 @@ func (p *TransportParameters) unmarshal(r *bytes.Reader, sentBy protocol.Perspec
 			}
 			connID, _ := protocol.ReadConnectionID(r, int(paramLen))
 			p.RetrySourceConnectionID = &connID
+		case greaseQuicBitParameterID:
+			if paramLen != 0 {
+				return fmt.Errorf("wrong length for grease_quic_bit: %d (expected empty)", paramLen)
+			}
+			p.GreaseQuicBit = true
 		default:
 			r.Seek(int64(paramLen), io.SeekCurrent)
 		}
@@ -394,6 +402,10 @@ func (p *TransportParameters) Marshal(pers protocol.Perspective) []byte {
 	if p.MaxDatagramFrameSize != protocol.InvalidByteCount {
 		p.marshalVarintParam(b, maxDatagramFrameSizeParameterID, uint64(p.MaxDatagramFrameSize))
 	}
+	if p.GreaseQuicBit {
+		quicvarint.Write(b, uint64(greaseQuicBitParameterID))
+		quicvarint.Write(b, 0)
+	}
 	return b.Bytes()
 }
 
@@ -470,6 +482,9 @@ func (p *TransportParameters) String() string {
 	if p.MaxDatagramFrameSize != protocol.InvalidByteCount {
 		logString += ", MaxDatagramFrameSize: %d"
 		logParams = append(logParams, p.MaxDatagramFrameSize)
+	}
+	if p.GreaseQuicBit {
+		logString += ", GreaseQuicBit: true"
 	}
 	logString += "}"
 	return fmt.Sprintf(logString, logParams...)

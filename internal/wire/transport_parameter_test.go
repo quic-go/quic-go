@@ -57,8 +57,9 @@ var _ = Describe("Transport Parameters", func() {
 			StatelessResetToken:             &protocol.StatelessResetToken{0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88, 0x99, 0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff, 0x00},
 			ActiveConnectionIDLimit:         123,
 			MaxDatagramFrameSize:            876,
+			GreaseQuicBit:                   true,
 		}
-		Expect(p.String()).To(Equal("&wire.TransportParameters{OriginalDestinationConnectionID: deadbeef, InitialSourceConnectionID: decafbad, RetrySourceConnectionID: deadc0de, InitialMaxStreamDataBidiLocal: 1234, InitialMaxStreamDataBidiRemote: 2345, InitialMaxStreamDataUni: 3456, InitialMaxData: 4567, MaxBidiStreamNum: 1337, MaxUniStreamNum: 7331, MaxIdleTimeout: 42s, AckDelayExponent: 14, MaxAckDelay: 37ms, ActiveConnectionIDLimit: 123, StatelessResetToken: 0x112233445566778899aabbccddeeff00, MaxDatagramFrameSize: 876}"))
+		Expect(p.String()).To(Equal("&wire.TransportParameters{OriginalDestinationConnectionID: deadbeef, InitialSourceConnectionID: decafbad, RetrySourceConnectionID: deadc0de, InitialMaxStreamDataBidiLocal: 1234, InitialMaxStreamDataBidiRemote: 2345, InitialMaxStreamDataUni: 3456, InitialMaxData: 4567, MaxBidiStreamNum: 1337, MaxUniStreamNum: 7331, MaxIdleTimeout: 42s, AckDelayExponent: 14, MaxAckDelay: 37ms, ActiveConnectionIDLimit: 123, StatelessResetToken: 0x112233445566778899aabbccddeeff00, MaxDatagramFrameSize: 876, GreaseQuicBit: true}"))
 	})
 
 	It("has a string representation, if there's no stateless reset token, no Retry source connection id and no datagram support", func() {
@@ -100,6 +101,7 @@ var _ = Describe("Transport Parameters", func() {
 			MaxAckDelay:                     42 * time.Millisecond,
 			ActiveConnectionIDLimit:         getRandomValue(),
 			MaxDatagramFrameSize:            protocol.ByteCount(getRandomValue()),
+			GreaseQuicBit:                   true,
 		}
 		data := params.Marshal(protocol.PerspectiveServer)
 
@@ -121,6 +123,7 @@ var _ = Describe("Transport Parameters", func() {
 		Expect(p.MaxAckDelay).To(Equal(42 * time.Millisecond))
 		Expect(p.ActiveConnectionIDLimit).To(Equal(params.ActiveConnectionIDLimit))
 		Expect(p.MaxDatagramFrameSize).To(Equal(params.MaxDatagramFrameSize))
+		Expect(p.GreaseQuicBit).To(BeTrue())
 	})
 
 	It("doesn't marshal a retry_source_connection_id, if no Retry was performed", func() {
@@ -394,6 +397,17 @@ var _ = Describe("Transport Parameters", func() {
 		Expect((&TransportParameters{}).Unmarshal(b.Bytes(), protocol.PerspectiveClient)).To(MatchError(&qerr.TransportError{
 			ErrorCode:    qerr.TransportParameterError,
 			ErrorMessage: "client sent an original_destination_connection_id",
+		}))
+	})
+
+	It("errors when grease_quic_bit has content", func() {
+		b := &bytes.Buffer{}
+		quicvarint.Write(b, uint64(greaseQuicBitParameterID))
+		quicvarint.Write(b, 6)
+		b.Write([]byte("foobar"))
+		Expect((&TransportParameters{}).Unmarshal(b.Bytes(), protocol.PerspectiveServer)).To(MatchError(&qerr.TransportError{
+			ErrorCode:    qerr.TransportParameterError,
+			ErrorMessage: "wrong length for grease_quic_bit: 6 (expected empty)",
 		}))
 	})
 
