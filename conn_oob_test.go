@@ -3,11 +3,14 @@
 package quic
 
 import (
+	"fmt"
 	"net"
 	"time"
 
+	"golang.org/x/net/ipv4"
 	"golang.org/x/sys/unix"
 
+	"github.com/golang/mock/gomock"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/internal/utils"
 
@@ -21,14 +24,14 @@ var _ = Describe("OOB Conn Test", func() {
 		Expect(err).ToNot(HaveOccurred())
 		udpConn, err := net.ListenUDP(network, addr)
 		Expect(err).ToNot(HaveOccurred())
-		ecnConn, err := newConn(udpConn)
+		oobConn, err := newConn(udpConn)
 		Expect(err).ToNot(HaveOccurred())
 
 		packetChan := make(chan *receivedPacket)
 		go func() {
 			defer GinkgoRecover()
 			for {
-				p, err := ecnConn.ReadPacket()
+				p, err := oobConn.ReadPacket()
 				if err != nil {
 					return
 				}
@@ -195,6 +198,45 @@ var _ = Describe("OOB Conn Test", func() {
 			Expect(utils.IsIPv4(p.remoteAddr.(*net.UDPAddr).IP)).To(BeFalse())
 			Expect(p.info).To(Not(BeNil()))
 			Expect(p.info.addr).To(Equal(ip6))
+		})
+	})
+
+	Context("Batch Reading", func() {
+		var batchConn *MockBatchConn
+
+		BeforeEach(func() {
+			batchConn = NewMockBatchConn(mockCtrl)
+		})
+
+		It("reads multiple messages in one batch", func() {
+			const numMsgRead = batchSize/2 + 1
+			var counter int
+			batchConn.EXPECT().ReadBatch(gomock.Any(), gomock.Any()).DoAndReturn(func(ms []ipv4.Message, flags int) (int, error) {
+				Expect(ms).To(HaveLen(batchSize))
+				for i := 0; i < numMsgRead; i++ {
+					Expect(ms[i].Buffers).To(HaveLen(1))
+					Expect(ms[i].Buffers[0]).To(HaveLen(int(protocol.MaxPacketBufferSize)))
+					data := []byte(fmt.Sprintf("message %d", counter))
+					counter++
+					ms[i].Buffers[0] = data
+					ms[i].N = len(data)
+				}
+				return numMsgRead, nil
+			}).Times(2)
+
+			addr, err := net.ResolveUDPAddr("udp", "localhost:0")
+			Expect(err).ToNot(HaveOccurred())
+			udpConn, err := net.ListenUDP("udp", addr)
+			Expect(err).ToNot(HaveOccurred())
+			oobConn, err := newConn(udpConn)
+			Expect(err).ToNot(HaveOccurred())
+			oobConn.batchConn = batchConn
+
+			for i := 0; i < batchSize+1; i++ {
+				p, err := oobConn.ReadPacket()
+				Expect(err).ToNot(HaveOccurred())
+				Expect(string(p.data)).To(Equal(fmt.Sprintf("message %d", i)))
+			}
 		})
 	})
 })
