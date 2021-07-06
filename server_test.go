@@ -568,10 +568,12 @@ var _ = Describe("Server", func() {
 				packet := getPacket(hdr, make([]byte, protocol.MinInitialPacketSize))
 				packet.data[len(packet.data)-10] ^= 0xff // corrupt the packet
 				packet.remoteAddr = &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 1337}
-				tracer.EXPECT().DroppedPacket(packet.remoteAddr, logging.PacketTypeInitial, packet.Size(), logging.PacketDropPayloadDecryptError)
+				done := make(chan struct{})
+				tracer.EXPECT().DroppedPacket(packet.remoteAddr, logging.PacketTypeInitial, packet.Size(), logging.PacketDropPayloadDecryptError).Do(func(net.Addr, logging.PacketType, protocol.ByteCount, logging.PacketDropReason) { close(done) })
 				serv.handlePacket(packet)
 				// make sure there are no Write calls on the packet conn
 				time.Sleep(50 * time.Millisecond)
+				Eventually(done).Should(BeClosed())
 			})
 
 			It("creates a session, if no Token is required", func() {
