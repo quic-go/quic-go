@@ -15,8 +15,6 @@ var _ = Describe("Version", func() {
 		Expect(IsValidVersion(VersionWhatever)).To(BeFalse())
 		Expect(IsValidVersion(VersionUnknown)).To(BeFalse())
 		Expect(IsValidVersion(VersionDraft29)).To(BeTrue())
-		Expect(IsValidVersion(VersionDraft32)).To(BeTrue())
-		Expect(IsValidVersion(VersionDraft34)).To(BeTrue())
 		Expect(IsValidVersion(Version1)).To(BeTrue())
 		Expect(IsValidVersion(1234)).To(BeFalse())
 	})
@@ -29,8 +27,6 @@ var _ = Describe("Version", func() {
 		Expect(VersionWhatever.String()).To(Equal("whatever"))
 		Expect(VersionUnknown.String()).To(Equal("unknown"))
 		Expect(VersionDraft29.String()).To(Equal("draft-29"))
-		Expect(VersionDraft32.String()).To(Equal("draft-32"))
-		Expect(VersionDraft34.String()).To(Equal("draft-34"))
 		Expect(Version1.String()).To(Equal("v1"))
 		// check with unsupported version numbers from the wiki
 		Expect(VersionNumber(0x51303039).String()).To(Equal("gQUIC 9"))
