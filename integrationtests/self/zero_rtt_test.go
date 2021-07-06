@@ -465,7 +465,7 @@ var _ = Describe("0-RTT", func() {
 				)
 				Expect(err).ToNot(HaveOccurred())
 				defer ln.Close()
-				proxy, num0RTTPackets := runCountingProxy(ln.Addr().(*net.UDPAddr).Port)
+				proxy, _ := runCountingProxy(ln.Addr().(*net.UDPAddr).Port)
 				defer proxy.Close()
 
 				sess, err := quic.DialAddrEarly(
@@ -487,13 +487,8 @@ var _ = Describe("0-RTT", func() {
 				defer cancel()
 				_, err = sess.OpenUniStreamSync(ctx)
 				Expect(err).ToNot(HaveOccurred())
+				Expect(sess.ConnectionState().TLS.Used0RTT).To(BeTrue())
 				Expect(sess.CloseWithError(0, "")).To(Succeed())
-
-				// The client should send 0-RTT packets.
-				num0RTT := atomic.LoadUint32(num0RTTPackets)
-				fmt.Fprintf(GinkgoWriter, "Sent %d 0-RTT packets.", num0RTT)
-				Expect(num0RTT).ToNot(BeZero())
-				Expect(get0RTTPackets(tracer.getRcvdPackets())).ToNot(BeEmpty())
 			})
 
 			It("rejects 0-RTT when the server's stream limit decreased", func() {
