@@ -99,15 +99,6 @@ var _ = Describe("Version", func() {
 			Expect(isReservedVersion(greased[0])).To(BeTrue())
 		})
 
-		It("strips greased versions", func() {
-			v := SupportedVersions[0]
-			greased := GetGreasedVersions([]VersionNumber{v})
-			Expect(greased).To(HaveLen(2))
-			stripped := StripGreasedVersions(greased)
-			Expect(stripped).To(HaveLen(1))
-			Expect(stripped[0]).To(Equal(v))
-		})
-
 		It("creates greased lists of version numbers", func() {
 			supported := []VersionNumber{10, 18, 29}
 			for _, v := range supported {
