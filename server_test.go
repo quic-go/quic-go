@@ -406,6 +406,25 @@ var _ = Describe("Server", func() {
 				Eventually(done).Should(BeClosed())
 			})
 
+			It("doesn't send a Version Negotiation packets if sending them is disabled", func() {
+				serv.config.DisableVersionNegotiationPackets = true
+				srcConnID := protocol.ConnectionID{1, 2, 3, 4, 5}
+				destConnID := protocol.ConnectionID{1, 2, 3, 4, 5, 6}
+				packet := getPacket(&wire.Header{
+					IsLongHeader:     true,
+					Type:             protocol.PacketTypeHandshake,
+					SrcConnectionID:  srcConnID,
+					DestConnectionID: destConnID,
+					Version:          0x42,
+				}, make([]byte, protocol.MinUnknownVersionPacketSize))
+				raddr := &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 1337}
+				packet.remoteAddr = raddr
+				done := make(chan struct{})
+				conn.EXPECT().WriteTo(gomock.Any(), raddr).Do(func() { close(done) }).Times(0)
+				serv.handlePacket(packet)
+				Consistently(done, 50*time.Millisecond).ShouldNot(BeClosed())
+			})
+
 			It("ignores Version Negotiation packets", func() {
 				data, err := wire.ComposeVersionNegotiation(
 					protocol.ConnectionID{1, 2, 3, 4},
