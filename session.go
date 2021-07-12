@@ -139,6 +139,8 @@ type session struct {
 	origDestConnID protocol.ConnectionID
 	retrySrcConnID *protocol.ConnectionID // only set for the client (and if a Retry was performed)
 
+	nilPacketCounter int
+
 	srcConnIDLen int
 
 	perspective protocol.Perspective
@@ -1754,9 +1756,16 @@ func (s *session) sendPacket() (bool, error) {
 	now := time.Now()
 	if !s.handshakeConfirmed {
 		packet, err := s.packer.PackCoalescedPacket()
+		if packet == nil {
+			s.nilPacketCounter++
+			if s.nilPacketCounter > 1000 {
+				panic("packed too many nil packets")
+			}
+		}
 		if err != nil || packet == nil {
 			return false, err
 		}
+		s.nilPacketCounter = 0
 		s.logCoalescedPacket(packet)
 		for _, p := range packet.packets {
 			if s.firstAckElicitingPacketAfterIdleSentTime.IsZero() && p.IsAckEliciting() {
@@ -1777,9 +1786,16 @@ func (s *session) sendPacket() (bool, error) {
 		return true, nil
 	}
 	packet, err := s.packer.PackPacket()
+	if packet == nil {
+		s.nilPacketCounter++
+		if s.nilPacketCounter > 1000 {
+			panic("packed too many nil packets")
+		}
+	}
 	if err != nil || packet == nil {
 		return false, err
 	}
+	s.nilPacketCounter = 0
 	s.sendPackedPacket(packet, now)
 	return true, nil
 }
