@@ -503,8 +503,11 @@ func (h *sentPacketHandler) setLossDetectionTimer() {
 	if !lossTime.IsZero() {
 		// Early retransmit timer or time loss detection.
 		h.alarm = lossTime
-		if h.tracer != nil && h.alarm != oldAlarm {
-			h.tracer.SetLossTimer(logging.TimerTypeACK, encLevel, h.alarm)
+		if h.tracer != nil {
+			h.tracer.Debug("set_loss_detection_timer", "ack")
+			if h.alarm != oldAlarm {
+				h.tracer.SetLossTimer(logging.TimerTypeACK, encLevel, h.alarm)
+			}
 		}
 		return
 	}
@@ -546,8 +549,11 @@ func (h *sentPacketHandler) setLossDetectionTimer() {
 		return
 	}
 	h.alarm = ptoTime
-	if h.tracer != nil && h.alarm != oldAlarm {
-		h.tracer.SetLossTimer(logging.TimerTypePTO, encLevel, h.alarm)
+	if h.tracer != nil {
+		h.tracer.Debug("set_loss_detection_timer", "pto")
+		if h.alarm != oldAlarm {
+			h.tracer.SetLossTimer(logging.TimerTypePTO, encLevel, h.alarm)
+		}
 	}
 }
 
