@@ -1643,6 +1643,9 @@ func (s *session) applyTransportParameters() {
 }
 
 func (s *session) sendPackets() error {
+	if s.tracer != nil {
+		s.tracer.Debug("send_packets", "")
+	}
 	s.pacingDeadline = time.Time{}
 
 	var sentPacket bool // only used in for packets sent in send mode SendAny
