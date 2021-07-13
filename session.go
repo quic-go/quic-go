@@ -597,14 +597,26 @@ runLoop:
 			case closeErr = <-s.closeChan:
 				break runLoop
 			case <-s.timer.Chan():
+				if s.tracer != nil {
+					s.tracer.Debug("run_timer_chan", "")
+				}
 				s.timer.SetRead()
 				// We do all the interesting stuff after the switch statement, so
 				// nothing to see here.
 			case <-s.sendingScheduled:
+				if s.tracer != nil {
+					s.tracer.Debug("run_sending_scheduled", "")
+				}
 				// We do all the interesting stuff after the switch statement, so
 				// nothing to see here.
 			case <-sendQueueAvailable:
+				if s.tracer != nil {
+					s.tracer.Debug("run_send_queue_available", "")
+				}
 			case firstPacket := <-s.receivedPackets:
+				if s.tracer != nil {
+					s.tracer.Debug("run_received_packet", "")
+				}
 				wasProcessed := s.handlePacketImpl(firstPacket)
 				// Don't set timers and send packets if the packet made us close the session.
 				select {
@@ -641,6 +653,9 @@ runLoop:
 					continue
 				}
 			case <-s.handshakeCompleteChan:
+				if s.tracer != nil {
+					s.tracer.Debug("run_handshake_complete", "")
+				}
 				s.handleHandshakeComplete()
 			}
 		}
