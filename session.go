@@ -748,34 +748,53 @@ func (s *session) nextKeepAliveTime() time.Time {
 
 func (s *session) maybeResetTimer() {
 	var deadline time.Time
+	var reason string
 	if !s.handshakeComplete {
 		deadline = utils.MinTime(
 			s.sessionCreationTime.Add(s.config.handshakeTimeout()),
 			s.idleTimeoutStartTime().Add(s.config.HandshakeIdleTimeout),
 		)
+		reason = "handshake timeout"
 	} else {
 		if keepAliveTime := s.nextKeepAliveTime(); !keepAliveTime.IsZero() {
+			reason = "keep alive"
 			deadline = keepAliveTime
 		} else {
+			reason = "idle timeout"
 			deadline = s.idleTimeoutStartTime().Add(s.idleTimeout)
 		}
 	}
 	if s.handshakeConfirmed && !s.config.DisablePathMTUDiscovery {
 		if probeTime := s.mtuDiscoverer.NextProbeTime(); !probeTime.IsZero() {
-			deadline = utils.MinTime(deadline, probeTime)
+			if probeTime.Before(deadline) {
+				reason = "pmtu"
+				deadline = probeTime
+			}
 		}
 	}
 
 	if ackAlarm := s.receivedPacketHandler.GetAlarmTimeout(); !ackAlarm.IsZero() {
-		deadline = utils.MinTime(deadline, ackAlarm)
+		if ackAlarm.Before(deadline) {
+			deadline = ackAlarm
+			reason = "ack alarm"
+		}
 	}
 	if lossTime := s.sentPacketHandler.GetLossDetectionTimeout(); !lossTime.IsZero() {
-		deadline = utils.MinTime(deadline, lossTime)
+		if lossTime.Before(deadline) {
+			deadline = lossTime
+			reason = "loss time"
+		}
 	}
 	if !s.pacingDeadline.IsZero() {
-		deadline = utils.MinTime(deadline, s.pacingDeadline)
+		if s.pacingDeadline.Before(deadline) {
+			deadline = s.pacingDeadline
+			reason = "pacing"
+		}
 	}
 
+	if s.tracer != nil {
+		s.tracer.Debug("timer", reason)
+	}
 	s.timer.Reset(deadline)
 }
 
@@ -1643,9 +1662,6 @@ func (s *session) applyTransportParameters() {
 }
 
 func (s *session) sendPackets() error {
-	if s.tracer != nil {
-		s.tracer.Debug("send_packets", "")
-	}
 	s.pacingDeadline = time.Time{}
 
 	var sentPacket bool // only used in for packets sent in send mode SendAny
