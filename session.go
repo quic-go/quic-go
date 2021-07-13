@@ -1759,7 +1759,8 @@ func (s *session) sendPacket() (bool, error) {
 		if packet == nil {
 			s.nilPacketCounter++
 			if s.nilPacketCounter > 1000 {
-				panic("packed too many nil packets")
+				fmt.Println("nil-packet error on connection", s.logID)
+				return false, errors.New("packed too many nil packets")
 			}
 		}
 		if err != nil || packet == nil {
