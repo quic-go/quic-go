@@ -1681,6 +1681,9 @@ func (s *session) sendPackets() error {
 			}
 			sendMode = ackhandler.SendAck
 		}
+		if s.tracer != nil {
+			s.tracer.Debug("send_packets", sendMode.String())
+		}
 		switch sendMode {
 		case ackhandler.SendNone:
 			return nil
