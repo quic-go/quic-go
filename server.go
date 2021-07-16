@@ -195,10 +195,18 @@ func listen(conn net.PacketConn, tlsConf *tls.Config, config *Config, acceptEarl
 	if err != nil {
 		return nil, err
 	}
-	c, err := wrapConn(conn)
-	if err != nil {
-		return nil, err
+
+	// Extract the already wrapped connection if available
+	var c connection
+	if m, ok := sessionHandler.(*packetHandlerMap); ok {
+		c = m.conn
+	} else {
+		c, err = wrapConn(conn)
+		if err != nil {
+			return nil, err
+		}
 	}
+
 	s := &baseServer{
 		conn:                c,
 		tlsConf:             tlsConf,
