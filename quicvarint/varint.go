@@ -2,6 +2,7 @@ package quicvarint
 
 import (
 	"fmt"
+	"io"
 
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 )
@@ -15,8 +16,9 @@ const (
 )
 
 // Read reads a number in the QUIC varint format from r.
-func Read(r Reader) (uint64, error) {
-	firstByte, err := r.ReadByte()
+func Read(r io.Reader) (uint64, error) {
+	qr := NewReader(r)
+	firstByte, err := qr.ReadByte()
 	if err != nil {
 		return 0, err
 	}
@@ -26,37 +28,37 @@ func Read(r Reader) (uint64, error) {
 	if len == 1 {
 		return uint64(b1), nil
 	}
-	b2, err := r.ReadByte()
+	b2, err := qr.ReadByte()
 	if err != nil {
 		return 0, err
 	}
 	if len == 2 {
 		return uint64(b2) + uint64(b1)<<8, nil
 	}
-	b3, err := r.ReadByte()
+	b3, err := qr.ReadByte()
 	if err != nil {
 		return 0, err
 	}
-	b4, err := r.ReadByte()
+	b4, err := qr.ReadByte()
 	if err != nil {
 		return 0, err
 	}
 	if len == 4 {
 		return uint64(b4) + uint64(b3)<<8 + uint64(b2)<<16 + uint64(b1)<<24, nil
 	}
-	b5, err := r.ReadByte()
+	b5, err := qr.ReadByte()
 	if err != nil {
 		return 0, err
 	}
-	b6, err := r.ReadByte()
+	b6, err := qr.ReadByte()
 	if err != nil {
 		return 0, err
 	}
-	b7, err := r.ReadByte()
+	b7, err := qr.ReadByte()
 	if err != nil {
 		return 0, err
 	}
-	b8, err := r.ReadByte()
+	b8, err := qr.ReadByte()
 	if err != nil {
 		return 0, err
 	}
@@ -64,15 +66,16 @@ func Read(r Reader) (uint64, error) {
 }
 
 // Write writes i in the QUIC varint format to w.
-func Write(w Writer, i uint64) {
+func Write(w io.Writer, i uint64) {
+	qw := NewWriter(w)
 	if i <= maxVarInt1 {
-		w.WriteByte(uint8(i))
+		qw.WriteByte(uint8(i))
 	} else if i <= maxVarInt2 {
-		w.Write([]byte{uint8(i>>8) | 0x40, uint8(i)})
+		qw.Write([]byte{uint8(i>>8) | 0x40, uint8(i)})
 	} else if i <= maxVarInt4 {
-		w.Write([]byte{uint8(i>>24) | 0x80, uint8(i >> 16), uint8(i >> 8), uint8(i)})
+		qw.Write([]byte{uint8(i>>24) | 0x80, uint8(i >> 16), uint8(i >> 8), uint8(i)})
 	} else if i <= maxVarInt8 {
-		w.Write([]byte{
+		qw.Write([]byte{
 			uint8(i>>56) | 0xc0, uint8(i >> 48), uint8(i >> 40), uint8(i >> 32),
 			uint8(i >> 24), uint8(i >> 16), uint8(i >> 8), uint8(i),
 		})
@@ -94,18 +97,19 @@ func WriteWithLen(w Writer, i uint64, length protocol.ByteCount) {
 	if l > length {
 		panic(fmt.Sprintf("cannot encode %d in %d bytes", i, length))
 	}
+	qw := NewWriter(w)
 	if length == 2 {
-		w.WriteByte(0b01000000)
+		qw.WriteByte(0b01000000)
 	} else if length == 4 {
-		w.WriteByte(0b10000000)
+		qw.WriteByte(0b10000000)
 	} else if length == 8 {
-		w.WriteByte(0b11000000)
+		qw.WriteByte(0b11000000)
 	}
 	for j := protocol.ByteCount(1); j < length-l; j++ {
-		w.WriteByte(0)
+		qw.WriteByte(0)
 	}
 	for j := protocol.ByteCount(0); j < l; j++ {
-		w.WriteByte(uint8(i >> (8 * (l - 1 - j))))
+		qw.WriteByte(uint8(i >> (8 * (l - 1 - j))))
 	}
 }
 
