@@ -14,7 +14,7 @@ const (
 	maxVarInt8 = 4611686018427387903
 )
 
-// Read reads a number in the QUIC varint format
+// Read reads a number in the QUIC varint format from r.
 func Read(r Reader) (uint64, error) {
 	firstByte, err := r.ReadByte()
 	if err != nil {
@@ -63,7 +63,7 @@ func Read(r Reader) (uint64, error) {
 	return uint64(b8) + uint64(b7)<<8 + uint64(b6)<<16 + uint64(b5)<<24 + uint64(b4)<<32 + uint64(b3)<<40 + uint64(b2)<<48 + uint64(b1)<<56, nil
 }
 
-// Write writes a number in the QUIC varint format
+// Write writes i in the QUIC varint format to w.
 func Write(w Writer, i uint64) {
 	if i <= maxVarInt1 {
 		w.WriteByte(uint8(i))
@@ -81,7 +81,7 @@ func Write(w Writer, i uint64) {
 	}
 }
 
-// WriteWithLen writes a number in the QUIC varint format, with the desired length.
+// WriteWithLen writes i in the QUIC varint format with the desired length to w.
 func WriteWithLen(w Writer, i uint64, length protocol.ByteCount) {
 	if length != 1 && length != 2 && length != 4 && length != 8 {
 		panic("invalid varint length")
@@ -109,7 +109,7 @@ func WriteWithLen(w Writer, i uint64, length protocol.ByteCount) {
 	}
 }
 
-// Len determines the number of bytes that will be needed to write a number
+// Len determines the number of bytes that will be needed to write the number i.
 func Len(i uint64) protocol.ByteCount {
 	if i <= maxVarInt1 {
 		return 1
