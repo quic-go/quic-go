@@ -148,7 +148,7 @@ func (c *client) handleUnidirectionalStreams() {
 		}
 
 		go func() {
-			streamType, err := quicvarint.Read(quicvarint.NewReader(str))
+			streamType, err := quicvarint.Read(str)
 			if err != nil {
 				c.logger.Debugf("reading stream type on stream %d failed: %s", str.StreamID(), err)
 				return

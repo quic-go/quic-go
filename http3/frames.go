@@ -13,12 +13,11 @@ import (
 type frame interface{}
 
 func parseNextFrame(r io.Reader) (frame, error) {
-	qr := quicvarint.NewReader(r)
-	t, err := quicvarint.Read(qr)
+	t, err := quicvarint.Read(r)
 	if err != nil {
 		return nil, err
 	}
-	l, err := quicvarint.Read(qr)
+	l, err := quicvarint.Read(r)
 	if err != nil {
 		return nil, err
 	}
@@ -29,7 +28,7 @@ func parseNextFrame(r io.Reader) (frame, error) {
 	case 0x1:
 		return &headersFrame{Length: l}, nil
 	case 0x4:
-		return parseSettingsFrame(qr, l)
+		return parseSettingsFrame(r, l)
 	case 0x3: // CANCEL_PUSH
 		fallthrough
 	case 0x5: // PUSH_PROMISE
@@ -42,10 +41,10 @@ func parseNextFrame(r io.Reader) (frame, error) {
 		fallthrough
 	default:
 		// skip over unknown frames
-		if _, err := io.CopyN(ioutil.Discard, qr, int64(l)); err != nil {
+		if _, err := io.CopyN(ioutil.Discard, r, int64(l)); err != nil {
 			return nil, err
 		}
-		return parseNextFrame(qr)
+		return parseNextFrame(r)
 	}
 }
 
