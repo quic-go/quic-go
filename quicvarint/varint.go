@@ -2,7 +2,6 @@ package quicvarint
 
 import (
 	"fmt"
-	"io"
 
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 )
@@ -16,8 +15,8 @@ const (
 )
 
 // Read reads a number in the QUIC varint format
-func Read(b io.ByteReader) (uint64, error) {
-	firstByte, err := b.ReadByte()
+func Read(r Reader) (uint64, error) {
+	firstByte, err := r.ReadByte()
 	if err != nil {
 		return 0, err
 	}
@@ -27,37 +26,37 @@ func Read(b io.ByteReader) (uint64, error) {
 	if len == 1 {
 		return uint64(b1), nil
 	}
-	b2, err := b.ReadByte()
+	b2, err := r.ReadByte()
 	if err != nil {
 		return 0, err
 	}
 	if len == 2 {
 		return uint64(b2) + uint64(b1)<<8, nil
 	}
-	b3, err := b.ReadByte()
+	b3, err := r.ReadByte()
 	if err != nil {
 		return 0, err
 	}
-	b4, err := b.ReadByte()
+	b4, err := r.ReadByte()
 	if err != nil {
 		return 0, err
 	}
 	if len == 4 {
 		return uint64(b4) + uint64(b3)<<8 + uint64(b2)<<16 + uint64(b1)<<24, nil
 	}
-	b5, err := b.ReadByte()
+	b5, err := r.ReadByte()
 	if err != nil {
 		return 0, err
 	}
-	b6, err := b.ReadByte()
+	b6, err := r.ReadByte()
 	if err != nil {
 		return 0, err
 	}
-	b7, err := b.ReadByte()
+	b7, err := r.ReadByte()
 	if err != nil {
 		return 0, err
 	}
-	b8, err := b.ReadByte()
+	b8, err := r.ReadByte()
 	if err != nil {
 		return 0, err
 	}
