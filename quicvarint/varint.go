@@ -1,7 +1,6 @@
 package quicvarint
 
 import (
-	"bytes"
 	"fmt"
 	"io"
 
@@ -66,15 +65,15 @@ func Read(b io.ByteReader) (uint64, error) {
 }
 
 // Write writes a number in the QUIC varint format
-func Write(b *bytes.Buffer, i uint64) {
+func Write(w Writer, i uint64) {
 	if i <= maxVarInt1 {
-		b.WriteByte(uint8(i))
+		w.WriteByte(uint8(i))
 	} else if i <= maxVarInt2 {
-		b.Write([]byte{uint8(i>>8) | 0x40, uint8(i)})
+		w.Write([]byte{uint8(i>>8) | 0x40, uint8(i)})
 	} else if i <= maxVarInt4 {
-		b.Write([]byte{uint8(i>>24) | 0x80, uint8(i >> 16), uint8(i >> 8), uint8(i)})
+		w.Write([]byte{uint8(i>>24) | 0x80, uint8(i >> 16), uint8(i >> 8), uint8(i)})
 	} else if i <= maxVarInt8 {
-		b.Write([]byte{
+		w.Write([]byte{
 			uint8(i>>56) | 0xc0, uint8(i >> 48), uint8(i >> 40), uint8(i >> 32),
 			uint8(i >> 24), uint8(i >> 16), uint8(i >> 8), uint8(i),
 		})
@@ -84,30 +83,30 @@ func Write(b *bytes.Buffer, i uint64) {
 }
 
 // WriteWithLen writes a number in the QUIC varint format, with the desired length.
-func WriteWithLen(b *bytes.Buffer, i uint64, length protocol.ByteCount) {
+func WriteWithLen(w Writer, i uint64, length protocol.ByteCount) {
 	if length != 1 && length != 2 && length != 4 && length != 8 {
 		panic("invalid varint length")
 	}
 	l := Len(i)
 	if l == length {
-		Write(b, i)
+		Write(w, i)
 		return
 	}
 	if l > length {
 		panic(fmt.Sprintf("cannot encode %d in %d bytes", i, length))
 	}
 	if length == 2 {
-		b.WriteByte(0b01000000)
+		w.WriteByte(0b01000000)
 	} else if length == 4 {
-		b.WriteByte(0b10000000)
+		w.WriteByte(0b10000000)
 	} else if length == 8 {
-		b.WriteByte(0b11000000)
+		w.WriteByte(0b11000000)
 	}
 	for j := protocol.ByteCount(1); j < length-l; j++ {
-		b.WriteByte(0)
+		w.WriteByte(0)
 	}
 	for j := protocol.ByteCount(0); j < l; j++ {
-		b.WriteByte(uint8(i >> (8 * (l - 1 - j))))
+		w.WriteByte(uint8(i >> (8 * (l - 1 - j))))
 	}
 }
 
