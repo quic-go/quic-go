@@ -113,9 +113,17 @@ func newConn(c OOBCapablePacketConn) (*oobConn, error) {
 			return nil, errors.New("activating packet info failed for both IPv4 and IPv6")
 		}
 	}
+
+	var bc batchConn
+	if ibc, ok := c.(batchConn); ok {
+		bc = ibc
+	} else {
+		bc = ipv4.NewPacketConn(c)
+	}
+
 	oobConn := &oobConn{
 		OOBCapablePacketConn: c,
-		batchConn:            ipv4.NewPacketConn(c),
+		batchConn:            bc,
 		messages:             make([]ipv4.Message, batchSize),
 		readPos:              batchSize,
 	}
