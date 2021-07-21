@@ -45,8 +45,8 @@ var _ = Describe("Benchmarks", func() {
 			})
 			Expect(got).To(Equal(values))
 
-			b.RecordValue("read all (ns)", float64(runtime))
 			b.RecordValue("read one (ns)", float64(runtime)/float64(len(values)))
+			b.RecordValue("read all (ns)", float64(runtime))
 		}, 100)
 
 		Measure("reading from an io.Reader", func(b Benchmarker) {
@@ -59,8 +59,8 @@ var _ = Describe("Benchmarks", func() {
 			})
 			Expect(got).To(Equal(values))
 
-			b.RecordValue("read all (ns)", float64(runtime))
 			b.RecordValue("read one (ns)", float64(runtime)/float64(len(values)))
+			b.RecordValue("read all (ns)", float64(runtime))
 		}, 0)
 	})
 
@@ -76,8 +76,8 @@ var _ = Describe("Benchmarks", func() {
 			})
 			Expect(got).To(Equal(values))
 
-			b.RecordValue("read all (ns)", float64(runtime))
 			b.RecordValue("read one (ns)", float64(runtime)/float64(len(values)))
+			b.RecordValue("read all (ns)", float64(runtime))
 		}, 100)
 	})
 
@@ -93,8 +93,8 @@ var _ = Describe("Benchmarks", func() {
 			})
 			Expect(got).To(Equal(values))
 
-			b.RecordValue("read all (ns)", float64(runtime))
 			b.RecordValue("read one (ns)", float64(runtime)/float64(len(values)))
+			b.RecordValue("read all (ns)", float64(runtime))
 		}, 100)
 	})
 
