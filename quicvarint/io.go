@@ -13,13 +13,6 @@ type Reader interface {
 
 var _ Reader = &bytes.Reader{}
 
-type reader struct {
-	io.ByteReader
-	io.Reader
-}
-
-var _ Reader = &reader{}
-
 type byteReader struct {
 	io.Reader
 }
@@ -32,9 +25,6 @@ var _ Reader = &byteReader{}
 func NewReader(r io.Reader) Reader {
 	if r, ok := r.(Reader); ok {
 		return r
-	}
-	if br, ok := r.(io.ByteReader); ok {
-		return &reader{br, r}
 	}
 	return &byteReader{r}
 }
@@ -53,13 +43,6 @@ type Writer interface {
 
 var _ Writer = &bytes.Buffer{}
 
-type writer struct {
-	io.ByteWriter
-	io.Writer
-}
-
-var _ Writer = &writer{}
-
 type byteWriter struct {
 	io.Writer
 }
@@ -72,9 +55,6 @@ var _ Writer = &byteWriter{}
 func NewWriter(w io.Writer) Writer {
 	if w, ok := w.(Writer); ok {
 		return w
-	}
-	if bw, ok := w.(io.ByteWriter); ok {
-		return &writer{bw, w}
 	}
 	return &byteWriter{w}
 }
