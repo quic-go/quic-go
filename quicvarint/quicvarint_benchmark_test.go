@@ -48,20 +48,6 @@ var _ = Describe("Benchmarks", func() {
 			b.RecordValue("read one (ns)", float64(runtime)/float64(len(values)))
 			b.RecordValue("read all (ns)", float64(runtime))
 		}, 100)
-
-		Measure("reading from an io.Reader", func(b Benchmarker) {
-			r := onlyReader(bytes.NewReader(data).Read)
-			got := make([]uint64, len(values))
-			runtime := b.Time("read", func() {
-				for i := 0; i < len(values); i++ {
-					got[i], _ = Read(r)
-				}
-			})
-			Expect(got).To(Equal(values))
-
-			b.RecordValue("read one (ns)", float64(runtime)/float64(len(values)))
-			b.RecordValue("read all (ns)", float64(runtime))
-		}, 0)
 	})
 
 	// Benchmark old version without type assertion
