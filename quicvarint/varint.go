@@ -66,16 +66,15 @@ func Read(r io.Reader) (uint64, error) {
 }
 
 // Write writes i in the QUIC varint format to w.
-func Write(w io.Writer, i uint64) {
-	qw := NewWriter(w)
+func Write(w Writer, i uint64) {
 	if i <= maxVarInt1 {
-		qw.WriteByte(uint8(i))
+		w.WriteByte(uint8(i))
 	} else if i <= maxVarInt2 {
-		qw.Write([]byte{uint8(i>>8) | 0x40, uint8(i)})
+		w.Write([]byte{uint8(i>>8) | 0x40, uint8(i)})
 	} else if i <= maxVarInt4 {
-		qw.Write([]byte{uint8(i>>24) | 0x80, uint8(i >> 16), uint8(i >> 8), uint8(i)})
+		w.Write([]byte{uint8(i>>24) | 0x80, uint8(i >> 16), uint8(i >> 8), uint8(i)})
 	} else if i <= maxVarInt8 {
-		qw.Write([]byte{
+		w.Write([]byte{
 			uint8(i>>56) | 0xc0, uint8(i >> 48), uint8(i >> 40), uint8(i >> 32),
 			uint8(i >> 24), uint8(i >> 16), uint8(i >> 8), uint8(i),
 		})
