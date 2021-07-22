@@ -1,7 +1,6 @@
 package quic
 
 import (
-	"io"
 	"net"
 	"syscall"
 	"time"
@@ -11,10 +10,9 @@ import (
 )
 
 type connection interface {
+	net.PacketConn
 	ReadPacket() (*receivedPacket, error)
 	WritePacket(b []byte, addr net.Addr, oob []byte) (int, error)
-	LocalAddr() net.Addr
-	io.Closer
 }
 
 // If the PacketConn passed to Dial or Listen satisfies this interface, quic-go will read the ECN bits from the IP header.
@@ -29,6 +27,9 @@ type OOBCapablePacketConn interface {
 var _ OOBCapablePacketConn = &net.UDPConn{}
 
 func wrapConn(pc net.PacketConn) (connection, error) {
+	if conn, ok := pc.(connection); ok {
+		return conn, nil
+	}
 	c, ok := pc.(OOBCapablePacketConn)
 	if !ok {
 		utils.DefaultLogger.Infof("PacketConn is not a net.UDPConn. Disabling optimizations possible on UDP connections.")

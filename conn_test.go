@@ -29,5 +29,10 @@ var _ = Describe("Basic Conn Test", func() {
 		Expect(p.data).To(Equal([]byte("foobar")))
 		Expect(p.rcvTime).To(BeTemporally("~", time.Now(), scaleDuration(100*time.Millisecond)))
 		Expect(p.remoteAddr).To(Equal(addr))
+
+		// wrapConn is idempotent
+		conn2, err := wrapConn(conn)
+		Expect(err).ToNot(HaveOccurred())
+		Expect(conn2).To(Equal(conn))
 	})
 })

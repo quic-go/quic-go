@@ -173,7 +173,7 @@ func ListenEarly(conn net.PacketConn, tlsConf *tls.Config, config *Config) (Earl
 	return &earlyServer{s}, nil
 }
 
-func listen(conn net.PacketConn, tlsConf *tls.Config, config *Config, acceptEarly bool) (*baseServer, error) {
+func listen(pconn net.PacketConn, tlsConf *tls.Config, config *Config, acceptEarly bool) (*baseServer, error) {
 	if tlsConf == nil {
 		return nil, errors.New("quic: tls.Config not set")
 	}
@@ -187,6 +187,11 @@ func listen(conn net.PacketConn, tlsConf *tls.Config, config *Config, acceptEarl
 		}
 	}
 
+	conn, err := wrapConn(pconn)
+	if err != nil {
+		return nil, err
+	}
+
 	sessionHandler, err := getMultiplexer().AddConn(conn, config.ConnectionIDLength, config.StatelessResetKey, config.Tracer)
 	if err != nil {
 		return nil, err
@@ -196,19 +201,8 @@ func listen(conn net.PacketConn, tlsConf *tls.Config, config *Config, acceptEarl
 		return nil, err
 	}
 
-	// Extract the already wrapped connection if available
-	var c connection
-	if m, ok := sessionHandler.(*packetHandlerMap); ok {
-		c = m.conn
-	} else {
-		c, err = wrapConn(conn)
-		if err != nil {
-			return nil, err
-		}
-	}
-
 	s := &baseServer{
-		conn:                c,
+		conn:                conn,
 		tlsConf:             tlsConf,
 		config:              config,
 		tokenGenerator:      tokenGenerator,
@@ -223,7 +217,7 @@ func listen(conn net.PacketConn, tlsConf *tls.Config, config *Config, acceptEarl
 	}
 	go s.run()
 	sessionHandler.SetServer(s)
-	s.logger.Debugf("Listening for %s connections on %s", conn.LocalAddr().Network(), conn.LocalAddr().String())
+	s.logger.Debugf("Listening for %s connections on %s", pconn.LocalAddr().Network(), pconn.LocalAddr().String())
 	return s, nil
 }
 
