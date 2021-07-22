@@ -2,6 +2,7 @@ package quicvarint
 
 import (
 	"fmt"
+	"io"
 
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 )
@@ -15,7 +16,7 @@ const (
 )
 
 // Read reads a number in the QUIC varint format from r.
-func Read(r Reader) (uint64, error) {
+func Read(r io.ByteReader) (uint64, error) {
 	firstByte, err := r.ReadByte()
 	if err != nil {
 		return 0, err
