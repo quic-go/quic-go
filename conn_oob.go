@@ -115,6 +115,7 @@ func newConn(c OOBCapablePacketConn) (*oobConn, error) {
 	}
 
 	var bc batchConn
+	// Allows applications to pass in a connection that already satisfies batchConn interface
 	if ibc, ok := c.(batchConn); ok {
 		bc = ibc
 	} else {
