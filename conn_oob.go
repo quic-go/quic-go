@@ -114,8 +114,10 @@ func newConn(c OOBCapablePacketConn) (*oobConn, error) {
 		}
 	}
 
+	// Allows callers to pass in a connection that already satisfies batchConn interface
+	// to make use of the optimisation. Otherwise, ipv4.NewPacketConn would unwrap the file descriptor 
+	// via SyscallConn(), and read it that way, which might not be what the caller wants.
 	var bc batchConn
-	// Allows applications to pass in a connection that already satisfies batchConn interface
 	if ibc, ok := c.(batchConn); ok {
 		bc = ibc
 	} else {
