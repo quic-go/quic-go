@@ -113,9 +113,20 @@ func newConn(c OOBCapablePacketConn) (*oobConn, error) {
 			return nil, errors.New("activating packet info failed for both IPv4 and IPv6")
 		}
 	}
+
+	// Allows callers to pass in a connection that already satisfies batchConn interface
+	// to make use of the optimisation. Otherwise, ipv4.NewPacketConn would unwrap the file descriptor
+	// via SyscallConn(), and read it that way, which might not be what the caller wants.
+	var bc batchConn
+	if ibc, ok := c.(batchConn); ok {
+		bc = ibc
+	} else {
+		bc = ipv4.NewPacketConn(c)
+	}
+
 	oobConn := &oobConn{
 		OOBCapablePacketConn: c,
-		batchConn:            ipv4.NewPacketConn(c),
+		batchConn:            bc,
 		messages:             make([]ipv4.Message, batchSize),
 		readPos:              batchSize,
 	}
