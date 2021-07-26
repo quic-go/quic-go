@@ -11,8 +11,6 @@ import (
 )
 
 const (
-	FrameTypeSettings = 0x4
-
 	// https://www.ietf.org/archive/id/draft-ietf-masque-h3-datagram-02.html#name-http-settings-parameter
 	SettingDatagram = 0xffd276
 
@@ -27,13 +25,13 @@ func (s Setting) String() string {
 	case SettingDatagram:
 		return "H3_DATAGRAM"
 	default:
-		return fmt.Sprintf("H3 SETTING 0x%x", s)
+		return fmt.Sprintf("H3 setting 0x%x", uint64(s))
 	}
 }
 
 type Settings map[Setting]uint64
 
-func (s Settings) FrameType() uint64 {
+func (s Settings) FrameType() FrameType {
 	return FrameTypeSettings
 }
 
