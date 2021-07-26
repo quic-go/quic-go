@@ -50,7 +50,7 @@ func (s Settings) frameLength() protocol.ByteCount {
 	return len
 }
 
-func (s Settings) Write(w quicvarint.Writer) error {
+func (s Settings) writeFrame(w quicvarint.Writer) {
 	quicvarint.Write(w, uint64(s.frameType()))
 	quicvarint.Write(w, uint64(s.frameLength()))
 	ids := make([]SettingID, 0, len(s))
@@ -62,7 +62,6 @@ func (s Settings) Write(w quicvarint.Writer) error {
 		quicvarint.Write(w, uint64(id))
 		quicvarint.Write(w, s[id])
 	}
-	return nil
 }
 
 func parseSettingsFramePayload(r io.Reader, len uint64) (Settings, error) {

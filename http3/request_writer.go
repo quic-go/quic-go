@@ -66,7 +66,7 @@ func (w *requestWriter) WriteRequest(str quic.Stream, req *http.Request, gzip bo
 				}
 			}
 			buf := &bytes.Buffer{}
-			(&dataFrame{len: uint64(n)}).Write(buf)
+			(&dataFrame{len: uint64(n)}).writeFrame(buf)
 			if _, err := str.Write(buf.Bytes()); err != nil {
 				w.logger.Errorf("Error writing request: %s", err)
 				return
@@ -101,7 +101,7 @@ func (w *requestWriter) writeHeaders(wr io.Writer, req *http.Request, gzip bool)
 
 	buf := &bytes.Buffer{}
 	hf := headersFrame{len: uint64(w.headerBuf.Len())}
-	hf.Write(buf)
+	hf.writeFrame(buf)
 	if _, err := wr.Write(buf.Bytes()); err != nil {
 		return err
 	}

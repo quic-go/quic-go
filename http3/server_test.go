@@ -212,7 +212,7 @@ var _ = Describe("Server", func() {
 			It("parses the SETTINGS frame", func() {
 				buf := &bytes.Buffer{}
 				quicvarint.Write(buf, streamTypeControlStream)
-				Settings{}.Write(buf)
+				Settings{}.writeFrame(buf)
 				controlStr := mockquic.NewMockStream(mockCtrl)
 				controlStr.EXPECT().Read(gomock.Any()).DoAndReturn(buf.Read).AnyTimes()
 				sess.EXPECT().AcceptUniStream(gomock.Any()).DoAndReturn(func(context.Context) (quic.ReceiveStream, error) {
@@ -275,7 +275,7 @@ var _ = Describe("Server", func() {
 			It("errors when the first frame on the control stream is not a SETTINGS frame", func() {
 				buf := &bytes.Buffer{}
 				quicvarint.Write(buf, streamTypeControlStream)
-				(&dataFrame{}).Write(buf)
+				(&dataFrame{}).writeFrame(buf)
 				controlStr := mockquic.NewMockStream(mockCtrl)
 				controlStr.EXPECT().Read(gomock.Any()).DoAndReturn(buf.Read).AnyTimes()
 				sess.EXPECT().AcceptUniStream(gomock.Any()).DoAndReturn(func(context.Context) (quic.ReceiveStream, error) {
@@ -299,7 +299,7 @@ var _ = Describe("Server", func() {
 				buf := &bytes.Buffer{}
 				quicvarint.Write(buf, streamTypeControlStream)
 				b := &bytes.Buffer{}
-				Settings{}.Write(b)
+				Settings{}.writeFrame(b)
 				buf.Write(b.Bytes()[:b.Len()-1])
 				controlStr := mockquic.NewMockStream(mockCtrl)
 				controlStr.EXPECT().Read(gomock.Any()).DoAndReturn(buf.Read).AnyTimes()
@@ -323,7 +323,7 @@ var _ = Describe("Server", func() {
 			It("errors when the client opens a push stream", func() {
 				buf := &bytes.Buffer{}
 				quicvarint.Write(buf, streamTypePushStream)
-				(&dataFrame{}).Write(buf)
+				(&dataFrame{}).writeFrame(buf)
 				controlStr := mockquic.NewMockStream(mockCtrl)
 				controlStr.EXPECT().Read(gomock.Any()).DoAndReturn(buf.Read).AnyTimes()
 				sess.EXPECT().AcceptUniStream(gomock.Any()).DoAndReturn(func(context.Context) (quic.ReceiveStream, error) {
@@ -347,7 +347,7 @@ var _ = Describe("Server", func() {
 				s.EnableDatagrams = true
 				buf := &bytes.Buffer{}
 				quicvarint.Write(buf, streamTypeControlStream)
-				(Settings{SettingDatagram: 1}).Write(buf)
+				(Settings{SettingDatagram: 1}).writeFrame(buf)
 				controlStr := mockquic.NewMockStream(mockCtrl)
 				controlStr.EXPECT().Read(gomock.Any()).DoAndReturn(buf.Read).AnyTimes()
 				sess.EXPECT().AcceptUniStream(gomock.Any()).DoAndReturn(func(context.Context) (quic.ReceiveStream, error) {
@@ -401,7 +401,7 @@ var _ = Describe("Server", func() {
 
 				requestData := encodeRequest(exampleGetRequest)
 				buf := &bytes.Buffer{}
-				(&dataFrame{len: 6}).Write(buf) // add a body
+				(&dataFrame{len: 6}).writeFrame(buf) // add a body
 				buf.Write([]byte("foobar"))
 				responseBuf := &bytes.Buffer{}
 				setRequest(append(requestData, buf.Bytes()...))
@@ -425,7 +425,7 @@ var _ = Describe("Server", func() {
 
 				requestData := encodeRequest(exampleGetRequest)
 				buf := &bytes.Buffer{}
-				(&dataFrame{len: 6}).Write(buf) // add a body
+				(&dataFrame{len: 6}).writeFrame(buf) // add a body
 				buf.Write([]byte("foobar"))
 				responseBuf := &bytes.Buffer{}
 				setRequest(append(requestData, buf.Bytes()...))
@@ -459,7 +459,7 @@ var _ = Describe("Server", func() {
 				})
 
 				buf := &bytes.Buffer{}
-				(&dataFrame{}).Write(buf)
+				(&dataFrame{}).writeFrame(buf)
 				setRequest(buf.Bytes())
 				str.EXPECT().Write(gomock.Any()).DoAndReturn(func(p []byte) (int, error) {
 					return len(p), nil

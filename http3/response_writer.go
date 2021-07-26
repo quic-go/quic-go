@@ -74,7 +74,7 @@ func (w *responseWriter) WriteHeader(status int) {
 	}
 
 	buf := &bytes.Buffer{}
-	(&headersFrame{len: uint64(headers.Len())}).Write(buf)
+	(&headersFrame{len: uint64(headers.Len())}).writeFrame(buf)
 	w.logger.Infof("Responding with %d", status)
 	if _, err := w.bufferedStream.Write(buf.Bytes()); err != nil {
 		w.logger.Errorf("could not write headers frame: %s", err.Error())
@@ -96,7 +96,7 @@ func (w *responseWriter) Write(p []byte) (int, error) {
 	}
 	df := &dataFrame{len: uint64(len(p))}
 	buf := &bytes.Buffer{}
-	df.Write(buf)
+	df.writeFrame(buf)
 	if _, err := w.bufferedStream.Write(buf.Bytes()); err != nil {
 		return 0, err
 	}

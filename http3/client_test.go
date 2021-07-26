@@ -220,7 +220,7 @@ var _ = Describe("Client", func() {
 		It("parses the SETTINGS frame", func() {
 			buf := &bytes.Buffer{}
 			quicvarint.Write(buf, streamTypeControlStream)
-			Settings{}.Write(buf)
+			Settings{}.writeFrame(buf)
 			controlStr := mockquic.NewMockStream(mockCtrl)
 			controlStr.EXPECT().Read(gomock.Any()).DoAndReturn(buf.Read).AnyTimes()
 			sess.EXPECT().AcceptUniStream(gomock.Any()).DoAndReturn(func(context.Context) (quic.ReceiveStream, error) {
@@ -286,7 +286,7 @@ var _ = Describe("Client", func() {
 		It("errors when the first frame on the control stream is not a SETTINGS frame", func() {
 			buf := &bytes.Buffer{}
 			quicvarint.Write(buf, streamTypeControlStream)
-			(&dataFrame{}).Write(buf)
+			(&dataFrame{}).writeFrame(buf)
 			controlStr := mockquic.NewMockStream(mockCtrl)
 			controlStr.EXPECT().Read(gomock.Any()).DoAndReturn(buf.Read).AnyTimes()
 			sess.EXPECT().AcceptUniStream(gomock.Any()).DoAndReturn(func(context.Context) (quic.ReceiveStream, error) {
@@ -311,7 +311,7 @@ var _ = Describe("Client", func() {
 			buf := &bytes.Buffer{}
 			quicvarint.Write(buf, streamTypeControlStream)
 			b := &bytes.Buffer{}
-			Settings{}.Write(b)
+			Settings{}.writeFrame(b)
 			buf.Write(b.Bytes()[:b.Len()-1])
 			controlStr := mockquic.NewMockStream(mockCtrl)
 			controlStr.EXPECT().Read(gomock.Any()).DoAndReturn(buf.Read).AnyTimes()
@@ -360,7 +360,7 @@ var _ = Describe("Client", func() {
 			client.opts.EnableDatagram = true
 			buf := &bytes.Buffer{}
 			quicvarint.Write(buf, streamTypeControlStream)
-			(Settings{SettingDatagram: 1}).Write(buf)
+			(Settings{SettingDatagram: 1}).writeFrame(buf)
 			controlStr := mockquic.NewMockStream(mockCtrl)
 			controlStr.EXPECT().Read(gomock.Any()).DoAndReturn(buf.Read).AnyTimes()
 			sess.EXPECT().AcceptUniStream(gomock.Any()).DoAndReturn(func(context.Context) (quic.ReceiveStream, error) {
@@ -401,7 +401,7 @@ var _ = Describe("Client", func() {
 				Expect(enc.WriteField(qpack.HeaderField{Name: name, Value: value})).To(Succeed())
 			}
 			Expect(enc.Close()).To(Succeed())
-			(&headersFrame{len: uint64(headerBuf.Len())}).Write(buf)
+			(&headersFrame{len: uint64(headerBuf.Len())}).writeFrame(buf)
 			buf.Write(headerBuf.Bytes())
 			return buf.Bytes()
 		}
@@ -568,7 +568,7 @@ var _ = Describe("Client", func() {
 					":status":        "200",
 					"Content-Length": "1337",
 				}))
-				(&dataFrame{len: 0x6}).Write(buf)
+				(&dataFrame{len: 0x6}).writeFrame(buf)
 				buf.Write([]byte("foobar"))
 				str.EXPECT().Close().Do(func() { close(done) })
 				sess.EXPECT().ConnectionState().Return(quic.ConnectionState{})
@@ -583,7 +583,7 @@ var _ = Describe("Client", func() {
 
 			It("closes the connection when the first frame is not a HEADERS frame", func() {
 				buf := &bytes.Buffer{}
-				(&dataFrame{len: 0x42}).Write(buf)
+				(&dataFrame{len: 0x42}).writeFrame(buf)
 				sess.EXPECT().CloseWithError(quic.ApplicationErrorCode(errorFrameUnexpected), gomock.Any())
 				closed := make(chan struct{})
 				str.EXPECT().Close().Do(func() { close(closed) })
@@ -595,7 +595,7 @@ var _ = Describe("Client", func() {
 
 			It("cancels the stream when the HEADERS frame is too large", func() {
 				buf := &bytes.Buffer{}
-				(&headersFrame{len: 1338}).Write(buf)
+				(&headersFrame{len: 1338}).writeFrame(buf)
 				str.EXPECT().CancelWrite(quic.StreamErrorCode(errorFrameError))
 				closed := make(chan struct{})
 				str.EXPECT().Close().Do(func() { close(closed) })
