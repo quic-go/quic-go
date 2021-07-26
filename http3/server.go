@@ -350,10 +350,10 @@ func (s *Server) handleRequest(sess quic.Session, str quic.Stream, decoder *qpac
 	if !ok {
 		return newConnError(errorFrameUnexpected, errors.New("expected first frame to be a HEADERS frame"))
 	}
-	if hf.Length > s.maxHeaderBytes() {
-		return newStreamError(errorFrameError, fmt.Errorf("HEADERS frame too large: %d bytes (max: %d)", hf.Length, s.maxHeaderBytes()))
+	if hf.len > s.maxHeaderBytes() {
+		return newStreamError(errorFrameError, fmt.Errorf("HEADERS frame too large: %d bytes (max: %d)", hf.len, s.maxHeaderBytes()))
 	}
-	headerBlock := make([]byte, hf.Length)
+	headerBlock := make([]byte, hf.len)
 	if _, err := io.ReadFull(str, headerBlock); err != nil {
 		return newStreamError(errorRequestIncomplete, err)
 	}

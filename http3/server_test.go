@@ -76,7 +76,7 @@ var _ = Describe("Server", func() {
 			ExpectWithOffset(1, err).ToNot(HaveOccurred())
 			ExpectWithOffset(1, frame).To(BeAssignableToTypeOf(&headersFrame{}))
 			headersFrame := frame.(*headersFrame)
-			data := make([]byte, headersFrame.Length)
+			data := make([]byte, headersFrame.len)
 			_, err = io.ReadFull(str, data)
 			ExpectWithOffset(1, err).ToNot(HaveOccurred())
 			hfs, err := decoder.DecodeFull(data)
@@ -401,7 +401,7 @@ var _ = Describe("Server", func() {
 
 				requestData := encodeRequest(exampleGetRequest)
 				buf := &bytes.Buffer{}
-				(&dataFrame{Length: 6}).Write(buf) // add a body
+				(&dataFrame{len: 6}).Write(buf) // add a body
 				buf.Write([]byte("foobar"))
 				responseBuf := &bytes.Buffer{}
 				setRequest(append(requestData, buf.Bytes()...))
@@ -425,7 +425,7 @@ var _ = Describe("Server", func() {
 
 				requestData := encodeRequest(exampleGetRequest)
 				buf := &bytes.Buffer{}
-				(&dataFrame{Length: 6}).Write(buf) // add a body
+				(&dataFrame{len: 6}).Write(buf) // add a body
 				buf.Write([]byte("foobar"))
 				responseBuf := &bytes.Buffer{}
 				setRequest(append(requestData, buf.Bytes()...))

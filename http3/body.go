@@ -60,7 +60,7 @@ func (r *body) readImpl(b []byte) (int, error) {
 				// skip HEADERS frames
 				continue
 			case *dataFrame:
-				r.bytesRemainingInFrame = f.Length
+				r.bytesRemainingInFrame = f.len
 				break parseLoop
 			default:
 				r.onFrameError()
