@@ -240,7 +240,7 @@ func (s *Server) handleConn(sess quic.EarlySession) {
 	if s.EnableDatagrams {
 		settings[SettingDatagram] = 1
 	}
-	settings.WriteFrame(buf)
+	settings.Write(buf)
 	str.Write(buf.Bytes())
 
 	go s.handleUnidirectionalStreams(sess)

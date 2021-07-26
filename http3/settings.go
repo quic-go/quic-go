@@ -43,7 +43,7 @@ func (s Settings) FrameLength() protocol.ByteCount {
 	return len
 }
 
-func (s Settings) WriteFrame(w quicvarint.Writer) error {
+func (s Settings) Write(w quicvarint.Writer) error {
 	quicvarint.Write(w, uint64(s.FrameType()))
 	quicvarint.Write(w, uint64(s.FrameLength()))
 	ids := make([]Setting, 0, len(s))

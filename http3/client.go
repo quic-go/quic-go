@@ -138,7 +138,7 @@ func (c *client) setupSession() error {
 	if c.opts.EnableDatagram {
 		settings[SettingDatagram] = 1
 	}
-	settings.WriteFrame(buf)
+	settings.Write(buf)
 	_, err = str.Write(buf.Bytes())
 	return err
 }
