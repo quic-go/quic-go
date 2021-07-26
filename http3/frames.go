@@ -1,7 +1,6 @@
 package http3
 
 import (
-	"bytes"
 	"io"
 	"io/ioutil"
 
@@ -51,16 +50,16 @@ type dataFrame struct {
 	Length uint64
 }
 
-func (f *dataFrame) Write(b *bytes.Buffer) {
-	quicvarint.Write(b, 0x0)
-	quicvarint.Write(b, f.Length)
+func (f *dataFrame) Write(w quicvarint.Writer) {
+	quicvarint.Write(w, 0x0)
+	quicvarint.Write(w, f.Length)
 }
 
 type headersFrame struct {
 	Length uint64
 }
 
-func (f *headersFrame) Write(b *bytes.Buffer) {
-	quicvarint.Write(b, 0x1)
-	quicvarint.Write(b, f.Length)
+func (f *headersFrame) Write(w quicvarint.Writer) {
+	quicvarint.Write(w, 0x1)
+	quicvarint.Write(w, f.Length)
 }
