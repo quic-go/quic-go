@@ -18,15 +18,15 @@ const (
 	SettingDatagramDraft00 = 0x276
 )
 
-// A Setting represents an individual HTTP/3 setting identifier.
-type Setting uint64
+// A SettingID represents an individual HTTP/3 setting identifier.
+type SettingID uint64
 
-func (s Setting) String() string {
-	switch s {
+func (id SettingID) String() string {
+	switch id {
 	case SettingDatagram:
 		return "H3_DATAGRAM"
 	default:
-		return fmt.Sprintf("H3 setting 0x%x", uint64(s))
+		return fmt.Sprintf("H3 setting 0x%x", uint64(id))
 	}
 }
 
@@ -35,7 +35,7 @@ func (s Setting) String() string {
 // SETTINGS frames always apply to an entire HTTP/3 connection, never a single stream.
 // A SETTINGS frame MUST be sent as the first frame of each control stream by each peer,
 // and MUST NOT be sent subsequently.
-type Settings map[Setting]uint64
+type Settings map[SettingID]uint64
 
 func (s Settings) FrameType() FrameType {
 	return FrameTypeSettings
@@ -52,7 +52,7 @@ func (s Settings) FrameLength() protocol.ByteCount {
 func (s Settings) Write(w quicvarint.Writer) error {
 	quicvarint.Write(w, uint64(s.FrameType()))
 	quicvarint.Write(w, uint64(s.FrameLength()))
-	ids := make([]Setting, 0, len(s))
+	ids := make([]SettingID, 0, len(s))
 	for id := range s {
 		ids = append(ids, id)
 	}
@@ -87,10 +87,10 @@ func parseSettingsFramePayload(r io.Reader, len uint64) (Settings, error) {
 			return nil, err
 		}
 
-		if _, ok := s[Setting(id)]; ok {
+		if _, ok := s[SettingID(id)]; ok {
 			return nil, fmt.Errorf("duplicate setting: %d", id)
 		}
-		s[Setting(id)] = val
+		s[SettingID(id)] = val
 	}
 	return s, nil
 }

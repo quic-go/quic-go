@@ -85,8 +85,8 @@ var _ = Describe("Frames", func() {
 			Expect(err).ToNot(HaveOccurred())
 			Expect(frame).To(BeAssignableToTypeOf(Settings{}))
 			s := frame.(Settings)
-			Expect(s).To(HaveKeyWithValue(Setting(13), uint64(37)))
-			Expect(s).To(HaveKeyWithValue(Setting(0xdead), uint64(0xbeef)))
+			Expect(s).To(HaveKeyWithValue(SettingID(13), uint64(37)))
+			Expect(s).To(HaveKeyWithValue(SettingID(0xdead), uint64(0xbeef)))
 		})
 
 		It("rejects duplicate settings", func() {
