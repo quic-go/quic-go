@@ -12,10 +12,10 @@ import (
 
 const (
 	// https://www.ietf.org/archive/id/draft-ietf-masque-h3-datagram-02.html#name-http-settings-parameter
-	SettingDatagram = 0xffd276
+	SettingDatagram SettingID = 0xffd276
 
 	// https://datatracker.ietf.org/doc/draft-ietf-masque-h3-datagram/00/
-	SettingDatagramDraft00 = 0x276
+	SettingDatagramDraft00 SettingID = 0x276
 )
 
 // A SettingID represents an individual HTTP/3 setting identifier.
@@ -25,6 +25,8 @@ func (id SettingID) String() string {
 	switch id {
 	case SettingDatagram:
 		return "H3_DATAGRAM"
+	case SettingDatagramDraft00:
+		return "H3_DATAGRAM (draft 00)"
 	default:
 		return fmt.Sprintf("H3 setting 0x%x", uint64(id))
 	}

@@ -136,7 +136,7 @@ var _ = Describe("Frames", func() {
 
 		Context("H3_DATAGRAM", func() {
 			It("reads the H3_DATAGRAM value", func() {
-				settings := appendVarInt(nil, SettingDatagram)
+				settings := appendVarInt(nil, uint64(SettingDatagram))
 				settings = appendVarInt(settings, 1)
 				data := appendVarInt(nil, 4) // type byte
 				data = appendVarInt(data, uint64(len(settings)))
@@ -149,9 +149,9 @@ var _ = Describe("Frames", func() {
 			})
 
 			It("rejects duplicate H3_DATAGRAM entries", func() {
-				settings := appendVarInt(nil, SettingDatagram)
+				settings := appendVarInt(nil, uint64(SettingDatagram))
 				settings = appendVarInt(settings, 1)
-				settings = appendVarInt(settings, SettingDatagram)
+				settings = appendVarInt(settings, uint64(SettingDatagram))
 				settings = appendVarInt(settings, 1)
 				data := appendVarInt(nil, 4) // type byte
 				data = appendVarInt(data, uint64(len(settings)))
@@ -162,7 +162,7 @@ var _ = Describe("Frames", func() {
 
 			It("rejects invalid values for the H3_DATAGRAM entry", func() {
 				Skip("TODO: H3 settings validation should happen elsewhere")
-				settings := appendVarInt(nil, SettingDatagram)
+				settings := appendVarInt(nil, uint64(SettingDatagram))
 				settings = appendVarInt(settings, 1337)
 				data := appendVarInt(nil, 4) // type byte
 				data = appendVarInt(data, uint64(len(settings)))
