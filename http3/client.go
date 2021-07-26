@@ -299,10 +299,10 @@ func (c *client) doRequest(
 	if !ok {
 		return nil, newConnError(errorFrameUnexpected, errors.New("expected first frame to be a HEADERS frame"))
 	}
-	if hf.Length > c.maxHeaderBytes() {
-		return nil, newStreamError(errorFrameError, fmt.Errorf("HEADERS frame too large: %d bytes (max: %d)", hf.Length, c.maxHeaderBytes()))
+	if hf.len > c.maxHeaderBytes() {
+		return nil, newStreamError(errorFrameError, fmt.Errorf("HEADERS frame too large: %d bytes (max: %d)", hf.len, c.maxHeaderBytes()))
 	}
-	headerBlock := make([]byte, hf.Length)
+	headerBlock := make([]byte, hf.len)
 	if _, err := io.ReadFull(str, headerBlock); err != nil {
 		return nil, newStreamError(errorRequestIncomplete, err)
 	}

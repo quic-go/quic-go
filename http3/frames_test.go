@@ -23,11 +23,11 @@ var _ = Describe("Frames", func() {
 		data = appendVarInt(data, 0x42)
 		data = append(data, make([]byte, 0x42)...)
 		buf := bytes.NewBuffer(data)
-		(&dataFrame{Length: 0x1234}).Write(buf)
+		(&dataFrame{len: 0x1234}).Write(buf)
 		frame, err := parseNextFrame(buf)
 		Expect(err).ToNot(HaveOccurred())
 		Expect(frame).To(BeAssignableToTypeOf(&dataFrame{}))
-		Expect(frame.(*dataFrame).Length).To(Equal(uint64(0x1234)))
+		Expect(frame.(*dataFrame).len).To(Equal(uint64(0x1234)))
 	})
 
 	Context("DATA frames", func() {
@@ -37,17 +37,17 @@ var _ = Describe("Frames", func() {
 			frame, err := parseNextFrame(bytes.NewReader(data))
 			Expect(err).ToNot(HaveOccurred())
 			Expect(frame).To(BeAssignableToTypeOf(&dataFrame{}))
-			Expect(frame.(*dataFrame).Length).To(Equal(uint64(0x1337)))
+			Expect(frame.(*dataFrame).len).To(Equal(uint64(0x1337)))
 		})
 
 		It("writes", func() {
 			buf := &bytes.Buffer{}
-			(&dataFrame{Length: 0xdeadbeef}).Write(buf)
+			(&dataFrame{len: 0xdeadbeef}).Write(buf)
 			frame, err := parseNextFrame(buf)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(err).ToNot(HaveOccurred())
 			Expect(frame).To(BeAssignableToTypeOf(&dataFrame{}))
-			Expect(frame.(*dataFrame).Length).To(Equal(uint64(0xdeadbeef)))
+			Expect(frame.(*dataFrame).len).To(Equal(uint64(0xdeadbeef)))
 		})
 	})
 
@@ -58,17 +58,17 @@ var _ = Describe("Frames", func() {
 			frame, err := parseNextFrame(bytes.NewReader(data))
 			Expect(err).ToNot(HaveOccurred())
 			Expect(frame).To(BeAssignableToTypeOf(&headersFrame{}))
-			Expect(frame.(*headersFrame).Length).To(Equal(uint64(0x1337)))
+			Expect(frame.(*headersFrame).len).To(Equal(uint64(0x1337)))
 		})
 
 		It("writes", func() {
 			buf := &bytes.Buffer{}
-			(&headersFrame{Length: 0xdeadbeef}).Write(buf)
+			(&headersFrame{len: 0xdeadbeef}).Write(buf)
 			frame, err := parseNextFrame(buf)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(err).ToNot(HaveOccurred())
 			Expect(frame).To(BeAssignableToTypeOf(&headersFrame{}))
-			Expect(frame.(*headersFrame).Length).To(Equal(uint64(0xdeadbeef)))
+			Expect(frame.(*headersFrame).len).To(Equal(uint64(0xdeadbeef)))
 		})
 	})
 

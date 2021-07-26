@@ -401,7 +401,7 @@ var _ = Describe("Client", func() {
 				Expect(enc.WriteField(qpack.HeaderField{Name: name, Value: value})).To(Succeed())
 			}
 			Expect(enc.Close()).To(Succeed())
-			(&headersFrame{Length: uint64(headerBuf.Len())}).Write(buf)
+			(&headersFrame{len: uint64(headerBuf.Len())}).Write(buf)
 			buf.Write(headerBuf.Bytes())
 			return buf.Bytes()
 		}
@@ -414,7 +414,7 @@ var _ = Describe("Client", func() {
 			ExpectWithOffset(1, err).ToNot(HaveOccurred())
 			ExpectWithOffset(1, frame).To(BeAssignableToTypeOf(&headersFrame{}))
 			headersFrame := frame.(*headersFrame)
-			data := make([]byte, headersFrame.Length)
+			data := make([]byte, headersFrame.len)
 			_, err = io.ReadFull(str, data)
 			ExpectWithOffset(1, err).ToNot(HaveOccurred())
 			hfs, err := decoder.DecodeFull(data)
@@ -568,7 +568,7 @@ var _ = Describe("Client", func() {
 					":status":        "200",
 					"Content-Length": "1337",
 				}))
-				(&dataFrame{Length: 0x6}).Write(buf)
+				(&dataFrame{len: 0x6}).Write(buf)
 				buf.Write([]byte("foobar"))
 				str.EXPECT().Close().Do(func() { close(done) })
 				sess.EXPECT().ConnectionState().Return(quic.ConnectionState{})
@@ -583,7 +583,7 @@ var _ = Describe("Client", func() {
 
 			It("closes the connection when the first frame is not a HEADERS frame", func() {
 				buf := &bytes.Buffer{}
-				(&dataFrame{Length: 0x42}).Write(buf)
+				(&dataFrame{len: 0x42}).Write(buf)
 				sess.EXPECT().CloseWithError(quic.ApplicationErrorCode(errorFrameUnexpected), gomock.Any())
 				closed := make(chan struct{})
 				str.EXPECT().Close().Do(func() { close(closed) })
@@ -595,7 +595,7 @@ var _ = Describe("Client", func() {
 
 			It("cancels the stream when the HEADERS frame is too large", func() {
 				buf := &bytes.Buffer{}
-				(&headersFrame{Length: 1338}).Write(buf)
+				(&headersFrame{len: 1338}).Write(buf)
 				str.EXPECT().CancelWrite(quic.StreamErrorCode(errorFrameError))
 				closed := make(chan struct{})
 				str.EXPECT().Close().Do(func() { close(closed) })

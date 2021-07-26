@@ -34,7 +34,7 @@ var _ = Describe("Request Writer", func() {
 		ExpectWithOffset(1, err).ToNot(HaveOccurred())
 		ExpectWithOffset(1, frame).To(BeAssignableToTypeOf(&headersFrame{}))
 		headersFrame := frame.(*headersFrame)
-		data := make([]byte, headersFrame.Length)
+		data := make([]byte, headersFrame.len)
 		_, err = io.ReadFull(str, data)
 		ExpectWithOffset(1, err).ToNot(HaveOccurred())
 		decoder := qpack.NewDecoder(nil)
@@ -88,7 +88,7 @@ var _ = Describe("Request Writer", func() {
 		frame, err := parseNextFrame(strBuf)
 		Expect(err).ToNot(HaveOccurred())
 		Expect(frame).To(BeAssignableToTypeOf(&dataFrame{}))
-		Expect(frame.(*dataFrame).Length).To(BeEquivalentTo(6))
+		Expect(frame.(*dataFrame).len).To(BeEquivalentTo(6))
 	})
 
 	It("writes a POST request, if the Body returns an EOF immediately", func() {
@@ -105,7 +105,7 @@ var _ = Describe("Request Writer", func() {
 		frame, err := parseNextFrame(strBuf)
 		Expect(err).ToNot(HaveOccurred())
 		Expect(frame).To(BeAssignableToTypeOf(&dataFrame{}))
-		Expect(frame.(*dataFrame).Length).To(BeEquivalentTo(6))
+		Expect(frame.(*dataFrame).len).To(BeEquivalentTo(6))
 	})
 
 	It("sends cookies", func() {

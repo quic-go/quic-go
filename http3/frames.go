@@ -22,9 +22,9 @@ func parseNextFrame(r io.Reader) (frame, error) {
 
 	switch FrameType(t) {
 	case FrameTypeData:
-		return &dataFrame{Length: l}, nil
+		return &dataFrame{len: l}, nil
 	case FrameTypeHeaders:
-		return &headersFrame{Length: l}, nil
+		return &headersFrame{len: l}, nil
 	case FrameTypeSettings:
 		return parseSettingsFramePayload(r, l)
 	case FrameTypeCancelPush:
@@ -47,19 +47,19 @@ func parseNextFrame(r io.Reader) (frame, error) {
 }
 
 type dataFrame struct {
-	Length uint64
+	len uint64
 }
 
 func (f *dataFrame) Write(w quicvarint.Writer) {
 	quicvarint.Write(w, 0x0)
-	quicvarint.Write(w, f.Length)
+	quicvarint.Write(w, f.len)
 }
 
 type headersFrame struct {
-	Length uint64
+	len uint64
 }
 
 func (f *headersFrame) Write(w quicvarint.Writer) {
 	quicvarint.Write(w, 0x1)
-	quicvarint.Write(w, f.Length)
+	quicvarint.Write(w, f.len)
 }

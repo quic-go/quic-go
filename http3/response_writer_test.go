@@ -37,7 +37,7 @@ var _ = Describe("Response Writer", func() {
 		Expect(err).ToNot(HaveOccurred())
 		Expect(frame).To(BeAssignableToTypeOf(&headersFrame{}))
 		headersFrame := frame.(*headersFrame)
-		data := make([]byte, headersFrame.Length)
+		data := make([]byte, headersFrame.len)
 		_, err = io.ReadFull(str, data)
 		Expect(err).ToNot(HaveOccurred())
 		hfs, err := decoder.DecodeFull(data)
@@ -53,7 +53,7 @@ var _ = Describe("Response Writer", func() {
 		Expect(err).ToNot(HaveOccurred())
 		Expect(frame).To(BeAssignableToTypeOf(&dataFrame{}))
 		df := frame.(*dataFrame)
-		data := make([]byte, df.Length)
+		data := make([]byte, df.len)
 		_, err = io.ReadFull(str, data)
 		Expect(err).ToNot(HaveOccurred())
 		return data

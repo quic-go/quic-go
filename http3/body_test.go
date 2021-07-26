@@ -40,7 +40,7 @@ var _ = Describe("Body", func() {
 
 	getDataFrame := func(data []byte) []byte {
 		b := &bytes.Buffer{}
-		(&dataFrame{Length: uint64(len(data))}).Write(b)
+		(&dataFrame{len: uint64(len(data))}).Write(b)
 		b.Write(data)
 		return b.Bytes()
 	}
@@ -132,7 +132,7 @@ var _ = Describe("Body", func() {
 
 			It("skips HEADERS frames", func() {
 				buf.Write(getDataFrame([]byte("foo")))
-				(&headersFrame{Length: 10}).Write(buf)
+				(&headersFrame{len: 10}).Write(buf)
 				buf.Write(make([]byte, 10))
 				buf.Write(getDataFrame([]byte("bar")))
 				b := make([]byte, 6)
