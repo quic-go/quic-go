@@ -37,11 +37,12 @@ func (id SettingID) String() string {
 // and MUST NOT be sent subsequently.
 type Settings map[SettingID]uint64
 
-func (s Settings) FrameType() FrameType {
+// TODO: export the frame handling methods?
+func (s Settings) frameType() FrameType {
 	return FrameTypeSettings
 }
 
-func (s Settings) FrameLength() protocol.ByteCount {
+func (s Settings) frameLength() protocol.ByteCount {
 	var len protocol.ByteCount
 	for id, val := range s {
 		len += quicvarint.Len(uint64(id)) + quicvarint.Len(val)
@@ -50,8 +51,8 @@ func (s Settings) FrameLength() protocol.ByteCount {
 }
 
 func (s Settings) Write(w quicvarint.Writer) error {
-	quicvarint.Write(w, uint64(s.FrameType()))
-	quicvarint.Write(w, uint64(s.FrameLength()))
+	quicvarint.Write(w, uint64(s.frameType()))
+	quicvarint.Write(w, uint64(s.frameLength()))
 	ids := make([]SettingID, 0, len(s))
 	for id := range s {
 		ids = append(ids, id)
