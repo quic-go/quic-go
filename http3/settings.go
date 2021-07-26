@@ -49,6 +49,17 @@ func (id SettingID) String() string {
 // and MUST NOT be sent subsequently.
 type Settings map[SettingID]uint64
 
+// EnableDatagrams adds the necessary HTTP/3 setting(s) to signal support for the HTTP/3 datagram draft.
+func (s Settings) EnableDatagrams() {
+	s[SettingDatagram] = 1
+	s[SettingDatagramDraft00] = 1 // TODO: remove this when the value for H3_DATAGRAM stabilizes
+}
+
+// DatagramsEnabled returns true if any of the values for H3_DATAGRAM are set to 1.
+func (s Settings) DatagramsEnabled() bool {
+	return s[SettingDatagram] == 1 || s[SettingDatagramDraft00] == 1
+}
+
 // TODO: export the frame handling methods?
 func (s Settings) frameType() FrameType {
 	return FrameTypeSettings
