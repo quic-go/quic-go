@@ -18,6 +18,7 @@ const (
 	SettingDatagramDraft00 = 0x276
 )
 
+// A Setting represents an individual HTTP/3 setting identifier.
 type Setting uint64
 
 func (s Setting) String() string {
@@ -29,6 +30,11 @@ func (s Setting) String() string {
 	}
 }
 
+// Settings represent HTTP/3 settings, which convey configuration parameters that
+// affect how endpoints communicate, such as preferences and constraints on peer behavior.
+// SETTINGS frames always apply to an entire HTTP/3 connection, never a single stream.
+// A SETTINGS frame MUST be sent as the first frame of each control stream by each peer,
+// and MUST NOT be sent subsequently.
 type Settings map[Setting]uint64
 
 func (s Settings) FrameType() FrameType {
