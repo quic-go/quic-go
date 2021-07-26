@@ -238,7 +238,7 @@ func (s *Server) handleConn(sess quic.EarlySession) {
 	quicvarint.Write(buf, streamTypeControlStream) // stream type
 	settings := Settings{}
 	if s.EnableDatagrams {
-		settings[SettingDatagram] = 1
+		settings.EnableDatagrams()
 	}
 	settings.writeFrame(buf)
 	str.Write(buf.Bytes())
@@ -314,21 +314,11 @@ func (s *Server) handleUnidirectionalStreams(sess quic.EarlySession) {
 				sess.CloseWithError(quic.ApplicationErrorCode(errorMissingSettings), "")
 				return
 			}
-			// TODO(ydnar): an extension should handle validate the H3_DATAGRAM setting.
-			// H3_DATAGRAM changed from 0x276 to 0xffd276 in draft 01:
-			// https://datatracker.ietf.org/doc/draft-ietf-masque-h3-datagram/01/
-			switch settings[SettingDatagram] {
-			case 0:
-				return
-			case 1:
-				// If datagram support was enabled on our side as well as on the client side,
-				// we can expect it to have been negotiated both on the transport and on the HTTP/3 layer.
-				// Note: ConnectionState() will block until the handshake is complete (relevant when using 0-RTT).
-				if s.EnableDatagrams && !sess.ConnectionState().SupportsDatagrams {
-					sess.CloseWithError(quic.ApplicationErrorCode(errorSettingsError), "missing QUIC Datagram support")
-				}
-			default:
-				sess.CloseWithError(quic.ApplicationErrorCode(errorSettingsError), fmt.Sprintf("invalid value for H3_DATAGRAM: %d", settings[SettingDatagram]))
+			// If datagram support was enabled on our side as well as on the client side,
+			// we can expect it to have been negotiated both on the transport and on the HTTP/3 layer.
+			// Note: ConnectionState() will block until the handshake is complete (relevant when using 0-RTT).
+			if settings.DatagramsEnabled() && s.EnableDatagrams && !sess.ConnectionState().SupportsDatagrams {
+				sess.CloseWithError(quic.ApplicationErrorCode(errorSettingsError), "missing QUIC Datagram support")
 			}
 		}(str)
 	}
