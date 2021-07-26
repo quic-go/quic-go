@@ -161,8 +161,17 @@ var _ = Describe("Frames", func() {
 			})
 
 			It("rejects invalid values for the H3_DATAGRAM entry", func() {
-				Skip("TODO: H3 settings validation should happen elsewhere")
 				settings := appendVarInt(nil, uint64(SettingDatagram))
+				settings = appendVarInt(settings, 1337)
+				data := appendVarInt(nil, 4) // type byte
+				data = appendVarInt(data, uint64(len(settings)))
+				data = append(data, settings...)
+				_, err := parseNextFrame(bytes.NewReader(data))
+				Expect(err).To(MatchError("invalid value for H3_DATAGRAM: 1337"))
+			})
+
+			It("rejects invalid values for the H3_DATAGRAM (draft 00) entry", func() {
+				settings := appendVarInt(nil, uint64(SettingDatagramDraft00))
 				settings = appendVarInt(settings, 1337)
 				data := appendVarInt(nil, 4) // type byte
 				data = appendVarInt(data, uint64(len(settings)))
