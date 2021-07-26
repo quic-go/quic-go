@@ -11,6 +11,10 @@ import (
 )
 
 const (
+	SettingQPACKMaxTableCapacity SettingID = 0x01
+	SettingMaxFieldSectionSize   SettingID = 0x06
+	SettingQPACKBlockedStreams   SettingID = 0x07
+
 	// https://www.ietf.org/archive/id/draft-ietf-masque-h3-datagram-02.html#name-http-settings-parameter
 	SettingDatagram SettingID = 0xffd276
 
@@ -23,6 +27,12 @@ type SettingID uint64
 
 func (id SettingID) String() string {
 	switch id {
+	case SettingQPACKMaxTableCapacity:
+		return "QPACK_MAX_TABLE_CAPACITY"
+	case SettingMaxFieldSectionSize:
+		return "MAX_FIELD_SECTION_SIZE"
+	case SettingQPACKBlockedStreams:
+		return "QPACK_BLOCKED_STREAMS"
 	case SettingDatagram:
 		return "H3_DATAGRAM"
 	case SettingDatagramDraft00:
