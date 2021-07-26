@@ -149,9 +149,9 @@ var _ = Describe("Body", func() {
 			})
 
 			It("errors on unexpected frames, and calls the error callback", func() {
-				(&settingsFrame{}).Write(buf)
+				Settings{}.Write(buf)
 				_, err := rb.Read([]byte{0})
-				Expect(err).To(MatchError("peer sent an unexpected frame: *http3.settingsFrame"))
+				Expect(err).To(MatchError("peer sent an unexpected frame: http3.Settings"))
 				Expect(errorCbCalled).To(BeTrue())
 			})
 
