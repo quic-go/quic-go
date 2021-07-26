@@ -23,7 +23,7 @@ var _ = Describe("Frames", func() {
 		data = appendVarInt(data, 0x42)
 		data = append(data, make([]byte, 0x42)...)
 		buf := bytes.NewBuffer(data)
-		(&dataFrame{len: 0x1234}).Write(buf)
+		(&dataFrame{len: 0x1234}).writeFrame(buf)
 		frame, err := parseNextFrame(buf)
 		Expect(err).ToNot(HaveOccurred())
 		Expect(frame).To(BeAssignableToTypeOf(&dataFrame{}))
@@ -42,7 +42,7 @@ var _ = Describe("Frames", func() {
 
 		It("writes", func() {
 			buf := &bytes.Buffer{}
-			(&dataFrame{len: 0xdeadbeef}).Write(buf)
+			(&dataFrame{len: 0xdeadbeef}).writeFrame(buf)
 			frame, err := parseNextFrame(buf)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(err).ToNot(HaveOccurred())
@@ -63,7 +63,7 @@ var _ = Describe("Frames", func() {
 
 		It("writes", func() {
 			buf := &bytes.Buffer{}
-			(&headersFrame{len: 0xdeadbeef}).Write(buf)
+			(&headersFrame{len: 0xdeadbeef}).writeFrame(buf)
 			frame, err := parseNextFrame(buf)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(err).ToNot(HaveOccurred())
@@ -108,7 +108,7 @@ var _ = Describe("Frames", func() {
 				13: 37,
 			}
 			buf := &bytes.Buffer{}
-			settings.Write(buf)
+			settings.writeFrame(buf)
 			parsed, err := parseNextFrame(buf)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(parsed).To(Equal(settings))
@@ -120,7 +120,7 @@ var _ = Describe("Frames", func() {
 				0xdeadbeef: 0xdecafbad,
 			}
 			buf := &bytes.Buffer{}
-			settings.Write(buf)
+			settings.writeFrame(buf)
 
 			data := buf.Bytes()
 			_, err := parseNextFrame(bytes.NewReader(data))
@@ -174,7 +174,7 @@ var _ = Describe("Frames", func() {
 			It("writes the H3_DATAGRAM setting", func() {
 				settings := Settings{SettingDatagram: 1}
 				buf := &bytes.Buffer{}
-				settings.Write(buf)
+				settings.writeFrame(buf)
 				frame, err := parseNextFrame(buf)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(frame).To(Equal(settings))

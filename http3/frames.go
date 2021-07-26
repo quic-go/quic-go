@@ -50,7 +50,7 @@ type dataFrame struct {
 	len uint64
 }
 
-func (f *dataFrame) Write(w quicvarint.Writer) {
+func (f *dataFrame) writeFrame(w quicvarint.Writer) {
 	quicvarint.Write(w, 0x0)
 	quicvarint.Write(w, f.len)
 }
@@ -59,7 +59,7 @@ type headersFrame struct {
 	len uint64
 }
 
-func (f *headersFrame) Write(w quicvarint.Writer) {
+func (f *headersFrame) writeFrame(w quicvarint.Writer) {
 	quicvarint.Write(w, 0x1)
 	quicvarint.Write(w, f.len)
 }

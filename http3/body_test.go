@@ -40,7 +40,7 @@ var _ = Describe("Body", func() {
 
 	getDataFrame := func(data []byte) []byte {
 		b := &bytes.Buffer{}
-		(&dataFrame{len: uint64(len(data))}).Write(b)
+		(&dataFrame{len: uint64(len(data))}).writeFrame(b)
 		b.Write(data)
 		return b.Bytes()
 	}
@@ -132,7 +132,7 @@ var _ = Describe("Body", func() {
 
 			It("skips HEADERS frames", func() {
 				buf.Write(getDataFrame([]byte("foo")))
-				(&headersFrame{len: 10}).Write(buf)
+				(&headersFrame{len: 10}).writeFrame(buf)
 				buf.Write(make([]byte, 10))
 				buf.Write(getDataFrame([]byte("bar")))
 				b := make([]byte, 6)
@@ -149,7 +149,7 @@ var _ = Describe("Body", func() {
 			})
 
 			It("errors on unexpected frames, and calls the error callback", func() {
-				Settings{}.Write(buf)
+				Settings{}.writeFrame(buf)
 				_, err := rb.Read([]byte{0})
 				Expect(err).To(MatchError("peer sent an unexpected frame: http3.Settings"))
 				Expect(errorCbCalled).To(BeTrue())
