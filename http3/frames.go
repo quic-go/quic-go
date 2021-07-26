@@ -23,22 +23,22 @@ func parseNextFrame(r io.Reader) (frame, error) {
 		return nil, err
 	}
 
-	switch t {
-	case 0x0:
+	switch FrameType(t) {
+	case FrameTypeData:
 		return &dataFrame{Length: l}, nil
-	case 0x1:
-		return &headersFrame{Length: l}, nil
-	case 0x4:
+	case FrameTypeHeaders:
+		return &headersFrame{length: l}, nil
+	case FrameTypeSettings:
 		return parseSettingsFrame(r, l)
-	case 0x3: // CANCEL_PUSH
+	case FrameTypeCancelPush:
 		fallthrough
-	case 0x5: // PUSH_PROMISE
+	case FrameTypePushPromise:
 		fallthrough
-	case 0x7: // GOAWAY
+	case FrameTypeGoAway:
 		fallthrough
-	case 0xd: // MAX_PUSH_ID
+	case FrameTypeMaxPushID:
 		fallthrough
-	case 0xe: // DUPLICATE_PUSH
+	case FrameTypeDuplicatePush:
 		fallthrough
 	default:
 		// skip over unknown frames
