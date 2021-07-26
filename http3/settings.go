@@ -90,19 +90,25 @@ func parseSettingsFramePayload(r io.Reader, len uint64) (Settings, error) {
 	s := Settings{}
 	br := bytes.NewReader(b)
 	for br.Len() > 0 {
-		id, err := quicvarint.Read(br)
+		i, err := quicvarint.Read(br)
 		if err != nil { // should not happen. We allocated the whole frame already.
 			return nil, err
 		}
+		id := SettingID(i)
 		val, err := quicvarint.Read(br)
 		if err != nil { // should not happen. We allocated the whole frame already.
 			return nil, err
 		}
-
-		if _, ok := s[SettingID(id)]; ok {
+		if _, ok := s[id]; ok {
 			return nil, fmt.Errorf("duplicate setting: %d", id)
 		}
-		s[SettingID(id)] = val
+		switch id {
+		case SettingDatagram, SettingDatagramDraft00:
+			if val != 0 && val != 1 {
+				return nil, fmt.Errorf("invalid value for H3_DATAGRAM: %d", val)
+			}
+		}
+		s[id] = val
 	}
 	return s, nil
 }
