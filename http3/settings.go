@@ -43,59 +43,48 @@ func (s Settings) FrameLength() protocol.ByteCount {
 	return len
 }
 
-func (s Settings) WriteFrame(w io.Writer) error {
-	qw := quicvarint.NewWriter(w)
-	quicvarint.Write(qw, uint64(s.FrameType()))
-	quicvarint.Write(qw, uint64(s.FrameLength()))
+func (s Settings) WriteFrame(w quicvarint.Writer) error {
+	quicvarint.Write(w, uint64(s.FrameType()))
+	quicvarint.Write(w, uint64(s.FrameLength()))
 	ids := make([]Setting, 0, len(s))
 	for id := range s {
 		ids = append(ids, id)
 	}
 	sort.Slice(ids, func(i, j int) bool { return i < j })
 	for _, id := range ids {
-		quicvarint.Write(qw, uint64(id))
-		quicvarint.Write(qw, s[id])
+		quicvarint.Write(w, uint64(id))
+		quicvarint.Write(w, s[id])
 	}
 	return nil
 }
 
-func (sp *Settings) UnmarshalFrame(b []byte) error {
-	if len(b) > 8*(1<<10) {
-		return fmt.Errorf("unexpected size for SETTINGS frame: %d", len(b))
+func parseSettingsFramePayload(r io.Reader, len uint64) (Settings, error) {
+	if len > 8*(1<<10) {
+		return nil, fmt.Errorf("unexpected size for SETTINGS frame: %d", len)
 	}
-	s := Settings{}
-	r := bytes.NewReader(b)
-	for r.Len() > 0 {
-		id, err := quicvarint.Read(r)
-		if err != nil { // should not happen. We allocated the whole frame already.
-			return err
-		}
-		val, err := quicvarint.Read(r)
-		if err != nil { // should not happen. We allocated the whole frame already.
-			return err
-		}
-
-		if _, ok := s[Setting(id)]; ok {
-			return fmt.Errorf("duplicate setting: %d", id)
-		}
-		s[Setting(id)] = val
-	}
-	*sp = s
-	return nil
-}
-
-func ReadSettingsFrame(r io.Reader, l uint64) (Settings, error) {
-	if l > 8*(1<<10) {
-		return nil, fmt.Errorf("unexpected size for SETTINGS frame: %d", l)
-	}
-	buf := make([]byte, l)
-	if _, err := io.ReadFull(r, buf); err != nil {
+	b := make([]byte, len)
+	if _, err := io.ReadFull(r, b); err != nil {
 		if err == io.ErrUnexpectedEOF {
 			return nil, io.EOF
 		}
 		return nil, err
 	}
 	s := Settings{}
-	err := s.UnmarshalFrame(buf)
-	return s, err
+	br := bytes.NewReader(b)
+	for br.Len() > 0 {
+		id, err := quicvarint.Read(br)
+		if err != nil { // should not happen. We allocated the whole frame already.
+			return nil, err
+		}
+		val, err := quicvarint.Read(br)
+		if err != nil { // should not happen. We allocated the whole frame already.
+			return nil, err
+		}
+
+		if _, ok := s[Setting(id)]; ok {
+			return nil, fmt.Errorf("duplicate setting: %d", id)
+		}
+		s[Setting(id)] = val
+	}
+	return s, nil
 }
