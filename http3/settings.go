@@ -59,11 +59,11 @@ func (s Settings) WriteFrame(w io.Writer) error {
 	return nil
 }
 
-func (s Settings) UnmarshalFrame(b []byte) error {
+func (sp *Settings) UnmarshalFrame(b []byte) error {
 	if len(b) > 8*(1<<10) {
 		return fmt.Errorf("unexpected size for SETTINGS frame: %d", len(b))
 	}
-	*(&s) = Settings{}
+	s := Settings{}
 	r := bytes.NewReader(b)
 	for r.Len() > 0 {
 		id, err := quicvarint.Read(r)
@@ -80,6 +80,7 @@ func (s Settings) UnmarshalFrame(b []byte) error {
 		}
 		s[Setting(id)] = val
 	}
+	*sp = s
 	return nil
 }
 
@@ -95,20 +96,6 @@ func ReadSettingsFrame(r io.Reader, l uint64) (Settings, error) {
 		return nil, err
 	}
 	s := Settings{}
-	b := bytes.NewReader(buf)
-	for b.Len() > 0 {
-		id, err := quicvarint.Read(b)
-		if err != nil { // should not happen. We allocated the whole frame already.
-			return nil, err
-		}
-		val, err := quicvarint.Read(b)
-		if err != nil { // should not happen. We allocated the whole frame already.
-			return nil, err
-		}
-		if _, ok := s[Setting(id)]; ok {
-			return nil, fmt.Errorf("duplicate setting: %d", id)
-		}
-		s[Setting(id)] = val
-	}
-	return s, nil
+	err := s.UnmarshalFrame(buf)
+	return s, err
 }
