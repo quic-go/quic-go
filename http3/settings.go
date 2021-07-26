@@ -55,7 +55,7 @@ func (s Settings) EnableDatagrams() {
 	s[SettingDatagramDraft00] = 1 // TODO: remove this when the value for H3_DATAGRAM stabilizes
 }
 
-// DatagramsEnabled returns true if any of the values for H3_DATAGRAM are set to 1.
+// DatagramsEnabled returns true if any of H3_DATAGRAM setting(s) are set to 1.
 func (s Settings) DatagramsEnabled() bool {
 	return s[SettingDatagram] == 1 || s[SettingDatagramDraft00] == 1
 }
