@@ -27,7 +27,7 @@ func parseNextFrame(r io.Reader) (frame, error) {
 	case FrameTypeData:
 		return &dataFrame{Length: l}, nil
 	case FrameTypeHeaders:
-		return &headersFrame{length: l}, nil
+		return &headersFrame{Length: l}, nil
 	case FrameTypeSettings:
 		return parseSettingsFrame(r, l)
 	case FrameTypeCancelPush:
