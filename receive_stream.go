@@ -200,10 +200,12 @@ func (s *receiveStream) dequeueNextFrame() {
 func (s *receiveStream) CancelRead(errorCode StreamErrorCode) {
 	s.mutex.Lock()
 	completed := s.cancelReadImpl(errorCode)
+	if completed {
+		s.flowController.Abandon()
+	}
 	s.mutex.Unlock()
 
 	if completed {
-		s.flowController.Abandon()
 		s.sender.onStreamCompleted(s.streamID)
 	}
 }
