@@ -2,6 +2,7 @@ package quic
 
 import (
 	"context"
+	"crypto/tls"
 	"errors"
 	"io"
 	"net"
@@ -9,6 +10,7 @@ import (
 
 	"github.com/lucas-clemente/quic-go/internal/handshake"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
+	"github.com/lucas-clemente/quic-go/internal/qtls"
 	"github.com/lucas-clemente/quic-go/logging"
 )
 
@@ -298,6 +300,10 @@ type Config struct {
 type ConnectionState struct {
 	TLS               handshake.ConnectionState
 	SupportsDatagrams bool
+}
+
+func (s *ConnectionState) ToTLSConnectionState() tls.ConnectionState {
+	return qtls.ToTLSConnectionState(s.TLS)
 }
 
 // A Listener for incoming QUIC connections
