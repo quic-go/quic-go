@@ -38,7 +38,7 @@ func (id SettingID) String() string {
 	case SettingDatagramDraft00:
 		return "H3_DATAGRAM (draft 00)"
 	default:
-		return fmt.Sprintf("0x%x", uint64(id))
+		return fmt.Sprintf("%#x", uint64(id))
 	}
 }
 

@@ -37,6 +37,6 @@ func (t FrameType) String() string {
 	case FrameTypeDuplicatePush:
 		return "DUPLICATE_PUSH"
 	default:
-		return fmt.Sprintf("0x%x", uint64(t))
+		return fmt.Sprintf("%#x", uint64(t))
 	}
 }
