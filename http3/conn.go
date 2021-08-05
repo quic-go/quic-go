@@ -2,6 +2,7 @@ package http3
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net"
 	"sync"
@@ -38,14 +39,16 @@ type connection struct {
 
 	settings Settings
 
-	isServer bool
+	peerSettingsRead chan struct{} // Closed when peer settings are read
+	peerSettings     Settings
+	peerSettingsErr  error
 
-	peerSettingsMutex sync.RWMutex
-	peerSettings      Settings
-	peerSettingsErr   error
+	incomingUniStreams chan ReadableStream
 
 	peerStreamsMutex sync.Mutex
 	peerStreams      [4]ReadableStream
+
+	isServer bool
 }
 
 // Open establishes a new HTTP/3 connection on an existing QUIC session.
@@ -60,8 +63,10 @@ func Open(s quic.EarlySession, settings Settings) (Conn, error) {
 	}
 
 	conn := &connection{
-		EarlySession: s,
-		settings:     settings,
+		EarlySession:       s,
+		settings:           settings,
+		peerSettingsRead:   make(chan struct{}),
+		incomingUniStreams: make(chan ReadableStream, 1),
 	}
 
 	str, err := conn.OpenUniStream(StreamTypeControl)
@@ -73,7 +78,92 @@ func Open(s quic.EarlySession, settings Settings) (Conn, error) {
 
 	conn.isServer = (str.StreamID() & 1) == 1
 
+	go conn.handleIncomingUniStreams()
+
 	return conn, nil
+}
+
+func (conn *connection) handleIncomingUniStreams() {
+	for {
+		str, err := conn.EarlySession.AcceptUniStream(context.Background())
+		if err != nil {
+			// TODO: close the connection
+			return
+		}
+		go conn.handleIncomingUniStream(str)
+	}
+}
+
+func (conn *connection) handleIncomingUniStream(qstr quic.ReceiveStream) {
+	r := quicvarint.NewReader(qstr)
+	t, err := quicvarint.Read(r)
+	if err != nil {
+		// TODO: close the stream
+		qstr.CancelRead(quic.StreamErrorCode(errorGeneralProtocolError))
+		return
+	}
+	str := &readableStream{
+		ReceiveStream: qstr,
+		conn:          conn,
+		streamType:    StreamType(t),
+	}
+	if str.streamType < 4 {
+		conn.peerStreamsMutex.Lock()
+		if conn.peerStreams[str.streamType] != nil {
+			conn.CloseWithError(quic.ApplicationErrorCode(errorStreamCreationError), fmt.Sprintf("more than one %s opened", str.streamType))
+			return
+		}
+		conn.peerStreams[str.streamType] = str
+		conn.peerStreamsMutex.Unlock()
+	}
+	switch str.streamType {
+	case StreamTypeControl:
+		conn.handleControlStream(str)
+	case StreamTypePush:
+		if conn.isServer {
+			conn.CloseWithError(quic.ApplicationErrorCode(errorStreamCreationError), fmt.Sprintf("spurious %s from client", str.streamType))
+			return
+		}
+		// TODO: handle push streams
+	case StreamTypeQPACKEncoder, StreamTypeQPACKDecoder:
+		// TODO: handle QPACK dynamic tables
+	default:
+		conn.incomingUniStreams <- str
+	}
+}
+
+func (conn *connection) handleControlStream(str ReadableStream) {
+	for {
+		f, err := parseNextFrame(str)
+		if err != nil {
+			conn.peerSettingsErr = err
+			conn.CloseWithError(quic.ApplicationErrorCode(errorFrameError), "")
+			return
+		}
+		settings, ok := f.(Settings)
+		if !ok {
+			err := &quic.ApplicationError{
+				ErrorCode: quic.ApplicationErrorCode(errorMissingSettings),
+			}
+			conn.CloseWithError(err.ErrorCode, err.ErrorMessage)
+			conn.peerSettingsErr = err
+			return
+		}
+		// If datagram support was enabled on this side and the peer side, we can expect it to have been
+		// negotiated both on the transport and on the HTTP/3 layer.
+		// Note: ConnectionState() will block until the handshake is complete (relevant when using 0-RTT).
+		if settings.DatagramsEnabled() && !conn.ConnectionState().SupportsDatagrams {
+			err := &quic.ApplicationError{
+				ErrorCode:    quic.ApplicationErrorCode(errorSettingsError),
+				ErrorMessage: "missing QUIC datagram support",
+			}
+			conn.CloseWithError(err.ErrorCode, err.ErrorMessage)
+			conn.peerSettingsErr = err
+			return
+		}
+		conn.peerSettings = settings
+		close(conn.peerSettingsRead)
+	}
 }
 
 func (conn *connection) AcceptStream(ctx context.Context) (Stream, error) {
@@ -88,44 +178,11 @@ func (conn *connection) AcceptStream(ctx context.Context) (Stream, error) {
 }
 
 func (conn *connection) AcceptUniStream(ctx context.Context) (ReadableStream, error) {
-	conn.peerStreamsMutex.Lock()
-	defer conn.peerStreamsMutex.Unlock()
-	for {
-		qstr, err := conn.EarlySession.AcceptUniStream(ctx)
-		if err != nil {
-			return nil, err
-		}
-		r := quicvarint.NewReader(qstr)
-		t, err := quicvarint.Read(r)
-		if err != nil {
-			return nil, err
-		}
-		str := &readableStream{
-			ReceiveStream: qstr,
-			conn:          conn,
-			streamType:    StreamType(t),
-		}
-		switch str.streamType {
-		case StreamTypePush:
-			if conn.isServer {
-				err := &quic.ApplicationError{
-					ErrorCode:    quic.ApplicationErrorCode(errorStreamCreationError),
-					ErrorMessage: fmt.Sprintf("spurious %s from client", str.streamType),
-				}
-				conn.CloseWithError(err.ErrorCode, err.ErrorMessage)
-				return nil, err
-			}
-			fallthrough
-		case StreamTypeControl, StreamTypeQPACKEncoder, StreamTypeQPACKDecoder:
-			if conn.peerStreams[str.streamType] != nil {
-				// TODO: close with errorStreamCreationError
-				return nil, fmt.Errorf("second %s opened", str.streamType)
-			}
-			conn.peerStreams[str.streamType] = str
-			// TODO: start stream goroutine
-		default:
-			return str, nil
-		}
+	select {
+	case str := <-conn.incomingUniStreams:
+		return str, nil
+	case <-conn.Context().Done():
+		return nil, errors.New("QUIC session closed")
 	}
 }
 
@@ -163,7 +220,10 @@ func (conn *connection) Settings() Settings {
 }
 
 func (conn *connection) PeerSettings() (Settings, error) {
-	conn.peerSettingsMutex.RLock()
-	defer conn.peerSettingsMutex.RUnlock()
-	return conn.peerSettings, conn.peerSettingsErr
+	select {
+	case <-conn.peerSettingsRead:
+		return conn.peerSettings, conn.peerSettingsErr
+	case <-conn.Context().Done():
+		return nil, conn.Context().Err()
+	}
 }
