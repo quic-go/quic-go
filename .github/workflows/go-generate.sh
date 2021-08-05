@@ -5,7 +5,6 @@ set -e
 DIR=$(pwd)
 TMP=$(mktemp -d)
 cd "$TMP"
-mkdir orig generated
 cp -r "$DIR" orig
 cp -r "$DIR" generated
 

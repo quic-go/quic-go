@@ -4,7 +4,7 @@ import (
 	"context"
 	"crypto/tls"
 	"fmt"
-	"io/ioutil"
+	"io"
 	mrand "math/rand"
 	"net"
 	"sort"
@@ -117,7 +117,7 @@ var _ = Describe("0-RTT", func() {
 					Expect(err).ToNot(HaveOccurred())
 					str, err := sess.AcceptUniStream(context.Background())
 					Expect(err).ToNot(HaveOccurred())
-					data, err := ioutil.ReadAll(str)
+					data, err := io.ReadAll(str)
 					Expect(err).ToNot(HaveOccurred())
 					Expect(data).To(Equal(testdata))
 					Expect(sess.ConnectionState().TLS.Used0RTT).To(BeTrue())
@@ -270,12 +270,12 @@ var _ = Describe("0-RTT", func() {
 					Expect(err).ToNot(HaveOccurred())
 					str, err := sess.AcceptUniStream(context.Background())
 					Expect(err).ToNot(HaveOccurred())
-					data, err := ioutil.ReadAll(str)
+					data, err := io.ReadAll(str)
 					Expect(err).ToNot(HaveOccurred())
 					Expect(data).To(Equal(zeroRTTData))
 					str, err = sess.AcceptUniStream(context.Background())
 					Expect(err).ToNot(HaveOccurred())
-					data, err = ioutil.ReadAll(str)
+					data, err = io.ReadAll(str)
 					Expect(err).ToNot(HaveOccurred())
 					Expect(data).To(Equal(oneRTTData))
 					Expect(sess.CloseWithError(0, "")).To(Succeed())
@@ -605,7 +605,7 @@ var _ = Describe("0-RTT", func() {
 					Expect(err).ToNot(HaveOccurred())
 					rstr, err := serverSess.AcceptUniStream(context.Background())
 					Expect(err).ToNot(HaveOccurred())
-					data, err := ioutil.ReadAll(rstr)
+					data, err := io.ReadAll(rstr)
 					Expect(err).ToNot(HaveOccurred())
 					Expect(data).To(Equal([]byte("foobar")))
 					Expect(serverSess.ConnectionState().TLS.Used0RTT).To(BeTrue())

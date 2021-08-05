@@ -51,5 +51,4 @@ jobs:
 workflows:
   workflow:
     jobs:
-      - go115
       - go116

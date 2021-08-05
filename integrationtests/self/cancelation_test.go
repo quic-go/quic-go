@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"math/rand"
 	"net"
 	"sync"
@@ -94,7 +93,7 @@ var _ = Describe("Stream Cancelations", func() {
 						str.CancelRead(quic.StreamErrorCode(str.StreamID()))
 						return
 					}
-					data, err := ioutil.ReadAll(str)
+					data, err := io.ReadAll(str)
 					Expect(err).ToNot(HaveOccurred())
 					Expect(data).To(Equal(PRData))
 				}()
@@ -135,14 +134,14 @@ var _ = Describe("Stream Cancelations", func() {
 					// only read some data from about 1/3 of the streams
 					if rand.Int31()%3 != 0 {
 						length := int(rand.Int31n(int32(len(PRData) - 1)))
-						data, err := ioutil.ReadAll(io.LimitReader(str, int64(length)))
+						data, err := io.ReadAll(io.LimitReader(str, int64(length)))
 						Expect(err).ToNot(HaveOccurred())
 						str.CancelRead(quic.StreamErrorCode(str.StreamID()))
 						Expect(data).To(Equal(PRData[:length]))
 						atomic.AddInt32(&canceledCounter, 1)
 						return
 					}
-					data, err := ioutil.ReadAll(str)
+					data, err := io.ReadAll(str)
 					Expect(err).ToNot(HaveOccurred())
 					Expect(data).To(Equal(PRData))
 				}()
@@ -225,7 +224,7 @@ var _ = Describe("Stream Cancelations", func() {
 					defer wg.Done()
 					str, err := sess.AcceptUniStream(context.Background())
 					Expect(err).ToNot(HaveOccurred())
-					data, err := ioutil.ReadAll(str)
+					data, err := io.ReadAll(str)
 					if err != nil {
 						atomic.AddInt32(&counter, 1)
 						Expect(err).To(MatchError(&quic.StreamError{
@@ -375,7 +374,7 @@ var _ = Describe("Stream Cancelations", func() {
 						str.CancelRead(quic.StreamErrorCode(str.StreamID()))
 						return
 					}
-					data, err := ioutil.ReadAll(str)
+					data, err := io.ReadAll(str)
 					if err != nil {
 						Expect(err).To(MatchError(&quic.StreamError{
 							StreamID:  str.StreamID(),
@@ -464,7 +463,7 @@ var _ = Describe("Stream Cancelations", func() {
 						length = int(rand.Int31n(int32(len(PRData) - 1)))
 						r = io.LimitReader(str, int64(length))
 					}
-					data, err := ioutil.ReadAll(r)
+					data, err := io.ReadAll(r)
 					if err != nil {
 						Expect(err).To(MatchError(&quic.StreamError{
 							StreamID:  str.StreamID(),
@@ -547,7 +546,7 @@ var _ = Describe("Stream Cancelations", func() {
 						}
 						return
 					}
-					data, err := ioutil.ReadAll(str)
+					data, err := io.ReadAll(str)
 					Expect(err).ToNot(HaveOccurred())
 					Expect(data).To(Equal(PRData))
 					wg.Done()
@@ -617,7 +616,7 @@ var _ = Describe("Stream Cancelations", func() {
 				Expect(err).ToNot(HaveOccurred())
 				go func(str quic.ReceiveStream) {
 					defer GinkgoRecover()
-					data, err := ioutil.ReadAll(str)
+					data, err := io.ReadAll(str)
 					Expect(err).ToNot(HaveOccurred())
 					Expect(data).To(Equal(PRData))
 					wg.Done()

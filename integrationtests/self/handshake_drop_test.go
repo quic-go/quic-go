@@ -4,7 +4,7 @@ import (
 	"context"
 	"crypto/tls"
 	"fmt"
-	"io/ioutil"
+	"io"
 	mrand "math/rand"
 	"net"
 	"sync/atomic"
@@ -79,7 +79,7 @@ var _ = Describe("Handshake drop tests", func() {
 				defer sess.CloseWithError(0, "")
 				str, err := sess.AcceptStream(context.Background())
 				Expect(err).ToNot(HaveOccurred())
-				b, err := ioutil.ReadAll(gbytes.TimeoutReader(str, timeout))
+				b, err := io.ReadAll(gbytes.TimeoutReader(str, timeout))
 				Expect(err).ToNot(HaveOccurred())
 				Expect(b).To(Equal(data))
 				serverSessionChan <- sess
@@ -134,7 +134,7 @@ var _ = Describe("Handshake drop tests", func() {
 			Expect(err).ToNot(HaveOccurred())
 			str, err := sess.AcceptStream(context.Background())
 			Expect(err).ToNot(HaveOccurred())
-			b, err := ioutil.ReadAll(gbytes.TimeoutReader(str, timeout))
+			b, err := io.ReadAll(gbytes.TimeoutReader(str, timeout))
 			Expect(err).ToNot(HaveOccurred())
 			Expect(b).To(Equal(data))
 
