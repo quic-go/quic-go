@@ -51,7 +51,7 @@ type dataFrame struct {
 }
 
 func (f *dataFrame) writeFrame(w quicvarint.Writer) {
-	quicvarint.Write(w, 0x0)
+	quicvarint.Write(w, uint64(FrameTypeData))
 	quicvarint.Write(w, f.len)
 }
 
@@ -60,6 +60,6 @@ type headersFrame struct {
 }
 
 func (f *headersFrame) writeFrame(w quicvarint.Writer) {
-	quicvarint.Write(w, 0x1)
+	quicvarint.Write(w, uint64(FrameTypeHeaders))
 	quicvarint.Write(w, f.len)
 }
