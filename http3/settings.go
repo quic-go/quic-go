@@ -118,6 +118,7 @@ func parseSettingsFramePayload(r io.Reader, len uint64) (Settings, error) {
 			if val != 0 && val != 1 {
 				return nil, fmt.Errorf("invalid value for H3_DATAGRAM: %d", val)
 			}
+		default:
 		}
 		s[id] = val
 	}
