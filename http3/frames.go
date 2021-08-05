@@ -7,7 +7,9 @@ import (
 	"github.com/lucas-clemente/quic-go/quicvarint"
 )
 
-type frame interface{}
+type frame interface {
+	writeFrame(quicvarint.Writer)
+}
 
 func parseNextFrame(r io.Reader) (frame, error) {
 	qr := quicvarint.NewReader(r)
