@@ -35,10 +35,14 @@ var _ = Describe("0-RTT", func() {
 				proxy, err := quicproxy.NewQuicProxy("localhost:0", &quicproxy.Opts{
 					RemoteAddr: fmt.Sprintf("localhost:%d", serverPort),
 					DelayPacket: func(_ quicproxy.Direction, data []byte) time.Duration {
-						hdr, _, _, err := wire.ParsePacket(data, 0)
-						Expect(err).ToNot(HaveOccurred())
-						if hdr.Type == protocol.PacketType0RTT {
-							atomic.AddUint32(&num0RTTPackets, 1)
+						for len(data) > 0 {
+							hdr, _, rest, err := wire.ParsePacket(data, 0)
+							Expect(err).ToNot(HaveOccurred())
+							if hdr.Type == protocol.PacketType0RTT {
+								atomic.AddUint32(&num0RTTPackets, 1)
+								break
+							}
+							data = rest
 						}
 						return rtt / 2
 					},
