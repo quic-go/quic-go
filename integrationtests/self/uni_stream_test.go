@@ -3,7 +3,7 @@ package self_test
 import (
 	"context"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net"
 	"sync"
 
@@ -61,7 +61,7 @@ var _ = Describe("Unidirectional Streams", func() {
 			go func() {
 				defer GinkgoRecover()
 				defer wg.Done()
-				data, err := ioutil.ReadAll(str)
+				data, err := io.ReadAll(str)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(data).To(Equal(dataForStream(str.StreamID())))
 			}()
