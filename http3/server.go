@@ -281,7 +281,7 @@ func (s *Server) handleUnidirectionalStreams(sess quic.EarlySession) {
 		}
 
 		go func(str quic.ReceiveStream) {
-			streamType, err := quicvarint.Read(&byteReaderImpl{str})
+			streamType, err := quicvarint.Read(quicvarint.NewReader(str))
 			if err != nil {
 				s.logger.Debugf("reading stream type on stream %d failed: %s", str.StreamID(), err)
 				return

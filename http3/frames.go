@@ -10,33 +10,15 @@ import (
 	"github.com/lucas-clemente/quic-go/quicvarint"
 )
 
-type byteReader interface {
-	io.ByteReader
-	io.Reader
-}
-
-type byteReaderImpl struct{ io.Reader }
-
-func (br *byteReaderImpl) ReadByte() (byte, error) {
-	b := make([]byte, 1)
-	if _, err := br.Reader.Read(b); err != nil {
-		return 0, err
-	}
-	return b[0], nil
-}
-
 type frame interface{}
 
-func parseNextFrame(b io.Reader) (frame, error) {
-	br, ok := b.(byteReader)
-	if !ok {
-		br = &byteReaderImpl{b}
-	}
-	t, err := quicvarint.Read(br)
+func parseNextFrame(r io.Reader) (frame, error) {
+	qr := quicvarint.NewReader(r)
+	t, err := quicvarint.Read(qr)
 	if err != nil {
 		return nil, err
 	}
-	l, err := quicvarint.Read(br)
+	l, err := quicvarint.Read(qr)
 	if err != nil {
 		return nil, err
 	}
@@ -47,7 +29,7 @@ func parseNextFrame(b io.Reader) (frame, error) {
 	case 0x1:
 		return &headersFrame{Length: l}, nil
 	case 0x4:
-		return parseSettingsFrame(br, l)
+		return parseSettingsFrame(r, l)
 	case 0x3: // CANCEL_PUSH
 		fallthrough
 	case 0x5: // PUSH_PROMISE
@@ -60,10 +42,10 @@ func parseNextFrame(b io.Reader) (frame, error) {
 		fallthrough
 	default:
 		// skip over unknown frames
-		if _, err := io.CopyN(ioutil.Discard, br, int64(l)); err != nil {
+		if _, err := io.CopyN(ioutil.Discard, qr, int64(l)); err != nil {
 			return nil, err
 		}
-		return parseNextFrame(b)
+		return parseNextFrame(qr)
 	}
 }
 
