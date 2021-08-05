@@ -95,19 +95,18 @@ func WriteWithLen(w Writer, i uint64, length protocol.ByteCount) {
 	if l > length {
 		panic(fmt.Sprintf("cannot encode %d in %d bytes", i, length))
 	}
-	qw := NewWriter(w)
 	if length == 2 {
-		qw.WriteByte(0b01000000)
+		w.WriteByte(0b01000000)
 	} else if length == 4 {
-		qw.WriteByte(0b10000000)
+		w.WriteByte(0b10000000)
 	} else if length == 8 {
-		qw.WriteByte(0b11000000)
+		w.WriteByte(0b11000000)
 	}
 	for j := protocol.ByteCount(1); j < length-l; j++ {
-		qw.WriteByte(0)
+		w.WriteByte(0)
 	}
 	for j := protocol.ByteCount(0); j < l; j++ {
-		qw.WriteByte(uint8(i >> (8 * (l - 1 - j))))
+		w.WriteByte(uint8(i >> (8 * (l - 1 - j))))
 	}
 }
 
