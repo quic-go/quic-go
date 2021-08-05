@@ -2,13 +2,13 @@ version: 2.1
 executors:
   test-go115:
     docker:
-      - image: "circleci/golang:1.15"
+      - image: "cimg/go:1.15"
     environment:
       runrace: true
       TIMESCALE_FACTOR: 3
   test-go116:
     docker:
-      - image: "circleci/golang:1.16"
+      - image: "cimg/go:1.16"
     environment:
       runrace: true
       TIMESCALE_FACTOR: 3
@@ -16,7 +16,6 @@ executors:
 jobs:
   "test": &test
     executor: test-go115
-    working_directory: /go/src/github.com/lucas-clemente/quic-go
     steps:
       - checkout
       - run:
