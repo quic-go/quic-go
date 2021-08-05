@@ -3,14 +3,14 @@ package http3
 import "fmt"
 
 const (
-	FrameTypeData          FrameType = 0x0
-	FrameTypeHeaders       FrameType = 0x1
-	FrameTypeCancelPush    FrameType = 0x3
-	FrameTypeSettings      FrameType = 0x4
-	FrameTypePushPromise   FrameType = 0x5
-	FrameTypeGoAway        FrameType = 0x7
-	FrameTypeMaxPushID     FrameType = 0xd
-	FrameTypeDuplicatePush FrameType = 0xe
+	FrameTypeData          FrameType = 0x00
+	FrameTypeHeaders       FrameType = 0x01
+	FrameTypeCancelPush    FrameType = 0x03
+	FrameTypeSettings      FrameType = 0x04
+	FrameTypePushPromise   FrameType = 0x05
+	FrameTypeGoAway        FrameType = 0x07
+	FrameTypeMaxPushID     FrameType = 0x0d
+	FrameTypeDuplicatePush FrameType = 0x0e
 )
 
 // A FrameType represents an HTTP/3 frame type.
