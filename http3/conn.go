@@ -76,6 +76,7 @@ func Open(s quic.EarlySession, settings Settings) (Conn, error) {
 	w := quicvarint.NewWriter(str)
 	settings.writeFrame(w)
 
+	// TODO: add Perspective to quic.Session
 	conn.isServer = (str.StreamID() & 1) == 1
 
 	go conn.handleIncomingUniStreams()
@@ -155,7 +156,7 @@ func (conn *connection) handleControlStream(str ReadableStream) {
 		if settings.DatagramsEnabled() && !conn.ConnectionState().SupportsDatagrams {
 			err := &quic.ApplicationError{
 				ErrorCode:    quic.ApplicationErrorCode(errorSettingsError),
-				ErrorMessage: "missing QUIC datagram support",
+				ErrorMessage: "missing QUIC Datagram support",
 			}
 			conn.CloseWithError(err.ErrorCode, err.ErrorMessage)
 			conn.peerSettingsErr = err
@@ -163,6 +164,9 @@ func (conn *connection) handleControlStream(str ReadableStream) {
 		}
 		conn.peerSettings = settings
 		close(conn.peerSettingsRead)
+
+		// FIXME: have tests permit reading in a loop
+		return
 	}
 }
 
@@ -180,6 +184,9 @@ func (conn *connection) AcceptStream(ctx context.Context) (Stream, error) {
 func (conn *connection) AcceptUniStream(ctx context.Context) (ReadableStream, error) {
 	select {
 	case str := <-conn.incomingUniStreams:
+		if str == nil {
+			return nil, errors.New("BUG: closed incomingUniStreams channel")
+		}
 		return str, nil
 	case <-conn.Context().Done():
 		return nil, errors.New("QUIC session closed")
