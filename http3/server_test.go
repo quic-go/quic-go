@@ -123,6 +123,7 @@ var _ = Describe("Server", func() {
 			addr := &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 1337}
 			sess.EXPECT().RemoteAddr().Return(addr).AnyTimes()
 			sess.EXPECT().LocalAddr().AnyTimes()
+			sess.EXPECT().Context().Return(reqContext).AnyTimes()
 		})
 
 		It("calls the HTTP handler function", func() {
@@ -200,11 +201,13 @@ var _ = Describe("Server", func() {
 			BeforeEach(func() {
 				sess = mockquic.NewMockEarlySession(mockCtrl)
 				controlStr := mockquic.NewMockStream(mockCtrl)
-				controlStr.EXPECT().Write(gomock.Any())
+				controlStr.EXPECT().StreamID().Return(protocol.StreamID(1))
+				controlStr.EXPECT().Write(gomock.Any()).MinTimes(1)
 				sess.EXPECT().OpenUniStream().Return(controlStr, nil)
 				sess.EXPECT().AcceptStream(gomock.Any()).Return(nil, errors.New("done"))
 				sess.EXPECT().RemoteAddr().Return(&net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 1337}).AnyTimes()
 				sess.EXPECT().LocalAddr().AnyTimes()
+				sess.EXPECT().Context().Return(reqContext).AnyTimes()
 			})
 
 			AfterEach(func() { testDone <- struct{}{} })
@@ -379,7 +382,8 @@ var _ = Describe("Server", func() {
 				addr := &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 1337}
 				sess = mockquic.NewMockEarlySession(mockCtrl)
 				controlStr := mockquic.NewMockStream(mockCtrl)
-				controlStr.EXPECT().Write(gomock.Any())
+				controlStr.EXPECT().StreamID().Return(protocol.StreamID(1))
+				controlStr.EXPECT().Write(gomock.Any()).AnyTimes()
 				sess.EXPECT().OpenUniStream().Return(controlStr, nil)
 				sess.EXPECT().AcceptUniStream(gomock.Any()).DoAndReturn(func(context.Context) (quic.ReceiveStream, error) {
 					<-testDone
@@ -389,6 +393,7 @@ var _ = Describe("Server", func() {
 				sess.EXPECT().AcceptStream(gomock.Any()).Return(nil, errors.New("done"))
 				sess.EXPECT().RemoteAddr().Return(addr).AnyTimes()
 				sess.EXPECT().LocalAddr().AnyTimes()
+				sess.EXPECT().Context().Return(reqContext).AnyTimes()
 			})
 
 			AfterEach(func() { testDone <- struct{}{} })

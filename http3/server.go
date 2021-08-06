@@ -1,7 +1,6 @@
 package http3
 
 import (
-	"bytes"
 	"context"
 	"crypto/tls"
 	"errors"
@@ -19,7 +18,6 @@ import (
 	"github.com/lucas-clemente/quic-go/internal/handshake"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/internal/utils"
-	"github.com/lucas-clemente/quic-go/quicvarint"
 	"github.com/marten-seemann/qpack"
 )
 
@@ -228,35 +226,30 @@ func (s *Server) removeListener(l *quic.EarlyListener) {
 func (s *Server) handleConn(sess quic.EarlySession) {
 	decoder := qpack.NewDecoder(nil)
 
-	// send a SETTINGS frame
-	str, err := sess.OpenUniStream()
-	if err != nil {
-		s.logger.Debugf("Opening the control stream failed.")
-		return
-	}
-	buf := &bytes.Buffer{}
-	quicvarint.Write(buf, streamTypeControlStream) // stream type
 	settings := Settings{}
 	if s.EnableDatagrams {
 		settings.EnableDatagrams()
 	}
-	settings.writeFrame(buf)
-	str.Write(buf.Bytes())
 
-	go s.handleUnidirectionalStreams(sess)
+	conn, err := Open(sess, settings)
+	if err != nil {
+		s.logger.Errorf("unable to open HTTP/3 connection")
+		sess.CloseWithError(quic.ApplicationErrorCode(errorGeneralProtocolError), "")
+		return
+	}
+
+	go s.handleUnidirectionalStreams(conn)
 
 	// Process all requests immediately.
 	// It's the client's responsibility to decide which requests are eligible for 0-RTT.
 	for {
-		str, err := sess.AcceptStream(context.Background())
+		str, err := conn.AcceptStream(context.Background())
 		if err != nil {
 			s.logger.Debugf("Accepting stream failed: %s", err)
 			return
 		}
 		go func() {
-			rerr := s.handleRequest(sess, str, decoder, func() {
-				sess.CloseWithError(quic.ApplicationErrorCode(errorFrameUnexpected), "")
-			})
+			rerr := s.handleRequest2(str, decoder)
 			if rerr.err != nil || rerr.streamErr != 0 || rerr.connErr != 0 {
 				s.logger.Debugf("Handling request failed: %s", err)
 				if rerr.streamErr != 0 {
@@ -276,51 +269,16 @@ func (s *Server) handleConn(sess quic.EarlySession) {
 	}
 }
 
-func (s *Server) handleUnidirectionalStreams(sess quic.EarlySession) {
+func (s *Server) handleUnidirectionalStreams(conn Conn) {
 	for {
-		str, err := sess.AcceptUniStream(context.Background())
+		str, err := conn.AcceptUniStream(context.Background())
 		if err != nil {
 			s.logger.Debugf("accepting unidirectional stream failed: %s", err)
 			return
 		}
 
-		go func(str quic.ReceiveStream) {
-			streamType, err := quicvarint.Read(quicvarint.NewReader(str))
-			if err != nil {
-				s.logger.Debugf("reading stream type on stream %d failed: %s", str.StreamID(), err)
-				return
-			}
-			// We're only interested in the control stream here.
-			switch streamType {
-			case streamTypeControlStream:
-			case streamTypeQPACKEncoderStream, streamTypeQPACKDecoderStream:
-				// Our QPACK implementation doesn't use the dynamic table yet.
-				// TODO: check that only one stream of each type is opened.
-				return
-			case streamTypePushStream: // only the server can push
-				sess.CloseWithError(quic.ApplicationErrorCode(errorStreamCreationError), "")
-				return
-			default:
-				str.CancelRead(quic.StreamErrorCode(errorStreamCreationError))
-				return
-			}
-			f, err := parseNextFrame(str)
-			if err != nil {
-				sess.CloseWithError(quic.ApplicationErrorCode(errorFrameError), "")
-				return
-			}
-			settings, ok := f.(Settings)
-			if !ok {
-				sess.CloseWithError(quic.ApplicationErrorCode(errorMissingSettings), "")
-				return
-			}
-			// If datagram support was enabled on our side as well as on the client side,
-			// we can expect it to have been negotiated both on the transport and on the HTTP/3 layer.
-			// Note: ConnectionState() will block until the handshake is complete (relevant when using 0-RTT).
-			if settings.DatagramsEnabled() && s.EnableDatagrams && !sess.ConnectionState().SupportsDatagrams {
-				sess.CloseWithError(quic.ApplicationErrorCode(errorSettingsError), "missing QUIC Datagram support")
-			}
-		}(str)
+		// TODO: handle unknown stream types
+		str.CancelRead(quic.StreamErrorCode(errorStreamCreationError))
 	}
 }
 
@@ -329,6 +287,86 @@ func (s *Server) maxHeaderBytes() uint64 {
 		return http.DefaultMaxHeaderBytes
 	}
 	return uint64(s.Server.MaxHeaderBytes)
+}
+
+func (s *Server) handleRequest2(str Stream, decoder *qpack.Decoder) requestError {
+	frame, err := parseNextFrame(str)
+	if err != nil {
+		return newStreamError(errorRequestIncomplete, err)
+	}
+	hf, ok := frame.(*headersFrame)
+	if !ok {
+		return newConnError(errorFrameUnexpected, errors.New("expected first frame to be a HEADERS frame"))
+	}
+	if hf.len > s.maxHeaderBytes() {
+		return newStreamError(errorFrameError, fmt.Errorf("HEADERS frame too large: %d bytes (max: %d)", hf.len, s.maxHeaderBytes()))
+	}
+	headerBlock := make([]byte, hf.len)
+	if _, err := io.ReadFull(str, headerBlock); err != nil {
+		return newStreamError(errorRequestIncomplete, err)
+	}
+	hfs, err := decoder.DecodeFull(headerBlock)
+	if err != nil {
+		// TODO: use the right error code
+		return newConnError(errorGeneralProtocolError, err)
+	}
+	req, err := requestFromHeaders(hfs)
+	if err != nil {
+		// TODO: use the right error code
+		return newStreamError(errorGeneralProtocolError, err)
+	}
+
+	req.RemoteAddr = str.Conn().RemoteAddr().String()
+	req.Body = newRequestBody(str, func() {
+		str.Conn().CloseWithError(quic.ApplicationErrorCode(errorFrameUnexpected), "")
+	})
+
+	if s.logger.Debug() {
+		s.logger.Infof("%s %s%s, on stream %d", req.Method, req.Host, req.RequestURI, str.StreamID())
+	} else {
+		s.logger.Infof("%s %s%s", req.Method, req.Host, req.RequestURI)
+	}
+
+	ctx := str.Context()
+	ctx = context.WithValue(ctx, ServerContextKey, s)
+	ctx = context.WithValue(ctx, http.LocalAddrContextKey, str.Conn().LocalAddr())
+	req = req.WithContext(ctx)
+	r := newResponseWriter(str, s.logger)
+	defer func() {
+		if !r.usedDataStream() {
+			r.Flush()
+		}
+	}()
+	handler := s.Handler
+	if handler == nil {
+		handler = http.DefaultServeMux
+	}
+
+	var panicked bool
+	func() {
+		defer func() {
+			if p := recover(); p != nil {
+				// Copied from net/http/server.go
+				const size = 64 << 10
+				buf := make([]byte, size)
+				buf = buf[:runtime.Stack(buf, false)]
+				s.logger.Errorf("http: panic serving: %v\n%s", p, buf)
+				panicked = true
+			}
+		}()
+		handler.ServeHTTP(r, req)
+	}()
+
+	if !r.usedDataStream() {
+		if panicked {
+			r.WriteHeader(500)
+		} else {
+			r.WriteHeader(200)
+		}
+		// If the EOF was read by the handler, CancelRead() is a no-op.
+		str.CancelRead(quic.StreamErrorCode(errorNoError))
+	}
+	return requestError{}
 }
 
 func (s *Server) handleRequest(sess quic.Session, str quic.Stream, decoder *qpack.Decoder, onFrameError func()) requestError {
