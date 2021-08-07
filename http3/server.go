@@ -249,7 +249,7 @@ func (s *Server) handleConn(sess quic.EarlySession) {
 			return
 		}
 		go func() {
-			rerr := s.handleRequest2(str, decoder)
+			rerr := s.handleRequest2(str.(Stream), decoder)
 			if rerr.err != nil || rerr.streamErr != 0 || rerr.connErr != 0 {
 				s.logger.Debugf("Handling request failed: %s", err)
 				if rerr.streamErr != 0 {

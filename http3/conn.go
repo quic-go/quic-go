@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"net"
 	"sync"
 
 	"github.com/lucas-clemente/quic-go"
@@ -12,13 +11,9 @@ import (
 )
 
 type Conn interface {
-	AcceptStream(context.Context) (Stream, error)
-	AcceptUniStream(context.Context) (ReadableStream, error)
-	OpenStream() (Stream, error)
-	OpenUniStream(StreamType) (WritableStream, error)
+	quic.EarlySession
 
-	LocalAddr() net.Addr
-	RemoteAddr() net.Addr
+	OpenTypedStream(StreamType) (WritableStream, error)
 
 	// ReadDatagram() ([]byte, error)
 	// WriteDatagram([]byte) error
@@ -51,6 +46,9 @@ type connection struct {
 	isServer bool
 }
 
+var _ quic.EarlySession = &connection{}
+var _ Conn = &connection{}
+
 // Open establishes a new HTTP/3 connection on an existing QUIC session.
 // If settings is nil, it will use a set of reasonable defaults.
 func Open(s quic.EarlySession, settings Settings) (Conn, error) {
@@ -69,7 +67,7 @@ func Open(s quic.EarlySession, settings Settings) (Conn, error) {
 		incomingUniStreams: make(chan ReadableStream, 1),
 	}
 
-	str, err := conn.OpenUniStream(StreamTypeControl)
+	str, err := conn.OpenTypedStream(StreamTypeControl)
 	if err != nil {
 		return nil, err
 	}
@@ -166,7 +164,7 @@ func (conn *connection) handleControlStream(str ReadableStream) {
 	// TODO: loop reading the reset of the frames from the control stream
 }
 
-func (conn *connection) AcceptStream(ctx context.Context) (Stream, error) {
+func (conn *connection) AcceptStream(ctx context.Context) (quic.Stream, error) {
 	str, err := conn.EarlySession.AcceptStream(ctx)
 	if err != nil {
 		return nil, err
@@ -177,7 +175,7 @@ func (conn *connection) AcceptStream(ctx context.Context) (Stream, error) {
 	}, nil
 }
 
-func (conn *connection) AcceptUniStream(ctx context.Context) (ReadableStream, error) {
+func (conn *connection) AcceptUniStream(ctx context.Context) (quic.ReceiveStream, error) {
 	select {
 	case str := <-conn.incomingUniStreams:
 		if str == nil {
@@ -189,7 +187,9 @@ func (conn *connection) AcceptUniStream(ctx context.Context) (ReadableStream, er
 	}
 }
 
-func (conn *connection) OpenStream() (Stream, error) {
+// OpenStream overrides (quic.EarlySession).OpenStream to return
+// a wrapped quic.Stream which is also implements http3.Stream.
+func (conn *connection) OpenStream() (quic.Stream, error) {
 	str, err := conn.EarlySession.OpenStream()
 	if err != nil {
 		return nil, err
@@ -200,7 +200,7 @@ func (conn *connection) OpenStream() (Stream, error) {
 	}, nil
 }
 
-func (conn *connection) OpenUniStream(t StreamType) (WritableStream, error) {
+func (conn *connection) OpenTypedStream(t StreamType) (WritableStream, error) {
 	if !t.Valid() {
 		return nil, fmt.Errorf("invalid stream type: %s", t)
 	}

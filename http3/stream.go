@@ -53,6 +53,8 @@ type readableStream struct {
 	streamType StreamType
 }
 
+var _ quic.ReceiveStream = &readableStream{}
+
 func (s *readableStream) Conn() Conn {
 	return s.conn
 }
@@ -74,6 +76,8 @@ type writableStream struct {
 	streamType StreamType
 }
 
+var _ quic.SendStream = &writableStream{}
+
 func (s *writableStream) Conn() Conn {
 	return s.conn
 }
@@ -92,6 +96,8 @@ type bidiStream struct {
 	quic.Stream
 	conn Conn
 }
+
+var _ quic.Stream = &bidiStream{}
 
 func (s *bidiStream) Conn() Conn {
 	return s.conn
