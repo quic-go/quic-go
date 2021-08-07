@@ -171,7 +171,7 @@ func (conn *connection) AcceptStream(ctx context.Context) (Stream, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &stream{
+	return &bidiStream{
 		Stream: str,
 		conn:   conn,
 	}, nil
@@ -194,7 +194,7 @@ func (conn *connection) OpenStream() (Stream, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &stream{
+	return &bidiStream{
 		Stream: str,
 		conn:   conn,
 	}, nil

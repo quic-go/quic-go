@@ -7,9 +7,6 @@ import (
 )
 
 const (
-	// A StreamTypeBidi is never represented on the wire as a varint.
-	StreamTypeBidi StreamType = -1
-
 	// https://www.ietf.org/archive/id/draft-ietf-quic-http-34.html#name-stream-types
 	StreamTypeControl StreamType = 0x00
 	StreamTypePush    StreamType = 0x01
@@ -20,13 +17,11 @@ const (
 )
 
 // StreamType represents an HTTP/3 stream type.
-type StreamType int64
+type StreamType uint64
 
 // String implements the Stringer interface.
 func (t StreamType) String() string {
 	switch t {
-	case StreamTypeBidi:
-		return "bidirectional stream"
 	case StreamTypeControl:
 		return "Control Stream"
 	case StreamTypePush:
@@ -36,21 +31,20 @@ func (t StreamType) String() string {
 	case StreamTypeQPACKDecoder:
 		return "QPACK Decoder Stream"
 	default:
-		return fmt.Sprintf("0x%x", int64(t))
+		return fmt.Sprintf("0x%x", uint64(t))
 	}
 }
 
 // Valid returns true if t is a valid stream type ([0,4611686018427387903]).
-// Note: StreamTypeBidi is "invalid".
 func (t StreamType) Valid() bool {
-	return t >= 0 && t <= 4611686018427387903
+	return t <= 4611686018427387903
 }
 
-// A ReadableStream represents the receiver side of a unidirectional HTTP/3 stream.
+// ReadableStream represents the receiver side of a unidirectional HTTP/3 stream.
 type ReadableStream interface {
+	quic.ReceiveStream
 	Conn() Conn
 	StreamType() StreamType
-	quic.ReceiveStream
 }
 
 type readableStream struct {
@@ -67,11 +61,11 @@ func (s *readableStream) StreamType() StreamType {
 	return s.streamType
 }
 
-// A WritableStream represents the sender side of a unidirectional HTTP/3 stream.
+// WritableStream represents the sender side of a unidirectional HTTP/3 stream.
 type WritableStream interface {
+	quic.SendStream
 	Conn() Conn
 	StreamType() StreamType
-	quic.SendStream
 }
 
 type writableStream struct {
@@ -88,22 +82,17 @@ func (s *writableStream) StreamType() StreamType {
 	return s.streamType
 }
 
-// A Stream represents a bidirectional HTTP/3 stream.
+// Stream represents a bidirectional HTTP/3 stream.
 type Stream interface {
-	ReadableStream
-	WritableStream
 	quic.Stream
+	Conn() Conn
 }
 
-type stream struct {
+type bidiStream struct {
 	quic.Stream
 	conn Conn
 }
 
-func (s *stream) Conn() Conn {
+func (s *bidiStream) Conn() Conn {
 	return s.conn
-}
-
-func (s *stream) StreamType() StreamType {
-	return StreamTypeBidi
 }
