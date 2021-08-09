@@ -224,6 +224,20 @@ func (mr *MockQuicSessionMockRecorder) OpenUniStreamSync(arg0 interface{}) *gomo
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "OpenUniStreamSync", reflect.TypeOf((*MockQuicSession)(nil).OpenUniStreamSync), arg0)
 }
 
+// Perspective mocks base method.
+func (m *MockQuicSession) Perspective() Perspective {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Perspective")
+	ret0, _ := ret[0].(Perspective)
+	return ret0
+}
+
+// Perspective indicates an expected call of Perspective.
+func (mr *MockQuicSessionMockRecorder) Perspective() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Perspective", reflect.TypeOf((*MockQuicSession)(nil).Perspective))
+}
+
 // ReceiveMessage mocks base method.
 func (m *MockQuicSession) ReceiveMessage() ([]byte, error) {
 	m.ctrl.T.Helper()
@@ -291,20 +305,6 @@ func (m *MockQuicSession) earlySessionReady() <-chan struct{} {
 func (mr *MockQuicSessionMockRecorder) earlySessionReady() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "earlySessionReady", reflect.TypeOf((*MockQuicSession)(nil).earlySessionReady))
-}
-
-// getPerspective mocks base method.
-func (m *MockQuicSession) getPerspective() protocol.Perspective {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "getPerspective")
-	ret0, _ := ret[0].(protocol.Perspective)
-	return ret0
-}
-
-// getPerspective indicates an expected call of getPerspective.
-func (mr *MockQuicSessionMockRecorder) getPerspective() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "getPerspective", reflect.TypeOf((*MockQuicSession)(nil).getPerspective))
 }
 
 // handlePacket mocks base method.
