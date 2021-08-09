@@ -14,8 +14,7 @@ var _ = Describe("Varint encoding / decoding", func() {
 		})
 
 		Specify("Max == 2^62-1", func() {
-			const max = 1<<62 - 1
-			Expect(Max).To(Equal(max))
+			Expect(uint64(Max)).To(Equal(uint64(1<<62 - 1)))
 		})
 	})
 
