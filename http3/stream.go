@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/lucas-clemente/quic-go"
+	"github.com/lucas-clemente/quic-go/quicvarint"
 )
 
 const (
@@ -35,9 +36,9 @@ func (t StreamType) String() string {
 	}
 }
 
-// Valid returns true if t is a valid stream type ([0,4611686018427387903]).
+// Valid returns true if t is a valid stream type ([0,2^62-1]).
 func (t StreamType) Valid() bool {
-	return t <= 4611686018427387903
+	return t <= quicvarint.Max
 }
 
 // ReadableStream represents the receiver side of a unidirectional HTTP/3 stream.
