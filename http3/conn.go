@@ -4,16 +4,23 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net"
 	"sync"
 
 	"github.com/lucas-clemente/quic-go"
 	"github.com/lucas-clemente/quic-go/quicvarint"
 )
 
+// Conn is an HTTP/3 connection.
+// The interface is modeled after quic.Session.
 type Conn interface {
-	quic.EarlySession
+	AcceptStream(context.Context) (Stream, error)
+	AcceptUniStream(context.Context) (ReadableStream, error)
+	OpenStream() (Stream, error)
+	OpenUniStream(StreamType) (WritableStream, error)
 
-	OpenTypedStream(StreamType) (WritableStream, error)
+	LocalAddr() net.Addr
+	RemoteAddr() net.Addr
 
 	// ReadDatagram() ([]byte, error)
 	// WriteDatagram([]byte) error
@@ -30,7 +37,7 @@ type Conn interface {
 }
 
 type connection struct {
-	quic.EarlySession
+	session quic.EarlySession
 
 	settings Settings
 
@@ -46,7 +53,6 @@ type connection struct {
 	isServer bool
 }
 
-var _ quic.EarlySession = &connection{}
 var _ Conn = &connection{}
 
 // Open establishes a new HTTP/3 connection on an existing QUIC session.
@@ -61,13 +67,13 @@ func Open(s quic.EarlySession, settings Settings) (Conn, error) {
 	}
 
 	conn := &connection{
-		EarlySession:       s,
+		session:            s,
 		settings:           settings,
 		peerSettingsDone:   make(chan struct{}),
 		incomingUniStreams: make(chan ReadableStream, 1),
 	}
 
-	str, err := conn.OpenTypedStream(StreamTypeControl)
+	str, err := conn.OpenUniStream(StreamTypeControl)
 	if err != nil {
 		return nil, err
 	}
@@ -82,9 +88,13 @@ func Open(s quic.EarlySession, settings Settings) (Conn, error) {
 	return conn, nil
 }
 
+func (conn *connection) CloseWithError(code quic.ApplicationErrorCode, msg string) error {
+	return conn.session.CloseWithError(code, msg)
+}
+
 func (conn *connection) handleIncomingUniStreams() {
 	for {
-		str, err := conn.EarlySession.AcceptUniStream(context.Background())
+		str, err := conn.session.AcceptUniStream(context.Background())
 		if err != nil {
 			// TODO: close the connection
 			return
@@ -149,7 +159,7 @@ func (conn *connection) handleControlStream(str ReadableStream) {
 	// If datagram support was enabled on this side and the peer side, we can expect it to have been
 	// negotiated both on the transport and on the HTTP/3 layer.
 	// Note: ConnectionState() will block until the handshake is complete (relevant when using 0-RTT).
-	if settings.DatagramsEnabled() && !conn.ConnectionState().SupportsDatagrams {
+	if settings.DatagramsEnabled() && !conn.session.ConnectionState().SupportsDatagrams {
 		err := &quic.ApplicationError{
 			ErrorCode:    quic.ApplicationErrorCode(errorSettingsError),
 			ErrorMessage: "missing QUIC Datagram support",
@@ -164,8 +174,8 @@ func (conn *connection) handleControlStream(str ReadableStream) {
 	// TODO: loop reading the reset of the frames from the control stream
 }
 
-func (conn *connection) AcceptStream(ctx context.Context) (quic.Stream, error) {
-	str, err := conn.EarlySession.AcceptStream(ctx)
+func (conn *connection) AcceptStream(ctx context.Context) (Stream, error) {
+	str, err := conn.session.AcceptStream(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -175,22 +185,21 @@ func (conn *connection) AcceptStream(ctx context.Context) (quic.Stream, error) {
 	}, nil
 }
 
-func (conn *connection) AcceptUniStream(ctx context.Context) (quic.ReceiveStream, error) {
+func (conn *connection) AcceptUniStream(ctx context.Context) (ReadableStream, error) {
 	select {
 	case str := <-conn.incomingUniStreams:
 		if str == nil {
 			return nil, errors.New("BUG: closed incomingUniStreams channel")
 		}
 		return str, nil
-	case <-conn.Context().Done():
+	case <-conn.session.Context().Done():
 		return nil, errors.New("QUIC session closed")
 	}
 }
 
-// OpenStream overrides (quic.EarlySession).OpenStream to return
-// a wrapped quic.Stream which is also implements http3.Stream.
-func (conn *connection) OpenStream() (quic.Stream, error) {
-	str, err := conn.EarlySession.OpenStream()
+// OpenStream opens a new bidirectional tream.
+func (conn *connection) OpenStream() (Stream, error) {
+	str, err := conn.session.OpenStream()
 	if err != nil {
 		return nil, err
 	}
@@ -200,11 +209,11 @@ func (conn *connection) OpenStream() (quic.Stream, error) {
 	}, nil
 }
 
-func (conn *connection) OpenTypedStream(t StreamType) (WritableStream, error) {
+func (conn *connection) OpenUniStream(t StreamType) (WritableStream, error) {
 	if !t.Valid() {
 		return nil, fmt.Errorf("invalid stream type: %s", t)
 	}
-	str, err := conn.EarlySession.OpenUniStream()
+	str, err := conn.session.OpenUniStream()
 	if err != nil {
 		return nil, err
 	}
@@ -218,6 +227,14 @@ func (conn *connection) OpenTypedStream(t StreamType) (WritableStream, error) {
 	}, nil
 }
 
+func (conn *connection) LocalAddr() net.Addr {
+	return conn.session.LocalAddr()
+}
+
+func (conn *connection) RemoteAddr() net.Addr {
+	return conn.session.RemoteAddr()
+}
+
 func (conn *connection) Settings() Settings {
 	return conn.settings
 }
@@ -226,7 +243,7 @@ func (conn *connection) PeerSettings() (Settings, error) {
 	select {
 	case <-conn.peerSettingsDone:
 		return conn.peerSettings, conn.peerSettingsErr
-	case <-conn.Context().Done():
-		return nil, conn.Context().Err()
+	case <-conn.session.Context().Done():
+		return nil, conn.session.Context().Err()
 	}
 }
