@@ -11,6 +11,7 @@ import (
 
 	gomock "github.com/golang/mock/gomock"
 	quic "github.com/lucas-clemente/quic-go"
+	protocol "github.com/lucas-clemente/quic-go/internal/protocol"
 	qerr "github.com/lucas-clemente/quic-go/internal/qerr"
 )
 
@@ -209,6 +210,20 @@ func (m *MockEarlySession) OpenUniStreamSync(arg0 context.Context) (quic.SendStr
 func (mr *MockEarlySessionMockRecorder) OpenUniStreamSync(arg0 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "OpenUniStreamSync", reflect.TypeOf((*MockEarlySession)(nil).OpenUniStreamSync), arg0)
+}
+
+// Perspective mocks base method.
+func (m *MockEarlySession) Perspective() protocol.Perspective {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Perspective")
+	ret0, _ := ret[0].(protocol.Perspective)
+	return ret0
+}
+
+// Perspective indicates an expected call of Perspective.
+func (mr *MockEarlySessionMockRecorder) Perspective() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Perspective", reflect.TypeOf((*MockEarlySession)(nil).Perspective))
 }
 
 // ReceiveMessage mocks base method.

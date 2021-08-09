@@ -89,7 +89,7 @@ func (s *closedLocalSession) destroy(error) {
 	})
 }
 
-func (s *closedLocalSession) getPerspective() protocol.Perspective {
+func (s *closedLocalSession) Perspective() Perspective {
 	return s.perspective
 }
 
@@ -106,7 +106,7 @@ func newClosedRemoteSession(pers protocol.Perspective) packetHandler {
 	return &closedRemoteSession{perspective: pers}
 }
 
-func (s *closedRemoteSession) handlePacket(*receivedPacket)         {}
-func (s *closedRemoteSession) shutdown()                            {}
-func (s *closedRemoteSession) destroy(error)                        {}
-func (s *closedRemoteSession) getPerspective() protocol.Perspective { return s.perspective }
+func (s *closedRemoteSession) handlePacket(*receivedPacket) {}
+func (s *closedRemoteSession) shutdown()                    {}
+func (s *closedRemoteSession) destroy(error)                {}
+func (s *closedRemoteSession) Perspective() Perspective     { return s.perspective }

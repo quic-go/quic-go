@@ -25,7 +25,7 @@ type packetHandler interface {
 	handlePacket(*receivedPacket)
 	shutdown()
 	destroy(error)
-	getPerspective() protocol.Perspective
+	Perspective() Perspective
 }
 
 type unknownPacketHandler interface {
@@ -46,7 +46,7 @@ type quicSession interface {
 	earlySessionReady() <-chan struct{}
 	handlePacket(*receivedPacket)
 	GetVersion() protocol.VersionNumber
-	getPerspective() protocol.Perspective
+	Perspective() Perspective
 	run() error
 	destroy(error)
 	shutdown()

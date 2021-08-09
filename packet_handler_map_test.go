@@ -253,9 +253,9 @@ var _ = Describe("Packet Handler Map", func() {
 			It("closes all server sessions", func() {
 				handler.SetServer(NewMockUnknownPacketHandler(mockCtrl))
 				clientSess := NewMockPacketHandler(mockCtrl)
-				clientSess.EXPECT().getPerspective().Return(protocol.PerspectiveClient)
+				clientSess.EXPECT().Perspective().Return(protocol.PerspectiveClient)
 				serverSess := NewMockPacketHandler(mockCtrl)
-				serverSess.EXPECT().getPerspective().Return(protocol.PerspectiveServer)
+				serverSess.EXPECT().Perspective().Return(protocol.PerspectiveServer)
 				serverSess.EXPECT().shutdown()
 
 				handler.Add(protocol.ConnectionID{1, 1, 1, 1}, clientSess)
