@@ -22,6 +22,8 @@ type Conn interface {
 	LocalAddr() net.Addr
 	RemoteAddr() net.Addr
 
+	Perspective() quic.Perspective
+
 	// ReadDatagram() ([]byte, error)
 	// WriteDatagram([]byte) error
 
@@ -49,8 +51,6 @@ type connection struct {
 
 	peerStreamsMutex sync.Mutex
 	peerStreams      [4]ReadableStream
-
-	isServer bool
 }
 
 var _ Conn = &connection{}
@@ -79,9 +79,6 @@ func Open(s quic.EarlySession, settings Settings) (Conn, error) {
 	}
 	w := quicvarint.NewWriter(str)
 	settings.writeFrame(w)
-
-	// TODO: add Perspective to quic.Session
-	conn.isServer = (str.StreamID() & 1) == 1
 
 	go conn.handleIncomingUniStreams()
 
@@ -129,7 +126,7 @@ func (conn *connection) handleIncomingUniStream(qstr quic.ReceiveStream) {
 	case StreamTypeControl:
 		conn.handleControlStream(str)
 	case StreamTypePush:
-		if conn.isServer {
+		if conn.Perspective() == quic.PerspectiveServer {
 			conn.CloseWithError(quic.ApplicationErrorCode(errorStreamCreationError), fmt.Sprintf("spurious %s from client", str.streamType))
 			return
 		}
@@ -233,6 +230,10 @@ func (conn *connection) LocalAddr() net.Addr {
 
 func (conn *connection) RemoteAddr() net.Addr {
 	return conn.session.RemoteAddr()
+}
+
+func (conn *connection) Perspective() quic.Perspective {
+	return conn.session.Perspective()
 }
 
 func (conn *connection) Settings() Settings {
