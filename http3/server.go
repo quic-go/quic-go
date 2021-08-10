@@ -224,8 +224,6 @@ func (s *Server) removeListener(l *quic.EarlyListener) {
 }
 
 func (s *Server) handleConn(sess quic.EarlySession) {
-	decoder := qpack.NewDecoder(nil)
-
 	settings := Settings{}
 	if s.EnableDatagrams {
 		settings.EnableDatagrams()
@@ -249,7 +247,7 @@ func (s *Server) handleConn(sess quic.EarlySession) {
 			return
 		}
 		go func() {
-			rerr := s.handleRequest2(str, decoder)
+			rerr := s.handleRequest2(str)
 			if rerr.err != nil || rerr.streamErr != 0 || rerr.connErr != 0 {
 				s.logger.Debugf("Handling request failed: %s", err)
 				if rerr.streamErr != 0 {
@@ -289,7 +287,7 @@ func (s *Server) maxHeaderBytes() uint64 {
 	return uint64(s.Server.MaxHeaderBytes)
 }
 
-func (s *Server) handleRequest2(str Stream, decoder *qpack.Decoder) requestError {
+func (s *Server) handleRequest2(str Stream) requestError {
 	frame, err := parseNextFrame(str)
 	if err != nil {
 		return newStreamError(errorRequestIncomplete, err)
@@ -305,6 +303,7 @@ func (s *Server) handleRequest2(str Stream, decoder *qpack.Decoder) requestError
 	if _, err := io.ReadFull(str, headerBlock); err != nil {
 		return newStreamError(errorRequestIncomplete, err)
 	}
+	decoder := qpack.NewDecoder(nil)
 	hfs, err := decoder.DecodeFull(headerBlock)
 	if err != nil {
 		// TODO: use the right error code
