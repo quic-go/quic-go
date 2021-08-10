@@ -114,6 +114,9 @@ func parseSettingsFramePayload(r io.Reader, len uint64) (Settings, error) {
 			return nil, fmt.Errorf("duplicate setting: %d", id)
 		}
 		switch id {
+		case SettingQPACKMaxTableCapacity,
+			SettingMaxFieldSectionSize,
+			SettingQPACKBlockedStreams:
 		case SettingDatagram, SettingDatagramDraft00:
 			if val != 0 && val != 1 {
 				return nil, fmt.Errorf("invalid value for H3_DATAGRAM: %d", val)
