@@ -8,6 +8,16 @@ import (
 )
 
 var _ = Describe("Varint encoding / decoding", func() {
+	Context("limits", func() {
+		Specify("Min == 0", func() {
+			Expect(Min).To(Equal(0))
+		})
+
+		Specify("Max == 2^62-1", func() {
+			Expect(uint64(Max)).To(Equal(uint64(1<<62 - 1)))
+		})
+	})
+
 	Context("decoding", func() {
 		It("reads a 1 byte number", func() {
 			b := bytes.NewReader([]byte{0b00011001})
