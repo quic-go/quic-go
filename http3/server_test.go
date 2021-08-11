@@ -855,4 +855,35 @@ var _ = Describe("Server", func() {
 		Expect(s.ListenAndServe()).To(HaveOccurred())
 		Expect(receivedConf.EnableDatagrams).To(BeTrue())
 	})
+
+	Context("Settings", func() {
+		Context("when nil", func() {
+			It("reasonable defaults are used", func() {
+				Expect(s.Settings).To(BeNil())
+				Expect(s.EnableDatagrams).To(BeFalse())
+				Expect(s.settings()).To(Equal(Settings{}))
+			})
+
+			It("set H3_DATAGRAM when EnableDatagrams is set", func() {
+				s.EnableDatagrams = true
+				Expect(s.Settings).To(BeNil())
+				settings := Settings{}
+				settings.EnableDatagrams()
+				Expect(s.settings()).To(Equal(settings))
+			})
+		})
+
+		Context("when set", func() {
+			It("pass through exactly", func() {
+				s.Settings = Settings{1: 1, 2: 2}
+				Expect(s.settings()).To(Equal(s.Settings))
+			})
+
+			It("does not change when EnableDatagrams is set", func() {
+				s.EnableDatagrams = true
+				s.Settings = Settings{1: 1, 2: 2}
+				Expect(s.settings()).To(Equal(s.Settings))
+			})
+		})
+	})
 })

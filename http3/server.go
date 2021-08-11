@@ -78,6 +78,11 @@ type Server struct {
 	// If nil, it uses reasonable default values.
 	QuicConfig *quic.Config
 
+	// If set, the supplied HTTP/3 settings will be transmitted to the client.
+	// If nil, reasonable default values will be used.
+	// See https://quicwg.org/base-drafts/draft-ietf-quic-http.html#name-http-2-settings-parameters.
+	Settings Settings
+
 	// Enable support for HTTP/3 datagrams.
 	// If set to true, QuicConfig.EnableDatagram will be set.
 	// See https://www.ietf.org/archive/id/draft-schinazi-masque-h3-datagram-02.html.
@@ -216,13 +221,19 @@ func (s *Server) removeListener(l *quic.EarlyListener) {
 	s.mutex.Unlock()
 }
 
-func (s *Server) handleConn(sess quic.EarlySession) {
+func (s *Server) settings() Settings {
+	if s.Settings != nil {
+		return s.Settings
+	}
 	settings := Settings{}
 	if s.EnableDatagrams {
 		settings.EnableDatagrams()
 	}
+	return settings
+}
 
-	conn, err := Open(sess, settings)
+func (s *Server) handleConn(sess quic.EarlySession) {
+	conn, err := Open(sess, s.settings())
 	if err != nil {
 		s.logger.Errorf("unable to open HTTP/3 connection")
 		sess.CloseWithError(quic.ApplicationErrorCode(errorGeneralProtocolError), "")
