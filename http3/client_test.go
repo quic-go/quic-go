@@ -39,7 +39,7 @@ var _ = Describe("Client", func() {
 		var err error
 		client, err = newClient(hostname, nil, &roundTripperOpts{MaxHeaderBytes: 1337}, nil, nil)
 		Expect(err).ToNot(HaveOccurred())
-		Expect(client.hostname).To(Equal(hostname))
+		Expect(client.authority).To(Equal(hostname))
 
 		req, err = http.NewRequest("GET", "https://localhost:1337", nil)
 		Expect(err).ToNot(HaveOccurred())

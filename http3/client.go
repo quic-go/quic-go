@@ -52,14 +52,14 @@ type client struct {
 
 	requestWriter *requestWriter
 
-	hostname string
-	conn     Conn
+	authority string
+	conn      Conn
 
 	logger utils.Logger
 }
 
 func newClient(
-	hostname string,
+	authority string,
 	tlsConf *tls.Config,
 	opts *roundTripperOpts,
 	quicConfig *quic.Config,
@@ -87,7 +87,7 @@ func newClient(
 	tlsConf.NextProtos = []string{versionToALPN(quicConfig.Versions[0])}
 
 	return &client{
-		hostname:      authorityAddr("https", hostname),
+		authority:     authorityAddr("https", authority),
 		tlsConf:       tlsConf,
 		requestWriter: newRequestWriter(logger),
 		config:        quicConfig,
@@ -101,9 +101,9 @@ func (c *client) dial() error {
 	var s quic.EarlySession
 	var err error
 	if c.dialer != nil {
-		s, err = c.dialer("udp", c.hostname, c.tlsConf, c.config)
+		s, err = c.dialer("udp", c.authority, c.tlsConf, c.config)
 	} else {
-		s, err = dialAddr(c.hostname, c.tlsConf, c.config)
+		s, err = dialAddr(c.authority, c.tlsConf, c.config)
 	}
 	if err != nil {
 		return err
@@ -154,8 +154,8 @@ func (c *client) maxHeaderBytes() uint64 {
 
 // RoundTrip executes a request and returns a response
 func (c *client) RoundTrip(req *http.Request) (*http.Response, error) {
-	if authorityAddr("https", hostnameFromRequest(req)) != c.hostname {
-		return nil, fmt.Errorf("http3 client BUG: RoundTrip called for the wrong client (expected %s, got %s)", c.hostname, req.Host)
+	if authorityAddr("https", hostnameFromRequest(req)) != c.authority {
+		return nil, fmt.Errorf("http3 client BUG: RoundTrip called for the wrong client (expected %s, got %s)", c.authority, req.Host)
 	}
 
 	c.dialOnce.Do(func() {
