@@ -87,7 +87,6 @@ func Open(s quic.EarlySession, settings Settings) (Conn, error) {
 
 	str, err := conn.OpenUniStream(StreamTypeControl)
 	if err != nil {
-		conn.CloseWithError(quic.ApplicationErrorCode(errorInternalError), "")
 		return nil, err
 	}
 	w := quicvarint.NewWriter(str)

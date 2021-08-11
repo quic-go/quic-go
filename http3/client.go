@@ -117,6 +117,8 @@ func (c *client) dial() error {
 
 	c.conn, err = Open(s, settings)
 	if err != nil {
+		c.logger.Errorf("unable to open HTTP/3 connection: %s", err)
+		c.conn.CloseWithError(quic.ApplicationErrorCode(errorInternalError), "")
 		return err
 	}
 
