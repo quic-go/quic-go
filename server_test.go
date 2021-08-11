@@ -90,7 +90,7 @@ var _ = Describe("Server", func() {
 	}
 
 	parseHeader := func(data []byte) *wire.Header {
-		hdr, _, _, err := wire.ParsePacket(data, 0)
+		hdr, _, _, err := wire.ParsePacket(data, 0, false /* disableQUICGreasing */)
 		Expect(err).ToNot(HaveOccurred())
 		return hdr
 	}
@@ -395,7 +395,7 @@ var _ = Describe("Server", func() {
 				conn.EXPECT().WriteTo(gomock.Any(), raddr).DoAndReturn(func(b []byte, _ net.Addr) (int, error) {
 					defer close(done)
 					Expect(wire.IsVersionNegotiationPacket(b)).To(BeTrue())
-					hdr, versions, err := wire.ParseVersionNegotiationPacket(bytes.NewReader(b))
+					hdr, versions, err := wire.ParseVersionNegotiationPacket(bytes.NewReader(b), false /* disableQUICGreasing */)
 					Expect(err).ToNot(HaveOccurred())
 					Expect(hdr.DestConnectionID).To(Equal(srcConnID))
 					Expect(hdr.SrcConnectionID).To(Equal(destConnID))
@@ -661,6 +661,7 @@ var _ = Describe("Server", func() {
 				tracer.EXPECT().TracerForConnection(gomock.Any(), protocol.PerspectiveServer, gomock.Any()).AnyTimes()
 
 				serv.config.AcceptToken = func(net.Addr, *Token) bool { return true }
+				serv.config.DisableQUICBitGreasing = false
 				acceptSession := make(chan struct{})
 				var counter uint32 // to be used as an atomic, so we query it in Eventually
 				serv.newSession = func(
@@ -708,7 +709,7 @@ var _ = Describe("Server", func() {
 				close(acceptSession)
 				Eventually(
 					func() uint32 { return atomic.LoadUint32(&counter) },
-					scaleDuration(100*time.Millisecond),
+					scaleDuration(1000*time.Millisecond),
 				).Should(BeEquivalentTo(protocol.MaxServerUnprocessedPackets + 1))
 				Consistently(func() uint32 { return atomic.LoadUint32(&counter) }).Should(BeEquivalentTo(protocol.MaxServerUnprocessedPackets + 1))
 			})
@@ -796,7 +797,7 @@ var _ = Describe("Server", func() {
 				}
 				wg.Wait()
 				p := getInitialWithRandomDestConnID()
-				hdr, _, _, err := wire.ParsePacket(p.data, 0)
+				hdr, _, _, err := wire.ParsePacket(p.data, 0, false /* disableQUICGreasing */)
 				Expect(err).ToNot(HaveOccurred())
 				tracer.EXPECT().SentPacket(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any())
 				done := make(chan struct{})

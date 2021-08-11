@@ -63,9 +63,10 @@ var ErrUnsupportedVersion = errors.New("unsupported version")
 
 // The Header is the version independent part of the header
 type Header struct {
-	IsLongHeader bool
-	typeByte     byte
-	Type         protocol.PacketType
+	IsLongHeader       bool
+	disableBitGreasing bool
+	typeByte           byte
+	Type               protocol.PacketType
 
 	Version          protocol.VersionNumber
 	SrcConnectionID  protocol.ConnectionID
@@ -82,8 +83,8 @@ type Header struct {
 // If the packet has a long header, the packet is cut according to the length field.
 // If we understand the version, the packet is header up unto the packet number.
 // Otherwise, only the invariant part of the header is parsed.
-func ParsePacket(data []byte, shortHeaderConnIDLen int) (*Header, []byte /* packet data */, []byte /* rest */, error) {
-	hdr, err := parseHeader(bytes.NewReader(data), shortHeaderConnIDLen)
+func ParsePacket(data []byte, shortHeaderConnIDLen int, disableQUICBitGreasing bool) (*Header, []byte /* packet data */, []byte /* rest */, error) {
+	hdr, err := parseHeader(bytes.NewReader(data), shortHeaderConnIDLen, disableQUICBitGreasing)
 	if err != nil {
 		if err == ErrUnsupportedVersion {
 			return hdr, nil, nil, ErrUnsupportedVersion
@@ -107,9 +108,9 @@ func ParsePacket(data []byte, shortHeaderConnIDLen int) (*Header, []byte /* pack
 // For long header packets:
 // * if we understand the version: up to the packet number
 // * if not, only the invariant part of the header
-func parseHeader(b *bytes.Reader, shortHeaderConnIDLen int) (*Header, error) {
+func parseHeader(b *bytes.Reader, shortHeaderConnIDLen int, disableQUICBitGreasing bool) (*Header, error) {
 	startLen := b.Len()
-	h, err := parseHeaderImpl(b, shortHeaderConnIDLen)
+	h, err := parseHeaderImpl(b, shortHeaderConnIDLen, disableQUICBitGreasing)
 	if err != nil {
 		return h, err
 	}
@@ -117,19 +118,22 @@ func parseHeader(b *bytes.Reader, shortHeaderConnIDLen int) (*Header, error) {
 	return h, err
 }
 
-func parseHeaderImpl(b *bytes.Reader, shortHeaderConnIDLen int) (*Header, error) {
+func parseHeaderImpl(b *bytes.Reader, shortHeaderConnIDLen int, disableQUICBitGreasing bool) (*Header, error) {
 	typeByte, err := b.ReadByte()
 	if err != nil {
 		return nil, err
 	}
 
 	h := &Header{
-		typeByte:     typeByte,
-		IsLongHeader: typeByte&0x80 > 0,
+		typeByte:           typeByte,
+		disableBitGreasing: disableQUICBitGreasing,
+		IsLongHeader:       typeByte&0x80 > 0,
 	}
 
 	if !h.IsLongHeader {
-		if h.typeByte&0x40 == 0 {
+		// When bit greasing is disabled, then the second most-significant
+		// bit in the typeByte can be 0.
+		if !h.disableBitGreasing && h.typeByte&0x40 == 0 {
 			return nil, errors.New("not a QUIC packet")
 		}
 		if err := h.parseShortHeader(b, shortHeaderConnIDLen); err != nil {
@@ -152,7 +156,7 @@ func (h *Header) parseLongHeader(b *bytes.Reader) error {
 		return err
 	}
 	h.Version = protocol.VersionNumber(v)
-	if h.Version != 0 && h.typeByte&0x40 == 0 {
+	if h.Version != 0 && (!h.disableBitGreasing && h.typeByte&0x40 == 0) {
 		return errors.New("not a QUIC packet")
 	}
 	destConnIDLen, err := b.ReadByte()

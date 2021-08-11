@@ -24,7 +24,7 @@ var _ = Describe("Version Negotiation Packets", func() {
 			binary.BigEndian.PutUint32(data[len(data)-4:], uint32(v))
 		}
 		Expect(IsVersionNegotiationPacket(data)).To(BeTrue())
-		hdr, supportedVersions, err := ParseVersionNegotiationPacket(bytes.NewReader(data))
+		hdr, supportedVersions, err := ParseVersionNegotiationPacket(bytes.NewReader(data), false /* disableQUICGreasing */)
 		Expect(err).ToNot(HaveOccurred())
 		Expect(hdr.DestConnectionID).To(Equal(destConnID))
 		Expect(hdr.SrcConnectionID).To(Equal(srcConnID))
@@ -38,7 +38,7 @@ var _ = Describe("Version Negotiation Packets", func() {
 		versions := []protocol.VersionNumber{0x22334455, 0x33445566}
 		data, err := ComposeVersionNegotiation(connID, connID, versions)
 		Expect(err).ToNot(HaveOccurred())
-		_, _, err = ParseVersionNegotiationPacket(bytes.NewReader(data[:len(data)-2]))
+		_, _, err = ParseVersionNegotiationPacket(bytes.NewReader(data[:len(data)-2]), false /* disableQUICGreasing */)
 		Expect(err).To(MatchError("Version Negotiation packet has a version list with an invalid length"))
 	})
 
@@ -49,7 +49,7 @@ var _ = Describe("Version Negotiation Packets", func() {
 		Expect(err).ToNot(HaveOccurred())
 		// remove 8 bytes (two versions), since ComposeVersionNegotiation also added a reserved version number
 		data = data[:len(data)-8]
-		_, _, err = ParseVersionNegotiationPacket(bytes.NewReader(data))
+		_, _, err = ParseVersionNegotiationPacket(bytes.NewReader(data), false /* disableQUICGreasing */)
 		Expect(err).To(MatchError("Version Negotiation packet has empty version list"))
 	})
 
@@ -60,7 +60,7 @@ var _ = Describe("Version Negotiation Packets", func() {
 		data, err := ComposeVersionNegotiation(destConnID, srcConnID, versions)
 		Expect(err).ToNot(HaveOccurred())
 		Expect(data[0] & 0x80).ToNot(BeZero())
-		hdr, supportedVersions, err := ParseVersionNegotiationPacket(bytes.NewReader(data))
+		hdr, supportedVersions, err := ParseVersionNegotiationPacket(bytes.NewReader(data), false /* disableQUICGreasing */)
 		Expect(err).ToNot(HaveOccurred())
 		Expect(hdr.DestConnectionID).To(Equal(destConnID))
 		Expect(hdr.SrcConnectionID).To(Equal(srcConnID))

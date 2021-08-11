@@ -844,7 +844,7 @@ func (s *session) handlePacketImpl(rp *receivedPacket) bool {
 			p.data = data
 		}
 
-		hdr, packetData, rest, err := wire.ParsePacket(p.data, s.srcConnIDLen)
+		hdr, packetData, rest, err := wire.ParsePacket(p.data, s.srcConnIDLen, s.config.DisableQUICBitGreasing)
 		if err != nil {
 			if s.tracer != nil {
 				dropReason := logging.PacketDropHeaderParseError
@@ -1056,7 +1056,7 @@ func (s *session) handleVersionNegotiationPacket(p *receivedPacket) {
 		return
 	}
 
-	hdr, supportedVersions, err := wire.ParseVersionNegotiationPacket(bytes.NewReader(p.data))
+	hdr, supportedVersions, err := wire.ParseVersionNegotiationPacket(bytes.NewReader(p.data), s.config.DisableQUICBitGreasing)
 	if err != nil {
 		if s.tracer != nil {
 			s.tracer.DroppedPacket(logging.PacketTypeVersionNegotiation, p.Size(), logging.PacketDropHeaderParseError)

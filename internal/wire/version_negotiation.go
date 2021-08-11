@@ -10,8 +10,8 @@ import (
 )
 
 // ParseVersionNegotiationPacket parses a Version Negotiation packet.
-func ParseVersionNegotiationPacket(b *bytes.Reader) (*Header, []protocol.VersionNumber, error) {
-	hdr, err := parseHeader(b, 0)
+func ParseVersionNegotiationPacket(b *bytes.Reader, disableGreaseQUICBit bool) (*Header, []protocol.VersionNumber, error) {
+	hdr, err := parseHeader(b, 0, disableGreaseQUICBit)
 	if err != nil {
 		return nil, nil, err
 	}

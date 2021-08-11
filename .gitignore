@@ -15,3 +15,6 @@ fuzzing/*/suppressions
 fuzzing/*/corpus/
 
 gomock_reflect_*/
+
+*.coverprofile
+.idea/*

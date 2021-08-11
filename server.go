@@ -338,7 +338,7 @@ func (s *baseServer) handlePacketImpl(p *receivedPacket) bool /* is the buffer s
 	}
 	// If we're creating a new session, the packet will be passed to the session.
 	// The header will then be parsed again.
-	hdr, _, _, err := wire.ParsePacket(p.data, s.config.ConnectionIDLength)
+	hdr, _, _, err := wire.ParsePacket(p.data, s.config.ConnectionIDLength, s.config.DisableQUICBitGreasing)
 	if err != nil && err != wire.ErrUnsupportedVersion {
 		if s.config.Tracer != nil {
 			s.config.Tracer.DroppedPacket(p.remoteAddr, logging.PacketTypeNotDetermined, p.Size(), logging.PacketDropHeaderParseError)

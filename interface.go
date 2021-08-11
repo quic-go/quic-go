@@ -292,6 +292,11 @@ type Config struct {
 	// Datagrams will only be available when both peers enable datagram support.
 	EnableDatagrams bool
 	Tracer          logging.Tracer
+	// See https://quicwg.org/quic-bit-grease/draft-ietf-quic-bit-grease.html
+	// When disabled, server advertises additional transport parameter indicating
+	// that the second most significant bit need not be 1 (it should be 1 in case
+	// QUIC is being multiplexed with other UDP-based protocols)
+	DisableQUICBitGreasing bool
 }
 
 // ConnectionState records basic details about a QUIC connection

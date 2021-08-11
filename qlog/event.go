@@ -395,6 +395,8 @@ type eventTransportParameters struct {
 	PreferredAddress *preferredAddress
 
 	MaxDatagramFrameSize protocol.ByteCount
+
+	DisableGreaseQUICBit bool
 }
 
 func (e eventTransportParameters) Category() category { return categoryTransport }
