@@ -17,7 +17,9 @@ type Conn interface {
 	AcceptStream(context.Context) (Stream, error)
 	AcceptUniStream(context.Context) (ReadableStream, error)
 	OpenStream() (Stream, error)
+	OpenStreamSync(context.Context) (Stream, error)
 	OpenUniStream(StreamType) (WritableStream, error)
+	OpenUniStreamSync(context.Context, StreamType) (WritableStream, error)
 
 	LocalAddr() net.Addr
 	RemoteAddr() net.Addr
@@ -34,6 +36,16 @@ type Conn interface {
 	// PeerSettings returns the peer’s HTTP/3 settings.
 	// This will block until the peer’s settings have been received.
 	PeerSettings() (Settings, error)
+
+	// Blocks until the handshake completes (or fails).
+	// Data sent before completion of the handshake is encrypted with 1-RTT keys.
+	// Note that the client's identity hasn't been verified yet.
+	HandshakeComplete() context.Context
+
+	// ConnectionState returns basic details about the QUIC connection.
+	// It blocks until the handshake completes.
+	// Warning: This API should not be considered stable and might change soon.
+	ConnectionState() quic.ConnectionState
 
 	CloseWithError(quic.ApplicationErrorCode, string) error
 }
@@ -75,6 +87,7 @@ func Open(s quic.EarlySession, settings Settings) (Conn, error) {
 
 	str, err := conn.OpenUniStream(StreamTypeControl)
 	if err != nil {
+		conn.CloseWithError(quic.ApplicationErrorCode(errorInternalError), "")
 		return nil, err
 	}
 	w := quicvarint.NewWriter(str)
@@ -83,6 +96,14 @@ func Open(s quic.EarlySession, settings Settings) (Conn, error) {
 	go conn.handleIncomingUniStreams()
 
 	return conn, nil
+}
+
+func (conn *connection) HandshakeComplete() context.Context {
+	return conn.session.HandshakeComplete()
+}
+
+func (conn *connection) ConnectionState() quic.ConnectionState {
+	return conn.session.ConnectionState()
 }
 
 func (conn *connection) CloseWithError(code quic.ApplicationErrorCode, msg string) error {
@@ -131,6 +152,9 @@ func (conn *connection) handleIncomingUniStream(qstr quic.ReceiveStream) {
 			return
 		}
 		// TODO: handle push streams
+		// We never increased the Push ID, so we don't expect any push streams.
+		conn.CloseWithError(quic.ApplicationErrorCode(errorIDError), "MAX_PUSH_ID = 0")
+		return
 	case StreamTypeQPACKEncoder, StreamTypeQPACKDecoder:
 		// TODO: handle QPACK dynamic tables
 	default:
@@ -176,10 +200,7 @@ func (conn *connection) AcceptStream(ctx context.Context) (Stream, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &bidiStream{
-		Stream: str,
-		conn:   conn,
-	}, nil
+	return conn.openBidiStream(str)
 }
 
 func (conn *connection) AcceptUniStream(ctx context.Context) (ReadableStream, error) {
@@ -194,12 +215,27 @@ func (conn *connection) AcceptUniStream(ctx context.Context) (ReadableStream, er
 	}
 }
 
-// OpenStream opens a new bidirectional tream.
+// OpenStream opens a new bidirectional stream.
 func (conn *connection) OpenStream() (Stream, error) {
 	str, err := conn.session.OpenStream()
 	if err != nil {
 		return nil, err
 	}
+	return conn.openBidiStream(str)
+}
+
+// OpenStreamSync opens a new bidirectional stream.
+// It blocks until a stream can be opened.
+func (conn *connection) OpenStreamSync(ctx context.Context) (Stream, error) {
+	str, err := conn.session.OpenStreamSync(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return conn.openBidiStream(str)
+}
+
+func (conn *connection) openBidiStream(str quic.Stream) (Stream, error) {
+	// TODO: store a quicvarint.Writer in bidiStream?
 	return &bidiStream{
 		Stream: str,
 		conn:   conn,
@@ -214,6 +250,22 @@ func (conn *connection) OpenUniStream(t StreamType) (WritableStream, error) {
 	if err != nil {
 		return nil, err
 	}
+	return conn.openWritableStream(str, t)
+
+}
+
+func (conn *connection) OpenUniStreamSync(ctx context.Context, t StreamType) (WritableStream, error) {
+	if !t.Valid() {
+		return nil, fmt.Errorf("invalid stream type: %s", t)
+	}
+	str, err := conn.session.OpenUniStreamSync(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return conn.openWritableStream(str, t)
+}
+
+func (conn *connection) openWritableStream(str quic.SendStream, t StreamType) (WritableStream, error) {
 	// TODO: store a quicvarint.Writer in writableStream?
 	w := quicvarint.NewWriter(str)
 	quicvarint.Write(w, uint64(t))
