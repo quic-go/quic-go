@@ -54,8 +54,6 @@ type client struct {
 
 	requestWriter *requestWriter
 
-	decoder *qpack.Decoder
-
 	hostname string
 	session  quic.EarlySession
 
@@ -94,7 +92,6 @@ func newClient(
 		hostname:      authorityAddr("https", hostname),
 		tlsConf:       tlsConf,
 		requestWriter: newRequestWriter(logger),
-		decoder:       qpack.NewDecoder(func(hf qpack.HeaderField) {}),
 		config:        quicConfig,
 		opts:          opts,
 		dialer:        dialer,
@@ -295,7 +292,8 @@ func (c *client) doRequest(
 	if _, err := io.ReadFull(str, headerBlock); err != nil {
 		return nil, newStreamError(errorRequestIncomplete, err)
 	}
-	hfs, err := c.decoder.DecodeFull(headerBlock)
+	decoder := qpack.NewDecoder(nil)
+	hfs, err := decoder.DecodeFull(headerBlock)
 	if err != nil {
 		// TODO: use the right error code
 		return nil, newConnError(errorGeneralProtocolError, err)
