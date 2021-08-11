@@ -38,7 +38,7 @@ var dialAddr = quic.DialAddrEarly
 
 type roundTripperOpts struct {
 	DisableCompression bool
-	EnableDatagram     bool
+	EnableDatagrams    bool
 	MaxHeaderBytes     int64
 }
 
@@ -79,7 +79,7 @@ func newClient(
 		return nil, errors.New("can only use a single QUIC version for dialing a HTTP/3 connection")
 	}
 	quicConfig.MaxIncomingStreams = -1 // don't allow any bidirectional streams
-	quicConfig.EnableDatagrams = opts.EnableDatagram
+	quicConfig.EnableDatagrams = opts.EnableDatagrams
 	logger := utils.DefaultLogger.WithPrefix("h3 client")
 
 	if tlsConf == nil {
@@ -135,7 +135,7 @@ func (c *client) setupSession() error {
 	quicvarint.Write(buf, streamTypeControlStream)
 	// send the SETTINGS frame
 	settings := Settings{}
-	if c.opts.EnableDatagram {
+	if c.opts.EnableDatagrams {
 		settings.EnableDatagrams()
 	}
 	settings.writeFrame(buf)
@@ -185,7 +185,7 @@ func (c *client) handleUnidirectionalStreams() {
 			// If datagram support was enabled on our side as well as on the server side,
 			// we can expect it to have been negotiated both on the transport and on the HTTP/3 layer.
 			// Note: ConnectionState() will block until the handshake is complete (relevant when using 0-RTT).
-			if settings.DatagramsEnabled() && c.opts.EnableDatagram && !c.session.ConnectionState().SupportsDatagrams {
+			if settings.DatagramsEnabled() && c.opts.EnableDatagrams && !c.session.ConnectionState().SupportsDatagrams {
 				c.session.CloseWithError(quic.ApplicationErrorCode(errorSettingsError), "missing QUIC Datagram support")
 			}
 		}()

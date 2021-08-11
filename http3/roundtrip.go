@@ -141,7 +141,7 @@ func (r *RoundTripper) getClient(hostname string, onlyCached bool) (http.RoundTr
 			hostname,
 			r.TLSClientConfig,
 			&roundTripperOpts{
-				EnableDatagram:     r.EnableDatagrams,
+				EnableDatagrams:    r.EnableDatagrams,
 				DisableCompression: r.DisableCompression,
 				MaxHeaderBytes:     r.MaxResponseHeaderBytes,
 			},

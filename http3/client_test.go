@@ -140,7 +140,7 @@ var _ = Describe("Client", func() {
 
 	It("enables HTTP/3 Datagrams", func() {
 		testErr := errors.New("handshake error")
-		client, err := newClient("localhost:1337", nil, &roundTripperOpts{EnableDatagram: true}, nil, nil)
+		client, err := newClient("localhost:1337", nil, &roundTripperOpts{EnableDatagrams: true}, nil, nil)
 		Expect(err).ToNot(HaveOccurred())
 		dialAddr = func(hostname string, _ *tls.Config, quicConf *quic.Config) (quic.EarlySession, error) {
 			Expect(quicConf.EnableDatagrams).To(BeTrue())
@@ -357,7 +357,7 @@ var _ = Describe("Client", func() {
 		})
 
 		It("errors when the server advertises datagram support (and we enabled support for it)", func() {
-			client.opts.EnableDatagram = true
+			client.opts.EnableDatagrams = true
 			buf := &bytes.Buffer{}
 			quicvarint.Write(buf, streamTypeControlStream)
 			(Settings{SettingDatagram: 1}).writeFrame(buf)
