@@ -32,13 +32,6 @@ const (
 	nextProtoH3        = "h3"
 )
 
-const (
-	streamTypeControlStream      = 0
-	streamTypePushStream         = 1
-	streamTypeQPACKEncoderStream = 2
-	streamTypeQPACKDecoderStream = 3
-)
-
 func versionToALPN(v protocol.VersionNumber) string {
 	if v == protocol.Version1 {
 		return nextProtoH3

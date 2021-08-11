@@ -215,7 +215,7 @@ var _ = Describe("Server", func() {
 
 			It("parses the SETTINGS frame", func() {
 				buf := &bytes.Buffer{}
-				quicvarint.Write(buf, streamTypeControlStream)
+				quicvarint.Write(buf, uint64(StreamTypeControl))
 				Settings{}.writeFrame(buf)
 				controlStr := mockquic.NewMockStream(mockCtrl)
 				controlStr.EXPECT().Read(gomock.Any()).DoAndReturn(buf.Read).AnyTimes()
@@ -230,16 +230,15 @@ var _ = Describe("Server", func() {
 				time.Sleep(scaleDuration(20 * time.Millisecond)) // don't EXPECT any calls to sess.CloseWithError
 			})
 
-			for _, t := range []uint64{streamTypeQPACKEncoderStream, streamTypeQPACKDecoderStream} {
-				streamType := t
+			for _, streamType := range []StreamType{StreamTypeQPACKEncoder, StreamTypeQPACKDecoder} {
 				name := "encoder"
-				if streamType == streamTypeQPACKDecoderStream {
+				if streamType == StreamTypeQPACKDecoder {
 					name = "decoder"
 				}
 
 				It(fmt.Sprintf("ignores the QPACK %s streams", name), func() {
 					buf := &bytes.Buffer{}
-					quicvarint.Write(buf, streamType)
+					quicvarint.Write(buf, uint64(streamType))
 					str := mockquic.NewMockStream(mockCtrl)
 					str.EXPECT().Read(gomock.Any()).DoAndReturn(buf.Read).AnyTimes()
 
@@ -278,7 +277,7 @@ var _ = Describe("Server", func() {
 
 			It("errors when the first frame on the control stream is not a SETTINGS frame", func() {
 				buf := &bytes.Buffer{}
-				quicvarint.Write(buf, streamTypeControlStream)
+				quicvarint.Write(buf, uint64(StreamTypeControl))
 				(&dataFrame{}).writeFrame(buf)
 				controlStr := mockquic.NewMockStream(mockCtrl)
 				controlStr.EXPECT().Read(gomock.Any()).DoAndReturn(buf.Read).AnyTimes()
@@ -301,7 +300,7 @@ var _ = Describe("Server", func() {
 
 			It("errors when parsing the frame on the control stream fails", func() {
 				buf := &bytes.Buffer{}
-				quicvarint.Write(buf, streamTypeControlStream)
+				quicvarint.Write(buf, uint64(StreamTypeControl))
 				b := &bytes.Buffer{}
 				Settings{}.writeFrame(b)
 				buf.Write(b.Bytes()[:b.Len()-1])
@@ -326,7 +325,7 @@ var _ = Describe("Server", func() {
 
 			It("errors when the client opens a push stream", func() {
 				buf := &bytes.Buffer{}
-				quicvarint.Write(buf, streamTypePushStream)
+				quicvarint.Write(buf, uint64(StreamTypePush))
 				(&dataFrame{}).writeFrame(buf)
 				controlStr := mockquic.NewMockStream(mockCtrl)
 				controlStr.EXPECT().Read(gomock.Any()).DoAndReturn(buf.Read).AnyTimes()
@@ -350,7 +349,7 @@ var _ = Describe("Server", func() {
 			It("errors when the client advertises datagram support (and we enabled support for it)", func() {
 				s.EnableDatagrams = true
 				buf := &bytes.Buffer{}
-				quicvarint.Write(buf, streamTypeControlStream)
+				quicvarint.Write(buf, uint64(StreamTypeControl))
 				(Settings{SettingDatagram: 1}).writeFrame(buf)
 				controlStr := mockquic.NewMockStream(mockCtrl)
 				controlStr.EXPECT().Read(gomock.Any()).DoAndReturn(buf.Read).AnyTimes()
