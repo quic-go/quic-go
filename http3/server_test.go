@@ -60,9 +60,10 @@ var _ = Describe("Server", func() {
 
 	Context("handling requests", func() {
 		var (
-			qpackDecoder       *qpack.Decoder
-			str                *mockquic.MockStream
 			sess               *mockquic.MockEarlySession
+			conn               Conn
+			str                *mockquic.MockStream
+			hstr               Stream
 			exampleGetRequest  *http.Request
 			examplePostRequest *http.Request
 		)
@@ -116,15 +117,20 @@ var _ = Describe("Server", func() {
 			examplePostRequest, err = http.NewRequest("POST", "https://www.example.com", bytes.NewReader([]byte("foobar")))
 			Expect(err).ToNot(HaveOccurred())
 
-			qpackDecoder = qpack.NewDecoder(nil)
-			str = mockquic.NewMockStream(mockCtrl)
-
 			sess = mockquic.NewMockEarlySession(mockCtrl)
 			addr := &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 1337}
 			sess.EXPECT().RemoteAddr().Return(addr).AnyTimes()
 			sess.EXPECT().LocalAddr().AnyTimes()
 			sess.EXPECT().Perspective().Return(quic.PerspectiveServer).AnyTimes()
 			sess.EXPECT().Context().Return(reqContext).AnyTimes()
+
+			conn = &connection{session: sess}
+
+			str = mockquic.NewMockStream(mockCtrl)
+			hstr = &bidiStream{
+				Stream: str,
+				conn:   conn,
+			}
 		})
 
 		It("calls the HTTP handler function", func() {
@@ -140,7 +146,7 @@ var _ = Describe("Server", func() {
 			}).AnyTimes()
 			str.EXPECT().CancelRead(gomock.Any())
 
-			Expect(s.handleRequest(sess, str, qpackDecoder, nil)).To(Equal(requestError{}))
+			Expect(s.handleRequest2(hstr)).To(Equal(requestError{}))
 			var req *http.Request
 			Eventually(requestChan).Should(Receive(&req))
 			Expect(req.Host).To(Equal("www.example.com"))
@@ -157,7 +163,7 @@ var _ = Describe("Server", func() {
 			str.EXPECT().Write(gomock.Any()).DoAndReturn(responseBuf.Write).AnyTimes()
 			str.EXPECT().CancelRead(gomock.Any())
 
-			serr := s.handleRequest(sess, str, qpackDecoder, nil)
+			serr := s.handleRequest2(hstr)
 			Expect(serr.err).ToNot(HaveOccurred())
 			hfs := decodeHeader(responseBuf)
 			Expect(hfs).To(HaveKeyWithValue(":status", []string{"200"}))
@@ -174,7 +180,7 @@ var _ = Describe("Server", func() {
 			str.EXPECT().Write(gomock.Any()).DoAndReturn(responseBuf.Write).AnyTimes()
 			str.EXPECT().CancelRead(gomock.Any())
 
-			serr := s.handleRequest(sess, str, qpackDecoder, nil)
+			serr := s.handleRequest2(hstr)
 			Expect(serr.err).ToNot(HaveOccurred())
 			hfs := decodeHeader(responseBuf)
 			Expect(hfs).To(HaveKeyWithValue(":status", []string{"500"}))
@@ -191,7 +197,7 @@ var _ = Describe("Server", func() {
 			str.EXPECT().Write([]byte("foobar"))
 			// don't EXPECT CancelRead()
 
-			serr := s.handleRequest(sess, str, qpackDecoder, nil)
+			serr := s.handleRequest2(hstr)
 			Expect(serr.err).ToNot(HaveOccurred())
 		})
 
@@ -520,7 +526,7 @@ var _ = Describe("Server", func() {
 			}).AnyTimes()
 			str.EXPECT().CancelRead(quic.StreamErrorCode(errorNoError))
 
-			serr := s.handleRequest(sess, str, qpackDecoder, nil)
+			serr := s.handleRequest2(hstr)
 			Expect(serr.err).ToNot(HaveOccurred())
 			Eventually(handlerCalled).Should(BeClosed())
 		})
@@ -543,7 +549,7 @@ var _ = Describe("Server", func() {
 			}).AnyTimes()
 			str.EXPECT().CancelRead(quic.StreamErrorCode(errorNoError))
 
-			serr := s.handleRequest(sess, str, qpackDecoder, nil)
+			serr := s.handleRequest2(hstr)
 			Expect(serr.err).ToNot(HaveOccurred())
 			Eventually(handlerCalled).Should(BeClosed())
 		})
