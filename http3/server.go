@@ -251,7 +251,7 @@ func (s *Server) handleConn(sess quic.EarlySession) {
 			return
 		}
 		go func() {
-			rerr := s.handleRequest2(str)
+			rerr := s.handleRequestStream(str)
 			if rerr.err != nil || rerr.streamErr != 0 || rerr.connErr != 0 {
 				s.logger.Debugf("Handling request failed: %s", err)
 				if rerr.streamErr != 0 {
@@ -291,7 +291,7 @@ func (s *Server) maxHeaderBytes() uint64 {
 	return uint64(s.Server.MaxHeaderBytes)
 }
 
-func (s *Server) handleRequest2(str Stream) requestError {
+func (s *Server) handleRequestStream(str Stream) requestError {
 	frame, err := parseNextFrame(str)
 	if err != nil {
 		return newStreamError(errorRequestIncomplete, err)
@@ -333,84 +333,6 @@ func (s *Server) handleRequest2(str Stream) requestError {
 	ctx := str.Context()
 	ctx = context.WithValue(ctx, ServerContextKey, s)
 	ctx = context.WithValue(ctx, http.LocalAddrContextKey, str.Conn().LocalAddr())
-	req = req.WithContext(ctx)
-	r := newResponseWriter(str, s.logger)
-	defer func() {
-		if !r.usedDataStream() {
-			r.Flush()
-		}
-	}()
-	handler := s.Handler
-	if handler == nil {
-		handler = http.DefaultServeMux
-	}
-
-	var panicked bool
-	func() {
-		defer func() {
-			if p := recover(); p != nil {
-				// Copied from net/http/server.go
-				const size = 64 << 10
-				buf := make([]byte, size)
-				buf = buf[:runtime.Stack(buf, false)]
-				s.logger.Errorf("http: panic serving: %v\n%s", p, buf)
-				panicked = true
-			}
-		}()
-		handler.ServeHTTP(r, req)
-	}()
-
-	if !r.usedDataStream() {
-		if panicked {
-			r.WriteHeader(500)
-		} else {
-			r.WriteHeader(200)
-		}
-		// If the EOF was read by the handler, CancelRead() is a no-op.
-		str.CancelRead(quic.StreamErrorCode(errorNoError))
-	}
-	return requestError{}
-}
-
-func (s *Server) handleRequest(sess quic.Session, str quic.Stream, decoder *qpack.Decoder, onFrameError func()) requestError {
-	frame, err := parseNextFrame(str)
-	if err != nil {
-		return newStreamError(errorRequestIncomplete, err)
-	}
-	hf, ok := frame.(*headersFrame)
-	if !ok {
-		return newConnError(errorFrameUnexpected, errors.New("expected first frame to be a HEADERS frame"))
-	}
-	if hf.len > s.maxHeaderBytes() {
-		return newStreamError(errorFrameError, fmt.Errorf("HEADERS frame too large: %d bytes (max: %d)", hf.len, s.maxHeaderBytes()))
-	}
-	headerBlock := make([]byte, hf.len)
-	if _, err := io.ReadFull(str, headerBlock); err != nil {
-		return newStreamError(errorRequestIncomplete, err)
-	}
-	hfs, err := decoder.DecodeFull(headerBlock)
-	if err != nil {
-		// TODO: use the right error code
-		return newConnError(errorGeneralProtocolError, err)
-	}
-	req, err := requestFromHeaders(hfs)
-	if err != nil {
-		// TODO: use the right error code
-		return newStreamError(errorGeneralProtocolError, err)
-	}
-
-	req.RemoteAddr = sess.RemoteAddr().String()
-	req.Body = newRequestBody(str, onFrameError)
-
-	if s.logger.Debug() {
-		s.logger.Infof("%s %s%s, on stream %d", req.Method, req.Host, req.RequestURI, str.StreamID())
-	} else {
-		s.logger.Infof("%s %s%s", req.Method, req.Host, req.RequestURI)
-	}
-
-	ctx := str.Context()
-	ctx = context.WithValue(ctx, ServerContextKey, s)
-	ctx = context.WithValue(ctx, http.LocalAddrContextKey, sess.LocalAddr())
 	req = req.WithContext(ctx)
 	r := newResponseWriter(str, s.logger)
 	defer func() {
