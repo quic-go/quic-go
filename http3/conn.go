@@ -133,6 +133,8 @@ func (conn *connection) handleIncomingUniStream(qstr quic.ReceiveStream) {
 		conn:          conn,
 		streamType:    StreamType(t),
 	}
+
+	// Store control, QPACK, and push streams on conn
 	if str.streamType < 4 {
 		conn.peerStreamsMutex.Lock()
 		if conn.peerStreams[str.streamType] != nil {
@@ -142,6 +144,7 @@ func (conn *connection) handleIncomingUniStream(qstr quic.ReceiveStream) {
 		conn.peerStreams[str.streamType] = str
 		conn.peerStreamsMutex.Unlock()
 	}
+
 	switch str.streamType {
 	case StreamTypeControl:
 		conn.handleControlStream(str)
