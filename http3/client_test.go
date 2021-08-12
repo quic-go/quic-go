@@ -53,12 +53,35 @@ var _ = Describe("Client", func() {
 		dialAddr = origDialAddr
 	})
 
-	It("rejects quic.Configs that allow multiple QUIC versions", func() {
-		qconf := &quic.Config{
-			Versions: []quic.VersionNumber{protocol.VersionDraft29, protocol.Version1},
-		}
-		_, err := newClient("localhost:1337", nil, &roundTripperOpts{}, qconf, nil)
-		Expect(err).To(MatchError("can only use a single QUIC version for dialing a HTTP/3 connection"))
+	Context("Settings", func() {
+		It("uses default Settings when none is given", func() {
+			Expect(client.opts.Settings).To(BeNil())
+			Expect(client.opts.EnableDatagrams).To(BeFalse())
+			Expect(client.settings()).To(Equal(Settings{}))
+		})
+
+		It("sets H3_DATAGRAM on Settings when opts.EnableDatagrams is set", func() {
+			client.opts.EnableDatagrams = true
+			Expect(client.opts.Settings).To(BeNil())
+			settings := Settings{}
+			settings.EnableDatagrams()
+			Expect(client.settings()).To(Equal(settings))
+		})
+
+		It("passes configured Settings through exactly", func() {
+			client.opts.Settings = Settings{1: 1, 2: 2}
+			Expect(client.settings()).To(Equal(client.opts.Settings))
+			client.opts.EnableDatagrams = true
+			Expect(client.settings()).To(Equal(client.opts.Settings))
+		})
+
+		It("rejects quic.Configs that allow multiple QUIC versions", func() {
+			qconf := &quic.Config{
+				Versions: []quic.VersionNumber{protocol.VersionDraft29, protocol.Version1},
+			}
+			_, err := newClient("localhost:1337", nil, &roundTripperOpts{}, qconf, nil)
+			Expect(err).To(MatchError("can only use a single QUIC version for dialing a HTTP/3 connection"))
+		})
 	})
 
 	It("uses the default QUIC and TLS config if none is give", func() {

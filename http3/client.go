@@ -38,6 +38,7 @@ type roundTripperOpts struct {
 	DisableCompression bool
 	EnableDatagrams    bool
 	MaxHeaderBytes     int64
+	Settings           Settings
 }
 
 // client is a HTTP3 client doing requests
@@ -97,6 +98,17 @@ func newClient(
 	}, nil
 }
 
+func (c *client) settings() Settings {
+	if c.opts.Settings != nil {
+		return c.opts.Settings
+	}
+	settings := Settings{}
+	if c.opts.EnableDatagrams {
+		settings.EnableDatagrams()
+	}
+	return settings
+}
+
 func (c *client) dial() error {
 	var s quic.EarlySession
 	var err error
@@ -109,13 +121,7 @@ func (c *client) dial() error {
 		return err
 	}
 
-	// TODO: make settings a member of client?
-	settings := Settings{}
-	if c.opts.EnableDatagrams {
-		settings.EnableDatagrams()
-	}
-
-	c.conn, err = Open(s, settings)
+	c.conn, err = Open(s, c.settings())
 	if err != nil {
 		c.logger.Errorf("unable to open HTTP/3 connection: %s", err)
 		c.conn.CloseWithError(quic.ApplicationErrorCode(errorInternalError), "")
