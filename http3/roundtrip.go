@@ -41,6 +41,11 @@ type RoundTripper struct {
 	// If nil, reasonable default values will be used.
 	QuicConfig *quic.Config
 
+	// Settings specifies the HTTP/3 settings transmitted to the server.
+	// If nil, reasonable default values will be used.
+	// See https://quicwg.org/base-drafts/draft-ietf-quic-http.html#name-http-2-settings-parameters.
+	Settings Settings
+
 	// Enable support for HTTP/3 datagrams.
 	// If set to true, QuicConfig.EnableDatagram will be set.
 	// See https://www.ietf.org/archive/id/draft-schinazi-masque-h3-datagram-02.html.
@@ -144,6 +149,7 @@ func (r *RoundTripper) getClient(hostname string, onlyCached bool) (http.RoundTr
 				EnableDatagrams:    r.EnableDatagrams,
 				DisableCompression: r.DisableCompression,
 				MaxHeaderBytes:     r.MaxResponseHeaderBytes,
+				Settings:           r.Settings,
 			},
 			r.QuicConfig,
 			r.Dial,

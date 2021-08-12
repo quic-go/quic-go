@@ -125,6 +125,22 @@ var _ = Describe("RoundTripper", func() {
 			Expect(receivedConfig.HandshakeIdleTimeout).To(Equal(config.HandshakeIdleTimeout))
 		})
 
+		It("uses Settings, if provided", func() {
+			testErr := errors.New("test err")
+			req, err := http.NewRequest("GET", "https://quic.clemente.io/foobar.html", nil)
+			Expect(err).ToNot(HaveOccurred())
+			sess.EXPECT().OpenStreamSync(context.Background()).Return(nil, testErr)
+			sess.EXPECT().AcceptUniStream(gomock.Any()).DoAndReturn(func(context.Context) (quic.ReceiveStream, error) {
+				return nil, errors.New("test done")
+			}).MaxTimes(1)
+			rt.Settings = Settings{1: 1, 2: 2}
+			_, err = rt.RoundTrip(req)
+			Expect(err).To(MatchError(testErr))
+			c := rt.clients["quic.clemente.io:443"]
+			Expect(c).ToNot(BeNil())
+			Expect(c.(*client).settings()).To(Equal(rt.Settings))
+		})
+
 		It("uses the custom dialer, if provided", func() {
 			var dialed bool
 			dialer := func(_, _ string, tlsCfgP *tls.Config, cfg *quic.Config) (quic.EarlySession, error) {
