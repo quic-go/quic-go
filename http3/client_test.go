@@ -269,7 +269,8 @@ var _ = Describe("Client", func() {
 			time.Sleep(scaleDuration(20 * time.Millisecond)) // don't EXPECT any calls to sess.CloseWithError
 		})
 
-		for _, streamType := range []StreamType{StreamTypeQPACKEncoder, StreamTypeQPACKDecoder} {
+		for _, t := range []StreamType{StreamTypeQPACKEncoder, StreamTypeQPACKDecoder} {
+			streamType := t
 			name := "encoder"
 			if streamType == StreamTypeQPACKDecoder {
 				name = "decoder"
