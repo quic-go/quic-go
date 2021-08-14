@@ -90,23 +90,11 @@ func Open(s quic.EarlySession, settings Settings) (Conn, error) {
 		return nil, err
 	}
 	w := quicvarint.NewWriter(str)
-	settings.writeFrame(w)
+	conn.settings.writeFrame(w)
 
 	go conn.handleIncomingUniStreams()
 
 	return conn, nil
-}
-
-func (conn *connection) HandshakeComplete() context.Context {
-	return conn.session.HandshakeComplete()
-}
-
-func (conn *connection) ConnectionState() quic.ConnectionState {
-	return conn.session.ConnectionState()
-}
-
-func (conn *connection) CloseWithError(code quic.ApplicationErrorCode, msg string) error {
-	return conn.session.CloseWithError(code, msg)
 }
 
 func (conn *connection) handleIncomingUniStreams() {
@@ -301,4 +289,16 @@ func (conn *connection) PeerSettings() (Settings, error) {
 	case <-conn.session.Context().Done():
 		return nil, conn.session.Context().Err()
 	}
+}
+
+func (conn *connection) HandshakeComplete() context.Context {
+	return conn.session.HandshakeComplete()
+}
+
+func (conn *connection) ConnectionState() quic.ConnectionState {
+	return conn.session.ConnectionState()
+}
+
+func (conn *connection) CloseWithError(code quic.ApplicationErrorCode, msg string) error {
+	return conn.session.CloseWithError(code, msg)
 }
