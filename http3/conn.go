@@ -50,6 +50,16 @@ type Conn interface {
 	CloseWithError(quic.ApplicationErrorCode, string) error
 }
 
+type ServerConn interface {
+	Conn
+	AcceptRequestStream(context.Context) (Stream, error)
+}
+
+type ClientConn interface {
+	Conn
+	OpenRequestStream(context.Context) (Stream, error)
+}
+
 type connection struct {
 	session quic.EarlySession
 
@@ -65,11 +75,31 @@ type connection struct {
 	peerStreams      [4]ReadableStream
 }
 
-var _ Conn = &connection{}
+var (
+	_ Conn       = &connection{}
+	_ ClientConn = &connection{}
+	_ ServerConn = &connection{}
+)
 
-// Open establishes a new HTTP/3 connection on an existing QUIC session.
+// Accept establishes a new HTTP/3 server connection from an existing QUIC session.
 // If settings is nil, it will use a set of reasonable defaults.
-func Open(s quic.EarlySession, settings Settings) (Conn, error) {
+func Accept(s quic.EarlySession, settings Settings) (ServerConn, error) {
+	if s.Perspective() != quic.PerspectiveServer {
+		return nil, errors.New("Accept called on client session")
+	}
+	return newConn(s, settings)
+}
+
+// Open establishes a new HTTP/3 client connection from an existing QUIC session.
+// If settings is nil, it will use a set of reasonable defaults.
+func Open(s quic.EarlySession, settings Settings) (ClientConn, error) {
+	if s.Perspective() != quic.PerspectiveClient {
+		return nil, errors.New("Open called on server session")
+	}
+	return newConn(s, settings)
+}
+
+func newConn(s quic.EarlySession, settings Settings) (*connection, error) {
 	if settings == nil {
 		settings = Settings{}
 		// TODO: this blocks, so is this too clever?
@@ -185,6 +215,14 @@ func (conn *connection) handleControlStream(str ReadableStream) {
 	// TODO: loop reading the reset of the frames from the control stream
 }
 
+// TODO: demultiplex incoming bidi streams
+func (conn *connection) AcceptRequestStream(ctx context.Context) (Stream, error) {
+	if conn.Perspective() != quic.PerspectiveServer {
+		return nil, errors.New("server method called on client connection")
+	}
+	return conn.AcceptStream(ctx)
+}
+
 func (conn *connection) AcceptStream(ctx context.Context) (Stream, error) {
 	str, err := conn.session.AcceptStream(ctx)
 	if err != nil {
@@ -203,6 +241,14 @@ func (conn *connection) AcceptUniStream(ctx context.Context) (ReadableStream, er
 	case <-conn.session.Context().Done():
 		return nil, errors.New("QUIC session closed")
 	}
+}
+
+// TODO: multiplex outgoing bidi streams?
+func (conn *connection) OpenRequestStream(ctx context.Context) (Stream, error) {
+	if conn.Perspective() != quic.PerspectiveClient {
+		return nil, errors.New("client method called on server connection")
+	}
+	return conn.OpenStreamSync(ctx)
 }
 
 // OpenStream opens a new bidirectional stream.

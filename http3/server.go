@@ -233,7 +233,7 @@ func (s *Server) settings() Settings {
 }
 
 func (s *Server) handleConn(sess quic.EarlySession) {
-	conn, err := Open(sess, s.settings())
+	conn, err := Accept(sess, s.settings())
 	if err != nil {
 		s.logger.Errorf("unable to open HTTP/3 connection")
 		sess.CloseWithError(quic.ApplicationErrorCode(errorGeneralProtocolError), "")
@@ -245,7 +245,7 @@ func (s *Server) handleConn(sess quic.EarlySession) {
 	// Process all requests immediately.
 	// It's the client's responsibility to decide which requests are eligible for 0-RTT.
 	for {
-		str, err := conn.AcceptStream(context.Background())
+		str, err := conn.AcceptRequestStream(context.Background())
 		if err != nil {
 			s.logger.Debugf("Accepting stream failed: %s", err)
 			return

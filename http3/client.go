@@ -54,7 +54,7 @@ type client struct {
 	requestWriter *requestWriter
 
 	authority string
-	conn      Conn
+	conn      ClientConn
 
 	logger utils.Logger
 }
@@ -186,7 +186,7 @@ func (c *client) RoundTrip(req *http.Request) (*http.Response, error) {
 		}
 	}
 
-	str, err := c.conn.OpenStreamSync(req.Context())
+	str, err := c.conn.OpenRequestStream(req.Context())
 	if err != nil {
 		return nil, err
 	}
