@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"net"
 	"sync"
 
 	"github.com/lucas-clemente/quic-go"
@@ -14,9 +13,6 @@ import (
 // Conn is a base HTTP/3 connection.
 // Callers should use either ServerConn or ClientConn.
 type Conn interface {
-	LocalAddr() net.Addr
-	RemoteAddr() net.Addr
-
 	// CloseWithError closes the connection with an error.
 	// The error string will be sent to the peer.
 	CloseWithError(quic.ApplicationErrorCode, string) error
@@ -50,7 +46,6 @@ type ClientConn interface {
 	Conn
 	OpenRequestStream(context.Context) (Stream, error)
 }
-
 type connection struct {
 	session quic.EarlySession
 
@@ -266,14 +261,6 @@ func (conn *connection) openWritableStream(str quic.SendStream, t StreamType) (W
 		conn:       conn,
 		streamType: t,
 	}, nil
-}
-
-func (conn *connection) LocalAddr() net.Addr {
-	return conn.session.LocalAddr()
-}
-
-func (conn *connection) RemoteAddr() net.Addr {
-	return conn.session.RemoteAddr()
 }
 
 func (conn *connection) HandshakeComplete() context.Context {

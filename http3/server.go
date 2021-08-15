@@ -249,7 +249,7 @@ func (s *Server) handleConn(sess quic.EarlySession) {
 			return
 		}
 		go func() {
-			rerr := s.handleRequestStream(str)
+			rerr := s.handleRequestStream(sess, str)
 			if rerr.err != nil || rerr.streamErr != 0 || rerr.connErr != 0 {
 				s.logger.Debugf("Handling request failed: %s", err)
 				if rerr.streamErr != 0 {
@@ -276,7 +276,7 @@ func (s *Server) maxHeaderBytes() uint64 {
 	return uint64(s.Server.MaxHeaderBytes)
 }
 
-func (s *Server) handleRequestStream(str Stream) requestError {
+func (s *Server) handleRequestStream(sess quic.EarlySession, str Stream) requestError {
 	frame, err := parseNextFrame(str)
 	if err != nil {
 		return newStreamError(errorRequestIncomplete, err)
@@ -304,9 +304,9 @@ func (s *Server) handleRequestStream(str Stream) requestError {
 		return newStreamError(errorGeneralProtocolError, err)
 	}
 
-	req.RemoteAddr = str.Conn().RemoteAddr().String()
+	req.RemoteAddr = sess.RemoteAddr().String()
 	req.Body = newRequestBody(str, func() {
-		str.Conn().CloseWithError(quic.ApplicationErrorCode(errorFrameUnexpected), "")
+		sess.CloseWithError(quic.ApplicationErrorCode(errorFrameUnexpected), "")
 	})
 
 	if s.logger.Debug() {
@@ -317,7 +317,7 @@ func (s *Server) handleRequestStream(str Stream) requestError {
 
 	ctx := str.Context()
 	ctx = context.WithValue(ctx, ServerContextKey, s)
-	ctx = context.WithValue(ctx, http.LocalAddrContextKey, str.Conn().LocalAddr())
+	ctx = context.WithValue(ctx, http.LocalAddrContextKey, sess.LocalAddr())
 	req = req.WithContext(ctx)
 	r := newResponseWriter(str, s.logger)
 	defer func() {

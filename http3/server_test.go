@@ -146,7 +146,7 @@ var _ = Describe("Server", func() {
 			}).AnyTimes()
 			str.EXPECT().CancelRead(gomock.Any())
 
-			Expect(s.handleRequestStream(hstr)).To(Equal(requestError{}))
+			Expect(s.handleRequestStream(sess, hstr)).To(Equal(requestError{}))
 			var req *http.Request
 			Eventually(requestChan).Should(Receive(&req))
 			Expect(req.Host).To(Equal("www.example.com"))
@@ -163,7 +163,7 @@ var _ = Describe("Server", func() {
 			str.EXPECT().Write(gomock.Any()).DoAndReturn(responseBuf.Write).AnyTimes()
 			str.EXPECT().CancelRead(gomock.Any())
 
-			serr := s.handleRequestStream(hstr)
+			serr := s.handleRequestStream(sess, hstr)
 			Expect(serr.err).ToNot(HaveOccurred())
 			hfs := decodeHeader(responseBuf)
 			Expect(hfs).To(HaveKeyWithValue(":status", []string{"200"}))
@@ -180,7 +180,7 @@ var _ = Describe("Server", func() {
 			str.EXPECT().Write(gomock.Any()).DoAndReturn(responseBuf.Write).AnyTimes()
 			str.EXPECT().CancelRead(gomock.Any())
 
-			serr := s.handleRequestStream(hstr)
+			serr := s.handleRequestStream(sess, hstr)
 			Expect(serr.err).ToNot(HaveOccurred())
 			hfs := decodeHeader(responseBuf)
 			Expect(hfs).To(HaveKeyWithValue(":status", []string{"500"}))
@@ -197,7 +197,7 @@ var _ = Describe("Server", func() {
 			str.EXPECT().Write([]byte("foobar"))
 			// don't EXPECT CancelRead()
 
-			serr := s.handleRequestStream(hstr)
+			serr := s.handleRequestStream(sess, hstr)
 			Expect(serr.err).ToNot(HaveOccurred())
 		})
 
@@ -527,7 +527,7 @@ var _ = Describe("Server", func() {
 			}).AnyTimes()
 			str.EXPECT().CancelRead(quic.StreamErrorCode(errorNoError))
 
-			serr := s.handleRequestStream(hstr)
+			serr := s.handleRequestStream(sess, hstr)
 			Expect(serr.err).ToNot(HaveOccurred())
 			Eventually(handlerCalled).Should(BeClosed())
 		})
@@ -550,7 +550,7 @@ var _ = Describe("Server", func() {
 			}).AnyTimes()
 			str.EXPECT().CancelRead(quic.StreamErrorCode(errorNoError))
 
-			serr := s.handleRequestStream(hstr)
+			serr := s.handleRequestStream(sess, hstr)
 			Expect(serr.err).ToNot(HaveOccurred())
 			Eventually(handlerCalled).Should(BeClosed())
 		})
