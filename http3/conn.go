@@ -13,20 +13,6 @@ import (
 // Conn is a base HTTP/3 connection.
 // Callers should use either ServerConn or ClientConn.
 type Conn interface {
-	// CloseWithError closes the connection with an error.
-	// The error string will be sent to the peer.
-	CloseWithError(quic.ApplicationErrorCode, string) error
-
-	// Blocks until the handshake completes (or fails).
-	// Data sent before completion of the handshake is encrypted with 1-RTT keys.
-	// Note that the client's identity hasn't been verified yet.
-	HandshakeComplete() context.Context
-
-	// ConnectionState returns basic details about the QUIC connection.
-	// It blocks until the handshake completes.
-	// Warning: This API should not be considered stable and might change soon.
-	ConnectionState() quic.ConnectionState
-
 	// Settings returns the HTTP/3 settings for this side of the connection.
 	Settings() Settings
 
@@ -138,7 +124,7 @@ func (conn *connection) handleIncomingUniStream(qstr quic.ReceiveStream) {
 	if str.streamType < 4 {
 		conn.peerStreamsMutex.Lock()
 		if conn.peerStreams[str.streamType] != nil {
-			conn.CloseWithError(quic.ApplicationErrorCode(errorStreamCreationError), fmt.Sprintf("more than one %s opened", str.streamType))
+			conn.session.CloseWithError(quic.ApplicationErrorCode(errorStreamCreationError), fmt.Sprintf("more than one %s opened", str.streamType))
 			return
 		}
 		conn.peerStreams[str.streamType] = str
@@ -150,12 +136,12 @@ func (conn *connection) handleIncomingUniStream(qstr quic.ReceiveStream) {
 		conn.handleControlStream(str)
 	case StreamTypePush:
 		if conn.session.Perspective() == quic.PerspectiveServer {
-			conn.CloseWithError(quic.ApplicationErrorCode(errorStreamCreationError), fmt.Sprintf("spurious %s from client", str.streamType))
+			conn.session.CloseWithError(quic.ApplicationErrorCode(errorStreamCreationError), fmt.Sprintf("spurious %s from client", str.streamType))
 			return
 		}
 		// TODO: handle push streams
 		// We never increased the Push ID, so we don't expect any push streams.
-		conn.CloseWithError(quic.ApplicationErrorCode(errorIDError), "MAX_PUSH_ID = 0")
+		conn.session.CloseWithError(quic.ApplicationErrorCode(errorIDError), "MAX_PUSH_ID = 0")
 		return
 	case StreamTypeQPACKEncoder, StreamTypeQPACKDecoder:
 		// TODO: handle QPACK dynamic tables
@@ -169,7 +155,7 @@ func (conn *connection) handleIncomingUniStream(qstr quic.ReceiveStream) {
 func (conn *connection) handleControlStream(str ReadableStream) {
 	f, err := parseNextFrame(str)
 	if err != nil {
-		conn.CloseWithError(quic.ApplicationErrorCode(errorFrameError), "")
+		conn.session.CloseWithError(quic.ApplicationErrorCode(errorFrameError), "")
 		return
 	}
 	settings, ok := f.(Settings)
@@ -177,7 +163,7 @@ func (conn *connection) handleControlStream(str ReadableStream) {
 		err := &quic.ApplicationError{
 			ErrorCode: quic.ApplicationErrorCode(errorMissingSettings),
 		}
-		conn.CloseWithError(err.ErrorCode, err.ErrorMessage)
+		conn.session.CloseWithError(err.ErrorCode, err.ErrorMessage)
 		conn.peerSettingsErr = err
 		return
 	}
@@ -189,7 +175,7 @@ func (conn *connection) handleControlStream(str ReadableStream) {
 			ErrorCode:    quic.ApplicationErrorCode(errorSettingsError),
 			ErrorMessage: "missing QUIC Datagram support",
 		}
-		conn.CloseWithError(err.ErrorCode, err.ErrorMessage)
+		conn.session.CloseWithError(err.ErrorCode, err.ErrorMessage)
 		conn.peerSettingsErr = err
 		return
 	}
@@ -261,18 +247,6 @@ func (conn *connection) openWritableStream(str quic.SendStream, t StreamType) (W
 		conn:       conn,
 		streamType: t,
 	}, nil
-}
-
-func (conn *connection) HandshakeComplete() context.Context {
-	return conn.session.HandshakeComplete()
-}
-
-func (conn *connection) ConnectionState() quic.ConnectionState {
-	return conn.session.ConnectionState()
-}
-
-func (conn *connection) CloseWithError(code quic.ApplicationErrorCode, msg string) error {
-	return conn.session.CloseWithError(code, msg)
 }
 
 func (conn *connection) Settings() Settings {

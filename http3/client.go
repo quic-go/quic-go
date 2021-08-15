@@ -53,6 +53,7 @@ type client struct {
 	requestWriter *requestWriter
 
 	authority string
+	sess      quic.EarlySession
 	conn      ClientConn
 
 	logger utils.Logger
@@ -109,21 +110,20 @@ func (c *client) settings() Settings {
 }
 
 func (c *client) dial() error {
-	var s quic.EarlySession
 	var err error
 	if c.dialer != nil {
-		s, err = c.dialer("udp", c.authority, c.tlsConf, c.config)
+		c.sess, err = c.dialer("udp", c.authority, c.tlsConf, c.config)
 	} else {
-		s, err = dialAddr(c.authority, c.tlsConf, c.config)
+		c.sess, err = dialAddr(c.authority, c.tlsConf, c.config)
 	}
 	if err != nil {
 		return err
 	}
 
-	c.conn, err = Open(s, c.settings())
+	c.conn, err = Open(c.sess, c.settings())
 	if err != nil {
 		c.logger.Errorf("unable to open HTTP/3 connection: %s", err)
-		c.conn.CloseWithError(quic.ApplicationErrorCode(errorInternalError), "")
+		c.sess.CloseWithError(quic.ApplicationErrorCode(errorInternalError), "")
 		return err
 	}
 
@@ -134,7 +134,7 @@ func (c *client) Close() error {
 	if c.conn == nil {
 		return nil
 	}
-	return c.conn.CloseWithError(quic.ApplicationErrorCode(errorNoError), "")
+	return c.sess.CloseWithError(quic.ApplicationErrorCode(errorNoError), "")
 }
 
 func (c *client) maxHeaderBytes() uint64 {
@@ -164,7 +164,7 @@ func (c *client) RoundTrip(req *http.Request) (*http.Response, error) {
 	} else {
 		// wait for the handshake to complete
 		select {
-		case <-c.conn.HandshakeComplete().Done():
+		case <-c.sess.HandshakeComplete().Done():
 		case <-req.Context().Done():
 			return nil, req.Context().Err()
 		}
@@ -199,7 +199,7 @@ func (c *client) RoundTrip(req *http.Request) (*http.Response, error) {
 			if rerr.err != nil {
 				reason = rerr.err.Error()
 			}
-			c.conn.CloseWithError(quic.ApplicationErrorCode(rerr.connErr), reason)
+			c.sess.CloseWithError(quic.ApplicationErrorCode(rerr.connErr), reason)
 		}
 	}
 	return rsp, rerr.err
@@ -240,7 +240,7 @@ func (c *client) doRequest(
 		return nil, newConnError(errorGeneralProtocolError, err)
 	}
 
-	connState := qtls.ToTLSConnectionState(c.conn.ConnectionState().TLS)
+	connState := qtls.ToTLSConnectionState(c.sess.ConnectionState().TLS)
 	res := &http.Response{
 		Proto:      "HTTP/3",
 		ProtoMajor: 3,
@@ -261,7 +261,7 @@ func (c *client) doRequest(
 		}
 	}
 	respBody := newResponseBody(str, reqDone, func() {
-		c.conn.CloseWithError(quic.ApplicationErrorCode(errorFrameUnexpected), "")
+		c.sess.CloseWithError(quic.ApplicationErrorCode(errorFrameUnexpected), "")
 	})
 
 	// Rules for when to set Content-Length are defined in https://tools.ietf.org/html/rfc7230#section-3.3.2.
