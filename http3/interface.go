@@ -18,22 +18,24 @@ type Conn interface {
 	PeerSettings() (Settings, error)
 }
 
-// ServerConn is a server connection. It accepts and processes HTTP/3 request sessions.
+// ServerConn is a server connection. It accepts and processes HTTP/3 request streams.
 type ServerConn interface {
 	Conn
 	AcceptRequestStream(context.Context) (RequestStream, error)
 }
 
-// ClientConn is a client connection. It opens and processes HTTP/3 request sessions.
+// ClientConn is a client connection. It opens and processes HTTP/3 request streams.
 type ClientConn interface {
 	Conn
 	OpenRequestStream(context.Context) (RequestStream, error)
 }
 
 // A RequestStream is a QUIC stream for processing HTTP/3 requests.
-// Instances of RequestStream may optionally vend datagram or WebTransport handlers.
+// Instances may also implement DatagramContextProvider and/or WebTransportProvider.
 type RequestStream interface {
 	quic.Stream
+
+	// TODO: integrate QPACK encoding and decoding with dynamic tables
 
 	// AcceptDatagramContext receives a datagram context from a peer.
 	// This allows a server, for instance, to start receiving datagrams on a
@@ -55,7 +57,7 @@ type RequestStream interface {
 	// See https://www.ietf.org/archive/id/draft-ietf-masque-h3-datagram-03.html#name-the-register_datagram_no_co.
 	DatagramNoContext() (DatagramContext, error)
 
-	// WebTransport returns a WebTransport interface for this session, if supported.
+	// WebTransport returns a WebTransport interface, if supported.
 	WebTransport() (WebTransport, error)
 }
 
