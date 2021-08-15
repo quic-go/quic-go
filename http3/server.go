@@ -240,8 +240,6 @@ func (s *Server) handleConn(sess quic.EarlySession) {
 		return
 	}
 
-	go s.handleUnidirectionalStreams(conn)
-
 	// Process all requests immediately.
 	// It's the client's responsibility to decide which requests are eligible for 0-RTT.
 	for {
@@ -268,19 +266,6 @@ func (s *Server) handleConn(sess quic.EarlySession) {
 			}
 			str.Close()
 		}()
-	}
-}
-
-func (s *Server) handleUnidirectionalStreams(conn Conn) {
-	for {
-		str, err := conn.AcceptUniStream(context.Background())
-		if err != nil {
-			s.logger.Debugf("accepting unidirectional stream failed: %s", err)
-			return
-		}
-
-		// TODO: handle unknown stream types
-		str.CancelRead(quic.StreamErrorCode(errorStreamCreationError))
 	}
 }
 

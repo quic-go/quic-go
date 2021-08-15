@@ -11,31 +11,15 @@ import (
 	"github.com/lucas-clemente/quic-go/quicvarint"
 )
 
-// Conn is an HTTP/3 connection.
-// The interface is modeled after quic.Session.
+// Conn is a base HTTP/3 connection.
+// Callers should use either ServerConn or ClientConn.
 type Conn interface {
-	AcceptStream(context.Context) (Stream, error)
-	AcceptUniStream(context.Context) (ReadableStream, error)
-	OpenStream() (Stream, error)
-	OpenStreamSync(context.Context) (Stream, error)
-	OpenUniStream(StreamType) (WritableStream, error)
-	OpenUniStreamSync(context.Context, StreamType) (WritableStream, error)
-
 	LocalAddr() net.Addr
 	RemoteAddr() net.Addr
 
-	Perspective() quic.Perspective
-
-	// ReadDatagram() ([]byte, error)
-	// WriteDatagram([]byte) error
-
-	// DecodeHeaders(io.Reader) (http.Header, error)
-
-	Settings() Settings
-
-	// PeerSettings returns the peer’s HTTP/3 settings.
-	// This will block until the peer’s settings have been received.
-	PeerSettings() (Settings, error)
+	// CloseWithError closes the connection with an error.
+	// The error string will be sent to the peer.
+	CloseWithError(quic.ApplicationErrorCode, string) error
 
 	// Blocks until the handshake completes (or fails).
 	// Data sent before completion of the handshake is encrypted with 1-RTT keys.
@@ -47,14 +31,21 @@ type Conn interface {
 	// Warning: This API should not be considered stable and might change soon.
 	ConnectionState() quic.ConnectionState
 
-	CloseWithError(quic.ApplicationErrorCode, string) error
+	// Settings returns the HTTP/3 settings for this side of the connection.
+	Settings() Settings
+
+	// PeerSettings returns the peer’s HTTP/3 settings.
+	// This will block until the peer’s settings have been received.
+	PeerSettings() (Settings, error)
 }
 
+// ServerConn is a server connection. It accepts and processes HTTP/3 request sessions.
 type ServerConn interface {
 	Conn
 	AcceptRequestStream(context.Context) (Stream, error)
 }
 
+// ClientConn is a client connection. It opens and processes HTTP/3 request sessions.
 type ClientConn interface {
 	Conn
 	OpenRequestStream(context.Context) (Stream, error)
@@ -68,8 +59,6 @@ type connection struct {
 	peerSettingsDone chan struct{} // Closed when peer settings are read
 	peerSettings     Settings
 	peerSettingsErr  error
-
-	incomingUniStreams chan ReadableStream
 
 	peerStreamsMutex sync.Mutex
 	peerStreams      [4]ReadableStream
@@ -109,10 +98,9 @@ func newConn(s quic.EarlySession, settings Settings) (*connection, error) {
 	}
 
 	conn := &connection{
-		session:            s,
-		settings:           settings,
-		peerSettingsDone:   make(chan struct{}),
-		incomingUniStreams: make(chan ReadableStream, 1),
+		session:          s,
+		settings:         settings,
+		peerSettingsDone: make(chan struct{}),
 	}
 
 	str, err := conn.OpenUniStream(StreamTypeControl)
@@ -131,7 +119,7 @@ func (conn *connection) handleIncomingUniStreams() {
 	for {
 		str, err := conn.session.AcceptUniStream(context.Background())
 		if err != nil {
-			// TODO: close the connection
+			// TODO: log the error
 			return
 		}
 		go conn.handleIncomingUniStream(str)
@@ -142,7 +130,6 @@ func (conn *connection) handleIncomingUniStream(qstr quic.ReceiveStream) {
 	r := quicvarint.NewReader(qstr)
 	t, err := quicvarint.Read(r)
 	if err != nil {
-		// TODO: close the stream
 		qstr.CancelRead(quic.StreamErrorCode(errorGeneralProtocolError))
 		return
 	}
@@ -167,7 +154,7 @@ func (conn *connection) handleIncomingUniStream(qstr quic.ReceiveStream) {
 	case StreamTypeControl:
 		conn.handleControlStream(str)
 	case StreamTypePush:
-		if conn.Perspective() == quic.PerspectiveServer {
+		if conn.session.Perspective() == quic.PerspectiveServer {
 			conn.CloseWithError(quic.ApplicationErrorCode(errorStreamCreationError), fmt.Sprintf("spurious %s from client", str.streamType))
 			return
 		}
@@ -178,7 +165,9 @@ func (conn *connection) handleIncomingUniStream(qstr quic.ReceiveStream) {
 	case StreamTypeQPACKEncoder, StreamTypeQPACKDecoder:
 		// TODO: handle QPACK dynamic tables
 	default:
-		conn.incomingUniStreams <- str
+		// TODO: demultiplex incoming uni streams
+		str.CancelRead(quic.StreamErrorCode(errorStreamCreationError))
+		// conn.incomingUniStreams <- str
 	}
 }
 
@@ -217,61 +206,28 @@ func (conn *connection) handleControlStream(str ReadableStream) {
 
 // TODO: demultiplex incoming bidi streams
 func (conn *connection) AcceptRequestStream(ctx context.Context) (Stream, error) {
-	if conn.Perspective() != quic.PerspectiveServer {
+	if conn.session.Perspective() != quic.PerspectiveServer {
 		return nil, errors.New("server method called on client connection")
 	}
-	return conn.AcceptStream(ctx)
-}
-
-func (conn *connection) AcceptStream(ctx context.Context) (Stream, error) {
 	str, err := conn.session.AcceptStream(ctx)
 	if err != nil {
 		return nil, err
 	}
-	return conn.openBidiStream(str)
-}
-
-func (conn *connection) AcceptUniStream(ctx context.Context) (ReadableStream, error) {
-	select {
-	case str := <-conn.incomingUniStreams:
-		if str == nil {
-			return nil, errors.New("BUG: closed incomingUniStreams channel")
-		}
-		return str, nil
-	case <-conn.session.Context().Done():
-		return nil, errors.New("QUIC session closed")
-	}
+	return &bidiStream{
+		Stream: str,
+		conn:   conn,
+	}, nil
 }
 
 // TODO: multiplex outgoing bidi streams?
 func (conn *connection) OpenRequestStream(ctx context.Context) (Stream, error) {
-	if conn.Perspective() != quic.PerspectiveClient {
+	if conn.session.Perspective() != quic.PerspectiveClient {
 		return nil, errors.New("client method called on server connection")
 	}
-	return conn.OpenStreamSync(ctx)
-}
-
-// OpenStream opens a new bidirectional stream.
-func (conn *connection) OpenStream() (Stream, error) {
-	str, err := conn.session.OpenStream()
-	if err != nil {
-		return nil, err
-	}
-	return conn.openBidiStream(str)
-}
-
-// OpenStreamSync opens a new bidirectional stream.
-// It blocks until a stream can be opened.
-func (conn *connection) OpenStreamSync(ctx context.Context) (Stream, error) {
 	str, err := conn.session.OpenStreamSync(ctx)
 	if err != nil {
 		return nil, err
 	}
-	return conn.openBidiStream(str)
-}
-
-func (conn *connection) openBidiStream(str quic.Stream) (Stream, error) {
-	// TODO: store a quicvarint.Writer in bidiStream?
 	return &bidiStream{
 		Stream: str,
 		conn:   conn,
@@ -320,8 +276,16 @@ func (conn *connection) RemoteAddr() net.Addr {
 	return conn.session.RemoteAddr()
 }
 
-func (conn *connection) Perspective() quic.Perspective {
-	return conn.session.Perspective()
+func (conn *connection) HandshakeComplete() context.Context {
+	return conn.session.HandshakeComplete()
+}
+
+func (conn *connection) ConnectionState() quic.ConnectionState {
+	return conn.session.ConnectionState()
+}
+
+func (conn *connection) CloseWithError(code quic.ApplicationErrorCode, msg string) error {
+	return conn.session.CloseWithError(code, msg)
 }
 
 func (conn *connection) Settings() Settings {
@@ -335,16 +299,4 @@ func (conn *connection) PeerSettings() (Settings, error) {
 	case <-conn.session.Context().Done():
 		return nil, conn.session.Context().Err()
 	}
-}
-
-func (conn *connection) HandshakeComplete() context.Context {
-	return conn.session.HandshakeComplete()
-}
-
-func (conn *connection) ConnectionState() quic.ConnectionState {
-	return conn.session.ConnectionState()
-}
-
-func (conn *connection) CloseWithError(code quic.ApplicationErrorCode, msg string) error {
-	return conn.session.CloseWithError(code, msg)
 }

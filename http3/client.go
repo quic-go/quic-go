@@ -1,7 +1,6 @@
 package http3
 
 import (
-	"context"
 	"crypto/tls"
 	"errors"
 	"fmt"
@@ -128,22 +127,7 @@ func (c *client) dial() error {
 		return err
 	}
 
-	go c.handleUnidirectionalStreams()
-
 	return nil
-}
-
-func (c *client) handleUnidirectionalStreams() {
-	for {
-		str, err := c.conn.AcceptUniStream(context.Background())
-		if err != nil {
-			c.logger.Debugf("accepting unidirectional stream failed: %s", err)
-			return
-		}
-
-		// TODO: handle unknown stream types
-		str.CancelRead(quic.StreamErrorCode(errorStreamCreationError))
-	}
 }
 
 func (c *client) Close() error {
