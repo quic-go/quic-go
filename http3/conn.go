@@ -42,7 +42,7 @@ type connection struct {
 	peerSettingsErr  error
 
 	peerStreamsMutex sync.Mutex
-	peerStreams      [4]ReadableStream
+	peerStreams      [4]quic.ReceiveStream
 }
 
 var (
@@ -84,11 +84,12 @@ func newConn(s quic.EarlySession, settings Settings) (*connection, error) {
 		peerSettingsDone: make(chan struct{}),
 	}
 
-	str, err := conn.OpenUniStream(StreamTypeControl)
+	str, err := conn.session.OpenUniStream()
 	if err != nil {
 		return nil, err
 	}
 	w := quicvarint.NewWriter(str)
+	quicvarint.Write(w, uint64(StreamTypeControl))
 	conn.settings.writeFrame(w)
 
 	go conn.handleIncomingUniStreams()
@@ -107,36 +108,32 @@ func (conn *connection) handleIncomingUniStreams() {
 	}
 }
 
-func (conn *connection) handleIncomingUniStream(qstr quic.ReceiveStream) {
-	r := quicvarint.NewReader(qstr)
+func (conn *connection) handleIncomingUniStream(str quic.ReceiveStream) {
+	r := quicvarint.NewReader(str)
 	t, err := quicvarint.Read(r)
 	if err != nil {
-		qstr.CancelRead(quic.StreamErrorCode(errorGeneralProtocolError))
+		str.CancelRead(quic.StreamErrorCode(errorGeneralProtocolError))
 		return
 	}
-	str := &readableStream{
-		ReceiveStream: qstr,
-		conn:          conn,
-		streamType:    StreamType(t),
-	}
+	streamType := StreamType(t)
 
 	// Store control, QPACK, and push streams on conn
-	if str.streamType < 4 {
+	if streamType < 4 {
 		conn.peerStreamsMutex.Lock()
-		if conn.peerStreams[str.streamType] != nil {
-			conn.session.CloseWithError(quic.ApplicationErrorCode(errorStreamCreationError), fmt.Sprintf("more than one %s opened", str.streamType))
+		if conn.peerStreams[streamType] != nil {
+			conn.session.CloseWithError(quic.ApplicationErrorCode(errorStreamCreationError), fmt.Sprintf("more than one %s opened", streamType))
 			return
 		}
-		conn.peerStreams[str.streamType] = str
+		conn.peerStreams[streamType] = str
 		conn.peerStreamsMutex.Unlock()
 	}
 
-	switch str.streamType {
+	switch streamType {
 	case StreamTypeControl:
 		conn.handleControlStream(str)
 	case StreamTypePush:
 		if conn.session.Perspective() == quic.PerspectiveServer {
-			conn.session.CloseWithError(quic.ApplicationErrorCode(errorStreamCreationError), fmt.Sprintf("spurious %s from client", str.streamType))
+			conn.session.CloseWithError(quic.ApplicationErrorCode(errorStreamCreationError), fmt.Sprintf("spurious %s from client", streamType))
 			return
 		}
 		// TODO: handle push streams
@@ -152,7 +149,7 @@ func (conn *connection) handleIncomingUniStream(qstr quic.ReceiveStream) {
 	}
 }
 
-func (conn *connection) handleControlStream(str ReadableStream) {
+func (conn *connection) handleControlStream(str quic.ReceiveStream) {
 	f, err := parseNextFrame(str)
 	if err != nil {
 		conn.session.CloseWithError(quic.ApplicationErrorCode(errorFrameError), "")
@@ -212,40 +209,6 @@ func (conn *connection) OpenRequestStream(ctx context.Context) (Stream, error) {
 	return &bidiStream{
 		Stream: str,
 		conn:   conn,
-	}, nil
-}
-
-func (conn *connection) OpenUniStream(t StreamType) (WritableStream, error) {
-	if !t.Valid() {
-		return nil, fmt.Errorf("invalid stream type: %s", t)
-	}
-	str, err := conn.session.OpenUniStream()
-	if err != nil {
-		return nil, err
-	}
-	return conn.openWritableStream(str, t)
-
-}
-
-func (conn *connection) OpenUniStreamSync(ctx context.Context, t StreamType) (WritableStream, error) {
-	if !t.Valid() {
-		return nil, fmt.Errorf("invalid stream type: %s", t)
-	}
-	str, err := conn.session.OpenUniStreamSync(ctx)
-	if err != nil {
-		return nil, err
-	}
-	return conn.openWritableStream(str, t)
-}
-
-func (conn *connection) openWritableStream(str quic.SendStream, t StreamType) (WritableStream, error) {
-	// TODO: store a quicvarint.Writer in writableStream?
-	w := quicvarint.NewWriter(str)
-	quicvarint.Write(w, uint64(t))
-	return &writableStream{
-		SendStream: str,
-		conn:       conn,
-		streamType: t,
 	}, nil
 }
 

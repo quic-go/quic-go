@@ -41,52 +41,6 @@ func (t StreamType) Valid() bool {
 	return t <= quicvarint.Max
 }
 
-// ReadableStream represents the receiver side of a unidirectional HTTP/3 stream.
-type ReadableStream interface {
-	quic.ReceiveStream
-	Conn() Conn
-	StreamType() StreamType
-}
-
-type readableStream struct {
-	quic.ReceiveStream
-	conn       Conn
-	streamType StreamType
-}
-
-var _ quic.ReceiveStream = &readableStream{}
-
-func (s *readableStream) Conn() Conn {
-	return s.conn
-}
-
-func (s *readableStream) StreamType() StreamType {
-	return s.streamType
-}
-
-// WritableStream represents the sender side of a unidirectional HTTP/3 stream.
-type WritableStream interface {
-	quic.SendStream
-	Conn() Conn
-	StreamType() StreamType
-}
-
-type writableStream struct {
-	quic.SendStream
-	conn       Conn
-	streamType StreamType
-}
-
-var _ quic.SendStream = &writableStream{}
-
-func (s *writableStream) Conn() Conn {
-	return s.conn
-}
-
-func (s *writableStream) StreamType() StreamType {
-	return s.streamType
-}
-
 // Stream represents a bidirectional HTTP/3 stream.
 type Stream interface {
 	quic.Stream
