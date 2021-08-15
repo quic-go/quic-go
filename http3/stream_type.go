@@ -3,7 +3,6 @@ package http3
 import (
 	"fmt"
 
-	"github.com/lucas-clemente/quic-go"
 	"github.com/lucas-clemente/quic-go/quicvarint"
 )
 
@@ -39,21 +38,4 @@ func (t StreamType) String() string {
 // Valid returns true if t is a valid stream type ([0,2^62-1]).
 func (t StreamType) Valid() bool {
 	return t <= quicvarint.Max
-}
-
-// Stream represents a bidirectional HTTP/3 stream.
-type Stream interface {
-	quic.Stream
-	Conn() Conn
-}
-
-type bidiStream struct {
-	quic.Stream
-	conn Conn
-}
-
-var _ quic.Stream = &bidiStream{}
-
-func (s *bidiStream) Conn() Conn {
-	return s.conn
 }

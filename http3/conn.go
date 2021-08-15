@@ -10,28 +10,6 @@ import (
 	"github.com/lucas-clemente/quic-go/quicvarint"
 )
 
-// Conn is a base HTTP/3 connection.
-// Callers should use either ServerConn or ClientConn.
-type Conn interface {
-	// Settings returns the HTTP/3 settings for this side of the connection.
-	Settings() Settings
-
-	// PeerSettings returns the peer’s HTTP/3 settings.
-	// This will block until the peer’s settings have been received.
-	PeerSettings() (Settings, error)
-}
-
-// ServerConn is a server connection. It accepts and processes HTTP/3 request sessions.
-type ServerConn interface {
-	Conn
-	AcceptRequestStream(context.Context) (Stream, error)
-}
-
-// ClientConn is a client connection. It opens and processes HTTP/3 request sessions.
-type ClientConn interface {
-	Conn
-	OpenRequestStream(context.Context) (Stream, error)
-}
 type connection struct {
 	session quic.EarlySession
 
@@ -183,7 +161,7 @@ func (conn *connection) handleControlStream(str quic.ReceiveStream) {
 }
 
 // TODO: demultiplex incoming bidi streams
-func (conn *connection) AcceptRequestStream(ctx context.Context) (Stream, error) {
+func (conn *connection) AcceptRequestStream(ctx context.Context) (RequestStream, error) {
 	if conn.session.Perspective() != quic.PerspectiveServer {
 		return nil, errors.New("server method called on client connection")
 	}
@@ -191,14 +169,11 @@ func (conn *connection) AcceptRequestStream(ctx context.Context) (Stream, error)
 	if err != nil {
 		return nil, err
 	}
-	return &bidiStream{
-		Stream: str,
-		conn:   conn,
-	}, nil
+	return newRequestStream(conn, str)
 }
 
 // TODO: multiplex outgoing bidi streams?
-func (conn *connection) OpenRequestStream(ctx context.Context) (Stream, error) {
+func (conn *connection) OpenRequestStream(ctx context.Context) (RequestStream, error) {
 	if conn.session.Perspective() != quic.PerspectiveClient {
 		return nil, errors.New("client method called on server connection")
 	}
@@ -206,10 +181,7 @@ func (conn *connection) OpenRequestStream(ctx context.Context) (Stream, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &bidiStream{
-		Stream: str,
-		conn:   conn,
-	}, nil
+	return newRequestStream(conn, str)
 }
 
 func (conn *connection) Settings() Settings {

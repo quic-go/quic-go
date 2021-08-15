@@ -276,7 +276,7 @@ func (s *Server) maxHeaderBytes() uint64 {
 	return uint64(s.Server.MaxHeaderBytes)
 }
 
-func (s *Server) handleRequestStream(sess quic.EarlySession, str Stream) requestError {
+func (s *Server) handleRequestStream(sess quic.EarlySession, str RequestStream) requestError {
 	frame, err := parseNextFrame(str)
 	if err != nil {
 		return newStreamError(errorRequestIncomplete, err)
