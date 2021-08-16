@@ -10,6 +10,29 @@ import (
 	"github.com/lucas-clemente/quic-go/quicvarint"
 )
 
+// Conn is a base HTTP/3 connection.
+// Callers should use either ServerConn or ClientConn.
+type Conn interface {
+	// Settings returns the HTTP/3 settings for this side of the connection.
+	Settings() Settings
+
+	// PeerSettings returns the peer’s HTTP/3 settings.
+	// This will block until the peer’s settings have been received.
+	PeerSettings() (Settings, error)
+}
+
+// ServerConn is a server connection. It accepts and processes HTTP/3 request streams.
+type ServerConn interface {
+	Conn
+	AcceptRequestStream(context.Context) (RequestStream, error)
+}
+
+// ClientConn is a client connection. It opens and processes HTTP/3 request streams.
+type ClientConn interface {
+	Conn
+	OpenRequestStream(context.Context) (RequestStream, error)
+}
+
 type connection struct {
 	session quic.EarlySession
 

@@ -7,6 +7,20 @@ import (
 	"github.com/lucas-clemente/quic-go"
 )
 
+// A RequestStream is a QUIC stream for processing HTTP/3 requests.
+// Instances may also implement DatagramContextProvider and/or WebTransportProvider.
+type RequestStream interface {
+	quic.Stream
+
+	// TODO: integrate QPACK encoding and decoding with dynamic tables
+
+	// WriteHeaderFrame([]qpack.HeaderField) error
+	// WriteDataFrame([]byte) error
+
+	// WebTransport returns a WebTransport interface, if supported.
+	WebTransport() (WebTransport, error)
+}
+
 type requestStream struct {
 	quic.Stream
 	conn Conn
@@ -17,6 +31,7 @@ func newRequestStream(conn Conn, str quic.Stream) (RequestStream, error) {
 		Stream: str,
 		conn:   conn,
 	}
+
 	return s, nil
 }
 
