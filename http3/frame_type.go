@@ -11,6 +11,9 @@ const (
 	FrameTypeGoAway        FrameType = 0x07
 	FrameTypeMaxPushID     FrameType = 0x0d
 	FrameTypeDuplicatePush FrameType = 0x0e
+
+	// https://www.ietf.org/archive/id/draft-ietf-masque-h3-datagram-03.html#name-http-3-capsule-frame
+	FrameTypeCapsule FrameType = 0xffcab5
 )
 
 // A FrameType represents an HTTP/3 frame type.
@@ -36,6 +39,8 @@ func (t FrameType) String() string {
 		return "MAX_PUSH_ID"
 	case FrameTypeDuplicatePush:
 		return "DUPLICATE_PUSH"
+	case FrameTypeCapsule:
+		return "CAPSULE"
 	default:
 		return fmt.Sprintf("%#x", uint64(t))
 	}
