@@ -12,7 +12,10 @@ const (
 	FrameTypeMaxPushID     FrameType = 0x0d
 	FrameTypeDuplicatePush FrameType = 0x0e
 
-	// https://www.ietf.org/archive/id/draft-ietf-masque-h3-datagram-03.html#name-http-3-capsule-frame
+	// https://www.ietf.org/archive/id/draft-ietf-webtrans-http3-01.html#section-7.3
+	FrameTypeWebTransportStream FrameType = 0x41
+
+	// https://www.ietf.org/archive/id/draft-ietf-masque-h3-datagram-03.html#section-10.1
 	FrameTypeCapsule FrameType = 0xffcab5
 )
 
@@ -39,6 +42,8 @@ func (t FrameType) String() string {
 		return "MAX_PUSH_ID"
 	case FrameTypeDuplicatePush:
 		return "DUPLICATE_PUSH"
+	case FrameTypeWebTransportStream:
+		return "WEBTRANSPORT_STREAM"
 	case FrameTypeCapsule:
 		return "CAPSULE"
 	default:
