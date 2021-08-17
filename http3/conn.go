@@ -46,8 +46,7 @@ type connection struct {
 	peerSettings     Settings
 	peerSettingsErr  error
 
-	peerStreamsMutex sync.Mutex
-	peerStreams      [4]quic.ReceiveStream
+	peerStreams [4]quic.ReceiveStream
 
 	incomingStreamsOnce    sync.Once
 	incomingStreamsErr     error
@@ -205,7 +204,7 @@ func (conn *connection) handleIncomingUniStreams() {
 			// TODO: log the error
 			return
 		}
-		go conn.handleIncomingUniStream(str)
+		conn.handleIncomingUniStream(str)
 	}
 }
 
@@ -220,18 +219,16 @@ func (conn *connection) handleIncomingUniStream(str quic.ReceiveStream) {
 
 	// Store control, QPACK, and push streams on conn
 	if streamType < 4 {
-		conn.peerStreamsMutex.Lock()
 		if conn.peerStreams[streamType] != nil {
 			conn.session.CloseWithError(quic.ApplicationErrorCode(errorStreamCreationError), fmt.Sprintf("more than one %s opened", streamType))
 			return
 		}
 		conn.peerStreams[streamType] = str
-		conn.peerStreamsMutex.Unlock()
 	}
 
 	switch streamType {
 	case StreamTypeControl:
-		conn.handleControlStream(str)
+		go conn.handleControlStream(str)
 	case StreamTypePush:
 		if conn.session.Perspective() == quic.PerspectiveServer {
 			conn.session.CloseWithError(quic.ApplicationErrorCode(errorStreamCreationError), fmt.Sprintf("spurious %s from client", streamType))
