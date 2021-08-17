@@ -87,6 +87,7 @@ var _ = Describe("RoundTripper", func() {
 			sess.EXPECT().Context().Return(context.Background()).AnyTimes()
 			sess.EXPECT().HandshakeComplete().Return(handshakeCtx).AnyTimes()
 			sess.EXPECT().OpenUniStream().Return(controlStr, nil).MaxTimes(1)
+			sess.EXPECT().AcceptStream(gomock.Any()).Return(nil, errors.New("done")).MaxTimes(1)
 			origDialAddr = dialAddr
 			dialAddr = func(addr string, tlsConf *tls.Config, config *quic.Config) (quic.EarlySession, error) {
 				// return an error when trying to open a stream

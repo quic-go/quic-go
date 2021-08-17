@@ -3,6 +3,7 @@ package http3
 import (
 	"context"
 	"errors"
+	"io"
 
 	"github.com/lucas-clemente/quic-go"
 )
@@ -14,9 +15,6 @@ type RequestStream interface {
 
 	// TODO: integrate QPACK encoding and decoding with dynamic tables
 
-	// WriteHeaderFrame([]qpack.HeaderField) error
-	// WriteDataFrame([]byte) error
-
 	// WebTransport returns a WebTransport interface, if supported.
 	WebTransport() (WebTransport, error)
 }
@@ -24,15 +22,22 @@ type RequestStream interface {
 type requestStream struct {
 	quic.Stream
 	conn Conn
+	r    io.Reader // Allows buffering reads from the stream
 }
 
-func newRequestStream(conn Conn, str quic.Stream) (RequestStream, error) {
-	s := &requestStream{
+func newRequestStream(conn Conn, str quic.Stream, r io.Reader) *requestStream {
+	if r == nil {
+		r = str
+	}
+	return &requestStream{
 		Stream: str,
 		conn:   conn,
+		r:      r,
 	}
+}
 
-	return s, nil
+func (s *requestStream) Read(p []byte) (int, error) {
+	return s.r.Read(p)
 }
 
 func (s *requestStream) AcceptDatagramContext(ctx context.Context) (DatagramContext, error) {

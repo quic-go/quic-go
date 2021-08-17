@@ -67,6 +67,7 @@ var _ = Describe("Server", func() {
 			exampleGetRequest  *http.Request
 			examplePostRequest *http.Request
 		)
+
 		reqContext := context.Background()
 
 		decodeHeader := func(str io.Reader) map[string][]string {
@@ -127,7 +128,7 @@ var _ = Describe("Server", func() {
 			conn = &connection{session: sess}
 
 			str = mockquic.NewMockStream(mockCtrl)
-			reqStr, _ = newRequestStream(conn, str)
+			reqStr = newRequestStream(conn, str, str)
 		})
 
 		It("calls the HTTP handler function", func() {
@@ -416,7 +417,7 @@ var _ = Describe("Server", func() {
 				setRequest(append(requestData, buf.Bytes()...))
 				done := make(chan struct{})
 				str.EXPECT().Context().Return(reqContext)
-				str.EXPECT().Write(gomock.Any()).DoAndReturn(responseBuf.Write).AnyTimes()
+				str.EXPECT().Write(gomock.Any()).DoAndReturn(responseBuf.Write).MinTimes(1)
 				str.EXPECT().CancelRead(quic.StreamErrorCode(errorNoError))
 				str.EXPECT().Close().Do(func() { close(done) })
 

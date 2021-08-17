@@ -1,6 +1,8 @@
 package http3
 
 import (
+	"bufio"
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -9,6 +11,8 @@ import (
 	"github.com/lucas-clemente/quic-go"
 	"github.com/lucas-clemente/quic-go/quicvarint"
 )
+
+const maxBufferedStreams = 8
 
 // Conn is a base HTTP/3 connection.
 // Callers should use either ServerConn or ClientConn.
@@ -44,6 +48,21 @@ type connection struct {
 
 	peerStreamsMutex sync.Mutex
 	peerStreams      [4]quic.ReceiveStream
+
+	incomingStreamsOnce    sync.Once
+	incomingStreamsErr     error
+	incomingRequestStreams chan *requestStream
+
+	// TODO: clean up buffers for closed streams
+	incomingStreamsMutex sync.Mutex
+	incomingStreams      map[quic.StreamID]chan quic.Stream // Lazily constructed
+
+	// TODO: clean up buffers for closed streams
+	incomingUniStreamsMutex sync.Mutex
+	incomingUniStreams      map[quic.StreamID]chan quic.ReceiveStream // Lazily constructed
+
+	// TODO: buffer incoming datagrams
+
 }
 
 var (
@@ -80,9 +99,10 @@ func newConn(s quic.EarlySession, settings Settings) (*connection, error) {
 	}
 
 	conn := &connection{
-		session:          s,
-		settings:         settings,
-		peerSettingsDone: make(chan struct{}),
+		session:                s,
+		settings:               settings,
+		peerSettingsDone:       make(chan struct{}),
+		incomingRequestStreams: make(chan *requestStream, maxBufferedStreams),
 	}
 
 	str, err := conn.session.OpenUniStream()
@@ -96,6 +116,86 @@ func newConn(s quic.EarlySession, settings Settings) (*connection, error) {
 	go conn.handleIncomingUniStreams()
 
 	return conn, nil
+}
+
+func (conn *connection) AcceptRequestStream(ctx context.Context) (RequestStream, error) {
+	if conn.session.Perspective() != quic.PerspectiveServer {
+		return nil, errors.New("server method called on client connection")
+	}
+	conn.incomingStreamsOnce.Do(func() {
+		go conn.handleIncomingStreams()
+	})
+	select {
+	case str := <-conn.incomingRequestStreams:
+		if str == nil {
+			// incomingRequestStreams was closed
+			return nil, conn.incomingStreamsErr
+		}
+		return str, nil
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	case <-conn.session.Context().Done():
+		return nil, conn.session.Context().Err()
+	}
+}
+
+func (conn *connection) OpenRequestStream(ctx context.Context) (RequestStream, error) {
+	if conn.session.Perspective() != quic.PerspectiveClient {
+		return nil, errors.New("client method called on server connection")
+	}
+	str, err := conn.session.OpenStreamSync(ctx)
+	if err != nil {
+		return nil, err
+	}
+	conn.incomingStreamsOnce.Do(func() {
+		go conn.handleIncomingStreams()
+	})
+	return newRequestStream(conn, str, str), nil
+}
+
+func (conn *connection) handleIncomingStreams() {
+	for {
+		str, err := conn.session.AcceptStream(context.Background())
+		if err != nil {
+			conn.incomingStreamsErr = err
+			close(conn.incomingRequestStreams)
+			// TODO: log the error
+			return
+		}
+		conn.handleIncomingStream(str)
+	}
+}
+
+func (conn *connection) handleIncomingStream(str quic.Stream) {
+	r := bufio.NewReader(str)
+	b, _ := r.Peek(16)
+	br := bytes.NewReader(b)
+
+	t, err := quicvarint.Read(br)
+	if err != nil {
+		str.CancelWrite(quic.StreamErrorCode(errorRequestIncomplete))
+		return
+	}
+
+	switch FrameType(t) {
+	case FrameTypeHeaders:
+		conn.incomingRequestStreams <- newRequestStream(conn, str, r)
+	case FrameTypeWebTransportStream:
+		id, err := quicvarint.Read(br)
+		if err != nil {
+			str.CancelWrite(quic.StreamErrorCode(errorFrameError))
+			return
+		}
+		select {
+		case conn.incomingStreamChan(quic.StreamID(id)) <- str:
+		default:
+			str.CancelWrite(quic.StreamErrorCode(errorWebTransportBufferedStreamRejected))
+			return
+		}
+	default:
+		conn.session.CloseWithError(quic.ApplicationErrorCode(errorFrameUnexpected), "expected first frame to be a HEADERS frame")
+		return
+	}
 }
 
 func (conn *connection) handleIncomingUniStreams() {
@@ -143,10 +243,21 @@ func (conn *connection) handleIncomingUniStream(str quic.ReceiveStream) {
 		return
 	case StreamTypeQPACKEncoder, StreamTypeQPACKDecoder:
 		// TODO: handle QPACK dynamic tables
+	case StreamTypeWebTransportStream:
+		id, err := quicvarint.Read(r)
+		if err != nil {
+			// TODO: log this error
+			str.CancelRead(quic.StreamErrorCode(errorGeneralProtocolError))
+			return
+		}
+		select {
+		case conn.incomingUniStreamChan(quic.StreamID(id)) <- str:
+		default:
+			str.CancelRead(quic.StreamErrorCode(errorWebTransportBufferedStreamRejected))
+			return
+		}
 	default:
-		// TODO: demultiplex incoming uni streams
 		str.CancelRead(quic.StreamErrorCode(errorStreamCreationError))
-		// conn.incomingUniStreams <- str
 	}
 }
 
@@ -183,28 +294,28 @@ func (conn *connection) handleControlStream(str quic.ReceiveStream) {
 	// TODO: loop reading the reset of the frames from the control stream
 }
 
-// TODO: demultiplex incoming bidi streams
-func (conn *connection) AcceptRequestStream(ctx context.Context) (RequestStream, error) {
-	if conn.session.Perspective() != quic.PerspectiveServer {
-		return nil, errors.New("server method called on client connection")
+func (conn *connection) incomingStreamChan(id quic.StreamID) chan quic.Stream {
+	conn.incomingStreamsMutex.Lock()
+	defer conn.incomingStreamsMutex.Unlock()
+	if conn.incomingStreams[id] == nil {
+		if conn.incomingStreams == nil {
+			conn.incomingStreams = make(map[quic.StreamID]chan quic.Stream)
+		}
+		conn.incomingStreams[id] = make(chan quic.Stream, maxBufferedStreams)
 	}
-	str, err := conn.session.AcceptStream(ctx)
-	if err != nil {
-		return nil, err
-	}
-	return newRequestStream(conn, str)
+	return conn.incomingStreams[id]
 }
 
-// TODO: multiplex outgoing bidi streams?
-func (conn *connection) OpenRequestStream(ctx context.Context) (RequestStream, error) {
-	if conn.session.Perspective() != quic.PerspectiveClient {
-		return nil, errors.New("client method called on server connection")
+func (conn *connection) incomingUniStreamChan(id quic.StreamID) chan quic.ReceiveStream {
+	conn.incomingUniStreamsMutex.Lock()
+	defer conn.incomingUniStreamsMutex.Unlock()
+	if conn.incomingUniStreams[id] == nil {
+		if conn.incomingUniStreams == nil {
+			conn.incomingUniStreams = make(map[quic.StreamID]chan quic.ReceiveStream)
+		}
+		conn.incomingUniStreams[id] = make(chan quic.ReceiveStream, maxBufferedStreams)
 	}
-	str, err := conn.session.OpenStreamSync(ctx)
-	if err != nil {
-		return nil, err
-	}
-	return newRequestStream(conn, str)
+	return conn.incomingUniStreams[id]
 }
 
 func (conn *connection) Settings() Settings {
