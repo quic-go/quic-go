@@ -128,7 +128,7 @@ var _ = Describe("Server", func() {
 			conn = &connection{session: sess}
 
 			str = mockquic.NewMockStream(mockCtrl)
-			reqStr = newRequestStream(conn, str, str)
+			reqStr = newRequestStream(conn, str, nil)
 		})
 
 		It("calls the HTTP handler function", func() {

@@ -1,7 +1,6 @@
 package http3
 
 import (
-	"bufio"
 	"bytes"
 	"context"
 	"errors"
@@ -149,7 +148,7 @@ func (conn *connection) OpenRequestStream(ctx context.Context) (RequestStream, e
 	conn.incomingStreamsOnce.Do(func() {
 		go conn.handleIncomingStreams()
 	})
-	return newRequestStream(conn, str, str), nil
+	return newRequestStream(conn, str, nil), nil
 }
 
 func (conn *connection) handleIncomingStreams() {
@@ -166,11 +165,9 @@ func (conn *connection) handleIncomingStreams() {
 }
 
 func (conn *connection) handleIncomingStream(str quic.Stream) {
-	r := bufio.NewReader(str)
-	b, _ := r.Peek(16)
-	br := bytes.NewReader(b)
+	r := quicvarint.NewReader(str)
 
-	t, err := quicvarint.Read(br)
+	t, err := quicvarint.Read(r)
 	if err != nil {
 		str.CancelWrite(quic.StreamErrorCode(errorRequestIncomplete))
 		return
@@ -178,9 +175,11 @@ func (conn *connection) handleIncomingStream(str quic.Stream) {
 
 	switch FrameType(t) {
 	case FrameTypeHeaders:
-		conn.incomingRequestStreams <- newRequestStream(conn, str, r)
+		b := &bytes.Buffer{}
+		quicvarint.Write(b, t)
+		conn.incomingRequestStreams <- newRequestStream(conn, str, b.Bytes())
 	case FrameTypeWebTransportStream:
-		id, err := quicvarint.Read(br)
+		id, err := quicvarint.Read(r)
 		if err != nil {
 			str.CancelWrite(quic.StreamErrorCode(errorFrameError))
 			return

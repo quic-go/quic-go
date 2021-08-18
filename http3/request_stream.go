@@ -3,7 +3,6 @@ package http3
 import (
 	"context"
 	"errors"
-	"io"
 
 	"github.com/lucas-clemente/quic-go"
 )
@@ -23,24 +22,33 @@ type RequestStream interface {
 type requestStream struct {
 	quic.Stream
 	conn *connection
-	r    io.Reader // Allows buffering reads from the stream
+	pfx  []byte // Allows buffering reads from the stream
 }
 
 var _ quic.Stream = &requestStream{}
 
-func newRequestStream(conn *connection, str quic.Stream, r io.Reader) *requestStream {
-	if r == nil {
-		r = str
-	}
+func newRequestStream(conn *connection, str quic.Stream, pfx []byte) *requestStream {
 	return &requestStream{
 		Stream: str,
 		conn:   conn,
-		r:      r,
+		pfx:    pfx,
 	}
 }
 
+// Read first copies bytes from pfx, then reads from Stream.
 func (s *requestStream) Read(p []byte) (int, error) {
-	return s.r.Read(p)
+	n := len(s.pfx)
+	if n == 0 {
+		return s.Stream.Read(p)
+	}
+	if n <= len(p) {
+		copy(p, s.pfx)
+		s.pfx = nil
+		return n, nil
+	}
+	copy(p, s.pfx[:len(p)])
+	s.pfx = s.pfx[len(p):]
+	return len(p), nil
 }
 
 func (s *requestStream) Close() error {
