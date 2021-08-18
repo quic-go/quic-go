@@ -45,17 +45,16 @@ type connection struct {
 	peerSettings     Settings
 	peerSettingsErr  error
 
-	peerStreams [4]quic.ReceiveStream
+	peerStreamsMutex sync.Mutex
+	peerStreams      [4]quic.ReceiveStream
 
 	incomingStreamsOnce    sync.Once
 	incomingStreamsErr     error
 	incomingRequestStreams chan *requestStream
 
-	// TODO: clean up buffers for closed streams
 	incomingStreamsMutex sync.Mutex
 	incomingStreams      map[quic.StreamID]chan quic.Stream // Lazily constructed
 
-	// TODO: clean up buffers for closed streams
 	incomingUniStreamsMutex sync.Mutex
 	incomingUniStreams      map[quic.StreamID]chan quic.ReceiveStream // Lazily constructed
 
@@ -203,7 +202,10 @@ func (conn *connection) handleIncomingUniStreams() {
 			// TODO: log the error
 			return
 		}
-		conn.handleIncomingUniStream(str)
+		// FIXME: This could lead to resource exhaustion.
+		// Chrome sends 2 unidirectional streams before opening the first WebTransport uni stream.
+		// The streams are open, but zero data is sent on them, which blocks reads below.
+		go conn.handleIncomingUniStream(str)
 	}
 }
 
@@ -218,11 +220,14 @@ func (conn *connection) handleIncomingUniStream(str quic.ReceiveStream) {
 
 	// Store control, QPACK, and push streams on conn
 	if streamType < 4 {
-		if conn.peerStreams[streamType] != nil {
+		conn.peerStreamsMutex.Lock()
+		prevPeerStream := conn.peerStreams[streamType]
+		conn.peerStreams[streamType] = str
+		conn.peerStreamsMutex.Unlock()
+		if prevPeerStream != nil {
 			conn.session.CloseWithError(quic.ApplicationErrorCode(errorStreamCreationError), fmt.Sprintf("more than one %s opened", streamType))
 			return
 		}
-		conn.peerStreams[streamType] = str
 	}
 
 	switch streamType {

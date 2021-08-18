@@ -138,9 +138,9 @@ func parseSettingsFramePayload(r io.Reader, len uint64) (Settings, error) {
 		case SettingQPACKMaxTableCapacity,
 			SettingMaxFieldSectionSize,
 			SettingQPACKBlockedStreams:
-		case SettingDatagram, SettingDatagramDraft00:
+		case SettingDatagram, SettingDatagramDraft00, SettingWebTransport:
 			if val != 0 && val != 1 {
-				return nil, fmt.Errorf("invalid value for H3_DATAGRAM: %d", val)
+				return nil, fmt.Errorf("invalid value for %s: %d", id, val)
 			}
 		default:
 		}
