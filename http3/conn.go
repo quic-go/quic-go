@@ -444,5 +444,7 @@ func (conn *connection) cleanup(id quic.StreamID) {
 	delete(conn.incomingUniStreams, id)
 	conn.incomingUniStreamsMutex.Unlock()
 
-	// TODO: clean up buffered datagrams
+	conn.incomingDatagramsMutex.Lock()
+	delete(conn.incomingDatagrams, id)
+	conn.incomingDatagramsMutex.Unlock()
 }
