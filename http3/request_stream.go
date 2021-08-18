@@ -71,5 +71,5 @@ func (s *requestStream) DatagramNoContext() (DatagramContext, error) {
 }
 
 func (s *requestStream) WebTransport() (WebTransport, error) {
-	return nil, errors.New("TODO: not supported yet")
+	return s.conn.WebTransport(s.Stream)
 }
