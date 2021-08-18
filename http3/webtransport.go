@@ -5,8 +5,10 @@ import (
 	"io"
 
 	"github.com/lucas-clemente/quic-go"
-	"github.com/lucas-clemente/quic-go/quicvarint"
 )
+
+// A WebTransport SessionID is the same as the request stream ID.
+type SessionID = quic.StreamID
 
 // WebTransport is an interface to accept or open streams and read and write datagrams.
 type WebTransport interface {
@@ -48,7 +50,7 @@ func newWebTransportSession(conn *connection, str quic.Stream) WebTransport {
 	}
 }
 
-func (s *wtSession) SessionID() quic.StreamID {
+func (s *wtSession) SessionID() SessionID {
 	return s.str.StreamID()
 }
 
@@ -60,65 +62,27 @@ func (s *wtSession) Close() error {
 }
 
 func (s *wtSession) AcceptStream(ctx context.Context) (quic.Stream, error) {
-	select {
-	case str := <-s.conn.incomingStreamsChan(s.SessionID()):
-		return str, nil
-	case <-s.conn.session.Context().Done():
-		return nil, s.conn.session.Context().Err()
-	}
+	return s.conn.acceptStream(ctx, s.SessionID())
 }
 
 func (s *wtSession) AcceptUniStream(ctx context.Context) (quic.ReceiveStream, error) {
-	select {
-	case str := <-s.conn.incomingUniStreamsChan(s.SessionID()):
-		return str, nil
-	case <-s.conn.session.Context().Done():
-		return nil, s.conn.session.Context().Err()
-	}
+	return s.conn.acceptUniStream(ctx, s.SessionID())
 }
 
 func (s *wtSession) OpenStream() (quic.Stream, error) {
-	str, err := s.conn.session.OpenStream()
-	if err != nil {
-		return nil, err
-	}
-	w := quicvarint.NewWriter(str)
-	quicvarint.Write(w, uint64(FrameTypeWebTransportStream))
-	quicvarint.Write(w, uint64(s.SessionID()))
-	return str, nil
+	return s.conn.openStream(s.SessionID())
 }
 
 func (s *wtSession) OpenStreamSync(ctx context.Context) (quic.Stream, error) {
-	str, err := s.conn.session.OpenStreamSync(ctx)
-	if err != nil {
-		return nil, err
-	}
-	w := quicvarint.NewWriter(str)
-	quicvarint.Write(w, uint64(FrameTypeWebTransportStream))
-	quicvarint.Write(w, uint64(s.SessionID()))
-	return str, nil
+	return s.conn.openStreamSync(ctx, s.SessionID())
 }
 
 func (s *wtSession) OpenUniStream() (quic.SendStream, error) {
-	str, err := s.conn.session.OpenUniStream()
-	if err != nil {
-		return nil, err
-	}
-	w := quicvarint.NewWriter(str)
-	quicvarint.Write(w, uint64(StreamTypeWebTransportStream))
-	quicvarint.Write(w, uint64(s.SessionID()))
-	return str, nil
+	return s.conn.openUniStream(s.SessionID())
 }
 
 func (s *wtSession) OpenUniStreamSync(ctx context.Context) (quic.SendStream, error) {
-	str, err := s.conn.session.OpenUniStreamSync(ctx)
-	if err != nil {
-		return nil, err
-	}
-	w := quicvarint.NewWriter(str)
-	quicvarint.Write(w, uint64(StreamTypeWebTransportStream))
-	quicvarint.Write(w, uint64(s.SessionID()))
-	return str, nil
+	return s.conn.openUniStreamSync(ctx, s.SessionID())
 }
 
 func (s *wtSession) ReadDatagram(ctx context.Context) ([]byte, error) {

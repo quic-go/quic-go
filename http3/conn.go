@@ -27,11 +27,6 @@ type Conn interface {
 	PeerSettings() (Settings, error)
 }
 
-type datagramConn interface {
-	readDatagram(context.Context, quic.StreamID) ([]byte, error)
-	writeDatagram(quic.StreamID, []byte) error
-}
-
 // ServerConn is a server connection. It accepts and processes HTTP/3 request streams.
 type ServerConn interface {
 	Conn
@@ -42,6 +37,22 @@ type ServerConn interface {
 type ClientConn interface {
 	Conn
 	OpenRequestStream(context.Context) (RequestStream, error)
+}
+
+// streamConn is an internal interface for implementing WebTransport.
+type streamConn interface {
+	acceptStream(context.Context, quic.StreamID) (quic.Stream, error)
+	acceptUniStream(context.Context, quic.StreamID) (quic.ReceiveStream, error)
+	openStream(quic.StreamID) (quic.Stream, error)
+	openStreamSync(context.Context, quic.StreamID) (quic.Stream, error)
+	openUniStream(quic.StreamID) (quic.SendStream, error)
+	openUniStreamSync(context.Context, quic.StreamID) (quic.SendStream, error)
+}
+
+// datagramConn is an internal interface for implementing WebTransport.
+type datagramConn interface {
+	readDatagram(context.Context, quic.StreamID) ([]byte, error)
+	writeDatagram(quic.StreamID, []byte) error
 }
 
 type connection struct {
@@ -76,6 +87,7 @@ var (
 	_ Conn         = &connection{}
 	_ ClientConn   = &connection{}
 	_ ServerConn   = &connection{}
+	_ streamConn   = &connection{}
 	_ datagramConn = &connection{}
 )
 
@@ -342,6 +354,68 @@ func (conn *connection) handleControlStream(str quic.ReceiveStream) {
 	close(conn.peerSettingsDone)
 
 	// TODO: loop reading the reset of the frames from the control stream
+}
+
+func (conn *connection) acceptStream(ctx context.Context, id quic.StreamID) (quic.Stream, error) {
+	select {
+	case str := <-conn.incomingStreamsChan(id):
+		return str, nil
+	case <-conn.session.Context().Done():
+		return nil, conn.session.Context().Err()
+	}
+}
+
+func (conn *connection) acceptUniStream(ctx context.Context, id quic.StreamID) (quic.ReceiveStream, error) {
+	select {
+	case str := <-conn.incomingUniStreamsChan(id):
+		return str, nil
+	case <-conn.session.Context().Done():
+		return nil, conn.session.Context().Err()
+	}
+}
+
+func (conn *connection) openStream(id quic.StreamID) (quic.Stream, error) {
+	str, err := conn.session.OpenStream()
+	if err != nil {
+		return nil, err
+	}
+	w := quicvarint.NewWriter(str)
+	quicvarint.Write(w, uint64(FrameTypeWebTransportStream))
+	quicvarint.Write(w, uint64(id))
+	return str, nil
+}
+
+func (conn *connection) openStreamSync(ctx context.Context, id quic.StreamID) (quic.Stream, error) {
+	str, err := conn.session.OpenStreamSync(ctx)
+	if err != nil {
+		return nil, err
+	}
+	w := quicvarint.NewWriter(str)
+	quicvarint.Write(w, uint64(FrameTypeWebTransportStream))
+	quicvarint.Write(w, uint64(id))
+	return str, nil
+}
+
+func (conn *connection) openUniStream(id quic.StreamID) (quic.SendStream, error) {
+	str, err := conn.session.OpenUniStream()
+	if err != nil {
+		return nil, err
+	}
+	w := quicvarint.NewWriter(str)
+	quicvarint.Write(w, uint64(StreamTypeWebTransportStream))
+	quicvarint.Write(w, uint64(id))
+	return str, nil
+}
+
+func (conn *connection) openUniStreamSync(ctx context.Context, id quic.StreamID) (quic.SendStream, error) {
+	str, err := conn.session.OpenUniStreamSync(ctx)
+	if err != nil {
+		return nil, err
+	}
+	w := quicvarint.NewWriter(str)
+	quicvarint.Write(w, uint64(StreamTypeWebTransportStream))
+	quicvarint.Write(w, uint64(id))
+	return str, nil
 }
 
 func (conn *connection) readDatagram(ctx context.Context, id quic.StreamID) ([]byte, error) {
