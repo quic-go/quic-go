@@ -151,16 +151,22 @@ func (conn *connection) OpenRequestStream(ctx context.Context) (RequestStream, e
 }
 
 func (conn *connection) handleIncomingStreams() {
+	var wg sync.WaitGroup
 	for {
 		str, err := conn.session.AcceptStream(context.Background())
 		if err != nil {
 			conn.incomingStreamsErr = err
-			close(conn.incomingRequestStreams)
 			// TODO: log the error
-			return
+			break
 		}
-		conn.handleIncomingStream(str)
+		wg.Add(1)
+		go func(str quic.Stream) {
+			conn.handleIncomingStream(str)
+			wg.Done()
+		}(str)
 	}
+	wg.Wait()
+	close(conn.incomingRequestStreams)
 }
 
 func (conn *connection) handleIncomingStream(str quic.Stream) {
