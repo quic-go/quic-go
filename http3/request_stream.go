@@ -71,5 +71,5 @@ func (s *requestStream) DatagramNoContext() (DatagramContext, error) {
 }
 
 func (s *requestStream) WebTransport() (WebTransport, error) {
-	return s.conn.WebTransport(s.Stream)
+	return newWebTransportSession(s.conn, s), nil
 }

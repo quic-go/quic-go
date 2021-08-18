@@ -9,7 +9,6 @@ import (
 	"sync"
 
 	"github.com/lucas-clemente/quic-go"
-	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/quicvarint"
 )
 
@@ -24,10 +23,6 @@ type Conn interface {
 	// PeerSettings returns the peer’s HTTP/3 settings.
 	// This will block until the peer’s settings have been received.
 	PeerSettings() (Settings, error)
-
-	// WebTransport returns a WebTransport session for a request stream.
-	// The stream must be a request stream.
-	WebTransport(quic.Stream) (WebTransport, error)
 }
 
 // ServerConn is a server connection. It accepts and processes HTTP/3 request streams.
@@ -343,11 +338,4 @@ func (conn *connection) PeerSettings() (Settings, error) {
 	case <-conn.session.Context().Done():
 		return nil, conn.session.Context().Err()
 	}
-}
-
-func (conn *connection) WebTransport(str quic.Stream) (WebTransport, error) {
-	if str.StreamID().Type() != protocol.StreamTypeBidi {
-		return nil, errors.New("bidirectional stream required")
-	}
-	return newWebTransportSession(conn, str), nil
 }
