@@ -39,20 +39,16 @@ type ClientConn interface {
 	OpenRequestStream(context.Context) (RequestStream, error)
 }
 
-// streamConn is an internal interface for implementing WebTransport.
-type streamConn interface {
-	acceptStream(context.Context, quic.StreamID) (quic.Stream, error)
-	acceptUniStream(context.Context, quic.StreamID) (quic.ReceiveStream, error)
-	openStream(quic.StreamID) (quic.Stream, error)
-	openStreamSync(context.Context, quic.StreamID) (quic.Stream, error)
-	openUniStream(quic.StreamID) (quic.SendStream, error)
-	openUniStreamSync(context.Context, quic.StreamID) (quic.SendStream, error)
-}
-
-// datagramConn is an internal interface for implementing WebTransport.
-type datagramConn interface {
-	readDatagram(context.Context, quic.StreamID) ([]byte, error)
-	writeDatagram(quic.StreamID, []byte) error
+// webTransportConn is an internal interface for implementing WebTransport.
+type webTransportConn interface {
+	acceptStream(context.Context, SessionID) (quic.Stream, error)
+	acceptUniStream(context.Context, SessionID) (quic.ReceiveStream, error)
+	openStream(SessionID) (quic.Stream, error)
+	openStreamSync(context.Context, SessionID) (quic.Stream, error)
+	openUniStream(SessionID) (quic.SendStream, error)
+	openUniStreamSync(context.Context, SessionID) (quic.SendStream, error)
+	readDatagram(context.Context, SessionID) ([]byte, error)
+	writeDatagram(SessionID, []byte) error
 }
 
 type connection struct {
@@ -72,23 +68,22 @@ type connection struct {
 	incomingRequestStreams chan *requestStream
 
 	incomingStreamsMutex sync.Mutex
-	incomingStreams      map[quic.StreamID]chan quic.Stream // Lazily constructed
+	incomingStreams      map[SessionID]chan quic.Stream // Lazily constructed
 
 	incomingUniStreamsMutex sync.Mutex
-	incomingUniStreams      map[quic.StreamID]chan quic.ReceiveStream // Lazily constructed
+	incomingUniStreams      map[SessionID]chan quic.ReceiveStream // Lazily constructed
 
 	// TODO: buffer incoming datagrams
 	incomingDatagramsOnce  sync.Once
 	incomingDatagramsMutex sync.Mutex
-	incomingDatagrams      map[quic.StreamID]chan []byte // Lazily constructed
+	incomingDatagrams      map[SessionID]chan []byte // Lazily constructed
 }
 
 var (
-	_ Conn         = &connection{}
-	_ ClientConn   = &connection{}
-	_ ServerConn   = &connection{}
-	_ streamConn   = &connection{}
-	_ datagramConn = &connection{}
+	_ Conn             = &connection{}
+	_ ClientConn       = &connection{}
+	_ ServerConn       = &connection{}
+	_ webTransportConn = &connection{}
 )
 
 // Accept establishes a new HTTP/3 server connection from an existing QUIC session.
@@ -245,7 +240,7 @@ func (conn *connection) handleIncomingStream(str quic.Stream) {
 			return
 		}
 		select {
-		case conn.incomingStreamsChan(quic.StreamID(id)) <- str:
+		case conn.incomingStreamsChan(SessionID(id)) <- str:
 		default:
 			str.CancelWrite(quic.StreamErrorCode(errorWebTransportBufferedStreamRejected))
 			return
@@ -313,7 +308,7 @@ func (conn *connection) handleIncomingUniStream(str quic.ReceiveStream) {
 			return
 		}
 		select {
-		case conn.incomingUniStreamsChan(quic.StreamID(id)) <- str:
+		case conn.incomingUniStreamsChan(SessionID(id)) <- str:
 		default:
 			str.CancelRead(quic.StreamErrorCode(errorWebTransportBufferedStreamRejected))
 			return
@@ -356,7 +351,7 @@ func (conn *connection) handleControlStream(str quic.ReceiveStream) {
 	// TODO: loop reading the reset of the frames from the control stream
 }
 
-func (conn *connection) acceptStream(ctx context.Context, id quic.StreamID) (quic.Stream, error) {
+func (conn *connection) acceptStream(ctx context.Context, id SessionID) (quic.Stream, error) {
 	select {
 	case str := <-conn.incomingStreamsChan(id):
 		return str, nil
@@ -365,7 +360,7 @@ func (conn *connection) acceptStream(ctx context.Context, id quic.StreamID) (qui
 	}
 }
 
-func (conn *connection) acceptUniStream(ctx context.Context, id quic.StreamID) (quic.ReceiveStream, error) {
+func (conn *connection) acceptUniStream(ctx context.Context, id SessionID) (quic.ReceiveStream, error) {
 	select {
 	case str := <-conn.incomingUniStreamsChan(id):
 		return str, nil
@@ -374,7 +369,7 @@ func (conn *connection) acceptUniStream(ctx context.Context, id quic.StreamID) (
 	}
 }
 
-func (conn *connection) openStream(id quic.StreamID) (quic.Stream, error) {
+func (conn *connection) openStream(id SessionID) (quic.Stream, error) {
 	str, err := conn.session.OpenStream()
 	if err != nil {
 		return nil, err
@@ -385,7 +380,7 @@ func (conn *connection) openStream(id quic.StreamID) (quic.Stream, error) {
 	return str, nil
 }
 
-func (conn *connection) openStreamSync(ctx context.Context, id quic.StreamID) (quic.Stream, error) {
+func (conn *connection) openStreamSync(ctx context.Context, id SessionID) (quic.Stream, error) {
 	str, err := conn.session.OpenStreamSync(ctx)
 	if err != nil {
 		return nil, err
@@ -396,7 +391,7 @@ func (conn *connection) openStreamSync(ctx context.Context, id quic.StreamID) (q
 	return str, nil
 }
 
-func (conn *connection) openUniStream(id quic.StreamID) (quic.SendStream, error) {
+func (conn *connection) openUniStream(id SessionID) (quic.SendStream, error) {
 	str, err := conn.session.OpenUniStream()
 	if err != nil {
 		return nil, err
@@ -407,7 +402,7 @@ func (conn *connection) openUniStream(id quic.StreamID) (quic.SendStream, error)
 	return str, nil
 }
 
-func (conn *connection) openUniStreamSync(ctx context.Context, id quic.StreamID) (quic.SendStream, error) {
+func (conn *connection) openUniStreamSync(ctx context.Context, id SessionID) (quic.SendStream, error) {
 	str, err := conn.session.OpenUniStreamSync(ctx)
 	if err != nil {
 		return nil, err
@@ -418,7 +413,7 @@ func (conn *connection) openUniStreamSync(ctx context.Context, id quic.StreamID)
 	return str, nil
 }
 
-func (conn *connection) readDatagram(ctx context.Context, id quic.StreamID) ([]byte, error) {
+func (conn *connection) readDatagram(ctx context.Context, id SessionID) ([]byte, error) {
 	conn.incomingDatagramsOnce.Do(func() {
 		go conn.handleIncomingDatagrams()
 	})
@@ -452,14 +447,14 @@ func (conn *connection) handleIncomingDatagrams() {
 		msg = msg[quicvarint.Len(id):]
 
 		select {
-		case conn.incomingDatagramsChan(quic.StreamID(id)) <- msg:
+		case conn.incomingDatagramsChan(SessionID(id)) <- msg:
 		case <-conn.session.Context().Done():
 			return
 		}
 	}
 }
 
-func (conn *connection) writeDatagram(id quic.StreamID, msg []byte) error {
+func (conn *connection) writeDatagram(id SessionID, msg []byte) error {
 	b := make([]byte, 0, len(msg)+int(quicvarint.Len(uint64(id))))
 	buf := bytes.NewBuffer(b)
 	quicvarint.Write(buf, uint64(id))
@@ -473,43 +468,43 @@ func (conn *connection) writeDatagram(id quic.StreamID, msg []byte) error {
 	return conn.session.SendMessage(buf.Bytes())
 }
 
-func (conn *connection) incomingStreamsChan(id quic.StreamID) chan quic.Stream {
+func (conn *connection) incomingStreamsChan(id SessionID) chan quic.Stream {
 	conn.incomingStreamsMutex.Lock()
 	defer conn.incomingStreamsMutex.Unlock()
 	if conn.incomingStreams[id] == nil {
 		if conn.incomingStreams == nil {
-			conn.incomingStreams = make(map[quic.StreamID]chan quic.Stream)
+			conn.incomingStreams = make(map[SessionID]chan quic.Stream)
 		}
 		conn.incomingStreams[id] = make(chan quic.Stream, maxBufferedStreams)
 	}
 	return conn.incomingStreams[id]
 }
 
-func (conn *connection) incomingUniStreamsChan(id quic.StreamID) chan quic.ReceiveStream {
+func (conn *connection) incomingUniStreamsChan(id SessionID) chan quic.ReceiveStream {
 	conn.incomingUniStreamsMutex.Lock()
 	defer conn.incomingUniStreamsMutex.Unlock()
 	if conn.incomingUniStreams[id] == nil {
 		if conn.incomingUniStreams == nil {
-			conn.incomingUniStreams = make(map[quic.StreamID]chan quic.ReceiveStream)
+			conn.incomingUniStreams = make(map[SessionID]chan quic.ReceiveStream)
 		}
 		conn.incomingUniStreams[id] = make(chan quic.ReceiveStream, maxBufferedStreams)
 	}
 	return conn.incomingUniStreams[id]
 }
 
-func (conn *connection) incomingDatagramsChan(id quic.StreamID) chan []byte {
+func (conn *connection) incomingDatagramsChan(id SessionID) chan []byte {
 	conn.incomingDatagramsMutex.Lock()
 	defer conn.incomingDatagramsMutex.Unlock()
 	if conn.incomingDatagrams[id] == nil {
 		if conn.incomingDatagrams == nil {
-			conn.incomingDatagrams = make(map[quic.StreamID]chan []byte)
+			conn.incomingDatagrams = make(map[SessionID]chan []byte)
 		}
 		conn.incomingDatagrams[id] = make(chan []byte, maxBufferedDatagrams)
 	}
 	return conn.incomingDatagrams[id]
 }
 
-func (conn *connection) cleanup(id quic.StreamID) {
+func (conn *connection) cleanup(id SessionID) {
 	conn.incomingStreamsMutex.Lock()
 	delete(conn.incomingStreams, id)
 	conn.incomingStreamsMutex.Unlock()
