@@ -126,6 +126,31 @@ func newConn(s quic.EarlySession, settings Settings) (*connection, error) {
 	return conn, nil
 }
 
+func (conn *connection) Settings() Settings {
+	return conn.settings
+}
+
+func (conn *connection) PeerSettings() (Settings, error) {
+	select {
+	case <-conn.peerSettingsDone:
+		return conn.peerSettings, conn.peerSettingsErr
+	case <-conn.session.Context().Done():
+		return nil, conn.session.Context().Err()
+	}
+}
+
+func (conn *connection) negotiatedWebTransport() bool {
+	if !conn.Settings().WebTransportEnabled() {
+		return false
+	}
+	peerSettings, err := conn.PeerSettings()
+	if err != nil {
+		// TODO: log error
+		return false
+	}
+	return peerSettings.WebTransportEnabled()
+}
+
 func (conn *connection) AcceptRequestStream(ctx context.Context) (RequestStream, error) {
 	if conn.session.Perspective() != quic.PerspectiveServer {
 		return nil, errors.New("server method called on client connection")
@@ -195,6 +220,13 @@ func (conn *connection) handleIncomingStream(str quic.Stream) {
 		quicvarint.Write(b, t)
 		conn.incomingRequestStreams <- newRequestStream(conn, str, b.Bytes())
 	case FrameTypeWebTransportStream:
+		if !conn.negotiatedWebTransport() {
+			// TODO: log error
+			// TODO: should this close the connection or the stream?
+			// https://github.com/ietf-wg-webtrans/draft-ietf-webtrans-http3/pull/56
+			str.CancelWrite(quic.StreamErrorCode(errorSettingsError))
+			return
+		}
 		id, err := quicvarint.Read(r)
 		if err != nil {
 			str.CancelWrite(quic.StreamErrorCode(errorFrameError))
@@ -413,17 +445,4 @@ func (conn *connection) cleanup(id quic.StreamID) {
 	conn.incomingUniStreamsMutex.Unlock()
 
 	// TODO: clean up buffered datagrams
-}
-
-func (conn *connection) Settings() Settings {
-	return conn.settings
-}
-
-func (conn *connection) PeerSettings() (Settings, error) {
-	select {
-	case <-conn.peerSettingsDone:
-		return conn.peerSettings, conn.peerSettingsErr
-	case <-conn.session.Context().Done():
-		return nil, conn.session.Context().Err()
-	}
 }
