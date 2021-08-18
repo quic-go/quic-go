@@ -177,7 +177,7 @@ var _ = Describe("Frames", func() {
 				data = appendVarInt(data, uint64(len(settings)))
 				data = append(data, settings...)
 				_, err := parseNextFrame(bytes.NewReader(data))
-				Expect(err).To(MatchError("invalid value for H3_DATAGRAM: 1337"))
+				Expect(err).To(MatchError("invalid value for H3_DATAGRAM (draft 00): 1337"))
 			})
 
 			It("writes the H3_DATAGRAM setting", func() {
