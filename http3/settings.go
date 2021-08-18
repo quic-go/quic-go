@@ -15,11 +15,14 @@ const (
 	SettingMaxFieldSectionSize   SettingID = 0x06
 	SettingQPACKBlockedStreams   SettingID = 0x07
 
-	// https://www.ietf.org/archive/id/draft-ietf-masque-h3-datagram-02.html#name-http-settings-parameter
+	// https://www.ietf.org/archive/id/draft-ietf-masque-h3-datagram-02.html#section-10.2
 	SettingDatagram SettingID = 0xffd276
 
 	// https://datatracker.ietf.org/doc/draft-ietf-masque-h3-datagram/00/
 	SettingDatagramDraft00 SettingID = 0x276
+
+	// https://www.ietf.org/archive/id/draft-ietf-webtrans-http3-01.html#section-7.2
+	SettingWebTransport SettingID = 0x2b603742
 )
 
 // A SettingID represents an individual HTTP/3 setting identifier.
@@ -37,6 +40,8 @@ func (id SettingID) String() string {
 		return "H3_DATAGRAM"
 	case SettingDatagramDraft00:
 		return "H3_DATAGRAM (draft 00)"
+	case SettingWebTransport:
+		return "ENABLE_WEBTRANSPORT"
 	default:
 		return fmt.Sprintf("%#x", uint64(id))
 	}
@@ -58,6 +63,22 @@ func (s Settings) EnableDatagrams() {
 // DatagramsEnabled returns true if any of H3_DATAGRAM setting(s) are set to 1.
 func (s Settings) DatagramsEnabled() bool {
 	return s[SettingDatagram] == 1 || s[SettingDatagramDraft00] == 1
+}
+
+// EnableWebTransport sets ENABLE_WEBTRANSPORT to 1.
+func (s Settings) EnableWebTransport() {
+	s[SettingWebTransport] = 1
+}
+
+// WebTransportEnabled returns true if the ENABLE_WEBTRANSPORT setting is set to 1.
+func (s Settings) WebTransportEnabled() bool {
+	return s[SettingWebTransport] == 1
+}
+
+// ExtendedConnectEnabled returns true if the settings imply support for the extended CONNECT method.
+// Currently this is limited to the ENABLE_WEBTRANSPORT setting.
+func (s Settings) ExtendedConnectEnabled() bool {
+	return s.WebTransportEnabled()
 }
 
 // TODO: export the frame handling methods?

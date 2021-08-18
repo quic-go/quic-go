@@ -88,6 +88,11 @@ type Server struct {
 	// See https://www.ietf.org/archive/id/draft-schinazi-masque-h3-datagram-02.html.
 	EnableDatagrams bool
 
+	// Enable support for WebTransport.
+	// If set to true, QuicConfig.EnableDatagram will be set.
+	// See https://www.ietf.org/archive/id/draft-ietf-webtrans-http3-01.html.
+	EnableWebTransport bool
+
 	port uint32 // used atomically
 
 	mutex     sync.Mutex
@@ -180,7 +185,7 @@ func (s *Server) serveImpl(tlsConf *tls.Config, conn net.PacketConn) error {
 	} else {
 		quicConf = s.QuicConfig.Clone()
 	}
-	if s.EnableDatagrams {
+	if s.EnableDatagrams || s.EnableWebTransport {
 		quicConf.EnableDatagrams = true
 	}
 	if conn == nil {
@@ -228,6 +233,9 @@ func (s *Server) settings() Settings {
 	settings := Settings{}
 	if s.EnableDatagrams {
 		settings.EnableDatagrams()
+	}
+	if s.EnableWebTransport {
+		settings.EnableWebTransport()
 	}
 	return settings
 }
