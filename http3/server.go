@@ -298,7 +298,12 @@ func (s *Server) handleRequestStream(sess quic.EarlySession, str RequestStream) 
 		// TODO: use the right error code
 		return newConnError(errorGeneralProtocolError, err)
 	}
-	req, err := requestFromHeaders(hfs)
+
+	ctx := str.Context()
+	ctx = context.WithValue(ctx, ServerContextKey, s)
+	ctx = context.WithValue(ctx, http.LocalAddrContextKey, sess.LocalAddr())
+
+	req, err := requestFromHeaders(ctx, hfs)
 	if err != nil {
 		// TODO: use the right error code
 		return newStreamError(errorGeneralProtocolError, err)
@@ -315,10 +320,6 @@ func (s *Server) handleRequestStream(sess quic.EarlySession, str RequestStream) 
 		s.logger.Infof("%s %s%s", req.Method, req.Host, req.RequestURI)
 	}
 
-	ctx := str.Context()
-	ctx = context.WithValue(ctx, ServerContextKey, s)
-	ctx = context.WithValue(ctx, http.LocalAddrContextKey, sess.LocalAddr())
-	req = req.WithContext(ctx)
 	r := newResponseWriter(str, s.logger)
 	defer func() {
 		if !r.usedDataStream() {

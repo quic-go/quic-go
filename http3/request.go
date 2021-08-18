@@ -1,6 +1,7 @@
 package http3
 
 import (
+	"context"
 	"crypto/tls"
 	"errors"
 	"net/http"
@@ -11,8 +12,11 @@ import (
 	"github.com/marten-seemann/qpack"
 )
 
-func requestFromHeaders(headers []qpack.HeaderField) (*http.Request, error) {
-	var path, authority, method, contentLengthStr string
+// ProtocolContextKey is the value of the :protocol header, if present.
+var ProtocolContextKey = &contextKey{"protocol"}
+
+func requestFromHeaders(ctx context.Context, headers []qpack.HeaderField) (*http.Request, error) {
+	var method, authority, path, protocol, contentLengthStr string
 	httpHeaders := http.Header{}
 
 	for _, h := range headers {
@@ -23,6 +27,8 @@ func requestFromHeaders(headers []qpack.HeaderField) (*http.Request, error) {
 			method = h.Value
 		case ":authority":
 			authority = h.Value
+		case ":protocol":
+			protocol = h.Value
 		case "content-length":
 			contentLengthStr = h.Value
 		default:
@@ -32,13 +38,18 @@ func requestFromHeaders(headers []qpack.HeaderField) (*http.Request, error) {
 		}
 	}
 
+	if protocol != "" {
+		ctx = context.WithValue(ctx, ServerContextKey, protocol)
+	}
+
 	// concatenate cookie headers, see https://tools.ietf.org/html/rfc6265#section-5.4
 	if len(httpHeaders["Cookie"]) > 0 {
 		httpHeaders.Set("Cookie", strings.Join(httpHeaders["Cookie"], "; "))
 	}
 
 	isConnect := method == http.MethodConnect
-	if isConnect {
+	isExtendedConnect := isConnect && protocol != ""
+	if isConnect && !isExtendedConnect {
 		if path != "" || authority == "" {
 			return nil, errors.New(":path must be empty and :authority must not be empty")
 		}
@@ -50,7 +61,7 @@ func requestFromHeaders(headers []qpack.HeaderField) (*http.Request, error) {
 	var requestURI string
 	var err error
 
-	if isConnect {
+	if isConnect && !isExtendedConnect {
 		u = &url.URL{Host: authority}
 		requestURI = authority
 	} else {
@@ -69,7 +80,7 @@ func requestFromHeaders(headers []qpack.HeaderField) (*http.Request, error) {
 		}
 	}
 
-	return &http.Request{
+	req := &http.Request{
 		Method:        method,
 		URL:           u,
 		Proto:         "HTTP/3",
@@ -81,7 +92,9 @@ func requestFromHeaders(headers []qpack.HeaderField) (*http.Request, error) {
 		Host:          authority,
 		RequestURI:    requestURI,
 		TLS:           &tls.ConnectionState{},
-	}, nil
+	}
+
+	return req.WithContext(ctx), nil
 }
 
 func hostnameFromRequest(req *http.Request) string {

@@ -1,6 +1,7 @@
 package http3
 
 import (
+	"context"
 	"net/http"
 	"net/url"
 
@@ -10,6 +11,8 @@ import (
 )
 
 var _ = Describe("Request", func() {
+	ctx := context.Background()
+
 	It("populates request", func() {
 		headers := []qpack.HeaderField{
 			{Name: ":path", Value: "/foo"},
@@ -17,7 +20,7 @@ var _ = Describe("Request", func() {
 			{Name: ":method", Value: "GET"},
 			{Name: "content-length", Value: "42"},
 		}
-		req, err := requestFromHeaders(headers)
+		req, err := requestFromHeaders(ctx, headers)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(req.Method).To(Equal("GET"))
 		Expect(req.URL.Path).To(Equal("/foo"))
@@ -31,6 +34,7 @@ var _ = Describe("Request", func() {
 		Expect(req.Host).To(Equal("quic.clemente.io"))
 		Expect(req.RequestURI).To(Equal("/foo"))
 		Expect(req.TLS).ToNot(BeNil())
+		Expect(req.Context()).To(Equal(ctx))
 	})
 
 	It("parses path with leading double slashes", func() {
@@ -39,7 +43,7 @@ var _ = Describe("Request", func() {
 			{Name: ":authority", Value: "quic.clemente.io"},
 			{Name: ":method", Value: "GET"},
 		}
-		req, err := requestFromHeaders(headers)
+		req, err := requestFromHeaders(ctx, headers)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(req.Header).To(BeEmpty())
 		Expect(req.Body).To(BeNil())
@@ -57,7 +61,7 @@ var _ = Describe("Request", func() {
 			{Name: "cookie", Value: "cookie1=foobar1"},
 			{Name: "cookie", Value: "cookie2=foobar2"},
 		}
-		req, err := requestFromHeaders(headers)
+		req, err := requestFromHeaders(ctx, headers)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(req.Header).To(Equal(http.Header{
 			"Cookie": []string{"cookie1=foobar1; cookie2=foobar2"},
@@ -73,7 +77,7 @@ var _ = Describe("Request", func() {
 			{Name: "duplicate-header", Value: "1"},
 			{Name: "duplicate-header", Value: "2"},
 		}
-		req, err := requestFromHeaders(headers)
+		req, err := requestFromHeaders(ctx, headers)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(req.Header).To(Equal(http.Header{
 			"Cache-Control":    []string{"max-age=0"},
@@ -86,7 +90,7 @@ var _ = Describe("Request", func() {
 			{Name: ":authority", Value: "quic.clemente.io"},
 			{Name: ":method", Value: http.MethodConnect},
 		}
-		req, err := requestFromHeaders(headers)
+		req, err := requestFromHeaders(ctx, headers)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(req.Method).To(Equal(http.MethodConnect))
 		Expect(req.RequestURI).To(Equal("quic.clemente.io"))
@@ -97,7 +101,7 @@ var _ = Describe("Request", func() {
 			{Name: ":authority", Value: "quic.clemente.io"},
 			{Name: ":method", Value: "GET"},
 		}
-		_, err := requestFromHeaders(headers)
+		_, err := requestFromHeaders(ctx, headers)
 		Expect(err).To(MatchError(":path, :authority and :method must not be empty"))
 	})
 
@@ -106,7 +110,7 @@ var _ = Describe("Request", func() {
 			{Name: ":path", Value: "/foo"},
 			{Name: ":authority", Value: "quic.clemente.io"},
 		}
-		_, err := requestFromHeaders(headers)
+		_, err := requestFromHeaders(ctx, headers)
 		Expect(err).To(MatchError(":path, :authority and :method must not be empty"))
 	})
 
@@ -115,7 +119,7 @@ var _ = Describe("Request", func() {
 			{Name: ":path", Value: "/foo"},
 			{Name: ":method", Value: "GET"},
 		}
-		_, err := requestFromHeaders(headers)
+		_, err := requestFromHeaders(ctx, headers)
 		Expect(err).To(MatchError(":path, :authority and :method must not be empty"))
 	})
 
@@ -123,7 +127,7 @@ var _ = Describe("Request", func() {
 		headers := []qpack.HeaderField{
 			{Name: ":method", Value: http.MethodConnect},
 		}
-		_, err := requestFromHeaders(headers)
+		_, err := requestFromHeaders(ctx, headers)
 		Expect(err).To(MatchError(":path must be empty and :authority must not be empty"))
 	})
 
@@ -133,7 +137,7 @@ var _ = Describe("Request", func() {
 			{Name: ":authority", Value: "quic.clemente.io"},
 			{Name: ":method", Value: http.MethodConnect},
 		}
-		_, err := requestFromHeaders(headers)
+		_, err := requestFromHeaders(ctx, headers)
 		Expect(err).To(MatchError(":path must be empty and :authority must not be empty"))
 	})
 
