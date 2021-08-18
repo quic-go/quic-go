@@ -9,6 +9,7 @@ import (
 	"sync"
 
 	"github.com/lucas-clemente/quic-go"
+	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/quicvarint"
 )
 
@@ -313,6 +314,18 @@ func (conn *connection) incomingUniStreamChan(id quic.StreamID) chan quic.Receiv
 		conn.incomingUniStreams[id] = make(chan quic.ReceiveStream, maxBufferedStreams)
 	}
 	return conn.incomingUniStreams[id]
+}
+
+func (conn *connection) cleanup(id quic.StreamID) {
+	conn.incomingStreamsMutex.Lock()
+	delete(conn.incomingStreams, id)
+	conn.incomingStreamsMutex.Unlock()
+
+	conn.incomingUniStreamsMutex.Lock()
+	delete(conn.incomingUniStreams, id)
+	conn.incomingUniStreamsMutex.Unlock()
+
+	// TODO: clean up buffered datagrams
 }
 
 func (conn *connection) Settings() Settings {

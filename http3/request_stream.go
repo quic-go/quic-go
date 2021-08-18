@@ -16,16 +16,19 @@ type RequestStream interface {
 	// TODO: integrate QPACK encoding and decoding with dynamic tables
 
 	// WebTransport returns a WebTransport interface, if supported.
+	// TODO: should this method live here?
 	WebTransport() (WebTransport, error)
 }
 
 type requestStream struct {
 	quic.Stream
-	conn Conn
+	conn *connection
 	r    io.Reader // Allows buffering reads from the stream
 }
 
-func newRequestStream(conn Conn, str quic.Stream, r io.Reader) *requestStream {
+var _ quic.Stream = &requestStream{}
+
+func newRequestStream(conn *connection, str quic.Stream, r io.Reader) *requestStream {
 	if r == nil {
 		r = str
 	}
@@ -38,6 +41,21 @@ func newRequestStream(conn Conn, str quic.Stream, r io.Reader) *requestStream {
 
 func (s *requestStream) Read(p []byte) (int, error) {
 	return s.r.Read(p)
+}
+
+func (s *requestStream) Close() error {
+	s.conn.cleanup(s.Stream.StreamID())
+	return s.Stream.Close()
+}
+
+func (s *requestStream) CancelRead(code quic.StreamErrorCode) {
+	s.conn.cleanup(s.Stream.StreamID())
+	s.Stream.CancelRead(code)
+}
+
+func (s *requestStream) CancelWrite(code quic.StreamErrorCode) {
+	s.conn.cleanup(s.Stream.StreamID())
+	s.Stream.CancelWrite(code)
 }
 
 func (s *requestStream) AcceptDatagramContext(ctx context.Context) (DatagramContext, error) {

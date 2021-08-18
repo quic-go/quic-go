@@ -524,6 +524,7 @@ var _ = Describe("Client", func() {
 			str.EXPECT().Write(gomock.Any()).DoAndReturn(buf.Write).AnyTimes()
 			str.EXPECT().Close()
 			str.EXPECT().CancelWrite(gomock.Any())
+			str.EXPECT().StreamID().AnyTimes()
 			str.EXPECT().Read(gomock.Any()).DoAndReturn(func([]byte) (int, error) {
 				return 0, testErr
 			})
@@ -541,6 +542,7 @@ var _ = Describe("Client", func() {
 			)
 			str.EXPECT().Write(gomock.Any()).AnyTimes().DoAndReturn(func(p []byte) (int, error) { return len(p), nil })
 			str.EXPECT().Close()
+			str.EXPECT().StreamID().AnyTimes()
 			str.EXPECT().Read(gomock.Any()).DoAndReturn(rspBuf.Read).AnyTimes()
 			rsp, err := client.RoundTrip(request)
 			Expect(err).ToNot(HaveOccurred())
@@ -569,7 +571,9 @@ var _ = Describe("Client", func() {
 			It("sends a request", func() {
 				done := make(chan struct{})
 				gomock.InOrder(
+					str.EXPECT().StreamID(),
 					str.EXPECT().Close().Do(func() { close(done) }),
+					str.EXPECT().StreamID(),
 					str.EXPECT().CancelWrite(gomock.Any()).MaxTimes(1), // when reading the response errors
 				)
 				// the response body is sent asynchronously, while already reading the response
@@ -588,9 +592,11 @@ var _ = Describe("Client", func() {
 				request.Body.(*mockBody).readErr = errors.New("testErr")
 				done := make(chan struct{})
 				gomock.InOrder(
+					str.EXPECT().StreamID(),
 					str.EXPECT().CancelWrite(quic.StreamErrorCode(errorRequestCanceled)).Do(func(quic.StreamErrorCode) {
 						close(done)
 					}),
+					str.EXPECT().StreamID(),
 					str.EXPECT().CancelWrite(gomock.Any()),
 				)
 
@@ -612,6 +618,7 @@ var _ = Describe("Client", func() {
 				}))
 				(&dataFrame{len: 0x6}).writeFrame(buf)
 				buf.Write([]byte("foobar"))
+				str.EXPECT().StreamID().AnyTimes()
 				str.EXPECT().Close().Do(func() { close(done) })
 				sess.EXPECT().ConnectionState().Return(quic.ConnectionState{})
 				str.EXPECT().CancelWrite(gomock.Any()).MaxTimes(1) // when reading the response errors
@@ -628,6 +635,7 @@ var _ = Describe("Client", func() {
 				(&dataFrame{len: 0x42}).writeFrame(buf)
 				sess.EXPECT().CloseWithError(quic.ApplicationErrorCode(errorFrameUnexpected), gomock.Any())
 				closed := make(chan struct{})
+				str.EXPECT().StreamID().AnyTimes()
 				str.EXPECT().Close().Do(func() { close(closed) })
 				str.EXPECT().Read(gomock.Any()).DoAndReturn(buf.Read).AnyTimes()
 				_, err := client.RoundTrip(request)
@@ -640,6 +648,7 @@ var _ = Describe("Client", func() {
 				(&headersFrame{len: 1338}).writeFrame(buf)
 				str.EXPECT().CancelWrite(quic.StreamErrorCode(errorFrameError))
 				closed := make(chan struct{})
+				str.EXPECT().StreamID().AnyTimes()
 				str.EXPECT().Close().Do(func() { close(closed) })
 				str.EXPECT().Read(gomock.Any()).DoAndReturn(buf.Read).AnyTimes()
 				_, err := client.RoundTrip(request)
@@ -671,6 +680,7 @@ var _ = Describe("Client", func() {
 				sess.EXPECT().OpenStreamSync(ctx).Return(str, nil)
 				buf := &bytes.Buffer{}
 				str.EXPECT().Close().MaxTimes(1)
+				str.EXPECT().StreamID().AnyTimes()
 
 				str.EXPECT().Write(gomock.Any()).DoAndReturn(buf.Write)
 
@@ -701,6 +711,7 @@ var _ = Describe("Client", func() {
 				sess.EXPECT().ConnectionState().Return(quic.ConnectionState{})
 				buf := &bytes.Buffer{}
 				str.EXPECT().Close().MaxTimes(1)
+				str.EXPECT().StreamID().AnyTimes()
 
 				done := make(chan struct{})
 				str.EXPECT().Write(gomock.Any()).DoAndReturn(buf.Write)
@@ -723,6 +734,7 @@ var _ = Describe("Client", func() {
 				sess.EXPECT().OpenStreamSync(context.Background()).Return(str, nil)
 				buf := &bytes.Buffer{}
 				str.EXPECT().Write(gomock.Any()).DoAndReturn(buf.Write)
+				str.EXPECT().StreamID().AnyTimes()
 				gomock.InOrder(
 					str.EXPECT().Close(),
 					str.EXPECT().CancelWrite(gomock.Any()).MaxTimes(1), // when the Read errors
@@ -740,6 +752,7 @@ var _ = Describe("Client", func() {
 				sess.EXPECT().OpenStreamSync(context.Background()).Return(str, nil)
 				buf := &bytes.Buffer{}
 				str.EXPECT().Write(gomock.Any()).DoAndReturn(buf.Write)
+				str.EXPECT().StreamID().AnyTimes()
 				gomock.InOrder(
 					str.EXPECT().Close(),
 					str.EXPECT().CancelWrite(gomock.Any()).MaxTimes(1), // when the Read errors
@@ -766,6 +779,7 @@ var _ = Describe("Client", func() {
 				str.EXPECT().Write(gomock.Any()).AnyTimes().DoAndReturn(func(p []byte) (int, error) { return len(p), nil })
 				str.EXPECT().Read(gomock.Any()).DoAndReturn(buf.Read).AnyTimes()
 				str.EXPECT().Close()
+				str.EXPECT().StreamID().AnyTimes()
 
 				rsp, err := client.RoundTrip(request)
 				Expect(err).ToNot(HaveOccurred())
@@ -789,6 +803,7 @@ var _ = Describe("Client", func() {
 				str.EXPECT().Write(gomock.Any()).AnyTimes().DoAndReturn(func(p []byte) (int, error) { return len(p), nil })
 				str.EXPECT().Read(gomock.Any()).DoAndReturn(buf.Read).AnyTimes()
 				str.EXPECT().Close()
+				str.EXPECT().StreamID().AnyTimes()
 
 				rsp, err := client.RoundTrip(request)
 				Expect(err).ToNot(HaveOccurred())
