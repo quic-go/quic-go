@@ -31,7 +31,7 @@ type DatagramRequestStream interface {
 // A DatagramHandler can read and write datagrams.
 type DatagramHandler interface {
 	// ReadDatagram reads a single datagram.
-	ReadDatagram() ([]byte, error)
+	ReadDatagram(context.Context) ([]byte, error)
 
 	// WriteDatagram writes a single datagram.
 	WriteDatagram([]byte) error

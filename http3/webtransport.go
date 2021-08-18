@@ -2,7 +2,6 @@ package http3
 
 import (
 	"context"
-	"errors"
 	"io"
 
 	"github.com/lucas-clemente/quic-go"
@@ -62,7 +61,7 @@ func (s *wtSession) Close() error {
 
 func (s *wtSession) AcceptStream(ctx context.Context) (quic.Stream, error) {
 	select {
-	case str := <-s.conn.incomingStreamChan(s.SessionID()):
+	case str := <-s.conn.incomingStreamsChan(s.SessionID()):
 		return str, nil
 	case <-s.conn.session.Context().Done():
 		return nil, s.conn.session.Context().Err()
@@ -71,7 +70,7 @@ func (s *wtSession) AcceptStream(ctx context.Context) (quic.Stream, error) {
 
 func (s *wtSession) AcceptUniStream(ctx context.Context) (quic.ReceiveStream, error) {
 	select {
-	case str := <-s.conn.incomingUniStreamChan(s.SessionID()):
+	case str := <-s.conn.incomingUniStreamsChan(s.SessionID()):
 		return str, nil
 	case <-s.conn.session.Context().Done():
 		return nil, s.conn.session.Context().Err()
@@ -122,10 +121,10 @@ func (s *wtSession) OpenUniStreamSync(ctx context.Context) (quic.SendStream, err
 	return str, nil
 }
 
-func (s *wtSession) ReadDatagram() ([]byte, error) {
-	return nil, errors.New("TODO: not supported yet")
+func (s *wtSession) ReadDatagram(ctx context.Context) ([]byte, error) {
+	return s.conn.readDatagram(ctx, s.SessionID())
 }
 
-func (s *wtSession) WriteDatagram([]byte) error {
-	return errors.New("TODO: not supported yet")
+func (s *wtSession) WriteDatagram(msg []byte) error {
+	return s.conn.writeDatagram(s.SessionID(), msg)
 }
