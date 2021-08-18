@@ -42,6 +42,8 @@ func parseNextFrame(r io.Reader) (frame, error) {
 		fallthrough
 	case FrameTypeDuplicatePush:
 		fallthrough
+	case FrameTypeCapsule:
+		fallthrough
 	default:
 		// skip over unknown frames
 		if _, err := io.CopyN(ioutil.Discard, qr, int64(l)); err != nil {

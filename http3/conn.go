@@ -178,7 +178,7 @@ func (conn *connection) handleIncomingStream(str quic.Stream) {
 		return
 	}
 
-	switch FrameType(t) {
+	switch FrameType(t) { //nolint:exhaustive
 	case FrameTypeHeaders:
 		b := &bytes.Buffer{}
 		quicvarint.Write(b, t)
