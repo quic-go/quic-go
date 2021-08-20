@@ -12,6 +12,7 @@ type SessionID = quic.StreamID
 
 // WebTransport is an interface to accept or open streams and read and write datagrams.
 type WebTransport interface {
+	SessionID() SessionID
 	StreamHandler
 	DatagramHandler
 	io.Closer
@@ -42,6 +43,8 @@ type wtSession struct {
 	conn *connection
 	str  quic.Stream
 }
+
+var _ WebTransport = &wtSession{}
 
 func newWebTransportSession(conn *connection, str quic.Stream) WebTransport {
 	return &wtSession{
