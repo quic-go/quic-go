@@ -27,7 +27,7 @@ type requestStream struct {
 
 var _ quic.Stream = &requestStream{}
 
-func newRequestStream(conn *connection, str quic.Stream, pfx []byte) *requestStream {
+func newRequestStream(conn *connection, str quic.Stream, pfx []byte) RequestStream {
 	return &requestStream{
 		Stream: str,
 		conn:   conn,

@@ -63,7 +63,7 @@ var _ = Describe("Server", func() {
 			sess               *mockquic.MockEarlySession
 			conn               *connection
 			str                *mockquic.MockStream
-			reqStr             *requestStream
+			reqStr             RequestStream
 			exampleGetRequest  *http.Request
 			examplePostRequest *http.Request
 		)

@@ -65,7 +65,7 @@ type connection struct {
 
 	incomingStreamsOnce    sync.Once
 	incomingStreamsErr     error
-	incomingRequestStreams chan *requestStream
+	incomingRequestStreams chan RequestStream
 
 	incomingStreamsMutex sync.Mutex
 	incomingStreams      map[SessionID]chan quic.Stream // Lazily constructed
@@ -117,7 +117,7 @@ func newConn(s quic.EarlySession, settings Settings) (*connection, error) {
 		session:                s,
 		settings:               settings,
 		peerSettingsDone:       make(chan struct{}),
-		incomingRequestStreams: make(chan *requestStream, maxBufferedStreams),
+		incomingRequestStreams: make(chan RequestStream, maxBufferedStreams),
 	}
 
 	str, err := conn.session.OpenUniStream()
