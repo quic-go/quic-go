@@ -70,6 +70,7 @@ type connection struct {
 	incomingStreamsMutex sync.Mutex
 	incomingStreams      map[SessionID]chan quic.Stream // Lazily constructed
 
+	incomingUniStreamsOnce  sync.Once
 	incomingUniStreamsMutex sync.Mutex
 	incomingUniStreams      map[SessionID]chan quic.ReceiveStream // Lazily constructed
 
@@ -128,8 +129,6 @@ func newConn(s quic.EarlySession, settings Settings) (*connection, error) {
 	quicvarint.Write(w, uint64(StreamTypeControl))
 	conn.settings.writeFrame(w)
 
-	go conn.handleIncomingUniStreams()
-
 	return conn, nil
 }
 
@@ -138,6 +137,9 @@ func (conn *connection) Settings() Settings {
 }
 
 func (conn *connection) PeerSettings() (Settings, error) {
+	conn.incomingUniStreamsOnce.Do(func() {
+		go conn.handleIncomingUniStreams()
+	})
 	select {
 	case <-conn.peerSettingsDone:
 		return conn.peerSettings, conn.peerSettingsErr
@@ -165,6 +167,9 @@ func (conn *connection) AcceptRequestStream(ctx context.Context) (RequestStream,
 	conn.incomingStreamsOnce.Do(func() {
 		go conn.handleIncomingStreams()
 	})
+	conn.incomingUniStreamsOnce.Do(func() {
+		go conn.handleIncomingUniStreams()
+	})
 	select {
 	case str := <-conn.incomingRequestStreams:
 		if str == nil {
@@ -183,13 +188,13 @@ func (conn *connection) OpenRequestStream(ctx context.Context) (RequestStream, e
 	if conn.session.Perspective() != quic.PerspectiveClient {
 		return nil, errors.New("client method called on server connection")
 	}
+	conn.incomingUniStreamsOnce.Do(func() {
+		go conn.handleIncomingUniStreams()
+	})
 	str, err := conn.session.OpenStreamSync(ctx)
 	if err != nil {
 		return nil, err
 	}
-	conn.incomingStreamsOnce.Do(func() {
-		go conn.handleIncomingStreams()
-	})
 	return newRequestStream(conn, str, nil), nil
 }
 
@@ -352,6 +357,9 @@ func (conn *connection) handleControlStream(str quic.ReceiveStream) {
 }
 
 func (conn *connection) acceptStream(ctx context.Context, id SessionID) (quic.Stream, error) {
+	conn.incomingStreamsOnce.Do(func() {
+		go conn.handleIncomingStreams()
+	})
 	select {
 	case str := <-conn.incomingStreamsChan(id):
 		return str, nil
@@ -361,6 +369,9 @@ func (conn *connection) acceptStream(ctx context.Context, id SessionID) (quic.St
 }
 
 func (conn *connection) acceptUniStream(ctx context.Context, id SessionID) (quic.ReceiveStream, error) {
+	conn.incomingUniStreamsOnce.Do(func() {
+		go conn.handleIncomingUniStreams()
+	})
 	select {
 	case str := <-conn.incomingUniStreamsChan(id):
 		return str, nil
