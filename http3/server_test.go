@@ -871,17 +871,24 @@ var _ = Describe("Server", func() {
 	})
 
 	Context("Settings", func() {
+		var settings Settings
+
+		BeforeEach(func() {
+			settings = Settings{
+				SettingMaxFieldSectionSize: s.maxHeaderBytes(),
+			}
+		})
+
 		Context("when nil", func() {
 			It("reasonable defaults are used", func() {
 				Expect(s.Settings).To(BeNil())
 				Expect(s.EnableDatagrams).To(BeFalse())
-				Expect(s.settings()).To(Equal(Settings{}))
+				Expect(s.settings()).To(Equal(settings))
 			})
 
 			It("set H3_DATAGRAM when EnableDatagrams is set", func() {
 				s.EnableDatagrams = true
 				Expect(s.Settings).To(BeNil())
-				settings := Settings{}
 				settings.EnableDatagrams()
 				Expect(s.settings()).To(Equal(settings))
 			})

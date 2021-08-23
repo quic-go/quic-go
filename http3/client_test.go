@@ -37,10 +37,9 @@ var _ = Describe("Client", func() {
 		origDialAddr = dialAddr
 		hostname := "quic.clemente.io:1337"
 		var err error
-		client, err = newClient(hostname, nil, &roundTripperOpts{MaxHeaderBytes: 1337}, nil, nil)
+		client, err = newClient(hostname, nil, &roundTripperOpts{}, nil, nil)
 		Expect(err).ToNot(HaveOccurred())
 		Expect(client.authority).To(Equal(hostname))
-
 		req, err = http.NewRequest("GET", "https://localhost:1337", nil)
 		Expect(err).ToNot(HaveOccurred())
 
@@ -54,16 +53,23 @@ var _ = Describe("Client", func() {
 	})
 
 	Context("Settings", func() {
+		var settings Settings
+
+		BeforeEach(func() {
+			settings = Settings{
+				SettingMaxFieldSectionSize: client.maxHeaderBytes(),
+			}
+		})
+
 		It("uses default Settings when none is given", func() {
 			Expect(client.opts.Settings).To(BeNil())
 			Expect(client.opts.EnableDatagrams).To(BeFalse())
-			Expect(client.settings()).To(Equal(Settings{}))
+			Expect(client.settings()).To(Equal(settings))
 		})
 
 		It("sets H3_DATAGRAM on Settings when opts.EnableDatagrams is set", func() {
 			client.opts.EnableDatagrams = true
 			Expect(client.opts.Settings).To(BeNil())
-			settings := Settings{}
 			settings.EnableDatagrams()
 			Expect(client.settings()).To(Equal(settings))
 		})
@@ -645,14 +651,16 @@ var _ = Describe("Client", func() {
 
 			It("cancels the stream when the HEADERS frame is too large", func() {
 				buf := &bytes.Buffer{}
-				(&headersFrame{len: 1338}).writeFrame(buf)
+				max := defaultMaxResponseHeaderBytes
+				len := max + 1
+				(&headersFrame{len: uint64(len)}).writeFrame(buf)
 				str.EXPECT().CancelWrite(quic.StreamErrorCode(errorFrameError))
 				closed := make(chan struct{})
 				str.EXPECT().StreamID().AnyTimes()
 				str.EXPECT().Close().Do(func() { close(closed) })
 				str.EXPECT().Read(gomock.Any()).DoAndReturn(buf.Read).AnyTimes()
 				_, err := client.RoundTrip(request)
-				Expect(err).To(MatchError("HEADERS frame too large: 1338 bytes (max: 1337)"))
+				Expect(err).To(MatchError(fmt.Sprintf("HEADERS frame too large: %d bytes (max: %d)", len, max)))
 				Eventually(closed).Should(BeClosed())
 			})
 		})

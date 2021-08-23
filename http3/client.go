@@ -102,7 +102,9 @@ func (c *client) settings() Settings {
 	if c.opts.Settings != nil {
 		return c.opts.Settings
 	}
-	settings := Settings{}
+	settings := Settings{
+		SettingMaxFieldSectionSize: c.maxHeaderBytes(),
+	}
 	if c.opts.EnableDatagrams {
 		settings.EnableDatagrams()
 	}
