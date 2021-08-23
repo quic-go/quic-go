@@ -425,6 +425,7 @@ var _ = Describe("Client", func() {
 			sess                 *mockquic.MockEarlySession
 			settingsFrameWritten chan struct{}
 		)
+		testDone := make(chan struct{})
 
 		getHeadersFrame := func(headers map[string]string) []byte {
 			buf := &bytes.Buffer{}
@@ -490,8 +491,9 @@ var _ = Describe("Client", func() {
 			sess.EXPECT().Context().Return(context.Background()).AnyTimes()
 			sess.EXPECT().OpenUniStream().Return(controlStr, nil)
 			sess.EXPECT().AcceptUniStream(gomock.Any()).DoAndReturn(func(context.Context) (quic.ReceiveStream, error) {
+				<-testDone
 				return nil, errors.New("test done")
-			}).AnyTimes()
+			}).MinTimes(1)
 			sess.EXPECT().AcceptStream(gomock.Any()).Return(nil, errors.New("done")).MaxTimes(1)
 			dialAddr = func(hostname string, _ *tls.Config, _ *quic.Config) (quic.EarlySession, error) { return sess, nil }
 			var err error
@@ -500,6 +502,7 @@ var _ = Describe("Client", func() {
 		})
 
 		AfterEach(func() {
+			testDone <- struct{}{}
 			Eventually(settingsFrameWritten).Should(BeClosed())
 		})
 
