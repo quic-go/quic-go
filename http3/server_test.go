@@ -159,7 +159,7 @@ var _ = Describe("Server", func() {
 			responseBuf := &bytes.Buffer{}
 			setRequest(encodeRequest(exampleGetRequest))
 			str.EXPECT().Context().Return(reqContext)
-			str.EXPECT().Write(gomock.Any()).DoAndReturn(responseBuf.Write).AnyTimes()
+			str.EXPECT().Write(gomock.Any()).DoAndReturn(responseBuf.Write).MinTimes(1)
 			str.EXPECT().CancelRead(gomock.Any())
 			str.EXPECT().StreamID()
 
@@ -177,7 +177,7 @@ var _ = Describe("Server", func() {
 			responseBuf := &bytes.Buffer{}
 			setRequest(encodeRequest(exampleGetRequest))
 			str.EXPECT().Context().Return(reqContext)
-			str.EXPECT().Write(gomock.Any()).DoAndReturn(responseBuf.Write).AnyTimes()
+			str.EXPECT().Write(gomock.Any()).DoAndReturn(responseBuf.Write).MinTimes(1)
 			str.EXPECT().CancelRead(gomock.Any())
 			str.EXPECT().StreamID()
 
@@ -431,7 +431,7 @@ var _ = Describe("Server", func() {
 				Expect(hfs).To(HaveKeyWithValue(":status", []string{"200"}))
 			})
 
-			It("errors when the client sends a too large header frame", func() {
+			It("errors when the client sends a too large HEADERS frame", func() {
 				s.Server.MaxHeaderBytes = 20
 				s.Handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 					Fail("Handler should not be called.")
@@ -441,15 +441,18 @@ var _ = Describe("Server", func() {
 				buf := &bytes.Buffer{}
 				(&dataFrame{len: 6}).writeFrame(buf) // add a body
 				buf.Write([]byte("foobar"))
-				responseBuf := &bytes.Buffer{}
 				setRequest(append(requestData, buf.Bytes()...))
+				responseBuf := &bytes.Buffer{}
+				str.EXPECT().Write(gomock.Any()).DoAndReturn(responseBuf.Write).MinTimes(1)
 				done := make(chan struct{})
-				str.EXPECT().Write(gomock.Any()).DoAndReturn(responseBuf.Write).AnyTimes()
-				str.EXPECT().CancelWrite(quic.StreamErrorCode(errorFrameError)).Do(func(quic.StreamErrorCode) { close(done) })
-				str.EXPECT().StreamID()
+				str.EXPECT().CancelRead(quic.StreamErrorCode(errorFrameError)).Do(func(quic.StreamErrorCode) { close(done) })
+				str.EXPECT().StreamID().AnyTimes()
+				str.EXPECT().Close()
 
 				s.handleConn(sess)
 				Eventually(done).Should(BeClosed())
+				hfs := decodeHeader(responseBuf)
+				Expect(hfs).To(HaveKeyWithValue(":status", []string{"431"}))
 			})
 
 			It("handles a request for which the client immediately resets the stream", func() {
@@ -490,28 +493,29 @@ var _ = Describe("Server", func() {
 				Eventually(done).Should(BeClosed())
 			})
 
-			It("closes the connection when the first frame is not a HEADERS frame", func() {
+			It("returns HTTP 431 when the HEADERS frame is too large", func() {
 				handlerCalled := make(chan struct{})
 				s.Handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 					close(handlerCalled)
 				})
 
-				// use 2*DefaultMaxHeaderBytes here. qpack will compress the requiest,
+				// use 2*DefaultMaxHeaderBytes here. qpack will compress the request,
 				// but the request will still end up larger than DefaultMaxHeaderBytes.
 				url := bytes.Repeat([]byte{'a'}, http.DefaultMaxHeaderBytes*2)
 				req, err := http.NewRequest(http.MethodGet, "https://"+string(url), nil)
 				Expect(err).ToNot(HaveOccurred())
 				setRequest(encodeRequest(req))
-				// str.EXPECT().Context().Return(reqContext)
-				str.EXPECT().Write(gomock.Any()).DoAndReturn(func(p []byte) (int, error) {
-					return len(p), nil
-				}).AnyTimes()
+				responseBuf := &bytes.Buffer{}
+				str.EXPECT().Write(gomock.Any()).DoAndReturn(responseBuf.Write).MinTimes(1)
 				done := make(chan struct{})
-				str.EXPECT().CancelWrite(quic.StreamErrorCode(errorFrameError)).Do(func(quic.StreamErrorCode) { close(done) })
+				str.EXPECT().CancelRead(quic.StreamErrorCode(errorFrameError)).Do(func(quic.StreamErrorCode) { close(done) })
 				str.EXPECT().StreamID().AnyTimes()
+				str.EXPECT().Close()
 
 				s.handleConn(sess)
 				Eventually(done).Should(BeClosed())
+				hfs := decodeHeader(responseBuf)
+				Expect(hfs).To(HaveKeyWithValue(":status", []string{"431"}))
 			})
 		})
 

@@ -287,6 +287,13 @@ func (s *Server) maxHeaderBytes() uint64 {
 }
 
 func (s *Server) handleRequestStream(sess quic.EarlySession, str RequestStream) requestError {
+	rw := newResponseWriter(str, s.logger)
+	defer func() {
+		if !rw.usedDataStream() {
+			rw.Flush()
+		}
+	}()
+
 	frame, err := parseNextFrame(str)
 	if err != nil {
 		return newStreamError(errorRequestIncomplete, err)
@@ -296,7 +303,11 @@ func (s *Server) handleRequestStream(sess quic.EarlySession, str RequestStream) 
 		return newConnError(errorFrameUnexpected, errors.New("expected first frame to be a HEADERS frame"))
 	}
 	if hf.len > s.maxHeaderBytes() {
-		return newStreamError(errorFrameError, fmt.Errorf("HEADERS frame too large: %d bytes (max: %d)", hf.len, s.maxHeaderBytes()))
+		// Return HTTP 431
+		// https://quicwg.org/base-drafts/draft-ietf-quic-http.html#header-size-constraints
+		rw.WriteHeader(http.StatusRequestHeaderFieldsTooLarge)
+		str.CancelRead(quic.StreamErrorCode(errorFrameError))
+		return requestError{}
 	}
 	headerBlock := make([]byte, hf.len)
 	if _, err := io.ReadFull(str, headerBlock); err != nil {
@@ -330,12 +341,6 @@ func (s *Server) handleRequestStream(sess quic.EarlySession, str RequestStream) 
 		s.logger.Infof("%s %s%s", req.Method, req.Host, req.RequestURI)
 	}
 
-	r := newResponseWriter(str, s.logger)
-	defer func() {
-		if !r.usedDataStream() {
-			r.Flush()
-		}
-	}()
 	handler := s.Handler
 	if handler == nil {
 		handler = http.DefaultServeMux
@@ -353,14 +358,14 @@ func (s *Server) handleRequestStream(sess quic.EarlySession, str RequestStream) 
 				panicked = true
 			}
 		}()
-		handler.ServeHTTP(r, req)
+		handler.ServeHTTP(rw, req)
 	}()
 
-	if !r.usedDataStream() {
+	if !rw.usedDataStream() {
 		if panicked {
-			r.WriteHeader(500)
+			rw.WriteHeader(http.StatusInternalServerError)
 		} else {
-			r.WriteHeader(200)
+			rw.WriteHeader(http.StatusOK)
 		}
 		// If the EOF was read by the handler, CancelRead() is a no-op.
 		str.CancelRead(quic.StreamErrorCode(errorNoError))
