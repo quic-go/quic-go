@@ -16,6 +16,10 @@ import (
 
 // A RequestStream is a QUIC stream for processing HTTP/3 requests.
 type RequestStream interface {
+	StreamID() quic.StreamID
+
+	Context() context.Context
+
 	// TODO: integrate QPACK encoding and decoding with dynamic tables.
 
 	// ReadFields reads a single HEADERS frame, used for HTTP headers or trailers.
@@ -29,6 +33,10 @@ type RequestStream interface {
 
 	// DataWriter returns an io.WriteCloser that writes to DATA frames.
 	DataWriter() io.WriteCloser
+
+	CancelRead(code quic.StreamErrorCode)
+
+	Close() error
 
 	// WebTransport returns a WebTransport interface, if supported.
 	// TODO: should this method live here?
@@ -77,6 +85,70 @@ func newRequestStream(conn *connection, str quic.Stream, first *FrameType) *requ
 	return s
 }
 
+func (s *requestStream) StreamID() quic.StreamID {
+	return s.Stream.StreamID()
+}
+
+func (s *requestStream) Context() context.Context {
+	return s.Stream.Context()
+}
+
+func (s *requestStream) ReadFields() ([]qpack.HeaderField, error) {
+	select {
+	case fields := <-s.Fields:
+		return fields, s.Err
+	case <-s.Stream.Context().Done():
+		return nil, s.Stream.Context().Err()
+	}
+}
+
+// WriteFields writes a single QPACK-encoded HEADERS frame to s.
+// It returns an error if the estimated size of the frame exceeds the peer’s
+// MAX_FIELD_SECTION_SIZE. Headers are not modified or validated.
+// It is the responsibility of the caller to ensure the fields are valid.
+func (s *requestStream) WriteFields(fields []qpack.HeaderField) error {
+	var l uint64
+	for i := range fields {
+		// https://quicwg.org/base-drafts/draft-ietf-quic-qpack.html#name-dynamic-table-size
+		l += uint64(len(fields[i].Name) + len(fields[i].Value) + 32)
+	}
+	max := s.conn.peerMaxHeaderBytes()
+	if l > max {
+		return fmt.Errorf("HEADERS frame too large: %d bytes (max: %d)", l, max)
+	}
+
+	buf := &bytes.Buffer{}
+	encoder := qpack.NewEncoder(buf)
+	for i := range fields {
+		encoder.WriteField(fields[i])
+	}
+
+	// TODO: should we just instruct callers to not call WriteFields and use BodyWriter at the same time?
+	s.writeMutex.Lock()
+	defer s.writeMutex.Unlock()
+
+	w := quicvarint.NewWriter(s.Stream)
+	quicvarint.Write(w, uint64(FrameTypeHeaders))
+	quicvarint.Write(w, uint64(buf.Len()))
+	_, err := s.Stream.Write(buf.Bytes())
+	return err
+}
+
+func (s *requestStream) Close() error {
+	s.conn.cleanup(s.StreamID())
+	return s.Stream.Close()
+}
+
+func (s *requestStream) CancelRead(code quic.StreamErrorCode) {
+	s.conn.cleanup(s.StreamID())
+	s.Stream.CancelRead(code)
+}
+
+// func (s *requestStream) CancelWrite(code quic.StreamErrorCode) {
+// 	s.conn.cleanup(s.Stream.StreamID())
+// 	s.Stream.CancelWrite(code)
+// }
+
 func (s *requestStream) handleIncomingFrames(first *FrameType) {
 	defer s.conn.cleanup(s.Stream.StreamID())
 	rerr := s.parseIncomingFrames(first)
@@ -94,7 +166,7 @@ func (s *requestStream) handleIncomingFrames(first *FrameType) {
 		}
 		return
 	}
-	s.Close()
+	s.CancelRead(quic.StreamErrorCode(rerr.streamErr))
 }
 
 func (s *requestStream) parseIncomingFrames(first *FrameType) requestError {
@@ -168,62 +240,6 @@ func (s *requestStream) decodeFields(p []byte) {
 		s.conn.session.CloseWithError(quic.ApplicationErrorCode(errorGeneralProtocolError), "QPACK decoding error")
 	}
 	s.Fields <- fields
-}
-
-func (s *requestStream) ReadFields() ([]qpack.HeaderField, error) {
-	select {
-	case fields := <-s.Fields:
-		return fields, s.Err
-	case <-s.Stream.Context().Done():
-		return nil, s.Stream.Context().Err()
-	}
-}
-
-// WriteFields writes a single QPACK-encoded HEADERS frame to s.
-// It returns an error if the estimated size of the frame exceeds the peer’s
-// MAX_FIELD_SECTION_SIZE. Headers are not modified or validated.
-// It is the responsibility of the caller to ensure the fields are valid.
-func (s *requestStream) WriteFields(fields []qpack.HeaderField) error {
-	var l uint64
-	for i := range fields {
-		// https://quicwg.org/base-drafts/draft-ietf-quic-qpack.html#name-dynamic-table-size
-		l += uint64(len(fields[i].Name) + len(fields[i].Value) + 32)
-	}
-	max := s.conn.peerMaxHeaderBytes()
-	if l > max {
-		return fmt.Errorf("HEADERS frame too large: %d bytes (max: %d)", l, max)
-	}
-
-	buf := &bytes.Buffer{}
-	encoder := qpack.NewEncoder(buf)
-	for i := range fields {
-		encoder.WriteField(fields[i])
-	}
-
-	// TODO: should we just instruct callers to not call WriteFields and use BodyWriter at the same time?
-	s.writeMutex.Lock()
-	defer s.writeMutex.Unlock()
-
-	w := quicvarint.NewWriter(s.Stream)
-	quicvarint.Write(w, uint64(FrameTypeHeaders))
-	quicvarint.Write(w, uint64(buf.Len()))
-	_, err := s.Stream.Write(buf.Bytes())
-	return err
-}
-
-func (s *requestStream) Close() error {
-	s.conn.cleanup(s.Stream.StreamID())
-	return s.Stream.Close()
-}
-
-func (s *requestStream) CancelRead(code quic.StreamErrorCode) {
-	s.conn.cleanup(s.Stream.StreamID())
-	s.Stream.CancelRead(code)
-}
-
-func (s *requestStream) CancelWrite(code quic.StreamErrorCode) {
-	s.conn.cleanup(s.Stream.StreamID())
-	s.Stream.CancelWrite(code)
 }
 
 func (s *requestStream) AcceptDatagramContext(ctx context.Context) (DatagramContext, error) {

@@ -75,26 +75,26 @@ func (e errorCode) String() string {
 }
 
 type frameTypeError struct {
-	Type FrameType
 	Want FrameType
+	Got  FrameType
 }
 
 func (err *frameTypeError) Error() string {
-	return fmt.Sprintf("unexpected frame type %s, expected %s", err.Type, err.Want)
+	return fmt.Sprintf("unexpected frame type %s, expected %s", err.Got, err.Want)
 }
 
 var _ error = &frameTypeError{}
 
 type frameLengthError struct {
-	Type   FrameType
-	Length uint64
-	Max    uint64
+	FrameType FrameType
+	Length    uint64
+	Max       uint64
 }
 
 var _ error = &frameLengthError{}
 
 func (err *frameLengthError) Error() string {
-	return fmt.Sprintf("%s frame too large: %d bytes (max: %d)", err.Type, err.Length, err.Max)
+	return fmt.Sprintf("%s frame too large: %d bytes (max: %d)", err.FrameType, err.Length, err.Max)
 }
 
 type connError struct {

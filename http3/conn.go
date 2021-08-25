@@ -5,14 +5,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io"
-	"io/ioutil"
 	"net/http"
 	"sync"
 
 	"github.com/lucas-clemente/quic-go"
 	"github.com/lucas-clemente/quic-go/quicvarint"
-	"github.com/marten-seemann/qpack"
 )
 
 const (
@@ -194,9 +191,7 @@ func (conn *connection) AcceptRequestStream(ctx context.Context) (RequestStream,
 			// incomingRequestStreams was closed
 			return nil, conn.incomingStreamsErr
 		}
-		s := newRequestStream(conn, str)
-		go conn.handleRequestStream(s, true)
-		return s, nil
+		return newRequestStream(conn, str, nil), nil
 	case <-ctx.Done():
 		return nil, ctx.Err()
 	case <-conn.session.Context().Done():
@@ -215,9 +210,8 @@ func (conn *connection) OpenRequestStream(ctx context.Context) (RequestStream, e
 	conn.incomingStreamsOnce.Do(func() {
 		go conn.handleIncomingStreams()
 	})
-	s := newRequestStream(conn, str)
-	go conn.handleRequestStream(s, false)
-	return s, nil
+	t := FrameTypeHeaders
+	return newRequestStream(conn, str, &t), nil
 }
 
 func (conn *connection) handleIncomingStreams() {
@@ -275,60 +269,6 @@ func (conn *connection) handleIncomingStream(str quic.Stream) {
 	default:
 		conn.session.CloseWithError(quic.ApplicationErrorCode(errorFrameUnexpected), "expected first frame to be a HEADERS frame")
 		return
-	}
-}
-
-func (conn *connection) handleRequestStream(s *requestStream, readFirst bool) error {
-	t := FrameTypeHeaders
-	if readFirst {
-		i, err := quicvarint.Read(s.Reader)
-		if err != nil {
-			return err
-		}
-		t = FrameType(i)
-	}
-
-	// HTTP messages must begin with a HEADERS frame.
-	if t != FrameTypeHeaders {
-		return &frameTypeError{Type: t, Want: FrameTypeHeaders}
-	}
-
-	for {
-		// Read frame length
-		l, err := quicvarint.Read(s.Reader)
-		if err != nil {
-			return err
-		}
-
-		switch t {
-		case FrameTypeHeaders:
-			if l > conn.maxHeaderBytes() {
-				return &frameLengthError{Type: t, Length: l, Max: conn.maxHeaderBytes()}
-			}
-			p := make([]byte, l)
-			_, err := io.ReadFull(s.Reader, p)
-			if err != nil {
-				return err
-			}
-			dec := qpack.NewDecoder(nil)
-			fields, err := dec.DecodeFull(p)
-			if err != nil {
-				conn.session.CloseWithError(quic.ApplicationErrorCode(errorGeneralProtocolError), "QPACK decoding error")
-			}
-			s.Fields <- fields
-		default:
-			// Skip unknown frames
-			if _, err := io.CopyN(ioutil.Discard, s.Reader, int64(l)); err != nil {
-				return err
-			}
-		}
-
-		// Read next frame type
-		i, err := quicvarint.Read(s.Reader)
-		if err != nil {
-			return err
-		}
-		t = FrameType(i)
 	}
 }
 
