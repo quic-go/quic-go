@@ -5,10 +5,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
+	"io/ioutil"
+	"net/http"
 	"sync"
 
 	"github.com/lucas-clemente/quic-go"
 	"github.com/lucas-clemente/quic-go/quicvarint"
+	"github.com/marten-seemann/qpack"
 )
 
 const (
@@ -65,7 +69,7 @@ type connection struct {
 
 	incomingStreamsOnce    sync.Once
 	incomingStreamsErr     error
-	incomingRequestStreams chan RequestStream
+	incomingRequestStreams chan quic.Stream
 
 	incomingStreamsMutex sync.Mutex
 	incomingStreams      map[SessionID]chan quic.Stream // Lazily constructed
@@ -117,7 +121,7 @@ func newConn(s quic.EarlySession, settings Settings) (*connection, error) {
 		session:                s,
 		settings:               settings,
 		peerSettingsDone:       make(chan struct{}),
-		incomingRequestStreams: make(chan RequestStream, maxBufferedStreams),
+		incomingRequestStreams: make(chan quic.Stream, maxBufferedStreams),
 	}
 
 	str, err := conn.session.OpenUniStream()
@@ -158,6 +162,25 @@ func (conn *connection) negotiatedWebTransport() bool {
 	return peerSettings.WebTransportEnabled()
 }
 
+func (conn *connection) maxHeaderBytes() uint64 {
+	max := conn.Settings()[SettingMaxFieldSectionSize]
+	if max > 0 {
+		return max
+	}
+	return http.DefaultMaxHeaderBytes
+}
+
+func (conn *connection) peerMaxHeaderBytes() uint64 {
+	peerSettings, err := conn.PeerSettings()
+	if err == nil {
+		max := peerSettings[SettingMaxFieldSectionSize]
+		if max > 0 {
+			return max
+		}
+	}
+	return http.DefaultMaxHeaderBytes
+}
+
 func (conn *connection) AcceptRequestStream(ctx context.Context) (RequestStream, error) {
 	if conn.session.Perspective() != quic.PerspectiveServer {
 		return nil, errors.New("server method called on client connection")
@@ -171,7 +194,9 @@ func (conn *connection) AcceptRequestStream(ctx context.Context) (RequestStream,
 			// incomingRequestStreams was closed
 			return nil, conn.incomingStreamsErr
 		}
-		return str, nil
+		s := newRequestStream(conn, str)
+		go conn.handleRequestStream(s, true)
+		return s, nil
 	case <-ctx.Done():
 		return nil, ctx.Err()
 	case <-conn.session.Context().Done():
@@ -190,7 +215,9 @@ func (conn *connection) OpenRequestStream(ctx context.Context) (RequestStream, e
 	conn.incomingStreamsOnce.Do(func() {
 		go conn.handleIncomingStreams()
 	})
-	return newRequestStream(conn, str, nil), nil
+	s := newRequestStream(conn, str)
+	go conn.handleRequestStream(s, false)
+	return s, nil
 }
 
 func (conn *connection) handleIncomingStreams() {
@@ -215,17 +242,17 @@ func (conn *connection) handleIncomingStreams() {
 func (conn *connection) handleIncomingStream(str quic.Stream) {
 	r := quicvarint.NewReader(str)
 
-	t, err := quicvarint.Read(r)
+	i, err := quicvarint.Read(r)
 	if err != nil {
 		str.CancelWrite(quic.StreamErrorCode(errorRequestIncomplete))
 		return
 	}
 
+	t := FrameType(i)
+
 	switch FrameType(t) { //nolint:exhaustive
 	case FrameTypeHeaders:
-		b := &bytes.Buffer{}
-		quicvarint.Write(b, t)
-		conn.incomingRequestStreams <- newRequestStream(conn, str, b.Bytes())
+		conn.incomingRequestStreams <- str
 	case FrameTypeWebTransportStream:
 		if !conn.negotiatedWebTransport() {
 			// TODO: log error
@@ -248,6 +275,60 @@ func (conn *connection) handleIncomingStream(str quic.Stream) {
 	default:
 		conn.session.CloseWithError(quic.ApplicationErrorCode(errorFrameUnexpected), "expected first frame to be a HEADERS frame")
 		return
+	}
+}
+
+func (conn *connection) handleRequestStream(s *requestStream, readFirst bool) error {
+	t := FrameTypeHeaders
+	if readFirst {
+		i, err := quicvarint.Read(s.Reader)
+		if err != nil {
+			return err
+		}
+		t = FrameType(i)
+	}
+
+	// HTTP messages must begin with a HEADERS frame.
+	if t != FrameTypeHeaders {
+		return &frameTypeError{Type: t, Want: FrameTypeHeaders}
+	}
+
+	for {
+		// Read frame length
+		l, err := quicvarint.Read(s.Reader)
+		if err != nil {
+			return err
+		}
+
+		switch t {
+		case FrameTypeHeaders:
+			if l > conn.maxHeaderBytes() {
+				return &frameLengthError{Type: t, Length: l, Max: conn.maxHeaderBytes()}
+			}
+			p := make([]byte, l)
+			_, err := io.ReadFull(s.Reader, p)
+			if err != nil {
+				return err
+			}
+			dec := qpack.NewDecoder(nil)
+			fields, err := dec.DecodeFull(p)
+			if err != nil {
+				conn.session.CloseWithError(quic.ApplicationErrorCode(errorGeneralProtocolError), "QPACK decoding error")
+			}
+			s.Fields <- fields
+		default:
+			// Skip unknown frames
+			if _, err := io.CopyN(ioutil.Discard, s.Reader, int64(l)); err != nil {
+				return err
+			}
+		}
+
+		// Read next frame type
+		i, err := quicvarint.Read(s.Reader)
+		if err != nil {
+			return err
+		}
+		t = FrameType(i)
 	}
 }
 

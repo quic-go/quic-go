@@ -70,6 +70,59 @@ func (e errorCode) String() string {
 	case errorWebTransportBufferedStreamRejected:
 		return "H3_WEBTRANSPORT_BUFFERED_STREAM_REJECTED"
 	default:
-		return fmt.Sprintf("unknown error code: %#x", uint16(e))
+		return fmt.Sprintf("unknown error code: %#x", uint64(e))
 	}
+}
+
+type frameTypeError struct {
+	Type FrameType
+	Want FrameType
+}
+
+func (err *frameTypeError) Error() string {
+	return fmt.Sprintf("unexpected frame type %s, expected %s", err.Type, err.Want)
+}
+
+var _ error = &frameTypeError{}
+
+type frameLengthError struct {
+	Type   FrameType
+	Length uint64
+	Max    uint64
+}
+
+var _ error = &frameLengthError{}
+
+func (err *frameLengthError) Error() string {
+	return fmt.Sprintf("%s frame too large: %d bytes (max: %d)", err.Type, err.Length, err.Max)
+}
+
+type connError struct {
+	Code errorCode
+	Err  error
+}
+
+var _ error = &connError{}
+
+func (err *connError) Error() string {
+	return fmt.Sprintf("connection error %s: %s", err.Code, err.Err)
+}
+
+func (err *connError) Unwrap() error {
+	return err.Err
+}
+
+type streamError struct {
+	Code errorCode
+	Err  error
+}
+
+var _ error = &streamError{}
+
+func (err *streamError) Error() string {
+	return fmt.Sprintf("stream error %s: %s", err.Code, err.Err)
+}
+
+func (err *streamError) Unwrap() error {
+	return err.Err
 }
