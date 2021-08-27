@@ -25,16 +25,16 @@ import (
 	. "github.com/onsi/gomega"
 )
 
-type mockConn struct {
+type mockNetConn struct {
 	net.Conn
 	version protocol.VersionNumber
 }
 
-func newMockConn(version protocol.VersionNumber) net.Conn {
-	return &mockConn{version: version}
+func newMockNetConn(version protocol.VersionNumber) net.Conn {
+	return &mockNetConn{version: version}
 }
 
-func (c *mockConn) GetQUICVersion() protocol.VersionNumber {
+func (c *mockNetConn) GetQUICVersion() protocol.VersionNumber {
 	return c.version
 }
 
@@ -729,10 +729,10 @@ var _ = Describe("Server", func() {
 		})
 
 		checkGetConfigForClientVersions := func(conf *tls.Config) {
-			c, err := conf.GetConfigForClient(&tls.ClientHelloInfo{Conn: newMockConn(protocol.VersionDraft29)})
+			c, err := conf.GetConfigForClient(&tls.ClientHelloInfo{Conn: newMockNetConn(protocol.VersionDraft29)})
 			ExpectWithOffset(1, err).ToNot(HaveOccurred())
 			ExpectWithOffset(1, c.NextProtos).To(Equal([]string{nextProtoH3Draft29}))
-			c, err = conf.GetConfigForClient(&tls.ClientHelloInfo{Conn: newMockConn(protocol.Version1)})
+			c, err = conf.GetConfigForClient(&tls.ClientHelloInfo{Conn: newMockNetConn(protocol.Version1)})
 			ExpectWithOffset(1, err).ToNot(HaveOccurred())
 			ExpectWithOffset(1, c.NextProtos).To(Equal([]string{nextProtoH3}))
 		}
