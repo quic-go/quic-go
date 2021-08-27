@@ -103,6 +103,10 @@ func (w *responseWriter) DataStream() quic.Stream {
 	return w.stream.(*messageStream).stream
 }
 
+func (w *responseWriter) WebTransport() (WebTransport, error) {
+	return w.stream.WebTransport()
+}
+
 // copied from http2/http2.go
 // bodyAllowedForStatus reports whether a given response status code
 // permits a body. See RFC 2616, section 4.4.
