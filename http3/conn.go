@@ -31,13 +31,13 @@ type Conn interface {
 // ServerConn is a server connection. It accepts and processes HTTP/3 request streams.
 type ServerConn interface {
 	Conn
-	AcceptRequestStream(context.Context) (RequestStream, error)
+	AcceptMessageStream(context.Context) (MessageStream, error)
 }
 
 // ClientConn is a client connection. It opens and processes HTTP/3 request streams.
 type ClientConn interface {
 	Conn
-	OpenRequestStream(context.Context) (RequestStream, error)
+	OpenMessageStream(context.Context) (MessageStream, error)
 }
 
 // webTransportConn is an internal interface for implementing WebTransport.
@@ -66,7 +66,7 @@ type connection struct {
 
 	incomingStreamsOnce    sync.Once
 	incomingStreamsErr     error
-	incomingRequestStreams chan quic.Stream
+	incomingMessageStreams chan quic.Stream
 
 	incomingStreamsMutex sync.Mutex
 	incomingStreams      map[SessionID]chan quic.Stream // Lazily constructed
@@ -118,7 +118,7 @@ func newConn(s quic.EarlySession, settings Settings) (*connection, error) {
 		session:                s,
 		settings:               settings,
 		peerSettingsDone:       make(chan struct{}),
-		incomingRequestStreams: make(chan quic.Stream, maxBufferedStreams),
+		incomingMessageStreams: make(chan quic.Stream, maxBufferedStreams),
 	}
 
 	str, err := conn.session.OpenUniStream()
@@ -144,6 +144,8 @@ func (conn *connection) PeerSettings() (Settings, error) {
 		return conn.peerSettings, conn.peerSettingsErr
 	case <-conn.session.Context().Done():
 		return nil, conn.session.Context().Err()
+	default:
+		return nil, nil // 0RTT
 	}
 }
 
@@ -168,17 +170,14 @@ func (conn *connection) maxHeaderBytes() uint64 {
 }
 
 func (conn *connection) peerMaxHeaderBytes() uint64 {
-	peerSettings, err := conn.PeerSettings()
-	if err == nil {
-		max := peerSettings[SettingMaxFieldSectionSize]
-		if max > 0 {
-			return max
-		}
+	peerSettings, _ := conn.PeerSettings()
+	if max, ok := peerSettings[SettingMaxFieldSectionSize]; ok && max > 0 {
+		return max
 	}
 	return http.DefaultMaxHeaderBytes
 }
 
-func (conn *connection) AcceptRequestStream(ctx context.Context) (RequestStream, error) {
+func (conn *connection) AcceptMessageStream(ctx context.Context) (MessageStream, error) {
 	if conn.session.Perspective() != quic.PerspectiveServer {
 		return nil, errors.New("server method called on client connection")
 	}
@@ -186,12 +185,13 @@ func (conn *connection) AcceptRequestStream(ctx context.Context) (RequestStream,
 		go conn.handleIncomingStreams()
 	})
 	select {
-	case str := <-conn.incomingRequestStreams:
+	case str := <-conn.incomingMessageStreams:
 		if str == nil {
-			// incomingRequestStreams was closed
+			// incomingMessageStreams was closed
 			return nil, conn.incomingStreamsErr
 		}
-		return newRequestStream(conn, str, nil), nil
+		t := FrameTypeHeaders
+		return newMessageStream(conn, str, &t), nil
 	case <-ctx.Done():
 		return nil, ctx.Err()
 	case <-conn.session.Context().Done():
@@ -199,7 +199,7 @@ func (conn *connection) AcceptRequestStream(ctx context.Context) (RequestStream,
 	}
 }
 
-func (conn *connection) OpenRequestStream(ctx context.Context) (RequestStream, error) {
+func (conn *connection) OpenMessageStream(ctx context.Context) (MessageStream, error) {
 	if conn.session.Perspective() != quic.PerspectiveClient {
 		return nil, errors.New("client method called on server connection")
 	}
@@ -210,8 +210,7 @@ func (conn *connection) OpenRequestStream(ctx context.Context) (RequestStream, e
 	conn.incomingStreamsOnce.Do(func() {
 		go conn.handleIncomingStreams()
 	})
-	t := FrameTypeHeaders
-	return newRequestStream(conn, str, &t), nil
+	return newMessageStream(conn, str, nil), nil
 }
 
 func (conn *connection) handleIncomingStreams() {
@@ -230,7 +229,7 @@ func (conn *connection) handleIncomingStreams() {
 		}(str)
 	}
 	wg.Wait()
-	close(conn.incomingRequestStreams)
+	close(conn.incomingMessageStreams)
 }
 
 func (conn *connection) handleIncomingStream(str quic.Stream) {
@@ -246,7 +245,7 @@ func (conn *connection) handleIncomingStream(str quic.Stream) {
 
 	switch FrameType(t) { //nolint:exhaustive
 	case FrameTypeHeaders:
-		conn.incomingRequestStreams <- str
+		conn.incomingMessageStreams <- str
 	case FrameTypeWebTransportStream:
 		if !conn.negotiatedWebTransport() {
 			// TODO: log error

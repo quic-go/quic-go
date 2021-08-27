@@ -8,19 +8,12 @@ import (
 	"io"
 	"io/ioutil"
 	"strconv"
+	"sync"
 
 	"github.com/lucas-clemente/quic-go"
 	"github.com/lucas-clemente/quic-go/quicvarint"
 	"github.com/marten-seemann/qpack"
 )
-
-/*
-
-An HTTP/3 message is a HEADERS frame followed by zero or more DATA frames, optionally followed by a single HEADERS frame (the trailers).
-
-Extension frames
-
-*/
 
 // A MessageStream is a QUIC stream for processing HTTP/3 request and response messages.
 type MessageStream interface {
@@ -40,6 +33,17 @@ type MessageStream interface {
 	// For clients, WriteMessage writes an HTTP request.
 	WriteMessage(Message) error
 
+	// WriteFields a single HEADERS frame.
+	// Used for writing HTTP headers or trailers.
+	// Should not be called concurrently with WriteMessage or WriteData.
+	WriteFields([]qpack.HeaderField) error
+
+	// WriteData writes 0 or more DATA frames.
+	// Used for writing an HTTP request or response body.
+	// Should not be called concurrently with WriteMessage or WriteFields.
+	WriteData([]byte) (int, error)
+	WriteDataFrom(io.Reader) error
+
 	// TODO: integrate QPACK encoding and decoding with dynamic tables.
 
 	CancelRead(code quic.StreamErrorCode)
@@ -58,6 +62,9 @@ type messageStream struct {
 	r quicvarint.Reader
 	w quicvarint.Writer
 
+	once  sync.Once
+	first *FrameType
+
 	messages chan *incomingMessage
 	readErr  error
 
@@ -73,19 +80,19 @@ var _ MessageStream = &messageStream{}
 
 // newMessageStream creates a new MessageStream. If first is non-nil, the
 // parser will assume the first varint has already been read from the stream.
-func newMessageStream(conn *connection, stream quic.Stream, first *FrameType) *messageStream {
+func newMessageStream(conn *connection, stream quic.Stream, first *FrameType) MessageStream {
 	s := &messageStream{
 		conn:             conn,
 		stream:           stream,
 		r:                quicvarint.NewReader(stream),
 		w:                quicvarint.NewWriter(stream),
+		first:            first,
 		messages:         make(chan *incomingMessage),
 		bytesToRead:      make(chan uint64),
 		bytesUnread:      make(chan uint64),
 		bodyReaderClosed: make(chan struct{}),
 		readDone:         make(chan struct{}),
 	}
-	go s.handleIncomingFrames(first)
 	return s
 }
 
@@ -99,6 +106,9 @@ func (s *messageStream) Context() context.Context {
 
 // ReadMessage reads a single HTTP message from s or a read error, if any.
 func (s *messageStream) ReadMessage() (Message, error) {
+	s.once.Do(func() {
+		go s.handleIncomingFrames()
+	})
 	select {
 	case msg := <-s.messages:
 		return msg, nil
@@ -117,13 +127,13 @@ func (s *messageStream) ReadMessage() (Message, error) {
 // followed by an optional HEADERS frame for the message trailers.
 // WriteMessage will call Close on the message body on success.
 func (s *messageStream) WriteMessage(msg Message) error {
-	err := s.writeFieldsFrame(msg.Headers())
+	err := s.WriteFields(msg.Headers())
 	if err != nil {
 		return err
 	}
 	body := msg.Body()
 	if body != nil {
-		err = s.writeDataFrom(body)
+		err = s.WriteDataFrom(body)
 		if err != nil {
 			return err
 		}
@@ -134,12 +144,80 @@ func (s *messageStream) WriteMessage(msg Message) error {
 	}
 	trailers := msg.Trailers()
 	if trailers != nil {
-		err = s.writeFieldsFrame(trailers)
+		err = s.WriteFields(trailers)
 		if err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+// WriteFields writes a single QPACK-encoded HEADERS frame to s.
+// It returns an error if the estimated size of the frame exceeds the peer’s
+// MAX_FIELD_SECTION_SIZE. Headers are not modified or validated.
+// It is the responsibility of the caller to ensure the fields are valid.
+// It should not be called concurrently with WriteMessage or WriteData.
+func (s *messageStream) WriteFields(fields []qpack.HeaderField) error {
+	var l uint64
+	for i := range fields {
+		// https://quicwg.org/base-drafts/draft-ietf-quic-qpack.html#name-dynamic-table-size
+		l += uint64(len(fields[i].Name) + len(fields[i].Value) + 32)
+	}
+	max := s.conn.peerMaxHeaderBytes()
+	if l > max {
+		return fmt.Errorf("HEADERS frame too large: %d bytes (max: %d)", l, max)
+	}
+
+	buf := &bytes.Buffer{}
+	encoder := qpack.NewEncoder(buf)
+	for i := range fields {
+		encoder.WriteField(fields[i])
+	}
+
+	quicvarint.Write(s.w, uint64(FrameTypeHeaders))
+	quicvarint.Write(s.w, uint64(buf.Len()))
+	_, err := s.w.Write(buf.Bytes())
+	return err
+}
+
+const bodyCopyBufferSize = 8 * 1024
+
+func (s *messageStream) WriteData(p []byte) (n int, err error) {
+	for len(p) > 0 {
+		pp := p
+		if len(p) > bodyCopyBufferSize {
+			pp = p[:bodyCopyBufferSize]
+		}
+		x, err := s.writeDataFrame(pp)
+		p = p[x:]
+		n += x
+		if err != nil {
+			return n, err
+		}
+	}
+	return n, err
+}
+
+func (s *messageStream) WriteDataFrom(r io.Reader) error {
+	buf := make([]byte, bodyCopyBufferSize)
+	for {
+		l, rerr := r.Read(buf)
+		if l == 0 {
+			if rerr == nil {
+				continue
+			} else if rerr == io.EOF {
+				return nil
+			}
+			return rerr
+		}
+		_, err := s.writeDataFrame(buf[:l])
+		if err != nil {
+			return err
+		}
+		if rerr == io.EOF {
+			return nil
+		}
+	}
 }
 
 func (s *messageStream) AcceptDatagramContext(ctx context.Context) (DatagramContext, error) {
@@ -159,36 +237,35 @@ func (s *messageStream) WebTransport() (WebTransport, error) {
 }
 
 func (s *messageStream) Close() error {
-	s.conn.cleanup(s.StreamID())
+	s.conn.cleanup(s.stream.StreamID())
 	return s.stream.Close()
 }
 
 func (s *messageStream) CancelRead(code quic.StreamErrorCode) {
-	s.conn.cleanup(s.StreamID())
+	s.conn.cleanup(s.stream.StreamID())
 	s.stream.CancelRead(code)
 }
 
-// func (s *messageStream) CancelWrite(code quic.StreamErrorCode) {
-// 	s.conn.cleanup(s.Stream.StreamID())
-// 	s.Stream.CancelWrite(code)
-// }
-
-func (s *messageStream) handleIncomingFrames(first *FrameType) {
-	err := s.parseIncomingFrames(first)
-	code := errorNoError
-	if serr, ok := err.(*streamError); ok {
-		code = serr.Code
-	}
-	s.CancelRead(quic.StreamErrorCode(code))
-	s.readErr = err
-	close(s.readDone)
+func (s *messageStream) CancelWrite(code quic.StreamErrorCode) {
 	s.conn.cleanup(s.stream.StreamID())
+	s.stream.CancelWrite(code)
 }
 
-func (s *messageStream) parseIncomingFrames(first *FrameType) error {
+func (s *messageStream) handleIncomingFrames() {
+	err := s.parseIncomingFrames()
+	// code := errorNoError
+	// if serr, ok := err.(*streamError); ok {
+	// 	code = serr.Code
+	// }
+	// s.CancelRead(quic.StreamErrorCode(code))
+	s.readErr = err
+	close(s.readDone)
+}
+
+func (s *messageStream) parseIncomingFrames() error {
 	var t FrameType
-	if first != nil {
-		t = *first
+	if s.first != nil {
+		t = *s.first
 	} else {
 		i, err := quicvarint.Read(s.r)
 		if err != nil {
@@ -235,7 +312,7 @@ func (s *messageStream) parseIncomingFrames(first *FrameType) error {
 				// Start a new message
 				interim, err := isInterim(fields)
 				if err != nil {
-					return &connError{Code: errorGeneralProtocolError, Err: err}
+					return &streamError{Code: errorGeneralProtocolError, Err: err}
 				}
 				msg = newIncomingMessage(s, fields, interim)
 				s.messages <- msg
@@ -322,76 +399,11 @@ func (s *messageStream) closeBody() error {
 
 var errAlreadyClosed = errors.New("already closed")
 
-// writeFieldsFrame writes a single QPACK-encoded HEADERS frame to s.
-// It returns an error if the estimated size of the frame exceeds the peer’s
-// MAX_FIELD_SECTION_SIZE. Headers are not modified or validated.
-// It is the responsibility of the caller to ensure the fields are valid.
-func (s *messageStream) writeFieldsFrame(fields []qpack.HeaderField) error {
-	var l uint64
-	for i := range fields {
-		// https://quicwg.org/base-drafts/draft-ietf-quic-qpack.html#name-dynamic-table-size
-		l += uint64(len(fields[i].Name) + len(fields[i].Value) + 32)
-	}
-	max := s.conn.peerMaxHeaderBytes()
-	if l > max {
-		return fmt.Errorf("HEADERS frame too large: %d bytes (max: %d)", l, max)
-	}
-
-	buf := &bytes.Buffer{}
-	encoder := qpack.NewEncoder(buf)
-	for i := range fields {
-		encoder.WriteField(fields[i])
-	}
-
-	w := quicvarint.NewWriter(s.stream)
-	quicvarint.Write(w, uint64(FrameTypeHeaders))
-	quicvarint.Write(w, uint64(buf.Len()))
-	_, err := s.stream.Write(buf.Bytes())
-	return err
-}
-
-func (s *messageStream) writeDataFrom(r io.Reader) error {
-	buf := make([]byte, bodyCopyBufferSize)
-	for {
-		l, rerr := r.Read(buf)
-		if l == 0 {
-			if rerr == nil {
-				continue
-			} else if rerr == io.EOF {
-				return nil
-			}
-		}
-		_, err := s.writeDataFrame(buf[:l])
-		if err != nil {
-			return err
-		}
-		if rerr == io.EOF {
-			return nil
-		}
-	}
-}
-
-// TODO: remove this method?
-func (s *messageStream) writeData(p []byte) error {
-	var err error
-	for len(p) > 0 {
-		pp := p
-		if len(p) > bodyCopyBufferSize {
-			pp = p[:bodyCopyBufferSize]
-		}
-		x, err := s.writeDataFrame(pp)
-		p = p[x:]
-		if err != nil {
-			return err
-		}
-	}
-	return err
-}
-
 func (s *messageStream) writeDataFrame(p []byte) (n int, err error) {
 	quicvarint.Write(s.w, uint64(FrameTypeData))
 	quicvarint.Write(s.w, uint64(len(p)))
-	return s.stream.Write(p)
+	n, err = s.w.Write(p)
+	return
 }
 
 func isInterim(headers []qpack.HeaderField) (bool, error) {

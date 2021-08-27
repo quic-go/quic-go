@@ -2,6 +2,7 @@ package http3
 
 import (
 	"bytes"
+	"context"
 	"io"
 	"net/http"
 
@@ -25,7 +26,10 @@ var _ = Describe("Response Writer", func() {
 		strBuf = &bytes.Buffer{}
 		str := mockquic.NewMockStream(mockCtrl)
 		str.EXPECT().Write(gomock.Any()).DoAndReturn(strBuf.Write).AnyTimes()
-		rw = newResponseWriter(str, utils.DefaultLogger)
+		sess := mockquic.NewMockEarlySession(mockCtrl)
+		sess.EXPECT().Context().Return(context.Background()).AnyTimes()
+		msgStr := newMessageStream(&connection{session: sess}, str, nil)
+		rw = newResponseWriter(msgStr, utils.DefaultLogger)
 	})
 
 	decodeHeader := func(str io.Reader) map[string][]string {

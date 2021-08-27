@@ -4,8 +4,8 @@ import "context"
 
 // TODO: implement the DATAGRAM draft:
 // https://www.ietf.org/archive/id/draft-ietf-masque-h3-datagram-03.html
-type DatagramRequestStream interface {
-	RequestStream
+type DatagramMessageStream interface {
+	MessageStream
 
 	// AcceptDatagramContext receives a datagram context from a peer.
 	// This allows a server, for instance, to start receiving datagrams on a

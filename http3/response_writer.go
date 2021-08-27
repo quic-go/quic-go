@@ -1,8 +1,6 @@
 package http3
 
 import (
-	"bufio"
-	"bytes"
 	"net/http"
 	"strconv"
 	"strings"
@@ -23,8 +21,7 @@ type DataStreamer interface {
 }
 
 type responseWriter struct {
-	stream         quic.Stream // needed for DataStream()
-	bufferedStream *bufio.Writer
+	stream MessageStream
 
 	header         http.Header
 	status         int // status code passed to WriteHeader
@@ -40,12 +37,11 @@ var (
 	_ DataStreamer        = &responseWriter{}
 )
 
-func newResponseWriter(stream quic.Stream, logger utils.Logger) *responseWriter {
+func newResponseWriter(stream MessageStream, logger utils.Logger) *responseWriter {
 	return &responseWriter{
-		header:         http.Header{},
-		stream:         stream,
-		bufferedStream: bufio.NewWriter(stream),
-		logger:         logger,
+		header: http.Header{},
+		stream: stream,
+		logger: logger,
 	}
 }
 
@@ -63,24 +59,19 @@ func (w *responseWriter) WriteHeader(status int) {
 	}
 	w.status = status
 
-	var headers bytes.Buffer
-	enc := qpack.NewEncoder(&headers)
-	enc.WriteField(qpack.HeaderField{Name: ":status", Value: strconv.Itoa(status)})
-
+	fields := make([]qpack.HeaderField, 0, len(w.header)+1)
+	fields = append(fields, qpack.HeaderField{Name: ":status", Value: strconv.Itoa(status)})
 	for k, v := range w.header {
-		for index := range v {
-			enc.WriteField(qpack.HeaderField{Name: strings.ToLower(k), Value: v[index]})
+		for i := range v {
+			fields = append(fields, qpack.HeaderField{Name: strings.ToLower(k), Value: v[i]})
 		}
 	}
 
-	buf := &bytes.Buffer{}
-	(&headersFrame{len: uint64(headers.Len())}).writeFrame(buf)
 	w.logger.Infof("Responding with %d", status)
-	if _, err := w.bufferedStream.Write(buf.Bytes()); err != nil {
+
+	err := w.stream.WriteFields(fields)
+	if err != nil {
 		w.logger.Errorf("could not write headers frame: %s", err.Error())
-	}
-	if _, err := w.bufferedStream.Write(headers.Bytes()); err != nil {
-		w.logger.Errorf("could not write header frame payload: %s", err.Error())
 	}
 	if !w.headerWritten {
 		w.Flush()
@@ -94,19 +85,11 @@ func (w *responseWriter) Write(p []byte) (int, error) {
 	if !bodyAllowedForStatus(w.status) {
 		return 0, http.ErrBodyNotAllowed
 	}
-	df := &dataFrame{len: uint64(len(p))}
-	buf := &bytes.Buffer{}
-	df.writeFrame(buf)
-	if _, err := w.bufferedStream.Write(buf.Bytes()); err != nil {
-		return 0, err
-	}
-	return w.bufferedStream.Write(p)
+	return w.stream.WriteData(p)
 }
 
 func (w *responseWriter) Flush() {
-	if err := w.bufferedStream.Flush(); err != nil {
-		w.logger.Errorf("could not flush to stream: %s", err.Error())
-	}
+	// TODO: buffer?
 }
 
 func (w *responseWriter) usedDataStream() bool {
@@ -116,7 +99,8 @@ func (w *responseWriter) usedDataStream() bool {
 func (w *responseWriter) DataStream() quic.Stream {
 	w.dataStreamUsed = true
 	w.Flush()
-	return w.stream
+	// TODO: remove type assertion
+	return w.stream.(*messageStream).stream
 }
 
 // copied from http2/http2.go

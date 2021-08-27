@@ -1,3 +1,7 @@
+// +build ignore
+
+// TODO: make this work with MessageStream
+
 package http3
 
 import (

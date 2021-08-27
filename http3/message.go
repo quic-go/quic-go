@@ -20,19 +20,19 @@ type incomingMessage struct {
 	interim      bool
 }
 
+var _ Message = &incomingMessage{}
+
 func newIncomingMessage(stream *messageStream, headers []qpack.HeaderField, interim bool) *incomingMessage {
 	var trailersRead chan struct{}
 	if !interim {
 		trailersRead = make(chan struct{})
 	}
-	m := &incomingMessage{
+	return &incomingMessage{
 		stream:       stream,
 		headers:      headers,
 		trailersRead: trailersRead,
 		interim:      interim,
 	}
-
-	return m
 }
 
 func (m *incomingMessage) Headers() []qpack.HeaderField {

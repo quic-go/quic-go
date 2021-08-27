@@ -4,7 +4,6 @@ import (
 	"crypto/tls"
 	"errors"
 	"fmt"
-	"io"
 	"net/http"
 	"strconv"
 	"sync"
@@ -13,7 +12,6 @@ import (
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/internal/qtls"
 	"github.com/lucas-clemente/quic-go/internal/utils"
-	"github.com/marten-seemann/qpack"
 )
 
 // MethodGet0RTT allows a GET request to be sent using 0-RTT.
@@ -50,8 +48,6 @@ type client struct {
 	dialer       func(network, addr string, tlsCfg *tls.Config, cfg *quic.Config) (quic.EarlySession, error)
 	handshakeErr error
 
-	requestWriter *requestWriter
-
 	authority string
 	sess      quic.EarlySession
 	conn      ClientConn
@@ -75,6 +71,7 @@ func newClient(
 	if len(quicConfig.Versions) != 1 {
 		return nil, errors.New("can only use a single QUIC version for dialing a HTTP/3 connection")
 	}
+	// FIXME: disable this for WebTransport-enabled clients.
 	quicConfig.MaxIncomingStreams = -1 // don't allow any bidirectional streams
 	quicConfig.EnableDatagrams = opts.EnableDatagrams
 	logger := utils.DefaultLogger.WithPrefix("h3 client")
@@ -88,13 +85,12 @@ func newClient(
 	tlsConf.NextProtos = []string{versionToALPN(quicConfig.Versions[0])}
 
 	return &client{
-		authority:     authorityAddr("https", authority),
-		tlsConf:       tlsConf,
-		requestWriter: newRequestWriter(logger),
-		config:        quicConfig,
-		opts:          opts,
-		dialer:        dialer,
-		logger:        logger,
+		authority: authorityAddr("https", authority),
+		tlsConf:   tlsConf,
+		config:    quicConfig,
+		opts:      opts,
+		dialer:    dialer,
+		logger:    logger,
 	}, nil
 }
 
@@ -172,7 +168,7 @@ func (c *client) RoundTrip(req *http.Request) (*http.Response, error) {
 		}
 	}
 
-	str, err := c.conn.OpenRequestStream(req.Context())
+	str, err := c.conn.OpenMessageStream(req.Context())
 	if err != nil {
 		return nil, err
 	}
@@ -190,7 +186,7 @@ func (c *client) RoundTrip(req *http.Request) (*http.Response, error) {
 		}
 	}()
 
-	rsp, rerr := c.doRequest(req, str, reqDone)
+	rsp, rerr := c.doRequest(str, req, reqDone)
 	if rerr.err != nil { // if any error occurred
 		close(reqDone)
 		if rerr.streamErr != 0 { // if it was a stream error
@@ -208,38 +204,28 @@ func (c *client) RoundTrip(req *http.Request) (*http.Response, error) {
 }
 
 func (c *client) doRequest(
+	str MessageStream,
 	req *http.Request,
-	str quic.Stream,
 	reqDone chan struct{},
 ) (*http.Response, requestError) {
 	var requestGzip bool
-	if !c.opts.DisableCompression && req.Method != "HEAD" && req.Header.Get("Accept-Encoding") == "" && req.Header.Get("Range") == "" {
+	if !c.opts.DisableCompression && req.Method != http.MethodHead && req.Header.Get("Accept-Encoding") == "" && req.Header.Get("Range") == "" {
 		requestGzip = true
 	}
-	if err := c.requestWriter.WriteRequest(str, req, requestGzip); err != nil {
+
+	err := c.writeRequest(str, req, requestGzip)
+	if err != nil {
 		return nil, newStreamError(errorInternalError, err)
 	}
 
-	frame, err := parseNextFrame(str)
+	msg, err := str.ReadMessage()
 	if err != nil {
-		return nil, newStreamError(errorFrameError, err)
-	}
-	hf, ok := frame.(*headersFrame)
-	if !ok {
-		return nil, newConnError(errorFrameUnexpected, errors.New("expected first frame to be a HEADERS frame"))
-	}
-	if hf.len > c.maxHeaderBytes() {
-		return nil, newStreamError(errorFrameError, fmt.Errorf("HEADERS frame too large: %d bytes (max: %d)", hf.len, c.maxHeaderBytes()))
-	}
-	headerBlock := make([]byte, hf.len)
-	if _, err := io.ReadFull(str, headerBlock); err != nil {
-		return nil, newStreamError(errorRequestIncomplete, err)
-	}
-	decoder := qpack.NewDecoder(nil)
-	hfs, err := decoder.DecodeFull(headerBlock)
-	if err != nil {
-		// TODO: use the right error code
-		return nil, newConnError(errorGeneralProtocolError, err)
+		switch err := err.(type) {
+		case *streamError:
+			return nil, newStreamError(err.Code, err.Unwrap())
+		case *connError:
+			return nil, newConnError(err.Code, err.Unwrap())
+		}
 	}
 
 	connState := qtls.ToTLSConnectionState(c.sess.ConnectionState().TLS)
@@ -249,7 +235,7 @@ func (c *client) doRequest(
 		Header:     http.Header{},
 		TLS:        &connState,
 	}
-	for _, hf := range hfs {
+	for _, hf := range msg.Headers() {
 		switch hf.Name {
 		case ":status":
 			status, err := strconv.Atoi(hf.Value)
@@ -262,9 +248,7 @@ func (c *client) doRequest(
 			res.Header.Add(hf.Name, hf.Value)
 		}
 	}
-	respBody := newResponseBody(str, reqDone, func() {
-		c.sess.CloseWithError(quic.ApplicationErrorCode(errorFrameUnexpected), "")
-	})
+	respBody := msg.Body()
 
 	// Rules for when to set Content-Length are defined in https://tools.ietf.org/html/rfc7230#section-3.3.2.
 	_, hasTransferEncoding := res.Header["Transfer-Encoding"]
@@ -291,4 +275,54 @@ func (c *client) doRequest(
 	}
 
 	return res, requestError{}
+}
+
+func (c *client) writeRequest(str MessageStream, req *http.Request, requestGzip bool) error {
+	fields, err := RequestHeaders(req)
+	if err != nil {
+		return err
+	}
+
+	if requestGzip {
+		fields = appendGzipHeader(fields)
+	}
+
+	err = str.WriteFields(fields)
+	if err != nil {
+		return err
+	}
+
+	if req.Body == nil && len(req.Trailer) == 0 {
+		if req.Method != http.MethodConnect {
+			str.Close()
+		}
+		return nil
+	}
+
+	// Send the request body and trailers asynchronously
+	go func() {
+		err := str.WriteDataFrom(req.Body)
+		req.Body.Close()
+		if err != nil {
+			c.logger.Errorf("Error writing request: %s", err)
+			str.CancelWrite(quic.StreamErrorCode(errorRequestCanceled))
+			return
+		}
+
+		// FIXME: maybe convert http.Request to a Message, with sanitized trailer keys?
+		if len(req.Trailer) > 0 {
+			err = str.WriteFields(Trailers(req.Trailer))
+			if err != nil {
+				c.logger.Errorf("Error writing trailers: %s", err)
+				str.CancelWrite(quic.StreamErrorCode(errorRequestCanceled))
+				return
+			}
+		}
+
+		if req.Method != http.MethodConnect {
+			str.Close()
+		}
+	}()
+
+	return nil
 }

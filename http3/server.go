@@ -5,7 +5,6 @@ import (
 	"crypto/tls"
 	"errors"
 	"fmt"
-	"io"
 	"net"
 	"net/http"
 	"runtime"
@@ -18,7 +17,6 @@ import (
 	"github.com/lucas-clemente/quic-go/internal/handshake"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/internal/utils"
-	"github.com/marten-seemann/qpack"
 )
 
 // allows mocking of quic.Listen and quic.ListenAddr
@@ -253,13 +251,13 @@ func (s *Server) handleConn(sess quic.EarlySession) {
 	// Process all requests immediately.
 	// It's the client's responsibility to decide which requests are eligible for 0-RTT.
 	for {
-		str, err := conn.AcceptRequestStream(context.Background())
+		str, err := conn.AcceptMessageStream(context.Background())
 		if err != nil {
 			s.logger.Debugf("Accepting stream failed: %s", err)
 			return
 		}
 		go func() {
-			rerr := s.handleRequestStream(sess, str)
+			rerr := s.handleMessageStream(sess, str)
 			if rerr.err != nil || rerr.streamErr != 0 || rerr.connErr != 0 {
 				s.logger.Debugf("Handling request failed: %s", err)
 				if rerr.streamErr != 0 {
@@ -286,7 +284,7 @@ func (s *Server) maxHeaderBytes() uint64 {
 	return uint64(s.Server.MaxHeaderBytes)
 }
 
-func (s *Server) handleRequestStream(sess quic.EarlySession, str RequestStream) requestError {
+func (s *Server) handleMessageStream(sess quic.EarlySession, str MessageStream) requestError {
 	rw := newResponseWriter(str, s.logger)
 	defer func() {
 		if !rw.usedDataStream() {
@@ -294,46 +292,28 @@ func (s *Server) handleRequestStream(sess quic.EarlySession, str RequestStream) 
 		}
 	}()
 
-	frame, err := parseNextFrame(str)
+	msg, err := str.ReadMessage()
 	if err != nil {
-		return newStreamError(errorRequestIncomplete, err)
-	}
-	hf, ok := frame.(*headersFrame)
-	if !ok {
-		return newConnError(errorFrameUnexpected, errors.New("expected first frame to be a HEADERS frame"))
-	}
-	if hf.len > s.maxHeaderBytes() {
-		// Return HTTP 431
-		// https://quicwg.org/base-drafts/draft-ietf-quic-http.html#header-size-constraints
-		rw.WriteHeader(http.StatusRequestHeaderFieldsTooLarge)
-		str.CancelRead(quic.StreamErrorCode(errorFrameError))
-		return requestError{}
-	}
-	headerBlock := make([]byte, hf.len)
-	if _, err := io.ReadFull(str, headerBlock); err != nil {
-		return newStreamError(errorRequestIncomplete, err)
-	}
-	decoder := qpack.NewDecoder(nil)
-	hfs, err := decoder.DecodeFull(headerBlock)
-	if err != nil {
-		// TODO: use the right error code
-		return newConnError(errorGeneralProtocolError, err)
+		return newStreamError(errorGeneralProtocolError, err) // TODO: use new error types
 	}
 
 	ctx := str.Context()
 	ctx = context.WithValue(ctx, ServerContextKey, s)
 	ctx = context.WithValue(ctx, http.LocalAddrContextKey, sess.LocalAddr())
 
-	req, err := requestFromHeaders(ctx, hfs)
+	// TODO: create a requestFromMessage func
+	req, err := requestFromHeaders(ctx, msg.Headers())
 	if err != nil {
 		// TODO: use the right error code
 		return newStreamError(errorGeneralProtocolError, err)
 	}
 
 	req.RemoteAddr = sess.RemoteAddr().String()
-	req.Body = newRequestBody(str, func() {
-		sess.CloseWithError(quic.ApplicationErrorCode(errorFrameUnexpected), "")
-	})
+	// req.Body = newRequestBody(str, func() {
+	// 	sess.CloseWithError(quic.ApplicationErrorCode(errorFrameUnexpected), "")
+	// })
+	req.Body = msg.Body()
+	// TODO: set trailers
 
 	if s.logger.Debug() {
 		s.logger.Infof("%s %s%s, on stream %d", req.Method, req.Host, req.RequestURI, str.StreamID())
