@@ -24,8 +24,13 @@ type Conn interface {
 	Settings() Settings
 
 	// PeerSettings returns the peer’s HTTP/3 settings.
-	// This will block until the peer’s settings have been received.
+	// Returns nil if the peer’s settings have not been received.
 	PeerSettings() (Settings, error)
+
+	// PeerSettingsSync returns the peer’s HTTP/3 settings,
+	// blocking until the peer’s settings have been received,
+	// the underlying QUIC session is closed, or the context is canceled.
+	PeerSettingsSync(context.Context) (Settings, error)
 }
 
 // ServerConn is a server connection. It accepts and processes HTTP/3 request streams.
@@ -145,7 +150,18 @@ func (conn *connection) PeerSettings() (Settings, error) {
 	case <-conn.session.Context().Done():
 		return nil, conn.session.Context().Err()
 	default:
-		return nil, nil // 0RTT
+		return nil, nil
+	}
+}
+
+func (conn *connection) PeerSettingsSync(ctx context.Context) (Settings, error) {
+	select {
+	case <-conn.peerSettingsDone:
+		return conn.peerSettings, conn.peerSettingsErr
+	case <-conn.session.Context().Done():
+		return nil, conn.session.Context().Err()
+	case <-ctx.Done():
+		return nil, ctx.Err()
 	}
 }
 
@@ -153,7 +169,7 @@ func (conn *connection) negotiatedWebTransport() bool {
 	if !conn.Settings().WebTransportEnabled() {
 		return false
 	}
-	peerSettings, err := conn.PeerSettings()
+	peerSettings, err := conn.PeerSettingsSync(context.Background())
 	if err != nil {
 		// TODO: log error
 		return false
