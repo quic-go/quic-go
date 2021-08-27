@@ -335,13 +335,14 @@ func (s *messageStream) parseIncomingFrames() error {
 			}
 
 			// Wait for the frame to be consumed
+		readLoop:
 			for l > 0 {
 				select {
 				case s.bytesToRead <- l:
 					l = <-s.bytesUnread
 				case <-s.bodyReaderClosed:
 					// Caller ignoring further DATA frames; discard any remaining payload
-					break
+					break readLoop
 				}
 			}
 		}
