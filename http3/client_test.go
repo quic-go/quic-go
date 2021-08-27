@@ -469,7 +469,7 @@ var _ = Describe("Client", func() {
 			buf := &bytes.Buffer{}
 			rsess := mockquic.NewMockEarlySession(mockCtrl)
 			rsess.EXPECT().Context().Return(context.Background()).AnyTimes()
-			rconn := &connection{session: rsess}
+			rconn := newMockConn(rsess, Settings{}, Settings{})
 			rstr := mockquic.NewMockStream(mockCtrl)
 			rstr.EXPECT().Write(gomock.Any()).DoAndReturn(buf.Write).AnyTimes()
 			mstr := newMessageStream(rconn, rstr, nil)
@@ -781,7 +781,7 @@ var _ = Describe("Client", func() {
 				buf := &bytes.Buffer{}
 				rsess := mockquic.NewMockEarlySession(mockCtrl)
 				rsess.EXPECT().Context().Return(context.Background()).AnyTimes()
-				rconn := &connection{session: rsess}
+				rconn := newMockConn(rsess, Settings{}, Settings{})
 				rstr := mockquic.NewMockStream(mockCtrl)
 				rstr.EXPECT().Write(gomock.Any()).DoAndReturn(buf.Write).MinTimes(1)
 				mstr := newMessageStream(rconn, rstr, nil)
@@ -812,7 +812,7 @@ var _ = Describe("Client", func() {
 				buf := &bytes.Buffer{}
 				rsess := mockquic.NewMockEarlySession(mockCtrl)
 				rsess.EXPECT().Context().Return(context.Background()).AnyTimes()
-				rconn := &connection{session: rsess}
+				rconn := newMockConn(rsess, Settings{}, Settings{})
 				rstr := mockquic.NewMockStream(mockCtrl)
 				rstr.EXPECT().Write(gomock.Any()).DoAndReturn(buf.Write).AnyTimes()
 				mstr := newMessageStream(rconn, rstr, nil)

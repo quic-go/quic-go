@@ -8,6 +8,21 @@ import (
 	. "github.com/onsi/gomega"
 )
 
+func newMockConn(sess *mockquic.MockEarlySession, settings, peerSettings Settings) *connection {
+	conn := &connection{
+		session:          sess,
+		settings:         settings,
+		peerSettings:     peerSettings,
+		peerSettingsDone: make(chan struct{}),
+	}
+
+	if peerSettings != nil {
+		close(conn.peerSettingsDone)
+	}
+
+	return conn
+}
+
 var _ = Describe("Conn", func() {
 	Context("ServerConn", func() {
 		Context("Accept", func() {

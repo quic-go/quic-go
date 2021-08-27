@@ -93,7 +93,7 @@ var _ = Describe("Server", func() {
 			buf := &bytes.Buffer{}
 			sess := mockquic.NewMockEarlySession(mockCtrl)
 			sess.EXPECT().Context().Return(ctx).AnyTimes()
-			conn := &connection{session: sess}
+			conn := newMockConn(sess, Settings{}, Settings{})
 			str := mockquic.NewMockStream(mockCtrl)
 			str.EXPECT().Write(gomock.Any()).DoAndReturn(buf.Write).AnyTimes()
 			closed := make(chan struct{})
@@ -131,11 +131,7 @@ var _ = Describe("Server", func() {
 			sess.EXPECT().Perspective().Return(quic.PerspectiveServer).AnyTimes()
 			sess.EXPECT().Context().Return(ctx).AnyTimes()
 
-			conn = &connection{
-				session:          sess,
-				peerSettingsDone: make(chan struct{}),
-			}
-			close(conn.peerSettingsDone)
+			conn = newMockConn(sess, Settings{}, Settings{})
 
 			str = mockquic.NewMockStream(mockCtrl)
 			str.EXPECT().StreamID().AnyTimes()

@@ -28,7 +28,8 @@ var _ = Describe("Response Writer", func() {
 		str.EXPECT().Write(gomock.Any()).DoAndReturn(strBuf.Write).AnyTimes()
 		sess := mockquic.NewMockEarlySession(mockCtrl)
 		sess.EXPECT().Context().Return(context.Background()).AnyTimes()
-		msgStr := newMessageStream(&connection{session: sess}, str, nil)
+		conn := newMockConn(sess, Settings{}, Settings{})
+		msgStr := newMessageStream(conn, str, nil)
 		rw = newResponseWriter(msgStr, utils.DefaultLogger)
 	})
 
