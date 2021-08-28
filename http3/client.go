@@ -190,7 +190,7 @@ func (c *client) RoundTrip(req *http.Request) (*http.Response, error) {
 	if rerr.err != nil { // if any error occurred
 		close(reqDone)
 		if rerr.streamErr != 0 { // if it was a stream error
-			str.CancelWrite(quic.StreamErrorCode(rerr.streamErr))
+			str.Stream().CancelWrite(quic.StreamErrorCode(rerr.streamErr))
 		}
 		if rerr.connErr != 0 { // if it was a connection error
 			var reason string
@@ -305,7 +305,7 @@ func (c *client) writeRequest(str MessageStream, req *http.Request, requestGzip 
 		req.Body.Close()
 		if err != nil {
 			c.logger.Errorf("Error writing request: %s", err)
-			str.CancelWrite(quic.StreamErrorCode(errorRequestCanceled))
+			str.Stream().CancelWrite(quic.StreamErrorCode(errorRequestCanceled))
 			return
 		}
 
@@ -314,7 +314,7 @@ func (c *client) writeRequest(str MessageStream, req *http.Request, requestGzip 
 			err = str.WriteFields(Trailers(req.Trailer))
 			if err != nil {
 				c.logger.Errorf("Error writing trailers: %s", err)
-				str.CancelWrite(quic.StreamErrorCode(errorRequestCanceled))
+				str.Stream().CancelWrite(quic.StreamErrorCode(errorRequestCanceled))
 				return
 			}
 		}

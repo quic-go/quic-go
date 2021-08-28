@@ -44,8 +44,6 @@ type MessageStream interface {
 
 	// TODO: integrate QPACK encoding and decoding with dynamic tables.
 
-	// CancelRead(code quic.StreamErrorCode)
-	CancelWrite(code quic.StreamErrorCode)
 	Close() error
 
 	// WebTransport returns a WebTransport interface, if supported.
