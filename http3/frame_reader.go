@@ -8,8 +8,9 @@ import (
 
 // FrameReader implements a lightweight HTTP/3 frame reader.
 // After setting R, an otherwise zero-value FrameReader is ready to use.
-// A FrameReader can be initialized with an already-read frame header
-// by setting Type and N.
+// If a frame has already been partially read from R, a FrameReader
+// can be initialized by setting Type to the current frame type and N to
+// the number of bytes remaining in the payload.
 type FrameReader struct {
 	R    io.Reader
 	Type FrameType
@@ -53,7 +54,8 @@ func (r *FrameReader) Next() error {
 }
 
 // Read reads bytes from the current frame payload.
-// It returns io.EOF at the end of the frame payload.
+// It will read up to len(p) or r.N, whichever is smaller.
+// It returns io.EOF if bytes remaining in the frame payload <= 0.
 // It should not be called simultaneously with Next or WriteTo.
 // The state of r is indeterminate after Read returns an error.
 // Read conforms to io.Reader.
@@ -61,8 +63,12 @@ func (r *FrameReader) Read(p []byte) (n int, err error) {
 	if r.N <= 0 {
 		return 0, io.EOF
 	}
-	// TODO: implement read
-	return 0, nil
+	if int64(len(p)) > r.N {
+		p = p[:r.N]
+	}
+	n, err = r.R.Read(p)
+	r.N -= int64(n)
+	return n, err
 }
 
 // WriteTo writes any remaining bytes of the current frame payload to w.
