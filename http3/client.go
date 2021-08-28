@@ -301,7 +301,7 @@ func (c *client) writeRequest(str MessageStream, req *http.Request, requestGzip 
 
 	// Send the request body and trailers asynchronously
 	go func() {
-		err := str.WriteDataFrom(req.Body)
+		err := str.ReadFrom(req.Body)
 		req.Body.Close()
 		if err != nil {
 			c.logger.Errorf("Error writing request: %s", err)

@@ -33,14 +33,17 @@ type MessageStream interface {
 
 	// WriteFields a single HEADERS frame.
 	// Used for writing HTTP headers or trailers.
-	// Should not be called concurrently with WriteMessage or WriteData.
+	// Should not be called concurrently with WriteMessage, Write, or ReadFrom.
 	WriteFields([]qpack.HeaderField) error
 
-	// WriteData writes 0 or more DATA frames.
+	// Write writes 0 or more DATA frames.
 	// Used for writing an HTTP request or response body.
-	// Should not be called concurrently with WriteMessage or WriteFields.
-	WriteData([]byte) (int, error)
-	WriteDataFrom(io.Reader) error
+	// Should not be called concurrently with WriteMessage, WriteFields, or ReadFrom.
+	Write([]byte) (int, error)
+
+	// ReadFrom implements io.ReaderFrom. It reads data from an io.Reader
+	// and writes DATA frames to the underlying quic.Stream.
+	ReadFrom(io.Reader) error
 
 	// TODO: integrate QPACK encoding and decoding with dynamic tables.
 
@@ -125,7 +128,7 @@ func (s *messageStream) WriteMessage(msg Message) error {
 	}
 	body := msg.Body()
 	if body != nil {
-		err = s.WriteDataFrom(body)
+		err = s.ReadFrom(body)
 		if err != nil {
 			return err
 		}
@@ -148,7 +151,7 @@ func (s *messageStream) WriteMessage(msg Message) error {
 // It returns an error if the estimated size of the frame exceeds the peer’s
 // MAX_FIELD_SECTION_SIZE. Headers are not modified or validated.
 // It is the responsibility of the caller to ensure the fields are valid.
-// It should not be called concurrently with WriteMessage or WriteData.
+// It should not be called concurrently with WriteMessage, Write, or ReadFrom.
 func (s *messageStream) WriteFields(fields []qpack.HeaderField) error {
 	var l uint64
 	for i := range fields {
@@ -174,7 +177,8 @@ func (s *messageStream) WriteFields(fields []qpack.HeaderField) error {
 
 const bodyCopyBufferSize = 8 * 1024
 
-func (s *messageStream) WriteData(p []byte) (n int, err error) {
+// Write writes bytes to DATA frames to the underlying quic.Stream.
+func (s *messageStream) Write(p []byte) (n int, err error) {
 	for len(p) > 0 {
 		pp := p
 		if len(p) > bodyCopyBufferSize {
@@ -190,7 +194,9 @@ func (s *messageStream) WriteData(p []byte) (n int, err error) {
 	return n, err
 }
 
-func (s *messageStream) WriteDataFrom(r io.Reader) error {
+// ReadFrom implements io.ReaderFrom. It reads from r until an error
+// or io.EOF and writes DATA frames to the underlying quic.Stream.
+func (s *messageStream) ReadFrom(r io.Reader) error {
 	buf := make([]byte, bodyCopyBufferSize)
 	for {
 		l, rerr := r.Read(buf)
