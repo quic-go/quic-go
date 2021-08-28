@@ -17,9 +17,7 @@ import (
 
 // A MessageStream is a QUIC stream for processing HTTP/3 request and response messages.
 type MessageStream interface {
-	StreamID() quic.StreamID
-
-	Context() context.Context
+	Stream() quic.Stream
 
 	// Reads a single HTTP message.
 	// For servers, ReadMessage reads an HTTP request.
@@ -96,12 +94,8 @@ func newMessageStream(conn *connection, stream quic.Stream, first *FrameType) Me
 	return s
 }
 
-func (s *messageStream) StreamID() quic.StreamID {
-	return s.stream.StreamID()
-}
-
-func (s *messageStream) Context() context.Context {
-	return s.stream.Context()
+func (s *messageStream) Stream() quic.Stream {
+	return s.stream
 }
 
 // ReadMessage reads a single HTTP message from s or a read error, if any.
@@ -238,6 +232,7 @@ func (s *messageStream) WebTransport() (WebTransport, error) {
 
 func (s *messageStream) Close() error {
 	s.conn.cleanup(s.stream.StreamID())
+	// s.stream.CancelRead(quic.StreamErrorCode(errorNoError))
 	return s.stream.Close()
 }
 

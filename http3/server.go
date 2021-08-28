@@ -297,7 +297,7 @@ func (s *Server) handleMessageStream(sess quic.EarlySession, str MessageStream) 
 		return newStreamError(errorGeneralProtocolError, err) // TODO: use new error types
 	}
 
-	ctx := str.Context()
+	ctx := str.Stream().Context()
 	ctx = context.WithValue(ctx, ServerContextKey, s)
 	ctx = context.WithValue(ctx, http.LocalAddrContextKey, sess.LocalAddr())
 
@@ -316,7 +316,7 @@ func (s *Server) handleMessageStream(sess quic.EarlySession, str MessageStream) 
 	// TODO: set trailers
 
 	if s.logger.Debug() {
-		s.logger.Infof("%s %s%s, on stream %d", req.Method, req.Host, req.RequestURI, str.StreamID())
+		s.logger.Infof("%s %s%s, on stream %d", req.Method, req.Host, req.RequestURI, str.Stream().StreamID())
 	} else {
 		s.logger.Infof("%s %s%s", req.Method, req.Host, req.RequestURI)
 	}
