@@ -1,6 +1,10 @@
 package http3
 
-import "io"
+import (
+	"io"
+
+	"github.com/lucas-clemente/quic-go/quicvarint"
+)
 
 // FrameReader implements a lightweight HTTP/3 frame reader.
 // After setting R, an otherwise zero-value FrameReader is ready to use.
@@ -10,6 +14,8 @@ type FrameReader struct {
 	R    io.Reader
 	Type FrameType
 	N    int64
+	r    io.Reader
+	qr   quicvarint.Reader
 }
 
 var (
@@ -32,7 +38,18 @@ func (r *FrameReader) Next() error {
 			return err
 		}
 	}
-	return nil
+	if r.r != r.R {
+		r.r = r.R
+		r.qr = quicvarint.NewReader(r.r)
+	}
+	i, err := quicvarint.Read(r.qr)
+	r.Type = FrameType(i)
+	if err != nil {
+		return err
+	}
+	i, err = quicvarint.Read(r.qr)
+	r.N = int64(i)
+	return err
 }
 
 // Read reads bytes from the current frame payload.
