@@ -76,11 +76,12 @@ func (e errorCode) String() string {
 
 type frameTypeError struct {
 	Want FrameType
-	Got  FrameType
+	Type FrameType
+	Len  uint64
 }
 
 func (err *frameTypeError) Error() string {
-	return fmt.Sprintf("unexpected frame type %s, expected %s", err.Got, err.Want)
+	return fmt.Sprintf("unexpected frame type %s, expected %s", err.Type, err.Want)
 }
 
 var _ error = &frameTypeError{}

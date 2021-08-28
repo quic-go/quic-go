@@ -276,7 +276,7 @@ func (s *messageStream) parseIncomingFrames() error {
 
 	// HTTP messages must begin with a HEADERS frame.
 	if t != FrameTypeHeaders {
-		return &connError{Code: errorFrameUnexpected, Err: &frameTypeError{Want: FrameTypeHeaders, Got: t}}
+		return &connError{Code: errorFrameUnexpected, Err: &frameTypeError{Want: FrameTypeHeaders, Type: t}}
 	}
 
 	var msg *incomingMessage
@@ -322,16 +322,16 @@ func (s *messageStream) parseIncomingFrames() error {
 				close(msg.trailersRead)
 			} else {
 				// Unexpected HEADERS frame
-				return &streamError{Code: errorFrameUnexpected, Err: &frameTypeError{Got: t}}
+				return &streamError{Code: errorFrameUnexpected, Err: &frameTypeError{Type: t}}
 			}
 
 		case FrameTypeData:
 			if msg == nil || msg.interim {
 				// Unexpected DATA frame (interim responses do not have response bodies)
-				return &streamError{Code: errorFrameUnexpected, Err: &frameTypeError{Want: FrameTypeHeaders, Got: t}}
+				return &streamError{Code: errorFrameUnexpected, Err: &frameTypeError{Want: FrameTypeHeaders, Type: t}}
 			} else if msg.trailers != nil {
 				// Unexpected DATA frame following trailers
-				return &streamError{Code: errorFrameUnexpected, Err: &frameTypeError{Got: t}}
+				return &streamError{Code: errorFrameUnexpected, Err: &frameTypeError{Type: t}}
 			}
 
 			// Wait for the frame to be consumed
