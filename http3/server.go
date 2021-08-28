@@ -348,7 +348,8 @@ func (s *Server) handleMessageStream(sess quic.EarlySession, str MessageStream) 
 			rw.WriteHeader(http.StatusOK)
 		}
 		// If the EOF was read by the handler, CancelRead() is a no-op.
-		str.CancelRead(quic.StreamErrorCode(errorNoError))
+		// TODO(ydnar): this should be str.Close()
+		str.Stream().CancelRead(quic.StreamErrorCode(errorNoError))
 	}
 	return requestError{}
 }

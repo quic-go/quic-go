@@ -180,8 +180,8 @@ func (c *client) RoundTrip(req *http.Request) (*http.Response, error) {
 	go func() {
 		select {
 		case <-req.Context().Done():
-			str.CancelWrite(quic.StreamErrorCode(errorRequestCanceled))
-			str.CancelRead(quic.StreamErrorCode(errorRequestCanceled))
+			str.Stream().CancelWrite(quic.StreamErrorCode(errorRequestCanceled))
+			str.Stream().CancelRead(quic.StreamErrorCode(errorRequestCanceled))
 		case <-reqDone:
 		}
 	}()
