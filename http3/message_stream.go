@@ -79,6 +79,7 @@ var (
 	_ MessageStream = &messageStream{}
 	_ io.Writer     = &messageStream{}
 	_ io.ReaderFrom = &messageStream{}
+	_ io.Closer     = &messageStream{}
 )
 
 // newMessageStream creates a new MessageStream. If first is non-nil, the
