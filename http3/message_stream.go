@@ -26,19 +26,14 @@ type MessageStream interface {
 	// Interim responses must be followed by additional response messages.
 	ReadMessage() (Message, error)
 
-	// Writes a single HTTP message.
-	// For servers, WriteMessage writes an HTTP response. Multiple responses can be written.
-	// For clients, WriteMessage writes an HTTP request.
-	WriteMessage(Message) error
-
 	// WriteFields a single HEADERS frame.
 	// Used for writing HTTP headers or trailers.
-	// Should not be called concurrently with WriteMessage, Write, or ReadFrom.
+	// Should not be called concurrently with Write or ReadFrom.
 	WriteFields([]qpack.HeaderField) error
 
 	// Write writes 0 or more DATA frames.
 	// Used for writing an HTTP request or response body.
-	// Should not be called concurrently with WriteMessage, WriteFields, or ReadFrom.
+	// Should not be called concurrently with WriteFields or ReadFrom.
 	Write([]byte) (int, error)
 
 	// ReadFrom implements io.ReaderFrom. It reads data from an io.Reader
@@ -119,44 +114,11 @@ func (s *messageStream) ReadMessage() (Message, error) {
 	}
 }
 
-// WriteMessage writes a single HTTP message to s. It does not validate
-// the message, or enforce ordering of messages on a stream.
-// It does not close the stream for writing.
-// The message will be written as follows:
-// A single HEADERS frame, followed by 0 or more DATA frames for the message body,
-// followed by an optional HEADERS frame for the message trailers.
-// WriteMessage will call Close on the message body on success.
-func (s *messageStream) WriteMessage(msg Message) error {
-	err := s.WriteFields(msg.Headers())
-	if err != nil {
-		return err
-	}
-	body := msg.Body()
-	if body != nil {
-		_, err = s.ReadFrom(body)
-		if err != nil {
-			return err
-		}
-		err = body.Close()
-		if err != nil {
-			return err
-		}
-	}
-	trailers := msg.Trailers()
-	if trailers != nil {
-		err = s.WriteFields(trailers)
-		if err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
 // WriteFields writes a single QPACK-encoded HEADERS frame to s.
 // It returns an error if the estimated size of the frame exceeds the peer’s
 // MAX_FIELD_SECTION_SIZE. Headers are not modified or validated.
 // It is the responsibility of the caller to ensure the fields are valid.
-// It should not be called concurrently with WriteMessage, Write, or ReadFrom.
+// It should not be called concurrently with Write or ReadFrom.
 func (s *messageStream) WriteFields(fields []qpack.HeaderField) error {
 	var l uint64
 	for i := range fields {
