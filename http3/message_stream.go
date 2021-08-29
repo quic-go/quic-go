@@ -43,7 +43,7 @@ type MessageStream interface {
 
 	// ReadFrom implements io.ReaderFrom. It reads data from an io.Reader
 	// and writes DATA frames to the underlying quic.Stream.
-	ReadFrom(io.Reader) error
+	ReadFrom(io.Reader) (int64, error)
 
 	// TODO: integrate QPACK encoding and decoding with dynamic tables.
 
@@ -75,7 +75,11 @@ type messageStream struct {
 	readDone         chan struct{}
 }
 
-var _ MessageStream = &messageStream{}
+var (
+	_ MessageStream = &messageStream{}
+	_ io.Writer     = &messageStream{}
+	_ io.ReaderFrom = &messageStream{}
+)
 
 // newMessageStream creates a new MessageStream. If first is non-nil, the
 // parser will assume the first varint has already been read from the stream.
@@ -128,7 +132,7 @@ func (s *messageStream) WriteMessage(msg Message) error {
 	}
 	body := msg.Body()
 	if body != nil {
-		err = s.ReadFrom(body)
+		_, err = s.ReadFrom(body)
 		if err != nil {
 			return err
 		}
@@ -196,7 +200,7 @@ func (s *messageStream) Write(p []byte) (n int, err error) {
 
 // ReadFrom implements io.ReaderFrom. It reads from r until an error
 // or io.EOF and writes DATA frames to the underlying quic.Stream.
-func (s *messageStream) ReadFrom(r io.Reader) error {
+func (s *messageStream) ReadFrom(r io.Reader) (n int64, err error) {
 	buf := make([]byte, bodyCopyBufferSize)
 	for {
 		l, rerr := r.Read(buf)
@@ -204,16 +208,17 @@ func (s *messageStream) ReadFrom(r io.Reader) error {
 			if rerr == nil {
 				continue
 			} else if rerr == io.EOF {
-				return nil
+				return n, nil
 			}
-			return rerr
+			return n, rerr
 		}
-		_, err := s.writeDataFrame(buf[:l])
+		x, err := s.writeDataFrame(buf[:l])
+		n += int64(x)
 		if err != nil {
-			return err
+			return n, err
 		}
 		if rerr == io.EOF {
-			return nil
+			return n, nil
 		}
 	}
 }
