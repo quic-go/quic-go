@@ -246,16 +246,6 @@ func (s *messageStream) Close() error {
 	return s.stream.Close()
 }
 
-func (s *messageStream) CancelRead(code quic.StreamErrorCode) {
-	s.conn.cleanup(s.stream.StreamID())
-	s.stream.CancelRead(code)
-}
-
-func (s *messageStream) CancelWrite(code quic.StreamErrorCode) {
-	s.conn.cleanup(s.stream.StreamID())
-	s.stream.CancelWrite(code)
-}
-
 func (s *messageStream) handleIncomingFrames() {
 	err := s.parseIncomingFrames()
 	// code := errorNoError
