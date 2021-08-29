@@ -15,8 +15,6 @@ type FrameReader struct {
 	R    io.Reader
 	Type FrameType
 	N    int64
-	r    io.Reader
-	qr   quicvarint.Reader
 }
 
 var (
@@ -39,16 +37,12 @@ func (r *FrameReader) Next() error {
 			return err
 		}
 	}
-	if r.r != r.R {
-		r.r = r.R
-		r.qr = quicvarint.NewReader(r.r)
-	}
-	i, err := quicvarint.Read(r.qr)
+	i, err := quicvarint.Read((*frameByteReader)(r))
 	r.Type = FrameType(i)
 	if err != nil {
 		return err
 	}
-	i, err = quicvarint.Read(r.qr)
+	i, err = quicvarint.Read((*frameByteReader)(r))
 	r.N = int64(i)
 	return err
 }
@@ -84,4 +78,14 @@ func (r *FrameReader) WriteTo(w io.Writer) (n int64, err error) {
 	n, err = io.CopyN(w, r.R, r.N)
 	r.N -= n
 	return n, err
+}
+
+type frameByteReader FrameReader
+
+var _ io.ByteReader = &frameByteReader{}
+
+func (r *frameByteReader) ReadByte() (byte, error) {
+	var b [1]byte
+	_, err := r.R.Read(b[:])
+	return b[0], err
 }
