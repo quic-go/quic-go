@@ -187,28 +187,29 @@ func (c *client) RoundTrip(req *http.Request) (*http.Response, error) {
 		}
 	}()
 
-	rsp, rerr := c.doRequest(str, req, reqDone)
-	if rerr.err != nil { // if any error occurred
+	resp, err := c.doRequest(str, req, reqDone)
+	if err != nil {
 		close(reqDone)
-		if rerr.streamErr != 0 { // if it was a stream error
-			str.CancelWrite(quic.StreamErrorCode(rerr.streamErr))
-		}
-		if rerr.connErr != 0 { // if it was a connection error
-			var reason string
-			if rerr.err != nil {
-				reason = rerr.err.Error()
-			}
-			c.sess.CloseWithError(quic.ApplicationErrorCode(rerr.connErr), reason)
+		switch err := err.(type) {
+		case *FrameTypeError:
+			// HTTP requests or responses MUST start with a HEADERS frame.
+			c.sess.CloseWithError(quic.ApplicationErrorCode(errorFrameUnexpected), err.Error())
+		case *connError:
+			c.sess.CloseWithError(quic.ApplicationErrorCode(err.Code), err.Unwrap().Error())
+		case *streamError:
+			str.CancelWrite(quic.StreamErrorCode(err.Code))
+		default:
+			str.CancelWrite(quic.StreamErrorCode(errorGeneralProtocolError))
 		}
 	}
-	return rsp, rerr.err
+	return resp, err
 }
 
 func (c *client) doRequest(
 	str RequestStream,
 	req *http.Request,
 	reqDone chan struct{},
-) (*http.Response, requestError) {
+) (*http.Response, error) {
 	var requestGzip bool
 	if !c.opts.DisableCompression && req.Method != http.MethodHead && req.Header.Get("Accept-Encoding") == "" && req.Header.Get("Range") == "" {
 		requestGzip = true
@@ -216,7 +217,10 @@ func (c *client) doRequest(
 
 	err := c.writeRequest(str, req, requestGzip)
 	if err != nil {
-		return nil, newStreamError(errorInternalError, err)
+		return nil, &streamError{
+			Code: errorInternalError,
+			Err:  err,
+		}
 	}
 
 	// Read HEADERS frames until we get a non-interim status code.
@@ -228,16 +232,7 @@ func (c *client) doRequest(
 	for {
 		headers, err := str.ReadHeaders()
 		if err != nil {
-			switch err := err.(type) {
-			case *FrameTypeError:
-				return nil, newConnError(errorFrameUnexpected, err) // HTTP requests or responses MUST start with a HEADERS frame
-			case *connError:
-				return nil, newConnError(err.Code, err.Unwrap())
-			case *streamError:
-				return nil, newStreamError(err.Code, err.Unwrap())
-			default:
-				return nil, newStreamError(errorGeneralProtocolError, err)
-			}
+			return nil, err
 		}
 
 		for _, hf := range headers {
@@ -245,7 +240,10 @@ func (c *client) doRequest(
 			case ":status":
 				res.StatusCode, err = strconv.Atoi(hf.Value)
 				if err != nil {
-					return nil, newStreamError(errorGeneralProtocolError, errors.New("malformed non-numeric status pseudo header"))
+					return nil, &streamError{
+						Code: errorGeneralProtocolError,
+						Err:  errors.New("malformed non-numeric status pseudo header"),
+					}
 				}
 				res.Status = hf.Value + " " + http.StatusText(res.StatusCode)
 			default:
@@ -288,7 +286,7 @@ func (c *client) doRequest(
 		res.Body = respBody
 	}
 
-	return res, requestError{}
+	return res, nil
 }
 
 func (c *client) writeRequest(str RequestStream, req *http.Request, requestGzip bool) error {

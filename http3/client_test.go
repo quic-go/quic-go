@@ -663,7 +663,14 @@ var _ = Describe("Client", func() {
 				str.EXPECT().Close().Do(func() { close(closed) })
 				str.EXPECT().Read(gomock.Any()).DoAndReturn(buf.Read).AnyTimes()
 				_, err := client.RoundTrip(request)
-				Expect(err).To(MatchError(fmt.Sprintf("HEADERS frame too large: %d bytes (max: %d)", len, max)))
+				Expect(err).To(MatchError(&streamError{
+					Code: errorFrameError,
+					Err: &FrameLengthError{
+						Type: FrameTypeHeaders,
+						Len:  uint64(len),
+						Max:  uint64(max),
+					},
+				}))
 				Eventually(closed).Should(BeClosed())
 			})
 		})
