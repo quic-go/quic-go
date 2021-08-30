@@ -69,7 +69,7 @@ func (w *responseWriter) WriteHeader(status int) {
 
 	w.logger.Infof("Responding with %d", status)
 
-	err := w.stream.WriteFields(fields)
+	err := w.stream.WriteHeaders(fields)
 	if err != nil {
 		w.logger.Errorf("could not write headers frame: %s", err.Error())
 	}

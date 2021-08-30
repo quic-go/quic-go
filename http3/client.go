@@ -301,7 +301,7 @@ func (c *client) writeRequest(str MessageStream, req *http.Request, requestGzip 
 		fields = appendGzipHeader(fields)
 	}
 
-	err = str.WriteFields(fields)
+	err = str.WriteHeaders(fields)
 	if err != nil {
 		return err
 	}
@@ -324,7 +324,7 @@ func (c *client) writeRequest(str MessageStream, req *http.Request, requestGzip 
 		}
 
 		if len(req.Trailer) > 0 {
-			err = str.WriteFields(Trailers(req.Trailer))
+			err = str.WriteHeaders(Trailers(req.Trailer))
 			if err != nil {
 				c.logger.Errorf("Error writing trailers: %s", err)
 				str.Stream().CancelWrite(quic.StreamErrorCode(errorRequestCanceled))

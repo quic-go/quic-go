@@ -25,17 +25,12 @@ type MessageStream interface {
 	// it will return a FrameTypeError.
 	ReadHeaders() ([]qpack.HeaderField, error)
 
-	// WriteHeaders writes a single HEADERS frame, for HTTP headers or trailers.
-	// It returns any errors that may occur, including QPACK encoding or writes
-	// to the underlying quic.Stream.
+	// WriteHeaders writes a single HEADERS frame, used for HTTP request and
+	// response headers and trailers.  It returns any errors that may occur,
+	// including QPACK encoding or writes to the underlying quic.Stream.
 	// WriteHeaders shoud not be called simultaneously with Write, ReadFrom, or
 	// writes to the underlying quic.Stream.
 	WriteHeaders([]qpack.HeaderField) error
-
-	// WriteFields a single HEADERS frame.
-	// Used for writing HTTP headers or trailers.
-	// Should not be called concurrently with Write or ReadFrom.
-	WriteFields([]qpack.HeaderField) error
 
 	// Read reads DATA frames from he underlying quic.Stream.
 	// If Read encounters a HEADERS frame or an otherwise unhandled frame,
@@ -138,16 +133,12 @@ func (s *messageStream) ReadHeaders() ([]qpack.HeaderField, error) {
 	return fields, nil
 }
 
-func (s *messageStream) WriteHeaders(fields []qpack.HeaderField) error {
-	return s.WriteFields(fields)
-}
-
-// WriteFields writes a single QPACK-encoded HEADERS frame to s.
+// WriteHeaders writes a single QPACK-encoded HEADERS frame to s.
 // It returns an error if the estimated size of the frame exceeds the peer’s
 // MAX_FIELD_SECTION_SIZE. Headers are not modified or validated.
 // It is the responsibility of the caller to ensure the fields are valid.
 // It should not be called concurrently with Write or ReadFrom.
-func (s *messageStream) WriteFields(fields []qpack.HeaderField) error {
+func (s *messageStream) WriteHeaders(fields []qpack.HeaderField) error {
 	var l uint64
 	for i := range fields {
 		// https://quicwg.org/base-drafts/draft-ietf-quic-qpack.html#name-dynamic-table-size
