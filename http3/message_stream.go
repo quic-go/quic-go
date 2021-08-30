@@ -25,10 +25,31 @@ type MessageStream interface {
 	// Interim responses must be followed by additional response messages.
 	ReadMessage() (Message, error)
 
+	// TODO: integrate QPACK encoding and decoding with dynamic tables.
+
+	// ReadHeaders reads the next HEADERS frame, used for HTTP request and
+	// response headers and trailers. An interim response (status 100-199)
+	// must be followed by one or more additional HEADERS frames.
+	// If ReadHeaders encounters a DATA frame or an otherwise unhandled frame,
+	// it will return a FrameTypeError.
+	ReadHeaders() ([]qpack.HeaderField, error)
+
+	// WriteHeaders writes a single HEADERS frame, for HTTP headers or trailers.
+	// It returns any errors that may occur, including QPACK encoding or writes
+	// to the underlying quic.Stream.
+	// WriteHeaders shoud not be called simultaneously with Write, ReadFrom, or
+	// writes to the underlying quic.Stream.
+	WriteHeaders([]qpack.HeaderField) error
+
 	// WriteFields a single HEADERS frame.
 	// Used for writing HTTP headers or trailers.
 	// Should not be called concurrently with Write or ReadFrom.
 	WriteFields([]qpack.HeaderField) error
+
+	// Read reads DATA frames from he underlying quic.Stream.
+	// If Read encounters a HEADERS frame or an otherwise unhandled frame,
+	// it will return a FrameTypeError.
+	Read([]byte) (int, error)
 
 	// Write writes 0 or more DATA frames.
 	// Used for writing an HTTP request or response body.
@@ -39,8 +60,7 @@ type MessageStream interface {
 	// and writes DATA frames to the underlying quic.Stream.
 	ReadFrom(io.Reader) (int64, error)
 
-	// TODO: integrate QPACK encoding and decoding with dynamic tables.
-
+	// Close closes the MessageStream.
 	Close() error
 
 	// WebTransport returns a WebTransport interface, if supported.
@@ -70,6 +90,7 @@ type messageStream struct {
 
 var (
 	_ MessageStream = &messageStream{}
+	_ io.Reader     = &messageStream{}
 	_ io.Writer     = &messageStream{}
 	_ io.ReaderFrom = &messageStream{}
 	_ io.Closer     = &messageStream{}
@@ -112,6 +133,41 @@ func (s *messageStream) ReadMessage() (Message, error) {
 	}
 }
 
+// ReadHeaders reads the next HEADERS frame, used for HTTP request and
+// response headers and trailers. An interim response (status 100-199)
+// must be followed by one or more additional HEADERS frames.
+// If ReadHeaders encounters a DATA frame or an otherwise unhandled frame,
+// it will return a FrameTypeError.
+func (s *messageStream) ReadHeaders() ([]qpack.HeaderField, error) {
+	err := s.nextHeadersFrame()
+	if err != nil {
+		return nil, err
+	}
+
+	max := s.conn.maxHeaderBytes()
+	if s.fr.N > int64(max) {
+		return nil, &streamError{Code: errorFrameError, Err: &FrameLengthError{Type: s.fr.Type, Len: uint64(s.fr.N), Max: max}}
+	}
+
+	p := make([]byte, s.fr.N)
+	_, err = io.ReadFull(s.fr, p)
+	if err != nil {
+		return nil, &streamError{Code: errorRequestIncomplete, Err: err}
+	}
+
+	dec := qpack.NewDecoder(nil)
+	fields, err := dec.DecodeFull(p)
+	if err != nil {
+		return nil, &connError{Code: errorGeneralProtocolError, Err: err}
+	}
+
+	return fields, nil
+}
+
+func (s *messageStream) WriteHeaders(fields []qpack.HeaderField) error {
+	return s.WriteFields(fields)
+}
+
 // WriteFields writes a single QPACK-encoded HEADERS frame to s.
 // It returns an error if the estimated size of the frame exceeds the peer’s
 // MAX_FIELD_SECTION_SIZE. Headers are not modified or validated.
@@ -138,6 +194,28 @@ func (s *messageStream) WriteFields(fields []qpack.HeaderField) error {
 	quicvarint.Write(s.w, uint64(buf.Len()))
 	_, err := s.w.Write(buf.Bytes())
 	return err
+}
+
+func (s *messageStream) Read(p []byte) (n int, err error) {
+	for len(p) > 0 {
+		for s.fr.N <= 0 {
+			err = s.nextDataFrame()
+			if err != nil {
+				return n, err
+			}
+		}
+		pp := p
+		if s.fr.N < int64(len(p)) {
+			pp = p[:s.fr.N]
+		}
+		x, err := s.fr.Read(pp)
+		n += x
+		p = p[x:]
+		if err != nil {
+			return n, err
+		}
+	}
+	return n, nil
 }
 
 const bodyCopyBufferSize = 8 * 1024
@@ -204,6 +282,50 @@ func (s *messageStream) Close() error {
 	s.conn.cleanup(s.str.StreamID())
 	// s.stream.CancelRead(quic.StreamErrorCode(errorNoError))
 	return s.str.Close()
+}
+
+// nextHeadersFrame reads incoming HTTP/3 frames until it finds
+// the next HEADERS frame. If it encouters a DATA frame prior to
+// reading a HEADERS frame, it will return a frameTypeError.
+func (s *messageStream) nextHeadersFrame() error {
+	err := s.readFrames()
+	if err != nil {
+		return err
+	}
+	if s.fr.Type != FrameTypeHeaders {
+		return &FrameTypeError{Want: FrameTypeHeaders, Type: s.fr.Type}
+	}
+	return nil
+}
+
+// nextDataFrame reads incoming HTTP/3 frames until it finds
+// the next DATA frame. If it encouters a HEADERS frame prior to
+// reading a DATA frame, it will return a frameTypeError.
+func (s *messageStream) nextDataFrame() error {
+	err := s.readFrames()
+	if err != nil {
+		return err
+	}
+	if s.fr.Type != FrameTypeData {
+		return &FrameTypeError{Want: FrameTypeData, Type: s.fr.Type}
+	}
+	return nil
+}
+
+func (s *messageStream) readFrames() error {
+	for {
+		// Next discards any unread frame payload bytes
+		err := s.fr.Next()
+		if err != nil {
+			return err
+		}
+		switch s.fr.Type {
+		case FrameTypeHeaders, FrameTypeData:
+			return nil
+		case FrameTypePushPromise:
+			// TODO: handle HTTP/3 pushes
+		}
+	}
 }
 
 func (s *messageStream) handleIncomingFrames() {
