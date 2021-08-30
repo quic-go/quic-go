@@ -165,18 +165,6 @@ func (conn *connection) PeerSettingsSync(ctx context.Context) (Settings, error) 
 	}
 }
 
-func (conn *connection) negotiatedWebTransport() bool {
-	if !conn.Settings().WebTransportEnabled() {
-		return false
-	}
-	peerSettings, err := conn.PeerSettingsSync(context.Background())
-	if err != nil {
-		// TODO: log error
-		return false
-	}
-	return peerSettings.WebTransportEnabled()
-}
-
 func (conn *connection) maxHeaderBytes() uint64 {
 	max := conn.Settings()[SettingMaxFieldSectionSize]
 	if max > 0 {
