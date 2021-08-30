@@ -30,13 +30,13 @@ type RequestStream interface {
 	ReadHeaders() ([]qpack.HeaderField, error)
 
 	// WriteHeaders writes a single HEADERS frame, used for HTTP request and
-	// response headers and trailers.  It returns any errors that may occur,
+	// response headers and trailers. It returns any errors that may occur,
 	// including QPACK encoding or writes to the underlying quic.Stream.
 	// WriteHeaders shoud not be called simultaneously with Write, ReadFrom, or
 	// writes to the underlying quic.Stream.
 	WriteHeaders([]qpack.HeaderField) error
 
-	// Read reads DATA frames from he underlying quic.Stream.
+	// Read reads DATA frames from the underlying quic.Stream.
 	// If Read encounters a HEADERS frame or an otherwise unhandled frame,
 	// it will return a FrameTypeError.
 	Read([]byte) (int, error)
