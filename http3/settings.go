@@ -81,11 +81,6 @@ func (s Settings) ExtendedConnectEnabled() bool {
 	return s.WebTransportEnabled()
 }
 
-// TODO: export the frame handling methods?
-func (s Settings) frameType() FrameType {
-	return FrameTypeSettings
-}
-
 func (s Settings) frameLength() protocol.ByteCount {
 	var len protocol.ByteCount
 	for id, val := range s {
@@ -95,7 +90,7 @@ func (s Settings) frameLength() protocol.ByteCount {
 }
 
 func (s Settings) writeFrame(w quicvarint.Writer) {
-	quicvarint.Write(w, uint64(s.frameType()))
+	quicvarint.Write(w, uint64(FrameTypeSettings))
 	quicvarint.Write(w, uint64(s.frameLength()))
 	ids := make([]SettingID, 0, len(s))
 	for id := range s {

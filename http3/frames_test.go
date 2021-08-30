@@ -65,7 +65,8 @@ var _ = Describe("Frames", func() {
 
 		It("writes", func() {
 			buf := &bytes.Buffer{}
-			(&headersFrame{len: 0xdeadbeef}).writeFrame(buf)
+			quicvarint.Write(buf, uint64(FrameTypeHeaders))
+			quicvarint.Write(buf, 0xdeadbeef)
 			frame, err := parseNextFrame(buf)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(err).ToNot(HaveOccurred())
