@@ -257,22 +257,23 @@ func (s *Server) handleConn(sess quic.EarlySession) {
 			return
 		}
 		go func() {
-			rerr := s.handleRequestStream(sess, str)
-			if rerr.err != nil || rerr.streamErr != 0 || rerr.connErr != 0 {
+			err := s.handleRequestStream(sess, str)
+			if err != nil {
 				s.logger.Debugf("Handling request failed: %s", err)
-				if rerr.streamErr != 0 {
-					str.CancelWrite(quic.StreamErrorCode(rerr.streamErr))
-				}
-				if rerr.connErr != 0 {
-					var reason string
-					if rerr.err != nil {
-						reason = rerr.err.Error()
-					}
-					sess.CloseWithError(quic.ApplicationErrorCode(rerr.connErr), reason)
+				switch err := err.(type) {
+				case *FrameTypeError:
+					// HTTP requests MUST start with a HEADERS frame.
+					sess.CloseWithError(quic.ApplicationErrorCode(errorFrameUnexpected), err.Error())
+				case *connError:
+					sess.CloseWithError(quic.ApplicationErrorCode(err.Code), err.Unwrap().Error())
+				case *streamError:
+					str.CancelWrite(quic.StreamErrorCode(err.Code))
+				default:
+					str.CancelWrite(quic.StreamErrorCode(errorGeneralProtocolError))
 				}
 				return
 			}
-			// TODO: should this close CONNECT requests?
+			// TODO: should this close CONNECT (WebTransport) requests?
 			str.Close()
 		}()
 	}
@@ -285,7 +286,7 @@ func (s *Server) maxHeaderBytes() uint64 {
 	return uint64(s.Server.MaxHeaderBytes)
 }
 
-func (s *Server) handleRequestStream(sess quic.EarlySession, str RequestStream) requestError {
+func (s *Server) handleRequestStream(sess quic.EarlySession, str RequestStream) error {
 	rw := newResponseWriter(str, s.logger)
 	defer func() {
 		if !rw.usedDataStream() {
@@ -295,27 +296,16 @@ func (s *Server) handleRequestStream(sess quic.EarlySession, str RequestStream) 
 
 	headers, err := str.ReadHeaders()
 	if err != nil {
-		switch err := err.(type) {
-		case *FrameTypeError:
-			return newConnError(errorFrameUnexpected, err) // HTTP requests or responses MUST start with a HEADERS frame
-		case *connError:
-			return newConnError(err.Code, err.Unwrap())
-		case *streamError:
-			return newStreamError(err.Code, err.Unwrap())
-		default:
-			return newStreamError(errorGeneralProtocolError, err)
-		}
+		return err
 	}
 
 	ctx := str.Context()
 	ctx = context.WithValue(ctx, ServerContextKey, s)
 	ctx = context.WithValue(ctx, http.LocalAddrContextKey, sess.LocalAddr())
 
-	// TODO: create a requestFromMessage func
 	req, err := requestFromHeaders(ctx, headers)
 	if err != nil {
-		// TODO: use the right error code
-		return newStreamError(errorGeneralProtocolError, err)
+		return nil
 	}
 
 	req.RemoteAddr = sess.RemoteAddr().String()
@@ -356,10 +346,10 @@ func (s *Server) handleRequestStream(sess quic.EarlySession, str RequestStream) 
 			rw.WriteHeader(http.StatusOK)
 		}
 		// If the EOF was read by the handler, CancelRead() is a no-op.
-		// TODO(ydnar): this should be str.Close()
+		// TODO(ydnar): should this stream persist for CONNECT (WebTransport) requests?
 		str.CancelRead(quic.StreamErrorCode(errorNoError))
 	}
-	return requestError{}
+	return nil
 }
 
 // Close the server immediately, aborting requests and sending CONNECTION_CLOSE frames to connected clients.

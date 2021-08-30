@@ -152,7 +152,8 @@ var _ = Describe("Server", func() {
 			str.EXPECT().CancelRead(gomock.Any())
 			str.EXPECT().Context().Return(ctx).AnyTimes()
 
-			Expect(s.handleRequestStream(sess, mstr)).To(Equal(requestError{}))
+			err := s.handleRequestStream(sess, mstr)
+			Expect(err).ToNot(HaveOccurred())
 			var req *http.Request
 			Eventually(requestChan).Should(Receive(&req))
 			Expect(req.Host).To(Equal("www.example.com"))
@@ -169,8 +170,8 @@ var _ = Describe("Server", func() {
 			str.EXPECT().CancelRead(gomock.Any())
 			str.EXPECT().Context().Return(ctx).AnyTimes()
 
-			serr := s.handleRequestStream(sess, mstr)
-			Expect(serr.err).ToNot(HaveOccurred())
+			err := s.handleRequestStream(sess, mstr)
+			Expect(err).ToNot(HaveOccurred())
 			hfs := decodeHeader(responseBuf)
 			Expect(hfs).To(HaveKeyWithValue(":status", []string{"200"}))
 		})
@@ -186,8 +187,8 @@ var _ = Describe("Server", func() {
 			str.EXPECT().CancelRead(gomock.Any())
 			str.EXPECT().Context().Return(ctx).AnyTimes()
 
-			serr := s.handleRequestStream(sess, mstr)
-			Expect(serr.err).ToNot(HaveOccurred())
+			err := s.handleRequestStream(sess, mstr)
+			Expect(err).ToNot(HaveOccurred())
 			hfs := decodeHeader(responseBuf)
 			Expect(hfs).To(HaveKeyWithValue(":status", []string{"500"}))
 		})
@@ -203,8 +204,8 @@ var _ = Describe("Server", func() {
 			str.EXPECT().Context().Return(ctx).AnyTimes()
 			setRequest(encodeRequest(exampleGetRequest))
 
-			serr := s.handleRequestStream(sess, mstr)
-			Expect(serr.err).ToNot(HaveOccurred())
+			err := s.handleRequestStream(sess, mstr)
+			Expect(err).ToNot(HaveOccurred())
 		})
 
 		Context("control stream handling", func() {
@@ -539,8 +540,8 @@ var _ = Describe("Server", func() {
 			}).AnyTimes()
 			str.EXPECT().CancelRead(quic.StreamErrorCode(errorNoError))
 
-			serr := s.handleRequestStream(sess, mstr)
-			Expect(serr.err).ToNot(HaveOccurred())
+			err := s.handleRequestStream(sess, mstr)
+			Expect(err).ToNot(HaveOccurred())
 			Eventually(handlerCalled).Should(BeClosed())
 		})
 
@@ -560,8 +561,8 @@ var _ = Describe("Server", func() {
 			str.EXPECT().Write(gomock.Any()).DoAndReturn(responseBuf.Write).MinTimes(1)
 			str.EXPECT().CancelRead(quic.StreamErrorCode(errorNoError))
 
-			serr := s.handleRequestStream(sess, mstr)
-			Expect(serr.err).ToNot(HaveOccurred())
+			err := s.handleRequestStream(sess, mstr)
+			Expect(err).ToNot(HaveOccurred())
 			Eventually(handlerCalled).Should(BeClosed())
 		})
 	})
