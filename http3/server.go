@@ -292,9 +292,18 @@ func (s *Server) handleMessageStream(sess quic.EarlySession, str MessageStream) 
 		}
 	}()
 
-	msg, err := str.ReadMessage()
+	headers, err := str.ReadHeaders()
 	if err != nil {
-		return newStreamError(errorGeneralProtocolError, err) // TODO: use new error types
+		switch err := err.(type) {
+		case *FrameTypeError:
+			return newConnError(errorFrameUnexpected, err) // HTTP requests or responses MUST start with a HEADERS frame
+		case *connError:
+			return newConnError(err.Code, err.Unwrap())
+		case *streamError:
+			return newStreamError(err.Code, err.Unwrap())
+		default:
+			return newStreamError(errorGeneralProtocolError, err)
+		}
 	}
 
 	ctx := str.Stream().Context()
@@ -302,17 +311,15 @@ func (s *Server) handleMessageStream(sess quic.EarlySession, str MessageStream) 
 	ctx = context.WithValue(ctx, http.LocalAddrContextKey, sess.LocalAddr())
 
 	// TODO: create a requestFromMessage func
-	req, err := requestFromHeaders(ctx, msg.Headers())
+	req, err := requestFromHeaders(ctx, headers)
 	if err != nil {
 		// TODO: use the right error code
 		return newStreamError(errorGeneralProtocolError, err)
 	}
 
 	req.RemoteAddr = sess.RemoteAddr().String()
-	// req.Body = newRequestBody(str, func() {
-	// 	sess.CloseWithError(quic.ApplicationErrorCode(errorFrameUnexpected), "")
-	// })
-	req.Body = msg.Body()
+	// TODO(ydnar): wrap str to set req.Trailer after last read on body fails hitting EOF or a trailing HEADERS frame
+	req.Body = str
 	// TODO: set trailers
 
 	if s.logger.Debug() {

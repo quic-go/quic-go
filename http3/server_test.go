@@ -421,12 +421,12 @@ var _ = Describe("Server", func() {
 				buf := &bytes.Buffer{}
 				(&dataFrame{len: 6}).writeFrame(buf) // add a body
 				buf.Write([]byte("foobar"))
-				responseBuf := &bytes.Buffer{}
 				setRequest(append(requestData, buf.Bytes()...))
-				done := make(chan struct{})
+				responseBuf := &bytes.Buffer{}
 				str.EXPECT().Write(gomock.Any()).DoAndReturn(responseBuf.Write).MinTimes(1)
 				str.EXPECT().CancelRead(quic.StreamErrorCode(errorNoError))
 				str.EXPECT().StreamID().AnyTimes()
+				done := make(chan struct{})
 				str.EXPECT().Close().Do(func() { close(done) })
 
 				s.handleConn(sess)
@@ -451,7 +451,7 @@ var _ = Describe("Server", func() {
 				setRequest(append(requestData, buf.Bytes()...))
 				done := make(chan struct{})
 				str.EXPECT().Context().Return(ctx).AnyTimes()
-				str.EXPECT().CancelWrite(quic.StreamErrorCode(errorGeneralProtocolError)).Do(func(quic.StreamErrorCode) { close(done) })
+				str.EXPECT().CancelWrite(quic.StreamErrorCode(errorFrameError)).Do(func(quic.StreamErrorCode) { close(done) })
 
 				s.handleConn(sess)
 				Eventually(done).Should(BeClosed())
@@ -556,10 +556,13 @@ var _ = Describe("Server", func() {
 			reqContext, cancel := context.WithCancel(context.Background())
 			cancel()
 			str.EXPECT().Context().Return(reqContext).MinTimes(1)
+			responseBuf := &bytes.Buffer{}
+			str.EXPECT().Write(gomock.Any()).DoAndReturn(responseBuf.Write).MinTimes(1)
+			str.EXPECT().CancelRead(quic.StreamErrorCode(errorNoError))
 
 			serr := s.handleMessageStream(sess, mstr)
-			Expect(serr.err).To(MatchError(reqContext.Err()))
-			Eventually(handlerCalled).ShouldNot(BeClosed())
+			Expect(serr.err).ToNot(HaveOccurred())
+			Eventually(handlerCalled).Should(BeClosed())
 		})
 	})
 
