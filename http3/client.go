@@ -315,7 +315,7 @@ func (c *client) writeRequest(str RequestStream, req *http.Request, requestGzip 
 
 	// Send the request body and trailers asynchronously
 	go func() {
-		_, err := str.ReadFrom(req.Body)
+		_, err := io.Copy(str, req.Body)
 		req.Body.Close()
 		if err != nil {
 			c.logger.Errorf("Error writing request: %s", err)
