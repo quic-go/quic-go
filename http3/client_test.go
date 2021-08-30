@@ -235,9 +235,9 @@ var _ = Describe("Client", func() {
 				streamType, err := quicvarint.Read(r)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(streamType).To(BeEquivalentTo(StreamTypeControl))
-				frame, err := parseNextFrame(reader)
+				settings, err := readSettings(&FrameReader{R: reader})
 				Expect(err).ToNot(HaveOccurred())
-				Expect(frame).To(BeAssignableToTypeOf(Settings{}))
+				Expect(settings).ToNot(BeNil())
 				close(settingsFrameWritten)
 			}() // SETTINGS frame
 			sess = mockquic.NewMockEarlySession(mockCtrl)
@@ -438,9 +438,9 @@ var _ = Describe("Client", func() {
 			headerBuf := &bytes.Buffer{}
 			enc := qpack.NewEncoder(headerBuf)
 			for name, value := range headers {
-				Expect(enc.WriteField(qpack.HeaderField{Name: name, Value: value})).To(Succeed())
+				ExpectWithOffset(1, enc.WriteField(qpack.HeaderField{Name: name, Value: value})).To(Succeed())
 			}
-			Expect(enc.Close()).To(Succeed())
+			ExpectWithOffset(1, enc.Close()).To(Succeed())
 			(&headersFrame{len: uint64(headerBuf.Len())}).writeFrame(buf)
 			buf.Write(headerBuf.Bytes())
 			return buf.Bytes()
@@ -450,12 +450,12 @@ var _ = Describe("Client", func() {
 			fields := make(map[string]string)
 			decoder := qpack.NewDecoder(nil)
 
-			frame, err := parseNextFrame(str)
+			fr := &FrameReader{R: str}
+			err := fr.Next()
 			ExpectWithOffset(1, err).ToNot(HaveOccurred())
-			ExpectWithOffset(1, frame).To(BeAssignableToTypeOf(&headersFrame{}))
-			headersFrame := frame.(*headersFrame)
-			data := make([]byte, headersFrame.len)
-			_, err = io.ReadFull(str, data)
+			ExpectWithOffset(1, fr.Type).To(Equal(FrameTypeHeaders))
+			data := make([]byte, fr.N)
+			_, err = io.ReadFull(fr, data)
 			ExpectWithOffset(1, err).ToNot(HaveOccurred())
 			hfs, err := decoder.DecodeFull(data)
 			ExpectWithOffset(1, err).ToNot(HaveOccurred())
@@ -490,9 +490,9 @@ var _ = Describe("Client", func() {
 				streamType, err := quicvarint.Read(r)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(streamType).To(BeEquivalentTo(StreamTypeControl))
-				frame, err := parseNextFrame(reader)
+				settings, err := readSettings(&FrameReader{R: reader})
 				Expect(err).ToNot(HaveOccurred())
-				Expect(frame).To(BeAssignableToTypeOf(Settings{}))
+				Expect(settings).ToNot(BeNil())
 				close(settingsFrameWritten)
 			}() // SETTINGS frame
 			str = mockquic.NewMockStream(mockCtrl)
@@ -507,7 +507,9 @@ var _ = Describe("Client", func() {
 				return nil, errors.New("test done")
 			}).MinTimes(1)
 			sess.EXPECT().AcceptStream(gomock.Any()).Return(nil, errors.New("done")).MaxTimes(1)
-			dialAddr = func(hostname string, _ *tls.Config, _ *quic.Config) (quic.EarlySession, error) { return sess, nil }
+			dialAddr = func(hostname string, _ *tls.Config, _ *quic.Config) (quic.EarlySession, error) {
+				return sess, nil
+			}
 			var err error
 			request, err = http.NewRequest("GET", "https://quic.clemente.io:1337/file1.dat", nil)
 			Expect(err).ToNot(HaveOccurred())
