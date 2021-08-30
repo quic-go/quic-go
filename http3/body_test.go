@@ -8,6 +8,7 @@ import (
 	"github.com/golang/mock/gomock"
 	"github.com/lucas-clemente/quic-go"
 	mockquic "github.com/lucas-clemente/quic-go/internal/mocks/quic"
+	"github.com/lucas-clemente/quic-go/quicvarint"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -42,10 +43,11 @@ var _ = Describe("Body", func() {
 	errorCb := func() { errorCbCalled = true }
 
 	getDataFrame := func(data []byte) []byte {
-		b := &bytes.Buffer{}
-		(&dataFrame{len: uint64(len(data))}).writeFrame(b)
-		b.Write(data)
-		return b.Bytes()
+		buf := &bytes.Buffer{}
+		quicvarint.Write(buf, uint64(FrameTypeData))
+		quicvarint.Write(buf, uint64(len(data)))
+		buf.Write(data)
+		return buf.Bytes()
 	}
 
 	BeforeEach(func() {
@@ -138,7 +140,8 @@ var _ = Describe("Body", func() {
 			// TODO(ydnar): handle trailers
 			XIt("skips HEADERS frames", func() {
 				buf.Write(getDataFrame([]byte("foo")))
-				(&headersFrame{len: 10}).writeFrame(buf)
+				quicvarint.Write(buf, uint64(FrameTypeHeaders))
+				quicvarint.Write(buf, 10)
 				buf.Write(make([]byte, 10))
 				buf.Write(getDataFrame([]byte("bar")))
 				b := make([]byte, 6)

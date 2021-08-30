@@ -326,7 +326,8 @@ var _ = Describe("Client", func() {
 		It("errors when the first frame on the control stream is not a SETTINGS frame", func() {
 			buf := &bytes.Buffer{}
 			quicvarint.Write(buf, uint64(StreamTypeControl))
-			(&dataFrame{}).writeFrame(buf)
+			quicvarint.Write(buf, uint64(FrameTypeData))
+			quicvarint.Write(buf, uint64(0))
 			controlStr := mockquic.NewMockStream(mockCtrl)
 			controlStr.EXPECT().Read(gomock.Any()).DoAndReturn(buf.Read).AnyTimes()
 			sess.EXPECT().AcceptUniStream(gomock.Any()).DoAndReturn(func(context.Context) (quic.ReceiveStream, error) {
@@ -441,7 +442,8 @@ var _ = Describe("Client", func() {
 				ExpectWithOffset(1, enc.WriteField(qpack.HeaderField{Name: name, Value: value})).To(Succeed())
 			}
 			ExpectWithOffset(1, enc.Close()).To(Succeed())
-			(&headersFrame{len: uint64(headerBuf.Len())}).writeFrame(buf)
+			quicvarint.Write(buf, uint64(FrameTypeHeaders))
+			quicvarint.Write(buf, uint64(headerBuf.Len()))
 			buf.Write(headerBuf.Bytes())
 			return buf.Bytes()
 		}
@@ -627,7 +629,8 @@ var _ = Describe("Client", func() {
 					":status":        "200",
 					"Content-Length": "1337",
 				}))
-				(&dataFrame{len: 0x6}).writeFrame(buf)
+				quicvarint.Write(buf, uint64(FrameTypeData))
+				quicvarint.Write(buf, 6)
 				buf.Write([]byte("foobar"))
 				str.EXPECT().StreamID().AnyTimes()
 				str.EXPECT().Close().Do(func() { close(done) })
@@ -643,7 +646,8 @@ var _ = Describe("Client", func() {
 
 			It("closes the connection when the first frame is not a HEADERS frame", func() {
 				buf := &bytes.Buffer{}
-				(&dataFrame{len: 0x42}).writeFrame(buf)
+				quicvarint.Write(buf, uint64(FrameTypeData))
+				quicvarint.Write(buf, 0x42)
 				sess.EXPECT().CloseWithError(quic.ApplicationErrorCode(errorFrameUnexpected), gomock.Any())
 				closed := make(chan struct{})
 				str.EXPECT().StreamID().AnyTimes()

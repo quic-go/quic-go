@@ -292,7 +292,8 @@ var _ = Describe("Server", func() {
 			It("errors when the first frame on the control stream is not a SETTINGS frame", func() {
 				buf := &bytes.Buffer{}
 				quicvarint.Write(buf, uint64(StreamTypeControl))
-				(&dataFrame{}).writeFrame(buf)
+				quicvarint.Write(buf, uint64(FrameTypeData))
+				quicvarint.Write(buf, 0)
 				controlStr := mockquic.NewMockStream(mockCtrl)
 				controlStr.EXPECT().Read(gomock.Any()).DoAndReturn(buf.Read).AnyTimes()
 				sess.EXPECT().AcceptUniStream(gomock.Any()).DoAndReturn(func(context.Context) (quic.ReceiveStream, error) {
@@ -340,7 +341,8 @@ var _ = Describe("Server", func() {
 			It("errors when the client opens a push stream", func() {
 				buf := &bytes.Buffer{}
 				quicvarint.Write(buf, uint64(StreamTypePush))
-				(&dataFrame{}).writeFrame(buf)
+				quicvarint.Write(buf, uint64(FrameTypeData))
+				quicvarint.Write(buf, 0)
 				controlStr := mockquic.NewMockStream(mockCtrl)
 				controlStr.EXPECT().Read(gomock.Any()).DoAndReturn(buf.Read).AnyTimes()
 				sess.EXPECT().AcceptUniStream(gomock.Any()).DoAndReturn(func(context.Context) (quic.ReceiveStream, error) {
@@ -420,7 +422,8 @@ var _ = Describe("Server", func() {
 
 				requestData := encodeRequest(exampleGetRequest)
 				buf := &bytes.Buffer{}
-				(&dataFrame{len: 6}).writeFrame(buf) // add a body
+				quicvarint.Write(buf, uint64(FrameTypeData))
+				quicvarint.Write(buf, 6)
 				buf.Write([]byte("foobar"))
 				setRequest(append(requestData, buf.Bytes()...))
 				responseBuf := &bytes.Buffer{}
@@ -447,7 +450,8 @@ var _ = Describe("Server", func() {
 
 				requestData := encodeRequest(exampleGetRequest)
 				buf := &bytes.Buffer{}
-				(&dataFrame{len: 6}).writeFrame(buf) // add a body
+				quicvarint.Write(buf, uint64(FrameTypeData))
+				quicvarint.Write(buf, 0)
 				buf.Write([]byte("foobar"))
 				setRequest(append(requestData, buf.Bytes()...))
 				done := make(chan struct{})
@@ -480,7 +484,8 @@ var _ = Describe("Server", func() {
 				})
 
 				buf := &bytes.Buffer{}
-				(&dataFrame{}).writeFrame(buf)
+				quicvarint.Write(buf, uint64(FrameTypeData))
+				quicvarint.Write(buf, 0)
 				setRequest(buf.Bytes())
 				str.EXPECT().Write(gomock.Any()).DoAndReturn(func(p []byte) (int, error) {
 					return len(p), nil

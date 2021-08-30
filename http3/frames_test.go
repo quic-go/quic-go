@@ -23,7 +23,8 @@ var _ = Describe("Frames", func() {
 		data = appendVarInt(data, 0x42)
 		data = append(data, make([]byte, 0x42)...)
 		buf := bytes.NewBuffer(data)
-		(&dataFrame{len: 0x1234}).writeFrame(buf)
+		quicvarint.Write(buf, uint64(FrameTypeData))
+		quicvarint.Write(buf, 0x1234)
 		frame, err := parseNextFrame(buf)
 		Expect(err).ToNot(HaveOccurred())
 		Expect(frame).To(BeAssignableToTypeOf(&dataFrame{}))
@@ -42,7 +43,8 @@ var _ = Describe("Frames", func() {
 
 		It("writes", func() {
 			buf := &bytes.Buffer{}
-			(&dataFrame{len: 0xdeadbeef}).writeFrame(buf)
+			quicvarint.Write(buf, uint64(FrameTypeData))
+			quicvarint.Write(buf, 0xdeadbeef)
 			frame, err := parseNextFrame(buf)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(err).ToNot(HaveOccurred())
