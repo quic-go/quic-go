@@ -34,12 +34,11 @@ var _ = Describe("Request Writer", func() {
 	)
 
 	decode := func(str io.Reader) map[string]string {
-		frame, err := parseNextFrame(str)
-		ExpectWithOffset(1, err).ToNot(HaveOccurred())
-		ExpectWithOffset(1, frame).To(BeAssignableToTypeOf(&headersFrame{}))
-		headersFrame := frame.(*headersFrame)
-		data := make([]byte, headersFrame.len)
-		_, err = io.ReadFull(str, data)
+		fr := &FrameReader{R: str}
+		err := fr.Next()
+		ExpectWithOffset(1, fr.Type).To(Equal(FrameTypeHeaders))
+		data := make([]byte, fr.N)
+		_, err = io.ReadFull(fr, data)
 		ExpectWithOffset(1, err).ToNot(HaveOccurred())
 		decoder := qpack.NewDecoder(nil)
 		hfs, err := decoder.DecodeFull(data)
@@ -89,10 +88,11 @@ var _ = Describe("Request Writer", func() {
 		Expect(err).ToNot(HaveOccurred())
 		Expect(contentLength).To(BeNumerically(">", 0))
 
-		frame, err := parseNextFrame(strBuf)
+		fr := &FrameReader(R: strBuf)
+		err := fr.Next()
 		Expect(err).ToNot(HaveOccurred())
-		Expect(frame).To(BeAssignableToTypeOf(&dataFrame{}))
-		Expect(frame.(*dataFrame).len).To(BeEquivalentTo(6))
+		Expect(fr.Type).To(Equal(FrameTypeData))
+		Expect(fr.N).To(BeEquivalentTo(6))
 	})
 
 	It("writes a POST request, if the Body returns an EOF immediately", func() {
@@ -106,10 +106,11 @@ var _ = Describe("Request Writer", func() {
 		headerFields := decode(strBuf)
 		Expect(headerFields).To(HaveKeyWithValue(":method", "POST"))
 
-		frame, err := parseNextFrame(strBuf)
+		fr := &FrameReader(R: strBuf)
+		err := fr.Next()
 		Expect(err).ToNot(HaveOccurred())
-		Expect(frame).To(BeAssignableToTypeOf(&dataFrame{}))
-		Expect(frame.(*dataFrame).len).To(BeEquivalentTo(6))
+		Expect(fr.Type).To(Equal(FrameTypeData))
+		Expect(fr.N).To(BeEquivalentTo(6))
 	})
 
 	It("sends cookies", func() {
