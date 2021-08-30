@@ -262,7 +262,7 @@ func (c *client) doRequest(
 	connState := qtls.ToTLSConnectionState(c.sess.ConnectionState().TLS)
 	res.TLS = &connState
 
-	var respBody io.ReadCloser = str
+	respBody := str.DataReader()
 
 	// Rules for when to set Content-Length are defined in https://tools.ietf.org/html/rfc7230#section-3.3.2.
 	_, hasTransferEncoding := res.Header["Transfer-Encoding"]
@@ -308,14 +308,14 @@ func (c *client) writeRequest(str RequestStream, req *http.Request, requestGzip 
 
 	if req.Body == nil && len(req.Trailer) == 0 {
 		if req.Method != http.MethodConnect {
-			str.Close()
+			str.Stream().Close()
 		}
 		return nil
 	}
 
 	// Send the request body and trailers asynchronously
 	go func() {
-		_, err := io.Copy(str, req.Body)
+		_, err := io.Copy(str.DataWriter(), req.Body)
 		req.Body.Close()
 		if err != nil {
 			c.logger.Errorf("Error writing request: %s", err)
@@ -333,7 +333,7 @@ func (c *client) writeRequest(str RequestStream, req *http.Request, requestGzip 
 		}
 
 		if req.Method != http.MethodConnect {
-			str.Close()
+			str.Stream().Close()
 		}
 	}()
 

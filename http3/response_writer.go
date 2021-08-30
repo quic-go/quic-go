@@ -85,7 +85,7 @@ func (w *responseWriter) Write(p []byte) (int, error) {
 	if !bodyAllowedForStatus(w.status) {
 		return 0, http.ErrBodyNotAllowed
 	}
-	return w.stream.Write(p)
+	return w.stream.DataWriter().Write(p)
 }
 
 func (w *responseWriter) Flush() {

@@ -12,11 +12,11 @@ import (
 	"github.com/marten-seemann/qpack"
 )
 
-// A RequestStream wraps a QUIC stream for processing HTTP/3 requests.
-// It processes HEADERS and DATA frames, making these available to
-// the caller via ReadHeaders and Read. It may also process other frame
-// types or skip any unknown frame types.
-// A caller may read or write other frame types to the underlying quic.Stream.
+// A RequestStream wraps a QUIC stream for processing HTTP/3 requests. It
+// processes HEADERS and DATA frames, making these available to the caller via
+// ReadHeaders and Read. It may also process other frame types or skip any
+// unknown frame types. A caller may read or write other frame types to the
+// underlying quic.Stream.
 type RequestStream interface {
 	Stream() quic.Stream
 
@@ -24,37 +24,34 @@ type RequestStream interface {
 
 	// ReadHeaders reads the next HEADERS frame, used for HTTP request and
 	// response headers and trailers. An interim response (status 100-199)
-	// must be followed by one or more additional HEADERS frames.
-	// If ReadHeaders encounters a DATA frame or an otherwise unhandled frame,
+	// must be followed by one or more additional HEADERS frames. If
+	// ReadHeaders encounters a DATA frame or an otherwise unhandled frame,
 	// it will return a FrameTypeError.
 	ReadHeaders() ([]qpack.HeaderField, error)
 
 	// WriteHeaders writes a single HEADERS frame, used for HTTP request and
 	// response headers and trailers. It returns any errors that may occur,
 	// including QPACK encoding or writes to the underlying quic.Stream.
-	// WriteHeaders shoud not be called simultaneously with Write, ReadFrom, or
-	// writes to the underlying quic.Stream.
+	// WriteHeaders shoud not be called simultaneously with Write, ReadFrom,
+	// or writes to the underlying quic.Stream.
 	WriteHeaders([]qpack.HeaderField) error
 
-	// Read reads DATA frames from the underlying quic.Stream.
-	// If Read encounters a HEADERS frame or an otherwise unhandled frame,
-	// it will return a FrameTypeError.
-	Read([]byte) (int, error)
+	// DataReader returns an io.ReadCloser that reads DATA frames from the
+	// underlying quic.Stream, used for reading an HTTP request or response
+	// body. If Read encounters a HEADERS frame it will return a
+	// FrameTypeError. If the write side of the stream closes, it will
+	// return io.EOF. Closing DataReader will prevent further writes, but
+	// will not close the stream.
+	DataReader() io.ReadCloser
 
-	// Write writes 0 or more DATA frames.
-	// Used for writing an HTTP request or response body.
-	// Should not be called concurrently with WriteFields or ReadFrom.
-	Write([]byte) (int, error)
-
-	// ReadFrom implements io.ReaderFrom. It reads data from an io.Reader
-	// and writes DATA frames to the underlying quic.Stream.
-	ReadFrom(io.Reader) (int64, error)
-
-	// Close closes the RequestStream.
-	Close() error
+	// DataWriter returns an io.WriteCloser that writes DATA frames to the
+	// underlying quic.Stream, used for writing an HTTP request or response
+	// body. Write should not be called simultaneously with WriteHeaders.
+	// Closing DataWriter will prevent further writes, but will not close
+	// the stream.
+	DataWriter() io.WriteCloser
 
 	// WebTransport returns a WebTransport interface, if supported.
-	// TODO: should this method live here?
 	WebTransport() (WebTransport, error)
 }
 
@@ -62,21 +59,20 @@ type requestStream struct {
 	conn *connection
 	str  quic.Stream
 
-	fr *FrameReader
-	w  quicvarint.Writer
+	fr           *FrameReader
+	readerClosed bool
+
+	w            quicvarint.Writer
+	writerClosed bool
 }
 
 var (
 	_ RequestStream = &requestStream{}
-	_ io.Reader     = &requestStream{}
-	_ io.Writer     = &requestStream{}
-	_ io.ReaderFrom = &requestStream{}
-	_ io.Closer     = &requestStream{}
 )
 
-// newRequestStream creates a new RequestStream.
-// If a frame has already been partially consumed from str, t specifies
-// the frame type and n the number of bytes remaining in the frame payload.
+// newRequestStream creates a new RequestStream. If a frame has already been
+// partially consumed from str, t specifies the frame type and n the number of
+// bytes remaining in the frame payload.
 func newRequestStream(conn *connection, str quic.Stream, t FrameType, n int64) RequestStream {
 	s := &requestStream{
 		conn: conn,
@@ -150,70 +146,12 @@ func (s *requestStream) WriteHeaders(fields []qpack.HeaderField) error {
 	return err
 }
 
-func (s *requestStream) Read(p []byte) (n int, err error) {
-	for len(p) > 0 {
-		for s.fr.N <= 0 {
-			err = s.nextDataFrame()
-			if err != nil {
-				return n, err
-			}
-		}
-		pp := p
-		if s.fr.N < int64(len(p)) {
-			pp = p[:s.fr.N]
-		}
-		x, err := s.fr.Read(pp)
-		n += x
-		p = p[x:]
-		if err != nil {
-			return n, err
-		}
-	}
-	return n, nil
+func (s *requestStream) DataReader() io.ReadCloser {
+	return (*dataReader)(s)
 }
 
-const bodyCopyBufferSize = 8 * 1024
-
-// Write writes bytes to DATA frames to the underlying quic.Stream.
-func (s *requestStream) Write(p []byte) (n int, err error) {
-	for len(p) > 0 {
-		pp := p
-		if len(p) > bodyCopyBufferSize {
-			pp = p[:bodyCopyBufferSize]
-		}
-		x, err := s.writeDataFrame(pp)
-		p = p[x:]
-		n += x
-		if err != nil {
-			return n, err
-		}
-	}
-	return n, err
-}
-
-// ReadFrom implements io.ReaderFrom. It reads from r until an error
-// or io.EOF and writes DATA frames to the underlying quic.Stream.
-func (s *requestStream) ReadFrom(r io.Reader) (n int64, err error) {
-	buf := make([]byte, bodyCopyBufferSize)
-	for {
-		l, rerr := r.Read(buf)
-		if l == 0 {
-			if rerr == nil {
-				continue
-			} else if rerr == io.EOF {
-				return n, nil
-			}
-			return n, rerr
-		}
-		x, err := s.writeDataFrame(buf[:l])
-		n += int64(x)
-		if err != nil {
-			return n, err
-		}
-		if rerr == io.EOF {
-			return n, nil
-		}
-	}
+func (s *requestStream) DataWriter() io.WriteCloser {
+	return (*dataWriter)(s)
 }
 
 func (s *requestStream) AcceptDatagramContext(ctx context.Context) (DatagramContext, error) {
@@ -234,7 +172,6 @@ func (s *requestStream) WebTransport() (WebTransport, error) {
 
 func (s *requestStream) Close() error {
 	s.conn.cleanup(s.str.StreamID())
-	// s.stream.CancelRead(quic.StreamErrorCode(errorNoError))
 	return s.str.Close()
 }
 
@@ -282,9 +219,128 @@ func (s *requestStream) readFrames() error {
 	}
 }
 
+func (s *requestStream) readData(p []byte) (n int, err error) {
+	if s.readerClosed {
+		return 0, errors.New("reader closed")
+	}
+	for len(p) > 0 {
+		for s.fr.N <= 0 {
+			err = s.nextDataFrame()
+			if err != nil {
+				return n, err
+			}
+		}
+		pp := p
+		if s.fr.N < int64(len(p)) {
+			pp = p[:s.fr.N]
+		}
+		x, err := s.fr.Read(pp)
+		n += x
+		p = p[x:]
+		if err != nil {
+			return n, err
+		}
+	}
+	return n, nil
+}
+
+const bodyCopyBufferSize = 8 * 1024
+
+// writeData writes bytes to DATA frames to the underlying quic.Stream.
+func (s *requestStream) writeData(p []byte) (n int, err error) {
+	if s.writerClosed {
+		return 0, errors.New("writer closed")
+	}
+	for len(p) > 0 {
+		pp := p
+		if len(p) > bodyCopyBufferSize {
+			pp = p[:bodyCopyBufferSize]
+		}
+		x, err := s.writeDataFrame(pp)
+		p = p[x:]
+		n += x
+		if err != nil {
+			return n, err
+		}
+	}
+	return n, err
+}
+
+// writeDataFrom reads from r until an error or io.EOF and writes DATA frames to
+// the underlying quic.Stream. This is the underlying implementation of
+// BodyReader().(io.ReaderFrom).
+func (s *requestStream) writeDataFrom(r io.Reader) (n int64, err error) {
+	if s.writerClosed {
+		return 0, errors.New("writer closed")
+	}
+	buf := make([]byte, bodyCopyBufferSize)
+	for {
+		l, rerr := r.Read(buf)
+		if l == 0 {
+			if rerr == nil {
+				continue
+			} else if rerr == io.EOF {
+				return n, nil
+			}
+			return n, rerr
+		}
+		x, err := s.writeDataFrame(buf[:l])
+		n += int64(x)
+		if err != nil {
+			return n, err
+		}
+		if rerr == io.EOF {
+			return n, nil
+		}
+	}
+}
+
 func (s *requestStream) writeDataFrame(p []byte) (n int, err error) {
 	quicvarint.Write(s.w, uint64(FrameTypeData))
 	quicvarint.Write(s.w, uint64(len(p)))
 	n, err = s.w.Write(p)
 	return
+}
+
+func (s *requestStream) closeReader() error {
+	s.readerClosed = true
+	return nil
+}
+
+func (s *requestStream) closeWriter() error {
+	s.writerClosed = true
+	return nil
+}
+
+// dataReader is an alias for requestStream, so (*requestStream).BodyReader can
+// return a limited interface version of itself.
+type dataReader requestStream
+
+var _ io.ReadCloser = &dataReader{}
+
+func (r *dataReader) Read(p []byte) (n int, err error) {
+	return (*requestStream)(r).readData(p)
+}
+
+func (r *dataReader) Close() error {
+	return (*requestStream)(r).closeReader()
+}
+
+// dataWriter is an alias for requestStream, so (*requestStream).BodyWriter can
+// return a limited interface version of itself.
+type dataWriter requestStream
+
+var _ io.WriteCloser = &dataWriter{}
+var _ io.ReaderFrom = &dataWriter{}
+
+func (w *dataWriter) Write(p []byte) (n int, err error) {
+	return (*requestStream)(w).writeData(p)
+}
+
+func (w *dataWriter) ReadFrom(r io.Reader) (n int64, err error) {
+	return (*requestStream)(w).writeDataFrom(r)
+}
+
+func (w *dataWriter) Close() error {
+	return (*requestStream)(w).closeWriter()
 }

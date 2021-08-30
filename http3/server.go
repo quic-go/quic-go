@@ -272,7 +272,8 @@ func (s *Server) handleConn(sess quic.EarlySession) {
 				}
 				return
 			}
-			str.Close()
+			// TODO: should this close CONNECT requests?
+			str.Stream().Close()
 		}()
 	}
 }
@@ -319,7 +320,7 @@ func (s *Server) handleRequestStream(sess quic.EarlySession, str RequestStream) 
 
 	req.RemoteAddr = sess.RemoteAddr().String()
 	// TODO(ydnar): wrap str to set req.Trailer after last read on body fails hitting EOF or a trailing HEADERS frame
-	req.Body = str
+	req.Body = str.DataReader()
 	// TODO: set trailers
 
 	if s.logger.Debug() {
