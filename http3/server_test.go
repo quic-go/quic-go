@@ -100,7 +100,7 @@ var _ = Describe("Server", func() {
 			str.EXPECT().Close().Do(func() { close(closed) })
 			str.EXPECT().StreamID().AnyTimes()
 			str.EXPECT().Context().Return(ctx).AnyTimes()
-			mstr := newMessageStream(conn, str, nil)
+			mstr := newMessageStream(conn, str, 0, 0)
 			c := &client{sess: sess}
 			Expect(c.writeRequest(mstr, req, false)).To(Succeed())
 			Eventually(closed).Should(BeClosed())
@@ -135,7 +135,7 @@ var _ = Describe("Server", func() {
 
 			str = mockquic.NewMockStream(mockCtrl)
 			str.EXPECT().StreamID().AnyTimes()
-			mstr = newMessageStream(conn, str, nil)
+			mstr = newMessageStream(conn, str, 0, 0)
 		})
 
 		It("calls the HTTP handler function", func() {

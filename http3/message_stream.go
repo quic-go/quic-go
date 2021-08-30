@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"strconv"
 	"sync"
 
@@ -50,21 +49,20 @@ type MessageStream interface {
 }
 
 type messageStream struct {
-	conn   *connection
-	stream quic.Stream
+	conn *connection
+	str  quic.Stream
 
-	r quicvarint.Reader
-	w quicvarint.Writer
+	fr *FrameReader
+	w  quicvarint.Writer
 
-	once  sync.Once
-	first *FrameType
+	once sync.Once
 
 	messages chan *incomingMessage
 	readErr  error
 
 	// Used to synchronize reading DATA frames, used for HTTP message bodies
-	bytesToRead chan uint64
-	bytesUnread chan uint64
+	dataReady chan struct{}
+	dataRead  chan struct{}
 
 	bodyReaderClosed chan struct{}
 	readDone         chan struct{}
@@ -77,18 +75,18 @@ var (
 	_ io.Closer     = &messageStream{}
 )
 
-// newMessageStream creates a new MessageStream. If first is non-nil, the
-// parser will assume the first varint has already been read from the stream.
-func newMessageStream(conn *connection, stream quic.Stream, first *FrameType) MessageStream {
+// newMessageStream creates a new MessageStream.
+// If a frame has already been partially consumed from str, t specifies
+// the frame type and n the number of bytes remaining in the frame payload.
+func newMessageStream(conn *connection, str quic.Stream, t FrameType, n int64) MessageStream {
 	s := &messageStream{
 		conn:             conn,
-		stream:           stream,
-		r:                quicvarint.NewReader(stream),
-		w:                quicvarint.NewWriter(stream),
-		first:            first,
+		str:              str,
+		fr:               &FrameReader{R: str, Type: t, N: n},
+		w:                quicvarint.NewWriter(str),
 		messages:         make(chan *incomingMessage),
-		bytesToRead:      make(chan uint64),
-		bytesUnread:      make(chan uint64),
+		dataReady:        make(chan struct{}),
+		dataRead:         make(chan struct{}),
 		bodyReaderClosed: make(chan struct{}),
 		readDone:         make(chan struct{}),
 	}
@@ -96,7 +94,7 @@ func newMessageStream(conn *connection, stream quic.Stream, first *FrameType) Me
 }
 
 func (s *messageStream) Stream() quic.Stream {
-	return s.stream
+	return s.str
 }
 
 // ReadMessage reads a single HTTP message from s or a read error, if any.
@@ -109,8 +107,8 @@ func (s *messageStream) ReadMessage() (Message, error) {
 		return msg, nil
 	case <-s.readDone:
 		return nil, s.readErr
-	case <-s.stream.Context().Done():
-		return nil, s.stream.Context().Err()
+	case <-s.str.Context().Done():
+		return nil, s.str.Context().Err()
 	}
 }
 
@@ -199,13 +197,13 @@ func (s *messageStream) DatagramNoContext() (DatagramContext, error) {
 }
 
 func (s *messageStream) WebTransport() (WebTransport, error) {
-	return newWebTransportSession(s.conn, s.stream), nil
+	return newWebTransportSession(s.conn, s.str), nil
 }
 
 func (s *messageStream) Close() error {
-	s.conn.cleanup(s.stream.StreamID())
+	s.conn.cleanup(s.str.StreamID())
 	// s.stream.CancelRead(quic.StreamErrorCode(errorNoError))
-	return s.stream.Close()
+	return s.str.Close()
 }
 
 func (s *messageStream) handleIncomingFrames() {
@@ -220,44 +218,36 @@ func (s *messageStream) handleIncomingFrames() {
 }
 
 func (s *messageStream) parseIncomingFrames() error {
-	var t FrameType
-	if s.first != nil {
-		t = *s.first
-	} else {
-		i, err := quicvarint.Read(s.r)
-		if err != nil {
-			return &streamError{Code: errorRequestIncomplete, Err: err}
-		}
-		t = FrameType(i)
-	}
-
-	// HTTP messages must begin with a HEADERS frame.
-	if t != FrameTypeHeaders {
-		return &connError{Code: errorFrameUnexpected, Err: &frameTypeError{Want: FrameTypeHeaders, Type: t}}
-	}
-
 	var msg *incomingMessage
 
-	for {
-		// Read frame length
-		l, err := quicvarint.Read(s.r)
+	for frameCount := 0; ; frameCount++ {
+		err := s.fr.Next()
 		if err != nil {
+			// TODO(ydnar): is MessageStream responsible for H3 semantics,
+			// and close the stream and/or connection?
+			if err == io.EOF {
+				return err
+			}
 			return &streamError{Code: errorRequestIncomplete, Err: err}
 		}
 
-		switch t {
+		// HTTP messages must begin with a HEADERS frame.
+		if frameCount == 0 && s.fr.Type != FrameTypeHeaders {
+			return &connError{Code: errorFrameUnexpected, Err: &frameTypeError{Want: FrameTypeHeaders, Type: s.fr.Type}}
+		}
+
+		switch s.fr.Type {
 		case FrameTypeHeaders:
 			max := s.conn.maxHeaderBytes()
-			if l > max {
-				return &streamError{Code: errorFrameError, Err: &frameLengthError{FrameType: t, Length: l, Max: max}}
+			if s.fr.N > int64(max) {
+				return &streamError{Code: errorFrameError, Err: &frameLengthError{FrameType: s.fr.Type, Length: uint64(s.fr.N), Max: max}}
 			}
 
-			p := make([]byte, l)
-			_, err := io.ReadFull(s.stream, p)
+			p := make([]byte, s.fr.N)
+			_, err := io.ReadFull(s.fr, p)
 			if err != nil {
 				return &streamError{Code: errorRequestIncomplete, Err: err}
 			}
-			l = 0 // TODO: should this subtract the returned n from io.ReadFull?
 
 			dec := qpack.NewDecoder(nil)
 			fields, err := dec.DecodeFull(p)
@@ -279,69 +269,49 @@ func (s *messageStream) parseIncomingFrames() error {
 				close(msg.trailersRead)
 			} else {
 				// Unexpected HEADERS frame
-				return &streamError{Code: errorFrameUnexpected, Err: &frameTypeError{Type: t}}
+				return &streamError{Code: errorFrameUnexpected, Err: &frameTypeError{Type: s.fr.Type}}
 			}
 
 		case FrameTypeData:
 			if msg == nil || msg.interim {
 				// Unexpected DATA frame (interim responses do not have response bodies)
-				return &streamError{Code: errorFrameUnexpected, Err: &frameTypeError{Want: FrameTypeHeaders, Type: t}}
+				return &streamError{Code: errorFrameUnexpected, Err: &frameTypeError{Want: FrameTypeHeaders, Type: s.fr.Type}}
 			} else if msg.trailers != nil {
 				// Unexpected DATA frame following trailers
-				return &streamError{Code: errorFrameUnexpected, Err: &frameTypeError{Type: t}}
+				return &streamError{Code: errorFrameUnexpected, Err: &frameTypeError{Type: s.fr.Type}}
 			}
 
 			// Wait for the frame to be consumed
 		readLoop:
-			for l > 0 {
+			for s.fr.N > 0 {
 				select {
-				case s.bytesToRead <- l:
-					l = <-s.bytesUnread
+				case s.dataReady <- struct{}{}:
+					<-s.dataRead
 				case <-s.bodyReaderClosed:
 					// Caller ignoring further DATA frames; discard any remaining payload
 					break readLoop
 				}
 			}
 		}
-
-		// Skip unread payload bytes
-		if l != 0 {
-			_, err := io.CopyN(ioutil.Discard, s.stream, int64(l))
-			if err != nil {
-				return &streamError{Code: errorRequestIncomplete, Err: err}
-			}
-		}
-
-		// Read frame type
-		i, err := quicvarint.Read(s.r)
-		if err != nil {
-			if err == io.EOF {
-				return err // TODO: is this right?
-			}
-			return &streamError{Code: errorRequestIncomplete, Err: err}
-		}
-		t = FrameType(i)
 	}
 }
 
 func (s *messageStream) readBody(p []byte) (n int, err error) {
-	var l uint64
 	select {
 	// Get DATA frame from parseIncomingFrames loop
-	case l = <-s.bytesToRead:
+	case <-s.dataReady:
 	case <-s.bodyReaderClosed:
 		return 0, errAlreadyClosed
 	case <-s.readDone:
 		return 0, s.readErr
 	}
-	if l < uint64(len(p)) {
-		n, err = s.stream.Read(p[:l])
+	if s.fr.N < int64(len(p)) {
+		n, err = s.fr.Read(p[:s.fr.N])
 	} else {
-		n, err = s.stream.Read(p)
+		n, err = s.fr.Read(p)
 	}
-	l -= uint64(n)
 	// Hand control back to parseIncomingFrames loop
-	s.bytesUnread <- l
+	s.dataRead <- struct{}{}
 	return n, err
 }
 

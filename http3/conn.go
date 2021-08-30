@@ -71,7 +71,7 @@ type connection struct {
 
 	incomingStreamsOnce    sync.Once
 	incomingStreamsErr     error
-	incomingMessageStreams chan quic.Stream
+	incomingMessageStreams chan *FrameReader
 
 	incomingStreamsMutex sync.Mutex
 	incomingStreams      map[SessionID]chan quic.Stream // Lazily constructed
@@ -123,7 +123,7 @@ func newConn(s quic.EarlySession, settings Settings) (*connection, error) {
 		session:                s,
 		settings:               settings,
 		peerSettingsDone:       make(chan struct{}),
-		incomingMessageStreams: make(chan quic.Stream, maxBufferedStreams),
+		incomingMessageStreams: make(chan *FrameReader, maxBufferedStreams),
 	}
 
 	str, err := conn.session.OpenUniStream()
@@ -201,13 +201,12 @@ func (conn *connection) AcceptMessageStream(ctx context.Context) (MessageStream,
 		go conn.handleIncomingStreams()
 	})
 	select {
-	case str := <-conn.incomingMessageStreams:
-		if str == nil {
+	case fr := <-conn.incomingMessageStreams:
+		if fr == nil {
 			// incomingMessageStreams was closed
 			return nil, conn.incomingStreamsErr
 		}
-		t := FrameTypeHeaders
-		return newMessageStream(conn, str, &t), nil
+		return newMessageStream(conn, fr.R.(quic.Stream), fr.Type, fr.N), nil
 	case <-ctx.Done():
 		return nil, ctx.Err()
 	case <-conn.session.Context().Done():
@@ -226,7 +225,7 @@ func (conn *connection) OpenMessageStream(ctx context.Context) (MessageStream, e
 	conn.incomingStreamsOnce.Do(func() {
 		go conn.handleIncomingStreams()
 	})
-	return newMessageStream(conn, str, nil), nil
+	return newMessageStream(conn, str, 0, 0), nil
 }
 
 func (conn *connection) handleIncomingStreams() {
@@ -249,39 +248,36 @@ func (conn *connection) handleIncomingStreams() {
 }
 
 func (conn *connection) handleIncomingStream(str quic.Stream) {
-	r := quicvarint.NewReader(str)
+	fr := &FrameReader{R: str}
 
-	i, err := quicvarint.Read(r)
+	err := fr.Next()
 	if err != nil {
 		str.CancelWrite(quic.StreamErrorCode(errorRequestIncomplete))
 		return
 	}
 
-	t := FrameType(i)
-
-	switch FrameType(t) { //nolint:exhaustive
+	switch fr.Type { //nolint:exhaustive
 	case FrameTypeHeaders:
-		conn.incomingMessageStreams <- str
+		conn.incomingMessageStreams <- fr
 	case FrameTypeWebTransportStream:
-		if !conn.negotiatedWebTransport() {
+		if !conn.Settings().WebTransportEnabled() {
 			// TODO: log error
 			// TODO: should this close the connection or the stream?
 			// https://github.com/ietf-wg-webtrans/draft-ietf-webtrans-http3/pull/56
 			str.CancelWrite(quic.StreamErrorCode(errorSettingsError))
 			return
 		}
-		id, err := quicvarint.Read(r)
-		if err != nil {
-			str.CancelWrite(quic.StreamErrorCode(errorFrameError))
-			return
-		}
+		id := SessionID(fr.N)
 		select {
-		case conn.incomingStreamsChan(SessionID(id)) <- str:
+		case conn.incomingStreamsChan(id) <- str:
 		default:
+			// TODO: log that we dropped an incoming WebTransport stream
 			str.CancelWrite(quic.StreamErrorCode(errorWebTransportBufferedStreamRejected))
 			return
 		}
 	default:
+		// TODO: log connecion error
+		// TODO: store FrameTypeError so future calls can return it?
 		conn.session.CloseWithError(quic.ApplicationErrorCode(errorFrameUnexpected), "expected first frame to be a HEADERS frame")
 		return
 	}
