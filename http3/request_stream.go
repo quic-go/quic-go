@@ -213,15 +213,22 @@ func (s *requestStream) nextDataFrame() error {
 
 func (s *requestStream) readFrames() error {
 	for {
-		// Next discards any unread frame payload bytes
+		// Next discards any unread frame payload bytes.
 		err := s.fr.Next()
 		if err != nil {
 			return err
 		}
 		switch s.fr.Type {
-		case FrameTypeHeaders, FrameTypeData:
+		case FrameTypeData, FrameTypeHeaders:
+			// Stop processing on DATA or HEADERS frames.
 			return nil
-		case FrameTypePushPromise:
+
+		case FrameTypeSettings, FrameTypeGoAway, FrameTypeMaxPushID:
+			// Receipt of these frame types is a connection error: H3_FRAME_UNEXPECTED.
+			// TODO(ydnar): should RequestStream close the connection, rather than the caller?
+			return nil
+
+		case FrameTypeCancelPush, FrameTypePushPromise:
 			// TODO: handle HTTP/3 pushes
 		}
 	}
