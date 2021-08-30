@@ -662,7 +662,8 @@ var _ = Describe("Client", func() {
 				buf := &bytes.Buffer{}
 				max := defaultMaxResponseHeaderBytes
 				len := max + 1
-				(&headersFrame{len: uint64(len)}).writeFrame(buf)
+				quicvarint.Write(buf, uint64(FrameTypeHeaders))
+				quicvarint.Write(buf, uint64(len))
 				str.EXPECT().CancelWrite(quic.StreamErrorCode(errorFrameError))
 				closed := make(chan struct{})
 				str.EXPECT().StreamID().AnyTimes()
