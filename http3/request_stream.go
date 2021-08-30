@@ -229,7 +229,7 @@ func (s *requestStream) DatagramNoContext() (DatagramContext, error) {
 }
 
 func (s *requestStream) WebTransport() (WebTransport, error) {
-	return newWebTransportSession(s.conn, s.str), nil
+	return newWebTransportSession(s.conn, s.str)
 }
 
 func (s *requestStream) Close() error {

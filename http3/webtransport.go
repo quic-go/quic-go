@@ -2,6 +2,7 @@ package http3
 
 import (
 	"context"
+	"errors"
 	"io"
 
 	"github.com/lucas-clemente/quic-go"
@@ -46,11 +47,21 @@ type wtSession struct {
 
 var _ WebTransport = &wtSession{}
 
-func newWebTransportSession(conn *connection, str quic.Stream) WebTransport {
+func newWebTransportSession(conn *connection, str quic.Stream) (WebTransport, error) {
+	if !conn.Settings().WebTransportEnabled() {
+		return nil, errors.New("WebTransport not enabled")
+	}
+	peerSettings, err := conn.PeerSettingsSync(context.Background())
+	if err != nil {
+		return nil, err
+	}
+	if !peerSettings.WebTransportEnabled() {
+		return nil, errors.New("WebTransport not supported by peer")
+	}
 	return &wtSession{
 		conn: conn,
 		str:  str,
-	}
+	}, nil
 }
 
 func (s *wtSession) SessionID() SessionID {
