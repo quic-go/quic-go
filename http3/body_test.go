@@ -30,7 +30,10 @@ func (t bodyType) String() string {
 var _ = Describe("Body", func() {
 	var (
 		rb            *body
+		sess          *mockquic.MockEarlySession
+		conn          *connection
 		str           *mockquic.MockStream
+		rstr          RequestStream
 		buf           *bytes.Buffer
 		reqDone       chan struct{}
 		errorCbCalled bool
@@ -62,13 +65,18 @@ var _ = Describe("Body", func() {
 				str.EXPECT().Read(gomock.Any()).DoAndReturn(func(b []byte) (int, error) {
 					return buf.Read(b)
 				}).AnyTimes()
+				str.EXPECT().StreamID().AnyTimes()
+
+				sess = mockquic.NewMockEarlySession(mockCtrl)
+				conn = newMockConn(sess, Settings{}, Settings{})
+				rstr = newRequestStream(conn, str, 0, 0)
 
 				switch bodyType {
 				case bodyTypeRequest:
-					rb = newRequestBody(str, errorCb)
+					rb = newRequestBody(rstr, errorCb)
 				case bodyTypeResponse:
 					reqDone = make(chan struct{})
-					rb = newResponseBody(str, reqDone, errorCb)
+					rb = newResponseBody(rstr, reqDone, errorCb)
 				}
 			})
 
@@ -98,7 +106,7 @@ var _ = Describe("Body", func() {
 				buf.Write(getDataFrame([]byte("foobar")))
 				b := make([]byte, 10)
 				n, err := rb.Read(b)
-				Expect(err).ToNot(HaveOccurred())
+				Expect(err).To(MatchError(io.EOF))
 				Expect(n).To(Equal(6))
 				Expect(b[:n]).To(Equal([]byte("foobar")))
 			})
@@ -111,7 +119,8 @@ var _ = Describe("Body", func() {
 				Expect(n).To(Equal(4))
 				Expect(b).To(Equal([]byte("foob")))
 				n, err = rb.Read(b)
-				Expect(err).ToNot(HaveOccurred())
+				// Expect(err).ToNot(HaveOccurred())
+				Expect(err).To(MatchError(io.EOF))
 				Expect(n).To(Equal(2))
 				Expect(b[:n]).To(Equal([]byte("ar")))
 			})
@@ -122,15 +131,12 @@ var _ = Describe("Body", func() {
 				b := make([]byte, 6)
 				n, err := rb.Read(b)
 				Expect(err).ToNot(HaveOccurred())
-				Expect(n).To(Equal(3))
-				Expect(b[:n]).To(Equal([]byte("foo")))
-				n, err = rb.Read(b)
-				Expect(err).ToNot(HaveOccurred())
-				Expect(n).To(Equal(3))
-				Expect(b[:n]).To(Equal([]byte("bar")))
+				Expect(n).To(Equal(6))
+				Expect(b[:n]).To(Equal([]byte("foobar")))
 			})
 
-			It("skips HEADERS frames", func() {
+			// TODO(ydnar): handle trailers
+			XIt("skips HEADERS frames", func() {
 				buf.Write(getDataFrame([]byte("foo")))
 				(&headersFrame{len: 10}).writeFrame(buf)
 				buf.Write(make([]byte, 10))
@@ -151,7 +157,7 @@ var _ = Describe("Body", func() {
 			It("errors on unexpected frames, and calls the error callback", func() {
 				Settings{}.writeFrame(buf)
 				_, err := rb.Read([]byte{0})
-				Expect(err).To(MatchError("peer sent an unexpected frame: http3.Settings"))
+				Expect(err).To(MatchError(&FrameTypeError{Want: FrameTypeData, Type: FrameTypeSettings}))
 				Expect(errorCbCalled).To(BeTrue())
 			})
 
