@@ -6,8 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"strconv"
-	"sync"
 
 	"github.com/lucas-clemente/quic-go"
 	"github.com/lucas-clemente/quic-go/quicvarint"
@@ -17,13 +15,6 @@ import (
 // A MessageStream is a QUIC stream for processing HTTP/3 request and response messages.
 type MessageStream interface {
 	Stream() quic.Stream
-
-	// Reads a single HTTP message.
-	// For servers, ReadMessage reads an HTTP request.
-	// For clients, ReadMessage reads an HTTP response.
-	// An interim response (status codes 100-199) will have nil Trailers and Body.
-	// Interim responses must be followed by additional response messages.
-	ReadMessage() (Message, error)
 
 	// TODO: integrate QPACK encoding and decoding with dynamic tables.
 
@@ -75,8 +66,6 @@ type messageStream struct {
 	fr *FrameReader
 	w  quicvarint.Writer
 
-	once sync.Once
-
 	messages chan *incomingMessage
 	readErr  error
 
@@ -116,21 +105,6 @@ func newMessageStream(conn *connection, str quic.Stream, t FrameType, n int64) M
 
 func (s *messageStream) Stream() quic.Stream {
 	return s.str
-}
-
-// ReadMessage reads a single HTTP message from s or a read error, if any.
-func (s *messageStream) ReadMessage() (Message, error) {
-	s.once.Do(func() {
-		go s.handleIncomingFrames()
-	})
-	select {
-	case msg := <-s.messages:
-		return msg, nil
-	case <-s.readDone:
-		return nil, s.readErr
-	case <-s.str.Context().Done():
-		return nil, s.str.Context().Err()
-	}
 }
 
 // ReadHeaders reads the next HEADERS frame, used for HTTP request and
@@ -328,96 +302,6 @@ func (s *messageStream) readFrames() error {
 	}
 }
 
-func (s *messageStream) handleIncomingFrames() {
-	err := s.parseIncomingFrames()
-	// code := errorNoError
-	// if serr, ok := err.(*streamError); ok {
-	// 	code = serr.Code
-	// }
-	// s.CancelRead(quic.StreamErrorCode(code))
-	s.readErr = err
-	close(s.readDone)
-}
-
-func (s *messageStream) parseIncomingFrames() error {
-	var msg *incomingMessage
-
-	for frameCount := 0; ; frameCount++ {
-		err := s.fr.Next()
-		if err != nil {
-			// TODO(ydnar): is MessageStream responsible for H3 semantics,
-			// and close the stream and/or connection?
-			if err == io.EOF {
-				return err
-			}
-			return &streamError{Code: errorRequestIncomplete, Err: err}
-		}
-
-		// HTTP messages must begin with a HEADERS frame.
-		if frameCount == 0 && s.fr.Type != FrameTypeHeaders {
-			return &connError{Code: errorFrameUnexpected, Err: &FrameTypeError{Want: FrameTypeHeaders, Type: s.fr.Type}}
-		}
-
-		switch s.fr.Type {
-		case FrameTypeHeaders:
-			max := s.conn.maxHeaderBytes()
-			if s.fr.N > int64(max) {
-				return &streamError{Code: errorFrameError, Err: &FrameLengthError{Type: s.fr.Type, Len: uint64(s.fr.N), Max: max}}
-			}
-
-			p := make([]byte, s.fr.N)
-			_, err := io.ReadFull(s.fr, p)
-			if err != nil {
-				return &streamError{Code: errorRequestIncomplete, Err: err}
-			}
-
-			dec := qpack.NewDecoder(nil)
-			fields, err := dec.DecodeFull(p)
-			if err != nil {
-				return &connError{Code: errorGeneralProtocolError, Err: err}
-			}
-
-			if msg == nil || msg.interim {
-				// Start a new message
-				interim, err := isInterim(fields)
-				if err != nil {
-					return &streamError{Code: errorGeneralProtocolError, Err: err}
-				}
-				msg = newIncomingMessage(s, fields, interim)
-				s.messages <- msg
-			} else if msg.trailers == nil {
-				// Set trailers
-				msg.trailers = fields
-				close(msg.trailersRead)
-			} else {
-				// Unexpected HEADERS frame
-				return &streamError{Code: errorFrameUnexpected, Err: &FrameTypeError{Type: s.fr.Type}}
-			}
-
-		case FrameTypeData:
-			if msg == nil || msg.interim {
-				// Unexpected DATA frame (interim responses do not have response bodies)
-				return &streamError{Code: errorFrameUnexpected, Err: &FrameTypeError{Want: FrameTypeHeaders, Type: s.fr.Type}}
-			} else if msg.trailers != nil {
-				// Unexpected DATA frame following trailers
-				return &streamError{Code: errorFrameUnexpected, Err: &FrameTypeError{Type: s.fr.Type}}
-			}
-
-			// Wait for the frame to be consumed
-		readLoop:
-			for s.fr.N > 0 {
-				select {
-				case s.dataReady <- struct{}{}:
-					<-s.dataRead
-				case <-s.bodyReaderClosed:
-					// Caller ignoring further DATA frames; discard any remaining payload
-					break readLoop
-				}
-			}
-		}
-	}
-}
-
 func (s *messageStream) readBody(p []byte) (n int, err error) {
 	select {
 	// Get DATA frame from parseIncomingFrames loop
@@ -454,19 +338,4 @@ func (s *messageStream) writeDataFrame(p []byte) (n int, err error) {
 	quicvarint.Write(s.w, uint64(len(p)))
 	n, err = s.w.Write(p)
 	return
-}
-
-func isInterim(headers []qpack.HeaderField) (bool, error) {
-	for i := range headers {
-		if headers[i].Name == ":status" {
-			status, err := strconv.Atoi(headers[i].Value)
-			if err != nil {
-				return false, errors.New("malformed non-numeric :status pseudo header")
-			}
-			if status >= 100 && status < 200 {
-				return true, nil
-			}
-		}
-	}
-	return false, nil
 }
