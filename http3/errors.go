@@ -74,6 +74,8 @@ func (e errorCode) String() string {
 	}
 }
 
+// FrameTypeError is returned when an unexpected frame is read. Want is set to
+// the desired frame type, while Type is set to the actual frame type.
 type FrameTypeError struct {
 	Want FrameType
 	Type FrameType
@@ -85,6 +87,7 @@ func (err *FrameTypeError) Error() string {
 
 var _ error = &FrameTypeError{}
 
+// FrameLengthError is returned when the frame payload length (Len) exceeds Max.
 type FrameLengthError struct {
 	Type FrameType
 	Len  uint64
