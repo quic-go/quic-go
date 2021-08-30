@@ -233,14 +233,14 @@ func (s *messageStream) parseIncomingFrames() error {
 
 		// HTTP messages must begin with a HEADERS frame.
 		if frameCount == 0 && s.fr.Type != FrameTypeHeaders {
-			return &connError{Code: errorFrameUnexpected, Err: &frameTypeError{Want: FrameTypeHeaders, Type: s.fr.Type}}
+			return &connError{Code: errorFrameUnexpected, Err: &FrameTypeError{Want: FrameTypeHeaders, Type: s.fr.Type}}
 		}
 
 		switch s.fr.Type {
 		case FrameTypeHeaders:
 			max := s.conn.maxHeaderBytes()
 			if s.fr.N > int64(max) {
-				return &streamError{Code: errorFrameError, Err: &frameLengthError{FrameType: s.fr.Type, Length: uint64(s.fr.N), Max: max}}
+				return &streamError{Code: errorFrameError, Err: &FrameLengthError{Type: s.fr.Type, Len: uint64(s.fr.N), Max: max}}
 			}
 
 			p := make([]byte, s.fr.N)
@@ -269,16 +269,16 @@ func (s *messageStream) parseIncomingFrames() error {
 				close(msg.trailersRead)
 			} else {
 				// Unexpected HEADERS frame
-				return &streamError{Code: errorFrameUnexpected, Err: &frameTypeError{Type: s.fr.Type}}
+				return &streamError{Code: errorFrameUnexpected, Err: &FrameTypeError{Type: s.fr.Type}}
 			}
 
 		case FrameTypeData:
 			if msg == nil || msg.interim {
 				// Unexpected DATA frame (interim responses do not have response bodies)
-				return &streamError{Code: errorFrameUnexpected, Err: &frameTypeError{Want: FrameTypeHeaders, Type: s.fr.Type}}
+				return &streamError{Code: errorFrameUnexpected, Err: &FrameTypeError{Want: FrameTypeHeaders, Type: s.fr.Type}}
 			} else if msg.trailers != nil {
 				// Unexpected DATA frame following trailers
-				return &streamError{Code: errorFrameUnexpected, Err: &frameTypeError{Type: s.fr.Type}}
+				return &streamError{Code: errorFrameUnexpected, Err: &FrameTypeError{Type: s.fr.Type}}
 			}
 
 			// Wait for the frame to be consumed

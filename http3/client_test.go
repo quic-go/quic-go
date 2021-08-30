@@ -648,7 +648,7 @@ var _ = Describe("Client", func() {
 				str.EXPECT().Close().Do(func() { close(closed) })
 				str.EXPECT().Read(gomock.Any()).DoAndReturn(buf.Read).AnyTimes()
 				_, err := client.RoundTrip(request)
-				Expect(err).To(MatchError(&frameTypeError{Want: FrameTypeHeaders, Type: FrameTypeData}))
+				Expect(err).To(MatchError(&FrameTypeError{Want: FrameTypeHeaders, Type: FrameTypeData}))
 				Eventually(closed).Should(BeClosed())
 			})
 
