@@ -97,21 +97,6 @@ func (err *FrameLengthError) Error() string {
 	return fmt.Sprintf("%s frame too large: %d bytes (max: %d)", err.Type, err.Len, err.Max)
 }
 
-type connError struct {
-	Code errorCode
-	Err  error
-}
-
-var _ error = &connError{}
-
-func (err *connError) Error() string {
-	return fmt.Sprintf("connection error %s: %s", err.Code, err.Err)
-}
-
-func (err *connError) Unwrap() error {
-	return err.Err
-}
-
 type streamError struct {
 	Code errorCode
 	Err  error

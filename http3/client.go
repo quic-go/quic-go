@@ -194,8 +194,6 @@ func (c *client) RoundTrip(req *http.Request) (*http.Response, error) {
 		case *FrameTypeError:
 			// HTTP responses MUST start with a HEADERS frame.
 			c.sess.CloseWithError(quic.ApplicationErrorCode(errorFrameUnexpected), err.Error())
-		case *connError:
-			c.sess.CloseWithError(quic.ApplicationErrorCode(err.Code), err.Unwrap().Error())
 		case *streamError:
 			str.CancelWrite(quic.StreamErrorCode(err.Code))
 		default:

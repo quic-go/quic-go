@@ -250,8 +250,6 @@ func (s *Server) handleConn(sess quic.EarlySession) {
 				case *FrameTypeError:
 					// HTTP requests MUST start with a HEADERS frame.
 					sess.CloseWithError(quic.ApplicationErrorCode(errorFrameUnexpected), err.Error())
-				case *connError:
-					sess.CloseWithError(quic.ApplicationErrorCode(err.Code), err.Unwrap().Error())
 				case *streamError:
 					str.CancelWrite(quic.StreamErrorCode(err.Code))
 				default:

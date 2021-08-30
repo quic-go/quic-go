@@ -108,7 +108,8 @@ func (s *requestStream) ReadHeaders() ([]qpack.HeaderField, error) {
 	dec := qpack.NewDecoder(nil)
 	fields, err := dec.DecodeFull(p)
 	if err != nil {
-		return nil, &connError{Code: errorGeneralProtocolError, Err: err}
+		s.conn.session.CloseWithError(quic.ApplicationErrorCode(errorGeneralProtocolError), err.Error())
+		return nil, err
 	}
 
 	return fields, nil
