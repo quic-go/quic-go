@@ -12,7 +12,11 @@ import (
 	"github.com/marten-seemann/qpack"
 )
 
-// A MessageStream is a QUIC stream for processing HTTP/3 request and response messages.
+// A MessageStream wraps a QUIC stream for processing HTTP/3 requests.
+// It processes HEADERS and DATA frames, making these available to
+// the caller via ReadHeaders and Read. It may also process other frame
+// types or skip any unknown frame types.
+// A caller may read or write other frame types to the underlying quic.Stream.
 type MessageStream interface {
 	Stream() quic.Stream
 
@@ -61,8 +65,7 @@ type messageStream struct {
 	fr *FrameReader
 	w  quicvarint.Writer
 
-	messages chan *incomingMessage
-	readErr  error
+	readErr error
 
 	// Used to synchronize reading DATA frames, used for HTTP message bodies
 	dataReady chan struct{}
@@ -89,7 +92,6 @@ func newMessageStream(conn *connection, str quic.Stream, t FrameType, n int64) M
 		str:              str,
 		fr:               &FrameReader{R: str, Type: t, N: n},
 		w:                quicvarint.NewWriter(str),
-		messages:         make(chan *incomingMessage),
 		dataReady:        make(chan struct{}),
 		dataRead:         make(chan struct{}),
 		bodyReaderClosed: make(chan struct{}),
