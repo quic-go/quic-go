@@ -4,6 +4,7 @@ import (
 	"crypto/tls"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"strconv"
 	"sync"
@@ -218,37 +219,50 @@ func (c *client) doRequest(
 		return nil, newStreamError(errorInternalError, err)
 	}
 
-	msg, err := str.ReadMessage()
-	if err != nil {
-		switch err := err.(type) {
-		case *streamError:
-			return nil, newStreamError(err.Code, err.Unwrap())
-		case *connError:
-			return nil, newConnError(err.Code, err.Unwrap())
-		}
-	}
-
-	connState := qtls.ToTLSConnectionState(c.sess.ConnectionState().TLS)
+	// Read HEADERS frames until we get a non-interim status code.
 	res := &http.Response{
 		Proto:      "HTTP/3",
 		ProtoMajor: 3,
 		Header:     http.Header{},
-		TLS:        &connState,
 	}
-	for _, hf := range msg.Headers() {
-		switch hf.Name {
-		case ":status":
-			status, err := strconv.Atoi(hf.Value)
-			if err != nil {
-				return nil, newStreamError(errorGeneralProtocolError, errors.New("malformed non-numeric status pseudo header"))
+	for {
+		headers, err := str.ReadHeaders()
+		if err != nil {
+			switch err := err.(type) {
+			case *FrameTypeError:
+				return nil, newConnError(errorFrameUnexpected, err) // HTTP requests or responses MUST start with a HEADERS frame
+			case *connError:
+				return nil, newConnError(err.Code, err.Unwrap())
+			case *streamError:
+				return nil, newStreamError(err.Code, err.Unwrap())
+			default:
+				return nil, newStreamError(errorGeneralProtocolError, err)
 			}
-			res.StatusCode = status
-			res.Status = hf.Value + " " + http.StatusText(status)
-		default:
-			res.Header.Add(hf.Name, hf.Value)
+		}
+
+		for _, hf := range headers {
+			switch hf.Name {
+			case ":status":
+				res.StatusCode, err = strconv.Atoi(hf.Value)
+				if err != nil {
+					return nil, newStreamError(errorGeneralProtocolError, errors.New("malformed non-numeric status pseudo header"))
+				}
+				res.Status = hf.Value + " " + http.StatusText(res.StatusCode)
+			default:
+				// TODO: is is correct to accumulate interim headers in the final response headers map?
+				res.Header.Add(hf.Name, hf.Value)
+			}
+		}
+
+		if res.StatusCode < 100 || res.StatusCode >= 200 {
+			break
 		}
 	}
-	respBody := msg.Body()
+
+	connState := qtls.ToTLSConnectionState(c.sess.ConnectionState().TLS)
+	res.TLS = &connState
+
+	var respBody io.ReadCloser = str
 
 	// Rules for when to set Content-Length are defined in https://tools.ietf.org/html/rfc7230#section-3.3.2.
 	_, hasTransferEncoding := res.Header["Transfer-Encoding"]
@@ -309,7 +323,6 @@ func (c *client) writeRequest(str MessageStream, req *http.Request, requestGzip 
 			return
 		}
 
-		// FIXME: maybe convert http.Request to a Message, with sanitized trailer keys?
 		if len(req.Trailer) > 0 {
 			err = str.WriteFields(Trailers(req.Trailer))
 			if err != nil {
