@@ -264,7 +264,7 @@ func (conn *connection) handleIncomingStream(str quic.Stream) {
 			return
 		}
 	default:
-		// TODO: log connecion error
+		// TODO: log connection error
 		// TODO: store FrameTypeError so future calls can return it?
 		conn.session.CloseWithError(quic.ApplicationErrorCode(errorFrameUnexpected), "expected first frame to be a HEADERS frame")
 		return
