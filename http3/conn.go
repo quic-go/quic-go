@@ -338,25 +338,21 @@ func (conn *connection) handleIncomingUniStream(str quic.ReceiveStream) {
 	}
 }
 
+// TODO(ydnar): log errors
 func (conn *connection) handleControlStream(str quic.ReceiveStream) {
-	f, err := parseNextFrame(str)
-	if err != nil {
-		conn.session.CloseWithError(quic.ApplicationErrorCode(errorFrameError), "")
+	fr := &FrameReader{R: str}
+
+	conn.peerSettings, conn.peerSettingsErr = readSettings(fr)
+	close(conn.peerSettingsDone)
+	if conn.peerSettingsErr != nil {
+		conn.session.CloseWithError(quic.ApplicationErrorCode(errorMissingSettings), conn.peerSettingsErr.Error())
 		return
 	}
-	settings, ok := f.(Settings)
-	if !ok {
-		err := &quic.ApplicationError{
-			ErrorCode: quic.ApplicationErrorCode(errorMissingSettings),
-		}
-		conn.session.CloseWithError(err.ErrorCode, err.ErrorMessage)
-		conn.peerSettingsErr = err
-		return
-	}
+
 	// If datagram support was enabled on this side and the peer side, we can expect it to have been
 	// negotiated both on the transport and on the HTTP/3 layer.
 	// Note: ConnectionState() will block until the handshake is complete (relevant when using 0-RTT).
-	if settings.DatagramsEnabled() && !conn.session.ConnectionState().SupportsDatagrams {
+	if conn.peerSettings.DatagramsEnabled() && !conn.session.ConnectionState().SupportsDatagrams {
 		err := &quic.ApplicationError{
 			ErrorCode:    quic.ApplicationErrorCode(errorSettingsError),
 			ErrorMessage: "missing QUIC Datagram support",
@@ -365,8 +361,6 @@ func (conn *connection) handleControlStream(str quic.ReceiveStream) {
 		conn.peerSettingsErr = err
 		return
 	}
-	conn.peerSettings = settings
-	close(conn.peerSettingsDone)
 
 	// TODO: loop reading the reset of the frames from the control stream
 }

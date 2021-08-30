@@ -365,7 +365,7 @@ var _ = Describe("Client", func() {
 			done := make(chan struct{})
 			sess.EXPECT().CloseWithError(gomock.Any(), gomock.Any()).Do(func(code quic.ApplicationErrorCode, _ string) {
 				defer GinkgoRecover()
-				Expect(code).To(BeEquivalentTo(errorFrameError))
+				Expect(code).To(BeEquivalentTo(errorMissingSettings))
 				close(done)
 			})
 			_, err := client.RoundTrip(request)

@@ -108,6 +108,20 @@ func (s Settings) writeFrame(w quicvarint.Writer) {
 	}
 }
 
+func readSettings(fr *FrameReader) (Settings, error) {
+	err := fr.Next()
+	if err != nil {
+		return nil, err
+	}
+	if fr.Type != FrameTypeSettings {
+		return nil, &FrameTypeError{
+			Want: FrameTypeSettings,
+			Type: fr.Type,
+		}
+	}
+	return parseSettingsFramePayload(fr, uint64(fr.N))
+}
+
 func parseSettingsFramePayload(r io.Reader, len uint64) (Settings, error) {
 	if len > 8*(1<<10) {
 		return nil, fmt.Errorf("unexpected size for SETTINGS frame: %d", len)
