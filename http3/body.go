@@ -21,8 +21,6 @@ type body struct {
 	reqDoneClosed bool
 
 	onFrameError func()
-
-	bytesRemainingInFrame uint64
 }
 
 var _ io.ReadCloser = &body{}
