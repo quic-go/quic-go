@@ -5,6 +5,7 @@ import (
 	"crypto/tls"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"runtime"
@@ -250,10 +251,14 @@ func (s *Server) handleConn(sess quic.EarlySession) {
 				case *FrameTypeError:
 					// HTTP requests MUST start with a HEADERS frame.
 					sess.CloseWithError(quic.ApplicationErrorCode(errorFrameUnexpected), err.Error())
-				case *streamError:
-					str.CancelWrite(quic.StreamErrorCode(err.Code))
+				case *FrameLengthError:
+					str.CancelWrite(quic.StreamErrorCode(errorFrameError))
 				default:
-					str.CancelWrite(quic.StreamErrorCode(errorGeneralProtocolError))
+					code := errorGeneralProtocolError
+					if err == io.EOF || err == io.ErrUnexpectedEOF {
+						code = errorRequestIncomplete
+					}
+					str.CancelWrite(quic.StreamErrorCode(code))
 				}
 				return
 			}

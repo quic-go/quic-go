@@ -96,13 +96,13 @@ func (s *requestStream) ReadHeaders() ([]qpack.HeaderField, error) {
 
 	max := s.conn.maxHeaderBytes()
 	if s.fr.N > int64(max) {
-		return nil, &streamError{Code: errorFrameError, Err: &FrameLengthError{Type: s.fr.Type, Len: uint64(s.fr.N), Max: max}}
+		return nil, &FrameLengthError{Type: s.fr.Type, Len: uint64(s.fr.N), Max: max}
 	}
 
 	p := make([]byte, s.fr.N)
 	_, err = io.ReadFull(s.fr, p)
 	if err != nil {
-		return nil, &streamError{Code: errorRequestIncomplete, Err: err}
+		return nil, err
 	}
 
 	dec := qpack.NewDecoder(nil)

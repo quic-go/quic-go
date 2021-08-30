@@ -194,8 +194,8 @@ func (c *client) RoundTrip(req *http.Request) (*http.Response, error) {
 		case *FrameTypeError:
 			// HTTP responses MUST start with a HEADERS frame.
 			c.sess.CloseWithError(quic.ApplicationErrorCode(errorFrameUnexpected), err.Error())
-		case *streamError:
-			str.CancelWrite(quic.StreamErrorCode(err.Code))
+		case *FrameLengthError:
+			str.CancelWrite(quic.StreamErrorCode(errorFrameError))
 		default:
 			str.CancelWrite(quic.StreamErrorCode(errorGeneralProtocolError))
 		}
@@ -215,10 +215,7 @@ func (c *client) doRequest(
 
 	err := c.writeRequest(str, req, requestGzip)
 	if err != nil {
-		return nil, &streamError{
-			Code: errorInternalError,
-			Err:  err,
-		}
+		return nil, err
 	}
 
 	// Read HEADERS frames until we get a non-interim status code.
@@ -238,10 +235,7 @@ func (c *client) doRequest(
 			case ":status":
 				res.StatusCode, err = strconv.Atoi(hf.Value)
 				if err != nil {
-					return nil, &streamError{
-						Code: errorGeneralProtocolError,
-						Err:  errors.New("malformed non-numeric status pseudo header"),
-					}
+					return nil, errors.New("malformed non-numeric status pseudo header")
 				}
 				res.Status = hf.Value + " " + http.StatusText(res.StatusCode)
 			default:

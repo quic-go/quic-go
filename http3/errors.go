@@ -96,18 +96,3 @@ var _ error = &FrameLengthError{}
 func (err *FrameLengthError) Error() string {
 	return fmt.Sprintf("%s frame too large: %d bytes (max: %d)", err.Type, err.Len, err.Max)
 }
-
-type streamError struct {
-	Code errorCode
-	Err  error
-}
-
-var _ error = &streamError{}
-
-func (err *streamError) Error() string {
-	return fmt.Sprintf("stream error %s: %s", err.Code, err.Err)
-}
-
-func (err *streamError) Unwrap() error {
-	return err.Err
-}
