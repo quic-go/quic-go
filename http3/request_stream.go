@@ -14,7 +14,7 @@ import (
 
 // A RequestStream wraps a QUIC stream for processing HTTP/3 requests. It
 // processes HEADERS and DATA frames, making these available to the caller via
-// ReadHeaders and Read. It may also process other frame types or skip any
+// ReadHeaders and DataReader. It may also process other frame types or skip any
 // unknown frame types. A caller can also bypass the framing methods and
 // directly read from or write to the underlying quic.Stream.
 type RequestStream interface {
