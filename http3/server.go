@@ -54,20 +54,6 @@ func (k *contextKey) String() string { return "quic-go/http3 context value " + k
 // type *http3.Server.
 var ServerContextKey = &contextKey{"http3-server"}
 
-type requestError struct {
-	err       error
-	streamErr errorCode
-	connErr   errorCode
-}
-
-func newStreamError(code errorCode, err error) requestError {
-	return requestError{err: err, streamErr: code}
-}
-
-func newConnError(code errorCode, err error) requestError {
-	return requestError{err: err, connErr: code}
-}
-
 // Server is a HTTP/3 server.
 type Server struct {
 	*http.Server
