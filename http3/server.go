@@ -276,13 +276,6 @@ func (s *Server) maxHeaderBytes() uint64 {
 }
 
 func (s *Server) handleRequestStream(sess quic.EarlySession, str RequestStream) error {
-	rw := newResponseWriter(str, s.logger)
-	defer func() {
-		if !rw.usedDataStream() {
-			rw.Flush()
-		}
-	}()
-
 	headers, err := str.ReadHeaders()
 	if err != nil {
 		return err
@@ -307,6 +300,13 @@ func (s *Server) handleRequestStream(sess quic.EarlySession, str RequestStream) 
 	} else {
 		s.logger.Infof("%s %s%s", req.Method, req.Host, req.RequestURI)
 	}
+
+	rw := newResponseWriter(str, s.logger)
+	defer func() {
+		if !rw.usedDataStream() {
+			rw.Flush()
+		}
+	}()
 
 	handler := s.Handler
 	if handler == nil {
