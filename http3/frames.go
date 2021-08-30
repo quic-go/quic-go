@@ -4,7 +4,6 @@ import (
 	"io"
 	"io/ioutil"
 
-	"github.com/lucas-clemente/quic-go"
 	"github.com/lucas-clemente/quic-go/quicvarint"
 )
 
@@ -30,8 +29,6 @@ func parseNextFrame(r io.Reader) (frame, error) {
 		return &headersFrame{len: l}, nil
 	case FrameTypeSettings:
 		return parseSettingsFramePayload(r, l)
-	case FrameTypeWebTransportStream:
-		return &webTransportStreamFrame{SessionID: quic.StreamID(l)}, nil
 	case FrameTypeCancelPush:
 		fallthrough
 	case FrameTypePushPromise:
@@ -69,13 +66,4 @@ type headersFrame struct {
 func (f *headersFrame) writeFrame(w quicvarint.Writer) {
 	quicvarint.Write(w, uint64(FrameTypeHeaders))
 	quicvarint.Write(w, f.len)
-}
-
-type webTransportStreamFrame struct {
-	SessionID quic.StreamID
-}
-
-func (f *webTransportStreamFrame) writeFrame(w quicvarint.Writer) {
-	quicvarint.Write(w, uint64(FrameTypeWebTransportStream))
-	quicvarint.Write(w, uint64(f.SessionID))
 }
