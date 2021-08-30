@@ -29,7 +29,7 @@ var _ = Describe("Response Writer", func() {
 		sess := mockquic.NewMockEarlySession(mockCtrl)
 		sess.EXPECT().Context().Return(context.Background()).AnyTimes()
 		conn := newMockConn(sess, Settings{}, Settings{})
-		msgStr := newMessageStream(conn, str, 0, 0)
+		msgStr := newRequestStream(conn, str, 0, 0)
 		rw = newResponseWriter(msgStr, utils.DefaultLogger)
 	})
 

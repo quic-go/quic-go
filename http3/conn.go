@@ -36,13 +36,13 @@ type Conn interface {
 // ServerConn is a server connection. It accepts and processes HTTP/3 request streams.
 type ServerConn interface {
 	Conn
-	AcceptMessageStream(context.Context) (MessageStream, error)
+	AcceptRequestStream(context.Context) (RequestStream, error)
 }
 
 // ClientConn is a client connection. It opens and processes HTTP/3 request streams.
 type ClientConn interface {
 	Conn
-	OpenMessageStream(context.Context) (MessageStream, error)
+	OpenRequestStream(context.Context) (RequestStream, error)
 }
 
 // webTransportConn is an internal interface for implementing WebTransport.
@@ -71,7 +71,7 @@ type connection struct {
 
 	incomingStreamsOnce    sync.Once
 	incomingStreamsErr     error
-	incomingMessageStreams chan *FrameReader
+	incomingRequestStreams chan *FrameReader
 
 	incomingStreamsMutex sync.Mutex
 	incomingStreams      map[SessionID]chan quic.Stream // Lazily constructed
@@ -123,7 +123,7 @@ func newConn(s quic.EarlySession, settings Settings) (*connection, error) {
 		session:                s,
 		settings:               settings,
 		peerSettingsDone:       make(chan struct{}),
-		incomingMessageStreams: make(chan *FrameReader, maxBufferedStreams),
+		incomingRequestStreams: make(chan *FrameReader, maxBufferedStreams),
 	}
 
 	str, err := conn.session.OpenUniStream()
@@ -193,7 +193,7 @@ func (conn *connection) peerMaxHeaderBytes() uint64 {
 	return http.DefaultMaxHeaderBytes
 }
 
-func (conn *connection) AcceptMessageStream(ctx context.Context) (MessageStream, error) {
+func (conn *connection) AcceptRequestStream(ctx context.Context) (RequestStream, error) {
 	if conn.session.Perspective() != quic.PerspectiveServer {
 		return nil, errors.New("server method called on client connection")
 	}
@@ -201,12 +201,12 @@ func (conn *connection) AcceptMessageStream(ctx context.Context) (MessageStream,
 		go conn.handleIncomingStreams()
 	})
 	select {
-	case fr := <-conn.incomingMessageStreams:
+	case fr := <-conn.incomingRequestStreams:
 		if fr == nil {
-			// incomingMessageStreams was closed
+			// incomingRequestStreams was closed
 			return nil, conn.incomingStreamsErr
 		}
-		return newMessageStream(conn, fr.R.(quic.Stream), fr.Type, fr.N), nil
+		return newRequestStream(conn, fr.R.(quic.Stream), fr.Type, fr.N), nil
 	case <-ctx.Done():
 		return nil, ctx.Err()
 	case <-conn.session.Context().Done():
@@ -214,7 +214,7 @@ func (conn *connection) AcceptMessageStream(ctx context.Context) (MessageStream,
 	}
 }
 
-func (conn *connection) OpenMessageStream(ctx context.Context) (MessageStream, error) {
+func (conn *connection) OpenRequestStream(ctx context.Context) (RequestStream, error) {
 	if conn.session.Perspective() != quic.PerspectiveClient {
 		return nil, errors.New("client method called on server connection")
 	}
@@ -225,7 +225,7 @@ func (conn *connection) OpenMessageStream(ctx context.Context) (MessageStream, e
 	conn.incomingStreamsOnce.Do(func() {
 		go conn.handleIncomingStreams()
 	})
-	return newMessageStream(conn, str, 0, 0), nil
+	return newRequestStream(conn, str, 0, 0), nil
 }
 
 func (conn *connection) handleIncomingStreams() {
@@ -244,7 +244,7 @@ func (conn *connection) handleIncomingStreams() {
 		}(str)
 	}
 	wg.Wait()
-	close(conn.incomingMessageStreams)
+	close(conn.incomingRequestStreams)
 }
 
 func (conn *connection) handleIncomingStream(str quic.Stream) {
@@ -258,7 +258,7 @@ func (conn *connection) handleIncomingStream(str quic.Stream) {
 
 	switch fr.Type { //nolint:exhaustive
 	case FrameTypeHeaders:
-		conn.incomingMessageStreams <- fr
+		conn.incomingRequestStreams <- fr
 	case FrameTypeWebTransportStream:
 		if !conn.Settings().WebTransportEnabled() {
 			// TODO: log error

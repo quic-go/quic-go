@@ -12,12 +12,12 @@ import (
 	"github.com/marten-seemann/qpack"
 )
 
-// A MessageStream wraps a QUIC stream for processing HTTP/3 requests.
+// A RequestStream wraps a QUIC stream for processing HTTP/3 requests.
 // It processes HEADERS and DATA frames, making these available to
 // the caller via ReadHeaders and Read. It may also process other frame
 // types or skip any unknown frame types.
 // A caller may read or write other frame types to the underlying quic.Stream.
-type MessageStream interface {
+type RequestStream interface {
 	Stream() quic.Stream
 
 	// TODO: integrate QPACK encoding and decoding with dynamic tables.
@@ -50,7 +50,7 @@ type MessageStream interface {
 	// and writes DATA frames to the underlying quic.Stream.
 	ReadFrom(io.Reader) (int64, error)
 
-	// Close closes the MessageStream.
+	// Close closes the RequestStream.
 	Close() error
 
 	// WebTransport returns a WebTransport interface, if supported.
@@ -58,7 +58,7 @@ type MessageStream interface {
 	WebTransport() (WebTransport, error)
 }
 
-type messageStream struct {
+type requestStream struct {
 	conn *connection
 	str  quic.Stream
 
@@ -67,18 +67,18 @@ type messageStream struct {
 }
 
 var (
-	_ MessageStream = &messageStream{}
-	_ io.Reader     = &messageStream{}
-	_ io.Writer     = &messageStream{}
-	_ io.ReaderFrom = &messageStream{}
-	_ io.Closer     = &messageStream{}
+	_ RequestStream = &requestStream{}
+	_ io.Reader     = &requestStream{}
+	_ io.Writer     = &requestStream{}
+	_ io.ReaderFrom = &requestStream{}
+	_ io.Closer     = &requestStream{}
 )
 
-// newMessageStream creates a new MessageStream.
+// newRequestStream creates a new RequestStream.
 // If a frame has already been partially consumed from str, t specifies
 // the frame type and n the number of bytes remaining in the frame payload.
-func newMessageStream(conn *connection, str quic.Stream, t FrameType, n int64) MessageStream {
-	s := &messageStream{
+func newRequestStream(conn *connection, str quic.Stream, t FrameType, n int64) RequestStream {
+	s := &requestStream{
 		conn: conn,
 		str:  str,
 		fr:   &FrameReader{R: str, Type: t, N: n},
@@ -87,7 +87,7 @@ func newMessageStream(conn *connection, str quic.Stream, t FrameType, n int64) M
 	return s
 }
 
-func (s *messageStream) Stream() quic.Stream {
+func (s *requestStream) Stream() quic.Stream {
 	return s.str
 }
 
@@ -96,7 +96,7 @@ func (s *messageStream) Stream() quic.Stream {
 // must be followed by one or more additional HEADERS frames.
 // If ReadHeaders encounters a DATA frame or an otherwise unhandled frame,
 // it will return a FrameTypeError.
-func (s *messageStream) ReadHeaders() ([]qpack.HeaderField, error) {
+func (s *requestStream) ReadHeaders() ([]qpack.HeaderField, error) {
 	err := s.nextHeadersFrame()
 	if err != nil {
 		return nil, err
@@ -127,7 +127,7 @@ func (s *messageStream) ReadHeaders() ([]qpack.HeaderField, error) {
 // MAX_FIELD_SECTION_SIZE. Headers are not modified or validated.
 // It is the responsibility of the caller to ensure the fields are valid.
 // It should not be called concurrently with Write or ReadFrom.
-func (s *messageStream) WriteHeaders(fields []qpack.HeaderField) error {
+func (s *requestStream) WriteHeaders(fields []qpack.HeaderField) error {
 	var l uint64
 	for i := range fields {
 		// https://quicwg.org/base-drafts/draft-ietf-quic-qpack.html#name-dynamic-table-size
@@ -150,7 +150,7 @@ func (s *messageStream) WriteHeaders(fields []qpack.HeaderField) error {
 	return err
 }
 
-func (s *messageStream) Read(p []byte) (n int, err error) {
+func (s *requestStream) Read(p []byte) (n int, err error) {
 	for len(p) > 0 {
 		for s.fr.N <= 0 {
 			err = s.nextDataFrame()
@@ -175,7 +175,7 @@ func (s *messageStream) Read(p []byte) (n int, err error) {
 const bodyCopyBufferSize = 8 * 1024
 
 // Write writes bytes to DATA frames to the underlying quic.Stream.
-func (s *messageStream) Write(p []byte) (n int, err error) {
+func (s *requestStream) Write(p []byte) (n int, err error) {
 	for len(p) > 0 {
 		pp := p
 		if len(p) > bodyCopyBufferSize {
@@ -193,7 +193,7 @@ func (s *messageStream) Write(p []byte) (n int, err error) {
 
 // ReadFrom implements io.ReaderFrom. It reads from r until an error
 // or io.EOF and writes DATA frames to the underlying quic.Stream.
-func (s *messageStream) ReadFrom(r io.Reader) (n int64, err error) {
+func (s *requestStream) ReadFrom(r io.Reader) (n int64, err error) {
 	buf := make([]byte, bodyCopyBufferSize)
 	for {
 		l, rerr := r.Read(buf)
@@ -216,23 +216,23 @@ func (s *messageStream) ReadFrom(r io.Reader) (n int64, err error) {
 	}
 }
 
-func (s *messageStream) AcceptDatagramContext(ctx context.Context) (DatagramContext, error) {
+func (s *requestStream) AcceptDatagramContext(ctx context.Context) (DatagramContext, error) {
 	return nil, errors.New("TODO: not supported yet")
 }
 
-func (s *messageStream) RegisterDatagramContext() (DatagramContext, error) {
+func (s *requestStream) RegisterDatagramContext() (DatagramContext, error) {
 	return nil, errors.New("TODO: not supported yet")
 }
 
-func (s *messageStream) DatagramNoContext() (DatagramContext, error) {
+func (s *requestStream) DatagramNoContext() (DatagramContext, error) {
 	return nil, errors.New("TODO: not supported yet")
 }
 
-func (s *messageStream) WebTransport() (WebTransport, error) {
+func (s *requestStream) WebTransport() (WebTransport, error) {
 	return newWebTransportSession(s.conn, s.str), nil
 }
 
-func (s *messageStream) Close() error {
+func (s *requestStream) Close() error {
 	s.conn.cleanup(s.str.StreamID())
 	// s.stream.CancelRead(quic.StreamErrorCode(errorNoError))
 	return s.str.Close()
@@ -241,7 +241,7 @@ func (s *messageStream) Close() error {
 // nextHeadersFrame reads incoming HTTP/3 frames until it finds
 // the next HEADERS frame. If it encouters a DATA frame prior to
 // reading a HEADERS frame, it will return a frameTypeError.
-func (s *messageStream) nextHeadersFrame() error {
+func (s *requestStream) nextHeadersFrame() error {
 	err := s.readFrames()
 	if err != nil {
 		return err
@@ -255,7 +255,7 @@ func (s *messageStream) nextHeadersFrame() error {
 // nextDataFrame reads incoming HTTP/3 frames until it finds
 // the next DATA frame. If it encouters a HEADERS frame prior to
 // reading a DATA frame, it will return a frameTypeError.
-func (s *messageStream) nextDataFrame() error {
+func (s *requestStream) nextDataFrame() error {
 	err := s.readFrames()
 	if err != nil {
 		return err
@@ -266,7 +266,7 @@ func (s *messageStream) nextDataFrame() error {
 	return nil
 }
 
-func (s *messageStream) readFrames() error {
+func (s *requestStream) readFrames() error {
 	for {
 		// Next discards any unread frame payload bytes
 		err := s.fr.Next()
@@ -282,7 +282,7 @@ func (s *messageStream) readFrames() error {
 	}
 }
 
-func (s *messageStream) writeDataFrame(p []byte) (n int, err error) {
+func (s *requestStream) writeDataFrame(p []byte) (n int, err error) {
 	quicvarint.Write(s.w, uint64(FrameTypeData))
 	quicvarint.Write(s.w, uint64(len(p)))
 	n, err = s.w.Write(p)

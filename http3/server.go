@@ -251,13 +251,13 @@ func (s *Server) handleConn(sess quic.EarlySession) {
 	// Process all requests immediately.
 	// It's the client's responsibility to decide which requests are eligible for 0-RTT.
 	for {
-		str, err := conn.AcceptMessageStream(context.Background())
+		str, err := conn.AcceptRequestStream(context.Background())
 		if err != nil {
 			s.logger.Debugf("Accepting stream failed: %s", err)
 			return
 		}
 		go func() {
-			rerr := s.handleMessageStream(sess, str)
+			rerr := s.handleRequestStream(sess, str)
 			if rerr.err != nil || rerr.streamErr != 0 || rerr.connErr != 0 {
 				s.logger.Debugf("Handling request failed: %s", err)
 				if rerr.streamErr != 0 {
@@ -284,7 +284,7 @@ func (s *Server) maxHeaderBytes() uint64 {
 	return uint64(s.Server.MaxHeaderBytes)
 }
 
-func (s *Server) handleMessageStream(sess quic.EarlySession, str MessageStream) requestError {
+func (s *Server) handleRequestStream(sess quic.EarlySession, str RequestStream) requestError {
 	rw := newResponseWriter(str, s.logger)
 	defer func() {
 		if !rw.usedDataStream() {

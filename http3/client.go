@@ -169,7 +169,7 @@ func (c *client) RoundTrip(req *http.Request) (*http.Response, error) {
 		}
 	}
 
-	str, err := c.conn.OpenMessageStream(req.Context())
+	str, err := c.conn.OpenRequestStream(req.Context())
 	if err != nil {
 		return nil, err
 	}
@@ -205,7 +205,7 @@ func (c *client) RoundTrip(req *http.Request) (*http.Response, error) {
 }
 
 func (c *client) doRequest(
-	str MessageStream,
+	str RequestStream,
 	req *http.Request,
 	reqDone chan struct{},
 ) (*http.Response, requestError) {
@@ -291,7 +291,7 @@ func (c *client) doRequest(
 	return res, requestError{}
 }
 
-func (c *client) writeRequest(str MessageStream, req *http.Request, requestGzip bool) error {
+func (c *client) writeRequest(str RequestStream, req *http.Request, requestGzip bool) error {
 	fields, err := RequestHeaders(req)
 	if err != nil {
 		return err

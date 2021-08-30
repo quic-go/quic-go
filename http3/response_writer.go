@@ -21,7 +21,7 @@ type DataStreamer interface {
 }
 
 type responseWriter struct {
-	stream MessageStream
+	stream RequestStream
 
 	header         http.Header
 	status         int // status code passed to WriteHeader
@@ -37,7 +37,7 @@ var (
 	_ DataStreamer        = &responseWriter{}
 )
 
-func newResponseWriter(stream MessageStream, logger utils.Logger) *responseWriter {
+func newResponseWriter(stream RequestStream, logger utils.Logger) *responseWriter {
 	return &responseWriter{
 		header: http.Header{},
 		stream: stream,
@@ -100,7 +100,7 @@ func (w *responseWriter) DataStream() quic.Stream {
 	w.dataStreamUsed = true
 	w.Flush()
 	// TODO: remove type assertion
-	return w.stream.(*messageStream).str
+	return w.stream.(*requestStream).str
 }
 
 func (w *responseWriter) WebTransport() (WebTransport, error) {

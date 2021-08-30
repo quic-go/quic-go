@@ -1,6 +1,6 @@
 // +build ignore
 
-// TODO: make this work with MessageStream
+// TODO: make this work with RequestStream
 
 package http3
 
