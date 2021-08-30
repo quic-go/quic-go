@@ -36,6 +36,7 @@ var _ = Describe("Request Writer", func() {
 	decode := func(str io.Reader) map[string]string {
 		fr := &FrameReader{R: str}
 		err := fr.Next()
+		ExpectWithOffset(1, err).ToNot(HaveOccurred())
 		ExpectWithOffset(1, fr.Type).To(Equal(FrameTypeHeaders))
 		data := make([]byte, fr.N)
 		_, err = io.ReadFull(fr, data)
