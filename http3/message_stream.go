@@ -64,15 +64,6 @@ type messageStream struct {
 
 	fr *FrameReader
 	w  quicvarint.Writer
-
-	readErr error
-
-	// Used to synchronize reading DATA frames, used for HTTP message bodies
-	dataReady chan struct{}
-	dataRead  chan struct{}
-
-	bodyReaderClosed chan struct{}
-	readDone         chan struct{}
 }
 
 var (
@@ -88,14 +79,10 @@ var (
 // the frame type and n the number of bytes remaining in the frame payload.
 func newMessageStream(conn *connection, str quic.Stream, t FrameType, n int64) MessageStream {
 	s := &messageStream{
-		conn:             conn,
-		str:              str,
-		fr:               &FrameReader{R: str, Type: t, N: n},
-		w:                quicvarint.NewWriter(str),
-		dataReady:        make(chan struct{}),
-		dataRead:         make(chan struct{}),
-		bodyReaderClosed: make(chan struct{}),
-		readDone:         make(chan struct{}),
+		conn: conn,
+		str:  str,
+		fr:   &FrameReader{R: str, Type: t, N: n},
+		w:    quicvarint.NewWriter(str),
 	}
 	return s
 }
@@ -294,37 +281,6 @@ func (s *messageStream) readFrames() error {
 		}
 	}
 }
-
-func (s *messageStream) readBody(p []byte) (n int, err error) {
-	select {
-	// Get DATA frame from parseIncomingFrames loop
-	case <-s.dataReady:
-	case <-s.bodyReaderClosed:
-		return 0, errAlreadyClosed
-	case <-s.readDone:
-		return 0, s.readErr
-	}
-	if s.fr.N < int64(len(p)) {
-		n, err = s.fr.Read(p[:s.fr.N])
-	} else {
-		n, err = s.fr.Read(p)
-	}
-	// Hand control back to parseIncomingFrames loop
-	s.dataRead <- struct{}{}
-	return n, err
-}
-
-func (s *messageStream) closeBody() error {
-	select {
-	case <-s.bodyReaderClosed:
-		return errAlreadyClosed
-	default:
-	}
-	close(s.bodyReaderClosed)
-	return nil
-}
-
-var errAlreadyClosed = errors.New("already closed")
 
 func (s *messageStream) writeDataFrame(p []byte) (n int, err error) {
 	quicvarint.Write(s.w, uint64(FrameTypeData))
