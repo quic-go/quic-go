@@ -99,8 +99,7 @@ func (w *responseWriter) usedDataStream() bool {
 func (w *responseWriter) DataStream() quic.Stream {
 	w.dataStreamUsed = true
 	w.Flush()
-	// TODO: remove type assertion
-	return w.stream.(*requestStream).str
+	return w.stream.Stream()
 }
 
 func (w *responseWriter) WebTransport() (WebTransport, error) {
