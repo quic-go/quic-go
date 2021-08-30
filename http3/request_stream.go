@@ -15,10 +15,10 @@ import (
 // A RequestStream wraps a QUIC stream for processing HTTP/3 requests. It
 // processes HEADERS and DATA frames, making these available to the caller via
 // ReadHeaders and Read. It may also process other frame types or skip any
-// unknown frame types. A caller may read or write other frame types to the
-// underlying quic.Stream.
+// unknown frame types. A caller can also bypass the framing methods and
+// directly read from or write to the underlying quic.Stream.
 type RequestStream interface {
-	Stream() quic.Stream
+	quic.Stream
 
 	// TODO: integrate QPACK encoding and decoding with dynamic tables.
 
@@ -56,8 +56,8 @@ type RequestStream interface {
 }
 
 type requestStream struct {
+	quic.Stream
 	conn *connection
-	str  quic.Stream
 
 	fr           *FrameReader
 	readerClosed bool
@@ -75,16 +75,12 @@ var (
 // bytes remaining in the frame payload.
 func newRequestStream(conn *connection, str quic.Stream, t FrameType, n int64) RequestStream {
 	s := &requestStream{
-		conn: conn,
-		str:  str,
-		fr:   &FrameReader{R: str, Type: t, N: n},
-		w:    quicvarint.NewWriter(str),
+		Stream: str,
+		conn:   conn,
+		fr:     &FrameReader{R: str, Type: t, N: n},
+		w:      quicvarint.NewWriter(str),
 	}
 	return s
-}
-
-func (s *requestStream) Stream() quic.Stream {
-	return s.str
 }
 
 // ReadHeaders reads the next HEADERS frame, used for HTTP request and
@@ -167,12 +163,24 @@ func (s *requestStream) DatagramNoContext() (DatagramContext, error) {
 }
 
 func (s *requestStream) WebTransport() (WebTransport, error) {
-	return newWebTransportSession(s.conn, s.str)
+	return newWebTransportSession(s.conn, s.Stream)
+}
+
+func (s *requestStream) CancelRead(code quic.StreamErrorCode) {
+	s.conn.cleanup(s.Stream.StreamID())
+	s.Stream.CancelRead(code)
+}
+
+func (s *requestStream) CancelWrite(code quic.StreamErrorCode) {
+	s.conn.cleanup(s.Stream.StreamID())
+	s.Stream.CancelWrite(code)
 }
 
 func (s *requestStream) Close() error {
-	s.conn.cleanup(s.str.StreamID())
-	return s.str.Close()
+	// FIXME: should this close the stream if a WebTransport interface was created?
+	// Should a WebTransport session persist after an http.Handler returns?
+	s.conn.cleanup(s.Stream.StreamID())
+	return s.Stream.Close()
 }
 
 // nextHeadersFrame reads incoming HTTP/3 frames until it finds

@@ -181,8 +181,8 @@ func (c *client) RoundTrip(req *http.Request) (*http.Response, error) {
 	go func() {
 		select {
 		case <-req.Context().Done():
-			str.Stream().CancelWrite(quic.StreamErrorCode(errorRequestCanceled))
-			str.Stream().CancelRead(quic.StreamErrorCode(errorRequestCanceled))
+			str.CancelWrite(quic.StreamErrorCode(errorRequestCanceled))
+			str.CancelRead(quic.StreamErrorCode(errorRequestCanceled))
 		case <-reqDone:
 		}
 	}()
@@ -191,7 +191,7 @@ func (c *client) RoundTrip(req *http.Request) (*http.Response, error) {
 	if rerr.err != nil { // if any error occurred
 		close(reqDone)
 		if rerr.streamErr != 0 { // if it was a stream error
-			str.Stream().CancelWrite(quic.StreamErrorCode(rerr.streamErr))
+			str.CancelWrite(quic.StreamErrorCode(rerr.streamErr))
 		}
 		if rerr.connErr != 0 { // if it was a connection error
 			var reason string
@@ -308,7 +308,7 @@ func (c *client) writeRequest(str RequestStream, req *http.Request, requestGzip 
 
 	if req.Body == nil && len(req.Trailer) == 0 {
 		if req.Method != http.MethodConnect {
-			str.Stream().Close()
+			str.Close()
 		}
 		return nil
 	}
@@ -319,7 +319,7 @@ func (c *client) writeRequest(str RequestStream, req *http.Request, requestGzip 
 		req.Body.Close()
 		if err != nil {
 			c.logger.Errorf("Error writing request: %s", err)
-			str.Stream().CancelWrite(quic.StreamErrorCode(errorRequestCanceled))
+			str.CancelWrite(quic.StreamErrorCode(errorRequestCanceled))
 			return
 		}
 
@@ -327,13 +327,13 @@ func (c *client) writeRequest(str RequestStream, req *http.Request, requestGzip 
 			err = str.WriteHeaders(Trailers(req.Trailer))
 			if err != nil {
 				c.logger.Errorf("Error writing trailers: %s", err)
-				str.Stream().CancelWrite(quic.StreamErrorCode(errorRequestCanceled))
+				str.CancelWrite(quic.StreamErrorCode(errorRequestCanceled))
 				return
 			}
 		}
 
 		if req.Method != http.MethodConnect {
-			str.Stream().Close()
+			str.Close()
 		}
 	}()
 

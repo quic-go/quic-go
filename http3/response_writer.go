@@ -99,7 +99,7 @@ func (w *responseWriter) usedDataStream() bool {
 func (w *responseWriter) DataStream() quic.Stream {
 	w.dataStreamUsed = true
 	w.Flush()
-	return w.stream.Stream()
+	return w.stream
 }
 
 func (w *responseWriter) WebTransport() (WebTransport, error) {

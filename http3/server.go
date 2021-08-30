@@ -261,7 +261,7 @@ func (s *Server) handleConn(sess quic.EarlySession) {
 			if rerr.err != nil || rerr.streamErr != 0 || rerr.connErr != 0 {
 				s.logger.Debugf("Handling request failed: %s", err)
 				if rerr.streamErr != 0 {
-					str.Stream().CancelWrite(quic.StreamErrorCode(rerr.streamErr))
+					str.CancelWrite(quic.StreamErrorCode(rerr.streamErr))
 				}
 				if rerr.connErr != 0 {
 					var reason string
@@ -273,7 +273,7 @@ func (s *Server) handleConn(sess quic.EarlySession) {
 				return
 			}
 			// TODO: should this close CONNECT requests?
-			str.Stream().Close()
+			str.Close()
 		}()
 	}
 }
@@ -307,7 +307,7 @@ func (s *Server) handleRequestStream(sess quic.EarlySession, str RequestStream) 
 		}
 	}
 
-	ctx := str.Stream().Context()
+	ctx := str.Context()
 	ctx = context.WithValue(ctx, ServerContextKey, s)
 	ctx = context.WithValue(ctx, http.LocalAddrContextKey, sess.LocalAddr())
 
@@ -324,7 +324,7 @@ func (s *Server) handleRequestStream(sess quic.EarlySession, str RequestStream) 
 	// TODO: set trailers
 
 	if s.logger.Debug() {
-		s.logger.Infof("%s %s%s, on stream %d", req.Method, req.Host, req.RequestURI, str.Stream().StreamID())
+		s.logger.Infof("%s %s%s, on stream %d", req.Method, req.Host, req.RequestURI, str.StreamID())
 	} else {
 		s.logger.Infof("%s %s%s", req.Method, req.Host, req.RequestURI)
 	}
@@ -357,7 +357,7 @@ func (s *Server) handleRequestStream(sess quic.EarlySession, str RequestStream) 
 		}
 		// If the EOF was read by the handler, CancelRead() is a no-op.
 		// TODO(ydnar): this should be str.Close()
-		str.Stream().CancelRead(quic.StreamErrorCode(errorNoError))
+		str.CancelRead(quic.StreamErrorCode(errorNoError))
 	}
 	return requestError{}
 }
