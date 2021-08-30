@@ -12,6 +12,8 @@ import (
 	"golang.org/x/net/idna"
 )
 
+// RequestHeaders returns valid HTTP/3 header fields for req, or an error if req
+// is malformed.
 func RequestHeaders(req *http.Request) ([]qpack.HeaderField, error) {
 	host := req.Host
 	if host == "" {
@@ -123,6 +125,8 @@ func RequestHeaders(req *http.Request) ([]qpack.HeaderField, error) {
 	return fields, nil
 }
 
+// Trailers returns HTTP/3 trailer fields for trailer, or nil
+// if there are no valid trailers present.
 func Trailers(trailer http.Header) []qpack.HeaderField {
 	var fields []qpack.HeaderField
 	for k, vv := range trailer {
@@ -139,6 +143,7 @@ func Trailers(trailer http.Header) []qpack.HeaderField {
 	return fields
 }
 
+// appendGzipHeader appends the correct accept-encoding header to fields.
 func appendGzipHeader(fields []qpack.HeaderField) []qpack.HeaderField {
 	return append(fields, qpack.HeaderField{Name: "accept-encoding", Value: "gzip"})
 }
