@@ -18,6 +18,7 @@ import (
 	"github.com/lucas-clemente/quic-go/internal/handshake"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/internal/utils"
+	"github.com/marten-seemann/qpack"
 )
 
 // allows mocking of quic.Listen and quic.ListenAddr
@@ -291,9 +292,22 @@ func (s *Server) handleRequestStream(sess quic.EarlySession, str RequestStream) 
 	}
 
 	req.RemoteAddr = sess.RemoteAddr().String()
-	// TODO(ydnar): wrap str to set req.Trailer after last read on body fails hitting EOF or a trailing HEADERS frame
-	req.Body = str.DataReader()
-	// TODO: set trailers
+
+	onTrailers := func(fields []qpack.HeaderField, err error) {
+		if err != nil {
+			s.logger.Errorf("error reading trailer: %s", err)
+			return
+		}
+		s.logger.Debugf("read %d trailer fields", len(fields))
+		if req.Trailer == nil {
+			req.Trailer = http.Header{}
+		}
+		for _, f := range fields {
+			req.Trailer.Add(f.Name, f.Value)
+		}
+	}
+
+	req.Body = newRequestBody(str, onTrailers)
 
 	if s.logger.Debug() {
 		s.logger.Infof("%s %s%s, on stream %d", req.Method, req.Host, req.RequestURI, str.StreamID())
