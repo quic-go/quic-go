@@ -476,9 +476,18 @@ var _ = Describe("Client", func() {
 			rstr.EXPECT().Write(gomock.Any()).DoAndReturn(buf.Write).AnyTimes()
 			mstr := newRequestStream(rconn, rstr, 0, 0)
 			rw := newResponseWriter(mstr, utils.DefaultLogger)
-			rw.header = header
+			for k, vv := range header {
+				rw.header[k] = vv[:]
+			}
+			for k := range trailer {
+				rw.header["Trailer"] = append(rw.header["Trailer"], k)
+			}
 			rw.WriteHeader(status)
 			rw.Write(body)
+			for k, vv := range trailer {
+				rw.header[k] = vv[:]
+			}
+			rw.writeTrailer()
 			// TODO: handle trailers
 			rw.Flush()
 			return buf.Bytes()
@@ -592,6 +601,30 @@ var _ = Describe("Client", func() {
 			resBody, err := io.ReadAll(res.Body)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(resBody).To(Equal(body))
+		})
+
+		It("returns a response with trailers", func() {
+			body := []byte("foobar")
+			trailer := http.Header{}
+			trailer.Add("foo", "1")
+			trailer.Add("bar", "1")
+			rspBuf := bytes.NewBuffer(getResponse(200, nil, trailer, body))
+			gomock.InOrder(
+				sess.EXPECT().HandshakeComplete().Return(handshakeCtx),
+				sess.EXPECT().OpenStreamSync(context.Background()).Return(str, nil),
+				sess.EXPECT().ConnectionState().Return(quic.ConnectionState{}),
+			)
+			str.EXPECT().Write(gomock.Any()).AnyTimes().DoAndReturn(func(p []byte) (int, error) { return len(p), nil })
+			str.EXPECT().Close()
+			str.EXPECT().StreamID().AnyTimes()
+			str.EXPECT().Read(gomock.Any()).DoAndReturn(rspBuf.Read).AnyTimes()
+			res, err := client.RoundTrip(request)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(res.StatusCode).To(Equal(200))
+			resBody, err := io.ReadAll(res.Body)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(resBody).To(Equal(body))
+			Expect(res.Trailer).To(Equal(trailer))
 		})
 
 		Context("requests containing a Body", func() {
