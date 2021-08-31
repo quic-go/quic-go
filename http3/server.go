@@ -316,11 +316,6 @@ func (s *Server) handleRequestStream(sess quic.EarlySession, str RequestStream) 
 	}
 
 	rw := newResponseWriter(str, s.logger)
-	defer func() {
-		if !rw.usedDataStream() {
-			rw.Flush()
-		}
-	}()
 
 	handler := s.Handler
 	if handler == nil {
@@ -348,6 +343,8 @@ func (s *Server) handleRequestStream(sess quic.EarlySession, str RequestStream) 
 		} else {
 			rw.WriteHeader(http.StatusOK)
 		}
+		rw.writeTrailer()
+		rw.Flush()
 		// If the EOF was read by the handler, CancelRead() is a no-op.
 		// TODO(ydnar): should this stream persist for CONNECT (WebTransport) requests?
 		str.CancelRead(quic.StreamErrorCode(errorNoError))
