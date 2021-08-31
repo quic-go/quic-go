@@ -574,6 +574,26 @@ var _ = Describe("Client", func() {
 			Expect(rsp.StatusCode).To(Equal(418))
 		})
 
+		It("returns a response with a body", func() {
+			body := []byte("foobar")
+			rspBuf := bytes.NewBuffer(getResponse(200, nil, nil, body))
+			gomock.InOrder(
+				sess.EXPECT().HandshakeComplete().Return(handshakeCtx),
+				sess.EXPECT().OpenStreamSync(context.Background()).Return(str, nil),
+				sess.EXPECT().ConnectionState().Return(quic.ConnectionState{}),
+			)
+			str.EXPECT().Write(gomock.Any()).AnyTimes().DoAndReturn(func(p []byte) (int, error) { return len(p), nil })
+			str.EXPECT().Close()
+			str.EXPECT().StreamID().AnyTimes()
+			str.EXPECT().Read(gomock.Any()).DoAndReturn(rspBuf.Read).AnyTimes()
+			res, err := client.RoundTrip(request)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(res.StatusCode).To(Equal(200))
+			resBody, err := io.ReadAll(res.Body)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(resBody).To(Equal(body))
+		})
+
 		Context("requests containing a Body", func() {
 			var strBuf *bytes.Buffer
 
