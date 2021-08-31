@@ -164,7 +164,7 @@ func (s *requestStream) Close() error {
 }
 
 // nextHeadersFrame reads incoming HTTP/3 frames until it finds
-// the next HEADERS frame. If it encouters a DATA frame prior to
+// the next HEADERS frame. If it encounters a DATA frame prior to
 // reading a HEADERS frame, it will return a frameTypeError.
 func (s *requestStream) nextHeadersFrame() error {
 	if s.fr.Type == FrameTypeHeaders && s.fr.N > 0 {
@@ -181,7 +181,7 @@ func (s *requestStream) nextHeadersFrame() error {
 }
 
 // nextDataFrame reads incoming HTTP/3 frames until it finds
-// the next DATA frame. If it encouters a HEADERS frame prior to
+// the next DATA frame. If it encounters a HEADERS frame prior to
 // reading a DATA frame, it will return a frameTypeError.
 func (s *requestStream) nextDataFrame() error {
 	if s.fr.Type == FrameTypeData && s.fr.N > 0 {
