@@ -10,6 +10,7 @@ import (
 	"io"
 	"io/ioutil"
 	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/golang/mock/gomock"
@@ -422,6 +423,130 @@ var _ = Describe("Client", func() {
 			_, err := client.RoundTrip(request)
 			Expect(err).To(MatchError("done"))
 			Eventually(done).Should(BeClosed())
+		})
+	})
+
+	Context("writing requests", func() {
+		var (
+			sess   *mockquic.MockEarlySession
+			conn   *connection
+			str    *mockquic.MockStream
+			rstr   RequestStream
+			strBuf *bytes.Buffer
+		)
+
+		decode := func(str io.Reader) map[string]string {
+			fr := &FrameReader{R: str}
+			err := fr.Next()
+			ExpectWithOffset(1, err).ToNot(HaveOccurred())
+			ExpectWithOffset(1, fr.Type).To(Equal(FrameTypeHeaders))
+			data := make([]byte, fr.N)
+			_, err = io.ReadFull(fr, data)
+			ExpectWithOffset(1, err).ToNot(HaveOccurred())
+			decoder := qpack.NewDecoder(nil)
+			hfs, err := decoder.DecodeFull(data)
+			ExpectWithOffset(1, err).ToNot(HaveOccurred())
+			values := make(map[string]string)
+			for _, hf := range hfs {
+				values[hf.Name] = hf.Value
+			}
+			return values
+		}
+
+		BeforeEach(func() {
+			sess = mockquic.NewMockEarlySession(mockCtrl)
+			sess.EXPECT().Context().Return(context.Background()).AnyTimes()
+			conn = newMockConn(sess, Settings{}, Settings{})
+			str = mockquic.NewMockStream(mockCtrl)
+			str.EXPECT().StreamID().AnyTimes()
+			rstr = newRequestStream(conn, str, 0, 0)
+			strBuf = &bytes.Buffer{}
+			str.EXPECT().Write(gomock.Any()).DoAndReturn(func(p []byte) (int, error) {
+				return strBuf.Write(p)
+			}).AnyTimes()
+		})
+
+		It("writes a GET request", func() {
+			str.EXPECT().Close()
+			req, err := http.NewRequest("GET", "https://quic.clemente.io/index.html?foo=bar", nil)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(client.writeRequest(rstr, req, false)).To(Succeed())
+			headerFields := decode(strBuf)
+			Expect(headerFields).To(HaveKeyWithValue(":authority", "quic.clemente.io"))
+			Expect(headerFields).To(HaveKeyWithValue(":method", "GET"))
+			Expect(headerFields).To(HaveKeyWithValue(":path", "/index.html?foo=bar"))
+			Expect(headerFields).To(HaveKeyWithValue(":scheme", "https"))
+			Expect(headerFields).ToNot(HaveKey("accept-encoding"))
+		})
+
+		It("writes a POST request", func() {
+			closed := make(chan struct{})
+			str.EXPECT().Close().Do(func() { close(closed) })
+			postData := bytes.NewReader([]byte("foobar"))
+			req, err := http.NewRequest("POST", "https://quic.clemente.io/upload.html", postData)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(client.writeRequest(rstr, req, false)).To(Succeed())
+
+			Eventually(closed).Should(BeClosed())
+			headerFields := decode(strBuf)
+			Expect(headerFields).To(HaveKeyWithValue(":method", "POST"))
+			Expect(headerFields).To(HaveKey("content-length"))
+			contentLength, err := strconv.Atoi(headerFields["content-length"])
+			Expect(err).ToNot(HaveOccurred())
+			Expect(contentLength).To(BeNumerically(">", 0))
+
+			fr := &FrameReader{R: strBuf}
+			err = fr.Next()
+			Expect(err).ToNot(HaveOccurred())
+			Expect(fr.Type).To(Equal(FrameTypeData))
+			Expect(fr.N).To(BeEquivalentTo(6))
+		})
+
+		It("writes a POST request, if the Body returns an EOF immediately", func() {
+			closed := make(chan struct{})
+			str.EXPECT().Close().Do(func() { close(closed) })
+			body := bytes.NewBufferString("foobar")
+			req, err := http.NewRequest("POST", "https://quic.clemente.io/upload.html", body)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(client.writeRequest(rstr, req, false)).To(Succeed())
+
+			Eventually(closed).Should(BeClosed())
+			headerFields := decode(strBuf)
+			Expect(headerFields).To(HaveKeyWithValue(":method", "POST"))
+
+			fr := &FrameReader{R: strBuf}
+			err = fr.Next()
+			Expect(err).ToNot(HaveOccurred())
+			Expect(fr.Type).To(Equal(FrameTypeData))
+			Expect(fr.N).To(BeEquivalentTo(6))
+		})
+
+		It("sends cookies", func() {
+			str.EXPECT().Close()
+			req, err := http.NewRequest("GET", "https://quic.clemente.io/", nil)
+			Expect(err).ToNot(HaveOccurred())
+			cookie1 := &http.Cookie{
+				Name:  "Cookie #1",
+				Value: "Value #1",
+			}
+			cookie2 := &http.Cookie{
+				Name:  "Cookie #2",
+				Value: "Value #2",
+			}
+			req.AddCookie(cookie1)
+			req.AddCookie(cookie2)
+			Expect(client.writeRequest(rstr, req, false)).To(Succeed())
+			headerFields := decode(strBuf)
+			Expect(headerFields).To(HaveKeyWithValue("cookie", `Cookie #1="Value #1"; Cookie #2="Value #2"`))
+		})
+
+		It("adds the header for gzip support", func() {
+			str.EXPECT().Close()
+			req, err := http.NewRequest("GET", "https://quic.clemente.io/", nil)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(client.writeRequest(rstr, req, true)).To(Succeed())
+			headerFields := decode(strBuf)
+			Expect(headerFields).To(HaveKeyWithValue("accept-encoding", "gzip"))
 		})
 	})
 
