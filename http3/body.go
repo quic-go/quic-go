@@ -2,20 +2,16 @@ package http3
 
 import (
 	"io"
-	"net/http"
 
 	"github.com/lucas-clemente/quic-go"
+	"github.com/marten-seemann/qpack"
 )
 
-// onFrameError:
-// Server: sess.CloseWithError(quic.ApplicationErrorCode(errorFrameUnexpected), "")
-// Client: c.session.CloseWithError(quic.ApplicationErrorCode(errorFrameUnexpected), "")
+type trailerFunc func([]qpack.HeaderField, error)
 
 // The body of a http.Request or http.Response.
 type body struct {
 	str RequestStream
-
-	trailer http.Header
 
 	// only set for the http.Response
 	// The channel is closed when the user is done with this response:
@@ -23,23 +19,24 @@ type body struct {
 	reqDone       chan<- struct{}
 	reqDoneClosed bool
 
+	onTrailers   trailerFunc
 	onFrameError func()
 }
 
 var _ io.ReadCloser = &body{}
 
-func newRequestBody(str RequestStream, trailer http.Header, onFrameError func()) *body {
+func newRequestBody(str RequestStream, onTrailers trailerFunc, onFrameError func()) *body {
 	return &body{
 		str:          str,
-		trailer:      trailer,
+		onTrailers:   onTrailers,
 		onFrameError: onFrameError,
 	}
 }
 
-func newResponseBody(str RequestStream, trailer http.Header, done chan<- struct{}, onFrameError func()) *body {
+func newResponseBody(str RequestStream, onTrailers trailerFunc, done chan<- struct{}, onFrameError func()) *body {
 	return &body{
 		str:          str,
-		trailer:      trailer,
+		onTrailers:   onTrailers,
 		onFrameError: onFrameError,
 		reqDone:      done,
 	}
@@ -49,15 +46,8 @@ func (r *body) Read(p []byte) (n int, err error) {
 	n, err = r.str.DataReader().Read(p)
 	if err != nil {
 		// Read trailers if present
-		if err == io.EOF && r.trailer != nil {
-			fields, ferr := r.str.ReadHeaders()
-			if ferr != nil {
-				// TODO(ydnar): log this error
-			} else {
-				for _, f := range fields {
-					r.trailer.Add(f.Name, f.Value)
-				}
-			}
+		if err == io.EOF && r.onTrailers != nil {
+			r.onTrailers(r.str.ReadHeaders())
 		} else if _, ok := err.(*FrameTypeError); ok {
 			r.onFrameError()
 		}

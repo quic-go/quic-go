@@ -10,6 +10,7 @@ import (
 	"github.com/lucas-clemente/quic-go"
 	mockquic "github.com/lucas-clemente/quic-go/internal/mocks/quic"
 	"github.com/lucas-clemente/quic-go/quicvarint"
+	"github.com/marten-seemann/qpack"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -31,18 +32,24 @@ func (t bodyType) String() string {
 
 var _ = Describe("body", func() {
 	var (
-		rb            *body
-		sess          *mockquic.MockEarlySession
-		conn          *connection
-		str           *mockquic.MockStream
-		rstr          RequestStream
-		buf           *bytes.Buffer
-		trailer       http.Header
-		reqDone       chan struct{}
-		errorCbCalled bool
+		rb                 *body
+		sess               *mockquic.MockEarlySession
+		conn               *connection
+		str                *mockquic.MockStream
+		rstr               RequestStream
+		buf                *bytes.Buffer
+		trailers           []qpack.HeaderField
+		trailersErr        error
+		reqDone            chan struct{}
+		onFrameErrorCalled bool
 	)
 
-	errorCb := func() { errorCbCalled = true }
+	onTrailers := func(fields []qpack.HeaderField, err error) {
+		trailers = fields[:]
+		trailersErr = err
+	}
+
+	onFrameError := func() { onFrameErrorCalled = true }
 
 	getDataFrame := func(data []byte) []byte {
 		buf := &bytes.Buffer{}
@@ -54,8 +61,7 @@ var _ = Describe("body", func() {
 
 	BeforeEach(func() {
 		buf = &bytes.Buffer{}
-		trailer = http.Header{}
-		errorCbCalled = false
+		onFrameErrorCalled = false
 	})
 
 	for _, bt := range []bodyType{bodyTypeRequest, bodyTypeResponse} {
@@ -78,10 +84,10 @@ var _ = Describe("body", func() {
 
 				switch bodyType {
 				case bodyTypeRequest:
-					rb = newRequestBody(rstr, trailer, errorCb)
+					rb = newRequestBody(rstr, onTrailers, onFrameError)
 				case bodyTypeResponse:
 					reqDone = make(chan struct{})
-					rb = newResponseBody(rstr, trailer, reqDone, errorCb)
+					rb = newResponseBody(rstr, onTrailers, reqDone, onFrameError)
 				}
 			})
 
@@ -143,10 +149,11 @@ var _ = Describe("body", func() {
 			It("reads trailers", func() {
 				buf.Write(getDataFrame([]byte("foo")))
 				buf.Write(getDataFrame([]byte("bar")))
-				want := http.Header{}
-				want.Add("foo", "1")
-				want.Add("bar", "2")
-				err := writeHeadersFrame(buf, Trailers(want), http.DefaultMaxHeaderBytes)
+				fields := []qpack.HeaderField{
+					{Name: "foo", Value: "1"},
+					{Name: "bar", Value: "2"},
+				}
+				err := writeHeadersFrame(buf, fields, http.DefaultMaxHeaderBytes)
 				Expect(err).ToNot(HaveOccurred())
 				b := make([]byte, 10)
 				n, err := rb.Read(b)
@@ -154,7 +161,24 @@ var _ = Describe("body", func() {
 				Expect(err).To(Equal(io.EOF))
 				Expect(n).To(Equal(6))
 				Expect(b).To(Equal([]byte("foobar")))
-				Expect(trailer).To(Equal(want))
+				Expect(trailers).To(Equal(fields))
+				Expect(trailersErr).ToNot(HaveOccurred())
+			})
+
+			It("receives an error on malformed trailers", func() {
+				buf.Write(getDataFrame([]byte("foo")))
+				buf.Write(getDataFrame([]byte("bar")))
+				quicvarint.Write(buf, uint64(FrameTypeHeaders))
+				quicvarint.Write(buf, 0x10)
+				buf.Write(make([]byte, 0x10))
+				sess.EXPECT().CloseWithError(quic.ApplicationErrorCode(errorGeneralProtocolError), gomock.Any())
+				b := make([]byte, 10)
+				n, err := rb.Read(b)
+				b = b[:n]
+				Expect(err).To(Equal(io.EOF))
+				Expect(n).To(Equal(6))
+				Expect(b).To(Equal([]byte("foobar")))
+				Expect(trailersErr).To(HaveOccurred())
 			})
 
 			It("errors when it can't parse the frame", func() {
@@ -167,7 +191,7 @@ var _ = Describe("body", func() {
 				Settings{}.writeFrame(buf)
 				_, err := rb.Read([]byte{0})
 				Expect(err).To(MatchError(&FrameTypeError{Want: FrameTypeData, Type: FrameTypeSettings}))
-				Expect(errorCbCalled).To(BeTrue())
+				Expect(onFrameErrorCalled).To(BeTrue())
 			})
 
 			if bodyType == bodyTypeResponse {
