@@ -62,7 +62,7 @@ var _ = Describe("FrameReader", func() {
 		Expect(fr.N).To(Equal(int64(0x100)))
 
 		err = fr.Next()
-		Expect(err).To(MatchError(io.EOF))
+		Expect(err).To(Equal(io.EOF))
 	})
 
 	It("errors on EOF", func() {
@@ -83,7 +83,7 @@ var _ = Describe("FrameReader", func() {
 		Expect(n).To(Equal(0x100))
 
 		n, err = fr.Read(b)
-		Expect(err).To(MatchError(io.EOF))
+		Expect(err).To(Equal(io.EOF))
 		Expect(n).To(Equal(0))
 
 	})

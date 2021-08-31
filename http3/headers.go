@@ -1,12 +1,14 @@
 package http3
 
 import (
+	"bytes"
 	"fmt"
 	"net"
 	"net/http"
 	"strconv"
 	"strings"
 
+	"github.com/lucas-clemente/quic-go/quicvarint"
 	"github.com/marten-seemann/qpack"
 	"golang.org/x/net/http/httpguts"
 	"golang.org/x/net/idna"
@@ -219,4 +221,27 @@ func shouldSendReqContentLength(method string, contentLength int64) bool {
 	default:
 		return false
 	}
+}
+
+// TODO(ydnar): support dynamic QPACK tables
+func writeHeadersFrame(w quicvarint.Writer, fields []qpack.HeaderField, max uint64) error {
+	var l uint64
+	for i := range fields {
+		// https://quicwg.org/base-drafts/draft-ietf-quic-qpack.html#name-dynamic-table-size
+		l += uint64(len(fields[i].Name) + len(fields[i].Value) + 32)
+	}
+	if l > max {
+		return fmt.Errorf("HEADERS frame too large: %d bytes (max: %d)", l, max)
+	}
+
+	buf := &bytes.Buffer{}
+	encoder := qpack.NewEncoder(buf)
+	for i := range fields {
+		encoder.WriteField(fields[i])
+	}
+
+	quicvarint.Write(w, uint64(FrameTypeHeaders))
+	quicvarint.Write(w, uint64(buf.Len()))
+	_, err := w.Write(buf.Bytes())
+	return err
 }

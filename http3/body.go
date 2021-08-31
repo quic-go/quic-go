@@ -2,6 +2,7 @@ package http3
 
 import (
 	"io"
+	"net/http"
 
 	"github.com/lucas-clemente/quic-go"
 )
@@ -14,6 +15,8 @@ import (
 type body struct {
 	str RequestStream
 
+	trailer http.Header
+
 	// only set for the http.Response
 	// The channel is closed when the user is done with this response:
 	// either when Read() errors, or when Close() is called.
@@ -25,16 +28,18 @@ type body struct {
 
 var _ io.ReadCloser = &body{}
 
-func newRequestBody(str RequestStream, onFrameError func()) *body {
+func newRequestBody(str RequestStream, trailer http.Header, onFrameError func()) *body {
 	return &body{
 		str:          str,
+		trailer:      trailer,
 		onFrameError: onFrameError,
 	}
 }
 
-func newResponseBody(str RequestStream, done chan<- struct{}, onFrameError func()) *body {
+func newResponseBody(str RequestStream, trailer http.Header, done chan<- struct{}, onFrameError func()) *body {
 	return &body{
 		str:          str,
+		trailer:      trailer,
 		onFrameError: onFrameError,
 		reqDone:      done,
 	}
@@ -43,10 +48,20 @@ func newResponseBody(str RequestStream, done chan<- struct{}, onFrameError func(
 func (r *body) Read(p []byte) (n int, err error) {
 	n, err = r.str.DataReader().Read(p)
 	if err != nil {
-		r.requestDone()
-		if _, ok := err.(*FrameTypeError); ok {
+		// Read trailers if present
+		if err == io.EOF && r.trailer != nil {
+			fields, ferr := r.str.ReadHeaders()
+			if ferr != nil {
+				// TODO(ydnar): log this error
+			} else {
+				for _, f := range fields {
+					r.trailer.Add(f.Name, f.Value)
+				}
+			}
+		} else if _, ok := err.(*FrameTypeError); ok {
 			r.onFrameError()
 		}
+		r.requestDone()
 	}
 	return n, err
 }

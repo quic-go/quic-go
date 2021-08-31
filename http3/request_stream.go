@@ -1,10 +1,8 @@
 package http3
 
 import (
-	"bytes"
 	"context"
 	"errors"
-	"fmt"
 	"io"
 
 	"github.com/lucas-clemente/quic-go"
@@ -121,26 +119,7 @@ func (s *requestStream) ReadHeaders() ([]qpack.HeaderField, error) {
 // It is the responsibility of the caller to ensure the fields are valid.
 // It should not be called concurrently with Write or ReadFrom.
 func (s *requestStream) WriteHeaders(fields []qpack.HeaderField) error {
-	var l uint64
-	for i := range fields {
-		// https://quicwg.org/base-drafts/draft-ietf-quic-qpack.html#name-dynamic-table-size
-		l += uint64(len(fields[i].Name) + len(fields[i].Value) + 32)
-	}
-	max := s.conn.peerMaxHeaderBytes()
-	if l > max {
-		return fmt.Errorf("HEADERS frame too large: %d bytes (max: %d)", l, max)
-	}
-
-	buf := &bytes.Buffer{}
-	encoder := qpack.NewEncoder(buf)
-	for i := range fields {
-		encoder.WriteField(fields[i])
-	}
-
-	quicvarint.Write(s.w, uint64(FrameTypeHeaders))
-	quicvarint.Write(s.w, uint64(buf.Len()))
-	_, err := s.w.Write(buf.Bytes())
-	return err
+	return writeHeadersFrame(s.w, fields, s.conn.peerMaxHeaderBytes())
 }
 
 func (s *requestStream) DataReader() io.ReadCloser {

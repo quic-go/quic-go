@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+	"net/http"
 
 	"github.com/golang/mock/gomock"
 	"github.com/lucas-clemente/quic-go"
@@ -28,7 +29,7 @@ func (t bodyType) String() string {
 	return "response"
 }
 
-var _ = Describe("Body", func() {
+var _ = Describe("body", func() {
 	var (
 		rb            *body
 		sess          *mockquic.MockEarlySession
@@ -36,6 +37,7 @@ var _ = Describe("Body", func() {
 		str           *mockquic.MockStream
 		rstr          RequestStream
 		buf           *bytes.Buffer
+		trailer       http.Header
 		reqDone       chan struct{}
 		errorCbCalled bool
 	)
@@ -52,6 +54,7 @@ var _ = Describe("Body", func() {
 
 	BeforeEach(func() {
 		buf = &bytes.Buffer{}
+		trailer = http.Header{}
 		errorCbCalled = false
 	})
 
@@ -75,10 +78,10 @@ var _ = Describe("Body", func() {
 
 				switch bodyType {
 				case bodyTypeRequest:
-					rb = newRequestBody(rstr, errorCb)
+					rb = newRequestBody(rstr, trailer, errorCb)
 				case bodyTypeResponse:
 					reqDone = make(chan struct{})
-					rb = newResponseBody(rstr, reqDone, errorCb)
+					rb = newResponseBody(rstr, trailer, reqDone, errorCb)
 				}
 			})
 
@@ -108,7 +111,7 @@ var _ = Describe("Body", func() {
 				buf.Write(getDataFrame([]byte("foobar")))
 				b := make([]byte, 10)
 				n, err := rb.Read(b)
-				Expect(err).To(MatchError(io.EOF))
+				Expect(err).To(Equal(io.EOF))
 				Expect(n).To(Equal(6))
 				Expect(b[:n]).To(Equal([]byte("foobar")))
 			})
@@ -122,7 +125,7 @@ var _ = Describe("Body", func() {
 				Expect(b).To(Equal([]byte("foob")))
 				n, err = rb.Read(b)
 				// Expect(err).ToNot(HaveOccurred())
-				Expect(err).To(MatchError(io.EOF))
+				Expect(err).To(Equal(io.EOF))
 				Expect(n).To(Equal(2))
 				Expect(b[:n]).To(Equal([]byte("ar")))
 			})
@@ -137,18 +140,21 @@ var _ = Describe("Body", func() {
 				Expect(b[:n]).To(Equal([]byte("foobar")))
 			})
 
-			// TODO(ydnar): handle trailers
-			XIt("skips HEADERS frames", func() {
+			It("reads trailers", func() {
 				buf.Write(getDataFrame([]byte("foo")))
-				quicvarint.Write(buf, uint64(FrameTypeHeaders))
-				quicvarint.Write(buf, 10)
-				buf.Write(make([]byte, 10))
 				buf.Write(getDataFrame([]byte("bar")))
-				b := make([]byte, 6)
-				n, err := io.ReadFull(rb, b)
+				want := http.Header{}
+				want.Add("foo", "1")
+				want.Add("bar", "2")
+				err := writeHeadersFrame(buf, Trailers(want), http.DefaultMaxHeaderBytes)
 				Expect(err).ToNot(HaveOccurred())
+				b := make([]byte, 10)
+				n, err := rb.Read(b)
+				b = b[:n]
+				Expect(err).To(Equal(io.EOF))
 				Expect(n).To(Equal(6))
 				Expect(b).To(Equal([]byte("foobar")))
+				Expect(trailer).To(Equal(want))
 			})
 
 			It("errors when it can't parse the frame", func() {
