@@ -216,10 +216,9 @@ var _ = Describe("Server", func() {
 			err := writeHeadersFrame(trailerBuf, Trailers(trailer), http.DefaultMaxHeaderBytes)
 
 			s.Handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				p := make([]byte, 100)
-				n, err := r.Body.Read(p)
-				Expect(err).To(Equal(io.EOF))
-				Expect(n).To(Equal(6))
+				body, err := io.ReadAll(r.Body)
+				Expect(err).ToNot(HaveOccurred())
+				Expect(len(body)).To(Equal(6))
 				Expect(r.Trailer).To(Equal(trailer))
 			})
 

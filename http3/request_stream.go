@@ -234,34 +234,26 @@ func (s *requestStream) nextFrame(want FrameType) error {
 	}
 }
 
+// readData will read from at most a single DATA frame.
 func (s *requestStream) readData(p []byte) (n int, err error) {
 	if s.dataReaderClosed {
 		return 0, io.EOF
 	}
-	for len(p) > 0 {
-		for s.fr.N <= 0 {
-			err = s.nextDataFrame()
-			if err != nil {
-				// Return EOF if we encounter trailers
-				if err, ok := err.(*FrameTypeError); ok && err.Type == FrameTypeHeaders {
-					s.closeDataReader()
-					return n, io.EOF
-				}
-				return n, err
-			}
-		}
-		pp := p
-		if s.fr.N < int64(len(p)) {
-			pp = p[:s.fr.N]
-		}
-		x, err := s.fr.Read(pp)
-		n += x
-		p = p[x:]
+	for s.fr.N <= 0 {
+		err = s.nextDataFrame()
 		if err != nil {
+			// Return EOF if we encounter trailers
+			if err, ok := err.(*FrameTypeError); ok && err.Type == FrameTypeHeaders {
+				s.closeDataReader()
+				return n, io.EOF
+			}
 			return n, err
 		}
 	}
-	return n, nil
+	if s.fr.N < int64(len(p)) {
+		p = p[:s.fr.N]
+	}
+	return s.fr.Read(p)
 }
 
 const bodyCopyBufferSize = 8 * 1024
@@ -318,8 +310,7 @@ func (s *requestStream) writeDataFrom(r io.Reader) (n int64, err error) {
 func (s *requestStream) writeDataFrame(p []byte) (n int, err error) {
 	quicvarint.Write(s.w, uint64(FrameTypeData))
 	quicvarint.Write(s.w, uint64(len(p)))
-	n, err = s.w.Write(p)
-	return
+	return s.w.Write(p)
 }
 
 func (s *requestStream) closeDataReader() error {
