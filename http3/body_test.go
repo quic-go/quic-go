@@ -184,10 +184,11 @@ var _ = Describe("body", func() {
 			It("errors when it can't parse the frame", func() {
 				buf.Write([]byte("invalid"))
 				_, err := rb.Read([]byte{0})
-				Expect(err).To(HaveOccurred())
+				Expect(err).To(Equal(io.EOF))
 			})
 
 			It("errors on unexpected frames, and calls the error callback", func() {
+				sess.EXPECT().CloseWithError(quic.ApplicationErrorCode(errorFrameUnexpected), gomock.Any())
 				Settings{}.writeFrame(buf)
 				_, err := rb.Read([]byte{0})
 				Expect(err).To(MatchError(&FrameTypeError{Want: FrameTypeData, Type: FrameTypeSettings}))

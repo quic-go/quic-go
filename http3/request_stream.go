@@ -170,14 +170,7 @@ func (s *requestStream) nextHeadersFrame() error {
 	if s.fr.Type == FrameTypeHeaders && s.fr.N > 0 {
 		return nil
 	}
-	err := s.readFrames()
-	if err != nil {
-		return err
-	}
-	if s.fr.Type != FrameTypeHeaders && !s.dataReaderClosed {
-		return &FrameTypeError{Want: FrameTypeHeaders, Type: s.fr.Type}
-	}
-	return nil
+	return s.nextFrame(FrameTypeHeaders)
 }
 
 // nextDataFrame reads incoming HTTP/3 frames until it finds
@@ -187,35 +180,56 @@ func (s *requestStream) nextDataFrame() error {
 	if s.fr.Type == FrameTypeData && s.fr.N > 0 {
 		return nil
 	}
-	err := s.readFrames()
-	if err != nil {
-		return err
-	}
-	if s.fr.Type != FrameTypeData {
-		return &FrameTypeError{Want: FrameTypeData, Type: s.fr.Type}
-	}
-	return nil
+	return s.nextFrame(FrameTypeData)
 }
 
-func (s *requestStream) readFrames() error {
+func (s *requestStream) nextFrame(want FrameType) error {
 	for {
 		// Next discards any unread frame payload bytes.
 		err := s.fr.Next()
 		if err != nil {
 			return err
 		}
-		switch s.fr.Type {
-		case FrameTypeData, FrameTypeHeaders:
+		switch s.fr.Type { //nolint:exhaustive
+		case FrameTypeData:
 			// Stop processing on DATA or HEADERS frames.
+			if s.dataReaderClosed {
+				continue
+			}
+			if want != FrameTypeData {
+				return &FrameTypeError{Want: want, Type: s.fr.Type}
+			}
 			return nil
+
+		case FrameTypeHeaders:
+			// Stop processing on HEADERS frames.
+			if want != FrameTypeHeaders {
+				return &FrameTypeError{Want: want, Type: s.fr.Type}
+			}
+			return nil
+
+		case FrameTypeCancelPush:
+			// TODO: handle HTTP/3 pushes
+
+		case FrameTypePushPromise:
+			// TODO: handle HTTP/3 pushes
+			if s.conn.session.Perspective() == quic.PerspectiveServer {
+				// Not allowed on a request stream.
+				// Close the connection with H3_FRAME_UNEXPECTED.
+				err = &FrameTypeError{Want: want, Type: s.fr.Type}
+				s.conn.session.CloseWithError(quic.ApplicationErrorCode(errorFrameUnexpected), err.Error())
+				return err
+			}
 
 		case FrameTypeSettings, FrameTypeGoAway, FrameTypeMaxPushID:
-			// Receipt of these frame types is a connection error: H3_FRAME_UNEXPECTED.
-			// TODO(ydnar): should RequestStream close the connection, rather than the caller?
-			return nil
+			// Not allowed on a request stream.
+			// Close the connection with H3_FRAME_UNEXPECTED.
+			err = &FrameTypeError{Want: want, Type: s.fr.Type}
+			s.conn.session.CloseWithError(quic.ApplicationErrorCode(errorFrameUnexpected), err.Error())
+			return err
 
-		case FrameTypeCancelPush, FrameTypePushPromise:
-			// TODO: handle HTTP/3 pushes
+		default:
+			// Skip unknown frame types.
 		}
 	}
 }
