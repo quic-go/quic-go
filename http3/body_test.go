@@ -32,24 +32,21 @@ func (t bodyType) String() string {
 
 var _ = Describe("body", func() {
 	var (
-		rb                 *body
-		sess               *mockquic.MockEarlySession
-		conn               *connection
-		str                *mockquic.MockStream
-		rstr               RequestStream
-		buf                *bytes.Buffer
-		trailers           []qpack.HeaderField
-		trailersErr        error
-		reqDone            chan struct{}
-		onFrameErrorCalled bool
+		rb          *body
+		sess        *mockquic.MockEarlySession
+		conn        *connection
+		str         *mockquic.MockStream
+		rstr        RequestStream
+		buf         *bytes.Buffer
+		trailers    []qpack.HeaderField
+		trailersErr error
+		reqDone     chan struct{}
 	)
 
 	onTrailers := func(fields []qpack.HeaderField, err error) {
 		trailers = fields[:]
 		trailersErr = err
 	}
-
-	onFrameError := func() { onFrameErrorCalled = true }
 
 	getDataFrame := func(data []byte) []byte {
 		buf := &bytes.Buffer{}
@@ -61,7 +58,6 @@ var _ = Describe("body", func() {
 
 	BeforeEach(func() {
 		buf = &bytes.Buffer{}
-		onFrameErrorCalled = false
 	})
 
 	for _, bt := range []bodyType{bodyTypeRequest, bodyTypeResponse} {
@@ -84,10 +80,10 @@ var _ = Describe("body", func() {
 
 				switch bodyType {
 				case bodyTypeRequest:
-					rb = newRequestBody(rstr, onTrailers, onFrameError)
+					rb = newRequestBody(rstr, onTrailers)
 				case bodyTypeResponse:
 					reqDone = make(chan struct{})
-					rb = newResponseBody(rstr, onTrailers, reqDone, onFrameError)
+					rb = newResponseBody(rstr, onTrailers, reqDone)
 				}
 			})
 
@@ -187,12 +183,11 @@ var _ = Describe("body", func() {
 				Expect(err).To(Equal(io.EOF))
 			})
 
-			It("errors on unexpected frames, and calls the error callback", func() {
+			It("errors on unexpected frames, and closes the QUIC session", func() {
 				sess.EXPECT().CloseWithError(quic.ApplicationErrorCode(errorFrameUnexpected), gomock.Any())
 				Settings{}.writeFrame(buf)
 				_, err := rb.Read([]byte{0})
 				Expect(err).To(MatchError(&FrameTypeError{Want: FrameTypeData, Type: FrameTypeSettings}))
-				Expect(onFrameErrorCalled).To(BeTrue())
 			})
 
 			if bodyType == bodyTypeResponse {

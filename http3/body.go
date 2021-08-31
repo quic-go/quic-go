@@ -19,26 +19,23 @@ type body struct {
 	reqDone       chan<- struct{}
 	reqDoneClosed bool
 
-	onTrailers   trailerFunc
-	onFrameError func()
+	onTrailers trailerFunc
 }
 
 var _ io.ReadCloser = &body{}
 
-func newRequestBody(str RequestStream, onTrailers trailerFunc, onFrameError func()) *body {
+func newRequestBody(str RequestStream, onTrailers trailerFunc) *body {
 	return &body{
-		str:          str,
-		onTrailers:   onTrailers,
-		onFrameError: onFrameError,
+		str:        str,
+		onTrailers: onTrailers,
 	}
 }
 
-func newResponseBody(str RequestStream, onTrailers trailerFunc, done chan<- struct{}, onFrameError func()) *body {
+func newResponseBody(str RequestStream, onTrailers trailerFunc, done chan<- struct{}) *body {
 	return &body{
-		str:          str,
-		onTrailers:   onTrailers,
-		onFrameError: onFrameError,
-		reqDone:      done,
+		str:        str,
+		onTrailers: onTrailers,
+		reqDone:    done,
 	}
 }
 
@@ -48,8 +45,6 @@ func (r *body) Read(p []byte) (n int, err error) {
 		// Read trailers if present
 		if err == io.EOF && r.onTrailers != nil {
 			r.onTrailers(r.str.ReadHeaders())
-		} else if _, ok := err.(*FrameTypeError); ok {
-			r.onFrameError()
 		}
 		r.requestDone()
 	}
