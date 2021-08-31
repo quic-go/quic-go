@@ -467,7 +467,7 @@ var _ = Describe("Client", func() {
 			return fields
 		}
 
-		getResponse := func(status int) []byte {
+		getResponse := func(status int, header, trailer http.Header, body []byte) []byte {
 			buf := &bytes.Buffer{}
 			rsess := mockquic.NewMockEarlySession(mockCtrl)
 			rsess.EXPECT().Context().Return(context.Background()).AnyTimes()
@@ -476,9 +476,16 @@ var _ = Describe("Client", func() {
 			rstr.EXPECT().Write(gomock.Any()).DoAndReturn(buf.Write).AnyTimes()
 			mstr := newRequestStream(rconn, rstr, 0, 0)
 			rw := newResponseWriter(mstr, utils.DefaultLogger)
+			rw.header = header
 			rw.WriteHeader(status)
+			rw.Write(body)
+			// TODO: handle trailers
 			rw.Flush()
 			return buf.Bytes()
+		}
+
+		getSimpleResponse := func(status int) []byte {
+			return getResponse(status, nil, nil, nil)
 		}
 
 		BeforeEach(func() {
@@ -550,7 +557,7 @@ var _ = Describe("Client", func() {
 		})
 
 		It("returns a response", func() {
-			rspBuf := bytes.NewBuffer(getResponse(418))
+			rspBuf := bytes.NewBuffer(getSimpleResponse(418))
 			gomock.InOrder(
 				sess.EXPECT().HandshakeComplete().Return(handshakeCtx),
 				sess.EXPECT().OpenStreamSync(context.Background()).Return(str, nil),
@@ -724,7 +731,7 @@ var _ = Describe("Client", func() {
 			})
 
 			It("cancels a request after the response arrived", func() {
-				rspBuf := bytes.NewBuffer(getResponse(404))
+				rspBuf := bytes.NewBuffer(getSimpleResponse(404))
 
 				ctx, cancel := context.WithCancel(context.Background())
 				req := request.WithContext(ctx)
