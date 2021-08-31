@@ -208,6 +208,34 @@ var _ = Describe("Server", func() {
 			Expect(err).ToNot(HaveOccurred())
 		})
 
+		It("reads trailers sent from the client", func() {
+			trailer := http.Header{}
+			trailer.Add("foo", "1")
+			trailer.Add("bar", "2")
+			trailerBuf := &bytes.Buffer{}
+			err := writeHeadersFrame(trailerBuf, Trailers(trailer), http.DefaultMaxHeaderBytes)
+
+			s.Handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				p := make([]byte, 100)
+				n, err := r.Body.Read(p)
+				Expect(err).To(Equal(io.EOF))
+				Expect(n).To(Equal(6))
+				Expect(r.Trailer).To(Equal(trailer))
+			})
+
+			Expect(err).ToNot(HaveOccurred())
+			setRequest(append(encodeRequest(examplePostRequest), trailerBuf.Bytes()...))
+			responseBuf := &bytes.Buffer{}
+			str.EXPECT().Write(gomock.Any()).DoAndReturn(responseBuf.Write).MinTimes(1)
+			str.EXPECT().CancelRead(gomock.Any())
+			str.EXPECT().Context().Return(ctx).AnyTimes()
+
+			err = s.handleRequestStream(sess, mstr)
+			Expect(err).ToNot(HaveOccurred())
+			hfs := decodeHeader(responseBuf)
+			Expect(hfs).To(HaveKeyWithValue(":status", []string{"200"}))
+		})
+
 		Context("control stream handling", func() {
 			var sess *mockquic.MockEarlySession
 			testDone := make(chan struct{})
