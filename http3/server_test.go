@@ -414,7 +414,7 @@ var _ = Describe("Server", func() {
 
 			AfterEach(func() { testDone <- struct{}{} })
 
-			XIt("cancels reading when client sends a body in GET request", func() {
+			It("cancels reading when client sends a body in GET request", func() {
 				handlerCalled := make(chan struct{})
 				s.Handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 					close(handlerCalled)
@@ -430,6 +430,7 @@ var _ = Describe("Server", func() {
 				str.EXPECT().Write(gomock.Any()).DoAndReturn(responseBuf.Write).MinTimes(1)
 				str.EXPECT().CancelRead(quic.StreamErrorCode(errorNoError))
 				str.EXPECT().StreamID().AnyTimes()
+				str.EXPECT().Context().Return(ctx)
 				done := make(chan struct{})
 				str.EXPECT().Close().Do(func() { close(done) })
 
