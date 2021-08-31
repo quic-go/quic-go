@@ -59,11 +59,11 @@ type requestStream struct {
 	quic.Stream
 	conn *connection
 
-	fr           *FrameReader
-	readerClosed bool
+	fr               *FrameReader
+	dataReaderClosed bool
 
-	w            quicvarint.Writer
-	writerClosed bool
+	w                quicvarint.Writer
+	dataWriterClosed bool
 }
 
 var (
@@ -188,11 +188,14 @@ func (s *requestStream) Close() error {
 // the next HEADERS frame. If it encouters a DATA frame prior to
 // reading a HEADERS frame, it will return a frameTypeError.
 func (s *requestStream) nextHeadersFrame() error {
+	if s.fr.Type == FrameTypeHeaders && s.fr.N > 0 {
+		return nil
+	}
 	err := s.readFrames()
 	if err != nil {
 		return err
 	}
-	if s.fr.Type != FrameTypeHeaders {
+	if s.fr.Type != FrameTypeHeaders && !s.dataReaderClosed {
 		return &FrameTypeError{Want: FrameTypeHeaders, Type: s.fr.Type}
 	}
 	return nil
@@ -202,6 +205,9 @@ func (s *requestStream) nextHeadersFrame() error {
 // the next DATA frame. If it encouters a HEADERS frame prior to
 // reading a DATA frame, it will return a frameTypeError.
 func (s *requestStream) nextDataFrame() error {
+	if s.fr.Type == FrameTypeData && s.fr.N > 0 {
+		return nil
+	}
 	err := s.readFrames()
 	if err != nil {
 		return err
@@ -236,13 +242,18 @@ func (s *requestStream) readFrames() error {
 }
 
 func (s *requestStream) readData(p []byte) (n int, err error) {
-	if s.readerClosed {
-		return 0, errors.New("reader closed")
+	if s.dataReaderClosed {
+		return 0, io.EOF
 	}
 	for len(p) > 0 {
 		for s.fr.N <= 0 {
 			err = s.nextDataFrame()
 			if err != nil {
+				// Return EOF if we encounter trailers
+				if err, ok := err.(*FrameTypeError); ok && err.Type == FrameTypeHeaders {
+					s.closeDataReader()
+					return n, io.EOF
+				}
 				return n, err
 			}
 		}
@@ -264,8 +275,8 @@ const bodyCopyBufferSize = 8 * 1024
 
 // writeData writes bytes to DATA frames to the underlying quic.Stream.
 func (s *requestStream) writeData(p []byte) (n int, err error) {
-	if s.writerClosed {
-		return 0, errors.New("writer closed")
+	if s.dataWriterClosed {
+		return 0, io.ErrClosedPipe
 	}
 	for len(p) > 0 {
 		pp := p
@@ -286,8 +297,8 @@ func (s *requestStream) writeData(p []byte) (n int, err error) {
 // the underlying quic.Stream. This is the underlying implementation of
 // BodyReader().(io.ReaderFrom).
 func (s *requestStream) writeDataFrom(r io.Reader) (n int64, err error) {
-	if s.writerClosed {
-		return 0, errors.New("writer closed")
+	if s.dataWriterClosed {
+		return 0, io.ErrClosedPipe
 	}
 	buf := make([]byte, bodyCopyBufferSize)
 	for {
@@ -318,13 +329,13 @@ func (s *requestStream) writeDataFrame(p []byte) (n int, err error) {
 	return
 }
 
-func (s *requestStream) closeReader() error {
-	s.readerClosed = true
+func (s *requestStream) closeDataReader() error {
+	s.dataReaderClosed = true
 	return nil
 }
 
-func (s *requestStream) closeWriter() error {
-	s.writerClosed = true
+func (s *requestStream) closeDataWriter() error {
+	s.dataWriterClosed = true
 	return nil
 }
 
@@ -339,7 +350,7 @@ func (r *dataReader) Read(p []byte) (n int, err error) {
 }
 
 func (r *dataReader) Close() error {
-	return (*requestStream)(r).closeReader()
+	return (*requestStream)(r).closeDataReader()
 }
 
 // dataWriter is an alias for requestStream, so (*requestStream).BodyWriter can
@@ -358,5 +369,5 @@ func (w *dataWriter) ReadFrom(r io.Reader) (n int64, err error) {
 }
 
 func (w *dataWriter) Close() error {
-	return (*requestStream)(w).closeWriter()
+	return (*requestStream)(w).closeDataWriter()
 }
