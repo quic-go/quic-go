@@ -126,7 +126,6 @@ var _ = Describe("body", func() {
 				Expect(n).To(Equal(4))
 				Expect(b).To(Equal([]byte("foob")))
 				n, err = rb.Read(b)
-				// Expect(err).ToNot(HaveOccurred())
 				Expect(err).To(Equal(io.EOF))
 				Expect(n).To(Equal(2))
 				Expect(b[:n]).To(Equal([]byte("ar")))
