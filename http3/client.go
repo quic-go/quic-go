@@ -144,8 +144,18 @@ func (c *client) maxHeaderBytes() uint64 {
 	return uint64(c.opts.MaxHeaderBytes)
 }
 
-// RoundTrip executes a request and returns a response
+// RoundTrip executes a request and returns a response.
+// RoundTrip will always close req.Body if non-nil.
+// See https://pkg.go.dev/net/http#RoundTripper.
 func (c *client) RoundTrip(req *http.Request) (*http.Response, error) {
+	res, err := c.roundTrip(req)
+	if err != nil && req.Body != nil {
+		req.Body.Close()
+	}
+	return res, err
+}
+
+func (c *client) roundTrip(req *http.Request) (*http.Response, error) {
 	if authorityAddr("https", hostnameFromRequest(req)) != c.authority {
 		return nil, fmt.Errorf("http3 client BUG: RoundTrip called for the wrong client (expected %s, got %s)", c.authority, req.Host)
 	}
