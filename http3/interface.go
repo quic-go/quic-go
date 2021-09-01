@@ -104,7 +104,7 @@ type RequestStream interface {
 
 // TODO: implement the DATAGRAM draft:
 // https://www.ietf.org/archive/id/draft-ietf-masque-h3-datagram-03.html
-type DatagramRequestStream interface {
+type datagramRequestStream interface {
 	RequestStream
 
 	// AcceptDatagramContext receives a datagram context from a peer.
@@ -143,4 +143,23 @@ type DatagramHandler interface {
 
 	// WriteDatagram writes a single datagram.
 	WriteDatagram([]byte) error
+}
+
+// DataStreamer lets the caller take over the underlying quic.Stream. After a
+// call to DataStream, the server library will not do anything else with the
+// stream.
+//
+// It becomes the caller’s responsibility to manage and close the stream.
+//
+// After a call to DataStream, the original Request.Body should not be used.
+type DataStreamer interface {
+	DataStream() quic.Stream
+}
+
+// WebTransporter lets the caller extract a WebTransport session from a client
+// or server request session. The underlying request must be a CONNECT request
+// with :protocol=WebTransport on an HTTP/3 connection where both peers have
+// sent ENABLE_WEBTRANSPORT=1.
+type WebTransporter interface {
+	WebTransport() (WebTransport, error)
 }

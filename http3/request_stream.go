@@ -22,7 +22,11 @@ type requestStream struct {
 	dataWriterClosed bool
 }
 
-var _ RequestStream = &requestStream{}
+var (
+	_ RequestStream         = &requestStream{}
+	_ WebTransporter        = &requestStream{}
+	_ datagramRequestStream = &requestStream{}
+)
 
 // newRequestStream creates a new RequestStream. If a frame has already been
 // partially consumed from str, t specifies the frame type and n the number of

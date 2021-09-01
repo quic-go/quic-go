@@ -10,16 +10,6 @@ import (
 	"github.com/marten-seemann/qpack"
 )
 
-// DataStreamer lets the caller take over the stream. After a call to DataStream
-// the HTTP server library will not do anything else with the connection.
-//
-// It becomes the caller's responsibility to manage and close the stream.
-//
-// After a call to DataStream, the original Request.Body must not be used.
-type DataStreamer interface {
-	DataStream() quic.Stream
-}
-
 type responseWriter struct {
 	stream RequestStream
 
