@@ -228,6 +228,13 @@ func (s *Server) settings() Settings {
 	return settings
 }
 
+func (s *Server) maxHeaderBytes() uint64 {
+	if s.Server.MaxHeaderBytes <= 0 {
+		return http.DefaultMaxHeaderBytes
+	}
+	return uint64(s.Server.MaxHeaderBytes)
+}
+
 func (s *Server) handleConn(sess quic.EarlySession) {
 	conn, err := Accept(sess, s.settings())
 	if err != nil {
@@ -267,13 +274,6 @@ func (s *Server) handleConn(sess quic.EarlySession) {
 			str.Close()
 		}()
 	}
-}
-
-func (s *Server) maxHeaderBytes() uint64 {
-	if s.Server.MaxHeaderBytes <= 0 {
-		return http.DefaultMaxHeaderBytes
-	}
-	return uint64(s.Server.MaxHeaderBytes)
 }
 
 func (s *Server) handleRequestStream(str RequestStream) error {
