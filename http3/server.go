@@ -245,6 +245,8 @@ func (s *Server) handleSession(sess quic.EarlySession) {
 	s.handleConn(conn)
 }
 
+// TODO(ydnar): export this as (*Server).HandleConn so callers can process an
+// existing quic.EarlySession.
 func (s *Server) handleConn(conn ServerConn) {
 	// Process all requests immediately.
 	// It's the client's responsibility to decide which requests are eligible for 0-RTT.
@@ -279,6 +281,8 @@ func (s *Server) handleConn(conn ServerConn) {
 	}
 }
 
+// TODO(ydnar): export this as (*Server).HandleRequestStream so callers can
+// process an existing RequestStream.
 func (s *Server) handleRequestStream(str RequestStream) error {
 	headers, err := str.ReadHeaders()
 	if err != nil {
