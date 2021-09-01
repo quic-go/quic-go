@@ -63,7 +63,9 @@ func RequestHeaders(req *http.Request) ([]qpack.HeaderField, error) {
 
 	var didUA bool
 	for k, vv := range req.Header {
-		if !httpguts.ValidHeaderFieldName(k) {
+		if k == ":protocol" && req.Method == http.MethodConnect {
+			// TODO: is this right?
+		} else if !httpguts.ValidHeaderFieldName(k) {
 			return nil, fmt.Errorf("invalid HTTP header name %q", k)
 		}
 

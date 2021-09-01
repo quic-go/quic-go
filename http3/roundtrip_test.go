@@ -233,13 +233,13 @@ var _ = Describe("RoundTripper", func() {
 		It("rejects requests with invalid header name fields", func() {
 			req1.Header.Add("foobär", "value")
 			_, err := rt.RoundTrip(req1)
-			Expect(err).To(MatchError("http3: invalid http header field name \"foobär\""))
+			Expect(err).To(MatchError("http3: invalid HTTP header field name \"foobär\""))
 		})
 
 		It("rejects requests with invalid header name values", func() {
 			req1.Header.Add("foo", string([]byte{0x7}))
 			_, err := rt.RoundTrip(req1)
-			Expect(err.Error()).To(ContainSubstring("http3: invalid http header field value"))
+			Expect(err.Error()).To(ContainSubstring("http3: invalid HTTP header field value"))
 		})
 
 		It("rejects requests with an invalid request method", func() {

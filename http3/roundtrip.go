@@ -102,13 +102,16 @@ func (r *RoundTripper) RoundTripOpt(req *http.Request, opt RoundTripOpt) (*http.
 	}
 
 	if req.URL.Scheme == "https" {
+		// TODO: this is redundant with the checks in RequestHeaders()
 		for k, vv := range req.Header {
-			if !httpguts.ValidHeaderFieldName(k) {
-				return nil, fmt.Errorf("http3: invalid http header field name %q", k)
+			if req.Method == http.MethodConnect && k == ":protocol" {
+				// TODO: is this right?
+			} else if !httpguts.ValidHeaderFieldName(k) {
+				return nil, fmt.Errorf("http3: invalid HTTP header field name %q", k)
 			}
 			for _, v := range vv {
 				if !httpguts.ValidHeaderFieldValue(v) {
-					return nil, fmt.Errorf("http3: invalid http header field value %q for key %v", v, k)
+					return nil, fmt.Errorf("http3: invalid HTTP header field value %q for key %v", v, k)
 				}
 			}
 		}
