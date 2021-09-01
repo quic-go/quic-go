@@ -64,9 +64,7 @@ type requestStream struct {
 	dataWriterClosed bool
 }
 
-var (
-	_ RequestStream = &requestStream{}
-)
+var _ RequestStream = &requestStream{}
 
 // newRequestStream creates a new RequestStream. If a frame has already been
 // partially consumed from str, t specifies the frame type and n the number of
@@ -341,8 +339,10 @@ func (r *dataReader) Close() error {
 // return a limited interface version of itself.
 type dataWriter requestStream
 
-var _ io.WriteCloser = &dataWriter{}
-var _ io.ReaderFrom = &dataWriter{}
+var (
+	_ io.WriteCloser = &dataWriter{}
+	_ io.ReaderFrom  = &dataWriter{}
+)
 
 func (w *dataWriter) Write(p []byte) (n int, err error) {
 	return (*requestStream)(w).writeData(p)

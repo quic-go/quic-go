@@ -58,7 +58,7 @@ var _ = Describe("FrameReader", func() {
 
 		err := fr.Next()
 		Expect(err).ToNot(HaveOccurred())
-		Expect(fr.Type).To(Equal(FrameType(FrameTypeData)))
+		Expect(fr.Type).To(Equal(FrameTypeData))
 		Expect(fr.N).To(Equal(int64(0x100)))
 
 		err = fr.Next()
@@ -74,7 +74,7 @@ var _ = Describe("FrameReader", func() {
 
 		err := fr.Next()
 		Expect(err).ToNot(HaveOccurred())
-		Expect(fr.Type).To(Equal(FrameType(FrameTypeData)))
+		Expect(fr.Type).To(Equal(FrameTypeData))
 		Expect(fr.N).To(Equal(int64(0x100)))
 
 		b := make([]byte, 0x200)
@@ -85,6 +85,5 @@ var _ = Describe("FrameReader", func() {
 		n, err = fr.Read(b)
 		Expect(err).To(Equal(io.EOF))
 		Expect(n).To(Equal(0))
-
 	})
 })

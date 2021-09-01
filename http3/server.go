@@ -217,7 +217,7 @@ func (s *Server) settings() Settings {
 		return s.Settings
 	}
 	settings := Settings{
-		SettingMaxFieldSectionSize: uint64(s.maxHeaderBytes()),
+		SettingMaxFieldSectionSize: s.maxHeaderBytes(),
 	}
 	if s.EnableDatagrams {
 		settings.EnableDatagrams()
