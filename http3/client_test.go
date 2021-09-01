@@ -731,6 +731,23 @@ var _ = Describe("Client", func() {
 			Expect(res.Header.Get("Bar")).To(Equal("1"))
 		})
 
+		It("errors on malformed responses", func() {
+			resBuf := bytes.NewBuffer(getSimpleResponse(42))
+			gomock.InOrder(
+				sess.EXPECT().HandshakeComplete().Return(handshakeCtx),
+				sess.EXPECT().OpenStreamSync(context.Background()).Return(str, nil),
+			)
+			str.EXPECT().Write(gomock.Any()).AnyTimes().DoAndReturn(func(p []byte) (int, error) { return len(p), nil })
+			str.EXPECT().Close()
+			str.EXPECT().StreamID().AnyTimes()
+			str.EXPECT().Read(gomock.Any()).DoAndReturn(resBuf.Read).AnyTimes()
+			str.EXPECT().CancelWrite(quic.StreamErrorCode(errorMessageError))
+			str.EXPECT().CancelWrite(quic.StreamErrorCode(errorGeneralProtocolError))
+			res, err := client.RoundTrip(request)
+			Expect(err).To(HaveOccurred())
+			Expect(res.StatusCode).To(Equal(42))
+		})
+
 		It("returns a response with a body", func() {
 			body := []byte("foobar")
 			resBuf := bytes.NewBuffer(getResponse(200, nil, nil, body))

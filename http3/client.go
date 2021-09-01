@@ -263,7 +263,7 @@ func (c *client) doRequest(
 		// error before closing or resetting the stream.
 		// See https://quicwg.org/base-drafts/draft-ietf-quic-http.html#malformed.
 		str.CancelWrite(quic.StreamErrorCode(errorMessageError))
-		return nil, errors.New("invalid or missing :status header")
+		return res, errors.New("invalid or missing :status header")
 	}
 
 	connState := qtls.ToTLSConnectionState(c.sess.ConnectionState().TLS)
