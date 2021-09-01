@@ -257,11 +257,11 @@ func (c *client) doRequest(
 		}
 	}
 
-	// An invalid or missing :status header is an H3_MESSAGE_ERROR.
-	// TODO(ydnar): a server MAY send a response indicating the error
-	// before closing or resetting the stream.
-	// See https://quicwg.org/base-drafts/draft-ietf-quic-http.html#malformed.
+	// Duplicate, missing, or invalid :status is an H3_MESSAGE_ERROR.
 	if res.StatusCode < 100 || res.StatusCode > 599 {
+		// TODO(ydnar): a server MAY send a response indicating the
+		// error before closing or resetting the stream.
+		// See https://quicwg.org/base-drafts/draft-ietf-quic-http.html#malformed.
 		str.CancelWrite(quic.StreamErrorCode(errorMessageError))
 		return nil, errors.New("invalid or missing :status header")
 	}
