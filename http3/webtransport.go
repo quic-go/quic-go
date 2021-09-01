@@ -2,7 +2,6 @@ package http3
 
 import (
 	"context"
-	"errors"
 	"io"
 
 	"github.com/lucas-clemente/quic-go"
@@ -38,71 +37,4 @@ type StreamHandler interface {
 
 	// OpenUniStreamSync opens a new unidirectional stream.
 	OpenUniStreamSync(context.Context) (quic.SendStream, error)
-}
-
-type wtSession struct {
-	conn *connection
-	str  quic.Stream
-}
-
-var _ WebTransport = &wtSession{}
-
-func newWebTransportSession(conn *connection, str quic.Stream) (WebTransport, error) {
-	if !conn.Settings().WebTransportEnabled() {
-		return nil, errors.New("WebTransport not enabled")
-	}
-	peerSettings, err := conn.PeerSettingsSync(context.Background())
-	if err != nil {
-		return nil, err
-	}
-	if !peerSettings.WebTransportEnabled() {
-		return nil, errors.New("WebTransport not supported by peer")
-	}
-	return &wtSession{
-		conn: conn,
-		str:  str,
-	}, nil
-}
-
-func (s *wtSession) SessionID() SessionID {
-	return s.str.StreamID()
-}
-
-func (s *wtSession) Close() error {
-	s.conn.cleanup(s.SessionID())
-	s.str.CancelRead(quic.StreamErrorCode(errorNoError))
-	s.str.CancelWrite(quic.StreamErrorCode(errorNoError))
-	return nil
-}
-
-func (s *wtSession) AcceptStream(ctx context.Context) (quic.Stream, error) {
-	return s.conn.acceptStream(ctx, s.SessionID())
-}
-
-func (s *wtSession) AcceptUniStream(ctx context.Context) (quic.ReceiveStream, error) {
-	return s.conn.acceptUniStream(ctx, s.SessionID())
-}
-
-func (s *wtSession) OpenStream() (quic.Stream, error) {
-	return s.conn.openStream(s.SessionID())
-}
-
-func (s *wtSession) OpenStreamSync(ctx context.Context) (quic.Stream, error) {
-	return s.conn.openStreamSync(ctx, s.SessionID())
-}
-
-func (s *wtSession) OpenUniStream() (quic.SendStream, error) {
-	return s.conn.openUniStream(s.SessionID())
-}
-
-func (s *wtSession) OpenUniStreamSync(ctx context.Context) (quic.SendStream, error) {
-	return s.conn.openUniStreamSync(ctx, s.SessionID())
-}
-
-func (s *wtSession) ReadDatagram(ctx context.Context) ([]byte, error) {
-	return s.conn.readDatagram(ctx, s.SessionID())
-}
-
-func (s *wtSession) WriteDatagram(msg []byte) error {
-	return s.conn.writeDatagram(s.SessionID(), msg)
 }

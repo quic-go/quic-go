@@ -79,6 +79,26 @@ func newRequestStream(conn *connection, str quic.Stream, t FrameType, n int64) R
 	return s
 }
 
+// CancelRead cleans up any buffered incoming streams and datagrams.
+func (s *requestStream) CancelRead(code quic.StreamErrorCode) {
+	s.conn.cleanup(s.Stream.StreamID())
+	s.Stream.CancelRead(code)
+}
+
+// CancelWrite cleans up any buffered incoming streams and datagrams.
+func (s *requestStream) CancelWrite(code quic.StreamErrorCode) {
+	s.conn.cleanup(s.Stream.StreamID())
+	s.Stream.CancelWrite(code)
+}
+
+// Close cleans up any buffered incoming streams and datagrams.
+// TODO(ydnar): should this close the stream if a WebTransport interface was created?
+// TODO(ydnar): should a WebTransport session persist after an http.Handler returns?
+func (s *requestStream) Close() error {
+	s.conn.cleanup(s.Stream.StreamID())
+	return s.Stream.Close()
+}
+
 // ReadHeaders reads the next HEADERS frame, used for HTTP request and
 // response headers and trailers. An interim response (status 100-199)
 // must be followed by one or more additional HEADERS frames.
@@ -141,24 +161,17 @@ func (s *requestStream) DatagramNoContext() (DatagramContext, error) {
 }
 
 func (s *requestStream) WebTransport() (WebTransport, error) {
-	return newWebTransportSession(s.conn, s.Stream)
-}
-
-func (s *requestStream) CancelRead(code quic.StreamErrorCode) {
-	s.conn.cleanup(s.Stream.StreamID())
-	s.Stream.CancelRead(code)
-}
-
-func (s *requestStream) CancelWrite(code quic.StreamErrorCode) {
-	s.conn.cleanup(s.Stream.StreamID())
-	s.Stream.CancelWrite(code)
-}
-
-func (s *requestStream) Close() error {
-	// FIXME: should this close the stream if a WebTransport interface was created?
-	// Should a WebTransport session persist after an http.Handler returns?
-	s.conn.cleanup(s.Stream.StreamID())
-	return s.Stream.Close()
+	if !s.conn.Settings().WebTransportEnabled() {
+		return nil, errors.New("WebTransport not enabled")
+	}
+	peerSettings, err := s.conn.PeerSettingsSync(context.Background())
+	if err != nil {
+		return nil, err
+	}
+	if !peerSettings.WebTransportEnabled() {
+		return nil, errors.New("WebTransport not supported by peer")
+	}
+	return (*webTransportSession)(s), nil
 }
 
 // nextHeadersFrame reads incoming HTTP/3 frames until it finds
@@ -354,4 +367,51 @@ func (w *dataWriter) ReadFrom(r io.Reader) (n int64, err error) {
 
 func (w *dataWriter) Close() error {
 	return (*requestStream)(w).closeDataWriter()
+}
+
+// webTransportSession is an alias for requestStream.
+type webTransportSession requestStream
+
+var _ WebTransport = &webTransportSession{}
+
+func (s *webTransportSession) SessionID() SessionID {
+	return s.StreamID()
+}
+
+func (s *webTransportSession) Close() error {
+	s.CancelRead(quic.StreamErrorCode(errorNoError))
+	s.CancelWrite(quic.StreamErrorCode(errorNoError))
+	return nil
+}
+
+func (s *webTransportSession) AcceptStream(ctx context.Context) (quic.Stream, error) {
+	return s.conn.acceptStream(ctx, s.SessionID())
+}
+
+func (s *webTransportSession) AcceptUniStream(ctx context.Context) (quic.ReceiveStream, error) {
+	return s.conn.acceptUniStream(ctx, s.SessionID())
+}
+
+func (s *webTransportSession) OpenStream() (quic.Stream, error) {
+	return s.conn.openStream(s.SessionID())
+}
+
+func (s *webTransportSession) OpenStreamSync(ctx context.Context) (quic.Stream, error) {
+	return s.conn.openStreamSync(ctx, s.SessionID())
+}
+
+func (s *webTransportSession) OpenUniStream() (quic.SendStream, error) {
+	return s.conn.openUniStream(s.SessionID())
+}
+
+func (s *webTransportSession) OpenUniStreamSync(ctx context.Context) (quic.SendStream, error) {
+	return s.conn.openUniStreamSync(ctx, s.SessionID())
+}
+
+func (s *webTransportSession) ReadDatagram(ctx context.Context) ([]byte, error) {
+	return s.conn.readDatagram(ctx, s.SessionID())
+}
+
+func (s *webTransportSession) WriteDatagram(msg []byte) error {
+	return s.conn.writeDatagram(s.SessionID(), msg)
 }
