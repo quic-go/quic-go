@@ -226,6 +226,10 @@ func (c *client) doRequest(
 		Header:     http.Header{},
 	}
 	for {
+		// Reset on each interim response
+		res.StatusCode = 0
+		res.Status = ""
+
 		headers, err := str.ReadHeaders()
 		if err != nil {
 			return nil, err
@@ -236,7 +240,12 @@ func (c *client) doRequest(
 			case ":status":
 				res.StatusCode, err = strconv.Atoi(hf.Value)
 				if err != nil {
-					return nil, errors.New("malformed non-numeric status pseudo header")
+					// A malformed :status header is an H3_MESSAGE_ERROR.
+					// TODO(ydnar): a server MAY send a response indicating the error
+					// before closing or resetting the stream.
+					// See https://quicwg.org/base-drafts/draft-ietf-quic-http.html#malformed.
+					str.CancelWrite(quic.StreamErrorCode(errorMessageError))
+					return nil, errors.New("malformed non-numeric :status header")
 				}
 				res.Status = hf.Value + " " + http.StatusText(res.StatusCode)
 			default:
@@ -248,6 +257,15 @@ func (c *client) doRequest(
 		if res.StatusCode < 100 || res.StatusCode >= 200 {
 			break
 		}
+	}
+
+	// Missing :status header is an H3_MESSAGE_ERROR.
+	// TODO(ydnar): a server MAY send a response indicating the error
+	// before closing or resetting the stream.
+	// See https://quicwg.org/base-drafts/draft-ietf-quic-http.html#malformed.
+	if res.StatusCode < 100 || res.StatusCode > 599 {
+		str.CancelWrite(quic.StreamErrorCode(errorMessageError))
+		return nil, errors.New(":status header missing from response")
 	}
 
 	connState := qtls.ToTLSConnectionState(c.sess.ConnectionState().TLS)
