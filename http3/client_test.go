@@ -38,7 +38,7 @@ var _ = Describe("Client", func() {
 		origDialAddr = dialAddr
 		hostname := "quic.clemente.io:1337"
 		var err error
-		client, err = newClient(hostname, nil, &roundTripperOpts{}, nil, nil)
+		client, err = newClient(hostname, nil, nil, nil, false, nil)
 		Expect(err).ToNot(HaveOccurred())
 		Expect(client.authority).To(Equal(hostname))
 		req, err = http.NewRequest("GET", "https://localhost:1337", nil)
@@ -63,36 +63,27 @@ var _ = Describe("Client", func() {
 		})
 
 		It("uses default Settings when none is given", func() {
-			Expect(client.opts.Settings).To(BeNil())
-			Expect(client.opts.EnableDatagrams).To(BeFalse())
-			Expect(client.settings()).To(Equal(settings))
-		})
-
-		It("sets H3_DATAGRAM on Settings when opts.EnableDatagrams is set", func() {
-			client.opts.EnableDatagrams = true
-			Expect(client.opts.Settings).To(BeNil())
-			settings.EnableDatagrams()
-			Expect(client.settings()).To(Equal(settings))
+			Expect(client.settings).To(Equal(settings))
 		})
 
 		It("passes configured Settings through exactly", func() {
-			client.opts.Settings = Settings{1: 1, 2: 2}
-			Expect(client.settings()).To(Equal(client.opts.Settings))
-			client.opts.EnableDatagrams = true
-			Expect(client.settings()).To(Equal(client.opts.Settings))
+			settings := Settings{1: 1, 2: 2}
+			client, err := newClient("example.com", nil, nil, settings, false, nil)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(client.settings).To(Equal(settings))
 		})
 
 		It("rejects quic.Configs that allow multiple QUIC versions", func() {
 			qconf := &quic.Config{
 				Versions: []quic.VersionNumber{protocol.VersionDraft29, protocol.Version1},
 			}
-			_, err := newClient("localhost:1337", nil, &roundTripperOpts{}, qconf, nil)
+			_, err := newClient("localhost:1337", nil, qconf, nil, false, nil)
 			Expect(err).To(MatchError("can only use a single QUIC version for dialing a HTTP/3 connection"))
 		})
 	})
 
 	It("uses the default QUIC and TLS config if none is give", func() {
-		client, err := newClient("localhost:1337", nil, &roundTripperOpts{}, nil, nil)
+		client, err := newClient("localhost:1337", nil, nil, nil, false, nil)
 		Expect(err).ToNot(HaveOccurred())
 		var dialAddrCalled bool
 		dialAddr = func(_ string, tlsConf *tls.Config, quicConf *quic.Config) (quic.EarlySession, error) {
@@ -107,7 +98,7 @@ var _ = Describe("Client", func() {
 	})
 
 	It("adds the port to the hostname, if none is given", func() {
-		client, err := newClient("quic.clemente.io", nil, &roundTripperOpts{}, nil, nil)
+		client, err := newClient("quic.clemente.io", nil, nil, nil, false, nil)
 		Expect(err).ToNot(HaveOccurred())
 		var dialAddrCalled bool
 		dialAddr = func(hostname string, _ *tls.Config, _ *quic.Config) (quic.EarlySession, error) {
@@ -127,7 +118,7 @@ var _ = Describe("Client", func() {
 			NextProtos: []string{"proto foo", "proto bar"},
 		}
 		quicConf := &quic.Config{MaxIdleTimeout: time.Nanosecond}
-		client, err := newClient("localhost:1337", tlsConf, &roundTripperOpts{}, quicConf, nil)
+		client, err := newClient("localhost:1337", tlsConf, quicConf, nil, false, nil)
 		Expect(err).ToNot(HaveOccurred())
 		var dialAddrCalled bool
 		dialAddr = func(
@@ -161,7 +152,7 @@ var _ = Describe("Client", func() {
 			dialerCalled = true
 			return nil, testErr
 		}
-		client, err := newClient("localhost:1337", tlsConf, &roundTripperOpts{}, quicConf, dialer)
+		client, err := newClient("localhost:1337", tlsConf, quicConf, nil, false, dialer)
 		Expect(err).ToNot(HaveOccurred())
 		_, err = client.RoundTrip(req)
 		Expect(err).To(MatchError(testErr))
@@ -170,7 +161,9 @@ var _ = Describe("Client", func() {
 
 	It("enables HTTP/3 Datagrams", func() {
 		testErr := errors.New("handshake error")
-		client, err := newClient("localhost:1337", nil, &roundTripperOpts{EnableDatagrams: true}, nil, nil)
+		settings := Settings{}
+		settings.EnableDatagrams()
+		client, err := newClient("localhost:1337", nil, nil, settings, false, nil)
 		Expect(err).ToNot(HaveOccurred())
 		dialAddr = func(hostname string, _ *tls.Config, quicConf *quic.Config) (quic.EarlySession, error) {
 			Expect(quicConf.EnableDatagrams).To(BeTrue())
@@ -182,7 +175,7 @@ var _ = Describe("Client", func() {
 
 	It("errors when dialing fails", func() {
 		testErr := errors.New("handshake error")
-		client, err := newClient("localhost:1337", nil, &roundTripperOpts{}, nil, nil)
+		client, err := newClient("localhost:1337", nil, nil, nil, false, nil)
 		Expect(err).ToNot(HaveOccurred())
 		dialAddr = func(hostname string, _ *tls.Config, _ *quic.Config) (quic.EarlySession, error) {
 			return nil, testErr
@@ -192,7 +185,7 @@ var _ = Describe("Client", func() {
 	})
 
 	It("closes correctly if session was not created", func() {
-		client, err := newClient("localhost:1337", nil, &roundTripperOpts{}, nil, nil)
+		client, err := newClient("localhost:1337", nil, nil, nil, false, nil)
 		Expect(err).ToNot(HaveOccurred())
 		Expect(client.Close()).To(Succeed())
 	})
@@ -399,7 +392,7 @@ var _ = Describe("Client", func() {
 		})
 
 		It("errors when the server advertises datagram support (and we enabled support for it)", func() {
-			client.opts.EnableDatagrams = true
+			client.settings.EnableDatagrams()
 			buf := &bytes.Buffer{}
 			quicvarint.Write(buf, uint64(StreamTypeControl))
 			(Settings{SettingDatagram: 1}).writeFrame(buf)
@@ -1014,7 +1007,7 @@ var _ = Describe("Client", func() {
 			})
 
 			It("doesn't add gzip if the header disable it", func() {
-				client, err := newClient("quic.clemente.io:1337", nil, &roundTripperOpts{DisableCompression: true}, nil, nil)
+				client, err := newClient("quic.clemente.io:1337", nil, nil, nil, true, nil)
 				Expect(err).ToNot(HaveOccurred())
 				sess.EXPECT().OpenStreamSync(context.Background()).Return(str, nil)
 				buf := &bytes.Buffer{}

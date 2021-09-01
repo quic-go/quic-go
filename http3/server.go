@@ -229,10 +229,13 @@ func (s *Server) settings() Settings {
 }
 
 func (s *Server) maxHeaderBytes() uint64 {
-	if s.Server.MaxHeaderBytes <= 0 {
-		return http.DefaultMaxHeaderBytes
+	if s.Settings[SettingMaxFieldSectionSize] > 0 {
+		return s.Settings[SettingMaxFieldSectionSize]
 	}
-	return uint64(s.Server.MaxHeaderBytes)
+	if s.Server.MaxHeaderBytes > 0 {
+		return uint64(s.Server.MaxHeaderBytes)
+	}
+	return http.DefaultMaxHeaderBytes
 }
 
 func (s *Server) handleSession(sess quic.EarlySession) {

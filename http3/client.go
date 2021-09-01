@@ -36,15 +36,18 @@ var dialAddr = quic.DialAddrEarly
 type roundTripperOpts struct {
 	DisableCompression bool
 	EnableDatagrams    bool
+	EnableWebTransport bool
 	MaxHeaderBytes     int64
 	Settings           Settings
 }
 
 // client is a HTTP3 client doing requests
 type client struct {
-	tlsConf *tls.Config
-	config  *quic.Config
-	opts    *roundTripperOpts
+	tlsConf  *tls.Config
+	config   *quic.Config
+	settings Settings
+
+	disableCompression bool
 
 	dialOnce     sync.Once
 	dialer       func(network, addr string, tlsCfg *tls.Config, cfg *quic.Config) (quic.EarlySession, error)
@@ -60,8 +63,9 @@ type client struct {
 func newClient(
 	authority string,
 	tlsConf *tls.Config,
-	opts *roundTripperOpts,
 	quicConfig *quic.Config,
+	settings Settings,
+	disableCompression bool,
 	dialer func(network, addr string, tlsCfg *tls.Config, cfg *quic.Config) (quic.EarlySession, error),
 ) (*client, error) {
 	if quicConfig == nil {
@@ -73,9 +77,18 @@ func newClient(
 	if len(quicConfig.Versions) != 1 {
 		return nil, errors.New("can only use a single QUIC version for dialing a HTTP/3 connection")
 	}
-	// FIXME: disable this for WebTransport-enabled clients.
-	quicConfig.MaxIncomingStreams = -1 // don't allow any bidirectional streams
-	quicConfig.EnableDatagrams = opts.EnableDatagrams
+
+	if settings == nil {
+		settings = Settings{
+			SettingMaxFieldSectionSize: defaultMaxResponseHeaderBytes,
+		}
+	}
+
+	// Don’t allow incoming bidirectional streams unless WebTransport is enabled.
+	if !settings.WebTransportEnabled() {
+		quicConfig.MaxIncomingStreams = -1
+	}
+	quicConfig.EnableDatagrams = settings.DatagramsEnabled()
 	logger := utils.DefaultLogger.WithPrefix("h3 client")
 
 	if tlsConf == nil {
@@ -87,26 +100,14 @@ func newClient(
 	tlsConf.NextProtos = []string{versionToALPN(quicConfig.Versions[0])}
 
 	return &client{
-		authority: authorityAddr("https", authority),
-		tlsConf:   tlsConf,
-		config:    quicConfig,
-		opts:      opts,
-		dialer:    dialer,
-		logger:    logger,
+		authority:          authorityAddr("https", authority),
+		tlsConf:            tlsConf,
+		config:             quicConfig,
+		settings:           settings,
+		disableCompression: disableCompression,
+		dialer:             dialer,
+		logger:             logger,
 	}, nil
-}
-
-func (c *client) settings() Settings {
-	if c.opts.Settings != nil {
-		return c.opts.Settings
-	}
-	settings := Settings{
-		SettingMaxFieldSectionSize: c.maxHeaderBytes(),
-	}
-	if c.opts.EnableDatagrams {
-		settings.EnableDatagrams()
-	}
-	return settings
 }
 
 func (c *client) dial() error {
@@ -120,7 +121,7 @@ func (c *client) dial() error {
 		return err
 	}
 
-	c.conn, err = Open(c.sess, c.settings())
+	c.conn, err = Open(c.sess, c.settings)
 	if err != nil {
 		c.logger.Errorf("unable to open HTTP/3 connection: %s", err)
 		c.sess.CloseWithError(quic.ApplicationErrorCode(errorInternalError), "")
@@ -138,10 +139,10 @@ func (c *client) Close() error {
 }
 
 func (c *client) maxHeaderBytes() uint64 {
-	if c.opts.MaxHeaderBytes <= 0 {
-		return defaultMaxResponseHeaderBytes
+	if c.settings[SettingMaxFieldSectionSize] > 0 {
+		return c.settings[SettingMaxFieldSectionSize]
 	}
-	return uint64(c.opts.MaxHeaderBytes)
+	return defaultMaxResponseHeaderBytes
 }
 
 // RoundTrip executes a request and returns a response.
@@ -220,7 +221,7 @@ func (c *client) doRequest(
 	reqDone chan struct{},
 ) (*http.Response, error) {
 	var requestGzip bool
-	if !c.opts.DisableCompression && req.Method != http.MethodHead && req.Header.Get("Accept-Encoding") == "" && req.Header.Get("Range") == "" {
+	if !c.disableCompression && req.Method != http.MethodHead && req.Header.Get("Accept-Encoding") == "" && req.Header.Get("Range") == "" {
 		requestGzip = true
 	}
 

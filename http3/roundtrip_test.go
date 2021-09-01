@@ -139,7 +139,7 @@ var _ = Describe("RoundTripper", func() {
 			Expect(err).To(MatchError(testErr))
 			c := rt.clients["quic.clemente.io:443"]
 			Expect(c).ToNot(BeNil())
-			Expect(c.(*client).settings()).To(Equal(rt.Settings))
+			Expect(c.(*client).settings).To(Equal(rt.Settings))
 		})
 
 		It("uses the custom dialer, if provided", func() {

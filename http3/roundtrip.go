@@ -44,12 +44,19 @@ type RoundTripper struct {
 	// Settings specifies the HTTP/3 settings transmitted to the server.
 	// If nil, reasonable default values will be used.
 	// See https://quicwg.org/base-drafts/draft-ietf-quic-http.html#name-http-2-settings-parameters.
+	// If non-nil, overrides EnableDatagrams and EnableWebTransport.
 	Settings Settings
 
 	// Enable support for HTTP/3 datagrams.
 	// If set to true, QuicConfig.EnableDatagram will be set.
 	// See https://www.ietf.org/archive/id/draft-schinazi-masque-h3-datagram-02.html.
+	// Ignored if Settings is non-nil.
 	EnableDatagrams bool
+
+	// Enable support for WebTransport.
+	// If set to true, QuicConfig.EnableDatagram and ENABLE_WEBTRANSPORT will be set.
+	// Ignored if Settings is non-nil.
+	EnableWebTransport bool
 
 	// Dial specifies an optional dial function for creating QUIC
 	// connections for requests.
@@ -145,13 +152,9 @@ func (r *RoundTripper) getClient(hostname string, onlyCached bool) (http.RoundTr
 		client, err = newClient(
 			hostname,
 			r.TLSClientConfig,
-			&roundTripperOpts{
-				EnableDatagrams:    r.EnableDatagrams,
-				DisableCompression: r.DisableCompression,
-				MaxHeaderBytes:     r.MaxResponseHeaderBytes,
-				Settings:           r.Settings,
-			},
 			r.QuicConfig,
+			r.settings(),
+			r.DisableCompression,
 			r.Dial,
 		)
 		if err != nil {
@@ -160,6 +163,22 @@ func (r *RoundTripper) getClient(hostname string, onlyCached bool) (http.RoundTr
 		r.clients[hostname] = client
 	}
 	return client, nil
+}
+
+func (r *RoundTripper) settings() Settings {
+	if r.Settings != nil {
+		return r.Settings
+	}
+	settings := Settings{
+		SettingMaxFieldSectionSize: uint64(r.MaxResponseHeaderBytes),
+	}
+	if r.EnableDatagrams {
+		settings.EnableDatagrams()
+	}
+	if r.EnableWebTransport {
+		settings.EnableWebTransport()
+	}
+	return settings
 }
 
 // Close closes the QUIC connections that this RoundTripper has used
