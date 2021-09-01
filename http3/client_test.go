@@ -608,7 +608,9 @@ var _ = Describe("Client", func() {
 				rw.header["Trailer"] = append(rw.header["Trailer"], k)
 			}
 			rw.WriteHeader(status)
-			rw.Write(body)
+			if body != nil {
+				rw.Write(body)
+			}
 			for k, vv := range trailer {
 				rw.header[k] = vv[:]
 			}
