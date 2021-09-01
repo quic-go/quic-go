@@ -245,7 +245,7 @@ func (s *Server) handleConn(sess quic.EarlySession) {
 			return
 		}
 		go func() {
-			err := s.handleRequestStream(sess, str)
+			err := s.handleRequestStream(str)
 			if err != nil {
 				s.logger.Debugf("Handling request failed: %s", err)
 				switch err := err.(type) {
@@ -276,7 +276,7 @@ func (s *Server) maxHeaderBytes() uint64 {
 	return uint64(s.Server.MaxHeaderBytes)
 }
 
-func (s *Server) handleRequestStream(sess quic.EarlySession, str RequestStream) error {
+func (s *Server) handleRequestStream(str RequestStream) error {
 	headers, err := str.ReadHeaders()
 	if err != nil {
 		return err
@@ -284,14 +284,14 @@ func (s *Server) handleRequestStream(sess quic.EarlySession, str RequestStream) 
 
 	ctx := str.Context()
 	ctx = context.WithValue(ctx, ServerContextKey, s)
-	ctx = context.WithValue(ctx, http.LocalAddrContextKey, sess.LocalAddr())
+	ctx = context.WithValue(ctx, http.LocalAddrContextKey, str.LocalAddr())
 
 	req, err := requestFromHeaders(ctx, headers)
 	if err != nil {
 		return nil
 	}
 
-	req.RemoteAddr = sess.RemoteAddr().String()
+	req.RemoteAddr = str.RemoteAddr().String()
 
 	onTrailers := func(fields []qpack.HeaderField, err error) {
 		if err != nil {

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"net"
 
 	"github.com/lucas-clemente/quic-go"
 	"github.com/lucas-clemente/quic-go/quicvarint"
@@ -17,6 +18,12 @@ import (
 // directly read from or write to the underlying quic.Stream.
 type RequestStream interface {
 	quic.Stream
+
+	// LocalAddr returns the local address.
+	LocalAddr() net.Addr
+
+	// RemoteAddr returns the address of the peer.
+	RemoteAddr() net.Addr
 
 	// TODO: integrate QPACK encoding and decoding with dynamic tables.
 
@@ -97,6 +104,16 @@ func (s *requestStream) CancelWrite(code quic.StreamErrorCode) {
 func (s *requestStream) Close() error {
 	s.conn.cleanup(s.Stream.StreamID())
 	return s.Stream.Close()
+}
+
+// LocalAddr returns the local address.
+func (s *requestStream) LocalAddr() net.Addr {
+	return s.conn.session.LocalAddr()
+}
+
+// RemoteAddr returns the address of the peer.
+func (s *requestStream) RemoteAddr() net.Addr {
+	return s.conn.session.RemoteAddr()
 }
 
 // ReadHeaders reads the next HEADERS frame, used for HTTP request and
