@@ -31,6 +31,10 @@ type Conn interface {
 	// blocking until the peer’s settings have been received,
 	// the underlying QUIC session is closed, or the context is canceled.
 	PeerSettingsSync(context.Context) (Settings, error)
+
+	// CloseWithError closes the connection with an error.
+	// The error string will be sent to the peer.
+	CloseWithError(quic.ApplicationErrorCode, string) error
 }
 
 // ServerConn is a server connection. It accepts and processes HTTP/3 request streams.
@@ -163,6 +167,10 @@ func (conn *connection) PeerSettingsSync(ctx context.Context) (Settings, error) 
 	case <-ctx.Done():
 		return nil, ctx.Err()
 	}
+}
+
+func (conn *connection) CloseWithError(code quic.ApplicationErrorCode, desc string) error {
+	return conn.session.CloseWithError(code, desc)
 }
 
 func (conn *connection) maxHeaderBytes() uint64 {
