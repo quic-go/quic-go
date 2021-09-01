@@ -33,14 +33,6 @@ var defaultQuicConfig = &quic.Config{
 
 var dialAddr = quic.DialAddrEarly
 
-type roundTripperOpts struct {
-	DisableCompression bool
-	EnableDatagrams    bool
-	EnableWebTransport bool
-	MaxHeaderBytes     int64
-	Settings           Settings
-}
-
 // client is a HTTP3 client doing requests
 type client struct {
 	tlsConf  *tls.Config
