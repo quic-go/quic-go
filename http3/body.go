@@ -22,7 +22,10 @@ type body struct {
 	onTrailers trailerFunc
 }
 
-var _ io.ReadCloser = &body{}
+var (
+	_ io.ReadCloser  = &body{}
+	_ WebTransporter = &body{}
+)
 
 func newRequestBody(str RequestStream, onTrailers trailerFunc) *body {
 	return &body{
@@ -64,4 +67,8 @@ func (r *body) Close() error {
 	// If the EOF was read, CancelRead() is a no-op.
 	r.str.CancelRead(quic.StreamErrorCode(errorRequestCanceled))
 	return nil
+}
+
+func (r *body) WebTransport() (WebTransport, error) {
+	return r.str.WebTransport()
 }
