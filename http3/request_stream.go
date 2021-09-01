@@ -11,55 +11,6 @@ import (
 	"github.com/marten-seemann/qpack"
 )
 
-// A RequestStream wraps a QUIC stream for processing HTTP/3 requests. It
-// processes HEADERS and DATA frames, making these available to the caller via
-// ReadHeaders and DataReader. It may also process other frame types or skip any
-// unknown frame types. A caller can also bypass the framing methods and
-// directly read from or write to the underlying quic.Stream.
-type RequestStream interface {
-	quic.Stream
-
-	// LocalAddr returns the local address.
-	LocalAddr() net.Addr
-
-	// RemoteAddr returns the address of the peer.
-	RemoteAddr() net.Addr
-
-	// TODO: integrate QPACK encoding and decoding with dynamic tables.
-
-	// ReadHeaders reads the next HEADERS frame, used for HTTP request and
-	// response headers and trailers. An interim response (status 100-199)
-	// must be followed by one or more additional HEADERS frames. If
-	// ReadHeaders encounters a DATA frame or an otherwise unhandled frame,
-	// it will return a FrameTypeError.
-	ReadHeaders() ([]qpack.HeaderField, error)
-
-	// WriteHeaders writes a single HEADERS frame, used for HTTP request and
-	// response headers and trailers. It returns any errors that may occur,
-	// including QPACK encoding or writes to the underlying quic.Stream.
-	// WriteHeaders shoud not be called simultaneously with Write, ReadFrom,
-	// or writes to the underlying quic.Stream.
-	WriteHeaders([]qpack.HeaderField) error
-
-	// DataReader returns an io.ReadCloser that reads DATA frames from the
-	// underlying quic.Stream, used for reading an HTTP request or response
-	// body. If Read encounters a HEADERS frame it will return a
-	// FrameTypeError. If the write side of the stream closes, it will
-	// return io.EOF. Closing DataReader will prevent further writes, but
-	// will not close the stream.
-	DataReader() io.ReadCloser
-
-	// DataWriter returns an io.WriteCloser that writes DATA frames to the
-	// underlying quic.Stream, used for writing an HTTP request or response
-	// body. Write should not be called simultaneously with WriteHeaders.
-	// Closing DataWriter will prevent further writes, but will not close
-	// the stream.
-	DataWriter() io.WriteCloser
-
-	// WebTransport returns a WebTransport interface, if supported.
-	WebTransport() (WebTransport, error)
-}
-
 type requestStream struct {
 	quic.Stream
 	conn *connection

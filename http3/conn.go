@@ -17,50 +17,6 @@ const (
 	maxBufferedDatagrams = 10
 )
 
-// Conn is a base HTTP/3 connection.
-// Callers should use either ServerConn or ClientConn.
-type Conn interface {
-	// Settings returns the HTTP/3 settings for this side of the connection.
-	Settings() Settings
-
-	// PeerSettings returns the peer’s HTTP/3 settings.
-	// Returns nil if the peer’s settings have not been received.
-	PeerSettings() (Settings, error)
-
-	// PeerSettingsSync returns the peer’s HTTP/3 settings,
-	// blocking until the peer’s settings have been received,
-	// the underlying QUIC session is closed, or the context is canceled.
-	PeerSettingsSync(context.Context) (Settings, error)
-
-	// CloseWithError closes the connection with an error.
-	// The error string will be sent to the peer.
-	CloseWithError(quic.ApplicationErrorCode, string) error
-}
-
-// ServerConn is a server connection. It accepts and processes HTTP/3 request streams.
-type ServerConn interface {
-	Conn
-	AcceptRequestStream(context.Context) (RequestStream, error)
-}
-
-// ClientConn is a client connection. It opens and processes HTTP/3 request streams.
-type ClientConn interface {
-	Conn
-	OpenRequestStream(context.Context) (RequestStream, error)
-}
-
-// webTransportConn is an internal interface for implementing WebTransport.
-type webTransportConn interface {
-	acceptStream(context.Context, SessionID) (quic.Stream, error)
-	acceptUniStream(context.Context, SessionID) (quic.ReceiveStream, error)
-	openStream(SessionID) (quic.Stream, error)
-	openStreamSync(context.Context, SessionID) (quic.Stream, error)
-	openUniStream(SessionID) (quic.SendStream, error)
-	openUniStreamSync(context.Context, SessionID) (quic.SendStream, error)
-	readDatagram(context.Context, SessionID) ([]byte, error)
-	writeDatagram(SessionID, []byte) error
-}
-
 type connection struct {
 	session quic.EarlySession
 
