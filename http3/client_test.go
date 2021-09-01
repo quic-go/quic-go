@@ -550,7 +550,7 @@ var _ = Describe("Client", func() {
 		})
 	})
 
-	Context("Doing requests", func() {
+	Context("doing requests", func() {
 		var (
 			request              *http.Request
 			str                  *mockquic.MockStream
@@ -693,7 +693,7 @@ var _ = Describe("Client", func() {
 		})
 
 		It("returns a response", func() {
-			rspBuf := bytes.NewBuffer(getSimpleResponse(418))
+			resBuf := bytes.NewBuffer(getSimpleResponse(418))
 			gomock.InOrder(
 				sess.EXPECT().HandshakeComplete().Return(handshakeCtx),
 				sess.EXPECT().OpenStreamSync(context.Background()).Return(str, nil),
@@ -702,19 +702,19 @@ var _ = Describe("Client", func() {
 			str.EXPECT().Write(gomock.Any()).AnyTimes().DoAndReturn(func(p []byte) (int, error) { return len(p), nil })
 			str.EXPECT().Close()
 			str.EXPECT().StreamID().AnyTimes()
-			str.EXPECT().Read(gomock.Any()).DoAndReturn(rspBuf.Read).AnyTimes()
-			rsp, err := client.RoundTrip(request)
+			str.EXPECT().Read(gomock.Any()).DoAndReturn(resBuf.Read).AnyTimes()
+			res, err := client.RoundTrip(request)
 			Expect(err).ToNot(HaveOccurred())
-			Expect(rsp.Proto).To(Equal("HTTP/3"))
-			Expect(rsp.ProtoMajor).To(Equal(3))
-			Expect(rsp.StatusCode).To(Equal(418))
+			Expect(res.Proto).To(Equal("HTTP/3"))
+			Expect(res.ProtoMajor).To(Equal(3))
+			Expect(res.StatusCode).To(Equal(418))
 		})
 
 		It("handles interim responses", func() {
-			rspBuf := &bytes.Buffer{}
-			rspBuf.Write(getSimpleResponse(http.StatusProcessing))
-			rspBuf.Write(getResponse(http.StatusEarlyHints, http.Header{"Foo": {"1"}}, nil, nil))
-			rspBuf.Write(getResponse(http.StatusOK, http.Header{"Bar": {"1"}}, nil, nil))
+			resBuf := &bytes.Buffer{}
+			resBuf.Write(getSimpleResponse(http.StatusProcessing))
+			resBuf.Write(getResponse(http.StatusEarlyHints, http.Header{"Foo": {"1"}}, nil, nil))
+			resBuf.Write(getResponse(http.StatusOK, http.Header{"Bar": {"1"}}, nil, nil))
 			gomock.InOrder(
 				sess.EXPECT().HandshakeComplete().Return(handshakeCtx),
 				sess.EXPECT().OpenStreamSync(context.Background()).Return(str, nil),
@@ -723,17 +723,17 @@ var _ = Describe("Client", func() {
 			str.EXPECT().Write(gomock.Any()).AnyTimes().DoAndReturn(func(p []byte) (int, error) { return len(p), nil })
 			str.EXPECT().Close()
 			str.EXPECT().StreamID().AnyTimes()
-			str.EXPECT().Read(gomock.Any()).DoAndReturn(rspBuf.Read).AnyTimes()
-			rsp, err := client.RoundTrip(request)
+			str.EXPECT().Read(gomock.Any()).DoAndReturn(resBuf.Read).AnyTimes()
+			res, err := client.RoundTrip(request)
 			Expect(err).ToNot(HaveOccurred())
-			Expect(rsp.StatusCode).To(Equal(http.StatusOK))
-			Expect(rsp.Header.Get("Foo")).To(Equal("1")) // TODO: should interim response headers accumulate into final response?
-			Expect(rsp.Header.Get("Bar")).To(Equal("1"))
+			Expect(res.StatusCode).To(Equal(http.StatusOK))
+			Expect(res.Header.Get("Foo")).To(Equal("1")) // TODO: should interim response headers accumulate into final response?
+			Expect(res.Header.Get("Bar")).To(Equal("1"))
 		})
 
 		It("returns a response with a body", func() {
 			body := []byte("foobar")
-			rspBuf := bytes.NewBuffer(getResponse(200, nil, nil, body))
+			resBuf := bytes.NewBuffer(getResponse(200, nil, nil, body))
 			gomock.InOrder(
 				sess.EXPECT().HandshakeComplete().Return(handshakeCtx),
 				sess.EXPECT().OpenStreamSync(context.Background()).Return(str, nil),
@@ -742,7 +742,7 @@ var _ = Describe("Client", func() {
 			str.EXPECT().Write(gomock.Any()).AnyTimes().DoAndReturn(func(p []byte) (int, error) { return len(p), nil })
 			str.EXPECT().Close()
 			str.EXPECT().StreamID().AnyTimes()
-			str.EXPECT().Read(gomock.Any()).DoAndReturn(rspBuf.Read).AnyTimes()
+			str.EXPECT().Read(gomock.Any()).DoAndReturn(resBuf.Read).AnyTimes()
 			res, err := client.RoundTrip(request)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(res.StatusCode).To(Equal(200))
@@ -756,7 +756,7 @@ var _ = Describe("Client", func() {
 			trailer := http.Header{}
 			trailer.Add("foo", "1")
 			trailer.Add("bar", "1")
-			rspBuf := bytes.NewBuffer(getResponse(200, nil, trailer, body))
+			resBuf := bytes.NewBuffer(getResponse(200, nil, trailer, body))
 			gomock.InOrder(
 				sess.EXPECT().HandshakeComplete().Return(handshakeCtx),
 				sess.EXPECT().OpenStreamSync(context.Background()).Return(str, nil),
@@ -765,7 +765,7 @@ var _ = Describe("Client", func() {
 			str.EXPECT().Write(gomock.Any()).AnyTimes().DoAndReturn(func(p []byte) (int, error) { return len(p), nil })
 			str.EXPECT().Close()
 			str.EXPECT().StreamID().AnyTimes()
-			str.EXPECT().Read(gomock.Any()).DoAndReturn(rspBuf.Read).AnyTimes()
+			str.EXPECT().Read(gomock.Any()).DoAndReturn(resBuf.Read).AnyTimes()
 			res, err := client.RoundTrip(request)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(res.StatusCode).To(Equal(200))
@@ -932,7 +932,7 @@ var _ = Describe("Client", func() {
 			})
 
 			It("cancels a request after the response arrived", func() {
-				rspBuf := bytes.NewBuffer(getSimpleResponse(404))
+				resBuf := bytes.NewBuffer(getSimpleResponse(404))
 
 				ctx, cancel := context.WithCancel(context.Background())
 				req := request.WithContext(ctx)
@@ -945,7 +945,7 @@ var _ = Describe("Client", func() {
 
 				done := make(chan struct{})
 				str.EXPECT().Write(gomock.Any()).DoAndReturn(buf.Write).MinTimes(1)
-				str.EXPECT().Read(gomock.Any()).DoAndReturn(rspBuf.Read).AnyTimes()
+				str.EXPECT().Read(gomock.Any()).DoAndReturn(resBuf.Read).AnyTimes()
 				str.EXPECT().CancelWrite(quic.StreamErrorCode(errorRequestCanceled))
 				str.EXPECT().CancelRead(quic.StreamErrorCode(errorRequestCanceled)).Do(func(quic.StreamErrorCode) { close(done) })
 				_, err := client.RoundTrip(req)
@@ -1015,14 +1015,14 @@ var _ = Describe("Client", func() {
 				str.EXPECT().Close()
 				str.EXPECT().StreamID().AnyTimes()
 
-				rsp, err := client.RoundTrip(request)
+				res, err := client.RoundTrip(request)
 				Expect(err).ToNot(HaveOccurred())
-				data, err := ioutil.ReadAll(rsp.Body)
+				data, err := ioutil.ReadAll(res.Body)
 				Expect(err).ToNot(HaveOccurred())
-				Expect(rsp.ContentLength).To(BeEquivalentTo(-1))
+				Expect(res.ContentLength).To(BeEquivalentTo(-1))
 				Expect(string(data)).To(Equal("gzipped response"))
-				Expect(rsp.Header.Get("Content-Encoding")).To(BeEmpty())
-				Expect(rsp.Uncompressed).To(BeTrue())
+				Expect(res.Header.Get("Content-Encoding")).To(BeEmpty())
+				Expect(res.Uncompressed).To(BeTrue())
 			})
 
 			It("only decompresses the response if the response contains the right content-encoding header", func() {
@@ -1043,12 +1043,12 @@ var _ = Describe("Client", func() {
 				str.EXPECT().Close()
 				str.EXPECT().StreamID().AnyTimes()
 
-				rsp, err := client.RoundTrip(request)
+				res, err := client.RoundTrip(request)
 				Expect(err).ToNot(HaveOccurred())
-				data, err := ioutil.ReadAll(rsp.Body)
+				data, err := ioutil.ReadAll(res.Body)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(string(data)).To(Equal("not gzipped"))
-				Expect(rsp.Header.Get("Content-Encoding")).To(BeEmpty())
+				Expect(res.Header.Get("Content-Encoding")).To(BeEmpty())
 			})
 		})
 	})

@@ -188,7 +188,7 @@ func (c *client) RoundTrip(req *http.Request) (*http.Response, error) {
 		}
 	}()
 
-	resp, err := c.doRequest(str, req, reqDone)
+	res, err := c.doRequest(str, req, reqDone)
 	if err != nil {
 		close(reqDone)
 		switch err := err.(type) {
@@ -201,7 +201,7 @@ func (c *client) RoundTrip(req *http.Request) (*http.Response, error) {
 			str.CancelWrite(quic.StreamErrorCode(errorGeneralProtocolError))
 		}
 	}
-	return resp, err
+	return res, err
 }
 
 func (c *client) doRequest(
