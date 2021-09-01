@@ -710,6 +710,27 @@ var _ = Describe("Client", func() {
 			Expect(rsp.StatusCode).To(Equal(418))
 		})
 
+		It("handles interim responses", func() {
+			rspBuf := &bytes.Buffer{}
+			rspBuf.Write(getSimpleResponse(http.StatusProcessing))
+			rspBuf.Write(getResponse(http.StatusEarlyHints, http.Header{"Foo": {"1"}}, nil, nil))
+			rspBuf.Write(getResponse(http.StatusOK, http.Header{"Bar": {"1"}}, nil, nil))
+			gomock.InOrder(
+				sess.EXPECT().HandshakeComplete().Return(handshakeCtx),
+				sess.EXPECT().OpenStreamSync(context.Background()).Return(str, nil),
+				sess.EXPECT().ConnectionState().Return(quic.ConnectionState{}),
+			)
+			str.EXPECT().Write(gomock.Any()).AnyTimes().DoAndReturn(func(p []byte) (int, error) { return len(p), nil })
+			str.EXPECT().Close()
+			str.EXPECT().StreamID().AnyTimes()
+			str.EXPECT().Read(gomock.Any()).DoAndReturn(rspBuf.Read).AnyTimes()
+			rsp, err := client.RoundTrip(request)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(rsp.StatusCode).To(Equal(http.StatusOK))
+			Expect(rsp.Header.Get("Foo")).To(Equal("1")) // TODO: should interim response headers accumulate into final response?
+			Expect(rsp.Header.Get("Bar")).To(Equal("1"))
+		})
+
 		It("returns a response with a body", func() {
 			body := []byte("foobar")
 			rspBuf := bytes.NewBuffer(getResponse(200, nil, nil, body))
