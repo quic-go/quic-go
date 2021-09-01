@@ -266,7 +266,7 @@ var _ = Describe("Server", func() {
 					<-testDone
 					return nil, errors.New("test done")
 				})
-				s.handleConn(sess)
+				s.handleSession(sess)
 				time.Sleep(scaleDuration(20 * time.Millisecond)) // don't EXPECT any calls to sess.CloseWithError
 			})
 
@@ -290,7 +290,7 @@ var _ = Describe("Server", func() {
 						<-testDone
 						return nil, errors.New("test done")
 					})
-					s.handleConn(sess)
+					s.handleSession(sess)
 					time.Sleep(scaleDuration(20 * time.Millisecond)) // don't EXPECT any calls to str.CancelRead
 				})
 			}
@@ -312,7 +312,7 @@ var _ = Describe("Server", func() {
 					<-testDone
 					return nil, errors.New("test done")
 				})
-				s.handleConn(sess)
+				s.handleSession(sess)
 				Eventually(done).Should(BeClosed())
 			})
 
@@ -336,7 +336,7 @@ var _ = Describe("Server", func() {
 					Expect(code).To(BeEquivalentTo(errorMissingSettings))
 					close(done)
 				})
-				s.handleConn(sess)
+				s.handleSession(sess)
 				Eventually(done).Should(BeClosed())
 			})
 
@@ -361,7 +361,7 @@ var _ = Describe("Server", func() {
 					Expect(code).To(BeEquivalentTo(errorMissingSettings))
 					close(done)
 				})
-				s.handleConn(sess)
+				s.handleSession(sess)
 				Eventually(done).Should(BeClosed())
 			})
 
@@ -385,7 +385,7 @@ var _ = Describe("Server", func() {
 					Expect(code).To(BeEquivalentTo(errorStreamCreationError))
 					close(done)
 				})
-				s.handleConn(sess)
+				s.handleSession(sess)
 				Eventually(done).Should(BeClosed())
 			})
 
@@ -411,7 +411,7 @@ var _ = Describe("Server", func() {
 					Expect(reason).To(Equal("missing QUIC Datagram support"))
 					close(done)
 				})
-				s.handleConn(sess)
+				s.handleSession(sess)
 				Eventually(done).Should(BeClosed())
 			})
 		})
@@ -461,7 +461,7 @@ var _ = Describe("Server", func() {
 				done := make(chan struct{})
 				str.EXPECT().Close().Do(func() { close(done) })
 
-				s.handleConn(sess)
+				s.handleSession(sess)
 				Eventually(done).Should(BeClosed())
 				hfs := decodeHeader(responseBuf)
 				Expect(hfs).To(HaveKeyWithValue(":status", []string{"200"}))
@@ -486,7 +486,7 @@ var _ = Describe("Server", func() {
 				str.EXPECT().Context().Return(ctx).AnyTimes()
 				str.EXPECT().CancelWrite(quic.StreamErrorCode(errorFrameError)).Do(func(quic.StreamErrorCode) { close(done) })
 
-				s.handleConn(sess)
+				s.handleSession(sess)
 				Eventually(done).Should(BeClosed())
 			})
 
@@ -501,7 +501,7 @@ var _ = Describe("Server", func() {
 				str.EXPECT().Read(gomock.Any()).Return(0, testErr)
 				str.EXPECT().CancelWrite(quic.StreamErrorCode(errorRequestIncomplete)).Do(func(quic.StreamErrorCode) { close(done) })
 
-				s.handleConn(sess)
+				s.handleSession(sess)
 				Consistently(handlerCalled).ShouldNot(BeClosed())
 			})
 
@@ -525,7 +525,7 @@ var _ = Describe("Server", func() {
 					Expect(code).To(Equal(quic.ApplicationErrorCode(errorFrameUnexpected)))
 					close(done)
 				})
-				s.handleConn(sess)
+				s.handleSession(sess)
 				Eventually(done).Should(BeClosed())
 			})
 
@@ -549,7 +549,7 @@ var _ = Describe("Server", func() {
 				str.EXPECT().StreamID().AnyTimes()
 				str.EXPECT().Close()
 
-				s.handleConn(sess)
+				s.handleSession(sess)
 				Eventually(done).Should(BeClosed())
 				hfs := decodeHeader(responseBuf)
 				Expect(hfs).To(HaveKeyWithValue(":status", []string{"431"}))

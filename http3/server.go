@@ -190,7 +190,7 @@ func (s *Server) serveImpl(tlsConf *tls.Config, conn net.PacketConn) error {
 		if err != nil {
 			return err
 		}
-		go s.handleConn(sess)
+		go s.handleSession(sess)
 	}
 }
 
@@ -235,14 +235,17 @@ func (s *Server) maxHeaderBytes() uint64 {
 	return uint64(s.Server.MaxHeaderBytes)
 }
 
-func (s *Server) handleConn(sess quic.EarlySession) {
+func (s *Server) handleSession(sess quic.EarlySession) {
 	conn, err := Accept(sess, s.settings())
 	if err != nil {
-		s.logger.Errorf("unable to open HTTP/3 connection")
+		s.logger.Errorf("error accepting HTTP/3 connection: %s", err)
 		sess.CloseWithError(quic.ApplicationErrorCode(errorGeneralProtocolError), "")
 		return
 	}
+	s.handleConn(conn)
+}
 
+func (s *Server) handleConn(conn ServerConn) {
 	// Process all requests immediately.
 	// It's the client's responsibility to decide which requests are eligible for 0-RTT.
 	for {
@@ -258,7 +261,7 @@ func (s *Server) handleConn(sess quic.EarlySession) {
 				switch err := err.(type) {
 				case *FrameTypeError:
 					// HTTP requests MUST start with a HEADERS frame.
-					sess.CloseWithError(quic.ApplicationErrorCode(errorFrameUnexpected), err.Error())
+					conn.CloseWithError(quic.ApplicationErrorCode(errorFrameUnexpected), err.Error())
 				case *FrameLengthError:
 					str.CancelWrite(quic.StreamErrorCode(errorFrameError))
 				default:

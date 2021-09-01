@@ -82,11 +82,11 @@ func (s *Server) ListenAndServe() error {
 		if err != nil {
 			return err
 		}
-		go s.handleConn(sess)
+		go s.handleSession(sess)
 	}
 }
 
-func (s *Server) handleConn(sess quic.Session) {
+func (s *Server) handleSession(sess quic.Session) {
 	for {
 		str, err := sess.AcceptStream(context.Background())
 		if err != nil {
