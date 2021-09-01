@@ -226,46 +226,44 @@ func (c *client) doRequest(
 		Header:     http.Header{},
 	}
 	for {
-		// Reset on each interim response
-		res.StatusCode = 0
-		res.Status = ""
-
 		headers, err := str.ReadHeaders()
 		if err != nil {
 			return nil, err
 		}
 
+		var statusCode int
+		var status string
 		for _, hf := range headers {
-			switch hf.Name {
-			case ":status":
-				res.StatusCode, err = strconv.Atoi(hf.Value)
+			if hf.Name == ":status" {
+				if statusCode != 0 {
+					// More than one :status header is an H3_MESSAGE_ERROR.
+					break
+				}
+				statusCode, err = strconv.Atoi(hf.Value)
 				if err != nil {
 					// A malformed :status header is an H3_MESSAGE_ERROR.
-					// TODO(ydnar): a server MAY send a response indicating the error
-					// before closing or resetting the stream.
-					// See https://quicwg.org/base-drafts/draft-ietf-quic-http.html#malformed.
-					str.CancelWrite(quic.StreamErrorCode(errorMessageError))
-					return nil, errors.New("malformed non-numeric :status header")
+					break
 				}
-				res.Status = hf.Value + " " + http.StatusText(res.StatusCode)
-			default:
-				// TODO: is is correct to accumulate interim headers in the final response headers map?
+				status = hf.Value + " " + http.StatusText(res.StatusCode)
+			} else {
 				res.Header.Add(hf.Name, hf.Value)
 			}
 		}
 
-		if res.StatusCode < 100 || res.StatusCode >= 200 {
+		if statusCode < 100 || statusCode >= 200 {
+			res.StatusCode = statusCode
+			res.Status = status
 			break
 		}
 	}
 
-	// Missing :status header is an H3_MESSAGE_ERROR.
+	// An invalid or missing :status header is an H3_MESSAGE_ERROR.
 	// TODO(ydnar): a server MAY send a response indicating the error
 	// before closing or resetting the stream.
 	// See https://quicwg.org/base-drafts/draft-ietf-quic-http.html#malformed.
 	if res.StatusCode < 100 || res.StatusCode > 599 {
 		str.CancelWrite(quic.StreamErrorCode(errorMessageError))
-		return nil, errors.New(":status header missing from response")
+		return nil, errors.New("invalid or missing :status header")
 	}
 
 	connState := qtls.ToTLSConnectionState(c.sess.ConnectionState().TLS)
