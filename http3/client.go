@@ -245,14 +245,14 @@ func (c *client) doRequest(
 		var status string
 		for _, hf := range headers {
 			if hf.Name == ":status" {
-				if statusCode != 0 {
-					// More than one :status header is an H3_MESSAGE_ERROR.
-					break
-				}
 				statusCode, err = strconv.Atoi(hf.Value)
 				if err != nil {
 					// A malformed :status header is an H3_MESSAGE_ERROR.
-					break
+					// TODO(ydnar): a server MAY send a response indicating the
+					// error before closing or resetting the stream.
+					// See https://quicwg.org/base-drafts/draft-ietf-quic-http.html#malformed.
+					str.CancelWrite(quic.StreamErrorCode(errorMessageError))
+					return nil, errors.New("invalid or missing :status header")
 				}
 				status = hf.Value + " " + http.StatusText(res.StatusCode)
 			} else {
@@ -265,15 +265,6 @@ func (c *client) doRequest(
 			res.Status = status
 			break
 		}
-	}
-
-	// Duplicate, missing, or invalid :status is an H3_MESSAGE_ERROR.
-	if res.StatusCode < 100 || res.StatusCode > 599 {
-		// TODO(ydnar): a server MAY send a response indicating the
-		// error before closing or resetting the stream.
-		// See https://quicwg.org/base-drafts/draft-ietf-quic-http.html#malformed.
-		str.CancelWrite(quic.StreamErrorCode(errorMessageError))
-		return res, errors.New("invalid or missing :status header")
 	}
 
 	connState := qtls.ToTLSConnectionState(c.sess.ConnectionState().TLS)

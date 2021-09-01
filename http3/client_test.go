@@ -731,8 +731,28 @@ var _ = Describe("Client", func() {
 			Expect(res.Header.Get("Bar")).To(Equal("1"))
 		})
 
-		It("errors on malformed responses", func() {
+		It("returns responses with an invalid :status header", func() {
 			resBuf := bytes.NewBuffer(getSimpleResponse(42))
+			gomock.InOrder(
+				sess.EXPECT().HandshakeComplete().Return(handshakeCtx),
+				sess.EXPECT().OpenStreamSync(context.Background()).Return(str, nil),
+				sess.EXPECT().ConnectionState().Return(quic.ConnectionState{}),
+			)
+			str.EXPECT().Write(gomock.Any()).AnyTimes().DoAndReturn(func(p []byte) (int, error) { return len(p), nil })
+			str.EXPECT().Close()
+			str.EXPECT().StreamID().AnyTimes()
+			str.EXPECT().Read(gomock.Any()).DoAndReturn(resBuf.Read).AnyTimes()
+			res, err := client.RoundTrip(request)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(res.StatusCode).To(Equal(42))
+		})
+
+		It("errors on malformed :status headers", func() {
+			resBuf := &bytes.Buffer{}
+			writeHeadersFrame(resBuf, []qpack.HeaderField{{Name: ":status", Value: "101"}}, http.DefaultMaxHeaderBytes)
+			writeHeadersFrame(resBuf, []qpack.HeaderField{{Name: ":status", Value: ""}}, http.DefaultMaxHeaderBytes)
+			quicvarint.Write(resBuf, uint64(FrameTypeData))
+			quicvarint.Write(resBuf, 0)
 			gomock.InOrder(
 				sess.EXPECT().HandshakeComplete().Return(handshakeCtx),
 				sess.EXPECT().OpenStreamSync(context.Background()).Return(str, nil),
@@ -745,7 +765,7 @@ var _ = Describe("Client", func() {
 			str.EXPECT().CancelWrite(quic.StreamErrorCode(errorGeneralProtocolError))
 			res, err := client.RoundTrip(request)
 			Expect(err).To(HaveOccurred())
-			Expect(res.StatusCode).To(Equal(42))
+			Expect(res).To(BeNil())
 		})
 
 		It("returns a response with a body", func() {
