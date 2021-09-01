@@ -6,7 +6,6 @@ import (
 	"io"
 	"sort"
 
-	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/quicvarint"
 )
 
@@ -81,17 +80,17 @@ func (s Settings) ExtendedConnectEnabled() bool {
 	return s.WebTransportEnabled()
 }
 
-func (s Settings) frameLength() protocol.ByteCount {
-	var len protocol.ByteCount
+func (s Settings) frameLength() uint64 {
+	var len uint64
 	for id, val := range s {
-		len += quicvarint.Len(uint64(id)) + quicvarint.Len(val)
+		len += uint64(quicvarint.Len(uint64(id)) + quicvarint.Len(val))
 	}
 	return len
 }
 
 func (s Settings) writeFrame(w quicvarint.Writer) {
 	quicvarint.Write(w, uint64(FrameTypeSettings))
-	quicvarint.Write(w, uint64(s.frameLength()))
+	quicvarint.Write(w, s.frameLength())
 	ids := make([]SettingID, 0, len(s))
 	for id := range s {
 		ids = append(ids, id)
