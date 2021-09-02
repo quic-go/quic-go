@@ -58,6 +58,15 @@ var _ = Describe("Server", func() {
 		quicListenAddr = origQuicListenAddr
 	})
 
+	Context("handling QUIC sessions", func() {
+		It("fails when passed a client session", func() {
+			sess := mockquic.NewMockEarlySession(mockCtrl)
+			sess.EXPECT().Perspective().Return(quic.PerspectiveClient)
+			sess.EXPECT().CloseWithError(quic.ApplicationErrorCode(errorGeneralProtocolError), "")
+			s.handleSession(sess)
+		})
+	})
+
 	Context("handling requests", func() {
 		var (
 			sess               *mockquic.MockEarlySession
