@@ -26,9 +26,12 @@ func RequestHeaders(req *http.Request) ([]qpack.HeaderField, error) {
 		return nil, err
 	}
 
-	// FIXME: support extended CONNECT for WebTransport
+	protocol := req.Header.Get(":protocol")
+	isConnect := req.Method == http.MethodConnect
+	isExtendedConnect := isConnect && protocol != ""
+
 	var path string
-	if req.Method != http.MethodConnect {
+	if !isConnect || isExtendedConnect {
 		path = req.URL.RequestURI()
 		if !validPseudoPath(path) {
 			orig := path
@@ -56,7 +59,10 @@ func RequestHeaders(req *http.Request) ([]qpack.HeaderField, error) {
 	// [RFC3986]).
 	f(":authority", host)
 	f(":method", req.Method)
-	if req.Method != "CONNECT" {
+
+	// The extended CONNECT method used by WebTransport requires :scheme and :path
+	// See https://www.ietf.org/archive/id/draft-ietf-webtrans-http3-01.html#section-3.2
+	if !isConnect || isExtendedConnect {
 		f(":path", path)
 		f(":scheme", req.URL.Scheme)
 	}
