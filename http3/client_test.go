@@ -54,16 +54,10 @@ var _ = Describe("Client", func() {
 	})
 
 	Context("Settings", func() {
-		var settings Settings
-
-		BeforeEach(func() {
-			settings = Settings{
-				SettingMaxFieldSectionSize: client.maxHeaderBytes(),
-			}
-		})
-
-		It("uses default Settings when none is given", func() {
-			Expect(client.settings).To(Equal(settings))
+		It("has nil Settings when none is provided", func() {
+			client, err := newClient("example.com", nil, nil, nil, false, nil)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(client.settings).To(BeNil())
 		})
 
 		It("passes configured Settings through exactly", func() {
@@ -239,6 +233,7 @@ var _ = Describe("Client", func() {
 			sess.EXPECT().Context().Return(context.Background()).AnyTimes()
 			sess.EXPECT().OpenUniStream().Return(controlStr, nil)
 			sess.EXPECT().HandshakeComplete().Return(handshakeCtx)
+			sess.EXPECT().ConnectionState().Return(quic.ConnectionState{})
 			sess.EXPECT().OpenStreamSync(gomock.Any()).Return(nil, errors.New("done"))
 			dialAddr = func(hostname string, _ *tls.Config, _ *quic.Config) (quic.EarlySession, error) { return sess, nil }
 			var err error
@@ -281,7 +276,6 @@ var _ = Describe("Client", func() {
 				quicvarint.Write(buf, uint64(streamType))
 				str := mockquic.NewMockStream(mockCtrl)
 				str.EXPECT().Read(gomock.Any()).DoAndReturn(buf.Read).AnyTimes()
-
 				sess.EXPECT().AcceptUniStream(gomock.Any()).DoAndReturn(func(context.Context) (quic.ReceiveStream, error) {
 					return str, nil
 				})
@@ -392,6 +386,7 @@ var _ = Describe("Client", func() {
 		})
 
 		It("errors when the server advertises datagram support (and we enabled support for it)", func() {
+			client.settings = Settings{}
 			client.settings.EnableDatagrams()
 			buf := &bytes.Buffer{}
 			quicvarint.Write(buf, uint64(StreamTypeControl))
@@ -405,7 +400,6 @@ var _ = Describe("Client", func() {
 				<-testDone
 				return nil, errors.New("test done")
 			})
-			sess.EXPECT().ConnectionState().Return(quic.ConnectionState{SupportsDatagrams: false})
 			done := make(chan struct{})
 			sess.EXPECT().CloseWithError(gomock.Any(), gomock.Any()).Do(func(code quic.ApplicationErrorCode, reason string) {
 				defer GinkgoRecover()
@@ -639,6 +633,7 @@ var _ = Describe("Client", func() {
 			sess = mockquic.NewMockEarlySession(mockCtrl)
 			sess.EXPECT().Perspective().Return(quic.PerspectiveClient).AnyTimes()
 			sess.EXPECT().Context().Return(context.Background()).AnyTimes()
+			sess.EXPECT().ConnectionState().Return(quic.ConnectionState{})
 			sess.EXPECT().OpenUniStream().Return(controlStr, nil)
 			sess.EXPECT().AcceptUniStream(gomock.Any()).DoAndReturn(func(context.Context) (quic.ReceiveStream, error) {
 				<-testDone
@@ -898,7 +893,7 @@ var _ = Describe("Client", func() {
 
 			It("cancels the stream when the HEADERS frame is too large", func() {
 				buf := &bytes.Buffer{}
-				max := defaultMaxResponseHeaderBytes
+				max := defaultMaxFieldSectionSize
 				len := max + 1
 				quicvarint.Write(buf, uint64(FrameTypeHeaders))
 				quicvarint.Write(buf, uint64(len))

@@ -20,10 +20,7 @@ import (
 // Note that 0-RTT data doesn't provide replay protection.
 const MethodGet0RTT = "GET_0RTT"
 
-const (
-	defaultUserAgent              = "quic-go HTTP/3"
-	defaultMaxResponseHeaderBytes = 10 * 1 << 20 // 10 MB
-)
+const defaultUserAgent = "quic-go HTTP/3"
 
 var defaultQuicConfig = &quic.Config{
 	MaxIncomingStreams: -1, // don't allow the server to create bidirectional streams
@@ -68,12 +65,6 @@ func newClient(
 	}
 	if len(quicConfig.Versions) != 1 {
 		return nil, errors.New("can only use a single QUIC version for dialing a HTTP/3 connection")
-	}
-
-	if settings == nil {
-		settings = Settings{
-			SettingMaxFieldSectionSize: defaultMaxResponseHeaderBytes,
-		}
 	}
 
 	// Don’t allow incoming bidirectional streams unless WebTransport is enabled.
@@ -128,13 +119,6 @@ func (c *client) Close() error {
 		return nil
 	}
 	return c.sess.CloseWithError(quic.ApplicationErrorCode(errorNoError), "")
-}
-
-func (c *client) maxHeaderBytes() uint64 {
-	if c.settings[SettingMaxFieldSectionSize] > 0 {
-		return c.settings[SettingMaxFieldSectionSize]
-	}
-	return defaultMaxResponseHeaderBytes
 }
 
 func (c *client) RoundTrip(req *http.Request) (*http.Response, error) {

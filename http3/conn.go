@@ -129,12 +129,15 @@ func (conn *connection) CloseWithError(code quic.ApplicationErrorCode, desc stri
 	return conn.session.CloseWithError(code, desc)
 }
 
+// 16 MB, same as net/http2 default MAX_HEADER_LIST_SIZE
+const defaultMaxFieldSectionSize = 16 << 20
+
 func (conn *connection) maxHeaderBytes() uint64 {
 	max := conn.Settings()[SettingMaxFieldSectionSize]
 	if max > 0 {
 		return max
 	}
-	return http.DefaultMaxHeaderBytes
+	return defaultMaxFieldSectionSize
 }
 
 func (conn *connection) peerMaxHeaderBytes() uint64 {
@@ -142,6 +145,7 @@ func (conn *connection) peerMaxHeaderBytes() uint64 {
 	if max, ok := peerSettings[SettingMaxFieldSectionSize]; ok && max > 0 {
 		return max
 	}
+	// TODO(ydnar): should this be defaultMaxFieldSectionSize too?
 	return http.DefaultMaxHeaderBytes
 }
 
