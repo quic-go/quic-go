@@ -2,6 +2,7 @@ package self_test
 
 import (
 	"bufio"
+	"context"
 	"crypto/tls"
 	"fmt"
 	"io"
@@ -215,13 +216,60 @@ var _ = Describe("WebTransport tests", func() {
 				Expect(err).ToNot(HaveOccurred())
 				wt, err := res.Body.(http3.WebTransporter).WebTransport()
 				Expect(err).ToNot(HaveOccurred())
-				str, err := wt.OpenUniStream()
+				for i := 0; i < 5; i++ {
+					str, err := wt.OpenUniStream()
+					Expect(err).ToNot(HaveOccurred())
+					for j := 0; j < 5; j++ {
+						msg := fmt.Sprintf("Unidirectional stream %d, message %d\n", i, j)
+						_, err := str.Write([]byte(msg))
+						Expect(err).ToNot(HaveOccurred())
+						Expect(<-incomingStrings).To(Equal(msg))
+					}
+					str.CancelWrite(0) // TODO: is this right?
+				}
+				err = wt.Close()
+				Expect(err).ToNot(HaveOccurred())
+			})
+
+			It("can send and receive data on bidirectional streams", func() {
+				req, err := webTransportRequest("/")
+				Expect(err).ToNot(HaveOccurred())
+				res, err := client.Do(req)
+				Expect(err).ToNot(HaveOccurred())
+				wt, err := res.Body.(http3.WebTransporter).WebTransport()
 				Expect(err).ToNot(HaveOccurred())
 				for i := 0; i < 5; i++ {
-					msg := "Hello, WebTransport!\n"
-					_, err := str.Write([]byte(msg))
+					str, err := wt.OpenStream()
 					Expect(err).ToNot(HaveOccurred())
-					Expect(<-incomingStrings).To(Equal(msg))
+					r := bufio.NewReader(str)
+					for j := 0; j < 5; j++ {
+						msg := fmt.Sprintf("Bidirectional stream %d, message %d\n", i, j)
+						_, err := str.Write([]byte(msg))
+						Expect(err).ToNot(HaveOccurred())
+						reply, err := r.ReadString('\n')
+						Expect(err).ToNot(HaveOccurred())
+						Expect(reply).To(Equal(msg))
+					}
+					str.Close()
+				}
+				err = wt.Close()
+				Expect(err).ToNot(HaveOccurred())
+			})
+
+			It("can send and receive datagrams", func() {
+				req, err := webTransportRequest("/")
+				Expect(err).ToNot(HaveOccurred())
+				res, err := client.Do(req)
+				Expect(err).ToNot(HaveOccurred())
+				wt, err := res.Body.(http3.WebTransporter).WebTransport()
+				Expect(err).ToNot(HaveOccurred())
+				for i := 0; i < 5; i++ {
+					msg := fmt.Sprintf("Datagram %d\n", i)
+					err := wt.WriteDatagram([]byte(msg))
+					Expect(err).ToNot(HaveOccurred())
+					reply, err := wt.ReadDatagram(context.Background())
+					Expect(err).ToNot(HaveOccurred())
+					Expect(string(reply)).To(Equal(msg))
 				}
 				err = wt.Close()
 				Expect(err).ToNot(HaveOccurred())
