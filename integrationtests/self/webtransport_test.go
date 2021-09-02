@@ -36,9 +36,6 @@ var _ = Describe("WebTransport tests", func() {
 		if err != nil {
 			return nil, err
 		}
-		// req.Proto = "HTTP/3"
-		// req.ProtoMajor = 3
-		// req.ProtoMinor = 0
 		req.Header[":protocol"] = []string{"WebTransport"}
 		return req, nil
 	}
