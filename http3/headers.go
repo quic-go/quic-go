@@ -14,6 +14,15 @@ import (
 	"golang.org/x/net/idna"
 )
 
+const (
+	pseudoHeaderMethod    = ":method"
+	pseudoHeaderScheme    = ":scheme"
+	pseudoHeaderAuthority = ":authority"
+	pseudoHeaderPath      = ":path"
+	pseudoHeaderProtocol  = ":protocol"
+	pseudoHeaderStatus    = ":status"
+)
+
 // RequestHeaders returns valid HTTP/3 header fields for req, or an error if req
 // is malformed.
 func RequestHeaders(req *http.Request) ([]qpack.HeaderField, error) {
@@ -26,7 +35,7 @@ func RequestHeaders(req *http.Request) ([]qpack.HeaderField, error) {
 		return nil, err
 	}
 
-	protocol := req.Header.Get(":protocol")
+	protocol := req.Header.Get(pseudoHeaderProtocol)
 	isConnect := req.Method == http.MethodConnect
 	isExtendedConnect := isConnect && protocol != ""
 
@@ -57,19 +66,19 @@ func RequestHeaders(req *http.Request) ([]qpack.HeaderField, error) {
 	// target URI (the path-absolute production and optionally a '?' character
 	// followed by the query production (see Sections 3.3 and 3.4 of
 	// [RFC3986]).
-	f(":authority", host)
-	f(":method", req.Method)
+	f(pseudoHeaderAuthority, host)
+	f(pseudoHeaderMethod, req.Method)
 
 	// The extended CONNECT method used by WebTransport requires :scheme and :path
 	// See https://www.ietf.org/archive/id/draft-ietf-webtrans-http3-01.html#section-3.2
 	if !isConnect || isExtendedConnect {
-		f(":path", path)
-		f(":scheme", req.URL.Scheme)
+		f(pseudoHeaderPath, path)
+		f(pseudoHeaderScheme, req.URL.Scheme)
 	}
 
 	var didUA bool
 	for k, vv := range req.Header {
-		if k == ":protocol" && req.Method == http.MethodConnect {
+		if k == pseudoHeaderProtocol && req.Method == http.MethodConnect {
 			// TODO: is this right?
 		} else if !httpguts.ValidHeaderFieldName(k) {
 			return nil, fmt.Errorf("invalid HTTP header name %q", k)
@@ -224,7 +233,7 @@ func shouldSendReqContentLength(method string, contentLength int64) bool {
 	// For zero bodies, whether we send a content-length depends on the method.
 	// It also kinda doesn't matter for http2 either way, with END_STREAM.
 	switch method {
-	case "POST", "PUT", "PATCH":
+	case http.MethodPost, http.MethodPut, http.MethodPatch:
 		return true
 	default:
 		return false

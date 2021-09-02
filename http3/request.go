@@ -21,13 +21,13 @@ func requestFromHeaders(ctx context.Context, headers []qpack.HeaderField) (*http
 
 	for _, h := range headers {
 		switch h.Name {
-		case ":path":
+		case pseudoHeaderPath:
 			path = h.Value
-		case ":method":
+		case pseudoHeaderMethod:
 			method = h.Value
-		case ":authority":
+		case pseudoHeaderAuthority:
 			authority = h.Value
-		case ":protocol":
+		case pseudoHeaderProtocol:
 			protocol = h.Value
 		case "content-length":
 			contentLengthStr = h.Value

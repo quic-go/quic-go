@@ -51,7 +51,7 @@ func (w *responseWriter) WriteHeader(status int) {
 	w.status = status
 
 	fields := make([]qpack.HeaderField, 0, len(w.header)+1)
-	fields = append(fields, qpack.HeaderField{Name: ":status", Value: strconv.Itoa(status)})
+	fields = append(fields, qpack.HeaderField{Name: pseudoHeaderStatus, Value: strconv.Itoa(status)})
 	for k, vv := range w.header {
 		if strings.HasPrefix(k, http.TrailerPrefix) {
 			continue

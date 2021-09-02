@@ -226,7 +226,7 @@ func (c *client) doRequest(
 		var statusCode int
 		var status string
 		for _, hf := range headers {
-			if hf.Name == ":status" {
+			if hf.Name == pseudoHeaderStatus {
 				statusCode, err = strconv.Atoi(hf.Value)
 				if err != nil {
 					// A malformed :status header is an H3_MESSAGE_ERROR.
