@@ -1,10 +1,9 @@
 # A QUIC server example in Go
 
-<img src="docs/quic.png" width=303 height=124>
+<!-- GETTING STARTED -->
+## Getting Started
 
-## Guide
-
-## Compiling server:
+## Compiling Server:
 
 ```
 go mod init server
