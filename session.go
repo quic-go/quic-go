@@ -613,7 +613,9 @@ runLoop:
 				default:
 				}
 			}
-		} else if !processedUndecryptablePacket {
+		}
+		// If we processed any undecryptable packets, jump to the resetting of the timers directly.
+		if !processedUndecryptablePacket {
 			select {
 			case closeErr = <-s.closeChan:
 				break runLoop
