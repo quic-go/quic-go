@@ -232,8 +232,8 @@ func (conn *connection) handleIncomingStream(str quic.Stream) {
 			default:
 				// TODO: log that we dropped an incoming WebTransport stream
 				str.CancelWrite(quic.StreamErrorCode(errorWebTransportBufferedStreamRejected))
-				return
 			}
+			return
 
 		case FrameTypeData:
 			// TODO: log connection error
