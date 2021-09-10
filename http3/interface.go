@@ -98,6 +98,12 @@ type RequestStream interface {
 	// the stream.
 	DataWriter() io.WriteCloser
 
+	// WriteGrease writes a greasing frame. HTTP/3 peers MUST ignore reserved frame types.
+	// See https://quicwg.org/base-drafts/draft-ietf-quic-http.html#name-reserved-frame-types
+	// and https://datatracker.ietf.org/doc/html/draft-nottingham-http-grease-00.
+	// Should not be called simultaneously with WriteHeaders or DataWriter().Write.
+	WriteGrease() error
+
 	// WebTransport returns a WebTransport interface, if supported.
 	WebTransport() (WebTransport, error)
 }
