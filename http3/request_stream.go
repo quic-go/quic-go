@@ -71,16 +71,6 @@ func (s *requestStream) RemoteAddr() net.Addr {
 	return s.conn.session.RemoteAddr()
 }
 
-// WriteGrease writes a greasing frame. HTTP/3 peers MUST ignore reserved frame types.
-// See https://quicwg.org/base-drafts/draft-ietf-quic-http.html#name-reserved-frame-types
-// and https://datatracker.ietf.org/doc/html/draft-nottingham-http-grease-00.
-// Should not be called simultaneously with WriteHeaders or DataWriter().Write.
-func (s *requestStream) WriteGrease() error {
-	quicvarint.Write(s.w, Grease(uint64(s.StreamID())))
-	quicvarint.Write(s.w, 0) // Zero frame payload length
-	return nil
-}
-
 // ReadHeaders reads the next HEADERS frame, used for HTTP request and
 // response headers and trailers. An interim response (status 100-199)
 // must be followed by one or more additional HEADERS frames.
