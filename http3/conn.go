@@ -206,36 +206,49 @@ func (conn *connection) handleIncomingStreams() {
 func (conn *connection) handleIncomingStream(str quic.Stream) {
 	fr := &FrameReader{R: str}
 
-	err := fr.Next()
-	if err != nil {
-		str.CancelWrite(quic.StreamErrorCode(errorRequestIncomplete))
-		return
-	}
+	for {
+		err := fr.Next()
+		if err != nil {
+			str.CancelWrite(quic.StreamErrorCode(errorRequestIncomplete))
+			return
+		}
 
-	switch fr.Type { //nolint:exhaustive
-	case FrameTypeHeaders:
-		conn.incomingRequestStreams <- fr
-	case FrameTypeWebTransportStream:
-		if !conn.Settings().WebTransportEnabled() {
-			// TODO: log error
-			// TODO: should this close the connection or the stream?
-			// https://github.com/ietf-wg-webtrans/draft-ietf-webtrans-http3/pull/56
-			str.CancelWrite(quic.StreamErrorCode(errorSettingsError))
+		switch fr.Type { //nolint:exhaustive
+		case FrameTypeHeaders:
+			conn.incomingRequestStreams <- fr
 			return
-		}
-		id := SessionID(fr.N)
-		select {
-		case conn.incomingStreamsChan(id) <- str:
+
+		case FrameTypeWebTransportStream:
+			if !conn.Settings().WebTransportEnabled() {
+				// TODO: log error
+				// TODO: should this close the connection or the stream?
+				// https://github.com/ietf-wg-webtrans/draft-ietf-w
+				str.CancelWrite(quic.StreamErrorCode(errorSettingsError))
+				return
+			}
+			id := SessionID(fr.N)
+			select {
+			case conn.incomingStreamsChan(id) <- str:
+			default:
+				// TODO: log that we dropped an incoming WebTransport stream
+				str.CancelWrite(quic.StreamErrorCode(errorWebTransportBufferedStreamRejected))
+				return
+			}
+
+		case FrameTypeData:
+			// TODO: log connection error
+			// TODO: store FrameTypeError so future calls can return it?
+			err := &FrameTypeError{
+				Type: fr.Type,
+				Want: FrameTypeHeaders,
+			}
+			conn.session.CloseWithError(quic.ApplicationErrorCode(errorFrameUnexpected), err.Error())
+			return
+
 		default:
-			// TODO: log that we dropped an incoming WebTransport stream
-			str.CancelWrite(quic.StreamErrorCode(errorWebTransportBufferedStreamRejected))
-			return
+			// Skip grease frames
+			// https://datatracker.ietf.org/doc/html/draft-nottingham-http-grease-00
 		}
-	default:
-		// TODO: log connection error
-		// TODO: store FrameTypeError so future calls can return it?
-		conn.session.CloseWithError(quic.ApplicationErrorCode(errorFrameUnexpected), "expected first frame to be a HEADERS frame")
-		return
 	}
 }
 
