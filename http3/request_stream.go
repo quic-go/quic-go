@@ -113,7 +113,7 @@ func (s *requestStream) ReadHeaders() ([]qpack.HeaderField, error) {
 // See https://quicwg.org/base-drafts/draft-ietf-quic-http.html#name-reserved-frame-types
 // and https://datatracker.ietf.org/doc/html/draft-nottingham-http-grease-00.
 func (s *requestStream) WriteHeaders(fields []qpack.HeaderField) error {
-	n := uint64(time.Now().UnixMicro())
+	n := uint64(time.Now().Nanosecond() >> 10) // Rougly microseconds
 	if n&0x1 == 0 {
 		writeGreaseFrame(s.w, n)
 	}
