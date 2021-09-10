@@ -5,6 +5,7 @@ import (
 	"errors"
 	"io"
 	"net"
+	"time"
 
 	"github.com/lucas-clemente/quic-go"
 	"github.com/lucas-clemente/quic-go/quicvarint"
@@ -108,7 +109,14 @@ func (s *requestStream) ReadHeaders() ([]qpack.HeaderField, error) {
 // MAX_FIELD_SECTION_SIZE. Headers are not modified or validated.
 // It is the responsibility of the caller to ensure the fields are valid.
 // It should not be called concurrently with Write or ReadFrom.
+// It MAY also write a greasing frame, which the peer should ignore.
+// See https://quicwg.org/base-drafts/draft-ietf-quic-http.html#name-reserved-frame-types
+// and https://datatracker.ietf.org/doc/html/draft-nottingham-http-grease-00.
 func (s *requestStream) WriteHeaders(fields []qpack.HeaderField) error {
+	n := uint64(time.Now().UnixMicro())
+	if n&0x1 == 0 {
+		writeGreaseFrame(s.w, n)
+	}
 	return writeHeadersFrame(s.w, fields, s.conn.peerMaxHeaderBytes())
 }
 

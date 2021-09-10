@@ -39,8 +39,11 @@ var _ = Describe("Response Writer", func() {
 		decoder := qpack.NewDecoder(nil)
 
 		fr := &FrameReader{R: str}
-		err := fr.Next()
-		ExpectWithOffset(1, err).ToNot(HaveOccurred())
+		var err error
+		for err == nil && fr.Type != FrameTypeHeaders {
+			err = fr.Next()
+			ExpectWithOffset(1, err).ToNot(HaveOccurred())
+		}
 		ExpectWithOffset(1, fr.Type).To(Equal(FrameTypeHeaders))
 		data := make([]byte, fr.N)
 		_, err = io.ReadFull(fr, data)

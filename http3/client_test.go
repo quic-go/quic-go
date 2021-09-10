@@ -422,10 +422,13 @@ var _ = Describe("Client", func() {
 			strBuf *bytes.Buffer
 		)
 
-		decode := func(str io.Reader) map[string]string {
+		decodeHeader := func(str io.Reader) map[string]string {
 			fr := &FrameReader{R: str}
-			err := fr.Next()
-			ExpectWithOffset(1, err).ToNot(HaveOccurred())
+			var err error
+			for err == nil && fr.Type != FrameTypeHeaders {
+				err = fr.Next()
+				ExpectWithOffset(1, err).ToNot(HaveOccurred())
+			}
 			ExpectWithOffset(1, fr.Type).To(Equal(FrameTypeHeaders))
 			data := make([]byte, fr.N)
 			_, err = io.ReadFull(fr, data)
@@ -458,7 +461,7 @@ var _ = Describe("Client", func() {
 			req, err := http.NewRequest("GET", "https://quic.clemente.io/index.html?foo=bar", nil)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(client.writeRequest(rstr, req, false)).To(Succeed())
-			headerFields := decode(strBuf)
+			headerFields := decodeHeader(strBuf)
 			Expect(headerFields).To(HaveKeyWithValue(":authority", "quic.clemente.io"))
 			Expect(headerFields).To(HaveKeyWithValue(":method", "GET"))
 			Expect(headerFields).To(HaveKeyWithValue(":path", "/index.html?foo=bar"))
@@ -475,7 +478,7 @@ var _ = Describe("Client", func() {
 			Expect(client.writeRequest(rstr, req, false)).To(Succeed())
 
 			Eventually(closed).Should(BeClosed())
-			headerFields := decode(strBuf)
+			headerFields := decodeHeader(strBuf)
 			Expect(headerFields).To(HaveKeyWithValue(":method", "POST"))
 			Expect(headerFields).To(HaveKey("content-length"))
 			contentLength, err := strconv.Atoi(headerFields["content-length"])
@@ -498,7 +501,7 @@ var _ = Describe("Client", func() {
 			Expect(client.writeRequest(rstr, req, false)).To(Succeed())
 
 			Eventually(closed).Should(BeClosed())
-			headerFields := decode(strBuf)
+			headerFields := decodeHeader(strBuf)
 			Expect(headerFields).To(HaveKeyWithValue(":method", "POST"))
 
 			fr := &FrameReader{R: strBuf}
@@ -523,7 +526,7 @@ var _ = Describe("Client", func() {
 			req.AddCookie(cookie1)
 			req.AddCookie(cookie2)
 			Expect(client.writeRequest(rstr, req, false)).To(Succeed())
-			headerFields := decode(strBuf)
+			headerFields := decodeHeader(strBuf)
 			Expect(headerFields).To(HaveKeyWithValue("cookie", `Cookie #1="Value #1"; Cookie #2="Value #2"`))
 		})
 
@@ -532,7 +535,7 @@ var _ = Describe("Client", func() {
 			req, err := http.NewRequest("GET", "https://quic.clemente.io/", nil)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(client.writeRequest(rstr, req, true)).To(Succeed())
-			headerFields := decode(strBuf)
+			headerFields := decodeHeader(strBuf)
 			Expect(headerFields).To(HaveKeyWithValue("accept-encoding", "gzip"))
 		})
 	})
@@ -565,8 +568,11 @@ var _ = Describe("Client", func() {
 			decoder := qpack.NewDecoder(nil)
 
 			fr := &FrameReader{R: str}
-			err := fr.Next()
-			ExpectWithOffset(1, err).ToNot(HaveOccurred())
+			var err error
+			for err == nil && fr.Type != FrameTypeHeaders {
+				err = fr.Next()
+				ExpectWithOffset(1, err).ToNot(HaveOccurred())
+			}
 			ExpectWithOffset(1, fr.Type).To(Equal(FrameTypeHeaders))
 			data := make([]byte, fr.N)
 			_, err = io.ReadFull(fr, data)
