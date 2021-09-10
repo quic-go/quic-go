@@ -8,12 +8,12 @@ import (
 var _ = Describe("Grease", func() {
 	It("generates a min greasing value", func() {
 		got := Grease(0)
-		Expect(got).To(Equal(uint64(GreaseMin)))
+		Expect(got).To(Equal(uint64(greaseMin)))
 	})
 
 	It("clamps to a max greasing value", func() {
 		got := Grease(^uint64(0))
-		Expect(got).To(Equal(uint64(GreaseMax)))
+		Expect(got).To(Equal(uint64(greaseMax)))
 	})
 
 	It("provides a value somewhere in the middle", func() {

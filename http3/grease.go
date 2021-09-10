@@ -7,10 +7,10 @@ import (
 const (
 	greaseMaxN = (quicvarint.Max - 0x21) / 0x1f
 
-	// GreaseMax is the largest HTTP/3 greasing value that will fit in a quicvarint.
+	// greaseMax is the largest HTTP/3 greasing value that will fit in a quicvarint.
 	// See https://quicwg.org/base-drafts/draft-ietf-quic-http.html#section-6.2.3.
-	GreaseMax = 0x1f*greaseMaxN + 0x21
-	GreaseMin = 0x1f*0 + 0x21
+	greaseMax = 0x1f*greaseMaxN + 0x21
+	greaseMin = 0x1f*0 + 0x21
 )
 
 // Grease returns a value that can be used for generating ignored HTTP/3 stream types or frames.
@@ -21,4 +21,12 @@ func Grease(n uint64) uint64 {
 		n = greaseMaxN
 	}
 	return 0x1f*n + 0x21
+}
+
+// writeGreaseFrame writes a greasing frame to w. HTTP/3 peers MUST ignore
+// reserved frame types. The value of n should be somewhat random. The greasing
+// value will be clamped to GreaseMax.
+func writeGreaseFrame(w quicvarint.Writer, n uint64) {
+	quicvarint.Write(w, Grease(n))
+	quicvarint.Write(w, 0) // Zero frame payload length
 }
