@@ -1,16 +1,15 @@
-// +build go1.16
-// +build !go1.17
-// +build gc
+// +build go1.17
+// +build gccgo
 
 package qtls
 
 import (
 	"unsafe"
 
-	qtls "github.com/marten-seemann/qtls-go1-16"
+	qtls "github.com/marten-seemann/qtls-go1-17"
 )
 
-//go:linkname cipherSuiteTLS13ByID github.com/marten-seemann/qtls-go1-16.cipherSuiteTLS13ByID
+//go:linkname cipherSuiteTLS13ByID "github_0com_1marten_x2dseemann_1qtls_x2dgo1_x2d17.cipherSuiteTLS13ByID"
 func cipherSuiteTLS13ByID(id uint16) *cipherSuiteTLS13
 
 // CipherSuiteTLS13ByID gets a TLS 1.3 cipher suite.

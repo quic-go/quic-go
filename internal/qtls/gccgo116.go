@@ -1,4 +1,5 @@
 // +build go1.16
+// +build !go1.17
 // +build gccgo
 
 package qtls
