@@ -144,6 +144,7 @@ func main() {
 	flag.Var(&bs, "bind", "bind to")
 	www := flag.String("www", "", "www data")
 	tcp := flag.Bool("tcp", false, "also listen on TCP")
+	customAltSvcPort := flag.Uint("customAltSvcPort", 0, "use custom Alt-Svc header port value")
 	enableQlog := flag.Bool("qlog", false, "output a qlog (in the same directory)")
 	flag.Parse()
 
@@ -182,7 +183,12 @@ func main() {
 			var err error
 			if *tcp {
 				certFile, keyFile := testdata.GetCertificatePaths()
-				err = http3.ListenAndServe(bCap, certFile, keyFile, handler)
+				if *customAltSvcPort != 0 {
+					logger.Infof("using customAltSvcPort = %v", *customAltSvcPort)
+					err = http3.ListenAndServeWithCustomAltSvcPort(bCap, certFile, keyFile, handler, uint32(*customAltSvcPort))
+				} else {
+					err = http3.ListenAndServe(bCap, certFile, keyFile, handler)
+				}
 			} else {
 				server := http3.Server{
 					Server:     &http.Server{Handler: handler, Addr: bCap},
