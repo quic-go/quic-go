@@ -505,7 +505,6 @@ func (conn *connection) incomingDatagramsChan(id SessionID) chan []byte {
 	return conn.incomingDatagrams[id]
 }
 
-// TODO: wrap quic.Stream in MessageStream so this always gets called.
 func (conn *connection) cleanup(id SessionID) {
 	conn.incomingStreamsMutex.Lock()
 	delete(conn.incomingStreams, id)
