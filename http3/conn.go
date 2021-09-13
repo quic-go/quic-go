@@ -34,15 +34,15 @@ type connection struct {
 	incomingRequestStreams chan *FrameReader
 
 	incomingStreamsMutex sync.Mutex
-	incomingStreams      map[SessionID]chan quic.Stream // Lazily constructed
+	incomingStreams      map[uint64]chan quic.Stream // Lazily constructed
 
 	incomingUniStreamsMutex sync.Mutex
-	incomingUniStreams      map[SessionID]chan quic.ReceiveStream // Lazily constructed
+	incomingUniStreams      map[uint64]chan quic.ReceiveStream // Lazily constructed
 
 	// TODO: buffer incoming datagrams
 	incomingDatagramsOnce  sync.Once
 	incomingDatagramsMutex sync.Mutex
-	incomingDatagrams      map[SessionID]chan []byte // Lazily constructed
+	incomingDatagrams      map[uint64]chan []byte // Lazily constructed
 }
 
 var (
@@ -227,9 +227,15 @@ func (conn *connection) handleIncomingStream(str quic.Stream) {
 				str.CancelWrite(quic.StreamErrorCode(errorSettingsError))
 				return
 			}
-			id := SessionID(fr.N)
+			// WebTransport session IDs must be client-initiated bidirectional streams.
+			sessionID := uint64(fr.N)
+			if !isClientBidi(sessionID) {
+				str.CancelRead(quic.StreamErrorCode(errorIDError))
+				str.CancelWrite(quic.StreamErrorCode(errorIDError))
+
+			}
 			select {
-			case conn.incomingStreamsChan(id) <- str:
+			case conn.incomingStreamsChan(sessionID) <- str:
 			default:
 				// TODO: log that we dropped an incoming WebTransport stream
 				str.CancelRead(quic.StreamErrorCode(errorWebTransportBufferedStreamRejected))
@@ -307,14 +313,23 @@ func (conn *connection) handleIncomingUniStream(str quic.ReceiveStream) {
 		// TODO: handle QPACK dynamic tables
 
 	case StreamTypeWebTransportStream:
-		id, err := quicvarint.Read(r)
+		if !conn.Settings().WebTransportEnabled() {
+			str.CancelRead(quic.StreamErrorCode(errorSettingsError))
+			return
+		}
+		sessionID, err := quicvarint.Read(r)
 		if err != nil {
 			// TODO: log this error
 			str.CancelRead(quic.StreamErrorCode(errorGeneralProtocolError))
 			return
 		}
+		// WebTransport session IDs must be client-initiated bidirectional streams.
+		if !isClientBidi(sessionID) {
+			str.CancelRead(quic.StreamErrorCode(errorIDError))
+			return
+		}
 		select {
-		case conn.incomingUniStreamsChan(SessionID(id)) <- str:
+		case conn.incomingUniStreamsChan(sessionID) <- str:
 		default:
 			str.CancelRead(quic.StreamErrorCode(errorWebTransportBufferedStreamRejected))
 			return
@@ -352,74 +367,74 @@ func (conn *connection) handleControlStream(str quic.ReceiveStream) {
 	// TODO: loop reading the reset of the frames from the control stream
 }
 
-func (conn *connection) acceptStream(ctx context.Context, id SessionID) (quic.Stream, error) {
+func (conn *connection) acceptStream(ctx context.Context, sessionID uint64) (quic.Stream, error) {
 	select {
-	case str := <-conn.incomingStreamsChan(id):
+	case str := <-conn.incomingStreamsChan(sessionID):
 		return str, nil
 	case <-conn.session.Context().Done():
 		return nil, conn.session.Context().Err()
 	}
 }
 
-func (conn *connection) acceptUniStream(ctx context.Context, id SessionID) (quic.ReceiveStream, error) {
+func (conn *connection) acceptUniStream(ctx context.Context, sessionID uint64) (quic.ReceiveStream, error) {
 	select {
-	case str := <-conn.incomingUniStreamsChan(id):
+	case str := <-conn.incomingUniStreamsChan(sessionID):
 		return str, nil
 	case <-conn.session.Context().Done():
 		return nil, conn.session.Context().Err()
 	}
 }
 
-func (conn *connection) openStream(id SessionID) (quic.Stream, error) {
+func (conn *connection) openStream(sessionID uint64) (quic.Stream, error) {
 	str, err := conn.session.OpenStream()
 	if err != nil {
 		return nil, err
 	}
 	w := quicvarint.NewWriter(str)
 	quicvarint.Write(w, uint64(FrameTypeWebTransportStream))
-	quicvarint.Write(w, uint64(id))
+	quicvarint.Write(w, sessionID)
 	return str, nil
 }
 
-func (conn *connection) openStreamSync(ctx context.Context, id SessionID) (quic.Stream, error) {
+func (conn *connection) openStreamSync(ctx context.Context, sessionID uint64) (quic.Stream, error) {
 	str, err := conn.session.OpenStreamSync(ctx)
 	if err != nil {
 		return nil, err
 	}
 	w := quicvarint.NewWriter(str)
 	quicvarint.Write(w, uint64(FrameTypeWebTransportStream))
-	quicvarint.Write(w, uint64(id))
+	quicvarint.Write(w, sessionID)
 	return str, nil
 }
 
-func (conn *connection) openUniStream(id SessionID) (quic.SendStream, error) {
+func (conn *connection) openUniStream(sessionID uint64) (quic.SendStream, error) {
 	str, err := conn.session.OpenUniStream()
 	if err != nil {
 		return nil, err
 	}
 	w := quicvarint.NewWriter(str)
 	quicvarint.Write(w, uint64(StreamTypeWebTransportStream))
-	quicvarint.Write(w, uint64(id))
+	quicvarint.Write(w, sessionID)
 	return str, nil
 }
 
-func (conn *connection) openUniStreamSync(ctx context.Context, id SessionID) (quic.SendStream, error) {
+func (conn *connection) openUniStreamSync(ctx context.Context, sessionID uint64) (quic.SendStream, error) {
 	str, err := conn.session.OpenUniStreamSync(ctx)
 	if err != nil {
 		return nil, err
 	}
 	w := quicvarint.NewWriter(str)
 	quicvarint.Write(w, uint64(StreamTypeWebTransportStream))
-	quicvarint.Write(w, uint64(id))
+	quicvarint.Write(w, sessionID)
 	return str, nil
 }
 
-func (conn *connection) readDatagram(ctx context.Context, id SessionID) ([]byte, error) {
+func (conn *connection) readDatagram(ctx context.Context, sessionID uint64) ([]byte, error) {
 	conn.incomingDatagramsOnce.Do(func() {
 		go conn.handleIncomingDatagrams()
 	})
 	select {
-	case msg := <-conn.incomingDatagramsChan(id):
+	case msg := <-conn.incomingDatagramsChan(sessionID):
 		return msg, nil
 	case <-ctx.Done():
 		return nil, ctx.Err()
@@ -437,28 +452,36 @@ func (conn *connection) handleIncomingDatagrams() {
 		}
 
 		r := bytes.NewReader(msg)
-		id, err := quicvarint.Read(r)
+		sessionID, err := quicvarint.Read(r)
 		if err != nil {
 			// TODO: log error
 			continue
 		}
 
+		// Trim varint off datagram
+		msg = msg[quicvarint.Len(sessionID):]
+
 		// TODO: handle differences between datagram draft (quarter stream ID)
 		// and WebTransport draft (session ID = stream ID).
-		msg = msg[quicvarint.Len(id):]
+
+		// WebTransport session IDs must be client-initiated bidirectional streams.
+		if !isClientBidi(sessionID) {
+			// TODO: log error
+			continue
+		}
 
 		select {
-		case conn.incomingDatagramsChan(SessionID(id)) <- msg:
+		case conn.incomingDatagramsChan(sessionID) <- msg:
 		case <-conn.session.Context().Done():
 			return
 		}
 	}
 }
 
-func (conn *connection) writeDatagram(id SessionID, msg []byte) error {
-	b := make([]byte, 0, len(msg)+int(quicvarint.Len(uint64(id))))
+func (conn *connection) writeDatagram(sessionID uint64, msg []byte) error {
+	b := make([]byte, 0, len(msg)+int(quicvarint.Len(sessionID)))
 	buf := bytes.NewBuffer(b)
-	quicvarint.Write(buf, uint64(id))
+	quicvarint.Write(buf, sessionID)
 	n, err := buf.Write(msg)
 	if err != nil {
 		return err
@@ -469,52 +492,52 @@ func (conn *connection) writeDatagram(id SessionID, msg []byte) error {
 	return conn.session.SendMessage(buf.Bytes())
 }
 
-func (conn *connection) incomingStreamsChan(id SessionID) chan quic.Stream {
+func (conn *connection) incomingStreamsChan(sessionID uint64) chan quic.Stream {
 	conn.incomingStreamsMutex.Lock()
 	defer conn.incomingStreamsMutex.Unlock()
-	if conn.incomingStreams[id] == nil {
+	if conn.incomingStreams[sessionID] == nil {
 		if conn.incomingStreams == nil {
-			conn.incomingStreams = make(map[SessionID]chan quic.Stream)
+			conn.incomingStreams = make(map[uint64]chan quic.Stream)
 		}
-		conn.incomingStreams[id] = make(chan quic.Stream, maxBufferedStreams)
+		conn.incomingStreams[sessionID] = make(chan quic.Stream, maxBufferedStreams)
 	}
-	return conn.incomingStreams[id]
+	return conn.incomingStreams[sessionID]
 }
 
-func (conn *connection) incomingUniStreamsChan(id SessionID) chan quic.ReceiveStream {
+func (conn *connection) incomingUniStreamsChan(sessionID uint64) chan quic.ReceiveStream {
 	conn.incomingUniStreamsMutex.Lock()
 	defer conn.incomingUniStreamsMutex.Unlock()
-	if conn.incomingUniStreams[id] == nil {
+	if conn.incomingUniStreams[sessionID] == nil {
 		if conn.incomingUniStreams == nil {
-			conn.incomingUniStreams = make(map[SessionID]chan quic.ReceiveStream)
+			conn.incomingUniStreams = make(map[uint64]chan quic.ReceiveStream)
 		}
-		conn.incomingUniStreams[id] = make(chan quic.ReceiveStream, maxBufferedStreams)
+		conn.incomingUniStreams[sessionID] = make(chan quic.ReceiveStream, maxBufferedStreams)
 	}
-	return conn.incomingUniStreams[id]
+	return conn.incomingUniStreams[sessionID]
 }
 
-func (conn *connection) incomingDatagramsChan(id SessionID) chan []byte {
+func (conn *connection) incomingDatagramsChan(sessionID uint64) chan []byte {
 	conn.incomingDatagramsMutex.Lock()
 	defer conn.incomingDatagramsMutex.Unlock()
-	if conn.incomingDatagrams[id] == nil {
+	if conn.incomingDatagrams[sessionID] == nil {
 		if conn.incomingDatagrams == nil {
-			conn.incomingDatagrams = make(map[SessionID]chan []byte)
+			conn.incomingDatagrams = make(map[uint64]chan []byte)
 		}
-		conn.incomingDatagrams[id] = make(chan []byte, maxBufferedDatagrams)
+		conn.incomingDatagrams[sessionID] = make(chan []byte, maxBufferedDatagrams)
 	}
-	return conn.incomingDatagrams[id]
+	return conn.incomingDatagrams[sessionID]
 }
 
-func (conn *connection) cleanup(id SessionID) {
+func (conn *connection) cleanup(sessionID uint64) {
 	conn.incomingStreamsMutex.Lock()
-	delete(conn.incomingStreams, id)
+	delete(conn.incomingStreams, sessionID)
 	conn.incomingStreamsMutex.Unlock()
 
 	conn.incomingUniStreamsMutex.Lock()
-	delete(conn.incomingUniStreams, id)
+	delete(conn.incomingUniStreams, sessionID)
 	conn.incomingUniStreamsMutex.Unlock()
 
 	conn.incomingDatagramsMutex.Lock()
-	delete(conn.incomingDatagrams, id)
+	delete(conn.incomingDatagrams, sessionID)
 	conn.incomingDatagramsMutex.Unlock()
 }

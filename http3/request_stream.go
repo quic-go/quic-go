@@ -12,6 +12,11 @@ import (
 	"github.com/marten-seemann/qpack"
 )
 
+// isClientBidi returns true if id is a client-initiated bidirectional stream ID.
+func isClientBidi(id uint64) bool {
+	return id&0b11 == 0
+}
+
 type requestStream struct {
 	quic.Stream
 	conn *connection
@@ -44,13 +49,13 @@ func newRequestStream(conn *connection, str quic.Stream, t FrameType, n int64) R
 
 // CancelRead cleans up any buffered incoming streams and datagrams.
 func (s *requestStream) CancelRead(code quic.StreamErrorCode) {
-	s.conn.cleanup(s.Stream.StreamID())
+	s.conn.cleanup(uint64(s.StreamID()))
 	s.Stream.CancelRead(code)
 }
 
 // CancelWrite cleans up any buffered incoming streams and datagrams.
 func (s *requestStream) CancelWrite(code quic.StreamErrorCode) {
-	s.conn.cleanup(s.Stream.StreamID())
+	s.conn.cleanup(uint64(s.StreamID()))
 	s.Stream.CancelWrite(code)
 }
 
@@ -58,7 +63,7 @@ func (s *requestStream) CancelWrite(code quic.StreamErrorCode) {
 // TODO(ydnar): should this close the stream if a WebTransport interface was created?
 // TODO(ydnar): should a WebTransport session persist after an http.Handler returns?
 func (s *requestStream) Close() error {
-	s.conn.cleanup(s.Stream.StreamID())
+	s.conn.cleanup(uint64(s.StreamID()))
 	return s.Stream.Close()
 }
 
@@ -354,8 +359,8 @@ type webTransportSession requestStream
 
 var _ WebTransport = &webTransportSession{}
 
-func (s *webTransportSession) SessionID() SessionID {
-	return s.StreamID()
+func (s *webTransportSession) sessionID() uint64 {
+	return uint64(s.StreamID())
 }
 
 func (s *webTransportSession) Close() error {
@@ -365,33 +370,33 @@ func (s *webTransportSession) Close() error {
 }
 
 func (s *webTransportSession) AcceptStream(ctx context.Context) (quic.Stream, error) {
-	return s.conn.acceptStream(ctx, s.SessionID())
+	return s.conn.acceptStream(ctx, s.sessionID())
 }
 
 func (s *webTransportSession) AcceptUniStream(ctx context.Context) (quic.ReceiveStream, error) {
-	return s.conn.acceptUniStream(ctx, s.SessionID())
+	return s.conn.acceptUniStream(ctx, s.sessionID())
 }
 
 func (s *webTransportSession) OpenStream() (quic.Stream, error) {
-	return s.conn.openStream(s.SessionID())
+	return s.conn.openStream(s.sessionID())
 }
 
 func (s *webTransportSession) OpenStreamSync(ctx context.Context) (quic.Stream, error) {
-	return s.conn.openStreamSync(ctx, s.SessionID())
+	return s.conn.openStreamSync(ctx, s.sessionID())
 }
 
 func (s *webTransportSession) OpenUniStream() (quic.SendStream, error) {
-	return s.conn.openUniStream(s.SessionID())
+	return s.conn.openUniStream(s.sessionID())
 }
 
 func (s *webTransportSession) OpenUniStreamSync(ctx context.Context) (quic.SendStream, error) {
-	return s.conn.openUniStreamSync(ctx, s.SessionID())
+	return s.conn.openUniStreamSync(ctx, s.sessionID())
 }
 
 func (s *webTransportSession) ReadDatagram(ctx context.Context) ([]byte, error) {
-	return s.conn.readDatagram(ctx, s.SessionID())
+	return s.conn.readDatagram(ctx, s.sessionID())
 }
 
 func (s *webTransportSession) WriteDatagram(msg []byte) error {
-	return s.conn.writeDatagram(s.SessionID(), msg)
+	return s.conn.writeDatagram(s.sessionID(), msg)
 }

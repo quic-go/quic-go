@@ -42,15 +42,17 @@ type ClientConn interface {
 }
 
 // webTransportConn is an internal interface for implementing WebTransport.
+// The interface is similar to quic.Session, but methods accept a session ID
+// to (de)multiplex streams and datagframs.
 type webTransportConn interface {
-	acceptStream(context.Context, SessionID) (quic.Stream, error)
-	acceptUniStream(context.Context, SessionID) (quic.ReceiveStream, error)
-	openStream(SessionID) (quic.Stream, error)
-	openStreamSync(context.Context, SessionID) (quic.Stream, error)
-	openUniStream(SessionID) (quic.SendStream, error)
-	openUniStreamSync(context.Context, SessionID) (quic.SendStream, error)
-	readDatagram(context.Context, SessionID) ([]byte, error)
-	writeDatagram(SessionID, []byte) error
+	acceptStream(context.Context, uint64) (quic.Stream, error)
+	acceptUniStream(context.Context, uint64) (quic.ReceiveStream, error)
+	openStream(uint64) (quic.Stream, error)
+	openStreamSync(context.Context, uint64) (quic.Stream, error)
+	openUniStream(uint64) (quic.SendStream, error)
+	openUniStreamSync(context.Context, uint64) (quic.SendStream, error)
+	readDatagram(context.Context, uint64) ([]byte, error)
+	writeDatagram(uint64, []byte) error
 }
 
 // A RequestStream wraps a QUIC stream for processing HTTP/3 requests. It
@@ -164,12 +166,8 @@ type WebTransporter interface {
 	WebTransport() (WebTransport, error)
 }
 
-// A WebTransport SessionID is the same as the request stream ID.
-type SessionID = quic.StreamID
-
 // WebTransport is an interface to accept or open streams and read and write datagrams.
 type WebTransport interface {
-	SessionID() SessionID
 	StreamHandler
 	DatagramHandler
 	io.Closer
