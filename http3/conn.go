@@ -223,6 +223,7 @@ func (conn *connection) handleIncomingStream(str quic.Stream) {
 				// TODO: log error
 				// TODO: should this close the connection or the stream?
 				// https://github.com/ietf-wg-webtrans/draft-ietf-w
+				str.CancelRead(quic.StreamErrorCode(errorSettingsError))
 				str.CancelWrite(quic.StreamErrorCode(errorSettingsError))
 				return
 			}
@@ -231,6 +232,7 @@ func (conn *connection) handleIncomingStream(str quic.Stream) {
 			case conn.incomingStreamsChan(id) <- str:
 			default:
 				// TODO: log that we dropped an incoming WebTransport stream
+				str.CancelRead(quic.StreamErrorCode(errorWebTransportBufferedStreamRejected))
 				str.CancelWrite(quic.StreamErrorCode(errorWebTransportBufferedStreamRejected))
 			}
 			return
