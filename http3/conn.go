@@ -292,6 +292,7 @@ func (conn *connection) handleIncomingUniStream(str quic.ReceiveStream) {
 	switch streamType {
 	case StreamTypeControl:
 		go conn.handleControlStream(str)
+
 	case StreamTypePush:
 		if conn.session.Perspective() == quic.PerspectiveServer {
 			conn.session.CloseWithError(quic.ApplicationErrorCode(errorStreamCreationError), fmt.Sprintf("spurious %s from client", streamType))
@@ -301,8 +302,10 @@ func (conn *connection) handleIncomingUniStream(str quic.ReceiveStream) {
 		// We never increased the Push ID, so we don't expect any push streams.
 		conn.session.CloseWithError(quic.ApplicationErrorCode(errorIDError), "MAX_PUSH_ID = 0")
 		return
+
 	case StreamTypeQPACKEncoder, StreamTypeQPACKDecoder:
 		// TODO: handle QPACK dynamic tables
+
 	case StreamTypeWebTransportStream:
 		id, err := quicvarint.Read(r)
 		if err != nil {
@@ -316,6 +319,7 @@ func (conn *connection) handleIncomingUniStream(str quic.ReceiveStream) {
 			str.CancelRead(quic.StreamErrorCode(errorWebTransportBufferedStreamRejected))
 			return
 		}
+
 	default:
 		str.CancelRead(quic.StreamErrorCode(errorStreamCreationError))
 	}
