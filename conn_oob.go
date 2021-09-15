@@ -252,13 +252,3 @@ func (info *packetInfo) OOB() []byte {
 	}
 	return nil
 }
-
-func cmsgLen(datalen int) int {
-	return cmsgAlign(syscall.SizeofCmsghdr) + datalen
-}
-
-func cmsgAlign(salen int) int {
-	const sizeOfPtr = 0x8
-	salign := sizeOfPtr
-	return (salen + salign - 1) & ^(salign - 1)
-}
