@@ -7,10 +7,8 @@ import (
 	"errors"
 	"fmt"
 	"net"
-	"runtime"
 	"syscall"
 	"time"
-	"unsafe"
 
 	"golang.org/x/net/ipv4"
 	"golang.org/x/net/ipv6"
@@ -238,40 +236,19 @@ func (info *packetInfo) OOB() []byte {
 		// 	struct in_addr ipi_spec_dst; /* Local address */
 		// 	struct in_addr ipi_addr;     /* Header Destination address */
 		// };
-		msgLen := 12
-		if runtime.GOOS == "freebsd" {
-			msgLen = 4
-		}
-		cmsglen := cmsgLen(msgLen)
-		oob := make([]byte, cmsglen)
-		cmsg := (*syscall.Cmsghdr)(unsafe.Pointer(&oob[0]))
-		cmsg.Level = syscall.IPPROTO_TCP
-		cmsg.Type = msgTypeIPv4PKTINFO
-		cmsg.SetLen(cmsglen)
-		off := cmsgLen(0)
-		if runtime.GOOS != "freebsd" {
-			// FreeBSD does not support in_pktinfo, just an in_addr is sent
-			binary.LittleEndian.PutUint32(oob[off:], info.ifIndex)
-			off += 4
-		}
-		copy(oob[off:], ip4)
-		return oob
+		cm := ipv4.ControlMessage{}
+		cm.Src = ip4
+		cm.IfIndex = int(info.ifIndex)
+		return cm.Marshal()
 	} else if len(info.addr) == 16 {
 		// struct in6_pktinfo {
 		// 	struct in6_addr ipi6_addr;    /* src/dst IPv6 address */
 		// 	unsigned int    ipi6_ifindex; /* send/recv interface index */
 		// };
-		const msgLen = 20
-		cmsglen := cmsgLen(msgLen)
-		oob := make([]byte, cmsglen)
-		cmsg := (*syscall.Cmsghdr)(unsafe.Pointer(&oob[0]))
-		cmsg.Level = syscall.IPPROTO_IPV6
-		cmsg.Type = msgTypeIPv6PKTINFO
-		cmsg.SetLen(cmsglen)
-		off := cmsgLen(0)
-		off += copy(oob[off:], info.addr)
-		binary.LittleEndian.PutUint32(oob[off:], info.ifIndex)
-		return oob
+		cm := ipv6.ControlMessage{}
+		cm.Src = info.addr
+		cm.IfIndex = int(info.ifIndex)
+		return cm.Marshal()
 	}
 	return nil
 }
