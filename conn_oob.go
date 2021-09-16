@@ -236,18 +236,20 @@ func (info *packetInfo) OOB() []byte {
 		// 	struct in_addr ipi_spec_dst; /* Local address */
 		// 	struct in_addr ipi_addr;     /* Header Destination address */
 		// };
-		cm := ipv4.ControlMessage{}
-		cm.Src = ip4
-		cm.IfIndex = int(info.ifIndex)
+		cm := ipv4.ControlMessage{
+			Src:     ip4,
+			IfIndex: int(info.ifIndex),
+		}
 		return cm.Marshal()
 	} else if len(info.addr) == 16 {
 		// struct in6_pktinfo {
 		// 	struct in6_addr ipi6_addr;    /* src/dst IPv6 address */
 		// 	unsigned int    ipi6_ifindex; /* send/recv interface index */
 		// };
-		cm := ipv6.ControlMessage{}
-		cm.Src = info.addr
-		cm.IfIndex = int(info.ifIndex)
+		cm := ipv6.ControlMessage{
+			Src:     info.addr,
+			IfIndex: int(info.ifIndex),
+		}
 		return cm.Marshal()
 	}
 	return nil
