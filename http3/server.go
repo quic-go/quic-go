@@ -92,8 +92,7 @@ type Server struct {
 	// See https://www.ietf.org/archive/id/draft-schinazi-masque-h3-datagram-02.html.
 	EnableDatagrams bool
 
-	port             uint32 // used atomically
-	customAltSvcPort uint32 // custom port used for Alt-Svc response header
+	port uint32 // used atomically
 
 	mutex     sync.Mutex
 	listeners map[*quic.EarlyListener]struct{}
@@ -440,22 +439,16 @@ func (s *Server) SetQuicHeaders(hdr http.Header) error {
 	port := atomic.LoadUint32(&s.port)
 
 	if port == 0 {
-		if s.customAltSvcPort != 0 {
-			// Use customAltSvcPort if set
-			port = s.customAltSvcPort
-		} else {
-			// Extract port from s.Server.Addr
-			_, portStr, err := net.SplitHostPort(s.Server.Addr)
-			if err != nil {
-				return err
-			}
-			portInt, err := net.LookupPort("tcp", portStr)
-			if err != nil {
-				return err
-			}
-			port = uint32(portInt)
+		// Extract port from s.Server.Addr
+		_, portStr, err := net.SplitHostPort(s.Server.Addr)
+		if err != nil {
+			return err
 		}
-
+		portInt, err := net.LookupPort("tcp", portStr)
+		if err != nil {
+			return err
+		}
+		port = uint32(portInt)
 		atomic.StoreUint32(&s.port, port)
 	}
 
@@ -493,17 +486,6 @@ func ListenAndServeQUIC(addr, certFile, keyFile string, handler http.Handler) er
 // http.DefaultServeMux is used when handler is nil.
 // The correct Alt-Svc headers for QUIC are set.
 func ListenAndServe(addr, certFile, keyFile string, handler http.Handler) error {
-	return ListenAndServeWithCustomAltSvcPort(addr, certFile, keyFile, handler, 0)
-}
-
-// ListenAndServeWithCustomAltSvcPort listens on the given network address for both, TLS and QUIC
-// connetions in parallel. It returns if one of the two returns an error.
-// http.DefaultServeMux is used when handler is nil.
-// The correct Alt-Svc headers for QUIC are set.
-// customAltSvcPort is used to override the default port value in the Alt-Svc response header.
-// This is useful when a Layer 4 firewall is redirecting UDP traffic and clients must use
-// a port different from the port the QUIC server itself is listening on.
-func ListenAndServeWithCustomAltSvcPort(addr, certFile, keyFile string, handler http.Handler, customAltSvcPort uint32) error {
 	// Load certs
 	var err error
 	certs := make([]tls.Certificate, 1)
@@ -548,8 +530,7 @@ func ListenAndServeWithCustomAltSvcPort(addr, certFile, keyFile string, handler 
 	}
 
 	quicServer := &Server{
-		Server:           httpServer,
-		customAltSvcPort: customAltSvcPort,
+		Server: httpServer,
 	}
 
 	if handler == nil {
