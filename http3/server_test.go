@@ -591,6 +591,14 @@ var _ = Describe("Server", func() {
 			Expect(s.SetQuicHeaders(hdr)).To(Succeed())
 			Expect(hdr).To(Equal(http.Header{"Alt-Svc": {`h3=":443"; ma=2592000,h3-29=":443"; ma=2592000`}}))
 		})
+
+		It("uses s.Port if set to a non-zero value", func() {
+			s.Server.Addr = ":443"
+			s.Port = 8443
+			hdr := http.Header{}
+			Expect(s.SetQuicHeaders(hdr)).To(Succeed())
+			Expect(hdr).To(Equal(http.Header{"Alt-Svc": {`h3-29=":8443"; ma=2592000`}}))
+		})
 	})
 
 	It("errors when ListenAndServe is called with s.Server nil", func() {
