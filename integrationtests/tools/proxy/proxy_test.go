@@ -84,7 +84,7 @@ var _ = Describe("QUIC Proxy", func() {
 			proxy, err := NewQuicProxy("localhost:0", nil)
 			Expect(err).ToNot(HaveOccurred())
 			port := proxy.LocalPort()
-			Expect(isProxyRunning()).To(BeTrue())
+			Eventually(isProxyRunning).Should(BeTrue())
 			err = proxy.Close()
 			Expect(err).ToNot(HaveOccurred())
 

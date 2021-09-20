@@ -35,7 +35,7 @@ var _ = Describe("TLS Extension Handler, for the server", func() {
 	})
 
 	Context("for the server", func() {
-		for _, ver := range []protocol.VersionNumber{protocol.VersionDraft29, protocol.VersionDraft34} {
+		for _, ver := range []protocol.VersionNumber{protocol.VersionDraft29, protocol.Version1} {
 			v := ver
 
 			Context(fmt.Sprintf("sending, for version %s", v), func() {
@@ -122,7 +122,7 @@ var _ = Describe("TLS Extension Handler, for the server", func() {
 	})
 
 	Context("for the client", func() {
-		for _, ver := range []protocol.VersionNumber{protocol.VersionDraft29, protocol.VersionDraft34} {
+		for _, ver := range []protocol.VersionNumber{protocol.VersionDraft29, protocol.Version1} {
 			v := ver
 
 			Context(fmt.Sprintf("sending, for version %s", v), func() {

@@ -366,7 +366,9 @@ func (s *baseServer) handlePacketImpl(p *receivedPacket) bool /* is the buffer s
 			}
 			return false
 		}
-		go s.sendVersionNegotiationPacket(p, hdr)
+		if !s.config.DisableVersionNegotiationPackets {
+			go s.sendVersionNegotiationPacket(p, hdr)
+		}
 		return false
 	}
 	if hdr.IsLongHeader && hdr.Type != protocol.PacketTypeInitial {

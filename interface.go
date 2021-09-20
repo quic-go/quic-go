@@ -13,16 +13,6 @@ import (
 	"github.com/Psiphon-Labs/quic-go/logging"
 )
 
-// RetireBugBackwardsCompatibilityMode controls a backwards compatibility mode, necessary due to a bug in
-// quic-go v0.17.2 (and earlier), where under certain circumstances, an endpoint would retire the connection
-// ID it is currently using. See https://github.com/Psiphon-Labs/quic-go/issues/2658.
-// The bug has now been fixed, and new deployments have nothing to worry about.
-// Deployments that already have quic-go <= v0.17.2 deployed should active RetireBugBackwardsCompatibilityMode.
-// If activated, quic-go will take steps to avoid the bug from triggering when connected to endpoints that are still
-// running quic-go <= v0.17.2.
-// This flag will be removed in a future version of quic-go.
-var RetireBugBackwardsCompatibilityMode bool
-
 // The StreamID is the ID of a QUIC stream.
 type StreamID = protocol.StreamID
 
@@ -32,10 +22,6 @@ type VersionNumber = protocol.VersionNumber
 const (
 	// VersionDraft29 is IETF QUIC draft-29
 	VersionDraft29 = protocol.VersionDraft29
-	// VersionDraft32 is IETF QUIC draft-32
-	VersionDraft32 = protocol.VersionDraft32
-	// VersionDraft34 is IETF QUIC draft-34
-	VersionDraft34 = protocol.VersionDraft34
 	// Version1 is RFC 9000
 	Version1 = protocol.Version1
 )
@@ -299,6 +285,10 @@ type Config struct {
 	// DisablePathMTUDiscovery disables Path MTU Discovery (RFC 8899).
 	// Packets will then be at most 1252 (IPv4) / 1232 (IPv6) bytes in size.
 	DisablePathMTUDiscovery bool
+	// DisableVersionNegotiationPackets disables the sending of Version Negotiation packets.
+	// This can be useful if version information is exchanged out-of-band.
+	// It has no effect for a client.
+	DisableVersionNegotiationPackets bool
 	// See https://datatracker.ietf.org/doc/draft-ietf-quic-datagram/.
 	// Datagrams will only be available when both peers enable datagram support.
 	EnableDatagrams bool

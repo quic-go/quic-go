@@ -586,10 +586,10 @@ var _ = Describe("Server", func() {
 
 		It("works if the quic.Config sets QUIC versions", func() {
 			s.Server.Addr = ":443"
-			s.QuicConfig.Versions = []quic.VersionNumber{quic.VersionDraft32, quic.VersionDraft29}
+			s.QuicConfig.Versions = []quic.VersionNumber{quic.Version1, quic.VersionDraft29}
 			hdr := http.Header{}
 			Expect(s.SetQuicHeaders(hdr)).To(Succeed())
-			Expect(hdr).To(Equal(http.Header{"Alt-Svc": {`h3-32=":443"; ma=2592000,h3-29=":443"; ma=2592000`}}))
+			Expect(hdr).To(Equal(http.Header{"Alt-Svc": {`h3=":443"; ma=2592000,h3-29=":443"; ma=2592000`}}))
 		})
 	})
 
@@ -709,9 +709,9 @@ var _ = Describe("Server", func() {
 			c, err := conf.GetConfigForClient(&tls.ClientHelloInfo{Conn: newMockConn(protocol.VersionDraft29)})
 			ExpectWithOffset(1, err).ToNot(HaveOccurred())
 			ExpectWithOffset(1, c.NextProtos).To(Equal([]string{nextProtoH3Draft29}))
-			c, err = conf.GetConfigForClient(&tls.ClientHelloInfo{Conn: newMockConn(protocol.VersionDraft32)})
+			c, err = conf.GetConfigForClient(&tls.ClientHelloInfo{Conn: newMockConn(protocol.Version1)})
 			ExpectWithOffset(1, err).ToNot(HaveOccurred())
-			ExpectWithOffset(1, c.NextProtos).To(Equal([]string{nextProtoH3Draft32}))
+			ExpectWithOffset(1, c.NextProtos).To(Equal([]string{nextProtoH3}))
 		}
 
 		It("uses the quic.Config to start the QUIC server", func() {

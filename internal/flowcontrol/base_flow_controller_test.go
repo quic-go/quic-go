@@ -173,8 +173,6 @@ var _ = Describe("Base Flow controller", func() {
 			})
 
 			It("doesn't increase the window size if data is read so fast that the window would be consumed in less than 4 RTTs, but less than half the window has been read", func() {
-				// this test only makes sense if a window update is triggered before half of the window has been consumed
-				Expect(protocol.WindowUpdateThreshold).To(BeNumerically(">", 1/3))
 				bytesRead := controller.bytesRead
 				rtt := scaleDuration(20 * time.Millisecond)
 				setRtt(rtt)

@@ -121,9 +121,7 @@ func setupHandler(www string) http.Handler {
 					err = errors.New("couldn't get uploaded file size")
 				}
 			}
-			if err != nil {
-				utils.DefaultLogger.Infof("Error receiving upload: %#v", err)
-			}
+			utils.DefaultLogger.Infof("Error receiving upload: %#v", err)
 		}
 		io.WriteString(w, `<html><body><form action="/demo/upload" method="post" enctype="multipart/form-data">
 				<input type="file" name="uploadfile"><br>

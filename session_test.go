@@ -2182,7 +2182,7 @@ var _ = Describe("Session", func() {
 			cryptoSetup.EXPECT().Close()
 			gomock.InOrder(
 				tracer.EXPECT().ClosedConnection(gomock.Any()).Do(func(e error) {
-					Expect(errors.Is(e, &IdleTimeoutError{})).To(BeTrue())
+					Expect(e).To(MatchError(&qerr.IdleTimeoutError{}))
 				}),
 				tracer.EXPECT().Close(),
 			)
@@ -2206,7 +2206,7 @@ var _ = Describe("Session", func() {
 			cryptoSetup.EXPECT().Close()
 			gomock.InOrder(
 				tracer.EXPECT().ClosedConnection(gomock.Any()).Do(func(e error) {
-					Expect(errors.Is(e, &HandshakeTimeoutError{})).To(BeTrue())
+					Expect(e).To(MatchError(&HandshakeTimeoutError{}))
 				}),
 				tracer.EXPECT().Close(),
 			)
@@ -2235,8 +2235,10 @@ var _ = Describe("Session", func() {
 			})
 			gomock.InOrder(
 				tracer.EXPECT().ClosedConnection(gomock.Any()).Do(func(e error) {
-					Expect(errors.Is(e, &IdleTimeoutError{})).To(BeFalse())
-					Expect(errors.Is(e, &HandshakeTimeoutError{})).To(BeFalse())
+					idleTimeout := &IdleTimeoutError{}
+					handshakeTimeout := &HandshakeTimeoutError{}
+					Expect(errors.As(e, &idleTimeout)).To(BeFalse())
+					Expect(errors.As(e, &handshakeTimeout)).To(BeFalse())
 				}),
 				tracer.EXPECT().Close(),
 			)
@@ -2263,7 +2265,7 @@ var _ = Describe("Session", func() {
 			cryptoSetup.EXPECT().Close()
 			gomock.InOrder(
 				tracer.EXPECT().ClosedConnection(gomock.Any()).Do(func(e error) {
-					Expect(errors.Is(e, &IdleTimeoutError{})).To(BeTrue())
+					Expect(e).To(MatchError(&IdleTimeoutError{}))
 				}),
 				tracer.EXPECT().Close(),
 			)
@@ -2292,7 +2294,7 @@ var _ = Describe("Session", func() {
 			cryptoSetup.EXPECT().Close()
 			gomock.InOrder(
 				tracer.EXPECT().ClosedConnection(gomock.Any()).Do(func(e error) {
-					Expect(errors.Is(e, &IdleTimeoutError{})).To(BeTrue())
+					Expect(e).To(MatchError(&IdleTimeoutError{}))
 				}),
 				tracer.EXPECT().Close(),
 			)

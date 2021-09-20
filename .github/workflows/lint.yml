@@ -17,6 +17,10 @@ jobs:
           go mod tidy
           diff go.mod go.mod.orig
           diff go.sum go.sum.orig
+      - name: Check that go mod vendor works
+        run: |
+          cd integrationtests/gomodvendor
+          go mod vendor
   golangci-lint:
     runs-on: ubuntu-latest
     steps:
@@ -24,5 +28,4 @@ jobs:
       - name: golangci-lint
         uses: golangci/golangci-lint-action@v2
         with:
-          # Required: the version of golangci-lint is required and must be specified without patch version: we always use the latest patch version.
-          version: v1.34.1
+          version: v1.41.1

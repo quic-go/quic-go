@@ -15,8 +15,6 @@ var _ = Describe("Version", func() {
 		Expect(IsValidVersion(VersionWhatever)).To(BeFalse())
 		Expect(IsValidVersion(VersionUnknown)).To(BeFalse())
 		Expect(IsValidVersion(VersionDraft29)).To(BeTrue())
-		Expect(IsValidVersion(VersionDraft32)).To(BeTrue())
-		Expect(IsValidVersion(VersionDraft34)).To(BeTrue())
 		Expect(IsValidVersion(Version1)).To(BeTrue())
 		Expect(IsValidVersion(1234)).To(BeFalse())
 	})
@@ -29,8 +27,6 @@ var _ = Describe("Version", func() {
 		Expect(VersionWhatever.String()).To(Equal("whatever"))
 		Expect(VersionUnknown.String()).To(Equal("unknown"))
 		Expect(VersionDraft29.String()).To(Equal("draft-29"))
-		Expect(VersionDraft32.String()).To(Equal("draft-32"))
-		Expect(VersionDraft34.String()).To(Equal("draft-34"))
 		Expect(Version1.String()).To(Equal("v1"))
 		// check with unsupported version numbers from the wiki
 		Expect(VersionNumber(0x51303039).String()).To(Equal("gQUIC 9"))
@@ -51,13 +47,6 @@ var _ = Describe("Version", func() {
 		for i := 1; i < len(SupportedVersions)-1; i++ {
 			Expect(SupportedVersions[i]).To(BeNumerically(">", SupportedVersions[i+1]))
 		}
-	})
-
-	It("says if backwards compatibility mode should be used", func() {
-		Expect(UseRetireBugBackwardsCompatibilityMode(true, VersionDraft29)).To(BeTrue())
-		Expect(UseRetireBugBackwardsCompatibilityMode(true, VersionDraft32)).To(BeFalse())
-		Expect(UseRetireBugBackwardsCompatibilityMode(false, VersionDraft29)).To(BeFalse())
-		Expect(UseRetireBugBackwardsCompatibilityMode(false, VersionDraft32)).To(BeFalse())
 	})
 
 	Context("highest supported version", func() {
@@ -97,15 +86,6 @@ var _ = Describe("Version", func() {
 			greased := GetGreasedVersions([]VersionNumber{})
 			Expect(greased).To(HaveLen(1))
 			Expect(isReservedVersion(greased[0])).To(BeTrue())
-		})
-
-		It("strips greased versions", func() {
-			v := SupportedVersions[0]
-			greased := GetGreasedVersions([]VersionNumber{v})
-			Expect(greased).To(HaveLen(2))
-			stripped := StripGreasedVersions(greased)
-			Expect(stripped).To(HaveLen(1))
-			Expect(stripped[0]).To(Equal(v))
 		})
 
 		It("creates greased lists of version numbers", func() {
