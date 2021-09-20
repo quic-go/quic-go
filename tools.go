@@ -3,5 +3,7 @@
 package quic
 
 import (
-	_ "github.com/onsi/ginkgo/ginkgo"
+// [Psiphon]
+// Avoid vendoring testing dependencies
+// _ "github.com/onsi/ginkgo/ginkgo"
 )
