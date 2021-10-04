@@ -67,9 +67,7 @@ func newClient(
 	}
 
 	// Don’t allow incoming bidirectional streams unless WebTransport is enabled.
-	if !settings.WebTransportEnabled() {
-		quicConfig.MaxIncomingStreams = -1
-	}
+	quicConfig.MaxIncomingStreams = -1
 	quicConfig.EnableDatagrams = settings.DatagramsEnabled()
 	logger := utils.DefaultLogger.WithPrefix("h3 client")
 

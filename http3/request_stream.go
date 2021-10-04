@@ -1,8 +1,6 @@
 package http3
 
 import (
-	"context"
-	"errors"
 	"io"
 	"net"
 	"time"
@@ -28,10 +26,7 @@ type requestStream struct {
 	dataWriterClosed bool
 }
 
-var (
-	_ RequestStream  = &requestStream{}
-	_ WebTransporter = &requestStream{}
-)
+var _ RequestStream = &requestStream{}
 
 // newRequestStream creates a new RequestStream. If a frame has already been
 // partially consumed from str, t specifies the frame type and n the number of
@@ -44,26 +39,6 @@ func newRequestStream(conn *connection, str quic.Stream, t FrameType, n int64) R
 		w:      quicvarint.NewWriter(str),
 	}
 	return s
-}
-
-// CancelRead cleans up any buffered incoming streams and datagrams.
-func (s *requestStream) CancelRead(code quic.StreamErrorCode) {
-	s.conn.cleanup(uint64(s.StreamID()))
-	s.Stream.CancelRead(code)
-}
-
-// CancelWrite cleans up any buffered incoming streams and datagrams.
-func (s *requestStream) CancelWrite(code quic.StreamErrorCode) {
-	s.conn.cleanup(uint64(s.StreamID()))
-	s.Stream.CancelWrite(code)
-}
-
-// Close cleans up any buffered incoming streams and datagrams.
-// TODO(ydnar): should this close the stream if a WebTransport interface was created?
-// TODO(ydnar): should a WebTransport session persist after an http.Handler returns?
-func (s *requestStream) Close() error {
-	s.conn.cleanup(uint64(s.StreamID()))
-	return s.Stream.Close()
 }
 
 // LocalAddr returns the local address.
@@ -130,20 +105,6 @@ func (s *requestStream) DataReader() io.ReadCloser {
 
 func (s *requestStream) DataWriter() io.WriteCloser {
 	return (*dataWriter)(s)
-}
-
-func (s *requestStream) WebTransport() (WebTransport, error) {
-	if !s.conn.Settings().WebTransportEnabled() {
-		return nil, errors.New("WebTransport not enabled")
-	}
-	peerSettings, err := s.conn.PeerSettingsSync(context.Background())
-	if err != nil {
-		return nil, err
-	}
-	if !peerSettings.WebTransportEnabled() {
-		return nil, errors.New("WebTransport not supported by peer")
-	}
-	return (*webTransportSession)(s), nil
 }
 
 // nextHeadersFrame reads incoming HTTP/3 frames until it finds
@@ -339,51 +300,4 @@ func (w *dataWriter) ReadFrom(r io.Reader) (n int64, err error) {
 
 func (w *dataWriter) Close() error {
 	return (*requestStream)(w).closeDataWriter()
-}
-
-// webTransportSession is an alias for requestStream.
-type webTransportSession requestStream
-
-var _ WebTransport = &webTransportSession{}
-
-func (s *webTransportSession) sessionID() uint64 {
-	return uint64(s.StreamID())
-}
-
-func (s *webTransportSession) Close() error {
-	s.CancelRead(quic.StreamErrorCode(errorNoError))
-	s.CancelWrite(quic.StreamErrorCode(errorNoError))
-	return nil
-}
-
-func (s *webTransportSession) AcceptStream(ctx context.Context) (quic.Stream, error) {
-	return s.conn.acceptStream(ctx, s.sessionID())
-}
-
-func (s *webTransportSession) AcceptUniStream(ctx context.Context) (quic.ReceiveStream, error) {
-	return s.conn.acceptUniStream(ctx, s.sessionID())
-}
-
-func (s *webTransportSession) OpenStream() (quic.Stream, error) {
-	return s.conn.openStream(s.sessionID())
-}
-
-func (s *webTransportSession) OpenStreamSync(ctx context.Context) (quic.Stream, error) {
-	return s.conn.openStreamSync(ctx, s.sessionID())
-}
-
-func (s *webTransportSession) OpenUniStream() (quic.SendStream, error) {
-	return s.conn.openUniStream(s.sessionID())
-}
-
-func (s *webTransportSession) OpenUniStreamSync(ctx context.Context) (quic.SendStream, error) {
-	return s.conn.openUniStreamSync(ctx, s.sessionID())
-}
-
-func (s *webTransportSession) ReadDatagram(ctx context.Context) ([]byte, error) {
-	return s.conn.readDatagram(ctx, s.sessionID())
-}
-
-func (s *webTransportSession) WriteDatagram(msg []byte) error {
-	return s.conn.writeDatagram(s.sessionID(), msg)
 }

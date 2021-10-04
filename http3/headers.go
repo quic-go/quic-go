@@ -35,12 +35,10 @@ func RequestHeaders(req *http.Request) ([]qpack.HeaderField, error) {
 		return nil, err
 	}
 
-	protocol := req.Header.Get(pseudoHeaderProtocol)
 	isConnect := req.Method == http.MethodConnect
-	isExtendedConnect := isConnect && protocol != ""
 
 	var path string
-	if !isConnect || isExtendedConnect {
+	if !isConnect {
 		path = req.URL.RequestURI()
 		if !validPseudoPath(path) {
 			orig := path
@@ -69,9 +67,7 @@ func RequestHeaders(req *http.Request) ([]qpack.HeaderField, error) {
 	f(pseudoHeaderAuthority, host)
 	f(pseudoHeaderMethod, req.Method)
 
-	// The extended CONNECT method used by WebTransport requires :scheme and :path
-	// See https://www.ietf.org/archive/id/draft-ietf-webtrans-http3-01.html#section-3.2
-	if !isConnect || isExtendedConnect {
+	if !isConnect {
 		f(pseudoHeaderPath, path)
 		f(pseudoHeaderScheme, req.URL.Scheme)
 	}

@@ -48,8 +48,7 @@ func requestFromHeaders(ctx context.Context, headers []qpack.HeaderField) (*http
 	}
 
 	isConnect := method == http.MethodConnect
-	isExtendedConnect := isConnect && protocol != ""
-	if isConnect && !isExtendedConnect {
+	if isConnect {
 		if path != "" || authority == "" {
 			return nil, errors.New(":path must be empty and :authority must not be empty")
 		}
@@ -61,7 +60,7 @@ func requestFromHeaders(ctx context.Context, headers []qpack.HeaderField) (*http
 	var requestURI string
 	var err error
 
-	if isConnect && !isExtendedConnect {
+	if isConnect {
 		u = &url.URL{Host: authority}
 		requestURI = authority
 	} else {

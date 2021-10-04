@@ -11,9 +11,6 @@ const (
 	FrameTypeGoAway        FrameType = 0x07
 	FrameTypeMaxPushID     FrameType = 0x0d
 	FrameTypeDuplicatePush FrameType = 0x0e
-
-	// https://www.ietf.org/archive/id/draft-ietf-webtrans-http3-01.html#section-7.3
-	FrameTypeWebTransportStream FrameType = 0x41
 )
 
 // A FrameType represents an HTTP/3 frame type.
@@ -39,8 +36,6 @@ func (t FrameType) String() string {
 		return "MAX_PUSH_ID"
 	case FrameTypeDuplicatePush:
 		return "DUPLICATE_PUSH"
-	case FrameTypeWebTransportStream:
-		return "WEBTRANSPORT_STREAM"
 	default:
 		return fmt.Sprintf("%#x", uint64(t))
 	}

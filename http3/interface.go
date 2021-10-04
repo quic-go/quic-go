@@ -41,20 +41,6 @@ type ClientConn interface {
 	OpenRequestStream(context.Context) (RequestStream, error)
 }
 
-// webTransportConn is an internal interface for implementing WebTransport.
-// The interface is similar to quic.Session, but methods accept a session ID
-// to (de)multiplex streams and datagframs.
-type webTransportConn interface {
-	acceptStream(context.Context, uint64) (quic.Stream, error)
-	acceptUniStream(context.Context, uint64) (quic.ReceiveStream, error)
-	openStream(uint64) (quic.Stream, error)
-	openStreamSync(context.Context, uint64) (quic.Stream, error)
-	openUniStream(uint64) (quic.SendStream, error)
-	openUniStreamSync(context.Context, uint64) (quic.SendStream, error)
-	readDatagram(context.Context, uint64) ([]byte, error)
-	writeDatagram(uint64, []byte) error
-}
-
 // A RequestStream wraps a QUIC stream for processing HTTP/3 requests. It
 // processes HEADERS and DATA frames, making these available to the caller via
 // ReadHeaders and DataReader. It may also process other frame types or skip any
@@ -99,18 +85,6 @@ type RequestStream interface {
 	// Closing DataWriter will prevent further writes, but will not close
 	// the stream.
 	DataWriter() io.WriteCloser
-
-	// WebTransport returns a WebTransport interface, if supported.
-	WebTransport() (WebTransport, error)
-}
-
-// A DatagramHandler can read and write datagrams.
-type DatagramHandler interface {
-	// ReadDatagram reads a single datagram.
-	ReadDatagram(context.Context) ([]byte, error)
-
-	// WriteDatagram writes a single datagram.
-	WriteDatagram([]byte) error
 }
 
 // DataStreamer lets the caller take over the underlying quic.Stream. After a
@@ -122,21 +96,6 @@ type DatagramHandler interface {
 // After a call to DataStream, the original Request.Body should not be used.
 type DataStreamer interface {
 	DataStream() quic.Stream
-}
-
-// WebTransporter lets the caller extract a WebTransport session from a client
-// or server request session. The underlying request must be a CONNECT request
-// with :protocol=WebTransport on an HTTP/3 connection where both peers have
-// sent ENABLE_WEBTRANSPORT=1.
-type WebTransporter interface {
-	WebTransport() (WebTransport, error)
-}
-
-// WebTransport is an interface to accept or open streams and read and write datagrams.
-type WebTransport interface {
-	StreamHandler
-	DatagramHandler
-	io.Closer
 }
 
 // A StreamHandler can accept or open new streams.

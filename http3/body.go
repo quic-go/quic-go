@@ -17,10 +17,7 @@ type body struct {
 	reqDoneClosed bool
 }
 
-var (
-	_ io.ReadCloser  = &body{}
-	_ WebTransporter = &body{}
-)
+var _ io.ReadCloser = &body{}
 
 func newRequestBody(str RequestStream) *body {
 	return &body{
@@ -56,8 +53,4 @@ func (r *body) Close() error {
 	// If the EOF was read, CancelRead() is a no-op.
 	r.str.CancelRead(quic.StreamErrorCode(errorRequestCanceled))
 	return nil
-}
-
-func (r *body) WebTransport() (WebTransport, error) {
-	return r.str.WebTransport()
 }

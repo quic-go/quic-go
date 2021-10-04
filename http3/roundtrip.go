@@ -44,7 +44,7 @@ type RoundTripper struct {
 	// Settings specifies the HTTP/3 settings transmitted to the server.
 	// If nil, reasonable default values will be used.
 	// See https://quicwg.org/base-drafts/draft-ietf-quic-http.html#name-http-2-settings-parameters.
-	// If non-nil, overrides EnableDatagrams and EnableWebTransport.
+	// If non-nil, overrides EnableDatagrams and MaxResponseHeaderBytes.
 	Settings Settings
 
 	// Enable support for HTTP/3 datagrams.
@@ -52,11 +52,6 @@ type RoundTripper struct {
 	// See https://www.ietf.org/archive/id/draft-schinazi-masque-h3-datagram-02.html.
 	// Ignored if Settings is non-nil.
 	EnableDatagrams bool
-
-	// Enable support for WebTransport.
-	// If set to true, QuicConfig.EnableDatagram and ENABLE_WEBTRANSPORT will be set.
-	// Ignored if Settings is non-nil.
-	EnableWebTransport bool
 
 	// Dial specifies an optional dial function for creating QUIC
 	// connections for requests.
@@ -177,9 +172,6 @@ func (r *RoundTripper) settings() Settings {
 	}
 	if r.EnableDatagrams {
 		settings.EnableDatagrams()
-	}
-	if r.EnableWebTransport {
-		settings.EnableWebTransport()
 	}
 	return settings
 }
