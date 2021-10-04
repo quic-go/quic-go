@@ -18,7 +18,6 @@ import (
 	"github.com/lucas-clemente/quic-go/internal/handshake"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/internal/utils"
-	"github.com/marten-seemann/qpack"
 )
 
 // allows mocking of quic.Listen and quic.ListenAddr
@@ -307,21 +306,7 @@ func (s *Server) handleRequestStream(str RequestStream) error {
 
 	req.RemoteAddr = str.RemoteAddr().String()
 
-	onTrailers := func(fields []qpack.HeaderField, err error) {
-		if err != nil {
-			s.logger.Errorf("error reading trailer: %s", err)
-			return
-		}
-		s.logger.Debugf("read %d trailer fields", len(fields))
-		if req.Trailer == nil {
-			req.Trailer = http.Header{}
-		}
-		for _, f := range fields {
-			req.Trailer.Add(f.Name, f.Value)
-		}
-	}
-
-	req.Body = newRequestBody(str, onTrailers)
+	req.Body = newRequestBody(str)
 
 	if s.logger.Debug() {
 		s.logger.Infof("%s %s%s, on stream %d", req.Method, req.Host, req.RequestURI, str.StreamID())
@@ -357,7 +342,6 @@ func (s *Server) handleRequestStream(str RequestStream) error {
 		} else {
 			rw.WriteHeader(http.StatusOK)
 		}
-		rw.writeTrailer()
 		rw.Flush()
 		// If the EOF was read by the handler, CancelRead() is a no-op.
 		// TODO(ydnar): should this stream persist for CONNECT (WebTransport) requests?

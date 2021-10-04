@@ -585,7 +585,7 @@ var _ = Describe("Client", func() {
 			return fields
 		}
 
-		getResponse := func(status int, header, trailer http.Header, body []byte) []byte {
+		getResponse := func(status int, header http.Header, body []byte) []byte {
 			buf := &bytes.Buffer{}
 			rsess := mockquic.NewMockEarlySession(mockCtrl)
 			rsess.EXPECT().Context().Return(context.Background()).AnyTimes()
@@ -597,24 +597,16 @@ var _ = Describe("Client", func() {
 			for k, vv := range header {
 				rw.header[k] = vv[:]
 			}
-			for k := range trailer {
-				rw.header["Trailer"] = append(rw.header["Trailer"], k)
-			}
 			rw.WriteHeader(status)
 			if body != nil {
 				rw.Write(body)
 			}
-			for k, vv := range trailer {
-				rw.header[k] = vv[:]
-			}
-			rw.writeTrailer()
-			// TODO: handle trailers
 			rw.Flush()
 			return buf.Bytes()
 		}
 
 		getSimpleResponse := func(status int) []byte {
-			return getResponse(status, nil, nil, nil)
+			return getResponse(status, nil, nil)
 		}
 
 		BeforeEach(func() {
@@ -707,8 +699,8 @@ var _ = Describe("Client", func() {
 		It("handles interim responses", func() {
 			resBuf := &bytes.Buffer{}
 			resBuf.Write(getSimpleResponse(http.StatusProcessing))
-			resBuf.Write(getResponse(http.StatusEarlyHints, http.Header{"Foo": {"1"}}, nil, nil))
-			resBuf.Write(getResponse(http.StatusOK, http.Header{"Bar": {"1"}}, nil, nil))
+			resBuf.Write(getResponse(http.StatusEarlyHints, http.Header{"Foo": {"1"}}, nil))
+			resBuf.Write(getResponse(http.StatusOK, http.Header{"Bar": {"1"}}, nil))
 			gomock.InOrder(
 				sess.EXPECT().HandshakeComplete().Return(handshakeCtx),
 				sess.EXPECT().OpenStreamSync(context.Background()).Return(str, nil),
@@ -764,7 +756,7 @@ var _ = Describe("Client", func() {
 
 		It("returns a response with a body", func() {
 			body := []byte("foobar")
-			resBuf := bytes.NewBuffer(getResponse(200, nil, nil, body))
+			resBuf := bytes.NewBuffer(getResponse(200, nil, body))
 			gomock.InOrder(
 				sess.EXPECT().HandshakeComplete().Return(handshakeCtx),
 				sess.EXPECT().OpenStreamSync(context.Background()).Return(str, nil),
@@ -780,30 +772,6 @@ var _ = Describe("Client", func() {
 			resBody, err := io.ReadAll(res.Body)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(resBody).To(Equal(body))
-		})
-
-		It("returns a response with trailers", func() {
-			body := []byte("foobar")
-			trailer := http.Header{}
-			trailer.Add("foo", "1")
-			trailer.Add("bar", "1")
-			resBuf := bytes.NewBuffer(getResponse(200, nil, trailer, body))
-			gomock.InOrder(
-				sess.EXPECT().HandshakeComplete().Return(handshakeCtx),
-				sess.EXPECT().OpenStreamSync(context.Background()).Return(str, nil),
-				sess.EXPECT().ConnectionState().Return(quic.ConnectionState{}),
-			)
-			str.EXPECT().Write(gomock.Any()).AnyTimes().DoAndReturn(func(p []byte) (int, error) { return len(p), nil })
-			str.EXPECT().Close()
-			str.EXPECT().StreamID().AnyTimes()
-			str.EXPECT().Read(gomock.Any()).DoAndReturn(resBuf.Read).AnyTimes()
-			res, err := client.RoundTrip(request)
-			Expect(err).ToNot(HaveOccurred())
-			Expect(res.StatusCode).To(Equal(200))
-			resBody, err := io.ReadAll(res.Body)
-			Expect(err).ToNot(HaveOccurred())
-			Expect(resBody).To(Equal(body))
-			Expect(res.Trailer).To(Equal(trailer))
 		})
 
 		Context("requests containing a Body", func() {

@@ -4,10 +4,7 @@ import (
 	"io"
 
 	"github.com/lucas-clemente/quic-go"
-	"github.com/marten-seemann/qpack"
 )
-
-type trailerFunc func([]qpack.HeaderField, error)
 
 // The body of a http.Request or http.Response.
 type body struct {
@@ -18,8 +15,6 @@ type body struct {
 	// either when Read() errors, or when Close() is called.
 	reqDone       chan<- struct{}
 	reqDoneClosed bool
-
-	onTrailers trailerFunc
 }
 
 var (
@@ -27,28 +22,22 @@ var (
 	_ WebTransporter = &body{}
 )
 
-func newRequestBody(str RequestStream, onTrailers trailerFunc) *body {
+func newRequestBody(str RequestStream) *body {
 	return &body{
-		str:        str,
-		onTrailers: onTrailers,
+		str: str,
 	}
 }
 
-func newResponseBody(str RequestStream, onTrailers trailerFunc, done chan<- struct{}) *body {
+func newResponseBody(str RequestStream, done chan<- struct{}) *body {
 	return &body{
-		str:        str,
-		onTrailers: onTrailers,
-		reqDone:    done,
+		str:     str,
+		reqDone: done,
 	}
 }
 
 func (r *body) Read(p []byte) (n int, err error) {
 	n, err = r.str.DataReader().Read(p)
 	if err != nil {
-		// Read trailers if present
-		if err == io.EOF && r.onTrailers != nil {
-			r.onTrailers(r.str.ReadHeaders())
-		}
 		r.requestDone()
 	}
 	return n, err

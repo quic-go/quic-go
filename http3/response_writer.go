@@ -14,7 +14,6 @@ type responseWriter struct {
 	stream RequestStream
 
 	header         http.Header
-	trailers       []string
 	status         int // status code passed to WriteHeader
 	headerWritten  bool
 	dataStreamUsed bool // set when DataSteam() is called
@@ -58,14 +57,6 @@ func (w *responseWriter) WriteHeader(status int) {
 		}
 		k = strings.ToLower(k)
 		for _, v := range vv {
-			if k == "trailer" {
-				for _, t := range strings.Split(v, ",") {
-					t = strings.TrimSpace(t)
-					if t != "" {
-						w.trailers = append(w.trailers, t)
-					}
-				}
-			}
 			fields = append(fields, qpack.HeaderField{Name: k, Value: v})
 		}
 	}
@@ -93,25 +84,6 @@ func (w *responseWriter) Write(p []byte) (int, error) {
 
 func (w *responseWriter) Flush() {
 	// TODO: buffer?
-}
-
-// See https://pkg.go.dev/net/http#example-ResponseWriter-Trailers.
-func (w *responseWriter) writeTrailer() error {
-	trailer := http.Header{}
-	for _, k := range w.trailers {
-		trailer[k] = append(trailer[k], w.header[k]...)
-	}
-	for k, vv := range w.header {
-		if strings.HasPrefix(k, http.TrailerPrefix) {
-			k = strings.TrimPrefix(k, http.TrailerPrefix)
-			trailer[k] = append(trailer[k], vv...)
-		}
-	}
-	fields := Trailers(trailer)
-	if len(fields) == 0 {
-		return nil
-	}
-	return w.stream.WriteHeaders(fields)
 }
 
 func (w *responseWriter) usedDataStream() bool {

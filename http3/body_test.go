@@ -4,13 +4,11 @@ import (
 	"bytes"
 	"fmt"
 	"io"
-	"net/http"
 
 	"github.com/golang/mock/gomock"
 	"github.com/lucas-clemente/quic-go"
 	mockquic "github.com/lucas-clemente/quic-go/internal/mocks/quic"
 	"github.com/lucas-clemente/quic-go/quicvarint"
-	"github.com/marten-seemann/qpack"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -32,21 +30,14 @@ func (t bodyType) String() string {
 
 var _ = Describe("body", func() {
 	var (
-		rb          *body
-		sess        *mockquic.MockEarlySession
-		conn        *connection
-		str         *mockquic.MockStream
-		rstr        RequestStream
-		buf         *bytes.Buffer
-		trailers    []qpack.HeaderField
-		trailersErr error
-		reqDone     chan struct{}
+		rb      *body
+		sess    *mockquic.MockEarlySession
+		conn    *connection
+		str     *mockquic.MockStream
+		rstr    RequestStream
+		buf     *bytes.Buffer
+		reqDone chan struct{}
 	)
-
-	onTrailers := func(fields []qpack.HeaderField, err error) {
-		trailers = fields[:]
-		trailersErr = err
-	}
 
 	getDataFrame := func(data []byte) []byte {
 		buf := &bytes.Buffer{}
@@ -80,10 +71,10 @@ var _ = Describe("body", func() {
 
 				switch bodyType {
 				case bodyTypeRequest:
-					rb = newRequestBody(rstr, onTrailers)
+					rb = newRequestBody(rstr)
 				case bodyTypeResponse:
 					reqDone = make(chan struct{})
-					rb = newResponseBody(rstr, onTrailers, reqDone)
+					rb = newResponseBody(rstr, reqDone)
 				}
 			})
 
@@ -138,37 +129,6 @@ var _ = Describe("body", func() {
 				Expect(err).ToNot(HaveOccurred())
 				Expect(len(b)).To(Equal(6))
 				Expect(b).To(Equal([]byte("foobar")))
-			})
-
-			It("reads trailers", func() {
-				buf.Write(getDataFrame([]byte("foo")))
-				buf.Write(getDataFrame([]byte("bar")))
-				fields := []qpack.HeaderField{
-					{Name: "foo", Value: "1"},
-					{Name: "bar", Value: "2"},
-				}
-				err := writeHeadersFrame(buf, fields, http.DefaultMaxHeaderBytes)
-				Expect(err).ToNot(HaveOccurred())
-				body, err := io.ReadAll(rb)
-				Expect(err).ToNot(HaveOccurred())
-				Expect(len(body)).To(Equal(6))
-				Expect(body).To(Equal([]byte("foobar")))
-				Expect(trailers).To(Equal(fields))
-				Expect(trailersErr).ToNot(HaveOccurred())
-			})
-
-			It("receives an error on malformed trailers", func() {
-				buf.Write(getDataFrame([]byte("foo")))
-				buf.Write(getDataFrame([]byte("bar")))
-				quicvarint.Write(buf, uint64(FrameTypeHeaders))
-				quicvarint.Write(buf, 0x10)
-				buf.Write(make([]byte, 0x10))
-				sess.EXPECT().CloseWithError(quic.ApplicationErrorCode(errorGeneralProtocolError), gomock.Any())
-				body, err := io.ReadAll(rb)
-				Expect(err).ToNot(HaveOccurred())
-				Expect(len(body)).To(Equal(6))
-				Expect(body).To(Equal([]byte("foobar")))
-				Expect(trailersErr).To(HaveOccurred())
 			})
 
 			It("errors when it can't parse the frame", func() {

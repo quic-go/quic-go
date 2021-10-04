@@ -13,7 +13,6 @@ import (
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/internal/qtls"
 	"github.com/lucas-clemente/quic-go/internal/utils"
-	"github.com/marten-seemann/qpack"
 )
 
 // MethodGet0RTT allows a GET request to be sent using 0-RTT.
@@ -236,21 +235,7 @@ func (c *client) doRequest(
 	connState := qtls.ToTLSConnectionState(c.sess.ConnectionState().TLS)
 	res.TLS = &connState
 
-	onTrailers := func(fields []qpack.HeaderField, err error) {
-		if err != nil {
-			c.logger.Errorf("error reading trailer: %s", err)
-			return
-		}
-		c.logger.Debugf("read %d trailer fields", len(fields))
-		if res.Trailer == nil {
-			res.Trailer = http.Header{}
-		}
-		for _, f := range fields {
-			res.Trailer.Add(f.Name, f.Value)
-		}
-	}
-
-	respBody := newResponseBody(str, onTrailers, reqDone)
+	respBody := newResponseBody(str, reqDone)
 
 	// Rules for when to set Content-Length are defined in https://tools.ietf.org/html/rfc7230#section-3.3.2.
 	_, hasTransferEncoding := res.Header["Transfer-Encoding"]
@@ -294,14 +279,14 @@ func (c *client) writeRequest(str RequestStream, req *http.Request, requestGzip 
 		return err
 	}
 
-	if req.Body == nil && len(req.Trailer) == 0 {
+	if req.Body == nil {
 		if req.Method != http.MethodConnect {
 			str.Close()
 		}
 		return nil
 	}
 
-	// Send the request body and trailers asynchronously
+	// Send the request body asynchronously
 	go func() {
 		_, err := io.Copy(str.DataWriter(), req.Body)
 		req.Body.Close()
@@ -309,15 +294,6 @@ func (c *client) writeRequest(str RequestStream, req *http.Request, requestGzip 
 			c.logger.Errorf("Error writing request: %s", err)
 			str.CancelWrite(quic.StreamErrorCode(errorRequestCanceled))
 			return
-		}
-
-		if len(req.Trailer) > 0 {
-			err = str.WriteHeaders(Trailers(req.Trailer))
-			if err != nil {
-				c.logger.Errorf("Error writing trailers: %s", err)
-				str.CancelWrite(quic.StreamErrorCode(errorRequestCanceled))
-				return
-			}
 		}
 
 		if req.Method != http.MethodConnect {

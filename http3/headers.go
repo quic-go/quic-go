@@ -131,35 +131,7 @@ func RequestHeaders(req *http.Request) ([]qpack.HeaderField, error) {
 		f("user-agent", defaultUserAgent)
 	}
 
-	if len(req.Trailer) > 0 {
-		trailers := make([]string, 0, len(req.Trailer))
-		for k := range req.Trailer {
-			if httpguts.ValidTrailerHeader(k) {
-				trailers = append(trailers, strings.ToLower(k))
-			}
-		}
-		f("trailer", strings.Join(trailers, ", "))
-	}
-
 	return fields, nil
-}
-
-// Trailers returns HTTP/3 trailer fields for trailer, or nil
-// if there are no valid trailers present.
-func Trailers(trailer http.Header) []qpack.HeaderField {
-	var fields []qpack.HeaderField
-	for k, vv := range trailer {
-		if !httpguts.ValidTrailerHeader(k) {
-			continue
-		}
-		for _, v := range vv {
-			if !httpguts.ValidHeaderFieldValue(v) {
-				continue
-			}
-			fields = append(fields, qpack.HeaderField{Name: strings.ToLower(k), Value: v})
-		}
-	}
-	return fields
 }
 
 // appendGzipHeader appends the correct accept-encoding header to fields.
