@@ -10,11 +10,6 @@ import (
 	"github.com/marten-seemann/qpack"
 )
 
-// isClientBidi returns true if id is a client-initiated bidirectional stream ID.
-func isClientBidi(id uint64) bool {
-	return id&0b11 == 0
-}
-
 type requestStream struct {
 	quic.Stream
 	conn *connection

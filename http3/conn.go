@@ -11,10 +11,7 @@ import (
 	"github.com/lucas-clemente/quic-go/quicvarint"
 )
 
-const (
-	maxBufferedStreams   = 10
-	maxBufferedDatagrams = 10
-)
+const maxBufferedStreams = 10
 
 type connection struct {
 	session quic.EarlySession
