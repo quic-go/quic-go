@@ -2,6 +2,7 @@ package http3
 
 import (
 	"bytes"
+	"context"
 	"io"
 	"net/http"
 
@@ -25,7 +26,11 @@ var _ = Describe("Response Writer", func() {
 		strBuf = &bytes.Buffer{}
 		str := mockquic.NewMockStream(mockCtrl)
 		str.EXPECT().Write(gomock.Any()).DoAndReturn(strBuf.Write).AnyTimes()
-		rw = newResponseWriter(str, utils.DefaultLogger)
+		sess := mockquic.NewMockEarlySession(mockCtrl)
+		sess.EXPECT().Context().Return(context.Background()).AnyTimes()
+		conn := newMockConn(sess, Settings{}, Settings{})
+		msgStr := newRequestStream(conn, str, 0, 0)
+		rw = newResponseWriter(msgStr, utils.DefaultLogger)
 	})
 
 	decodeHeader := func(str io.Reader) map[string][]string {
@@ -33,12 +38,15 @@ var _ = Describe("Response Writer", func() {
 		fields := make(map[string][]string)
 		decoder := qpack.NewDecoder(nil)
 
-		frame, err := parseNextFrame(str)
-		Expect(err).ToNot(HaveOccurred())
-		Expect(frame).To(BeAssignableToTypeOf(&headersFrame{}))
-		headersFrame := frame.(*headersFrame)
-		data := make([]byte, headersFrame.Length)
-		_, err = io.ReadFull(str, data)
+		fr := &FrameReader{R: str}
+		var err error
+		for err == nil && fr.Type != FrameTypeHeaders {
+			err = fr.Next()
+			ExpectWithOffset(1, err).ToNot(HaveOccurred())
+		}
+		ExpectWithOffset(1, fr.Type).To(Equal(FrameTypeHeaders))
+		data := make([]byte, fr.N)
+		_, err = io.ReadFull(fr, data)
 		Expect(err).ToNot(HaveOccurred())
 		hfs, err := decoder.DecodeFull(data)
 		Expect(err).ToNot(HaveOccurred())
@@ -49,12 +57,12 @@ var _ = Describe("Response Writer", func() {
 	}
 
 	getData := func(str io.Reader) []byte {
-		frame, err := parseNextFrame(str)
-		Expect(err).ToNot(HaveOccurred())
-		Expect(frame).To(BeAssignableToTypeOf(&dataFrame{}))
-		df := frame.(*dataFrame)
-		data := make([]byte, df.Length)
-		_, err = io.ReadFull(str, data)
+		fr := &FrameReader{R: str}
+		err := fr.Next()
+		ExpectWithOffset(1, err).ToNot(HaveOccurred())
+		ExpectWithOffset(1, fr.Type).To(Equal(FrameTypeData))
+		data := make([]byte, fr.N)
+		_, err = io.ReadFull(fr, data)
 		Expect(err).ToNot(HaveOccurred())
 		return data
 	}

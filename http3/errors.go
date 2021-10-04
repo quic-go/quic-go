@@ -26,6 +26,9 @@ const (
 	errorMessageError         errorCode = 0x10e
 	errorConnectError         errorCode = 0x10f
 	errorVersionFallback      errorCode = 0x110
+
+	// https://www.ietf.org/archive/id/draft-ietf-webtrans-http3-01.html#section-7.5
+	errorWebTransportBufferedStreamRejected errorCode = 0x3994bd84
 )
 
 func (e errorCode) String() string {
@@ -64,7 +67,35 @@ func (e errorCode) String() string {
 		return "H3_CONNECT_ERROR"
 	case errorVersionFallback:
 		return "H3_VERSION_FALLBACK"
+	case errorWebTransportBufferedStreamRejected:
+		return "H3_WEBTRANSPORT_BUFFERED_STREAM_REJECTED"
 	default:
-		return fmt.Sprintf("unknown error code: %#x", uint16(e))
+		return fmt.Sprintf("unknown error code: %#x", uint64(e))
 	}
+}
+
+// FrameTypeError is returned when an unexpected frame is read. Want is set to
+// the desired frame type, while Type is set to the actual frame type.
+type FrameTypeError struct {
+	Want FrameType
+	Type FrameType
+}
+
+func (err *FrameTypeError) Error() string {
+	return fmt.Sprintf("unexpected frame type %s, expected %s", err.Type, err.Want)
+}
+
+var _ error = &FrameTypeError{}
+
+// FrameLengthError is returned when the frame payload length (Len) exceeds Max.
+type FrameLengthError struct {
+	Type FrameType
+	Len  uint64
+	Max  uint64
+}
+
+var _ error = &FrameLengthError{}
+
+func (err *FrameLengthError) Error() string {
+	return fmt.Sprintf("%s frame too large: %d bytes (max: %d)", err.Type, err.Len, err.Max)
 }

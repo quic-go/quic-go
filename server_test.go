@@ -872,7 +872,7 @@ var _ = Describe("Server", func() {
 
 				// make the go routine return
 				phm.EXPECT().CloseServer()
-				sess.EXPECT().getPerspective().MaxTimes(2) // once for every conn ID
+				sess.EXPECT().Perspective().MaxTimes(2) // once for every conn ID
 				Expect(serv.Close()).To(Succeed())
 				Eventually(done).Should(BeClosed())
 			})
@@ -1161,7 +1161,7 @@ var _ = Describe("Server", func() {
 
 			// make the go routine return
 			phm.EXPECT().CloseServer()
-			sess.EXPECT().getPerspective().MaxTimes(2) // once for every conn ID
+			sess.EXPECT().Perspective().MaxTimes(2) // once for every conn ID
 			Expect(serv.Close()).To(Succeed())
 			Eventually(done).Should(BeClosed())
 		})

@@ -30,9 +30,9 @@ func (h *zeroRTTQueue) handlePacket(p *receivedPacket) {
 		h.queue = append(h.queue, p)
 	}
 }
-func (h *zeroRTTQueue) shutdown()                            {}
-func (h *zeroRTTQueue) destroy(error)                        {}
-func (h *zeroRTTQueue) getPerspective() protocol.Perspective { return protocol.PerspectiveClient }
+func (h *zeroRTTQueue) shutdown()                {}
+func (h *zeroRTTQueue) destroy(error)            {}
+func (h *zeroRTTQueue) Perspective() Perspective { return protocol.PerspectiveClient }
 func (h *zeroRTTQueue) EnqueueAll(sess packetHandler) {
 	for _, p := range h.queue {
 		sess.handlePacket(p)
@@ -275,7 +275,7 @@ func (h *packetHandlerMap) CloseServer() {
 	h.server = nil
 	var wg sync.WaitGroup
 	for _, entry := range h.handlers {
-		if entry.packetHandler.getPerspective() == protocol.PerspectiveServer {
+		if entry.packetHandler.Perspective() == protocol.PerspectiveServer {
 			wg.Add(1)
 			go func(handler packetHandler) {
 				// blocks until the CONNECTION_CLOSE has been sent and the run-loop has stopped

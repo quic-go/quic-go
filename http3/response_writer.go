@@ -1,8 +1,6 @@
 package http3
 
 import (
-	"bufio"
-	"bytes"
 	"net/http"
 	"strconv"
 	"strings"
@@ -12,21 +10,11 @@ import (
 	"github.com/marten-seemann/qpack"
 )
 
-// DataStreamer lets the caller take over the stream. After a call to DataStream
-// the HTTP server library will not do anything else with the connection.
-//
-// It becomes the caller's responsibility to manage and close the stream.
-//
-// After a call to DataStream, the original Request.Body must not be used.
-type DataStreamer interface {
-	DataStream() quic.Stream
-}
-
 type responseWriter struct {
-	stream         quic.Stream // needed for DataStream()
-	bufferedStream *bufio.Writer
+	stream RequestStream
 
 	header         http.Header
+	trailers       []string
 	status         int // status code passed to WriteHeader
 	headerWritten  bool
 	dataStreamUsed bool // set when DataSteam() is called
@@ -40,12 +28,11 @@ var (
 	_ DataStreamer        = &responseWriter{}
 )
 
-func newResponseWriter(stream quic.Stream, logger utils.Logger) *responseWriter {
+func newResponseWriter(stream RequestStream, logger utils.Logger) *responseWriter {
 	return &responseWriter{
-		header:         http.Header{},
-		stream:         stream,
-		bufferedStream: bufio.NewWriter(stream),
-		logger:         logger,
+		header: http.Header{},
+		stream: stream,
+		logger: logger,
 	}
 }
 
@@ -63,24 +50,31 @@ func (w *responseWriter) WriteHeader(status int) {
 	}
 	w.status = status
 
-	var headers bytes.Buffer
-	enc := qpack.NewEncoder(&headers)
-	enc.WriteField(qpack.HeaderField{Name: ":status", Value: strconv.Itoa(status)})
-
-	for k, v := range w.header {
-		for index := range v {
-			enc.WriteField(qpack.HeaderField{Name: strings.ToLower(k), Value: v[index]})
+	fields := make([]qpack.HeaderField, 0, len(w.header)+1)
+	fields = append(fields, qpack.HeaderField{Name: pseudoHeaderStatus, Value: strconv.Itoa(status)})
+	for k, vv := range w.header {
+		if strings.HasPrefix(k, http.TrailerPrefix) {
+			continue
+		}
+		k = strings.ToLower(k)
+		for _, v := range vv {
+			if k == "trailer" {
+				for _, t := range strings.Split(v, ",") {
+					t = strings.TrimSpace(t)
+					if t != "" {
+						w.trailers = append(w.trailers, t)
+					}
+				}
+			}
+			fields = append(fields, qpack.HeaderField{Name: k, Value: v})
 		}
 	}
 
-	buf := &bytes.Buffer{}
-	(&headersFrame{Length: uint64(headers.Len())}).Write(buf)
 	w.logger.Infof("Responding with %d", status)
-	if _, err := w.bufferedStream.Write(buf.Bytes()); err != nil {
+
+	err := w.stream.WriteHeaders(fields)
+	if err != nil {
 		w.logger.Errorf("could not write headers frame: %s", err.Error())
-	}
-	if _, err := w.bufferedStream.Write(headers.Bytes()); err != nil {
-		w.logger.Errorf("could not write header frame payload: %s", err.Error())
 	}
 	if !w.headerWritten {
 		w.Flush()
@@ -94,19 +88,30 @@ func (w *responseWriter) Write(p []byte) (int, error) {
 	if !bodyAllowedForStatus(w.status) {
 		return 0, http.ErrBodyNotAllowed
 	}
-	df := &dataFrame{Length: uint64(len(p))}
-	buf := &bytes.Buffer{}
-	df.Write(buf)
-	if _, err := w.bufferedStream.Write(buf.Bytes()); err != nil {
-		return 0, err
-	}
-	return w.bufferedStream.Write(p)
+	return w.stream.DataWriter().Write(p)
 }
 
 func (w *responseWriter) Flush() {
-	if err := w.bufferedStream.Flush(); err != nil {
-		w.logger.Errorf("could not flush to stream: %s", err.Error())
+	// TODO: buffer?
+}
+
+// See https://pkg.go.dev/net/http#example-ResponseWriter-Trailers.
+func (w *responseWriter) writeTrailer() error {
+	trailer := http.Header{}
+	for _, k := range w.trailers {
+		trailer[k] = append(trailer[k], w.header[k]...)
 	}
+	for k, vv := range w.header {
+		if strings.HasPrefix(k, http.TrailerPrefix) {
+			k = strings.TrimPrefix(k, http.TrailerPrefix)
+			trailer[k] = append(trailer[k], vv...)
+		}
+	}
+	fields := Trailers(trailer)
+	if len(fields) == 0 {
+		return nil
+	}
+	return w.stream.WriteHeaders(fields)
 }
 
 func (w *responseWriter) usedDataStream() bool {

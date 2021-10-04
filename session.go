@@ -1986,7 +1986,7 @@ func (s *session) RemoteAddr() net.Addr {
 	return s.conn.RemoteAddr()
 }
 
-func (s *session) getPerspective() protocol.Perspective {
+func (s *session) Perspective() Perspective {
 	return s.perspective
 }
 

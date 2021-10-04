@@ -28,7 +28,7 @@ var _ = Describe("Closed local session", func() {
 	})
 
 	It("tells its perspective", func() {
-		Expect(sess.getPerspective()).To(Equal(protocol.PerspectiveClient))
+		Expect(sess.Perspective()).To(Equal(protocol.PerspectiveClient))
 		// stop the session
 		sess.shutdown()
 	})

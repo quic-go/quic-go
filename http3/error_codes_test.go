@@ -20,7 +20,7 @@ var _ = Describe("error codes", func() {
 		if !ok {
 			panic("Failed to get current frame")
 		}
-		filename := path.Join(path.Dir(thisfile), "error_codes.go")
+		filename := path.Join(path.Dir(thisfile), "errors.go")
 		fileAst, err := parser.ParseFile(token.NewFileSet(), filename, nil, 0)
 		Expect(err).NotTo(HaveOccurred())
 		constSpecs := fileAst.Decls[2].(*ast.GenDecl).Specs

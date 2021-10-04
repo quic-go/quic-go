@@ -25,6 +25,16 @@ const (
 	Version1 = protocol.Version1
 )
 
+// Perspective determines if a session is acting as a server or client.
+type Perspective = protocol.Perspective
+
+const (
+	// PerspectiveServer indicates a server connection
+	PerspectiveServer = protocol.PerspectiveServer
+	// PerspectiveClient indicates a client connection
+	PerspectiveClient = protocol.PerspectiveClient
+)
+
 // A Token can be used to verify the ownership of the client address.
 type Token struct {
 	// IsRetryToken encodes how the client received the token. There are two ways:
@@ -183,6 +193,8 @@ type Session interface {
 	// CloseWithError closes the connection with an error.
 	// The error string will be sent to the peer.
 	CloseWithError(ApplicationErrorCode, string) error
+	// Perspective returns whether the connection is acting on behalf of a client or a server.
+	Perspective() Perspective
 	// The context is cancelled when the session is closed.
 	// Warning: This API should not be considered stable and might change soon.
 	Context() context.Context

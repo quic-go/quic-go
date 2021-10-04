@@ -8,7 +8,6 @@ import (
 	reflect "reflect"
 
 	gomock "github.com/golang/mock/gomock"
-	protocol "github.com/lucas-clemente/quic-go/internal/protocol"
 )
 
 // MockPacketHandler is a mock of PacketHandler interface.
@@ -34,6 +33,20 @@ func (m *MockPacketHandler) EXPECT() *MockPacketHandlerMockRecorder {
 	return m.recorder
 }
 
+// Perspective mocks base method.
+func (m *MockPacketHandler) Perspective() Perspective {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Perspective")
+	ret0, _ := ret[0].(Perspective)
+	return ret0
+}
+
+// Perspective indicates an expected call of Perspective.
+func (mr *MockPacketHandlerMockRecorder) Perspective() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Perspective", reflect.TypeOf((*MockPacketHandler)(nil).Perspective))
+}
+
 // destroy mocks base method.
 func (m *MockPacketHandler) destroy(arg0 error) {
 	m.ctrl.T.Helper()
@@ -44,20 +57,6 @@ func (m *MockPacketHandler) destroy(arg0 error) {
 func (mr *MockPacketHandlerMockRecorder) destroy(arg0 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "destroy", reflect.TypeOf((*MockPacketHandler)(nil).destroy), arg0)
-}
-
-// getPerspective mocks base method.
-func (m *MockPacketHandler) getPerspective() protocol.Perspective {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "getPerspective")
-	ret0, _ := ret[0].(protocol.Perspective)
-	return ret0
-}
-
-// getPerspective indicates an expected call of getPerspective.
-func (mr *MockPacketHandlerMockRecorder) getPerspective() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "getPerspective", reflect.TypeOf((*MockPacketHandler)(nil).getPerspective))
 }
 
 // handlePacket mocks base method.

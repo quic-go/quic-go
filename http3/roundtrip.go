@@ -41,10 +41,22 @@ type RoundTripper struct {
 	// If nil, reasonable default values will be used.
 	QuicConfig *quic.Config
 
+	// Settings specifies the HTTP/3 settings transmitted to the server.
+	// If nil, reasonable default values will be used.
+	// See https://quicwg.org/base-drafts/draft-ietf-quic-http.html#name-http-2-settings-parameters.
+	// If non-nil, overrides EnableDatagrams and EnableWebTransport.
+	Settings Settings
+
 	// Enable support for HTTP/3 datagrams.
 	// If set to true, QuicConfig.EnableDatagram will be set.
 	// See https://www.ietf.org/archive/id/draft-schinazi-masque-h3-datagram-02.html.
+	// Ignored if Settings is non-nil.
 	EnableDatagrams bool
+
+	// Enable support for WebTransport.
+	// If set to true, QuicConfig.EnableDatagram and ENABLE_WEBTRANSPORT will be set.
+	// Ignored if Settings is non-nil.
+	EnableWebTransport bool
 
 	// Dial specifies an optional dial function for creating QUIC
 	// connections for requests.
@@ -90,13 +102,16 @@ func (r *RoundTripper) RoundTripOpt(req *http.Request, opt RoundTripOpt) (*http.
 	}
 
 	if req.URL.Scheme == "https" {
+		// TODO: this is redundant with the checks in RequestHeaders()
 		for k, vv := range req.Header {
-			if !httpguts.ValidHeaderFieldName(k) {
-				return nil, fmt.Errorf("http3: invalid http header field name %q", k)
+			if req.Method == http.MethodConnect && k == pseudoHeaderProtocol {
+				// TODO: is this right?
+			} else if !httpguts.ValidHeaderFieldName(k) {
+				return nil, fmt.Errorf("http3: invalid HTTP header field name %q", k)
 			}
 			for _, v := range vv {
 				if !httpguts.ValidHeaderFieldValue(v) {
-					return nil, fmt.Errorf("http3: invalid http header field value %q for key %v", v, k)
+					return nil, fmt.Errorf("http3: invalid HTTP header field value %q for key %v", v, k)
 				}
 			}
 		}
@@ -140,12 +155,9 @@ func (r *RoundTripper) getClient(hostname string, onlyCached bool) (http.RoundTr
 		client, err = newClient(
 			hostname,
 			r.TLSClientConfig,
-			&roundTripperOpts{
-				EnableDatagram:     r.EnableDatagrams,
-				DisableCompression: r.DisableCompression,
-				MaxHeaderBytes:     r.MaxResponseHeaderBytes,
-			},
 			r.QuicConfig,
+			r.settings(),
+			r.DisableCompression,
 			r.Dial,
 		)
 		if err != nil {
@@ -154,6 +166,22 @@ func (r *RoundTripper) getClient(hostname string, onlyCached bool) (http.RoundTr
 		r.clients[hostname] = client
 	}
 	return client, nil
+}
+
+func (r *RoundTripper) settings() Settings {
+	if r.Settings != nil {
+		return r.Settings
+	}
+	settings := Settings{
+		SettingMaxFieldSectionSize: uint64(r.MaxResponseHeaderBytes),
+	}
+	if r.EnableDatagrams {
+		settings.EnableDatagrams()
+	}
+	if r.EnableWebTransport {
+		settings.EnableWebTransport()
+	}
+	return settings
 }
 
 // Close closes the QUIC connections that this RoundTripper has used

@@ -1,15 +1,17 @@
 package http3
 
 import (
-	"fmt"
 	"io"
 
 	"github.com/lucas-clemente/quic-go"
+	"github.com/marten-seemann/qpack"
 )
+
+type trailerFunc func([]qpack.HeaderField, error)
 
 // The body of a http.Request or http.Response.
 type body struct {
-	str quic.Stream
+	str RequestStream
 
 	// only set for the http.Response
 	// The channel is closed when the user is done with this response:
@@ -17,68 +19,38 @@ type body struct {
 	reqDone       chan<- struct{}
 	reqDoneClosed bool
 
-	onFrameError func()
-
-	bytesRemainingInFrame uint64
+	onTrailers trailerFunc
 }
 
-var _ io.ReadCloser = &body{}
+var (
+	_ io.ReadCloser  = &body{}
+	_ WebTransporter = &body{}
+)
 
-func newRequestBody(str quic.Stream, onFrameError func()) *body {
+func newRequestBody(str RequestStream, onTrailers trailerFunc) *body {
 	return &body{
-		str:          str,
-		onFrameError: onFrameError,
+		str:        str,
+		onTrailers: onTrailers,
 	}
 }
 
-func newResponseBody(str quic.Stream, done chan<- struct{}, onFrameError func()) *body {
+func newResponseBody(str RequestStream, onTrailers trailerFunc, done chan<- struct{}) *body {
 	return &body{
-		str:          str,
-		onFrameError: onFrameError,
-		reqDone:      done,
+		str:        str,
+		onTrailers: onTrailers,
+		reqDone:    done,
 	}
 }
 
-func (r *body) Read(b []byte) (int, error) {
-	n, err := r.readImpl(b)
+func (r *body) Read(p []byte) (n int, err error) {
+	n, err = r.str.DataReader().Read(p)
 	if err != nil {
+		// Read trailers if present
+		if err == io.EOF && r.onTrailers != nil {
+			r.onTrailers(r.str.ReadHeaders())
+		}
 		r.requestDone()
 	}
-	return n, err
-}
-
-func (r *body) readImpl(b []byte) (int, error) {
-	if r.bytesRemainingInFrame == 0 {
-	parseLoop:
-		for {
-			frame, err := parseNextFrame(r.str)
-			if err != nil {
-				return 0, err
-			}
-			switch f := frame.(type) {
-			case *headersFrame:
-				// skip HEADERS frames
-				continue
-			case *dataFrame:
-				r.bytesRemainingInFrame = f.Length
-				break parseLoop
-			default:
-				r.onFrameError()
-				// parseNextFrame skips over unknown frame types
-				// Therefore, this condition is only entered when we parsed another known frame type.
-				return 0, fmt.Errorf("peer sent an unexpected frame: %T", f)
-			}
-		}
-	}
-
-	var n int
-	var err error
-	if r.bytesRemainingInFrame < uint64(len(b)) {
-		n, err = r.str.Read(b[:r.bytesRemainingInFrame])
-	} else {
-		n, err = r.str.Read(b)
-	}
-	r.bytesRemainingInFrame -= uint64(n)
 	return n, err
 }
 
@@ -95,4 +67,8 @@ func (r *body) Close() error {
 	// If the EOF was read, CancelRead() is a no-op.
 	r.str.CancelRead(quic.StreamErrorCode(errorRequestCanceled))
 	return nil
+}
+
+func (r *body) WebTransport() (WebTransport, error) {
+	return r.str.WebTransport()
 }
