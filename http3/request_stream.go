@@ -29,9 +29,8 @@ type requestStream struct {
 }
 
 var (
-	_ RequestStream         = &requestStream{}
-	_ WebTransporter        = &requestStream{}
-	_ datagramRequestStream = &requestStream{}
+	_ RequestStream  = &requestStream{}
+	_ WebTransporter = &requestStream{}
 )
 
 // newRequestStream creates a new RequestStream. If a frame has already been
@@ -131,18 +130,6 @@ func (s *requestStream) DataReader() io.ReadCloser {
 
 func (s *requestStream) DataWriter() io.WriteCloser {
 	return (*dataWriter)(s)
-}
-
-func (s *requestStream) AcceptDatagramContext(ctx context.Context) (DatagramContext, error) {
-	return nil, errors.New("TODO: not supported yet")
-}
-
-func (s *requestStream) RegisterDatagramContext() (DatagramContext, error) {
-	return nil, errors.New("TODO: not supported yet")
-}
-
-func (s *requestStream) DatagramNoContext() (DatagramContext, error) {
-	return nil, errors.New("TODO: not supported yet")
 }
 
 func (s *requestStream) WebTransport() (WebTransport, error) {

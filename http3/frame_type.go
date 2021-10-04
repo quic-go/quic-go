@@ -14,9 +14,6 @@ const (
 
 	// https://www.ietf.org/archive/id/draft-ietf-webtrans-http3-01.html#section-7.3
 	FrameTypeWebTransportStream FrameType = 0x41
-
-	// https://www.ietf.org/archive/id/draft-ietf-masque-h3-datagram-03.html#section-10.1
-	FrameTypeCapsule FrameType = 0xffcab5
 )
 
 // A FrameType represents an HTTP/3 frame type.
@@ -44,8 +41,6 @@ func (t FrameType) String() string {
 		return "DUPLICATE_PUSH"
 	case FrameTypeWebTransportStream:
 		return "WEBTRANSPORT_STREAM"
-	case FrameTypeCapsule:
-		return "CAPSULE"
 	default:
 		return fmt.Sprintf("%#x", uint64(t))
 	}
