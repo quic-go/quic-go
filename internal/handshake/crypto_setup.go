@@ -162,6 +162,7 @@ func NewCryptoSetupClient(
 	runner handshakeRunner,
 	tlsConf *tls.Config,
 	clientHelloSeed *prng.Seed,
+	getClientHelloRandom func() ([]byte, error),
 	enable0RTT bool,
 	rttStats *utils.RTTStats,
 	tracer logging.ConnectionTracer,
@@ -198,6 +199,7 @@ func NewCryptoSetupClient(
 
 	// [Psiphon]
 	cs.extraConf.ClientHelloPRNG = clientHelloPRNG
+	cs.extraConf.GetClientHelloRandom = getClientHelloRandom
 
 	cs.conn = qtls.Client(newConn(localAddr, remoteAddr, version), cs.tlsConf, cs.extraConf)
 	return cs, clientHelloWritten

@@ -121,6 +121,10 @@ func populateConfig(config *Config) *Config {
 		Tracer:                           config.Tracer,
 
 		// [Psiphon]
-		ClientHelloSeed: config.ClientHelloSeed,
+		ClientHelloSeed:               config.ClientHelloSeed,
+		GetClientHelloRandom:          config.GetClientHelloRandom,
+		VerifyClientHelloRandom:       config.VerifyClientHelloRandom,
+		ClientMaxPacketSizeAdjustment: config.ClientMaxPacketSizeAdjustment,
+		ServerMaxPacketSizeAdjustment: config.ServerMaxPacketSizeAdjustment,
 	}
 }

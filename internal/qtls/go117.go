@@ -1,3 +1,4 @@
+//go:build go1.17
 // +build go1.17
 
 package qtls
@@ -96,4 +97,10 @@ func CipherSuiteTLS13ByID(id uint16) *CipherSuiteTLS13 {
 		AEAD:   cs.AEAD,
 		Hash:   cs.Hash,
 	}
+}
+
+// [Psiphon]
+
+func ReadClientHelloRandom(data []byte) ([]byte, error) {
+	return qtls.ReadClientHelloRandom(data)
 }

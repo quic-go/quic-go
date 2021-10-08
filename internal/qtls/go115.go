@@ -1,5 +1,5 @@
-// +build go1.15
-// +build !go1.16
+//go:build go1.15 && !go1.16
+// +build go1.15,!go1.16
 
 package qtls
 
@@ -97,4 +97,10 @@ func CipherSuiteTLS13ByID(id uint16) *CipherSuiteTLS13 {
 		AEAD:   cs.AEAD,
 		Hash:   cs.Hash,
 	}
+}
+
+// [Psiphon]
+
+func ReadClientHelloRandom(data []byte) ([]byte, error) {
+	return qtls.ReadClientHelloRandom(data)
 }

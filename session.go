@@ -283,9 +283,16 @@ var newSession = func(
 	)
 	s.preSetup()
 	s.ctx, s.ctxCancel = context.WithCancel(context.WithValue(context.Background(), SessionTracingKey, tracingID))
+
+	// [Psiphon]
+	maxPacketSizeAdjustment := 0
+	if conf.ServerMaxPacketSizeAdjustment != nil {
+		maxPacketSizeAdjustment = conf.ServerMaxPacketSizeAdjustment(s.RemoteAddr())
+	}
+
 	s.sentPacketHandler, s.receivedPacketHandler = ackhandler.NewAckHandler(
 		0,
-		getMaxPacketSize(s.conn.RemoteAddr()),
+		getMaxPacketSize(s.conn.RemoteAddr(), maxPacketSizeAdjustment),
 		s.rttStats,
 		s.perspective,
 		s.tracer,
@@ -349,6 +356,10 @@ var newSession = func(
 		s.sentPacketHandler,
 		s.retransmissionQueue,
 		s.RemoteAddr(),
+
+		// [Psiphon]
+		maxPacketSizeAdjustment,
+
 		cs,
 		s.framer,
 		s.receivedPacketHandler,
@@ -412,7 +423,10 @@ var newClientSession = func(
 	s.ctx, s.ctxCancel = context.WithCancel(context.WithValue(context.Background(), SessionTracingKey, tracingID))
 	s.sentPacketHandler, s.receivedPacketHandler = ackhandler.NewAckHandler(
 		initialPacketNumber,
-		getMaxPacketSize(s.conn.RemoteAddr()),
+
+		// [Psiphon]
+		getMaxPacketSize(s.conn.RemoteAddr(), conf.ClientMaxPacketSizeAdjustment),
+
 		s.rttStats,
 		s.perspective,
 		s.tracer,
@@ -458,6 +472,7 @@ var newClientSession = func(
 
 		// [Psiphon]
 		conf.ClientHelloSeed,
+		conf.GetClientHelloRandom,
 
 		enable0RTT,
 		s.rttStats,
@@ -477,6 +492,10 @@ var newClientSession = func(
 		s.sentPacketHandler,
 		s.retransmissionQueue,
 		s.RemoteAddr(),
+
+		// [Psiphon]
+		conf.ClientMaxPacketSizeAdjustment,
+
 		cs,
 		s.framer,
 		s.receivedPacketHandler,
@@ -807,6 +826,16 @@ func (s *session) handleHandshakeComplete() {
 }
 
 func (s *session) handleHandshakeConfirmed() {
+
+	// [Psiphon]
+	// Adjust the max packet size to allow for obfuscation overhead.
+	maxPacketSizeAdjustment := 0
+	if s.config.ServerMaxPacketSizeAdjustment != nil {
+		maxPacketSizeAdjustment = s.config.ServerMaxPacketSizeAdjustment(s.conn.RemoteAddr())
+	} else {
+		maxPacketSizeAdjustment = s.config.ClientMaxPacketSizeAdjustment
+	}
+
 	s.handshakeConfirmed = true
 	s.sentPacketHandler.SetHandshakeConfirmed()
 	s.cryptoStreamHandler.SetHandshakeConfirmed()
@@ -817,9 +846,18 @@ func (s *session) handleHandshakeConfirmed() {
 			maxPacketSize = protocol.MaxByteCount
 		}
 		maxPacketSize = utils.MinByteCount(maxPacketSize, protocol.MaxPacketBufferSize)
+
+		// [Psiphon]
+		if maxPacketSize > protocol.ByteCount(maxPacketSizeAdjustment) {
+			maxPacketSize -= protocol.ByteCount(maxPacketSizeAdjustment)
+		}
+
 		s.mtuDiscoverer = newMTUDiscoverer(
 			s.rttStats,
-			getMaxPacketSize(s.conn.RemoteAddr()),
+
+			// [Psiphon]
+			getMaxPacketSize(s.conn.RemoteAddr(), maxPacketSizeAdjustment),
+
 			maxPacketSize,
 			func(size protocol.ByteCount) {
 				s.sentPacketHandler.SetMaxDatagramSize(size)
