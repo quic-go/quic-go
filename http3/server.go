@@ -92,7 +92,11 @@ type Server struct {
 	// See https://www.ietf.org/archive/id/draft-schinazi-masque-h3-datagram-02.html.
 	EnableDatagrams bool
 
-	port uint32 // used atomically
+	// The port to use in Alt-Svc response headers.
+	// If needed Port can be manually set when the Server is created.
+	// This is useful when a Layer 4 firewall is redirecting UDP traffic and clients must use
+	// a port different from the port the Server is listening on.
+	Port uint32
 
 	mutex     sync.Mutex
 	listeners map[*quic.EarlyListener]struct{}
@@ -436,7 +440,7 @@ func (s *Server) CloseGracefully(timeout time.Duration) error {
 // The values that are set depend on the port information from s.Server.Addr, and currently look like this (if Addr has port 443):
 //  Alt-Svc: quic=":443"; ma=2592000; v="33,32,31,30"
 func (s *Server) SetQuicHeaders(hdr http.Header) error {
-	port := atomic.LoadUint32(&s.port)
+	port := atomic.LoadUint32(&s.Port)
 
 	if port == 0 {
 		// Extract port from s.Server.Addr
@@ -449,7 +453,7 @@ func (s *Server) SetQuicHeaders(hdr http.Header) error {
 			return err
 		}
 		port = uint32(portInt)
-		atomic.StoreUint32(&s.port, port)
+		atomic.StoreUint32(&s.Port, port)
 	}
 
 	// This code assumes that we will use protocol.SupportedVersions if no quic.Config is passed.
