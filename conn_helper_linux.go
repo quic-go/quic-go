@@ -5,7 +5,10 @@ package quic
 
 import "golang.org/x/sys/unix"
 
-const msgTypeIPTOS = unix.IP_TOS
+const (
+	msgTypeIPTOS            = unix.IP_TOS
+	disablePathMTUDiscovery = false
+)
 
 const (
 	ipv4RECVPKTINFO = unix.IP_PKTINFO
