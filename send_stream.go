@@ -414,7 +414,7 @@ func (s *sendStream) CancelWrite(errorCode StreamErrorCode) {
 // must be called after locking the mutex
 func (s *sendStream) cancelWriteImpl(errorCode qerr.StreamErrorCode, writeErr error) {
 	s.mutex.Lock()
-	if s.canceledWrite {
+	if s.canceledWrite || s.finSent {
 		s.mutex.Unlock()
 		return
 	}

@@ -838,6 +838,18 @@ var _ = Describe("Send Stream", func() {
 				// don't EXPECT any calls to queueControlFrame
 				str.CancelWrite(123)
 			})
+
+			It("doesn't queue a RESET_STREAM frame if the stream was closed and the FIN sent", func() {
+				mockSender.EXPECT().onHasStreamData(streamID)
+				str.Close()
+				frame, _ := str.popStreamFrame(1000)
+				Expect(frame).ToNot(BeNil())
+				f := frame.Frame.(*wire.StreamFrame)
+				Expect(f.Data).To(BeEmpty())
+				Expect(f.Fin).To(BeTrue())
+				// don't EXPECT any calls to queueControlFrame
+				str.CancelWrite(1337)
+			})
 		})
 
 		Context("receiving STOP_SENDING frames", func() {
@@ -888,6 +900,26 @@ var _ = Describe("Send Stream", func() {
 					StreamID:  streamID,
 					ErrorCode: 1234,
 				}))
+			})
+
+			It("ignores STOP_SENDING after it was closed", func() {
+				mockSender.EXPECT().onHasStreamData(streamID)
+				str.Close()
+				frame, _ := str.popStreamFrame(1000)
+				Expect(frame).ToNot(BeNil())
+				f := frame.Frame.(*wire.StreamFrame)
+				Expect(f.Data).To(BeEmpty())
+				Expect(f.Fin).To(BeTrue())
+				// don't EXPECT any calls to queueControlFrame
+				str.handleStopSendingFrame(&wire.StopSendingFrame{StreamID: streamID})
+			})
+
+			It("doesn't ignore STOP_SENDING after it was closed, but if the FIN was not yet sent", func() {
+				mockSender.EXPECT().onHasStreamData(streamID)
+				str.Close()
+				mockSender.EXPECT().queueControlFrame(&wire.ResetStreamFrame{StreamID: streamID})
+				mockSender.EXPECT().onStreamCompleted(streamID)
+				str.handleStopSendingFrame(&wire.StopSendingFrame{StreamID: streamID})
 			})
 		})
 	})
