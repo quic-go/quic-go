@@ -50,6 +50,13 @@ type entry struct {
 	Event map[string]interface{}
 }
 
+func unmarshal(data []byte, v interface{}) error {
+	if data[0] == recordSeparator {
+		data = data[1:]
+	}
+	return json.Unmarshal(data, v)
+}
+
 var _ = Describe("Tracing", func() {
 	Context("tracer", func() {
 		It("returns nil when there's no io.WriteCloser", func() {
@@ -92,8 +99,8 @@ var _ = Describe("Tracing", func() {
 			tracer.Close()
 
 			m := make(map[string]interface{})
-			Expect(json.Unmarshal(buf.Bytes(), &m)).To(Succeed())
-			Expect(m).To(HaveKeyWithValue("qlog_version", "draft-02"))
+			Expect(unmarshal(buf.Bytes(), &m)).To(Succeed())
+			Expect(m).To(HaveKeyWithValue("qlog_version", "0.3"))
 			Expect(m).To(HaveKey("title"))
 			Expect(m).To(HaveKey("trace"))
 			trace := m["trace"].(map[string]interface{})
@@ -117,7 +124,7 @@ var _ = Describe("Tracing", func() {
 				m := make(map[string]interface{})
 				line, err := buf.ReadBytes('\n')
 				Expect(err).ToNot(HaveOccurred())
-				Expect(json.Unmarshal(line, &m)).To(Succeed())
+				Expect(unmarshal(line, &m)).To(Succeed())
 				Expect(m).To(HaveKey("trace"))
 				var entries []entry
 				trace := m["trace"].(map[string]interface{})
@@ -131,7 +138,7 @@ var _ = Describe("Tracing", func() {
 					line, err := buf.ReadBytes('\n')
 					Expect(err).ToNot(HaveOccurred())
 					ev := make(map[string]interface{})
-					Expect(json.Unmarshal(line, &ev)).To(Succeed())
+					Expect(unmarshal(line, &ev)).To(Succeed())
 					Expect(ev).To(HaveLen(3))
 					Expect(ev).To(HaveKey("time"))
 					Expect(ev).To(HaveKey("name"))

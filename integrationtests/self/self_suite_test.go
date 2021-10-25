@@ -141,7 +141,7 @@ var _ = BeforeSuite(func() {
 			if p == logging.PerspectiveClient {
 				role = "client"
 			}
-			filename := fmt.Sprintf("log_%x_%s.qlog", connectionID, role)
+			filename := fmt.Sprintf("log_%x_%s.sqlog", connectionID, role)
 			fmt.Fprintf(GinkgoWriter, "Creating %s.\n", filename)
 			f, err := os.Create(filename)
 			Expect(err).ToNot(HaveOccurred())

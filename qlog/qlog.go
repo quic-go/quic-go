@@ -19,6 +19,8 @@ import (
 	"github.com/francoispqt/gojay"
 )
 
+const recordSeparator = 0x1e
+
 // Setting of this only works when quic-go is used as a library.
 // When building a binary from this repository, the version can be set using the following go build flag:
 // -ldflags="-X github.com/lucas-clemente/quic-go/qlog.quicGoVersion=foobar"
@@ -116,6 +118,9 @@ func (t *connectionTracer) run() {
 			},
 		},
 	}
+	if err := writeRecordSeparator(buf); err != nil {
+		panic(fmt.Sprintf("qlog encoding into a bytes.Buffer failed: %s", err))
+	}
 	if err := enc.Encode(tl); err != nil {
 		panic(fmt.Sprintf("qlog encoding into a bytes.Buffer failed: %s", err))
 	}
@@ -128,6 +133,10 @@ func (t *connectionTracer) run() {
 	enc = gojay.NewEncoder(t.w)
 	for ev := range t.events {
 		if t.encodeErr != nil { // if encoding failed, just continue draining the event channel
+			continue
+		}
+		if err := writeRecordSeparator(t.w); err != nil {
+			t.encodeErr = err
 			continue
 		}
 		if err := enc.Encode(ev); err != nil {
@@ -483,4 +492,9 @@ func (t *connectionTracer) Debug(name, msg string) {
 		msg:  msg,
 	})
 	t.mutex.Unlock()
+}
+
+func writeRecordSeparator(w io.Writer) error {
+	_, err := w.Write([]byte{recordSeparator})
+	return err
 }
