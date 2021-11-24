@@ -552,6 +552,10 @@ func (s *Server) handleRequest(conn quic.Connection, str quic.Stream, decoder *q
 		return newStreamError(errorGeneralProtocolError, err)
 	}
 
+	if conn.(quic.EarlyConnection).HandshakeComplete().Err() != nil {
+		tlsState := conn.ConnectionState().TLS.ConnectionState
+		req.TLS = &tlsState
+	}
 	req.RemoteAddr = conn.RemoteAddr().String()
 	body := newRequestBody(newStream(str, onFrameError))
 	req.Body = body
