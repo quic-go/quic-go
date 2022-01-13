@@ -503,6 +503,54 @@ var _ = Describe("Server", func() {
 				Eventually(done).Should(BeClosed())
 			})
 
+			It("sends a CONNECTION_REFUSED error, if AcceptConnection says so", func() {
+				serv.config.AcceptToken = func(_ net.Addr, _ *Token) bool { return true }
+				serv.config.AcceptConnection = func(_ net.Addr) bool { return false }
+				hdr := &wire.Header{
+					IsLongHeader:     true,
+					Type:             protocol.PacketTypeInitial,
+					SrcConnectionID:  protocol.ConnectionID{5, 4, 3, 2, 1},
+					DestConnectionID: protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8, 9, 10},
+					Version:          protocol.VersionTLS,
+				}
+				packet := getPacket(hdr, make([]byte, protocol.MinInitialPacketSize))
+				packet.data = append(packet.data, []byte("coalesced packet")...) // add some garbage to simulate a coalesced packet
+				raddr := &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 1337}
+				packet.remoteAddr = raddr
+				tracer.EXPECT().SentPacket(packet.remoteAddr, gomock.Any(), gomock.Any(), gomock.Any()).Do(func(_ net.Addr, replyHdr *logging.Header, _ logging.ByteCount, frames []logging.Frame) {
+					Expect(replyHdr.Type).To(Equal(protocol.PacketTypeInitial))
+					Expect(replyHdr.SrcConnectionID).To(Equal(hdr.DestConnectionID))
+					Expect(replyHdr.DestConnectionID).To(Equal(hdr.SrcConnectionID))
+					Expect(frames).To(HaveLen(1))
+					Expect(frames[0]).To(BeAssignableToTypeOf(&wire.ConnectionCloseFrame{}))
+					ccf := frames[0].(*logging.ConnectionCloseFrame)
+					Expect(ccf.IsApplicationError).To(BeFalse())
+					Expect(ccf.ErrorCode).To(BeEquivalentTo(qerr.ConnectionRefused))
+				})
+				done := make(chan struct{})
+				conn.EXPECT().WriteTo(gomock.Any(), raddr).DoAndReturn(func(b []byte, _ net.Addr) (int, error) {
+					defer close(done)
+					replyHdr := parseHeader(b)
+					Expect(replyHdr.Type).To(Equal(protocol.PacketTypeInitial))
+					Expect(replyHdr.SrcConnectionID).To(Equal(hdr.DestConnectionID))
+					Expect(replyHdr.DestConnectionID).To(Equal(hdr.SrcConnectionID))
+					_, opener := handshake.NewInitialAEAD(hdr.DestConnectionID, protocol.PerspectiveClient, replyHdr.Version)
+					extHdr, err := unpackHeader(opener, replyHdr, b, hdr.Version)
+					Expect(err).ToNot(HaveOccurred())
+					data, err := opener.Open(nil, b[extHdr.ParsedLen():], extHdr.PacketNumber, b[:extHdr.ParsedLen()])
+					Expect(err).ToNot(HaveOccurred())
+					f, err := wire.NewFrameParser(false, hdr.Version).ParseNext(bytes.NewReader(data), protocol.EncryptionInitial)
+					Expect(err).ToNot(HaveOccurred())
+					Expect(f).To(BeAssignableToTypeOf(&wire.ConnectionCloseFrame{}))
+					ccf := f.(*wire.ConnectionCloseFrame)
+					Expect(ccf.ErrorCode).To(BeEquivalentTo(qerr.ConnectionRefused))
+					Expect(ccf.ReasonPhrase).To(BeEmpty())
+					return len(b), nil
+				})
+				serv.handlePacket(packet)
+				Eventually(done).Should(BeClosed())
+			})
+
 			It("sends an INVALID_TOKEN error, if an invalid retry token is received", func() {
 				serv.config.AcceptToken = func(_ net.Addr, _ *Token) bool { return false }
 				token, err := serv.tokenGenerator.NewRetryToken(&net.UDPAddr{}, nil, nil)

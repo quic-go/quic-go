@@ -45,7 +45,7 @@ var _ = Describe("Config", func() {
 			}
 
 			switch fn := typ.Field(i).Name; fn {
-			case "AcceptToken", "GetLogWriter":
+			case "AcceptConnection", "AcceptToken", "GetLogWriter":
 				// Can't compare functions.
 			case "Versions":
 				f.Set(reflect.ValueOf([]VersionNumber{1, 2, 3}))
@@ -99,7 +99,17 @@ var _ = Describe("Config", func() {
 	})
 
 	Context("cloning", func() {
-		It("clones function fields", func() {
+		It("clones AcceptConnection", func() {
+			var called bool
+			c1 := &Config{
+				AcceptConnection: func(_ net.Addr) bool { called = true; return true },
+			}
+			c2 := c1.Clone()
+			c2.AcceptConnection(&net.UDPAddr{})
+			Expect(called).To(BeTrue())
+		})
+
+		It("clones AcceptToken", func() {
 			var calledAcceptToken bool
 			c1 := &Config{
 				AcceptToken: func(_ net.Addr, _ *Token) bool { calledAcceptToken = true; return true },
@@ -129,7 +139,17 @@ var _ = Describe("Config", func() {
 	})
 
 	Context("populating", func() {
-		It("populates function fields", func() {
+		It("populates AcceptConnection", func() {
+			var called bool
+			c1 := &Config{
+				AcceptConnection: func(_ net.Addr) bool { called = true; return true },
+			}
+			c2 := populateConfig(c1)
+			c2.AcceptConnection(&net.UDPAddr{})
+			Expect(called).To(BeTrue())
+		})
+
+		It("populates AcceptToken", func() {
 			var calledAcceptToken bool
 			c1 := &Config{
 				AcceptToken: func(_ net.Addr, _ *Token) bool { calledAcceptToken = true; return true },

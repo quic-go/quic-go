@@ -436,6 +436,16 @@ func (s *baseServer) handleInitialImpl(p *receivedPacket, hdr *wire.Header) erro
 		return nil
 	}
 
+	if s.config.AcceptConnection != nil && !s.config.AcceptConnection(p.remoteAddr) {
+		go func() {
+			defer p.buffer.Release()
+			if err := s.sendConnectionRefused(p.remoteAddr, hdr, p.info); err != nil {
+				s.logger.Debugf("Error rejecting connection: %s", err)
+			}
+		}()
+		return nil
+	}
+
 	if queueLen := atomic.LoadInt32(&s.sessionQueueLen); queueLen >= protocol.MaxAcceptQueueSize {
 		s.logger.Debugf("Rejecting new connection. Server currently busy. Accept queue length: %d (max %d)", queueLen, protocol.MaxAcceptQueueSize)
 		go func() {

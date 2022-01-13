@@ -323,6 +323,34 @@ var _ = Describe("Handshake tests", func() {
 		}
 	})
 
+	It("rejects new connection attempts if AcceptConnection says so", func() {
+		var accept bool
+		serverConfig.AcceptConnection = func(net.Addr) bool { return accept }
+		server, err := quic.ListenAddr("localhost:0", getTLSConfig(), serverConfig)
+		Expect(err).ToNot(HaveOccurred())
+		laddr, err := net.ResolveUDPAddr("udp", "localhost:0")
+		Expect(err).ToNot(HaveOccurred())
+		pconn, err := net.ListenUDP("udp", laddr)
+		Expect(err).ToNot(HaveOccurred())
+
+		dial := func() (quic.Session, error) {
+			remoteAddr := fmt.Sprintf("localhost:%d", server.Addr().(*net.UDPAddr).Port)
+			raddr, err := net.ResolveUDPAddr("udp", remoteAddr)
+			Expect(err).ToNot(HaveOccurred())
+			return quic.Dial(pconn, raddr, remoteAddr, getTLSClientConfig(), nil)
+		}
+
+		_, err = dial()
+		Expect(err).To(HaveOccurred())
+		var transportErr *quic.TransportError
+		Expect(errors.As(err, &transportErr)).To(BeTrue())
+		Expect(transportErr.ErrorCode).To(Equal(quic.ConnectionRefused))
+
+		accept = true
+		_, err = dial()
+		Expect(err).ToNot(HaveOccurred())
+	})
+
 	Context("rate limiting", func() {
 		var (
 			server quic.Listener

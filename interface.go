@@ -237,6 +237,11 @@ type Config struct {
 	// If the timeout is exceeded, the connection is closed.
 	// If this value is zero, the timeout is set to 30 seconds.
 	MaxIdleTimeout time.Duration
+	// AcceptConnection determines if a connection is accepted.
+	// This allows the servers to reject incoming connection attempts
+	// right after receiving the client's first Initial packet.
+	// The connection is closed by sending a CONNECTION_REFUSED error.
+	AcceptConnection func(clientAddr net.Addr) bool
 	// AcceptToken determines if a Token is accepted.
 	// It is called with token = nil if the client didn't send a token.
 	// If not set, a default verification function is used:
