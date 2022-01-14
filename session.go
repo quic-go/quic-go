@@ -506,6 +506,7 @@ func (s *session) preSetup() {
 		protocol.ByteCount(s.config.InitialConnectionReceiveWindow),
 		protocol.ByteCount(s.config.MaxConnectionReceiveWindow),
 		s.onHasConnectionWindowUpdate,
+		func(protocol.ByteCount) bool { return true },
 		s.rttStats,
 		s.logger,
 	)
