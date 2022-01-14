@@ -19,7 +19,7 @@ type connectionFlowController struct {
 var _ ConnectionFlowController = &connectionFlowController{}
 
 // NewConnectionFlowController gets a new flow controller for the connection
-// It is created before we receive the peer's transport paramenters, thus it starts with a sendWindow of 0.
+// It is created before we receive the peer's transport parameters, thus it starts with a sendWindow of 0.
 func NewConnectionFlowController(
 	receiveWindow protocol.ByteCount,
 	maxReceiveWindow protocol.ByteCount,

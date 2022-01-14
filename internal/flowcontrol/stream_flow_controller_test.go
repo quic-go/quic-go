@@ -189,7 +189,7 @@ var _ = Describe("Stream Flow controller", func() {
 				Expect(queuedWindowUpdate).To(BeFalse())
 			})
 
-			It("tells the connection flow controller when the window was autotuned", func() {
+			It("tells the connection flow controller when the window was auto-tuned", func() {
 				oldOffset := controller.bytesRead
 				setRtt(scaleDuration(20 * time.Millisecond))
 				controller.epochStartOffset = oldOffset

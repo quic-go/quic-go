@@ -124,7 +124,7 @@ type SendStream interface {
 	// Write will unblock immediately, and future calls to Write will fail.
 	// When called multiple times or after closing the stream it is a no-op.
 	CancelWrite(StreamErrorCode)
-	// The context is canceled as soon as the write-side of the stream is closed.
+	// The Context is canceled as soon as the write-side of the stream is closed.
 	// This happens when Close() or CancelWrite() is called, or when the peer
 	// cancels the read-side of their stream.
 	// Warning: This API should not be considered stable and might change soon.
@@ -132,7 +132,7 @@ type SendStream interface {
 	// SetWriteDeadline sets the deadline for future Write calls
 	// and any currently-blocked Write call.
 	// Even if write times out, it may return n > 0, indicating that
-	// some of the data was successfully written.
+	// some data was successfully written.
 	// A zero value for t means Write will not time out.
 	SetWriteDeadline(t time.Time) error
 }
@@ -206,7 +206,7 @@ type Session interface {
 type EarlySession interface {
 	Session
 
-	// Blocks until the handshake completes (or fails).
+	// HandshakeComplete blocks until the handshake completes (or fails).
 	// Data sent before completion of the handshake is encrypted with 1-RTT keys.
 	// Note that the client's identity hasn't been verified yet.
 	HandshakeComplete() context.Context

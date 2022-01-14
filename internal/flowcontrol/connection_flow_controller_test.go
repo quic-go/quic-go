@@ -77,7 +77,7 @@ var _ = Describe("Connection Flow controller", func() {
 				Expect(offset).To(Equal(oldOffset + dataRead + 60))
 			})
 
-			It("autotunes the window", func() {
+			It("auto-tunes the window", func() {
 				oldOffset := controller.bytesRead
 				oldWindowSize := controller.receiveWindowSize
 				rtt := scaleDuration(20 * time.Millisecond)
@@ -118,7 +118,7 @@ var _ = Describe("Connection Flow controller", func() {
 			Expect(controller.receiveWindowSize).To(Equal(oldWindowSize))
 		})
 
-		It("doens't increase the window size beyond the maxReceiveWindowSize", func() {
+		It("doesn't increase the window size beyond the maxReceiveWindowSize", func() {
 			max := controller.maxReceiveWindowSize
 			controller.EnsureMinimumWindowSize(2 * max)
 			Expect(controller.receiveWindowSize).To(Equal(max))
