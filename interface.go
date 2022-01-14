@@ -266,6 +266,11 @@ type Config struct {
 	// MaxConnectionReceiveWindow is the connection-level flow control window for receiving data.
 	// If this value is zero, it will default to 15 MB.
 	MaxConnectionReceiveWindow uint64
+	// AllowConnectionWindowIncrease is called every time the connection flow controller attempts
+	// to increase the connection flow control window.
+	// If set, the caller can prevent an increase of the window. Typically, it would do so to
+	// limit the memory usage.
+	AllowConnectionWindowIncrease func(sess Session, delta int) bool
 	// MaxIncomingStreams is the maximum number of concurrent bidirectional streams that a peer is allowed to open.
 	// Values above 2^60 are invalid.
 	// If not set, it will default to 100.

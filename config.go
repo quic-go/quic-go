@@ -110,6 +110,7 @@ func populateConfig(config *Config) *Config {
 		MaxStreamReceiveWindow:           maxStreamReceiveWindow,
 		InitialConnectionReceiveWindow:   initialConnectionReceiveWindow,
 		MaxConnectionReceiveWindow:       maxConnectionReceiveWindow,
+		AllowConnectionWindowIncrease:    config.AllowConnectionWindowIncrease,
 		MaxIncomingStreams:               maxIncomingStreams,
 		MaxIncomingUniStreams:            maxIncomingUniStreams,
 		ConnectionIDLength:               config.ConnectionIDLength,
