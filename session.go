@@ -510,7 +510,7 @@ func (s *session) preSetup() {
 			if s.config.AllowConnectionWindowIncrease == nil {
 				return true
 			}
-			return s.config.AllowConnectionWindowIncrease(s, int(size))
+			return s.config.AllowConnectionWindowIncrease(s, uint64(size))
 		},
 		s.rttStats,
 		s.logger,
