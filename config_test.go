@@ -45,7 +45,7 @@ var _ = Describe("Config", func() {
 			}
 
 			switch fn := typ.Field(i).Name; fn {
-			case "AcceptToken", "GetLogWriter":
+			case "AcceptToken", "GetLogWriter", "AllowConnectionWindowIncrease":
 				// Can't compare functions.
 			case "Versions":
 				f.Set(reflect.ValueOf([]VersionNumber{1, 2, 3}))
@@ -100,13 +100,16 @@ var _ = Describe("Config", func() {
 
 	Context("cloning", func() {
 		It("clones function fields", func() {
-			var calledAcceptToken bool
+			var calledAcceptToken, calledAllowConnectionWindowIncrease bool
 			c1 := &Config{
-				AcceptToken: func(_ net.Addr, _ *Token) bool { calledAcceptToken = true; return true },
+				AcceptToken:                   func(_ net.Addr, _ *Token) bool { calledAcceptToken = true; return true },
+				AllowConnectionWindowIncrease: func(Session, uint64) bool { calledAllowConnectionWindowIncrease = true; return true },
 			}
 			c2 := c1.Clone()
 			c2.AcceptToken(&net.UDPAddr{}, &Token{})
 			Expect(calledAcceptToken).To(BeTrue())
+			c2.AllowConnectionWindowIncrease(nil, 1234)
+			Expect(calledAllowConnectionWindowIncrease).To(BeTrue())
 		})
 
 		It("clones non-function fields", func() {
