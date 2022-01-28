@@ -89,6 +89,7 @@ type baseServer struct {
 		*tls.Config,
 		*handshake.TokenGenerator,
 		bool, /* enable 0-RTT */
+		bool, /* client address validated by an address validation token */
 		logging.ConnectionTracer,
 		uint64,
 		utils.Logger,
@@ -375,6 +376,26 @@ func (s *baseServer) handlePacketImpl(p *receivedPacket) bool /* is the buffer s
 	return true
 }
 
+// validateToken returns false if:
+//   - address is invalid
+//   - token is expired
+//   - token is null
+func (s *baseServer) validateToken(token *handshake.Token, addr net.Addr) bool {
+	if token == nil {
+		return false
+	}
+	if !token.ValidateRemoteAddr(addr) {
+		return false
+	}
+	if !token.IsRetryToken && time.Since(token.SentTime) > s.config.MaxTokenAge {
+		return false
+	}
+	if token.IsRetryToken && time.Since(token.SentTime) > s.config.MaxRetryTokenAge {
+		return false
+	}
+	return true
+}
+
 func (s *baseServer) handleInitialImpl(p *receivedPacket, hdr *wire.Header) error {
 	if len(hdr.Token) == 0 && hdr.DestConnectionID.Len() < protocol.MinConnectionIDLenInitial {
 		p.buffer.Release()
@@ -399,23 +420,23 @@ func (s *baseServer) handleInitialImpl(p *receivedPacket, hdr *wire.Header) erro
 			token = tok
 		}
 	}
-	if token != nil {
-		addrIsValid := token.ValidateRemoteAddr(p.remoteAddr)
+
+	clientAddrIsValid := s.validateToken(token, p.remoteAddr)
+
+	if token != nil && !clientAddrIsValid {
 		// For invalid and expired non-retry tokens, we don't send an INVALID_TOKEN error.
 		// We just ignore them, and act as if there was no token on this packet at all.
 		// This also means we might send a Retry later.
-		if !token.IsRetryToken && (time.Since(token.SentTime) > s.config.MaxTokenAge || !addrIsValid) {
+		if !token.IsRetryToken {
 			token = nil
-		} else if token.IsRetryToken && (time.Since(token.SentTime) > s.config.MaxRetryTokenAge || !addrIsValid) {
+		} else {
 			// For Retry tokens, we send an INVALID_ERROR if
 			// * the token is too old, or
 			// * the token is invalid, in case of a retry token.
 			go func() {
 				defer p.buffer.Release()
-				if token != nil && token.IsRetryToken {
-					if err := s.maybeSendInvalidToken(p, hdr); err != nil {
-						s.logger.Debugf("Error sending INVALID_TOKEN error: %s", err)
-					}
+				if err := s.maybeSendInvalidToken(p, hdr); err != nil {
+					s.logger.Debugf("Error sending INVALID_TOKEN error: %s", err)
 				}
 			}()
 			return nil
@@ -476,6 +497,7 @@ func (s *baseServer) handleInitialImpl(p *receivedPacket, hdr *wire.Header) erro
 			s.tlsConf,
 			s.tokenGenerator,
 			s.acceptEarlyConns,
+			clientAddrIsValid,
 			tracer,
 			tracingID,
 			s.logger,
