@@ -5,8 +5,6 @@ package quic
 
 import "net"
 
-const disablePathMTUDiscovery = false
-
 func newConn(c net.PacketConn) (connection, error) {
 	return &basicConn{PacketConn: c}, nil
 }
