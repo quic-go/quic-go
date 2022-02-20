@@ -87,6 +87,8 @@ func newConn(c OOBCapablePacketConn) (*oobConn, error) {
 			errPIIPv4 = unix.SetsockoptInt(int(fd), unix.IPPROTO_IP, ipv4RECVPKTINFO, 1)
 			errPIIPv6 = unix.SetsockoptInt(int(fd), unix.IPPROTO_IPV6, ipv6RECVPKTINFO, 1)
 		}
+
+		setOOBSockOpts(fd)
 	}); err != nil {
 		return nil, err
 	}

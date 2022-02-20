@@ -9,7 +9,6 @@ import (
 	"fmt"
 	"io"
 	"net"
-	"runtime"
 	"runtime/pprof"
 	"strings"
 	"time"
@@ -1682,35 +1681,33 @@ var _ = Describe("Session", func() {
 			time.Sleep(50 * time.Millisecond)
 		})
 
-		if runtime.GOOS != "windows" { // Path MTU Discovery is disabled on Windows
-			It("sends a Path MTU probe packet", func() {
-				mtuDiscoverer := NewMockMtuDiscoverer(mockCtrl)
-				sess.mtuDiscoverer = mtuDiscoverer
-				sess.config.DisablePathMTUDiscovery = false
-				sph.EXPECT().SentPacket(gomock.Any())
-				sph.EXPECT().HasPacingBudget().Return(true).AnyTimes()
-				sph.EXPECT().SendMode().Return(ackhandler.SendAny)
-				sph.EXPECT().SendMode().Return(ackhandler.SendNone)
-				written := make(chan struct{}, 1)
-				sender.EXPECT().WouldBlock().AnyTimes()
-				sender.EXPECT().Send(gomock.Any()).DoAndReturn(func(p *packetBuffer) { written <- struct{}{} })
-				gomock.InOrder(
-					mtuDiscoverer.EXPECT().NextProbeTime(),
-					mtuDiscoverer.EXPECT().ShouldSendProbe(gomock.Any()).Return(true),
-					mtuDiscoverer.EXPECT().NextProbeTime(),
-				)
-				ping := ackhandler.Frame{Frame: &wire.PingFrame{}}
-				mtuDiscoverer.EXPECT().GetPing().Return(ping, protocol.ByteCount(1234))
-				packer.EXPECT().PackMTUProbePacket(ping, protocol.ByteCount(1234)).Return(getPacket(1), nil)
-				go func() {
-					defer GinkgoRecover()
-					cryptoSetup.EXPECT().RunHandshake().MaxTimes(1)
-					sess.run()
-				}()
-				sess.scheduleSending()
-				Eventually(written).Should(Receive())
-			})
-		}
+		It("sends a Path MTU probe packet", func() {
+			mtuDiscoverer := NewMockMtuDiscoverer(mockCtrl)
+			sess.mtuDiscoverer = mtuDiscoverer
+			sess.config.DisablePathMTUDiscovery = false
+			sph.EXPECT().SentPacket(gomock.Any())
+			sph.EXPECT().HasPacingBudget().Return(true).AnyTimes()
+			sph.EXPECT().SendMode().Return(ackhandler.SendAny)
+			sph.EXPECT().SendMode().Return(ackhandler.SendNone)
+			written := make(chan struct{}, 1)
+			sender.EXPECT().WouldBlock().AnyTimes()
+			sender.EXPECT().Send(gomock.Any()).DoAndReturn(func(p *packetBuffer) { written <- struct{}{} })
+			gomock.InOrder(
+				mtuDiscoverer.EXPECT().NextProbeTime(),
+				mtuDiscoverer.EXPECT().ShouldSendProbe(gomock.Any()).Return(true),
+				mtuDiscoverer.EXPECT().NextProbeTime(),
+			)
+			ping := ackhandler.Frame{Frame: &wire.PingFrame{}}
+			mtuDiscoverer.EXPECT().GetPing().Return(ping, protocol.ByteCount(1234))
+			packer.EXPECT().PackMTUProbePacket(ping, protocol.ByteCount(1234)).Return(getPacket(1), nil)
+			go func() {
+				defer GinkgoRecover()
+				cryptoSetup.EXPECT().RunHandshake().MaxTimes(1)
+				sess.run()
+			}()
+			sess.scheduleSending()
+			Eventually(written).Should(Receive())
+		})
 	})
 
 	Context("scheduling sending", func() {
