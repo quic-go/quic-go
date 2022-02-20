@@ -110,7 +110,7 @@ func setReceiveBuffer(c net.PacketConn, logger utils.Logger) error {
 	return nil
 }
 
-// only print warnings about the UPD receive buffer size once
+// only print warnings about the UDP receive buffer size once
 var receiveBufferWarningOnce sync.Once
 
 func newPacketHandlerMap(
