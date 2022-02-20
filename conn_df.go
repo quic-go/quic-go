@@ -3,6 +3,9 @@
 
 package quic
 
-func setOOBSockOpts(fd uintptr) {
+import "syscall"
+
+func setDF(rawConn syscall.RawConn) error {
 	// no-op on unsupported platforms
+	return nil
 }
