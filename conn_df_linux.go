@@ -5,9 +5,10 @@ package quic
 
 import (
 	"errors"
+	"syscall"
+
 	"github.com/lucas-clemente/quic-go/internal/utils"
 	"golang.org/x/sys/unix"
-	"syscall"
 )
 
 func setDF(rawConn syscall.RawConn) error {
@@ -31,4 +32,9 @@ func setDF(rawConn syscall.RawConn) error {
 		return errors.New("setting DF failed for both IPv4 and IPv6")
 	}
 	return nil
+}
+
+func isMsgSizeErr(err error) bool {
+	// https://man7.org/linux/man-pages/man7/udp.7.html
+	return errors.Is(err, unix.EMSGSIZE)
 }

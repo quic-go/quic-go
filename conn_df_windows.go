@@ -5,9 +5,10 @@ package quic
 
 import (
 	"errors"
+	"syscall"
+
 	"github.com/lucas-clemente/quic-go/internal/utils"
 	"golang.org/x/sys/windows"
-	"syscall"
 )
 
 const (
@@ -37,4 +38,9 @@ func setDF(rawConn syscall.RawConn) error {
 		return errors.New("setting DF failed for both IPv4 and IPv6")
 	}
 	return nil
+}
+
+func isMsgSizeErr(err error) bool {
+	// https://docs.microsoft.com/en-us/windows/win32/winsock/windows-sockets-error-codes-2
+	return errors.Is(err, windows.WSAEMSGSIZE)
 }
