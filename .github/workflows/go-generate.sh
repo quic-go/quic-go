@@ -20,4 +20,4 @@ go generate ./...
 cd ..
 
 # don't compare fuzzing corpora
-diff --exclude=corpus -ruN orig generated
+diff --exclude=corpus --exclude=.git -ruN orig generated

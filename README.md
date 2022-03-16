@@ -10,7 +10,7 @@ In addition to RFC 9000, it currently implements the [IETF QUIC draft-29](https:
 
 ## Guides
 
-*We currently support Go 1.16.x and Go 1.17.x.*
+*We currently support Go 1.16.x, Go 1.17.x, and Go 1.18.x.*
 
 Running tests:
 
