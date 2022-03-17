@@ -51,6 +51,44 @@ func versionToALPN(v protocol.VersionNumber) string {
 	return ""
 }
 
+// ConfigureTLSConfig creates a new tls.Config which can be used
+// to create a quic.Listener meant for serving http3. The created
+// tls.Config adds the functionality of detecting the used QUIC version
+// in order to set the correct ALPN value for the http3 connection.
+func ConfigureTLSConfig(tlsConf *tls.Config) *tls.Config {
+	// The tls.Config used to setup the quic.Listener needs to have the GetConfigForClient callback set.
+	// That way, we can get the QUIC version and set the correct ALPN value.
+	return &tls.Config{
+		GetConfigForClient: func(ch *tls.ClientHelloInfo) (*tls.Config, error) {
+			// determine the ALPN from the QUIC version used
+			proto := nextProtoH3Draft29
+			if qconn, ok := ch.Conn.(handshake.ConnWithVersion); ok {
+				if qconn.GetQUICVersion() == protocol.Version1 {
+					proto = nextProtoH3
+				}
+			}
+			config := tlsConf
+			if tlsConf.GetConfigForClient != nil {
+				getConfigForClient := tlsConf.GetConfigForClient
+				var err error
+				conf, err := getConfigForClient(ch)
+				if err != nil {
+					return nil, err
+				}
+				if conf != nil {
+					config = conf
+				}
+			}
+			if config == nil {
+				return nil, nil
+			}
+			config = config.Clone()
+			config.NextProtos = []string{proto}
+			return config, nil
+		},
+	}
+}
+
 // contextKey is a value for use with context.WithValue. It's used as
 // a pointer so it fits in an interface{} without allocation.
 type contextKey struct {
@@ -111,7 +149,7 @@ func (s *Server) ListenAndServe() error {
 	if s.Server == nil {
 		return errors.New("use of http3.Server without http.Server")
 	}
-	return s.serveImpl(s.TLSConfig, nil)
+	return s.serveImpl(s.TLSConfig, nil, nil)
 }
 
 // ListenAndServeTLS listens on the UDP address s.Addr and calls s.Handler to handle HTTP/3 requests on incoming connections.
@@ -127,17 +165,23 @@ func (s *Server) ListenAndServeTLS(certFile, keyFile string) error {
 	config := &tls.Config{
 		Certificates: certs,
 	}
-	return s.serveImpl(config, nil)
+	return s.serveImpl(config, nil, nil)
 }
 
 // Serve an existing UDP connection.
 // It is possible to reuse the same connection for outgoing connections.
 // Closing the server does not close the packet conn.
 func (s *Server) Serve(conn net.PacketConn) error {
-	return s.serveImpl(s.TLSConfig, conn)
+	return s.serveImpl(s.TLSConfig, nil, conn)
 }
 
-func (s *Server) serveImpl(tlsConf *tls.Config, conn net.PacketConn) error {
+// Serve an existing QUIC listener.
+// Closing the server does close the listener.
+func (s *Server) ServeListener(listener quic.EarlyListener) error {
+	return s.serveImpl(nil, listener, nil)
+}
+
+func (s *Server) serveImpl(tlsConf *tls.Config, ln quic.EarlyListener, conn net.PacketConn) error {
 	if s.closed.Get() {
 		return http.ErrServerClosed
 	}
@@ -148,59 +192,30 @@ func (s *Server) serveImpl(tlsConf *tls.Config, conn net.PacketConn) error {
 		s.logger = utils.DefaultLogger.WithPrefix("server")
 	})
 
-	// The tls.Config we pass to Listen needs to have the GetConfigForClient callback set.
-	// That way, we can get the QUIC version and set the correct ALPN value.
-	baseConf := &tls.Config{
-		GetConfigForClient: func(ch *tls.ClientHelloInfo) (*tls.Config, error) {
-			// determine the ALPN from the QUIC version used
-			proto := nextProtoH3Draft29
-			if qconn, ok := ch.Conn.(handshake.ConnWithVersion); ok {
-				if qconn.GetQUICVersion() == protocol.Version1 {
-					proto = nextProtoH3
-				}
-			}
-			config := tlsConf
-			if tlsConf.GetConfigForClient != nil {
-				getConfigForClient := tlsConf.GetConfigForClient
-				var err error
-				conf, err := getConfigForClient(ch)
-				if err != nil {
-					return nil, err
-				}
-				if conf != nil {
-					config = conf
-				}
-			}
-			if config == nil {
-				return nil, nil
-			}
-			config = config.Clone()
-			config.NextProtos = []string{proto}
-			return config, nil
-		},
-	}
+	if ln == nil {
+		baseConf := ConfigureTLSConfig(tlsConf)
+		quicConf := s.QuicConfig
+		if quicConf == nil {
+			quicConf = &quic.Config{}
+		} else {
+			quicConf = s.QuicConfig.Clone()
+		}
+		if s.EnableDatagrams {
+			quicConf.EnableDatagrams = true
+		}
 
-	var ln quic.EarlyListener
-	var err error
-	quicConf := s.QuicConfig
-	if quicConf == nil {
-		quicConf = &quic.Config{}
-	} else {
-		quicConf = s.QuicConfig.Clone()
+		var err error
+		if conn == nil {
+			ln, err = quicListenAddr(s.Addr, baseConf, quicConf)
+		} else {
+			ln, err = quicListen(conn, baseConf, quicConf)
+		}
+		if err != nil {
+			return err
+		}
+		s.addListener(&ln)
+		defer s.removeListener(&ln)
 	}
-	if s.EnableDatagrams {
-		quicConf.EnableDatagrams = true
-	}
-	if conn == nil {
-		ln, err = quicListenAddr(s.Addr, baseConf, quicConf)
-	} else {
-		ln, err = quicListen(conn, baseConf, quicConf)
-	}
-	if err != nil {
-		return err
-	}
-	s.addListener(&ln)
-	defer s.removeListener(&ln)
 
 	for {
 		sess, err := ln.Accept(context.Background())
