@@ -225,6 +225,9 @@ func (s *Server) serveImpl(tlsConf *tls.Config, ln quic.EarlyListener, conn net.
 	for {
 		sess, err := ln.Accept(s.context)
 		if err != nil {
+			if errors.Is(err, context.Canceled) {
+				return http.ErrServerClosed
+			}
 			return err
 		}
 		go s.handleConn(sess)
