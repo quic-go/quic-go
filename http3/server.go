@@ -180,10 +180,37 @@ func (s *Server) Serve(conn net.PacketConn) error {
 // and use it to construct a http3-friendly QUIC listener.
 // Closing the server does close the listener.
 func (s *Server) ServeListener(listener quic.EarlyListener) error {
-	return s.serveImpl(listener)
+	return s.serveImpl(func() (quic.EarlyListener, error) { return listener, nil })
 }
 
 func (s *Server) serveConn(tlsConf *tls.Config, conn net.PacketConn) error {
+	return s.serveImpl(func() (quic.EarlyListener, error) {
+		baseConf := ConfigureTLSConfig(tlsConf)
+		quicConf := s.QuicConfig
+		if quicConf == nil {
+			quicConf = &quic.Config{}
+		} else {
+			quicConf = s.QuicConfig.Clone()
+		}
+		if s.EnableDatagrams {
+			quicConf.EnableDatagrams = true
+		}
+
+		var ln quic.EarlyListener
+		var err error
+		if conn == nil {
+			ln, err = quicListenAddr(s.Addr, baseConf, quicConf)
+		} else {
+			ln, err = quicListen(conn, baseConf, quicConf)
+		}
+		if err != nil {
+			return nil, err
+		}
+		return ln, nil
+	})
+}
+
+func (s *Server) serveImpl(startListener func() (quic.EarlyListener, error)) error {
 	if s.closed.Get() {
 		return http.ErrServerClosed
 	}
@@ -194,32 +221,10 @@ func (s *Server) serveConn(tlsConf *tls.Config, conn net.PacketConn) error {
 		s.logger = utils.DefaultLogger.WithPrefix("server")
 	})
 
-	baseConf := ConfigureTLSConfig(tlsConf)
-	quicConf := s.QuicConfig
-	if quicConf == nil {
-		quicConf = &quic.Config{}
-	} else {
-		quicConf = s.QuicConfig.Clone()
-	}
-	if s.EnableDatagrams {
-		quicConf.EnableDatagrams = true
-	}
-
-	var ln quic.EarlyListener
-	var err error
-	if conn == nil {
-		ln, err = quicListenAddr(s.Addr, baseConf, quicConf)
-	} else {
-		ln, err = quicListen(conn, baseConf, quicConf)
-	}
+	ln, err := startListener()
 	if err != nil {
 		return err
 	}
-
-	return s.serveImpl(ln)
-}
-
-func (s *Server) serveImpl(ln quic.EarlyListener) error {
 	s.addListener(&ln)
 	defer s.removeListener(&ln)
 
