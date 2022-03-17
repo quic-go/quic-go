@@ -140,8 +140,10 @@ type Server struct {
 	listeners map[*quic.EarlyListener]struct{}
 	closed    utils.AtomicBool
 
-	loggerOnce sync.Once
-	logger     utils.Logger
+	serveOnce     sync.Once
+	logger        utils.Logger
+	context       context.Context
+	contextCancel context.CancelFunc
 }
 
 // ListenAndServe listens on the UDP address s.Addr and calls s.Handler to handle HTTP/3 requests on incoming connections.
@@ -190,8 +192,9 @@ func (s *Server) serveImpl(tlsConf *tls.Config, ln quic.EarlyListener, conn net.
 	if s.Server == nil {
 		return errors.New("use of http3.Server without http.Server")
 	}
-	s.loggerOnce.Do(func() {
+	s.serveOnce.Do(func() {
 		s.logger = utils.DefaultLogger.WithPrefix("server")
+		s.context, s.contextCancel = context.WithCancel(context.Background())
 	})
 
 	if ln == nil {
@@ -220,7 +223,7 @@ func (s *Server) serveImpl(tlsConf *tls.Config, ln quic.EarlyListener, conn net.
 	}
 
 	for {
-		sess, err := ln.Accept(context.Background())
+		sess, err := ln.Accept(s.context)
 		if err != nil {
 			return err
 		}
@@ -436,6 +439,11 @@ func (s *Server) Close() error {
 
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
+
+	// Stop all listeners, including the ones we didn't start
+	if s.contextCancel != nil {
+		s.contextCancel()
+	}
 
 	var err error
 	for ln := range s.listeners {
