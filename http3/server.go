@@ -140,10 +140,8 @@ type Server struct {
 	listeners map[*quic.EarlyListener]struct{}
 	closed    utils.AtomicBool
 
-	serveOnce     sync.Once
-	logger        utils.Logger
-	context       context.Context
-	contextCancel context.CancelFunc
+	loggerOnce sync.Once
+	logger     utils.Logger
 }
 
 // ListenAndServe listens on the UDP address s.Addr and calls s.Handler to handle HTTP/3 requests on incoming connections.
@@ -151,7 +149,7 @@ func (s *Server) ListenAndServe() error {
 	if s.Server == nil {
 		return errors.New("use of http3.Server without http.Server")
 	}
-	return s.serveImpl(s.TLSConfig, nil, nil)
+	return s.serveConn(s.TLSConfig, nil)
 }
 
 // ListenAndServeTLS listens on the UDP address s.Addr and calls s.Handler to handle HTTP/3 requests on incoming connections.
@@ -167,14 +165,14 @@ func (s *Server) ListenAndServeTLS(certFile, keyFile string) error {
 	config := &tls.Config{
 		Certificates: certs,
 	}
-	return s.serveImpl(config, nil, nil)
+	return s.serveConn(config, nil)
 }
 
 // Serve an existing UDP connection.
 // It is possible to reuse the same connection for outgoing connections.
 // Closing the server does not close the packet conn.
 func (s *Server) Serve(conn net.PacketConn) error {
-	return s.serveImpl(s.TLSConfig, nil, conn)
+	return s.serveConn(s.TLSConfig, conn)
 }
 
 // Serve an existing QUIC listener.
@@ -182,52 +180,52 @@ func (s *Server) Serve(conn net.PacketConn) error {
 // and use it to construct a http3-friendly QUIC listener.
 // Closing the server does close the listener.
 func (s *Server) ServeListener(listener quic.EarlyListener) error {
-	return s.serveImpl(nil, listener, nil)
+	return s.serveImpl(listener)
 }
 
-func (s *Server) serveImpl(tlsConf *tls.Config, ln quic.EarlyListener, conn net.PacketConn) error {
+func (s *Server) serveConn(tlsConf *tls.Config, conn net.PacketConn) error {
 	if s.closed.Get() {
 		return http.ErrServerClosed
 	}
 	if s.Server == nil {
 		return errors.New("use of http3.Server without http.Server")
 	}
-	s.serveOnce.Do(func() {
+	s.loggerOnce.Do(func() {
 		s.logger = utils.DefaultLogger.WithPrefix("server")
-		s.context, s.contextCancel = context.WithCancel(context.Background())
 	})
 
-	if ln == nil {
-		baseConf := ConfigureTLSConfig(tlsConf)
-		quicConf := s.QuicConfig
-		if quicConf == nil {
-			quicConf = &quic.Config{}
-		} else {
-			quicConf = s.QuicConfig.Clone()
-		}
-		if s.EnableDatagrams {
-			quicConf.EnableDatagrams = true
-		}
-
-		var err error
-		if conn == nil {
-			ln, err = quicListenAddr(s.Addr, baseConf, quicConf)
-		} else {
-			ln, err = quicListen(conn, baseConf, quicConf)
-		}
-		if err != nil {
-			return err
-		}
-		s.addListener(&ln)
-		defer s.removeListener(&ln)
+	baseConf := ConfigureTLSConfig(tlsConf)
+	quicConf := s.QuicConfig
+	if quicConf == nil {
+		quicConf = &quic.Config{}
+	} else {
+		quicConf = s.QuicConfig.Clone()
+	}
+	if s.EnableDatagrams {
+		quicConf.EnableDatagrams = true
 	}
 
+	var ln quic.EarlyListener
+	var err error
+	if conn == nil {
+		ln, err = quicListenAddr(s.Addr, baseConf, quicConf)
+	} else {
+		ln, err = quicListen(conn, baseConf, quicConf)
+	}
+	if err != nil {
+		return err
+	}
+
+	return s.serveImpl(ln)
+}
+
+func (s *Server) serveImpl(ln quic.EarlyListener) error {
+	s.addListener(&ln)
+	defer s.removeListener(&ln)
+
 	for {
-		sess, err := ln.Accept(s.context)
+		sess, err := ln.Accept(context.Background())
 		if err != nil {
-			if errors.Is(err, context.Canceled) {
-				return http.ErrServerClosed
-			}
 			return err
 		}
 		go s.handleConn(sess)
@@ -442,11 +440,6 @@ func (s *Server) Close() error {
 
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
-
-	// Stop all listeners, including the ones we didn't start
-	if s.contextCancel != nil {
-		s.contextCancel()
-	}
 
 	var err error
 	for ln := range s.listeners {
