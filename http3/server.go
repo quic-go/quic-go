@@ -176,6 +176,8 @@ func (s *Server) Serve(conn net.PacketConn) error {
 }
 
 // Serve an existing QUIC listener.
+// Make sure you use http3.ConfigureTLSConfig to configure a tls.Config
+// and use it to construct a http3-friendly QUIC listener.
 // Closing the server does close the listener.
 func (s *Server) ServeListener(listener quic.EarlyListener) error {
 	return s.serveImpl(nil, listener, nil)
