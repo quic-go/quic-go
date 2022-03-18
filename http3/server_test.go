@@ -619,6 +619,35 @@ var _ = Describe("Server", func() {
 		Expect(serv.ListenAndServe()).To(MatchError(http.ErrServerClosed))
 	})
 
+	Context("ConfigureTLSConfig", func() {
+		var tlsConf *tls.Config
+		var ch *tls.ClientHelloInfo
+
+		BeforeEach(func() {
+			tlsConf = &tls.Config{}
+			ch = &tls.ClientHelloInfo{}
+		})
+
+		It("advertises draft by default", func() {
+			tlsConf = ConfigureTLSConfig(tlsConf)
+			Expect(tlsConf.GetConfigForClient).NotTo(BeNil())
+
+			config, err := tlsConf.GetConfigForClient(ch)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(config.NextProtos).To(Equal([]string{nextProtoH3Draft29}))
+		})
+
+		It("advertises h3 for quic version 1", func() {
+			tlsConf = ConfigureTLSConfig(tlsConf)
+			Expect(tlsConf.GetConfigForClient).NotTo(BeNil())
+
+			ch.Conn = newMockConn(protocol.Version1)
+			config, err := tlsConf.GetConfigForClient(ch)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(config.NextProtos).To(Equal([]string{nextProtoH3}))
+		})
+	})
+
 	Context("Serve", func() {
 		origQuicListen := quicListen
 
