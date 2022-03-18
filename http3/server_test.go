@@ -704,6 +704,95 @@ var _ = Describe("Server", func() {
 		})
 	})
 
+	Context("ServeListener", func() {
+		origQuicListen := quicListen
+
+		AfterEach(func() {
+			quicListen = origQuicListen
+		})
+
+		It("serves a listener", func() {
+			called := false
+			ln := mockquic.NewMockEarlyListener(mockCtrl)
+			quicListen = func(conn net.PacketConn, tlsConf *tls.Config, config *quic.Config) (quic.EarlyListener, error) {
+				called = true
+				return ln, nil
+			}
+
+			s := &Server{Server: &http.Server{}}
+			s.TLSConfig = &tls.Config{}
+
+			stopAccept := make(chan struct{})
+			ln.EXPECT().Accept(gomock.Any()).DoAndReturn(func(context.Context) (quic.Session, error) {
+				<-stopAccept
+				return nil, errors.New("closed")
+			})
+			done := make(chan struct{})
+			go func() {
+				defer GinkgoRecover()
+				defer close(done)
+				s.ServeListener(ln)
+			}()
+
+			Consistently(called).Should(BeFalse())
+			Consistently(done).ShouldNot(BeClosed())
+			ln.EXPECT().Close().Do(func() { close(stopAccept) })
+			Expect(s.Close()).To(Succeed())
+			Eventually(done).Should(BeClosed())
+		})
+
+		It("serves two listeners", func() {
+			called := false
+			ln1 := mockquic.NewMockEarlyListener(mockCtrl)
+			ln2 := mockquic.NewMockEarlyListener(mockCtrl)
+			lns := make(chan quic.EarlyListener, 2)
+			lns <- ln1
+			lns <- ln2
+			conn1 := &net.UDPConn{}
+			conn2 := &net.UDPConn{}
+			quicListen = func(c net.PacketConn, tlsConf *tls.Config, config *quic.Config) (quic.EarlyListener, error) {
+				called = true
+				return <-lns, nil
+			}
+
+			s := &Server{Server: &http.Server{}}
+			s.TLSConfig = &tls.Config{}
+
+			stopAccept1 := make(chan struct{})
+			ln1.EXPECT().Accept(gomock.Any()).DoAndReturn(func(context.Context) (quic.Session, error) {
+				<-stopAccept1
+				return nil, errors.New("closed")
+			})
+			stopAccept2 := make(chan struct{})
+			ln2.EXPECT().Accept(gomock.Any()).DoAndReturn(func(context.Context) (quic.Session, error) {
+				<-stopAccept2
+				return nil, errors.New("closed")
+			})
+
+			done1 := make(chan struct{})
+			go func() {
+				defer GinkgoRecover()
+				defer close(done1)
+				s.Serve(conn1)
+			}()
+			done2 := make(chan struct{})
+			go func() {
+				defer GinkgoRecover()
+				defer close(done2)
+				s.Serve(conn2)
+			}()
+
+			Consistently(called).Should(BeFalse())
+			Consistently(done1).ShouldNot(BeClosed())
+			Expect(done2).ToNot(BeClosed())
+			ln1.EXPECT().Close().Do(func() { close(stopAccept1) })
+			ln2.EXPECT().Close().Do(func() { close(stopAccept2) })
+			Expect(s.Close()).To(Succeed())
+			Eventually(done1).Should(BeClosed())
+			Eventually(done2).Should(BeClosed())
+		})
+	})
+
 	Context("ListenAndServe", func() {
 		BeforeEach(func() {
 			s.Server.Addr = "localhost:0"
