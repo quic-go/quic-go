@@ -9,6 +9,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"sync/atomic"
 	"time"
 
 	"github.com/lucas-clemente/quic-go"
@@ -741,10 +742,10 @@ var _ = Describe("Server", func() {
 		})
 
 		It("serves a listener", func() {
-			called := false
+			var called int32
 			ln := mockquic.NewMockEarlyListener(mockCtrl)
 			quicListen = func(conn net.PacketConn, tlsConf *tls.Config, config *quic.Config) (quic.EarlyListener, error) {
-				called = true
+				atomic.StoreInt32(&called, 1)
 				return ln, nil
 			}
 
@@ -763,7 +764,7 @@ var _ = Describe("Server", func() {
 				s.ServeListener(ln)
 			}()
 
-			Consistently(called).Should(BeFalse())
+			Consistently(func() int32 { return atomic.LoadInt32(&called) }).Should(Equal(int32(0)))
 			Consistently(done).ShouldNot(BeClosed())
 			ln.EXPECT().Close().Do(func() { close(stopAccept) })
 			Expect(s.Close()).To(Succeed())
@@ -771,16 +772,14 @@ var _ = Describe("Server", func() {
 		})
 
 		It("serves two listeners", func() {
-			called := false
+			var called int32
 			ln1 := mockquic.NewMockEarlyListener(mockCtrl)
 			ln2 := mockquic.NewMockEarlyListener(mockCtrl)
 			lns := make(chan quic.EarlyListener, 2)
 			lns <- ln1
 			lns <- ln2
-			conn1 := &net.UDPConn{}
-			conn2 := &net.UDPConn{}
 			quicListen = func(c net.PacketConn, tlsConf *tls.Config, config *quic.Config) (quic.EarlyListener, error) {
-				called = true
+				atomic.StoreInt32(&called, 1)
 				return <-lns, nil
 			}
 
@@ -802,16 +801,16 @@ var _ = Describe("Server", func() {
 			go func() {
 				defer GinkgoRecover()
 				defer close(done1)
-				s.Serve(conn1)
+				s.ServeListener(ln1)
 			}()
 			done2 := make(chan struct{})
 			go func() {
 				defer GinkgoRecover()
 				defer close(done2)
-				s.Serve(conn2)
+				s.ServeListener(ln2)
 			}()
 
-			Consistently(called).Should(BeFalse())
+			Consistently(func() int32 { return atomic.LoadInt32(&called) }).Should(Equal(int32(0)))
 			Consistently(done1).ShouldNot(BeClosed())
 			Expect(done2).ToNot(BeClosed())
 			ln1.EXPECT().Close().Do(func() { close(stopAccept1) })
