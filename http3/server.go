@@ -12,7 +12,6 @@ import (
 	"runtime"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/lucas-clemente/quic-go"
@@ -134,11 +133,14 @@ type Server struct {
 	// If needed Port can be manually set when the Server is created.
 	// This is useful when a Layer 4 firewall is redirecting UDP traffic and clients must use
 	// a port different from the port the Server is listening on.
-	Port uint32
+	Port int
 
-	mutex     sync.Mutex
-	listeners map[*quic.EarlyListener]struct{}
+	mutex     sync.RWMutex
+	listeners map[*quic.EarlyListener]net.Addr
 	closed    utils.AtomicBool
+
+	altSvcHeader        string
+	altSvcGenerationErr error
 
 	loggerOnce sync.Once
 	logger     utils.Logger
@@ -237,21 +239,78 @@ func (s *Server) serveImpl(startListener func() (quic.EarlyListener, error)) err
 	}
 }
 
+func (s *Server) generateAltSvcHeader() {
+	s.altSvcGenerationErr = nil
+
+	// This code assumes that we will use protocol.SupportedVersions if no quic.Config is passed.
+	supportedVersions := protocol.SupportedVersions
+	if s.QuicConfig != nil && len(s.QuicConfig.Versions) > 0 {
+		supportedVersions = s.QuicConfig.Versions
+	}
+	var versionStrings []string
+	for _, version := range supportedVersions {
+		if v := versionToALPN(version); len(v) > 0 {
+			versionStrings = append(versionStrings, v)
+		}
+	}
+
+	extractPort := func(addr net.Addr) (int, error) {
+		_, portStr, err := net.SplitHostPort(addr.String())
+		if err != nil {
+			return 0, err
+		}
+
+		portInt, err := net.LookupPort("tcp", portStr)
+		if err != nil {
+			return 0, err
+		}
+		return portInt, nil
+	}
+
+	var altSvc []string
+	addPort := func(port int) {
+		for _, v := range versionStrings {
+			altSvc = append(altSvc, fmt.Sprintf(`%s=":%d"; ma=2592000`, v, port))
+		}
+	}
+
+	// if Port is specified, we must use it instead of the
+	// listener addresses since there's a reason it's specified.
+	if s.Port != 0 {
+		addPort(s.Port)
+	} else {
+		for _, addr := range s.listeners {
+			port, err := extractPort(addr)
+			if err != nil {
+				// save the error since it will only count as an error
+				// when the user needs an alt-svc header
+				s.altSvcGenerationErr = err
+				return
+			}
+			addPort(port)
+		}
+	}
+
+	s.altSvcHeader = strings.Join(altSvc, ",")
+}
+
 // We store a pointer to interface in the map set. This is safe because we only
 // call trackListener via Serve and can track+defer untrack the same pointer to
 // local variable there. We never need to compare a Listener from another caller.
 func (s *Server) addListener(l *quic.EarlyListener) {
 	s.mutex.Lock()
 	if s.listeners == nil {
-		s.listeners = make(map[*quic.EarlyListener]struct{})
+		s.listeners = make(map[*quic.EarlyListener]net.Addr)
 	}
-	s.listeners[l] = struct{}{}
+	s.listeners[l] = (*l).Addr()
+	s.generateAltSvcHeader()
 	s.mutex.Unlock()
 }
 
 func (s *Server) removeListener(l *quic.EarlyListener) {
 	s.mutex.Lock()
 	delete(s.listeners, l)
+	s.generateAltSvcHeader()
 	s.mutex.Unlock()
 }
 
@@ -462,39 +521,20 @@ func (s *Server) CloseGracefully(timeout time.Duration) error {
 	return nil
 }
 
-// SetQuicHeaders can be used to set the proper headers that announce that this server supports QUIC.
-// The values that are set depend on the port information from s.Server.Addr, and currently look like this (if Addr has port 443):
-//  Alt-Svc: quic=":443"; ma=2592000; v="33,32,31,30"
+// SetQuicHeaders can be used to set the proper headers that announce that this server supports HTTP/3.
+// The values set by default advertise all of the ports the server is listening on, but can be
+// changed to a specific port by setting Server.Port before launching the serverr.
+// For example, a server launched using ListenAndServe on an address with port 443 would set:
+// 	Alt-Svc: h3=":443"; ma=2592000,h3-29=":443"; ma=2592000
 func (s *Server) SetQuicHeaders(hdr http.Header) error {
-	port := atomic.LoadUint32(&s.Port)
-
-	if port == 0 {
-		// Extract port from s.Server.Addr
-		_, portStr, err := net.SplitHostPort(s.Server.Addr)
-		if err != nil {
-			return err
-		}
-		portInt, err := net.LookupPort("tcp", portStr)
-		if err != nil {
-			return err
-		}
-		port = uint32(portInt)
-		atomic.StoreUint32(&s.Port, port)
+	s.mutex.RLock()
+	defer s.mutex.RUnlock()
+	if s.altSvcGenerationErr != nil {
+		return s.altSvcGenerationErr
 	}
-
-	// This code assumes that we will use protocol.SupportedVersions if no quic.Config is passed.
-	supportedVersions := protocol.SupportedVersions
-	if s.QuicConfig != nil && len(s.QuicConfig.Versions) > 0 {
-		supportedVersions = s.QuicConfig.Versions
-	}
-	altSvc := make([]string, 0, len(supportedVersions))
-	for _, version := range supportedVersions {
-		v := versionToALPN(version)
-		if len(v) > 0 {
-			altSvc = append(altSvc, fmt.Sprintf(`%s=":%d"; ma=2592000`, v, port))
-		}
-	}
-	hdr.Add("Alt-Svc", strings.Join(altSvc, ","))
+	// use the map directly to avoid constant canonicalization
+	// since the key is already canonicalized
+	hdr["Alt-Svc"] = append(hdr["Alt-Svc"], s.altSvcHeader)
 	return nil
 }
 

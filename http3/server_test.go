@@ -39,6 +39,37 @@ func (c *mockConn) GetQUICVersion() protocol.VersionNumber {
 	return c.version
 }
 
+type mockAddr struct {
+	addr string
+}
+
+func (ma *mockAddr) Network() string {
+	return "udp"
+}
+
+func (ma *mockAddr) String() string {
+	return ma.addr
+}
+
+type mockAddrListener struct {
+	*mockquic.MockEarlyListener
+	addr *mockAddr
+}
+
+func (m *mockAddrListener) Addr() net.Addr {
+	_ = m.MockEarlyListener.Addr()
+	return m.addr
+}
+
+func newMockAddrListener(addr string) *mockAddrListener {
+	return &mockAddrListener{
+		MockEarlyListener: mockquic.NewMockEarlyListener(mockCtrl),
+		addr: &mockAddr{
+			addr: addr,
+		},
+	}
+}
+
 var _ = Describe("Server", func() {
 	var (
 		s                  *Server
@@ -554,29 +585,36 @@ var _ = Describe("Server", func() {
 			"Alt-Svc": {`h3-29=":443"; ma=2592000`},
 		}
 
+		addListener := func(addr string) {
+			mln := newMockAddrListener(addr)
+			mln.EXPECT().Addr()
+			var ln quic.EarlyListener = mln
+			s.addListener(&ln)
+		}
+
 		It("sets proper headers with numeric port", func() {
-			s.Server.Addr = ":443"
+			addListener(":443")
 			hdr := http.Header{}
 			Expect(s.SetQuicHeaders(hdr)).To(Succeed())
 			Expect(hdr).To(Equal(expected))
 		})
 
 		It("sets proper headers with full addr", func() {
-			s.Server.Addr = "127.0.0.1:443"
+			addListener("127.0.0.1:443")
 			hdr := http.Header{}
 			Expect(s.SetQuicHeaders(hdr)).To(Succeed())
 			Expect(hdr).To(Equal(expected))
 		})
 
 		It("sets proper headers with string port", func() {
-			s.Server.Addr = ":https"
+			addListener(":https")
 			hdr := http.Header{}
 			Expect(s.SetQuicHeaders(hdr)).To(Succeed())
 			Expect(hdr).To(Equal(expected))
 		})
 
 		It("works multiple times", func() {
-			s.Server.Addr = ":https"
+			addListener(":https")
 			hdr := http.Header{}
 			Expect(s.SetQuicHeaders(hdr)).To(Succeed())
 			Expect(hdr).To(Equal(expected))
@@ -586,19 +624,30 @@ var _ = Describe("Server", func() {
 		})
 
 		It("works if the quic.Config sets QUIC versions", func() {
-			s.Server.Addr = ":443"
 			s.QuicConfig.Versions = []quic.VersionNumber{quic.Version1, quic.VersionDraft29}
+			addListener(":443")
 			hdr := http.Header{}
 			Expect(s.SetQuicHeaders(hdr)).To(Succeed())
 			Expect(hdr).To(Equal(http.Header{"Alt-Svc": {`h3=":443"; ma=2592000,h3-29=":443"; ma=2592000`}}))
 		})
 
 		It("uses s.Port if set to a non-zero value", func() {
-			s.Server.Addr = ":443"
 			s.Port = 8443
+			addListener(":443")
 			hdr := http.Header{}
 			Expect(s.SetQuicHeaders(hdr)).To(Succeed())
 			Expect(hdr).To(Equal(http.Header{"Alt-Svc": {`h3-29=":8443"; ma=2592000`}}))
+		})
+
+		It("properly announces multiple listeners", func() {
+			addListener(":443")
+			addListener(":8443")
+			hdr := http.Header{}
+			Expect(s.SetQuicHeaders(hdr)).To(Succeed())
+			Expect(hdr).To(Or(
+				Equal(http.Header{"Alt-Svc": {`h3-29=":443"; ma=2592000,h3-29=":8443"; ma=2592000`}}),
+				Equal(http.Header{"Alt-Svc": {`h3-29=":8443"; ma=2592000,h3-29=":443"; ma=2592000`}}),
+			))
 		})
 	})
 
@@ -657,7 +706,7 @@ var _ = Describe("Server", func() {
 		})
 
 		It("serves a packet conn", func() {
-			ln := mockquic.NewMockEarlyListener(mockCtrl)
+			ln := newMockAddrListener(":443")
 			conn := &net.UDPConn{}
 			quicListen = func(c net.PacketConn, tlsConf *tls.Config, config *quic.Config) (quic.EarlyListener, error) {
 				Expect(c).To(Equal(conn))
@@ -672,6 +721,7 @@ var _ = Describe("Server", func() {
 				<-stopAccept
 				return nil, errors.New("closed")
 			})
+			ln.EXPECT().Addr() // generate alt-svc headers
 			done := make(chan struct{})
 			go func() {
 				defer GinkgoRecover()
@@ -686,8 +736,8 @@ var _ = Describe("Server", func() {
 		})
 
 		It("serves two packet conns", func() {
-			ln1 := mockquic.NewMockEarlyListener(mockCtrl)
-			ln2 := mockquic.NewMockEarlyListener(mockCtrl)
+			ln1 := newMockAddrListener(":443")
+			ln2 := newMockAddrListener(":8443")
 			lns := make(chan quic.EarlyListener, 2)
 			lns <- ln1
 			lns <- ln2
@@ -705,11 +755,13 @@ var _ = Describe("Server", func() {
 				<-stopAccept1
 				return nil, errors.New("closed")
 			})
+			ln1.EXPECT().Addr() // generate alt-svc headers
 			stopAccept2 := make(chan struct{})
 			ln2.EXPECT().Accept(gomock.Any()).DoAndReturn(func(context.Context) (quic.Session, error) {
 				<-stopAccept2
 				return nil, errors.New("closed")
 			})
+			ln2.EXPECT().Addr()
 
 			done1 := make(chan struct{})
 			go func() {
@@ -743,7 +795,7 @@ var _ = Describe("Server", func() {
 
 		It("serves a listener", func() {
 			var called int32
-			ln := mockquic.NewMockEarlyListener(mockCtrl)
+			ln := newMockAddrListener(":443")
 			quicListen = func(conn net.PacketConn, tlsConf *tls.Config, config *quic.Config) (quic.EarlyListener, error) {
 				atomic.StoreInt32(&called, 1)
 				return ln, nil
@@ -757,6 +809,7 @@ var _ = Describe("Server", func() {
 				<-stopAccept
 				return nil, errors.New("closed")
 			})
+			ln.EXPECT().Addr() // generate alt-svc headers
 			done := make(chan struct{})
 			go func() {
 				defer GinkgoRecover()
@@ -773,8 +826,8 @@ var _ = Describe("Server", func() {
 
 		It("serves two listeners", func() {
 			var called int32
-			ln1 := mockquic.NewMockEarlyListener(mockCtrl)
-			ln2 := mockquic.NewMockEarlyListener(mockCtrl)
+			ln1 := newMockAddrListener(":443")
+			ln2 := newMockAddrListener(":8443")
 			lns := make(chan quic.EarlyListener, 2)
 			lns <- ln1
 			lns <- ln2
@@ -791,11 +844,13 @@ var _ = Describe("Server", func() {
 				<-stopAccept1
 				return nil, errors.New("closed")
 			})
+			ln1.EXPECT().Addr() // generate alt-svc headers
 			stopAccept2 := make(chan struct{})
 			ln2.EXPECT().Accept(gomock.Any()).DoAndReturn(func(context.Context) (quic.Session, error) {
 				<-stopAccept2
 				return nil, errors.New("closed")
 			})
+			ln2.EXPECT().Addr()
 
 			done1 := make(chan struct{})
 			go func() {
