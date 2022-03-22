@@ -9,7 +9,7 @@ import (
 	"strings"
 	"sync"
 
-	quic "github.com/lucas-clemente/quic-go"
+	"github.com/lucas-clemente/quic-go"
 
 	"golang.org/x/net/http/httpguts"
 )
@@ -64,9 +64,6 @@ type RoundTripOpt struct {
 	// OnlyCachedConn controls whether the RoundTripper may create a new QUIC connection.
 	// If set true and no cached connection is available, RoundTrip will return ErrNoCachedConn.
 	OnlyCachedConn bool
-	// SkipSchemeCheck controls whether we check if the scheme is https.
-	// This allows the use of different schemes, e.g. masque://target.example.com:443/.
-	SkipSchemeCheck bool
 }
 
 var _ roundTripCloser = &RoundTripper{}
@@ -100,7 +97,7 @@ func (r *RoundTripper) RoundTripOpt(req *http.Request, opt RoundTripOpt) (*http.
 				}
 			}
 		}
-	} else if !opt.SkipSchemeCheck {
+	} else {
 		closeRequestBody(req)
 		return nil, fmt.Errorf("http3: unsupported protocol scheme: %s", req.URL.Scheme)
 	}
