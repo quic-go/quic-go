@@ -1,11 +1,27 @@
 package http3
 
 import (
+	"context"
 	"fmt"
 	"io"
 
 	"github.com/lucas-clemente/quic-go"
 )
+
+type StreamCreator interface {
+	OpenStream() (quic.Stream, error)
+	OpenStreamSync(context.Context) (quic.Stream, error)
+	OpenUniStream() (quic.SendStream, error)
+	OpenUniStreamSync(context.Context) (quic.SendStream, error)
+}
+
+var _ StreamCreator = quic.Connection(nil)
+
+// A Hijacker allows hijacking of the stream creating part of a quic.Session from a http.Response.Body.
+// It is used by WebTransport to create WebTransport streams after a session has been established.
+type Hijacker interface {
+	StreamCreator() StreamCreator
+}
 
 // The body of a http.Request or http.Response.
 type body struct {
@@ -24,6 +40,13 @@ type body struct {
 
 var _ io.ReadCloser = &body{}
 
+type hijackableBody struct {
+	body
+	conn quic.Connection // only needed to implement Hijacker
+}
+
+var _ Hijacker = &hijackableBody{}
+
 func newRequestBody(str quic.Stream, onFrameError func()) *body {
 	return &body{
 		str:          str,
@@ -31,12 +54,19 @@ func newRequestBody(str quic.Stream, onFrameError func()) *body {
 	}
 }
 
-func newResponseBody(str quic.Stream, done chan<- struct{}, onFrameError func()) *body {
-	return &body{
-		str:          str,
-		onFrameError: onFrameError,
-		reqDone:      done,
+func newResponseBody(str quic.Stream, conn quic.Connection, done chan<- struct{}, onFrameError func()) *hijackableBody {
+	return &hijackableBody{
+		body: body{
+			str:          str,
+			onFrameError: onFrameError,
+			reqDone:      done,
+		},
+		conn: conn,
 	}
+}
+
+func (r *hijackableBody) StreamCreator() StreamCreator {
+	return r.conn
 }
 
 func (r *body) Read(b []byte) (int, error) {

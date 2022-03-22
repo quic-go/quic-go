@@ -316,7 +316,7 @@ func (c *client) doRequest(
 			res.Header.Add(hf.Name, hf.Value)
 		}
 	}
-	respBody := newResponseBody(str, reqDone, func() {
+	respBody := newResponseBody(str, c.conn, reqDone, func() {
 		c.conn.CloseWithError(quic.ApplicationErrorCode(errorFrameUnexpected), "")
 	})
 
