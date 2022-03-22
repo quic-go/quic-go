@@ -24,6 +24,7 @@ import (
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
+	gmtypes "github.com/onsi/gomega/types"
 )
 
 type mockConn struct {
@@ -67,6 +68,18 @@ func newMockAddrListener(addr string) *mockAddrListener {
 		addr: &mockAddr{
 			addr: addr,
 		},
+	}
+}
+
+type noPortListener struct {
+	*mockAddrListener
+}
+
+func (m *noPortListener) Addr() net.Addr {
+	_ = m.mockAddrListener.Addr()
+	return &net.UnixAddr{
+		Net:  "unix",
+		Name: "/tmp/quic.sock",
 	}
 }
 
@@ -581,73 +594,100 @@ var _ = Describe("Server", func() {
 			s.QuicConfig = &quic.Config{Versions: []protocol.VersionNumber{protocol.VersionDraft29}}
 		})
 
+		var ln1 quic.EarlyListener
+		var ln2 quic.EarlyListener
 		expected := http.Header{
 			"Alt-Svc": {`h3-29=":443"; ma=2592000`},
 		}
 
-		addListener := func(addr string) {
+		addListener := func(addr string, ln *quic.EarlyListener) {
 			mln := newMockAddrListener(addr)
 			mln.EXPECT().Addr()
-			var ln quic.EarlyListener = mln
-			s.addListener(&ln)
+			*ln = mln
+			s.addListener(ln)
+		}
+
+		removeListener := func(ln *quic.EarlyListener) {
+			s.removeListener(ln)
+		}
+
+		checkSetHeaders := func(expected gmtypes.GomegaMatcher) {
+			hdr := http.Header{}
+			Expect(s.SetQuicHeaders(hdr)).To(Succeed())
+			Expect(hdr).To(expected)
+		}
+
+		checkSetHeaderError := func() {
+			hdr := http.Header{}
+			Expect(s.SetQuicHeaders(hdr)).To(Equal(ErrNoAltSvcPort))
 		}
 
 		It("sets proper headers with numeric port", func() {
-			addListener(":443")
-			hdr := http.Header{}
-			Expect(s.SetQuicHeaders(hdr)).To(Succeed())
-			Expect(hdr).To(Equal(expected))
+			addListener(":443", &ln1)
+			checkSetHeaders(Equal(expected))
+			removeListener(&ln1)
+			checkSetHeaderError()
 		})
 
 		It("sets proper headers with full addr", func() {
-			addListener("127.0.0.1:443")
-			hdr := http.Header{}
-			Expect(s.SetQuicHeaders(hdr)).To(Succeed())
-			Expect(hdr).To(Equal(expected))
+			addListener("127.0.0.1:443", &ln1)
+			checkSetHeaders(Equal(expected))
+			removeListener(&ln1)
+			checkSetHeaderError()
 		})
 
 		It("sets proper headers with string port", func() {
-			addListener(":https")
-			hdr := http.Header{}
-			Expect(s.SetQuicHeaders(hdr)).To(Succeed())
-			Expect(hdr).To(Equal(expected))
+			addListener(":https", &ln1)
+			checkSetHeaders(Equal(expected))
+			removeListener(&ln1)
+			checkSetHeaderError()
 		})
 
 		It("works multiple times", func() {
-			addListener(":https")
-			hdr := http.Header{}
-			Expect(s.SetQuicHeaders(hdr)).To(Succeed())
-			Expect(hdr).To(Equal(expected))
-			hdr = http.Header{}
-			Expect(s.SetQuicHeaders(hdr)).To(Succeed())
-			Expect(hdr).To(Equal(expected))
+			addListener(":https", &ln1)
+			checkSetHeaders(Equal(expected))
+			checkSetHeaders(Equal(expected))
+			removeListener(&ln1)
+			checkSetHeaderError()
 		})
 
 		It("works if the quic.Config sets QUIC versions", func() {
 			s.QuicConfig.Versions = []quic.VersionNumber{quic.Version1, quic.VersionDraft29}
-			addListener(":443")
-			hdr := http.Header{}
-			Expect(s.SetQuicHeaders(hdr)).To(Succeed())
-			Expect(hdr).To(Equal(http.Header{"Alt-Svc": {`h3=":443"; ma=2592000,h3-29=":443"; ma=2592000`}}))
+			addListener(":443", &ln1)
+			checkSetHeaders(Equal(http.Header{"Alt-Svc": {`h3=":443"; ma=2592000,h3-29=":443"; ma=2592000`}}))
+			removeListener(&ln1)
+			checkSetHeaderError()
 		})
 
 		It("uses s.Port if set to a non-zero value", func() {
 			s.Port = 8443
-			addListener(":443")
-			hdr := http.Header{}
-			Expect(s.SetQuicHeaders(hdr)).To(Succeed())
-			Expect(hdr).To(Equal(http.Header{"Alt-Svc": {`h3-29=":8443"; ma=2592000`}}))
+			addListener(":443", &ln1)
+			checkSetHeaders(Equal(http.Header{"Alt-Svc": {`h3-29=":8443"; ma=2592000`}}))
+			removeListener(&ln1)
+			checkSetHeaderError()
+		})
+
+		It("uses s.Addr if listeners don't have ports available", func() {
+			s.Addr = ":443"
+			mln := &noPortListener{newMockAddrListener("")}
+			mln.EXPECT().Addr()
+			ln1 = mln
+			s.addListener(&ln1)
+			checkSetHeaders(Equal(expected))
+			s.removeListener(&ln1)
+			checkSetHeaderError()
 		})
 
 		It("properly announces multiple listeners", func() {
-			addListener(":443")
-			addListener(":8443")
-			hdr := http.Header{}
-			Expect(s.SetQuicHeaders(hdr)).To(Succeed())
-			Expect(hdr).To(Or(
+			addListener(":443", &ln1)
+			addListener(":8443", &ln2)
+			checkSetHeaders(Or(
 				Equal(http.Header{"Alt-Svc": {`h3-29=":443"; ma=2592000,h3-29=":8443"; ma=2592000`}}),
 				Equal(http.Header{"Alt-Svc": {`h3-29=":8443"; ma=2592000,h3-29=":443"; ma=2592000`}}),
 			))
+			removeListener(&ln1)
+			removeListener(&ln2)
+			checkSetHeaderError()
 		})
 	})
 

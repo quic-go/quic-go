@@ -116,6 +116,11 @@ func newConnError(code errorCode, err error) requestError {
 	return requestError{err: err, connErr: code}
 }
 
+// listenerInfo contains info about specific listener added with addListener
+type listenerInfo struct {
+	port int // 0 means that no info about port is available
+}
+
 // Server is a HTTP/3 server.
 type Server struct {
 	*http.Server
@@ -136,11 +141,10 @@ type Server struct {
 	Port int
 
 	mutex     sync.RWMutex
-	listeners map[*quic.EarlyListener]net.Addr
+	listeners map[*quic.EarlyListener]listenerInfo
 	closed    utils.AtomicBool
 
-	altSvcHeader        string
-	altSvcGenerationErr error
+	altSvcHeader string
 
 	loggerOnce sync.Once
 	logger     utils.Logger
@@ -239,8 +243,25 @@ func (s *Server) serveImpl(startListener func() (quic.EarlyListener, error)) err
 	}
 }
 
+func extractPort(addr string) (int, error) {
+	_, portStr, err := net.SplitHostPort(addr)
+	if err != nil {
+		return 0, err
+	}
+
+	portInt, err := net.LookupPort("tcp", portStr)
+	if err != nil {
+		return 0, err
+	}
+	return portInt, nil
+}
+
 func (s *Server) generateAltSvcHeader() {
-	s.altSvcGenerationErr = nil
+	if len(s.listeners) == 0 {
+		// Don't announce any ports since no one is listening for connections
+		s.altSvcHeader = ""
+		return
+	}
 
 	// This code assumes that we will use protocol.SupportedVersions if no quic.Config is passed.
 	supportedVersions := protocol.SupportedVersions
@@ -254,19 +275,6 @@ func (s *Server) generateAltSvcHeader() {
 		}
 	}
 
-	extractPort := func(addr net.Addr) (int, error) {
-		_, portStr, err := net.SplitHostPort(addr.String())
-		if err != nil {
-			return 0, err
-		}
-
-		portInt, err := net.LookupPort("tcp", portStr)
-		if err != nil {
-			return 0, err
-		}
-		return portInt, nil
-	}
-
 	var altSvc []string
 	addPort := func(port int) {
 		for _, v := range versionStrings {
@@ -274,20 +282,24 @@ func (s *Server) generateAltSvcHeader() {
 		}
 	}
 
-	// if Port is specified, we must use it instead of the
-	// listener addresses since there's a reason it's specified.
 	if s.Port != 0 {
+		// if Port is specified, we must use it instead of the
+		// listener addresses since there's a reason it's specified.
 		addPort(s.Port)
 	} else {
-		for _, addr := range s.listeners {
-			port, err := extractPort(addr)
-			if err != nil {
-				// save the error since it will only count as an error
-				// when the user needs an alt-svc header
-				s.altSvcGenerationErr = err
-				return
+		// if we have some listeners assigned, try to find ports
+		// which we can announce, otherwise nothing should be announced
+		validPortsFound := false
+		for _, info := range s.listeners {
+			if info.port != 0 {
+				addPort(info.port)
+				validPortsFound = true
 			}
-			addPort(port)
+		}
+		if !validPortsFound {
+			if port, err := extractPort(s.Addr); err == nil {
+				addPort(port)
+			}
 		}
 	}
 
@@ -300,10 +312,18 @@ func (s *Server) generateAltSvcHeader() {
 func (s *Server) addListener(l *quic.EarlyListener) {
 	s.mutex.Lock()
 	if s.listeners == nil {
-		s.listeners = make(map[*quic.EarlyListener]net.Addr)
+		s.listeners = make(map[*quic.EarlyListener]listenerInfo)
 	}
-	s.listeners[l] = (*l).Addr()
+
+	if port, err := extractPort((*l).Addr().String()); err == nil {
+		s.listeners[l] = listenerInfo{port}
+	} else {
+		s.logger.Errorf(
+			"Unable to extract port from listener %+v, will not be announced using SetQuicHeaders: %s", err)
+		s.listeners[l] = listenerInfo{}
+	}
 	s.generateAltSvcHeader()
+
 	s.mutex.Unlock()
 }
 
@@ -521,16 +541,24 @@ func (s *Server) CloseGracefully(timeout time.Duration) error {
 	return nil
 }
 
+// ErrNoAltSvcPort is the error returned by SetQuicHeaders when no port was found
+// for Alt-Svc to announce. This can happen if listening on a PacketConn without a port
+// (UNIX socket, for example) and no port is specified in Server.Port or Server.Addr.
+var ErrNoAltSvcPort = errors.New("no port can be announced, specify it explicitly using Server.Port or Server.Addr")
+
 // SetQuicHeaders can be used to set the proper headers that announce that this server supports HTTP/3.
 // The values set by default advertise all of the ports the server is listening on, but can be
 // changed to a specific port by setting Server.Port before launching the serverr.
+// If no listener's Addr().String() returns an address with a valid port, Server.Addr will be used
+// to extract the port, if specified.
 // For example, a server launched using ListenAndServe on an address with port 443 would set:
 // 	Alt-Svc: h3=":443"; ma=2592000,h3-29=":443"; ma=2592000
 func (s *Server) SetQuicHeaders(hdr http.Header) error {
 	s.mutex.RLock()
 	defer s.mutex.RUnlock()
-	if s.altSvcGenerationErr != nil {
-		return s.altSvcGenerationErr
+
+	if s.altSvcHeader == "" {
+		return ErrNoAltSvcPort
 	}
 	// use the map directly to avoid constant canonicalization
 	// since the key is already canonicalized
