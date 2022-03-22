@@ -144,6 +144,13 @@ type Server struct {
 	// It is invalid to specify any settings defined by the HTTP/3 draft and the datagram draft.
 	AdditionalSettings map[uint64]uint64
 
+	// When set, this callback is called for the first unknown frame parsed on a bidirectional stream.
+	// It is called right after parsing the frame type.
+	// Callers can either process the frame and return control of the stream back to HTTP/3
+	// (by returning hijacked false).
+	// Alternatively, callers can take over the QUIC stream (by returning hijacked true).
+	StreamHijacker func(FrameType, quic.Connection, quic.Stream) (hijacked bool, err error)
+
 	mutex     sync.RWMutex
 	listeners map[*quic.EarlyListener]listenerInfo
 
@@ -186,7 +193,7 @@ func (s *Server) Serve(conn net.PacketConn) error {
 	return s.serveConn(s.TLSConfig, conn)
 }
 
-// Serve an existing QUIC listener.
+// ServeListener serves an existing QUIC listener.
 // Make sure you use http3.ConfigureTLSConfig to configure a tls.Config
 // and use it to construct a http3-friendly QUIC listener.
 // Closing the server does close the listener.
@@ -367,6 +374,9 @@ func (s *Server) handleConn(conn quic.EarlyConnection) {
 			rerr := s.handleRequest(conn, str, decoder, func() {
 				conn.CloseWithError(quic.ApplicationErrorCode(errorFrameUnexpected), "")
 			})
+			if rerr.err == errHijacked {
+				return
+			}
 			if rerr.err != nil || rerr.streamErr != 0 || rerr.connErr != 0 {
 				s.logger.Debugf("Handling request failed: %s", err)
 				if rerr.streamErr != 0 {
@@ -414,7 +424,7 @@ func (s *Server) handleUnidirectionalStreams(conn quic.EarlyConnection) {
 				str.CancelRead(quic.StreamErrorCode(errorStreamCreationError))
 				return
 			}
-			f, err := parseNextFrame(str)
+			f, err := parseNextFrame(str, nil)
 			if err != nil {
 				conn.CloseWithError(quic.ApplicationErrorCode(errorFrameError), "")
 				return
@@ -445,8 +455,17 @@ func (s *Server) maxHeaderBytes() uint64 {
 }
 
 func (s *Server) handleRequest(conn quic.Connection, str quic.Stream, decoder *qpack.Decoder, onFrameError func()) requestError {
-	frame, err := parseNextFrame(str)
+	var ufh unknownFrameHandlerFunc
+	if s.StreamHijacker != nil {
+		ufh = func(ft FrameType) (processed bool, err error) {
+			return s.StreamHijacker(ft, conn, str)
+		}
+	}
+	frame, err := parseNextFrame(str, ufh)
 	if err != nil {
+		if err == errHijacked {
+			return requestError{err: errHijacked}
+		}
 		return newStreamError(errorRequestIncomplete, err)
 	}
 	hf, ok := frame.(*headersFrame)

@@ -30,7 +30,7 @@ var _ = Describe("Request Writer", func() {
 	)
 
 	decode := func(str io.Reader) map[string]string {
-		frame, err := parseNextFrame(str)
+		frame, err := parseNextFrame(str, nil)
 		ExpectWithOffset(1, err).ToNot(HaveOccurred())
 		ExpectWithOffset(1, frame).To(BeAssignableToTypeOf(&headersFrame{}))
 		headersFrame := frame.(*headersFrame)
@@ -85,7 +85,7 @@ var _ = Describe("Request Writer", func() {
 		Expect(err).ToNot(HaveOccurred())
 		Expect(contentLength).To(BeNumerically(">", 0))
 
-		frame, err := parseNextFrame(strBuf)
+		frame, err := parseNextFrame(strBuf, nil)
 		Expect(err).ToNot(HaveOccurred())
 		Expect(frame).To(BeAssignableToTypeOf(&dataFrame{}))
 		Expect(frame.(*dataFrame).Length).To(BeEquivalentTo(6))
@@ -102,7 +102,7 @@ var _ = Describe("Request Writer", func() {
 		headerFields := decode(strBuf)
 		Expect(headerFields).To(HaveKeyWithValue(":method", "POST"))
 
-		frame, err := parseNextFrame(strBuf)
+		frame, err := parseNextFrame(strBuf, nil)
 		Expect(err).ToNot(HaveOccurred())
 		Expect(frame).To(BeAssignableToTypeOf(&dataFrame{}))
 		Expect(frame.(*dataFrame).Length).To(BeEquivalentTo(6))

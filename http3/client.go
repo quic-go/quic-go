@@ -43,6 +43,7 @@ type roundTripperOpts struct {
 	EnableDatagram     bool
 	MaxHeaderBytes     int64
 	AdditionalSettings map[uint64]uint64
+	StreamHijacker     func(FrameType, quic.Stream) (hijacked bool, err error)
 }
 
 // client is a HTTP3 client doing requests
@@ -118,6 +119,9 @@ func (c *client) dial(ctx context.Context) error {
 		}
 	}()
 
+	if c.opts.StreamHijacker != nil {
+		go c.handleBidirectionalStreams()
+	}
 	go c.handleUnidirectionalStreams()
 	return nil
 }
@@ -134,6 +138,30 @@ func (c *client) setupConn() error {
 	(&settingsFrame{Datagram: c.opts.EnableDatagram, Other: c.opts.AdditionalSettings}).Write(buf)
 	_, err = str.Write(buf.Bytes())
 	return err
+}
+
+func (c *client) handleBidirectionalStreams() {
+	for {
+		str, err := c.conn.AcceptStream(context.Background())
+		if err != nil {
+			c.logger.Debugf("accepting bidirectional stream failed: %s", err)
+			return
+		}
+		go func(str quic.Stream) {
+			for {
+				_, err := parseNextFrame(str, func(ft FrameType) (processed bool, err error) {
+					return c.opts.StreamHijacker(ft, str)
+				})
+				if err == errHijacked {
+					return
+				}
+				if err != nil {
+					c.logger.Debugf("error handling stream: %s", err)
+				}
+				c.conn.CloseWithError(quic.ApplicationErrorCode(errorFrameUnexpected), "received HTTP/3 frame on bidirectional stream")
+			}
+		}(str)
+	}
 }
 
 func (c *client) handleUnidirectionalStreams() {
@@ -165,7 +193,7 @@ func (c *client) handleUnidirectionalStreams() {
 				str.CancelRead(quic.StreamErrorCode(errorStreamCreationError))
 				return
 			}
-			f, err := parseNextFrame(str)
+			f, err := parseNextFrame(str, nil)
 			if err != nil {
 				c.conn.CloseWithError(quic.ApplicationErrorCode(errorFrameError), "")
 				return
@@ -276,7 +304,7 @@ func (c *client) doRequest(
 		return nil, newStreamError(errorInternalError, err)
 	}
 
-	frame, err := parseNextFrame(str)
+	frame, err := parseNextFrame(str, nil)
 	if err != nil {
 		return nil, newStreamError(errorFrameError, err)
 	}

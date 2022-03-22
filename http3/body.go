@@ -81,7 +81,7 @@ func (r *body) readImpl(b []byte) (int, error) {
 	if r.bytesRemainingInFrame == 0 {
 	parseLoop:
 		for {
-			frame, err := parseNextFrame(r.str)
+			frame, err := parseNextFrame(r.str, nil)
 			if err != nil {
 				return 0, err
 			}

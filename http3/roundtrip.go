@@ -51,6 +51,13 @@ type RoundTripper struct {
 	// It is invalid to specify any settings defined by the HTTP/3 draft and the datagram draft.
 	AdditionalSettings map[uint64]uint64
 
+	// When set, this callback is called for the first unknown frame parsed on a bidirectional stream.
+	// It is called right after parsing the frame type.
+	// Callers can either process the frame and return control of the stream back to HTTP/3
+	// (by returning hijacked false).
+	// Alternatively, callers can take over the QUIC stream (by returning hijacked true).
+	StreamHijacker func(FrameType, quic.Stream) (hijacked bool, err error)
+
 	// Dial specifies an optional dial function for creating QUIC
 	// connections for requests.
 	// If Dial is nil, quic.DialAddrEarlyContext will be used.
@@ -146,6 +153,7 @@ func (r *RoundTripper) getClient(hostname string, onlyCached bool) (http.RoundTr
 				EnableDatagram:     r.EnableDatagrams,
 				DisableCompression: r.DisableCompression,
 				MaxHeaderBytes:     r.MaxResponseHeaderBytes,
+				StreamHijacker:     r.StreamHijacker,
 			},
 			r.QuicConfig,
 			r.Dial,
