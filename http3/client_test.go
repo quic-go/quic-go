@@ -261,7 +261,7 @@ var _ = Describe("Client", func() {
 			})
 		}
 
-		It("resets streams other than the control stream and the QPACK streams", func() {
+		It("resets streams Other than the control stream and the QPACK streams", func() {
 			buf := &bytes.Buffer{}
 			quicvarint.Write(buf, 1337)
 			str := mockquic.NewMockStream(mockCtrl)

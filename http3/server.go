@@ -140,9 +140,14 @@ type Server struct {
 	// a port different from the port the Server is listening on.
 	Port int
 
+	// Additional HTTP/3 settings.
+	// It is invalid to specify any settings defined by the HTTP/3 draft and the datagram draft.
+	AdditionalSettings map[uint64]uint64
+
 	mutex     sync.RWMutex
 	listeners map[*quic.EarlyListener]listenerInfo
-	closed    utils.AtomicBool
+
+	closed utils.AtomicBool
 
 	altSvcHeader string
 
@@ -345,7 +350,7 @@ func (s *Server) handleConn(conn quic.EarlyConnection) {
 	}
 	buf := &bytes.Buffer{}
 	quicvarint.Write(buf, streamTypeControlStream) // stream type
-	(&settingsFrame{Datagram: s.EnableDatagrams}).Write(buf)
+	(&settingsFrame{Datagram: s.EnableDatagrams, Other: s.AdditionalSettings}).Write(buf)
 	str.Write(buf.Bytes())
 
 	go s.handleUnidirectionalStreams(conn)

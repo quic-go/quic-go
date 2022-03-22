@@ -42,6 +42,7 @@ type roundTripperOpts struct {
 	DisableCompression bool
 	EnableDatagram     bool
 	MaxHeaderBytes     int64
+	AdditionalSettings map[uint64]uint64
 }
 
 // client is a HTTP3 client doing requests
@@ -130,7 +131,7 @@ func (c *client) setupConn() error {
 	buf := &bytes.Buffer{}
 	quicvarint.Write(buf, streamTypeControlStream)
 	// send the SETTINGS frame
-	(&settingsFrame{Datagram: c.opts.EnableDatagram}).Write(buf)
+	(&settingsFrame{Datagram: c.opts.EnableDatagram, Other: c.opts.AdditionalSettings}).Write(buf)
 	_, err = str.Write(buf.Bytes())
 	return err
 }

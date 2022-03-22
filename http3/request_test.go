@@ -64,7 +64,7 @@ var _ = Describe("Request", func() {
 		}))
 	})
 
-	It("handles other headers", func() {
+	It("handles Other headers", func() {
 		headers := []qpack.HeaderField{
 			{Name: ":path", Value: "/foo"},
 			{Name: ":authority", Value: "quic.clemente.io"},

@@ -47,6 +47,10 @@ type RoundTripper struct {
 	// See https://www.ietf.org/archive/id/draft-schinazi-masque-h3-datagram-02.html.
 	EnableDatagrams bool
 
+	// Additional HTTP/3 settings.
+	// It is invalid to specify any settings defined by the HTTP/3 draft and the datagram draft.
+	AdditionalSettings map[uint64]uint64
+
 	// Dial specifies an optional dial function for creating QUIC
 	// connections for requests.
 	// If Dial is nil, quic.DialAddrEarlyContext will be used.

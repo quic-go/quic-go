@@ -70,7 +70,7 @@ const settingDatagram = 0xffd277
 
 type settingsFrame struct {
 	Datagram bool
-	other    map[uint64]uint64 // all settings that we don't explicitly recognize
+	Other    map[uint64]uint64 // all settings that we don't explicitly recognize
 }
 
 func parseSettingsFrame(r io.Reader, l uint64) (*settingsFrame, error) {
@@ -108,13 +108,13 @@ func parseSettingsFrame(r io.Reader, l uint64) (*settingsFrame, error) {
 			}
 			frame.Datagram = val == 1
 		default:
-			if _, ok := frame.other[id]; ok {
+			if _, ok := frame.Other[id]; ok {
 				return nil, fmt.Errorf("duplicate setting: %d", id)
 			}
-			if frame.other == nil {
-				frame.other = make(map[uint64]uint64)
+			if frame.Other == nil {
+				frame.Other = make(map[uint64]uint64)
 			}
-			frame.other[id] = val
+			frame.Other[id] = val
 		}
 	}
 	return frame, nil
@@ -123,7 +123,7 @@ func parseSettingsFrame(r io.Reader, l uint64) (*settingsFrame, error) {
 func (f *settingsFrame) Write(b *bytes.Buffer) {
 	quicvarint.Write(b, 0x4)
 	var l protocol.ByteCount
-	for id, val := range f.other {
+	for id, val := range f.Other {
 		l += quicvarint.Len(id) + quicvarint.Len(val)
 	}
 	if f.Datagram {
@@ -134,7 +134,7 @@ func (f *settingsFrame) Write(b *bytes.Buffer) {
 		quicvarint.Write(b, settingDatagram)
 		quicvarint.Write(b, 1)
 	}
-	for id, val := range f.other {
+	for id, val := range f.Other {
 		quicvarint.Write(b, id)
 		quicvarint.Write(b, val)
 	}

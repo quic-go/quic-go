@@ -85,8 +85,8 @@ var _ = Describe("Frames", func() {
 			Expect(err).ToNot(HaveOccurred())
 			Expect(frame).To(BeAssignableToTypeOf(&settingsFrame{}))
 			sf := frame.(*settingsFrame)
-			Expect(sf.other).To(HaveKeyWithValue(uint64(13), uint64(37)))
-			Expect(sf.other).To(HaveKeyWithValue(uint64(0xdead), uint64(0xbeef)))
+			Expect(sf.Other).To(HaveKeyWithValue(uint64(13), uint64(37)))
+			Expect(sf.Other).To(HaveKeyWithValue(uint64(0xdead), uint64(0xbeef)))
 		})
 
 		It("rejects duplicate settings", func() {
@@ -102,7 +102,7 @@ var _ = Describe("Frames", func() {
 		})
 
 		It("writes", func() {
-			sf := &settingsFrame{other: map[uint64]uint64{
+			sf := &settingsFrame{Other: map[uint64]uint64{
 				1:  2,
 				99: 999,
 				13: 37,
@@ -115,7 +115,7 @@ var _ = Describe("Frames", func() {
 		})
 
 		It("errors on EOF", func() {
-			sf := &settingsFrame{other: map[uint64]uint64{
+			sf := &settingsFrame{Other: map[uint64]uint64{
 				13:         37,
 				0xdeadbeef: 0xdecafbad,
 			}}
