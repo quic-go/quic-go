@@ -12,9 +12,9 @@ import (
 )
 
 func requestFromHeaders(headers []qpack.HeaderField) (*http.Request, error) {
-	var path, authority, method, contentLengthStr string
-	httpHeaders := http.Header{}
+	var path, authority, method, protocol, scheme, contentLengthStr string
 
+	httpHeaders := http.Header{}
 	for _, h := range headers {
 		switch h.Name {
 		case ":path":
@@ -23,6 +23,10 @@ func requestFromHeaders(headers []qpack.HeaderField) (*http.Request, error) {
 			method = h.Value
 		case ":authority":
 			authority = h.Value
+		case ":protocol":
+			protocol = h.Value
+		case ":scheme":
+			scheme = h.Value
 		case "content-length":
 			contentLengthStr = h.Value
 		default:
@@ -39,7 +43,12 @@ func requestFromHeaders(headers []qpack.HeaderField) (*http.Request, error) {
 
 	isConnect := method == http.MethodConnect
 	if isConnect {
-		if path != "" || authority == "" {
+		// Extended CONNECT, see https://datatracker.ietf.org/doc/html/rfc8441#section-4
+		if protocol != "" {
+			if scheme == "" || path == "" || authority == "" {
+				return nil, errors.New("extended CONNECT: :scheme, :path and :authority must not be empty")
+			}
+		} else if path != "" || authority == "" { // normal CONNECT
 			return nil, errors.New(":path must be empty and :authority must not be empty")
 		}
 	} else if len(path) == 0 || len(authority) == 0 || len(method) == 0 {
@@ -51,9 +60,14 @@ func requestFromHeaders(headers []qpack.HeaderField) (*http.Request, error) {
 	var err error
 
 	if isConnect {
-		u = &url.URL{Host: authority}
+		u = &url.URL{
+			Scheme: scheme,
+			Host:   authority,
+			Path:   path,
+		}
 		requestURI = authority
 	} else {
+		protocol = "HTTP/3"
 		u, err = url.ParseRequestURI(path)
 		if err != nil {
 			return nil, err
@@ -72,7 +86,7 @@ func requestFromHeaders(headers []qpack.HeaderField) (*http.Request, error) {
 	return &http.Request{
 		Method:        method,
 		URL:           u,
-		Proto:         "HTTP/3",
+		Proto:         protocol,
 		ProtoMajor:    3,
 		ProtoMinor:    0,
 		Header:        httpHeaders,
