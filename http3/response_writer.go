@@ -119,6 +119,10 @@ func (w *responseWriter) DataStream() quic.Stream {
 	return w.stream
 }
 
+func (w *responseWriter) StreamID() quic.StreamID {
+	return w.stream.StreamID()
+}
+
 // copied from http2/http2.go
 // bodyAllowedForStatus reports whether a given response status code
 // permits a body. See RFC 2616, section 4.4.
