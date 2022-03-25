@@ -26,6 +26,7 @@ const (
 	errorMessageError         errorCode = 0x10e
 	errorConnectError         errorCode = 0x10f
 	errorVersionFallback      errorCode = 0x110
+	errorDatagramError        errorCode = 0x4a1268
 )
 
 func (e errorCode) String() string {
@@ -64,6 +65,8 @@ func (e errorCode) String() string {
 		return "H3_CONNECT_ERROR"
 	case errorVersionFallback:
 		return "H3_VERSION_FALLBACK"
+	case errorDatagramError:
+		return "H3_DATAGRAM_ERROR"
 	default:
 		return fmt.Sprintf("unknown error code: %#x", uint16(e))
 	}

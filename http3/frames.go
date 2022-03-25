@@ -66,7 +66,7 @@ func (f *headersFrame) Write(b *bytes.Buffer) {
 	quicvarint.Write(b, f.Length)
 }
 
-const settingDatagram = 0x276
+const settingDatagram = 0xffd277
 
 type settingsFrame struct {
 	Datagram bool
