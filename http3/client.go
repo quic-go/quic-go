@@ -36,7 +36,7 @@ var defaultQuicConfig = &quic.Config{
 
 type dialFunc func(ctx context.Context, network, addr string, tlsCfg *tls.Config, cfg *quic.Config) (quic.EarlySession, error)
 
-var dialAddr = quic.DialAddrEarly
+var dialAddr = quic.DialAddrEarlyContext
 
 type roundTripperOpts struct {
 	DisableCompression bool
@@ -103,7 +103,7 @@ func (c *client) dial(ctx context.Context) error {
 	if c.dialer != nil {
 		c.session, err = c.dialer(ctx, "udp", c.hostname, c.tlsConf, c.config)
 	} else {
-		c.session, err = dialAddr(c.hostname, c.tlsConf, c.config)
+		c.session, err = dialAddr(ctx, c.hostname, c.tlsConf, c.config)
 	}
 	if err != nil {
 		return err

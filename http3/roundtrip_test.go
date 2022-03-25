@@ -82,7 +82,7 @@ var _ = Describe("RoundTripper", func() {
 		BeforeEach(func() {
 			session = mockquic.NewMockEarlySession(mockCtrl)
 			origDialAddr = dialAddr
-			dialAddr = func(addr string, tlsConf *tls.Config, config *quic.Config) (quic.EarlySession, error) {
+			dialAddr = func(context.Context, string, *tls.Config, *quic.Config) (quic.EarlySession, error) {
 				// return an error when trying to open a stream
 				// we don't want to test all the dial logic here, just that dialing happens at all
 				return session, nil
@@ -115,7 +115,7 @@ var _ = Describe("RoundTripper", func() {
 		It("uses the quic.Config, if provided", func() {
 			config := &quic.Config{HandshakeIdleTimeout: time.Millisecond}
 			var receivedConfig *quic.Config
-			dialAddr = func(addr string, tlsConf *tls.Config, config *quic.Config) (quic.EarlySession, error) {
+			dialAddr = func(_ context.Context, _ string, _ *tls.Config, config *quic.Config) (quic.EarlySession, error) {
 				receivedConfig = config
 				return nil, errors.New("handshake error")
 			}
