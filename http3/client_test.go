@@ -12,13 +12,13 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/golang/mock/gomock"
 	"github.com/lucas-clemente/quic-go"
 	mockquic "github.com/lucas-clemente/quic-go/internal/mocks/quic"
-	"github.com/lucas-clemente/quic-go/quicvarint"
-
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/internal/utils"
+	"github.com/lucas-clemente/quic-go/quicvarint"
+
+	"github.com/golang/mock/gomock"
 	"github.com/marten-seemann/qpack"
 
 	. "github.com/onsi/ginkgo"
@@ -122,8 +122,11 @@ var _ = Describe("Client", func() {
 		testErr := errors.New("test done")
 		tlsConf := &tls.Config{ServerName: "foo.bar"}
 		quicConf := &quic.Config{MaxIdleTimeout: 1337 * time.Second}
+		ctx, cancel := context.WithTimeout(context.Background(), time.Hour)
+		defer cancel()
 		var dialerCalled bool
-		dialer := func(network, address string, tlsConfP *tls.Config, quicConfP *quic.Config) (quic.EarlySession, error) {
+		dialer := func(ctxP context.Context, network, address string, tlsConfP *tls.Config, quicConfP *quic.Config) (quic.EarlySession, error) {
+			Expect(ctxP).To(Equal(ctx))
 			Expect(network).To(Equal("udp"))
 			Expect(address).To(Equal("localhost:1337"))
 			Expect(tlsConfP.ServerName).To(Equal("foo.bar"))
@@ -133,7 +136,7 @@ var _ = Describe("Client", func() {
 		}
 		client, err := newClient("localhost:1337", tlsConf, &roundTripperOpts{}, quicConf, dialer)
 		Expect(err).ToNot(HaveOccurred())
-		_, err = client.RoundTrip(req)
+		_, err = client.RoundTrip(req.WithContext(ctx))
 		Expect(err).To(MatchError(testErr))
 		Expect(dialerCalled).To(BeTrue())
 	})

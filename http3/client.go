@@ -34,6 +34,8 @@ var defaultQuicConfig = &quic.Config{
 	Versions:           []protocol.VersionNumber{protocol.VersionTLS},
 }
 
+type dialFunc func(ctx context.Context, network, addr string, tlsCfg *tls.Config, cfg *quic.Config) (quic.EarlySession, error)
+
 var dialAddr = quic.DialAddrEarly
 
 type roundTripperOpts struct {
@@ -49,7 +51,7 @@ type client struct {
 	opts    *roundTripperOpts
 
 	dialOnce     sync.Once
-	dialer       func(network, addr string, tlsCfg *tls.Config, cfg *quic.Config) (quic.EarlySession, error)
+	dialer       dialFunc
 	handshakeErr error
 
 	requestWriter *requestWriter
@@ -62,24 +64,18 @@ type client struct {
 	logger utils.Logger
 }
 
-func newClient(
-	hostname string,
-	tlsConf *tls.Config,
-	opts *roundTripperOpts,
-	quicConfig *quic.Config,
-	dialer func(network, addr string, tlsCfg *tls.Config, cfg *quic.Config) (quic.EarlySession, error),
-) (*client, error) {
-	if quicConfig == nil {
-		quicConfig = defaultQuicConfig.Clone()
-	} else if len(quicConfig.Versions) == 0 {
-		quicConfig = quicConfig.Clone()
-		quicConfig.Versions = []quic.VersionNumber{defaultQuicConfig.Versions[0]}
+func newClient(hostname string, tlsConf *tls.Config, opts *roundTripperOpts, conf *quic.Config, dialer dialFunc) (*client, error) {
+	if conf == nil {
+		conf = defaultQuicConfig.Clone()
+	} else if len(conf.Versions) == 0 {
+		conf = conf.Clone()
+		conf.Versions = []quic.VersionNumber{defaultQuicConfig.Versions[0]}
 	}
-	if len(quicConfig.Versions) != 1 {
+	if len(conf.Versions) != 1 {
 		return nil, errors.New("can only use a single QUIC version for dialing a HTTP/3 connection")
 	}
-	quicConfig.MaxIncomingStreams = -1 // don't allow any bidirectional streams
-	quicConfig.EnableDatagrams = opts.EnableDatagram
+	conf.MaxIncomingStreams = -1 // don't allow any bidirectional streams
+	conf.EnableDatagrams = opts.EnableDatagram
 	logger := utils.DefaultLogger.WithPrefix("h3 client")
 
 	if tlsConf == nil {
@@ -88,24 +84,24 @@ func newClient(
 		tlsConf = tlsConf.Clone()
 	}
 	// Replace existing ALPNs by H3
-	tlsConf.NextProtos = []string{versionToALPN(quicConfig.Versions[0])}
+	tlsConf.NextProtos = []string{versionToALPN(conf.Versions[0])}
 
 	return &client{
 		hostname:      authorityAddr("https", hostname),
 		tlsConf:       tlsConf,
 		requestWriter: newRequestWriter(logger),
 		decoder:       qpack.NewDecoder(func(hf qpack.HeaderField) {}),
-		config:        quicConfig,
+		config:        conf,
 		opts:          opts,
 		dialer:        dialer,
 		logger:        logger,
 	}, nil
 }
 
-func (c *client) dial() error {
+func (c *client) dial(ctx context.Context) error {
 	var err error
 	if c.dialer != nil {
-		c.session, err = c.dialer("udp", c.hostname, c.tlsConf, c.config)
+		c.session, err = c.dialer(ctx, "udp", c.hostname, c.tlsConf, c.config)
 	} else {
 		c.session, err = dialAddr(c.hostname, c.tlsConf, c.config)
 	}
@@ -212,7 +208,7 @@ func (c *client) RoundTrip(req *http.Request) (*http.Response, error) {
 	}
 
 	c.dialOnce.Do(func() {
-		c.handshakeErr = c.dial()
+		c.handshakeErr = c.dial(req.Context())
 	})
 
 	if c.handshakeErr != nil {
