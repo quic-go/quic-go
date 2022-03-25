@@ -76,7 +76,9 @@ func newClient(hostname string, tlsConf *tls.Config, opts *roundTripperOpts, con
 	if len(conf.Versions) != 1 {
 		return nil, errors.New("can only use a single QUIC version for dialing a HTTP/3 connection")
 	}
-	conf.MaxIncomingStreams = -1 // don't allow any bidirectional streams
+	if conf.MaxIncomingStreams == 0 {
+		conf.MaxIncomingStreams = -1 // don't allow any bidirectional streams
+	}
 	conf.EnableDatagrams = opts.EnableDatagram
 	logger := utils.DefaultLogger.WithPrefix("h3 client")
 
