@@ -12,13 +12,13 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/golang/mock/gomock"
 	"github.com/lucas-clemente/quic-go"
 	mockquic "github.com/lucas-clemente/quic-go/internal/mocks/quic"
-	"github.com/lucas-clemente/quic-go/quicvarint"
-
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/internal/utils"
+	"github.com/lucas-clemente/quic-go/quicvarint"
+
+	"github.com/golang/mock/gomock"
 	"github.com/marten-seemann/qpack"
 
 	. "github.com/onsi/ginkgo"
@@ -65,7 +65,7 @@ var _ = Describe("Client", func() {
 		client, err := newClient("localhost:1337", nil, &roundTripperOpts{}, nil, nil)
 		Expect(err).ToNot(HaveOccurred())
 		var dialAddrCalled bool
-		dialAddr = func(_ string, tlsConf *tls.Config, quicConf *quic.Config) (quic.EarlySession, error) {
+		dialAddr = func(_ context.Context, _ string, tlsConf *tls.Config, quicConf *quic.Config) (quic.EarlySession, error) {
 			Expect(quicConf).To(Equal(defaultQuicConfig))
 			Expect(tlsConf.NextProtos).To(Equal([]string{nextProtoH3}))
 			Expect(quicConf.Versions).To(Equal([]protocol.VersionNumber{protocol.Version1}))
@@ -80,7 +80,7 @@ var _ = Describe("Client", func() {
 		client, err := newClient("quic.clemente.io", nil, &roundTripperOpts{}, nil, nil)
 		Expect(err).ToNot(HaveOccurred())
 		var dialAddrCalled bool
-		dialAddr = func(hostname string, _ *tls.Config, _ *quic.Config) (quic.EarlySession, error) {
+		dialAddr = func(_ context.Context, hostname string, _ *tls.Config, _ *quic.Config) (quic.EarlySession, error) {
 			Expect(hostname).To(Equal("quic.clemente.io:443"))
 			dialAddrCalled = true
 			return nil, errors.New("test done")
@@ -100,12 +100,8 @@ var _ = Describe("Client", func() {
 		client, err := newClient("localhost:1337", tlsConf, &roundTripperOpts{}, quicConf, nil)
 		Expect(err).ToNot(HaveOccurred())
 		var dialAddrCalled bool
-		dialAddr = func(
-			hostname string,
-			tlsConfP *tls.Config,
-			quicConfP *quic.Config,
-		) (quic.EarlySession, error) {
-			Expect(hostname).To(Equal("localhost:1337"))
+		dialAddr = func(_ context.Context, host string, tlsConfP *tls.Config, quicConfP *quic.Config) (quic.EarlySession, error) {
+			Expect(host).To(Equal("localhost:1337"))
 			Expect(tlsConfP.ServerName).To(Equal(tlsConf.ServerName))
 			Expect(tlsConfP.NextProtos).To(Equal([]string{nextProtoH3}))
 			Expect(quicConfP.MaxIdleTimeout).To(Equal(quicConf.MaxIdleTimeout))
@@ -122,8 +118,11 @@ var _ = Describe("Client", func() {
 		testErr := errors.New("test done")
 		tlsConf := &tls.Config{ServerName: "foo.bar"}
 		quicConf := &quic.Config{MaxIdleTimeout: 1337 * time.Second}
+		ctx, cancel := context.WithTimeout(context.Background(), time.Hour)
+		defer cancel()
 		var dialerCalled bool
-		dialer := func(network, address string, tlsConfP *tls.Config, quicConfP *quic.Config) (quic.EarlySession, error) {
+		dialer := func(ctxP context.Context, network, address string, tlsConfP *tls.Config, quicConfP *quic.Config) (quic.EarlySession, error) {
+			Expect(ctxP).To(Equal(ctx))
 			Expect(network).To(Equal("udp"))
 			Expect(address).To(Equal("localhost:1337"))
 			Expect(tlsConfP.ServerName).To(Equal("foo.bar"))
@@ -133,7 +132,7 @@ var _ = Describe("Client", func() {
 		}
 		client, err := newClient("localhost:1337", tlsConf, &roundTripperOpts{}, quicConf, dialer)
 		Expect(err).ToNot(HaveOccurred())
-		_, err = client.RoundTrip(req)
+		_, err = client.RoundTrip(req.WithContext(ctx))
 		Expect(err).To(MatchError(testErr))
 		Expect(dialerCalled).To(BeTrue())
 	})
@@ -142,7 +141,7 @@ var _ = Describe("Client", func() {
 		testErr := errors.New("handshake error")
 		client, err := newClient("localhost:1337", nil, &roundTripperOpts{EnableDatagram: true}, nil, nil)
 		Expect(err).ToNot(HaveOccurred())
-		dialAddr = func(hostname string, _ *tls.Config, quicConf *quic.Config) (quic.EarlySession, error) {
+		dialAddr = func(_ context.Context, _ string, _ *tls.Config, quicConf *quic.Config) (quic.EarlySession, error) {
 			Expect(quicConf.EnableDatagrams).To(BeTrue())
 			return nil, testErr
 		}
@@ -154,7 +153,7 @@ var _ = Describe("Client", func() {
 		testErr := errors.New("handshake error")
 		client, err := newClient("localhost:1337", nil, &roundTripperOpts{}, nil, nil)
 		Expect(err).ToNot(HaveOccurred())
-		dialAddr = func(hostname string, _ *tls.Config, _ *quic.Config) (quic.EarlySession, error) {
+		dialAddr = func(context.Context, string, *tls.Config, *quic.Config) (quic.EarlySession, error) {
 			return nil, testErr
 		}
 		_, err = client.RoundTrip(req)
@@ -179,7 +178,7 @@ var _ = Describe("Client", func() {
 			testErr := errors.New("handshake error")
 			req, err := http.NewRequest("masque", "masque://quic.clemente.io:1337/foobar.html", nil)
 			Expect(err).ToNot(HaveOccurred())
-			dialAddr = func(hostname string, _ *tls.Config, _ *quic.Config) (quic.EarlySession, error) {
+			dialAddr = func(context.Context, string, *tls.Config, *quic.Config) (quic.EarlySession, error) {
 				return nil, testErr
 			}
 			_, err = client.RoundTrip(req)
@@ -206,7 +205,7 @@ var _ = Describe("Client", func() {
 			sess.EXPECT().OpenUniStream().Return(controlStr, nil)
 			sess.EXPECT().HandshakeComplete().Return(handshakeCtx)
 			sess.EXPECT().OpenStreamSync(gomock.Any()).Return(nil, errors.New("done"))
-			dialAddr = func(hostname string, _ *tls.Config, _ *quic.Config) (quic.EarlySession, error) { return sess, nil }
+			dialAddr = func(context.Context, string, *tls.Config, *quic.Config) (quic.EarlySession, error) { return sess, nil }
 			var err error
 			request, err = http.NewRequest("GET", "https://quic.clemente.io:1337/file1.dat", nil)
 			Expect(err).ToNot(HaveOccurred())
@@ -453,7 +452,7 @@ var _ = Describe("Client", func() {
 				<-testDone
 				return nil, errors.New("test done")
 			})
-			dialAddr = func(hostname string, _ *tls.Config, _ *quic.Config) (quic.EarlySession, error) { return sess, nil }
+			dialAddr = func(context.Context, string, *tls.Config, *quic.Config) (quic.EarlySession, error) { return sess, nil }
 			var err error
 			request, err = http.NewRequest("GET", "https://quic.clemente.io:1337/file1.dat", nil)
 			Expect(err).ToNot(HaveOccurred())
