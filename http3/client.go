@@ -34,7 +34,7 @@ var defaultQuicConfig = &quic.Config{
 	Versions:           []protocol.VersionNumber{protocol.VersionTLS},
 }
 
-type dialFunc func(ctx context.Context, network, addr string, tlsCfg *tls.Config, cfg *quic.Config) (quic.EarlySession, error)
+type dialFunc func(ctx context.Context, network, addr string, tlsCfg *tls.Config, cfg *quic.Config) (quic.EarlyConnection, error)
 
 var dialAddr = quic.DialAddrEarlyContext
 
@@ -59,7 +59,7 @@ type client struct {
 	decoder *qpack.Decoder
 
 	hostname string
-	session  quic.EarlySession
+	session  quic.EarlyConnection
 
 	logger utils.Logger
 }

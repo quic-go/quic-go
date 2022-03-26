@@ -222,10 +222,10 @@ type session struct {
 }
 
 var (
-	_                       Connection   = &session{}
-	_                       EarlySession = &session{}
-	_                       streamSender = &session{}
-	deadlineSendImmediately              = time.Time{}.Add(42 * time.Millisecond) // any value > time.Time{} and before time.Now() is fine
+	_                       Connection      = &session{}
+	_                       EarlyConnection = &session{}
+	_                       streamSender    = &session{}
+	deadlineSendImmediately                 = time.Time{}.Add(42 * time.Millisecond) // any value > time.Time{} and before time.Now() is fine
 )
 
 var newSession = func(
@@ -1996,7 +1996,7 @@ func (s *session) GetVersion() protocol.VersionNumber {
 	return s.version
 }
 
-func (s *session) NextSession() Connection {
+func (s *session) NextConnection() Connection {
 	<-s.HandshakeComplete().Done()
 	s.streamsMap.UseResetMaps()
 	return s

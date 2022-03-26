@@ -42,7 +42,7 @@ type packetHandlerManager interface {
 }
 
 type quicSession interface {
-	EarlySession
+	EarlyConnection
 	earlySessionReady() <-chan struct{}
 	handlePacket(*receivedPacket)
 	GetVersion() protocol.VersionNumber
@@ -112,7 +112,7 @@ type earlyServer struct{ *baseServer }
 
 var _ EarlyListener = &earlyServer{}
 
-func (s *earlyServer) Accept(ctx context.Context) (EarlySession, error) {
+func (s *earlyServer) Accept(ctx context.Context) (EarlyConnection, error) {
 	return s.baseServer.accept(ctx)
 }
 

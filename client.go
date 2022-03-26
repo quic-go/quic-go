@@ -68,7 +68,7 @@ func DialAddrEarly(
 	addr string,
 	tlsConf *tls.Config,
 	config *Config,
-) (EarlySession, error) {
+) (EarlyConnection, error) {
 	return DialAddrEarlyContext(context.Background(), addr, tlsConf, config)
 }
 
@@ -79,7 +79,7 @@ func DialAddrEarlyContext(
 	addr string,
 	tlsConf *tls.Config,
 	config *Config,
-) (EarlySession, error) {
+) (EarlyConnection, error) {
 	sess, err := dialAddrContext(ctx, addr, tlsConf, config, true)
 	if err != nil {
 		return nil, err
@@ -146,7 +146,7 @@ func DialEarly(
 	host string,
 	tlsConf *tls.Config,
 	config *Config,
-) (EarlySession, error) {
+) (EarlyConnection, error) {
 	return DialEarlyContext(context.Background(), pconn, remoteAddr, host, tlsConf, config)
 }
 
@@ -159,7 +159,7 @@ func DialEarlyContext(
 	host string,
 	tlsConf *tls.Config,
 	config *Config,
-) (EarlySession, error) {
+) (EarlyConnection, error) {
 	return dialContext(ctx, pconn, remoteAddr, host, tlsConf, config, true, false)
 }
 

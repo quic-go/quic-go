@@ -199,11 +199,11 @@ type Connection interface {
 	ReceiveMessage() ([]byte, error)
 }
 
-// An EarlySession is a connection that is handshaking.
+// An EarlyConnection is a connection that is handshaking.
 // Data sent during the handshake is encrypted using the forward secure keys.
 // When using client certificates, the client's identity is only verified
 // after completion of the handshake.
-type EarlySession interface {
+type EarlyConnection interface {
 	Connection
 
 	// HandshakeComplete blocks until the handshake completes (or fails).
@@ -211,7 +211,7 @@ type EarlySession interface {
 	// Note that the client's identity hasn't been verified yet.
 	HandshakeComplete() context.Context
 
-	NextSession() Connection
+	NextConnection() Connection
 }
 
 // Config contains all configuration data needed for a QUIC server or client.
@@ -326,5 +326,5 @@ type EarlyListener interface {
 	// Addr returns the local network addr that the server is listening on.
 	Addr() net.Addr
 	// Accept returns new early connections. It should be called in a loop.
-	Accept(context.Context) (EarlySession, error)
+	Accept(context.Context) (EarlyConnection, error)
 }

@@ -45,7 +45,7 @@ type fakeClosingListener struct {
 	cancel context.CancelFunc
 }
 
-func (ln *fakeClosingListener) Accept(ctx context.Context) (quic.EarlySession, error) {
+func (ln *fakeClosingListener) Accept(ctx context.Context) (quic.EarlyConnection, error) {
 	Expect(ctx).To(Equal(context.Background()))
 	return ln.listenerWrapper.Accept(ln.ctx)
 }

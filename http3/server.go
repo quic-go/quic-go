@@ -334,7 +334,7 @@ func (s *Server) removeListener(l *quic.EarlyListener) {
 	s.mutex.Unlock()
 }
 
-func (s *Server) handleConn(sess quic.EarlySession) {
+func (s *Server) handleConn(sess quic.EarlyConnection) {
 	decoder := qpack.NewDecoder(nil)
 
 	// send a SETTINGS frame
@@ -381,7 +381,7 @@ func (s *Server) handleConn(sess quic.EarlySession) {
 	}
 }
 
-func (s *Server) handleUnidirectionalStreams(sess quic.EarlySession) {
+func (s *Server) handleUnidirectionalStreams(sess quic.EarlyConnection) {
 	for {
 		str, err := sess.AcceptUniStream(context.Background())
 		if err != nil {
