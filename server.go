@@ -41,7 +41,7 @@ type packetHandlerManager interface {
 	CloseServer()
 }
 
-type quicSession interface {
+type quicConn interface {
 	EarlyConnection
 	earlySessionReady() <-chan struct{}
 	handlePacket(*receivedPacket)
@@ -90,14 +90,14 @@ type baseServer struct {
 		uint64,
 		utils.Logger,
 		protocol.VersionNumber,
-	) quicSession
+	) quicConn
 
 	serverError error
 	errorChan   chan struct{}
 	closed      bool
 	running     chan struct{} // closed as soon as run() returns
 
-	sessionQueue    chan quicSession
+	sessionQueue    chan quicConn
 	sessionQueueLen int32 // to be used as an atomic
 
 	logger utils.Logger
@@ -205,7 +205,7 @@ func listen(conn net.PacketConn, tlsConf *tls.Config, config *Config, acceptEarl
 		config:              config,
 		tokenGenerator:      tokenGenerator,
 		sessionHandler:      sessionHandler,
-		sessionQueue:        make(chan quicSession),
+		sessionQueue:        make(chan quicConn),
 		errorChan:           make(chan struct{}),
 		running:             make(chan struct{}),
 		receivedPackets:     make(chan *receivedPacket, protocol.MaxServerUnprocessedPackets),
@@ -264,7 +264,7 @@ func (s *baseServer) Accept(ctx context.Context) (Connection, error) {
 	return s.accept(ctx)
 }
 
-func (s *baseServer) accept(ctx context.Context) (quicSession, error) {
+func (s *baseServer) accept(ctx context.Context) (quicConn, error) {
 	select {
 	case <-ctx.Done():
 		return nil, ctx.Err()
@@ -452,7 +452,7 @@ func (s *baseServer) handleInitialImpl(p *receivedPacket, hdr *wire.Header) erro
 		return err
 	}
 	s.logger.Debugf("Changing connection ID to %s.", connID)
-	var sess quicSession
+	var sess quicConn
 	tracingID := nextSessionTracingID()
 	if added := s.sessionHandler.AddWithConnID(hdr.DestConnectionID, connID, func() packetHandler {
 		var tracer logging.ConnectionTracer
@@ -500,7 +500,7 @@ func (s *baseServer) handleInitialImpl(p *receivedPacket, hdr *wire.Header) erro
 	return nil
 }
 
-func (s *baseServer) handleNewSession(sess quicSession) {
+func (s *baseServer) handleNewSession(sess quicConn) {
 	sessCtx := sess.Context()
 	if s.acceptEarlySessions {
 		// wait until the early session is ready (or the handshake fails)

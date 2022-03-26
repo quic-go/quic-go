@@ -245,7 +245,7 @@ var newSession = func(
 	tracingID uint64,
 	logger utils.Logger,
 	v protocol.VersionNumber,
-) quicSession {
+) quicConn {
 	s := &session{
 		conn:                  conn,
 		config:                conf,
@@ -376,7 +376,7 @@ var newClientSession = func(
 	tracingID uint64,
 	logger utils.Logger,
 	v protocol.VersionNumber,
-) quicSession {
+) quicConn {
 	s := &session{
 		conn:                  conn,
 		config:                conf,

@@ -35,7 +35,7 @@ type client struct {
 
 	handshakeChan chan struct{}
 
-	session quicSession
+	session quicConn
 
 	tracer    logging.ConnectionTracer
 	tracingID uint64
@@ -105,7 +105,7 @@ func dialAddrContext(
 	tlsConf *tls.Config,
 	config *Config,
 	use0RTT bool,
-) (quicSession, error) {
+) (quicConn, error) {
 	udpAddr, err := net.ResolveUDPAddr("udp", addr)
 	if err != nil {
 		return nil, err
@@ -185,7 +185,7 @@ func dialContext(
 	config *Config,
 	use0RTT bool,
 	createdPacketConn bool,
-) (quicSession, error) {
+) (quicConn, error) {
 	if tlsConf == nil {
 		return nil, errors.New("quic: tls.Config not set")
 	}

@@ -45,7 +45,7 @@ var _ = Describe("Client", func() {
 			tracingID uint64,
 			logger utils.Logger,
 			v protocol.VersionNumber,
-		) quicSession
+		) quicConn
 	)
 
 	BeforeEach(func() {
@@ -57,7 +57,6 @@ var _ = Describe("Client", func() {
 		tr.EXPECT().TracerForConnection(gomock.Any(), protocol.PerspectiveClient, gomock.Any()).Return(tracer).MaxTimes(1)
 		config = &Config{Tracer: tr, Versions: []protocol.VersionNumber{protocol.VersionTLS}}
 		Eventually(areSessionsRunning).Should(BeFalse())
-		// sess = NewMockQuicSession(mockCtrl)
 		addr = &net.UDPAddr{IP: net.IPv4(192, 168, 100, 200), Port: 1337}
 		packetConn = NewMockPacketConn(mockCtrl)
 		packetConn.EXPECT().LocalAddr().Return(&net.UDPAddr{}).AnyTimes()
@@ -120,7 +119,7 @@ var _ = Describe("Client", func() {
 
 			remoteAddrChan := make(chan string, 1)
 			newClientSession = func(
-				conn sendConn,
+				sconn sendConn,
 				_ sessionRunner,
 				_ protocol.ConnectionID,
 				_ protocol.ConnectionID,
@@ -133,12 +132,12 @@ var _ = Describe("Client", func() {
 				_ uint64,
 				_ utils.Logger,
 				_ protocol.VersionNumber,
-			) quicSession {
-				remoteAddrChan <- conn.RemoteAddr().String()
-				sess := NewMockQuicSession(mockCtrl)
-				sess.EXPECT().run()
-				sess.EXPECT().HandshakeComplete().Return(context.Background())
-				return sess
+			) quicConn {
+				remoteAddrChan <- sconn.RemoteAddr().String()
+				conn := NewMockQuicConn(mockCtrl)
+				conn.EXPECT().run()
+				conn.EXPECT().HandshakeComplete().Return(context.Background())
+				return conn
 			}
 			_, err := DialAddr("localhost:17890", tlsConf, &Config{HandshakeIdleTimeout: time.Millisecond})
 			Expect(err).ToNot(HaveOccurred())
@@ -166,12 +165,12 @@ var _ = Describe("Client", func() {
 				_ uint64,
 				_ utils.Logger,
 				_ protocol.VersionNumber,
-			) quicSession {
+			) quicConn {
 				hostnameChan <- tlsConf.ServerName
-				sess := NewMockQuicSession(mockCtrl)
-				sess.EXPECT().run()
-				sess.EXPECT().HandshakeComplete().Return(context.Background())
-				return sess
+				conn := NewMockQuicConn(mockCtrl)
+				conn.EXPECT().run()
+				conn.EXPECT().HandshakeComplete().Return(context.Background())
+				return conn
 			}
 			tlsConf.ServerName = "foobar"
 			_, err := DialAddr("localhost:17890", tlsConf, nil)
@@ -199,12 +198,12 @@ var _ = Describe("Client", func() {
 				_ uint64,
 				_ utils.Logger,
 				_ protocol.VersionNumber,
-			) quicSession {
+			) quicConn {
 				hostnameChan <- tlsConf.ServerName
-				sess := NewMockQuicSession(mockCtrl)
-				sess.EXPECT().HandshakeComplete().Return(context.Background())
-				sess.EXPECT().run()
-				return sess
+				conn := NewMockQuicConn(mockCtrl)
+				conn.EXPECT().HandshakeComplete().Return(context.Background())
+				conn.EXPECT().run()
+				return conn
 			}
 			tracer.EXPECT().StartedConnection(packetConn.LocalAddr(), addr, gomock.Any(), gomock.Any())
 			_, err := Dial(
@@ -238,14 +237,14 @@ var _ = Describe("Client", func() {
 				_ uint64,
 				_ utils.Logger,
 				_ protocol.VersionNumber,
-			) quicSession {
+			) quicConn {
 				Expect(enable0RTT).To(BeFalse())
-				sess := NewMockQuicSession(mockCtrl)
-				sess.EXPECT().run().Do(func() { close(run) })
+				conn := NewMockQuicConn(mockCtrl)
+				conn.EXPECT().run().Do(func() { close(run) })
 				ctx, cancel := context.WithCancel(context.Background())
 				cancel()
-				sess.EXPECT().HandshakeComplete().Return(ctx)
-				return sess
+				conn.EXPECT().HandshakeComplete().Return(ctx)
+				return conn
 			}
 			tracer.EXPECT().StartedConnection(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any())
 			s, err := Dial(
@@ -281,13 +280,13 @@ var _ = Describe("Client", func() {
 				_ uint64,
 				_ utils.Logger,
 				_ protocol.VersionNumber,
-			) quicSession {
+			) quicConn {
 				Expect(enable0RTT).To(BeTrue())
-				sess := NewMockQuicSession(mockCtrl)
-				sess.EXPECT().run().Do(func() { <-done })
-				sess.EXPECT().HandshakeComplete().Return(context.Background())
-				sess.EXPECT().earlySessionReady().Return(readyChan)
-				return sess
+				conn := NewMockQuicConn(mockCtrl)
+				conn.EXPECT().run().Do(func() { <-done })
+				conn.EXPECT().HandshakeComplete().Return(context.Background())
+				conn.EXPECT().earlySessionReady().Return(readyChan)
+				return conn
 			}
 
 			go func() {
@@ -329,11 +328,11 @@ var _ = Describe("Client", func() {
 				_ uint64,
 				_ utils.Logger,
 				_ protocol.VersionNumber,
-			) quicSession {
-				sess := NewMockQuicSession(mockCtrl)
-				sess.EXPECT().run().Return(testErr)
-				sess.EXPECT().HandshakeComplete().Return(context.Background())
-				return sess
+			) quicConn {
+				conn := NewMockQuicConn(mockCtrl)
+				conn.EXPECT().run().Return(testErr)
+				conn.EXPECT().HandshakeComplete().Return(context.Background())
+				return conn
 			}
 			tracer.EXPECT().StartedConnection(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any())
 			_, err := Dial(
@@ -353,11 +352,11 @@ var _ = Describe("Client", func() {
 
 			sessionRunning := make(chan struct{})
 			defer close(sessionRunning)
-			sess := NewMockQuicSession(mockCtrl)
-			sess.EXPECT().run().Do(func() {
+			conn := NewMockQuicConn(mockCtrl)
+			conn.EXPECT().run().Do(func() {
 				<-sessionRunning
 			})
-			sess.EXPECT().HandshakeComplete().Return(context.Background())
+			conn.EXPECT().HandshakeComplete().Return(context.Background())
 			newClientSession = func(
 				_ sendConn,
 				_ sessionRunner,
@@ -372,8 +371,8 @@ var _ = Describe("Client", func() {
 				_ uint64,
 				_ utils.Logger,
 				_ protocol.VersionNumber,
-			) quicSession {
-				return sess
+			) quicConn {
+				return conn
 			}
 			ctx, cancel := context.WithCancel(context.Background())
 			dialed := make(chan struct{})
@@ -392,7 +391,7 @@ var _ = Describe("Client", func() {
 				close(dialed)
 			}()
 			Consistently(dialed).ShouldNot(BeClosed())
-			sess.EXPECT().shutdown()
+			conn.EXPECT().shutdown()
 			cancel()
 			Eventually(dialed).Should(BeClosed())
 		})
@@ -406,10 +405,10 @@ var _ = Describe("Client", func() {
 			mockMultiplexer.EXPECT().AddConn(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(manager, nil)
 			manager.EXPECT().Add(gomock.Any(), gomock.Any())
 
-			var conn sendConn
+			var sconn sendConn
 			run := make(chan struct{})
 			sessionCreated := make(chan struct{})
-			sess := NewMockQuicSession(mockCtrl)
+			conn := NewMockQuicConn(mockCtrl)
 			newClientSession = func(
 				connP sendConn,
 				_ sessionRunner,
@@ -424,15 +423,15 @@ var _ = Describe("Client", func() {
 				_ uint64,
 				_ utils.Logger,
 				_ protocol.VersionNumber,
-			) quicSession {
-				conn = connP
+			) quicConn {
+				sconn = connP
 				close(sessionCreated)
-				return sess
+				return conn
 			}
-			sess.EXPECT().run().Do(func() {
+			conn.EXPECT().run().Do(func() {
 				<-run
 			})
-			sess.EXPECT().HandshakeComplete().Return(context.Background())
+			conn.EXPECT().HandshakeComplete().Return(context.Background())
 
 			done := make(chan struct{})
 			go func() {
@@ -445,7 +444,7 @@ var _ = Describe("Client", func() {
 			Eventually(sessionCreated).Should(BeClosed())
 
 			// check that the connection is not closed
-			Expect(conn.Write([]byte("foobar"))).To(Succeed())
+			Expect(sconn.Write([]byte("foobar"))).To(Succeed())
 
 			manager.EXPECT().Destroy()
 			close(run)
@@ -544,16 +543,16 @@ var _ = Describe("Client", func() {
 				_ uint64,
 				_ utils.Logger,
 				versionP protocol.VersionNumber,
-			) quicSession {
+			) quicConn {
 				cconn = connP
 				version = versionP
 				conf = configP
 				close(c)
 				// TODO: check connection IDs?
-				sess := NewMockQuicSession(mockCtrl)
-				sess.EXPECT().run()
-				sess.EXPECT().HandshakeComplete().Return(context.Background())
-				return sess
+				conn := NewMockQuicConn(mockCtrl)
+				conn.EXPECT().run()
+				conn.EXPECT().HandshakeComplete().Return(context.Background())
+				return conn
 			}
 			_, err := Dial(packetConn, addr, "localhost:1337", tlsConf, config)
 			Expect(err).ToNot(HaveOccurred())
@@ -584,23 +583,23 @@ var _ = Describe("Client", func() {
 				_ uint64,
 				_ utils.Logger,
 				versionP protocol.VersionNumber,
-			) quicSession {
-				sess := NewMockQuicSession(mockCtrl)
-				sess.EXPECT().HandshakeComplete().Return(context.Background())
+			) quicConn {
+				conn := NewMockQuicConn(mockCtrl)
+				conn.EXPECT().HandshakeComplete().Return(context.Background())
 				if counter == 0 {
 					Expect(pn).To(BeZero())
 					Expect(hasNegotiatedVersion).To(BeFalse())
-					sess.EXPECT().run().Return(&errCloseForRecreating{
+					conn.EXPECT().run().Return(&errCloseForRecreating{
 						nextPacketNumber: 109,
 						nextVersion:      789,
 					})
 				} else {
 					Expect(pn).To(Equal(protocol.PacketNumber(109)))
 					Expect(hasNegotiatedVersion).To(BeTrue())
-					sess.EXPECT().run()
+					conn.EXPECT().run()
 				}
 				counter++
-				return sess
+				return conn
 			}
 
 			tracer.EXPECT().StartedConnection(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any())

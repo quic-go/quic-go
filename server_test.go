@@ -323,7 +323,7 @@ var _ = Describe("Server", func() {
 					return true
 				})
 				tracer.EXPECT().TracerForConnection(gomock.Any(), protocol.PerspectiveServer, protocol.ConnectionID{0xde, 0xad, 0xc0, 0xde})
-				sess := NewMockQuicSession(mockCtrl)
+				conn := NewMockQuicConn(mockCtrl)
 				serv.newSession = func(
 					_ sendConn,
 					_ sessionRunner,
@@ -341,7 +341,7 @@ var _ = Describe("Server", func() {
 					_ uint64,
 					_ utils.Logger,
 					_ protocol.VersionNumber,
-				) quicSession {
+				) quicConn {
 					Expect(enable0RTT).To(BeFalse())
 					Expect(origDestConnID).To(Equal(protocol.ConnectionID{0xde, 0xad, 0xc0, 0xde}))
 					Expect(retrySrcConnID).To(Equal(&protocol.ConnectionID{0xde, 0xca, 0xfb, 0xad}))
@@ -352,11 +352,11 @@ var _ = Describe("Server", func() {
 					Expect(srcConnID).ToNot(Equal(hdr.SrcConnectionID))
 					Expect(srcConnID).To(Equal(newConnID))
 					Expect(tokenP).To(Equal(token))
-					sess.EXPECT().handlePacket(p)
-					sess.EXPECT().run().Do(func() { close(run) })
-					sess.EXPECT().Context().Return(context.Background())
-					sess.EXPECT().HandshakeComplete().Return(context.Background())
-					return sess
+					conn.EXPECT().handlePacket(p)
+					conn.EXPECT().run().Do(func() { close(run) })
+					conn.EXPECT().Context().Return(context.Background())
+					conn.EXPECT().HandshakeComplete().Return(context.Background())
+					return conn
 				}
 
 				done := make(chan struct{})
@@ -602,7 +602,7 @@ var _ = Describe("Server", func() {
 				})
 				tracer.EXPECT().TracerForConnection(gomock.Any(), protocol.PerspectiveServer, protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8, 9, 10})
 
-				sess := NewMockQuicSession(mockCtrl)
+				conn := NewMockQuicConn(mockCtrl)
 				serv.newSession = func(
 					_ sendConn,
 					_ sessionRunner,
@@ -620,7 +620,7 @@ var _ = Describe("Server", func() {
 					_ uint64,
 					_ utils.Logger,
 					_ protocol.VersionNumber,
-				) quicSession {
+				) quicConn {
 					Expect(enable0RTT).To(BeFalse())
 					Expect(origDestConnID).To(Equal(hdr.DestConnectionID))
 					Expect(retrySrcConnID).To(BeNil())
@@ -631,11 +631,11 @@ var _ = Describe("Server", func() {
 					Expect(srcConnID).ToNot(Equal(hdr.SrcConnectionID))
 					Expect(srcConnID).To(Equal(newConnID))
 					Expect(tokenP).To(Equal(token))
-					sess.EXPECT().handlePacket(p)
-					sess.EXPECT().run().Do(func() { close(run) })
-					sess.EXPECT().Context().Return(context.Background())
-					sess.EXPECT().HandshakeComplete().Return(context.Background())
-					return sess
+					conn.EXPECT().handlePacket(p)
+					conn.EXPECT().run().Do(func() { close(run) })
+					conn.EXPECT().Context().Return(context.Background())
+					conn.EXPECT().HandshakeComplete().Return(context.Background())
+					return conn
 				}
 
 				done := make(chan struct{})
@@ -680,15 +680,15 @@ var _ = Describe("Server", func() {
 					_ uint64,
 					_ utils.Logger,
 					_ protocol.VersionNumber,
-				) quicSession {
+				) quicConn {
 					<-acceptSession
 					atomic.AddUint32(&counter, 1)
-					sess := NewMockQuicSession(mockCtrl)
-					sess.EXPECT().handlePacket(gomock.Any()).MaxTimes(1)
-					sess.EXPECT().run().MaxTimes(1)
-					sess.EXPECT().Context().Return(context.Background()).MaxTimes(1)
-					sess.EXPECT().HandshakeComplete().Return(context.Background()).MaxTimes(1)
-					return sess
+					conn := NewMockQuicConn(mockCtrl)
+					conn.EXPECT().handlePacket(gomock.Any()).MaxTimes(1)
+					conn.EXPECT().run().MaxTimes(1)
+					conn.EXPECT().Context().Return(context.Background()).MaxTimes(1)
+					conn.EXPECT().HandshakeComplete().Return(context.Background()).MaxTimes(1)
+					return conn
 				}
 
 				p := getInitial(protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8})
@@ -716,7 +716,7 @@ var _ = Describe("Server", func() {
 			It("only creates a single session for a duplicate Initial", func() {
 				serv.config.AcceptToken = func(_ net.Addr, _ *Token) bool { return true }
 				var createdSession bool
-				sess := NewMockQuicSession(mockCtrl)
+				conn := NewMockQuicConn(mockCtrl)
 				serv.newSession = func(
 					_ sendConn,
 					runner sessionRunner,
@@ -734,9 +734,9 @@ var _ = Describe("Server", func() {
 					_ uint64,
 					_ utils.Logger,
 					_ protocol.VersionNumber,
-				) quicSession {
+				) quicConn {
 					createdSession = true
-					return sess
+					return conn
 				}
 
 				p := getInitial(protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8, 9})
@@ -765,15 +765,15 @@ var _ = Describe("Server", func() {
 					_ uint64,
 					_ utils.Logger,
 					_ protocol.VersionNumber,
-				) quicSession {
-					sess := NewMockQuicSession(mockCtrl)
-					sess.EXPECT().handlePacket(gomock.Any())
-					sess.EXPECT().run()
-					sess.EXPECT().Context().Return(context.Background())
+				) quicConn {
+					conn := NewMockQuicConn(mockCtrl)
+					conn.EXPECT().handlePacket(gomock.Any())
+					conn.EXPECT().run()
+					conn.EXPECT().Context().Return(context.Background())
 					ctx, cancel := context.WithCancel(context.Background())
 					cancel()
-					sess.EXPECT().HandshakeComplete().Return(ctx)
-					return sess
+					conn.EXPECT().HandshakeComplete().Return(ctx)
+					return conn
 				}
 
 				phm.EXPECT().AddWithConnID(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(func(_, _ protocol.ConnectionID, fn func() packetHandler) bool {
@@ -819,7 +819,7 @@ var _ = Describe("Server", func() {
 				p := getInitial(protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8, 9, 10})
 				ctx, cancel := context.WithCancel(context.Background())
 				sessionCreated := make(chan struct{})
-				sess := NewMockQuicSession(mockCtrl)
+				conn := NewMockQuicConn(mockCtrl)
 				serv.newSession = func(
 					_ sendConn,
 					runner sessionRunner,
@@ -837,15 +837,15 @@ var _ = Describe("Server", func() {
 					_ uint64,
 					_ utils.Logger,
 					_ protocol.VersionNumber,
-				) quicSession {
-					sess.EXPECT().handlePacket(p)
-					sess.EXPECT().run()
-					sess.EXPECT().Context().Return(ctx)
+				) quicConn {
+					conn.EXPECT().handlePacket(p)
+					conn.EXPECT().run()
+					conn.EXPECT().Context().Return(ctx)
 					ctx, cancel := context.WithCancel(context.Background())
 					cancel()
-					sess.EXPECT().HandshakeComplete().Return(ctx)
+					conn.EXPECT().HandshakeComplete().Return(ctx)
 					close(sessionCreated)
-					return sess
+					return conn
 				}
 
 				phm.EXPECT().AddWithConnID(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(func(_, _ protocol.ConnectionID, fn func() packetHandler) bool {
@@ -872,7 +872,7 @@ var _ = Describe("Server", func() {
 
 				// make the go routine return
 				phm.EXPECT().CloseServer()
-				sess.EXPECT().getPerspective().MaxTimes(2) // once for every conn ID
+				conn.EXPECT().getPerspective().MaxTimes(2) // once for every conn ID
 				Expect(serv.Close()).To(Succeed())
 				Eventually(done).Should(BeClosed())
 			})
@@ -919,14 +919,14 @@ var _ = Describe("Server", func() {
 			})
 
 			It("accepts new sessions when the handshake completes", func() {
-				sess := NewMockQuicSession(mockCtrl)
+				conn := NewMockQuicConn(mockCtrl)
 
 				done := make(chan struct{})
 				go func() {
 					defer GinkgoRecover()
 					s, err := serv.Accept(context.Background())
 					Expect(err).ToNot(HaveOccurred())
-					Expect(s).To(Equal(sess))
+					Expect(s).To(Equal(conn))
 					close(done)
 				}()
 
@@ -949,12 +949,12 @@ var _ = Describe("Server", func() {
 					_ uint64,
 					_ utils.Logger,
 					_ protocol.VersionNumber,
-				) quicSession {
-					sess.EXPECT().handlePacket(gomock.Any())
-					sess.EXPECT().HandshakeComplete().Return(ctx)
-					sess.EXPECT().run().Do(func() {})
-					sess.EXPECT().Context().Return(context.Background())
-					return sess
+				) quicConn {
+					conn.EXPECT().handlePacket(gomock.Any())
+					conn.EXPECT().HandshakeComplete().Return(ctx)
+					conn.EXPECT().run().Do(func() {})
+					conn.EXPECT().Context().Return(context.Background())
+					return conn
 				}
 				phm.EXPECT().AddWithConnID(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(func(_, _ protocol.ConnectionID, fn func() packetHandler) bool {
 					phm.EXPECT().GetStatelessResetToken(gomock.Any())
@@ -993,14 +993,14 @@ var _ = Describe("Server", func() {
 		})
 
 		It("accepts new sessions when they become ready", func() {
-			sess := NewMockQuicSession(mockCtrl)
+			conn := NewMockQuicConn(mockCtrl)
 
 			done := make(chan struct{})
 			go func() {
 				defer GinkgoRecover()
 				s, err := serv.Accept(context.Background())
 				Expect(err).ToNot(HaveOccurred())
-				Expect(s).To(Equal(sess))
+				Expect(s).To(Equal(conn))
 				close(done)
 			}()
 
@@ -1023,13 +1023,13 @@ var _ = Describe("Server", func() {
 				_ uint64,
 				_ utils.Logger,
 				_ protocol.VersionNumber,
-			) quicSession {
+			) quicConn {
 				Expect(enable0RTT).To(BeTrue())
-				sess.EXPECT().handlePacket(gomock.Any())
-				sess.EXPECT().run().Do(func() {})
-				sess.EXPECT().earlySessionReady().Return(ready)
-				sess.EXPECT().Context().Return(context.Background())
-				return sess
+				conn.EXPECT().handlePacket(gomock.Any())
+				conn.EXPECT().run().Do(func() {})
+				conn.EXPECT().earlySessionReady().Return(ready)
+				conn.EXPECT().Context().Return(context.Background())
+				return conn
 			}
 			phm.EXPECT().AddWithConnID(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(func(_, _ protocol.ConnectionID, fn func() packetHandler) bool {
 				phm.EXPECT().GetStatelessResetToken(gomock.Any())
@@ -1066,15 +1066,15 @@ var _ = Describe("Server", func() {
 				_ uint64,
 				_ utils.Logger,
 				_ protocol.VersionNumber,
-			) quicSession {
+			) quicConn {
 				ready := make(chan struct{})
 				close(ready)
-				sess := NewMockQuicSession(mockCtrl)
-				sess.EXPECT().handlePacket(gomock.Any())
-				sess.EXPECT().run()
-				sess.EXPECT().earlySessionReady().Return(ready)
-				sess.EXPECT().Context().Return(context.Background())
-				return sess
+				conn := NewMockQuicConn(mockCtrl)
+				conn.EXPECT().handlePacket(gomock.Any())
+				conn.EXPECT().run()
+				conn.EXPECT().earlySessionReady().Return(ready)
+				conn.EXPECT().Context().Return(context.Background())
+				return conn
 			}
 
 			phm.EXPECT().AddWithConnID(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(func(_, _ protocol.ConnectionID, fn func() packetHandler) bool {
@@ -1112,7 +1112,7 @@ var _ = Describe("Server", func() {
 			p := getInitial(protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8, 9, 10})
 			ctx, cancel := context.WithCancel(context.Background())
 			sessionCreated := make(chan struct{})
-			sess := NewMockQuicSession(mockCtrl)
+			conn := NewMockQuicConn(mockCtrl)
 			serv.newSession = func(
 				_ sendConn,
 				runner sessionRunner,
@@ -1130,13 +1130,13 @@ var _ = Describe("Server", func() {
 				_ uint64,
 				_ utils.Logger,
 				_ protocol.VersionNumber,
-			) quicSession {
-				sess.EXPECT().handlePacket(p)
-				sess.EXPECT().run()
-				sess.EXPECT().earlySessionReady()
-				sess.EXPECT().Context().Return(ctx)
+			) quicConn {
+				conn.EXPECT().handlePacket(p)
+				conn.EXPECT().run()
+				conn.EXPECT().earlySessionReady()
+				conn.EXPECT().Context().Return(ctx)
 				close(sessionCreated)
-				return sess
+				return conn
 			}
 
 			phm.EXPECT().AddWithConnID(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(func(_, _ protocol.ConnectionID, fn func() packetHandler) bool {
@@ -1161,7 +1161,7 @@ var _ = Describe("Server", func() {
 
 			// make the go routine return
 			phm.EXPECT().CloseServer()
-			sess.EXPECT().getPerspective().MaxTimes(2) // once for every conn ID
+			conn.EXPECT().getPerspective().MaxTimes(2) // once for every conn ID
 			Expect(serv.Close()).To(Succeed())
 			Eventually(done).Should(BeClosed())
 		})
