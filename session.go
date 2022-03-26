@@ -1517,7 +1517,7 @@ func (s *session) handleCloseError(closeErr *closeError) {
 
 	// If this is a remote close we're done here
 	if closeErr.remote {
-		s.connIDGenerator.ReplaceWithClosed(newClosedRemoteSession(s.perspective))
+		s.connIDGenerator.ReplaceWithClosed(newClosedRemoteConn(s.perspective))
 		return
 	}
 	if closeErr.immediate {
@@ -1528,7 +1528,7 @@ func (s *session) handleCloseError(closeErr *closeError) {
 	if err != nil {
 		s.logger.Debugf("Error sending CONNECTION_CLOSE: %s", err)
 	}
-	cs := newClosedLocalSession(s.conn, connClosePacket, s.perspective, s.logger)
+	cs := newClosedLocalConn(s.conn, connClosePacket, s.perspective, s.logger)
 	s.connIDGenerator.ReplaceWithClosed(cs)
 }
 

@@ -37,10 +37,10 @@ func areSessionsRunning() bool {
 	return strings.Contains(b.String(), "quic-go.(*session).run")
 }
 
-func areClosedSessionsRunning() bool {
+func areClosedConnsRunning() bool {
 	var b bytes.Buffer
 	pprof.Lookup("goroutine").WriteTo(&b, 1)
-	return strings.Contains(b.String(), "quic-go.(*closedLocalSession).run")
+	return strings.Contains(b.String(), "quic-go.(*closedLocalConn).run")
 }
 
 var _ = Describe("Connection", func() {
@@ -74,9 +74,9 @@ var _ = Describe("Connection", func() {
 	expectReplaceWithClosed := func() {
 		sessionRunner.EXPECT().ReplaceWithClosed(clientDestConnID, gomock.Any()).MaxTimes(1)
 		sessionRunner.EXPECT().ReplaceWithClosed(srcConnID, gomock.Any()).Do(func(_ protocol.ConnectionID, s packetHandler) {
-			Expect(s).To(BeAssignableToTypeOf(&closedLocalSession{}))
+			Expect(s).To(BeAssignableToTypeOf(&closedLocalConn{}))
 			s.shutdown()
-			Eventually(areClosedSessionsRunning).Should(BeFalse())
+			Eventually(areClosedConnsRunning).Should(BeFalse())
 		})
 	}
 
@@ -330,10 +330,10 @@ var _ = Describe("Connection", func() {
 			}
 			streamManager.EXPECT().CloseWithError(expectedErr)
 			sessionRunner.EXPECT().ReplaceWithClosed(srcConnID, gomock.Any()).Do(func(_ protocol.ConnectionID, s packetHandler) {
-				Expect(s).To(BeAssignableToTypeOf(&closedRemoteSession{}))
+				Expect(s).To(BeAssignableToTypeOf(&closedRemoteConn{}))
 			})
 			sessionRunner.EXPECT().ReplaceWithClosed(clientDestConnID, gomock.Any()).Do(func(_ protocol.ConnectionID, s packetHandler) {
-				Expect(s).To(BeAssignableToTypeOf(&closedRemoteSession{}))
+				Expect(s).To(BeAssignableToTypeOf(&closedRemoteConn{}))
 			})
 			cryptoSetup.EXPECT().Close()
 			gomock.InOrder(
@@ -361,10 +361,10 @@ var _ = Describe("Connection", func() {
 			}
 			streamManager.EXPECT().CloseWithError(testErr)
 			sessionRunner.EXPECT().ReplaceWithClosed(srcConnID, gomock.Any()).Do(func(_ protocol.ConnectionID, s packetHandler) {
-				Expect(s).To(BeAssignableToTypeOf(&closedRemoteSession{}))
+				Expect(s).To(BeAssignableToTypeOf(&closedRemoteConn{}))
 			})
 			sessionRunner.EXPECT().ReplaceWithClosed(clientDestConnID, gomock.Any()).Do(func(_ protocol.ConnectionID, s packetHandler) {
-				Expect(s).To(BeAssignableToTypeOf(&closedRemoteSession{}))
+				Expect(s).To(BeAssignableToTypeOf(&closedRemoteConn{}))
 			})
 			cryptoSetup.EXPECT().Close()
 			gomock.InOrder(
@@ -2439,7 +2439,7 @@ var _ = Describe("Client Connection", func() {
 	expectReplaceWithClosed := func() {
 		sessionRunner.EXPECT().ReplaceWithClosed(srcConnID, gomock.Any()).Do(func(_ protocol.ConnectionID, s packetHandler) {
 			s.shutdown()
-			Eventually(areClosedSessionsRunning).Should(BeFalse())
+			Eventually(areClosedConnsRunning).Should(BeFalse())
 		})
 	}
 
@@ -2753,7 +2753,7 @@ var _ = Describe("Client Connection", func() {
 		expectClose := func(applicationClose bool) {
 			if !closed {
 				sessionRunner.EXPECT().ReplaceWithClosed(gomock.Any(), gomock.Any()).Do(func(_ protocol.ConnectionID, s packetHandler) {
-					Expect(s).To(BeAssignableToTypeOf(&closedLocalSession{}))
+					Expect(s).To(BeAssignableToTypeOf(&closedLocalConn{}))
 					s.shutdown()
 				})
 				if applicationClose {
