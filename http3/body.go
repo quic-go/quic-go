@@ -120,6 +120,10 @@ func (r *body) requestDone() {
 	r.reqDoneClosed = true
 }
 
+func (r *body) StreamID() quic.StreamID {
+	return r.str.StreamID()
+}
+
 func (r *body) Close() error {
 	r.requestDone()
 	// If the EOF was read, CancelRead() is a no-op.
