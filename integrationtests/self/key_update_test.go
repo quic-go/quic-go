@@ -6,7 +6,7 @@ import (
 	"io"
 	"net"
 
-	quic "github.com/lucas-clemente/quic-go"
+	"github.com/lucas-clemente/quic-go"
 	"github.com/lucas-clemente/quic-go/internal/handshake"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/logging"
@@ -66,9 +66,9 @@ var _ = Describe("Key Update tests", func() {
 
 		go func() {
 			defer GinkgoRecover()
-			sess, err := server.Accept(context.Background())
+			conn, err := server.Accept(context.Background())
 			Expect(err).ToNot(HaveOccurred())
-			str, err := sess.OpenUniStream()
+			str, err := conn.OpenUniStream()
 			Expect(err).ToNot(HaveOccurred())
 			defer str.Close()
 			_, err = str.Write(PRDataLong)
@@ -82,18 +82,18 @@ var _ = Describe("Key Update tests", func() {
 		handshake.KeyUpdateInterval = 1 // update keys as frequently as possible
 
 		runServer()
-		sess, err := quic.DialAddr(
+		conn, err := quic.DialAddr(
 			fmt.Sprintf("localhost:%d", server.Addr().(*net.UDPAddr).Port),
 			getTLSClientConfig(),
 			getQuicConfig(&quic.Config{Tracer: newTracer(func() logging.ConnectionTracer { return &keyUpdateConnTracer{} })}),
 		)
 		Expect(err).ToNot(HaveOccurred())
-		str, err := sess.AcceptUniStream(context.Background())
+		str, err := conn.AcceptUniStream(context.Background())
 		Expect(err).ToNot(HaveOccurred())
 		data, err := io.ReadAll(str)
 		Expect(err).ToNot(HaveOccurred())
 		Expect(data).To(Equal(PRDataLong))
-		Expect(sess.CloseWithError(0, "")).To(Succeed())
+		Expect(conn.CloseWithError(0, "")).To(Succeed())
 
 		keyPhasesSent, keyPhasesReceived := countKeyPhases()
 		fmt.Fprintf(GinkgoWriter, "Used %d key phases on outgoing and %d key phases on incoming packets.\n", keyPhasesSent, keyPhasesReceived)

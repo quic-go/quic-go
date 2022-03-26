@@ -47,9 +47,9 @@ var _ = Describe("Datagram test", func() {
 				Expect(err).ToNot(HaveOccurred())
 				go func() {
 					defer GinkgoRecover()
-					sess, err := ln.Accept(context.Background())
+					conn, err := ln.Accept(context.Background())
 					Expect(err).ToNot(HaveOccurred())
-					Expect(sess.ConnectionState().SupportsDatagrams).To(BeTrue())
+					Expect(conn.ConnectionState().SupportsDatagrams).To(BeTrue())
 
 					var wg sync.WaitGroup
 					wg.Add(num)
@@ -59,7 +59,7 @@ var _ = Describe("Datagram test", func() {
 							defer wg.Done()
 							b := make([]byte, 8)
 							binary.BigEndian.PutUint64(b, uint64(i))
-							Expect(sess.SendMessage(b)).To(Succeed())
+							Expect(conn.SendMessage(b)).To(Succeed())
 						}(i)
 					}
 					wg.Wait()
@@ -102,7 +102,7 @@ var _ = Describe("Datagram test", func() {
 				startServerAndProxy()
 				raddr, err := net.ResolveUDPAddr("udp", fmt.Sprintf("localhost:%d", proxy.LocalPort()))
 				Expect(err).ToNot(HaveOccurred())
-				sess, err := quic.Dial(
+				conn, err := quic.Dial(
 					clientConn,
 					raddr,
 					fmt.Sprintf("localhost:%d", proxy.LocalPort()),
@@ -113,14 +113,14 @@ var _ = Describe("Datagram test", func() {
 					}),
 				)
 				Expect(err).ToNot(HaveOccurred())
-				Expect(sess.ConnectionState().SupportsDatagrams).To(BeTrue())
+				Expect(conn.ConnectionState().SupportsDatagrams).To(BeTrue())
 				var counter int
 				for {
-					// Close the session if no message is received for 100 ms.
+					// Close the connection if no message is received for 100 ms.
 					timer := time.AfterFunc(scaleDuration(100*time.Millisecond), func() {
-						sess.CloseWithError(0, "")
+						conn.CloseWithError(0, "")
 					})
-					if _, err := sess.ReceiveMessage(); err != nil {
+					if _, err := conn.ReceiveMessage(); err != nil {
 						break
 					}
 					timer.Stop()

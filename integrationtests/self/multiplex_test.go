@@ -8,7 +8,7 @@ import (
 	"runtime"
 	"time"
 
-	quic "github.com/lucas-clemente/quic-go"
+	"github.com/lucas-clemente/quic-go"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 
 	. "github.com/onsi/ginkgo"
@@ -24,13 +24,13 @@ var _ = Describe("Multiplexing", func() {
 				go func() {
 					defer GinkgoRecover()
 					for {
-						sess, err := ln.Accept(context.Background())
+						conn, err := ln.Accept(context.Background())
 						if err != nil {
 							return
 						}
 						go func() {
 							defer GinkgoRecover()
-							str, err := sess.OpenStream()
+							str, err := conn.OpenStream()
 							Expect(err).ToNot(HaveOccurred())
 							defer str.Close()
 							_, err = str.Write(PRData)
@@ -40,17 +40,17 @@ var _ = Describe("Multiplexing", func() {
 				}()
 			}
 
-			dial := func(conn net.PacketConn, addr net.Addr) {
-				sess, err := quic.Dial(
-					conn,
+			dial := func(pconn net.PacketConn, addr net.Addr) {
+				conn, err := quic.Dial(
+					pconn,
 					addr,
 					fmt.Sprintf("localhost:%d", addr.(*net.UDPAddr).Port),
 					getTLSClientConfig(),
 					getQuicConfig(&quic.Config{Versions: []protocol.VersionNumber{version}}),
 				)
 				Expect(err).ToNot(HaveOccurred())
-				defer sess.CloseWithError(0, "")
-				str, err := sess.AcceptStream(context.Background())
+				defer conn.CloseWithError(0, "")
+				str, err := conn.AcceptStream(context.Background())
 				Expect(err).ToNot(HaveOccurred())
 				data, err := io.ReadAll(str)
 				Expect(err).ToNot(HaveOccurred())

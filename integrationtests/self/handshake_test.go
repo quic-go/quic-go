@@ -131,14 +131,14 @@ var _ = Describe("Handshake tests", func() {
 				runServer(getTLSConfig())
 				defer server.Close()
 				clientTracer := &versionNegotiationTracer{}
-				sess, err := quic.DialAddr(
+				conn, err := quic.DialAddr(
 					fmt.Sprintf("localhost:%d", server.Addr().(*net.UDPAddr).Port),
 					getTLSClientConfig(),
 					getQuicConfig(&quic.Config{Tracer: newTracer(func() logging.ConnectionTracer { return clientTracer })}),
 				)
 				Expect(err).ToNot(HaveOccurred())
-				Expect(sess.(versioner).GetVersion()).To(Equal(expectedVersion))
-				Expect(sess.CloseWithError(0, "")).To(Succeed())
+				Expect(conn.(versioner).GetVersion()).To(Equal(expectedVersion))
+				Expect(conn.CloseWithError(0, "")).To(Succeed())
 				Expect(clientTracer.chosen).To(Equal(expectedVersion))
 				Expect(clientTracer.receivedVersionNegotiation).To(BeFalse())
 				Expect(clientTracer.clientVersions).To(Equal(protocol.SupportedVersions))
@@ -159,7 +159,7 @@ var _ = Describe("Handshake tests", func() {
 				defer server.Close()
 				clientVersions := []protocol.VersionNumber{7, 8, 9, protocol.SupportedVersions[0], 10}
 				clientTracer := &versionNegotiationTracer{}
-				sess, err := quic.DialAddr(
+				conn, err := quic.DialAddr(
 					fmt.Sprintf("localhost:%d", server.Addr().(*net.UDPAddr).Port),
 					getTLSClientConfig(),
 					getQuicConfig(&quic.Config{
@@ -168,8 +168,8 @@ var _ = Describe("Handshake tests", func() {
 					}),
 				)
 				Expect(err).ToNot(HaveOccurred())
-				Expect(sess.(versioner).GetVersion()).To(Equal(protocol.SupportedVersions[0]))
-				Expect(sess.CloseWithError(0, "")).To(Succeed())
+				Expect(conn.(versioner).GetVersion()).To(Equal(protocol.SupportedVersions[0]))
+				Expect(conn.CloseWithError(0, "")).To(Succeed())
 				Expect(clientTracer.chosen).To(Equal(expectedVersion))
 				Expect(clientTracer.receivedVersionNegotiation).To(BeTrue())
 				Expect(clientTracer.clientVersions).To(Equal(clientVersions))
@@ -199,28 +199,28 @@ var _ = Describe("Handshake tests", func() {
 
 				go func() {
 					defer GinkgoRecover()
-					sess, err := ln.Accept(context.Background())
+					conn, err := ln.Accept(context.Background())
 					Expect(err).ToNot(HaveOccurred())
-					str, err := sess.OpenStream()
+					str, err := conn.OpenStream()
 					Expect(err).ToNot(HaveOccurred())
 					defer str.Close()
 					_, err = str.Write(PRData)
 					Expect(err).ToNot(HaveOccurred())
 				}()
 
-				sess, err := quic.DialAddr(
+				conn, err := quic.DialAddr(
 					fmt.Sprintf("localhost:%d", ln.Addr().(*net.UDPAddr).Port),
 					getTLSClientConfig(),
 					nil,
 				)
 				Expect(err).ToNot(HaveOccurred())
-				str, err := sess.AcceptStream(context.Background())
+				str, err := conn.AcceptStream(context.Background())
 				Expect(err).ToNot(HaveOccurred())
 				data, err := io.ReadAll(str)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(data).To(Equal(PRData))
-				Expect(sess.ConnectionState().TLS.CipherSuite).To(Equal(suiteID))
-				Expect(sess.CloseWithError(0, "")).To(Succeed())
+				Expect(conn.ConnectionState().TLS.CipherSuite).To(Equal(suiteID))
+				Expect(conn.CloseWithError(0, "")).To(Succeed())
 			})
 		}
 	})
@@ -280,19 +280,19 @@ var _ = Describe("Handshake tests", func() {
 					tlsConf.ClientAuth = tls.RequireAndVerifyClientCert
 					runServer(tlsConf)
 
-					sess, err := quic.DialAddr(
+					conn, err := quic.DialAddr(
 						fmt.Sprintf("localhost:%d", server.Addr().(*net.UDPAddr).Port),
 						getTLSClientConfig(),
 						clientConfig,
 					)
 					// Usually, the error will occur after the client already finished the handshake.
 					// However, there's a race condition here. The server's CONNECTION_CLOSE might be
-					// received before the session is returned, so we might already get the error while dialing.
+					// received before the connection is returned, so we might already get the error while dialing.
 					if err == nil {
 						errChan := make(chan error)
 						go func() {
 							defer GinkgoRecover()
-							_, err := sess.AcceptStream(context.Background())
+							_, err := conn.AcceptStream(context.Background())
 							errChan <- err
 						}()
 						Eventually(errChan).Should(Receive(&err))
@@ -368,11 +368,11 @@ var _ = Describe("Handshake tests", func() {
 
 		It("rejects new connection attempts if connections don't get accepted", func() {
 			for i := 0; i < protocol.MaxAcceptQueueSize; i++ {
-				sess, err := dial()
+				conn, err := dial()
 				Expect(err).ToNot(HaveOccurred())
-				defer sess.CloseWithError(0, "")
+				defer conn.CloseWithError(0, "")
 			}
-			time.Sleep(25 * time.Millisecond) // wait a bit for the sessions to be queued
+			time.Sleep(25 * time.Millisecond) // wait a bit for the connection to be queued
 
 			_, err := dial()
 			Expect(err).To(HaveOccurred())
@@ -380,14 +380,14 @@ var _ = Describe("Handshake tests", func() {
 			Expect(errors.As(err, &transportErr)).To(BeTrue())
 			Expect(transportErr.ErrorCode).To(Equal(quic.ConnectionRefused))
 
-			// now accept one session, freeing one spot in the queue
+			// now accept one connection, freeing one spot in the queue
 			_, err = server.Accept(context.Background())
 			Expect(err).ToNot(HaveOccurred())
 			// dial again, and expect that this dial succeeds
-			sess, err := dial()
+			conn, err := dial()
 			Expect(err).ToNot(HaveOccurred())
-			defer sess.CloseWithError(0, "")
-			time.Sleep(25 * time.Millisecond) // wait a bit for the session to be queued
+			defer conn.CloseWithError(0, "")
+			time.Sleep(25 * time.Millisecond) // wait a bit for the connection to be queued
 
 			_, err = dial()
 			Expect(err).To(HaveOccurred())
@@ -396,15 +396,15 @@ var _ = Describe("Handshake tests", func() {
 		})
 
 		It("removes closed connections from the accept queue", func() {
-			firstSess, err := dial()
+			firstConn, err := dial()
 			Expect(err).ToNot(HaveOccurred())
 
 			for i := 1; i < protocol.MaxAcceptQueueSize; i++ {
-				sess, err := dial()
+				conn, err := dial()
 				Expect(err).ToNot(HaveOccurred())
-				defer sess.CloseWithError(0, "")
+				defer conn.CloseWithError(0, "")
 			}
-			time.Sleep(scaleDuration(20 * time.Millisecond)) // wait a bit for the sessions to be queued
+			time.Sleep(scaleDuration(20 * time.Millisecond)) // wait a bit for the connection to be queued
 
 			_, err = dial()
 			Expect(err).To(HaveOccurred())
@@ -412,16 +412,16 @@ var _ = Describe("Handshake tests", func() {
 			Expect(errors.As(err, &transportErr)).To(BeTrue())
 			Expect(transportErr.ErrorCode).To(Equal(quic.ConnectionRefused))
 
-			// Now close the one of the session that are waiting to be accepted.
+			// Now close the one of the connection that are waiting to be accepted.
 			// This should free one spot in the queue.
-			Expect(firstSess.CloseWithError(0, ""))
-			Eventually(firstSess.Context().Done()).Should(BeClosed())
+			Expect(firstConn.CloseWithError(0, ""))
+			Eventually(firstConn.Context().Done()).Should(BeClosed())
 			time.Sleep(scaleDuration(20 * time.Millisecond))
 
 			// dial again, and expect that this dial succeeds
 			_, err = dial()
 			Expect(err).ToNot(HaveOccurred())
-			time.Sleep(scaleDuration(20 * time.Millisecond)) // wait a bit for the session to be queued
+			time.Sleep(scaleDuration(20 * time.Millisecond)) // wait a bit for the connection to be queued
 
 			_, err = dial()
 			Expect(err).To(HaveOccurred())
@@ -438,21 +438,21 @@ var _ = Describe("Handshake tests", func() {
 			done := make(chan struct{})
 			go func() {
 				defer GinkgoRecover()
-				sess, err := ln.Accept(context.Background())
+				conn, err := ln.Accept(context.Background())
 				Expect(err).ToNot(HaveOccurred())
-				cs := sess.ConnectionState()
+				cs := conn.ConnectionState()
 				Expect(cs.TLS.NegotiatedProtocol).To(Equal(alpn))
 				close(done)
 			}()
 
-			sess, err := quic.DialAddr(
+			conn, err := quic.DialAddr(
 				fmt.Sprintf("localhost:%d", ln.Addr().(*net.UDPAddr).Port),
 				getTLSClientConfig(),
 				nil,
 			)
 			Expect(err).ToNot(HaveOccurred())
-			defer sess.CloseWithError(0, "")
-			cs := sess.ConnectionState()
+			defer conn.CloseWithError(0, "")
+			cs := conn.ConnectionState()
 			Expect(cs.TLS.NegotiatedProtocol).To(Equal(alpn))
 			Eventually(done).Should(BeClosed())
 			Expect(ln.Close()).To(Succeed())
@@ -489,7 +489,7 @@ var _ = Describe("Handshake tests", func() {
 			server, err := quic.ListenAddr("localhost:0", getTLSConfig(), serverConfig)
 			Expect(err).ToNot(HaveOccurred())
 
-			// dial the first session and receive the token
+			// dial the first connection and receive the token
 			go func() {
 				defer GinkgoRecover()
 				_, err := server.Accept(context.Background())
@@ -500,7 +500,7 @@ var _ = Describe("Handshake tests", func() {
 			puts := make(chan string, 100)
 			tokenStore := newTokenStore(gets, puts)
 			quicConf := getQuicConfig(&quic.Config{TokenStore: tokenStore})
-			sess, err := quic.DialAddr(
+			conn, err := quic.DialAddr(
 				fmt.Sprintf("localhost:%d", server.Addr().(*net.UDPAddr).Port),
 				getTLSClientConfig(),
 				quicConf,
@@ -509,10 +509,10 @@ var _ = Describe("Handshake tests", func() {
 			Expect(gets).To(Receive())
 			Eventually(puts).Should(Receive())
 			Expect(tokenChan).ToNot(Receive())
-			// received a token. Close this session.
-			Expect(sess.CloseWithError(0, "")).To(Succeed())
+			// received a token. Close this connection.
+			Expect(conn.CloseWithError(0, "")).To(Succeed())
 
-			// dial the second session and verify that the token was used
+			// dial the second connection and verify that the token was used
 			done := make(chan struct{})
 			go func() {
 				defer GinkgoRecover()
@@ -520,13 +520,13 @@ var _ = Describe("Handshake tests", func() {
 				_, err := server.Accept(context.Background())
 				Expect(err).ToNot(HaveOccurred())
 			}()
-			sess, err = quic.DialAddr(
+			conn, err = quic.DialAddr(
 				fmt.Sprintf("localhost:%d", server.Addr().(*net.UDPAddr).Port),
 				getTLSClientConfig(),
 				quicConf,
 			)
 			Expect(err).ToNot(HaveOccurred())
-			defer sess.CloseWithError(0, "")
+			defer conn.CloseWithError(0, "")
 			Expect(gets).To(Receive())
 			Expect(tokenChan).To(Receive())
 

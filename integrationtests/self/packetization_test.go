@@ -45,7 +45,7 @@ var _ = Describe("Packetization", func() {
 		defer proxy.Close()
 
 		clientTracer := newPacketTracer()
-		sess, err := quic.DialAddr(
+		conn, err := quic.DialAddr(
 			fmt.Sprintf("localhost:%d", proxy.LocalPort()),
 			getTLSClientConfig(),
 			getQuicConfig(&quic.Config{
@@ -57,9 +57,9 @@ var _ = Describe("Packetization", func() {
 
 		go func() {
 			defer GinkgoRecover()
-			sess, err := server.Accept(context.Background())
+			conn, err := server.Accept(context.Background())
 			Expect(err).ToNot(HaveOccurred())
-			str, err := sess.AcceptStream(context.Background())
+			str, err := conn.AcceptStream(context.Background())
 			Expect(err).ToNot(HaveOccurred())
 			b := make([]byte, 1)
 			// Echo every byte received from the client.
@@ -72,7 +72,7 @@ var _ = Describe("Packetization", func() {
 			}
 		}()
 
-		str, err := sess.OpenStreamSync(context.Background())
+		str, err := conn.OpenStreamSync(context.Background())
 		Expect(err).ToNot(HaveOccurred())
 		b := make([]byte, 1)
 		// Send numMsg 1-byte messages.
@@ -83,7 +83,7 @@ var _ = Describe("Packetization", func() {
 			Expect(err).ToNot(HaveOccurred())
 			Expect(b[0]).To(Equal(uint8(i)))
 		}
-		Expect(sess.CloseWithError(0, "")).To(Succeed())
+		Expect(conn.CloseWithError(0, "")).To(Succeed())
 
 		countBundledPackets := func(packets []packet) (numBundled int) {
 			for _, p := range packets {

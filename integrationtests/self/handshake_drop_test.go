@@ -71,20 +71,20 @@ var _ = Describe("Handshake drop tests", func() {
 	clientSpeaksFirst := &applicationProtocol{
 		name: "client speaks first",
 		run: func(version protocol.VersionNumber) {
-			serverSessionChan := make(chan quic.Connection)
+			serverConnChan := make(chan quic.Connection)
 			go func() {
 				defer GinkgoRecover()
-				sess, err := ln.Accept(context.Background())
+				conn, err := ln.Accept(context.Background())
 				Expect(err).ToNot(HaveOccurred())
-				defer sess.CloseWithError(0, "")
-				str, err := sess.AcceptStream(context.Background())
+				defer conn.CloseWithError(0, "")
+				str, err := conn.AcceptStream(context.Background())
 				Expect(err).ToNot(HaveOccurred())
 				b, err := io.ReadAll(gbytes.TimeoutReader(str, timeout))
 				Expect(err).ToNot(HaveOccurred())
 				Expect(b).To(Equal(data))
-				serverSessionChan <- sess
+				serverConnChan <- conn
 			}()
-			sess, err := quic.DialAddr(
+			conn, err := quic.DialAddr(
 				fmt.Sprintf("localhost:%d", proxy.LocalPort()),
 				getTLSClientConfig(),
 				getQuicConfig(&quic.Config{
@@ -94,35 +94,35 @@ var _ = Describe("Handshake drop tests", func() {
 				}),
 			)
 			Expect(err).ToNot(HaveOccurred())
-			str, err := sess.OpenStream()
+			str, err := conn.OpenStream()
 			Expect(err).ToNot(HaveOccurred())
 			_, err = str.Write(data)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(str.Close()).To(Succeed())
 
-			var serverSession quic.Connection
-			Eventually(serverSessionChan, timeout).Should(Receive(&serverSession))
-			sess.CloseWithError(0, "")
-			serverSession.CloseWithError(0, "")
+			var serverConn quic.Connection
+			Eventually(serverConnChan, timeout).Should(Receive(&serverConn))
+			conn.CloseWithError(0, "")
+			serverConn.CloseWithError(0, "")
 		},
 	}
 
 	serverSpeaksFirst := &applicationProtocol{
 		name: "server speaks first",
 		run: func(version protocol.VersionNumber) {
-			serverSessionChan := make(chan quic.Connection)
+			serverConnChan := make(chan quic.Connection)
 			go func() {
 				defer GinkgoRecover()
-				sess, err := ln.Accept(context.Background())
+				conn, err := ln.Accept(context.Background())
 				Expect(err).ToNot(HaveOccurred())
-				str, err := sess.OpenStream()
+				str, err := conn.OpenStream()
 				Expect(err).ToNot(HaveOccurred())
 				_, err = str.Write(data)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(str.Close()).To(Succeed())
-				serverSessionChan <- sess
+				serverConnChan <- conn
 			}()
-			sess, err := quic.DialAddr(
+			conn, err := quic.DialAddr(
 				fmt.Sprintf("localhost:%d", proxy.LocalPort()),
 				getTLSClientConfig(),
 				getQuicConfig(&quic.Config{
@@ -132,30 +132,30 @@ var _ = Describe("Handshake drop tests", func() {
 				}),
 			)
 			Expect(err).ToNot(HaveOccurred())
-			str, err := sess.AcceptStream(context.Background())
+			str, err := conn.AcceptStream(context.Background())
 			Expect(err).ToNot(HaveOccurred())
 			b, err := io.ReadAll(gbytes.TimeoutReader(str, timeout))
 			Expect(err).ToNot(HaveOccurred())
 			Expect(b).To(Equal(data))
 
-			var serverSession quic.Connection
-			Eventually(serverSessionChan, timeout).Should(Receive(&serverSession))
-			sess.CloseWithError(0, "")
-			serverSession.CloseWithError(0, "")
+			var serverConn quic.Connection
+			Eventually(serverConnChan, timeout).Should(Receive(&serverConn))
+			conn.CloseWithError(0, "")
+			serverConn.CloseWithError(0, "")
 		},
 	}
 
 	nobodySpeaks := &applicationProtocol{
 		name: "nobody speaks",
 		run: func(version protocol.VersionNumber) {
-			serverSessionChan := make(chan quic.Connection)
+			serverConnChan := make(chan quic.Connection)
 			go func() {
 				defer GinkgoRecover()
-				sess, err := ln.Accept(context.Background())
+				conn, err := ln.Accept(context.Background())
 				Expect(err).ToNot(HaveOccurred())
-				serverSessionChan <- sess
+				serverConnChan <- conn
 			}()
-			sess, err := quic.DialAddr(
+			conn, err := quic.DialAddr(
 				fmt.Sprintf("localhost:%d", proxy.LocalPort()),
 				getTLSClientConfig(),
 				getQuicConfig(&quic.Config{
@@ -165,11 +165,11 @@ var _ = Describe("Handshake drop tests", func() {
 				}),
 			)
 			Expect(err).ToNot(HaveOccurred())
-			var serverSession quic.Connection
-			Eventually(serverSessionChan, timeout).Should(Receive(&serverSession))
-			// both server and client accepted a session. Close now.
-			sess.CloseWithError(0, "")
-			serverSession.CloseWithError(0, "")
+			var serverConn quic.Connection
+			Eventually(serverConnChan, timeout).Should(Receive(&serverConn))
+			// both server and client accepted a connection. Close now.
+			conn.CloseWithError(0, "")
+			serverConn.CloseWithError(0, "")
 		},
 	}
 
