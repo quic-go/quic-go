@@ -90,7 +90,7 @@ func (p *receivedPacket) Clone() *receivedPacket {
 	}
 }
 
-type sessionRunner interface {
+type connRunner interface {
 	Add(protocol.ConnectionID, packetHandler) bool
 	GetStatelessResetToken(protocol.ConnectionID) protocol.StatelessResetToken
 	Retire(protocol.ConnectionID)
@@ -230,7 +230,7 @@ var (
 
 var newSession = func(
 	conn sendConn,
-	runner sessionRunner,
+	runner connRunner,
 	origDestConnID protocol.ConnectionID,
 	retrySrcConnID *protocol.ConnectionID,
 	clientDestConnID protocol.ConnectionID,
@@ -364,7 +364,7 @@ var newSession = func(
 // declare this as a variable, such that we can it mock it in the tests
 var newClientSession = func(
 	conn sendConn,
-	runner sessionRunner,
+	runner connRunner,
 	destConnID protocol.ConnectionID,
 	srcConnID protocol.ConnectionID,
 	conf *Config,

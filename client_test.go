@@ -33,7 +33,7 @@ var _ = Describe("Client", func() {
 
 		originalClientSessConstructor func(
 			conn sendConn,
-			runner sessionRunner,
+			runner connRunner,
 			destConnID protocol.ConnectionID,
 			srcConnID protocol.ConnectionID,
 			conf *Config,
@@ -120,7 +120,7 @@ var _ = Describe("Client", func() {
 			remoteAddrChan := make(chan string, 1)
 			newClientSession = func(
 				sconn sendConn,
-				_ sessionRunner,
+				_ connRunner,
 				_ protocol.ConnectionID,
 				_ protocol.ConnectionID,
 				_ *Config,
@@ -153,7 +153,7 @@ var _ = Describe("Client", func() {
 			hostnameChan := make(chan string, 1)
 			newClientSession = func(
 				_ sendConn,
-				_ sessionRunner,
+				_ connRunner,
 				_ protocol.ConnectionID,
 				_ protocol.ConnectionID,
 				_ *Config,
@@ -186,7 +186,7 @@ var _ = Describe("Client", func() {
 			hostnameChan := make(chan string, 1)
 			newClientSession = func(
 				_ sendConn,
-				_ sessionRunner,
+				_ connRunner,
 				_ protocol.ConnectionID,
 				_ protocol.ConnectionID,
 				_ *Config,
@@ -225,7 +225,7 @@ var _ = Describe("Client", func() {
 			run := make(chan struct{})
 			newClientSession = func(
 				_ sendConn,
-				runner sessionRunner,
+				runner connRunner,
 				_ protocol.ConnectionID,
 				_ protocol.ConnectionID,
 				_ *Config,
@@ -268,7 +268,7 @@ var _ = Describe("Client", func() {
 			done := make(chan struct{})
 			newClientSession = func(
 				_ sendConn,
-				runner sessionRunner,
+				runner connRunner,
 				_ protocol.ConnectionID,
 				_ protocol.ConnectionID,
 				_ *Config,
@@ -316,7 +316,7 @@ var _ = Describe("Client", func() {
 			testErr := errors.New("early handshake error")
 			newClientSession = func(
 				_ sendConn,
-				_ sessionRunner,
+				_ connRunner,
 				_ protocol.ConnectionID,
 				_ protocol.ConnectionID,
 				_ *Config,
@@ -359,7 +359,7 @@ var _ = Describe("Client", func() {
 			conn.EXPECT().HandshakeComplete().Return(context.Background())
 			newClientSession = func(
 				_ sendConn,
-				_ sessionRunner,
+				_ connRunner,
 				_ protocol.ConnectionID,
 				_ protocol.ConnectionID,
 				_ *Config,
@@ -411,7 +411,7 @@ var _ = Describe("Client", func() {
 			conn := NewMockQuicConn(mockCtrl)
 			newClientSession = func(
 				connP sendConn,
-				_ sessionRunner,
+				_ connRunner,
 				_ protocol.ConnectionID,
 				_ protocol.ConnectionID,
 				_ *Config,
@@ -531,7 +531,7 @@ var _ = Describe("Client", func() {
 			var conf *Config
 			newClientSession = func(
 				connP sendConn,
-				_ sessionRunner,
+				_ connRunner,
 				_ protocol.ConnectionID,
 				_ protocol.ConnectionID,
 				configP *Config,
@@ -571,7 +571,7 @@ var _ = Describe("Client", func() {
 			var counter int
 			newClientSession = func(
 				_ sendConn,
-				_ sessionRunner,
+				_ connRunner,
 				_ protocol.ConnectionID,
 				_ protocol.ConnectionID,
 				configP *Config,

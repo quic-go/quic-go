@@ -36,7 +36,7 @@ type unknownPacketHandler interface {
 type packetHandlerManager interface {
 	AddWithConnID(protocol.ConnectionID, protocol.ConnectionID, func() packetHandler) bool
 	Destroy() error
-	sessionRunner
+	connRunner
 	SetServer(unknownPacketHandler)
 	CloseServer()
 }
@@ -75,7 +75,7 @@ type baseServer struct {
 	// set as a member, so they can be set in the tests
 	newSession func(
 		sendConn,
-		sessionRunner,
+		connRunner,
 		protocol.ConnectionID, /* original dest connection ID */
 		*protocol.ConnectionID, /* retry src connection ID */
 		protocol.ConnectionID, /* client dest connection ID */

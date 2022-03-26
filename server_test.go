@@ -326,7 +326,7 @@ var _ = Describe("Server", func() {
 				conn := NewMockQuicConn(mockCtrl)
 				serv.newSession = func(
 					_ sendConn,
-					_ sessionRunner,
+					_ connRunner,
 					origDestConnID protocol.ConnectionID,
 					retrySrcConnID *protocol.ConnectionID,
 					clientDestConnID protocol.ConnectionID,
@@ -605,7 +605,7 @@ var _ = Describe("Server", func() {
 				conn := NewMockQuicConn(mockCtrl)
 				serv.newSession = func(
 					_ sendConn,
-					_ sessionRunner,
+					_ connRunner,
 					origDestConnID protocol.ConnectionID,
 					retrySrcConnID *protocol.ConnectionID,
 					clientDestConnID protocol.ConnectionID,
@@ -665,7 +665,7 @@ var _ = Describe("Server", func() {
 				var counter uint32 // to be used as an atomic, so we query it in Eventually
 				serv.newSession = func(
 					_ sendConn,
-					runner sessionRunner,
+					runner connRunner,
 					_ protocol.ConnectionID,
 					_ *protocol.ConnectionID,
 					_ protocol.ConnectionID,
@@ -719,7 +719,7 @@ var _ = Describe("Server", func() {
 				conn := NewMockQuicConn(mockCtrl)
 				serv.newSession = func(
 					_ sendConn,
-					runner sessionRunner,
+					runner connRunner,
 					_ protocol.ConnectionID,
 					_ *protocol.ConnectionID,
 					_ protocol.ConnectionID,
@@ -750,7 +750,7 @@ var _ = Describe("Server", func() {
 
 				serv.newSession = func(
 					_ sendConn,
-					runner sessionRunner,
+					runner connRunner,
 					_ protocol.ConnectionID,
 					_ *protocol.ConnectionID,
 					_ protocol.ConnectionID,
@@ -822,7 +822,7 @@ var _ = Describe("Server", func() {
 				conn := NewMockQuicConn(mockCtrl)
 				serv.newSession = func(
 					_ sendConn,
-					runner sessionRunner,
+					runner connRunner,
 					_ protocol.ConnectionID,
 					_ *protocol.ConnectionID,
 					_ protocol.ConnectionID,
@@ -934,7 +934,7 @@ var _ = Describe("Server", func() {
 				serv.config.AcceptToken = func(_ net.Addr, _ *Token) bool { return true }
 				serv.newSession = func(
 					_ sendConn,
-					runner sessionRunner,
+					runner connRunner,
 					_ protocol.ConnectionID,
 					_ *protocol.ConnectionID,
 					_ protocol.ConnectionID,
@@ -1008,7 +1008,7 @@ var _ = Describe("Server", func() {
 			serv.config.AcceptToken = func(_ net.Addr, _ *Token) bool { return true }
 			serv.newSession = func(
 				_ sendConn,
-				runner sessionRunner,
+				runner connRunner,
 				_ protocol.ConnectionID,
 				_ *protocol.ConnectionID,
 				_ protocol.ConnectionID,
@@ -1051,7 +1051,7 @@ var _ = Describe("Server", func() {
 
 			serv.newSession = func(
 				_ sendConn,
-				runner sessionRunner,
+				runner connRunner,
 				_ protocol.ConnectionID,
 				_ *protocol.ConnectionID,
 				_ protocol.ConnectionID,
@@ -1115,7 +1115,7 @@ var _ = Describe("Server", func() {
 			conn := NewMockQuicConn(mockCtrl)
 			serv.newSession = func(
 				_ sendConn,
-				runner sessionRunner,
+				runner connRunner,
 				_ protocol.ConnectionID,
 				_ *protocol.ConnectionID,
 				_ protocol.ConnectionID,
