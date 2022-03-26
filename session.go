@@ -130,7 +130,7 @@ func (e *errCloseForRecreating) Error() string {
 var sessionTracingID uint64        // to be accessed atomically
 func nextSessionTracingID() uint64 { return atomic.AddUint64(&sessionTracingID, 1) }
 
-// A Session is a QUIC session
+// A Connection is a QUIC session
 type session struct {
 	// Destination connection ID used during the handshake.
 	// Used to check source connection ID on incoming packets.
@@ -222,7 +222,7 @@ type session struct {
 }
 
 var (
-	_                       Session      = &session{}
+	_                       Connection   = &session{}
 	_                       EarlySession = &session{}
 	_                       streamSender = &session{}
 	deadlineSendImmediately              = time.Time{}.Add(42 * time.Millisecond) // any value > time.Time{} and before time.Now() is fine
@@ -1996,7 +1996,7 @@ func (s *session) GetVersion() protocol.VersionNumber {
 	return s.version
 }
 
-func (s *session) NextSession() Session {
+func (s *session) NextSession() Connection {
 	<-s.HandshakeComplete().Done()
 	s.streamsMap.UseResetMaps()
 	return s

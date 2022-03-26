@@ -86,7 +86,7 @@ func (s *Server) ListenAndServe() error {
 	}
 }
 
-func (s *Server) handleConn(sess quic.Session) {
+func (s *Server) handleConn(sess quic.Connection) {
 	for {
 		str, err := sess.AcceptStream(context.Background())
 		if err != nil {

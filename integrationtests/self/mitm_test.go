@@ -31,7 +31,7 @@ var _ = Describe("MITM test", func() {
 			var (
 				proxy                  *quicproxy.QuicProxy
 				serverConn, clientConn *net.UDPConn
-				serverSess             quic.Session
+				serverSess             quic.Connection
 				serverConfig           *quic.Config
 			)
 

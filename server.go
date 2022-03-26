@@ -260,7 +260,7 @@ var defaultAcceptToken = func(clientAddr net.Addr, token *Token) bool {
 
 // Accept returns sessions that already completed the handshake.
 // It is only valid if acceptEarlySessions is false.
-func (s *baseServer) Accept(ctx context.Context) (Session, error) {
+func (s *baseServer) Accept(ctx context.Context) (Connection, error) {
 	return s.accept(ctx)
 }
 

@@ -7,7 +7,7 @@ import (
 	"net"
 	"sync"
 
-	quic "github.com/lucas-clemente/quic-go"
+	"github.com/lucas-clemente/quic-go"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 
 	. "github.com/onsi/ginkgo"
@@ -42,7 +42,7 @@ var _ = Describe("Bidirectional streams", func() {
 				server.Close()
 			})
 
-			runSendingPeer := func(sess quic.Session) {
+			runSendingPeer := func(sess quic.Connection) {
 				var wg sync.WaitGroup
 				wg.Add(numStreams)
 				for i := 0; i < numStreams; i++ {
@@ -66,7 +66,7 @@ var _ = Describe("Bidirectional streams", func() {
 				wg.Wait()
 			}
 
-			runReceivingPeer := func(sess quic.Session) {
+			runReceivingPeer := func(sess quic.Connection) {
 				var wg sync.WaitGroup
 				wg.Add(numStreams)
 				for i := 0; i < numStreams; i++ {
@@ -88,7 +88,7 @@ var _ = Describe("Bidirectional streams", func() {
 			}
 
 			It(fmt.Sprintf("client opening %d streams to a server", numStreams), func() {
-				var sess quic.Session
+				var sess quic.Connection
 				go func() {
 					defer GinkgoRecover()
 					var err error

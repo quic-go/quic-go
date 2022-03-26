@@ -329,7 +329,7 @@ var _ = Describe("Handshake tests", func() {
 			pconn  net.PacketConn
 		)
 
-		dial := func() (quic.Session, error) {
+		dial := func() (quic.Connection, error) {
 			remoteAddr := fmt.Sprintf("localhost:%d", server.Addr().(*net.UDPAddr).Port)
 			raddr, err := net.ResolveUDPAddr("udp", remoteAddr)
 			Expect(err).ToNot(HaveOccurred())

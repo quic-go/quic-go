@@ -404,7 +404,7 @@ var _ = Describe("Timeout tests", func() {
 			return err
 		}
 
-		runClient := func(sess quic.Session) error {
+		runClient := func(sess quic.Connection) error {
 			str, err := sess.AcceptUniStream(context.Background())
 			if err != nil {
 				return err

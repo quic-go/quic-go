@@ -56,7 +56,7 @@ func DialAddr(
 	addr string,
 	tlsConf *tls.Config,
 	config *Config,
-) (Session, error) {
+) (Connection, error) {
 	return DialAddrContext(context.Background(), addr, tlsConf, config)
 }
 
@@ -95,7 +95,7 @@ func DialAddrContext(
 	addr string,
 	tlsConf *tls.Config,
 	config *Config,
-) (Session, error) {
+) (Connection, error) {
 	return dialAddrContext(ctx, addr, tlsConf, config, false)
 }
 
@@ -131,7 +131,7 @@ func Dial(
 	host string,
 	tlsConf *tls.Config,
 	config *Config,
-) (Session, error) {
+) (Connection, error) {
 	return dialContext(context.Background(), pconn, remoteAddr, host, tlsConf, config, false, false)
 }
 
@@ -172,7 +172,7 @@ func DialContext(
 	host string,
 	tlsConf *tls.Config,
 	config *Config,
-) (Session, error) {
+) (Connection, error) {
 	return dialContext(ctx, pconn, remoteAddr, host, tlsConf, config, false, false)
 }
 

@@ -7,7 +7,7 @@ import (
 	"net"
 	"sync"
 
-	quic "github.com/lucas-clemente/quic-go"
+	"github.com/lucas-clemente/quic-go"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 
 	. "github.com/onsi/ginkgo"
@@ -39,7 +39,7 @@ var _ = Describe("Unidirectional Streams", func() {
 		return GeneratePRData(10 * int(id))
 	}
 
-	runSendingPeer := func(sess quic.Session) {
+	runSendingPeer := func(sess quic.Connection) {
 		for i := 0; i < numStreams; i++ {
 			str, err := sess.OpenUniStreamSync(context.Background())
 			Expect(err).ToNot(HaveOccurred())
@@ -52,7 +52,7 @@ var _ = Describe("Unidirectional Streams", func() {
 		}
 	}
 
-	runReceivingPeer := func(sess quic.Session) {
+	runReceivingPeer := func(sess quic.Connection) {
 		var wg sync.WaitGroup
 		wg.Add(numStreams)
 		for i := 0; i < numStreams; i++ {

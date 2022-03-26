@@ -10,7 +10,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	quic "github.com/lucas-clemente/quic-go"
+	"github.com/lucas-clemente/quic-go"
 	quicproxy "github.com/lucas-clemente/quic-go/integrationtests/tools/proxy"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 
@@ -71,7 +71,7 @@ var _ = Describe("Handshake drop tests", func() {
 	clientSpeaksFirst := &applicationProtocol{
 		name: "client speaks first",
 		run: func(version protocol.VersionNumber) {
-			serverSessionChan := make(chan quic.Session)
+			serverSessionChan := make(chan quic.Connection)
 			go func() {
 				defer GinkgoRecover()
 				sess, err := ln.Accept(context.Background())
@@ -100,7 +100,7 @@ var _ = Describe("Handshake drop tests", func() {
 			Expect(err).ToNot(HaveOccurred())
 			Expect(str.Close()).To(Succeed())
 
-			var serverSession quic.Session
+			var serverSession quic.Connection
 			Eventually(serverSessionChan, timeout).Should(Receive(&serverSession))
 			sess.CloseWithError(0, "")
 			serverSession.CloseWithError(0, "")
@@ -110,7 +110,7 @@ var _ = Describe("Handshake drop tests", func() {
 	serverSpeaksFirst := &applicationProtocol{
 		name: "server speaks first",
 		run: func(version protocol.VersionNumber) {
-			serverSessionChan := make(chan quic.Session)
+			serverSessionChan := make(chan quic.Connection)
 			go func() {
 				defer GinkgoRecover()
 				sess, err := ln.Accept(context.Background())
@@ -138,7 +138,7 @@ var _ = Describe("Handshake drop tests", func() {
 			Expect(err).ToNot(HaveOccurred())
 			Expect(b).To(Equal(data))
 
-			var serverSession quic.Session
+			var serverSession quic.Connection
 			Eventually(serverSessionChan, timeout).Should(Receive(&serverSession))
 			sess.CloseWithError(0, "")
 			serverSession.CloseWithError(0, "")
@@ -148,7 +148,7 @@ var _ = Describe("Handshake drop tests", func() {
 	nobodySpeaks := &applicationProtocol{
 		name: "nobody speaks",
 		run: func(version protocol.VersionNumber) {
-			serverSessionChan := make(chan quic.Session)
+			serverSessionChan := make(chan quic.Connection)
 			go func() {
 				defer GinkgoRecover()
 				sess, err := ln.Accept(context.Background())
@@ -165,7 +165,7 @@ var _ = Describe("Handshake drop tests", func() {
 				}),
 			)
 			Expect(err).ToNot(HaveOccurred())
-			var serverSession quic.Session
+			var serverSession quic.Connection
 			Eventually(serverSessionChan, timeout).Should(Receive(&serverSession))
 			// both server and client accepted a session. Close now.
 			sess.CloseWithError(0, "")

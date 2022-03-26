@@ -43,7 +43,7 @@ func areClosedSessionsRunning() bool {
 	return strings.Contains(b.String(), "quic-go.(*closedLocalSession).run")
 }
 
-var _ = Describe("Session", func() {
+var _ = Describe("Connection", func() {
 	var (
 		sess          *session
 		sessionRunner *MockSessionRunner
@@ -2413,7 +2413,7 @@ var _ = Describe("Session", func() {
 	})
 })
 
-var _ = Describe("Client Session", func() {
+var _ = Describe("Client Connection", func() {
 	var (
 		sess          *session
 		sessionRunner *MockSessionRunner

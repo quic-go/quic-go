@@ -138,10 +138,10 @@ func (mr *MockEarlySessionMockRecorder) LocalAddr() *gomock.Call {
 }
 
 // NextSession mocks base method.
-func (m *MockEarlySession) NextSession() quic.Session {
+func (m *MockEarlySession) NextSession() quic.Connection {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "NextSession")
-	ret0, _ := ret[0].(quic.Session)
+	ret0, _ := ret[0].(quic.Connection)
 	return ret0
 }
 
