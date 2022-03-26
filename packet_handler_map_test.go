@@ -89,12 +89,12 @@ var _ = Describe("Packet Handler Map", func() {
 		}()
 
 		testErr := errors.New("test error	")
-		sess1 := NewMockPacketHandler(mockCtrl)
-		sess1.EXPECT().destroy(testErr)
-		sess2 := NewMockPacketHandler(mockCtrl)
-		sess2.EXPECT().destroy(testErr)
-		handler.Add(protocol.ConnectionID{1, 1, 1, 1}, sess1)
-		handler.Add(protocol.ConnectionID{2, 2, 2, 2}, sess2)
+		conn1 := NewMockPacketHandler(mockCtrl)
+		conn1.EXPECT().destroy(testErr)
+		conn2 := NewMockPacketHandler(mockCtrl)
+		conn2.EXPECT().destroy(testErr)
+		handler.Add(protocol.ConnectionID{1, 1, 1, 1}, conn1)
+		handler.Add(protocol.ConnectionID{2, 2, 2, 2}, conn2)
 		mockMultiplexer.EXPECT().RemoveConn(gomock.Any())
 		handler.close(testErr)
 		close(packetChan)
@@ -103,7 +103,7 @@ var _ = Describe("Packet Handler Map", func() {
 
 	Context("other operations", func() {
 		AfterEach(func() {
-			// delete sessions and the server before closing
+			// delete connections and the server before closing
 			// They might be mock implementations, and we'd have to register the expected calls before otherwise.
 			handler.mutex.Lock()
 			for connID := range handler.handlers {
@@ -160,8 +160,8 @@ var _ = Describe("Packet Handler Map", func() {
 				})
 			})
 
-			It("deletes removed sessions immediately", func() {
-				handler.deleteRetiredSessionsAfter = time.Hour
+			It("deletes removed connections immediately", func() {
+				handler.deleteRetiredConnsAfter = time.Hour
 				connID := protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8}
 				handler.Add(connID, NewMockPacketHandler(mockCtrl))
 				handler.Remove(connID)
@@ -169,19 +169,19 @@ var _ = Describe("Packet Handler Map", func() {
 				// don't EXPECT any calls to handlePacket of the MockPacketHandler
 			})
 
-			It("deletes retired session entries after a wait time", func() {
-				handler.deleteRetiredSessionsAfter = scaleDuration(10 * time.Millisecond)
+			It("deletes retired connection entries after a wait time", func() {
+				handler.deleteRetiredConnsAfter = scaleDuration(10 * time.Millisecond)
 				connID := protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8}
-				sess := NewMockPacketHandler(mockCtrl)
-				handler.Add(connID, sess)
+				conn := NewMockPacketHandler(mockCtrl)
+				handler.Add(connID, conn)
 				handler.Retire(connID)
 				time.Sleep(scaleDuration(30 * time.Millisecond))
 				handler.handlePacket(&receivedPacket{data: getPacket(connID)})
 				// don't EXPECT any calls to handlePacket of the MockPacketHandler
 			})
 
-			It("passes packets arriving late for closed sessions to that session", func() {
-				handler.deleteRetiredSessionsAfter = time.Hour
+			It("passes packets arriving late for closed connections to that connection", func() {
+				handler.deleteRetiredConnsAfter = time.Hour
 				connID := protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8}
 				packetHandler := NewMockPacketHandler(mockCtrl)
 				handled := make(chan struct{})
@@ -250,16 +250,16 @@ var _ = Describe("Packet Handler Map", func() {
 				handler.handlePacket(&receivedPacket{data: p})
 			})
 
-			It("closes all server sessions", func() {
+			It("closes all server connections", func() {
 				handler.SetServer(NewMockUnknownPacketHandler(mockCtrl))
-				clientSess := NewMockPacketHandler(mockCtrl)
-				clientSess.EXPECT().getPerspective().Return(protocol.PerspectiveClient)
-				serverSess := NewMockPacketHandler(mockCtrl)
-				serverSess.EXPECT().getPerspective().Return(protocol.PerspectiveServer)
-				serverSess.EXPECT().shutdown()
+				clientConn := NewMockPacketHandler(mockCtrl)
+				clientConn.EXPECT().getPerspective().Return(protocol.PerspectiveClient)
+				serverConn := NewMockPacketHandler(mockCtrl)
+				serverConn.EXPECT().getPerspective().Return(protocol.PerspectiveServer)
+				serverConn.EXPECT().shutdown()
 
-				handler.Add(protocol.ConnectionID{1, 1, 1, 1}, clientSess)
-				handler.Add(protocol.ConnectionID{2, 2, 2, 2}, serverSess)
+				handler.Add(protocol.ConnectionID{1, 1, 1, 1}, clientConn)
+				handler.Add(protocol.ConnectionID{2, 2, 2, 2}, serverConn)
 				handler.CloseServer()
 			})
 
@@ -293,23 +293,23 @@ var _ = Describe("Packet Handler Map", func() {
 				handler.handlePacket(p1)
 				handler.handlePacket(p2)
 				handler.handlePacket(p3)
-				sess := NewMockPacketHandler(mockCtrl)
+				conn := NewMockPacketHandler(mockCtrl)
 				done := make(chan struct{})
 				gomock.InOrder(
-					sess.EXPECT().handlePacket(p1),
-					sess.EXPECT().handlePacket(p2),
-					sess.EXPECT().handlePacket(p3).Do(func(packet *receivedPacket) { close(done) }),
+					conn.EXPECT().handlePacket(p1),
+					conn.EXPECT().handlePacket(p2),
+					conn.EXPECT().handlePacket(p3).Do(func(packet *receivedPacket) { close(done) }),
 				)
-				handler.AddWithConnID(connID, protocol.ConnectionID{1, 2, 3, 4}, func() packetHandler { return sess })
+				handler.AddWithConnID(connID, protocol.ConnectionID{1, 2, 3, 4}, func() packetHandler { return conn })
 				Eventually(done).Should(BeClosed())
 			})
 
-			It("directs 0-RTT packets to existing sessions", func() {
+			It("directs 0-RTT packets to existing connections", func() {
 				connID := protocol.ConnectionID{0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88}
-				sess := NewMockPacketHandler(mockCtrl)
-				handler.AddWithConnID(connID, protocol.ConnectionID{1, 2, 3, 4}, func() packetHandler { return sess })
+				conn := NewMockPacketHandler(mockCtrl)
+				handler.AddWithConnID(connID, protocol.ConnectionID{1, 2, 3, 4}, func() packetHandler { return conn })
 				p1 := &receivedPacket{data: getPacketWithPacketType(connID, protocol.PacketType0RTT, 1)}
-				sess.EXPECT().handlePacket(p1)
+				conn.EXPECT().handlePacket(p1)
 				handler.handlePacket(p1)
 			})
 
@@ -324,12 +324,12 @@ var _ = Describe("Packet Handler Map", func() {
 				connID := protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8, 9}
 				handler.handlePacket(&receivedPacket{data: getPacketWithPacketType(connID, protocol.PacketType0RTT, 1)})
 				// Don't EXPECT any handlePacket() calls.
-				sess := NewMockPacketHandler(mockCtrl)
-				handler.AddWithConnID(connID, protocol.ConnectionID{1, 2, 3, 4}, func() packetHandler { return sess })
+				conn := NewMockPacketHandler(mockCtrl)
+				handler.AddWithConnID(connID, protocol.ConnectionID{1, 2, 3, 4}, func() packetHandler { return conn })
 				time.Sleep(20 * time.Millisecond)
 			})
 
-			It("deletes queues if no session is created for this connection ID", func() {
+			It("deletes queues if no connection is created for this connection ID", func() {
 				queueDuration := scaleDuration(10 * time.Millisecond)
 				handler.zeroRTTQueueDuration = queueDuration
 
@@ -350,8 +350,8 @@ var _ = Describe("Packet Handler Map", func() {
 				// wait a bit. The queue should now already be deleted.
 				time.Sleep(queueDuration * 3)
 				// Don't EXPECT any handlePacket() calls.
-				sess := NewMockPacketHandler(mockCtrl)
-				handler.AddWithConnID(connID, protocol.ConnectionID{1, 2, 3, 4}, func() packetHandler { return sess })
+				conn := NewMockPacketHandler(mockCtrl)
+				handler.AddWithConnID(connID, protocol.ConnectionID{1, 2, 3, 4}, func() packetHandler { return conn })
 				time.Sleep(20 * time.Millisecond)
 			})
 		})

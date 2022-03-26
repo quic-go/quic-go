@@ -31,7 +31,7 @@ import (
 	. "github.com/onsi/gomega"
 )
 
-func areSessionsRunning() bool {
+func areConnsRunning() bool {
 	var b bytes.Buffer
 	pprof.Lookup("goroutine").WriteTo(&b, 1)
 	return strings.Contains(b.String(), "quic-go.(*session).run")
@@ -81,7 +81,7 @@ var _ = Describe("Connection", func() {
 	}
 
 	BeforeEach(func() {
-		Eventually(areSessionsRunning).Should(BeFalse())
+		Eventually(areConnsRunning).Should(BeFalse())
 
 		connRunner = NewMockConnRunner(mockCtrl)
 		mconn = NewMockSendConn(mockCtrl)
@@ -123,7 +123,7 @@ var _ = Describe("Connection", func() {
 	})
 
 	AfterEach(func() {
-		Eventually(areSessionsRunning).Should(BeFalse())
+		Eventually(areConnsRunning).Should(BeFalse())
 	})
 
 	Context("frame handling", func() {
@@ -424,7 +424,7 @@ var _ = Describe("Connection", func() {
 				cryptoSetup.EXPECT().RunHandshake().MaxTimes(1)
 				runErr <- sess.run()
 			}()
-			Eventually(areSessionsRunning).Should(BeTrue())
+			Eventually(areConnsRunning).Should(BeTrue())
 		}
 
 		It("shuts down without error", func() {
@@ -451,7 +451,7 @@ var _ = Describe("Connection", func() {
 				tracer.EXPECT().Close(),
 			)
 			sess.shutdown()
-			Eventually(areSessionsRunning).Should(BeFalse())
+			Eventually(areConnsRunning).Should(BeFalse())
 			Expect(sess.Context().Done()).To(BeClosed())
 		})
 
@@ -466,7 +466,7 @@ var _ = Describe("Connection", func() {
 			tracer.EXPECT().Close()
 			sess.shutdown()
 			sess.shutdown()
-			Eventually(areSessionsRunning).Should(BeFalse())
+			Eventually(areConnsRunning).Should(BeFalse())
 			Expect(sess.Context().Done()).To(BeClosed())
 		})
 
@@ -486,7 +486,7 @@ var _ = Describe("Connection", func() {
 				tracer.EXPECT().Close(),
 			)
 			sess.CloseWithError(0x1337, "test error")
-			Eventually(areSessionsRunning).Should(BeFalse())
+			Eventually(areConnsRunning).Should(BeFalse())
 			Expect(sess.Context().Done()).To(BeClosed())
 		})
 
@@ -507,7 +507,7 @@ var _ = Describe("Connection", func() {
 				tracer.EXPECT().Close(),
 			)
 			sess.closeLocal(expectedErr)
-			Eventually(areSessionsRunning).Should(BeFalse())
+			Eventually(areConnsRunning).Should(BeFalse())
 			Expect(sess.Context().Done()).To(BeClosed())
 		})
 
@@ -528,7 +528,7 @@ var _ = Describe("Connection", func() {
 				tracer.EXPECT().Close(),
 			)
 			sess.destroy(testErr)
-			Eventually(areSessionsRunning).Should(BeFalse())
+			Eventually(areConnsRunning).Should(BeFalse())
 			expectedRunErr = &qerr.TransportError{
 				ErrorCode:    qerr.InternalError,
 				ErrorMessage: testErr.Error(),
@@ -2449,7 +2449,7 @@ var _ = Describe("Client Connection", func() {
 	})
 
 	JustBeforeEach(func() {
-		Eventually(areSessionsRunning).Should(BeFalse())
+		Eventually(areConnsRunning).Should(BeFalse())
 
 		mconn = NewMockSendConn(mockCtrl)
 		mconn.EXPECT().RemoteAddr().Return(&net.UDPAddr{}).AnyTimes()

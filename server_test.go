@@ -146,7 +146,7 @@ var _ = Describe("Server", func() {
 		ln, err := Listen(conn, tlsConf, &config)
 		Expect(err).ToNot(HaveOccurred())
 		server := ln.(*baseServer)
-		Expect(server.sessionHandler).ToNot(BeNil())
+		Expect(server.connHandler).ToNot(BeNil())
 		Expect(server.config.Versions).To(Equal(supportedVersions))
 		Expect(server.config.HandshakeIdleTimeout).To(Equal(1337 * time.Hour))
 		Expect(server.config.MaxIdleTimeout).To(Equal(42 * time.Minute))
@@ -178,7 +178,7 @@ var _ = Describe("Server", func() {
 		Expect(err).To(BeAssignableToTypeOf(&net.OpError{}))
 	})
 
-	Context("server accepting sessions that completed the handshake", func() {
+	Context("server accepting connections that completed the handshake", func() {
 		var (
 			serv   *baseServer
 			phm    *MockPacketHandlerManager
@@ -191,7 +191,7 @@ var _ = Describe("Server", func() {
 			Expect(err).ToNot(HaveOccurred())
 			serv = ln.(*baseServer)
 			phm = NewMockPacketHandlerManager(mockCtrl)
-			serv.sessionHandler = phm
+			serv.connHandler = phm
 		})
 
 		AfterEach(func() {
@@ -291,7 +291,7 @@ var _ = Describe("Server", func() {
 				Eventually(done).Should(BeClosed())
 			})
 
-			It("creates a session when the token is accepted", func() {
+			It("creates a connection when the token is accepted", func() {
 				serv.config.AcceptToken = func(_ net.Addr, token *Token) bool { return true }
 				retryToken, err := serv.tokenGenerator.NewRetryToken(
 					&net.UDPAddr{},
@@ -363,7 +363,7 @@ var _ = Describe("Server", func() {
 				go func() {
 					defer GinkgoRecover()
 					serv.handlePacket(p)
-					// the Handshake packet is written by the session.
+					// the Handshake packet is written by the connection.
 					// Make sure there are no Write calls on the packet conn.
 					time.Sleep(50 * time.Millisecond)
 					close(done)
@@ -576,7 +576,7 @@ var _ = Describe("Server", func() {
 				Eventually(done).Should(BeClosed())
 			})
 
-			It("creates a session, if no Token is required", func() {
+			It("creates a connection, if no Token is required", func() {
 				serv.config.AcceptToken = func(_ net.Addr, _ *Token) bool { return true }
 				hdr := &wire.Header{
 					IsLongHeader:     true,
@@ -642,7 +642,7 @@ var _ = Describe("Server", func() {
 				go func() {
 					defer GinkgoRecover()
 					serv.handlePacket(p)
-					// the Handshake packet is written by the session
+					// the Handshake packet is written by the connection
 					// make sure there are no Write calls on the packet conn
 					time.Sleep(50 * time.Millisecond)
 					close(done)
@@ -661,7 +661,7 @@ var _ = Describe("Server", func() {
 				tracer.EXPECT().TracerForConnection(gomock.Any(), protocol.PerspectiveServer, gomock.Any()).AnyTimes()
 
 				serv.config.AcceptToken = func(net.Addr, *Token) bool { return true }
-				acceptSession := make(chan struct{})
+				acceptConn := make(chan struct{})
 				var counter uint32 // to be used as an atomic, so we query it in Eventually
 				serv.newSession = func(
 					_ sendConn,
@@ -681,7 +681,7 @@ var _ = Describe("Server", func() {
 					_ utils.Logger,
 					_ protocol.VersionNumber,
 				) quicConn {
-					<-acceptSession
+					<-acceptConn
 					atomic.AddUint32(&counter, 1)
 					conn := NewMockQuicConn(mockCtrl)
 					conn.EXPECT().handlePacket(gomock.Any()).MaxTimes(1)
@@ -705,7 +705,7 @@ var _ = Describe("Server", func() {
 				}
 				wg.Wait()
 
-				close(acceptSession)
+				close(acceptConn)
 				Eventually(
 					func() uint32 { return atomic.LoadUint32(&counter) },
 					scaleDuration(100*time.Millisecond),
@@ -713,9 +713,9 @@ var _ = Describe("Server", func() {
 				Consistently(func() uint32 { return atomic.LoadUint32(&counter) }).Should(BeEquivalentTo(protocol.MaxServerUnprocessedPackets + 1))
 			})
 
-			It("only creates a single session for a duplicate Initial", func() {
+			It("only creates a single connection for a duplicate Initial", func() {
 				serv.config.AcceptToken = func(_ net.Addr, _ *Token) bool { return true }
-				var createdSession bool
+				var createdConn bool
 				conn := NewMockQuicConn(mockCtrl)
 				serv.newSession = func(
 					_ sendConn,
@@ -735,14 +735,14 @@ var _ = Describe("Server", func() {
 					_ utils.Logger,
 					_ protocol.VersionNumber,
 				) quicConn {
-					createdSession = true
+					createdConn = true
 					return conn
 				}
 
 				p := getInitial(protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8, 9})
 				phm.EXPECT().AddWithConnID(protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8, 9}, gomock.Any(), gomock.Any()).Return(false)
 				Expect(serv.handlePacketImpl(p)).To(BeTrue())
-				Expect(createdSession).To(BeFalse())
+				Expect(createdConn).To(BeFalse())
 			})
 
 			It("rejects new connection attempts if the accept queue is full", func() {
@@ -813,12 +813,12 @@ var _ = Describe("Server", func() {
 				Eventually(done).Should(BeClosed())
 			})
 
-			It("doesn't accept new sessions if they were closed in the mean time", func() {
+			It("doesn't accept new connections if they were closed in the mean time", func() {
 				serv.config.AcceptToken = func(_ net.Addr, _ *Token) bool { return true }
 
 				p := getInitial(protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8, 9, 10})
 				ctx, cancel := context.WithCancel(context.Background())
-				sessionCreated := make(chan struct{})
+				connCreated := make(chan struct{})
 				conn := NewMockQuicConn(mockCtrl)
 				serv.newSession = func(
 					_ sendConn,
@@ -844,7 +844,7 @@ var _ = Describe("Server", func() {
 					ctx, cancel := context.WithCancel(context.Background())
 					cancel()
 					conn.EXPECT().HandshakeComplete().Return(ctx)
-					close(sessionCreated)
+					close(connCreated)
 					return conn
 				}
 
@@ -858,7 +858,7 @@ var _ = Describe("Server", func() {
 				serv.handlePacket(p)
 				// make sure there are no Write calls on the packet conn
 				time.Sleep(50 * time.Millisecond)
-				Eventually(sessionCreated).Should(BeClosed())
+				Eventually(connCreated).Should(BeClosed())
 				cancel()
 				time.Sleep(scaleDuration(200 * time.Millisecond))
 
@@ -878,7 +878,7 @@ var _ = Describe("Server", func() {
 			})
 		})
 
-		Context("accepting sessions", func() {
+		Context("accepting connections", func() {
 			It("returns Accept when an error occurs", func() {
 				testErr := errors.New("test err")
 
@@ -918,7 +918,7 @@ var _ = Describe("Server", func() {
 				Eventually(done).Should(BeClosed())
 			})
 
-			It("accepts new sessions when the handshake completes", func() {
+			It("accepts new connections when the handshake completes", func() {
 				conn := NewMockQuicConn(mockCtrl)
 
 				done := make(chan struct{})
@@ -973,7 +973,7 @@ var _ = Describe("Server", func() {
 		})
 	})
 
-	Context("server accepting sessions that haven't completed the handshake", func() {
+	Context("server accepting connections that haven't completed the handshake", func() {
 		var (
 			serv *earlyServer
 			phm  *MockPacketHandlerManager
@@ -984,7 +984,7 @@ var _ = Describe("Server", func() {
 			Expect(err).ToNot(HaveOccurred())
 			serv = ln.(*earlyServer)
 			phm = NewMockPacketHandlerManager(mockCtrl)
-			serv.sessionHandler = phm
+			serv.connHandler = phm
 		})
 
 		AfterEach(func() {
@@ -992,7 +992,7 @@ var _ = Describe("Server", func() {
 			serv.Close()
 		})
 
-		It("accepts new sessions when they become ready", func() {
+		It("accepts new connections when they become ready", func() {
 			conn := NewMockQuicConn(mockCtrl)
 
 			done := make(chan struct{})
@@ -1086,7 +1086,7 @@ var _ = Describe("Server", func() {
 				serv.handlePacket(getInitialWithRandomDestConnID())
 			}
 
-			Eventually(func() int32 { return atomic.LoadInt32(&serv.sessionQueueLen) }).Should(BeEquivalentTo(protocol.MaxAcceptQueueSize))
+			Eventually(func() int32 { return atomic.LoadInt32(&serv.connQueueLen) }).Should(BeEquivalentTo(protocol.MaxAcceptQueueSize))
 			// make sure there are no Write calls on the packet conn
 			time.Sleep(50 * time.Millisecond)
 
@@ -1106,12 +1106,12 @@ var _ = Describe("Server", func() {
 			Eventually(done).Should(BeClosed())
 		})
 
-		It("doesn't accept new sessions if they were closed in the mean time", func() {
+		It("doesn't accept new connections if they were closed in the mean time", func() {
 			serv.config.AcceptToken = func(_ net.Addr, _ *Token) bool { return true }
 
 			p := getInitial(protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8, 9, 10})
 			ctx, cancel := context.WithCancel(context.Background())
-			sessionCreated := make(chan struct{})
+			connCreated := make(chan struct{})
 			conn := NewMockQuicConn(mockCtrl)
 			serv.newSession = func(
 				_ sendConn,
@@ -1135,7 +1135,7 @@ var _ = Describe("Server", func() {
 				conn.EXPECT().run()
 				conn.EXPECT().earlySessionReady()
 				conn.EXPECT().Context().Return(ctx)
-				close(sessionCreated)
+				close(connCreated)
 				return conn
 			}
 
@@ -1147,7 +1147,7 @@ var _ = Describe("Server", func() {
 			serv.handlePacket(p)
 			// make sure there are no Write calls on the packet conn
 			time.Sleep(50 * time.Millisecond)
-			Eventually(sessionCreated).Should(BeClosed())
+			Eventually(connCreated).Should(BeClosed())
 			cancel()
 			time.Sleep(scaleDuration(200 * time.Millisecond))
 

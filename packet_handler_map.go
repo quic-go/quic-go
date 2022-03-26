@@ -71,8 +71,8 @@ type packetHandlerMap struct {
 	listening chan struct{} // is closed when listen returns
 	closed    bool
 
-	deleteRetiredSessionsAfter time.Duration
-	zeroRTTQueueDuration       time.Duration
+	deleteRetiredConnsAfter time.Duration
+	zeroRTTQueueDuration    time.Duration
 
 	statelessResetEnabled bool
 	statelessResetMutex   sync.Mutex
@@ -138,17 +138,17 @@ func newPacketHandlerMap(
 		return nil, err
 	}
 	m := &packetHandlerMap{
-		conn:                       conn,
-		connIDLen:                  connIDLen,
-		listening:                  make(chan struct{}),
-		handlers:                   make(map[string]packetHandlerMapEntry),
-		resetTokens:                make(map[protocol.StatelessResetToken]packetHandler),
-		deleteRetiredSessionsAfter: protocol.RetiredConnectionIDDeleteTimeout,
-		zeroRTTQueueDuration:       protocol.Max0RTTQueueingDuration,
-		statelessResetEnabled:      len(statelessResetKey) > 0,
-		statelessResetHasher:       hmac.New(sha256.New, statelessResetKey),
-		tracer:                     tracer,
-		logger:                     logger,
+		conn:                    conn,
+		connIDLen:               connIDLen,
+		listening:               make(chan struct{}),
+		handlers:                make(map[string]packetHandlerMapEntry),
+		resetTokens:             make(map[protocol.StatelessResetToken]packetHandler),
+		deleteRetiredConnsAfter: protocol.RetiredConnectionIDDeleteTimeout,
+		zeroRTTQueueDuration:    protocol.Max0RTTQueueingDuration,
+		statelessResetEnabled:   len(statelessResetKey) > 0,
+		statelessResetHasher:    hmac.New(sha256.New, statelessResetKey),
+		tracer:                  tracer,
+		logger:                  logger,
 	}
 	go m.listen()
 
@@ -204,7 +204,7 @@ func (h *packetHandlerMap) AddWithConnID(clientDestConnID, newConnID protocol.Co
 	var q *zeroRTTQueue
 	if entry, ok := h.handlers[string(clientDestConnID)]; ok {
 		if !entry.is0RTTQueue {
-			h.logger.Debugf("Not adding connection ID %s for a new session, as it already exists.", clientDestConnID)
+			h.logger.Debugf("Not adding connection ID %s for a new connection, as it already exists.", clientDestConnID)
 			return false
 		}
 		q = entry.packetHandler.(*zeroRTTQueue)
@@ -220,7 +220,7 @@ func (h *packetHandlerMap) AddWithConnID(clientDestConnID, newConnID protocol.Co
 	}
 	h.handlers[string(clientDestConnID)] = packetHandlerMapEntry{packetHandler: sess}
 	h.handlers[string(newConnID)] = packetHandlerMapEntry{packetHandler: sess}
-	h.logger.Debugf("Adding connection IDs %s and %s for a new session.", clientDestConnID, newConnID)
+	h.logger.Debugf("Adding connection IDs %s and %s for a new connection.", clientDestConnID, newConnID)
 	return true
 }
 
@@ -232,8 +232,8 @@ func (h *packetHandlerMap) Remove(id protocol.ConnectionID) {
 }
 
 func (h *packetHandlerMap) Retire(id protocol.ConnectionID) {
-	h.logger.Debugf("Retiring connection ID %s in %s.", id, h.deleteRetiredSessionsAfter)
-	time.AfterFunc(h.deleteRetiredSessionsAfter, func() {
+	h.logger.Debugf("Retiring connection ID %s in %s.", id, h.deleteRetiredConnsAfter)
+	time.AfterFunc(h.deleteRetiredConnsAfter, func() {
 		h.mutex.Lock()
 		delete(h.handlers, string(id))
 		h.mutex.Unlock()
@@ -245,14 +245,14 @@ func (h *packetHandlerMap) ReplaceWithClosed(id protocol.ConnectionID, handler p
 	h.mutex.Lock()
 	h.handlers[string(id)] = packetHandlerMapEntry{packetHandler: handler}
 	h.mutex.Unlock()
-	h.logger.Debugf("Replacing session for connection ID %s with a closed session.", id)
+	h.logger.Debugf("Replacing connection for connection ID %s with a closed connection.", id)
 
-	time.AfterFunc(h.deleteRetiredSessionsAfter, func() {
+	time.AfterFunc(h.deleteRetiredConnsAfter, func() {
 		h.mutex.Lock()
 		handler.shutdown()
 		delete(h.handlers, string(id))
 		h.mutex.Unlock()
-		h.logger.Debugf("Removing connection ID %s for a closed session after it has been retired.", id)
+		h.logger.Debugf("Removing connection ID %s for a closed connection after it has been retired.", id)
 	})
 }
 
@@ -297,7 +297,7 @@ func (h *packetHandlerMap) CloseServer() {
 }
 
 // Destroy closes the underlying connection and waits until listen() has returned.
-// It does not close active sessions.
+// It does not close active connections.
 func (h *packetHandlerMap) Destroy() error {
 	if err := h.conn.Close(); err != nil {
 		return err
@@ -371,7 +371,7 @@ func (h *packetHandlerMap) handlePacket(p *receivedPacket) {
 				entry.packetHandler.handlePacket(p)
 				return
 			}
-		} else { // existing session
+		} else { // existing connection
 			entry.packetHandler.handlePacket(p)
 			return
 		}
@@ -397,7 +397,7 @@ func (h *packetHandlerMap) handlePacket(p *receivedPacket) {
 		queue.retireTimer = time.AfterFunc(h.zeroRTTQueueDuration, func() {
 			h.mutex.Lock()
 			defer h.mutex.Unlock()
-			// The entry might have been replaced by an actual session.
+			// The entry might have been replaced by an actual connection.
 			// Only delete it if it's still a 0-RTT queue.
 			if entry, ok := h.handlers[string(connID)]; ok && entry.is0RTTQueue {
 				delete(h.handlers, string(connID))
@@ -429,7 +429,7 @@ func (h *packetHandlerMap) maybeHandleStatelessReset(data []byte) bool {
 	var token protocol.StatelessResetToken
 	copy(token[:], data[len(data)-16:])
 	if sess, ok := h.resetTokens[token]; ok {
-		h.logger.Debugf("Received a stateless reset with token %#x. Closing session.", token)
+		h.logger.Debugf("Received a stateless reset with token %#x. Closing connection.", token)
 		go sess.destroy(&StatelessResetError{Token: token})
 		return true
 	}

@@ -56,7 +56,7 @@ type quicConn interface {
 type baseServer struct {
 	mutex sync.Mutex
 
-	acceptEarlySessions bool
+	acceptEarlyConns bool
 
 	tlsConf *tls.Config
 	config  *Config
@@ -68,7 +68,7 @@ type baseServer struct {
 
 	tokenGenerator *handshake.TokenGenerator
 
-	sessionHandler packetHandlerManager
+	connHandler packetHandlerManager
 
 	receivedPackets chan *receivedPacket
 
@@ -97,8 +97,8 @@ type baseServer struct {
 	closed      bool
 	running     chan struct{} // closed as soon as run() returns
 
-	sessionQueue    chan quicConn
-	sessionQueueLen int32 // to be used as an atomic
+	connQueue    chan quicConn
+	connQueueLen int32 // to be used as an atomic
 
 	logger utils.Logger
 }
@@ -123,7 +123,7 @@ func ListenAddr(addr string, tlsConf *tls.Config, config *Config) (Listener, err
 	return listenAddr(addr, tlsConf, config, false)
 }
 
-// ListenAddrEarly works like ListenAddr, but it returns sessions before the handshake completes.
+// ListenAddrEarly works like ListenAddr, but it returns connections before the handshake completes.
 func ListenAddrEarly(addr string, tlsConf *tls.Config, config *Config) (EarlyListener, error) {
 	s, err := listenAddr(addr, tlsConf, config, true)
 	if err != nil {
@@ -164,7 +164,7 @@ func Listen(conn net.PacketConn, tlsConf *tls.Config, config *Config) (Listener,
 	return listen(conn, tlsConf, config, false)
 }
 
-// ListenEarly works like Listen, but it returns sessions before the handshake completes.
+// ListenEarly works like Listen, but it returns connections before the handshake completes.
 func ListenEarly(conn net.PacketConn, tlsConf *tls.Config, config *Config) (EarlyListener, error) {
 	s, err := listen(conn, tlsConf, config, true)
 	if err != nil {
@@ -187,7 +187,7 @@ func listen(conn net.PacketConn, tlsConf *tls.Config, config *Config, acceptEarl
 		}
 	}
 
-	sessionHandler, err := getMultiplexer().AddConn(conn, config.ConnectionIDLength, config.StatelessResetKey, config.Tracer)
+	connHandler, err := getMultiplexer().AddConn(conn, config.ConnectionIDLength, config.StatelessResetKey, config.Tracer)
 	if err != nil {
 		return nil, err
 	}
@@ -200,21 +200,21 @@ func listen(conn net.PacketConn, tlsConf *tls.Config, config *Config, acceptEarl
 		return nil, err
 	}
 	s := &baseServer{
-		conn:                c,
-		tlsConf:             tlsConf,
-		config:              config,
-		tokenGenerator:      tokenGenerator,
-		sessionHandler:      sessionHandler,
-		sessionQueue:        make(chan quicConn),
-		errorChan:           make(chan struct{}),
-		running:             make(chan struct{}),
-		receivedPackets:     make(chan *receivedPacket, protocol.MaxServerUnprocessedPackets),
-		newSession:          newSession,
-		logger:              utils.DefaultLogger.WithPrefix("server"),
-		acceptEarlySessions: acceptEarly,
+		conn:             c,
+		tlsConf:          tlsConf,
+		config:           config,
+		tokenGenerator:   tokenGenerator,
+		connHandler:      connHandler,
+		connQueue:        make(chan quicConn),
+		errorChan:        make(chan struct{}),
+		running:          make(chan struct{}),
+		receivedPackets:  make(chan *receivedPacket, protocol.MaxServerUnprocessedPackets),
+		newSession:       newSession,
+		logger:           utils.DefaultLogger.WithPrefix("server"),
+		acceptEarlyConns: acceptEarly,
 	}
 	go s.run()
-	sessionHandler.SetServer(s)
+	connHandler.SetServer(s)
 	s.logger.Debugf("Listening for %s connections on %s", conn.LocalAddr().Network(), conn.LocalAddr().String())
 	return s, nil
 }
@@ -258,8 +258,8 @@ var defaultAcceptToken = func(clientAddr net.Addr, token *Token) bool {
 	return sourceAddr == token.RemoteAddr
 }
 
-// Accept returns sessions that already completed the handshake.
-// It is only valid if acceptEarlySessions is false.
+// Accept returns connections that already completed the handshake.
+// It is only valid if acceptEarlyConns is false.
 func (s *baseServer) Accept(ctx context.Context) (Connection, error) {
 	return s.accept(ctx)
 }
@@ -268,8 +268,8 @@ func (s *baseServer) accept(ctx context.Context) (quicConn, error) {
 	select {
 	case <-ctx.Done():
 		return nil, ctx.Err()
-	case sess := <-s.sessionQueue:
-		atomic.AddInt32(&s.sessionQueueLen, -1)
+	case sess := <-s.connQueue:
+		atomic.AddInt32(&s.connQueueLen, -1)
 		return sess, nil
 	case <-s.errorChan:
 		return nil, s.serverError
@@ -294,9 +294,9 @@ func (s *baseServer) Close() error {
 	s.mutex.Unlock()
 
 	<-s.running
-	s.sessionHandler.CloseServer()
+	s.connHandler.CloseServer()
 	if createdPacketConn {
-		return s.sessionHandler.Destroy()
+		return s.connHandler.Destroy()
 	}
 	return nil
 }
@@ -336,7 +336,7 @@ func (s *baseServer) handlePacketImpl(p *receivedPacket) bool /* is the buffer s
 		}
 		return false
 	}
-	// If we're creating a new session, the packet will be passed to the session.
+	// If we're creating a new connection, the packet will be passed to the connection.
 	// The header will then be parsed again.
 	hdr, _, _, err := wire.ParsePacket(p.data, s.config.ConnectionIDLength)
 	if err != nil && err != wire.ErrUnsupportedVersion {
@@ -436,7 +436,7 @@ func (s *baseServer) handleInitialImpl(p *receivedPacket, hdr *wire.Header) erro
 		return nil
 	}
 
-	if queueLen := atomic.LoadInt32(&s.sessionQueueLen); queueLen >= protocol.MaxAcceptQueueSize {
+	if queueLen := atomic.LoadInt32(&s.connQueueLen); queueLen >= protocol.MaxAcceptQueueSize {
 		s.logger.Debugf("Rejecting new connection. Server currently busy. Accept queue length: %d (max %d)", queueLen, protocol.MaxAcceptQueueSize)
 		go func() {
 			defer p.buffer.Release()
@@ -452,9 +452,9 @@ func (s *baseServer) handleInitialImpl(p *receivedPacket, hdr *wire.Header) erro
 		return err
 	}
 	s.logger.Debugf("Changing connection ID to %s.", connID)
-	var sess quicConn
+	var conn quicConn
 	tracingID := nextSessionTracingID()
-	if added := s.sessionHandler.AddWithConnID(hdr.DestConnectionID, connID, func() packetHandler {
+	if added := s.connHandler.AddWithConnID(hdr.DestConnectionID, connID, func() packetHandler {
 		var tracer logging.ConnectionTracer
 		if s.config.Tracer != nil {
 			// Use the same connection ID that is passed to the client's GetLogWriter callback.
@@ -468,69 +468,69 @@ func (s *baseServer) handleInitialImpl(p *receivedPacket, hdr *wire.Header) erro
 				connID,
 			)
 		}
-		sess = s.newSession(
+		conn = s.newSession(
 			newSendConn(s.conn, p.remoteAddr, p.info),
-			s.sessionHandler,
+			s.connHandler,
 			origDestConnID,
 			retrySrcConnID,
 			hdr.DestConnectionID,
 			hdr.SrcConnectionID,
 			connID,
-			s.sessionHandler.GetStatelessResetToken(connID),
+			s.connHandler.GetStatelessResetToken(connID),
 			s.config,
 			s.tlsConf,
 			s.tokenGenerator,
-			s.acceptEarlySessions,
+			s.acceptEarlyConns,
 			tracer,
 			tracingID,
 			s.logger,
 			hdr.Version,
 		)
-		sess.handlePacket(p)
-		return sess
+		conn.handlePacket(p)
+		return conn
 	}); !added {
 		return nil
 	}
-	go sess.run()
-	go s.handleNewSession(sess)
-	if sess == nil {
+	go conn.run()
+	go s.handleNewConn(conn)
+	if conn == nil {
 		p.buffer.Release()
 		return nil
 	}
 	return nil
 }
 
-func (s *baseServer) handleNewSession(sess quicConn) {
-	sessCtx := sess.Context()
-	if s.acceptEarlySessions {
-		// wait until the early session is ready (or the handshake fails)
+func (s *baseServer) handleNewConn(conn quicConn) {
+	sessCtx := conn.Context()
+	if s.acceptEarlyConns {
+		// wait until the early connection is ready (or the handshake fails)
 		select {
-		case <-sess.earlySessionReady():
+		case <-conn.earlySessionReady():
 		case <-sessCtx.Done():
 			return
 		}
 	} else {
 		// wait until the handshake is complete (or fails)
 		select {
-		case <-sess.HandshakeComplete().Done():
+		case <-conn.HandshakeComplete().Done():
 		case <-sessCtx.Done():
 			return
 		}
 	}
 
-	atomic.AddInt32(&s.sessionQueueLen, 1)
+	atomic.AddInt32(&s.connQueueLen, 1)
 	select {
-	case s.sessionQueue <- sess:
-		// blocks until the session is accepted
+	case s.connQueue <- conn:
+		// blocks until the connection is accepted
 	case <-sessCtx.Done():
-		atomic.AddInt32(&s.sessionQueueLen, -1)
-		// don't pass sessions that were already closed to Accept()
+		atomic.AddInt32(&s.connQueueLen, -1)
+		// don't pass connections that were already closed to Accept()
 	}
 }
 
 func (s *baseServer) sendRetry(remoteAddr net.Addr, hdr *wire.Header, info *packetInfo) error {
 	// Log the Initial packet now.
-	// If no Retry is sent, the packet will be logged by the session.
+	// If no Retry is sent, the packet will be logged by the connection.
 	(&wire.ExtendedHeader{Header: *hdr}).Log(s.logger)
 	srcConnID, err := protocol.GenerateConnectionID(s.config.ConnectionIDLength)
 	if err != nil {

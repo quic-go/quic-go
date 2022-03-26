@@ -56,7 +56,7 @@ var _ = Describe("Client", func() {
 		tr := mocklogging.NewMockTracer(mockCtrl)
 		tr.EXPECT().TracerForConnection(gomock.Any(), protocol.PerspectiveClient, gomock.Any()).Return(tracer).MaxTimes(1)
 		config = &Config{Tracer: tr, Versions: []protocol.VersionNumber{protocol.VersionTLS}}
-		Eventually(areSessionsRunning).Should(BeFalse())
+		Eventually(areConnsRunning).Should(BeFalse())
 		addr = &net.UDPAddr{IP: net.IPv4(192, 168, 100, 200), Port: 1337}
 		packetConn = NewMockPacketConn(mockCtrl)
 		packetConn.EXPECT().LocalAddr().Return(&net.UDPAddr{}).AnyTimes()
@@ -64,7 +64,7 @@ var _ = Describe("Client", func() {
 			srcConnID:  connID,
 			destConnID: connID,
 			version:    protocol.VersionTLS,
-			conn:       newSendPconn(packetConn, addr),
+			sconn:      newSendPconn(packetConn, addr),
 			tracer:     tracer,
 			logger:     utils.DefaultLogger,
 		}
@@ -81,10 +81,10 @@ var _ = Describe("Client", func() {
 	})
 
 	AfterEach(func() {
-		if s, ok := cl.session.(*session); ok {
+		if s, ok := cl.conn.(*session); ok {
 			s.shutdown()
 		}
-		Eventually(areSessionsRunning).Should(BeFalse())
+		Eventually(areConnsRunning).Should(BeFalse())
 	})
 
 	Context("Dialing", func() {
@@ -259,7 +259,7 @@ var _ = Describe("Client", func() {
 			Eventually(run).Should(BeClosed())
 		})
 
-		It("returns early sessions", func() {
+		It("returns early connections", func() {
 			manager := NewMockPacketHandlerManager(mockCtrl)
 			manager.EXPECT().Add(gomock.Any(), gomock.Any())
 			mockMultiplexer.EXPECT().AddConn(packetConn, gomock.Any(), gomock.Any(), gomock.Any()).Return(manager, nil)
@@ -345,16 +345,16 @@ var _ = Describe("Client", func() {
 			Expect(err).To(MatchError(testErr))
 		})
 
-		It("closes the session when the context is canceled", func() {
+		It("closes the connection when the context is canceled", func() {
 			manager := NewMockPacketHandlerManager(mockCtrl)
 			manager.EXPECT().Add(gomock.Any(), gomock.Any())
 			mockMultiplexer.EXPECT().AddConn(packetConn, gomock.Any(), gomock.Any(), gomock.Any()).Return(manager, nil)
 
-			sessionRunning := make(chan struct{})
-			defer close(sessionRunning)
+			connRunning := make(chan struct{})
+			defer close(connRunning)
 			conn := NewMockQuicConn(mockCtrl)
 			conn.EXPECT().run().Do(func() {
-				<-sessionRunning
+				<-connRunning
 			})
 			conn.EXPECT().HandshakeComplete().Return(context.Background())
 			newClientSession = func(
@@ -407,7 +407,7 @@ var _ = Describe("Client", func() {
 
 			var sconn sendConn
 			run := make(chan struct{})
-			sessionCreated := make(chan struct{})
+			connCreated := make(chan struct{})
 			conn := NewMockQuicConn(mockCtrl)
 			newClientSession = func(
 				connP sendConn,
@@ -425,7 +425,7 @@ var _ = Describe("Client", func() {
 				_ protocol.VersionNumber,
 			) quicConn {
 				sconn = connP
-				close(sessionCreated)
+				close(connCreated)
 				return conn
 			}
 			conn.EXPECT().run().Do(func() {
@@ -441,7 +441,7 @@ var _ = Describe("Client", func() {
 				close(done)
 			}()
 
-			Eventually(sessionCreated).Should(BeClosed())
+			Eventually(connCreated).Should(BeClosed())
 
 			// check that the connection is not closed
 			Expect(sconn.Write([]byte("foobar"))).To(Succeed())
@@ -519,7 +519,7 @@ var _ = Describe("Client", func() {
 			})
 		})
 
-		It("creates new sessions with the right parameters", func() {
+		It("creates new connections with the right parameters", func() {
 			manager := NewMockPacketHandlerManager(mockCtrl)
 			manager.EXPECT().Add(connID, gomock.Any())
 			mockMultiplexer.EXPECT().AddConn(packetConn, gomock.Any(), gomock.Any(), gomock.Any()).Return(manager, nil)
@@ -562,7 +562,7 @@ var _ = Describe("Client", func() {
 			Expect(conf.Versions).To(Equal(config.Versions))
 		})
 
-		It("creates a new session after version negotiation", func() {
+		It("creates a new connections after version negotiation", func() {
 			manager := NewMockPacketHandlerManager(mockCtrl)
 			manager.EXPECT().Add(connID, gomock.Any()).Times(2)
 			manager.EXPECT().Destroy()

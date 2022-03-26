@@ -14,7 +14,7 @@ import (
 )
 
 type client struct {
-	conn sendConn
+	sconn sendConn
 	// If the client is created with DialAddr, we create a packet conn.
 	// If it is started with Dial, we take a packet conn as a parameter.
 	createdPacketConn bool
@@ -35,7 +35,7 @@ type client struct {
 
 	handshakeChan chan struct{}
 
-	session quicConn
+	conn quicConn
 
 	tracer    logging.ConnectionTracer
 	tracingID uint64
@@ -49,7 +49,7 @@ var (
 )
 
 // DialAddr establishes a new QUIC connection to a server.
-// It uses a new UDP connection and closes this connection when the QUIC session is closed.
+// It uses a new UDP connection and closes this connection when the QUIC connection is closed.
 // The hostname for SNI is taken from the given address.
 // The tls.Config.CipherSuites allows setting of TLS 1.3 cipher suites.
 func DialAddr(
@@ -61,7 +61,7 @@ func DialAddr(
 }
 
 // DialAddrEarly establishes a new 0-RTT QUIC connection to a server.
-// It uses a new UDP connection and closes this connection when the QUIC session is closed.
+// It uses a new UDP connection and closes this connection when the QUIC connection is closed.
 // The hostname for SNI is taken from the given address.
 // The tls.Config.CipherSuites allows setting of TLS 1.3 cipher suites.
 func DialAddrEarly(
@@ -80,12 +80,12 @@ func DialAddrEarlyContext(
 	tlsConf *tls.Config,
 	config *Config,
 ) (EarlyConnection, error) {
-	sess, err := dialAddrContext(ctx, addr, tlsConf, config, true)
+	conn, err := dialAddrContext(ctx, addr, tlsConf, config, true)
 	if err != nil {
 		return nil, err
 	}
-	utils.Logger.WithPrefix(utils.DefaultLogger, "client").Debugf("Returning early session")
-	return sess, nil
+	utils.Logger.WithPrefix(utils.DefaultLogger, "client").Debugf("Returning early connection")
+	return conn, nil
 }
 
 // DialAddrContext establishes a new QUIC connection to a server using the provided context.
@@ -212,12 +212,12 @@ func dialContext(
 		)
 	}
 	if c.tracer != nil {
-		c.tracer.StartedConnection(c.conn.LocalAddr(), c.conn.RemoteAddr(), c.srcConnID, c.destConnID)
+		c.tracer.StartedConnection(c.sconn.LocalAddr(), c.sconn.RemoteAddr(), c.srcConnID, c.destConnID)
 	}
 	if err := c.dial(ctx); err != nil {
 		return nil, err
 	}
-	return c.session, nil
+	return c.conn, nil
 }
 
 func newClient(
@@ -265,7 +265,7 @@ func newClient(
 	c := &client{
 		srcConnID:         srcConnID,
 		destConnID:        destConnID,
-		conn:              newSendPconn(pconn, remoteAddr),
+		sconn:             newSendPconn(pconn, remoteAddr),
 		createdPacketConn: createdPacketConn,
 		use0RTT:           use0RTT,
 		tlsConf:           tlsConf,
@@ -278,10 +278,10 @@ func newClient(
 }
 
 func (c *client) dial(ctx context.Context) error {
-	c.logger.Infof("Starting new connection to %s (%s -> %s), source connection ID %s, destination connection ID %s, version %s", c.tlsConf.ServerName, c.conn.LocalAddr(), c.conn.RemoteAddr(), c.srcConnID, c.destConnID, c.version)
+	c.logger.Infof("Starting new connection to %s (%s -> %s), source connection ID %s, destination connection ID %s, version %s", c.tlsConf.ServerName, c.sconn.LocalAddr(), c.sconn.RemoteAddr(), c.srcConnID, c.destConnID, c.version)
 
-	c.session = newClientSession(
-		c.conn,
+	c.conn = newClientSession(
+		c.sconn,
 		c.packetHandlers,
 		c.destConnID,
 		c.srcConnID,
@@ -295,11 +295,11 @@ func (c *client) dial(ctx context.Context) error {
 		c.logger,
 		c.version,
 	)
-	c.packetHandlers.Add(c.srcConnID, c.session)
+	c.packetHandlers.Add(c.srcConnID, c.conn)
 
 	errorChan := make(chan error, 1)
 	go func() {
-		err := c.session.run() // returns as soon as the session is closed
+		err := c.conn.run() // returns as soon as the connection is closed
 
 		if e := (&errCloseForRecreating{}); !errors.As(err, &e) && c.createdPacketConn {
 			c.packetHandlers.Destroy()
@@ -308,15 +308,15 @@ func (c *client) dial(ctx context.Context) error {
 	}()
 
 	// only set when we're using 0-RTT
-	// Otherwise, earlySessionChan will be nil. Receiving from a nil chan blocks forever.
-	var earlySessionChan <-chan struct{}
+	// Otherwise, earlyConnChan will be nil. Receiving from a nil chan blocks forever.
+	var earlyConnChan <-chan struct{}
 	if c.use0RTT {
-		earlySessionChan = c.session.earlySessionReady()
+		earlyConnChan = c.conn.earlySessionReady()
 	}
 
 	select {
 	case <-ctx.Done():
-		c.session.shutdown()
+		c.conn.shutdown()
 		return ctx.Err()
 	case err := <-errorChan:
 		var recreateErr *errCloseForRecreating
@@ -327,10 +327,10 @@ func (c *client) dial(ctx context.Context) error {
 			return c.dial(ctx)
 		}
 		return err
-	case <-earlySessionChan:
+	case <-earlyConnChan:
 		// ready to send 0-RTT data
 		return nil
-	case <-c.session.HandshakeComplete().Done():
+	case <-c.conn.HandshakeComplete().Done():
 		// handshake successfully completed
 		return nil
 	}
