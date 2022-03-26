@@ -235,11 +235,11 @@ func (s *Server) serveImpl(startListener func() (quic.EarlyListener, error)) err
 	defer s.removeListener(&ln)
 
 	for {
-		sess, err := ln.Accept(context.Background())
+		conn, err := ln.Accept(context.Background())
 		if err != nil {
 			return err
 		}
-		go s.handleConn(sess)
+		go s.handleConn(conn)
 	}
 }
 
@@ -334,11 +334,11 @@ func (s *Server) removeListener(l *quic.EarlyListener) {
 	s.mutex.Unlock()
 }
 
-func (s *Server) handleConn(sess quic.EarlyConnection) {
+func (s *Server) handleConn(conn quic.EarlyConnection) {
 	decoder := qpack.NewDecoder(nil)
 
 	// send a SETTINGS frame
-	str, err := sess.OpenUniStream()
+	str, err := conn.OpenUniStream()
 	if err != nil {
 		s.logger.Debugf("Opening the control stream failed.")
 		return
@@ -348,19 +348,19 @@ func (s *Server) handleConn(sess quic.EarlyConnection) {
 	(&settingsFrame{Datagram: s.EnableDatagrams}).Write(buf)
 	str.Write(buf.Bytes())
 
-	go s.handleUnidirectionalStreams(sess)
+	go s.handleUnidirectionalStreams(conn)
 
 	// Process all requests immediately.
 	// It's the client's responsibility to decide which requests are eligible for 0-RTT.
 	for {
-		str, err := sess.AcceptStream(context.Background())
+		str, err := conn.AcceptStream(context.Background())
 		if err != nil {
 			s.logger.Debugf("Accepting stream failed: %s", err)
 			return
 		}
 		go func() {
-			rerr := s.handleRequest(sess, str, decoder, func() {
-				sess.CloseWithError(quic.ApplicationErrorCode(errorFrameUnexpected), "")
+			rerr := s.handleRequest(conn, str, decoder, func() {
+				conn.CloseWithError(quic.ApplicationErrorCode(errorFrameUnexpected), "")
 			})
 			if rerr.err != nil || rerr.streamErr != 0 || rerr.connErr != 0 {
 				s.logger.Debugf("Handling request failed: %s", err)
@@ -372,7 +372,7 @@ func (s *Server) handleConn(sess quic.EarlyConnection) {
 					if rerr.err != nil {
 						reason = rerr.err.Error()
 					}
-					sess.CloseWithError(quic.ApplicationErrorCode(rerr.connErr), reason)
+					conn.CloseWithError(quic.ApplicationErrorCode(rerr.connErr), reason)
 				}
 				return
 			}
@@ -381,9 +381,9 @@ func (s *Server) handleConn(sess quic.EarlyConnection) {
 	}
 }
 
-func (s *Server) handleUnidirectionalStreams(sess quic.EarlyConnection) {
+func (s *Server) handleUnidirectionalStreams(conn quic.EarlyConnection) {
 	for {
-		str, err := sess.AcceptUniStream(context.Background())
+		str, err := conn.AcceptUniStream(context.Background())
 		if err != nil {
 			s.logger.Debugf("accepting unidirectional stream failed: %s", err)
 			return
@@ -403,7 +403,7 @@ func (s *Server) handleUnidirectionalStreams(sess quic.EarlyConnection) {
 				// TODO: check that only one stream of each type is opened.
 				return
 			case streamTypePushStream: // only the server can push
-				sess.CloseWithError(quic.ApplicationErrorCode(errorStreamCreationError), "")
+				conn.CloseWithError(quic.ApplicationErrorCode(errorStreamCreationError), "")
 				return
 			default:
 				str.CancelRead(quic.StreamErrorCode(errorStreamCreationError))
@@ -411,12 +411,12 @@ func (s *Server) handleUnidirectionalStreams(sess quic.EarlyConnection) {
 			}
 			f, err := parseNextFrame(str)
 			if err != nil {
-				sess.CloseWithError(quic.ApplicationErrorCode(errorFrameError), "")
+				conn.CloseWithError(quic.ApplicationErrorCode(errorFrameError), "")
 				return
 			}
 			sf, ok := f.(*settingsFrame)
 			if !ok {
-				sess.CloseWithError(quic.ApplicationErrorCode(errorMissingSettings), "")
+				conn.CloseWithError(quic.ApplicationErrorCode(errorMissingSettings), "")
 				return
 			}
 			if !sf.Datagram {
@@ -425,8 +425,8 @@ func (s *Server) handleUnidirectionalStreams(sess quic.EarlyConnection) {
 			// If datagram support was enabled on our side as well as on the client side,
 			// we can expect it to have been negotiated both on the transport and on the HTTP/3 layer.
 			// Note: ConnectionState() will block until the handshake is complete (relevant when using 0-RTT).
-			if s.EnableDatagrams && !sess.ConnectionState().SupportsDatagrams {
-				sess.CloseWithError(quic.ApplicationErrorCode(errorSettingsError), "missing QUIC Datagram support")
+			if s.EnableDatagrams && !conn.ConnectionState().SupportsDatagrams {
+				conn.CloseWithError(quic.ApplicationErrorCode(errorSettingsError), "missing QUIC Datagram support")
 			}
 		}(str)
 	}
@@ -439,7 +439,7 @@ func (s *Server) maxHeaderBytes() uint64 {
 	return uint64(s.Server.MaxHeaderBytes)
 }
 
-func (s *Server) handleRequest(sess quic.Connection, str quic.Stream, decoder *qpack.Decoder, onFrameError func()) requestError {
+func (s *Server) handleRequest(conn quic.Connection, str quic.Stream, decoder *qpack.Decoder, onFrameError func()) requestError {
 	frame, err := parseNextFrame(str)
 	if err != nil {
 		return newStreamError(errorRequestIncomplete, err)
@@ -466,7 +466,7 @@ func (s *Server) handleRequest(sess quic.Connection, str quic.Stream, decoder *q
 		return newStreamError(errorGeneralProtocolError, err)
 	}
 
-	req.RemoteAddr = sess.RemoteAddr().String()
+	req.RemoteAddr = conn.RemoteAddr().String()
 	req.Body = newRequestBody(str, onFrameError)
 
 	if s.logger.Debug() {
@@ -477,7 +477,7 @@ func (s *Server) handleRequest(sess quic.Connection, str quic.Stream, decoder *q
 
 	ctx := str.Context()
 	ctx = context.WithValue(ctx, ServerContextKey, s)
-	ctx = context.WithValue(ctx, http.LocalAddrContextKey, sess.LocalAddr())
+	ctx = context.WithValue(ctx, http.LocalAddrContextKey, conn.LocalAddr())
 	req = req.WithContext(ctx)
 	r := newResponseWriter(str, s.logger)
 	defer func() {
