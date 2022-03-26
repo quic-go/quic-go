@@ -453,7 +453,7 @@ func (s *baseServer) handleInitialImpl(p *receivedPacket, hdr *wire.Header) erro
 	}
 	s.logger.Debugf("Changing connection ID to %s.", connID)
 	var conn quicConn
-	tracingID := nextSessionTracingID()
+	tracingID := nextConnTracingID()
 	if added := s.connHandler.AddWithConnID(hdr.DestConnectionID, connID, func() packetHandler {
 		var tracer logging.ConnectionTracer
 		if s.config.Tracer != nil {
@@ -463,7 +463,7 @@ func (s *baseServer) handleInitialImpl(p *receivedPacket, hdr *wire.Header) erro
 				connID = origDestConnID
 			}
 			tracer = s.config.Tracer.TracerForConnection(
-				context.WithValue(context.Background(), SessionTracingKey, tracingID),
+				context.WithValue(context.Background(), ConnectionTracingKey, tracingID),
 				protocol.PerspectiveServer,
 				connID,
 			)

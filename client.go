@@ -203,10 +203,10 @@ func dialContext(
 	}
 	c.packetHandlers = packetHandlers
 
-	c.tracingID = nextSessionTracingID()
+	c.tracingID = nextConnTracingID()
 	if c.config.Tracer != nil {
 		c.tracer = c.config.Tracer.TracerForConnection(
-			context.WithValue(ctx, SessionTracingKey, c.tracingID),
+			context.WithValue(ctx, ConnectionTracingKey, c.tracingID),
 			protocol.PerspectiveClient,
 			c.destConnID,
 		)

@@ -59,12 +59,12 @@ type TokenStore interface {
 // when the server rejects a 0-RTT connection attempt.
 var Err0RTTRejected = errors.New("0-RTT rejected")
 
-// SessionTracingKey can be used to associate a ConnectionTracer with a Connection.
+// ConnectionTracingKey can be used to associate a ConnectionTracer with a Connection.
 // It is set on the Connection.Context() context,
 // as well as on the context passed to logging.Tracer.NewConnectionTracer.
-var SessionTracingKey = sessionTracingCtxKey{}
+var ConnectionTracingKey = connTracingCtxKey{}
 
-type sessionTracingCtxKey struct{}
+type connTracingCtxKey struct{}
 
 // Stream is the interface implemented by QUIC streams
 // In addition to the errors listed on the Connection,

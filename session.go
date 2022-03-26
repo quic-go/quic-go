@@ -127,8 +127,8 @@ func (e *errCloseForRecreating) Error() string {
 	return "closing session in order to recreate it"
 }
 
-var sessionTracingID uint64        // to be accessed atomically
-func nextSessionTracingID() uint64 { return atomic.AddUint64(&sessionTracingID, 1) }
+var connTracingID uint64        // to be accessed atomically
+func nextConnTracingID() uint64 { return atomic.AddUint64(&connTracingID, 1) }
 
 // A Connection is a QUIC session
 type session struct {
@@ -282,7 +282,7 @@ var newSession = func(
 		s.version,
 	)
 	s.preSetup()
-	s.ctx, s.ctxCancel = context.WithCancel(context.WithValue(context.Background(), SessionTracingKey, tracingID))
+	s.ctx, s.ctxCancel = context.WithCancel(context.WithValue(context.Background(), ConnectionTracingKey, tracingID))
 	s.sentPacketHandler, s.receivedPacketHandler = ackhandler.NewAckHandler(
 		0,
 		getMaxPacketSize(s.conn.RemoteAddr()),
@@ -409,7 +409,7 @@ var newClientSession = func(
 		s.version,
 	)
 	s.preSetup()
-	s.ctx, s.ctxCancel = context.WithCancel(context.WithValue(context.Background(), SessionTracingKey, tracingID))
+	s.ctx, s.ctxCancel = context.WithCancel(context.WithValue(context.Background(), ConnectionTracingKey, tracingID))
 	s.sentPacketHandler, s.receivedPacketHandler = ackhandler.NewAckHandler(
 		initialPacketNumber,
 		getMaxPacketSize(s.conn.RemoteAddr()),
