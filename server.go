@@ -43,7 +43,7 @@ type packetHandlerManager interface {
 
 type quicConn interface {
 	EarlyConnection
-	earlySessionReady() <-chan struct{}
+	earlyConnReady() <-chan struct{}
 	handlePacket(*receivedPacket)
 	GetVersion() protocol.VersionNumber
 	getPerspective() protocol.Perspective
@@ -505,7 +505,7 @@ func (s *baseServer) handleNewConn(conn quicConn) {
 	if s.acceptEarlyConns {
 		// wait until the early connection is ready (or the handshake fails)
 		select {
-		case <-conn.earlySessionReady():
+		case <-conn.earlyConnReady():
 		case <-sessCtx.Done():
 			return
 		}

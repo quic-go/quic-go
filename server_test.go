@@ -1027,7 +1027,7 @@ var _ = Describe("Server", func() {
 				Expect(enable0RTT).To(BeTrue())
 				conn.EXPECT().handlePacket(gomock.Any())
 				conn.EXPECT().run().Do(func() {})
-				conn.EXPECT().earlySessionReady().Return(ready)
+				conn.EXPECT().earlyConnReady().Return(ready)
 				conn.EXPECT().Context().Return(context.Background())
 				return conn
 			}
@@ -1072,7 +1072,7 @@ var _ = Describe("Server", func() {
 				conn := NewMockQuicConn(mockCtrl)
 				conn.EXPECT().handlePacket(gomock.Any())
 				conn.EXPECT().run()
-				conn.EXPECT().earlySessionReady().Return(ready)
+				conn.EXPECT().earlyConnReady().Return(ready)
 				conn.EXPECT().Context().Return(context.Background())
 				return conn
 			}
@@ -1133,7 +1133,7 @@ var _ = Describe("Server", func() {
 			) quicConn {
 				conn.EXPECT().handlePacket(p)
 				conn.EXPECT().run()
-				conn.EXPECT().earlySessionReady()
+				conn.EXPECT().earlyConnReady()
 				conn.EXPECT().Context().Return(ctx)
 				close(connCreated)
 				return conn

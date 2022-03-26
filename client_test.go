@@ -285,7 +285,7 @@ var _ = Describe("Client", func() {
 				conn := NewMockQuicConn(mockCtrl)
 				conn.EXPECT().run().Do(func() { <-done })
 				conn.EXPECT().HandshakeComplete().Return(context.Background())
-				conn.EXPECT().earlySessionReady().Return(readyChan)
+				conn.EXPECT().earlyConnReady().Return(readyChan)
 				return conn
 			}
 

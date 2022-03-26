@@ -188,7 +188,7 @@ type session struct {
 	undecryptablePacketsToProcess []*receivedPacket
 
 	clientHelloWritten    <-chan *wire.TransportParameters
-	earlySessionReadyChan chan struct{}
+	earlyConnReadyChan    chan struct{}
 	handshakeCompleteChan chan struct{} // is closed when the handshake completes
 	handshakeComplete     bool
 	handshakeConfirmed    bool
@@ -511,7 +511,7 @@ func (s *session) preSetup() {
 		s.rttStats,
 		s.logger,
 	)
-	s.earlySessionReadyChan = make(chan struct{})
+	s.earlyConnReadyChan = make(chan struct{})
 	s.streamsMap = newStreamsMap(
 		s,
 		s.newFlowController,
@@ -555,7 +555,7 @@ func (s *session) run() error {
 			s.scheduleSending()
 			if zeroRTTParams != nil {
 				s.restoreTransportParameters(zeroRTTParams)
-				close(s.earlySessionReadyChan)
+				close(s.earlyConnReadyChan)
 			}
 		case closeErr := <-s.closeChan:
 			// put the close error back into the channel, so that the run loop can receive it
@@ -705,8 +705,8 @@ runLoop:
 }
 
 // blocks until the early session can be used
-func (s *session) earlySessionReady() <-chan struct{} {
-	return s.earlySessionReadyChan
+func (s *session) earlyConnReady() <-chan struct{} {
+	return s.earlyConnReadyChan
 }
 
 func (s *session) HandshakeComplete() context.Context {
@@ -1575,7 +1575,7 @@ func (s *session) handleTransportParameters(params *wire.TransportParameters) {
 		s.applyTransportParameters()
 		// On the server side, the early session is ready as soon as we processed
 		// the client's transport parameters.
-		close(s.earlySessionReadyChan)
+		close(s.earlyConnReadyChan)
 	}
 }
 

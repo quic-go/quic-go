@@ -311,7 +311,7 @@ func (c *client) dial(ctx context.Context) error {
 	// Otherwise, earlyConnChan will be nil. Receiving from a nil chan blocks forever.
 	var earlyConnChan <-chan struct{}
 	if c.use0RTT {
-		earlyConnChan = c.conn.earlySessionReady()
+		earlyConnChan = c.conn.earlyConnReady()
 	}
 
 	select {
