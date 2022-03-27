@@ -7,7 +7,7 @@ import (
 	"net"
 	"sync"
 
-	quic "github.com/lucas-clemente/quic-go"
+	"github.com/lucas-clemente/quic-go"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 
 	. "github.com/onsi/ginkgo"
@@ -42,11 +42,11 @@ var _ = Describe("Bidirectional streams", func() {
 				server.Close()
 			})
 
-			runSendingPeer := func(sess quic.Session) {
+			runSendingPeer := func(conn quic.Connection) {
 				var wg sync.WaitGroup
 				wg.Add(numStreams)
 				for i := 0; i < numStreams; i++ {
-					str, err := sess.OpenStreamSync(context.Background())
+					str, err := conn.OpenStreamSync(context.Background())
 					Expect(err).ToNot(HaveOccurred())
 					data := GeneratePRData(25 * i)
 					go func() {
@@ -66,11 +66,11 @@ var _ = Describe("Bidirectional streams", func() {
 				wg.Wait()
 			}
 
-			runReceivingPeer := func(sess quic.Session) {
+			runReceivingPeer := func(conn quic.Connection) {
 				var wg sync.WaitGroup
 				wg.Add(numStreams)
 				for i := 0; i < numStreams; i++ {
-					str, err := sess.AcceptStream(context.Background())
+					str, err := conn.AcceptStream(context.Background())
 					Expect(err).ToNot(HaveOccurred())
 					go func() {
 						defer GinkgoRecover()
@@ -88,13 +88,13 @@ var _ = Describe("Bidirectional streams", func() {
 			}
 
 			It(fmt.Sprintf("client opening %d streams to a server", numStreams), func() {
-				var sess quic.Session
+				var conn quic.Connection
 				go func() {
 					defer GinkgoRecover()
 					var err error
-					sess, err = server.Accept(context.Background())
+					conn, err = server.Accept(context.Background())
 					Expect(err).ToNot(HaveOccurred())
-					runReceivingPeer(sess)
+					runReceivingPeer(conn)
 				}()
 
 				client, err := quic.DialAddr(
@@ -109,10 +109,10 @@ var _ = Describe("Bidirectional streams", func() {
 			It(fmt.Sprintf("server opening %d streams to a client", numStreams), func() {
 				go func() {
 					defer GinkgoRecover()
-					sess, err := server.Accept(context.Background())
+					conn, err := server.Accept(context.Background())
 					Expect(err).ToNot(HaveOccurred())
-					runSendingPeer(sess)
-					sess.CloseWithError(0, "")
+					runSendingPeer(conn)
+					conn.CloseWithError(0, "")
 				}()
 
 				client, err := quic.DialAddr(
@@ -129,15 +129,15 @@ var _ = Describe("Bidirectional streams", func() {
 				done1 := make(chan struct{})
 				go func() {
 					defer GinkgoRecover()
-					sess, err := server.Accept(context.Background())
+					conn, err := server.Accept(context.Background())
 					Expect(err).ToNot(HaveOccurred())
 					done := make(chan struct{})
 					go func() {
 						defer GinkgoRecover()
-						runReceivingPeer(sess)
+						runReceivingPeer(conn)
 						close(done)
 					}()
-					runSendingPeer(sess)
+					runSendingPeer(conn)
 					<-done
 					close(done1)
 				}()

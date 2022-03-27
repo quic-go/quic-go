@@ -29,25 +29,25 @@ var _ = Describe("MITM test", func() {
 			const connIDLen = 6 // explicitly set the connection ID length, so the proxy can parse it
 
 			var (
-				proxy                  *quicproxy.QuicProxy
-				serverConn, clientConn *net.UDPConn
-				serverSess             quic.Session
-				serverConfig           *quic.Config
+				proxy                        *quicproxy.QuicProxy
+				serverUDPConn, clientUDPConn *net.UDPConn
+				serverConn                   quic.Connection
+				serverConfig                 *quic.Config
 			)
 
 			startServerAndProxy := func(delayCb quicproxy.DelayCallback, dropCb quicproxy.DropCallback) {
 				addr, err := net.ResolveUDPAddr("udp", "localhost:0")
 				Expect(err).ToNot(HaveOccurred())
-				serverConn, err = net.ListenUDP("udp", addr)
+				serverUDPConn, err = net.ListenUDP("udp", addr)
 				Expect(err).ToNot(HaveOccurred())
-				ln, err := quic.Listen(serverConn, getTLSConfig(), serverConfig)
+				ln, err := quic.Listen(serverUDPConn, getTLSConfig(), serverConfig)
 				Expect(err).ToNot(HaveOccurred())
 				go func() {
 					defer GinkgoRecover()
 					var err error
-					serverSess, err = ln.Accept(context.Background())
+					serverConn, err = ln.Accept(context.Background())
 					Expect(err).ToNot(HaveOccurred())
-					str, err := serverSess.OpenUniStream()
+					str, err := serverConn.OpenUniStream()
 					Expect(err).ToNot(HaveOccurred())
 					_, err = str.Write(PRData)
 					Expect(err).ToNot(HaveOccurred())
@@ -69,17 +69,17 @@ var _ = Describe("MITM test", func() {
 				})
 				addr, err := net.ResolveUDPAddr("udp", "localhost:0")
 				Expect(err).ToNot(HaveOccurred())
-				clientConn, err = net.ListenUDP("udp", addr)
+				clientUDPConn, err = net.ListenUDP("udp", addr)
 				Expect(err).ToNot(HaveOccurred())
 			})
 
 			Context("unsuccessful attacks", func() {
 				AfterEach(func() {
-					Eventually(serverSess.Context().Done()).Should(BeClosed())
+					Eventually(serverConn.Context().Done()).Should(BeClosed())
 					// Test shutdown is tricky due to the proxy. Just wait for a bit.
 					time.Sleep(50 * time.Millisecond)
-					Expect(clientConn.Close()).To(Succeed())
-					Expect(serverConn.Close()).To(Succeed())
+					Expect(clientUDPConn.Close()).To(Succeed())
+					Expect(serverUDPConn.Close()).To(Succeed())
 					Expect(proxy.Close()).To(Succeed())
 				})
 
@@ -123,8 +123,8 @@ var _ = Describe("MITM test", func() {
 						startServerAndProxy(delayCb, nil)
 						raddr, err := net.ResolveUDPAddr("udp", fmt.Sprintf("localhost:%d", proxy.LocalPort()))
 						Expect(err).ToNot(HaveOccurred())
-						sess, err := quic.Dial(
-							clientConn,
+						conn, err := quic.Dial(
+							clientUDPConn,
 							raddr,
 							fmt.Sprintf("localhost:%d", proxy.LocalPort()),
 							getTLSClientConfig(),
@@ -134,19 +134,19 @@ var _ = Describe("MITM test", func() {
 							}),
 						)
 						Expect(err).ToNot(HaveOccurred())
-						str, err := sess.AcceptUniStream(context.Background())
+						str, err := conn.AcceptUniStream(context.Background())
 						Expect(err).ToNot(HaveOccurred())
 						data, err := io.ReadAll(str)
 						Expect(err).ToNot(HaveOccurred())
 						Expect(data).To(Equal(PRData))
-						Expect(sess.CloseWithError(0, "")).To(Succeed())
+						Expect(conn.CloseWithError(0, "")).To(Succeed())
 					}
 
 					It("downloads a message when the packets are injected towards the server", func() {
 						delayCb := func(dir quicproxy.Direction, raw []byte) time.Duration {
 							if dir == quicproxy.DirectionIncoming {
 								defer GinkgoRecover()
-								go sendRandomPacketsOfSameType(clientConn, serverConn.LocalAddr(), raw)
+								go sendRandomPacketsOfSameType(clientUDPConn, serverUDPConn.LocalAddr(), raw)
 							}
 							return rtt / 2
 						}
@@ -157,7 +157,7 @@ var _ = Describe("MITM test", func() {
 						delayCb := func(dir quicproxy.Direction, raw []byte) time.Duration {
 							if dir == quicproxy.DirectionOutgoing {
 								defer GinkgoRecover()
-								go sendRandomPacketsOfSameType(serverConn, clientConn.LocalAddr(), raw)
+								go sendRandomPacketsOfSameType(serverUDPConn, clientUDPConn.LocalAddr(), raw)
 							}
 							return rtt / 2
 						}
@@ -169,8 +169,8 @@ var _ = Describe("MITM test", func() {
 					startServerAndProxy(nil, dropCb)
 					raddr, err := net.ResolveUDPAddr("udp", fmt.Sprintf("localhost:%d", proxy.LocalPort()))
 					Expect(err).ToNot(HaveOccurred())
-					sess, err := quic.Dial(
-						clientConn,
+					conn, err := quic.Dial(
+						clientUDPConn,
 						raddr,
 						fmt.Sprintf("localhost:%d", proxy.LocalPort()),
 						getTLSClientConfig(),
@@ -180,12 +180,12 @@ var _ = Describe("MITM test", func() {
 						}),
 					)
 					Expect(err).ToNot(HaveOccurred())
-					str, err := sess.AcceptUniStream(context.Background())
+					str, err := conn.AcceptUniStream(context.Background())
 					Expect(err).ToNot(HaveOccurred())
 					data, err := io.ReadAll(str)
 					Expect(err).ToNot(HaveOccurred())
 					Expect(data).To(Equal(PRData))
-					Expect(sess.CloseWithError(0, "")).To(Succeed())
+					Expect(conn.CloseWithError(0, "")).To(Succeed())
 				}
 
 				Context("duplicating packets", func() {
@@ -193,7 +193,7 @@ var _ = Describe("MITM test", func() {
 						dropCb := func(dir quicproxy.Direction, raw []byte) bool {
 							defer GinkgoRecover()
 							if dir == quicproxy.DirectionIncoming {
-								_, err := clientConn.WriteTo(raw, serverConn.LocalAddr())
+								_, err := clientUDPConn.WriteTo(raw, serverUDPConn.LocalAddr())
 								Expect(err).ToNot(HaveOccurred())
 							}
 							return false
@@ -205,7 +205,7 @@ var _ = Describe("MITM test", func() {
 						dropCb := func(dir quicproxy.Direction, raw []byte) bool {
 							defer GinkgoRecover()
 							if dir == quicproxy.DirectionOutgoing {
-								_, err := serverConn.WriteTo(raw, clientConn.LocalAddr())
+								_, err := serverUDPConn.WriteTo(raw, clientUDPConn.LocalAddr())
 								Expect(err).ToNot(HaveOccurred())
 							}
 							return false
@@ -230,8 +230,8 @@ var _ = Describe("MITM test", func() {
 						fmt.Fprintf(GinkgoWriter, "Corrupted %d of %d packets.", num, atomic.LoadInt32(&numPackets))
 						Expect(num).To(BeNumerically(">=", 1))
 						// If the packet containing the CONNECTION_CLOSE is corrupted,
-						// we have to wait for the session to time out.
-						Eventually(serverSess.Context().Done(), 3*idleTimeout).Should(BeClosed())
+						// we have to wait for the connection to time out.
+						Eventually(serverConn.Context().Done(), 3*idleTimeout).Should(BeClosed())
 					})
 
 					It("downloads a message when packet are corrupted towards the server", func() {
@@ -243,7 +243,7 @@ var _ = Describe("MITM test", func() {
 								if mrand.Intn(interval) == 0 {
 									pos := mrand.Intn(len(raw))
 									raw[pos] = byte(mrand.Intn(256))
-									_, err := clientConn.WriteTo(raw, serverConn.LocalAddr())
+									_, err := clientUDPConn.WriteTo(raw, serverUDPConn.LocalAddr())
 									Expect(err).ToNot(HaveOccurred())
 									atomic.AddInt32(&numCorrupted, 1)
 									return true
@@ -263,7 +263,7 @@ var _ = Describe("MITM test", func() {
 								if mrand.Intn(interval) == 0 {
 									pos := mrand.Intn(len(raw))
 									raw[pos] = byte(mrand.Intn(256))
-									_, err := serverConn.WriteTo(raw, clientConn.LocalAddr())
+									_, err := serverUDPConn.WriteTo(raw, clientUDPConn.LocalAddr())
 									Expect(err).ToNot(HaveOccurred())
 									atomic.AddInt32(&numCorrupted, 1)
 									return true
@@ -292,7 +292,7 @@ var _ = Describe("MITM test", func() {
 				})
 
 				// sendForgedVersionNegotiationPacket sends a fake VN packet with no supported versions
-				// from serverConn to client's remoteAddr
+				// from serverUDPConn to client's remoteAddr
 				// expects hdr from an Initial packet intercepted from client
 				sendForgedVersionNegotationPacket := func(conn net.PacketConn, remoteAddr net.Addr, hdr *wire.Header) {
 					// Create fake version negotiation packet with no supported versions
@@ -305,7 +305,7 @@ var _ = Describe("MITM test", func() {
 				}
 
 				// sendForgedRetryPacket sends a fake Retry packet with a modified srcConnID
-				// from serverConn to client's remoteAddr
+				// from serverUDPConn to client's remoteAddr
 				// expects hdr from an Initial packet intercepted from client
 				sendForgedRetryPacket := func(conn net.PacketConn, remoteAddr net.Addr, hdr *wire.Header) {
 					var x byte = 0x12
@@ -339,7 +339,7 @@ var _ = Describe("MITM test", func() {
 					raddr, err := net.ResolveUDPAddr("udp", fmt.Sprintf("localhost:%d", proxy.LocalPort()))
 					Expect(err).ToNot(HaveOccurred())
 					_, err = quic.Dial(
-						clientConn,
+						clientUDPConn,
 						raddr,
 						fmt.Sprintf("localhost:%d", proxy.LocalPort()),
 						getTLSClientConfig(),
@@ -365,7 +365,7 @@ var _ = Describe("MITM test", func() {
 								return 0
 							}
 
-							sendForgedVersionNegotationPacket(serverConn, clientConn.LocalAddr(), hdr)
+							sendForgedVersionNegotationPacket(serverUDPConn, clientUDPConn.LocalAddr(), hdr)
 						}
 						return rtt / 2
 					}
@@ -392,7 +392,7 @@ var _ = Describe("MITM test", func() {
 							}
 
 							initialPacketIntercepted = true
-							sendForgedRetryPacket(serverConn, clientConn.LocalAddr(), hdr)
+							sendForgedRetryPacket(serverUDPConn, clientUDPConn.LocalAddr(), hdr)
 						}
 						return rtt / 2
 					}
@@ -416,7 +416,7 @@ var _ = Describe("MITM test", func() {
 								return 0
 							}
 
-							sendForgedInitialPacket(serverConn, clientConn.LocalAddr(), hdr)
+							sendForgedInitialPacket(serverUDPConn, clientUDPConn.LocalAddr(), hdr)
 						}
 						return rtt
 					}
@@ -427,7 +427,7 @@ var _ = Describe("MITM test", func() {
 
 				// client connection closes immediately on receiving ack for unsent packet
 				It("fails when a forged initial packet with ack for unsent packet is sent to client", func() {
-					clientAddr := clientConn.LocalAddr()
+					clientAddr := clientUDPConn.LocalAddr()
 					delayCb := func(dir quicproxy.Direction, raw []byte) time.Duration {
 						if dir == quicproxy.DirectionIncoming {
 							hdr, _, _, err := wire.ParsePacket(raw, connIDLen)
@@ -435,7 +435,7 @@ var _ = Describe("MITM test", func() {
 							if hdr.Type != protocol.PacketTypeInitial {
 								return 0
 							}
-							sendForgedInitialPacketWithAck(serverConn, clientAddr, hdr)
+							sendForgedInitialPacketWithAck(serverUDPConn, clientAddr, hdr)
 						}
 						return rtt
 					}

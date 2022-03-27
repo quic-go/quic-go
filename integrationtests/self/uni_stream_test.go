@@ -7,7 +7,7 @@ import (
 	"net"
 	"sync"
 
-	quic "github.com/lucas-clemente/quic-go"
+	"github.com/lucas-clemente/quic-go"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 
 	. "github.com/onsi/ginkgo"
@@ -39,9 +39,9 @@ var _ = Describe("Unidirectional Streams", func() {
 		return GeneratePRData(10 * int(id))
 	}
 
-	runSendingPeer := func(sess quic.Session) {
+	runSendingPeer := func(conn quic.Connection) {
 		for i := 0; i < numStreams; i++ {
-			str, err := sess.OpenUniStreamSync(context.Background())
+			str, err := conn.OpenUniStreamSync(context.Background())
 			Expect(err).ToNot(HaveOccurred())
 			go func() {
 				defer GinkgoRecover()
@@ -52,11 +52,11 @@ var _ = Describe("Unidirectional Streams", func() {
 		}
 	}
 
-	runReceivingPeer := func(sess quic.Session) {
+	runReceivingPeer := func(conn quic.Connection) {
 		var wg sync.WaitGroup
 		wg.Add(numStreams)
 		for i := 0; i < numStreams; i++ {
-			str, err := sess.AcceptUniStream(context.Background())
+			str, err := conn.AcceptUniStream(context.Background())
 			Expect(err).ToNot(HaveOccurred())
 			go func() {
 				defer GinkgoRecover()
@@ -72,10 +72,10 @@ var _ = Describe("Unidirectional Streams", func() {
 	It(fmt.Sprintf("client opening %d streams to a server", numStreams), func() {
 		go func() {
 			defer GinkgoRecover()
-			sess, err := server.Accept(context.Background())
+			conn, err := server.Accept(context.Background())
 			Expect(err).ToNot(HaveOccurred())
-			runReceivingPeer(sess)
-			sess.CloseWithError(0, "")
+			runReceivingPeer(conn)
+			conn.CloseWithError(0, "")
 		}()
 
 		client, err := quic.DialAddr(
@@ -91,9 +91,9 @@ var _ = Describe("Unidirectional Streams", func() {
 	It(fmt.Sprintf("server opening %d streams to a client", numStreams), func() {
 		go func() {
 			defer GinkgoRecover()
-			sess, err := server.Accept(context.Background())
+			conn, err := server.Accept(context.Background())
 			Expect(err).ToNot(HaveOccurred())
-			runSendingPeer(sess)
+			runSendingPeer(conn)
 		}()
 
 		client, err := quic.DialAddr(
@@ -109,15 +109,15 @@ var _ = Describe("Unidirectional Streams", func() {
 		done1 := make(chan struct{})
 		go func() {
 			defer GinkgoRecover()
-			sess, err := server.Accept(context.Background())
+			conn, err := server.Accept(context.Background())
 			Expect(err).ToNot(HaveOccurred())
 			done := make(chan struct{})
 			go func() {
 				defer GinkgoRecover()
-				runReceivingPeer(sess)
+				runReceivingPeer(conn)
 				close(done)
 			}()
-			runSendingPeer(sess)
+			runSendingPeer(conn)
 			<-done
 			close(done1)
 		}()

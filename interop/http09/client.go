@@ -84,25 +84,25 @@ type client struct {
 	quicConf *quic.Config
 
 	once    sync.Once
-	sess    quic.EarlySession
+	conn    quic.EarlyConnection
 	dialErr error
 }
 
 func (c *client) RoundTrip(req *http.Request) (*http.Response, error) {
 	c.once.Do(func() {
-		c.sess, c.dialErr = quic.DialAddrEarly(c.hostname, c.tlsConf, c.quicConf)
+		c.conn, c.dialErr = quic.DialAddrEarly(c.hostname, c.tlsConf, c.quicConf)
 	})
 	if c.dialErr != nil {
 		return nil, c.dialErr
 	}
 	if req.Method != MethodGet0RTT {
-		<-c.sess.HandshakeComplete().Done()
+		<-c.conn.HandshakeComplete().Done()
 	}
 	return c.doRequest(req)
 }
 
 func (c *client) doRequest(req *http.Request) (*http.Response, error) {
-	str, err := c.sess.OpenStreamSync(context.Background())
+	str, err := c.conn.OpenStreamSync(context.Background())
 	if err != nil {
 		return nil, err
 	}
@@ -124,10 +124,10 @@ func (c *client) doRequest(req *http.Request) (*http.Response, error) {
 }
 
 func (c *client) Close() error {
-	if c.sess == nil {
+	if c.conn == nil {
 		return nil
 	}
-	return c.sess.CloseWithError(0, "")
+	return c.conn.CloseWithError(0, "")
 }
 
 func hostnameFromRequest(req *http.Request) string {

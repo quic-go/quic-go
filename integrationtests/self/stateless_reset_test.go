@@ -35,9 +35,9 @@ var _ = Describe("Stateless Resets", func() {
 
 			go func() {
 				defer GinkgoRecover()
-				sess, err := ln.Accept(context.Background())
+				conn, err := ln.Accept(context.Background())
 				Expect(err).ToNot(HaveOccurred())
-				str, err := sess.OpenStream()
+				str, err := conn.OpenStream()
 				Expect(err).ToNot(HaveOccurred())
 				_, err = str.Write([]byte("foobar"))
 				Expect(err).ToNot(HaveOccurred())
@@ -56,7 +56,7 @@ var _ = Describe("Stateless Resets", func() {
 			Expect(err).ToNot(HaveOccurred())
 			defer proxy.Close()
 
-			sess, err := quic.DialAddr(
+			conn, err := quic.DialAddr(
 				fmt.Sprintf("localhost:%d", proxy.LocalPort()),
 				getTLSClientConfig(),
 				getQuicConfig(&quic.Config{
@@ -65,7 +65,7 @@ var _ = Describe("Stateless Resets", func() {
 				}),
 			)
 			Expect(err).ToNot(HaveOccurred())
-			str, err := sess.AcceptStream(context.Background())
+			str, err := conn.AcceptStream(context.Background())
 			Expect(err).ToNot(HaveOccurred())
 			data := make([]byte, 6)
 			_, err = str.Read(data)

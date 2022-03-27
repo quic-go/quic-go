@@ -103,7 +103,7 @@ var _ = Describe("Config", func() {
 			var calledAcceptToken, calledAllowConnectionWindowIncrease bool
 			c1 := &Config{
 				AcceptToken:                   func(_ net.Addr, _ *Token) bool { calledAcceptToken = true; return true },
-				AllowConnectionWindowIncrease: func(Session, uint64) bool { calledAllowConnectionWindowIncrease = true; return true },
+				AllowConnectionWindowIncrease: func(Connection, uint64) bool { calledAllowConnectionWindowIncrease = true; return true },
 			}
 			c2 := c1.Clone()
 			c2.AcceptToken(&net.UDPAddr{}, &Token{})

@@ -171,7 +171,7 @@ var _ = Describe("Connection ID Generator", func() {
 		}
 	})
 
-	It("replaces with a closed session for all connection IDs", func() {
+	It("replaces with a closed connection for all connection IDs", func() {
 		Expect(g.SetMaxActiveConnIDs(5)).To(Succeed())
 		Expect(queuedFrames).To(HaveLen(4))
 		sess := NewMockPacketHandler(mockCtrl)

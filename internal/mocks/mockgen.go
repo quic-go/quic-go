@@ -1,7 +1,7 @@
 package mocks
 
 //go:generate sh -c "mockgen -package mockquic -destination quic/stream.go github.com/lucas-clemente/quic-go Stream"
-//go:generate sh -c "mockgen -package mockquic -destination quic/early_session_tmp.go github.com/lucas-clemente/quic-go EarlySession && sed 's/qtls.ConnectionState/quic.ConnectionState/g' quic/early_session_tmp.go > quic/early_session.go && rm quic/early_session_tmp.go && goimports -w quic/early_session.go"
+//go:generate sh -c "mockgen -package mockquic -destination quic/early_conn_tmp.go github.com/lucas-clemente/quic-go EarlyConnection && sed 's/qtls.ConnectionState/quic.ConnectionState/g' quic/early_conn_tmp.go > quic/early_conn.go && rm quic/early_conn_tmp.go && goimports -w quic/early_conn.go"
 //go:generate sh -c "mockgen -package mockquic -destination quic/early_listener.go github.com/lucas-clemente/quic-go EarlyListener"
 //go:generate sh -c "mockgen -package mocklogging -destination logging/tracer.go github.com/lucas-clemente/quic-go/logging Tracer"
 //go:generate sh -c "mockgen -package mocklogging -destination logging/connection_tracer.go github.com/lucas-clemente/quic-go/logging ConnectionTracer"

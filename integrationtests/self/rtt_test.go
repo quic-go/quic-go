@@ -7,7 +7,7 @@ import (
 	"net"
 	"time"
 
-	quic "github.com/lucas-clemente/quic-go"
+	"github.com/lucas-clemente/quic-go"
 	quicproxy "github.com/lucas-clemente/quic-go/integrationtests/tools/proxy"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 
@@ -28,9 +28,9 @@ var _ = Describe("non-zero RTT", func() {
 			Expect(err).ToNot(HaveOccurred())
 			go func() {
 				defer GinkgoRecover()
-				sess, err := ln.Accept(context.Background())
+				conn, err := ln.Accept(context.Background())
 				Expect(err).ToNot(HaveOccurred())
-				str, err := sess.OpenStream()
+				str, err := conn.OpenStream()
 				Expect(err).ToNot(HaveOccurred())
 				_, err = str.Write(PRData)
 				Expect(err).ToNot(HaveOccurred())
@@ -40,18 +40,18 @@ var _ = Describe("non-zero RTT", func() {
 		}
 
 		downloadFile := func(port int) {
-			sess, err := quic.DialAddr(
+			conn, err := quic.DialAddr(
 				fmt.Sprintf("localhost:%d", port),
 				getTLSClientConfig(),
 				getQuicConfig(&quic.Config{Versions: []protocol.VersionNumber{version}}),
 			)
 			Expect(err).ToNot(HaveOccurred())
-			str, err := sess.AcceptStream(context.Background())
+			str, err := conn.AcceptStream(context.Background())
 			Expect(err).ToNot(HaveOccurred())
 			data, err := io.ReadAll(str)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(data).To(Equal(PRData))
-			sess.CloseWithError(0, "")
+			conn.CloseWithError(0, "")
 		}
 
 		Context(fmt.Sprintf("with QUIC version %s", version), func() {
@@ -76,18 +76,18 @@ var _ = Describe("non-zero RTT", func() {
 					Expect(err).ToNot(HaveOccurred())
 					defer proxy.Close()
 
-					sess, err := quic.DialAddr(
+					conn, err := quic.DialAddr(
 						fmt.Sprintf("localhost:%d", proxy.LocalPort()),
 						getTLSClientConfig(),
 						getQuicConfig(&quic.Config{Versions: []protocol.VersionNumber{version}}),
 					)
 					Expect(err).ToNot(HaveOccurred())
-					str, err := sess.AcceptStream(context.Background())
+					str, err := conn.AcceptStream(context.Background())
 					Expect(err).ToNot(HaveOccurred())
 					data, err := io.ReadAll(str)
 					Expect(err).ToNot(HaveOccurred())
 					Expect(data).To(Equal(PRData))
-					sess.CloseWithError(0, "")
+					conn.CloseWithError(0, "")
 				})
 			}
 
