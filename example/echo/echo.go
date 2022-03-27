@@ -12,7 +12,7 @@ import (
 	"log"
 	"math/big"
 
-	quic "github.com/lucas-clemente/quic-go"
+	"github.com/lucas-clemente/quic-go"
 )
 
 const addr = "localhost:4242"
@@ -36,11 +36,11 @@ func echoServer() error {
 	if err != nil {
 		return err
 	}
-	sess, err := listener.Accept(context.Background())
+	conn, err := listener.Accept(context.Background())
 	if err != nil {
 		return err
 	}
-	stream, err := sess.AcceptStream(context.Background())
+	stream, err := conn.AcceptStream(context.Background())
 	if err != nil {
 		panic(err)
 	}
@@ -54,12 +54,12 @@ func clientMain() error {
 		InsecureSkipVerify: true,
 		NextProtos:         []string{"quic-echo-example"},
 	}
-	session, err := quic.DialAddr(addr, tlsConf, nil)
+	conn, err := quic.DialAddr(addr, tlsConf, nil)
 	if err != nil {
 		return err
 	}
 
-	stream, err := session.OpenStreamSync(context.Background())
+	stream, err := conn.OpenStreamSync(context.Background())
 	if err != nil {
 		return err
 	}

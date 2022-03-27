@@ -64,7 +64,7 @@ type packetHandlerMapEntry struct {
 
 // The packetHandlerMap stores packetHandlers, identified by connection ID.
 // It is used:
-// * by the server to store sessions
+// * by the server to store connections
 // * when multiplexing outgoing connections to store clients
 type packetHandlerMap struct {
 	mutex sync.Mutex

@@ -73,7 +73,7 @@ type baseServer struct {
 	receivedPackets chan *receivedPacket
 
 	// set as a member, so they can be set in the tests
-	newSession func(
+	newConn func(
 		sendConn,
 		connRunner,
 		protocol.ConnectionID, /* original dest connection ID */
@@ -209,7 +209,7 @@ func listen(conn net.PacketConn, tlsConf *tls.Config, config *Config, acceptEarl
 		errorChan:        make(chan struct{}),
 		running:          make(chan struct{}),
 		receivedPackets:  make(chan *receivedPacket, protocol.MaxServerUnprocessedPackets),
-		newSession:       newSession,
+		newConn:          newConnection,
 		logger:           utils.DefaultLogger.WithPrefix("server"),
 		acceptEarlyConns: acceptEarly,
 	}
@@ -268,9 +268,9 @@ func (s *baseServer) accept(ctx context.Context) (quicConn, error) {
 	select {
 	case <-ctx.Done():
 		return nil, ctx.Err()
-	case sess := <-s.connQueue:
+	case conn := <-s.connQueue:
 		atomic.AddInt32(&s.connQueueLen, -1)
-		return sess, nil
+		return conn, nil
 	case <-s.errorChan:
 		return nil, s.serverError
 	}
@@ -468,7 +468,7 @@ func (s *baseServer) handleInitialImpl(p *receivedPacket, hdr *wire.Header) erro
 				connID,
 			)
 		}
-		conn = s.newSession(
+		conn = s.newConn(
 			newSendConn(s.conn, p.remoteAddr, p.info),
 			s.connHandler,
 			origDestConnID,
@@ -501,19 +501,19 @@ func (s *baseServer) handleInitialImpl(p *receivedPacket, hdr *wire.Header) erro
 }
 
 func (s *baseServer) handleNewConn(conn quicConn) {
-	sessCtx := conn.Context()
+	connCtx := conn.Context()
 	if s.acceptEarlyConns {
 		// wait until the early connection is ready (or the handshake fails)
 		select {
 		case <-conn.earlyConnReady():
-		case <-sessCtx.Done():
+		case <-connCtx.Done():
 			return
 		}
 	} else {
 		// wait until the handshake is complete (or fails)
 		select {
 		case <-conn.HandshakeComplete().Done():
-		case <-sessCtx.Done():
+		case <-connCtx.Done():
 			return
 		}
 	}
@@ -522,7 +522,7 @@ func (s *baseServer) handleNewConn(conn quicConn) {
 	select {
 	case s.connQueue <- conn:
 		// blocks until the connection is accepted
-	case <-sessCtx.Done():
+	case <-connCtx.Done():
 		atomic.AddInt32(&s.connQueueLen, -1)
 		// don't pass connections that were already closed to Accept()
 	}

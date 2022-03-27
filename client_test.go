@@ -31,7 +31,7 @@ var _ = Describe("Client", func() {
 		tracer          *mocklogging.MockConnectionTracer
 		config          *Config
 
-		originalClientSessConstructor func(
+		originalClientConnConstructor func(
 			conn sendConn,
 			runner connRunner,
 			destConnID protocol.ConnectionID,
@@ -51,7 +51,7 @@ var _ = Describe("Client", func() {
 	BeforeEach(func() {
 		tlsConf = &tls.Config{NextProtos: []string{"proto1"}}
 		connID = protocol.ConnectionID{0, 0, 0, 0, 0, 0, 0x13, 0x37}
-		originalClientSessConstructor = newClientSession
+		originalClientConnConstructor = newClientConnection
 		tracer = mocklogging.NewMockConnectionTracer(mockCtrl)
 		tr := mocklogging.NewMockTracer(mockCtrl)
 		tr.EXPECT().TracerForConnection(gomock.Any(), protocol.PerspectiveClient, gomock.Any()).Return(tracer).MaxTimes(1)
@@ -77,11 +77,11 @@ var _ = Describe("Client", func() {
 
 	AfterEach(func() {
 		connMuxer = origMultiplexer
-		newClientSession = originalClientSessConstructor
+		newClientConnection = originalClientConnConstructor
 	})
 
 	AfterEach(func() {
-		if s, ok := cl.conn.(*session); ok {
+		if s, ok := cl.conn.(*connection); ok {
 			s.shutdown()
 		}
 		Eventually(areConnsRunning).Should(BeFalse())
@@ -118,7 +118,7 @@ var _ = Describe("Client", func() {
 			mockMultiplexer.EXPECT().AddConn(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(manager, nil)
 
 			remoteAddrChan := make(chan string, 1)
-			newClientSession = func(
+			newClientConnection = func(
 				sconn sendConn,
 				_ connRunner,
 				_ protocol.ConnectionID,
@@ -151,7 +151,7 @@ var _ = Describe("Client", func() {
 			mockMultiplexer.EXPECT().AddConn(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(manager, nil)
 
 			hostnameChan := make(chan string, 1)
-			newClientSession = func(
+			newClientConnection = func(
 				_ sendConn,
 				_ connRunner,
 				_ protocol.ConnectionID,
@@ -184,7 +184,7 @@ var _ = Describe("Client", func() {
 			mockMultiplexer.EXPECT().AddConn(packetConn, gomock.Any(), gomock.Any(), gomock.Any()).Return(manager, nil)
 
 			hostnameChan := make(chan string, 1)
-			newClientSession = func(
+			newClientConnection = func(
 				_ sendConn,
 				_ connRunner,
 				_ protocol.ConnectionID,
@@ -223,7 +223,7 @@ var _ = Describe("Client", func() {
 			mockMultiplexer.EXPECT().AddConn(packetConn, gomock.Any(), gomock.Any(), gomock.Any()).Return(manager, nil)
 
 			run := make(chan struct{})
-			newClientSession = func(
+			newClientConnection = func(
 				_ sendConn,
 				runner connRunner,
 				_ protocol.ConnectionID,
@@ -266,7 +266,7 @@ var _ = Describe("Client", func() {
 
 			readyChan := make(chan struct{})
 			done := make(chan struct{})
-			newClientSession = func(
+			newClientConnection = func(
 				_ sendConn,
 				runner connRunner,
 				_ protocol.ConnectionID,
@@ -314,7 +314,7 @@ var _ = Describe("Client", func() {
 			mockMultiplexer.EXPECT().AddConn(packetConn, gomock.Any(), gomock.Any(), gomock.Any()).Return(manager, nil)
 
 			testErr := errors.New("early handshake error")
-			newClientSession = func(
+			newClientConnection = func(
 				_ sendConn,
 				_ connRunner,
 				_ protocol.ConnectionID,
@@ -357,7 +357,7 @@ var _ = Describe("Client", func() {
 				<-connRunning
 			})
 			conn.EXPECT().HandshakeComplete().Return(context.Background())
-			newClientSession = func(
+			newClientConnection = func(
 				_ sendConn,
 				_ connRunner,
 				_ protocol.ConnectionID,
@@ -409,7 +409,7 @@ var _ = Describe("Client", func() {
 			run := make(chan struct{})
 			connCreated := make(chan struct{})
 			conn := NewMockQuicConn(mockCtrl)
-			newClientSession = func(
+			newClientConnection = func(
 				connP sendConn,
 				_ connRunner,
 				_ protocol.ConnectionID,
@@ -529,7 +529,7 @@ var _ = Describe("Client", func() {
 			var cconn sendConn
 			var version protocol.VersionNumber
 			var conf *Config
-			newClientSession = func(
+			newClientConnection = func(
 				connP sendConn,
 				_ connRunner,
 				_ protocol.ConnectionID,
@@ -569,7 +569,7 @@ var _ = Describe("Client", func() {
 			mockMultiplexer.EXPECT().AddConn(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(manager, nil)
 
 			var counter int
-			newClientSession = func(
+			newClientConnection = func(
 				_ sendConn,
 				_ connRunner,
 				_ protocol.ConnectionID,

@@ -324,7 +324,7 @@ var _ = Describe("Server", func() {
 				})
 				tracer.EXPECT().TracerForConnection(gomock.Any(), protocol.PerspectiveServer, protocol.ConnectionID{0xde, 0xad, 0xc0, 0xde})
 				conn := NewMockQuicConn(mockCtrl)
-				serv.newSession = func(
+				serv.newConn = func(
 					_ sendConn,
 					_ connRunner,
 					origDestConnID protocol.ConnectionID,
@@ -603,7 +603,7 @@ var _ = Describe("Server", func() {
 				tracer.EXPECT().TracerForConnection(gomock.Any(), protocol.PerspectiveServer, protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8, 9, 10})
 
 				conn := NewMockQuicConn(mockCtrl)
-				serv.newSession = func(
+				serv.newConn = func(
 					_ sendConn,
 					_ connRunner,
 					origDestConnID protocol.ConnectionID,
@@ -663,7 +663,7 @@ var _ = Describe("Server", func() {
 				serv.config.AcceptToken = func(net.Addr, *Token) bool { return true }
 				acceptConn := make(chan struct{})
 				var counter uint32 // to be used as an atomic, so we query it in Eventually
-				serv.newSession = func(
+				serv.newConn = func(
 					_ sendConn,
 					runner connRunner,
 					_ protocol.ConnectionID,
@@ -717,7 +717,7 @@ var _ = Describe("Server", func() {
 				serv.config.AcceptToken = func(_ net.Addr, _ *Token) bool { return true }
 				var createdConn bool
 				conn := NewMockQuicConn(mockCtrl)
-				serv.newSession = func(
+				serv.newConn = func(
 					_ sendConn,
 					runner connRunner,
 					_ protocol.ConnectionID,
@@ -748,7 +748,7 @@ var _ = Describe("Server", func() {
 			It("rejects new connection attempts if the accept queue is full", func() {
 				serv.config.AcceptToken = func(_ net.Addr, _ *Token) bool { return true }
 
-				serv.newSession = func(
+				serv.newConn = func(
 					_ sendConn,
 					runner connRunner,
 					_ protocol.ConnectionID,
@@ -820,7 +820,7 @@ var _ = Describe("Server", func() {
 				ctx, cancel := context.WithCancel(context.Background())
 				connCreated := make(chan struct{})
 				conn := NewMockQuicConn(mockCtrl)
-				serv.newSession = func(
+				serv.newConn = func(
 					_ sendConn,
 					runner connRunner,
 					_ protocol.ConnectionID,
@@ -932,7 +932,7 @@ var _ = Describe("Server", func() {
 
 				ctx, cancel := context.WithCancel(context.Background()) // handshake context
 				serv.config.AcceptToken = func(_ net.Addr, _ *Token) bool { return true }
-				serv.newSession = func(
+				serv.newConn = func(
 					_ sendConn,
 					runner connRunner,
 					_ protocol.ConnectionID,
@@ -1006,7 +1006,7 @@ var _ = Describe("Server", func() {
 
 			ready := make(chan struct{})
 			serv.config.AcceptToken = func(_ net.Addr, _ *Token) bool { return true }
-			serv.newSession = func(
+			serv.newConn = func(
 				_ sendConn,
 				runner connRunner,
 				_ protocol.ConnectionID,
@@ -1049,7 +1049,7 @@ var _ = Describe("Server", func() {
 			serv.config.AcceptToken = func(_ net.Addr, _ *Token) bool { return true }
 			senderAddr := &net.UDPAddr{IP: net.IPv4(1, 2, 3, 4), Port: 42}
 
-			serv.newSession = func(
+			serv.newConn = func(
 				_ sendConn,
 				runner connRunner,
 				_ protocol.ConnectionID,
@@ -1113,7 +1113,7 @@ var _ = Describe("Server", func() {
 			ctx, cancel := context.WithCancel(context.Background())
 			connCreated := make(chan struct{})
 			conn := NewMockQuicConn(mockCtrl)
-			serv.newSession = func(
+			serv.newConn = func(
 				_ sendConn,
 				runner connRunner,
 				_ protocol.ConnectionID,
