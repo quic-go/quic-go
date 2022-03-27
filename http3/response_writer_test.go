@@ -25,7 +25,7 @@ var _ = Describe("Response Writer", func() {
 		strBuf = &bytes.Buffer{}
 		str := mockquic.NewMockStream(mockCtrl)
 		str.EXPECT().Write(gomock.Any()).DoAndReturn(strBuf.Write).AnyTimes()
-		rw = newResponseWriter(str, utils.DefaultLogger)
+		rw = newResponseWriter(str, nil, utils.DefaultLogger)
 	})
 
 	decodeHeader := func(str io.Reader) map[string][]string {
