@@ -43,7 +43,7 @@ type roundTripperOpts struct {
 	EnableDatagram     bool
 	MaxHeaderBytes     int64
 	AdditionalSettings map[uint64]uint64
-	StreamHijacker     func(FrameType, quic.Stream) (hijacked bool, err error)
+	StreamHijacker     func(FrameType, quic.Connection, quic.Stream) (hijacked bool, err error)
 }
 
 // client is a HTTP3 client doing requests
@@ -152,7 +152,7 @@ func (c *client) handleBidirectionalStreams() {
 		go func(str quic.Stream) {
 			for {
 				_, err := parseNextFrame(str, func(ft FrameType) (processed bool, err error) {
-					return c.opts.StreamHijacker(ft, str)
+					return c.opts.StreamHijacker(ft, c.conn, str)
 				})
 				if err == errHijacked {
 					return
