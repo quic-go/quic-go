@@ -1,7 +1,6 @@
 package quic
 
 import (
-	"io"
 	"net"
 	"syscall"
 	"time"
@@ -9,14 +8,6 @@ import (
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/internal/utils"
 )
-
-// connection is a connection that allow reading of a receivedPacket.
-type connection interface {
-	ReadPacket() (*receivedPacket, error)
-	WritePacket(b []byte, addr net.Addr, oob []byte) (int, error)
-	LocalAddr() net.Addr
-	io.Closer
-}
 
 // OOBCapablePacketConn is a connection that allows the reading of ECN bits from the IP header.
 // If the PacketConn passed to Dial or Listen satisfies this interface, quic-go will use it.
@@ -30,7 +21,7 @@ type OOBCapablePacketConn interface {
 
 var _ OOBCapablePacketConn = &net.UDPConn{}
 
-func wrapConn(pc net.PacketConn) (connection, error) {
+func wrapConn(pc net.PacketConn) (rawConn, error) {
 	conn, ok := pc.(interface {
 		SyscallConn() (syscall.RawConn, error)
 	})
@@ -61,7 +52,7 @@ type basicConn struct {
 	net.PacketConn
 }
 
-var _ connection = &basicConn{}
+var _ rawConn = &basicConn{}
 
 func (c *basicConn) ReadPacket() (*receivedPacket, error) {
 	buffer := getPacketBuffer()

@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"hash"
+	"io"
 	"log"
 	"net"
 	"os"
@@ -48,6 +49,14 @@ func (h *zeroRTTQueue) Clear() {
 	}
 }
 
+// rawConn is a connection that allow reading of a receivedPacket.
+type rawConn interface {
+	ReadPacket() (*receivedPacket, error)
+	WritePacket(b []byte, addr net.Addr, oob []byte) (int, error)
+	LocalAddr() net.Addr
+	io.Closer
+}
+
 type packetHandlerMapEntry struct {
 	packetHandler packetHandler
 	is0RTTQueue   bool
@@ -60,7 +69,7 @@ type packetHandlerMapEntry struct {
 type packetHandlerMap struct {
 	mutex sync.Mutex
 
-	conn      connection
+	conn      rawConn
 	connIDLen int
 
 	handlers          map[string] /* string(ConnectionID)*/ packetHandlerMapEntry

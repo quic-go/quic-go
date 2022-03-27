@@ -61,7 +61,7 @@ type baseServer struct {
 	tlsConf *tls.Config
 	config  *Config
 
-	conn connection
+	conn rawConn
 	// If the server is started with ListenAddr, we create a packet conn.
 	// If it is started with Listen, we take a packet conn as a parameter.
 	createdPacketConn bool
