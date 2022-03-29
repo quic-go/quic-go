@@ -3,7 +3,7 @@ package self_test
 import (
 	"context"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net"
 	"time"
 
@@ -138,7 +138,7 @@ var _ = Describe("Stream deadline tests", func() {
 			done := make(chan struct{})
 			go func() {
 				defer GinkgoRecover()
-				data, err := ioutil.ReadAll(serverStr)
+				data, err := io.ReadAll(serverStr)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(data).To(Equal(PRDataLong))
 				close(done)
@@ -171,7 +171,7 @@ var _ = Describe("Stream deadline tests", func() {
 			readDone := make(chan struct{})
 			go func() {
 				defer GinkgoRecover()
-				data, err := ioutil.ReadAll(serverStr)
+				data, err := io.ReadAll(serverStr)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(data).To(Equal(PRDataLong))
 				close(readDone)

@@ -5,7 +5,6 @@ set -e
 DIR=$(pwd)
 TMP=$(mktemp -d)
 cd "$TMP"
-mkdir orig generated
 cp -r "$DIR" orig
 cp -r "$DIR" generated
 
@@ -21,4 +20,4 @@ go generate ./...
 cd ..
 
 # don't compare fuzzing corpora
-diff --exclude=corpus -ruN orig generated
+diff --exclude=corpus --exclude=.git -ruN orig generated

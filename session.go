@@ -525,6 +525,12 @@ func (s *session) preSetup() {
 		protocol.ByteCount(s.config.InitialConnectionReceiveWindow),
 		protocol.ByteCount(s.config.MaxConnectionReceiveWindow),
 		s.onHasConnectionWindowUpdate,
+		func(size protocol.ByteCount) bool {
+			if s.config.AllowConnectionWindowIncrease == nil {
+				return true
+			}
+			return s.config.AllowConnectionWindowIncrease(s, uint64(size))
+		},
 		s.rttStats,
 		s.logger,
 	)

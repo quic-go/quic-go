@@ -3,7 +3,7 @@ package self_test
 import (
 	"context"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"math/rand"
 	"net"
 
@@ -54,7 +54,7 @@ var _ = Describe("Connection ID lengths tests", func() {
 		defer cl.CloseWithError(0, "")
 		str, err := cl.AcceptStream(context.Background())
 		Expect(err).ToNot(HaveOccurred())
-		data, err := ioutil.ReadAll(str)
+		data, err := io.ReadAll(str)
 		Expect(err).ToNot(HaveOccurred())
 		Expect(data).To(Equal(PRData))
 	}

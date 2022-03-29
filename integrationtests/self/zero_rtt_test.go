@@ -4,7 +4,7 @@ import (
 	"context"
 	"crypto/tls"
 	"fmt"
-	"io/ioutil"
+	"io"
 	mrand "math/rand"
 	"net"
 	"sort"
@@ -35,10 +35,14 @@ var _ = Describe("0-RTT", func() {
 				proxy, err := quicproxy.NewQuicProxy("localhost:0", &quicproxy.Opts{
 					RemoteAddr: fmt.Sprintf("localhost:%d", serverPort),
 					DelayPacket: func(_ quicproxy.Direction, data []byte) time.Duration {
-						hdr, _, _, err := wire.ParsePacket(data, 0)
-						Expect(err).ToNot(HaveOccurred())
-						if hdr.Type == protocol.PacketType0RTT {
-							atomic.AddUint32(&num0RTTPackets, 1)
+						for len(data) > 0 {
+							hdr, _, rest, err := wire.ParsePacket(data, 0)
+							Expect(err).ToNot(HaveOccurred())
+							if hdr.Type == protocol.PacketType0RTT {
+								atomic.AddUint32(&num0RTTPackets, 1)
+								break
+							}
+							data = rest
 						}
 						return rtt / 2
 					},
@@ -113,7 +117,7 @@ var _ = Describe("0-RTT", func() {
 					Expect(err).ToNot(HaveOccurred())
 					str, err := sess.AcceptUniStream(context.Background())
 					Expect(err).ToNot(HaveOccurred())
-					data, err := ioutil.ReadAll(str)
+					data, err := io.ReadAll(str)
 					Expect(err).ToNot(HaveOccurred())
 					Expect(data).To(Equal(testdata))
 					Expect(sess.ConnectionState().TLS.Used0RTT).To(BeTrue())
@@ -266,12 +270,12 @@ var _ = Describe("0-RTT", func() {
 					Expect(err).ToNot(HaveOccurred())
 					str, err := sess.AcceptUniStream(context.Background())
 					Expect(err).ToNot(HaveOccurred())
-					data, err := ioutil.ReadAll(str)
+					data, err := io.ReadAll(str)
 					Expect(err).ToNot(HaveOccurred())
 					Expect(data).To(Equal(zeroRTTData))
 					str, err = sess.AcceptUniStream(context.Background())
 					Expect(err).ToNot(HaveOccurred())
-					data, err = ioutil.ReadAll(str)
+					data, err = io.ReadAll(str)
 					Expect(err).ToNot(HaveOccurred())
 					Expect(data).To(Equal(oneRTTData))
 					Expect(sess.CloseWithError(0, "")).To(Succeed())
@@ -601,7 +605,7 @@ var _ = Describe("0-RTT", func() {
 					Expect(err).ToNot(HaveOccurred())
 					rstr, err := serverSess.AcceptUniStream(context.Background())
 					Expect(err).ToNot(HaveOccurred())
-					data, err := ioutil.ReadAll(rstr)
+					data, err := io.ReadAll(rstr)
 					Expect(err).ToNot(HaveOccurred())
 					Expect(data).To(Equal([]byte("foobar")))
 					Expect(serverSess.ConnectionState().TLS.Used0RTT).To(BeTrue())

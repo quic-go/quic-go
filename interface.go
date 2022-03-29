@@ -125,7 +125,7 @@ type SendStream interface {
 	// Write will unblock immediately, and future calls to Write will fail.
 	// When called multiple times or after closing the stream it is a no-op.
 	CancelWrite(StreamErrorCode)
-	// The context is canceled as soon as the write-side of the stream is closed.
+	// The Context is canceled as soon as the write-side of the stream is closed.
 	// This happens when Close() or CancelWrite() is called, or when the peer
 	// cancels the read-side of their stream.
 	// Warning: This API should not be considered stable and might change soon.
@@ -133,7 +133,7 @@ type SendStream interface {
 	// SetWriteDeadline sets the deadline for future Write calls
 	// and any currently-blocked Write call.
 	// Even if write times out, it may return n > 0, indicating that
-	// some of the data was successfully written.
+	// some data was successfully written.
 	// A zero value for t means Write will not time out.
 	SetWriteDeadline(t time.Time) error
 }
@@ -207,7 +207,7 @@ type Session interface {
 type EarlySession interface {
 	Session
 
-	// Blocks until the handshake completes (or fails).
+	// HandshakeComplete blocks until the handshake completes (or fails).
 	// Data sent before completion of the handshake is encrypted with 1-RTT keys.
 	// Note that the client's identity hasn't been verified yet.
 	HandshakeComplete() context.Context
@@ -267,6 +267,13 @@ type Config struct {
 	// MaxConnectionReceiveWindow is the connection-level flow control window for receiving data.
 	// If this value is zero, it will default to 15 MB.
 	MaxConnectionReceiveWindow uint64
+	// AllowConnectionWindowIncrease is called every time the connection flow controller attempts
+	// to increase the connection flow control window.
+	// If set, the caller can prevent an increase of the window. Typically, it would do so to
+	// limit the memory usage.
+	// To avoid deadlocks, it is not valid to call other functions on the session or on streams
+	// in this callback.
+	AllowConnectionWindowIncrease func(sess Session, delta uint64) bool
 	// MaxIncomingStreams is the maximum number of concurrent bidirectional streams that a peer is allowed to open.
 	// Values above 2^60 are invalid.
 	// If not set, it will default to 100.
@@ -284,6 +291,7 @@ type Config struct {
 	KeepAlive bool
 	// DisablePathMTUDiscovery disables Path MTU Discovery (RFC 8899).
 	// Packets will then be at most 1252 (IPv4) / 1232 (IPv6) bytes in size.
+	// Note that if Path MTU discovery is causing issues on your system, please open a new issue
 	DisablePathMTUDiscovery bool
 	// DisableVersionNegotiationPackets disables the sending of Version Negotiation packets.
 	// This can be useful if version information is exchanged out-of-band.

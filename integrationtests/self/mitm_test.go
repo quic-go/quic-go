@@ -5,7 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"math"
 	mrand "math/rand"
 	"net"
@@ -137,7 +137,7 @@ var _ = Describe("MITM test", func() {
 						Expect(err).ToNot(HaveOccurred())
 						str, err := sess.AcceptUniStream(context.Background())
 						Expect(err).ToNot(HaveOccurred())
-						data, err := ioutil.ReadAll(str)
+						data, err := io.ReadAll(str)
 						Expect(err).ToNot(HaveOccurred())
 						Expect(data).To(Equal(PRData))
 						Expect(sess.CloseWithError(0, "")).To(Succeed())
@@ -183,7 +183,7 @@ var _ = Describe("MITM test", func() {
 					Expect(err).ToNot(HaveOccurred())
 					str, err := sess.AcceptUniStream(context.Background())
 					Expect(err).ToNot(HaveOccurred())
-					data, err := ioutil.ReadAll(str)
+					data, err := io.ReadAll(str)
 					Expect(err).ToNot(HaveOccurred())
 					Expect(data).To(Equal(PRData))
 					Expect(sess.CloseWithError(0, "")).To(Succeed())

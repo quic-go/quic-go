@@ -3,7 +3,7 @@ package self_test
 import (
 	"context"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net"
 	"sync"
 
@@ -58,7 +58,7 @@ var _ = Describe("Bidirectional streams", func() {
 					go func() {
 						defer GinkgoRecover()
 						defer wg.Done()
-						dataRead, err := ioutil.ReadAll(str)
+						dataRead, err := io.ReadAll(str)
 						Expect(err).ToNot(HaveOccurred())
 						Expect(dataRead).To(Equal(data))
 					}()
@@ -77,7 +77,7 @@ var _ = Describe("Bidirectional streams", func() {
 						defer wg.Done()
 						// shouldn't use io.Copy here
 						// we should read from the stream as early as possible, to free flow control credit
-						data, err := ioutil.ReadAll(str)
+						data, err := io.ReadAll(str)
 						Expect(err).ToNot(HaveOccurred())
 						_, err = str.Write(data)
 						Expect(err).ToNot(HaveOccurred())

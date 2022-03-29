@@ -3,17 +3,14 @@
 <img src="docs/quic.png" width=303 height=124>
 
 [![PkgGoDev](https://pkg.go.dev/badge/github.com/lucas-clemente/quic-go)](https://pkg.go.dev/github.com/lucas-clemente/quic-go)
-[![Travis Build Status](https://img.shields.io/travis/lucas-clemente/quic-go/master.svg?style=flat-square&label=Travis+build)](https://travis-ci.org/lucas-clemente/quic-go)
-[![CircleCI Build Status](https://img.shields.io/circleci/project/github/lucas-clemente/quic-go.svg?style=flat-square&label=CircleCI+build)](https://circleci.com/gh/lucas-clemente/quic-go)
-[![Windows Build Status](https://img.shields.io/appveyor/ci/lucas-clemente/quic-go/master.svg?style=flat-square&label=windows+build)](https://ci.appveyor.com/project/lucas-clemente/quic-go/branch/master)
 [![Code Coverage](https://img.shields.io/codecov/c/github/lucas-clemente/quic-go/master.svg?style=flat-square)](https://codecov.io/gh/lucas-clemente/quic-go/)
 
 quic-go is an implementation of the [QUIC protocol, RFC 9000](https://datatracker.ietf.org/doc/html/rfc9000) protocol in Go.
-In addition to RFC 9000, it currently implements the [IETF QUIC draft-29](https://tools.ietf.org/html/draft-ietf-quic-transport-29), [draft-32](https://tools.ietf.org/html/draft-ietf-quic-transport-32) and [draft-34](https://tools.ietf.org/html/draft-ietf-quic-transport-34). Support for draft versions will be eventually be dropped, as these are phased out of the ecosystem.
+In addition to RFC 9000, it currently implements the [IETF QUIC draft-29](https://tools.ietf.org/html/draft-ietf-quic-transport-29). Support for draft-29 will eventually be dropped, as it is phased out of the ecosystem.
 
 ## Guides
 
-*We currently support Go 1.15.x, Go 1.16.x and Go 1.17 Beta 1, with [Go modules](https://github.com/golang/go/wiki/Modules) support enabled.*
+*We currently support Go 1.16.x, Go 1.17.x, and Go 1.18.x.*
 
 Running tests:
 
@@ -43,6 +40,21 @@ http.Client{
   Transport: &http3.RoundTripper{},
 }
 ```
+
+## Projects using quic-go
+
+| Project                                              | Description                                                                                            | Stars |
+|------------------------------------------------------|--------------------------------------------------------------------------------------------------------|-------|
+| [algernon](https://github.com/xyproto/algernon)      | Small self-contained pure-Go web server with Lua, Markdown, HTTP/2, QUIC, Redis and PostgreSQL support | ![GitHub Repo stars](https://img.shields.io/github/stars/xyproto/algernon?style=flat-square) |
+| [caddy](https://github.com/caddyserver/caddy/)       | Fast, multi-platform web server with automatic HTTPS                                                   | ![GitHub Repo stars](https://img.shields.io/github/stars/caddyserver/caddy?style=flat-square) |
+| [go-ipfs](https://github.com/ipfs/go-ipfs)           | IPFS implementation in go                                                                              | ![GitHub Repo stars](https://img.shields.io/github/stars/ipfs/go-ipfs?style=flat-square) |
+| [nextdns](https://github.com/nextdns/nextdns)        | NextDNS CLI client (DoH Proxy)                                                                         | ![GitHub Repo stars](https://img.shields.io/github/stars/nextdns/nextdns?style=flat-square) |
+| [syncthing](https://github.com/syncthing/syncthing/) | Open Source Continuous File Synchronization                                                            | ![GitHub Repo stars](https://img.shields.io/github/stars/syncthing/syncthing?style=flat-square) |
+| [traefik](https://github.com/traefik/traefik)        | The Cloud Native Application Proxy                                                                     | ![GitHub Repo stars](https://img.shields.io/github/stars/traefik/traefik?style=flat-square) |
+| [v2ray-core](https://github.com/v2fly/v2ray-core)    | A platform for building proxies to bypass network restrictions                                         | ![GitHub Repo stars](https://img.shields.io/github/stars/v2fly/v2ray-core?style=flat-square) |
+| [cloudflared](https://github.com/cloudflare/cloudflared)    | A tunneling daemon that proxies traffic from the Cloudflare network to your origins             | ![GitHub Repo stars](https://img.shields.io/github/stars/cloudflare/cloudflared?style=flat-square) |
+| [OONI Probe](https://github.com/ooni/probe-cli)            | The Open Observatory of Network Interference (OONI) aims to empower decentralized efforts in documenting Internet censorship around the world.   | ![GitHub Repo stars](https://img.shields.io/github/stars/ooni/probe-cli?style=flat-square) |
+
 
 ## Contributing
 

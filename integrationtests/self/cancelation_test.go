@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"math/rand"
 	"net"
 	"sync"
@@ -94,7 +93,7 @@ var _ = Describe("Stream Cancelations", func() {
 						str.CancelRead(quic.StreamErrorCode(str.StreamID()))
 						return
 					}
-					data, err := ioutil.ReadAll(str)
+					data, err := io.ReadAll(str)
 					Expect(err).ToNot(HaveOccurred())
 					Expect(data).To(Equal(PRData))
 				}()
@@ -135,14 +134,14 @@ var _ = Describe("Stream Cancelations", func() {
 					// only read some data from about 1/3 of the streams
 					if rand.Int31()%3 != 0 {
 						length := int(rand.Int31n(int32(len(PRData) - 1)))
-						data, err := ioutil.ReadAll(io.LimitReader(str, int64(length)))
+						data, err := io.ReadAll(io.LimitReader(str, int64(length)))
 						Expect(err).ToNot(HaveOccurred())
 						str.CancelRead(quic.StreamErrorCode(str.StreamID()))
 						Expect(data).To(Equal(PRData[:length]))
 						atomic.AddInt32(&canceledCounter, 1)
 						return
 					}
-					data, err := ioutil.ReadAll(str)
+					data, err := io.ReadAll(str)
 					Expect(err).ToNot(HaveOccurred())
 					Expect(data).To(Equal(PRData))
 				}()
@@ -225,7 +224,7 @@ var _ = Describe("Stream Cancelations", func() {
 					defer wg.Done()
 					str, err := sess.AcceptUniStream(context.Background())
 					Expect(err).ToNot(HaveOccurred())
-					data, err := ioutil.ReadAll(str)
+					data, err := io.ReadAll(str)
 					if err != nil {
 						atomic.AddInt32(&counter, 1)
 						Expect(err).To(MatchError(&quic.StreamError{
@@ -375,7 +374,7 @@ var _ = Describe("Stream Cancelations", func() {
 						str.CancelRead(quic.StreamErrorCode(str.StreamID()))
 						return
 					}
-					data, err := ioutil.ReadAll(str)
+					data, err := io.ReadAll(str)
 					if err != nil {
 						Expect(err).To(MatchError(&quic.StreamError{
 							StreamID:  str.StreamID(),
@@ -464,7 +463,7 @@ var _ = Describe("Stream Cancelations", func() {
 						length = int(rand.Int31n(int32(len(PRData) - 1)))
 						r = io.LimitReader(str, int64(length))
 					}
-					data, err := ioutil.ReadAll(r)
+					data, err := io.ReadAll(r)
 					if err != nil {
 						Expect(err).To(MatchError(&quic.StreamError{
 							StreamID:  str.StreamID(),
@@ -547,7 +546,7 @@ var _ = Describe("Stream Cancelations", func() {
 						}
 						return
 					}
-					data, err := ioutil.ReadAll(str)
+					data, err := io.ReadAll(str)
 					Expect(err).ToNot(HaveOccurred())
 					Expect(data).To(Equal(PRData))
 					wg.Done()
@@ -617,7 +616,7 @@ var _ = Describe("Stream Cancelations", func() {
 				Expect(err).ToNot(HaveOccurred())
 				go func(str quic.ReceiveStream) {
 					defer GinkgoRecover()
-					data, err := ioutil.ReadAll(str)
+					data, err := io.ReadAll(str)
 					Expect(err).ToNot(HaveOccurred())
 					Expect(data).To(Equal(PRData))
 					wg.Done()
@@ -631,5 +630,93 @@ var _ = Describe("Stream Cancelations", func() {
 			Expect(sess.CloseWithError(0, "")).To(Succeed())
 			Expect(server.Close()).To(Succeed())
 		})
+	})
+
+	It("doesn't run into any errors when streams are canceled all the time", func() {
+		const maxIncomingStreams = 1000
+		server, err := quic.ListenAddr(
+			"localhost:0",
+			getTLSConfig(),
+			getQuicConfig(&quic.Config{MaxIncomingStreams: maxIncomingStreams, MaxIdleTimeout: 10 * time.Second}),
+		)
+		Expect(err).ToNot(HaveOccurred())
+
+		var wg sync.WaitGroup
+		wg.Add(2 * 4 * maxIncomingStreams)
+		handleStream := func(str quic.Stream) {
+			str.SetDeadline(time.Now().Add(time.Second))
+			go func() {
+				defer wg.Done()
+				if rand.Int31()%2 == 0 {
+					defer GinkgoRecover()
+					io.ReadAll(str)
+				}
+			}()
+			go func() {
+				defer wg.Done()
+				if rand.Int31()%2 == 0 {
+					str.Write([]byte("foobar"))
+					if rand.Int31()%2 == 0 {
+						str.Close()
+					}
+				}
+			}()
+			go func() {
+				defer wg.Done()
+				// Make sure we at least send out *something* for the last stream,
+				// otherwise the peer might never receive this anything for this stream.
+				if rand.Int31()%2 == 0 || str.StreamID() == 4*(maxIncomingStreams-1) {
+					str.CancelWrite(1234)
+				}
+			}()
+			go func() {
+				defer wg.Done()
+				if rand.Int31()%2 == 0 {
+					str.CancelRead(1234)
+				}
+			}()
+		}
+
+		serverRunning := make(chan struct{})
+		go func() {
+			defer GinkgoRecover()
+			defer close(serverRunning)
+			conn, err := server.Accept(context.Background())
+			Expect(err).ToNot(HaveOccurred())
+			for {
+				str, err := conn.AcceptStream(context.Background())
+				if err != nil {
+					// Make sure the session is closed regularly.
+					Expect(err).To(BeAssignableToTypeOf(&quic.ApplicationError{}))
+					return
+				}
+				handleStream(str)
+			}
+		}()
+
+		sess, err := quic.DialAddr(
+			fmt.Sprintf("localhost:%d", server.Addr().(*net.UDPAddr).Port),
+			getTLSClientConfig(),
+			getQuicConfig(&quic.Config{}),
+		)
+		Expect(err).ToNot(HaveOccurred())
+
+		for i := 0; i < maxIncomingStreams; i++ {
+			str, err := sess.OpenStreamSync(context.Background())
+			Expect(err).ToNot(HaveOccurred())
+			handleStream(str)
+		}
+
+		// We don't expect to accept any stream here.
+		// We're just making sure the session stays open and there's no error.
+		ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
+		defer cancel()
+		_, err = sess.AcceptStream(ctx)
+		Expect(err).To(MatchError(context.DeadlineExceeded))
+
+		wg.Wait()
+
+		Expect(sess.CloseWithError(0, "")).To(Succeed())
+		Eventually(serverRunning).Should(BeClosed())
 	})
 })

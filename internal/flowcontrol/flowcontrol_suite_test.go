@@ -8,7 +8,7 @@ import (
 	. "github.com/onsi/gomega"
 )
 
-func TestCrypto(t *testing.T) {
+func TestFlowControl(t *testing.T) {
 	RegisterFailHandler(Fail)
 	RunSpecs(t, "FlowControl Suite")
 }

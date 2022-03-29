@@ -97,9 +97,9 @@ func main() {
 				log.Fatal(err)
 			}
 			if *quiet {
-				logger.Infof("Request Body: %d bytes", body.Len())
+				logger.Infof("Response Body: %d bytes", body.Len())
 			} else {
-				logger.Infof("Request Body:")
+				logger.Infof("Response Body:")
 				logger.Infof("%s", body.Bytes())
 			}
 			wg.Done()

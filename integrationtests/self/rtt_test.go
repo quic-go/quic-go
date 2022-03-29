@@ -3,7 +3,7 @@ package self_test
 import (
 	"context"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net"
 	"time"
 
@@ -48,7 +48,7 @@ var _ = Describe("non-zero RTT", func() {
 			Expect(err).ToNot(HaveOccurred())
 			str, err := sess.AcceptStream(context.Background())
 			Expect(err).ToNot(HaveOccurred())
-			data, err := ioutil.ReadAll(str)
+			data, err := io.ReadAll(str)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(data).To(Equal(PRData))
 			sess.CloseWithError(0, "")
@@ -84,7 +84,7 @@ var _ = Describe("non-zero RTT", func() {
 					Expect(err).ToNot(HaveOccurred())
 					str, err := sess.AcceptStream(context.Background())
 					Expect(err).ToNot(HaveOccurred())
-					data, err := ioutil.ReadAll(str)
+					data, err := io.ReadAll(str)
 					Expect(err).ToNot(HaveOccurred())
 					Expect(data).To(Equal(PRData))
 					sess.CloseWithError(0, "")

@@ -3,7 +3,7 @@ package self_test
 import (
 	"context"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net"
 	"time"
 
@@ -61,7 +61,7 @@ var _ = Describe("early data", func() {
 				Expect(err).ToNot(HaveOccurred())
 				str, err := sess.AcceptUniStream(context.Background())
 				Expect(err).ToNot(HaveOccurred())
-				data, err := ioutil.ReadAll(str)
+				data, err := io.ReadAll(str)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(data).To(Equal([]byte("early data")))
 				sess.CloseWithError(0, "")

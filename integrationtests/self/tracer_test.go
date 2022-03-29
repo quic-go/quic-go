@@ -136,7 +136,7 @@ var _ = Describe("Handshake tests", func() {
 			defer sess.CloseWithError(0, "")
 			str, err := sess.AcceptUniStream(context.Background())
 			Expect(err).ToNot(HaveOccurred())
-			data, err := ioutil.ReadAll(str)
+			data, err := io.ReadAll(str)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(data).To(Equal(PRData))
 		})
