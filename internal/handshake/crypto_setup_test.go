@@ -260,7 +260,8 @@ var _ = Describe("Crypto Setup TLS", func() {
 		}
 
 		handshake := func(client CryptoSetup, cChunkChan <-chan chunk,
-			server CryptoSetup, sChunkChan <-chan chunk) {
+			server CryptoSetup, sChunkChan <-chan chunk,
+		) {
 			done := make(chan struct{})
 			go func() {
 				defer GinkgoRecover()
