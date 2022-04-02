@@ -344,6 +344,10 @@ func (h *packetHandlerMap) listen() {
 	defer close(h.listening)
 	for {
 		p, err := h.conn.ReadPacket()
+		//nolint:staticcheck // SA1019 ignore this!
+		// TODO: This code is used to ignore wsa errors on Windows.
+		// Since net.Error.Temporary is deprecated as of Go 1.18, we should find a better solution.
+		// See https://github.com/lucas-clemente/quic-go/issues/1737 for details.
 		if nerr, ok := err.(net.Error); ok && nerr.Temporary() {
 			h.logger.Debugf("Temporary error reading from conn: %w", err)
 			continue
