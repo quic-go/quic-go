@@ -99,7 +99,6 @@ var _ = Describe("Stream", func() {
 var _ = Describe("Deadline Error", func() {
 	It("is a net.Error that wraps os.ErrDeadlineError", func() {
 		err := deadlineError{}
-		Expect(err.Temporary()).To(BeTrue())
 		Expect(err.Timeout()).To(BeTrue())
 		Expect(errors.Is(err, os.ErrDeadlineExceeded)).To(BeTrue())
 		Expect(errors.Unwrap(err)).To(Equal(os.ErrDeadlineExceeded))
