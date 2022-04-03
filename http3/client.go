@@ -34,7 +34,7 @@ var defaultQuicConfig = &quic.Config{
 	Versions:           []protocol.VersionNumber{protocol.VersionTLS},
 }
 
-type dialFunc func(ctx context.Context, network, addr string, tlsCfg *tls.Config, cfg *quic.Config) (quic.EarlyConnection, error)
+type dialFunc func(ctx context.Context, addr string, tlsCfg *tls.Config, cfg *quic.Config) (quic.EarlyConnection, error)
 
 var dialAddr = quic.DialAddrEarlyContext
 
@@ -101,7 +101,7 @@ func newClient(hostname string, tlsConf *tls.Config, opts *roundTripperOpts, con
 func (c *client) dial(ctx context.Context) error {
 	var err error
 	if c.dialer != nil {
-		c.conn, err = c.dialer(ctx, "udp", c.hostname, c.tlsConf, c.config)
+		c.conn, err = c.dialer(ctx, c.hostname, c.tlsConf, c.config)
 	} else {
 		c.conn, err = dialAddr(ctx, c.hostname, c.tlsConf, c.config)
 	}

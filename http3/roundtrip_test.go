@@ -127,7 +127,7 @@ var _ = Describe("RoundTripper", func() {
 
 		It("uses the custom dialer, if provided", func() {
 			var dialed bool
-			dialer := func(_ context.Context, _, _ string, tlsCfgP *tls.Config, cfg *quic.Config) (quic.EarlyConnection, error) {
+			dialer := func(_ context.Context, _ string, tlsCfgP *tls.Config, cfg *quic.Config) (quic.EarlyConnection, error) {
 				dialed = true
 				return nil, errors.New("handshake error")
 			}
