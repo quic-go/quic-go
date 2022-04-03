@@ -121,9 +121,8 @@ var _ = Describe("Client", func() {
 		ctx, cancel := context.WithTimeout(context.Background(), time.Hour)
 		defer cancel()
 		var dialerCalled bool
-		dialer := func(ctxP context.Context, network, address string, tlsConfP *tls.Config, quicConfP *quic.Config) (quic.EarlyConnection, error) {
+		dialer := func(ctxP context.Context, address string, tlsConfP *tls.Config, quicConfP *quic.Config) (quic.EarlyConnection, error) {
 			Expect(ctxP).To(Equal(ctx))
-			Expect(network).To(Equal("udp"))
 			Expect(address).To(Equal("localhost:1337"))
 			Expect(tlsConfP.ServerName).To(Equal("foo.bar"))
 			Expect(quicConfP.MaxIdleTimeout).To(Equal(quicConf.MaxIdleTimeout))

@@ -50,7 +50,7 @@ type RoundTripper struct {
 	// Dial specifies an optional dial function for creating QUIC
 	// connections for requests.
 	// If Dial is nil, quic.DialAddrEarlyContext will be used.
-	Dial func(ctx context.Context, network, addr string, tlsCfg *tls.Config, cfg *quic.Config) (quic.EarlyConnection, error)
+	Dial func(ctx context.Context, addr string, tlsCfg *tls.Config, cfg *quic.Config) (quic.EarlyConnection, error)
 
 	// MaxResponseHeaderBytes specifies a limit on how many response bytes are
 	// allowed in the server's response header.
