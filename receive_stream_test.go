@@ -218,7 +218,6 @@ var _ = Describe("Receive Stream", func() {
 
 		Context("deadlines", func() {
 			It("the deadline error has the right net.Error properties", func() {
-				Expect(errDeadline.Temporary()).To(BeTrue())
 				Expect(errDeadline.Timeout()).To(BeTrue())
 				Expect(errDeadline).To(MatchError("deadline exceeded"))
 			})

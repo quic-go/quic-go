@@ -300,7 +300,6 @@ func runHandshake(runConfig [confLen]byte, messageConfig uint8, clientConf *tls.
 	serverConf.ClientAuth = getClientAuth(runConfig[1] & 0b00000111)
 	serverConf.CipherSuites = getSuites(runConfig[1] >> 6)
 	serverConf.SessionTicketsDisabled = helper.NthBit(runConfig[1], 3)
-	clientConf.PreferServerCipherSuites = helper.NthBit(runConfig[1], 4)
 	if helper.NthBit(runConfig[2], 0) {
 		clientConf.RootCAs = x509.NewCertPool()
 	}
