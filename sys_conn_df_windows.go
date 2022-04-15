@@ -13,17 +13,26 @@ import (
 
 const (
 	// same for both IPv4 and IPv6 on Windows
-	// https://microsoft.github.io/windows-docs-rs/doc/windows/Win32/Networking/WinSock/constant.IP_DONTFRAG.html
-	// https://microsoft.github.io/windows-docs-rs/doc/windows/Win32/Networking/WinSock/constant.IPV6_DONTFRAG.html
-	IP_DONTFRAGMENT = 14
-	IPV6_DONTFRAG   = 14
+	// https://microsoft.github.io/windows-docs-rs/doc/windows/Win32/Networking/WinSock/constant.IP_MTU_DISCOVER.html
+	// https://microsoft.github.io/windows-docs-rs/doc/windows/Win32/Networking/WinSock/constant.IPV6_MTU_DISCOVER.html
+	IP_MTU_DISCOVER   = 14
+	IPV6_MTU_DISCOVER = 14
+)
+
+// enum PMTUD_STATE from ws2ipdef.h
+const (
+	IP_PMTUDISC_NOT_SET = iota
+	IP_PMTUDISC_DO
+	IP_PMTUDISC_DONT
+	IP_PMTUDISC_PROBE
+	IP_PMTUDISC_MAX
 )
 
 func setDF(rawConn syscall.RawConn) error {
 	var errDFIPv4, errDFIPv6 error
 	if err := rawConn.Control(func(fd uintptr) {
-		errDFIPv4 = windows.SetsockoptInt(windows.Handle(fd), windows.IPPROTO_IP, IP_DONTFRAGMENT, 1)
-		errDFIPv6 = windows.SetsockoptInt(windows.Handle(fd), windows.IPPROTO_IPV6, IPV6_DONTFRAG, 1)
+		errDFIPv4 = windows.SetsockoptInt(windows.Handle(fd), windows.IPPROTO_IP, IP_MTU_DISCOVER, IP_PMTUDISC_PROBE)
+		errDFIPv6 = windows.SetsockoptInt(windows.Handle(fd), windows.IPPROTO_IPV6, IPV6_MTU_DISCOVER, IP_PMTUDISC_PROBE)
 	}); err != nil {
 		return err
 	}
