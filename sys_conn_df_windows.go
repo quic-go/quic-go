@@ -15,8 +15,8 @@ const (
 	// same for both IPv4 and IPv6 on Windows
 	// https://microsoft.github.io/windows-docs-rs/doc/windows/Win32/Networking/WinSock/constant.IP_MTU_DISCOVER.html
 	// https://microsoft.github.io/windows-docs-rs/doc/windows/Win32/Networking/WinSock/constant.IPV6_MTU_DISCOVER.html
-	IP_MTU_DISCOVER   = 14
-	IPV6_MTU_DISCOVER = 14
+	IP_MTU_DISCOVER   = 71
+	IPV6_MTU_DISCOVER = 71
 )
 
 // enum PMTUD_STATE from ws2ipdef.h
