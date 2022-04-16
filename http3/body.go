@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"net"
 
 	"github.com/lucas-clemente/quic-go"
 )
@@ -13,6 +14,8 @@ type StreamCreator interface {
 	OpenStreamSync(context.Context) (quic.Stream, error)
 	OpenUniStream() (quic.SendStream, error)
 	OpenUniStreamSync(context.Context) (quic.SendStream, error)
+	LocalAddr() net.Addr
+	RemoteAddr() net.Addr
 }
 
 var _ StreamCreator = quic.Connection(nil)
