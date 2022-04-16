@@ -23,6 +23,7 @@ type DataStreamer interface {
 }
 
 type responseWriter struct {
+	conn           quic.Connection
 	stream         quic.Stream // needed for DataStream()
 	bufferedStream *bufio.Writer
 
@@ -38,12 +39,14 @@ var (
 	_ http.ResponseWriter = &responseWriter{}
 	_ http.Flusher        = &responseWriter{}
 	_ DataStreamer        = &responseWriter{}
+	_ Hijacker            = &responseWriter{}
 )
 
-func newResponseWriter(stream quic.Stream, logger utils.Logger) *responseWriter {
+func newResponseWriter(stream quic.Stream, conn quic.Connection, logger utils.Logger) *responseWriter {
 	return &responseWriter{
 		header:         http.Header{},
 		stream:         stream,
+		conn:           conn,
 		bufferedStream: bufio.NewWriter(stream),
 		logger:         logger,
 	}
@@ -117,6 +120,14 @@ func (w *responseWriter) DataStream() quic.Stream {
 	w.dataStreamUsed = true
 	w.Flush()
 	return w.stream
+}
+
+func (w *responseWriter) StreamID() quic.StreamID {
+	return w.stream.StreamID()
+}
+
+func (w *responseWriter) StreamCreator() StreamCreator {
+	return w.conn
 }
 
 // copied from http2/http2.go

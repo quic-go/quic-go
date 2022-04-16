@@ -117,7 +117,7 @@ var _ = Describe("Server", func() {
 			fields := make(map[string][]string)
 			decoder := qpack.NewDecoder(nil)
 
-			frame, err := parseNextFrame(str)
+			frame, err := parseNextFrame(str, nil)
 			ExpectWithOffset(1, err).ToNot(HaveOccurred())
 			ExpectWithOffset(1, frame).To(BeAssignableToTypeOf(&headersFrame{}))
 			headersFrame := frame.(*headersFrame)
@@ -296,7 +296,7 @@ var _ = Describe("Server", func() {
 				})
 			}
 
-			It("reset streams other than the control stream and the QPACK streams", func() {
+			It("reset streams Other than the control stream and the QPACK streams", func() {
 				buf := &bytes.Buffer{}
 				quicvarint.Write(buf, 1337)
 				str := mockquic.NewMockStream(mockCtrl)

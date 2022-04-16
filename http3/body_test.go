@@ -29,7 +29,7 @@ func (t bodyType) String() string {
 
 var _ = Describe("Body", func() {
 	var (
-		rb            *body
+		rb            io.ReadCloser
 		str           *mockquic.MockStream
 		buf           *bytes.Buffer
 		reqDone       chan struct{}
@@ -68,7 +68,7 @@ var _ = Describe("Body", func() {
 					rb = newRequestBody(str, errorCb)
 				case bodyTypeResponse:
 					reqDone = make(chan struct{})
-					rb = newResponseBody(str, reqDone, errorCb)
+					rb = newResponseBody(str, nil, reqDone, errorCb)
 				}
 			})
 
