@@ -191,11 +191,9 @@ type Connection interface {
 	// Warning: This API should not be considered stable and might change soon.
 	ConnectionState() ConnectionState
 
-	// SendMessage sends a message as a datagram.
-	// See https://datatracker.ietf.org/doc/draft-pauly-quic-datagram/.
+	// SendMessage sends a message as a datagram, as specified in RFC 9221.
 	SendMessage([]byte) error
-	// ReceiveMessage gets a message received in a datagram.
-	// See https://datatracker.ietf.org/doc/draft-pauly-quic-datagram/.
+	// ReceiveMessage gets a message received in a datagram, as specified in RFC 9221.
 	ReceiveMessage() ([]byte, error)
 }
 
