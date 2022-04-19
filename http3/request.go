@@ -42,13 +42,14 @@ func requestFromHeaders(headers []qpack.HeaderField) (*http.Request, error) {
 	}
 
 	isConnect := method == http.MethodConnect
-	if isConnect {
-		// Extended CONNECT, see https://datatracker.ietf.org/doc/html/rfc8441#section-4
-		if protocol != "" {
-			if scheme == "" || path == "" || authority == "" {
-				return nil, errors.New("extended CONNECT: :scheme, :path and :authority must not be empty")
-			}
-		} else if path != "" || authority == "" { // normal CONNECT
+	// Extended CONNECT, see https://datatracker.ietf.org/doc/html/rfc8441#section-4
+	isExtendedConnected := isConnect && protocol != ""
+	if isExtendedConnected {
+		if scheme == "" || path == "" || authority == "" {
+			return nil, errors.New("extended CONNECT: :scheme, :path and :authority must not be empty")
+		}
+	} else if isConnect {
+		if path != "" || authority == "" { // normal CONNECT
 			return nil, errors.New(":path must be empty and :authority must not be empty")
 		}
 	} else if len(path) == 0 || len(authority) == 0 || len(method) == 0 {
@@ -60,11 +61,17 @@ func requestFromHeaders(headers []qpack.HeaderField) (*http.Request, error) {
 	var err error
 
 	if isConnect {
-		u = &url.URL{
-			Scheme: scheme,
-			Host:   authority,
-			Path:   path,
+		u = &url.URL{}
+		if isExtendedConnected {
+			u, err = url.ParseRequestURI(path)
+			if err != nil {
+				return nil, err
+			}
+		} else {
+			u.Path = path
 		}
+		u.Scheme = scheme
+		u.Host = authority
 		requestURI = authority
 	} else {
 		protocol = "HTTP/3"
