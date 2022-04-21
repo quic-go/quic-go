@@ -255,7 +255,7 @@ var _ = Describe("Server", func() {
 
 			AfterEach(func() { testDone <- struct{}{} })
 
-			It("hijacks an unistream of unknown stream type", func() {
+			It("hijacks an unidirectional stream of unknown stream type", func() {
 				streamTypeChan := make(chan StreamType, 1)
 				s.UniStreamHijacker = func(st StreamType, c quic.Connection, rs quic.ReceiveStream) bool {
 					streamTypeChan <- st
@@ -278,7 +278,7 @@ var _ = Describe("Server", func() {
 				time.Sleep(scaleDuration(20 * time.Millisecond)) // don't EXPECT any calls to conn.CloseWithError
 			})
 
-			It("cancels reading when hijacker didn't hijack an unistream", func() {
+			It("cancels reading when hijacker didn't hijack an unidirectional stream", func() {
 				streamTypeChan := make(chan StreamType, 1)
 				s.UniStreamHijacker = func(st StreamType, c quic.Connection, rs quic.ReceiveStream) bool {
 					streamTypeChan <- st
