@@ -58,6 +58,9 @@ type RoundTripper struct {
 	// Alternatively, callers can take over the QUIC stream (by returning hijacked true).
 	StreamHijacker func(FrameType, quic.Connection, quic.Stream) (hijacked bool, err error)
 
+	// When set, this callback is called for unknown unidirectional stream of unknown stream type.
+	UniStreamHijacker func(StreamType, quic.Connection, quic.ReceiveStream) (hijacked bool)
+
 	// Dial specifies an optional dial function for creating QUIC
 	// connections for requests.
 	// If Dial is nil, quic.DialAddrEarlyContext will be used.
@@ -154,6 +157,7 @@ func (r *RoundTripper) getClient(hostname string, onlyCached bool) (http.RoundTr
 				DisableCompression: r.DisableCompression,
 				MaxHeaderBytes:     r.MaxResponseHeaderBytes,
 				StreamHijacker:     r.StreamHijacker,
+				UniStreamHijacker:  r.UniStreamHijacker,
 			},
 			r.QuicConfig,
 			r.Dial,

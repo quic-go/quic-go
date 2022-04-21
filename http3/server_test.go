@@ -238,6 +238,72 @@ var _ = Describe("Server", func() {
 			Expect(serr.err).ToNot(HaveOccurred())
 		})
 
+		Context("hijacking unidirectional streams", func() {
+			var conn *mockquic.MockEarlyConnection
+			testDone := make(chan struct{})
+
+			BeforeEach(func() {
+				testDone = make(chan struct{})
+				conn = mockquic.NewMockEarlyConnection(mockCtrl)
+				controlStr := mockquic.NewMockStream(mockCtrl)
+				controlStr.EXPECT().Write(gomock.Any())
+				conn.EXPECT().OpenUniStream().Return(controlStr, nil)
+				conn.EXPECT().AcceptStream(gomock.Any()).Return(nil, errors.New("done"))
+				conn.EXPECT().RemoteAddr().Return(&net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 1337}).AnyTimes()
+				conn.EXPECT().LocalAddr().AnyTimes()
+			})
+
+			AfterEach(func() { testDone <- struct{}{} })
+
+			It("hijacks an unidirectional stream of unknown stream type", func() {
+				streamTypeChan := make(chan StreamType, 1)
+				s.UniStreamHijacker = func(st StreamType, c quic.Connection, rs quic.ReceiveStream) bool {
+					streamTypeChan <- st
+					return true
+				}
+
+				buf := &bytes.Buffer{}
+				quicvarint.Write(buf, 0x54)
+				unknownStr := mockquic.NewMockStream(mockCtrl)
+				unknownStr.EXPECT().Read(gomock.Any()).DoAndReturn(buf.Read).AnyTimes()
+				conn.EXPECT().AcceptUniStream(gomock.Any()).DoAndReturn(func(context.Context) (quic.ReceiveStream, error) {
+					return unknownStr, nil
+				})
+				conn.EXPECT().AcceptUniStream(gomock.Any()).DoAndReturn(func(context.Context) (quic.ReceiveStream, error) {
+					<-testDone
+					return nil, errors.New("test done")
+				})
+				s.handleConn(conn)
+				Eventually(streamTypeChan).Should(Receive(BeEquivalentTo(0x54)))
+				time.Sleep(scaleDuration(20 * time.Millisecond)) // don't EXPECT any calls to conn.CloseWithError
+			})
+
+			It("cancels reading when hijacker didn't hijack an unidirectional stream", func() {
+				streamTypeChan := make(chan StreamType, 1)
+				s.UniStreamHijacker = func(st StreamType, c quic.Connection, rs quic.ReceiveStream) bool {
+					streamTypeChan <- st
+					return false
+				}
+
+				buf := &bytes.Buffer{}
+				quicvarint.Write(buf, 0x54)
+				unknownStr := mockquic.NewMockStream(mockCtrl)
+				unknownStr.EXPECT().Read(gomock.Any()).DoAndReturn(buf.Read).AnyTimes()
+				unknownStr.EXPECT().CancelRead(quic.StreamErrorCode(errorStreamCreationError))
+
+				conn.EXPECT().AcceptUniStream(gomock.Any()).DoAndReturn(func(context.Context) (quic.ReceiveStream, error) {
+					return unknownStr, nil
+				})
+				conn.EXPECT().AcceptUniStream(gomock.Any()).DoAndReturn(func(context.Context) (quic.ReceiveStream, error) {
+					<-testDone
+					return nil, errors.New("test done")
+				})
+				s.handleConn(conn)
+				Eventually(streamTypeChan).Should(Receive(BeEquivalentTo(0x54)))
+				time.Sleep(scaleDuration(20 * time.Millisecond)) // don't EXPECT any calls to conn.CloseWithError
+			})
+		})
+
 		Context("control stream handling", func() {
 			var conn *mockquic.MockEarlyConnection
 			testDone := make(chan struct{})

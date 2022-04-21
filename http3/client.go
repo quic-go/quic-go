@@ -44,6 +44,7 @@ type roundTripperOpts struct {
 	MaxHeaderBytes     int64
 	AdditionalSettings map[uint64]uint64
 	StreamHijacker     func(FrameType, quic.Connection, quic.Stream) (hijacked bool, err error)
+	UniStreamHijacker  func(StreamType, quic.Connection, quic.ReceiveStream) (hijacked bool)
 }
 
 // client is a HTTP3 client doing requests
@@ -174,7 +175,7 @@ func (c *client) handleUnidirectionalStreams() {
 			return
 		}
 
-		go func() {
+		go func(str quic.ReceiveStream) {
 			streamType, err := quicvarint.Read(quicvarint.NewReader(str))
 			if err != nil {
 				c.logger.Debugf("reading stream type on stream %d failed: %s", str.StreamID(), err)
@@ -192,6 +193,9 @@ func (c *client) handleUnidirectionalStreams() {
 				c.conn.CloseWithError(quic.ApplicationErrorCode(errorIDError), "")
 				return
 			default:
+				if c.opts.UniStreamHijacker != nil && c.opts.UniStreamHijacker(StreamType(streamType), c.conn, str) {
+					return
+				}
 				str.CancelRead(quic.StreamErrorCode(errorStreamCreationError))
 				return
 			}
@@ -214,7 +218,7 @@ func (c *client) handleUnidirectionalStreams() {
 			if c.opts.EnableDatagram && !c.conn.ConnectionState().SupportsDatagrams {
 				c.conn.CloseWithError(quic.ApplicationErrorCode(errorSettingsError), "missing QUIC Datagram support")
 			}
-		}()
+		}(str)
 	}
 }
 
