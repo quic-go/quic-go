@@ -185,7 +185,7 @@ var _ = Describe("Client", func() {
 		})
 	})
 
-	Context("hijacking unistreams", func() {
+	Context("hijacking unidirectional streams", func() {
 		var (
 			request              *http.Request
 			conn                 *mockquic.MockEarlyConnection

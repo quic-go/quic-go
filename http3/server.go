@@ -33,6 +33,7 @@ const (
 	nextProtoH3        = "h3"
 )
 
+// StreamType is the stream type of a unidirectional stream.
 type StreamType uint64
 
 const (
@@ -153,7 +154,7 @@ type Server struct {
 	// Alternatively, callers can take over the QUIC stream (by returning hijacked true).
 	StreamHijacker func(FrameType, quic.Connection, quic.Stream) (hijacked bool, err error)
 
-	// When set, this callback is called for the first unknown stream type parsed on a unidirectional receive stream.
+	// When set, this callback is called for unknown unidirectional stream of unknown stream type.
 	UniStreamHijacker func(StreamType, quic.Connection, quic.ReceiveStream) (hijacked bool)
 
 	mutex     sync.RWMutex

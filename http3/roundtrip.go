@@ -58,7 +58,7 @@ type RoundTripper struct {
 	// Alternatively, callers can take over the QUIC stream (by returning hijacked true).
 	StreamHijacker func(FrameType, quic.Connection, quic.Stream) (hijacked bool, err error)
 
-	// When set, this callback is called for the first unknown stream type parsed on a unidirectional receive stream.
+	// When set, this callback is called for unknown unidirectional stream of unknown stream type.
 	UniStreamHijacker func(StreamType, quic.Connection, quic.ReceiveStream) (hijacked bool)
 
 	// Dial specifies an optional dial function for creating QUIC

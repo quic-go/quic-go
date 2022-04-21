@@ -238,7 +238,7 @@ var _ = Describe("Server", func() {
 			Expect(serr.err).ToNot(HaveOccurred())
 		})
 
-		Context("hijacking unistreams", func() {
+		Context("hijacking unidirectional streams", func() {
 			var conn *mockquic.MockEarlyConnection
 			testDone := make(chan struct{})
 
