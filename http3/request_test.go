@@ -12,7 +12,7 @@ import (
 var _ = Describe("Request", func() {
 	It("populates request", func() {
 		headers := []qpack.HeaderField{
-			{Name: ":path", Value: "/foo"},
+			{Name: ":path", Value: "/foo?foo=bar"},
 			{Name: ":authority", Value: "quic.clemente.io"},
 			{Name: ":method", Value: "GET"},
 			{Name: "content-length", Value: "42"},
@@ -21,6 +21,7 @@ var _ = Describe("Request", func() {
 		Expect(err).NotTo(HaveOccurred())
 		Expect(req.Method).To(Equal("GET"))
 		Expect(req.URL.Path).To(Equal("/foo"))
+		Expect(req.URL.RawQuery).To(Equal("foo=bar"))
 		Expect(req.URL.Host).To(BeEmpty())
 		Expect(req.Proto).To(Equal("HTTP/3"))
 		Expect(req.ProtoMajor).To(Equal(3))
@@ -29,7 +30,7 @@ var _ = Describe("Request", func() {
 		Expect(req.Header).To(BeEmpty())
 		Expect(req.Body).To(BeNil())
 		Expect(req.Host).To(Equal("quic.clemente.io"))
-		Expect(req.RequestURI).To(Equal("/foo"))
+		Expect(req.RequestURI).To(Equal("/foo?foo=bar"))
 		Expect(req.TLS).ToNot(BeNil())
 	})
 
