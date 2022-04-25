@@ -146,13 +146,14 @@ var _ = Describe("Request", func() {
 				{Name: ":scheme", Value: "ftp"},
 				{Name: ":method", Value: http.MethodConnect},
 				{Name: ":authority", Value: "quic.clemente.io"},
-				{Name: ":path", Value: "/foo"},
+				{Name: ":path", Value: "/foo?val=1337"},
 			}
 			req, err := requestFromHeaders(headers)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(req.Method).To(Equal(http.MethodConnect))
 			Expect(req.Proto).To(Equal("webtransport"))
-			Expect(req.URL.String()).To(Equal("ftp://quic.clemente.io/foo"))
+			Expect(req.URL.String()).To(Equal("ftp://quic.clemente.io/foo?val=1337"))
+			Expect(req.URL.Query().Get("val")).To(Equal("1337"))
 		})
 
 		It("errors with missing scheme", func() {
