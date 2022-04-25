@@ -4,6 +4,8 @@ import (
 	"errors"
 	"io"
 	"runtime"
+	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/golang/mock/gomock"
@@ -402,6 +404,43 @@ var _ = Describe("Receive Stream", func() {
 					n, err := strWithTimeout.Read(b)
 					Expect(n).To(BeZero())
 					Expect(err).To(MatchError(io.EOF))
+				})
+
+				// Calling Read concurrently doesn't make any sense (and is forbidden),
+				// but we still want to make sure that we don't complete the stream more than once
+				// if the user misuses our API.
+				// This would lead to an INTERNAL_ERROR ("tried to delete unknown outgoing stream"),
+				// which can be hard to debug.
+				// Note that even without the protection built into the receiveStream, this test
+				// is very timing-dependent, and would need to run a few hundred times to trigger the failure.
+				It("handles concurrent reads", func() {
+					mockFC.EXPECT().UpdateHighestReceived(protocol.ByteCount(6), gomock.Any()).AnyTimes()
+					var bytesRead protocol.ByteCount
+					mockFC.EXPECT().AddBytesRead(gomock.Any()).Do(func(n protocol.ByteCount) { bytesRead += n }).AnyTimes()
+
+					var numCompleted int32
+					mockSender.EXPECT().onStreamCompleted(streamID).Do(func(protocol.StreamID) {
+						atomic.AddInt32(&numCompleted, 1)
+					}).AnyTimes()
+					const num = 3
+					var wg sync.WaitGroup
+					wg.Add(num)
+					for i := 0; i < num; i++ {
+						go func() {
+							defer wg.Done()
+							defer GinkgoRecover()
+							_, err := str.Read(make([]byte, 8))
+							Expect(err).To(MatchError(io.EOF))
+						}()
+					}
+					str.handleStreamFrame(&wire.StreamFrame{
+						Offset: 0,
+						Data:   []byte("foobar"),
+						Fin:    true,
+					})
+					wg.Wait()
+					Expect(bytesRead).To(BeEquivalentTo(6))
+					Expect(atomic.LoadInt32(&numCompleted)).To(BeEquivalentTo(1))
 				})
 			})
 
