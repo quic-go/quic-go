@@ -60,11 +60,16 @@ func requestFromHeaders(headers []qpack.HeaderField) (*http.Request, error) {
 	var err error
 
 	if isConnect {
-		u = &url.URL{
-			Scheme: scheme,
-			Host:   authority,
-			Path:   path,
+		if path != "" {
+			u, err = url.ParseRequestURI(path)
+			if err != nil {
+				return nil, err
+			}
+		} else {
+			u = &url.URL{}
 		}
+		u.Scheme = scheme
+		u.Host = authority
 		requestURI = authority
 	} else {
 		protocol = "HTTP/3"
