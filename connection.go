@@ -141,6 +141,8 @@ type connection struct {
 
 	srcConnIDLen int
 
+	counter map[string]int
+
 	perspective protocol.Perspective
 	version     protocol.VersionNumber
 	config      *Config
@@ -258,6 +260,7 @@ var newConnection = func(
 		tracer:                tracer,
 		logger:                logger,
 		version:               v,
+		counter:               make(map[string]int),
 	}
 	if origDestConnID != nil {
 		s.logID = origDestConnID.String()
@@ -390,6 +393,7 @@ var newClientConnection = func(
 		tracer:                tracer,
 		versionNegotiated:     hasNegotiatedVersion,
 		version:               v,
+		counter:               make(map[string]int),
 	}
 	s.connIDManager = newConnIDManager(
 		destConnID,
@@ -739,32 +743,55 @@ func (s *connection) nextKeepAliveTime() time.Time {
 
 func (s *connection) maybeResetTimer() {
 	var deadline time.Time
+	var reason string
 	if !s.handshakeComplete {
 		deadline = utils.MinTime(
 			s.creationTime.Add(s.config.handshakeTimeout()),
 			s.idleTimeoutStartTime().Add(s.config.HandshakeIdleTimeout),
 		)
+		reason = "handshake not complete"
 	} else {
 		if keepAliveTime := s.nextKeepAliveTime(); !keepAliveTime.IsZero() {
 			deadline = keepAliveTime
+			reason = "keep alive"
 		} else {
 			deadline = s.idleTimeoutStartTime().Add(s.idleTimeout)
+			reason = "idle timeout"
 		}
 	}
 	if s.handshakeConfirmed && !s.config.DisablePathMTUDiscovery {
-		if probeTime := s.mtuDiscoverer.NextProbeTime(); !probeTime.IsZero() {
-			deadline = utils.MinTime(deadline, probeTime)
+		probeTime := s.mtuDiscoverer.NextProbeTime()
+		if !probeTime.IsZero() && probeTime.Before(deadline) {
+			deadline = probeTime
+			reason = "probe time"
 		}
 	}
 
 	if ackAlarm := s.receivedPacketHandler.GetAlarmTimeout(); !ackAlarm.IsZero() {
-		deadline = utils.MinTime(deadline, ackAlarm)
+		if ackAlarm.Before(deadline) {
+			deadline = ackAlarm
+			reason = "ack alarm"
+		}
 	}
 	if lossTime := s.sentPacketHandler.GetLossDetectionTimeout(); !lossTime.IsZero() {
-		deadline = utils.MinTime(deadline, lossTime)
+		if lossTime.Before(deadline) {
+			deadline = lossTime
+			reason = "loss time"
+		}
 	}
 	if !s.pacingDeadline.IsZero() {
-		deadline = utils.MinTime(deadline, s.pacingDeadline)
+		if s.pacingDeadline.Before(deadline) {
+			deadline = s.pacingDeadline
+			reason = "pacing deadline"
+		}
+	}
+	s.counter[reason]++
+
+	for _, r := range s.counter {
+		if r > 1e5 {
+			fmt.Printf("%#v\n", s.counter)
+			panic("possible busy loop")
+		}
 	}
 
 	s.timer.Reset(deadline)
