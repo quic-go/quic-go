@@ -255,9 +255,6 @@ func (s *Server) serveImpl(startListener func() (quic.EarlyListener, error)) err
 	for {
 		conn, err := ln.Accept(context.Background())
 		if err != nil {
-			if errors.Is(err, quic.ErrServerClosed) {
-				return http.ErrServerClosed
-			}
 			return err
 		}
 		go s.handleConn(conn)
