@@ -49,7 +49,7 @@ var _ = Describe("Stream deadline tests", func() {
 			server, serverStr, clientStr := setup()
 			defer server.Close()
 
-			const timeout = 20 * time.Millisecond
+			const timeout = time.Millisecond
 			done := make(chan struct{})
 			go func() {
 				defer GinkgoRecover()
@@ -75,7 +75,7 @@ var _ = Describe("Stream deadline tests", func() {
 				bytesRead += n
 			}
 			Expect(data).To(Equal(PRDataLong))
-			// make sure the test actually worked an Read actually ran into the deadline a few times
+			// make sure the test actually worked and Read actually ran into the deadline a few times
 			Expect(timeoutCounter).To(BeNumerically(">=", 10))
 			Eventually(done).Should(BeClosed())
 		})
@@ -84,7 +84,7 @@ var _ = Describe("Stream deadline tests", func() {
 			server, serverStr, clientStr := setup()
 			defer server.Close()
 
-			const timeout = 20 * time.Millisecond
+			const timeout = time.Millisecond
 			go func() {
 				defer GinkgoRecover()
 				_, err := serverStr.Write(PRDataLong)
@@ -134,7 +134,7 @@ var _ = Describe("Stream deadline tests", func() {
 			server, serverStr, clientStr := setup()
 			defer server.Close()
 
-			const timeout = 20 * time.Millisecond
+			const timeout = time.Millisecond
 			done := make(chan struct{})
 			go func() {
 				defer GinkgoRecover()
@@ -167,7 +167,7 @@ var _ = Describe("Stream deadline tests", func() {
 			server, serverStr, clientStr := setup()
 			defer server.Close()
 
-			const timeout = 20 * time.Millisecond
+			const timeout = time.Millisecond
 			readDone := make(chan struct{})
 			go func() {
 				defer GinkgoRecover()
