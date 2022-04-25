@@ -9,6 +9,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"runtime"
 	"sync/atomic"
 	"time"
 
@@ -773,6 +774,22 @@ var _ = Describe("Server", func() {
 		serv := &Server{Server: &http.Server{}}
 		Expect(serv.Close()).To(Succeed())
 		Expect(serv.ListenAndServe()).To(MatchError(http.ErrServerClosed))
+	})
+
+	It("handles concurrent Serve and Close", func() {
+		addr, err := net.ResolveUDPAddr("udp", "localhost:0")
+		Expect(err).ToNot(HaveOccurred())
+		c, err := net.ListenUDP("udp", addr)
+		Expect(err).ToNot(HaveOccurred())
+		done := make(chan struct{})
+		go func() {
+			defer GinkgoRecover()
+			defer close(done)
+			s.Serve(c)
+		}()
+		runtime.Gosched()
+		s.Close()
+		Eventually(done).Should(BeClosed())
 	})
 
 	Context("ConfigureTLSConfig", func() {
