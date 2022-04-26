@@ -218,6 +218,8 @@ type connection struct {
 
 	datagramQueue *datagramQueue
 
+	mtuLogger *bytes.Buffer
+
 	logID  string
 	tracer logging.ConnectionTracer
 	logger utils.Logger
@@ -529,6 +531,7 @@ func (s *connection) preSetup() {
 	s.closeChan = make(chan closeError, 1)
 	s.sendingScheduled = make(chan struct{}, 1)
 	s.handshakeCtx, s.handshakeCtxCancel = context.WithCancel(context.Background())
+	s.mtuLogger = bytes.NewBuffer(make([]byte, 10*1024))
 
 	now := time.Now()
 	s.lastPacketReceivedTime = now
@@ -790,6 +793,7 @@ func (s *connection) maybeResetTimer() {
 	for _, r := range s.counter {
 		if r > 1e5 {
 			fmt.Printf("%#v\n", s.counter)
+			fmt.Println(s.mtuLogger.String())
 			panic("possible busy loop")
 		}
 	}
@@ -856,6 +860,7 @@ func (s *connection) handleHandshakeConfirmed() {
 				s.sentPacketHandler.SetMaxDatagramSize(size)
 				s.packer.SetMaxPacketSize(size)
 			},
+			s.mtuLogger,
 		)
 	}
 }
