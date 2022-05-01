@@ -87,18 +87,14 @@ var _ = Describe("HTTP3 Server hotswap test", func() {
 		})
 
 		server1 = &http3.Server{
-			Server: &http.Server{
-				Handler:   mux1,
-				TLSConfig: testdata.GetTLSConfig(),
-			},
+			Handler:    mux1,
+			TLSConfig:  testdata.GetTLSConfig(),
 			QuicConfig: getQuicConfig(&quic.Config{Versions: versions}),
 		}
 
 		server2 = &http3.Server{
-			Server: &http.Server{
-				Handler:   mux2,
-				TLSConfig: testdata.GetTLSConfig(),
-			},
+			Handler:    mux2,
+			TLSConfig:  testdata.GetTLSConfig(),
 			QuicConfig: getQuicConfig(&quic.Config{Versions: versions}),
 		}
 

@@ -126,35 +126,64 @@ type listenerInfo struct {
 
 // Server is a HTTP/3 server.
 type Server struct {
-	*http.Server
+	// Addr optionally specifies the UDP address for the server to listen on,
+	// in the form "host:port".
+	//
+	// When used by ListenAndServe and ListenAndServeTLS methods, if empty,
+	// ":https" (port 443) is used. See net.Dial for details of the address
+	// format.
+	//
+	// Otherwise, if Port is not set and underlying QUIC listeners do not
+	// have valid port numbers, the port part is used in Alt-Svc headers set
+	// with SetQuicHeaders.
+	Addr string
 
-	// By providing a quic.Config, it is possible to set parameters of the QUIC connection.
-	// If nil, it uses reasonable default values.
+	// Port is used in Alt-Svc response headers set with SetQuicHeaders. If
+	// needed Port can be manually set when the Server is created.
+	//
+	// This is useful when a Layer 4 firewall is redirecting UDP traffic and
+	// clients must use a port different from the port the Server is
+	// listening on.
+	Port int
+
+	// TLSConfig provides a TLS configuration for use by server. It must be
+	// set for ListenAndServe and Serve methods.
+	TLSConfig *tls.Config
+
+	// QuicConfig provides the parameters for QUIC connection created with
+	// Serve. If nil, it uses reasonable default values.
+	//
+	// Configured versions are also used in Alt-Svc response header set with
+	// SetQuicHeaders.
 	QuicConfig *quic.Config
 
-	// Enable support for HTTP/3 datagrams.
+	// Handler is the HTTP request handler to use. If not set, defaults to
+	// http.NotFound.
+	Handler http.Handler
+
+	// EnableDatagrams enables support for HTTP/3 datagrams.
 	// If set to true, QuicConfig.EnableDatagram will be set.
 	// See https://datatracker.ietf.org/doc/html/draft-ietf-masque-h3-datagram-07.
 	EnableDatagrams bool
 
-	// The port to use in Alt-Svc response headers.
-	// If needed Port can be manually set when the Server is created.
-	// This is useful when a Layer 4 firewall is redirecting UDP traffic and clients must use
-	// a port different from the port the Server is listening on.
-	Port int
+	// MaxHeaderBytes controls the maximum number of bytes the server will
+	// read parsing the request HEADERS frame. It does not limit the size of
+	// the request body. If zero or negative, http.DefaultMaxHeaderBytes is
+	// used.
+	MaxHeaderBytes int
 
-	// Additional HTTP/3 settings.
+	// AdditionalSettings specifies additional HTTP/3 settings.
 	// It is invalid to specify any settings defined by the HTTP/3 draft and the datagram draft.
 	AdditionalSettings map[uint64]uint64
 
-	// When set, this callback is called for the first unknown frame parsed on a bidirectional stream.
+	// StreamHijacker, when set, is called for the first unknown frame parsed on a bidirectional stream.
 	// It is called right after parsing the frame type.
 	// Callers can either process the frame and return control of the stream back to HTTP/3
 	// (by returning hijacked false).
 	// Alternatively, callers can take over the QUIC stream (by returning hijacked true).
 	StreamHijacker func(FrameType, quic.Connection, quic.Stream) (hijacked bool, err error)
 
-	// When set, this callback is called for unknown unidirectional stream of unknown stream type.
+	// UniStreamHijacker, when set, is called for unknown unidirectional stream of unknown stream type.
 	UniStreamHijacker func(StreamType, quic.Connection, quic.ReceiveStream) (hijacked bool)
 
 	mutex     sync.RWMutex
@@ -168,14 +197,15 @@ type Server struct {
 }
 
 // ListenAndServe listens on the UDP address s.Addr and calls s.Handler to handle HTTP/3 requests on incoming connections.
+//
+// If s.Addr is blank, ":https" is used.
 func (s *Server) ListenAndServe() error {
-	if s.Server == nil {
-		return errors.New("use of http3.Server without http.Server")
-	}
 	return s.serveConn(s.TLSConfig, nil)
 }
 
 // ListenAndServeTLS listens on the UDP address s.Addr and calls s.Handler to handle HTTP/3 requests on incoming connections.
+//
+// If s.Addr is blank, ":https" is used.
 func (s *Server) ListenAndServeTLS(certFile, keyFile string) error {
 	var err error
 	certs := make([]tls.Certificate, 1)
@@ -203,10 +233,6 @@ func (s *Server) Serve(conn net.PacketConn) error {
 // and use it to construct a http3-friendly QUIC listener.
 // Closing the server does close the listener.
 func (s *Server) ServeListener(ln quic.EarlyListener) error {
-	if s.Server == nil {
-		return errors.New("use of http3.Server without http.Server")
-	}
-
 	if err := s.addListener(&ln); err != nil {
 		return err
 	}
@@ -215,9 +241,18 @@ func (s *Server) ServeListener(ln quic.EarlyListener) error {
 	return err
 }
 
+var errServerWithoutTLSConfig = errors.New("use of http3.Server without TLSConfig")
+
 func (s *Server) serveConn(tlsConf *tls.Config, conn net.PacketConn) error {
-	if s.Server == nil {
-		return errors.New("use of http3.Server without http.Server")
+	if tlsConf == nil {
+		return errServerWithoutTLSConfig
+	}
+
+	s.mutex.Lock()
+	closed := s.closed
+	s.mutex.Unlock()
+	if closed {
+		return http.ErrServerClosed
 	}
 
 	baseConf := ConfigureTLSConfig(tlsConf)
@@ -234,7 +269,11 @@ func (s *Server) serveConn(tlsConf *tls.Config, conn net.PacketConn) error {
 	var ln quic.EarlyListener
 	var err error
 	if conn == nil {
-		ln, err = quicListenAddr(s.Addr, baseConf, quicConf)
+		addr := s.Addr
+		if addr == "" {
+			addr = ":https"
+		}
+		ln, err = quicListenAddr(addr, baseConf, quicConf)
 	} else {
 		ln, err = quicListen(conn, baseConf, quicConf)
 	}
@@ -462,10 +501,10 @@ func (s *Server) handleUnidirectionalStreams(conn quic.EarlyConnection) {
 }
 
 func (s *Server) maxHeaderBytes() uint64 {
-	if s.Server.MaxHeaderBytes <= 0 {
+	if s.MaxHeaderBytes <= 0 {
 		return http.DefaultMaxHeaderBytes
 	}
-	return uint64(s.Server.MaxHeaderBytes)
+	return uint64(s.MaxHeaderBytes)
 }
 
 func (s *Server) handleRequest(conn quic.Connection, str quic.Stream, decoder *qpack.Decoder, onFrameError func()) requestError {
@@ -609,10 +648,8 @@ func (s *Server) SetQuicHeaders(hdr http.Header) error {
 // used when handler is nil.
 func ListenAndServeQUIC(addr, certFile, keyFile string, handler http.Handler) error {
 	server := &Server{
-		Server: &http.Server{
-			Addr:    addr,
-			Handler: handler,
-		},
+		Addr:    addr,
+		Handler: handler,
 	}
 	return server.ListenAndServeTLS(certFile, keyFile)
 }
@@ -633,6 +670,10 @@ func ListenAndServe(addr, certFile, keyFile string, handler http.Handler) error 
 	// so we don't need to make a full copy.
 	config := &tls.Config{
 		Certificates: certs,
+	}
+
+	if addr == "" {
+		addr = ":https"
 	}
 
 	// Open the listeners
@@ -660,13 +701,9 @@ func ListenAndServe(addr, certFile, keyFile string, handler http.Handler) error 
 	defer tlsConn.Close()
 
 	// Start the servers
-	httpServer := &http.Server{
-		Addr:      addr,
-		TLSConfig: config,
-	}
-
+	httpServer := &http.Server{}
 	quicServer := &Server{
-		Server: httpServer,
+		TLSConfig: config,
 	}
 
 	if handler == nil {
