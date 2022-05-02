@@ -12,6 +12,7 @@ import (
 	"runtime"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/lucas-clemente/quic-go"
@@ -160,6 +161,10 @@ type Server struct {
 	mutex     sync.RWMutex
 	listeners map[*quic.EarlyListener]listenerInfo
 
+	once   sync.Once
+	ctx    context.Context
+	cancel context.CancelFunc
+
 	closed bool
 
 	altSvcHeader string
@@ -250,13 +255,29 @@ func (s *Server) serveConn(tlsConf *tls.Config, conn net.PacketConn) error {
 }
 
 func (s *Server) serveListener(ln quic.EarlyListener) error {
+	s.initContext()
 	for {
-		conn, err := ln.Accept(context.Background())
+		conn, err := ln.Accept(s.ctx)
 		if err != nil {
 			return err
 		}
 		go s.handleConn(conn)
 	}
+}
+
+// handleConn handles requests on the given connection until it is no longer
+// readable.
+func (s *Server) handleConn(conn quic.EarlyConnection) {
+	s.newConn(conn).serve()
+}
+
+// ServeConn serves HTTP/3 requests on the provided QUIC connection and blocks
+// until connection is no longer readable.
+//
+// It is guaranteed that the given connection and the server’s http.Handler will
+// not be used once ServeConn returns.
+func (s *Server) ServeConn(conn quic.EarlyConnection) {
+	s.handleConn(conn)
 }
 
 func extractPort(addr string) (int, error) {
@@ -357,107 +378,283 @@ func (s *Server) removeListener(l *quic.EarlyListener) {
 	s.mutex.Unlock()
 }
 
-func (s *Server) handleConn(conn quic.EarlyConnection) {
-	decoder := qpack.NewDecoder(nil)
+// serverConn is a server side of a single QUIC connection.
+type serverConn struct {
+	// Server is the server on which connection arrived (or passed to
+	// ServeConn method).
+	*Server
 
-	// send a SETTINGS frame
-	str, err := conn.OpenUniStream()
+	// conn is the underlying connection that is being served.
+	conn quic.EarlyConnection
+
+	// ctx is the context used for accepting streams on the connection.
+	ctx context.Context
+	// cancel is a function that cancels ctx context.
+	cancel context.CancelFunc
+
+	// decoder is a shared decoder instance. It is safe for concurrent use.
+	decoder *qpack.Decoder
+
+	// ctrl is an atomic boolean that is set to true when the first control
+	// stream is accepted.
+	ctrl uint32 // mutable
+
+	// lastStreamID is the ID of the last accepted client-initiated
+	// bidirectional stream for GOAWAY frame.
+	//
+	// It is updated in (*serverConn).acceptStreams loop.
+	lastStreamID quic.StreamID // mutable
+
+	// streamWG and uniStreamWG are the wait groups for stream handlers.
+	streamWG, uniStreamWG sync.WaitGroup
+}
+
+// newConn returns a new server connection from c.
+func (s *Server) newConn(c quic.EarlyConnection) *serverConn {
+	ctx, cancel := s.newConnContext()
+	return &serverConn{
+		Server:  s,
+		conn:    c,
+		ctx:     ctx,
+		cancel:  cancel,
+		decoder: qpack.NewDecoder(nil),
+	}
+}
+
+// newConnContext returns a child context of the internal server’s context for
+// new connection. The context is used to propagates graceful server shutdown
+// signal to connections.
+func (s *Server) newConnContext() (context.Context, context.CancelFunc) {
+	s.initContext()
+	return context.WithCancel(s.ctx)
+}
+
+// initContext initialized the internal server context at most once.
+func (s *Server) initContext() {
+	s.once.Do(func() {
+		s.ctx, s.cancel = context.WithCancel(context.Background())
+	})
+}
+
+// serve starts serving requests on the underlying connection.
+func (s *serverConn) serve() {
+	ctrl, err := s.openControlStream()
 	if err != nil {
-		s.logger.Debugf("Opening the control stream failed.")
+		s.cancel()
+		s.logger.Debugf("Opening the control stream failed: %s", err)
+		s.conn.CloseWithError(quic.ApplicationErrorCode(errorClosedCriticalStream), "")
 		return
 	}
-	buf := &bytes.Buffer{}
-	quicvarint.Write(buf, streamTypeControlStream) // stream type
-	(&settingsFrame{Datagram: s.EnableDatagrams, Other: s.AdditionalSettings}).Write(buf)
-	str.Write(buf.Bytes())
 
-	go s.handleUnidirectionalStreams(conn)
+	// Send SETTINGS frame on the control stream.
+	buf := bytes.NewBuffer(nil)
+	(&settingsFrame{Datagram: s.EnableDatagrams, Other: s.AdditionalSettings}).Write(buf)
+	ctrl.Write(buf.Bytes())
+
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		defer s.cancel()
+		s.acceptUniStreams()
+	}()
 
 	// Process all requests immediately.
 	// It's the client's responsibility to decide which requests are eligible for 0-RTT.
+	s.acceptStreams()
+
+	// Stop accepting unidirectional streams.
+	s.cancel()
+	wg.Wait()
+
+	// Send GOAWAY frame after acceptStreams loop returns.
+	//
+	// See https://quicwg.org/base-drafts/draft-ietf-quic-http.html#connection-shutdown
+	buf.Reset()
+	(&goawayFrame{StreamID: s.lastStreamID}).Write(buf)
+	ctrl.Write(buf.Bytes())
+
+	// Wait for active handlers to complete and close the connection.
+	s.streamWG.Wait()
+	s.conn.CloseWithError(quic.ApplicationErrorCode(errorNoError), "")
+
+	// Wait for unidirectional streams and client-initiated control stream
+	// handlers to complete.
+	s.uniStreamWG.Wait()
+}
+
+// openControlStream opens a server-initiated connection control stream.
+func (s *serverConn) openControlStream() (quic.SendStream, error) {
+	str, err := s.conn.OpenUniStream()
+	if err != nil {
+		return nil, err
+	}
+	quicvarint.Write(quicvarint.NewWriter(str), streamTypeControlStream)
+	return str, nil
+}
+
+// acceptStreams accepts client-initiated bidirectional streams. For each stream
+// it spawns a handler goroutine.
+func (s *serverConn) acceptStreams() {
 	for {
-		str, err := conn.AcceptStream(context.Background())
+		str, err := s.conn.AcceptStream(s.ctx)
 		if err != nil {
 			s.logger.Debugf("Accepting stream failed: %s", err)
 			return
 		}
+
+		s.lastStreamID = str.StreamID()
+
+		s.streamWG.Add(1)
 		go func() {
-			rerr := s.handleRequest(conn, str, decoder, func() {
-				conn.CloseWithError(quic.ApplicationErrorCode(errorFrameUnexpected), "")
-			})
-			if rerr.err == errHijacked {
-				return
-			}
-			if rerr.err != nil || rerr.streamErr != 0 || rerr.connErr != 0 {
-				s.logger.Debugf("Handling request failed: %s", err)
-				if rerr.streamErr != 0 {
-					str.CancelWrite(quic.StreamErrorCode(rerr.streamErr))
-				}
-				if rerr.connErr != 0 {
-					var reason string
-					if rerr.err != nil {
-						reason = rerr.err.Error()
-					}
-					conn.CloseWithError(quic.ApplicationErrorCode(rerr.connErr), reason)
-				}
-				return
-			}
-			str.Close()
+			defer s.streamWG.Done()
+			s.handleStream(str)
 		}()
 	}
 }
 
-func (s *Server) handleUnidirectionalStreams(conn quic.EarlyConnection) {
+// handleStream handles client-initiated bidirectional stream.
+func (s *serverConn) handleStream(str quic.Stream) {
+	rerr := s.handleRequest(s.conn, str, s.decoder, func() {
+		s.conn.CloseWithError(quic.ApplicationErrorCode(errorFrameUnexpected), "")
+	})
+	if rerr.err == errHijacked {
+		return
+	}
+	if rerr.err != nil || rerr.streamErr != 0 || rerr.connErr != 0 {
+		s.logger.Debugf("Handling request failed: %s", rerr.err)
+		if rerr.streamErr != 0 {
+			str.CancelWrite(quic.StreamErrorCode(rerr.streamErr))
+		}
+		if rerr.connErr != 0 {
+			var reason string
+			if rerr.err != nil {
+				reason = rerr.err.Error()
+			}
+			s.conn.CloseWithError(quic.ApplicationErrorCode(rerr.connErr), reason)
+		}
+		return
+	}
+	str.Close()
+}
+
+// acceptUniStreams accepts client-initiated unidirectional streams in a loop.
+// For each stream it spawns a handler goroutine.
+func (s *serverConn) acceptUniStreams() {
 	for {
-		str, err := conn.AcceptUniStream(context.Background())
+		str, err := s.conn.AcceptUniStream(s.ctx)
 		if err != nil {
 			s.logger.Debugf("accepting unidirectional stream failed: %s", err)
 			return
 		}
 
-		go func(str quic.ReceiveStream) {
-			streamType, err := quicvarint.Read(quicvarint.NewReader(str))
-			if err != nil {
-				s.logger.Debugf("reading stream type on stream %d failed: %s", str.StreamID(), err)
-				return
+		s.uniStreamWG.Add(1)
+		go func() {
+			defer s.uniStreamWG.Done()
+			s.handleUniStream(str)
+		}()
+	}
+}
+
+// handleUniStream handles client-initiated unidirectional stream.
+func (s *serverConn) handleUniStream(str quic.ReceiveStream) {
+	streamType, err := quicvarint.Read(quicvarint.NewReader(str))
+	if err != nil {
+		s.logger.Debugf("reading stream type on stream %d failed: %s", str.StreamID(), err)
+		return
+	}
+	switch streamType {
+	case streamTypeControlStream:
+		s.handleControlStream(str)
+	case streamTypeQPACKEncoderStream, streamTypeQPACKDecoderStream:
+		// Our QPACK implementation doesn't use the dynamic table yet.
+		// TODO: check that only one stream of each type is opened.
+	case streamTypePushStream: // only the server can push
+		s.conn.CloseWithError(quic.ApplicationErrorCode(errorStreamCreationError), "")
+	default:
+		if s.UniStreamHijacker != nil && s.UniStreamHijacker(StreamType(streamType), s.conn, str) {
+			return
+		}
+		str.CancelRead(quic.StreamErrorCode(errorStreamCreationError))
+	}
+}
+
+// handleControlStream handles client’s control stream. It closes the underlying
+// connection if called more than once.
+func (s *serverConn) handleControlStream(str quic.ReceiveStream) {
+	// Only one control stream per peer is permitted.
+	//
+	// See https://quicwg.org/base-drafts/draft-ietf-quic-http.html#name-control-streams
+	if !atomic.CompareAndSwapUint32(&s.ctrl, 0, 1) {
+		s.conn.CloseWithError(quic.ApplicationErrorCode(errorStreamCreationError), "")
+		return
+	}
+
+	f, err := parseNextFrame(str, nil)
+	if err != nil {
+		s.conn.CloseWithError(quic.ApplicationErrorCode(errorFrameError), "")
+		return
+	}
+
+	// The SETTINGS frame must be the first frame in control stream.
+	// Subsequent SETTINGS frames will result in connection error.
+	//
+	// See https://quicwg.org/base-drafts/draft-ietf-quic-http.html#name-settings
+	sf, ok := f.(*settingsFrame)
+	if !ok {
+		s.conn.CloseWithError(quic.ApplicationErrorCode(errorMissingSettings), "")
+		return
+	}
+
+	if !sf.Datagram {
+		return
+	}
+
+	// If datagram support was enabled on our side as well as on the client side,
+	// we can expect it to have been negotiated both on the transport and on the HTTP/3 layer.
+	// Note: ConnectionState() will block until the handshake is complete (relevant when using 0-RTT).
+	if s.EnableDatagrams && !s.conn.ConnectionState().SupportsDatagrams {
+		s.conn.CloseWithError(quic.ApplicationErrorCode(errorSettingsError), "missing QUIC Datagram support")
+		return
+	}
+
+	for {
+		f, err := parseNextFrame(str, nil)
+		if err != nil {
+			// Abort connection with H3_CLOSED_CRITICAL_STREAM if the control stream is closed.
+			//
+			// See https://quicwg.org/base-drafts/draft-ietf-quic-http.html#name-control-streams
+			var ec errorCode
+			if errors.As(err, new(*quic.StreamError)) {
+				ec = errorClosedCriticalStream
+			} else {
+				ec = errorFrameError
 			}
-			// We're only interested in the control stream here.
-			switch streamType {
-			case streamTypeControlStream:
-			case streamTypeQPACKEncoderStream, streamTypeQPACKDecoderStream:
-				// Our QPACK implementation doesn't use the dynamic table yet.
-				// TODO: check that only one stream of each type is opened.
-				return
-			case streamTypePushStream: // only the server can push
-				conn.CloseWithError(quic.ApplicationErrorCode(errorStreamCreationError), "")
-				return
-			default:
-				if s.UniStreamHijacker != nil && s.UniStreamHijacker(StreamType(streamType), conn, str) {
-					return
-				}
-				str.CancelRead(quic.StreamErrorCode(errorStreamCreationError))
-				return
-			}
-			f, err := parseNextFrame(str, nil)
-			if err != nil {
-				conn.CloseWithError(quic.ApplicationErrorCode(errorFrameError), "")
-				return
-			}
-			sf, ok := f.(*settingsFrame)
-			if !ok {
-				conn.CloseWithError(quic.ApplicationErrorCode(errorMissingSettings), "")
-				return
-			}
-			if !sf.Datagram {
-				return
-			}
-			// If datagram support was enabled on our side as well as on the client side,
-			// we can expect it to have been negotiated both on the transport and on the HTTP/3 layer.
-			// Note: ConnectionState() will block until the handshake is complete (relevant when using 0-RTT).
-			if s.EnableDatagrams && !conn.ConnectionState().SupportsDatagrams {
-				conn.CloseWithError(quic.ApplicationErrorCode(errorSettingsError), "missing QUIC Datagram support")
-			}
-		}(str)
+			s.logger.Debugf("parsing next frame in the control stream: %s", err)
+			s.conn.CloseWithError(quic.ApplicationErrorCode(ec), "")
+			return
+		}
+		// The following frames are allowed in control streams:
+		//
+		//  • CANCEL_PUSH
+		//  • SETTINGS (must be the first frame)
+		//  • GOAWAY
+		//  • MAX_PUSH_ID
+		//  • Reserved
+		//
+		// parseNextFrame skips reserved frames, so we only have to
+		// reject known frame types.
+		switch f.(type) {
+		case *cancelPushFrame, *maxPushIDFrame:
+			// TODO: currently not implemented.
+		case *goawayFrame:
+			// Trigger graceful connection shutdown.
+			s.cancel()
+			return
+		case *dataFrame, *headersFrame, *settingsFrame, *pushPromiseFrame:
+			s.conn.CloseWithError(quic.ApplicationErrorCode(errorFrameUnexpected), "")
+			return
+		}
 	}
 }
 
