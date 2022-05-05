@@ -127,7 +127,6 @@ type SendStream interface {
 	// The Context is canceled as soon as the write-side of the stream is closed.
 	// This happens when Close() or CancelWrite() is called, or when the peer
 	// cancels the read-side of their stream.
-	// Warning: This API should not be considered stable and might change soon.
 	Context() context.Context
 	// SetWriteDeadline sets the deadline for future Write calls
 	// and any currently-blocked Write call.
@@ -184,7 +183,6 @@ type Connection interface {
 	// The error string will be sent to the peer.
 	CloseWithError(ApplicationErrorCode, string) error
 	// The context is cancelled when the connection is closed.
-	// Warning: This API should not be considered stable and might change soon.
 	Context() context.Context
 	// ConnectionState returns basic details about the QUIC connection.
 	// It blocks until the handshake completes.
@@ -216,7 +214,6 @@ type EarlyConnection interface {
 type Config struct {
 	// The QUIC versions that can be negotiated.
 	// If not set, it uses all versions available.
-	// Warning: This API should not be considered stable and will change soon.
 	Versions []VersionNumber
 	// The length of the connection ID in bytes.
 	// It can be 0, or any value between 4 and 18.
