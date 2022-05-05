@@ -126,6 +126,10 @@ func (w *responseWriter) StreamID() quic.StreamID {
 	return w.stream.StreamID()
 }
 
+func (w *responseWriter) Stream() quic.Stream {
+	return w.stream
+}
+
 func (w *responseWriter) StreamCreator() StreamCreator {
 	return w.conn
 }

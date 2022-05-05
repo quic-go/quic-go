@@ -20,9 +20,10 @@ type StreamCreator interface {
 
 var _ StreamCreator = quic.Connection(nil)
 
-// A Hijacker allows hijacking of the stream creating part of a quic.Session from a http.Response.Body.
+// A Hijacker allows hijacking of the stream and stream creating part of a quic.Session from a http.Response.Body.
 // It is used by WebTransport to create WebTransport streams after a session has been established.
 type Hijacker interface {
+	Stream() quic.Stream
 	StreamCreator() StreamCreator
 }
 
@@ -66,6 +67,10 @@ func newResponseBody(str quic.Stream, conn quic.Connection, done chan<- struct{}
 		},
 		conn: conn,
 	}
+}
+
+func (r *hijackableBody) Stream() quic.Stream {
+	return r.body.str
 }
 
 func (r *hijackableBody) StreamCreator() StreamCreator {
