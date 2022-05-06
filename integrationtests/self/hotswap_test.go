@@ -8,6 +8,7 @@ import (
 	"net"
 	"net/http"
 	"strconv"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -34,28 +35,53 @@ func (ln *listenerWrapper) Close() error {
 
 func (ln *listenerWrapper) Faker() *fakeClosingListener {
 	atomic.AddInt32(&ln.count, 1)
-	ctx, cancel := context.WithCancel(context.Background())
-	return &fakeClosingListener{ln, 0, ctx, cancel}
+	return &fakeClosingListener{listenerWrapper: ln}
 }
 
 type fakeClosingListener struct {
 	*listenerWrapper
-	closed int32
-	ctx    context.Context
+	mu     sync.Mutex
+	closed bool
 	cancel context.CancelFunc
 }
 
 func (ln *fakeClosingListener) Accept(ctx context.Context) (quic.EarlyConnection, error) {
-	Expect(ctx).To(Equal(context.Background()))
-	return ln.listenerWrapper.Accept(ln.ctx)
+	ln.mu.Lock()
+	if ln.closed {
+		ln.mu.Unlock()
+		return nil, quic.ErrServerClosed
+	}
+
+	// NB we assume that Accept will not be called concurrently.
+	Expect(ln.cancel).To(BeNil())
+
+	ctx, cancel := context.WithCancel(ctx)
+	ln.cancel = cancel
+
+	ln.mu.Unlock()
+
+	c, err := ln.listenerWrapper.Accept(ctx)
+
+	ln.mu.Lock()
+	ln.cancel()
+	ln.cancel = nil
+	ln.mu.Unlock()
+
+	return c, err
 }
 
 func (ln *fakeClosingListener) Close() error {
-	if atomic.CompareAndSwapInt32(&ln.closed, 0, 1) {
+	ln.mu.Lock()
+	defer ln.mu.Unlock()
+	if ln.closed {
+		return nil
+	}
+	ln.closed = true
+	if ln.cancel != nil {
 		ln.cancel()
-		if atomic.AddInt32(&ln.listenerWrapper.count, -1) == 0 {
-			ln.listenerWrapper.Close()
-		}
+	}
+	if atomic.AddInt32(&ln.listenerWrapper.count, -1) == 0 {
+		ln.listenerWrapper.Close()
 	}
 	return nil
 }
@@ -166,8 +192,8 @@ var _ = Describe("HTTP3 Server hotswap test", func() {
 				// and only the fake listener should be closed
 				Expect(server1.Close()).NotTo(HaveOccurred())
 				Eventually(stoppedServing1).Should(BeClosed())
-				Expect(fake1.closed).To(Equal(int32(1)))
-				Expect(fake2.closed).To(Equal(int32(0)))
+				Expect(fake1.closed).To(BeTrue())
+				Expect(fake2.closed).To(BeFalse())
 				Expect(ln.listenerClosed).ToNot(BeTrue())
 				Expect(client.Transport.(*http3.RoundTripper).Close()).NotTo(HaveOccurred())
 
@@ -182,7 +208,7 @@ var _ = Describe("HTTP3 Server hotswap test", func() {
 				// close the other server - both the fake and the actual listeners must close now
 				Expect(server2.Close()).NotTo(HaveOccurred())
 				Eventually(stoppedServing2).Should(BeClosed())
-				Expect(fake2.closed).To(Equal(int32(1)))
+				Expect(fake2.closed).To(BeTrue())
 				Expect(ln.listenerClosed).To(BeTrue())
 			})
 		})
