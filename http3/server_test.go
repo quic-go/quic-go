@@ -272,7 +272,7 @@ var _ = Describe("Server", func() {
 				conn.EXPECT().AcceptUniStream(gomock.Any()).DoAndReturn(func(context.Context) (quic.ReceiveStream, error) {
 					return nil, errors.New("test done")
 				})
-				s.ServeConn(conn)
+				s.handleConn(context.Background(), conn, false)
 				Expect(streamTypeChan).To(Receive(BeEquivalentTo(sentinelStreamType)))
 			})
 
@@ -295,7 +295,7 @@ var _ = Describe("Server", func() {
 				conn.EXPECT().AcceptUniStream(gomock.Any()).DoAndReturn(func(context.Context) (quic.ReceiveStream, error) {
 					return nil, errors.New("test done")
 				})
-				s.ServeConn(conn)
+				s.handleConn(context.Background(), conn, false)
 				Expect(streamTypeChan).To(Receive(BeEquivalentTo(sentinelStreamType)))
 			})
 		})
@@ -331,7 +331,7 @@ var _ = Describe("Server", func() {
 					conn.EXPECT().CloseWithError(quic.ApplicationErrorCode(errorNoError), ""),
 				)
 
-				s.ServeConn(conn)
+				s.handleConn(context.Background(), conn, false)
 			})
 
 			for _, t := range []uint64{streamTypeQPACKEncoderStream, streamTypeQPACKDecoderStream} {
@@ -358,7 +358,7 @@ var _ = Describe("Server", func() {
 						conn.EXPECT().CloseWithError(quic.ApplicationErrorCode(errorNoError), ""),
 					)
 
-					s.ServeConn(conn)
+					s.handleConn(context.Background(), conn, false)
 				})
 			}
 
@@ -367,10 +367,7 @@ var _ = Describe("Server", func() {
 				quicvarint.Write(buf, 1337)
 				str := mockquic.NewMockStream(mockCtrl)
 				str.EXPECT().Read(gomock.Any()).DoAndReturn(buf.Read).AnyTimes()
-				done := make(chan struct{})
-				str.EXPECT().CancelRead(quic.StreamErrorCode(errorStreamCreationError)).Do(func(code quic.StreamErrorCode) {
-					close(done)
-				})
+				str.EXPECT().CancelRead(quic.StreamErrorCode(errorStreamCreationError))
 				gomock.InOrder(
 					conn.EXPECT().AcceptUniStream(gomock.Any()).DoAndReturn(func(context.Context) (quic.ReceiveStream, error) {
 						return str, nil
@@ -380,8 +377,7 @@ var _ = Describe("Server", func() {
 					}),
 					conn.EXPECT().CloseWithError(quic.ApplicationErrorCode(errorNoError), ""),
 				)
-				s.ServeConn(conn)
-				Expect(done).To(BeClosed())
+				s.handleConn(context.Background(), conn, false)
 			})
 
 			It("errors when the first frame on the control stream is not a SETTINGS frame", func() {
@@ -406,7 +402,7 @@ var _ = Describe("Server", func() {
 					conn.EXPECT().CloseWithError(quic.ApplicationErrorCode(errorMissingSettings), gomock.Any()),
 				)
 
-				s.ServeConn(conn)
+				s.handleConn(context.Background(), conn, false)
 			})
 
 			It("errors when parsing the frame on the control stream fails", func() {
@@ -433,7 +429,7 @@ var _ = Describe("Server", func() {
 					conn.EXPECT().CloseWithError(quic.ApplicationErrorCode(errorFrameError), gomock.Any()),
 				)
 
-				s.ServeConn(conn)
+				s.handleConn(context.Background(), conn, false)
 			})
 
 			It("errors when the client opens a push stream", func() {
@@ -458,7 +454,7 @@ var _ = Describe("Server", func() {
 					conn.EXPECT().CloseWithError(quic.ApplicationErrorCode(errorStreamCreationError), gomock.Any()),
 				)
 
-				s.ServeConn(conn)
+				s.handleConn(context.Background(), conn, false)
 			})
 
 			It("errors when the client advertises datagram support (and we enabled support for it)", func() {
@@ -485,7 +481,7 @@ var _ = Describe("Server", func() {
 					conn.EXPECT().CloseWithError(quic.ApplicationErrorCode(errorSettingsError), "missing QUIC Datagram support"),
 				)
 
-				s.ServeConn(conn)
+				s.handleConn(context.Background(), conn, false)
 			})
 		})
 
@@ -521,14 +517,14 @@ var _ = Describe("Server", func() {
 				buf.Write([]byte("foobar"))
 				responseBuf := &bytes.Buffer{}
 				setRequest(append(requestData, buf.Bytes()...))
-				done := make(chan struct{})
+
 				str.EXPECT().Context().Return(reqContext)
 				str.EXPECT().Write(gomock.Any()).DoAndReturn(responseBuf.Write).AnyTimes()
 				str.EXPECT().CancelRead(quic.StreamErrorCode(errorNoError))
-				str.EXPECT().Close().Do(func() { close(done) })
+				str.EXPECT().Close()
 
-				s.ServeConn(conn)
-				Expect(done).To(BeClosed())
+				s.handleConn(context.Background(), conn, false)
+
 				hfs := decodeHeader(responseBuf)
 				Expect(hfs).To(HaveKeyWithValue(":status", []string{"200"}))
 			})
@@ -546,15 +542,10 @@ var _ = Describe("Server", func() {
 				responseBuf := &bytes.Buffer{}
 				setRequest(append(requestData, buf.Bytes()...))
 
-				done := make(chan struct{})
-
 				str.EXPECT().Write(gomock.Any()).DoAndReturn(responseBuf.Write).AnyTimes()
-				str.EXPECT().CancelWrite(quic.StreamErrorCode(errorFrameError)).Do(func(quic.StreamErrorCode) {
-					close(done)
-				})
+				str.EXPECT().CancelWrite(quic.StreamErrorCode(errorFrameError))
 
-				s.ServeConn(conn)
-				Expect(done).To(BeClosed())
+				s.handleConn(context.Background(), conn, false)
 			})
 
 			It("handles a request for which the client immediately resets the stream", func() {
@@ -568,7 +559,8 @@ var _ = Describe("Server", func() {
 				str.EXPECT().Read(gomock.Any()).Return(0, testErr)
 				str.EXPECT().CancelWrite(quic.StreamErrorCode(errorRequestIncomplete)).Do(func(quic.StreamErrorCode) { close(done) })
 
-				s.ServeConn(conn)
+				s.handleConn(context.Background(), conn, false)
+
 				Expect(handlerCalled).ToNot(BeClosed())
 			})
 
@@ -585,13 +577,11 @@ var _ = Describe("Server", func() {
 					return len(p), nil
 				}).AnyTimes()
 
-				done := make(chan struct{})
-				conn.EXPECT().CloseWithError(gomock.Any(), gomock.Any()).Do(func(code quic.ApplicationErrorCode, _ string) {
-					Expect(code).To(Equal(quic.ApplicationErrorCode(errorFrameUnexpected)))
-					close(done)
-				})
-				s.ServeConn(conn)
-				Expect(done).To(BeClosed())
+				conn.EXPECT().CloseWithError(quic.ApplicationErrorCode(errorFrameUnexpected), gomock.Any())
+
+				s.handleConn(context.Background(), conn, false)
+
+				Expect(handlerCalled).ToNot(BeClosed())
 			})
 
 			It("closes the connection when the first frame is not a HEADERS frame", func() {
@@ -610,11 +600,10 @@ var _ = Describe("Server", func() {
 				str.EXPECT().Write(gomock.Any()).DoAndReturn(func(p []byte) (int, error) {
 					return len(p), nil
 				}).AnyTimes()
-				done := make(chan struct{})
-				str.EXPECT().CancelWrite(quic.StreamErrorCode(errorFrameError)).Do(func(quic.StreamErrorCode) { close(done) })
 
-				s.ServeConn(conn)
-				Expect(done).To(BeClosed())
+				str.EXPECT().CancelWrite(quic.StreamErrorCode(errorFrameError))
+
+				s.handleConn(context.Background(), conn, false)
 			})
 		})
 
@@ -675,15 +664,17 @@ var _ = Describe("Server", func() {
 			"Alt-Svc": {`h3-29=":443"; ma=2592000`},
 		}
 
+		m := map[*quic.EarlyListener]*serverListener{}
+
 		addListener := func(addr string, ln *quic.EarlyListener) {
 			mln := newMockAddrListener(addr)
 			mln.EXPECT().Addr()
-			*ln = mln
-			s.addListener(ln)
+			m[ln] = s.newListener(mln)
+			s.addListener(m[ln], func() {})
 		}
 
 		removeListener := func(ln *quic.EarlyListener) {
-			s.removeListener(ln)
+			s.removeListener(m[ln])
 		}
 
 		checkSetHeaders := func(expected gmtypes.GomegaMatcher) {
@@ -746,10 +737,10 @@ var _ = Describe("Server", func() {
 			s.Addr = ":443"
 			mln := &noPortListener{newMockAddrListener("")}
 			mln.EXPECT().Addr()
-			ln1 = mln
-			s.addListener(&ln1)
+			ln := s.newListener(mln)
+			s.addListener(ln, func() {})
 			checkSetHeaders(Equal(expected))
-			s.removeListener(&ln1)
+			s.removeListener(ln)
 			checkSetHeaderError()
 		})
 
@@ -1136,10 +1127,6 @@ var _ = Describe("Server", func() {
 			Expect(conf).ToNot(BeNil())
 			checkGetConfigForClientVersions(receivedConf)
 		})
-	})
-
-	It("closes gracefully", func() {
-		Expect(s.CloseGracefully(0)).To(Succeed())
 	})
 
 	It("errors when listening fails", func() {
