@@ -123,9 +123,9 @@ func (c *client) dial(ctx context.Context) error {
 	}()
 
 	if c.opts.StreamHijacker != nil {
-		go c.handleBidirectionalStreams()
+		go c.handleBidirectionalStreams(ctx)
 	}
-	go c.handleUnidirectionalStreams()
+	go c.handleUnidirectionalStreams(ctx)
 	return nil
 }
 
@@ -143,9 +143,12 @@ func (c *client) setupConn() error {
 	return err
 }
 
-func (c *client) handleBidirectionalStreams() {
+func (c *client) handleBidirectionalStreams(ctx context.Context) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	for {
-		str, err := c.conn.AcceptStream(context.Background())
+		str, err := c.conn.AcceptStream(ctx)
 		if err != nil {
 			c.logger.Debugf("accepting bidirectional stream failed: %s", err)
 			return
@@ -167,9 +170,12 @@ func (c *client) handleBidirectionalStreams() {
 	}
 }
 
-func (c *client) handleUnidirectionalStreams() {
+func (c *client) handleUnidirectionalStreams(ctx context.Context) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	for {
-		str, err := c.conn.AcceptUniStream(context.Background())
+		str, err := c.conn.AcceptUniStream(ctx)
 		if err != nil {
 			c.logger.Debugf("accepting unidirectional stream failed: %s", err)
 			return
