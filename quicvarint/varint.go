@@ -28,46 +28,19 @@ func Read(r io.ByteReader) (uint64, error) {
 		return 0, err
 	}
 	// the first two bits of the first byte encode the length
-	len := 1 << ((firstByte & 0xc0) >> 6)
-	b1 := firstByte & (0xff - 0xc0)
-	if len == 1 {
-		return uint64(b1), nil
+	length := 1 << ((firstByte & 0xc0) >> 6)
+	v := uint64(firstByte & (0xff - 0xc0))
+
+	// the first byte has been read
+	length--
+	for ; length > 0; length-- {
+		nextByte, err := r.ReadByte()
+		if err != nil {
+			return 0, err
+		}
+		v = (v << 8) + uint64(nextByte)
 	}
-	b2, err := r.ReadByte()
-	if err != nil {
-		return 0, err
-	}
-	if len == 2 {
-		return uint64(b2) + uint64(b1)<<8, nil
-	}
-	b3, err := r.ReadByte()
-	if err != nil {
-		return 0, err
-	}
-	b4, err := r.ReadByte()
-	if err != nil {
-		return 0, err
-	}
-	if len == 4 {
-		return uint64(b4) + uint64(b3)<<8 + uint64(b2)<<16 + uint64(b1)<<24, nil
-	}
-	b5, err := r.ReadByte()
-	if err != nil {
-		return 0, err
-	}
-	b6, err := r.ReadByte()
-	if err != nil {
-		return 0, err
-	}
-	b7, err := r.ReadByte()
-	if err != nil {
-		return 0, err
-	}
-	b8, err := r.ReadByte()
-	if err != nil {
-		return 0, err
-	}
-	return uint64(b8) + uint64(b7)<<8 + uint64(b6)<<16 + uint64(b5)<<24 + uint64(b4)<<32 + uint64(b3)<<40 + uint64(b2)<<48 + uint64(b1)<<56, nil
+	return v, nil
 }
 
 // Write writes i in the QUIC varint format to w.
