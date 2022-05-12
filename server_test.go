@@ -426,12 +426,11 @@ var _ = Describe("Server", func() {
 			})
 
 			It("ignores Version Negotiation packets", func() {
-				data, err := wire.ComposeVersionNegotiation(
+				data := wire.ComposeVersionNegotiation(
 					protocol.ConnectionID{1, 2, 3, 4},
 					protocol.ConnectionID{4, 3, 2, 1},
 					[]protocol.VersionNumber{1, 2, 3},
 				)
-				Expect(err).ToNot(HaveOccurred())
 				raddr := &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 1337}
 				done := make(chan struct{})
 				tracer.EXPECT().DroppedPacket(raddr, logging.PacketTypeVersionNegotiation, protocol.ByteCount(len(data)), logging.PacketDropUnexpectedPacket).Do(func(net.Addr, logging.PacketType, protocol.ByteCount, logging.PacketDropReason) {

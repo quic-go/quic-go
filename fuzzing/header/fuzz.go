@@ -91,8 +91,6 @@ func fuzzVNP(data []byte) int {
 	if len(versions) == 0 {
 		panic("no versions")
 	}
-	if _, err := wire.ComposeVersionNegotiation(hdr.SrcConnectionID, hdr.DestConnectionID, versions); err != nil {
-		panic(err)
-	}
+	wire.ComposeVersionNegotiation(hdr.SrcConnectionID, hdr.DestConnectionID, versions)
 	return 1
 }

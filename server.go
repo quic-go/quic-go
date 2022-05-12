@@ -651,11 +651,7 @@ func (s *baseServer) sendError(remoteAddr net.Addr, hdr *wire.Header, sealer han
 
 func (s *baseServer) sendVersionNegotiationPacket(p *receivedPacket, hdr *wire.Header) {
 	s.logger.Debugf("Client offered version %s, sending Version Negotiation", hdr.Version)
-	data, err := wire.ComposeVersionNegotiation(hdr.SrcConnectionID, hdr.DestConnectionID, s.config.Versions)
-	if err != nil {
-		s.logger.Debugf("Error composing Version Negotiation: %s", err)
-		return
-	}
+	data := wire.ComposeVersionNegotiation(hdr.SrcConnectionID, hdr.DestConnectionID, s.config.Versions)
 	if s.config.Tracer != nil {
 		s.config.Tracer.SentPacket(
 			p.remoteAddr,

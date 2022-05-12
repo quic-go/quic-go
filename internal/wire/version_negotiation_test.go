@@ -36,20 +36,18 @@ var _ = Describe("Version Negotiation Packets", func() {
 	It("errors if it contains versions of the wrong length", func() {
 		connID := protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8}
 		versions := []protocol.VersionNumber{0x22334455, 0x33445566}
-		data, err := ComposeVersionNegotiation(connID, connID, versions)
-		Expect(err).ToNot(HaveOccurred())
-		_, _, err = ParseVersionNegotiationPacket(bytes.NewReader(data[:len(data)-2]))
+		data := ComposeVersionNegotiation(connID, connID, versions)
+		_, _, err := ParseVersionNegotiationPacket(bytes.NewReader(data[:len(data)-2]))
 		Expect(err).To(MatchError("Version Negotiation packet has a version list with an invalid length"))
 	})
 
 	It("errors if the version list is empty", func() {
 		connID := protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8}
 		versions := []protocol.VersionNumber{0x22334455}
-		data, err := ComposeVersionNegotiation(connID, connID, versions)
-		Expect(err).ToNot(HaveOccurred())
+		data := ComposeVersionNegotiation(connID, connID, versions)
 		// remove 8 bytes (two versions), since ComposeVersionNegotiation also added a reserved version number
 		data = data[:len(data)-8]
-		_, _, err = ParseVersionNegotiationPacket(bytes.NewReader(data))
+		_, _, err := ParseVersionNegotiationPacket(bytes.NewReader(data))
 		Expect(err).To(MatchError("Version Negotiation packet has empty version list"))
 	})
 
@@ -57,8 +55,7 @@ var _ = Describe("Version Negotiation Packets", func() {
 		srcConnID := protocol.ConnectionID{0xde, 0xad, 0xbe, 0xef, 0xca, 0xfe, 0x13, 0x37}
 		destConnID := protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8}
 		versions := []protocol.VersionNumber{1001, 1003}
-		data, err := ComposeVersionNegotiation(destConnID, srcConnID, versions)
-		Expect(err).ToNot(HaveOccurred())
+		data := ComposeVersionNegotiation(destConnID, srcConnID, versions)
 		Expect(data[0] & 0x80).ToNot(BeZero())
 		hdr, supportedVersions, err := ParseVersionNegotiationPacket(bytes.NewReader(data))
 		Expect(err).ToNot(HaveOccurred())
