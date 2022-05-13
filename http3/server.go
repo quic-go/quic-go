@@ -10,9 +10,10 @@ import (
 	"net"
 	"net/http"
 	"runtime"
+	"sort"
 	"strings"
 	"sync"
-	"time"
+	"sync/atomic"
 
 	"github.com/lucas-clemente/quic-go"
 	"github.com/lucas-clemente/quic-go/internal/handshake"
@@ -119,11 +120,6 @@ func newConnError(code errorCode, err error) requestError {
 	return requestError{err: err, connErr: code}
 }
 
-// listenerInfo contains info about specific listener added with addListener
-type listenerInfo struct {
-	port int // 0 means that no info about port is available
-}
-
 // Server is a HTTP/3 server.
 type Server struct {
 	*http.Server
@@ -158,13 +154,35 @@ type Server struct {
 	UniStreamHijacker func(StreamType, quic.Connection, quic.ReceiveStream) (hijacked bool)
 
 	mutex     sync.RWMutex
-	listeners map[*quic.EarlyListener]listenerInfo
+	listeners map[*serverListener]context.CancelFunc // mutable
+	conns     map[*serverConn]context.CancelFunc     // mutable
+	closed    uint32                                 // mutable, atomic
 
-	closed bool
+	altSvcHeader string // mutable
 
-	altSvcHeader string
+	loggerOnce sync.Once
+	logger     utils.Logger
+}
 
-	logger utils.Logger
+// getLogger initializes and returns the underlying server logger.
+func (s *Server) getLogger() utils.Logger {
+	s.loggerOnce.Do(func() {
+		if s.logger != nil {
+			return
+		}
+		s.logger = utils.DefaultLogger.WithPrefix("server")
+	})
+	return s.logger
+}
+
+// getClosed returns a boolean value indicating whether the server is closed.
+func (s *Server) getClosed() bool {
+	return atomic.LoadUint32(&s.closed) == 1
+}
+
+// setClosed sets the server state to be closed.
+func (s *Server) setClosed() {
+	atomic.StoreUint32(&s.closed, 1)
 }
 
 // ListenAndServe listens on the UDP address s.Addr and calls s.Handler to handle HTTP/3 requests on incoming connections.
@@ -207,11 +225,26 @@ func (s *Server) ServeListener(ln quic.EarlyListener) error {
 		return errors.New("use of http3.Server without http.Server")
 	}
 
-	if err := s.addListener(&ln); err != nil {
+	if s.getClosed() {
+		return http.ErrServerClosed
+	}
+
+	sl := s.newListener(ln)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	if err := s.addListener(sl, cancel); err != nil {
+		_ = ln.Close()
 		return err
 	}
-	err := s.serveListener(ln)
-	s.removeListener(&ln)
+
+	err := s.serveListener(ctx, sl)
+
+	if s.removeListener(sl) {
+		_ = ln.Close()
+	}
+
 	return err
 }
 
@@ -241,21 +274,59 @@ func (s *Server) serveConn(tlsConf *tls.Config, conn net.PacketConn) error {
 	if err != nil {
 		return err
 	}
-	if err := s.addListener(&ln); err != nil {
-		return err
-	}
-	err = s.serveListener(ln)
-	s.removeListener(&ln)
-	return err
+	return s.ServeListener(ln)
 }
 
-func (s *Server) serveListener(ln quic.EarlyListener) error {
+func (s *Server) serveListener(ctx context.Context, sl *serverListener) error {
 	for {
-		conn, err := ln.Accept(context.Background())
+		conn, err := sl.ln.Accept(ctx)
 		if err != nil {
-			return err
+			if ctx.Err() == nil {
+				return err
+			}
+			s.getLogger().Infof("accepting connection after or during server shutdown: %s", err)
+			return http.ErrServerClosed
 		}
-		go s.handleConn(conn)
+		s.handleConn(ctx, conn, true)
+	}
+}
+
+// handleConn handles requests on the given connection until it is no longer
+// readable.
+func (s *Server) handleConn(ctx context.Context, conn quic.EarlyConnection, background bool) {
+	sc := s.newConn(conn)
+
+	ctx, cancel := context.WithCancel(ctx)
+
+	s.mutex.Lock()
+	if s.conns == nil {
+		s.conns = make(map[*serverConn]context.CancelFunc)
+	}
+	s.conns[sc] = cancel
+	s.mutex.Unlock()
+
+	if background {
+		go s.handleConnServe(ctx, sc)
+	} else {
+		s.handleConnServe(ctx, sc)
+	}
+}
+
+// handleConnServe serves the requests on the given serverConn and removes it
+// from active connections map when serve method returns.
+func (s *Server) handleConnServe(ctx context.Context, c *serverConn) {
+	c.serve(ctx)
+
+	s.mutex.Lock()
+	cancel, ok := s.conns[c]
+	delete(s.conns, c)
+	if len(s.conns) == 0 {
+		s.conns = nil
+	}
+	s.mutex.Unlock()
+	close(c.done)
+	if ok {
+		cancel()
 	}
 }
 
@@ -298,166 +369,384 @@ func (s *Server) generateAltSvcHeader() {
 		}
 	}
 
-	if s.Port != 0 {
-		// if Port is specified, we must use it instead of the
-		// listener addresses since there's a reason it's specified.
-		addPort(s.Port)
-	} else {
-		// if we have some listeners assigned, try to find ports
-		// which we can announce, otherwise nothing should be announced
-		validPortsFound := false
-		for _, info := range s.listeners {
-			if info.port != 0 {
-				addPort(info.port)
-				validPortsFound = true
+	if s.Port == 0 {
+		// If we have some listeners assigned, try to find ports which
+		// we can announce, otherwise nothing should be announced.
+		portsMap := make(map[int]struct{})
+		for l := range s.listeners {
+			if l.port == 0 {
+				continue
 			}
+			portsMap[l.port] = struct{}{}
 		}
-		if !validPortsFound {
+
+		ports := make([]int, 0, len(portsMap))
+		for port := range portsMap {
+			ports = append(ports, port)
+		}
+		sort.Ints(ports)
+		for _, port := range ports {
+			addPort(port)
+		}
+
+		if len(ports) == 0 {
 			if port, err := extractPort(s.Addr); err == nil {
 				addPort(port)
 			}
 		}
+	} else {
+		// If Port is specified, we must use it instead of the listener
+		// addresses since there's a reason it's specified.
+		addPort(s.Port)
 	}
 
 	s.altSvcHeader = strings.Join(altSvc, ",")
 }
 
-// We store a pointer to interface in the map set. This is safe because we only
-// call trackListener via Serve and can track+defer untrack the same pointer to
-// local variable there. We never need to compare a Listener from another caller.
-func (s *Server) addListener(l *quic.EarlyListener) error {
+// serverListener is a single QUIC listener owned by the HTTP/3 server.
+type serverListener struct {
+	// ln is the underlying listener that is being served.
+	ln quic.EarlyListener
+
+	// done is the channel that is closed when accept loop returns for this
+	// listener.
+	done chan struct{}
+
+	// port is the cached port parsed from the listener’s address. If zero,
+	// no information about port is available.
+	port int
+}
+
+// newListener returns a new serverListener instance.
+func (s *Server) newListener(l quic.EarlyListener) *serverListener {
+	sl := &serverListener{
+		ln:   l,
+		done: make(chan struct{}),
+	}
+	if port, err := extractPort(l.Addr().String()); err != nil {
+		s.getLogger().Errorf(
+			"Unable to extract port from listener %+v, will not be announced using SetQuicHeaders: %s", l, err)
+	} else {
+		sl.port = port
+	}
+	return sl
+}
+
+// addListener adds the given listener to the active listeners map. If the
+// server was closed, it returns http.ErrServerClosed. Cancel function is used
+// on shutdown to trigger sending GOAWAY frames on accepted connections.
+func (s *Server) addListener(sl *serverListener, cancel context.CancelFunc) error {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
-
-	if s.closed {
+	if s.getClosed() {
 		return http.ErrServerClosed
 	}
-	if s.logger == nil {
-		s.logger = utils.DefaultLogger.WithPrefix("server")
-	}
 	if s.listeners == nil {
-		s.listeners = make(map[*quic.EarlyListener]listenerInfo)
+		s.listeners = make(map[*serverListener]context.CancelFunc)
 	}
-
-	if port, err := extractPort((*l).Addr().String()); err == nil {
-		s.listeners[l] = listenerInfo{port}
-	} else {
-		s.logger.Errorf(
-			"Unable to extract port from listener %+v, will not be announced using SetQuicHeaders: %s", err)
-		s.listeners[l] = listenerInfo{}
-	}
+	s.listeners[sl] = cancel
 	s.generateAltSvcHeader()
 	return nil
 }
 
-func (s *Server) removeListener(l *quic.EarlyListener) {
+// removeListener removes the given listener from the active listeners map. It
+// returns false if the listener ownership was transfered to the Shutdown method
+// and Close must not be called on the listener.
+func (s *Server) removeListener(l *serverListener) bool {
 	s.mutex.Lock()
+	cancel, ok := s.listeners[l]
 	delete(s.listeners, l)
+	if len(s.listeners) == 0 {
+		s.listeners = nil
+	}
 	s.generateAltSvcHeader()
 	s.mutex.Unlock()
+	close(l.done)
+	if ok {
+		cancel()
+	}
+	return ok
 }
 
-func (s *Server) handleConn(conn quic.EarlyConnection) {
-	decoder := qpack.NewDecoder(nil)
+// serverConn is a server side of a single QUIC connection.
+type serverConn struct {
+	// Server is the server on which connection has arrived.
+	*Server
 
-	// send a SETTINGS frame
-	str, err := conn.OpenUniStream()
+	// conn is the underlying connection that is being served.
+	conn quic.EarlyConnection
+
+	// decoder is a shared decoder instance. It is safe for concurrent use.
+	decoder *qpack.Decoder
+
+	// ctrl is an atomic boolean that is set to true when the first control
+	// stream is accepted.
+	ctrl uint32 // mutable, atomic
+
+	// goaway is a channel that is closed when a client sends GOAWAY frame.
+	goaway chan struct{}
+
+	// lastStreamID is the ID of the last accepted client-initiated
+	// bidirectional stream for GOAWAY frame.
+	//
+	// It is updated in (*serverConn).acceptStreams loop.
+	lastStreamID quic.StreamID // mutable
+
+	// streamWG and uniStreamWG are the wait groups for stream handlers.
+	streamWG, uniStreamWG sync.WaitGroup
+
+	// done is the channel that is closed when server method returns for
+	// this connection.
+	done chan struct{}
+}
+
+// newConn returns a new server connection from c.
+func (s *Server) newConn(c quic.EarlyConnection) *serverConn {
+	return &serverConn{
+		Server:  s,
+		conn:    c,
+		goaway:  make(chan struct{}),
+		decoder: qpack.NewDecoder(nil),
+		done:    make(chan struct{}),
+	}
+}
+
+// serve starts serving requests on the underlying connection.
+func (s *serverConn) serve(ctx context.Context) {
+	ctrl, err := s.openControlStream()
 	if err != nil {
-		s.logger.Debugf("Opening the control stream failed.")
+		s.getLogger().Debugf("Opening the control stream failed: %s", err)
+		s.conn.CloseWithError(quic.ApplicationErrorCode(errorClosedCriticalStream), "")
 		return
 	}
-	buf := &bytes.Buffer{}
-	quicvarint.Write(buf, streamTypeControlStream) // stream type
-	(&settingsFrame{Datagram: s.EnableDatagrams, Other: s.AdditionalSettings}).Write(buf)
-	str.Write(buf.Bytes())
 
-	go s.handleUnidirectionalStreams(conn)
+	// Send SETTINGS frame on the control stream.
+	buf := bytes.NewBuffer(nil)
+	(&settingsFrame{Datagram: s.EnableDatagrams, Other: s.AdditionalSettings}).Write(buf)
+	ctrl.Write(buf.Bytes())
+
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	var wg sync.WaitGroup
+	wg.Add(2)
+	go func() {
+		defer wg.Done()
+
+		s.acceptUniStreams(ctx)
+
+		// Stop accepting bidirectional streams.
+		cancel()
+	}()
+	go func() {
+		defer wg.Done()
+		select {
+		case <-ctx.Done():
+		case <-s.goaway:
+			cancel()
+		}
+	}()
 
 	// Process all requests immediately.
 	// It's the client's responsibility to decide which requests are eligible for 0-RTT.
+	s.acceptStreams(ctx)
+
+	// Stop accepting unidirectional streams.
+	cancel()
+	wg.Wait()
+
+	// Send GOAWAY frame after acceptStreams loop returns.
+	//
+	// See https://quicwg.org/base-drafts/draft-ietf-quic-http.html#connection-shutdown
+	buf.Reset()
+	(&goawayFrame{StreamID: s.lastStreamID}).Write(buf)
+	ctrl.Write(buf.Bytes())
+
+	// Wait for active handlers to complete and close the connection.
+	s.streamWG.Wait()
+	s.conn.CloseWithError(quic.ApplicationErrorCode(errorNoError), "")
+
+	// Wait for unidirectional streams and client-initiated control stream
+	// handlers to return.
+	s.uniStreamWG.Wait()
+}
+
+// openControlStream opens a server-initiated connection control stream.
+func (s *serverConn) openControlStream() (quic.SendStream, error) {
+	str, err := s.conn.OpenUniStream()
+	if err != nil {
+		return nil, err
+	}
+	quicvarint.Write(quicvarint.NewWriter(str), streamTypeControlStream)
+	return str, nil
+}
+
+// acceptStreams accepts client-initiated bidirectional streams. For each stream
+// it spawns a handler goroutine.
+func (s *serverConn) acceptStreams(ctx context.Context) {
 	for {
-		str, err := conn.AcceptStream(context.Background())
+		str, err := s.conn.AcceptStream(ctx)
 		if err != nil {
-			s.logger.Debugf("Accepting stream failed: %s", err)
+			s.getLogger().Debugf("Accepting stream failed: %s", err)
 			return
 		}
+
+		s.lastStreamID = str.StreamID()
+
+		s.streamWG.Add(1)
 		go func() {
-			rerr := s.handleRequest(conn, str, decoder, func() {
-				conn.CloseWithError(quic.ApplicationErrorCode(errorFrameUnexpected), "")
-			})
-			if rerr.err == errHijacked {
-				return
-			}
-			if rerr.err != nil || rerr.streamErr != 0 || rerr.connErr != 0 {
-				s.logger.Debugf("Handling request failed: %s", err)
-				if rerr.streamErr != 0 {
-					str.CancelWrite(quic.StreamErrorCode(rerr.streamErr))
-				}
-				if rerr.connErr != 0 {
-					var reason string
-					if rerr.err != nil {
-						reason = rerr.err.Error()
-					}
-					conn.CloseWithError(quic.ApplicationErrorCode(rerr.connErr), reason)
-				}
-				return
-			}
-			str.Close()
+			defer s.streamWG.Done()
+			s.handleStream(str)
 		}()
 	}
 }
 
-func (s *Server) handleUnidirectionalStreams(conn quic.EarlyConnection) {
+// handleStream handles client-initiated bidirectional stream.
+func (s *serverConn) handleStream(str quic.Stream) {
+	rerr := s.handleRequest(s.conn, str, s.decoder, func() {
+		s.conn.CloseWithError(quic.ApplicationErrorCode(errorFrameUnexpected), "")
+	})
+	if rerr.err == errHijacked {
+		return
+	}
+	if rerr.err != nil || rerr.streamErr != 0 || rerr.connErr != 0 {
+		s.getLogger().Debugf("Handling request failed: %s", rerr.err)
+		if rerr.streamErr != 0 {
+			str.CancelWrite(quic.StreamErrorCode(rerr.streamErr))
+		}
+		if rerr.connErr != 0 {
+			var reason string
+			if rerr.err != nil {
+				reason = rerr.err.Error()
+			}
+			s.conn.CloseWithError(quic.ApplicationErrorCode(rerr.connErr), reason)
+		}
+		return
+	}
+	str.Close()
+}
+
+// acceptUniStreams accepts client-initiated unidirectional streams in a loop.
+// For each stream it spawns a handler goroutine.
+func (s *serverConn) acceptUniStreams(ctx context.Context) {
 	for {
-		str, err := conn.AcceptUniStream(context.Background())
+		str, err := s.conn.AcceptUniStream(ctx)
 		if err != nil {
-			s.logger.Debugf("accepting unidirectional stream failed: %s", err)
+			s.getLogger().Debugf("accepting unidirectional stream failed: %s", err)
 			return
 		}
 
-		go func(str quic.ReceiveStream) {
-			streamType, err := quicvarint.Read(quicvarint.NewReader(str))
-			if err != nil {
-				s.logger.Debugf("reading stream type on stream %d failed: %s", str.StreamID(), err)
-				return
+		s.uniStreamWG.Add(1)
+		go func() {
+			defer s.uniStreamWG.Done()
+			s.handleUniStream(str)
+		}()
+	}
+}
+
+// handleUniStream handles client-initiated unidirectional stream.
+func (s *serverConn) handleUniStream(str quic.ReceiveStream) {
+	streamType, err := quicvarint.Read(quicvarint.NewReader(str))
+	if err != nil {
+		s.getLogger().Debugf("reading stream type on stream %d failed: %s", str.StreamID(), err)
+		return
+	}
+	switch streamType {
+	case streamTypeControlStream:
+		s.handleControlStream(str)
+	case streamTypeQPACKEncoderStream, streamTypeQPACKDecoderStream:
+		// Our QPACK implementation doesn't use the dynamic table yet.
+		// TODO: check that only one stream of each type is opened.
+	case streamTypePushStream: // only the server can push
+		s.conn.CloseWithError(quic.ApplicationErrorCode(errorStreamCreationError), "")
+	default:
+		if s.UniStreamHijacker != nil && s.UniStreamHijacker(StreamType(streamType), s.conn, str) {
+			return
+		}
+		str.CancelRead(quic.StreamErrorCode(errorStreamCreationError))
+	}
+}
+
+// handleControlStream handles client’s control stream. It closes the underlying
+// connection if called more than once.
+func (s *serverConn) handleControlStream(str quic.ReceiveStream) {
+	// Only one control stream per peer is permitted.
+	//
+	// See https://quicwg.org/base-drafts/draft-ietf-quic-http.html#name-control-streams
+	if !atomic.CompareAndSwapUint32(&s.ctrl, 0, 1) {
+		s.conn.CloseWithError(quic.ApplicationErrorCode(errorStreamCreationError), "")
+		return
+	}
+
+	f, err := parseNextFrame(str, nil)
+	if err != nil {
+		s.conn.CloseWithError(quic.ApplicationErrorCode(errorFrameError), "")
+		return
+	}
+
+	// The SETTINGS frame must be the first frame in control stream.
+	// Subsequent SETTINGS frames will result in connection error.
+	//
+	// See https://quicwg.org/base-drafts/draft-ietf-quic-http.html#name-settings
+	sf, ok := f.(*settingsFrame)
+	if !ok {
+		s.conn.CloseWithError(quic.ApplicationErrorCode(errorMissingSettings), "")
+		return
+	}
+
+	if !sf.Datagram {
+		return
+	}
+
+	// If datagram support was enabled on our side as well as on the client side,
+	// we can expect it to have been negotiated both on the transport and on the HTTP/3 layer.
+	// Note: ConnectionState() will block until the handshake is complete (relevant when using 0-RTT).
+	if s.EnableDatagrams && !s.conn.ConnectionState().SupportsDatagrams {
+		s.conn.CloseWithError(quic.ApplicationErrorCode(errorSettingsError), "missing QUIC Datagram support")
+		return
+	}
+
+	var goawayClosed bool
+	for {
+		f, err := parseNextFrame(str, nil)
+		if err != nil {
+			// Abort connection with H3_CLOSED_CRITICAL_STREAM if the control stream is closed.
+			//
+			// See https://quicwg.org/base-drafts/draft-ietf-quic-http.html#name-control-streams
+			var ec errorCode
+			if errors.As(err, new(*quic.StreamError)) {
+				ec = errorClosedCriticalStream
+			} else {
+				ec = errorFrameError
 			}
-			// We're only interested in the control stream here.
-			switch streamType {
-			case streamTypeControlStream:
-			case streamTypeQPACKEncoderStream, streamTypeQPACKDecoderStream:
-				// Our QPACK implementation doesn't use the dynamic table yet.
-				// TODO: check that only one stream of each type is opened.
-				return
-			case streamTypePushStream: // only the server can push
-				conn.CloseWithError(quic.ApplicationErrorCode(errorStreamCreationError), "")
-				return
-			default:
-				if s.UniStreamHijacker != nil && s.UniStreamHijacker(StreamType(streamType), conn, str) {
-					return
-				}
-				str.CancelRead(quic.StreamErrorCode(errorStreamCreationError))
-				return
+			s.getLogger().Debugf("parsing next frame in the control stream: %s", err)
+			s.conn.CloseWithError(quic.ApplicationErrorCode(ec), "")
+			return
+		}
+		// The following frames are allowed in control streams:
+		//
+		//  • CANCEL_PUSH
+		//  • SETTINGS (must be the first frame)
+		//  • GOAWAY
+		//  • MAX_PUSH_ID
+		//  • Reserved
+		//
+		// parseNextFrame skips reserved frames, so we only have to
+		// reject known frame types.
+		switch f.(type) {
+		case *cancelPushFrame, *maxPushIDFrame:
+			// TODO: currently not implemented.
+		case *goawayFrame:
+			// Trigger graceful connection shutdown.
+			if goawayClosed {
+				continue
 			}
-			f, err := parseNextFrame(str, nil)
-			if err != nil {
-				conn.CloseWithError(quic.ApplicationErrorCode(errorFrameError), "")
-				return
-			}
-			sf, ok := f.(*settingsFrame)
-			if !ok {
-				conn.CloseWithError(quic.ApplicationErrorCode(errorMissingSettings), "")
-				return
-			}
-			if !sf.Datagram {
-				return
-			}
-			// If datagram support was enabled on our side as well as on the client side,
-			// we can expect it to have been negotiated both on the transport and on the HTTP/3 layer.
-			// Note: ConnectionState() will block until the handshake is complete (relevant when using 0-RTT).
-			if s.EnableDatagrams && !conn.ConnectionState().SupportsDatagrams {
-				conn.CloseWithError(quic.ApplicationErrorCode(errorSettingsError), "missing QUIC Datagram support")
-			}
-		}(str)
+			goawayClosed = true
+			close(s.goaway)
+		case *dataFrame, *headersFrame, *settingsFrame, *pushPromiseFrame:
+			s.conn.CloseWithError(quic.ApplicationErrorCode(errorFrameUnexpected), "")
+			return
+		}
 	}
 }
 
@@ -507,17 +796,17 @@ func (s *Server) handleRequest(conn quic.Connection, str quic.Stream, decoder *q
 	req.RemoteAddr = conn.RemoteAddr().String()
 	req.Body = newRequestBody(str, onFrameError)
 
-	if s.logger.Debug() {
-		s.logger.Infof("%s %s%s, on stream %d", req.Method, req.Host, req.RequestURI, str.StreamID())
+	if l := s.getLogger(); l.Debug() {
+		l.Infof("%s %s%s, on stream %d", req.Method, req.Host, req.RequestURI, str.StreamID())
 	} else {
-		s.logger.Infof("%s %s%s", req.Method, req.Host, req.RequestURI)
+		l.Infof("%s %s%s", req.Method, req.Host, req.RequestURI)
 	}
 
 	ctx := str.Context()
 	ctx = context.WithValue(ctx, ServerContextKey, s)
 	ctx = context.WithValue(ctx, http.LocalAddrContextKey, conn.LocalAddr())
 	req = req.WithContext(ctx)
-	r := newResponseWriter(str, conn, s.logger)
+	r := newResponseWriter(str, conn, s.getLogger())
 	defer func() {
 		if !r.usedDataStream() {
 			r.Flush()
@@ -536,7 +825,7 @@ func (s *Server) handleRequest(conn quic.Connection, str quic.Stream, decoder *q
 				const size = 64 << 10
 				buf := make([]byte, size)
 				buf = buf[:runtime.Stack(buf, false)]
-				s.logger.Errorf("http: panic serving: %v\n%s", p, buf)
+				s.getLogger().Errorf("http: panic serving: %v\n%s", p, buf)
 				panicked = true
 			}
 		}()
@@ -555,27 +844,112 @@ func (s *Server) handleRequest(conn quic.Connection, str quic.Stream, decoder *q
 	return requestError{}
 }
 
-// Close the server immediately, aborting requests and sending CONNECTION_CLOSE frames to connected clients.
-// Close in combination with ListenAndServe() (instead of Serve()) may race if it is called before a UDP socket is established.
+// Close immediately closes all active listeners and connections. The server
+// sends CONNECTION_CLOSE frames to connected clients and returns before all
+// request handlers complete.
+//
+// Once Close has been called on a server, it may not be reused; future calls
+// to methods such as Serve will return http.ErrServerClosed.
 func (s *Server) Close() error {
-	s.mutex.Lock()
-	defer s.mutex.Unlock()
+	if s.getClosed() {
+		return nil
+	}
 
-	s.closed = true
+	s.mutex.Lock()
+	activeListeners := s.listeners
+	s.listeners = nil
+	s.setClosed()
+	s.mutex.Unlock()
 
 	var err error
-	for ln := range s.listeners {
-		if cerr := (*ln).Close(); cerr != nil && err == nil {
+	for sl, cancel := range activeListeners {
+		if cerr := sl.ln.Close(); cerr != nil && err == nil {
 			err = cerr
 		}
+		cancel()
 	}
 	return err
 }
 
-// CloseGracefully shuts down the server gracefully. The server sends a GOAWAY frame first, then waits for either timeout to trigger, or for all running requests to complete.
-// CloseGracefully in combination with ListenAndServe() (instead of Serve()) may race if it is called before a UDP socket is established.
-func (s *Server) CloseGracefully(timeout time.Duration) error {
-	// TODO: implement
+// Shutdown shuts down the server gracefully. The server sends a GOAWAY frame
+// and waits for either the context to expire or active requests to complete.
+// If the context expires, the server sends CONNECTION_CLOSE frame to connected
+// clients.
+//
+// Once Shutdown has been called on a server, it may not be reused; future calls
+// to methods such as Serve will return http.ErrServerClosed.
+func (s *Server) Shutdown(ctx context.Context) error {
+	if s.getClosed() {
+		return nil
+	}
+
+	// Get active listeners and connections and set them to nil to indicate
+	// that we’ve moved the ownership. Also set server state to closed.
+	s.mutex.Lock()
+	activeListeners := s.listeners
+	s.listeners = nil
+	s.setClosed()
+	s.mutex.Unlock()
+
+	// Trigger graceful shutdown for active listeners and connections.
+	for _, cancel := range activeListeners {
+		cancel()
+	}
+
+	var once sync.Once
+	forceShutdown := func() {
+		for sl := range activeListeners {
+			_ = sl.ln.Close()
+		}
+		for sl := range activeListeners {
+			<-sl.done
+		}
+		activeListeners = nil
+	}
+
+	// Wait for listener loops to return. Close listeners (and therefore
+	// connections) if context expires but do not return yet since we want
+	// to guarantee that no connections are running after Shutdown returns.
+	for sl := range activeListeners {
+		select {
+		case <-sl.done:
+			continue
+		case <-ctx.Done():
+		}
+		once.Do(forceShutdown)
+		break
+	}
+
+	// At this point we know that no new connections will be created.
+	s.mutex.Lock()
+	activeConns := s.conns
+	s.conns = nil
+	s.mutex.Unlock()
+
+	for _, cancel := range activeConns {
+		cancel()
+	}
+
+	// Wait for graceful connections shutdown. If context expires, close
+	// all listeners (and therefore connections) and wait until all conns
+	// are done.
+	for sc := range activeConns {
+		select {
+		case <-sc.done:
+			delete(activeConns, sc)
+			continue
+		case <-ctx.Done():
+		}
+		once.Do(forceShutdown)
+		for sc := range activeConns {
+			<-sc.done
+		}
+		break
+	}
+
+	// Finally, close listeners after all connections have returned.
+	once.Do(forceShutdown)
+
 	return nil
 }
 
