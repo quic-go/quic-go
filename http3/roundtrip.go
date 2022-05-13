@@ -16,7 +16,7 @@ import (
 )
 
 type roundTripCloser interface {
-	http.RoundTripper
+	RoundTripOpt(*http.Request, RoundTripOpt) (*http.Response, error)
 	io.Closer
 }
 
@@ -77,11 +77,16 @@ type RoundTripper struct {
 // RoundTripOpt are options for the Transport.RoundTripOpt method.
 type RoundTripOpt struct {
 	// OnlyCachedConn controls whether the RoundTripper may create a new QUIC connection.
-	// If set true and no cached connection is available, RoundTrip will return ErrNoCachedConn.
+	// If set true and no cached connection is available, RoundTripOpt will return ErrNoCachedConn.
 	OnlyCachedConn bool
+	// DontCloseRequestStream controls whether the request stream is closed after sending the request.
+	DontCloseRequestStream bool
 }
 
-var _ roundTripCloser = &RoundTripper{}
+var (
+	_ http.RoundTripper = &RoundTripper{}
+	_ io.Closer         = &RoundTripper{}
+)
 
 // ErrNoCachedConn is returned when RoundTripper.OnlyCachedConn is set
 var ErrNoCachedConn = errors.New("http3: no cached connection was available")
@@ -127,7 +132,7 @@ func (r *RoundTripper) RoundTripOpt(req *http.Request, opt RoundTripOpt) (*http.
 	if err != nil {
 		return nil, err
 	}
-	return cl.RoundTrip(req)
+	return cl.RoundTripOpt(req, opt)
 }
 
 // RoundTrip does a round trip.
@@ -135,7 +140,7 @@ func (r *RoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
 	return r.RoundTripOpt(req, RoundTripOpt{})
 }
 
-func (r *RoundTripper) getClient(hostname string, onlyCached bool) (http.RoundTripper, error) {
+func (r *RoundTripper) getClient(hostname string, onlyCached bool) (roundTripCloser, error) {
 	r.mutex.Lock()
 	defer r.mutex.Unlock()
 
