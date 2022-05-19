@@ -34,7 +34,7 @@ http3.ListenAndServeQUIC("localhost:4242", "/path/to/cert/chain.pem", "/path/to/
 
 ### As a client
 
-See the [example client](example/client/main.go). Use a `http3.RoundTripper` as a `Transport` in a `http.Client`.
+See the [example client](example/server-and-client/client/main.go). Use a `http3.RoundTripper` as a `Transport` in a `http.Client`.
 
 ```go
 http.Client{
