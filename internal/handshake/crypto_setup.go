@@ -113,7 +113,7 @@ type cryptoSetup struct {
 
 	zeroRTTParameters      *wire.TransportParameters
 	clientHelloWritten     bool
-	clientHelloWrittenChan chan *wire.TransportParameters
+	clientHelloWrittenChan chan<- *wire.TransportParameters
 
 	rttStats *utils.RTTStats
 
@@ -238,6 +238,7 @@ func newCryptoSetup(
 		tracer.UpdatedKeyFromTLS(protocol.EncryptionInitial, protocol.PerspectiveServer)
 	}
 	extHandler := newExtensionHandler(tp.Marshal(perspective), perspective, version)
+	clientHelloWrittenChan := make(chan *wire.TransportParameters, 1)
 	cs := &cryptoSetup{
 		tlsConf:                   tlsConf,
 		initialStream:             initialStream,
@@ -256,7 +257,7 @@ func newCryptoSetup(
 		perspective:               perspective,
 		handshakeDone:             make(chan struct{}),
 		alertChan:                 make(chan uint8),
-		clientHelloWrittenChan:    make(chan *wire.TransportParameters, 1),
+		clientHelloWrittenChan:    clientHelloWrittenChan,
 		messageChan:               make(chan []byte, 100),
 		isReadingHandshakeMessage: make(chan struct{}),
 		closeChan:                 make(chan struct{}),
@@ -278,7 +279,7 @@ func newCryptoSetup(
 		GetAppDataForSessionState:  cs.marshalDataForSessionState,
 		SetAppDataFromSessionState: cs.handleDataFromSessionState,
 	}
-	return cs, cs.clientHelloWrittenChan
+	return cs, clientHelloWrittenChan
 }
 
 func (h *cryptoSetup) ChangeConnectionID(id protocol.ConnectionID) {
