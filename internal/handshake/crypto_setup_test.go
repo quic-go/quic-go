@@ -107,7 +107,7 @@ var _ = Describe("Crypto Setup TLS", func() {
 			defer GinkgoRecover()
 			server.RunHandshake()
 			Expect(sErrChan).To(Receive(MatchError(&qerr.TransportError{
-				ErrorCode:    0x10a,
+				ErrorCode:    0x100 + qerr.TransportErrorCode(alertUnexpectedMessage),
 				ErrorMessage: "local error: tls: unexpected message",
 			})))
 			close(done)
@@ -122,6 +122,44 @@ var _ = Describe("Crypto Setup TLS", func() {
 		}()
 		Eventually(handledMessage).Should(BeClosed())
 		Eventually(done).Should(BeClosed())
+	})
+
+	It("handles qtls errors occurring before during ClientHello generation", func() {
+		sErrChan := make(chan error, 1)
+		runner := NewMockHandshakeRunner(mockCtrl)
+		runner.EXPECT().OnError(gomock.Any()).Do(func(e error) { sErrChan <- e })
+		_, sInitialStream, sHandshakeStream := initStreams()
+		tlsConf := testdata.GetTLSConfig()
+		tlsConf.InsecureSkipVerify = true
+		tlsConf.NextProtos = []string{""}
+		cl, _ := NewCryptoSetupClient(
+			sInitialStream,
+			sHandshakeStream,
+			protocol.ConnectionID{},
+			nil,
+			nil,
+			&wire.TransportParameters{},
+			runner,
+			tlsConf,
+			false,
+			&utils.RTTStats{},
+			nil,
+			utils.DefaultLogger.WithPrefix("client"),
+			protocol.VersionTLS,
+		)
+
+		done := make(chan struct{})
+		go func() {
+			defer GinkgoRecover()
+			cl.RunHandshake()
+			close(done)
+		}()
+
+		Eventually(done).Should(BeClosed())
+		Expect(sErrChan).To(Receive(MatchError(&qerr.TransportError{
+			ErrorCode:    qerr.InternalError,
+			ErrorMessage: "tls: invalid NextProtos value",
+		})))
 	})
 
 	It("errors when a message is received at the wrong encryption level", func() {
