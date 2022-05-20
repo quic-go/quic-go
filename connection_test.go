@@ -1692,11 +1692,7 @@ var _ = Describe("Connection", func() {
 			written := make(chan struct{}, 1)
 			sender.EXPECT().WouldBlock().AnyTimes()
 			sender.EXPECT().Send(gomock.Any()).DoAndReturn(func(p *packetBuffer) { written <- struct{}{} })
-			gomock.InOrder(
-				mtuDiscoverer.EXPECT().NextProbeTime(),
-				mtuDiscoverer.EXPECT().ShouldSendProbe(gomock.Any()).Return(true),
-				mtuDiscoverer.EXPECT().NextProbeTime(),
-			)
+			mtuDiscoverer.EXPECT().ShouldSendProbe(gomock.Any()).Return(true)
 			ping := ackhandler.Frame{Frame: &wire.PingFrame{}}
 			mtuDiscoverer.EXPECT().GetPing().Return(ping, protocol.ByteCount(1234))
 			packer.EXPECT().PackMTUProbePacket(ping, protocol.ByteCount(1234)).Return(getPacket(1), nil)
