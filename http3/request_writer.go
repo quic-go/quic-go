@@ -38,7 +38,7 @@ func newRequestWriter(logger utils.Logger) *requestWriter {
 	}
 }
 
-func (w *requestWriter) WriteRequest(str quic.Stream, req *http.Request, gzip bool) error {
+func (w *requestWriter) WriteRequest(str quic.Stream, req *http.Request, dontCloseStr, gzip bool) error {
 	buf := &bytes.Buffer{}
 	if err := w.writeHeaders(buf, req, gzip); err != nil {
 		return err
@@ -48,7 +48,9 @@ func (w *requestWriter) WriteRequest(str quic.Stream, req *http.Request, gzip bo
 	}
 	// TODO: add support for trailers
 	if req.Body == nil {
-		str.Close()
+		if !dontCloseStr {
+			str.Close()
+		}
 		return nil
 	}
 
@@ -84,7 +86,9 @@ func (w *requestWriter) WriteRequest(str quic.Stream, req *http.Request, gzip bo
 				return
 			}
 		}
-		str.Close()
+		if !dontCloseStr {
+			str.Close()
+		}
 	}()
 
 	return nil

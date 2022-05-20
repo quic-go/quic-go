@@ -92,10 +92,8 @@ var _ = Describe("Server", func() {
 
 	BeforeEach(func() {
 		s = &Server{
-			Server: &http.Server{
-				TLSConfig: testdata.GetTLSConfig(),
-			},
-			logger: utils.DefaultLogger,
+			TLSConfig: testdata.GetTLSConfig(),
+			logger:    utils.DefaultLogger,
 		}
 		origQuicListenAddr = quicListenAddr
 	})
@@ -140,7 +138,7 @@ var _ = Describe("Server", func() {
 			closed := make(chan struct{})
 			str.EXPECT().Close().Do(func() { close(closed) })
 			rw := newRequestWriter(utils.DefaultLogger)
-			Expect(rw.WriteRequest(str, req, false)).To(Succeed())
+			Expect(rw.WriteRequest(str, req, false, false)).To(Succeed())
 			Eventually(closed).Should(BeClosed())
 			return buf.Bytes()
 		}
@@ -230,13 +228,37 @@ var _ = Describe("Server", func() {
 				str.Write([]byte("foobar"))
 			})
 
+			rspWritten := make(chan struct{})
 			setRequest(encodeRequest(exampleGetRequest))
 			str.EXPECT().Context().Return(reqContext)
-			str.EXPECT().Write([]byte("foobar"))
+			str.EXPECT().Write([]byte("foobar")).Do(func(b []byte) (int, error) {
+				close(rspWritten)
+				return len(b), nil
+			})
 			// don't EXPECT CancelRead()
 
-			serr := s.handleRequest(conn, str, qpackDecoder, nil)
-			Expect(serr.err).ToNot(HaveOccurred())
+			ctrlStr := mockquic.NewMockStream(mockCtrl)
+			ctrlStr.EXPECT().Write(gomock.Any()).AnyTimes()
+			conn.EXPECT().OpenUniStream().Return(ctrlStr, nil)
+			conn.EXPECT().AcceptUniStream(gomock.Any()).DoAndReturn(func(context.Context) (quic.ReceiveStream, error) {
+				<-rspWritten
+				return nil, errors.New("done")
+			})
+			conn.EXPECT().AcceptStream(gomock.Any()).Return(str, nil)
+			conn.EXPECT().AcceptStream(gomock.Any()).DoAndReturn(func(context.Context) (quic.Stream, error) {
+				<-rspWritten
+				return nil, errors.New("done")
+			})
+
+			done := make(chan struct{})
+			go func() {
+				defer GinkgoRecover()
+				defer close(done)
+				s.handleConn(conn)
+			}()
+			Eventually(rspWritten).Should(BeClosed())
+			time.Sleep(50 * time.Millisecond) // make sure that after str.Write there are no further calls to stream methods
+			Eventually(done).Should(BeClosed())
 		})
 
 		Context("hijacking unidirectional streams", func() {
@@ -530,7 +552,7 @@ var _ = Describe("Server", func() {
 			})
 
 			It("errors when the client sends a too large header frame", func() {
-				s.Server.MaxHeaderBytes = 20
+				s.MaxHeaderBytes = 20
 				s.Handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 					Fail("Handler should not be called.")
 				})
@@ -758,22 +780,18 @@ var _ = Describe("Server", func() {
 		})
 	})
 
-	It("errors when ListenAndServe is called with s.Server nil", func() {
-		Expect((&Server{}).ListenAndServe()).To(MatchError("use of http3.Server without http.Server"))
-	})
-
-	It("errors when ListenAndServeTLS is called with s.Server nil", func() {
-		Expect((&Server{}).ListenAndServeTLS(testdata.GetCertificatePaths())).To(MatchError("use of http3.Server without http.Server"))
+	It("errors when ListenAndServe is called with s.TLSConfig nil", func() {
+		Expect((&Server{}).ListenAndServe()).To(MatchError(errServerWithoutTLSConfig))
 	})
 
 	It("should nop-Close() when s.server is nil", func() {
 		Expect((&Server{}).Close()).To(Succeed())
 	})
 
-	It("errors when ListenAndServe is called after Close", func() {
-		serv := &Server{Server: &http.Server{}}
+	It("errors when ListenAndServeTLS is called after Close", func() {
+		serv := &Server{}
 		Expect(serv.Close()).To(Succeed())
-		Expect(serv.ListenAndServe()).To(MatchError(http.ErrServerClosed))
+		Expect(serv.ListenAndServeTLS(testdata.GetCertificatePaths())).To(MatchError(http.ErrServerClosed))
 	})
 
 	It("handles concurrent Serve and Close", func() {
@@ -836,8 +854,9 @@ var _ = Describe("Server", func() {
 				return ln, nil
 			}
 
-			s := &Server{Server: &http.Server{}}
-			s.TLSConfig = &tls.Config{}
+			s := &Server{
+				TLSConfig: &tls.Config{},
+			}
 
 			stopAccept := make(chan struct{})
 			ln.EXPECT().Accept(gomock.Any()).DoAndReturn(func(context.Context) (quic.Connection, error) {
@@ -870,8 +889,9 @@ var _ = Describe("Server", func() {
 				return <-lns, nil
 			}
 
-			s := &Server{Server: &http.Server{}}
-			s.TLSConfig = &tls.Config{}
+			s := &Server{
+				TLSConfig: &tls.Config{},
+			}
 
 			stopAccept1 := make(chan struct{})
 			ln1.EXPECT().Accept(gomock.Any()).DoAndReturn(func(context.Context) (quic.Connection, error) {
@@ -924,8 +944,7 @@ var _ = Describe("Server", func() {
 				return ln, nil
 			}
 
-			s := &Server{Server: &http.Server{}}
-			s.TLSConfig = &tls.Config{}
+			s := &Server{}
 
 			stopAccept := make(chan struct{})
 			ln.EXPECT().Accept(gomock.Any()).DoAndReturn(func(context.Context) (quic.Connection, error) {
@@ -959,8 +978,7 @@ var _ = Describe("Server", func() {
 				return <-lns, nil
 			}
 
-			s := &Server{Server: &http.Server{}}
-			s.TLSConfig = &tls.Config{}
+			s := &Server{}
 
 			stopAccept1 := make(chan struct{})
 			ln1.EXPECT().Accept(gomock.Any()).DoAndReturn(func(context.Context) (quic.Connection, error) {
@@ -1001,7 +1019,7 @@ var _ = Describe("Server", func() {
 
 	Context("ListenAndServe", func() {
 		BeforeEach(func() {
-			s.Server.Addr = "localhost:0"
+			s.Addr = "localhost:0"
 		})
 
 		AfterEach(func() {

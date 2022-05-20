@@ -236,10 +236,10 @@ func (c *client) maxHeaderBytes() uint64 {
 	return uint64(c.opts.MaxHeaderBytes)
 }
 
-// RoundTrip executes a request and returns a response
-func (c *client) RoundTrip(req *http.Request) (*http.Response, error) {
+// RoundTripOpt executes a request and returns a response
+func (c *client) RoundTripOpt(req *http.Request, opt RoundTripOpt) (*http.Response, error) {
 	if authorityAddr("https", hostnameFromRequest(req)) != c.hostname {
-		return nil, fmt.Errorf("http3 client BUG: RoundTrip called for the wrong client (expected %s, got %s)", c.hostname, req.Host)
+		return nil, fmt.Errorf("http3 client BUG: RoundTripOpt called for the wrong client (expected %s, got %s)", c.hostname, req.Host)
 	}
 
 	c.dialOnce.Do(func() {
@@ -268,7 +268,7 @@ func (c *client) RoundTrip(req *http.Request) (*http.Response, error) {
 	}
 
 	// Request Cancellation:
-	// This go routine keeps running even after RoundTrip() returns.
+	// This go routine keeps running even after RoundTripOpt() returns.
 	// It is shut down when the application is done processing the body.
 	reqDone := make(chan struct{})
 	go func() {
@@ -280,7 +280,7 @@ func (c *client) RoundTrip(req *http.Request) (*http.Response, error) {
 		}
 	}()
 
-	rsp, rerr := c.doRequest(req, str, reqDone)
+	rsp, rerr := c.doRequest(req, str, opt, reqDone)
 	if rerr.err != nil { // if any error occurred
 		close(reqDone)
 		if rerr.streamErr != 0 { // if it was a stream error
@@ -297,16 +297,12 @@ func (c *client) RoundTrip(req *http.Request) (*http.Response, error) {
 	return rsp, rerr.err
 }
 
-func (c *client) doRequest(
-	req *http.Request,
-	str quic.Stream,
-	reqDone chan struct{},
-) (*http.Response, requestError) {
+func (c *client) doRequest(req *http.Request, str quic.Stream, opt RoundTripOpt, reqDone chan struct{}) (*http.Response, requestError) {
 	var requestGzip bool
 	if !c.opts.DisableCompression && req.Method != "HEAD" && req.Header.Get("Accept-Encoding") == "" && req.Header.Get("Range") == "" {
 		requestGzip = true
 	}
-	if err := c.requestWriter.WriteRequest(str, req, requestGzip); err != nil {
+	if err := c.requestWriter.WriteRequest(str, req, opt.DontCloseRequestStream, requestGzip); err != nil {
 		return nil, newStreamError(errorInternalError, err)
 	}
 

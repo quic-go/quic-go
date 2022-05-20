@@ -751,11 +751,6 @@ func (s *connection) maybeResetTimer() {
 			deadline = s.idleTimeoutStartTime().Add(s.idleTimeout)
 		}
 	}
-	if s.handshakeConfirmed && !s.config.DisablePathMTUDiscovery {
-		if probeTime := s.mtuDiscoverer.NextProbeTime(); !probeTime.IsZero() {
-			deadline = utils.MinTime(deadline, probeTime)
-		}
-	}
 
 	if ackAlarm := s.receivedPacketHandler.GetAlarmTimeout(); !ackAlarm.IsZero() {
 		deadline = utils.MinTime(deadline, ackAlarm)

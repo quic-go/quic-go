@@ -72,7 +72,7 @@ var _ = Describe("Client", func() {
 			dialAddrCalled = true
 			return nil, errors.New("test done")
 		}
-		client.RoundTrip(req)
+		client.RoundTripOpt(req, RoundTripOpt{})
 		Expect(dialAddrCalled).To(BeTrue())
 	})
 
@@ -87,7 +87,7 @@ var _ = Describe("Client", func() {
 		}
 		req, err := http.NewRequest("GET", "https://quic.clemente.io:443", nil)
 		Expect(err).ToNot(HaveOccurred())
-		client.RoundTrip(req)
+		client.RoundTripOpt(req, RoundTripOpt{})
 		Expect(dialAddrCalled).To(BeTrue())
 	})
 
@@ -108,7 +108,7 @@ var _ = Describe("Client", func() {
 			dialAddrCalled = true
 			return nil, errors.New("test done")
 		}
-		client.RoundTrip(req)
+		client.RoundTripOpt(req, RoundTripOpt{})
 		Expect(dialAddrCalled).To(BeTrue())
 		// make sure the original tls.Config was not modified
 		Expect(tlsConf.NextProtos).To(Equal([]string{"proto foo", "proto bar"}))
@@ -131,7 +131,7 @@ var _ = Describe("Client", func() {
 		}
 		client, err := newClient("localhost:1337", tlsConf, &roundTripperOpts{}, quicConf, dialer)
 		Expect(err).ToNot(HaveOccurred())
-		_, err = client.RoundTrip(req.WithContext(ctx))
+		_, err = client.RoundTripOpt(req.WithContext(ctx), RoundTripOpt{})
 		Expect(err).To(MatchError(testErr))
 		Expect(dialerCalled).To(BeTrue())
 	})
@@ -144,7 +144,7 @@ var _ = Describe("Client", func() {
 			Expect(quicConf.EnableDatagrams).To(BeTrue())
 			return nil, testErr
 		}
-		_, err = client.RoundTrip(req)
+		_, err = client.RoundTripOpt(req, RoundTripOpt{})
 		Expect(err).To(MatchError(testErr))
 	})
 
@@ -155,7 +155,7 @@ var _ = Describe("Client", func() {
 		dialAddr = func(context.Context, string, *tls.Config, *quic.Config) (quic.EarlyConnection, error) {
 			return nil, testErr
 		}
-		_, err = client.RoundTrip(req)
+		_, err = client.RoundTripOpt(req, RoundTripOpt{})
 		Expect(err).To(MatchError(testErr))
 	})
 
@@ -169,8 +169,8 @@ var _ = Describe("Client", func() {
 		It("refuses to do requests for the wrong host", func() {
 			req, err := http.NewRequest("https", "https://quic.clemente.io:1336/foobar.html", nil)
 			Expect(err).ToNot(HaveOccurred())
-			_, err = client.RoundTrip(req)
-			Expect(err).To(MatchError("http3 client BUG: RoundTrip called for the wrong client (expected quic.clemente.io:1337, got quic.clemente.io:1336)"))
+			_, err = client.RoundTripOpt(req, RoundTripOpt{})
+			Expect(err).To(MatchError("http3 client BUG: RoundTripOpt called for the wrong client (expected quic.clemente.io:1337, got quic.clemente.io:1336)"))
 		})
 
 		It("allows requests using a different scheme", func() {
@@ -180,14 +180,14 @@ var _ = Describe("Client", func() {
 			dialAddr = func(context.Context, string, *tls.Config, *quic.Config) (quic.EarlyConnection, error) {
 				return nil, testErr
 			}
-			_, err = client.RoundTrip(req)
+			_, err = client.RoundTripOpt(req, RoundTripOpt{})
 			Expect(err).To(MatchError(testErr))
 		})
 	})
 
 	Context("hijacking unidirectional streams", func() {
 		var (
-			request              *http.Request
+			req                  *http.Request
 			conn                 *mockquic.MockEarlyConnection
 			settingsFrameWritten chan struct{}
 		)
@@ -209,7 +209,7 @@ var _ = Describe("Client", func() {
 				return conn, nil
 			}
 			var err error
-			request, err = http.NewRequest("GET", "https://quic.clemente.io:1337/file1.dat", nil)
+			req, err = http.NewRequest("GET", "https://quic.clemente.io:1337/file1.dat", nil)
 			Expect(err).ToNot(HaveOccurred())
 		})
 
@@ -236,7 +236,7 @@ var _ = Describe("Client", func() {
 				<-testDone
 				return nil, errors.New("test done")
 			})
-			_, err := client.RoundTrip(request)
+			_, err := client.RoundTripOpt(req, RoundTripOpt{})
 			Expect(err).To(MatchError("done"))
 			Eventually(streamTypeChan).Should(Receive(BeEquivalentTo(0x54)))
 			time.Sleep(scaleDuration(20 * time.Millisecond)) // don't EXPECT any calls to conn.CloseWithError
@@ -261,7 +261,7 @@ var _ = Describe("Client", func() {
 				<-testDone
 				return nil, errors.New("test done")
 			})
-			_, err := client.RoundTrip(request)
+			_, err := client.RoundTripOpt(req, RoundTripOpt{})
 			Expect(err).To(MatchError("done"))
 			Eventually(streamTypeChan).Should(Receive(BeEquivalentTo(0x54)))
 			time.Sleep(scaleDuration(20 * time.Millisecond)) // don't EXPECT any calls to conn.CloseWithError
@@ -270,7 +270,7 @@ var _ = Describe("Client", func() {
 
 	Context("control stream handling", func() {
 		var (
-			request              *http.Request
+			req                  *http.Request
 			conn                 *mockquic.MockEarlyConnection
 			settingsFrameWritten chan struct{}
 		)
@@ -291,7 +291,7 @@ var _ = Describe("Client", func() {
 				return conn, nil
 			}
 			var err error
-			request, err = http.NewRequest("GET", "https://quic.clemente.io:1337/file1.dat", nil)
+			req, err = http.NewRequest("GET", "https://quic.clemente.io:1337/file1.dat", nil)
 			Expect(err).ToNot(HaveOccurred())
 		})
 
@@ -313,7 +313,7 @@ var _ = Describe("Client", func() {
 				<-testDone
 				return nil, errors.New("test done")
 			})
-			_, err := client.RoundTrip(request)
+			_, err := client.RoundTripOpt(req, RoundTripOpt{})
 			Expect(err).To(MatchError("done"))
 			time.Sleep(scaleDuration(20 * time.Millisecond)) // don't EXPECT any calls to conn.CloseWithError
 		})
@@ -338,7 +338,7 @@ var _ = Describe("Client", func() {
 					<-testDone
 					return nil, errors.New("test done")
 				})
-				_, err := client.RoundTrip(request)
+				_, err := client.RoundTripOpt(req, RoundTripOpt{})
 				Expect(err).To(MatchError("done"))
 				time.Sleep(scaleDuration(20 * time.Millisecond)) // don't EXPECT any calls to str.CancelRead
 			})
@@ -361,7 +361,7 @@ var _ = Describe("Client", func() {
 				<-testDone
 				return nil, errors.New("test done")
 			})
-			_, err := client.RoundTrip(request)
+			_, err := client.RoundTripOpt(req, RoundTripOpt{})
 			Expect(err).To(MatchError("done"))
 			Eventually(done).Should(BeClosed())
 		})
@@ -385,7 +385,7 @@ var _ = Describe("Client", func() {
 				Expect(code).To(BeEquivalentTo(errorMissingSettings))
 				close(done)
 			})
-			_, err := client.RoundTrip(request)
+			_, err := client.RoundTripOpt(req, RoundTripOpt{})
 			Expect(err).To(MatchError("done"))
 			Eventually(done).Should(BeClosed())
 		})
@@ -411,7 +411,7 @@ var _ = Describe("Client", func() {
 				Expect(code).To(BeEquivalentTo(errorFrameError))
 				close(done)
 			})
-			_, err := client.RoundTrip(request)
+			_, err := client.RoundTripOpt(req, RoundTripOpt{})
 			Expect(err).To(MatchError("done"))
 			Eventually(done).Should(BeClosed())
 		})
@@ -434,7 +434,7 @@ var _ = Describe("Client", func() {
 				Expect(code).To(BeEquivalentTo(errorIDError))
 				close(done)
 			})
-			_, err := client.RoundTrip(request)
+			_, err := client.RoundTripOpt(req, RoundTripOpt{})
 			Expect(err).To(MatchError("done"))
 			Eventually(done).Should(BeClosed())
 		})
@@ -461,7 +461,7 @@ var _ = Describe("Client", func() {
 				Expect(reason).To(Equal("missing QUIC Datagram support"))
 				close(done)
 			})
-			_, err := client.RoundTrip(request)
+			_, err := client.RoundTripOpt(req, RoundTripOpt{})
 			Expect(err).To(MatchError("done"))
 			Eventually(done).Should(BeClosed())
 		})
@@ -469,7 +469,7 @@ var _ = Describe("Client", func() {
 
 	Context("Doing requests", func() {
 		var (
-			request              *http.Request
+			req                  *http.Request
 			str                  *mockquic.MockStream
 			conn                 *mockquic.MockEarlyConnection
 			settingsFrameWritten chan struct{}
@@ -540,7 +540,7 @@ var _ = Describe("Client", func() {
 				return conn, nil
 			}
 			var err error
-			request, err = http.NewRequest("GET", "https://quic.clemente.io:1337/file1.dat", nil)
+			req, err = http.NewRequest("GET", "https://quic.clemente.io:1337/file1.dat", nil)
 			Expect(err).ToNot(HaveOccurred())
 		})
 
@@ -554,13 +554,13 @@ var _ = Describe("Client", func() {
 			conn.EXPECT().OpenStreamSync(context.Background()).Return(nil, testErr)
 			conn.EXPECT().CloseWithError(gomock.Any(), gomock.Any()).MaxTimes(1)
 			conn.EXPECT().HandshakeComplete().Return(handshakeCtx)
-			_, err := client.RoundTrip(request)
+			_, err := client.RoundTripOpt(req, RoundTripOpt{})
 			Expect(err).To(MatchError(testErr))
 		})
 
 		It("performs a 0-RTT request", func() {
 			testErr := errors.New("stream open error")
-			request.Method = MethodGet0RTT
+			req.Method = MethodGet0RTT
 			// don't EXPECT any calls to HandshakeComplete()
 			conn.EXPECT().OpenStreamSync(context.Background()).Return(str, nil)
 			buf := &bytes.Buffer{}
@@ -570,7 +570,7 @@ var _ = Describe("Client", func() {
 			str.EXPECT().Read(gomock.Any()).DoAndReturn(func([]byte) (int, error) {
 				return 0, testErr
 			})
-			_, err := client.RoundTrip(request)
+			_, err := client.RoundTripOpt(req, RoundTripOpt{})
 			Expect(err).To(MatchError(testErr))
 			Expect(decodeHeader(buf)).To(HaveKeyWithValue(":method", "GET"))
 		})
@@ -585,7 +585,7 @@ var _ = Describe("Client", func() {
 			str.EXPECT().Write(gomock.Any()).AnyTimes().DoAndReturn(func(p []byte) (int, error) { return len(p), nil })
 			str.EXPECT().Close()
 			str.EXPECT().Read(gomock.Any()).DoAndReturn(rspBuf.Read).AnyTimes()
-			rsp, err := client.RoundTrip(request)
+			rsp, err := client.RoundTripOpt(req, RoundTripOpt{})
 			Expect(err).ToNot(HaveOccurred())
 			Expect(rsp.Proto).To(Equal("HTTP/3"))
 			Expect(rsp.ProtoMajor).To(Equal(3))
@@ -604,7 +604,7 @@ var _ = Describe("Client", func() {
 				body := &mockBody{}
 				body.SetData([]byte("request body"))
 				var err error
-				request, err = http.NewRequest("POST", "https://quic.clemente.io:1337/upload", body)
+				req, err = http.NewRequest("POST", "https://quic.clemente.io:1337/upload", body)
 				Expect(err).ToNot(HaveOccurred())
 				str.EXPECT().Write(gomock.Any()).DoAndReturn(strBuf.Write).AnyTimes()
 			})
@@ -620,7 +620,7 @@ var _ = Describe("Client", func() {
 					<-done
 					return 0, errors.New("test done")
 				})
-				_, err := client.RoundTrip(request)
+				_, err := client.RoundTripOpt(req, RoundTripOpt{})
 				Expect(err).To(MatchError("test done"))
 				hfs := decodeHeader(strBuf)
 				Expect(hfs).To(HaveKeyWithValue(":method", "POST"))
@@ -628,7 +628,7 @@ var _ = Describe("Client", func() {
 			})
 
 			It("returns the error that occurred when reading the body", func() {
-				request.Body.(*mockBody).readErr = errors.New("testErr")
+				req.Body.(*mockBody).readErr = errors.New("testErr")
 				done := make(chan struct{})
 				gomock.InOrder(
 					str.EXPECT().CancelWrite(quic.StreamErrorCode(errorRequestCanceled)).Do(func(quic.StreamErrorCode) {
@@ -642,7 +642,7 @@ var _ = Describe("Client", func() {
 					<-done
 					return 0, errors.New("test done")
 				})
-				_, err := client.RoundTrip(request)
+				_, err := client.RoundTripOpt(req, RoundTripOpt{})
 				Expect(err).To(MatchError("test done"))
 			})
 
@@ -660,7 +660,7 @@ var _ = Describe("Client", func() {
 				str.EXPECT().CancelWrite(gomock.Any()).MaxTimes(1) // when reading the response errors
 				// the response body is sent asynchronously, while already reading the response
 				str.EXPECT().Read(gomock.Any()).DoAndReturn(buf.Read).AnyTimes()
-				req, err := client.RoundTrip(request)
+				req, err := client.RoundTripOpt(req, RoundTripOpt{})
 				Expect(err).ToNot(HaveOccurred())
 				Expect(req.ContentLength).To(BeEquivalentTo(1337))
 				Eventually(done).Should(BeClosed())
@@ -673,7 +673,7 @@ var _ = Describe("Client", func() {
 				closed := make(chan struct{})
 				str.EXPECT().Close().Do(func() { close(closed) })
 				str.EXPECT().Read(gomock.Any()).DoAndReturn(buf.Read).AnyTimes()
-				_, err := client.RoundTrip(request)
+				_, err := client.RoundTripOpt(req, RoundTripOpt{})
 				Expect(err).To(MatchError("expected first frame to be a HEADERS frame"))
 				Eventually(closed).Should(BeClosed())
 			})
@@ -685,7 +685,7 @@ var _ = Describe("Client", func() {
 				closed := make(chan struct{})
 				str.EXPECT().Close().Do(func() { close(closed) })
 				str.EXPECT().Read(gomock.Any()).DoAndReturn(buf.Read).AnyTimes()
-				_, err := client.RoundTrip(request)
+				_, err := client.RoundTripOpt(req, RoundTripOpt{})
 				Expect(err).To(MatchError("HEADERS frame too large: 1338 bytes (max: 1337)"))
 				Eventually(closed).Should(BeClosed())
 			})
@@ -694,12 +694,12 @@ var _ = Describe("Client", func() {
 		Context("request cancellations", func() {
 			It("cancels a request while waiting for the handshake to complete", func() {
 				ctx, cancel := context.WithCancel(context.Background())
-				req := request.WithContext(ctx)
+				req := req.WithContext(ctx)
 				conn.EXPECT().HandshakeComplete().Return(context.Background())
 
 				errChan := make(chan error)
 				go func() {
-					_, err := client.RoundTrip(req)
+					_, err := client.RoundTripOpt(req, RoundTripOpt{})
 					errChan <- err
 				}()
 				Consistently(errChan).ShouldNot(Receive())
@@ -709,7 +709,7 @@ var _ = Describe("Client", func() {
 
 			It("cancels a request while the request is still in flight", func() {
 				ctx, cancel := context.WithCancel(context.Background())
-				req := request.WithContext(ctx)
+				req := req.WithContext(ctx)
 				conn.EXPECT().HandshakeComplete().Return(handshakeCtx)
 				conn.EXPECT().OpenStreamSync(ctx).Return(str, nil)
 				buf := &bytes.Buffer{}
@@ -729,7 +729,7 @@ var _ = Describe("Client", func() {
 					<-canceled
 					return 0, errors.New("test done")
 				})
-				_, err := client.RoundTrip(req)
+				_, err := client.RoundTripOpt(req, RoundTripOpt{})
 				Expect(err).To(MatchError("test done"))
 				Eventually(done).Should(BeClosed())
 			})
@@ -738,7 +738,7 @@ var _ = Describe("Client", func() {
 				rspBuf := bytes.NewBuffer(getResponse(404))
 
 				ctx, cancel := context.WithCancel(context.Background())
-				req := request.WithContext(ctx)
+				req := req.WithContext(ctx)
 				conn.EXPECT().HandshakeComplete().Return(handshakeCtx)
 				conn.EXPECT().OpenStreamSync(ctx).Return(str, nil)
 				conn.EXPECT().ConnectionState().Return(quic.ConnectionState{})
@@ -750,7 +750,7 @@ var _ = Describe("Client", func() {
 				str.EXPECT().Read(gomock.Any()).DoAndReturn(rspBuf.Read).AnyTimes()
 				str.EXPECT().CancelWrite(quic.StreamErrorCode(errorRequestCanceled))
 				str.EXPECT().CancelRead(quic.StreamErrorCode(errorRequestCanceled)).Do(func(quic.StreamErrorCode) { close(done) })
-				_, err := client.RoundTrip(req)
+				_, err := client.RoundTripOpt(req, RoundTripOpt{})
 				Expect(err).ToNot(HaveOccurred())
 				cancel()
 				Eventually(done).Should(BeClosed())
@@ -771,7 +771,7 @@ var _ = Describe("Client", func() {
 					str.EXPECT().CancelWrite(gomock.Any()).MaxTimes(1), // when the Read errors
 				)
 				str.EXPECT().Read(gomock.Any()).Return(0, errors.New("test done"))
-				_, err := client.RoundTrip(request)
+				_, err := client.RoundTripOpt(req, RoundTripOpt{})
 				Expect(err).To(MatchError("test done"))
 				hfs := decodeHeader(buf)
 				Expect(hfs).To(HaveKeyWithValue("accept-encoding", "gzip"))
@@ -788,7 +788,7 @@ var _ = Describe("Client", func() {
 					str.EXPECT().CancelWrite(gomock.Any()).MaxTimes(1), // when the Read errors
 				)
 				str.EXPECT().Read(gomock.Any()).Return(0, errors.New("test done"))
-				_, err = client.RoundTrip(request)
+				_, err = client.RoundTripOpt(req, RoundTripOpt{})
 				Expect(err).To(MatchError("test done"))
 				hfs := decodeHeader(buf)
 				Expect(hfs).ToNot(HaveKey("accept-encoding"))
@@ -810,7 +810,7 @@ var _ = Describe("Client", func() {
 				str.EXPECT().Read(gomock.Any()).DoAndReturn(buf.Read).AnyTimes()
 				str.EXPECT().Close()
 
-				rsp, err := client.RoundTrip(request)
+				rsp, err := client.RoundTripOpt(req, RoundTripOpt{})
 				Expect(err).ToNot(HaveOccurred())
 				data, err := ioutil.ReadAll(rsp.Body)
 				Expect(err).ToNot(HaveOccurred())
@@ -833,7 +833,7 @@ var _ = Describe("Client", func() {
 				str.EXPECT().Read(gomock.Any()).DoAndReturn(buf.Read).AnyTimes()
 				str.EXPECT().Close()
 
-				rsp, err := client.RoundTrip(request)
+				rsp, err := client.RoundTripOpt(req, RoundTripOpt{})
 				Expect(err).ToNot(HaveOccurred())
 				data, err := ioutil.ReadAll(rsp.Body)
 				Expect(err).ToNot(HaveOccurred())
