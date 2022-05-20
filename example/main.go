@@ -185,7 +185,8 @@ func main() {
 				err = http3.ListenAndServe(bCap, certFile, keyFile, handler)
 			} else {
 				server := http3.Server{
-					Server:     &http.Server{Handler: handler, Addr: bCap},
+					Handler:    handler,
+					Addr:       bCap,
 					QuicConfig: quicConf,
 				}
 				err = server.ListenAndServeTLS(testdata.GetCertificatePaths())

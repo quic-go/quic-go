@@ -94,10 +94,8 @@ func runHTTP09Server(quicConf *quic.Config) error {
 
 func runHTTP3Server(quicConf *quic.Config) error {
 	server := http3.Server{
-		Server: &http.Server{
-			Addr:      ":443",
-			TLSConfig: tlsConf,
-		},
+		Addr:       ":443",
+		TLSConfig:  tlsConf,
 		QuicConfig: quicConf,
 	}
 	http.DefaultServeMux.Handle("/", http.FileServer(http.Dir("/www")))

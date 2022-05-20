@@ -68,10 +68,8 @@ var _ = Describe("HTTP tests", func() {
 		})
 
 		server = &http3.Server{
-			Server: &http.Server{
-				Handler:   mux,
-				TLSConfig: testdata.GetTLSConfig(),
-			},
+			Handler:    mux,
+			TLSConfig:  testdata.GetTLSConfig(),
 			QuicConfig: getQuicConfig(&quic.Config{Versions: versions}),
 		}
 
