@@ -582,15 +582,17 @@ func (s *Server) handleRequest(conn quic.Connection, str quic.Stream, decoder *q
 		handler.ServeHTTP(r, req)
 	}()
 
-	if !r.usedDataStream() {
-		if panicked {
-			r.WriteHeader(500)
-		} else {
-			r.WriteHeader(200)
-		}
-		// If the EOF was read by the handler, CancelRead() is a no-op.
-		str.CancelRead(quic.StreamErrorCode(errorNoError))
+	if r.usedDataStream() {
+		return requestError{err: errHijacked}
 	}
+
+	if panicked {
+		r.WriteHeader(500)
+	} else {
+		r.WriteHeader(200)
+	}
+	// If the EOF was read by the handler, CancelRead() is a no-op.
+	str.CancelRead(quic.StreamErrorCode(errorNoError))
 	return requestError{}
 }
 

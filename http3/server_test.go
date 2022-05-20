@@ -228,13 +228,37 @@ var _ = Describe("Server", func() {
 				str.Write([]byte("foobar"))
 			})
 
+			rspWritten := make(chan struct{})
 			setRequest(encodeRequest(exampleGetRequest))
 			str.EXPECT().Context().Return(reqContext)
-			str.EXPECT().Write([]byte("foobar"))
+			str.EXPECT().Write([]byte("foobar")).Do(func(b []byte) (int, error) {
+				close(rspWritten)
+				return len(b), nil
+			})
 			// don't EXPECT CancelRead()
 
-			serr := s.handleRequest(conn, str, qpackDecoder, nil)
-			Expect(serr.err).ToNot(HaveOccurred())
+			ctrlStr := mockquic.NewMockStream(mockCtrl)
+			ctrlStr.EXPECT().Write(gomock.Any()).AnyTimes()
+			conn.EXPECT().OpenUniStream().Return(ctrlStr, nil)
+			conn.EXPECT().AcceptUniStream(gomock.Any()).DoAndReturn(func(context.Context) (quic.ReceiveStream, error) {
+				<-rspWritten
+				return nil, errors.New("done")
+			})
+			conn.EXPECT().AcceptStream(gomock.Any()).Return(str, nil)
+			conn.EXPECT().AcceptStream(gomock.Any()).DoAndReturn(func(context.Context) (quic.Stream, error) {
+				<-rspWritten
+				return nil, errors.New("done")
+			})
+
+			done := make(chan struct{})
+			go func() {
+				defer GinkgoRecover()
+				defer close(done)
+				s.handleConn(conn)
+			}()
+			Eventually(rspWritten).Should(BeClosed())
+			time.Sleep(50 * time.Millisecond) // make sure that after str.Write there are no further calls to stream methods
+			Eventually(done).Should(BeClosed())
 		})
 
 		Context("hijacking unidirectional streams", func() {
