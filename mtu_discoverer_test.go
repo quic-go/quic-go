@@ -38,17 +38,14 @@ var _ = Describe("MTU Discoverer", func() {
 	It("only allows a probe 5 RTTs after the handshake completes", func() {
 		Expect(d.ShouldSendProbe(now)).To(BeFalse())
 		Expect(d.ShouldSendProbe(now.Add(rtt * 9 / 2))).To(BeFalse())
-		Expect(d.NextProbeTime()).To(BeTemporally("~", now.Add(5*rtt), scaleDuration(20*time.Millisecond)))
 		Expect(d.ShouldSendProbe(now.Add(rtt * 5))).To(BeTrue())
 	})
 
 	It("doesn't allow a probe if another probe is still in flight", func() {
 		ping, _ := d.GetPing()
 		Expect(d.ShouldSendProbe(now.Add(10 * rtt))).To(BeFalse())
-		Expect(d.NextProbeTime()).To(BeZero())
 		ping.OnLost(ping.Frame)
 		Expect(d.ShouldSendProbe(now.Add(10 * rtt))).To(BeTrue())
-		Expect(d.NextProbeTime()).ToNot(BeZero())
 	})
 
 	It("tries a lower size when a probe is lost", func() {
@@ -79,7 +76,6 @@ var _ = Describe("MTU Discoverer", func() {
 		}
 		Expect(sizes).To(Equal([]protocol.ByteCount{1500, 1750, 1875, 1937, 1968, 1984}))
 		Expect(d.ShouldSendProbe(t.Add(10 * rtt))).To(BeFalse())
-		Expect(d.NextProbeTime()).To(BeZero())
 	})
 
 	It("finds the MTU", func() {
