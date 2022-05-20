@@ -138,7 +138,7 @@ var _ = Describe("Server", func() {
 			closed := make(chan struct{})
 			str.EXPECT().Close().Do(func() { close(closed) })
 			rw := newRequestWriter(utils.DefaultLogger)
-			Expect(rw.WriteRequest(str, req, false)).To(Succeed())
+			Expect(rw.WriteRequest(str, req, false, false)).To(Succeed())
 			Eventually(closed).Should(BeClosed())
 			return buf.Bytes()
 		}

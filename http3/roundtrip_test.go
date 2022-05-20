@@ -20,7 +20,7 @@ type mockClient struct {
 	closed bool
 }
 
-func (m *mockClient) RoundTrip(req *http.Request) (*http.Response, error) {
+func (m *mockClient) RoundTripOpt(req *http.Request, _ RoundTripOpt) (*http.Response, error) {
 	return &http.Response{Request: req}, nil
 }
 

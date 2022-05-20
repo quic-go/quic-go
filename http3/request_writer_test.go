@@ -60,7 +60,7 @@ var _ = Describe("Request Writer", func() {
 		str.EXPECT().Close()
 		req, err := http.NewRequest(http.MethodGet, "https://quic.clemente.io/index.html?foo=bar", nil)
 		Expect(err).ToNot(HaveOccurred())
-		Expect(rw.WriteRequest(str, req, false)).To(Succeed())
+		Expect(rw.WriteRequest(str, req, false, false)).To(Succeed())
 		headerFields := decode(strBuf)
 		Expect(headerFields).To(HaveKeyWithValue(":authority", "quic.clemente.io"))
 		Expect(headerFields).To(HaveKeyWithValue(":method", "GET"))
@@ -69,13 +69,21 @@ var _ = Describe("Request Writer", func() {
 		Expect(headerFields).ToNot(HaveKey("accept-encoding"))
 	})
 
+	It("writes a GET request without closing the stream", func() {
+		req, err := http.NewRequest(http.MethodGet, "https://quic.clemente.io", nil)
+		Expect(err).ToNot(HaveOccurred())
+		Expect(rw.WriteRequest(str, req, true, false)).To(Succeed())
+		headerFields := decode(strBuf)
+		Expect(headerFields).To(HaveKeyWithValue(":authority", "quic.clemente.io"))
+	})
+
 	It("writes a POST request", func() {
 		closed := make(chan struct{})
 		str.EXPECT().Close().Do(func() { close(closed) })
 		postData := bytes.NewReader([]byte("foobar"))
 		req, err := http.NewRequest(http.MethodPost, "https://quic.clemente.io/upload.html", postData)
 		Expect(err).ToNot(HaveOccurred())
-		Expect(rw.WriteRequest(str, req, false)).To(Succeed())
+		Expect(rw.WriteRequest(str, req, false, false)).To(Succeed())
 
 		Eventually(closed).Should(BeClosed())
 		headerFields := decode(strBuf)
@@ -96,7 +104,7 @@ var _ = Describe("Request Writer", func() {
 		str.EXPECT().Close().Do(func() { close(closed) })
 		req, err := http.NewRequest(http.MethodPost, "https://quic.clemente.io/upload.html", &foobarReader{})
 		Expect(err).ToNot(HaveOccurred())
-		Expect(rw.WriteRequest(str, req, false)).To(Succeed())
+		Expect(rw.WriteRequest(str, req, false, false)).To(Succeed())
 
 		Eventually(closed).Should(BeClosed())
 		headerFields := decode(strBuf)
@@ -122,7 +130,7 @@ var _ = Describe("Request Writer", func() {
 		}
 		req.AddCookie(cookie1)
 		req.AddCookie(cookie2)
-		Expect(rw.WriteRequest(str, req, false)).To(Succeed())
+		Expect(rw.WriteRequest(str, req, false, false)).To(Succeed())
 		headerFields := decode(strBuf)
 		Expect(headerFields).To(HaveKeyWithValue("cookie", `Cookie #1="Value #1"; Cookie #2="Value #2"`))
 	})
@@ -131,7 +139,7 @@ var _ = Describe("Request Writer", func() {
 		str.EXPECT().Close()
 		req, err := http.NewRequest(http.MethodGet, "https://quic.clemente.io/", nil)
 		Expect(err).ToNot(HaveOccurred())
-		Expect(rw.WriteRequest(str, req, true)).To(Succeed())
+		Expect(rw.WriteRequest(str, req, false, true)).To(Succeed())
 		headerFields := decode(strBuf)
 		Expect(headerFields).To(HaveKeyWithValue("accept-encoding", "gzip"))
 	})
@@ -140,7 +148,7 @@ var _ = Describe("Request Writer", func() {
 		str.EXPECT().Close()
 		req, err := http.NewRequest(http.MethodConnect, "https://quic.clemente.io/", nil)
 		Expect(err).ToNot(HaveOccurred())
-		Expect(rw.WriteRequest(str, req, false)).To(Succeed())
+		Expect(rw.WriteRequest(str, req, false, false)).To(Succeed())
 		headerFields := decode(strBuf)
 		Expect(headerFields).To(HaveKeyWithValue(":method", "CONNECT"))
 		Expect(headerFields).To(HaveKeyWithValue(":authority", "quic.clemente.io"))
@@ -154,7 +162,7 @@ var _ = Describe("Request Writer", func() {
 		req, err := http.NewRequest(http.MethodConnect, "https://quic.clemente.io/foobar", nil)
 		Expect(err).ToNot(HaveOccurred())
 		req.Proto = "webtransport"
-		Expect(rw.WriteRequest(str, req, false)).To(Succeed())
+		Expect(rw.WriteRequest(str, req, false, false)).To(Succeed())
 		headerFields := decode(strBuf)
 		Expect(headerFields).To(HaveKeyWithValue(":authority", "quic.clemente.io"))
 		Expect(headerFields).To(HaveKeyWithValue(":method", "CONNECT"))
