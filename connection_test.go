@@ -2477,6 +2477,7 @@ var _ = Describe("Client Connection", func() {
 		conn.packer = packer
 		cryptoSetup = mocks.NewMockCryptoSetup(mockCtrl)
 		conn.cryptoStreamHandler = cryptoSetup
+		conn.sentFirstPacket = true
 	})
 
 	It("changes the connection ID when receiving the first packet from the server", func() {
@@ -2566,6 +2567,25 @@ var _ = Describe("Client Connection", func() {
 		cryptoSetup.EXPECT().SetLargest1RTTAcked(protocol.PacketNumber(3))
 		cryptoSetup.EXPECT().SetHandshakeConfirmed()
 		Expect(conn.handleAckFrame(ack, protocol.Encryption1RTT)).To(Succeed())
+	})
+
+	It("doesn't send a CONNECTION_CLOSE when no packet was sent", func() {
+		conn.sentFirstPacket = false
+		tracer.EXPECT().ClosedConnection(gomock.Any())
+		tracer.EXPECT().Close()
+		running := make(chan struct{})
+		cryptoSetup.EXPECT().RunHandshake().Do(func() {
+			close(running)
+			conn.closeLocal(errors.New("early error"))
+		})
+		cryptoSetup.EXPECT().Close()
+		connRunner.EXPECT().Remove(gomock.Any())
+		go func() {
+			defer GinkgoRecover()
+			conn.run()
+		}()
+		Eventually(running).Should(BeClosed())
+		Eventually(areConnsRunning).Should(BeFalse())
 	})
 
 	Context("handling tokens", func() {

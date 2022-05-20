@@ -12,6 +12,7 @@ import (
 	"github.com/lucas-clemente/quic-go"
 	"github.com/lucas-clemente/quic-go/integrationtests/tools/israce"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
+	"github.com/lucas-clemente/quic-go/internal/qerr"
 	"github.com/lucas-clemente/quic-go/logging"
 
 	. "github.com/onsi/ginkgo"
@@ -566,5 +567,38 @@ var _ = Describe("Handshake tests", func() {
 			}
 			Expect(token.IsRetryToken).To(BeTrue())
 		})
+	})
+
+	It("doesn't send any packets when generating the ClientHello fails", func() {
+		ln, err := net.ListenUDP("udp", nil)
+		Expect(err).ToNot(HaveOccurred())
+		done := make(chan struct{})
+		packetChan := make(chan struct{})
+		go func() {
+			defer GinkgoRecover()
+			defer close(done)
+			for {
+				_, _, err := ln.ReadFromUDP(make([]byte, protocol.MaxPacketBufferSize))
+				if err != nil {
+					return
+				}
+				packetChan <- struct{}{}
+			}
+		}()
+
+		tlsConf := getTLSClientConfig()
+		tlsConf.NextProtos = []string{""}
+		_, err = quic.DialAddr(
+			fmt.Sprintf("localhost:%d", ln.LocalAddr().(*net.UDPAddr).Port),
+			tlsConf,
+			nil,
+		)
+		Expect(err).To(MatchError(&qerr.TransportError{
+			ErrorCode:    qerr.InternalError,
+			ErrorMessage: "tls: invalid NextProtos value",
+		}))
+		Consistently(packetChan).ShouldNot(Receive())
+		ln.Close()
+		Eventually(done).Should(BeClosed())
 	})
 })

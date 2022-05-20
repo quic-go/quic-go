@@ -113,7 +113,8 @@ type cryptoSetup struct {
 
 	zeroRTTParameters      *wire.TransportParameters
 	clientHelloWritten     bool
-	clientHelloWrittenChan chan *wire.TransportParameters
+	clientHelloWrittenChan chan struct{} // is closed as soon as the ClientHello is written
+	zeroRTTParametersChan  chan<- *wire.TransportParameters
 
 	rttStats *utils.RTTStats
 
@@ -238,6 +239,7 @@ func newCryptoSetup(
 		tracer.UpdatedKeyFromTLS(protocol.EncryptionInitial, protocol.PerspectiveServer)
 	}
 	extHandler := newExtensionHandler(tp.Marshal(perspective), perspective, version)
+	zeroRTTParametersChan := make(chan *wire.TransportParameters, 1)
 	cs := &cryptoSetup{
 		tlsConf:                   tlsConf,
 		initialStream:             initialStream,
@@ -256,7 +258,8 @@ func newCryptoSetup(
 		perspective:               perspective,
 		handshakeDone:             make(chan struct{}),
 		alertChan:                 make(chan uint8),
-		clientHelloWrittenChan:    make(chan *wire.TransportParameters, 1),
+		clientHelloWrittenChan:    make(chan struct{}),
+		zeroRTTParametersChan:     zeroRTTParametersChan,
 		messageChan:               make(chan []byte, 100),
 		isReadingHandshakeMessage: make(chan struct{}),
 		closeChan:                 make(chan struct{}),
@@ -278,7 +281,7 @@ func newCryptoSetup(
 		GetAppDataForSessionState:  cs.marshalDataForSessionState,
 		SetAppDataFromSessionState: cs.handleDataFromSessionState,
 	}
-	return cs, cs.clientHelloWrittenChan
+	return cs, zeroRTTParametersChan
 }
 
 func (h *cryptoSetup) ChangeConnectionID(id protocol.ConnectionID) {
@@ -308,6 +311,15 @@ func (h *cryptoSetup) RunHandshake() {
 		close(handshakeComplete)
 	}()
 
+	if h.perspective == protocol.PerspectiveClient {
+		select {
+		case err := <-handshakeErrChan:
+			h.onError(0, err.Error())
+			return
+		case <-h.clientHelloWrittenChan:
+		}
+	}
+
 	select {
 	case <-handshakeComplete: // return when the handshake is done
 		h.mutex.Lock()
@@ -324,7 +336,13 @@ func (h *cryptoSetup) RunHandshake() {
 }
 
 func (h *cryptoSetup) onError(alert uint8, message string) {
-	h.runner.OnError(qerr.NewCryptoError(alert, message))
+	var err error
+	if alert == 0 {
+		err = &qerr.TransportError{ErrorCode: qerr.InternalError, ErrorMessage: message}
+	} else {
+		err = qerr.NewCryptoError(alert, message)
+	}
+	h.runner.OnError(err)
 }
 
 // Close closes the crypto setup.
@@ -645,12 +663,13 @@ func (h *cryptoSetup) WriteRecord(p []byte) (int, error) {
 		n, err := h.initialStream.Write(p)
 		if !h.clientHelloWritten && h.perspective == protocol.PerspectiveClient {
 			h.clientHelloWritten = true
+			close(h.clientHelloWrittenChan)
 			if h.zeroRTTSealer != nil && h.zeroRTTParameters != nil {
 				h.logger.Debugf("Doing 0-RTT.")
-				h.clientHelloWrittenChan <- h.zeroRTTParameters
+				h.zeroRTTParametersChan <- h.zeroRTTParameters
 			} else {
 				h.logger.Debugf("Not doing 0-RTT.")
-				h.clientHelloWrittenChan <- nil
+				h.zeroRTTParametersChan <- nil
 			}
 		}
 		return n, err
