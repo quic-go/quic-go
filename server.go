@@ -119,28 +119,30 @@ func (s *earlyServer) Accept(ctx context.Context) (EarlyConnection, error) {
 	return s.baseServer.accept(ctx)
 }
 
+type ListenConfig struct {
+	netListenConfig net.ListenConfig
+}
+
 // ListenAddr creates a QUIC server listening on a given address.
 // The tls.Config must not be nil and must contain a certificate configuration.
 // The quic.Config may be nil, in that case the default values will be used.
 func ListenAddr(addr string, tlsConf *tls.Config, config *Config) (Listener, error) {
-	return listenAddr(addr, tlsConf, config, false)
+	lc := ListenConfig{netListenConfig: net.ListenConfig{}}
+	return lc.listenAddr(addr, tlsConf, config, false)
 }
 
 // ListenAddrEarly works like ListenAddr, but it returns connections before the handshake completes.
 func ListenAddrEarly(addr string, tlsConf *tls.Config, config *Config) (EarlyListener, error) {
-	s, err := listenAddr(addr, tlsConf, config, true)
+	lc := ListenConfig{netListenConfig: net.ListenConfig{}}
+	s, err := lc.listenAddr(addr, tlsConf, config, false)
 	if err != nil {
 		return nil, err
 	}
 	return &earlyServer{s}, nil
 }
 
-func listenAddr(addr string, tlsConf *tls.Config, config *Config, acceptEarly bool) (*baseServer, error) {
-	udpAddr, err := net.ResolveUDPAddr("udp", addr)
-	if err != nil {
-		return nil, err
-	}
-	conn, err := net.ListenUDP("udp", udpAddr)
+func (lc *ListenConfig) listenAddr(addr string, tlsConf *tls.Config, config *Config, acceptEarly bool) (*baseServer, error) {
+	conn, err := lc.netListenConfig.ListenPacket(context.Background(), "udp", addr)
 	if err != nil {
 		return nil, err
 	}
@@ -150,6 +152,14 @@ func listenAddr(addr string, tlsConf *tls.Config, config *Config, acceptEarly bo
 	}
 	serv.createdPacketConn = true
 	return serv, nil
+}
+
+func (lc *ListenConfig) ListenAddr(addr string, tlsConf *tls.Config, config *Config) (*baseServer, error) {
+	return lc.listenAddr(addr, tlsConf, config, false)
+}
+
+func (lc *ListenConfig) ListenAddrEarly(addr string, tlsConf *tls.Config, config *Config) (*baseServer, error) {
+	return lc.listenAddr(addr, tlsConf, config, true)
 }
 
 // Listen listens for QUIC connections on a given net.PacketConn. If the
@@ -289,7 +299,7 @@ func (s *baseServer) Close() error {
 	if s.serverError == nil {
 		s.serverError = ErrServerClosed
 	}
-	// If the server was started with ListenAddr, we created the packet conn.
+	// If the server was started with listenAddr, we created the packet conn.
 	// We need to close it in order to make the go routine reading from that conn return.
 	createdPacketConn := s.createdPacketConn
 	s.closed = true
