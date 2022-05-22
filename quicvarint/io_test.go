@@ -22,6 +22,21 @@ func (r *nopWriter) Write(_ []byte) (int, error) {
 	return 0, io.ErrShortBuffer
 }
 
+// eofReader is a reader that returns data and the io.EOF at the same time in the last Read call
+type eofReader struct {
+	Data []byte
+	pos  int
+}
+
+func (r *eofReader) Read(b []byte) (int, error) {
+	n := copy(b, r.Data[r.pos:])
+	r.pos += n
+	if r.pos >= len(r.Data) {
+		return n, io.EOF
+	}
+	return n, nil
+}
+
 var _ io.Writer = &nopWriter{}
 
 var _ = Describe("Varint I/O", func() {
@@ -45,6 +60,34 @@ var _ = Describe("Varint I/O", func() {
 			val, err := r.ReadByte()
 			Expect(err).To(Equal(io.ErrUnexpectedEOF))
 			Expect(val).To(Equal(byte(0)))
+		})
+
+		Context("EOF handling", func() {
+			It("eofReader works correctly", func() {
+				r := &eofReader{Data: []byte("foobar")}
+				b := make([]byte, 3)
+				n, err := r.Read(b)
+				Expect(n).To(Equal(3))
+				Expect(err).ToNot(HaveOccurred())
+				Expect(string(b)).To(Equal("foo"))
+				n, err = r.Read(b)
+				Expect(n).To(Equal(3))
+				Expect(err).To(MatchError(io.EOF))
+				Expect(string(b)).To(Equal("bar"))
+				n, err = r.Read(b)
+				Expect(err).To(MatchError(io.EOF))
+				Expect(n).To(BeZero())
+			})
+
+			It("correctly handles io.EOF", func() {
+				buf := &bytes.Buffer{}
+				Write(buf, 1337)
+
+				r := NewReader(&eofReader{Data: buf.Bytes()})
+				n, err := Read(r)
+				Expect(err).ToNot(HaveOccurred())
+				Expect(n).To(BeEquivalentTo(1337))
+			})
 		})
 	})
 
