@@ -246,7 +246,7 @@ func newCryptoSetup(
 		initialSealer:             initialSealer,
 		initialOpener:             initialOpener,
 		handshakeStream:           handshakeStream,
-		aead:                      newUpdatableAEAD(rttStats, tracer, logger),
+		aead:                      newUpdatableAEAD(rttStats, tracer, logger, version),
 		readEncLevel:              protocol.EncryptionInitial,
 		writeEncLevel:             protocol.EncryptionInitial,
 		runner:                    runner,
@@ -572,8 +572,8 @@ func (h *cryptoSetup) SetReadKey(encLevel qtls.EncryptionLevel, suite *qtls.Ciph
 			panic("Received 0-RTT read key for the client")
 		}
 		h.zeroRTTOpener = newLongHeaderOpener(
-			createAEAD(suite, trafficSecret),
-			newHeaderProtector(suite, trafficSecret, true),
+			createAEAD(suite, trafficSecret, h.version),
+			newHeaderProtector(suite, trafficSecret, true, h.version),
 		)
 		h.mutex.Unlock()
 		h.logger.Debugf("Installed 0-RTT Read keys (using %s)", tls.CipherSuiteName(suite.ID))
@@ -584,8 +584,8 @@ func (h *cryptoSetup) SetReadKey(encLevel qtls.EncryptionLevel, suite *qtls.Ciph
 	case qtls.EncryptionHandshake:
 		h.readEncLevel = protocol.EncryptionHandshake
 		h.handshakeOpener = newHandshakeOpener(
-			createAEAD(suite, trafficSecret),
-			newHeaderProtector(suite, trafficSecret, true),
+			createAEAD(suite, trafficSecret, h.version),
+			newHeaderProtector(suite, trafficSecret, true, h.version),
 			h.dropInitialKeys,
 			h.perspective,
 		)
@@ -612,8 +612,8 @@ func (h *cryptoSetup) SetWriteKey(encLevel qtls.EncryptionLevel, suite *qtls.Cip
 			panic("Received 0-RTT write key for the server")
 		}
 		h.zeroRTTSealer = newLongHeaderSealer(
-			createAEAD(suite, trafficSecret),
-			newHeaderProtector(suite, trafficSecret, true),
+			createAEAD(suite, trafficSecret, h.version),
+			newHeaderProtector(suite, trafficSecret, true, h.version),
 		)
 		h.mutex.Unlock()
 		h.logger.Debugf("Installed 0-RTT Write keys (using %s)", tls.CipherSuiteName(suite.ID))
@@ -624,8 +624,8 @@ func (h *cryptoSetup) SetWriteKey(encLevel qtls.EncryptionLevel, suite *qtls.Cip
 	case qtls.EncryptionHandshake:
 		h.writeEncLevel = protocol.EncryptionHandshake
 		h.handshakeSealer = newHandshakeSealer(
-			createAEAD(suite, trafficSecret),
-			newHeaderProtector(suite, trafficSecret, true),
+			createAEAD(suite, trafficSecret, h.version),
+			newHeaderProtector(suite, trafficSecret, true, h.version),
 			h.dropInitialKeys,
 			h.perspective,
 		)
