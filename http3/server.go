@@ -44,7 +44,7 @@ const (
 )
 
 func versionToALPN(v protocol.VersionNumber) string {
-	if v == protocol.Version1 {
+	if v == protocol.Version1 || v == protocol.Version2 {
 		return nextProtoH3
 	}
 	if v == protocol.VersionTLS || v == protocol.VersionDraft29 {
@@ -63,11 +63,9 @@ func ConfigureTLSConfig(tlsConf *tls.Config) *tls.Config {
 	return &tls.Config{
 		GetConfigForClient: func(ch *tls.ClientHelloInfo) (*tls.Config, error) {
 			// determine the ALPN from the QUIC version used
-			proto := nextProtoH3Draft29
+			proto := nextProtoH3
 			if qconn, ok := ch.Conn.(handshake.ConnWithVersion); ok {
-				if qconn.GetQUICVersion() == protocol.Version1 {
-					proto = nextProtoH3
-				}
+				proto = versionToALPN(qconn.GetQUICVersion())
 			}
 			config := tlsConf
 			if tlsConf.GetConfigForClient != nil {
