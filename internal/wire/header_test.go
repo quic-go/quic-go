@@ -11,13 +11,6 @@ import (
 )
 
 var _ = Describe("Header Parsing", func() {
-	appendVersion := func(data []byte, v protocol.VersionNumber) []byte {
-		offset := len(data)
-		data = append(data, []byte{0, 0, 0, 0}...)
-		binary.BigEndian.PutUint32(data[offset:], uint32(v))
-		return data
-	}
-
 	Context("Parsing the Connection ID", func() {
 		It("parses the connection ID of a long header packet", func() {
 			buf := &bytes.Buffer{}
@@ -94,19 +87,27 @@ var _ = Describe("Header Parsing", func() {
 	})
 
 	Context("identifying 0-RTT packets", func() {
-		var zeroRTTHeader []byte
-
-		BeforeEach(func() {
-			zeroRTTHeader = make([]byte, 5)
-			zeroRTTHeader[0] = 0x80 | 0x1<<4
+		It("recognizes 0-RTT packets, for QUIC v1", func() {
+			zeroRTTHeader := make([]byte, 5)
+			zeroRTTHeader[0] = 0x80 | 0b01<<4
 			binary.BigEndian.PutUint32(zeroRTTHeader[1:], uint32(protocol.Version1))
-		})
 
-		It("recognizes 0-RTT packets", func() {
+			Expect(Is0RTTPacket(zeroRTTHeader)).To(BeTrue())
 			Expect(Is0RTTPacket(zeroRTTHeader[:4])).To(BeFalse())                           // too short
 			Expect(Is0RTTPacket([]byte{zeroRTTHeader[0], 1, 2, 3, 4})).To(BeFalse())        // unknown version
 			Expect(Is0RTTPacket([]byte{zeroRTTHeader[0] | 0x80, 1, 2, 3, 4})).To(BeFalse()) // short header
+			Expect(Is0RTTPacket(append(zeroRTTHeader, []byte("foobar")...))).To(BeTrue())
+		})
+
+		It("recognizes 0-RTT packets, for QUIC v2", func() {
+			zeroRTTHeader := make([]byte, 5)
+			zeroRTTHeader[0] = 0x80 | 0b10<<4
+			binary.BigEndian.PutUint32(zeroRTTHeader[1:], uint32(protocol.Version2))
+
 			Expect(Is0RTTPacket(zeroRTTHeader)).To(BeTrue())
+			Expect(Is0RTTPacket(zeroRTTHeader[:4])).To(BeFalse())                           // too short
+			Expect(Is0RTTPacket([]byte{zeroRTTHeader[0], 1, 2, 3, 4})).To(BeFalse())        // unknown version
+			Expect(Is0RTTPacket([]byte{zeroRTTHeader[0] | 0x80, 1, 2, 3, 4})).To(BeFalse()) // short header
 			Expect(Is0RTTPacket(append(zeroRTTHeader, []byte("foobar")...))).To(BeTrue())
 		})
 	})
@@ -245,8 +246,8 @@ var _ = Describe("Header Parsing", func() {
 			Expect(b.Len()).To(BeZero())
 		})
 
-		It("parses a Retry packet", func() {
-			data := []byte{0xc0 | 0x3<<4 | (10 - 3) /* connection ID length */}
+		It("parses a Retry packet, for QUIC v1", func() {
+			data := []byte{0xc0 | 0b11<<4 | (10 - 3) /* connection ID length */}
 			data = appendVersion(data, protocol.Version1)
 			data = append(data, []byte{6}...)                             // dest conn ID len
 			data = append(data, []byte{6, 5, 4, 3, 2, 1}...)              // dest conn ID
@@ -257,6 +258,27 @@ var _ = Describe("Header Parsing", func() {
 			hdr, pdata, rest, err := ParsePacket(data, 0)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(hdr.Type).To(Equal(protocol.PacketTypeRetry))
+			Expect(hdr.Version).To(Equal(protocol.Version1))
+			Expect(hdr.DestConnectionID).To(Equal(protocol.ConnectionID{6, 5, 4, 3, 2, 1}))
+			Expect(hdr.SrcConnectionID).To(Equal(protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}))
+			Expect(hdr.Token).To(Equal([]byte("foobar")))
+			Expect(pdata).To(Equal(data))
+			Expect(rest).To(BeEmpty())
+		})
+
+		It("parses a Retry packet, for QUIC v2", func() {
+			data := []byte{0xc0 | 0b00<<4 | (10 - 3) /* connection ID length */}
+			data = appendVersion(data, protocol.Version2)
+			data = append(data, []byte{6}...)                             // dest conn ID len
+			data = append(data, []byte{6, 5, 4, 3, 2, 1}...)              // dest conn ID
+			data = append(data, []byte{10}...)                            // src conn ID len
+			data = append(data, []byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}...) // source connection ID
+			data = append(data, []byte{'f', 'o', 'o', 'b', 'a', 'r'}...)  // token
+			data = append(data, []byte{16, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1}...)
+			hdr, pdata, rest, err := ParsePacket(data, 0)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(hdr.Type).To(Equal(protocol.PacketTypeRetry))
+			Expect(hdr.Version).To(Equal(protocol.Version2))
 			Expect(hdr.DestConnectionID).To(Equal(protocol.ConnectionID{6, 5, 4, 3, 2, 1}))
 			Expect(hdr.SrcConnectionID).To(Equal(protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}))
 			Expect(hdr.Token).To(Equal([]byte("foobar")))
