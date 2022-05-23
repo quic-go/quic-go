@@ -23,6 +23,7 @@ const (
 	VersionDraft29 = protocol.VersionDraft29
 	// Version1 is RFC 9000
 	Version1 = protocol.Version1
+	Version2 = protocol.Version2
 )
 
 // A Token can be used to verify the ownership of the client address.
