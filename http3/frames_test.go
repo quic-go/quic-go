@@ -2,6 +2,7 @@ package http3
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"io"
 
@@ -10,6 +11,10 @@ import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 )
+
+type errReader struct{ err error }
+
+func (e errReader) Read([]byte) (int, error) { return 0, e.err }
 
 var _ = Describe("Frames", func() {
 	appendVarInt := func(b []byte, val uint64) []byte {
@@ -189,13 +194,27 @@ var _ = Describe("Frames", func() {
 			buf.Write(customFrameContents)
 
 			var called bool
-			_, err := parseNextFrame(buf, func(ft FrameType) (hijacked bool, err error) {
+			_, err := parseNextFrame(buf, func(ft FrameType, e error) (hijacked bool, err error) {
+				Expect(e).ToNot(HaveOccurred())
 				Expect(ft).To(BeEquivalentTo(1337))
 				called = true
 				b := make([]byte, 3)
 				_, err = io.ReadFull(buf, b)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(string(b)).To(Equal("foo"))
+				return true, nil
+			})
+			Expect(err).To(MatchError(errHijacked))
+			Expect(called).To(BeTrue())
+		})
+
+		It("passes on errors that occur when reading the frame type", func() {
+			testErr := errors.New("test error")
+			var called bool
+			_, err := parseNextFrame(errReader{err: testErr}, func(ft FrameType, e error) (hijacked bool, err error) {
+				Expect(e).To(MatchError(testErr))
+				Expect(ft).To(BeZero())
+				called = true
 				return true, nil
 			})
 			Expect(err).To(MatchError(errHijacked))
@@ -212,7 +231,8 @@ var _ = Describe("Frames", func() {
 			buf.WriteString("foobar")
 
 			var called bool
-			frame, err := parseNextFrame(buf, func(ft FrameType) (hijacked bool, err error) {
+			frame, err := parseNextFrame(buf, func(ft FrameType, e error) (hijacked bool, err error) {
+				Expect(e).ToNot(HaveOccurred())
 				Expect(ft).To(BeEquivalentTo(1337))
 				called = true
 				return false, nil

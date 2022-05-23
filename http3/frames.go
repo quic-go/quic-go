@@ -14,7 +14,7 @@ import (
 // FrameType is the frame type of a HTTP/3 frame
 type FrameType uint64
 
-type unknownFrameHandlerFunc func(FrameType) (processed bool, err error)
+type unknownFrameHandlerFunc func(FrameType, error) (processed bool, err error)
 
 type frame interface{}
 
@@ -25,11 +25,20 @@ func parseNextFrame(r io.Reader, unknownFrameHandler unknownFrameHandlerFunc) (f
 	for {
 		t, err := quicvarint.Read(qr)
 		if err != nil {
+			if unknownFrameHandler != nil {
+				hijacked, err := unknownFrameHandler(0, err)
+				if err != nil {
+					return nil, err
+				}
+				if hijacked {
+					return nil, errHijacked
+				}
+			}
 			return nil, err
 		}
 		// Call the unknownFrameHandler for frames not defined in the HTTP/3 spec
 		if t > 0xd && unknownFrameHandler != nil {
-			hijacked, err := unknownFrameHandler(FrameType(t))
+			hijacked, err := unknownFrameHandler(FrameType(t), nil)
 			if err != nil {
 				return nil, err
 			}

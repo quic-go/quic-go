@@ -178,13 +178,17 @@ type Server struct {
 
 	// StreamHijacker, when set, is called for the first unknown frame parsed on a bidirectional stream.
 	// It is called right after parsing the frame type.
+	// If parsing the frame type fails, the error is passed to the callback.
+	// In that case, the frame type will not be set.
 	// Callers can either ignore the frame and return control of the stream back to HTTP/3
 	// (by returning hijacked false).
 	// Alternatively, callers can take over the QUIC stream (by returning hijacked true).
-	StreamHijacker func(FrameType, quic.Connection, quic.Stream) (hijacked bool, err error)
+	StreamHijacker func(FrameType, quic.Connection, quic.Stream, error) (hijacked bool, err error)
 
 	// UniStreamHijacker, when set, is called for unknown unidirectional stream of unknown stream type.
-	UniStreamHijacker func(StreamType, quic.Connection, quic.ReceiveStream) (hijacked bool)
+	// If parsing the stream type fails, the error is passed to the callback.
+	// In that case, the stream type will not be set.
+	UniStreamHijacker func(StreamType, quic.Connection, quic.ReceiveStream, error) (hijacked bool)
 
 	mutex     sync.RWMutex
 	listeners map[*quic.EarlyListener]listenerInfo
@@ -457,6 +461,9 @@ func (s *Server) handleUnidirectionalStreams(conn quic.EarlyConnection) {
 		go func(str quic.ReceiveStream) {
 			streamType, err := quicvarint.Read(quicvarint.NewReader(str))
 			if err != nil {
+				if s.UniStreamHijacker != nil && s.UniStreamHijacker(StreamType(streamType), conn, str, err) {
+					return
+				}
 				s.logger.Debugf("reading stream type on stream %d failed: %s", str.StreamID(), err)
 				return
 			}
@@ -471,7 +478,7 @@ func (s *Server) handleUnidirectionalStreams(conn quic.EarlyConnection) {
 				conn.CloseWithError(quic.ApplicationErrorCode(errorStreamCreationError), "")
 				return
 			default:
-				if s.UniStreamHijacker != nil && s.UniStreamHijacker(StreamType(streamType), conn, str) {
+				if s.UniStreamHijacker != nil && s.UniStreamHijacker(StreamType(streamType), conn, str, nil) {
 					return
 				}
 				str.CancelRead(quic.StreamErrorCode(errorStreamCreationError))
@@ -510,9 +517,7 @@ func (s *Server) maxHeaderBytes() uint64 {
 func (s *Server) handleRequest(conn quic.Connection, str quic.Stream, decoder *qpack.Decoder, onFrameError func()) requestError {
 	var ufh unknownFrameHandlerFunc
 	if s.StreamHijacker != nil {
-		ufh = func(ft FrameType) (processed bool, err error) {
-			return s.StreamHijacker(ft, conn, str)
-		}
+		ufh = func(ft FrameType, e error) (processed bool, err error) { return s.StreamHijacker(ft, conn, str, e) }
 	}
 	frame, err := parseNextFrame(str, ufh)
 	if err != nil {
