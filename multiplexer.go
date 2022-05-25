@@ -97,7 +97,8 @@ func (m *connMultiplexer) RemoveConn(c indexableConn) error {
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
 
-	connIndex := c.LocalAddr().Network() + " " + c.LocalAddr().String()
+	laddr := c.LocalAddr()
+	connIndex := laddr.Network() + " " + laddr.String()
 	if _, ok := m.conns[connIndex]; !ok {
 		return fmt.Errorf("cannote remove connection, connection is unknown")
 	}

@@ -1,6 +1,7 @@
 package quic
 
 import (
+	"errors"
 	"net"
 
 	"github.com/golang/mock/gomock"
@@ -16,32 +17,48 @@ type testConn struct {
 }
 
 var _ = Describe("Multiplexer", func() {
+	var (
+		conn        *MockPacketConn
+		testRunning chan struct{}
+	)
+	localAddr := &net.UDPAddr{IP: net.IPv4(1, 2, 3, 4), Port: 1234}
+
+	BeforeEach(func() {
+		testRunning = make(chan struct{})
+		conn = NewMockPacketConn(mockCtrl)
+		conn.EXPECT().ReadFrom(gomock.Any()).DoAndReturn(func([]byte) (int, net.Addr, error) {
+			<-testRunning
+			return 0, nil, errors.New("test done")
+		}).MaxTimes(1)
+	})
+
+	AfterEach(func() {
+		conn.EXPECT().LocalAddr().Return(localAddr)
+		close(testRunning)
+	})
+
 	It("adds a new packet conn ", func() {
-		conn := NewMockPacketConn(mockCtrl)
-		conn.EXPECT().ReadFrom(gomock.Any()).Do(func([]byte) { <-(make(chan struct{})) }).MaxTimes(1)
-		conn.EXPECT().LocalAddr().Return(&net.UDPAddr{IP: net.IPv4(1, 2, 3, 4), Port: 1234})
+		done := make(chan struct{})
+		conn.EXPECT().LocalAddr().Return(localAddr).Do(func() { close(done) })
 		_, err := getMultiplexer().AddConn(conn, 8, nil, nil)
 		Expect(err).ToNot(HaveOccurred())
+		Eventually(done).Should(BeClosed())
 	})
 
 	It("recognizes when the same connection is added twice", func() {
-		pconn := NewMockPacketConn(mockCtrl)
-		pconn.EXPECT().LocalAddr().Return(&net.UDPAddr{IP: net.IPv4(1, 2, 3, 4), Port: 4321}).Times(2)
-		pconn.EXPECT().ReadFrom(gomock.Any()).Do(func([]byte) { <-(make(chan struct{})) }).MaxTimes(1)
-		conn := testConn{PacketConn: pconn}
+		conn.EXPECT().LocalAddr().Return(localAddr).Times(2)
+		tconn := testConn{PacketConn: conn}
 		tracer := mocklogging.NewMockTracer(mockCtrl)
-		_, err := getMultiplexer().AddConn(conn, 8, []byte("foobar"), tracer)
+		_, err := getMultiplexer().AddConn(tconn, 8, []byte("foobar"), tracer)
 		Expect(err).ToNot(HaveOccurred())
-		conn.counter++
-		_, err = getMultiplexer().AddConn(conn, 8, []byte("foobar"), tracer)
+		tconn.counter++
+		_, err = getMultiplexer().AddConn(tconn, 8, []byte("foobar"), tracer)
 		Expect(err).ToNot(HaveOccurred())
 		Expect(getMultiplexer().(*connMultiplexer).conns).To(HaveLen(1))
 	})
 
 	It("errors when adding an existing conn with a different connection ID length", func() {
-		conn := NewMockPacketConn(mockCtrl)
-		conn.EXPECT().ReadFrom(gomock.Any()).Do(func([]byte) { <-(make(chan struct{})) }).MaxTimes(1)
-		conn.EXPECT().LocalAddr().Return(&net.UDPAddr{IP: net.IPv4(1, 2, 3, 4), Port: 1234}).Times(2)
+		conn.EXPECT().LocalAddr().Return(localAddr).Times(2)
 		_, err := getMultiplexer().AddConn(conn, 5, nil, nil)
 		Expect(err).ToNot(HaveOccurred())
 		_, err = getMultiplexer().AddConn(conn, 6, nil, nil)
@@ -49,9 +66,7 @@ var _ = Describe("Multiplexer", func() {
 	})
 
 	It("errors when adding an existing conn with a different stateless rest key", func() {
-		conn := NewMockPacketConn(mockCtrl)
-		conn.EXPECT().ReadFrom(gomock.Any()).Do(func([]byte) { <-(make(chan struct{})) }).MaxTimes(1)
-		conn.EXPECT().LocalAddr().Return(&net.UDPAddr{IP: net.IPv4(1, 2, 3, 4), Port: 1234}).Times(2)
+		conn.EXPECT().LocalAddr().Return(localAddr).Times(2)
 		_, err := getMultiplexer().AddConn(conn, 7, []byte("foobar"), nil)
 		Expect(err).ToNot(HaveOccurred())
 		_, err = getMultiplexer().AddConn(conn, 7, []byte("raboof"), nil)
@@ -59,9 +74,7 @@ var _ = Describe("Multiplexer", func() {
 	})
 
 	It("errors when adding an existing conn with different tracers", func() {
-		conn := NewMockPacketConn(mockCtrl)
-		conn.EXPECT().ReadFrom(gomock.Any()).Do(func([]byte) { <-(make(chan struct{})) }).MaxTimes(1)
-		conn.EXPECT().LocalAddr().Return(&net.UDPAddr{IP: net.IPv4(1, 2, 3, 4), Port: 1234}).Times(2)
+		conn.EXPECT().LocalAddr().Return(localAddr).Times(2)
 		_, err := getMultiplexer().AddConn(conn, 7, nil, mocklogging.NewMockTracer(mockCtrl))
 		Expect(err).ToNot(HaveOccurred())
 		_, err = getMultiplexer().AddConn(conn, 7, nil, mocklogging.NewMockTracer(mockCtrl))
