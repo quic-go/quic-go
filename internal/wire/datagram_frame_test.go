@@ -18,7 +18,7 @@ var _ = Describe("STREAM frame", func() {
 			data = append(data, encodeVarInt(0x6)...) // length
 			data = append(data, []byte("foobar")...)
 			r := bytes.NewReader(data)
-			frame, err := parseDatagramFrame(r, versionIETFFrames)
+			frame, err := parseDatagramFrame(r, protocol.Version1)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(frame.Data).To(Equal([]byte("foobar")))
 			Expect(frame.DataLenPresent).To(BeTrue())
@@ -29,7 +29,7 @@ var _ = Describe("STREAM frame", func() {
 			data := []byte{0x30}
 			data = append(data, []byte("Lorem ipsum dolor sit amet")...)
 			r := bytes.NewReader(data)
-			frame, err := parseDatagramFrame(r, versionIETFFrames)
+			frame, err := parseDatagramFrame(r, protocol.Version1)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(frame.Data).To(Equal([]byte("Lorem ipsum dolor sit amet")))
 			Expect(frame.DataLenPresent).To(BeFalse())
@@ -41,7 +41,7 @@ var _ = Describe("STREAM frame", func() {
 			data = append(data, encodeVarInt(0x6)...) // length
 			data = append(data, []byte("fooba")...)
 			r := bytes.NewReader(data)
-			_, err := parseDatagramFrame(r, versionIETFFrames)
+			_, err := parseDatagramFrame(r, protocol.Version1)
 			Expect(err).To(MatchError(io.EOF))
 		})
 
@@ -49,10 +49,10 @@ var _ = Describe("STREAM frame", func() {
 			data := []byte{0x30 ^ 0x1}
 			data = append(data, encodeVarInt(6)...) // length
 			data = append(data, []byte("foobar")...)
-			_, err := parseDatagramFrame(bytes.NewReader(data), versionIETFFrames)
+			_, err := parseDatagramFrame(bytes.NewReader(data), protocol.Version1)
 			Expect(err).NotTo(HaveOccurred())
 			for i := range data {
-				_, err := parseDatagramFrame(bytes.NewReader(data[0:i]), versionIETFFrames)
+				_, err := parseDatagramFrame(bytes.NewReader(data[0:i]), protocol.Version1)
 				Expect(err).To(MatchError(io.EOF))
 			}
 		})
@@ -65,7 +65,7 @@ var _ = Describe("STREAM frame", func() {
 				Data:           []byte("foobar"),
 			}
 			buf := &bytes.Buffer{}
-			Expect(f.Write(buf, versionIETFFrames)).To(Succeed())
+			Expect(f.Write(buf, protocol.Version1)).To(Succeed())
 			expected := []byte{0x30 ^ 0x1}
 			expected = append(expected, encodeVarInt(0x6)...)
 			expected = append(expected, []byte("foobar")...)
@@ -75,7 +75,7 @@ var _ = Describe("STREAM frame", func() {
 		It("writes a frame without length", func() {
 			f := &DatagramFrame{Data: []byte("Lorem ipsum")}
 			buf := &bytes.Buffer{}
-			Expect(f.Write(buf, versionIETFFrames)).To(Succeed())
+			Expect(f.Write(buf, protocol.Version1)).To(Succeed())
 			expected := []byte{0x30}
 			expected = append(expected, []byte("Lorem ipsum")...)
 			Expect(buf.Bytes()).To(Equal(expected))
@@ -88,12 +88,12 @@ var _ = Describe("STREAM frame", func() {
 				DataLenPresent: true,
 				Data:           []byte("foobar"),
 			}
-			Expect(f.Length(versionIETFFrames)).To(Equal(1 + quicvarint.Len(6) + 6))
+			Expect(f.Length(protocol.Version1)).To(Equal(1 + quicvarint.Len(6) + 6))
 		})
 
 		It("has the right length for a frame without length", func() {
 			f := &DatagramFrame{Data: []byte("foobar")}
-			Expect(f.Length(versionIETFFrames)).To(Equal(protocol.ByteCount(1 + 6)))
+			Expect(f.Length(protocol.Version1)).To(Equal(protocol.ByteCount(1 + 6)))
 		})
 	})
 
@@ -107,16 +107,16 @@ var _ = Describe("STREAM frame", func() {
 			for i := 1; i < 3000; i++ {
 				b.Reset()
 				f.Data = nil
-				maxDataLen := f.MaxDataLen(protocol.ByteCount(i), versionIETFFrames)
+				maxDataLen := f.MaxDataLen(protocol.ByteCount(i), protocol.Version1)
 				if maxDataLen == 0 { // 0 means that no valid STREAM frame can be written
 					// check that writing a minimal size STREAM frame (i.e. with 1 byte data) is actually larger than the desired size
 					f.Data = []byte{0}
-					Expect(f.Write(b, versionIETFFrames)).To(Succeed())
+					Expect(f.Write(b, protocol.Version1)).To(Succeed())
 					Expect(b.Len()).To(BeNumerically(">", i))
 					continue
 				}
 				f.Data = data[:int(maxDataLen)]
-				Expect(f.Write(b, versionIETFFrames)).To(Succeed())
+				Expect(f.Write(b, protocol.Version1)).To(Succeed())
 				Expect(b.Len()).To(Equal(i))
 			}
 		})
@@ -129,16 +129,16 @@ var _ = Describe("STREAM frame", func() {
 			for i := 1; i < 3000; i++ {
 				b.Reset()
 				f.Data = nil
-				maxDataLen := f.MaxDataLen(protocol.ByteCount(i), versionIETFFrames)
+				maxDataLen := f.MaxDataLen(protocol.ByteCount(i), protocol.Version1)
 				if maxDataLen == 0 { // 0 means that no valid STREAM frame can be written
 					// check that writing a minimal size STREAM frame (i.e. with 1 byte data) is actually larger than the desired size
 					f.Data = []byte{0}
-					Expect(f.Write(b, versionIETFFrames)).To(Succeed())
+					Expect(f.Write(b, protocol.Version1)).To(Succeed())
 					Expect(b.Len()).To(BeNumerically(">", i))
 					continue
 				}
 				f.Data = data[:int(maxDataLen)]
-				Expect(f.Write(b, versionIETFFrames)).To(Succeed())
+				Expect(f.Write(b, protocol.Version1)).To(Succeed())
 				// There's *one* pathological case, where a data length of x can be encoded into 1 byte
 				// but a data lengths of x+1 needs 2 bytes
 				// In that case, it's impossible to create a STREAM frame of the desired size
