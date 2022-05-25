@@ -28,10 +28,7 @@ import (
 )
 
 var _ = Describe("Server", func() {
-	var (
-		conn    *MockPacketConn
-		tlsConf *tls.Config
-	)
+	var tlsConf *tls.Config
 
 	getPacket := func(hdr *wire.Header, p []byte) *receivedPacket {
 		buffer := getPacketBuffer()
@@ -88,9 +85,6 @@ var _ = Describe("Server", func() {
 	}
 
 	BeforeEach(func() {
-		conn = NewMockPacketConn(mockCtrl)
-		conn.EXPECT().LocalAddr().Return(&net.UDPAddr{}).AnyTimes()
-		conn.EXPECT().ReadFrom(gomock.Any()).Do(func(_ []byte) { <-(make(chan struct{})) }).MaxTimes(1)
 		tlsConf = testdata.GetTLSConfig()
 		tlsConf.NextProtos = []string{"proto1"}
 	})
@@ -108,6 +102,9 @@ var _ = Describe("Server", func() {
 	})
 
 	It("fills in default values if options are not set in the Config", func() {
+		conn, err := net.ListenUDP("udp", nil)
+		Expect(err).ToNot(HaveOccurred())
+		defer conn.Close()
 		ln, err := Listen(conn, tlsConf, &Config{})
 		Expect(err).ToNot(HaveOccurred())
 		server := ln.(*baseServer)
@@ -131,6 +128,9 @@ var _ = Describe("Server", func() {
 			KeepAlivePeriod:      5 * time.Second,
 			StatelessResetKey:    []byte("foobar"),
 		}
+		conn, err := net.ListenUDP("udp", nil)
+		Expect(err).ToNot(HaveOccurred())
+		defer conn.Close()
 		ln, err := Listen(conn, tlsConf, &config)
 		Expect(err).ToNot(HaveOccurred())
 		server := ln.(*baseServer)
@@ -168,13 +168,22 @@ var _ = Describe("Server", func() {
 
 	Context("server accepting connections that completed the handshake", func() {
 		var (
-			serv   *baseServer
-			phm    *MockPacketHandlerManager
-			tracer *mocklogging.MockTracer
+			conn        *MockPacketConn
+			serv        *baseServer
+			phm         *MockPacketHandlerManager
+			testRunning chan struct{}
+			tracer      *mocklogging.MockTracer
 		)
 
 		BeforeEach(func() {
 			tracer = mocklogging.NewMockTracer(mockCtrl)
+			testRunning = make(chan struct{})
+			conn = NewMockPacketConn(mockCtrl)
+			conn.EXPECT().LocalAddr().Return(&net.UDPAddr{}).AnyTimes()
+			conn.EXPECT().ReadFrom(gomock.Any()).DoAndReturn(func(_ []byte) (int, net.Addr, error) {
+				<-testRunning
+				return 0, nil, errors.New("test done")
+			}).MaxTimes(1)
 			ln, err := Listen(conn, tlsConf, &Config{Tracer: tracer})
 			Expect(err).ToNot(HaveOccurred())
 			serv = ln.(*baseServer)
@@ -183,6 +192,7 @@ var _ = Describe("Server", func() {
 		})
 
 		AfterEach(func() {
+			close(testRunning)
 			phm.EXPECT().CloseServer().MaxTimes(1)
 			serv.Close()
 		})
@@ -962,11 +972,20 @@ var _ = Describe("Server", func() {
 
 	Context("server accepting connections that haven't completed the handshake", func() {
 		var (
-			serv *earlyServer
-			phm  *MockPacketHandlerManager
+			conn        *MockPacketConn
+			testRunning chan struct{}
+			serv        *earlyServer
+			phm         *MockPacketHandlerManager
 		)
 
 		BeforeEach(func() {
+			testRunning = make(chan struct{})
+			conn = NewMockPacketConn(mockCtrl)
+			conn.EXPECT().LocalAddr().Return(&net.UDPAddr{}).AnyTimes()
+			conn.EXPECT().ReadFrom(gomock.Any()).DoAndReturn(func(_ []byte) (int, net.Addr, error) {
+				<-testRunning
+				return 0, nil, errors.New("test done")
+			}).MaxTimes(1)
 			ln, err := ListenEarly(conn, tlsConf, nil)
 			Expect(err).ToNot(HaveOccurred())
 			serv = ln.(*earlyServer)
@@ -975,6 +994,7 @@ var _ = Describe("Server", func() {
 		})
 
 		AfterEach(func() {
+			close(testRunning)
 			phm.EXPECT().CloseServer().MaxTimes(1)
 			serv.Close()
 		})
