@@ -33,10 +33,11 @@ var _ = BeforeSuite(func() {
 })
 
 var _ = AfterEach(func() {
-	mockCtrl.Finish()
 	Eventually(areConnsRunning).Should(BeFalse())
 	Eventually(areClosedConnsRunning).Should(BeFalse())
 	Eventually(areServersRunning).Should(BeFalse())
+	Eventually(arePacketHandlerMapsRunning).Should(BeFalse())
+	mockCtrl.Finish()
 })
 
 func areConnsRunning() bool {
@@ -55,4 +56,10 @@ func areServersRunning() bool {
 	var b bytes.Buffer
 	pprof.Lookup("goroutine").WriteTo(&b, 1)
 	return strings.Contains(b.String(), "quic-go.(*baseServer).run")
+}
+
+func arePacketHandlerMapsRunning() bool {
+	var b bytes.Buffer
+	pprof.Lookup("goroutine").WriteTo(&b, 1)
+	return strings.Contains(b.String(), "quic-go.(*packetHandlerMap).listen")
 }
