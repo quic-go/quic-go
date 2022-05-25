@@ -1,8 +1,11 @@
 package quic
 
 import (
+	"bytes"
 	"io/ioutil"
 	"log"
+	"runtime/pprof"
+	"strings"
 	"sync"
 	"testing"
 
@@ -31,4 +34,18 @@ var _ = BeforeSuite(func() {
 
 var _ = AfterEach(func() {
 	mockCtrl.Finish()
+	Eventually(areConnsRunning).Should(BeFalse())
+	Eventually(areClosedConnsRunning).Should(BeFalse())
 })
+
+func areConnsRunning() bool {
+	var b bytes.Buffer
+	pprof.Lookup("goroutine").WriteTo(&b, 1)
+	return strings.Contains(b.String(), "quic-go.(*connection).run")
+}
+
+func areClosedConnsRunning() bool {
+	var b bytes.Buffer
+	pprof.Lookup("goroutine").WriteTo(&b, 1)
+	return strings.Contains(b.String(), "quic-go.(*closedLocalConn).run")
+}

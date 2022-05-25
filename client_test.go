@@ -84,7 +84,6 @@ var _ = Describe("Client", func() {
 		if s, ok := cl.conn.(*connection); ok {
 			s.shutdown()
 		}
-		Eventually(areConnsRunning).Should(BeFalse())
 	})
 
 	Context("Dialing", func() {

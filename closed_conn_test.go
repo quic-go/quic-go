@@ -23,10 +23,6 @@ var _ = Describe("Closed local connection", func() {
 		conn = newClosedLocalConn(mconn, []byte("close"), protocol.PerspectiveClient, utils.DefaultLogger)
 	})
 
-	AfterEach(func() {
-		Eventually(areClosedConnsRunning).Should(BeFalse())
-	})
-
 	It("tells its perspective", func() {
 		Expect(conn.getPerspective()).To(Equal(protocol.PerspectiveClient))
 		// stop the connection

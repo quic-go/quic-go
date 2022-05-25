@@ -9,8 +9,6 @@ import (
 	"fmt"
 	"io"
 	"net"
-	"runtime/pprof"
-	"strings"
 	"time"
 
 	"github.com/lucas-clemente/quic-go/internal/ackhandler"
@@ -30,18 +28,6 @@ import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 )
-
-func areConnsRunning() bool {
-	var b bytes.Buffer
-	pprof.Lookup("goroutine").WriteTo(&b, 1)
-	return strings.Contains(b.String(), "quic-go.(*connection).run")
-}
-
-func areClosedConnsRunning() bool {
-	var b bytes.Buffer
-	pprof.Lookup("goroutine").WriteTo(&b, 1)
-	return strings.Contains(b.String(), "quic-go.(*closedLocalConn).run")
-}
 
 var _ = Describe("Connection", func() {
 	var (
@@ -120,10 +106,6 @@ var _ = Describe("Connection", func() {
 		conn.cryptoStreamHandler = cryptoSetup
 		conn.handshakeComplete = true
 		conn.idleTimeout = time.Hour
-	})
-
-	AfterEach(func() {
-		Eventually(areConnsRunning).Should(BeFalse())
 	})
 
 	Context("frame handling", func() {
