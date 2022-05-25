@@ -36,6 +36,7 @@ var _ = AfterEach(func() {
 	mockCtrl.Finish()
 	Eventually(areConnsRunning).Should(BeFalse())
 	Eventually(areClosedConnsRunning).Should(BeFalse())
+	Eventually(areServersRunning).Should(BeFalse())
 })
 
 func areConnsRunning() bool {
@@ -48,4 +49,10 @@ func areClosedConnsRunning() bool {
 	var b bytes.Buffer
 	pprof.Lookup("goroutine").WriteTo(&b, 1)
 	return strings.Contains(b.String(), "quic-go.(*closedLocalConn).run")
+}
+
+func areServersRunning() bool {
+	var b bytes.Buffer
+	pprof.Lookup("goroutine").WriteTo(&b, 1)
+	return strings.Contains(b.String(), "quic-go.(*baseServer).run")
 }

@@ -8,8 +8,6 @@ import (
 	"errors"
 	"net"
 	"reflect"
-	"runtime/pprof"
-	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -28,12 +26,6 @@ import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 )
-
-func areServersRunning() bool {
-	var b bytes.Buffer
-	pprof.Lookup("goroutine").WriteTo(&b, 1)
-	return strings.Contains(b.String(), "quic-go.(*baseServer).run")
-}
 
 var _ = Describe("Server", func() {
 	var (
@@ -101,10 +93,6 @@ var _ = Describe("Server", func() {
 		conn.EXPECT().ReadFrom(gomock.Any()).Do(func(_ []byte) { <-(make(chan struct{})) }).MaxTimes(1)
 		tlsConf = testdata.GetTLSConfig()
 		tlsConf.NextProtos = []string{"proto1"}
-	})
-
-	AfterEach(func() {
-		Eventually(areServersRunning).Should(BeFalse())
 	})
 
 	It("errors when no tls.Config is given", func() {
