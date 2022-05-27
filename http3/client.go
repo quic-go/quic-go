@@ -43,8 +43,8 @@ type roundTripperOpts struct {
 	EnableDatagram     bool
 	MaxHeaderBytes     int64
 	AdditionalSettings map[uint64]uint64
-	StreamHijacker     func(FrameType, quic.Connection, quic.Stream) (hijacked bool, err error)
-	UniStreamHijacker  func(StreamType, quic.Connection, quic.ReceiveStream) (hijacked bool)
+	StreamHijacker     func(FrameType, quic.Connection, quic.Stream, error) (hijacked bool, err error)
+	UniStreamHijacker  func(StreamType, quic.Connection, quic.ReceiveStream, error) (hijacked bool)
 }
 
 // client is a HTTP3 client doing requests
@@ -151,18 +151,16 @@ func (c *client) handleBidirectionalStreams() {
 			return
 		}
 		go func(str quic.Stream) {
-			for {
-				_, err := parseNextFrame(str, func(ft FrameType) (processed bool, err error) {
-					return c.opts.StreamHijacker(ft, c.conn, str)
-				})
-				if err == errHijacked {
-					return
-				}
-				if err != nil {
-					c.logger.Debugf("error handling stream: %s", err)
-				}
-				c.conn.CloseWithError(quic.ApplicationErrorCode(errorFrameUnexpected), "received HTTP/3 frame on bidirectional stream")
+			_, err := parseNextFrame(str, func(ft FrameType, e error) (processed bool, err error) {
+				return c.opts.StreamHijacker(ft, c.conn, str, e)
+			})
+			if err == errHijacked {
+				return
 			}
+			if err != nil {
+				c.logger.Debugf("error handling stream: %s", err)
+			}
+			c.conn.CloseWithError(quic.ApplicationErrorCode(errorFrameUnexpected), "received HTTP/3 frame on bidirectional stream")
 		}(str)
 	}
 }
@@ -178,6 +176,9 @@ func (c *client) handleUnidirectionalStreams() {
 		go func(str quic.ReceiveStream) {
 			streamType, err := quicvarint.Read(quicvarint.NewReader(str))
 			if err != nil {
+				if c.opts.UniStreamHijacker != nil && c.opts.UniStreamHijacker(StreamType(streamType), c.conn, str, err) {
+					return
+				}
 				c.logger.Debugf("reading stream type on stream %d failed: %s", str.StreamID(), err)
 				return
 			}
@@ -193,7 +194,7 @@ func (c *client) handleUnidirectionalStreams() {
 				c.conn.CloseWithError(quic.ApplicationErrorCode(errorIDError), "")
 				return
 			default:
-				if c.opts.UniStreamHijacker != nil && c.opts.UniStreamHijacker(StreamType(streamType), c.conn, str) {
+				if c.opts.UniStreamHijacker != nil && c.opts.UniStreamHijacker(StreamType(streamType), c.conn, str, nil) {
 					return
 				}
 				str.CancelRead(quic.StreamErrorCode(errorStreamCreationError))
