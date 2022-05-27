@@ -261,6 +261,91 @@ var _ = Describe("Server", func() {
 			Eventually(done).Should(BeClosed())
 		})
 
+		Context("hijacking bidirectional streams", func() {
+			var conn *mockquic.MockEarlyConnection
+			testDone := make(chan struct{})
+
+			BeforeEach(func() {
+				testDone = make(chan struct{})
+				conn = mockquic.NewMockEarlyConnection(mockCtrl)
+				controlStr := mockquic.NewMockStream(mockCtrl)
+				controlStr.EXPECT().Write(gomock.Any())
+				conn.EXPECT().OpenUniStream().Return(controlStr, nil)
+				conn.EXPECT().RemoteAddr().Return(&net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 1337}).AnyTimes()
+				conn.EXPECT().LocalAddr().AnyTimes()
+			})
+
+			AfterEach(func() { testDone <- struct{}{} })
+
+			It("hijacks a bidirectional stream of unknown frame type", func() {
+				frameTypeChan := make(chan FrameType, 1)
+				s.StreamHijacker = func(ft FrameType, c quic.Connection, s quic.Stream) (hijacked bool, err error) {
+					frameTypeChan <- ft
+					return true, nil
+				}
+
+				buf := &bytes.Buffer{}
+				quicvarint.Write(buf, 0x41)
+				unknownStr := mockquic.NewMockStream(mockCtrl)
+				unknownStr.EXPECT().Read(gomock.Any()).DoAndReturn(buf.Read).AnyTimes()
+				conn.EXPECT().AcceptStream(gomock.Any()).Return(unknownStr, nil)
+				conn.EXPECT().AcceptStream(gomock.Any()).Return(nil, errors.New("done"))
+				conn.EXPECT().AcceptUniStream(gomock.Any()).DoAndReturn(func(context.Context) (quic.ReceiveStream, error) {
+					<-testDone
+					return nil, errors.New("test done")
+				})
+				s.handleConn(conn)
+				Eventually(frameTypeChan).Should(Receive(BeEquivalentTo(0x41)))
+				time.Sleep(scaleDuration(20 * time.Millisecond)) // don't EXPECT any calls to conn.CloseWithError
+			})
+
+			It("cancels writing when hijacker didn't hijack a bidirectional stream", func() {
+				frameTypeChan := make(chan FrameType, 1)
+				s.StreamHijacker = func(ft FrameType, c quic.Connection, s quic.Stream) (hijacked bool, err error) {
+					frameTypeChan <- ft
+					return false, nil
+				}
+
+				buf := &bytes.Buffer{}
+				quicvarint.Write(buf, 0x41)
+				unknownStr := mockquic.NewMockStream(mockCtrl)
+				unknownStr.EXPECT().Read(gomock.Any()).DoAndReturn(buf.Read).AnyTimes()
+				unknownStr.EXPECT().CancelWrite(quic.StreamErrorCode(errorRequestIncomplete))
+				conn.EXPECT().AcceptStream(gomock.Any()).Return(unknownStr, nil)
+				conn.EXPECT().AcceptStream(gomock.Any()).Return(nil, errors.New("done"))
+				conn.EXPECT().AcceptUniStream(gomock.Any()).DoAndReturn(func(context.Context) (quic.ReceiveStream, error) {
+					<-testDone
+					return nil, errors.New("test done")
+				})
+				s.handleConn(conn)
+				Eventually(frameTypeChan).Should(Receive(BeEquivalentTo(0x41)))
+				time.Sleep(scaleDuration(20 * time.Millisecond)) // don't EXPECT any calls to conn.CloseWithError
+			})
+
+			It("cancels writing when hijacker returned error", func() {
+				frameTypeChan := make(chan FrameType, 1)
+				s.StreamHijacker = func(ft FrameType, c quic.Connection, s quic.Stream) (hijacked bool, err error) {
+					frameTypeChan <- ft
+					return false, errors.New("error in hijacker")
+				}
+
+				buf := &bytes.Buffer{}
+				quicvarint.Write(buf, 0x41)
+				unknownStr := mockquic.NewMockStream(mockCtrl)
+				unknownStr.EXPECT().Read(gomock.Any()).DoAndReturn(buf.Read).AnyTimes()
+				unknownStr.EXPECT().CancelWrite(quic.StreamErrorCode(errorRequestIncomplete))
+				conn.EXPECT().AcceptStream(gomock.Any()).Return(unknownStr, nil)
+				conn.EXPECT().AcceptStream(gomock.Any()).Return(nil, errors.New("done"))
+				conn.EXPECT().AcceptUniStream(gomock.Any()).DoAndReturn(func(context.Context) (quic.ReceiveStream, error) {
+					<-testDone
+					return nil, errors.New("test done")
+				})
+				s.handleConn(conn)
+				Eventually(frameTypeChan).Should(Receive(BeEquivalentTo(0x41)))
+				time.Sleep(scaleDuration(20 * time.Millisecond)) // don't EXPECT any calls to conn.CloseWithError
+			})
+		})
+
 		Context("hijacking unidirectional streams", func() {
 			var conn *mockquic.MockEarlyConnection
 			testDone := make(chan struct{})
