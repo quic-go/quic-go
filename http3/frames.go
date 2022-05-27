@@ -33,11 +33,10 @@ func parseNextFrame(r io.Reader, unknownFrameHandler unknownFrameHandlerFunc) (f
 			if err != nil {
 				return nil, err
 			}
-			// If the unknownFrameHandler didn't process the frame, it is our responsibility to skip it.
 			if hijacked {
 				return nil, errHijacked
 			}
-			continue
+			// If the unknownFrameHandler didn't process the frame, it is our responsibility to skip it.
 		}
 		l, err := quicvarint.Read(qr)
 		if err != nil {

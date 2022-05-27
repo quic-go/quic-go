@@ -206,6 +206,7 @@ var _ = Describe("Frames", func() {
 			buf := &bytes.Buffer{}
 			quicvarint.Write(buf, 1337)
 			customFrameContents := []byte("custom frame")
+			quicvarint.Write(buf, uint64(len(customFrameContents)))
 			buf.Write(customFrameContents)
 			(&dataFrame{Length: 6}).Write(buf)
 			buf.WriteString("foobar")
@@ -214,10 +215,6 @@ var _ = Describe("Frames", func() {
 			frame, err := parseNextFrame(buf, func(ft FrameType) (hijacked bool, err error) {
 				Expect(ft).To(BeEquivalentTo(1337))
 				called = true
-				b := make([]byte, len(customFrameContents))
-				_, err = io.ReadFull(buf, b)
-				Expect(err).ToNot(HaveOccurred())
-				Expect(string(b)).To(Equal(string(customFrameContents)))
 				return false, nil
 			})
 			Expect(err).ToNot(HaveOccurred())
