@@ -549,7 +549,7 @@ func (s *Server) handleRequest(conn quic.Connection, str quic.Stream, decoder *q
 	}
 
 	req.RemoteAddr = conn.RemoteAddr().String()
-	req.Body = newRequestBody(str, onFrameError)
+	req.Body = newRequestBody(newStream(str, onFrameError))
 
 	if s.logger.Debug() {
 		s.logger.Infof("%s %s%s, on stream %d", req.Method, req.Host, req.RequestURI, str.StreamID())
