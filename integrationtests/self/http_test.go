@@ -321,9 +321,14 @@ var _ = Describe("HTTP tests", func() {
 					str := r.Body.(http3.HTTPStreamer).HTTPStream()
 					str.Write([]byte("foobar"))
 
-					_, err := io.Copy(str, str)
-					Expect(err).ToNot(HaveOccurred())
-					Expect(str.Close()).To(Succeed())
+					// Do this in a Go routine, so that the handler returns early.
+					// This way, we can also check that the HTTP/3 doesn't close the stream.
+					go func() {
+						defer GinkgoRecover()
+						_, err := io.Copy(str, str)
+						Expect(err).ToNot(HaveOccurred())
+						Expect(str.Close()).To(Succeed())
+					}()
 				})
 
 				req, err := http.NewRequest(http.MethodGet, "https://localhost:"+port+"/httpstreamer", nil)

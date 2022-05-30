@@ -12,6 +12,7 @@ import (
 // * for the server: the http.Request.Body
 // * for the client: the http.Response.Body
 // On the client side, the stream will be closed for writing, unless the DontCloseRequestStream RoundTripOpt was set.
+// When a stream is taken over, it's the caller's responsibility to close the stream.
 type HTTPStreamer interface {
 	HTTPStream() Stream
 }
@@ -36,6 +37,8 @@ type Hijacker interface {
 // The body of a http.Request or http.Response.
 type body struct {
 	str quic.Stream
+
+	wasHijacked bool // set when HTTPStream is called
 }
 
 var (
@@ -48,7 +51,12 @@ func newRequestBody(str Stream) *body {
 }
 
 func (r *body) HTTPStream() Stream {
+	r.wasHijacked = true
 	return r.str
+}
+
+func (r *body) wasStreamHijacked() bool {
+	return r.wasHijacked
 }
 
 func (r *body) Read(b []byte) (int, error) {
