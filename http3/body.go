@@ -8,6 +8,14 @@ import (
 	"github.com/lucas-clemente/quic-go"
 )
 
+// The HTTPStreamer allows taking over a HTTP/3 stream. The interface is implemented by:
+// * for the server: the http.Request.Body
+// * for the client: the http.Response.Body
+// On the client side, the stream will be closed for writing, unless the DontCloseRequestStream RoundTripOpt was set.
+type HTTPStreamer interface {
+	HTTPStream() Stream
+}
+
 type StreamCreator interface {
 	OpenStream() (quic.Stream, error)
 	OpenStreamSync(context.Context) (quic.Stream, error)
@@ -30,10 +38,17 @@ type body struct {
 	str quic.Stream
 }
 
-var _ io.ReadCloser = &body{}
+var (
+	_ io.ReadCloser = &body{}
+	_ HTTPStreamer  = &body{}
+)
 
 func newRequestBody(str Stream) *body {
 	return &body{str: str}
+}
+
+func (r *body) HTTPStream() Stream {
+	return r.str
 }
 
 func (r *body) Read(b []byte) (int, error) {
@@ -56,7 +71,10 @@ type hijackableBody struct {
 	reqDoneClosed bool
 }
 
-var _ Hijacker = &hijackableBody{}
+var (
+	_ Hijacker     = &hijackableBody{}
+	_ HTTPStreamer = &hijackableBody{}
+)
 
 func newResponseBody(str Stream, conn quic.Connection, done chan<- struct{}) *hijackableBody {
 	return &hijackableBody{
@@ -97,4 +115,8 @@ func (r *hijackableBody) Close() error {
 	// If the EOF was read, CancelRead() is a no-op.
 	r.str.CancelRead(quic.StreamErrorCode(errorRequestCanceled))
 	return nil
+}
+
+func (r *hijackableBody) HTTPStream() Stream {
+	return r.str
 }
