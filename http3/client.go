@@ -330,7 +330,7 @@ func (c *client) doRequest(req *http.Request, str quic.Stream, opt RoundTripOpt,
 
 	connState := qtls.ToTLSConnectionState(c.conn.ConnectionState().TLS)
 	res := &http.Response{
-		Proto:      "HTTP/3",
+		Proto:      "HTTP/3.0",
 		ProtoMajor: 3,
 		Header:     http.Header{},
 		TLS:        &connState,

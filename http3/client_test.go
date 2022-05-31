@@ -742,7 +742,7 @@ var _ = Describe("Client", func() {
 			str.EXPECT().Read(gomock.Any()).DoAndReturn(rspBuf.Read).AnyTimes()
 			rsp, err := client.RoundTripOpt(req, RoundTripOpt{})
 			Expect(err).ToNot(HaveOccurred())
-			Expect(rsp.Proto).To(Equal("HTTP/3"))
+			Expect(rsp.Proto).To(Equal("HTTP/3.0"))
 			Expect(rsp.ProtoMajor).To(Equal(3))
 			Expect(rsp.StatusCode).To(Equal(418))
 		})
