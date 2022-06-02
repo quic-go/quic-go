@@ -62,6 +62,7 @@ type streamI interface {
 	handleStopSendingFrame(*wire.StopSendingFrame)
 	popStreamFrame(maxBytes protocol.ByteCount) (*ackhandler.Frame, bool)
 	updateSendWindow(protocol.ByteCount)
+	getPriority() int
 }
 
 var (
@@ -146,4 +147,12 @@ func (s *stream) checkIfCompleted() {
 	if s.sendStreamCompleted && s.receiveStreamCompleted {
 		s.sender.onStreamCompleted(s.StreamID())
 	}
+}
+
+func (s *stream) getPriority() int {
+	return s.sendStream.getPriority()
+}
+
+func (s *stream) SetPriority(priority int) {
+	s.sendStream.SetPriority(priority)
 }

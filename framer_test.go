@@ -219,8 +219,8 @@ var _ = Describe("Framer", func() {
 		})
 
 		It("re-queues a stream at the end, if it has enough data", func() {
-			streamGetter.EXPECT().GetOrOpenSendStream(id1).Return(stream1, nil).Times(2)
-			streamGetter.EXPECT().GetOrOpenSendStream(id2).Return(stream2, nil)
+			streamGetter.EXPECT().GetOrOpenSendStream(id1).Return(stream1, nil).Times(3)
+			streamGetter.EXPECT().GetOrOpenSendStream(id2).Return(stream2, nil).Times(2)
 			f11 := &wire.StreamFrame{StreamID: id1, Data: []byte("foobar")}
 			f12 := &wire.StreamFrame{StreamID: id1, Data: []byte("foobaz")}
 			f2 := &wire.StreamFrame{StreamID: id2, Data: []byte("raboof")}

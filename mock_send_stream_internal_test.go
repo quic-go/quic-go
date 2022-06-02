@@ -180,6 +180,18 @@ func (m *MockSendStreamI) updateSendWindow(arg0 protocol.ByteCount) {
 	m.ctrl.Call(m, "updateSendWindow", arg0)
 }
 
+func (m *MockSendStreamI) SetPriority(p int) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "SetPriority", p)
+}
+
+func (m *MockSendStreamI) getPriority() int {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "getPriority")
+	ret0, _ := ret[0].(int)
+	return ret0
+}
+
 // updateSendWindow indicates an expected call of updateSendWindow.
 func (mr *MockSendStreamIMockRecorder) updateSendWindow(arg0 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()

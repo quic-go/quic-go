@@ -21,6 +21,7 @@ type sendStreamI interface {
 	popStreamFrame(maxBytes protocol.ByteCount) (*ackhandler.Frame, bool)
 	closeForShutdown(error)
 	updateSendWindow(protocol.ByteCount)
+	getPriority() int
 }
 
 type sendStream struct {
@@ -56,6 +57,8 @@ type sendStream struct {
 	flowController flowcontrol.StreamFlowController
 
 	version protocol.VersionNumber
+
+	priority int
 }
 
 var (
@@ -493,4 +496,12 @@ func (s *sendStream) signalWrite() {
 	case s.writeChan <- struct{}{}:
 	default:
 	}
+}
+
+func (s *sendStream) getPriority() int {
+	return s.priority
+}
+
+func (s *sendStream) SetPriority(priority int) {
+	s.priority = priority
 }

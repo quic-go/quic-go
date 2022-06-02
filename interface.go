@@ -134,6 +134,11 @@ type SendStream interface {
 	// some data was successfully written.
 	// A zero value for t means Write will not time out.
 	SetWriteDeadline(t time.Time) error
+
+	// Set the priority of this stream, relative to other streams.
+	// During congestion, the stream with the higher priority will be sent first.
+	// If two streams have the same priority, they will be round-robined.
+	SetPriority(priority int)
 }
 
 // A Connection is a QUIC connection between two peers.
