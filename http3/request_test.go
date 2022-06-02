@@ -22,7 +22,7 @@ var _ = Describe("Request", func() {
 		Expect(req.Method).To(Equal("GET"))
 		Expect(req.URL.Path).To(Equal("/foo"))
 		Expect(req.URL.Host).To(BeEmpty())
-		Expect(req.Proto).To(Equal("HTTP/3"))
+		Expect(req.Proto).To(Equal("HTTP/3.0"))
 		Expect(req.ProtoMajor).To(Equal(3))
 		Expect(req.ProtoMinor).To(BeZero())
 		Expect(req.ContentLength).To(Equal(int64(42)))

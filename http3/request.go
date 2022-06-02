@@ -74,7 +74,7 @@ func requestFromHeaders(headers []qpack.HeaderField) (*http.Request, error) {
 		u.Host = authority
 		requestURI = authority
 	} else {
-		protocol = "HTTP/3"
+		protocol = "HTTP/3.0"
 		u, err = url.ParseRequestURI(path)
 		if err != nil {
 			return nil, err
