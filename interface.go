@@ -283,7 +283,7 @@ type Config struct {
 	// or the one direction (for unidirectional streams).
 	// To avoid deadlocks, it is not valid to call other functions on the connection or on streams
 	// in this callback.
-	OnStreamDone func(StreamID)
+	OnStreamDone func(Connection, StreamID)
 	// The StatelessResetKey is used to generate stateless reset tokens.
 	// If no key is configured, sending of stateless resets is disabled.
 	StatelessResetKey []byte

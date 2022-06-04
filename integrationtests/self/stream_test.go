@@ -175,7 +175,7 @@ var _ = Describe("Bidirectional streams", func() {
 
 				conf := getQuicConfig(qconf)
 				streamCloseChan := make(chan quic.StreamID, 1)
-				conf.OnStreamDone = func(id quic.StreamID) { streamCloseChan <- id }
+				conf.OnStreamDone = func(_ quic.Connection, id quic.StreamID) { streamCloseChan <- id }
 				conn, err := quic.DialAddr(
 					serverAddr,
 					getTLSClientConfig(),
@@ -197,7 +197,6 @@ var _ = Describe("Bidirectional streams", func() {
 
 			It("calls the OnStreamDone callback, for unidirectional streams", func() {
 				done := make(chan struct{})
-				startWrite := make(chan struct{})
 				go func() {
 					defer GinkgoRecover()
 					defer close(done)
@@ -212,17 +211,18 @@ var _ = Describe("Bidirectional streams", func() {
 
 				conf := getQuicConfig(qconf)
 				streamCloseChan := make(chan quic.StreamID, 1)
-				conf.OnStreamDone = func(id quic.StreamID) { streamCloseChan <- id }
+				conf.OnStreamDone = func(_ quic.Connection, id quic.StreamID) { streamCloseChan <- id }
 				conn, err := quic.DialAddr(
 					serverAddr,
 					getTLSClientConfig(),
 					conf,
 				)
 				Expect(err).ToNot(HaveOccurred())
+				// At this point, the stream is already closed.
+				// We only expect the callback to be called once we've actually accepted it though.
+				Consistently(streamCloseChan).ShouldNot(Receive())
 				str, err := conn.AcceptUniStream(context.Background())
 				Expect(err).ToNot(HaveOccurred())
-				Consistently(streamCloseChan).ShouldNot(Receive())
-				close(startWrite)
 				_, err = io.ReadAll(str)
 				Expect(err).ToNot(HaveOccurred())
 				Eventually(streamCloseChan).Should(Receive(Equal(quic.StreamID(3))))

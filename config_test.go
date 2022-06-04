@@ -137,11 +137,11 @@ var _ = Describe("Config", func() {
 			var calledStreamDoneWith StreamID
 			c1 := &Config{
 				AcceptToken:  func(_ net.Addr, _ *Token) bool { calledAcceptToken = true; return true },
-				OnStreamDone: func(id StreamID) { calledStreamDoneWith = id },
+				OnStreamDone: func(_ Connection, id StreamID) { calledStreamDoneWith = id },
 			}
 			c2 := populateConfig(c1)
 			c2.AcceptToken(&net.UDPAddr{}, &Token{})
-			c2.OnStreamDone(1337)
+			c2.OnStreamDone(nil, 1337)
 			Expect(calledAcceptToken).To(BeTrue())
 			Expect(calledStreamDoneWith).To(BeEquivalentTo(1337))
 		})

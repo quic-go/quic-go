@@ -1968,7 +1968,7 @@ func (s *connection) onStreamCompleted(id protocol.StreamID) {
 		s.closeLocal(err)
 	}
 	if s.config.OnStreamDone != nil {
-		s.config.OnStreamDone(id)
+		s.config.OnStreamDone(s, id)
 	}
 }
 
