@@ -1967,6 +1967,9 @@ func (s *connection) onStreamCompleted(id protocol.StreamID) {
 	if err := s.streamsMap.DeleteStream(id); err != nil {
 		s.closeLocal(err)
 	}
+	if s.config.OnStreamDone != nil {
+		s.config.OnStreamDone(id)
+	}
 }
 
 func (s *connection) SendMessage(p []byte) error {

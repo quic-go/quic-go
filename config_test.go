@@ -45,7 +45,7 @@ var _ = Describe("Config", func() {
 			}
 
 			switch fn := typ.Field(i).Name; fn {
-			case "AcceptToken", "GetLogWriter", "AllowConnectionWindowIncrease":
+			case "AcceptToken", "GetLogWriter", "AllowConnectionWindowIncrease", "OnStreamDone":
 				// Can't compare functions.
 			case "Versions":
 				f.Set(reflect.ValueOf([]VersionNumber{1, 2, 3}))
@@ -134,12 +134,16 @@ var _ = Describe("Config", func() {
 	Context("populating", func() {
 		It("populates function fields", func() {
 			var calledAcceptToken bool
+			var calledStreamDoneWith StreamID
 			c1 := &Config{
-				AcceptToken: func(_ net.Addr, _ *Token) bool { calledAcceptToken = true; return true },
+				AcceptToken:  func(_ net.Addr, _ *Token) bool { calledAcceptToken = true; return true },
+				OnStreamDone: func(id StreamID) { calledStreamDoneWith = id },
 			}
 			c2 := populateConfig(c1)
 			c2.AcceptToken(&net.UDPAddr{}, &Token{})
+			c2.OnStreamDone(1337)
 			Expect(calledAcceptToken).To(BeTrue())
+			Expect(calledStreamDoneWith).To(BeEquivalentTo(1337))
 		})
 
 		It("copies non-function fields", func() {

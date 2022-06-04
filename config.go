@@ -113,6 +113,7 @@ func populateConfig(config *Config) *Config {
 		AllowConnectionWindowIncrease:    config.AllowConnectionWindowIncrease,
 		MaxIncomingStreams:               maxIncomingStreams,
 		MaxIncomingUniStreams:            maxIncomingUniStreams,
+		OnStreamDone:                     config.OnStreamDone,
 		ConnectionIDLength:               config.ConnectionIDLength,
 		StatelessResetKey:                config.StatelessResetKey,
 		TokenStore:                       config.TokenStore,

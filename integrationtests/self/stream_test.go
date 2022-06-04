@@ -158,6 +158,77 @@ var _ = Describe("Bidirectional streams", func() {
 				<-done1
 				<-done2
 			})
+
+			It("calls the OnStreamDone callback, for bidirectional streams", func() {
+				done := make(chan struct{})
+				go func() {
+					defer GinkgoRecover()
+					defer close(done)
+					conn, err := server.Accept(context.Background())
+					Expect(err).ToNot(HaveOccurred())
+					str, err := conn.OpenStream()
+					Expect(err).ToNot(HaveOccurred())
+					str.Write([]byte("foobar"))
+					Expect(str.Close()).To(Succeed())
+					<-conn.Context().Done()
+				}()
+
+				conf := getQuicConfig(qconf)
+				streamCloseChan := make(chan quic.StreamID, 1)
+				conf.OnStreamDone = func(id quic.StreamID) { streamCloseChan <- id }
+				conn, err := quic.DialAddr(
+					serverAddr,
+					getTLSClientConfig(),
+					conf,
+				)
+				Expect(err).ToNot(HaveOccurred())
+				str, err := conn.AcceptStream(context.Background())
+				Expect(err).ToNot(HaveOccurred())
+				_, err = io.ReadAll(str)
+				Expect(err).ToNot(HaveOccurred())
+				// only the read side is closed, we're still tracking this stream
+				Consistently(streamCloseChan).ShouldNot(Receive())
+				// now reset the write side of the stream (closing would work as well)
+				str.CancelWrite(1337)
+				Eventually(streamCloseChan).Should(Receive(Equal(quic.StreamID(1))))
+				conn.CloseWithError(0, "")
+				Eventually(done).Should(BeClosed())
+			})
+
+			It("calls the OnStreamDone callback, for unidirectional streams", func() {
+				done := make(chan struct{})
+				startWrite := make(chan struct{})
+				go func() {
+					defer GinkgoRecover()
+					defer close(done)
+					conn, err := server.Accept(context.Background())
+					Expect(err).ToNot(HaveOccurred())
+					str, err := conn.OpenUniStream()
+					Expect(err).ToNot(HaveOccurred())
+					str.Write([]byte("foobar"))
+					Expect(str.Close()).To(Succeed())
+					<-conn.Context().Done()
+				}()
+
+				conf := getQuicConfig(qconf)
+				streamCloseChan := make(chan quic.StreamID, 1)
+				conf.OnStreamDone = func(id quic.StreamID) { streamCloseChan <- id }
+				conn, err := quic.DialAddr(
+					serverAddr,
+					getTLSClientConfig(),
+					conf,
+				)
+				Expect(err).ToNot(HaveOccurred())
+				str, err := conn.AcceptUniStream(context.Background())
+				Expect(err).ToNot(HaveOccurred())
+				Consistently(streamCloseChan).ShouldNot(Receive())
+				close(startWrite)
+				_, err = io.ReadAll(str)
+				Expect(err).ToNot(HaveOccurred())
+				Eventually(streamCloseChan).Should(Receive(Equal(quic.StreamID(3))))
+				conn.CloseWithError(0, "")
+				Eventually(done).Should(BeClosed())
+			})
 		})
 	}
 })

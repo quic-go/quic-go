@@ -279,6 +279,11 @@ type Config struct {
 	// If not set, it will default to 100.
 	// If set to a negative value, it doesn't allow any unidirectional streams.
 	MaxIncomingUniStreams int64
+	// OnStreamDone is called when a stream is closed or reset in both directions (for bidirectional streams),
+	// or the one direction (for unidirectional streams).
+	// To avoid deadlocks, it is not valid to call other functions on the connection or on streams
+	// in this callback.
+	OnStreamDone func(StreamID)
 	// The StatelessResetKey is used to generate stateless reset tokens.
 	// If no key is configured, sending of stateless resets is disabled.
 	StatelessResetKey []byte
