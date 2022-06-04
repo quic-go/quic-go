@@ -176,6 +176,18 @@ func (mr *MockStreamIMockRecorder) Write(p interface{}) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Write", reflect.TypeOf((*MockStreamI)(nil).Write), p)
 }
 
+// SetPriority mocks base method.
+func (m *MockStreamI) SetPriority(arg0 int) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "SetPriority", arg0)
+}
+
+// CancelWrite indicates an expected call of CancelWrite.
+func (mr *MockStreamIMockRecorder) SetPriority(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetPriority", reflect.TypeOf((*MockStreamI)(nil).SetPriority), arg0)
+}
+
 // closeForShutdown mocks base method.
 func (m *MockStreamI) closeForShutdown(arg0 error) {
 	m.ctrl.T.Helper()

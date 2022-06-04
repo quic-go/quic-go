@@ -18,21 +18,24 @@ var _ = Describe("Framer", func() {
 	const (
 		id1 = protocol.StreamID(10)
 		id2 = protocol.StreamID(11)
+		id3 = protocol.StreamID(12)
 	)
 
 	var (
-		framer           framer
-		stream1, stream2 *MockSendStreamI
-		streamGetter     *MockStreamGetter
-		version          protocol.VersionNumber
+		framer                    framer
+		stream1, stream2, stream3 *MockSendStreamI
+		streamGetter              *MockStreamGetter
+		version                   protocol.VersionNumber
 	)
 
 	BeforeEach(func() {
 		streamGetter = NewMockStreamGetter(mockCtrl)
 		stream1 = NewMockSendStreamI(mockCtrl)
-		stream1.EXPECT().StreamID().Return(protocol.StreamID(5)).AnyTimes()
+		stream1.EXPECT().StreamID().Return(id1).AnyTimes()
 		stream2 = NewMockSendStreamI(mockCtrl)
-		stream2.EXPECT().StreamID().Return(protocol.StreamID(6)).AnyTimes()
+		stream2.EXPECT().StreamID().Return(id2).AnyTimes()
+		stream3 = NewMockSendStreamI(mockCtrl)
+		stream3.EXPECT().StreamID().Return(id3).AnyTimes()
 		framer = newFramer(streamGetter, version)
 	})
 
@@ -121,6 +124,7 @@ var _ = Describe("Framer", func() {
 				Offset:         42,
 				DataLenPresent: true,
 			}
+			stream1.EXPECT().getPriority().Return(0).MinTimes(1)
 			stream1.EXPECT().popStreamFrame(gomock.Any()).Return(&ackhandler.Frame{Frame: f}, false)
 			framer.AddActiveStream(id1)
 			fs, length := framer.AppendStreamFrames(nil, 1000)
@@ -136,6 +140,7 @@ var _ = Describe("Framer", func() {
 			Expect(framer.HasData()).To(BeTrue())
 			f1 := &wire.StreamFrame{StreamID: id1, Data: []byte("foo")}
 			f2 := &wire.StreamFrame{StreamID: id1, Data: []byte("bar")}
+			stream1.EXPECT().getPriority().Return(0).MinTimes(1)
 			stream1.EXPECT().popStreamFrame(gomock.Any()).Return(&ackhandler.Frame{Frame: f1}, true)
 			stream1.EXPECT().popStreamFrame(gomock.Any()).Return(&ackhandler.Frame{Frame: f2}, false)
 			frames, _ := framer.AppendStreamFrames(nil, protocol.MaxByteCount)
@@ -155,6 +160,7 @@ var _ = Describe("Framer", func() {
 				Data:           []byte("foobar"),
 				DataLenPresent: true,
 			}
+			stream1.EXPECT().getPriority().Return(0).MinTimes(1)
 			stream1.EXPECT().popStreamFrame(gomock.Any()).Return(&ackhandler.Frame{Frame: f}, false)
 			framer.AddActiveStream(id1)
 			mdf := &wire.MaxDataFrame{MaximumData: 1337}
@@ -168,13 +174,14 @@ var _ = Describe("Framer", func() {
 		})
 
 		It("skips a stream that was reported active, but was completed shortly after", func() {
-			streamGetter.EXPECT().GetOrOpenSendStream(id1).Return(nil, nil)
-			streamGetter.EXPECT().GetOrOpenSendStream(id2).Return(stream2, nil)
+			streamGetter.EXPECT().GetOrOpenSendStream(id1).Return(nil, nil).MinTimes(1)
+			streamGetter.EXPECT().GetOrOpenSendStream(id2).Return(stream2, nil).MinTimes(1)
 			f := &wire.StreamFrame{
 				StreamID:       id2,
 				Data:           []byte("foobar"),
 				DataLenPresent: true,
 			}
+			stream2.EXPECT().getPriority().Return(0)
 			stream2.EXPECT().popStreamFrame(gomock.Any()).Return(&ackhandler.Frame{Frame: f}, false)
 			framer.AddActiveStream(id1)
 			framer.AddActiveStream(id2)
@@ -184,14 +191,16 @@ var _ = Describe("Framer", func() {
 		})
 
 		It("skips a stream that was reported active, but doesn't have any data", func() {
-			streamGetter.EXPECT().GetOrOpenSendStream(id1).Return(stream1, nil)
-			streamGetter.EXPECT().GetOrOpenSendStream(id2).Return(stream2, nil)
+			streamGetter.EXPECT().GetOrOpenSendStream(id1).Return(stream1, nil).MinTimes(1)
+			streamGetter.EXPECT().GetOrOpenSendStream(id2).Return(stream2, nil).MinTimes(1)
 			f := &wire.StreamFrame{
 				StreamID:       id2,
 				Data:           []byte("foobar"),
 				DataLenPresent: true,
 			}
+			stream1.EXPECT().getPriority().Return(0).MinTimes(1)
 			stream1.EXPECT().popStreamFrame(gomock.Any()).Return(nil, false)
+			stream2.EXPECT().getPriority().Return(0).MinTimes(1)
 			stream2.EXPECT().popStreamFrame(gomock.Any()).Return(&ackhandler.Frame{Frame: f}, false)
 			framer.AddActiveStream(id1)
 			framer.AddActiveStream(id2)
@@ -204,6 +213,7 @@ var _ = Describe("Framer", func() {
 			streamGetter.EXPECT().GetOrOpenSendStream(id1).Return(stream1, nil).Times(2)
 			f1 := &wire.StreamFrame{StreamID: id1, Data: []byte("foobar")}
 			f2 := &wire.StreamFrame{StreamID: id1, Data: []byte("foobaz")}
+			stream1.EXPECT().getPriority().Return(0).MinTimes(1)
 			stream1.EXPECT().popStreamFrame(gomock.Any()).Return(&ackhandler.Frame{Frame: f1}, true)
 			stream1.EXPECT().popStreamFrame(gomock.Any()).Return(&ackhandler.Frame{Frame: f2}, false)
 			framer.AddActiveStream(id1) // only add it once
@@ -219,13 +229,15 @@ var _ = Describe("Framer", func() {
 		})
 
 		It("re-queues a stream at the end, if it has enough data", func() {
-			streamGetter.EXPECT().GetOrOpenSendStream(id1).Return(stream1, nil).Times(3)
-			streamGetter.EXPECT().GetOrOpenSendStream(id2).Return(stream2, nil).Times(2)
+			streamGetter.EXPECT().GetOrOpenSendStream(id1).Return(stream1, nil).MinTimes(1)
+			streamGetter.EXPECT().GetOrOpenSendStream(id2).Return(stream2, nil).MinTimes(1)
 			f11 := &wire.StreamFrame{StreamID: id1, Data: []byte("foobar")}
 			f12 := &wire.StreamFrame{StreamID: id1, Data: []byte("foobaz")}
 			f2 := &wire.StreamFrame{StreamID: id2, Data: []byte("raboof")}
+			stream1.EXPECT().getPriority().Return(0).MinTimes(1)
 			stream1.EXPECT().popStreamFrame(gomock.Any()).Return(&ackhandler.Frame{Frame: f11}, true)
 			stream1.EXPECT().popStreamFrame(gomock.Any()).Return(&ackhandler.Frame{Frame: f12}, false)
+			stream2.EXPECT().getPriority().Return(0).MinTimes(1)
 			stream2.EXPECT().popStreamFrame(gomock.Any()).Return(&ackhandler.Frame{Frame: f2}, false)
 			framer.AddActiveStream(id1) // only add it once
 			framer.AddActiveStream(id2)
@@ -244,12 +256,14 @@ var _ = Describe("Framer", func() {
 		})
 
 		It("only dequeues data from each stream once per packet", func() {
-			streamGetter.EXPECT().GetOrOpenSendStream(id1).Return(stream1, nil)
-			streamGetter.EXPECT().GetOrOpenSendStream(id2).Return(stream2, nil)
+			streamGetter.EXPECT().GetOrOpenSendStream(id1).Return(stream1, nil).MinTimes(1)
+			streamGetter.EXPECT().GetOrOpenSendStream(id2).Return(stream2, nil).MinTimes(1)
 			f1 := &wire.StreamFrame{StreamID: id1, Data: []byte("foobar")}
 			f2 := &wire.StreamFrame{StreamID: id2, Data: []byte("raboof")}
 			// both streams have more data, and will be re-queued
+			stream1.EXPECT().getPriority().Return(0).MinTimes(1)
 			stream1.EXPECT().popStreamFrame(gomock.Any()).Return(&ackhandler.Frame{Frame: f1}, true)
+			stream2.EXPECT().getPriority().Return(0).MinTimes(1)
 			stream2.EXPECT().popStreamFrame(gomock.Any()).Return(&ackhandler.Frame{Frame: f2}, true)
 			framer.AddActiveStream(id1)
 			framer.AddActiveStream(id2)
@@ -261,11 +275,13 @@ var _ = Describe("Framer", func() {
 		})
 
 		It("returns multiple normal frames in the order they were reported active", func() {
-			streamGetter.EXPECT().GetOrOpenSendStream(id1).Return(stream1, nil)
-			streamGetter.EXPECT().GetOrOpenSendStream(id2).Return(stream2, nil)
+			streamGetter.EXPECT().GetOrOpenSendStream(id1).Return(stream1, nil).MinTimes(1)
+			streamGetter.EXPECT().GetOrOpenSendStream(id2).Return(stream2, nil).MinTimes(1)
 			f1 := &wire.StreamFrame{Data: []byte("foobar")}
 			f2 := &wire.StreamFrame{Data: []byte("foobaz")}
+			stream1.EXPECT().getPriority().Return(0).MinTimes(1)
 			stream1.EXPECT().popStreamFrame(gomock.Any()).Return(&ackhandler.Frame{Frame: f1}, false)
+			stream2.EXPECT().getPriority().Return(0).MinTimes(1)
 			stream2.EXPECT().popStreamFrame(gomock.Any()).Return(&ackhandler.Frame{Frame: f2}, false)
 			framer.AddActiveStream(id2)
 			framer.AddActiveStream(id1)
@@ -278,6 +294,7 @@ var _ = Describe("Framer", func() {
 		It("only asks a stream for data once, even if it was reported active multiple times", func() {
 			streamGetter.EXPECT().GetOrOpenSendStream(id1).Return(stream1, nil)
 			f := &wire.StreamFrame{Data: []byte("foobar")}
+			stream1.EXPECT().getPriority().Return(0).MinTimes(1)
 			stream1.EXPECT().popStreamFrame(gomock.Any()).Return(&ackhandler.Frame{Frame: f}, false) // only one call to this function
 			framer.AddActiveStream(id1)
 			framer.AddActiveStream(id1)
@@ -294,6 +311,7 @@ var _ = Describe("Framer", func() {
 		It("pops maximum size STREAM frames", func() {
 			for i := protocol.MinStreamFrameSize; i < 2000; i++ {
 				streamGetter.EXPECT().GetOrOpenSendStream(id1).Return(stream1, nil)
+				stream1.EXPECT().getPriority().Return(0)
 				stream1.EXPECT().popStreamFrame(gomock.Any()).DoAndReturn(func(size protocol.ByteCount) (*ackhandler.Frame, bool) {
 					f := &wire.StreamFrame{
 						StreamID:       id1,
@@ -313,9 +331,11 @@ var _ = Describe("Framer", func() {
 		})
 
 		It("pops multiple STREAM frames", func() {
-			for i := 2 * protocol.MinStreamFrameSize; i < 2000; i++ {
-				streamGetter.EXPECT().GetOrOpenSendStream(id1).Return(stream1, nil)
-				streamGetter.EXPECT().GetOrOpenSendStream(id2).Return(stream2, nil)
+			for i := 2 * protocol.MinStreamFrameSize; i < 2000; i += 1 {
+				// TODO I'm not sure why AnyTimes is needed instead of MinTimes
+				streamGetter.EXPECT().GetOrOpenSendStream(id1).Return(stream1, nil).AnyTimes()
+				streamGetter.EXPECT().GetOrOpenSendStream(id2).Return(stream2, nil).AnyTimes()
+				stream1.EXPECT().getPriority().Return(0).AnyTimes()
 				stream1.EXPECT().popStreamFrame(gomock.Any()).DoAndReturn(func(size protocol.ByteCount) (*ackhandler.Frame, bool) {
 					f := &wire.StreamFrame{
 						StreamID:       id2,
@@ -324,6 +344,7 @@ var _ = Describe("Framer", func() {
 					f.Data = make([]byte, f.MaxDataLen(protocol.MinStreamFrameSize, version))
 					return &ackhandler.Frame{Frame: f}, false
 				})
+				stream2.EXPECT().getPriority().Return(0).AnyTimes()
 				stream2.EXPECT().popStreamFrame(gomock.Any()).DoAndReturn(func(size protocol.ByteCount) (*ackhandler.Frame, bool) {
 					f := &wire.StreamFrame{
 						StreamID:       id2,
@@ -348,6 +369,7 @@ var _ = Describe("Framer", func() {
 		It("pops frames that when asked for the the minimum STREAM frame size", func() {
 			streamGetter.EXPECT().GetOrOpenSendStream(id1).Return(stream1, nil)
 			f := &wire.StreamFrame{Data: []byte("foobar")}
+			stream1.EXPECT().getPriority().Return(0).MinTimes(1)
 			stream1.EXPECT().popStreamFrame(gomock.Any()).Return(&ackhandler.Frame{Frame: f}, false)
 			framer.AddActiveStream(id1)
 			framer.AppendStreamFrames(nil, protocol.MinStreamFrameSize)
@@ -366,6 +388,7 @@ var _ = Describe("Framer", func() {
 				Data:           bytes.Repeat([]byte("f"), int(500-protocol.MinStreamFrameSize)),
 				DataLenPresent: true,
 			}
+			stream1.EXPECT().getPriority().Return(0).MinTimes(1)
 			stream1.EXPECT().popStreamFrame(gomock.Any()).Return(&ackhandler.Frame{Frame: f}, false)
 			framer.AddActiveStream(id1)
 			fs, length := framer.AppendStreamFrames(nil, 500)
@@ -380,6 +403,88 @@ var _ = Describe("Framer", func() {
 			fs, length := framer.AppendStreamFrames(nil, protocol.MaxByteCount)
 			Expect(fs).To(BeEmpty())
 			Expect(length).To(BeZero())
+		})
+
+		It("pops streams in priority order", func() {
+			streamGetter.EXPECT().GetOrOpenSendStream(id1).Return(stream1, nil).MinTimes(1)
+			streamGetter.EXPECT().GetOrOpenSendStream(id2).Return(stream2, nil).MinTimes(1)
+			streamGetter.EXPECT().GetOrOpenSendStream(id3).Return(stream3, nil).MinTimes(1)
+
+			f1 := &wire.StreamFrame{StreamID: id1, Data: []byte("foobar")}
+			f2 := &wire.StreamFrame{StreamID: id2, Data: []byte("raboof")}
+			f3 := &wire.StreamFrame{StreamID: id3, Data: []byte("kixel4")}
+
+			stream1.EXPECT().getPriority().Return(1).MinTimes(1) // lowest priority
+			stream1.EXPECT().popStreamFrame(gomock.Any()).Return(&ackhandler.Frame{Frame: f1}, false)
+
+			stream2.EXPECT().getPriority().Return(3).MinTimes(1) // highest priority
+			stream2.EXPECT().popStreamFrame(gomock.Any()).Return(&ackhandler.Frame{Frame: f2}, false)
+
+			stream3.EXPECT().getPriority().Return(2).MinTimes(1) // middle priority
+			stream3.EXPECT().popStreamFrame(gomock.Any()).Return(&ackhandler.Frame{Frame: f3}, false)
+
+			framer.AddActiveStream(id1)
+			framer.AddActiveStream(id2)
+			framer.AddActiveStream(id3)
+
+			// stream 2
+			frames, _ := framer.AppendStreamFrames(nil, protocol.MinStreamFrameSize)
+			Expect(frames).To(HaveLen(1))
+			Expect(frames[0].Frame).To(Equal(f2))
+
+			// stream 3
+			frames, _ = framer.AppendStreamFrames(nil, protocol.MinStreamFrameSize)
+			Expect(frames).To(HaveLen(1))
+			Expect(frames[0].Frame).To(Equal(f3))
+
+			// stream 1
+			frames, _ = framer.AppendStreamFrames(nil, protocol.MinStreamFrameSize)
+			Expect(frames).To(HaveLen(1))
+			Expect(frames[0].Frame).To(Equal(f1))
+		})
+
+		It("reorders when priority is changed", func() {
+			streamGetter.EXPECT().GetOrOpenSendStream(id1).Return(stream1, nil).MinTimes(1)
+			streamGetter.EXPECT().GetOrOpenSendStream(id2).Return(stream2, nil).MinTimes(1)
+
+			f11 := &wire.StreamFrame{StreamID: id1, Data: []byte("foobar")}
+			f12 := &wire.StreamFrame{StreamID: id1, Data: []byte("foobaz")}
+			f21 := &wire.StreamFrame{StreamID: id2, Data: []byte("raboof")}
+			f22 := &wire.StreamFrame{StreamID: id2, Data: []byte("zaboof")}
+
+			stream1.EXPECT().getPriority().Return(2).MinTimes(2) // lowest priority
+			stream1.EXPECT().popStreamFrame(gomock.Any()).Return(&ackhandler.Frame{Frame: f11}, true)
+			stream1.EXPECT().popStreamFrame(gomock.Any()).Return(&ackhandler.Frame{Frame: f12}, false)
+
+			priority := 3
+			stream2.EXPECT().getPriority().DoAndReturn(func() int { return priority }).MinTimes(1) // highest priority... for now
+			stream2.EXPECT().popStreamFrame(gomock.Any()).Return(&ackhandler.Frame{Frame: f21}, true)
+			stream2.EXPECT().popStreamFrame(gomock.Any()).Return(&ackhandler.Frame{Frame: f22}, false)
+
+			framer.AddActiveStream(id1)
+			framer.AddActiveStream(id2)
+
+			// stream 2
+			frames, _ := framer.AppendStreamFrames(nil, protocol.MinStreamFrameSize)
+			Expect(frames).To(HaveLen(1))
+			Expect(frames[0].Frame).To(Equal(f21))
+
+			priority = 1 // now stream 2 is the lowest priority
+
+			// stream 1
+			frames, _ = framer.AppendStreamFrames(nil, protocol.MinStreamFrameSize)
+			Expect(frames).To(HaveLen(1))
+			Expect(frames[0].Frame).To(Equal(f11))
+
+			// stream 1
+			frames, _ = framer.AppendStreamFrames(nil, protocol.MinStreamFrameSize)
+			Expect(frames).To(HaveLen(1))
+			Expect(frames[0].Frame).To(Equal(f12))
+
+			// stream 2
+			frames, _ = framer.AppendStreamFrames(nil, protocol.MinStreamFrameSize)
+			Expect(frames).To(HaveLen(1))
+			Expect(frames[0].Frame).To(Equal(f22))
 		})
 	})
 })

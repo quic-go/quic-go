@@ -121,6 +121,18 @@ func (mr *MockSendStreamIMockRecorder) Write(p interface{}) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Write", reflect.TypeOf((*MockSendStreamI)(nil).Write), p)
 }
 
+// SetPriority mocks base method.
+func (m *MockSendStreamI) SetPriority(p int) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "SetPriority", p)
+}
+
+// SetPriority indicates an expected call of SetPriority.
+func (mr *MockSendStreamIMockRecorder) SetPriority(p interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetPriority", reflect.TypeOf((*MockSendStreamI)(nil).SetPriority), p)
+}
+
 // closeForShutdown mocks base method.
 func (m *MockSendStreamI) closeForShutdown(arg0 error) {
 	m.ctrl.T.Helper()
@@ -180,11 +192,13 @@ func (m *MockSendStreamI) updateSendWindow(arg0 protocol.ByteCount) {
 	m.ctrl.Call(m, "updateSendWindow", arg0)
 }
 
-func (m *MockSendStreamI) SetPriority(p int) {
-	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "SetPriority", p)
+// updateSendWindow indicates an expected call of updateSendWindow.
+func (mr *MockSendStreamIMockRecorder) updateSendWindow(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "updateSendWindow", reflect.TypeOf((*MockSendStreamI)(nil).updateSendWindow), arg0)
 }
 
+// getPriority mocks base method.
 func (m *MockSendStreamI) getPriority() int {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "getPriority")
@@ -192,8 +206,8 @@ func (m *MockSendStreamI) getPriority() int {
 	return ret0
 }
 
-// updateSendWindow indicates an expected call of updateSendWindow.
-func (mr *MockSendStreamIMockRecorder) updateSendWindow(arg0 interface{}) *gomock.Call {
+// getPriority indicates an expected call of getPriority.
+func (mr *MockSendStreamIMockRecorder) getPriority() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "updateSendWindow", reflect.TypeOf((*MockSendStreamI)(nil).updateSendWindow), arg0)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "getPriority", reflect.TypeOf((*MockSendStreamI)(nil).getPriority))
 }
