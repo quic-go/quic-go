@@ -486,5 +486,64 @@ var _ = Describe("Framer", func() {
 			Expect(frames).To(HaveLen(1))
 			Expect(frames[0].Frame).To(Equal(f22))
 		})
+
+		It("round-robins when priority is equal", func() {
+			streamGetter.EXPECT().GetOrOpenSendStream(id1).Return(stream1, nil).MinTimes(1)
+			streamGetter.EXPECT().GetOrOpenSendStream(id2).Return(stream2, nil).MinTimes(1)
+			streamGetter.EXPECT().GetOrOpenSendStream(id3).Return(stream3, nil).MinTimes(1)
+
+			f11 := &wire.StreamFrame{StreamID: id1, Data: []byte("foobar")}
+			f12 := &wire.StreamFrame{StreamID: id1, Data: []byte("foobaz")}
+			f21 := &wire.StreamFrame{StreamID: id2, Data: []byte("raboof")}
+			f22 := &wire.StreamFrame{StreamID: id2, Data: []byte("zaboof")}
+			f31 := &wire.StreamFrame{StreamID: id3, Data: []byte("kixel4")}
+			f32 := &wire.StreamFrame{StreamID: id3, Data: []byte("pogger")}
+
+			stream1.EXPECT().getPriority().Return(2).MinTimes(2) // highest priority
+			stream1.EXPECT().popStreamFrame(gomock.Any()).Return(&ackhandler.Frame{Frame: f11}, true)
+			stream1.EXPECT().popStreamFrame(gomock.Any()).Return(&ackhandler.Frame{Frame: f12}, false)
+
+			stream2.EXPECT().getPriority().Return(1).MinTimes(1) // lowest priority
+			stream2.EXPECT().popStreamFrame(gomock.Any()).Return(&ackhandler.Frame{Frame: f21}, true)
+			stream2.EXPECT().popStreamFrame(gomock.Any()).Return(&ackhandler.Frame{Frame: f22}, false)
+
+			stream3.EXPECT().getPriority().Return(2).MinTimes(1) // highest priority
+			stream3.EXPECT().popStreamFrame(gomock.Any()).Return(&ackhandler.Frame{Frame: f31}, true)
+			stream3.EXPECT().popStreamFrame(gomock.Any()).Return(&ackhandler.Frame{Frame: f32}, false)
+
+			framer.AddActiveStream(id1)
+			framer.AddActiveStream(id2)
+			framer.AddActiveStream(id3)
+
+			// stream 1 was added first
+			frames, _ := framer.AppendStreamFrames(nil, protocol.MinStreamFrameSize)
+			Expect(frames).To(HaveLen(1))
+			Expect(frames[0].Frame).To(Equal(f11))
+
+			// stream 3 is equal priority so it goes next
+			frames, _ = framer.AppendStreamFrames(nil, protocol.MinStreamFrameSize)
+			Expect(frames).To(HaveLen(1))
+			Expect(frames[0].Frame).To(Equal(f31))
+
+			// stream 1 is equal priority so it goes next
+			frames, _ = framer.AppendStreamFrames(nil, protocol.MinStreamFrameSize)
+			Expect(frames).To(HaveLen(1))
+			Expect(frames[0].Frame).To(Equal(f12))
+
+			// stream 3 is highest priority
+			frames, _ = framer.AppendStreamFrames(nil, protocol.MinStreamFrameSize)
+			Expect(frames).To(HaveLen(1))
+			Expect(frames[0].Frame).To(Equal(f32))
+
+			// stream 2 finally gets a chance
+			frames, _ = framer.AppendStreamFrames(nil, protocol.MinStreamFrameSize)
+			Expect(frames).To(HaveLen(1))
+			Expect(frames[0].Frame).To(Equal(f21))
+
+			// stream 2 finishes
+			frames, _ = framer.AppendStreamFrames(nil, protocol.MinStreamFrameSize)
+			Expect(frames).To(HaveLen(1))
+			Expect(frames[0].Frame).To(Equal(f22))
+		})
 	})
 })
