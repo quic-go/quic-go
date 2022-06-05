@@ -179,11 +179,14 @@ func (m *incomingItemsMap) deleteStream(num protocol.StreamNum) error {
 	return nil
 }
 
-func (m *incomingItemsMap) CloseWithError(err error) {
+// CloseWithError closes the map.
+// The callback is called for every stream that is removed.
+func (m *incomingItemsMap) CloseWithError(cb func(protocol.StreamID), err error) {
 	m.mutex.Lock()
 	m.closeErr = err
 	for _, entry := range m.streams {
 		entry.stream.closeForShutdown(err)
+		cb(entry.stream.StreamID())
 	}
 	m.mutex.Unlock()
 	close(m.newStreamChan)

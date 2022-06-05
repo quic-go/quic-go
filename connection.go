@@ -513,11 +513,16 @@ func (s *connection) preSetup() {
 		s.logger,
 	)
 	s.earlyConnReadyChan = make(chan struct{})
+	onStreamDone := func(protocol.StreamID) {}
+	if s.config.OnStreamDone != nil {
+		onStreamDone = func(id protocol.StreamID) { s.config.OnStreamDone(s, id) }
+	}
 	s.streamsMap = newStreamsMap(
 		s,
 		s.newFlowController,
 		uint64(s.config.MaxIncomingStreams),
 		uint64(s.config.MaxIncomingUniStreams),
+		onStreamDone,
 		s.perspective,
 		s.version,
 	)
@@ -1966,9 +1971,6 @@ func (s *connection) onHasStreamData(id protocol.StreamID) {
 func (s *connection) onStreamCompleted(id protocol.StreamID) {
 	if err := s.streamsMap.DeleteStream(id); err != nil {
 		s.closeLocal(err)
-	}
-	if s.config.OnStreamDone != nil {
-		s.config.OnStreamDone(s, id)
 	}
 }
 

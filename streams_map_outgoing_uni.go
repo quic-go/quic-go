@@ -211,11 +211,14 @@ func (m *outgoingUniStreamsMap) unblockOpenSync() {
 	}
 }
 
-func (m *outgoingUniStreamsMap) CloseWithError(err error) {
+// CloseWithError closes the map.
+// The callback is called for every stream that is removed.
+func (m *outgoingUniStreamsMap) CloseWithError(cb func(protocol.StreamID), err error) {
 	m.mutex.Lock()
 	m.closeErr = err
 	for _, str := range m.streams {
 		str.closeForShutdown(err)
+		cb(str.StreamID())
 	}
 	for _, c := range m.openQueue {
 		if c != nil {

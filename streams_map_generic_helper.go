@@ -11,8 +11,9 @@ import (
 // This definition must be in a file that Genny doesn't process.
 type item interface {
 	generic.Type
+	StreamID() protocol.StreamID
 	updateSendWindow(protocol.ByteCount)
 	closeForShutdown(error)
 }
 
-const streamTypeGeneric protocol.StreamType = protocol.StreamTypeUni
+const streamTypeGeneric = protocol.StreamTypeUni

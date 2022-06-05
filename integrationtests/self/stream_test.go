@@ -229,6 +229,40 @@ var _ = Describe("Bidirectional streams", func() {
 				conn.CloseWithError(0, "")
 				Eventually(done).Should(BeClosed())
 			})
+
+			It("calls the OnStreamDone callback when closing", func() {
+				done := make(chan struct{})
+				closeChan := make(chan struct{})
+				go func() {
+					defer GinkgoRecover()
+					defer close(done)
+					conn, err := server.Accept(context.Background())
+					Expect(err).ToNot(HaveOccurred())
+					ustr, err := conn.OpenUniStream()
+					Expect(err).ToNot(HaveOccurred())
+					ustr.Write([]byte("foo"))
+					str, err := conn.OpenStream()
+					Expect(err).ToNot(HaveOccurred())
+					str.Write([]byte("bar"))
+					<-closeChan
+					conn.CloseWithError(0, "")
+				}()
+
+				conf := getQuicConfig(qconf)
+				var doneStreams []quic.StreamID
+				conf.OnStreamDone = func(_ quic.Connection, id quic.StreamID) { doneStreams = append(doneStreams, id) }
+				conn, err := quic.DialAddr(
+					serverAddr,
+					getTLSClientConfig(),
+					conf,
+				)
+				Expect(err).ToNot(HaveOccurred())
+				// At this point, the stream is already closed.
+				// We only expect the callback to be called once we've actually accepted it though.
+				close(closeChan)
+				<-conn.Context().Done()
+				Expect(doneStreams).To(ContainElements(quic.StreamID(1), quic.StreamID(3)))
+			})
 		})
 	}
 })

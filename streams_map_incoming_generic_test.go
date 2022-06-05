@@ -16,6 +16,7 @@ import (
 )
 
 type mockGenericStream struct {
+	id  protocol.StreamID
 	num protocol.StreamNum
 
 	closed     bool
@@ -23,13 +24,11 @@ type mockGenericStream struct {
 	sendWindow protocol.ByteCount
 }
 
+func (s *mockGenericStream) StreamID() protocol.StreamID               { return s.id }
+func (s *mockGenericStream) updateSendWindow(limit protocol.ByteCount) { s.sendWindow = limit }
 func (s *mockGenericStream) closeForShutdown(err error) {
 	s.closed = true
 	s.closeErr = err
-}
-
-func (s *mockGenericStream) updateSendWindow(limit protocol.ByteCount) {
-	s.sendWindow = limit
 }
 
 var _ = Describe("Streams Map (incoming)", func() {
@@ -57,7 +56,7 @@ var _ = Describe("Streams Map (incoming)", func() {
 		m = newIncomingItemsMap(
 			func(num protocol.StreamNum) item {
 				newItemCounter++
-				return &mockGenericStream{num: num}
+				return &mockGenericStream{num: num, id: protocol.StreamID(num * 2)}
 			},
 			maxNumStreams,
 			mockSender.queueControlFrame,
@@ -144,13 +143,13 @@ var _ = Describe("Streams Map (incoming)", func() {
 			close(done)
 		}()
 		Consistently(done).ShouldNot(BeClosed())
-		m.CloseWithError(testErr)
+		m.CloseWithError(func(protocol.StreamID) {}, testErr)
 		Eventually(done).Should(BeClosed())
 	})
 
 	It("errors AcceptStream immediately if it is closed", func() {
 		testErr := errors.New("test error")
-		m.CloseWithError(testErr)
+		m.CloseWithError(func(protocol.StreamID) {}, testErr)
 		_, err := m.AcceptStream(context.Background())
 		Expect(err).To(MatchError(testErr))
 	})
@@ -161,11 +160,13 @@ var _ = Describe("Streams Map (incoming)", func() {
 		str2, err := m.GetOrOpenStream(3)
 		Expect(err).ToNot(HaveOccurred())
 		testErr := errors.New("test err")
-		m.CloseWithError(testErr)
+		var called []protocol.StreamID
+		m.CloseWithError(func(id protocol.StreamID) { called = append(called, id) }, testErr)
 		Expect(str1.(*mockGenericStream).closed).To(BeTrue())
 		Expect(str1.(*mockGenericStream).closeErr).To(MatchError(testErr))
 		Expect(str2.(*mockGenericStream).closed).To(BeTrue())
 		Expect(str2.(*mockGenericStream).closeErr).To(MatchError(testErr))
+		Expect(called).To(ContainElements(protocol.StreamID(2), protocol.StreamID(6)))
 	})
 
 	It("deletes streams", func() {

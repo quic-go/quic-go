@@ -56,7 +56,7 @@ var _ = Describe("Streams Map (outgoing)", func() {
 
 		It("doesn't open streams after it has been closed", func() {
 			testErr := errors.New("close")
-			m.CloseWithError(testErr)
+			m.CloseWithError(func(protocol.StreamID) {}, testErr)
 			_, err := m.OpenStream()
 			Expect(err).To(MatchError(testErr))
 		})
@@ -106,11 +106,13 @@ var _ = Describe("Streams Map (outgoing)", func() {
 			str2, err := m.OpenStream()
 			Expect(err).ToNot(HaveOccurred())
 			testErr := errors.New("test err")
-			m.CloseWithError(testErr)
+			var called []protocol.StreamID
+			m.CloseWithError(func(id protocol.StreamID) { called = append(called, id) }, testErr)
 			Expect(str1.(*mockGenericStream).closed).To(BeTrue())
 			Expect(str1.(*mockGenericStream).closeErr).To(MatchError(testErr))
 			Expect(str2.(*mockGenericStream).closed).To(BeTrue())
 			Expect(str2.(*mockGenericStream).closeErr).To(MatchError(testErr))
+			Expect(called).To(ContainElements(str1.StreamID(), str2.StreamID()))
 		})
 
 		It("updates the send window", func() {
@@ -273,7 +275,7 @@ var _ = Describe("Streams Map (outgoing)", func() {
 			Eventually(done).Should(Receive())
 			Consistently(done).ShouldNot(Receive())
 
-			m.CloseWithError(errors.New("test done"))
+			m.CloseWithError(func(protocol.StreamID) {}, errors.New("test done"))
 			Eventually(done).Should(Receive())
 		})
 
@@ -329,7 +331,7 @@ var _ = Describe("Streams Map (outgoing)", func() {
 			}()
 
 			Consistently(done).ShouldNot(BeClosed())
-			m.CloseWithError(testErr)
+			m.CloseWithError(func(protocol.StreamID) {}, testErr)
 			Eventually(done).Should(BeClosed())
 		})
 

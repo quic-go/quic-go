@@ -53,6 +53,7 @@ type streamsMap struct {
 
 	sender            streamSender
 	newFlowController func(protocol.StreamID) flowcontrol.StreamFlowController
+	onStreamDone      func(id protocol.StreamID)
 
 	mutex               sync.Mutex
 	outgoingBidiStreams *outgoingBidiStreamsMap
@@ -69,6 +70,7 @@ func newStreamsMap(
 	newFlowController func(protocol.StreamID) flowcontrol.StreamFlowController,
 	maxIncomingBidiStreams uint64,
 	maxIncomingUniStreams uint64,
+	onStreamDone func(protocol.StreamID),
 	perspective protocol.Perspective,
 	version protocol.VersionNumber,
 ) streamManager {
@@ -78,6 +80,7 @@ func newStreamsMap(
 		maxIncomingBidiStreams: maxIncomingBidiStreams,
 		maxIncomingUniStreams:  maxIncomingUniStreams,
 		sender:                 sender,
+		onStreamDone:           onStreamDone,
 		version:                version,
 	}
 	m.initMaps()
@@ -191,6 +194,9 @@ func (m *streamsMap) AcceptUniStream(ctx context.Context) (ReceiveStream, error)
 
 func (m *streamsMap) DeleteStream(id protocol.StreamID) error {
 	num := id.StreamNum()
+	// TODO: this would better be done inside the individual streams maps.
+	// This will be easier to implement once we can make use of Go generics.
+	m.onStreamDone(id)
 	switch id.Type() {
 	case protocol.StreamTypeUni:
 		if id.InitiatedBy() == m.perspective {
@@ -291,10 +297,10 @@ func (m *streamsMap) UpdateLimits(p *wire.TransportParameters) {
 }
 
 func (m *streamsMap) CloseWithError(err error) {
-	m.outgoingBidiStreams.CloseWithError(err)
-	m.outgoingUniStreams.CloseWithError(err)
-	m.incomingBidiStreams.CloseWithError(err)
-	m.incomingUniStreams.CloseWithError(err)
+	m.outgoingBidiStreams.CloseWithError(m.onStreamDone, err)
+	m.outgoingUniStreams.CloseWithError(m.onStreamDone, err)
+	m.incomingBidiStreams.CloseWithError(m.onStreamDone, err)
+	m.incomingUniStreams.CloseWithError(m.onStreamDone, err)
 }
 
 // ResetFor0RTT resets is used when 0-RTT is rejected. In that case, the streams maps are
