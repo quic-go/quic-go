@@ -127,7 +127,7 @@ var _ = Describe("Server", func() {
 		Expect(server.config.HandshakeIdleTimeout).To(Equal(protocol.DefaultHandshakeIdleTimeout))
 		Expect(server.config.MaxIdleTimeout).To(Equal(protocol.DefaultIdleTimeout))
 		Expect(reflect.ValueOf(server.config.AcceptToken)).To(Equal(reflect.ValueOf(defaultAcceptToken)))
-		Expect(server.config.KeepAlivePeriod).To(Equal(0))
+		Expect(server.config.KeepAlivePeriod).To(Equal(0 * time.Second))
 		// stop the listener
 		Expect(ln.Close()).To(Succeed())
 	})

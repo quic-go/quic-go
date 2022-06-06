@@ -71,8 +71,8 @@ var _ = Describe("Config", func() {
 				f.Set(reflect.ValueOf(int64(12)))
 			case "StatelessResetKey":
 				f.Set(reflect.ValueOf([]byte{1, 2, 3, 4}))
-			case "KeepAlive":
-				f.Set(reflect.ValueOf(true))
+			case "KeepAlivePeriod":
+				f.Set(reflect.ValueOf(time.Second))
 			case "EnableDatagrams":
 				f.Set(reflect.ValueOf(true))
 			case "DisableVersionNegotiationPackets":
