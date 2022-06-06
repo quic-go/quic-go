@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"strconv"
 	"sync"
+	"time"
 
 	"github.com/lucas-clemente/quic-go"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
@@ -30,7 +31,7 @@ const (
 
 var defaultQuicConfig = &quic.Config{
 	MaxIncomingStreams: -1, // don't allow the server to create bidirectional streams
-	KeepAlive:          true,
+	KeepAlivePeriod:    10 * time.Second,
 	Versions:           []protocol.VersionNumber{protocol.VersionTLS},
 }
 
