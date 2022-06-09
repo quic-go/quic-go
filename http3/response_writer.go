@@ -12,25 +12,14 @@ import (
 	"github.com/marten-seemann/qpack"
 )
 
-// DataStreamer lets the caller take over the stream. After a call to DataStream
-// the HTTP server library will not do anything else with the connection.
-//
-// It becomes the caller's responsibility to manage and close the stream.
-//
-// After a call to DataStream, the original Request.Body must not be used.
-type DataStreamer interface {
-	DataStream() quic.Stream
-}
-
 type responseWriter struct {
 	conn           quic.Connection
 	stream         quic.Stream // needed for DataStream()
 	bufferedStream *bufio.Writer
 
-	header         http.Header
-	status         int // status code passed to WriteHeader
-	headerWritten  bool
-	dataStreamUsed bool // set when DataSteam() is called
+	header        http.Header
+	status        int // status code passed to WriteHeader
+	headerWritten bool
 
 	logger utils.Logger
 }
@@ -38,7 +27,6 @@ type responseWriter struct {
 var (
 	_ http.ResponseWriter = &responseWriter{}
 	_ http.Flusher        = &responseWriter{}
-	_ DataStreamer        = &responseWriter{}
 	_ Hijacker            = &responseWriter{}
 )
 
@@ -110,16 +98,6 @@ func (w *responseWriter) Flush() {
 	if err := w.bufferedStream.Flush(); err != nil {
 		w.logger.Errorf("could not flush to stream: %s", err.Error())
 	}
-}
-
-func (w *responseWriter) usedDataStream() bool {
-	return w.dataStreamUsed
-}
-
-func (w *responseWriter) DataStream() quic.Stream {
-	w.dataStreamUsed = true
-	w.Flush()
-	return w.stream
 }
 
 func (w *responseWriter) StreamID() quic.StreamID {
