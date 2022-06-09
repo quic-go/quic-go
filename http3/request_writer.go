@@ -98,6 +98,7 @@ func (w *requestWriter) writeHeaders(wr io.Writer, req *http.Request, gzip bool)
 	w.mutex.Lock()
 	defer w.mutex.Unlock()
 	defer w.encoder.Close()
+	defer w.headerBuf.Reset()
 
 	if err := w.encodeHeaders(req, gzip, "", actualContentLength(req)); err != nil {
 		return err
@@ -109,11 +110,8 @@ func (w *requestWriter) writeHeaders(wr io.Writer, req *http.Request, gzip bool)
 	if _, err := wr.Write(buf.Bytes()); err != nil {
 		return err
 	}
-	if _, err := wr.Write(w.headerBuf.Bytes()); err != nil {
-		return err
-	}
-	w.headerBuf.Reset()
-	return nil
+	_, err := wr.Write(w.headerBuf.Bytes())
+	return err
 }
 
 // copied from net/transport.go
