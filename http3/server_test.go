@@ -934,23 +934,23 @@ var _ = Describe("Server", func() {
 			ch = &tls.ClientHelloInfo{}
 		})
 
-		It("advertises draft by default", func() {
+		It("advertises v1 by default", func() {
 			tlsConf = ConfigureTLSConfig(tlsConf)
 			Expect(tlsConf.GetConfigForClient).NotTo(BeNil())
 
-			config, err := tlsConf.GetConfigForClient(ch)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(config.NextProtos).To(Equal([]string{nextProtoH3Draft29}))
-		})
-
-		It("advertises h3 for quic version 1", func() {
-			tlsConf = ConfigureTLSConfig(tlsConf)
-			Expect(tlsConf.GetConfigForClient).NotTo(BeNil())
-
-			ch.Conn = newMockConn(protocol.Version1)
 			config, err := tlsConf.GetConfigForClient(ch)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(config.NextProtos).To(Equal([]string{nextProtoH3}))
+		})
+
+		It("advertises h3-29 for draft-29", func() {
+			tlsConf = ConfigureTLSConfig(tlsConf)
+			Expect(tlsConf.GetConfigForClient).NotTo(BeNil())
+
+			ch.Conn = newMockConn(protocol.VersionDraft29)
+			config, err := tlsConf.GetConfigForClient(ch)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(config.NextProtos).To(Equal([]string{nextProtoH3Draft29}))
 		})
 	})
 

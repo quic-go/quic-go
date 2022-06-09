@@ -17,7 +17,7 @@ var _ = Describe("DATA_BLOCKED frame", func() {
 			data := []byte{0x14}
 			data = append(data, encodeVarInt(0x12345678)...)
 			b := bytes.NewReader(data)
-			frame, err := parseDataBlockedFrame(b, versionIETFFrames)
+			frame, err := parseDataBlockedFrame(b, protocol.Version1)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(frame.MaximumData).To(Equal(protocol.ByteCount(0x12345678)))
 			Expect(b.Len()).To(BeZero())
@@ -26,10 +26,10 @@ var _ = Describe("DATA_BLOCKED frame", func() {
 		It("errors on EOFs", func() {
 			data := []byte{0x14}
 			data = append(data, encodeVarInt(0x12345678)...)
-			_, err := parseDataBlockedFrame(bytes.NewReader(data), versionIETFFrames)
+			_, err := parseDataBlockedFrame(bytes.NewReader(data), protocol.Version1)
 			Expect(err).ToNot(HaveOccurred())
 			for i := range data {
-				_, err := parseDataBlockedFrame(bytes.NewReader(data[:i]), versionIETFFrames)
+				_, err := parseDataBlockedFrame(bytes.NewReader(data[:i]), protocol.Version1)
 				Expect(err).To(MatchError(io.EOF))
 			}
 		})
@@ -48,7 +48,7 @@ var _ = Describe("DATA_BLOCKED frame", func() {
 
 		It("has the correct min length", func() {
 			frame := DataBlockedFrame{MaximumData: 0x12345}
-			Expect(frame.Length(versionIETFFrames)).To(Equal(1 + quicvarint.Len(0x12345)))
+			Expect(frame.Length(protocol.Version1)).To(Equal(1 + quicvarint.Len(0x12345)))
 		})
 	})
 })

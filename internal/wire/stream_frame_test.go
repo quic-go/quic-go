@@ -19,7 +19,7 @@ var _ = Describe("STREAM frame", func() {
 			data = append(data, encodeVarInt(0xdecafbad)...) // offset
 			data = append(data, []byte("foobar")...)
 			r := bytes.NewReader(data)
-			frame, err := parseStreamFrame(r, versionIETFFrames)
+			frame, err := parseStreamFrame(r, protocol.Version1)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(frame.StreamID).To(Equal(protocol.StreamID(0x12345)))
 			Expect(frame.Data).To(Equal([]byte("foobar")))
@@ -34,7 +34,7 @@ var _ = Describe("STREAM frame", func() {
 			data = append(data, encodeVarInt(4)...)       // data length
 			data = append(data, []byte("foobar")...)
 			r := bytes.NewReader(data)
-			frame, err := parseStreamFrame(r, versionIETFFrames)
+			frame, err := parseStreamFrame(r, protocol.Version1)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(frame.StreamID).To(Equal(protocol.StreamID(0x12345)))
 			Expect(frame.Data).To(Equal([]byte("foob")))
@@ -48,7 +48,7 @@ var _ = Describe("STREAM frame", func() {
 			data = append(data, encodeVarInt(9)...) // stream ID
 			data = append(data, []byte("foobar")...)
 			r := bytes.NewReader(data)
-			frame, err := parseStreamFrame(r, versionIETFFrames)
+			frame, err := parseStreamFrame(r, protocol.Version1)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(frame.StreamID).To(Equal(protocol.StreamID(9)))
 			Expect(frame.Data).To(Equal([]byte("foobar")))
@@ -62,7 +62,7 @@ var _ = Describe("STREAM frame", func() {
 			data = append(data, encodeVarInt(0x1337)...)  // stream ID
 			data = append(data, encodeVarInt(0x12345)...) // offset
 			r := bytes.NewReader(data)
-			f, err := parseStreamFrame(r, versionIETFFrames)
+			f, err := parseStreamFrame(r, protocol.Version1)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(f.StreamID).To(Equal(protocol.StreamID(0x1337)))
 			Expect(f.Offset).To(Equal(protocol.ByteCount(0x12345)))
@@ -76,7 +76,7 @@ var _ = Describe("STREAM frame", func() {
 			data = append(data, encodeVarInt(uint64(protocol.MaxByteCount-5))...) // offset
 			data = append(data, []byte("foobar")...)
 			r := bytes.NewReader(data)
-			_, err := parseStreamFrame(r, versionIETFFrames)
+			_, err := parseStreamFrame(r, protocol.Version1)
 			Expect(err).To(MatchError("stream data overflows maximum offset"))
 		})
 
@@ -86,7 +86,7 @@ var _ = Describe("STREAM frame", func() {
 			data = append(data, encodeVarInt(uint64(protocol.MaxPacketBufferSize)+1)...) // data length
 			data = append(data, make([]byte, protocol.MaxPacketBufferSize+1)...)
 			r := bytes.NewReader(data)
-			_, err := parseStreamFrame(r, versionIETFFrames)
+			_, err := parseStreamFrame(r, protocol.Version1)
 			Expect(err).To(Equal(io.EOF))
 		})
 
@@ -96,10 +96,10 @@ var _ = Describe("STREAM frame", func() {
 			data = append(data, encodeVarInt(0xdecafbad)...) // offset
 			data = append(data, encodeVarInt(6)...)          // data length
 			data = append(data, []byte("foobar")...)
-			_, err := parseStreamFrame(bytes.NewReader(data), versionIETFFrames)
+			_, err := parseStreamFrame(bytes.NewReader(data), protocol.Version1)
 			Expect(err).NotTo(HaveOccurred())
 			for i := range data {
-				_, err := parseStreamFrame(bytes.NewReader(data[0:i]), versionIETFFrames)
+				_, err := parseStreamFrame(bytes.NewReader(data[0:i]), protocol.Version1)
 				Expect(err).To(HaveOccurred())
 			}
 		})
@@ -111,7 +111,7 @@ var _ = Describe("STREAM frame", func() {
 			data = append(data, encodeVarInt(0x12345)...) // stream ID
 			data = append(data, bytes.Repeat([]byte{'f'}, protocol.MinStreamFrameBufferSize)...)
 			r := bytes.NewReader(data)
-			frame, err := parseStreamFrame(r, versionIETFFrames)
+			frame, err := parseStreamFrame(r, protocol.Version1)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(frame.StreamID).To(Equal(protocol.StreamID(0x12345)))
 			Expect(frame.Data).To(Equal(bytes.Repeat([]byte{'f'}, protocol.MinStreamFrameBufferSize)))
@@ -127,7 +127,7 @@ var _ = Describe("STREAM frame", func() {
 			data = append(data, encodeVarInt(0x12345)...) // stream ID
 			data = append(data, bytes.Repeat([]byte{'f'}, protocol.MinStreamFrameBufferSize-1)...)
 			r := bytes.NewReader(data)
-			frame, err := parseStreamFrame(r, versionIETFFrames)
+			frame, err := parseStreamFrame(r, protocol.Version1)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(frame.StreamID).To(Equal(protocol.StreamID(0x12345)))
 			Expect(frame.Data).To(Equal(bytes.Repeat([]byte{'f'}, protocol.MinStreamFrameBufferSize-1)))
@@ -146,7 +146,7 @@ var _ = Describe("STREAM frame", func() {
 				Data:     []byte("foobar"),
 			}
 			b := &bytes.Buffer{}
-			err := f.Write(b, versionIETFFrames)
+			err := f.Write(b, protocol.Version1)
 			Expect(err).ToNot(HaveOccurred())
 			expected := []byte{0x8}
 			expected = append(expected, encodeVarInt(0x1337)...) // stream ID
@@ -161,7 +161,7 @@ var _ = Describe("STREAM frame", func() {
 				Data:     []byte("foobar"),
 			}
 			b := &bytes.Buffer{}
-			err := f.Write(b, versionIETFFrames)
+			err := f.Write(b, protocol.Version1)
 			Expect(err).ToNot(HaveOccurred())
 			expected := []byte{0x8 ^ 0x4}
 			expected = append(expected, encodeVarInt(0x1337)...)   // stream ID
@@ -177,7 +177,7 @@ var _ = Describe("STREAM frame", func() {
 				Fin:      true,
 			}
 			b := &bytes.Buffer{}
-			err := f.Write(b, versionIETFFrames)
+			err := f.Write(b, protocol.Version1)
 			Expect(err).ToNot(HaveOccurred())
 			expected := []byte{0x8 ^ 0x4 ^ 0x1}
 			expected = append(expected, encodeVarInt(0x1337)...)   // stream ID
@@ -192,7 +192,7 @@ var _ = Describe("STREAM frame", func() {
 				DataLenPresent: true,
 			}
 			b := &bytes.Buffer{}
-			err := f.Write(b, versionIETFFrames)
+			err := f.Write(b, protocol.Version1)
 			Expect(err).ToNot(HaveOccurred())
 			expected := []byte{0x8 ^ 0x2}
 			expected = append(expected, encodeVarInt(0x1337)...) // stream ID
@@ -209,7 +209,7 @@ var _ = Describe("STREAM frame", func() {
 				Offset:         0x123456,
 			}
 			b := &bytes.Buffer{}
-			err := f.Write(b, versionIETFFrames)
+			err := f.Write(b, protocol.Version1)
 			Expect(err).ToNot(HaveOccurred())
 			expected := []byte{0x8 ^ 0x4 ^ 0x2}
 			expected = append(expected, encodeVarInt(0x1337)...)   // stream ID
@@ -225,7 +225,7 @@ var _ = Describe("STREAM frame", func() {
 				Offset:   0x1337,
 			}
 			b := &bytes.Buffer{}
-			err := f.Write(b, versionIETFFrames)
+			err := f.Write(b, protocol.Version1)
 			Expect(err).To(MatchError("StreamFrame: attempting to write empty frame without FIN"))
 		})
 	})
@@ -236,7 +236,7 @@ var _ = Describe("STREAM frame", func() {
 				StreamID: 0x1337,
 				Data:     []byte("foobar"),
 			}
-			Expect(f.Length(versionIETFFrames)).To(Equal(1 + quicvarint.Len(0x1337) + 6))
+			Expect(f.Length(protocol.Version1)).To(Equal(1 + quicvarint.Len(0x1337) + 6))
 		})
 
 		It("has the right length for a frame with offset", func() {
@@ -245,7 +245,7 @@ var _ = Describe("STREAM frame", func() {
 				Offset:   0x42,
 				Data:     []byte("foobar"),
 			}
-			Expect(f.Length(versionIETFFrames)).To(Equal(1 + quicvarint.Len(0x1337) + quicvarint.Len(0x42) + 6))
+			Expect(f.Length(protocol.Version1)).To(Equal(1 + quicvarint.Len(0x1337) + quicvarint.Len(0x42) + 6))
 		})
 
 		It("has the right length for a frame with data length", func() {
@@ -255,7 +255,7 @@ var _ = Describe("STREAM frame", func() {
 				DataLenPresent: true,
 				Data:           []byte("foobar"),
 			}
-			Expect(f.Length(versionIETFFrames)).To(Equal(1 + quicvarint.Len(0x1337) + quicvarint.Len(0x1234567) + quicvarint.Len(6) + 6))
+			Expect(f.Length(protocol.Version1)).To(Equal(1 + quicvarint.Len(0x1337) + quicvarint.Len(0x1234567) + quicvarint.Len(6) + 6))
 		})
 	})
 
@@ -272,17 +272,17 @@ var _ = Describe("STREAM frame", func() {
 			for i := 1; i < 3000; i++ {
 				b.Reset()
 				f.Data = nil
-				maxDataLen := f.MaxDataLen(protocol.ByteCount(i), versionIETFFrames)
+				maxDataLen := f.MaxDataLen(protocol.ByteCount(i), protocol.Version1)
 				if maxDataLen == 0 { // 0 means that no valid STREAM frame can be written
 					// check that writing a minimal size STREAM frame (i.e. with 1 byte data) is actually larger than the desired size
 					f.Data = []byte{0}
-					err := f.Write(b, versionIETFFrames)
+					err := f.Write(b, protocol.Version1)
 					Expect(err).ToNot(HaveOccurred())
 					Expect(b.Len()).To(BeNumerically(">", i))
 					continue
 				}
 				f.Data = data[:int(maxDataLen)]
-				err := f.Write(b, versionIETFFrames)
+				err := f.Write(b, protocol.Version1)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(b.Len()).To(Equal(i))
 			}
@@ -300,17 +300,17 @@ var _ = Describe("STREAM frame", func() {
 			for i := 1; i < 3000; i++ {
 				b.Reset()
 				f.Data = nil
-				maxDataLen := f.MaxDataLen(protocol.ByteCount(i), versionIETFFrames)
+				maxDataLen := f.MaxDataLen(protocol.ByteCount(i), protocol.Version1)
 				if maxDataLen == 0 { // 0 means that no valid STREAM frame can be written
 					// check that writing a minimal size STREAM frame (i.e. with 1 byte data) is actually larger than the desired size
 					f.Data = []byte{0}
-					err := f.Write(b, versionIETFFrames)
+					err := f.Write(b, protocol.Version1)
 					Expect(err).ToNot(HaveOccurred())
 					Expect(b.Len()).To(BeNumerically(">", i))
 					continue
 				}
 				f.Data = data[:int(maxDataLen)]
-				err := f.Write(b, versionIETFFrames)
+				err := f.Write(b, protocol.Version1)
 				Expect(err).ToNot(HaveOccurred())
 				// There's *one* pathological case, where a data length of x can be encoded into 1 byte
 				// but a data lengths of x+1 needs 2 bytes
@@ -333,11 +333,11 @@ var _ = Describe("STREAM frame", func() {
 				Offset:         0xdeadbeef,
 				Data:           make([]byte, 100),
 			}
-			frame, needsSplit := f.MaybeSplitOffFrame(f.Length(versionIETFFrames), versionIETFFrames)
+			frame, needsSplit := f.MaybeSplitOffFrame(f.Length(protocol.Version1), protocol.Version1)
 			Expect(needsSplit).To(BeFalse())
 			Expect(frame).To(BeNil())
 			Expect(f.DataLen()).To(BeEquivalentTo(100))
-			frame, needsSplit = f.MaybeSplitOffFrame(f.Length(versionIETFFrames)-1, versionIETFFrames)
+			frame, needsSplit = f.MaybeSplitOffFrame(f.Length(protocol.Version1)-1, protocol.Version1)
 			Expect(needsSplit).To(BeTrue())
 			Expect(frame.DataLen()).To(BeEquivalentTo(99))
 			f.PutBack()
@@ -349,7 +349,7 @@ var _ = Describe("STREAM frame", func() {
 				DataLenPresent: true,
 				Data:           make([]byte, 100),
 			}
-			frame, needsSplit := f.MaybeSplitOffFrame(66, versionIETFFrames)
+			frame, needsSplit := f.MaybeSplitOffFrame(66, protocol.Version1)
 			Expect(needsSplit).To(BeTrue())
 			Expect(frame).ToNot(BeNil())
 			Expect(f.DataLenPresent).To(BeTrue())
@@ -362,7 +362,7 @@ var _ = Describe("STREAM frame", func() {
 				Offset:   0x100,
 				Data:     []byte("foobar"),
 			}
-			frame, needsSplit := f.MaybeSplitOffFrame(f.Length(versionIETFFrames)-3, versionIETFFrames)
+			frame, needsSplit := f.MaybeSplitOffFrame(f.Length(protocol.Version1)-3, protocol.Version1)
 			Expect(needsSplit).To(BeTrue())
 			Expect(frame).ToNot(BeNil())
 			Expect(frame.Offset).To(Equal(protocol.ByteCount(0x100)))
@@ -378,7 +378,7 @@ var _ = Describe("STREAM frame", func() {
 				Offset:   0xdeadbeef,
 				Data:     make([]byte, 100),
 			}
-			frame, needsSplit := f.MaybeSplitOffFrame(50, versionIETFFrames)
+			frame, needsSplit := f.MaybeSplitOffFrame(50, protocol.Version1)
 			Expect(needsSplit).To(BeTrue())
 			Expect(frame).ToNot(BeNil())
 			Expect(frame.Offset).To(BeNumerically("<", f.Offset))
@@ -393,18 +393,18 @@ var _ = Describe("STREAM frame", func() {
 				Offset:   0x1234,
 				Data:     []byte{0},
 			}
-			minFrameSize := f.Length(versionIETFFrames)
+			minFrameSize := f.Length(protocol.Version1)
 			for i := protocol.ByteCount(0); i < minFrameSize; i++ {
-				f, needsSplit := f.MaybeSplitOffFrame(i, versionIETFFrames)
+				f, needsSplit := f.MaybeSplitOffFrame(i, protocol.Version1)
 				Expect(needsSplit).To(BeTrue())
 				Expect(f).To(BeNil())
 			}
 			for i := minFrameSize; i < size; i++ {
 				f.fromPool = false
 				f.Data = make([]byte, size)
-				f, needsSplit := f.MaybeSplitOffFrame(i, versionIETFFrames)
+				f, needsSplit := f.MaybeSplitOffFrame(i, protocol.Version1)
 				Expect(needsSplit).To(BeTrue())
-				Expect(f.Length(versionIETFFrames)).To(Equal(i))
+				Expect(f.Length(protocol.Version1)).To(Equal(i))
 			}
 		})
 
@@ -416,9 +416,9 @@ var _ = Describe("STREAM frame", func() {
 				DataLenPresent: true,
 				Data:           []byte{0},
 			}
-			minFrameSize := f.Length(versionIETFFrames)
+			minFrameSize := f.Length(protocol.Version1)
 			for i := protocol.ByteCount(0); i < minFrameSize; i++ {
-				f, needsSplit := f.MaybeSplitOffFrame(i, versionIETFFrames)
+				f, needsSplit := f.MaybeSplitOffFrame(i, protocol.Version1)
 				Expect(needsSplit).To(BeTrue())
 				Expect(f).To(BeNil())
 			}
@@ -426,16 +426,16 @@ var _ = Describe("STREAM frame", func() {
 			for i := minFrameSize; i < size; i++ {
 				f.fromPool = false
 				f.Data = make([]byte, size)
-				newFrame, needsSplit := f.MaybeSplitOffFrame(i, versionIETFFrames)
+				newFrame, needsSplit := f.MaybeSplitOffFrame(i, protocol.Version1)
 				Expect(needsSplit).To(BeTrue())
 				// There's *one* pathological case, where a data length of x can be encoded into 1 byte
 				// but a data lengths of x+1 needs 2 bytes
 				// In that case, it's impossible to create a STREAM frame of the desired size
-				if newFrame.Length(versionIETFFrames) == i-1 {
+				if newFrame.Length(protocol.Version1) == i-1 {
 					frameOneByteTooSmallCounter++
 					continue
 				}
-				Expect(newFrame.Length(versionIETFFrames)).To(Equal(i))
+				Expect(newFrame.Length(protocol.Version1)).To(Equal(i))
 			}
 			Expect(frameOneByteTooSmallCounter).To(Equal(1))
 		})

@@ -17,7 +17,7 @@ var _ = Describe("STREAM_DATA_BLOCKED frame", func() {
 			data = append(data, encodeVarInt(0xdeadbeef)...) // stream ID
 			data = append(data, encodeVarInt(0xdecafbad)...) // offset
 			b := bytes.NewReader(data)
-			frame, err := parseStreamDataBlockedFrame(b, versionIETFFrames)
+			frame, err := parseStreamDataBlockedFrame(b, protocol.Version1)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(frame.StreamID).To(Equal(protocol.StreamID(0xdeadbeef)))
 			Expect(frame.MaximumStreamData).To(Equal(protocol.ByteCount(0xdecafbad)))
@@ -28,10 +28,10 @@ var _ = Describe("STREAM_DATA_BLOCKED frame", func() {
 			data := []byte{0x15}
 			data = append(data, encodeVarInt(0xdeadbeef)...)
 			data = append(data, encodeVarInt(0xc0010ff)...)
-			_, err := parseStreamDataBlockedFrame(bytes.NewReader(data), versionIETFFrames)
+			_, err := parseStreamDataBlockedFrame(bytes.NewReader(data), protocol.Version1)
 			Expect(err).NotTo(HaveOccurred())
 			for i := range data {
-				_, err := parseStreamDataBlockedFrame(bytes.NewReader(data[0:i]), versionIETFFrames)
+				_, err := parseStreamDataBlockedFrame(bytes.NewReader(data[0:i]), protocol.Version1)
 				Expect(err).To(HaveOccurred())
 			}
 		})
@@ -52,7 +52,7 @@ var _ = Describe("STREAM_DATA_BLOCKED frame", func() {
 				StreamID:          0xdecafbad,
 				MaximumStreamData: 0x1337,
 			}
-			err := f.Write(b, versionIETFFrames)
+			err := f.Write(b, protocol.Version1)
 			Expect(err).ToNot(HaveOccurred())
 			expected := []byte{0x15}
 			expected = append(expected, encodeVarInt(uint64(f.StreamID))...)
