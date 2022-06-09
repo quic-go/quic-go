@@ -797,9 +797,11 @@ var _ = Describe("Client", func() {
 					<-done
 					return 0, errors.New("test done")
 				})
-				str.EXPECT().Close()
+				closed := make(chan struct{})
+				str.EXPECT().Close().Do(func() { close(closed) })
 				_, err := client.RoundTripOpt(req, RoundTripOpt{})
 				Expect(err).To(MatchError("test done"))
+				Eventually(closed).Should(BeClosed())
 			})
 
 			It("sets the Content-Length", func() {
