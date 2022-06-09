@@ -282,8 +282,10 @@ type Config struct {
 	// The StatelessResetKey is used to generate stateless reset tokens.
 	// If no key is configured, sending of stateless resets is disabled.
 	StatelessResetKey []byte
-	// KeepAlive defines whether this peer will periodically send a packet to keep the connection alive.
-	KeepAlive bool
+	// KeepAlivePeriod defines whether this peer will periodically send a packet to keep the connection alive.
+	// If set to 0, then no keep alive is sent. Otherwise, the keep alive is sent on that period (or at most
+	// every half of MaxIdleTimeout, whichever is smaller).
+	KeepAlivePeriod time.Duration
 	// DisablePathMTUDiscovery disables Path MTU Discovery (RFC 8899).
 	// Packets will then be at most 1252 (IPv4) / 1232 (IPv6) bytes in size.
 	// Note that if Path MTU discovery is causing issues on your system, please open a new issue

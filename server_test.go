@@ -127,7 +127,7 @@ var _ = Describe("Server", func() {
 		Expect(server.config.HandshakeIdleTimeout).To(Equal(protocol.DefaultHandshakeIdleTimeout))
 		Expect(server.config.MaxIdleTimeout).To(Equal(protocol.DefaultIdleTimeout))
 		Expect(reflect.ValueOf(server.config.AcceptToken)).To(Equal(reflect.ValueOf(defaultAcceptToken)))
-		Expect(server.config.KeepAlive).To(BeFalse())
+		Expect(server.config.KeepAlivePeriod).To(Equal(0 * time.Second))
 		// stop the listener
 		Expect(ln.Close()).To(Succeed())
 	})
@@ -140,7 +140,7 @@ var _ = Describe("Server", func() {
 			AcceptToken:          acceptToken,
 			HandshakeIdleTimeout: 1337 * time.Hour,
 			MaxIdleTimeout:       42 * time.Minute,
-			KeepAlive:            true,
+			KeepAlivePeriod:      5 * time.Second,
 			StatelessResetKey:    []byte("foobar"),
 		}
 		ln, err := Listen(conn, tlsConf, &config)
@@ -151,7 +151,7 @@ var _ = Describe("Server", func() {
 		Expect(server.config.HandshakeIdleTimeout).To(Equal(1337 * time.Hour))
 		Expect(server.config.MaxIdleTimeout).To(Equal(42 * time.Minute))
 		Expect(reflect.ValueOf(server.config.AcceptToken)).To(Equal(reflect.ValueOf(acceptToken)))
-		Expect(server.config.KeepAlive).To(BeTrue())
+		Expect(server.config.KeepAlivePeriod).To(Equal(5 * time.Second))
 		Expect(server.config.StatelessResetKey).To(Equal([]byte("foobar")))
 		// stop the listener
 		Expect(ln.Close()).To(Succeed())

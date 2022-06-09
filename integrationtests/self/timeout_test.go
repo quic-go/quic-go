@@ -355,7 +355,7 @@ var _ = Describe("Timeout tests", func() {
 			getTLSClientConfig(),
 			getQuicConfig(&quic.Config{
 				MaxIdleTimeout:          idleTimeout,
-				KeepAlive:               true,
+				KeepAlivePeriod:         idleTimeout / 2,
 				DisablePathMTUDiscovery: true,
 			}),
 		)
@@ -480,7 +480,7 @@ var _ = Describe("Timeout tests", func() {
 				getQuicConfig(&quic.Config{
 					HandshakeIdleTimeout:    handshakeTimeout,
 					MaxIdleTimeout:          handshakeTimeout,
-					KeepAlive:               true,
+					KeepAlivePeriod:         handshakeTimeout / 2,
 					DisablePathMTUDiscovery: true,
 				}),
 			)
