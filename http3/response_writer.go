@@ -13,9 +13,8 @@ import (
 )
 
 type responseWriter struct {
-	conn           quic.Connection
-	stream         quic.Stream // needed for DataStream()
-	bufferedStream *bufio.Writer
+	conn        quic.Connection
+	bufferedStr *bufio.Writer
 
 	header        http.Header
 	status        int // status code passed to WriteHeader
@@ -30,13 +29,12 @@ var (
 	_ Hijacker            = &responseWriter{}
 )
 
-func newResponseWriter(stream quic.Stream, conn quic.Connection, logger utils.Logger) *responseWriter {
+func newResponseWriter(str quic.Stream, conn quic.Connection, logger utils.Logger) *responseWriter {
 	return &responseWriter{
-		header:         http.Header{},
-		stream:         stream,
-		conn:           conn,
-		bufferedStream: bufio.NewWriter(stream),
-		logger:         logger,
+		header:      http.Header{},
+		conn:        conn,
+		bufferedStr: bufio.NewWriter(str),
+		logger:      logger,
 	}
 }
 
@@ -67,10 +65,10 @@ func (w *responseWriter) WriteHeader(status int) {
 	buf := &bytes.Buffer{}
 	(&headersFrame{Length: uint64(headers.Len())}).Write(buf)
 	w.logger.Infof("Responding with %d", status)
-	if _, err := w.bufferedStream.Write(buf.Bytes()); err != nil {
+	if _, err := w.bufferedStr.Write(buf.Bytes()); err != nil {
 		w.logger.Errorf("could not write headers frame: %s", err.Error())
 	}
-	if _, err := w.bufferedStream.Write(headers.Bytes()); err != nil {
+	if _, err := w.bufferedStr.Write(headers.Bytes()); err != nil {
 		w.logger.Errorf("could not write header frame payload: %s", err.Error())
 	}
 	if !w.headerWritten {
@@ -88,20 +86,16 @@ func (w *responseWriter) Write(p []byte) (int, error) {
 	df := &dataFrame{Length: uint64(len(p))}
 	buf := &bytes.Buffer{}
 	df.Write(buf)
-	if _, err := w.bufferedStream.Write(buf.Bytes()); err != nil {
+	if _, err := w.bufferedStr.Write(buf.Bytes()); err != nil {
 		return 0, err
 	}
-	return w.bufferedStream.Write(p)
+	return w.bufferedStr.Write(p)
 }
 
 func (w *responseWriter) Flush() {
-	if err := w.bufferedStream.Flush(); err != nil {
+	if err := w.bufferedStr.Flush(); err != nil {
 		w.logger.Errorf("could not flush to stream: %s", err.Error())
 	}
-}
-
-func (w *responseWriter) StreamID() quic.StreamID {
-	return w.stream.StreamID()
 }
 
 func (w *responseWriter) StreamCreator() StreamCreator {

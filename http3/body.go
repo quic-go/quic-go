@@ -2,12 +2,20 @@ package http3
 
 import (
 	"context"
-	"fmt"
 	"io"
 	"net"
 
 	"github.com/lucas-clemente/quic-go"
 )
+
+// The HTTPStreamer allows taking over a HTTP/3 stream. The interface is implemented by:
+// * for the server: the http.Request.Body
+// * for the client: the http.Response.Body
+// On the client side, the stream will be closed for writing, unless the DontCloseRequestStream RoundTripOpt was set.
+// When a stream is taken over, it's the caller's responsibility to close the stream.
+type HTTPStreamer interface {
+	HTTPStream() Stream
+}
 
 type StreamCreator interface {
 	OpenStream() (quic.Stream, error)
@@ -30,41 +38,59 @@ type Hijacker interface {
 type body struct {
 	str quic.Stream
 
+	wasHijacked bool // set when HTTPStream is called
+}
+
+var (
+	_ io.ReadCloser = &body{}
+	_ HTTPStreamer  = &body{}
+)
+
+func newRequestBody(str Stream) *body {
+	return &body{str: str}
+}
+
+func (r *body) HTTPStream() Stream {
+	r.wasHijacked = true
+	return r.str
+}
+
+func (r *body) wasStreamHijacked() bool {
+	return r.wasHijacked
+}
+
+func (r *body) Read(b []byte) (int, error) {
+	return r.str.Read(b)
+}
+
+func (r *body) Close() error {
+	r.str.CancelRead(quic.StreamErrorCode(errorRequestCanceled))
+	return nil
+}
+
+type hijackableBody struct {
+	body
+	conn quic.Connection // only needed to implement Hijacker
+
 	// only set for the http.Response
 	// The channel is closed when the user is done with this response:
 	// either when Read() errors, or when Close() is called.
 	reqDone       chan<- struct{}
 	reqDoneClosed bool
-
-	onFrameError func()
-
-	bytesRemainingInFrame uint64
 }
 
-var _ io.ReadCloser = &body{}
+var (
+	_ Hijacker     = &hijackableBody{}
+	_ HTTPStreamer = &hijackableBody{}
+)
 
-type hijackableBody struct {
-	body
-	conn quic.Connection // only needed to implement Hijacker
-}
-
-var _ Hijacker = &hijackableBody{}
-
-func newRequestBody(str quic.Stream, onFrameError func()) *body {
-	return &body{
-		str:          str,
-		onFrameError: onFrameError,
-	}
-}
-
-func newResponseBody(str quic.Stream, conn quic.Connection, done chan<- struct{}, onFrameError func()) *hijackableBody {
+func newResponseBody(str Stream, conn quic.Connection, done chan<- struct{}) *hijackableBody {
 	return &hijackableBody{
 		body: body{
-			str:          str,
-			onFrameError: onFrameError,
-			reqDone:      done,
+			str: str,
 		},
-		conn: conn,
+		reqDone: done,
+		conn:    conn,
 	}
 }
 
@@ -72,50 +98,15 @@ func (r *hijackableBody) StreamCreator() StreamCreator {
 	return r.conn
 }
 
-func (r *body) Read(b []byte) (int, error) {
-	n, err := r.readImpl(b)
+func (r *hijackableBody) Read(b []byte) (int, error) {
+	n, err := r.str.Read(b)
 	if err != nil {
 		r.requestDone()
 	}
 	return n, err
 }
 
-func (r *body) readImpl(b []byte) (int, error) {
-	if r.bytesRemainingInFrame == 0 {
-	parseLoop:
-		for {
-			frame, err := parseNextFrame(r.str, nil)
-			if err != nil {
-				return 0, err
-			}
-			switch f := frame.(type) {
-			case *headersFrame:
-				// skip HEADERS frames
-				continue
-			case *dataFrame:
-				r.bytesRemainingInFrame = f.Length
-				break parseLoop
-			default:
-				r.onFrameError()
-				// parseNextFrame skips over unknown frame types
-				// Therefore, this condition is only entered when we parsed another known frame type.
-				return 0, fmt.Errorf("peer sent an unexpected frame: %T", f)
-			}
-		}
-	}
-
-	var n int
-	var err error
-	if r.bytesRemainingInFrame < uint64(len(b)) {
-		n, err = r.str.Read(b[:r.bytesRemainingInFrame])
-	} else {
-		n, err = r.str.Read(b)
-	}
-	r.bytesRemainingInFrame -= uint64(n)
-	return n, err
-}
-
-func (r *body) requestDone() {
+func (r *hijackableBody) requestDone() {
 	if r.reqDoneClosed || r.reqDone == nil {
 		return
 	}
@@ -127,9 +118,13 @@ func (r *body) StreamID() quic.StreamID {
 	return r.str.StreamID()
 }
 
-func (r *body) Close() error {
+func (r *hijackableBody) Close() error {
 	r.requestDone()
 	// If the EOF was read, CancelRead() is a no-op.
 	r.str.CancelRead(quic.StreamErrorCode(errorRequestCanceled))
 	return nil
+}
+
+func (r *hijackableBody) HTTPStream() Stream {
+	return r.str
 }

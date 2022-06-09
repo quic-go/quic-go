@@ -1,189 +1,54 @@
 package http3
 
 import (
-	"bytes"
-	"fmt"
-	"io"
+	"errors"
 
-	"github.com/golang/mock/gomock"
 	"github.com/lucas-clemente/quic-go"
 	mockquic "github.com/lucas-clemente/quic-go/internal/mocks/quic"
 
+	"github.com/golang/mock/gomock"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 )
 
-type bodyType uint8
+var _ = Describe("Response Body", func() {
+	var reqDone chan struct{}
 
-const (
-	bodyTypeRequest bodyType = iota
-	bodyTypeResponse
-)
+	BeforeEach(func() { reqDone = make(chan struct{}) })
 
-func (t bodyType) String() string {
-	if t == bodyTypeRequest {
-		return "request"
-	}
-	return "response"
-}
-
-var _ = Describe("Body", func() {
-	var (
-		rb            io.ReadCloser
-		str           *mockquic.MockStream
-		buf           *bytes.Buffer
-		reqDone       chan struct{}
-		errorCbCalled bool
-	)
-
-	errorCb := func() { errorCbCalled = true }
-
-	getDataFrame := func(data []byte) []byte {
-		b := &bytes.Buffer{}
-		(&dataFrame{Length: uint64(len(data))}).Write(b)
-		b.Write(data)
-		return b.Bytes()
-	}
-
-	BeforeEach(func() {
-		buf = &bytes.Buffer{}
-		errorCbCalled = false
+	It("closes the reqDone channel when Read errors", func() {
+		str := mockquic.NewMockStream(mockCtrl)
+		str.EXPECT().Read(gomock.Any()).Return(0, errors.New("test error"))
+		rb := newResponseBody(str, nil, reqDone)
+		_, err := rb.Read([]byte{0})
+		Expect(err).To(MatchError("test error"))
+		Expect(reqDone).To(BeClosed())
 	})
 
-	for _, bt := range []bodyType{bodyTypeRequest, bodyTypeResponse} {
-		bodyType := bt
+	It("allows multiple calls to Read, when Read errors", func() {
+		str := mockquic.NewMockStream(mockCtrl)
+		str.EXPECT().Read(gomock.Any()).Return(0, errors.New("test error")).Times(2)
+		rb := newResponseBody(str, nil, reqDone)
+		_, err := rb.Read([]byte{0})
+		Expect(err).To(HaveOccurred())
+		Expect(reqDone).To(BeClosed())
+		_, err = rb.Read([]byte{0})
+		Expect(err).To(HaveOccurred())
+	})
 
-		Context(fmt.Sprintf("using a %s body", bodyType), func() {
-			BeforeEach(func() {
-				str = mockquic.NewMockStream(mockCtrl)
-				str.EXPECT().Write(gomock.Any()).DoAndReturn(func(b []byte) (int, error) {
-					return buf.Write(b)
-				}).AnyTimes()
-				str.EXPECT().Read(gomock.Any()).DoAndReturn(func(b []byte) (int, error) {
-					return buf.Read(b)
-				}).AnyTimes()
+	It("closes responses", func() {
+		str := mockquic.NewMockStream(mockCtrl)
+		rb := newResponseBody(str, nil, reqDone)
+		str.EXPECT().CancelRead(quic.StreamErrorCode(errorRequestCanceled))
+		Expect(rb.Close()).To(Succeed())
+	})
 
-				switch bodyType {
-				case bodyTypeRequest:
-					rb = newRequestBody(str, errorCb)
-				case bodyTypeResponse:
-					reqDone = make(chan struct{})
-					rb = newResponseBody(str, nil, reqDone, errorCb)
-				}
-			})
-
-			It("reads DATA frames in a single run", func() {
-				buf.Write(getDataFrame([]byte("foobar")))
-				b := make([]byte, 6)
-				n, err := rb.Read(b)
-				Expect(err).ToNot(HaveOccurred())
-				Expect(n).To(Equal(6))
-				Expect(b).To(Equal([]byte("foobar")))
-			})
-
-			It("reads DATA frames in multiple runs", func() {
-				buf.Write(getDataFrame([]byte("foobar")))
-				b := make([]byte, 3)
-				n, err := rb.Read(b)
-				Expect(err).ToNot(HaveOccurred())
-				Expect(n).To(Equal(3))
-				Expect(b).To(Equal([]byte("foo")))
-				n, err = rb.Read(b)
-				Expect(err).ToNot(HaveOccurred())
-				Expect(n).To(Equal(3))
-				Expect(b).To(Equal([]byte("bar")))
-			})
-
-			It("reads DATA frames into too large buffers", func() {
-				buf.Write(getDataFrame([]byte("foobar")))
-				b := make([]byte, 10)
-				n, err := rb.Read(b)
-				Expect(err).ToNot(HaveOccurred())
-				Expect(n).To(Equal(6))
-				Expect(b[:n]).To(Equal([]byte("foobar")))
-			})
-
-			It("reads DATA frames into too large buffers, in multiple runs", func() {
-				buf.Write(getDataFrame([]byte("foobar")))
-				b := make([]byte, 4)
-				n, err := rb.Read(b)
-				Expect(err).ToNot(HaveOccurred())
-				Expect(n).To(Equal(4))
-				Expect(b).To(Equal([]byte("foob")))
-				n, err = rb.Read(b)
-				Expect(err).ToNot(HaveOccurred())
-				Expect(n).To(Equal(2))
-				Expect(b[:n]).To(Equal([]byte("ar")))
-			})
-
-			It("reads multiple DATA frames", func() {
-				buf.Write(getDataFrame([]byte("foo")))
-				buf.Write(getDataFrame([]byte("bar")))
-				b := make([]byte, 6)
-				n, err := rb.Read(b)
-				Expect(err).ToNot(HaveOccurred())
-				Expect(n).To(Equal(3))
-				Expect(b[:n]).To(Equal([]byte("foo")))
-				n, err = rb.Read(b)
-				Expect(err).ToNot(HaveOccurred())
-				Expect(n).To(Equal(3))
-				Expect(b[:n]).To(Equal([]byte("bar")))
-			})
-
-			It("skips HEADERS frames", func() {
-				buf.Write(getDataFrame([]byte("foo")))
-				(&headersFrame{Length: 10}).Write(buf)
-				buf.Write(make([]byte, 10))
-				buf.Write(getDataFrame([]byte("bar")))
-				b := make([]byte, 6)
-				n, err := io.ReadFull(rb, b)
-				Expect(err).ToNot(HaveOccurred())
-				Expect(n).To(Equal(6))
-				Expect(b).To(Equal([]byte("foobar")))
-			})
-
-			It("errors when it can't parse the frame", func() {
-				buf.Write([]byte("invalid"))
-				_, err := rb.Read([]byte{0})
-				Expect(err).To(HaveOccurred())
-			})
-
-			It("errors on unexpected frames, and calls the error callback", func() {
-				(&settingsFrame{}).Write(buf)
-				_, err := rb.Read([]byte{0})
-				Expect(err).To(MatchError("peer sent an unexpected frame: *http3.settingsFrame"))
-				Expect(errorCbCalled).To(BeTrue())
-			})
-
-			if bodyType == bodyTypeResponse {
-				It("closes the reqDone channel when Read errors", func() {
-					buf.Write([]byte("invalid"))
-					_, err := rb.Read([]byte{0})
-					Expect(err).To(HaveOccurred())
-					Expect(reqDone).To(BeClosed())
-				})
-
-				It("allows multiple calls to Read, when Read errors", func() {
-					buf.Write([]byte("invalid"))
-					_, err := rb.Read([]byte{0})
-					Expect(err).To(HaveOccurred())
-					Expect(reqDone).To(BeClosed())
-					_, err = rb.Read([]byte{0})
-					Expect(err).To(HaveOccurred())
-				})
-
-				It("closes responses", func() {
-					str.EXPECT().CancelRead(quic.StreamErrorCode(errorRequestCanceled))
-					Expect(rb.Close()).To(Succeed())
-				})
-
-				It("allows multiple calls to Close", func() {
-					str.EXPECT().CancelRead(quic.StreamErrorCode(errorRequestCanceled)).MaxTimes(2)
-					Expect(rb.Close()).To(Succeed())
-					Expect(reqDone).To(BeClosed())
-					Expect(rb.Close()).To(Succeed())
-				})
-			}
-		})
-	}
+	It("allows multiple calls to Close", func() {
+		str := mockquic.NewMockStream(mockCtrl)
+		rb := newResponseBody(str, nil, reqDone)
+		str.EXPECT().CancelRead(quic.StreamErrorCode(errorRequestCanceled)).MaxTimes(2)
+		Expect(rb.Close()).To(Succeed())
+		Expect(reqDone).To(BeClosed())
+		Expect(rb.Close()).To(Succeed())
+	})
 })
