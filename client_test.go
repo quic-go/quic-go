@@ -88,22 +88,16 @@ var _ = Describe("Client", func() {
 	})
 
 	Context("Dialing", func() {
-		var origGenerateConnectionID func(int) (protocol.ConnectionID, error)
 		var origGenerateConnectionIDForInitial func() (protocol.ConnectionID, error)
 
 		BeforeEach(func() {
-			origGenerateConnectionID = generateConnectionID
 			origGenerateConnectionIDForInitial = generateConnectionIDForInitial
-			generateConnectionID = func(int) (protocol.ConnectionID, error) {
-				return connID, nil
-			}
 			generateConnectionIDForInitial = func() (protocol.ConnectionID, error) {
 				return connID, nil
 			}
 		})
 
 		AfterEach(func() {
-			generateConnectionID = origGenerateConnectionID
 			generateConnectionIDForInitial = origGenerateConnectionIDForInitial
 		})
 
@@ -524,7 +518,7 @@ var _ = Describe("Client", func() {
 			manager.EXPECT().Add(connID, gomock.Any())
 			mockMultiplexer.EXPECT().AddConn(packetConn, gomock.Any(), gomock.Any(), gomock.Any()).Return(manager, nil)
 
-			config := &Config{Versions: []protocol.VersionNumber{protocol.VersionTLS}}
+			config := &Config{Versions: []protocol.VersionNumber{protocol.VersionTLS}, ConnectionIDGenerator: &mockedConnIDGenerator{ConnID: connID}}
 			c := make(chan struct{})
 			var cconn sendConn
 			var version protocol.VersionNumber
@@ -602,6 +596,7 @@ var _ = Describe("Client", func() {
 				return conn
 			}
 
+			config := &Config{Tracer: config.Tracer, Versions: []protocol.VersionNumber{protocol.VersionTLS}, ConnectionIDGenerator: &mockedConnIDGenerator{ConnID: connID}}
 			tracer.EXPECT().StartedConnection(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any())
 			_, err := DialAddr("localhost:7890", tlsConf, config)
 			Expect(err).ToNot(HaveOccurred())
@@ -609,3 +604,15 @@ var _ = Describe("Client", func() {
 		})
 	})
 })
+
+type mockedConnIDGenerator struct {
+	ConnID protocol.ConnectionID
+}
+
+func (m *mockedConnIDGenerator) GenerateConnectionID() ([]byte, error) {
+	return m.ConnID, nil
+}
+
+func (m *mockedConnIDGenerator) ConnectionIDLen() int {
+	return m.ConnID.Len()
+}
