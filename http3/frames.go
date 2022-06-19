@@ -162,3 +162,11 @@ func (f *settingsFrame) Write(b *bytes.Buffer) {
 		quicvarint.Write(b, val)
 	}
 }
+
+type datagramFrame struct {
+	QuarterStreamId uint64
+}
+
+func (f *datagramFrame) Write(b *bytes.Buffer) {
+	quicvarint.Write(b, f.QuarterStreamId)
+}

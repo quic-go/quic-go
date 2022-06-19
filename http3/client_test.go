@@ -686,6 +686,7 @@ var _ = Describe("Client", func() {
 			}) // SETTINGS frame
 			str = mockquic.NewMockStream(mockCtrl)
 			conn = mockquic.NewMockEarlyConnection(mockCtrl)
+			str.EXPECT().StreamID().Return(protocol.StreamID(1)).AnyTimes()
 			conn.EXPECT().OpenUniStream().Return(controlStr, nil)
 			conn.EXPECT().AcceptUniStream(gomock.Any()).DoAndReturn(func(context.Context) (quic.ReceiveStream, error) {
 				<-testDone

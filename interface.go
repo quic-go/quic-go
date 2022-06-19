@@ -137,6 +137,14 @@ type SendStream interface {
 	SetWriteDeadline(t time.Time) error
 }
 
+// Interface for something that can send and receive datagrams (currently HTTP/3 streams and QUIC connections)
+type DatagramSendReceiver interface {
+	// Send a datagram
+	SendMessage([]byte) error
+	// Receive a datagram
+	ReceiveMessage() ([]byte, error)
+}
+
 // A Connection is a QUIC connection between two peers.
 // Calls to the connection (and to streams) can return the following types of errors:
 // * ApplicationError: for errors triggered by the application running on top of QUIC
@@ -146,6 +154,9 @@ type SendStream interface {
 // * StatelessResetError: when we receive a stateless reset (this is a net.Error temporary error)
 // * VersionNegotiationError: returned by the client, when there's no version overlap between the peers
 type Connection interface {
+	// Datagrams sent from and received by this connection as specified in RFC 9221
+	DatagramSendReceiver
+
 	// AcceptStream returns the next stream opened by the peer, blocking until one is available.
 	// If the connection was closed due to a timeout, the error satisfies
 	// the net.Error interface, and Timeout() will be true.
@@ -189,11 +200,6 @@ type Connection interface {
 	// It blocks until the handshake completes.
 	// Warning: This API should not be considered stable and might change soon.
 	ConnectionState() ConnectionState
-
-	// SendMessage sends a message as a datagram, as specified in RFC 9221.
-	SendMessage([]byte) error
-	// ReceiveMessage gets a message received in a datagram, as specified in RFC 9221.
-	ReceiveMessage() ([]byte, error)
 }
 
 // An EarlyConnection is a connection that is handshaking.

@@ -111,6 +111,7 @@ var _ = Describe("Server", func() {
 			examplePostRequest *http.Request
 		)
 		reqContext := context.Background()
+		testDone := make(chan struct{})
 
 		decodeHeader := func(str io.Reader) map[string][]string {
 			fields := make(map[string][]string)
@@ -161,8 +162,17 @@ var _ = Describe("Server", func() {
 			str = mockquic.NewMockStream(mockCtrl)
 			conn = mockquic.NewMockEarlyConnection(mockCtrl)
 			addr := &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 1337}
+			str.EXPECT().StreamID().Return(protocol.StreamID(1)).AnyTimes()
+			conn.EXPECT().ReceiveMessage().DoAndReturn(func(context.Context) (quic.ReceiveStream, error) {
+				<-testDone
+				return nil, errors.New("test done")
+			}).AnyTimes()
 			conn.EXPECT().RemoteAddr().Return(addr).AnyTimes()
 			conn.EXPECT().LocalAddr().AnyTimes()
+		})
+
+		AfterEach(func() {
+			testDone <- struct{}{}
 		})
 
 		It("calls the HTTP handler function", func() {
@@ -178,7 +188,7 @@ var _ = Describe("Server", func() {
 			}).AnyTimes()
 			str.EXPECT().CancelRead(gomock.Any())
 
-			Expect(s.handleRequest(conn, str, qpackDecoder, nil)).To(Equal(requestError{}))
+			Expect(s.handleRequest(conn, &serverConnection{streams: make(map[protocol.StreamID]*stream)}, str, qpackDecoder, nil)).To(Equal(requestError{}))
 			var req *http.Request
 			Eventually(requestChan).Should(Receive(&req))
 			Expect(req.Host).To(Equal("www.example.com"))
@@ -195,7 +205,7 @@ var _ = Describe("Server", func() {
 			str.EXPECT().Write(gomock.Any()).DoAndReturn(responseBuf.Write).AnyTimes()
 			str.EXPECT().CancelRead(gomock.Any())
 
-			serr := s.handleRequest(conn, str, qpackDecoder, nil)
+			serr := s.handleRequest(conn, &serverConnection{streams: make(map[protocol.StreamID]*stream)}, str, qpackDecoder, nil)
 			Expect(serr.err).ToNot(HaveOccurred())
 			hfs := decodeHeader(responseBuf)
 			Expect(hfs).To(HaveKeyWithValue(":status", []string{"200"}))
@@ -212,7 +222,7 @@ var _ = Describe("Server", func() {
 			str.EXPECT().Write(gomock.Any()).DoAndReturn(responseBuf.Write).AnyTimes()
 			str.EXPECT().CancelRead(gomock.Any())
 
-			serr := s.handleRequest(conn, str, qpackDecoder, nil)
+			serr := s.handleRequest(conn, &serverConnection{streams: make(map[protocol.StreamID]*stream)}, str, qpackDecoder, nil)
 			Expect(serr.err).ToNot(HaveOccurred())
 			hfs := decodeHeader(responseBuf)
 			Expect(hfs).To(HaveKeyWithValue(":status", []string{"500"}))
@@ -764,7 +774,7 @@ var _ = Describe("Server", func() {
 			}).AnyTimes()
 			str.EXPECT().CancelRead(quic.StreamErrorCode(errorNoError))
 
-			serr := s.handleRequest(conn, str, qpackDecoder, nil)
+			serr := s.handleRequest(conn, &serverConnection{streams: make(map[protocol.StreamID]*stream)}, str, qpackDecoder, nil)
 			Expect(serr.err).ToNot(HaveOccurred())
 			Eventually(handlerCalled).Should(BeClosed())
 		})
@@ -787,7 +797,7 @@ var _ = Describe("Server", func() {
 			}).AnyTimes()
 			str.EXPECT().CancelRead(quic.StreamErrorCode(errorNoError))
 
-			serr := s.handleRequest(conn, str, qpackDecoder, nil)
+			serr := s.handleRequest(conn, &serverConnection{streams: make(map[protocol.StreamID]*stream)}, str, qpackDecoder, nil)
 			Expect(serr.err).ToNot(HaveOccurred())
 			Eventually(handlerCalled).Should(BeClosed())
 		})

@@ -4,7 +4,7 @@ import (
 	"errors"
 
 	"github.com/lucas-clemente/quic-go"
-	mockquic "github.com/lucas-clemente/quic-go/internal/mocks/quic"
+	mockhttp "github.com/lucas-clemente/quic-go/internal/mocks/http3"
 
 	"github.com/golang/mock/gomock"
 	. "github.com/onsi/ginkgo"
@@ -17,7 +17,7 @@ var _ = Describe("Response Body", func() {
 	BeforeEach(func() { reqDone = make(chan struct{}) })
 
 	It("closes the reqDone channel when Read errors", func() {
-		str := mockquic.NewMockStream(mockCtrl)
+		str := mockhttp.NewMockStream(mockCtrl)
 		str.EXPECT().Read(gomock.Any()).Return(0, errors.New("test error"))
 		rb := newResponseBody(str, nil, reqDone)
 		_, err := rb.Read([]byte{0})
@@ -26,7 +26,7 @@ var _ = Describe("Response Body", func() {
 	})
 
 	It("allows multiple calls to Read, when Read errors", func() {
-		str := mockquic.NewMockStream(mockCtrl)
+		str := mockhttp.NewMockStream(mockCtrl)
 		str.EXPECT().Read(gomock.Any()).Return(0, errors.New("test error")).Times(2)
 		rb := newResponseBody(str, nil, reqDone)
 		_, err := rb.Read([]byte{0})
@@ -37,14 +37,14 @@ var _ = Describe("Response Body", func() {
 	})
 
 	It("closes responses", func() {
-		str := mockquic.NewMockStream(mockCtrl)
+		str := mockhttp.NewMockStream(mockCtrl)
 		rb := newResponseBody(str, nil, reqDone)
 		str.EXPECT().CancelRead(quic.StreamErrorCode(errorRequestCanceled))
 		Expect(rb.Close()).To(Succeed())
 	})
 
 	It("allows multiple calls to Close", func() {
-		str := mockquic.NewMockStream(mockCtrl)
+		str := mockhttp.NewMockStream(mockCtrl)
 		rb := newResponseBody(str, nil, reqDone)
 		str.EXPECT().CancelRead(quic.StreamErrorCode(errorRequestCanceled)).MaxTimes(2)
 		Expect(rb.Close()).To(Succeed())

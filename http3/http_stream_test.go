@@ -34,7 +34,7 @@ var _ = Describe("Stream", func() {
 			qstr = mockquic.NewMockStream(mockCtrl)
 			qstr.EXPECT().Write(gomock.Any()).DoAndReturn(buf.Write).AnyTimes()
 			qstr.EXPECT().Read(gomock.Any()).DoAndReturn(buf.Read).AnyTimes()
-			str = newStream(qstr, errorCb)
+			str = newStream(qstr, nil, errorCb, nil)
 		})
 
 		It("reads DATA frames in a single run", func() {
@@ -126,7 +126,7 @@ var _ = Describe("Stream", func() {
 			buf := &bytes.Buffer{}
 			qstr := mockquic.NewMockStream(mockCtrl)
 			qstr.EXPECT().Write(gomock.Any()).DoAndReturn(buf.Write).AnyTimes()
-			str := newStream(qstr, nil)
+			str := newStream(qstr, nil, nil, nil)
 			str.Write([]byte("foo"))
 			str.Write([]byte("foobar"))
 
