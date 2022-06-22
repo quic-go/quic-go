@@ -228,15 +228,11 @@ func (s *baseServer) run() {
 		select {
 		case <-s.errorChan:
 			return
-		default:
-		}
-		select {
-		case <-s.errorChan:
-			return
 		case p := <-s.receivedPackets:
 			if bufferStillInUse := s.handlePacketImpl(p); !bufferStillInUse {
 				p.buffer.Release()
 			}
+		default:
 		}
 	}
 }
