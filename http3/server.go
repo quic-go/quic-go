@@ -325,10 +325,16 @@ func (s *Server) generateAltSvcHeader() {
 	if s.QuicConfig != nil && len(s.QuicConfig.Versions) > 0 {
 		supportedVersions = s.QuicConfig.Versions
 	}
+
+	// keep track of which have been seen so we don't yield duplicate values
+	seen := make(map[string]struct{}, len(supportedVersions))
 	var versionStrings []string
 	for _, version := range supportedVersions {
 		if v := versionToALPN(version); len(v) > 0 {
-			versionStrings = append(versionStrings, v)
+			if _, ok := seen[v]; !ok {
+				versionStrings = append(versionStrings, v)
+				seen[v] = struct{}{}
+			}
 		}
 	}
 
