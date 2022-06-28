@@ -893,6 +893,14 @@ var _ = Describe("Server", func() {
 			removeListener(&ln2)
 			checkSetHeaderError()
 		})
+
+		It("doesn't duplicate Alt-Svc values", func() {
+			s.QuicConfig.Versions = []quic.VersionNumber{quic.Version1, quic.Version1}
+			addListener(":443", &ln1)
+			checkSetHeaders(Equal(http.Header{"Alt-Svc": {`h3=":443"; ma=2592000`}}))
+			removeListener(&ln1)
+			checkSetHeaderError()
+		})
 	})
 
 	It("errors when ListenAndServe is called with s.TLSConfig nil", func() {
