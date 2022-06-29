@@ -349,16 +349,16 @@ func (e eventKeyUpdated) MarshalJSONObject(enc *gojay.Encoder) {
 	}
 }
 
-type eventKeyRetired struct {
+type eventKeyDiscarded struct {
 	KeyType    keyType
 	Generation protocol.KeyPhase
 }
 
-func (e eventKeyRetired) Category() category { return categorySecurity }
-func (e eventKeyRetired) Name() string       { return "key_retired" }
-func (e eventKeyRetired) IsNil() bool        { return false }
+func (e eventKeyDiscarded) Category() category { return categorySecurity }
+func (e eventKeyDiscarded) Name() string       { return "key_discarded" }
+func (e eventKeyDiscarded) IsNil() bool        { return false }
 
-func (e eventKeyRetired) MarshalJSONObject(enc *gojay.Encoder) {
+func (e eventKeyDiscarded) MarshalJSONObject(enc *gojay.Encoder) {
 	if e.KeyType != keyTypeClient1RTT && e.KeyType != keyTypeServer1RTT {
 		enc.StringKey("trigger", "tls")
 	}
