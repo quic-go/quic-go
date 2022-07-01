@@ -56,25 +56,25 @@ func (h *sentPacketHistory) SentPacket(p *Packet, isAckEliciting bool) {
 // Iterate iterates through all packets.
 func (h *sentPacketHistory) Iterate(cb func(*Packet) (cont bool, err error)) error {
 	cont := true
-	nextOutstanding := h.outstandingPacketList.Front()
-	nextEtc := h.etcPacketList.Front()
-	var nextEl *PacketElement
+	outstandingEl := h.outstandingPacketList.Front()
+	etcEl := h.etcPacketList.Front()
+	var el *PacketElement
 	// whichever has the next packet number is returned first
 	for cont {
-		if nextOutstanding == nil || (nextEtc != nil && nextEtc.Value.PacketNumber < nextOutstanding.Value.PacketNumber) {
-			nextEl = nextEtc
+		if outstandingEl == nil || (etcEl != nil && etcEl.Value.PacketNumber < outstandingEl.Value.PacketNumber) {
+			el = etcEl
 		} else {
-			nextEl = nextOutstanding
+			el = outstandingEl
 		}
-		if nextEl == nil {
+		if el == nil {
 			return nil
-		} else if nextEl == nextOutstanding {
-			nextOutstanding = nextOutstanding.Next()
+		} else if el == outstandingEl {
+			outstandingEl = outstandingEl.Next()
 		} else {
-			nextEtc = nextEtc.Next()
+			etcEl = etcEl.Next()
 		}
 		var err error
-		cont, err = cb(&nextEl.Value)
+		cont, err = cb(&el.Value)
 		if err != nil {
 			return err
 		}
