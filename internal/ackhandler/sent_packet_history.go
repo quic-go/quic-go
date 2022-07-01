@@ -125,10 +125,10 @@ func (h *sentPacketHistory) DeleteOldPackets(now time.Time) {
 	}
 }
 
-func (h *sentPacketHistory) DeclareLost(p *Packet) {
+func (h *sentPacketHistory) DeclareLost(p *Packet) *Packet {
 	el, ok := h.packetMap[p.PacketNumber]
 	if !ok {
-		return
+		return nil
 	}
 	h.outstandingPacketList.Remove(el)
 	h.etcPacketList.Remove(el)
@@ -140,8 +140,10 @@ func (h *sentPacketHistory) DeclareLost(p *Packet) {
 		}
 	}
 	if el == nil {
-		h.packetMap[p.PacketNumber] = h.etcPacketList.PushFront(*p)
+		el = h.etcPacketList.PushFront(*p)
 	} else {
-		h.packetMap[p.PacketNumber] = h.etcPacketList.InsertAfter(*p, el)
+		el = h.etcPacketList.InsertAfter(*p, el)
 	}
+	h.packetMap[p.PacketNumber] = el
+	return &el.Value
 }

@@ -598,7 +598,7 @@ func (h *sentPacketHandler) detectLostPackets(now time.Time, encLevel protocol.E
 			pnSpace.lossTime = lossTime
 		}
 		if packetLost {
-			pnSpace.history.DeclareLost(p)
+			p = pnSpace.history.DeclareLost(p)
 			// the bytes in flight need to be reduced no matter if the frames in this packet will be retransmitted
 			h.removeFromBytesInFlight(p)
 			h.queueFramesForRetransmission(p)
