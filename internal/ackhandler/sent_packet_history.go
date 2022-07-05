@@ -68,7 +68,8 @@ func (h *sentPacketHistory) Iterate(cb func(*Packet) (cont bool, err error)) err
 		}
 		if el == nil {
 			return nil
-		} else if el == outstandingEl {
+		}
+		if el == outstandingEl {
 			outstandingEl = outstandingEl.Next()
 		} else {
 			etcEl = etcEl.Next()
@@ -87,9 +88,8 @@ func (h *sentPacketHistory) FirstOutstanding() *Packet {
 	el := h.outstandingPacketList.Front()
 	if el == nil {
 		return nil
-	} else {
-		return &el.Value
 	}
+	return &el.Value
 }
 
 func (h *sentPacketHistory) Len() int {
@@ -114,6 +114,8 @@ func (h *sentPacketHistory) HasOutstandingPackets() bool {
 func (h *sentPacketHistory) DeleteOldPackets(now time.Time) {
 	maxAge := 3 * h.rttStats.PTO(false)
 	var nextEl *PacketElement
+	// we don't iterate outstandingPacketList, as we should not delete outstanding packets.
+	// being outstanding for more than 3*PTO should only happen in the case of drastic RTT changes.
 	for el := h.etcPacketList.Front(); el != nil; el = nextEl {
 		nextEl = el.Next()
 		p := el.Value
