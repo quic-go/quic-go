@@ -134,17 +134,19 @@ var _ = Describe("SentPacketHistory", func() {
 		})
 
 		It("also iterates over skipped packets", func() {
-			var packets, skippedPackets []protocol.PacketNumber
+			var packets, skippedPackets, allPackets []protocol.PacketNumber
 			Expect(hist.Iterate(func(p *Packet) (bool, error) {
 				if p.skippedPacket {
 					skippedPackets = append(skippedPackets, p.PacketNumber)
 				} else {
 					packets = append(packets, p.PacketNumber)
 				}
+				allPackets = append(allPackets, p.PacketNumber)
 				return true, nil
 			})).To(Succeed())
 			Expect(packets).To(Equal([]protocol.PacketNumber{1, 4, 8}))
 			Expect(skippedPackets).To(Equal([]protocol.PacketNumber{0, 2, 3, 5, 6, 7}))
+			Expect(allPackets).To(Equal([]protocol.PacketNumber{0, 1, 2, 3, 4, 5, 6, 7, 8}))
 		})
 
 		It("stops iterating", func() {
