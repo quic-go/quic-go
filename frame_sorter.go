@@ -3,8 +3,10 @@ package quic
 import (
 	"errors"
 
+	"github.com/lucas-clemente/quic-go/internal/utils"
+	"github.com/lucas-clemente/quic-go/internal/utils/tree"
+
 	"github.com/lucas-clemente/quic-go/internal/protocol"
-	list "github.com/lucas-clemente/quic-go/internal/utils/linkedlist"
 )
 
 // byteInterval is an interval from one ByteCount to the other
@@ -21,17 +23,17 @@ type frameSorterEntry struct {
 type frameSorter struct {
 	queue   map[protocol.ByteCount]frameSorterEntry
 	readPos protocol.ByteCount
-	gaps    *list.List[byteInterval]
+	gapTree *tree.Btree
 }
 
 var errDuplicateStreamData = errors.New("duplicate stream data")
 
 func newFrameSorter() *frameSorter {
 	s := frameSorter{
-		gaps:  list.New[byteInterval](),
-		queue: make(map[protocol.ByteCount]frameSorterEntry),
+		gapTree: tree.New(),
+		queue:   make(map[protocol.ByteCount]frameSorterEntry),
 	}
-	s.gaps.PushFront(byteInterval{Start: 0, End: protocol.MaxByteCount})
+	s.gapTree.Insert(&utils.ByteInterval{Start: 0, End: protocol.MaxByteCount})
 	return &s
 }
 
@@ -53,25 +55,29 @@ func (s *frameSorter) push(data []byte, offset protocol.ByteCount, doneCb func()
 
 	start := offset
 	end := offset + protocol.ByteCount(len(data))
+	covInterval := &utils.ByteInterval{Start: start, End: end}
 
-	if end <= s.gaps.Front().Value.Start {
+	gaps := s.gapTree.Match(covInterval)
+
+	if len(gaps) == 0 {
+		// no overlap with any existing gap
 		return errDuplicateStreamData
 	}
 
-	startGap, startsInGap := s.findStartGap(start)
-	endGap, endsInGap := s.findEndGap(startGap, end)
+	startGap := gaps[0].(*utils.ByteInterval)
+	endGap := gaps[len(gaps)-1].(*utils.ByteInterval)
+	startGapEqualsEndGap := len(gaps) == 1
 
-	startGapEqualsEndGap := startGap == endGap
-
-	if (startGapEqualsEndGap && end <= startGap.Value.Start) ||
-		(!startGapEqualsEndGap && startGap.Value.End >= endGap.Value.Start && end <= startGap.Value.Start) {
+	if startGapEqualsEndGap && end <= startGap.Start {
 		return errDuplicateStreamData
 	}
 
-	startGapNext := startGap.Next()
-	startGapEnd := startGap.Value.End // save it, in case startGap is modified
-	endGapStart := endGap.Value.Start // save it, in case endGap is modified
-	endGapEnd := endGap.Value.End     // save it, in case endGap is modified
+	startsInGap := covInterval.Start >= startGap.Start && covInterval.Start <= startGap.End
+	endsInGap := covInterval.End >= endGap.Start && covInterval.End < endGap.End
+
+	startGapEnd := startGap.End // save it, in case startGap is modified
+	endGapStart := endGap.Start // save it, in case endGap is modified
+	endGapEnd := endGap.End     // save it, in case endGap is modified
 	var adjustedStartGapEnd bool
 	var wasCut bool
 
@@ -106,29 +112,37 @@ func (s *frameSorter) push(data []byte, offset protocol.ByteCount, doneCb func()
 
 	if !startsInGap && !hasReplacedAtLeastOne {
 		// cut the frame, such that it starts at the start of the gap
-		data = data[startGap.Value.Start-start:]
-		start = startGap.Value.Start
+		data = data[startGap.Start-start:]
+		start = startGap.Start
 		wasCut = true
 	}
-	if start <= startGap.Value.Start {
-		if end >= startGap.Value.End {
+	if start <= startGap.Start {
+		if end >= startGap.End {
 			// The frame covers the whole startGap. Delete the gap.
-			s.gaps.Remove(startGap)
+			s.gapTree.Delete(startGap)
 		} else {
-			startGap.Value.Start = end
+			s.gapTree.Delete(startGap)
+			startGap.Start = end
+			// Re-insert the gap, but with the new start.
+			s.gapTree.Insert(startGap)
 		}
 	} else if !hasReplacedAtLeastOne {
-		startGap.Value.End = start
+		s.gapTree.Delete(startGap)
+		startGap.End = start
+		// Re-insert the gap, but with the new end.
+		s.gapTree.Insert(startGap)
 		adjustedStartGapEnd = true
 	}
 
 	if !startGapEqualsEndGap {
 		s.deleteConsecutive(startGapEnd)
-		var nextGap *list.Element[byteInterval]
-		for gap := startGapNext; gap.Value.End < endGapStart; gap = nextGap {
-			nextGap = gap.Next()
-			s.deleteConsecutive(gap.Value.End)
-			s.gaps.Remove(gap)
+		for _, gap := range gaps[1:] {
+			g := gap.(*utils.ByteInterval)
+			if g.End >= endGapStart {
+				break
+			}
+			s.deleteConsecutive(g.End)
+			s.gapTree.Delete(gap)
 		}
 	}
 
@@ -141,14 +155,17 @@ func (s *frameSorter) push(data []byte, offset protocol.ByteCount, doneCb func()
 	if end == endGapEnd {
 		if !startGapEqualsEndGap {
 			// The frame covers the whole endGap. Delete the gap.
-			s.gaps.Remove(endGap)
+			s.gapTree.Delete(endGap)
 		}
 	} else {
 		if startGapEqualsEndGap && adjustedStartGapEnd {
 			// The frame split the existing gap into two.
-			s.gaps.InsertAfter(byteInterval{Start: end, End: startGapEnd}, startGap)
+			s.gapTree.Insert(&utils.ByteInterval{Start: end, End: startGapEnd})
 		} else if !startGapEqualsEndGap {
-			endGap.Value.Start = end
+			s.gapTree.Delete(endGap)
+			endGap.Start = end
+			// Re-insert the gap, but with the new start.
+			s.gapTree.Insert(endGap)
 		}
 	}
 
@@ -162,36 +179,12 @@ func (s *frameSorter) push(data []byte, offset protocol.ByteCount, doneCb func()
 		}
 	}
 
-	if s.gaps.Len() > protocol.MaxStreamFrameSorterGaps {
+	if s.gapTree.Len() > protocol.MaxStreamFrameSorterGaps {
 		return errors.New("too many gaps in received data")
 	}
 
 	s.queue[start] = frameSorterEntry{Data: data, DoneCb: doneCb}
 	return nil
-}
-
-func (s *frameSorter) findStartGap(offset protocol.ByteCount) (*list.Element[byteInterval], bool) {
-	for gap := s.gaps.Front(); gap != nil; gap = gap.Next() {
-		if offset >= gap.Value.Start && offset <= gap.Value.End {
-			return gap, true
-		}
-		if offset < gap.Value.Start {
-			return gap, false
-		}
-	}
-	panic("no gap found")
-}
-
-func (s *frameSorter) findEndGap(startGap *list.Element[byteInterval], offset protocol.ByteCount) (*list.Element[byteInterval], bool) {
-	for gap := startGap; gap != nil; gap = gap.Next() {
-		if offset >= gap.Value.Start && offset < gap.Value.End {
-			return gap, true
-		}
-		if offset < gap.Value.Start {
-			return gap.Prev(), false
-		}
-	}
-	panic("no gap found")
 }
 
 // deleteConsecutive deletes consecutive frames from the queue, starting at pos
@@ -218,9 +211,6 @@ func (s *frameSorter) Pop() (protocol.ByteCount, []byte, func()) {
 	delete(s.queue, s.readPos)
 	offset := s.readPos
 	s.readPos += protocol.ByteCount(len(entry.Data))
-	if s.gaps.Front().Value.End <= s.readPos {
-		panic("frame sorter BUG: read position higher than a gap")
-	}
 	return offset, entry.Data, entry.DoneCb
 }
 

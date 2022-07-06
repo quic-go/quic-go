@@ -7,6 +7,9 @@ import (
 	"math/rand"
 	"time"
 
+	"github.com/lucas-clemente/quic-go/internal/utils"
+	"github.com/lucas-clemente/quic-go/internal/utils/tree"
+
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -16,18 +19,22 @@ var _ = Describe("frame sorter", func() {
 	var s *frameSorter
 
 	checkGaps := func(expectedGaps []byteInterval) {
-		if s.gaps.Len() != len(expectedGaps) {
+		if s.gapTree.Len() != len(expectedGaps) {
 			fmt.Println("Gaps:")
-			for gap := s.gaps.Front(); gap != nil; gap = gap.Next() {
-				fmt.Printf("\t%d - %d\n", gap.Value.Start, gap.Value.End)
-			}
-			ExpectWithOffset(1, s.gaps.Len()).To(Equal(len(expectedGaps)))
+			s.gapTree.Ascend(func(n *tree.Node, i int) bool {
+				gap := n.Value.(*utils.ByteInterval)
+				fmt.Printf("\t%d - %d\n", gap.Start, gap.End)
+				return true
+			})
+			ExpectWithOffset(1, s.gapTree.Len()).To(Equal(len(expectedGaps)))
 		}
 		var i int
-		for gap := s.gaps.Front(); gap != nil; gap = gap.Next() {
-			ExpectWithOffset(1, gap.Value).To(Equal(expectedGaps[i]))
+		s.gapTree.Ascend(func(n *tree.Node, _ int) bool {
+			gap := n.Value.(*utils.ByteInterval)
+			ExpectWithOffset(1, *gap).To(Equal(expectedGaps[i]))
 			i++
-		}
+			return true
+		})
 	}
 
 	type callbackTracker struct {
@@ -1376,7 +1383,7 @@ var _ = Describe("frame sorter", func() {
 				for i := 0; i < protocol.MaxStreamFrameSorterGaps; i++ {
 					Expect(s.Push([]byte("foobar"), protocol.ByteCount(i*7), nil)).To(Succeed())
 				}
-				Expect(s.gaps.Len()).To(Equal(protocol.MaxStreamFrameSorterGaps))
+				Expect(s.gapTree.Len()).To(Equal(protocol.MaxStreamFrameSorterGaps))
 				err := s.Push([]byte("foobar"), protocol.ByteCount(protocol.MaxStreamFrameSorterGaps*7)+100, nil)
 				Expect(err).To(MatchError("too many gaps in received data"))
 			})
