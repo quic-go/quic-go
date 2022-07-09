@@ -209,16 +209,24 @@ func (testkey TestKey1) Match(cond interface{}) int8 {
 
 func TestBtree_CustomKey(t *testing.T) {
 	btree := New()
-	btree.InsertAll([]Val{TestKey1{Name: "Ross"}, TestKey1{Name: "Michael"},
-		TestKey1{Name: "Angelo"}, TestKey1{Name: "Jason"}})
+	btree.InsertAll([]Val{
+		TestKey1{Name: "Ross"},
+		TestKey1{Name: "Michael"},
+		TestKey1{Name: "Angelo"},
+		TestKey1{Name: "Jason"},
+	})
 
 	rootName := btree.root.Value.(TestKey1).Name
 	if btree.root.Value.(TestKey1).Name != "Michael" {
 		t.Error(rootName, "should equal Michael")
 	}
 	btree.Init()
-	btree.InsertAll([]Val{TestKey1{Name: "Ross"}, TestKey1{Name: "Michael"},
-		TestKey1{Name: "Angelo"}, TestKey1{Name: "Jason"}})
+	btree.InsertAll([]Val{
+		TestKey1{Name: "Ross"},
+		TestKey1{Name: "Michael"},
+		TestKey1{Name: "Angelo"},
+		TestKey1{Name: "Jason"},
+	})
 	btree.Debug()
 	s := btree.String()
 	test := "[{Angelo} {Jason} {Michael} {Ross}]"
@@ -242,8 +250,10 @@ func TestBtree_CustomKey(t *testing.T) {
 
 func TestBtree_Duplicates(t *testing.T) {
 	btree := New()
-	btree.InsertAll([]Val{IntVal(0), IntVal(2), IntVal(5), IntVal(10), IntVal(15), IntVal(20), IntVal(12), IntVal(14),
-		IntVal(13), IntVal(25), IntVal(0), IntVal(2), IntVal(5), IntVal(10), IntVal(15), IntVal(20), IntVal(12), IntVal(14), IntVal(13), IntVal(25)})
+	btree.InsertAll([]Val{
+		IntVal(0), IntVal(2), IntVal(5), IntVal(10), IntVal(15), IntVal(20), IntVal(12), IntVal(14),
+		IntVal(13), IntVal(25), IntVal(0), IntVal(2), IntVal(5), IntVal(10), IntVal(15), IntVal(20), IntVal(12), IntVal(14), IntVal(13), IntVal(25),
+	})
 	test := 10
 	length := btree.Len()
 	if length != test {
