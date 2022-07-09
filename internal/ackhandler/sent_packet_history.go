@@ -132,6 +132,8 @@ func (h *sentPacketHistory) DeclareLost(p *Packet) *Packet {
 	if !ok {
 		return nil
 	}
+	// try to remove it from both lists, as we don't know which one it currently belongs to.
+	// Remove is a no-op for elements that are not in the list.
 	h.outstandingPacketList.Remove(el)
 	h.etcPacketList.Remove(el)
 	p.declaredLost = true
