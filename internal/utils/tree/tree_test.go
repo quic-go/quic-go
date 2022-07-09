@@ -1,7 +1,6 @@
 package tree
 
 import (
-	"flag"
 	"reflect"
 	"testing"
 )
@@ -55,10 +54,6 @@ func btreeFixed(values []Val) *Btree {
 	btree.InsertAll(values)
 	return btree
 }
-
-const benchLen = 1000000
-
-var btreeDegree = flag.Int("degree", 32, "B-Tree degree")
 
 func TestBtree_Get(t *testing.T) {
 	values := []Val{IntVal(9), IntVal(4), IntVal(2), IntVal(6), IntVal(8), IntVal(0), IntVal(3), IntVal(1), IntVal(7), IntVal(5)}
