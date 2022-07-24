@@ -55,7 +55,7 @@ func (p *FrameParser) ParseType(b []byte, encLevel protocol.EncryptionLevel) (Fr
 		valid := ft.isValidRFC9000() ||
 			(p.supportsDatagrams && ft.IsDatagramFrameType()) ||
 			(p.supportsResetStreamAt && ft == FrameTypeResetStreamAt) ||
-			(p.supportsAckFrequency && ft == FrameTypeAckFrequency)
+			(p.supportsAckFrequency && (ft == FrameTypeAckFrequency || ft == FrameTypeImmediateAck))
 		if !valid {
 			return 0, parsed, &qerr.TransportError{
 				ErrorCode:    qerr.FrameEncodingError,
@@ -163,6 +163,8 @@ func (p *FrameParser) ParseLessCommonFrame(frameType FrameType, data []byte, v p
 		frame, l, err = parseResetStreamFrame(data, true, v)
 	case FrameTypeAckFrequency:
 		frame, l, err = parseAckFrequencyFrame(data, v)
+	case FrameTypeImmediateAck:
+		frame = &ImmediateAckFrame{}
 	default:
 		err = errUnknownFrameType
 	}
