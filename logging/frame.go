@@ -44,6 +44,10 @@ type (
 	StreamsBlockedFrame = wire.StreamsBlockedFrame
 	// A StreamDataBlockedFrame is a STREAM_DATA_BLOCKED frame.
 	StreamDataBlockedFrame = wire.StreamDataBlockedFrame
+	// An AckFrequencyFrame is an ACK_FREQUENCY frame.
+	AckFrequencyFrame = wire.AckFrequencyFrame
+	// An ImmediateAckFrame is an IMMEDIATE_ACK frame.
+	ImmediateAckFrame = wire.ImmediateAckFrame
 )
 
 // A CryptoFrame is a CRYPTO frame.

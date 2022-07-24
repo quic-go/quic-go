@@ -137,6 +137,33 @@ func TestResetStreamAtFrame(t *testing.T) {
 	)
 }
 
+func TestAckFrequencyFrame(t *testing.T) {
+	check(t,
+		&logging.AckFrequencyFrame{
+			SequenceNumber:        1337,
+			AckElicitingThreshold: 123,
+			RequestMaxAckDelay:    42 * time.Millisecond,
+			ReorderingThreshold:   1234,
+		},
+		map[string]interface{}{
+			"frame_type":              "ack_frequency",
+			"sequence_number":         1337,
+			"ack_eliciting_threshold": 123,
+			"request_max_ack_delay":   42,
+			"reordering_threshold":    1234,
+		},
+	)
+}
+
+func TestImmediateAckFrame(t *testing.T) {
+	check(t,
+		&logging.ImmediateAckFrame{},
+		map[string]interface{}{
+			"frame_type": "immediate_ack",
+		},
+	)
+}
+
 func TestStopSendingFrame(t *testing.T) {
 	check(t,
 		&logging.StopSendingFrame{
