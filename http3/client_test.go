@@ -913,6 +913,26 @@ var _ = Describe("Client", func() {
 				cancel()
 				Eventually(done).Should(BeClosed())
 			})
+
+			It("doesn't cancel a request if DontCloseRequestStream is set", func() {
+				rspBuf := bytes.NewBuffer(getResponse(404))
+
+				ctx, cancel := context.WithCancel(context.Background())
+				req := req.WithContext(ctx)
+				conn.EXPECT().HandshakeComplete().Return(handshakeCtx)
+				conn.EXPECT().OpenStreamSync(ctx).Return(str, nil)
+				conn.EXPECT().ConnectionState().Return(quic.ConnectionState{})
+				buf := &bytes.Buffer{}
+				str.EXPECT().Close().MaxTimes(1)
+
+				str.EXPECT().Write(gomock.Any()).DoAndReturn(buf.Write)
+				str.EXPECT().Read(gomock.Any()).DoAndReturn(rspBuf.Read).AnyTimes()
+				rsp, err := client.RoundTripOpt(req, RoundTripOpt{DontCloseRequestStream: true})
+				Expect(err).ToNot(HaveOccurred())
+				cancel()
+				_, err = io.ReadAll(rsp.Body)
+				Expect(err).ToNot(HaveOccurred())
+			})
 		})
 
 		Context("gzip compression", func() {
