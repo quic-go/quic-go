@@ -11,8 +11,8 @@ import (
 var _ = Describe("Min / Max", func() {
 	Context("Max", func() {
 		It("returns the maximum", func() {
-			Expect(Max(5, 7)).To(Equal(7))
-			Expect(Max(7, 5)).To(Equal(7))
+			Expect(MaxInt(5, 7)).To(Equal(7))
+			Expect(MaxInt(7, 5)).To(Equal(7))
 		})
 
 		It("returns the maximum uint32", func() {

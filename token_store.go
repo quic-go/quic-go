@@ -27,7 +27,7 @@ func (s *singleOriginTokenStore) Pop() *ClientToken {
 	s.p = s.index(s.p - 1)
 	token := s.tokens[s.p]
 	s.tokens[s.p] = nil
-	s.len = utils.Max(s.len-1, 0)
+	s.len = utils.MaxInt(s.len-1, 0)
 	return token
 }
 

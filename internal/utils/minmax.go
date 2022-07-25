@@ -10,8 +10,8 @@ import (
 // InfDuration is a duration of infinite length
 const InfDuration = time.Duration(math.MaxInt64)
 
-// Max returns the maximum of two Ints
-func Max(a, b int) int {
+// MaxInt returns the maximum of two Ints
+func MaxInt(a, b int) int {
 	if a < b {
 		return b
 	}
