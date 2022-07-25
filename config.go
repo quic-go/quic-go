@@ -16,7 +16,7 @@ func (c *Config) Clone() *Config {
 }
 
 func (c *Config) handshakeTimeout() time.Duration {
-	return utils.MaxDuration(protocol.DefaultHandshakeTimeout, 2*c.HandshakeIdleTimeout)
+	return utils.Max(protocol.DefaultHandshakeTimeout, 2*c.HandshakeIdleTimeout)
 }
 
 func validateConfig(config *Config) error {
