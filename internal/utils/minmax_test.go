@@ -65,8 +65,8 @@ var _ = Describe("Min / Max", func() {
 
 	Context("Min", func() {
 		It("returns the minimum", func() {
-			Expect(Min(5, 7)).To(Equal(5))
-			Expect(Min(7, 5)).To(Equal(5))
+			Expect(MinInt(5, 7)).To(Equal(5))
+			Expect(MinInt(7, 5)).To(Equal(5))
 		})
 
 		It("returns the minimum uint32", func() {

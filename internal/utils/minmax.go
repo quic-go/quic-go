@@ -42,8 +42,8 @@ func MinUint64(a, b uint64) uint64 {
 	return b
 }
 
-// Min returns the minimum of two Ints
-func Min(a, b int) int {
+// MinInt returns the minimum of two Ints
+func MinInt(a, b int) int {
 	if a < b {
 		return a
 	}
