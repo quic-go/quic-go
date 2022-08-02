@@ -34,11 +34,12 @@ func (s *mockGenericStream) updateSendWindow(limit protocol.ByteCount) {
 
 var _ = Describe("Streams Map (incoming)", func() {
 	var (
-		m              *incomingItemsMap
+		m              *incomingStreamsMap[*mockGenericStream]
 		newItemCounter int
 		mockSender     *MockStreamSender
 		maxNumStreams  uint64
 	)
+	streamType := []protocol.StreamType{protocol.StreamTypeUni, protocol.StreamTypeUni}[rand.Intn(2)]
 
 	// check that the frame can be serialized and deserialized
 	checkFrameSerialization := func(f wire.Frame) {
@@ -54,8 +55,9 @@ var _ = Describe("Streams Map (incoming)", func() {
 	JustBeforeEach(func() {
 		newItemCounter = 0
 		mockSender = NewMockStreamSender(mockCtrl)
-		m = newIncomingItemsMap(
-			func(num protocol.StreamNum) item {
+		m = newIncomingStreamsMap(
+			streamType,
+			func(num protocol.StreamNum) *mockGenericStream {
 				newItemCounter++
 				return &mockGenericStream{num: num}
 			},
@@ -85,16 +87,16 @@ var _ = Describe("Streams Map (incoming)", func() {
 		Expect(err).ToNot(HaveOccurred())
 		str, err := m.AcceptStream(context.Background())
 		Expect(err).ToNot(HaveOccurred())
-		Expect(str.(*mockGenericStream).num).To(Equal(protocol.StreamNum(1)))
+		Expect(str.num).To(Equal(protocol.StreamNum(1)))
 		str, err = m.AcceptStream(context.Background())
 		Expect(err).ToNot(HaveOccurred())
-		Expect(str.(*mockGenericStream).num).To(Equal(protocol.StreamNum(2)))
+		Expect(str.num).To(Equal(protocol.StreamNum(2)))
 	})
 
 	It("allows opening the maximum stream ID", func() {
 		str, err := m.GetOrOpenStream(1)
 		Expect(err).ToNot(HaveOccurred())
-		Expect(str.(*mockGenericStream).num).To(Equal(protocol.StreamNum(1)))
+		Expect(str.num).To(Equal(protocol.StreamNum(1)))
 	})
 
 	It("errors when trying to get a stream ID higher than the maximum", func() {
@@ -104,7 +106,7 @@ var _ = Describe("Streams Map (incoming)", func() {
 	})
 
 	It("blocks AcceptStream until a new stream is available", func() {
-		strChan := make(chan item)
+		strChan := make(chan *mockGenericStream)
 		go func() {
 			defer GinkgoRecover()
 			str, err := m.AcceptStream(context.Background())
@@ -114,10 +116,10 @@ var _ = Describe("Streams Map (incoming)", func() {
 		Consistently(strChan).ShouldNot(Receive())
 		str, err := m.GetOrOpenStream(1)
 		Expect(err).ToNot(HaveOccurred())
-		Expect(str.(*mockGenericStream).num).To(Equal(protocol.StreamNum(1)))
-		var acceptedStr item
+		Expect(str.num).To(Equal(protocol.StreamNum(1)))
+		var acceptedStr *mockGenericStream
 		Eventually(strChan).Should(Receive(&acceptedStr))
-		Expect(acceptedStr.(*mockGenericStream).num).To(Equal(protocol.StreamNum(1)))
+		Expect(acceptedStr.num).To(Equal(protocol.StreamNum(1)))
 	})
 
 	It("unblocks AcceptStream when the context is canceled", func() {
@@ -162,10 +164,10 @@ var _ = Describe("Streams Map (incoming)", func() {
 		Expect(err).ToNot(HaveOccurred())
 		testErr := errors.New("test err")
 		m.CloseWithError(testErr)
-		Expect(str1.(*mockGenericStream).closed).To(BeTrue())
-		Expect(str1.(*mockGenericStream).closeErr).To(MatchError(testErr))
-		Expect(str2.(*mockGenericStream).closed).To(BeTrue())
-		Expect(str2.(*mockGenericStream).closeErr).To(MatchError(testErr))
+		Expect(str1.closed).To(BeTrue())
+		Expect(str1.closeErr).To(MatchError(testErr))
+		Expect(str2.closed).To(BeTrue())
+		Expect(str2.closeErr).To(MatchError(testErr))
 	})
 
 	It("deletes streams", func() {
@@ -174,7 +176,7 @@ var _ = Describe("Streams Map (incoming)", func() {
 		Expect(err).ToNot(HaveOccurred())
 		str, err := m.AcceptStream(context.Background())
 		Expect(err).ToNot(HaveOccurred())
-		Expect(str.(*mockGenericStream).num).To(Equal(protocol.StreamNum(1)))
+		Expect(str.num).To(Equal(protocol.StreamNum(1)))
 		Expect(m.DeleteStream(1)).To(Succeed())
 		str, err = m.GetOrOpenStream(1)
 		Expect(err).ToNot(HaveOccurred())
@@ -187,12 +189,12 @@ var _ = Describe("Streams Map (incoming)", func() {
 		Expect(m.DeleteStream(2)).To(Succeed())
 		str, err := m.AcceptStream(context.Background())
 		Expect(err).ToNot(HaveOccurred())
-		Expect(str.(*mockGenericStream).num).To(Equal(protocol.StreamNum(1)))
+		Expect(str.num).To(Equal(protocol.StreamNum(1)))
 		// when accepting this stream, it will get deleted, and a MAX_STREAMS frame is queued
 		mockSender.EXPECT().queueControlFrame(gomock.Any())
 		str, err = m.AcceptStream(context.Background())
 		Expect(err).ToNot(HaveOccurred())
-		Expect(str.(*mockGenericStream).num).To(Equal(protocol.StreamNum(2)))
+		Expect(str.num).To(Equal(protocol.StreamNum(2)))
 	})
 
 	It("doesn't return a stream queued for deleting from GetOrOpenStream", func() {
@@ -226,7 +228,9 @@ var _ = Describe("Streams Map (incoming)", func() {
 			Expect(err).ToNot(HaveOccurred())
 		}
 		mockSender.EXPECT().queueControlFrame(gomock.Any()).Do(func(f wire.Frame) {
-			Expect(f.(*wire.MaxStreamsFrame).MaxStreamNum).To(Equal(protocol.StreamNum(maxNumStreams + 1)))
+			msf := f.(*wire.MaxStreamsFrame)
+			Expect(msf.Type).To(BeEquivalentTo(streamType))
+			Expect(msf.MaxStreamNum).To(Equal(protocol.StreamNum(maxNumStreams + 1)))
 			checkFrameSerialization(f)
 		})
 		Expect(m.DeleteStream(3)).To(Succeed())

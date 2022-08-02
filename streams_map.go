@@ -57,8 +57,8 @@ type streamsMap struct {
 	mutex               sync.Mutex
 	outgoingBidiStreams *outgoingStreamsMap[streamI]
 	outgoingUniStreams  *outgoingStreamsMap[sendStreamI]
-	incomingBidiStreams *incomingBidiStreamsMap
-	incomingUniStreams  *incomingUniStreamsMap
+	incomingBidiStreams *incomingStreamsMap[streamI]
+	incomingUniStreams  *incomingStreamsMap[receiveStreamI]
 	reset               bool
 }
 
@@ -93,7 +93,8 @@ func (m *streamsMap) initMaps() {
 		},
 		m.sender.queueControlFrame,
 	)
-	m.incomingBidiStreams = newIncomingBidiStreamsMap(
+	m.incomingBidiStreams = newIncomingStreamsMap(
+		protocol.StreamTypeBidi,
 		func(num protocol.StreamNum) streamI {
 			id := num.StreamID(protocol.StreamTypeBidi, m.perspective.Opposite())
 			return newStream(id, m.sender, m.newFlowController(id), m.version)
@@ -109,7 +110,8 @@ func (m *streamsMap) initMaps() {
 		},
 		m.sender.queueControlFrame,
 	)
-	m.incomingUniStreams = newIncomingUniStreamsMap(
+	m.incomingUniStreams = newIncomingStreamsMap(
+		protocol.StreamTypeUni,
 		func(num protocol.StreamNum) receiveStreamI {
 			id := num.StreamID(protocol.StreamTypeUni, m.perspective.Opposite())
 			return newReceiveStream(id, m.sender, m.newFlowController(id), m.version)
