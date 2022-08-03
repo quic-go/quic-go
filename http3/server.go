@@ -552,6 +552,8 @@ func (s *Server) handleRequest(conn quic.Connection, str quic.Stream, decoder *q
 		return newStreamError(errorGeneralProtocolError, err)
 	}
 
+	// If handshake is already completed, we can safely acquire TLS connection state
+	// without breaking 0-RTT.
 	if conn.(quic.EarlyConnection).HandshakeComplete().Err() != nil {
 		tlsState := conn.ConnectionState().TLS.ConnectionState
 		req.TLS = &tlsState
