@@ -44,8 +44,8 @@ func main() {
 	}
 	// a quic.Config that doesn't do a Retry
 	quicConf := &quic.Config{
-		AcceptToken: func(_ net.Addr, _ *quic.Token) bool { return true },
-		Tracer:      qlog.NewTracer(getLogWriter),
+		RequireAddressValidation: func(net.Addr) bool { return testcase == "retry" },
+		Tracer:                   qlog.NewTracer(getLogWriter),
 	}
 	cert, err := tls.LoadX509KeyPair("/certs/cert.pem", "/certs/priv.key")
 	if err != nil {
@@ -58,14 +58,10 @@ func main() {
 	}
 
 	switch testcase {
-	case "versionnegotiation", "handshake", "transfer", "resumption", "zerortt", "multiconnect":
+	case "versionnegotiation", "handshake", "retry", "transfer", "resumption", "zerortt", "multiconnect":
 		err = runHTTP09Server(quicConf)
 	case "chacha20":
 		tlsConf.CipherSuites = []uint16{tls.TLS_CHACHA20_POLY1305_SHA256}
-		err = runHTTP09Server(quicConf)
-	case "retry":
-		// By default, quic-go performs a Retry on every incoming connection.
-		quicConf.AcceptToken = nil
 		err = runHTTP09Server(quicConf)
 	case "http3":
 		err = runHTTP3Server(quicConf)

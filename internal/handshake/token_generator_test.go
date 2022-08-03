@@ -35,16 +35,13 @@ var _ = Describe("Token Generator", func() {
 	})
 
 	It("accepts a valid token", func() {
-		ip := net.IPv4(192, 168, 0, 1)
-		tokenEnc, err := tokenGen.NewRetryToken(
-			&net.UDPAddr{IP: ip, Port: 1337},
-			nil,
-			nil,
-		)
+		addr := &net.UDPAddr{IP: net.IPv4(192, 168, 0, 1), Port: 1337}
+		tokenEnc, err := tokenGen.NewRetryToken(addr, nil, nil)
 		Expect(err).ToNot(HaveOccurred())
 		token, err := tokenGen.DecodeToken(tokenEnc)
 		Expect(err).ToNot(HaveOccurred())
-		Expect(token.RemoteAddr).To(Equal("192.168.0.1"))
+		Expect(token.ValidateRemoteAddr(addr)).To(BeTrue())
+		Expect(token.ValidateRemoteAddr(&net.UDPAddr{IP: net.IPv4(192, 168, 0, 2), Port: 1337})).To(BeFalse())
 		Expect(token.SentTime).To(BeTemporally("~", time.Now(), 100*time.Millisecond))
 		Expect(token.OriginalDestConnectionID.Len()).To(BeZero())
 		Expect(token.RetrySrcConnectionID.Len()).To(BeZero())
@@ -110,7 +107,7 @@ var _ = Describe("Token Generator", func() {
 			Expect(err).ToNot(HaveOccurred())
 			token, err := tokenGen.DecodeToken(tokenEnc)
 			Expect(err).ToNot(HaveOccurred())
-			Expect(token.RemoteAddr).To(Equal(ip.String()))
+			Expect(token.ValidateRemoteAddr(raddr)).To(BeTrue())
 			Expect(token.SentTime).To(BeTemporally("~", time.Now(), 100*time.Millisecond))
 		}
 	})
@@ -121,7 +118,8 @@ var _ = Describe("Token Generator", func() {
 		Expect(err).ToNot(HaveOccurred())
 		token, err := tokenGen.DecodeToken(tokenEnc)
 		Expect(err).ToNot(HaveOccurred())
-		Expect(token.RemoteAddr).To(Equal("192.168.13.37:1337"))
+		Expect(token.ValidateRemoteAddr(raddr)).To(BeTrue())
+		Expect(token.ValidateRemoteAddr(&net.TCPAddr{IP: net.IPv4(192, 168, 13, 37), Port: 1338})).To(BeFalse())
 		Expect(token.SentTime).To(BeTemporally("~", time.Now(), 100*time.Millisecond))
 	})
 })

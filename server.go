@@ -241,26 +241,6 @@ func (s *baseServer) run() {
 	}
 }
 
-var defaultAcceptToken = func(clientAddr net.Addr, token *Token) bool {
-	if token == nil {
-		return false
-	}
-	validity := protocol.TokenValidity
-	if token.IsRetryToken {
-		validity = protocol.RetryTokenValidity
-	}
-	if time.Now().After(token.SentTime.Add(validity)) {
-		return false
-	}
-	var sourceAddr string
-	if udpAddr, ok := clientAddr.(*net.UDPAddr); ok {
-		sourceAddr = udpAddr.IP.String()
-	} else {
-		sourceAddr = clientAddr.String()
-	}
-	return sourceAddr == token.RemoteAddr
-}
-
 // Accept returns connections that already completed the handshake.
 // It is only valid if acceptEarlyConns is false.
 func (s *baseServer) Accept(ctx context.Context) (Connection, error) {
@@ -405,33 +385,45 @@ func (s *baseServer) handleInitialImpl(p *receivedPacket, hdr *wire.Header) erro
 	}
 
 	var (
-		token          *Token
+		token          *handshake.Token
 		retrySrcConnID *protocol.ConnectionID
 	)
 	origDestConnID := hdr.DestConnectionID
 	if len(hdr.Token) > 0 {
-		c, err := s.tokenGenerator.DecodeToken(hdr.Token)
+		tok, err := s.tokenGenerator.DecodeToken(hdr.Token)
 		if err == nil {
-			token = &Token{
-				IsRetryToken: c.IsRetryToken,
-				RemoteAddr:   c.RemoteAddr,
-				SentTime:     c.SentTime,
+			if tok.IsRetryToken {
+				origDestConnID = tok.OriginalDestConnectionID
+				retrySrcConnID = &tok.RetrySrcConnectionID
 			}
-			if token.IsRetryToken {
-				origDestConnID = c.OriginalDestConnectionID
-				retrySrcConnID = &c.RetrySrcConnectionID
-			}
+			token = tok
 		}
 	}
-	if !s.config.AcceptToken(p.remoteAddr, token) {
+	if token != nil {
+		addrIsValid := token.ValidateRemoteAddr(p.remoteAddr)
+		// For invalid and expired non-retry tokens, we don't send an INVALID_TOKEN error.
+		// We just ignore them, and act as if there was no token on this packet at all.
+		// This also means we might send a Retry later.
+		if !token.IsRetryToken && (time.Since(token.SentTime) > s.config.MaxTokenAge || !addrIsValid) {
+			token = nil
+		} else if token.IsRetryToken && (time.Since(token.SentTime) > s.config.MaxRetryTokenAge || !addrIsValid) {
+			// For Retry tokens, we send an INVALID_ERROR if
+			// * the token is too old, or
+			// * the token is invalid, in case of a retry token.
+			go func() {
+				defer p.buffer.Release()
+				if token != nil && token.IsRetryToken {
+					if err := s.maybeSendInvalidToken(p, hdr); err != nil {
+						s.logger.Debugf("Error sending INVALID_TOKEN error: %s", err)
+					}
+				}
+			}()
+			return nil
+		}
+	}
+	if token == nil && s.config.RequireAddressValidation(p.remoteAddr) {
 		go func() {
 			defer p.buffer.Release()
-			if token != nil && token.IsRetryToken {
-				if err := s.maybeSendInvalidToken(p, hdr); err != nil {
-					s.logger.Debugf("Error sending INVALID_TOKEN error: %s", err)
-				}
-				return
-			}
 			if err := s.sendRetry(p.remoteAddr, hdr, p.info); err != nil {
 				s.logger.Debugf("Error sending Retry: %s", err)
 			}

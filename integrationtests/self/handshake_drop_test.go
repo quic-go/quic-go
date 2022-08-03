@@ -41,8 +41,8 @@ var _ = Describe("Handshake drop tests", func() {
 			HandshakeIdleTimeout: timeout,
 			Versions:             []protocol.VersionNumber{version},
 		})
-		if !doRetry {
-			conf.AcceptToken = func(net.Addr, *quic.Token) bool { return true }
+		if doRetry {
+			conf.RequireAddressValidation = func(net.Addr) bool { return true }
 		}
 		var tlsConf *tls.Config
 		if longCertChain {
