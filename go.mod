@@ -8,7 +8,7 @@ require (
 	github.com/golang/mock v1.6.0
 	github.com/marten-seemann/qpack v0.2.1
 	github.com/marten-seemann/qtls-go1-18 v0.1.2
-	github.com/marten-seemann/qtls-go1-19 v0.1.0-beta.1
+	github.com/marten-seemann/qtls-go1-19 v0.1.0
 	github.com/onsi/ginkgo v1.16.4
 	github.com/onsi/gomega v1.13.0
 	golang.org/x/crypto v0.0.0-20200622213623-75b288015ac9
