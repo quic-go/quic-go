@@ -56,7 +56,7 @@ var _ = Describe("Version Negotiation Packets", func() {
 		destConnID := protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8}
 		versions := []protocol.VersionNumber{1001, 1003}
 		data := ComposeVersionNegotiation(destConnID, srcConnID, versions)
-		Expect(data[0] & 0x80).ToNot(BeZero())
+		Expect(IsLongHeaderPacket(data[0])).To(BeTrue())
 		hdr, supportedVersions, err := ParseVersionNegotiationPacket(bytes.NewReader(data))
 		Expect(err).ToNot(HaveOccurred())
 		Expect(hdr.DestConnectionID).To(Equal(destConnID))

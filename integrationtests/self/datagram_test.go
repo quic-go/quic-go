@@ -13,6 +13,7 @@ import (
 	"github.com/lucas-clemente/quic-go"
 	quicproxy "github.com/lucas-clemente/quic-go/integrationtests/tools/proxy"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
+	"github.com/lucas-clemente/quic-go/internal/wire"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -73,7 +74,7 @@ var _ = Describe("Datagram test", func() {
 							return false
 						}
 						// don't drop Long Header packets
-						if packet[0]&0x80 == 1 {
+						if wire.IsLongHeaderPacket(packet[0]) {
 							return false
 						}
 						drop := mrand.Int()%10 == 0

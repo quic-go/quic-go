@@ -732,7 +732,7 @@ var _ = Describe("0-RTT", func() {
 				proxy, err := quicproxy.NewQuicProxy("localhost:0", &quicproxy.Opts{
 					RemoteAddr: ln.Addr().String(),
 					DelayPacket: func(dir quicproxy.Direction, data []byte) time.Duration {
-						if dir == quicproxy.DirectionIncoming && data[0]&0x80 > 0 && data[0]&0x30>>4 == 0 { // Initial packet from client
+						if dir == quicproxy.DirectionIncoming && wire.IsLongHeaderPacket(data[0]) && data[0]&0x30>>4 == 0 { // Initial packet from client
 							return rtt/2 + rtt
 						}
 						return rtt / 2
