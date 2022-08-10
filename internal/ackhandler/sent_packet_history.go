@@ -6,22 +6,23 @@ import (
 
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/internal/utils"
+	list "github.com/lucas-clemente/quic-go/internal/utils/linkedlist"
 )
 
 type sentPacketHistory struct {
 	rttStats              *utils.RTTStats
-	outstandingPacketList *PacketList
-	etcPacketList         *PacketList
-	packetMap             map[protocol.PacketNumber]*PacketElement
+	outstandingPacketList *list.List[Packet]
+	etcPacketList         *list.List[Packet]
+	packetMap             map[protocol.PacketNumber]*list.Element[Packet]
 	highestSent           protocol.PacketNumber
 }
 
 func newSentPacketHistory(rttStats *utils.RTTStats) *sentPacketHistory {
 	return &sentPacketHistory{
 		rttStats:              rttStats,
-		outstandingPacketList: NewPacketList(),
-		etcPacketList:         NewPacketList(),
-		packetMap:             make(map[protocol.PacketNumber]*PacketElement),
+		outstandingPacketList: list.New[Packet](),
+		etcPacketList:         list.New[Packet](),
+		packetMap:             make(map[protocol.PacketNumber]*list.Element[Packet]),
 		highestSent:           protocol.InvalidPacketNumber,
 	}
 }
@@ -43,7 +44,7 @@ func (h *sentPacketHistory) SentPacket(p *Packet, isAckEliciting bool) {
 	h.highestSent = p.PacketNumber
 
 	if isAckEliciting {
-		var el *PacketElement
+		var el *list.Element[Packet]
 		if p.outstanding() {
 			el = h.outstandingPacketList.PushBack(*p)
 		} else {
@@ -58,7 +59,7 @@ func (h *sentPacketHistory) Iterate(cb func(*Packet) (cont bool, err error)) err
 	cont := true
 	outstandingEl := h.outstandingPacketList.Front()
 	etcEl := h.etcPacketList.Front()
-	var el *PacketElement
+	var el *list.Element[Packet]
 	// whichever has the next packet number is returned first
 	for cont {
 		if outstandingEl == nil || (etcEl != nil && etcEl.Value.PacketNumber < outstandingEl.Value.PacketNumber) {
@@ -113,7 +114,7 @@ func (h *sentPacketHistory) HasOutstandingPackets() bool {
 
 func (h *sentPacketHistory) DeleteOldPackets(now time.Time) {
 	maxAge := 3 * h.rttStats.PTO(false)
-	var nextEl *PacketElement
+	var nextEl *list.Element[Packet]
 	// we don't iterate outstandingPacketList, as we should not delete outstanding packets.
 	// being outstanding for more than 3*PTO should only happen in the case of drastic RTT changes.
 	for el := h.etcPacketList.Front(); el != nil; el = nextEl {

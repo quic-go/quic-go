@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/lucas-clemente/quic-go/internal/protocol"
-	"github.com/lucas-clemente/quic-go/internal/utils"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 )
@@ -16,7 +15,7 @@ import (
 var _ = Describe("frame sorter", func() {
 	var s *frameSorter
 
-	checkGaps := func(expectedGaps []utils.ByteInterval) {
+	checkGaps := func(expectedGaps []byteInterval) {
 		if s.gaps.Len() != len(expectedGaps) {
 			fmt.Println("Gaps:")
 			for gap := s.gaps.Front(); gap != nil; gap = gap.Next() {
@@ -158,7 +157,7 @@ var _ = Describe("frame sorter", func() {
 				3: f1,
 				6: f2,
 			})
-			checkGaps([]utils.ByteInterval{
+			checkGaps([]byteInterval{
 				{Start: 0, End: 3},
 				{Start: 11, End: protocol.MaxByteCount},
 			})
@@ -181,7 +180,7 @@ var _ = Describe("frame sorter", func() {
 				3:  f1,
 				10: f2,
 			})
-			checkGaps([]utils.ByteInterval{
+			checkGaps([]byteInterval{
 				{Start: 0, End: 3},
 				{Start: 6, End: 10},
 				{Start: 15, End: protocol.MaxByteCount},
@@ -209,7 +208,7 @@ var _ = Describe("frame sorter", func() {
 				6:  f2,
 				10: f3,
 			})
-			checkGaps([]utils.ByteInterval{
+			checkGaps([]byteInterval{
 				{Start: 0, End: 3},
 				{Start: 15, End: protocol.MaxByteCount},
 			})
@@ -233,7 +232,7 @@ var _ = Describe("frame sorter", func() {
 				3: f1,
 				7: f2[2:],
 			})
-			checkGaps([]utils.ByteInterval{
+			checkGaps([]byteInterval{
 				{Start: 0, End: 3},
 				{Start: 9, End: protocol.MaxByteCount},
 			})
@@ -253,7 +252,7 @@ var _ = Describe("frame sorter", func() {
 				3 * mult: f1,
 				7 * mult: f2[2*mult:],
 			})
-			checkGaps([]utils.ByteInterval{
+			checkGaps([]byteInterval{
 				{Start: 0, End: 3 * mult},
 				{Start: 9 * mult, End: protocol.MaxByteCount},
 			})
@@ -276,7 +275,7 @@ var _ = Describe("frame sorter", func() {
 				0: f1,
 				4: f2[1:],
 			})
-			checkGaps([]utils.ByteInterval{
+			checkGaps([]byteInterval{
 				{Start: 7, End: protocol.MaxByteCount},
 			})
 			checkCallbackNotCalled(t1)
@@ -295,7 +294,7 @@ var _ = Describe("frame sorter", func() {
 				0:        f1,
 				4 * mult: f2[mult:],
 			})
-			checkGaps([]utils.ByteInterval{
+			checkGaps([]byteInterval{
 				{Start: 7 * mult, End: protocol.MaxByteCount},
 			})
 			checkCallbackNotCalled(t1)
@@ -317,7 +316,7 @@ var _ = Describe("frame sorter", func() {
 				3: f2[:2],
 				5: f1,
 			})
-			checkGaps([]utils.ByteInterval{
+			checkGaps([]byteInterval{
 				{Start: 0, End: 3},
 				{Start: 9, End: protocol.MaxByteCount},
 			})
@@ -337,7 +336,7 @@ var _ = Describe("frame sorter", func() {
 				3 * mult: f2[:2*mult],
 				5 * mult: f1,
 			})
-			checkGaps([]utils.ByteInterval{
+			checkGaps([]byteInterval{
 				{Start: 0, End: 3 * mult},
 				{Start: 9 * mult, End: protocol.MaxByteCount},
 			})
@@ -364,7 +363,7 @@ var _ = Describe("frame sorter", func() {
 				6:  f2,
 				10: f3,
 			})
-			checkGaps([]utils.ByteInterval{
+			checkGaps([]byteInterval{
 				{Start: 0, End: 3},
 				{Start: 8, End: 10},
 				{Start: 15, End: protocol.MaxByteCount},
@@ -393,7 +392,7 @@ var _ = Describe("frame sorter", func() {
 				10: f2,
 				15: f3,
 			})
-			checkGaps([]utils.ByteInterval{
+			checkGaps([]byteInterval{
 				{Start: 0, End: 3},
 				{Start: 6, End: 10},
 				{Start: 12, End: 15},
@@ -423,7 +422,7 @@ var _ = Describe("frame sorter", func() {
 				8:  f2,
 				10: f3,
 			})
-			checkGaps([]utils.ByteInterval{
+			checkGaps([]byteInterval{
 				{Start: 0, End: 3},
 				{Start: 6, End: 8},
 				{Start: 15, End: protocol.MaxByteCount},
@@ -452,7 +451,7 @@ var _ = Describe("frame sorter", func() {
 				6:  f3[1:5],
 				10: f2,
 			})
-			checkGaps([]utils.ByteInterval{
+			checkGaps([]byteInterval{
 				{Start: 0, End: 3},
 				{Start: 15, End: protocol.MaxByteCount},
 			})
@@ -477,7 +476,7 @@ var _ = Describe("frame sorter", func() {
 				6 * mult:  f3[mult : 5*mult],
 				10 * mult: f2,
 			})
-			checkGaps([]utils.ByteInterval{
+			checkGaps([]byteInterval{
 				{Start: 0, End: 3 * mult},
 				{Start: 15 * mult, End: protocol.MaxByteCount},
 			})
@@ -505,7 +504,7 @@ var _ = Describe("frame sorter", func() {
 				7:  f3[2:],
 				10: f2,
 			})
-			checkGaps([]utils.ByteInterval{
+			checkGaps([]byteInterval{
 				{Start: 0, End: 3},
 				{Start: 15, End: protocol.MaxByteCount},
 			})
@@ -534,7 +533,7 @@ var _ = Describe("frame sorter", func() {
 				7 * mult:  f3[2*mult:],
 				10 * mult: f2,
 			})
-			checkGaps([]utils.ByteInterval{
+			checkGaps([]byteInterval{
 				{Start: 0, End: 3 * mult},
 				{Start: 15 * mult, End: protocol.MaxByteCount},
 			})
@@ -557,7 +556,7 @@ var _ = Describe("frame sorter", func() {
 			checkQueue(map[protocol.ByteCount][]byte{
 				3: f2,
 			})
-			checkGaps([]utils.ByteInterval{
+			checkGaps([]byteInterval{
 				{Start: 0, End: 3},
 				{Start: 10, End: protocol.MaxByteCount},
 			})
@@ -582,7 +581,7 @@ var _ = Describe("frame sorter", func() {
 			checkQueue(map[protocol.ByteCount][]byte{
 				3: f3,
 			})
-			checkGaps([]utils.ByteInterval{
+			checkGaps([]byteInterval{
 				{Start: 0, End: 3},
 				{Start: 10, End: protocol.MaxByteCount},
 			})
@@ -609,7 +608,7 @@ var _ = Describe("frame sorter", func() {
 				3: f3[:3],
 				6: f2,
 			})
-			checkGaps([]utils.ByteInterval{
+			checkGaps([]byteInterval{
 				{Start: 0, End: 3},
 				{Start: 10, End: protocol.MaxByteCount},
 			})
@@ -633,7 +632,7 @@ var _ = Describe("frame sorter", func() {
 				3 * mult: f3[:3*mult],
 				6 * mult: f2,
 			})
-			checkGaps([]utils.ByteInterval{
+			checkGaps([]byteInterval{
 				{Start: 0, End: 3 * mult},
 				{Start: 10 * mult, End: protocol.MaxByteCount},
 			})
@@ -659,7 +658,7 @@ var _ = Describe("frame sorter", func() {
 			checkQueue(map[protocol.ByteCount][]byte{
 				3: f3,
 			})
-			checkGaps([]utils.ByteInterval{
+			checkGaps([]byteInterval{
 				{Start: 0, End: 3},
 				{Start: 9, End: protocol.MaxByteCount},
 			})
@@ -682,7 +681,7 @@ var _ = Describe("frame sorter", func() {
 			checkQueue(map[protocol.ByteCount][]byte{
 				5: f1,
 			})
-			checkGaps([]utils.ByteInterval{
+			checkGaps([]byteInterval{
 				{Start: 0, End: 5},
 				{Start: 9, End: protocol.MaxByteCount},
 			})
@@ -708,7 +707,7 @@ var _ = Describe("frame sorter", func() {
 				3: f1,
 				6: f2,
 			})
-			checkGaps([]utils.ByteInterval{
+			checkGaps([]byteInterval{
 				{Start: 0, End: 3},
 				{Start: 9, End: protocol.MaxByteCount},
 			})
@@ -731,7 +730,7 @@ var _ = Describe("frame sorter", func() {
 			checkQueue(map[protocol.ByteCount][]byte{
 				5: f1,
 			})
-			checkGaps([]utils.ByteInterval{
+			checkGaps([]byteInterval{
 				{Start: 0, End: 5},
 				{Start: 9, End: protocol.MaxByteCount},
 			})
@@ -756,7 +755,7 @@ var _ = Describe("frame sorter", func() {
 			checkQueue(map[protocol.ByteCount][]byte{
 				5: f1,
 			})
-			checkGaps([]utils.ByteInterval{
+			checkGaps([]byteInterval{
 				{Start: 0, End: 5},
 				{Start: 10, End: protocol.MaxByteCount},
 			})
@@ -778,7 +777,7 @@ var _ = Describe("frame sorter", func() {
 			checkQueue(map[protocol.ByteCount][]byte{
 				0: f1,
 			})
-			checkGaps([]utils.ByteInterval{
+			checkGaps([]byteInterval{
 				{Start: 10, End: protocol.MaxByteCount},
 			})
 			checkCallbackNotCalled(t1)
@@ -796,7 +795,7 @@ var _ = Describe("frame sorter", func() {
 			cb2, t2 := getCallback()
 			Expect(s.Push(f1, 5, cb1)).To(Succeed()) // 5 - 10
 			Expect(s.Push(f2, 7, cb2)).To(Succeed()) // 7 - 10
-			checkGaps([]utils.ByteInterval{
+			checkGaps([]byteInterval{
 				{Start: 0, End: 5},
 				{Start: 10, End: protocol.MaxByteCount},
 			})
@@ -821,7 +820,7 @@ var _ = Describe("frame sorter", func() {
 			checkQueue(map[protocol.ByteCount][]byte{
 				3: f2,
 			})
-			checkGaps([]utils.ByteInterval{
+			checkGaps([]byteInterval{
 				{Start: 0, End: 3},
 				{Start: 8, End: protocol.MaxByteCount},
 			})
@@ -846,7 +845,7 @@ var _ = Describe("frame sorter", func() {
 			checkQueue(map[protocol.ByteCount][]byte{
 				3: f3,
 			})
-			checkGaps([]utils.ByteInterval{
+			checkGaps([]byteInterval{
 				{Start: 0, End: 3},
 				{Start: 11, End: protocol.MaxByteCount},
 			})
@@ -873,7 +872,7 @@ var _ = Describe("frame sorter", func() {
 				3: f1,
 				6: f3,
 			})
-			checkGaps([]utils.ByteInterval{
+			checkGaps([]byteInterval{
 				{Start: 0, End: 3},
 				{Start: 12, End: protocol.MaxByteCount},
 			})
@@ -904,7 +903,7 @@ var _ = Describe("frame sorter", func() {
 				6:  f4,
 				15: f3,
 			})
-			checkGaps([]utils.ByteInterval{
+			checkGaps([]byteInterval{
 				{Start: 0, End: 3},
 				{Start: 18, End: protocol.MaxByteCount},
 			})
@@ -928,7 +927,7 @@ var _ = Describe("frame sorter", func() {
 			checkQueue(map[protocol.ByteCount][]byte{
 				3: f2,
 			})
-			checkGaps([]utils.ByteInterval{
+			checkGaps([]byteInterval{
 				{Start: 0, End: 3},
 				{Start: 13, End: protocol.MaxByteCount},
 			})
@@ -955,7 +954,7 @@ var _ = Describe("frame sorter", func() {
 				3: f1,
 				6: f2,
 			})
-			checkGaps([]utils.ByteInterval{
+			checkGaps([]byteInterval{
 				{Start: 0, End: 2},
 				{Start: 10, End: protocol.MaxByteCount},
 			})
@@ -980,7 +979,7 @@ var _ = Describe("frame sorter", func() {
 				3 * mult: f1,
 				6 * mult: f2,
 			})
-			checkGaps([]utils.ByteInterval{
+			checkGaps([]byteInterval{
 				{Start: 0, End: 2 * mult},
 				{Start: 10 * mult, End: protocol.MaxByteCount},
 			})
@@ -1008,7 +1007,7 @@ var _ = Describe("frame sorter", func() {
 				3: f1,
 				6: f2,
 			})
-			checkGaps([]utils.ByteInterval{
+			checkGaps([]byteInterval{
 				{Start: 0, End: 2},
 				{Start: 10, End: protocol.MaxByteCount},
 			})
@@ -1033,7 +1032,7 @@ var _ = Describe("frame sorter", func() {
 				3 * mult: f1,
 				6 * mult: f2,
 			})
-			checkGaps([]utils.ByteInterval{
+			checkGaps([]byteInterval{
 				{Start: 0, End: 2 * mult},
 				{Start: 10 * mult, End: protocol.MaxByteCount},
 			})
@@ -1060,7 +1059,7 @@ var _ = Describe("frame sorter", func() {
 				3: f1,
 				6: f3,
 			})
-			checkGaps([]utils.ByteInterval{
+			checkGaps([]byteInterval{
 				{Start: 0, End: 3},
 				{Start: 11, End: protocol.MaxByteCount},
 			})
@@ -1088,7 +1087,7 @@ var _ = Describe("frame sorter", func() {
 				6: f2,
 				9: f3[4:],
 			})
-			checkGaps([]utils.ByteInterval{
+			checkGaps([]byteInterval{
 				{Start: 0, End: 3},
 				{Start: 11, End: protocol.MaxByteCount},
 			})
@@ -1113,7 +1112,7 @@ var _ = Describe("frame sorter", func() {
 				6 * mult: f2,
 				9 * mult: f3[4*mult:],
 			})
-			checkGaps([]utils.ByteInterval{
+			checkGaps([]byteInterval{
 				{Start: 0, End: 3 * mult},
 				{Start: 11 * mult, End: protocol.MaxByteCount},
 			})
@@ -1140,7 +1139,7 @@ var _ = Describe("frame sorter", func() {
 				3: f1,
 				6: f3[1:],
 			})
-			checkGaps([]utils.ByteInterval{
+			checkGaps([]byteInterval{
 				{Start: 0, End: 3},
 				{Start: 15, End: protocol.MaxByteCount},
 			})
@@ -1164,7 +1163,7 @@ var _ = Describe("frame sorter", func() {
 				3 * mult: f1,
 				6 * mult: f3[mult:],
 			})
-			checkGaps([]utils.ByteInterval{
+			checkGaps([]byteInterval{
 				{Start: 0, End: 3 * mult},
 				{Start: 15 * mult, End: protocol.MaxByteCount},
 			})
@@ -1190,7 +1189,7 @@ var _ = Describe("frame sorter", func() {
 			checkQueue(map[protocol.ByteCount][]byte{
 				3: f3,
 			})
-			checkGaps([]utils.ByteInterval{
+			checkGaps([]byteInterval{
 				{Start: 0, End: 3},
 				{Start: 12, End: protocol.MaxByteCount},
 			})
@@ -1220,7 +1219,7 @@ var _ = Describe("frame sorter", func() {
 				3: f1,
 				6: f4[1:],
 			})
-			checkGaps([]utils.ByteInterval{
+			checkGaps([]byteInterval{
 				{Start: 0, End: 3},
 				{Start: 17, End: protocol.MaxByteCount},
 			})
@@ -1248,7 +1247,7 @@ var _ = Describe("frame sorter", func() {
 				3 * mult: f1,
 				6 * mult: f4[mult:],
 			})
-			checkGaps([]utils.ByteInterval{
+			checkGaps([]byteInterval{
 				{Start: 0, End: 3 * mult},
 				{Start: 17 * mult, End: protocol.MaxByteCount},
 			})
@@ -1280,7 +1279,7 @@ var _ = Describe("frame sorter", func() {
 				10: f3,
 				20: f4,
 			})
-			checkGaps([]utils.ByteInterval{
+			checkGaps([]byteInterval{
 				{Start: 0, End: 5},
 				{Start: 25, End: protocol.MaxByteCount},
 			})
@@ -1304,7 +1303,7 @@ var _ = Describe("frame sorter", func() {
 			Expect(s.Push(f1, 3, cb1)).To(Succeed()) // 3 - 6
 			Expect(s.Push(f2, 9, cb2)).To(Succeed()) // 9 - 13
 			Expect(s.Push(f3, 3, cb3)).To(Succeed()) // 3 - 11
-			checkGaps([]utils.ByteInterval{
+			checkGaps([]byteInterval{
 				{Start: 0, End: 3},
 				{Start: 13, End: protocol.MaxByteCount},
 			})
@@ -1328,7 +1327,7 @@ var _ = Describe("frame sorter", func() {
 			Expect(s.Push(f1, 3*mult, cb1)).To(Succeed()) // 3 - 6
 			Expect(s.Push(f2, 9*mult, cb2)).To(Succeed()) // 9 - 13
 			Expect(s.Push(f3, 3*mult, cb3)).To(Succeed()) // 3 - 11
-			checkGaps([]utils.ByteInterval{
+			checkGaps([]byteInterval{
 				{Start: 0, End: 3 * mult},
 				{Start: 13 * mult, End: protocol.MaxByteCount},
 			})
@@ -1350,7 +1349,7 @@ var _ = Describe("frame sorter", func() {
 				// now receive the duplicate
 				Expect(s.Push([]byte("foobar"), 0, nil)).To(Succeed())
 				Expect(s.queue).To(BeEmpty())
-				checkGaps([]utils.ByteInterval{
+				checkGaps([]byteInterval{
 					{Start: 6, End: protocol.MaxByteCount},
 				})
 			})
@@ -1366,7 +1365,7 @@ var _ = Describe("frame sorter", func() {
 				Expect(offset).To(Equal(protocol.ByteCount(3)))
 				Expect(data).To(Equal([]byte("bar")))
 				Expect(s.queue).To(BeEmpty())
-				checkGaps([]utils.ByteInterval{
+				checkGaps([]byteInterval{
 					{Start: 6, End: protocol.MaxByteCount},
 				})
 			})
@@ -1475,7 +1474,7 @@ var _ = Describe("frame sorter", func() {
 					for _, f := range frames {
 						push(f.data, f.offset)
 					}
-					checkGaps([]utils.ByteInterval{{Start: num * dataLen, End: protocol.MaxByteCount}})
+					checkGaps([]byteInterval{{Start: num * dataLen, End: protocol.MaxByteCount}})
 
 					Expect(getData()).To(Equal(data))
 					Expect(s.queue).To(BeEmpty())
@@ -1492,7 +1491,7 @@ var _ = Describe("frame sorter", func() {
 							push(df.data, df.offset)
 						}
 					}
-					checkGaps([]utils.ByteInterval{{Start: num * dataLen, End: protocol.MaxByteCount}})
+					checkGaps([]byteInterval{{Start: num * dataLen, End: protocol.MaxByteCount}})
 
 					Expect(getData()).To(Equal(data))
 					Expect(s.queue).To(BeEmpty())
@@ -1515,7 +1514,7 @@ var _ = Describe("frame sorter", func() {
 							push(b, offset)
 						}
 					}
-					checkGaps([]utils.ByteInterval{{Start: num * dataLen, End: protocol.MaxByteCount}})
+					checkGaps([]byteInterval{{Start: num * dataLen, End: protocol.MaxByteCount}})
 
 					Expect(getData()).To(Equal(data))
 					Expect(s.queue).To(BeEmpty())
