@@ -7,7 +7,7 @@ import (
 	"crypto/x509"
 	"errors"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"log"
 	"math"
 	mrand "math/rand"
@@ -249,6 +249,7 @@ const (
 )
 
 // Fuzz fuzzes the TLS 1.3 handshake used by QUIC.
+//
 //go:generate go run ./cmd/corpus.go
 func Fuzz(data []byte) int {
 	if len(data) < PrefixLen {
@@ -353,10 +354,10 @@ func runHandshake(runConfig [confLen]byte, messageConfig uint8, clientConf *tls.
 		serverConf.NextProtos = []string{alpnWrong, alpn}
 	}
 	if helper.NthBit(runConfig[3], 6) {
-		serverConf.KeyLogWriter = ioutil.Discard
+		serverConf.KeyLogWriter = io.Discard
 	}
 	if helper.NthBit(runConfig[3], 7) {
-		clientConf.KeyLogWriter = ioutil.Discard
+		clientConf.KeyLogWriter = io.Discard
 	}
 	clientTP := getTransportParameters(runConfig[4] & 0x3)
 	if helper.NthBit(runConfig[4], 3) {

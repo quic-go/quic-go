@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"io"
-	"io/ioutil"
 	"log"
 	"net"
 	"net/http"
@@ -102,7 +101,7 @@ func (s *Server) handleConn(conn quic.Connection) {
 }
 
 func (s *Server) handleStream(str quic.Stream) error {
-	reqBytes, err := ioutil.ReadAll(str)
+	reqBytes, err := io.ReadAll(str)
 	if err != nil {
 		return err
 	}

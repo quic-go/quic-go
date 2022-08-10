@@ -4,7 +4,7 @@ import (
 	"context"
 	"crypto/tls"
 	"errors"
-	"io/ioutil"
+	"io"
 	"log"
 	"net"
 	"net/http"
@@ -118,7 +118,7 @@ func (c *client) doRequest(req *http.Request) (*http.Response, error) {
 		ProtoMajor: 0,
 		ProtoMinor: 9,
 		Request:    req,
-		Body:       ioutil.NopCloser(str),
+		Body:       io.NopCloser(str),
 	}
 	return rsp, nil
 }

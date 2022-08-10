@@ -8,7 +8,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net/http"
 	"time"
 
@@ -990,7 +989,7 @@ var _ = Describe("Client", func() {
 
 				rsp, err := client.RoundTripOpt(req, RoundTripOpt{})
 				Expect(err).ToNot(HaveOccurred())
-				data, err := ioutil.ReadAll(rsp.Body)
+				data, err := io.ReadAll(rsp.Body)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(rsp.ContentLength).To(BeEquivalentTo(-1))
 				Expect(string(data)).To(Equal("gzipped response"))
@@ -1013,7 +1012,7 @@ var _ = Describe("Client", func() {
 
 				rsp, err := client.RoundTripOpt(req, RoundTripOpt{})
 				Expect(err).ToNot(HaveOccurred())
-				data, err := ioutil.ReadAll(rsp.Body)
+				data, err := io.ReadAll(rsp.Body)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(string(data)).To(Equal("not gzipped"))
 				Expect(rsp.Header.Get("Content-Encoding")).To(BeEmpty())
