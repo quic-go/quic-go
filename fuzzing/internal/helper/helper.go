@@ -8,7 +8,6 @@ import (
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/hex"
-	"io/ioutil"
 	"math/big"
 	"os"
 	"path/filepath"
@@ -33,7 +32,7 @@ func WriteCorpusFile(path string, data []byte) error {
 		}
 	}
 	hash := sha1.Sum(data)
-	return ioutil.WriteFile(filepath.Join(path, hex.EncodeToString(hash[:])), data, 0o644)
+	return os.WriteFile(filepath.Join(path, hex.EncodeToString(hash[:])), data, 0o644)
 }
 
 // WriteCorpusFileWithPrefix writes data to a corpus file in directory path.

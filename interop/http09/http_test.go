@@ -3,7 +3,7 @@ package http09
 import (
 	"crypto/tls"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -62,7 +62,7 @@ var _ = Describe("HTTP 0.9 integration tests", func() {
 		)
 		rsp, err := rt.RoundTrip(req)
 		Expect(err).ToNot(HaveOccurred())
-		data, err := ioutil.ReadAll(rsp.Body)
+		data, err := io.ReadAll(rsp.Body)
 		Expect(err).ToNot(HaveOccurred())
 		Expect(data).To(Equal([]byte("Hello World!")))
 	})
@@ -83,7 +83,7 @@ var _ = Describe("HTTP 0.9 integration tests", func() {
 		)
 		rsp, err := rt.RoundTrip(req)
 		Expect(err).ToNot(HaveOccurred())
-		data, err := ioutil.ReadAll(rsp.Body)
+		data, err := io.ReadAll(rsp.Body)
 		Expect(err).ToNot(HaveOccurred())
 		Expect(data).To(Equal([]byte("done")))
 	})

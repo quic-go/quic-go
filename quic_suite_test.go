@@ -1,7 +1,7 @@
 package quic
 
 import (
-	"io/ioutil"
+	"io"
 	"log"
 	"sync"
 	"testing"
@@ -26,7 +26,7 @@ var _ = BeforeEach(func() {
 })
 
 var _ = BeforeSuite(func() {
-	log.SetOutput(ioutil.Discard)
+	log.SetOutput(io.Discard)
 })
 
 var _ = AfterEach(func() {

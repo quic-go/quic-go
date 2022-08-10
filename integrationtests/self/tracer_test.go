@@ -6,7 +6,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"io/ioutil"
 	mrand "math/rand"
 	"net"
 	"time"
@@ -90,7 +89,7 @@ var _ = Describe("Handshake tests", func() {
 					return nil
 				}
 				fmt.Fprintf(GinkgoWriter, "%s qlog tracing connection %x\n", p, connectionID)
-				return utils.NewBufferedWriteCloser(bufio.NewWriter(&bytes.Buffer{}), ioutil.NopCloser(nil))
+				return utils.NewBufferedWriteCloser(bufio.NewWriter(&bytes.Buffer{}), io.NopCloser(nil))
 			}))
 		}
 		if enableCustomTracer {
