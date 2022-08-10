@@ -14,6 +14,7 @@ const version = protocol.VersionTLS
 const PrefixLen = 1
 
 // Fuzz fuzzes the QUIC header.
+//
 //go:generate go run ./cmd/corpus.go
 func Fuzz(data []byte) int {
 	if len(data) < PrefixLen {

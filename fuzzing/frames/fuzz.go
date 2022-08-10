@@ -25,6 +25,7 @@ func toEncLevel(v uint8) protocol.EncryptionLevel {
 }
 
 // Fuzz fuzzes the QUIC frames.
+//
 //go:generate go run ./cmd/corpus.go
 func Fuzz(data []byte) int {
 	if len(data) < PrefixLen {

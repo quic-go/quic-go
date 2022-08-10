@@ -249,6 +249,7 @@ const (
 )
 
 // Fuzz fuzzes the TLS 1.3 handshake used by QUIC.
+//
 //go:generate go run ./cmd/corpus.go
 func Fuzz(data []byte) int {
 	if len(data) < PrefixLen {
