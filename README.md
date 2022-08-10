@@ -11,7 +11,7 @@ In addition the RFCs listed above, it currently implements the [IETF QUIC draft-
 
 ## Guides
 
-*We currently support Go 1.16.x, Go 1.17.x, and Go 1.18.x.*
+*We currently support Go 1.18.x and Go 1.19.x.*
 
 Running tests:
 

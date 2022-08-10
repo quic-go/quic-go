@@ -6,15 +6,9 @@ executors:
     environment:
       runrace: true
       TIMESCALE_FACTOR: 3
-  test-go117:
+  test-go119:
     docker:
-      - image: "cimg/go:1.17"
-    environment:
-      runrace: true
-      TIMESCALE_FACTOR: 3
-  test-go116:
-    docker:
-      - image: "cimg/go:1.16"
+      - image: "cimg/go:1.19"
     environment:
       runrace: true
       TIMESCALE_FACTOR: 3
@@ -50,16 +44,12 @@ jobs:
           command: ginkgo -v -randomizeAllSpecs -trace integrationtests/self -- -qlog
   go118:
     <<: *test
-  go117:
+  go119:
     <<: *test
-    executor: test-go117
-  go116:
-    <<: *test
-    executor: test-go116
+    executor: test-go119
 
 workflows:
   workflow:
     jobs:
       - go118
-      - go117
-      - go116
+      - go119
