@@ -241,8 +241,9 @@ var _ = Describe("Server", func() {
 
 			It("creates a connection when the token is accepted", func() {
 				serv.config.RequireAddressValidation = func(net.Addr) bool { return true }
+				raddr := &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 1337}
 				retryToken, err := serv.tokenGenerator.NewRetryToken(
-					&net.UDPAddr{},
+					raddr,
 					protocol.ConnectionID{0xde, 0xad, 0xc0, 0xde},
 					protocol.ConnectionID{0xde, 0xca, 0xfb, 0xad},
 				)
@@ -256,6 +257,7 @@ var _ = Describe("Server", func() {
 					Token:            retryToken,
 				}
 				p := getPacket(hdr, make([]byte, protocol.MinInitialPacketSize))
+				p.remoteAddr = raddr
 				run := make(chan struct{})
 				var token protocol.StatelessResetToken
 				rand.Read(token[:])
@@ -451,7 +453,6 @@ var _ = Describe("Server", func() {
 			})
 
 			It("creates a connection, if no token is required", func() {
-				serv.config.RequireAddressValidation = func(net.Addr) bool { return false }
 				hdr := &wire.Header{
 					IsLongHeader:     true,
 					Type:             protocol.PacketTypeInitial,
@@ -534,7 +535,6 @@ var _ = Describe("Server", func() {
 				}).AnyTimes()
 				tracer.EXPECT().TracerForConnection(gomock.Any(), protocol.PerspectiveServer, gomock.Any()).AnyTimes()
 
-				serv.config.RequireAddressValidation = func(net.Addr) bool { return false }
 				acceptConn := make(chan struct{})
 				var counter uint32 // to be used as an atomic, so we query it in Eventually
 				serv.newConn = func(
@@ -588,7 +588,6 @@ var _ = Describe("Server", func() {
 			})
 
 			It("only creates a single connection for a duplicate Initial", func() {
-				serv.config.RequireAddressValidation = func(net.Addr) bool { return false }
 				var createdConn bool
 				conn := NewMockQuicConn(mockCtrl)
 				serv.newConn = func(
@@ -620,8 +619,6 @@ var _ = Describe("Server", func() {
 			})
 
 			It("rejects new connection attempts if the accept queue is full", func() {
-				serv.config.RequireAddressValidation = func(net.Addr) bool { return false }
-
 				serv.newConn = func(
 					_ sendConn,
 					runner connRunner,
@@ -688,8 +685,6 @@ var _ = Describe("Server", func() {
 			})
 
 			It("doesn't accept new connections if they were closed in the mean time", func() {
-				serv.config.RequireAddressValidation = func(net.Addr) bool { return false }
-
 				p := getInitial(protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8, 9, 10})
 				ctx, cancel := context.WithCancel(context.Background())
 				connCreated := make(chan struct{})
@@ -999,7 +994,6 @@ var _ = Describe("Server", func() {
 				}()
 
 				ctx, cancel := context.WithCancel(context.Background()) // handshake context
-				serv.config.RequireAddressValidation = func(net.Addr) bool { return false }
 				serv.newConn = func(
 					_ sendConn,
 					runner connRunner,
@@ -1073,7 +1067,6 @@ var _ = Describe("Server", func() {
 			}()
 
 			ready := make(chan struct{})
-			serv.config.RequireAddressValidation = func(net.Addr) bool { return false }
 			serv.newConn = func(
 				_ sendConn,
 				runner connRunner,
@@ -1114,7 +1107,6 @@ var _ = Describe("Server", func() {
 		})
 
 		It("rejects new connection attempts if the accept queue is full", func() {
-			serv.config.RequireAddressValidation = func(net.Addr) bool { return false }
 			senderAddr := &net.UDPAddr{IP: net.IPv4(1, 2, 3, 4), Port: 42}
 
 			serv.newConn = func(
@@ -1175,8 +1167,6 @@ var _ = Describe("Server", func() {
 		})
 
 		It("doesn't accept new connections if they were closed in the mean time", func() {
-			serv.config.RequireAddressValidation = func(net.Addr) bool { return false }
-
 			p := getInitial(protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8, 9, 10})
 			ctx, cancel := context.WithCancel(context.Background())
 			connCreated := make(chan struct{})

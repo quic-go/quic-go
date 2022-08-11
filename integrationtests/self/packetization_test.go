@@ -26,9 +26,8 @@ var _ = Describe("Packetization", func() {
 			"localhost:0",
 			getTLSConfig(),
 			getQuicConfig(&quic.Config{
-				RequireAddressValidation: func(net.Addr) bool { return false },
-				DisablePathMTUDiscovery:  true,
-				Tracer:                   newTracer(func() logging.ConnectionTracer { return serverTracer }),
+				DisablePathMTUDiscovery: true,
+				Tracer:                  newTracer(func() logging.ConnectionTracer { return serverTracer }),
 			}),
 		)
 		Expect(err).ToNot(HaveOccurred())

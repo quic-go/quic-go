@@ -55,9 +55,7 @@ var _ = Describe("0-RTT", func() {
 			dialAndReceiveSessionTicket := func(serverConf *quic.Config) (*tls.Config, *tls.Config) {
 				tlsConf := getTLSConfig()
 				if serverConf == nil {
-					serverConf = getQuicConfig(&quic.Config{
-						RequireAddressValidation: func(net.Addr) bool { return false },
-					})
+					serverConf = getQuicConfig(nil)
 					serverConf.Versions = []protocol.VersionNumber{version}
 				}
 				ln, err := quic.ListenAddrEarly(
@@ -197,9 +195,8 @@ var _ = Describe("0-RTT", func() {
 						"localhost:0",
 						tlsConf,
 						getQuicConfig(&quic.Config{
-							Versions:                 []protocol.VersionNumber{version},
-							RequireAddressValidation: func(net.Addr) bool { return false },
-							Tracer:                   newTracer(func() logging.ConnectionTracer { return tracer }),
+							Versions: []protocol.VersionNumber{version},
+							Tracer:   newTracer(func() logging.ConnectionTracer { return tracer }),
 						}),
 					)
 					Expect(err).ToNot(HaveOccurred())
@@ -255,9 +252,8 @@ var _ = Describe("0-RTT", func() {
 					"localhost:0",
 					tlsConf,
 					getQuicConfig(&quic.Config{
-						Versions:                 []protocol.VersionNumber{version},
-						RequireAddressValidation: func(net.Addr) bool { return false },
-						Tracer:                   newTracer(func() logging.ConnectionTracer { return tracer }),
+						Versions: []protocol.VersionNumber{version},
+						Tracer:   newTracer(func() logging.ConnectionTracer { return tracer }),
 					}),
 				)
 				Expect(err).ToNot(HaveOccurred())
@@ -400,8 +396,9 @@ var _ = Describe("0-RTT", func() {
 					"localhost:0",
 					tlsConf,
 					getQuicConfig(&quic.Config{
-						Versions: []protocol.VersionNumber{version},
-						Tracer:   newTracer(func() logging.ConnectionTracer { return tracer }),
+						Versions:                 []protocol.VersionNumber{version},
+						RequireAddressValidation: func(net.Addr) bool { return true },
+						Tracer:                   newTracer(func() logging.ConnectionTracer { return tracer }),
 					}),
 				)
 				Expect(err).ToNot(HaveOccurred())
@@ -452,8 +449,7 @@ var _ = Describe("0-RTT", func() {
 			It("doesn't reject 0-RTT when the server's transport stream limit increased", func() {
 				const maxStreams = 1
 				tlsConf, clientConf := dialAndReceiveSessionTicket(getQuicConfig(&quic.Config{
-					MaxIncomingUniStreams:    maxStreams,
-					RequireAddressValidation: func(net.Addr) bool { return false },
+					MaxIncomingUniStreams: maxStreams,
 				}))
 
 				tracer := newPacketTracer()
@@ -461,10 +457,9 @@ var _ = Describe("0-RTT", func() {
 					"localhost:0",
 					tlsConf,
 					getQuicConfig(&quic.Config{
-						Versions:                 []protocol.VersionNumber{version},
-						RequireAddressValidation: func(net.Addr) bool { return false },
-						MaxIncomingUniStreams:    maxStreams + 1,
-						Tracer:                   newTracer(func() logging.ConnectionTracer { return tracer }),
+						Versions:              []protocol.VersionNumber{version},
+						MaxIncomingUniStreams: maxStreams + 1,
+						Tracer:                newTracer(func() logging.ConnectionTracer { return tracer }),
 					}),
 				)
 				Expect(err).ToNot(HaveOccurred())
@@ -498,8 +493,7 @@ var _ = Describe("0-RTT", func() {
 			It("rejects 0-RTT when the server's stream limit decreased", func() {
 				const maxStreams = 42
 				tlsConf, clientConf := dialAndReceiveSessionTicket(getQuicConfig(&quic.Config{
-					MaxIncomingStreams:       maxStreams,
-					RequireAddressValidation: func(net.Addr) bool { return false },
+					MaxIncomingStreams: maxStreams,
 				}))
 
 				tracer := newPacketTracer()
@@ -507,10 +501,9 @@ var _ = Describe("0-RTT", func() {
 					"localhost:0",
 					tlsConf,
 					getQuicConfig(&quic.Config{
-						Versions:                 []protocol.VersionNumber{version},
-						RequireAddressValidation: func(net.Addr) bool { return false },
-						MaxIncomingStreams:       maxStreams - 1,
-						Tracer:                   newTracer(func() logging.ConnectionTracer { return tracer }),
+						Versions:           []protocol.VersionNumber{version},
+						MaxIncomingStreams: maxStreams - 1,
+						Tracer:             newTracer(func() logging.ConnectionTracer { return tracer }),
 					}),
 				)
 				Expect(err).ToNot(HaveOccurred())
@@ -537,9 +530,8 @@ var _ = Describe("0-RTT", func() {
 					"localhost:0",
 					tlsConf,
 					getQuicConfig(&quic.Config{
-						Versions:                 []protocol.VersionNumber{version},
-						RequireAddressValidation: func(net.Addr) bool { return false },
-						Tracer:                   newTracer(func() logging.ConnectionTracer { return tracer }),
+						Versions: []protocol.VersionNumber{version},
+						Tracer:   newTracer(func() logging.ConnectionTracer { return tracer }),
 					}),
 				)
 				Expect(err).ToNot(HaveOccurred())
@@ -560,16 +552,14 @@ var _ = Describe("0-RTT", func() {
 				func(addFlowControlLimit func(*quic.Config, uint64)) {
 					tracer := newPacketTracer()
 					firstConf := getQuicConfig(&quic.Config{
-						RequireAddressValidation: func(net.Addr) bool { return false },
-						Versions:                 []protocol.VersionNumber{version},
+						Versions: []protocol.VersionNumber{version},
 					})
 					addFlowControlLimit(firstConf, 3)
 					tlsConf, clientConf := dialAndReceiveSessionTicket(firstConf)
 
 					secondConf := getQuicConfig(&quic.Config{
-						Versions:                 []protocol.VersionNumber{version},
-						RequireAddressValidation: func(net.Addr) bool { return false },
-						Tracer:                   newTracer(func() logging.ConnectionTracer { return tracer }),
+						Versions: []protocol.VersionNumber{version},
+						Tracer:   newTracer(func() logging.ConnectionTracer { return tracer }),
 					})
 					addFlowControlLimit(secondConf, 100)
 					ln, err := quic.ListenAddrEarly(
@@ -722,9 +712,8 @@ var _ = Describe("0-RTT", func() {
 					"localhost:0",
 					tlsConf,
 					getQuicConfig(&quic.Config{
-						Versions:                 []protocol.VersionNumber{version},
-						RequireAddressValidation: func(net.Addr) bool { return false },
-						Tracer:                   newTracer(func() logging.ConnectionTracer { return tracer }),
+						Versions: []protocol.VersionNumber{version},
+						Tracer:   newTracer(func() logging.ConnectionTracer { return tracer }),
 					}),
 				)
 				Expect(err).ToNot(HaveOccurred())

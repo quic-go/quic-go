@@ -347,6 +347,7 @@ var _ = Describe("MITM test", func() {
 				// as it has already accepted a retry.
 				// TODO: determine behavior when server does not send Retry packets
 				It("fails when a forged Retry packet with modified srcConnID is sent to client", func() {
+					serverConfig.RequireAddressValidation = func(net.Addr) bool { return true }
 					var initialPacketIntercepted bool
 					done := make(chan struct{})
 					delayCb := func(dir quicproxy.Direction, raw []byte) time.Duration {

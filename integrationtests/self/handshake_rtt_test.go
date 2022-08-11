@@ -101,6 +101,7 @@ var _ = Describe("Handshake RTT tests", func() {
 	// 1 RTT for verifying the source address
 	// 1 RTT for the TLS handshake
 	It("is forward-secure after 2 RTTs", func() {
+		serverConfig.RequireAddressValidation = func(net.Addr) bool { return true }
 		runServerAndProxy()
 		_, err := quic.DialAddr(
 			fmt.Sprintf("localhost:%d", proxy.LocalAddr().(*net.UDPAddr).Port),
@@ -112,7 +113,6 @@ var _ = Describe("Handshake RTT tests", func() {
 	})
 
 	It("establishes a connection in 1 RTT when the server doesn't require a token", func() {
-		serverConfig.RequireAddressValidation = func(net.Addr) bool { return false }
 		runServerAndProxy()
 		_, err := quic.DialAddr(
 			fmt.Sprintf("localhost:%d", proxy.LocalAddr().(*net.UDPAddr).Port),
@@ -124,7 +124,6 @@ var _ = Describe("Handshake RTT tests", func() {
 	})
 
 	It("establishes a connection in 2 RTTs if a HelloRetryRequest is performed", func() {
-		serverConfig.RequireAddressValidation = func(net.Addr) bool { return false }
 		serverTLSConfig.CurvePreferences = []tls.CurveID{tls.CurveP384}
 		runServerAndProxy()
 		_, err := quic.DialAddr(

@@ -46,7 +46,7 @@ func populateServerConfig(config *Config) *Config {
 		config.MaxRetryTokenAge = protocol.RetryTokenValidity
 	}
 	if config.RequireAddressValidation == nil {
-		config.RequireAddressValidation = func(net.Addr) bool { return true }
+		config.RequireAddressValidation = func(net.Addr) bool { return false }
 	}
 	return config
 }

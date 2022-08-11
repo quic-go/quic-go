@@ -344,7 +344,6 @@ var _ = Describe("Handshake tests", func() {
 		}
 
 		BeforeEach(func() {
-			serverConfig.RequireAddressValidation = func(net.Addr) bool { return false }
 			var err error
 			// start the server, but don't call Accept
 			server, err = quic.ListenAddr("localhost:0", getTLSConfig(), serverConfig)
@@ -474,8 +473,6 @@ var _ = Describe("Handshake tests", func() {
 
 	Context("using tokens", func() {
 		It("uses tokens provided in NEW_TOKEN frames", func() {
-			serverConfig.RequireAddressValidation = func(net.Addr) bool { return false }
-
 			server, err := quic.ListenAddr("localhost:0", getTLSConfig(), serverConfig)
 			Expect(err).ToNot(HaveOccurred())
 
