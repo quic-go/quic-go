@@ -390,7 +390,7 @@ func (h *packetHandlerMap) handlePacket(p *receivedPacket) {
 			return
 		}
 	}
-	if p.data[0]&0x80 == 0 {
+	if !wire.IsLongHeaderPacket(p.data[0]) {
 		go h.maybeSendStatelessReset(p, connID)
 		return
 	}
@@ -433,7 +433,7 @@ func (h *packetHandlerMap) handlePacket(p *receivedPacket) {
 
 func (h *packetHandlerMap) maybeHandleStatelessReset(data []byte) bool {
 	// stateless resets are always short header packets
-	if data[0]&0x80 != 0 {
+	if wire.IsLongHeaderPacket(data[0]) {
 		return false
 	}
 	if len(data) < 17 /* type byte + 16 bytes for the reset token */ {

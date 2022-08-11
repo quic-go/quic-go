@@ -453,7 +453,7 @@ var _ = Describe("Packet Handler Map", func() {
 					done := make(chan struct{})
 					conn.EXPECT().WriteTo(gomock.Any(), addr).Do(func(b []byte, _ net.Addr) {
 						defer close(done)
-						Expect(b[0] & 0x80).To(BeZero()) // short header packet
+						Expect(wire.IsLongHeaderPacket(b[0])).To(BeFalse()) // short header packet
 						Expect(b).To(HaveLen(protocol.MinStatelessResetSize))
 					})
 					handler.handlePacket(&receivedPacket{
