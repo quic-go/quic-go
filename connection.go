@@ -816,7 +816,7 @@ func (s *connection) handleHandshakeConfirmed() {
 		if maxPacketSize == 0 {
 			maxPacketSize = protocol.MaxByteCount
 		}
-		maxPacketSize = utils.MinByteCount(maxPacketSize, protocol.MaxPacketBufferSize)
+		maxPacketSize = utils.Min(maxPacketSize, protocol.MaxPacketBufferSize)
 		s.mtuDiscoverer = newMTUDiscoverer(
 			s.rttStats,
 			getMaxPacketSize(s.conn.RemoteAddr()),
@@ -1618,7 +1618,7 @@ func (s *connection) applyTransportParameters() {
 	params := s.peerParams
 	// Our local idle timeout will always be > 0.
 	s.idleTimeout = utils.MinNonZeroDuration(s.config.MaxIdleTimeout, params.MaxIdleTimeout)
-	s.keepAliveInterval = utils.MinDuration(s.config.KeepAlivePeriod, utils.MinDuration(s.idleTimeout/2, protocol.MaxKeepAliveInterval))
+	s.keepAliveInterval = utils.Min(s.config.KeepAlivePeriod, utils.Min(s.idleTimeout/2, protocol.MaxKeepAliveInterval))
 	s.streamsMap.UpdateLimits(params)
 	s.packer.HandleTransportParameters(params)
 	s.frameParser.SetAckDelayExponent(params.AckDelayExponent)
