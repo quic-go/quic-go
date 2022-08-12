@@ -3,6 +3,6 @@
 package quic
 
 import (
-	_ "github.com/cheekybits/genny"
+	_ "github.com/golang/mock/mockgen"
 	_ "github.com/onsi/ginkgo/ginkgo"
 )
