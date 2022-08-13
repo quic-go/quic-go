@@ -26,7 +26,6 @@ var _ = Describe("Packetization", func() {
 			"localhost:0",
 			getTLSConfig(),
 			getQuicConfig(&quic.Config{
-				AcceptToken:             func(net.Addr, *quic.Token) bool { return true },
 				DisablePathMTUDiscovery: true,
 				Tracer:                  newTracer(func() logging.ConnectionTracer { return serverTracer }),
 			}),

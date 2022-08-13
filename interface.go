@@ -26,16 +26,6 @@ const (
 	Version2 = protocol.Version2
 )
 
-// A Token can be used to verify the ownership of the client address.
-type Token struct {
-	// IsRetryToken encodes how the client received the token. There are two ways:
-	// * In a Retry packet sent when trying to establish a new connection.
-	// * In a NEW_TOKEN frame on a previous connection.
-	IsRetryToken bool
-	RemoteAddr   string
-	SentTime     time.Time
-}
-
 // A ClientToken is a token received by the client.
 // It can be used to skip address validation on future connection attempts.
 type ClientToken struct {
@@ -233,14 +223,18 @@ type Config struct {
 	// If the timeout is exceeded, the connection is closed.
 	// If this value is zero, the timeout is set to 30 seconds.
 	MaxIdleTimeout time.Duration
-	// AcceptToken determines if a Token is accepted.
-	// It is called with token = nil if the client didn't send a token.
-	// If not set, a default verification function is used:
-	// * it verifies that the address matches, and
-	//   * if the token is a retry token, that it was issued within the last 5 seconds
-	//   * else, that it was issued within the last 24 hours.
-	// This option is only valid for the server.
-	AcceptToken func(clientAddr net.Addr, token *Token) bool
+	// RequireAddressValidation determines if a QUIC Retry packet is sent.
+	// This allows the server to verify the client's address, at the cost of increasing the handshake latency by 1 RTT.
+	// See https://datatracker.ietf.org/doc/html/rfc9000#section-8 for details.
+	// If not set, every client is forced to prove its remote address.
+	RequireAddressValidation func(net.Addr) bool
+	// MaxRetryTokenAge is the maximum age of a Retry token.
+	// If not set, it defaults to 5 seconds. Only valid for a server.
+	MaxRetryTokenAge time.Duration
+	// MaxTokenAge is the maximum age of the token presented during the handshake,
+	// for tokens that were issued on a previous connection.
+	// If not set, it defaults to 24 hours. Only valid for a server.
+	MaxTokenAge time.Duration
 	// The TokenStore stores tokens received from the server.
 	// Tokens are used to skip address validation on future connection attempts.
 	// The key used to store tokens is the ServerName from the tls.Config, if set

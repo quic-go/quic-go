@@ -2,11 +2,11 @@ package quic
 
 import (
 	"errors"
+	"net"
 	"time"
 
-	"github.com/lucas-clemente/quic-go/internal/utils"
-
 	"github.com/lucas-clemente/quic-go/internal/protocol"
+	"github.com/lucas-clemente/quic-go/internal/utils"
 )
 
 // Clone clones a Config
@@ -39,8 +39,14 @@ func populateServerConfig(config *Config) *Config {
 	if config.ConnectionIDLength == 0 {
 		config.ConnectionIDLength = protocol.DefaultConnectionIDLength
 	}
-	if config.AcceptToken == nil {
-		config.AcceptToken = defaultAcceptToken
+	if config.MaxTokenAge == 0 {
+		config.MaxTokenAge = protocol.TokenValidity
+	}
+	if config.MaxRetryTokenAge == 0 {
+		config.MaxRetryTokenAge = protocol.RetryTokenValidity
+	}
+	if config.RequireAddressValidation == nil {
+		config.RequireAddressValidation = func(net.Addr) bool { return false }
 	}
 	return config
 }
@@ -104,7 +110,9 @@ func populateConfig(config *Config) *Config {
 		Versions:                         versions,
 		HandshakeIdleTimeout:             handshakeIdleTimeout,
 		MaxIdleTimeout:                   idleTimeout,
-		AcceptToken:                      config.AcceptToken,
+		MaxTokenAge:                      config.MaxTokenAge,
+		MaxRetryTokenAge:                 config.MaxRetryTokenAge,
+		RequireAddressValidation:         config.RequireAddressValidation,
 		KeepAlivePeriod:                  config.KeepAlivePeriod,
 		InitialStreamReceiveWindow:       initialStreamReceiveWindow,
 		MaxStreamReceiveWindow:           maxStreamReceiveWindow,

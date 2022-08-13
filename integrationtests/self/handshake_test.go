@@ -344,12 +344,6 @@ var _ = Describe("Handshake tests", func() {
 		}
 
 		BeforeEach(func() {
-			serverConfig.AcceptToken = func(addr net.Addr, token *quic.Token) bool {
-				if token != nil {
-					Expect(token.IsRetryToken).To(BeFalse())
-				}
-				return true
-			}
 			var err error
 			// start the server, but don't call Accept
 			server, err = quic.ListenAddr("localhost:0", getTLSConfig(), serverConfig)
@@ -479,14 +473,6 @@ var _ = Describe("Handshake tests", func() {
 
 	Context("using tokens", func() {
 		It("uses tokens provided in NEW_TOKEN frames", func() {
-			tokenChan := make(chan *quic.Token, 100)
-			serverConfig.AcceptToken = func(addr net.Addr, token *quic.Token) bool {
-				if token != nil && !token.IsRetryToken {
-					tokenChan <- token
-				}
-				return true
-			}
-
 			server, err := quic.ListenAddr("localhost:0", getTLSConfig(), serverConfig)
 			Expect(err).ToNot(HaveOccurred())
 
@@ -509,7 +495,6 @@ var _ = Describe("Handshake tests", func() {
 			Expect(err).ToNot(HaveOccurred())
 			Expect(gets).To(Receive())
 			Eventually(puts).Should(Receive())
-			Expect(tokenChan).ToNot(Receive())
 			// received a token. Close this connection.
 			Expect(conn.CloseWithError(0, "")).To(Succeed())
 
@@ -529,17 +514,13 @@ var _ = Describe("Handshake tests", func() {
 			Expect(err).ToNot(HaveOccurred())
 			defer conn.CloseWithError(0, "")
 			Expect(gets).To(Receive())
-			Expect(tokenChan).To(Receive())
 
 			Eventually(done).Should(BeClosed())
 		})
 
 		It("rejects invalid Retry token with the INVALID_TOKEN error", func() {
-			tokenChan := make(chan *quic.Token, 10)
-			serverConfig.AcceptToken = func(addr net.Addr, token *quic.Token) bool {
-				tokenChan <- token
-				return false
-			}
+			serverConfig.RequireAddressValidation = func(net.Addr) bool { return true }
+			serverConfig.MaxRetryTokenAge = time.Nanosecond
 
 			server, err := quic.ListenAddr("localhost:0", getTLSConfig(), serverConfig)
 			Expect(err).ToNot(HaveOccurred())
@@ -554,18 +535,6 @@ var _ = Describe("Handshake tests", func() {
 			var transportErr *quic.TransportError
 			Expect(errors.As(err, &transportErr)).To(BeTrue())
 			Expect(transportErr.ErrorCode).To(Equal(quic.InvalidToken))
-			// Receiving a Retry might lead the client to measure a very small RTT.
-			// Then, it sometimes would retransmit the ClientHello before receiving the ServerHello.
-			Expect(len(tokenChan)).To(BeNumerically(">=", 2))
-			token := <-tokenChan
-			Expect(token).To(BeNil())
-			token = <-tokenChan
-			Expect(token).ToNot(BeNil())
-			// If the ClientHello was retransmitted, make sure that it contained the same Retry token.
-			for i := 2; i < len(tokenChan); i++ {
-				Expect(<-tokenChan).To(Equal(token))
-			}
-			Expect(token.IsRetryToken).To(BeTrue())
 		})
 	})
 

@@ -45,7 +45,7 @@ var _ = Describe("Config", func() {
 			}
 
 			switch fn := typ.Field(i).Name; fn {
-			case "AcceptToken", "GetLogWriter", "AllowConnectionWindowIncrease":
+			case "RequireAddressValidation", "GetLogWriter", "AllowConnectionWindowIncrease":
 				// Can't compare functions.
 			case "Versions":
 				f.Set(reflect.ValueOf([]VersionNumber{1, 2, 3}))
@@ -55,6 +55,10 @@ var _ = Describe("Config", func() {
 				f.Set(reflect.ValueOf(time.Second))
 			case "MaxIdleTimeout":
 				f.Set(reflect.ValueOf(time.Hour))
+			case "MaxTokenAge":
+				f.Set(reflect.ValueOf(2 * time.Hour))
+			case "MaxRetryTokenAge":
+				f.Set(reflect.ValueOf(2 * time.Minute))
 			case "TokenStore":
 				f.Set(reflect.ValueOf(NewLRUTokenStore(2, 3)))
 			case "InitialStreamReceiveWindow":
@@ -100,14 +104,14 @@ var _ = Describe("Config", func() {
 
 	Context("cloning", func() {
 		It("clones function fields", func() {
-			var calledAcceptToken, calledAllowConnectionWindowIncrease bool
+			var calledAddrValidation, calledAllowConnectionWindowIncrease bool
 			c1 := &Config{
-				AcceptToken:                   func(_ net.Addr, _ *Token) bool { calledAcceptToken = true; return true },
 				AllowConnectionWindowIncrease: func(Connection, uint64) bool { calledAllowConnectionWindowIncrease = true; return true },
+				RequireAddressValidation:      func(net.Addr) bool { calledAddrValidation = true; return true },
 			}
 			c2 := c1.Clone()
-			c2.AcceptToken(&net.UDPAddr{}, &Token{})
-			Expect(calledAcceptToken).To(BeTrue())
+			c2.RequireAddressValidation(&net.UDPAddr{})
+			Expect(calledAddrValidation).To(BeTrue())
 			c2.AllowConnectionWindowIncrease(nil, 1234)
 			Expect(calledAllowConnectionWindowIncrease).To(BeTrue())
 		})
@@ -119,27 +123,26 @@ var _ = Describe("Config", func() {
 
 		It("returns a copy", func() {
 			c1 := &Config{
-				MaxIncomingStreams: 100,
-				AcceptToken:        func(_ net.Addr, _ *Token) bool { return true },
+				MaxIncomingStreams:       100,
+				RequireAddressValidation: func(net.Addr) bool { return true },
 			}
 			c2 := c1.Clone()
 			c2.MaxIncomingStreams = 200
-			c2.AcceptToken = func(_ net.Addr, _ *Token) bool { return false }
+			c2.RequireAddressValidation = func(net.Addr) bool { return false }
 
 			Expect(c1.MaxIncomingStreams).To(BeEquivalentTo(100))
-			Expect(c1.AcceptToken(&net.UDPAddr{}, nil)).To(BeTrue())
+			Expect(c1.RequireAddressValidation(&net.UDPAddr{})).To(BeTrue())
 		})
 	})
 
 	Context("populating", func() {
 		It("populates function fields", func() {
-			var calledAcceptToken bool
-			c1 := &Config{
-				AcceptToken: func(_ net.Addr, _ *Token) bool { calledAcceptToken = true; return true },
-			}
+			var calledAddrValidation bool
+			c1 := &Config{}
+			c1.RequireAddressValidation = func(net.Addr) bool { calledAddrValidation = true; return true }
 			c2 := populateConfig(c1)
-			c2.AcceptToken(&net.UDPAddr{}, &Token{})
-			Expect(calledAcceptToken).To(BeTrue())
+			c2.RequireAddressValidation(&net.UDPAddr{})
+			Expect(calledAddrValidation).To(BeTrue())
 		})
 
 		It("copies non-function fields", func() {
@@ -164,7 +167,7 @@ var _ = Describe("Config", func() {
 		It("populates empty fields with default values, for the server", func() {
 			c := populateServerConfig(&Config{})
 			Expect(c.ConnectionIDLength).To(Equal(protocol.DefaultConnectionIDLength))
-			Expect(c.AcceptToken).ToNot(BeNil())
+			Expect(c.RequireAddressValidation).ToNot(BeNil())
 		})
 
 		It("sets a default connection ID length if we didn't create the conn, for the client", func() {

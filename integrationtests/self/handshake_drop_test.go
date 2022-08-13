@@ -37,13 +37,11 @@ var _ = Describe("Handshake drop tests", func() {
 
 	startListenerAndProxy := func(dropCallback quicproxy.DropCallback, doRetry bool, longCertChain bool, version protocol.VersionNumber) {
 		conf := getQuicConfig(&quic.Config{
-			MaxIdleTimeout:       timeout,
-			HandshakeIdleTimeout: timeout,
-			Versions:             []protocol.VersionNumber{version},
+			MaxIdleTimeout:           timeout,
+			HandshakeIdleTimeout:     timeout,
+			Versions:                 []protocol.VersionNumber{version},
+			RequireAddressValidation: func(net.Addr) bool { return doRetry },
 		})
-		if !doRetry {
-			conf.AcceptToken = func(net.Addr, *quic.Token) bool { return true }
-		}
 		var tlsConf *tls.Config
 		if longCertChain {
 			tlsConf = getTLSConfigWithLongCertChain()

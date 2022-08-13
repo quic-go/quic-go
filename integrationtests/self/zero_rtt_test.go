@@ -55,9 +55,7 @@ var _ = Describe("0-RTT", func() {
 			dialAndReceiveSessionTicket := func(serverConf *quic.Config) (*tls.Config, *tls.Config) {
 				tlsConf := getTLSConfig()
 				if serverConf == nil {
-					serverConf = getQuicConfig(&quic.Config{
-						AcceptToken: func(_ net.Addr, _ *quic.Token) bool { return true },
-					})
+					serverConf = getQuicConfig(nil)
 					serverConf.Versions = []protocol.VersionNumber{version}
 				}
 				ln, err := quic.ListenAddrEarly(
@@ -197,9 +195,8 @@ var _ = Describe("0-RTT", func() {
 						"localhost:0",
 						tlsConf,
 						getQuicConfig(&quic.Config{
-							Versions:    []protocol.VersionNumber{version},
-							AcceptToken: func(_ net.Addr, _ *quic.Token) bool { return true },
-							Tracer:      newTracer(func() logging.ConnectionTracer { return tracer }),
+							Versions: []protocol.VersionNumber{version},
+							Tracer:   newTracer(func() logging.ConnectionTracer { return tracer }),
 						}),
 					)
 					Expect(err).ToNot(HaveOccurred())
@@ -255,9 +252,8 @@ var _ = Describe("0-RTT", func() {
 					"localhost:0",
 					tlsConf,
 					getQuicConfig(&quic.Config{
-						Versions:    []protocol.VersionNumber{version},
-						AcceptToken: func(_ net.Addr, _ *quic.Token) bool { return true },
-						Tracer:      newTracer(func() logging.ConnectionTracer { return tracer }),
+						Versions: []protocol.VersionNumber{version},
+						Tracer:   newTracer(func() logging.ConnectionTracer { return tracer }),
 					}),
 				)
 				Expect(err).ToNot(HaveOccurred())
@@ -400,8 +396,9 @@ var _ = Describe("0-RTT", func() {
 					"localhost:0",
 					tlsConf,
 					getQuicConfig(&quic.Config{
-						Versions: []protocol.VersionNumber{version},
-						Tracer:   newTracer(func() logging.ConnectionTracer { return tracer }),
+						Versions:                 []protocol.VersionNumber{version},
+						RequireAddressValidation: func(net.Addr) bool { return true },
+						Tracer:                   newTracer(func() logging.ConnectionTracer { return tracer }),
 					}),
 				)
 				Expect(err).ToNot(HaveOccurred())
@@ -453,7 +450,6 @@ var _ = Describe("0-RTT", func() {
 				const maxStreams = 1
 				tlsConf, clientConf := dialAndReceiveSessionTicket(getQuicConfig(&quic.Config{
 					MaxIncomingUniStreams: maxStreams,
-					AcceptToken:           func(_ net.Addr, _ *quic.Token) bool { return true },
 				}))
 
 				tracer := newPacketTracer()
@@ -462,7 +458,6 @@ var _ = Describe("0-RTT", func() {
 					tlsConf,
 					getQuicConfig(&quic.Config{
 						Versions:              []protocol.VersionNumber{version},
-						AcceptToken:           func(_ net.Addr, _ *quic.Token) bool { return true },
 						MaxIncomingUniStreams: maxStreams + 1,
 						Tracer:                newTracer(func() logging.ConnectionTracer { return tracer }),
 					}),
@@ -499,7 +494,6 @@ var _ = Describe("0-RTT", func() {
 				const maxStreams = 42
 				tlsConf, clientConf := dialAndReceiveSessionTicket(getQuicConfig(&quic.Config{
 					MaxIncomingStreams: maxStreams,
-					AcceptToken:        func(_ net.Addr, _ *quic.Token) bool { return true },
 				}))
 
 				tracer := newPacketTracer()
@@ -508,7 +502,6 @@ var _ = Describe("0-RTT", func() {
 					tlsConf,
 					getQuicConfig(&quic.Config{
 						Versions:           []protocol.VersionNumber{version},
-						AcceptToken:        func(_ net.Addr, _ *quic.Token) bool { return true },
 						MaxIncomingStreams: maxStreams - 1,
 						Tracer:             newTracer(func() logging.ConnectionTracer { return tracer }),
 					}),
@@ -537,9 +530,8 @@ var _ = Describe("0-RTT", func() {
 					"localhost:0",
 					tlsConf,
 					getQuicConfig(&quic.Config{
-						Versions:    []protocol.VersionNumber{version},
-						AcceptToken: func(_ net.Addr, _ *quic.Token) bool { return true },
-						Tracer:      newTracer(func() logging.ConnectionTracer { return tracer }),
+						Versions: []protocol.VersionNumber{version},
+						Tracer:   newTracer(func() logging.ConnectionTracer { return tracer }),
 					}),
 				)
 				Expect(err).ToNot(HaveOccurred())
@@ -560,16 +552,14 @@ var _ = Describe("0-RTT", func() {
 				func(addFlowControlLimit func(*quic.Config, uint64)) {
 					tracer := newPacketTracer()
 					firstConf := getQuicConfig(&quic.Config{
-						AcceptToken: func(_ net.Addr, _ *quic.Token) bool { return true },
-						Versions:    []protocol.VersionNumber{version},
+						Versions: []protocol.VersionNumber{version},
 					})
 					addFlowControlLimit(firstConf, 3)
 					tlsConf, clientConf := dialAndReceiveSessionTicket(firstConf)
 
 					secondConf := getQuicConfig(&quic.Config{
-						Versions:    []protocol.VersionNumber{version},
-						AcceptToken: func(_ net.Addr, _ *quic.Token) bool { return true },
-						Tracer:      newTracer(func() logging.ConnectionTracer { return tracer }),
+						Versions: []protocol.VersionNumber{version},
+						Tracer:   newTracer(func() logging.ConnectionTracer { return tracer }),
 					})
 					addFlowControlLimit(secondConf, 100)
 					ln, err := quic.ListenAddrEarly(
@@ -722,9 +712,8 @@ var _ = Describe("0-RTT", func() {
 					"localhost:0",
 					tlsConf,
 					getQuicConfig(&quic.Config{
-						Versions:    []protocol.VersionNumber{version},
-						AcceptToken: func(_ net.Addr, _ *quic.Token) bool { return true },
-						Tracer:      newTracer(func() logging.ConnectionTracer { return tracer }),
+						Versions: []protocol.VersionNumber{version},
+						Tracer:   newTracer(func() logging.ConnectionTracer { return tracer }),
 					}),
 				)
 				Expect(err).ToNot(HaveOccurred())

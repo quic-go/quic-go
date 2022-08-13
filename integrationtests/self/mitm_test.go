@@ -29,24 +29,27 @@ var _ = Describe("MITM test", func() {
 			const connIDLen = 6 // explicitly set the connection ID length, so the proxy can parse it
 
 			var (
-				proxy                        *quicproxy.QuicProxy
 				serverUDPConn, clientUDPConn *net.UDPConn
 				serverConn                   quic.Connection
 				serverConfig                 *quic.Config
 			)
 
-			startServerAndProxy := func(delayCb quicproxy.DelayCallback, dropCb quicproxy.DropCallback) {
+			startServerAndProxy := func(delayCb quicproxy.DelayCallback, dropCb quicproxy.DropCallback) (proxyPort int, closeFn func()) {
 				addr, err := net.ResolveUDPAddr("udp", "localhost:0")
 				Expect(err).ToNot(HaveOccurred())
 				serverUDPConn, err = net.ListenUDP("udp", addr)
 				Expect(err).ToNot(HaveOccurred())
 				ln, err := quic.Listen(serverUDPConn, getTLSConfig(), serverConfig)
 				Expect(err).ToNot(HaveOccurred())
+				done := make(chan struct{})
 				go func() {
 					defer GinkgoRecover()
+					defer close(done)
 					var err error
 					serverConn, err = ln.Accept(context.Background())
-					Expect(err).ToNot(HaveOccurred())
+					if err != nil {
+						return
+					}
 					str, err := serverConn.OpenUniStream()
 					Expect(err).ToNot(HaveOccurred())
 					_, err = str.Write(PRData)
@@ -54,12 +57,18 @@ var _ = Describe("MITM test", func() {
 					Expect(str.Close()).To(Succeed())
 				}()
 				serverPort := ln.Addr().(*net.UDPAddr).Port
-				proxy, err = quicproxy.NewQuicProxy("localhost:0", &quicproxy.Opts{
+				proxy, err := quicproxy.NewQuicProxy("localhost:0", &quicproxy.Opts{
 					RemoteAddr:  fmt.Sprintf("localhost:%d", serverPort),
 					DelayPacket: delayCb,
 					DropPacket:  dropCb,
 				})
 				Expect(err).ToNot(HaveOccurred())
+				return proxy.LocalPort(), func() {
+					proxy.Close()
+					ln.Close()
+					serverUDPConn.Close()
+					<-done
+				}
 			}
 
 			BeforeEach(func() {
@@ -79,8 +88,6 @@ var _ = Describe("MITM test", func() {
 					// Test shutdown is tricky due to the proxy. Just wait for a bit.
 					time.Sleep(50 * time.Millisecond)
 					Expect(clientUDPConn.Close()).To(Succeed())
-					Expect(serverUDPConn.Close()).To(Succeed())
-					Expect(proxy.Close()).To(Succeed())
 				})
 
 				Context("injecting invalid packets", func() {
@@ -120,13 +127,14 @@ var _ = Describe("MITM test", func() {
 					}
 
 					runTest := func(delayCb quicproxy.DelayCallback) {
-						startServerAndProxy(delayCb, nil)
-						raddr, err := net.ResolveUDPAddr("udp", fmt.Sprintf("localhost:%d", proxy.LocalPort()))
+						proxyPort, closeFn := startServerAndProxy(delayCb, nil)
+						defer closeFn()
+						raddr, err := net.ResolveUDPAddr("udp", fmt.Sprintf("localhost:%d", proxyPort))
 						Expect(err).ToNot(HaveOccurred())
 						conn, err := quic.Dial(
 							clientUDPConn,
 							raddr,
-							fmt.Sprintf("localhost:%d", proxy.LocalPort()),
+							fmt.Sprintf("localhost:%d", proxyPort),
 							getTLSClientConfig(),
 							getQuicConfig(&quic.Config{
 								Versions:           []protocol.VersionNumber{version},
@@ -166,13 +174,14 @@ var _ = Describe("MITM test", func() {
 				})
 
 				runTest := func(dropCb quicproxy.DropCallback) {
-					startServerAndProxy(nil, dropCb)
-					raddr, err := net.ResolveUDPAddr("udp", fmt.Sprintf("localhost:%d", proxy.LocalPort()))
+					proxyPort, closeFn := startServerAndProxy(nil, dropCb)
+					defer closeFn()
+					raddr, err := net.ResolveUDPAddr("udp", fmt.Sprintf("localhost:%d", proxyPort))
 					Expect(err).ToNot(HaveOccurred())
 					conn, err := quic.Dial(
 						clientUDPConn,
 						raddr,
-						fmt.Sprintf("localhost:%d", proxy.LocalPort()),
+						fmt.Sprintf("localhost:%d", proxyPort),
 						getTLSClientConfig(),
 						getQuicConfig(&quic.Config{
 							Versions:           []protocol.VersionNumber{version},
@@ -283,65 +292,14 @@ var _ = Describe("MITM test", func() {
 
 				const rtt = 20 * time.Millisecond
 
-				// AfterEach closes the proxy, but each function is responsible
-				// for closing client and server connections
-				AfterEach(func() {
-					// Test shutdown is tricky due to the proxy. Just wait for a bit.
-					time.Sleep(50 * time.Millisecond)
-					Expect(proxy.Close()).To(Succeed())
-				})
-
-				// sendForgedVersionNegotiationPacket sends a fake VN packet with no supported versions
-				// from serverUDPConn to client's remoteAddr
-				// expects hdr from an Initial packet intercepted from client
-				sendForgedVersionNegotationPacket := func(conn net.PacketConn, remoteAddr net.Addr, hdr *wire.Header) {
-					// Create fake version negotiation packet with no supported versions
-					versions := []protocol.VersionNumber{}
-					packet := wire.ComposeVersionNegotiation(hdr.SrcConnectionID, hdr.DestConnectionID, versions)
-
-					// Send the packet
-					_, err := conn.WriteTo(packet, remoteAddr)
-					Expect(err).ToNot(HaveOccurred())
-				}
-
-				// sendForgedRetryPacket sends a fake Retry packet with a modified srcConnID
-				// from serverUDPConn to client's remoteAddr
-				// expects hdr from an Initial packet intercepted from client
-				sendForgedRetryPacket := func(conn net.PacketConn, remoteAddr net.Addr, hdr *wire.Header) {
-					var x byte = 0x12
-					fakeSrcConnID := protocol.ConnectionID{x, x, x, x, x, x, x, x}
-					retryPacket := testutils.ComposeRetryPacket(fakeSrcConnID, hdr.SrcConnectionID, hdr.DestConnectionID, []byte("token"), hdr.Version)
-
-					_, err := conn.WriteTo(retryPacket, remoteAddr)
-					Expect(err).ToNot(HaveOccurred())
-				}
-
-				// Send a forged Initial packet with no frames to client
-				// expects hdr from an Initial packet intercepted from client
-				sendForgedInitialPacket := func(conn net.PacketConn, remoteAddr net.Addr, hdr *wire.Header) {
-					initialPacket := testutils.ComposeInitialPacket(hdr.DestConnectionID, hdr.SrcConnectionID, hdr.Version, hdr.DestConnectionID, nil)
-					_, err := conn.WriteTo(initialPacket, remoteAddr)
-					Expect(err).ToNot(HaveOccurred())
-				}
-
-				// Send a forged Initial packet with ACK for random packet to client
-				// expects hdr from an Initial packet intercepted from client
-				sendForgedInitialPacketWithAck := func(conn net.PacketConn, remoteAddr net.Addr, hdr *wire.Header) {
-					// Fake Initial with ACK for packet 2 (unsent)
-					ack := &wire.AckFrame{AckRanges: []wire.AckRange{{Smallest: 2, Largest: 2}}}
-					initialPacket := testutils.ComposeInitialPacket(hdr.DestConnectionID, hdr.SrcConnectionID, hdr.Version, hdr.DestConnectionID, []wire.Frame{ack})
-					_, err := conn.WriteTo(initialPacket, remoteAddr)
-					Expect(err).ToNot(HaveOccurred())
-				}
-
-				runTest := func(delayCb quicproxy.DelayCallback) error {
-					startServerAndProxy(delayCb, nil)
-					raddr, err := net.ResolveUDPAddr("udp", fmt.Sprintf("localhost:%d", proxy.LocalPort()))
+				runTest := func(delayCb quicproxy.DelayCallback) (closeFn func(), err error) {
+					proxyPort, closeFn := startServerAndProxy(delayCb, nil)
+					raddr, err := net.ResolveUDPAddr("udp", fmt.Sprintf("localhost:%d", proxyPort))
 					Expect(err).ToNot(HaveOccurred())
 					_, err = quic.Dial(
 						clientUDPConn,
 						raddr,
-						fmt.Sprintf("localhost:%d", proxy.LocalPort()),
+						fmt.Sprintf("localhost:%d", proxyPort),
 						getTLSClientConfig(),
 						getQuicConfig(&quic.Config{
 							Versions:             []protocol.VersionNumber{version},
@@ -349,11 +307,12 @@ var _ = Describe("MITM test", func() {
 							HandshakeIdleTimeout: 2 * time.Second,
 						}),
 					)
-					return err
+					return closeFn, err
 				}
 
 				// fails immediately because client connection closes when it can't find compatible version
 				It("fails when a forged version negotiation packet is sent to client", func() {
+					done := make(chan struct{})
 					delayCb := func(dir quicproxy.Direction, raw []byte) time.Duration {
 						if dir == quicproxy.DirectionIncoming {
 							defer GinkgoRecover()
@@ -365,24 +324,36 @@ var _ = Describe("MITM test", func() {
 								return 0
 							}
 
-							sendForgedVersionNegotationPacket(serverUDPConn, clientUDPConn.LocalAddr(), hdr)
+							// Create fake version negotiation packet with no supported versions
+							versions := []protocol.VersionNumber{}
+							packet := wire.ComposeVersionNegotiation(hdr.SrcConnectionID, hdr.DestConnectionID, versions)
+
+							// Send the packet
+							_, err = serverUDPConn.WriteTo(packet, clientUDPConn.LocalAddr())
+							Expect(err).ToNot(HaveOccurred())
+							close(done)
 						}
 						return rtt / 2
 					}
-					err := runTest(delayCb)
+					closeFn, err := runTest(delayCb)
+					defer closeFn()
 					Expect(err).To(HaveOccurred())
 					vnErr := &quic.VersionNegotiationError{}
 					Expect(errors.As(err, &vnErr)).To(BeTrue())
+					Eventually(done).Should(BeClosed())
 				})
 
 				// times out, because client doesn't accept subsequent real retry packets from server
 				// as it has already accepted a retry.
 				// TODO: determine behavior when server does not send Retry packets
 				It("fails when a forged Retry packet with modified srcConnID is sent to client", func() {
+					serverConfig.RequireAddressValidation = func(net.Addr) bool { return true }
 					var initialPacketIntercepted bool
+					done := make(chan struct{})
 					delayCb := func(dir quicproxy.Direction, raw []byte) time.Duration {
 						if dir == quicproxy.DirectionIncoming && !initialPacketIntercepted {
 							defer GinkgoRecover()
+							defer close(done)
 
 							hdr, _, _, err := wire.ParsePacket(raw, connIDLen)
 							Expect(err).ToNot(HaveOccurred())
@@ -392,59 +363,82 @@ var _ = Describe("MITM test", func() {
 							}
 
 							initialPacketIntercepted = true
-							sendForgedRetryPacket(serverUDPConn, clientUDPConn.LocalAddr(), hdr)
+							fakeSrcConnID := protocol.ConnectionID{0x12, 0x12, 0x12, 0x12, 0x12, 0x12, 0x12, 0x12}
+							retryPacket := testutils.ComposeRetryPacket(fakeSrcConnID, hdr.SrcConnectionID, hdr.DestConnectionID, []byte("token"), hdr.Version)
+
+							_, err = serverUDPConn.WriteTo(retryPacket, clientUDPConn.LocalAddr())
+							Expect(err).ToNot(HaveOccurred())
 						}
 						return rtt / 2
 					}
-					err := runTest(delayCb)
+					closeFn, err := runTest(delayCb)
+					defer closeFn()
 					Expect(err).To(HaveOccurred())
 					Expect(err.(net.Error).Timeout()).To(BeTrue())
+					Eventually(done).Should(BeClosed())
 				})
 
 				// times out, because client doesn't accept real retry packets from server because
 				// it has already accepted an initial.
 				// TODO: determine behavior when server does not send Retry packets
 				It("fails when a forged initial packet is sent to client", func() {
+					done := make(chan struct{})
+					var injected bool
 					delayCb := func(dir quicproxy.Direction, raw []byte) time.Duration {
 						if dir == quicproxy.DirectionIncoming {
 							defer GinkgoRecover()
 
 							hdr, _, _, err := wire.ParsePacket(raw, connIDLen)
 							Expect(err).ToNot(HaveOccurred())
-
-							if hdr.Type != protocol.PacketTypeInitial {
+							if hdr.Type != protocol.PacketTypeInitial || injected {
 								return 0
 							}
-
-							sendForgedInitialPacket(serverUDPConn, clientUDPConn.LocalAddr(), hdr)
+							defer close(done)
+							injected = true
+							initialPacket := testutils.ComposeInitialPacket(hdr.DestConnectionID, hdr.SrcConnectionID, hdr.Version, hdr.DestConnectionID, nil)
+							_, err = serverUDPConn.WriteTo(initialPacket, clientUDPConn.LocalAddr())
+							Expect(err).ToNot(HaveOccurred())
 						}
 						return rtt
 					}
-					err := runTest(delayCb)
+					closeFn, err := runTest(delayCb)
+					defer closeFn()
 					Expect(err).To(HaveOccurred())
 					Expect(err.(net.Error).Timeout()).To(BeTrue())
+					Eventually(done).Should(BeClosed())
 				})
 
 				// client connection closes immediately on receiving ack for unsent packet
 				It("fails when a forged initial packet with ack for unsent packet is sent to client", func() {
-					clientAddr := clientUDPConn.LocalAddr()
+					done := make(chan struct{})
+					var injected bool
 					delayCb := func(dir quicproxy.Direction, raw []byte) time.Duration {
 						if dir == quicproxy.DirectionIncoming {
+							defer GinkgoRecover()
+
 							hdr, _, _, err := wire.ParsePacket(raw, connIDLen)
 							Expect(err).ToNot(HaveOccurred())
-							if hdr.Type != protocol.PacketTypeInitial {
+							if hdr.Type != protocol.PacketTypeInitial || injected {
 								return 0
 							}
-							sendForgedInitialPacketWithAck(serverUDPConn, clientAddr, hdr)
+							defer close(done)
+							injected = true
+							// Fake Initial with ACK for packet 2 (unsent)
+							ack := &wire.AckFrame{AckRanges: []wire.AckRange{{Smallest: 2, Largest: 2}}}
+							initialPacket := testutils.ComposeInitialPacket(hdr.DestConnectionID, hdr.SrcConnectionID, hdr.Version, hdr.DestConnectionID, []wire.Frame{ack})
+							_, err = serverUDPConn.WriteTo(initialPacket, clientUDPConn.LocalAddr())
+							Expect(err).ToNot(HaveOccurred())
 						}
 						return rtt
 					}
-					err := runTest(delayCb)
+					closeFn, err := runTest(delayCb)
+					defer closeFn()
 					Expect(err).To(HaveOccurred())
 					var transportErr *quic.TransportError
 					Expect(errors.As(err, &transportErr)).To(BeTrue())
 					Expect(transportErr.ErrorCode).To(Equal(quic.ProtocolViolation))
 					Expect(transportErr.ErrorMessage).To(ContainSubstring("received ACK for an unsent packet"))
+					Eventually(done).Should(BeClosed())
 				})
 			})
 		})
