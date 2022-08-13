@@ -543,7 +543,11 @@ func (s *connection) run() error {
 
 	s.timer = utils.NewTimer()
 
-	go s.cryptoStreamHandler.RunHandshake()
+	handshaking := make(chan struct{})
+	go func() {
+		defer close(handshaking)
+		s.cryptoStreamHandler.RunHandshake()
+	}()
 	go func() {
 		if err := s.sendQueue.Run(); err != nil {
 			s.destroyImpl(err)
@@ -694,12 +698,13 @@ runLoop:
 		}
 	}
 
+	s.cryptoStreamHandler.Close()
+	<-handshaking
 	s.handleCloseError(&closeErr)
 	if e := (&errCloseForRecreating{}); !errors.As(closeErr.err, &e) && s.tracer != nil {
 		s.tracer.Close()
 	}
 	s.logger.Infof("Connection %s closed.", s.logID)
-	s.cryptoStreamHandler.Close()
 	s.sendQueue.Close()
 	s.timer.Stop()
 	return closeErr.err

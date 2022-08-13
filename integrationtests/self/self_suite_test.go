@@ -17,7 +17,9 @@ import (
 	mrand "math/rand"
 	"net"
 	"os"
+	"runtime/pprof"
 	"strconv"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -294,7 +296,14 @@ var _ = BeforeEach(func() {
 	}
 })
 
+func areHandshakesRunning() bool {
+	var b bytes.Buffer
+	pprof.Lookup("goroutine").WriteTo(&b, 1)
+	return strings.Contains(b.String(), "RunHandshake")
+}
+
 var _ = AfterEach(func() {
+	Expect(areHandshakesRunning()).To(BeFalse())
 	if debugLog() {
 		logFile, err := os.Create(logFileName)
 		Expect(err).ToNot(HaveOccurred())

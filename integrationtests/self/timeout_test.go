@@ -1,14 +1,11 @@
 package self_test
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"io"
 	mrand "math/rand"
 	"net"
-	"runtime/pprof"
-	"strings"
 	"sync/atomic"
 	"time"
 
@@ -43,12 +40,6 @@ func (c *faultyConn) WriteTo(p []byte, addr net.Addr) (int, error) {
 		return c.PacketConn.WriteTo(p, addr)
 	}
 	return 0, io.ErrClosedPipe
-}
-
-func areHandshakesRunning() bool {
-	var b bytes.Buffer
-	pprof.Lookup("goroutine").WriteTo(&b, 1)
-	return strings.Contains(b.String(), "RunHandshake")
 }
 
 var _ = Describe("Timeout tests", func() {
@@ -381,14 +372,6 @@ var _ = Describe("Timeout tests", func() {
 
 	Context("faulty packet conns", func() {
 		const handshakeTimeout = time.Second / 2
-
-		BeforeEach(func() {
-			Expect(areHandshakesRunning()).To(BeFalse())
-		})
-
-		AfterEach(func() {
-			Expect(areHandshakesRunning()).To(BeFalse())
-		})
 
 		runServer := func(ln quic.Listener) error {
 			conn, err := ln.Accept(context.Background())
