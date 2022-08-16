@@ -7,6 +7,7 @@ import (
 // A sendConn allows sending using a simple Write() on a non-connected packet conn.
 type sendConn interface {
 	Write([]byte) error
+	WritePackets([][]byte) error
 	Close() error
 	LocalAddr() net.Addr
 	RemoteAddr() net.Addr
@@ -32,7 +33,12 @@ func newSendConn(c rawConn, remote net.Addr, info *packetInfo) sendConn {
 }
 
 func (c *sconn) Write(p []byte) error {
-	_, err := c.WritePacket(p, c.remoteAddr, c.oob)
+	_, err := c.rawConn.WritePacket(p, c.remoteAddr, c.oob)
+	return err
+}
+
+func (c *sconn) WritePackets(p [][]byte) error {
+	_, err := c.rawConn.WritePackets(p, c.remoteAddr, c.oob)
 	return err
 }
 

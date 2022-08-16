@@ -18,4 +18,4 @@ const (
 	msgTypeIPv6PKTINFO = 0x2e
 )
 
-const batchSize = 8
+const readBatchSize = 8

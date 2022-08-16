@@ -48,3 +48,18 @@ func (mr *MockBatchConnMockRecorder) ReadBatch(ms, flags interface{}) *gomock.Ca
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReadBatch", reflect.TypeOf((*MockBatchConn)(nil).ReadBatch), ms, flags)
 }
+
+// WriteBatch mocks base method.
+func (m *MockBatchConn) WriteBatch(ms []ipv4.Message, flags int) (int, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "WriteBatch", ms, flags)
+	ret0, _ := ret[0].(int)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// WriteBatch indicates an expected call of WriteBatch.
+func (mr *MockBatchConnMockRecorder) WriteBatch(ms, flags interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "WriteBatch", reflect.TypeOf((*MockBatchConn)(nil).WriteBatch), ms, flags)
+}

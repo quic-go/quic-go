@@ -26,6 +26,7 @@ import (
 type rawConn interface {
 	ReadPacket() (*receivedPacket, error)
 	WritePacket(b []byte, addr net.Addr, oob []byte) (int, error)
+	WritePackets(b [][]byte, addr net.Addr, oob []byte) (int, error)
 	LocalAddr() net.Addr
 	io.Closer
 }

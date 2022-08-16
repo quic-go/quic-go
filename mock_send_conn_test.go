@@ -89,3 +89,17 @@ func (mr *MockSendConnMockRecorder) Write(arg0 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Write", reflect.TypeOf((*MockSendConn)(nil).Write), arg0)
 }
+
+// WritePackets mocks base method.
+func (m *MockSendConn) WritePackets(arg0 [][]byte) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "WritePackets", arg0)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// WritePackets indicates an expected call of WritePackets.
+func (mr *MockSendConnMockRecorder) WritePackets(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "WritePackets", reflect.TypeOf((*MockSendConn)(nil).WritePackets), arg0)
+}

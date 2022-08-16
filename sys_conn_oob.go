@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"runtime"
 	"syscall"
 	"time"
 
@@ -30,6 +31,7 @@ var _ ipv4.Message = ipv6.Message{}
 
 type batchConn interface {
 	ReadBatch(ms []ipv4.Message, flags int) (int, error)
+	WriteBatch(ms []ipv4.Message, flags int) (int, error)
 }
 
 func inspectReadBuffer(c interface{}) (int, error) {
@@ -60,7 +62,7 @@ type oobConn struct {
 	readPos uint8
 	// Packets received from the kernel, but not yet returned by ReadPacket().
 	messages []ipv4.Message
-	buffers  [batchSize]*packetBuffer
+	buffers  [readBatchSize]*packetBuffer
 }
 
 var _ rawConn = &oobConn{}
@@ -122,7 +124,7 @@ func newConn(c OOBCapablePacketConn) (*oobConn, error) {
 		bc = ipv4.NewPacketConn(c)
 	}
 
-	msgs := make([]ipv4.Message, batchSize)
+	msgs := make([]ipv4.Message, readBatchSize)
 	for i := range msgs {
 		// preallocate the [][]byte
 		msgs[i].Buffers = make([][]byte, 1)
@@ -131,9 +133,9 @@ func newConn(c OOBCapablePacketConn) (*oobConn, error) {
 		OOBCapablePacketConn: c,
 		batchConn:            bc,
 		messages:             msgs,
-		readPos:              batchSize,
+		readPos:              readBatchSize,
 	}
-	for i := 0; i < batchSize; i++ {
+	for i := 0; i < readBatchSize; i++ {
 		oobConn.messages[i].OOB = make([]byte, oobBufferSize)
 	}
 	return oobConn, nil
@@ -141,7 +143,7 @@ func newConn(c OOBCapablePacketConn) (*oobConn, error) {
 
 func (c *oobConn) ReadPacket() (*receivedPacket, error) {
 	if len(c.messages) == int(c.readPos) { // all messages read. Read the next batch of messages.
-		c.messages = c.messages[:batchSize]
+		c.messages = c.messages[:readBatchSize]
 		// replace buffers data buffers up to the packet that has been consumed during the last ReadBatch call
 		for i := uint8(0); i < c.readPos; i++ {
 			buffer := getPacketBuffer()
@@ -229,6 +231,30 @@ func (c *oobConn) ReadPacket() (*receivedPacket, error) {
 func (c *oobConn) WritePacket(b []byte, addr net.Addr, oob []byte) (n int, err error) {
 	n, _, err = c.OOBCapablePacketConn.WriteMsgUDP(b, oob, addr.(*net.UDPAddr))
 	return n, err
+}
+
+func (c *oobConn) WritePackets(packets [][]byte, addr net.Addr, oob []byte) (int, error) {
+	// OSX throws sendmsg errors when using a packet conn that listening on both IPv4 and IPv6.
+	// Since WriteBatch won't send more than 1 packet on OSX anyway,
+	// there's no harm to just call WritePacket directly here.
+	if runtime.GOOS == "darwin" {
+		for i, p := range packets {
+			if _, err := c.WritePacket(p, addr, oob); err != nil {
+				return i, err
+			}
+		}
+		return len(packets), nil
+	}
+
+	msgs := make([]ipv4.Message, len(packets))
+	for i, p := range packets {
+		msgs[i] = ipv4.Message{
+			Buffers: [][]byte{p},
+			OOB:     oob,
+			Addr:    addr,
+		}
+	}
+	return c.batchConn.WriteBatch(msgs, 0)
 }
 
 func (info *packetInfo) OOB() []byte {

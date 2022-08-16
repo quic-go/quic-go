@@ -209,10 +209,10 @@ var _ = Describe("OOB Conn Test", func() {
 		})
 
 		It("reads multiple messages in one batch", func() {
-			const numMsgRead = batchSize/2 + 1
+			const numMsgRead = readBatchSize/2 + 1
 			var counter int
 			batchConn.EXPECT().ReadBatch(gomock.Any(), gomock.Any()).DoAndReturn(func(ms []ipv4.Message, flags int) (int, error) {
-				Expect(ms).To(HaveLen(batchSize))
+				Expect(ms).To(HaveLen(readBatchSize))
 				for i := 0; i < numMsgRead; i++ {
 					Expect(ms[i].Buffers).To(HaveLen(1))
 					Expect(ms[i].Buffers[0]).To(HaveLen(int(protocol.MaxPacketBufferSize)))
@@ -232,7 +232,7 @@ var _ = Describe("OOB Conn Test", func() {
 			Expect(err).ToNot(HaveOccurred())
 			oobConn.batchConn = batchConn
 
-			for i := 0; i < batchSize+1; i++ {
+			for i := 0; i < readBatchSize+1; i++ {
 				p, err := oobConn.ReadPacket()
 				Expect(err).ToNot(HaveOccurred())
 				Expect(string(p.data)).To(Equal(fmt.Sprintf("message %d", i)))
