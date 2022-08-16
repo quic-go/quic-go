@@ -75,6 +75,11 @@ func (c *basicConn) ReadPacket() (*receivedPacket, error) {
 	}, nil
 }
 
-func (c *basicConn) WritePacket(b []byte, addr net.Addr, _ []byte) (n int, err error) {
-	return c.PacketConn.WriteTo(b, addr)
+func (c *basicConn) WritePackets(packets [][]byte, addr net.Addr, _ []byte) (int, error) {
+	for i, p := range packets {
+		if _, err := c.PacketConn.WriteTo(p, addr); err != nil {
+			return i, err
+		}
+	}
+	return len(packets), nil
 }

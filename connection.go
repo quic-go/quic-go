@@ -1829,7 +1829,7 @@ func (s *connection) sendConnectionClose(e error) ([]byte, error) {
 		return nil, err
 	}
 	s.logCoalescedPacket(packet)
-	return packet.buffer.Data, s.conn.Write(packet.buffer.Data)
+	return packet.buffer.Data, s.conn.WritePackets([][]byte{packet.buffer.Data})
 }
 
 func (s *connection) logPacketContents(p *packetContents) {

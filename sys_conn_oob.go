@@ -30,6 +30,7 @@ var _ ipv4.Message = ipv6.Message{}
 
 type batchConn interface {
 	ReadBatch(ms []ipv4.Message, flags int) (int, error)
+	WriteBatch(ms []ipv4.Message, flags int) (int, error)
 }
 
 func inspectReadBuffer(c interface{}) (int, error) {
@@ -221,9 +222,16 @@ func (c *oobConn) ReadPacket() (*receivedPacket, error) {
 	}, nil
 }
 
-func (c *oobConn) WritePacket(b []byte, addr net.Addr, oob []byte) (n int, err error) {
-	n, _, err = c.OOBCapablePacketConn.WriteMsgUDP(b, oob, addr.(*net.UDPAddr))
-	return n, err
+func (c *oobConn) WritePackets(packets [][]byte, addr net.Addr, oob []byte) (int, error) {
+	msgs := make([]ipv4.Message, len(packets))
+	for i, p := range packets {
+		msgs[i] = ipv4.Message{
+			Buffers: [][]byte{p},
+			OOB:     oob,
+			Addr:    addr,
+		}
+	}
+	return c.batchConn.WriteBatch(msgs, 0)
 }
 
 func (info *packetInfo) OOB() []byte {

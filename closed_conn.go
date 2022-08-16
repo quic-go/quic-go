@@ -74,7 +74,7 @@ func (s *closedLocalConn) handlePacketImpl(_ *receivedPacket) {
 		}
 	}
 	s.logger.Debugf("Received %d packets after sending CONNECTION_CLOSE. Retransmitting.", s.counter)
-	if err := s.conn.Write(s.connClosePacket); err != nil {
+	if err := s.conn.WritePackets([][]byte{s.connClosePacket}); err != nil {
 		s.logger.Debugf("Error retransmitting CONNECTION_CLOSE: %s", err)
 	}
 }
