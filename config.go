@@ -68,8 +68,9 @@ func populateConfig(config *Config, defaultConnIDLen int) *Config {
 	if len(versions) == 0 {
 		versions = protocol.SupportedVersions
 	}
+	conIDLen := config.ConnectionIDLength
 	if config.ConnectionIDLength == 0 {
-		config.ConnectionIDLength = defaultConnIDLen
+		conIDLen = defaultConnIDLen
 	}
 	handshakeIdleTimeout := protocol.DefaultHandshakeIdleTimeout
 	if config.HandshakeIdleTimeout != 0 {
@@ -109,7 +110,7 @@ func populateConfig(config *Config, defaultConnIDLen int) *Config {
 	}
 	connIDGenerator := config.ConnectionIDGenerator
 	if connIDGenerator == nil {
-		connIDGenerator = &protocol.DefaultConnectionIDGenerator{ConnLen: config.ConnectionIDLength}
+		connIDGenerator = &protocol.DefaultConnectionIDGenerator{ConnLen: conIDLen}
 	}
 
 	return &Config{
@@ -127,7 +128,7 @@ func populateConfig(config *Config, defaultConnIDLen int) *Config {
 		AllowConnectionWindowIncrease:    config.AllowConnectionWindowIncrease,
 		MaxIncomingStreams:               maxIncomingStreams,
 		MaxIncomingUniStreams:            maxIncomingUniStreams,
-		ConnectionIDLength:               config.ConnectionIDLength,
+		ConnectionIDLength:               conIDLen,
 		ConnectionIDGenerator:            connIDGenerator,
 		StatelessResetKey:                config.StatelessResetKey,
 		TokenStore:                       config.TokenStore,
