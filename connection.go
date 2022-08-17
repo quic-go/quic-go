@@ -314,6 +314,8 @@ var newConnection = func(
 	}
 	if s.config.EnableDatagrams {
 		params.MaxDatagramFrameSize = protocol.MaxDatagramFrameSize
+	} else {
+		params.MaxDatagramFrameSize = protocol.InvalidByteCount
 	}
 	if s.tracer != nil {
 		s.tracer.SentTransportParameters(params)
@@ -438,6 +440,8 @@ var newClientConnection = func(
 	}
 	if s.config.EnableDatagrams {
 		params.MaxDatagramFrameSize = protocol.MaxDatagramFrameSize
+	} else {
+		params.MaxDatagramFrameSize = protocol.InvalidByteCount
 	}
 	if s.tracer != nil {
 		s.tracer.SentTransportParameters(params)
@@ -724,7 +728,7 @@ func (s *connection) Context() context.Context {
 }
 
 func (s *connection) supportsDatagrams() bool {
-	return s.peerParams.MaxDatagramFrameSize != protocol.InvalidByteCount
+	return s.peerParams.MaxDatagramFrameSize > 0
 }
 
 func (s *connection) ConnectionState() ConnectionState {
@@ -1975,6 +1979,10 @@ func (s *connection) onStreamCompleted(id protocol.StreamID) {
 }
 
 func (s *connection) SendMessage(p []byte) error {
+	if s.datagramQueue == nil {
+		return errors.New("datagram support disabled")
+	}
+
 	f := &wire.DatagramFrame{DataLenPresent: true}
 	if protocol.ByteCount(len(p)) > f.MaxDataLen(s.peerParams.MaxDatagramFrameSize, s.version) {
 		return errors.New("message too large")
@@ -1985,6 +1993,9 @@ func (s *connection) SendMessage(p []byte) error {
 }
 
 func (s *connection) ReceiveMessage() ([]byte, error) {
+	if s.datagramQueue == nil {
+		return nil, errors.New("datagram support disabled")
+	}
 	return s.datagramQueue.Receive()
 }
 
