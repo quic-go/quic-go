@@ -26,6 +26,7 @@ type Token struct {
 	RetrySrcConnectionID     protocol.ConnectionID
 }
 
+// ValidateRemoteAddr validates the address, but does not check expiration
 func (t *Token) ValidateRemoteAddr(addr net.Addr) bool {
 	return bytes.Equal(encodeRemoteAddr(addr), t.encodedRemoteAddr)
 }

@@ -242,6 +242,7 @@ var newConnection = func(
 	tlsConf *tls.Config,
 	tokenGenerator *handshake.TokenGenerator,
 	enable0RTT bool,
+	clientAddressValidated bool,
 	tracer logging.ConnectionTracer,
 	tracingID uint64,
 	logger utils.Logger,
@@ -288,6 +289,7 @@ var newConnection = func(
 		0,
 		getMaxPacketSize(s.conn.RemoteAddr()),
 		s.rttStats,
+		clientAddressValidated,
 		s.perspective,
 		s.tracer,
 		s.logger,
@@ -415,6 +417,7 @@ var newClientConnection = func(
 		initialPacketNumber,
 		getMaxPacketSize(s.conn.RemoteAddr()),
 		s.rttStats,
+		false, /* has no effect */
 		s.perspective,
 		s.tracer,
 		s.logger,
