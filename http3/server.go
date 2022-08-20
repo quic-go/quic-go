@@ -709,19 +709,20 @@ func ListenAndServe(addr, certFile, keyFile string, handler http.Handler) error 
 	tlsConn := tls.NewListener(tcpConn, config)
 	defer tlsConn.Close()
 
-	// Start the servers
-	httpServer := &http.Server{}
-	quicServer := &Server{
-		TLSConfig: config,
-	}
-
 	if handler == nil {
 		handler = http.DefaultServeMux
 	}
-	httpServer.Handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		quicServer.SetQuicHeaders(w.Header())
-		handler.ServeHTTP(w, r)
-	})
+	// Start the servers
+	quicServer := &Server{
+		TLSConfig: config,
+		Handler:   handler,
+	}
+	httpServer := &http.Server{
+		Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			quicServer.SetQuicHeaders(w.Header())
+			handler.ServeHTTP(w, r)
+		}),
+	}
 
 	hErr := make(chan error)
 	qErr := make(chan error)
