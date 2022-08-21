@@ -30,6 +30,12 @@ type rawConn interface {
 	io.Closer
 }
 
+type closePacket struct {
+	payload []byte
+	addr    net.Addr
+	info    *packetInfo
+}
+
 // The packetHandlerMap stores packetHandlers, identified by connection ID.
 // It is used:
 // * by the server to store connections
@@ -39,6 +45,8 @@ type packetHandlerMap struct {
 
 	conn      rawConn
 	connIDLen int
+
+	closeQueue chan closePacket
 
 	handlers          map[string] /* string(ConnectionID)*/ packetHandler
 	resetTokens       map[protocol.StatelessResetToken] /* stateless reset token */ packetHandler
@@ -123,12 +131,14 @@ func newPacketHandlerMap(
 		resetTokens:             make(map[protocol.StatelessResetToken]packetHandler),
 		deleteRetiredConnsAfter: protocol.RetiredConnectionIDDeleteTimeout,
 		zeroRTTQueueDuration:    protocol.Max0RTTQueueingDuration,
+		closeQueue:              make(chan closePacket, 4),
 		statelessResetEnabled:   len(statelessResetKey) > 0,
 		statelessResetHasher:    hmac.New(sha256.New, statelessResetKey),
 		tracer:                  tracer,
 		logger:                  logger,
 	}
 	go m.listen()
+	go m.runCloseQueue()
 
 	if logger.Debug() {
 		go m.logUsage()
@@ -219,7 +229,29 @@ func (h *packetHandlerMap) Retire(id protocol.ConnectionID) {
 	})
 }
 
-func (h *packetHandlerMap) ReplaceWithClosed(ids []protocol.ConnectionID, handler packetHandler) {
+// ReplaceWithClosed is called when a connection is closed.
+// Depending on which side closed the connection, we need to:
+// * remote close: absorb delayed packets
+// * local close: retransmit the CONNECTION_CLOSE packet, in case it was lost
+func (h *packetHandlerMap) ReplaceWithClosed(ids []protocol.ConnectionID, pers protocol.Perspective, connClosePacket []byte) {
+	var handler packetHandler
+	if connClosePacket != nil {
+		handler = newClosedLocalConn(
+			func(addr net.Addr, info *packetInfo) {
+				select {
+				case h.closeQueue <- closePacket{payload: connClosePacket, addr: addr, info: info}:
+				default:
+					// Oops, we're backlogged.
+					// Just drop the packet, sending CONNECTION_CLOSE copies is best effort anyway.
+				}
+			},
+			pers,
+			h.logger,
+		)
+	} else {
+		handler = newClosedRemoteConn(pers)
+	}
+
 	h.mutex.Lock()
 	for _, id := range ids {
 		h.handlers[string(id)] = handler
@@ -236,6 +268,17 @@ func (h *packetHandlerMap) ReplaceWithClosed(ids []protocol.ConnectionID, handle
 		h.mutex.Unlock()
 		h.logger.Debugf("Removing connection IDs %s for a closed connection after it has been retired.", ids)
 	})
+}
+
+func (h *packetHandlerMap) runCloseQueue() {
+	for {
+		select {
+		case <-h.listening:
+			return
+		case p := <-h.closeQueue:
+			h.conn.WritePacket(p.payload, p.addr, p.info.OOB())
+		}
+	}
 }
 
 func (h *packetHandlerMap) AddResetToken(token protocol.StatelessResetToken, handler packetHandler) {
