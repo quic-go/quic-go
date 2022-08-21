@@ -536,9 +536,7 @@ func (s *connection) preSetup() {
 	s.creationTime = now
 
 	s.windowUpdateQueue = newWindowUpdateQueue(s.streamsMap, s.connFlowController, s.framer.QueueControlFrame)
-	if s.config.EnableDatagrams {
-		s.datagramQueue = newDatagramQueue(s.scheduleSending, s.logger)
-	}
+	s.datagramQueue = newDatagramQueue(s.scheduleSending, s.logger)
 }
 
 // run the connection main loop
@@ -1979,7 +1977,7 @@ func (s *connection) onStreamCompleted(id protocol.StreamID) {
 }
 
 func (s *connection) SendMessage(p []byte) error {
-	if s.datagramQueue == nil {
+	if s.datagramQueue == nil || !s.supportsDatagrams() {
 		return errors.New("datagram support disabled")
 	}
 
@@ -1993,7 +1991,7 @@ func (s *connection) SendMessage(p []byte) error {
 }
 
 func (s *connection) ReceiveMessage() ([]byte, error) {
-	if s.datagramQueue == nil {
+	if s.datagramQueue == nil || !s.config.EnableDatagrams {
 		return nil, errors.New("datagram support disabled")
 	}
 	return s.datagramQueue.Receive()
