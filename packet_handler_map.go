@@ -219,18 +219,22 @@ func (h *packetHandlerMap) Retire(id protocol.ConnectionID) {
 	})
 }
 
-func (h *packetHandlerMap) ReplaceWithClosed(id protocol.ConnectionID, handler packetHandler) {
+func (h *packetHandlerMap) ReplaceWithClosed(ids []protocol.ConnectionID, handler packetHandler) {
 	h.mutex.Lock()
-	h.handlers[string(id)] = handler
+	for _, id := range ids {
+		h.handlers[string(id)] = handler
+	}
 	h.mutex.Unlock()
-	h.logger.Debugf("Replacing connection for connection ID %s with a closed connection.", id)
+	h.logger.Debugf("Replacing connection for connection IDs %s with a closed connection.", ids)
 
 	time.AfterFunc(h.deleteRetiredConnsAfter, func() {
 		h.mutex.Lock()
 		handler.shutdown()
-		delete(h.handlers, string(id))
+		for _, id := range ids {
+			delete(h.handlers, string(id))
+		}
 		h.mutex.Unlock()
-		h.logger.Debugf("Removing connection ID %s for a closed connection after it has been retired.", id)
+		h.logger.Debugf("Removing connection IDs %s for a closed connection after it has been retired.", ids)
 	})
 }
 

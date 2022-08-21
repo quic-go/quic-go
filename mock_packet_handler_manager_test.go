@@ -139,7 +139,7 @@ func (mr *MockPacketHandlerManagerMockRecorder) RemoveResetToken(arg0 interface{
 }
 
 // ReplaceWithClosed mocks base method.
-func (m *MockPacketHandlerManager) ReplaceWithClosed(arg0 protocol.ConnectionID, arg1 packetHandler) {
+func (m *MockPacketHandlerManager) ReplaceWithClosed(arg0 []protocol.ConnectionID, arg1 packetHandler) {
 	m.ctrl.T.Helper()
 	m.ctrl.Call(m, "ReplaceWithClosed", arg0, arg1)
 }

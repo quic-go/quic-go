@@ -20,7 +20,7 @@ type connIDGenerator struct {
 	getStatelessResetToken func(protocol.ConnectionID) protocol.StatelessResetToken
 	removeConnectionID     func(protocol.ConnectionID)
 	retireConnectionID     func(protocol.ConnectionID)
-	replaceWithClosed      func(protocol.ConnectionID, packetHandler)
+	replaceWithClosed      func([]protocol.ConnectionID, packetHandler)
 	queueControlFrame      func(wire.Frame)
 
 	version protocol.VersionNumber
@@ -33,7 +33,7 @@ func newConnIDGenerator(
 	getStatelessResetToken func(protocol.ConnectionID) protocol.StatelessResetToken,
 	removeConnectionID func(protocol.ConnectionID),
 	retireConnectionID func(protocol.ConnectionID),
-	replaceWithClosed func(protocol.ConnectionID, packetHandler),
+	replaceWithClosed func([]protocol.ConnectionID, packetHandler),
 	queueControlFrame func(wire.Frame),
 	version protocol.VersionNumber,
 ) *connIDGenerator {
@@ -131,10 +131,12 @@ func (m *connIDGenerator) RemoveAll() {
 }
 
 func (m *connIDGenerator) ReplaceWithClosed(handler packetHandler) {
+	connIDs := make([]protocol.ConnectionID, 0, len(m.activeSrcConnIDs)+1)
 	if m.initialClientDestConnID != nil {
-		m.replaceWithClosed(m.initialClientDestConnID, handler)
+		connIDs = append(connIDs, m.initialClientDestConnID)
 	}
 	for _, connID := range m.activeSrcConnIDs {
-		m.replaceWithClosed(connID, handler)
+		connIDs = append(connIDs, connID)
 	}
+	m.replaceWithClosed(connIDs, handler)
 }

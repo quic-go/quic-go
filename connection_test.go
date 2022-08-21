@@ -72,8 +72,11 @@ var _ = Describe("Connection", func() {
 	}
 
 	expectReplaceWithClosed := func() {
-		connRunner.EXPECT().ReplaceWithClosed(clientDestConnID, gomock.Any()).MaxTimes(1)
-		connRunner.EXPECT().ReplaceWithClosed(srcConnID, gomock.Any()).Do(func(_ protocol.ConnectionID, s packetHandler) {
+		connRunner.EXPECT().ReplaceWithClosed(gomock.Any(), gomock.Any()).Do(func(connIDs []protocol.ConnectionID, s packetHandler) {
+			Expect(connIDs).To(ContainElement(srcConnID))
+			if len(connIDs) > 1 {
+				Expect(connIDs).To(ContainElement(clientDestConnID))
+			}
 			Expect(s).To(BeAssignableToTypeOf(&closedLocalConn{}))
 			s.shutdown()
 			Eventually(areClosedConnsRunning).Should(BeFalse())
@@ -330,10 +333,8 @@ var _ = Describe("Connection", func() {
 				ErrorMessage: "foobar",
 			}
 			streamManager.EXPECT().CloseWithError(expectedErr)
-			connRunner.EXPECT().ReplaceWithClosed(srcConnID, gomock.Any()).Do(func(_ protocol.ConnectionID, s packetHandler) {
-				Expect(s).To(BeAssignableToTypeOf(&closedRemoteConn{}))
-			})
-			connRunner.EXPECT().ReplaceWithClosed(clientDestConnID, gomock.Any()).Do(func(_ protocol.ConnectionID, s packetHandler) {
+			connRunner.EXPECT().ReplaceWithClosed(gomock.Any(), gomock.Any()).Do(func(connIDs []protocol.ConnectionID, s packetHandler) {
+				Expect(connIDs).To(ConsistOf(clientDestConnID, srcConnID))
 				Expect(s).To(BeAssignableToTypeOf(&closedRemoteConn{}))
 			})
 			cryptoSetup.EXPECT().Close()
@@ -361,10 +362,8 @@ var _ = Describe("Connection", func() {
 				ErrorMessage: "foobar",
 			}
 			streamManager.EXPECT().CloseWithError(testErr)
-			connRunner.EXPECT().ReplaceWithClosed(srcConnID, gomock.Any()).Do(func(_ protocol.ConnectionID, s packetHandler) {
-				Expect(s).To(BeAssignableToTypeOf(&closedRemoteConn{}))
-			})
-			connRunner.EXPECT().ReplaceWithClosed(clientDestConnID, gomock.Any()).Do(func(_ protocol.ConnectionID, s packetHandler) {
+			connRunner.EXPECT().ReplaceWithClosed(gomock.Any(), gomock.Any()).Do(func(connIDs []protocol.ConnectionID, s packetHandler) {
+				Expect(connIDs).To(ConsistOf(clientDestConnID, srcConnID))
 				Expect(s).To(BeAssignableToTypeOf(&closedRemoteConn{}))
 			})
 			cryptoSetup.EXPECT().Close()
@@ -2433,7 +2432,7 @@ var _ = Describe("Client Connection", func() {
 	}
 
 	expectReplaceWithClosed := func() {
-		connRunner.EXPECT().ReplaceWithClosed(srcConnID, gomock.Any()).Do(func(_ protocol.ConnectionID, s packetHandler) {
+		connRunner.EXPECT().ReplaceWithClosed([]protocol.ConnectionID{srcConnID}, gomock.Any()).Do(func(_ []protocol.ConnectionID, s packetHandler) {
 			s.shutdown()
 			Eventually(areClosedConnsRunning).Should(BeFalse())
 		})
@@ -2767,7 +2766,7 @@ var _ = Describe("Client Connection", func() {
 
 		expectClose := func(applicationClose bool) {
 			if !closed {
-				connRunner.EXPECT().ReplaceWithClosed(gomock.Any(), gomock.Any()).Do(func(_ protocol.ConnectionID, s packetHandler) {
+				connRunner.EXPECT().ReplaceWithClosed(gomock.Any(), gomock.Any()).Do(func(_ []protocol.ConnectionID, s packetHandler) {
 					Expect(s).To(BeAssignableToTypeOf(&closedLocalConn{}))
 					s.shutdown()
 				})
