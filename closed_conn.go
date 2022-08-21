@@ -1,6 +1,7 @@
 package quic
 
 import (
+	"math/bits"
 	"sync"
 
 	"github.com/lucas-clemente/quic-go/internal/protocol"
@@ -68,10 +69,8 @@ func (s *closedLocalConn) handlePacketImpl(_ *receivedPacket) {
 	s.counter++
 	// exponential backoff
 	// only send a CONNECTION_CLOSE for the 1st, 2nd, 4th, 8th, 16th, ... packet arriving
-	for n := s.counter; n > 1; n = n / 2 {
-		if n%2 != 0 {
-			return
-		}
+	if bits.OnesCount64(s.counter) != 1 {
+		return
 	}
 	s.logger.Debugf("Received %d packets after sending CONNECTION_CLOSE. Retransmitting.", s.counter)
 	if err := s.conn.Write(s.connClosePacket); err != nil {
