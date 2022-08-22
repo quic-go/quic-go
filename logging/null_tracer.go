@@ -1,17 +1,29 @@
 package logging
 
 import (
+	"context"
 	"net"
 	"time"
 )
 
-// The NullConnectionTracer is a ConnectionTracer that does nothing.
-// It is useful for embedding. Don't modify this variable!
-var NullConnectionTracer ConnectionTracer = &nullConnectionTracer{}
+var (
+	// The NullTracer is a Tracer that does nothing.
+	// It is useful for embedding. Don't modify this variable!
+	NullTracer Tracer = &nullTracer{}
+	// The NullConnectionTracer is a ConnectionTracer that does nothing.
+	// It is useful for embedding. Don't modify this variable!
+	NullConnectionTracer ConnectionTracer = &nullConnectionTracer{}
+)
+
+type nullTracer struct{}
+
+func (n nullTracer) TracerForConnection(context.Context, Perspective, ConnectionID) ConnectionTracer {
+	return NullConnectionTracer
+}
+func (n nullTracer) SentPacket(net.Addr, *Header, ByteCount, []Frame)                {}
+func (n nullTracer) DroppedPacket(net.Addr, PacketType, ByteCount, PacketDropReason) {}
 
 type nullConnectionTracer struct{}
-
-var _ ConnectionTracer = &nullConnectionTracer{}
 
 func (n nullConnectionTracer) StartedConnection(local, remote net.Addr, srcConnID, destConnID ConnectionID) {
 }
