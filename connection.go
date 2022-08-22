@@ -1977,7 +1977,7 @@ func (s *connection) onStreamCompleted(id protocol.StreamID) {
 }
 
 func (s *connection) SendMessage(p []byte) error {
-	if s.datagramQueue == nil || !s.supportsDatagrams() {
+	if !s.supportsDatagrams() {
 		return errors.New("datagram support disabled")
 	}
 
@@ -1991,7 +1991,7 @@ func (s *connection) SendMessage(p []byte) error {
 }
 
 func (s *connection) ReceiveMessage() ([]byte, error) {
-	if s.datagramQueue == nil || !s.config.EnableDatagrams {
+	if !s.config.EnableDatagrams {
 		return nil, errors.New("datagram support disabled")
 	}
 	return s.datagramQueue.Receive()
