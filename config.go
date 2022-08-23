@@ -51,12 +51,12 @@ func populateServerConfig(config *Config) *Config {
 // populateClientConfig populates fields in the quic.Config with their default values, if none are set
 // it may be called with nil
 func populateClientConfig(config *Config, createdPacketConn bool) *Config {
-	var defaultConnIdLen = protocol.DefaultConnectionIDLength
+	defaultConnIDLen := protocol.DefaultConnectionIDLength
 	if createdPacketConn {
-		defaultConnIdLen = 0
+		defaultConnIDLen = 0
 	}
 
-	config = populateConfig(config, defaultConnIdLen)
+	config = populateConfig(config, defaultConnIDLen)
 	return config
 }
 
