@@ -140,9 +140,9 @@ func (m *connTracerMultiplexer) UpdatedCongestionState(state CongestionState) {
 	}
 }
 
-func (m *connTracerMultiplexer) UpdatedMetrics(rttStats *RTTStats, cwnd, bytesInFLight ByteCount, packetsInFlight int) {
+func (m *connTracerMultiplexer) UpdatedMetrics(rttStats *RTTStats, cwnd, bytesInFLight ByteCount, packetsInFlight int, timeUntilSend time.Duration) {
 	for _, t := range m.tracers {
-		t.UpdatedMetrics(rttStats, cwnd, bytesInFLight, packetsInFlight)
+		t.UpdatedMetrics(rttStats, cwnd, bytesInFLight, packetsInFlight, timeUntilSend)
 	}
 }
 

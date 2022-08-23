@@ -116,7 +116,7 @@ type ConnectionTracer interface {
 	ReceivedPacket(hdr *ExtendedHeader, size ByteCount, frames []Frame)
 	BufferedPacket(PacketType)
 	DroppedPacket(PacketType, ByteCount, PacketDropReason)
-	UpdatedMetrics(rttStats *RTTStats, cwnd, bytesInFlight ByteCount, packetsInFlight int)
+	UpdatedMetrics(rttStats *RTTStats, cwnd, bytesInFlight ByteCount, packetsInFlight int, timeUntilSend time.Duration)
 	AcknowledgedPacket(EncryptionLevel, PacketNumber)
 	LostPacket(EncryptionLevel, PacketNumber, PacketLossReason)
 	UpdatedCongestionState(CongestionState)

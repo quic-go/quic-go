@@ -264,6 +264,7 @@ type metrics struct {
 	CongestionWindow protocol.ByteCount
 	BytesInFlight    protocol.ByteCount
 	PacketsInFlight  int
+	TimeUntilSend    time.Duration
 }
 
 type eventMetricsUpdated struct {
@@ -298,6 +299,7 @@ func (e eventMetricsUpdated) MarshalJSONObject(enc *gojay.Encoder) {
 	if e.Last == nil || e.Last.PacketsInFlight != e.Current.PacketsInFlight {
 		enc.Uint64KeyOmitEmpty("packets_in_flight", uint64(e.Current.PacketsInFlight))
 	}
+	enc.FloatKey("latest_rtt", milliseconds(e.Current.TimeUntilSend))
 }
 
 type eventUpdatedPTO struct {

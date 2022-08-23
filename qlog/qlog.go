@@ -352,7 +352,7 @@ func (t *connectionTracer) DroppedPacket(pt logging.PacketType, size protocol.By
 	t.mutex.Unlock()
 }
 
-func (t *connectionTracer) UpdatedMetrics(rttStats *utils.RTTStats, cwnd, bytesInFlight protocol.ByteCount, packetsInFlight int) {
+func (t *connectionTracer) UpdatedMetrics(rttStats *utils.RTTStats, cwnd, bytesInFlight protocol.ByteCount, packetsInFlight int, timeUntilSend time.Duration) {
 	m := &metrics{
 		MinRTT:           rttStats.MinRTT(),
 		SmoothedRTT:      rttStats.SmoothedRTT(),
@@ -361,6 +361,7 @@ func (t *connectionTracer) UpdatedMetrics(rttStats *utils.RTTStats, cwnd, bytesI
 		CongestionWindow: cwnd,
 		BytesInFlight:    bytesInFlight,
 		PacketsInFlight:  packetsInFlight,
+		TimeUntilSend:    timeUntilSend,
 	}
 	t.mutex.Lock()
 	t.recordEvent(time.Now(), &eventMetricsUpdated{
