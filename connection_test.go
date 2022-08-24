@@ -672,6 +672,7 @@ var _ = Describe("Connection", func() {
 		})
 
 		It("drops packets for which header decryption fails", func() {
+			conn.quicBitGreasingEnabled = false
 			p := getPacket(&wire.ExtendedHeader{
 				Header: wire.Header{
 					IsLongHeader: true,

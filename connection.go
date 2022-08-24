@@ -869,7 +869,7 @@ func (s *connection) handlePacketImpl(rp *receivedPacket) bool {
 			p.data = data
 		}
 
-		hdr, packetData, rest, err := wire.ParsePacket(p.data, s.srcConnIDLen, false)
+		hdr, packetData, rest, err := wire.ParsePacket(p.data, s.srcConnIDLen, s.quicBitGreasingEnabled)
 		if err != nil {
 			if s.tracer != nil {
 				dropReason := logging.PacketDropHeaderParseError

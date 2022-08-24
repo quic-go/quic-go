@@ -168,6 +168,8 @@ type packetPacker struct {
 
 	maxPacketSize          protocol.ByteCount
 	numNonAckElicitingAcks int
+
+	greaseQuicBit bool
 }
 
 var _ packer = &packetPacker{}
@@ -826,7 +828,7 @@ func (p *packetPacker) appendPacket(buffer *packetBuffer, header *wire.ExtendedH
 
 	hdrOffset := buffer.Len()
 	buf := bytes.NewBuffer(buffer.Data)
-	if err := header.Write(buf, true, p.version); err != nil {
+	if err := header.Write(buf, !p.greaseQuicBit, p.version); err != nil {
 		return nil, err
 	}
 	payloadOffset := buf.Len()
@@ -880,15 +882,16 @@ func (p *packetPacker) SetToken(token []byte) {
 	p.token = token
 }
 
-// When a higher MTU is discovered, use it.
 func (p *packetPacker) SetMaxPacketSize(s protocol.ByteCount) {
+	// When a higher MTU is discovered, use it.
 	p.maxPacketSize = s
 }
 
-// If the peer sets a max_packet_size that's smaller than the size we're currently using,
-// we need to reduce the size of packets we send.
 func (p *packetPacker) HandleTransportParameters(params *wire.TransportParameters) {
+	// If the peer sets a max_packet_size that's smaller than the size we're currently using,
+	// we need to reduce the size of packets we send.
 	if params.MaxUDPPayloadSize != 0 {
 		p.maxPacketSize = utils.Min(p.maxPacketSize, params.MaxUDPPayloadSize)
 	}
+	p.greaseQuicBit = params.GreaseQuicBit
 }
