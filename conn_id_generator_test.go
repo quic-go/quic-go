@@ -44,6 +44,7 @@ var _ = Describe("Connection ID Generator", func() {
 				replacedWithClosed = append(replacedWithClosed, cs...)
 			},
 			func(f wire.Frame) { queuedFrames = append(queuedFrames, f) },
+			&protocol.DefaultConnectionIDGenerator{ConnLen: initialConnID.Len()},
 			protocol.VersionDraft29,
 		)
 	})

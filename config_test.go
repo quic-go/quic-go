@@ -51,6 +51,8 @@ var _ = Describe("Config", func() {
 				f.Set(reflect.ValueOf([]VersionNumber{1, 2, 3}))
 			case "ConnectionIDLength":
 				f.Set(reflect.ValueOf(8))
+			case "ConnectionIDGenerator":
+				f.Set(reflect.ValueOf(&protocol.DefaultConnectionIDGenerator{ConnLen: protocol.DefaultConnectionIDLength}))
 			case "HandshakeIdleTimeout":
 				f.Set(reflect.ValueOf(time.Second))
 			case "MaxIdleTimeout":
@@ -140,18 +142,18 @@ var _ = Describe("Config", func() {
 			var calledAddrValidation bool
 			c1 := &Config{}
 			c1.RequireAddressValidation = func(net.Addr) bool { calledAddrValidation = true; return true }
-			c2 := populateConfig(c1)
+			c2 := populateConfig(c1, protocol.DefaultConnectionIDLength)
 			c2.RequireAddressValidation(&net.UDPAddr{})
 			Expect(calledAddrValidation).To(BeTrue())
 		})
 
 		It("copies non-function fields", func() {
 			c := configWithNonZeroNonFunctionFields()
-			Expect(populateConfig(c)).To(Equal(c))
+			Expect(populateConfig(c, protocol.DefaultConnectionIDLength)).To(Equal(c))
 		})
 
 		It("populates empty fields with default values", func() {
-			c := populateConfig(&Config{})
+			c := populateConfig(&Config{}, protocol.DefaultConnectionIDLength)
 			Expect(c.Versions).To(Equal(protocol.SupportedVersions))
 			Expect(c.HandshakeIdleTimeout).To(Equal(protocol.DefaultHandshakeIdleTimeout))
 			Expect(c.InitialStreamReceiveWindow).To(BeEquivalentTo(protocol.DefaultInitialMaxStreamData))

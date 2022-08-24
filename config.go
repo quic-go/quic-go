@@ -35,10 +35,7 @@ func validateConfig(config *Config) error {
 // populateServerConfig populates fields in the quic.Config with their default values, if none are set
 // it may be called with nil
 func populateServerConfig(config *Config) *Config {
-	config = populateConfig(config)
-	if config.ConnectionIDLength == 0 {
-		config.ConnectionIDLength = protocol.DefaultConnectionIDLength
-	}
+	config = populateConfig(config, protocol.DefaultConnectionIDLength)
 	if config.MaxTokenAge == 0 {
 		config.MaxTokenAge = protocol.TokenValidity
 	}
@@ -54,20 +51,26 @@ func populateServerConfig(config *Config) *Config {
 // populateClientConfig populates fields in the quic.Config with their default values, if none are set
 // it may be called with nil
 func populateClientConfig(config *Config, createdPacketConn bool) *Config {
-	config = populateConfig(config)
-	if config.ConnectionIDLength == 0 && !createdPacketConn {
-		config.ConnectionIDLength = protocol.DefaultConnectionIDLength
+	defaultConnIDLen := protocol.DefaultConnectionIDLength
+	if createdPacketConn {
+		defaultConnIDLen = 0
 	}
+
+	config = populateConfig(config, defaultConnIDLen)
 	return config
 }
 
-func populateConfig(config *Config) *Config {
+func populateConfig(config *Config, defaultConnIDLen int) *Config {
 	if config == nil {
 		config = &Config{}
 	}
 	versions := config.Versions
 	if len(versions) == 0 {
 		versions = protocol.SupportedVersions
+	}
+	conIDLen := config.ConnectionIDLength
+	if config.ConnectionIDLength == 0 {
+		conIDLen = defaultConnIDLen
 	}
 	handshakeIdleTimeout := protocol.DefaultHandshakeIdleTimeout
 	if config.HandshakeIdleTimeout != 0 {
@@ -105,6 +108,10 @@ func populateConfig(config *Config) *Config {
 	} else if maxIncomingUniStreams < 0 {
 		maxIncomingUniStreams = 0
 	}
+	connIDGenerator := config.ConnectionIDGenerator
+	if connIDGenerator == nil {
+		connIDGenerator = &protocol.DefaultConnectionIDGenerator{ConnLen: conIDLen}
+	}
 
 	return &Config{
 		Versions:                         versions,
@@ -121,7 +128,8 @@ func populateConfig(config *Config) *Config {
 		AllowConnectionWindowIncrease:    config.AllowConnectionWindowIncrease,
 		MaxIncomingStreams:               maxIncomingStreams,
 		MaxIncomingUniStreams:            maxIncomingUniStreams,
-		ConnectionIDLength:               config.ConnectionIDLength,
+		ConnectionIDLength:               conIDLen,
+		ConnectionIDGenerator:            connIDGenerator,
 		StatelessResetKey:                config.StatelessResetKey,
 		TokenStore:                       config.TokenStore,
 		EnableDatagrams:                  config.EnableDatagrams,
