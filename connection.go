@@ -952,7 +952,7 @@ func (s *connection) handleSinglePacket(p *receivedPacket, hdr *wire.Header) boo
 			// Sealer for this encryption level not yet available.
 			// Try again later.
 			wasQueued = true
-			s.tryQueueingUndecryptablePacket(p, hdr)
+			s.tryQueueingUndecryptablePacket(p, logging.PacketTypeFromHeader(hdr))
 		case wire.ErrInvalidReservedBits:
 			s.closeLocal(&qerr.TransportError{
 				ErrorCode:    qerr.ProtocolViolation,
@@ -1936,20 +1936,22 @@ func (s *connection) scheduleSending() {
 	}
 }
 
-func (s *connection) tryQueueingUndecryptablePacket(p *receivedPacket, hdr *wire.Header) {
+// tryQueueingUndecryptablePacket queues a packet for which we're missing the decryption keys.
+// The logging.PacketType is only used for logging purposes.
+func (s *connection) tryQueueingUndecryptablePacket(p *receivedPacket, pt logging.PacketType) {
 	if s.handshakeComplete {
 		panic("shouldn't queue undecryptable packets after handshake completion")
 	}
 	if len(s.undecryptablePackets)+1 > protocol.MaxUndecryptablePackets {
 		if s.tracer != nil {
-			s.tracer.DroppedPacket(logging.PacketTypeFromHeader(hdr), p.Size(), logging.PacketDropDOSPrevention)
+			s.tracer.DroppedPacket(pt, p.Size(), logging.PacketDropDOSPrevention)
 		}
 		s.logger.Infof("Dropping undecryptable packet (%d bytes). Undecryptable packet queue full.", p.Size())
 		return
 	}
 	s.logger.Infof("Queueing packet (%d bytes) for later decryption", p.Size())
 	if s.tracer != nil {
-		s.tracer.BufferedPacket(logging.PacketTypeFromHeader(hdr))
+		s.tracer.BufferedPacket(pt)
 	}
 	s.undecryptablePackets = append(s.undecryptablePackets, p)
 }
