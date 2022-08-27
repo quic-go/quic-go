@@ -1123,13 +1123,6 @@ func (s *connection) handleUnpackedPacket(
 	rcvTime time.Time,
 	packetSize protocol.ByteCount, // only for logging
 ) error {
-	if len(packet.data) == 0 {
-		return &qerr.TransportError{
-			ErrorCode:    qerr.ProtocolViolation,
-			ErrorMessage: "empty packet",
-		}
-	}
-
 	if !s.receivedFirstPacket {
 		s.receivedFirstPacket = true
 		if !s.versionNegotiated && s.tracer != nil {

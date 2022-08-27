@@ -1013,36 +1013,6 @@ var _ = Describe("Connection", func() {
 			Eventually(conn.Context().Done()).Should(BeClosed())
 		})
 
-		It("rejects packets with empty payload", func() {
-			unpacker.EXPECT().Unpack(gomock.Any(), gomock.Any(), gomock.Any()).Return(&unpackedPacket{
-				hdr:             &wire.ExtendedHeader{},
-				data:            []byte{}, // no payload
-				encryptionLevel: protocol.Encryption1RTT,
-			}, nil)
-			streamManager.EXPECT().CloseWithError(gomock.Any())
-			cryptoSetup.EXPECT().Close()
-			packer.EXPECT().PackConnectionClose(gomock.Any()).Return(&coalescedPacket{buffer: getPacketBuffer()}, nil)
-			done := make(chan struct{})
-			go func() {
-				defer GinkgoRecover()
-				cryptoSetup.EXPECT().RunHandshake().MaxTimes(1)
-				Expect(conn.run()).To(MatchError(&qerr.TransportError{
-					ErrorCode:    qerr.ProtocolViolation,
-					ErrorMessage: "empty packet",
-				}))
-				close(done)
-			}()
-			expectReplaceWithClosed()
-			mconn.EXPECT().Write(gomock.Any())
-			tracer.EXPECT().ClosedConnection(gomock.Any())
-			tracer.EXPECT().Close()
-			conn.handlePacket(getPacket(&wire.ExtendedHeader{
-				Header:          wire.Header{DestConnectionID: srcConnID},
-				PacketNumberLen: protocol.PacketNumberLen1,
-			}, nil))
-			Eventually(done).Should(BeClosed())
-		})
-
 		It("ignores packets with a different source connection ID", func() {
 			hdr1 := &wire.ExtendedHeader{
 				Header: wire.Header{

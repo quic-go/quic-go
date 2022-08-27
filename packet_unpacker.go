@@ -7,6 +7,7 @@ import (
 
 	"github.com/lucas-clemente/quic-go/internal/handshake"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
+	"github.com/lucas-clemente/quic-go/internal/qerr"
 	"github.com/lucas-clemente/quic-go/internal/wire"
 )
 
@@ -99,6 +100,13 @@ func (u *packetUnpacker) Unpack(hdr *wire.Header, rcvTime time.Time, data []byte
 		extHdr, decrypted, err = u.unpackShortHeaderPacket(opener, hdr, rcvTime, data)
 		if err != nil {
 			return nil, err
+		}
+	}
+
+	if len(decrypted) == 0 {
+		return nil, &qerr.TransportError{
+			ErrorCode:    qerr.ProtocolViolation,
+			ErrorMessage: "empty packet",
 		}
 	}
 
