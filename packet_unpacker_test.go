@@ -287,6 +287,6 @@ var _ = Describe("Packet Unpacker", func() {
 		}
 		packet, err := unpacker.Unpack(hdr, time.Now(), data)
 		Expect(err).ToNot(HaveOccurred())
-		Expect(packet.packetNumber).To(Equal(protocol.PacketNumber(0x7331)))
+		Expect(packet.hdr.PacketNumber).To(Equal(protocol.PacketNumber(0x7331)))
 	})
 })

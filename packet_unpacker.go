@@ -27,7 +27,6 @@ func (e *headerParseError) Error() string {
 }
 
 type unpackedPacket struct {
-	packetNumber    protocol.PacketNumber // the decoded packet number
 	hdr             *wire.ExtendedHeader
 	encryptionLevel protocol.EncryptionLevel
 	data            []byte
@@ -105,7 +104,6 @@ func (u *packetUnpacker) Unpack(hdr *wire.Header, rcvTime time.Time, data []byte
 
 	return &unpackedPacket{
 		hdr:             extHdr,
-		packetNumber:    extHdr.PacketNumber,
 		encryptionLevel: encLevel,
 		data:            decrypted,
 	}, nil
