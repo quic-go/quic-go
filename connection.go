@@ -1199,7 +1199,16 @@ func (s *connection) handleUnpackedPacket(
 		for i, frame := range frames {
 			fs[i] = logutils.ConvertFrame(frame)
 		}
-		s.tracer.ReceivedPacket(packet.hdr, packetSize, fs)
+		if packet.hdr.IsLongHeader {
+			s.tracer.ReceivedLongHeaderPacket(packet.hdr, packetSize, fs)
+		} else {
+			s.tracer.ReceivedShortHeaderPacket(&wire.ShortHeader{
+				DestConnectionID: packet.hdr.DestConnectionID,
+				PacketNumber:     packet.hdr.PacketNumber,
+				PacketNumberLen:  packet.hdr.PacketNumberLen,
+				KeyPhase:         packet.hdr.KeyPhase,
+			}, packetSize, fs)
+		}
 		for _, frame := range frames {
 			if err := s.handleFrame(frame, packet.encryptionLevel, packet.hdr.DestConnectionID); err != nil {
 				return err

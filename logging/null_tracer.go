@@ -38,10 +38,12 @@ func (n NullConnectionTracer) RestoredTransportParameters(*TransportParameters) 
 func (n NullConnectionTracer) SentPacket(*ExtendedHeader, ByteCount, *AckFrame, []Frame) {}
 func (n NullConnectionTracer) ReceivedVersionNegotiationPacket(dest, src ArbitraryLenConnectionID, _ []VersionNumber) {
 }
-func (n NullConnectionTracer) ReceivedRetry(*Header)                                              {}
-func (n NullConnectionTracer) ReceivedPacket(hdr *ExtendedHeader, size ByteCount, frames []Frame) {}
-func (n NullConnectionTracer) BufferedPacket(PacketType)                                          {}
-func (n NullConnectionTracer) DroppedPacket(PacketType, ByteCount, PacketDropReason)              {}
+func (n NullConnectionTracer) ReceivedRetry(*Header)                                        {}
+func (n NullConnectionTracer) ReceivedLongHeaderPacket(*ExtendedHeader, ByteCount, []Frame) {}
+func (n NullConnectionTracer) ReceivedShortHeaderPacket(*ShortHeader, ByteCount, []Frame)   {}
+func (n NullConnectionTracer) BufferedPacket(PacketType)                                    {}
+func (n NullConnectionTracer) DroppedPacket(PacketType, ByteCount, PacketDropReason)        {}
+
 func (n NullConnectionTracer) UpdatedMetrics(rttStats *RTTStats, cwnd, bytesInFlight ByteCount, packetsInFlight int) {
 }
 func (n NullConnectionTracer) AcknowledgedPacket(EncryptionLevel, PacketNumber)            {}

@@ -572,7 +572,7 @@ var _ = Describe("Connection", func() {
 			})
 			gomock.InOrder(
 				tracer.EXPECT().StartedConnection(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()),
-				tracer.EXPECT().ReceivedPacket(gomock.Any(), gomock.Any(), gomock.Any()),
+				tracer.EXPECT().ReceivedShortHeaderPacket(gomock.Any(), gomock.Any(), gomock.Any()),
 				tracer.EXPECT().ClosedConnection(gomock.Any()),
 				tracer.EXPECT().Close(),
 			)
@@ -749,7 +749,7 @@ var _ = Describe("Connection", func() {
 			conn.receivedPacketHandler = rph
 			packet.rcvTime = rcvTime
 			tracer.EXPECT().StartedConnection(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any())
-			tracer.EXPECT().ReceivedPacket(&unpackedHdr, protocol.ByteCount(len(packet.data)), []logging.Frame{})
+			tracer.EXPECT().ReceivedShortHeaderPacket(&wire.ShortHeader{PacketNumber: 0x1337, PacketNumberLen: 1, DestConnectionID: srcConnID}, protocol.ByteCount(len(packet.data)), []logging.Frame{})
 			Expect(conn.handlePacketImpl(packet)).To(BeTrue())
 		})
 
@@ -779,7 +779,7 @@ var _ = Describe("Connection", func() {
 			conn.receivedPacketHandler = rph
 			packet.rcvTime = rcvTime
 			tracer.EXPECT().StartedConnection(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any())
-			tracer.EXPECT().ReceivedPacket(&unpackedHdr, protocol.ByteCount(len(packet.data)), []logging.Frame{&logging.PingFrame{}})
+			tracer.EXPECT().ReceivedShortHeaderPacket(&wire.ShortHeader{PacketNumber: 0x1337, PacketNumberLen: 1, DestConnectionID: srcConnID}, protocol.ByteCount(len(packet.data)), []logging.Frame{&logging.PingFrame{}})
 			Expect(conn.handlePacketImpl(packet)).To(BeTrue())
 		})
 
@@ -854,7 +854,7 @@ var _ = Describe("Connection", func() {
 				}, nil
 			}).Times(3)
 			tracer.EXPECT().StartedConnection(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any())
-			tracer.EXPECT().ReceivedPacket(gomock.Any(), gomock.Any(), gomock.Any()).Do(func(hdr *wire.ExtendedHeader, _ protocol.ByteCount, _ []logging.Frame) {
+			tracer.EXPECT().ReceivedShortHeaderPacket(gomock.Any(), gomock.Any(), gomock.Any()).Do(func(hdr *wire.ShortHeader, _ protocol.ByteCount, _ []logging.Frame) {
 			}).Times(3)
 			packer.EXPECT().PackCoalescedPacket() // only expect a single call
 
@@ -901,7 +901,7 @@ var _ = Describe("Connection", func() {
 				}, nil
 			}).Times(3)
 			tracer.EXPECT().StartedConnection(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any())
-			tracer.EXPECT().ReceivedPacket(gomock.Any(), gomock.Any(), gomock.Any()).Do(func(hdr *wire.ExtendedHeader, _ protocol.ByteCount, _ []logging.Frame) {
+			tracer.EXPECT().ReceivedShortHeaderPacket(gomock.Any(), gomock.Any(), gomock.Any()).Do(func(hdr *wire.ShortHeader, _ protocol.ByteCount, _ []logging.Frame) {
 			}).Times(3)
 			packer.EXPECT().PackCoalescedPacket().Times(3) // only expect a single call
 
@@ -1048,7 +1048,7 @@ var _ = Describe("Connection", func() {
 			}, nil)
 			p1 := getPacket(hdr1, nil)
 			tracer.EXPECT().StartedConnection(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any())
-			tracer.EXPECT().ReceivedPacket(gomock.Any(), protocol.ByteCount(len(p1.data)), gomock.Any())
+			tracer.EXPECT().ReceivedLongHeaderPacket(gomock.Any(), protocol.ByteCount(len(p1.data)), gomock.Any())
 			Expect(conn.handlePacketImpl(p1)).To(BeTrue())
 			// The next packet has to be ignored, since the source connection ID doesn't match.
 			p2 := getPacket(hdr2, nil)
@@ -1090,7 +1090,7 @@ var _ = Describe("Connection", func() {
 				}, nil)
 				packet.remoteAddr = &net.IPAddr{IP: net.IPv4(192, 168, 0, 100)}
 				tracer.EXPECT().StartedConnection(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any())
-				tracer.EXPECT().ReceivedPacket(gomock.Any(), protocol.ByteCount(len(packet.data)), gomock.Any())
+				tracer.EXPECT().ReceivedShortHeaderPacket(gomock.Any(), protocol.ByteCount(len(packet.data)), gomock.Any())
 				Expect(conn.handlePacketImpl(packet)).To(BeTrue())
 			})
 		})
@@ -1125,10 +1125,10 @@ var _ = Describe("Connection", func() {
 					return &unpackedPacket{
 						encryptionLevel: protocol.EncryptionHandshake,
 						data:            []byte{0},
-						hdr:             &wire.ExtendedHeader{},
+						hdr:             &wire.ExtendedHeader{Header: wire.Header{IsLongHeader: true}},
 					}, nil
 				})
-				tracer.EXPECT().ReceivedPacket(gomock.Any(), protocol.ByteCount(len(packet.data)), gomock.Any())
+				tracer.EXPECT().ReceivedLongHeaderPacket(gomock.Any(), protocol.ByteCount(len(packet.data)), gomock.Any())
 				Expect(conn.handlePacketImpl(packet)).To(BeTrue())
 			})
 
@@ -1141,7 +1141,7 @@ var _ = Describe("Connection", func() {
 						data:            []byte{0},
 						hdr: &wire.ExtendedHeader{
 							PacketNumber: 1,
-							Header:       wire.Header{SrcConnectionID: destConnID},
+							Header:       wire.Header{SrcConnectionID: destConnID, IsLongHeader: true},
 						},
 					}, nil
 				})
@@ -1153,13 +1153,13 @@ var _ = Describe("Connection", func() {
 						data:            []byte{0},
 						hdr: &wire.ExtendedHeader{
 							PacketNumber: 2,
-							Header:       wire.Header{SrcConnectionID: destConnID},
+							Header:       wire.Header{SrcConnectionID: destConnID, IsLongHeader: true},
 						},
 					}, nil
 				})
 				gomock.InOrder(
-					tracer.EXPECT().ReceivedPacket(gomock.Any(), protocol.ByteCount(len(packet1.data)), gomock.Any()),
-					tracer.EXPECT().ReceivedPacket(gomock.Any(), protocol.ByteCount(len(packet2.data)), gomock.Any()),
+					tracer.EXPECT().ReceivedLongHeaderPacket(gomock.Any(), protocol.ByteCount(len(packet1.data)), gomock.Any()),
+					tracer.EXPECT().ReceivedLongHeaderPacket(gomock.Any(), protocol.ByteCount(len(packet2.data)), gomock.Any()),
 				)
 				packet1.data = append(packet1.data, packet2.data...)
 				Expect(conn.handlePacketImpl(packet1)).To(BeTrue())
@@ -1176,13 +1176,13 @@ var _ = Describe("Connection", func() {
 						return &unpackedPacket{
 							encryptionLevel: protocol.EncryptionHandshake,
 							data:            []byte{0},
-							hdr:             &wire.ExtendedHeader{},
+							hdr:             &wire.ExtendedHeader{Header: wire.Header{IsLongHeader: true}},
 						}, nil
 					}),
 				)
 				gomock.InOrder(
 					tracer.EXPECT().BufferedPacket(gomock.Any()),
-					tracer.EXPECT().ReceivedPacket(gomock.Any(), protocol.ByteCount(len(packet2.data)), gomock.Any()),
+					tracer.EXPECT().ReceivedLongHeaderPacket(gomock.Any(), protocol.ByteCount(len(packet2.data)), gomock.Any()),
 				)
 				packet1.data = append(packet1.data, packet2.data...)
 				Expect(conn.handlePacketImpl(packet1)).To(BeTrue())
@@ -1200,13 +1200,13 @@ var _ = Describe("Connection", func() {
 					return &unpackedPacket{
 						encryptionLevel: protocol.EncryptionHandshake,
 						data:            []byte{0},
-						hdr:             &wire.ExtendedHeader{},
+						hdr:             &wire.ExtendedHeader{Header: wire.Header{IsLongHeader: true}},
 					}, nil
 				})
 				_, packet2 := getPacketWithLength(wrongConnID, 123)
 				// don't EXPECT any more calls to unpacker.Unpack()
 				gomock.InOrder(
-					tracer.EXPECT().ReceivedPacket(gomock.Any(), protocol.ByteCount(len(packet1.data)), gomock.Any()),
+					tracer.EXPECT().ReceivedLongHeaderPacket(gomock.Any(), protocol.ByteCount(len(packet1.data)), gomock.Any()),
 					tracer.EXPECT().DroppedPacket(gomock.Any(), protocol.ByteCount(len(packet2.data)), logging.PacketDropUnknownConnectionID),
 				)
 				packet1.data = append(packet1.data, packet2.data...)
@@ -2481,7 +2481,7 @@ var _ = Describe("Client Connection", func() {
 			},
 			PacketNumberLen: protocol.PacketNumberLen2,
 		}, []byte("foobar"))
-		tracer.EXPECT().ReceivedPacket(gomock.Any(), p.Size(), []logging.Frame{})
+		tracer.EXPECT().ReceivedLongHeaderPacket(gomock.Any(), p.Size(), []logging.Frame{})
 		Expect(conn.handlePacketImpl(p)).To(BeTrue())
 		// make sure the go routine returns
 		packer.EXPECT().PackApplicationClose(gomock.Any()).Return(&coalescedPacket{buffer: getPacketBuffer()}, nil)
@@ -2518,7 +2518,7 @@ var _ = Describe("Client Connection", func() {
 			DestConnectionID: srcConnID,
 			SrcConnectionID:  destConnID,
 		}
-		tracer.EXPECT().ReceivedPacket(gomock.Any(), gomock.Any(), gomock.Any())
+		tracer.EXPECT().ReceivedLongHeaderPacket(gomock.Any(), gomock.Any(), gomock.Any())
 		Expect(conn.handleSinglePacket(&receivedPacket{buffer: getPacketBuffer()}, hdr)).To(BeTrue())
 	})
 
@@ -2951,7 +2951,7 @@ var _ = Describe("Client Connection", func() {
 				hdr:             hdr1,
 				data:            []byte{0}, // one PADDING frame
 			}, nil)
-			tracer.EXPECT().ReceivedPacket(gomock.Any(), gomock.Any(), gomock.Any())
+			tracer.EXPECT().ReceivedLongHeaderPacket(gomock.Any(), gomock.Any(), gomock.Any())
 			Expect(conn.handlePacketImpl(getPacket(hdr1, nil))).To(BeTrue())
 			// The next packet has to be ignored, since the source connection ID doesn't match.
 			tracer.EXPECT().DroppedPacket(gomock.Any(), gomock.Any(), gomock.Any())
@@ -2979,7 +2979,7 @@ var _ = Describe("Client Connection", func() {
 		It("fails on Initial-level ACK for unsent packet", func() {
 			ack := &wire.AckFrame{AckRanges: []wire.AckRange{{Smallest: 2, Largest: 2}}}
 			initialPacket := testutils.ComposeInitialPacket(destConnID, srcConnID, conn.version, destConnID, []wire.Frame{ack})
-			tracer.EXPECT().ReceivedPacket(gomock.Any(), gomock.Any(), gomock.Any())
+			tracer.EXPECT().ReceivedLongHeaderPacket(gomock.Any(), gomock.Any(), gomock.Any())
 			Expect(conn.handlePacketImpl(wrapPacket(initialPacket))).To(BeFalse())
 		})
 
@@ -2991,7 +2991,7 @@ var _ = Describe("Client Connection", func() {
 				ReasonPhrase:       "mitm attacker",
 			}
 			initialPacket := testutils.ComposeInitialPacket(destConnID, srcConnID, conn.version, destConnID, []wire.Frame{connCloseFrame})
-			tracer.EXPECT().ReceivedPacket(gomock.Any(), gomock.Any(), gomock.Any())
+			tracer.EXPECT().ReceivedLongHeaderPacket(gomock.Any(), gomock.Any(), gomock.Any())
 			Expect(conn.handlePacketImpl(wrapPacket(initialPacket))).To(BeTrue())
 		})
 

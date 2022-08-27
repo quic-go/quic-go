@@ -11,6 +11,8 @@ import (
 	"os"
 	"time"
 
+	"github.com/lucas-clemente/quic-go/internal/wire"
+
 	"github.com/lucas-clemente/quic-go"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/internal/qerr"
@@ -486,8 +488,8 @@ var _ = Describe("Tracing", func() {
 				Expect(frames[1].(map[string]interface{})).To(HaveKeyWithValue("frame_type", "max_data"))
 			})
 
-			It("records a received packet", func() {
-				tracer.ReceivedPacket(
+			It("records a received Long Header packet", func() {
+				tracer.ReceivedLongHeaderPacket(
 					&logging.ExtendedHeader{
 						Header: logging.Header{
 							IsLongHeader:     true,
@@ -522,6 +524,37 @@ var _ = Describe("Tracing", func() {
 				Expect(hdr).To(HaveKey("token"))
 				token := hdr["token"].(map[string]interface{})
 				Expect(token).To(HaveKeyWithValue("data", "deadbeef"))
+				Expect(ev).To(HaveKey("frames"))
+				Expect(ev["frames"].([]interface{})).To(HaveLen(2))
+			})
+
+			It("records a received Short Header packet", func() {
+				shdr := &wire.ShortHeader{
+					DestConnectionID: protocol.ParseConnectionID([]byte{1, 2, 3, 4, 5, 6, 7, 8}),
+					PacketNumber:     1337,
+					KeyPhase:         protocol.KeyPhaseZero,
+				}
+				tracer.ReceivedShortHeaderPacket(
+					shdr,
+					789,
+					[]logging.Frame{
+						&logging.MaxStreamDataFrame{StreamID: 42, MaximumStreamData: 987},
+						&logging.StreamFrame{StreamID: 123, Offset: 1234, Length: 6, Fin: true},
+					},
+				)
+				entry := exportAndParseSingle()
+				Expect(entry.Time).To(BeTemporally("~", time.Now(), scaleDuration(10*time.Millisecond)))
+				Expect(entry.Name).To(Equal("transport:packet_received"))
+				ev := entry.Event
+				Expect(ev).To(HaveKey("raw"))
+				raw := ev["raw"].(map[string]interface{})
+				Expect(raw).To(HaveKeyWithValue("length", float64(789)))
+				Expect(raw).To(HaveKeyWithValue("payload_length", float64(789-shdr.Len())))
+				Expect(ev).To(HaveKey("header"))
+				hdr := ev["header"].(map[string]interface{})
+				Expect(hdr).To(HaveKeyWithValue("packet_type", "1RTT"))
+				Expect(hdr).To(HaveKeyWithValue("packet_number", float64(1337)))
+				Expect(hdr).To(HaveKeyWithValue("key_phase_bit", "0"))
 				Expect(ev).To(HaveKey("frames"))
 				Expect(ev["frames"].([]interface{})).To(HaveLen(2))
 			})

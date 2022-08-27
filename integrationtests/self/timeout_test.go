@@ -226,7 +226,7 @@ var _ = Describe("Timeout tests", func() {
 					lastAckElicitingPacketSentAt = p.time
 				}
 			}
-			rcvdPackets := tr.getRcvdPackets()
+			rcvdPackets := tr.getRcvdShortHeaderPackets()
 			lastPacketRcvdAt := rcvdPackets[len(rcvdPackets)-1].time
 			// We're ignoring here that only the first ack-eliciting packet sent resets the idle timeout.
 			// This is ok since we're dealing with a lossless connection here,
