@@ -50,7 +50,7 @@ func (c *tokenStore) Pop(key string) *quic.ClientToken {
 }
 
 type versionNegotiationTracer struct {
-	connTracer
+	logging.NullConnectionTracer
 
 	loggedVersions                 bool
 	receivedVersionNegotiation     bool

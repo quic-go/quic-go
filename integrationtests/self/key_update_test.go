@@ -45,7 +45,7 @@ func countKeyPhases() (sent, received int) {
 }
 
 type keyUpdateConnTracer struct {
-	connTracer
+	logging.NullConnectionTracer
 }
 
 func (t *keyUpdateConnTracer) SentPacket(hdr *logging.ExtendedHeader, size logging.ByteCount, ack *logging.AckFrame, frames []logging.Frame) {
