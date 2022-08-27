@@ -100,15 +100,16 @@ func (p *packetContents) ToAckHandlerPacket(now time.Time, q *retransmissionQueu
 			p.frames[i].OnLost = q.AddAppData
 		}
 	}
-	return &ackhandler.Packet{
-		PacketNumber:         p.header.PacketNumber,
-		LargestAcked:         largestAcked,
-		Frames:               p.frames,
-		Length:               p.length,
-		EncryptionLevel:      encLevel,
-		SendTime:             now,
-		IsPathMTUProbePacket: p.isMTUProbePacket,
-	}
+
+	ap := ackhandler.GetPacket()
+	ap.PacketNumber = p.header.PacketNumber
+	ap.LargestAcked = largestAcked
+	ap.Frames = p.frames
+	ap.Length = p.length
+	ap.EncryptionLevel = encLevel
+	ap.SendTime = now
+	ap.IsPathMTUProbePacket = p.isMTUProbePacket
+	return ap
 }
 
 func getMaxPacketSize(addr net.Addr) protocol.ByteCount {
