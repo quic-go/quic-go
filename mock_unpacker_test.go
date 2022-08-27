@@ -35,17 +35,33 @@ func (m *MockUnpacker) EXPECT() *MockUnpackerMockRecorder {
 	return m.recorder
 }
 
-// Unpack mocks base method.
-func (m *MockUnpacker) Unpack(hdr *wire.Header, rcvTime time.Time, data []byte) (*unpackedPacket, error) {
+// UnpackLongHeader mocks base method.
+func (m *MockUnpacker) UnpackLongHeader(hdr *wire.Header, rcvTime time.Time, data []byte) (*unpackedPacket, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Unpack", hdr, rcvTime, data)
+	ret := m.ctrl.Call(m, "UnpackLongHeader", hdr, rcvTime, data)
 	ret0, _ := ret[0].(*unpackedPacket)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
-// Unpack indicates an expected call of Unpack.
-func (mr *MockUnpackerMockRecorder) Unpack(hdr, rcvTime, data interface{}) *gomock.Call {
+// UnpackLongHeader indicates an expected call of UnpackLongHeader.
+func (mr *MockUnpackerMockRecorder) UnpackLongHeader(hdr, rcvTime, data interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Unpack", reflect.TypeOf((*MockUnpacker)(nil).Unpack), hdr, rcvTime, data)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UnpackLongHeader", reflect.TypeOf((*MockUnpacker)(nil).UnpackLongHeader), hdr, rcvTime, data)
+}
+
+// UnpackShortHeader mocks base method.
+func (m *MockUnpacker) UnpackShortHeader(rcvTime time.Time, data []byte) (*wire.ShortHeader, []byte, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UnpackShortHeader", rcvTime, data)
+	ret0, _ := ret[0].(*wire.ShortHeader)
+	ret1, _ := ret[1].([]byte)
+	ret2, _ := ret[2].(error)
+	return ret0, ret1, ret2
+}
+
+// UnpackShortHeader indicates an expected call of UnpackShortHeader.
+func (mr *MockUnpackerMockRecorder) UnpackShortHeader(rcvTime, data interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UnpackShortHeader", reflect.TypeOf((*MockUnpacker)(nil).UnpackShortHeader), rcvTime, data)
 }
