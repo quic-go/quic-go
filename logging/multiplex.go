@@ -110,9 +110,9 @@ func (m *connTracerMultiplexer) SentPacket(hdr *ExtendedHeader, size ByteCount, 
 	}
 }
 
-func (m *connTracerMultiplexer) ReceivedVersionNegotiationPacket(hdr *Header, versions []VersionNumber) {
+func (m *connTracerMultiplexer) ReceivedVersionNegotiationPacket(dest, src ArbitraryLenConnectionID, versions []VersionNumber) {
 	for _, t := range m.tracers {
-		t.ReceivedVersionNegotiationPacket(hdr, versions)
+		t.ReceivedVersionNegotiationPacket(dest, src, versions)
 	}
 }
 

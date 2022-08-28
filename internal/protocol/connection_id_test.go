@@ -119,5 +119,15 @@ var _ = Describe("Connection ID generation", func() {
 			c := ArbitraryLenConnectionID(make([]byte, 156))
 			Expect(c.Len()).To(Equal(156))
 		})
+
+		It("has a string representation", func() {
+			c := ArbitraryLenConnectionID([]byte{0xde, 0xad, 0xbe, 0xef, 0x42})
+			Expect(c.String()).To(Equal("deadbeef42"))
+		})
+
+		It("has a string representation for the default value", func() {
+			var c ArbitraryLenConnectionID
+			Expect(c.String()).To(Equal("(empty)"))
+		})
 	})
 })

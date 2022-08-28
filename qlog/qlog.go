@@ -321,14 +321,17 @@ func (t *connectionTracer) ReceivedRetry(hdr *wire.Header) {
 	t.mutex.Unlock()
 }
 
-func (t *connectionTracer) ReceivedVersionNegotiationPacket(hdr *wire.Header, versions []logging.VersionNumber) {
+func (t *connectionTracer) ReceivedVersionNegotiationPacket(dest, src logging.ArbitraryLenConnectionID, versions []logging.VersionNumber) {
 	ver := make([]versionNumber, len(versions))
 	for i, v := range versions {
 		ver[i] = versionNumber(v)
 	}
 	t.mutex.Lock()
 	t.recordEvent(time.Now(), &eventVersionNegotiationReceived{
-		Header:            *transformHeader(hdr),
+		Header: packetHeaderVersionNegotiation{
+			SrcConnectionID:  src,
+			DestConnectionID: dest,
+		},
 		SupportedVersions: ver,
 	})
 	t.mutex.Unlock()

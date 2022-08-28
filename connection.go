@@ -1094,7 +1094,11 @@ func (s *connection) handleVersionNegotiationPacket(p *receivedPacket) {
 
 	s.logger.Infof("Received a Version Negotiation packet. Supported Versions: %s", supportedVersions)
 	if s.tracer != nil {
-		s.tracer.ReceivedVersionNegotiationPacket(hdr, supportedVersions)
+		s.tracer.ReceivedVersionNegotiationPacket(
+			protocol.ArbitraryLenConnectionID(hdr.DestConnectionID),
+			protocol.ArbitraryLenConnectionID(hdr.SrcConnectionID),
+			supportedVersions,
+		)
 	}
 	newVersion, ok := protocol.ChooseSupportedVersion(s.config.Versions, supportedVersions)
 	if !ok {

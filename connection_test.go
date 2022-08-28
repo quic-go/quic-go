@@ -2613,8 +2613,7 @@ var _ = Describe("Client Connection", func() {
 				errChan <- conn.run()
 			}()
 			connRunner.EXPECT().Remove(srcConnID)
-			tracer.EXPECT().ReceivedVersionNegotiationPacket(gomock.Any(), gomock.Any()).Do(func(hdr *wire.Header, versions []logging.VersionNumber) {
-				Expect(hdr.Version).To(BeZero())
+			tracer.EXPECT().ReceivedVersionNegotiationPacket(gomock.Any(), gomock.Any(), gomock.Any()).Do(func(_, _ protocol.ArbitraryLenConnectionID, versions []logging.VersionNumber) {
 				Expect(versions).To(And(
 					ContainElement(protocol.VersionNumber(4321)),
 					ContainElement(protocol.VersionNumber(1337)),
@@ -2640,7 +2639,7 @@ var _ = Describe("Client Connection", func() {
 			}()
 			connRunner.EXPECT().Remove(srcConnID).MaxTimes(1)
 			gomock.InOrder(
-				tracer.EXPECT().ReceivedVersionNegotiationPacket(gomock.Any(), gomock.Any()),
+				tracer.EXPECT().ReceivedVersionNegotiationPacket(gomock.Any(), gomock.Any(), gomock.Any()),
 				tracer.EXPECT().ClosedConnection(gomock.Any()).Do(func(e error) {
 					var vnErr *VersionNegotiationError
 					Expect(errors.As(e, &vnErr)).To(BeTrue())

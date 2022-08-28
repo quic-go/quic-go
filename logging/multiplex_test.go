@@ -159,10 +159,11 @@ var _ = Describe("Tracing", func() {
 		})
 
 		It("traces the ReceivedVersionNegotiationPacket event", func() {
-			hdr := &Header{DestConnectionID: ConnectionID{1, 2, 3}}
-			tr1.EXPECT().ReceivedVersionNegotiationPacket(hdr, []VersionNumber{1337})
-			tr2.EXPECT().ReceivedVersionNegotiationPacket(hdr, []VersionNumber{1337})
-			tracer.ReceivedVersionNegotiationPacket(hdr, []VersionNumber{1337})
+			src := ArbitraryLenConnectionID{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13}
+			dest := ArbitraryLenConnectionID{1, 2, 3, 4}
+			tr1.EXPECT().ReceivedVersionNegotiationPacket(dest, src, []VersionNumber{1337})
+			tr2.EXPECT().ReceivedVersionNegotiationPacket(dest, src, []VersionNumber{1337})
+			tracer.ReceivedVersionNegotiationPacket(dest, src, []VersionNumber{1337})
 		})
 
 		It("traces the ReceivedRetry event", func() {

@@ -20,6 +20,13 @@ func (c ArbitraryLenConnectionID) Bytes() []byte {
 	return c
 }
 
+func (c ArbitraryLenConnectionID) String() string {
+	if c.Len() == 0 {
+		return "(empty)"
+	}
+	return fmt.Sprintf("%x", c.Bytes())
+}
+
 // A ConnectionID in QUIC
 type ConnectionID []byte
 

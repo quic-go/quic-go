@@ -114,7 +114,7 @@ type ConnectionTracer interface {
 	ReceivedTransportParameters(*TransportParameters)
 	RestoredTransportParameters(parameters *TransportParameters) // for 0-RTT
 	SentPacket(hdr *ExtendedHeader, size ByteCount, ack *AckFrame, frames []Frame)
-	ReceivedVersionNegotiationPacket(*Header, []VersionNumber)
+	ReceivedVersionNegotiationPacket(dest, src ArbitraryLenConnectionID, _ []VersionNumber)
 	ReceivedRetry(*Header)
 	ReceivedPacket(hdr *ExtendedHeader, size ByteCount, frames []Frame)
 	BufferedPacket(PacketType)

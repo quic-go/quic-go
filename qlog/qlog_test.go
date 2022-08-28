@@ -548,12 +548,8 @@ var _ = Describe("Tracing", func() {
 
 			It("records a received Version Negotiation packet", func() {
 				tracer.ReceivedVersionNegotiationPacket(
-					&logging.Header{
-						IsLongHeader:     true,
-						Type:             protocol.PacketTypeRetry,
-						DestConnectionID: protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8},
-						SrcConnectionID:  protocol.ConnectionID{4, 3, 2, 1},
-					},
+					protocol.ArbitraryLenConnectionID{1, 2, 3, 4, 5, 6, 7, 8},
+					protocol.ArbitraryLenConnectionID{4, 3, 2, 1},
 					[]protocol.VersionNumber{0xdeadbeef, 0xdecafbad},
 				)
 				entry := exportAndParseSingle()
@@ -568,8 +564,8 @@ var _ = Describe("Tracing", func() {
 				Expect(header).To(HaveKeyWithValue("packet_type", "version_negotiation"))
 				Expect(header).ToNot(HaveKey("packet_number"))
 				Expect(header).ToNot(HaveKey("version"))
-				Expect(header).To(HaveKey("dcid"))
-				Expect(header).To(HaveKey("scid"))
+				Expect(header).To(HaveKeyWithValue("dcid", "0102030405060708"))
+				Expect(header).To(HaveKeyWithValue("scid", "04030201"))
 			})
 
 			It("records buffered packets", func() {

@@ -212,7 +212,7 @@ func (e eventRetryReceived) MarshalJSONObject(enc *gojay.Encoder) {
 }
 
 type eventVersionNegotiationReceived struct {
-	Header            packetHeader
+	Header            packetHeaderVersionNegotiation
 	SupportedVersions []versionNumber
 }
 

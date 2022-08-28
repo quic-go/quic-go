@@ -31,12 +31,13 @@ func (n NullConnectionTracer) StartedConnection(local, remote net.Addr, srcConnI
 
 func (n NullConnectionTracer) NegotiatedVersion(chosen VersionNumber, clientVersions, serverVersions []VersionNumber) {
 }
-func (n NullConnectionTracer) ClosedConnection(err error)                                         {}
-func (n NullConnectionTracer) SentTransportParameters(*TransportParameters)                       {}
-func (n NullConnectionTracer) ReceivedTransportParameters(*TransportParameters)                   {}
-func (n NullConnectionTracer) RestoredTransportParameters(*TransportParameters)                   {}
-func (n NullConnectionTracer) SentPacket(*ExtendedHeader, ByteCount, *AckFrame, []Frame)          {}
-func (n NullConnectionTracer) ReceivedVersionNegotiationPacket(*Header, []VersionNumber)          {}
+func (n NullConnectionTracer) ClosedConnection(err error)                                {}
+func (n NullConnectionTracer) SentTransportParameters(*TransportParameters)              {}
+func (n NullConnectionTracer) ReceivedTransportParameters(*TransportParameters)          {}
+func (n NullConnectionTracer) RestoredTransportParameters(*TransportParameters)          {}
+func (n NullConnectionTracer) SentPacket(*ExtendedHeader, ByteCount, *AckFrame, []Frame) {}
+func (n NullConnectionTracer) ReceivedVersionNegotiationPacket(dest, src ArbitraryLenConnectionID, _ []VersionNumber) {
+}
 func (n NullConnectionTracer) ReceivedRetry(*Header)                                              {}
 func (n NullConnectionTracer) ReceivedPacket(hdr *ExtendedHeader, size ByteCount, frames []Frame) {}
 func (n NullConnectionTracer) BufferedPacket(PacketType)                                          {}
