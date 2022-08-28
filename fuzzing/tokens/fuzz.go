@@ -132,10 +132,10 @@ func newRetryToken(tg *handshake.TokenGenerator, data []byte) int {
 	if token.SentTime.Before(start) || token.SentTime.After(time.Now()) {
 		panic("incorrect send time")
 	}
-	if !token.OriginalDestConnectionID.Equal(origDestConnID) {
+	if token.OriginalDestConnectionID != origDestConnID {
 		panic("orig dest conn ID doesn't match")
 	}
-	if !token.RetrySrcConnectionID.Equal(retrySrcConnID) {
+	if token.RetrySrcConnectionID != retrySrcConnID {
 		panic("retry src conn ID doesn't match")
 	}
 	return 1

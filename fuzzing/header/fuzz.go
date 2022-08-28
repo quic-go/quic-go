@@ -35,7 +35,7 @@ func Fuzz(data []byte) int {
 	if err != nil {
 		return 0
 	}
-	if !hdr.DestConnectionID.Equal(connID) {
+	if hdr.DestConnectionID != connID {
 		panic(fmt.Sprintf("Expected connection IDs to match: %s vs %s", hdr.DestConnectionID, connID))
 	}
 	if (hdr.Type == protocol.PacketType0RTT) != is0RTTPacket {

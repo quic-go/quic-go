@@ -417,13 +417,13 @@ var _ = Describe("0-RTT", func() {
 							if firstConnID == nil {
 								firstConnID = &connID
 								firstCounter += zeroRTTBytes
-							} else if firstConnID != nil && firstConnID.Equal(connID) {
+							} else if firstConnID != nil && *firstConnID == connID {
 								Expect(secondConnID).To(BeNil())
 								firstCounter += zeroRTTBytes
 							} else if secondConnID == nil {
 								secondConnID = &connID
 								secondCounter += zeroRTTBytes
-							} else if secondConnID != nil && secondConnID.Equal(connID) {
+							} else if secondConnID != nil && *secondConnID == connID {
 								secondCounter += zeroRTTBytes
 							} else {
 								Fail("received 3 connection IDs on 0-RTT packets")

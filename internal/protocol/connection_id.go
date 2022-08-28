@@ -86,11 +86,6 @@ func ReadConnectionID(r io.Reader, l int) (ConnectionID, error) {
 	return c, err
 }
 
-// Equal says if two connection IDs are equal
-func (c ConnectionID) Equal(other ConnectionID) bool {
-	return c == other
-}
-
 // Len returns the length of the connection ID in bytes
 func (c ConnectionID) Len() int {
 	return int(c.l)

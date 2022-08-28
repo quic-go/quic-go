@@ -278,7 +278,7 @@ var _ = Describe("Connection ID Manager", func() {
 			m.SentPacket()
 
 			connID := m.Get()
-			if !connID.Equal(lastConnID) {
+			if connID != lastConnID {
 				counter++
 				lastConnID = connID
 				Expect(removedTokens).To(HaveLen(1))
@@ -306,7 +306,7 @@ var _ = Describe("Connection ID Manager", func() {
 		Expect(m.Get()).To(Equal(protocol.ParseConnectionID([]byte{10, 10, 10, 10})))
 		for {
 			m.SentPacket()
-			if m.Get().Equal(protocol.ParseConnectionID([]byte{11, 11, 11, 11})) {
+			if m.Get() == protocol.ParseConnectionID([]byte{11, 11, 11, 11}) {
 				break
 			}
 		}

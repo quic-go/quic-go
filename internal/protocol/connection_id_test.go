@@ -43,18 +43,6 @@ var _ = Describe("Connection ID generation", func() {
 		Expect(has20ByteConnID).To(BeTrue())
 	})
 
-	It("says if connection IDs are equal", func() {
-		c1 := ParseConnectionID([]byte{1, 2, 3, 4, 5, 6, 7, 8})
-		c2 := ParseConnectionID([]byte{8, 7, 6, 5, 4, 3, 2, 1})
-		c3 := ParseConnectionID([]byte{1, 2, 3, 4, 5, 6, 7, 8})
-		Expect(c1.Equal(c1)).To(BeTrue())
-		Expect(c1.Equal(c3)).To(BeTrue())
-		Expect(c2.Equal(c2)).To(BeTrue())
-		Expect(c2.Equal(c3)).To(BeFalse())
-		Expect(c1.Equal(c2)).To(BeFalse())
-		Expect(c2.Equal(c1)).To(BeFalse())
-	})
-
 	It("reads the connection ID", func() {
 		buf := bytes.NewBuffer([]byte{1, 2, 3, 4, 5, 6, 7, 8, 9})
 		c, err := ReadConnectionID(buf, 9)
