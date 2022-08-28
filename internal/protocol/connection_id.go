@@ -7,6 +7,19 @@ import (
 	"io"
 )
 
+// An ArbitraryLenConnectionID is a QUIC Connection ID able to represent Connection IDs according to RFC 8999.
+// Future QUIC versions might allow connection ID lengths up to 255 bytes, while QUIC v1
+// restricts the length to 20 bytes.
+type ArbitraryLenConnectionID []byte
+
+func (c ArbitraryLenConnectionID) Len() int {
+	return len(c)
+}
+
+func (c ArbitraryLenConnectionID) Bytes() []byte {
+	return c
+}
+
 // A ConnectionID in QUIC
 type ConnectionID []byte
 

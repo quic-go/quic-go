@@ -2,6 +2,7 @@ package protocol
 
 import (
 	"bytes"
+	"crypto/rand"
 	"io"
 
 	. "github.com/onsi/ginkgo"
@@ -104,5 +105,19 @@ var _ = Describe("Connection ID generation", func() {
 	It("has a string representation for the default value", func() {
 		var c ConnectionID
 		Expect(c.String()).To(Equal("(empty)"))
+	})
+
+	Context("arbitrary length connection IDs", func() {
+		It("returns the bytes", func() {
+			b := make([]byte, 30)
+			rand.Read(b)
+			c := ArbitraryLenConnectionID(b)
+			Expect(c.Bytes()).To(Equal(b))
+		})
+
+		It("returns the length", func() {
+			c := ArbitraryLenConnectionID(make([]byte, 156))
+			Expect(c.Len()).To(Equal(156))
+		})
 	})
 })

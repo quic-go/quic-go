@@ -2,8 +2,10 @@ package wire
 
 import (
 	"bytes"
+	"crypto/rand"
 	"encoding/binary"
 	"io"
+	mrand "math/rand"
 
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 	. "github.com/onsi/ginkgo"
@@ -125,6 +127,48 @@ var _ = Describe("Header Parsing", func() {
 			Expect(err).ToNot(HaveOccurred())
 			for i := range b {
 				_, err := ParseVersion(b[:i])
+				Expect(err).To(MatchError(io.EOF))
+			}
+		})
+	})
+
+	Context("parsing arbitrary length connection IDs", func() {
+		generateConnID := func(l int) protocol.ArbitraryLenConnectionID {
+			c := make(protocol.ArbitraryLenConnectionID, l)
+			rand.Read(c)
+			return c
+		}
+
+		generatePacket := func(src, dest protocol.ArbitraryLenConnectionID) []byte {
+			b := []byte{0x80, 1, 2, 3, 4}
+			b = append(b, uint8(dest.Len()))
+			b = append(b, dest.Bytes()...)
+			b = append(b, uint8(src.Len()))
+			b = append(b, src.Bytes()...)
+			return b
+		}
+
+		It("parses arbitrary length connection IDs", func() {
+			src := generateConnID(mrand.Intn(255) + 1)
+			dest := generateConnID(mrand.Intn(255) + 1)
+			b := generatePacket(src, dest)
+			l := len(b)
+			b = append(b, []byte("foobar")...) // add some payload
+
+			parsed, d, s, err := ParseArbitraryLenConnectionIDs(b)
+			Expect(parsed).To(Equal(l))
+			Expect(err).ToNot(HaveOccurred())
+			Expect(s).To(Equal(src))
+			Expect(d).To(Equal(dest))
+		})
+
+		It("errors on EOF", func() {
+			b := generatePacket(generateConnID(mrand.Intn(255)+1), generateConnID(mrand.Intn(255)+1))
+			_, _, _, err := ParseArbitraryLenConnectionIDs(b)
+			Expect(err).ToNot(HaveOccurred())
+
+			for i := range b {
+				_, _, _, err := ParseArbitraryLenConnectionIDs(b[:i])
 				Expect(err).To(MatchError(io.EOF))
 			}
 		})
