@@ -19,7 +19,7 @@ func getRandomData(l int) []byte {
 	return b
 }
 
-func getVNP(src, dest protocol.ConnectionID, numVersions int) []byte {
+func getVNP(src, dest protocol.ArbitraryLenConnectionID, numVersions int) []byte {
 	versions := make([]protocol.VersionNumber, numVersions)
 	for i := 0; i < numVersions; i++ {
 		versions[i] = protocol.VersionNumber(rand.Uint32())
@@ -113,28 +113,28 @@ func main() {
 
 	vnps := [][]byte{
 		getVNP(
-			protocol.ConnectionID(getRandomData(8)),
-			protocol.ConnectionID(getRandomData(10)),
+			protocol.ArbitraryLenConnectionID(getRandomData(8)),
+			protocol.ArbitraryLenConnectionID(getRandomData(10)),
 			4,
 		),
 		getVNP(
-			protocol.ConnectionID(getRandomData(10)),
-			protocol.ConnectionID(getRandomData(5)),
+			protocol.ArbitraryLenConnectionID(getRandomData(10)),
+			protocol.ArbitraryLenConnectionID(getRandomData(5)),
 			0,
 		),
 		getVNP(
-			protocol.ConnectionID(getRandomData(3)),
-			protocol.ConnectionID(getRandomData(19)),
+			protocol.ArbitraryLenConnectionID(getRandomData(3)),
+			protocol.ArbitraryLenConnectionID(getRandomData(19)),
 			100,
 		),
 		getVNP(
-			protocol.ConnectionID(getRandomData(3)),
+			protocol.ArbitraryLenConnectionID(getRandomData(3)),
 			nil,
 			20,
 		),
 		getVNP(
 			nil,
-			protocol.ConnectionID(getRandomData(10)),
+			protocol.ArbitraryLenConnectionID(getRandomData(10)),
 			5,
 		),
 	}

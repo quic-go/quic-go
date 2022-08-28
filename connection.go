@@ -1072,7 +1072,7 @@ func (s *connection) handleVersionNegotiationPacket(p *receivedPacket) {
 		return
 	}
 
-	hdr, supportedVersions, err := wire.ParseVersionNegotiationPacket(bytes.NewReader(p.data))
+	src, dest, supportedVersions, err := wire.ParseVersionNegotiationPacket(p.data)
 	if err != nil {
 		if s.tracer != nil {
 			s.tracer.DroppedPacket(logging.PacketTypeVersionNegotiation, p.Size(), logging.PacketDropHeaderParseError)
@@ -1094,11 +1094,7 @@ func (s *connection) handleVersionNegotiationPacket(p *receivedPacket) {
 
 	s.logger.Infof("Received a Version Negotiation packet. Supported Versions: %s", supportedVersions)
 	if s.tracer != nil {
-		s.tracer.ReceivedVersionNegotiationPacket(
-			protocol.ArbitraryLenConnectionID(hdr.DestConnectionID),
-			protocol.ArbitraryLenConnectionID(hdr.SrcConnectionID),
-			supportedVersions,
-		)
+		s.tracer.ReceivedVersionNegotiationPacket(dest, src, supportedVersions)
 	}
 	newVersion, ok := protocol.ChooseSupportedVersion(s.config.Versions, supportedVersions)
 	if !ok {

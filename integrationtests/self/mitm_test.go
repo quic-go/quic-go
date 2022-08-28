@@ -326,7 +326,11 @@ var _ = Describe("MITM test", func() {
 
 							// Create fake version negotiation packet with no supported versions
 							versions := []protocol.VersionNumber{}
-							packet := wire.ComposeVersionNegotiation(hdr.SrcConnectionID, hdr.DestConnectionID, versions)
+							packet := wire.ComposeVersionNegotiation(
+								protocol.ArbitraryLenConnectionID(hdr.SrcConnectionID.Bytes()),
+								protocol.ArbitraryLenConnectionID(hdr.DestConnectionID.Bytes()),
+								versions,
+							)
 
 							// Send the packet
 							_, err = serverUDPConn.WriteTo(packet, clientUDPConn.LocalAddr())

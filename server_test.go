@@ -336,20 +336,18 @@ var _ = Describe("Server", func() {
 				}, make([]byte, protocol.MinUnknownVersionPacketSize))
 				raddr := &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 1337}
 				packet.remoteAddr = raddr
-				tracer.EXPECT().SentPacket(packet.remoteAddr, gomock.Any(), gomock.Any(), nil).Do(func(_ net.Addr, replyHdr *logging.Header, _ logging.ByteCount, _ []logging.Frame) {
-					Expect(replyHdr.IsLongHeader).To(BeTrue())
-					Expect(replyHdr.Version).To(BeZero())
-					Expect(replyHdr.SrcConnectionID).To(Equal(destConnID))
-					Expect(replyHdr.DestConnectionID).To(Equal(srcConnID))
+				tracer.EXPECT().SentVersionNegotiationPacket(packet.remoteAddr, gomock.Any(), gomock.Any(), gomock.Any()).Do(func(_ net.Addr, src, dest protocol.ArbitraryLenConnectionID, _ []protocol.VersionNumber) {
+					Expect(src).To(BeEquivalentTo(destConnID))
+					Expect(dest).To(BeEquivalentTo(srcConnID))
 				})
 				done := make(chan struct{})
 				conn.EXPECT().WriteTo(gomock.Any(), raddr).DoAndReturn(func(b []byte, _ net.Addr) (int, error) {
 					defer close(done)
 					Expect(wire.IsVersionNegotiationPacket(b)).To(BeTrue())
-					hdr, versions, err := wire.ParseVersionNegotiationPacket(bytes.NewReader(b))
+					dest, src, versions, err := wire.ParseVersionNegotiationPacket(b)
 					Expect(err).ToNot(HaveOccurred())
-					Expect(hdr.DestConnectionID).To(Equal(srcConnID))
-					Expect(hdr.SrcConnectionID).To(Equal(destConnID))
+					Expect(dest).To(BeEquivalentTo(srcConnID))
+					Expect(src).To(BeEquivalentTo(destConnID))
 					Expect(versions).ToNot(ContainElement(protocol.VersionNumber(0x42)))
 					return len(b), nil
 				})
@@ -378,8 +376,8 @@ var _ = Describe("Server", func() {
 
 			It("ignores Version Negotiation packets", func() {
 				data := wire.ComposeVersionNegotiation(
-					protocol.ConnectionID{1, 2, 3, 4},
-					protocol.ConnectionID{4, 3, 2, 1},
+					protocol.ArbitraryLenConnectionID{1, 2, 3, 4},
+					protocol.ArbitraryLenConnectionID{4, 3, 2, 1},
 					[]protocol.VersionNumber{1, 2, 3},
 				)
 				raddr := &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 1337}

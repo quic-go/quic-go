@@ -320,19 +320,42 @@ func (s *baseServer) handlePacketImpl(p *receivedPacket) bool /* is the buffer s
 		}
 		return false
 	}
+	// Short header packets should never end up here in the first place
+	if !wire.IsLongHeaderPacket(p.data[0]) {
+		panic(fmt.Sprintf("misrouted packet: %#v", p.data))
+	}
+	v, err := wire.ParseVersion(p.data)
+	// send a Version Negotiation Packet if the client is speaking a different protocol version
+	if err != nil || !protocol.IsSupportedVersion(s.config.Versions, v) {
+		if err != nil || p.Size() < protocol.MinUnknownVersionPacketSize {
+			s.logger.Debugf("Dropping a packet with an unknown version that is too small (%d bytes)", p.Size())
+			if s.config.Tracer != nil {
+				s.config.Tracer.DroppedPacket(p.remoteAddr, logging.PacketTypeNotDetermined, p.Size(), logging.PacketDropUnexpectedPacket)
+			}
+			return false
+		}
+		_, src, dest, err := wire.ParseArbitraryLenConnectionIDs(p.data)
+		if err != nil { // should never happen
+			s.logger.Debugf("Dropping a packet with an unknown version for which we failed to parse connection IDs")
+			if s.config.Tracer != nil {
+				s.config.Tracer.DroppedPacket(p.remoteAddr, logging.PacketTypeNotDetermined, p.Size(), logging.PacketDropUnexpectedPacket)
+			}
+			return false
+		}
+		if !s.config.DisableVersionNegotiationPackets {
+			go s.sendVersionNegotiationPacket(p.remoteAddr, src, dest, p.info.OOB())
+		}
+		return false
+	}
 	// If we're creating a new connection, the packet will be passed to the connection.
 	// The header will then be parsed again.
 	hdr, _, _, err := wire.ParsePacket(p.data, s.config.ConnectionIDGenerator.ConnectionIDLen())
-	if err != nil && err != wire.ErrUnsupportedVersion {
+	if err != nil {
 		if s.config.Tracer != nil {
 			s.config.Tracer.DroppedPacket(p.remoteAddr, logging.PacketTypeNotDetermined, p.Size(), logging.PacketDropHeaderParseError)
 		}
 		s.logger.Debugf("Error parsing packet: %s", err)
 		return false
-	}
-	// Short header packets should never end up here in the first place
-	if !hdr.IsLongHeader {
-		panic(fmt.Sprintf("misrouted packet: %#v", hdr))
 	}
 	if hdr.Type == protocol.PacketTypeInitial && p.Size() < protocol.MinInitialPacketSize {
 		s.logger.Debugf("Dropping a packet that is too small to be a valid Initial (%d bytes)", p.Size())
@@ -341,20 +364,7 @@ func (s *baseServer) handlePacketImpl(p *receivedPacket) bool /* is the buffer s
 		}
 		return false
 	}
-	// send a Version Negotiation Packet if the client is speaking a different protocol version
-	if !protocol.IsSupportedVersion(s.config.Versions, hdr.Version) {
-		if p.Size() < protocol.MinUnknownVersionPacketSize {
-			s.logger.Debugf("Dropping a packet with an unknown version that is too small (%d bytes)", p.Size())
-			if s.config.Tracer != nil {
-				s.config.Tracer.DroppedPacket(p.remoteAddr, logging.PacketTypeNotDetermined, p.Size(), logging.PacketDropUnexpectedPacket)
-			}
-			return false
-		}
-		if !s.config.DisableVersionNegotiationPackets {
-			go s.sendVersionNegotiationPacket(p, hdr)
-		}
-		return false
-	}
+
 	if hdr.IsLongHeader && hdr.Type != protocol.PacketTypeInitial {
 		// Drop long header packets.
 		// There's little point in sending a Stateless Reset, since the client
@@ -664,22 +674,14 @@ func (s *baseServer) sendError(remoteAddr net.Addr, hdr *wire.Header, sealer han
 	return err
 }
 
-func (s *baseServer) sendVersionNegotiationPacket(p *receivedPacket, hdr *wire.Header) {
-	s.logger.Debugf("Client offered version %s, sending Version Negotiation", hdr.Version)
-	data := wire.ComposeVersionNegotiation(hdr.SrcConnectionID, hdr.DestConnectionID, s.config.Versions)
+func (s *baseServer) sendVersionNegotiationPacket(remote net.Addr, src, dest protocol.ArbitraryLenConnectionID, oob []byte) {
+	s.logger.Debugf("Client offered version %s, sending Version Negotiation")
+
+	data := wire.ComposeVersionNegotiation(dest, src, s.config.Versions)
 	if s.config.Tracer != nil {
-		s.config.Tracer.SentPacket(
-			p.remoteAddr,
-			&wire.Header{
-				IsLongHeader:     true,
-				DestConnectionID: hdr.SrcConnectionID,
-				SrcConnectionID:  hdr.DestConnectionID,
-			},
-			protocol.ByteCount(len(data)),
-			nil,
-		)
+		s.config.Tracer.SentVersionNegotiationPacket(remote, src, dest, s.config.Versions)
 	}
-	if _, err := s.conn.WritePacket(data, p.remoteAddr, p.info.OOB()); err != nil {
+	if _, err := s.conn.WritePacket(data, remote, oob); err != nil {
 		s.logger.Debugf("Error sending Version Negotiation: %s", err)
 	}
 }

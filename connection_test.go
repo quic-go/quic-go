@@ -663,7 +663,11 @@ var _ = Describe("Connection", func() {
 		})
 
 		It("drops Version Negotiation packets", func() {
-			b := wire.ComposeVersionNegotiation(srcConnID, destConnID, conn.config.Versions)
+			b := wire.ComposeVersionNegotiation(
+				protocol.ArbitraryLenConnectionID(srcConnID),
+				protocol.ArbitraryLenConnectionID(destConnID),
+				conn.config.Versions,
+			)
 			tracer.EXPECT().DroppedPacket(logging.PacketTypeVersionNegotiation, protocol.ByteCount(len(b)), logging.PacketDropUnexpectedPacket)
 			Expect(conn.handlePacketImpl(&receivedPacket{
 				data:   b,
@@ -2593,7 +2597,11 @@ var _ = Describe("Client Connection", func() {
 
 	Context("handling Version Negotiation", func() {
 		getVNP := func(versions ...protocol.VersionNumber) *receivedPacket {
-			b := wire.ComposeVersionNegotiation(srcConnID, destConnID, versions)
+			b := wire.ComposeVersionNegotiation(
+				protocol.ArbitraryLenConnectionID(srcConnID),
+				protocol.ArbitraryLenConnectionID(destConnID),
+				versions,
+			)
 			return &receivedPacket{
 				data:   b,
 				buffer: getPacketBuffer(),
