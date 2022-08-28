@@ -36,7 +36,7 @@ var _ = Describe("NEW_CONNECTION_ID frame", func() {
 	Context("when writing", func() {
 		It("writes a sample frame", func() {
 			frame := &RetireConnectionIDFrame{SequenceNumber: 0x1337}
-			b, err := frame.Write(nil, protocol.Version1)
+			b, err := frame.Append(nil, protocol.Version1)
 			Expect(err).ToNot(HaveOccurred())
 			expected := []byte{0x19}
 			expected = append(expected, encodeVarInt(0x1337)...)
@@ -45,7 +45,7 @@ var _ = Describe("NEW_CONNECTION_ID frame", func() {
 
 		It("has the correct length", func() {
 			frame := &RetireConnectionIDFrame{SequenceNumber: 0xdecafbad}
-			b, err := frame.Write(nil, protocol.Version1)
+			b, err := frame.Append(nil, protocol.Version1)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(b).To(HaveLen(int(frame.Length(protocol.Version1))))
 		})

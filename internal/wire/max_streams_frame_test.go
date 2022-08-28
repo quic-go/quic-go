@@ -54,7 +54,7 @@ var _ = Describe("MAX_STREAMS frame", func() {
 					Type:         streamType,
 					MaxStreamNum: protocol.MaxStreamCount,
 				}
-				b, err := f.Write(nil, protocol.VersionWhatever)
+				b, err := f.Append(nil, protocol.VersionWhatever)
 				Expect(err).ToNot(HaveOccurred())
 				frame, err := parseMaxStreamsFrame(bytes.NewReader(b), protocol.VersionWhatever)
 				Expect(err).ToNot(HaveOccurred())
@@ -66,7 +66,7 @@ var _ = Describe("MAX_STREAMS frame", func() {
 					Type:         streamType,
 					MaxStreamNum: protocol.MaxStreamCount + 1,
 				}
-				b, err := f.Write(nil, protocol.VersionWhatever)
+				b, err := f.Append(nil, protocol.VersionWhatever)
 				Expect(err).ToNot(HaveOccurred())
 				_, err = parseMaxStreamsFrame(bytes.NewReader(b), protocol.VersionWhatever)
 				Expect(err).To(MatchError(fmt.Sprintf("%d exceeds the maximum stream count", protocol.MaxStreamCount+1)))
@@ -80,7 +80,7 @@ var _ = Describe("MAX_STREAMS frame", func() {
 				Type:         protocol.StreamTypeBidi,
 				MaxStreamNum: 0xdeadbeef,
 			}
-			b, err := f.Write(nil, protocol.VersionWhatever)
+			b, err := f.Append(nil, protocol.VersionWhatever)
 			Expect(err).ToNot(HaveOccurred())
 			expected := []byte{0x12}
 			expected = append(expected, encodeVarInt(0xdeadbeef)...)
@@ -92,7 +92,7 @@ var _ = Describe("MAX_STREAMS frame", func() {
 				Type:         protocol.StreamTypeUni,
 				MaxStreamNum: 0xdecafbad,
 			}
-			b, err := f.Write(nil, protocol.VersionWhatever)
+			b, err := f.Append(nil, protocol.VersionWhatever)
 			Expect(err).ToNot(HaveOccurred())
 			expected := []byte{0x13}
 			expected = append(expected, encodeVarInt(0xdecafbad)...)

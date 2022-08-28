@@ -60,7 +60,7 @@ func parseNewConnectionIDFrame(r *bytes.Reader, _ protocol.VersionNumber) (*NewC
 	return frame, nil
 }
 
-func (f *NewConnectionIDFrame) Write(b []byte, _ protocol.VersionNumber) ([]byte, error) {
+func (f *NewConnectionIDFrame) Append(b []byte, _ protocol.VersionNumber) ([]byte, error) {
 	b = append(b, 0x18)
 	b = quicvarint.Append(b, f.SequenceNumber)
 	b = quicvarint.Append(b, f.RetirePriorTo)

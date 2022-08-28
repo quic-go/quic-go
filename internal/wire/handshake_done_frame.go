@@ -17,7 +17,7 @@ func parseHandshakeDoneFrame(r *bytes.Reader, _ protocol.VersionNumber) (*Handsh
 	return &HandshakeDoneFrame{}, nil
 }
 
-func (f *HandshakeDoneFrame) Write(b []byte, _ protocol.VersionNumber) ([]byte, error) {
+func (f *HandshakeDoneFrame) Append(b []byte, _ protocol.VersionNumber) ([]byte, error) {
 	return append(b, 0x1e), nil
 }
 

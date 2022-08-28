@@ -44,7 +44,7 @@ func parseDatagramFrame(r *bytes.Reader, _ protocol.VersionNumber) (*DatagramFra
 	return f, nil
 }
 
-func (f *DatagramFrame) Write(b []byte, _ protocol.VersionNumber) ([]byte, error) {
+func (f *DatagramFrame) Append(b []byte, _ protocol.VersionNumber) ([]byte, error) {
 	typeByte := uint8(0x30)
 	if f.DataLenPresent {
 		typeByte ^= 0b1

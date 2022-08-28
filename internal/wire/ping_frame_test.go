@@ -26,7 +26,7 @@ var _ = Describe("PING frame", func() {
 	Context("when writing", func() {
 		It("writes a sample frame", func() {
 			frame := PingFrame{}
-			b, err := frame.Write(nil, protocol.VersionWhatever)
+			b, err := frame.Append(nil, protocol.VersionWhatever)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(b).To(Equal([]byte{0x1}))
 		})

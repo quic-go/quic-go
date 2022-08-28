@@ -28,7 +28,7 @@ func parseMaxDataFrame(r *bytes.Reader, _ protocol.VersionNumber) (*MaxDataFrame
 }
 
 // Write writes a MAX_STREAM_DATA frame
-func (f *MaxDataFrame) Write(b []byte, _ protocol.VersionNumber) ([]byte, error) {
+func (f *MaxDataFrame) Append(b []byte, _ protocol.VersionNumber) ([]byte, error) {
 	b = append(b, 0x10)
 	b = quicvarint.Append(b, uint64(f.MaximumData))
 	return b, nil

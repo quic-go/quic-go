@@ -25,7 +25,7 @@ var _ = Describe("Frame parsing", func() {
 
 	It("skips PADDING frames", func() {
 		b := []byte{0} // PADDING frame
-		b, err := (&PingFrame{}).Write(b, protocol.Version1)
+		b, err := (&PingFrame{}).Append(b, protocol.Version1)
 		Expect(err).ToNot(HaveOccurred())
 		f, err := parser.ParseNext(bytes.NewReader(b), protocol.Encryption1RTT)
 		Expect(err).ToNot(HaveOccurred())
@@ -42,7 +42,7 @@ var _ = Describe("Frame parsing", func() {
 
 	It("unpacks ACK frames", func() {
 		f := &AckFrame{AckRanges: []AckRange{{Smallest: 1, Largest: 0x13}}}
-		b, err := f.Write(nil, protocol.Version1)
+		b, err := f.Append(nil, protocol.Version1)
 		Expect(err).ToNot(HaveOccurred())
 		frame, err := parser.ParseNext(bytes.NewReader(b), protocol.Encryption1RTT)
 		Expect(err).ToNot(HaveOccurred())
@@ -57,7 +57,7 @@ var _ = Describe("Frame parsing", func() {
 			AckRanges: []AckRange{{Smallest: 1, Largest: 1}},
 			DelayTime: time.Second,
 		}
-		b, err := f.Write(nil, protocol.Version1)
+		b, err := f.Append(nil, protocol.Version1)
 		Expect(err).ToNot(HaveOccurred())
 		frame, err := parser.ParseNext(bytes.NewReader(b), protocol.Encryption1RTT)
 		Expect(err).ToNot(HaveOccurred())
@@ -72,7 +72,7 @@ var _ = Describe("Frame parsing", func() {
 			AckRanges: []AckRange{{Smallest: 1, Largest: 1}},
 			DelayTime: time.Second,
 		}
-		b, err := f.Write(nil, protocol.Version1)
+		b, err := f.Append(nil, protocol.Version1)
 		Expect(err).ToNot(HaveOccurred())
 		frame, err := parser.ParseNext(bytes.NewReader(b), protocol.EncryptionHandshake)
 		Expect(err).ToNot(HaveOccurred())
@@ -85,7 +85,7 @@ var _ = Describe("Frame parsing", func() {
 			FinalSize: 0xdecafbad1234,
 			ErrorCode: 0x1337,
 		}
-		b, err := f.Write(nil, protocol.Version1)
+		b, err := f.Append(nil, protocol.Version1)
 		Expect(err).ToNot(HaveOccurred())
 		frame, err := parser.ParseNext(bytes.NewReader(b), protocol.Encryption1RTT)
 		Expect(err).ToNot(HaveOccurred())
@@ -94,7 +94,7 @@ var _ = Describe("Frame parsing", func() {
 
 	It("unpacks STOP_SENDING frames", func() {
 		f := &StopSendingFrame{StreamID: 0x42}
-		b, err := f.Write(nil, protocol.Version1)
+		b, err := f.Append(nil, protocol.Version1)
 		Expect(err).ToNot(HaveOccurred())
 		frame, err := parser.ParseNext(bytes.NewReader(b), protocol.Encryption1RTT)
 		Expect(err).ToNot(HaveOccurred())
@@ -106,7 +106,7 @@ var _ = Describe("Frame parsing", func() {
 			Offset: 0x1337,
 			Data:   []byte("lorem ipsum"),
 		}
-		b, err := f.Write(nil, protocol.Version1)
+		b, err := f.Append(nil, protocol.Version1)
 		Expect(err).ToNot(HaveOccurred())
 		frame, err := parser.ParseNext(bytes.NewReader(b), protocol.Encryption1RTT)
 		Expect(err).ToNot(HaveOccurred())
@@ -116,7 +116,7 @@ var _ = Describe("Frame parsing", func() {
 
 	It("unpacks NEW_TOKEN frames", func() {
 		f := &NewTokenFrame{Token: []byte("foobar")}
-		b, err := f.Write(nil, protocol.Version1)
+		b, err := f.Append(nil, protocol.Version1)
 		Expect(err).ToNot(HaveOccurred())
 		frame, err := parser.ParseNext(bytes.NewReader(b), protocol.Encryption1RTT)
 		Expect(err).ToNot(HaveOccurred())
@@ -131,7 +131,7 @@ var _ = Describe("Frame parsing", func() {
 			Fin:      true,
 			Data:     []byte("foobar"),
 		}
-		b, err := f.Write(nil, protocol.Version1)
+		b, err := f.Append(nil, protocol.Version1)
 		Expect(err).ToNot(HaveOccurred())
 		frame, err := parser.ParseNext(bytes.NewReader(b), protocol.Encryption1RTT)
 		Expect(err).ToNot(HaveOccurred())
@@ -143,7 +143,7 @@ var _ = Describe("Frame parsing", func() {
 		f := &MaxDataFrame{
 			MaximumData: 0xcafe,
 		}
-		b, err := f.Write(nil, protocol.Version1)
+		b, err := f.Append(nil, protocol.Version1)
 		Expect(err).ToNot(HaveOccurred())
 		frame, err := parser.ParseNext(bytes.NewReader(b), protocol.Encryption1RTT)
 		Expect(err).ToNot(HaveOccurred())
@@ -155,7 +155,7 @@ var _ = Describe("Frame parsing", func() {
 			StreamID:          0xdeadbeef,
 			MaximumStreamData: 0xdecafbad,
 		}
-		b, err := f.Write(nil, protocol.Version1)
+		b, err := f.Append(nil, protocol.Version1)
 		Expect(err).ToNot(HaveOccurred())
 		frame, err := parser.ParseNext(bytes.NewReader(b), protocol.Encryption1RTT)
 		Expect(err).ToNot(HaveOccurred())
@@ -167,7 +167,7 @@ var _ = Describe("Frame parsing", func() {
 			Type:         protocol.StreamTypeBidi,
 			MaxStreamNum: 0x1337,
 		}
-		b, err := f.Write(nil, protocol.Version1)
+		b, err := f.Append(nil, protocol.Version1)
 		Expect(err).ToNot(HaveOccurred())
 		frame, err := parser.ParseNext(bytes.NewReader(b), protocol.Encryption1RTT)
 		Expect(err).ToNot(HaveOccurred())
@@ -176,7 +176,7 @@ var _ = Describe("Frame parsing", func() {
 
 	It("unpacks DATA_BLOCKED frames", func() {
 		f := &DataBlockedFrame{MaximumData: 0x1234}
-		b, err := f.Write(nil, protocol.Version1)
+		b, err := f.Append(nil, protocol.Version1)
 		Expect(err).ToNot(HaveOccurred())
 		frame, err := parser.ParseNext(bytes.NewReader(b), protocol.Encryption1RTT)
 		Expect(err).ToNot(HaveOccurred())
@@ -188,7 +188,7 @@ var _ = Describe("Frame parsing", func() {
 			StreamID:          0xdeadbeef,
 			MaximumStreamData: 0xdead,
 		}
-		b, err := f.Write(nil, protocol.Version1)
+		b, err := f.Append(nil, protocol.Version1)
 		Expect(err).ToNot(HaveOccurred())
 		frame, err := parser.ParseNext(bytes.NewReader(b), protocol.Encryption1RTT)
 		Expect(err).ToNot(HaveOccurred())
@@ -200,7 +200,7 @@ var _ = Describe("Frame parsing", func() {
 			Type:        protocol.StreamTypeBidi,
 			StreamLimit: 0x1234567,
 		}
-		b, err := f.Write(nil, protocol.Version1)
+		b, err := f.Append(nil, protocol.Version1)
 		Expect(err).ToNot(HaveOccurred())
 		frame, err := parser.ParseNext(bytes.NewReader(b), protocol.Encryption1RTT)
 		Expect(err).ToNot(HaveOccurred())
@@ -213,7 +213,7 @@ var _ = Describe("Frame parsing", func() {
 			ConnectionID:        protocol.ConnectionID{0xde, 0xad, 0xbe, 0xef},
 			StatelessResetToken: protocol.StatelessResetToken{0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15},
 		}
-		b, err := f.Write(nil, protocol.Version1)
+		b, err := f.Append(nil, protocol.Version1)
 		Expect(err).ToNot(HaveOccurred())
 		frame, err := parser.ParseNext(bytes.NewReader(b), protocol.Encryption1RTT)
 		Expect(err).ToNot(HaveOccurred())
@@ -222,7 +222,7 @@ var _ = Describe("Frame parsing", func() {
 
 	It("unpacks RETIRE_CONNECTION_ID frames", func() {
 		f := &RetireConnectionIDFrame{SequenceNumber: 0x1337}
-		b, err := f.Write(nil, protocol.Version1)
+		b, err := f.Append(nil, protocol.Version1)
 		Expect(err).ToNot(HaveOccurred())
 		frame, err := parser.ParseNext(bytes.NewReader(b), protocol.Encryption1RTT)
 		Expect(err).ToNot(HaveOccurred())
@@ -231,7 +231,7 @@ var _ = Describe("Frame parsing", func() {
 
 	It("unpacks PATH_CHALLENGE frames", func() {
 		f := &PathChallengeFrame{Data: [8]byte{1, 2, 3, 4, 5, 6, 7, 8}}
-		b, err := f.Write(nil, protocol.Version1)
+		b, err := f.Append(nil, protocol.Version1)
 		Expect(err).ToNot(HaveOccurred())
 		frame, err := parser.ParseNext(bytes.NewReader(b), protocol.Encryption1RTT)
 		Expect(err).ToNot(HaveOccurred())
@@ -242,7 +242,7 @@ var _ = Describe("Frame parsing", func() {
 
 	It("unpacks PATH_RESPONSE frames", func() {
 		f := &PathResponseFrame{Data: [8]byte{1, 2, 3, 4, 5, 6, 7, 8}}
-		b, err := f.Write(nil, protocol.Version1)
+		b, err := f.Append(nil, protocol.Version1)
 		Expect(err).ToNot(HaveOccurred())
 		frame, err := parser.ParseNext(bytes.NewReader(b), protocol.Encryption1RTT)
 		Expect(err).ToNot(HaveOccurred())
@@ -256,7 +256,7 @@ var _ = Describe("Frame parsing", func() {
 			IsApplicationError: true,
 			ReasonPhrase:       "foobar",
 		}
-		b, err := f.Write(nil, protocol.Version1)
+		b, err := f.Append(nil, protocol.Version1)
 		Expect(err).ToNot(HaveOccurred())
 		frame, err := parser.ParseNext(bytes.NewReader(b), protocol.Encryption1RTT)
 		Expect(err).ToNot(HaveOccurred())
@@ -265,7 +265,7 @@ var _ = Describe("Frame parsing", func() {
 
 	It("unpacks HANDSHAKE_DONE frames", func() {
 		f := &HandshakeDoneFrame{}
-		b, err := f.Write(nil, protocol.Version1)
+		b, err := f.Append(nil, protocol.Version1)
 		Expect(err).ToNot(HaveOccurred())
 		frame, err := parser.ParseNext(bytes.NewReader(b), protocol.Encryption1RTT)
 		Expect(err).ToNot(HaveOccurred())
@@ -274,7 +274,7 @@ var _ = Describe("Frame parsing", func() {
 
 	It("unpacks DATAGRAM frames", func() {
 		f := &DatagramFrame{Data: []byte("foobar")}
-		b, err := f.Write(nil, protocol.Version1)
+		b, err := f.Append(nil, protocol.Version1)
 		Expect(err).ToNot(HaveOccurred())
 		frame, err := parser.ParseNext(bytes.NewReader(b), protocol.Encryption1RTT)
 		Expect(err).ToNot(HaveOccurred())
@@ -284,7 +284,7 @@ var _ = Describe("Frame parsing", func() {
 	It("errors when DATAGRAM frames are not supported", func() {
 		parser = NewFrameParser(false, protocol.Version1)
 		f := &DatagramFrame{Data: []byte("foobar")}
-		b, err := f.Write(nil, protocol.Version1)
+		b, err := f.Append(nil, protocol.Version1)
 		Expect(err).ToNot(HaveOccurred())
 		_, err = parser.ParseNext(bytes.NewReader(b), protocol.Encryption1RTT)
 		Expect(err).To(MatchError(&qerr.TransportError{
@@ -308,7 +308,7 @@ var _ = Describe("Frame parsing", func() {
 			StreamID:          0x1337,
 			MaximumStreamData: 0xdeadbeef,
 		}
-		b, err := f.Write(nil, protocol.Version1)
+		b, err := f.Append(nil, protocol.Version1)
 		Expect(err).ToNot(HaveOccurred())
 		_, err = parser.ParseNext(bytes.NewReader(b[:len(b)-2]), protocol.Encryption1RTT)
 		Expect(err).To(HaveOccurred())
@@ -344,7 +344,7 @@ var _ = Describe("Frame parsing", func() {
 		BeforeEach(func() {
 			framesSerialized = nil
 			for _, frame := range frames {
-				b, err := frame.Write(nil, protocol.Version1)
+				b, err := frame.Append(nil, protocol.Version1)
 				Expect(err).ToNot(HaveOccurred())
 				framesSerialized = append(framesSerialized, b)
 			}

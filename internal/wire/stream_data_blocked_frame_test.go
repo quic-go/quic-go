@@ -51,7 +51,7 @@ var _ = Describe("STREAM_DATA_BLOCKED frame", func() {
 				StreamID:          0xdecafbad,
 				MaximumStreamData: 0x1337,
 			}
-			b, err := f.Write(nil, protocol.Version1)
+			b, err := f.Append(nil, protocol.Version1)
 			Expect(err).ToNot(HaveOccurred())
 			expected := []byte{0x15}
 			expected = append(expected, encodeVarInt(uint64(f.StreamID))...)

@@ -38,7 +38,7 @@ func parseMaxStreamsFrame(r *bytes.Reader, _ protocol.VersionNumber) (*MaxStream
 	return f, nil
 }
 
-func (f *MaxStreamsFrame) Write(b []byte, _ protocol.VersionNumber) ([]byte, error) {
+func (f *MaxStreamsFrame) Append(b []byte, _ protocol.VersionNumber) ([]byte, error) {
 	switch f.Type {
 	case protocol.StreamTypeBidi:
 		b = append(b, 0x12)

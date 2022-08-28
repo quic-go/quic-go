@@ -33,7 +33,7 @@ func parseStreamDataBlockedFrame(r *bytes.Reader, _ protocol.VersionNumber) (*St
 	}, nil
 }
 
-func (f *StreamDataBlockedFrame) Write(b []byte, _ protocol.VersionNumber) ([]byte, error) {
+func (f *StreamDataBlockedFrame) Append(b []byte, _ protocol.VersionNumber) ([]byte, error) {
 	b = append(b, 0x15)
 	b = quicvarint.Append(b, uint64(f.StreamID))
 	b = quicvarint.Append(b, uint64(f.MaximumStreamData))

@@ -23,7 +23,7 @@ func packRawPayload(version protocol.VersionNumber, frames []wire.Frame) []byte 
 	var b []byte
 	for _, cf := range frames {
 		var err error
-		b, err = cf.Write(b, version)
+		b, err = cf.Append(b, version)
 		if err != nil {
 			panic(err)
 		}

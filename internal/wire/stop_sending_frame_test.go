@@ -44,7 +44,7 @@ var _ = Describe("STOP_SENDING frame", func() {
 				StreamID:  0xdeadbeefcafe,
 				ErrorCode: 0xdecafbad,
 			}
-			b, err := frame.Write(nil, protocol.Version1)
+			b, err := frame.Append(nil, protocol.Version1)
 			Expect(err).ToNot(HaveOccurred())
 			expected := []byte{0x5}
 			expected = append(expected, encodeVarInt(0xdeadbeefcafe)...)

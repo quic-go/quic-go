@@ -66,7 +66,7 @@ func (f *ConnectionCloseFrame) Length(protocol.VersionNumber) protocol.ByteCount
 	return length
 }
 
-func (f *ConnectionCloseFrame) Write(b []byte, _ protocol.VersionNumber) ([]byte, error) {
+func (f *ConnectionCloseFrame) Append(b []byte, _ protocol.VersionNumber) ([]byte, error) {
 	if f.IsApplicationError {
 		b = append(b, 0x1d)
 	} else {

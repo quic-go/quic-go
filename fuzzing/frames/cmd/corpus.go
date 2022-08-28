@@ -252,7 +252,7 @@ func getFrames() []wire.Frame {
 
 func main() {
 	for _, f := range getFrames() {
-		b, err := f.Write(nil, version)
+		b, err := f.Append(nil, version)
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -271,7 +271,7 @@ func main() {
 			}
 			f := frames[rand.Intn(len(frames))]
 			var err error
-			b, err = f.Write(b, version)
+			b, err = f.Append(b, version)
 			if err != nil {
 				log.Fatal(err)
 			}

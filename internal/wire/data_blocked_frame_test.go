@@ -38,7 +38,7 @@ var _ = Describe("DATA_BLOCKED frame", func() {
 	Context("when writing", func() {
 		It("writes a sample frame", func() {
 			frame := DataBlockedFrame{MaximumData: 0xdeadbeef}
-			b, err := frame.Write(nil, protocol.VersionWhatever)
+			b, err := frame.Append(nil, protocol.VersionWhatever)
 			Expect(err).ToNot(HaveOccurred())
 			expected := []byte{0x14}
 			expected = append(expected, encodeVarInt(0xdeadbeef)...)

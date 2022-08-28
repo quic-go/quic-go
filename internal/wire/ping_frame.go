@@ -16,7 +16,7 @@ func parsePingFrame(r *bytes.Reader, _ protocol.VersionNumber) (*PingFrame, erro
 	return &PingFrame{}, nil
 }
 
-func (f *PingFrame) Write(b []byte, _ protocol.VersionNumber) ([]byte, error) {
+func (f *PingFrame) Append(b []byte, _ protocol.VersionNumber) ([]byte, error) {
 	return append(b, 0x1), nil
 }
 

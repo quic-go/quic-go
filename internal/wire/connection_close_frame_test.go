@@ -88,7 +88,7 @@ var _ = Describe("CONNECTION_CLOSE Frame", func() {
 				ErrorCode: 0xbeef,
 				FrameType: 0x12345,
 			}
-			b, err := frame.Write(nil, protocol.Version1)
+			b, err := frame.Append(nil, protocol.Version1)
 			Expect(err).ToNot(HaveOccurred())
 			expected := []byte{0x1c}
 			expected = append(expected, encodeVarInt(0xbeef)...)
@@ -102,7 +102,7 @@ var _ = Describe("CONNECTION_CLOSE Frame", func() {
 				ErrorCode:    0xdead,
 				ReasonPhrase: "foobar",
 			}
-			b, err := frame.Write(nil, protocol.Version1)
+			b, err := frame.Append(nil, protocol.Version1)
 			Expect(err).ToNot(HaveOccurred())
 			expected := []byte{0x1c}
 			expected = append(expected, encodeVarInt(0xdead)...)
@@ -118,7 +118,7 @@ var _ = Describe("CONNECTION_CLOSE Frame", func() {
 				ErrorCode:          0xdead,
 				ReasonPhrase:       "foobar",
 			}
-			b, err := frame.Write(nil, protocol.Version1)
+			b, err := frame.Append(nil, protocol.Version1)
 			Expect(err).ToNot(HaveOccurred())
 			expected := []byte{0x1d}
 			expected = append(expected, encodeVarInt(0xdead)...)
@@ -133,7 +133,7 @@ var _ = Describe("CONNECTION_CLOSE Frame", func() {
 				FrameType:    0xdeadbeef,
 				ReasonPhrase: "foobar",
 			}
-			b, err := f.Write(nil, protocol.Version1)
+			b, err := f.Append(nil, protocol.Version1)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(b).To(HaveLen(int(f.Length(protocol.Version1))))
 		})
@@ -144,7 +144,7 @@ var _ = Describe("CONNECTION_CLOSE Frame", func() {
 				ErrorCode:          0xcafe,
 				ReasonPhrase:       "foobar",
 			}
-			b, err := f.Write(nil, protocol.Version1)
+			b, err := f.Append(nil, protocol.Version1)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(b).To(HaveLen(int(f.Length(protocol.Version1))))
 		})

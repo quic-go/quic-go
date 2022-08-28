@@ -834,7 +834,7 @@ func (p *packetPacker) appendPacket(buffer *packetBuffer, header *wire.ExtendedH
 
 	if payload.ack != nil {
 		var err error
-		raw, err = payload.ack.Write(raw, p.version)
+		raw, err = payload.ack.Append(raw, p.version)
 		if err != nil {
 			return nil, err
 		}
@@ -844,7 +844,7 @@ func (p *packetPacker) appendPacket(buffer *packetBuffer, header *wire.ExtendedH
 	}
 	for _, frame := range payload.frames {
 		var err error
-		raw, err = frame.Write(raw, p.version)
+		raw, err = frame.Append(raw, p.version)
 		if err != nil {
 			return nil, err
 		}

@@ -69,7 +69,7 @@ func Fuzz(data []byte) int {
 			}
 		}
 		lenBefore := len(b)
-		b, err := f.Write(b, version)
+		b, err := f.Append(b, version)
 		if err != nil {
 			panic(fmt.Sprintf("Error writing frame %#v: %s", f, err))
 		}

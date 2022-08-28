@@ -84,7 +84,7 @@ func parseStreamFrame(r *bytes.Reader, _ protocol.VersionNumber) (*StreamFrame, 
 }
 
 // Write writes a STREAM frame
-func (f *StreamFrame) Write(b []byte, _ protocol.VersionNumber) ([]byte, error) {
+func (f *StreamFrame) Append(b []byte, _ protocol.VersionNumber) ([]byte, error) {
 	if len(f.Data) == 0 && !f.Fin {
 		return nil, errors.New("StreamFrame: attempting to write empty frame without FIN")
 	}

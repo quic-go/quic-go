@@ -46,7 +46,7 @@ var _ = Describe("MAX_DATA frame", func() {
 			f := &MaxDataFrame{
 				MaximumData: 0xdeadbeefcafe,
 			}
-			b, err := f.Write(nil, protocol.Version1)
+			b, err := f.Append(nil, protocol.Version1)
 			Expect(err).ToNot(HaveOccurred())
 			expected := []byte{0x10}
 			expected = append(expected, encodeVarInt(0xdeadbeefcafe)...)

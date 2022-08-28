@@ -640,7 +640,7 @@ func (s *baseServer) sendError(remoteAddr net.Addr, hdr *wire.Header, sealer han
 	payloadOffset := buf.Len()
 
 	raw := buf.Bytes()
-	raw, err := ccf.Write(raw, hdr.Version)
+	raw, err := ccf.Append(raw, hdr.Version)
 	if err != nil {
 		return err
 	}

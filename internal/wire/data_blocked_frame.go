@@ -25,7 +25,7 @@ func parseDataBlockedFrame(r *bytes.Reader, _ protocol.VersionNumber) (*DataBloc
 	}, nil
 }
 
-func (f *DataBlockedFrame) Write(b []byte, version protocol.VersionNumber) ([]byte, error) {
+func (f *DataBlockedFrame) Append(b []byte, version protocol.VersionNumber) ([]byte, error) {
 	b = append(b, 0x14)
 	b = quicvarint.Append(b, uint64(f.MaximumData))
 	return b, nil

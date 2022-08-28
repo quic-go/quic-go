@@ -8,7 +8,7 @@ import (
 
 // A Frame in QUIC
 type Frame interface {
-	Write(b []byte, version protocol.VersionNumber) ([]byte, error)
+	Append(b []byte, version protocol.VersionNumber) ([]byte, error)
 	Length(version protocol.VersionNumber) protocol.ByteCount
 }
 

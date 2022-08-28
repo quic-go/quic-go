@@ -107,7 +107,7 @@ func parseAckFrame(r *bytes.Reader, ackDelayExponent uint8, _ protocol.VersionNu
 }
 
 // Write writes an ACK frame.
-func (f *AckFrame) Write(b []byte, _ protocol.VersionNumber) ([]byte, error) {
+func (f *AckFrame) Append(b []byte, _ protocol.VersionNumber) ([]byte, error) {
 	hasECN := f.ECT0 > 0 || f.ECT1 > 0 || f.ECNCE > 0
 	if hasECN {
 		b = append(b, 0b11)

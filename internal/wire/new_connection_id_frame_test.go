@@ -77,7 +77,7 @@ var _ = Describe("NEW_CONNECTION_ID frame", func() {
 				ConnectionID:        protocol.ConnectionID{1, 2, 3, 4, 5, 6},
 				StatelessResetToken: token,
 			}
-			b, err := frame.Write(nil, protocol.Version1)
+			b, err := frame.Append(nil, protocol.Version1)
 			Expect(err).ToNot(HaveOccurred())
 			expected := []byte{0x18}
 			expected = append(expected, encodeVarInt(0x1337)...)
@@ -96,7 +96,7 @@ var _ = Describe("NEW_CONNECTION_ID frame", func() {
 				ConnectionID:        protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8},
 				StatelessResetToken: token,
 			}
-			b, err := frame.Write(nil, protocol.Version1)
+			b, err := frame.Append(nil, protocol.Version1)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(b).To(HaveLen(int(frame.Length(protocol.Version1))))
 		})

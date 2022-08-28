@@ -561,7 +561,7 @@ var _ = Describe("Connection", func() {
 			}
 			Expect(hdr.Write(buf, conn.version)).To(Succeed())
 			unpacker.EXPECT().Unpack(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(func(*wire.Header, time.Time, []byte) (*unpackedPacket, error) {
-				b, err := (&wire.ConnectionCloseFrame{ErrorCode: uint64(qerr.StreamLimitError)}).Write(nil, conn.version)
+				b, err := (&wire.ConnectionCloseFrame{ErrorCode: uint64(qerr.StreamLimitError)}).Append(nil, conn.version)
 				Expect(err).ToNot(HaveOccurred())
 				return &unpackedPacket{
 					hdr:             hdr,
@@ -754,7 +754,7 @@ var _ = Describe("Connection", func() {
 				PacketNumberLen: protocol.PacketNumberLen1,
 			}
 			rcvTime := time.Now().Add(-10 * time.Second)
-			b, err := (&wire.PingFrame{}).Write(nil, conn.version)
+			b, err := (&wire.PingFrame{}).Append(nil, conn.version)
 			Expect(err).ToNot(HaveOccurred())
 			packet := getPacket(hdr, nil)
 			packet.ecn = protocol.ECT1

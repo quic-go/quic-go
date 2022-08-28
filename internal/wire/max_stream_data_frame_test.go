@@ -54,7 +54,7 @@ var _ = Describe("MAX_STREAM_DATA frame", func() {
 			expected := []byte{0x11}
 			expected = append(expected, encodeVarInt(0xdecafbad)...)
 			expected = append(expected, encodeVarInt(0xdeadbeefcafe42)...)
-			b, err := f.Write(nil, protocol.Version1)
+			b, err := f.Append(nil, protocol.Version1)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(b).To(Equal(expected))
 		})

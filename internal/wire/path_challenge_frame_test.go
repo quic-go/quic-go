@@ -34,7 +34,7 @@ var _ = Describe("PATH_CHALLENGE frame", func() {
 	Context("when writing", func() {
 		It("writes a sample frame", func() {
 			frame := PathChallengeFrame{Data: [8]byte{0xde, 0xad, 0xbe, 0xef, 0xca, 0xfe, 0x13, 0x37}}
-			b, err := frame.Write(nil, protocol.VersionWhatever)
+			b, err := frame.Append(nil, protocol.VersionWhatever)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(b).To(Equal([]byte{0x1a, 0xde, 0xad, 0xbe, 0xef, 0xca, 0xfe, 0x13, 0x37}))
 		})

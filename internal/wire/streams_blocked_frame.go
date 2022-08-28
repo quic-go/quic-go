@@ -38,7 +38,7 @@ func parseStreamsBlockedFrame(r *bytes.Reader, _ protocol.VersionNumber) (*Strea
 	return f, nil
 }
 
-func (f *StreamsBlockedFrame) Write(b []byte, _ protocol.VersionNumber) ([]byte, error) {
+func (f *StreamsBlockedFrame) Append(b []byte, _ protocol.VersionNumber) ([]byte, error) {
 	switch f.Type {
 	case protocol.StreamTypeBidi:
 		b = append(b, 0x16)

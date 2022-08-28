@@ -45,7 +45,7 @@ var _ = Describe("CRYPTO frame", func() {
 				Offset: 0x123456,
 				Data:   []byte("foobar"),
 			}
-			b, err := f.Write(nil, protocol.Version1)
+			b, err := f.Append(nil, protocol.Version1)
 			Expect(err).ToNot(HaveOccurred())
 			expected := []byte{0x6}
 			expected = append(expected, encodeVarInt(0x123456)...) // offset
@@ -70,13 +70,13 @@ var _ = Describe("CRYPTO frame", func() {
 				if maxDataLen == 0 { // 0 means that no valid CRYTPO frame can be written
 					// check that writing a minimal size CRYPTO frame (i.e. with 1 byte data) is actually larger than the desired size
 					f.Data = []byte{0}
-					b, err := f.Write(nil, protocol.Version1)
+					b, err := f.Append(nil, protocol.Version1)
 					Expect(err).ToNot(HaveOccurred())
 					Expect(len(b)).To(BeNumerically(">", i))
 					continue
 				}
 				f.Data = data[:int(maxDataLen)]
-				b, err := f.Write(nil, protocol.Version1)
+				b, err := f.Append(nil, protocol.Version1)
 				Expect(err).ToNot(HaveOccurred())
 				// There's *one* pathological case, where a data length of x can be encoded into 1 byte
 				// but a data lengths of x+1 needs 2 bytes
