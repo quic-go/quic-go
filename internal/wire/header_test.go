@@ -111,6 +111,24 @@ var _ = Describe("Header Parsing", func() {
 			Expect(Is0RTTPacket(append(zeroRTTHeader, []byte("foobar")...))).To(BeTrue())
 		})
 	})
+	Context("parsing the version", func() {
+		It("parses the version", func() {
+			b := []byte{0x80, 0xde, 0xad, 0xbe, 0xef}
+			v, err := ParseVersion(b)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(v).To(Equal(protocol.VersionNumber(0xdeadbeef)))
+		})
+
+		It("errors with EOF", func() {
+			b := []byte{0x80, 0xde, 0xad, 0xbe, 0xef}
+			_, err := ParseVersion(b)
+			Expect(err).ToNot(HaveOccurred())
+			for i := range b {
+				_, err := ParseVersion(b[:i])
+				Expect(err).To(MatchError(io.EOF))
+			}
+		})
+	})
 
 	Context("Identifying Version Negotiation Packets", func() {
 		It("identifies version negotiation packets", func() {

@@ -40,6 +40,15 @@ func IsLongHeaderPacket(firstByte byte) bool {
 	return firstByte&0x80 > 0
 }
 
+// ParseVersion parses the QUIC version.
+// It should only be called for Long Header packets (Short Header packets don't contain a version number).
+func ParseVersion(data []byte) (protocol.VersionNumber, error) {
+	if len(data) < 5 {
+		return 0, io.EOF
+	}
+	return protocol.VersionNumber(binary.BigEndian.Uint32(data[1:5])), nil
+}
+
 // IsVersionNegotiationPacket says if this is a version negotiation packet
 func IsVersionNegotiationPacket(b []byte) bool {
 	if len(b) < 5 {
