@@ -19,6 +19,8 @@ type (
 	ByteCount = protocol.ByteCount
 	// A ConnectionID is a QUIC Connection ID.
 	ConnectionID = protocol.ConnectionID
+	// An ArbitraryLenConnectionID is a QUIC Connection ID that can be up to 255 bytes long.
+	ArbitraryLenConnectionID = protocol.ArbitraryLenConnectionID
 	// The EncryptionLevel is the encryption level of a packet.
 	EncryptionLevel = protocol.EncryptionLevel
 	// The KeyPhase is the key phase of the 1-RTT keys.
@@ -99,6 +101,7 @@ type Tracer interface {
 	TracerForConnection(ctx context.Context, p Perspective, odcid ConnectionID) ConnectionTracer
 
 	SentPacket(net.Addr, *Header, ByteCount, []Frame)
+	SentVersionNegotiationPacket(_ net.Addr, dest, src ArbitraryLenConnectionID, _ []VersionNumber)
 	DroppedPacket(net.Addr, PacketType, ByteCount, PacketDropReason)
 }
 

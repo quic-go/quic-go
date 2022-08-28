@@ -81,6 +81,16 @@ var _ = Describe("Tracing", func() {
 				tracer.SentPacket(remote, hdr, 1024, []Frame{f})
 			})
 
+			It("traces the PacketSent event", func() {
+				remote := &net.UDPAddr{IP: net.IPv4(4, 3, 2, 1)}
+				src := ArbitraryLenConnectionID{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13}
+				dest := ArbitraryLenConnectionID{1, 2, 3, 4}
+				versions := []VersionNumber{1, 2, 3}
+				tr1.EXPECT().SentVersionNegotiationPacket(remote, dest, src, versions)
+				tr2.EXPECT().SentVersionNegotiationPacket(remote, dest, src, versions)
+				tracer.SentVersionNegotiationPacket(remote, dest, src, versions)
+			})
+
 			It("traces the PacketDropped event", func() {
 				remote := &net.UDPAddr{IP: net.IPv4(4, 3, 2, 1)}
 				tr1.EXPECT().DroppedPacket(remote, PacketTypeRetry, ByteCount(1024), PacketDropDuplicate)

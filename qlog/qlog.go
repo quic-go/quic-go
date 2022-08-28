@@ -50,6 +50,8 @@ func init() {
 const eventChanSize = 50
 
 type tracer struct {
+	logging.NullTracer
+
 	getLogWriter func(p logging.Perspective, connectionID []byte) io.WriteCloser
 }
 
@@ -65,10 +67,6 @@ func (t *tracer) TracerForConnection(_ context.Context, p logging.Perspective, o
 		return NewConnectionTracer(w, p, odcid)
 	}
 	return nil
-}
-
-func (t *tracer) SentPacket(net.Addr, *logging.Header, protocol.ByteCount, []logging.Frame) {}
-func (t *tracer) DroppedPacket(net.Addr, logging.PacketType, protocol.ByteCount, logging.PacketDropReason) {
 }
 
 type connectionTracer struct {

@@ -39,6 +39,12 @@ func (m *tracerMultiplexer) SentPacket(remote net.Addr, hdr *Header, size ByteCo
 	}
 }
 
+func (m *tracerMultiplexer) SentVersionNegotiationPacket(remote net.Addr, dest, src ArbitraryLenConnectionID, versions []VersionNumber) {
+	for _, t := range m.tracers {
+		t.SentVersionNegotiationPacket(remote, dest, src, versions)
+	}
+}
+
 func (m *tracerMultiplexer) DroppedPacket(remote net.Addr, typ PacketType, size ByteCount, reason PacketDropReason) {
 	for _, t := range m.tracers {
 		t.DroppedPacket(remote, typ, size, reason)

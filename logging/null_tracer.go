@@ -10,15 +10,21 @@ import (
 // It is useful for embedding.
 type NullTracer struct{}
 
+var _ Tracer = &NullTracer{}
+
 func (n NullTracer) TracerForConnection(context.Context, Perspective, ConnectionID) ConnectionTracer {
 	return NullConnectionTracer{}
 }
-func (n NullTracer) SentPacket(net.Addr, *Header, ByteCount, []Frame)                {}
+func (n NullTracer) SentPacket(net.Addr, *Header, ByteCount, []Frame) {}
+func (n NullTracer) SentVersionNegotiationPacket(_ net.Addr, dest, src ArbitraryLenConnectionID, _ []VersionNumber) {
+}
 func (n NullTracer) DroppedPacket(net.Addr, PacketType, ByteCount, PacketDropReason) {}
 
 // The NullConnectionTracer is a ConnectionTracer that does nothing.
 // It is useful for embedding.
 type NullConnectionTracer struct{}
+
+var _ ConnectionTracer = &NullConnectionTracer{}
 
 func (n NullConnectionTracer) StartedConnection(local, remote net.Addr, srcConnID, destConnID ConnectionID) {
 }
