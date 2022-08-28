@@ -37,13 +37,12 @@ var _ = Describe("DATA_BLOCKED frame", func() {
 
 	Context("when writing", func() {
 		It("writes a sample frame", func() {
-			b := &bytes.Buffer{}
 			frame := DataBlockedFrame{MaximumData: 0xdeadbeef}
-			err := frame.Write(b, protocol.VersionWhatever)
+			b, err := frame.Write(nil, protocol.VersionWhatever)
 			Expect(err).ToNot(HaveOccurred())
 			expected := []byte{0x14}
 			expected = append(expected, encodeVarInt(0xdeadbeef)...)
-			Expect(b.Bytes()).To(Equal(expected))
+			Expect(b).To(Equal(expected))
 		})
 
 		It("has the correct min length", func() {

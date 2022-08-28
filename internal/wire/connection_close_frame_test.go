@@ -84,70 +84,69 @@ var _ = Describe("CONNECTION_CLOSE Frame", func() {
 
 	Context("when writing", func() {
 		It("writes a frame without a reason phrase", func() {
-			b := &bytes.Buffer{}
 			frame := &ConnectionCloseFrame{
 				ErrorCode: 0xbeef,
 				FrameType: 0x12345,
 			}
-			Expect(frame.Write(b, protocol.Version1)).To(Succeed())
+			b, err := frame.Write(nil, protocol.Version1)
+			Expect(err).ToNot(HaveOccurred())
 			expected := []byte{0x1c}
 			expected = append(expected, encodeVarInt(0xbeef)...)
 			expected = append(expected, encodeVarInt(0x12345)...) // frame type
 			expected = append(expected, encodeVarInt(0)...)       // reason phrase length
-			Expect(b.Bytes()).To(Equal(expected))
+			Expect(b).To(Equal(expected))
 		})
 
 		It("writes a frame with a reason phrase", func() {
-			b := &bytes.Buffer{}
 			frame := &ConnectionCloseFrame{
 				ErrorCode:    0xdead,
 				ReasonPhrase: "foobar",
 			}
-			Expect(frame.Write(b, protocol.Version1)).To(Succeed())
+			b, err := frame.Write(nil, protocol.Version1)
+			Expect(err).ToNot(HaveOccurred())
 			expected := []byte{0x1c}
 			expected = append(expected, encodeVarInt(0xdead)...)
 			expected = append(expected, encodeVarInt(0)...) // frame type
 			expected = append(expected, encodeVarInt(6)...) // reason phrase length
 			expected = append(expected, []byte("foobar")...)
-			Expect(b.Bytes()).To(Equal(expected))
+			Expect(b).To(Equal(expected))
 		})
 
 		It("writes a frame with an application error code", func() {
-			b := &bytes.Buffer{}
 			frame := &ConnectionCloseFrame{
 				IsApplicationError: true,
 				ErrorCode:          0xdead,
 				ReasonPhrase:       "foobar",
 			}
-			Expect(frame.Write(b, protocol.Version1)).To(Succeed())
+			b, err := frame.Write(nil, protocol.Version1)
+			Expect(err).ToNot(HaveOccurred())
 			expected := []byte{0x1d}
 			expected = append(expected, encodeVarInt(0xdead)...)
 			expected = append(expected, encodeVarInt(6)...) // reason phrase length
 			expected = append(expected, []byte("foobar")...)
-			Expect(b.Bytes()).To(Equal(expected))
+			Expect(b).To(Equal(expected))
 		})
 
 		It("has proper min length, for a frame containing a QUIC error code", func() {
-			b := &bytes.Buffer{}
 			f := &ConnectionCloseFrame{
 				ErrorCode:    0xcafe,
 				FrameType:    0xdeadbeef,
 				ReasonPhrase: "foobar",
 			}
-			Expect(f.Write(b, protocol.Version1)).To(Succeed())
-			Expect(f.Length(protocol.Version1)).To(Equal(protocol.ByteCount(b.Len())))
+			b, err := f.Write(nil, protocol.Version1)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(b).To(HaveLen(int(f.Length(protocol.Version1))))
 		})
 
 		It("has proper min length, for a frame containing an application error code", func() {
-			b := &bytes.Buffer{}
 			f := &ConnectionCloseFrame{
 				IsApplicationError: true,
 				ErrorCode:          0xcafe,
 				ReasonPhrase:       "foobar",
 			}
-			err := f.Write(b, protocol.Version1)
+			b, err := f.Write(nil, protocol.Version1)
 			Expect(err).ToNot(HaveOccurred())
-			Expect(f.Length(protocol.Version1)).To(Equal(protocol.ByteCount(b.Len())))
+			Expect(b).To(HaveLen(int(f.Length(protocol.Version1))))
 		})
 	})
 })

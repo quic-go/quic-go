@@ -830,35 +830,38 @@ func (p *packetPacker) appendPacket(buffer *packetBuffer, header *wire.ExtendedH
 		return nil, err
 	}
 	payloadOffset := buf.Len()
+	raw := buffer.Data[:payloadOffset]
 
 	if payload.ack != nil {
-		if err := payload.ack.Write(buf, p.version); err != nil {
+		var err error
+		raw, err = payload.ack.Write(raw, p.version)
+		if err != nil {
 			return nil, err
 		}
 	}
 	if paddingLen > 0 {
-		buf.Write(make([]byte, paddingLen))
+		raw = append(raw, make([]byte, paddingLen)...)
 	}
 	for _, frame := range payload.frames {
-		if err := frame.Write(buf, p.version); err != nil {
+		var err error
+		raw, err = frame.Write(raw, p.version)
+		if err != nil {
 			return nil, err
 		}
 	}
 
-	if payloadSize := protocol.ByteCount(buf.Len()-payloadOffset) - paddingLen; payloadSize != payload.length {
+	if payloadSize := protocol.ByteCount(len(raw)-payloadOffset) - paddingLen; payloadSize != payload.length {
 		return nil, fmt.Errorf("PacketPacker BUG: payload size inconsistent (expected %d, got %d bytes)", payload.length, payloadSize)
 	}
 	if !isMTUProbePacket {
-		if size := protocol.ByteCount(buf.Len() + sealer.Overhead()); size > p.maxPacketSize {
+		if size := protocol.ByteCount(len(raw) + sealer.Overhead()); size > p.maxPacketSize {
 			return nil, fmt.Errorf("PacketPacker BUG: packet too large (%d bytes, allowed %d bytes)", size, p.maxPacketSize)
 		}
 	}
 
-	raw := buffer.Data
 	// encrypt the packet
-	raw = raw[:buf.Len()]
 	_ = sealer.Seal(raw[payloadOffset:payloadOffset], raw[payloadOffset:], header.PacketNumber, raw[hdrOffset:payloadOffset])
-	raw = raw[0 : buf.Len()+sealer.Overhead()]
+	raw = raw[0 : len(raw)+sealer.Overhead()]
 	// apply header protection
 	pnOffset := payloadOffset - int(header.PacketNumberLen)
 	sealer.EncryptHeader(raw[pnOffset+4:pnOffset+4+16], &raw[hdrOffset], raw[pnOffset:payloadOffset])

@@ -44,12 +44,12 @@ var _ = Describe("STOP_SENDING frame", func() {
 				StreamID:  0xdeadbeefcafe,
 				ErrorCode: 0xdecafbad,
 			}
-			buf := &bytes.Buffer{}
-			Expect(frame.Write(buf, protocol.Version1)).To(Succeed())
+			b, err := frame.Write(nil, protocol.Version1)
+			Expect(err).ToNot(HaveOccurred())
 			expected := []byte{0x5}
 			expected = append(expected, encodeVarInt(0xdeadbeefcafe)...)
 			expected = append(expected, encodeVarInt(0xdecafbad)...)
-			Expect(buf.Bytes()).To(Equal(expected))
+			Expect(b).To(Equal(expected))
 		})
 
 		It("has the correct min length", func() {

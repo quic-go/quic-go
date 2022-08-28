@@ -38,7 +38,7 @@ var _ = Describe("MAX_STREAM_DATA frame", func() {
 	})
 
 	Context("writing", func() {
-		It("has proper min length", func() {
+		It("has proper length", func() {
 			f := &MaxStreamDataFrame{
 				StreamID:          0x1337,
 				MaximumStreamData: 0xdeadbeef,
@@ -47,7 +47,6 @@ var _ = Describe("MAX_STREAM_DATA frame", func() {
 		})
 
 		It("writes a sample frame", func() {
-			b := &bytes.Buffer{}
 			f := &MaxStreamDataFrame{
 				StreamID:          0xdecafbad,
 				MaximumStreamData: 0xdeadbeefcafe42,
@@ -55,9 +54,9 @@ var _ = Describe("MAX_STREAM_DATA frame", func() {
 			expected := []byte{0x11}
 			expected = append(expected, encodeVarInt(0xdecafbad)...)
 			expected = append(expected, encodeVarInt(0xdeadbeefcafe42)...)
-			err := f.Write(b, protocol.Version1)
+			b, err := f.Write(nil, protocol.Version1)
 			Expect(err).ToNot(HaveOccurred())
-			Expect(b.Bytes()).To(Equal(expected))
+			Expect(b).To(Equal(expected))
 		})
 	})
 })

@@ -561,11 +561,11 @@ var _ = Describe("Connection", func() {
 			}
 			Expect(hdr.Write(buf, conn.version)).To(Succeed())
 			unpacker.EXPECT().Unpack(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(func(*wire.Header, time.Time, []byte) (*unpackedPacket, error) {
-				buf := &bytes.Buffer{}
-				Expect((&wire.ConnectionCloseFrame{ErrorCode: uint64(qerr.StreamLimitError)}).Write(buf, conn.version)).To(Succeed())
+				b, err := (&wire.ConnectionCloseFrame{ErrorCode: uint64(qerr.StreamLimitError)}).Write(nil, conn.version)
+				Expect(err).ToNot(HaveOccurred())
 				return &unpackedPacket{
 					hdr:             hdr,
-					data:            buf.Bytes(),
+					data:            b,
 					encryptionLevel: protocol.Encryption1RTT,
 				}, nil
 			})
@@ -754,15 +754,15 @@ var _ = Describe("Connection", func() {
 				PacketNumberLen: protocol.PacketNumberLen1,
 			}
 			rcvTime := time.Now().Add(-10 * time.Second)
-			buf := &bytes.Buffer{}
-			Expect((&wire.PingFrame{}).Write(buf, conn.version)).To(Succeed())
+			b, err := (&wire.PingFrame{}).Write(nil, conn.version)
+			Expect(err).ToNot(HaveOccurred())
 			packet := getPacket(hdr, nil)
 			packet.ecn = protocol.ECT1
 			unpacker.EXPECT().Unpack(gomock.Any(), rcvTime, gomock.Any()).Return(&unpackedPacket{
 				packetNumber:    0x1337,
 				encryptionLevel: protocol.Encryption1RTT,
 				hdr:             hdr,
-				data:            buf.Bytes(),
+				data:            b,
 			}, nil)
 			rph := mockackhandler.NewMockReceivedPacketHandler(mockCtrl)
 			gomock.InOrder(

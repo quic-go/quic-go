@@ -36,18 +36,18 @@ var _ = Describe("NEW_CONNECTION_ID frame", func() {
 	Context("when writing", func() {
 		It("writes a sample frame", func() {
 			frame := &RetireConnectionIDFrame{SequenceNumber: 0x1337}
-			b := &bytes.Buffer{}
-			Expect(frame.Write(b, protocol.Version1)).To(Succeed())
+			b, err := frame.Write(nil, protocol.Version1)
+			Expect(err).ToNot(HaveOccurred())
 			expected := []byte{0x19}
 			expected = append(expected, encodeVarInt(0x1337)...)
-			Expect(b.Bytes()).To(Equal(expected))
+			Expect(b).To(Equal(expected))
 		})
 
 		It("has the correct length", func() {
 			frame := &RetireConnectionIDFrame{SequenceNumber: 0xdecafbad}
-			b := &bytes.Buffer{}
-			Expect(frame.Write(b, protocol.Version1)).To(Succeed())
-			Expect(frame.Length(protocol.Version1)).To(BeEquivalentTo(b.Len()))
+			b, err := frame.Write(nil, protocol.Version1)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(b).To(HaveLen(int(frame.Length(protocol.Version1))))
 		})
 	})
 })

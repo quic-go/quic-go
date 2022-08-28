@@ -35,7 +35,7 @@ var _ = Describe("MAX_DATA frame", func() {
 	})
 
 	Context("writing", func() {
-		It("has proper min length", func() {
+		It("has proper length", func() {
 			f := &MaxDataFrame{
 				MaximumData: 0xdeadbeef,
 			}
@@ -43,15 +43,14 @@ var _ = Describe("MAX_DATA frame", func() {
 		})
 
 		It("writes a MAX_DATA frame", func() {
-			b := &bytes.Buffer{}
 			f := &MaxDataFrame{
 				MaximumData: 0xdeadbeefcafe,
 			}
-			err := f.Write(b, protocol.Version1)
+			b, err := f.Write(nil, protocol.Version1)
 			Expect(err).ToNot(HaveOccurred())
 			expected := []byte{0x10}
 			expected = append(expected, encodeVarInt(0xdeadbeefcafe)...)
-			Expect(b.Bytes()).To(Equal(expected))
+			Expect(b).To(Equal(expected))
 		})
 	})
 })
