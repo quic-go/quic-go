@@ -23,7 +23,7 @@ var _ = Describe("Packet Unpacker", func() {
 	var (
 		unpacker *packetUnpacker
 		cs       *mocks.MockCryptoSetup
-		connID   = protocol.ConnectionID{0xde, 0xad, 0xbe, 0xef}
+		connID   = protocol.ParseConnectionID([]byte{0xde, 0xad, 0xbe, 0xef})
 		payload  = []byte("Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.")
 	)
 

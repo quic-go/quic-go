@@ -43,13 +43,13 @@ func main() {
 			ActiveConnectionIDLimit:        getRandomValue(),
 		}
 		if rand.Int()%2 == 0 {
-			tp.OriginalDestinationConnectionID = protocol.ConnectionID(getRandomData(rand.Intn(50)))
+			tp.OriginalDestinationConnectionID = protocol.ParseConnectionID(getRandomData(rand.Intn(21)))
 		}
 		if rand.Int()%2 == 0 {
-			tp.InitialSourceConnectionID = protocol.ConnectionID(getRandomData(rand.Intn(50)))
+			tp.InitialSourceConnectionID = protocol.ParseConnectionID(getRandomData(rand.Intn(21)))
 		}
 		if rand.Int()%2 == 0 {
-			connID := protocol.ConnectionID(getRandomData(rand.Intn(50)))
+			connID := protocol.ParseConnectionID(getRandomData(rand.Intn(21)))
 			tp.RetrySourceConnectionID = &connID
 		}
 		if rand.Int()%2 == 0 {
@@ -65,7 +65,7 @@ func main() {
 				IPv4Port:            uint16(rand.Int()),
 				IPv6:                net.IP(getRandomData(16)),
 				IPv6Port:            uint16(rand.Int()),
-				ConnectionID:        protocol.ConnectionID(getRandomData(rand.Intn(25))),
+				ConnectionID:        protocol.ParseConnectionID(getRandomData(rand.Intn(21))),
 				StatelessResetToken: token,
 			}
 		}

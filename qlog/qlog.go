@@ -108,8 +108,8 @@ func (t *connectionTracer) run() {
 		trace: trace{
 			VantagePoint: vantagePoint{Type: t.perspective},
 			CommonFields: commonFields{
-				ODCID:         connectionID(t.odcid),
-				GroupID:       connectionID(t.odcid),
+				ODCID:         t.odcid,
+				GroupID:       t.odcid,
 				ReferenceTime: t.referenceTime,
 			},
 		},

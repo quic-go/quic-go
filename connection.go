@@ -261,7 +261,7 @@ var newConnection = func(
 		logger:                logger,
 		version:               v,
 	}
-	if origDestConnID != nil {
+	if origDestConnID.Len() > 0 {
 		s.logID = origDestConnID.String()
 	} else {
 		s.logID = destConnID.String()
@@ -274,7 +274,7 @@ var newConnection = func(
 	)
 	s.connIDGenerator = newConnIDGenerator(
 		srcConnID,
-		clientDestConnID,
+		&clientDestConnID,
 		func(connID protocol.ConnectionID) { runner.Add(connID, s) },
 		runner.GetStatelessResetToken,
 		runner.Remove,

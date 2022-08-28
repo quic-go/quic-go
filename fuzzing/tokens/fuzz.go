@@ -73,7 +73,7 @@ func newToken(tg *handshake.TokenGenerator, data []byte) int {
 	if token.SentTime.Before(start) || token.SentTime.After(time.Now()) {
 		panic("incorrect send time")
 	}
-	if token.OriginalDestConnectionID != nil || token.RetrySrcConnectionID != nil {
+	if token.OriginalDestConnectionID.Len() > 0 || token.RetrySrcConnectionID.Len() > 0 {
 		panic("didn't expect connection IDs")
 	}
 	return 1
@@ -89,12 +89,12 @@ func newRetryToken(tg *handshake.TokenGenerator, data []byte) int {
 	if len(data) < origDestConnIDLen {
 		return -1
 	}
-	origDestConnID := protocol.ConnectionID(data[:origDestConnIDLen])
+	origDestConnID := protocol.ParseConnectionID(data[:origDestConnIDLen])
 	data = data[origDestConnIDLen:]
 	if len(data) < retrySrcConnIDLen {
 		return -1
 	}
-	retrySrcConnID := protocol.ConnectionID(data[:retrySrcConnIDLen])
+	retrySrcConnID := protocol.ParseConnectionID(data[:retrySrcConnIDLen])
 	data = data[retrySrcConnIDLen:]
 
 	if len(data) < 1 {

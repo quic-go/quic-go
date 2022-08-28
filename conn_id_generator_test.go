@@ -20,11 +20,12 @@ var _ = Describe("Connection ID Generator", func() {
 		queuedFrames       []wire.Frame
 		g                  *connIDGenerator
 	)
-	initialConnID := protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7}
-	initialClientDestConnID := protocol.ConnectionID{0xa, 0xb, 0xc, 0xd, 0xe}
+	initialConnID := protocol.ParseConnectionID([]byte{1, 2, 3, 4, 5, 6, 7})
+	initialClientDestConnID := protocol.ParseConnectionID([]byte{0xa, 0xb, 0xc, 0xd, 0xe})
 
 	connIDToToken := func(c protocol.ConnectionID) protocol.StatelessResetToken {
-		return protocol.StatelessResetToken{c[0], c[0], c[0], c[0], c[0], c[0], c[0], c[0], c[0], c[0], c[0], c[0], c[0], c[0], c[0], c[0]}
+		b := c.Bytes()[0]
+		return protocol.StatelessResetToken{b, b, b, b, b, b, b, b, b, b, b, b, b, b, b, b}
 	}
 
 	BeforeEach(func() {
@@ -35,7 +36,7 @@ var _ = Describe("Connection ID Generator", func() {
 		replacedWithClosed = nil
 		g = newConnIDGenerator(
 			initialConnID,
-			initialClientDestConnID,
+			&initialClientDestConnID,
 			func(c protocol.ConnectionID) { addedConnIDs = append(addedConnIDs, c) },
 			connIDToToken,
 			func(c protocol.ConnectionID) { removedConnIDs = append(removedConnIDs, c) },

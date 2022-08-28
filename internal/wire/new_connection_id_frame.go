@@ -38,9 +38,6 @@ func parseNewConnectionIDFrame(r *bytes.Reader, _ protocol.VersionNumber) (*NewC
 	if err != nil {
 		return nil, err
 	}
-	if connIDLen > protocol.MaxConnIDLen {
-		return nil, fmt.Errorf("invalid connection ID length: %d", connIDLen)
-	}
 	connID, err := protocol.ReadConnectionID(r, int(connIDLen))
 	if err != nil {
 		return nil, err

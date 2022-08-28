@@ -71,7 +71,7 @@ var _ = Describe("Server", func() {
 		hdr := &wire.Header{
 			IsLongHeader:     true,
 			Type:             protocol.PacketTypeInitial,
-			SrcConnectionID:  protocol.ConnectionID{5, 4, 3, 2, 1},
+			SrcConnectionID:  protocol.ParseConnectionID([]byte{5, 4, 3, 2, 1}),
 			DestConnectionID: destConnID,
 			Version:          protocol.VersionTLS,
 		}
@@ -82,11 +82,11 @@ var _ = Describe("Server", func() {
 	}
 
 	getInitialWithRandomDestConnID := func() *receivedPacket {
-		destConnID := make([]byte, 10)
-		_, err := rand.Read(destConnID)
+		b := make([]byte, 10)
+		_, err := rand.Read(b)
 		Expect(err).ToNot(HaveOccurred())
 
-		return getInitial(destConnID)
+		return getInitial(protocol.ParseConnectionID(b))
 	}
 
 	parseHeader := func(data []byte) *wire.Header {
@@ -204,7 +204,7 @@ var _ = Describe("Server", func() {
 				p := getPacket(&wire.Header{
 					IsLongHeader:     true,
 					Type:             protocol.PacketTypeInitial,
-					DestConnectionID: protocol.ConnectionID{1, 2, 3, 4},
+					DestConnectionID: protocol.ParseConnectionID([]byte{1, 2, 3, 4}),
 					Version:          serv.config.Versions[0],
 				}, nil)
 				tracer.EXPECT().DroppedPacket(p.remoteAddr, logging.PacketTypeInitial, p.Size(), logging.PacketDropUnexpectedPacket)
@@ -217,7 +217,7 @@ var _ = Describe("Server", func() {
 				p := getPacket(&wire.Header{
 					IsLongHeader:     true,
 					Type:             protocol.PacketTypeInitial,
-					DestConnectionID: protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8},
+					DestConnectionID: protocol.ParseConnectionID([]byte{1, 2, 3, 4, 5, 6, 7, 8}),
 					Version:          serv.config.Versions[0],
 				}, make([]byte, protocol.MinInitialPacketSize-100),
 				)
@@ -244,15 +244,15 @@ var _ = Describe("Server", func() {
 				raddr := &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 1337}
 				retryToken, err := serv.tokenGenerator.NewRetryToken(
 					raddr,
-					protocol.ConnectionID{0xde, 0xad, 0xc0, 0xde},
-					protocol.ConnectionID{0xde, 0xca, 0xfb, 0xad},
+					protocol.ParseConnectionID([]byte{0xde, 0xad, 0xc0, 0xde}),
+					protocol.ParseConnectionID([]byte{0xde, 0xca, 0xfb, 0xad}),
 				)
 				Expect(err).ToNot(HaveOccurred())
 				hdr := &wire.Header{
 					IsLongHeader:     true,
 					Type:             protocol.PacketTypeInitial,
-					SrcConnectionID:  protocol.ConnectionID{5, 4, 3, 2, 1},
-					DestConnectionID: protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8, 9, 10},
+					SrcConnectionID:  protocol.ParseConnectionID([]byte{5, 4, 3, 2, 1}),
+					DestConnectionID: protocol.ParseConnectionID([]byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}),
 					Version:          protocol.VersionTLS,
 					Token:            retryToken,
 				}
@@ -263,7 +263,7 @@ var _ = Describe("Server", func() {
 				rand.Read(token[:])
 
 				var newConnID protocol.ConnectionID
-				phm.EXPECT().AddWithConnID(protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}, gomock.Any(), gomock.Any()).DoAndReturn(func(_, c protocol.ConnectionID, fn func() packetHandler) bool {
+				phm.EXPECT().AddWithConnID(protocol.ParseConnectionID([]byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}), gomock.Any(), gomock.Any()).DoAndReturn(func(_, c protocol.ConnectionID, fn func() packetHandler) bool {
 					newConnID = c
 					phm.EXPECT().GetStatelessResetToken(gomock.Any()).DoAndReturn(func(c protocol.ConnectionID) protocol.StatelessResetToken {
 						newConnID = c
@@ -272,7 +272,7 @@ var _ = Describe("Server", func() {
 					fn()
 					return true
 				})
-				tracer.EXPECT().TracerForConnection(gomock.Any(), protocol.PerspectiveServer, protocol.ConnectionID{0xde, 0xad, 0xc0, 0xde})
+				tracer.EXPECT().TracerForConnection(gomock.Any(), protocol.PerspectiveServer, protocol.ParseConnectionID([]byte{0xde, 0xad, 0xc0, 0xde}))
 				conn := NewMockQuicConn(mockCtrl)
 				serv.newConn = func(
 					_ sendConn,
@@ -294,8 +294,8 @@ var _ = Describe("Server", func() {
 					_ protocol.VersionNumber,
 				) quicConn {
 					Expect(enable0RTT).To(BeFalse())
-					Expect(origDestConnID).To(Equal(protocol.ConnectionID{0xde, 0xad, 0xc0, 0xde}))
-					Expect(retrySrcConnID).To(Equal(&protocol.ConnectionID{0xde, 0xca, 0xfb, 0xad}))
+					Expect(origDestConnID).To(Equal(protocol.ParseConnectionID([]byte{0xde, 0xad, 0xc0, 0xde})))
+					Expect(*retrySrcConnID).To(Equal(protocol.ParseConnectionID([]byte{0xde, 0xca, 0xfb, 0xad})))
 					Expect(clientDestConnID).To(Equal(hdr.DestConnectionID))
 					Expect(destConnID).To(Equal(hdr.SrcConnectionID))
 					// make sure we're using a server-generated connection ID
@@ -325,8 +325,8 @@ var _ = Describe("Server", func() {
 			})
 
 			It("sends a Version Negotiation Packet for unsupported versions", func() {
-				srcConnID := protocol.ConnectionID{1, 2, 3, 4, 5}
-				destConnID := protocol.ConnectionID{1, 2, 3, 4, 5, 6}
+				srcConnID := protocol.ParseConnectionID([]byte{1, 2, 3, 4, 5})
+				destConnID := protocol.ParseConnectionID([]byte{1, 2, 3, 4, 5, 6})
 				packet := getPacket(&wire.Header{
 					IsLongHeader:     true,
 					Type:             protocol.PacketTypeHandshake,
@@ -337,8 +337,8 @@ var _ = Describe("Server", func() {
 				raddr := &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 1337}
 				packet.remoteAddr = raddr
 				tracer.EXPECT().SentVersionNegotiationPacket(packet.remoteAddr, gomock.Any(), gomock.Any(), gomock.Any()).Do(func(_ net.Addr, src, dest protocol.ArbitraryLenConnectionID, _ []protocol.VersionNumber) {
-					Expect(src).To(BeEquivalentTo(destConnID))
-					Expect(dest).To(BeEquivalentTo(srcConnID))
+					Expect(src).To(Equal(protocol.ArbitraryLenConnectionID(destConnID.Bytes())))
+					Expect(dest).To(Equal(protocol.ArbitraryLenConnectionID(srcConnID.Bytes())))
 				})
 				done := make(chan struct{})
 				conn.EXPECT().WriteTo(gomock.Any(), raddr).DoAndReturn(func(b []byte, _ net.Addr) (int, error) {
@@ -346,8 +346,8 @@ var _ = Describe("Server", func() {
 					Expect(wire.IsVersionNegotiationPacket(b)).To(BeTrue())
 					dest, src, versions, err := wire.ParseVersionNegotiationPacket(b)
 					Expect(err).ToNot(HaveOccurred())
-					Expect(dest).To(BeEquivalentTo(srcConnID))
-					Expect(src).To(BeEquivalentTo(destConnID))
+					Expect(dest).To(Equal(protocol.ArbitraryLenConnectionID(srcConnID.Bytes())))
+					Expect(src).To(Equal(protocol.ArbitraryLenConnectionID(destConnID.Bytes())))
 					Expect(versions).ToNot(ContainElement(protocol.VersionNumber(0x42)))
 					return len(b), nil
 				})
@@ -357,8 +357,8 @@ var _ = Describe("Server", func() {
 
 			It("doesn't send a Version Negotiation packets if sending them is disabled", func() {
 				serv.config.DisableVersionNegotiationPackets = true
-				srcConnID := protocol.ConnectionID{1, 2, 3, 4, 5}
-				destConnID := protocol.ConnectionID{1, 2, 3, 4, 5, 6}
+				srcConnID := protocol.ParseConnectionID([]byte{1, 2, 3, 4, 5})
+				destConnID := protocol.ParseConnectionID([]byte{1, 2, 3, 4, 5, 6})
 				packet := getPacket(&wire.Header{
 					IsLongHeader:     true,
 					Type:             protocol.PacketTypeHandshake,
@@ -396,8 +396,8 @@ var _ = Describe("Server", func() {
 			})
 
 			It("doesn't send a Version Negotiation Packet for unsupported versions, if the packet is too small", func() {
-				srcConnID := protocol.ConnectionID{1, 2, 3, 4, 5}
-				destConnID := protocol.ConnectionID{1, 2, 3, 4, 5, 6}
+				srcConnID := protocol.ParseConnectionID([]byte{1, 2, 3, 4, 5})
+				destConnID := protocol.ParseConnectionID([]byte{1, 2, 3, 4, 5, 6})
 				p := getPacket(&wire.Header{
 					IsLongHeader:     true,
 					Type:             protocol.PacketTypeHandshake,
@@ -423,8 +423,8 @@ var _ = Describe("Server", func() {
 				hdr := &wire.Header{
 					IsLongHeader:     true,
 					Type:             protocol.PacketTypeInitial,
-					SrcConnectionID:  protocol.ConnectionID{5, 4, 3, 2, 1},
-					DestConnectionID: protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8, 9, 10},
+					SrcConnectionID:  protocol.ParseConnectionID([]byte{5, 4, 3, 2, 1}),
+					DestConnectionID: protocol.ParseConnectionID([]byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}),
 					Version:          protocol.VersionTLS,
 				}
 				packet := getPacket(hdr, make([]byte, protocol.MinInitialPacketSize))
@@ -455,8 +455,8 @@ var _ = Describe("Server", func() {
 				hdr := &wire.Header{
 					IsLongHeader:     true,
 					Type:             protocol.PacketTypeInitial,
-					SrcConnectionID:  protocol.ConnectionID{5, 4, 3, 2, 1},
-					DestConnectionID: protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8, 9, 10},
+					SrcConnectionID:  protocol.ParseConnectionID([]byte{5, 4, 3, 2, 1}),
+					DestConnectionID: protocol.ParseConnectionID([]byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}),
 					Version:          protocol.VersionTLS,
 				}
 				p := getPacket(hdr, make([]byte, protocol.MinInitialPacketSize))
@@ -465,7 +465,7 @@ var _ = Describe("Server", func() {
 				rand.Read(token[:])
 
 				var newConnID protocol.ConnectionID
-				phm.EXPECT().AddWithConnID(protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}, gomock.Any(), gomock.Any()).DoAndReturn(func(_, c protocol.ConnectionID, fn func() packetHandler) bool {
+				phm.EXPECT().AddWithConnID(protocol.ParseConnectionID([]byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}), gomock.Any(), gomock.Any()).DoAndReturn(func(_, c protocol.ConnectionID, fn func() packetHandler) bool {
 					newConnID = c
 					phm.EXPECT().GetStatelessResetToken(gomock.Any()).DoAndReturn(func(c protocol.ConnectionID) protocol.StatelessResetToken {
 						newConnID = c
@@ -474,7 +474,7 @@ var _ = Describe("Server", func() {
 					fn()
 					return true
 				})
-				tracer.EXPECT().TracerForConnection(gomock.Any(), protocol.PerspectiveServer, protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8, 9, 10})
+				tracer.EXPECT().TracerForConnection(gomock.Any(), protocol.PerspectiveServer, protocol.ParseConnectionID([]byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}))
 
 				conn := NewMockQuicConn(mockCtrl)
 				serv.newConn = func(
@@ -566,7 +566,7 @@ var _ = Describe("Server", func() {
 					return conn
 				}
 
-				p := getInitial(protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8})
+				p := getInitial(protocol.ParseConnectionID([]byte{1, 2, 3, 4, 5, 6, 7, 8}))
 				serv.handlePacket(p)
 				tracer.EXPECT().DroppedPacket(p.remoteAddr, logging.PacketTypeNotDetermined, p.Size(), logging.PacketDropDOSPrevention).MinTimes(1)
 				var wg sync.WaitGroup
@@ -575,7 +575,7 @@ var _ = Describe("Server", func() {
 					go func() {
 						defer GinkgoRecover()
 						defer wg.Done()
-						serv.handlePacket(getInitial(protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8}))
+						serv.handlePacket(getInitial(protocol.ParseConnectionID([]byte{1, 2, 3, 4, 5, 6, 7, 8})))
 					}()
 				}
 				wg.Wait()
@@ -614,8 +614,8 @@ var _ = Describe("Server", func() {
 					return conn
 				}
 
-				p := getInitial(protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8, 9})
-				phm.EXPECT().AddWithConnID(protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8, 9}, gomock.Any(), gomock.Any()).Return(false)
+				p := getInitial(protocol.ParseConnectionID([]byte{1, 2, 3, 4, 5, 6, 7, 8, 9}))
+				phm.EXPECT().AddWithConnID(protocol.ParseConnectionID([]byte{1, 2, 3, 4, 5, 6, 7, 8, 9}), gomock.Any(), gomock.Any()).Return(false)
 				Expect(serv.handlePacketImpl(p)).To(BeTrue())
 				Expect(createdConn).To(BeFalse())
 			})
@@ -688,7 +688,7 @@ var _ = Describe("Server", func() {
 			})
 
 			It("doesn't accept new connections if they were closed in the mean time", func() {
-				p := getInitial(protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8, 9, 10})
+				p := getInitial(protocol.ParseConnectionID([]byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}))
 				ctx, cancel := context.WithCancel(context.Background())
 				connCreated := make(chan struct{})
 				conn := NewMockQuicConn(mockCtrl)
@@ -772,7 +772,7 @@ var _ = Describe("Server", func() {
 
 			It("decodes the token from the token field", func() {
 				raddr := &net.UDPAddr{IP: net.IPv4(192, 168, 13, 37), Port: 1337}
-				token, err := serv.tokenGenerator.NewRetryToken(raddr, nil, nil)
+				token, err := serv.tokenGenerator.NewRetryToken(raddr, protocol.ConnectionID{}, protocol.ConnectionID{})
 				Expect(err).ToNot(HaveOccurred())
 				packet := getPacket(&wire.Header{
 					IsLongHeader: true,
@@ -792,13 +792,13 @@ var _ = Describe("Server", func() {
 
 			It("sends an INVALID_TOKEN error, if an invalid retry token is received", func() {
 				serv.config.RequireAddressValidation = func(net.Addr) bool { return true }
-				token, err := serv.tokenGenerator.NewRetryToken(&net.UDPAddr{}, nil, nil)
+				token, err := serv.tokenGenerator.NewRetryToken(&net.UDPAddr{}, protocol.ConnectionID{}, protocol.ConnectionID{})
 				Expect(err).ToNot(HaveOccurred())
 				hdr := &wire.Header{
 					IsLongHeader:     true,
 					Type:             protocol.PacketTypeInitial,
-					SrcConnectionID:  protocol.ConnectionID{5, 4, 3, 2, 1},
-					DestConnectionID: protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8, 9, 10},
+					SrcConnectionID:  protocol.ParseConnectionID([]byte{5, 4, 3, 2, 1}),
+					DestConnectionID: protocol.ParseConnectionID([]byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}),
 					Token:            token,
 					Version:          protocol.VersionTLS,
 				}
@@ -830,14 +830,14 @@ var _ = Describe("Server", func() {
 				serv.config.RequireAddressValidation = func(net.Addr) bool { return true }
 				serv.config.MaxRetryTokenAge = time.Millisecond
 				raddr := &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 1337}
-				token, err := serv.tokenGenerator.NewRetryToken(raddr, nil, nil)
+				token, err := serv.tokenGenerator.NewRetryToken(raddr, protocol.ConnectionID{}, protocol.ConnectionID{})
 				Expect(err).ToNot(HaveOccurred())
 				time.Sleep(2 * time.Millisecond) // make sure the token is expired
 				hdr := &wire.Header{
 					IsLongHeader:     true,
 					Type:             protocol.PacketTypeInitial,
-					SrcConnectionID:  protocol.ConnectionID{5, 4, 3, 2, 1},
-					DestConnectionID: protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8, 9, 10},
+					SrcConnectionID:  protocol.ParseConnectionID([]byte{5, 4, 3, 2, 1}),
+					DestConnectionID: protocol.ParseConnectionID([]byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}),
 					Token:            token,
 					Version:          protocol.VersionTLS,
 				}
@@ -870,8 +870,8 @@ var _ = Describe("Server", func() {
 				hdr := &wire.Header{
 					IsLongHeader:     true,
 					Type:             protocol.PacketTypeInitial,
-					SrcConnectionID:  protocol.ConnectionID{5, 4, 3, 2, 1},
-					DestConnectionID: protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8, 9, 10},
+					SrcConnectionID:  protocol.ParseConnectionID([]byte{5, 4, 3, 2, 1}),
+					DestConnectionID: protocol.ParseConnectionID([]byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}),
 					Token:            token,
 					Version:          protocol.VersionTLS,
 				}
@@ -902,8 +902,8 @@ var _ = Describe("Server", func() {
 				hdr := &wire.Header{
 					IsLongHeader:     true,
 					Type:             protocol.PacketTypeInitial,
-					SrcConnectionID:  protocol.ConnectionID{5, 4, 3, 2, 1},
-					DestConnectionID: protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8, 9, 10},
+					SrcConnectionID:  protocol.ParseConnectionID([]byte{5, 4, 3, 2, 1}),
+					DestConnectionID: protocol.ParseConnectionID([]byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}),
 					Token:            token,
 					Version:          protocol.VersionTLS,
 				}
@@ -923,13 +923,13 @@ var _ = Describe("Server", func() {
 
 			It("doesn't send an INVALID_TOKEN error, if the packet is corrupted", func() {
 				serv.config.RequireAddressValidation = func(net.Addr) bool { return true }
-				token, err := serv.tokenGenerator.NewRetryToken(&net.UDPAddr{}, nil, nil)
+				token, err := serv.tokenGenerator.NewRetryToken(&net.UDPAddr{}, protocol.ConnectionID{}, protocol.ConnectionID{})
 				Expect(err).ToNot(HaveOccurred())
 				hdr := &wire.Header{
 					IsLongHeader:     true,
 					Type:             protocol.PacketTypeInitial,
-					SrcConnectionID:  protocol.ConnectionID{5, 4, 3, 2, 1},
-					DestConnectionID: protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8, 9, 10},
+					SrcConnectionID:  protocol.ParseConnectionID([]byte{5, 4, 3, 2, 1}),
+					DestConnectionID: protocol.ParseConnectionID([]byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}),
 					Token:            token,
 					Version:          protocol.VersionTLS,
 				}
@@ -1031,7 +1031,7 @@ var _ = Describe("Server", func() {
 				tracer.EXPECT().TracerForConnection(gomock.Any(), protocol.PerspectiveServer, gomock.Any())
 				serv.handleInitialImpl(
 					&receivedPacket{buffer: getPacketBuffer()},
-					&wire.Header{DestConnectionID: protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8}},
+					&wire.Header{DestConnectionID: protocol.ParseConnectionID([]byte{1, 2, 3, 4, 5, 6, 7, 8})},
 				)
 				Consistently(done).ShouldNot(BeClosed())
 				cancel() // complete the handshake
@@ -1105,7 +1105,7 @@ var _ = Describe("Server", func() {
 			})
 			serv.handleInitialImpl(
 				&receivedPacket{buffer: getPacketBuffer()},
-				&wire.Header{DestConnectionID: protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8}},
+				&wire.Header{DestConnectionID: protocol.ParseConnectionID([]byte{1, 2, 3, 4, 5, 6, 7, 8})},
 			)
 			Consistently(done).ShouldNot(BeClosed())
 			close(ready)
@@ -1174,7 +1174,7 @@ var _ = Describe("Server", func() {
 		})
 
 		It("doesn't accept new connections if they were closed in the mean time", func() {
-			p := getInitial(protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8, 9, 10})
+			p := getInitial(protocol.ParseConnectionID([]byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}))
 			ctx, cancel := context.WithCancel(context.Background())
 			connCreated := make(chan struct{})
 			conn := NewMockQuicConn(mockCtrl)

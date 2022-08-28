@@ -24,7 +24,7 @@ var _ = Describe("NEW_CONNECTION_ID frame", func() {
 			Expect(err).ToNot(HaveOccurred())
 			Expect(frame.SequenceNumber).To(Equal(uint64(0xdeadbeef)))
 			Expect(frame.RetirePriorTo).To(Equal(uint64(0xcafe)))
-			Expect(frame.ConnectionID).To(Equal(protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}))
+			Expect(frame.ConnectionID).To(Equal(protocol.ParseConnectionID([]byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10})))
 			Expect(string(frame.StatelessResetToken[:])).To(Equal("deadbeefdecafbad"))
 		})
 
@@ -49,7 +49,7 @@ var _ = Describe("NEW_CONNECTION_ID frame", func() {
 			data = append(data, []byte("deadbeefdecafbad")...)                                                        // stateless reset token
 			b := bytes.NewReader(data)
 			_, err := parseNewConnectionIDFrame(b, protocol.Version1)
-			Expect(err).To(MatchError("invalid connection ID length: 21"))
+			Expect(err).To(MatchError(protocol.ErrInvalidConnectionIDLen))
 		})
 
 		It("errors on EOFs", func() {
@@ -74,7 +74,7 @@ var _ = Describe("NEW_CONNECTION_ID frame", func() {
 			frame := &NewConnectionIDFrame{
 				SequenceNumber:      0x1337,
 				RetirePriorTo:       0x42,
-				ConnectionID:        protocol.ConnectionID{1, 2, 3, 4, 5, 6},
+				ConnectionID:        protocol.ParseConnectionID([]byte{1, 2, 3, 4, 5, 6}),
 				StatelessResetToken: token,
 			}
 			b, err := frame.Append(nil, protocol.Version1)
@@ -93,7 +93,7 @@ var _ = Describe("NEW_CONNECTION_ID frame", func() {
 			frame := &NewConnectionIDFrame{
 				SequenceNumber:      0xdecafbad,
 				RetirePriorTo:       0xdeadbeefcafe,
-				ConnectionID:        protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8},
+				ConnectionID:        protocol.ParseConnectionID([]byte{1, 2, 3, 4, 5, 6, 7, 8}),
 				StatelessResetToken: token,
 			}
 			b, err := frame.Append(nil, protocol.Version1)

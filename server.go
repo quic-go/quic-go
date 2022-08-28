@@ -477,7 +477,7 @@ func (s *baseServer) handleInitialImpl(p *receivedPacket, hdr *wire.Header) erro
 	if err != nil {
 		return err
 	}
-	s.logger.Debugf("Changing connection ID to %s.", protocol.ConnectionID(connID))
+	s.logger.Debugf("Changing connection ID to %s.", connID)
 	var conn quicConn
 	tracingID := nextConnTracingID()
 	if added := s.connHandler.AddWithConnID(hdr.DestConnectionID, connID, func() packetHandler {
@@ -575,7 +575,7 @@ func (s *baseServer) sendRetry(remoteAddr net.Addr, hdr *wire.Header, info *pack
 	replyHdr.DestConnectionID = hdr.SrcConnectionID
 	replyHdr.Token = token
 	if s.logger.Debug() {
-		s.logger.Debugf("Changing connection ID to %s.", protocol.ConnectionID(srcConnID))
+		s.logger.Debugf("Changing connection ID to %s.", srcConnID)
 		s.logger.Debugf("-> Sending Retry")
 		replyHdr.Log(s.logger)
 	}

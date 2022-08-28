@@ -210,7 +210,7 @@ var _ = Describe("Frame parsing", func() {
 	It("unpacks NEW_CONNECTION_ID frames", func() {
 		f := &NewConnectionIDFrame{
 			SequenceNumber:      0x1337,
-			ConnectionID:        protocol.ConnectionID{0xde, 0xad, 0xbe, 0xef},
+			ConnectionID:        protocol.ParseConnectionID([]byte{0xde, 0xad, 0xbe, 0xef}),
 			StatelessResetToken: protocol.StatelessResetToken{0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15},
 		}
 		b, err := f.Append(nil, protocol.Version1)
@@ -330,7 +330,7 @@ var _ = Describe("Frame parsing", func() {
 			&DataBlockedFrame{},
 			&StreamDataBlockedFrame{},
 			&StreamsBlockedFrame{},
-			&NewConnectionIDFrame{ConnectionID: protocol.ConnectionID{0xde, 0xad, 0xbe, 0xef}},
+			&NewConnectionIDFrame{ConnectionID: protocol.ParseConnectionID([]byte{0xde, 0xad, 0xbe, 0xef})},
 			&RetireConnectionIDFrame{},
 			&PathChallengeFrame{},
 			&PathResponseFrame{},

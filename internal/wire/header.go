@@ -17,22 +17,22 @@ import (
 // That means that the connection ID must not be used after the packet buffer is released.
 func ParseConnectionID(data []byte, shortHeaderConnIDLen int) (protocol.ConnectionID, error) {
 	if len(data) == 0 {
-		return nil, io.EOF
+		return protocol.ConnectionID{}, io.EOF
 	}
 	if !IsLongHeaderPacket(data[0]) {
 		if len(data) < shortHeaderConnIDLen+1 {
-			return nil, io.EOF
+			return protocol.ConnectionID{}, io.EOF
 		}
-		return protocol.ConnectionID(data[1 : 1+shortHeaderConnIDLen]), nil
+		return protocol.ParseConnectionID(data[1 : 1+shortHeaderConnIDLen]), nil
 	}
 	if len(data) < 6 {
-		return nil, io.EOF
+		return protocol.ConnectionID{}, io.EOF
 	}
 	destConnIDLen := int(data[5])
 	if len(data) < 6+destConnIDLen {
-		return nil, io.EOF
+		return protocol.ConnectionID{}, io.EOF
 	}
-	return protocol.ConnectionID(data[6 : 6+destConnIDLen]), nil
+	return protocol.ParseConnectionID(data[6 : 6+destConnIDLen]), nil
 }
 
 // ParseArbitraryLenConnectionIDs parses the most general form of a Long Header packet,

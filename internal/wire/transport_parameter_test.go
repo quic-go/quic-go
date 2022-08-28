@@ -41,6 +41,7 @@ var _ = Describe("Transport Parameters", func() {
 	}
 
 	It("has a string representation", func() {
+		rcid := protocol.ParseConnectionID([]byte{0xde, 0xad, 0xc0, 0xde})
 		p := &TransportParameters{
 			InitialMaxStreamDataBidiLocal:   1234,
 			InitialMaxStreamDataBidiRemote:  2345,
@@ -49,9 +50,9 @@ var _ = Describe("Transport Parameters", func() {
 			MaxBidiStreamNum:                1337,
 			MaxUniStreamNum:                 7331,
 			MaxIdleTimeout:                  42 * time.Second,
-			OriginalDestinationConnectionID: protocol.ConnectionID{0xde, 0xad, 0xbe, 0xef},
-			InitialSourceConnectionID:       protocol.ConnectionID{0xde, 0xca, 0xfb, 0xad},
-			RetrySourceConnectionID:         &protocol.ConnectionID{0xde, 0xad, 0xc0, 0xde},
+			OriginalDestinationConnectionID: protocol.ParseConnectionID([]byte{0xde, 0xad, 0xbe, 0xef}),
+			InitialSourceConnectionID:       protocol.ParseConnectionID([]byte{0xde, 0xca, 0xfb, 0xad}),
+			RetrySourceConnectionID:         &rcid,
 			AckDelayExponent:                14,
 			MaxAckDelay:                     37 * time.Millisecond,
 			StatelessResetToken:             &protocol.StatelessResetToken{0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88, 0x99, 0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff, 0x00},
@@ -70,8 +71,8 @@ var _ = Describe("Transport Parameters", func() {
 			MaxBidiStreamNum:                1337,
 			MaxUniStreamNum:                 7331,
 			MaxIdleTimeout:                  42 * time.Second,
-			OriginalDestinationConnectionID: protocol.ConnectionID{0xde, 0xad, 0xbe, 0xef},
-			InitialSourceConnectionID:       protocol.ConnectionID{},
+			OriginalDestinationConnectionID: protocol.ParseConnectionID([]byte{0xde, 0xad, 0xbe, 0xef}),
+			InitialSourceConnectionID:       protocol.ParseConnectionID([]byte{}),
 			AckDelayExponent:                14,
 			MaxAckDelay:                     37 * time.Second,
 			ActiveConnectionIDLimit:         89,
@@ -83,6 +84,7 @@ var _ = Describe("Transport Parameters", func() {
 	It("marshals and unmarshals", func() {
 		var token protocol.StatelessResetToken
 		rand.Read(token[:])
+		rcid := protocol.ParseConnectionID([]byte{0xde, 0xad, 0xc0, 0xde})
 		params := &TransportParameters{
 			InitialMaxStreamDataBidiLocal:   protocol.ByteCount(getRandomValue()),
 			InitialMaxStreamDataBidiRemote:  protocol.ByteCount(getRandomValue()),
@@ -93,9 +95,9 @@ var _ = Describe("Transport Parameters", func() {
 			MaxUniStreamNum:                 protocol.StreamNum(getRandomValueUpTo(int64(protocol.MaxStreamCount))),
 			DisableActiveMigration:          true,
 			StatelessResetToken:             &token,
-			OriginalDestinationConnectionID: protocol.ConnectionID{0xde, 0xad, 0xbe, 0xef},
-			InitialSourceConnectionID:       protocol.ConnectionID{0xde, 0xca, 0xfb, 0xad},
-			RetrySourceConnectionID:         &protocol.ConnectionID{0xde, 0xad, 0xc0, 0xde},
+			OriginalDestinationConnectionID: protocol.ParseConnectionID([]byte{0xde, 0xad, 0xbe, 0xef}),
+			InitialSourceConnectionID:       protocol.ParseConnectionID([]byte{0xde, 0xca, 0xfb, 0xad}),
+			RetrySourceConnectionID:         &rcid,
 			AckDelayExponent:                13,
 			MaxAckDelay:                     42 * time.Millisecond,
 			ActiveConnectionIDLimit:         getRandomValue(),
@@ -114,9 +116,9 @@ var _ = Describe("Transport Parameters", func() {
 		Expect(p.MaxIdleTimeout).To(Equal(params.MaxIdleTimeout))
 		Expect(p.DisableActiveMigration).To(Equal(params.DisableActiveMigration))
 		Expect(p.StatelessResetToken).To(Equal(params.StatelessResetToken))
-		Expect(p.OriginalDestinationConnectionID).To(Equal(protocol.ConnectionID{0xde, 0xad, 0xbe, 0xef}))
-		Expect(p.InitialSourceConnectionID).To(Equal(protocol.ConnectionID{0xde, 0xca, 0xfb, 0xad}))
-		Expect(p.RetrySourceConnectionID).To(Equal(&protocol.ConnectionID{0xde, 0xad, 0xc0, 0xde}))
+		Expect(p.OriginalDestinationConnectionID).To(Equal(protocol.ParseConnectionID([]byte{0xde, 0xad, 0xbe, 0xef})))
+		Expect(p.InitialSourceConnectionID).To(Equal(protocol.ParseConnectionID([]byte{0xde, 0xca, 0xfb, 0xad})))
+		Expect(p.RetrySourceConnectionID).To(Equal(&rcid))
 		Expect(p.AckDelayExponent).To(Equal(uint8(13)))
 		Expect(p.MaxAckDelay).To(Equal(42 * time.Millisecond))
 		Expect(p.ActiveConnectionIDLimit).To(Equal(params.ActiveConnectionIDLimit))
@@ -133,8 +135,9 @@ var _ = Describe("Transport Parameters", func() {
 	})
 
 	It("marshals a zero-length retry_source_connection_id", func() {
+		rcid := protocol.ParseConnectionID([]byte{})
 		data := (&TransportParameters{
-			RetrySourceConnectionID: &protocol.ConnectionID{},
+			RetrySourceConnectionID: &rcid,
 			StatelessResetToken:     &protocol.StatelessResetToken{},
 		}).Marshal(protocol.PerspectiveServer)
 		p := &TransportParameters{}
@@ -406,7 +409,7 @@ var _ = Describe("Transport Parameters", func() {
 				IPv4Port:            42,
 				IPv6:                net.IP{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16},
 				IPv6Port:            13,
-				ConnectionID:        protocol.ConnectionID{0xde, 0xad, 0xbe, 0xef},
+				ConnectionID:        protocol.ParseConnectionID([]byte{0xde, 0xad, 0xbe, 0xef}),
 				StatelessResetToken: protocol.StatelessResetToken{16, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1},
 			}
 		})
@@ -439,7 +442,7 @@ var _ = Describe("Transport Parameters", func() {
 		})
 
 		It("errors on zero-length connection IDs", func() {
-			pa.ConnectionID = protocol.ConnectionID{}
+			pa.ConnectionID = protocol.ParseConnectionID([]byte{})
 			data := (&TransportParameters{
 				PreferredAddress:    pa,
 				StatelessResetToken: &protocol.StatelessResetToken{},
@@ -448,20 +451,6 @@ var _ = Describe("Transport Parameters", func() {
 			Expect(p.Unmarshal(data, protocol.PerspectiveServer)).To(MatchError(&qerr.TransportError{
 				ErrorCode:    qerr.TransportParameterError,
 				ErrorMessage: "invalid connection ID length: 0",
-			}))
-		})
-
-		It("errors on too long connection IDs", func() {
-			pa.ConnectionID = protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21}
-			Expect(pa.ConnectionID.Len()).To(BeNumerically(">", protocol.MaxConnIDLen))
-			data := (&TransportParameters{
-				PreferredAddress:    pa,
-				StatelessResetToken: &protocol.StatelessResetToken{},
-			}).Marshal(protocol.PerspectiveServer)
-			p := &TransportParameters{}
-			Expect(p.Unmarshal(data, protocol.PerspectiveServer)).To(MatchError(&qerr.TransportError{
-				ErrorCode:    qerr.TransportParameterError,
-				ErrorMessage: "invalid connection ID length: 21",
 			}))
 		})
 

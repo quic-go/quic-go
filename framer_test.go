@@ -89,7 +89,10 @@ var _ = Describe("Framer", func() {
 
 		It("drops *_BLOCKED frames when 0-RTT is rejected", func() {
 			ping := &wire.PingFrame{}
-			ncid := &wire.NewConnectionIDFrame{SequenceNumber: 10, ConnectionID: protocol.ConnectionID{0xde, 0xad, 0xbe, 0xef}}
+			ncid := &wire.NewConnectionIDFrame{
+				SequenceNumber: 10,
+				ConnectionID:   protocol.ParseConnectionID([]byte{0xde, 0xad, 0xbe, 0xef}),
+			}
 			frames := []wire.Frame{
 				&wire.DataBlockedFrame{MaximumData: 1337},
 				&wire.StreamDataBlockedFrame{StreamID: 42, MaximumStreamData: 1337},

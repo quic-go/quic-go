@@ -80,8 +80,8 @@ func (e eventConnectionStarted) MarshalJSONObject(enc *gojay.Encoder) {
 	enc.IntKey("src_port", e.SrcAddr.Port)
 	enc.StringKey("dst_ip", e.DestAddr.IP.String())
 	enc.IntKey("dst_port", e.DestAddr.Port)
-	enc.StringKey("src_cid", connectionID(e.SrcConnectionID).String())
-	enc.StringKey("dst_cid", connectionID(e.DestConnectionID).String())
+	enc.StringKey("src_cid", e.SrcConnectionID.String())
+	enc.StringKey("dst_cid", e.DestConnectionID.String())
 }
 
 type eventVersionNegotiated struct {
@@ -410,15 +410,15 @@ func (e eventTransportParameters) MarshalJSONObject(enc *gojay.Encoder) {
 	if !e.Restore {
 		enc.StringKey("owner", e.Owner.String())
 		if e.SentBy == protocol.PerspectiveServer {
-			enc.StringKey("original_destination_connection_id", connectionID(e.OriginalDestinationConnectionID).String())
+			enc.StringKey("original_destination_connection_id", e.OriginalDestinationConnectionID.String())
 			if e.StatelessResetToken != nil {
 				enc.StringKey("stateless_reset_token", fmt.Sprintf("%x", e.StatelessResetToken[:]))
 			}
 			if e.RetrySourceConnectionID != nil {
-				enc.StringKey("retry_source_connection_id", connectionID(*e.RetrySourceConnectionID).String())
+				enc.StringKey("retry_source_connection_id", (*e.RetrySourceConnectionID).String())
 			}
 		}
-		enc.StringKey("initial_source_connection_id", connectionID(e.InitialSourceConnectionID).String())
+		enc.StringKey("initial_source_connection_id", e.InitialSourceConnectionID.String())
 	}
 	enc.BoolKey("disable_active_migration", e.DisableActiveMigration)
 	enc.FloatKeyOmitEmpty("max_idle_timeout", milliseconds(e.MaxIdleTimeout))
@@ -457,7 +457,7 @@ func (a preferredAddress) MarshalJSONObject(enc *gojay.Encoder) {
 	enc.Uint16Key("port_v4", a.PortV4)
 	enc.StringKey("ip_v6", a.IPv6.String())
 	enc.Uint16Key("port_v6", a.PortV6)
-	enc.StringKey("connection_id", connectionID(a.ConnectionID).String())
+	enc.StringKey("connection_id", a.ConnectionID.String())
 	enc.StringKey("stateless_reset_token", fmt.Sprintf("%x", a.StatelessResetToken))
 }
 

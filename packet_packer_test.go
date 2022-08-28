@@ -38,7 +38,7 @@ var _ = Describe("Packet packer", func() {
 		sealingManager      *MockSealingManager
 		pnManager           *mockackhandler.MockSentPacketHandler
 	)
-	connID := protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8}
+	connID := protocol.ParseConnectionID([]byte{1, 2, 3, 4, 5, 6, 7, 8})
 
 	parsePacket := func(data []byte) []*wire.ExtendedHeader {
 		var hdrs []*wire.ExtendedHeader
@@ -94,7 +94,7 @@ var _ = Describe("Packet packer", func() {
 		datagramQueue = newDatagramQueue(func() {}, utils.DefaultLogger)
 
 		packer = newPacketPacker(
-			protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8},
+			protocol.ParseConnectionID([]byte{1, 2, 3, 4, 5, 6, 7, 8}),
 			func() protocol.ConnectionID { return connID },
 			initialStream,
 			handshakeStream,
@@ -141,8 +141,8 @@ var _ = Describe("Packet packer", func() {
 
 		It("sets source and destination connection ID", func() {
 			pnManager.EXPECT().PeekPacketNumber(protocol.EncryptionHandshake).Return(protocol.PacketNumber(0x42), protocol.PacketNumberLen2)
-			srcConnID := protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8}
-			destConnID := protocol.ConnectionID{8, 7, 6, 5, 4, 3, 2, 1}
+			srcConnID := protocol.ParseConnectionID([]byte{1, 2, 3, 4, 5, 6, 7, 8})
+			destConnID := protocol.ParseConnectionID([]byte{8, 7, 6, 5, 4, 3, 2, 1})
 			packer.srcConnID = srcConnID
 			packer.getDestConnID = func() protocol.ConnectionID { return destConnID }
 			h := packer.getLongHeader(protocol.EncryptionHandshake)
@@ -616,7 +616,7 @@ var _ = Describe("Packet packer", func() {
 				Expect(packet.packets).To(HaveLen(1))
 				// cut off the tag that the mock sealer added
 				// packet.buffer.Data = packet.buffer.Data[:packet.buffer.Len()-protocol.ByteCount(sealer.Overhead())]
-				hdr, _, _, err := wire.ParsePacket(packet.buffer.Data, len(packer.getDestConnID()))
+				hdr, _, _, err := wire.ParsePacket(packet.buffer.Data, packer.getDestConnID().Len())
 				Expect(err).ToNot(HaveOccurred())
 				r := bytes.NewReader(packet.buffer.Data)
 				extHdr, err := hdr.ParseExtended(r, packer.version)
@@ -656,7 +656,7 @@ var _ = Describe("Packet packer", func() {
 				Expect(err).ToNot(HaveOccurred())
 				// cut off the tag that the mock sealer added
 				packet.buffer.Data = packet.buffer.Data[:packet.buffer.Len()-protocol.ByteCount(sealer.Overhead())]
-				hdr, _, _, err := wire.ParsePacket(packet.buffer.Data, len(packer.getDestConnID()))
+				hdr, _, _, err := wire.ParsePacket(packet.buffer.Data, packer.getDestConnID().Len())
 				Expect(err).ToNot(HaveOccurred())
 				r := bytes.NewReader(packet.buffer.Data)
 				extHdr, err := hdr.ParseExtended(r, packer.version)
@@ -1206,7 +1206,7 @@ var _ = Describe("Packet packer", func() {
 				Expect(packet.packets).To(HaveLen(1))
 				// cut off the tag that the mock sealer added
 				// packet.buffer.Data = packet.buffer.Data[:packet.buffer.Len()-protocol.ByteCount(sealer.Overhead())]
-				hdr, _, _, err := wire.ParsePacket(packet.buffer.Data, len(packer.getDestConnID()))
+				hdr, _, _, err := wire.ParsePacket(packet.buffer.Data, packer.getDestConnID().Len())
 				Expect(err).ToNot(HaveOccurred())
 				r := bytes.NewReader(packet.buffer.Data)
 				extHdr, err := hdr.ParseExtended(r, packer.version)

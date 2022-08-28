@@ -20,36 +20,36 @@ var _ = Describe("Header Parsing", func() {
 				Header: Header{
 					IsLongHeader:     true,
 					Type:             protocol.PacketTypeHandshake,
-					DestConnectionID: protocol.ConnectionID{0xde, 0xca, 0xfb, 0xad},
-					SrcConnectionID:  protocol.ConnectionID{1, 2, 3, 4, 5, 6},
+					DestConnectionID: protocol.ParseConnectionID([]byte{0xde, 0xca, 0xfb, 0xad}),
+					SrcConnectionID:  protocol.ParseConnectionID([]byte{1, 2, 3, 4, 5, 6}),
 					Version:          protocol.Version1,
 				},
 				PacketNumberLen: 2,
 			}).Write(buf, protocol.Version1)).To(Succeed())
 			connID, err := ParseConnectionID(buf.Bytes(), 8)
 			Expect(err).ToNot(HaveOccurred())
-			Expect(connID).To(Equal(protocol.ConnectionID{0xde, 0xca, 0xfb, 0xad}))
+			Expect(connID).To(Equal(protocol.ParseConnectionID([]byte{0xde, 0xca, 0xfb, 0xad})))
 		})
 
 		It("parses the connection ID of a short header packet", func() {
 			buf := &bytes.Buffer{}
 			Expect((&ExtendedHeader{
 				Header: Header{
-					DestConnectionID: protocol.ConnectionID{0xde, 0xca, 0xfb, 0xad},
+					DestConnectionID: protocol.ParseConnectionID([]byte{0xde, 0xca, 0xfb, 0xad}),
 				},
 				PacketNumberLen: 2,
 			}).Write(buf, protocol.Version1)).To(Succeed())
 			buf.Write([]byte("foobar"))
 			connID, err := ParseConnectionID(buf.Bytes(), 4)
 			Expect(err).ToNot(HaveOccurred())
-			Expect(connID).To(Equal(protocol.ConnectionID{0xde, 0xca, 0xfb, 0xad}))
+			Expect(connID).To(Equal(protocol.ParseConnectionID([]byte{0xde, 0xca, 0xfb, 0xad})))
 		})
 
 		It("errors on EOF, for short header packets", func() {
 			buf := &bytes.Buffer{}
 			Expect((&ExtendedHeader{
 				Header: Header{
-					DestConnectionID: protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8},
+					DestConnectionID: protocol.ParseConnectionID([]byte{1, 2, 3, 4, 5, 6, 7, 8}),
 				},
 				PacketNumberLen: 2,
 			}).Write(buf, protocol.Version1)).To(Succeed())
@@ -70,8 +70,8 @@ var _ = Describe("Header Parsing", func() {
 				Header: Header{
 					IsLongHeader:     true,
 					Type:             protocol.PacketTypeHandshake,
-					DestConnectionID: protocol.ConnectionID{0xde, 0xca, 0xfb, 0xad, 0x13, 0x37},
-					SrcConnectionID:  protocol.ConnectionID{1, 2, 3, 4, 5, 6, 8, 9},
+					DestConnectionID: protocol.ParseConnectionID([]byte{0xde, 0xca, 0xfb, 0xad, 0x13, 0x37}),
+					SrcConnectionID:  protocol.ParseConnectionID([]byte{1, 2, 3, 4, 5, 6, 8, 9}),
 					Version:          protocol.Version1,
 				},
 				PacketNumberLen: 2,
@@ -194,14 +194,14 @@ var _ = Describe("Header Parsing", func() {
 
 	Context("Long Headers", func() {
 		It("parses a Long Header", func() {
-			destConnID := protocol.ConnectionID{9, 8, 7, 6, 5, 4, 3, 2, 1}
-			srcConnID := protocol.ConnectionID{0xde, 0xad, 0xbe, 0xef}
+			destConnID := protocol.ParseConnectionID([]byte{9, 8, 7, 6, 5, 4, 3, 2, 1})
+			srcConnID := protocol.ParseConnectionID([]byte{0xde, 0xad, 0xbe, 0xef})
 			data := []byte{0xc0 ^ 0x3}
 			data = appendVersion(data, protocol.Version1)
 			data = append(data, 0x9) // dest conn id length
-			data = append(data, destConnID...)
+			data = append(data, destConnID.Bytes()...)
 			data = append(data, 0x4) // src conn id length
-			data = append(data, srcConnID...)
+			data = append(data, srcConnID.Bytes()...)
 			data = append(data, encodeVarInt(6)...)  // token length
 			data = append(data, []byte("foobar")...) // token
 			data = append(data, encodeVarInt(10)...) // length
@@ -256,38 +256,50 @@ var _ = Describe("Header Parsing", func() {
 			Expect(err).To(MatchError(ErrUnsupportedVersion))
 			Expect(hdr.IsLongHeader).To(BeTrue())
 			Expect(hdr.Version).To(Equal(protocol.VersionNumber(0xdeadbeef)))
-			Expect(hdr.DestConnectionID).To(Equal(protocol.ConnectionID{0x1, 0x2, 0x3, 0x4, 0x5, 0x6, 0x7, 0x8}))
-			Expect(hdr.SrcConnectionID).To(Equal(protocol.ConnectionID{0x8, 0x7, 0x6, 0x5, 0x4, 0x3, 0x2, 0x1}))
+			Expect(hdr.DestConnectionID).To(Equal(protocol.ParseConnectionID([]byte{0x1, 0x2, 0x3, 0x4, 0x5, 0x6, 0x7, 0x8})))
+			Expect(hdr.SrcConnectionID).To(Equal(protocol.ParseConnectionID([]byte{0x8, 0x7, 0x6, 0x5, 0x4, 0x3, 0x2, 0x1})))
 			Expect(rest).To(BeEmpty())
 		})
 
 		It("parses a Long Header without a destination connection ID", func() {
 			data := []byte{0xc0 ^ 0x1<<4}
 			data = appendVersion(data, protocol.Version1)
-			data = append(data, 0x0)                               // dest conn ID len
-			data = append(data, 0x4)                               // src conn ID len
+			data = append(data, 0)                                 // dest conn ID len
+			data = append(data, 4)                                 // src conn ID len
 			data = append(data, []byte{0xde, 0xad, 0xbe, 0xef}...) // source connection ID
 			data = append(data, encodeVarInt(0)...)                // length
 			data = append(data, []byte{0xde, 0xca, 0xfb, 0xad}...)
 			hdr, _, _, err := ParsePacket(data, 0)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(hdr.Type).To(Equal(protocol.PacketType0RTT))
-			Expect(hdr.SrcConnectionID).To(Equal(protocol.ConnectionID{0xde, 0xad, 0xbe, 0xef}))
-			Expect(hdr.DestConnectionID).To(BeEmpty())
+			Expect(hdr.SrcConnectionID).To(Equal(protocol.ParseConnectionID([]byte{0xde, 0xad, 0xbe, 0xef})))
+			Expect(hdr.DestConnectionID).To(BeZero())
 		})
 
 		It("parses a Long Header without a source connection ID", func() {
 			data := []byte{0xc0 ^ 0x2<<4}
 			data = appendVersion(data, protocol.Version1)
-			data = append(data, 0xa)                                      // dest conn ID len
+			data = append(data, 10)                                       // dest conn ID len
 			data = append(data, []byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}...) // dest connection ID
-			data = append(data, 0x0)                                      // src conn ID len
+			data = append(data, 0)                                        // src conn ID len
 			data = append(data, encodeVarInt(0)...)                       // length
 			data = append(data, []byte{0xde, 0xca, 0xfb, 0xad}...)
 			hdr, _, _, err := ParsePacket(data, 0)
 			Expect(err).ToNot(HaveOccurred())
-			Expect(hdr.SrcConnectionID).To(BeEmpty())
-			Expect(hdr.DestConnectionID).To(Equal(protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}))
+			Expect(hdr.SrcConnectionID).To(BeZero())
+			Expect(hdr.DestConnectionID).To(Equal(protocol.ParseConnectionID([]byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10})))
+		})
+
+		It("parses a Long Header without a too long destination connection ID", func() {
+			data := []byte{0xc0 ^ 0x2<<4}
+			data = appendVersion(data, protocol.Version1)
+			data = append(data, 21)                                                                                   // dest conn ID len
+			data = append(data, []byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21}...) // dest connection ID
+			data = append(data, 0x0)                                                                                  // src conn ID len
+			data = append(data, encodeVarInt(0)...)                                                                   // length
+			data = append(data, []byte{0xde, 0xca, 0xfb, 0xad}...)
+			_, _, _, err := ParsePacket(data, 0)
+			Expect(err).To(MatchError(protocol.ErrInvalidConnectionIDLen))
 		})
 
 		It("parses a Long Header with a 2 byte packet number", func() {
@@ -321,8 +333,8 @@ var _ = Describe("Header Parsing", func() {
 			Expect(err).ToNot(HaveOccurred())
 			Expect(hdr.Type).To(Equal(protocol.PacketTypeRetry))
 			Expect(hdr.Version).To(Equal(protocol.Version1))
-			Expect(hdr.DestConnectionID).To(Equal(protocol.ConnectionID{6, 5, 4, 3, 2, 1}))
-			Expect(hdr.SrcConnectionID).To(Equal(protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}))
+			Expect(hdr.DestConnectionID).To(Equal(protocol.ParseConnectionID([]byte{6, 5, 4, 3, 2, 1})))
+			Expect(hdr.SrcConnectionID).To(Equal(protocol.ParseConnectionID([]byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10})))
 			Expect(hdr.Token).To(Equal([]byte("foobar")))
 			Expect(pdata).To(Equal(data))
 			Expect(rest).To(BeEmpty())
@@ -341,8 +353,8 @@ var _ = Describe("Header Parsing", func() {
 			Expect(err).ToNot(HaveOccurred())
 			Expect(hdr.Type).To(Equal(protocol.PacketTypeRetry))
 			Expect(hdr.Version).To(Equal(protocol.Version2))
-			Expect(hdr.DestConnectionID).To(Equal(protocol.ConnectionID{6, 5, 4, 3, 2, 1}))
-			Expect(hdr.SrcConnectionID).To(Equal(protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}))
+			Expect(hdr.DestConnectionID).To(Equal(protocol.ParseConnectionID([]byte{6, 5, 4, 3, 2, 1})))
+			Expect(hdr.SrcConnectionID).To(Equal(protocol.ParseConnectionID([]byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10})))
 			Expect(hdr.Token).To(Equal([]byte("foobar")))
 			Expect(pdata).To(Equal(data))
 			Expect(rest).To(BeEmpty())
@@ -439,7 +451,7 @@ var _ = Describe("Header Parsing", func() {
 				hdr := Header{
 					IsLongHeader:     true,
 					Type:             protocol.PacketTypeInitial,
-					DestConnectionID: protocol.ConnectionID{1, 2, 3, 4},
+					DestConnectionID: protocol.ParseConnectionID([]byte{1, 2, 3, 4}),
 					Length:           2 + 6,
 					Version:          protocol.Version1,
 				}
@@ -465,7 +477,7 @@ var _ = Describe("Header Parsing", func() {
 					Header: Header{
 						IsLongHeader:     true,
 						Type:             protocol.PacketTypeInitial,
-						DestConnectionID: protocol.ConnectionID{1, 2, 3, 4},
+						DestConnectionID: protocol.ParseConnectionID([]byte{1, 2, 3, 4}),
 						Length:           3,
 						Version:          protocol.Version1,
 					},
@@ -483,7 +495,7 @@ var _ = Describe("Header Parsing", func() {
 					Header: Header{
 						IsLongHeader:     true,
 						Type:             protocol.PacketTypeInitial,
-						DestConnectionID: protocol.ConnectionID{1, 2, 3, 4},
+						DestConnectionID: protocol.ParseConnectionID([]byte{1, 2, 3, 4}),
 						Length:           1000,
 						Version:          protocol.Version1,
 					},
@@ -499,8 +511,8 @@ var _ = Describe("Header Parsing", func() {
 
 	Context("Short Headers", func() {
 		It("reads a Short Header with a 8 byte connection ID", func() {
-			connID := protocol.ConnectionID{0xde, 0xad, 0xbe, 0xef, 0xca, 0xfe, 0x13, 0x37}
-			data := append([]byte{0x40}, connID...)
+			connID := protocol.ParseConnectionID([]byte{0xde, 0xad, 0xbe, 0xef, 0xca, 0xfe, 0x13, 0x37})
+			data := append([]byte{0x40}, connID.Bytes()...)
 			data = append(data, 0x42) // packet number
 			Expect(IsVersionNegotiationPacket(data)).To(BeFalse())
 
@@ -513,7 +525,7 @@ var _ = Describe("Header Parsing", func() {
 			Expect(err).ToNot(HaveOccurred())
 			Expect(extHdr.KeyPhase).To(Equal(protocol.KeyPhaseZero))
 			Expect(extHdr.DestConnectionID).To(Equal(connID))
-			Expect(extHdr.SrcConnectionID).To(BeEmpty())
+			Expect(extHdr.SrcConnectionID).To(BeZero())
 			Expect(extHdr.PacketNumber).To(Equal(protocol.PacketNumber(0x42)))
 			Expect(hdr.ParsedLen()).To(BeEquivalentTo(len(data) - 1))
 			Expect(extHdr.ParsedLen()).To(Equal(hdr.ParsedLen() + 1))
@@ -522,15 +534,15 @@ var _ = Describe("Header Parsing", func() {
 		})
 
 		It("errors if 0x40 is not set", func() {
-			connID := protocol.ConnectionID{0xde, 0xad, 0xbe, 0xef, 0xca, 0xfe, 0x13, 0x37}
-			data := append([]byte{0x0}, connID...)
+			connID := protocol.ParseConnectionID([]byte{0xde, 0xad, 0xbe, 0xef, 0xca, 0xfe, 0x13, 0x37})
+			data := append([]byte{0x0}, connID.Bytes()...)
 			_, _, _, err := ParsePacket(data, 8)
 			Expect(err).To(MatchError("not a QUIC packet"))
 		})
 
 		It("errors if the 4th or 5th bit are set", func() {
-			connID := protocol.ConnectionID{1, 2, 3, 4, 5}
-			data := append([]byte{0x40 | 0x10 /* set the 4th bit */}, connID...)
+			connID := protocol.ParseConnectionID([]byte{1, 2, 3, 4, 5})
+			data := append([]byte{0x40 | 0x10 /* set the 4th bit */}, connID.Bytes()...)
 			data = append(data, 0x42) // packet number
 			hdr, _, _, err := ParsePacket(data, 5)
 			Expect(err).ToNot(HaveOccurred())
@@ -542,8 +554,8 @@ var _ = Describe("Header Parsing", func() {
 		})
 
 		It("reads a Short Header with a 5 byte connection ID", func() {
-			connID := protocol.ConnectionID{1, 2, 3, 4, 5}
-			data := append([]byte{0x40}, connID...)
+			connID := protocol.ParseConnectionID([]byte{1, 2, 3, 4, 5})
+			data := append([]byte{0x40}, connID.Bytes()...)
 			data = append(data, 0x42) // packet number
 			hdr, pdata, rest, err := ParsePacket(data, 5)
 			Expect(err).ToNot(HaveOccurred())
@@ -555,7 +567,7 @@ var _ = Describe("Header Parsing", func() {
 			Expect(err).ToNot(HaveOccurred())
 			Expect(extHdr.KeyPhase).To(Equal(protocol.KeyPhaseZero))
 			Expect(extHdr.DestConnectionID).To(Equal(connID))
-			Expect(extHdr.SrcConnectionID).To(BeEmpty())
+			Expect(extHdr.SrcConnectionID).To(BeZero())
 			Expect(rest).To(BeEmpty())
 		})
 
