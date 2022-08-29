@@ -51,10 +51,9 @@ func fuzzTransportParametersForSessionTicket(data []byte) int {
 	if err := tp.UnmarshalFromSessionTicket(bytes.NewReader(data)); err != nil {
 		return 0
 	}
-	buf := &bytes.Buffer{}
-	tp.MarshalForSessionTicket(buf)
+	b := tp.MarshalForSessionTicket(nil)
 	tp2 := &wire.TransportParameters{}
-	if err := tp2.UnmarshalFromSessionTicket(bytes.NewReader(buf.Bytes())); err != nil {
+	if err := tp2.UnmarshalFromSessionTicket(bytes.NewReader(b)); err != nil {
 		panic(err)
 	}
 	return 1
