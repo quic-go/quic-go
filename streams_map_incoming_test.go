@@ -1,7 +1,6 @@
 package quic
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"math/rand"
@@ -45,7 +44,7 @@ var _ = Describe("Streams Map (incoming)", func() {
 	checkFrameSerialization := func(f wire.Frame) {
 		b, err := f.Append(nil, protocol.VersionTLS)
 		ExpectWithOffset(1, err).ToNot(HaveOccurred())
-		frame, err := wire.NewFrameParser(false, protocol.VersionTLS).ParseNext(bytes.NewReader(b), protocol.Encryption1RTT)
+		_, frame, err := wire.NewFrameParser(false, protocol.VersionTLS).ParseNext(b, protocol.Encryption1RTT)
 		ExpectWithOffset(1, err).ToNot(HaveOccurred())
 		Expect(f).To(Equal(frame))
 	}
