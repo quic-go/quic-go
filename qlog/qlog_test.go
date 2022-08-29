@@ -11,8 +11,6 @@ import (
 	"os"
 	"time"
 
-	"github.com/lucas-clemente/quic-go/internal/wire"
-
 	"github.com/lucas-clemente/quic-go"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/internal/qerr"
@@ -529,9 +527,10 @@ var _ = Describe("Tracing", func() {
 			})
 
 			It("records a received Short Header packet", func() {
-				shdr := &wire.ShortHeader{
+				shdr := &logging.ShortHeader{
 					DestConnectionID: protocol.ParseConnectionID([]byte{1, 2, 3, 4, 5, 6, 7, 8}),
 					PacketNumber:     1337,
+					PacketNumberLen:  protocol.PacketNumberLen3,
 					KeyPhase:         protocol.KeyPhaseZero,
 				}
 				tracer.ReceivedShortHeaderPacket(
@@ -549,7 +548,7 @@ var _ = Describe("Tracing", func() {
 				Expect(ev).To(HaveKey("raw"))
 				raw := ev["raw"].(map[string]interface{})
 				Expect(raw).To(HaveKeyWithValue("length", float64(789)))
-				Expect(raw).To(HaveKeyWithValue("payload_length", float64(789-shdr.Len())))
+				Expect(raw).To(HaveKeyWithValue("payload_length", float64(789-(1+8+3))))
 				Expect(ev).To(HaveKey("header"))
 				hdr := ev["header"].(map[string]interface{})
 				Expect(hdr).To(HaveKeyWithValue("packet_type", "1RTT"))

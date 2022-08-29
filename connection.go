@@ -26,7 +26,7 @@ import (
 
 type unpacker interface {
 	UnpackLongHeader(hdr *wire.Header, rcvTime time.Time, data []byte) (*unpackedPacket, error)
-	UnpackShortHeader(rcvTime time.Time, data []byte) (*wire.ShortHeader, []byte, error)
+	UnpackShortHeader(rcvTime time.Time, data []byte) (protocol.PacketNumber, protocol.PacketNumberLen, protocol.KeyPhaseBit, []byte, error)
 }
 
 type streamGetter interface {
@@ -856,11 +856,13 @@ func (s *connection) handlePacketImpl(rp *receivedPacket) bool {
 	data := rp.data
 	p := rp
 	for len(data) > 0 {
+		var destConnID protocol.ConnectionID
 		if counter > 0 {
 			p = p.Clone()
 			p.data = data
 
-			destConnID, err := wire.ParseConnectionID(p.data, s.srcConnIDLen)
+			var err error
+			destConnID, err = wire.ParseConnectionID(p.data, s.srcConnIDLen)
 			if err != nil {
 				if s.tracer != nil {
 					s.tracer.DroppedPacket(logging.PacketTypeNotDetermined, protocol.ByteCount(len(data)), logging.PacketDropHeaderParseError)
@@ -920,7 +922,7 @@ func (s *connection) handlePacketImpl(rp *receivedPacket) bool {
 			if counter > 0 {
 				p.buffer.Split()
 			}
-			processed = s.handleShortHeaderPacket(p)
+			processed = s.handleShortHeaderPacket(p, destConnID)
 			break
 		}
 	}
@@ -929,7 +931,7 @@ func (s *connection) handlePacketImpl(rp *receivedPacket) bool {
 	return processed
 }
 
-func (s *connection) handleShortHeaderPacket(p *receivedPacket) bool {
+func (s *connection) handleShortHeaderPacket(p *receivedPacket, destConnID protocol.ConnectionID) bool {
 	var wasQueued bool
 
 	defer func() {
@@ -939,18 +941,18 @@ func (s *connection) handleShortHeaderPacket(p *receivedPacket) bool {
 		}
 	}()
 
-	hdr, data, err := s.unpacker.UnpackShortHeader(p.rcvTime, p.data)
+	pn, pnLen, keyPhase, data, err := s.unpacker.UnpackShortHeader(p.rcvTime, p.data)
 	if err != nil {
 		wasQueued = s.handleUnpackError(err, p, logging.PacketType1RTT)
 		return false
 	}
 
 	if s.logger.Debug() {
-		s.logger.Debugf("<- Reading packet %d (%d bytes) for connection %s, 1-RTT", hdr.PacketNumber, p.Size(), hdr.DestConnectionID)
-		hdr.Log(s.logger)
+		s.logger.Debugf("<- Reading packet %d (%d bytes) for connection %s, 1-RTT", pn, p.Size(), destConnID)
+		wire.LogShortHeader(s.logger, destConnID, pn, pnLen, keyPhase)
 	}
 
-	if s.receivedPacketHandler.IsPotentiallyDuplicate(hdr.PacketNumber, protocol.Encryption1RTT) {
+	if s.receivedPacketHandler.IsPotentiallyDuplicate(pn, protocol.Encryption1RTT) {
 		s.logger.Debugf("Dropping (potentially) duplicate packet.")
 		if s.tracer != nil {
 			s.tracer.DroppedPacket(logging.PacketType1RTT, p.Size(), logging.PacketDropDuplicate)
@@ -958,7 +960,22 @@ func (s *connection) handleShortHeaderPacket(p *receivedPacket) bool {
 		return false
 	}
 
-	if err := s.handleUnpackedShortHeaderPacket(hdr, data, p.ecn, p.rcvTime, p.Size()); err != nil {
+	var log func([]logging.Frame)
+	if s.tracer != nil {
+		log = func(frames []logging.Frame) {
+			s.tracer.ReceivedShortHeaderPacket(
+				&logging.ShortHeader{
+					DestConnectionID: destConnID,
+					PacketNumber:     pn,
+					PacketNumberLen:  pnLen,
+					KeyPhase:         keyPhase,
+				},
+				p.Size(),
+				frames,
+			)
+		}
+	}
+	if err := s.handleUnpackedShortHeaderPacket(destConnID, pn, data, p.ecn, p.rcvTime, log); err != nil {
 		s.closeLocal(err)
 		return false
 	}
@@ -1241,22 +1258,23 @@ func (s *connection) handleUnpackedPacket(
 	return s.receivedPacketHandler.ReceivedPacket(packet.hdr.PacketNumber, ecn, packet.encryptionLevel, rcvTime, isAckEliciting)
 }
 
-func (s *connection) handleUnpackedShortHeaderPacket(hdr *wire.ShortHeader, data []byte, ecn protocol.ECN, rcvTime time.Time, packetSize protocol.ByteCount) error {
+func (s *connection) handleUnpackedShortHeaderPacket(
+	destConnID protocol.ConnectionID,
+	pn protocol.PacketNumber,
+	data []byte,
+	ecn protocol.ECN,
+	rcvTime time.Time,
+	log func([]logging.Frame),
+) error {
 	s.lastPacketReceivedTime = rcvTime
 	s.firstAckElicitingPacketAfterIdleSentTime = time.Time{}
 	s.keepAlivePingSent = false
 
-	var log func([]logging.Frame)
-	if s.tracer != nil {
-		log = func(frames []logging.Frame) {
-			s.tracer.ReceivedShortHeaderPacket(hdr, packetSize, frames)
-		}
-	}
-	isAckEliciting, err := s.handleFrames(data, hdr.DestConnectionID, protocol.Encryption1RTT, log)
+	isAckEliciting, err := s.handleFrames(data, destConnID, protocol.Encryption1RTT, log)
 	if err != nil {
 		return err
 	}
-	return s.receivedPacketHandler.ReceivedPacket(hdr.PacketNumber, ecn, protocol.Encryption1RTT, rcvTime, isAckEliciting)
+	return s.receivedPacketHandler.ReceivedPacket(pn, ecn, protocol.Encryption1RTT, rcvTime, isAckEliciting)
 }
 
 func (s *connection) handleFrames(

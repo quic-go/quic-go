@@ -9,6 +9,7 @@ import (
 	time "time"
 
 	gomock "github.com/golang/mock/gomock"
+	protocol "github.com/lucas-clemente/quic-go/internal/protocol"
 	wire "github.com/lucas-clemente/quic-go/internal/wire"
 )
 
@@ -51,13 +52,15 @@ func (mr *MockUnpackerMockRecorder) UnpackLongHeader(hdr, rcvTime, data interfac
 }
 
 // UnpackShortHeader mocks base method.
-func (m *MockUnpacker) UnpackShortHeader(rcvTime time.Time, data []byte) (*wire.ShortHeader, []byte, error) {
+func (m *MockUnpacker) UnpackShortHeader(rcvTime time.Time, data []byte) (protocol.PacketNumber, protocol.PacketNumberLen, protocol.KeyPhaseBit, []byte, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "UnpackShortHeader", rcvTime, data)
-	ret0, _ := ret[0].(*wire.ShortHeader)
-	ret1, _ := ret[1].([]byte)
-	ret2, _ := ret[2].(error)
-	return ret0, ret1, ret2
+	ret0, _ := ret[0].(protocol.PacketNumber)
+	ret1, _ := ret[1].(protocol.PacketNumberLen)
+	ret2, _ := ret[2].(protocol.KeyPhaseBit)
+	ret3, _ := ret[3].([]byte)
+	ret4, _ := ret[4].(error)
+	return ret0, ret1, ret2, ret3, ret4
 }
 
 // UnpackShortHeader indicates an expected call of UnpackShortHeader.

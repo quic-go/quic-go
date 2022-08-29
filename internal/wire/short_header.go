@@ -9,28 +9,20 @@ import (
 	"github.com/lucas-clemente/quic-go/internal/utils"
 )
 
-type ShortHeader struct {
-	DestConnectionID protocol.ConnectionID
-	PacketNumber     protocol.PacketNumber
-	PacketNumberLen  protocol.PacketNumberLen
-	KeyPhase         protocol.KeyPhaseBit
-}
-
-func ParseShortHeader(data []byte, connIDLen int) (*ShortHeader, error) {
+func ParseShortHeader(data []byte, connIDLen int) (length int, _ protocol.PacketNumber, _ protocol.PacketNumberLen, _ protocol.KeyPhaseBit, _ error) {
 	if len(data) == 0 {
-		return nil, io.EOF
+		return 0, 0, 0, 0, io.EOF
 	}
 	if data[0]&0x80 > 0 {
-		return nil, errors.New("not a short header packet")
+		return 0, 0, 0, 0, errors.New("not a short header packet")
 	}
 	if data[0]&0x40 == 0 {
-		return nil, errors.New("not a QUIC packet")
+		return 0, 0, 0, 0, errors.New("not a QUIC packet")
 	}
 	pnLen := protocol.PacketNumberLen(data[0]&0b11) + 1
 	if len(data) < 1+int(pnLen)+connIDLen {
-		return nil, io.EOF
+		return 0, 0, 0, 0, io.EOF
 	}
-	destConnID := protocol.ParseConnectionID(data[1 : 1+connIDLen])
 
 	pos := 1 + connIDLen
 	var pn protocol.PacketNumber
@@ -44,7 +36,7 @@ func ParseShortHeader(data []byte, connIDLen int) (*ShortHeader, error) {
 	case protocol.PacketNumberLen4:
 		pn = protocol.PacketNumber(utils.BigEndian.Uint32(data[pos : pos+4]))
 	default:
-		return nil, fmt.Errorf("invalid packet number length: %d", pnLen)
+		return 0, 0, 0, 0, fmt.Errorf("invalid packet number length: %d", pnLen)
 	}
 	kp := protocol.KeyPhaseZero
 	if data[0]&0b100 > 0 {
@@ -55,19 +47,9 @@ func ParseShortHeader(data []byte, connIDLen int) (*ShortHeader, error) {
 	if data[0]&0x18 != 0 {
 		err = ErrInvalidReservedBits
 	}
-	return &ShortHeader{
-		DestConnectionID: destConnID,
-		PacketNumber:     pn,
-		PacketNumberLen:  pnLen,
-		KeyPhase:         kp,
-	}, err
+	return 1 + connIDLen + int(pnLen), pn, pnLen, kp, err
 }
 
-func (h *ShortHeader) Len() protocol.ByteCount {
-	return 1 + protocol.ByteCount(h.DestConnectionID.Len()) + protocol.ByteCount(h.PacketNumberLen)
-}
-
-// Log logs the Header
-func (h *ShortHeader) Log(logger utils.Logger) {
-	logger.Debugf("\tShort Header{DestConnectionID: %s, PacketNumber: %d, PacketNumberLen: %d, KeyPhase: %s}", h.DestConnectionID, h.PacketNumber, h.PacketNumberLen, h.KeyPhase)
+func LogShortHeader(logger utils.Logger, dest protocol.ConnectionID, pn protocol.PacketNumber, pnLen protocol.PacketNumberLen, kp protocol.KeyPhaseBit) {
+	logger.Debugf("\tShort Header{DestConnectionID: %s, PacketNumber: %d, PacketNumberLen: %d, KeyPhase: %s}", dest, pn, pnLen, kp)
 }

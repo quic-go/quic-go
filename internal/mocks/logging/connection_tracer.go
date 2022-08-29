@@ -208,7 +208,7 @@ func (mr *MockConnectionTracerMockRecorder) ReceivedRetry(arg0 interface{}) *gom
 }
 
 // ReceivedShortHeaderPacket mocks base method.
-func (m *MockConnectionTracer) ReceivedShortHeaderPacket(arg0 *wire.ShortHeader, arg1 protocol.ByteCount, arg2 []logging.Frame) {
+func (m *MockConnectionTracer) ReceivedShortHeaderPacket(arg0 *logging.ShortHeader, arg1 protocol.ByteCount, arg2 []logging.Frame) {
 	m.ctrl.T.Helper()
 	m.ctrl.Call(m, "ReceivedShortHeaderPacket", arg0, arg1, arg2)
 }

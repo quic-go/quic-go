@@ -109,22 +109,22 @@ func (u *packetUnpacker) UnpackLongHeader(hdr *wire.Header, rcvTime time.Time, d
 	}, nil
 }
 
-func (u *packetUnpacker) UnpackShortHeader(rcvTime time.Time, data []byte) (*wire.ShortHeader, []byte, error) {
+func (u *packetUnpacker) UnpackShortHeader(rcvTime time.Time, data []byte) (protocol.PacketNumber, protocol.PacketNumberLen, protocol.KeyPhaseBit, []byte, error) {
 	opener, err := u.cs.Get1RTTOpener()
 	if err != nil {
-		return nil, nil, err
+		return 0, 0, 0, nil, err
 	}
-	hdr, decrypted, err := u.unpackShortHeaderPacket(opener, rcvTime, data)
+	pn, pnLen, kp, decrypted, err := u.unpackShortHeaderPacket(opener, rcvTime, data)
 	if err != nil {
-		return nil, nil, err
+		return 0, 0, 0, nil, err
 	}
 	if len(decrypted) == 0 {
-		return nil, nil, &qerr.TransportError{
+		return 0, 0, 0, nil, &qerr.TransportError{
 			ErrorCode:    qerr.ProtocolViolation,
 			ErrorMessage: "empty packet",
 		}
 	}
-	return hdr, decrypted, nil
+	return pn, pnLen, kp, decrypted, nil
 }
 
 func (u *packetUnpacker) unpackLongHeaderPacket(opener handshake.LongHeaderOpener, hdr *wire.Header, data []byte) (*wire.ExtendedHeader, []byte, error) {
@@ -147,27 +147,26 @@ func (u *packetUnpacker) unpackLongHeaderPacket(opener handshake.LongHeaderOpene
 	return extHdr, decrypted, nil
 }
 
-func (u *packetUnpacker) unpackShortHeaderPacket(opener handshake.ShortHeaderOpener, rcvTime time.Time, data []byte) (*wire.ShortHeader, []byte, error) {
-	hdr, parseErr := u.unpackShortHeader(opener, data)
+func (u *packetUnpacker) unpackShortHeaderPacket(opener handshake.ShortHeaderOpener, rcvTime time.Time, data []byte) (protocol.PacketNumber, protocol.PacketNumberLen, protocol.KeyPhaseBit, []byte, error) {
+	l, pn, pnLen, kp, parseErr := u.unpackShortHeader(opener, data)
 	// If the reserved bits are set incorrectly, we still need to continue unpacking.
 	// This avoids a timing side-channel, which otherwise might allow an attacker
 	// to gain information about the header encryption.
 	if parseErr != nil && parseErr != wire.ErrInvalidReservedBits {
-		return nil, nil, &headerParseError{parseErr}
+		return 0, 0, 0, nil, &headerParseError{parseErr}
 	}
-	hdr.PacketNumber = opener.DecodePacketNumber(hdr.PacketNumber, hdr.PacketNumberLen)
-	l := hdr.Len()
-	decrypted, err := opener.Open(data[l:l], data[l:], rcvTime, hdr.PacketNumber, hdr.KeyPhase, data[:l])
+	pn = opener.DecodePacketNumber(pn, pnLen)
+	decrypted, err := opener.Open(data[l:l], data[l:], rcvTime, pn, kp, data[:l])
 	if err != nil {
-		return nil, nil, err
+		return 0, 0, 0, nil, err
 	}
-	return hdr, decrypted, parseErr
+	return pn, pnLen, kp, decrypted, parseErr
 }
 
-func (u *packetUnpacker) unpackShortHeader(hd headerDecryptor, data []byte) (*wire.ShortHeader, error) {
+func (u *packetUnpacker) unpackShortHeader(hd headerDecryptor, data []byte) (int, protocol.PacketNumber, protocol.PacketNumberLen, protocol.KeyPhaseBit, error) {
 	hdrLen := 1 /* first header byte */ + u.shortHdrConnIDLen
 	if len(data) < hdrLen+4+16 {
-		return nil, fmt.Errorf("packet too small, expected at least 20 bytes after the header, got %d", len(data)-hdrLen)
+		return 0, 0, 0, 0, fmt.Errorf("packet too small, expected at least 20 bytes after the header, got %d", len(data)-hdrLen)
 	}
 	origPNBytes := make([]byte, 4)
 	copy(origPNBytes, data[hdrLen:hdrLen+4])
@@ -178,15 +177,15 @@ func (u *packetUnpacker) unpackShortHeader(hd headerDecryptor, data []byte) (*wi
 		data[hdrLen:hdrLen+4],
 	)
 	// 3. parse the header (and learn the actual length of the packet number)
-	hdr, parseErr := wire.ParseShortHeader(data, u.shortHdrConnIDLen)
+	l, pn, pnLen, kp, parseErr := wire.ParseShortHeader(data, u.shortHdrConnIDLen)
 	if parseErr != nil && parseErr != wire.ErrInvalidReservedBits {
-		return nil, parseErr
+		return l, pn, pnLen, kp, parseErr
 	}
 	// 4. if the packet number is shorter than 4 bytes, replace the remaining bytes with the copy we saved earlier
-	if hdr.PacketNumberLen != protocol.PacketNumberLen4 {
-		copy(data[hdrLen+int(hdr.PacketNumberLen):hdrLen+4], origPNBytes[int(hdr.PacketNumberLen):])
+	if pnLen != protocol.PacketNumberLen4 {
+		copy(data[hdrLen+int(pnLen):hdrLen+4], origPNBytes[int(pnLen):])
 	}
-	return hdr, parseErr
+	return l, pn, pnLen, kp, parseErr
 }
 
 // The error is either nil, a wire.ErrInvalidReservedBits or of type headerParseError.
