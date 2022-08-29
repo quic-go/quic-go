@@ -499,10 +499,10 @@ var _ = Describe("Packet packer", func() {
 				p, err := packer.PackPacket()
 				Expect(err).ToNot(HaveOccurred())
 				Expect(p).ToNot(BeNil())
-				b := &bytes.Buffer{}
-				f.Write(b, packer.version)
+				b, err := f.Append(nil, packer.version)
+				Expect(err).ToNot(HaveOccurred())
 				Expect(p.frames).To(Equal([]ackhandler.Frame{{Frame: f}}))
-				Expect(p.buffer.Data).To(ContainSubstring(b.String()))
+				Expect(p.buffer.Data).To(ContainSubstring(string(b)))
 			})
 
 			It("stores the encryption level a packet was sealed with", func() {

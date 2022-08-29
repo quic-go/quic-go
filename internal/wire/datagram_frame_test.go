@@ -64,21 +64,21 @@ var _ = Describe("STREAM frame", func() {
 				DataLenPresent: true,
 				Data:           []byte("foobar"),
 			}
-			buf := &bytes.Buffer{}
-			Expect(f.Write(buf, protocol.Version1)).To(Succeed())
+			b, err := f.Append(nil, protocol.Version1)
+			Expect(err).ToNot(HaveOccurred())
 			expected := []byte{0x30 ^ 0x1}
 			expected = append(expected, encodeVarInt(0x6)...)
 			expected = append(expected, []byte("foobar")...)
-			Expect(buf.Bytes()).To(Equal(expected))
+			Expect(b).To(Equal(expected))
 		})
 
 		It("writes a frame without length", func() {
 			f := &DatagramFrame{Data: []byte("Lorem ipsum")}
-			buf := &bytes.Buffer{}
-			Expect(f.Write(buf, protocol.Version1)).To(Succeed())
+			b, err := f.Append(nil, protocol.Version1)
+			Expect(err).ToNot(HaveOccurred())
 			expected := []byte{0x30}
 			expected = append(expected, []byte("Lorem ipsum")...)
-			Expect(buf.Bytes()).To(Equal(expected))
+			Expect(b).To(Equal(expected))
 		})
 	})
 
@@ -111,42 +111,44 @@ var _ = Describe("STREAM frame", func() {
 				if maxDataLen == 0 { // 0 means that no valid STREAM frame can be written
 					// check that writing a minimal size STREAM frame (i.e. with 1 byte data) is actually larger than the desired size
 					f.Data = []byte{0}
-					Expect(f.Write(b, protocol.Version1)).To(Succeed())
-					Expect(b.Len()).To(BeNumerically(">", i))
+					b, err := f.Append(nil, protocol.Version1)
+					Expect(err).ToNot(HaveOccurred())
+					Expect(len(b)).To(BeNumerically(">", i))
 					continue
 				}
 				f.Data = data[:int(maxDataLen)]
-				Expect(f.Write(b, protocol.Version1)).To(Succeed())
-				Expect(b.Len()).To(Equal(i))
+				b, err := f.Append(nil, protocol.Version1)
+				Expect(err).ToNot(HaveOccurred())
+				Expect(b).To(HaveLen(i))
 			}
 		})
 
 		It("always returns a data length such that the resulting frame has the right size, if data length is present", func() {
 			data := make([]byte, maxSize)
 			f := &DatagramFrame{DataLenPresent: true}
-			b := &bytes.Buffer{}
 			var frameOneByteTooSmallCounter int
 			for i := 1; i < 3000; i++ {
-				b.Reset()
 				f.Data = nil
 				maxDataLen := f.MaxDataLen(protocol.ByteCount(i), protocol.Version1)
 				if maxDataLen == 0 { // 0 means that no valid STREAM frame can be written
 					// check that writing a minimal size STREAM frame (i.e. with 1 byte data) is actually larger than the desired size
 					f.Data = []byte{0}
-					Expect(f.Write(b, protocol.Version1)).To(Succeed())
-					Expect(b.Len()).To(BeNumerically(">", i))
+					b, err := f.Append(nil, protocol.Version1)
+					Expect(err).ToNot(HaveOccurred())
+					Expect(len(b)).To(BeNumerically(">", i))
 					continue
 				}
 				f.Data = data[:int(maxDataLen)]
-				Expect(f.Write(b, protocol.Version1)).To(Succeed())
+				b, err := f.Append(nil, protocol.Version1)
+				Expect(err).ToNot(HaveOccurred())
 				// There's *one* pathological case, where a data length of x can be encoded into 1 byte
 				// but a data lengths of x+1 needs 2 bytes
 				// In that case, it's impossible to create a STREAM frame of the desired size
-				if b.Len() == i-1 {
+				if len(b) == i-1 {
 					frameOneByteTooSmallCounter++
 					continue
 				}
-				Expect(b.Len()).To(Equal(i))
+				Expect(b).To(HaveLen(i))
 			}
 			Expect(frameOneByteTooSmallCounter).To(Equal(1))
 		})

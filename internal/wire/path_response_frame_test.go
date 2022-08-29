@@ -32,14 +32,13 @@ var _ = Describe("PATH_RESPONSE frame", func() {
 
 	Context("when writing", func() {
 		It("writes a sample frame", func() {
-			b := &bytes.Buffer{}
 			frame := PathResponseFrame{Data: [8]byte{0xde, 0xad, 0xbe, 0xef, 0xca, 0xfe, 0x13, 0x37}}
-			err := frame.Write(b, protocol.VersionWhatever)
+			b, err := frame.Append(nil, protocol.VersionWhatever)
 			Expect(err).ToNot(HaveOccurred())
-			Expect(b.Bytes()).To(Equal([]byte{0x1b, 0xde, 0xad, 0xbe, 0xef, 0xca, 0xfe, 0x13, 0x37}))
+			Expect(b).To(Equal([]byte{0x1b, 0xde, 0xad, 0xbe, 0xef, 0xca, 0xfe, 0x13, 0x37}))
 		})
 
-		It("has the correct min length", func() {
+		It("has the correct length", func() {
 			frame := PathResponseFrame{}
 			Expect(frame.Length(protocol.VersionWhatever)).To(Equal(protocol.ByteCount(9)))
 		})

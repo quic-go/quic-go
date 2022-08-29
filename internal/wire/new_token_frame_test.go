@@ -50,12 +50,12 @@ var _ = Describe("NEW_TOKEN frame", func() {
 		It("writes a sample frame", func() {
 			token := "Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat."
 			f := &NewTokenFrame{Token: []byte(token)}
-			b := &bytes.Buffer{}
-			Expect(f.Write(b, protocol.VersionWhatever)).To(Succeed())
+			b, err := f.Append(nil, protocol.VersionWhatever)
+			Expect(err).ToNot(HaveOccurred())
 			expected := []byte{0x7}
 			expected = append(expected, encodeVarInt(uint64(len(token)))...)
 			expected = append(expected, token...)
-			Expect(b.Bytes()).To(Equal(expected))
+			Expect(b).To(Equal(expected))
 		})
 
 		It("has the correct min length", func() {

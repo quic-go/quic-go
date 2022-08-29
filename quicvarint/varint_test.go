@@ -2,6 +2,7 @@ package quicvarint
 
 import (
 	"bytes"
+	"math/rand"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -189,6 +190,34 @@ var _ = Describe("Varint encoding / decoding", func() {
 				WriteWithLen(b, 494878333, 8)
 				Expect(b.Bytes()).To(Equal([]byte{0b11000000, 0, 0, 0, 0x1d, 0x7f, 0x3e, 0x7d}))
 				Expect(Read(b)).To(BeEquivalentTo(494878333))
+			})
+		})
+
+		Context("appending", func() {
+			It("panics when given a too large number (> 62 bit)", func() {
+				Expect(func() { Append(nil, maxVarInt8+1) }).Should(Panic())
+			})
+
+			It("appends", func() {
+				for i := 0; i < 10000; i++ {
+					var limit int64
+					switch rand.Int() % 4 {
+					case 0:
+						limit = maxVarInt1
+					case 1:
+						limit = maxVarInt2
+					case 2:
+						limit = maxVarInt4
+					case 3:
+						limit = maxVarInt8
+					}
+
+					n := uint64(rand.Int63n(limit))
+					b := Append(nil, n)
+					buf := &bytes.Buffer{}
+					Write(buf, n)
+					Expect(b).To(Equal(buf.Bytes()))
+				}
 			})
 		})
 	})

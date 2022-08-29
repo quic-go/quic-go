@@ -45,14 +45,13 @@ var _ = Describe("CRYPTO frame", func() {
 				Offset: 0x123456,
 				Data:   []byte("foobar"),
 			}
-			b := &bytes.Buffer{}
-			err := f.Write(b, protocol.Version1)
+			b, err := f.Append(nil, protocol.Version1)
 			Expect(err).ToNot(HaveOccurred())
 			expected := []byte{0x6}
 			expected = append(expected, encodeVarInt(0x123456)...) // offset
 			expected = append(expected, encodeVarInt(6)...)        // length
 			expected = append(expected, []byte("foobar")...)
-			Expect(b.Bytes()).To(Equal(expected))
+			Expect(b).To(Equal(expected))
 		})
 	})
 
@@ -64,31 +63,29 @@ var _ = Describe("CRYPTO frame", func() {
 			f := &CryptoFrame{
 				Offset: 0xdeadbeef,
 			}
-			b := &bytes.Buffer{}
 			var frameOneByteTooSmallCounter int
 			for i := 1; i < maxSize; i++ {
-				b.Reset()
 				f.Data = nil
 				maxDataLen := f.MaxDataLen(protocol.ByteCount(i))
 				if maxDataLen == 0 { // 0 means that no valid CRYTPO frame can be written
 					// check that writing a minimal size CRYPTO frame (i.e. with 1 byte data) is actually larger than the desired size
 					f.Data = []byte{0}
-					err := f.Write(b, protocol.Version1)
+					b, err := f.Append(nil, protocol.Version1)
 					Expect(err).ToNot(HaveOccurred())
-					Expect(b.Len()).To(BeNumerically(">", i))
+					Expect(len(b)).To(BeNumerically(">", i))
 					continue
 				}
 				f.Data = data[:int(maxDataLen)]
-				err := f.Write(b, protocol.Version1)
+				b, err := f.Append(nil, protocol.Version1)
 				Expect(err).ToNot(HaveOccurred())
 				// There's *one* pathological case, where a data length of x can be encoded into 1 byte
 				// but a data lengths of x+1 needs 2 bytes
 				// In that case, it's impossible to create a STREAM frame of the desired size
-				if b.Len() == i-1 {
+				if len(b) == i-1 {
 					frameOneByteTooSmallCounter++
 					continue
 				}
-				Expect(b.Len()).To(Equal(i))
+				Expect(len(b)).To(Equal(i))
 			}
 			Expect(frameOneByteTooSmallCounter).To(Equal(1))
 		})

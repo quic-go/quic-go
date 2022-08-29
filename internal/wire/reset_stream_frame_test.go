@@ -47,17 +47,16 @@ var _ = Describe("RESET_STREAM frame", func() {
 				FinalSize: 0x11223344decafbad,
 				ErrorCode: 0xcafe,
 			}
-			b := &bytes.Buffer{}
-			err := frame.Write(b, protocol.Version1)
+			b, err := frame.Append(nil, protocol.Version1)
 			Expect(err).ToNot(HaveOccurred())
 			expected := []byte{0x4}
 			expected = append(expected, encodeVarInt(0x1337)...)
 			expected = append(expected, encodeVarInt(0xcafe)...)
 			expected = append(expected, encodeVarInt(0x11223344decafbad)...)
-			Expect(b.Bytes()).To(Equal(expected))
+			Expect(b).To(Equal(expected))
 		})
 
-		It("has the correct min length", func() {
+		It("has the correct length", func() {
 			rst := ResetStreamFrame{
 				StreamID:  0x1337,
 				FinalSize: 0x1234567,
