@@ -50,6 +50,8 @@ func init() {
 const eventChanSize = 50
 
 type tracer struct {
+	logging.NullTracer
+
 	getLogWriter func(p logging.Perspective, connectionID []byte) io.WriteCloser
 }
 
@@ -65,10 +67,6 @@ func (t *tracer) TracerForConnection(_ context.Context, p logging.Perspective, o
 		return NewConnectionTracer(w, p, odcid)
 	}
 	return nil
-}
-
-func (t *tracer) SentPacket(net.Addr, *logging.Header, protocol.ByteCount, []logging.Frame) {}
-func (t *tracer) DroppedPacket(net.Addr, logging.PacketType, protocol.ByteCount, logging.PacketDropReason) {
 }
 
 type connectionTracer struct {
@@ -110,8 +108,8 @@ func (t *connectionTracer) run() {
 		trace: trace{
 			VantagePoint: vantagePoint{Type: t.perspective},
 			CommonFields: commonFields{
-				ODCID:         connectionID(t.odcid),
-				GroupID:       connectionID(t.odcid),
+				ODCID:         t.odcid,
+				GroupID:       t.odcid,
 				ReferenceTime: t.referenceTime,
 			},
 		},
@@ -323,14 +321,17 @@ func (t *connectionTracer) ReceivedRetry(hdr *wire.Header) {
 	t.mutex.Unlock()
 }
 
-func (t *connectionTracer) ReceivedVersionNegotiationPacket(hdr *wire.Header, versions []logging.VersionNumber) {
+func (t *connectionTracer) ReceivedVersionNegotiationPacket(dest, src logging.ArbitraryLenConnectionID, versions []logging.VersionNumber) {
 	ver := make([]versionNumber, len(versions))
 	for i, v := range versions {
 		ver[i] = versionNumber(v)
 	}
 	t.mutex.Lock()
 	t.recordEvent(time.Now(), &eventVersionNegotiationReceived{
-		Header:            *transformHeader(hdr),
+		Header: packetHeaderVersionNegotiation{
+			SrcConnectionID:  src,
+			DestConnectionID: dest,
+		},
 		SupportedVersions: ver,
 	})
 	t.mutex.Unlock()

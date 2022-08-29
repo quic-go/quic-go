@@ -24,15 +24,15 @@ var _ = Describe("Header", func() {
 		})
 
 		Context("Long Header", func() {
-			srcConnID := protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8}
+			srcConnID := protocol.ParseConnectionID([]byte{1, 2, 3, 4, 5, 6, 7, 8})
 
 			It("writes", func() {
 				Expect((&ExtendedHeader{
 					Header: Header{
 						IsLongHeader:     true,
 						Type:             protocol.PacketTypeHandshake,
-						DestConnectionID: protocol.ConnectionID{0xde, 0xad, 0xbe, 0xef, 0xca, 0xfe},
-						SrcConnectionID:  protocol.ConnectionID{0xde, 0xca, 0xfb, 0xad, 0x0, 0x0, 0x13, 0x37},
+						DestConnectionID: protocol.ParseConnectionID([]byte{0xde, 0xad, 0xbe, 0xef, 0xca, 0xfe}),
+						SrcConnectionID:  protocol.ParseConnectionID([]byte{0xde, 0xca, 0xfb, 0xad, 0x0, 0x0, 0x13, 0x37}),
 						Version:          0x1020304,
 						Length:           protocol.InitialPacketSizeIPv4,
 					},
@@ -52,27 +52,12 @@ var _ = Describe("Header", func() {
 				Expect(buf.Bytes()).To(Equal(expected))
 			})
 
-			It("refuses to write a header with a too long connection ID", func() {
-				err := (&ExtendedHeader{
-					Header: Header{
-						IsLongHeader:     true,
-						SrcConnectionID:  srcConnID,
-						DestConnectionID: protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21}, // connection IDs must be at most 20 bytes long
-						Version:          0x1020304,
-						Type:             0x5,
-					},
-					PacketNumber:    0xdecafbad,
-					PacketNumberLen: protocol.PacketNumberLen4,
-				}).Write(buf, versionIETFHeader)
-				Expect(err).To(MatchError("invalid connection ID length: 21 bytes"))
-			})
-
 			It("writes a header with a 20 byte connection ID", func() {
 				err := (&ExtendedHeader{
 					Header: Header{
 						IsLongHeader:     true,
 						SrcConnectionID:  srcConnID,
-						DestConnectionID: protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20}, // connection IDs must be at most 20 bytes long
+						DestConnectionID: protocol.ParseConnectionID([]byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20}), // connection IDs must be at most 20 bytes long
 						Version:          0x1020304,
 						Type:             0x5,
 					},
@@ -194,7 +179,7 @@ var _ = Describe("Header", func() {
 			It("writes a header with connection ID", func() {
 				Expect((&ExtendedHeader{
 					Header: Header{
-						DestConnectionID: protocol.ConnectionID{0xde, 0xad, 0xbe, 0xef, 0xca, 0xfe, 0x13, 0x37},
+						DestConnectionID: protocol.ParseConnectionID([]byte{0xde, 0xad, 0xbe, 0xef, 0xca, 0xfe, 0x13, 0x37}),
 					},
 					PacketNumberLen: protocol.PacketNumberLen1,
 					PacketNumber:    0x42,
@@ -271,8 +256,8 @@ var _ = Describe("Header", func() {
 				Header: Header{
 					IsLongHeader:     true,
 					Type:             protocol.PacketTypeHandshake,
-					DestConnectionID: protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8},
-					SrcConnectionID:  protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8},
+					DestConnectionID: protocol.ParseConnectionID([]byte{1, 2, 3, 4, 5, 6, 7, 8}),
+					SrcConnectionID:  protocol.ParseConnectionID([]byte{1, 2, 3, 4, 5, 6, 7, 8}),
 					Length:           1,
 				},
 				PacketNumberLen: protocol.PacketNumberLen1,
@@ -288,8 +273,8 @@ var _ = Describe("Header", func() {
 				Header: Header{
 					IsLongHeader:     true,
 					Type:             protocol.PacketTypeHandshake,
-					DestConnectionID: protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8},
-					SrcConnectionID:  protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8},
+					DestConnectionID: protocol.ParseConnectionID([]byte{1, 2, 3, 4, 5, 6, 7, 8}),
+					SrcConnectionID:  protocol.ParseConnectionID([]byte{1, 2, 3, 4, 5, 6, 7, 8}),
 					Length:           1500,
 				},
 				PacketNumberLen: protocol.PacketNumberLen2,
@@ -305,8 +290,8 @@ var _ = Describe("Header", func() {
 				Header: Header{
 					IsLongHeader:     true,
 					Type:             protocol.PacketTypeInitial,
-					DestConnectionID: protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8},
-					SrcConnectionID:  protocol.ConnectionID{1, 2, 3, 4},
+					DestConnectionID: protocol.ParseConnectionID([]byte{1, 2, 3, 4, 5, 6, 7, 8}),
+					SrcConnectionID:  protocol.ParseConnectionID([]byte{1, 2, 3, 4}),
 					Length:           15,
 				},
 				PacketNumberLen: protocol.PacketNumberLen2,
@@ -322,8 +307,8 @@ var _ = Describe("Header", func() {
 				Header: Header{
 					IsLongHeader:     true,
 					Type:             protocol.PacketTypeInitial,
-					DestConnectionID: protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8},
-					SrcConnectionID:  protocol.ConnectionID{1, 2, 3, 4},
+					DestConnectionID: protocol.ParseConnectionID([]byte{1, 2, 3, 4, 5, 6, 7, 8}),
+					SrcConnectionID:  protocol.ParseConnectionID([]byte{1, 2, 3, 4}),
 					Length:           1500,
 				},
 				PacketNumberLen: protocol.PacketNumberLen2,
@@ -338,8 +323,8 @@ var _ = Describe("Header", func() {
 			h := &ExtendedHeader{
 				Header: Header{
 					IsLongHeader:     true,
-					DestConnectionID: protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8},
-					SrcConnectionID:  protocol.ConnectionID{1, 2, 3, 4},
+					DestConnectionID: protocol.ParseConnectionID([]byte{1, 2, 3, 4, 5, 6, 7, 8}),
+					SrcConnectionID:  protocol.ParseConnectionID([]byte{1, 2, 3, 4}),
 					Type:             protocol.PacketTypeInitial,
 					Length:           1500,
 					Token:            []byte("foo"),
@@ -355,7 +340,7 @@ var _ = Describe("Header", func() {
 		It("has the right length for a Short Header containing a connection ID", func() {
 			h := &ExtendedHeader{
 				Header: Header{
-					DestConnectionID: protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8},
+					DestConnectionID: protocol.ParseConnectionID([]byte{1, 2, 3, 4, 5, 6, 7, 8}),
 				},
 				PacketNumberLen: protocol.PacketNumberLen1,
 			}
@@ -407,8 +392,8 @@ var _ = Describe("Header", func() {
 			(&ExtendedHeader{
 				Header: Header{
 					IsLongHeader:     true,
-					DestConnectionID: protocol.ConnectionID{0xde, 0xad, 0xbe, 0xef, 0xca, 0xfe, 0x13, 0x37},
-					SrcConnectionID:  protocol.ConnectionID{0xde, 0xca, 0xfb, 0xad, 0x013, 0x37, 0x13, 0x37},
+					DestConnectionID: protocol.ParseConnectionID([]byte{0xde, 0xad, 0xbe, 0xef, 0xca, 0xfe, 0x13, 0x37}),
+					SrcConnectionID:  protocol.ParseConnectionID([]byte{0xde, 0xca, 0xfb, 0xad, 0x013, 0x37, 0x13, 0x37}),
 					Type:             protocol.PacketTypeHandshake,
 					Length:           54321,
 					Version:          0xfeed,
@@ -423,8 +408,8 @@ var _ = Describe("Header", func() {
 			(&ExtendedHeader{
 				Header: Header{
 					IsLongHeader:     true,
-					DestConnectionID: protocol.ConnectionID{0xca, 0xfe, 0x13, 0x37},
-					SrcConnectionID:  protocol.ConnectionID{0xde, 0xca, 0xfb, 0xad},
+					DestConnectionID: protocol.ParseConnectionID([]byte{0xca, 0xfe, 0x13, 0x37}),
+					SrcConnectionID:  protocol.ParseConnectionID([]byte{0xde, 0xca, 0xfb, 0xad}),
 					Type:             protocol.PacketTypeInitial,
 					Token:            []byte{0xde, 0xad, 0xbe, 0xef},
 					Length:           100,
@@ -440,8 +425,8 @@ var _ = Describe("Header", func() {
 			(&ExtendedHeader{
 				Header: Header{
 					IsLongHeader:     true,
-					DestConnectionID: protocol.ConnectionID{0xca, 0xfe, 0x13, 0x37},
-					SrcConnectionID:  protocol.ConnectionID{0xde, 0xca, 0xfb, 0xad},
+					DestConnectionID: protocol.ParseConnectionID([]byte{0xca, 0xfe, 0x13, 0x37}),
+					SrcConnectionID:  protocol.ParseConnectionID([]byte{0xde, 0xca, 0xfb, 0xad}),
 					Type:             protocol.PacketTypeInitial,
 					Length:           100,
 					Version:          0xfeed,
@@ -456,8 +441,8 @@ var _ = Describe("Header", func() {
 			(&ExtendedHeader{
 				Header: Header{
 					IsLongHeader:     true,
-					DestConnectionID: protocol.ConnectionID{0xca, 0xfe, 0x13, 0x37},
-					SrcConnectionID:  protocol.ConnectionID{0xde, 0xca, 0xfb, 0xad},
+					DestConnectionID: protocol.ParseConnectionID([]byte{0xca, 0xfe, 0x13, 0x37}),
+					SrcConnectionID:  protocol.ParseConnectionID([]byte{0xde, 0xca, 0xfb, 0xad}),
 					Type:             protocol.PacketTypeRetry,
 					Token:            []byte{0x12, 0x34, 0x56},
 					Version:          0xfeed,
@@ -469,7 +454,7 @@ var _ = Describe("Header", func() {
 		It("logs Short Headers containing a connection ID", func() {
 			(&ExtendedHeader{
 				Header: Header{
-					DestConnectionID: protocol.ConnectionID{0xde, 0xad, 0xbe, 0xef, 0xca, 0xfe, 0x13, 0x37},
+					DestConnectionID: protocol.ParseConnectionID([]byte{0xde, 0xad, 0xbe, 0xef, 0xca, 0xfe, 0x13, 0x37}),
 				},
 				KeyPhase:        protocol.KeyPhaseOne,
 				PacketNumber:    1337,

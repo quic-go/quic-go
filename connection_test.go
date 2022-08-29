@@ -49,9 +49,9 @@ var _ = Describe("Connection", func() {
 	)
 	remoteAddr := &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 1337}
 	localAddr := &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 7331}
-	srcConnID := protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8}
-	destConnID := protocol.ConnectionID{8, 7, 6, 5, 4, 3, 2, 1}
-	clientDestConnID := protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}
+	srcConnID := protocol.ParseConnectionID([]byte{1, 2, 3, 4, 5, 6, 7, 8})
+	destConnID := protocol.ParseConnectionID([]byte{8, 7, 6, 5, 4, 3, 2, 1})
+	clientDestConnID := protocol.ParseConnectionID([]byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10})
 
 	getPacket := func(pn protocol.PacketNumber) *packedPacket {
 		buffer := getPacketBuffer()
@@ -91,7 +91,7 @@ var _ = Describe("Connection", func() {
 		conn = newConnection(
 			mconn,
 			connRunner,
-			nil,
+			protocol.ConnectionID{},
 			nil,
 			clientDestConnID,
 			destConnID,
@@ -270,11 +270,12 @@ var _ = Describe("Connection", func() {
 		})
 
 		It("handles NEW_CONNECTION_ID frames", func() {
+			connID := protocol.ParseConnectionID([]byte{1, 2, 3, 4})
 			Expect(conn.handleFrame(&wire.NewConnectionIDFrame{
 				SequenceNumber: 10,
-				ConnectionID:   protocol.ConnectionID{1, 2, 3, 4},
+				ConnectionID:   connID,
 			}, protocol.Encryption1RTT, protocol.ConnectionID{})).To(Succeed())
-			Expect(conn.connIDManager.queue.Back().Value.ConnectionID).To(Equal(protocol.ConnectionID{1, 2, 3, 4}))
+			Expect(conn.connIDManager.queue.Back().Value.ConnectionID).To(Equal(connID))
 		})
 
 		It("handles PING frames", func() {
@@ -663,7 +664,11 @@ var _ = Describe("Connection", func() {
 		})
 
 		It("drops Version Negotiation packets", func() {
-			b := wire.ComposeVersionNegotiation(srcConnID, destConnID, conn.config.Versions)
+			b := wire.ComposeVersionNegotiation(
+				protocol.ArbitraryLenConnectionID(srcConnID.Bytes()),
+				protocol.ArbitraryLenConnectionID(destConnID.Bytes()),
+				conn.config.Versions,
+			)
 			tracer.EXPECT().DroppedPacket(logging.PacketTypeVersionNegotiation, protocol.ByteCount(len(b)), logging.PacketDropUnexpectedPacket)
 			Expect(conn.handlePacketImpl(&receivedPacket{
 				data:   b,
@@ -1047,7 +1052,7 @@ var _ = Describe("Connection", func() {
 					IsLongHeader:     true,
 					Type:             protocol.PacketTypeInitial,
 					DestConnectionID: destConnID,
-					SrcConnectionID:  protocol.ConnectionID{0xde, 0xad, 0xbe, 0xef},
+					SrcConnectionID:  protocol.ParseConnectionID([]byte{0xde, 0xad, 0xbe, 0xef}),
 					Length:           1,
 					Version:          conn.version,
 				},
@@ -1204,7 +1209,7 @@ var _ = Describe("Connection", func() {
 			})
 
 			It("ignores coalesced packet parts if the destination connection IDs don't match", func() {
-				wrongConnID := protocol.ConnectionID{0xde, 0xad, 0xbe, 0xef}
+				wrongConnID := protocol.ParseConnectionID([]byte{0xde, 0xad, 0xbe, 0xef})
 				Expect(srcConnID).ToNot(Equal(wrongConnID))
 				hdrLen1, packet1 := getPacketWithLength(srcConnID, 456)
 				unpacker.EXPECT().Unpack(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(func(_ *wire.Header, _ time.Time, data []byte) (*unpackedPacket, error) {
@@ -2408,8 +2413,8 @@ var _ = Describe("Client Connection", func() {
 		tlsConf     *tls.Config
 		quicConf    *Config
 	)
-	srcConnID := protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8}
-	destConnID := protocol.ConnectionID{8, 7, 6, 5, 4, 3, 2, 1}
+	srcConnID := protocol.ParseConnectionID([]byte{1, 2, 3, 4, 5, 6, 7, 8})
+	destConnID := protocol.ParseConnectionID([]byte{8, 7, 6, 5, 4, 3, 2, 1})
 
 	getPacket := func(hdr *wire.ExtendedHeader, data []byte) *receivedPacket {
 		buf := &bytes.Buffer{}
@@ -2448,7 +2453,7 @@ var _ = Describe("Client Connection", func() {
 			mconn,
 			connRunner,
 			destConnID,
-			protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8},
+			protocol.ParseConnectionID([]byte{1, 2, 3, 4, 5, 6, 7, 8}),
 			quicConf,
 			tlsConf,
 			42, // initial packet number
@@ -2481,7 +2486,7 @@ var _ = Describe("Client Connection", func() {
 			cryptoSetup.EXPECT().RunHandshake().MaxTimes(1)
 			conn.run()
 		}()
-		newConnID := protocol.ConnectionID{1, 3, 3, 7, 1, 3, 3, 7}
+		newConnID := protocol.ParseConnectionID([]byte{1, 3, 3, 7, 1, 3, 3, 7})
 		p := getPacket(&wire.ExtendedHeader{
 			Header: wire.Header{
 				IsLongHeader:     true,
@@ -2513,9 +2518,9 @@ var _ = Describe("Client Connection", func() {
 		conn.connIDManager.SetHandshakeComplete()
 		conn.handleNewConnectionIDFrame(&wire.NewConnectionIDFrame{
 			SequenceNumber: 1,
-			ConnectionID:   protocol.ConnectionID{1, 2, 3, 4, 5},
+			ConnectionID:   protocol.ParseConnectionID([]byte{1, 2, 3, 4, 5}),
 		})
-		Expect(conn.connIDManager.Get()).To(Equal(protocol.ConnectionID{1, 2, 3, 4, 5}))
+		Expect(conn.connIDManager.Get()).To(Equal(protocol.ParseConnectionID([]byte{1, 2, 3, 4, 5})))
 		// now receive a packet with the original source connection ID
 		unpacker.EXPECT().Unpack(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(func(hdr *wire.Header, _ time.Time, _ []byte) (*unpackedPacket, error) {
 			return &unpackedPacket{
@@ -2593,7 +2598,11 @@ var _ = Describe("Client Connection", func() {
 
 	Context("handling Version Negotiation", func() {
 		getVNP := func(versions ...protocol.VersionNumber) *receivedPacket {
-			b := wire.ComposeVersionNegotiation(srcConnID, destConnID, versions)
+			b := wire.ComposeVersionNegotiation(
+				protocol.ArbitraryLenConnectionID(srcConnID.Bytes()),
+				protocol.ArbitraryLenConnectionID(destConnID.Bytes()),
+				versions,
+			)
 			return &receivedPacket{
 				data:   b,
 				buffer: getPacketBuffer(),
@@ -2613,8 +2622,7 @@ var _ = Describe("Client Connection", func() {
 				errChan <- conn.run()
 			}()
 			connRunner.EXPECT().Remove(srcConnID)
-			tracer.EXPECT().ReceivedVersionNegotiationPacket(gomock.Any(), gomock.Any()).Do(func(hdr *wire.Header, versions []logging.VersionNumber) {
-				Expect(hdr.Version).To(BeZero())
+			tracer.EXPECT().ReceivedVersionNegotiationPacket(gomock.Any(), gomock.Any(), gomock.Any()).Do(func(_, _ protocol.ArbitraryLenConnectionID, versions []logging.VersionNumber) {
 				Expect(versions).To(And(
 					ContainElement(protocol.VersionNumber(4321)),
 					ContainElement(protocol.VersionNumber(1337)),
@@ -2640,7 +2648,7 @@ var _ = Describe("Client Connection", func() {
 			}()
 			connRunner.EXPECT().Remove(srcConnID).MaxTimes(1)
 			gomock.InOrder(
-				tracer.EXPECT().ReceivedVersionNegotiationPacket(gomock.Any(), gomock.Any()),
+				tracer.EXPECT().ReceivedVersionNegotiationPacket(gomock.Any(), gomock.Any(), gomock.Any()),
 				tracer.EXPECT().ClosedConnection(gomock.Any()).Do(func(e error) {
 					var vnErr *VersionNegotiationError
 					Expect(errors.As(e, &vnErr)).To(BeTrue())
@@ -2672,7 +2680,7 @@ var _ = Describe("Client Connection", func() {
 	})
 
 	Context("handling Retry", func() {
-		origDestConnID := protocol.ConnectionID{8, 7, 6, 5, 4, 3, 2, 1}
+		origDestConnID := protocol.ParseConnectionID([]byte{8, 7, 6, 5, 4, 3, 2, 1})
 
 		var retryHdr *wire.ExtendedHeader
 
@@ -2681,8 +2689,8 @@ var _ = Describe("Client Connection", func() {
 				Header: wire.Header{
 					IsLongHeader:     true,
 					Type:             protocol.PacketTypeRetry,
-					SrcConnectionID:  protocol.ConnectionID{0xde, 0xad, 0xbe, 0xef},
-					DestConnectionID: protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8},
+					SrcConnectionID:  protocol.ParseConnectionID([]byte{0xde, 0xad, 0xbe, 0xef}),
+					DestConnectionID: protocol.ParseConnectionID([]byte{1, 2, 3, 4, 5, 6, 7, 8}),
 					Token:            []byte("foobar"),
 					Version:          conn.version,
 				},
@@ -2700,7 +2708,7 @@ var _ = Describe("Client Connection", func() {
 			conn.sentPacketHandler = sph
 			sph.EXPECT().ResetForRetry()
 			sph.EXPECT().ReceivedBytes(gomock.Any())
-			cryptoSetup.EXPECT().ChangeConnectionID(protocol.ConnectionID{0xde, 0xad, 0xbe, 0xef})
+			cryptoSetup.EXPECT().ChangeConnectionID(protocol.ParseConnectionID([]byte{0xde, 0xad, 0xbe, 0xef}))
 			packer.EXPECT().SetToken([]byte("foobar"))
 			tracer.EXPECT().ReceivedRetry(gomock.Any()).Do(func(hdr *wire.Header) {
 				Expect(hdr.DestConnectionID).To(Equal(retryHdr.DestConnectionID))
@@ -2781,7 +2789,7 @@ var _ = Describe("Client Connection", func() {
 				PreferredAddress: &wire.PreferredAddress{
 					IPv4:                net.IPv4(127, 0, 0, 1),
 					IPv6:                net.IP{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16},
-					ConnectionID:        protocol.ConnectionID{1, 2, 3, 4},
+					ConnectionID:        protocol.ParseConnectionID([]byte{1, 2, 3, 4}),
 					StatelessResetToken: protocol.StatelessResetToken{16, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1},
 				},
 			}
@@ -2794,7 +2802,7 @@ var _ = Describe("Client Connection", func() {
 			cf, _ := conn.framer.AppendControlFrames(nil, protocol.MaxByteCount)
 			Expect(cf).To(BeEmpty())
 			connRunner.EXPECT().AddResetToken(protocol.StatelessResetToken{16, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1}, conn)
-			Expect(conn.connIDManager.Get()).To(Equal(protocol.ConnectionID{1, 2, 3, 4}))
+			Expect(conn.connIDManager.Get()).To(Equal(protocol.ParseConnectionID([]byte{1, 2, 3, 4})))
 			// shut down
 			connRunner.EXPECT().RemoveResetToken(protocol.StatelessResetToken{16, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1})
 			expectClose(true)
@@ -2816,10 +2824,10 @@ var _ = Describe("Client Connection", func() {
 		})
 
 		It("errors if the transport parameters contain a wrong initial_source_connection_id", func() {
-			conn.handshakeDestConnID = protocol.ConnectionID{0xde, 0xad, 0xbe, 0xef}
+			conn.handshakeDestConnID = protocol.ParseConnectionID([]byte{0xde, 0xad, 0xbe, 0xef})
 			params := &wire.TransportParameters{
 				OriginalDestinationConnectionID: destConnID,
-				InitialSourceConnectionID:       protocol.ConnectionID{0xde, 0xca, 0xfb, 0xad},
+				InitialSourceConnectionID:       protocol.ParseConnectionID([]byte{0xde, 0xca, 0xfb, 0xad}),
 				StatelessResetToken:             &protocol.StatelessResetToken{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16},
 			}
 			expectClose(false)
@@ -2832,7 +2840,8 @@ var _ = Describe("Client Connection", func() {
 		})
 
 		It("errors if the transport parameters don't contain the retry_source_connection_id, if a Retry was performed", func() {
-			conn.retrySrcConnID = &protocol.ConnectionID{0xde, 0xad, 0xbe, 0xef}
+			rcid := protocol.ParseConnectionID([]byte{0xde, 0xad, 0xbe, 0xef})
+			conn.retrySrcConnID = &rcid
 			params := &wire.TransportParameters{
 				OriginalDestinationConnectionID: destConnID,
 				InitialSourceConnectionID:       destConnID,
@@ -2848,11 +2857,13 @@ var _ = Describe("Client Connection", func() {
 		})
 
 		It("errors if the transport parameters contain the wrong retry_source_connection_id, if a Retry was performed", func() {
-			conn.retrySrcConnID = &protocol.ConnectionID{0xde, 0xad, 0xbe, 0xef}
+			rcid := protocol.ParseConnectionID([]byte{0xde, 0xad, 0xbe, 0xef})
+			rcid2 := protocol.ParseConnectionID([]byte{0xde, 0xad, 0xc0, 0xde})
+			conn.retrySrcConnID = &rcid
 			params := &wire.TransportParameters{
 				OriginalDestinationConnectionID: destConnID,
 				InitialSourceConnectionID:       destConnID,
-				RetrySourceConnectionID:         &protocol.ConnectionID{0xde, 0xad, 0xc0, 0xde},
+				RetrySourceConnectionID:         &rcid2,
 				StatelessResetToken:             &protocol.StatelessResetToken{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16},
 			}
 			expectClose(false)
@@ -2865,10 +2876,11 @@ var _ = Describe("Client Connection", func() {
 		})
 
 		It("errors if the transport parameters contain the retry_source_connection_id, if no Retry was performed", func() {
+			rcid := protocol.ParseConnectionID([]byte{0xde, 0xad, 0xc0, 0xde})
 			params := &wire.TransportParameters{
 				OriginalDestinationConnectionID: destConnID,
 				InitialSourceConnectionID:       destConnID,
-				RetrySourceConnectionID:         &protocol.ConnectionID{0xde, 0xad, 0xc0, 0xde},
+				RetrySourceConnectionID:         &rcid,
 				StatelessResetToken:             &protocol.StatelessResetToken{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16},
 			}
 			expectClose(false)
@@ -2881,9 +2893,9 @@ var _ = Describe("Client Connection", func() {
 		})
 
 		It("errors if the transport parameters contain a wrong original_destination_connection_id", func() {
-			conn.origDestConnID = protocol.ConnectionID{0xde, 0xad, 0xbe, 0xef}
+			conn.origDestConnID = protocol.ParseConnectionID([]byte{0xde, 0xad, 0xbe, 0xef})
 			params := &wire.TransportParameters{
-				OriginalDestinationConnectionID: protocol.ConnectionID{0xde, 0xca, 0xfb, 0xad},
+				OriginalDestinationConnectionID: protocol.ParseConnectionID([]byte{0xde, 0xca, 0xfb, 0xad}),
 				InitialSourceConnectionID:       conn.handshakeDestConnID,
 				StatelessResetToken:             &protocol.StatelessResetToken{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16},
 			}
@@ -2941,7 +2953,7 @@ var _ = Describe("Client Connection", func() {
 					IsLongHeader:     true,
 					Type:             protocol.PacketTypeInitial,
 					DestConnectionID: destConnID,
-					SrcConnectionID:  protocol.ConnectionID{0xde, 0xad, 0xbe, 0xef},
+					SrcConnectionID:  protocol.ParseConnectionID([]byte{0xde, 0xad, 0xbe, 0xef}),
 					Length:           1,
 					Version:          conn.version,
 				},
@@ -3007,7 +3019,7 @@ var _ = Describe("Client Connection", func() {
 			conn.sentPacketHandler = sph
 			sph.EXPECT().ReceivedBytes(gomock.Any()).Times(2)
 			sph.EXPECT().ResetForRetry()
-			newSrcConnID := protocol.ConnectionID{0xde, 0xad, 0xbe, 0xef}
+			newSrcConnID := protocol.ParseConnectionID([]byte{0xde, 0xad, 0xbe, 0xef})
 			cryptoSetup.EXPECT().ChangeConnectionID(newSrcConnID)
 			packer.EXPECT().SetToken([]byte("foobar"))
 

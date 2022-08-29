@@ -72,7 +72,7 @@ func transformExtendedHeader(hdr *wire.ExtendedHeader) *packetHeader {
 
 func (h packetHeader) MarshalJSONObject(enc *gojay.Encoder) {
 	enc.StringKey("packet_type", packetType(h.PacketType).String())
-	if h.PacketType != logging.PacketTypeRetry && h.PacketType != logging.PacketTypeVersionNegotiation {
+	if h.PacketType != logging.PacketTypeRetry {
 		enc.Int64Key("packet_number", int64(h.PacketNumber))
 	}
 	if h.Version != 0 {
@@ -81,12 +81,12 @@ func (h packetHeader) MarshalJSONObject(enc *gojay.Encoder) {
 	if h.PacketType != logging.PacketType1RTT {
 		enc.IntKey("scil", h.SrcConnectionID.Len())
 		if h.SrcConnectionID.Len() > 0 {
-			enc.StringKey("scid", connectionID(h.SrcConnectionID).String())
+			enc.StringKey("scid", h.SrcConnectionID.String())
 		}
 	}
 	enc.IntKey("dcil", h.DestConnectionID.Len())
 	if h.DestConnectionID.Len() > 0 {
-		enc.StringKey("dcid", connectionID(h.DestConnectionID).String())
+		enc.StringKey("dcid", h.DestConnectionID.String())
 	}
 	if h.KeyPhaseBit == logging.KeyPhaseZero || h.KeyPhaseBit == logging.KeyPhaseOne {
 		enc.StringKey("key_phase_bit", h.KeyPhaseBit.String())
@@ -94,6 +94,20 @@ func (h packetHeader) MarshalJSONObject(enc *gojay.Encoder) {
 	if h.Token != nil {
 		enc.ObjectKey("token", h.Token)
 	}
+}
+
+type packetHeaderVersionNegotiation struct {
+	SrcConnectionID  logging.ArbitraryLenConnectionID
+	DestConnectionID logging.ArbitraryLenConnectionID
+}
+
+func (h packetHeaderVersionNegotiation) IsNil() bool { return false }
+func (h packetHeaderVersionNegotiation) MarshalJSONObject(enc *gojay.Encoder) {
+	enc.StringKey("packet_type", "version_negotiation")
+	enc.IntKey("scil", h.SrcConnectionID.Len())
+	enc.StringKey("scid", h.SrcConnectionID.String())
+	enc.IntKey("dcil", h.DestConnectionID.Len())
+	enc.StringKey("dcid", h.DestConnectionID.String())
 }
 
 // a minimal header that only outputs the packet type

@@ -2,6 +2,7 @@ package protocol
 
 import (
 	"bytes"
+	"crypto/rand"
 	"io"
 
 	. "github.com/onsi/ginkgo"
@@ -42,15 +43,6 @@ var _ = Describe("Connection ID generation", func() {
 		Expect(has20ByteConnID).To(BeTrue())
 	})
 
-	It("says if connection IDs are equal", func() {
-		c1 := ConnectionID{1, 2, 3, 4, 5, 6, 7, 8}
-		c2 := ConnectionID{8, 7, 6, 5, 4, 3, 2, 1}
-		Expect(c1.Equal(c1)).To(BeTrue())
-		Expect(c2.Equal(c2)).To(BeTrue())
-		Expect(c1.Equal(c2)).To(BeFalse())
-		Expect(c2.Equal(c1)).To(BeFalse())
-	})
-
 	It("reads the connection ID", func() {
 		buf := bytes.NewBuffer([]byte{1, 2, 3, 4, 5, 6, 7, 8, 9})
 		c, err := ReadConnectionID(buf, 9)
@@ -64,15 +56,21 @@ var _ = Describe("Connection ID generation", func() {
 		Expect(err).To(MatchError(io.EOF))
 	})
 
-	It("returns nil for a 0 length connection ID", func() {
+	It("returns a 0 length connection ID", func() {
 		buf := bytes.NewBuffer([]byte{1, 2, 3, 4})
 		c, err := ReadConnectionID(buf, 0)
 		Expect(err).ToNot(HaveOccurred())
-		Expect(c).To(BeNil())
+		Expect(c.Len()).To(BeZero())
+	})
+
+	It("errors when trying to read a too long connection ID", func() {
+		buf := bytes.NewBuffer(make([]byte, 21))
+		_, err := ReadConnectionID(buf, 21)
+		Expect(err).To(MatchError(ErrInvalidConnectionIDLen))
 	})
 
 	It("returns the length", func() {
-		c := ConnectionID{1, 2, 3, 4, 5, 6, 7}
+		c := ParseConnectionID([]byte{1, 2, 3, 4, 5, 6, 7})
 		Expect(c.Len()).To(Equal(7))
 	})
 
@@ -82,27 +80,51 @@ var _ = Describe("Connection ID generation", func() {
 	})
 
 	It("returns the bytes", func() {
-		c := ConnectionID([]byte{1, 2, 3, 4, 5, 6, 7})
+		c := ParseConnectionID([]byte{1, 2, 3, 4, 5, 6, 7})
 		Expect(c.Bytes()).To(Equal([]byte{1, 2, 3, 4, 5, 6, 7}))
 	})
 
 	It("returns a nil byte slice for the default value", func() {
 		var c ConnectionID
-		Expect(c.Bytes()).To(BeNil())
+		Expect(c.Bytes()).To(HaveLen(0))
 	})
 
 	It("has a string representation", func() {
-		c := ConnectionID([]byte{0xde, 0xad, 0xbe, 0xef, 0x42})
+		c := ParseConnectionID([]byte{0xde, 0xad, 0xbe, 0xef, 0x42})
 		Expect(c.String()).To(Equal("deadbeef42"))
 	})
 
 	It("has a long string representation", func() {
-		c := ConnectionID{0x13, 0x37, 0, 0, 0xde, 0xca, 0xfb, 0xad}
+		c := ParseConnectionID([]byte{0x13, 0x37, 0, 0, 0xde, 0xca, 0xfb, 0xad})
 		Expect(c.String()).To(Equal("13370000decafbad"))
 	})
 
 	It("has a string representation for the default value", func() {
 		var c ConnectionID
 		Expect(c.String()).To(Equal("(empty)"))
+	})
+
+	Context("arbitrary length connection IDs", func() {
+		It("returns the bytes", func() {
+			b := make([]byte, 30)
+			rand.Read(b)
+			c := ArbitraryLenConnectionID(b)
+			Expect(c.Bytes()).To(Equal(b))
+		})
+
+		It("returns the length", func() {
+			c := ArbitraryLenConnectionID(make([]byte, 156))
+			Expect(c.Len()).To(Equal(156))
+		})
+
+		It("has a string representation", func() {
+			c := ArbitraryLenConnectionID([]byte{0xde, 0xad, 0xbe, 0xef, 0x42})
+			Expect(c.String()).To(Equal("deadbeef42"))
+		})
+
+		It("has a string representation for the default value", func() {
+			var c ArbitraryLenConnectionID
+			Expect(c.String()).To(Equal("(empty)"))
+		})
 	})
 })

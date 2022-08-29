@@ -97,7 +97,7 @@ var _ = Describe("Packet Header", func() {
 					Header: wire.Header{
 						IsLongHeader:    true,
 						Type:            protocol.PacketTypeRetry,
-						SrcConnectionID: protocol.ConnectionID{0x11, 0x22, 0x33, 0x44},
+						SrcConnectionID: protocol.ParseConnectionID([]byte{0x11, 0x22, 0x33, 0x44}),
 						Version:         protocol.VersionNumber(0xdecafbad),
 						Token:           []byte{0xde, 0xad, 0xbe, 0xef},
 					},
@@ -140,7 +140,7 @@ var _ = Describe("Packet Header", func() {
 					Header: wire.Header{
 						IsLongHeader:    true,
 						Type:            protocol.PacketTypeHandshake,
-						SrcConnectionID: protocol.ConnectionID{0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88, 0x99, 0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff},
+						SrcConnectionID: protocol.ParseConnectionID([]byte{0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88, 0x99, 0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff}),
 						Version:         protocol.VersionNumber(0xdecafbad),
 					},
 				},
@@ -159,7 +159,7 @@ var _ = Describe("Packet Header", func() {
 			check(
 				&wire.ExtendedHeader{
 					PacketNumber: 42,
-					Header:       wire.Header{DestConnectionID: protocol.ConnectionID{0xde, 0xad, 0xbe, 0xef}},
+					Header:       wire.Header{DestConnectionID: protocol.ParseConnectionID([]byte{0xde, 0xad, 0xbe, 0xef})},
 					KeyPhase:     protocol.KeyPhaseOne,
 				},
 				map[string]interface{}{

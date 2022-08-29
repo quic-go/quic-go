@@ -18,7 +18,7 @@ var _ = Describe("Initial AEAD using AES-GCM", func() {
 		Expect(splitHexString("dead beef")).To(Equal([]byte{0xde, 0xad, 0xbe, 0xef}))
 	})
 
-	connID := protocol.ConnectionID(splitHexString("0x8394c8f03e515708"))
+	connID := protocol.ParseConnectionID(splitHexString("0x8394c8f03e515708"))
 
 	DescribeTable("computes the client key and IV",
 		func(v protocol.VersionNumber, expectedClientSecret, expectedKey, expectedIV []byte) {
@@ -160,7 +160,7 @@ var _ = Describe("Initial AEAD using AES-GCM", func() {
 
 		Context(fmt.Sprintf("using version %s", v), func() {
 			It("seals and opens", func() {
-				connectionID := protocol.ConnectionID{0x12, 0x34, 0x56, 0x78, 0x90, 0xab, 0xcd, 0xef}
+				connectionID := protocol.ParseConnectionID([]byte{0x12, 0x34, 0x56, 0x78, 0x90, 0xab, 0xcd, 0xef})
 				clientSealer, clientOpener := NewInitialAEAD(connectionID, protocol.PerspectiveClient, v)
 				serverSealer, serverOpener := NewInitialAEAD(connectionID, protocol.PerspectiveServer, v)
 
@@ -175,8 +175,8 @@ var _ = Describe("Initial AEAD using AES-GCM", func() {
 			})
 
 			It("doesn't work if initialized with different connection IDs", func() {
-				c1 := protocol.ConnectionID{0, 0, 0, 0, 0, 0, 0, 1}
-				c2 := protocol.ConnectionID{0, 0, 0, 0, 0, 0, 0, 2}
+				c1 := protocol.ParseConnectionID([]byte{0, 0, 0, 0, 0, 0, 0, 1})
+				c2 := protocol.ParseConnectionID([]byte{0, 0, 0, 0, 0, 0, 0, 2})
 				clientSealer, _ := NewInitialAEAD(c1, protocol.PerspectiveClient, v)
 				_, serverOpener := NewInitialAEAD(c2, protocol.PerspectiveServer, v)
 
@@ -186,7 +186,7 @@ var _ = Describe("Initial AEAD using AES-GCM", func() {
 			})
 
 			It("encrypts und decrypts the header", func() {
-				connID := protocol.ConnectionID{0xde, 0xca, 0xfb, 0xad}
+				connID := protocol.ParseConnectionID([]byte{0xde, 0xca, 0xfb, 0xad})
 				clientSealer, clientOpener := NewInitialAEAD(connID, protocol.PerspectiveClient, v)
 				serverSealer, serverOpener := NewInitialAEAD(connID, protocol.PerspectiveServer, v)
 

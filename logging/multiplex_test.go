@@ -6,6 +6,8 @@ import (
 	"net"
 	"time"
 
+	"github.com/lucas-clemente/quic-go/internal/protocol"
+
 	"github.com/lucas-clemente/quic-go/internal/wire"
 
 	. "github.com/onsi/ginkgo"
@@ -38,18 +40,20 @@ var _ = Describe("Tracing", func() {
 
 			It("multiplexes the TracerForConnection call", func() {
 				ctx := context.Background()
-				tr1.EXPECT().TracerForConnection(ctx, PerspectiveClient, ConnectionID{1, 2, 3})
-				tr2.EXPECT().TracerForConnection(ctx, PerspectiveClient, ConnectionID{1, 2, 3})
-				tracer.TracerForConnection(ctx, PerspectiveClient, ConnectionID{1, 2, 3})
+				connID := protocol.ParseConnectionID([]byte{1, 2, 3})
+				tr1.EXPECT().TracerForConnection(ctx, PerspectiveClient, connID)
+				tr2.EXPECT().TracerForConnection(ctx, PerspectiveClient, connID)
+				tracer.TracerForConnection(ctx, PerspectiveClient, connID)
 			})
 
 			It("uses multiple connection tracers", func() {
 				ctx := context.Background()
 				ctr1 := NewMockConnectionTracer(mockCtrl)
 				ctr2 := NewMockConnectionTracer(mockCtrl)
-				tr1.EXPECT().TracerForConnection(ctx, PerspectiveServer, ConnectionID{1, 2, 3}).Return(ctr1)
-				tr2.EXPECT().TracerForConnection(ctx, PerspectiveServer, ConnectionID{1, 2, 3}).Return(ctr2)
-				tr := tracer.TracerForConnection(ctx, PerspectiveServer, ConnectionID{1, 2, 3})
+				connID := protocol.ParseConnectionID([]byte{1, 2, 3})
+				tr1.EXPECT().TracerForConnection(ctx, PerspectiveServer, connID).Return(ctr1)
+				tr2.EXPECT().TracerForConnection(ctx, PerspectiveServer, connID).Return(ctr2)
+				tr := tracer.TracerForConnection(ctx, PerspectiveServer, connID)
 				ctr1.EXPECT().LossTimerCanceled()
 				ctr2.EXPECT().LossTimerCanceled()
 				tr.LossTimerCanceled()
@@ -58,27 +62,39 @@ var _ = Describe("Tracing", func() {
 			It("handles tracers that return a nil ConnectionTracer", func() {
 				ctx := context.Background()
 				ctr1 := NewMockConnectionTracer(mockCtrl)
-				tr1.EXPECT().TracerForConnection(ctx, PerspectiveServer, ConnectionID{1, 2, 3}).Return(ctr1)
-				tr2.EXPECT().TracerForConnection(ctx, PerspectiveServer, ConnectionID{1, 2, 3})
-				tr := tracer.TracerForConnection(ctx, PerspectiveServer, ConnectionID{1, 2, 3})
+				connID := protocol.ParseConnectionID([]byte{1, 2, 3, 4})
+				tr1.EXPECT().TracerForConnection(ctx, PerspectiveServer, connID).Return(ctr1)
+				tr2.EXPECT().TracerForConnection(ctx, PerspectiveServer, connID)
+				tr := tracer.TracerForConnection(ctx, PerspectiveServer, connID)
 				ctr1.EXPECT().LossTimerCanceled()
 				tr.LossTimerCanceled()
 			})
 
 			It("returns nil when all tracers return a nil ConnectionTracer", func() {
 				ctx := context.Background()
-				tr1.EXPECT().TracerForConnection(ctx, PerspectiveClient, ConnectionID{1, 2, 3})
-				tr2.EXPECT().TracerForConnection(ctx, PerspectiveClient, ConnectionID{1, 2, 3})
-				Expect(tracer.TracerForConnection(ctx, PerspectiveClient, ConnectionID{1, 2, 3})).To(BeNil())
+				connID := protocol.ParseConnectionID([]byte{1, 2, 3, 4, 5})
+				tr1.EXPECT().TracerForConnection(ctx, PerspectiveClient, connID)
+				tr2.EXPECT().TracerForConnection(ctx, PerspectiveClient, connID)
+				Expect(tracer.TracerForConnection(ctx, PerspectiveClient, connID)).To(BeNil())
 			})
 
 			It("traces the PacketSent event", func() {
 				remote := &net.UDPAddr{IP: net.IPv4(4, 3, 2, 1)}
-				hdr := &Header{DestConnectionID: ConnectionID{1, 2, 3}}
+				hdr := &Header{DestConnectionID: protocol.ParseConnectionID([]byte{1, 2, 3})}
 				f := &MaxDataFrame{MaximumData: 1337}
 				tr1.EXPECT().SentPacket(remote, hdr, ByteCount(1024), []Frame{f})
 				tr2.EXPECT().SentPacket(remote, hdr, ByteCount(1024), []Frame{f})
 				tracer.SentPacket(remote, hdr, 1024, []Frame{f})
+			})
+
+			It("traces the PacketSent event", func() {
+				remote := &net.UDPAddr{IP: net.IPv4(4, 3, 2, 1)}
+				src := ArbitraryLenConnectionID{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13}
+				dest := ArbitraryLenConnectionID{1, 2, 3, 4}
+				versions := []VersionNumber{1, 2, 3}
+				tr1.EXPECT().SentVersionNegotiationPacket(remote, dest, src, versions)
+				tr2.EXPECT().SentVersionNegotiationPacket(remote, dest, src, versions)
+				tracer.SentVersionNegotiationPacket(remote, dest, src, versions)
 			})
 
 			It("traces the PacketDropped event", func() {
@@ -106,9 +122,11 @@ var _ = Describe("Tracing", func() {
 		It("trace the ConnectionStarted event", func() {
 			local := &net.UDPAddr{IP: net.IPv4(1, 2, 3, 4)}
 			remote := &net.UDPAddr{IP: net.IPv4(4, 3, 2, 1)}
-			tr1.EXPECT().StartedConnection(local, remote, ConnectionID{1, 2, 3, 4}, ConnectionID{4, 3, 2, 1})
-			tr2.EXPECT().StartedConnection(local, remote, ConnectionID{1, 2, 3, 4}, ConnectionID{4, 3, 2, 1})
-			tracer.StartedConnection(local, remote, ConnectionID{1, 2, 3, 4}, ConnectionID{4, 3, 2, 1})
+			dest := protocol.ParseConnectionID([]byte{1, 2, 3, 4})
+			src := protocol.ParseConnectionID([]byte{4, 3, 2, 1})
+			tr1.EXPECT().StartedConnection(local, remote, src, dest)
+			tr2.EXPECT().StartedConnection(local, remote, src, dest)
+			tracer.StartedConnection(local, remote, src, dest)
 		})
 
 		It("traces the ClosedConnection event", func() {
@@ -140,7 +158,7 @@ var _ = Describe("Tracing", func() {
 		})
 
 		It("traces the SentPacket event", func() {
-			hdr := &ExtendedHeader{Header: Header{DestConnectionID: ConnectionID{1, 2, 3}}}
+			hdr := &ExtendedHeader{Header: Header{DestConnectionID: protocol.ParseConnectionID([]byte{1, 2, 3})}}
 			ack := &AckFrame{AckRanges: []AckRange{{Smallest: 1, Largest: 10}}}
 			ping := &PingFrame{}
 			tr1.EXPECT().SentPacket(hdr, ByteCount(1337), ack, []Frame{ping})
@@ -149,21 +167,22 @@ var _ = Describe("Tracing", func() {
 		})
 
 		It("traces the ReceivedVersionNegotiationPacket event", func() {
-			hdr := &Header{DestConnectionID: ConnectionID{1, 2, 3}}
-			tr1.EXPECT().ReceivedVersionNegotiationPacket(hdr, []VersionNumber{1337})
-			tr2.EXPECT().ReceivedVersionNegotiationPacket(hdr, []VersionNumber{1337})
-			tracer.ReceivedVersionNegotiationPacket(hdr, []VersionNumber{1337})
+			src := ArbitraryLenConnectionID{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13}
+			dest := ArbitraryLenConnectionID{1, 2, 3, 4}
+			tr1.EXPECT().ReceivedVersionNegotiationPacket(dest, src, []VersionNumber{1337})
+			tr2.EXPECT().ReceivedVersionNegotiationPacket(dest, src, []VersionNumber{1337})
+			tracer.ReceivedVersionNegotiationPacket(dest, src, []VersionNumber{1337})
 		})
 
 		It("traces the ReceivedRetry event", func() {
-			hdr := &Header{DestConnectionID: ConnectionID{1, 2, 3}}
+			hdr := &Header{DestConnectionID: protocol.ParseConnectionID([]byte{1, 2, 3})}
 			tr1.EXPECT().ReceivedRetry(hdr)
 			tr2.EXPECT().ReceivedRetry(hdr)
 			tracer.ReceivedRetry(hdr)
 		})
 
 		It("traces the ReceivedPacket event", func() {
-			hdr := &ExtendedHeader{Header: Header{DestConnectionID: ConnectionID{1, 2, 3}}}
+			hdr := &ExtendedHeader{Header: Header{DestConnectionID: protocol.ParseConnectionID([]byte{1, 2, 3})}}
 			ping := &PingFrame{}
 			tr1.EXPECT().ReceivedPacket(hdr, ByteCount(1337), []Frame{ping})
 			tr2.EXPECT().ReceivedPacket(hdr, ByteCount(1337), []Frame{ping})

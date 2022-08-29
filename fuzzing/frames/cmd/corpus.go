@@ -224,13 +224,13 @@ func getFrames() []wire.Frame {
 		&wire.NewConnectionIDFrame{
 			SequenceNumber:      seq1,
 			RetirePriorTo:       seq1 / 2,
-			ConnectionID:        getRandomData(4),
+			ConnectionID:        protocol.ParseConnectionID(getRandomData(4)),
 			StatelessResetToken: token1,
 		},
 		&wire.NewConnectionIDFrame{
 			SequenceNumber:      seq2,
 			RetirePriorTo:       seq2,
-			ConnectionID:        getRandomData(17),
+			ConnectionID:        protocol.ParseConnectionID(getRandomData(17)),
 			StatelessResetToken: token2,
 		},
 	}...)

@@ -58,6 +58,8 @@ type versionNegotiationTracer struct {
 	clientVersions, serverVersions []logging.VersionNumber
 }
 
+var _ logging.ConnectionTracer = &versionNegotiationTracer{}
+
 func (t *versionNegotiationTracer) NegotiatedVersion(chosen logging.VersionNumber, clientVersions, serverVersions []logging.VersionNumber) {
 	if t.loggedVersions {
 		Fail("only expected one call to NegotiatedVersions")
@@ -68,7 +70,7 @@ func (t *versionNegotiationTracer) NegotiatedVersion(chosen logging.VersionNumbe
 	t.serverVersions = serverVersions
 }
 
-func (t *versionNegotiationTracer) ReceivedVersionNegotiationPacket(*logging.Header, []logging.VersionNumber) {
+func (t *versionNegotiationTracer) ReceivedVersionNegotiationPacket(dest, src logging.ArbitraryLenConnectionID, _ []logging.VersionNumber) {
 	t.receivedVersionNegotiation = true
 }
 

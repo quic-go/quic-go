@@ -50,7 +50,7 @@ var _ = Describe("Client", func() {
 
 	BeforeEach(func() {
 		tlsConf = &tls.Config{NextProtos: []string{"proto1"}}
-		connID = protocol.ConnectionID{0, 0, 0, 0, 0, 0, 0x13, 0x37}
+		connID = protocol.ParseConnectionID([]byte{0, 0, 0, 0, 0, 0, 0x13, 0x37})
 		originalClientConnConstructor = newClientConnection
 		tracer = mocklogging.NewMockConnectionTracer(mockCtrl)
 		tr := mocklogging.NewMockTracer(mockCtrl)
@@ -518,7 +518,7 @@ var _ = Describe("Client", func() {
 			manager.EXPECT().Add(connID, gomock.Any())
 			mockMultiplexer.EXPECT().AddConn(packetConn, gomock.Any(), gomock.Any(), gomock.Any()).Return(manager, nil)
 
-			config := &Config{Versions: []protocol.VersionNumber{protocol.VersionTLS}, ConnectionIDGenerator: &mockedConnIDGenerator{ConnID: connID}}
+			config := &Config{Versions: []protocol.VersionNumber{protocol.VersionTLS}, ConnectionIDGenerator: &mockConnIDGenerator{ConnID: connID}}
 			c := make(chan struct{})
 			var cconn sendConn
 			var version protocol.VersionNumber
@@ -596,7 +596,7 @@ var _ = Describe("Client", func() {
 				return conn
 			}
 
-			config := &Config{Tracer: config.Tracer, Versions: []protocol.VersionNumber{protocol.VersionTLS}, ConnectionIDGenerator: &mockedConnIDGenerator{ConnID: connID}}
+			config := &Config{Tracer: config.Tracer, Versions: []protocol.VersionNumber{protocol.VersionTLS}, ConnectionIDGenerator: &mockConnIDGenerator{ConnID: connID}}
 			tracer.EXPECT().StartedConnection(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any())
 			_, err := DialAddr("localhost:7890", tlsConf, config)
 			Expect(err).ToNot(HaveOccurred())
@@ -605,14 +605,14 @@ var _ = Describe("Client", func() {
 	})
 })
 
-type mockedConnIDGenerator struct {
+type mockConnIDGenerator struct {
 	ConnID protocol.ConnectionID
 }
 
-func (m *mockedConnIDGenerator) GenerateConnectionID() ([]byte, error) {
+func (m *mockConnIDGenerator) GenerateConnectionID() (protocol.ConnectionID, error) {
 	return m.ConnID, nil
 }
 
-func (m *mockedConnIDGenerator) ConnectionIDLen() int {
+func (m *mockConnIDGenerator) ConnectionIDLen() int {
 	return m.ConnID.Len()
 }

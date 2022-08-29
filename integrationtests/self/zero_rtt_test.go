@@ -372,7 +372,7 @@ var _ = Describe("0-RTT", func() {
 
 			It("retransmits all 0-RTT data when the server performs a Retry", func() {
 				var mutex sync.Mutex
-				var firstConnID, secondConnID protocol.ConnectionID
+				var firstConnID, secondConnID *protocol.ConnectionID
 				var firstCounter, secondCounter protocol.ByteCount
 
 				tlsConf, clientConf := dialAndReceiveSessionTicket(nil)
@@ -415,15 +415,15 @@ var _ = Describe("0-RTT", func() {
 
 						if zeroRTTBytes := countZeroRTTBytes(data); zeroRTTBytes > 0 {
 							if firstConnID == nil {
-								firstConnID = connID
+								firstConnID = &connID
 								firstCounter += zeroRTTBytes
-							} else if firstConnID != nil && firstConnID.Equal(connID) {
+							} else if firstConnID != nil && *firstConnID == connID {
 								Expect(secondConnID).To(BeNil())
 								firstCounter += zeroRTTBytes
 							} else if secondConnID == nil {
-								secondConnID = connID
+								secondConnID = &connID
 								secondCounter += zeroRTTBytes
-							} else if secondConnID != nil && secondConnID.Equal(connID) {
+							} else if secondConnID != nil && *secondConnID == connID {
 								secondCounter += zeroRTTBytes
 							} else {
 								Fail("received 3 connection IDs on 0-RTT packets")
