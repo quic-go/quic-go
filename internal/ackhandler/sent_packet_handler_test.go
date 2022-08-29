@@ -38,7 +38,7 @@ var _ = Describe("SentPacketHandler", func() {
 
 	getPacket := func(pn protocol.PacketNumber, encLevel protocol.EncryptionLevel) *Packet {
 		if el, ok := handler.getPacketNumberSpace(encLevel).history.packetMap[pn]; ok {
-			return &el.Value
+			return el.Value
 		}
 		return nil
 	}
