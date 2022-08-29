@@ -486,10 +486,9 @@ var _ = Describe("Transport Parameters", func() {
 				ActiveConnectionIDLimit:        getRandomValue(),
 			}
 			Expect(params.ValidFor0RTT(params)).To(BeTrue())
-			b := &bytes.Buffer{}
-			params.MarshalForSessionTicket(b)
+			b := params.MarshalForSessionTicket(nil)
 			var tp TransportParameters
-			Expect(tp.UnmarshalFromSessionTicket(bytes.NewReader(b.Bytes()))).To(Succeed())
+			Expect(tp.UnmarshalFromSessionTicket(bytes.NewReader(b))).To(Succeed())
 			Expect(tp.InitialMaxStreamDataBidiLocal).To(Equal(params.InitialMaxStreamDataBidiLocal))
 			Expect(tp.InitialMaxStreamDataBidiRemote).To(Equal(params.InitialMaxStreamDataBidiRemote))
 			Expect(tp.InitialMaxStreamDataUni).To(Equal(params.InitialMaxStreamDataUni))
@@ -506,9 +505,7 @@ var _ = Describe("Transport Parameters", func() {
 
 		It("rejects the parameters if the version changed", func() {
 			var p TransportParameters
-			buf := &bytes.Buffer{}
-			p.MarshalForSessionTicket(buf)
-			data := buf.Bytes()
+			data := p.MarshalForSessionTicket(nil)
 			b := &bytes.Buffer{}
 			quicvarint.Write(b, transportParameterMarshalingVersion+1)
 			b.Write(data[quicvarint.Len(transportParameterMarshalingVersion):])

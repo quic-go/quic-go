@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bytes"
 	"log"
 	"math"
 	"math/rand"
@@ -78,9 +77,7 @@ func main() {
 			}
 			data = tp.Marshal(pers)
 		} else {
-			b := &bytes.Buffer{}
-			tp.MarshalForSessionTicket(b)
-			data = b.Bytes()
+			data = tp.MarshalForSessionTicket(nil)
 		}
 		if err := helper.WriteCorpusFileWithPrefix("corpus", data, transportparameters.PrefixLen); err != nil {
 			log.Fatal(err)
