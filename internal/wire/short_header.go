@@ -50,6 +50,10 @@ func ParseShortHeader(data []byte, connIDLen int) (length int, _ protocol.Packet
 	return 1 + connIDLen + int(pnLen), pn, pnLen, kp, err
 }
 
+func ShortHeaderLen(dest protocol.ConnectionID, pnLen protocol.PacketNumberLen) protocol.ByteCount {
+	return 1 + protocol.ByteCount(dest.Len()) + protocol.ByteCount(pnLen)
+}
+
 func LogShortHeader(logger utils.Logger, dest protocol.ConnectionID, pn protocol.PacketNumber, pnLen protocol.PacketNumberLen, kp protocol.KeyPhaseBit) {
 	logger.Debugf("\tShort Header{DestConnectionID: %s, PacketNumber: %d, PacketNumberLen: %d, KeyPhase: %s}", dest, pn, pnLen, kp)
 }
