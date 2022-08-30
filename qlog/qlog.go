@@ -286,7 +286,7 @@ func (t *connectionTracer) SentPacket(hdr *wire.ExtendedHeader, packetSize loggi
 	for _, f := range frames {
 		fs = append(fs, frame{Frame: f})
 	}
-	header := *transformExtendedHeader(hdr)
+	header := *transformLongHeader(hdr)
 	t.mutex.Lock()
 	t.recordEvent(time.Now(), &eventPacketSent{
 		Header:        header,
@@ -297,17 +297,33 @@ func (t *connectionTracer) SentPacket(hdr *wire.ExtendedHeader, packetSize loggi
 	t.mutex.Unlock()
 }
 
-func (t *connectionTracer) ReceivedPacket(hdr *wire.ExtendedHeader, packetSize logging.ByteCount, frames []logging.Frame) {
+func (t *connectionTracer) ReceivedLongHeaderPacket(hdr *logging.ExtendedHeader, packetSize logging.ByteCount, frames []logging.Frame) {
 	fs := make([]frame, len(frames))
 	for i, f := range frames {
 		fs[i] = frame{Frame: f}
 	}
-	header := *transformExtendedHeader(hdr)
+	header := *transformLongHeader(hdr)
 	t.mutex.Lock()
 	t.recordEvent(time.Now(), &eventPacketReceived{
 		Header:        header,
 		Length:        packetSize,
 		PayloadLength: hdr.Length,
+		Frames:        fs,
+	})
+	t.mutex.Unlock()
+}
+
+func (t *connectionTracer) ReceivedShortHeaderPacket(hdr *logging.ShortHeader, packetSize logging.ByteCount, frames []logging.Frame) {
+	fs := make([]frame, len(frames))
+	for i, f := range frames {
+		fs[i] = frame{Frame: f}
+	}
+	header := *transformShortHeader(hdr)
+	t.mutex.Lock()
+	t.recordEvent(time.Now(), &eventPacketReceived{
+		Header:        header,
+		Length:        packetSize,
+		PayloadLength: packetSize - hdr.Len(),
 		Frames:        fs,
 	})
 	t.mutex.Unlock()

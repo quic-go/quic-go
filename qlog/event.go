@@ -177,7 +177,7 @@ func (e eventPacketSent) MarshalJSONObject(enc *gojay.Encoder) {
 }
 
 type eventPacketReceived struct {
-	Header        packetHeader
+	Header        gojay.MarshalerJSONObject // either a shortHeader or a packetHeader
 	Length        logging.ByteCount
 	PayloadLength logging.ByteCount
 	Frames        frames

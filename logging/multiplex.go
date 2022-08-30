@@ -122,9 +122,15 @@ func (m *connTracerMultiplexer) ReceivedRetry(hdr *Header) {
 	}
 }
 
-func (m *connTracerMultiplexer) ReceivedPacket(hdr *ExtendedHeader, size ByteCount, frames []Frame) {
+func (m *connTracerMultiplexer) ReceivedLongHeaderPacket(hdr *ExtendedHeader, size ByteCount, frames []Frame) {
 	for _, t := range m.tracers {
-		t.ReceivedPacket(hdr, size, frames)
+		t.ReceivedLongHeaderPacket(hdr, size, frames)
+	}
+}
+
+func (m *connTracerMultiplexer) ReceivedShortHeaderPacket(hdr *ShortHeader, size ByteCount, frames []Frame) {
+	for _, t := range m.tracers {
+		t.ReceivedShortHeaderPacket(hdr, size, frames)
 	}
 }
 

@@ -347,18 +347,29 @@ type packet struct {
 	frames []logging.Frame
 }
 
+type shortHeaderPacket struct {
+	time   time.Time
+	hdr    *logging.ShortHeader
+	frames []logging.Frame
+}
+
 type packetTracer struct {
 	logging.NullConnectionTracer
-	closed     chan struct{}
-	sent, rcvd []packet
+	closed            chan struct{}
+	rcvdShortHdr      []shortHeaderPacket
+	sent, rcvdLongHdr []packet
 }
 
 func newPacketTracer() *packetTracer {
 	return &packetTracer{closed: make(chan struct{})}
 }
 
-func (t *packetTracer) ReceivedPacket(hdr *logging.ExtendedHeader, _ logging.ByteCount, frames []logging.Frame) {
-	t.rcvd = append(t.rcvd, packet{time: time.Now(), hdr: hdr, frames: frames})
+func (t *packetTracer) ReceivedLongHeaderPacket(hdr *logging.ExtendedHeader, _ logging.ByteCount, frames []logging.Frame) {
+	t.rcvdLongHdr = append(t.rcvdLongHdr, packet{time: time.Now(), hdr: hdr, frames: frames})
+}
+
+func (t *packetTracer) ReceivedShortHeaderPacket(hdr *logging.ShortHeader, _ logging.ByteCount, frames []logging.Frame) {
+	t.rcvdShortHdr = append(t.rcvdShortHdr, shortHeaderPacket{time: time.Now(), hdr: hdr, frames: frames})
 }
 
 func (t *packetTracer) SentPacket(hdr *logging.ExtendedHeader, _ logging.ByteCount, ack *wire.AckFrame, frames []logging.Frame) {
@@ -373,9 +384,14 @@ func (t *packetTracer) getSentPackets() []packet {
 	return t.sent
 }
 
-func (t *packetTracer) getRcvdPackets() []packet {
+func (t *packetTracer) getRcvdLongHeaderPackets() []packet {
 	<-t.closed
-	return t.rcvd
+	return t.rcvdLongHdr
+}
+
+func (t *packetTracer) getRcvdShortHeaderPackets() []shortHeaderPacket {
+	<-t.closed
+	return t.rcvdShortHdr
 }
 
 func TestSelf(t *testing.T) {
