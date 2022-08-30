@@ -27,31 +27,37 @@ func newSentPacketHistory(rttStats *utils.RTTStats) *sentPacketHistory {
 	}
 }
 
-func (h *sentPacketHistory) SentPacket(p *Packet, isAckEliciting bool) {
-	if p.PacketNumber <= h.highestSent {
+func (h *sentPacketHistory) SentNonAckElicitingPacket(pn protocol.PacketNumber, encLevel protocol.EncryptionLevel, t time.Time) {
+	h.registerSentPacket(pn, encLevel, t)
+}
+
+func (h *sentPacketHistory) SentAckElicitingPacket(p *Packet) {
+	h.registerSentPacket(p.PacketNumber, p.EncryptionLevel, p.SendTime)
+
+	var el *list.Element[*Packet]
+	if p.outstanding() {
+		el = h.outstandingPacketList.PushBack(p)
+	} else {
+		el = h.etcPacketList.PushBack(p)
+	}
+	h.packetMap[p.PacketNumber] = el
+}
+
+func (h *sentPacketHistory) registerSentPacket(pn protocol.PacketNumber, encLevel protocol.EncryptionLevel, t time.Time) {
+	if pn <= h.highestSent {
 		panic("non-sequential packet number use")
 	}
 	// Skipped packet numbers.
-	for pn := h.highestSent + 1; pn < p.PacketNumber; pn++ {
+	for p := h.highestSent + 1; p < pn; p++ {
 		el := h.etcPacketList.PushBack(&Packet{
-			PacketNumber:    pn,
-			EncryptionLevel: p.EncryptionLevel,
-			SendTime:        p.SendTime,
+			PacketNumber:    p,
+			EncryptionLevel: encLevel,
+			SendTime:        t,
 			skippedPacket:   true,
 		})
-		h.packetMap[pn] = el
+		h.packetMap[p] = el
 	}
-	h.highestSent = p.PacketNumber
-
-	if isAckEliciting {
-		var el *list.Element[*Packet]
-		if p.outstanding() {
-			el = h.outstandingPacketList.PushBack(p)
-		} else {
-			el = h.etcPacketList.PushBack(p)
-		}
-		h.packetMap[p.PacketNumber] = el
-	}
+	h.highestSent = pn
 }
 
 // Iterate iterates through all packets.
