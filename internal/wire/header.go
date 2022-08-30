@@ -29,6 +29,9 @@ func ParseConnectionID(data []byte, shortHeaderConnIDLen int) (protocol.Connecti
 		return protocol.ConnectionID{}, io.EOF
 	}
 	destConnIDLen := int(data[5])
+	if destConnIDLen > protocol.MaxConnIDLen {
+		return protocol.ConnectionID{}, protocol.ErrInvalidConnectionIDLen
+	}
 	if len(data) < 6+destConnIDLen {
 		return protocol.ConnectionID{}, io.EOF
 	}

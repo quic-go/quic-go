@@ -86,6 +86,15 @@ var _ = Describe("Header Parsing", func() {
 				Expect(err).To(MatchError(io.EOF))
 			}
 		})
+
+		It("errors when encountering a too long connection ID", func() {
+			b := []byte{0x80, 0, 0, 0, 0}
+			binary.BigEndian.PutUint32(b[1:], uint32(protocol.Version1))
+			b = append(b, 21) // dest conn id len
+			b = append(b, make([]byte, 21)...)
+			_, err := ParseConnectionID(b, 4)
+			Expect(err).To(MatchError(protocol.ErrInvalidConnectionIDLen))
+		})
 	})
 
 	Context("identifying 0-RTT packets", func() {
