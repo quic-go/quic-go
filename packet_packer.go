@@ -412,16 +412,23 @@ func (p *packetPacker) PackCoalescedPacket() (*coalescedPacket, error) {
 	var appDataSealer sealer
 	appDataEncLevel := protocol.Encryption1RTT
 	if size < maxPacketSize-protocol.MinCoalescedPacketSize {
-		var err error
-		appDataSealer, appDataHdr, appDataPayload = p.maybeGetAppDataPacket(maxPacketSize-size, size)
-		if err != nil {
-			return nil, err
+		var sErr error
+		var oneRTTSealer handshake.ShortHeaderSealer
+		oneRTTSealer, sErr = p.cryptoSetup.Get1RTTSealer()
+		appDataSealer = oneRTTSealer
+		if sErr != nil && p.perspective == protocol.PerspectiveClient {
+			appDataSealer, sErr = p.cryptoSetup.Get0RTTSealer()
+			appDataEncLevel = protocol.Encryption0RTT
 		}
-		if appDataHdr != nil {
-			if appDataHdr.IsLongHeader {
-				appDataEncLevel = protocol.Encryption0RTT
+		if appDataSealer != nil && sErr == nil {
+			//nolint:exhaustive // 0-RTT and 1-RTT are the only two application data encryption levels.
+			switch appDataEncLevel {
+			case protocol.Encryption0RTT:
+				appDataHdr, appDataPayload = p.maybeGetAppDataPacketFor0RTT(appDataSealer, maxPacketSize-size)
+			case protocol.Encryption1RTT:
+				appDataHdr, appDataPayload = p.maybeGetShortHeaderPacket(oneRTTSealer, maxPacketSize-size, size)
 			}
-			if appDataPayload != nil {
+			if appDataHdr != nil && appDataPayload != nil {
 				size += p.packetLength(appDataHdr, appDataPayload) + protocol.ByteCount(appDataSealer.Overhead())
 				numPackets++
 			}
@@ -465,16 +472,16 @@ func (p *packetPacker) PackCoalescedPacket() (*coalescedPacket, error) {
 // PackPacket packs a packet in the application data packet number space.
 // It should be called after the handshake is confirmed.
 func (p *packetPacker) PackPacket() (*packedPacket, error) {
-	sealer, hdr, payload := p.maybeGetAppDataPacket(p.maxPacketSize, 0)
+	sealer, err := p.cryptoSetup.Get1RTTSealer()
+	if err != nil {
+		return nil, err
+	}
+	hdr, payload := p.maybeGetShortHeaderPacket(sealer, p.maxPacketSize, 0)
 	if payload == nil {
 		return nil, nil
 	}
 	buffer := getPacketBuffer()
-	encLevel := protocol.Encryption1RTT
-	if hdr.IsLongHeader {
-		encLevel = protocol.Encryption0RTT
-	}
-	cont, err := p.appendPacket(buffer, hdr, payload, 0, encLevel, sealer, false)
+	cont, err := p.appendPacket(buffer, hdr, payload, 0, protocol.Encryption1RTT, sealer, false)
 	if err != nil {
 		return nil, err
 	}
@@ -541,31 +548,22 @@ func (p *packetPacker) maybeGetCryptoPacket(maxPacketSize, currentSize protocol.
 	return hdr, &payload
 }
 
-func (p *packetPacker) maybeGetAppDataPacket(maxPacketSize, currentSize protocol.ByteCount) (sealer, *wire.ExtendedHeader, *payload) {
-	var sealer sealer
-	var encLevel protocol.EncryptionLevel
-	var hdr *wire.ExtendedHeader
-	oneRTTSealer, err := p.cryptoSetup.Get1RTTSealer()
-	if err == nil {
-		encLevel = protocol.Encryption1RTT
-		sealer = oneRTTSealer
-		hdr = p.getShortHeader(oneRTTSealer.KeyPhase())
-	} else {
-		// 1-RTT sealer not yet available
-		if p.perspective != protocol.PerspectiveClient {
-			return nil, nil, nil
-		}
-		sealer, err = p.cryptoSetup.Get0RTTSealer()
-		if sealer == nil || err != nil {
-			return nil, nil, nil
-		}
-		encLevel = protocol.Encryption0RTT
-		hdr = p.getLongHeader(protocol.Encryption0RTT)
+func (p *packetPacker) maybeGetAppDataPacketFor0RTT(sealer sealer, maxPacketSize protocol.ByteCount) (*wire.ExtendedHeader, *payload) {
+	if p.perspective != protocol.PerspectiveClient {
+		return nil, nil
 	}
 
+	hdr := p.getLongHeader(protocol.Encryption0RTT)
 	maxPayloadSize := maxPacketSize - hdr.GetLength(p.version) - protocol.ByteCount(sealer.Overhead())
-	payload := p.maybeGetAppDataPacketWithEncLevel(maxPayloadSize, encLevel == protocol.Encryption1RTT && currentSize == 0)
-	return sealer, hdr, payload
+	payload := p.maybeGetAppDataPacketWithEncLevel(maxPayloadSize, false)
+	return hdr, payload
+}
+
+func (p *packetPacker) maybeGetShortHeaderPacket(sealer handshake.ShortHeaderSealer, maxPacketSize, currentSize protocol.ByteCount) (*wire.ExtendedHeader, *payload) {
+	hdr := p.getShortHeader(sealer.KeyPhase())
+	maxPayloadSize := maxPacketSize - hdr.GetLength(p.version) - protocol.ByteCount(sealer.Overhead())
+	payload := p.maybeGetAppDataPacketWithEncLevel(maxPayloadSize, currentSize == 0)
+	return hdr, payload
 }
 
 func (p *packetPacker) maybeGetAppDataPacketWithEncLevel(maxPayloadSize protocol.ByteCount, ackAllowed bool) *payload {
