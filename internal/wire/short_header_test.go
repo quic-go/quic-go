@@ -70,6 +70,11 @@ var _ = Describe("Short Header", func() {
 		})
 	})
 
+	It("determines the length", func() {
+		Expect(ShortHeaderLen(protocol.ParseConnectionID([]byte{1, 2, 3, 4}), protocol.PacketNumberLen3)).To(BeEquivalentTo(8))
+		Expect(ShortHeaderLen(protocol.ParseConnectionID([]byte{}), protocol.PacketNumberLen1)).To(BeEquivalentTo(2))
+	})
+
 	Context("logging", func() {
 		var (
 			buf    *bytes.Buffer
