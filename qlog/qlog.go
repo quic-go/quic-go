@@ -319,11 +319,12 @@ func (t *connectionTracer) ReceivedShortHeaderPacket(hdr *logging.ShortHeader, p
 		fs[i] = frame{Frame: f}
 	}
 	header := *transformShortHeader(hdr)
+	hdrLen := 1 + hdr.DestConnectionID.Len() + int(hdr.PacketNumberLen)
 	t.mutex.Lock()
 	t.recordEvent(time.Now(), &eventPacketReceived{
 		Header:        header,
 		Length:        packetSize,
-		PayloadLength: packetSize - hdr.Len(),
+		PayloadLength: packetSize - protocol.ByteCount(hdrLen),
 		Frames:        fs,
 	})
 	t.mutex.Unlock()

@@ -562,10 +562,10 @@ var _ = Describe("Connection", func() {
 			}
 			Expect(hdr.Write(buf, conn.version)).To(Succeed())
 
-			unpacker.EXPECT().UnpackShortHeader(gomock.Any(), gomock.Any()).DoAndReturn(func(time.Time, []byte) (*wire.ShortHeader, []byte, error) {
+			unpacker.EXPECT().UnpackShortHeader(gomock.Any(), gomock.Any()).DoAndReturn(func(time.Time, []byte) (protocol.PacketNumber, protocol.PacketNumberLen, protocol.KeyPhaseBit, []byte, error) {
 				b, err := (&wire.ConnectionCloseFrame{ErrorCode: uint64(qerr.StreamLimitError)}).Append(nil, conn.version)
 				Expect(err).ToNot(HaveOccurred())
-				return &wire.ShortHeader{PacketNumber: 3}, b, nil
+				return 3, protocol.PacketNumberLen2, protocol.KeyPhaseOne, b, nil
 			})
 			gomock.InOrder(
 				tracer.EXPECT().ReceivedShortHeaderPacket(gomock.Any(), gomock.Any(), gomock.Any()),
@@ -766,7 +766,7 @@ var _ = Describe("Connection", func() {
 			Expect(err).ToNot(HaveOccurred())
 			packet := getPacket(hdr, nil)
 			packet.ecn = protocol.ECT1
-			unpacker.EXPECT().UnpackShortHeader(rcvTime, gomock.Any()).Return(&wire.ShortHeader{PacketNumber: 0x1337}, b, nil)
+			unpacker.EXPECT().UnpackShortHeader(rcvTime, gomock.Any()).Return(protocol.PacketNumber(0x1337), protocol.PacketNumberLen2, protocol.KeyPhaseZero, b, nil)
 			rph := mockackhandler.NewMockReceivedPacketHandler(mockCtrl)
 			gomock.InOrder(
 				rph.EXPECT().IsPotentiallyDuplicate(protocol.PacketNumber(0x1337), protocol.Encryption1RTT),
@@ -774,7 +774,7 @@ var _ = Describe("Connection", func() {
 			)
 			conn.receivedPacketHandler = rph
 			packet.rcvTime = rcvTime
-			tracer.EXPECT().ReceivedShortHeaderPacket(&wire.ShortHeader{PacketNumber: 0x1337}, protocol.ByteCount(len(packet.data)), []logging.Frame{&logging.PingFrame{}})
+			tracer.EXPECT().ReceivedShortHeaderPacket(&logging.ShortHeader{PacketNumber: 0x1337, PacketNumberLen: 2, KeyPhase: protocol.KeyPhaseZero}, protocol.ByteCount(len(packet.data)), []logging.Frame{&logging.PingFrame{}})
 			Expect(conn.handlePacketImpl(packet)).To(BeTrue())
 		})
 
@@ -785,7 +785,7 @@ var _ = Describe("Connection", func() {
 				PacketNumberLen: protocol.PacketNumberLen1,
 			}
 			packet := getPacket(hdr, nil)
-			unpacker.EXPECT().UnpackShortHeader(gomock.Any(), gomock.Any()).Return(&wire.ShortHeader{PacketNumber: 0x1337}, []byte("foobar"), nil)
+			unpacker.EXPECT().UnpackShortHeader(gomock.Any(), gomock.Any()).Return(protocol.PacketNumber(0x1337), protocol.PacketNumberLen2, protocol.KeyPhaseOne, []byte("foobar"), nil)
 			rph := mockackhandler.NewMockReceivedPacketHandler(mockCtrl)
 			rph.EXPECT().IsPotentiallyDuplicate(protocol.PacketNumber(0x1337), protocol.Encryption1RTT).Return(true)
 			conn.receivedPacketHandler = rph
@@ -829,11 +829,11 @@ var _ = Describe("Connection", func() {
 		It("processes multiple received packets before sending one", func() {
 			conn.creationTime = time.Now()
 			var pn protocol.PacketNumber
-			unpacker.EXPECT().UnpackShortHeader(gomock.Any(), gomock.Any()).DoAndReturn(func(rcvTime time.Time, data []byte) (*wire.ShortHeader, []byte, error) {
+			unpacker.EXPECT().UnpackShortHeader(gomock.Any(), gomock.Any()).DoAndReturn(func(rcvTime time.Time, data []byte) (protocol.PacketNumber, protocol.PacketNumberLen, protocol.KeyPhaseBit, []byte, error) {
 				pn++
-				return &wire.ShortHeader{PacketNumber: pn}, []byte{0} /* PADDING frame */, nil
+				return pn, protocol.PacketNumberLen2, protocol.KeyPhaseZero, []byte{0} /* PADDING frame */, nil
 			}).Times(3)
-			tracer.EXPECT().ReceivedShortHeaderPacket(gomock.Any(), gomock.Any(), gomock.Any()).Do(func(hdr *wire.ShortHeader, _ protocol.ByteCount, _ []logging.Frame) {
+			tracer.EXPECT().ReceivedShortHeaderPacket(gomock.Any(), gomock.Any(), gomock.Any()).Do(func(hdr *logging.ShortHeader, _ protocol.ByteCount, _ []logging.Frame) {
 			}).Times(3)
 			packer.EXPECT().PackCoalescedPacket() // only expect a single call
 
@@ -868,11 +868,11 @@ var _ = Describe("Connection", func() {
 			conn.handshakeComplete = false
 			conn.creationTime = time.Now()
 			var pn protocol.PacketNumber
-			unpacker.EXPECT().UnpackShortHeader(gomock.Any(), gomock.Any()).DoAndReturn(func(rcvTime time.Time, data []byte) (*wire.ShortHeader, []byte, error) {
+			unpacker.EXPECT().UnpackShortHeader(gomock.Any(), gomock.Any()).DoAndReturn(func(rcvTime time.Time, data []byte) (protocol.PacketNumber, protocol.PacketNumberLen, protocol.KeyPhaseBit, []byte, error) {
 				pn++
-				return &wire.ShortHeader{PacketNumber: pn}, []byte{0} /* PADDING frame */, nil
+				return pn, protocol.PacketNumberLen4, protocol.KeyPhaseZero, []byte{0} /* PADDING frame */, nil
 			}).Times(3)
-			tracer.EXPECT().ReceivedShortHeaderPacket(gomock.Any(), gomock.Any(), gomock.Any()).Do(func(hdr *wire.ShortHeader, _ protocol.ByteCount, _ []logging.Frame) {
+			tracer.EXPECT().ReceivedShortHeaderPacket(gomock.Any(), gomock.Any(), gomock.Any()).Do(func(hdr *logging.ShortHeader, _ protocol.ByteCount, _ []logging.Frame) {
 			}).Times(3)
 			packer.EXPECT().PackCoalescedPacket().Times(3) // only expect a single call
 
@@ -904,7 +904,7 @@ var _ = Describe("Connection", func() {
 		})
 
 		It("closes the connection when unpacking fails because the reserved bits were incorrect", func() {
-			unpacker.EXPECT().UnpackShortHeader(gomock.Any(), gomock.Any()).Return(nil, nil, wire.ErrInvalidReservedBits)
+			unpacker.EXPECT().UnpackShortHeader(gomock.Any(), gomock.Any()).Return(protocol.PacketNumber(0), protocol.PacketNumberLen(0), protocol.KeyPhaseBit(0), nil, wire.ErrInvalidReservedBits)
 			streamManager.EXPECT().CloseWithError(gomock.Any())
 			cryptoSetup.EXPECT().Close()
 			packer.EXPECT().PackConnectionClose(gomock.Any()).Return(&coalescedPacket{buffer: getPacketBuffer()}, nil)
@@ -932,7 +932,7 @@ var _ = Describe("Connection", func() {
 
 		It("ignores packets when unpacking the header fails", func() {
 			testErr := &headerParseError{errors.New("test error")}
-			unpacker.EXPECT().UnpackShortHeader(gomock.Any(), gomock.Any()).Return(nil, nil, testErr)
+			unpacker.EXPECT().UnpackShortHeader(gomock.Any(), gomock.Any()).Return(protocol.PacketNumber(0), protocol.PacketNumberLen(0), protocol.KeyPhaseBit(0), nil, testErr)
 			streamManager.EXPECT().CloseWithError(gomock.Any())
 			cryptoSetup.EXPECT().Close()
 			runErr := make(chan error)
@@ -958,7 +958,7 @@ var _ = Describe("Connection", func() {
 		})
 
 		It("closes the connection when unpacking fails because of an error other than a decryption error", func() {
-			unpacker.EXPECT().UnpackShortHeader(gomock.Any(), gomock.Any()).Return(nil, nil, &qerr.TransportError{ErrorCode: qerr.ConnectionIDLimitError})
+			unpacker.EXPECT().UnpackShortHeader(gomock.Any(), gomock.Any()).Return(protocol.PacketNumber(0), protocol.PacketNumberLen(0), protocol.KeyPhaseBit(0), nil, &qerr.TransportError{ErrorCode: qerr.ConnectionIDLimitError})
 			streamManager.EXPECT().CloseWithError(gomock.Any())
 			cryptoSetup.EXPECT().Close()
 			packer.EXPECT().PackConnectionClose(gomock.Any()).Return(&coalescedPacket{buffer: getPacketBuffer()}, nil)
@@ -1050,8 +1050,7 @@ var _ = Describe("Connection", func() {
 
 		Context("updating the remote address", func() {
 			It("doesn't support connection migration", func() {
-				unpacker.EXPECT().UnpackShortHeader(gomock.Any(), gomock.Any()).Return(&wire.ShortHeader{},
-					[]byte{0} /* one PADDING frame */, nil)
+				unpacker.EXPECT().UnpackShortHeader(gomock.Any(), gomock.Any()).Return(protocol.PacketNumber(10), protocol.PacketNumberLen2, protocol.KeyPhaseZero, []byte{0} /* one PADDING frame */, nil)
 				packet := getPacket(&wire.ExtendedHeader{
 					Header:          wire.Header{DestConnectionID: srcConnID},
 					PacketNumberLen: protocol.PacketNumberLen1,
