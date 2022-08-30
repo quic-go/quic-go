@@ -22,10 +22,8 @@ var _ = Describe("Stream", func() {
 
 		errorCb := func() { errorCbCalled = true }
 		getDataFrame := func(data []byte) []byte {
-			b := &bytes.Buffer{}
-			(&dataFrame{Length: uint64(len(data))}).Write(b)
-			b.Write(data)
-			return b.Bytes()
+			b := (&dataFrame{Length: uint64(len(data))}).Append(nil)
+			return append(b, data...)
 		}
 
 		BeforeEach(func() {
@@ -96,15 +94,16 @@ var _ = Describe("Stream", func() {
 		})
 
 		It("skips HEADERS frames", func() {
-			buf.Write(getDataFrame([]byte("foo")))
-			(&headersFrame{Length: 10}).Write(buf)
-			buf.Write(make([]byte, 10))
-			buf.Write(getDataFrame([]byte("bar")))
-			b := make([]byte, 6)
-			n, err := io.ReadFull(str, b)
+			b := getDataFrame([]byte("foo"))
+			b = (&headersFrame{Length: 10}).Append(b)
+			b = append(b, make([]byte, 10)...)
+			b = append(b, getDataFrame([]byte("bar"))...)
+			buf.Write(b)
+			r := make([]byte, 6)
+			n, err := io.ReadFull(str, r)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(n).To(Equal(6))
-			Expect(b).To(Equal([]byte("foobar")))
+			Expect(r).To(Equal([]byte("foobar")))
 		})
 
 		It("errors when it can't parse the frame", func() {
@@ -114,7 +113,8 @@ var _ = Describe("Stream", func() {
 		})
 
 		It("errors on unexpected frames, and calls the error callback", func() {
-			(&settingsFrame{}).Write(buf)
+			b := (&settingsFrame{}).Append(nil)
+			buf.Write(b)
 			_, err := str.Read([]byte{0})
 			Expect(err).To(MatchError("peer sent an unexpected frame: *http3.settingsFrame"))
 			Expect(errorCbCalled).To(BeTrue())
