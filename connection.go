@@ -1916,14 +1916,18 @@ func (s *connection) sendPacket() (bool, error) {
 	return true, nil
 }
 
-func (s *connection) sendPackedPacket(packet *packedPacket, now time.Time) {
-	if s.firstAckElicitingPacketAfterIdleSentTime.IsZero() && packet.IsAckEliciting() {
+func (s *connection) sendPackedPacket(p *packedPacket, now time.Time) {
+	if s.firstAckElicitingPacketAfterIdleSentTime.IsZero() && p.IsAckEliciting() {
 		s.firstAckElicitingPacketAfterIdleSentTime = now
 	}
-	s.logPacket(packet)
-	s.sentPacketHandler.SentPacket(packet.ToAckHandlerPacket(now, s.retransmissionQueue))
+	if s.logger.Debug() {
+		s.logger.Debugf("-> Sending packet %d (%d bytes) for connection %s, %s", p.header.PacketNumber, p.buffer.Len(), s.logID, p.EncryptionLevel())
+	}
+	s.logShortHeaderPacket(p.packetContents)
+
+	s.sentPacketHandler.SentPacket(p.ToAckHandlerPacket(now, s.retransmissionQueue))
 	s.connIDManager.SentPacket()
-	s.sendQueue.Send(packet.buffer)
+	s.sendQueue.Send(p.buffer)
 }
 
 func (s *connection) sendPackedCoalescedPacket(packet *coalescedPacket, now time.Time) {
@@ -1960,7 +1964,18 @@ func (s *connection) sendConnectionClose(e error) ([]byte, error) {
 	return packet.buffer.Data, s.conn.Write(packet.buffer.Data)
 }
 
-func (s *connection) logPacketContents(p *packetContents) {
+func (s *connection) logLongHeaderPacket(p *packetContents) {
+	// quic-go logging
+	if s.logger.Debug() {
+		p.header.Log(s.logger)
+		if p.ack != nil {
+			wire.LogFrame(s.logger, p.ack, true)
+		}
+		for _, frame := range p.frames {
+			wire.LogFrame(s.logger, frame.Frame, true)
+		}
+	}
+
 	// tracing
 	if s.tracer != nil {
 		frames := make([]logging.Frame, 0, len(p.frames))
@@ -1971,33 +1986,43 @@ func (s *connection) logPacketContents(p *packetContents) {
 		if p.ack != nil {
 			ack = logutils.ConvertAckFrame(p.ack)
 		}
-		if p.header.IsLongHeader {
-			s.tracer.SentLongHeaderPacket(p.header, p.length, ack, frames)
-		} else {
-			s.tracer.SentShortHeaderPacket(
-				&logging.ShortHeader{
-					DestConnectionID: p.header.DestConnectionID,
-					PacketNumber:     p.header.PacketNumber,
-					PacketNumberLen:  p.header.PacketNumberLen,
-					KeyPhase:         p.header.KeyPhase,
-				},
-				p.length,
-				ack,
-				frames,
-			)
+		s.tracer.SentLongHeaderPacket(p.header, p.length, ack, frames)
+	}
+}
+
+func (s *connection) logShortHeaderPacket(p *packetContents) {
+	// quic-go logging
+	if s.logger.Debug() {
+		p.header.Log(s.logger)
+		if p.ack != nil {
+			wire.LogFrame(s.logger, p.ack, true)
+		}
+		for _, frame := range p.frames {
+			wire.LogFrame(s.logger, frame.Frame, true)
 		}
 	}
 
-	// quic-go logging
-	if !s.logger.Debug() {
-		return
-	}
-	p.header.Log(s.logger)
-	if p.ack != nil {
-		wire.LogFrame(s.logger, p.ack, true)
-	}
-	for _, frame := range p.frames {
-		wire.LogFrame(s.logger, frame.Frame, true)
+	// tracing
+	if s.tracer != nil {
+		frames := make([]logging.Frame, 0, len(p.frames))
+		for _, f := range p.frames {
+			frames = append(frames, logutils.ConvertFrame(f.Frame))
+		}
+		var ack *logging.AckFrame
+		if p.ack != nil {
+			ack = logutils.ConvertAckFrame(p.ack)
+		}
+		s.tracer.SentShortHeaderPacket(
+			&logging.ShortHeader{
+				DestConnectionID: p.header.DestConnectionID,
+				PacketNumber:     p.header.PacketNumber,
+				PacketNumberLen:  p.header.PacketNumberLen,
+				KeyPhase:         p.header.KeyPhase,
+			},
+			p.length,
+			ack,
+			frames,
+		)
 	}
 }
 
@@ -2010,15 +2035,12 @@ func (s *connection) logCoalescedPacket(packet *coalescedPacket) {
 		}
 	}
 	for _, p := range packet.packets {
-		s.logPacketContents(p)
+		if p.header.IsLongHeader {
+			s.logLongHeaderPacket(p)
+		} else {
+			s.logShortHeaderPacket(p)
+		}
 	}
-}
-
-func (s *connection) logPacket(packet *packedPacket) {
-	if s.logger.Debug() {
-		s.logger.Debugf("-> Sending packet %d (%d bytes) for connection %s, %s", packet.header.PacketNumber, packet.buffer.Len(), s.logID, packet.EncryptionLevel())
-	}
-	s.logPacketContents(packet.packetContents)
 }
 
 // AcceptStream returns the next stream openend by the peer
