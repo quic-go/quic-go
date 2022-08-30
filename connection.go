@@ -1971,7 +1971,21 @@ func (s *connection) logPacketContents(p *packetContents) {
 		if p.ack != nil {
 			ack = logutils.ConvertAckFrame(p.ack)
 		}
-		s.tracer.SentPacket(p.header, p.length, ack, frames)
+		if p.header.IsLongHeader {
+			s.tracer.SentLongHeaderPacket(p.header, p.length, ack, frames)
+		} else {
+			s.tracer.SentShortHeaderPacket(
+				&logging.ShortHeader{
+					DestConnectionID: p.header.DestConnectionID,
+					PacketNumber:     p.header.PacketNumber,
+					PacketNumberLen:  p.header.PacketNumberLen,
+					KeyPhase:         p.header.KeyPhase,
+				},
+				p.length,
+				ack,
+				frames,
+			)
+		}
 	}
 
 	// quic-go logging
