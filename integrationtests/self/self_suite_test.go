@@ -23,9 +23,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/lucas-clemente/quic-go/internal/wire"
+
 	"github.com/lucas-clemente/quic-go"
 	"github.com/lucas-clemente/quic-go/internal/utils"
-	"github.com/lucas-clemente/quic-go/internal/wire"
 	"github.com/lucas-clemente/quic-go/logging"
 	"github.com/lucas-clemente/quic-go/qlog"
 
@@ -355,9 +356,9 @@ type shortHeaderPacket struct {
 
 type packetTracer struct {
 	logging.NullConnectionTracer
-	closed            chan struct{}
-	rcvdShortHdr      []shortHeaderPacket
-	sent, rcvdLongHdr []packet
+	closed                     chan struct{}
+	sentShortHdr, rcvdShortHdr []shortHeaderPacket
+	rcvdLongHdr                []packet
 }
 
 func newPacketTracer() *packetTracer {
@@ -372,16 +373,18 @@ func (t *packetTracer) ReceivedShortHeaderPacket(hdr *logging.ShortHeader, _ log
 	t.rcvdShortHdr = append(t.rcvdShortHdr, shortHeaderPacket{time: time.Now(), hdr: hdr, frames: frames})
 }
 
-func (t *packetTracer) SentPacket(hdr *logging.ExtendedHeader, _ logging.ByteCount, ack *wire.AckFrame, frames []logging.Frame) {
+func (t *packetTracer) SentShortHeaderPacket(hdr *logging.ShortHeader, _ logging.ByteCount, ack *wire.AckFrame, frames []logging.Frame) {
 	if ack != nil {
 		frames = append(frames, ack)
 	}
-	t.sent = append(t.sent, packet{time: time.Now(), hdr: hdr, frames: frames})
+	t.sentShortHdr = append(t.sentShortHdr, shortHeaderPacket{time: time.Now(), hdr: hdr, frames: frames})
 }
+
 func (t *packetTracer) Close() { close(t.closed) }
-func (t *packetTracer) getSentPackets() []packet {
+
+func (t *packetTracer) getSentShortHeaderPackets() []shortHeaderPacket {
 	<-t.closed
-	return t.sent
+	return t.sentShortHdr
 }
 
 func (t *packetTracer) getRcvdLongHeaderPackets() []packet {

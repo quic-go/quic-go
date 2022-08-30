@@ -213,7 +213,7 @@ var _ = Describe("Timeout tests", func() {
 			}()
 			Eventually(done, 2*idleTimeout).Should(BeClosed())
 			var lastAckElicitingPacketSentAt time.Time
-			for _, p := range tr.getSentPackets() {
+			for _, p := range tr.getSentShortHeaderPackets() {
 				var hasAckElicitingFrame bool
 				for _, f := range p.frames {
 					if _, ok := f.(*logging.AckFrame); ok {
