@@ -198,6 +198,10 @@ type Server struct {
 	logger utils.Logger
 }
 
+type serverConnection struct {
+	streams map[protocol.StreamID]*stream
+}
+
 // ListenAndServe listens on the UDP address s.Addr and calls s.Handler to handle HTTP/3 requests on incoming connections.
 //
 // If s.Addr is blank, ":https" is used.
@@ -418,7 +422,12 @@ func (s *Server) handleConn(conn quic.EarlyConnection) {
 	(&settingsFrame{Datagram: s.EnableDatagrams, Other: s.AdditionalSettings}).Write(buf)
 	str.Write(buf.Bytes())
 
+	serverConn := &serverConnection{streams: make(map[protocol.StreamID]*stream)}
+
 	go s.handleUnidirectionalStreams(conn)
+	if s.EnableDatagrams {
+		go s.handleDatagrams(serverConn, conn)
+	}
 
 	// Process all requests immediately.
 	// It's the client's responsibility to decide which requests are eligible for 0-RTT.
@@ -429,7 +438,7 @@ func (s *Server) handleConn(conn quic.EarlyConnection) {
 			return
 		}
 		go func() {
-			rerr := s.handleRequest(conn, str, decoder, func() {
+			rerr := s.handleRequest(conn, serverConn, str, decoder, func() {
 				conn.CloseWithError(quic.ApplicationErrorCode(errorFrameUnexpected), "")
 			})
 			if rerr.err == errHijacked {
@@ -451,6 +460,33 @@ func (s *Server) handleConn(conn quic.EarlyConnection) {
 			}
 			str.Close()
 		}()
+	}
+}
+
+func (sc *serverConnection) handleStreamClose(str *stream) {
+	delete(sc.streams, str.StreamID())
+}
+
+func (s *Server) handleDatagrams(serverConn *serverConnection, conn quic.EarlyConnection) {
+	for {
+		data, err := conn.ReceiveMessage()
+		if err != nil {
+			s.logger.Debugf("Receiving datagram failed: %s", err)
+			return
+		}
+		buf := bytes.NewBuffer(data)
+		quarterStreamId, err := quicvarint.Read(buf)
+		if err != nil {
+			s.logger.Debugf("Reading datagram ID failed: %s", err)
+			return
+		}
+		streamId := quarterStreamId * 4
+		str, ok := serverConn.streams[protocol.StreamID(streamId)]
+		if !ok {
+			s.logger.Debugf("Received datagram for unknown stream: %d", streamId)
+			return
+		}
+		str.onMessage(buf.Bytes())
 	}
 }
 
@@ -518,7 +554,7 @@ func (s *Server) maxHeaderBytes() uint64 {
 	return uint64(s.MaxHeaderBytes)
 }
 
-func (s *Server) handleRequest(conn quic.Connection, str quic.Stream, decoder *qpack.Decoder, onFrameError func()) requestError {
+func (s *Server) handleRequest(conn quic.Connection, serverConn *serverConnection, str quic.Stream, decoder *qpack.Decoder, onFrameError func()) requestError {
 	var ufh unknownFrameHandlerFunc
 	if s.StreamHijacker != nil {
 		ufh = func(ft FrameType, e error) (processed bool, err error) { return s.StreamHijacker(ft, conn, str, e) }
@@ -553,7 +589,9 @@ func (s *Server) handleRequest(conn quic.Connection, str quic.Stream, decoder *q
 	}
 
 	req.RemoteAddr = conn.RemoteAddr().String()
-	body := newRequestBody(newStream(str, onFrameError))
+	hstr := newStream(str, conn, onFrameError, serverConn.handleStreamClose)
+	serverConn.streams[hstr.StreamID()] = hstr
+	body := newRequestBody(hstr)
 	req.Body = body
 
 	if s.logger.Debug() {

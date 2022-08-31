@@ -64,6 +64,7 @@ type client struct {
 
 	hostname string
 	conn     quic.EarlyConnection
+	streams  map[protocol.StreamID]*stream
 
 	logger utils.Logger
 }
@@ -101,6 +102,7 @@ func newClient(hostname string, tlsConf *tls.Config, opts *roundTripperOpts, con
 		opts:          opts,
 		dialer:        dialer,
 		logger:        logger,
+		streams:       make(map[protocol.StreamID]*stream),
 	}, nil
 }
 
@@ -310,6 +312,10 @@ func (c *client) RoundTripOpt(req *http.Request, opt RoundTripOpt) (*http.Respon
 	return rsp, rerr.err
 }
 
+func (c *client) handleStreamClose(str *stream) {
+	delete(c.streams, str.StreamID())
+}
+
 func (c *client) sendRequestBody(str Stream, body io.ReadCloser) error {
 	defer body.Close()
 	b := make([]byte, bodyCopyBufferSize)
@@ -350,7 +356,8 @@ func (c *client) doRequest(req *http.Request, str quic.Stream, opt RoundTripOpt,
 		str.Close()
 	}
 
-	hstr := newStream(str, func() { c.conn.CloseWithError(quic.ApplicationErrorCode(errorFrameUnexpected), "") })
+	hstr := newStream(str, c.conn, func() { c.conn.CloseWithError(quic.ApplicationErrorCode(errorFrameUnexpected), "") }, c.handleStreamClose)
+	c.streams[hstr.StreamID()] = hstr
 	if req.Body != nil {
 		// send the request body asynchronously
 		go func() {

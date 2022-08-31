@@ -9,7 +9,12 @@ import (
 
 // A Stream is a HTTP/3 stream.
 // When writing to and reading from the stream, data is framed in HTTP/3 DATA frames.
-type Stream quic.Stream
+type Stream interface {
+	quic.Stream
+
+	// Datagrams currently as outlined in draft-ietf-masque-h3-datagram-10
+	quic.DatagramSendReceiver
+}
 
 // The stream conforms to the quic.Stream interface, but instead of writing to and reading directly
 // from the QUIC stream, it writes to and reads from the HTTP stream.
@@ -17,13 +22,15 @@ type stream struct {
 	quic.Stream
 
 	onFrameError          func()
+	onClose               func(*stream)
 	bytesRemainingInFrame uint64
+	dgram                 quic.DatagramSendReceiver
 }
 
 var _ Stream = &stream{}
 
-func newStream(str quic.Stream, onFrameError func()) *stream {
-	return &stream{Stream: str, onFrameError: onFrameError}
+func newStream(str quic.Stream, dgram quic.DatagramSendReceiver, onFrameError func(), onClose func(*stream)) *stream {
+	return &stream{Stream: str, onFrameError: onFrameError, onClose: onClose}
 }
 
 func (s *stream) Read(b []byte) (int, error) {
@@ -68,4 +75,24 @@ func (s *stream) Write(b []byte) (int, error) {
 		return 0, err
 	}
 	return s.Stream.Write(b)
+}
+
+func (s *stream) Close() error {
+	s.onClose(s)
+	return s.Stream.Close()
+}
+
+func (s *stream) SendMessage(data []byte) error {
+	buf := &bytes.Buffer{}
+	(&datagramFrame{QuarterStreamId: uint64(s.StreamID() / 4)}).Write(buf)
+	buf.Write(data)
+	return s.dgram.SendMessage(data)
+}
+
+func (s *stream) ReceiveMessage() ([]byte, error) {
+	return []byte{}, nil
+}
+
+func (s *stream) onMessage(data []byte) {
+
 }

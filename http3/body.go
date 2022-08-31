@@ -36,7 +36,7 @@ type Hijacker interface {
 
 // The body of a http.Request or http.Response.
 type body struct {
-	str quic.Stream
+	str Stream
 
 	wasHijacked bool // set when HTTPStream is called
 }
