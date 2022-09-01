@@ -1,7 +1,6 @@
 package frames
 
 import (
-	"bytes"
 	"fmt"
 
 	"github.com/lucas-clemente/quic-go/internal/protocol"
@@ -37,19 +36,19 @@ func Fuzz(data []byte) int {
 	parser := wire.NewFrameParser(true, version)
 	parser.SetAckDelayExponent(protocol.DefaultAckDelayExponent)
 
-	r := bytes.NewReader(data)
-	initialLen := r.Len()
+	initialLen := len(data)
 
 	var frames []wire.Frame
 
-	for r.Len() > 0 {
-		f, err := parser.ParseNext(r, encLevel)
+	for len(data) > 0 {
+		l, f, err := parser.ParseNext(data, encLevel)
 		if err != nil {
 			break
 		}
+		data = data[l:]
 		frames = append(frames, f)
 	}
-	parsedLen := initialLen - r.Len()
+	parsedLen := initialLen - len(data)
 
 	if len(frames) == 0 {
 		return 0

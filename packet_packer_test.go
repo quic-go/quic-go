@@ -618,7 +618,8 @@ var _ = Describe("Packet packer", func() {
 				// packet.buffer.Data = packet.buffer.Data[:packet.buffer.Len()-protocol.ByteCount(sealer.Overhead())]
 				hdr, _, _, err := wire.ParsePacket(packet.buffer.Data, packer.getDestConnID().Len())
 				Expect(err).ToNot(HaveOccurred())
-				r := bytes.NewReader(packet.buffer.Data)
+				data := packet.buffer.Data
+				r := bytes.NewReader(data)
 				extHdr, err := hdr.ParseExtended(r, packer.version)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(extHdr.PacketNumberLen).To(Equal(protocol.PacketNumberLen1))
@@ -632,10 +633,10 @@ var _ = Describe("Packet packer", func() {
 				Expect(secondPayloadByte).To(Equal(byte(0)))
 				// ... followed by the PING
 				frameParser := wire.NewFrameParser(false, packer.version)
-				frame, err := frameParser.ParseNext(r, protocol.Encryption1RTT)
+				l, frame, err := frameParser.ParseNext(data[len(data)-r.Len():], protocol.Encryption1RTT)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(frame).To(BeAssignableToTypeOf(&wire.PingFrame{}))
-				Expect(r.Len()).To(Equal(sealer.Overhead()))
+				Expect(r.Len() - l).To(Equal(sealer.Overhead()))
 			})
 
 			It("pads if payload length + packet number length is smaller than 4", func() {
@@ -658,7 +659,8 @@ var _ = Describe("Packet packer", func() {
 				packet.buffer.Data = packet.buffer.Data[:packet.buffer.Len()-protocol.ByteCount(sealer.Overhead())]
 				hdr, _, _, err := wire.ParsePacket(packet.buffer.Data, packer.getDestConnID().Len())
 				Expect(err).ToNot(HaveOccurred())
-				r := bytes.NewReader(packet.buffer.Data)
+				data := packet.buffer.Data
+				r := bytes.NewReader(data)
 				extHdr, err := hdr.ParseExtended(r, packer.version)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(extHdr.PacketNumberLen).To(Equal(protocol.PacketNumberLen1))
@@ -669,14 +671,14 @@ var _ = Describe("Packet packer", func() {
 				Expect(firstPayloadByte).To(Equal(byte(0)))
 				// ... followed by the STREAM frame
 				frameParser := wire.NewFrameParser(true, packer.version)
-				frame, err := frameParser.ParseNext(r, protocol.Encryption1RTT)
+				l, frame, err := frameParser.ParseNext(packet.buffer.Data[len(data)-r.Len():], protocol.Encryption1RTT)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(frame).To(BeAssignableToTypeOf(&wire.StreamFrame{}))
 				sf := frame.(*wire.StreamFrame)
 				Expect(sf.StreamID).To(Equal(f.StreamID))
 				Expect(sf.Fin).To(Equal(f.Fin))
 				Expect(sf.Data).To(BeEmpty())
-				Expect(r.Len()).To(BeZero())
+				Expect(r.Len() - l).To(BeZero())
 			})
 
 			It("packs multiple small STREAM frames into single packet", func() {
@@ -1208,7 +1210,8 @@ var _ = Describe("Packet packer", func() {
 				// packet.buffer.Data = packet.buffer.Data[:packet.buffer.Len()-protocol.ByteCount(sealer.Overhead())]
 				hdr, _, _, err := wire.ParsePacket(packet.buffer.Data, packer.getDestConnID().Len())
 				Expect(err).ToNot(HaveOccurred())
-				r := bytes.NewReader(packet.buffer.Data)
+				data := packet.buffer.Data
+				r := bytes.NewReader(data)
 				extHdr, err := hdr.ParseExtended(r, packer.version)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(extHdr.PacketNumberLen).To(Equal(protocol.PacketNumberLen1))
@@ -1222,10 +1225,10 @@ var _ = Describe("Packet packer", func() {
 				Expect(secondPayloadByte).To(Equal(byte(0)))
 				// ... followed by the PING
 				frameParser := wire.NewFrameParser(false, packer.version)
-				frame, err := frameParser.ParseNext(r, protocol.Encryption1RTT)
+				l, frame, err := frameParser.ParseNext(data[len(data)-r.Len():], protocol.Encryption1RTT)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(frame).To(BeAssignableToTypeOf(&wire.PingFrame{}))
-				Expect(r.Len()).To(Equal(sealer.Overhead()))
+				Expect(r.Len() - l).To(Equal(sealer.Overhead()))
 			})
 
 			It("adds retransmissions", func() {

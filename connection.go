@@ -1286,12 +1286,12 @@ func (s *connection) handleFrames(
 	// Only used for tracing.
 	// If we're not tracing, this slice will always remain empty.
 	var frames []wire.Frame
-	r := bytes.NewReader(data)
-	for {
-		frame, err := s.frameParser.ParseNext(r, encLevel)
+	for len(data) > 0 {
+		l, frame, err := s.frameParser.ParseNext(data, encLevel)
 		if err != nil {
 			return false, err
 		}
+		data = data[l:]
 		if frame == nil {
 			break
 		}
