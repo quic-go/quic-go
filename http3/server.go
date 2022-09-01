@@ -1,7 +1,6 @@
 package http3
 
 import (
-	"bytes"
 	"context"
 	"crypto/tls"
 	"errors"
@@ -413,10 +412,10 @@ func (s *Server) handleConn(conn quic.EarlyConnection) {
 		s.logger.Debugf("Opening the control stream failed.")
 		return
 	}
-	buf := &bytes.Buffer{}
-	quicvarint.Write(buf, streamTypeControlStream) // stream type
-	(&settingsFrame{Datagram: s.EnableDatagrams, Other: s.AdditionalSettings}).Write(buf)
-	str.Write(buf.Bytes())
+	b := make([]byte, 0, 64)
+	b = quicvarint.Append(b, streamTypeControlStream) // stream type
+	b = (&settingsFrame{Datagram: s.EnableDatagrams, Other: s.AdditionalSettings}).Append(b)
+	str.Write(b)
 
 	go s.handleUnidirectionalStreams(conn)
 

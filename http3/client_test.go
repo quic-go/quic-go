@@ -455,11 +455,11 @@ var _ = Describe("Client", func() {
 		})
 
 		It("parses the SETTINGS frame", func() {
-			buf := &bytes.Buffer{}
-			quicvarint.Write(buf, streamTypeControlStream)
-			(&settingsFrame{}).Write(buf)
+			b := quicvarint.Append(nil, streamTypeControlStream)
+			b = (&settingsFrame{}).Append(b)
+			r := bytes.NewReader(b)
 			controlStr := mockquic.NewMockStream(mockCtrl)
-			controlStr.EXPECT().Read(gomock.Any()).DoAndReturn(buf.Read).AnyTimes()
+			controlStr.EXPECT().Read(gomock.Any()).DoAndReturn(r.Read).AnyTimes()
 			conn.EXPECT().AcceptUniStream(gomock.Any()).DoAndReturn(func(context.Context) (quic.ReceiveStream, error) {
 				return controlStr, nil
 			})
@@ -521,11 +521,11 @@ var _ = Describe("Client", func() {
 		})
 
 		It("errors when the first frame on the control stream is not a SETTINGS frame", func() {
-			buf := &bytes.Buffer{}
-			quicvarint.Write(buf, streamTypeControlStream)
-			(&dataFrame{}).Write(buf)
+			b := quicvarint.Append(nil, streamTypeControlStream)
+			b = (&dataFrame{}).Append(b)
+			r := bytes.NewReader(b)
 			controlStr := mockquic.NewMockStream(mockCtrl)
-			controlStr.EXPECT().Read(gomock.Any()).DoAndReturn(buf.Read).AnyTimes()
+			controlStr.EXPECT().Read(gomock.Any()).DoAndReturn(r.Read).AnyTimes()
 			conn.EXPECT().AcceptUniStream(gomock.Any()).DoAndReturn(func(context.Context) (quic.ReceiveStream, error) {
 				return controlStr, nil
 			})
@@ -545,13 +545,11 @@ var _ = Describe("Client", func() {
 		})
 
 		It("errors when parsing the frame on the control stream fails", func() {
-			buf := &bytes.Buffer{}
-			quicvarint.Write(buf, streamTypeControlStream)
-			b := &bytes.Buffer{}
-			(&settingsFrame{}).Write(b)
-			buf.Write(b.Bytes()[:b.Len()-1])
+			b := quicvarint.Append(nil, streamTypeControlStream)
+			b = (&settingsFrame{}).Append(b)
+			r := bytes.NewReader(b[:len(b)-1])
 			controlStr := mockquic.NewMockStream(mockCtrl)
-			controlStr.EXPECT().Read(gomock.Any()).DoAndReturn(buf.Read).AnyTimes()
+			controlStr.EXPECT().Read(gomock.Any()).DoAndReturn(r.Read).AnyTimes()
 			conn.EXPECT().AcceptUniStream(gomock.Any()).DoAndReturn(func(context.Context) (quic.ReceiveStream, error) {
 				return controlStr, nil
 			})
@@ -595,11 +593,11 @@ var _ = Describe("Client", func() {
 
 		It("errors when the server advertises datagram support (and we enabled support for it)", func() {
 			client.opts.EnableDatagram = true
-			buf := &bytes.Buffer{}
-			quicvarint.Write(buf, streamTypeControlStream)
-			(&settingsFrame{Datagram: true}).Write(buf)
+			b := quicvarint.Append(nil, streamTypeControlStream)
+			b = (&settingsFrame{Datagram: true}).Append(b)
+			r := bytes.NewReader(b)
 			controlStr := mockquic.NewMockStream(mockCtrl)
-			controlStr.EXPECT().Read(gomock.Any()).DoAndReturn(buf.Read).AnyTimes()
+			controlStr.EXPECT().Read(gomock.Any()).DoAndReturn(r.Read).AnyTimes()
 			conn.EXPECT().AcceptUniStream(gomock.Any()).DoAndReturn(func(context.Context) (quic.ReceiveStream, error) {
 				return controlStr, nil
 			})
@@ -631,16 +629,15 @@ var _ = Describe("Client", func() {
 		testDone := make(chan struct{})
 
 		getHeadersFrame := func(headers map[string]string) []byte {
-			buf := &bytes.Buffer{}
 			headerBuf := &bytes.Buffer{}
 			enc := qpack.NewEncoder(headerBuf)
 			for name, value := range headers {
 				Expect(enc.WriteField(qpack.HeaderField{Name: name, Value: value})).To(Succeed())
 			}
 			Expect(enc.Close()).To(Succeed())
-			(&headersFrame{Length: uint64(headerBuf.Len())}).Write(buf)
-			buf.Write(headerBuf.Bytes())
-			return buf.Bytes()
+			b := (&headersFrame{Length: uint64(headerBuf.Len())}).Append(nil)
+			b = append(b, headerBuf.Bytes()...)
+			return b
 		}
 
 		decodeHeader := func(str io.Reader) map[string]string {
@@ -805,18 +802,18 @@ var _ = Describe("Client", func() {
 
 			It("sets the Content-Length", func() {
 				done := make(chan struct{})
-				buf := &bytes.Buffer{}
-				buf.Write(getHeadersFrame(map[string]string{
+				b := getHeadersFrame(map[string]string{
 					":status":        "200",
 					"Content-Length": "1337",
-				}))
-				(&dataFrame{Length: 0x6}).Write(buf)
-				buf.Write([]byte("foobar"))
+				})
+				b = (&dataFrame{Length: 0x6}).Append(b)
+				b = append(b, []byte("foobar")...)
+				r := bytes.NewReader(b)
 				str.EXPECT().Close().Do(func() { close(done) })
 				conn.EXPECT().ConnectionState().Return(quic.ConnectionState{})
 				str.EXPECT().CancelWrite(gomock.Any()).MaxTimes(1) // when reading the response errors
 				// the response body is sent asynchronously, while already reading the response
-				str.EXPECT().Read(gomock.Any()).DoAndReturn(buf.Read).AnyTimes()
+				str.EXPECT().Read(gomock.Any()).DoAndReturn(r.Read).AnyTimes()
 				req, err := client.RoundTripOpt(req, RoundTripOpt{})
 				Expect(err).ToNot(HaveOccurred())
 				Expect(req.ContentLength).To(BeEquivalentTo(1337))
@@ -824,24 +821,24 @@ var _ = Describe("Client", func() {
 			})
 
 			It("closes the connection when the first frame is not a HEADERS frame", func() {
-				buf := &bytes.Buffer{}
-				(&dataFrame{Length: 0x42}).Write(buf)
+				b := (&dataFrame{Length: 0x42}).Append(nil)
 				conn.EXPECT().CloseWithError(quic.ApplicationErrorCode(errorFrameUnexpected), gomock.Any())
 				closed := make(chan struct{})
+				r := bytes.NewReader(b)
 				str.EXPECT().Close().Do(func() { close(closed) })
-				str.EXPECT().Read(gomock.Any()).DoAndReturn(buf.Read).AnyTimes()
+				str.EXPECT().Read(gomock.Any()).DoAndReturn(r.Read).AnyTimes()
 				_, err := client.RoundTripOpt(req, RoundTripOpt{})
 				Expect(err).To(MatchError("expected first frame to be a HEADERS frame"))
 				Eventually(closed).Should(BeClosed())
 			})
 
 			It("cancels the stream when the HEADERS frame is too large", func() {
-				buf := &bytes.Buffer{}
-				(&headersFrame{Length: 1338}).Write(buf)
+				b := (&headersFrame{Length: 1338}).Append(nil)
+				r := bytes.NewReader(b)
 				str.EXPECT().CancelWrite(quic.StreamErrorCode(errorFrameError))
 				closed := make(chan struct{})
 				str.EXPECT().Close().Do(func() { close(closed) })
-				str.EXPECT().Read(gomock.Any()).DoAndReturn(buf.Read).AnyTimes()
+				str.EXPECT().Read(gomock.Any()).DoAndReturn(r.Read).AnyTimes()
 				_, err := client.RoundTripOpt(req, RoundTripOpt{})
 				Expect(err).To(MatchError("HEADERS frame too large: 1338 bytes (max: 1337)"))
 				Eventually(closed).Should(BeClosed())
