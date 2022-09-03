@@ -3,6 +3,7 @@ package quic
 import (
 	"errors"
 
+	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/internal/utils"
 	"github.com/lucas-clemente/quic-go/internal/wire"
 
@@ -18,25 +19,30 @@ var _ = Describe("Datagram Queue", func() {
 		queued = make(chan struct{}, 100)
 		queue = newDatagramQueue(func() {
 			queued <- struct{}{}
-		}, utils.DefaultLogger)
+		}, utils.DefaultLogger, protocol.Version1)
 	})
 
 	Context("sending", func() {
 		It("returns nil when there's no datagram to send", func() {
+			Expect(queue.NextFrameSize()).To(Equal(protocol.InvalidByteCount))
 			Expect(queue.Get()).To(BeNil())
 		})
 
 		It("queues a datagram", func() {
 			done := make(chan struct{})
+			frame := &wire.DatagramFrame{Data: []byte("foobar")}
 			go func() {
 				defer GinkgoRecover()
 				defer close(done)
-				Expect(queue.AddAndWait(&wire.DatagramFrame{Data: []byte("foobar")})).To(Succeed())
+				Expect(queue.AddAndWait(frame)).To(Succeed())
 			}()
 
 			Eventually(queued).Should(HaveLen(1))
 			Consistently(done).ShouldNot(BeClosed())
+			l := queue.NextFrameSize()
 			f := queue.Get()
+			Expect(l).To(Equal(f.Length(protocol.Version1)))
+			Expect(queue.NextFrameSize()).To(Equal(protocol.InvalidByteCount))
 			Expect(f).ToNot(BeNil())
 			Expect(f.Data).To(Equal([]byte("foobar")))
 			Eventually(done).Should(BeClosed())

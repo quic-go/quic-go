@@ -555,18 +555,18 @@ func (p *packetPacker) maybeGetAppDataPacketFor0RTT(sealer sealer, maxPacketSize
 
 	hdr := p.getLongHeader(protocol.Encryption0RTT)
 	maxPayloadSize := maxPacketSize - hdr.GetLength(p.version) - protocol.ByteCount(sealer.Overhead())
-	payload := p.maybeGetAppDataPacketWithEncLevel(maxPayloadSize, false)
+	payload := p.maybeGetAppDataPacket(maxPayloadSize, false)
 	return hdr, payload
 }
 
 func (p *packetPacker) maybeGetShortHeaderPacket(sealer handshake.ShortHeaderSealer, maxPacketSize, currentSize protocol.ByteCount) (*wire.ExtendedHeader, *payload) {
 	hdr := p.getShortHeader(sealer.KeyPhase())
 	maxPayloadSize := maxPacketSize - hdr.GetLength(p.version) - protocol.ByteCount(sealer.Overhead())
-	payload := p.maybeGetAppDataPacketWithEncLevel(maxPayloadSize, currentSize == 0)
+	payload := p.maybeGetAppDataPacket(maxPayloadSize, currentSize == 0)
 	return hdr, payload
 }
 
-func (p *packetPacker) maybeGetAppDataPacketWithEncLevel(maxPayloadSize protocol.ByteCount, ackAllowed bool) *payload {
+func (p *packetPacker) maybeGetAppDataPacket(maxPayloadSize protocol.ByteCount, ackAllowed bool) *payload {
 	payload := p.composeNextPacket(maxPayloadSize, ackAllowed)
 
 	// check if we have anything to send
@@ -593,32 +593,35 @@ func (p *packetPacker) maybeGetAppDataPacketWithEncLevel(maxPayloadSize protocol
 func (p *packetPacker) composeNextPacket(maxFrameSize protocol.ByteCount, ackAllowed bool) *payload {
 	payload := &payload{frames: make([]ackhandler.Frame, 0, 1)}
 
-	var hasDatagram bool
+	hasData := p.framer.HasData()
+	hasRetransmission := p.retransmissionQueue.HasAppData()
+
+	var hasAck bool
+	if ackAllowed {
+		if ack := p.acks.GetAckFrame(protocol.Encryption1RTT, !hasRetransmission && !hasData); ack != nil {
+			payload.ack = ack
+			payload.length += ack.Length(p.version)
+			hasAck = true
+		}
+	}
+
 	if p.datagramQueue != nil {
-		if datagram := p.datagramQueue.Get(); datagram != nil {
+		size := p.datagramQueue.NextFrameSize()
+		if size > 0 && size <= maxFrameSize-payload.length {
+			datagram := p.datagramQueue.Get()
+			if datagram == nil || datagram.Length(p.version) != size {
+				panic("packet packer BUG: inconsistent DATAGRAM frame length")
+			}
 			payload.frames = append(payload.frames, ackhandler.Frame{
 				Frame: datagram,
 				// set it to a no-op. Then we won't set the default callback, which would retransmit the frame.
 				OnLost: func(wire.Frame) {},
 			})
 			payload.length += datagram.Length(p.version)
-			hasDatagram = true
 		}
 	}
 
-	var ack *wire.AckFrame
-	hasData := p.framer.HasData()
-	hasRetransmission := p.retransmissionQueue.HasAppData()
-	// TODO: make sure ACKs are sent when a lot of DATAGRAMs are queued
-	if !hasDatagram && ackAllowed {
-		ack = p.acks.GetAckFrame(protocol.Encryption1RTT, !hasRetransmission && !hasData)
-		if ack != nil {
-			payload.ack = ack
-			payload.length += ack.Length(p.version)
-		}
-	}
-
-	if ack == nil && !hasData && !hasRetransmission {
+	if hasAck && !hasData && !hasRetransmission {
 		return payload
 	}
 
@@ -675,7 +678,7 @@ func (p *packetPacker) MaybePackProbePacket(encLevel protocol.EncryptionLevel) (
 		}
 		sealer = oneRTTSealer
 		hdr = p.getShortHeader(oneRTTSealer.KeyPhase())
-		payload = p.maybeGetAppDataPacketWithEncLevel(p.maxPacketSize-protocol.ByteCount(sealer.Overhead())-hdr.GetLength(p.version), true)
+		payload = p.maybeGetAppDataPacket(p.maxPacketSize-protocol.ByteCount(sealer.Overhead())-hdr.GetLength(p.version), true)
 	default:
 		panic("unknown encryption level")
 	}
