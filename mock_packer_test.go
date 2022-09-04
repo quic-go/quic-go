@@ -6,6 +6,7 @@ package quic
 
 import (
 	reflect "reflect"
+	time "time"
 
 	gomock "github.com/golang/mock/gomock"
 	ackhandler "github.com/lucas-clemente/quic-go/internal/ackhandler"
@@ -110,33 +111,33 @@ func (mr *MockPackerMockRecorder) PackConnectionClose(arg0 interface{}) *gomock.
 }
 
 // PackMTUProbePacket mocks base method.
-func (m *MockPacker) PackMTUProbePacket(ping ackhandler.Frame, size protocol.ByteCount) (*packedPacket, error) {
+func (m *MockPacker) PackMTUProbePacket(ping ackhandler.Frame, size protocol.ByteCount, now time.Time) (shortHeaderPacket, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "PackMTUProbePacket", ping, size)
-	ret0, _ := ret[0].(*packedPacket)
+	ret := m.ctrl.Call(m, "PackMTUProbePacket", ping, size, now)
+	ret0, _ := ret[0].(shortHeaderPacket)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // PackMTUProbePacket indicates an expected call of PackMTUProbePacket.
-func (mr *MockPackerMockRecorder) PackMTUProbePacket(ping, size interface{}) *gomock.Call {
+func (mr *MockPackerMockRecorder) PackMTUProbePacket(ping, size, now interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PackMTUProbePacket", reflect.TypeOf((*MockPacker)(nil).PackMTUProbePacket), ping, size)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PackMTUProbePacket", reflect.TypeOf((*MockPacker)(nil).PackMTUProbePacket), ping, size, now)
 }
 
 // PackPacket mocks base method.
-func (m *MockPacker) PackPacket(onlyAck bool) (*packedPacket, error) {
+func (m *MockPacker) PackPacket(onlyAck bool, now time.Time) (shortHeaderPacket, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "PackPacket", onlyAck)
-	ret0, _ := ret[0].(*packedPacket)
+	ret := m.ctrl.Call(m, "PackPacket", onlyAck, now)
+	ret0, _ := ret[0].(shortHeaderPacket)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // PackPacket indicates an expected call of PackPacket.
-func (mr *MockPackerMockRecorder) PackPacket(onlyAck interface{}) *gomock.Call {
+func (mr *MockPackerMockRecorder) PackPacket(onlyAck, now interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PackPacket", reflect.TypeOf((*MockPacker)(nil).PackPacket), onlyAck)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PackPacket", reflect.TypeOf((*MockPacker)(nil).PackPacket), onlyAck, now)
 }
 
 // SetMaxPacketSize mocks base method.
