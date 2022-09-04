@@ -1820,7 +1820,24 @@ func (s *connection) sendPackets() error {
 }
 
 func (s *connection) maybeSendAckOnlyPacket() error {
-	packet, err := s.packer.MaybePackAckPacket(s.handshakeConfirmed)
+	if !s.handshakeConfirmed {
+		packet, err := s.packer.PackCoalescedPacket(true)
+		if err != nil {
+			return err
+		}
+		if packet == nil {
+			return nil
+		}
+		s.logCoalescedPacket(packet)
+		for _, p := range packet.packets {
+			s.sentPacketHandler.SentPacket(p.ToAckHandlerPacket(time.Now(), s.retransmissionQueue))
+		}
+		s.connIDManager.SentPacket()
+		s.sendQueue.Send(packet.buffer)
+		return nil
+	}
+
+	packet, err := s.packer.PackPacket(true)
 	if err != nil {
 		return err
 	}
@@ -1881,7 +1898,7 @@ func (s *connection) sendPacket() (bool, error) {
 
 	now := time.Now()
 	if !s.handshakeConfirmed {
-		packet, err := s.packer.PackCoalescedPacket()
+		packet, err := s.packer.PackCoalescedPacket(false)
 		if err != nil || packet == nil {
 			return false, err
 		}
@@ -1905,7 +1922,7 @@ func (s *connection) sendPacket() (bool, error) {
 		s.sendPackedPacket(packet, now)
 		return true, nil
 	}
-	packet, err := s.packer.PackPacket()
+	packet, err := s.packer.PackPacket(false)
 	if err != nil || packet == nil {
 		return false, err
 	}
