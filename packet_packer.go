@@ -754,13 +754,14 @@ func (p *packetPacker) appendPacket(buffer *packetBuffer, header *wire.ExtendedH
 		header.Length = pnLen + protocol.ByteCount(sealer.Overhead()) + payload.length + paddingLen
 	}
 
-	hdrOffset := buffer.Len()
+	raw := buffer.Data[len(buffer.Data):]
 	buf := bytes.NewBuffer(buffer.Data)
+	startLen := buf.Len()
 	if err := header.Write(buf, p.version); err != nil {
 		return nil, err
 	}
-	payloadOffset := buf.Len()
-	raw := buffer.Data[:payloadOffset]
+	raw = raw[:buf.Len()-startLen]
+	payloadOffset := len(raw)
 
 	if payload.ack != nil {
 		var err error
@@ -788,24 +789,24 @@ func (p *packetPacker) appendPacket(buffer *packetBuffer, header *wire.ExtendedH
 			return nil, fmt.Errorf("PacketPacker BUG: packet too large (%d bytes, allowed %d bytes)", size, p.maxPacketSize)
 		}
 	}
-
-	// encrypt the packet
-	_ = sealer.Seal(raw[payloadOffset:payloadOffset], raw[payloadOffset:], header.PacketNumber, raw[hdrOffset:payloadOffset])
-	raw = raw[0 : len(raw)+sealer.Overhead()]
-	// apply header protection
-	pnOffset := payloadOffset - int(header.PacketNumberLen)
-	sealer.EncryptHeader(raw[pnOffset+4:pnOffset+4+16], &raw[hdrOffset], raw[pnOffset:payloadOffset])
-	buffer.Data = raw
-
 	num := p.pnManager.PopPacketNumber(encLevel)
 	if num != header.PacketNumber {
 		return nil, errors.New("packetPacker BUG: Peeked and Popped packet numbers do not match")
 	}
+
+	// encrypt the packet
+	_ = sealer.Seal(raw[payloadOffset:payloadOffset], raw[payloadOffset:], header.PacketNumber, raw[:payloadOffset])
+	raw = raw[:len(raw)+sealer.Overhead()]
+	// apply header protection
+	pnOffset := payloadOffset - int(header.PacketNumberLen)
+	sealer.EncryptHeader(raw[pnOffset+4:pnOffset+4+16], &raw[0], raw[pnOffset:payloadOffset])
+	buffer.Data = buffer.Data[:len(buffer.Data)+len(raw)]
+
 	return &packetContents{
 		header: header,
 		ack:    payload.ack,
 		frames: payload.frames,
-		length: buffer.Len() - hdrOffset,
+		length: protocol.ByteCount(len(raw)),
 	}, nil
 }
 
