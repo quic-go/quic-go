@@ -65,6 +65,18 @@ var _ = Describe("Connection", func() {
 		}
 	}
 
+	getCoalescedPacket := func(pn protocol.PacketNumber) *coalescedPacket {
+		buffer := getPacketBuffer()
+		buffer.Data = append(buffer.Data, []byte("foobar")...)
+		return &coalescedPacket{
+			buffer: buffer,
+			packets: []*packetContents{{
+				header: &wire.ExtendedHeader{PacketNumber: pn},
+				length: 6, // foobar
+			}},
+		}
+	}
+
 	expectReplaceWithClosed := func() {
 		connRunner.EXPECT().ReplaceWithClosed(gomock.Any(), gomock.Any(), gomock.Any()).Do(func(connIDs []protocol.ConnectionID, _ protocol.Perspective, _ []byte) {
 			Expect(connIDs).To(ContainElement(srcConnID))
@@ -1327,7 +1339,7 @@ var _ = Describe("Connection", func() {
 					sph.EXPECT().SendMode().Return(sendMode)
 					sph.EXPECT().SendMode().Return(ackhandler.SendNone)
 					sph.EXPECT().QueueProbePacket(encLevel)
-					p := getPacket(123)
+					p := getCoalescedPacket(123)
 					packer.EXPECT().MaybePackProbePacket(encLevel).Return(p, nil)
 					sph.EXPECT().SentPacket(gomock.Any()).Do(func(packet *ackhandler.Packet) {
 						Expect(packet.PacketNumber).To(Equal(protocol.PacketNumber(123)))
@@ -1336,7 +1348,7 @@ var _ = Describe("Connection", func() {
 					runConn()
 					sent := make(chan struct{})
 					sender.EXPECT().Send(gomock.Any()).Do(func(packet *packetBuffer) { close(sent) })
-					tracer.EXPECT().SentPacket(p.header, p.length, gomock.Any(), gomock.Any())
+					tracer.EXPECT().SentPacket(p.packets[0].header, p.packets[0].length, gomock.Any(), gomock.Any())
 					conn.scheduleSending()
 					Eventually(sent).Should(BeClosed())
 				})
@@ -1348,7 +1360,7 @@ var _ = Describe("Connection", func() {
 					sph.EXPECT().SendMode().Return(sendMode)
 					sph.EXPECT().SendMode().Return(ackhandler.SendNone)
 					sph.EXPECT().QueueProbePacket(encLevel).Return(false)
-					p := getPacket(123)
+					p := getCoalescedPacket(123)
 					packer.EXPECT().MaybePackProbePacket(encLevel).Return(p, nil)
 					sph.EXPECT().SentPacket(gomock.Any()).Do(func(packet *ackhandler.Packet) {
 						Expect(packet.PacketNumber).To(Equal(protocol.PacketNumber(123)))
@@ -1357,7 +1369,7 @@ var _ = Describe("Connection", func() {
 					runConn()
 					sent := make(chan struct{})
 					sender.EXPECT().Send(gomock.Any()).Do(func(packet *packetBuffer) { close(sent) })
-					tracer.EXPECT().SentPacket(p.header, p.length, gomock.Any(), gomock.Any())
+					tracer.EXPECT().SentPacket(p.packets[0].header, p.packets[0].length, gomock.Any(), gomock.Any())
 					conn.scheduleSending()
 					Eventually(sent).Should(BeClosed())
 					// We're using a mock packet packer in this test.

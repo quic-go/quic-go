@@ -50,10 +50,10 @@ func (mr *MockPackerMockRecorder) HandleTransportParameters(arg0 interface{}) *g
 }
 
 // MaybePackProbePacket mocks base method.
-func (m *MockPacker) MaybePackProbePacket(arg0 protocol.EncryptionLevel) (*packedPacket, error) {
+func (m *MockPacker) MaybePackProbePacket(arg0 protocol.EncryptionLevel) (*coalescedPacket, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "MaybePackProbePacket", arg0)
-	ret0, _ := ret[0].(*packedPacket)
+	ret0, _ := ret[0].(*coalescedPacket)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }

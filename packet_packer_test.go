@@ -1416,15 +1416,17 @@ var _ = Describe("Packet packer", func() {
 					pnManager.EXPECT().PeekPacketNumber(protocol.EncryptionInitial).Return(protocol.PacketNumber(0x42), protocol.PacketNumberLen2)
 					pnManager.EXPECT().PopPacketNumber(protocol.EncryptionInitial).Return(protocol.PacketNumber(0x42))
 
-					packet, err := packer.MaybePackProbePacket(protocol.EncryptionInitial)
+					p, err := packer.MaybePackProbePacket(protocol.EncryptionInitial)
 					Expect(err).ToNot(HaveOccurred())
-					Expect(packet).ToNot(BeNil())
+					Expect(p).ToNot(BeNil())
+					Expect(p.packets).To(HaveLen(1))
+					packet := p.packets[0]
 					Expect(packet.EncryptionLevel()).To(Equal(protocol.EncryptionInitial))
-					Expect(packet.buffer.Len()).To(BeNumerically(">=", protocol.MinInitialPacketSize))
-					Expect(packet.buffer.Len()).To(BeEquivalentTo(maxPacketSize))
+					Expect(p.buffer.Len()).To(BeNumerically(">=", protocol.MinInitialPacketSize))
+					Expect(p.buffer.Len()).To(BeEquivalentTo(maxPacketSize))
 					Expect(packet.frames).To(HaveLen(1))
 					Expect(packet.frames[0].Frame).To(Equal(f))
-					parsePacket(packet.buffer.Data)
+					parsePacket(p.buffer.Data)
 				})
 
 				It(fmt.Sprintf("packs an Initial probe packet with 1 byte payload, for the %s", perspective), func() {
@@ -1436,15 +1438,18 @@ var _ = Describe("Packet packer", func() {
 					pnManager.EXPECT().PeekPacketNumber(protocol.EncryptionInitial).Return(protocol.PacketNumber(0x42), protocol.PacketNumberLen1)
 					pnManager.EXPECT().PopPacketNumber(protocol.EncryptionInitial).Return(protocol.PacketNumber(0x42))
 
-					packet, err := packer.MaybePackProbePacket(protocol.EncryptionInitial)
+					p, err := packer.MaybePackProbePacket(protocol.EncryptionInitial)
 					Expect(err).ToNot(HaveOccurred())
-					Expect(packet).ToNot(BeNil())
+					Expect(err).ToNot(HaveOccurred())
+					Expect(p).ToNot(BeNil())
+					Expect(p.packets).To(HaveLen(1))
+					packet := p.packets[0]
 					Expect(packet.EncryptionLevel()).To(Equal(protocol.EncryptionInitial))
-					Expect(packet.buffer.Len()).To(BeNumerically(">=", protocol.MinInitialPacketSize))
-					Expect(packet.buffer.Len()).To(BeEquivalentTo(maxPacketSize))
+					Expect(p.buffer.Len()).To(BeNumerically(">=", protocol.MinInitialPacketSize))
+					Expect(p.buffer.Len()).To(BeEquivalentTo(maxPacketSize))
 					Expect(packet.frames).To(HaveLen(1))
 					Expect(packet.frames[0].Frame).To(BeAssignableToTypeOf(&wire.PingFrame{}))
-					parsePacket(packet.buffer.Data)
+					parsePacket(p.buffer.Data)
 				})
 			}
 
@@ -1457,13 +1462,16 @@ var _ = Describe("Packet packer", func() {
 				pnManager.EXPECT().PeekPacketNumber(protocol.EncryptionHandshake).Return(protocol.PacketNumber(0x42), protocol.PacketNumberLen2)
 				pnManager.EXPECT().PopPacketNumber(protocol.EncryptionHandshake).Return(protocol.PacketNumber(0x42))
 
-				packet, err := packer.MaybePackProbePacket(protocol.EncryptionHandshake)
+				p, err := packer.MaybePackProbePacket(protocol.EncryptionHandshake)
 				Expect(err).ToNot(HaveOccurred())
-				Expect(packet).ToNot(BeNil())
+				Expect(err).ToNot(HaveOccurred())
+				Expect(p).ToNot(BeNil())
+				Expect(p.packets).To(HaveLen(1))
+				packet := p.packets[0]
 				Expect(packet.EncryptionLevel()).To(Equal(protocol.EncryptionHandshake))
 				Expect(packet.frames).To(HaveLen(1))
 				Expect(packet.frames[0].Frame).To(Equal(f))
-				parsePacket(packet.buffer.Data)
+				parsePacket(p.buffer.Data)
 			})
 
 			It("packs a full size  Handshake probe packet", func() {
@@ -1475,14 +1483,17 @@ var _ = Describe("Packet packer", func() {
 				pnManager.EXPECT().PeekPacketNumber(protocol.EncryptionHandshake).Return(protocol.PacketNumber(0x42), protocol.PacketNumberLen2)
 				pnManager.EXPECT().PopPacketNumber(protocol.EncryptionHandshake).Return(protocol.PacketNumber(0x42))
 
-				packet, err := packer.MaybePackProbePacket(protocol.EncryptionHandshake)
+				p, err := packer.MaybePackProbePacket(protocol.EncryptionHandshake)
 				Expect(err).ToNot(HaveOccurred())
-				Expect(packet).ToNot(BeNil())
+				Expect(err).ToNot(HaveOccurred())
+				Expect(p).ToNot(BeNil())
+				Expect(p.packets).To(HaveLen(1))
+				packet := p.packets[0]
 				Expect(packet.EncryptionLevel()).To(Equal(protocol.EncryptionHandshake))
 				Expect(packet.frames).To(HaveLen(1))
 				Expect(packet.frames[0].Frame).To(BeAssignableToTypeOf(&wire.CryptoFrame{}))
 				Expect(packet.length).To(Equal(maxPacketSize))
-				parsePacket(packet.buffer.Data)
+				parsePacket(p.buffer.Data)
 			})
 
 			It("packs a 1-RTT probe packet", func() {
@@ -1496,9 +1507,11 @@ var _ = Describe("Packet packer", func() {
 				expectAppendControlFrames()
 				expectAppendStreamFrames(ackhandler.Frame{Frame: f})
 
-				packet, err := packer.MaybePackProbePacket(protocol.Encryption1RTT)
+				p, err := packer.MaybePackProbePacket(protocol.Encryption1RTT)
 				Expect(err).ToNot(HaveOccurred())
-				Expect(packet).ToNot(BeNil())
+				Expect(p).ToNot(BeNil())
+				Expect(p.packets).To(HaveLen(1))
+				packet := p.packets[0]
 				Expect(packet.EncryptionLevel()).To(Equal(protocol.Encryption1RTT))
 				Expect(packet.frames).To(HaveLen(1))
 				Expect(packet.frames[0].Frame).To(Equal(f))
@@ -1519,9 +1532,11 @@ var _ = Describe("Packet packer", func() {
 					return append(fs, ackhandler.Frame{Frame: sf}), sf.Length(packer.version)
 				})
 
-				packet, err := packer.MaybePackProbePacket(protocol.Encryption1RTT)
+				p, err := packer.MaybePackProbePacket(protocol.Encryption1RTT)
 				Expect(err).ToNot(HaveOccurred())
-				Expect(packet).ToNot(BeNil())
+				Expect(p).ToNot(BeNil())
+				Expect(p.packets).To(HaveLen(1))
+				packet := p.packets[0]
 				Expect(packet.EncryptionLevel()).To(Equal(protocol.Encryption1RTT))
 				Expect(packet.frames).To(HaveLen(1))
 				Expect(packet.frames[0].Frame).To(BeAssignableToTypeOf(&wire.StreamFrame{}))
