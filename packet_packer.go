@@ -761,8 +761,35 @@ func (p *packetPacker) appendPacket(buffer *packetBuffer, header *wire.ExtendedH
 		return nil, err
 	}
 	raw = raw[:buf.Len()-startLen]
-	payloadOffset := len(raw)
+	payloadOffset := protocol.ByteCount(len(raw))
 
+	pn := p.pnManager.PopPacketNumber(encLevel)
+	if pn != header.PacketNumber {
+		return nil, errors.New("packetPacker BUG: Peeked and Popped packet numbers do not match")
+	}
+
+	raw, err := p.appendPacketPayload(raw, payload, paddingLen)
+	if err != nil {
+		return nil, err
+	}
+	if !isMTUProbePacket {
+		if size := protocol.ByteCount(len(raw) + sealer.Overhead()); size > p.maxPacketSize {
+			return nil, fmt.Errorf("PacketPacker BUG: packet too large (%d bytes, allowed %d bytes)", size, p.maxPacketSize)
+		}
+	}
+	raw = p.encryptPacket(raw, sealer, pn, payloadOffset, pnLen)
+	buffer.Data = buffer.Data[:len(buffer.Data)+len(raw)]
+
+	return &packetContents{
+		header: header,
+		ack:    payload.ack,
+		frames: payload.frames,
+		length: protocol.ByteCount(len(raw)),
+	}, nil
+}
+
+func (p *packetPacker) appendPacketPayload(raw []byte, payload *payload, paddingLen protocol.ByteCount) ([]byte, error) {
+	payloadOffset := len(raw)
 	if payload.ack != nil {
 		var err error
 		raw, err = payload.ack.Append(raw, p.version)
@@ -784,30 +811,16 @@ func (p *packetPacker) appendPacket(buffer *packetBuffer, header *wire.ExtendedH
 	if payloadSize := protocol.ByteCount(len(raw)-payloadOffset) - paddingLen; payloadSize != payload.length {
 		return nil, fmt.Errorf("PacketPacker BUG: payload size inconsistent (expected %d, got %d bytes)", payload.length, payloadSize)
 	}
-	if !isMTUProbePacket {
-		if size := protocol.ByteCount(len(raw) + sealer.Overhead()); size > p.maxPacketSize {
-			return nil, fmt.Errorf("PacketPacker BUG: packet too large (%d bytes, allowed %d bytes)", size, p.maxPacketSize)
-		}
-	}
-	num := p.pnManager.PopPacketNumber(encLevel)
-	if num != header.PacketNumber {
-		return nil, errors.New("packetPacker BUG: Peeked and Popped packet numbers do not match")
-	}
+	return raw, nil
+}
 
-	// encrypt the packet
-	_ = sealer.Seal(raw[payloadOffset:payloadOffset], raw[payloadOffset:], header.PacketNumber, raw[:payloadOffset])
+func (p *packetPacker) encryptPacket(raw []byte, sealer sealer, pn protocol.PacketNumber, payloadOffset, pnLen protocol.ByteCount) []byte {
+	_ = sealer.Seal(raw[payloadOffset:payloadOffset], raw[payloadOffset:], pn, raw[:payloadOffset])
 	raw = raw[:len(raw)+sealer.Overhead()]
 	// apply header protection
-	pnOffset := payloadOffset - int(header.PacketNumberLen)
+	pnOffset := payloadOffset - pnLen
 	sealer.EncryptHeader(raw[pnOffset+4:pnOffset+4+16], &raw[0], raw[pnOffset:payloadOffset])
-	buffer.Data = buffer.Data[:len(buffer.Data)+len(raw)]
-
-	return &packetContents{
-		header: header,
-		ack:    payload.ack,
-		frames: payload.frames,
-		length: protocol.ByteCount(len(raw)),
-	}, nil
+	return raw
 }
 
 func (p *packetPacker) SetToken(token []byte) {
