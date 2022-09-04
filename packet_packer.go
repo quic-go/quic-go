@@ -18,7 +18,7 @@ import (
 type packer interface {
 	PackCoalescedPacket(onlyAck bool) (*coalescedPacket, error)
 	PackPacket(onlyAck bool) (*packedPacket, error)
-	MaybePackProbePacket(protocol.EncryptionLevel) (*packedPacket, error)
+	MaybePackProbePacket(protocol.EncryptionLevel) (*coalescedPacket, error)
 	PackConnectionClose(*qerr.TransportError) (*coalescedPacket, error)
 	PackApplicationClose(*qerr.ApplicationError) (*coalescedPacket, error)
 
@@ -636,7 +636,7 @@ func (p *packetPacker) composeNextPacket(maxFrameSize protocol.ByteCount, onlyAc
 	return payload
 }
 
-func (p *packetPacker) MaybePackProbePacket(encLevel protocol.EncryptionLevel) (*packedPacket, error) {
+func (p *packetPacker) MaybePackProbePacket(encLevel protocol.EncryptionLevel) (*coalescedPacket, error) {
 	var hdr *wire.ExtendedHeader
 	var payload *payload
 	var sealer sealer
@@ -680,9 +680,9 @@ func (p *packetPacker) MaybePackProbePacket(encLevel protocol.EncryptionLevel) (
 	if err != nil {
 		return nil, err
 	}
-	return &packedPacket{
-		buffer:         buffer,
-		packetContents: cont,
+	return &coalescedPacket{
+		buffer:  buffer,
+		packets: []*packetContents{cont},
 	}, nil
 }
 
