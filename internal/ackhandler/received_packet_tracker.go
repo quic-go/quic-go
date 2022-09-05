@@ -172,7 +172,7 @@ func (h *receivedPacketTracker) GetAckFrame(onlyIfQueued bool) *wire.AckFrame {
 	}
 
 	ack := &wire.AckFrame{
-		AckRanges: h.packetHistory.GetAckRanges(),
+		AckRanges: h.packetHistory.AppendAckRanges(nil),
 		// Make sure that the DelayTime is always positive.
 		// This is not guaranteed on systems that don't have a monotonic clock.
 		DelayTime: utils.Max(0, now.Sub(h.largestObservedReceivedTime)),
