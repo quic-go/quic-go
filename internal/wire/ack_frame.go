@@ -29,7 +29,7 @@ func parseAckFrame(r *bytes.Reader, ackDelayExponent uint8, _ protocol.VersionNu
 	}
 	ecn := typeByte&0x1 > 0
 
-	frame := &AckFrame{}
+	frame := GetAckFrame()
 
 	la, err := quicvarint.Read(r)
 	if err != nil {
@@ -106,7 +106,7 @@ func parseAckFrame(r *bytes.Reader, ackDelayExponent uint8, _ protocol.VersionNu
 	return frame, nil
 }
 
-// Write writes an ACK frame.
+// Append appends an ACK frame.
 func (f *AckFrame) Append(b []byte, _ protocol.VersionNumber) ([]byte, error) {
 	hasECN := f.ECT0 > 0 || f.ECT1 > 0 || f.ECNCE > 0
 	if hasECN {

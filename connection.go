@@ -1334,6 +1334,7 @@ func (s *connection) handleFrame(f wire.Frame, encLevel protocol.EncryptionLevel
 		err = s.handleStreamFrame(frame)
 	case *wire.AckFrame:
 		err = s.handleAckFrame(frame, encLevel)
+		wire.PutAckFrame(frame)
 	case *wire.ConnectionCloseFrame:
 		s.handleConnectionCloseFrame(frame)
 	case *wire.ResetStreamFrame:
@@ -1952,7 +1953,11 @@ func (s *connection) logPacketContents(p *packetContents) {
 		for _, f := range p.frames {
 			frames = append(frames, logutils.ConvertFrame(f.Frame))
 		}
-		s.tracer.SentPacket(p.header, p.length, p.ack, frames)
+		var ack *logging.AckFrame
+		if p.ack != nil {
+			ack = logutils.ConvertAckFrame(p.ack)
+		}
+		s.tracer.SentPacket(p.header, p.length, ack, frames)
 	}
 
 	// quic-go logging
