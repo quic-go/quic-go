@@ -118,7 +118,7 @@ func (f *framerI) AppendStreamFrames(frames []ackhandler.Frame, maxLen protocol.
 		// Therefore, we can pretend to have more bytes available when popping
 		// the STREAM frame (which will always have the DataLen set).
 		remainingLen += quicvarint.Len(uint64(remainingLen))
-		frame, hasMoreData := str.popStreamFrame(remainingLen)
+		frame, hasFrame, hasMoreData := str.popStreamFrame(remainingLen)
 		if hasMoreData { // put the stream back in the queue (at the end)
 			f.streamQueue = append(f.streamQueue, id)
 		} else { // no more data to send. Stream is not active any more
@@ -127,12 +127,12 @@ func (f *framerI) AppendStreamFrames(frames []ackhandler.Frame, maxLen protocol.
 		// The frame can be nil
 		// * if the receiveStream was canceled after it said it had data
 		// * the remaining size doesn't allow us to add another STREAM frame
-		if frame == nil {
+		if !hasFrame {
 			continue
 		}
-		frames = append(frames, *frame)
+		frames = append(frames, frame)
 		length += frame.Length(f.version)
-		lastFrame = frame
+		lastFrame = &frame
 	}
 	f.mutex.Unlock()
 	if lastFrame != nil {

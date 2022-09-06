@@ -6,7 +6,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/lucas-clemente/quic-go/internal/ackhandler"
 	"github.com/lucas-clemente/quic-go/internal/flowcontrol"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/internal/wire"
@@ -52,16 +51,8 @@ var _ streamSender = &uniStreamSender{}
 
 type streamI interface {
 	Stream
-	closeForShutdown(error)
-	// for receiving
-	handleStreamFrame(*wire.StreamFrame) error
-	handleResetStreamFrame(*wire.ResetStreamFrame) error
-	getWindowUpdate() protocol.ByteCount
-	// for sending
-	hasData() bool
-	handleStopSendingFrame(*wire.StopSendingFrame)
-	popStreamFrame(maxBytes protocol.ByteCount) (*ackhandler.Frame, bool)
-	updateSendWindow(protocol.ByteCount)
+	receiveStreamI
+	sendStreamI
 }
 
 var (
