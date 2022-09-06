@@ -95,7 +95,7 @@ func (f *framerI) AddActiveStream(id protocol.StreamID) {
 
 func (f *framerI) AppendStreamFrames(frames []ackhandler.Frame, maxLen protocol.ByteCount) ([]ackhandler.Frame, protocol.ByteCount) {
 	var length protocol.ByteCount
-	var lastFrame *ackhandler.Frame
+	var lastFrame *wire.StreamFrame
 	f.mutex.Lock()
 	// pop STREAM frames, until less than MinStreamFrameSize bytes are left in the packet
 	numActiveStreams := len(f.streamQueue)
@@ -118,7 +118,7 @@ func (f *framerI) AppendStreamFrames(frames []ackhandler.Frame, maxLen protocol.
 		// Therefore, we can pretend to have more bytes available when popping
 		// the STREAM frame (which will always have the DataLen set).
 		remainingLen += quicvarint.Len(uint64(remainingLen))
-		frame, hasMoreData := str.popStreamFrame(remainingLen)
+		fr, onAcked, onLost, hasMoreData := str.popStreamFrame(remainingLen)
 		if hasMoreData { // put the stream back in the queue (at the end)
 			f.streamQueue = append(f.streamQueue, id)
 		} else { // no more data to send. Stream is not active any more
@@ -127,18 +127,22 @@ func (f *framerI) AppendStreamFrames(frames []ackhandler.Frame, maxLen protocol.
 		// The frame can be nil
 		// * if the receiveStream was canceled after it said it had data
 		// * the remaining size doesn't allow us to add another STREAM frame
-		if frame == nil {
+		if fr == nil {
 			continue
 		}
-		frames = append(frames, *frame)
-		length += frame.Length(f.version)
-		lastFrame = frame
+		frames = append(frames, ackhandler.Frame{
+			Frame:   fr,
+			OnLost:  onLost,
+			OnAcked: onAcked,
+		})
+		length += fr.Length(f.version)
+		lastFrame = fr
 	}
 	f.mutex.Unlock()
 	if lastFrame != nil {
 		lastFrameLen := lastFrame.Length(f.version)
 		// account for the smaller size of the last STREAM frame
-		lastFrame.Frame.(*wire.StreamFrame).DataLenPresent = false
+		lastFrame.DataLenPresent = false
 		length += lastFrame.Length(f.version) - lastFrameLen
 	}
 	return frames, length
