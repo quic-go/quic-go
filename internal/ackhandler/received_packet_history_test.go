@@ -204,15 +204,24 @@ var _ = Describe("receivedPacketHistory", func() {
 
 	Context("ACK range export", func() {
 		It("returns nil if there are no ranges", func() {
-			Expect(hist.GetAckRanges()).To(BeNil())
+			Expect(hist.AppendAckRanges(nil)).To(BeEmpty())
 		})
 
 		It("gets a single ACK range", func() {
 			Expect(hist.ReceivedPacket(4)).To(BeTrue())
 			Expect(hist.ReceivedPacket(5)).To(BeTrue())
-			ackRanges := hist.GetAckRanges()
+			ackRanges := hist.AppendAckRanges(nil)
 			Expect(ackRanges).To(HaveLen(1))
 			Expect(ackRanges[0]).To(Equal(wire.AckRange{Smallest: 4, Largest: 5}))
+		})
+
+		It("appends ACK ranges", func() {
+			Expect(hist.ReceivedPacket(4)).To(BeTrue())
+			Expect(hist.ReceivedPacket(5)).To(BeTrue())
+			ackRanges := hist.AppendAckRanges([]wire.AckRange{{Smallest: 1, Largest: 2}})
+			Expect(ackRanges).To(HaveLen(2))
+			Expect(ackRanges[0]).To(Equal(wire.AckRange{Smallest: 1, Largest: 2}))
+			Expect(ackRanges[1]).To(Equal(wire.AckRange{Smallest: 4, Largest: 5}))
 		})
 
 		It("gets multiple ACK ranges", func() {
@@ -223,7 +232,7 @@ var _ = Describe("receivedPacketHistory", func() {
 			Expect(hist.ReceivedPacket(11)).To(BeTrue())
 			Expect(hist.ReceivedPacket(10)).To(BeTrue())
 			Expect(hist.ReceivedPacket(2)).To(BeTrue())
-			ackRanges := hist.GetAckRanges()
+			ackRanges := hist.AppendAckRanges(nil)
 			Expect(ackRanges).To(HaveLen(3))
 			Expect(ackRanges[0]).To(Equal(wire.AckRange{Smallest: 10, Largest: 11}))
 			Expect(ackRanges[1]).To(Equal(wire.AckRange{Smallest: 4, Largest: 6}))
@@ -339,7 +348,7 @@ var _ = Describe("receivedPacketHistory", func() {
 				}
 			}
 			var counter int
-			ackRanges := hist.GetAckRanges()
+			ackRanges := hist.AppendAckRanges(nil)
 			fmt.Fprintf(GinkgoWriter, "ACK ranges: %v\n", ackRanges)
 			Expect(len(ackRanges)).To(BeNumerically("<=", numLostPackets+1))
 			for _, ackRange := range ackRanges {

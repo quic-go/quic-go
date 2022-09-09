@@ -171,16 +171,16 @@ func (h *receivedPacketTracker) GetAckFrame(onlyIfQueued bool) *wire.AckFrame {
 		}
 	}
 
-	ack := &wire.AckFrame{
-		AckRanges: h.packetHistory.GetAckRanges(),
-		// Make sure that the DelayTime is always positive.
-		// This is not guaranteed on systems that don't have a monotonic clock.
-		DelayTime: utils.Max(0, now.Sub(h.largestObservedReceivedTime)),
-		ECT0:      h.ect0,
-		ECT1:      h.ect1,
-		ECNCE:     h.ecnce,
-	}
+	ack := wire.GetAckFrame()
+	ack.DelayTime = utils.Max(0, now.Sub(h.largestObservedReceivedTime))
+	ack.ECT0 = h.ect0
+	ack.ECT1 = h.ect1
+	ack.ECNCE = h.ecnce
+	ack.AckRanges = h.packetHistory.AppendAckRanges(ack.AckRanges)
 
+	if h.lastAck != nil {
+		wire.PutAckFrame(h.lastAck)
+	}
 	h.lastAck = ack
 	h.ackAlarm = time.Time{}
 	h.ackQueued = false
