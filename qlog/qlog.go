@@ -446,10 +446,10 @@ func (t *connectionTracer) DroppedEncryptionLevel(encLevel protocol.EncryptionLe
 	t.mutex.Lock()
 	now := time.Now()
 	if encLevel == protocol.Encryption0RTT {
-		t.recordEvent(now, &eventKeyRetired{KeyType: encLevelToKeyType(encLevel, t.perspective)})
+		t.recordEvent(now, &eventKeyDiscarded{KeyType: encLevelToKeyType(encLevel, t.perspective)})
 	} else {
-		t.recordEvent(now, &eventKeyRetired{KeyType: encLevelToKeyType(encLevel, protocol.PerspectiveServer)})
-		t.recordEvent(now, &eventKeyRetired{KeyType: encLevelToKeyType(encLevel, protocol.PerspectiveClient)})
+		t.recordEvent(now, &eventKeyDiscarded{KeyType: encLevelToKeyType(encLevel, protocol.PerspectiveServer)})
+		t.recordEvent(now, &eventKeyDiscarded{KeyType: encLevelToKeyType(encLevel, protocol.PerspectiveClient)})
 	}
 	t.mutex.Unlock()
 }
@@ -457,11 +457,11 @@ func (t *connectionTracer) DroppedEncryptionLevel(encLevel protocol.EncryptionLe
 func (t *connectionTracer) DroppedKey(generation protocol.KeyPhase) {
 	t.mutex.Lock()
 	now := time.Now()
-	t.recordEvent(now, &eventKeyRetired{
+	t.recordEvent(now, &eventKeyDiscarded{
 		KeyType:    encLevelToKeyType(protocol.Encryption1RTT, protocol.PerspectiveServer),
 		Generation: generation,
 	})
-	t.recordEvent(now, &eventKeyRetired{
+	t.recordEvent(now, &eventKeyDiscarded{
 		KeyType:    encLevelToKeyType(protocol.Encryption1RTT, protocol.PerspectiveClient),
 		Generation: generation,
 	})

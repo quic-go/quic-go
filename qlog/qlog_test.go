@@ -794,7 +794,7 @@ var _ = Describe("Tracing", func() {
 				var keyTypes []string
 				for _, entry := range entries {
 					Expect(entry.Time).To(BeTemporally("~", time.Now(), scaleDuration(10*time.Millisecond)))
-					Expect(entry.Name).To(Equal("security:key_retired"))
+					Expect(entry.Name).To(Equal("security:key_discarded"))
 					ev := entry.Event
 					Expect(ev).To(HaveKeyWithValue("trigger", "tls"))
 					Expect(ev).To(HaveKey("key_type"))
@@ -810,7 +810,7 @@ var _ = Describe("Tracing", func() {
 				Expect(entries).To(HaveLen(1))
 				entry := entries[0]
 				Expect(entry.Time).To(BeTemporally("~", time.Now(), scaleDuration(10*time.Millisecond)))
-				Expect(entry.Name).To(Equal("security:key_retired"))
+				Expect(entry.Name).To(Equal("security:key_discarded"))
 				ev := entry.Event
 				Expect(ev).To(HaveKeyWithValue("trigger", "tls"))
 				Expect(ev).To(HaveKeyWithValue("key_type", "server_0rtt_secret"))
@@ -823,7 +823,7 @@ var _ = Describe("Tracing", func() {
 				var keyTypes []string
 				for _, entry := range entries {
 					Expect(entry.Time).To(BeTemporally("~", time.Now(), scaleDuration(10*time.Millisecond)))
-					Expect(entry.Name).To(Equal("security:key_retired"))
+					Expect(entry.Name).To(Equal("security:key_discarded"))
 					ev := entry.Event
 					Expect(ev).To(HaveKeyWithValue("generation", float64(42)))
 					Expect(ev).ToNot(HaveKey("trigger"))
