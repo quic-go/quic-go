@@ -1,12 +1,17 @@
 package quic
 
 import (
+	"sync"
+
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/internal/utils"
 	"github.com/lucas-clemente/quic-go/internal/wire"
 )
 
 type datagramQueue struct {
+	mx            sync.Mutex
+	nextFrameSize protocol.ByteCount
+
 	sendQueue chan *wire.DatagramFrame
 	rcvQueue  chan []byte
 
@@ -17,17 +22,20 @@ type datagramQueue struct {
 
 	dequeued chan struct{}
 
-	logger utils.Logger
+	logger  utils.Logger
+	version protocol.VersionNumber
 }
 
-func newDatagramQueue(hasData func(), logger utils.Logger) *datagramQueue {
+func newDatagramQueue(hasData func(), logger utils.Logger, v protocol.VersionNumber) *datagramQueue {
 	return &datagramQueue{
-		hasData:   hasData,
-		sendQueue: make(chan *wire.DatagramFrame, 1),
-		rcvQueue:  make(chan []byte, protocol.DatagramRcvQueueLen),
-		dequeued:  make(chan struct{}),
-		closed:    make(chan struct{}),
-		logger:    logger,
+		hasData:       hasData,
+		sendQueue:     make(chan *wire.DatagramFrame, 1),
+		nextFrameSize: protocol.InvalidByteCount,
+		rcvQueue:      make(chan []byte, protocol.DatagramRcvQueueLen),
+		dequeued:      make(chan struct{}),
+		closed:        make(chan struct{}),
+		logger:        logger,
+		version:       v,
 	}
 }
 
@@ -36,6 +44,9 @@ func newDatagramQueue(hasData func(), logger utils.Logger) *datagramQueue {
 func (h *datagramQueue) AddAndWait(f *wire.DatagramFrame) error {
 	select {
 	case h.sendQueue <- f:
+		h.mx.Lock()
+		h.nextFrameSize = f.Length(h.version)
+		h.mx.Unlock()
 		h.hasData()
 	case <-h.closed:
 		return h.closeErr
@@ -53,11 +64,20 @@ func (h *datagramQueue) AddAndWait(f *wire.DatagramFrame) error {
 func (h *datagramQueue) Get() *wire.DatagramFrame {
 	select {
 	case f := <-h.sendQueue:
+		h.mx.Lock()
+		h.nextFrameSize = protocol.InvalidByteCount
+		h.mx.Unlock()
 		h.dequeued <- struct{}{}
 		return f
 	default:
 		return nil
 	}
+}
+
+func (h *datagramQueue) NextFrameSize() protocol.ByteCount {
+	h.mx.Lock()
+	defer h.mx.Unlock()
+	return h.nextFrameSize
 }
 
 // HandleDatagramFrame handles a received DATAGRAM frame.

@@ -91,7 +91,7 @@ var _ = Describe("Packet packer", func() {
 		ackFramer = NewMockAckFrameSource(mockCtrl)
 		sealingManager = NewMockSealingManager(mockCtrl)
 		pnManager = mockackhandler.NewMockSentPacketHandler(mockCtrl)
-		datagramQueue = newDatagramQueue(func() {}, utils.DefaultLogger)
+		datagramQueue = newDatagramQueue(func() {}, utils.DefaultLogger, version)
 
 		packer = newPacketPacker(
 			protocol.ParseConnectionID([]byte{1, 2, 3, 4, 5, 6, 7, 8}),
@@ -554,6 +554,7 @@ var _ = Describe("Packet packer", func() {
 			})
 
 			It("packs DATAGRAM frames", func() {
+				ackFramer.EXPECT().GetAckFrame(protocol.Encryption1RTT, true)
 				pnManager.EXPECT().PeekPacketNumber(protocol.Encryption1RTT).Return(protocol.PacketNumber(0x42), protocol.PacketNumberLen2)
 				pnManager.EXPECT().PopPacketNumber(protocol.Encryption1RTT).Return(protocol.PacketNumber(0x42))
 				sealingManager.EXPECT().Get1RTTSealer().Return(getSealer(), nil)
@@ -577,6 +578,36 @@ var _ = Describe("Packet packer", func() {
 				Expect(p.frames).To(HaveLen(1))
 				Expect(p.frames[0].Frame).To(Equal(f))
 				Expect(p.buffer.Data).ToNot(BeEmpty())
+				Eventually(done).Should(BeClosed())
+			})
+
+			It("doesn't pack a DATAGRAM frame if the ACK frame is too large", func() {
+				ackFramer.EXPECT().GetAckFrame(protocol.Encryption1RTT, true).Return(&wire.AckFrame{AckRanges: []wire.AckRange{{Largest: 100}}})
+				pnManager.EXPECT().PeekPacketNumber(protocol.Encryption1RTT).Return(protocol.PacketNumber(0x42), protocol.PacketNumberLen2)
+				pnManager.EXPECT().PopPacketNumber(protocol.Encryption1RTT).Return(protocol.PacketNumber(0x42))
+				sealingManager.EXPECT().Get1RTTSealer().Return(getSealer(), nil)
+				f := &wire.DatagramFrame{
+					DataLenPresent: true,
+					Data:           make([]byte, maxPacketSize-10),
+				}
+				done := make(chan struct{})
+				go func() {
+					defer GinkgoRecover()
+					defer close(done)
+					datagramQueue.AddAndWait(f)
+				}()
+				// make sure the DATAGRAM has actually been queued
+				time.Sleep(scaleDuration(20 * time.Millisecond))
+
+				framer.EXPECT().HasData()
+				p, err := packer.PackPacket()
+				Expect(p).ToNot(BeNil())
+				Expect(err).ToNot(HaveOccurred())
+				Expect(p.ack).ToNot(BeNil())
+				Expect(p.frames).To(BeEmpty())
+				Expect(p.buffer.Data).ToNot(BeEmpty())
+				Expect(done).ToNot(BeClosed())
+				datagramQueue.CloseWithError(nil)
 				Eventually(done).Should(BeClosed())
 			})
 
