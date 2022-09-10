@@ -31,7 +31,10 @@ var _ = Describe("frame sorter", func() {
 		var i int
 		s.gapTree.Ascend(func(n *tree.Node, _ int) bool {
 			gap := n.Value.(*utils.ByteInterval)
-			ExpectWithOffset(1, *gap).To(Equal(expectedGaps[i]))
+			ExpectWithOffset(1, *gap).To(Equal(utils.ByteInterval{
+				Start: expectedGaps[i].Start,
+				End:   expectedGaps[i].End,
+			}))
 			i++
 			return true
 		})
