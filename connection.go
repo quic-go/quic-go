@@ -752,27 +752,44 @@ func (s *connection) nextKeepAliveTime() time.Time {
 
 func (s *connection) maybeResetTimer() {
 	var deadline time.Time
+	var reason string
 	if !s.handshakeComplete {
 		deadline = utils.MinTime(
 			s.creationTime.Add(s.config.handshakeTimeout()),
 			s.idleTimeoutStartTime().Add(s.config.HandshakeIdleTimeout),
 		)
+		reason = "handshake_timeout"
 	} else {
 		if keepAliveTime := s.nextKeepAliveTime(); !keepAliveTime.IsZero() {
 			deadline = keepAliveTime
+			reason = "keep_alive"
 		} else {
 			deadline = s.idleTimeoutStartTime().Add(s.idleTimeout)
+			reason = "idle_timeout"
 		}
 	}
 
 	if ackAlarm := s.receivedPacketHandler.GetAlarmTimeout(); !ackAlarm.IsZero() {
-		deadline = utils.MinTime(deadline, ackAlarm)
+		if ackAlarm.Before(deadline) {
+			reason = "ack_alarm"
+			deadline = ackAlarm
+		}
 	}
 	if lossTime := s.sentPacketHandler.GetLossDetectionTimeout(); !lossTime.IsZero() {
-		deadline = utils.MinTime(deadline, lossTime)
+		if lossTime.Before(deadline) {
+			deadline = lossTime
+			reason = "loss_time"
+		}
 	}
 	if !s.pacingDeadline.IsZero() {
-		deadline = utils.MinTime(deadline, s.pacingDeadline)
+		if s.pacingDeadline.Before(deadline) {
+			reason = "pacing"
+			deadline = s.pacingDeadline
+		}
+	}
+
+	if s.tracer != nil {
+		s.tracer.Debug("deadline_set", fmt.Sprintf("%s: %s", reason, deadline))
 	}
 
 	s.timer.Reset(deadline)
