@@ -52,6 +52,9 @@ func (h *receivedPacketTracker) ReceivedPacket(packetNumber protocol.PacketNumbe
 	if packetNumber < h.ignoreBelow {
 		return
 	}
+	if isNew := h.packetHistory.ReceivedPacket(packetNumber); !isNew {
+		return
+	}
 
 	isMissing := h.isMissing(packetNumber)
 	if packetNumber >= h.largestObserved {
@@ -59,7 +62,7 @@ func (h *receivedPacketTracker) ReceivedPacket(packetNumber protocol.PacketNumbe
 		h.largestObservedReceivedTime = rcvTime
 	}
 
-	if isNew := h.packetHistory.ReceivedPacket(packetNumber); isNew && shouldInstigateAck {
+	if shouldInstigateAck {
 		h.hasNewAck = true
 	}
 	if shouldInstigateAck {

@@ -189,6 +189,15 @@ var _ = Describe("Received Packet Tracker", func() {
 				tracker.ReceivedPacket(11, protocol.ECNNon, time.Now(), true)
 				Expect(tracker.GetAckFrame(true)).To(BeNil())
 			})
+
+			It("doesn't queue ACKs for duplicated packets", func() {
+				receiveAndAck10Packets()
+				tracker.ReceivedPacket(4, protocol.ECNNon, time.Time{}, true)
+				tracker.ReceivedPacket(5, protocol.ECNNon, time.Time{}, true)
+				Expect(tracker.GetAckFrame(true)).To(BeNil())
+				Expect(tracker.GetAlarmTimeout()).To(BeZero())
+				Expect(tracker.ackQueued).To(BeFalse())
+			})
 		})
 
 		Context("ACK generation", func() {
