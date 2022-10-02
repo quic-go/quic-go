@@ -1669,6 +1669,9 @@ func (s *connection) sendPackets() error {
 	var sentPacket bool // only used in for packets sent in send mode SendAny
 	for {
 		sendMode := s.sentPacketHandler.SendMode()
+		if s.tracer != nil {
+			s.tracer.Debug("send_mode", sendMode.String())
+		}
 		if sendMode == ackhandler.SendAny && s.handshakeComplete && !s.sentPacketHandler.HasPacingBudget() {
 			deadline := s.sentPacketHandler.TimeUntilSend()
 			if deadline.IsZero() {
