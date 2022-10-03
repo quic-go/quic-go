@@ -209,7 +209,7 @@ type connection struct {
 
 	peerParams *wire.TransportParameters
 
-	timer *utils.Timer
+	timer timer
 	// keepAlivePingSent stores whether a keep alive PING is in flight.
 	// It is reset as soon as we receive a packet from the peer.
 	keepAlivePingSent bool
@@ -548,7 +548,7 @@ func (s *connection) preSetup() {
 func (s *connection) run() error {
 	defer s.ctxCancel()
 
-	s.timer = utils.NewTimer()
+	s.timer = *newTimer()
 
 	handshaking := make(chan struct{})
 	go func() {
@@ -764,47 +764,57 @@ func (s *connection) nextKeepAliveTime() time.Time {
 
 func (s *connection) maybeResetTimer() {
 	var deadline time.Time
-	var reason string
+	var mode timerMode
+
 	if !s.handshakeComplete {
 		deadline = utils.MinTime(
 			s.creationTime.Add(s.config.handshakeTimeout()),
 			s.idleTimeoutStartTime().Add(s.config.HandshakeIdleTimeout),
 		)
-		reason = "handshake_timeout"
+		mode = timerModeHandshakeIdleTimeout
 	} else {
 		if keepAliveTime := s.nextKeepAliveTime(); !keepAliveTime.IsZero() {
 			deadline = keepAliveTime
-			reason = "keep_alive"
+			mode = timerModeKeepAlive
 		} else {
 			deadline = s.idleTimeoutStartTime().Add(s.idleTimeout)
-			reason = "idle_timeout"
+			mode = timerModeIdleTimeout
 		}
 	}
 
-	if ackAlarm := s.receivedPacketHandler.GetAlarmTimeout(); !ackAlarm.IsZero() {
-		if ackAlarm.Before(deadline) {
-			reason = "ack_alarm"
-			deadline = ackAlarm
-		}
+	if ackAlarm := s.receivedPacketHandler.GetAlarmTimeout(); !ackAlarm.IsZero() && ackAlarm.Before(deadline) {
+		deadline = ackAlarm
+		mode = timerModeAckAlarm
 	}
-	if lossTime := s.sentPacketHandler.GetLossDetectionTimeout(); !lossTime.IsZero() {
-		if lossTime.Before(deadline) {
-			deadline = lossTime
-			reason = "loss_time"
-		}
+	if lossTime := s.sentPacketHandler.GetLossDetectionTimeout(); !lossTime.IsZero() && lossTime.Before(deadline) {
+		deadline = lossTime
+		mode = timerModeLossDetection
 	}
-	if !s.pacingDeadline.IsZero() {
-		if s.pacingDeadline.Before(deadline) {
-			reason = "pacing"
-			deadline = s.pacingDeadline
-		}
+	if !s.pacingDeadline.IsZero() && s.pacingDeadline.Before(deadline) {
+		deadline = s.pacingDeadline
+		mode = timerModePacing
 	}
 
 	if s.tracer != nil {
-		s.tracer.Debug("deadline_set", fmt.Sprintf("%s: %s", reason, deadline))
+		var reason string
+		switch mode {
+		case timerModePacing:
+			reason = "pacing"
+		case timerModeLossDetection:
+			reason = "loss_detection"
+		case timerModeAckAlarm:
+			reason = "ack_alarm"
+		case timerModeIdleTimeout:
+			reason = "idle_timeout"
+		case timerModeHandshakeIdleTimeout:
+			reason = "handshake_timeout"
+		case timerModeKeepAlive:
+			reason = "keep_alive"
+		}
+		s.tracer.Debug("deadline_set", fmt.Sprintf("%s: %s (in %s)", reason, deadline, time.Until(deadline)))
 	}
 
-	s.timer.Reset(deadline)
+	s.timer.MaybeReset(mode, deadline)
 }
 
 func (s *connection) idleTimeoutStartTime() time.Time {
