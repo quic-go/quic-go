@@ -210,7 +210,7 @@ type connection struct {
 
 	peerParams *wire.TransportParameters
 
-	timer *utils.Timer
+	timer timer
 	// keepAlivePingSent stores whether a keep alive PING is in flight.
 	// It is reset as soon as we receive a packet from the peer.
 	keepAlivePingSent bool
@@ -549,7 +549,7 @@ func (s *connection) preSetup() {
 func (s *connection) run() error {
 	defer s.ctxCancel()
 
-	s.timer = utils.NewTimer()
+	s.timer = *newTimer()
 
 	handshaking := make(chan struct{})
 	go func() {
@@ -753,30 +753,38 @@ func (s *connection) nextKeepAliveTime() time.Time {
 
 func (s *connection) maybeResetTimer() {
 	var deadline time.Time
+	var mode timerMode
+
 	if !s.handshakeComplete {
 		deadline = utils.MinTime(
 			s.creationTime.Add(s.config.handshakeTimeout()),
 			s.idleTimeoutStartTime().Add(s.config.HandshakeIdleTimeout),
 		)
+		mode = timerModeHandshakeIdleTimeout
 	} else {
 		if keepAliveTime := s.nextKeepAliveTime(); !keepAliveTime.IsZero() {
 			deadline = keepAliveTime
+			mode = timerModeKeepAlive
 		} else {
 			deadline = s.idleTimeoutStartTime().Add(s.idleTimeout)
+			mode = timerModeIdleTimeout
 		}
 	}
 
-	if ackAlarm := s.receivedPacketHandler.GetAlarmTimeout(); !ackAlarm.IsZero() {
-		deadline = utils.MinTime(deadline, ackAlarm)
+	if ackAlarm := s.receivedPacketHandler.GetAlarmTimeout(); !ackAlarm.IsZero() && ackAlarm.Before(deadline) {
+		deadline = ackAlarm
+		mode = timerModeAckAlarm
 	}
-	if lossTime := s.sentPacketHandler.GetLossDetectionTimeout(); !lossTime.IsZero() {
-		deadline = utils.MinTime(deadline, lossTime)
+	if lossTime := s.sentPacketHandler.GetLossDetectionTimeout(); !lossTime.IsZero() && lossTime.Before(deadline) {
+		deadline = lossTime
+		mode = timerModeLossDetection
 	}
-	if !s.pacingDeadline.IsZero() {
-		deadline = utils.MinTime(deadline, s.pacingDeadline)
+	if !s.pacingDeadline.IsZero() && s.pacingDeadline.Before(deadline) {
+		deadline = s.pacingDeadline
+		mode = timerModePacing
 	}
 
-	s.timer.Reset(deadline)
+	s.timer.MaybeReset(mode, deadline)
 }
 
 func (s *connection) idleTimeoutStartTime() time.Time {
