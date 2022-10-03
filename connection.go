@@ -622,6 +622,9 @@ runLoop:
 				// We do all the interesting stuff after the switch statement, so
 				// nothing to see here.
 			case <-sendQueueAvailable:
+				if s.tracer != nil {
+					s.tracer.Debug("send_queue_unblocked", "before sending")
+				}
 			case firstPacket := <-s.receivedPackets:
 				wasProcessed := s.handlePacketImpl(firstPacket)
 				// Don't set timers and send packets if the packet made us close the connection.
@@ -690,6 +693,9 @@ runLoop:
 		}
 
 		if s.sendQueue.WouldBlock() {
+			if s.tracer != nil {
+				s.tracer.Debug("send_queue_blocked", "before sending")
+			}
 			// The send queue is still busy sending out packets.
 			// Wait until there's space to enqueue new packets.
 			sendQueueAvailable = s.sendQueue.Available()
@@ -699,8 +705,14 @@ runLoop:
 			s.closeLocal(err)
 		}
 		if s.sendQueue.WouldBlock() {
+			if s.tracer != nil {
+				s.tracer.Debug("send_queue_blocked", "after sending")
+			}
 			sendQueueAvailable = s.sendQueue.Available()
 		} else {
+			if sendQueueAvailable != nil && s.tracer != nil {
+				s.tracer.Debug("send_queue_unblocked", "after sending")
+			}
 			sendQueueAvailable = nil
 		}
 	}
