@@ -610,7 +610,7 @@ var _ = Describe("Tracing", func() {
 			})
 
 			It("records buffered packets", func() {
-				tracer.BufferedPacket(logging.PacketTypeHandshake)
+				tracer.BufferedPacket(logging.PacketTypeHandshake, 1337)
 				entry := exportAndParseSingle()
 				Expect(entry.Time).To(BeTemporally("~", time.Now(), scaleDuration(10*time.Millisecond)))
 				Expect(entry.Name).To(Equal("transport:packet_buffered"))
@@ -619,6 +619,8 @@ var _ = Describe("Tracing", func() {
 				hdr := ev["header"].(map[string]interface{})
 				Expect(hdr).To(HaveLen(1))
 				Expect(hdr).To(HaveKeyWithValue("packet_type", "handshake"))
+				Expect(ev).To(HaveKey("raw"))
+				Expect(ev["raw"].(map[string]interface{})).To(HaveKeyWithValue("length", float64(1337)))
 				Expect(ev).To(HaveKeyWithValue("trigger", "keys_unavailable"))
 			})
 

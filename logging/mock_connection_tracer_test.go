@@ -51,15 +51,15 @@ func (mr *MockConnectionTracerMockRecorder) AcknowledgedPacket(arg0, arg1 interf
 }
 
 // BufferedPacket mocks base method.
-func (m *MockConnectionTracer) BufferedPacket(arg0 PacketType) {
+func (m *MockConnectionTracer) BufferedPacket(arg0 PacketType, arg1 protocol.ByteCount) {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "BufferedPacket", arg0)
+	m.ctrl.Call(m, "BufferedPacket", arg0, arg1)
 }
 
 // BufferedPacket indicates an expected call of BufferedPacket.
-func (mr *MockConnectionTracerMockRecorder) BufferedPacket(arg0 interface{}) *gomock.Call {
+func (mr *MockConnectionTracerMockRecorder) BufferedPacket(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "BufferedPacket", reflect.TypeOf((*MockConnectionTracer)(nil).BufferedPacket), arg0)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "BufferedPacket", reflect.TypeOf((*MockConnectionTracer)(nil).BufferedPacket), arg0, arg1)
 }
 
 // Close mocks base method.

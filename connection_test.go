@@ -1043,7 +1043,7 @@ var _ = Describe("Connection", func() {
 			}
 			unpacker.EXPECT().UnpackLongHeader(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil, handshake.ErrKeysNotYetAvailable)
 			packet := getPacket(hdr, nil)
-			tracer.EXPECT().BufferedPacket(logging.PacketTypeHandshake)
+			tracer.EXPECT().BufferedPacket(logging.PacketTypeHandshake, packet.Size())
 			Expect(conn.handlePacketImpl(packet)).To(BeFalse())
 			Expect(conn.undecryptablePackets).To(Equal([]*receivedPacket{packet}))
 		})
@@ -1147,7 +1147,7 @@ var _ = Describe("Connection", func() {
 					}),
 				)
 				gomock.InOrder(
-					tracer.EXPECT().BufferedPacket(gomock.Any()),
+					tracer.EXPECT().BufferedPacket(gomock.Any(), protocol.ByteCount(len(packet1.data))),
 					tracer.EXPECT().ReceivedLongHeaderPacket(gomock.Any(), protocol.ByteCount(len(packet2.data)), gomock.Any()),
 				)
 				packet1.data = append(packet1.data, packet2.data...)
