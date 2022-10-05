@@ -21,6 +21,14 @@ var _ = Describe("Timer", func() {
 		Eventually(t.Chan()).Should(Receive())
 	})
 
+	It("returns the deadline", func() {
+		t := NewTimer()
+		deadline := time.Now().Add(d)
+		t.Reset(deadline)
+		Expect(t.Deadline()).To(Equal(deadline))
+		Eventually(t.Chan()).Should(Receive())
+	})
+
 	It("works multiple times with reading", func() {
 		t := NewTimer()
 		for i := 0; i < 10; i++ {
