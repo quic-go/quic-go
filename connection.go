@@ -547,7 +547,7 @@ func (s *connection) preSetup() {
 func (s *connection) run() error {
 	defer s.ctxCancel()
 
-	s.timer = *newTimer()
+	s.timer = *newTimer(s.tracer)
 
 	handshaking := make(chan struct{})
 	go func() {
