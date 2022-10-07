@@ -13,6 +13,8 @@ import (
 	"github.com/lucas-clemente/quic-go/logging"
 )
 
+var CID = map[net.Addr]protocol.ConnectionID{}
+
 type client struct {
 	sconn sendConn
 	// If the client is created with DialAddr, we create a packet conn.
@@ -257,6 +259,9 @@ func newClient(
 	if err != nil {
 		return nil, err
 	}
+
+	CID[remoteAddr] = srcConnID
+
 	destConnID, err := generateConnectionIDForInitial()
 	if err != nil {
 		return nil, err
@@ -333,4 +338,8 @@ func (c *client) dial(ctx context.Context) error {
 		// handshake successfully completed
 		return nil
 	}
+}
+
+func GetCID(remoteAddr net.Addr) string {
+	return CID[remoteAddr].String()
 }

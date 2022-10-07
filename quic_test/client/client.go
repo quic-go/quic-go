@@ -102,6 +102,9 @@ func main() {
 	var str string
 	var str1 = "UCLab"
 
+	CID := quic.GetCID(session.RemoteAddr())
+	fmt.Printf("ConnectionID:%s", CID)
+
 	for {
 		fmt.Scan(&str)
 		buf = []byte(str1)
