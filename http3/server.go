@@ -42,12 +42,6 @@ const (
 	streamTypeQPACKDecoderStream = 3
 )
 
-// ErrAbortHandler is a sentinel panic value to abort a handler.
-// While any panic from ServeHTTP aborts the response to the client,
-// panicking with ErrAbortHandler also suppresses logging of a stack
-// trace to the server's error log.
-var ErrAbortHandler = errors.New("net/http: abort Handler")
-
 func versionToALPN(v protocol.VersionNumber) string {
 	if v == protocol.Version1 || v == protocol.Version2 {
 		return nextProtoH3
@@ -581,7 +575,7 @@ func (s *Server) handleRequest(conn quic.Connection, str quic.Stream, decoder *q
 	var panicked bool
 	func() {
 		defer func() {
-			if p := recover(); p != nil && err != ErrAbortHandler {
+			if p := recover(); p != nil && err != http.ErrAbortHandler {
 				// Copied from net/http/server.go
 				const size = 64 << 10
 				buf := make([]byte, size)
