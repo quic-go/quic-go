@@ -575,13 +575,16 @@ func (s *Server) handleRequest(conn quic.Connection, str quic.Stream, decoder *q
 	var panicked bool
 	func() {
 		defer func() {
-			if p := recover(); p != nil && err != http.ErrAbortHandler {
+			if p := recover(); p != nil {
+				panicked = true
+				if p == http.ErrAbortHandler {
+					return
+				}
 				// Copied from net/http/server.go
 				const size = 64 << 10
 				buf := make([]byte, size)
 				buf = buf[:runtime.Stack(buf, false)]
 				s.logger.Errorf("http: panic serving: %v\n%s", p, buf)
-				panicked = true
 			}
 		}()
 		handler.ServeHTTP(r, req)
