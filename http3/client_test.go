@@ -66,7 +66,7 @@ var _ = Describe("Client", func() {
 		var dialAddrCalled bool
 		dialAddr = func(_ context.Context, _ string, tlsConf *tls.Config, quicConf *quic.Config) (quic.EarlyConnection, error) {
 			Expect(quicConf).To(Equal(defaultQuicConfig))
-			Expect(tlsConf.NextProtos).To(Equal([]string{nextProtoH3}))
+			Expect(tlsConf.NextProtos).To(Equal([]string{NextProtoH3}))
 			Expect(quicConf.Versions).To(Equal([]protocol.VersionNumber{protocol.Version1}))
 			dialAddrCalled = true
 			return nil, errors.New("test done")
@@ -102,7 +102,7 @@ var _ = Describe("Client", func() {
 		dialAddr = func(_ context.Context, host string, tlsConfP *tls.Config, quicConfP *quic.Config) (quic.EarlyConnection, error) {
 			Expect(host).To(Equal("localhost:1337"))
 			Expect(tlsConfP.ServerName).To(Equal(tlsConf.ServerName))
-			Expect(tlsConfP.NextProtos).To(Equal([]string{nextProtoH3}))
+			Expect(tlsConfP.NextProtos).To(Equal([]string{NextProtoH3}))
 			Expect(quicConfP.MaxIdleTimeout).To(Equal(quicConf.MaxIdleTimeout))
 			dialAddrCalled = true
 			return nil, errors.New("test done")
