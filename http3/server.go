@@ -226,9 +226,20 @@ func (s *Server) ListenAndServeTLS(certFile, keyFile string) error {
 
 // Serve an existing UDP connection.
 // It is possible to reuse the same connection for outgoing connections.
-// Closing the server does not close the packet conn.
+// Closing the server does not close the connection.
 func (s *Server) Serve(conn net.PacketConn) error {
 	return s.serveConn(s.TLSConfig, conn)
+}
+
+// ServeQUICConn serves a single QUIC connection.
+func (s *Server) ServeQUICConn(conn quic.Connection) error {
+	s.mutex.Lock()
+	if s.logger == nil {
+		s.logger = utils.DefaultLogger.WithPrefix("server")
+	}
+	s.mutex.Unlock()
+
+	return s.handleConn(conn)
 }
 
 // ServeListener serves an existing QUIC listener.
@@ -297,7 +308,11 @@ func (s *Server) serveListener(ln quic.EarlyListener) error {
 		if err != nil {
 			return err
 		}
-		go s.handleConn(conn)
+		go func() {
+			if err := s.handleConn(conn); err != nil {
+				s.logger.Debugf(err.Error())
+			}
+		}()
 	}
 }
 
@@ -405,14 +420,13 @@ func (s *Server) removeListener(l *quic.EarlyListener) {
 	s.mutex.Unlock()
 }
 
-func (s *Server) handleConn(conn quic.EarlyConnection) {
+func (s *Server) handleConn(conn quic.Connection) error {
 	decoder := qpack.NewDecoder(nil)
 
 	// send a SETTINGS frame
 	str, err := conn.OpenUniStream()
 	if err != nil {
-		s.logger.Debugf("Opening the control stream failed.")
-		return
+		return fmt.Errorf("opening the control stream failed: %w", err)
 	}
 	b := make([]byte, 0, 64)
 	b = quicvarint.Append(b, streamTypeControlStream) // stream type
@@ -426,8 +440,11 @@ func (s *Server) handleConn(conn quic.EarlyConnection) {
 	for {
 		str, err := conn.AcceptStream(context.Background())
 		if err != nil {
-			s.logger.Debugf("Accepting stream failed: %s", err)
-			return
+			var appErr *quic.ApplicationError
+			if errors.As(err, &appErr) && appErr.ErrorCode == quic.ApplicationErrorCode(errorNoError) {
+				return nil
+			}
+			return fmt.Errorf("accepting stream failed: %w", err)
 		}
 		go func() {
 			rerr := s.handleRequest(conn, str, decoder, func() {
@@ -455,7 +472,7 @@ func (s *Server) handleConn(conn quic.EarlyConnection) {
 	}
 }
 
-func (s *Server) handleUnidirectionalStreams(conn quic.EarlyConnection) {
+func (s *Server) handleUnidirectionalStreams(conn quic.Connection) {
 	for {
 		str, err := conn.AcceptUniStream(context.Background())
 		if err != nil {

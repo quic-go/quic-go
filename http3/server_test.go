@@ -1151,6 +1151,30 @@ var _ = Describe("Server", func() {
 		})
 	})
 
+	Context("ServeQUICConn", func() {
+		It("serves a QUIC connection", func() {
+			mux := http.NewServeMux()
+			mux.HandleFunc("/hello", func(w http.ResponseWriter, _ *http.Request) {
+				w.Write([]byte("foobar"))
+			})
+			s.Handler = mux
+			tlsConf := testdata.GetTLSConfig()
+			tlsConf.NextProtos = []string{NextProtoH3}
+			conn := mockquic.NewMockEarlyConnection(mockCtrl)
+			controlStr := mockquic.NewMockStream(mockCtrl)
+			controlStr.EXPECT().Write(gomock.Any())
+			conn.EXPECT().OpenUniStream().Return(controlStr, nil)
+			testDone := make(chan struct{})
+			conn.EXPECT().AcceptUniStream(gomock.Any()).DoAndReturn(func(context.Context) (quic.ReceiveStream, error) {
+				<-testDone
+				return nil, errors.New("test done")
+			}).MaxTimes(1)
+			conn.EXPECT().AcceptStream(gomock.Any()).Return(nil, &quic.ApplicationError{ErrorCode: quic.ApplicationErrorCode(errorNoError)})
+			s.ServeQUICConn(conn)
+			close(testDone)
+		})
+	})
+
 	Context("ListenAndServe", func() {
 		BeforeEach(func() {
 			s.Addr = "localhost:0"
