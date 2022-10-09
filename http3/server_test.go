@@ -201,19 +201,6 @@ var _ = Describe("Server", func() {
 			Expect(hfs).To(HaveKeyWithValue(":status", []string{"200"}))
 		})
 
-		It("handles aborts", func() {
-			testErr := http.ErrAbortHandler
-			done := make(chan struct{})
-			unknownStr := mockquic.NewMockStream(mockCtrl)
-			s.UniStreamHijacker = func(st StreamType, _ quic.Connection, str quic.ReceiveStream, err error) bool {
-				defer close(done)
-				Expect(st).To(BeZero())
-				Expect(str).To(Equal(unknownStr))
-				Expect(err).To(MatchError(testErr))
-				return true
-			}
-		})
-
 		It("handles a aborting handler", func() {
 			s.Handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				panic(http.ErrAbortHandler)
