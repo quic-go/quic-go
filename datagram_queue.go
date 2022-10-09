@@ -1,18 +1,14 @@
 package quic
 
 import (
-	"sync"
-
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/internal/utils"
 	"github.com/lucas-clemente/quic-go/internal/wire"
 )
 
 type datagramQueue struct {
-	mx            sync.Mutex
-	nextFrameSize protocol.ByteCount
-
 	sendQueue chan *wire.DatagramFrame
+	nextFrame *wire.DatagramFrame
 	rcvQueue  chan []byte
 
 	closeErr error
@@ -22,20 +18,17 @@ type datagramQueue struct {
 
 	dequeued chan struct{}
 
-	logger  utils.Logger
-	version protocol.VersionNumber
+	logger utils.Logger
 }
 
-func newDatagramQueue(hasData func(), logger utils.Logger, v protocol.VersionNumber) *datagramQueue {
+func newDatagramQueue(hasData func(), logger utils.Logger) *datagramQueue {
 	return &datagramQueue{
-		hasData:       hasData,
-		sendQueue:     make(chan *wire.DatagramFrame, 1),
-		nextFrameSize: protocol.InvalidByteCount,
-		rcvQueue:      make(chan []byte, protocol.DatagramRcvQueueLen),
-		dequeued:      make(chan struct{}),
-		closed:        make(chan struct{}),
-		logger:        logger,
-		version:       v,
+		hasData:   hasData,
+		sendQueue: make(chan *wire.DatagramFrame, 1),
+		rcvQueue:  make(chan []byte, protocol.DatagramRcvQueueLen),
+		dequeued:  make(chan struct{}),
+		closed:    make(chan struct{}),
+		logger:    logger,
 	}
 }
 
@@ -44,9 +37,6 @@ func newDatagramQueue(hasData func(), logger utils.Logger, v protocol.VersionNum
 func (h *datagramQueue) AddAndWait(f *wire.DatagramFrame) error {
 	select {
 	case h.sendQueue <- f:
-		h.mx.Lock()
-		h.nextFrameSize = f.Length(h.version)
-		h.mx.Unlock()
 		h.hasData()
 	case <-h.closed:
 		return h.closeErr
@@ -60,24 +50,26 @@ func (h *datagramQueue) AddAndWait(f *wire.DatagramFrame) error {
 	}
 }
 
-// Get dequeues a DATAGRAM frame for sending.
-func (h *datagramQueue) Get() *wire.DatagramFrame {
+// Peek gets the next DATAGRAM frame for sending.
+// If actually sent out, Pop needs to be called before the next call to Peek.
+func (h *datagramQueue) Peek() *wire.DatagramFrame {
+	if h.nextFrame != nil {
+		return h.nextFrame
+	}
 	select {
-	case f := <-h.sendQueue:
-		h.mx.Lock()
-		h.nextFrameSize = protocol.InvalidByteCount
-		h.mx.Unlock()
+	case h.nextFrame = <-h.sendQueue:
 		h.dequeued <- struct{}{}
-		return f
 	default:
 		return nil
 	}
+	return h.nextFrame
 }
 
-func (h *datagramQueue) NextFrameSize() protocol.ByteCount {
-	h.mx.Lock()
-	defer h.mx.Unlock()
-	return h.nextFrameSize
+func (h *datagramQueue) Pop() {
+	if h.nextFrame == nil {
+		panic("datagramQueue BUG: Pop called for nil frame")
+	}
+	h.nextFrame = nil
 }
 
 // HandleDatagramFrame handles a received DATAGRAM frame.

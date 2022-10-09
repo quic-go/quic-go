@@ -542,7 +542,7 @@ func (s *connection) preSetup() {
 	s.creationTime = now
 
 	s.windowUpdateQueue = newWindowUpdateQueue(s.streamsMap, s.connFlowController, s.framer.QueueControlFrame)
-	s.datagramQueue = newDatagramQueue(s.scheduleSending, s.logger, s.version)
+	s.datagramQueue = newDatagramQueue(s.scheduleSending, s.logger)
 }
 
 // run the connection main loop
