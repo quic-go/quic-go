@@ -1,6 +1,7 @@
 package ackhandler
 
 import (
+	"fmt"
 	"time"
 
 	"github.com/lucas-clemente/quic-go/internal/protocol"
@@ -48,9 +49,9 @@ func newReceivedPacketTracker(
 	}
 }
 
-func (h *receivedPacketTracker) ReceivedPacket(packetNumber protocol.PacketNumber, ecn protocol.ECN, rcvTime time.Time, shouldInstigateAck bool) {
-	if packetNumber < h.ignoreBelow {
-		return
+func (h *receivedPacketTracker) ReceivedPacket(packetNumber protocol.PacketNumber, ecn protocol.ECN, rcvTime time.Time, shouldInstigateAck bool) error {
+	if isNew := h.packetHistory.ReceivedPacket(packetNumber); !isNew {
+		return fmt.Errorf("recevedPacketTracker BUG: ReceivedPacket called for old / duplicate packet %d", packetNumber)
 	}
 
 	isMissing := h.isMissing(packetNumber)
@@ -59,7 +60,7 @@ func (h *receivedPacketTracker) ReceivedPacket(packetNumber protocol.PacketNumbe
 		h.largestObservedReceivedTime = rcvTime
 	}
 
-	if isNew := h.packetHistory.ReceivedPacket(packetNumber); isNew && shouldInstigateAck {
+	if shouldInstigateAck {
 		h.hasNewAck = true
 	}
 	if shouldInstigateAck {
@@ -74,6 +75,7 @@ func (h *receivedPacketTracker) ReceivedPacket(packetNumber protocol.PacketNumbe
 	case protocol.ECNCE:
 		h.ecnce++
 	}
+	return nil
 }
 
 // IgnoreBelow sets a lower limit for acknowledging packets.
