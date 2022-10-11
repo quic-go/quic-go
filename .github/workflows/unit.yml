@@ -18,7 +18,7 @@ jobs:
           go-version: ${{ matrix.go }}
       - run: go version
       - name: Install Ginkgo
-        run: go install github.com/onsi/ginkgo/v2/ginkgo@latest
+        run: go install github.com/onsi/ginkgo/v2/ginkgo
       - name: Run tests
         env:
           TIMESCALE_FACTOR: 10

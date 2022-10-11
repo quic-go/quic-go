@@ -20,7 +20,7 @@ jobs:
       - checkout
       - run:
           name: "Setup build environment"
-          command: go install github.com/onsi/ginkgo/v2/ginkgo@latest
+          command: go install github.com/onsi/ginkgo/v2/ginkgo
       - run:
           name: "Build infos"
           command: go version
