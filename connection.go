@@ -2080,7 +2080,7 @@ func (s *connection) tryQueueingUndecryptablePacket(p *receivedPacket, pt loggin
 	}
 	s.logger.Infof("Queueing packet (%d bytes) for later decryption", p.Size())
 	if s.tracer != nil {
-		s.tracer.BufferedPacket(pt)
+		s.tracer.BufferedPacket(pt, p.Size())
 	}
 	s.undecryptablePackets = append(s.undecryptablePackets, p)
 }
