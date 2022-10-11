@@ -11,6 +11,7 @@ import (
 
 	protocol "github.com/Psiphon-Labs/quic-go/internal/protocol"
 	qerr "github.com/Psiphon-Labs/quic-go/internal/qerr"
+	gomock "github.com/golang/mock/gomock"
 )
 
 // MockStream is a mock of Stream interface.

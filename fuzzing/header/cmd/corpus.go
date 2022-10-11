@@ -24,11 +24,7 @@ func getVNP(src, dest protocol.ConnectionID, numVersions int) []byte {
 	for i := 0; i < numVersions; i++ {
 		versions[i] = protocol.VersionNumber(rand.Uint32())
 	}
-	data, err := wire.ComposeVersionNegotiation(src, dest, versions)
-	if err != nil {
-		log.Fatal(err)
-	}
-	return data
+	return wire.ComposeVersionNegotiation(src, dest, versions)
 }
 
 func main() {

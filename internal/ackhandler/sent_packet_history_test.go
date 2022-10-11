@@ -25,11 +25,12 @@ var _ = Describe("SentPacketHistory", func() {
 			}
 		}
 		var listLen int
-		for el := hist.packetList.Front(); el != nil; el = el.Next() {
-			if !el.Value.skippedPacket {
+		hist.Iterate(func(p *Packet) (bool, error) {
+			if !p.skippedPacket {
 				listLen++
 			}
-		}
+			return true, nil
+		})
 		ExpectWithOffset(1, mapLen).To(Equal(len(packetNumbers)))
 		ExpectWithOffset(1, listLen).To(Equal(len(packetNumbers)))
 		i := 0
@@ -63,9 +64,10 @@ var _ = Describe("SentPacketHistory", func() {
 		hist.SentPacket(&Packet{PacketNumber: 3}, false)
 		hist.SentPacket(&Packet{PacketNumber: 4}, true)
 		expectInHistory([]protocol.PacketNumber{1, 4})
-		for el := hist.packetList.Front(); el != nil; el = el.Next() {
-			Expect(el.Value.PacketNumber).ToNot(Equal(protocol.PacketNumber(3)))
-		}
+		hist.Iterate(func(p *Packet) (bool, error) {
+			Expect(p.PacketNumber).ToNot(Equal(protocol.PacketNumber(3)))
+			return true, nil
+		})
 	})
 
 	It("gets the length", func() {
@@ -132,17 +134,19 @@ var _ = Describe("SentPacketHistory", func() {
 		})
 
 		It("also iterates over skipped packets", func() {
-			var packets, skippedPackets []protocol.PacketNumber
+			var packets, skippedPackets, allPackets []protocol.PacketNumber
 			Expect(hist.Iterate(func(p *Packet) (bool, error) {
 				if p.skippedPacket {
 					skippedPackets = append(skippedPackets, p.PacketNumber)
 				} else {
 					packets = append(packets, p.PacketNumber)
 				}
+				allPackets = append(allPackets, p.PacketNumber)
 				return true, nil
 			})).To(Succeed())
 			Expect(packets).To(Equal([]protocol.PacketNumber{1, 4, 8}))
 			Expect(skippedPackets).To(Equal([]protocol.PacketNumber{0, 2, 3, 5, 6, 7}))
+			Expect(allPackets).To(Equal([]protocol.PacketNumber{0, 1, 2, 3, 4, 5, 6, 7, 8}))
 		})
 
 		It("stops iterating", func() {

@@ -101,6 +101,7 @@ var _ = Describe("Handshake RTT tests", func() {
 	// 1 RTT for verifying the source address
 	// 1 RTT for the TLS handshake
 	It("is forward-secure after 2 RTTs", func() {
+		serverConfig.RequireAddressValidation = func(net.Addr) bool { return true }
 		runServerAndProxy()
 		_, err := quic.DialAddr(
 			fmt.Sprintf("localhost:%d", proxy.LocalAddr().(*net.UDPAddr).Port),
@@ -112,9 +113,6 @@ var _ = Describe("Handshake RTT tests", func() {
 	})
 
 	It("establishes a connection in 1 RTT when the server doesn't require a token", func() {
-		serverConfig.AcceptToken = func(_ net.Addr, _ *quic.Token) bool {
-			return true
-		}
 		runServerAndProxy()
 		_, err := quic.DialAddr(
 			fmt.Sprintf("localhost:%d", proxy.LocalAddr().(*net.UDPAddr).Port),
@@ -126,9 +124,6 @@ var _ = Describe("Handshake RTT tests", func() {
 	})
 
 	It("establishes a connection in 2 RTTs if a HelloRetryRequest is performed", func() {
-		serverConfig.AcceptToken = func(_ net.Addr, _ *quic.Token) bool {
-			return true
-		}
 		serverTLSConfig.CurvePreferences = []tls.CurveID{tls.CurveP384}
 		runServerAndProxy()
 		_, err := quic.DialAddr(
@@ -138,22 +133,5 @@ var _ = Describe("Handshake RTT tests", func() {
 		)
 		Expect(err).ToNot(HaveOccurred())
 		expectDurationInRTTs(2)
-	})
-
-	It("doesn't complete the handshake when the server never accepts the token", func() {
-		serverConfig.AcceptToken = func(_ net.Addr, _ *quic.Token) bool {
-			return false
-		}
-		clientConfig.HandshakeIdleTimeout = 500 * time.Millisecond
-		runServerAndProxy()
-		_, err := quic.DialAddr(
-			fmt.Sprintf("localhost:%d", proxy.LocalAddr().(*net.UDPAddr).Port),
-			getTLSClientConfig(),
-			clientConfig,
-		)
-		Expect(err).To(HaveOccurred())
-		nerr, ok := err.(net.Error)
-		Expect(ok).To(BeTrue())
-		Expect(nerr.Timeout()).To(BeTrue())
 	})
 })

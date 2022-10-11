@@ -38,62 +38,21 @@ func newRequestWriter(logger utils.Logger) *requestWriter {
 	}
 }
 
-func (w *requestWriter) WriteRequest(str quic.Stream, req *http.Request, gzip bool) error {
+func (w *requestWriter) WriteRequestHeader(str quic.Stream, req *http.Request, gzip bool) error {
+	// TODO: figure out how to add support for trailers
 	buf := &bytes.Buffer{}
 	if err := w.writeHeaders(buf, req, gzip); err != nil {
 		return err
 	}
-	if _, err := str.Write(buf.Bytes()); err != nil {
-		return err
-	}
-	// TODO: add support for trailers
-	if req.Body == nil {
-		str.Close()
-		return nil
-	}
-
-	// send the request body asynchronously
-	go func() {
-		defer req.Body.Close()
-		b := make([]byte, bodyCopyBufferSize)
-		for {
-			n, rerr := req.Body.Read(b)
-			if n == 0 {
-				if rerr == nil {
-					continue
-				} else if rerr == io.EOF {
-					break
-				}
-			}
-			buf := &bytes.Buffer{}
-			(&dataFrame{Length: uint64(n)}).Write(buf)
-			if _, err := str.Write(buf.Bytes()); err != nil {
-				w.logger.Errorf("Error writing request: %s", err)
-				return
-			}
-			if _, err := str.Write(b[:n]); err != nil {
-				w.logger.Errorf("Error writing request: %s", err)
-				return
-			}
-			if rerr != nil {
-				if rerr == io.EOF {
-					break
-				}
-				str.CancelWrite(quic.StreamErrorCode(errorRequestCanceled))
-				w.logger.Errorf("Error writing request: %s", rerr)
-				return
-			}
-		}
-		str.Close()
-	}()
-
-	return nil
+	_, err := str.Write(buf.Bytes())
+	return err
 }
 
 func (w *requestWriter) writeHeaders(wr io.Writer, req *http.Request, gzip bool) error {
 	w.mutex.Lock()
 	defer w.mutex.Unlock()
 	defer w.encoder.Close()
+	defer w.headerBuf.Reset()
 
 	if err := w.encodeHeaders(req, gzip, "", actualContentLength(req)); err != nil {
 		return err
@@ -105,15 +64,14 @@ func (w *requestWriter) writeHeaders(wr io.Writer, req *http.Request, gzip bool)
 	if _, err := wr.Write(buf.Bytes()); err != nil {
 		return err
 	}
-	if _, err := wr.Write(w.headerBuf.Bytes()); err != nil {
-		return err
-	}
-	w.headerBuf.Reset()
-	return nil
+	_, err := wr.Write(w.headerBuf.Bytes())
+	return err
 }
 
 // copied from net/transport.go
-
+// Modified to support Extended CONNECT:
+// Contrary to what the godoc for the http.Request says,
+// we do respect the Proto field if the method is CONNECT.
 func (w *requestWriter) encodeHeaders(req *http.Request, addGzipHeader bool, trailers string, contentLength int64) error {
 	host := req.Host
 	if host == "" {
@@ -124,8 +82,11 @@ func (w *requestWriter) encodeHeaders(req *http.Request, addGzipHeader bool, tra
 		return err
 	}
 
+	// http.NewRequest sets this field to HTTP/1.1
+	isExtendedConnect := req.Method == http.MethodConnect && req.Proto != "" && req.Proto != "HTTP/1.1"
+
 	var path string
-	if req.Method != "CONNECT" {
+	if req.Method != http.MethodConnect || isExtendedConnect {
 		path = req.URL.RequestURI()
 		if !validPseudoPath(path) {
 			orig := path
@@ -162,9 +123,12 @@ func (w *requestWriter) encodeHeaders(req *http.Request, addGzipHeader bool, tra
 		// [RFC3986]).
 		f(":authority", host)
 		f(":method", req.Method)
-		if req.Method != "CONNECT" {
+		if req.Method != http.MethodConnect || isExtendedConnect {
 			f(":path", path)
 			f(":scheme", req.URL.Scheme)
+		}
+		if isExtendedConnect {
+			f(":protocol", req.Proto)
 		}
 		if trailers != "" {
 			f("trailer", trailers)
@@ -269,8 +233,8 @@ func authorityAddr(scheme string, authority string) (addr string) {
 // validPseudoPath reports whether v is a valid :path pseudo-header
 // value. It must be either:
 //
-//     *) a non-empty string starting with '/'
-//     *) the string '*', for OPTIONS requests.
+//	*) a non-empty string starting with '/'
+//	*) the string '*', for OPTIONS requests.
 //
 // For now this is only used a quick check for deciding when to clean
 // up Opaque URLs before sending requests from the Transport.

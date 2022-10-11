@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"io"
-	"io/ioutil"
 	"log"
 	"net"
 	"net/http"
@@ -78,17 +77,17 @@ func (s *Server) ListenAndServe() error {
 	s.mutex.Unlock()
 
 	for {
-		sess, err := ln.Accept(context.Background())
+		conn, err := ln.Accept(context.Background())
 		if err != nil {
 			return err
 		}
-		go s.handleConn(sess)
+		go s.handleConn(conn)
 	}
 }
 
-func (s *Server) handleConn(sess quic.Session) {
+func (s *Server) handleConn(conn quic.Connection) {
 	for {
-		str, err := sess.AcceptStream(context.Background())
+		str, err := conn.AcceptStream(context.Background())
 		if err != nil {
 			log.Printf("Error accepting stream: %s\n", err.Error())
 			return
@@ -102,7 +101,7 @@ func (s *Server) handleConn(sess quic.Session) {
 }
 
 func (s *Server) handleStream(str quic.Stream) error {
-	reqBytes, err := ioutil.ReadAll(str)
+	reqBytes, err := io.ReadAll(str)
 	if err != nil {
 		return err
 	}

@@ -33,6 +33,9 @@ const (
 	nextProtoH3        = "h3"
 )
 
+// StreamType is the stream type of a unidirectional stream.
+type StreamType uint64
+
 const (
 	streamTypeControlStream      = 0
 	streamTypePushStream         = 1
@@ -41,7 +44,7 @@ const (
 )
 
 func versionToALPN(v protocol.VersionNumber) string {
-	if v == protocol.Version1 {
+	if v == protocol.Version1 || v == protocol.Version2 {
 		return nextProtoH3
 	}
 	if v == protocol.VersionTLS || v == protocol.VersionDraft29 {
@@ -60,11 +63,9 @@ func ConfigureTLSConfig(tlsConf *tls.Config) *tls.Config {
 	return &tls.Config{
 		GetConfigForClient: func(ch *tls.ClientHelloInfo) (*tls.Config, error) {
 			// determine the ALPN from the QUIC version used
-			proto := nextProtoH3Draft29
+			proto := nextProtoH3
 			if qconn, ok := ch.Conn.(handshake.ConnWithVersion); ok {
-				if qconn.GetQUICVersion() == protocol.Version1 {
-					proto = nextProtoH3
-				}
+				proto = versionToALPN(qconn.GetQUICVersion())
 			}
 			config := tlsConf
 			if tlsConf.GetConfigForClient != nil {
@@ -123,42 +124,90 @@ type listenerInfo struct {
 
 // Server is a HTTP/3 server.
 type Server struct {
-	*http.Server
+	// Addr optionally specifies the UDP address for the server to listen on,
+	// in the form "host:port".
+	//
+	// When used by ListenAndServe and ListenAndServeTLS methods, if empty,
+	// ":https" (port 443) is used. See net.Dial for details of the address
+	// format.
+	//
+	// Otherwise, if Port is not set and underlying QUIC listeners do not
+	// have valid port numbers, the port part is used in Alt-Svc headers set
+	// with SetQuicHeaders.
+	Addr string
 
-	// By providing a quic.Config, it is possible to set parameters of the QUIC connection.
-	// If nil, it uses reasonable default values.
+	// Port is used in Alt-Svc response headers set with SetQuicHeaders. If
+	// needed Port can be manually set when the Server is created.
+	//
+	// This is useful when a Layer 4 firewall is redirecting UDP traffic and
+	// clients must use a port different from the port the Server is
+	// listening on.
+	Port int
+
+	// TLSConfig provides a TLS configuration for use by server. It must be
+	// set for ListenAndServe and Serve methods.
+	TLSConfig *tls.Config
+
+	// QuicConfig provides the parameters for QUIC connection created with
+	// Serve. If nil, it uses reasonable default values.
+	//
+	// Configured versions are also used in Alt-Svc response header set with
+	// SetQuicHeaders.
 	QuicConfig *quic.Config
 
-	// Enable support for HTTP/3 datagrams.
+	// Handler is the HTTP request handler to use. If not set, defaults to
+	// http.NotFound.
+	Handler http.Handler
+
+	// EnableDatagrams enables support for HTTP/3 datagrams.
 	// If set to true, QuicConfig.EnableDatagram will be set.
-	// See https://www.ietf.org/archive/id/draft-schinazi-masque-h3-datagram-02.html.
+	// See https://datatracker.ietf.org/doc/html/draft-ietf-masque-h3-datagram-07.
 	EnableDatagrams bool
 
-	// The port to use in Alt-Svc response headers.
-	// If needed Port can be manually set when the Server is created.
-	// This is useful when a Layer 4 firewall is redirecting UDP traffic and clients must use
-	// a port different from the port the Server is listening on.
-	Port int
+	// MaxHeaderBytes controls the maximum number of bytes the server will
+	// read parsing the request HEADERS frame. It does not limit the size of
+	// the request body. If zero or negative, http.DefaultMaxHeaderBytes is
+	// used.
+	MaxHeaderBytes int
+
+	// AdditionalSettings specifies additional HTTP/3 settings.
+	// It is invalid to specify any settings defined by the HTTP/3 draft and the datagram draft.
+	AdditionalSettings map[uint64]uint64
+
+	// StreamHijacker, when set, is called for the first unknown frame parsed on a bidirectional stream.
+	// It is called right after parsing the frame type.
+	// If parsing the frame type fails, the error is passed to the callback.
+	// In that case, the frame type will not be set.
+	// Callers can either ignore the frame and return control of the stream back to HTTP/3
+	// (by returning hijacked false).
+	// Alternatively, callers can take over the QUIC stream (by returning hijacked true).
+	StreamHijacker func(FrameType, quic.Connection, quic.Stream, error) (hijacked bool, err error)
+
+	// UniStreamHijacker, when set, is called for unknown unidirectional stream of unknown stream type.
+	// If parsing the stream type fails, the error is passed to the callback.
+	// In that case, the stream type will not be set.
+	UniStreamHijacker func(StreamType, quic.Connection, quic.ReceiveStream, error) (hijacked bool)
 
 	mutex     sync.RWMutex
 	listeners map[*quic.EarlyListener]listenerInfo
-	closed    utils.AtomicBool
+
+	closed bool
 
 	altSvcHeader string
 
-	loggerOnce sync.Once
-	logger     utils.Logger
+	logger utils.Logger
 }
 
 // ListenAndServe listens on the UDP address s.Addr and calls s.Handler to handle HTTP/3 requests on incoming connections.
+//
+// If s.Addr is blank, ":https" is used.
 func (s *Server) ListenAndServe() error {
-	if s.Server == nil {
-		return errors.New("use of http3.Server without http.Server")
-	}
 	return s.serveConn(s.TLSConfig, nil)
 }
 
 // ListenAndServeTLS listens on the UDP address s.Addr and calls s.Handler to handle HTTP/3 requests on incoming connections.
+//
+// If s.Addr is blank, ":https" is used.
 func (s *Server) ListenAndServeTLS(certFile, keyFile string) error {
 	var err error
 	certs := make([]tls.Certificate, 1)
@@ -181,65 +230,73 @@ func (s *Server) Serve(conn net.PacketConn) error {
 	return s.serveConn(s.TLSConfig, conn)
 }
 
-// Serve an existing QUIC listener.
+// ServeListener serves an existing QUIC listener.
 // Make sure you use http3.ConfigureTLSConfig to configure a tls.Config
 // and use it to construct a http3-friendly QUIC listener.
 // Closing the server does close the listener.
-func (s *Server) ServeListener(listener quic.EarlyListener) error {
-	return s.serveImpl(func() (quic.EarlyListener, error) { return listener, nil })
+func (s *Server) ServeListener(ln quic.EarlyListener) error {
+	if err := s.addListener(&ln); err != nil {
+		return err
+	}
+	err := s.serveListener(ln)
+	s.removeListener(&ln)
+	return err
 }
+
+var errServerWithoutTLSConfig = errors.New("use of http3.Server without TLSConfig")
 
 func (s *Server) serveConn(tlsConf *tls.Config, conn net.PacketConn) error {
-	return s.serveImpl(func() (quic.EarlyListener, error) {
-		baseConf := ConfigureTLSConfig(tlsConf)
-		quicConf := s.QuicConfig
-		if quicConf == nil {
-			quicConf = &quic.Config{}
-		} else {
-			quicConf = s.QuicConfig.Clone()
-		}
-		if s.EnableDatagrams {
-			quicConf.EnableDatagrams = true
-		}
+	if tlsConf == nil {
+		return errServerWithoutTLSConfig
+	}
 
-		var ln quic.EarlyListener
-		var err error
-		if conn == nil {
-			ln, err = quicListenAddr(s.Addr, baseConf, quicConf)
-		} else {
-			ln, err = quicListen(conn, baseConf, quicConf)
-		}
-		if err != nil {
-			return nil, err
-		}
-		return ln, nil
-	})
-}
-
-func (s *Server) serveImpl(startListener func() (quic.EarlyListener, error)) error {
-	if s.closed.Get() {
+	s.mutex.Lock()
+	closed := s.closed
+	s.mutex.Unlock()
+	if closed {
 		return http.ErrServerClosed
 	}
-	if s.Server == nil {
-		return errors.New("use of http3.Server without http.Server")
-	}
-	s.loggerOnce.Do(func() {
-		s.logger = utils.DefaultLogger.WithPrefix("server")
-	})
 
-	ln, err := startListener()
+	baseConf := ConfigureTLSConfig(tlsConf)
+	quicConf := s.QuicConfig
+	if quicConf == nil {
+		quicConf = &quic.Config{}
+	} else {
+		quicConf = s.QuicConfig.Clone()
+	}
+	if s.EnableDatagrams {
+		quicConf.EnableDatagrams = true
+	}
+
+	var ln quic.EarlyListener
+	var err error
+	if conn == nil {
+		addr := s.Addr
+		if addr == "" {
+			addr = ":https"
+		}
+		ln, err = quicListenAddr(addr, baseConf, quicConf)
+	} else {
+		ln, err = quicListen(conn, baseConf, quicConf)
+	}
 	if err != nil {
 		return err
 	}
-	s.addListener(&ln)
-	defer s.removeListener(&ln)
+	if err := s.addListener(&ln); err != nil {
+		return err
+	}
+	err = s.serveListener(ln)
+	s.removeListener(&ln)
+	return err
+}
 
+func (s *Server) serveListener(ln quic.EarlyListener) error {
 	for {
-		sess, err := ln.Accept(context.Background())
+		conn, err := ln.Accept(context.Background())
 		if err != nil {
 			return err
 		}
-		go s.handleConn(sess)
+		go s.handleConn(conn)
 	}
 }
 
@@ -268,10 +325,16 @@ func (s *Server) generateAltSvcHeader() {
 	if s.QuicConfig != nil && len(s.QuicConfig.Versions) > 0 {
 		supportedVersions = s.QuicConfig.Versions
 	}
+
+	// keep track of which have been seen so we don't yield duplicate values
+	seen := make(map[string]struct{}, len(supportedVersions))
 	var versionStrings []string
 	for _, version := range supportedVersions {
 		if v := versionToALPN(version); len(v) > 0 {
-			versionStrings = append(versionStrings, v)
+			if _, ok := seen[v]; !ok {
+				versionStrings = append(versionStrings, v)
+				seen[v] = struct{}{}
+			}
 		}
 	}
 
@@ -309,8 +372,16 @@ func (s *Server) generateAltSvcHeader() {
 // We store a pointer to interface in the map set. This is safe because we only
 // call trackListener via Serve and can track+defer untrack the same pointer to
 // local variable there. We never need to compare a Listener from another caller.
-func (s *Server) addListener(l *quic.EarlyListener) {
+func (s *Server) addListener(l *quic.EarlyListener) error {
 	s.mutex.Lock()
+	defer s.mutex.Unlock()
+
+	if s.closed {
+		return http.ErrServerClosed
+	}
+	if s.logger == nil {
+		s.logger = utils.DefaultLogger.WithPrefix("server")
+	}
 	if s.listeners == nil {
 		s.listeners = make(map[*quic.EarlyListener]listenerInfo)
 	}
@@ -323,8 +394,7 @@ func (s *Server) addListener(l *quic.EarlyListener) {
 		s.listeners[l] = listenerInfo{}
 	}
 	s.generateAltSvcHeader()
-
-	s.mutex.Unlock()
+	return nil
 }
 
 func (s *Server) removeListener(l *quic.EarlyListener) {
@@ -334,34 +404,37 @@ func (s *Server) removeListener(l *quic.EarlyListener) {
 	s.mutex.Unlock()
 }
 
-func (s *Server) handleConn(sess quic.EarlySession) {
+func (s *Server) handleConn(conn quic.EarlyConnection) {
 	decoder := qpack.NewDecoder(nil)
 
 	// send a SETTINGS frame
-	str, err := sess.OpenUniStream()
+	str, err := conn.OpenUniStream()
 	if err != nil {
 		s.logger.Debugf("Opening the control stream failed.")
 		return
 	}
 	buf := &bytes.Buffer{}
 	quicvarint.Write(buf, streamTypeControlStream) // stream type
-	(&settingsFrame{Datagram: s.EnableDatagrams}).Write(buf)
+	(&settingsFrame{Datagram: s.EnableDatagrams, Other: s.AdditionalSettings}).Write(buf)
 	str.Write(buf.Bytes())
 
-	go s.handleUnidirectionalStreams(sess)
+	go s.handleUnidirectionalStreams(conn)
 
 	// Process all requests immediately.
 	// It's the client's responsibility to decide which requests are eligible for 0-RTT.
 	for {
-		str, err := sess.AcceptStream(context.Background())
+		str, err := conn.AcceptStream(context.Background())
 		if err != nil {
 			s.logger.Debugf("Accepting stream failed: %s", err)
 			return
 		}
 		go func() {
-			rerr := s.handleRequest(sess, str, decoder, func() {
-				sess.CloseWithError(quic.ApplicationErrorCode(errorFrameUnexpected), "")
+			rerr := s.handleRequest(conn, str, decoder, func() {
+				conn.CloseWithError(quic.ApplicationErrorCode(errorFrameUnexpected), "")
 			})
+			if rerr.err == errHijacked {
+				return
+			}
 			if rerr.err != nil || rerr.streamErr != 0 || rerr.connErr != 0 {
 				s.logger.Debugf("Handling request failed: %s", err)
 				if rerr.streamErr != 0 {
@@ -372,7 +445,7 @@ func (s *Server) handleConn(sess quic.EarlySession) {
 					if rerr.err != nil {
 						reason = rerr.err.Error()
 					}
-					sess.CloseWithError(quic.ApplicationErrorCode(rerr.connErr), reason)
+					conn.CloseWithError(quic.ApplicationErrorCode(rerr.connErr), reason)
 				}
 				return
 			}
@@ -381,9 +454,9 @@ func (s *Server) handleConn(sess quic.EarlySession) {
 	}
 }
 
-func (s *Server) handleUnidirectionalStreams(sess quic.EarlySession) {
+func (s *Server) handleUnidirectionalStreams(conn quic.EarlyConnection) {
 	for {
-		str, err := sess.AcceptUniStream(context.Background())
+		str, err := conn.AcceptUniStream(context.Background())
 		if err != nil {
 			s.logger.Debugf("accepting unidirectional stream failed: %s", err)
 			return
@@ -392,6 +465,9 @@ func (s *Server) handleUnidirectionalStreams(sess quic.EarlySession) {
 		go func(str quic.ReceiveStream) {
 			streamType, err := quicvarint.Read(quicvarint.NewReader(str))
 			if err != nil {
+				if s.UniStreamHijacker != nil && s.UniStreamHijacker(StreamType(streamType), conn, str, err) {
+					return
+				}
 				s.logger.Debugf("reading stream type on stream %d failed: %s", str.StreamID(), err)
 				return
 			}
@@ -403,20 +479,23 @@ func (s *Server) handleUnidirectionalStreams(sess quic.EarlySession) {
 				// TODO: check that only one stream of each type is opened.
 				return
 			case streamTypePushStream: // only the server can push
-				sess.CloseWithError(quic.ApplicationErrorCode(errorStreamCreationError), "")
+				conn.CloseWithError(quic.ApplicationErrorCode(errorStreamCreationError), "")
 				return
 			default:
+				if s.UniStreamHijacker != nil && s.UniStreamHijacker(StreamType(streamType), conn, str, nil) {
+					return
+				}
 				str.CancelRead(quic.StreamErrorCode(errorStreamCreationError))
 				return
 			}
-			f, err := parseNextFrame(str)
+			f, err := parseNextFrame(str, nil)
 			if err != nil {
-				sess.CloseWithError(quic.ApplicationErrorCode(errorFrameError), "")
+				conn.CloseWithError(quic.ApplicationErrorCode(errorFrameError), "")
 				return
 			}
 			sf, ok := f.(*settingsFrame)
 			if !ok {
-				sess.CloseWithError(quic.ApplicationErrorCode(errorMissingSettings), "")
+				conn.CloseWithError(quic.ApplicationErrorCode(errorMissingSettings), "")
 				return
 			}
 			if !sf.Datagram {
@@ -425,23 +504,30 @@ func (s *Server) handleUnidirectionalStreams(sess quic.EarlySession) {
 			// If datagram support was enabled on our side as well as on the client side,
 			// we can expect it to have been negotiated both on the transport and on the HTTP/3 layer.
 			// Note: ConnectionState() will block until the handshake is complete (relevant when using 0-RTT).
-			if s.EnableDatagrams && !sess.ConnectionState().SupportsDatagrams {
-				sess.CloseWithError(quic.ApplicationErrorCode(errorSettingsError), "missing QUIC Datagram support")
+			if s.EnableDatagrams && !conn.ConnectionState().SupportsDatagrams {
+				conn.CloseWithError(quic.ApplicationErrorCode(errorSettingsError), "missing QUIC Datagram support")
 			}
 		}(str)
 	}
 }
 
 func (s *Server) maxHeaderBytes() uint64 {
-	if s.Server.MaxHeaderBytes <= 0 {
+	if s.MaxHeaderBytes <= 0 {
 		return http.DefaultMaxHeaderBytes
 	}
-	return uint64(s.Server.MaxHeaderBytes)
+	return uint64(s.MaxHeaderBytes)
 }
 
-func (s *Server) handleRequest(sess quic.Session, str quic.Stream, decoder *qpack.Decoder, onFrameError func()) requestError {
-	frame, err := parseNextFrame(str)
+func (s *Server) handleRequest(conn quic.Connection, str quic.Stream, decoder *qpack.Decoder, onFrameError func()) requestError {
+	var ufh unknownFrameHandlerFunc
+	if s.StreamHijacker != nil {
+		ufh = func(ft FrameType, e error) (processed bool, err error) { return s.StreamHijacker(ft, conn, str, e) }
+	}
+	frame, err := parseNextFrame(str, ufh)
 	if err != nil {
+		if err == errHijacked {
+			return requestError{err: errHijacked}
+		}
 		return newStreamError(errorRequestIncomplete, err)
 	}
 	hf, ok := frame.(*headersFrame)
@@ -466,8 +552,9 @@ func (s *Server) handleRequest(sess quic.Session, str quic.Stream, decoder *qpac
 		return newStreamError(errorGeneralProtocolError, err)
 	}
 
-	req.RemoteAddr = sess.RemoteAddr().String()
-	req.Body = newRequestBody(str, onFrameError)
+	req.RemoteAddr = conn.RemoteAddr().String()
+	body := newRequestBody(newStream(str, onFrameError))
+	req.Body = body
 
 	if s.logger.Debug() {
 		s.logger.Infof("%s %s%s, on stream %d", req.Method, req.Host, req.RequestURI, str.StreamID())
@@ -477,14 +564,10 @@ func (s *Server) handleRequest(sess quic.Session, str quic.Stream, decoder *qpac
 
 	ctx := str.Context()
 	ctx = context.WithValue(ctx, ServerContextKey, s)
-	ctx = context.WithValue(ctx, http.LocalAddrContextKey, sess.LocalAddr())
+	ctx = context.WithValue(ctx, http.LocalAddrContextKey, conn.LocalAddr())
 	req = req.WithContext(ctx)
-	r := newResponseWriter(str, s.logger)
-	defer func() {
-		if !r.usedDataStream() {
-			r.Flush()
-		}
-	}()
+	r := newResponseWriter(str, conn, s.logger)
+	defer r.Flush()
 	handler := s.Handler
 	if handler == nil {
 		handler = http.DefaultServeMux
@@ -505,25 +588,27 @@ func (s *Server) handleRequest(sess quic.Session, str quic.Stream, decoder *qpac
 		handler.ServeHTTP(r, req)
 	}()
 
-	if !r.usedDataStream() {
-		if panicked {
-			r.WriteHeader(500)
-		} else {
-			r.WriteHeader(200)
-		}
-		// If the EOF was read by the handler, CancelRead() is a no-op.
-		str.CancelRead(quic.StreamErrorCode(errorNoError))
+	if body.wasStreamHijacked() {
+		return requestError{err: errHijacked}
 	}
+
+	if panicked {
+		r.WriteHeader(500)
+	} else {
+		r.WriteHeader(200)
+	}
+	// If the EOF was read by the handler, CancelRead() is a no-op.
+	str.CancelRead(quic.StreamErrorCode(errorNoError))
 	return requestError{}
 }
 
 // Close the server immediately, aborting requests and sending CONNECTION_CLOSE frames to connected clients.
 // Close in combination with ListenAndServe() (instead of Serve()) may race if it is called before a UDP socket is established.
 func (s *Server) Close() error {
-	s.closed.Set(true)
-
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
+
+	s.closed = true
 
 	var err error
 	for ln := range s.listeners {
@@ -552,7 +637,8 @@ var ErrNoAltSvcPort = errors.New("no port can be announced, specify it explicitl
 // If no listener's Addr().String() returns an address with a valid port, Server.Addr will be used
 // to extract the port, if specified.
 // For example, a server launched using ListenAndServe on an address with port 443 would set:
-// 	Alt-Svc: h3=":443"; ma=2592000,h3-29=":443"; ma=2592000
+//
+//	Alt-Svc: h3=":443"; ma=2592000,h3-29=":443"; ma=2592000
 func (s *Server) SetQuicHeaders(hdr http.Header) error {
 	s.mutex.RLock()
 	defer s.mutex.RUnlock()
@@ -571,10 +657,8 @@ func (s *Server) SetQuicHeaders(hdr http.Header) error {
 // used when handler is nil.
 func ListenAndServeQUIC(addr, certFile, keyFile string, handler http.Handler) error {
 	server := &Server{
-		Server: &http.Server{
-			Addr:    addr,
-			Handler: handler,
-		},
+		Addr:    addr,
+		Handler: handler,
 	}
 	return server.ListenAndServeTLS(certFile, keyFile)
 }
@@ -595,6 +679,10 @@ func ListenAndServe(addr, certFile, keyFile string, handler http.Handler) error 
 	// so we don't need to make a full copy.
 	config := &tls.Config{
 		Certificates: certs,
+	}
+
+	if addr == "" {
+		addr = ":https"
 	}
 
 	// Open the listeners
@@ -621,23 +709,20 @@ func ListenAndServe(addr, certFile, keyFile string, handler http.Handler) error 
 	tlsConn := tls.NewListener(tcpConn, config)
 	defer tlsConn.Close()
 
-	// Start the servers
-	httpServer := &http.Server{
-		Addr:      addr,
-		TLSConfig: config,
-	}
-
-	quicServer := &Server{
-		Server: httpServer,
-	}
-
 	if handler == nil {
 		handler = http.DefaultServeMux
 	}
-	httpServer.Handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		quicServer.SetQuicHeaders(w.Header())
-		handler.ServeHTTP(w, r)
-	})
+	// Start the servers
+	quicServer := &Server{
+		TLSConfig: config,
+		Handler:   handler,
+	}
+	httpServer := &http.Server{
+		Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			quicServer.SetQuicHeaders(w.Header())
+			handler.ServeHTTP(w, r)
+		}),
+	}
 
 	hErr := make(chan error)
 	qErr := make(chan error)

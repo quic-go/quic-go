@@ -51,20 +51,6 @@ func (mr *MockMtuDiscovererMockRecorder) GetPing() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetPing", reflect.TypeOf((*MockMtuDiscoverer)(nil).GetPing))
 }
 
-// NextProbeTime mocks base method.
-func (m *MockMtuDiscoverer) NextProbeTime() time.Time {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "NextProbeTime")
-	ret0, _ := ret[0].(time.Time)
-	return ret0
-}
-
-// NextProbeTime indicates an expected call of NextProbeTime.
-func (mr *MockMtuDiscovererMockRecorder) NextProbeTime() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NextProbeTime", reflect.TypeOf((*MockMtuDiscoverer)(nil).NextProbeTime))
-}
-
 // ShouldSendProbe mocks base method.
 func (m *MockMtuDiscoverer) ShouldSendProbe(now time.Time) bool {
 	m.ctrl.T.Helper()

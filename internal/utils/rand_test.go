@@ -9,7 +9,7 @@ var _ = Describe("Rand", func() {
 	It("generates random numbers", func() {
 		const (
 			num = 1000
-			max = 123456
+			max = 12345678
 		)
 
 		var values [num]int32

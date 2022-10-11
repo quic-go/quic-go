@@ -15,9 +15,10 @@ import (
 	"log"
 	"math/big"
 	mrand "math/rand"
-	"net"
 	"os"
+	"runtime/pprof"
 	"strconv"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -294,7 +295,14 @@ var _ = BeforeEach(func() {
 	}
 })
 
+func areHandshakesRunning() bool {
+	var b bytes.Buffer
+	pprof.Lookup("goroutine").WriteTo(&b, 1)
+	return strings.Contains(b.String(), "RunHandshake")
+}
+
 var _ = AfterEach(func() {
+	Expect(areHandshakesRunning()).To(BeFalse())
 	if debugLog() {
 		logFile, err := os.Create(logFileName)
 		Expect(err).ToNot(HaveOccurred())
@@ -319,6 +327,7 @@ func scaleDuration(d time.Duration) time.Duration {
 }
 
 type tracer struct {
+	logging.NullTracer
 	createNewConnTracer func() logging.ConnectionTracer
 }
 
@@ -331,48 +340,6 @@ func newTracer(c func() logging.ConnectionTracer) logging.Tracer {
 func (t *tracer) TracerForConnection(context.Context, logging.Perspective, logging.ConnectionID) logging.ConnectionTracer {
 	return t.createNewConnTracer()
 }
-func (t *tracer) SentPacket(net.Addr, *logging.Header, logging.ByteCount, []logging.Frame) {}
-func (t *tracer) DroppedPacket(net.Addr, logging.PacketType, logging.ByteCount, logging.PacketDropReason) {
-}
-
-type connTracer struct{}
-
-var _ logging.ConnectionTracer = &connTracer{}
-
-func (t *connTracer) StartedConnection(local, remote net.Addr, srcConnID, destConnID logging.ConnectionID) {
-}
-
-func (t *connTracer) NegotiatedVersion(chosen logging.VersionNumber, clientVersions, serverVersions []logging.VersionNumber) {
-}
-func (t *connTracer) ClosedConnection(error)                                   {}
-func (t *connTracer) SentTransportParameters(*logging.TransportParameters)     {}
-func (t *connTracer) ReceivedTransportParameters(*logging.TransportParameters) {}
-func (t *connTracer) RestoredTransportParameters(*logging.TransportParameters) {}
-func (t *connTracer) SentPacket(hdr *logging.ExtendedHeader, size logging.ByteCount, ack *logging.AckFrame, frames []logging.Frame) {
-}
-func (t *connTracer) ReceivedVersionNegotiationPacket(*logging.Header, []logging.VersionNumber) {}
-func (t *connTracer) ReceivedRetry(*logging.Header)                                             {}
-func (t *connTracer) ReceivedPacket(hdr *logging.ExtendedHeader, size logging.ByteCount, frames []logging.Frame) {
-}
-func (t *connTracer) BufferedPacket(logging.PacketType)                                             {}
-func (t *connTracer) DroppedPacket(logging.PacketType, logging.ByteCount, logging.PacketDropReason) {}
-func (t *connTracer) UpdatedMetrics(rttStats *logging.RTTStats, cwnd, bytesInFlight logging.ByteCount, packetsInFlight int) {
-}
-
-func (t *connTracer) AcknowledgedPacket(logging.EncryptionLevel, logging.PacketNumber) {}
-func (t *connTracer) LostPacket(logging.EncryptionLevel, logging.PacketNumber, logging.PacketLossReason) {
-}
-func (t *connTracer) UpdatedCongestionState(logging.CongestionState)                     {}
-func (t *connTracer) UpdatedPTOCount(value uint32)                                       {}
-func (t *connTracer) UpdatedKeyFromTLS(logging.EncryptionLevel, logging.Perspective)     {}
-func (t *connTracer) UpdatedKey(generation logging.KeyPhase, remote bool)                {}
-func (t *connTracer) DroppedEncryptionLevel(logging.EncryptionLevel)                     {}
-func (t *connTracer) DroppedKey(logging.KeyPhase)                                        {}
-func (t *connTracer) SetLossTimer(logging.TimerType, logging.EncryptionLevel, time.Time) {}
-func (t *connTracer) LossTimerExpired(logging.TimerType, logging.EncryptionLevel)        {}
-func (t *connTracer) LossTimerCanceled()                                                 {}
-func (t *connTracer) Debug(string, string)                                               {}
-func (t *connTracer) Close()                                                             {}
 
 type packet struct {
 	time   time.Time
@@ -381,7 +348,7 @@ type packet struct {
 }
 
 type packetTracer struct {
-	connTracer
+	logging.NullConnectionTracer
 	closed     chan struct{}
 	sent, rcvd []packet
 }

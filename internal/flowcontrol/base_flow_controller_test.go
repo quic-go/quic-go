@@ -13,6 +13,7 @@ import (
 )
 
 // on the CIs, the timing is a lot less precise, so scale every duration by this factor
+//
 //nolint:unparam
 func scaleDuration(t time.Duration) time.Duration {
 	scaleFactor := 1

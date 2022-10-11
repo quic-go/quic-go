@@ -68,10 +68,8 @@ var _ = Describe("HTTP tests", func() {
 		})
 
 		server = &http3.Server{
-			Server: &http.Server{
-				Handler:   mux,
-				TLSConfig: testdata.GetTLSConfig(),
-			},
+			Handler:    mux,
+			TLSConfig:  testdata.GetTLSConfig(),
 			QuicConfig: getQuicConfig(&quic.Config{Versions: versions}),
 		}
 
@@ -312,6 +310,46 @@ var _ = Describe("HTTP tests", func() {
 				}
 				Expect(req.Body.Close()).To(Succeed())
 				Eventually(done).Should(BeClosed())
+			})
+
+			It("allows taking over the stream", func() {
+				mux.HandleFunc("/httpstreamer", func(w http.ResponseWriter, r *http.Request) {
+					defer GinkgoRecover()
+					w.WriteHeader(200)
+					w.(http.Flusher).Flush()
+
+					str := r.Body.(http3.HTTPStreamer).HTTPStream()
+					str.Write([]byte("foobar"))
+
+					// Do this in a Go routine, so that the handler returns early.
+					// This way, we can also check that the HTTP/3 doesn't close the stream.
+					go func() {
+						defer GinkgoRecover()
+						_, err := io.Copy(str, str)
+						Expect(err).ToNot(HaveOccurred())
+						Expect(str.Close()).To(Succeed())
+					}()
+				})
+
+				req, err := http.NewRequest(http.MethodGet, "https://localhost:"+port+"/httpstreamer", nil)
+				Expect(err).ToNot(HaveOccurred())
+				rsp, err := client.Transport.(*http3.RoundTripper).RoundTripOpt(req, http3.RoundTripOpt{DontCloseRequestStream: true})
+				Expect(err).ToNot(HaveOccurred())
+				Expect(rsp.StatusCode).To(Equal(200))
+
+				str := rsp.Body.(http3.HTTPStreamer).HTTPStream()
+				b := make([]byte, 6)
+				_, err = io.ReadFull(str, b)
+				Expect(err).ToNot(HaveOccurred())
+				Expect(b).To(Equal([]byte("foobar")))
+
+				data := GeneratePRData(8 * 1024)
+				_, err = str.Write(data)
+				Expect(err).ToNot(HaveOccurred())
+				Expect(str.Close()).To(Succeed())
+				repl, err := io.ReadAll(str)
+				Expect(err).ToNot(HaveOccurred())
+				Expect(repl).To(Equal(data))
 			})
 		})
 	}

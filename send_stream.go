@@ -50,6 +50,7 @@ type sendStream struct {
 	nextFrame      *wire.StreamFrame
 
 	writeChan chan struct{}
+	writeOnce chan struct{}
 	deadline  time.Time
 
 	flowController flowcontrol.StreamFlowController
@@ -73,6 +74,7 @@ func newSendStream(
 		sender:         sender,
 		flowController: flowController,
 		writeChan:      make(chan struct{}, 1),
+		writeOnce:      make(chan struct{}, 1), // cap: 1, to protect against concurrent use of Write
 		version:        version,
 	}
 	s.ctx, s.ctxCancel = context.WithCancel(context.Background())
@@ -84,6 +86,12 @@ func (s *sendStream) StreamID() protocol.StreamID {
 }
 
 func (s *sendStream) Write(p []byte) (int, error) {
+	// Concurrent use of Write is not permitted (and doesn't make any sense),
+	// but sometimes people do it anyway.
+	// Make sure that we only execute one call at any given time to avoid hard to debug failures.
+	s.writeOnce <- struct{}{}
+	defer func() { <-s.writeOnce }()
+
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
 
@@ -269,7 +277,7 @@ func (s *sendStream) popNewStreamFrame(maxBytes, sendWindow protocol.ByteCount) 
 		nextFrame := s.nextFrame
 		s.nextFrame = nil
 
-		maxDataLen := utils.MinByteCount(sendWindow, nextFrame.MaxDataLen(maxBytes, s.version))
+		maxDataLen := utils.Min(sendWindow, nextFrame.MaxDataLen(maxBytes, s.version))
 		if nextFrame.DataLen() > maxDataLen {
 			s.nextFrame = wire.GetStreamFrame()
 			s.nextFrame.StreamID = s.streamID
@@ -304,7 +312,7 @@ func (s *sendStream) popNewStreamFrameWithoutBuffer(f *wire.StreamFrame, maxByte
 	if maxDataLen == 0 { // a STREAM frame must have at least one byte of data
 		return s.dataForWriting != nil || s.nextFrame != nil || s.finishedWriting
 	}
-	s.getDataForWriting(f, utils.MinByteCount(maxDataLen, sendWindow))
+	s.getDataForWriting(f, utils.Min(maxDataLen, sendWindow))
 
 	return s.dataForWriting != nil || s.nextFrame != nil || s.finishedWriting
 }

@@ -24,17 +24,8 @@ const (
 	VersionDraft29 = protocol.VersionDraft29
 	// Version1 is RFC 9000
 	Version1 = protocol.Version1
+	Version2 = protocol.Version2
 )
-
-// A Token can be used to verify the ownership of the client address.
-type Token struct {
-	// IsRetryToken encodes how the client received the token. There are two ways:
-	// * In a Retry packet sent when trying to establish a new connection.
-	// * In a NEW_TOKEN frame on a previous connection.
-	IsRetryToken bool
-	RemoteAddr   string
-	SentTime     time.Time
-}
 
 // A ClientToken is a token received by the client.
 // It can be used to skip address validation on future connection attempts.
@@ -60,15 +51,15 @@ type TokenStore interface {
 // when the server rejects a 0-RTT connection attempt.
 var Err0RTTRejected = errors.New("0-RTT rejected")
 
-// SessionTracingKey can be used to associate a ConnectionTracer with a Session.
-// It is set on the Session.Context() context,
+// ConnectionTracingKey can be used to associate a ConnectionTracer with a Connection.
+// It is set on the Connection.Context() context,
 // as well as on the context passed to logging.Tracer.NewConnectionTracer.
-var SessionTracingKey = sessionTracingCtxKey{}
+var ConnectionTracingKey = connTracingCtxKey{}
 
-type sessionTracingCtxKey struct{}
+type connTracingCtxKey struct{}
 
 // Stream is the interface implemented by QUIC streams
-// In addition to the errors listed on the Session,
+// In addition to the errors listed on the Connection,
 // calls to stream functions can return a StreamError if the stream is canceled.
 type Stream interface {
 	ReceiveStream
@@ -88,7 +79,7 @@ type ReceiveStream interface {
 	// after a fixed time limit; see SetDeadline and SetReadDeadline.
 	// If the stream was canceled by the peer, the error implements the StreamError
 	// interface, and Canceled() == true.
-	// If the session was closed due to a timeout, the error satisfies
+	// If the connection was closed due to a timeout, the error satisfies
 	// the net.Error interface, and Timeout() will be true.
 	io.Reader
 	// CancelRead aborts receiving on this stream.
@@ -112,7 +103,7 @@ type SendStream interface {
 	// after a fixed time limit; see SetDeadline and SetWriteDeadline.
 	// If the stream was canceled by the peer, the error implements the StreamError
 	// interface, and Canceled() == true.
-	// If the session was closed due to a timeout, the error satisfies
+	// If the connection was closed due to a timeout, the error satisfies
 	// the net.Error interface, and Timeout() will be true.
 	io.Writer
 	// Close closes the write-direction of the stream.
@@ -128,7 +119,6 @@ type SendStream interface {
 	// The Context is canceled as soon as the write-side of the stream is closed.
 	// This happens when Close() or CancelWrite() is called, or when the peer
 	// cancels the read-side of their stream.
-	// Warning: This API should not be considered stable and might change soon.
 	Context() context.Context
 	// SetWriteDeadline sets the deadline for future Write calls
 	// and any currently-blocked Write call.
@@ -138,21 +128,21 @@ type SendStream interface {
 	SetWriteDeadline(t time.Time) error
 }
 
-// A Session is a QUIC connection between two peers.
-// Calls to the session (and to streams) can return the following types of errors:
+// A Connection is a QUIC connection between two peers.
+// Calls to the connection (and to streams) can return the following types of errors:
 // * ApplicationError: for errors triggered by the application running on top of QUIC
 // * TransportError: for errors triggered by the QUIC transport (in many cases a misbehaving peer)
 // * IdleTimeoutError: when the peer goes away unexpectedly (this is a net.Error timeout error)
 // * HandshakeTimeoutError: when the cryptographic handshake takes too long (this is a net.Error timeout error)
 // * StatelessResetError: when we receive a stateless reset (this is a net.Error temporary error)
 // * VersionNegotiationError: returned by the client, when there's no version overlap between the peers
-type Session interface {
+type Connection interface {
 	// AcceptStream returns the next stream opened by the peer, blocking until one is available.
-	// If the session was closed due to a timeout, the error satisfies
+	// If the connection was closed due to a timeout, the error satisfies
 	// the net.Error interface, and Timeout() will be true.
 	AcceptStream(context.Context) (Stream, error)
 	// AcceptUniStream returns the next unidirectional stream opened by the peer, blocking until one is available.
-	// If the session was closed due to a timeout, the error satisfies
+	// If the connection was closed due to a timeout, the error satisfies
 	// the net.Error interface, and Timeout() will be true.
 	AcceptUniStream(context.Context) (ReceiveStream, error)
 	// OpenStream opens a new bidirectional QUIC stream.
@@ -160,22 +150,22 @@ type Session interface {
 	// The peer can only accept the stream after data has been sent on the stream.
 	// If the error is non-nil, it satisfies the net.Error interface.
 	// When reaching the peer's stream limit, err.Temporary() will be true.
-	// If the session was closed due to a timeout, Timeout() will be true.
+	// If the connection was closed due to a timeout, Timeout() will be true.
 	OpenStream() (Stream, error)
 	// OpenStreamSync opens a new bidirectional QUIC stream.
 	// It blocks until a new stream can be opened.
 	// If the error is non-nil, it satisfies the net.Error interface.
-	// If the session was closed due to a timeout, Timeout() will be true.
+	// If the connection was closed due to a timeout, Timeout() will be true.
 	OpenStreamSync(context.Context) (Stream, error)
 	// OpenUniStream opens a new outgoing unidirectional QUIC stream.
 	// If the error is non-nil, it satisfies the net.Error interface.
 	// When reaching the peer's stream limit, Temporary() will be true.
-	// If the session was closed due to a timeout, Timeout() will be true.
+	// If the connection was closed due to a timeout, Timeout() will be true.
 	OpenUniStream() (SendStream, error)
 	// OpenUniStreamSync opens a new outgoing unidirectional QUIC stream.
 	// It blocks until a new stream can be opened.
 	// If the error is non-nil, it satisfies the net.Error interface.
-	// If the session was closed due to a timeout, Timeout() will be true.
+	// If the connection was closed due to a timeout, Timeout() will be true.
 	OpenUniStreamSync(context.Context) (SendStream, error)
 	// LocalAddr returns the local address.
 	LocalAddr() net.Addr
@@ -184,42 +174,56 @@ type Session interface {
 	// CloseWithError closes the connection with an error.
 	// The error string will be sent to the peer.
 	CloseWithError(ApplicationErrorCode, string) error
-	// The context is cancelled when the session is closed.
-	// Warning: This API should not be considered stable and might change soon.
+	// The context is cancelled when the connection is closed.
 	Context() context.Context
 	// ConnectionState returns basic details about the QUIC connection.
 	// It blocks until the handshake completes.
 	// Warning: This API should not be considered stable and might change soon.
 	ConnectionState() ConnectionState
 
-	// SendMessage sends a message as a datagram.
-	// See https://datatracker.ietf.org/doc/draft-pauly-quic-datagram/.
+	// SendMessage sends a message as a datagram, as specified in RFC 9221.
 	SendMessage([]byte) error
-	// ReceiveMessage gets a message received in a datagram.
-	// See https://datatracker.ietf.org/doc/draft-pauly-quic-datagram/.
+	// ReceiveMessage gets a message received in a datagram, as specified in RFC 9221.
 	ReceiveMessage() ([]byte, error)
 }
 
-// An EarlySession is a session that is handshaking.
+// An EarlyConnection is a connection that is handshaking.
 // Data sent during the handshake is encrypted using the forward secure keys.
 // When using client certificates, the client's identity is only verified
 // after completion of the handshake.
-type EarlySession interface {
-	Session
+type EarlyConnection interface {
+	Connection
 
 	// HandshakeComplete blocks until the handshake completes (or fails).
 	// Data sent before completion of the handshake is encrypted with 1-RTT keys.
 	// Note that the client's identity hasn't been verified yet.
 	HandshakeComplete() context.Context
 
-	NextSession() Session
+	NextConnection() Connection
+}
+
+// A ConnectionIDGenerator is an interface that allows clients to implement their own format
+// for the Connection IDs that servers/clients use as SrcConnectionID in QUIC packets.
+//
+// Connection IDs generated by an implementation should always produce IDs of constant size.
+type ConnectionIDGenerator interface {
+	// GenerateConnectionID generates a new ConnectionID.
+	// Generated ConnectionIDs should be unique and observers should not be able to correlate two ConnectionIDs.
+	GenerateConnectionID() ([]byte, error)
+
+	// ConnectionIDLen tells what is the length of the ConnectionIDs generated by the implementation of
+	// this interface.
+	// Effectively, this means that implementations of ConnectionIDGenerator must always return constant-size
+	// connection IDs. Valid lengths are between 0 and 20 and calls to GenerateConnectionID.
+	// 0-length ConnectionsIDs can be used when an endpoint (server or client) does not require multiplexing connections
+	// in the presence of a connection migration environment.
+	ConnectionIDLen() int
 }
 
 // Config contains all configuration data needed for a QUIC server or client.
 type Config struct {
 	// The QUIC versions that can be negotiated.
 	// If not set, it uses all versions available.
-	// Warning: This API should not be considered stable and will change soon.
 	Versions []VersionNumber
 	// The length of the connection ID in bytes.
 	// It can be 0, or any value between 4 and 18.
@@ -228,6 +232,11 @@ type Config struct {
 	// If used for a server, or dialing on a packet conn, a 4 byte connection ID will be used.
 	// When dialing on a packet conn, the ConnectionIDLength value must be the same for every Dial call.
 	ConnectionIDLength int
+	// An optional ConnectionIDGenerator to be used for ConnectionIDs generated during the lifecycle of a QUIC connection.
+	// The goal is to give some control on how connection IDs, which can be useful in some scenarios, in particular for servers.
+	// By default, if not provided, random connection IDs with the length given by ConnectionIDLength is used.
+	// Otherwise, if one is provided, then ConnectionIDLength is ignored.
+	ConnectionIDGenerator ConnectionIDGenerator
 	// HandshakeIdleTimeout is the idle timeout before completion of the handshake.
 	// Specifically, if we don't receive any packet from the peer within this time, the connection attempt is aborted.
 	// If this value is zero, the timeout is set to 5 seconds.
@@ -238,14 +247,18 @@ type Config struct {
 	// If the timeout is exceeded, the connection is closed.
 	// If this value is zero, the timeout is set to 30 seconds.
 	MaxIdleTimeout time.Duration
-	// AcceptToken determines if a Token is accepted.
-	// It is called with token = nil if the client didn't send a token.
-	// If not set, a default verification function is used:
-	// * it verifies that the address matches, and
-	//   * if the token is a retry token, that it was issued within the last 5 seconds
-	//   * else, that it was issued within the last 24 hours.
-	// This option is only valid for the server.
-	AcceptToken func(clientAddr net.Addr, token *Token) bool
+	// RequireAddressValidation determines if a QUIC Retry packet is sent.
+	// This allows the server to verify the client's address, at the cost of increasing the handshake latency by 1 RTT.
+	// See https://datatracker.ietf.org/doc/html/rfc9000#section-8 for details.
+	// If not set, every client is forced to prove its remote address.
+	RequireAddressValidation func(net.Addr) bool
+	// MaxRetryTokenAge is the maximum age of a Retry token.
+	// If not set, it defaults to 5 seconds. Only valid for a server.
+	MaxRetryTokenAge time.Duration
+	// MaxTokenAge is the maximum age of the token presented during the handshake,
+	// for tokens that were issued on a previous connection.
+	// If not set, it defaults to 24 hours. Only valid for a server.
+	MaxTokenAge time.Duration
 	// The TokenStore stores tokens received from the server.
 	// Tokens are used to skip address validation on future connection attempts.
 	// The key used to store tokens is the ServerName from the tls.Config, if set
@@ -271,9 +284,9 @@ type Config struct {
 	// to increase the connection flow control window.
 	// If set, the caller can prevent an increase of the window. Typically, it would do so to
 	// limit the memory usage.
-	// To avoid deadlocks, it is not valid to call other functions on the session or on streams
+	// To avoid deadlocks, it is not valid to call other functions on the connection or on streams
 	// in this callback.
-	AllowConnectionWindowIncrease func(sess Session, delta uint64) bool
+	AllowConnectionWindowIncrease func(sess Connection, delta uint64) bool
 	// MaxIncomingStreams is the maximum number of concurrent bidirectional streams that a peer is allowed to open.
 	// Values above 2^60 are invalid.
 	// If not set, it will default to 100.
@@ -287,8 +300,10 @@ type Config struct {
 	// The StatelessResetKey is used to generate stateless reset tokens.
 	// If no key is configured, sending of stateless resets is disabled.
 	StatelessResetKey []byte
-	// KeepAlive defines whether this peer will periodically send a packet to keep the connection alive.
-	KeepAlive bool
+	// KeepAlivePeriod defines whether this peer will periodically send a packet to keep the connection alive.
+	// If set to 0, then no keep alive is sent. Otherwise, the keep alive is sent on that period (or at most
+	// every half of MaxIdleTimeout, whichever is smaller).
+	KeepAlivePeriod time.Duration
 	// DisablePathMTUDiscovery disables Path MTU Discovery (RFC 8899).
 	// Packets will then be at most 1252 (IPv4) / 1232 (IPv6) bytes in size.
 	// Note that if Path MTU discovery is causing issues on your system, please open a new issue
@@ -345,21 +360,21 @@ type ConnectionState struct {
 
 // A Listener for incoming QUIC connections
 type Listener interface {
-	// Close the server. All active sessions will be closed.
+	// Close the server. All active connections will be closed.
 	Close() error
 	// Addr returns the local network addr that the server is listening on.
 	Addr() net.Addr
-	// Accept returns new sessions. It should be called in a loop.
-	Accept(context.Context) (Session, error)
+	// Accept returns new connections. It should be called in a loop.
+	Accept(context.Context) (Connection, error)
 }
 
 // An EarlyListener listens for incoming QUIC connections,
 // and returns them before the handshake completes.
 type EarlyListener interface {
-	// Close the server. All active sessions will be closed.
+	// Close the server. All active connections will be closed.
 	Close() error
 	// Addr returns the local network addr that the server is listening on.
 	Addr() net.Addr
-	// Accept returns new early sessions. It should be called in a loop.
-	Accept(context.Context) (EarlySession, error)
+	// Accept returns new early connections. It should be called in a loop.
+	Accept(context.Context) (EarlyConnection, error)
 }

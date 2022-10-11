@@ -18,7 +18,7 @@ var _ = Describe("STOP_SENDING frame", func() {
 			data = append(data, encodeVarInt(0xdecafbad)...) // stream ID
 			data = append(data, encodeVarInt(0x1337)...)     // error code
 			b := bytes.NewReader(data)
-			frame, err := parseStopSendingFrame(b, versionIETFFrames)
+			frame, err := parseStopSendingFrame(b, protocol.Version1)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(frame.StreamID).To(Equal(protocol.StreamID(0xdecafbad)))
 			Expect(frame.ErrorCode).To(Equal(qerr.StreamErrorCode(0x1337)))
@@ -29,10 +29,10 @@ var _ = Describe("STOP_SENDING frame", func() {
 			data := []byte{0x5}
 			data = append(data, encodeVarInt(0xdecafbad)...) // stream ID
 			data = append(data, encodeVarInt(0x123456)...)   // error code
-			_, err := parseStopSendingFrame(bytes.NewReader(data), versionIETFFrames)
+			_, err := parseStopSendingFrame(bytes.NewReader(data), protocol.Version1)
 			Expect(err).NotTo(HaveOccurred())
 			for i := range data {
-				_, err := parseStopSendingFrame(bytes.NewReader(data[:i]), versionIETFFrames)
+				_, err := parseStopSendingFrame(bytes.NewReader(data[:i]), protocol.Version1)
 				Expect(err).To(HaveOccurred())
 			}
 		})
@@ -45,7 +45,7 @@ var _ = Describe("STOP_SENDING frame", func() {
 				ErrorCode: 0xdecafbad,
 			}
 			buf := &bytes.Buffer{}
-			Expect(frame.Write(buf, versionIETFFrames)).To(Succeed())
+			Expect(frame.Write(buf, protocol.Version1)).To(Succeed())
 			expected := []byte{0x5}
 			expected = append(expected, encodeVarInt(0xdeadbeefcafe)...)
 			expected = append(expected, encodeVarInt(0xdecafbad)...)
@@ -57,7 +57,7 @@ var _ = Describe("STOP_SENDING frame", func() {
 				StreamID:  0xdeadbeef,
 				ErrorCode: 0x1234567,
 			}
-			Expect(frame.Length(versionIETFFrames)).To(Equal(1 + quicvarint.Len(0xdeadbeef) + quicvarint.Len(0x1234567)))
+			Expect(frame.Length(protocol.Version1)).To(Equal(1 + quicvarint.Len(0xdeadbeef) + quicvarint.Len(0x1234567)))
 		})
 	})
 })

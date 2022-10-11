@@ -6,7 +6,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"io/ioutil"
 	mrand "math/rand"
 	"net"
 	"time"
@@ -90,7 +89,7 @@ var _ = Describe("Handshake tests", func() {
 					return nil
 				}
 				fmt.Fprintf(GinkgoWriter, "%s qlog tracing connection %x\n", p, connectionID)
-				return utils.NewBufferedWriteCloser(bufio.NewWriter(&bytes.Buffer{}), ioutil.NopCloser(nil))
+				return utils.NewBufferedWriteCloser(bufio.NewWriter(&bytes.Buffer{}), io.NopCloser(nil))
 			}))
 		}
 		if enableCustomTracer {
@@ -115,9 +114,9 @@ var _ = Describe("Handshake tests", func() {
 				ln, err := quic.ListenAddr("localhost:0", getTLSConfig(), quicServerConf)
 				Expect(err).ToNot(HaveOccurred())
 				serverChan <- ln
-				sess, err := ln.Accept(context.Background())
+				conn, err := ln.Accept(context.Background())
 				Expect(err).ToNot(HaveOccurred())
-				str, err := sess.OpenUniStream()
+				str, err := conn.OpenUniStream()
 				Expect(err).ToNot(HaveOccurred())
 				_, err = str.Write(PRData)
 				Expect(err).ToNot(HaveOccurred())
@@ -127,14 +126,14 @@ var _ = Describe("Handshake tests", func() {
 			ln := <-serverChan
 			defer ln.Close()
 
-			sess, err := quic.DialAddr(
+			conn, err := quic.DialAddr(
 				fmt.Sprintf("localhost:%d", ln.Addr().(*net.UDPAddr).Port),
 				getTLSClientConfig(),
 				quicClientConf,
 			)
 			Expect(err).ToNot(HaveOccurred())
-			defer sess.CloseWithError(0, "")
-			str, err := sess.AcceptUniStream(context.Background())
+			defer conn.CloseWithError(0, "")
+			str, err := conn.AcceptUniStream(context.Background())
 			Expect(err).ToNot(HaveOccurred())
 			data, err := io.ReadAll(str)
 			Expect(err).ToNot(HaveOccurred())

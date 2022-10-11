@@ -29,7 +29,7 @@ var _ = Describe("SentPacketHandler", func() {
 	JustBeforeEach(func() {
 		lostPackets = nil
 		rttStats := utils.NewRTTStats()
-		handler = newSentPacketHandler(42, protocol.InitialPacketSizeIPv4, rttStats, perspective, nil, utils.DefaultLogger)
+		handler = newSentPacketHandler(42, protocol.InitialPacketSizeIPv4, rttStats, false, perspective, nil, utils.DefaultLogger)
 		streamFrame = wire.StreamFrame{
 			StreamID: 5,
 			Data:     []byte{0x13, 0x37},
@@ -941,6 +941,26 @@ var _ = Describe("SentPacketHandler", func() {
 			Expect(handler.GetLossDetectionTimeout()).ToNot(BeZero())
 			handler.ReceivedAck(&wire.AckFrame{AckRanges: []wire.AckRange{{Smallest: 3, Largest: 4}}}, protocol.EncryptionHandshake, time.Now())
 			Expect(handler.GetLossDetectionTimeout()).To(BeZero())
+		})
+	})
+
+	Context("amplification limit, for the server, with validated address", func() {
+		JustBeforeEach(func() {
+			rttStats := utils.NewRTTStats()
+			handler = newSentPacketHandler(42, protocol.InitialPacketSizeIPv4, rttStats, true, perspective, nil, utils.DefaultLogger)
+		})
+
+		It("do not limits the window", func() {
+			handler.ReceivedBytes(0)
+			Expect(handler.SendMode()).To(Equal(SendAny))
+			handler.SentPacket(&Packet{
+				PacketNumber:    1,
+				Length:          900,
+				EncryptionLevel: protocol.EncryptionInitial,
+				Frames:          []Frame{{Frame: &wire.PingFrame{}}},
+				SendTime:        time.Now(),
+			})
+			Expect(handler.SendMode()).To(Equal(SendAny))
 		})
 	})
 

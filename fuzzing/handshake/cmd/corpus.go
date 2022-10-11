@@ -60,9 +60,9 @@ func newRunner(client, server *handshake.CryptoSetup) *runner {
 func (r *runner) OnReceivedParams(*wire.TransportParameters) {}
 func (r *runner) OnHandshakeComplete()                       {}
 func (r *runner) OnError(err error) {
-	log.Fatal("runner error:", err)
 	(*r.client).Close()
 	(*r.server).Close()
+	log.Fatal("runner error:", err)
 }
 func (r *runner) DropKeys(protocol.EncryptionLevel) {}
 

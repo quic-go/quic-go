@@ -1,5 +1,4 @@
-//go:build linux
-// +build linux
+//go:build windows
 
 package quic
 
@@ -8,16 +7,22 @@ import (
 	"syscall"
 
 	"github.com/Psiphon-Labs/quic-go/internal/utils"
-	"golang.org/x/sys/unix"
+	"golang.org/x/sys/windows"
+)
+
+const (
+	// same for both IPv4 and IPv6 on Windows
+	// https://microsoft.github.io/windows-docs-rs/doc/windows/Win32/Networking/WinSock/constant.IP_DONTFRAG.html
+	// https://microsoft.github.io/windows-docs-rs/doc/windows/Win32/Networking/WinSock/constant.IPV6_DONTFRAG.html
+	IP_DONTFRAGMENT = 14
+	IPV6_DONTFRAG   = 14
 )
 
 func setDF(rawConn syscall.RawConn) error {
-	// Enabling IP_MTU_DISCOVER will force the kernel to return "sendto: message too long"
-	// and the datagram will not be fragmented
 	var errDFIPv4, errDFIPv6 error
 	if err := rawConn.Control(func(fd uintptr) {
-		errDFIPv4 = unix.SetsockoptInt(int(fd), unix.IPPROTO_IP, unix.IP_MTU_DISCOVER, unix.IP_PMTUDISC_DO)
-		errDFIPv6 = unix.SetsockoptInt(int(fd), unix.IPPROTO_IPV6, unix.IPV6_MTU_DISCOVER, unix.IPV6_PMTUDISC_DO)
+		errDFIPv4 = windows.SetsockoptInt(windows.Handle(fd), windows.IPPROTO_IP, IP_DONTFRAGMENT, 1)
+		errDFIPv6 = windows.SetsockoptInt(windows.Handle(fd), windows.IPPROTO_IPV6, IPV6_DONTFRAG, 1)
 	}); err != nil {
 		return err
 	}
@@ -35,6 +40,6 @@ func setDF(rawConn syscall.RawConn) error {
 }
 
 func isMsgSizeErr(err error) bool {
-	// https://man7.org/linux/man-pages/man7/udp.7.html
-	return errors.Is(err, unix.EMSGSIZE)
+	// https://docs.microsoft.com/en-us/windows/win32/winsock/windows-sockets-error-codes-2
+	return errors.Is(err, windows.WSAEMSGSIZE)
 }

@@ -18,10 +18,12 @@ import (
 
 var _ = Describe("Streams Map (outgoing)", func() {
 	var (
-		m          *outgoingItemsMap
-		newItem    func(num protocol.StreamNum) item
+		m          *outgoingStreamsMap[*mockGenericStream]
+		newStr     func(num protocol.StreamNum) *mockGenericStream
 		mockSender *MockStreamSender
 	)
+
+	const streamType = 42
 
 	// waitForEnqueued waits until there are n go routines waiting on OpenStreamSync()
 	waitForEnqueued := func(n int) {
@@ -33,11 +35,11 @@ var _ = Describe("Streams Map (outgoing)", func() {
 	}
 
 	BeforeEach(func() {
-		newItem = func(num protocol.StreamNum) item {
+		newStr = func(num protocol.StreamNum) *mockGenericStream {
 			return &mockGenericStream{num: num}
 		}
 		mockSender = NewMockStreamSender(mockCtrl)
-		m = newOutgoingItemsMap(newItem, mockSender.queueControlFrame)
+		m = newOutgoingStreamsMap[*mockGenericStream](streamType, newStr, mockSender.queueControlFrame)
 	})
 
 	Context("no stream ID limit", func() {
@@ -48,10 +50,10 @@ var _ = Describe("Streams Map (outgoing)", func() {
 		It("opens streams", func() {
 			str, err := m.OpenStream()
 			Expect(err).ToNot(HaveOccurred())
-			Expect(str.(*mockGenericStream).num).To(Equal(protocol.StreamNum(1)))
+			Expect(str.num).To(Equal(protocol.StreamNum(1)))
 			str, err = m.OpenStream()
 			Expect(err).ToNot(HaveOccurred())
-			Expect(str.(*mockGenericStream).num).To(Equal(protocol.StreamNum(2)))
+			Expect(str.num).To(Equal(protocol.StreamNum(2)))
 		})
 
 		It("doesn't open streams after it has been closed", func() {
@@ -66,7 +68,7 @@ var _ = Describe("Streams Map (outgoing)", func() {
 			Expect(err).ToNot(HaveOccurred())
 			str, err := m.GetStream(1)
 			Expect(err).ToNot(HaveOccurred())
-			Expect(str.(*mockGenericStream).num).To(Equal(protocol.StreamNum(1)))
+			Expect(str.num).To(Equal(protocol.StreamNum(1)))
 		})
 
 		It("errors when trying to get a stream that has not yet been opened", func() {
@@ -107,10 +109,10 @@ var _ = Describe("Streams Map (outgoing)", func() {
 			Expect(err).ToNot(HaveOccurred())
 			testErr := errors.New("test err")
 			m.CloseWithError(testErr)
-			Expect(str1.(*mockGenericStream).closed).To(BeTrue())
-			Expect(str1.(*mockGenericStream).closeErr).To(MatchError(testErr))
-			Expect(str2.(*mockGenericStream).closed).To(BeTrue())
-			Expect(str2.(*mockGenericStream).closeErr).To(MatchError(testErr))
+			Expect(str1.closed).To(BeTrue())
+			Expect(str1.closeErr).To(MatchError(testErr))
+			Expect(str2.closed).To(BeTrue())
+			Expect(str2.closeErr).To(MatchError(testErr))
 		})
 
 		It("updates the send window", func() {
@@ -119,8 +121,8 @@ var _ = Describe("Streams Map (outgoing)", func() {
 			str2, err := m.OpenStream()
 			Expect(err).ToNot(HaveOccurred())
 			m.UpdateSendWindow(1337)
-			Expect(str1.(*mockGenericStream).sendWindow).To(BeEquivalentTo(1337))
-			Expect(str2.(*mockGenericStream).sendWindow).To(BeEquivalentTo(1337))
+			Expect(str1.sendWindow).To(BeEquivalentTo(1337))
+			Expect(str2.sendWindow).To(BeEquivalentTo(1337))
 		})
 	})
 
@@ -145,7 +147,7 @@ var _ = Describe("Streams Map (outgoing)", func() {
 				defer GinkgoRecover()
 				str, err := m.OpenStreamSync(context.Background())
 				Expect(err).ToNot(HaveOccurred())
-				Expect(str.(*mockGenericStream).num).To(Equal(protocol.StreamNum(1)))
+				Expect(str.num).To(Equal(protocol.StreamNum(1)))
 				close(done)
 			}()
 			waitForEnqueued(1)
@@ -173,7 +175,7 @@ var _ = Describe("Streams Map (outgoing)", func() {
 			m.SetMaxStream(1000)
 			str, err := m.OpenStream()
 			Expect(err).ToNot(HaveOccurred())
-			Expect(str.(*mockGenericStream).num).To(Equal(protocol.StreamNum(1)))
+			Expect(str.num).To(Equal(protocol.StreamNum(1)))
 		})
 
 		It("opens streams in the right order", func() {
@@ -183,7 +185,7 @@ var _ = Describe("Streams Map (outgoing)", func() {
 				defer GinkgoRecover()
 				str, err := m.OpenStreamSync(context.Background())
 				Expect(err).ToNot(HaveOccurred())
-				Expect(str.(*mockGenericStream).num).To(Equal(protocol.StreamNum(1)))
+				Expect(str.num).To(Equal(protocol.StreamNum(1)))
 				close(done1)
 			}()
 			waitForEnqueued(1)
@@ -193,7 +195,7 @@ var _ = Describe("Streams Map (outgoing)", func() {
 				defer GinkgoRecover()
 				str, err := m.OpenStreamSync(context.Background())
 				Expect(err).ToNot(HaveOccurred())
-				Expect(str.(*mockGenericStream).num).To(Equal(protocol.StreamNum(2)))
+				Expect(str.num).To(Equal(protocol.StreamNum(2)))
 				close(done2)
 			}()
 			waitForEnqueued(2)
@@ -212,7 +214,7 @@ var _ = Describe("Streams Map (outgoing)", func() {
 				defer GinkgoRecover()
 				str, err := m.OpenStreamSync(context.Background())
 				Expect(err).ToNot(HaveOccurred())
-				Expect(str.(*mockGenericStream).num).To(Equal(protocol.StreamNum(1)))
+				Expect(str.num).To(Equal(protocol.StreamNum(1)))
 				close(done1)
 			}()
 			waitForEnqueued(1)
@@ -232,7 +234,7 @@ var _ = Describe("Streams Map (outgoing)", func() {
 				defer GinkgoRecover()
 				str, err := m.OpenStreamSync(context.Background())
 				Expect(err).ToNot(HaveOccurred())
-				Expect(str.(*mockGenericStream).num).To(Equal(protocol.StreamNum(2)))
+				Expect(str.num).To(Equal(protocol.StreamNum(2)))
 				close(done3)
 			}()
 			waitForEnqueued(3)
@@ -284,7 +286,7 @@ var _ = Describe("Streams Map (outgoing)", func() {
 				defer GinkgoRecover()
 				str, err := m.OpenStreamSync(context.Background())
 				Expect(err).ToNot(HaveOccurred())
-				Expect(str.(*mockGenericStream).num).To(Equal(protocol.StreamNum(1)))
+				Expect(str.num).To(Equal(protocol.StreamNum(1)))
 				close(openedSync)
 			}()
 			waitForEnqueued(1)
@@ -297,7 +299,7 @@ var _ = Describe("Streams Map (outgoing)", func() {
 				for {
 					str, err := m.OpenStream()
 					if err == nil {
-						Expect(str.(*mockGenericStream).num).To(Equal(protocol.StreamNum(2)))
+						Expect(str.num).To(Equal(protocol.StreamNum(2)))
 						close(openend)
 						return
 					}
@@ -340,7 +342,7 @@ var _ = Describe("Streams Map (outgoing)", func() {
 			Expect(err).ToNot(HaveOccurred())
 			str, err := m.OpenStream()
 			Expect(err).ToNot(HaveOccurred())
-			Expect(str.(*mockGenericStream).num).To(Equal(protocol.StreamNum(2)))
+			Expect(str.num).To(Equal(protocol.StreamNum(2)))
 		})
 
 		It("queues a STREAMS_BLOCKED frame if no stream can be opened", func() {
@@ -352,7 +354,9 @@ var _ = Describe("Streams Map (outgoing)", func() {
 			}
 
 			mockSender.EXPECT().queueControlFrame(gomock.Any()).Do(func(f wire.Frame) {
-				Expect(f.(*wire.StreamsBlockedFrame).StreamLimit).To(BeEquivalentTo(6))
+				bf := f.(*wire.StreamsBlockedFrame)
+				Expect(bf.Type).To(BeEquivalentTo(streamType))
+				Expect(bf.StreamLimit).To(BeEquivalentTo(6))
 			})
 			_, err := m.OpenStream()
 			Expect(err).To(HaveOccurred())
@@ -423,7 +427,7 @@ var _ = Describe("Streams Map (outgoing)", func() {
 					defer close(doneChan)
 					str, err := m.OpenStreamSync(context.Background())
 					Expect(err).ToNot(HaveOccurred())
-					Expect(str.(*mockGenericStream).num).To(Equal(id))
+					Expect(str.num).To(Equal(id))
 				}(c, protocol.StreamNum(i))
 				waitForEnqueued(i)
 			}
@@ -449,7 +453,7 @@ var _ = Describe("Streams Map (outgoing)", func() {
 					Expect(err).To(HaveOccurred())
 					Expect(err.Error()).To(Equal(errTooManyOpenStreams.Error()))
 				} else {
-					Expect(str.(*mockGenericStream).num).To(Equal(protocol.StreamNum(n + 1)))
+					Expect(str.num).To(Equal(protocol.StreamNum(n + 1)))
 				}
 			}
 			Expect(blockedAt).To(Equal(limits))
@@ -499,7 +503,7 @@ var _ = Describe("Streams Map (outgoing)", func() {
 					}
 					Expect(err).ToNot(HaveOccurred())
 					mutex.Lock()
-					streamIDs = append(streamIDs, int(str.(*mockGenericStream).num))
+					streamIDs = append(streamIDs, int(str.num))
 					mutex.Unlock()
 				}(c, protocol.StreamNum(i))
 				waitForEnqueued(i)

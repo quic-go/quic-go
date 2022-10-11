@@ -12,7 +12,7 @@ import (
 	"golang.org/x/sys/windows"
 )
 
-func newConn(c OOBCapablePacketConn) (connection, error) {
+func newConn(c OOBCapablePacketConn) (rawConn, error) {
 	return &basicConn{PacketConn: c}, nil
 }
 

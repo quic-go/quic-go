@@ -22,7 +22,7 @@ var _ = Describe("Request", func() {
 		Expect(req.Method).To(Equal("GET"))
 		Expect(req.URL.Path).To(Equal("/foo"))
 		Expect(req.URL.Host).To(BeEmpty())
-		Expect(req.Proto).To(Equal("HTTP/3"))
+		Expect(req.Proto).To(Equal("HTTP/3.0"))
 		Expect(req.ProtoMajor).To(Equal(3))
 		Expect(req.ProtoMinor).To(BeZero())
 		Expect(req.ContentLength).To(Equal(int64(42)))
@@ -64,7 +64,7 @@ var _ = Describe("Request", func() {
 		}))
 	})
 
-	It("handles other headers", func() {
+	It("handles Other headers", func() {
 		headers := []qpack.HeaderField{
 			{Name: ":path", Value: "/foo"},
 			{Name: ":authority", Value: "quic.clemente.io"},
@@ -79,17 +79,6 @@ var _ = Describe("Request", func() {
 			"Cache-Control":    []string{"max-age=0"},
 			"Duplicate-Header": []string{"1", "2"},
 		}))
-	})
-
-	It("handles CONNECT method", func() {
-		headers := []qpack.HeaderField{
-			{Name: ":authority", Value: "quic.clemente.io"},
-			{Name: ":method", Value: http.MethodConnect},
-		}
-		req, err := requestFromHeaders(headers)
-		Expect(err).NotTo(HaveOccurred())
-		Expect(req.Method).To(Equal(http.MethodConnect))
-		Expect(req.RequestURI).To(Equal("quic.clemente.io"))
 	})
 
 	It("errors with missing path", func() {
@@ -119,22 +108,64 @@ var _ = Describe("Request", func() {
 		Expect(err).To(MatchError(":path, :authority and :method must not be empty"))
 	})
 
-	It("errors with missing authority in CONNECT method", func() {
-		headers := []qpack.HeaderField{
-			{Name: ":method", Value: http.MethodConnect},
-		}
-		_, err := requestFromHeaders(headers)
-		Expect(err).To(MatchError(":path must be empty and :authority must not be empty"))
+	Context("regular HTTP CONNECT", func() {
+		It("handles CONNECT method", func() {
+			headers := []qpack.HeaderField{
+				{Name: ":authority", Value: "quic.clemente.io"},
+				{Name: ":method", Value: http.MethodConnect},
+			}
+			req, err := requestFromHeaders(headers)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(req.Method).To(Equal(http.MethodConnect))
+			Expect(req.RequestURI).To(Equal("quic.clemente.io"))
+		})
+
+		It("errors with missing authority in CONNECT method", func() {
+			headers := []qpack.HeaderField{
+				{Name: ":method", Value: http.MethodConnect},
+			}
+			_, err := requestFromHeaders(headers)
+			Expect(err).To(MatchError(":path must be empty and :authority must not be empty"))
+		})
+
+		It("errors with extra path in CONNECT method", func() {
+			headers := []qpack.HeaderField{
+				{Name: ":path", Value: "/foo"},
+				{Name: ":authority", Value: "quic.clemente.io"},
+				{Name: ":method", Value: http.MethodConnect},
+			}
+			_, err := requestFromHeaders(headers)
+			Expect(err).To(MatchError(":path must be empty and :authority must not be empty"))
+		})
 	})
 
-	It("errors with extra path in CONNECT method", func() {
-		headers := []qpack.HeaderField{
-			{Name: ":path", Value: "/foo"},
-			{Name: ":authority", Value: "quic.clemente.io"},
-			{Name: ":method", Value: http.MethodConnect},
-		}
-		_, err := requestFromHeaders(headers)
-		Expect(err).To(MatchError(":path must be empty and :authority must not be empty"))
+	Context("Extended CONNECT", func() {
+		It("handles Extended CONNECT method", func() {
+			headers := []qpack.HeaderField{
+				{Name: ":protocol", Value: "webtransport"},
+				{Name: ":scheme", Value: "ftp"},
+				{Name: ":method", Value: http.MethodConnect},
+				{Name: ":authority", Value: "quic.clemente.io"},
+				{Name: ":path", Value: "/foo?val=1337"},
+			}
+			req, err := requestFromHeaders(headers)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(req.Method).To(Equal(http.MethodConnect))
+			Expect(req.Proto).To(Equal("webtransport"))
+			Expect(req.URL.String()).To(Equal("ftp://quic.clemente.io/foo?val=1337"))
+			Expect(req.URL.Query().Get("val")).To(Equal("1337"))
+		})
+
+		It("errors with missing scheme", func() {
+			headers := []qpack.HeaderField{
+				{Name: ":protocol", Value: "webtransport"},
+				{Name: ":method", Value: http.MethodConnect},
+				{Name: ":authority", Value: "quic.clemente.io"},
+				{Name: ":path", Value: "/foo"},
+			}
+			_, err := requestFromHeaders(headers)
+			Expect(err).To(MatchError("extended CONNECT: :scheme, :path and :authority must not be empty"))
+		})
 	})
 
 	Context("extracting the hostname from a request", func() {

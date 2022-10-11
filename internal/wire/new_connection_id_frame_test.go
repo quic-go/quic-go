@@ -20,7 +20,7 @@ var _ = Describe("NEW_CONNECTION_ID frame", func() {
 			data = append(data, []byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}...) // connection ID
 			data = append(data, []byte("deadbeefdecafbad")...)            // stateless reset token
 			b := bytes.NewReader(data)
-			frame, err := parseNewConnectionIDFrame(b, versionIETFFrames)
+			frame, err := parseNewConnectionIDFrame(b, protocol.Version1)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(frame.SequenceNumber).To(Equal(uint64(0xdeadbeef)))
 			Expect(frame.RetirePriorTo).To(Equal(uint64(0xcafe)))
@@ -36,7 +36,7 @@ var _ = Describe("NEW_CONNECTION_ID frame", func() {
 			data = append(data, []byte{1, 2, 3}...)
 			data = append(data, []byte("deadbeefdecafbad")...) // stateless reset token
 			b := bytes.NewReader(data)
-			_, err := parseNewConnectionIDFrame(b, versionIETFFrames)
+			_, err := parseNewConnectionIDFrame(b, protocol.Version1)
 			Expect(err).To(MatchError("Retire Prior To value (1001) larger than Sequence Number (1000)"))
 		})
 
@@ -48,7 +48,7 @@ var _ = Describe("NEW_CONNECTION_ID frame", func() {
 			data = append(data, []byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21}...) // connection ID
 			data = append(data, []byte("deadbeefdecafbad")...)                                                        // stateless reset token
 			b := bytes.NewReader(data)
-			_, err := parseNewConnectionIDFrame(b, versionIETFFrames)
+			_, err := parseNewConnectionIDFrame(b, protocol.Version1)
 			Expect(err).To(MatchError("invalid connection ID length: 21"))
 		})
 
@@ -59,10 +59,10 @@ var _ = Describe("NEW_CONNECTION_ID frame", func() {
 			data = append(data, 10)                                       // connection ID length
 			data = append(data, []byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}...) // connection ID
 			data = append(data, []byte("deadbeefdecafbad")...)            // stateless reset token
-			_, err := parseNewConnectionIDFrame(bytes.NewReader(data), versionIETFFrames)
+			_, err := parseNewConnectionIDFrame(bytes.NewReader(data), protocol.Version1)
 			Expect(err).NotTo(HaveOccurred())
 			for i := range data {
-				_, err := parseNewConnectionIDFrame(bytes.NewReader(data[0:i]), versionIETFFrames)
+				_, err := parseNewConnectionIDFrame(bytes.NewReader(data[0:i]), protocol.Version1)
 				Expect(err).To(MatchError(io.EOF))
 			}
 		})
@@ -78,7 +78,7 @@ var _ = Describe("NEW_CONNECTION_ID frame", func() {
 				StatelessResetToken: token,
 			}
 			b := &bytes.Buffer{}
-			Expect(frame.Write(b, versionIETFFrames)).To(Succeed())
+			Expect(frame.Write(b, protocol.Version1)).To(Succeed())
 			expected := []byte{0x18}
 			expected = append(expected, encodeVarInt(0x1337)...)
 			expected = append(expected, encodeVarInt(0x42)...)
@@ -97,8 +97,8 @@ var _ = Describe("NEW_CONNECTION_ID frame", func() {
 				StatelessResetToken: token,
 			}
 			b := &bytes.Buffer{}
-			Expect(frame.Write(b, versionIETFFrames)).To(Succeed())
-			Expect(frame.Length(versionIETFFrames)).To(BeEquivalentTo(b.Len()))
+			Expect(frame.Write(b, protocol.Version1)).To(Succeed())
+			Expect(frame.Length(protocol.Version1)).To(BeEquivalentTo(b.Len()))
 		})
 	})
 })

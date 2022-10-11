@@ -1,14 +1,11 @@
 package self_test
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"io"
 	mrand "math/rand"
 	"net"
-	"runtime/pprof"
-	"strings"
 	"sync/atomic"
 	"time"
 
@@ -43,12 +40,6 @@ func (c *faultyConn) WriteTo(p []byte, addr net.Addr) (int, error) {
 		return c.PacketConn.WriteTo(p, addr)
 	}
 	return 0, io.ErrClosedPipe
-}
-
-func areHandshakesRunning() bool {
-	var b bytes.Buffer
-	pprof.Lookup("goroutine").WriteTo(&b, 1)
-	return strings.Contains(b.String(), "RunHandshake")
 }
 
 var _ = Describe("Timeout tests", func() {
@@ -125,9 +116,9 @@ var _ = Describe("Timeout tests", func() {
 
 		go func() {
 			defer GinkgoRecover()
-			sess, err := server.Accept(context.Background())
+			conn, err := server.Accept(context.Background())
 			Expect(err).ToNot(HaveOccurred())
-			str, err := sess.OpenStream()
+			str, err := conn.OpenStream()
 			Expect(err).ToNot(HaveOccurred())
 			_, err = str.Write([]byte("foobar"))
 			Expect(err).ToNot(HaveOccurred())
@@ -144,15 +135,15 @@ var _ = Describe("Timeout tests", func() {
 		Expect(err).ToNot(HaveOccurred())
 		defer proxy.Close()
 
-		sess, err := quic.DialAddr(
+		conn, err := quic.DialAddr(
 			fmt.Sprintf("localhost:%d", proxy.LocalPort()),
 			getTLSClientConfig(),
 			getQuicConfig(&quic.Config{DisablePathMTUDiscovery: true, MaxIdleTimeout: idleTimeout}),
 		)
 		Expect(err).ToNot(HaveOccurred())
-		strIn, err := sess.AcceptStream(context.Background())
+		strIn, err := conn.AcceptStream(context.Background())
 		Expect(err).ToNot(HaveOccurred())
-		strOut, err := sess.OpenStream()
+		strOut, err := conn.OpenStream()
 		Expect(err).ToNot(HaveOccurred())
 		_, err = strIn.Read(make([]byte, 6))
 		Expect(err).ToNot(HaveOccurred())
@@ -167,13 +158,13 @@ var _ = Describe("Timeout tests", func() {
 		checkTimeoutError(err)
 		_, err = strOut.Read([]byte{0})
 		checkTimeoutError(err)
-		_, err = sess.OpenStream()
+		_, err = conn.OpenStream()
 		checkTimeoutError(err)
-		_, err = sess.OpenUniStream()
+		_, err = conn.OpenUniStream()
 		checkTimeoutError(err)
-		_, err = sess.AcceptStream(context.Background())
+		_, err = conn.AcceptStream(context.Background())
 		checkTimeoutError(err)
-		_, err = sess.AcceptUniStream(context.Background())
+		_, err = conn.AcceptUniStream(context.Background())
 		checkTimeoutError(err)
 	})
 
@@ -193,17 +184,17 @@ var _ = Describe("Timeout tests", func() {
 			Expect(err).ToNot(HaveOccurred())
 			defer server.Close()
 
-			serverSessionClosed := make(chan struct{})
+			serverConnClosed := make(chan struct{})
 			go func() {
 				defer GinkgoRecover()
-				sess, err := server.Accept(context.Background())
+				conn, err := server.Accept(context.Background())
 				Expect(err).ToNot(HaveOccurred())
-				sess.AcceptStream(context.Background()) // blocks until the session is closed
-				close(serverSessionClosed)
+				conn.AcceptStream(context.Background()) // blocks until the connection is closed
+				close(serverConnClosed)
 			}()
 
 			tr := newPacketTracer()
-			sess, err := quic.DialAddr(
+			conn, err := quic.DialAddr(
 				fmt.Sprintf("localhost:%d", server.Addr().(*net.UDPAddr).Port),
 				getTLSClientConfig(),
 				getQuicConfig(&quic.Config{
@@ -216,7 +207,7 @@ var _ = Describe("Timeout tests", func() {
 			done := make(chan struct{})
 			go func() {
 				defer GinkgoRecover()
-				_, err := sess.AcceptStream(context.Background())
+				_, err := conn.AcceptStream(context.Background())
 				checkTimeoutError(err)
 				close(done)
 			}()
@@ -244,11 +235,11 @@ var _ = Describe("Timeout tests", func() {
 				BeNumerically(">=", idleTimeout),
 				BeNumerically("<", idleTimeout*6/5),
 			))
-			Consistently(serverSessionClosed).ShouldNot(BeClosed())
+			Consistently(serverConnClosed).ShouldNot(BeClosed())
 
 			// make the go routine return
 			Expect(server.Close()).To(Succeed())
-			Eventually(serverSessionClosed).Should(BeClosed())
+			Eventually(serverConnClosed).Should(BeClosed())
 		})
 
 		It("times out after sending a packet", func() {
@@ -273,16 +264,16 @@ var _ = Describe("Timeout tests", func() {
 			Expect(err).ToNot(HaveOccurred())
 			defer proxy.Close()
 
-			serverSessionClosed := make(chan struct{})
+			serverConnClosed := make(chan struct{})
 			go func() {
 				defer GinkgoRecover()
-				sess, err := server.Accept(context.Background())
+				conn, err := server.Accept(context.Background())
 				Expect(err).ToNot(HaveOccurred())
-				<-sess.Context().Done() // block until the session is closed
-				close(serverSessionClosed)
+				<-conn.Context().Done() // block until the connection is closed
+				close(serverConnClosed)
 			}()
 
-			sess, err := quic.DialAddr(
+			conn, err := quic.DialAddr(
 				fmt.Sprintf("localhost:%d", proxy.LocalPort()),
 				getTLSClientConfig(),
 				getQuicConfig(&quic.Config{MaxIdleTimeout: idleTimeout, DisablePathMTUDiscovery: true}),
@@ -292,7 +283,7 @@ var _ = Describe("Timeout tests", func() {
 			// wait half the idle timeout, then send a packet
 			time.Sleep(idleTimeout / 2)
 			drop.Set(true)
-			str, err := sess.OpenUniStream()
+			str, err := conn.OpenUniStream()
 			Expect(err).ToNot(HaveOccurred())
 			_, err = str.Write([]byte("foobar"))
 			Expect(err).ToNot(HaveOccurred())
@@ -302,7 +293,7 @@ var _ = Describe("Timeout tests", func() {
 			done := make(chan struct{})
 			go func() {
 				defer GinkgoRecover()
-				_, err := sess.AcceptStream(context.Background())
+				_, err := conn.AcceptStream(context.Background())
 				checkTimeoutError(err)
 				close(done)
 			}()
@@ -312,11 +303,11 @@ var _ = Describe("Timeout tests", func() {
 				BeNumerically(">=", idleTimeout),
 				BeNumerically("<", idleTimeout*12/10),
 			))
-			Consistently(serverSessionClosed).ShouldNot(BeClosed())
+			Consistently(serverConnClosed).ShouldNot(BeClosed())
 
 			// make the go routine return
 			Expect(server.Close()).To(Succeed())
-			Eventually(serverSessionClosed).Should(BeClosed())
+			Eventually(serverConnClosed).Should(BeClosed())
 		})
 	})
 
@@ -331,13 +322,13 @@ var _ = Describe("Timeout tests", func() {
 		Expect(err).ToNot(HaveOccurred())
 		defer server.Close()
 
-		serverSessionClosed := make(chan struct{})
+		serverConnClosed := make(chan struct{})
 		go func() {
 			defer GinkgoRecover()
-			sess, err := server.Accept(context.Background())
+			conn, err := server.Accept(context.Background())
 			Expect(err).ToNot(HaveOccurred())
-			sess.AcceptStream(context.Background()) // blocks until the session is closed
-			close(serverSessionClosed)
+			conn.AcceptStream(context.Background()) // blocks until the connection is closed
+			close(serverConnClosed)
 		}()
 
 		drop := utils.AtomicBool{}
@@ -350,12 +341,12 @@ var _ = Describe("Timeout tests", func() {
 		Expect(err).ToNot(HaveOccurred())
 		defer proxy.Close()
 
-		sess, err := quic.DialAddr(
+		conn, err := quic.DialAddr(
 			fmt.Sprintf("localhost:%d", proxy.LocalPort()),
 			getTLSClientConfig(),
 			getQuicConfig(&quic.Config{
 				MaxIdleTimeout:          idleTimeout,
-				KeepAlive:               true,
+				KeepAlivePeriod:         idleTimeout / 2,
 				DisablePathMTUDiscovery: true,
 			}),
 		)
@@ -363,11 +354,11 @@ var _ = Describe("Timeout tests", func() {
 
 		// wait longer than the idle timeout
 		time.Sleep(3 * idleTimeout)
-		str, err := sess.OpenUniStream()
+		str, err := conn.OpenUniStream()
 		Expect(err).ToNot(HaveOccurred())
 		_, err = str.Write([]byte("foobar"))
 		Expect(err).ToNot(HaveOccurred())
-		Consistently(serverSessionClosed).ShouldNot(BeClosed())
+		Consistently(serverConnClosed).ShouldNot(BeClosed())
 
 		// idle timeout will still kick in if pings are dropped
 		drop.Set(true)
@@ -376,26 +367,18 @@ var _ = Describe("Timeout tests", func() {
 		checkTimeoutError(err)
 
 		Expect(server.Close()).To(Succeed())
-		Eventually(serverSessionClosed).Should(BeClosed())
+		Eventually(serverConnClosed).Should(BeClosed())
 	})
 
 	Context("faulty packet conns", func() {
 		const handshakeTimeout = time.Second / 2
 
-		BeforeEach(func() {
-			Expect(areHandshakesRunning()).To(BeFalse())
-		})
-
-		AfterEach(func() {
-			Expect(areHandshakesRunning()).To(BeFalse())
-		})
-
 		runServer := func(ln quic.Listener) error {
-			sess, err := ln.Accept(context.Background())
+			conn, err := ln.Accept(context.Background())
 			if err != nil {
 				return err
 			}
-			str, err := sess.OpenUniStream()
+			str, err := conn.OpenUniStream()
 			if err != nil {
 				return err
 			}
@@ -404,8 +387,8 @@ var _ = Describe("Timeout tests", func() {
 			return err
 		}
 
-		runClient := func(sess quic.Session) error {
-			str, err := sess.AcceptUniStream(context.Background())
+		runClient := func(conn quic.Connection) error {
+			str, err := conn.AcceptUniStream(context.Background())
 			if err != nil {
 				return err
 			}
@@ -414,7 +397,7 @@ var _ = Describe("Timeout tests", func() {
 				return err
 			}
 			Expect(data).To(Equal(PRData))
-			return sess.CloseWithError(0, "done")
+			return conn.CloseWithError(0, "done")
 		}
 
 		It("deals with an erroring packet conn, on the server side", func() {
@@ -440,7 +423,7 @@ var _ = Describe("Timeout tests", func() {
 			clientErrChan := make(chan error, 1)
 			go func() {
 				defer GinkgoRecover()
-				sess, err := quic.DialAddr(
+				conn, err := quic.DialAddr(
 					fmt.Sprintf("localhost:%d", ln.Addr().(*net.UDPAddr).Port),
 					getTLSClientConfig(),
 					getQuicConfig(&quic.Config{
@@ -453,7 +436,7 @@ var _ = Describe("Timeout tests", func() {
 					clientErrChan <- err
 					return
 				}
-				clientErrChan <- runClient(sess)
+				clientErrChan <- runClient(conn)
 			}()
 
 			var clientErr error
@@ -480,7 +463,7 @@ var _ = Describe("Timeout tests", func() {
 				getQuicConfig(&quic.Config{
 					HandshakeIdleTimeout:    handshakeTimeout,
 					MaxIdleTimeout:          handshakeTimeout,
-					KeepAlive:               true,
+					KeepAlivePeriod:         handshakeTimeout / 2,
 					DisablePathMTUDiscovery: true,
 				}),
 			)
@@ -501,7 +484,7 @@ var _ = Describe("Timeout tests", func() {
 			clientErrChan := make(chan error, 1)
 			go func() {
 				defer GinkgoRecover()
-				sess, err := quic.Dial(
+				conn, err := quic.Dial(
 					&faultyConn{PacketConn: conn, MaxPackets: maxPackets},
 					ln.Addr(),
 					"localhost",
@@ -512,7 +495,7 @@ var _ = Describe("Timeout tests", func() {
 					clientErrChan <- err
 					return
 				}
-				clientErrChan <- runClient(sess)
+				clientErrChan <- runClient(conn)
 			}()
 
 			var clientErr error

@@ -45,7 +45,7 @@ type fakeClosingListener struct {
 	cancel context.CancelFunc
 }
 
-func (ln *fakeClosingListener) Accept(ctx context.Context) (quic.EarlySession, error) {
+func (ln *fakeClosingListener) Accept(ctx context.Context) (quic.EarlyConnection, error) {
 	Expect(ctx).To(Equal(context.Background()))
 	return ln.listenerWrapper.Accept(ln.ctx)
 }
@@ -87,18 +87,14 @@ var _ = Describe("HTTP3 Server hotswap test", func() {
 		})
 
 		server1 = &http3.Server{
-			Server: &http.Server{
-				Handler:   mux1,
-				TLSConfig: testdata.GetTLSConfig(),
-			},
+			Handler:    mux1,
+			TLSConfig:  testdata.GetTLSConfig(),
 			QuicConfig: getQuicConfig(&quic.Config{Versions: versions}),
 		}
 
 		server2 = &http3.Server{
-			Server: &http.Server{
-				Handler:   mux2,
-				TLSConfig: testdata.GetTLSConfig(),
-			},
+			Handler:    mux2,
+			TLSConfig:  testdata.GetTLSConfig(),
 			QuicConfig: getQuicConfig(&quic.Config{Versions: versions}),
 		}
 
@@ -171,7 +167,7 @@ var _ = Describe("HTTP3 Server hotswap test", func() {
 				Expect(ln.listenerClosed).ToNot(BeTrue())
 				Expect(client.Transport.(*http3.RoundTripper).Close()).NotTo(HaveOccurred())
 
-				// verify that new sessions are being initiated from the second server now
+				// verify that new connections are being initiated from the second server now
 				resp, err = client.Get("https://localhost:" + port + "/hello2")
 				Expect(err).ToNot(HaveOccurred())
 				Expect(resp.StatusCode).To(Equal(200))

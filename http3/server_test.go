@@ -9,6 +9,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"runtime"
 	"sync/atomic"
 	"time"
 
@@ -91,10 +92,8 @@ var _ = Describe("Server", func() {
 
 	BeforeEach(func() {
 		s = &Server{
-			Server: &http.Server{
-				TLSConfig: testdata.GetTLSConfig(),
-			},
-			logger: utils.DefaultLogger,
+			TLSConfig: testdata.GetTLSConfig(),
+			logger:    utils.DefaultLogger,
 		}
 		origQuicListenAddr = quicListenAddr
 	})
@@ -107,7 +106,7 @@ var _ = Describe("Server", func() {
 		var (
 			qpackDecoder       *qpack.Decoder
 			str                *mockquic.MockStream
-			sess               *mockquic.MockEarlySession
+			conn               *mockquic.MockEarlyConnection
 			exampleGetRequest  *http.Request
 			examplePostRequest *http.Request
 		)
@@ -117,7 +116,7 @@ var _ = Describe("Server", func() {
 			fields := make(map[string][]string)
 			decoder := qpack.NewDecoder(nil)
 
-			frame, err := parseNextFrame(str)
+			frame, err := parseNextFrame(str, nil)
 			ExpectWithOffset(1, err).ToNot(HaveOccurred())
 			ExpectWithOffset(1, frame).To(BeAssignableToTypeOf(&headersFrame{}))
 			headersFrame := frame.(*headersFrame)
@@ -136,11 +135,8 @@ var _ = Describe("Server", func() {
 			buf := &bytes.Buffer{}
 			str := mockquic.NewMockStream(mockCtrl)
 			str.EXPECT().Write(gomock.Any()).DoAndReturn(buf.Write).AnyTimes()
-			closed := make(chan struct{})
-			str.EXPECT().Close().Do(func() { close(closed) })
 			rw := newRequestWriter(utils.DefaultLogger)
-			Expect(rw.WriteRequest(str, req, false)).To(Succeed())
-			Eventually(closed).Should(BeClosed())
+			Expect(rw.WriteRequestHeader(str, req, false)).To(Succeed())
 			return buf.Bytes()
 		}
 
@@ -163,11 +159,10 @@ var _ = Describe("Server", func() {
 
 			qpackDecoder = qpack.NewDecoder(nil)
 			str = mockquic.NewMockStream(mockCtrl)
-
-			sess = mockquic.NewMockEarlySession(mockCtrl)
+			conn = mockquic.NewMockEarlyConnection(mockCtrl)
 			addr := &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 1337}
-			sess.EXPECT().RemoteAddr().Return(addr).AnyTimes()
-			sess.EXPECT().LocalAddr().AnyTimes()
+			conn.EXPECT().RemoteAddr().Return(addr).AnyTimes()
+			conn.EXPECT().LocalAddr().AnyTimes()
 		})
 
 		It("calls the HTTP handler function", func() {
@@ -183,7 +178,7 @@ var _ = Describe("Server", func() {
 			}).AnyTimes()
 			str.EXPECT().CancelRead(gomock.Any())
 
-			Expect(s.handleRequest(sess, str, qpackDecoder, nil)).To(Equal(requestError{}))
+			Expect(s.handleRequest(conn, str, qpackDecoder, nil)).To(Equal(requestError{}))
 			var req *http.Request
 			Eventually(requestChan).Should(Receive(&req))
 			Expect(req.Host).To(Equal("www.example.com"))
@@ -200,7 +195,7 @@ var _ = Describe("Server", func() {
 			str.EXPECT().Write(gomock.Any()).DoAndReturn(responseBuf.Write).AnyTimes()
 			str.EXPECT().CancelRead(gomock.Any())
 
-			serr := s.handleRequest(sess, str, qpackDecoder, nil)
+			serr := s.handleRequest(conn, str, qpackDecoder, nil)
 			Expect(serr.err).ToNot(HaveOccurred())
 			hfs := decodeHeader(responseBuf)
 			Expect(hfs).To(HaveKeyWithValue(":status", []string{"200"}))
@@ -217,39 +212,227 @@ var _ = Describe("Server", func() {
 			str.EXPECT().Write(gomock.Any()).DoAndReturn(responseBuf.Write).AnyTimes()
 			str.EXPECT().CancelRead(gomock.Any())
 
-			serr := s.handleRequest(sess, str, qpackDecoder, nil)
+			serr := s.handleRequest(conn, str, qpackDecoder, nil)
 			Expect(serr.err).ToNot(HaveOccurred())
 			hfs := decodeHeader(responseBuf)
 			Expect(hfs).To(HaveKeyWithValue(":status", []string{"500"}))
 		})
 
-		It("doesn't close the stream if the handler called DataStream()", func() {
-			s.Handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				str := w.(DataStreamer).DataStream()
-				str.Write([]byte("foobar"))
-			})
-
-			setRequest(encodeRequest(exampleGetRequest))
-			str.EXPECT().Context().Return(reqContext)
-			str.EXPECT().Write([]byte("foobar"))
-			// don't EXPECT CancelRead()
-
-			serr := s.handleRequest(sess, str, qpackDecoder, nil)
-			Expect(serr.err).ToNot(HaveOccurred())
-		})
-
-		Context("control stream handling", func() {
-			var sess *mockquic.MockEarlySession
+		Context("hijacking bidirectional streams", func() {
+			var conn *mockquic.MockEarlyConnection
 			testDone := make(chan struct{})
 
 			BeforeEach(func() {
-				sess = mockquic.NewMockEarlySession(mockCtrl)
+				testDone = make(chan struct{})
+				conn = mockquic.NewMockEarlyConnection(mockCtrl)
 				controlStr := mockquic.NewMockStream(mockCtrl)
 				controlStr.EXPECT().Write(gomock.Any())
-				sess.EXPECT().OpenUniStream().Return(controlStr, nil)
-				sess.EXPECT().AcceptStream(gomock.Any()).Return(nil, errors.New("done"))
-				sess.EXPECT().RemoteAddr().Return(&net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 1337}).AnyTimes()
-				sess.EXPECT().LocalAddr().AnyTimes()
+				conn.EXPECT().OpenUniStream().Return(controlStr, nil)
+				conn.EXPECT().RemoteAddr().Return(&net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 1337}).AnyTimes()
+				conn.EXPECT().LocalAddr().AnyTimes()
+			})
+
+			AfterEach(func() { testDone <- struct{}{} })
+
+			It("hijacks a bidirectional stream of unknown frame type", func() {
+				frameTypeChan := make(chan FrameType, 1)
+				s.StreamHijacker = func(ft FrameType, c quic.Connection, s quic.Stream, e error) (hijacked bool, err error) {
+					Expect(e).ToNot(HaveOccurred())
+					frameTypeChan <- ft
+					return true, nil
+				}
+
+				buf := &bytes.Buffer{}
+				quicvarint.Write(buf, 0x41)
+				unknownStr := mockquic.NewMockStream(mockCtrl)
+				unknownStr.EXPECT().Read(gomock.Any()).DoAndReturn(buf.Read).AnyTimes()
+				conn.EXPECT().AcceptStream(gomock.Any()).Return(unknownStr, nil)
+				conn.EXPECT().AcceptStream(gomock.Any()).Return(nil, errors.New("done"))
+				conn.EXPECT().AcceptUniStream(gomock.Any()).DoAndReturn(func(context.Context) (quic.ReceiveStream, error) {
+					<-testDone
+					return nil, errors.New("test done")
+				})
+				s.handleConn(conn)
+				Eventually(frameTypeChan).Should(Receive(BeEquivalentTo(0x41)))
+				time.Sleep(scaleDuration(20 * time.Millisecond)) // don't EXPECT any calls to conn.CloseWithError
+			})
+
+			It("cancels writing when hijacker didn't hijack a bidirectional stream", func() {
+				frameTypeChan := make(chan FrameType, 1)
+				s.StreamHijacker = func(ft FrameType, c quic.Connection, s quic.Stream, e error) (hijacked bool, err error) {
+					Expect(e).ToNot(HaveOccurred())
+					frameTypeChan <- ft
+					return false, nil
+				}
+
+				buf := &bytes.Buffer{}
+				quicvarint.Write(buf, 0x41)
+				unknownStr := mockquic.NewMockStream(mockCtrl)
+				unknownStr.EXPECT().Read(gomock.Any()).DoAndReturn(buf.Read).AnyTimes()
+				unknownStr.EXPECT().CancelWrite(quic.StreamErrorCode(errorRequestIncomplete))
+				conn.EXPECT().AcceptStream(gomock.Any()).Return(unknownStr, nil)
+				conn.EXPECT().AcceptStream(gomock.Any()).Return(nil, errors.New("done"))
+				conn.EXPECT().AcceptUniStream(gomock.Any()).DoAndReturn(func(context.Context) (quic.ReceiveStream, error) {
+					<-testDone
+					return nil, errors.New("test done")
+				})
+				s.handleConn(conn)
+				Eventually(frameTypeChan).Should(Receive(BeEquivalentTo(0x41)))
+				time.Sleep(scaleDuration(20 * time.Millisecond)) // don't EXPECT any calls to conn.CloseWithError
+			})
+
+			It("cancels writing when hijacker returned error", func() {
+				frameTypeChan := make(chan FrameType, 1)
+				s.StreamHijacker = func(ft FrameType, c quic.Connection, s quic.Stream, e error) (hijacked bool, err error) {
+					Expect(e).ToNot(HaveOccurred())
+					frameTypeChan <- ft
+					return false, errors.New("error in hijacker")
+				}
+
+				buf := &bytes.Buffer{}
+				quicvarint.Write(buf, 0x41)
+				unknownStr := mockquic.NewMockStream(mockCtrl)
+				unknownStr.EXPECT().Read(gomock.Any()).DoAndReturn(buf.Read).AnyTimes()
+				unknownStr.EXPECT().CancelWrite(quic.StreamErrorCode(errorRequestIncomplete))
+				conn.EXPECT().AcceptStream(gomock.Any()).Return(unknownStr, nil)
+				conn.EXPECT().AcceptStream(gomock.Any()).Return(nil, errors.New("done"))
+				conn.EXPECT().AcceptUniStream(gomock.Any()).DoAndReturn(func(context.Context) (quic.ReceiveStream, error) {
+					<-testDone
+					return nil, errors.New("test done")
+				})
+				s.handleConn(conn)
+				Eventually(frameTypeChan).Should(Receive(BeEquivalentTo(0x41)))
+				time.Sleep(scaleDuration(20 * time.Millisecond)) // don't EXPECT any calls to conn.CloseWithError
+			})
+
+			It("handles errors that occur when reading the stream type", func() {
+				testErr := errors.New("test error")
+				done := make(chan struct{})
+				unknownStr := mockquic.NewMockStream(mockCtrl)
+				s.StreamHijacker = func(ft FrameType, _ quic.Connection, str quic.Stream, err error) (bool, error) {
+					defer close(done)
+					Expect(ft).To(BeZero())
+					Expect(str).To(Equal(unknownStr))
+					Expect(err).To(MatchError(testErr))
+					return true, nil
+				}
+
+				unknownStr.EXPECT().Read(gomock.Any()).Return(0, testErr).AnyTimes()
+				conn.EXPECT().AcceptStream(gomock.Any()).Return(unknownStr, nil)
+				conn.EXPECT().AcceptStream(gomock.Any()).Return(nil, errors.New("done"))
+				conn.EXPECT().AcceptUniStream(gomock.Any()).DoAndReturn(func(context.Context) (quic.ReceiveStream, error) {
+					<-testDone
+					return nil, errors.New("test done")
+				})
+				s.handleConn(conn)
+				Eventually(done).Should(BeClosed())
+				time.Sleep(scaleDuration(20 * time.Millisecond)) // don't EXPECT any calls to conn.CloseWithError
+			})
+		})
+
+		Context("hijacking unidirectional streams", func() {
+			var conn *mockquic.MockEarlyConnection
+			testDone := make(chan struct{})
+
+			BeforeEach(func() {
+				testDone = make(chan struct{})
+				conn = mockquic.NewMockEarlyConnection(mockCtrl)
+				controlStr := mockquic.NewMockStream(mockCtrl)
+				controlStr.EXPECT().Write(gomock.Any())
+				conn.EXPECT().OpenUniStream().Return(controlStr, nil)
+				conn.EXPECT().AcceptStream(gomock.Any()).Return(nil, errors.New("done"))
+				conn.EXPECT().RemoteAddr().Return(&net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 1337}).AnyTimes()
+				conn.EXPECT().LocalAddr().AnyTimes()
+			})
+
+			AfterEach(func() { testDone <- struct{}{} })
+
+			It("hijacks an unidirectional stream of unknown stream type", func() {
+				streamTypeChan := make(chan StreamType, 1)
+				s.UniStreamHijacker = func(st StreamType, _ quic.Connection, _ quic.ReceiveStream, err error) bool {
+					Expect(err).ToNot(HaveOccurred())
+					streamTypeChan <- st
+					return true
+				}
+
+				buf := &bytes.Buffer{}
+				quicvarint.Write(buf, 0x54)
+				unknownStr := mockquic.NewMockStream(mockCtrl)
+				unknownStr.EXPECT().Read(gomock.Any()).DoAndReturn(buf.Read).AnyTimes()
+				conn.EXPECT().AcceptUniStream(gomock.Any()).DoAndReturn(func(context.Context) (quic.ReceiveStream, error) {
+					return unknownStr, nil
+				})
+				conn.EXPECT().AcceptUniStream(gomock.Any()).DoAndReturn(func(context.Context) (quic.ReceiveStream, error) {
+					<-testDone
+					return nil, errors.New("test done")
+				})
+				s.handleConn(conn)
+				Eventually(streamTypeChan).Should(Receive(BeEquivalentTo(0x54)))
+				time.Sleep(scaleDuration(20 * time.Millisecond)) // don't EXPECT any calls to conn.CloseWithError
+			})
+
+			It("handles errors that occur when reading the stream type", func() {
+				testErr := errors.New("test error")
+				done := make(chan struct{})
+				unknownStr := mockquic.NewMockStream(mockCtrl)
+				s.UniStreamHijacker = func(st StreamType, _ quic.Connection, str quic.ReceiveStream, err error) bool {
+					defer close(done)
+					Expect(st).To(BeZero())
+					Expect(str).To(Equal(unknownStr))
+					Expect(err).To(MatchError(testErr))
+					return true
+				}
+
+				unknownStr.EXPECT().Read(gomock.Any()).DoAndReturn(func([]byte) (int, error) { return 0, testErr })
+				conn.EXPECT().AcceptUniStream(gomock.Any()).Return(unknownStr, nil)
+				conn.EXPECT().AcceptUniStream(gomock.Any()).DoAndReturn(func(context.Context) (quic.ReceiveStream, error) {
+					<-testDone
+					return nil, errors.New("test done")
+				})
+				s.handleConn(conn)
+				Eventually(done).Should(BeClosed())
+				time.Sleep(scaleDuration(20 * time.Millisecond)) // don't EXPECT any calls to conn.CloseWithError
+			})
+
+			It("cancels reading when hijacker didn't hijack an unidirectional stream", func() {
+				streamTypeChan := make(chan StreamType, 1)
+				s.UniStreamHijacker = func(st StreamType, _ quic.Connection, _ quic.ReceiveStream, err error) bool {
+					Expect(err).ToNot(HaveOccurred())
+					streamTypeChan <- st
+					return false
+				}
+
+				buf := &bytes.Buffer{}
+				quicvarint.Write(buf, 0x54)
+				unknownStr := mockquic.NewMockStream(mockCtrl)
+				unknownStr.EXPECT().Read(gomock.Any()).DoAndReturn(buf.Read).AnyTimes()
+				unknownStr.EXPECT().CancelRead(quic.StreamErrorCode(errorStreamCreationError))
+
+				conn.EXPECT().AcceptUniStream(gomock.Any()).DoAndReturn(func(context.Context) (quic.ReceiveStream, error) {
+					return unknownStr, nil
+				})
+				conn.EXPECT().AcceptUniStream(gomock.Any()).DoAndReturn(func(context.Context) (quic.ReceiveStream, error) {
+					<-testDone
+					return nil, errors.New("test done")
+				})
+				s.handleConn(conn)
+				Eventually(streamTypeChan).Should(Receive(BeEquivalentTo(0x54)))
+				time.Sleep(scaleDuration(20 * time.Millisecond)) // don't EXPECT any calls to conn.CloseWithError
+			})
+		})
+
+		Context("control stream handling", func() {
+			var conn *mockquic.MockEarlyConnection
+			testDone := make(chan struct{})
+
+			BeforeEach(func() {
+				conn = mockquic.NewMockEarlyConnection(mockCtrl)
+				controlStr := mockquic.NewMockStream(mockCtrl)
+				controlStr.EXPECT().Write(gomock.Any())
+				conn.EXPECT().OpenUniStream().Return(controlStr, nil)
+				conn.EXPECT().AcceptStream(gomock.Any()).Return(nil, errors.New("done"))
+				conn.EXPECT().RemoteAddr().Return(&net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 1337}).AnyTimes()
+				conn.EXPECT().LocalAddr().AnyTimes()
 			})
 
 			AfterEach(func() { testDone <- struct{}{} })
@@ -260,15 +443,15 @@ var _ = Describe("Server", func() {
 				(&settingsFrame{}).Write(buf)
 				controlStr := mockquic.NewMockStream(mockCtrl)
 				controlStr.EXPECT().Read(gomock.Any()).DoAndReturn(buf.Read).AnyTimes()
-				sess.EXPECT().AcceptUniStream(gomock.Any()).DoAndReturn(func(context.Context) (quic.ReceiveStream, error) {
+				conn.EXPECT().AcceptUniStream(gomock.Any()).DoAndReturn(func(context.Context) (quic.ReceiveStream, error) {
 					return controlStr, nil
 				})
-				sess.EXPECT().AcceptUniStream(gomock.Any()).DoAndReturn(func(context.Context) (quic.ReceiveStream, error) {
+				conn.EXPECT().AcceptUniStream(gomock.Any()).DoAndReturn(func(context.Context) (quic.ReceiveStream, error) {
 					<-testDone
 					return nil, errors.New("test done")
 				})
-				s.handleConn(sess)
-				time.Sleep(scaleDuration(20 * time.Millisecond)) // don't EXPECT any calls to sess.CloseWithError
+				s.handleConn(conn)
+				time.Sleep(scaleDuration(20 * time.Millisecond)) // don't EXPECT any calls to conn.CloseWithError
 			})
 
 			for _, t := range []uint64{streamTypeQPACKEncoderStream, streamTypeQPACKDecoderStream} {
@@ -284,14 +467,14 @@ var _ = Describe("Server", func() {
 					str := mockquic.NewMockStream(mockCtrl)
 					str.EXPECT().Read(gomock.Any()).DoAndReturn(buf.Read).AnyTimes()
 
-					sess.EXPECT().AcceptUniStream(gomock.Any()).DoAndReturn(func(context.Context) (quic.ReceiveStream, error) {
+					conn.EXPECT().AcceptUniStream(gomock.Any()).DoAndReturn(func(context.Context) (quic.ReceiveStream, error) {
 						return str, nil
 					})
-					sess.EXPECT().AcceptUniStream(gomock.Any()).DoAndReturn(func(context.Context) (quic.ReceiveStream, error) {
+					conn.EXPECT().AcceptUniStream(gomock.Any()).DoAndReturn(func(context.Context) (quic.ReceiveStream, error) {
 						<-testDone
 						return nil, errors.New("test done")
 					})
-					s.handleConn(sess)
+					s.handleConn(conn)
 					time.Sleep(scaleDuration(20 * time.Millisecond)) // don't EXPECT any calls to str.CancelRead
 				})
 			}
@@ -306,14 +489,14 @@ var _ = Describe("Server", func() {
 					close(done)
 				})
 
-				sess.EXPECT().AcceptUniStream(gomock.Any()).DoAndReturn(func(context.Context) (quic.ReceiveStream, error) {
+				conn.EXPECT().AcceptUniStream(gomock.Any()).DoAndReturn(func(context.Context) (quic.ReceiveStream, error) {
 					return str, nil
 				})
-				sess.EXPECT().AcceptUniStream(gomock.Any()).DoAndReturn(func(context.Context) (quic.ReceiveStream, error) {
+				conn.EXPECT().AcceptUniStream(gomock.Any()).DoAndReturn(func(context.Context) (quic.ReceiveStream, error) {
 					<-testDone
 					return nil, errors.New("test done")
 				})
-				s.handleConn(sess)
+				s.handleConn(conn)
 				Eventually(done).Should(BeClosed())
 			})
 
@@ -323,20 +506,20 @@ var _ = Describe("Server", func() {
 				(&dataFrame{}).Write(buf)
 				controlStr := mockquic.NewMockStream(mockCtrl)
 				controlStr.EXPECT().Read(gomock.Any()).DoAndReturn(buf.Read).AnyTimes()
-				sess.EXPECT().AcceptUniStream(gomock.Any()).DoAndReturn(func(context.Context) (quic.ReceiveStream, error) {
+				conn.EXPECT().AcceptUniStream(gomock.Any()).DoAndReturn(func(context.Context) (quic.ReceiveStream, error) {
 					return controlStr, nil
 				})
-				sess.EXPECT().AcceptUniStream(gomock.Any()).DoAndReturn(func(context.Context) (quic.ReceiveStream, error) {
+				conn.EXPECT().AcceptUniStream(gomock.Any()).DoAndReturn(func(context.Context) (quic.ReceiveStream, error) {
 					<-testDone
 					return nil, errors.New("test done")
 				})
 				done := make(chan struct{})
-				sess.EXPECT().CloseWithError(gomock.Any(), gomock.Any()).Do(func(code quic.ApplicationErrorCode, _ string) {
+				conn.EXPECT().CloseWithError(gomock.Any(), gomock.Any()).Do(func(code quic.ApplicationErrorCode, _ string) {
 					defer GinkgoRecover()
 					Expect(code).To(BeEquivalentTo(errorMissingSettings))
 					close(done)
 				})
-				s.handleConn(sess)
+				s.handleConn(conn)
 				Eventually(done).Should(BeClosed())
 			})
 
@@ -348,20 +531,20 @@ var _ = Describe("Server", func() {
 				buf.Write(b.Bytes()[:b.Len()-1])
 				controlStr := mockquic.NewMockStream(mockCtrl)
 				controlStr.EXPECT().Read(gomock.Any()).DoAndReturn(buf.Read).AnyTimes()
-				sess.EXPECT().AcceptUniStream(gomock.Any()).DoAndReturn(func(context.Context) (quic.ReceiveStream, error) {
+				conn.EXPECT().AcceptUniStream(gomock.Any()).DoAndReturn(func(context.Context) (quic.ReceiveStream, error) {
 					return controlStr, nil
 				})
-				sess.EXPECT().AcceptUniStream(gomock.Any()).DoAndReturn(func(context.Context) (quic.ReceiveStream, error) {
+				conn.EXPECT().AcceptUniStream(gomock.Any()).DoAndReturn(func(context.Context) (quic.ReceiveStream, error) {
 					<-testDone
 					return nil, errors.New("test done")
 				})
 				done := make(chan struct{})
-				sess.EXPECT().CloseWithError(gomock.Any(), gomock.Any()).Do(func(code quic.ApplicationErrorCode, _ string) {
+				conn.EXPECT().CloseWithError(gomock.Any(), gomock.Any()).Do(func(code quic.ApplicationErrorCode, _ string) {
 					defer GinkgoRecover()
 					Expect(code).To(BeEquivalentTo(errorFrameError))
 					close(done)
 				})
-				s.handleConn(sess)
+				s.handleConn(conn)
 				Eventually(done).Should(BeClosed())
 			})
 
@@ -371,20 +554,20 @@ var _ = Describe("Server", func() {
 				(&dataFrame{}).Write(buf)
 				controlStr := mockquic.NewMockStream(mockCtrl)
 				controlStr.EXPECT().Read(gomock.Any()).DoAndReturn(buf.Read).AnyTimes()
-				sess.EXPECT().AcceptUniStream(gomock.Any()).DoAndReturn(func(context.Context) (quic.ReceiveStream, error) {
+				conn.EXPECT().AcceptUniStream(gomock.Any()).DoAndReturn(func(context.Context) (quic.ReceiveStream, error) {
 					return controlStr, nil
 				})
-				sess.EXPECT().AcceptUniStream(gomock.Any()).DoAndReturn(func(context.Context) (quic.ReceiveStream, error) {
+				conn.EXPECT().AcceptUniStream(gomock.Any()).DoAndReturn(func(context.Context) (quic.ReceiveStream, error) {
 					<-testDone
 					return nil, errors.New("test done")
 				})
 				done := make(chan struct{})
-				sess.EXPECT().CloseWithError(gomock.Any(), gomock.Any()).Do(func(code quic.ApplicationErrorCode, _ string) {
+				conn.EXPECT().CloseWithError(gomock.Any(), gomock.Any()).Do(func(code quic.ApplicationErrorCode, _ string) {
 					defer GinkgoRecover()
 					Expect(code).To(BeEquivalentTo(errorStreamCreationError))
 					close(done)
 				})
-				s.handleConn(sess)
+				s.handleConn(conn)
 				Eventually(done).Should(BeClosed())
 			})
 
@@ -395,53 +578,53 @@ var _ = Describe("Server", func() {
 				(&settingsFrame{Datagram: true}).Write(buf)
 				controlStr := mockquic.NewMockStream(mockCtrl)
 				controlStr.EXPECT().Read(gomock.Any()).DoAndReturn(buf.Read).AnyTimes()
-				sess.EXPECT().AcceptUniStream(gomock.Any()).DoAndReturn(func(context.Context) (quic.ReceiveStream, error) {
+				conn.EXPECT().AcceptUniStream(gomock.Any()).DoAndReturn(func(context.Context) (quic.ReceiveStream, error) {
 					return controlStr, nil
 				})
-				sess.EXPECT().AcceptUniStream(gomock.Any()).DoAndReturn(func(context.Context) (quic.ReceiveStream, error) {
+				conn.EXPECT().AcceptUniStream(gomock.Any()).DoAndReturn(func(context.Context) (quic.ReceiveStream, error) {
 					<-testDone
 					return nil, errors.New("test done")
 				})
-				sess.EXPECT().ConnectionState().Return(quic.ConnectionState{SupportsDatagrams: false})
+				conn.EXPECT().ConnectionState().Return(quic.ConnectionState{SupportsDatagrams: false})
 				done := make(chan struct{})
-				sess.EXPECT().CloseWithError(gomock.Any(), gomock.Any()).Do(func(code quic.ApplicationErrorCode, reason string) {
+				conn.EXPECT().CloseWithError(gomock.Any(), gomock.Any()).Do(func(code quic.ApplicationErrorCode, reason string) {
 					defer GinkgoRecover()
 					Expect(code).To(BeEquivalentTo(errorSettingsError))
 					Expect(reason).To(Equal("missing QUIC Datagram support"))
 					close(done)
 				})
-				s.handleConn(sess)
+				s.handleConn(conn)
 				Eventually(done).Should(BeClosed())
 			})
 		})
 
 		Context("stream- and connection-level errors", func() {
-			var sess *mockquic.MockEarlySession
+			var conn *mockquic.MockEarlyConnection
 			testDone := make(chan struct{})
 
 			BeforeEach(func() {
 				testDone = make(chan struct{})
 				addr := &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 1337}
-				sess = mockquic.NewMockEarlySession(mockCtrl)
+				conn = mockquic.NewMockEarlyConnection(mockCtrl)
 				controlStr := mockquic.NewMockStream(mockCtrl)
 				controlStr.EXPECT().Write(gomock.Any())
-				sess.EXPECT().OpenUniStream().Return(controlStr, nil)
-				sess.EXPECT().AcceptUniStream(gomock.Any()).DoAndReturn(func(context.Context) (quic.ReceiveStream, error) {
+				conn.EXPECT().OpenUniStream().Return(controlStr, nil)
+				conn.EXPECT().AcceptUniStream(gomock.Any()).DoAndReturn(func(context.Context) (quic.ReceiveStream, error) {
 					<-testDone
 					return nil, errors.New("test done")
 				})
-				sess.EXPECT().AcceptStream(gomock.Any()).Return(str, nil)
-				sess.EXPECT().AcceptStream(gomock.Any()).Return(nil, errors.New("done"))
-				sess.EXPECT().RemoteAddr().Return(addr).AnyTimes()
-				sess.EXPECT().LocalAddr().AnyTimes()
+				conn.EXPECT().AcceptStream(gomock.Any()).Return(str, nil)
+				conn.EXPECT().AcceptStream(gomock.Any()).Return(nil, errors.New("done"))
+				conn.EXPECT().RemoteAddr().Return(addr).AnyTimes()
+				conn.EXPECT().LocalAddr().AnyTimes()
 			})
 
 			AfterEach(func() { testDone <- struct{}{} })
 
 			It("cancels reading when client sends a body in GET request", func() {
-				handlerCalled := make(chan struct{})
+				var handlerCalled bool
 				s.Handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-					close(handlerCalled)
+					handlerCalled = true
 				})
 
 				requestData := encodeRequest(exampleGetRequest)
@@ -456,14 +639,35 @@ var _ = Describe("Server", func() {
 				str.EXPECT().CancelRead(quic.StreamErrorCode(errorNoError))
 				str.EXPECT().Close().Do(func() { close(done) })
 
-				s.handleConn(sess)
+				s.handleConn(conn)
 				Eventually(done).Should(BeClosed())
 				hfs := decodeHeader(responseBuf)
 				Expect(hfs).To(HaveKeyWithValue(":status", []string{"200"}))
+				Expect(handlerCalled).To(BeTrue())
+			})
+
+			It("doesn't close the stream if the stream was hijacked (via HTTPStream)", func() {
+				handlerCalled := make(chan struct{})
+				s.Handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					defer close(handlerCalled)
+					r.Body.(HTTPStreamer).HTTPStream()
+					str.Write([]byte("foobar"))
+				})
+
+				requestData := encodeRequest(exampleGetRequest)
+				buf := &bytes.Buffer{}
+				(&dataFrame{Length: 6}).Write(buf) // add a body
+				buf.Write([]byte("foobar"))
+				setRequest(append(requestData, buf.Bytes()...))
+				str.EXPECT().Context().Return(reqContext)
+				str.EXPECT().Write([]byte("foobar")).Return(6, nil)
+
+				s.handleConn(conn)
+				Eventually(handlerCalled).Should(BeClosed())
 			})
 
 			It("errors when the client sends a too large header frame", func() {
-				s.Server.MaxHeaderBytes = 20
+				s.MaxHeaderBytes = 20
 				s.Handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 					Fail("Handler should not be called.")
 				})
@@ -478,7 +682,7 @@ var _ = Describe("Server", func() {
 				str.EXPECT().Write(gomock.Any()).DoAndReturn(responseBuf.Write).AnyTimes()
 				str.EXPECT().CancelWrite(quic.StreamErrorCode(errorFrameError)).Do(func(quic.StreamErrorCode) { close(done) })
 
-				s.handleConn(sess)
+				s.handleConn(conn)
 				Eventually(done).Should(BeClosed())
 			})
 
@@ -493,7 +697,7 @@ var _ = Describe("Server", func() {
 				str.EXPECT().Read(gomock.Any()).Return(0, testErr)
 				str.EXPECT().CancelWrite(quic.StreamErrorCode(errorRequestIncomplete)).Do(func(quic.StreamErrorCode) { close(done) })
 
-				s.handleConn(sess)
+				s.handleConn(conn)
 				Consistently(handlerCalled).ShouldNot(BeClosed())
 			})
 
@@ -511,11 +715,11 @@ var _ = Describe("Server", func() {
 				}).AnyTimes()
 
 				done := make(chan struct{})
-				sess.EXPECT().CloseWithError(gomock.Any(), gomock.Any()).Do(func(code quic.ApplicationErrorCode, _ string) {
+				conn.EXPECT().CloseWithError(gomock.Any(), gomock.Any()).Do(func(code quic.ApplicationErrorCode, _ string) {
 					Expect(code).To(Equal(quic.ApplicationErrorCode(errorFrameUnexpected)))
 					close(done)
 				})
-				s.handleConn(sess)
+				s.handleConn(conn)
 				Eventually(done).Should(BeClosed())
 			})
 
@@ -538,7 +742,7 @@ var _ = Describe("Server", func() {
 				done := make(chan struct{})
 				str.EXPECT().CancelWrite(quic.StreamErrorCode(errorFrameError)).Do(func(quic.StreamErrorCode) { close(done) })
 
-				s.handleConn(sess)
+				s.handleConn(conn)
 				Eventually(done).Should(BeClosed())
 			})
 		})
@@ -560,7 +764,7 @@ var _ = Describe("Server", func() {
 			}).AnyTimes()
 			str.EXPECT().CancelRead(quic.StreamErrorCode(errorNoError))
 
-			serr := s.handleRequest(sess, str, qpackDecoder, nil)
+			serr := s.handleRequest(conn, str, qpackDecoder, nil)
 			Expect(serr.err).ToNot(HaveOccurred())
 			Eventually(handlerCalled).Should(BeClosed())
 		})
@@ -583,7 +787,7 @@ var _ = Describe("Server", func() {
 			}).AnyTimes()
 			str.EXPECT().CancelRead(quic.StreamErrorCode(errorNoError))
 
-			serr := s.handleRequest(sess, str, qpackDecoder, nil)
+			serr := s.handleRequest(conn, str, qpackDecoder, nil)
 			Expect(serr.err).ToNot(HaveOccurred())
 			Eventually(handlerCalled).Should(BeClosed())
 		})
@@ -689,24 +893,44 @@ var _ = Describe("Server", func() {
 			removeListener(&ln2)
 			checkSetHeaderError()
 		})
+
+		It("doesn't duplicate Alt-Svc values", func() {
+			s.QuicConfig.Versions = []quic.VersionNumber{quic.Version1, quic.Version1}
+			addListener(":443", &ln1)
+			checkSetHeaders(Equal(http.Header{"Alt-Svc": {`h3=":443"; ma=2592000`}}))
+			removeListener(&ln1)
+			checkSetHeaderError()
+		})
 	})
 
-	It("errors when ListenAndServe is called with s.Server nil", func() {
-		Expect((&Server{}).ListenAndServe()).To(MatchError("use of http3.Server without http.Server"))
-	})
-
-	It("errors when ListenAndServeTLS is called with s.Server nil", func() {
-		Expect((&Server{}).ListenAndServeTLS(testdata.GetCertificatePaths())).To(MatchError("use of http3.Server without http.Server"))
+	It("errors when ListenAndServe is called with s.TLSConfig nil", func() {
+		Expect((&Server{}).ListenAndServe()).To(MatchError(errServerWithoutTLSConfig))
 	})
 
 	It("should nop-Close() when s.server is nil", func() {
 		Expect((&Server{}).Close()).To(Succeed())
 	})
 
-	It("errors when ListenAndServe is called after Close", func() {
-		serv := &Server{Server: &http.Server{}}
+	It("errors when ListenAndServeTLS is called after Close", func() {
+		serv := &Server{}
 		Expect(serv.Close()).To(Succeed())
-		Expect(serv.ListenAndServe()).To(MatchError(http.ErrServerClosed))
+		Expect(serv.ListenAndServeTLS(testdata.GetCertificatePaths())).To(MatchError(http.ErrServerClosed))
+	})
+
+	It("handles concurrent Serve and Close", func() {
+		addr, err := net.ResolveUDPAddr("udp", "localhost:0")
+		Expect(err).ToNot(HaveOccurred())
+		c, err := net.ListenUDP("udp", addr)
+		Expect(err).ToNot(HaveOccurred())
+		done := make(chan struct{})
+		go func() {
+			defer GinkgoRecover()
+			defer close(done)
+			s.Serve(c)
+		}()
+		runtime.Gosched()
+		s.Close()
+		Eventually(done).Should(BeClosed())
 	})
 
 	Context("ConfigureTLSConfig", func() {
@@ -718,23 +942,23 @@ var _ = Describe("Server", func() {
 			ch = &tls.ClientHelloInfo{}
 		})
 
-		It("advertises draft by default", func() {
+		It("advertises v1 by default", func() {
 			tlsConf = ConfigureTLSConfig(tlsConf)
 			Expect(tlsConf.GetConfigForClient).NotTo(BeNil())
 
-			config, err := tlsConf.GetConfigForClient(ch)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(config.NextProtos).To(Equal([]string{nextProtoH3Draft29}))
-		})
-
-		It("advertises h3 for quic version 1", func() {
-			tlsConf = ConfigureTLSConfig(tlsConf)
-			Expect(tlsConf.GetConfigForClient).NotTo(BeNil())
-
-			ch.Conn = newMockConn(protocol.Version1)
 			config, err := tlsConf.GetConfigForClient(ch)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(config.NextProtos).To(Equal([]string{nextProtoH3}))
+		})
+
+		It("advertises h3-29 for draft-29", func() {
+			tlsConf = ConfigureTLSConfig(tlsConf)
+			Expect(tlsConf.GetConfigForClient).NotTo(BeNil())
+
+			ch.Conn = newMockConn(protocol.VersionDraft29)
+			config, err := tlsConf.GetConfigForClient(ch)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(config.NextProtos).To(Equal([]string{nextProtoH3Draft29}))
 		})
 	})
 
@@ -753,11 +977,12 @@ var _ = Describe("Server", func() {
 				return ln, nil
 			}
 
-			s := &Server{Server: &http.Server{}}
-			s.TLSConfig = &tls.Config{}
+			s := &Server{
+				TLSConfig: &tls.Config{},
+			}
 
 			stopAccept := make(chan struct{})
-			ln.EXPECT().Accept(gomock.Any()).DoAndReturn(func(context.Context) (quic.Session, error) {
+			ln.EXPECT().Accept(gomock.Any()).DoAndReturn(func(context.Context) (quic.Connection, error) {
 				<-stopAccept
 				return nil, errors.New("closed")
 			})
@@ -787,17 +1012,18 @@ var _ = Describe("Server", func() {
 				return <-lns, nil
 			}
 
-			s := &Server{Server: &http.Server{}}
-			s.TLSConfig = &tls.Config{}
+			s := &Server{
+				TLSConfig: &tls.Config{},
+			}
 
 			stopAccept1 := make(chan struct{})
-			ln1.EXPECT().Accept(gomock.Any()).DoAndReturn(func(context.Context) (quic.Session, error) {
+			ln1.EXPECT().Accept(gomock.Any()).DoAndReturn(func(context.Context) (quic.Connection, error) {
 				<-stopAccept1
 				return nil, errors.New("closed")
 			})
 			ln1.EXPECT().Addr() // generate alt-svc headers
 			stopAccept2 := make(chan struct{})
-			ln2.EXPECT().Accept(gomock.Any()).DoAndReturn(func(context.Context) (quic.Session, error) {
+			ln2.EXPECT().Accept(gomock.Any()).DoAndReturn(func(context.Context) (quic.Connection, error) {
 				<-stopAccept2
 				return nil, errors.New("closed")
 			})
@@ -841,11 +1067,10 @@ var _ = Describe("Server", func() {
 				return ln, nil
 			}
 
-			s := &Server{Server: &http.Server{}}
-			s.TLSConfig = &tls.Config{}
+			s := &Server{}
 
 			stopAccept := make(chan struct{})
-			ln.EXPECT().Accept(gomock.Any()).DoAndReturn(func(context.Context) (quic.Session, error) {
+			ln.EXPECT().Accept(gomock.Any()).DoAndReturn(func(context.Context) (quic.Connection, error) {
 				<-stopAccept
 				return nil, errors.New("closed")
 			})
@@ -876,17 +1101,16 @@ var _ = Describe("Server", func() {
 				return <-lns, nil
 			}
 
-			s := &Server{Server: &http.Server{}}
-			s.TLSConfig = &tls.Config{}
+			s := &Server{}
 
 			stopAccept1 := make(chan struct{})
-			ln1.EXPECT().Accept(gomock.Any()).DoAndReturn(func(context.Context) (quic.Session, error) {
+			ln1.EXPECT().Accept(gomock.Any()).DoAndReturn(func(context.Context) (quic.Connection, error) {
 				<-stopAccept1
 				return nil, errors.New("closed")
 			})
 			ln1.EXPECT().Addr() // generate alt-svc headers
 			stopAccept2 := make(chan struct{})
-			ln2.EXPECT().Accept(gomock.Any()).DoAndReturn(func(context.Context) (quic.Session, error) {
+			ln2.EXPECT().Accept(gomock.Any()).DoAndReturn(func(context.Context) (quic.Connection, error) {
 				<-stopAccept2
 				return nil, errors.New("closed")
 			})
@@ -918,7 +1142,7 @@ var _ = Describe("Server", func() {
 
 	Context("ListenAndServe", func() {
 		BeforeEach(func() {
-			s.Server.Addr = "localhost:0"
+			s.Addr = "localhost:0"
 		})
 
 		AfterEach(func() {

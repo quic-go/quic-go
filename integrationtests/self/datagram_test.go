@@ -13,6 +13,7 @@ import (
 	"github.com/Psiphon-Labs/quic-go"
 	quicproxy "github.com/Psiphon-Labs/quic-go/integrationtests/tools/proxy"
 	"github.com/Psiphon-Labs/quic-go/internal/protocol"
+	"github.com/Psiphon-Labs/quic-go/internal/wire"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -31,7 +32,7 @@ var _ = Describe("Datagram test", func() {
 				dropped, total         int32
 			)
 
-			startServerAndProxy := func() {
+			startServerAndProxy := func(enableDatagram, expectDatagramSupport bool) {
 				addr, err := net.ResolveUDPAddr("udp", "localhost:0")
 				Expect(err).ToNot(HaveOccurred())
 				serverConn, err = net.ListenUDP("udp", addr)
@@ -40,30 +41,39 @@ var _ = Describe("Datagram test", func() {
 					serverConn,
 					getTLSConfig(),
 					getQuicConfig(&quic.Config{
-						EnableDatagrams: true,
+						EnableDatagrams: enableDatagram,
 						Versions:        []protocol.VersionNumber{version},
 					}),
 				)
 				Expect(err).ToNot(HaveOccurred())
+
 				go func() {
 					defer GinkgoRecover()
-					sess, err := ln.Accept(context.Background())
+					conn, err := ln.Accept(context.Background())
 					Expect(err).ToNot(HaveOccurred())
-					Expect(sess.ConnectionState().SupportsDatagrams).To(BeTrue())
 
-					var wg sync.WaitGroup
-					wg.Add(num)
-					for i := 0; i < num; i++ {
-						go func(i int) {
-							defer GinkgoRecover()
-							defer wg.Done()
-							b := make([]byte, 8)
-							binary.BigEndian.PutUint64(b, uint64(i))
-							Expect(sess.SendMessage(b)).To(Succeed())
-						}(i)
+					if expectDatagramSupport {
+						Expect(conn.ConnectionState().SupportsDatagrams).To(BeTrue())
+
+						if enableDatagram {
+							var wg sync.WaitGroup
+							wg.Add(num)
+							for i := 0; i < num; i++ {
+								go func(i int) {
+									defer GinkgoRecover()
+									defer wg.Done()
+									b := make([]byte, 8)
+									binary.BigEndian.PutUint64(b, uint64(i))
+									Expect(conn.SendMessage(b)).To(Succeed())
+								}(i)
+							}
+							wg.Wait()
+						}
+					} else {
+						Expect(conn.ConnectionState().SupportsDatagrams).To(BeFalse())
 					}
-					wg.Wait()
 				}()
+
 				serverPort := ln.Addr().(*net.UDPAddr).Port
 				proxy, err = quicproxy.NewQuicProxy("localhost:0", &quicproxy.Opts{
 					RemoteAddr: fmt.Sprintf("localhost:%d", serverPort),
@@ -73,7 +83,7 @@ var _ = Describe("Datagram test", func() {
 							return false
 						}
 						// don't drop Long Header packets
-						if packet[0]&0x80 == 1 {
+						if wire.IsLongHeaderPacket(packet[0]) {
 							return false
 						}
 						drop := mrand.Int()%10 == 0
@@ -99,10 +109,10 @@ var _ = Describe("Datagram test", func() {
 			})
 
 			It("sends datagrams", func() {
-				startServerAndProxy()
+				startServerAndProxy(true, true)
 				raddr, err := net.ResolveUDPAddr("udp", fmt.Sprintf("localhost:%d", proxy.LocalPort()))
 				Expect(err).ToNot(HaveOccurred())
-				sess, err := quic.Dial(
+				conn, err := quic.Dial(
 					clientConn,
 					raddr,
 					fmt.Sprintf("localhost:%d", proxy.LocalPort()),
@@ -113,14 +123,14 @@ var _ = Describe("Datagram test", func() {
 					}),
 				)
 				Expect(err).ToNot(HaveOccurred())
-				Expect(sess.ConnectionState().SupportsDatagrams).To(BeTrue())
+				Expect(conn.ConnectionState().SupportsDatagrams).To(BeTrue())
 				var counter int
 				for {
-					// Close the session if no message is received for 100 ms.
+					// Close the connection if no message is received for 100 ms.
 					timer := time.AfterFunc(scaleDuration(100*time.Millisecond), func() {
-						sess.CloseWithError(0, "")
+						conn.CloseWithError(0, "")
 					})
-					if _, err := sess.ReceiveMessage(); err != nil {
+					if _, err := conn.ReceiveMessage(); err != nil {
 						break
 					}
 					timer.Stop()
@@ -135,6 +145,49 @@ var _ = Describe("Datagram test", func() {
 					BeNumerically(">", expVal*9/10),
 					BeNumerically("<", num),
 				))
+			})
+
+			It("server can disable datagram", func() {
+				startServerAndProxy(false, true)
+				raddr, err := net.ResolveUDPAddr("udp", fmt.Sprintf("localhost:%d", proxy.LocalPort()))
+				Expect(err).ToNot(HaveOccurred())
+				conn, err := quic.Dial(
+					clientConn,
+					raddr,
+					fmt.Sprintf("localhost:%d", proxy.LocalPort()),
+					getTLSClientConfig(),
+					getQuicConfig(&quic.Config{
+						EnableDatagrams: true,
+						Versions:        []protocol.VersionNumber{version},
+					}),
+				)
+				Expect(err).ToNot(HaveOccurred())
+				Expect(conn.ConnectionState().SupportsDatagrams).To(BeFalse())
+
+				conn.CloseWithError(0, "")
+				<-time.After(10 * time.Millisecond)
+			})
+
+			It("client can disable datagram", func() {
+				startServerAndProxy(false, true)
+				raddr, err := net.ResolveUDPAddr("udp", fmt.Sprintf("localhost:%d", proxy.LocalPort()))
+				Expect(err).ToNot(HaveOccurred())
+				conn, err := quic.Dial(
+					clientConn,
+					raddr,
+					fmt.Sprintf("localhost:%d", proxy.LocalPort()),
+					getTLSClientConfig(),
+					getQuicConfig(&quic.Config{
+						EnableDatagrams: true,
+						Versions:        []protocol.VersionNumber{version},
+					}),
+				)
+				Expect(err).ToNot(HaveOccurred())
+				Expect(conn.ConnectionState().SupportsDatagrams).To(BeFalse())
+
+				Expect(conn.SendMessage([]byte{0})).To(HaveOccurred())
+				conn.CloseWithError(0, "")
+				<-time.After(10 * time.Millisecond)
 			})
 		})
 	}

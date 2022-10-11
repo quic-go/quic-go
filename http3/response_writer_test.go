@@ -25,7 +25,7 @@ var _ = Describe("Response Writer", func() {
 		strBuf = &bytes.Buffer{}
 		str := mockquic.NewMockStream(mockCtrl)
 		str.EXPECT().Write(gomock.Any()).DoAndReturn(strBuf.Write).AnyTimes()
-		rw = newResponseWriter(str, utils.DefaultLogger)
+		rw = newResponseWriter(str, nil, utils.DefaultLogger)
 	})
 
 	decodeHeader := func(str io.Reader) map[string][]string {
@@ -33,7 +33,7 @@ var _ = Describe("Response Writer", func() {
 		fields := make(map[string][]string)
 		decoder := qpack.NewDecoder(nil)
 
-		frame, err := parseNextFrame(str)
+		frame, err := parseNextFrame(str, nil)
 		Expect(err).ToNot(HaveOccurred())
 		Expect(frame).To(BeAssignableToTypeOf(&headersFrame{}))
 		headersFrame := frame.(*headersFrame)
@@ -49,7 +49,7 @@ var _ = Describe("Response Writer", func() {
 	}
 
 	getData := func(str io.Reader) []byte {
-		frame, err := parseNextFrame(str)
+		frame, err := parseNextFrame(str, nil)
 		Expect(err).ToNot(HaveOccurred())
 		Expect(frame).To(BeAssignableToTypeOf(&dataFrame{}))
 		df := frame.(*dataFrame)

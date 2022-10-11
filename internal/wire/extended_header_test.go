@@ -95,6 +95,7 @@ var _ = Describe("Header", func() {
 					PacketNumber:    0xdecafbad,
 					PacketNumberLen: protocol.PacketNumberLen4,
 				}).Write(buf, versionIETFHeader)).To(Succeed())
+				Expect(buf.Bytes()[0]>>4&0b11 == 0)
 				expectedSubstring := append(encodeVarInt(uint64(len(token))), token...)
 				Expect(buf.Bytes()).To(ContainSubstring(string(expectedSubstring)))
 			})
@@ -119,18 +120,73 @@ var _ = Describe("Header", func() {
 				token := []byte("Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.")
 				Expect((&ExtendedHeader{Header: Header{
 					IsLongHeader: true,
-					Version:      0x1020304,
+					Version:      protocol.Version1,
 					Type:         protocol.PacketTypeRetry,
 					Token:        token,
 				}}).Write(buf, versionIETFHeader)).To(Succeed())
-				expected := []byte{
-					0xc0 | 0x3<<4,
-					0x1, 0x2, 0x3, 0x4, // version number
-					0x0, // dest connection ID length
-					0x0, // src connection ID length
-				}
+				expected := []byte{0xc0 | 0b11<<4}
+				expected = appendVersion(expected, protocol.Version1)
+				expected = append(expected, 0x0) // dest connection ID length
+				expected = append(expected, 0x0) // src connection ID length
 				expected = append(expected, token...)
 				Expect(buf.Bytes()).To(Equal(expected))
+			})
+		})
+
+		Context("long header, version 2", func() {
+			It("writes an Initial", func() {
+				Expect((&ExtendedHeader{
+					Header: Header{
+						IsLongHeader: true,
+						Version:      protocol.Version2,
+						Type:         protocol.PacketTypeInitial,
+					},
+					PacketNumber:    0xdecafbad,
+					PacketNumberLen: protocol.PacketNumberLen4,
+				}).Write(buf, protocol.Version2)).To(Succeed())
+				Expect(buf.Bytes()[0]>>4&0b11 == 0b01)
+			})
+
+			It("writes a Retry packet", func() {
+				token := []byte("Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.")
+				Expect((&ExtendedHeader{Header: Header{
+					IsLongHeader: true,
+					Version:      protocol.Version2,
+					Type:         protocol.PacketTypeRetry,
+					Token:        token,
+				}}).Write(buf, versionIETFHeader)).To(Succeed())
+				expected := []byte{0xc0 | 0b11<<4}
+				expected = appendVersion(expected, protocol.Version2)
+				expected = append(expected, 0x0) // dest connection ID length
+				expected = append(expected, 0x0) // src connection ID length
+				expected = append(expected, token...)
+				Expect(buf.Bytes()).To(Equal(expected))
+			})
+
+			It("writes a Handshake Packet", func() {
+				Expect((&ExtendedHeader{
+					Header: Header{
+						IsLongHeader: true,
+						Version:      protocol.Version2,
+						Type:         protocol.PacketTypeHandshake,
+					},
+					PacketNumber:    0xdecafbad,
+					PacketNumberLen: protocol.PacketNumberLen4,
+				}).Write(buf, protocol.Version2)).To(Succeed())
+				Expect(buf.Bytes()[0]>>4&0b11 == 0b11)
+			})
+
+			It("writes a 0-RTT Packet", func() {
+				Expect((&ExtendedHeader{
+					Header: Header{
+						IsLongHeader: true,
+						Version:      protocol.Version2,
+						Type:         protocol.PacketType0RTT,
+					},
+					PacketNumber:    0xdecafbad,
+					PacketNumberLen: protocol.PacketNumberLen4,
+				}).Write(buf, protocol.Version2)).To(Succeed())
+				Expect(buf.Bytes()[0]>>4&0b11 == 0b10)
 			})
 		})
 

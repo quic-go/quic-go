@@ -9,9 +9,15 @@ import (
 	"github.com/Psiphon-Labs/quic-go/internal/utils"
 )
 
-func createAEAD(suite *qtls.CipherSuiteTLS13, trafficSecret []byte) cipher.AEAD {
-	key := hkdfExpandLabel(suite.Hash, trafficSecret, []byte{}, "quic key", suite.KeyLen)
-	iv := hkdfExpandLabel(suite.Hash, trafficSecret, []byte{}, "quic iv", suite.IVLen())
+func createAEAD(suite *qtls.CipherSuiteTLS13, trafficSecret []byte, v protocol.VersionNumber) cipher.AEAD {
+	keyLabel := hkdfLabelKeyV1
+	ivLabel := hkdfLabelIVV1
+	if v == protocol.Version2 {
+		keyLabel = hkdfLabelKeyV2
+		ivLabel = hkdfLabelIVV2
+	}
+	key := hkdfExpandLabel(suite.Hash, trafficSecret, []byte{}, keyLabel, suite.KeyLen)
+	iv := hkdfExpandLabel(suite.Hash, trafficSecret, []byte{}, ivLabel, suite.IVLen())
 	return suite.AEAD(key, iv)
 }
 
@@ -77,7 +83,7 @@ func (o *longHeaderOpener) Open(dst, src []byte, pn protocol.PacketNumber, ad []
 	// It uses the nonce provided here and XOR it with the IV.
 	dec, err := o.aead.Open(dst, o.nonceBuf, src, ad)
 	if err == nil {
-		o.highestRcvdPN = utils.MaxPacketNumber(o.highestRcvdPN, pn)
+		o.highestRcvdPN = utils.Max(o.highestRcvdPN, pn)
 	} else {
 		err = ErrDecryptionFailed
 	}

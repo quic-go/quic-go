@@ -73,7 +73,6 @@ var _ = Describe("QUIC Errors", func() {
 			nerr, ok := err.(net.Error)
 			Expect(ok).To(BeTrue())
 			Expect(nerr.Timeout()).To(BeTrue())
-			Expect(nerr.Temporary()).To(BeFalse())
 			Expect(err.Error()).To(Equal("timeout: handshake did not complete in time"))
 		})
 
@@ -84,7 +83,6 @@ var _ = Describe("QUIC Errors", func() {
 			nerr, ok := err.(net.Error)
 			Expect(ok).To(BeTrue())
 			Expect(nerr.Timeout()).To(BeTrue())
-			Expect(nerr.Temporary()).To(BeFalse())
 			Expect(err.Error()).To(Equal("timeout: no recent network activity"))
 		})
 	})
@@ -112,7 +110,6 @@ var _ = Describe("QUIC Errors", func() {
 			nerr, ok := err.(net.Error)
 			Expect(ok).To(BeTrue())
 			Expect(nerr.Timeout()).To(BeFalse())
-			Expect(nerr.Temporary()).To(BeTrue())
 		})
 	})
 

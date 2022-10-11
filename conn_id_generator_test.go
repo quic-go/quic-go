@@ -16,7 +16,7 @@ var _ = Describe("Connection ID Generator", func() {
 		addedConnIDs       []protocol.ConnectionID
 		retiredConnIDs     []protocol.ConnectionID
 		removedConnIDs     []protocol.ConnectionID
-		replacedWithClosed map[string]packetHandler
+		replacedWithClosed []protocol.ConnectionID
 		queuedFrames       []wire.Frame
 		g                  *connIDGenerator
 	)
@@ -32,7 +32,7 @@ var _ = Describe("Connection ID Generator", func() {
 		retiredConnIDs = nil
 		removedConnIDs = nil
 		queuedFrames = nil
-		replacedWithClosed = make(map[string]packetHandler)
+		replacedWithClosed = nil
 		g = newConnIDGenerator(
 			initialConnID,
 			initialClientDestConnID,
@@ -40,8 +40,11 @@ var _ = Describe("Connection ID Generator", func() {
 			connIDToToken,
 			func(c protocol.ConnectionID) { removedConnIDs = append(removedConnIDs, c) },
 			func(c protocol.ConnectionID) { retiredConnIDs = append(retiredConnIDs, c) },
-			func(c protocol.ConnectionID, h packetHandler) { replacedWithClosed[string(c)] = h },
+			func(cs []protocol.ConnectionID, _ protocol.Perspective, _ []byte) {
+				replacedWithClosed = append(replacedWithClosed, cs...)
+			},
 			func(f wire.Frame) { queuedFrames = append(queuedFrames, f) },
+			&protocol.DefaultConnectionIDGenerator{ConnLen: initialConnID.Len()},
 			protocol.VersionDraft29,
 		)
 	})
@@ -171,17 +174,16 @@ var _ = Describe("Connection ID Generator", func() {
 		}
 	})
 
-	It("replaces with a closed session for all connection IDs", func() {
+	It("replaces with a closed connection for all connection IDs", func() {
 		Expect(g.SetMaxActiveConnIDs(5)).To(Succeed())
 		Expect(queuedFrames).To(HaveLen(4))
-		sess := NewMockPacketHandler(mockCtrl)
-		g.ReplaceWithClosed(sess)
+		g.ReplaceWithClosed(protocol.PerspectiveClient, []byte("foobar"))
 		Expect(replacedWithClosed).To(HaveLen(6)) // initial conn ID, initial client dest conn id, and newly issued ones
-		Expect(replacedWithClosed).To(HaveKeyWithValue(string(initialClientDestConnID), sess))
-		Expect(replacedWithClosed).To(HaveKeyWithValue(string(initialConnID), sess))
+		Expect(replacedWithClosed).To(ContainElement(initialClientDestConnID))
+		Expect(replacedWithClosed).To(ContainElement(initialConnID))
 		for _, f := range queuedFrames {
 			nf := f.(*wire.NewConnectionIDFrame)
-			Expect(replacedWithClosed).To(HaveKeyWithValue(string(nf.ConnectionID), sess))
+			Expect(replacedWithClosed).To(ContainElement(nf.ConnectionID))
 		}
 	})
 })

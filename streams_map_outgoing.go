@@ -8,12 +8,16 @@ import (
 	"github.com/Psiphon-Labs/quic-go/internal/wire"
 )
 
-//go:generate genny -in $GOFILE -out streams_map_outgoing_bidi.go gen "item=streamI Item=BidiStream streamTypeGeneric=protocol.StreamTypeBidi"
-//go:generate genny -in $GOFILE -out streams_map_outgoing_uni.go gen "item=sendStreamI Item=UniStream streamTypeGeneric=protocol.StreamTypeUni"
-type outgoingItemsMap struct {
+type outgoingStream interface {
+	updateSendWindow(protocol.ByteCount)
+	closeForShutdown(error)
+}
+
+type outgoingStreamsMap[T outgoingStream] struct {
 	mutex sync.RWMutex
 
-	streams map[protocol.StreamNum]item
+	streamType protocol.StreamType
+	streams    map[protocol.StreamNum]T
 
 	openQueue      map[uint64]chan struct{}
 	lowestInQueue  uint64
@@ -23,18 +27,20 @@ type outgoingItemsMap struct {
 	maxStream   protocol.StreamNum // the maximum stream ID we're allowed to open
 	blockedSent bool               // was a STREAMS_BLOCKED sent for the current maxStream
 
-	newStream            func(protocol.StreamNum) item
+	newStream            func(protocol.StreamNum) T
 	queueStreamIDBlocked func(*wire.StreamsBlockedFrame)
 
 	closeErr error
 }
 
-func newOutgoingItemsMap(
-	newStream func(protocol.StreamNum) item,
+func newOutgoingStreamsMap[T outgoingStream](
+	streamType protocol.StreamType,
+	newStream func(protocol.StreamNum) T,
 	queueControlFrame func(wire.Frame),
-) *outgoingItemsMap {
-	return &outgoingItemsMap{
-		streams:              make(map[protocol.StreamNum]item),
+) *outgoingStreamsMap[T] {
+	return &outgoingStreamsMap[T]{
+		streamType:           streamType,
+		streams:              make(map[protocol.StreamNum]T),
 		openQueue:            make(map[uint64]chan struct{}),
 		maxStream:            protocol.InvalidStreamNum,
 		nextStream:           1,
@@ -43,32 +49,32 @@ func newOutgoingItemsMap(
 	}
 }
 
-func (m *outgoingItemsMap) OpenStream() (item, error) {
+func (m *outgoingStreamsMap[T]) OpenStream() (T, error) {
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
 
 	if m.closeErr != nil {
-		return nil, m.closeErr
+		return *new(T), m.closeErr
 	}
 
 	// if there are OpenStreamSync calls waiting, return an error here
 	if len(m.openQueue) > 0 || m.nextStream > m.maxStream {
 		m.maybeSendBlockedFrame()
-		return nil, streamOpenErr{errTooManyOpenStreams}
+		return *new(T), streamOpenErr{errTooManyOpenStreams}
 	}
 	return m.openStream(), nil
 }
 
-func (m *outgoingItemsMap) OpenStreamSync(ctx context.Context) (item, error) {
+func (m *outgoingStreamsMap[T]) OpenStreamSync(ctx context.Context) (T, error) {
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
 
 	if m.closeErr != nil {
-		return nil, m.closeErr
+		return *new(T), m.closeErr
 	}
 
 	if err := ctx.Err(); err != nil {
-		return nil, err
+		return *new(T), err
 	}
 
 	if len(m.openQueue) == 0 && m.nextStream <= m.maxStream {
@@ -90,13 +96,13 @@ func (m *outgoingItemsMap) OpenStreamSync(ctx context.Context) (item, error) {
 		case <-ctx.Done():
 			m.mutex.Lock()
 			delete(m.openQueue, queuePos)
-			return nil, ctx.Err()
+			return *new(T), ctx.Err()
 		case <-waitChan:
 		}
 		m.mutex.Lock()
 
 		if m.closeErr != nil {
-			return nil, m.closeErr
+			return *new(T), m.closeErr
 		}
 		if m.nextStream > m.maxStream {
 			// no stream available. Continue waiting
@@ -110,7 +116,7 @@ func (m *outgoingItemsMap) OpenStreamSync(ctx context.Context) (item, error) {
 	}
 }
 
-func (m *outgoingItemsMap) openStream() item {
+func (m *outgoingStreamsMap[T]) openStream() T {
 	s := m.newStream(m.nextStream)
 	m.streams[m.nextStream] = s
 	m.nextStream++
@@ -119,7 +125,7 @@ func (m *outgoingItemsMap) openStream() item {
 
 // maybeSendBlockedFrame queues a STREAMS_BLOCKED frame for the current stream offset,
 // if we haven't sent one for this offset yet
-func (m *outgoingItemsMap) maybeSendBlockedFrame() {
+func (m *outgoingStreamsMap[T]) maybeSendBlockedFrame() {
 	if m.blockedSent {
 		return
 	}
@@ -129,17 +135,17 @@ func (m *outgoingItemsMap) maybeSendBlockedFrame() {
 		streamNum = m.maxStream
 	}
 	m.queueStreamIDBlocked(&wire.StreamsBlockedFrame{
-		Type:        streamTypeGeneric,
+		Type:        m.streamType,
 		StreamLimit: streamNum,
 	})
 	m.blockedSent = true
 }
 
-func (m *outgoingItemsMap) GetStream(num protocol.StreamNum) (item, error) {
+func (m *outgoingStreamsMap[T]) GetStream(num protocol.StreamNum) (T, error) {
 	m.mutex.RLock()
 	if num >= m.nextStream {
 		m.mutex.RUnlock()
-		return nil, streamError{
+		return *new(T), streamError{
 			message: "peer attempted to open stream %d",
 			nums:    []protocol.StreamNum{num},
 		}
@@ -149,7 +155,7 @@ func (m *outgoingItemsMap) GetStream(num protocol.StreamNum) (item, error) {
 	return s, nil
 }
 
-func (m *outgoingItemsMap) DeleteStream(num protocol.StreamNum) error {
+func (m *outgoingStreamsMap[T]) DeleteStream(num protocol.StreamNum) error {
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
 
@@ -163,7 +169,7 @@ func (m *outgoingItemsMap) DeleteStream(num protocol.StreamNum) error {
 	return nil
 }
 
-func (m *outgoingItemsMap) SetMaxStream(num protocol.StreamNum) {
+func (m *outgoingStreamsMap[T]) SetMaxStream(num protocol.StreamNum) {
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
 
@@ -181,7 +187,7 @@ func (m *outgoingItemsMap) SetMaxStream(num protocol.StreamNum) {
 // UpdateSendWindow is called when the peer's transport parameters are received.
 // Only in the case of a 0-RTT handshake will we have open streams at this point.
 // We might need to update the send window, in case the server increased it.
-func (m *outgoingItemsMap) UpdateSendWindow(limit protocol.ByteCount) {
+func (m *outgoingStreamsMap[T]) UpdateSendWindow(limit protocol.ByteCount) {
 	m.mutex.Lock()
 	for _, str := range m.streams {
 		str.updateSendWindow(limit)
@@ -190,7 +196,7 @@ func (m *outgoingItemsMap) UpdateSendWindow(limit protocol.ByteCount) {
 }
 
 // unblockOpenSync unblocks the next OpenStreamSync go-routine to open a new stream
-func (m *outgoingItemsMap) unblockOpenSync() {
+func (m *outgoingStreamsMap[T]) unblockOpenSync() {
 	if len(m.openQueue) == 0 {
 		return
 	}
@@ -209,7 +215,7 @@ func (m *outgoingItemsMap) unblockOpenSync() {
 	}
 }
 
-func (m *outgoingItemsMap) CloseWithError(err error) {
+func (m *outgoingStreamsMap[T]) CloseWithError(err error) {
 	m.mutex.Lock()
 	m.closeErr = err
 	for _, str := range m.streams {

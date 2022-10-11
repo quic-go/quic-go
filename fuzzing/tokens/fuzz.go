@@ -2,7 +2,6 @@ package tokens
 
 import (
 	"encoding/binary"
-	"fmt"
 	"math/rand"
 	"net"
 	"time"
@@ -77,7 +76,6 @@ func newToken(tg *handshake.TokenGenerator, data []byte) int {
 	if token.OriginalDestConnectionID != nil || token.RetrySrcConnectionID != nil {
 		panic("didn't expect connection IDs")
 	}
-	checkAddr(token.RemoteAddr, addr)
 	return 1
 }
 
@@ -140,22 +138,5 @@ func newRetryToken(tg *handshake.TokenGenerator, data []byte) int {
 	if !token.RetrySrcConnectionID.Equal(retrySrcConnID) {
 		panic("retry src conn ID doesn't match")
 	}
-	checkAddr(token.RemoteAddr, addr)
 	return 1
-}
-
-func checkAddr(tokenAddr string, addr net.Addr) {
-	if udpAddr, ok := addr.(*net.UDPAddr); ok {
-		// For UDP addresses, we encode only the IP (not the port).
-		if ip := udpAddr.IP.String(); tokenAddr != ip {
-			fmt.Printf("%s vs %s", tokenAddr, ip)
-			panic("wrong remote address for a net.UDPAddr")
-		}
-		return
-	}
-
-	if tokenAddr != addr.String() {
-		fmt.Printf("%s vs %s", tokenAddr, addr.String())
-		panic("wrong remote address")
-	}
 }

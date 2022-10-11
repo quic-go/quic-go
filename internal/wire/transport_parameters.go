@@ -43,7 +43,7 @@ const (
 	activeConnectionIDLimitParameterID         transportParameterID = 0xe
 	initialSourceConnectionIDParameterID       transportParameterID = 0xf
 	retrySourceConnectionIDParameterID         transportParameterID = 0x10
-	// https://datatracker.ietf.org/doc/draft-ietf-quic-datagram/
+	// RFC 9221
 	maxDatagramFrameSizeParameterID transportParameterID = 0x20
 )
 
@@ -286,7 +286,7 @@ func (p *TransportParameters) readNumericTransportParameter(
 			return fmt.Errorf("initial_max_streams_uni too large: %d (maximum %d)", p.MaxUniStreamNum, protocol.MaxStreamCount)
 		}
 	case maxIdleTimeoutParameterID:
-		p.MaxIdleTimeout = utils.MaxDuration(protocol.MinRemoteIdleTimeout, time.Duration(val)*time.Millisecond)
+		p.MaxIdleTimeout = utils.Max(protocol.MinRemoteIdleTimeout, time.Duration(val)*time.Millisecond)
 	case maxUDPPayloadSizeParameterID:
 		if val < 1200 {
 			return fmt.Errorf("invalid value for max_packet_size: %d (minimum 1200)", val)

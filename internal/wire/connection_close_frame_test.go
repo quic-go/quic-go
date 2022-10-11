@@ -20,7 +20,7 @@ var _ = Describe("CONNECTION_CLOSE Frame", func() {
 			data = append(data, encodeVarInt(uint64(len(reason)))...) // reason phrase length
 			data = append(data, []byte(reason)...)
 			b := bytes.NewReader(data)
-			frame, err := parseConnectionCloseFrame(b, versionIETFFrames)
+			frame, err := parseConnectionCloseFrame(b, protocol.Version1)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(frame.IsApplicationError).To(BeFalse())
 			Expect(frame.ErrorCode).To(BeEquivalentTo(0x19))
@@ -36,7 +36,7 @@ var _ = Describe("CONNECTION_CLOSE Frame", func() {
 			data = append(data, encodeVarInt(uint64(len(reason)))...) // reason phrase length
 			data = append(data, reason...)
 			b := bytes.NewReader(data)
-			frame, err := parseConnectionCloseFrame(b, versionIETFFrames)
+			frame, err := parseConnectionCloseFrame(b, protocol.Version1)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(frame.IsApplicationError).To(BeTrue())
 			Expect(frame.ErrorCode).To(BeEquivalentTo(0xcafe))
@@ -50,7 +50,7 @@ var _ = Describe("CONNECTION_CLOSE Frame", func() {
 			data = append(data, encodeVarInt(0x42)...)   // frame type
 			data = append(data, encodeVarInt(0xffff)...) // reason phrase length
 			b := bytes.NewReader(data)
-			_, err := parseConnectionCloseFrame(b, versionIETFFrames)
+			_, err := parseConnectionCloseFrame(b, protocol.Version1)
 			Expect(err).To(MatchError(io.EOF))
 		})
 
@@ -61,10 +61,10 @@ var _ = Describe("CONNECTION_CLOSE Frame", func() {
 			data = append(data, encodeVarInt(0x1337)...)              // frame type
 			data = append(data, encodeVarInt(uint64(len(reason)))...) // reason phrase length
 			data = append(data, []byte(reason)...)
-			_, err := parseConnectionCloseFrame(bytes.NewReader(data), versionIETFFrames)
+			_, err := parseConnectionCloseFrame(bytes.NewReader(data), protocol.Version1)
 			Expect(err).NotTo(HaveOccurred())
 			for i := range data {
-				_, err := parseConnectionCloseFrame(bytes.NewReader(data[0:i]), versionIETFFrames)
+				_, err := parseConnectionCloseFrame(bytes.NewReader(data[0:i]), protocol.Version1)
 				Expect(err).To(HaveOccurred())
 			}
 		})
@@ -75,7 +75,7 @@ var _ = Describe("CONNECTION_CLOSE Frame", func() {
 			data = append(data, encodeVarInt(0x42)...) // frame type
 			data = append(data, encodeVarInt(0)...)
 			b := bytes.NewReader(data)
-			frame, err := parseConnectionCloseFrame(b, versionIETFFrames)
+			frame, err := parseConnectionCloseFrame(b, protocol.Version1)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(frame.ReasonPhrase).To(BeEmpty())
 			Expect(b.Len()).To(BeZero())
@@ -89,7 +89,7 @@ var _ = Describe("CONNECTION_CLOSE Frame", func() {
 				ErrorCode: 0xbeef,
 				FrameType: 0x12345,
 			}
-			Expect(frame.Write(b, versionIETFFrames)).To(Succeed())
+			Expect(frame.Write(b, protocol.Version1)).To(Succeed())
 			expected := []byte{0x1c}
 			expected = append(expected, encodeVarInt(0xbeef)...)
 			expected = append(expected, encodeVarInt(0x12345)...) // frame type
@@ -103,7 +103,7 @@ var _ = Describe("CONNECTION_CLOSE Frame", func() {
 				ErrorCode:    0xdead,
 				ReasonPhrase: "foobar",
 			}
-			Expect(frame.Write(b, versionIETFFrames)).To(Succeed())
+			Expect(frame.Write(b, protocol.Version1)).To(Succeed())
 			expected := []byte{0x1c}
 			expected = append(expected, encodeVarInt(0xdead)...)
 			expected = append(expected, encodeVarInt(0)...) // frame type
@@ -119,7 +119,7 @@ var _ = Describe("CONNECTION_CLOSE Frame", func() {
 				ErrorCode:          0xdead,
 				ReasonPhrase:       "foobar",
 			}
-			Expect(frame.Write(b, versionIETFFrames)).To(Succeed())
+			Expect(frame.Write(b, protocol.Version1)).To(Succeed())
 			expected := []byte{0x1d}
 			expected = append(expected, encodeVarInt(0xdead)...)
 			expected = append(expected, encodeVarInt(6)...) // reason phrase length
@@ -134,8 +134,8 @@ var _ = Describe("CONNECTION_CLOSE Frame", func() {
 				FrameType:    0xdeadbeef,
 				ReasonPhrase: "foobar",
 			}
-			Expect(f.Write(b, versionIETFFrames)).To(Succeed())
-			Expect(f.Length(versionIETFFrames)).To(Equal(protocol.ByteCount(b.Len())))
+			Expect(f.Write(b, protocol.Version1)).To(Succeed())
+			Expect(f.Length(protocol.Version1)).To(Equal(protocol.ByteCount(b.Len())))
 		})
 
 		It("has proper min length, for a frame containing an application error code", func() {
@@ -145,9 +145,9 @@ var _ = Describe("CONNECTION_CLOSE Frame", func() {
 				ErrorCode:          0xcafe,
 				ReasonPhrase:       "foobar",
 			}
-			err := f.Write(b, versionIETFFrames)
+			err := f.Write(b, protocol.Version1)
 			Expect(err).ToNot(HaveOccurred())
-			Expect(f.Length(versionIETFFrames)).To(Equal(protocol.ByteCount(b.Len())))
+			Expect(f.Length(protocol.Version1)).To(Equal(protocol.ByteCount(b.Len())))
 		})
 	})
 })

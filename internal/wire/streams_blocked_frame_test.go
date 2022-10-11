@@ -39,10 +39,10 @@ var _ = Describe("STREAMS_BLOCKED frame", func() {
 		It("errors on EOFs", func() {
 			data := []byte{0x16}
 			data = append(data, encodeVarInt(0x12345678)...)
-			_, err := parseStreamsBlockedFrame(bytes.NewReader(data), versionIETFFrames)
+			_, err := parseStreamsBlockedFrame(bytes.NewReader(data), protocol.Version1)
 			Expect(err).ToNot(HaveOccurred())
 			for i := range data {
-				_, err := parseStreamsBlockedFrame(bytes.NewReader(data[:i]), versionIETFFrames)
+				_, err := parseStreamsBlockedFrame(bytes.NewReader(data[:i]), protocol.Version1)
 				Expect(err).To(MatchError(io.EOF))
 			}
 		})

@@ -19,8 +19,7 @@ func ParseConnectionID(data []byte, shortHeaderConnIDLen int) (protocol.Connecti
 	if len(data) == 0 {
 		return nil, io.EOF
 	}
-	isLongHeader := data[0]&0x80 > 0
-	if !isLongHeader {
+	if !IsLongHeaderPacket(data[0]) {
 		if len(data) < shortHeaderConnIDLen+1 {
 			return nil, io.EOF
 		}
@@ -36,12 +35,17 @@ func ParseConnectionID(data []byte, shortHeaderConnIDLen int) (protocol.Connecti
 	return protocol.ConnectionID(data[6 : 6+destConnIDLen]), nil
 }
 
+// IsLongHeaderPacket says if this is a Long Header packet
+func IsLongHeaderPacket(firstByte byte) bool {
+	return firstByte&0x80 > 0
+}
+
 // IsVersionNegotiationPacket says if this is a version negotiation packet
 func IsVersionNegotiationPacket(b []byte) bool {
 	if len(b) < 5 {
 		return false
 	}
-	return b[0]&0x80 > 0 && b[1] == 0 && b[2] == 0 && b[3] == 0 && b[4] == 0
+	return IsLongHeaderPacket(b[0]) && b[1] == 0 && b[2] == 0 && b[3] == 0 && b[4] == 0
 }
 
 // Is0RTTPacket says if this is a 0-RTT packet.
@@ -50,13 +54,17 @@ func Is0RTTPacket(b []byte) bool {
 	if len(b) < 5 {
 		return false
 	}
-	if b[0]&0x80 == 0 {
+	if !IsLongHeaderPacket(b[0]) {
 		return false
 	}
-	if !protocol.IsSupportedVersion(protocol.SupportedVersions, protocol.VersionNumber(binary.BigEndian.Uint32(b[1:5]))) {
+	version := protocol.VersionNumber(binary.BigEndian.Uint32(b[1:5]))
+	if !protocol.IsSupportedVersion(protocol.SupportedVersions, version) {
 		return false
 	}
-	return b[0]&0x30>>4 == 0x1
+	if version == protocol.Version2 {
+		return b[0]>>4&0b11 == 0b10
+	}
+	return b[0]>>4&0b11 == 0b01
 }
 
 var ErrUnsupportedVersion = errors.New("unsupported version")
@@ -125,7 +133,7 @@ func parseHeaderImpl(b *bytes.Reader, shortHeaderConnIDLen int) (*Header, error)
 
 	h := &Header{
 		typeByte:     typeByte,
-		IsLongHeader: typeByte&0x80 > 0,
+		IsLongHeader: IsLongHeaderPacket(typeByte),
 	}
 
 	if !h.IsLongHeader {
@@ -179,15 +187,28 @@ func (h *Header) parseLongHeader(b *bytes.Reader) error {
 		return ErrUnsupportedVersion
 	}
 
-	switch (h.typeByte & 0x30) >> 4 {
-	case 0x0:
-		h.Type = protocol.PacketTypeInitial
-	case 0x1:
-		h.Type = protocol.PacketType0RTT
-	case 0x2:
-		h.Type = protocol.PacketTypeHandshake
-	case 0x3:
-		h.Type = protocol.PacketTypeRetry
+	if h.Version == protocol.Version2 {
+		switch h.typeByte >> 4 & 0b11 {
+		case 0b00:
+			h.Type = protocol.PacketTypeRetry
+		case 0b01:
+			h.Type = protocol.PacketTypeInitial
+		case 0b10:
+			h.Type = protocol.PacketType0RTT
+		case 0b11:
+			h.Type = protocol.PacketTypeHandshake
+		}
+	} else {
+		switch h.typeByte >> 4 & 0b11 {
+		case 0b00:
+			h.Type = protocol.PacketTypeInitial
+		case 0b01:
+			h.Type = protocol.PacketType0RTT
+		case 0b10:
+			h.Type = protocol.PacketTypeHandshake
+		case 0b11:
+			h.Type = protocol.PacketTypeRetry
+		}
 	}
 
 	if h.Type == protocol.PacketTypeRetry {

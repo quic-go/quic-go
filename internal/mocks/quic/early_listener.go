@@ -10,7 +10,6 @@ import (
 	reflect "reflect"
 
 	quic "github.com/Psiphon-Labs/quic-go"
-	quic_go "github.com/Psiphon-Labs/quic-go"
 	gomock "github.com/golang/mock/gomock"
 )
 
@@ -38,10 +37,10 @@ func (m *MockEarlyListener) EXPECT() *MockEarlyListenerMockRecorder {
 }
 
 // Accept mocks base method.
-func (m *MockEarlyListener) Accept(arg0 context.Context) (quic.EarlySession, error) {
+func (m *MockEarlyListener) Accept(arg0 context.Context) (quic.EarlyConnection, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Accept", arg0)
-	ret0, _ := ret[0].(quic.EarlySession)
+	ret0, _ := ret[0].(quic.EarlyConnection)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
