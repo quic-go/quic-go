@@ -28,8 +28,10 @@ var (
 )
 
 const (
-	nextProtoH3Draft29 = "h3-29"
-	nextProtoH3        = "h3"
+	// NextProtoH3Draft29 is the ALPN protocol negotiated during the TLS handshake, for QUIC draft 29.
+	NextProtoH3Draft29 = "h3-29"
+	// NextProtoH3 is the ALPN protocol negotiated during the TLS handshake, for QUIC v1 and v2.
+	NextProtoH3 = "h3"
 )
 
 // StreamType is the stream type of a unidirectional stream.
@@ -44,10 +46,10 @@ const (
 
 func versionToALPN(v protocol.VersionNumber) string {
 	if v == protocol.Version1 || v == protocol.Version2 {
-		return nextProtoH3
+		return NextProtoH3
 	}
 	if v == protocol.VersionTLS || v == protocol.VersionDraft29 {
-		return nextProtoH3Draft29
+		return NextProtoH3Draft29
 	}
 	return ""
 }
@@ -62,7 +64,7 @@ func ConfigureTLSConfig(tlsConf *tls.Config) *tls.Config {
 	return &tls.Config{
 		GetConfigForClient: func(ch *tls.ClientHelloInfo) (*tls.Config, error) {
 			// determine the ALPN from the QUIC version used
-			proto := nextProtoH3
+			proto := NextProtoH3
 			if qconn, ok := ch.Conn.(handshake.ConnWithVersion); ok {
 				proto = versionToALPN(qconn.GetQUICVersion())
 			}

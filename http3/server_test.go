@@ -959,7 +959,7 @@ var _ = Describe("Server", func() {
 
 			config, err := tlsConf.GetConfigForClient(ch)
 			Expect(err).NotTo(HaveOccurred())
-			Expect(config.NextProtos).To(Equal([]string{nextProtoH3}))
+			Expect(config.NextProtos).To(Equal([]string{NextProtoH3}))
 		})
 
 		It("advertises h3-29 for draft-29", func() {
@@ -969,7 +969,7 @@ var _ = Describe("Server", func() {
 			ch.Conn = newMockConn(protocol.VersionDraft29)
 			config, err := tlsConf.GetConfigForClient(ch)
 			Expect(err).NotTo(HaveOccurred())
-			Expect(config.NextProtos).To(Equal([]string{nextProtoH3Draft29}))
+			Expect(config.NextProtos).To(Equal([]string{NextProtoH3Draft29}))
 		})
 	})
 
@@ -1163,10 +1163,10 @@ var _ = Describe("Server", func() {
 		checkGetConfigForClientVersions := func(conf *tls.Config) {
 			c, err := conf.GetConfigForClient(&tls.ClientHelloInfo{Conn: newMockConn(protocol.VersionDraft29)})
 			ExpectWithOffset(1, err).ToNot(HaveOccurred())
-			ExpectWithOffset(1, c.NextProtos).To(Equal([]string{nextProtoH3Draft29}))
+			ExpectWithOffset(1, c.NextProtos).To(Equal([]string{NextProtoH3Draft29}))
 			c, err = conf.GetConfigForClient(&tls.ClientHelloInfo{Conn: newMockConn(protocol.Version1)})
 			ExpectWithOffset(1, err).ToNot(HaveOccurred())
-			ExpectWithOffset(1, c.NextProtos).To(Equal([]string{nextProtoH3}))
+			ExpectWithOffset(1, c.NextProtos).To(Equal([]string{NextProtoH3}))
 		}
 
 		It("uses the quic.Config to start the QUIC server", func() {
