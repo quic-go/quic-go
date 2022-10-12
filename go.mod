@@ -5,7 +5,7 @@ go 1.18
 require (
 	github.com/francoispqt/gojay v1.2.13
 	github.com/golang/mock v1.6.0
-	github.com/marten-seemann/qpack v0.2.1
+	github.com/marten-seemann/qpack v0.3.0
 	github.com/marten-seemann/qtls-go1-18 v0.1.3
 	github.com/marten-seemann/qtls-go1-19 v0.1.1
 	github.com/onsi/ginkgo/v2 v2.2.0
@@ -21,7 +21,6 @@ require (
 	github.com/go-task/slim-sprig v0.0.0-20210107165309-348f09dbbbc0 // indirect
 	github.com/google/go-cmp v0.5.8 // indirect
 	github.com/google/pprof v0.0.0-20210407192527-94a9f03dee38 // indirect
-	github.com/onsi/ginkgo v1.16.4 // indirect
 	golang.org/x/mod v0.6.0-dev.0.20220419223038-86c51ed26bb4 // indirect
 	golang.org/x/text v0.3.7 // indirect
 	golang.org/x/tools v0.1.12 // indirect
