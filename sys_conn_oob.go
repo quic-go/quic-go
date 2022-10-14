@@ -234,11 +234,17 @@ func (c *oobConn) WritePacket(b []byte, addr net.Addr, oob []byte) (n int, err e
 }
 
 func (c *oobConn) newSendConn() rawSendConn {
-	return &oobSendConn{oobConn: *c}
+	return &oobSendConn{
+		oobConn:    *c,
+		sendMsgBuf: make([]ipv4.Message, 0, writeBatchSize),
+	}
 }
 
 type oobSendConn struct {
 	oobConn
+
+	// Used as a buffer during calls to WritePackets to avoid allocations.
+	sendMsgBuf []ipv4.Message
 }
 
 func (c *oobSendConn) WritePackets(packets [][]byte, addr net.Addr, oob []byte) (int, error) {
@@ -254,15 +260,16 @@ func (c *oobSendConn) WritePackets(packets [][]byte, addr net.Addr, oob []byte) 
 		return len(packets), nil
 	}
 
-	msgs := make([]ipv4.Message, len(packets))
-	for i, p := range packets {
-		msgs[i] = ipv4.Message{
+	for _, p := range packets {
+		c.sendMsgBuf = append(c.sendMsgBuf, ipv4.Message{
 			Buffers: [][]byte{p},
 			OOB:     oob,
 			Addr:    addr,
-		}
+		})
 	}
-	return c.batchConn.WriteBatch(msgs, 0)
+	n, err := c.batchConn.WriteBatch(c.sendMsgBuf, 0)
+	c.sendMsgBuf = c.sendMsgBuf[:0]
+	return n, err
 }
 
 func (info *packetInfo) OOB() []byte {
