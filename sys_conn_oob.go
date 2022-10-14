@@ -233,7 +233,15 @@ func (c *oobConn) WritePacket(b []byte, addr net.Addr, oob []byte) (n int, err e
 	return n, err
 }
 
-func (c *oobConn) WritePackets(packets [][]byte, addr net.Addr, oob []byte) (int, error) {
+func (c *oobConn) newSendConn() rawSendConn {
+	return &oobSendConn{oobConn: *c}
+}
+
+type oobSendConn struct {
+	oobConn
+}
+
+func (c *oobSendConn) WritePackets(packets [][]byte, addr net.Addr, oob []byte) (int, error) {
 	// OSX throws sendmsg errors when using a packet conn that listening on both IPv4 and IPv6.
 	// Since WriteBatch won't send more than 1 packet on OSX anyway,
 	// there's no harm to just call WritePacket directly here.

@@ -14,7 +14,7 @@ type sendConn interface {
 }
 
 type sconn struct {
-	rawConn
+	raw rawSendConn
 
 	remoteAddr net.Addr
 	info       *packetInfo
@@ -25,7 +25,7 @@ var _ sendConn = &sconn{}
 
 func newSendConn(c rawConn, remote net.Addr, info *packetInfo) sendConn {
 	return &sconn{
-		rawConn:    c,
+		raw:        c.newSendConn(),
 		remoteAddr: remote,
 		info:       info,
 		oob:        info.OOB(),
@@ -33,12 +33,12 @@ func newSendConn(c rawConn, remote net.Addr, info *packetInfo) sendConn {
 }
 
 func (c *sconn) Write(p []byte) error {
-	_, err := c.rawConn.WritePacket(p, c.remoteAddr, c.oob)
+	_, err := c.raw.WritePacket(p, c.remoteAddr, c.oob)
 	return err
 }
 
 func (c *sconn) WritePackets(p [][]byte) error {
-	_, err := c.rawConn.WritePackets(p, c.remoteAddr, c.oob)
+	_, err := c.raw.WritePackets(p, c.remoteAddr, c.oob)
 	return err
 }
 
@@ -47,7 +47,7 @@ func (c *sconn) RemoteAddr() net.Addr {
 }
 
 func (c *sconn) LocalAddr() net.Addr {
-	addr := c.rawConn.LocalAddr()
+	addr := c.raw.LocalAddr()
 	if c.info != nil {
 		if udpAddr, ok := addr.(*net.UDPAddr); ok {
 			addrCopy := *udpAddr
@@ -56,4 +56,8 @@ func (c *sconn) LocalAddr() net.Addr {
 		}
 	}
 	return addr
+}
+
+func (c *sconn) Close() error {
+	return c.raw.Close()
 }

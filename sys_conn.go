@@ -87,3 +87,7 @@ func (c *basicConn) WritePackets(packets [][]byte, addr net.Addr, _ []byte) (int
 	}
 	return len(packets), nil
 }
+
+func (c *basicConn) newSendConn() rawSendConn {
+	return c
+}

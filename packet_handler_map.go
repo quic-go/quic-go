@@ -24,8 +24,25 @@ import (
 
 // rawConn is a connection that allow reading of a receivedPacket.
 type rawConn interface {
+	// ReadPacket reads a single packet from the connection.
+	// On systems that support it, this will use the optimized recvmmsg syscall.
 	ReadPacket() (*receivedPacket, error)
+	// WritePacket writes a single packet to the socket.
+	// It is safe to call this method concurrently.
 	WritePacket(b []byte, addr net.Addr, oob []byte) (int, error)
+	LocalAddr() net.Addr
+	io.Closer
+
+	newSendConn() rawSendConn
+}
+
+type rawSendConn interface {
+	// WritePacket writes a single packet to the socket.
+	// It is safe to call this method concurrently.
+	WritePacket(b []byte, addr net.Addr, oob []byte) (int, error)
+	// WritePackets writes multiple packets.
+	// On systems that support it, this will use the optimized sendmmsg syscall.
+	// This function must not be called concurrently.
 	WritePackets(b [][]byte, addr net.Addr, oob []byte) (int, error)
 	LocalAddr() net.Addr
 	io.Closer
