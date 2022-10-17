@@ -23,8 +23,8 @@ const (
 	amplificationFactor = 3
 	// We use Retry packets to derive an RTT estimate. Make sure we don't set the RTT to a super low value yet.
 	minRTTAfterRetry = 5 * time.Millisecond
-	// PTO duration is exponential but truncated to the following maximum.
-	maxPTODuration = 10 * time.Second
+	// PTO duration is exponential but truncated to the following maximum as allowed by RFC 8961 Section 4.4.
+	maxPTODuration = 60 * time.Second
 )
 
 type packetNumberSpace struct {
