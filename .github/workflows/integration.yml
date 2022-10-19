@@ -33,8 +33,8 @@ jobs:
         env:
           GOARCH: 386
         run: |
-          ginkgo -r -v -randomize-all -randomizeSuites -trace -skip-package self integrationtests
-          ginkgo -r -v -randomize-all -randomizeSuites -trace integrationtests/self ${{ env.QLOGFLAG }}
+          ginkgo -r -v -randomize-all -randomize-suites -trace -skip-package self integrationtests
+          ginkgo -r -v -randomize-all -randomize-suites -trace integrationtests/self ${{ env.QLOGFLAG }}
       - name: save qlogs
         if: ${{ always() && env.DEBUG == 'true' }}
         uses: actions/upload-artifact@v2
