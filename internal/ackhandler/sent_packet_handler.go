@@ -461,7 +461,7 @@ func (h *sentPacketHandler) getLossTimeAndSpace() (time.Time, protocol.Encryptio
 
 func (h *sentPacketHandler) getScaledPTO(includeMaxAckDelay bool) time.Duration {
 	pto := h.rttStats.PTO(includeMaxAckDelay) << h.ptoCount
-	if pto > maxPTODuration {
+	if (pto > maxPTODuration) || (pto <= 0) {
 		return maxPTODuration
 	}
 	return pto
