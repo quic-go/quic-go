@@ -290,7 +290,7 @@ type Config struct {
 	// limit the memory usage.
 	// To avoid deadlocks, it is not valid to call other functions on the connection or on streams
 	// in this callback.
-	AllowConnectionWindowIncrease func(sess Connection, delta uint64) bool
+	AllowConnectionWindowIncrease func(conn Connection, delta uint64) bool
 	// MaxIncomingStreams is the maximum number of concurrent bidirectional streams that a peer is allowed to open.
 	// Values above 2^60 are invalid.
 	// If not set, it will default to 100.
