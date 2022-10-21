@@ -286,9 +286,9 @@ func (s *sendStream) popNewStreamFrame(maxBytes, sendWindow protocol.ByteCount) 
 			s.nextFrame.DataLenPresent = true
 			copy(s.nextFrame.Data, nextFrame.Data[maxDataLen:])
 			nextFrame.Data = nextFrame.Data[:maxDataLen]
-		} else {
-			s.signalWrite()
 		}
+		s.signalWrite()
+
 		return nextFrame, s.nextFrame != nil || s.dataForWriting != nil
 	}
 
