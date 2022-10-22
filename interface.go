@@ -173,7 +173,7 @@ type Connection interface {
 	// CloseWithError closes the connection with an error.
 	// The error string will be sent to the peer.
 	CloseWithError(ApplicationErrorCode, string) error
-	// The context is cancelled when the connection is closed.
+	// Context returns a context that is cancelled when the connection is closed.
 	Context() context.Context
 	// ConnectionState returns basic details about the QUIC connection.
 	// It blocks until the handshake completes.
