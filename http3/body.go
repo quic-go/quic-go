@@ -26,6 +26,7 @@ type StreamCreator interface {
 	OpenUniStreamSync(context.Context) (quic.SendStream, error)
 	LocalAddr() net.Addr
 	RemoteAddr() net.Addr
+	ConnectionState() quic.ConnectionState
 }
 
 var _ StreamCreator = quic.Connection(nil)
