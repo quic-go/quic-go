@@ -251,6 +251,10 @@ func (c *client) RoundTripOpt(req *http.Request, opt RoundTripOpt) (*http.Respon
 		return nil, c.handshakeErr
 	}
 
+	req.Proto = "HTTP/3.0"
+	req.ProtoMajor = 3
+	req.ProtoMinor = 0
+
 	// Immediately send out this request, if this is a 0-RTT request.
 	if req.Method == MethodGet0RTT {
 		req.Method = http.MethodGet
@@ -390,6 +394,7 @@ func (c *client) doRequest(req *http.Request, str quic.Stream, opt RoundTripOpt,
 		ProtoMajor: 3,
 		Header:     http.Header{},
 		TLS:        &connState,
+		Request:    req,
 	}
 	for _, hf := range hfs {
 		switch hf.Name {
