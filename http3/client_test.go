@@ -741,7 +741,7 @@ var _ = Describe("Client", func() {
 			Expect(rsp.Proto).To(Equal("HTTP/3.0"))
 			Expect(rsp.ProtoMajor).To(Equal(3))
 			Expect(rsp.StatusCode).To(Equal(418))
-			Expect(rsp.Request).ToNot(Equal(nil))
+			Expect(rsp.Request).ToNot(BeNil())
 			Expect(rsp.Request.Proto).To(Equal("HTTP/3.0"))
 			Expect(rsp.Request.ProtoMajor).To(Equal("3"))
 		})
