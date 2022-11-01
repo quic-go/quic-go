@@ -11,12 +11,13 @@ import (
 	"sync"
 	"time"
 
+	"github.com/marten-seemann/qpack"
+
 	"github.com/lucas-clemente/quic-go"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/internal/qtls"
 	"github.com/lucas-clemente/quic-go/internal/utils"
 	"github.com/lucas-clemente/quic-go/quicvarint"
-	"github.com/marten-seemann/qpack"
 )
 
 // MethodGet0RTT allows a GET request to be sent using 0-RTT.
@@ -250,10 +251,6 @@ func (c *client) RoundTripOpt(req *http.Request, opt RoundTripOpt) (*http.Respon
 	if c.handshakeErr != nil {
 		return nil, c.handshakeErr
 	}
-
-	req.Proto = "HTTP/3.0"
-	req.ProtoMajor = 3
-	req.ProtoMinor = 0
 
 	// Immediately send out this request, if this is a 0-RTT request.
 	if req.Method == MethodGet0RTT {
