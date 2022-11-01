@@ -11,13 +11,12 @@ import (
 	"sync"
 	"time"
 
-	"github.com/marten-seemann/qpack"
-
 	"github.com/lucas-clemente/quic-go"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/internal/qtls"
 	"github.com/lucas-clemente/quic-go/internal/utils"
 	"github.com/lucas-clemente/quic-go/quicvarint"
+	"github.com/marten-seemann/qpack"
 )
 
 // MethodGet0RTT allows a GET request to be sent using 0-RTT.
