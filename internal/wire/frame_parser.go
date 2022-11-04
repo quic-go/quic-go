@@ -34,6 +34,7 @@ const (
 	connectionCloseFrameType    = 0x1c
 	applicationCloseFrameType   = 0x1d
 	handshakeDoneFrameType      = 0x1e
+	resetStreamAtFrameType      = 0x24 // https://datatracker.ietf.org/doc/draft-ietf-quic-reliable-stream-reset/06/
 )
 
 // The FrameParser parses QUIC frames, one by one.
@@ -110,7 +111,7 @@ func (p *FrameParser) parseFrame(b []byte, typ uint64, encLevel protocol.Encrypt
 			l, err = parseAckFrame(p.ackFrame, b, typ, ackDelayExponent, v)
 			frame = p.ackFrame
 		case resetStreamFrameType:
-			frame, l, err = parseResetStreamFrame(b, v)
+			frame, l, err = parseResetStreamFrame(b, false, v)
 		case stopSendingFrameType:
 			frame, l, err = parseStopSendingFrame(b, v)
 		case cryptoFrameType:
