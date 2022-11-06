@@ -233,6 +233,7 @@ func newClient(
 	if tlsConf.ServerName == "" {
 		sni, _, err := net.SplitHostPort(host)
 		if err != nil {
+			// It's ok if net.SplitHostPort returns an error - it could be a hostname/IP address without a port.
 			sni = host
 		}
 
