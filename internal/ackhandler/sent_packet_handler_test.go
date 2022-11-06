@@ -190,7 +190,7 @@ var _ = Describe("SentPacketHandler", func() {
 				Expect(err).ToNot(HaveOccurred())
 				Expect(handler.appDataPackets.largestAcked).To(Equal(protocol.PacketNumber(3)))
 				// this wouldn't happen in practice
-				// for testing purposes, we pretend send a different ACK frame in a duplicated packet, to be able to verify that it actually doesn't get processed
+				// for testing purposes, we pretend to send a different ACK frame in a duplicated packet, to be able to verify that it actually doesn't get processed
 				_, err = handler.ReceivedAck(ack2, protocol.Encryption1RTT, time.Now())
 				Expect(err).ToNot(HaveOccurred())
 				Expect(handler.appDataPackets.largestAcked).To(Equal(protocol.PacketNumber(4)))
