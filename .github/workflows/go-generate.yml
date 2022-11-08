@@ -10,8 +10,6 @@ jobs:
       - name: Install dependencies
         run: go build
       - name: Install code generators
-        run: |
-          go install -v github.com/golang/mock/mockgen
-          go install -v golang.org/x/tools/cmd/goimports
+        run: go install -v golang.org/x/tools/cmd/goimports
       - name: Run code generators
         run: .github/workflows/go-generate.sh
