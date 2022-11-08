@@ -19,23 +19,20 @@ jobs:
     steps:
       - checkout
       - run:
-          name: "Setup build environment"
-          command: go install github.com/onsi/ginkgo/v2/ginkgo
-      - run:
           name: "Build infos"
           command: go version
       - run:
           name: "Run tools tests"
-          command: ginkgo -race -r -v -randomize-all -trace integrationtests/tools
+          command: go run github.com/onsi/ginkgo/v2/ginkgo -race -r -v -randomize-all -trace integrationtests/tools
       - run:
           name: "Run self integration tests"
-          command: ginkgo -v -randomize-all -trace integrationtests/self
+          command: go run github.com/onsi/ginkgo/v2/ginkgo -v -randomize-all -trace integrationtests/self
       - run:
           name: "Run self integration tests with race detector"
-          command: ginkgo -race -v -randomize-all -trace integrationtests/self
+          command: go run github.com/onsi/ginkgo/v2/ginkgo -race -v -randomize-all -trace integrationtests/self
       - run:
           name: "Run self integration tests with qlog"
-          command: ginkgo -v -randomize-all -trace integrationtests/self -- -qlog
+          command: go run github.com/onsi/ginkgo/v2/ginkgo -v -randomize-all -trace integrationtests/self -- -qlog
   go118:
     <<: *test
   go119:
