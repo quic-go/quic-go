@@ -11,6 +11,7 @@ import (
 	"io"
 	"log"
 	"math/big"
+	"time"
 
 	"github.com/lucas-clemente/quic-go"
 )
@@ -19,9 +20,15 @@ const addr = "localhost:4242"
 
 const message = "foobar"
 
+var cert *x509.Certificate
+var rootKey *rsa.PrivateKey
+
 // We start a server echoing data on the first stream the client opens,
 // then connect with a client, send the message, and wait for its receipt.
 func main() {
+	// set log level to debug if it's necessary
+	//utils.DefaultLogger.SetLogLevel(utils.LogLevelDebug)
+	generateRootCA()
 	go func() { log.Fatal(echoServer()) }()
 
 	err := clientMain()
@@ -50,8 +57,11 @@ func echoServer() error {
 }
 
 func clientMain() error {
+	pool := x509.NewCertPool()
+	pool.AddCert(cert)
 	tlsConf := &tls.Config{
-		InsecureSkipVerify: true,
+		RootCAs:            pool,
+		InsecureSkipVerify: false, // set false means to enable certificate verification
 		NextProtos:         []string{"quic-echo-example"},
 	}
 	conn, err := quic.DialAddr(addr, tlsConf, nil)
@@ -88,14 +98,45 @@ func (w loggingWriter) Write(b []byte) (int, error) {
 	return w.Writer.Write(b)
 }
 
+// generate root CA ,make sure client and server use the same root CA,
+// or you may got error :  x509: certificate signed by unknown authority
+func generateRootCA() {
+	key, err := rsa.GenerateKey(rand.Reader, 1024)
+	if err != nil {
+		panic(err)
+	}
+	template := x509.Certificate{
+		SerialNumber:          big.NewInt(1),
+		NotBefore:             time.Now(),
+		NotAfter:              time.Now().Add(30 * 24 * time.Hour),
+		IsCA:                  true,
+		BasicConstraintsValid: true,
+	}
+	certDER, err := x509.CreateCertificate(rand.Reader, &template, &template, &key.PublicKey, key)
+	if err != nil {
+		panic(err)
+	}
+	cert_, err := x509.ParseCertificate(certDER)
+	if nil != err {
+		panic(err)
+	}
+	cert = cert_
+	rootKey = key
+}
+
 // Setup a bare-bones TLS config for the server
 func generateTLSConfig() *tls.Config {
 	key, err := rsa.GenerateKey(rand.Reader, 1024)
 	if err != nil {
 		panic(err)
 	}
-	template := x509.Certificate{SerialNumber: big.NewInt(1)}
-	certDER, err := x509.CreateCertificate(rand.Reader, &template, &template, &key.PublicKey, key)
+	template := x509.Certificate{
+		SerialNumber: big.NewInt(1),
+		NotBefore:    time.Now(),
+		NotAfter:     time.Now().Add(30 * 24 * time.Hour),
+		DNSNames:     []string{"localhost"},
+	}
+	certDER, err := x509.CreateCertificate(rand.Reader, &template, cert, &key.PublicKey, rootKey)
 	if err != nil {
 		panic(err)
 	}
