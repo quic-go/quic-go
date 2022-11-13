@@ -206,6 +206,12 @@ type EarlyConnection interface {
 // as they are allowed by RFC 8999.
 type ConnectionID = protocol.ConnectionID
 
+// ConnectionIDFromBytes interprets b as a Connection ID. It panics if b is
+// longer than 20 bytes.
+func ConnectionIDFromBytes(b []byte) ConnectionID {
+	return protocol.ParseConnectionID(b)
+}
+
 // A ConnectionIDGenerator is an interface that allows clients to implement their own format
 // for the Connection IDs that servers/clients use as SrcConnectionID in QUIC packets.
 //
