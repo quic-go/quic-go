@@ -331,6 +331,7 @@ type Config struct {
 type ConnectionState struct {
 	TLS               handshake.ConnectionState
 	SupportsDatagrams bool
+	QUICVersion       protocol.VersionNumber
 }
 
 // A Listener for incoming QUIC connections
