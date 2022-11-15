@@ -76,7 +76,7 @@ var _ = Describe("Config", func() {
 			case "MaxIncomingUniStreams":
 				f.Set(reflect.ValueOf(int64(12)))
 			case "StatelessResetKey":
-				f.Set(reflect.ValueOf([]byte{1, 2, 3, 4}))
+				f.Set(reflect.ValueOf(&StatelessResetKey{1, 2, 3, 4}))
 			case "KeepAlivePeriod":
 				f.Set(reflect.ValueOf(time.Second))
 			case "EnableDatagrams":
