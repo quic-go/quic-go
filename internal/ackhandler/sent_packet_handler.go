@@ -23,7 +23,7 @@ const (
 	amplificationFactor = 3
 	// We use Retry packets to derive an RTT estimate. Make sure we don't set the RTT to a super low value yet.
 	minRTTAfterRetry = 5 * time.Millisecond
-	// PTO duration is exponential but truncated to the following maximum as allowed by RFC 8961 Section 4.4.
+	// The PTO duration uses exponential backoff, but is truncated to a maximum value, as allowed by RFC 8961, section 4.4.
 	maxPTODuration = 60 * time.Second
 )
 
@@ -461,7 +461,7 @@ func (h *sentPacketHandler) getLossTimeAndSpace() (time.Time, protocol.Encryptio
 
 func (h *sentPacketHandler) getScaledPTO(includeMaxAckDelay bool) time.Duration {
 	pto := h.rttStats.PTO(includeMaxAckDelay) << h.ptoCount
-	if (pto > maxPTODuration) || (pto <= 0) {
+	if pto > maxPTODuration || pto <= 0 {
 		return maxPTODuration
 	}
 	return pto
