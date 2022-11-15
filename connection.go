@@ -738,7 +738,7 @@ func (s *connection) ConnectionState() ConnectionState {
 	return ConnectionState{
 		TLS:               s.cryptoStreamHandler.ConnectionState(),
 		SupportsDatagrams: s.supportsDatagrams(),
-		QUICVersion:       s.version,
+		Version:           s.version,
 	}
 }
 
