@@ -23,9 +23,9 @@ var _ = Describe("Stateless Resets", func() {
 		connIDLen := connIDLens[i]
 
 		It(fmt.Sprintf("sends and recognizes stateless resets, for %d byte connection IDs", connIDLen), func() {
-			statelessResetKey := make([]byte, 32)
-			rand.Read(statelessResetKey)
-			serverConfig := getQuicConfig(&quic.Config{StatelessResetKey: statelessResetKey})
+			var statelessResetKey quic.StatelessResetKey
+			rand.Read(statelessResetKey[:])
+			serverConfig := getQuicConfig(&quic.Config{StatelessResetKey: &statelessResetKey})
 
 			ln, err := quic.ListenAddr("localhost:0", getTLSConfig(), serverConfig)
 			Expect(err).ToNot(HaveOccurred())
