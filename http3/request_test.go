@@ -15,6 +15,7 @@ var _ = Describe("Request", func() {
 			{Name: ":path", Value: "/foo"},
 			{Name: ":authority", Value: "quic.clemente.io"},
 			{Name: ":method", Value: "GET"},
+			// content-length should be ignored since it's a GET request
 			{Name: "content-length", Value: "42"},
 		}
 		req, err := requestFromHeaders(headers)
@@ -25,7 +26,7 @@ var _ = Describe("Request", func() {
 		Expect(req.Proto).To(Equal("HTTP/3.0"))
 		Expect(req.ProtoMajor).To(Equal(3))
 		Expect(req.ProtoMinor).To(BeZero())
-		Expect(req.ContentLength).To(Equal(int64(42)))
+		Expect(req.ContentLength).To(Equal(int64(0)))
 		Expect(req.Header).To(BeEmpty())
 		Expect(req.Body).To(BeNil())
 		Expect(req.Host).To(Equal("quic.clemente.io"))
@@ -47,6 +48,7 @@ var _ = Describe("Request", func() {
 		Expect(req.URL.Host).To(BeEmpty())
 		Expect(req.Host).To(Equal("quic.clemente.io"))
 		Expect(req.RequestURI).To(Equal("//foo"))
+		Expect(req.ContentLength).To(Equal(int64(0)))
 	})
 
 	It("concatenates the cookie headers", func() {
@@ -106,6 +108,31 @@ var _ = Describe("Request", func() {
 		}
 		_, err := requestFromHeaders(headers)
 		Expect(err).To(MatchError(":path, :authority and :method must not be empty"))
+	})
+
+	It("populates ContentLength when known", func() {
+		headers := []qpack.HeaderField{
+			{Name: ":path", Value: "/foo"},
+			{Name: ":authority", Value: "quic.clemente.io"},
+			{Name: ":method", Value: "POST"},
+			{Name: "content-length", Value: "42"},
+		}
+		req, err := requestFromHeaders(headers)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(req.Method).To(Equal("POST"))
+		Expect(req.ContentLength).To(Equal(int64(42)))
+	})
+
+	It("populates ContentLength when unknown", func() {
+		headers := []qpack.HeaderField{
+			{Name: ":path", Value: "/foo"},
+			{Name: ":authority", Value: "quic.clemente.io"},
+			{Name: ":method", Value: "POST"},
+		}
+		req, err := requestFromHeaders(headers)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(req.Method).To(Equal("POST"))
+		Expect(req.ContentLength).To(Equal(int64(-1)))
 	})
 
 	Context("regular HTTP CONNECT", func() {
