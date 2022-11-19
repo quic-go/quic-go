@@ -189,6 +189,20 @@ type Server struct {
 	// In that case, the stream type will not be set.
 	UniStreamHijacker func(StreamType, quic.Connection, quic.ReceiveStream, error) (hijacked bool)
 
+	// ConnContext optionally specifies a function that modifies the context used
+	// for a new connection c. The provided ctx is derived from the base context and
+	// has a ServerContextKey value. The function MUST return a modified context or
+	// the original untouched; if it returns nil expect a panic (because this
+	// follows the same behavior of net/http's Server.ConnContext).
+	//
+	// example function to inject quic.ConnectionTracingKey into the context:
+	//
+	//   func(ctx context.Context, conn quic.Connection) context.Context {
+	//     return context.WithValue(ctx, quic.ConnectionTracingKey, conn.Context().Value(quic.ConnectionTracingKey))
+	//   }
+	//
+	ConnContext func(ctx context.Context, conn quic.Connection) context.Context
+
 	mutex     sync.RWMutex
 	listeners map[*quic.EarlyListener]listenerInfo
 
@@ -583,6 +597,12 @@ func (s *Server) handleRequest(conn quic.Connection, str quic.Stream, decoder *q
 	ctx := str.Context()
 	ctx = context.WithValue(ctx, ServerContextKey, s)
 	ctx = context.WithValue(ctx, http.LocalAddrContextKey, conn.LocalAddr())
+	if cc := s.ConnContext; cc != nil {
+		ctx = cc(ctx, conn)
+		if ctx == nil {
+			panic("ConnContext returned nil")
+		}
+	}
 	req = req.WithContext(ctx)
 	r := newResponseWriter(str, conn, s.logger)
 	defer r.Flush()
