@@ -598,7 +598,7 @@ func (s *Server) handleRequest(conn quic.Connection, str quic.Stream, decoder *q
 	ctx := str.Context()
 	ctx = context.WithValue(ctx, ServerContextKey, s)
 	ctx = context.WithValue(ctx, http.LocalAddrContextKey, conn.LocalAddr())
-	if cc := s.ConnContext; cc != nil {
+	if cc := s.RequestContext; cc != nil {
 		ctx = cc(ctx, conn)
 		if ctx == nil {
 			panic("ConnContext returned nil")
