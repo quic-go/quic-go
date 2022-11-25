@@ -227,6 +227,7 @@ func (e eventVersionNegotiationReceived) MarshalJSONObject(enc *gojay.Encoder) {
 
 type eventPacketBuffered struct {
 	PacketType logging.PacketType
+	PacketSize protocol.ByteCount
 }
 
 func (e eventPacketBuffered) Category() category { return categoryTransport }
@@ -236,6 +237,7 @@ func (e eventPacketBuffered) IsNil() bool        { return false }
 func (e eventPacketBuffered) MarshalJSONObject(enc *gojay.Encoder) {
 	//nolint:gosimple
 	enc.ObjectKey("header", packetHeaderWithType{PacketType: e.PacketType})
+	enc.ObjectKey("raw", rawInfo{Length: e.PacketSize})
 	enc.StringKey("trigger", "keys_unavailable")
 }
 

@@ -10,7 +10,7 @@ import (
 
 	"github.com/lucas-clemente/quic-go/internal/wire"
 
-	. "github.com/onsi/ginkgo"
+	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 )
 
@@ -198,9 +198,9 @@ var _ = Describe("Tracing", func() {
 		})
 
 		It("traces the BufferedPacket event", func() {
-			tr1.EXPECT().BufferedPacket(PacketTypeHandshake)
-			tr2.EXPECT().BufferedPacket(PacketTypeHandshake)
-			tracer.BufferedPacket(PacketTypeHandshake)
+			tr1.EXPECT().BufferedPacket(PacketTypeHandshake, ByteCount(1337))
+			tr2.EXPECT().BufferedPacket(PacketTypeHandshake, ByteCount(1337))
+			tracer.BufferedPacket(PacketTypeHandshake, 1337)
 		})
 
 		It("traces the DroppedPacket event", func() {

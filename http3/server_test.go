@@ -23,7 +23,7 @@ import (
 	"github.com/golang/mock/gomock"
 	"github.com/marten-seemann/qpack"
 
-	. "github.com/onsi/ginkgo"
+	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	gmtypes "github.com/onsi/gomega/types"
 )
@@ -199,6 +199,23 @@ var _ = Describe("Server", func() {
 			Expect(serr.err).ToNot(HaveOccurred())
 			hfs := decodeHeader(responseBuf)
 			Expect(hfs).To(HaveKeyWithValue(":status", []string{"200"}))
+		})
+
+		It("handles a aborting handler", func() {
+			s.Handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				panic(http.ErrAbortHandler)
+			})
+
+			responseBuf := &bytes.Buffer{}
+			setRequest(encodeRequest(exampleGetRequest))
+			str.EXPECT().Context().Return(reqContext)
+			str.EXPECT().Write(gomock.Any()).DoAndReturn(responseBuf.Write).AnyTimes()
+			str.EXPECT().CancelRead(gomock.Any())
+
+			serr := s.handleRequest(conn, str, qpackDecoder, nil)
+			Expect(serr.err).ToNot(HaveOccurred())
+			hfs := decodeHeader(responseBuf)
+			Expect(hfs).To(HaveKeyWithValue(":status", []string{"500"}))
 		})
 
 		It("handles a panicking handler", func() {
@@ -942,7 +959,7 @@ var _ = Describe("Server", func() {
 
 			config, err := tlsConf.GetConfigForClient(ch)
 			Expect(err).NotTo(HaveOccurred())
-			Expect(config.NextProtos).To(Equal([]string{nextProtoH3}))
+			Expect(config.NextProtos).To(Equal([]string{NextProtoH3}))
 		})
 
 		It("advertises h3-29 for draft-29", func() {
@@ -952,7 +969,7 @@ var _ = Describe("Server", func() {
 			ch.Conn = newMockConn(protocol.VersionDraft29)
 			config, err := tlsConf.GetConfigForClient(ch)
 			Expect(err).NotTo(HaveOccurred())
-			Expect(config.NextProtos).To(Equal([]string{nextProtoH3Draft29}))
+			Expect(config.NextProtos).To(Equal([]string{NextProtoH3Draft29}))
 		})
 	})
 
@@ -1134,6 +1151,30 @@ var _ = Describe("Server", func() {
 		})
 	})
 
+	Context("ServeQUICConn", func() {
+		It("serves a QUIC connection", func() {
+			mux := http.NewServeMux()
+			mux.HandleFunc("/hello", func(w http.ResponseWriter, _ *http.Request) {
+				w.Write([]byte("foobar"))
+			})
+			s.Handler = mux
+			tlsConf := testdata.GetTLSConfig()
+			tlsConf.NextProtos = []string{NextProtoH3}
+			conn := mockquic.NewMockEarlyConnection(mockCtrl)
+			controlStr := mockquic.NewMockStream(mockCtrl)
+			controlStr.EXPECT().Write(gomock.Any())
+			conn.EXPECT().OpenUniStream().Return(controlStr, nil)
+			testDone := make(chan struct{})
+			conn.EXPECT().AcceptUniStream(gomock.Any()).DoAndReturn(func(context.Context) (quic.ReceiveStream, error) {
+				<-testDone
+				return nil, errors.New("test done")
+			}).MaxTimes(1)
+			conn.EXPECT().AcceptStream(gomock.Any()).Return(nil, &quic.ApplicationError{ErrorCode: quic.ApplicationErrorCode(errorNoError)})
+			s.ServeQUICConn(conn)
+			close(testDone)
+		})
+	})
+
 	Context("ListenAndServe", func() {
 		BeforeEach(func() {
 			s.Addr = "localhost:0"
@@ -1146,10 +1187,10 @@ var _ = Describe("Server", func() {
 		checkGetConfigForClientVersions := func(conf *tls.Config) {
 			c, err := conf.GetConfigForClient(&tls.ClientHelloInfo{Conn: newMockConn(protocol.VersionDraft29)})
 			ExpectWithOffset(1, err).ToNot(HaveOccurred())
-			ExpectWithOffset(1, c.NextProtos).To(Equal([]string{nextProtoH3Draft29}))
+			ExpectWithOffset(1, c.NextProtos).To(Equal([]string{NextProtoH3Draft29}))
 			c, err = conf.GetConfigForClient(&tls.ClientHelloInfo{Conn: newMockConn(protocol.Version1)})
 			ExpectWithOffset(1, err).ToNot(HaveOccurred())
-			ExpectWithOffset(1, c.NextProtos).To(Equal([]string{nextProtoH3}))
+			ExpectWithOffset(1, c.NextProtos).To(Equal([]string{NextProtoH3}))
 		}
 
 		It("uses the quic.Config to start the QUIC server", func() {

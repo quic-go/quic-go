@@ -7,7 +7,7 @@ import (
 	"github.com/lucas-clemente/quic-go/internal/qerr"
 	"github.com/lucas-clemente/quic-go/internal/wire"
 
-	. "github.com/onsi/ginkgo"
+	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 )
 
@@ -75,7 +75,7 @@ var _ = Describe("Connection ID Generator", func() {
 		Expect(queuedFrames).To(HaveLen(protocol.MaxIssuedConnectionIDs - 1))
 	})
 
-	// SetMaxActiveConnIDs is called twice when we dialing a 0-RTT connection:
+	// SetMaxActiveConnIDs is called twice when dialing a 0-RTT connection:
 	// once for the restored from the old connections, once when we receive the transport parameters
 	Context("dealing with 0-RTT", func() {
 		It("doesn't issue new connection IDs when SetMaxActiveConnIDs is called with the same value", func() {

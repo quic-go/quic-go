@@ -19,7 +19,7 @@ import (
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/internal/testdata"
 
-	. "github.com/onsi/ginkgo"
+	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/onsi/gomega/gbytes"
 )
@@ -351,6 +351,29 @@ var _ = Describe("HTTP tests", func() {
 				Expect(err).ToNot(HaveOccurred())
 				Expect(repl).To(Equal(data))
 			})
+
+			if version != protocol.VersionDraft29 {
+				It("serves other QUIC connections", func() {
+					tlsConf := testdata.GetTLSConfig()
+					tlsConf.NextProtos = []string{"h3"}
+					ln, err := quic.ListenAddr("localhost:0", tlsConf, nil)
+					Expect(err).ToNot(HaveOccurred())
+					done := make(chan struct{})
+					go func() {
+						defer GinkgoRecover()
+						defer close(done)
+						conn, err := ln.Accept(context.Background())
+						Expect(err).ToNot(HaveOccurred())
+						Expect(server.ServeQUICConn(conn)).To(Succeed())
+					}()
+
+					resp, err := client.Get(fmt.Sprintf("https://localhost:%d/hello", ln.Addr().(*net.UDPAddr).Port))
+					Expect(err).ToNot(HaveOccurred())
+					Expect(resp.StatusCode).To(Equal(http.StatusOK))
+					client.Transport.(io.Closer).Close()
+					Eventually(done).Should(BeClosed())
+				})
+			}
 		})
 	}
 })

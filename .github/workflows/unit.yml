@@ -17,23 +17,21 @@ jobs:
           stable: '!contains(${{ matrix.go }}, "beta") && !contains(${{ matrix.go }}, "rc")'
           go-version: ${{ matrix.go }}
       - run: go version
-      - name: Install Ginkgo
-        run: go install github.com/onsi/ginkgo/ginkgo
       - name: Run tests
         env:
           TIMESCALE_FACTOR: 10
-        run: ginkgo -r -v -cover -randomizeAllSpecs -randomizeSuites -trace -skipPackage integrationtests,benchmark
+        run: go run github.com/onsi/ginkgo/v2/ginkgo -r -v -cover -randomize-all -randomize-suites -trace -skip-package integrationtests
       - name: Run tests (32 bit)
         if: ${{ matrix.os != 'macos' }} # can't run 32 bit tests on OSX.
         env:
           TIMESCALE_FACTOR: 10
           GOARCH: 386
-        run: ginkgo -r -v -cover -coverprofile coverage.txt -outputdir . -randomizeAllSpecs -randomizeSuites -trace -skipPackage integrationtests,benchmark
+        run: go run github.com/onsi/ginkgo/v2/ginkgo -r -v -cover -coverprofile coverage.txt -output-dir . -randomize-all -randomize-suites -trace -skip-package integrationtests
       - name: Run tests with race detector
         if: ${{ matrix.os == 'ubuntu' }} # speed things up. Windows and OSX VMs are slow
         env:
           TIMESCALE_FACTOR: 20
-        run: ginkgo -r -v -race -randomizeAllSpecs -randomizeSuites -trace -skipPackage integrationtests,benchmark
+        run: go run github.com/onsi/ginkgo/v2/ginkgo -r -v -race -randomize-all -randomize-suites -trace -skip-package integrationtests
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v1
         with:

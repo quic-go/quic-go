@@ -15,7 +15,7 @@ import (
 
 	"github.com/golang/mock/gomock"
 
-	. "github.com/onsi/ginkgo"
+	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 )
 
@@ -33,7 +33,7 @@ var _ = Describe("Packet Handler Map", func() {
 		packetChan chan packetToRead
 
 		connIDLen         int
-		statelessResetKey []byte
+		statelessResetKey *StatelessResetKey
 	)
 
 	getPacketWithPacketType := func(connID protocol.ConnectionID, t protocol.PacketType, length protocol.ByteCount) []byte {
@@ -440,9 +440,9 @@ var _ = Describe("Packet Handler Map", func() {
 
 			Context("generating", func() {
 				BeforeEach(func() {
-					key := make([]byte, 32)
-					rand.Read(key)
-					statelessResetKey = key
+					var key StatelessResetKey
+					rand.Read(key[:])
+					statelessResetKey = &key
 				})
 
 				It("generates stateless reset tokens", func() {

@@ -354,9 +354,12 @@ func (t *connectionTracer) ReceivedVersionNegotiationPacket(dest, src logging.Ar
 	t.mutex.Unlock()
 }
 
-func (t *connectionTracer) BufferedPacket(pt logging.PacketType) {
+func (t *connectionTracer) BufferedPacket(pt logging.PacketType, size protocol.ByteCount) {
 	t.mutex.Lock()
-	t.recordEvent(time.Now(), &eventPacketBuffered{PacketType: pt})
+	t.recordEvent(time.Now(), &eventPacketBuffered{
+		PacketType: pt,
+		PacketSize: size,
+	})
 	t.mutex.Unlock()
 }
 

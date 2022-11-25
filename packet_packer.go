@@ -592,18 +592,17 @@ func (p *packetPacker) composeNextPacket(maxFrameSize protocol.ByteCount, onlyAc
 	}
 
 	if p.datagramQueue != nil {
-		size := p.datagramQueue.NextFrameSize()
-		if size > 0 && size <= maxFrameSize-payload.length {
-			datagram := p.datagramQueue.Get()
-			if datagram == nil || datagram.Length(p.version) != size {
-				panic("packet packer BUG: inconsistent DATAGRAM frame length")
+		if f := p.datagramQueue.Peek(); f != nil {
+			size := f.Length(p.version)
+			if size <= maxFrameSize-payload.length {
+				payload.frames = append(payload.frames, ackhandler.Frame{
+					Frame: f,
+					// set it to a no-op. Then we won't set the default callback, which would retransmit the frame.
+					OnLost: func(wire.Frame) {},
+				})
+				payload.length += size
+				p.datagramQueue.Pop()
 			}
-			payload.frames = append(payload.frames, ackhandler.Frame{
-				Frame: datagram,
-				// set it to a no-op. Then we won't set the default callback, which would retransmit the frame.
-				OnLost: func(wire.Frame) {},
-			})
-			payload.length += datagram.Length(p.version)
 		}
 	}
 

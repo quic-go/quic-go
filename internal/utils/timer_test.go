@@ -3,7 +3,7 @@ package utils
 import (
 	"time"
 
-	. "github.com/onsi/ginkgo"
+	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 )
 
@@ -18,6 +18,14 @@ var _ = Describe("Timer", func() {
 	It("works", func() {
 		t := NewTimer()
 		t.Reset(time.Now().Add(d))
+		Eventually(t.Chan()).Should(Receive())
+	})
+
+	It("returns the deadline", func() {
+		t := NewTimer()
+		deadline := time.Now().Add(d)
+		t.Reset(deadline)
+		Expect(t.Deadline()).To(Equal(deadline))
 		Eventually(t.Chan()).Should(Receive())
 	})
 

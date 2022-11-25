@@ -134,9 +134,9 @@ func (m *connTracerMultiplexer) ReceivedShortHeaderPacket(hdr *ShortHeader, size
 	}
 }
 
-func (m *connTracerMultiplexer) BufferedPacket(typ PacketType) {
+func (m *connTracerMultiplexer) BufferedPacket(typ PacketType, size ByteCount) {
 	for _, t := range m.tracers {
-		t.BufferedPacket(typ)
+		t.BufferedPacket(typ, size)
 	}
 }
 

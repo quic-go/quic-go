@@ -12,7 +12,7 @@ import (
 	"github.com/lucas-clemente/quic-go/internal/utils"
 	"github.com/lucas-clemente/quic-go/internal/wire"
 
-	. "github.com/onsi/ginkgo"
+	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 )
 
@@ -190,7 +190,7 @@ var _ = Describe("SentPacketHandler", func() {
 				Expect(err).ToNot(HaveOccurred())
 				Expect(handler.appDataPackets.largestAcked).To(Equal(protocol.PacketNumber(3)))
 				// this wouldn't happen in practice
-				// for testing purposes, we pretend send a different ACK frame in a duplicated packet, to be able to verify that it actually doesn't get processed
+				// for testing purposes, we pretend to send a different ACK frame in a duplicated packet, to be able to verify that it actually doesn't get processed
 				_, err = handler.ReceivedAck(ack2, protocol.Encryption1RTT, time.Now())
 				Expect(err).ToNot(HaveOccurred())
 				Expect(handler.appDataPackets.largestAcked).To(Equal(protocol.PacketNumber(4)))
@@ -687,6 +687,14 @@ var _ = Describe("SentPacketHandler", func() {
 			handler.ptoCount = 2
 			handler.setLossDetectionTimer()
 			Expect(handler.GetLossDetectionTimeout().Sub(sendTime)).To(Equal(4 * timeout))
+			// truncated when the exponential gets too large
+			handler.ptoCount = 20
+			handler.setLossDetectionTimer()
+			Expect(handler.GetLossDetectionTimeout().Sub(sendTime)).To(Equal(maxPTODuration))
+			// protected from rollover
+			handler.ptoCount = 100
+			handler.setLossDetectionTimer()
+			Expect(handler.GetLossDetectionTimeout().Sub(sendTime)).To(Equal(maxPTODuration))
 		})
 
 		It("reset the PTO count when receiving an ACK", func() {
@@ -1036,7 +1044,7 @@ var _ = Describe("SentPacketHandler", func() {
 		})
 
 		It("correctly sets the timer after the Initial packet number space has been dropped", func() {
-			handler.SentPacket(initialPacket(&Packet{PacketNumber: 1, SendTime: time.Now().Add(-42 * time.Second)}))
+			handler.SentPacket(initialPacket(&Packet{PacketNumber: 1, SendTime: time.Now().Add(-19 * time.Second)}))
 			_, err := handler.ReceivedAck(
 				&wire.AckFrame{AckRanges: []wire.AckRange{{Smallest: 1, Largest: 1}}},
 				protocol.EncryptionInitial,
@@ -1048,6 +1056,8 @@ var _ = Describe("SentPacketHandler", func() {
 
 			pto := handler.rttStats.PTO(false)
 			Expect(pto).ToNot(BeZero())
+			// pto is approximately 19 * 3. Using a number > 19 above will
+			// run into the maxPTODuration limit
 			Expect(handler.GetLossDetectionTimeout()).To(BeTemporally("~", time.Now().Add(pto), 10*time.Millisecond))
 		})
 

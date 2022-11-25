@@ -18,8 +18,7 @@ import (
 
 	"github.com/golang/mock/gomock"
 
-	. "github.com/onsi/ginkgo"
-	. "github.com/onsi/ginkgo/extensions/table"
+	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 )
 
@@ -91,7 +90,7 @@ var _ = Describe("Packet packer", func() {
 		ackFramer = NewMockAckFrameSource(mockCtrl)
 		sealingManager = NewMockSealingManager(mockCtrl)
 		pnManager = mockackhandler.NewMockSentPacketHandler(mockCtrl)
-		datagramQueue = newDatagramQueue(func() {}, utils.DefaultLogger, version)
+		datagramQueue = newDatagramQueue(func() {}, utils.DefaultLogger)
 
 		packer = newPacketPacker(
 			protocol.ParseConnectionID([]byte{1, 2, 3, 4, 5, 6, 7, 8}),
@@ -634,7 +633,6 @@ var _ = Describe("Packet packer", func() {
 				Expect(p.ack).ToNot(BeNil())
 				Expect(p.frames).To(BeEmpty())
 				Expect(p.buffer.Data).ToNot(BeEmpty())
-				Expect(done).ToNot(BeClosed())
 				datagramQueue.CloseWithError(nil)
 				Eventually(done).Should(BeClosed())
 			})

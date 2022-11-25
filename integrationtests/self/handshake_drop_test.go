@@ -7,6 +7,7 @@ import (
 	"io"
 	mrand "math/rand"
 	"net"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -14,7 +15,7 @@ import (
 	quicproxy "github.com/lucas-clemente/quic-go/integrationtests/tools/proxy"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 
-	. "github.com/onsi/ginkgo"
+	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/onsi/gomega/gbytes"
 )
@@ -60,10 +61,6 @@ var _ = Describe("Handshake drop tests", func() {
 			},
 		})
 		Expect(err).ToNot(HaveOccurred())
-	}
-
-	stochasticDropper := func(freq int) bool {
-		return mrand.Int63n(int64(freq)) == 0
 	}
 
 	clientSpeaksFirst := &applicationProtocol{
@@ -232,8 +229,39 @@ var _ = Describe("Handshake drop tests", func() {
 										})
 
 										It(fmt.Sprintf("establishes a connection when 1/3 of the packets are lost in %s direction", direction), func() {
+											const maxSequentiallyDropped = 10
+											var mx sync.Mutex
+											var incoming, outgoing int
+
 											startListenerAndProxy(func(d quicproxy.Direction, _ []byte) bool {
-												return d.Is(direction) && stochasticDropper(3)
+												drop := mrand.Int63n(int64(3)) == 0
+
+												mx.Lock()
+												defer mx.Unlock()
+												// never drop more than 10 consecutive packets
+												if d.Is(quicproxy.DirectionIncoming) {
+													if drop {
+														incoming++
+														if incoming > maxSequentiallyDropped {
+															drop = false
+														}
+													}
+													if !drop {
+														incoming = 0
+													}
+												}
+												if d.Is(quicproxy.DirectionOutgoing) {
+													if drop {
+														outgoing++
+														if outgoing > maxSequentiallyDropped {
+															drop = false
+														}
+													}
+													if !drop {
+														outgoing = 0
+													}
+												}
+												return drop
 											}, doRetry, longCertChain, version)
 											app.run(version)
 										})

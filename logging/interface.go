@@ -126,7 +126,7 @@ type ConnectionTracer interface {
 	ReceivedRetry(*Header)
 	ReceivedLongHeaderPacket(hdr *ExtendedHeader, size ByteCount, frames []Frame)
 	ReceivedShortHeaderPacket(hdr *ShortHeader, size ByteCount, frames []Frame)
-	BufferedPacket(PacketType)
+	BufferedPacket(PacketType, ByteCount)
 	DroppedPacket(PacketType, ByteCount, PacketDropReason)
 	UpdatedMetrics(rttStats *RTTStats, cwnd, bytesInFlight ByteCount, packetsInFlight int)
 	AcknowledgedPacket(EncryptionLevel, PacketNumber)
