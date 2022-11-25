@@ -4,7 +4,6 @@ import (
 	"fmt"
 
 	"github.com/lucas-clemente/quic-go/internal/protocol"
-	"github.com/lucas-clemente/quic-go/internal/utils/tree"
 )
 
 // ByteInterval is an interval from one ByteCount to the other
@@ -13,8 +12,7 @@ type ByteInterval struct {
 	End   protocol.ByteCount
 }
 
-func (i *ByteInterval) Comp(val tree.Val) int8 {
-	v := val.(*ByteInterval)
+func (i ByteInterval) Comp(v ByteInterval) int8 {
 	if i.Start < v.Start {
 		return -1
 	}
@@ -30,8 +28,7 @@ func (i *ByteInterval) Comp(val tree.Val) int8 {
 	return 0
 }
 
-func (i *ByteInterval) Match(cond interface{}) int8 {
-	n := cond.(*ByteInterval)
+func (i ByteInterval) Match(n ByteInterval) int8 {
 	// check if there is an overlap
 	if i.Start <= n.End && i.End >= n.Start {
 		return 0
@@ -43,6 +40,6 @@ func (i *ByteInterval) Match(cond interface{}) int8 {
 	}
 }
 
-func (i *ByteInterval) String() string {
+func (i ByteInterval) String() string {
 	return fmt.Sprintf("[%d, %d]", i.Start, i.End)
 }

@@ -23,17 +23,17 @@ type frameSorterEntry struct {
 type frameSorter struct {
 	queue   map[protocol.ByteCount]frameSorterEntry
 	readPos protocol.ByteCount
-	gapTree *tree.Btree
+	gapTree *tree.Btree[utils.ByteInterval]
 }
 
 var errDuplicateStreamData = errors.New("duplicate stream data")
 
 func newFrameSorter() *frameSorter {
 	s := frameSorter{
-		gapTree: tree.New(),
+		gapTree: tree.New[utils.ByteInterval](),
 		queue:   make(map[protocol.ByteCount]frameSorterEntry),
 	}
-	s.gapTree.Insert(&utils.ByteInterval{Start: 0, End: protocol.MaxByteCount})
+	s.gapTree.Insert(utils.ByteInterval{Start: 0, End: protocol.MaxByteCount})
 	return &s
 }
 
@@ -55,7 +55,7 @@ func (s *frameSorter) push(data []byte, offset protocol.ByteCount, doneCb func()
 
 	start := offset
 	end := offset + protocol.ByteCount(len(data))
-	covInterval := &utils.ByteInterval{Start: start, End: end}
+	covInterval := utils.ByteInterval{Start: start, End: end}
 
 	gaps := s.gapTree.Match(covInterval)
 
@@ -64,8 +64,8 @@ func (s *frameSorter) push(data []byte, offset protocol.ByteCount, doneCb func()
 		return errDuplicateStreamData
 	}
 
-	startGap := gaps[0].(*utils.ByteInterval)
-	endGap := gaps[len(gaps)-1].(*utils.ByteInterval)
+	startGap := gaps[0]
+	endGap := gaps[len(gaps)-1]
 	startGapEqualsEndGap := len(gaps) == 1
 
 	if startGapEqualsEndGap && end <= startGap.Start {
@@ -136,13 +136,12 @@ func (s *frameSorter) push(data []byte, offset protocol.ByteCount, doneCb func()
 
 	if !startGapEqualsEndGap {
 		s.deleteConsecutive(startGapEnd)
-		for _, gap := range gaps[1:] {
-			g := gap.(*utils.ByteInterval)
+		for _, g := range gaps[1:] {
 			if g.End >= endGapStart {
 				break
 			}
 			s.deleteConsecutive(g.End)
-			s.gapTree.Delete(gap)
+			s.gapTree.Delete(g)
 		}
 	}
 
@@ -160,7 +159,7 @@ func (s *frameSorter) push(data []byte, offset protocol.ByteCount, doneCb func()
 	} else {
 		if startGapEqualsEndGap && adjustedStartGapEnd {
 			// The frame split the existing gap into two.
-			s.gapTree.Insert(&utils.ByteInterval{Start: end, End: startGapEnd})
+			s.gapTree.Insert(utils.ByteInterval{Start: end, End: startGapEnd})
 		} else if !startGapEqualsEndGap {
 			s.gapTree.Delete(endGap)
 			endGap.Start = end

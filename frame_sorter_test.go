@@ -21,17 +21,17 @@ var _ = Describe("frame sorter", func() {
 	checkGaps := func(expectedGaps []byteInterval) {
 		if s.gapTree.Len() != len(expectedGaps) {
 			fmt.Println("Gaps:")
-			s.gapTree.Ascend(func(n *tree.Node, i int) bool {
-				gap := n.Value.(*utils.ByteInterval)
+			s.gapTree.Ascend(func(n *tree.Node[utils.ByteInterval], i int) bool {
+				gap := n.Value
 				fmt.Printf("\t%d - %d\n", gap.Start, gap.End)
 				return true
 			})
 			ExpectWithOffset(1, s.gapTree.Len()).To(Equal(len(expectedGaps)))
 		}
 		var i int
-		s.gapTree.Ascend(func(n *tree.Node, _ int) bool {
-			gap := n.Value.(*utils.ByteInterval)
-			ExpectWithOffset(1, *gap).To(Equal(utils.ByteInterval{
+		s.gapTree.Ascend(func(n *tree.Node[utils.ByteInterval], _ int) bool {
+			gap := n.Value
+			ExpectWithOffset(1, gap).To(Equal(utils.ByteInterval{
 				Start: expectedGaps[i].Start,
 				End:   expectedGaps[i].End,
 			}))

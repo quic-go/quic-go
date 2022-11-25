@@ -7,8 +7,7 @@ import (
 
 type IntVal int
 
-func (i IntVal) Comp(val Val) int8 {
-	v := val.(IntVal)
+func (i IntVal) Comp(v IntVal) int8 {
 	if i > v {
 		return 1
 	} else if i < v {
@@ -18,15 +17,14 @@ func (i IntVal) Comp(val Val) int8 {
 	}
 }
 
-func (i IntVal) Match(cond interface{}) int8 {
+func (i IntVal) Match(v IntVal) int8 {
 	// Unused
 	return 0
 }
 
 type StringVal string
 
-func (i StringVal) Comp(val Val) int8 {
-	v := val.(StringVal)
+func (i StringVal) Comp(v StringVal) int8 {
 	if i > v {
 		return 1
 	} else if i < v {
@@ -36,28 +34,28 @@ func (i StringVal) Comp(val Val) int8 {
 	}
 }
 
-func (i StringVal) Match(cond interface{}) int8 {
+func (i StringVal) Match(v StringVal) int8 {
 	// Unused
 	return 0
 }
 
-func btreeInOrder(n int) *Btree {
-	btree := New()
+func btreeInOrder(n int) *Btree[IntVal] {
+	btree := New[IntVal]()
 	for i := 1; i <= n; i++ {
 		btree.Insert(IntVal(i))
 	}
 	return btree
 }
 
-func btreeFixed(values []Val) *Btree {
-	btree := New()
+func btreeFixed[T Val[T]](values []T) *Btree[T] {
+	btree := New[T]()
 	btree.InsertAll(values)
 	return btree
 }
 
 func TestBtree_Get(t *testing.T) {
-	values := []Val{IntVal(9), IntVal(4), IntVal(2), IntVal(6), IntVal(8), IntVal(0), IntVal(3), IntVal(1), IntVal(7), IntVal(5)}
-	btree := btreeFixed(values).InsertAll(values)
+	values := []IntVal{9, 4, 2, 6, 8, 0, 3, 1, 7, 5}
+	btree := btreeFixed[IntVal](values).InsertAll(values)
 
 	expect, actual := len(values), btree.Len()
 	if actual != expect {
@@ -65,17 +63,17 @@ func TestBtree_Get(t *testing.T) {
 	}
 
 	expect2 := IntVal(2)
-	if btree.Get(expect2) != expect2 {
+	if btree.Get(expect2) == nil || *btree.Get(expect2) != expect2 {
 		t.Error("value should equal", expect2)
 	}
 }
 
 func TestBtreeString_Get(t *testing.T) {
-	tree := New()
-	tree.Insert(StringVal("Oreto")).Insert(StringVal("Michael")).Insert(StringVal("Ross"))
+	tree := New[StringVal]()
+	tree.Insert("Oreto").Insert("Michael").Insert("Ross")
 
 	expect := StringVal("Ross")
-	if tree.Get(expect) != expect {
+	if tree.Get(expect) == nil || *tree.Get(expect) != expect {
 		t.Error("value should equal", expect)
 	}
 }
@@ -88,24 +86,24 @@ func TestBtree_Contains(t *testing.T) {
 		t.Error("tree should contain", test)
 	}
 
-	test2 := []Val{IntVal(1), IntVal(2), IntVal(3), IntVal(4)}
+	test2 := []IntVal{1, 2, 3, 4}
 	if !btree.ContainsAll(test2) {
 		t.Error("tree should contain", test2)
 	}
 
-	test2 = []Val{IntVal(5)}
+	test2 = []IntVal{5}
 	if !btree.ContainsAny(test2) {
 		t.Error("tree should contain", test2)
 	}
 
-	test2 = []Val{IntVal(5000), IntVal(2000)}
+	test2 = []IntVal{5000, 2000}
 	if btree.ContainsAny(test2) {
 		t.Error("tree should not contain any", test2)
 	}
 }
 
 func TestBtree_String(t *testing.T) {
-	btree := btreeFixed([]Val{IntVal(1), IntVal(2), IntVal(3), IntVal(4), IntVal(5), IntVal(6)})
+	btree := btreeFixed[IntVal]([]IntVal{1, 2, 3, 4, 5, 6})
 	s1 := btree.String()
 	s2 := "[1 2 3 4 5 6]"
 	if s1 != s2 {
@@ -115,18 +113,18 @@ func TestBtree_String(t *testing.T) {
 
 func TestBtree_Values(t *testing.T) {
 	const capacity = 3
-	btree := btreeFixed([]Val{IntVal(1), IntVal(2)})
+	btree := btreeFixed[IntVal]([]IntVal{1, 2})
 
 	b := btree.Values()
-	c := []Val{IntVal(1), IntVal(2)}
+	c := []IntVal{1, 2}
 	if !reflect.DeepEqual(c, b) {
 		t.Error(c, "should equal", b)
 	}
 	btree.Insert(IntVal(3))
 
 	desc := [capacity]IntVal{}
-	btree.Descend(func(n *Node, i int) bool {
-		desc[i] = n.Value.(IntVal)
+	btree.Descend(func(n *Node[IntVal], i int) bool {
+		desc[i] = n.Value
 		return true
 	})
 	d := [capacity]IntVal{3, 2, 1}
@@ -143,7 +141,7 @@ func TestBtree_Values(t *testing.T) {
 }
 
 func TestBtree_Delete(t *testing.T) {
-	test := []Val{IntVal(1), IntVal(2), IntVal(3)}
+	test := []IntVal{1, 2, 3}
 	btree := btreeFixed(test)
 
 	btree.DeleteAll(test)
@@ -154,14 +152,14 @@ func TestBtree_Delete(t *testing.T) {
 
 	btree = btreeFixed(test)
 	pop := btree.Pop()
-	if pop != IntVal(3) {
+	if pop == nil || *pop != IntVal(3) {
 		t.Error(pop, "should be 3")
 	}
 	pull := btree.Pull()
-	if pull != IntVal(1) {
+	if pull == nil || *pull != IntVal(1) {
 		t.Error(pop, "should be 3")
 	}
-	if !btree.Delete(btree.Pop()).Empty() {
+	if !btree.Delete(*btree.Pop()).Empty() {
 		t.Error("tree should be empty")
 	}
 	btree.Pop()
@@ -169,11 +167,11 @@ func TestBtree_Delete(t *testing.T) {
 }
 
 func TestBtree_HeadTail(t *testing.T) {
-	btree := btreeFixed([]Val{IntVal(1), IntVal(2), IntVal(3)})
-	if btree.Head() != IntVal(1) {
+	btree := btreeFixed[IntVal]([]IntVal{1, 2, 3})
+	if btree.Head() == nil || *btree.Head() != IntVal(1) {
 		t.Error("head element should be 1")
 	}
-	if btree.Tail() != IntVal(3) {
+	if btree.Tail() == nil || *btree.Tail() != IntVal(3) {
 		t.Error("head element should be 3")
 	}
 	btree.Init()
@@ -186,9 +184,8 @@ type TestKey1 struct {
 	Name string
 }
 
-func (testkey TestKey1) Comp(val Val) int8 {
+func (testkey TestKey1) Comp(tk TestKey1) int8 {
 	var c int8
-	tk := val.(TestKey1)
 	if testkey.Name > tk.Name {
 		c = 1
 	} else if testkey.Name < tk.Name {
@@ -197,30 +194,30 @@ func (testkey TestKey1) Comp(val Val) int8 {
 	return c
 }
 
-func (testkey TestKey1) Match(cond interface{}) int8 {
+func (testkey TestKey1) Match(tk TestKey1) int8 {
 	// Unused
 	return 0
 }
 
 func TestBtree_CustomKey(t *testing.T) {
-	btree := New()
-	btree.InsertAll([]Val{
-		TestKey1{Name: "Ross"},
-		TestKey1{Name: "Michael"},
-		TestKey1{Name: "Angelo"},
-		TestKey1{Name: "Jason"},
+	btree := New[TestKey1]()
+	btree.InsertAll([]TestKey1{
+		{Name: "Ross"},
+		{Name: "Michael"},
+		{Name: "Angelo"},
+		{Name: "Jason"},
 	})
 
-	rootName := btree.root.Value.(TestKey1).Name
-	if btree.root.Value.(TestKey1).Name != "Michael" {
+	rootName := btree.root.Value.Name
+	if btree.root.Value.Name != "Michael" {
 		t.Error(rootName, "should equal Michael")
 	}
 	btree.Init()
-	btree.InsertAll([]Val{
-		TestKey1{Name: "Ross"},
-		TestKey1{Name: "Michael"},
-		TestKey1{Name: "Angelo"},
-		TestKey1{Name: "Jason"},
+	btree.InsertAll([]TestKey1{
+		{Name: "Ross"},
+		{Name: "Michael"},
+		{Name: "Angelo"},
+		{Name: "Jason"},
 	})
 	btree.Debug()
 	s := btree.String()
@@ -234,7 +231,7 @@ func TestBtree_CustomKey(t *testing.T) {
 		t.Error("tree length should be 3")
 	}
 	test = "Jason"
-	if btree.root.Value.(TestKey1).Name != test {
+	if btree.root.Value.Name != test {
 		t.Error(btree.root.Value, "root of the tree should be", test)
 	}
 	for !btree.Empty() {
@@ -244,10 +241,10 @@ func TestBtree_CustomKey(t *testing.T) {
 }
 
 func TestBtree_Duplicates(t *testing.T) {
-	btree := New()
-	btree.InsertAll([]Val{
-		IntVal(0), IntVal(2), IntVal(5), IntVal(10), IntVal(15), IntVal(20), IntVal(12), IntVal(14),
-		IntVal(13), IntVal(25), IntVal(0), IntVal(2), IntVal(5), IntVal(10), IntVal(15), IntVal(20), IntVal(12), IntVal(14), IntVal(13), IntVal(25),
+	btree := New[IntVal]()
+	btree.InsertAll([]IntVal{
+		0, 2, 5, 10, 15, 20, 12, 14,
+		13, 25, 0, 2, 5, 10, 15, 20, 12, 14, 13, 25,
 	})
 	test := 10
 	length := btree.Len()

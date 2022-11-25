@@ -1,58 +1,33 @@
-/*
-Copyright (c) 2017 Ross Oreto
-
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
-*/
-
-// Copied from https://github.com/ross-oreto/go-tree/blob/master/btree.go with modifications
-
 package tree
 
 import (
 	"fmt"
 )
 
+type Val[T any] interface {
+	Comp(val T) int8   // returns 1 if > val, -1 if < val, 0 if equals to val
+	Match(cond T) int8 // returns 1 if > cond, -1 if < cond, 0 if matches cond
+}
+
 // Btree represents an AVL tree
-type Btree struct {
-	root   *Node
-	values []Val
+type Btree[T Val[T]] struct {
+	root   *Node[T]
+	values []T
 	len    int
 }
 
-// Val interface to define the compare method used to insert and find values
-type Val interface {
-	Comp(val Val) int8           // returns 1 if > val, -1 if < val, 0 if equals to val
-	Match(cond interface{}) int8 // returns 1 if > cond, -1 if < cond, 0 if matches cond
-}
-
 // Node represents a node in the tree with a value, left and right children, and a height/balance of the node.
-type Node struct {
-	Value       Val
-	left, right *Node
+type Node[T Val[T]] struct {
+	Value       T
+	left, right *Node[T]
 	height      int8
 }
 
 // New returns a new btree
-func New() *Btree { return new(Btree).Init() }
+func New[T Val[T]]() *Btree[T] { return new(Btree[T]).Init() }
 
 // Init initializes all values/clears the tree and returns the tree pointer
-func (t *Btree) Init() *Btree {
+func (t *Btree[T]) Init() *Btree[T] {
 	t.root = nil
 	t.values = nil
 	t.len = 0
@@ -60,22 +35,22 @@ func (t *Btree) Init() *Btree {
 }
 
 // String returns a string representation of the tree values
-func (t *Btree) String() string {
+func (t *Btree[T]) String() string {
 	return fmt.Sprint(t.Values())
 }
 
 // Empty returns true if the tree is empty
-func (t *Btree) Empty() bool {
+func (t *Btree[T]) Empty() bool {
 	return t.root == nil
 }
 
 // NotEmpty returns true if the tree is not empty
-func (t *Btree) NotEmpty() bool {
+func (t *Btree[T]) NotEmpty() bool {
 	return t.root != nil
 }
 
 // Insert inserts a new value into the tree and returns the tree pointer
-func (t *Btree) Insert(value Val) *Btree {
+func (t *Btree[T]) Insert(value T) *Btree[T] {
 	added := false
 	t.root = insert(t.root, value, &added)
 	if added {
@@ -85,10 +60,10 @@ func (t *Btree) Insert(value Val) *Btree {
 	return t
 }
 
-func insert(n *Node, value Val, added *bool) *Node {
+func insert[T Val[T]](n *Node[T], value T, added *bool) *Node[T] {
 	if n == nil {
 		*added = true
-		return (&Node{Value: value}).Init()
+		return (&Node[T]{Value: value}).Init()
 	}
 	c := value.Comp(n.Value)
 	if c > 0 {
@@ -125,7 +100,7 @@ func insert(n *Node, value Val, added *bool) *Node {
 }
 
 // InsertAll inserts all the values into the tree and returns the tree pointer
-func (t *Btree) InsertAll(values []Val) *Btree {
+func (t *Btree[T]) InsertAll(values []T) *Btree[T] {
 	for _, v := range values {
 		t.Insert(v)
 	}
@@ -133,12 +108,12 @@ func (t *Btree) InsertAll(values []Val) *Btree {
 }
 
 // Contains returns true if the tree contains the specified value
-func (t *Btree) Contains(value Val) bool {
+func (t *Btree[T]) Contains(value T) bool {
 	return t.Get(value) != nil
 }
 
 // ContainsAny returns true if the tree contains any of the values
-func (t *Btree) ContainsAny(values []Val) bool {
+func (t *Btree[T]) ContainsAny(values []T) bool {
 	for _, v := range values {
 		if t.Contains(v) {
 			return true
@@ -148,7 +123,7 @@ func (t *Btree) ContainsAny(values []Val) bool {
 }
 
 // ContainsAll returns true if the tree contains all of the values
-func (t *Btree) ContainsAll(values []Val) bool {
+func (t *Btree[T]) ContainsAll(values []T) bool {
 	for _, v := range values {
 		if !t.Contains(v) {
 			return false
@@ -158,19 +133,19 @@ func (t *Btree) ContainsAll(values []Val) bool {
 }
 
 // Get returns the node value associated with the search value
-func (t *Btree) Get(value Val) Val {
-	var node *Node
+func (t *Btree[T]) Get(value T) *T {
+	var node *Node[T]
 	if t.root != nil {
 		node = t.root.get(value)
 	}
 	if node != nil {
-		return node.Value
+		return &node.Value
 	}
 	return nil
 }
 
-func (t *Btree) Match(cond interface{}) []Val {
-	var matches []Val
+func (t *Btree[T]) Match(cond T) []T {
+	var matches []T
 	if t.root != nil {
 		t.root.match(cond, &matches)
 	}
@@ -178,12 +153,12 @@ func (t *Btree) Match(cond interface{}) []Val {
 }
 
 // Len return the number of nodes in the tree
-func (t *Btree) Len() int {
+func (t *Btree[T]) Len() int {
 	return t.len
 }
 
 // Head returns the first value in the tree
-func (t *Btree) Head() Val {
+func (t *Btree[T]) Head() *T {
 	if t.root == nil {
 		return nil
 	}
@@ -197,13 +172,13 @@ func (t *Btree) Head() Val {
 		}
 	}
 	if beginning != nil {
-		return beginning.Value
+		return &beginning.Value
 	}
 	return nil
 }
 
 // Tail returns the last value in the tree
-func (t *Btree) Tail() Val {
+func (t *Btree[T]) Tail() *T {
 	if t.root == nil {
 		return nil
 	}
@@ -217,16 +192,16 @@ func (t *Btree) Tail() Val {
 		}
 	}
 	if beginning != nil {
-		return beginning.Value
+		return &beginning.Value
 	}
 	return nil
 }
 
 // Values returns a slice of all the values in tree in order
-func (t *Btree) Values() []Val {
+func (t *Btree[T]) Values() []T {
 	if t.values == nil {
-		t.values = make([]Val, t.len)
-		t.Ascend(func(n *Node, i int) bool {
+		t.values = make([]T, t.len)
+		t.Ascend(func(n *Node[T], i int) bool {
 			t.values[i] = n.Value
 			return true
 		})
@@ -235,7 +210,7 @@ func (t *Btree) Values() []Val {
 }
 
 // Delete deletes the node from the tree associated with the search value
-func (t *Btree) Delete(value Val) *Btree {
+func (t *Btree[T]) Delete(value T) *Btree[T] {
 	deleted := false
 	t.root = deleteNode(t.root, value, &deleted)
 	if deleted {
@@ -246,14 +221,14 @@ func (t *Btree) Delete(value Val) *Btree {
 }
 
 // DeleteAll deletes the nodes from the tree associated with the search values
-func (t *Btree) DeleteAll(values []Val) *Btree {
+func (t *Btree[T]) DeleteAll(values []T) *Btree[T] {
 	for _, v := range values {
 		t.Delete(v)
 	}
 	return t
 }
 
-func deleteNode(n *Node, value Val, deleted *bool) *Node {
+func deleteNode[T Val[T]](n *Node[T], value T, deleted *bool) *Node[T] {
 	if n == nil {
 		return n
 	}
@@ -306,29 +281,29 @@ func deleteNode(n *Node, value Val, deleted *bool) *Node {
 }
 
 // Pop deletes the last node from the tree and returns its value
-func (t *Btree) Pop() Val {
+func (t *Btree[T]) Pop() *T {
 	value := t.Tail()
 	if value != nil {
-		t.Delete(value)
+		t.Delete(*value)
 	}
 	return value
 }
 
 // Pull deletes the first node from the tree and returns its value
-func (t *Btree) Pull() Val {
+func (t *Btree[T]) Pull() *T {
 	value := t.Head()
 	if value != nil {
-		t.Delete(value)
+		t.Delete(*value)
 	}
 	return value
 }
 
 // NodeIterator expresses the iterator function used for traversals
-type NodeIterator func(n *Node, i int) bool
+type NodeIterator[T Val[T]] func(n *Node[T], i int) bool
 
 // Ascend performs an ascending order traversal of the tree calling the iterator function on each node
 // the iterator will continue as long as the NodeIterator returns true
-func (t *Btree) Ascend(iterator NodeIterator) {
+func (t *Btree[T]) Ascend(iterator NodeIterator[T]) {
 	var i int
 	if t.root != nil {
 		t.root.iterate(iterator, &i, true)
@@ -337,7 +312,7 @@ func (t *Btree) Ascend(iterator NodeIterator) {
 
 // Descend performs a descending order traversal of the tree using the iterator
 // the iterator will continue as long as the NodeIterator returns true
-func (t *Btree) Descend(iterator NodeIterator) {
+func (t *Btree[T]) Descend(iterator NodeIterator[T]) {
 	var i int
 	if t.root != nil {
 		t.root.rIterate(iterator, &i, true)
@@ -345,7 +320,7 @@ func (t *Btree) Descend(iterator NodeIterator) {
 }
 
 // Debug prints out useful debug information about the tree for debugging purposes
-func (t *Btree) Debug() {
+func (t *Btree[T]) Debug() {
 	fmt.Println("----------------------------------------------------------------------------------------------")
 	if t.Empty() {
 		fmt.Println("tree is empty")
@@ -353,8 +328,8 @@ func (t *Btree) Debug() {
 		fmt.Println(t.Len(), "elements")
 	}
 
-	t.Ascend(func(n *Node, i int) bool {
-		if t.root.Value == n.Value {
+	t.Ascend(func(n *Node[T], i int) bool {
+		if t.root.Value.Comp(n.Value) == 0 {
 			fmt.Print("ROOT ** ")
 		}
 		n.Debug()
@@ -364,7 +339,7 @@ func (t *Btree) Debug() {
 }
 
 // Init initializes the values of the node or clears the node and returns the node pointer
-func (n *Node) Init() *Node {
+func (n *Node[T]) Init() *Node[T] {
 	n.height = 1
 	n.left = nil
 	n.right = nil
@@ -372,12 +347,12 @@ func (n *Node) Init() *Node {
 }
 
 // String returns a string representing the node
-func (n *Node) String() string {
+func (n *Node[T]) String() string {
 	return fmt.Sprint(n.Value)
 }
 
 // Debug prints out useful debug information about the tree node for debugging purposes
-func (n *Node) Debug() {
+func (n *Node[T]) Debug() {
 	var children string
 	if n.left == nil && n.right == nil {
 		children = "no children |"
@@ -392,22 +367,22 @@ func (n *Node) Debug() {
 	fmt.Println(n.String(), "|", "height", n.height, "|", "balance", balance(n), "|", children)
 }
 
-func height(n *Node) int8 {
+func height[T Val[T]](n *Node[T]) int8 {
 	if n != nil {
 		return n.height
 	}
 	return 0
 }
 
-func balance(n *Node) int8 {
+func balance[T Val[T]](n *Node[T]) int8 {
 	if n == nil {
 		return 0
 	}
 	return height(n.left) - height(n.right)
 }
 
-func (n *Node) get(val Val) *Node {
-	var node *Node
+func (n *Node[T]) get(val T) *Node[T] {
+	var node *Node[T]
 	c := val.Comp(n.Value)
 	if c < 0 {
 		if n.left != nil {
@@ -423,7 +398,7 @@ func (n *Node) get(val Val) *Node {
 	return node
 }
 
-func (n *Node) match(cond interface{}, results *[]Val) {
+func (n *Node[T]) match(cond T, results *[]T) {
 	c := n.Value.Match(cond)
 	if c > 0 {
 		if n.left != nil {
@@ -445,7 +420,7 @@ func (n *Node) match(cond interface{}, results *[]Val) {
 	}
 }
 
-func (n *Node) rotateRight() *Node {
+func (n *Node[T]) rotateRight() *Node[T] {
 	l := n.left
 	// Rotation
 	l.right, n.left = n, l.right
@@ -457,7 +432,7 @@ func (n *Node) rotateRight() *Node {
 	return l
 }
 
-func (n *Node) rotateLeft() *Node {
+func (n *Node[T]) rotateLeft() *Node[T] {
 	r := n.right
 	// Rotation
 	r.left, n.right = n, r.left
@@ -469,7 +444,7 @@ func (n *Node) rotateLeft() *Node {
 	return r
 }
 
-func (n *Node) iterate(iterator NodeIterator, i *int, cont bool) {
+func (n *Node[T]) iterate(iterator NodeIterator[T], i *int, cont bool) {
 	if n != nil && cont {
 		n.left.iterate(iterator, i, cont)
 		cont = iterator(n, *i)
@@ -478,7 +453,7 @@ func (n *Node) iterate(iterator NodeIterator, i *int, cont bool) {
 	}
 }
 
-func (n *Node) rIterate(iterator NodeIterator, i *int, cont bool) {
+func (n *Node[T]) rIterate(iterator NodeIterator[T], i *int, cont bool) {
 	if n != nil && cont {
 		n.right.iterate(iterator, i, cont)
 		cont = iterator(n, *i)
@@ -487,7 +462,7 @@ func (n *Node) rIterate(iterator NodeIterator, i *int, cont bool) {
 	}
 }
 
-func (n *Node) min() *Node {
+func (n *Node[T]) min() *Node[T] {
 	current := n
 	for current.left != nil {
 		current = current.left
@@ -495,7 +470,7 @@ func (n *Node) min() *Node {
 	return current
 }
 
-func (n *Node) maxHeight() int8 {
+func (n *Node[T]) maxHeight() int8 {
 	rh := height(n.right)
 	lh := height(n.left)
 	if rh > lh {
