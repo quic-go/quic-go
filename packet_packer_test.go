@@ -344,7 +344,7 @@ var _ = Describe("Packet packer", func() {
 				sealingManager.EXPECT().GetInitialSealer().Return(nil, handshake.ErrKeysDropped)
 				sealingManager.EXPECT().GetHandshakeSealer().Return(getSealer(), nil)
 				sealingManager.EXPECT().Get1RTTSealer().Return(nil, handshake.ErrKeysNotYetAvailable)
-				quicErr := qerr.NewCryptoError(0x42, "crypto error")
+				quicErr := qerr.NewLocalCryptoError(0x42, "crypto error")
 				quicErr.FrameType = 0x1234
 				p, err := packer.PackConnectionClose(quicErr)
 				Expect(err).ToNot(HaveOccurred())

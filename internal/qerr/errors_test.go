@@ -15,18 +15,19 @@ var _ = Describe("QUIC Errors", func() {
 			Expect((&TransportError{
 				ErrorCode:    FlowControlError,
 				ErrorMessage: "foobar",
-			}).Error()).To(Equal("FLOW_CONTROL_ERROR: foobar"))
+			}).Error()).To(Equal("FLOW_CONTROL_ERROR (local): foobar"))
 		})
 
 		It("has a string representation for empty error phrases", func() {
-			Expect((&TransportError{ErrorCode: FlowControlError}).Error()).To(Equal("FLOW_CONTROL_ERROR"))
+			Expect((&TransportError{ErrorCode: FlowControlError}).Error()).To(Equal("FLOW_CONTROL_ERROR (local)"))
 		})
 
 		It("includes the frame type, for errors without a message", func() {
 			Expect((&TransportError{
+				Remote:    true,
 				ErrorCode: FlowControlError,
 				FrameType: 0x1337,
-			}).Error()).To(Equal("FLOW_CONTROL_ERROR (frame type: 0x1337)"))
+			}).Error()).To(Equal("FLOW_CONTROL_ERROR (remote) (frame type: 0x1337)"))
 		})
 
 		It("includes the frame type, for errors with a message", func() {
@@ -34,18 +35,18 @@ var _ = Describe("QUIC Errors", func() {
 				ErrorCode:    FlowControlError,
 				FrameType:    0x1337,
 				ErrorMessage: "foobar",
-			}).Error()).To(Equal("FLOW_CONTROL_ERROR (frame type: 0x1337): foobar"))
+			}).Error()).To(Equal("FLOW_CONTROL_ERROR (local) (frame type: 0x1337): foobar"))
 		})
 
 		Context("crypto errors", func() {
 			It("has a string representation for errors with a message", func() {
-				err := NewCryptoError(0x42, "foobar")
-				Expect(err.Error()).To(Equal("CRYPTO_ERROR (0x142): foobar"))
+				err := NewLocalCryptoError(0x42, "foobar")
+				Expect(err.Error()).To(Equal("CRYPTO_ERROR 0x142 (local): foobar"))
 			})
 
 			It("has a string representation for errors without a message", func() {
-				err := NewCryptoError(0x2a, "")
-				Expect(err.Error()).To(Equal("CRYPTO_ERROR (0x12a): tls: bad certificate"))
+				err := NewLocalCryptoError(0x2a, "")
+				Expect(err.Error()).To(Equal("CRYPTO_ERROR 0x12a (local): tls: bad certificate"))
 			})
 		})
 	})
@@ -55,13 +56,14 @@ var _ = Describe("QUIC Errors", func() {
 			Expect((&ApplicationError{
 				ErrorCode:    0x42,
 				ErrorMessage: "foobar",
-			}).Error()).To(Equal("Application error 0x42: foobar"))
+			}).Error()).To(Equal("Application error 0x42 (local): foobar"))
 		})
 
 		It("has a string representation for errors without a message", func() {
 			Expect((&ApplicationError{
 				ErrorCode: 0x42,
-			}).Error()).To(Equal("Application error 0x42"))
+				Remote:    true,
+			}).Error()).To(Equal("Application error 0x42 (remote)"))
 		})
 	})
 
