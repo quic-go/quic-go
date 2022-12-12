@@ -23,7 +23,7 @@ const (
 	VersionUnknown  VersionNumber = math.MaxUint32
 	VersionDraft29  VersionNumber = 0xff00001d
 	Version1        VersionNumber = 0x1
-	Version2        VersionNumber = 0x709a50c4
+	Version2        VersionNumber = 0x6b3343cf
 )
 
 // SupportedVersions lists the versions that the server supports
