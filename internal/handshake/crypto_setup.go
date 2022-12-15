@@ -575,7 +575,9 @@ func (h *cryptoSetup) SetReadKey(encLevel qtls.EncryptionLevel, suite *qtls.Ciph
 			newHeaderProtector(suite, trafficSecret, true, h.version),
 		)
 		h.mutex.Unlock()
-		h.logger.Debugf("Installed 0-RTT Read keys (using %s)", tls.CipherSuiteName(suite.ID))
+		if h.logger.Debug() {
+			h.logger.Debugf("Installed 0-RTT Read keys (using %s)", tls.CipherSuiteName(suite.ID))
+		}
 		if h.tracer != nil {
 			h.tracer.UpdatedKeyFromTLS(protocol.Encryption0RTT, h.perspective.Opposite())
 		}
@@ -588,12 +590,16 @@ func (h *cryptoSetup) SetReadKey(encLevel qtls.EncryptionLevel, suite *qtls.Ciph
 			h.dropInitialKeys,
 			h.perspective,
 		)
-		h.logger.Debugf("Installed Handshake Read keys (using %s)", tls.CipherSuiteName(suite.ID))
+		if h.logger.Debug() {
+			h.logger.Debugf("Installed Handshake Read keys (using %s)", tls.CipherSuiteName(suite.ID))
+		}
 	case qtls.EncryptionApplication:
 		h.readEncLevel = protocol.Encryption1RTT
 		h.aead.SetReadKey(suite, trafficSecret)
 		h.has1RTTOpener = true
-		h.logger.Debugf("Installed 1-RTT Read keys (using %s)", tls.CipherSuiteName(suite.ID))
+		if h.logger.Debug() {
+			h.logger.Debugf("Installed 1-RTT Read keys (using %s)", tls.CipherSuiteName(suite.ID))
+		}
 	default:
 		panic("unexpected read encryption level")
 	}
@@ -615,7 +621,9 @@ func (h *cryptoSetup) SetWriteKey(encLevel qtls.EncryptionLevel, suite *qtls.Cip
 			newHeaderProtector(suite, trafficSecret, true, h.version),
 		)
 		h.mutex.Unlock()
-		h.logger.Debugf("Installed 0-RTT Write keys (using %s)", tls.CipherSuiteName(suite.ID))
+		if h.logger.Debug() {
+			h.logger.Debugf("Installed 0-RTT Write keys (using %s)", tls.CipherSuiteName(suite.ID))
+		}
 		if h.tracer != nil {
 			h.tracer.UpdatedKeyFromTLS(protocol.Encryption0RTT, h.perspective)
 		}
@@ -628,12 +636,16 @@ func (h *cryptoSetup) SetWriteKey(encLevel qtls.EncryptionLevel, suite *qtls.Cip
 			h.dropInitialKeys,
 			h.perspective,
 		)
-		h.logger.Debugf("Installed Handshake Write keys (using %s)", tls.CipherSuiteName(suite.ID))
+		if h.logger.Debug() {
+			h.logger.Debugf("Installed Handshake Write keys (using %s)", tls.CipherSuiteName(suite.ID))
+		}
 	case qtls.EncryptionApplication:
 		h.writeEncLevel = protocol.Encryption1RTT
 		h.aead.SetWriteKey(suite, trafficSecret)
 		h.has1RTTSealer = true
-		h.logger.Debugf("Installed 1-RTT Write keys (using %s)", tls.CipherSuiteName(suite.ID))
+		if h.logger.Debug() {
+			h.logger.Debugf("Installed 1-RTT Write keys (using %s)", tls.CipherSuiteName(suite.ID))
+		}
 		if h.zeroRTTSealer != nil {
 			h.zeroRTTSealer = nil
 			h.logger.Debugf("Dropping 0-RTT keys.")
