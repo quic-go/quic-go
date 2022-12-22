@@ -272,7 +272,7 @@ func (s *Server) serveConn(tlsConf *tls.Config, conn net.PacketConn) error {
 	baseConf := ConfigureTLSConfig(tlsConf)
 	quicConf := s.QuicConfig
 	if quicConf == nil {
-		quicConf = &quic.Config{}
+		quicConf = &quic.Config{Allow0RTT: func(net.Addr) bool { return true }}
 	} else {
 		quicConf = s.QuicConfig.Clone()
 	}
@@ -570,6 +570,8 @@ func (s *Server) handleRequest(conn quic.Connection, str quic.Stream, decoder *q
 		return newStreamError(errorGeneralProtocolError, err)
 	}
 
+	connState := conn.ConnectionState().TLS.ConnectionState
+	req.TLS = &connState
 	req.RemoteAddr = conn.RemoteAddr().String()
 	body := newRequestBody(newStream(str, onFrameError))
 	req.Body = body

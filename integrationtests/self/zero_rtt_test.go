@@ -107,19 +107,20 @@ var _ = Describe("0-RTT", func() {
 				clientConf *quic.Config,
 				testdata []byte, // data to transfer
 			) {
-				// now dial the second connection, and use 0-RTT to send some data
+				// accept the second connection, and receive the data sent in 0-RTT
 				done := make(chan struct{})
 				go func() {
 					defer GinkgoRecover()
 					conn, err := ln.Accept(context.Background())
 					Expect(err).ToNot(HaveOccurred())
-					str, err := conn.AcceptUniStream(context.Background())
+					str, err := conn.AcceptStream(context.Background())
 					Expect(err).ToNot(HaveOccurred())
 					data, err := io.ReadAll(str)
 					Expect(err).ToNot(HaveOccurred())
 					Expect(data).To(Equal(testdata))
+					Expect(str.Close()).To(Succeed())
 					Expect(conn.ConnectionState().TLS.Used0RTT).To(BeTrue())
-					Expect(conn.CloseWithError(0, "")).To(Succeed())
+					<-conn.Context().Done()
 					close(done)
 				}()
 
@@ -133,13 +134,15 @@ var _ = Describe("0-RTT", func() {
 				)
 				Expect(err).ToNot(HaveOccurred())
 				defer conn.CloseWithError(0, "")
-				str, err := conn.OpenUniStream()
+				str, err := conn.OpenStream()
 				Expect(err).ToNot(HaveOccurred())
 				_, err = str.Write(testdata)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(str.Close()).To(Succeed())
 				<-conn.HandshakeComplete().Done()
 				Expect(conn.ConnectionState().TLS.Used0RTT).To(BeTrue())
+				io.ReadAll(str) // wait for the EOF from the server to arrive before closing the conn
+				conn.CloseWithError(0, "")
 				Eventually(done).Should(BeClosed())
 				Eventually(conn.Context().Done()).Should(BeClosed())
 			}
