@@ -95,7 +95,7 @@ var _ = Describe("QUIC Errors", func() {
 			Expect((&VersionNegotiationError{
 				Ours:   []protocol.VersionNumber{2, 3},
 				Theirs: []protocol.VersionNumber{4, 5, 6},
-			}).Error()).To(Equal("no compatible QUIC version found (we support [0x2 0x3], server offered [0x4 0x5 0x6])"))
+			}).Error()).To(Equal("no QUIC version overlap (we support [0x2 0x3], server offered [0x4 0x5 0x6])"))
 		})
 	})
 

@@ -98,7 +98,7 @@ type VersionNegotiationError struct {
 }
 
 func (e *VersionNegotiationError) Error() string {
-	return fmt.Sprintf("no compatible QUIC version found (we support %s, server offered %s)", e.Ours, e.Theirs)
+	return fmt.Sprintf("no QUIC version overlap (we support %s, server offered %s)", e.Ours, e.Theirs)
 }
 
 func (e *VersionNegotiationError) Is(target error) bool {

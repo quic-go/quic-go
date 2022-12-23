@@ -28,6 +28,8 @@ const (
 	KeyUpdateError            TransportErrorCode = 0xe
 	AEADLimitReached          TransportErrorCode = 0xf
 	NoViablePathError         TransportErrorCode = 0x10
+	// https://datatracker.ietf.org/doc/draft-ietf-quic-version-negotiation/14/
+	VersionNegotiation TransportErrorCode = 0x11
 )
 
 func (e TransportErrorCode) IsCryptoError() bool {
@@ -79,6 +81,8 @@ func (e TransportErrorCode) String() string {
 		return "AEAD_LIMIT_REACHED"
 	case NoViablePathError:
 		return "NO_VIABLE_PATH"
+	case VersionNegotiation:
+		return "VERSION_NEGOTIATION_ERROR"
 	default:
 		if e.IsCryptoError() {
 			return fmt.Sprintf("CRYPTO_ERROR %#x", uint16(e))

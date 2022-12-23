@@ -117,6 +117,7 @@ var _ = Describe("Types", func() {
 			Expect(transportError(qerr.ApplicationErrorErrorCode).String()).To(Equal("application_error"))
 			Expect(transportError(qerr.CryptoBufferExceeded).String()).To(Equal("crypto_buffer_exceeded"))
 			Expect(transportError(qerr.NoViablePathError).String()).To(Equal("no_viable_path"))
+			Expect(transportError(qerr.VersionNegotiation).String()).To(Equal("version_negotiation_error"))
 			Expect(transportError(1337).String()).To(BeEmpty())
 		})
 	})
