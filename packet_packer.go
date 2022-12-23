@@ -569,9 +569,9 @@ func (p *packetPacker) maybeGetCryptoPacket(maxPacketSize protocol.ByteCount, en
 			//nolint:exhaustive // 0-RTT packets can't contain any retransmission.s
 			switch encLevel {
 			case protocol.EncryptionInitial:
-				f = p.retransmissionQueue.GetInitialFrame(maxPacketSize)
+				f = p.retransmissionQueue.GetInitialFrame(maxPacketSize, p.version)
 			case protocol.EncryptionHandshake:
-				f = p.retransmissionQueue.GetHandshakeFrame(maxPacketSize)
+				f = p.retransmissionQueue.GetHandshakeFrame(maxPacketSize, p.version)
 			}
 			if f == nil {
 				break
@@ -683,7 +683,7 @@ func (p *packetPacker) composeNextPacket(maxFrameSize protocol.ByteCount, onlyAc
 			if remainingLen < protocol.MinStreamFrameSize {
 				break
 			}
-			f := p.retransmissionQueue.GetAppDataFrame(remainingLen)
+			f := p.retransmissionQueue.GetAppDataFrame(remainingLen, p.version)
 			if f == nil {
 				break
 			}

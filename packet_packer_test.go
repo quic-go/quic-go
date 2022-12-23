@@ -85,7 +85,7 @@ var _ = Describe("Packet packer", func() {
 
 	BeforeEach(func() {
 		rand.Seed(GinkgoRandomSeed())
-		retransmissionQueue = newRetransmissionQueue(version)
+		retransmissionQueue = newRetransmissionQueue()
 		mockSender := NewMockStreamSender(mockCtrl)
 		mockSender.EXPECT().onHasStreamData(gomock.Any()).AnyTimes()
 		initialStream = NewMockCryptoStream(mockCtrl)
@@ -1593,7 +1593,7 @@ var _ = Describe("Converting to ackhandler.Packet", func() {
 					{Frame: &wire.PingFrame{}, OnLost: func(wire.Frame) { pingLost = true }},
 				},
 			}
-			p := packet.ToAckHandlerPacket(time.Now(), newRetransmissionQueue(protocol.VersionTLS))
+			p := packet.ToAckHandlerPacket(time.Now(), newRetransmissionQueue())
 			Expect(p.Frames).To(HaveLen(2))
 			Expect(p.Frames[0].OnLost).ToNot(BeNil())
 			p.Frames[1].OnLost(nil)
