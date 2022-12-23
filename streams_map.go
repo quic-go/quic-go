@@ -114,7 +114,7 @@ func (m *streamsMap) initMaps() {
 		protocol.StreamTypeUni,
 		func(num protocol.StreamNum) receiveStreamI {
 			id := num.StreamID(protocol.StreamTypeUni, m.perspective.Opposite())
-			return newReceiveStream(id, m.sender, m.newFlowController(id), m.version)
+			return newReceiveStream(id, m.sender, m.newFlowController(id))
 		},
 		m.maxIncomingUniStreams,
 		m.sender.queueControlFrame,
