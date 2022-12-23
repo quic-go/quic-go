@@ -135,6 +135,7 @@ func populateConfig(config *Config, defaultConnIDLen int) *Config {
 		EnableDatagrams:                  config.EnableDatagrams,
 		DisablePathMTUDiscovery:          config.DisablePathMTUDiscovery,
 		DisableVersionNegotiationPackets: config.DisableVersionNegotiationPackets,
+		Allow0RTT:                        config.Allow0RTT,
 		Tracer:                           config.Tracer,
 	}
 }

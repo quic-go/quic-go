@@ -105,7 +105,7 @@ func main() {
 		&wire.TransportParameters{},
 		runner,
 		config,
-		false,
+		nil,
 		utils.NewRTTStats(),
 		nil,
 		utils.DefaultLogger.WithPrefix("server"),
