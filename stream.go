@@ -80,8 +80,6 @@ type stream struct {
 	sender                 streamSender
 	receiveStreamCompleted bool
 	sendStreamCompleted    bool
-
-	version protocol.VersionNumber
 }
 
 var _ Stream = &stream{}
@@ -90,9 +88,8 @@ var _ Stream = &stream{}
 func newStream(streamID protocol.StreamID,
 	sender streamSender,
 	flowController flowcontrol.StreamFlowController,
-	version protocol.VersionNumber,
 ) *stream {
-	s := &stream{sender: sender, version: version}
+	s := &stream{sender: sender}
 	senderForSendStream := &uniStreamSender{
 		streamSender: sender,
 		onStreamCompletedImpl: func() {

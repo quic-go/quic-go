@@ -89,7 +89,7 @@ func (m *streamsMap) initMaps() {
 		protocol.StreamTypeBidi,
 		func(num protocol.StreamNum) streamI {
 			id := num.StreamID(protocol.StreamTypeBidi, m.perspective)
-			return newStream(id, m.sender, m.newFlowController(id), m.version)
+			return newStream(id, m.sender, m.newFlowController(id))
 		},
 		m.sender.queueControlFrame,
 	)
@@ -97,7 +97,7 @@ func (m *streamsMap) initMaps() {
 		protocol.StreamTypeBidi,
 		func(num protocol.StreamNum) streamI {
 			id := num.StreamID(protocol.StreamTypeBidi, m.perspective.Opposite())
-			return newStream(id, m.sender, m.newFlowController(id), m.version)
+			return newStream(id, m.sender, m.newFlowController(id))
 		},
 		m.maxIncomingBidiStreams,
 		m.sender.queueControlFrame,
