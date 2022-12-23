@@ -106,7 +106,7 @@ func (m *streamsMap) initMaps() {
 		protocol.StreamTypeUni,
 		func(num protocol.StreamNum) sendStreamI {
 			id := num.StreamID(protocol.StreamTypeUni, m.perspective)
-			return newSendStream(id, m.sender, m.newFlowController(id), m.version)
+			return newSendStream(id, m.sender, m.newFlowController(id))
 		},
 		m.sender.queueControlFrame,
 	)
