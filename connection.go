@@ -530,7 +530,6 @@ func (s *connection) preSetup() {
 		uint64(s.config.MaxIncomingStreams),
 		uint64(s.config.MaxIncomingUniStreams),
 		s.perspective,
-		s.version,
 	)
 	s.framer = newFramer(s.streamsMap, s.version)
 	s.receivedPackets = make(chan *receivedPacket, protocol.MaxConnUnprocessedPackets)

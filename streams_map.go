@@ -46,7 +46,6 @@ var errTooManyOpenStreams = errors.New("too many open streams")
 
 type streamsMap struct {
 	perspective protocol.Perspective
-	version     protocol.VersionNumber
 
 	maxIncomingBidiStreams uint64
 	maxIncomingUniStreams  uint64
@@ -70,7 +69,6 @@ func newStreamsMap(
 	maxIncomingBidiStreams uint64,
 	maxIncomingUniStreams uint64,
 	perspective protocol.Perspective,
-	version protocol.VersionNumber,
 ) streamManager {
 	m := &streamsMap{
 		perspective:            perspective,
@@ -78,7 +76,6 @@ func newStreamsMap(
 		maxIncomingBidiStreams: maxIncomingBidiStreams,
 		maxIncomingUniStreams:  maxIncomingUniStreams,
 		sender:                 sender,
-		version:                version,
 	}
 	m.initMaps()
 	return m
