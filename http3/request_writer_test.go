@@ -8,9 +8,9 @@ import (
 	mockquic "github.com/lucas-clemente/quic-go/internal/mocks/quic"
 	"github.com/lucas-clemente/quic-go/internal/utils"
 
-	"github.com/golang/mock/gomock"
-	"github.com/marten-seemann/qpack"
+	"github.com/quic-go/qpack"
 
+	"github.com/golang/mock/gomock"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 )

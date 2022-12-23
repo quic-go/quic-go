@@ -18,7 +18,7 @@ import (
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/internal/utils"
 	"github.com/lucas-clemente/quic-go/quicvarint"
-	"github.com/marten-seemann/qpack"
+	"github.com/quic-go/qpack"
 )
 
 // allows mocking of quic.Listen and quic.ListenAddr
