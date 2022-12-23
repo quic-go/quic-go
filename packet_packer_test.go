@@ -672,8 +672,8 @@ var _ = Describe("Packet packer", func() {
 				Expect(err).ToNot(HaveOccurred())
 				Expect(secondPayloadByte).To(Equal(byte(0)))
 				// ... followed by the PING
-				frameParser := wire.NewFrameParser(false, packer.version)
-				l, frame, err := frameParser.ParseNext(data[len(data)-r.Len():], protocol.Encryption1RTT)
+				frameParser := wire.NewFrameParser(false)
+				l, frame, err := frameParser.ParseNext(data[len(data)-r.Len():], protocol.Encryption1RTT, packer.version)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(frame).To(BeAssignableToTypeOf(&wire.PingFrame{}))
 				Expect(r.Len() - l).To(Equal(sealer.Overhead()))
@@ -708,8 +708,8 @@ var _ = Describe("Packet packer", func() {
 				Expect(err).ToNot(HaveOccurred())
 				Expect(firstPayloadByte).To(Equal(byte(0)))
 				// ... followed by the STREAM frame
-				frameParser := wire.NewFrameParser(true, packer.version)
-				l, frame, err := frameParser.ParseNext(buffer.Data[len(data)-r.Len():], protocol.Encryption1RTT)
+				frameParser := wire.NewFrameParser(true)
+				l, frame, err := frameParser.ParseNext(buffer.Data[len(data)-r.Len():], protocol.Encryption1RTT, packer.version)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(frame).To(BeAssignableToTypeOf(&wire.StreamFrame{}))
 				sf := frame.(*wire.StreamFrame)
@@ -1268,8 +1268,8 @@ var _ = Describe("Packet packer", func() {
 				Expect(err).ToNot(HaveOccurred())
 				Expect(secondPayloadByte).To(Equal(byte(0)))
 				// ... followed by the PING
-				frameParser := wire.NewFrameParser(false, packer.version)
-				l, frame, err := frameParser.ParseNext(data[len(data)-r.Len():], protocol.Encryption1RTT)
+				frameParser := wire.NewFrameParser(false)
+				l, frame, err := frameParser.ParseNext(data[len(data)-r.Len():], protocol.Encryption1RTT, packer.version)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(frame).To(BeAssignableToTypeOf(&wire.PingFrame{}))
 				Expect(r.Len() - l).To(Equal(sealer.Overhead()))

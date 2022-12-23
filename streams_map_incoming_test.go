@@ -42,9 +42,9 @@ var _ = Describe("Streams Map (incoming)", func() {
 
 	// check that the frame can be serialized and deserialized
 	checkFrameSerialization := func(f wire.Frame) {
-		b, err := f.Append(nil, protocol.VersionTLS)
+		b, err := f.Append(nil, protocol.Version1)
 		ExpectWithOffset(1, err).ToNot(HaveOccurred())
-		_, frame, err := wire.NewFrameParser(false, protocol.VersionTLS).ParseNext(b, protocol.Encryption1RTT)
+		_, frame, err := wire.NewFrameParser(false).ParseNext(b, protocol.Encryption1RTT, protocol.Version1)
 		ExpectWithOffset(1, err).ToNot(HaveOccurred())
 		Expect(f).To(Equal(frame))
 	}

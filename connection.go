@@ -508,7 +508,7 @@ var newClientConnection = func(
 func (s *connection) preSetup() {
 	s.sendQueue = newSendQueue(s.conn)
 	s.retransmissionQueue = newRetransmissionQueue()
-	s.frameParser = wire.NewFrameParser(s.config.EnableDatagrams, s.version)
+	s.frameParser = wire.NewFrameParser(s.config.EnableDatagrams)
 	s.rttStats = &utils.RTTStats{}
 	s.connFlowController = flowcontrol.NewConnectionFlowController(
 		protocol.ByteCount(s.config.InitialConnectionReceiveWindow),
@@ -1284,7 +1284,7 @@ func (s *connection) handleFrames(
 	// If we're not tracing, this slice will always remain empty.
 	var frames []wire.Frame
 	for len(data) > 0 {
-		l, frame, err := s.frameParser.ParseNext(data, encLevel)
+		l, frame, err := s.frameParser.ParseNext(data, encLevel, s.version)
 		if err != nil {
 			return false, err
 		}
