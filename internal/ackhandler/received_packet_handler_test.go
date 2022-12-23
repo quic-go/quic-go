@@ -23,7 +23,6 @@ var _ = Describe("Received Packet Handler", func() {
 			sentPackets,
 			&utils.RTTStats{},
 			utils.DefaultLogger,
-			protocol.VersionWhatever,
 		)
 	})
 
