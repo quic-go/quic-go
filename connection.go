@@ -25,7 +25,7 @@ import (
 )
 
 type unpacker interface {
-	UnpackLongHeader(hdr *wire.Header, rcvTime time.Time, data []byte) (*unpackedPacket, error)
+	UnpackLongHeader(hdr *wire.Header, rcvTime time.Time, data []byte, v protocol.VersionNumber) (*unpackedPacket, error)
 	UnpackShortHeader(rcvTime time.Time, data []byte) (protocol.PacketNumber, protocol.PacketNumberLen, protocol.KeyPhaseBit, []byte, error)
 }
 
@@ -366,7 +366,7 @@ var newConnection = func(
 		s.perspective,
 		s.version,
 	)
-	s.unpacker = newPacketUnpacker(cs, s.srcConnIDLen, s.version)
+	s.unpacker = newPacketUnpacker(cs, s.srcConnIDLen)
 	s.cryptoStreamManager = newCryptoStreamManager(cs, initialStream, handshakeStream, s.oneRTTStream)
 	return s
 }
@@ -476,7 +476,7 @@ var newClientConnection = func(
 	s.clientHelloWritten = clientHelloWritten
 	s.cryptoStreamHandler = cs
 	s.cryptoStreamManager = newCryptoStreamManager(cs, initialStream, handshakeStream, newCryptoStream())
-	s.unpacker = newPacketUnpacker(cs, s.srcConnIDLen, s.version)
+	s.unpacker = newPacketUnpacker(cs, s.srcConnIDLen)
 	s.packer = newPacketPacker(
 		srcConnID,
 		s.connIDManager.Get,
@@ -1009,7 +1009,7 @@ func (s *connection) handleLongHeaderPacket(p *receivedPacket, hdr *wire.Header)
 		return false
 	}
 
-	packet, err := s.unpacker.UnpackLongHeader(hdr, p.rcvTime, p.data)
+	packet, err := s.unpacker.UnpackLongHeader(hdr, p.rcvTime, p.data, s.version)
 	if err != nil {
 		wasQueued = s.handleUnpackError(err, p, logging.PacketTypeFromHeader(hdr))
 		return false
