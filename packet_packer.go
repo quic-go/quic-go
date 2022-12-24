@@ -143,8 +143,8 @@ type sealingManager interface {
 
 type frameSource interface {
 	HasData() bool
-	AppendStreamFrames([]*ackhandler.Frame, protocol.ByteCount) ([]*ackhandler.Frame, protocol.ByteCount)
-	AppendControlFrames([]*ackhandler.Frame, protocol.ByteCount) ([]*ackhandler.Frame, protocol.ByteCount)
+	AppendStreamFrames([]*ackhandler.Frame, protocol.ByteCount, protocol.VersionNumber) ([]*ackhandler.Frame, protocol.ByteCount)
+	AppendControlFrames([]*ackhandler.Frame, protocol.ByteCount, protocol.VersionNumber) ([]*ackhandler.Frame, protocol.ByteCount)
 }
 
 type ackFrameSource interface {
@@ -681,10 +681,10 @@ func (p *packetPacker) composeNextPacket(maxFrameSize protocol.ByteCount, onlyAc
 
 	if hasData {
 		var lengthAdded protocol.ByteCount
-		pl.frames, lengthAdded = p.framer.AppendControlFrames(pl.frames, maxFrameSize-pl.length)
+		pl.frames, lengthAdded = p.framer.AppendControlFrames(pl.frames, maxFrameSize-pl.length, v)
 		pl.length += lengthAdded
 
-		pl.frames, lengthAdded = p.framer.AppendStreamFrames(pl.frames, maxFrameSize-pl.length)
+		pl.frames, lengthAdded = p.framer.AppendStreamFrames(pl.frames, maxFrameSize-pl.length, v)
 		pl.length += lengthAdded
 	}
 	return pl
