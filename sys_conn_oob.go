@@ -57,6 +57,8 @@ type oobConn struct {
 	OOBCapablePacketConn
 	batchConn batchConn
 
+	pool *packetBufferPool
+
 	readPos uint8
 	// Packets received from the kernel, but not yet returned by ReadPacket().
 	messages []ipv4.Message
@@ -65,7 +67,7 @@ type oobConn struct {
 
 var _ rawConn = &oobConn{}
 
-func newConn(c OOBCapablePacketConn) (*oobConn, error) {
+func newConn(c OOBCapablePacketConn, pool *packetBufferPool) (*oobConn, error) {
 	rawConn, err := c.SyscallConn()
 	if err != nil {
 		return nil, err
@@ -129,6 +131,7 @@ func newConn(c OOBCapablePacketConn) (*oobConn, error) {
 	}
 	oobConn := &oobConn{
 		OOBCapablePacketConn: c,
+		pool:                 pool,
 		batchConn:            bc,
 		messages:             msgs,
 		readPos:              batchSize,
@@ -139,12 +142,16 @@ func newConn(c OOBCapablePacketConn) (*oobConn, error) {
 	return oobConn, nil
 }
 
+func (c *oobConn) BufferPool() *packetBufferPool {
+	return nil
+}
+
 func (c *oobConn) ReadPacket() (*receivedPacket, error) {
 	if len(c.messages) == int(c.readPos) { // all messages read. Read the next batch of messages.
 		c.messages = c.messages[:batchSize]
 		// replace buffers data buffers up to the packet that has been consumed during the last ReadBatch call
 		for i := uint8(0); i < c.readPos; i++ {
-			buffer := getPacketBuffer()
+			buffer := c.pool.getPacketBuffer()
 			buffer.Data = buffer.Data[:protocol.MaxPacketBufferSize]
 			c.buffers[i] = buffer
 			c.messages[i].Buffers[0] = c.buffers[i].Data
@@ -229,7 +236,7 @@ func (c *oobConn) ReadPacket() (*receivedPacket, error) {
 	}, nil
 }
 
-func (c *oobConn) WritePacket(b []byte, addr net.Addr, oob []byte) (n int, err error) {
+func (c *oobConn) WritePacket(b []byte, tag int, addr net.Addr, oob []byte) (n int, err error) {
 	n, _, err = c.OOBCapablePacketConn.WriteMsgUDP(b, oob, addr.(*net.UDPAddr))
 	return n, err
 }

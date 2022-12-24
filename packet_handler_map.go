@@ -24,8 +24,9 @@ import (
 
 // rawConn is a connection that allow reading of a receivedPacket.
 type rawConn interface {
+	BufferPool() *packetBufferPool
 	ReadPacket() (*receivedPacket, error)
-	WritePacket(b []byte, addr net.Addr, oob []byte) (int, error)
+	WritePacket(b []byte, tag int, addr net.Addr, oob []byte) (int, error)
 	LocalAddr() net.Addr
 	io.Closer
 }
@@ -278,7 +279,7 @@ func (h *packetHandlerMap) runCloseQueue() {
 		case <-h.listening:
 			return
 		case p := <-h.closeQueue:
-			h.conn.WritePacket(p.payload, p.addr, p.info.OOB())
+			h.conn.WritePacket(p.payload, -1, p.addr, p.info.OOB())
 		}
 	}
 }
@@ -499,7 +500,7 @@ func (h *packetHandlerMap) maybeSendStatelessReset(p *receivedPacket, connID pro
 	rand.Read(data)
 	data[0] = (data[0] & 0x7f) | 0x40
 	data = append(data, token[:]...)
-	if _, err := h.conn.WritePacket(data, p.remoteAddr, p.info.OOB()); err != nil {
+	if _, err := h.conn.WritePacket(data, -1, p.remoteAddr, p.info.OOB()); err != nil {
 		h.logger.Debugf("Error sending Stateless Reset: %s", err)
 	}
 }

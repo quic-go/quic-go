@@ -13,6 +13,8 @@ import (
 )
 
 type client struct {
+	pool *packetBufferPool
+
 	sconn sendConn
 	// If the client is created with DialAddr, we create a packet conn.
 	// If it is started with Dial, we take a packet conn as a parameter.
@@ -276,6 +278,7 @@ func (c *client) dial(ctx context.Context) error {
 	c.logger.Infof("Starting new connection to %s (%s -> %s), source connection ID %s, destination connection ID %s, version %s", c.tlsConf.ServerName, c.sconn.LocalAddr(), c.sconn.RemoteAddr(), c.srcConnID, c.destConnID, c.version)
 
 	c.conn = newClientConnection(
+		c.pool,
 		c.sconn,
 		c.packetHandlers,
 		c.destConnID,

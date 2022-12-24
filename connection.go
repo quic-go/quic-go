@@ -230,6 +230,7 @@ var (
 )
 
 var newConnection = func(
+	pool *packetBufferPool,
 	conn sendConn,
 	runner connRunner,
 	origDestConnID protocol.ConnectionID,
@@ -348,6 +349,7 @@ var newConnection = func(
 	)
 	s.cryptoStreamHandler = cs
 	s.packer = newPacketPacker(
+		pool,
 		srcConnID,
 		s.connIDManager.Get,
 		initialStream,
@@ -369,6 +371,7 @@ var newConnection = func(
 
 // declare this as a variable, such that we can it mock it in the tests
 var newClientConnection = func(
+	pool *packetBufferPool,
 	conn sendConn,
 	runner connRunner,
 	destConnID protocol.ConnectionID,
@@ -476,6 +479,7 @@ var newClientConnection = func(
 	s.cryptoStreamManager = newCryptoStreamManager(cs, initialStream, handshakeStream, newCryptoStream())
 	s.unpacker = newPacketUnpacker(cs, s.srcConnIDLen, s.version)
 	s.packer = newPacketPacker(
+		pool,
 		srcConnID,
 		s.connIDManager.Get,
 		initialStream,
@@ -1955,7 +1959,7 @@ func (s *connection) sendConnectionClose(e error) ([]byte, error) {
 		return nil, err
 	}
 	s.logCoalescedPacket(packet)
-	return packet.buffer.Data, s.conn.Write(packet.buffer.Data)
+	return packet.buffer.Data, s.conn.Write(packet.buffer.Data, packet.buffer.Tag)
 }
 
 func (s *connection) logPacketContents(p *packetContents) {
