@@ -1832,15 +1832,15 @@ func (s *connection) maybeSendAckOnlyPacket() error {
 	}
 
 	now := time.Now()
-	p, err := s.packer.PackPacket(true, now)
+	p, buffer, err := s.packer.PackPacket(true, now)
 	if err != nil {
 		if err == errNothingToPack {
 			return nil
 		}
 		return err
 	}
-	s.sendPackedShortHeaderPacket(p.Buffer, p.Packet, now)
-	s.logShortHeaderPacket(p.DestConnID, p.Ack, p.Frames, p.PacketNumber, p.PacketNumberLen, p.KeyPhase, p.Buffer.Len(), false)
+	s.sendPackedShortHeaderPacket(buffer, p.Packet, now)
+	s.logShortHeaderPacket(p.DestConnID, p.Ack, p.Frames, p.PacketNumber, p.PacketNumberLen, p.KeyPhase, buffer.Len(), false)
 	return nil
 }
 
@@ -1903,23 +1903,23 @@ func (s *connection) sendPacket() (bool, error) {
 		return true, nil
 	} else if !s.config.DisablePathMTUDiscovery && s.mtuDiscoverer.ShouldSendProbe(now) {
 		ping, size := s.mtuDiscoverer.GetPing()
-		p, err := s.packer.PackMTUProbePacket(ping, size, now)
+		p, buffer, err := s.packer.PackMTUProbePacket(ping, size, now)
 		if err != nil {
 			return false, err
 		}
-		s.logShortHeaderPacket(p.DestConnID, p.Ack, p.Frames, p.PacketNumber, p.PacketNumberLen, p.KeyPhase, p.Buffer.Len(), false)
-		s.sendPackedShortHeaderPacket(p.Buffer, p.Packet, now)
+		s.logShortHeaderPacket(p.DestConnID, p.Ack, p.Frames, p.PacketNumber, p.PacketNumberLen, p.KeyPhase, buffer.Len(), false)
+		s.sendPackedShortHeaderPacket(buffer, p.Packet, now)
 		return true, nil
 	}
-	p, err := s.packer.PackPacket(false, now)
+	p, buffer, err := s.packer.PackPacket(false, now)
 	if err != nil {
 		if err == errNothingToPack {
 			return false, nil
 		}
 		return false, err
 	}
-	s.logShortHeaderPacket(p.DestConnID, p.Ack, p.Frames, p.PacketNumber, p.PacketNumberLen, p.KeyPhase, p.Buffer.Len(), false)
-	s.sendPackedShortHeaderPacket(p.Buffer, p.Packet, now)
+	s.logShortHeaderPacket(p.DestConnID, p.Ack, p.Frames, p.PacketNumber, p.PacketNumberLen, p.KeyPhase, buffer.Len(), false)
+	s.sendPackedShortHeaderPacket(buffer, p.Packet, now)
 	return true, nil
 }
 
