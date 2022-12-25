@@ -59,16 +59,27 @@ var _ = Describe("Connection", func() {
 		return shortHeaderPacket{Packet: &ackhandler.Packet{PacketNumber: pn}}, buffer
 	}
 
-	getCoalescedPacket := func(pn protocol.PacketNumber) *coalescedPacket {
+	getCoalescedPacket := func(pn protocol.PacketNumber, isLongHeader bool) *coalescedPacket {
 		buffer := getPacketBuffer()
 		buffer.Data = append(buffer.Data, []byte("foobar")...)
-		return &coalescedPacket{
-			buffer: buffer,
-			packets: []*packetContents{{
-				header: &wire.ExtendedHeader{PacketNumber: pn},
+		packet := &coalescedPacket{buffer: buffer}
+		if isLongHeader {
+			packet.longHdrPackets = []*longHeaderPacket{{
+				header: &wire.ExtendedHeader{
+					Header:       wire.Header{IsLongHeader: true},
+					PacketNumber: pn,
+				},
 				length: 6, // foobar
-			}},
+			}}
+		} else {
+			packet.shortHdrPacket = &shortHeaderPacket{
+				Packet: &ackhandler.Packet{
+					PacketNumber: pn,
+					Length:       6,
+				},
+			}
 		}
+		return packet
 	}
 
 	expectReplaceWithClosed := func() {
@@ -1337,7 +1348,7 @@ var _ = Describe("Connection", func() {
 					sph.EXPECT().SendMode().Return(sendMode)
 					sph.EXPECT().SendMode().Return(ackhandler.SendNone)
 					sph.EXPECT().QueueProbePacket(encLevel)
-					p := getCoalescedPacket(123)
+					p := getCoalescedPacket(123, enc != protocol.Encryption1RTT)
 					packer.EXPECT().MaybePackProbePacket(encLevel).Return(p, nil)
 					sph.EXPECT().SentPacket(gomock.Any()).Do(func(packet *ackhandler.Packet) {
 						Expect(packet.PacketNumber).To(Equal(protocol.PacketNumber(123)))
@@ -1346,7 +1357,11 @@ var _ = Describe("Connection", func() {
 					runConn()
 					sent := make(chan struct{})
 					sender.EXPECT().Send(gomock.Any()).Do(func(packet *packetBuffer) { close(sent) })
-					tracer.EXPECT().SentShortHeaderPacket(gomock.Any(), p.packets[0].length, gomock.Any(), gomock.Any())
+					if enc == protocol.Encryption1RTT {
+						tracer.EXPECT().SentShortHeaderPacket(gomock.Any(), p.shortHdrPacket.Length, gomock.Any(), gomock.Any())
+					} else {
+						tracer.EXPECT().SentLongHeaderPacket(gomock.Any(), p.longHdrPackets[0].length, gomock.Any(), gomock.Any())
+					}
 					conn.scheduleSending()
 					Eventually(sent).Should(BeClosed())
 				})
@@ -1358,7 +1373,7 @@ var _ = Describe("Connection", func() {
 					sph.EXPECT().SendMode().Return(sendMode)
 					sph.EXPECT().SendMode().Return(ackhandler.SendNone)
 					sph.EXPECT().QueueProbePacket(encLevel).Return(false)
-					p := getCoalescedPacket(123)
+					p := getCoalescedPacket(123, enc != protocol.Encryption1RTT)
 					packer.EXPECT().MaybePackProbePacket(encLevel).Return(p, nil)
 					sph.EXPECT().SentPacket(gomock.Any()).Do(func(packet *ackhandler.Packet) {
 						Expect(packet.PacketNumber).To(Equal(protocol.PacketNumber(123)))
@@ -1367,7 +1382,11 @@ var _ = Describe("Connection", func() {
 					runConn()
 					sent := make(chan struct{})
 					sender.EXPECT().Send(gomock.Any()).Do(func(packet *packetBuffer) { close(sent) })
-					tracer.EXPECT().SentShortHeaderPacket(gomock.Any(), p.packets[0].length, gomock.Any(), gomock.Any())
+					if enc == protocol.Encryption1RTT {
+						tracer.EXPECT().SentShortHeaderPacket(gomock.Any(), p.shortHdrPacket.Length, gomock.Any(), gomock.Any())
+					} else {
+						tracer.EXPECT().SentLongHeaderPacket(gomock.Any(), p.longHdrPackets[0].length, gomock.Any(), gomock.Any())
+					}
 					conn.scheduleSending()
 					Eventually(sent).Should(BeClosed())
 					// We're using a mock packet packer in this test.
@@ -1763,7 +1782,7 @@ var _ = Describe("Connection", func() {
 		buffer.Data = append(buffer.Data, []byte("foobar")...)
 		packer.EXPECT().PackCoalescedPacket(false).Return(&coalescedPacket{
 			buffer: buffer,
-			packets: []*packetContents{
+			longHdrPackets: []*longHeaderPacket{
 				{
 					header: &wire.ExtendedHeader{
 						Header: wire.Header{

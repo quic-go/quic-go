@@ -1879,7 +1879,7 @@ func (s *connection) sendProbePacket(encLevel protocol.EncryptionLevel) error {
 			return err
 		}
 	}
-	if packet == nil || len(packet.packets) == 0 {
+	if packet == nil || (len(packet.longHdrPackets) == 0 && packet.shortHdrPacket == nil) {
 		return fmt.Errorf("connection BUG: couldn't pack %s probe packet", encLevel)
 	}
 	s.sendPackedCoalescedPacket(packet, time.Now())
@@ -1935,11 +1935,17 @@ func (s *connection) sendPackedShortHeaderPacket(buffer *packetBuffer, p *ackhan
 
 func (s *connection) sendPackedCoalescedPacket(packet *coalescedPacket, now time.Time) {
 	s.logCoalescedPacket(packet)
-	for _, p := range packet.packets {
+	for _, p := range packet.longHdrPackets {
 		if s.firstAckElicitingPacketAfterIdleSentTime.IsZero() && p.IsAckEliciting() {
 			s.firstAckElicitingPacketAfterIdleSentTime = now
 		}
 		s.sentPacketHandler.SentPacket(p.ToAckHandlerPacket(now, s.retransmissionQueue))
+	}
+	if p := packet.shortHdrPacket; p != nil {
+		if s.firstAckElicitingPacketAfterIdleSentTime.IsZero() && p.IsAckEliciting() {
+			s.firstAckElicitingPacketAfterIdleSentTime = now
+		}
+		s.sentPacketHandler.SentPacket(p.Packet)
 	}
 	s.connIDManager.SentPacket()
 	s.sendQueue.Send(packet.buffer)
@@ -1967,7 +1973,7 @@ func (s *connection) sendConnectionClose(e error) ([]byte, error) {
 	return packet.buffer.Data, s.conn.Write(packet.buffer.Data)
 }
 
-func (s *connection) logLongHeaderPacket(p *packetContents) {
+func (s *connection) logLongHeaderPacket(p *longHeaderPacket) {
 	// quic-go logging
 	if s.logger.Debug() {
 		p.header.Log(s.logger)
@@ -2043,18 +2049,17 @@ func (s *connection) logShortHeaderPacket(
 
 func (s *connection) logCoalescedPacket(packet *coalescedPacket) {
 	if s.logger.Debug() {
-		if len(packet.packets) > 1 {
-			s.logger.Debugf("-> Sending coalesced packet (%d parts, %d bytes) for connection %s", len(packet.packets), packet.buffer.Len(), s.logID)
+		if len(packet.longHdrPackets) > 1 {
+			s.logger.Debugf("-> Sending coalesced packet (%d parts, %d bytes) for connection %s", len(packet.longHdrPackets), packet.buffer.Len(), s.logID)
 		} else {
-			s.logger.Debugf("-> Sending packet %d (%d bytes) for connection %s, %s", packet.packets[0].header.PacketNumber, packet.buffer.Len(), s.logID, packet.packets[0].EncryptionLevel())
+			s.logger.Debugf("-> Sending packet %d (%d bytes) for connection %s, %s", packet.longHdrPackets[0].header.PacketNumber, packet.buffer.Len(), s.logID, packet.longHdrPackets[0].EncryptionLevel())
 		}
 	}
-	for _, p := range packet.packets {
-		if p.header.IsLongHeader {
-			s.logLongHeaderPacket(p)
-		} else {
-			s.logShortHeaderPacket(p.header.DestConnectionID, p.ack, p.frames, p.header.PacketNumber, p.header.PacketNumberLen, p.header.KeyPhase, p.length, true)
-		}
+	for _, p := range packet.longHdrPackets {
+		s.logLongHeaderPacket(p)
+	}
+	if p := packet.shortHdrPacket; p != nil {
+		s.logShortHeaderPacket(p.DestConnID, p.Ack, p.Frames, p.PacketNumber, p.PacketNumberLen, p.KeyPhase, p.Length, true)
 	}
 }
 
