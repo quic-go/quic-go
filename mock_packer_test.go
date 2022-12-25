@@ -111,12 +111,13 @@ func (mr *MockPackerMockRecorder) PackConnectionClose(arg0 interface{}) *gomock.
 }
 
 // PackMTUProbePacket mocks base method.
-func (m *MockPacker) PackMTUProbePacket(ping ackhandler.Frame, size protocol.ByteCount, now time.Time) (shortHeaderPacket, error) {
+func (m *MockPacker) PackMTUProbePacket(ping ackhandler.Frame, size protocol.ByteCount, now time.Time) (shortHeaderPacket, *packetBuffer, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "PackMTUProbePacket", ping, size, now)
 	ret0, _ := ret[0].(shortHeaderPacket)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
+	ret1, _ := ret[1].(*packetBuffer)
+	ret2, _ := ret[2].(error)
+	return ret0, ret1, ret2
 }
 
 // PackMTUProbePacket indicates an expected call of PackMTUProbePacket.
@@ -126,12 +127,13 @@ func (mr *MockPackerMockRecorder) PackMTUProbePacket(ping, size, now interface{}
 }
 
 // PackPacket mocks base method.
-func (m *MockPacker) PackPacket(onlyAck bool, now time.Time) (shortHeaderPacket, error) {
+func (m *MockPacker) PackPacket(onlyAck bool, now time.Time) (shortHeaderPacket, *packetBuffer, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "PackPacket", onlyAck, now)
 	ret0, _ := ret[0].(shortHeaderPacket)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
+	ret1, _ := ret[1].(*packetBuffer)
+	ret2, _ := ret[2].(error)
+	return ret0, ret1, ret2
 }
 
 // PackPacket indicates an expected call of PackPacket.

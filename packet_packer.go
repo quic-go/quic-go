@@ -19,13 +19,13 @@ var errNothingToPack = errors.New("nothing to pack")
 
 type packer interface {
 	PackCoalescedPacket(onlyAck bool) (*coalescedPacket, error)
-	PackPacket(onlyAck bool, now time.Time) (shortHeaderPacket, error)
+	PackPacket(onlyAck bool, now time.Time) (shortHeaderPacket, *packetBuffer, error)
 	MaybePackProbePacket(protocol.EncryptionLevel) (*coalescedPacket, error)
 	PackConnectionClose(*qerr.TransportError) (*coalescedPacket, error)
 	PackApplicationClose(*qerr.ApplicationError) (*coalescedPacket, error)
 
 	SetMaxPacketSize(protocol.ByteCount)
-	PackMTUProbePacket(ping ackhandler.Frame, size protocol.ByteCount, now time.Time) (shortHeaderPacket, error)
+	PackMTUProbePacket(ping ackhandler.Frame, size protocol.ByteCount, now time.Time) (shortHeaderPacket, *packetBuffer, error)
 
 	HandleTransportParameters(*wire.TransportParameters)
 	SetToken([]byte)
@@ -53,7 +53,6 @@ type packetContents struct {
 
 type shortHeaderPacket struct {
 	*ackhandler.Packet
-	Buffer *packetBuffer
 	// used for logging
 	DestConnID      protocol.ConnectionID
 	Ack             *wire.AckFrame
@@ -456,28 +455,27 @@ func (p *packetPacker) PackCoalescedPacket(onlyAck bool) (*coalescedPacket, erro
 
 // PackPacket packs a packet in the application data packet number space.
 // It should be called after the handshake is confirmed.
-func (p *packetPacker) PackPacket(onlyAck bool, now time.Time) (shortHeaderPacket, error) {
+func (p *packetPacker) PackPacket(onlyAck bool, now time.Time) (shortHeaderPacket, *packetBuffer, error) {
 	sealer, err := p.cryptoSetup.Get1RTTSealer()
 	if err != nil {
-		return shortHeaderPacket{}, err
+		return shortHeaderPacket{}, nil, err
 	}
 	hdr, payload := p.maybeGetShortHeaderPacket(sealer, p.maxPacketSize, onlyAck, true)
 	if payload == nil {
-		return shortHeaderPacket{}, errNothingToPack
+		return shortHeaderPacket{}, nil, errNothingToPack
 	}
 	buffer := getPacketBuffer()
 	cont, err := p.appendShortHeaderPacket(buffer, hdr, payload, 0, sealer, false)
 	if err != nil {
-		return shortHeaderPacket{}, err
+		return shortHeaderPacket{}, nil, err
 	}
 	return shortHeaderPacket{
 		Packet:          cont.ToAckHandlerPacket(now, p.retransmissionQueue),
-		Buffer:          buffer,
 		DestConnID:      hdr.DestConnectionID,
 		Ack:             payload.ack,
 		PacketNumberLen: hdr.PacketNumberLen,
 		KeyPhase:        hdr.KeyPhase,
-	}, nil
+	}, buffer, nil
 }
 
 func (p *packetPacker) maybeGetCryptoPacket(maxPacketSize protocol.ByteCount, encLevel protocol.EncryptionLevel, onlyAck, ackAllowed bool) (*wire.ExtendedHeader, *payload) {
@@ -715,7 +713,7 @@ func (p *packetPacker) MaybePackProbePacket(encLevel protocol.EncryptionLevel) (
 	}, nil
 }
 
-func (p *packetPacker) PackMTUProbePacket(ping ackhandler.Frame, size protocol.ByteCount, now time.Time) (shortHeaderPacket, error) {
+func (p *packetPacker) PackMTUProbePacket(ping ackhandler.Frame, size protocol.ByteCount, now time.Time) (shortHeaderPacket, *packetBuffer, error) {
 	payload := &payload{
 		frames: []ackhandler.Frame{ping},
 		length: ping.Length(p.version),
@@ -723,23 +721,22 @@ func (p *packetPacker) PackMTUProbePacket(ping ackhandler.Frame, size protocol.B
 	buffer := getPacketBuffer()
 	sealer, err := p.cryptoSetup.Get1RTTSealer()
 	if err != nil {
-		return shortHeaderPacket{}, err
+		return shortHeaderPacket{}, nil, err
 	}
 	hdr := p.getShortHeader(sealer.KeyPhase())
 	padding := size - p.packetLength(hdr, payload) - protocol.ByteCount(sealer.Overhead())
 	cont, err := p.appendShortHeaderPacket(buffer, hdr, payload, padding, sealer, true)
 	if err != nil {
-		return shortHeaderPacket{}, err
+		return shortHeaderPacket{}, nil, err
 	}
 	cont.isMTUProbePacket = true
 	return shortHeaderPacket{
 		Packet:          cont.ToAckHandlerPacket(now, p.retransmissionQueue),
-		Buffer:          buffer,
 		DestConnID:      hdr.DestConnectionID,
 		Ack:             payload.ack,
 		PacketNumberLen: hdr.PacketNumberLen,
 		KeyPhase:        hdr.KeyPhase,
-	}, nil
+	}, buffer, nil
 }
 
 func (p *packetPacker) getShortHeader(kp protocol.KeyPhaseBit) *wire.ExtendedHeader {
