@@ -177,7 +177,7 @@ func (h *ExtendedHeader) writeLongHeader(b *bytes.Buffer, version protocol.Versi
 		b.Write(h.Token)
 	}
 	quicvarint.WriteWithLen(b, uint64(h.Length), 2)
-	return h.writePacketNumber(b)
+	return writePacketNumber(b, h.PacketNumber, h.PacketNumberLen)
 }
 
 func (h *ExtendedHeader) writeShortHeader(b *bytes.Buffer, _ protocol.VersionNumber) error {
@@ -188,23 +188,7 @@ func (h *ExtendedHeader) writeShortHeader(b *bytes.Buffer, _ protocol.VersionNum
 
 	b.WriteByte(typeByte)
 	b.Write(h.DestConnectionID.Bytes())
-	return h.writePacketNumber(b)
-}
-
-func (h *ExtendedHeader) writePacketNumber(b *bytes.Buffer) error {
-	switch h.PacketNumberLen {
-	case protocol.PacketNumberLen1:
-		b.WriteByte(uint8(h.PacketNumber))
-	case protocol.PacketNumberLen2:
-		utils.BigEndian.WriteUint16(b, uint16(h.PacketNumber))
-	case protocol.PacketNumberLen3:
-		utils.BigEndian.WriteUint24(b, uint32(h.PacketNumber))
-	case protocol.PacketNumberLen4:
-		utils.BigEndian.WriteUint32(b, uint32(h.PacketNumber))
-	default:
-		return fmt.Errorf("invalid packet number length: %d", h.PacketNumberLen)
-	}
-	return nil
+	return writePacketNumber(b, h.PacketNumber, h.PacketNumberLen)
 }
 
 // ParsedLen returns the number of bytes that were consumed when parsing the header
@@ -246,4 +230,20 @@ func (h *ExtendedHeader) Log(logger utils.Logger) {
 	} else {
 		logger.Debugf("\tShort Header{DestConnectionID: %s, PacketNumber: %d, PacketNumberLen: %d, KeyPhase: %s}", h.DestConnectionID, h.PacketNumber, h.PacketNumberLen, h.KeyPhase)
 	}
+}
+
+func writePacketNumber(b *bytes.Buffer, pn protocol.PacketNumber, pnLen protocol.PacketNumberLen) error {
+	switch pnLen {
+	case protocol.PacketNumberLen1:
+		b.WriteByte(uint8(pn))
+	case protocol.PacketNumberLen2:
+		utils.BigEndian.WriteUint16(b, uint16(pn))
+	case protocol.PacketNumberLen3:
+		utils.BigEndian.WriteUint24(b, uint32(pn))
+	case protocol.PacketNumberLen4:
+		utils.BigEndian.WriteUint32(b, uint32(pn))
+	default:
+		return fmt.Errorf("invalid packet number length: %d", pnLen)
+	}
+	return nil
 }
