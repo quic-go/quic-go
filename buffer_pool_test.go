@@ -7,6 +7,12 @@ import (
 	. "github.com/onsi/gomega"
 )
 
+func getPacketBuffer() *packetBuffer {
+	var pool *packetBufferPool
+
+	return pool.getPacketBuffer()
+}
+
 var _ = Describe("Buffer Pool", func() {
 	It("returns buffers of cap", func() {
 		buf := getPacketBuffer()

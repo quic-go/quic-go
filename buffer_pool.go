@@ -26,20 +26,16 @@ type packetBufferPool struct {
 }
 
 func (p *packetBufferPool) getPacketBuffer() *packetBuffer {
-	var data []byte
-	var tag int
+	packet := packetPool.Get().(*packetBuffer)
+	packet.refCount = 1
 
 	if p == nil {
-		data = defaultPacketBufferPool.Get().([]byte)
+		packet.Data = defaultPacketBufferPool.Get().([]byte)
+		packet.Tag = -1
 	} else {
-		data, tag = p.pool.New(int(protocol.MaxPacketBufferSize))
+		packet.Data, packet.Tag = p.pool.New(int(protocol.MaxPacketBufferSize))
+		packet.pool = p.pool
 	}
-
-	packet := packetPool.Get().(*packetBuffer)
-	packet.pool = p.pool
-	packet.Tag = tag
-	packet.Data = data
-	packet.refCount = 1
 
 	return packet
 }
@@ -115,6 +111,6 @@ func init() {
 	}
 
 	defaultPacketBufferPool.New = func() interface{} {
-		return make([]byte, int(protocol.MaxPacketBufferSize))
+		return make([]byte, 0, int(protocol.MaxPacketBufferSize))
 	}
 }

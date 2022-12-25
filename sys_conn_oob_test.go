@@ -24,7 +24,7 @@ var _ = Describe("OOB Conn Test", func() {
 		Expect(err).ToNot(HaveOccurred())
 		udpConn, err := net.ListenUDP(network, addr)
 		Expect(err).ToNot(HaveOccurred())
-		oobConn, err := newConn(udpConn)
+		oobConn, err := newConn(udpConn, nil)
 		Expect(err).ToNot(HaveOccurred())
 
 		packetChan := make(chan *receivedPacket)
@@ -228,7 +228,7 @@ var _ = Describe("OOB Conn Test", func() {
 			Expect(err).ToNot(HaveOccurred())
 			udpConn, err := net.ListenUDP("udp", addr)
 			Expect(err).ToNot(HaveOccurred())
-			oobConn, err := newConn(udpConn)
+			oobConn, err := newConn(udpConn, nil)
 			Expect(err).ToNot(HaveOccurred())
 			oobConn.batchConn = batchConn
 

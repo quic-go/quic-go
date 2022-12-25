@@ -93,6 +93,7 @@ var _ = Describe("Packet packer", func() {
 		datagramQueue = newDatagramQueue(func() {}, utils.DefaultLogger)
 
 		packer = newPacketPacker(
+			nil,
 			protocol.ParseConnectionID([]byte{1, 2, 3, 4, 5, 6, 7, 8}),
 			func() protocol.ConnectionID { return connID },
 			initialStream,
