@@ -1839,8 +1839,8 @@ func (s *connection) maybeSendAckOnlyPacket() error {
 		}
 		return err
 	}
-	s.sendPackedShortHeaderPacket(buffer, p.Packet, now)
 	s.logShortHeaderPacket(p.DestConnID, p.Ack, p.Frames, p.PacketNumber, p.PacketNumberLen, p.KeyPhase, buffer.Len(), false)
+	s.sendPackedShortHeaderPacket(buffer, p.Packet, now)
 	return nil
 }
 
