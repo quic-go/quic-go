@@ -348,7 +348,7 @@ func (s *baseServer) handlePacketImpl(p *receivedPacket) bool /* is the buffer s
 	}
 	// If we're creating a new connection, the packet will be passed to the connection.
 	// The header will then be parsed again.
-	hdr, _, _, err := wire.ParsePacket(p.data, s.config.ConnectionIDGenerator.ConnectionIDLen())
+	hdr, _, _, err := wire.ParsePacket(p.data)
 	if err != nil {
 		if s.config.Tracer != nil {
 			s.config.Tracer.DroppedPacket(p.remoteAddr, logging.PacketTypeNotDetermined, p.Size(), logging.PacketDropHeaderParseError)
@@ -364,7 +364,7 @@ func (s *baseServer) handlePacketImpl(p *receivedPacket) bool /* is the buffer s
 		return false
 	}
 
-	if hdr.IsLongHeader && hdr.Type != protocol.PacketTypeInitial {
+	if hdr.Type != protocol.PacketTypeInitial {
 		// Drop long header packets.
 		// There's little point in sending a Stateless Reset, since the client
 		// might not have received the token yet.
@@ -566,7 +566,6 @@ func (s *baseServer) sendRetry(remoteAddr net.Addr, hdr *wire.Header, info *pack
 		return err
 	}
 	replyHdr := &wire.ExtendedHeader{}
-	replyHdr.IsLongHeader = true
 	replyHdr.Type = protocol.PacketTypeRetry
 	replyHdr.Version = hdr.Version
 	replyHdr.SrcConnectionID = srcConnID
@@ -635,7 +634,6 @@ func (s *baseServer) sendError(remoteAddr net.Addr, hdr *wire.Header, sealer han
 	ccf := &wire.ConnectionCloseFrame{ErrorCode: uint64(errorCode)}
 
 	replyHdr := &wire.ExtendedHeader{}
-	replyHdr.IsLongHeader = true
 	replyHdr.Type = protocol.PacketTypeInitial
 	replyHdr.Version = hdr.Version
 	replyHdr.SrcConnectionID = hdr.DestConnectionID

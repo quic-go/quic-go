@@ -44,7 +44,7 @@ var _ = Describe("Packet packer", func() {
 			if !wire.IsLongHeaderPacket(data[0]) {
 				break
 			}
-			hdr, _, more, err := wire.ParsePacket(data, connID.Len())
+			hdr, _, more, err := wire.ParsePacket(data)
 			Expect(err).ToNot(HaveOccurred())
 			r := bytes.NewReader(data)
 			extHdr, err := hdr.ParseExtended(r, version)
@@ -136,7 +136,6 @@ var _ = Describe("Packet packer", func() {
 		It("uses the Long Header format", func() {
 			pnManager.EXPECT().PeekPacketNumber(protocol.EncryptionHandshake).Return(protocol.PacketNumber(0x42), protocol.PacketNumberLen3)
 			h := packer.getLongHeader(protocol.EncryptionHandshake)
-			Expect(h.IsLongHeader).To(BeTrue())
 			Expect(h.PacketNumber).To(Equal(protocol.PacketNumber(0x42)))
 			Expect(h.PacketNumberLen).To(Equal(protocol.PacketNumberLen3))
 			Expect(h.Version).To(Equal(packer.version))
@@ -657,7 +656,7 @@ var _ = Describe("Packet packer", func() {
 				Expect(packet.longHdrPackets).To(HaveLen(1))
 				// cut off the tag that the mock sealer added
 				// packet.buffer.Data = packet.buffer.Data[:packet.buffer.Len()-protocol.ByteCount(sealer.Overhead())]
-				hdr, _, _, err := wire.ParsePacket(packet.buffer.Data, packer.getDestConnID().Len())
+				hdr, _, _, err := wire.ParsePacket(packet.buffer.Data)
 				Expect(err).ToNot(HaveOccurred())
 				data := packet.buffer.Data
 				r := bytes.NewReader(data)
@@ -1003,7 +1002,6 @@ var _ = Describe("Packet packer", func() {
 				Expect(err).ToNot(HaveOccurred())
 				Expect(p.longHdrPackets).To(HaveLen(1))
 				Expect(p.longHdrPackets[0].frames).To(HaveLen(1))
-				Expect(p.longHdrPackets[0].header.IsLongHeader).To(BeTrue())
 				Expect(p.buffer.Len()).To(BeEquivalentTo(packer.maxPacketSize))
 				parsePacket(p.buffer.Data)
 			})
@@ -1206,13 +1204,11 @@ var _ = Describe("Packet packer", func() {
 				Expect(p.shortHdrPacket).ToNot(BeNil())
 				Expect(p.shortHdrPacket.Frames).To(HaveLen(1))
 				Expect(p.shortHdrPacket.Frames[0].Frame.(*wire.StreamFrame).Data).To(Equal([]byte("foobar")))
-				hdr, _, more, err := wire.ParsePacket(p.buffer.Data, 0)
-				Expect(err).ToNot(HaveOccurred())
-				Expect(hdr.Type).To(Equal(protocol.PacketTypeHandshake))
-				hdr, _, more, err = wire.ParsePacket(more, 0)
-				Expect(err).ToNot(HaveOccurred())
-				Expect(hdr.IsLongHeader).To(BeFalse())
-				Expect(more).To(BeEmpty())
+				hdrs, more := parsePacket(p.buffer.Data)
+				Expect(hdrs).To(HaveLen(1))
+				Expect(hdrs[0].Type).To(Equal(protocol.PacketTypeHandshake))
+				Expect(more).ToNot(BeEmpty())
+				parseShortHeaderPacket(more)
 			})
 
 			It("doesn't add a coalesced packet if the remaining size is smaller than MaxCoalescedPacketSize", func() {
@@ -1256,7 +1252,7 @@ var _ = Describe("Packet packer", func() {
 				Expect(packet.shortHdrPacket).To(BeNil())
 				// cut off the tag that the mock sealer added
 				// packet.buffer.Data = packet.buffer.Data[:packet.buffer.Len()-protocol.ByteCount(sealer.Overhead())]
-				hdr, _, _, err := wire.ParsePacket(packet.buffer.Data, packer.getDestConnID().Len())
+				hdr, _, _, err := wire.ParsePacket(packet.buffer.Data)
 				Expect(err).ToNot(HaveOccurred())
 				data := packet.buffer.Data
 				r := bytes.NewReader(data)
@@ -1295,7 +1291,6 @@ var _ = Describe("Packet packer", func() {
 				Expect(p.longHdrPackets).To(HaveLen(1))
 				Expect(p.longHdrPackets[0].EncryptionLevel()).To(Equal(protocol.EncryptionInitial))
 				Expect(p.longHdrPackets[0].frames).To(Equal([]ackhandler.Frame{{Frame: f}}))
-				Expect(p.longHdrPackets[0].header.IsLongHeader).To(BeTrue())
 			})
 
 			It("sends an Initial packet containing only an ACK", func() {
@@ -1565,7 +1560,7 @@ var _ = Describe("Packet packer", func() {
 var _ = Describe("Converting to ackhandler.Packet", func() {
 	It("convert a packet", func() {
 		packet := &longHeaderPacket{
-			header: &wire.ExtendedHeader{Header: wire.Header{IsLongHeader: true, Type: protocol.PacketTypeInitial}},
+			header: &wire.ExtendedHeader{Header: wire.Header{Type: protocol.PacketTypeInitial}},
 			frames: []ackhandler.Frame{{Frame: &wire.MaxDataFrame{}}, {Frame: &wire.PingFrame{}}},
 			ack:    &wire.AckFrame{AckRanges: []wire.AckRange{{Largest: 100, Smallest: 80}}},
 			length: 42,
@@ -1580,7 +1575,7 @@ var _ = Describe("Converting to ackhandler.Packet", func() {
 
 	It("sets the LargestAcked to invalid, if the packet doesn't have an ACK frame", func() {
 		packet := &longHeaderPacket{
-			header: &wire.ExtendedHeader{Header: wire.Header{IsLongHeader: true, Type: protocol.PacketTypeHandshake}},
+			header: &wire.ExtendedHeader{Header: wire.Header{Type: protocol.PacketTypeHandshake}},
 			frames: []ackhandler.Frame{{Frame: &wire.MaxDataFrame{}}, {Frame: &wire.PingFrame{}}},
 		}
 		p := packet.ToAckHandlerPacket(time.Now(), nil)
@@ -1604,8 +1599,8 @@ var _ = Describe("Converting to ackhandler.Packet", func() {
 			p.Frames[1].OnLost(nil)
 			Expect(pingLost).To(BeTrue())
 		},
-		Entry(protocol.EncryptionInitial.String(), wire.Header{IsLongHeader: true, Type: protocol.PacketTypeInitial}),
-		Entry(protocol.EncryptionHandshake.String(), wire.Header{IsLongHeader: true, Type: protocol.PacketTypeHandshake}),
-		Entry(protocol.Encryption0RTT.String(), wire.Header{IsLongHeader: true, Type: protocol.PacketType0RTT}),
+		Entry(protocol.EncryptionInitial.String(), wire.Header{Type: protocol.PacketTypeInitial}),
+		Entry(protocol.EncryptionHandshake.String(), wire.Header{Type: protocol.PacketTypeHandshake}),
+		Entry(protocol.Encryption0RTT.String(), wire.Header{Type: protocol.PacketType0RTT}),
 	)
 })

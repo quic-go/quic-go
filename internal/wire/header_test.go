@@ -18,7 +18,6 @@ var _ = Describe("Header Parsing", func() {
 			buf := &bytes.Buffer{}
 			Expect((&ExtendedHeader{
 				Header: Header{
-					IsLongHeader:     true,
 					Type:             protocol.PacketTypeHandshake,
 					DestConnectionID: protocol.ParseConnectionID([]byte{0xde, 0xca, 0xfb, 0xad}),
 					SrcConnectionID:  protocol.ParseConnectionID([]byte{1, 2, 3, 4, 5, 6}),
@@ -35,7 +34,6 @@ var _ = Describe("Header Parsing", func() {
 			buf := &bytes.Buffer{}
 			Expect((&ExtendedHeader{
 				Header: Header{
-					IsLongHeader:     true,
 					Type:             protocol.PacketTypeHandshake,
 					DestConnectionID: protocol.ParseConnectionID([]byte{0xde, 0xca, 0xfb, 0xad, 0x13, 0x37}),
 					SrcConnectionID:  protocol.ParseConnectionID([]byte{1, 2, 3, 4, 5, 6, 8, 9}),
@@ -186,10 +184,9 @@ var _ = Describe("Header Parsing", func() {
 			data = append(data, []byte("foobar")...)
 			Expect(IsVersionNegotiationPacket(data)).To(BeFalse())
 
-			hdr, pdata, rest, err := ParsePacket(data, 0)
+			hdr, pdata, rest, err := ParsePacket(data)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(pdata).To(Equal(data))
-			Expect(hdr.IsLongHeader).To(BeTrue())
 			Expect(hdr.DestConnectionID).To(Equal(destConnID))
 			Expect(hdr.SrcConnectionID).To(Equal(srcConnID))
 			Expect(hdr.Type).To(Equal(protocol.PacketTypeInitial))
@@ -214,7 +211,7 @@ var _ = Describe("Header Parsing", func() {
 				0xde, 0xca, 0xfb, 0xad, // dest conn ID
 				0xde, 0xad, 0xbe, 0xef, // src conn ID
 			}
-			_, _, _, err := ParsePacket(data, 0)
+			_, _, _, err := ParsePacket(data)
 			Expect(err).To(MatchError("not a QUIC packet"))
 		})
 
@@ -228,9 +225,8 @@ var _ = Describe("Header Parsing", func() {
 				0x8, 0x7, 0x6, 0x5, 0x4, 0x3, 0x2, 0x1, // src conn ID
 				'f', 'o', 'o', 'b', 'a', 'r', // unspecified bytes
 			}
-			hdr, _, rest, err := ParsePacket(data, 0)
+			hdr, _, rest, err := ParsePacket(data)
 			Expect(err).To(MatchError(ErrUnsupportedVersion))
-			Expect(hdr.IsLongHeader).To(BeTrue())
 			Expect(hdr.Version).To(Equal(protocol.VersionNumber(0xdeadbeef)))
 			Expect(hdr.DestConnectionID).To(Equal(protocol.ParseConnectionID([]byte{0x1, 0x2, 0x3, 0x4, 0x5, 0x6, 0x7, 0x8})))
 			Expect(hdr.SrcConnectionID).To(Equal(protocol.ParseConnectionID([]byte{0x8, 0x7, 0x6, 0x5, 0x4, 0x3, 0x2, 0x1})))
@@ -245,7 +241,7 @@ var _ = Describe("Header Parsing", func() {
 			data = append(data, []byte{0xde, 0xad, 0xbe, 0xef}...) // source connection ID
 			data = append(data, encodeVarInt(0)...)                // length
 			data = append(data, []byte{0xde, 0xca, 0xfb, 0xad}...)
-			hdr, _, _, err := ParsePacket(data, 0)
+			hdr, _, _, err := ParsePacket(data)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(hdr.Type).To(Equal(protocol.PacketType0RTT))
 			Expect(hdr.SrcConnectionID).To(Equal(protocol.ParseConnectionID([]byte{0xde, 0xad, 0xbe, 0xef})))
@@ -260,7 +256,7 @@ var _ = Describe("Header Parsing", func() {
 			data = append(data, 0)                                        // src conn ID len
 			data = append(data, encodeVarInt(0)...)                       // length
 			data = append(data, []byte{0xde, 0xca, 0xfb, 0xad}...)
-			hdr, _, _, err := ParsePacket(data, 0)
+			hdr, _, _, err := ParsePacket(data)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(hdr.SrcConnectionID).To(BeZero())
 			Expect(hdr.DestConnectionID).To(Equal(protocol.ParseConnectionID([]byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10})))
@@ -274,7 +270,7 @@ var _ = Describe("Header Parsing", func() {
 			data = append(data, 0x0)                                                                                  // src conn ID len
 			data = append(data, encodeVarInt(0)...)                                                                   // length
 			data = append(data, []byte{0xde, 0xca, 0xfb, 0xad}...)
-			_, _, _, err := ParsePacket(data, 0)
+			_, _, _, err := ParsePacket(data)
 			Expect(err).To(MatchError(protocol.ErrInvalidConnectionIDLen))
 		})
 
@@ -286,7 +282,7 @@ var _ = Describe("Header Parsing", func() {
 			data = append(data, encodeVarInt(0)...)       // length
 			data = append(data, []byte{0x1, 0x23}...)
 
-			hdr, _, _, err := ParsePacket(data, 0)
+			hdr, _, _, err := ParsePacket(data)
 			Expect(err).ToNot(HaveOccurred())
 			b := bytes.NewReader(data)
 			extHdr, err := hdr.ParseExtended(b, protocol.Version1)
@@ -305,7 +301,7 @@ var _ = Describe("Header Parsing", func() {
 			data = append(data, []byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}...) // source connection ID
 			data = append(data, []byte{'f', 'o', 'o', 'b', 'a', 'r'}...)  // token
 			data = append(data, []byte{16, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1}...)
-			hdr, pdata, rest, err := ParsePacket(data, 0)
+			hdr, pdata, rest, err := ParsePacket(data)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(hdr.Type).To(Equal(protocol.PacketTypeRetry))
 			Expect(hdr.Version).To(Equal(protocol.Version1))
@@ -325,7 +321,7 @@ var _ = Describe("Header Parsing", func() {
 			data = append(data, []byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}...) // source connection ID
 			data = append(data, []byte{'f', 'o', 'o', 'b', 'a', 'r'}...)  // token
 			data = append(data, []byte{16, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1}...)
-			hdr, pdata, rest, err := ParsePacket(data, 0)
+			hdr, pdata, rest, err := ParsePacket(data)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(hdr.Type).To(Equal(protocol.PacketTypeRetry))
 			Expect(hdr.Version).To(Equal(protocol.Version2))
@@ -343,7 +339,7 @@ var _ = Describe("Header Parsing", func() {
 			data = append(data, []byte{'f', 'o', 'o', 'b', 'a', 'r'}...) // token
 			data = append(data, []byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}...)
 			// this results in a token length of 0
-			_, _, _, err := ParsePacket(data, 0)
+			_, _, _, err := ParsePacket(data)
 			Expect(err).To(MatchError(io.EOF))
 		})
 
@@ -355,7 +351,7 @@ var _ = Describe("Header Parsing", func() {
 			data = append(data, encodeVarInt(0x42)...) // length, 1 byte
 			data = append(data, []byte{0x12, 0x34}...) // packet number
 
-			_, _, _, err := ParsePacket(data, 0)
+			_, _, _, err := ParsePacket(data)
 			Expect(err).To(MatchError(io.EOF))
 		})
 
@@ -365,7 +361,7 @@ var _ = Describe("Header Parsing", func() {
 			data = append(data, []byte{0x0, 0x0}...)   // connection ID lengths
 			data = append(data, encodeVarInt(2)...)    // length
 			data = append(data, []byte{0x12, 0x34}...) // packet number
-			hdr, _, _, err := ParsePacket(data, 0)
+			hdr, _, _, err := ParsePacket(data)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(hdr.Type).To(Equal(protocol.PacketTypeHandshake))
 			extHdr, err := hdr.ParseExtended(bytes.NewReader(data), protocol.Version1)
@@ -381,8 +377,8 @@ var _ = Describe("Header Parsing", func() {
 			data = append(data, []byte{0xde, 0xad, 0xbe, 0xef, 0xca, 0xfe, 0x13, 0x37}...) // dest conn ID
 			data = append(data, 0x8)                                                       // src conn ID len
 			data = append(data, []byte{0xde, 0xad, 0xbe, 0xef, 0xca, 0xfe, 0x13, 0x37}...) // src conn ID
-			for i := 0; i < len(data); i++ {
-				_, _, _, err := ParsePacket(data[:i], 0)
+			for i := 1; i < len(data); i++ {
+				_, _, _, err := ParsePacket(data[:i])
 				Expect(err).To(Equal(io.EOF))
 			}
 		})
@@ -396,7 +392,7 @@ var _ = Describe("Header Parsing", func() {
 			data = append(data, []byte{0xde, 0xad, 0xbe, 0xef}...) // packet number
 			for i := hdrLen; i < len(data); i++ {
 				data = data[:i]
-				hdr, _, _, err := ParsePacket(data, 0)
+				hdr, _, _, err := ParsePacket(data)
 				Expect(err).ToNot(HaveOccurred())
 				b := bytes.NewReader(data)
 				_, err = hdr.ParseExtended(b, protocol.Version1)
@@ -413,7 +409,7 @@ var _ = Describe("Header Parsing", func() {
 			hdrLen := len(data)
 			for i := hdrLen; i < len(data); i++ {
 				data = data[:i]
-				hdr, _, _, err := ParsePacket(data, 0)
+				hdr, _, _, err := ParsePacket(data)
 				Expect(err).ToNot(HaveOccurred())
 				b := bytes.NewReader(data)
 				_, err = hdr.ParseExtended(b, protocol.Version1)
@@ -425,7 +421,6 @@ var _ = Describe("Header Parsing", func() {
 			It("cuts packets", func() {
 				buf := &bytes.Buffer{}
 				hdr := Header{
-					IsLongHeader:     true,
 					Type:             protocol.PacketTypeInitial,
 					DestConnectionID: protocol.ParseConnectionID([]byte{1, 2, 3, 4}),
 					Length:           2 + 6,
@@ -439,7 +434,7 @@ var _ = Describe("Header Parsing", func() {
 				hdrRaw := append([]byte{}, buf.Bytes()...)
 				buf.Write([]byte("foobar")) // payload of the first packet
 				buf.Write([]byte("raboof")) // second packet
-				parsedHdr, data, rest, err := ParsePacket(buf.Bytes(), 4)
+				parsedHdr, data, rest, err := ParsePacket(buf.Bytes())
 				Expect(err).ToNot(HaveOccurred())
 				Expect(parsedHdr.Type).To(Equal(hdr.Type))
 				Expect(parsedHdr.DestConnectionID).To(Equal(hdr.DestConnectionID))
@@ -451,7 +446,6 @@ var _ = Describe("Header Parsing", func() {
 				buf := &bytes.Buffer{}
 				Expect((&ExtendedHeader{
 					Header: Header{
-						IsLongHeader:     true,
 						Type:             protocol.PacketTypeInitial,
 						DestConnectionID: protocol.ParseConnectionID([]byte{1, 2, 3, 4}),
 						Length:           3,
@@ -460,7 +454,7 @@ var _ = Describe("Header Parsing", func() {
 					PacketNumber:    0x1337,
 					PacketNumberLen: 2,
 				}).Write(buf, protocol.Version1)).To(Succeed())
-				_, _, _, err := ParsePacket(buf.Bytes(), 4)
+				_, _, _, err := ParsePacket(buf.Bytes())
 				Expect(err).To(HaveOccurred())
 				Expect(err.Error()).To(ContainSubstring("packet length (2 bytes) is smaller than the expected length (3 bytes)"))
 			})
@@ -469,7 +463,6 @@ var _ = Describe("Header Parsing", func() {
 				buf := &bytes.Buffer{}
 				Expect((&ExtendedHeader{
 					Header: Header{
-						IsLongHeader:     true,
 						Type:             protocol.PacketTypeInitial,
 						DestConnectionID: protocol.ParseConnectionID([]byte{1, 2, 3, 4}),
 						Length:           1000,
@@ -479,7 +472,7 @@ var _ = Describe("Header Parsing", func() {
 					PacketNumberLen: 2,
 				}).Write(buf, protocol.Version1)).To(Succeed())
 				buf.Write(make([]byte, 500-2 /* for packet number length */))
-				_, _, _, err := ParsePacket(buf.Bytes(), 4)
+				_, _, _, err := ParsePacket(buf.Bytes())
 				Expect(err).To(MatchError("packet length (500 bytes) is smaller than the expected length (1000 bytes)"))
 			})
 		})
@@ -491,7 +484,7 @@ var _ = Describe("Header Parsing", func() {
 	})
 
 	It("tells its packet type for logging", func() {
-		Expect((&Header{IsLongHeader: true, Type: protocol.PacketTypeHandshake}).PacketType()).To(Equal("Handshake"))
-		Expect((&Header{}).PacketType()).To(Equal("1-RTT"))
+		Expect((&Header{Type: protocol.PacketTypeInitial}).PacketType()).To(Equal("Initial"))
+		Expect((&Header{Type: protocol.PacketTypeHandshake}).PacketType()).To(Equal("Handshake"))
 	})
 })

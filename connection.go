@@ -878,7 +878,7 @@ func (s *connection) handlePacketImpl(rp *receivedPacket) bool {
 		}
 
 		if wire.IsLongHeaderPacket(p.data[0]) {
-			hdr, packetData, rest, err := wire.ParsePacket(p.data, s.srcConnIDLen)
+			hdr, packetData, rest, err := wire.ParsePacket(p.data)
 			if err != nil {
 				if s.tracer != nil {
 					dropReason := logging.PacketDropHeaderParseError
@@ -1030,7 +1030,7 @@ func (s *connection) handleLongHeaderPacket(p *receivedPacket, hdr *wire.Header)
 		return false
 	}
 
-	if err := s.handleUnpackedPacket(packet, p.ecn, p.rcvTime, p.Size()); err != nil {
+	if err := s.handleUnpackedLongHeaderPacket(packet, p.ecn, p.rcvTime, p.Size()); err != nil {
 		s.closeLocal(err)
 		return false
 	}
@@ -1193,7 +1193,7 @@ func (s *connection) handleVersionNegotiationPacket(p *receivedPacket) {
 	})
 }
 
-func (s *connection) handleUnpackedPacket(
+func (s *connection) handleUnpackedLongHeaderPacket(
 	packet *unpackedPacket,
 	ecn protocol.ECN,
 	rcvTime time.Time,
@@ -1212,7 +1212,7 @@ func (s *connection) handleUnpackedPacket(
 			s.tracer.NegotiatedVersion(s.version, clientVersions, serverVersions)
 		}
 		// The server can change the source connection ID with the first Handshake packet.
-		if s.perspective == protocol.PerspectiveClient && packet.hdr.IsLongHeader && packet.hdr.SrcConnectionID != s.handshakeDestConnID {
+		if s.perspective == protocol.PerspectiveClient && packet.hdr.SrcConnectionID != s.handshakeDestConnID {
 			cid := packet.hdr.SrcConnectionID
 			s.logger.Debugf("Received first packet. Switching destination connection ID to: %s", cid)
 			s.handshakeDestConnID = cid

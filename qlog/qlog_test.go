@@ -424,7 +424,6 @@ var _ = Describe("Tracing", func() {
 				tracer.SentLongHeaderPacket(
 					&logging.ExtendedHeader{
 						Header: logging.Header{
-							IsLongHeader:     true,
 							Type:             protocol.PacketTypeHandshake,
 							DestConnectionID: protocol.ParseConnectionID([]byte{1, 2, 3, 4, 5, 6, 7, 8}),
 							SrcConnectionID:  protocol.ParseConnectionID([]byte{4, 3, 2, 1}),
@@ -490,7 +489,6 @@ var _ = Describe("Tracing", func() {
 				tracer.ReceivedLongHeaderPacket(
 					&logging.ExtendedHeader{
 						Header: logging.Header{
-							IsLongHeader:     true,
 							Type:             protocol.PacketTypeInitial,
 							DestConnectionID: protocol.ParseConnectionID([]byte{1, 2, 3, 4, 5, 6, 7, 8}),
 							SrcConnectionID:  protocol.ParseConnectionID([]byte{4, 3, 2, 1}),
@@ -561,7 +559,6 @@ var _ = Describe("Tracing", func() {
 			It("records a received Retry packet", func() {
 				tracer.ReceivedRetry(
 					&logging.Header{
-						IsLongHeader:     true,
 						Type:             protocol.PacketTypeRetry,
 						DestConnectionID: protocol.ParseConnectionID([]byte{1, 2, 3, 4, 5, 6, 7, 8}),
 						SrcConnectionID:  protocol.ParseConnectionID([]byte{4, 3, 2, 1}),

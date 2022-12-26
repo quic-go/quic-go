@@ -40,7 +40,6 @@ var _ = Describe("Packet Handler Map", func() {
 		buf := &bytes.Buffer{}
 		Expect((&wire.ExtendedHeader{
 			Header: wire.Header{
-				IsLongHeader:     true,
 				Type:             t,
 				DestConnectionID: connID,
 				Length:           length,
