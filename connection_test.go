@@ -572,11 +572,7 @@ var _ = Describe("Connection", func() {
 			streamManager.EXPECT().CloseWithError(gomock.Any())
 			connRunner.EXPECT().ReplaceWithClosed(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
 			buf := &bytes.Buffer{}
-			hdr := &wire.ExtendedHeader{
-				Header:          wire.Header{DestConnectionID: srcConnID},
-				PacketNumberLen: protocol.PacketNumberLen2,
-			}
-			Expect(hdr.Write(buf, conn.version)).To(Succeed())
+			Expect(wire.WriteShortHeader(buf, srcConnID, 42, protocol.PacketNumberLen2, protocol.KeyPhaseOne)).To(Succeed())
 
 			unpacker.EXPECT().UnpackShortHeader(gomock.Any(), gomock.Any()).DoAndReturn(func(time.Time, []byte) (protocol.PacketNumber, protocol.PacketNumberLen, protocol.KeyPhaseBit, []byte, error) {
 				b, err := (&wire.ConnectionCloseFrame{ErrorCode: uint64(qerr.StreamLimitError)}).Append(nil, conn.version)
@@ -652,7 +648,18 @@ var _ = Describe("Connection", func() {
 			conn.unpacker = unpacker
 		})
 
-		getPacket := func(extHdr *wire.ExtendedHeader, data []byte) *receivedPacket {
+		getShortHeaderPacket := func(connID protocol.ConnectionID, pn protocol.PacketNumber, data []byte) *receivedPacket {
+			buf := &bytes.Buffer{}
+			Expect(wire.WriteShortHeader(buf, connID, pn, protocol.PacketNumberLen2, protocol.KeyPhaseOne)).To(Succeed())
+			return &receivedPacket{
+				data:    append(buf.Bytes(), data...),
+				buffer:  getPacketBuffer(),
+				rcvTime: time.Now(),
+			}
+		}
+
+		getLongHeaderPacket := func(extHdr *wire.ExtendedHeader, data []byte) *receivedPacket {
+			ExpectWithOffset(1, extHdr.IsLongHeader).To(BeTrue())
 			buf := &bytes.Buffer{}
 			Expect(extHdr.Write(buf, conn.version)).To(Succeed())
 			return &receivedPacket{
@@ -663,7 +670,7 @@ var _ = Describe("Connection", func() {
 		}
 
 		It("drops Retry packets", func() {
-			p := getPacket(&wire.ExtendedHeader{Header: wire.Header{
+			p := getLongHeaderPacket(&wire.ExtendedHeader{Header: wire.Header{
 				IsLongHeader:     true,
 				Type:             protocol.PacketTypeRetry,
 				DestConnectionID: destConnID,
@@ -689,7 +696,7 @@ var _ = Describe("Connection", func() {
 		})
 
 		It("drops packets for which header decryption fails", func() {
-			p := getPacket(&wire.ExtendedHeader{
+			p := getLongHeaderPacket(&wire.ExtendedHeader{
 				Header: wire.Header{
 					IsLongHeader: true,
 					Type:         protocol.PacketTypeHandshake,
@@ -703,7 +710,7 @@ var _ = Describe("Connection", func() {
 		})
 
 		It("drops packets for which the version is unsupported", func() {
-			p := getPacket(&wire.ExtendedHeader{
+			p := getLongHeaderPacket(&wire.ExtendedHeader{
 				Header: wire.Header{
 					IsLongHeader: true,
 					Type:         protocol.PacketTypeHandshake,
@@ -723,7 +730,7 @@ var _ = Describe("Connection", func() {
 			}()
 
 			protocol.SupportedVersions = append(protocol.SupportedVersions, conn.version+1)
-			p := getPacket(&wire.ExtendedHeader{
+			p := getLongHeaderPacket(&wire.ExtendedHeader{
 				Header: wire.Header{
 					IsLongHeader:     true,
 					Type:             protocol.PacketTypeHandshake,
@@ -751,7 +758,7 @@ var _ = Describe("Connection", func() {
 			}
 			unpackedHdr := *hdr
 			unpackedHdr.PacketNumber = 0x1337
-			packet := getPacket(hdr, nil)
+			packet := getLongHeaderPacket(hdr, nil)
 			packet.ecn = protocol.ECNCE
 			rcvTime := time.Now().Add(-10 * time.Second)
 			unpacker.EXPECT().UnpackLongHeader(gomock.Any(), rcvTime, gomock.Any()).Return(&unpackedPacket{
@@ -772,15 +779,10 @@ var _ = Describe("Connection", func() {
 		})
 
 		It("informs the ReceivedPacketHandler about ack-eliciting packets", func() {
-			hdr := &wire.ExtendedHeader{
-				Header:          wire.Header{DestConnectionID: srcConnID},
-				PacketNumber:    0x37,
-				PacketNumberLen: protocol.PacketNumberLen1,
-			}
 			rcvTime := time.Now().Add(-10 * time.Second)
 			b, err := (&wire.PingFrame{}).Append(nil, conn.version)
 			Expect(err).ToNot(HaveOccurred())
-			packet := getPacket(hdr, nil)
+			packet := getShortHeaderPacket(srcConnID, 0x37, nil)
 			packet.ecn = protocol.ECT1
 			unpacker.EXPECT().UnpackShortHeader(rcvTime, gomock.Any()).Return(protocol.PacketNumber(0x1337), protocol.PacketNumberLen2, protocol.KeyPhaseZero, b, nil)
 			rph := mockackhandler.NewMockReceivedPacketHandler(mockCtrl)
@@ -795,12 +797,7 @@ var _ = Describe("Connection", func() {
 		})
 
 		It("drops duplicate packets", func() {
-			hdr := &wire.ExtendedHeader{
-				Header:          wire.Header{DestConnectionID: srcConnID},
-				PacketNumber:    0x37,
-				PacketNumberLen: protocol.PacketNumberLen1,
-			}
-			packet := getPacket(hdr, nil)
+			packet := getShortHeaderPacket(srcConnID, 0x37, nil)
 			unpacker.EXPECT().UnpackShortHeader(gomock.Any(), gomock.Any()).Return(protocol.PacketNumber(0x1337), protocol.PacketNumberLen2, protocol.KeyPhaseOne, []byte("foobar"), nil)
 			rph := mockackhandler.NewMockReceivedPacketHandler(mockCtrl)
 			rph.EXPECT().IsPotentiallyDuplicate(protocol.PacketNumber(0x1337), protocol.Encryption1RTT).Return(true)
@@ -820,7 +817,7 @@ var _ = Describe("Connection", func() {
 				conn.run()
 			}()
 			expectReplaceWithClosed()
-			p := getPacket(&wire.ExtendedHeader{
+			p := getLongHeaderPacket(&wire.ExtendedHeader{
 				Header: wire.Header{
 					IsLongHeader:     true,
 					Type:             protocol.PacketTypeHandshake,
@@ -854,11 +851,7 @@ var _ = Describe("Connection", func() {
 			packer.EXPECT().PackCoalescedPacket(false) // only expect a single call
 
 			for i := 0; i < 3; i++ {
-				conn.handlePacket(getPacket(&wire.ExtendedHeader{
-					Header:          wire.Header{DestConnectionID: srcConnID},
-					PacketNumber:    0x1337,
-					PacketNumberLen: protocol.PacketNumberLen2,
-				}, []byte("foobar")))
+				conn.handlePacket(getShortHeaderPacket(srcConnID, 0x1337+protocol.PacketNumber(i), []byte("foobar")))
 			}
 
 			go func() {
@@ -893,11 +886,7 @@ var _ = Describe("Connection", func() {
 			packer.EXPECT().PackCoalescedPacket(false).Times(3) // only expect a single call
 
 			for i := 0; i < 3; i++ {
-				conn.handlePacket(getPacket(&wire.ExtendedHeader{
-					Header:          wire.Header{DestConnectionID: srcConnID},
-					PacketNumber:    0x1337,
-					PacketNumberLen: protocol.PacketNumberLen2,
-				}, []byte("foobar")))
+				conn.handlePacket(getShortHeaderPacket(srcConnID, 0x1337+protocol.PacketNumber(i), []byte("foobar")))
 			}
 
 			go func() {
@@ -936,10 +925,7 @@ var _ = Describe("Connection", func() {
 			}()
 			expectReplaceWithClosed()
 			mconn.EXPECT().Write(gomock.Any())
-			packet := getPacket(&wire.ExtendedHeader{
-				Header:          wire.Header{DestConnectionID: srcConnID},
-				PacketNumberLen: protocol.PacketNumberLen1,
-			}, nil)
+			packet := getShortHeaderPacket(srcConnID, 0x42, nil)
 			tracer.EXPECT().ClosedConnection(gomock.Any())
 			tracer.EXPECT().Close()
 			conn.handlePacket(packet)
@@ -959,10 +945,7 @@ var _ = Describe("Connection", func() {
 			}()
 			expectReplaceWithClosed()
 			tracer.EXPECT().DroppedPacket(logging.PacketType1RTT, gomock.Any(), logging.PacketDropHeaderParseError)
-			conn.handlePacket(getPacket(&wire.ExtendedHeader{
-				Header:          wire.Header{DestConnectionID: srcConnID},
-				PacketNumberLen: protocol.PacketNumberLen1,
-			}, nil))
+			conn.handlePacket(getShortHeaderPacket(srcConnID, 0x42, nil))
 			Consistently(runErr).ShouldNot(Receive())
 			// make the go routine return
 			packer.EXPECT().PackApplicationClose(gomock.Any()).Return(&coalescedPacket{buffer: getPacketBuffer()}, nil)
@@ -990,13 +973,9 @@ var _ = Describe("Connection", func() {
 			}()
 			expectReplaceWithClosed()
 			mconn.EXPECT().Write(gomock.Any())
-			packet := getPacket(&wire.ExtendedHeader{
-				Header:          wire.Header{DestConnectionID: srcConnID},
-				PacketNumberLen: protocol.PacketNumberLen1,
-			}, nil)
 			tracer.EXPECT().ClosedConnection(gomock.Any())
 			tracer.EXPECT().Close()
-			conn.handlePacket(packet)
+			conn.handlePacket(getShortHeaderPacket(srcConnID, 0x42, nil))
 			Eventually(conn.Context().Done()).Should(BeClosed())
 		})
 
@@ -1033,12 +1012,12 @@ var _ = Describe("Connection", func() {
 				hdr:             hdr1,
 				data:            []byte{0}, // one PADDING frame
 			}, nil)
-			p1 := getPacket(hdr1, nil)
+			p1 := getLongHeaderPacket(hdr1, nil)
 			tracer.EXPECT().StartedConnection(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any())
 			tracer.EXPECT().ReceivedLongHeaderPacket(gomock.Any(), protocol.ByteCount(len(p1.data)), gomock.Any())
 			Expect(conn.handlePacketImpl(p1)).To(BeTrue())
 			// The next packet has to be ignored, since the source connection ID doesn't match.
-			p2 := getPacket(hdr2, nil)
+			p2 := getLongHeaderPacket(hdr2, nil)
 			tracer.EXPECT().DroppedPacket(logging.PacketTypeInitial, protocol.ByteCount(len(p2.data)), logging.PacketDropUnknownConnectionID)
 			Expect(conn.handlePacketImpl(p2)).To(BeFalse())
 		})
@@ -1058,7 +1037,7 @@ var _ = Describe("Connection", func() {
 				PacketNumber:    1,
 			}
 			unpacker.EXPECT().UnpackLongHeader(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil, handshake.ErrKeysNotYetAvailable)
-			packet := getPacket(hdr, nil)
+			packet := getLongHeaderPacket(hdr, nil)
 			tracer.EXPECT().BufferedPacket(logging.PacketTypeHandshake, packet.Size())
 			Expect(conn.handlePacketImpl(packet)).To(BeFalse())
 			Expect(conn.undecryptablePackets).To(Equal([]*receivedPacket{packet}))
@@ -1067,10 +1046,7 @@ var _ = Describe("Connection", func() {
 		Context("updating the remote address", func() {
 			It("doesn't support connection migration", func() {
 				unpacker.EXPECT().UnpackShortHeader(gomock.Any(), gomock.Any()).Return(protocol.PacketNumber(10), protocol.PacketNumberLen2, protocol.KeyPhaseZero, []byte{0} /* one PADDING frame */, nil)
-				packet := getPacket(&wire.ExtendedHeader{
-					Header:          wire.Header{DestConnectionID: srcConnID},
-					PacketNumberLen: protocol.PacketNumberLen1,
-				}, nil)
+				packet := getShortHeaderPacket(srcConnID, 0x42, nil)
 				packet.remoteAddr = &net.IPAddr{IP: net.IPv4(192, 168, 0, 100)}
 				tracer.EXPECT().ReceivedShortHeaderPacket(gomock.Any(), protocol.ByteCount(len(packet.data)), gomock.Any())
 				Expect(conn.handlePacketImpl(packet)).To(BeTrue())
@@ -1096,7 +1072,7 @@ var _ = Describe("Connection", func() {
 				hdrLen := hdr.GetLength(conn.version)
 				b := make([]byte, 1)
 				rand.Read(b)
-				packet := getPacket(hdr, bytes.Repeat(b, int(length)-3))
+				packet := getLongHeaderPacket(hdr, bytes.Repeat(b, int(length)-3))
 				return int(hdrLen), packet
 			}
 

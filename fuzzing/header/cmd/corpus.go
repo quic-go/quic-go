@@ -11,7 +11,7 @@ import (
 	"github.com/lucas-clemente/quic-go/internal/wire"
 )
 
-const version = protocol.VersionTLS
+const version = protocol.Version1
 
 func getRandomData(l int) []byte {
 	b := make([]byte, l)
@@ -84,9 +84,6 @@ func main() {
 			Token:            getRandomData(1000),
 			Version:          version,
 		},
-		{ // Short-Header
-			DestConnectionID: protocol.ParseConnectionID(getRandomData(8)),
-		},
 	}
 
 	for _, h := range headers {
@@ -109,6 +106,15 @@ func main() {
 		if err := helper.WriteCorpusFileWithPrefix("corpus", b.Bytes(), header.PrefixLen); err != nil {
 			log.Fatal(err)
 		}
+	}
+
+	// short header
+	b := &bytes.Buffer{}
+	if err := wire.WriteShortHeader(b, protocol.ParseConnectionID(getRandomData(8)), 1337, protocol.PacketNumberLen2, protocol.KeyPhaseOne); err != nil {
+		log.Fatal(err)
+	}
+	if err := helper.WriteCorpusFileWithPrefix("corpus", b.Bytes(), header.PrefixLen); err != nil {
+		log.Fatal(err)
 	}
 
 	vnps := [][]byte{

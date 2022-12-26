@@ -58,6 +58,9 @@ func Fuzz(data []byte) int {
 	if hdr.IsLongHeader && hdr.Length > 16383 {
 		return 1
 	}
+	if !hdr.IsLongHeader {
+		return 1
+	}
 	b := &bytes.Buffer{}
 	if err := extHdr.Write(b, version); err != nil {
 		// We are able to parse packets with connection IDs longer than 20 bytes,

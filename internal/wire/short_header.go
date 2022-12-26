@@ -10,6 +10,9 @@ import (
 	"github.com/lucas-clemente/quic-go/internal/utils"
 )
 
+// ParseShortHeader parses a short header packet.
+// It must be called after header protection was removed.
+// Otherwise, the check for the reserved bits will (most likely) fail.
 func ParseShortHeader(data []byte, connIDLen int) (length int, _ protocol.PacketNumber, _ protocol.PacketNumberLen, _ protocol.KeyPhaseBit, _ error) {
 	if len(data) == 0 {
 		return 0, 0, 0, 0, io.EOF
