@@ -124,7 +124,7 @@ func (h *ExtendedHeader) Write(b *bytes.Buffer, ver protocol.VersionNumber) erro
 	if h.IsLongHeader {
 		return h.writeLongHeader(b, ver)
 	}
-	return h.writeShortHeader(b, ver)
+	panic("tried to write short extended header")
 }
 
 func (h *ExtendedHeader) writeLongHeader(b *bytes.Buffer, version protocol.VersionNumber) error {
@@ -180,17 +180,6 @@ func (h *ExtendedHeader) writeLongHeader(b *bytes.Buffer, version protocol.Versi
 	return writePacketNumber(b, h.PacketNumber, h.PacketNumberLen)
 }
 
-func (h *ExtendedHeader) writeShortHeader(b *bytes.Buffer, _ protocol.VersionNumber) error {
-	typeByte := 0x40 | uint8(h.PacketNumberLen-1)
-	if h.KeyPhase == protocol.KeyPhaseOne {
-		typeByte |= byte(1 << 2)
-	}
-
-	b.WriteByte(typeByte)
-	b.Write(h.DestConnectionID.Bytes())
-	return writePacketNumber(b, h.PacketNumber, h.PacketNumberLen)
-}
-
 // ParsedLen returns the number of bytes that were consumed when parsing the header
 func (h *ExtendedHeader) ParsedLen() protocol.ByteCount {
 	return h.parsedLen
@@ -228,7 +217,7 @@ func (h *ExtendedHeader) Log(logger utils.Logger) {
 		}
 		logger.Debugf("\tLong Header{Type: %s, DestConnectionID: %s, SrcConnectionID: %s, %sPacketNumber: %d, PacketNumberLen: %d, Length: %d, Version: %s}", h.Type, h.DestConnectionID, h.SrcConnectionID, token, h.PacketNumber, h.PacketNumberLen, h.Length, h.Version)
 	} else {
-		logger.Debugf("\tShort Header{DestConnectionID: %s, PacketNumber: %d, PacketNumberLen: %d, KeyPhase: %s}", h.DestConnectionID, h.PacketNumber, h.PacketNumberLen, h.KeyPhase)
+		panic("logged short ExtendedHeader")
 	}
 }
 

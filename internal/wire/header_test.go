@@ -31,39 +31,6 @@ var _ = Describe("Header Parsing", func() {
 			Expect(connID).To(Equal(protocol.ParseConnectionID([]byte{0xde, 0xca, 0xfb, 0xad})))
 		})
 
-		It("parses the connection ID of a short header packet", func() {
-			buf := &bytes.Buffer{}
-			Expect((&ExtendedHeader{
-				Header: Header{
-					DestConnectionID: protocol.ParseConnectionID([]byte{0xde, 0xca, 0xfb, 0xad}),
-				},
-				PacketNumberLen: 2,
-			}).Write(buf, protocol.Version1)).To(Succeed())
-			buf.Write([]byte("foobar"))
-			connID, err := ParseConnectionID(buf.Bytes(), 4)
-			Expect(err).ToNot(HaveOccurred())
-			Expect(connID).To(Equal(protocol.ParseConnectionID([]byte{0xde, 0xca, 0xfb, 0xad})))
-		})
-
-		It("errors on EOF, for short header packets", func() {
-			buf := &bytes.Buffer{}
-			Expect((&ExtendedHeader{
-				Header: Header{
-					DestConnectionID: protocol.ParseConnectionID([]byte{1, 2, 3, 4, 5, 6, 7, 8}),
-				},
-				PacketNumberLen: 2,
-			}).Write(buf, protocol.Version1)).To(Succeed())
-			data := buf.Bytes()[:buf.Len()-2] // cut the packet number
-			_, err := ParseConnectionID(data, 8)
-			Expect(err).ToNot(HaveOccurred())
-			for i := 0; i < len(data); i++ {
-				b := make([]byte, i)
-				copy(b, data[:i])
-				_, err := ParseConnectionID(b, 8)
-				Expect(err).To(MatchError(io.EOF))
-			}
-		})
-
 		It("errors on EOF, for long header packets", func() {
 			buf := &bytes.Buffer{}
 			Expect((&ExtendedHeader{
