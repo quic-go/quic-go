@@ -46,7 +46,7 @@ func (h *ExtendedHeader) parse(b *bytes.Reader, v protocol.VersionNumber) (bool 
 	if h.IsLongHeader {
 		reservedBitsValid, err = h.parseLongHeader(b, v)
 	} else {
-		reservedBitsValid, err = h.parseShortHeader(b, v)
+		panic("parsed a short header packet")
 	}
 	if err != nil {
 		return false, err
@@ -60,21 +60,6 @@ func (h *ExtendedHeader) parseLongHeader(b *bytes.Reader, _ protocol.VersionNumb
 		return false, err
 	}
 	if h.typeByte&0xc != 0 {
-		return false, nil
-	}
-	return true, nil
-}
-
-func (h *ExtendedHeader) parseShortHeader(b *bytes.Reader, _ protocol.VersionNumber) (bool /* reserved bits valid */, error) {
-	h.KeyPhase = protocol.KeyPhaseZero
-	if h.typeByte&0x4 > 0 {
-		h.KeyPhase = protocol.KeyPhaseOne
-	}
-
-	if err := h.readPacketNumber(b); err != nil {
-		return false, err
-	}
-	if h.typeByte&0x18 != 0 {
 		return false, nil
 	}
 	return true, nil
