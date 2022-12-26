@@ -148,15 +148,6 @@ var _ = Describe("Packet packer", func() {
 			Expect(h.SrcConnectionID).To(Equal(srcConnID))
 			Expect(h.DestConnectionID).To(Equal(destConnID))
 		})
-
-		It("gets a short header", func() {
-			pnManager.EXPECT().PeekPacketNumber(protocol.Encryption1RTT).Return(protocol.PacketNumber(0x1337), protocol.PacketNumberLen4)
-			h := packer.getShortHeader(protocol.KeyPhaseOne)
-			Expect(h.IsLongHeader).To(BeFalse())
-			Expect(h.PacketNumber).To(Equal(protocol.PacketNumber(0x1337)))
-			Expect(h.PacketNumberLen).To(Equal(protocol.PacketNumberLen4))
-			Expect(h.KeyPhase).To(Equal(protocol.KeyPhaseOne))
-		})
 	})
 
 	Context("encrypting packets", func() {
