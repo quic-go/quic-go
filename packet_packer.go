@@ -69,9 +69,6 @@ type coalescedPacket struct {
 }
 
 func (p *longHeaderPacket) EncryptionLevel() protocol.EncryptionLevel {
-	if !p.header.IsLongHeader {
-		panic("this shouldn't happen any more")
-	}
 	//nolint:exhaustive // Will never be called for Retry packets (and they don't have encrypted data).
 	switch p.header.Type {
 	case protocol.PacketTypeInitial:
@@ -335,9 +332,6 @@ func (p *packetPacker) packConnectionClose(
 // It takes into account that packets that have a tiny payload need to be padded,
 // such that len(payload) + packet number len >= 4 + AEAD overhead
 func (p *packetPacker) longHeaderPacketLength(hdr *wire.ExtendedHeader, payload *payload) protocol.ByteCount {
-	if !hdr.IsLongHeader {
-		panic("wrong code path")
-	}
 	var paddingLen protocol.ByteCount
 	pnLen := protocol.ByteCount(hdr.PacketNumberLen)
 	if payload.length < 4-pnLen {
@@ -780,7 +774,6 @@ func (p *packetPacker) getLongHeader(encLevel protocol.EncryptionLevel) *wire.Ex
 		PacketNumber:    pn,
 		PacketNumberLen: pnLen,
 	}
-	hdr.IsLongHeader = true
 	hdr.Version = p.version
 	hdr.SrcConnectionID = p.srcConnID
 	hdr.DestConnectionID = p.getDestConnID()
@@ -799,18 +792,13 @@ func (p *packetPacker) getLongHeader(encLevel protocol.EncryptionLevel) *wire.Ex
 }
 
 func (p *packetPacker) appendLongHeaderPacket(buffer *packetBuffer, header *wire.ExtendedHeader, payload *payload, padding protocol.ByteCount, encLevel protocol.EncryptionLevel, sealer sealer) (*longHeaderPacket, error) {
-	if !header.IsLongHeader {
-		panic("shouldn't have called appendLongHeaderPacket")
-	}
 	var paddingLen protocol.ByteCount
 	pnLen := protocol.ByteCount(header.PacketNumberLen)
 	if payload.length < 4-pnLen {
 		paddingLen = 4 - pnLen - payload.length
 	}
 	paddingLen += padding
-	if header.IsLongHeader {
-		header.Length = pnLen + protocol.ByteCount(sealer.Overhead()) + payload.length + paddingLen
-	}
+	header.Length = pnLen + protocol.ByteCount(sealer.Overhead()) + payload.length + paddingLen
 
 	raw := buffer.Data[len(buffer.Data):]
 	buf := bytes.NewBuffer(buffer.Data)

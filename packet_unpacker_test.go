@@ -28,14 +28,13 @@ var _ = Describe("Packet Unpacker", func() {
 	)
 
 	getLongHeader := func(extHdr *wire.ExtendedHeader) (*wire.Header, []byte) {
-		ExpectWithOffset(1, extHdr.IsLongHeader).To(BeTrue())
 		buf := &bytes.Buffer{}
 		ExpectWithOffset(1, extHdr.Write(buf, version)).To(Succeed())
 		hdrLen := buf.Len()
 		if extHdr.Length > protocol.ByteCount(extHdr.PacketNumberLen) {
 			buf.Write(make([]byte, int(extHdr.Length)-int(extHdr.PacketNumberLen)))
 		}
-		hdr, _, _, err := wire.ParsePacket(buf.Bytes(), connID.Len())
+		hdr, _, _, err := wire.ParsePacket(buf.Bytes())
 		ExpectWithOffset(1, err).ToNot(HaveOccurred())
 		return hdr, buf.Bytes()[:hdrLen]
 	}
@@ -54,7 +53,6 @@ var _ = Describe("Packet Unpacker", func() {
 	It("errors when the packet is too small to obtain the header decryption sample, for long headers", func() {
 		extHdr := &wire.ExtendedHeader{
 			Header: wire.Header{
-				IsLongHeader:     true,
 				Type:             protocol.PacketTypeHandshake,
 				DestConnectionID: connID,
 				Version:          version,
@@ -87,7 +85,6 @@ var _ = Describe("Packet Unpacker", func() {
 	It("opens Initial packets", func() {
 		extHdr := &wire.ExtendedHeader{
 			Header: wire.Header{
-				IsLongHeader:     true,
 				Type:             protocol.PacketTypeInitial,
 				Length:           3 + 6, // packet number len + payload
 				DestConnectionID: connID,
@@ -113,7 +110,6 @@ var _ = Describe("Packet Unpacker", func() {
 	It("opens 0-RTT packets", func() {
 		extHdr := &wire.ExtendedHeader{
 			Header: wire.Header{
-				IsLongHeader:     true,
 				Type:             protocol.PacketType0RTT,
 				Length:           3 + 6, // packet number len + payload
 				DestConnectionID: connID,
@@ -164,7 +160,6 @@ var _ = Describe("Packet Unpacker", func() {
 	It("errors on empty packets, for long header packets", func() {
 		extHdr := &wire.ExtendedHeader{
 			Header: wire.Header{
-				IsLongHeader:     true,
 				Type:             protocol.PacketTypeHandshake,
 				DestConnectionID: connID,
 				Version:          Version1,
@@ -207,7 +202,6 @@ var _ = Describe("Packet Unpacker", func() {
 	It("returns the error when unpacking fails", func() {
 		extHdr := &wire.ExtendedHeader{
 			Header: wire.Header{
-				IsLongHeader:     true,
 				Type:             protocol.PacketTypeHandshake,
 				Length:           3, // packet number len
 				DestConnectionID: connID,
@@ -230,7 +224,6 @@ var _ = Describe("Packet Unpacker", func() {
 	It("defends against the timing side-channel when the reserved bits are wrong, for long header packets", func() {
 		extHdr := &wire.ExtendedHeader{
 			Header: wire.Header{
-				IsLongHeader:     true,
 				Type:             protocol.PacketTypeHandshake,
 				DestConnectionID: connID,
 				Version:          version,
@@ -264,7 +257,6 @@ var _ = Describe("Packet Unpacker", func() {
 	It("returns the decryption error, when unpacking a packet with wrong reserved bits fails, for long headers", func() {
 		extHdr := &wire.ExtendedHeader{
 			Header: wire.Header{
-				IsLongHeader:     true,
 				Type:             protocol.PacketTypeHandshake,
 				DestConnectionID: connID,
 				Version:          version,
@@ -298,7 +290,6 @@ var _ = Describe("Packet Unpacker", func() {
 	It("decrypts the header", func() {
 		extHdr := &wire.ExtendedHeader{
 			Header: wire.Header{
-				IsLongHeader:     true,
 				Type:             protocol.PacketTypeHandshake,
 				Length:           3, // packet number len
 				DestConnectionID: connID,

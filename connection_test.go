@@ -66,7 +66,7 @@ var _ = Describe("Connection", func() {
 		if isLongHeader {
 			packet.longHdrPackets = []*longHeaderPacket{{
 				header: &wire.ExtendedHeader{
-					Header:       wire.Header{IsLongHeader: true},
+					Header:       wire.Header{},
 					PacketNumber: pn,
 				},
 				length: 6, // foobar
@@ -660,7 +660,6 @@ var _ = Describe("Connection", func() {
 		}
 
 		getLongHeaderPacket := func(extHdr *wire.ExtendedHeader, data []byte) *receivedPacket {
-			ExpectWithOffset(1, extHdr.IsLongHeader).To(BeTrue())
 			buf := &bytes.Buffer{}
 			Expect(extHdr.Write(buf, conn.version)).To(Succeed())
 			return &receivedPacket{
@@ -672,7 +671,6 @@ var _ = Describe("Connection", func() {
 
 		It("drops Retry packets", func() {
 			p := getLongHeaderPacket(&wire.ExtendedHeader{Header: wire.Header{
-				IsLongHeader:     true,
 				Type:             protocol.PacketTypeRetry,
 				DestConnectionID: destConnID,
 				SrcConnectionID:  srcConnID,
@@ -699,9 +697,8 @@ var _ = Describe("Connection", func() {
 		It("drops packets for which header decryption fails", func() {
 			p := getLongHeaderPacket(&wire.ExtendedHeader{
 				Header: wire.Header{
-					IsLongHeader: true,
-					Type:         protocol.PacketTypeHandshake,
-					Version:      conn.version,
+					Type:    protocol.PacketTypeHandshake,
+					Version: conn.version,
 				},
 				PacketNumberLen: protocol.PacketNumberLen2,
 			}, nil)
@@ -713,9 +710,8 @@ var _ = Describe("Connection", func() {
 		It("drops packets for which the version is unsupported", func() {
 			p := getLongHeaderPacket(&wire.ExtendedHeader{
 				Header: wire.Header{
-					IsLongHeader: true,
-					Type:         protocol.PacketTypeHandshake,
-					Version:      conn.version + 1,
+					Type:    protocol.PacketTypeHandshake,
+					Version: conn.version + 1,
 				},
 				PacketNumberLen: protocol.PacketNumberLen2,
 			}, nil)
@@ -733,7 +729,6 @@ var _ = Describe("Connection", func() {
 			protocol.SupportedVersions = append(protocol.SupportedVersions, conn.version+1)
 			p := getLongHeaderPacket(&wire.ExtendedHeader{
 				Header: wire.Header{
-					IsLongHeader:     true,
 					Type:             protocol.PacketTypeHandshake,
 					DestConnectionID: destConnID,
 					SrcConnectionID:  srcConnID,
@@ -748,7 +743,6 @@ var _ = Describe("Connection", func() {
 		It("informs the ReceivedPacketHandler about non-ack-eliciting packets", func() {
 			hdr := &wire.ExtendedHeader{
 				Header: wire.Header{
-					IsLongHeader:     true,
 					Type:             protocol.PacketTypeInitial,
 					DestConnectionID: srcConnID,
 					Version:          protocol.Version1,
@@ -820,7 +814,6 @@ var _ = Describe("Connection", func() {
 			expectReplaceWithClosed()
 			p := getLongHeaderPacket(&wire.ExtendedHeader{
 				Header: wire.Header{
-					IsLongHeader:     true,
 					Type:             protocol.PacketTypeHandshake,
 					DestConnectionID: srcConnID,
 					Version:          conn.version,
@@ -983,7 +976,6 @@ var _ = Describe("Connection", func() {
 		It("ignores packets with a different source connection ID", func() {
 			hdr1 := &wire.ExtendedHeader{
 				Header: wire.Header{
-					IsLongHeader:     true,
 					Type:             protocol.PacketTypeInitial,
 					DestConnectionID: destConnID,
 					SrcConnectionID:  srcConnID,
@@ -995,7 +987,6 @@ var _ = Describe("Connection", func() {
 			}
 			hdr2 := &wire.ExtendedHeader{
 				Header: wire.Header{
-					IsLongHeader:     true,
 					Type:             protocol.PacketTypeInitial,
 					DestConnectionID: destConnID,
 					SrcConnectionID:  protocol.ParseConnectionID([]byte{0xde, 0xad, 0xbe, 0xef}),
@@ -1027,7 +1018,6 @@ var _ = Describe("Connection", func() {
 			conn.handshakeComplete = false
 			hdr := &wire.ExtendedHeader{
 				Header: wire.Header{
-					IsLongHeader:     true,
 					Type:             protocol.PacketTypeHandshake,
 					DestConnectionID: destConnID,
 					SrcConnectionID:  srcConnID,
@@ -1061,7 +1051,6 @@ var _ = Describe("Connection", func() {
 			getPacketWithLength := func(connID protocol.ConnectionID, length protocol.ByteCount) (int /* header length */, *receivedPacket) {
 				hdr := &wire.ExtendedHeader{
 					Header: wire.Header{
-						IsLongHeader:     true,
 						Type:             protocol.PacketTypeHandshake,
 						DestConnectionID: connID,
 						SrcConnectionID:  destConnID,
@@ -1084,7 +1073,7 @@ var _ = Describe("Connection", func() {
 					return &unpackedPacket{
 						encryptionLevel: protocol.EncryptionHandshake,
 						data:            []byte{0},
-						hdr:             &wire.ExtendedHeader{Header: wire.Header{IsLongHeader: true}},
+						hdr:             &wire.ExtendedHeader{Header: wire.Header{}},
 					}, nil
 				})
 				tracer.EXPECT().ReceivedLongHeaderPacket(gomock.Any(), protocol.ByteCount(len(packet.data)), gomock.Any())
@@ -1100,7 +1089,7 @@ var _ = Describe("Connection", func() {
 						data:            []byte{0},
 						hdr: &wire.ExtendedHeader{
 							PacketNumber: 1,
-							Header:       wire.Header{SrcConnectionID: destConnID, IsLongHeader: true},
+							Header:       wire.Header{SrcConnectionID: destConnID},
 						},
 					}, nil
 				})
@@ -1112,7 +1101,7 @@ var _ = Describe("Connection", func() {
 						data:            []byte{0},
 						hdr: &wire.ExtendedHeader{
 							PacketNumber: 2,
-							Header:       wire.Header{SrcConnectionID: destConnID, IsLongHeader: true},
+							Header:       wire.Header{SrcConnectionID: destConnID},
 						},
 					}, nil
 				})
@@ -1135,7 +1124,7 @@ var _ = Describe("Connection", func() {
 						return &unpackedPacket{
 							encryptionLevel: protocol.EncryptionHandshake,
 							data:            []byte{0},
-							hdr:             &wire.ExtendedHeader{Header: wire.Header{IsLongHeader: true}},
+							hdr:             &wire.ExtendedHeader{Header: wire.Header{}},
 						}, nil
 					}),
 				)
@@ -1159,7 +1148,7 @@ var _ = Describe("Connection", func() {
 					return &unpackedPacket{
 						encryptionLevel: protocol.EncryptionHandshake,
 						data:            []byte{0},
-						hdr:             &wire.ExtendedHeader{Header: wire.Header{IsLongHeader: true}},
+						hdr:             &wire.ExtendedHeader{Header: wire.Header{}},
 					}, nil
 				})
 				_, packet2 := getPacketWithLength(wrongConnID, 123)
@@ -1762,20 +1751,14 @@ var _ = Describe("Connection", func() {
 			longHdrPackets: []*longHeaderPacket{
 				{
 					header: &wire.ExtendedHeader{
-						Header: wire.Header{
-							IsLongHeader: true,
-							Type:         protocol.PacketTypeInitial,
-						},
+						Header:       wire.Header{Type: protocol.PacketTypeInitial},
 						PacketNumber: 13,
 					},
 					length: 123,
 				},
 				{
 					header: &wire.ExtendedHeader{
-						Header: wire.Header{
-							IsLongHeader: true,
-							Type:         protocol.PacketTypeHandshake,
-						},
+						Header:       wire.Header{Type: protocol.PacketTypeHandshake},
 						PacketNumber: 37,
 					},
 					length: 1234,
@@ -2455,7 +2438,6 @@ var _ = Describe("Client Connection", func() {
 		newConnID := protocol.ParseConnectionID([]byte{1, 3, 3, 7, 1, 3, 3, 7})
 		p := getPacket(&wire.ExtendedHeader{
 			Header: wire.Header{
-				IsLongHeader:     true,
 				Type:             protocol.PacketTypeHandshake,
 				SrcConnectionID:  newConnID,
 				DestConnectionID: srcConnID,
@@ -2496,7 +2478,6 @@ var _ = Describe("Client Connection", func() {
 			}, nil
 		})
 		hdr := &wire.Header{
-			IsLongHeader:     true,
 			Type:             protocol.PacketTypeHandshake,
 			DestConnectionID: srcConnID,
 			SrcConnectionID:  destConnID,
@@ -2653,7 +2634,6 @@ var _ = Describe("Client Connection", func() {
 		JustBeforeEach(func() {
 			retryHdr = &wire.ExtendedHeader{
 				Header: wire.Header{
-					IsLongHeader:     true,
 					Type:             protocol.PacketTypeRetry,
 					SrcConnectionID:  protocol.ParseConnectionID([]byte{0xde, 0xad, 0xbe, 0xef}),
 					DestConnectionID: protocol.ParseConnectionID([]byte{1, 2, 3, 4, 5, 6, 7, 8}),
@@ -2904,7 +2884,6 @@ var _ = Describe("Client Connection", func() {
 
 			hdr1 := &wire.ExtendedHeader{
 				Header: wire.Header{
-					IsLongHeader:     true,
 					Type:             protocol.PacketTypeInitial,
 					DestConnectionID: destConnID,
 					SrcConnectionID:  srcConnID,
@@ -2916,7 +2895,6 @@ var _ = Describe("Client Connection", func() {
 			}
 			hdr2 := &wire.ExtendedHeader{
 				Header: wire.Header{
-					IsLongHeader:     true,
 					Type:             protocol.PacketTypeInitial,
 					DestConnectionID: destConnID,
 					SrcConnectionID:  protocol.ParseConnectionID([]byte{0xde, 0xad, 0xbe, 0xef}),
@@ -2944,7 +2922,6 @@ var _ = Describe("Client Connection", func() {
 		It("ignores 0-RTT packets", func() {
 			p := getPacket(&wire.ExtendedHeader{
 				Header: wire.Header{
-					IsLongHeader:     true,
 					Type:             protocol.PacketType0RTT,
 					DestConnectionID: srcConnID,
 					Length:           2 + 6,

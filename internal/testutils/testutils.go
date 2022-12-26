@@ -50,7 +50,6 @@ func ComposeInitialPacket(srcConnID protocol.ConnectionID, destConnID protocol.C
 	length := payloadSize + int(pnLength) + sealer.Overhead()
 	hdr := &wire.ExtendedHeader{
 		Header: wire.Header{
-			IsLongHeader:     true,
 			Type:             protocol.PacketTypeInitial,
 			SrcConnectionID:  srcConnID,
 			DestConnectionID: destConnID,
@@ -88,7 +87,6 @@ func ComposeRetryPacket(
 ) []byte {
 	hdr := &wire.ExtendedHeader{
 		Header: wire.Header{
-			IsLongHeader:     true,
 			Type:             protocol.PacketTypeRetry,
 			SrcConnectionID:  srcConnID,
 			DestConnectionID: destConnID,

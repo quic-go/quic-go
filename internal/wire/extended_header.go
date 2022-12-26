@@ -42,12 +42,7 @@ func (h *ExtendedHeader) parse(b *bytes.Reader, v protocol.VersionNumber) (bool 
 	if _, err := b.Seek(int64(h.Header.ParsedLen())-1, io.SeekCurrent); err != nil {
 		return false, err
 	}
-	var reservedBitsValid bool
-	if h.IsLongHeader {
-		reservedBitsValid, err = h.parseLongHeader(b, v)
-	} else {
-		panic("parsed a short header packet")
-	}
+	reservedBitsValid, err := h.parseLongHeader(b, v)
 	if err != nil {
 		return false, err
 	}
@@ -106,10 +101,7 @@ func (h *ExtendedHeader) Write(b *bytes.Buffer, ver protocol.VersionNumber) erro
 	if h.SrcConnectionID.Len() > protocol.MaxConnIDLen {
 		return fmt.Errorf("invalid connection ID length: %d bytes", h.SrcConnectionID.Len())
 	}
-	if h.IsLongHeader {
-		return h.writeLongHeader(b, ver)
-	}
-	panic("tried to write short extended header")
+	return h.writeLongHeader(b, ver)
 }
 
 func (h *ExtendedHeader) writeLongHeader(b *bytes.Buffer, version protocol.VersionNumber) error {
@@ -171,39 +163,29 @@ func (h *ExtendedHeader) ParsedLen() protocol.ByteCount {
 }
 
 // GetLength determines the length of the Header.
-func (h *ExtendedHeader) GetLength(v protocol.VersionNumber) protocol.ByteCount {
-	if h.IsLongHeader {
-		length := 1 /* type byte */ + 4 /* version */ + 1 /* dest conn ID len */ + protocol.ByteCount(h.DestConnectionID.Len()) + 1 /* src conn ID len */ + protocol.ByteCount(h.SrcConnectionID.Len()) + protocol.ByteCount(h.PacketNumberLen) + 2 /* length */
-		if h.Type == protocol.PacketTypeInitial {
-			length += quicvarint.Len(uint64(len(h.Token))) + protocol.ByteCount(len(h.Token))
-		}
-		return length
+func (h *ExtendedHeader) GetLength(_ protocol.VersionNumber) protocol.ByteCount {
+	length := 1 /* type byte */ + 4 /* version */ + 1 /* dest conn ID len */ + protocol.ByteCount(h.DestConnectionID.Len()) + 1 /* src conn ID len */ + protocol.ByteCount(h.SrcConnectionID.Len()) + protocol.ByteCount(h.PacketNumberLen) + 2 /* length */
+	if h.Type == protocol.PacketTypeInitial {
+		length += quicvarint.Len(uint64(len(h.Token))) + protocol.ByteCount(len(h.Token))
 	}
-
-	length := protocol.ByteCount(1 /* type byte */ + h.DestConnectionID.Len())
-	length += protocol.ByteCount(h.PacketNumberLen)
 	return length
 }
 
 // Log logs the Header
 func (h *ExtendedHeader) Log(logger utils.Logger) {
-	if h.IsLongHeader {
-		var token string
-		if h.Type == protocol.PacketTypeInitial || h.Type == protocol.PacketTypeRetry {
-			if len(h.Token) == 0 {
-				token = "Token: (empty), "
-			} else {
-				token = fmt.Sprintf("Token: %#x, ", h.Token)
-			}
-			if h.Type == protocol.PacketTypeRetry {
-				logger.Debugf("\tLong Header{Type: %s, DestConnectionID: %s, SrcConnectionID: %s, %sVersion: %s}", h.Type, h.DestConnectionID, h.SrcConnectionID, token, h.Version)
-				return
-			}
+	var token string
+	if h.Type == protocol.PacketTypeInitial || h.Type == protocol.PacketTypeRetry {
+		if len(h.Token) == 0 {
+			token = "Token: (empty), "
+		} else {
+			token = fmt.Sprintf("Token: %#x, ", h.Token)
 		}
-		logger.Debugf("\tLong Header{Type: %s, DestConnectionID: %s, SrcConnectionID: %s, %sPacketNumber: %d, PacketNumberLen: %d, Length: %d, Version: %s}", h.Type, h.DestConnectionID, h.SrcConnectionID, token, h.PacketNumber, h.PacketNumberLen, h.Length, h.Version)
-	} else {
-		panic("logged short ExtendedHeader")
+		if h.Type == protocol.PacketTypeRetry {
+			logger.Debugf("\tLong Header{Type: %s, DestConnectionID: %s, SrcConnectionID: %s, %sVersion: %s}", h.Type, h.DestConnectionID, h.SrcConnectionID, token, h.Version)
+			return
+		}
 	}
+	logger.Debugf("\tLong Header{Type: %s, DestConnectionID: %s, SrcConnectionID: %s, %sPacketNumber: %d, PacketNumberLen: %d, Length: %d, Version: %s}", h.Type, h.DestConnectionID, h.SrcConnectionID, token, h.PacketNumber, h.PacketNumberLen, h.Length, h.Version)
 }
 
 func writePacketNumber(b *bytes.Buffer, pn protocol.PacketNumber, pnLen protocol.PacketNumberLen) error {

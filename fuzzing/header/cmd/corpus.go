@@ -30,7 +30,6 @@ func getVNP(src, dest protocol.ArbitraryLenConnectionID, numVersions int) []byte
 func main() {
 	headers := []wire.Header{
 		{ // Initial without token
-			IsLongHeader:     true,
 			SrcConnectionID:  protocol.ParseConnectionID(getRandomData(3)),
 			DestConnectionID: protocol.ParseConnectionID(getRandomData(8)),
 			Type:             protocol.PacketTypeInitial,
@@ -38,14 +37,12 @@ func main() {
 			Version:          version,
 		},
 		{ // Initial without token, with zero-length src conn id
-			IsLongHeader:     true,
 			DestConnectionID: protocol.ParseConnectionID(getRandomData(8)),
 			Type:             protocol.PacketTypeInitial,
 			Length:           protocol.ByteCount(rand.Intn(1000)),
 			Version:          version,
 		},
 		{ // Initial with Token
-			IsLongHeader:     true,
 			SrcConnectionID:  protocol.ParseConnectionID(getRandomData(10)),
 			DestConnectionID: protocol.ParseConnectionID(getRandomData(19)),
 			Type:             protocol.PacketTypeInitial,
@@ -54,7 +51,6 @@ func main() {
 			Token:            getRandomData(25),
 		},
 		{ // Handshake packet
-			IsLongHeader:     true,
 			SrcConnectionID:  protocol.ParseConnectionID(getRandomData(5)),
 			DestConnectionID: protocol.ParseConnectionID(getRandomData(10)),
 			Type:             protocol.PacketTypeHandshake,
@@ -62,14 +58,12 @@ func main() {
 			Version:          version,
 		},
 		{ // Handshake packet, with zero-length src conn id
-			IsLongHeader:     true,
 			DestConnectionID: protocol.ParseConnectionID(getRandomData(12)),
 			Type:             protocol.PacketTypeHandshake,
 			Length:           protocol.ByteCount(rand.Intn(1000)),
 			Version:          version,
 		},
 		{ // 0-RTT packet
-			IsLongHeader:     true,
 			SrcConnectionID:  protocol.ParseConnectionID(getRandomData(8)),
 			DestConnectionID: protocol.ParseConnectionID(getRandomData(9)),
 			Type:             protocol.PacketType0RTT,
@@ -77,7 +71,6 @@ func main() {
 			Version:          version,
 		},
 		{ // Retry Packet, with empty orig dest conn id
-			IsLongHeader:     true,
 			SrcConnectionID:  protocol.ParseConnectionID(getRandomData(8)),
 			DestConnectionID: protocol.ParseConnectionID(getRandomData(9)),
 			Type:             protocol.PacketTypeRetry,
