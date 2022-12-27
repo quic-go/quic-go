@@ -142,54 +142,47 @@ var _ = Describe("Varint encoding / decoding", func() {
 
 		Context("with fixed length", func() {
 			It("panics when given an invalid length", func() {
-				Expect(func() { WriteWithLen(&bytes.Buffer{}, 25, 3) }).Should(Panic())
+				Expect(func() { AppendWithLen(nil, 25, 3) }).Should(Panic())
 			})
 
 			It("panics when given a too short length", func() {
-				Expect(func() { WriteWithLen(&bytes.Buffer{}, maxVarInt1+1, 1) }).Should(Panic())
-				Expect(func() { WriteWithLen(&bytes.Buffer{}, maxVarInt2+1, 2) }).Should(Panic())
-				Expect(func() { WriteWithLen(&bytes.Buffer{}, maxVarInt4+1, 4) }).Should(Panic())
+				Expect(func() { AppendWithLen(nil, maxVarInt1+1, 1) }).Should(Panic())
+				Expect(func() { AppendWithLen(nil, maxVarInt2+1, 2) }).Should(Panic())
+				Expect(func() { AppendWithLen(nil, maxVarInt4+1, 4) }).Should(Panic())
 			})
 
 			It("writes a 1-byte number in minimal encoding", func() {
-				b := &bytes.Buffer{}
-				WriteWithLen(b, 37, 1)
-				Expect(b.Bytes()).To(Equal([]byte{0x25}))
+				Expect(AppendWithLen(nil, 37, 1)).To(Equal([]byte{0x25}))
 			})
 
 			It("writes a 1-byte number in 2 bytes", func() {
-				b := &bytes.Buffer{}
-				WriteWithLen(b, 37, 2)
-				Expect(b.Bytes()).To(Equal([]byte{0b01000000, 0x25}))
-				Expect(Read(b)).To(BeEquivalentTo(37))
+				b := AppendWithLen(nil, 37, 2)
+				Expect(b).To(Equal([]byte{0b01000000, 0x25}))
+				Expect(Read(bytes.NewReader(b))).To(BeEquivalentTo(37))
 			})
 
 			It("writes a 1-byte number in 4 bytes", func() {
-				b := &bytes.Buffer{}
-				WriteWithLen(b, 37, 4)
-				Expect(b.Bytes()).To(Equal([]byte{0b10000000, 0, 0, 0x25}))
-				Expect(Read(b)).To(BeEquivalentTo(37))
+				b := AppendWithLen(nil, 37, 4)
+				Expect(b).To(Equal([]byte{0b10000000, 0, 0, 0x25}))
+				Expect(Read(bytes.NewReader(b))).To(BeEquivalentTo(37))
 			})
 
 			It("writes a 1-byte number in 8 bytes", func() {
-				b := &bytes.Buffer{}
-				WriteWithLen(b, 37, 8)
-				Expect(b.Bytes()).To(Equal([]byte{0b11000000, 0, 0, 0, 0, 0, 0, 0x25}))
-				Expect(Read(b)).To(BeEquivalentTo(37))
+				b := AppendWithLen(nil, 37, 8)
+				Expect(b).To(Equal([]byte{0b11000000, 0, 0, 0, 0, 0, 0, 0x25}))
+				Expect(Read(bytes.NewReader(b))).To(BeEquivalentTo(37))
 			})
 
 			It("writes a 2-byte number in 4 bytes", func() {
-				b := &bytes.Buffer{}
-				WriteWithLen(b, 15293, 4)
-				Expect(b.Bytes()).To(Equal([]byte{0b10000000, 0, 0x3b, 0xbd}))
-				Expect(Read(b)).To(BeEquivalentTo(15293))
+				b := AppendWithLen(nil, 15293, 4)
+				Expect(b).To(Equal([]byte{0b10000000, 0, 0x3b, 0xbd}))
+				Expect(Read(bytes.NewReader(b))).To(BeEquivalentTo(15293))
 			})
 
 			It("write a 4-byte number in 8 bytes", func() {
-				b := &bytes.Buffer{}
-				WriteWithLen(b, 494878333, 8)
-				Expect(b.Bytes()).To(Equal([]byte{0b11000000, 0, 0, 0, 0x1d, 0x7f, 0x3e, 0x7d}))
-				Expect(Read(b)).To(BeEquivalentTo(494878333))
+				b := AppendWithLen(nil, 494878333, 8)
+				Expect(b).To(Equal([]byte{0b11000000, 0, 0, 0, 0x1d, 0x7f, 0x3e, 0x7d}))
+				Expect(Read(bytes.NewReader(b))).To(BeEquivalentTo(494878333))
 			})
 		})
 

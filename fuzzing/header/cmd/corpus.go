@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bytes"
 	"log"
 	"math/rand"
 
@@ -85,28 +84,28 @@ func main() {
 			PacketNumberLen: protocol.PacketNumberLen(rand.Intn(4) + 1),
 			PacketNumber:    protocol.PacketNumber(rand.Uint64()),
 		}
-		b := &bytes.Buffer{}
-		if err := extHdr.Write(b, version); err != nil {
+		b, err := extHdr.Append(nil, version)
+		if err != nil {
 			log.Fatal(err)
 		}
 		if h.Type == protocol.PacketTypeRetry {
-			b.Write([]byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16})
+			b = append(b, []byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16}...)
 		}
 		if h.Length > 0 {
-			b.Write(make([]byte, h.Length))
+			b = append(b, make([]byte, h.Length)...)
 		}
 
-		if err := helper.WriteCorpusFileWithPrefix("corpus", b.Bytes(), header.PrefixLen); err != nil {
+		if err := helper.WriteCorpusFileWithPrefix("corpus", b, header.PrefixLen); err != nil {
 			log.Fatal(err)
 		}
 	}
 
 	// short header
-	b := &bytes.Buffer{}
-	if err := wire.WriteShortHeader(b, protocol.ParseConnectionID(getRandomData(8)), 1337, protocol.PacketNumberLen2, protocol.KeyPhaseOne); err != nil {
+	b, err := wire.AppendShortHeader(nil, protocol.ParseConnectionID(getRandomData(8)), 1337, protocol.PacketNumberLen2, protocol.KeyPhaseOne)
+	if err != nil {
 		log.Fatal(err)
 	}
-	if err := helper.WriteCorpusFileWithPrefix("corpus", b.Bytes(), header.PrefixLen); err != nil {
+	if err := helper.WriteCorpusFileWithPrefix("corpus", b, header.PrefixLen); err != nil {
 		log.Fatal(err)
 	}
 

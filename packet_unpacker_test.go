@@ -1,7 +1,6 @@
 package quic
 
 import (
-	"bytes"
 	"errors"
 	"time"
 
@@ -12,7 +11,6 @@ import (
 	"github.com/lucas-clemente/quic-go/internal/wire"
 
 	"github.com/golang/mock/gomock"
-
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 )
@@ -28,21 +26,22 @@ var _ = Describe("Packet Unpacker", func() {
 	)
 
 	getLongHeader := func(extHdr *wire.ExtendedHeader) (*wire.Header, []byte) {
-		buf := &bytes.Buffer{}
-		ExpectWithOffset(1, extHdr.Write(buf, version)).To(Succeed())
-		hdrLen := buf.Len()
-		if extHdr.Length > protocol.ByteCount(extHdr.PacketNumberLen) {
-			buf.Write(make([]byte, int(extHdr.Length)-int(extHdr.PacketNumberLen)))
-		}
-		hdr, _, _, err := wire.ParsePacket(buf.Bytes())
+		b, err := extHdr.Append(nil, version)
+		Expect(err).ToNot(HaveOccurred())
 		ExpectWithOffset(1, err).ToNot(HaveOccurred())
-		return hdr, buf.Bytes()[:hdrLen]
+		hdrLen := len(b)
+		if extHdr.Length > protocol.ByteCount(extHdr.PacketNumberLen) {
+			b = append(b, make([]byte, int(extHdr.Length)-int(extHdr.PacketNumberLen))...)
+		}
+		hdr, _, _, err := wire.ParsePacket(b)
+		ExpectWithOffset(1, err).ToNot(HaveOccurred())
+		return hdr, b[:hdrLen]
 	}
 
 	getShortHeader := func(connID protocol.ConnectionID, pn protocol.PacketNumber, pnLen protocol.PacketNumberLen, kp protocol.KeyPhaseBit) []byte {
-		buf := &bytes.Buffer{}
-		Expect(wire.WriteShortHeader(buf, connID, pn, pnLen, kp)).To(Succeed())
-		return buf.Bytes()
+		b, err := wire.AppendShortHeader(nil, connID, pn, pnLen, kp)
+		Expect(err).ToNot(HaveOccurred())
+		return b
 	}
 
 	BeforeEach(func() {
@@ -72,12 +71,12 @@ var _ = Describe("Packet Unpacker", func() {
 	})
 
 	It("errors when the packet is too small to obtain the header decryption sample, for short headers", func() {
-		buf := &bytes.Buffer{}
-		Expect(wire.WriteShortHeader(buf, connID, 1337, protocol.PacketNumberLen2, protocol.KeyPhaseOne)).To(Succeed())
-		data := append(buf.Bytes(), make([]byte, 2 /* fill up packet number */ +15 /* need 16 bytes */)...)
+		b, err := wire.AppendShortHeader(nil, connID, 1337, protocol.PacketNumberLen2, protocol.KeyPhaseOne)
+		Expect(err).ToNot(HaveOccurred())
+		data := append(b, make([]byte, 2 /* fill up packet number */ +15 /* need 16 bytes */)...)
 		opener := mocks.NewMockShortHeaderOpener(mockCtrl)
 		cs.EXPECT().Get1RTTOpener().Return(opener, nil)
-		_, _, _, _, err := unpacker.UnpackShortHeader(time.Now(), data)
+		_, _, _, _, err = unpacker.UnpackShortHeader(time.Now(), data)
 		Expect(err).To(BeAssignableToTypeOf(&headerParseError{}))
 		Expect(err).To(MatchError("packet too small, expected at least 20 bytes after the header, got 19"))
 	})
