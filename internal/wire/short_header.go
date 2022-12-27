@@ -1,7 +1,6 @@
 package wire
 
 import (
-	"bytes"
 	"errors"
 	"fmt"
 	"io"
@@ -54,15 +53,15 @@ func ParseShortHeader(data []byte, connIDLen int) (length int, _ protocol.Packet
 	return 1 + connIDLen + int(pnLen), pn, pnLen, kp, err
 }
 
-// WriteShortHeader writes a short header.
-func WriteShortHeader(b *bytes.Buffer, connID protocol.ConnectionID, pn protocol.PacketNumber, pnLen protocol.PacketNumberLen, kp protocol.KeyPhaseBit) error {
+// AppendShortHeader writes a short header.
+func AppendShortHeader(b []byte, connID protocol.ConnectionID, pn protocol.PacketNumber, pnLen protocol.PacketNumberLen, kp protocol.KeyPhaseBit) ([]byte, error) {
 	typeByte := 0x40 | uint8(pnLen-1)
 	if kp == protocol.KeyPhaseOne {
 		typeByte |= byte(1 << 2)
 	}
-	b.WriteByte(typeByte)
-	b.Write(connID.Bytes())
-	return writePacketNumber(b, pn, pnLen)
+	b = append(b, typeByte)
+	b = append(b, connID.Bytes()...)
+	return appendPacketNumber(b, pn, pnLen)
 }
 
 func ShortHeaderLen(dest protocol.ConnectionID, pnLen protocol.PacketNumberLen) protocol.ByteCount {

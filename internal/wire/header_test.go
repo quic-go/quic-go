@@ -15,8 +15,7 @@ import (
 var _ = Describe("Header Parsing", func() {
 	Context("Parsing the Connection ID", func() {
 		It("parses the connection ID of a long header packet", func() {
-			buf := &bytes.Buffer{}
-			Expect((&ExtendedHeader{
+			b, err := (&ExtendedHeader{
 				Header: Header{
 					Type:             protocol.PacketTypeHandshake,
 					DestConnectionID: protocol.ParseConnectionID([]byte{0xde, 0xca, 0xfb, 0xad}),
@@ -24,15 +23,15 @@ var _ = Describe("Header Parsing", func() {
 					Version:          protocol.Version1,
 				},
 				PacketNumberLen: 2,
-			}).Write(buf, protocol.Version1)).To(Succeed())
-			connID, err := ParseConnectionID(buf.Bytes(), 8)
+			}).Append(nil, protocol.Version1)
+			Expect(err).ToNot(HaveOccurred())
+			connID, err := ParseConnectionID(b, 8)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(connID).To(Equal(protocol.ParseConnectionID([]byte{0xde, 0xca, 0xfb, 0xad})))
 		})
 
 		It("errors on EOF, for long header packets", func() {
-			buf := &bytes.Buffer{}
-			Expect((&ExtendedHeader{
+			b, err := (&ExtendedHeader{
 				Header: Header{
 					Type:             protocol.PacketTypeHandshake,
 					DestConnectionID: protocol.ParseConnectionID([]byte{0xde, 0xca, 0xfb, 0xad, 0x13, 0x37}),
@@ -40,9 +39,10 @@ var _ = Describe("Header Parsing", func() {
 					Version:          protocol.Version1,
 				},
 				PacketNumberLen: 2,
-			}).Write(buf, protocol.Version1)).To(Succeed())
-			data := buf.Bytes()[:buf.Len()-2] // cut the packet number
-			_, err := ParseConnectionID(data, 8)
+			}).Append(nil, protocol.Version1)
+			Expect(err).ToNot(HaveOccurred())
+			data := b[:len(b)-2] // cut the packet number
+			_, err = ParseConnectionID(data, 8)
 			Expect(err).ToNot(HaveOccurred())
 			for i := 0; i < 1 /* first byte */ +4 /* version */ +1 /* conn ID lengths */ +6; /* dest conn ID */ i++ {
 				b := make([]byte, i)
@@ -419,22 +419,22 @@ var _ = Describe("Header Parsing", func() {
 
 		Context("coalesced packets", func() {
 			It("cuts packets", func() {
-				buf := &bytes.Buffer{}
 				hdr := Header{
 					Type:             protocol.PacketTypeInitial,
 					DestConnectionID: protocol.ParseConnectionID([]byte{1, 2, 3, 4}),
 					Length:           2 + 6,
 					Version:          protocol.Version1,
 				}
-				Expect((&ExtendedHeader{
+				b, err := (&ExtendedHeader{
 					Header:          hdr,
 					PacketNumber:    0x1337,
 					PacketNumberLen: 2,
-				}).Write(buf, protocol.Version1)).To(Succeed())
-				hdrRaw := append([]byte{}, buf.Bytes()...)
-				buf.Write([]byte("foobar")) // payload of the first packet
-				buf.Write([]byte("raboof")) // second packet
-				parsedHdr, data, rest, err := ParsePacket(buf.Bytes())
+				}).Append(nil, protocol.Version1)
+				Expect(err).ToNot(HaveOccurred())
+				hdrRaw := append([]byte{}, b...)
+				b = append(b, []byte("foobar")...) // payload of the first packet
+				b = append(b, []byte("raboof")...) // second packet
+				parsedHdr, data, rest, err := ParsePacket(b)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(parsedHdr.Type).To(Equal(hdr.Type))
 				Expect(parsedHdr.DestConnectionID).To(Equal(hdr.DestConnectionID))
@@ -443,8 +443,7 @@ var _ = Describe("Header Parsing", func() {
 			})
 
 			It("errors on packets that are smaller than the length in the packet header, for too small packet number", func() {
-				buf := &bytes.Buffer{}
-				Expect((&ExtendedHeader{
+				b, err := (&ExtendedHeader{
 					Header: Header{
 						Type:             protocol.PacketTypeInitial,
 						DestConnectionID: protocol.ParseConnectionID([]byte{1, 2, 3, 4}),
@@ -453,15 +452,15 @@ var _ = Describe("Header Parsing", func() {
 					},
 					PacketNumber:    0x1337,
 					PacketNumberLen: 2,
-				}).Write(buf, protocol.Version1)).To(Succeed())
-				_, _, _, err := ParsePacket(buf.Bytes())
+				}).Append(nil, protocol.Version1)
+				Expect(err).ToNot(HaveOccurred())
+				_, _, _, err = ParsePacket(b)
 				Expect(err).To(HaveOccurred())
 				Expect(err.Error()).To(ContainSubstring("packet length (2 bytes) is smaller than the expected length (3 bytes)"))
 			})
 
 			It("errors on packets that are smaller than the length in the packet header, for too small payload", func() {
-				buf := &bytes.Buffer{}
-				Expect((&ExtendedHeader{
+				b, err := (&ExtendedHeader{
 					Header: Header{
 						Type:             protocol.PacketTypeInitial,
 						DestConnectionID: protocol.ParseConnectionID([]byte{1, 2, 3, 4}),
@@ -470,9 +469,10 @@ var _ = Describe("Header Parsing", func() {
 					},
 					PacketNumber:    0x1337,
 					PacketNumberLen: 2,
-				}).Write(buf, protocol.Version1)).To(Succeed())
-				buf.Write(make([]byte, 500-2 /* for packet number length */))
-				_, _, _, err := ParsePacket(buf.Bytes())
+				}).Append(nil, protocol.Version1)
+				Expect(err).ToNot(HaveOccurred())
+				b = append(b, make([]byte, 500-2 /* for packet number length */)...)
+				_, _, _, err = ParsePacket(b)
 				Expect(err).To(MatchError("packet length (500 bytes) is smaller than the expected length (1000 bytes)"))
 			})
 		})

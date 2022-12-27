@@ -64,8 +64,8 @@ func Fuzz(data []byte) int {
 	if hdr.Length > 16383 {
 		return 1
 	}
-	b := &bytes.Buffer{}
-	if err := extHdr.Write(b, version); err != nil {
+	b, err := extHdr.Append(nil, version)
+	if err != nil {
 		// We are able to parse packets with connection IDs longer than 20 bytes,
 		// but in QUIC version 1, we don't write headers with longer connection IDs.
 		if hdr.DestConnectionID.Len() <= protocol.MaxConnIDLen &&
@@ -76,8 +76,8 @@ func Fuzz(data []byte) int {
 	}
 	// GetLength is not implemented for Retry packets
 	if hdr.Type != protocol.PacketTypeRetry {
-		if expLen := extHdr.GetLength(version); expLen != protocol.ByteCount(b.Len()) {
-			panic(fmt.Sprintf("inconsistent header length: %#v. Expected %d, got %d", extHdr, expLen, b.Len()))
+		if expLen := extHdr.GetLength(version); expLen != protocol.ByteCount(len(b)) {
+			panic(fmt.Sprintf("inconsistent header length: %#v. Expected %d, got %d", extHdr, expLen, len(b)))
 		}
 	}
 	return 1

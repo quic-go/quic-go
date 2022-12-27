@@ -1,7 +1,6 @@
 package quic
 
 import (
-	"bytes"
 	"crypto/rand"
 	"errors"
 	"net"
@@ -14,7 +13,6 @@ import (
 	"github.com/lucas-clemente/quic-go/logging"
 
 	"github.com/golang/mock/gomock"
-
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 )
@@ -37,8 +35,7 @@ var _ = Describe("Packet Handler Map", func() {
 	)
 
 	getPacketWithPacketType := func(connID protocol.ConnectionID, t protocol.PacketType, length protocol.ByteCount) []byte {
-		buf := &bytes.Buffer{}
-		Expect((&wire.ExtendedHeader{
+		b, err := (&wire.ExtendedHeader{
 			Header: wire.Header{
 				Type:             t,
 				DestConnectionID: connID,
@@ -46,8 +43,9 @@ var _ = Describe("Packet Handler Map", func() {
 				Version:          protocol.VersionTLS,
 			},
 			PacketNumberLen: protocol.PacketNumberLen2,
-		}).Write(buf, protocol.VersionWhatever)).To(Succeed())
-		return buf.Bytes()
+		}).Append(nil, protocol.VersionWhatever)
+		Expect(err).ToNot(HaveOccurred())
+		return b
 	}
 
 	getPacket := func(connID protocol.ConnectionID) []byte {

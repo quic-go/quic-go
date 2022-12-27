@@ -1,7 +1,6 @@
 package quic
 
 import (
-	"bytes"
 	"errors"
 	"fmt"
 	"net"
@@ -800,13 +799,12 @@ func (p *packetPacker) appendLongHeaderPacket(buffer *packetBuffer, header *wire
 	paddingLen += padding
 	header.Length = pnLen + protocol.ByteCount(sealer.Overhead()) + payload.length + paddingLen
 
-	raw := buffer.Data[len(buffer.Data):]
-	buf := bytes.NewBuffer(buffer.Data)
-	startLen := buf.Len()
-	if err := header.Write(buf, p.version); err != nil {
+	startLen := len(buffer.Data)
+	raw := buffer.Data[startLen:]
+	raw, err := header.Append(raw, p.version)
+	if err != nil {
 		return nil, err
 	}
-	raw = raw[:buf.Len()-startLen]
 	payloadOffset := protocol.ByteCount(len(raw))
 
 	pn := p.pnManager.PopPacketNumber(encLevel)
@@ -814,7 +812,7 @@ func (p *packetPacker) appendLongHeaderPacket(buffer *packetBuffer, header *wire
 		return nil, errors.New("packetPacker BUG: Peeked and Popped packet numbers do not match")
 	}
 
-	raw, err := p.appendPacketPayload(raw, payload, paddingLen)
+	raw, err = p.appendPacketPayload(raw, payload, paddingLen)
 	if err != nil {
 		return nil, err
 	}
@@ -846,20 +844,19 @@ func (p *packetPacker) appendShortHeaderPacket(
 	}
 	paddingLen += padding
 
-	raw := buffer.Data[len(buffer.Data):]
-	buf := bytes.NewBuffer(buffer.Data)
-	startLen := buf.Len()
-	if err := wire.WriteShortHeader(buf, connID, pn, pnLen, kp); err != nil {
+	startLen := len(buffer.Data)
+	raw := buffer.Data[startLen:]
+	raw, err := wire.AppendShortHeader(raw, connID, pn, pnLen, kp)
+	if err != nil {
 		return nil, err
 	}
-	raw = raw[:buf.Len()-startLen]
 	payloadOffset := protocol.ByteCount(len(raw))
 
 	if pn != p.pnManager.PopPacketNumber(protocol.Encryption1RTT) {
 		return nil, errors.New("packetPacker BUG: Peeked and Popped packet numbers do not match")
 	}
 
-	raw, err := p.appendPacketPayload(raw, payload, paddingLen)
+	raw, err = p.appendPacketPayload(raw, payload, paddingLen)
 	if err != nil {
 		return nil, err
 	}

@@ -1,7 +1,6 @@
 package self_test
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -116,12 +115,12 @@ var _ = Describe("MITM test", func() {
 							for i := 0; i < numPackets; i++ {
 								payloadLen := mrand.Int31n(100)
 								replyHdr.Length = protocol.ByteCount(mrand.Int31n(payloadLen + 1))
-								buf := &bytes.Buffer{}
-								Expect(replyHdr.Write(buf, version)).To(Succeed())
-								b := make([]byte, payloadLen)
-								mrand.Read(b)
-								buf.Write(b)
-								if _, err := conn.WriteTo(buf.Bytes(), remoteAddr); err != nil {
+								b, err := replyHdr.Append(nil, version)
+								Expect(err).ToNot(HaveOccurred())
+								r := make([]byte, payloadLen)
+								mrand.Read(r)
+								b = append(b, r...)
+								if _, err := conn.WriteTo(b, remoteAddr); err != nil {
 									return
 								}
 								<-ticker.C
@@ -134,13 +133,13 @@ var _ = Describe("MITM test", func() {
 								Expect(err).To(MatchError(wire.ErrInvalidReservedBits))
 							}
 							for i := 0; i < numPackets; i++ {
-								buf := &bytes.Buffer{}
-								Expect(wire.WriteShortHeader(buf, connID, pn, pnLen, protocol.KeyPhaseBit(mrand.Intn(2)))).To(Succeed())
+								b, err := wire.AppendShortHeader(nil, connID, pn, pnLen, protocol.KeyPhaseBit(mrand.Intn(2)))
+								Expect(err).ToNot(HaveOccurred())
 								payloadLen := mrand.Int31n(100)
-								b := make([]byte, payloadLen)
-								mrand.Read(b)
-								buf.Write(b)
-								if _, err := conn.WriteTo(buf.Bytes(), remoteAddr); err != nil {
+								r := make([]byte, payloadLen)
+								mrand.Read(r)
+								b = append(b, r...)
+								if _, err := conn.WriteTo(b, remoteAddr); err != nil {
 									return
 								}
 								<-ticker.C
