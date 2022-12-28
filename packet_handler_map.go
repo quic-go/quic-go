@@ -1,9 +1,12 @@
 package quic
 
 import (
+	"crypto/hmac"
 	"crypto/rand"
+	"crypto/sha256"
 	"errors"
 	"fmt"
+	"hash"
 	"io"
 	"log"
 	"net"
@@ -46,7 +49,6 @@ type packetHandlerMap struct {
 	closeQueue chan closePacket
 
 	handlers          map[protocol.ConnectionID]packetHandler
-	resetTokens       map[protocol.StatelessResetToken] /* stateless reset token */ packetHandler
 	server            unknownPacketHandler
 	numZeroRTTEntries int
 
@@ -56,6 +58,12 @@ type packetHandlerMap struct {
 	deleteRetiredConnsAfter time.Duration
 	zeroRTTQueueDuration    time.Duration
 
+	// We don't use the stateless reset token as a map key directly, since the token is provided by the peer,
+	// and this would make us vulnerable to hash map collision attacks.
+	// Instead, we derive the map key using a HMAC, as recommended by section 10.3.1 of RFC 9000.
+	resetTokens        map[[32]byte]packetHandler
+	statelessResetHMAC hash.Hash
+	// for stateless reset token that we generate
 	statelessResetter statelessResetter
 
 	tracer logging.Tracer
@@ -118,12 +126,19 @@ func newPacketHandlerMap(
 	if err != nil {
 		return nil, err
 	}
+	// Create a HMAC to calculate the map keys for storing stateless reset token.
+	// See section 10.3.1 of RFC 9000 for motivation.
+	b := make([]byte, 32)
+	if _, err := rand.Read(b); err != nil {
+		return nil, err
+	}
 	m := &packetHandlerMap{
 		conn:                    conn,
 		connIDLen:               connIDLen,
 		listening:               make(chan struct{}),
 		handlers:                make(map[protocol.ConnectionID]packetHandler),
-		resetTokens:             make(map[protocol.StatelessResetToken]packetHandler),
+		resetTokens:             make(map[[32]byte]packetHandler),
+		statelessResetHMAC:      hmac.New(sha256.New, b),
 		deleteRetiredConnsAfter: protocol.RetiredConnectionIDDeleteTimeout,
 		zeroRTTQueueDuration:    protocol.Max0RTTQueueingDuration,
 		closeQueue:              make(chan closePacket, 4),
@@ -276,15 +291,19 @@ func (h *packetHandlerMap) runCloseQueue() {
 	}
 }
 
+func (h *packetHandlerMap) statelessResetMapKey(token protocol.StatelessResetToken) [32]byte {
+	return *(*[32]byte)(h.statelessResetHMAC.Sum(token[:]))
+}
+
 func (h *packetHandlerMap) AddResetToken(token protocol.StatelessResetToken, handler packetHandler) {
 	h.mutex.Lock()
-	h.resetTokens[token] = handler
+	h.resetTokens[h.statelessResetMapKey(token)] = handler
 	h.mutex.Unlock()
 }
 
 func (h *packetHandlerMap) RemoveResetToken(token protocol.StatelessResetToken) {
 	h.mutex.Lock()
-	delete(h.resetTokens, token)
+	delete(h.resetTokens, h.statelessResetMapKey(token))
 	h.mutex.Unlock()
 }
 
@@ -451,7 +470,7 @@ func (h *packetHandlerMap) maybeHandleStatelessReset(data []byte) bool {
 
 	var token protocol.StatelessResetToken
 	copy(token[:], data[len(data)-16:])
-	if sess, ok := h.resetTokens[token]; ok {
+	if sess, ok := h.resetTokens[h.statelessResetMapKey(token)]; ok {
 		h.logger.Debugf("Received a stateless reset with token %#x. Closing connection.", token)
 		go sess.destroy(&StatelessResetError{Token: token})
 		return true
