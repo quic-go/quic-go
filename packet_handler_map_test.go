@@ -14,7 +14,6 @@ import (
 	"github.com/lucas-clemente/quic-go/logging"
 
 	"github.com/golang/mock/gomock"
-
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 )

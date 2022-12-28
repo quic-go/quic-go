@@ -1,12 +1,9 @@
 package quic
 
 import (
-	"crypto/hmac"
 	"crypto/rand"
-	"crypto/sha256"
 	"errors"
 	"fmt"
-	"hash"
 	"io"
 	"log"
 	"net"
@@ -59,9 +56,7 @@ type packetHandlerMap struct {
 	deleteRetiredConnsAfter time.Duration
 	zeroRTTQueueDuration    time.Duration
 
-	statelessResetEnabled bool
-	statelessResetMutex   sync.Mutex
-	statelessResetHasher  hash.Hash
+	statelessResetter statelessResetter
 
 	tracer logging.Tracer
 	logger utils.Logger
@@ -132,13 +127,11 @@ func newPacketHandlerMap(
 		deleteRetiredConnsAfter: protocol.RetiredConnectionIDDeleteTimeout,
 		zeroRTTQueueDuration:    protocol.Max0RTTQueueingDuration,
 		closeQueue:              make(chan closePacket, 4),
-		statelessResetEnabled:   statelessResetKey != nil,
+		statelessResetter:       *newStatelessResetter(statelessResetKey),
 		tracer:                  tracer,
 		logger:                  logger,
 	}
-	if m.statelessResetEnabled {
-		m.statelessResetHasher = hmac.New(sha256.New, statelessResetKey[:])
-	}
+
 	go m.listen()
 	go m.runCloseQueue()
 
@@ -467,25 +460,12 @@ func (h *packetHandlerMap) maybeHandleStatelessReset(data []byte) bool {
 }
 
 func (h *packetHandlerMap) GetStatelessResetToken(connID protocol.ConnectionID) protocol.StatelessResetToken {
-	var token protocol.StatelessResetToken
-	if !h.statelessResetEnabled {
-		// Return a random stateless reset token.
-		// This token will be sent in the server's transport parameters.
-		// By using a random token, an off-path attacker won't be able to disrupt the connection.
-		rand.Read(token[:])
-		return token
-	}
-	h.statelessResetMutex.Lock()
-	h.statelessResetHasher.Write(connID.Bytes())
-	copy(token[:], h.statelessResetHasher.Sum(nil))
-	h.statelessResetHasher.Reset()
-	h.statelessResetMutex.Unlock()
-	return token
+	return h.statelessResetter.GetStatelessResetToken(connID)
 }
 
 func (h *packetHandlerMap) maybeSendStatelessReset(p *receivedPacket, connID protocol.ConnectionID) {
 	defer p.buffer.Release()
-	if !h.statelessResetEnabled {
+	if !h.statelessResetter.Enabled() {
 		return
 	}
 	// Don't send a stateless reset in response to very small packets.
