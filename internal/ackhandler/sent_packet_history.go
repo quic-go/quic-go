@@ -5,21 +5,18 @@ import (
 	"time"
 
 	"github.com/lucas-clemente/quic-go/internal/protocol"
-	"github.com/lucas-clemente/quic-go/internal/utils"
 	list "github.com/lucas-clemente/quic-go/internal/utils/linkedlist"
 )
 
 type sentPacketHistory struct {
-	rttStats              *utils.RTTStats
 	outstandingPacketList *list.List[*Packet]
 	etcPacketList         *list.List[*Packet]
 	packetMap             map[protocol.PacketNumber]*list.Element[*Packet]
 	highestSent           protocol.PacketNumber
 }
 
-func newSentPacketHistory(rttStats *utils.RTTStats) *sentPacketHistory {
+func newSentPacketHistory() *sentPacketHistory {
 	return &sentPacketHistory{
-		rttStats:              rttStats,
 		outstandingPacketList: list.New[*Packet](),
 		etcPacketList:         list.New[*Packet](),
 		packetMap:             make(map[protocol.PacketNumber]*list.Element[*Packet]),
@@ -118,15 +115,14 @@ func (h *sentPacketHistory) HasOutstandingPackets() bool {
 	return h.outstandingPacketList.Len() > 0
 }
 
-func (h *sentPacketHistory) DeleteOldPackets(now time.Time) {
-	maxAge := 3 * h.rttStats.PTO(false)
+func (h *sentPacketHistory) DeleteOldPackets(before time.Time) {
 	var nextEl *list.Element[*Packet]
 	// we don't iterate outstandingPacketList, as we should not delete outstanding packets.
 	// being outstanding for more than 3*PTO should only happen in the case of drastic RTT changes.
 	for el := h.etcPacketList.Front(); el != nil; el = nextEl {
 		nextEl = el.Next()
 		p := el.Value
-		if p.SendTime.After(now.Add(-maxAge)) {
+		if p.SendTime.After(before) {
 			break
 		}
 		delete(h.packetMap, p.PacketNumber)
