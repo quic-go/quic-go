@@ -48,7 +48,9 @@ type packetHandlerMap struct {
 
 	closeQueue chan closePacket
 
-	handlers          map[protocol.ConnectionID]packetHandler
+	handlers map[protocol.ConnectionID]packetHandler
+	// Contrary to what RFC 9000 section 10.3.1 recommends, we use the stateless reset token as a map key.
+	// Since Go's hash table implementation uses a random seed, we don't have to worry about collision attacks.
 	resetTokens       map[protocol.StatelessResetToken] /* stateless reset token */ packetHandler
 	server            unknownPacketHandler
 	numZeroRTTEntries int
