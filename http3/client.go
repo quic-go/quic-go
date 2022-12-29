@@ -433,3 +433,10 @@ func (c *client) doRequest(req *http.Request, str quic.Stream, opt RoundTripOpt,
 
 	return res, requestError{}
 }
+
+func (c *client) IsClosed() bool {
+	if c.conn == nil {
+		return false
+	}
+	return c.conn.Context().Err() != nil
+}

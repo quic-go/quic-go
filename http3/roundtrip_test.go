@@ -25,6 +25,8 @@ func (m *mockClient) RoundTripOpt(req *http.Request, _ RoundTripOpt) (*http.Resp
 	return &http.Response{Request: req}, nil
 }
 
+func (m *mockClient) IsClosed() bool { return false }
+
 func (m *mockClient) Close() error {
 	m.closed = true
 	return nil
@@ -148,6 +150,7 @@ var _ = Describe("RoundTripper", func() {
 				<-closed
 				return nil, errors.New("test done")
 			}).MaxTimes(1)
+			conn.EXPECT().Context().Return(context.Background()).AnyTimes()
 			conn.EXPECT().CloseWithError(gomock.Any(), gomock.Any()).Do(func(quic.ApplicationErrorCode, string) { close(closed) })
 			req, err := http.NewRequest("GET", "https://quic.clemente.io/file1.html", nil)
 			Expect(err).ToNot(HaveOccurred())

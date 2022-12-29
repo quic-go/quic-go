@@ -17,6 +17,7 @@ import (
 
 type roundTripCloser interface {
 	RoundTripOpt(*http.Request, RoundTripOpt) (*http.Response, error)
+	IsClosed() bool
 	io.Closer
 }
 
@@ -148,18 +149,21 @@ func (r *RoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
 func (r *RoundTripper) getClient(hostname string, onlyCached bool) (roundTripCloser, error) {
 	r.mutex.Lock()
 	defer r.mutex.Unlock()
+	return r.getClientLocked(hostname, onlyCached)
+}
 
+func (r *RoundTripper) getClientLocked(hostname string, onlyCached bool) (roundTripCloser, error) {
 	if r.clients == nil {
 		r.clients = make(map[string]roundTripCloser)
 	}
 
-	client, ok := r.clients[hostname]
+	cl, ok := r.clients[hostname]
 	if !ok {
 		if onlyCached {
 			return nil, ErrNoCachedConn
 		}
 		var err error
-		client, err = newClient(
+		cl, err = newClient(
 			hostname,
 			r.TLSClientConfig,
 			&roundTripperOpts{
@@ -175,9 +179,13 @@ func (r *RoundTripper) getClient(hostname string, onlyCached bool) (roundTripClo
 		if err != nil {
 			return nil, err
 		}
-		r.clients[hostname] = client
+		r.clients[hostname] = cl
 	}
-	return client, nil
+	if cl.IsClosed() {
+		delete(r.clients, hostname)
+		return r.getClientLocked(hostname, onlyCached)
+	}
+	return cl, nil
 }
 
 // Close closes the QUIC connections that this RoundTripper has used

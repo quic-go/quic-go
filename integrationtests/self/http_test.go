@@ -24,7 +24,7 @@ import (
 	"github.com/onsi/gomega/gbytes"
 )
 
-var _ = Describe("HTTP tests", func() {
+var _ = Describe("HTTP/3 client tests", func() {
 	var (
 		mux            *http.ServeMux
 		client         *http.Client
@@ -376,4 +376,88 @@ var _ = Describe("HTTP tests", func() {
 			}
 		})
 	}
+})
+
+var _ = Describe("HTTP/3 roundtripper tests", func() {
+	getServer := func() *http3.Server {
+		mux := http.NewServeMux()
+		mux.HandleFunc("/tracing-id", func(w http.ResponseWriter, r *http.Request) {
+			defer GinkgoRecover()
+			ctx := w.(http3.Hijacker).StreamCreator().Context()
+			io.WriteString(w, fmt.Sprintf("%d", ctx.Value(quic.ConnectionTracingKey)))
+		})
+
+		return &http3.Server{
+			Handler:    mux,
+			TLSConfig:  testdata.GetTLSConfig(),
+			QuicConfig: getQuicConfig(nil),
+		}
+	}
+
+	It("reuses existing connections", func() {
+		server := getServer()
+		conn, err := net.ListenUDP("udp4", nil)
+		Expect(err).ToNot(HaveOccurred())
+		go func() {
+			defer GinkgoRecover()
+			server.Serve(conn)
+		}()
+		cl := &http.Client{
+			Transport: &http3.RoundTripper{
+				TLSClientConfig: &tls.Config{
+					RootCAs: testdata.GetRootCA(),
+				},
+				DisableCompression: true,
+				QuicConfig:         getQuicConfig(nil),
+			},
+		}
+		rsp, err := cl.Get(fmt.Sprintf("https://localhost:%d/tracing-id", conn.LocalAddr().(*net.UDPAddr).Port))
+		Expect(rsp.StatusCode).To(Equal(http.StatusOK))
+		Expect(err).ToNot(HaveOccurred())
+		id1, err := io.ReadAll(rsp.Body)
+		Expect(err).ToNot(HaveOccurred())
+		rsp, err = cl.Get(fmt.Sprintf("https://localhost:%d/tracing-id", conn.LocalAddr().(*net.UDPAddr).Port))
+		Expect(err).ToNot(HaveOccurred())
+		Expect(rsp.StatusCode).To(Equal(http.StatusOK))
+		id2, err := io.ReadAll(rsp.Body)
+		Expect(err).ToNot(HaveOccurred())
+		Expect(string(id1)).To(Equal(string(id2)))
+	})
+
+	It("handles failing connections", func() {
+		conn, err := net.ListenUDP("udp4", nil)
+		Expect(err).ToNot(HaveOccurred())
+		server := getServer()
+		go func() {
+			defer GinkgoRecover()
+			server.Serve(conn)
+		}()
+		cl := &http.Client{
+			Transport: &http3.RoundTripper{
+				TLSClientConfig: &tls.Config{
+					RootCAs: testdata.GetRootCA(),
+				},
+				DisableCompression: true,
+				QuicConfig:         getQuicConfig(nil),
+			},
+		}
+		rsp, err := cl.Get(fmt.Sprintf("https://localhost:%d/tracing-id", conn.LocalAddr().(*net.UDPAddr).Port))
+		Expect(rsp.StatusCode).To(Equal(http.StatusOK))
+		Expect(err).ToNot(HaveOccurred())
+		id1, err := io.ReadAll(rsp.Body)
+		Expect(err).ToNot(HaveOccurred())
+		Expect(server.Close()).To(Succeed())
+		time.Sleep(scaleDuration(100 * time.Millisecond)) // give the CONNECTION_CLOSE some time to arrive at the client
+		server = getServer()
+		go func() {
+			defer GinkgoRecover()
+			server.Serve(conn)
+		}()
+		rsp, err = cl.Get(fmt.Sprintf("https://localhost:%d/tracing-id", conn.LocalAddr().(*net.UDPAddr).Port))
+		Expect(err).ToNot(HaveOccurred())
+		Expect(rsp.StatusCode).To(Equal(http.StatusOK))
+		id2, err := io.ReadAll(rsp.Body)
+		Expect(err).ToNot(HaveOccurred())
+		Expect(string(id1)).ToNot(Equal(string(id2)))
+	})
 })
