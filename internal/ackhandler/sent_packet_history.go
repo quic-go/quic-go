@@ -2,6 +2,7 @@ package ackhandler
 
 import (
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/lucas-clemente/quic-go/internal/protocol"
@@ -17,11 +18,17 @@ type sentPacketHistory struct {
 	highestSent           protocol.PacketNumber
 }
 
+var packetElementPool sync.Pool
+
+func init() {
+	packetElementPool = *list.NewPool[*Packet]()
+}
+
 func newSentPacketHistory(rttStats *utils.RTTStats) *sentPacketHistory {
 	return &sentPacketHistory{
 		rttStats:              rttStats,
-		outstandingPacketList: list.New[*Packet](),
-		etcPacketList:         list.New[*Packet](),
+		outstandingPacketList: list.NewWithPool[*Packet](&packetElementPool),
+		etcPacketList:         list.NewWithPool[*Packet](&packetElementPool),
 		packetMap:             make(map[protocol.PacketNumber]*list.Element[*Packet]),
 		highestSent:           protocol.InvalidPacketNumber,
 	}
