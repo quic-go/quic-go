@@ -43,6 +43,10 @@ func (e *Element[T]) Prev() *Element[T] {
 	return nil
 }
 
+func (e *Element[T]) List() *List[T] {
+	return e.list
+}
+
 // List represents a doubly linked list.
 // The zero value for List is an empty list ready to use.
 type List[T any] struct {

@@ -108,8 +108,7 @@ func (h *sentPacketHistory) Remove(p protocol.PacketNumber) error {
 	if !ok {
 		return fmt.Errorf("packet %d not found in sent packet history", p)
 	}
-	h.outstandingPacketList.Remove(el)
-	h.etcPacketList.Remove(el)
+	el.List().Remove(el)
 	delete(h.packetMap, p)
 	return nil
 }
@@ -139,10 +138,7 @@ func (h *sentPacketHistory) DeclareLost(p *Packet) *Packet {
 	if !ok {
 		return nil
 	}
-	// try to remove it from both lists, as we don't know which one it currently belongs to.
-	// Remove is a no-op for elements that are not in the list.
-	h.outstandingPacketList.Remove(el)
-	h.etcPacketList.Remove(el)
+	el.List().Remove(el)
 	p.declaredLost = true
 	// move it to the correct position in the etc list (based on the packet number)
 	for el = h.etcPacketList.Back(); el != nil; el = el.Prev() {
