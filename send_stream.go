@@ -215,7 +215,11 @@ func (s *sendStream) popStreamFrame(maxBytes protocol.ByteCount) (*ackhandler.Fr
 	if f == nil {
 		return nil, hasMoreData
 	}
-	return &ackhandler.Frame{Frame: f, OnLost: s.queueRetransmission, OnAcked: s.frameAcked}, hasMoreData
+	af := ackhandler.GetFrame()
+	af.Frame = f
+	af.OnLost = s.queueRetransmission
+	af.OnAcked = s.frameAcked
+	return af, hasMoreData
 }
 
 func (s *sendStream) popNewOrRetransmittedStreamFrame(maxBytes protocol.ByteCount) (*wire.StreamFrame, bool /* has more data to send */) {

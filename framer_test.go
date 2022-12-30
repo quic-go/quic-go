@@ -64,7 +64,7 @@ var _ = Describe("Framer", func() {
 			ping := &wire.PingFrame{}
 			mdf := &wire.MaxDataFrame{MaximumData: 0x42}
 			framer.QueueControlFrame(mdf)
-			frames, length := framer.AppendControlFrames([]ackhandler.Frame{{Frame: ping}}, 1000)
+			frames, length := framer.AppendControlFrames([]*ackhandler.Frame{{Frame: ping}}, 1000)
 			Expect(frames).To(HaveLen(2))
 			Expect(frames[0].Frame).To(Equal(ping))
 			Expect(frames[1].Frame).To(Equal(mdf))
@@ -161,7 +161,7 @@ var _ = Describe("Framer", func() {
 			stream1.EXPECT().popStreamFrame(gomock.Any()).Return(&ackhandler.Frame{Frame: f}, false)
 			framer.AddActiveStream(id1)
 			mdf := &wire.MaxDataFrame{MaximumData: 1337}
-			frames := []ackhandler.Frame{{Frame: mdf}}
+			frames := []*ackhandler.Frame{{Frame: mdf}}
 			fs, length := framer.AppendStreamFrames(frames, 1000)
 			Expect(fs).To(HaveLen(2))
 			Expect(fs[0].Frame).To(Equal(mdf))
