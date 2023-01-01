@@ -210,16 +210,14 @@ func (s *Server) ListenAndServe() error {
 //
 // If s.Addr is blank, ":https" is used.
 func (s *Server) ListenAndServeTLS(certFile, keyFile string) error {
-	var err error
-	certs := make([]tls.Certificate, 1)
-	certs[0], err = tls.LoadX509KeyPair(certFile, keyFile)
+	cert, err := tls.LoadX509KeyPair(certFile, keyFile)
 	if err != nil {
 		return err
 	}
 	// We currently only use the cert-related stuff from tls.Config,
 	// so we don't need to make a full copy.
 	config := &tls.Config{
-		Certificates: certs,
+		Certificates: []tls.Certificate{cert},
 	}
 	return s.serveConn(config, nil)
 }
@@ -280,8 +278,10 @@ func (s *Server) serveConn(tlsConf *tls.Config, conn net.PacketConn) error {
 		quicConf.EnableDatagrams = true
 	}
 
-	var ln quic.EarlyListener
-	var err error
+	var (
+		err error
+		ln  quic.EarlyListener
+	)
 	if conn == nil {
 		addr := s.Addr
 		if addr == "" {
@@ -308,11 +308,11 @@ func (s *Server) serveListener(ln quic.EarlyListener) error {
 		if err != nil {
 			return err
 		}
-		go func() {
+		go func(conn quic.EarlyConnection) {
 			if err := s.handleConn(conn); err != nil {
 				s.logger.Debugf(err.Error())
 			}
-		}()
+		}(conn)
 	}
 }
 
@@ -321,12 +321,7 @@ func extractPort(addr string) (int, error) {
 	if err != nil {
 		return 0, err
 	}
-
-	portInt, err := net.LookupPort("tcp", portStr)
-	if err != nil {
-		return 0, err
-	}
-	return portInt, nil
+	return net.LookupPort("tcp", portStr)
 }
 
 func (s *Server) generateAltSvcHeader() {
@@ -446,7 +441,7 @@ func (s *Server) handleConn(conn quic.Connection) error {
 			}
 			return fmt.Errorf("accepting stream failed: %w", err)
 		}
-		go func() {
+		go func(str quic.Stream) {
 			rerr := s.handleRequest(conn, str, decoder, func() {
 				conn.CloseWithError(quic.ApplicationErrorCode(errorFrameUnexpected), "")
 			})
@@ -468,7 +463,7 @@ func (s *Server) handleConn(conn quic.Connection) error {
 				return
 			}
 			str.Close()
-		}()
+		}(str)
 	}
 }
 
@@ -614,9 +609,9 @@ func (s *Server) handleRequest(conn quic.Connection, str quic.Stream, decoder *q
 	}
 
 	if panicked {
-		r.WriteHeader(500)
+		r.WriteHeader(http.StatusInternalServerError)
 	} else {
-		r.WriteHeader(200)
+		r.WriteHeader(http.StatusOK)
 	}
 	// If the EOF was read by the handler, CancelRead() is a no-op.
 	str.CancelRead(quic.StreamErrorCode(errorNoError))
@@ -690,16 +685,14 @@ func ListenAndServeQUIC(addr, certFile, keyFile string, handler http.Handler) er
 // The correct Alt-Svc headers for QUIC are set.
 func ListenAndServe(addr, certFile, keyFile string, handler http.Handler) error {
 	// Load certs
-	var err error
-	certs := make([]tls.Certificate, 1)
-	certs[0], err = tls.LoadX509KeyPair(certFile, keyFile)
+	cert, err := tls.LoadX509KeyPair(certFile, keyFile)
 	if err != nil {
 		return err
 	}
 	// We currently only use the cert-related stuff from tls.Config,
 	// so we don't need to make a full copy.
 	config := &tls.Config{
-		Certificates: certs,
+		Certificates: []tls.Certificate{cert},
 	}
 
 	if addr == "" {
