@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"crypto"
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/tls"
@@ -22,6 +23,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"golang.org/x/crypto/ed25519"
 
 	"github.com/lucas-clemente/quic-go"
 	"github.com/lucas-clemente/quic-go/internal/utils"
@@ -152,7 +155,7 @@ var _ = BeforeSuite(func() {
 	}
 })
 
-func generateCA() (*x509.Certificate, *rsa.PrivateKey, error) {
+func generateCA() (*x509.Certificate, crypto.PrivateKey, error) {
 	certTempl := &x509.Certificate{
 		SerialNumber:          big.NewInt(2019),
 		Subject:               pkix.Name{},
@@ -163,11 +166,11 @@ func generateCA() (*x509.Certificate, *rsa.PrivateKey, error) {
 		KeyUsage:              x509.KeyUsageDigitalSignature | x509.KeyUsageCertSign,
 		BasicConstraintsValid: true,
 	}
-	caPrivateKey, err := rsa.GenerateKey(rand.Reader, 2048)
+	pub, priv, err := ed25519.GenerateKey(rand.Reader)
 	if err != nil {
 		return nil, nil, err
 	}
-	caBytes, err := x509.CreateCertificate(rand.Reader, certTempl, certTempl, &caPrivateKey.PublicKey, caPrivateKey)
+	caBytes, err := x509.CreateCertificate(rand.Reader, certTempl, certTempl, pub, priv)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -175,10 +178,10 @@ func generateCA() (*x509.Certificate, *rsa.PrivateKey, error) {
 	if err != nil {
 		return nil, nil, err
 	}
-	return ca, caPrivateKey, nil
+	return ca, priv, nil
 }
 
-func generateLeafCert(ca *x509.Certificate, caPrivateKey *rsa.PrivateKey) (*x509.Certificate, *rsa.PrivateKey, error) {
+func generateLeafCert(ca *x509.Certificate, caPriv crypto.PrivateKey) (*x509.Certificate, crypto.PrivateKey, error) {
 	certTempl := &x509.Certificate{
 		SerialNumber: big.NewInt(1),
 		DNSNames:     []string{"localhost"},
@@ -187,11 +190,11 @@ func generateLeafCert(ca *x509.Certificate, caPrivateKey *rsa.PrivateKey) (*x509
 		ExtKeyUsage:  []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth, x509.ExtKeyUsageServerAuth},
 		KeyUsage:     x509.KeyUsageDigitalSignature,
 	}
-	privKey, err := rsa.GenerateKey(rand.Reader, 2048)
+	pub, priv, err := ed25519.GenerateKey(rand.Reader)
 	if err != nil {
 		return nil, nil, err
 	}
-	certBytes, err := x509.CreateCertificate(rand.Reader, certTempl, ca, &privKey.PublicKey, caPrivateKey)
+	certBytes, err := x509.CreateCertificate(rand.Reader, certTempl, ca, pub, caPriv)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -199,12 +202,12 @@ func generateLeafCert(ca *x509.Certificate, caPrivateKey *rsa.PrivateKey) (*x509
 	if err != nil {
 		return nil, nil, err
 	}
-	return cert, privKey, nil
+	return cert, priv, nil
 }
 
 // getTLSConfigWithLongCertChain generates a tls.Config that uses a long certificate chain.
 // The Root CA used is the same as for the config returned from getTLSConfig().
-func generateTLSConfigWithLongCertChain(ca *x509.Certificate, caPrivateKey *rsa.PrivateKey) (*tls.Config, error) {
+func generateTLSConfigWithLongCertChain(ca *x509.Certificate, caPrivateKey crypto.PrivateKey) (*tls.Config, error) {
 	const chainLen = 7
 	certTempl := &x509.Certificate{
 		SerialNumber:          big.NewInt(2019),
