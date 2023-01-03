@@ -106,10 +106,6 @@ var (
 func init() {
 	flag.StringVar(&logFileName, "logfile", "", "log file")
 	flag.BoolVar(&enableQlog, "qlog", false, "enable qlog")
-}
-
-var _ = BeforeSuite(func() {
-	mrand.Seed(GinkgoRandomSeed())
 
 	ca, caPrivateKey, err := generateCA()
 	if err != nil {
@@ -138,6 +134,10 @@ var _ = BeforeSuite(func() {
 		RootCAs:    root,
 		NextProtos: []string{alpn},
 	}
+}
+
+var _ = BeforeSuite(func() {
+	mrand.Seed(GinkgoRandomSeed())
 
 	if enableQlog {
 		quicConfigTracer = qlog.NewTracer(func(p logging.Perspective, connectionID []byte) io.WriteCloser {
