@@ -78,8 +78,8 @@ var _ = Describe("Send Queue", func() {
 		written := make(chan struct{}, 100)
 		// now start sending out packets. This should free up queue space.
 		c.EXPECT().Write(gomock.Any()).DoAndReturn(func(b []byte) error {
-			<-write
 			written <- struct{}{}
+			<-write
 			return nil
 		}).AnyTimes()
 		// allow the first packet to be sent immediately
@@ -96,10 +96,15 @@ var _ = Describe("Send Queue", func() {
 		<-written
 
 		// now fill up the send queue
-		for i := 0; i < sendQueueCapacity+1; i++ {
+		for i := 0; i < sendQueueCapacity; i++ {
 			Expect(q.WouldBlock()).To(BeFalse())
 			q.Send(getPacket([]byte("foobar")))
 		}
+		// One more packet is queued when it's picked up by Run and written to the connection.
+		// In this test, it's blocked on write channel in the mocked Write call.
+		<-written
+		Eventually(q.WouldBlock()).Should(BeFalse())
+		q.Send(getPacket([]byte("foobar")))
 
 		Expect(q.WouldBlock()).To(BeTrue())
 		Consistently(q.Available()).ShouldNot(Receive())
