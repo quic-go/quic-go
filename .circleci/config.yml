@@ -16,6 +16,7 @@ executors:
 jobs:
   "test": &test
     executor: test-go119
+    resource_class: large
     steps:
       - checkout
       - run:
