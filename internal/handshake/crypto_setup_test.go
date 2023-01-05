@@ -95,7 +95,7 @@ var _ = Describe("Crypto Setup TLS", func() {
 			&wire.TransportParameters{StatelessResetToken: &token},
 			runner,
 			testdata.GetTLSConfig(),
-			false,
+			nil,
 			&utils.RTTStats{},
 			nil,
 			utils.DefaultLogger.WithPrefix("server"),
@@ -177,7 +177,7 @@ var _ = Describe("Crypto Setup TLS", func() {
 			&wire.TransportParameters{StatelessResetToken: &token},
 			runner,
 			testdata.GetTLSConfig(),
-			false,
+			nil,
 			&utils.RTTStats{},
 			nil,
 			utils.DefaultLogger.WithPrefix("server"),
@@ -218,7 +218,7 @@ var _ = Describe("Crypto Setup TLS", func() {
 			&wire.TransportParameters{StatelessResetToken: &token},
 			runner,
 			serverConf,
-			false,
+			nil,
 			&utils.RTTStats{},
 			nil,
 			utils.DefaultLogger.WithPrefix("server"),
@@ -253,7 +253,7 @@ var _ = Describe("Crypto Setup TLS", func() {
 			&wire.TransportParameters{StatelessResetToken: &token},
 			NewMockHandshakeRunner(mockCtrl),
 			serverConf,
-			false,
+			nil,
 			&utils.RTTStats{},
 			nil,
 			utils.DefaultLogger.WithPrefix("server"),
@@ -378,6 +378,10 @@ var _ = Describe("Crypto Setup TLS", func() {
 				protocol.VersionTLS,
 			)
 
+			var allow0RTT func() bool
+			if enable0RTT {
+				allow0RTT = func() bool { return true }
+			}
 			var sHandshakeComplete bool
 			sChunkChan, sInitialStream, sHandshakeStream := initStreams()
 			sErrChan := make(chan error, 1)
@@ -398,7 +402,7 @@ var _ = Describe("Crypto Setup TLS", func() {
 				serverTransportParameters,
 				sRunner,
 				serverConf,
-				enable0RTT,
+				allow0RTT,
 				serverRTTStats,
 				nil,
 				utils.DefaultLogger.WithPrefix("server"),
@@ -536,7 +540,7 @@ var _ = Describe("Crypto Setup TLS", func() {
 				sTransportParameters,
 				sRunner,
 				serverConf,
-				false,
+				nil,
 				&utils.RTTStats{},
 				nil,
 				utils.DefaultLogger.WithPrefix("server"),
@@ -591,7 +595,7 @@ var _ = Describe("Crypto Setup TLS", func() {
 					&wire.TransportParameters{StatelessResetToken: &token},
 					sRunner,
 					serverConf,
-					false,
+					nil,
 					&utils.RTTStats{},
 					nil,
 					utils.DefaultLogger.WithPrefix("server"),
@@ -650,7 +654,7 @@ var _ = Describe("Crypto Setup TLS", func() {
 					&wire.TransportParameters{StatelessResetToken: &token},
 					sRunner,
 					serverConf,
-					false,
+					nil,
 					&utils.RTTStats{},
 					nil,
 					utils.DefaultLogger.WithPrefix("server"),

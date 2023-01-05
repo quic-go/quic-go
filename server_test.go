@@ -286,14 +286,12 @@ var _ = Describe("Server", func() {
 					_ *Config,
 					_ *tls.Config,
 					_ *handshake.TokenGenerator,
-					enable0RTT bool,
 					_ bool,
 					_ logging.ConnectionTracer,
 					_ uint64,
 					_ utils.Logger,
 					_ protocol.VersionNumber,
 				) quicConn {
-					Expect(enable0RTT).To(BeFalse())
 					Expect(origDestConnID).To(Equal(protocol.ParseConnectionID([]byte{0xde, 0xad, 0xc0, 0xde})))
 					Expect(*retrySrcConnID).To(Equal(protocol.ParseConnectionID([]byte{0xde, 0xca, 0xfb, 0xad})))
 					Expect(clientDestConnID).To(Equal(hdr.DestConnectionID))
@@ -489,14 +487,12 @@ var _ = Describe("Server", func() {
 					_ *Config,
 					_ *tls.Config,
 					_ *handshake.TokenGenerator,
-					enable0RTT bool,
 					_ bool,
 					_ logging.ConnectionTracer,
 					_ uint64,
 					_ utils.Logger,
 					_ protocol.VersionNumber,
 				) quicConn {
-					Expect(enable0RTT).To(BeFalse())
 					Expect(origDestConnID).To(Equal(hdr.DestConnectionID))
 					Expect(retrySrcConnID).To(BeNil())
 					Expect(clientDestConnID).To(Equal(hdr.DestConnectionID))
@@ -549,7 +545,6 @@ var _ = Describe("Server", func() {
 					_ *Config,
 					_ *tls.Config,
 					_ *handshake.TokenGenerator,
-					_ bool,
 					_ bool,
 					_ logging.ConnectionTracer,
 					_ uint64,
@@ -604,7 +599,6 @@ var _ = Describe("Server", func() {
 					_ *tls.Config,
 					_ *handshake.TokenGenerator,
 					_ bool,
-					_ bool,
 					_ logging.ConnectionTracer,
 					_ uint64,
 					_ utils.Logger,
@@ -633,7 +627,6 @@ var _ = Describe("Server", func() {
 					_ *Config,
 					_ *tls.Config,
 					_ *handshake.TokenGenerator,
-					_ bool,
 					_ bool,
 					_ logging.ConnectionTracer,
 					_ uint64,
@@ -704,7 +697,6 @@ var _ = Describe("Server", func() {
 					_ *Config,
 					_ *tls.Config,
 					_ *handshake.TokenGenerator,
-					_ bool,
 					_ bool,
 					_ logging.ConnectionTracer,
 					_ uint64,
@@ -1011,7 +1003,6 @@ var _ = Describe("Server", func() {
 					_ *tls.Config,
 					_ *handshake.TokenGenerator,
 					_ bool,
-					_ bool,
 					_ logging.ConnectionTracer,
 					_ uint64,
 					_ utils.Logger,
@@ -1084,14 +1075,12 @@ var _ = Describe("Server", func() {
 				_ *Config,
 				_ *tls.Config,
 				_ *handshake.TokenGenerator,
-				enable0RTT bool,
 				_ bool,
 				_ logging.ConnectionTracer,
 				_ uint64,
 				_ utils.Logger,
 				_ protocol.VersionNumber,
 			) quicConn {
-				Expect(enable0RTT).To(BeTrue())
 				conn.EXPECT().handlePacket(gomock.Any())
 				conn.EXPECT().run().Do(func() {})
 				conn.EXPECT().earlyConnReady().Return(ready)
@@ -1127,7 +1116,6 @@ var _ = Describe("Server", func() {
 				_ *Config,
 				_ *tls.Config,
 				_ *handshake.TokenGenerator,
-				_ bool,
 				_ bool,
 				_ logging.ConnectionTracer,
 				_ uint64,
@@ -1190,7 +1178,6 @@ var _ = Describe("Server", func() {
 				_ *Config,
 				_ *tls.Config,
 				_ *handshake.TokenGenerator,
-				_ bool,
 				_ bool,
 				_ logging.ConnectionTracer,
 				_ uint64,

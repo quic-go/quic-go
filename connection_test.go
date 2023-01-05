@@ -101,7 +101,6 @@ var _ = Describe("Connection", func() {
 			nil, // tls.Config
 			tokenGenerator,
 			false,
-			false,
 			tracer,
 			1234,
 			utils.DefaultLogger,

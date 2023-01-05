@@ -88,7 +88,6 @@ type baseServer struct {
 		*Config,
 		*tls.Config,
 		*handshake.TokenGenerator,
-		bool, /* enable 0-RTT */
 		bool, /* client address validated by an address validation token */
 		logging.ConnectionTracer,
 		uint64,
@@ -506,7 +505,6 @@ func (s *baseServer) handleInitialImpl(p *receivedPacket, hdr *wire.Header) erro
 			s.config,
 			s.tlsConf,
 			s.tokenGenerator,
-			s.acceptEarlyConns,
 			clientAddrIsValid,
 			tracer,
 			tracingID,
