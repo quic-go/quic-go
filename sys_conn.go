@@ -22,6 +22,18 @@ type OOBCapablePacketConn interface {
 var _ OOBCapablePacketConn = &net.UDPConn{}
 
 func wrapConn(pc net.PacketConn) (rawConn, error) {
+	var bufferPool *packetBufferPool
+
+	bufPoolConn, ok := pc.(BufferPoolConn)
+	if ok {
+		bufferPool = &packetBufferPool{
+			pool: bufPoolConn.BufferPool(),
+		}
+	}
+	zcConn, ok := pc.(ZeroCopyConn)
+	if ok {
+		return &basicZeroCopyConn{ZeroCopyConn: zcConn}, nil
+	}
 	conn, ok := pc.(interface {
 		SyscallConn() (syscall.RawConn, error)
 	})
@@ -42,9 +54,12 @@ func wrapConn(pc net.PacketConn) (rawConn, error) {
 	c, ok := pc.(OOBCapablePacketConn)
 	if !ok {
 		utils.DefaultLogger.Infof("PacketConn is not a net.UDPConn. Disabling optimizations possible on UDP connections.")
-		return &basicConn{PacketConn: pc}, nil
+		return &basicConn{
+			PacketConn: pc,
+			pool:       bufferPool,
+		}, nil
 	}
-	return newConn(c)
+	return newConn(c, bufferPool)
 }
 
 // The basicConn is the most trivial implementation of a connection.
@@ -54,12 +69,18 @@ func wrapConn(pc net.PacketConn) (rawConn, error) {
 // * when the OS doesn't support OOB.
 type basicConn struct {
 	net.PacketConn
+
+	pool *packetBufferPool
 }
 
 var _ rawConn = &basicConn{}
 
+func (c *basicConn) BufferPool() *packetBufferPool {
+	return c.pool
+}
+
 func (c *basicConn) ReadPacket() (*receivedPacket, error) {
-	buffer := getPacketBuffer()
+	buffer := c.pool.getPacketBuffer()
 	// The packet size should not exceed protocol.MaxPacketBufferSize bytes
 	// If it does, we only read a truncated packet, which will then end up undecryptable
 	buffer.Data = buffer.Data[:protocol.MaxPacketBufferSize]
@@ -75,6 +96,6 @@ func (c *basicConn) ReadPacket() (*receivedPacket, error) {
 	}, nil
 }
 
-func (c *basicConn) WritePacket(b []byte, addr net.Addr, _ []byte) (n int, err error) {
+func (c *basicConn) WritePacket(b []byte, tag int, addr net.Addr, _ []byte) (n int, err error) {
 	return c.PacketConn.WriteTo(b, addr)
 }

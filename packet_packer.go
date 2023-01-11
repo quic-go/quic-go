@@ -148,6 +148,8 @@ type ackFrameSource interface {
 }
 
 type packetPacker struct {
+	pool *packetBufferPool
+
 	srcConnID     protocol.ConnectionID
 	getDestConnID func() protocol.ConnectionID
 
@@ -173,6 +175,7 @@ type packetPacker struct {
 var _ packer = &packetPacker{}
 
 func newPacketPacker(
+	pool *packetBufferPool,
 	srcConnID protocol.ConnectionID,
 	getDestConnID func() protocol.ConnectionID,
 	initialStream cryptoStream,
@@ -188,6 +191,7 @@ func newPacketPacker(
 	version protocol.VersionNumber,
 ) *packetPacker {
 	return &packetPacker{
+		pool:                pool,
 		cryptoSetup:         cryptoSetup,
 		getDestConnID:       getDestConnID,
 		srcConnID:           srcConnID,
@@ -289,7 +293,7 @@ func (p *packetPacker) packConnectionClose(
 		numPackets++
 	}
 	contents := make([]*packetContents, 0, numPackets)
-	buffer := getPacketBuffer()
+	buffer := p.pool.getPacketBuffer()
 	for i, encLevel := range encLevels {
 		if sealers[i] == nil {
 			continue
@@ -405,7 +409,7 @@ func (p *packetPacker) PackCoalescedPacket(onlyAck bool) (*coalescedPacket, erro
 		return nil, nil
 	}
 
-	buffer := getPacketBuffer()
+	buffer := p.pool.getPacketBuffer()
 	packet := &coalescedPacket{
 		buffer:  buffer,
 		packets: make([]*packetContents, 0, numPackets),
@@ -446,7 +450,7 @@ func (p *packetPacker) PackPacket(onlyAck bool) (*packedPacket, error) {
 	if payload == nil {
 		return nil, nil
 	}
-	buffer := getPacketBuffer()
+	buffer := p.pool.getPacketBuffer()
 	cont, err := p.appendPacket(buffer, hdr, payload, 0, protocol.Encryption1RTT, sealer, false)
 	if err != nil {
 		return nil, err
@@ -675,7 +679,7 @@ func (p *packetPacker) MaybePackProbePacket(encLevel protocol.EncryptionLevel) (
 	if encLevel == protocol.EncryptionInitial {
 		padding = p.initialPaddingLen(payload.frames, size)
 	}
-	buffer := getPacketBuffer()
+	buffer := p.pool.getPacketBuffer()
 	cont, err := p.appendPacket(buffer, hdr, payload, padding, encLevel, sealer, false)
 	if err != nil {
 		return nil, err
@@ -691,7 +695,7 @@ func (p *packetPacker) PackMTUProbePacket(ping ackhandler.Frame, size protocol.B
 		frames: []ackhandler.Frame{ping},
 		length: ping.Length(p.version),
 	}
-	buffer := getPacketBuffer()
+	buffer := p.pool.getPacketBuffer()
 	sealer, err := p.cryptoSetup.Get1RTTSealer()
 	if err != nil {
 		return nil, err

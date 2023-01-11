@@ -4,8 +4,11 @@ package quic
 
 import "net"
 
-func newConn(c net.PacketConn) (rawConn, error) {
-	return &basicConn{PacketConn: c}, nil
+func newConn(c net.PacketConn, pool *packetBufferPool) (rawConn, error) {
+	return &basicConn{
+		PacketConn: c,
+		pool:       pool,
+	}, nil
 }
 
 func inspectReadBuffer(interface{}) (int, error) {

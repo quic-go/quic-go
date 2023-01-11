@@ -77,6 +77,7 @@ type baseServer struct {
 
 	// set as a member, so they can be set in the tests
 	newConn func(
+		*packetBufferPool,
 		sendConn,
 		connRunner,
 		protocol.ConnectionID, /* original dest connection ID */
@@ -494,6 +495,7 @@ func (s *baseServer) handleInitialImpl(p *receivedPacket, hdr *wire.Header) erro
 			)
 		}
 		conn = s.newConn(
+			s.conn.BufferPool(),
 			newSendConn(s.conn, p.remoteAddr, p.info),
 			s.connHandler,
 			origDestConnID,
@@ -578,7 +580,7 @@ func (s *baseServer) sendRetry(remoteAddr net.Addr, hdr *wire.Header, info *pack
 		replyHdr.Log(s.logger)
 	}
 
-	packetBuffer := getPacketBuffer()
+	packetBuffer := s.conn.BufferPool().getPacketBuffer()
 	defer packetBuffer.Release()
 	buf := bytes.NewBuffer(packetBuffer.Data)
 	if err := replyHdr.Write(buf, hdr.Version); err != nil {
@@ -590,7 +592,7 @@ func (s *baseServer) sendRetry(remoteAddr net.Addr, hdr *wire.Header, info *pack
 	if s.config.Tracer != nil {
 		s.config.Tracer.SentPacket(remoteAddr, &replyHdr.Header, protocol.ByteCount(buf.Len()), nil)
 	}
-	_, err = s.conn.WritePacket(buf.Bytes(), remoteAddr, info.OOB())
+	_, err = s.conn.WritePacket(buf.Bytes(), packetBuffer.Tag, remoteAddr, info.OOB())
 	return err
 }
 
@@ -628,7 +630,7 @@ func (s *baseServer) sendConnectionRefused(remoteAddr net.Addr, hdr *wire.Header
 
 // sendError sends the error as a response to the packet received with header hdr
 func (s *baseServer) sendError(remoteAddr net.Addr, hdr *wire.Header, sealer handshake.LongHeaderSealer, errorCode qerr.TransportErrorCode, info *packetInfo) error {
-	packetBuffer := getPacketBuffer()
+	packetBuffer := s.conn.BufferPool().getPacketBuffer()
 	defer packetBuffer.Release()
 	buf := bytes.NewBuffer(packetBuffer.Data)
 
@@ -668,7 +670,7 @@ func (s *baseServer) sendError(remoteAddr net.Addr, hdr *wire.Header, sealer han
 	if s.config.Tracer != nil {
 		s.config.Tracer.SentPacket(remoteAddr, &replyHdr.Header, protocol.ByteCount(len(raw)), []logging.Frame{ccf})
 	}
-	_, err = s.conn.WritePacket(raw, remoteAddr, info.OOB())
+	_, err = s.conn.WritePacket(raw, packetBuffer.Tag, remoteAddr, info.OOB())
 	return err
 }
 
@@ -679,7 +681,7 @@ func (s *baseServer) sendVersionNegotiationPacket(remote net.Addr, src, dest pro
 	if s.config.Tracer != nil {
 		s.config.Tracer.SentVersionNegotiationPacket(remote, src, dest, s.config.Versions)
 	}
-	if _, err := s.conn.WritePacket(data, remote, oob); err != nil {
+	if _, err := s.conn.WritePacket(data, -1, remote, oob); err != nil {
 		s.logger.Debugf("Error sending Version Negotiation: %s", err)
 	}
 }

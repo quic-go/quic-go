@@ -29,7 +29,7 @@ var _ = Describe("Send Queue", func() {
 		q.Send(p)
 
 		written := make(chan struct{})
-		c.EXPECT().Write([]byte("foobar")).Do(func([]byte) { close(written) })
+		c.EXPECT().Write([]byte("foobar"), gomock.Any()).Do(func([]byte) { close(written) })
 		done := make(chan struct{})
 		go func() {
 			defer GinkgoRecover()
@@ -57,7 +57,7 @@ var _ = Describe("Send Queue", func() {
 		Consistently(q.Available()).ShouldNot(Receive())
 
 		// now start sending out packets. This should free up queue space.
-		c.EXPECT().Write(gomock.Any()).MinTimes(1).MaxTimes(2)
+		c.EXPECT().Write(gomock.Any(), gomock.Any()).MinTimes(1).MaxTimes(2)
 		done := make(chan struct{})
 		go func() {
 			defer GinkgoRecover()
@@ -77,7 +77,7 @@ var _ = Describe("Send Queue", func() {
 		write := make(chan struct{}, 1)
 		written := make(chan struct{}, 100)
 		// now start sending out packets. This should free up queue space.
-		c.EXPECT().Write(gomock.Any()).DoAndReturn(func(b []byte) error {
+		c.EXPECT().Write(gomock.Any(), gomock.Any()).DoAndReturn(func(b []byte) error {
 			<-write
 			written <- struct{}{}
 			return nil
@@ -125,7 +125,7 @@ var _ = Describe("Send Queue", func() {
 
 		// the run loop exits if there is a write error
 		testErr := errors.New("test error")
-		c.EXPECT().Write(gomock.Any()).Return(testErr)
+		c.EXPECT().Write(gomock.Any(), gomock.Any()).Return(testErr)
 		q.Send(getPacket([]byte("foobar")))
 		Eventually(done).Should(BeClosed())
 
@@ -142,7 +142,7 @@ var _ = Describe("Send Queue", func() {
 
 	It("blocks Close() until the packet has been sent out", func() {
 		written := make(chan []byte)
-		c.EXPECT().Write(gomock.Any()).Do(func(p []byte) { written <- p })
+		c.EXPECT().Write(gomock.Any(), gomock.Any()).Do(func(p []byte) { written <- p })
 		done := make(chan struct{})
 		go func() {
 			defer GinkgoRecover()

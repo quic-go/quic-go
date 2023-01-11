@@ -32,6 +32,7 @@ var _ = Describe("Client", func() {
 		config          *Config
 
 		originalClientConnConstructor func(
+			pool *packetBufferPool,
 			conn sendConn,
 			runner connRunner,
 			destConnID protocol.ConnectionID,
@@ -113,6 +114,7 @@ var _ = Describe("Client", func() {
 
 			remoteAddrChan := make(chan string, 1)
 			newClientConnection = func(
+				_ *packetBufferPool,
 				sconn sendConn,
 				_ connRunner,
 				_ protocol.ConnectionID,
@@ -146,6 +148,7 @@ var _ = Describe("Client", func() {
 
 			hostnameChan := make(chan string, 1)
 			newClientConnection = func(
+				_ *packetBufferPool,
 				_ sendConn,
 				_ connRunner,
 				_ protocol.ConnectionID,
@@ -179,6 +182,7 @@ var _ = Describe("Client", func() {
 
 			hostnameChan := make(chan string, 1)
 			newClientConnection = func(
+				_ *packetBufferPool,
 				_ sendConn,
 				_ connRunner,
 				_ protocol.ConnectionID,
@@ -218,6 +222,7 @@ var _ = Describe("Client", func() {
 
 			run := make(chan struct{})
 			newClientConnection = func(
+				_ *packetBufferPool,
 				_ sendConn,
 				runner connRunner,
 				_ protocol.ConnectionID,
@@ -261,6 +266,7 @@ var _ = Describe("Client", func() {
 			readyChan := make(chan struct{})
 			done := make(chan struct{})
 			newClientConnection = func(
+				_ *packetBufferPool,
 				_ sendConn,
 				runner connRunner,
 				_ protocol.ConnectionID,
@@ -309,6 +315,7 @@ var _ = Describe("Client", func() {
 
 			testErr := errors.New("early handshake error")
 			newClientConnection = func(
+				_ *packetBufferPool,
 				_ sendConn,
 				_ connRunner,
 				_ protocol.ConnectionID,
@@ -352,6 +359,7 @@ var _ = Describe("Client", func() {
 			})
 			conn.EXPECT().HandshakeComplete().Return(context.Background())
 			newClientConnection = func(
+				_ *packetBufferPool,
 				_ sendConn,
 				_ connRunner,
 				_ protocol.ConnectionID,
@@ -404,6 +412,7 @@ var _ = Describe("Client", func() {
 			connCreated := make(chan struct{})
 			conn := NewMockQuicConn(mockCtrl)
 			newClientConnection = func(
+				_ *packetBufferPool,
 				connP sendConn,
 				_ connRunner,
 				_ protocol.ConnectionID,
@@ -438,7 +447,7 @@ var _ = Describe("Client", func() {
 			Eventually(connCreated).Should(BeClosed())
 
 			// check that the connection is not closed
-			Expect(sconn.Write([]byte("foobar"))).To(Succeed())
+			Expect(sconn.Write([]byte("foobar"), -1)).To(Succeed())
 
 			manager.EXPECT().Destroy()
 			close(run)
@@ -525,6 +534,7 @@ var _ = Describe("Client", func() {
 			var version protocol.VersionNumber
 			var conf *Config
 			newClientConnection = func(
+				_ *packetBufferPool,
 				connP sendConn,
 				_ connRunner,
 				_ protocol.ConnectionID,
@@ -565,6 +575,7 @@ var _ = Describe("Client", func() {
 
 			var counter int
 			newClientConnection = func(
+				_ *packetBufferPool,
 				_ sendConn,
 				_ connRunner,
 				_ protocol.ConnectionID,

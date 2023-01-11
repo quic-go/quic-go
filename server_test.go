@@ -275,6 +275,7 @@ var _ = Describe("Server", func() {
 				tracer.EXPECT().TracerForConnection(gomock.Any(), protocol.PerspectiveServer, protocol.ParseConnectionID([]byte{0xde, 0xad, 0xc0, 0xde}))
 				conn := NewMockQuicConn(mockCtrl)
 				serv.newConn = func(
+					_ *packetBufferPool,
 					_ sendConn,
 					_ connRunner,
 					origDestConnID protocol.ConnectionID,
@@ -476,6 +477,7 @@ var _ = Describe("Server", func() {
 
 				conn := NewMockQuicConn(mockCtrl)
 				serv.newConn = func(
+					_ *packetBufferPool,
 					_ sendConn,
 					_ connRunner,
 					origDestConnID protocol.ConnectionID,
@@ -534,6 +536,7 @@ var _ = Describe("Server", func() {
 				acceptConn := make(chan struct{})
 				var counter uint32 // to be used as an atomic, so we query it in Eventually
 				serv.newConn = func(
+					_ *packetBufferPool,
 					_ sendConn,
 					runner connRunner,
 					_ protocol.ConnectionID,
@@ -587,6 +590,7 @@ var _ = Describe("Server", func() {
 				var createdConn bool
 				conn := NewMockQuicConn(mockCtrl)
 				serv.newConn = func(
+					_ *packetBufferPool,
 					_ sendConn,
 					runner connRunner,
 					_ protocol.ConnectionID,
@@ -616,6 +620,7 @@ var _ = Describe("Server", func() {
 
 			It("rejects new connection attempts if the accept queue is full", func() {
 				serv.newConn = func(
+					_ *packetBufferPool,
 					_ sendConn,
 					runner connRunner,
 					_ protocol.ConnectionID,
@@ -686,6 +691,7 @@ var _ = Describe("Server", func() {
 				connCreated := make(chan struct{})
 				conn := NewMockQuicConn(mockCtrl)
 				serv.newConn = func(
+					_ *packetBufferPool,
 					_ sendConn,
 					runner connRunner,
 					_ protocol.ConnectionID,
@@ -991,6 +997,7 @@ var _ = Describe("Server", func() {
 
 				ctx, cancel := context.WithCancel(context.Background()) // handshake context
 				serv.newConn = func(
+					_ *packetBufferPool,
 					_ sendConn,
 					runner connRunner,
 					_ protocol.ConnectionID,
@@ -1064,6 +1071,7 @@ var _ = Describe("Server", func() {
 
 			ready := make(chan struct{})
 			serv.newConn = func(
+				_ *packetBufferPool,
 				_ sendConn,
 				runner connRunner,
 				_ protocol.ConnectionID,
@@ -1105,6 +1113,7 @@ var _ = Describe("Server", func() {
 			senderAddr := &net.UDPAddr{IP: net.IPv4(1, 2, 3, 4), Port: 42}
 
 			serv.newConn = func(
+				_ *packetBufferPool,
 				_ sendConn,
 				runner connRunner,
 				_ protocol.ConnectionID,
@@ -1167,6 +1176,7 @@ var _ = Describe("Server", func() {
 			connCreated := make(chan struct{})
 			conn := NewMockQuicConn(mockCtrl)
 			serv.newConn = func(
+				_ *packetBufferPool,
 				_ sendConn,
 				runner connRunner,
 				_ protocol.ConnectionID,
