@@ -218,7 +218,7 @@ func (s *receiveStream) cancelReadImpl(errorCode qerr.StreamErrorCode) bool /* c
 		return false
 	}
 	s.canceledRead = true
-	s.cancelReadErr = fmt.Errorf("Read on stream %d canceled with error code %d", s.streamID, errorCode)
+	s.cancelReadErr = &StreamError{s.streamID, errorCode, StreamErrorActionRead}
 	s.signalRead()
 	s.sender.queueControlFrame(&wire.StopSendingFrame{
 		StreamID:  s.streamID,

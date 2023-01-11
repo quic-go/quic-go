@@ -416,7 +416,7 @@ func (s *sendStream) Close() error {
 }
 
 func (s *sendStream) CancelWrite(errorCode StreamErrorCode) {
-	s.cancelWriteImpl(errorCode, fmt.Errorf("Write on stream %d canceled with error code %d", s.streamID, errorCode))
+	s.cancelWriteImpl(errorCode, &StreamError{s.streamID, errorCode, StreamErrorActionWrite})
 }
 
 // must be called after locking the mutex
