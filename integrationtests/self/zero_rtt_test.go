@@ -246,7 +246,7 @@ var _ = Describe("0-RTT", func() {
 			It("waits for a connection until the handshake is done", func() {
 				tlsConf, clientConf := dialAndReceiveSessionTicket(nil)
 
-				zeroRTTData := GeneratePRData(2 * 1100) // 2 packets
+				zeroRTTData := GeneratePRData(5 << 10)
 				oneRTTData := PRData
 
 				tracer := newPacketTracer()
@@ -262,7 +262,7 @@ var _ = Describe("0-RTT", func() {
 				Expect(err).ToNot(HaveOccurred())
 				defer ln.Close()
 
-				// now dial the second connection, and use 0-RTT to send some data
+				// now accept the second connection, and receive the 0-RTT data
 				go func() {
 					defer GinkgoRecover()
 					conn, err := ln.Accept(context.Background())
@@ -280,7 +280,7 @@ var _ = Describe("0-RTT", func() {
 					Expect(conn.CloseWithError(0, "")).To(Succeed())
 				}()
 
-				proxy, num0RTTPackets := runCountingProxy(ln.Addr().(*net.UDPAddr).Port)
+				proxy, _ := runCountingProxy(ln.Addr().(*net.UDPAddr).Port)
 				defer proxy.Close()
 
 				conn, err := quic.DialAddrEarly(
@@ -289,17 +289,11 @@ var _ = Describe("0-RTT", func() {
 					getQuicConfig(&quic.Config{Versions: []protocol.VersionNumber{version}}),
 				)
 				Expect(err).ToNot(HaveOccurred())
-				sent0RTT := make(chan struct{})
-				go func() {
-					defer GinkgoRecover()
-					defer close(sent0RTT)
-					str, err := conn.OpenUniStream()
-					Expect(err).ToNot(HaveOccurred())
-					_, err = str.Write(zeroRTTData)
-					Expect(err).ToNot(HaveOccurred())
-					Expect(str.Close()).To(Succeed())
-				}()
-				Eventually(sent0RTT).Should(BeClosed())
+				firstStr, err := conn.OpenUniStream()
+				Expect(err).ToNot(HaveOccurred())
+				_, err = firstStr.Write(zeroRTTData)
+				Expect(err).ToNot(HaveOccurred())
+				Expect(firstStr.Close()).To(Succeed())
 
 				// wait for the handshake to complete
 				Eventually(conn.HandshakeComplete().Done()).Should(BeClosed())
@@ -310,10 +304,23 @@ var _ = Describe("0-RTT", func() {
 				Expect(str.Close()).To(Succeed())
 				<-conn.Context().Done()
 
-				num0RTT := atomic.LoadUint32(num0RTTPackets)
-				fmt.Fprintf(GinkgoWriter, "Sent %d 0-RTT packets.", num0RTT)
-				Expect(num0RTT).To(Or(BeEquivalentTo(2), BeEquivalentTo(3))) // the FIN might be sent in a separate packet
-				Expect(get0RTTPackets(tracer.getRcvdLongHeaderPackets())).To(HaveLen(int(num0RTT)))
+				// check that 0-RTT packets only contain STREAM frames for the first stream
+				var num0RTT int
+				for _, p := range tracer.getRcvdLongHeaderPackets() {
+					if p.hdr.Header.Type != protocol.PacketType0RTT {
+						continue
+					}
+					for _, f := range p.frames {
+						sf, ok := f.(*logging.StreamFrame)
+						if !ok {
+							continue
+						}
+						num0RTT++
+						Expect(sf.StreamID).To(Equal(firstStr.StreamID()))
+					}
+				}
+				fmt.Fprintf(GinkgoWriter, "received %d STREAM frames in 0-RTT packets\n", num0RTT)
+				Expect(num0RTT).ToNot(BeZero())
 			})
 
 			It("transfers 0-RTT data, when 0-RTT packets are lost", func() {
