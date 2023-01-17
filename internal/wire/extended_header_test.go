@@ -14,7 +14,7 @@ import (
 )
 
 var _ = Describe("Header", func() {
-	const versionIETFHeader = protocol.VersionTLS // a QUIC version that uses the IETF Header format
+	const versionIETFHeader = protocol.Version1
 
 	Context("Writing", func() {
 		var buf *bytes.Buffer
@@ -29,7 +29,6 @@ var _ = Describe("Header", func() {
 			It("writes", func() {
 				Expect((&ExtendedHeader{
 					Header: Header{
-						IsLongHeader:     true,
 						Type:             protocol.PacketTypeHandshake,
 						DestConnectionID: protocol.ParseConnectionID([]byte{0xde, 0xad, 0xbe, 0xef, 0xca, 0xfe}),
 						SrcConnectionID:  protocol.ParseConnectionID([]byte{0xde, 0xca, 0xfb, 0xad, 0x0, 0x0, 0x13, 0x37}),
@@ -55,7 +54,6 @@ var _ = Describe("Header", func() {
 			It("writes a header with a 20 byte connection ID", func() {
 				err := (&ExtendedHeader{
 					Header: Header{
-						IsLongHeader:     true,
 						SrcConnectionID:  srcConnID,
 						DestConnectionID: protocol.ParseConnectionID([]byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20}), // connection IDs must be at most 20 bytes long
 						Version:          0x1020304,
@@ -72,10 +70,9 @@ var _ = Describe("Header", func() {
 				token := []byte("Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.")
 				Expect((&ExtendedHeader{
 					Header: Header{
-						IsLongHeader: true,
-						Version:      0x1020304,
-						Type:         protocol.PacketTypeInitial,
-						Token:        token,
+						Version: 0x1020304,
+						Type:    protocol.PacketTypeInitial,
+						Token:   token,
 					},
 					PacketNumber:    0xdecafbad,
 					PacketNumberLen: protocol.PacketNumberLen4,
@@ -88,10 +85,9 @@ var _ = Describe("Header", func() {
 			It("uses a 2-byte encoding for the length on Initial packets", func() {
 				Expect((&ExtendedHeader{
 					Header: Header{
-						IsLongHeader: true,
-						Version:      0x1020304,
-						Type:         protocol.PacketTypeInitial,
-						Length:       37,
+						Version: 0x1020304,
+						Type:    protocol.PacketTypeInitial,
+						Length:  37,
 					},
 					PacketNumber:    0xdecafbad,
 					PacketNumberLen: protocol.PacketNumberLen4,
@@ -104,10 +100,9 @@ var _ = Describe("Header", func() {
 			It("writes a Retry packet", func() {
 				token := []byte("Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.")
 				Expect((&ExtendedHeader{Header: Header{
-					IsLongHeader: true,
-					Version:      protocol.Version1,
-					Type:         protocol.PacketTypeRetry,
-					Token:        token,
+					Version: protocol.Version1,
+					Type:    protocol.PacketTypeRetry,
+					Token:   token,
 				}}).Write(buf, versionIETFHeader)).To(Succeed())
 				expected := []byte{0xc0 | 0b11<<4}
 				expected = appendVersion(expected, protocol.Version1)
@@ -122,9 +117,8 @@ var _ = Describe("Header", func() {
 			It("writes an Initial", func() {
 				Expect((&ExtendedHeader{
 					Header: Header{
-						IsLongHeader: true,
-						Version:      protocol.Version2,
-						Type:         protocol.PacketTypeInitial,
+						Version: protocol.Version2,
+						Type:    protocol.PacketTypeInitial,
 					},
 					PacketNumber:    0xdecafbad,
 					PacketNumberLen: protocol.PacketNumberLen4,
@@ -135,10 +129,9 @@ var _ = Describe("Header", func() {
 			It("writes a Retry packet", func() {
 				token := []byte("Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.")
 				Expect((&ExtendedHeader{Header: Header{
-					IsLongHeader: true,
-					Version:      protocol.Version2,
-					Type:         protocol.PacketTypeRetry,
-					Token:        token,
+					Version: protocol.Version2,
+					Type:    protocol.PacketTypeRetry,
+					Token:   token,
 				}}).Write(buf, versionIETFHeader)).To(Succeed())
 				expected := []byte{0xc0 | 0b11<<4}
 				expected = appendVersion(expected, protocol.Version2)
@@ -151,9 +144,8 @@ var _ = Describe("Header", func() {
 			It("writes a Handshake Packet", func() {
 				Expect((&ExtendedHeader{
 					Header: Header{
-						IsLongHeader: true,
-						Version:      protocol.Version2,
-						Type:         protocol.PacketTypeHandshake,
+						Version: protocol.Version2,
+						Type:    protocol.PacketTypeHandshake,
 					},
 					PacketNumber:    0xdecafbad,
 					PacketNumberLen: protocol.PacketNumberLen4,
@@ -164,82 +156,13 @@ var _ = Describe("Header", func() {
 			It("writes a 0-RTT Packet", func() {
 				Expect((&ExtendedHeader{
 					Header: Header{
-						IsLongHeader: true,
-						Version:      protocol.Version2,
-						Type:         protocol.PacketType0RTT,
+						Version: protocol.Version2,
+						Type:    protocol.PacketType0RTT,
 					},
 					PacketNumber:    0xdecafbad,
 					PacketNumberLen: protocol.PacketNumberLen4,
 				}).Write(buf, protocol.Version2)).To(Succeed())
 				Expect(buf.Bytes()[0]>>4&0b11 == 0b10)
-			})
-		})
-
-		Context("short header", func() {
-			It("writes a header with connection ID", func() {
-				Expect((&ExtendedHeader{
-					Header: Header{
-						DestConnectionID: protocol.ParseConnectionID([]byte{0xde, 0xad, 0xbe, 0xef, 0xca, 0xfe, 0x13, 0x37}),
-					},
-					PacketNumberLen: protocol.PacketNumberLen1,
-					PacketNumber:    0x42,
-				}).Write(buf, versionIETFHeader)).To(Succeed())
-				Expect(buf.Bytes()).To(Equal([]byte{
-					0x40,
-					0xde, 0xad, 0xbe, 0xef, 0xca, 0xfe, 0x13, 0x37, // connection ID
-					0x42, // packet number
-				}))
-			})
-
-			It("writes a header without connection ID", func() {
-				Expect((&ExtendedHeader{
-					PacketNumberLen: protocol.PacketNumberLen1,
-					PacketNumber:    0x42,
-				}).Write(buf, versionIETFHeader)).To(Succeed())
-				Expect(buf.Bytes()).To(Equal([]byte{
-					0x40,
-					0x42, // packet number
-				}))
-			})
-
-			It("writes a header with a 2 byte packet number", func() {
-				Expect((&ExtendedHeader{
-					PacketNumberLen: protocol.PacketNumberLen2,
-					PacketNumber:    0x765,
-				}).Write(buf, versionIETFHeader)).To(Succeed())
-				expected := []byte{0x40 | 0x1}
-				expected = append(expected, []byte{0x7, 0x65}...) // packet number
-				Expect(buf.Bytes()).To(Equal(expected))
-			})
-
-			It("writes a header with a 4 byte packet number", func() {
-				Expect((&ExtendedHeader{
-					PacketNumberLen: protocol.PacketNumberLen4,
-					PacketNumber:    0x12345678,
-				}).Write(buf, versionIETFHeader)).To(Succeed())
-				expected := []byte{0x40 | 0x3}
-				expected = append(expected, []byte{0x12, 0x34, 0x56, 0x78}...)
-				Expect(buf.Bytes()).To(Equal(expected))
-			})
-
-			It("errors when given an invalid packet number length", func() {
-				err := (&ExtendedHeader{
-					PacketNumberLen: 5,
-					PacketNumber:    0xdecafbad,
-				}).Write(buf, versionIETFHeader)
-				Expect(err).To(MatchError("invalid packet number length: 5"))
-			})
-
-			It("writes the Key Phase Bit", func() {
-				Expect((&ExtendedHeader{
-					KeyPhase:        protocol.KeyPhaseOne,
-					PacketNumberLen: protocol.PacketNumberLen1,
-					PacketNumber:    0x42,
-				}).Write(buf, versionIETFHeader)).To(Succeed())
-				Expect(buf.Bytes()).To(Equal([]byte{
-					0x40 | 0x4,
-					0x42, // packet number
-				}))
 			})
 		})
 	})
@@ -254,7 +177,6 @@ var _ = Describe("Header", func() {
 		It("has the right length for the Long Header, for a short length", func() {
 			h := &ExtendedHeader{
 				Header: Header{
-					IsLongHeader:     true,
 					Type:             protocol.PacketTypeHandshake,
 					DestConnectionID: protocol.ParseConnectionID([]byte{1, 2, 3, 4, 5, 6, 7, 8}),
 					SrcConnectionID:  protocol.ParseConnectionID([]byte{1, 2, 3, 4, 5, 6, 7, 8}),
@@ -271,7 +193,6 @@ var _ = Describe("Header", func() {
 		It("has the right length for the Long Header, for a long length", func() {
 			h := &ExtendedHeader{
 				Header: Header{
-					IsLongHeader:     true,
 					Type:             protocol.PacketTypeHandshake,
 					DestConnectionID: protocol.ParseConnectionID([]byte{1, 2, 3, 4, 5, 6, 7, 8}),
 					SrcConnectionID:  protocol.ParseConnectionID([]byte{1, 2, 3, 4, 5, 6, 7, 8}),
@@ -288,7 +209,6 @@ var _ = Describe("Header", func() {
 		It("has the right length for an Initial that has a short length", func() {
 			h := &ExtendedHeader{
 				Header: Header{
-					IsLongHeader:     true,
 					Type:             protocol.PacketTypeInitial,
 					DestConnectionID: protocol.ParseConnectionID([]byte{1, 2, 3, 4, 5, 6, 7, 8}),
 					SrcConnectionID:  protocol.ParseConnectionID([]byte{1, 2, 3, 4}),
@@ -305,7 +225,6 @@ var _ = Describe("Header", func() {
 		It("has the right length for an Initial not containing a Token", func() {
 			h := &ExtendedHeader{
 				Header: Header{
-					IsLongHeader:     true,
 					Type:             protocol.PacketTypeInitial,
 					DestConnectionID: protocol.ParseConnectionID([]byte{1, 2, 3, 4, 5, 6, 7, 8}),
 					SrcConnectionID:  protocol.ParseConnectionID([]byte{1, 2, 3, 4}),
@@ -322,7 +241,6 @@ var _ = Describe("Header", func() {
 		It("has the right length for an Initial containing a Token", func() {
 			h := &ExtendedHeader{
 				Header: Header{
-					IsLongHeader:     true,
 					DestConnectionID: protocol.ParseConnectionID([]byte{1, 2, 3, 4, 5, 6, 7, 8}),
 					SrcConnectionID:  protocol.ParseConnectionID([]byte{1, 2, 3, 4}),
 					Type:             protocol.PacketTypeInitial,
@@ -335,39 +253,6 @@ var _ = Describe("Header", func() {
 			Expect(h.GetLength(versionIETFHeader)).To(BeEquivalentTo(expectedLen))
 			Expect(h.Write(buf, versionIETFHeader)).To(Succeed())
 			Expect(buf.Len()).To(Equal(expectedLen))
-		})
-
-		It("has the right length for a Short Header containing a connection ID", func() {
-			h := &ExtendedHeader{
-				Header: Header{
-					DestConnectionID: protocol.ParseConnectionID([]byte{1, 2, 3, 4, 5, 6, 7, 8}),
-				},
-				PacketNumberLen: protocol.PacketNumberLen1,
-			}
-			Expect(h.GetLength(versionIETFHeader)).To(Equal(protocol.ByteCount(1 + 8 + 1)))
-			Expect(h.Write(buf, versionIETFHeader)).To(Succeed())
-			Expect(buf.Len()).To(Equal(10))
-		})
-
-		It("has the right length for a short header without a connection ID", func() {
-			h := &ExtendedHeader{PacketNumberLen: protocol.PacketNumberLen1}
-			Expect(h.GetLength(versionIETFHeader)).To(Equal(protocol.ByteCount(1 + 1)))
-			Expect(h.Write(buf, versionIETFHeader)).To(Succeed())
-			Expect(buf.Len()).To(Equal(2))
-		})
-
-		It("has the right length for a short header with a 2 byte packet number", func() {
-			h := &ExtendedHeader{PacketNumberLen: protocol.PacketNumberLen2}
-			Expect(h.GetLength(versionIETFHeader)).To(Equal(protocol.ByteCount(1 + 2)))
-			Expect(h.Write(buf, versionIETFHeader)).To(Succeed())
-			Expect(buf.Len()).To(Equal(3))
-		})
-
-		It("has the right length for a short header with a 5 byte packet number", func() {
-			h := &ExtendedHeader{PacketNumberLen: protocol.PacketNumberLen4}
-			Expect(h.GetLength(versionIETFHeader)).To(Equal(protocol.ByteCount(1 + 4)))
-			Expect(h.Write(buf, versionIETFHeader)).To(Succeed())
-			Expect(buf.Len()).To(Equal(5))
 		})
 	})
 
@@ -391,7 +276,6 @@ var _ = Describe("Header", func() {
 		It("logs Long Headers", func() {
 			(&ExtendedHeader{
 				Header: Header{
-					IsLongHeader:     true,
 					DestConnectionID: protocol.ParseConnectionID([]byte{0xde, 0xad, 0xbe, 0xef, 0xca, 0xfe, 0x13, 0x37}),
 					SrcConnectionID:  protocol.ParseConnectionID([]byte{0xde, 0xca, 0xfb, 0xad, 0x013, 0x37, 0x13, 0x37}),
 					Type:             protocol.PacketTypeHandshake,
@@ -407,7 +291,6 @@ var _ = Describe("Header", func() {
 		It("logs Initial Packets with a Token", func() {
 			(&ExtendedHeader{
 				Header: Header{
-					IsLongHeader:     true,
 					DestConnectionID: protocol.ParseConnectionID([]byte{0xca, 0xfe, 0x13, 0x37}),
 					SrcConnectionID:  protocol.ParseConnectionID([]byte{0xde, 0xca, 0xfb, 0xad}),
 					Type:             protocol.PacketTypeInitial,
@@ -424,7 +307,6 @@ var _ = Describe("Header", func() {
 		It("logs Initial packets without a Token", func() {
 			(&ExtendedHeader{
 				Header: Header{
-					IsLongHeader:     true,
 					DestConnectionID: protocol.ParseConnectionID([]byte{0xca, 0xfe, 0x13, 0x37}),
 					SrcConnectionID:  protocol.ParseConnectionID([]byte{0xde, 0xca, 0xfb, 0xad}),
 					Type:             protocol.PacketTypeInitial,
@@ -440,7 +322,6 @@ var _ = Describe("Header", func() {
 		It("logs Retry packets with a Token", func() {
 			(&ExtendedHeader{
 				Header: Header{
-					IsLongHeader:     true,
 					DestConnectionID: protocol.ParseConnectionID([]byte{0xca, 0xfe, 0x13, 0x37}),
 					SrcConnectionID:  protocol.ParseConnectionID([]byte{0xde, 0xca, 0xfb, 0xad}),
 					Type:             protocol.PacketTypeRetry,
@@ -449,18 +330,6 @@ var _ = Describe("Header", func() {
 				},
 			}).Log(logger)
 			Expect(buf.String()).To(ContainSubstring("Long Header{Type: Retry, DestConnectionID: cafe1337, SrcConnectionID: decafbad, Token: 0x123456, Version: 0xfeed}"))
-		})
-
-		It("logs Short Headers containing a connection ID", func() {
-			(&ExtendedHeader{
-				Header: Header{
-					DestConnectionID: protocol.ParseConnectionID([]byte{0xde, 0xad, 0xbe, 0xef, 0xca, 0xfe, 0x13, 0x37}),
-				},
-				KeyPhase:        protocol.KeyPhaseOne,
-				PacketNumber:    1337,
-				PacketNumberLen: 4,
-			}).Log(logger)
-			Expect(buf.String()).To(ContainSubstring("Short Header{DestConnectionID: deadbeefcafe1337, PacketNumber: 1337, PacketNumberLen: 4, KeyPhase: 1}"))
 		})
 	})
 })

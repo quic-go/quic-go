@@ -30,8 +30,14 @@ func Fuzz(data []byte) int {
 	if err != nil {
 		return 0
 	}
+
+	if !wire.IsLongHeaderPacket(data[0]) {
+		wire.ParseShortHeader(data, connIDLen)
+		return 1
+	}
+
 	is0RTTPacket := wire.Is0RTTPacket(data)
-	hdr, _, _, err := wire.ParsePacket(data, connIDLen)
+	hdr, _, _, err := wire.ParsePacket(data)
 	if err != nil {
 		return 0
 	}
@@ -55,7 +61,7 @@ func Fuzz(data []byte) int {
 	}
 	// We always use a 2-byte encoding for the Length field in Long Header packets.
 	// Serializing the header will fail when using a higher value.
-	if hdr.IsLongHeader && hdr.Length > 16383 {
+	if hdr.Length > 16383 {
 		return 1
 	}
 	b := &bytes.Buffer{}

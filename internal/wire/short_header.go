@@ -1,6 +1,7 @@
 package wire
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"io"
@@ -9,6 +10,9 @@ import (
 	"github.com/lucas-clemente/quic-go/internal/utils"
 )
 
+// ParseShortHeader parses a short header packet.
+// It must be called after header protection was removed.
+// Otherwise, the check for the reserved bits will (most likely) fail.
 func ParseShortHeader(data []byte, connIDLen int) (length int, _ protocol.PacketNumber, _ protocol.PacketNumberLen, _ protocol.KeyPhaseBit, _ error) {
 	if len(data) == 0 {
 		return 0, 0, 0, 0, io.EOF
@@ -48,6 +52,21 @@ func ParseShortHeader(data []byte, connIDLen int) (length int, _ protocol.Packet
 		err = ErrInvalidReservedBits
 	}
 	return 1 + connIDLen + int(pnLen), pn, pnLen, kp, err
+}
+
+// WriteShortHeader writes a short header.
+func WriteShortHeader(b *bytes.Buffer, connID protocol.ConnectionID, pn protocol.PacketNumber, pnLen protocol.PacketNumberLen, kp protocol.KeyPhaseBit) error {
+	typeByte := 0x40 | uint8(pnLen-1)
+	if kp == protocol.KeyPhaseOne {
+		typeByte |= byte(1 << 2)
+	}
+	b.WriteByte(typeByte)
+	b.Write(connID.Bytes())
+	return writePacketNumber(b, pn, pnLen)
+}
+
+func ShortHeaderLen(dest protocol.ConnectionID, pnLen protocol.PacketNumberLen) protocol.ByteCount {
+	return 1 + protocol.ByteCount(dest.Len()) + protocol.ByteCount(pnLen)
 }
 
 func LogShortHeader(logger utils.Logger, dest protocol.ConnectionID, pn protocol.PacketNumber, pnLen protocol.PacketNumberLen, kp protocol.KeyPhaseBit) {

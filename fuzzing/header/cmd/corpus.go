@@ -11,7 +11,7 @@ import (
 	"github.com/lucas-clemente/quic-go/internal/wire"
 )
 
-const version = protocol.VersionTLS
+const version = protocol.Version1
 
 func getRandomData(l int) []byte {
 	b := make([]byte, l)
@@ -30,7 +30,6 @@ func getVNP(src, dest protocol.ArbitraryLenConnectionID, numVersions int) []byte
 func main() {
 	headers := []wire.Header{
 		{ // Initial without token
-			IsLongHeader:     true,
 			SrcConnectionID:  protocol.ParseConnectionID(getRandomData(3)),
 			DestConnectionID: protocol.ParseConnectionID(getRandomData(8)),
 			Type:             protocol.PacketTypeInitial,
@@ -38,14 +37,12 @@ func main() {
 			Version:          version,
 		},
 		{ // Initial without token, with zero-length src conn id
-			IsLongHeader:     true,
 			DestConnectionID: protocol.ParseConnectionID(getRandomData(8)),
 			Type:             protocol.PacketTypeInitial,
 			Length:           protocol.ByteCount(rand.Intn(1000)),
 			Version:          version,
 		},
 		{ // Initial with Token
-			IsLongHeader:     true,
 			SrcConnectionID:  protocol.ParseConnectionID(getRandomData(10)),
 			DestConnectionID: protocol.ParseConnectionID(getRandomData(19)),
 			Type:             protocol.PacketTypeInitial,
@@ -54,7 +51,6 @@ func main() {
 			Token:            getRandomData(25),
 		},
 		{ // Handshake packet
-			IsLongHeader:     true,
 			SrcConnectionID:  protocol.ParseConnectionID(getRandomData(5)),
 			DestConnectionID: protocol.ParseConnectionID(getRandomData(10)),
 			Type:             protocol.PacketTypeHandshake,
@@ -62,14 +58,12 @@ func main() {
 			Version:          version,
 		},
 		{ // Handshake packet, with zero-length src conn id
-			IsLongHeader:     true,
 			DestConnectionID: protocol.ParseConnectionID(getRandomData(12)),
 			Type:             protocol.PacketTypeHandshake,
 			Length:           protocol.ByteCount(rand.Intn(1000)),
 			Version:          version,
 		},
 		{ // 0-RTT packet
-			IsLongHeader:     true,
 			SrcConnectionID:  protocol.ParseConnectionID(getRandomData(8)),
 			DestConnectionID: protocol.ParseConnectionID(getRandomData(9)),
 			Type:             protocol.PacketType0RTT,
@@ -77,15 +71,11 @@ func main() {
 			Version:          version,
 		},
 		{ // Retry Packet, with empty orig dest conn id
-			IsLongHeader:     true,
 			SrcConnectionID:  protocol.ParseConnectionID(getRandomData(8)),
 			DestConnectionID: protocol.ParseConnectionID(getRandomData(9)),
 			Type:             protocol.PacketTypeRetry,
 			Token:            getRandomData(1000),
 			Version:          version,
-		},
-		{ // Short-Header
-			DestConnectionID: protocol.ParseConnectionID(getRandomData(8)),
 		},
 	}
 
@@ -109,6 +99,15 @@ func main() {
 		if err := helper.WriteCorpusFileWithPrefix("corpus", b.Bytes(), header.PrefixLen); err != nil {
 			log.Fatal(err)
 		}
+	}
+
+	// short header
+	b := &bytes.Buffer{}
+	if err := wire.WriteShortHeader(b, protocol.ParseConnectionID(getRandomData(8)), 1337, protocol.PacketNumberLen2, protocol.KeyPhaseOne); err != nil {
+		log.Fatal(err)
+	}
+	if err := helper.WriteCorpusFileWithPrefix("corpus", b.Bytes(), header.PrefixLen); err != nil {
+		log.Fatal(err)
 	}
 
 	vnps := [][]byte{

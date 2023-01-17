@@ -70,6 +70,25 @@ var _ = Describe("Short Header", func() {
 		})
 	})
 
+	It("determines the length", func() {
+		Expect(ShortHeaderLen(protocol.ParseConnectionID([]byte{1, 2, 3, 4}), protocol.PacketNumberLen3)).To(BeEquivalentTo(8))
+		Expect(ShortHeaderLen(protocol.ParseConnectionID([]byte{}), protocol.PacketNumberLen1)).To(BeEquivalentTo(2))
+	})
+
+	Context("writing", func() {
+		It("writes a short header packet", func() {
+			b := &bytes.Buffer{}
+			connID := protocol.ParseConnectionID([]byte{1, 2, 3, 4})
+			Expect(WriteShortHeader(b, connID, 1337, 4, protocol.KeyPhaseOne)).To(Succeed())
+			l, pn, pnLen, kp, err := ParseShortHeader(b.Bytes(), 4)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(pn).To(Equal(protocol.PacketNumber(1337)))
+			Expect(pnLen).To(Equal(protocol.PacketNumberLen4))
+			Expect(kp).To(Equal(protocol.KeyPhaseOne))
+			Expect(l).To(Equal(b.Len()))
+		})
+	})
+
 	Context("logging", func() {
 		var (
 			buf    *bytes.Buffer
