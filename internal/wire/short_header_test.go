@@ -5,6 +5,7 @@ import (
 	"io"
 	"log"
 	"os"
+	"testing"
 
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/internal/utils"
@@ -77,15 +78,15 @@ var _ = Describe("Short Header", func() {
 
 	Context("writing", func() {
 		It("writes a short header packet", func() {
-			b := &bytes.Buffer{}
 			connID := protocol.ParseConnectionID([]byte{1, 2, 3, 4})
-			Expect(WriteShortHeader(b, connID, 1337, 4, protocol.KeyPhaseOne)).To(Succeed())
-			l, pn, pnLen, kp, err := ParseShortHeader(b.Bytes(), 4)
+			b, err := AppendShortHeader(nil, connID, 1337, 4, protocol.KeyPhaseOne)
+			Expect(err).ToNot(HaveOccurred())
+			l, pn, pnLen, kp, err := ParseShortHeader(b, 4)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(pn).To(Equal(protocol.PacketNumber(1337)))
 			Expect(pnLen).To(Equal(protocol.PacketNumberLen4))
 			Expect(kp).To(Equal(protocol.KeyPhaseOne))
-			Expect(l).To(Equal(b.Len()))
+			Expect(l).To(Equal(len(b)))
 		})
 	})
 
@@ -113,3 +114,17 @@ var _ = Describe("Short Header", func() {
 		})
 	})
 })
+
+func BenchmarkWriteShortHeader(b *testing.B) {
+	b.ReportAllocs()
+	buf := make([]byte, 100)
+	connID := protocol.ParseConnectionID([]byte{1, 2, 3, 4, 5, 6})
+	for i := 0; i < b.N; i++ {
+		var err error
+		buf, err = AppendShortHeader(buf, connID, 1337, protocol.PacketNumberLen4, protocol.KeyPhaseOne)
+		if err != nil {
+			b.Fatalf("failed to write short header: %s", err)
+		}
+		buf = buf[:0]
+	}
+}

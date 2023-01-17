@@ -42,17 +42,18 @@ var _ = Describe("Server", func() {
 	)
 
 	getPacket := func(hdr *wire.Header, p []byte) *receivedPacket {
-		buffer := getPacketBuffer()
-		buf := bytes.NewBuffer(buffer.Data)
+		buf := getPacketBuffer()
 		hdr.Length = 4 + protocol.ByteCount(len(p)) + 16
-		Expect((&wire.ExtendedHeader{
+		var err error
+		buf.Data, err = (&wire.ExtendedHeader{
 			Header:          *hdr,
 			PacketNumber:    0x42,
 			PacketNumberLen: protocol.PacketNumberLen4,
-		}).Write(buf, protocol.VersionTLS)).To(Succeed())
-		n := buf.Len()
-		buf.Write(p)
-		data := buffer.Data[:buf.Len()]
+		}).Append(buf.Data, protocol.VersionTLS)
+		Expect(err).ToNot(HaveOccurred())
+		n := len(buf.Data)
+		buf.Data = append(buf.Data, p...)
+		data := buf.Data
 		sealer, _ := handshake.NewInitialAEAD(hdr.DestConnectionID, protocol.PerspectiveClient, hdr.Version)
 		_ = sealer.Seal(data[n:n], data[n:], 0x42, data[:n])
 		data = data[:len(data)+16]
@@ -60,7 +61,7 @@ var _ = Describe("Server", func() {
 		return &receivedPacket{
 			remoteAddr: &net.UDPAddr{IP: net.IPv4(4, 5, 6, 7), Port: 456},
 			data:       data,
-			buffer:     buffer,
+			buffer:     buf,
 		}
 	}
 

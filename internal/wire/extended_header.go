@@ -2,6 +2,7 @@ package wire
 
 import (
 	"bytes"
+	"encoding/binary"
 	"errors"
 	"fmt"
 	"io"
@@ -93,20 +94,17 @@ func (h *ExtendedHeader) readPacketNumber(b *bytes.Reader) error {
 	return nil
 }
 
-// Write writes the Header.
-func (h *ExtendedHeader) Write(b *bytes.Buffer, ver protocol.VersionNumber) error {
+// Append appends the Header.
+func (h *ExtendedHeader) Append(b []byte, v protocol.VersionNumber) ([]byte, error) {
 	if h.DestConnectionID.Len() > protocol.MaxConnIDLen {
-		return fmt.Errorf("invalid connection ID length: %d bytes", h.DestConnectionID.Len())
+		return nil, fmt.Errorf("invalid connection ID length: %d bytes", h.DestConnectionID.Len())
 	}
 	if h.SrcConnectionID.Len() > protocol.MaxConnIDLen {
-		return fmt.Errorf("invalid connection ID length: %d bytes", h.SrcConnectionID.Len())
+		return nil, fmt.Errorf("invalid connection ID length: %d bytes", h.SrcConnectionID.Len())
 	}
-	return h.writeLongHeader(b, ver)
-}
 
-func (h *ExtendedHeader) writeLongHeader(b *bytes.Buffer, version protocol.VersionNumber) error {
 	var packetType uint8
-	if version == protocol.Version2 {
+	if v == protocol.Version2 {
 		//nolint:exhaustive
 		switch h.Type {
 		case protocol.PacketTypeInitial:
@@ -137,24 +135,25 @@ func (h *ExtendedHeader) writeLongHeader(b *bytes.Buffer, version protocol.Versi
 		firstByte |= uint8(h.PacketNumberLen - 1)
 	}
 
-	b.WriteByte(firstByte)
-	utils.BigEndian.WriteUint32(b, uint32(h.Version))
-	b.WriteByte(uint8(h.DestConnectionID.Len()))
-	b.Write(h.DestConnectionID.Bytes())
-	b.WriteByte(uint8(h.SrcConnectionID.Len()))
-	b.Write(h.SrcConnectionID.Bytes())
+	b = append(b, firstByte)
+	b = append(b, make([]byte, 4)...)
+	binary.BigEndian.PutUint32(b[len(b)-4:], uint32(h.Version))
+	b = append(b, uint8(h.DestConnectionID.Len()))
+	b = append(b, h.DestConnectionID.Bytes()...)
+	b = append(b, uint8(h.SrcConnectionID.Len()))
+	b = append(b, h.SrcConnectionID.Bytes()...)
 
 	//nolint:exhaustive
 	switch h.Type {
 	case protocol.PacketTypeRetry:
-		b.Write(h.Token)
-		return nil
+		b = append(b, h.Token...)
+		return b, nil
 	case protocol.PacketTypeInitial:
-		quicvarint.Write(b, uint64(len(h.Token)))
-		b.Write(h.Token)
+		b = quicvarint.Append(b, uint64(len(h.Token)))
+		b = append(b, h.Token...)
 	}
-	quicvarint.WriteWithLen(b, uint64(h.Length), 2)
-	return writePacketNumber(b, h.PacketNumber, h.PacketNumberLen)
+	b = quicvarint.AppendWithLen(b, uint64(h.Length), 2)
+	return appendPacketNumber(b, h.PacketNumber, h.PacketNumberLen)
 }
 
 // ParsedLen returns the number of bytes that were consumed when parsing the header
@@ -188,18 +187,24 @@ func (h *ExtendedHeader) Log(logger utils.Logger) {
 	logger.Debugf("\tLong Header{Type: %s, DestConnectionID: %s, SrcConnectionID: %s, %sPacketNumber: %d, PacketNumberLen: %d, Length: %d, Version: %s}", h.Type, h.DestConnectionID, h.SrcConnectionID, token, h.PacketNumber, h.PacketNumberLen, h.Length, h.Version)
 }
 
-func writePacketNumber(b *bytes.Buffer, pn protocol.PacketNumber, pnLen protocol.PacketNumberLen) error {
+func appendPacketNumber(b []byte, pn protocol.PacketNumber, pnLen protocol.PacketNumberLen) ([]byte, error) {
 	switch pnLen {
 	case protocol.PacketNumberLen1:
-		b.WriteByte(uint8(pn))
+		b = append(b, uint8(pn))
 	case protocol.PacketNumberLen2:
-		utils.BigEndian.WriteUint16(b, uint16(pn))
+		buf := make([]byte, 2)
+		binary.BigEndian.PutUint16(buf, uint16(pn))
+		b = append(b, buf...)
 	case protocol.PacketNumberLen3:
-		utils.BigEndian.WriteUint24(b, uint32(pn))
+		buf := make([]byte, 4)
+		binary.BigEndian.PutUint32(buf, uint32(pn))
+		b = append(b, buf[1:]...)
 	case protocol.PacketNumberLen4:
-		utils.BigEndian.WriteUint32(b, uint32(pn))
+		buf := make([]byte, 4)
+		binary.BigEndian.PutUint32(buf, uint32(pn))
+		b = append(b, buf...)
 	default:
-		return fmt.Errorf("invalid packet number length: %d", pnLen)
+		return nil, fmt.Errorf("invalid packet number length: %d", pnLen)
 	}
-	return nil
+	return b, nil
 }

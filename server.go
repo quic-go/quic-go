@@ -1,7 +1,6 @@
 package quic
 
 import (
-	"bytes"
 	"context"
 	"crypto/rand"
 	"crypto/tls"
@@ -577,19 +576,19 @@ func (s *baseServer) sendRetry(remoteAddr net.Addr, hdr *wire.Header, info *pack
 		replyHdr.Log(s.logger)
 	}
 
-	packetBuffer := getPacketBuffer()
-	defer packetBuffer.Release()
-	buf := bytes.NewBuffer(packetBuffer.Data)
-	if err := replyHdr.Write(buf, hdr.Version); err != nil {
+	buf := getPacketBuffer()
+	defer buf.Release()
+	buf.Data, err = replyHdr.Append(buf.Data, hdr.Version)
+	if err != nil {
 		return err
 	}
 	// append the Retry integrity tag
-	tag := handshake.GetRetryIntegrityTag(buf.Bytes(), hdr.DestConnectionID, hdr.Version)
-	buf.Write(tag[:])
+	tag := handshake.GetRetryIntegrityTag(buf.Data, hdr.DestConnectionID, hdr.Version)
+	buf.Data = append(buf.Data, tag[:]...)
 	if s.config.Tracer != nil {
-		s.config.Tracer.SentPacket(remoteAddr, &replyHdr.Header, protocol.ByteCount(buf.Len()), nil)
+		s.config.Tracer.SentPacket(remoteAddr, &replyHdr.Header, protocol.ByteCount(len(buf.Data)), nil)
 	}
-	_, err = s.conn.WritePacket(buf.Bytes(), remoteAddr, info.OOB())
+	_, err = s.conn.WritePacket(buf.Data, remoteAddr, info.OOB())
 	return err
 }
 
@@ -627,9 +626,8 @@ func (s *baseServer) sendConnectionRefused(remoteAddr net.Addr, hdr *wire.Header
 
 // sendError sends the error as a response to the packet received with header hdr
 func (s *baseServer) sendError(remoteAddr net.Addr, hdr *wire.Header, sealer handshake.LongHeaderSealer, errorCode qerr.TransportErrorCode, info *packetInfo) error {
-	packetBuffer := getPacketBuffer()
-	defer packetBuffer.Release()
-	buf := bytes.NewBuffer(packetBuffer.Data)
+	b := getPacketBuffer()
+	defer b.Release()
 
 	ccf := &wire.ConnectionCloseFrame{ErrorCode: uint64(errorCode)}
 
@@ -640,33 +638,34 @@ func (s *baseServer) sendError(remoteAddr net.Addr, hdr *wire.Header, sealer han
 	replyHdr.DestConnectionID = hdr.SrcConnectionID
 	replyHdr.PacketNumberLen = protocol.PacketNumberLen4
 	replyHdr.Length = 4 /* packet number len */ + ccf.Length(hdr.Version) + protocol.ByteCount(sealer.Overhead())
-	if err := replyHdr.Write(buf, hdr.Version); err != nil {
+	var err error
+	b.Data, err = replyHdr.Append(b.Data, hdr.Version)
+	if err != nil {
 		return err
 	}
-	payloadOffset := buf.Len()
+	payloadOffset := len(b.Data)
 
-	raw := buf.Bytes()
-	raw, err := ccf.Append(raw, hdr.Version)
+	b.Data, err = ccf.Append(b.Data, hdr.Version)
 	if err != nil {
 		return err
 	}
 
-	_ = sealer.Seal(raw[payloadOffset:payloadOffset], raw[payloadOffset:], replyHdr.PacketNumber, raw[:payloadOffset])
-	raw = raw[0 : len(raw)+sealer.Overhead()]
+	_ = sealer.Seal(b.Data[payloadOffset:payloadOffset], b.Data[payloadOffset:], replyHdr.PacketNumber, b.Data[:payloadOffset])
+	b.Data = b.Data[0 : len(b.Data)+sealer.Overhead()]
 
 	pnOffset := payloadOffset - int(replyHdr.PacketNumberLen)
 	sealer.EncryptHeader(
-		raw[pnOffset+4:pnOffset+4+16],
-		&raw[0],
-		raw[pnOffset:payloadOffset],
+		b.Data[pnOffset+4:pnOffset+4+16],
+		&b.Data[0],
+		b.Data[pnOffset:payloadOffset],
 	)
 
 	replyHdr.Log(s.logger)
 	wire.LogFrame(s.logger, ccf, true)
 	if s.config.Tracer != nil {
-		s.config.Tracer.SentPacket(remoteAddr, &replyHdr.Header, protocol.ByteCount(len(raw)), []logging.Frame{ccf})
+		s.config.Tracer.SentPacket(remoteAddr, &replyHdr.Header, protocol.ByteCount(len(b.Data)), []logging.Frame{ccf})
 	}
-	_, err = s.conn.WritePacket(raw, remoteAddr, info.OOB())
+	_, err = s.conn.WritePacket(b.Data, remoteAddr, info.OOB())
 	return err
 }
 
