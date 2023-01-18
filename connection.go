@@ -218,6 +218,9 @@ type connection struct {
 
 	datagramQueue *datagramQueue
 
+	connStateMutex sync.Mutex
+	connState      ConnectionState
+
 	logID  string
 	tracer logging.ConnectionTracer
 	logger utils.Logger
@@ -545,6 +548,7 @@ func (s *connection) preSetup() {
 
 	s.windowUpdateQueue = newWindowUpdateQueue(s.streamsMap, s.connFlowController, s.framer.QueueControlFrame)
 	s.datagramQueue = newDatagramQueue(s.scheduleSending, s.logger)
+	s.connState.Version = s.version
 }
 
 // run the connection main loop
@@ -738,11 +742,10 @@ func (s *connection) supportsDatagrams() bool {
 }
 
 func (s *connection) ConnectionState() ConnectionState {
-	return ConnectionState{
-		TLS:               s.cryptoStreamHandler.ConnectionState(),
-		SupportsDatagrams: s.supportsDatagrams(),
-		Version:           s.version,
-	}
+	s.connStateMutex.Lock()
+	defer s.connStateMutex.Unlock()
+	s.connState.TLS = s.cryptoStreamHandler.ConnectionState()
+	return s.connState
 }
 
 // Time when the next keep-alive packet should be sent.
@@ -1678,6 +1681,9 @@ func (s *connection) restoreTransportParameters(params *wire.TransportParameters
 	s.connIDGenerator.SetMaxActiveConnIDs(params.ActiveConnectionIDLimit)
 	s.connFlowController.UpdateSendWindow(params.InitialMaxData)
 	s.streamsMap.UpdateLimits(params)
+	s.connStateMutex.Lock()
+	s.connState.SupportsDatagrams = s.supportsDatagrams()
+	s.connStateMutex.Unlock()
 }
 
 func (s *connection) handleTransportParameters(params *wire.TransportParameters) {
@@ -1696,6 +1702,10 @@ func (s *connection) handleTransportParameters(params *wire.TransportParameters)
 		// the client's transport parameters.
 		close(s.earlyConnReadyChan)
 	}
+
+	s.connStateMutex.Lock()
+	s.connState.SupportsDatagrams = s.supportsDatagrams()
+	s.connStateMutex.Unlock()
 }
 
 func (s *connection) checkTransportParameters(params *wire.TransportParameters) error {
