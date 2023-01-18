@@ -35,7 +35,7 @@ type sealer interface {
 }
 
 type payload struct {
-	frames []ackhandler.Frame
+	frames []*ackhandler.Frame
 	ack    *wire.AckFrame
 	length protocol.ByteCount
 }
@@ -43,7 +43,7 @@ type payload struct {
 type longHeaderPacket struct {
 	header *wire.ExtendedHeader
 	ack    *wire.AckFrame
-	frames []ackhandler.Frame
+	frames []*ackhandler.Frame
 
 	length protocol.ByteCount
 
@@ -143,8 +143,8 @@ type sealingManager interface {
 
 type frameSource interface {
 	HasData() bool
-	AppendStreamFrames([]ackhandler.Frame, protocol.ByteCount) ([]ackhandler.Frame, protocol.ByteCount)
-	AppendControlFrames([]ackhandler.Frame, protocol.ByteCount) ([]ackhandler.Frame, protocol.ByteCount)
+	AppendStreamFrames([]*ackhandler.Frame, protocol.ByteCount) ([]*ackhandler.Frame, protocol.ByteCount)
+	AppendControlFrames([]*ackhandler.Frame, protocol.ByteCount) ([]*ackhandler.Frame, protocol.ByteCount)
 }
 
 type ackFrameSource interface {
@@ -256,7 +256,7 @@ func (p *packetPacker) packConnectionClose(
 			ccf.ReasonPhrase = ""
 		}
 		pl := payload{
-			frames: []ackhandler.Frame{{Frame: ccf}},
+			frames: []*ackhandler.Frame{{Frame: ccf}},
 			length: ccf.Length(p.version),
 		}
 
@@ -357,7 +357,7 @@ func (p *packetPacker) shortHeaderPacketLength(connID protocol.ConnectionID, pnL
 }
 
 // size is the expected size of the packet, if no padding was applied.
-func (p *packetPacker) initialPaddingLen(frames []ackhandler.Frame, size protocol.ByteCount) protocol.ByteCount {
+func (p *packetPacker) initialPaddingLen(frames []*ackhandler.Frame, size protocol.ByteCount) protocol.ByteCount {
 	// For the server, only ack-eliciting Initial packets need to be padded.
 	if p.perspective == protocol.PerspectiveServer && !ackhandler.HasAckElicitingFrames(frames) {
 		return 0
@@ -576,14 +576,16 @@ func (p *packetPacker) maybeGetCryptoPacket(maxPacketSize protocol.ByteCount, en
 			if f == nil {
 				break
 			}
-			pl.frames = append(pl.frames, ackhandler.Frame{Frame: f})
+			af := ackhandler.GetFrame()
+			af.Frame = f
+			pl.frames = append(pl.frames, af)
 			frameLen := f.Length(p.version)
 			pl.length += frameLen
 			maxPacketSize -= frameLen
 		}
 	} else if s.HasData() {
 		cf := s.PopCryptoFrame(maxPacketSize)
-		pl.frames = []ackhandler.Frame{{Frame: cf}}
+		pl.frames = []*ackhandler.Frame{{Frame: cf}}
 		pl.length += cf.Length(p.version)
 	}
 	return hdr, pl
@@ -616,7 +618,10 @@ func (p *packetPacker) maybeGetAppDataPacket(maxPayloadSize protocol.ByteCount, 
 		if p.numNonAckElicitingAcks >= protocol.MaxNonAckElicitingAcks {
 			ping := &wire.PingFrame{}
 			// don't retransmit the PING frame when it is lost
-			pl.frames = append(pl.frames, ackhandler.Frame{Frame: ping, OnLost: func(wire.Frame) {}})
+			af := ackhandler.GetFrame()
+			af.Frame = ping
+			af.OnLost = func(wire.Frame) {}
+			pl.frames = append(pl.frames, af)
 			pl.length += ping.Length(p.version)
 			p.numNonAckElicitingAcks = 0
 		} else {
@@ -639,7 +644,7 @@ func (p *packetPacker) composeNextPacket(maxFrameSize protocol.ByteCount, onlyAc
 		return payload{}
 	}
 
-	pl := payload{frames: make([]ackhandler.Frame, 0, 1)}
+	pl := payload{frames: make([]*ackhandler.Frame, 0, 1)}
 
 	hasData := p.framer.HasData()
 	hasRetransmission := p.retransmissionQueue.HasAppData()
@@ -657,11 +662,11 @@ func (p *packetPacker) composeNextPacket(maxFrameSize protocol.ByteCount, onlyAc
 		if f := p.datagramQueue.Peek(); f != nil {
 			size := f.Length(p.version)
 			if size <= maxFrameSize-pl.length {
-				pl.frames = append(pl.frames, ackhandler.Frame{
-					Frame: f,
-					// set it to a no-op. Then we won't set the default callback, which would retransmit the frame.
-					OnLost: func(wire.Frame) {},
-				})
+				af := ackhandler.GetFrame()
+				af.Frame = f
+				// set it to a no-op. Then we won't set the default callback, which would retransmit the frame.
+				af.OnLost = func(wire.Frame) {}
+				pl.frames = append(pl.frames, af)
 				pl.length += size
 				p.datagramQueue.Pop()
 			}
@@ -682,7 +687,9 @@ func (p *packetPacker) composeNextPacket(maxFrameSize protocol.ByteCount, onlyAc
 			if f == nil {
 				break
 			}
-			pl.frames = append(pl.frames, ackhandler.Frame{Frame: f})
+			af := ackhandler.GetFrame()
+			af.Frame = f
+			pl.frames = append(pl.frames, af)
 			pl.length += f.Length(p.version)
 		}
 	}
@@ -772,7 +779,7 @@ func (p *packetPacker) MaybePackProbePacket(encLevel protocol.EncryptionLevel) (
 
 func (p *packetPacker) PackMTUProbePacket(ping ackhandler.Frame, size protocol.ByteCount, now time.Time) (shortHeaderPacket, *packetBuffer, error) {
 	pl := payload{
-		frames: []ackhandler.Frame{ping},
+		frames: []*ackhandler.Frame{&ping},
 		length: ping.Length(p.version),
 	}
 	buffer := getPacketBuffer()

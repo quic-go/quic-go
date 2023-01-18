@@ -309,7 +309,7 @@ var _ = Describe("Connection", func() {
 			err := conn.handleFrame(&wire.PathChallengeFrame{Data: data}, protocol.Encryption1RTT, protocol.ConnectionID{})
 			Expect(err).ToNot(HaveOccurred())
 			frames, _ := conn.framer.AppendControlFrames(nil, 1000)
-			Expect(frames).To(Equal([]ackhandler.Frame{{Frame: &wire.PathResponseFrame{Data: data}}}))
+			Expect(frames).To(Equal([]*ackhandler.Frame{{Frame: &wire.PathResponseFrame{Data: data}}}))
 		})
 
 		It("rejects NEW_TOKEN frames", func() {
@@ -1270,7 +1270,7 @@ var _ = Describe("Connection", func() {
 			conn.scheduleSending()
 			Eventually(sent).Should(BeClosed())
 			frames, _ := conn.framer.AppendControlFrames(nil, 1000)
-			Expect(frames).To(Equal([]ackhandler.Frame{{Frame: &logging.DataBlockedFrame{MaximumData: 1337}}}))
+			Expect(frames).To(Equal([]*ackhandler.Frame{{Frame: &logging.DataBlockedFrame{MaximumData: 1337}}}))
 		})
 
 		It("doesn't send when the SentPacketHandler doesn't allow it", func() {
@@ -1867,8 +1867,8 @@ var _ = Describe("Connection", func() {
 		handshakeCtx := conn.HandshakeComplete()
 		Consistently(handshakeCtx.Done()).ShouldNot(BeClosed())
 		close(finishHandshake)
-		var frames []ackhandler.Frame
-		Eventually(func() []ackhandler.Frame {
+		var frames []*ackhandler.Frame
+		Eventually(func() []*ackhandler.Frame {
 			frames, _ = conn.framer.AppendControlFrames(nil, protocol.MaxByteCount)
 			return frames
 		}).ShouldNot(BeEmpty())
