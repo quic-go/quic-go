@@ -351,21 +351,7 @@ var newConnection = func(
 		s.version,
 	)
 	s.cryptoStreamHandler = cs
-	s.packer = newPacketPacker(
-		srcConnID,
-		s.connIDManager.Get,
-		initialStream,
-		handshakeStream,
-		s.sentPacketHandler,
-		s.retransmissionQueue,
-		s.RemoteAddr(),
-		cs,
-		s.framer,
-		s.receivedPacketHandler,
-		s.datagramQueue,
-		s.perspective,
-		s.version,
-	)
+	s.packer = newPacketPacker(srcConnID, s.connIDManager.Get, initialStream, handshakeStream, s.sentPacketHandler, s.retransmissionQueue, s.RemoteAddr(), cs, s.framer, s.receivedPacketHandler, s.datagramQueue, s.perspective)
 	s.unpacker = newPacketUnpacker(cs, s.srcConnIDLen)
 	s.cryptoStreamManager = newCryptoStreamManager(cs, initialStream, handshakeStream, s.oneRTTStream)
 	return s
@@ -477,21 +463,7 @@ var newClientConnection = func(
 	s.cryptoStreamHandler = cs
 	s.cryptoStreamManager = newCryptoStreamManager(cs, initialStream, handshakeStream, newCryptoStream())
 	s.unpacker = newPacketUnpacker(cs, s.srcConnIDLen)
-	s.packer = newPacketPacker(
-		srcConnID,
-		s.connIDManager.Get,
-		initialStream,
-		handshakeStream,
-		s.sentPacketHandler,
-		s.retransmissionQueue,
-		s.RemoteAddr(),
-		cs,
-		s.framer,
-		s.receivedPacketHandler,
-		s.datagramQueue,
-		s.perspective,
-		s.version,
-	)
+	s.packer = newPacketPacker(srcConnID, s.connIDManager.Get, initialStream, handshakeStream, s.sentPacketHandler, s.retransmissionQueue, s.RemoteAddr(), cs, s.framer, s.receivedPacketHandler, s.datagramQueue, s.perspective)
 	if len(tlsConf.ServerName) > 0 {
 		s.tokenStoreKey = tlsConf.ServerName
 	} else {
@@ -1825,7 +1797,7 @@ func (s *connection) sendPackets() error {
 
 func (s *connection) maybeSendAckOnlyPacket() error {
 	if !s.handshakeConfirmed {
-		packet, err := s.packer.PackCoalescedPacket(true)
+		packet, err := s.packer.PackCoalescedPacket(true, s.version)
 		if err != nil {
 			return err
 		}
@@ -1837,7 +1809,7 @@ func (s *connection) maybeSendAckOnlyPacket() error {
 	}
 
 	now := time.Now()
-	p, buffer, err := s.packer.PackPacket(true, now)
+	p, buffer, err := s.packer.PackPacket(true, now, s.version)
 	if err != nil {
 		if err == errNothingToPack {
 			return nil
@@ -1858,7 +1830,7 @@ func (s *connection) sendProbePacket(encLevel protocol.EncryptionLevel) error {
 			break
 		}
 		var err error
-		packet, err = s.packer.MaybePackProbePacket(encLevel)
+		packet, err = s.packer.MaybePackProbePacket(encLevel, s.version)
 		if err != nil {
 			return err
 		}
@@ -1879,7 +1851,7 @@ func (s *connection) sendProbePacket(encLevel protocol.EncryptionLevel) error {
 			panic("unexpected encryption level")
 		}
 		var err error
-		packet, err = s.packer.MaybePackProbePacket(encLevel)
+		packet, err = s.packer.MaybePackProbePacket(encLevel, s.version)
 		if err != nil {
 			return err
 		}
@@ -1899,7 +1871,7 @@ func (s *connection) sendPacket() (bool, error) {
 
 	now := time.Now()
 	if !s.handshakeConfirmed {
-		packet, err := s.packer.PackCoalescedPacket(false)
+		packet, err := s.packer.PackCoalescedPacket(false, s.version)
 		if err != nil || packet == nil {
 			return false, err
 		}
@@ -1908,7 +1880,7 @@ func (s *connection) sendPacket() (bool, error) {
 		return true, nil
 	} else if !s.config.DisablePathMTUDiscovery && s.mtuDiscoverer.ShouldSendProbe(now) {
 		ping, size := s.mtuDiscoverer.GetPing()
-		p, buffer, err := s.packer.PackMTUProbePacket(ping, size, now)
+		p, buffer, err := s.packer.PackMTUProbePacket(ping, size, now, s.version)
 		if err != nil {
 			return false, err
 		}
@@ -1916,7 +1888,7 @@ func (s *connection) sendPacket() (bool, error) {
 		s.sendPackedShortHeaderPacket(buffer, p.Packet, now)
 		return true, nil
 	}
-	p, buffer, err := s.packer.PackPacket(false, now)
+	p, buffer, err := s.packer.PackPacket(false, now, s.version)
 	if err != nil {
 		if err == errNothingToPack {
 			return false, nil
@@ -1962,14 +1934,14 @@ func (s *connection) sendConnectionClose(e error) ([]byte, error) {
 	var transportErr *qerr.TransportError
 	var applicationErr *qerr.ApplicationError
 	if errors.As(e, &transportErr) {
-		packet, err = s.packer.PackConnectionClose(transportErr)
+		packet, err = s.packer.PackConnectionClose(transportErr, s.version)
 	} else if errors.As(e, &applicationErr) {
-		packet, err = s.packer.PackApplicationClose(applicationErr)
+		packet, err = s.packer.PackApplicationClose(applicationErr, s.version)
 	} else {
 		packet, err = s.packer.PackConnectionClose(&qerr.TransportError{
 			ErrorCode:    qerr.InternalError,
 			ErrorMessage: fmt.Sprintf("connection BUG: unspecified error type (msg: %s)", e.Error()),
-		})
+		}, s.version)
 	}
 	if err != nil {
 		return nil, err
