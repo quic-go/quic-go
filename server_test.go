@@ -743,7 +743,7 @@ var _ = Describe("Server", func() {
 				Expect(err).ToNot(HaveOccurred())
 				data, err := opener.Open(nil, b[extHdr.ParsedLen():], extHdr.PacketNumber, b[:extHdr.ParsedLen()])
 				Expect(err).ToNot(HaveOccurred())
-				_, f, err := wire.NewFrameParser(false, origHdr.Version).ParseNext(data, protocol.EncryptionInitial)
+				_, f, err := wire.NewFrameParser(false).ParseNext(data, protocol.EncryptionInitial, origHdr.Version)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(f).To(BeAssignableToTypeOf(&wire.ConnectionCloseFrame{}))
 				ccf := f.(*wire.ConnectionCloseFrame)

@@ -22,8 +22,6 @@ type connIDGenerator struct {
 	retireConnectionID     func(protocol.ConnectionID)
 	replaceWithClosed      func([]protocol.ConnectionID, protocol.Perspective, []byte)
 	queueControlFrame      func(wire.Frame)
-
-	version protocol.VersionNumber
 }
 
 func newConnIDGenerator(
@@ -36,7 +34,6 @@ func newConnIDGenerator(
 	replaceWithClosed func([]protocol.ConnectionID, protocol.Perspective, []byte),
 	queueControlFrame func(wire.Frame),
 	generator ConnectionIDGenerator,
-	version protocol.VersionNumber,
 ) *connIDGenerator {
 	m := &connIDGenerator{
 		generator:              generator,
@@ -47,7 +44,6 @@ func newConnIDGenerator(
 		retireConnectionID:     retireConnectionID,
 		replaceWithClosed:      replaceWithClosed,
 		queueControlFrame:      queueControlFrame,
-		version:                version,
 	}
 	m.activeSrcConnIDs[0] = initialConnectionID
 	m.initialClientDestConnID = initialClientDestConnID

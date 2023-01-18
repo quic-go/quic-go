@@ -257,18 +257,18 @@ func (mr *MockStreamIMockRecorder) hasData() *gomock.Call {
 }
 
 // popStreamFrame mocks base method.
-func (m *MockStreamI) popStreamFrame(maxBytes protocol.ByteCount) (*ackhandler.Frame, bool) {
+func (m *MockStreamI) popStreamFrame(maxBytes protocol.ByteCount, v protocol.VersionNumber) (*ackhandler.Frame, bool) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "popStreamFrame", maxBytes)
+	ret := m.ctrl.Call(m, "popStreamFrame", maxBytes, v)
 	ret0, _ := ret[0].(*ackhandler.Frame)
 	ret1, _ := ret[1].(bool)
 	return ret0, ret1
 }
 
 // popStreamFrame indicates an expected call of popStreamFrame.
-func (mr *MockStreamIMockRecorder) popStreamFrame(maxBytes interface{}) *gomock.Call {
+func (mr *MockStreamIMockRecorder) popStreamFrame(maxBytes, v interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "popStreamFrame", reflect.TypeOf((*MockStreamI)(nil).popStreamFrame), maxBytes)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "popStreamFrame", reflect.TypeOf((*MockStreamI)(nil).popStreamFrame), maxBytes, v)
 }
 
 // updateSendWindow mocks base method.

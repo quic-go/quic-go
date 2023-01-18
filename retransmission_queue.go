@@ -15,12 +15,10 @@ type retransmissionQueue struct {
 	handshakeCryptoData []*wire.CryptoFrame
 
 	appData []wire.Frame
-
-	version protocol.VersionNumber
 }
 
-func newRetransmissionQueue(ver protocol.VersionNumber) *retransmissionQueue {
-	return &retransmissionQueue{version: ver}
+func newRetransmissionQueue() *retransmissionQueue {
+	return &retransmissionQueue{}
 }
 
 func (q *retransmissionQueue) AddInitial(f wire.Frame) {
@@ -58,10 +56,10 @@ func (q *retransmissionQueue) AddAppData(f wire.Frame) {
 	q.appData = append(q.appData, f)
 }
 
-func (q *retransmissionQueue) GetInitialFrame(maxLen protocol.ByteCount) wire.Frame {
+func (q *retransmissionQueue) GetInitialFrame(maxLen protocol.ByteCount, v protocol.VersionNumber) wire.Frame {
 	if len(q.initialCryptoData) > 0 {
 		f := q.initialCryptoData[0]
-		newFrame, needsSplit := f.MaybeSplitOffFrame(maxLen, q.version)
+		newFrame, needsSplit := f.MaybeSplitOffFrame(maxLen, v)
 		if newFrame == nil && !needsSplit { // the whole frame fits
 			q.initialCryptoData = q.initialCryptoData[1:]
 			return f
@@ -74,17 +72,17 @@ func (q *retransmissionQueue) GetInitialFrame(maxLen protocol.ByteCount) wire.Fr
 		return nil
 	}
 	f := q.initial[0]
-	if f.Length(q.version) > maxLen {
+	if f.Length(v) > maxLen {
 		return nil
 	}
 	q.initial = q.initial[1:]
 	return f
 }
 
-func (q *retransmissionQueue) GetHandshakeFrame(maxLen protocol.ByteCount) wire.Frame {
+func (q *retransmissionQueue) GetHandshakeFrame(maxLen protocol.ByteCount, v protocol.VersionNumber) wire.Frame {
 	if len(q.handshakeCryptoData) > 0 {
 		f := q.handshakeCryptoData[0]
-		newFrame, needsSplit := f.MaybeSplitOffFrame(maxLen, q.version)
+		newFrame, needsSplit := f.MaybeSplitOffFrame(maxLen, v)
 		if newFrame == nil && !needsSplit { // the whole frame fits
 			q.handshakeCryptoData = q.handshakeCryptoData[1:]
 			return f
@@ -97,19 +95,19 @@ func (q *retransmissionQueue) GetHandshakeFrame(maxLen protocol.ByteCount) wire.
 		return nil
 	}
 	f := q.handshake[0]
-	if f.Length(q.version) > maxLen {
+	if f.Length(v) > maxLen {
 		return nil
 	}
 	q.handshake = q.handshake[1:]
 	return f
 }
 
-func (q *retransmissionQueue) GetAppDataFrame(maxLen protocol.ByteCount) wire.Frame {
+func (q *retransmissionQueue) GetAppDataFrame(maxLen protocol.ByteCount, v protocol.VersionNumber) wire.Frame {
 	if len(q.appData) == 0 {
 		return nil
 	}
 	f := q.appData[0]
-	if f.Length(q.version) > maxLen {
+	if f.Length(v) > maxLen {
 		return nil
 	}
 	q.appData = q.appData[1:]

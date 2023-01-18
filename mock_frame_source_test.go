@@ -36,33 +36,33 @@ func (m *MockFrameSource) EXPECT() *MockFrameSourceMockRecorder {
 }
 
 // AppendControlFrames mocks base method.
-func (m *MockFrameSource) AppendControlFrames(arg0 []*ackhandler.Frame, arg1 protocol.ByteCount) ([]*ackhandler.Frame, protocol.ByteCount) {
+func (m *MockFrameSource) AppendControlFrames(arg0 []*ackhandler.Frame, arg1 protocol.ByteCount, arg2 protocol.VersionNumber) ([]*ackhandler.Frame, protocol.ByteCount) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "AppendControlFrames", arg0, arg1)
+	ret := m.ctrl.Call(m, "AppendControlFrames", arg0, arg1, arg2)
 	ret0, _ := ret[0].([]*ackhandler.Frame)
 	ret1, _ := ret[1].(protocol.ByteCount)
 	return ret0, ret1
 }
 
 // AppendControlFrames indicates an expected call of AppendControlFrames.
-func (mr *MockFrameSourceMockRecorder) AppendControlFrames(arg0, arg1 interface{}) *gomock.Call {
+func (mr *MockFrameSourceMockRecorder) AppendControlFrames(arg0, arg1, arg2 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AppendControlFrames", reflect.TypeOf((*MockFrameSource)(nil).AppendControlFrames), arg0, arg1)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AppendControlFrames", reflect.TypeOf((*MockFrameSource)(nil).AppendControlFrames), arg0, arg1, arg2)
 }
 
 // AppendStreamFrames mocks base method.
-func (m *MockFrameSource) AppendStreamFrames(arg0 []*ackhandler.Frame, arg1 protocol.ByteCount) ([]*ackhandler.Frame, protocol.ByteCount) {
+func (m *MockFrameSource) AppendStreamFrames(arg0 []*ackhandler.Frame, arg1 protocol.ByteCount, arg2 protocol.VersionNumber) ([]*ackhandler.Frame, protocol.ByteCount) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "AppendStreamFrames", arg0, arg1)
+	ret := m.ctrl.Call(m, "AppendStreamFrames", arg0, arg1, arg2)
 	ret0, _ := ret[0].([]*ackhandler.Frame)
 	ret1, _ := ret[1].(protocol.ByteCount)
 	return ret0, ret1
 }
 
 // AppendStreamFrames indicates an expected call of AppendStreamFrames.
-func (mr *MockFrameSourceMockRecorder) AppendStreamFrames(arg0, arg1 interface{}) *gomock.Call {
+func (mr *MockFrameSourceMockRecorder) AppendStreamFrames(arg0, arg1, arg2 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AppendStreamFrames", reflect.TypeOf((*MockFrameSource)(nil).AppendStreamFrames), arg0, arg1)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AppendStreamFrames", reflect.TypeOf((*MockFrameSource)(nil).AppendStreamFrames), arg0, arg1, arg2)
 }
 
 // HasData mocks base method.

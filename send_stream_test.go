@@ -32,7 +32,7 @@ var _ = Describe("Send Stream", func() {
 	BeforeEach(func() {
 		mockSender = NewMockStreamSender(mockCtrl)
 		mockFC = mocks.NewMockStreamFlowController(mockCtrl)
-		str = newSendStream(streamID, mockSender, mockFC, protocol.VersionWhatever)
+		str = newSendStream(streamID, mockSender, mockFC)
 
 		timeout := scaleDuration(250 * time.Millisecond)
 		strWithTimeout = gbytes.TimeoutWriter(str, timeout)
@@ -85,7 +85,7 @@ var _ = Describe("Send Stream", func() {
 			waitForWrite()
 			mockFC.EXPECT().SendWindowSize().Return(protocol.MaxByteCount)
 			mockFC.EXPECT().AddBytesSent(protocol.ByteCount(6))
-			frame, _ := str.popStreamFrame(protocol.MaxByteCount)
+			frame, _ := str.popStreamFrame(protocol.MaxByteCount, protocol.Version1)
 			f := frame.Frame.(*wire.StreamFrame)
 			Expect(f.Data).To(Equal([]byte("foobar")))
 			Expect(f.Fin).To(BeFalse())
@@ -109,19 +109,19 @@ var _ = Describe("Send Stream", func() {
 			waitForWrite()
 			mockFC.EXPECT().SendWindowSize().Return(protocol.MaxByteCount).Times(2)
 			mockFC.EXPECT().AddBytesSent(protocol.ByteCount(3)).Times(2)
-			frame, _ := str.popStreamFrame(expectedFrameHeaderLen(0) + 3)
+			frame, _ := str.popStreamFrame(expectedFrameHeaderLen(0)+3, protocol.Version1)
 			f := frame.Frame.(*wire.StreamFrame)
 			Expect(f.Offset).To(BeZero())
 			Expect(f.Fin).To(BeFalse())
 			Expect(f.Data).To(Equal([]byte("foo")))
 			Expect(f.DataLenPresent).To(BeTrue())
-			frame, _ = str.popStreamFrame(protocol.MaxByteCount)
+			frame, _ = str.popStreamFrame(protocol.MaxByteCount, protocol.Version1)
 			f = frame.Frame.(*wire.StreamFrame)
 			Expect(f.Data).To(Equal([]byte("bar")))
 			Expect(f.Fin).To(BeFalse())
 			Expect(f.Offset).To(Equal(protocol.ByteCount(3)))
 			Expect(f.DataLenPresent).To(BeTrue())
-			Expect(str.popStreamFrame(1000)).To(BeNil())
+			Expect(str.popStreamFrame(1000, protocol.Version1)).To(BeNil())
 			Eventually(done).Should(BeClosed())
 		})
 
@@ -141,7 +141,7 @@ var _ = Describe("Send Stream", func() {
 			Eventually(done).Should(BeClosed()) // both Write calls returned without any data having been dequeued yet
 			mockFC.EXPECT().SendWindowSize().Return(protocol.MaxByteCount)
 			mockFC.EXPECT().AddBytesSent(protocol.ByteCount(6))
-			frame, _ := str.popStreamFrame(protocol.MaxByteCount)
+			frame, _ := str.popStreamFrame(protocol.MaxByteCount, protocol.Version1)
 			f := frame.Frame.(*wire.StreamFrame)
 			Expect(f.Offset).To(BeZero())
 			Expect(f.Fin).To(BeFalse())
@@ -163,7 +163,7 @@ var _ = Describe("Send Stream", func() {
 			}()
 			waitForWrite()
 			for i := 0; i < 5; i++ {
-				frame, _ := str.popStreamFrame(1100)
+				frame, _ := str.popStreamFrame(1100, protocol.Version1)
 				f := frame.Frame.(*wire.StreamFrame)
 				Expect(f.Offset).To(BeNumerically("~", 1100*i, 10*i))
 				Expect(f.Fin).To(BeFalse())
@@ -186,13 +186,13 @@ var _ = Describe("Send Stream", func() {
 			waitForWrite()
 			mockFC.EXPECT().SendWindowSize().Return(protocol.MaxByteCount).Times(2)
 			mockFC.EXPECT().AddBytesSent(protocol.ByteCount(2))
-			frame, hasMoreData := str.popStreamFrame(expectedFrameHeaderLen(0) + 2)
+			frame, hasMoreData := str.popStreamFrame(expectedFrameHeaderLen(0)+2, protocol.Version1)
 			Expect(hasMoreData).To(BeTrue())
 			f := frame.Frame.(*wire.StreamFrame)
 			Expect(f.DataLen()).To(Equal(protocol.ByteCount(2)))
 			Consistently(done).ShouldNot(BeClosed())
 			mockFC.EXPECT().AddBytesSent(protocol.ByteCount(1))
-			frame, hasMoreData = str.popStreamFrame(expectedFrameHeaderLen(1) + 1)
+			frame, hasMoreData = str.popStreamFrame(expectedFrameHeaderLen(1)+1, protocol.Version1)
 			Expect(hasMoreData).To(BeTrue())
 			f = frame.Frame.(*wire.StreamFrame)
 			Expect(f.DataLen()).To(Equal(protocol.ByteCount(1)))
@@ -214,13 +214,13 @@ var _ = Describe("Send Stream", func() {
 			waitForWrite()
 			mockFC.EXPECT().SendWindowSize().Return(protocol.MaxByteCount).Times(2)
 			mockFC.EXPECT().AddBytesSent(protocol.ByteCount(2))
-			frame, hasMoreData := str.popStreamFrame(expectedFrameHeaderLen(0) + 2)
+			frame, hasMoreData := str.popStreamFrame(expectedFrameHeaderLen(0)+2, protocol.Version1)
 			Expect(hasMoreData).To(BeTrue())
 			f := frame.Frame.(*wire.StreamFrame)
 			Expect(f.Data).To(Equal([]byte("fo")))
 			Consistently(done).ShouldNot(BeClosed())
 			mockFC.EXPECT().AddBytesSent(protocol.ByteCount(4))
-			frame, hasMoreData = str.popStreamFrame(expectedFrameHeaderLen(2) + 4)
+			frame, hasMoreData = str.popStreamFrame(expectedFrameHeaderLen(2)+4, protocol.Version1)
 			Expect(hasMoreData).To(BeTrue())
 			f = frame.Frame.(*wire.StreamFrame)
 			Expect(f.Data).To(Equal([]byte("obar")))
@@ -228,7 +228,7 @@ var _ = Describe("Send Stream", func() {
 		})
 
 		It("popStreamFrame returns nil if no data is available", func() {
-			frame, hasMoreData := str.popStreamFrame(1000)
+			frame, hasMoreData := str.popStreamFrame(1000, protocol.Version1)
 			Expect(frame).To(BeNil())
 			Expect(hasMoreData).To(BeFalse())
 		})
@@ -246,15 +246,15 @@ var _ = Describe("Send Stream", func() {
 			waitForWrite()
 			mockFC.EXPECT().SendWindowSize().Return(protocol.MaxByteCount).Times(2)
 			mockFC.EXPECT().AddBytesSent(gomock.Any()).Times(2)
-			frame, hasMoreData := str.popStreamFrame(50)
+			frame, hasMoreData := str.popStreamFrame(50, protocol.Version1)
 			Expect(frame).ToNot(BeNil())
 			Expect(frame.Frame.(*wire.StreamFrame).Fin).To(BeFalse())
 			Expect(hasMoreData).To(BeTrue())
-			frame, hasMoreData = str.popStreamFrame(protocol.MaxByteCount)
+			frame, hasMoreData = str.popStreamFrame(protocol.MaxByteCount, protocol.Version1)
 			Expect(frame).ToNot(BeNil())
 			Expect(frame.Frame.(*wire.StreamFrame).Fin).To(BeFalse())
 			Expect(hasMoreData).To(BeFalse())
-			frame, _ = str.popStreamFrame(protocol.MaxByteCount)
+			frame, _ = str.popStreamFrame(protocol.MaxByteCount, protocol.Version1)
 			Expect(frame).To(BeNil())
 			Eventually(done).Should(BeClosed())
 		})
@@ -275,10 +275,10 @@ var _ = Describe("Send Stream", func() {
 				Expect(n).To(Equal(3))
 			}()
 			waitForWrite()
-			frame, _ := str.popStreamFrame(frameHeaderSize + 1)
+			frame, _ := str.popStreamFrame(frameHeaderSize+1, protocol.Version1)
 			f := frame.Frame.(*wire.StreamFrame)
 			Expect(f.Data).To(Equal([]byte("f")))
-			frame, _ = str.popStreamFrame(100)
+			frame, _ = str.popStreamFrame(100, protocol.Version1)
 			Expect(frame).ToNot(BeNil())
 			f = frame.Frame.(*wire.StreamFrame)
 			Expect(f.Data).To(Equal([]byte("oo")))
@@ -323,7 +323,7 @@ var _ = Describe("Send Stream", func() {
 					Expect(err).ToNot(HaveOccurred())
 				}()
 				waitForWrite()
-				f, hasMoreData := str.popStreamFrame(1000)
+				f, hasMoreData := str.popStreamFrame(1000, protocol.Version1)
 				Expect(f).To(BeNil())
 				Expect(hasMoreData).To(BeFalse())
 				// make the Write go routine return
@@ -345,7 +345,7 @@ var _ = Describe("Send Stream", func() {
 				// first pop a STREAM frame of the maximum size allowed by flow control
 				mockFC.EXPECT().SendWindowSize().Return(protocol.ByteCount(3))
 				mockFC.EXPECT().AddBytesSent(protocol.ByteCount(3))
-				f, hasMoreData := str.popStreamFrame(expectedFrameHeaderLen(0) + 3)
+				f, hasMoreData := str.popStreamFrame(expectedFrameHeaderLen(0)+3, protocol.Version1)
 				Expect(f).ToNot(BeNil())
 				Expect(hasMoreData).To(BeTrue())
 
@@ -357,7 +357,7 @@ var _ = Describe("Send Stream", func() {
 					StreamID:          streamID,
 					MaximumStreamData: 10,
 				})
-				f, hasMoreData = str.popStreamFrame(1000)
+				f, hasMoreData = str.popStreamFrame(1000, protocol.Version1)
 				Expect(f).To(BeNil())
 				Expect(hasMoreData).To(BeFalse())
 				// make the Write go routine return
@@ -416,7 +416,7 @@ var _ = Describe("Send Stream", func() {
 					Expect(time.Now()).To(BeTemporally("~", deadline, scaleDuration(20*time.Millisecond)))
 				}()
 				waitForWrite()
-				frame, hasMoreData := str.popStreamFrame(50)
+				frame, hasMoreData := str.popStreamFrame(50, protocol.Version1)
 				Expect(frame).ToNot(BeNil())
 				Expect(hasMoreData).To(BeTrue())
 				Eventually(writeReturned, scaleDuration(80*time.Millisecond)).Should(BeClosed())
@@ -437,11 +437,11 @@ var _ = Describe("Send Stream", func() {
 					Expect(err).To(MatchError(errDeadline))
 				}()
 				waitForWrite()
-				frame, hasMoreData := str.popStreamFrame(50)
+				frame, hasMoreData := str.popStreamFrame(50, protocol.Version1)
 				Expect(frame).ToNot(BeNil())
 				Expect(hasMoreData).To(BeTrue())
 				Eventually(writeReturned, scaleDuration(80*time.Millisecond)).Should(BeClosed())
-				frame, hasMoreData = str.popStreamFrame(50)
+				frame, hasMoreData = str.popStreamFrame(50, protocol.Version1)
 				Expect(frame).To(BeNil())
 				Expect(hasMoreData).To(BeFalse())
 			})
@@ -529,7 +529,7 @@ var _ = Describe("Send Stream", func() {
 			It("allows FIN", func() {
 				mockSender.EXPECT().onHasStreamData(streamID)
 				str.Close()
-				frame, hasMoreData := str.popStreamFrame(1000)
+				frame, hasMoreData := str.popStreamFrame(1000, protocol.Version1)
 				Expect(frame).ToNot(BeNil())
 				f := frame.Frame.(*wire.StreamFrame)
 				Expect(f.Data).To(BeEmpty())
@@ -546,12 +546,12 @@ var _ = Describe("Send Stream", func() {
 				Expect(str.Close()).To(Succeed())
 				mockFC.EXPECT().SendWindowSize().Return(protocol.MaxByteCount).Times(2)
 				mockFC.EXPECT().AddBytesSent(gomock.Any()).Times(2)
-				frame, _ := str.popStreamFrame(3 + frameHeaderLen)
+				frame, _ := str.popStreamFrame(3+frameHeaderLen, protocol.Version1)
 				Expect(frame).ToNot(BeNil())
 				f := frame.Frame.(*wire.StreamFrame)
 				Expect(f.Data).To(Equal([]byte("foo")))
 				Expect(f.Fin).To(BeFalse())
-				frame, _ = str.popStreamFrame(protocol.MaxByteCount)
+				frame, _ = str.popStreamFrame(protocol.MaxByteCount, protocol.Version1)
 				f = frame.Frame.(*wire.StreamFrame)
 				Expect(f.Data).To(Equal([]byte("bar")))
 				Expect(f.Fin).To(BeTrue())
@@ -575,7 +575,7 @@ var _ = Describe("Send Stream", func() {
 					if i == 5 {
 						Eventually(done).Should(BeClosed())
 					}
-					frame, _ := str.popStreamFrame(1100)
+					frame, _ := str.popStreamFrame(1100, protocol.Version1)
 					Expect(frame).ToNot(BeNil())
 					f := frame.Frame.(*wire.StreamFrame)
 					Expect(f.Data).To(Equal(getDataAtOffset(f.Offset, f.DataLen())))
@@ -585,12 +585,12 @@ var _ = Describe("Send Stream", func() {
 
 			It("doesn't allow FIN after it is closed for shutdown", func() {
 				str.closeForShutdown(errors.New("test"))
-				f, hasMoreData := str.popStreamFrame(1000)
+				f, hasMoreData := str.popStreamFrame(1000, protocol.Version1)
 				Expect(f).To(BeNil())
 				Expect(hasMoreData).To(BeFalse())
 
 				Expect(str.Close()).To(Succeed())
-				f, hasMoreData = str.popStreamFrame(1000)
+				f, hasMoreData = str.popStreamFrame(1000, protocol.Version1)
 				Expect(f).To(BeNil())
 				Expect(hasMoreData).To(BeFalse())
 			})
@@ -598,12 +598,12 @@ var _ = Describe("Send Stream", func() {
 			It("doesn't allow FIN twice", func() {
 				mockSender.EXPECT().onHasStreamData(streamID)
 				str.Close()
-				frame, _ := str.popStreamFrame(1000)
+				frame, _ := str.popStreamFrame(1000, protocol.Version1)
 				Expect(frame).ToNot(BeNil())
 				f := frame.Frame.(*wire.StreamFrame)
 				Expect(f.Data).To(BeEmpty())
 				Expect(f.Fin).To(BeTrue())
-				frame, hasMoreData := str.popStreamFrame(1000)
+				frame, hasMoreData := str.popStreamFrame(1000, protocol.Version1)
 				Expect(frame).To(BeNil())
 				Expect(hasMoreData).To(BeFalse())
 			})
@@ -631,11 +631,11 @@ var _ = Describe("Send Stream", func() {
 					close(done)
 				}()
 				waitForWrite()
-				frame, hasMoreData := str.popStreamFrame(50) // get a STREAM frame containing some data, but not all
+				frame, hasMoreData := str.popStreamFrame(50, protocol.Version1) // get a STREAM frame containing some data, but not all
 				Expect(frame).ToNot(BeNil())
 				Expect(hasMoreData).To(BeTrue())
 				str.closeForShutdown(testErr)
-				frame, hasMoreData = str.popStreamFrame(1000)
+				frame, hasMoreData = str.popStreamFrame(1000, protocol.Version1)
 				Expect(frame).To(BeNil())
 				Expect(hasMoreData).To(BeFalse())
 				Eventually(done).Should(BeClosed())
@@ -710,7 +710,7 @@ var _ = Describe("Send Stream", func() {
 				}()
 
 				runtime.Gosched()
-				go str.popStreamFrame(protocol.MaxByteCount)
+				go str.popStreamFrame(protocol.MaxByteCount, protocol.Version1)
 				go str.CancelWrite(1234)
 				Eventually(errChan).Should(Receive(Not(HaveOccurred())))
 			})
@@ -730,7 +730,7 @@ var _ = Describe("Send Stream", func() {
 					close(writeReturned)
 				}()
 				waitForWrite()
-				frame, _ := str.popStreamFrame(50)
+				frame, _ := str.popStreamFrame(50, protocol.Version1)
 				Expect(frame).ToNot(BeNil())
 				mockSender.EXPECT().onStreamCompleted(streamID)
 				str.CancelWrite(1234)
@@ -750,12 +750,12 @@ var _ = Describe("Send Stream", func() {
 					close(writeReturned)
 				}()
 				waitForWrite()
-				frame, hasMoreData := str.popStreamFrame(50)
+				frame, hasMoreData := str.popStreamFrame(50, protocol.Version1)
 				Expect(hasMoreData).To(BeTrue())
 				Expect(frame).ToNot(BeNil())
 				mockSender.EXPECT().onStreamCompleted(streamID)
 				str.CancelWrite(1234)
-				frame, hasMoreData = str.popStreamFrame(10)
+				frame, hasMoreData = str.popStreamFrame(10, protocol.Version1)
 				Expect(frame).To(BeNil())
 				Expect(hasMoreData).To(BeFalse())
 				Eventually(writeReturned).Should(BeClosed())
@@ -774,12 +774,12 @@ var _ = Describe("Send Stream", func() {
 					close(writeReturned)
 				}()
 				waitForWrite()
-				frame, hasMoreData := str.popStreamFrame(50)
+				frame, hasMoreData := str.popStreamFrame(50, protocol.Version1)
 				Expect(hasMoreData).To(BeTrue())
 				Expect(frame).ToNot(BeNil())
 				mockSender.EXPECT().onStreamCompleted(streamID)
 				str.CancelWrite(1234)
-				frame, hasMoreData = str.popStreamFrame(10)
+				frame, hasMoreData = str.popStreamFrame(10, protocol.Version1)
 				Expect(hasMoreData).To(BeFalse())
 				Expect(frame).To(BeNil())
 				Eventually(writeReturned).Should(BeClosed())
@@ -797,7 +797,7 @@ var _ = Describe("Send Stream", func() {
 					close(writeReturned)
 				}()
 				waitForWrite()
-				frame, hasMoreData := str.popStreamFrame(50)
+				frame, hasMoreData := str.popStreamFrame(50, protocol.Version1)
 				Expect(hasMoreData).To(BeTrue())
 				Expect(frame).ToNot(BeNil())
 				mockSender.EXPECT().onStreamCompleted(streamID)
@@ -902,7 +902,7 @@ var _ = Describe("Send Stream", func() {
 			}
 			mockSender.EXPECT().onHasStreamData(streamID)
 			str.queueRetransmission(f)
-			frame, _ := str.popStreamFrame(protocol.MaxByteCount)
+			frame, _ := str.popStreamFrame(protocol.MaxByteCount, protocol.Version1)
 			Expect(frame).ToNot(BeNil())
 			f = frame.Frame.(*wire.StreamFrame)
 			Expect(f.Offset).To(Equal(protocol.ByteCount(0x42)))
@@ -919,14 +919,14 @@ var _ = Describe("Send Stream", func() {
 			}
 			mockSender.EXPECT().onHasStreamData(streamID)
 			str.queueRetransmission(sf)
-			frame, hasMoreData := str.popStreamFrame(sf.Length(str.version) - 3)
+			frame, hasMoreData := str.popStreamFrame(sf.Length(protocol.Version1)-3, protocol.Version1)
 			Expect(frame).ToNot(BeNil())
 			f := frame.Frame.(*wire.StreamFrame)
 			Expect(hasMoreData).To(BeTrue())
 			Expect(f.Offset).To(Equal(protocol.ByteCount(0x42)))
 			Expect(f.Data).To(Equal([]byte("foo")))
 			Expect(f.DataLenPresent).To(BeTrue())
-			frame, _ = str.popStreamFrame(protocol.MaxByteCount)
+			frame, _ = str.popStreamFrame(protocol.MaxByteCount, protocol.Version1)
 			Expect(frame).ToNot(BeNil())
 			f = frame.Frame.(*wire.StreamFrame)
 			Expect(f.Offset).To(Equal(protocol.ByteCount(0x45)))
@@ -943,7 +943,7 @@ var _ = Describe("Send Stream", func() {
 			}
 			mockSender.EXPECT().onHasStreamData(streamID)
 			str.queueRetransmission(f)
-			frame, hasMoreData := str.popStreamFrame(2)
+			frame, hasMoreData := str.popStreamFrame(2, protocol.Version1)
 			Expect(hasMoreData).To(BeTrue())
 			Expect(frame).To(BeNil())
 		})
@@ -960,7 +960,7 @@ var _ = Describe("Send Stream", func() {
 				close(done)
 			}()
 			waitForWrite()
-			frame, _ := str.popStreamFrame(protocol.MaxByteCount)
+			frame, _ := str.popStreamFrame(protocol.MaxByteCount, protocol.Version1)
 			Eventually(done).Should(BeClosed())
 			Expect(frame).ToNot(BeNil())
 			Expect(frame.Frame.(*wire.StreamFrame).Data).To(Equal([]byte("foobar")))
@@ -968,7 +968,7 @@ var _ = Describe("Send Stream", func() {
 			// now lose the frame
 			mockSender.EXPECT().onHasStreamData(streamID)
 			frame.OnLost(frame.Frame)
-			newFrame, _ := str.popStreamFrame(protocol.MaxByteCount)
+			newFrame, _ := str.popStreamFrame(protocol.MaxByteCount, protocol.Version1)
 			Expect(newFrame).ToNot(BeNil())
 			Expect(newFrame.Frame.(*wire.StreamFrame).Data).To(Equal([]byte("foobar")))
 		})
@@ -985,7 +985,7 @@ var _ = Describe("Send Stream", func() {
 				close(done)
 			}()
 			waitForWrite()
-			f, _ := str.popStreamFrame(100)
+			f, _ := str.popStreamFrame(100, protocol.Version1)
 			Expect(f).ToNot(BeNil())
 			gomock.InOrder(
 				mockSender.EXPECT().queueControlFrame(gomock.Any()),
@@ -1018,7 +1018,7 @@ var _ = Describe("Send Stream", func() {
 			// get a bunch of small frames (max. 20 bytes)
 			var frames []ackhandler.Frame
 			for {
-				frame, hasMoreData := str.popStreamFrame(20)
+				frame, hasMoreData := str.popStreamFrame(20, protocol.Version1)
 				if frame == nil {
 					continue
 				}
@@ -1038,7 +1038,7 @@ var _ = Describe("Send Stream", func() {
 			// Now close the stream and acknowledge the FIN.
 			mockSender.EXPECT().onHasStreamData(streamID)
 			Expect(str.Close()).To(Succeed())
-			frame, _ := str.popStreamFrame(protocol.MaxByteCount)
+			frame, _ := str.popStreamFrame(protocol.MaxByteCount, protocol.Version1)
 			Expect(frame).ToNot(BeNil())
 			mockSender.EXPECT().onStreamCompleted(streamID)
 			frame.OnAcked(frame.Frame)
@@ -1057,7 +1057,7 @@ var _ = Describe("Send Stream", func() {
 			Eventually(done).Should(BeClosed())
 			Expect(str.Close()).To(Succeed())
 
-			frame, hasMoreData := str.popStreamFrame(protocol.MaxByteCount)
+			frame, hasMoreData := str.popStreamFrame(protocol.MaxByteCount, protocol.Version1)
 			Expect(hasMoreData).To(BeFalse())
 			Expect(frame).ToNot(BeNil())
 			Expect(frame.Frame.(*wire.StreamFrame).Fin).To(BeTrue())
@@ -1082,7 +1082,7 @@ var _ = Describe("Send Stream", func() {
 			// get a bunch of small frames (max. 20 bytes)
 			var frames []ackhandler.Frame
 			for {
-				frame, _ := str.popStreamFrame(20)
+				frame, _ := str.popStreamFrame(20, protocol.Version1)
 				if frame == nil {
 					continue
 				}
@@ -1101,7 +1101,7 @@ var _ = Describe("Send Stream", func() {
 			frames[0].OnLost(frames[0].Frame)
 
 			// get the retransmission and acknowledge it
-			ret, _ := str.popStreamFrame(protocol.MaxByteCount)
+			ret, _ := str.popStreamFrame(protocol.MaxByteCount, protocol.Version1)
 			Expect(ret).ToNot(BeNil())
 			mockSender.EXPECT().onStreamCompleted(streamID)
 			ret.OnAcked(ret.Frame)
@@ -1139,7 +1139,7 @@ var _ = Describe("Send Stream", func() {
 				if completed {
 					break
 				}
-				f, _ := str.popStreamFrame(protocol.ByteCount(mrand.Intn(300) + 100))
+				f, _ := str.popStreamFrame(protocol.ByteCount(mrand.Intn(300)+100), protocol.Version1)
 				if f == nil {
 					continue
 				}

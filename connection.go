@@ -25,7 +25,7 @@ import (
 )
 
 type unpacker interface {
-	UnpackLongHeader(hdr *wire.Header, rcvTime time.Time, data []byte) (*unpackedPacket, error)
+	UnpackLongHeader(hdr *wire.Header, rcvTime time.Time, data []byte, v protocol.VersionNumber) (*unpackedPacket, error)
 	UnpackShortHeader(rcvTime time.Time, data []byte) (protocol.PacketNumber, protocol.PacketNumberLen, protocol.KeyPhaseBit, []byte, error)
 }
 
@@ -284,7 +284,6 @@ var newConnection = func(
 		runner.ReplaceWithClosed,
 		s.queueControlFrame,
 		s.config.ConnectionIDGenerator,
-		s.version,
 	)
 	s.preSetup()
 	s.ctx, s.ctxCancel = context.WithCancel(context.WithValue(context.Background(), ConnectionTracingKey, tracingID))
@@ -296,7 +295,6 @@ var newConnection = func(
 		s.perspective,
 		s.tracer,
 		s.logger,
-		s.version,
 	)
 	initialStream := newCryptoStream()
 	handshakeStream := newCryptoStream()
@@ -353,22 +351,8 @@ var newConnection = func(
 		s.version,
 	)
 	s.cryptoStreamHandler = cs
-	s.packer = newPacketPacker(
-		srcConnID,
-		s.connIDManager.Get,
-		initialStream,
-		handshakeStream,
-		s.sentPacketHandler,
-		s.retransmissionQueue,
-		s.RemoteAddr(),
-		cs,
-		s.framer,
-		s.receivedPacketHandler,
-		s.datagramQueue,
-		s.perspective,
-		s.version,
-	)
-	s.unpacker = newPacketUnpacker(cs, s.srcConnIDLen, s.version)
+	s.packer = newPacketPacker(srcConnID, s.connIDManager.Get, initialStream, handshakeStream, s.sentPacketHandler, s.retransmissionQueue, s.RemoteAddr(), cs, s.framer, s.receivedPacketHandler, s.datagramQueue, s.perspective)
+	s.unpacker = newPacketUnpacker(cs, s.srcConnIDLen)
 	s.cryptoStreamManager = newCryptoStreamManager(cs, initialStream, handshakeStream, s.oneRTTStream)
 	return s
 }
@@ -419,7 +403,6 @@ var newClientConnection = func(
 		runner.ReplaceWithClosed,
 		s.queueControlFrame,
 		s.config.ConnectionIDGenerator,
-		s.version,
 	)
 	s.preSetup()
 	s.ctx, s.ctxCancel = context.WithCancel(context.WithValue(context.Background(), ConnectionTracingKey, tracingID))
@@ -431,7 +414,6 @@ var newClientConnection = func(
 		s.perspective,
 		s.tracer,
 		s.logger,
-		s.version,
 	)
 	initialStream := newCryptoStream()
 	handshakeStream := newCryptoStream()
@@ -480,22 +462,8 @@ var newClientConnection = func(
 	s.clientHelloWritten = clientHelloWritten
 	s.cryptoStreamHandler = cs
 	s.cryptoStreamManager = newCryptoStreamManager(cs, initialStream, handshakeStream, newCryptoStream())
-	s.unpacker = newPacketUnpacker(cs, s.srcConnIDLen, s.version)
-	s.packer = newPacketPacker(
-		srcConnID,
-		s.connIDManager.Get,
-		initialStream,
-		handshakeStream,
-		s.sentPacketHandler,
-		s.retransmissionQueue,
-		s.RemoteAddr(),
-		cs,
-		s.framer,
-		s.receivedPacketHandler,
-		s.datagramQueue,
-		s.perspective,
-		s.version,
-	)
+	s.unpacker = newPacketUnpacker(cs, s.srcConnIDLen)
+	s.packer = newPacketPacker(srcConnID, s.connIDManager.Get, initialStream, handshakeStream, s.sentPacketHandler, s.retransmissionQueue, s.RemoteAddr(), cs, s.framer, s.receivedPacketHandler, s.datagramQueue, s.perspective)
 	if len(tlsConf.ServerName) > 0 {
 		s.tokenStoreKey = tlsConf.ServerName
 	} else {
@@ -511,8 +479,8 @@ var newClientConnection = func(
 
 func (s *connection) preSetup() {
 	s.sendQueue = newSendQueue(s.conn)
-	s.retransmissionQueue = newRetransmissionQueue(s.version)
-	s.frameParser = wire.NewFrameParser(s.config.EnableDatagrams, s.version)
+	s.retransmissionQueue = newRetransmissionQueue()
+	s.frameParser = wire.NewFrameParser(s.config.EnableDatagrams)
 	s.rttStats = &utils.RTTStats{}
 	s.connFlowController = flowcontrol.NewConnectionFlowController(
 		protocol.ByteCount(s.config.InitialConnectionReceiveWindow),
@@ -534,9 +502,8 @@ func (s *connection) preSetup() {
 		uint64(s.config.MaxIncomingStreams),
 		uint64(s.config.MaxIncomingUniStreams),
 		s.perspective,
-		s.version,
 	)
-	s.framer = newFramer(s.streamsMap, s.version)
+	s.framer = newFramer(s.streamsMap)
 	s.receivedPackets = make(chan *receivedPacket, protocol.MaxConnUnprocessedPackets)
 	s.closeChan = make(chan closeError, 1)
 	s.sendingScheduled = make(chan struct{}, 1)
@@ -1014,7 +981,7 @@ func (s *connection) handleLongHeaderPacket(p *receivedPacket, hdr *wire.Header)
 		return false
 	}
 
-	packet, err := s.unpacker.UnpackLongHeader(hdr, p.rcvTime, p.data)
+	packet, err := s.unpacker.UnpackLongHeader(hdr, p.rcvTime, p.data, s.version)
 	if err != nil {
 		wasQueued = s.handleUnpackError(err, p, logging.PacketTypeFromHeader(hdr))
 		return false
@@ -1288,7 +1255,7 @@ func (s *connection) handleFrames(
 	// If we're not tracing, this slice will always remain empty.
 	var frames []wire.Frame
 	for len(data) > 0 {
-		l, frame, err := s.frameParser.ParseNext(data, encLevel)
+		l, frame, err := s.frameParser.ParseNext(data, encLevel, s.version)
 		if err != nil {
 			return false, err
 		}
@@ -1830,7 +1797,7 @@ func (s *connection) sendPackets() error {
 
 func (s *connection) maybeSendAckOnlyPacket() error {
 	if !s.handshakeConfirmed {
-		packet, err := s.packer.PackCoalescedPacket(true)
+		packet, err := s.packer.PackCoalescedPacket(true, s.version)
 		if err != nil {
 			return err
 		}
@@ -1842,7 +1809,7 @@ func (s *connection) maybeSendAckOnlyPacket() error {
 	}
 
 	now := time.Now()
-	p, buffer, err := s.packer.PackPacket(true, now)
+	p, buffer, err := s.packer.PackPacket(true, now, s.version)
 	if err != nil {
 		if err == errNothingToPack {
 			return nil
@@ -1863,7 +1830,7 @@ func (s *connection) sendProbePacket(encLevel protocol.EncryptionLevel) error {
 			break
 		}
 		var err error
-		packet, err = s.packer.MaybePackProbePacket(encLevel)
+		packet, err = s.packer.MaybePackProbePacket(encLevel, s.version)
 		if err != nil {
 			return err
 		}
@@ -1884,7 +1851,7 @@ func (s *connection) sendProbePacket(encLevel protocol.EncryptionLevel) error {
 			panic("unexpected encryption level")
 		}
 		var err error
-		packet, err = s.packer.MaybePackProbePacket(encLevel)
+		packet, err = s.packer.MaybePackProbePacket(encLevel, s.version)
 		if err != nil {
 			return err
 		}
@@ -1904,7 +1871,7 @@ func (s *connection) sendPacket() (bool, error) {
 
 	now := time.Now()
 	if !s.handshakeConfirmed {
-		packet, err := s.packer.PackCoalescedPacket(false)
+		packet, err := s.packer.PackCoalescedPacket(false, s.version)
 		if err != nil || packet == nil {
 			return false, err
 		}
@@ -1913,7 +1880,7 @@ func (s *connection) sendPacket() (bool, error) {
 		return true, nil
 	} else if !s.config.DisablePathMTUDiscovery && s.mtuDiscoverer.ShouldSendProbe(now) {
 		ping, size := s.mtuDiscoverer.GetPing()
-		p, buffer, err := s.packer.PackMTUProbePacket(ping, size, now)
+		p, buffer, err := s.packer.PackMTUProbePacket(ping, size, now, s.version)
 		if err != nil {
 			return false, err
 		}
@@ -1921,7 +1888,7 @@ func (s *connection) sendPacket() (bool, error) {
 		s.sendPackedShortHeaderPacket(buffer, p.Packet, now)
 		return true, nil
 	}
-	p, buffer, err := s.packer.PackPacket(false, now)
+	p, buffer, err := s.packer.PackPacket(false, now, s.version)
 	if err != nil {
 		if err == errNothingToPack {
 			return false, nil
@@ -1967,14 +1934,14 @@ func (s *connection) sendConnectionClose(e error) ([]byte, error) {
 	var transportErr *qerr.TransportError
 	var applicationErr *qerr.ApplicationError
 	if errors.As(e, &transportErr) {
-		packet, err = s.packer.PackConnectionClose(transportErr)
+		packet, err = s.packer.PackConnectionClose(transportErr, s.version)
 	} else if errors.As(e, &applicationErr) {
-		packet, err = s.packer.PackApplicationClose(applicationErr)
+		packet, err = s.packer.PackApplicationClose(applicationErr, s.version)
 	} else {
 		packet, err = s.packer.PackConnectionClose(&qerr.TransportError{
 			ErrorCode:    qerr.InternalError,
 			ErrorMessage: fmt.Sprintf("connection BUG: unspecified error type (msg: %s)", e.Error()),
-		})
+		}, s.version)
 	}
 	if err != nil {
 		return nil, err
