@@ -32,7 +32,7 @@ jobs:
           TIMESCALE_FACTOR: 20
         run: go run github.com/onsi/ginkgo/v2/ginkgo -r -v -race -randomize-all -randomize-suites -trace -skip-package integrationtests
       - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v1
+        uses: codecov/codecov-action@v3
         with:
           file: coverage.txt
           env_vars: OS=${{ matrix.os }}, GO=${{ matrix.go }}
