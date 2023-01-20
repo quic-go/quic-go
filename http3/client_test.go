@@ -18,7 +18,7 @@ import (
 	"github.com/lucas-clemente/quic-go/quicvarint"
 
 	"github.com/golang/mock/gomock"
-	"github.com/marten-seemann/qpack"
+	"github.com/quic-go/qpack"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
