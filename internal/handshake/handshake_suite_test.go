@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/lucas-clemente/quic-go/internal/qtls"
+	"github.com/quic-go/quic-go/internal/qtls"
 
 	"github.com/golang/mock/gomock"
 
