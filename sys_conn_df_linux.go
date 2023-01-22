@@ -6,8 +6,9 @@ import (
 	"errors"
 	"syscall"
 
-	"github.com/lucas-clemente/quic-go/internal/utils"
 	"golang.org/x/sys/unix"
+
+	"github.com/quic-go/quic-go/internal/utils"
 )
 
 func setDF(rawConn syscall.RawConn) error {

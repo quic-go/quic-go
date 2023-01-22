@@ -3,7 +3,7 @@ package ackhandler
 import (
 	"sync"
 
-	"github.com/lucas-clemente/quic-go/internal/wire"
+	"github.com/quic-go/quic-go/internal/wire"
 )
 
 type Frame struct {
