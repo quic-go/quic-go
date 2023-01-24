@@ -1,7 +1,6 @@
 package http3
 
 import (
-	"bytes"
 	"context"
 	"crypto/tls"
 	"errors"
@@ -152,11 +151,11 @@ func (c *client) setupConn() error {
 	if err != nil {
 		return err
 	}
-	buf := &bytes.Buffer{}
-	quicvarint.Write(buf, streamTypeControlStream)
+	b := make([]byte, 0, 64)
+	b = quicvarint.Append(b, streamTypeControlStream)
 	// send the SETTINGS frame
-	(&settingsFrame{Datagram: c.opts.EnableDatagram, Other: c.opts.AdditionalSettings}).Write(buf)
-	_, err = str.Write(buf.Bytes())
+	b = (&settingsFrame{Datagram: c.opts.EnableDatagram, Other: c.opts.AdditionalSettings}).Append(b)
+	_, err = str.Write(b)
 	return err
 }
 
@@ -414,6 +413,7 @@ func (c *client) doRequest(req *http.Request, str quic.Stream, opt RoundTripOpt,
 		ProtoMajor: 3,
 		Header:     http.Header{},
 		TLS:        &connState,
+		Request:    req,
 	}
 	for _, hf := range hfs {
 		switch hf.Name {

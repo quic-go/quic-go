@@ -4,7 +4,7 @@ import (
 	"errors"
 
 	"github.com/golang/mock/gomock"
-	. "github.com/onsi/ginkgo"
+	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 )
 
@@ -68,6 +68,48 @@ var _ = Describe("Send Queue", func() {
 		Eventually(q.Available()).Should(Receive())
 		Expect(q.WouldBlock()).To(BeFalse())
 		Expect(func() { q.Send(getPacket([]byte("foobar2"))) }).ToNot(Panic())
+
+		q.Close()
+		Eventually(done).Should(BeClosed())
+	})
+
+	It("signals when sending is possible again, when the first write succeeded", func() {
+		write := make(chan struct{}, 1)
+		written := make(chan struct{}, 100)
+		// now start sending out packets. This should free up queue space.
+		c.EXPECT().Write(gomock.Any()).DoAndReturn(func(b []byte) error {
+			<-write
+			written <- struct{}{}
+			return nil
+		}).AnyTimes()
+		// allow the first packet to be sent immediately
+		write <- struct{}{}
+
+		done := make(chan struct{})
+		go func() {
+			defer GinkgoRecover()
+			q.Run()
+			close(done)
+		}()
+
+		q.Send(getPacket([]byte("foobar")))
+		<-written
+
+		// now fill up the send queue
+		for i := 0; i < sendQueueCapacity+1; i++ {
+			Expect(q.WouldBlock()).To(BeFalse())
+			q.Send(getPacket([]byte("foobar")))
+		}
+
+		Expect(q.WouldBlock()).To(BeTrue())
+		Consistently(q.Available()).ShouldNot(Receive())
+		write <- struct{}{}
+		Eventually(q.Available()).Should(Receive())
+
+		// test shutdown
+		for i := 0; i < sendQueueCapacity; i++ {
+			write <- struct{}{}
+		}
 
 		q.Close()
 		Eventually(done).Should(BeClosed())

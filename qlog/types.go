@@ -39,12 +39,6 @@ func (s streamType) String() string {
 	}
 }
 
-type connectionID protocol.ConnectionID
-
-func (c connectionID) String() string {
-	return fmt.Sprintf("%x", []byte(c))
-}
-
 // category is the qlog event category.
 type category uint8
 

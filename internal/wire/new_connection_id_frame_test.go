@@ -6,7 +6,7 @@ import (
 
 	"github.com/Psiphon-Labs/quic-go/internal/protocol"
 
-	. "github.com/onsi/ginkgo"
+	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 )
 
@@ -24,7 +24,7 @@ var _ = Describe("NEW_CONNECTION_ID frame", func() {
 			Expect(err).ToNot(HaveOccurred())
 			Expect(frame.SequenceNumber).To(Equal(uint64(0xdeadbeef)))
 			Expect(frame.RetirePriorTo).To(Equal(uint64(0xcafe)))
-			Expect(frame.ConnectionID).To(Equal(protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}))
+			Expect(frame.ConnectionID).To(Equal(protocol.ParseConnectionID([]byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10})))
 			Expect(string(frame.StatelessResetToken[:])).To(Equal("deadbeefdecafbad"))
 		})
 
@@ -49,7 +49,7 @@ var _ = Describe("NEW_CONNECTION_ID frame", func() {
 			data = append(data, []byte("deadbeefdecafbad")...)                                                        // stateless reset token
 			b := bytes.NewReader(data)
 			_, err := parseNewConnectionIDFrame(b, protocol.Version1)
-			Expect(err).To(MatchError("invalid connection ID length: 21"))
+			Expect(err).To(MatchError(protocol.ErrInvalidConnectionIDLen))
 		})
 
 		It("errors on EOFs", func() {
@@ -74,18 +74,18 @@ var _ = Describe("NEW_CONNECTION_ID frame", func() {
 			frame := &NewConnectionIDFrame{
 				SequenceNumber:      0x1337,
 				RetirePriorTo:       0x42,
-				ConnectionID:        protocol.ConnectionID{1, 2, 3, 4, 5, 6},
+				ConnectionID:        protocol.ParseConnectionID([]byte{1, 2, 3, 4, 5, 6}),
 				StatelessResetToken: token,
 			}
-			b := &bytes.Buffer{}
-			Expect(frame.Write(b, protocol.Version1)).To(Succeed())
+			b, err := frame.Append(nil, protocol.Version1)
+			Expect(err).ToNot(HaveOccurred())
 			expected := []byte{0x18}
 			expected = append(expected, encodeVarInt(0x1337)...)
 			expected = append(expected, encodeVarInt(0x42)...)
 			expected = append(expected, 6)
 			expected = append(expected, []byte{1, 2, 3, 4, 5, 6}...)
 			expected = append(expected, token[:]...)
-			Expect(b.Bytes()).To(Equal(expected))
+			Expect(b).To(Equal(expected))
 		})
 
 		It("has the correct length", func() {
@@ -93,12 +93,12 @@ var _ = Describe("NEW_CONNECTION_ID frame", func() {
 			frame := &NewConnectionIDFrame{
 				SequenceNumber:      0xdecafbad,
 				RetirePriorTo:       0xdeadbeefcafe,
-				ConnectionID:        protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8},
+				ConnectionID:        protocol.ParseConnectionID([]byte{1, 2, 3, 4, 5, 6, 7, 8}),
 				StatelessResetToken: token,
 			}
-			b := &bytes.Buffer{}
-			Expect(frame.Write(b, protocol.Version1)).To(Succeed())
-			Expect(frame.Length(protocol.Version1)).To(BeEquivalentTo(b.Len()))
+			b, err := frame.Append(nil, protocol.Version1)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(b).To(HaveLen(int(frame.Length(protocol.Version1))))
 		})
 	})
 })

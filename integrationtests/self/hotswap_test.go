@@ -16,7 +16,7 @@ import (
 	"github.com/Psiphon-Labs/quic-go/internal/protocol"
 	"github.com/Psiphon-Labs/quic-go/internal/testdata"
 
-	. "github.com/onsi/ginkgo"
+	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/onsi/gomega/gbytes"
 )

@@ -20,11 +20,15 @@ func writePacket(hdr *wire.ExtendedHeader, data []byte) []byte {
 
 // packRawPayload returns a new raw payload containing given frames
 func packRawPayload(version protocol.VersionNumber, frames []wire.Frame) []byte {
-	buf := new(bytes.Buffer)
+	var b []byte
 	for _, cf := range frames {
-		cf.Write(buf, version)
+		var err error
+		b, err = cf.Append(b, version)
+		if err != nil {
+			panic(err)
+		}
 	}
-	return buf.Bytes()
+	return b
 }
 
 // ComposeInitialPacket returns an Initial packet encrypted under key

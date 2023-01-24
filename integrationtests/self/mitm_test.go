@@ -18,7 +18,7 @@ import (
 	"github.com/Psiphon-Labs/quic-go/internal/testutils"
 	"github.com/Psiphon-Labs/quic-go/internal/wire"
 
-	. "github.com/onsi/ginkgo"
+	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 )
 
@@ -327,7 +327,11 @@ var _ = Describe("MITM test", func() {
 
 							// Create fake version negotiation packet with no supported versions
 							versions := []protocol.VersionNumber{}
-							packet := wire.ComposeVersionNegotiation(hdr.SrcConnectionID, hdr.DestConnectionID, versions)
+							packet := wire.ComposeVersionNegotiation(
+								protocol.ArbitraryLenConnectionID(hdr.SrcConnectionID.Bytes()),
+								protocol.ArbitraryLenConnectionID(hdr.DestConnectionID.Bytes()),
+								versions,
+							)
 
 							// Send the packet
 							_, err = serverUDPConn.WriteTo(packet, clientUDPConn.LocalAddr())
@@ -364,7 +368,7 @@ var _ = Describe("MITM test", func() {
 							}
 
 							initialPacketIntercepted = true
-							fakeSrcConnID := protocol.ConnectionID{0x12, 0x12, 0x12, 0x12, 0x12, 0x12, 0x12, 0x12}
+							fakeSrcConnID := protocol.ParseConnectionID([]byte{0x12, 0x12, 0x12, 0x12, 0x12, 0x12, 0x12, 0x12})
 							retryPacket := testutils.ComposeRetryPacket(fakeSrcConnID, hdr.SrcConnectionID, hdr.DestConnectionID, []byte("token"), hdr.Version)
 
 							_, err = serverUDPConn.WriteTo(retryPacket, clientUDPConn.LocalAddr())

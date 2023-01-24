@@ -11,7 +11,7 @@ import (
 	"github.com/Psiphon-Labs/quic-go"
 	"github.com/Psiphon-Labs/quic-go/internal/protocol"
 
-	. "github.com/onsi/ginkgo"
+	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 )
 
@@ -19,13 +19,12 @@ type connIDGenerator struct {
 	length int
 }
 
-func (c *connIDGenerator) GenerateConnectionID() ([]byte, error) {
+func (c *connIDGenerator) GenerateConnectionID() (quic.ConnectionID, error) {
 	b := make([]byte, c.length)
-	_, err := rand.Read(b)
-	if err != nil {
+	if _, err := rand.Read(b); err != nil {
 		fmt.Fprintf(GinkgoWriter, "generating conn ID failed: %s", err)
 	}
-	return b, nil
+	return protocol.ParseConnectionID(b), nil
 }
 
 func (c *connIDGenerator) ConnectionIDLen() int {

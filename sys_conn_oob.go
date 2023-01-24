@@ -123,10 +123,15 @@ func newConn(c OOBCapablePacketConn) (*oobConn, error) {
 		bc = ipv4.NewPacketConn(c)
 	}
 
+	msgs := make([]ipv4.Message, batchSize)
+	for i := range msgs {
+		// preallocate the [][]byte
+		msgs[i].Buffers = make([][]byte, 1)
+	}
 	oobConn := &oobConn{
 		OOBCapablePacketConn: c,
 		batchConn:            bc,
-		messages:             make([]ipv4.Message, batchSize),
+		messages:             msgs,
 		readPos:              batchSize,
 	}
 	for i := 0; i < batchSize; i++ {
@@ -143,7 +148,7 @@ func (c *oobConn) ReadPacket() (*receivedPacket, error) {
 			buffer := getPacketBuffer()
 			buffer.Data = buffer.Data[:protocol.MaxPacketBufferSize]
 			c.buffers[i] = buffer
-			c.messages[i].Buffers = [][]byte{c.buffers[i].Data}
+			c.messages[i].Buffers[0] = c.buffers[i].Data
 		}
 		c.readPos = 0
 
@@ -157,18 +162,20 @@ func (c *oobConn) ReadPacket() (*receivedPacket, error) {
 	msg := c.messages[c.readPos]
 	buffer := c.buffers[c.readPos]
 	c.readPos++
-	ctrlMsgs, err := unix.ParseSocketControlMessage(msg.OOB[:msg.NN])
-	if err != nil {
-		return nil, err
-	}
+
+	data := msg.OOB[:msg.NN]
 	var ecn protocol.ECN
 	var destIP net.IP
 	var ifIndex uint32
-	for _, ctrlMsg := range ctrlMsgs {
-		if ctrlMsg.Header.Level == unix.IPPROTO_IP {
-			switch ctrlMsg.Header.Type {
+	for len(data) > 0 {
+		hdr, body, remainder, err := unix.ParseOneSocketControlMessage(data)
+		if err != nil {
+			return nil, err
+		}
+		if hdr.Level == unix.IPPROTO_IP {
+			switch hdr.Type {
 			case msgTypeIPTOS:
-				ecn = protocol.ECN(ctrlMsg.Data[0] & ecnMask)
+				ecn = protocol.ECN(body[0] & ecnMask)
 			case msgTypeIPv4PKTINFO:
 				// struct in_pktinfo {
 				// 	unsigned int   ipi_ifindex;  /* Interface index */
@@ -177,33 +184,34 @@ func (c *oobConn) ReadPacket() (*receivedPacket, error) {
 				// 									address */
 				// };
 				ip := make([]byte, 4)
-				if len(ctrlMsg.Data) == 12 {
-					ifIndex = binary.LittleEndian.Uint32(ctrlMsg.Data)
-					copy(ip, ctrlMsg.Data[8:12])
-				} else if len(ctrlMsg.Data) == 4 {
+				if len(body) == 12 {
+					ifIndex = binary.LittleEndian.Uint32(body)
+					copy(ip, body[8:12])
+				} else if len(body) == 4 {
 					// FreeBSD
-					copy(ip, ctrlMsg.Data)
+					copy(ip, body)
 				}
 				destIP = net.IP(ip)
 			}
 		}
-		if ctrlMsg.Header.Level == unix.IPPROTO_IPV6 {
-			switch ctrlMsg.Header.Type {
+		if hdr.Level == unix.IPPROTO_IPV6 {
+			switch hdr.Type {
 			case unix.IPV6_TCLASS:
-				ecn = protocol.ECN(ctrlMsg.Data[0] & ecnMask)
+				ecn = protocol.ECN(body[0] & ecnMask)
 			case msgTypeIPv6PKTINFO:
 				// struct in6_pktinfo {
 				// 	struct in6_addr ipi6_addr;    /* src/dst IPv6 address */
 				// 	unsigned int    ipi6_ifindex; /* send/recv interface index */
 				// };
-				if len(ctrlMsg.Data) == 20 {
+				if len(body) == 20 {
 					ip := make([]byte, 16)
-					copy(ip, ctrlMsg.Data[:16])
+					copy(ip, body[:16])
 					destIP = net.IP(ip)
-					ifIndex = binary.LittleEndian.Uint32(ctrlMsg.Data[16:])
+					ifIndex = binary.LittleEndian.Uint32(body[16:])
 				}
 			}
 		}
+		data = remainder
 	}
 	var info *packetInfo
 	if destIP != nil {

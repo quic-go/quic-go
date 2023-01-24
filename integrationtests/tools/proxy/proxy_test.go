@@ -13,7 +13,7 @@ import (
 	"github.com/Psiphon-Labs/quic-go/internal/protocol"
 	"github.com/Psiphon-Labs/quic-go/internal/wire"
 
-	. "github.com/onsi/ginkgo"
+	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 )
 
@@ -35,8 +35,8 @@ var _ = Describe("QUIC Proxy", func() {
 				Type:             protocol.PacketTypeInitial,
 				Version:          protocol.VersionTLS,
 				Length:           4 + protocol.ByteCount(len(payload)),
-				DestConnectionID: protocol.ConnectionID{0xde, 0xad, 0xbe, 0xef, 0, 0, 0x13, 0x37},
-				SrcConnectionID:  protocol.ConnectionID{0xde, 0xad, 0xbe, 0xef, 0, 0, 0x13, 0x37},
+				DestConnectionID: protocol.ParseConnectionID([]byte{0xde, 0xad, 0xbe, 0xef, 0, 0, 0x13, 0x37}),
+				SrcConnectionID:  protocol.ParseConnectionID([]byte{0xde, 0xad, 0xbe, 0xef, 0, 0, 0x13, 0x37}),
 			},
 			PacketNumber:    p,
 			PacketNumberLen: protocol.PacketNumberLen4,

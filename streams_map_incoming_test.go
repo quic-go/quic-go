@@ -1,7 +1,6 @@
 package quic
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"math/rand"
@@ -11,7 +10,7 @@ import (
 	"github.com/Psiphon-Labs/quic-go/internal/wire"
 	"github.com/golang/mock/gomock"
 
-	. "github.com/onsi/ginkgo"
+	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 )
 
@@ -43,9 +42,9 @@ var _ = Describe("Streams Map (incoming)", func() {
 
 	// check that the frame can be serialized and deserialized
 	checkFrameSerialization := func(f wire.Frame) {
-		b := &bytes.Buffer{}
-		ExpectWithOffset(1, f.Write(b, protocol.VersionTLS)).To(Succeed())
-		frame, err := wire.NewFrameParser(false, protocol.VersionTLS).ParseNext(bytes.NewReader(b.Bytes()), protocol.Encryption1RTT)
+		b, err := f.Append(nil, protocol.VersionTLS)
+		ExpectWithOffset(1, err).ToNot(HaveOccurred())
+		_, frame, err := wire.NewFrameParser(false, protocol.VersionTLS).ParseNext(b, protocol.Encryption1RTT)
 		ExpectWithOffset(1, err).ToNot(HaveOccurred())
 		Expect(f).To(Equal(frame))
 	}

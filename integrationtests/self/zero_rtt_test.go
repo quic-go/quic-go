@@ -18,8 +18,7 @@ import (
 	"github.com/Psiphon-Labs/quic-go/internal/wire"
 	"github.com/Psiphon-Labs/quic-go/logging"
 
-	. "github.com/onsi/ginkgo"
-	. "github.com/onsi/ginkgo/extensions/table"
+	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 )
 
@@ -217,7 +216,7 @@ var _ = Describe("0-RTT", func() {
 					)
 
 					var numNewConnIDs int
-					for _, p := range tracer.getRcvdPackets() {
+					for _, p := range tracer.getRcvdLongHeaderPackets() {
 						for _, f := range p.frames {
 							if _, ok := f.(*logging.NewConnectionIDFrame); ok {
 								numNewConnIDs++
@@ -233,7 +232,7 @@ var _ = Describe("0-RTT", func() {
 					num0RTT := atomic.LoadUint32(num0RTTPackets)
 					fmt.Fprintf(GinkgoWriter, "Sent %d 0-RTT packets.", num0RTT)
 					Expect(num0RTT).ToNot(BeZero())
-					zeroRTTPackets := get0RTTPackets(tracer.getRcvdPackets())
+					zeroRTTPackets := get0RTTPackets(tracer.getRcvdLongHeaderPackets())
 					Expect(len(zeroRTTPackets)).To(BeNumerically(">", 10))
 					sort.Slice(zeroRTTPackets, func(i, j int) bool { return zeroRTTPackets[i] < zeroRTTPackets[j] })
 					Expect(zeroRTTPackets[0]).To(Equal(protocol.PacketNumber(0)))
@@ -310,7 +309,7 @@ var _ = Describe("0-RTT", func() {
 				num0RTT := atomic.LoadUint32(num0RTTPackets)
 				fmt.Fprintf(GinkgoWriter, "Sent %d 0-RTT packets.", num0RTT)
 				Expect(num0RTT).To(Or(BeEquivalentTo(2), BeEquivalentTo(3))) // the FIN might be sent in a separate packet
-				Expect(get0RTTPackets(tracer.getRcvdPackets())).To(HaveLen(int(num0RTT)))
+				Expect(get0RTTPackets(tracer.getRcvdLongHeaderPackets())).To(HaveLen(int(num0RTT)))
 			})
 
 			It("transfers 0-RTT data, when 0-RTT packets are lost", func() {
@@ -367,12 +366,12 @@ var _ = Describe("0-RTT", func() {
 				fmt.Fprintf(GinkgoWriter, "Sent %d 0-RTT packets. Dropped %d of those.", num0RTT, numDropped)
 				Expect(numDropped).ToNot(BeZero())
 				Expect(num0RTT).ToNot(BeZero())
-				Expect(get0RTTPackets(tracer.getRcvdPackets())).ToNot(BeEmpty())
+				Expect(get0RTTPackets(tracer.getRcvdLongHeaderPackets())).ToNot(BeEmpty())
 			})
 
 			It("retransmits all 0-RTT data when the server performs a Retry", func() {
 				var mutex sync.Mutex
-				var firstConnID, secondConnID protocol.ConnectionID
+				var firstConnID, secondConnID *protocol.ConnectionID
 				var firstCounter, secondCounter protocol.ByteCount
 
 				tlsConf, clientConf := dialAndReceiveSessionTicket(nil)
@@ -415,15 +414,15 @@ var _ = Describe("0-RTT", func() {
 
 						if zeroRTTBytes := countZeroRTTBytes(data); zeroRTTBytes > 0 {
 							if firstConnID == nil {
-								firstConnID = connID
+								firstConnID = &connID
 								firstCounter += zeroRTTBytes
-							} else if firstConnID != nil && firstConnID.Equal(connID) {
+							} else if firstConnID != nil && *firstConnID == connID {
 								Expect(secondConnID).To(BeNil())
 								firstCounter += zeroRTTBytes
 							} else if secondConnID == nil {
-								secondConnID = connID
+								secondConnID = &connID
 								secondCounter += zeroRTTBytes
-							} else if secondConnID != nil && secondConnID.Equal(connID) {
+							} else if secondConnID != nil && *secondConnID == connID {
 								secondCounter += zeroRTTBytes
 							} else {
 								Fail("received 3 connection IDs on 0-RTT packets")
@@ -441,7 +440,7 @@ var _ = Describe("0-RTT", func() {
 				defer mutex.Unlock()
 				Expect(firstCounter).To(BeNumerically("~", 5000+100 /* framing overhead */, 100)) // the FIN bit might be sent extra
 				Expect(secondCounter).To(BeNumerically("~", firstCounter, 20))
-				zeroRTTPackets := get0RTTPackets(tracer.getRcvdPackets())
+				zeroRTTPackets := get0RTTPackets(tracer.getRcvdLongHeaderPackets())
 				Expect(len(zeroRTTPackets)).To(BeNumerically(">=", 5))
 				Expect(zeroRTTPackets[0]).To(BeNumerically(">=", protocol.PacketNumber(5)))
 			})
@@ -516,7 +515,7 @@ var _ = Describe("0-RTT", func() {
 				num0RTT := atomic.LoadUint32(num0RTTPackets)
 				fmt.Fprintf(GinkgoWriter, "Sent %d 0-RTT packets.", num0RTT)
 				Expect(num0RTT).ToNot(BeZero())
-				Expect(get0RTTPackets(tracer.getRcvdPackets())).To(BeEmpty())
+				Expect(get0RTTPackets(tracer.getRcvdLongHeaderPackets())).To(BeEmpty())
 			})
 
 			It("rejects 0-RTT when the ALPN changed", func() {
@@ -545,7 +544,7 @@ var _ = Describe("0-RTT", func() {
 				num0RTT := atomic.LoadUint32(num0RTTPackets)
 				fmt.Fprintf(GinkgoWriter, "Sent %d 0-RTT packets.", num0RTT)
 				Expect(num0RTT).ToNot(BeZero())
-				Expect(get0RTTPackets(tracer.getRcvdPackets())).To(BeEmpty())
+				Expect(get0RTTPackets(tracer.getRcvdLongHeaderPackets())).To(BeEmpty())
 			})
 
 			DescribeTable("flow control limits",
@@ -603,7 +602,7 @@ var _ = Describe("0-RTT", func() {
 					Eventually(conn.Context().Done()).Should(BeClosed())
 
 					var processedFirst bool
-					for _, p := range tracer.getRcvdPackets() {
+					for _, p := range tracer.getRcvdLongHeaderPackets() {
 						for _, f := range p.frames {
 							if sf, ok := f.(*logging.StreamFrame); ok {
 								if !processedFirst {
@@ -613,9 +612,7 @@ var _ = Describe("0-RTT", func() {
 									Expect(sf.Length).To(BeEquivalentTo(3))
 									processedFirst = true
 								} else {
-									// All other STREAM frames can only be sent after handshake completion.
-									Expect(p.hdr.IsLongHeader).To(BeFalse())
-									Expect(sf.Offset).ToNot(BeZero())
+									Fail("STREAM was shouldn't have been sent in 0-RTT")
 								}
 							}
 						}
@@ -700,7 +697,7 @@ var _ = Describe("0-RTT", func() {
 					num0RTT := atomic.LoadUint32(num0RTTPackets)
 					fmt.Fprintf(GinkgoWriter, "Sent %d 0-RTT packets.", num0RTT)
 					Expect(num0RTT).ToNot(BeZero())
-					Expect(get0RTTPackets(tracer.getRcvdPackets())).To(BeEmpty())
+					Expect(get0RTTPackets(tracer.getRcvdLongHeaderPackets())).To(BeEmpty())
 				})
 			}
 
@@ -732,8 +729,8 @@ var _ = Describe("0-RTT", func() {
 
 				transfer0RTTData(ln, proxy.LocalPort(), clientConf, nil, PRData)
 
-				Expect(tracer.getRcvdPackets()[0].hdr.Type).To(Equal(protocol.PacketTypeInitial))
-				zeroRTTPackets := get0RTTPackets(tracer.getRcvdPackets())
+				Expect(tracer.getRcvdLongHeaderPackets()[0].hdr.Type).To(Equal(protocol.PacketTypeInitial))
+				zeroRTTPackets := get0RTTPackets(tracer.getRcvdLongHeaderPackets())
 				Expect(len(zeroRTTPackets)).To(BeNumerically(">", 10))
 				Expect(zeroRTTPackets[0]).To(Equal(protocol.PacketNumber(0)))
 			})

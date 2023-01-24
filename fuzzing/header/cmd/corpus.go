@@ -19,7 +19,7 @@ func getRandomData(l int) []byte {
 	return b
 }
 
-func getVNP(src, dest protocol.ConnectionID, numVersions int) []byte {
+func getVNP(src, dest protocol.ArbitraryLenConnectionID, numVersions int) []byte {
 	versions := make([]protocol.VersionNumber, numVersions)
 	for i := 0; i < numVersions; i++ {
 		versions[i] = protocol.VersionNumber(rand.Uint32())
@@ -31,23 +31,23 @@ func main() {
 	headers := []wire.Header{
 		{ // Initial without token
 			IsLongHeader:     true,
-			SrcConnectionID:  protocol.ConnectionID(getRandomData(3)),
-			DestConnectionID: protocol.ConnectionID(getRandomData(8)),
+			SrcConnectionID:  protocol.ParseConnectionID(getRandomData(3)),
+			DestConnectionID: protocol.ParseConnectionID(getRandomData(8)),
 			Type:             protocol.PacketTypeInitial,
 			Length:           protocol.ByteCount(rand.Intn(1000)),
 			Version:          version,
 		},
 		{ // Initial without token, with zero-length src conn id
 			IsLongHeader:     true,
-			DestConnectionID: protocol.ConnectionID(getRandomData(8)),
+			DestConnectionID: protocol.ParseConnectionID(getRandomData(8)),
 			Type:             protocol.PacketTypeInitial,
 			Length:           protocol.ByteCount(rand.Intn(1000)),
 			Version:          version,
 		},
 		{ // Initial with Token
 			IsLongHeader:     true,
-			SrcConnectionID:  protocol.ConnectionID(getRandomData(10)),
-			DestConnectionID: protocol.ConnectionID(getRandomData(19)),
+			SrcConnectionID:  protocol.ParseConnectionID(getRandomData(10)),
+			DestConnectionID: protocol.ParseConnectionID(getRandomData(19)),
 			Type:             protocol.PacketTypeInitial,
 			Length:           protocol.ByteCount(rand.Intn(1000)),
 			Version:          version,
@@ -55,37 +55,37 @@ func main() {
 		},
 		{ // Handshake packet
 			IsLongHeader:     true,
-			SrcConnectionID:  protocol.ConnectionID(getRandomData(5)),
-			DestConnectionID: protocol.ConnectionID(getRandomData(10)),
+			SrcConnectionID:  protocol.ParseConnectionID(getRandomData(5)),
+			DestConnectionID: protocol.ParseConnectionID(getRandomData(10)),
 			Type:             protocol.PacketTypeHandshake,
 			Length:           protocol.ByteCount(rand.Intn(1000)),
 			Version:          version,
 		},
 		{ // Handshake packet, with zero-length src conn id
 			IsLongHeader:     true,
-			DestConnectionID: protocol.ConnectionID(getRandomData(12)),
+			DestConnectionID: protocol.ParseConnectionID(getRandomData(12)),
 			Type:             protocol.PacketTypeHandshake,
 			Length:           protocol.ByteCount(rand.Intn(1000)),
 			Version:          version,
 		},
 		{ // 0-RTT packet
 			IsLongHeader:     true,
-			SrcConnectionID:  protocol.ConnectionID(getRandomData(8)),
-			DestConnectionID: protocol.ConnectionID(getRandomData(9)),
+			SrcConnectionID:  protocol.ParseConnectionID(getRandomData(8)),
+			DestConnectionID: protocol.ParseConnectionID(getRandomData(9)),
 			Type:             protocol.PacketType0RTT,
 			Length:           protocol.ByteCount(rand.Intn(1000)),
 			Version:          version,
 		},
 		{ // Retry Packet, with empty orig dest conn id
 			IsLongHeader:     true,
-			SrcConnectionID:  protocol.ConnectionID(getRandomData(8)),
-			DestConnectionID: protocol.ConnectionID(getRandomData(9)),
+			SrcConnectionID:  protocol.ParseConnectionID(getRandomData(8)),
+			DestConnectionID: protocol.ParseConnectionID(getRandomData(9)),
 			Type:             protocol.PacketTypeRetry,
 			Token:            getRandomData(1000),
 			Version:          version,
 		},
 		{ // Short-Header
-			DestConnectionID: protocol.ConnectionID(getRandomData(8)),
+			DestConnectionID: protocol.ParseConnectionID(getRandomData(8)),
 		},
 	}
 
@@ -113,28 +113,28 @@ func main() {
 
 	vnps := [][]byte{
 		getVNP(
-			protocol.ConnectionID(getRandomData(8)),
-			protocol.ConnectionID(getRandomData(10)),
+			protocol.ArbitraryLenConnectionID(getRandomData(8)),
+			protocol.ArbitraryLenConnectionID(getRandomData(10)),
 			4,
 		),
 		getVNP(
-			protocol.ConnectionID(getRandomData(10)),
-			protocol.ConnectionID(getRandomData(5)),
+			protocol.ArbitraryLenConnectionID(getRandomData(10)),
+			protocol.ArbitraryLenConnectionID(getRandomData(5)),
 			0,
 		),
 		getVNP(
-			protocol.ConnectionID(getRandomData(3)),
-			protocol.ConnectionID(getRandomData(19)),
+			protocol.ArbitraryLenConnectionID(getRandomData(3)),
+			protocol.ArbitraryLenConnectionID(getRandomData(19)),
 			100,
 		),
 		getVNP(
-			protocol.ConnectionID(getRandomData(3)),
+			protocol.ArbitraryLenConnectionID(getRandomData(3)),
 			nil,
 			20,
 		),
 		getVNP(
 			nil,
-			protocol.ConnectionID(getRandomData(10)),
+			protocol.ArbitraryLenConnectionID(getRandomData(10)),
 			5,
 		),
 	}

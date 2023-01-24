@@ -12,7 +12,7 @@ import (
 	"github.com/Psiphon-Labs/quic-go/internal/qerr"
 	"github.com/Psiphon-Labs/quic-go/logging"
 
-	. "github.com/onsi/ginkgo"
+	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 )
 

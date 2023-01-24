@@ -17,7 +17,7 @@ import (
 	"github.com/Psiphon-Labs/quic-go/internal/utils"
 	"github.com/Psiphon-Labs/quic-go/logging"
 
-	. "github.com/onsi/ginkgo"
+	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 )
 
@@ -54,7 +54,11 @@ var _ = Describe("Tracing", func() {
 	Context("tracer", func() {
 		It("returns nil when there's no io.WriteCloser", func() {
 			t := NewTracer(func(logging.Perspective, []byte) io.WriteCloser { return nil })
-			Expect(t.TracerForConnection(context.Background(), logging.PerspectiveClient, logging.ConnectionID{1, 2, 3, 4})).To(BeNil())
+			Expect(t.TracerForConnection(
+				context.Background(),
+				logging.PerspectiveClient,
+				protocol.ParseConnectionID([]byte{1, 2, 3, 4}),
+			)).To(BeNil())
 		})
 	})
 
@@ -63,7 +67,7 @@ var _ = Describe("Tracing", func() {
 		t := NewConnectionTracer(
 			&limitedWriter{WriteCloser: nopWriteCloser(buf), N: 250},
 			protocol.PerspectiveServer,
-			protocol.ConnectionID{0xde, 0xad, 0xbe, 0xef},
+			protocol.ParseConnectionID([]byte{0xde, 0xad, 0xbe, 0xef}),
 		)
 		for i := uint32(0); i < 1000; i++ {
 			t.UpdatedPTOCount(i)
@@ -85,7 +89,11 @@ var _ = Describe("Tracing", func() {
 		BeforeEach(func() {
 			buf = &bytes.Buffer{}
 			t := NewTracer(func(logging.Perspective, []byte) io.WriteCloser { return nopWriteCloser(buf) })
-			tracer = t.TracerForConnection(context.Background(), logging.PerspectiveServer, logging.ConnectionID{0xde, 0xad, 0xbe, 0xef})
+			tracer = t.TracerForConnection(
+				context.Background(),
+				logging.PerspectiveServer,
+				protocol.ParseConnectionID([]byte{0xde, 0xad, 0xbe, 0xef}),
+			)
 		})
 
 		It("exports a trace that has the right metadata", func() {
@@ -155,8 +163,8 @@ var _ = Describe("Tracing", func() {
 				tracer.StartedConnection(
 					&net.UDPAddr{IP: net.IPv4(192, 168, 13, 37), Port: 42},
 					&net.UDPAddr{IP: net.IPv4(192, 168, 12, 34), Port: 24},
-					protocol.ConnectionID{1, 2, 3, 4},
-					protocol.ConnectionID{5, 6, 7, 8},
+					protocol.ParseConnectionID([]byte{1, 2, 3, 4}),
+					protocol.ParseConnectionID([]byte{5, 6, 7, 8}),
 				)
 				entry := exportAndParseSingle()
 				Expect(entry.Time).To(BeTemporally("~", time.Now(), scaleDuration(10*time.Millisecond)))
@@ -274,6 +282,7 @@ var _ = Describe("Tracing", func() {
 			})
 
 			It("records sent transport parameters", func() {
+				rcid := protocol.ParseConnectionID([]byte{0xde, 0xca, 0xfb, 0xad})
 				tracer.SentTransportParameters(&logging.TransportParameters{
 					InitialMaxStreamDataBidiLocal:   1000,
 					InitialMaxStreamDataBidiRemote:  2000,
@@ -287,9 +296,9 @@ var _ = Describe("Tracing", func() {
 					MaxUDPPayloadSize:               1234,
 					MaxIdleTimeout:                  321 * time.Millisecond,
 					StatelessResetToken:             &protocol.StatelessResetToken{0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88, 0x99, 0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff, 0x00},
-					OriginalDestinationConnectionID: protocol.ConnectionID{0xde, 0xad, 0xc0, 0xde},
-					InitialSourceConnectionID:       protocol.ConnectionID{0xde, 0xad, 0xbe, 0xef},
-					RetrySourceConnectionID:         &protocol.ConnectionID{0xde, 0xca, 0xfb, 0xad},
+					OriginalDestinationConnectionID: protocol.ParseConnectionID([]byte{0xde, 0xad, 0xc0, 0xde}),
+					InitialSourceConnectionID:       protocol.ParseConnectionID([]byte{0xde, 0xad, 0xbe, 0xef}),
+					RetrySourceConnectionID:         &rcid,
 					ActiveConnectionIDLimit:         7,
 					MaxDatagramFrameSize:            protocol.InvalidByteCount,
 				})
@@ -318,7 +327,7 @@ var _ = Describe("Tracing", func() {
 
 			It("records the server's transport parameters, without a stateless reset token", func() {
 				tracer.SentTransportParameters(&logging.TransportParameters{
-					OriginalDestinationConnectionID: protocol.ConnectionID{0xde, 0xad, 0xc0, 0xde},
+					OriginalDestinationConnectionID: protocol.ParseConnectionID([]byte{0xde, 0xad, 0xc0, 0xde}),
 					ActiveConnectionIDLimit:         7,
 				})
 				entry := exportAndParseSingle()
@@ -347,7 +356,7 @@ var _ = Describe("Tracing", func() {
 						IPv4Port:            123,
 						IPv6:                net.IP{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16},
 						IPv6Port:            456,
-						ConnectionID:        protocol.ConnectionID{8, 7, 6, 5, 4, 3, 2, 1},
+						ConnectionID:        protocol.ParseConnectionID([]byte{8, 7, 6, 5, 4, 3, 2, 1}),
 						StatelessResetToken: protocol.StatelessResetToken{15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0},
 					},
 				})
@@ -417,8 +426,8 @@ var _ = Describe("Tracing", func() {
 						Header: logging.Header{
 							IsLongHeader:     true,
 							Type:             protocol.PacketTypeHandshake,
-							DestConnectionID: protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8},
-							SrcConnectionID:  protocol.ConnectionID{4, 3, 2, 1},
+							DestConnectionID: protocol.ParseConnectionID([]byte{1, 2, 3, 4, 5, 6, 7, 8}),
+							SrcConnectionID:  protocol.ParseConnectionID([]byte{4, 3, 2, 1}),
 							Length:           1337,
 							Version:          protocol.VersionTLS,
 						},
@@ -454,7 +463,7 @@ var _ = Describe("Tracing", func() {
 			It("records a sent packet, without an ACK", func() {
 				tracer.SentPacket(
 					&logging.ExtendedHeader{
-						Header:       logging.Header{DestConnectionID: protocol.ConnectionID{1, 2, 3, 4}},
+						Header:       logging.Header{DestConnectionID: protocol.ParseConnectionID([]byte{1, 2, 3, 4})},
 						PacketNumber: 1337,
 					},
 					123,
@@ -477,14 +486,14 @@ var _ = Describe("Tracing", func() {
 				Expect(frames[1].(map[string]interface{})).To(HaveKeyWithValue("frame_type", "max_data"))
 			})
 
-			It("records a received packet", func() {
-				tracer.ReceivedPacket(
+			It("records a received Long Header packet", func() {
+				tracer.ReceivedLongHeaderPacket(
 					&logging.ExtendedHeader{
 						Header: logging.Header{
 							IsLongHeader:     true,
 							Type:             protocol.PacketTypeInitial,
-							DestConnectionID: protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8},
-							SrcConnectionID:  protocol.ConnectionID{4, 3, 2, 1},
+							DestConnectionID: protocol.ParseConnectionID([]byte{1, 2, 3, 4, 5, 6, 7, 8}),
+							SrcConnectionID:  protocol.ParseConnectionID([]byte{4, 3, 2, 1}),
 							Token:            []byte{0xde, 0xad, 0xbe, 0xef},
 							Length:           1234,
 							Version:          protocol.VersionTLS,
@@ -517,13 +526,45 @@ var _ = Describe("Tracing", func() {
 				Expect(ev["frames"].([]interface{})).To(HaveLen(2))
 			})
 
+			It("records a received Short Header packet", func() {
+				shdr := &logging.ShortHeader{
+					DestConnectionID: protocol.ParseConnectionID([]byte{1, 2, 3, 4, 5, 6, 7, 8}),
+					PacketNumber:     1337,
+					PacketNumberLen:  protocol.PacketNumberLen3,
+					KeyPhase:         protocol.KeyPhaseZero,
+				}
+				tracer.ReceivedShortHeaderPacket(
+					shdr,
+					789,
+					[]logging.Frame{
+						&logging.MaxStreamDataFrame{StreamID: 42, MaximumStreamData: 987},
+						&logging.StreamFrame{StreamID: 123, Offset: 1234, Length: 6, Fin: true},
+					},
+				)
+				entry := exportAndParseSingle()
+				Expect(entry.Time).To(BeTemporally("~", time.Now(), scaleDuration(10*time.Millisecond)))
+				Expect(entry.Name).To(Equal("transport:packet_received"))
+				ev := entry.Event
+				Expect(ev).To(HaveKey("raw"))
+				raw := ev["raw"].(map[string]interface{})
+				Expect(raw).To(HaveKeyWithValue("length", float64(789)))
+				Expect(raw).To(HaveKeyWithValue("payload_length", float64(789-(1+8+3))))
+				Expect(ev).To(HaveKey("header"))
+				hdr := ev["header"].(map[string]interface{})
+				Expect(hdr).To(HaveKeyWithValue("packet_type", "1RTT"))
+				Expect(hdr).To(HaveKeyWithValue("packet_number", float64(1337)))
+				Expect(hdr).To(HaveKeyWithValue("key_phase_bit", "0"))
+				Expect(ev).To(HaveKey("frames"))
+				Expect(ev["frames"].([]interface{})).To(HaveLen(2))
+			})
+
 			It("records a received Retry packet", func() {
 				tracer.ReceivedRetry(
 					&logging.Header{
 						IsLongHeader:     true,
 						Type:             protocol.PacketTypeRetry,
-						DestConnectionID: protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8},
-						SrcConnectionID:  protocol.ConnectionID{4, 3, 2, 1},
+						DestConnectionID: protocol.ParseConnectionID([]byte{1, 2, 3, 4, 5, 6, 7, 8}),
+						SrcConnectionID:  protocol.ParseConnectionID([]byte{4, 3, 2, 1}),
 						Token:            []byte{0xde, 0xad, 0xbe, 0xef},
 						Version:          protocol.VersionTLS,
 					},
@@ -548,12 +589,8 @@ var _ = Describe("Tracing", func() {
 
 			It("records a received Version Negotiation packet", func() {
 				tracer.ReceivedVersionNegotiationPacket(
-					&logging.Header{
-						IsLongHeader:     true,
-						Type:             protocol.PacketTypeRetry,
-						DestConnectionID: protocol.ConnectionID{1, 2, 3, 4, 5, 6, 7, 8},
-						SrcConnectionID:  protocol.ConnectionID{4, 3, 2, 1},
-					},
+					protocol.ArbitraryLenConnectionID{1, 2, 3, 4, 5, 6, 7, 8},
+					protocol.ArbitraryLenConnectionID{4, 3, 2, 1},
 					[]protocol.VersionNumber{0xdeadbeef, 0xdecafbad},
 				)
 				entry := exportAndParseSingle()
@@ -568,12 +605,12 @@ var _ = Describe("Tracing", func() {
 				Expect(header).To(HaveKeyWithValue("packet_type", "version_negotiation"))
 				Expect(header).ToNot(HaveKey("packet_number"))
 				Expect(header).ToNot(HaveKey("version"))
-				Expect(header).To(HaveKey("dcid"))
-				Expect(header).To(HaveKey("scid"))
+				Expect(header).To(HaveKeyWithValue("dcid", "0102030405060708"))
+				Expect(header).To(HaveKeyWithValue("scid", "04030201"))
 			})
 
 			It("records buffered packets", func() {
-				tracer.BufferedPacket(logging.PacketTypeHandshake)
+				tracer.BufferedPacket(logging.PacketTypeHandshake, 1337)
 				entry := exportAndParseSingle()
 				Expect(entry.Time).To(BeTemporally("~", time.Now(), scaleDuration(10*time.Millisecond)))
 				Expect(entry.Name).To(Equal("transport:packet_buffered"))
@@ -582,6 +619,8 @@ var _ = Describe("Tracing", func() {
 				hdr := ev["header"].(map[string]interface{})
 				Expect(hdr).To(HaveLen(1))
 				Expect(hdr).To(HaveKeyWithValue("packet_type", "handshake"))
+				Expect(ev).To(HaveKey("raw"))
+				Expect(ev["raw"].(map[string]interface{})).To(HaveKeyWithValue("length", float64(1337)))
 				Expect(ev).To(HaveKeyWithValue("trigger", "keys_unavailable"))
 			})
 
@@ -757,7 +796,7 @@ var _ = Describe("Tracing", func() {
 				var keyTypes []string
 				for _, entry := range entries {
 					Expect(entry.Time).To(BeTemporally("~", time.Now(), scaleDuration(10*time.Millisecond)))
-					Expect(entry.Name).To(Equal("security:key_retired"))
+					Expect(entry.Name).To(Equal("security:key_discarded"))
 					ev := entry.Event
 					Expect(ev).To(HaveKeyWithValue("trigger", "tls"))
 					Expect(ev).To(HaveKey("key_type"))
@@ -773,7 +812,7 @@ var _ = Describe("Tracing", func() {
 				Expect(entries).To(HaveLen(1))
 				entry := entries[0]
 				Expect(entry.Time).To(BeTemporally("~", time.Now(), scaleDuration(10*time.Millisecond)))
-				Expect(entry.Name).To(Equal("security:key_retired"))
+				Expect(entry.Name).To(Equal("security:key_discarded"))
 				ev := entry.Event
 				Expect(ev).To(HaveKeyWithValue("trigger", "tls"))
 				Expect(ev).To(HaveKeyWithValue("key_type", "server_0rtt_secret"))
@@ -786,7 +825,7 @@ var _ = Describe("Tracing", func() {
 				var keyTypes []string
 				for _, entry := range entries {
 					Expect(entry.Time).To(BeTemporally("~", time.Now(), scaleDuration(10*time.Millisecond)))
-					Expect(entry.Name).To(Equal("security:key_retired"))
+					Expect(entry.Name).To(Equal("security:key_discarded"))
 					ev := entry.Event
 					Expect(ev).To(HaveKeyWithValue("generation", float64(42)))
 					Expect(ev).ToNot(HaveKey("trigger"))

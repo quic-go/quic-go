@@ -50,6 +50,8 @@ func init() {
 const eventChanSize = 50
 
 type tracer struct {
+	logging.NullTracer
+
 	getLogWriter func(p logging.Perspective, connectionID []byte) io.WriteCloser
 }
 
@@ -65,10 +67,6 @@ func (t *tracer) TracerForConnection(_ context.Context, p logging.Perspective, o
 		return NewConnectionTracer(w, p, odcid)
 	}
 	return nil
-}
-
-func (t *tracer) SentPacket(net.Addr, *logging.Header, protocol.ByteCount, []logging.Frame) {}
-func (t *tracer) DroppedPacket(net.Addr, logging.PacketType, protocol.ByteCount, logging.PacketDropReason) {
 }
 
 type connectionTracer struct {
@@ -110,8 +108,8 @@ func (t *connectionTracer) run() {
 		trace: trace{
 			VantagePoint: vantagePoint{Type: t.perspective},
 			CommonFields: commonFields{
-				ODCID:         connectionID(t.odcid),
-				GroupID:       connectionID(t.odcid),
+				ODCID:         t.odcid,
+				GroupID:       t.odcid,
 				ReferenceTime: t.referenceTime,
 			},
 		},
@@ -288,7 +286,7 @@ func (t *connectionTracer) SentPacket(hdr *wire.ExtendedHeader, packetSize loggi
 	for _, f := range frames {
 		fs = append(fs, frame{Frame: f})
 	}
-	header := *transformExtendedHeader(hdr)
+	header := *transformLongHeader(hdr)
 	t.mutex.Lock()
 	t.recordEvent(time.Now(), &eventPacketSent{
 		Header:        header,
@@ -299,17 +297,34 @@ func (t *connectionTracer) SentPacket(hdr *wire.ExtendedHeader, packetSize loggi
 	t.mutex.Unlock()
 }
 
-func (t *connectionTracer) ReceivedPacket(hdr *wire.ExtendedHeader, packetSize logging.ByteCount, frames []logging.Frame) {
+func (t *connectionTracer) ReceivedLongHeaderPacket(hdr *logging.ExtendedHeader, packetSize logging.ByteCount, frames []logging.Frame) {
 	fs := make([]frame, len(frames))
 	for i, f := range frames {
 		fs[i] = frame{Frame: f}
 	}
-	header := *transformExtendedHeader(hdr)
+	header := *transformLongHeader(hdr)
 	t.mutex.Lock()
 	t.recordEvent(time.Now(), &eventPacketReceived{
 		Header:        header,
 		Length:        packetSize,
 		PayloadLength: hdr.Length,
+		Frames:        fs,
+	})
+	t.mutex.Unlock()
+}
+
+func (t *connectionTracer) ReceivedShortHeaderPacket(hdr *logging.ShortHeader, packetSize logging.ByteCount, frames []logging.Frame) {
+	fs := make([]frame, len(frames))
+	for i, f := range frames {
+		fs[i] = frame{Frame: f}
+	}
+	header := *transformShortHeader(hdr)
+	hdrLen := 1 + hdr.DestConnectionID.Len() + int(hdr.PacketNumberLen)
+	t.mutex.Lock()
+	t.recordEvent(time.Now(), &eventPacketReceived{
+		Header:        header,
+		Length:        packetSize,
+		PayloadLength: packetSize - protocol.ByteCount(hdrLen),
 		Frames:        fs,
 	})
 	t.mutex.Unlock()
@@ -323,22 +338,28 @@ func (t *connectionTracer) ReceivedRetry(hdr *wire.Header) {
 	t.mutex.Unlock()
 }
 
-func (t *connectionTracer) ReceivedVersionNegotiationPacket(hdr *wire.Header, versions []logging.VersionNumber) {
+func (t *connectionTracer) ReceivedVersionNegotiationPacket(dest, src logging.ArbitraryLenConnectionID, versions []logging.VersionNumber) {
 	ver := make([]versionNumber, len(versions))
 	for i, v := range versions {
 		ver[i] = versionNumber(v)
 	}
 	t.mutex.Lock()
 	t.recordEvent(time.Now(), &eventVersionNegotiationReceived{
-		Header:            *transformHeader(hdr),
+		Header: packetHeaderVersionNegotiation{
+			SrcConnectionID:  src,
+			DestConnectionID: dest,
+		},
 		SupportedVersions: ver,
 	})
 	t.mutex.Unlock()
 }
 
-func (t *connectionTracer) BufferedPacket(pt logging.PacketType) {
+func (t *connectionTracer) BufferedPacket(pt logging.PacketType, size protocol.ByteCount) {
 	t.mutex.Lock()
-	t.recordEvent(time.Now(), &eventPacketBuffered{PacketType: pt})
+	t.recordEvent(time.Now(), &eventPacketBuffered{
+		PacketType: pt,
+		PacketSize: size,
+	})
 	t.mutex.Unlock()
 }
 
@@ -428,10 +449,10 @@ func (t *connectionTracer) DroppedEncryptionLevel(encLevel protocol.EncryptionLe
 	t.mutex.Lock()
 	now := time.Now()
 	if encLevel == protocol.Encryption0RTT {
-		t.recordEvent(now, &eventKeyRetired{KeyType: encLevelToKeyType(encLevel, t.perspective)})
+		t.recordEvent(now, &eventKeyDiscarded{KeyType: encLevelToKeyType(encLevel, t.perspective)})
 	} else {
-		t.recordEvent(now, &eventKeyRetired{KeyType: encLevelToKeyType(encLevel, protocol.PerspectiveServer)})
-		t.recordEvent(now, &eventKeyRetired{KeyType: encLevelToKeyType(encLevel, protocol.PerspectiveClient)})
+		t.recordEvent(now, &eventKeyDiscarded{KeyType: encLevelToKeyType(encLevel, protocol.PerspectiveServer)})
+		t.recordEvent(now, &eventKeyDiscarded{KeyType: encLevelToKeyType(encLevel, protocol.PerspectiveClient)})
 	}
 	t.mutex.Unlock()
 }
@@ -439,11 +460,11 @@ func (t *connectionTracer) DroppedEncryptionLevel(encLevel protocol.EncryptionLe
 func (t *connectionTracer) DroppedKey(generation protocol.KeyPhase) {
 	t.mutex.Lock()
 	now := time.Now()
-	t.recordEvent(now, &eventKeyRetired{
+	t.recordEvent(now, &eventKeyDiscarded{
 		KeyType:    encLevelToKeyType(protocol.Encryption1RTT, protocol.PerspectiveServer),
 		Generation: generation,
 	})
-	t.recordEvent(now, &eventKeyRetired{
+	t.recordEvent(now, &eventKeyDiscarded{
 		KeyType:    encLevelToKeyType(protocol.Encryption1RTT, protocol.PerspectiveClient),
 		Generation: generation,
 	})

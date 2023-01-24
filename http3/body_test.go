@@ -7,7 +7,7 @@ import (
 	mockquic "github.com/Psiphon-Labs/quic-go/internal/mocks/quic"
 
 	"github.com/golang/mock/gomock"
-	. "github.com/onsi/ginkgo"
+	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 )
 

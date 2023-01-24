@@ -4,11 +4,28 @@ import (
 	"bytes"
 	"io"
 
-	. "github.com/onsi/ginkgo"
+	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 )
 
 var _ = Describe("Big Endian encoding / decoding", func() {
+	Context("converting", func() {
+		It("Uint16", func() {
+			b := []byte{0x13, 0x37}
+			Expect(BigEndian.Uint16(b)).To(Equal(uint16(0x1337)))
+		})
+
+		It("Uint24", func() {
+			b := []byte{0x13, 0x99, 0x37}
+			Expect(BigEndian.Uint24(b)).To(Equal(uint32(0x139937)))
+		})
+
+		It("Uint32", func() {
+			b := []byte{0xde, 0xad, 0xbe, 0xef}
+			Expect(BigEndian.Uint32(b)).To(Equal(uint32(0xdeadbeef)))
+		})
+	})
+
 	Context("ReadUint16", func() {
 		It("reads a big endian", func() {
 			b := []byte{0x13, 0xEF}

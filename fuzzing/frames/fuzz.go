@@ -1,7 +1,6 @@
 package frames
 
 import (
-	"bytes"
 	"fmt"
 
 	"github.com/Psiphon-Labs/quic-go/internal/protocol"
@@ -37,28 +36,28 @@ func Fuzz(data []byte) int {
 	parser := wire.NewFrameParser(true, version)
 	parser.SetAckDelayExponent(protocol.DefaultAckDelayExponent)
 
-	r := bytes.NewReader(data)
-	initialLen := r.Len()
+	initialLen := len(data)
 
 	var frames []wire.Frame
 
-	for r.Len() > 0 {
-		f, err := parser.ParseNext(r, encLevel)
+	for len(data) > 0 {
+		l, f, err := parser.ParseNext(data, encLevel)
 		if err != nil {
 			break
 		}
+		data = data[l:]
 		frames = append(frames, f)
 	}
-	parsedLen := initialLen - r.Len()
+	parsedLen := initialLen - len(data)
 
 	if len(frames) == 0 {
 		return 0
 	}
 
-	b := &bytes.Buffer{}
+	var b []byte
 	for _, f := range frames {
 		if f == nil { // PADDING frame
-			b.WriteByte(0x0)
+			b = append(b, 0)
 			continue
 		}
 		// We accept empty STREAM frames, but we don't write them.
@@ -68,11 +67,12 @@ func Fuzz(data []byte) int {
 				continue
 			}
 		}
-		lenBefore := b.Len()
-		if err := f.Write(b, version); err != nil {
+		lenBefore := len(b)
+		b, err := f.Append(b, version)
+		if err != nil {
 			panic(fmt.Sprintf("Error writing frame %#v: %s", f, err))
 		}
-		frameLen := b.Len() - lenBefore
+		frameLen := len(b) - lenBefore
 		if f.Length(version) != protocol.ByteCount(frameLen) {
 			panic(fmt.Sprintf("Inconsistent frame length for %#v: expected %d, got %d", f, frameLen, f.Length(version)))
 		}
@@ -80,8 +80,8 @@ func Fuzz(data []byte) int {
 			sf.PutBack()
 		}
 	}
-	if b.Len() > parsedLen {
-		panic(fmt.Sprintf("Serialized length (%d) is longer than parsed length (%d)", b.Len(), parsedLen))
+	if len(b) > parsedLen {
+		panic(fmt.Sprintf("Serialized length (%d) is longer than parsed length (%d)", len(b), parsedLen))
 	}
 	return 1
 }

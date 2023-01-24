@@ -15,7 +15,7 @@ import (
 
 	"github.com/golang/mock/gomock"
 
-	. "github.com/onsi/ginkgo"
+	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 )
 
@@ -50,7 +50,7 @@ var _ = Describe("Client", func() {
 
 	BeforeEach(func() {
 		tlsConf = &tls.Config{NextProtos: []string{"proto1"}}
-		connID = protocol.ConnectionID{0, 0, 0, 0, 0, 0, 0x13, 0x37}
+		connID = protocol.ParseConnectionID([]byte{0, 0, 0, 0, 0, 0, 0x13, 0x37})
 		originalClientConnConstructor = newClientConnection
 		tracer = mocklogging.NewMockConnectionTracer(mockCtrl)
 		tr := mocklogging.NewMockTracer(mockCtrl)
@@ -449,6 +449,7 @@ var _ = Describe("Client", func() {
 
 		Context("quic.Config", func() {
 			It("setups with the right values", func() {
+				srk := &StatelessResetKey{'f', 'o', 'o', 'b', 'a', 'r'}
 				tokenStore := NewLRUTokenStore(10, 4)
 				config := &Config{
 					HandshakeIdleTimeout:  1337 * time.Minute,
@@ -456,7 +457,7 @@ var _ = Describe("Client", func() {
 					MaxIncomingStreams:    1234,
 					MaxIncomingUniStreams: 4321,
 					ConnectionIDLength:    13,
-					StatelessResetKey:     []byte("foobar"),
+					StatelessResetKey:     srk,
 					TokenStore:            tokenStore,
 					EnableDatagrams:       true,
 				}
@@ -466,7 +467,7 @@ var _ = Describe("Client", func() {
 				Expect(c.MaxIncomingStreams).To(BeEquivalentTo(1234))
 				Expect(c.MaxIncomingUniStreams).To(BeEquivalentTo(4321))
 				Expect(c.ConnectionIDLength).To(Equal(13))
-				Expect(c.StatelessResetKey).To(Equal([]byte("foobar")))
+				Expect(c.StatelessResetKey).To(Equal(srk))
 				Expect(c.TokenStore).To(Equal(tokenStore))
 				Expect(c.EnableDatagrams).To(BeTrue())
 			})
@@ -518,7 +519,7 @@ var _ = Describe("Client", func() {
 			manager.EXPECT().Add(connID, gomock.Any())
 			mockMultiplexer.EXPECT().AddConn(packetConn, gomock.Any(), gomock.Any(), gomock.Any()).Return(manager, nil)
 
-			config := &Config{Versions: []protocol.VersionNumber{protocol.VersionTLS}, ConnectionIDGenerator: &mockedConnIDGenerator{ConnID: connID}}
+			config := &Config{Versions: []protocol.VersionNumber{protocol.VersionTLS}, ConnectionIDGenerator: &mockConnIDGenerator{ConnID: connID}}
 			c := make(chan struct{})
 			var cconn sendConn
 			var version protocol.VersionNumber
@@ -596,7 +597,7 @@ var _ = Describe("Client", func() {
 				return conn
 			}
 
-			config := &Config{Tracer: config.Tracer, Versions: []protocol.VersionNumber{protocol.VersionTLS}, ConnectionIDGenerator: &mockedConnIDGenerator{ConnID: connID}}
+			config := &Config{Tracer: config.Tracer, Versions: []protocol.VersionNumber{protocol.VersionTLS}, ConnectionIDGenerator: &mockConnIDGenerator{ConnID: connID}}
 			tracer.EXPECT().StartedConnection(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any())
 			_, err := DialAddr("localhost:7890", tlsConf, config)
 			Expect(err).ToNot(HaveOccurred())
@@ -605,14 +606,14 @@ var _ = Describe("Client", func() {
 	})
 })
 
-type mockedConnIDGenerator struct {
+type mockConnIDGenerator struct {
 	ConnID protocol.ConnectionID
 }
 
-func (m *mockedConnIDGenerator) GenerateConnectionID() ([]byte, error) {
+func (m *mockConnIDGenerator) GenerateConnectionID() (protocol.ConnectionID, error) {
 	return m.ConnID, nil
 }
 
-func (m *mockedConnIDGenerator) ConnectionIDLen() int {
+func (m *mockConnIDGenerator) ConnectionIDLen() int {
 	return m.ConnID.Len()
 }

@@ -5,10 +5,10 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/Psiphon-Labs/quic-go/internal/protocol"
 	"github.com/Psiphon-Labs/quic-go/internal/utils"
 
-	"github.com/Psiphon-Labs/quic-go/internal/protocol"
-	. "github.com/onsi/ginkgo"
+	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 )
 

@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bytes"
 	"log"
 	"math/rand"
 	"time"
@@ -225,13 +224,13 @@ func getFrames() []wire.Frame {
 		&wire.NewConnectionIDFrame{
 			SequenceNumber:      seq1,
 			RetirePriorTo:       seq1 / 2,
-			ConnectionID:        getRandomData(4),
+			ConnectionID:        protocol.ParseConnectionID(getRandomData(4)),
 			StatelessResetToken: token1,
 		},
 		&wire.NewConnectionIDFrame{
 			SequenceNumber:      seq2,
 			RetirePriorTo:       seq2,
-			ConnectionID:        getRandomData(17),
+			ConnectionID:        protocol.ParseConnectionID(getRandomData(17)),
 			StatelessResetToken: token2,
 		},
 	}...)
@@ -253,11 +252,11 @@ func getFrames() []wire.Frame {
 
 func main() {
 	for _, f := range getFrames() {
-		b := &bytes.Buffer{}
-		if err := f.Write(b, version); err != nil {
+		b, err := f.Append(nil, version)
+		if err != nil {
 			log.Fatal(err)
 		}
-		if err := helper.WriteCorpusFileWithPrefix("corpus", b.Bytes(), 1); err != nil {
+		if err := helper.WriteCorpusFileWithPrefix("corpus", b, 1); err != nil {
 			log.Fatal(err)
 		}
 	}
@@ -265,20 +264,22 @@ func main() {
 	for i := 0; i < 30; i++ {
 		frames := getFrames()
 
-		b := &bytes.Buffer{}
+		var b []byte
 		for j := 0; j < rand.Intn(30)+2; j++ {
 			if rand.Intn(10) == 0 { // write a PADDING frame
-				b.WriteByte(0x0)
+				b = append(b, 0)
 			}
 			f := frames[rand.Intn(len(frames))]
-			if err := f.Write(b, version); err != nil {
+			var err error
+			b, err = f.Append(b, version)
+			if err != nil {
 				log.Fatal(err)
 			}
 			if rand.Intn(10) == 0 { // write a PADDING frame
-				b.WriteByte(0x0)
+				b = append(b, 0)
 			}
 		}
-		if err := helper.WriteCorpusFileWithPrefix("corpus", b.Bytes(), 1); err != nil {
+		if err := helper.WriteCorpusFileWithPrefix("corpus", b, 1); err != nil {
 			log.Fatal(err)
 		}
 	}

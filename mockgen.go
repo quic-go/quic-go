@@ -23,5 +23,5 @@ package quic
 //go:generate sh -c "./mockgen_private.sh quic mock_packet_handler_manager_test.go github.com/Psiphon-Labs/quic-go packetHandlerManager"
 //go:generate sh -c "./mockgen_private.sh quic mock_multiplexer_test.go github.com/Psiphon-Labs/quic-go multiplexer"
 //go:generate sh -c "./mockgen_private.sh quic mock_batch_conn_test.go github.com/Psiphon-Labs/quic-go batchConn"
-//go:generate sh -c "mockgen -package quic -self_package github.com/Psiphon-Labs/quic-go -destination mock_token_store_test.go github.com/Psiphon-Labs/quic-go TokenStore"
-//go:generate sh -c "mockgen -package quic -self_package github.com/Psiphon-Labs/quic-go -destination mock_packetconn_test.go net PacketConn"
+//go:generate sh -c "go run github.com/golang/mock/mockgen -package quic -self_package github.com/Psiphon-Labs/quic-go -destination mock_token_store_test.go github.com/Psiphon-Labs/quic-go TokenStore"
+//go:generate sh -c "go run github.com/golang/mock/mockgen -package quic -self_package github.com/Psiphon-Labs/quic-go -destination mock_packetconn_test.go net PacketConn"

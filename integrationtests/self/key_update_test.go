@@ -11,13 +11,13 @@ import (
 	"github.com/Psiphon-Labs/quic-go/internal/protocol"
 	"github.com/Psiphon-Labs/quic-go/logging"
 
-	. "github.com/onsi/ginkgo"
+	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 )
 
 var (
 	sentHeaders     []*logging.ExtendedHeader
-	receivedHeaders []*logging.ExtendedHeader
+	receivedHeaders []*logging.ShortHeader
 )
 
 func countKeyPhases() (sent, received int) {
@@ -33,9 +33,6 @@ func countKeyPhases() (sent, received int) {
 	}
 	lastKeyPhase = protocol.KeyPhaseOne
 	for _, hdr := range receivedHeaders {
-		if hdr.IsLongHeader {
-			continue
-		}
 		if hdr.KeyPhase != lastKeyPhase {
 			received++
 			lastKeyPhase = hdr.KeyPhase
@@ -52,7 +49,7 @@ func (t *keyUpdateConnTracer) SentPacket(hdr *logging.ExtendedHeader, size loggi
 	sentHeaders = append(sentHeaders, hdr)
 }
 
-func (t *keyUpdateConnTracer) ReceivedPacket(hdr *logging.ExtendedHeader, size logging.ByteCount, frames []logging.Frame) {
+func (t *keyUpdateConnTracer) ReceivedShortHeaderPacket(hdr *logging.ShortHeader, size logging.ByteCount, frames []logging.Frame) {
 	receivedHeaders = append(receivedHeaders, hdr)
 }
 

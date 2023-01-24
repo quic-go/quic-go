@@ -6,7 +6,7 @@ import (
 	"github.com/Psiphon-Labs/quic-go/internal/utils"
 	"github.com/Psiphon-Labs/quic-go/internal/wire"
 
-	. "github.com/onsi/ginkgo"
+	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 )
 
@@ -16,31 +16,51 @@ var _ = Describe("Datagram Queue", func() {
 
 	BeforeEach(func() {
 		queued = make(chan struct{}, 100)
-		queue = newDatagramQueue(func() {
-			queued <- struct{}{}
-		}, utils.DefaultLogger)
+		queue = newDatagramQueue(func() { queued <- struct{}{} }, utils.DefaultLogger)
 	})
 
 	Context("sending", func() {
 		It("returns nil when there's no datagram to send", func() {
-			Expect(queue.Get()).To(BeNil())
+			Expect(queue.Peek()).To(BeNil())
 		})
 
 		It("queues a datagram", func() {
 			done := make(chan struct{})
+			frame := &wire.DatagramFrame{Data: []byte("foobar")}
 			go func() {
 				defer GinkgoRecover()
 				defer close(done)
-				Expect(queue.AddAndWait(&wire.DatagramFrame{Data: []byte("foobar")})).To(Succeed())
+				Expect(queue.AddAndWait(frame)).To(Succeed())
 			}()
 
 			Eventually(queued).Should(HaveLen(1))
 			Consistently(done).ShouldNot(BeClosed())
-			f := queue.Get()
-			Expect(f).ToNot(BeNil())
+			f := queue.Peek()
 			Expect(f.Data).To(Equal([]byte("foobar")))
 			Eventually(done).Should(BeClosed())
-			Expect(queue.Get()).To(BeNil())
+			queue.Pop()
+			Expect(queue.Peek()).To(BeNil())
+		})
+
+		It("returns the same datagram multiple times, when Pop isn't called", func() {
+			sent := make(chan struct{}, 1)
+			go func() {
+				defer GinkgoRecover()
+				Expect(queue.AddAndWait(&wire.DatagramFrame{Data: []byte("foo")})).To(Succeed())
+				sent <- struct{}{}
+				Expect(queue.AddAndWait(&wire.DatagramFrame{Data: []byte("bar")})).To(Succeed())
+				sent <- struct{}{}
+			}()
+
+			Eventually(queued).Should(HaveLen(1))
+			f := queue.Peek()
+			Expect(f.Data).To(Equal([]byte("foo")))
+			Eventually(sent).Should(Receive())
+			Expect(queue.Peek()).To(Equal(f))
+			Expect(queue.Peek()).To(Equal(f))
+			queue.Pop()
+			f = queue.Peek()
+			Expect(f.Data).To(Equal([]byte("bar")))
 		})
 
 		It("closes", func() {

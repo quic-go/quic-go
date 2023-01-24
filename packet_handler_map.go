@@ -47,7 +47,7 @@ type packetHandlerMap struct {
 
 	closeQueue chan closePacket
 
-	handlers          map[string] /* string(ConnectionID)*/ packetHandler
+	handlers          map[protocol.ConnectionID]packetHandler
 	resetTokens       map[protocol.StatelessResetToken] /* stateless reset token */ packetHandler
 	server            unknownPacketHandler
 	numZeroRTTEntries int
@@ -104,7 +104,7 @@ var receiveBufferWarningOnce sync.Once
 func newPacketHandlerMap(
 	c net.PacketConn,
 	connIDLen int,
-	statelessResetKey []byte,
+	statelessResetKey *StatelessResetKey,
 	tracer logging.Tracer,
 	logger utils.Logger,
 ) (packetHandlerManager, error) {
@@ -129,15 +129,17 @@ func newPacketHandlerMap(
 		conn:                    conn,
 		connIDLen:               connIDLen,
 		listening:               make(chan struct{}),
-		handlers:                make(map[string]packetHandler),
+		handlers:                make(map[protocol.ConnectionID]packetHandler),
 		resetTokens:             make(map[protocol.StatelessResetToken]packetHandler),
 		deleteRetiredConnsAfter: protocol.RetiredConnectionIDDeleteTimeout,
 		zeroRTTQueueDuration:    protocol.Max0RTTQueueingDuration,
 		closeQueue:              make(chan closePacket, 4),
-		statelessResetEnabled:   len(statelessResetKey) > 0,
-		statelessResetHasher:    hmac.New(sha256.New, statelessResetKey),
+		statelessResetEnabled:   statelessResetKey != nil,
 		tracer:                  tracer,
 		logger:                  logger,
+	}
+	if m.statelessResetEnabled {
+		m.statelessResetHasher = hmac.New(sha256.New, statelessResetKey[:])
 	}
 	go m.listen()
 	go m.runCloseQueue()
@@ -178,11 +180,11 @@ func (h *packetHandlerMap) Add(id protocol.ConnectionID, handler packetHandler) 
 	h.mutex.Lock()
 	defer h.mutex.Unlock()
 
-	if _, ok := h.handlers[string(id)]; ok {
+	if _, ok := h.handlers[id]; ok {
 		h.logger.Debugf("Not adding connection ID %s, as it already exists.", id)
 		return false
 	}
-	h.handlers[string(id)] = handler
+	h.handlers[id] = handler
 	h.logger.Debugf("Adding connection ID %s.", id)
 	return true
 }
@@ -192,7 +194,7 @@ func (h *packetHandlerMap) AddWithConnID(clientDestConnID, newConnID protocol.Co
 	defer h.mutex.Unlock()
 
 	var q *zeroRTTQueue
-	if handler, ok := h.handlers[string(clientDestConnID)]; ok {
+	if handler, ok := h.handlers[clientDestConnID]; ok {
 		q, ok = handler.(*zeroRTTQueue)
 		if !ok {
 			h.logger.Debugf("Not adding connection ID %s for a new connection, as it already exists.", clientDestConnID)
@@ -208,15 +210,15 @@ func (h *packetHandlerMap) AddWithConnID(clientDestConnID, newConnID protocol.Co
 	if q != nil {
 		q.EnqueueAll(conn)
 	}
-	h.handlers[string(clientDestConnID)] = conn
-	h.handlers[string(newConnID)] = conn
+	h.handlers[clientDestConnID] = conn
+	h.handlers[newConnID] = conn
 	h.logger.Debugf("Adding connection IDs %s and %s for a new connection.", clientDestConnID, newConnID)
 	return true
 }
 
 func (h *packetHandlerMap) Remove(id protocol.ConnectionID) {
 	h.mutex.Lock()
-	delete(h.handlers, string(id))
+	delete(h.handlers, id)
 	h.mutex.Unlock()
 	h.logger.Debugf("Removing connection ID %s.", id)
 }
@@ -225,7 +227,7 @@ func (h *packetHandlerMap) Retire(id protocol.ConnectionID) {
 	h.logger.Debugf("Retiring connection ID %s in %s.", id, h.deleteRetiredConnsAfter)
 	time.AfterFunc(h.deleteRetiredConnsAfter, func() {
 		h.mutex.Lock()
-		delete(h.handlers, string(id))
+		delete(h.handlers, id)
 		h.mutex.Unlock()
 		h.logger.Debugf("Removing connection ID %s after it has been retired.", id)
 	})
@@ -256,7 +258,7 @@ func (h *packetHandlerMap) ReplaceWithClosed(ids []protocol.ConnectionID, pers p
 
 	h.mutex.Lock()
 	for _, id := range ids {
-		h.handlers[string(id)] = handler
+		h.handlers[id] = handler
 	}
 	h.mutex.Unlock()
 	h.logger.Debugf("Replacing connection for connection IDs %s with a closed connection.", ids)
@@ -265,7 +267,7 @@ func (h *packetHandlerMap) ReplaceWithClosed(ids []protocol.ConnectionID, pers p
 		h.mutex.Lock()
 		handler.shutdown()
 		for _, id := range ids {
-			delete(h.handlers, string(id))
+			delete(h.handlers, id)
 		}
 		h.mutex.Unlock()
 		h.logger.Debugf("Removing connection IDs %s for a closed connection after it has been retired.", ids)
@@ -396,7 +398,7 @@ func (h *packetHandlerMap) handlePacket(p *receivedPacket) {
 		return
 	}
 
-	if handler, ok := h.handlers[string(connID)]; ok {
+	if handler, ok := h.handlers[connID]; ok {
 		if ha, ok := handler.(*zeroRTTQueue); ok { // only enqueue 0-RTT packets in the 0-RTT queue
 			if wire.Is0RTTPacket(p.data) {
 				ha.handlePacket(p)
@@ -421,15 +423,15 @@ func (h *packetHandlerMap) handlePacket(p *receivedPacket) {
 		}
 		h.numZeroRTTEntries++
 		queue := &zeroRTTQueue{queue: make([]*receivedPacket, 0, 8)}
-		h.handlers[string(connID)] = queue
+		h.handlers[connID] = queue
 		queue.retireTimer = time.AfterFunc(h.zeroRTTQueueDuration, func() {
 			h.mutex.Lock()
 			defer h.mutex.Unlock()
 			// The entry might have been replaced by an actual connection.
 			// Only delete it if it's still a 0-RTT queue.
-			if handler, ok := h.handlers[string(connID)]; ok {
+			if handler, ok := h.handlers[connID]; ok {
 				if q, ok := handler.(*zeroRTTQueue); ok {
-					delete(h.handlers, string(connID))
+					delete(h.handlers, connID)
 					h.numZeroRTTEntries--
 					if h.numZeroRTTEntries < 0 {
 						panic("number of 0-RTT queues < 0")

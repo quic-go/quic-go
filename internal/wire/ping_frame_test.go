@@ -4,11 +4,12 @@ import (
 	"bytes"
 
 	"github.com/Psiphon-Labs/quic-go/internal/protocol"
-	. "github.com/onsi/ginkgo"
+
+	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 )
 
-var _ = Describe("PingFrame", func() {
+var _ = Describe("PING frame", func() {
 	Context("when parsing", func() {
 		It("accepts sample frame", func() {
 			b := bytes.NewReader([]byte{0x1})
@@ -25,13 +26,13 @@ var _ = Describe("PingFrame", func() {
 
 	Context("when writing", func() {
 		It("writes a sample frame", func() {
-			b := &bytes.Buffer{}
 			frame := PingFrame{}
-			frame.Write(b, protocol.VersionWhatever)
-			Expect(b.Bytes()).To(Equal([]byte{0x1}))
+			b, err := frame.Append(nil, protocol.VersionWhatever)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(b).To(Equal([]byte{0x1}))
 		})
 
-		It("has the correct min length", func() {
+		It("has the correct length", func() {
 			frame := PingFrame{}
 			Expect(frame.Length(0)).To(Equal(protocol.ByteCount(1)))
 		})

@@ -14,7 +14,7 @@ import (
 	"github.com/Psiphon-Labs/quic-go/internal/qerr"
 	"github.com/Psiphon-Labs/quic-go/internal/wire"
 
-	. "github.com/onsi/ginkgo"
+	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 )
 
