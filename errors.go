@@ -41,20 +41,12 @@ const (
 	NoViablePathError         = qerr.NoViablePathError
 )
 
-type StreamErrorAction uint8
-
-const (
-	StreamErrorActionUnknown = iota
-	StreamErrorActionRead
-	StreamErrorActionWrite
-)
-
 // A StreamError is used for Stream.CancelRead and Stream.CancelWrite.
 // It is also returned from Stream.Read and Stream.Write if the peer canceled reading or writing.
 type StreamError struct {
 	StreamID  StreamID
 	ErrorCode StreamErrorCode
-	Action    StreamErrorAction
+	Remote    bool
 }
 
 func (e *StreamError) Is(target error) bool {
@@ -64,13 +56,13 @@ func (e *StreamError) Is(target error) bool {
 
 func (e *StreamError) Error() string {
 	var format string
-	switch e.Action {
-	case StreamErrorActionRead:
-		format = "Read on stream %d canceled with error code %d"
-	case StreamErrorActionWrite:
-		format = "Write on stream %d canceled with error code %d"
-	default:
-		format = "stream %d canceled with error code %d"
-	}
+	// switch e.Action {
+	// case StreamErrorActionRead:
+	// 	format = "Read on stream %d canceled with error code %d"
+	// case StreamErrorActionWrite:
+	// 	format = "Write on stream %d canceled with error code %d"
+	// default:
+	// 	format = "stream %d canceled with error code %d"
+	// }
 	return fmt.Sprintf(format, e.StreamID, e.ErrorCode)
 }

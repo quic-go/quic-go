@@ -44,7 +44,7 @@ type receiveStream struct {
 	closedForShutdown bool // set when CloseForShutdown() is called
 	finRead           bool // set once we read a frame with a Fin
 	canceledRead      bool // set when CancelRead() is called
-	resetRemotely     bool // set when HandleResetStreamFrame() is called
+	resetRemotely     bool // set when handleResetStreamFrame() is called
 
 	readChan chan struct{}
 	readOnce chan struct{} // cap: 1, to protect against concurrent use of Read
@@ -218,7 +218,7 @@ func (s *receiveStream) cancelReadImpl(errorCode qerr.StreamErrorCode) bool /* c
 		return false
 	}
 	s.canceledRead = true
-	s.cancelReadErr = &StreamError{s.streamID, errorCode, StreamErrorActionRead}
+	s.cancelReadErr = &StreamError{StreamID: s.streamID, ErrorCode: errorCode, Remote: false}
 	s.signalRead()
 	s.sender.queueControlFrame(&wire.StopSendingFrame{
 		StreamID:  s.streamID,
@@ -290,6 +290,7 @@ func (s *receiveStream) handleResetStreamFrameImpl(frame *wire.ResetStreamFrame)
 	s.resetRemotelyErr = &StreamError{
 		StreamID:  s.streamID,
 		ErrorCode: frame.ErrorCode,
+		Remote:    true,
 	}
 	s.signalRead()
 	return newlyRcvdFinalOffset, nil
