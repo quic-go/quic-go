@@ -720,19 +720,6 @@ func ListenAndServe(addr, certFile, keyFile string, handler http.Handler) error 
 	}
 	defer udpConn.Close()
 
-	tcpAddr, err := net.ResolveTCPAddr("tcp", addr)
-	if err != nil {
-		return err
-	}
-	tcpConn, err := net.ListenTCP("tcp", tcpAddr)
-	if err != nil {
-		return err
-	}
-	defer tcpConn.Close()
-
-	tlsConn := tls.NewListener(tcpConn, config)
-	defer tlsConn.Close()
-
 	if handler == nil {
 		handler = http.DefaultServeMux
 	}
@@ -741,17 +728,14 @@ func ListenAndServe(addr, certFile, keyFile string, handler http.Handler) error 
 		TLSConfig: config,
 		Handler:   handler,
 	}
-	httpServer := &http.Server{
-		Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			quicServer.SetQuicHeaders(w.Header())
-			handler.ServeHTTP(w, r)
-		}),
-	}
 
 	hErr := make(chan error)
 	qErr := make(chan error)
 	go func() {
-		hErr <- httpServer.Serve(tlsConn)
+		hErr <- http.ListenAndServeTLS(addr, certFile, keyFile, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			quicServer.SetQuicHeaders(w.Header())
+			handler.ServeHTTP(w, r)
+		}))
 	}()
 	go func() {
 		qErr <- quicServer.Serve(udpConn)
