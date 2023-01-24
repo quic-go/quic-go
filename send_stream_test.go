@@ -726,7 +726,11 @@ var _ = Describe("Send Stream", func() {
 					defer GinkgoRecover()
 					var err error
 					n, err = strWithTimeout.Write(getData(5000))
-					Expect(err).To(MatchError("Write on stream 1337 canceled with error code 1234"))
+					Expect(err).To(Equal(&StreamError{
+						StreamID:  streamID,
+						ErrorCode: 1234,
+						Remote:    false,
+					}))
 					close(writeReturned)
 				}()
 				waitForWrite()
@@ -770,7 +774,11 @@ var _ = Describe("Send Stream", func() {
 				go func() {
 					defer GinkgoRecover()
 					_, err := strWithTimeout.Write(getData(5000))
-					Expect(err).To(MatchError("Write on stream 1337 canceled with error code 1234"))
+					Expect(err).To(Equal(&StreamError{
+						StreamID:  streamID,
+						ErrorCode: 1234,
+						Remote:    false,
+					}))
 					close(writeReturned)
 				}()
 				waitForWrite()
@@ -818,7 +826,11 @@ var _ = Describe("Send Stream", func() {
 				mockSender.EXPECT().onStreamCompleted(gomock.Any())
 				str.CancelWrite(1234)
 				_, err := strWithTimeout.Write([]byte("foobar"))
-				Expect(err).To(MatchError("Write on stream 1337 canceled with error code 1234"))
+				Expect(err).To(MatchError(&StreamError{
+					StreamID:  streamID,
+					ErrorCode: 1234,
+					Remote:    false,
+				}))
 			})
 
 			It("only cancels once", func() {
@@ -862,9 +874,10 @@ var _ = Describe("Send Stream", func() {
 				go func() {
 					defer GinkgoRecover()
 					_, err := str.Write(getData(5000))
-					Expect(err).To(MatchError(&StreamError{
+					Expect(err).To(Equal(&StreamError{
 						StreamID:  streamID,
-						ErrorCode: 1234,
+						ErrorCode: 123,
+						Remote:    true,
 					}))
 					close(done)
 				}()
@@ -884,9 +897,10 @@ var _ = Describe("Send Stream", func() {
 					ErrorCode: 123,
 				})
 				_, err := str.Write([]byte("foobar"))
-				Expect(err).To(MatchError(&StreamError{
+				Expect(err).To(Equal(&StreamError{
 					StreamID:  streamID,
-					ErrorCode: 1234,
+					ErrorCode: 123,
+					Remote:    true,
 				}))
 			})
 		})
