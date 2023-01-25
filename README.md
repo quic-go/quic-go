@@ -45,17 +45,18 @@ http.Client{
 
 ## Projects using quic-go
 
-| Project                                              | Description                                                                                            | Stars |
-|------------------------------------------------------|--------------------------------------------------------------------------------------------------------|-------|
-| [algernon](https://github.com/xyproto/algernon)      | Small self-contained pure-Go web server with Lua, Markdown, HTTP/2, QUIC, Redis and PostgreSQL support | ![GitHub Repo stars](https://img.shields.io/github/stars/xyproto/algernon?style=flat-square) |
-| [caddy](https://github.com/caddyserver/caddy/)       | Fast, multi-platform web server with automatic HTTPS                                                   | ![GitHub Repo stars](https://img.shields.io/github/stars/caddyserver/caddy?style=flat-square) |
-| [go-ipfs](https://github.com/ipfs/go-ipfs)           | IPFS implementation in go                                                                              | ![GitHub Repo stars](https://img.shields.io/github/stars/ipfs/go-ipfs?style=flat-square) |
-| [syncthing](https://github.com/syncthing/syncthing/) | Open Source Continuous File Synchronization                                                            | ![GitHub Repo stars](https://img.shields.io/github/stars/syncthing/syncthing?style=flat-square) |
-| [traefik](https://github.com/traefik/traefik)        | The Cloud Native Application Proxy                                                                     | ![GitHub Repo stars](https://img.shields.io/github/stars/traefik/traefik?style=flat-square) |
-| [v2ray-core](https://github.com/v2fly/v2ray-core)    | A platform for building proxies to bypass network restrictions                                         | ![GitHub Repo stars](https://img.shields.io/github/stars/v2fly/v2ray-core?style=flat-square) |
-| [cloudflared](https://github.com/cloudflare/cloudflared)    | A tunneling daemon that proxies traffic from the Cloudflare network to your origins             | ![GitHub Repo stars](https://img.shields.io/github/stars/cloudflare/cloudflared?style=flat-square) |
-| [OONI Probe](https://github.com/ooni/probe-cli)            | The Open Observatory of Network Interference (OONI) aims to empower decentralized efforts in documenting Internet censorship around the world.   | ![GitHub Repo stars](https://img.shields.io/github/stars/ooni/probe-cli?style=flat-square) |
-| [YoMo](https://github.com/yomorun/yomo)    | Streaming Serverless Framework for Geo-distributed System | ![GitHub Repo stars](https://img.shields.io/github/stars/yomorun/yomo?style=flat-square) |
+| Project                                                   | Description                                                                                             | Stars |
+|-----------------------------------------------------------|---------------------------------------------------------------------------------------------------------|-------|
+| [AdGuardHome](https://github.com/AdguardTeam/AdGuardHome) | Free and open source, powerful network-wide ads & trackers blocking DNS server.                         | ![GitHub Repo stars](https://img.shields.io/github/stars/AdguardTeam/AdGuardHome?style=flat-square) |
+| [algernon](https://github.com/xyproto/algernon)           | Small self-contained pure-Go web server with Lua, Markdown, HTTP/2, QUIC, Redis and PostgreSQL support  | ![GitHub Repo stars](https://img.shields.io/github/stars/xyproto/algernon?style=flat-square) |
+| [caddy](https://github.com/caddyserver/caddy/)            | Fast, multi-platform web server with automatic HTTPS                                                    | ![GitHub Repo stars](https://img.shields.io/github/stars/caddyserver/caddy?style=flat-square) |
+| [cloudflared](https://github.com/cloudflare/cloudflared)  | A tunneling daemon that proxies traffic from the Cloudflare network to your origins                     | ![GitHub Repo stars](https://img.shields.io/github/stars/cloudflare/cloudflared?style=flat-square) |
+| [go-ipfs](https://github.com/ipfs/go-ipfs)                | IPFS implementation in go                                                                               | ![GitHub Repo stars](https://img.shields.io/github/stars/ipfs/go-ipfs?style=flat-square) |
+| [OONI Probe](https://github.com/ooni/probe-cli)           | Next generation OONI Probe. Library and CLI tool.                                                       | ![GitHub Repo stars](https://img.shields.io/github/stars/ooni/probe-cli?style=flat-square) |
+| [syncthing](https://github.com/syncthing/syncthing/)      | Open Source Continuous File Synchronization                                                             | ![GitHub Repo stars](https://img.shields.io/github/stars/syncthing/syncthing?style=flat-square) |
+| [traefik](https://github.com/traefik/traefik)             | The Cloud Native Application Proxy                                                                      | ![GitHub Repo stars](https://img.shields.io/github/stars/traefik/traefik?style=flat-square) |
+| [v2ray-core](https://github.com/v2fly/v2ray-core)         | A platform for building proxies to bypass network restrictions                                          | ![GitHub Repo stars](https://img.shields.io/github/stars/v2fly/v2ray-core?style=flat-square) |
+| [YoMo](https://github.com/yomorun/yomo)                   | Streaming Serverless Framework for Geo-distributed System                                               | ![GitHub Repo stars](https://img.shields.io/github/stars/yomorun/yomo?style=flat-square) |
 
 ## Contributing
 
