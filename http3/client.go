@@ -411,7 +411,7 @@ func (c *client) doRequest(req *http.Request, str quic.Stream, opt RoundTripOpt,
 	// Rules for when to set Content-Length are defined in https://tools.ietf.org/html/rfc7230#section-3.3.2.
 	_, hasTransferEncoding := res.Header["Transfer-Encoding"]
 	isInformational := res.StatusCode >= 100 && res.StatusCode < 200
-	isNoContent := res.StatusCode == 204
+	isNoContent := res.StatusCode == http.StatusNoContent
 	isSuccessfulConnect := req.Method == http.MethodConnect && res.StatusCode >= 200 && res.StatusCode < 300
 	if !hasTransferEncoding && !isInformational && !isNoContent && !isSuccessfulConnect {
 		res.ContentLength = -1

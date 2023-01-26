@@ -81,7 +81,7 @@ func (w *responseWriter) WriteHeader(status int) {
 
 func (w *responseWriter) Write(p []byte) (int, error) {
 	if !w.headerWritten {
-		w.WriteHeader(200)
+		w.WriteHeader(http.StatusOK)
 	}
 	if !bodyAllowedForStatus(w.status) {
 		return 0, http.ErrBodyNotAllowed
@@ -112,9 +112,9 @@ func bodyAllowedForStatus(status int) bool {
 	switch {
 	case status >= 100 && status <= 199:
 		return false
-	case status == 204:
+	case status == http.StatusNoContent:
 		return false
-	case status == 304:
+	case status == http.StatusNotModified:
 		return false
 	}
 	return true

@@ -110,8 +110,8 @@ var _ = Describe("Response Writer", func() {
 	})
 
 	It("does not WriteHeader() twice", func() {
-		rw.WriteHeader(200)
-		rw.WriteHeader(500)
+		rw.WriteHeader(http.StatusOK)
+		rw.WriteHeader(http.StatusInternalServerError)
 		fields := decodeHeader(strBuf)
 		Expect(fields).To(HaveLen(1))
 		Expect(fields).To(HaveKeyWithValue(":status", []string{"200"}))
