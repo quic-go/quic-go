@@ -75,7 +75,8 @@ type RoundTripper struct {
 	// Zero means to use a default limit.
 	MaxResponseHeaderBytes int64
 
-	clients map[string]roundTripCloser
+	newClient func(hostname string, tlsConf *tls.Config, opts *roundTripperOpts, conf *quic.Config, dialer dialFunc) (roundTripCloser, error) // so we can mock it in tests
+	clients   map[string]roundTripCloser
 }
 
 // RoundTripOpt are options for the Transport.RoundTripOpt method.
@@ -157,7 +158,11 @@ func (r *RoundTripper) getClient(hostname string, onlyCached bool) (roundTripClo
 			return nil, ErrNoCachedConn
 		}
 		var err error
-		client, err = newClient(
+		newCl := newClient
+		if r.newClient != nil {
+			newCl = r.newClient
+		}
+		client, err = newCl(
 			hostname,
 			r.TLSClientConfig,
 			&roundTripperOpts{

@@ -10,27 +10,13 @@ import (
 	"time"
 
 	"github.com/quic-go/quic-go"
-	mockquic "github.com/quic-go/quic-go/internal/mocks/quic"
 
 	"github.com/golang/mock/gomock"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 )
 
-type mockClient struct {
-	closed bool
-}
-
-func (m *mockClient) RoundTripOpt(req *http.Request, _ RoundTripOpt) (*http.Response, error) {
-	return &http.Response{Request: req}, nil
-}
-
-func (m *mockClient) Close() error {
-	m.closed = true
-	return nil
-}
-
-var _ roundTripCloser = &mockClient{}
+//go:generate sh -c "./../mockgen_private.sh http3 mock_roundtripcloser_test.go github.com/quic-go/quic-go/http3 roundTripCloser"
 
 type mockBody struct {
 	reader   bytes.Reader
@@ -60,10 +46,8 @@ func (m *mockBody) Close() error {
 
 var _ = Describe("RoundTripper", func() {
 	var (
-		rt           *RoundTripper
-		req1         *http.Request
-		conn         *mockquic.MockEarlyConnection
-		handshakeCtx context.Context // an already canceled context
+		rt   *RoundTripper
+		req1 *http.Request
 	)
 
 	BeforeEach(func() {
@@ -71,46 +55,21 @@ var _ = Describe("RoundTripper", func() {
 		var err error
 		req1, err = http.NewRequest("GET", "https://www.example.org/file1.html", nil)
 		Expect(err).ToNot(HaveOccurred())
-
-		ctx, cancel := context.WithCancel(context.Background())
-		cancel()
-		handshakeCtx = ctx
 	})
 
 	Context("dialing hosts", func() {
-		origDialAddr := dialAddr
-
-		BeforeEach(func() {
-			conn = mockquic.NewMockEarlyConnection(mockCtrl)
-			origDialAddr = dialAddr
-			dialAddr = func(context.Context, string, *tls.Config, *quic.Config) (quic.EarlyConnection, error) {
-				// return an error when trying to open a stream
-				// we don't want to test all the dial logic here, just that dialing happens at all
-				return conn, nil
-			}
-		})
-
-		AfterEach(func() {
-			dialAddr = origDialAddr
-		})
-
 		It("creates new clients", func() {
-			closed := make(chan struct{})
 			testErr := errors.New("test err")
 			req, err := http.NewRequest("GET", "https://quic.clemente.io/foobar.html", nil)
 			Expect(err).ToNot(HaveOccurred())
-			conn.EXPECT().OpenUniStream().AnyTimes().Return(nil, testErr)
-			conn.EXPECT().HandshakeComplete().Return(handshakeCtx)
-			conn.EXPECT().OpenStreamSync(context.Background()).Return(nil, testErr)
-			conn.EXPECT().AcceptUniStream(gomock.Any()).DoAndReturn(func(context.Context) (quic.ReceiveStream, error) {
-				<-closed
-				return nil, errors.New("test done")
-			}).MaxTimes(1)
-			conn.EXPECT().CloseWithError(gomock.Any(), gomock.Any()).Do(func(quic.ApplicationErrorCode, string) { close(closed) })
+			rt.newClient = func(string, *tls.Config, *roundTripperOpts, *quic.Config, dialFunc) (roundTripCloser, error) {
+				cl := NewMockRoundTripCloser(mockCtrl)
+				cl.EXPECT().RoundTripOpt(gomock.Any(), gomock.Any()).Return(nil, testErr)
+				return cl, nil
+			}
 			_, err = rt.RoundTrip(req)
 			Expect(err).To(MatchError(testErr))
 			Expect(rt.clients).To(HaveLen(1))
-			Eventually(closed).Should(BeClosed())
 		})
 
 		It("uses the quic.Config, if provided", func() {
@@ -139,18 +98,14 @@ var _ = Describe("RoundTripper", func() {
 		})
 
 		It("reuses existing clients", func() {
-			closed := make(chan struct{})
 			testErr := errors.New("test err")
-			conn.EXPECT().OpenUniStream().AnyTimes().Return(nil, testErr)
-			conn.EXPECT().HandshakeComplete().Return(handshakeCtx).Times(2)
-			conn.EXPECT().OpenStreamSync(context.Background()).Return(nil, testErr).Times(2)
-			conn.EXPECT().AcceptUniStream(gomock.Any()).DoAndReturn(func(context.Context) (quic.ReceiveStream, error) {
-				<-closed
-				return nil, errors.New("test done")
-			}).MaxTimes(1)
-			conn.EXPECT().CloseWithError(gomock.Any(), gomock.Any()).Do(func(quic.ApplicationErrorCode, string) { close(closed) })
 			req, err := http.NewRequest("GET", "https://quic.clemente.io/file1.html", nil)
 			Expect(err).ToNot(HaveOccurred())
+			rt.newClient = func(string, *tls.Config, *roundTripperOpts, *quic.Config, dialFunc) (roundTripCloser, error) {
+				cl := NewMockRoundTripCloser(mockCtrl)
+				cl.EXPECT().RoundTripOpt(gomock.Any(), gomock.Any()).Return(nil, testErr).Times(2)
+				return cl, nil
+			}
 			_, err = rt.RoundTrip(req)
 			Expect(err).To(MatchError(testErr))
 			Expect(rt.clients).To(HaveLen(1))
@@ -159,7 +114,6 @@ var _ = Describe("RoundTripper", func() {
 			_, err = rt.RoundTrip(req2)
 			Expect(err).To(MatchError(testErr))
 			Expect(rt.clients).To(HaveLen(1))
-			Eventually(closed).Should(BeClosed())
 		})
 
 		It("doesn't create new clients if RoundTripOpt.OnlyCachedConn is set", func() {
@@ -235,12 +189,12 @@ var _ = Describe("RoundTripper", func() {
 	Context("closing", func() {
 		It("closes", func() {
 			rt.clients = make(map[string]roundTripCloser)
-			cl := &mockClient{}
+			cl := NewMockRoundTripCloser(mockCtrl)
+			cl.EXPECT().Close()
 			rt.clients["foo.bar"] = cl
 			err := rt.Close()
 			Expect(err).ToNot(HaveOccurred())
 			Expect(len(rt.clients)).To(BeZero())
-			Expect(cl.closed).To(BeTrue())
 		})
 
 		It("closes a RoundTripper that has never been used", func() {
