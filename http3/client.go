@@ -436,3 +436,15 @@ func (c *client) doRequest(req *http.Request, str quic.Stream, opt RoundTripOpt,
 
 	return res, requestError{}
 }
+
+func (c *client) HandshakeComplete() bool {
+	if c.conn == nil {
+		return false
+	}
+	select {
+	case <-c.conn.HandshakeComplete().Done():
+		return true
+	default:
+		return false
+	}
+}

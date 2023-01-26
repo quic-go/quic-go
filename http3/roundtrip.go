@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"strings"
 	"sync"
@@ -17,6 +18,7 @@ import (
 
 type roundTripCloser interface {
 	RoundTripOpt(*http.Request, RoundTripOpt) (*http.Response, error)
+	HandshakeComplete() bool
 	io.Closer
 }
 
@@ -132,11 +134,20 @@ func (r *RoundTripper) RoundTripOpt(req *http.Request, opt RoundTripOpt) (*http.
 	}
 
 	hostname := authorityAddr("https", hostnameFromRequest(req))
-	cl, err := r.getClient(hostname, opt.OnlyCachedConn)
+	cl, isReused, err := r.getClient(hostname, opt.OnlyCachedConn)
 	if err != nil {
 		return nil, err
 	}
-	return cl.RoundTripOpt(req, opt)
+	rsp, err := cl.RoundTripOpt(req, opt)
+	if err != nil {
+		r.removeClient(hostname)
+		if isReused {
+			if nerr, ok := err.(net.Error); ok && nerr.Timeout() {
+				return r.RoundTripOpt(req, opt)
+			}
+		}
+	}
+	return rsp, err
 }
 
 // RoundTrip does a round trip.
@@ -144,7 +155,7 @@ func (r *RoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
 	return r.RoundTripOpt(req, RoundTripOpt{})
 }
 
-func (r *RoundTripper) getClient(hostname string, onlyCached bool) (roundTripCloser, error) {
+func (r *RoundTripper) getClient(hostname string, onlyCached bool) (rtc roundTripCloser, isReused bool, err error) {
 	r.mutex.Lock()
 	defer r.mutex.Unlock()
 
@@ -155,7 +166,7 @@ func (r *RoundTripper) getClient(hostname string, onlyCached bool) (roundTripClo
 	client, ok := r.clients[hostname]
 	if !ok {
 		if onlyCached {
-			return nil, ErrNoCachedConn
+			return nil, false, ErrNoCachedConn
 		}
 		var err error
 		newCl := newClient
@@ -176,11 +187,22 @@ func (r *RoundTripper) getClient(hostname string, onlyCached bool) (roundTripClo
 			r.Dial,
 		)
 		if err != nil {
-			return nil, err
+			return nil, false, err
 		}
 		r.clients[hostname] = client
+	} else if client.HandshakeComplete() {
+		isReused = true
 	}
-	return client, nil
+	return client, isReused, nil
+}
+
+func (r *RoundTripper) removeClient(hostname string) {
+	r.mutex.Lock()
+	defer r.mutex.Unlock()
+	if r.clients == nil {
+		return
+	}
+	delete(r.clients, hostname)
 }
 
 // Close closes the QUIC connections that this RoundTripper has used

@@ -48,6 +48,20 @@ func (mr *MockRoundTripCloserMockRecorder) Close() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Close", reflect.TypeOf((*MockRoundTripCloser)(nil).Close))
 }
 
+// HandshakeComplete mocks base method.
+func (m *MockRoundTripCloser) HandshakeComplete() bool {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "HandshakeComplete")
+	ret0, _ := ret[0].(bool)
+	return ret0
+}
+
+// HandshakeComplete indicates an expected call of HandshakeComplete.
+func (mr *MockRoundTripCloserMockRecorder) HandshakeComplete() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HandshakeComplete", reflect.TypeOf((*MockRoundTripCloser)(nil).HandshakeComplete))
+}
+
 // RoundTripOpt mocks base method.
 func (m *MockRoundTripCloser) RoundTripOpt(arg0 *http.Request, arg1 RoundTripOpt) (*http.Response, error) {
 	m.ctrl.T.Helper()
