@@ -484,7 +484,7 @@ var _ = Describe("Receive Stream", func() {
 		})
 	})
 
-	Context("stream cancelations", func() {
+	Context("stream cancellations", func() {
 		Context("canceling read", func() {
 			It("unblocks Read", func() {
 				mockSender.EXPECT().queueControlFrame(gomock.Any())
@@ -492,7 +492,11 @@ var _ = Describe("Receive Stream", func() {
 				go func() {
 					defer GinkgoRecover()
 					_, err := strWithTimeout.Read([]byte{0})
-					Expect(err).To(MatchError("Read on stream 1337 canceled with error code 1234"))
+					Expect(err).To(Equal(&StreamError{
+						StreamID:  streamID,
+						ErrorCode: 1234,
+						Remote:    false,
+					}))
 					close(done)
 				}()
 				Consistently(done).ShouldNot(BeClosed())
@@ -504,7 +508,11 @@ var _ = Describe("Receive Stream", func() {
 				mockSender.EXPECT().queueControlFrame(gomock.Any())
 				str.CancelRead(1234)
 				_, err := strWithTimeout.Read([]byte{0})
-				Expect(err).To(MatchError("Read on stream 1337 canceled with error code 1234"))
+				Expect(err).To(Equal(&StreamError{
+					StreamID:  streamID,
+					ErrorCode: 1234,
+					Remote:    false,
+				}))
 			})
 
 			It("does nothing when CancelRead is called twice", func() {
@@ -512,7 +520,11 @@ var _ = Describe("Receive Stream", func() {
 				str.CancelRead(1234)
 				str.CancelRead(1234)
 				_, err := strWithTimeout.Read([]byte{0})
-				Expect(err).To(MatchError("Read on stream 1337 canceled with error code 1234"))
+				Expect(err).To(Equal(&StreamError{
+					StreamID:  streamID,
+					ErrorCode: 1234,
+					Remote:    false,
+				}))
 			})
 
 			It("queues a STOP_SENDING frame", func() {
@@ -609,9 +621,10 @@ var _ = Describe("Receive Stream", func() {
 				go func() {
 					defer GinkgoRecover()
 					_, err := strWithTimeout.Read([]byte{0})
-					Expect(err).To(MatchError(&StreamError{
+					Expect(err).To(Equal(&StreamError{
 						StreamID:  streamID,
 						ErrorCode: 1234,
+						Remote:    true,
 					}))
 					close(done)
 				}()
@@ -668,7 +681,7 @@ var _ = Describe("Receive Stream", func() {
 				Expect(str.handleResetStreamFrame(rst)).To(Succeed())
 			})
 
-			It("doesn't do anyting when it was closed for shutdown", func() {
+			It("doesn't do anything when it was closed for shutdown", func() {
 				str.closeForShutdown(nil)
 				err := str.handleResetStreamFrame(rst)
 				Expect(err).ToNot(HaveOccurred())

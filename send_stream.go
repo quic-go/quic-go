@@ -416,11 +416,11 @@ func (s *sendStream) Close() error {
 }
 
 func (s *sendStream) CancelWrite(errorCode StreamErrorCode) {
-	s.cancelWriteImpl(errorCode, fmt.Errorf("Write on stream %d canceled with error code %d", s.streamID, errorCode))
+	s.cancelWriteImpl(errorCode, false)
 }
 
 // must be called after locking the mutex
-func (s *sendStream) cancelWriteImpl(errorCode qerr.StreamErrorCode, writeErr error) {
+func (s *sendStream) cancelWriteImpl(errorCode qerr.StreamErrorCode, remote bool) {
 	s.mutex.Lock()
 	if s.canceledWrite {
 		s.mutex.Unlock()
@@ -428,7 +428,7 @@ func (s *sendStream) cancelWriteImpl(errorCode qerr.StreamErrorCode, writeErr er
 	}
 	s.ctxCancel()
 	s.canceledWrite = true
-	s.cancelWriteErr = writeErr
+	s.cancelWriteErr = &StreamError{StreamID: s.streamID, ErrorCode: errorCode, Remote: remote}
 	s.numOutstandingFrames = 0
 	s.retransmissionQueue = nil
 	newlyCompleted := s.isNewlyCompleted()
@@ -457,10 +457,7 @@ func (s *sendStream) updateSendWindow(limit protocol.ByteCount) {
 }
 
 func (s *sendStream) handleStopSendingFrame(frame *wire.StopSendingFrame) {
-	s.cancelWriteImpl(frame.ErrorCode, &StreamError{
-		StreamID:  s.streamID,
-		ErrorCode: frame.ErrorCode,
-	})
+	s.cancelWriteImpl(frame.ErrorCode, true)
 }
 
 func (s *sendStream) Context() context.Context {
