@@ -617,9 +617,9 @@ func (s *Server) handleRequest(conn quic.Connection, str quic.Stream, decoder *q
 	}
 
 	if panicked {
-		r.WriteHeader(500)
+		r.WriteHeader(http.StatusInternalServerError)
 	} else {
-		r.WriteHeader(200)
+		r.WriteHeader(http.StatusOK)
 	}
 	// If the EOF was read by the handler, CancelRead() is a no-op.
 	str.CancelRead(quic.StreamErrorCode(errorNoError))
