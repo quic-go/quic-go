@@ -68,7 +68,9 @@ type client struct {
 	logger utils.Logger
 }
 
-func newClient(hostname string, tlsConf *tls.Config, opts *roundTripperOpts, conf *quic.Config, dialer dialFunc) (*client, error) {
+var _ roundTripCloser = &client{}
+
+func newClient(hostname string, tlsConf *tls.Config, opts *roundTripperOpts, conf *quic.Config, dialer dialFunc) (roundTripCloser, error) {
 	if conf == nil {
 		conf = defaultQuicConfig.Clone()
 	} else if len(conf.Versions) == 0 {
@@ -433,4 +435,16 @@ func (c *client) doRequest(req *http.Request, str quic.Stream, opt RoundTripOpt,
 	}
 
 	return res, requestError{}
+}
+
+func (c *client) HandshakeComplete() bool {
+	if c.conn == nil {
+		return false
+	}
+	select {
+	case <-c.conn.HandshakeComplete().Done():
+		return true
+	default:
+		return false
+	}
 }
