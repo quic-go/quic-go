@@ -1,11 +1,5 @@
 version: 2.1
 executors:
-  test-go118:
-    docker:
-      - image: "cimg/go:1.18"
-    environment:
-      runrace: true
-      TIMESCALE_FACTOR: 3
   test-go119:
     docker:
       - image: "cimg/go:1.19"
@@ -21,7 +15,7 @@ executors:
  
 jobs:
   "test": &test
-    executor: test-go118
+    executor: test-go119
     steps:
       - checkout
       - run:
@@ -39,11 +33,8 @@ jobs:
       - run:
           name: "Run self integration tests with qlog"
           command: go run github.com/onsi/ginkgo/v2/ginkgo -v -randomize-all -trace integrationtests/self -- -qlog
-  go118:
-    <<: *test
   go119:
     <<: *test
-    executor: test-go119
   go120:
     <<: *test
     executor: test-go120
@@ -51,6 +42,5 @@ jobs:
 workflows:
   workflow:
     jobs:
-      - go118
       - go119
       - go120
