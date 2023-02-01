@@ -124,12 +124,11 @@ var _ = Describe("Timeout tests", func() {
 			Expect(err).ToNot(HaveOccurred())
 		}()
 
-		drop := utils.AtomicBool{}
-
+		var drop atomic.Bool
 		proxy, err := quicproxy.NewQuicProxy("localhost:0", &quicproxy.Opts{
 			RemoteAddr: fmt.Sprintf("localhost:%d", server.Addr().(*net.UDPAddr).Port),
 			DropPacket: func(quicproxy.Direction, []byte) bool {
-				return drop.Get()
+				return drop.Load()
 			},
 		})
 		Expect(err).ToNot(HaveOccurred())
@@ -148,7 +147,7 @@ var _ = Describe("Timeout tests", func() {
 		_, err = strIn.Read(make([]byte, 6))
 		Expect(err).ToNot(HaveOccurred())
 
-		drop.Set(true)
+		drop.Store(true)
 		time.Sleep(2 * idleTimeout)
 		_, err = strIn.Write([]byte("test"))
 		checkTimeoutError(err)
@@ -251,12 +250,12 @@ var _ = Describe("Timeout tests", func() {
 			Expect(err).ToNot(HaveOccurred())
 			defer server.Close()
 
-			drop := utils.AtomicBool{}
+			var drop atomic.Bool
 			proxy, err := quicproxy.NewQuicProxy("localhost:0", &quicproxy.Opts{
 				RemoteAddr: fmt.Sprintf("localhost:%d", server.Addr().(*net.UDPAddr).Port),
 				DropPacket: func(dir quicproxy.Direction, _ []byte) bool {
 					if dir == quicproxy.DirectionOutgoing {
-						return drop.Get()
+						return drop.Load()
 					}
 					return false
 				},
@@ -282,7 +281,7 @@ var _ = Describe("Timeout tests", func() {
 
 			// wait half the idle timeout, then send a packet
 			time.Sleep(idleTimeout / 2)
-			drop.Set(true)
+			drop.Store(true)
 			str, err := conn.OpenUniStream()
 			Expect(err).ToNot(HaveOccurred())
 			_, err = str.Write([]byte("foobar"))
@@ -331,11 +330,11 @@ var _ = Describe("Timeout tests", func() {
 			close(serverConnClosed)
 		}()
 
-		drop := utils.AtomicBool{}
+		var drop atomic.Bool
 		proxy, err := quicproxy.NewQuicProxy("localhost:0", &quicproxy.Opts{
 			RemoteAddr: fmt.Sprintf("localhost:%d", server.Addr().(*net.UDPAddr).Port),
 			DropPacket: func(quicproxy.Direction, []byte) bool {
-				return drop.Get()
+				return drop.Load()
 			},
 		})
 		Expect(err).ToNot(HaveOccurred())
@@ -361,7 +360,7 @@ var _ = Describe("Timeout tests", func() {
 		Consistently(serverConnClosed).ShouldNot(BeClosed())
 
 		// idle timeout will still kick in if pings are dropped
-		drop.Set(true)
+		drop.Store(true)
 		time.Sleep(2 * idleTimeout)
 		_, err = str.Write([]byte("foobar"))
 		checkTimeoutError(err)
