@@ -78,7 +78,7 @@ func main() {
 		protocol.ConnectionID{},
 		nil,
 		nil,
-		&wire.TransportParameters{},
+		&wire.TransportParameters{ActiveConnectionIDLimit: 2},
 		runner,
 		&tls.Config{
 			ServerName:         "localhost",
@@ -102,7 +102,7 @@ func main() {
 		protocol.ConnectionID{},
 		nil,
 		nil,
-		&wire.TransportParameters{},
+		&wire.TransportParameters{ActiveConnectionIDLimit: 2},
 		runner,
 		config,
 		nil,
