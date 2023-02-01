@@ -12,6 +12,12 @@ executors:
     environment:
       runrace: true
       TIMESCALE_FACTOR: 3
+  test-go120:
+    docker:
+      - image: "cimg/go:1.20"
+    environment:
+      runrace: true
+      TIMESCALE_FACTOR: 3
  
 jobs:
   "test": &test
@@ -38,9 +44,13 @@ jobs:
   go119:
     <<: *test
     executor: test-go119
+  go120:
+    <<: *test
+    executor: test-go120
 
 workflows:
   workflow:
     jobs:
       - go118
       - go119
+      - go120
