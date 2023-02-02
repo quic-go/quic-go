@@ -80,10 +80,7 @@ var _ = Describe("Varint I/O", func() {
 			})
 
 			It("correctly handles io.EOF", func() {
-				buf := &bytes.Buffer{}
-				Write(buf, 1337)
-
-				r := NewReader(&eofReader{Data: buf.Bytes()})
+				r := NewReader(&eofReader{Data: Append(nil, 1337)})
 				n, err := Read(r)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(n).To(BeEquivalentTo(1337))

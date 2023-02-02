@@ -2,7 +2,6 @@ package quicvarint
 
 import (
 	"bytes"
-	"math/rand"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -64,79 +63,59 @@ var _ = Describe("Varint encoding / decoding", func() {
 	Context("encoding", func() {
 		Context("with minimal length", func() {
 			It("writes a 1 byte number", func() {
-				b := &bytes.Buffer{}
-				Write(b, 37)
-				Expect(b.Bytes()).To(Equal([]byte{0x25}))
+				Expect(Append(nil, 37)).To(Equal([]byte{0x25}))
 			})
 
 			It("writes the maximum 1 byte number in 1 byte", func() {
-				b := &bytes.Buffer{}
-				Write(b, maxVarInt1)
-				Expect(b.Bytes()).To(Equal([]byte{0b00111111}))
+				Expect(Append(nil, maxVarInt1)).To(Equal([]byte{0b00111111}))
 			})
 
 			It("writes the minimum 2 byte number in 2 bytes", func() {
-				b := &bytes.Buffer{}
-				Write(b, maxVarInt1+1)
-				Expect(b.Bytes()).To(Equal([]byte{0x40, maxVarInt1 + 1}))
+				Expect(Append(nil, maxVarInt1+1)).To(Equal([]byte{0x40, maxVarInt1 + 1}))
 			})
 
 			It("writes a 2 byte number", func() {
-				b := &bytes.Buffer{}
-				Write(b, 15293)
-				Expect(b.Bytes()).To(Equal([]byte{0b01000000 ^ 0x3b, 0xbd}))
+				Expect(Append(nil, 15293)).To(Equal([]byte{0b01000000 ^ 0x3b, 0xbd}))
 			})
 
 			It("writes the maximum 2 byte number in 2 bytes", func() {
-				b := &bytes.Buffer{}
-				Write(b, maxVarInt2)
-				Expect(b.Bytes()).To(Equal([]byte{0b01111111, 0xff}))
+				Expect(Append(nil, maxVarInt2)).To(Equal([]byte{0b01111111, 0xff}))
 			})
 
 			It("writes the minimum 4 byte number in 4 bytes", func() {
-				b := &bytes.Buffer{}
-				Write(b, maxVarInt2+1)
-				Expect(b.Len()).To(Equal(4))
-				num, err := Read(b)
+				b := Append(nil, maxVarInt2+1)
+				Expect(b).To(HaveLen(4))
+				num, err := Read(bytes.NewReader(b))
 				Expect(err).ToNot(HaveOccurred())
 				Expect(num).To(Equal(uint64(maxVarInt2 + 1)))
 			})
 
 			It("writes a 4 byte number", func() {
-				b := &bytes.Buffer{}
-				Write(b, 494878333)
-				Expect(b.Bytes()).To(Equal([]byte{0b10000000 ^ 0x1d, 0x7f, 0x3e, 0x7d}))
+				Expect(Append(nil, 494878333)).To(Equal([]byte{0b10000000 ^ 0x1d, 0x7f, 0x3e, 0x7d}))
 			})
 
 			It("writes the maximum 4 byte number in 4 bytes", func() {
-				b := &bytes.Buffer{}
-				Write(b, maxVarInt4)
-				Expect(b.Bytes()).To(Equal([]byte{0b10111111, 0xff, 0xff, 0xff}))
+				Expect(Append(nil, maxVarInt4)).To(Equal([]byte{0b10111111, 0xff, 0xff, 0xff}))
 			})
 
 			It("writes the minimum 8 byte number in 8 bytes", func() {
-				b := &bytes.Buffer{}
-				Write(b, maxVarInt4+1)
-				Expect(b.Len()).To(Equal(8))
-				num, err := Read(b)
+				b := Append(nil, maxVarInt4+1)
+				Expect(b).To(HaveLen(8))
+				num, err := Read(bytes.NewReader(b))
 				Expect(err).ToNot(HaveOccurred())
 				Expect(num).To(Equal(uint64(maxVarInt4 + 1)))
 			})
 
 			It("writes an 8 byte number", func() {
-				b := &bytes.Buffer{}
-				Write(b, 151288809941952652)
-				Expect(b.Bytes()).To(Equal([]byte{0xc2, 0x19, 0x7c, 0x5e, 0xff, 0x14, 0xe8, 0x8c}))
+				Expect(Append(nil, 151288809941952652)).To(Equal([]byte{0xc2, 0x19, 0x7c, 0x5e, 0xff, 0x14, 0xe8, 0x8c}))
 			})
 
 			It("writes the maximum 8 byte number in 8 bytes", func() {
-				b := &bytes.Buffer{}
-				Write(b, maxVarInt8)
-				Expect(b.Bytes()).To(Equal([]byte{0xff /* 11111111 */, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff}))
+				Expect(Append(nil, maxVarInt8)).To(Equal([]byte{0xff /* 11111111 */, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff}))
 			})
 
 			It("panics when given a too large number (> 62 bit)", func() {
-				Expect(func() { Write(&bytes.Buffer{}, maxVarInt8+1) }).Should(Panic())
+				Expect(func() { Append(nil, maxVarInt8+1) }).Should(Panic())
 			})
 		})
 
@@ -183,34 +162,6 @@ var _ = Describe("Varint encoding / decoding", func() {
 				b := AppendWithLen(nil, 494878333, 8)
 				Expect(b).To(Equal([]byte{0b11000000, 0, 0, 0, 0x1d, 0x7f, 0x3e, 0x7d}))
 				Expect(Read(bytes.NewReader(b))).To(BeEquivalentTo(494878333))
-			})
-		})
-
-		Context("appending", func() {
-			It("panics when given a too large number (> 62 bit)", func() {
-				Expect(func() { Append(nil, maxVarInt8+1) }).Should(Panic())
-			})
-
-			It("appends", func() {
-				for i := 0; i < 10000; i++ {
-					var limit int64
-					switch rand.Int() % 4 {
-					case 0:
-						limit = maxVarInt1
-					case 1:
-						limit = maxVarInt2
-					case 2:
-						limit = maxVarInt4
-					case 3:
-						limit = maxVarInt8
-					}
-
-					n := uint64(rand.Int63n(limit))
-					b := Append(nil, n)
-					buf := &bytes.Buffer{}
-					Write(buf, n)
-					Expect(b).To(Equal(buf.Bytes()))
-				}
 			})
 		})
 	})
