@@ -428,7 +428,7 @@ var _ = Describe("Crypto Setup TLS", func() {
 			_, _, clientErr, _, serverErr := handshakeWithTLSConf(
 				clientConf, serverConf,
 				&utils.RTTStats{}, &utils.RTTStats{},
-				&wire.TransportParameters{}, &wire.TransportParameters{},
+				&wire.TransportParameters{ActiveConnectionIDLimit: 2}, &wire.TransportParameters{ActiveConnectionIDLimit: 2},
 				false,
 			)
 			Expect(clientErr).ToNot(HaveOccurred())
@@ -440,7 +440,7 @@ var _ = Describe("Crypto Setup TLS", func() {
 			_, _, clientErr, _, serverErr := handshakeWithTLSConf(
 				clientConf, serverConf,
 				&utils.RTTStats{}, &utils.RTTStats{},
-				&wire.TransportParameters{}, &wire.TransportParameters{},
+				&wire.TransportParameters{ActiveConnectionIDLimit: 2}, &wire.TransportParameters{ActiveConnectionIDLimit: 2},
 				false,
 			)
 			Expect(clientErr).ToNot(HaveOccurred())
@@ -453,7 +453,7 @@ var _ = Describe("Crypto Setup TLS", func() {
 			_, _, clientErr, _, serverErr := handshakeWithTLSConf(
 				clientConf, serverConf,
 				&utils.RTTStats{}, &utils.RTTStats{},
-				&wire.TransportParameters{}, &wire.TransportParameters{},
+				&wire.TransportParameters{ActiveConnectionIDLimit: 2}, &wire.TransportParameters{ActiveConnectionIDLimit: 2},
 				false,
 			)
 			Expect(clientErr).ToNot(HaveOccurred())
@@ -502,7 +502,7 @@ var _ = Describe("Crypto Setup TLS", func() {
 		It("receives transport parameters", func() {
 			var cTransportParametersRcvd, sTransportParametersRcvd *wire.TransportParameters
 			cChunkChan, cInitialStream, cHandshakeStream := initStreams()
-			cTransportParameters := &wire.TransportParameters{MaxIdleTimeout: 0x42 * time.Second}
+			cTransportParameters := &wire.TransportParameters{ActiveConnectionIDLimit: 2, MaxIdleTimeout: 0x42 * time.Second}
 			cRunner := NewMockHandshakeRunner(mockCtrl)
 			cRunner.EXPECT().OnReceivedParams(gomock.Any()).Do(func(tp *wire.TransportParameters) { sTransportParametersRcvd = tp })
 			cRunner.EXPECT().OnHandshakeComplete()
@@ -528,8 +528,9 @@ var _ = Describe("Crypto Setup TLS", func() {
 			sRunner.EXPECT().OnReceivedParams(gomock.Any()).Do(func(tp *wire.TransportParameters) { cTransportParametersRcvd = tp })
 			sRunner.EXPECT().OnHandshakeComplete()
 			sTransportParameters := &wire.TransportParameters{
-				MaxIdleTimeout:      0x1337 * time.Second,
-				StatelessResetToken: &token,
+				MaxIdleTimeout:          0x1337 * time.Second,
+				StatelessResetToken:     &token,
+				ActiveConnectionIDLimit: 2,
 			}
 			server := NewCryptoSetupServer(
 				sInitialStream,
@@ -571,7 +572,7 @@ var _ = Describe("Crypto Setup TLS", func() {
 					protocol.ConnectionID{},
 					nil,
 					nil,
-					&wire.TransportParameters{},
+					&wire.TransportParameters{ActiveConnectionIDLimit: 2},
 					cRunner,
 					clientConf,
 					false,
@@ -592,7 +593,7 @@ var _ = Describe("Crypto Setup TLS", func() {
 					protocol.ConnectionID{},
 					nil,
 					nil,
-					&wire.TransportParameters{StatelessResetToken: &token},
+					&wire.TransportParameters{ActiveConnectionIDLimit: 2, StatelessResetToken: &token},
 					sRunner,
 					serverConf,
 					nil,
@@ -630,7 +631,7 @@ var _ = Describe("Crypto Setup TLS", func() {
 					protocol.ConnectionID{},
 					nil,
 					nil,
-					&wire.TransportParameters{},
+					&wire.TransportParameters{ActiveConnectionIDLimit: 2},
 					cRunner,
 					clientConf,
 					false,
@@ -651,7 +652,7 @@ var _ = Describe("Crypto Setup TLS", func() {
 					protocol.ConnectionID{},
 					nil,
 					nil,
-					&wire.TransportParameters{StatelessResetToken: &token},
+					&wire.TransportParameters{ActiveConnectionIDLimit: 2, StatelessResetToken: &token},
 					sRunner,
 					serverConf,
 					nil,
@@ -693,7 +694,7 @@ var _ = Describe("Crypto Setup TLS", func() {
 				clientHelloWrittenChan, client, clientErr, server, serverErr := handshakeWithTLSConf(
 					clientConf, serverConf,
 					clientOrigRTTStats, &utils.RTTStats{},
-					&wire.TransportParameters{}, &wire.TransportParameters{},
+					&wire.TransportParameters{ActiveConnectionIDLimit: 2}, &wire.TransportParameters{ActiveConnectionIDLimit: 2},
 					false,
 				)
 				Expect(clientErr).ToNot(HaveOccurred())
@@ -709,7 +710,7 @@ var _ = Describe("Crypto Setup TLS", func() {
 				clientHelloWrittenChan, client, clientErr, server, serverErr = handshakeWithTLSConf(
 					clientConf, serverConf,
 					clientRTTStats, &utils.RTTStats{},
-					&wire.TransportParameters{}, &wire.TransportParameters{},
+					&wire.TransportParameters{ActiveConnectionIDLimit: 2}, &wire.TransportParameters{ActiveConnectionIDLimit: 2},
 					false,
 				)
 				Expect(clientErr).ToNot(HaveOccurred())
@@ -734,7 +735,7 @@ var _ = Describe("Crypto Setup TLS", func() {
 				_, client, clientErr, server, serverErr := handshakeWithTLSConf(
 					clientConf, serverConf,
 					&utils.RTTStats{}, &utils.RTTStats{},
-					&wire.TransportParameters{}, &wire.TransportParameters{},
+					&wire.TransportParameters{ActiveConnectionIDLimit: 2}, &wire.TransportParameters{ActiveConnectionIDLimit: 2},
 					false,
 				)
 				Expect(clientErr).ToNot(HaveOccurred())
@@ -748,7 +749,7 @@ var _ = Describe("Crypto Setup TLS", func() {
 				_, client, clientErr, server, serverErr = handshakeWithTLSConf(
 					clientConf, serverConf,
 					&utils.RTTStats{}, &utils.RTTStats{},
-					&wire.TransportParameters{}, &wire.TransportParameters{},
+					&wire.TransportParameters{ActiveConnectionIDLimit: 2}, &wire.TransportParameters{ActiveConnectionIDLimit: 2},
 					false,
 				)
 				Expect(clientErr).ToNot(HaveOccurred())
@@ -776,7 +777,8 @@ var _ = Describe("Crypto Setup TLS", func() {
 				clientHelloWrittenChan, client, clientErr, server, serverErr := handshakeWithTLSConf(
 					clientConf, serverConf,
 					clientOrigRTTStats, serverOrigRTTStats,
-					&wire.TransportParameters{}, &wire.TransportParameters{InitialMaxData: initialMaxData},
+					&wire.TransportParameters{ActiveConnectionIDLimit: 2},
+					&wire.TransportParameters{ActiveConnectionIDLimit: 2, InitialMaxData: initialMaxData},
 					true,
 				)
 				Expect(clientErr).ToNot(HaveOccurred())
@@ -795,7 +797,8 @@ var _ = Describe("Crypto Setup TLS", func() {
 				clientHelloWrittenChan, client, clientErr, server, serverErr = handshakeWithTLSConf(
 					clientConf, serverConf,
 					clientRTTStats, serverRTTStats,
-					&wire.TransportParameters{}, &wire.TransportParameters{InitialMaxData: initialMaxData},
+					&wire.TransportParameters{ActiveConnectionIDLimit: 2},
+					&wire.TransportParameters{ActiveConnectionIDLimit: 2, InitialMaxData: initialMaxData},
 					true,
 				)
 				Expect(clientErr).ToNot(HaveOccurred())
@@ -829,7 +832,8 @@ var _ = Describe("Crypto Setup TLS", func() {
 				clientHelloWrittenChan, client, clientErr, server, serverErr := handshakeWithTLSConf(
 					clientConf, serverConf,
 					clientOrigRTTStats, &utils.RTTStats{},
-					&wire.TransportParameters{}, &wire.TransportParameters{InitialMaxData: initialMaxData},
+					&wire.TransportParameters{ActiveConnectionIDLimit: 2},
+					&wire.TransportParameters{ActiveConnectionIDLimit: 2, InitialMaxData: initialMaxData},
 					true,
 				)
 				Expect(clientErr).ToNot(HaveOccurred())
@@ -847,7 +851,8 @@ var _ = Describe("Crypto Setup TLS", func() {
 				clientHelloWrittenChan, client, clientErr, server, serverErr = handshakeWithTLSConf(
 					clientConf, serverConf,
 					clientRTTStats, &utils.RTTStats{},
-					&wire.TransportParameters{}, &wire.TransportParameters{InitialMaxData: initialMaxData - 1},
+					&wire.TransportParameters{ActiveConnectionIDLimit: 2},
+					&wire.TransportParameters{ActiveConnectionIDLimit: 2, InitialMaxData: initialMaxData - 1},
 					true,
 				)
 				Expect(clientErr).ToNot(HaveOccurred())
