@@ -41,10 +41,9 @@ type receiveStream struct {
 	cancelReadErr       error
 	resetRemotelyErr    *StreamError
 
-	closedForShutdown bool // set when CloseForShutdown() is called
-	finRead           bool // set once we read a frame with a Fin
-	canceledRead      bool // set when CancelRead() is called
-	resetRemotely     bool // set when handleResetStreamFrame() is called
+	finRead       bool // set once we read a frame with a Fin
+	canceledRead  bool // set when CancelRead() is called
+	resetRemotely bool // set when handleResetStreamFrame() is called
 
 	readChan chan struct{}
 	readOnce chan struct{} // cap: 1, to protect against concurrent use of Read
@@ -106,7 +105,7 @@ func (s *receiveStream) readImpl(p []byte) (bool /*stream completed */, int, err
 	if s.resetRemotely {
 		return false, 0, s.resetRemotelyErr
 	}
-	if s.closedForShutdown {
+	if s.closeForShutdownErr != nil {
 		return false, 0, s.closeForShutdownErr
 	}
 
@@ -122,7 +121,7 @@ func (s *receiveStream) readImpl(p []byte) (bool /*stream completed */, int, err
 
 		for {
 			// Stop waiting on errors
-			if s.closedForShutdown {
+			if s.closeForShutdownErr != nil {
 				return false, bytesRead, s.closeForShutdownErr
 			}
 			if s.canceledRead {
@@ -270,7 +269,7 @@ func (s *receiveStream) handleResetStreamFrame(frame *wire.ResetStreamFrame) err
 }
 
 func (s *receiveStream) handleResetStreamFrameImpl(frame *wire.ResetStreamFrame) (bool /*completed */, error) {
-	if s.closedForShutdown {
+	if s.closeForShutdownErr != nil {
 		return false, nil
 	}
 	if err := s.flowController.UpdateHighestReceived(frame.FinalSize, true); err != nil {
@@ -310,7 +309,6 @@ func (s *receiveStream) SetReadDeadline(t time.Time) error {
 // The peer will NOT be informed about this: the stream is closed without sending a FIN or RESET.
 func (s *receiveStream) closeForShutdown(err error) {
 	s.mutex.Lock()
-	s.closedForShutdown = true
 	s.closeForShutdownErr = err
 	s.mutex.Unlock()
 	s.signalRead()
