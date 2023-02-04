@@ -42,7 +42,6 @@ type receiveStream struct {
 	resetRemotelyErr    *StreamError
 
 	finRead       bool // set once we read a frame with a Fin
-	canceledRead  bool // set when CancelRead() is called
 	resetRemotely bool // set when handleResetStreamFrame() is called
 
 	readChan chan struct{}
@@ -99,7 +98,7 @@ func (s *receiveStream) readImpl(p []byte) (bool /*stream completed */, int, err
 	if s.finRead {
 		return false, 0, io.EOF
 	}
-	if s.canceledRead {
+	if s.cancelReadErr != nil {
 		return false, 0, s.cancelReadErr
 	}
 	if s.resetRemotely {
@@ -124,7 +123,7 @@ func (s *receiveStream) readImpl(p []byte) (bool /*stream completed */, int, err
 			if s.closeForShutdownErr != nil {
 				return false, bytesRead, s.closeForShutdownErr
 			}
-			if s.canceledRead {
+			if s.cancelReadErr != nil {
 				return false, bytesRead, s.cancelReadErr
 			}
 			if s.resetRemotely {
@@ -210,10 +209,9 @@ func (s *receiveStream) CancelRead(errorCode StreamErrorCode) {
 }
 
 func (s *receiveStream) cancelReadImpl(errorCode qerr.StreamErrorCode) bool /* completed */ {
-	if s.finRead || s.canceledRead || s.resetRemotely {
+	if s.finRead || s.cancelReadErr != nil || s.resetRemotely {
 		return false
 	}
-	s.canceledRead = true
 	s.cancelReadErr = &StreamError{StreamID: s.streamID, ErrorCode: errorCode, Remote: false}
 	s.signalRead()
 	s.sender.queueControlFrame(&wire.StopSendingFrame{
@@ -246,7 +244,7 @@ func (s *receiveStream) handleStreamFrameImpl(frame *wire.StreamFrame) (bool /* 
 		newlyRcvdFinalOffset = s.finalOffset == protocol.MaxByteCount
 		s.finalOffset = maxOffset
 	}
-	if s.canceledRead {
+	if s.cancelReadErr != nil {
 		return newlyRcvdFinalOffset, nil
 	}
 	if err := s.frameQueue.Push(frame.Data, frame.Offset, frame.PutBack); err != nil {
