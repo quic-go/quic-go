@@ -6,6 +6,7 @@ mockgen_tmp.go
 *.qlog
 *.txt
 race.[0-9]*
+.idea
 
 fuzzing/*/*.zip
 fuzzing/*/coverprofile
