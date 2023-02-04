@@ -41,8 +41,7 @@ type receiveStream struct {
 	cancelReadErr       error
 	resetRemotelyErr    *StreamError
 
-	finRead       bool // set once we read a frame with a Fin
-	resetRemotely bool // set when handleResetStreamFrame() is called
+	finRead bool // set once we read a frame with a Fin
 
 	readChan chan struct{}
 	readOnce chan struct{} // cap: 1, to protect against concurrent use of Read
@@ -101,7 +100,7 @@ func (s *receiveStream) readImpl(p []byte) (bool /*stream completed */, int, err
 	if s.cancelReadErr != nil {
 		return false, 0, s.cancelReadErr
 	}
-	if s.resetRemotely {
+	if s.resetRemotelyErr != nil {
 		return false, 0, s.resetRemotelyErr
 	}
 	if s.closeForShutdownErr != nil {
@@ -126,7 +125,7 @@ func (s *receiveStream) readImpl(p []byte) (bool /*stream completed */, int, err
 			if s.cancelReadErr != nil {
 				return false, bytesRead, s.cancelReadErr
 			}
-			if s.resetRemotely {
+			if s.resetRemotelyErr != nil {
 				return false, bytesRead, s.resetRemotelyErr
 			}
 
@@ -173,8 +172,9 @@ func (s *receiveStream) readImpl(p []byte) (bool /*stream completed */, int, err
 		s.readPosInFrame += m
 		bytesRead += m
 
-		// when a RESET_STREAM was received, the was already informed about the final byteOffset for this stream
-		if !s.resetRemotely {
+		// when a RESET_STREAM was received, the flow controller was already
+		// informed about the final byteOffset for this stream
+		if s.resetRemotelyErr == nil {
 			s.flowController.AddBytesRead(protocol.ByteCount(m))
 		}
 
@@ -209,7 +209,7 @@ func (s *receiveStream) CancelRead(errorCode StreamErrorCode) {
 }
 
 func (s *receiveStream) cancelReadImpl(errorCode qerr.StreamErrorCode) bool /* completed */ {
-	if s.finRead || s.cancelReadErr != nil || s.resetRemotely {
+	if s.finRead || s.cancelReadErr != nil || s.resetRemotelyErr != nil {
 		return false
 	}
 	s.cancelReadErr = &StreamError{StreamID: s.streamID, ErrorCode: errorCode, Remote: false}
@@ -277,10 +277,9 @@ func (s *receiveStream) handleResetStreamFrameImpl(frame *wire.ResetStreamFrame)
 	s.finalOffset = frame.FinalSize
 
 	// ignore duplicate RESET_STREAM frames for this stream (after checking their final offset)
-	if s.resetRemotely {
+	if s.resetRemotelyErr != nil {
 		return false, nil
 	}
-	s.resetRemotely = true
 	s.resetRemotelyErr = &StreamError{
 		StreamID:  s.streamID,
 		ErrorCode: frame.ErrorCode,
