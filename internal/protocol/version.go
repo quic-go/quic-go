@@ -112,3 +112,10 @@ func GetGreasedVersions(supported []VersionNumber) []VersionNumber {
 	copy(greased[randPos+1:], supported[randPos:])
 	return greased
 }
+
+func CompatibleVersions(v VersionNumber) []VersionNumber {
+	if v == Version1 {
+		return []VersionNumber{Version2}
+	}
+	return nil
+}

@@ -417,6 +417,7 @@ var newClientConnection = func(
 	)
 	initialStream := newCryptoStream()
 	handshakeStream := newCryptoStream()
+	compatibleVersions := protocol.CompatibleVersions(v)
 	params := &wire.TransportParameters{
 		InitialMaxStreamDataBidiRemote: protocol.ByteCount(s.config.InitialStreamReceiveWindow),
 		InitialMaxStreamDataBidiLocal:  protocol.ByteCount(s.config.InitialStreamReceiveWindow),
@@ -430,6 +431,13 @@ var newClientConnection = func(
 		DisableActiveMigration:         true,
 		ActiveConnectionIDLimit:        protocol.MaxActiveConnectionIDs,
 		InitialSourceConnectionID:      srcConnID,
+	}
+	if len(compatibleVersions) > 0 {
+		compatibleVersions = append(compatibleVersions, s.version)
+		params.VersionInformation = &wire.VersionInformation{
+			ChosenVersion:     s.version,
+			AvailableVersions: protocol.GetGreasedVersions(protocol.SupportedVersions),
+		}
 	}
 	if s.config.EnableDatagrams {
 		params.MaxDatagramFrameSize = protocol.MaxDatagramFrameSize
