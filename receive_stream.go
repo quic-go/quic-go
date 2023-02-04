@@ -34,14 +34,13 @@ type receiveStream struct {
 
 	currentFrame       []byte
 	currentFrameDone   func()
-	currentFrameIsLast bool // is the currentFrame the last frame on this stream
 	readPosInFrame     int
+	currentFrameIsLast bool // is the currentFrame the last frame on this stream
 
+	finRead             bool // set once we read a frame with a Fin
 	closeForShutdownErr error
 	cancelReadErr       error
 	resetRemotelyErr    *StreamError
-
-	finRead bool // set once we read a frame with a Fin
 
 	readChan chan struct{}
 	readOnce chan struct{} // cap: 1, to protect against concurrent use of Read
