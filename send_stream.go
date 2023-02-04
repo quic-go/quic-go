@@ -40,11 +40,10 @@ type sendStream struct {
 	cancelWriteErr      error
 	closeForShutdownErr error
 
-	closedForShutdown bool // set when CloseForShutdown() is called
-	finishedWriting   bool // set once Close() is called
-	canceledWrite     bool // set when CancelWrite() is called, or a STOP_SENDING frame is received
-	finSent           bool // set when a STREAM_FRAME with FIN bit has been sent
-	completed         bool // set when this stream has been reported to the streamSender as completed
+	finishedWriting bool // set once Close() is called
+	canceledWrite   bool // set when CancelWrite() is called, or a STOP_SENDING frame is received
+	finSent         bool // set when a STREAM_FRAME with FIN bit has been sent
+	completed       bool // set when this stream has been reported to the streamSender as completed
 
 	dataForWriting []byte // during a Write() call, this slice is the part of p that still needs to be sent out
 	nextFrame      *wire.StreamFrame
@@ -153,7 +152,7 @@ func (s *sendStream) Write(p []byte) (int, error) {
 				}
 				deadlineTimer.Reset(deadline)
 			}
-			if s.dataForWriting == nil || s.canceledWrite || s.closedForShutdown {
+			if s.dataForWriting == nil || s.canceledWrite || s.closeForShutdownErr != nil {
 				break
 			}
 		}
@@ -399,7 +398,7 @@ func (s *sendStream) queueRetransmission(f wire.Frame) {
 
 func (s *sendStream) Close() error {
 	s.mutex.Lock()
-	if s.closedForShutdown {
+	if s.closeForShutdownErr != nil {
 		s.mutex.Unlock()
 		return nil
 	}
@@ -478,7 +477,6 @@ func (s *sendStream) SetWriteDeadline(t time.Time) error {
 func (s *sendStream) closeForShutdown(err error) {
 	s.mutex.Lock()
 	s.ctxCancel()
-	s.closedForShutdown = true
 	s.closeForShutdownErr = err
 	s.mutex.Unlock()
 	s.signalWrite()
