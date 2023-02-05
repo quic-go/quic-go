@@ -1659,6 +1659,7 @@ func (s *connection) handleTransportParameters(params *wire.TransportParameters)
 			ErrorCode:    qerr.TransportParameterError,
 			ErrorMessage: err.Error(),
 		})
+		return
 	}
 	s.peerParams = params
 	// On the client side we have to wait for handshake completion.
