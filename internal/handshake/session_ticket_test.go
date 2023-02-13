@@ -1,7 +1,6 @@
 package handshake
 
 import (
-	"bytes"
 	"time"
 
 	"github.com/quic-go/quic-go/internal/wire"
@@ -34,22 +33,19 @@ var _ = Describe("Session Ticket", func() {
 	})
 
 	It("refuses to unmarshal if the revision doesn't match", func() {
-		b := &bytes.Buffer{}
-		quicvarint.Write(b, 1337)
-		Expect((&sessionTicket{}).Unmarshal(b.Bytes())).To(MatchError("unknown session ticket revision: 1337"))
+		b := quicvarint.Append(nil, 1337)
+		Expect((&sessionTicket{}).Unmarshal(b)).To(MatchError("unknown session ticket revision: 1337"))
 	})
 
 	It("refuses to unmarshal if the RTT cannot be read", func() {
-		b := &bytes.Buffer{}
-		quicvarint.Write(b, sessionTicketRevision)
-		Expect((&sessionTicket{}).Unmarshal(b.Bytes())).To(MatchError("failed to read RTT"))
+		b := quicvarint.Append(nil, sessionTicketRevision)
+		Expect((&sessionTicket{}).Unmarshal(b)).To(MatchError("failed to read RTT"))
 	})
 
 	It("refuses to unmarshal if unmarshaling the transport parameters fails", func() {
-		b := &bytes.Buffer{}
-		quicvarint.Write(b, sessionTicketRevision)
-		b.Write([]byte("foobar"))
-		err := (&sessionTicket{}).Unmarshal(b.Bytes())
+		b := quicvarint.Append(nil, sessionTicketRevision)
+		b = append(b, []byte("foobar")...)
+		err := (&sessionTicket{}).Unmarshal(b)
 		Expect(err).To(HaveOccurred())
 		Expect(err.Error()).To(ContainSubstring("unmarshaling transport parameters from session ticket failed"))
 	})

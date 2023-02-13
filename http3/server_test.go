@@ -260,8 +260,7 @@ var _ = Describe("Server", func() {
 					return true, nil
 				}
 
-				buf := &bytes.Buffer{}
-				quicvarint.Write(buf, 0x41)
+				buf := bytes.NewBuffer(quicvarint.Append(nil, 0x41))
 				unknownStr := mockquic.NewMockStream(mockCtrl)
 				unknownStr.EXPECT().Read(gomock.Any()).DoAndReturn(buf.Read).AnyTimes()
 				conn.EXPECT().AcceptStream(gomock.Any()).Return(unknownStr, nil)
@@ -283,8 +282,7 @@ var _ = Describe("Server", func() {
 					return false, nil
 				}
 
-				buf := &bytes.Buffer{}
-				quicvarint.Write(buf, 0x41)
+				buf := bytes.NewBuffer(quicvarint.Append(nil, 0x41))
 				unknownStr := mockquic.NewMockStream(mockCtrl)
 				unknownStr.EXPECT().Read(gomock.Any()).DoAndReturn(buf.Read).AnyTimes()
 				unknownStr.EXPECT().CancelWrite(quic.StreamErrorCode(errorRequestIncomplete))
@@ -307,8 +305,7 @@ var _ = Describe("Server", func() {
 					return false, errors.New("error in hijacker")
 				}
 
-				buf := &bytes.Buffer{}
-				quicvarint.Write(buf, 0x41)
+				buf := bytes.NewBuffer(quicvarint.Append(nil, 0x41))
 				unknownStr := mockquic.NewMockStream(mockCtrl)
 				unknownStr.EXPECT().Read(gomock.Any()).DoAndReturn(buf.Read).AnyTimes()
 				unknownStr.EXPECT().CancelWrite(quic.StreamErrorCode(errorRequestIncomplete))
@@ -373,8 +370,7 @@ var _ = Describe("Server", func() {
 					return true
 				}
 
-				buf := &bytes.Buffer{}
-				quicvarint.Write(buf, 0x54)
+				buf := bytes.NewBuffer(quicvarint.Append(nil, 0x54))
 				unknownStr := mockquic.NewMockStream(mockCtrl)
 				unknownStr.EXPECT().Read(gomock.Any()).DoAndReturn(buf.Read).AnyTimes()
 				conn.EXPECT().AcceptUniStream(gomock.Any()).DoAndReturn(func(context.Context) (quic.ReceiveStream, error) {
@@ -420,8 +416,7 @@ var _ = Describe("Server", func() {
 					return false
 				}
 
-				buf := &bytes.Buffer{}
-				quicvarint.Write(buf, 0x54)
+				buf := bytes.NewBuffer(quicvarint.Append(nil, 0x54))
 				unknownStr := mockquic.NewMockStream(mockCtrl)
 				unknownStr.EXPECT().Read(gomock.Any()).DoAndReturn(buf.Read).AnyTimes()
 				unknownStr.EXPECT().CancelRead(quic.StreamErrorCode(errorStreamCreationError))
@@ -480,8 +475,7 @@ var _ = Describe("Server", func() {
 				}
 
 				It(fmt.Sprintf("ignores the QPACK %s streams", name), func() {
-					buf := &bytes.Buffer{}
-					quicvarint.Write(buf, streamType)
+					buf := bytes.NewBuffer(quicvarint.Append(nil, streamType))
 					str := mockquic.NewMockStream(mockCtrl)
 					str.EXPECT().Read(gomock.Any()).DoAndReturn(buf.Read).AnyTimes()
 
@@ -498,8 +492,7 @@ var _ = Describe("Server", func() {
 			}
 
 			It("reset streams other than the control stream and the QPACK streams", func() {
-				buf := &bytes.Buffer{}
-				quicvarint.Write(buf, 1337)
+				buf := bytes.NewBuffer(quicvarint.Append(nil, 0o1337))
 				str := mockquic.NewMockStream(mockCtrl)
 				str.EXPECT().Read(gomock.Any()).DoAndReturn(buf.Read).AnyTimes()
 				done := make(chan struct{})
