@@ -18,6 +18,7 @@ import (
 	"github.com/quic-go/quic-go/http3"
 	"github.com/quic-go/quic-go/internal/protocol"
 	"github.com/quic-go/quic-go/internal/testdata"
+	"golang.org/x/sync/errgroup"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -119,6 +120,27 @@ var _ = Describe("HTTP tests", func() {
 				body, err := io.ReadAll(gbytes.TimeoutReader(resp.Body, 3*time.Second))
 				Expect(err).ToNot(HaveOccurred())
 				Expect(string(body)).To(Equal("Hello, World!\n"))
+			})
+
+			It("downloads concurrently", func() {
+				group, ctx := errgroup.WithContext(context.Background())
+				for i := 0; i < 2; i++ {
+					group.Go(func() error {
+						req, err := http.NewRequestWithContext(ctx, http.MethodGet, "https://localhost:"+port+"/hello", nil)
+						Expect(err).ToNot(HaveOccurred())
+						resp, err := client.Do(req)
+						Expect(err).ToNot(HaveOccurred())
+						Expect(resp.StatusCode).To(Equal(200))
+						body, err := io.ReadAll(gbytes.TimeoutReader(resp.Body, 3*time.Second))
+						Expect(err).ToNot(HaveOccurred())
+						Expect(string(body)).To(Equal("Hello, World!\n"))
+
+						return nil
+					})
+				}
+
+				err := group.Wait()
+				Expect(err).ToNot(HaveOccurred())
 			})
 
 			It("sets and gets request headers", func() {
