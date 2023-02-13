@@ -4,12 +4,12 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"sync/atomic"
 	"time"
 
 	"github.com/quic-go/quic-go"
 	quicproxy "github.com/quic-go/quic-go/integrationtests/tools/proxy"
 	"github.com/quic-go/quic-go/internal/protocol"
-	"github.com/quic-go/quic-go/internal/utils"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -30,7 +30,7 @@ var _ = Describe("Connection ID lengths tests", func() {
 				)
 				Expect(err).ToNot(HaveOccurred())
 
-				var drop utils.AtomicBool
+				var drop atomic.Bool
 				dropped := make(chan []byte, 100)
 				proxy, err := quicproxy.NewQuicProxy("localhost:0", &quicproxy.Opts{
 					RemoteAddr: fmt.Sprintf("localhost:%d", server.Addr().(*net.UDPAddr).Port),
@@ -38,7 +38,7 @@ var _ = Describe("Connection ID lengths tests", func() {
 						return 5 * time.Millisecond // 10ms RTT
 					},
 					DropPacket: func(dir quicproxy.Direction, b []byte) bool {
-						if drop := drop.Get(); drop && dir == quicproxy.DirectionOutgoing {
+						if drop := drop.Load(); drop && dir == quicproxy.DirectionOutgoing {
 							dropped <- b
 							return true
 						}
@@ -58,7 +58,7 @@ var _ = Describe("Connection ID lengths tests", func() {
 				sconn, err := server.Accept(context.Background())
 				Expect(err).ToNot(HaveOccurred())
 				time.Sleep(100 * time.Millisecond)
-				drop.Set(true)
+				drop.Store(true)
 				sconn.CloseWithError(1337, "closing")
 
 				// send 100 packets

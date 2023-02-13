@@ -6,11 +6,11 @@ import (
 	"fmt"
 	"math/rand"
 	"net"
+	"sync/atomic"
 	"time"
 
 	"github.com/quic-go/quic-go"
 	quicproxy "github.com/quic-go/quic-go/integrationtests/tools/proxy"
-	"github.com/quic-go/quic-go/internal/utils"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -45,12 +45,11 @@ var _ = Describe("Stateless Resets", func() {
 				ln.Close()
 			}()
 
-			drop := utils.AtomicBool{}
-
+			var drop atomic.Bool
 			proxy, err := quicproxy.NewQuicProxy("localhost:0", &quicproxy.Opts{
 				RemoteAddr: fmt.Sprintf("localhost:%d", serverPort),
 				DropPacket: func(quicproxy.Direction, []byte) bool {
-					return drop.Get()
+					return drop.Load()
 				},
 			})
 			Expect(err).ToNot(HaveOccurred())
@@ -73,7 +72,7 @@ var _ = Describe("Stateless Resets", func() {
 			Expect(data).To(Equal([]byte("foobar")))
 
 			// make sure that the CONNECTION_CLOSE is dropped
-			drop.Set(true)
+			drop.Store(true)
 			close(closeServer)
 			time.Sleep(100 * time.Millisecond)
 
@@ -83,7 +82,7 @@ var _ = Describe("Stateless Resets", func() {
 				serverConfig,
 			)
 			Expect(err).ToNot(HaveOccurred())
-			drop.Set(false)
+			drop.Store(false)
 
 			acceptStopped := make(chan struct{})
 			go func() {
