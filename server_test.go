@@ -298,7 +298,7 @@ var _ = Describe("Server", func() {
 					conn.EXPECT().handlePacket(p)
 					conn.EXPECT().run().Do(func() { close(run) })
 					conn.EXPECT().Context().Return(context.Background())
-					conn.EXPECT().HandshakeComplete().Return(context.Background())
+					conn.EXPECT().HandshakeComplete().Return(make(chan struct{}))
 					return conn
 				}
 
@@ -494,7 +494,7 @@ var _ = Describe("Server", func() {
 					conn.EXPECT().handlePacket(p)
 					conn.EXPECT().run().Do(func() { close(run) })
 					conn.EXPECT().Context().Return(context.Background())
-					conn.EXPECT().HandshakeComplete().Return(context.Background())
+					conn.EXPECT().HandshakeComplete().Return(make(chan struct{}))
 					return conn
 				}
 
@@ -546,7 +546,7 @@ var _ = Describe("Server", func() {
 					conn.EXPECT().handlePacket(gomock.Any()).MaxTimes(1)
 					conn.EXPECT().run().MaxTimes(1)
 					conn.EXPECT().Context().Return(context.Background()).MaxTimes(1)
-					conn.EXPECT().HandshakeComplete().Return(context.Background()).MaxTimes(1)
+					conn.EXPECT().HandshakeComplete().Return(make(chan struct{})).MaxTimes(1)
 					return conn
 				}
 
@@ -626,9 +626,9 @@ var _ = Describe("Server", func() {
 					conn.EXPECT().handlePacket(gomock.Any())
 					conn.EXPECT().run()
 					conn.EXPECT().Context().Return(context.Background())
-					ctx, cancel := context.WithCancel(context.Background())
-					cancel()
-					conn.EXPECT().HandshakeComplete().Return(ctx)
+					c := make(chan struct{})
+					close(c)
+					conn.EXPECT().HandshakeComplete().Return(c)
 					return conn
 				}
 
@@ -695,9 +695,9 @@ var _ = Describe("Server", func() {
 					conn.EXPECT().handlePacket(p)
 					conn.EXPECT().run()
 					conn.EXPECT().Context().Return(ctx)
-					ctx, cancel := context.WithCancel(context.Background())
-					cancel()
-					conn.EXPECT().HandshakeComplete().Return(ctx)
+					c := make(chan struct{})
+					close(c)
+					conn.EXPECT().HandshakeComplete().Return(c)
 					close(connCreated)
 					return conn
 				}
@@ -972,7 +972,7 @@ var _ = Describe("Server", func() {
 					close(done)
 				}()
 
-				ctx, cancel := context.WithCancel(context.Background()) // handshake context
+				handshakeChan := make(chan struct{})
 				serv.newConn = func(
 					_ sendConn,
 					runner connRunner,
@@ -992,7 +992,7 @@ var _ = Describe("Server", func() {
 					_ protocol.VersionNumber,
 				) quicConn {
 					conn.EXPECT().handlePacket(gomock.Any())
-					conn.EXPECT().HandshakeComplete().Return(ctx)
+					conn.EXPECT().HandshakeComplete().Return(handshakeChan)
 					conn.EXPECT().run().Do(func() {})
 					conn.EXPECT().Context().Return(context.Background())
 					return conn
@@ -1008,7 +1008,7 @@ var _ = Describe("Server", func() {
 					&wire.Header{DestConnectionID: protocol.ParseConnectionID([]byte{1, 2, 3, 4, 5, 6, 7, 8})},
 				)
 				Consistently(done).ShouldNot(BeClosed())
-				cancel() // complete the handshake
+				close(handshakeChan) // complete the handshake
 				Eventually(done).Should(BeClosed())
 			})
 		})

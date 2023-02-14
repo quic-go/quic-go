@@ -40,7 +40,7 @@ var _ = Describe("early data", func() {
 					Expect(err).ToNot(HaveOccurred())
 					Expect(str.Close()).To(Succeed())
 					// make sure the Write finished before the handshake completed
-					Expect(conn.HandshakeComplete().Done()).ToNot(BeClosed())
+					Expect(conn.HandshakeComplete()).ToNot(BeClosed())
 					Eventually(conn.Context().Done()).Should(BeClosed())
 				}()
 				serverPort := ln.Addr().(*net.UDPAddr).Port
