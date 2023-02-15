@@ -31,21 +31,17 @@ type receivedPacketTracker struct {
 	lastAck                                 *wire.AckFrame
 
 	logger utils.Logger
-
-	version protocol.VersionNumber
 }
 
 func newReceivedPacketTracker(
 	rttStats *utils.RTTStats,
 	logger utils.Logger,
-	version protocol.VersionNumber,
 ) *receivedPacketTracker {
 	return &receivedPacketTracker{
 		packetHistory: newReceivedPacketHistory(),
 		maxAckDelay:   protocol.MaxAckDelay,
 		rttStats:      rttStats,
 		logger:        logger,
-		version:       version,
 	}
 }
 

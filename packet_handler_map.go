@@ -117,7 +117,7 @@ func newPacketHandlerMap(
 
 				// [Psiphon]
 				// Do not emit alert to stderr (was log.Printf).
-				logger.Errorf("%s. See https://github.com/lucas-clemente/quic-go/wiki/UDP-Receive-Buffer-Size for details.", err)
+				logger.Errorf("%s. See https://github.com/quic-go/quic-go/wiki/UDP-Receive-Buffer-Size for details.", err)
 			})
 		}
 	}
@@ -367,7 +367,7 @@ func (h *packetHandlerMap) listen() {
 		//nolint:staticcheck // SA1019 ignore this!
 		// TODO: This code is used to ignore wsa errors on Windows.
 		// Since net.Error.Temporary is deprecated as of Go 1.18, we should find a better solution.
-		// See https://github.com/lucas-clemente/quic-go/issues/1737 for details.
+		// See https://github.com/quic-go/quic-go/issues/1737 for details.
 		if nerr, ok := err.(net.Error); ok && nerr.Temporary() {
 			h.logger.Debugf("Temporary error reading from conn: %w", err)
 			continue

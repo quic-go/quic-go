@@ -7,8 +7,9 @@ package quic
 import (
 	reflect "reflect"
 
-	protocol "github.com/Psiphon-Labs/quic-go/internal/protocol"
 	gomock "github.com/golang/mock/gomock"
+
+	protocol "github.com/Psiphon-Labs/quic-go/internal/protocol"
 )
 
 // MockPacketHandlerManager is a mock of PacketHandlerManager interface.

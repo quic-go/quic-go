@@ -304,6 +304,9 @@ func (p *TransportParameters) readNumericTransportParameter(
 		}
 		p.MaxAckDelay = time.Duration(val) * time.Millisecond
 	case activeConnectionIDLimitParameterID:
+		if val < 2 {
+			return fmt.Errorf("invalid value for active_connection_id_limit: %d (minimum 2)", val)
+		}
 		p.ActiveConnectionIDLimit = val
 	case maxDatagramFrameSizeParameterID:
 		p.MaxDatagramFrameSize = protocol.ByteCount(val)

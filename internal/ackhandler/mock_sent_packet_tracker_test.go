@@ -7,8 +7,9 @@ package ackhandler
 import (
 	reflect "reflect"
 
-	protocol "github.com/Psiphon-Labs/quic-go/internal/protocol"
 	gomock "github.com/golang/mock/gomock"
+
+	protocol "github.com/Psiphon-Labs/quic-go/internal/protocol"
 )
 
 // MockSentPacketTracker is a mock of SentPacketTracker interface.

@@ -6,8 +6,9 @@ import (
 	"errors"
 	"syscall"
 
-	"github.com/Psiphon-Labs/quic-go/internal/utils"
 	"golang.org/x/sys/windows"
+
+	"github.com/Psiphon-Labs/quic-go/internal/utils"
 )
 
 const (

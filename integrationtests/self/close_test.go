@@ -6,11 +6,9 @@ import (
 	"net"
 	"time"
 
-	"github.com/Psiphon-Labs/quic-go/internal/protocol"
-
 	"github.com/Psiphon-Labs/quic-go"
-
 	quicproxy "github.com/Psiphon-Labs/quic-go/integrationtests/tools/proxy"
+	"github.com/Psiphon-Labs/quic-go/internal/protocol"
 	"github.com/Psiphon-Labs/quic-go/internal/utils"
 
 	. "github.com/onsi/ginkgo/v2"

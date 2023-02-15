@@ -9,7 +9,7 @@ import (
 	"github.com/Psiphon-Labs/quic-go/internal/utils"
 
 	"github.com/golang/mock/gomock"
-	"github.com/marten-seemann/qpack"
+	"github.com/quic-go/qpack"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"

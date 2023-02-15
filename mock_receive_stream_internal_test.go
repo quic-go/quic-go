@@ -8,9 +8,10 @@ import (
 	reflect "reflect"
 	time "time"
 
+	gomock "github.com/golang/mock/gomock"
+
 	protocol "github.com/Psiphon-Labs/quic-go/internal/protocol"
 	wire "github.com/Psiphon-Labs/quic-go/internal/wire"
-	gomock "github.com/golang/mock/gomock"
 )
 
 // MockReceiveStreamI is a mock of ReceiveStreamI interface.

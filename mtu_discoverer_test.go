@@ -5,7 +5,6 @@ import (
 	"time"
 
 	"github.com/Psiphon-Labs/quic-go/internal/protocol"
-
 	"github.com/Psiphon-Labs/quic-go/internal/utils"
 
 	. "github.com/onsi/ginkgo/v2"

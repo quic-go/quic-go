@@ -420,11 +420,10 @@ var _ = Describe("Tracing", func() {
 				Expect(ev).To(HaveKeyWithValue("initial_max_stream_data_uni", float64(300)))
 			})
 
-			It("records a sent packet, without an ACK", func() {
-				tracer.SentPacket(
+			It("records a sent long header packet, without an ACK", func() {
+				tracer.SentLongHeaderPacket(
 					&logging.ExtendedHeader{
 						Header: logging.Header{
-							IsLongHeader:     true,
 							Type:             protocol.PacketTypeHandshake,
 							DestConnectionID: protocol.ParseConnectionID([]byte{1, 2, 3, 4, 5, 6, 7, 8}),
 							SrcConnectionID:  protocol.ParseConnectionID([]byte{4, 3, 2, 1}),
@@ -460,11 +459,11 @@ var _ = Describe("Tracing", func() {
 				Expect(frames[1].(map[string]interface{})).To(HaveKeyWithValue("frame_type", "stream"))
 			})
 
-			It("records a sent packet, without an ACK", func() {
-				tracer.SentPacket(
-					&logging.ExtendedHeader{
-						Header:       logging.Header{DestConnectionID: protocol.ParseConnectionID([]byte{1, 2, 3, 4})},
-						PacketNumber: 1337,
+			It("records a sent short header packet, without an ACK", func() {
+				tracer.SentShortHeaderPacket(
+					&logging.ShortHeader{
+						DestConnectionID: protocol.ParseConnectionID([]byte{1, 2, 3, 4}),
+						PacketNumber:     1337,
 					},
 					123,
 					&logging.AckFrame{AckRanges: []logging.AckRange{{Smallest: 1, Largest: 10}}},
@@ -490,7 +489,6 @@ var _ = Describe("Tracing", func() {
 				tracer.ReceivedLongHeaderPacket(
 					&logging.ExtendedHeader{
 						Header: logging.Header{
-							IsLongHeader:     true,
 							Type:             protocol.PacketTypeInitial,
 							DestConnectionID: protocol.ParseConnectionID([]byte{1, 2, 3, 4, 5, 6, 7, 8}),
 							SrcConnectionID:  protocol.ParseConnectionID([]byte{4, 3, 2, 1}),
@@ -561,7 +559,6 @@ var _ = Describe("Tracing", func() {
 			It("records a received Retry packet", func() {
 				tracer.ReceivedRetry(
 					&logging.Header{
-						IsLongHeader:     true,
 						Type:             protocol.PacketTypeRetry,
 						DestConnectionID: protocol.ParseConnectionID([]byte{1, 2, 3, 4, 5, 6, 7, 8}),
 						SrcConnectionID:  protocol.ParseConnectionID([]byte{4, 3, 2, 1}),

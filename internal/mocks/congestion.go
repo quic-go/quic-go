@@ -8,8 +8,9 @@ import (
 	reflect "reflect"
 	time "time"
 
-	protocol "github.com/Psiphon-Labs/quic-go/internal/protocol"
 	gomock "github.com/golang/mock/gomock"
+
+	protocol "github.com/Psiphon-Labs/quic-go/internal/protocol"
 )
 
 // MockSendAlgorithmWithDebugInfos is a mock of SendAlgorithmWithDebugInfos interface.

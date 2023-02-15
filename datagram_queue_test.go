@@ -59,6 +59,7 @@ var _ = Describe("Datagram Queue", func() {
 			Expect(queue.Peek()).To(Equal(f))
 			Expect(queue.Peek()).To(Equal(f))
 			queue.Pop()
+			Eventually(func() *wire.DatagramFrame { f = queue.Peek(); return f }).ShouldNot(BeNil())
 			f = queue.Peek()
 			Expect(f.Data).To(Equal([]byte("bar")))
 		})

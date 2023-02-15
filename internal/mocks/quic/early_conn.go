@@ -9,7 +9,7 @@ import (
 	net "net"
 	reflect "reflect"
 
-	"github.com/golang/mock/gomock"
+	gomock "github.com/golang/mock/gomock"
 
 	quic "github.com/Psiphon-Labs/quic-go"
 	qerr "github.com/Psiphon-Labs/quic-go/internal/qerr"

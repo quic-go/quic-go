@@ -9,8 +9,9 @@ import (
 	net "net"
 	reflect "reflect"
 
-	protocol "github.com/Psiphon-Labs/quic-go/internal/protocol"
 	gomock "github.com/golang/mock/gomock"
+
+	protocol "github.com/Psiphon-Labs/quic-go/internal/protocol"
 )
 
 // MockQuicConn is a mock of QuicConn interface.

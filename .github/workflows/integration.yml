@@ -5,15 +5,15 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        go: [ "1.18.x", "1.19.x" ]
+        go: [ "1.18.x", "1.19.x", "1.20.x" ]
     runs-on: ubuntu-latest
     env:
       DEBUG: false # set this to true to export qlogs and save them as artifacts
       TIMESCALE_FACTOR: 3
     name: Integration Tests (Go ${{ matrix.go }})
     steps:
-      - uses: actions/checkout@v2
-      - uses: actions/setup-go@v2
+      - uses: actions/checkout@v3
+      - uses: actions/setup-go@v3
         with:
           stable: '!contains(${{ matrix.go }}, "beta") && !contains(${{ matrix.go }}, "rc")'
           go-version: ${{ matrix.go }}

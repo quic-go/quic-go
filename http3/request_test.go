@@ -4,9 +4,9 @@ import (
 	"net/http"
 	"net/url"
 
-	"github.com/marten-seemann/qpack"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"github.com/quic-go/qpack"
 )
 
 var _ = Describe("Request", func() {
@@ -30,7 +30,6 @@ var _ = Describe("Request", func() {
 		Expect(req.Body).To(BeNil())
 		Expect(req.Host).To(Equal("quic.clemente.io"))
 		Expect(req.RequestURI).To(Equal("/foo"))
-		Expect(req.TLS).ToNot(BeNil())
 	})
 
 	It("parses path with leading double slashes", func() {

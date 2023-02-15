@@ -16,7 +16,8 @@ import (
 	"github.com/Psiphon-Labs/quic-go/internal/qtls"
 	"github.com/Psiphon-Labs/quic-go/internal/utils"
 	"github.com/Psiphon-Labs/quic-go/quicvarint"
-	"github.com/marten-seemann/qpack"
+
+	"github.com/quic-go/qpack"
 )
 
 // MethodGet0RTT allows a GET request to be sent using 0-RTT.
@@ -72,7 +73,9 @@ type client struct {
 	logger utils.Logger
 }
 
-func newClient(hostname string, tlsConf *tls.Config, opts *roundTripperOpts, conf *quic.Config, dialer dialFunc) (*client, error) {
+var _ roundTripCloser = &client{}
+
+func newClient(hostname string, tlsConf *tls.Config, opts *roundTripperOpts, conf *quic.Config, dialer dialFunc) (roundTripCloser, error) {
 	if conf == nil {
 		conf = defaultQuicConfig.Clone()
 	} else if len(conf.Versions) == 0 {
@@ -433,7 +436,7 @@ func (c *client) doRequest(req *http.Request, str quic.Stream, opt RoundTripOpt,
 	// Rules for when to set Content-Length are defined in https://tools.ietf.org/html/rfc7230#section-3.3.2.
 	_, hasTransferEncoding := res.Header["Transfer-Encoding"]
 	isInformational := res.StatusCode >= 100 && res.StatusCode < 200
-	isNoContent := res.StatusCode == 204
+	isNoContent := res.StatusCode == http.StatusNoContent
 	isSuccessfulConnect := req.Method == http.MethodConnect && res.StatusCode >= 200 && res.StatusCode < 300
 	if !hasTransferEncoding && !isInformational && !isNoContent && !isSuccessfulConnect {
 		res.ContentLength = -1
@@ -455,4 +458,16 @@ func (c *client) doRequest(req *http.Request, str quic.Stream, opt RoundTripOpt,
 	}
 
 	return res, requestError{}
+}
+
+func (c *client) HandshakeComplete() bool {
+	if c.conn == nil {
+		return false
+	}
+	select {
+	case <-c.conn.HandshakeComplete().Done():
+		return true
+	default:
+		return false
+	}
 }

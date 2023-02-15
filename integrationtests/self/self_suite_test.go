@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"crypto"
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/tls"
@@ -22,6 +23,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"golang.org/x/crypto/ed25519"
 
 	"github.com/Psiphon-Labs/quic-go"
 	"github.com/Psiphon-Labs/quic-go/internal/utils"
@@ -152,7 +155,7 @@ var _ = BeforeSuite(func() {
 	}
 })
 
-func generateCA() (*x509.Certificate, *rsa.PrivateKey, error) {
+func generateCA() (*x509.Certificate, crypto.PrivateKey, error) {
 	certTempl := &x509.Certificate{
 		SerialNumber:          big.NewInt(2019),
 		Subject:               pkix.Name{},
@@ -163,11 +166,11 @@ func generateCA() (*x509.Certificate, *rsa.PrivateKey, error) {
 		KeyUsage:              x509.KeyUsageDigitalSignature | x509.KeyUsageCertSign,
 		BasicConstraintsValid: true,
 	}
-	caPrivateKey, err := rsa.GenerateKey(rand.Reader, 2048)
+	pub, priv, err := ed25519.GenerateKey(rand.Reader)
 	if err != nil {
 		return nil, nil, err
 	}
-	caBytes, err := x509.CreateCertificate(rand.Reader, certTempl, certTempl, &caPrivateKey.PublicKey, caPrivateKey)
+	caBytes, err := x509.CreateCertificate(rand.Reader, certTempl, certTempl, pub, priv)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -175,10 +178,10 @@ func generateCA() (*x509.Certificate, *rsa.PrivateKey, error) {
 	if err != nil {
 		return nil, nil, err
 	}
-	return ca, caPrivateKey, nil
+	return ca, priv, nil
 }
 
-func generateLeafCert(ca *x509.Certificate, caPrivateKey *rsa.PrivateKey) (*x509.Certificate, *rsa.PrivateKey, error) {
+func generateLeafCert(ca *x509.Certificate, caPriv crypto.PrivateKey) (*x509.Certificate, crypto.PrivateKey, error) {
 	certTempl := &x509.Certificate{
 		SerialNumber: big.NewInt(1),
 		DNSNames:     []string{"localhost"},
@@ -187,11 +190,11 @@ func generateLeafCert(ca *x509.Certificate, caPrivateKey *rsa.PrivateKey) (*x509
 		ExtKeyUsage:  []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth, x509.ExtKeyUsageServerAuth},
 		KeyUsage:     x509.KeyUsageDigitalSignature,
 	}
-	privKey, err := rsa.GenerateKey(rand.Reader, 2048)
+	pub, priv, err := ed25519.GenerateKey(rand.Reader)
 	if err != nil {
 		return nil, nil, err
 	}
-	certBytes, err := x509.CreateCertificate(rand.Reader, certTempl, ca, &privKey.PublicKey, caPrivateKey)
+	certBytes, err := x509.CreateCertificate(rand.Reader, certTempl, ca, pub, caPriv)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -199,12 +202,12 @@ func generateLeafCert(ca *x509.Certificate, caPrivateKey *rsa.PrivateKey) (*x509
 	if err != nil {
 		return nil, nil, err
 	}
-	return cert, privKey, nil
+	return cert, priv, nil
 }
 
 // getTLSConfigWithLongCertChain generates a tls.Config that uses a long certificate chain.
 // The Root CA used is the same as for the config returned from getTLSConfig().
-func generateTLSConfigWithLongCertChain(ca *x509.Certificate, caPrivateKey *rsa.PrivateKey) (*tls.Config, error) {
+func generateTLSConfigWithLongCertChain(ca *x509.Certificate, caPrivateKey crypto.PrivateKey) (*tls.Config, error) {
 	const chainLen = 7
 	certTempl := &x509.Certificate{
 		SerialNumber:          big.NewInt(2019),
@@ -355,9 +358,9 @@ type shortHeaderPacket struct {
 
 type packetTracer struct {
 	logging.NullConnectionTracer
-	closed            chan struct{}
-	rcvdShortHdr      []shortHeaderPacket
-	sent, rcvdLongHdr []packet
+	closed                     chan struct{}
+	sentShortHdr, rcvdShortHdr []shortHeaderPacket
+	rcvdLongHdr                []packet
 }
 
 func newPacketTracer() *packetTracer {
@@ -372,16 +375,18 @@ func (t *packetTracer) ReceivedShortHeaderPacket(hdr *logging.ShortHeader, _ log
 	t.rcvdShortHdr = append(t.rcvdShortHdr, shortHeaderPacket{time: time.Now(), hdr: hdr, frames: frames})
 }
 
-func (t *packetTracer) SentPacket(hdr *logging.ExtendedHeader, _ logging.ByteCount, ack *wire.AckFrame, frames []logging.Frame) {
+func (t *packetTracer) SentShortHeaderPacket(hdr *logging.ShortHeader, _ logging.ByteCount, ack *wire.AckFrame, frames []logging.Frame) {
 	if ack != nil {
 		frames = append(frames, ack)
 	}
-	t.sent = append(t.sent, packet{time: time.Now(), hdr: hdr, frames: frames})
+	t.sentShortHdr = append(t.sentShortHdr, shortHeaderPacket{time: time.Now(), hdr: hdr, frames: frames})
 }
+
 func (t *packetTracer) Close() { close(t.closed) }
-func (t *packetTracer) getSentPackets() []packet {
+
+func (t *packetTracer) getSentShortHeaderPackets() []shortHeaderPacket {
 	<-t.closed
-	return t.sent
+	return t.sentShortHdr
 }
 
 func (t *packetTracer) getRcvdLongHeaderPackets() []packet {

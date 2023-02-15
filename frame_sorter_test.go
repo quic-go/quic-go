@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/Psiphon-Labs/quic-go/internal/protocol"
+
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 )

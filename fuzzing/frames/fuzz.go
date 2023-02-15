@@ -33,7 +33,7 @@ func Fuzz(data []byte) int {
 	encLevel := toEncLevel(data[0])
 	data = data[PrefixLen:]
 
-	parser := wire.NewFrameParser(true, version)
+	parser := wire.NewFrameParser(true)
 	parser.SetAckDelayExponent(protocol.DefaultAckDelayExponent)
 
 	initialLen := len(data)
@@ -41,7 +41,7 @@ func Fuzz(data []byte) int {
 	var frames []wire.Frame
 
 	for len(data) > 0 {
-		l, f, err := parser.ParseNext(data, encLevel)
+		l, f, err := parser.ParseNext(data, encLevel, version)
 		if err != nil {
 			break
 		}

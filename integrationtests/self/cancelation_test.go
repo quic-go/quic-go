@@ -16,7 +16,7 @@ import (
 	. "github.com/onsi/gomega"
 )
 
-var _ = Describe("Stream Cancelations", func() {
+var _ = Describe("Stream Cancellations", func() {
 	const numStreams = 80
 
 	Context("canceling the read side", func() {
@@ -45,9 +45,10 @@ var _ = Describe("Stream Cancelations", func() {
 						str, err := conn.OpenUniStreamSync(context.Background())
 						Expect(err).ToNot(HaveOccurred())
 						if _, err := str.Write(data); err != nil {
-							Expect(err).To(MatchError(&quic.StreamError{
+							Expect(err).To(Equal(&quic.StreamError{
 								StreamID:  str.StreamID(),
 								ErrorCode: quic.StreamErrorCode(str.StreamID()),
+								Remote:    true,
 							}))
 							atomic.AddInt32(&canceledCounter, 1)
 							return
@@ -90,7 +91,14 @@ var _ = Describe("Stream Cancelations", func() {
 					// cancel around 2/3 of the streams
 					if rand.Int31()%3 != 0 {
 						atomic.AddInt32(&canceledCounter, 1)
-						str.CancelRead(quic.StreamErrorCode(str.StreamID()))
+						resetErr := quic.StreamErrorCode(str.StreamID())
+						str.CancelRead(resetErr)
+						_, err := str.Read([]byte{0})
+						Expect(err).To(Equal(&quic.StreamError{
+							StreamID:  str.StreamID(),
+							ErrorCode: resetErr,
+							Remote:    false,
+						}))
 						return
 					}
 					data, err := io.ReadAll(str)
@@ -162,7 +170,7 @@ var _ = Describe("Stream Cancelations", func() {
 
 		It("allows concurrent Read and CancelRead calls", func() {
 			// This test is especially valuable when run with race detector,
-			// see https://github.com/lucas-clemente/quic-go/issues/3239.
+			// see https://github.com/quic-go/quic-go/issues/3239.
 			serverCanceledCounterChan := runServer(make([]byte, 100)) // make sure the FIN is sent with the STREAM frame
 
 			conn, err := quic.DialAddr(
@@ -189,7 +197,11 @@ var _ = Describe("Stream Cancelations", func() {
 						b := make([]byte, 32)
 						if _, err := str.Read(b); err != nil {
 							atomic.AddInt32(&counter, 1)
-							Expect(err.Error()).To(ContainSubstring("canceled with error code 1234"))
+							Expect(err).To(Equal(&quic.StreamError{
+								StreamID:  str.StreamID(),
+								ErrorCode: 1234,
+								Remote:    false,
+							}))
 							return
 						}
 					}()

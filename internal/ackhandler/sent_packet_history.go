@@ -2,6 +2,7 @@ package ackhandler
 
 import (
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/Psiphon-Labs/quic-go/internal/protocol"
@@ -17,11 +18,17 @@ type sentPacketHistory struct {
 	highestSent           protocol.PacketNumber
 }
 
+var packetElementPool sync.Pool
+
+func init() {
+	packetElementPool = *list.NewPool[*Packet]()
+}
+
 func newSentPacketHistory(rttStats *utils.RTTStats) *sentPacketHistory {
 	return &sentPacketHistory{
 		rttStats:              rttStats,
-		outstandingPacketList: list.New[*Packet](),
-		etcPacketList:         list.New[*Packet](),
+		outstandingPacketList: list.NewWithPool[*Packet](&packetElementPool),
+		etcPacketList:         list.NewWithPool[*Packet](&packetElementPool),
 		packetMap:             make(map[protocol.PacketNumber]*list.Element[*Packet]),
 		highestSent:           protocol.InvalidPacketNumber,
 	}
@@ -108,8 +115,7 @@ func (h *sentPacketHistory) Remove(p protocol.PacketNumber) error {
 	if !ok {
 		return fmt.Errorf("packet %d not found in sent packet history", p)
 	}
-	h.outstandingPacketList.Remove(el)
-	h.etcPacketList.Remove(el)
+	el.List().Remove(el)
 	delete(h.packetMap, p)
 	return nil
 }
@@ -139,10 +145,7 @@ func (h *sentPacketHistory) DeclareLost(p *Packet) *Packet {
 	if !ok {
 		return nil
 	}
-	// try to remove it from both lists, as we don't know which one it currently belongs to.
-	// Remove is a no-op for elements that are not in the list.
-	h.outstandingPacketList.Remove(el)
-	h.etcPacketList.Remove(el)
+	el.List().Remove(el)
 	p.declaredLost = true
 	// move it to the correct position in the etc list (based on the packet number)
 	for el = h.etcPacketList.Back(); el != nil; el = el.Prev() {

@@ -18,7 +18,8 @@ import (
 	"github.com/Psiphon-Labs/quic-go/internal/protocol"
 	"github.com/Psiphon-Labs/quic-go/internal/utils"
 	"github.com/Psiphon-Labs/quic-go/quicvarint"
-	"github.com/marten-seemann/qpack"
+
+	"github.com/quic-go/qpack"
 )
 
 // allows mocking of quic.Listen and quic.ListenAddr
@@ -272,7 +273,7 @@ func (s *Server) serveConn(tlsConf *tls.Config, conn net.PacketConn) error {
 	baseConf := ConfigureTLSConfig(tlsConf)
 	quicConf := s.QuicConfig
 	if quicConf == nil {
-		quicConf = &quic.Config{}
+		quicConf = &quic.Config{Allow0RTT: func(net.Addr) bool { return true }}
 	} else {
 		quicConf = s.QuicConfig.Clone()
 	}
@@ -570,6 +571,8 @@ func (s *Server) handleRequest(conn quic.Connection, str quic.Stream, decoder *q
 		return newStreamError(errorGeneralProtocolError, err)
 	}
 
+	connState := conn.ConnectionState().TLS.ConnectionState
+	req.TLS = &connState
 	req.RemoteAddr = conn.RemoteAddr().String()
 	body := newRequestBody(newStream(str, onFrameError))
 	req.Body = body
@@ -614,9 +617,9 @@ func (s *Server) handleRequest(conn quic.Connection, str quic.Stream, decoder *q
 	}
 
 	if panicked {
-		r.WriteHeader(500)
+		r.WriteHeader(http.StatusInternalServerError)
 	} else {
-		r.WriteHeader(200)
+		r.WriteHeader(http.StatusOK)
 	}
 	// If the EOF was read by the handler, CancelRead() is a no-op.
 	str.CancelRead(quic.StreamErrorCode(errorNoError))
@@ -717,19 +720,6 @@ func ListenAndServe(addr, certFile, keyFile string, handler http.Handler) error 
 	}
 	defer udpConn.Close()
 
-	tcpAddr, err := net.ResolveTCPAddr("tcp", addr)
-	if err != nil {
-		return err
-	}
-	tcpConn, err := net.ListenTCP("tcp", tcpAddr)
-	if err != nil {
-		return err
-	}
-	defer tcpConn.Close()
-
-	tlsConn := tls.NewListener(tcpConn, config)
-	defer tlsConn.Close()
-
 	if handler == nil {
 		handler = http.DefaultServeMux
 	}
@@ -738,17 +728,14 @@ func ListenAndServe(addr, certFile, keyFile string, handler http.Handler) error 
 		TLSConfig: config,
 		Handler:   handler,
 	}
-	httpServer := &http.Server{
-		Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			quicServer.SetQuicHeaders(w.Header())
-			handler.ServeHTTP(w, r)
-		}),
-	}
 
 	hErr := make(chan error)
 	qErr := make(chan error)
 	go func() {
-		hErr <- httpServer.Serve(tlsConn)
+		hErr <- http.ListenAndServeTLS(addr, certFile, keyFile, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			quicServer.SetQuicHeaders(w.Header())
+			handler.ServeHTTP(w, r)
+		}))
 	}()
 	go func() {
 		qErr <- quicServer.Serve(udpConn)

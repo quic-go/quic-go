@@ -8,9 +8,10 @@ import (
 	reflect "reflect"
 	time "time"
 
+	gomock "github.com/golang/mock/gomock"
+
 	ackhandler "github.com/Psiphon-Labs/quic-go/internal/ackhandler"
 	protocol "github.com/Psiphon-Labs/quic-go/internal/protocol"
-	gomock "github.com/golang/mock/gomock"
 )
 
 // MockMtuDiscoverer is a mock of MtuDiscoverer interface.

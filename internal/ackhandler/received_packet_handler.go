@@ -25,13 +25,12 @@ func newReceivedPacketHandler(
 	sentPackets sentPacketTracker,
 	rttStats *utils.RTTStats,
 	logger utils.Logger,
-	version protocol.VersionNumber,
 ) ReceivedPacketHandler {
 	return &receivedPacketHandler{
 		sentPackets:      sentPackets,
-		initialPackets:   newReceivedPacketTracker(rttStats, logger, version),
-		handshakePackets: newReceivedPacketTracker(rttStats, logger, version),
-		appDataPackets:   newReceivedPacketTracker(rttStats, logger, version),
+		initialPackets:   newReceivedPacketTracker(rttStats, logger),
+		handshakePackets: newReceivedPacketTracker(rttStats, logger),
+		appDataPackets:   newReceivedPacketTracker(rttStats, logger),
 		lowest1RTTPacket: protocol.InvalidPacketNumber,
 	}
 }

@@ -21,7 +21,7 @@ import (
 	"github.com/Psiphon-Labs/quic-go/quicvarint"
 
 	"github.com/golang/mock/gomock"
-	"github.com/marten-seemann/qpack"
+	"github.com/quic-go/qpack"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -163,6 +163,7 @@ var _ = Describe("Server", func() {
 			addr := &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 1337}
 			conn.EXPECT().RemoteAddr().Return(addr).AnyTimes()
 			conn.EXPECT().LocalAddr().AnyTimes()
+			conn.EXPECT().ConnectionState().Return(quic.ConnectionState{}).AnyTimes()
 		})
 
 		It("calls the HTTP handler function", func() {
@@ -632,6 +633,7 @@ var _ = Describe("Server", func() {
 				conn.EXPECT().AcceptStream(gomock.Any()).Return(nil, errors.New("done"))
 				conn.EXPECT().RemoteAddr().Return(addr).AnyTimes()
 				conn.EXPECT().LocalAddr().AnyTimes()
+				conn.EXPECT().ConnectionState().Return(quic.ConnectionState{}).AnyTimes()
 			})
 
 			AfterEach(func() { testDone <- struct{}{} })

@@ -100,7 +100,7 @@ var _ = Describe("Transport Parameters", func() {
 			RetrySourceConnectionID:         &rcid,
 			AckDelayExponent:                13,
 			MaxAckDelay:                     42 * time.Millisecond,
-			ActiveConnectionIDLimit:         getRandomValue(),
+			ActiveConnectionIDLimit:         2 + getRandomValueUpTo(math.MaxInt64-2),
 			MaxDatagramFrameSize:            protocol.ByteCount(getRandomValue()),
 		}
 		data := params.Marshal(protocol.PerspectiveServer)
@@ -127,7 +127,8 @@ var _ = Describe("Transport Parameters", func() {
 
 	It("doesn't marshal a retry_source_connection_id, if no Retry was performed", func() {
 		data := (&TransportParameters{
-			StatelessResetToken: &protocol.StatelessResetToken{},
+			StatelessResetToken:     &protocol.StatelessResetToken{},
+			ActiveConnectionIDLimit: 2,
 		}).Marshal(protocol.PerspectiveServer)
 		p := &TransportParameters{}
 		Expect(p.Unmarshal(data, protocol.PerspectiveServer)).To(Succeed())
@@ -139,6 +140,7 @@ var _ = Describe("Transport Parameters", func() {
 		data := (&TransportParameters{
 			RetrySourceConnectionID: &rcid,
 			StatelessResetToken:     &protocol.StatelessResetToken{},
+			ActiveConnectionIDLimit: 2,
 		}).Marshal(protocol.PerspectiveServer)
 		p := &TransportParameters{}
 		Expect(p.Unmarshal(data, protocol.PerspectiveServer)).To(Succeed())
@@ -231,6 +233,18 @@ var _ = Describe("Transport Parameters", func() {
 		Expect(float32(dataLen) / num).To(BeNumerically("~", float32(defaultLen)/num+float32(entryLen), 1))
 	})
 
+	It("errors when the active_connection_id_limit is too small", func() {
+		data := (&TransportParameters{
+			ActiveConnectionIDLimit: 1,
+			StatelessResetToken:     &protocol.StatelessResetToken{},
+		}).Marshal(protocol.PerspectiveServer)
+		p := &TransportParameters{}
+		Expect(p.Unmarshal(data, protocol.PerspectiveServer)).To(MatchError(&qerr.TransportError{
+			ErrorCode:    qerr.TransportParameterError,
+			ErrorMessage: "invalid value for active_connection_id_limit: 1 (minimum 2)",
+		}))
+	})
+
 	It("errors when the ack_delay_exponenent is too large", func() {
 		data := (&TransportParameters{
 			AckDelayExponent:    21,
@@ -265,8 +279,9 @@ var _ = Describe("Transport Parameters", func() {
 
 	It("sets the default value for the ack_delay_exponent, when no value was sent", func() {
 		data := (&TransportParameters{
-			AckDelayExponent:    protocol.DefaultAckDelayExponent,
-			StatelessResetToken: &protocol.StatelessResetToken{},
+			AckDelayExponent:        protocol.DefaultAckDelayExponent,
+			StatelessResetToken:     &protocol.StatelessResetToken{},
+			ActiveConnectionIDLimit: 2,
 		}).Marshal(protocol.PerspectiveServer)
 		p := &TransportParameters{}
 		Expect(p.Unmarshal(data, protocol.PerspectiveServer)).To(Succeed())
@@ -416,8 +431,9 @@ var _ = Describe("Transport Parameters", func() {
 
 		It("marshals and unmarshals", func() {
 			data := (&TransportParameters{
-				PreferredAddress:    pa,
-				StatelessResetToken: &protocol.StatelessResetToken{},
+				PreferredAddress:        pa,
+				StatelessResetToken:     &protocol.StatelessResetToken{},
+				ActiveConnectionIDLimit: 2,
 			}).Marshal(protocol.PerspectiveServer)
 			p := &TransportParameters{}
 			Expect(p.Unmarshal(data, protocol.PerspectiveServer)).To(Succeed())
@@ -483,7 +499,7 @@ var _ = Describe("Transport Parameters", func() {
 				InitialMaxData:                 protocol.ByteCount(getRandomValue()),
 				MaxBidiStreamNum:               protocol.StreamNum(getRandomValueUpTo(int64(protocol.MaxStreamCount))),
 				MaxUniStreamNum:                protocol.StreamNum(getRandomValueUpTo(int64(protocol.MaxStreamCount))),
-				ActiveConnectionIDLimit:        getRandomValue(),
+				ActiveConnectionIDLimit:        2 + getRandomValueUpTo(math.MaxInt64-2),
 			}
 			Expect(params.ValidFor0RTT(params)).To(BeTrue())
 			b := params.MarshalForSessionTicket(nil)

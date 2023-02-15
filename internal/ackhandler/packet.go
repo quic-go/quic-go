@@ -10,7 +10,7 @@ import (
 // A Packet is a packet
 type Packet struct {
 	PacketNumber    protocol.PacketNumber
-	Frames          []Frame
+	Frames          []*Frame
 	LargestAcked    protocol.PacketNumber // InvalidPacketNumber if the packet doesn't contain an ACK
 	Length          protocol.ByteCount
 	EncryptionLevel protocol.EncryptionLevel
@@ -46,4 +46,10 @@ func GetPacket() *Packet {
 
 // We currently only return Packets back into the pool when they're acknowledged (not when they're lost).
 // This simplifies the code, and gives the vast majority of the performance benefit we can gain from using the pool.
-func putPacket(p *Packet) { packetPool.Put(p) }
+func putPacket(p *Packet) {
+	for _, f := range p.Frames {
+		putFrame(f)
+	}
+	p.Frames = nil
+	packetPool.Put(p)
+}

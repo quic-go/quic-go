@@ -10,7 +10,6 @@ import (
 	"github.com/Psiphon-Labs/quic-go/fuzzing/internal/helper"
 	"github.com/Psiphon-Labs/quic-go/fuzzing/transportparameters"
 	"github.com/Psiphon-Labs/quic-go/internal/protocol"
-
 	"github.com/Psiphon-Labs/quic-go/internal/wire"
 )
 
@@ -39,7 +38,7 @@ func main() {
 			MaxUniStreamNum:                protocol.StreamNum(getRandomValue()),
 			MaxBidiStreamNum:               protocol.StreamNum(getRandomValue()),
 			MaxIdleTimeout:                 time.Duration(getRandomValue()),
-			ActiveConnectionIDLimit:        getRandomValue(),
+			ActiveConnectionIDLimit:        getRandomValue() + 2,
 		}
 		if rand.Int()%2 == 0 {
 			tp.OriginalDestinationConnectionID = protocol.ParseConnectionID(getRandomData(rand.Intn(21)))

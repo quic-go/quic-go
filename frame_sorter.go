@@ -2,6 +2,7 @@ package quic
 
 import (
 	"errors"
+	"sync"
 
 	"github.com/Psiphon-Labs/quic-go/internal/protocol"
 	list "github.com/Psiphon-Labs/quic-go/internal/utils/linkedlist"
@@ -11,6 +12,12 @@ import (
 type byteInterval struct {
 	Start protocol.ByteCount
 	End   protocol.ByteCount
+}
+
+var byteIntervalElementPool sync.Pool
+
+func init() {
+	byteIntervalElementPool = *list.NewPool[byteInterval]()
 }
 
 type frameSorterEntry struct {
@@ -28,7 +35,7 @@ var errDuplicateStreamData = errors.New("duplicate stream data")
 
 func newFrameSorter() *frameSorter {
 	s := frameSorter{
-		gaps:  list.New[byteInterval](),
+		gaps:  list.NewWithPool[byteInterval](&byteIntervalElementPool),
 		queue: make(map[protocol.ByteCount]frameSorterEntry),
 	}
 	s.gaps.PushFront(byteInterval{Start: 0, End: protocol.MaxByteCount})

@@ -7,9 +7,10 @@ package handshake
 import (
 	reflect "reflect"
 
+	gomock "github.com/golang/mock/gomock"
+
 	protocol "github.com/Psiphon-Labs/quic-go/internal/protocol"
 	wire "github.com/Psiphon-Labs/quic-go/internal/wire"
-	gomock "github.com/golang/mock/gomock"
 )
 
 // MockHandshakeRunner is a mock of HandshakeRunner interface.

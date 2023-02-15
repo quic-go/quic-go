@@ -8,10 +8,11 @@ import (
 	reflect "reflect"
 	time "time"
 
+	gomock "github.com/golang/mock/gomock"
+
 	ackhandler "github.com/Psiphon-Labs/quic-go/internal/ackhandler"
 	protocol "github.com/Psiphon-Labs/quic-go/internal/protocol"
 	wire "github.com/Psiphon-Labs/quic-go/internal/wire"
-	gomock "github.com/golang/mock/gomock"
 )
 
 // MockSentPacketHandler is a mock of SentPacketHandler interface.
