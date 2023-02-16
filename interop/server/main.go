@@ -58,7 +58,10 @@ func main() {
 	}
 
 	switch testcase {
-	case "versionnegotiation", "handshake", "retry", "transfer", "resumption", "zerortt", "multiconnect":
+	case "zerortt":
+		quicConf.Allow0RTT = func(net.Addr) bool { return true }
+		fallthrough
+	case "versionnegotiation", "handshake", "retry", "transfer", "resumption", "multiconnect":
 		err = runHTTP09Server(quicConf)
 	case "chacha20":
 		tlsConf.CipherSuites = []uint16{tls.TLS_CHACHA20_POLY1305_SHA256}
