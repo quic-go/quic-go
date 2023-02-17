@@ -80,8 +80,9 @@ func (w *responseWriter) WriteHeader(status int) {
 }
 
 func (w *responseWriter) Write(p []byte) (int, error) {
+	bodyAllowed := bodyAllowedForStatus(w.status)
 	if !w.headerWritten {
-		if bodyAllowedForStatus(w.status) {
+		if bodyAllowed {
 			// If no content type, apply sniffing algorithm to body.
 			// We can't use `w.header.Get` here since if the Content-Type was set to nil, we shound't do sniffing.
 			_, haveType := w.header["Content-Type"]
@@ -97,8 +98,9 @@ func (w *responseWriter) Write(p []byte) (int, error) {
 			}
 		}
 		w.WriteHeader(http.StatusOK)
+		bodyAllowed = true
 	}
-	if !bodyAllowedForStatus(w.status) {
+	if !bodyAllowed {
 		return 0, http.ErrBodyNotAllowed
 	}
 	df := &dataFrame{Length: uint64(len(p))}
