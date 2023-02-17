@@ -83,7 +83,7 @@ func (w *responseWriter) Write(p []byte) (int, error) {
 	if !w.headerWritten {
 		if bodyAllowedForStatus(w.status) {
 			// If no content type, apply sniffing algorithm to body.
-			// We can't use `http.Head.Get` here since if the Content-Type was set to nil, we shound't do sniff.
+			// We can't use `w.header.Get` here since if the Content-Type was set to nil, we shound't do sniffing.
 			_, haveType := w.header["Content-Type"]
 
 			// If the Transfer-Encoding or Content-Encoding was set and is non-blank,
