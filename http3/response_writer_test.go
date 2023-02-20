@@ -148,7 +148,7 @@ var _ = Describe("Response Writer", func() {
 		Expect(err).To(MatchError(http.ErrBodyNotAllowed))
 	})
 
-	It("first call to Write do sniff if Content-Type is not set", func() {
+	It("first call to Write sniffs if Content-Type is not set", func() {
 		n, err := rw.Write([]byte("<html></html>"))
 		Expect(n).To(Equal(13))
 		Expect(err).ToNot(HaveOccurred())
