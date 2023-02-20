@@ -140,7 +140,10 @@ func (r *RoundTripper) RoundTripOpt(req *http.Request, opt RoundTripOpt) (*http.
 	}
 	rsp, err := cl.RoundTripOpt(req, opt)
 	if err != nil {
-		r.removeClient(hostname)
+		if cerr := r.removeClient(hostname); cerr != nil {
+			return nil, cerr
+		}
+
 		if isReused {
 			if nerr, ok := err.(net.Error); ok && nerr.Timeout() {
 				return r.RoundTripOpt(req, opt)
@@ -196,13 +199,21 @@ func (r *RoundTripper) getClient(hostname string, onlyCached bool) (rtc roundTri
 	return client, isReused, nil
 }
 
-func (r *RoundTripper) removeClient(hostname string) {
+func (r *RoundTripper) removeClient(hostname string) error {
 	r.mutex.Lock()
 	defer r.mutex.Unlock()
 	if r.clients == nil {
-		return
+		return nil
 	}
+
+	client := r.clients[hostname]
+	if err := client.Close(); err != nil {
+		return fmt.Errorf("can't close client: %w", err)
+	}
+
 	delete(r.clients, hostname)
+
+	return nil
 }
 
 // Close closes the QUIC connections that this RoundTripper has used
