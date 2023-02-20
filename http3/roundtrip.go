@@ -206,7 +206,11 @@ func (r *RoundTripper) removeClient(hostname string) error {
 		return nil
 	}
 
-	client := r.clients[hostname]
+	client, ok := r.clients[hostname]
+	if !ok {
+		return nil
+	}
+
 	if err := client.Close(); err != nil {
 		return fmt.Errorf("can't close client: %w", err)
 	}

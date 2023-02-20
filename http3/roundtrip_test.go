@@ -66,6 +66,7 @@ var _ = Describe("RoundTripper", func() {
 			rt.newClient = func(string, *tls.Config, *roundTripperOpts, *quic.Config, dialFunc) (roundTripCloser, error) {
 				cl := NewMockRoundTripCloser(mockCtrl)
 				cl.EXPECT().RoundTripOpt(gomock.Any(), gomock.Any()).Return(nil, testErr)
+				cl.EXPECT().Close()
 				return cl, nil
 			}
 			_, err = rt.RoundTrip(req)
@@ -130,7 +131,7 @@ var _ = Describe("RoundTripper", func() {
 			Expect(count).To(Equal(1))
 		})
 
-		It("immediately removes a clients when a request errored", func() {
+		It("immediately removes and close a clients when a request errored", func() {
 			testErr := errors.New("test err")
 
 			var count int
@@ -138,6 +139,7 @@ var _ = Describe("RoundTripper", func() {
 				count++
 				cl := NewMockRoundTripCloser(mockCtrl)
 				cl.EXPECT().RoundTripOpt(gomock.Any(), gomock.Any()).Return(nil, testErr)
+				cl.EXPECT().Close()
 				return cl, nil
 			}
 			_, err := rt.RoundTrip(req1)
@@ -161,6 +163,7 @@ var _ = Describe("RoundTripper", func() {
 				return nil, &qerr.IdleTimeoutError{}
 			}).Times(2)
 			cl1.EXPECT().HandshakeComplete().Return(true)
+			cl1.EXPECT().Close()
 			cl2 := NewMockRoundTripCloser(mockCtrl)
 			cl2.EXPECT().RoundTripOpt(gomock.Any(), gomock.Any()).DoAndReturn(func(req *http.Request, _ RoundTripOpt) (*http.Response, error) {
 				return &http.Response{Request: req}, nil
@@ -188,6 +191,7 @@ var _ = Describe("RoundTripper", func() {
 				count++
 				cl := NewMockRoundTripCloser(mockCtrl)
 				cl.EXPECT().RoundTripOpt(gomock.Any(), gomock.Any()).Return(nil, &qerr.IdleTimeoutError{})
+				cl.EXPECT().Close()
 				return cl, nil
 			}
 			_, err := rt.RoundTrip(req1)
@@ -208,6 +212,7 @@ var _ = Describe("RoundTripper", func() {
 					return nil, &qerr.IdleTimeoutError{}
 				}).Times(2)
 				cl.EXPECT().HandshakeComplete()
+				cl.EXPECT().Close()
 				return cl, nil
 			}
 			done := make(chan struct{}, 2)
