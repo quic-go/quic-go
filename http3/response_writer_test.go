@@ -147,4 +147,13 @@ var _ = Describe("Response Writer", func() {
 		Expect(n).To(BeZero())
 		Expect(err).To(MatchError(http.ErrBodyNotAllowed))
 	})
+
+	It("first call to Write sniffs if Content-Type is not set", func() {
+		n, err := rw.Write([]byte("<html></html>"))
+		Expect(n).To(Equal(13))
+		Expect(err).ToNot(HaveOccurred())
+
+		fields := decodeHeader(strBuf)
+		Expect(fields).To(HaveKeyWithValue("content-type", []string{"text/html; charset=utf-8"}))
+	})
 })
