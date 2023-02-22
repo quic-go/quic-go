@@ -69,7 +69,7 @@ type RoundTripper struct {
 
 	// Dial specifies an optional dial function for creating QUIC
 	// connections for requests.
-	// If Dial is nil, quic.DialAddrEarlyContext will be used.
+	// If Dial is nil, makeDialer will be used to create a dialer.
 	Dial func(ctx context.Context, addr string, tlsCfg *tls.Config, cfg *quic.Config) (quic.EarlyConnection, error)
 
 	// MaxResponseHeaderBytes specifies a limit on how many response bytes are
@@ -79,6 +79,7 @@ type RoundTripper struct {
 
 	newClient func(hostname string, tlsConf *tls.Config, opts *roundTripperOpts, conf *quic.Config, dialer dialFunc) (roundTripCloser, error) // so we can mock it in tests
 	clients   map[string]roundTripCloser
+	udpConn   *net.UDPConn
 }
 
 // RoundTripOpt are options for the Transport.RoundTripOpt method.
@@ -173,6 +174,16 @@ func (r *RoundTripper) getClient(hostname string, onlyCached bool) (rtc roundTri
 		if r.newClient != nil {
 			newCl = r.newClient
 		}
+		dial := r.Dial
+		if dial == nil {
+			if r.udpConn == nil {
+				r.udpConn, err = net.ListenUDP("udp", &net.UDPAddr{IP: net.IPv4zero, Port: 0})
+				if err != nil {
+					return nil, false, err
+				}
+			}
+			dial = makeDialer(r.udpConn)
+		}
 		client, err = newCl(
 			hostname,
 			r.TLSClientConfig,
@@ -184,7 +195,7 @@ func (r *RoundTripper) getClient(hostname string, onlyCached bool) (rtc roundTri
 				UniStreamHijacker:  r.UniStreamHijacker,
 			},
 			r.QuicConfig,
-			r.Dial,
+			dial,
 		)
 		if err != nil {
 			return nil, false, err
@@ -215,6 +226,10 @@ func (r *RoundTripper) Close() error {
 		}
 	}
 	r.clients = nil
+	if r.udpConn != nil {
+		r.udpConn.Close()
+		r.udpConn = nil
+	}
 	return nil
 }
 
@@ -244,4 +259,14 @@ func validMethod(method string) bool {
 // copied from net/http/http.go
 func isNotToken(r rune) bool {
 	return !httpguts.IsTokenRune(r)
+}
+
+func makeDialer(udpConn *net.UDPConn) func(ctx context.Context, addr string, tlsCfg *tls.Config, cfg *quic.Config) (quic.EarlyConnection, error) {
+	return func(ctx context.Context, addr string, tlsCfg *tls.Config, cfg *quic.Config) (quic.EarlyConnection, error) {
+		udpAddr, err := net.ResolveUDPAddr("udp", addr)
+		if err != nil {
+			return nil, err
+		}
+		return quic.DialEarlyContext(ctx, udpConn, udpAddr, addr, tlsCfg, cfg)
+	}
 }

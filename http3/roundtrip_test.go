@@ -75,7 +75,7 @@ var _ = Describe("RoundTripper", func() {
 		It("uses the quic.Config, if provided", func() {
 			config := &quic.Config{HandshakeIdleTimeout: time.Millisecond}
 			var receivedConfig *quic.Config
-			dialAddr = func(_ context.Context, _ string, _ *tls.Config, config *quic.Config) (quic.EarlyConnection, error) {
+			rt.Dial = func(_ context.Context, _ string, _ *tls.Config, config *quic.Config) (quic.EarlyConnection, error) {
 				receivedConfig = config
 				return nil, errors.New("handshake error")
 			}
