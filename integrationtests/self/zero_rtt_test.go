@@ -21,6 +21,39 @@ import (
 	. "github.com/onsi/gomega"
 )
 
+type metadataClientSessionCache struct {
+	toAdd    []byte
+	restored func([]byte)
+
+	cache tls.ClientSessionCache
+}
+
+func (m metadataClientSessionCache) Get(key string) (*tls.ClientSessionState, bool) {
+	session, ok := m.cache.Get(key)
+	if !ok || session == nil {
+		return session, ok
+	}
+	ticket, state, err := session.ResumptionState()
+	Expect(err).ToNot(HaveOccurred())
+	Expect(len(state.Extra)).To(BeNumerically(">=", len(m.toAdd)))
+	idx := len(state.Extra) - len(m.toAdd)
+	b := state.Extra[idx:]
+	m.restored(b)
+	state.Extra = state.Extra[:idx]
+	session, err = tls.NewResumptionState(ticket, state)
+	Expect(err).ToNot(HaveOccurred())
+	return session, true
+}
+
+func (m metadataClientSessionCache) Put(key string, session *tls.ClientSessionState) {
+	ticket, state, err := session.ResumptionState()
+	Expect(err).ToNot(HaveOccurred())
+	state.Extra = append(state.Extra, m.toAdd...)
+	session, err = tls.NewResumptionState(ticket, state)
+	Expect(err).ToNot(HaveOccurred())
+	m.cache.Put(key, session)
+}
+
 var _ = Describe("0-RTT", func() {
 	rtt := scaleDuration(5 * time.Millisecond)
 
@@ -49,15 +82,18 @@ var _ = Describe("0-RTT", func() {
 		return proxy, &num0RTTPackets
 	}
 
-	dialAndReceiveSessionTicket := func(serverConf *quic.Config) (*tls.Config, *tls.Config) {
-		tlsConf := getTLSConfig()
+	dialAndReceiveSessionTicket := func(serverTLSConf *tls.Config, serverConf *quic.Config, clientTLSConf *tls.Config) {
+		// TODO: find a better solution for this
+		// This is a hack to make crypto/tls initialize session ticket keys
+		serverTLSConf.DecryptTicket([]byte("foobar"), tls.ConnectionState{})
+
 		if serverConf == nil {
 			serverConf = getQuicConfig(nil)
 		}
 		serverConf.Allow0RTT = true
 		ln, err := quic.ListenAddrEarly(
 			"localhost:0",
-			tlsConf,
+			serverTLSConf,
 			serverConf,
 		)
 		Expect(err).ToNot(HaveOccurred())
@@ -80,14 +116,16 @@ var _ = Describe("0-RTT", func() {
 			<-conn.Context().Done()
 		}()
 
-		clientConf := getTLSClientConfig()
-		gets := make(chan string, 100)
 		puts := make(chan string, 100)
-		clientConf.ClientSessionCache = newClientSessionCache(gets, puts)
+		cache := clientTLSConf.ClientSessionCache
+		if cache == nil {
+			cache = tls.NewLRUClientSessionCache(100)
+		}
+		clientTLSConf.ClientSessionCache = newClientSessionCache(cache, make(chan string, 100), puts)
 		conn, err := quic.DialAddr(
 			context.Background(),
 			fmt.Sprintf("localhost:%d", proxy.LocalPort()),
-			clientConf,
+			clientTLSConf,
 			getQuicConfig(nil),
 		)
 		Expect(err).ToNot(HaveOccurred())
@@ -95,7 +133,6 @@ var _ = Describe("0-RTT", func() {
 		// received the session ticket. We're done here.
 		Expect(conn.CloseWithError(0, "")).To(Succeed())
 		Eventually(done).Should(BeClosed())
-		return tlsConf, clientConf
 	}
 
 	transfer0RTTData := func(
@@ -118,7 +155,7 @@ var _ = Describe("0-RTT", func() {
 			Expect(err).ToNot(HaveOccurred())
 			Expect(data).To(Equal(testdata))
 			Expect(str.Close()).To(Succeed())
-			Expect(conn.ConnectionState().TLS.Used0RTT).To(BeTrue())
+			Expect(conn.ConnectionState().Used0RTT).To(BeTrue())
 			<-conn.Context().Done()
 			close(done)
 		}()
@@ -162,7 +199,7 @@ var _ = Describe("0-RTT", func() {
 		Expect(err).ToNot(HaveOccurred())
 		Expect(str.Close()).To(Succeed())
 		<-conn.HandshakeComplete()
-		Expect(conn.ConnectionState().TLS.Used0RTT).To(BeTrue())
+		Expect(conn.ConnectionState().Used0RTT).To(BeTrue())
 		io.ReadAll(str) // wait for the EOF from the server to arrive before closing the conn
 		conn.CloseWithError(0, "")
 		Eventually(done).Should(BeClosed())
@@ -186,14 +223,14 @@ var _ = Describe("0-RTT", func() {
 		_, err = str.Write(make([]byte, 3000))
 		Expect(err).ToNot(HaveOccurred())
 		Expect(str.Close()).To(Succeed())
-		Expect(conn.ConnectionState().TLS.Used0RTT).To(BeFalse())
+		Expect(conn.ConnectionState().Used0RTT).To(BeFalse())
 
 		// make sure the server doesn't process the data
 		ctx, cancel := context.WithTimeout(context.Background(), scaleDuration(50*time.Millisecond))
 		defer cancel()
 		serverConn, err := ln.Accept(ctx)
 		Expect(err).ToNot(HaveOccurred())
-		Expect(serverConn.ConnectionState().TLS.Used0RTT).To(BeFalse())
+		Expect(serverConn.ConnectionState().Used0RTT).To(BeFalse())
 		_, err = serverConn.AcceptUniStream(ctx)
 		Expect(err).To(Equal(context.DeadlineExceeded))
 		Expect(serverConn.CloseWithError(0, "")).To(Succeed())
@@ -215,7 +252,9 @@ var _ = Describe("0-RTT", func() {
 		connIDLen := l
 
 		It(fmt.Sprintf("transfers 0-RTT data, with %d byte connection IDs", connIDLen), func() {
-			tlsConf, clientTLSConf := dialAndReceiveSessionTicket(nil)
+			tlsConf := getTLSConfig()
+			clientTLSConf := getTLSClientConfig()
+			dialAndReceiveSessionTicket(tlsConf, nil, clientTLSConf)
 
 			tracer := newPacketTracer()
 			ln, err := quic.ListenAddrEarly(
@@ -266,7 +305,9 @@ var _ = Describe("0-RTT", func() {
 
 	// Test that data intended to be sent with 1-RTT protection is not sent in 0-RTT packets.
 	It("waits for a connection until the handshake is done", func() {
-		tlsConf, clientConf := dialAndReceiveSessionTicket(nil)
+		tlsConf := getTLSConfig()
+		clientConf := getTLSClientConfig()
+		dialAndReceiveSessionTicket(tlsConf, nil, clientConf)
 
 		zeroRTTData := GeneratePRData(5 << 10)
 		oneRTTData := PRData
@@ -351,7 +392,9 @@ var _ = Describe("0-RTT", func() {
 			num0RTTDropped uint32
 		)
 
-		tlsConf, clientConf := dialAndReceiveSessionTicket(nil)
+		tlsConf := getTLSConfig()
+		clientConf := getTLSClientConfig()
+		dialAndReceiveSessionTicket(tlsConf, nil, clientConf)
 
 		tracer := newPacketTracer()
 		ln, err := quic.ListenAddrEarly(
@@ -412,7 +455,9 @@ var _ = Describe("0-RTT", func() {
 		var firstConnID, secondConnID *protocol.ConnectionID
 		var firstCounter, secondCounter protocol.ByteCount
 
-		tlsConf, clientConf := dialAndReceiveSessionTicket(nil)
+		tlsConf := getTLSConfig()
+		clientConf := getTLSClientConfig()
+		dialAndReceiveSessionTicket(tlsConf, nil, clientConf)
 
 		countZeroRTTBytes := func(data []byte) (n protocol.ByteCount) {
 			for len(data) > 0 {
@@ -485,9 +530,11 @@ var _ = Describe("0-RTT", func() {
 
 	It("doesn't reject 0-RTT when the server's transport stream limit increased", func() {
 		const maxStreams = 1
-		tlsConf, clientConf := dialAndReceiveSessionTicket(getQuicConfig(&quic.Config{
+		tlsConf := getTLSConfig()
+		clientConf := getTLSClientConfig()
+		dialAndReceiveSessionTicket(tlsConf, getQuicConfig(&quic.Config{
 			MaxIncomingUniStreams: maxStreams,
-		}))
+		}), clientConf)
 
 		tracer := newPacketTracer()
 		ln, err := quic.ListenAddrEarly(
@@ -524,15 +571,17 @@ var _ = Describe("0-RTT", func() {
 		defer cancel()
 		_, err = conn.OpenUniStreamSync(ctx)
 		Expect(err).ToNot(HaveOccurred())
-		Expect(conn.ConnectionState().TLS.Used0RTT).To(BeTrue())
+		Expect(conn.ConnectionState().Used0RTT).To(BeTrue())
 		Expect(conn.CloseWithError(0, "")).To(Succeed())
 	})
 
 	It("rejects 0-RTT when the server's stream limit decreased", func() {
 		const maxStreams = 42
-		tlsConf, clientConf := dialAndReceiveSessionTicket(getQuicConfig(&quic.Config{
+		tlsConf := getTLSConfig()
+		clientConf := getTLSClientConfig()
+		dialAndReceiveSessionTicket(tlsConf, getQuicConfig(&quic.Config{
 			MaxIncomingStreams: maxStreams,
-		}))
+		}), clientConf)
 
 		tracer := newPacketTracer()
 		ln, err := quic.ListenAddrEarly(
@@ -548,6 +597,7 @@ var _ = Describe("0-RTT", func() {
 		defer ln.Close()
 		proxy, num0RTTPackets := runCountingProxy(ln.Addr().(*net.UDPAddr).Port)
 		defer proxy.Close()
+
 		check0RTTRejected(ln, proxy.LocalPort(), clientConf)
 
 		// The client should send 0-RTT packets, but the server doesn't process them.
@@ -558,11 +608,15 @@ var _ = Describe("0-RTT", func() {
 	})
 
 	It("rejects 0-RTT when the ALPN changed", func() {
-		tlsConf, clientConf := dialAndReceiveSessionTicket(nil)
+		tlsConf := getTLSConfig()
+		clientConf := getTLSClientConfig()
+		dialAndReceiveSessionTicket(tlsConf, nil, clientConf)
 
-		// now close the listener and dial new connection with a different ALPN
-		clientConf.NextProtos = []string{"new-alpn"}
+		// switch to different ALPN on the server side
 		tlsConf.NextProtos = []string{"new-alpn"}
+		// Append to the client's ALPN.
+		// crypto/tls will attempt to resume with the ALPN from the original connection
+		clientConf.NextProtos = append(clientConf.NextProtos, "new-alpn")
 		tracer := newPacketTracer()
 		ln, err := quic.ListenAddrEarly(
 			"localhost:0",
@@ -587,7 +641,9 @@ var _ = Describe("0-RTT", func() {
 	})
 
 	It("rejects 0-RTT when the application doesn't allow it", func() {
-		tlsConf, clientConf := dialAndReceiveSessionTicket(nil)
+		tlsConf := getTLSConfig()
+		clientConf := getTLSClientConfig()
+		dialAndReceiveSessionTicket(tlsConf, nil, clientConf)
 
 		// now close the listener and dial new connection with a different ALPN
 		tracer := newPacketTracer()
@@ -618,7 +674,9 @@ var _ = Describe("0-RTT", func() {
 			tracer := newPacketTracer()
 			firstConf := getQuicConfig(&quic.Config{Allow0RTT: true})
 			addFlowControlLimit(firstConf, 3)
-			tlsConf, clientConf := dialAndReceiveSessionTicket(firstConf)
+			tlsConf := getTLSConfig()
+			clientConf := getTLSClientConfig()
+			dialAndReceiveSessionTicket(tlsConf, firstConf, clientConf)
 
 			secondConf := getQuicConfig(&quic.Config{
 				Allow0RTT: true,
@@ -662,7 +720,7 @@ var _ = Describe("0-RTT", func() {
 			data, err := io.ReadAll(rstr)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(data).To(Equal([]byte("foobar")))
-			Expect(serverConn.ConnectionState().TLS.Used0RTT).To(BeTrue())
+			Expect(serverConn.ConnectionState().Used0RTT).To(BeTrue())
 			Expect(serverConn.CloseWithError(0, "")).To(Succeed())
 			Eventually(conn.Context().Done()).Should(BeClosed())
 
@@ -691,7 +749,9 @@ var _ = Describe("0-RTT", func() {
 		connIDLen := l
 
 		It(fmt.Sprintf("correctly deals with 0-RTT rejections, for %d byte connection IDs", connIDLen), func() {
-			tlsConf, clientConf := dialAndReceiveSessionTicket(nil)
+			tlsConf := getTLSConfig()
+			clientConf := getTLSClientConfig()
+			dialAndReceiveSessionTicket(tlsConf, nil, clientConf)
 			// now dial new connection with different transport parameters
 			tracer := newPacketTracer()
 			ln, err := quic.ListenAddrEarly(
@@ -767,7 +827,9 @@ var _ = Describe("0-RTT", func() {
 	}
 
 	It("queues 0-RTT packets, if the Initial is delayed", func() {
-		tlsConf, clientConf := dialAndReceiveSessionTicket(nil)
+		tlsConf := getTLSConfig()
+		clientConf := getTLSClientConfig()
+		dialAndReceiveSessionTicket(tlsConf, nil, clientConf)
 
 		tracer := newPacketTracer()
 		ln, err := quic.ListenAddrEarly(
@@ -798,5 +860,88 @@ var _ = Describe("0-RTT", func() {
 		zeroRTTPackets := get0RTTPackets(tracer.getRcvdLongHeaderPackets())
 		Expect(len(zeroRTTPackets)).To(BeNumerically(">", 10))
 		Expect(zeroRTTPackets[0]).To(Equal(protocol.PacketNumber(0)))
+	})
+
+	It("allows the application to attach data to the session ticket, for the server", func() {
+		tlsConf := getTLSConfig()
+		tlsConf.WrapSession = func(cs tls.ConnectionState, ss *tls.SessionState) ([]byte, error) {
+			ss.Extra = append(ss.Extra, []byte("foobar")...) // append, since the QUIC stack will use
+			return tlsConf.EncryptTicket(cs, ss)
+		}
+		var unwrapped bool
+		tlsConf.UnwrapSession = func(identity []byte, cs tls.ConnectionState) (*tls.SessionState, error) {
+			defer GinkgoRecover()
+			state, err := tlsConf.DecryptTicket(identity, cs)
+			if err != nil {
+				return nil, err
+			}
+			Expect(len(state.Extra)).To(BeNumerically(">=", 6))
+			Expect(state.Extra[len(state.Extra)-6:]).To(Equal([]byte("foobar")))
+			state.Extra = state.Extra[:len(state.Extra)-6] // remove the foobar
+			unwrapped = true
+			return state, nil
+		}
+		clientTLSConf := getTLSClientConfig()
+		dialAndReceiveSessionTicket(tlsConf, nil, clientTLSConf)
+
+		tracer := newPacketTracer()
+		ln, err := quic.ListenAddrEarly(
+			"localhost:0",
+			tlsConf,
+			getQuicConfig(&quic.Config{
+				Allow0RTT: true,
+				Tracer:    newTracer(tracer),
+			}),
+		)
+		Expect(err).ToNot(HaveOccurred())
+		defer ln.Close()
+
+		transfer0RTTData(
+			ln,
+			ln.Addr().(*net.UDPAddr).Port,
+			10,
+			clientTLSConf,
+			getQuicConfig(nil),
+			PRData,
+		)
+		Expect(unwrapped).To(BeTrue())
+	})
+
+	It("allows the application to attach data to the session ticket, for the client", func() {
+		tlsConf := getTLSConfig()
+		clientTLSConf := getTLSClientConfig()
+		var restored bool
+		clientTLSConf.ClientSessionCache = &metadataClientSessionCache{
+			toAdd: []byte("foobar"),
+			restored: func(b []byte) {
+				defer GinkgoRecover()
+				Expect(b).To(Equal([]byte("foobar")))
+				restored = true
+			},
+			cache: tls.NewLRUClientSessionCache(100),
+		}
+		dialAndReceiveSessionTicket(tlsConf, nil, clientTLSConf)
+
+		tracer := newPacketTracer()
+		ln, err := quic.ListenAddrEarly(
+			"localhost:0",
+			tlsConf,
+			getQuicConfig(&quic.Config{
+				Allow0RTT: true,
+				Tracer:    newTracer(tracer),
+			}),
+		)
+		Expect(err).ToNot(HaveOccurred())
+		defer ln.Close()
+
+		transfer0RTTData(
+			ln,
+			ln.Addr().(*net.UDPAddr).Port,
+			10,
+			clientTLSConf,
+			getQuicConfig(nil),
+			PRData,
+		)
+		Expect(restored).To(BeTrue())
 	})
 })

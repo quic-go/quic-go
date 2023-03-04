@@ -2,6 +2,7 @@ package quic
 
 import (
 	"context"
+	"crypto/tls"
 	"errors"
 	"io"
 	"net"
@@ -331,7 +332,8 @@ type ClientHelloInfo struct {
 
 // ConnectionState records basic details about a QUIC connection
 type ConnectionState struct {
-	TLS               handshake.ConnectionState
-	SupportsDatagrams bool
+	TLS               tls.ConnectionState
 	Version           VersionNumber
+	Used0RTT          bool
+	SupportsDatagrams bool
 }

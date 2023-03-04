@@ -1,0 +1,28 @@
+on: [push, pull_request]
+
+jobs:
+  integration:
+    runs-on: ${{ fromJSON(vars['GOTIP_RUNNER_UBUNTU'] || '"ubuntu-latest"') }}
+    env:
+      DEBUG: false # set this to true to export qlogs and save them as artifacts
+      TIMESCALE_FACTOR: 3
+    name: Test with gotip
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-go@v3 # need to install Go for bootstrapping
+        with:
+          go-version: '1.20.x'
+      - name: Install gotip
+        run: |
+          git clone --depth=1 https://go.googlesource.com/go $HOME/gotip
+          cd $HOME/gotip/src
+          git fetch https://go.googlesource.com/go refs/changes/15/498215/1 && git checkout FETCH_HEAD
+          ./make.bash
+          echo "GOROOT=$HOME/gotip" >> $GITHUB_ENV
+          echo "$HOME/gotip/bin:$PATH" >> $GITHUB_PATH
+      - run: go version
+      - name: set qlogger
+        if: env.DEBUG == 'true'
+        run: echo "QLOGFLAG= -qlog" >> $GITHUB_ENV
+      - name: Run self tests, using QUIC v1
+        run: go run github.com/onsi/ginkgo/v2/ginkgo -r -v -randomize-all -randomize-suites -trace integrationtests/self -- -version=1 ${{ env.QLOGFLAG }}

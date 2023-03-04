@@ -35,10 +35,10 @@ func (m *MockCryptoDataHandler) EXPECT() *MockCryptoDataHandlerMockRecorder {
 }
 
 // HandleMessage mocks base method.
-func (m *MockCryptoDataHandler) HandleMessage(arg0 []byte, arg1 protocol.EncryptionLevel) bool {
+func (m *MockCryptoDataHandler) HandleMessage(arg0 []byte, arg1 protocol.EncryptionLevel) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "HandleMessage", arg0, arg1)
-	ret0, _ := ret[0].(bool)
+	ret0, _ := ret[0].(error)
 	return ret0
 }
 
