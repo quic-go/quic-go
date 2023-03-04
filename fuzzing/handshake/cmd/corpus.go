@@ -43,26 +43,24 @@ func initStreams() (chan chunk, *stream /* initial */, *stream /* handshake */) 
 type handshakeRunner interface {
 	OnReceivedParams(*wire.TransportParameters)
 	OnHandshakeComplete()
-	OnError(error)
+	OnReceivedReadKeys()
 	DropKeys(protocol.EncryptionLevel)
 }
 
 type runner struct {
-	client, server *handshake.CryptoSetup
+	handshakeComplete chan<- struct{}
 }
 
 var _ handshakeRunner = &runner{}
 
-func newRunner(client, server *handshake.CryptoSetup) *runner {
-	return &runner{client: client, server: server}
+func newRunner(handshakeComplete chan<- struct{}) *runner {
+	return &runner{handshakeComplete: handshakeComplete}
 }
 
 func (r *runner) OnReceivedParams(*wire.TransportParameters) {}
-func (r *runner) OnHandshakeComplete()                       {}
-func (r *runner) OnError(err error) {
-	(*r.client).Close()
-	(*r.server).Close()
-	log.Fatal("runner error:", err)
+func (r *runner) OnReceivedReadKeys()                        {}
+func (r *runner) OnHandshakeComplete() {
+	close(r.handshakeComplete)
 }
 func (r *runner) DropKeys(protocol.EncryptionLevel) {}
 
@@ -71,16 +69,16 @@ const alpn = "fuzz"
 func main() {
 	cChunkChan, cInitialStream, cHandshakeStream := initStreams()
 	var client, server handshake.CryptoSetup
-	runner := newRunner(&client, &server)
+	clientHandshakeCompleted := make(chan struct{})
 	client, _ = handshake.NewCryptoSetupClient(
 		cInitialStream,
 		cHandshakeStream,
+		nil,
 		protocol.ConnectionID{},
-		nil,
-		nil,
 		&wire.TransportParameters{ActiveConnectionIDLimit: 2},
-		runner,
+		newRunner(clientHandshakeCompleted),
 		&tls.Config{
+			MinVersion:         tls.VersionTLS13,
 			ServerName:         "localhost",
 			NextProtos:         []string{alpn},
 			RootCAs:            testdata.GetRootCA(),
@@ -96,14 +94,14 @@ func main() {
 	sChunkChan, sInitialStream, sHandshakeStream := initStreams()
 	config := testdata.GetTLSConfig()
 	config.NextProtos = []string{alpn}
+	serverHandshakeCompleted := make(chan struct{})
 	server = handshake.NewCryptoSetupServer(
 		sInitialStream,
 		sHandshakeStream,
+		nil,
 		protocol.ConnectionID{},
-		nil,
-		nil,
 		&wire.TransportParameters{ActiveConnectionIDLimit: 2},
-		runner,
+		newRunner(serverHandshakeCompleted),
 		config,
 		false,
 		utils.NewRTTStats(),
@@ -112,17 +110,13 @@ func main() {
 		protocol.Version1,
 	)
 
-	serverHandshakeCompleted := make(chan struct{})
-	go func() {
-		defer close(serverHandshakeCompleted)
-		server.RunHandshake()
-	}()
+	if err := client.StartHandshake(); err != nil {
+		log.Fatal(err)
+	}
 
-	clientHandshakeCompleted := make(chan struct{})
-	go func() {
-		defer close(clientHandshakeCompleted)
-		client.RunHandshake()
-	}()
+	if err := server.StartHandshake(); err != nil {
+		log.Fatal(err)
+	}
 
 	done := make(chan struct{})
 	go func() {
@@ -137,10 +131,14 @@ messageLoop:
 		select {
 		case c := <-cChunkChan:
 			messages = append(messages, c.data)
-			server.HandleMessage(c.data, c.encLevel)
+			if err := server.HandleMessage(c.data, c.encLevel); err != nil {
+				log.Fatal(err)
+			}
 		case c := <-sChunkChan:
 			messages = append(messages, c.data)
-			client.HandleMessage(c.data, c.encLevel)
+			if err := client.HandleMessage(c.data, c.encLevel); err != nil {
+				log.Fatal(err)
+			}
 		case <-done:
 			break messageLoop
 		}

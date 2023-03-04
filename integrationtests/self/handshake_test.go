@@ -198,7 +198,10 @@ var _ = Describe("Handshake tests", func() {
 			var transportErr *quic.TransportError
 			Expect(errors.As(err, &transportErr)).To(BeTrue())
 			Expect(transportErr.ErrorCode.IsCryptoError()).To(BeTrue())
-			Expect(transportErr.Error()).To(ContainSubstring("tls: bad certificate"))
+			Expect(transportErr.Error()).To(Or(
+				ContainSubstring("tls: certificate required"),
+				ContainSubstring("tls: bad certificate"),
+			))
 		})
 
 		It("uses the ServerName in the tls.Config", func() {

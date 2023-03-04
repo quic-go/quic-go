@@ -52,7 +52,7 @@ type streamManager interface {
 }
 
 type cryptoStreamHandler interface {
-	RunHandshake()
+	StartHandshake() error
 	ChangeConnectionID(protocol.ConnectionID)
 	SetLargest1RTTAcked(protocol.PacketNumber) error
 	SetHandshakeConfirmed()
@@ -98,15 +98,15 @@ type connRunner interface {
 
 type handshakeRunner struct {
 	onReceivedParams    func(*wire.TransportParameters)
-	onError             func(error)
+	onReceivedReadKeys  func()
 	dropKeys            func(protocol.EncryptionLevel)
 	onHandshakeComplete func()
 }
 
 func (r *handshakeRunner) OnReceivedParams(tp *wire.TransportParameters) { r.onReceivedParams(tp) }
-func (r *handshakeRunner) OnError(e error)                               { r.onError(e) }
 func (r *handshakeRunner) DropKeys(el protocol.EncryptionLevel)          { r.dropKeys(el) }
 func (r *handshakeRunner) OnHandshakeComplete()                          { r.onHandshakeComplete() }
+func (r *handshakeRunner) OnReceivedReadKeys()                           { r.onReceivedReadKeys() }
 
 type closeError struct {
 	err       error
@@ -329,14 +329,13 @@ var newConnection = func(
 	cs := handshake.NewCryptoSetupServer(
 		initialStream,
 		handshakeStream,
+		s.oneRTTStream,
 		clientDestConnID,
-		conn.LocalAddr(),
-		conn.RemoteAddr(),
 		params,
 		&handshakeRunner{
-			onReceivedParams: s.handleTransportParameters,
-			onError:          s.closeLocal,
-			dropKeys:         s.dropEncryptionLevel,
+			onReceivedParams:   s.handleTransportParameters,
+			dropKeys:           s.dropEncryptionLevel,
+			onReceivedReadKeys: s.receivedReadKeys,
 			onHandshakeComplete: func() {
 				runner.Retire(clientDestConnID)
 				close(s.handshakeCompleteChan)
@@ -418,6 +417,7 @@ var newClientConnection = func(
 	s.mtuDiscoverer = newMTUDiscoverer(s.rttStats, getMaxPacketSize(s.conn.RemoteAddr()), s.sentPacketHandler.SetMaxDatagramSize)
 	initialStream := newCryptoStream()
 	handshakeStream := newCryptoStream()
+	oneRTTStream := newCryptoStream()
 	params := &wire.TransportParameters{
 		InitialMaxStreamDataBidiRemote: protocol.ByteCount(s.config.InitialStreamReceiveWindow),
 		InitialMaxStreamDataBidiLocal:  protocol.ByteCount(s.config.InitialStreamReceiveWindow),
@@ -448,14 +448,13 @@ var newClientConnection = func(
 	cs, clientHelloWritten := handshake.NewCryptoSetupClient(
 		initialStream,
 		handshakeStream,
+		oneRTTStream,
 		destConnID,
-		conn.LocalAddr(),
-		conn.RemoteAddr(),
 		params,
 		&handshakeRunner{
 			onReceivedParams:    s.handleTransportParameters,
-			onError:             s.closeLocal,
 			dropKeys:            s.dropEncryptionLevel,
+			onReceivedReadKeys:  s.receivedReadKeys,
 			onHandshakeComplete: func() { close(s.handshakeCompleteChan) },
 		},
 		tlsConf,
@@ -467,7 +466,7 @@ var newClientConnection = func(
 	)
 	s.clientHelloWritten = clientHelloWritten
 	s.cryptoStreamHandler = cs
-	s.cryptoStreamManager = newCryptoStreamManager(cs, initialStream, handshakeStream, newCryptoStream())
+	s.cryptoStreamManager = newCryptoStreamManager(cs, initialStream, handshakeStream, oneRTTStream)
 	s.unpacker = newPacketUnpacker(cs, s.srcConnIDLen)
 	s.packer = newPacketPacker(srcConnID, s.connIDManager.Get, initialStream, handshakeStream, s.sentPacketHandler, s.retransmissionQueue, cs, s.framer, s.receivedPacketHandler, s.datagramQueue, s.perspective)
 	if len(tlsConf.ServerName) > 0 {
@@ -530,11 +529,9 @@ func (s *connection) run() error {
 
 	s.timer = *newTimer()
 
-	handshaking := make(chan struct{})
-	go func() {
-		defer close(handshaking)
-		s.cryptoStreamHandler.RunHandshake()
-	}()
+	if err := s.cryptoStreamHandler.StartHandshake(); err != nil {
+		return err
+	}
 	go func() {
 		if err := s.sendQueue.Run(); err != nil {
 			s.destroyImpl(err)
@@ -686,7 +683,6 @@ runLoop:
 	}
 
 	s.cryptoStreamHandler.Close()
-	<-handshaking
 	s.sendQueue.Close() // close the send queue before sending the CONNECTION_CLOSE
 	s.handleCloseError(&closeErr)
 	if e := (&errCloseForRecreating{}); !errors.As(closeErr.err, &e) && s.tracer != nil {
@@ -717,7 +713,9 @@ func (s *connection) supportsDatagrams() bool {
 func (s *connection) ConnectionState() ConnectionState {
 	s.connStateMutex.Lock()
 	defer s.connStateMutex.Unlock()
-	s.connState.TLS = s.cryptoStreamHandler.ConnectionState()
+	cs := s.cryptoStreamHandler.ConnectionState()
+	s.connState.TLS = cs.ConnectionState
+	s.connState.Used0RTT = cs.Used0RTT
 	return s.connState
 }
 
@@ -786,7 +784,7 @@ func (s *connection) handleHandshakeComplete() {
 	if err != nil {
 		s.closeLocal(err)
 	}
-	if ticket != nil {
+	if ticket != nil { // may be nil if session tickets are disabled via tls.Config.SessionTicketsDisabled
 		s.oneRTTStream.Write(ticket)
 		for s.oneRTTStream.HasData() {
 			s.queueControlFrame(s.oneRTTStream.PopCryptoFrame(protocol.MaxPostHandshakeCryptoFrameSize))
@@ -1378,16 +1376,13 @@ func (s *connection) handleConnectionCloseFrame(frame *wire.ConnectionCloseFrame
 }
 
 func (s *connection) handleCryptoFrame(frame *wire.CryptoFrame, encLevel protocol.EncryptionLevel) error {
-	encLevelChanged, err := s.cryptoStreamManager.HandleCryptoFrame(frame, encLevel)
-	if err != nil {
-		return err
-	}
-	if encLevelChanged {
-		// Queue all packets for decryption that have been undecryptable so far.
-		s.undecryptablePacketsToProcess = s.undecryptablePackets
-		s.undecryptablePackets = nil
-	}
-	return nil
+	return s.cryptoStreamManager.HandleCryptoFrame(frame, encLevel)
+}
+
+func (s *connection) receivedReadKeys() {
+	// Queue all packets for decryption that have been undecryptable so far.
+	s.undecryptablePacketsToProcess = s.undecryptablePackets
+	s.undecryptablePackets = nil
 }
 
 func (s *connection) handleStreamFrame(frame *wire.StreamFrame) error {
@@ -1629,10 +1624,14 @@ func (s *connection) handleCloseError(closeErr *closeError) {
 }
 
 func (s *connection) dropEncryptionLevel(encLevel protocol.EncryptionLevel) {
-	s.sentPacketHandler.DropPackets(encLevel)
-	s.receivedPacketHandler.DropPackets(encLevel)
 	if s.tracer != nil {
 		s.tracer.DroppedEncryptionLevel(encLevel)
+	}
+	s.sentPacketHandler.DropPackets(encLevel)
+	s.receivedPacketHandler.DropPackets(encLevel)
+	if err := s.cryptoStreamManager.Drop(encLevel); err != nil {
+		s.closeLocal(err)
+		return
 	}
 	if encLevel == protocol.Encryption0RTT {
 		s.streamsMap.ResetFor0RTT()
@@ -1817,6 +1816,9 @@ func (s *connection) sendPackets(now time.Time) error {
 		s.framer.QueueControlFrame(&wire.DataBlockedFrame{MaximumData: offset})
 	}
 	s.windowUpdateQueue.QueueAll()
+	if cf := s.cryptoStreamManager.GetPostHandshakeData(protocol.MaxPostHandshakeCryptoFrameSize); cf != nil {
+		s.queueControlFrame(cf)
+	}
 
 	if !s.handshakeConfirmed {
 		packet, err := s.packer.PackCoalescedPacket(false, s.mtuDiscoverer.CurrentSize(), s.version)
