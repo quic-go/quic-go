@@ -14,7 +14,6 @@ import (
 	"time"
 
 	"github.com/quic-go/quic-go"
-	"github.com/quic-go/quic-go/internal/handshake"
 	"github.com/quic-go/quic-go/internal/protocol"
 	"github.com/quic-go/quic-go/internal/utils"
 	"github.com/quic-go/quic-go/quicvarint"
@@ -66,8 +65,9 @@ func ConfigureTLSConfig(tlsConf *tls.Config) *tls.Config {
 		GetConfigForClient: func(ch *tls.ClientHelloInfo) (*tls.Config, error) {
 			// determine the ALPN from the QUIC version used
 			proto := NextProtoH3
-			if qconn, ok := ch.Conn.(handshake.ConnWithVersion); ok {
-				proto = versionToALPN(qconn.GetQUICVersion())
+			val := ch.Context().Value(quic.QUICVersionContextKey)
+			if v, ok := val.(quic.VersionNumber); ok {
+				proto = versionToALPN(v)
 			}
 			config := tlsConf
 			if tlsConf.GetConfigForClient != nil {
