@@ -69,7 +69,8 @@ type RoundTripper struct {
 
 	// Dial specifies an optional dial function for creating QUIC
 	// connections for requests.
-	// If Dial is nil, makeDialer will be used to create a dialer.
+	// If Dial is nil, a UDPConn will be created at the first request
+	// and will be reused for creating QUIC connections.
 	Dial func(ctx context.Context, addr string, tlsCfg *tls.Config, cfg *quic.Config) (quic.EarlyConnection, error)
 
 	// MaxResponseHeaderBytes specifies a limit on how many response bytes are
@@ -177,12 +178,12 @@ func (r *RoundTripper) getClient(hostname string, onlyCached bool) (rtc roundTri
 		dial := r.Dial
 		if dial == nil {
 			if r.udpConn == nil {
-				r.udpConn, err = net.ListenUDP("udp", &net.UDPAddr{IP: net.IPv4zero, Port: 0})
+				r.udpConn, err = net.ListenUDP("udp", nil)
 				if err != nil {
 					return nil, false, err
 				}
 			}
-			dial = makeDialer(r.udpConn)
+			dial = r.makeDialer()
 		}
 		client, err = newCl(
 			hostname,
@@ -216,7 +217,8 @@ func (r *RoundTripper) removeClient(hostname string) {
 	delete(r.clients, hostname)
 }
 
-// Close closes the QUIC connections that this RoundTripper has used
+// Close closes the QUIC connections that this RoundTripper has used.
+// It also closes the underlying UDPConn if it is not nil.
 func (r *RoundTripper) Close() error {
 	r.mutex.Lock()
 	defer r.mutex.Unlock()
@@ -261,12 +263,13 @@ func isNotToken(r rune) bool {
 	return !httpguts.IsTokenRune(r)
 }
 
-func makeDialer(udpConn *net.UDPConn) func(ctx context.Context, addr string, tlsCfg *tls.Config, cfg *quic.Config) (quic.EarlyConnection, error) {
+// makeDialer makes a QUIC dialer using r.udpConn.
+func (r *RoundTripper) makeDialer() func(ctx context.Context, addr string, tlsCfg *tls.Config, cfg *quic.Config) (quic.EarlyConnection, error) {
 	return func(ctx context.Context, addr string, tlsCfg *tls.Config, cfg *quic.Config) (quic.EarlyConnection, error) {
 		udpAddr, err := net.ResolveUDPAddr("udp", addr)
 		if err != nil {
 			return nil, err
 		}
-		return quic.DialEarlyContext(ctx, udpConn, udpAddr, addr, tlsCfg, cfg)
+		return quic.DialEarlyContext(ctx, r.udpConn, udpAddr, addr, tlsCfg, cfg)
 	}
 }
