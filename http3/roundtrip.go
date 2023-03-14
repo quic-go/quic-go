@@ -16,6 +16,9 @@ import (
 	"github.com/quic-go/quic-go"
 )
 
+// declare this as a variable, such that we can it mock it in the tests
+var quicDialer = quic.DialEarlyContext
+
 type roundTripCloser interface {
 	RoundTripOpt(*http.Request, RoundTripOpt) (*http.Response, error)
 	HandshakeComplete() bool
@@ -70,7 +73,7 @@ type RoundTripper struct {
 	// Dial specifies an optional dial function for creating QUIC
 	// connections for requests.
 	// If Dial is nil, a UDPConn will be created at the first request
-	// and will be reused for creating QUIC connections.
+	// and will be reused for subsequent connections to other servers.
 	Dial func(ctx context.Context, addr string, tlsCfg *tls.Config, cfg *quic.Config) (quic.EarlyConnection, error)
 
 	// MaxResponseHeaderBytes specifies a limit on how many response bytes are
@@ -270,6 +273,6 @@ func (r *RoundTripper) makeDialer() func(ctx context.Context, addr string, tlsCf
 		if err != nil {
 			return nil, err
 		}
-		return quic.DialEarlyContext(ctx, r.udpConn, udpAddr, addr, tlsCfg, cfg)
+		return quicDialer(ctx, r.udpConn, udpAddr, addr, tlsCfg, cfg)
 	}
 }
