@@ -245,9 +245,8 @@ var _ = Describe("Tracing", func() {
 				Expect(entry.Time).To(BeTemporally("~", time.Now(), scaleDuration(10*time.Millisecond)))
 				Expect(entry.Name).To(Equal("transport:connection_closed"))
 				ev := entry.Event
-				Expect(ev).To(HaveLen(2))
-				Expect(ev).To(HaveKeyWithValue("owner", "remote"))
-				Expect(ev).To(HaveKeyWithValue("trigger", "version_negotiation"))
+				Expect(ev).To(HaveLen(1))
+				Expect(ev).To(HaveKeyWithValue("trigger", "version_mismatch"))
 			})
 
 			It("records application errors", func() {
