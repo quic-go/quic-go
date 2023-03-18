@@ -13,6 +13,7 @@ import (
 	"github.com/quic-go/quic-go/integrationtests/tools/israce"
 	"github.com/quic-go/quic-go/internal/protocol"
 	"github.com/quic-go/quic-go/internal/qerr"
+	"github.com/quic-go/quic-go/internal/qtls"
 	"github.com/quic-go/quic-go/logging"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -194,8 +195,10 @@ var _ = Describe("Handshake tests", func() {
 			suiteID := id
 
 			It(fmt.Sprintf("using %s", name), func() {
+				reset := qtls.SetCipherSuite(suiteID)
+				defer reset()
+
 				tlsConf := getTLSConfig()
-				tlsConf.CipherSuites = []uint16{suiteID}
 				ln, err := quic.ListenAddr("localhost:0", tlsConf, serverConfig)
 				Expect(err).ToNot(HaveOccurred())
 				defer ln.Close()
