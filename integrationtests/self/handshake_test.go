@@ -46,7 +46,7 @@ func (c *tokenStore) Pop(key string) *quic.ClientToken {
 
 var _ = Describe("Handshake tests", func() {
 	var (
-		server        quic.Listener
+		server        *quic.Listener
 		serverConfig  *quic.Config
 		acceptStopped chan struct{}
 	)
@@ -221,7 +221,7 @@ var _ = Describe("Handshake tests", func() {
 
 	Context("rate limiting", func() {
 		var (
-			server quic.Listener
+			server *quic.Listener
 			pconn  net.PacketConn
 		)
 

@@ -15,7 +15,7 @@ import (
 )
 
 var _ = Describe("non-zero RTT", func() {
-	runServer := func() quic.Listener {
+	runServer := func() *quic.Listener {
 		ln, err := quic.ListenAddr(
 			"localhost:0",
 			getTLSConfig(),

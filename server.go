@@ -114,10 +114,28 @@ type baseServer struct {
 	logger utils.Logger
 }
 
-var (
-	_ Listener             = &baseServer{}
-	_ unknownPacketHandler = &baseServer{}
-)
+var _ unknownPacketHandler = &baseServer{}
+
+// A Listener listens for incoming QUIC connections.
+// It returns connections once the handshake has completed.
+type Listener struct {
+	baseServer *baseServer
+}
+
+// Accept returns new connections. It should be called in a loop.
+func (l *Listener) Accept(ctx context.Context) (Connection, error) {
+	return l.baseServer.Accept(ctx)
+}
+
+// Close the server. All active connections will be closed.
+func (l *Listener) Close() error {
+	return l.baseServer.Close()
+}
+
+// Addr returns the local network address that the server is listening on.
+func (l *Listener) Addr() net.Addr {
+	return l.baseServer.Addr()
+}
 
 type earlyServer struct{ *baseServer }
 
@@ -130,8 +148,12 @@ func (s *earlyServer) Accept(ctx context.Context) (EarlyConnection, error) {
 // ListenAddr creates a QUIC server listening on a given address.
 // The tls.Config must not be nil and must contain a certificate configuration.
 // The quic.Config may be nil, in that case the default values will be used.
-func ListenAddr(addr string, tlsConf *tls.Config, config *Config) (Listener, error) {
-	return listenAddr(addr, tlsConf, config, false)
+func ListenAddr(addr string, tlsConf *tls.Config, config *Config) (*Listener, error) {
+	s, err := listenAddr(addr, tlsConf, config, false)
+	if err != nil {
+		return nil, err
+	}
+	return &Listener{baseServer: s}, nil
 }
 
 // ListenAddrEarly works like ListenAddr, but it returns connections before the handshake completes.
@@ -170,8 +192,12 @@ func listenAddr(addr string, tlsConf *tls.Config, config *Config, acceptEarly bo
 // The tls.Config must not be nil and must contain a certificate configuration.
 // Furthermore, it must define an application control (using NextProtos).
 // The quic.Config may be nil, in that case the default values will be used.
-func Listen(conn net.PacketConn, tlsConf *tls.Config, config *Config) (Listener, error) {
-	return listen(conn, tlsConf, config, false)
+func Listen(conn net.PacketConn, tlsConf *tls.Config, config *Config) (*Listener, error) {
+	s, err := listen(conn, tlsConf, config, false)
+	if err != nil {
+		return nil, err
+	}
+	return &Listener{baseServer: s}, nil
 }
 
 // ListenEarly works like Listen, but it returns connections before the handshake completes.

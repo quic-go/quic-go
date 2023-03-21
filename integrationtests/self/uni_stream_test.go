@@ -18,7 +18,7 @@ var _ = Describe("Unidirectional Streams", func() {
 	const numStreams = 500
 
 	var (
-		server     quic.Listener
+		server     *quic.Listener
 		serverAddr string
 	)
 

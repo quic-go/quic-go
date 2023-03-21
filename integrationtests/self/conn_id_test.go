@@ -34,7 +34,7 @@ func (c *connIDGenerator) ConnectionIDLen() int {
 var _ = Describe("Connection ID lengths tests", func() {
 	randomConnIDLen := func() int { return 4 + int(mrand.Int31n(15)) }
 
-	runServer := func(conf *quic.Config) quic.Listener {
+	runServer := func(conf *quic.Config) *quic.Listener {
 		GinkgoWriter.Write([]byte(fmt.Sprintf("Using %d byte connection ID for the server\n", conf.ConnectionIDLength)))
 		ln, err := quic.ListenAddr("localhost:0", getTLSConfig(), conf)
 		Expect(err).ToNot(HaveOccurred())

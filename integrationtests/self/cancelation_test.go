@@ -20,7 +20,7 @@ var _ = Describe("Stream Cancellations", func() {
 	const numStreams = 80
 
 	Context("canceling the read side", func() {
-		var server quic.Listener
+		var server *quic.Listener
 
 		// The server accepts a single connection, and then opens numStreams unidirectional streams.
 		// On each of these streams, it (tries to) write PRData.
@@ -222,7 +222,7 @@ var _ = Describe("Stream Cancellations", func() {
 	})
 
 	Context("canceling the write side", func() {
-		runClient := func(server quic.Listener) int32 /* number of canceled streams */ {
+		runClient := func(server *quic.Listener) int32 /* number of canceled streams */ {
 			conn, err := quic.DialAddr(
 				context.Background(),
 				fmt.Sprintf("localhost:%d", server.Addr().(*net.UDPAddr).Port),

@@ -377,7 +377,7 @@ var _ = Describe("Timeout tests", func() {
 	Context("faulty packet conns", func() {
 		const handshakeTimeout = time.Second / 2
 
-		runServer := func(ln quic.Listener) error {
+		runServer := func(ln *quic.Listener) error {
 			conn, err := ln.Accept(context.Background())
 			if err != nil {
 				return err

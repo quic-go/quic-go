@@ -120,7 +120,7 @@ var _ = Describe("Server", func() {
 	It("fills in default values if options are not set in the Config", func() {
 		ln, err := Listen(conn, tlsConf, &Config{})
 		Expect(err).ToNot(HaveOccurred())
-		server := ln.(*baseServer)
+		server := ln.baseServer
 		Expect(server.config.Versions).To(Equal(protocol.SupportedVersions))
 		Expect(server.config.HandshakeIdleTimeout).To(Equal(protocol.DefaultHandshakeIdleTimeout))
 		Expect(server.config.MaxIdleTimeout).To(Equal(protocol.DefaultIdleTimeout))
@@ -143,7 +143,7 @@ var _ = Describe("Server", func() {
 		}
 		ln, err := Listen(conn, tlsConf, &config)
 		Expect(err).ToNot(HaveOccurred())
-		server := ln.(*baseServer)
+		server := ln.baseServer
 		Expect(server.connHandler).ToNot(BeNil())
 		Expect(server.config.Versions).To(Equal(supportedVersions))
 		Expect(server.config.HandshakeIdleTimeout).To(Equal(1337 * time.Hour))
@@ -187,7 +187,7 @@ var _ = Describe("Server", func() {
 			tracer = mocklogging.NewMockTracer(mockCtrl)
 			ln, err := Listen(conn, tlsConf, &Config{Tracer: tracer})
 			Expect(err).ToNot(HaveOccurred())
-			serv = ln.(*baseServer)
+			serv = ln.baseServer
 			phm = NewMockPacketHandlerManager(mockCtrl)
 			serv.connHandler = phm
 		})
