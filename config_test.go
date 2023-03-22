@@ -46,7 +46,7 @@ var _ = Describe("Config", func() {
 			}
 
 			switch fn := typ.Field(i).Name; fn {
-			case "GetConfigForClient", "RequireAddressValidation", "GetLogWriter", "AllowConnectionWindowIncrease", "Allow0RTT":
+			case "GetConfigForClient", "RequireAddressValidation", "GetLogWriter", "AllowConnectionWindowIncrease":
 				// Can't compare functions.
 			case "Versions":
 				f.Set(reflect.ValueOf([]VersionNumber{1, 2, 3}))
@@ -85,6 +85,8 @@ var _ = Describe("Config", func() {
 			case "DisableVersionNegotiationPackets":
 				f.Set(reflect.ValueOf(true))
 			case "DisablePathMTUDiscovery":
+				f.Set(reflect.ValueOf(true))
+			case "Allow0RTT":
 				f.Set(reflect.ValueOf(true))
 			case "Tracer":
 				f.Set(reflect.ValueOf(mocklogging.NewMockTracer(mockCtrl)))

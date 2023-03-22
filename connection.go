@@ -324,10 +324,6 @@ var newConnection = func(
 	if s.tracer != nil {
 		s.tracer.SentTransportParameters(params)
 	}
-	var allow0RTT func() bool
-	if conf.Allow0RTT != nil {
-		allow0RTT = func() bool { return conf.Allow0RTT(conn.RemoteAddr()) }
-	}
 	cs := handshake.NewCryptoSetupServer(
 		initialStream,
 		handshakeStream,
@@ -345,7 +341,7 @@ var newConnection = func(
 			},
 		},
 		tlsConf,
-		allow0RTT,
+		conf.Allow0RTT,
 		s.rttStats,
 		tracer,
 		logger,

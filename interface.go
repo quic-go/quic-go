@@ -318,10 +318,8 @@ type Config struct {
 	// It has no effect for a client.
 	DisableVersionNegotiationPackets bool
 	// Allow0RTT allows the application to decide if a 0-RTT connection attempt should be accepted.
-	// When set, 0-RTT is enabled. When not set, 0-RTT is disabled.
 	// Only valid for the server.
-	// Warning: This API should not be considered stable and might change soon.
-	Allow0RTT func(net.Addr) bool
+	Allow0RTT bool
 	// Enable QUIC datagram support (RFC 9221).
 	EnableDatagrams bool
 	Tracer          logging.Tracer

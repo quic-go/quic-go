@@ -46,6 +46,7 @@ func main() {
 	// a quic.Config that doesn't do a Retry
 	quicConf := &quic.Config{
 		RequireAddressValidation: func(net.Addr) bool { return testcase == "retry" },
+		Allow0RTT:                testcase == "zerortt",
 		Tracer:                   qlog.NewTracer(getLogWriter),
 	}
 	cert, err := tls.LoadX509KeyPair("/certs/cert.pem", "/certs/priv.key")
@@ -59,10 +60,7 @@ func main() {
 	}
 
 	switch testcase {
-	case "zerortt":
-		quicConf.Allow0RTT = func(net.Addr) bool { return true }
-		fallthrough
-	case "versionnegotiation", "handshake", "retry", "transfer", "resumption", "multiconnect":
+	case "versionnegotiation", "handshake", "retry", "transfer", "resumption", "multiconnect", "zerortt":
 		err = runHTTP09Server(quicConf)
 	case "chacha20":
 		reset := qtls.SetCipherSuite(tls.TLS_CHACHA20_POLY1305_SHA256)

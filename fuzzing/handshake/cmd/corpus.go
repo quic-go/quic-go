@@ -105,7 +105,7 @@ func main() {
 		&wire.TransportParameters{ActiveConnectionIDLimit: 2},
 		runner,
 		config,
-		nil,
+		false,
 		utils.NewRTTStats(),
 		nil,
 		utils.DefaultLogger.WithPrefix("server"),

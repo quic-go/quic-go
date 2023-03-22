@@ -288,7 +288,7 @@ func (s *Server) serveConn(tlsConf *tls.Config, conn net.PacketConn) error {
 	baseConf := ConfigureTLSConfig(tlsConf)
 	quicConf := s.QuicConfig
 	if quicConf == nil {
-		quicConf = &quic.Config{Allow0RTT: func(net.Addr) bool { return true }}
+		quicConf = &quic.Config{Allow0RTT: true}
 	} else {
 		quicConf = s.QuicConfig.Clone()
 	}

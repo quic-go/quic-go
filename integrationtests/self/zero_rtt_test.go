@@ -54,7 +54,7 @@ var _ = Describe("0-RTT", func() {
 		if serverConf == nil {
 			serverConf = getQuicConfig(nil)
 		}
-		serverConf.Allow0RTT = func(addr net.Addr) bool { return true }
+		serverConf.Allow0RTT = true
 		ln, err := quic.ListenAddrEarly(
 			"localhost:0",
 			tlsConf,
@@ -222,7 +222,7 @@ var _ = Describe("0-RTT", func() {
 				"localhost:0",
 				tlsConf,
 				getQuicConfig(&quic.Config{
-					Allow0RTT: func(addr net.Addr) bool { return true },
+					Allow0RTT: true,
 					Tracer:    newTracer(func() logging.ConnectionTracer { return tracer }),
 				}),
 			)
@@ -276,7 +276,7 @@ var _ = Describe("0-RTT", func() {
 			"localhost:0",
 			tlsConf,
 			getQuicConfig(&quic.Config{
-				Allow0RTT: func(net.Addr) bool { return true },
+				Allow0RTT: true,
 				Tracer:    newTracer(func() logging.ConnectionTracer { return tracer }),
 			}),
 		)
@@ -358,7 +358,7 @@ var _ = Describe("0-RTT", func() {
 			"localhost:0",
 			tlsConf,
 			getQuicConfig(&quic.Config{
-				Allow0RTT: func(net.Addr) bool { return true },
+				Allow0RTT: true,
 				Tracer:    newTracer(func() logging.ConnectionTracer { return tracer }),
 			}),
 		)
@@ -434,7 +434,7 @@ var _ = Describe("0-RTT", func() {
 			tlsConf,
 			getQuicConfig(&quic.Config{
 				RequireAddressValidation: func(net.Addr) bool { return true },
-				Allow0RTT:                func(net.Addr) bool { return true },
+				Allow0RTT:                true,
 				Tracer:                   newTracer(func() logging.ConnectionTracer { return tracer }),
 			}),
 		)
@@ -495,7 +495,7 @@ var _ = Describe("0-RTT", func() {
 			tlsConf,
 			getQuicConfig(&quic.Config{
 				MaxIncomingUniStreams: maxStreams + 1,
-				Allow0RTT:             func(net.Addr) bool { return true },
+				Allow0RTT:             true,
 				Tracer:                newTracer(func() logging.ConnectionTracer { return tracer }),
 			}),
 		)
@@ -540,7 +540,7 @@ var _ = Describe("0-RTT", func() {
 			tlsConf,
 			getQuicConfig(&quic.Config{
 				MaxIncomingStreams: maxStreams - 1,
-				Allow0RTT:          func(net.Addr) bool { return true },
+				Allow0RTT:          true,
 				Tracer:             newTracer(func() logging.ConnectionTracer { return tracer }),
 			}),
 		)
@@ -568,7 +568,7 @@ var _ = Describe("0-RTT", func() {
 			"localhost:0",
 			tlsConf,
 			getQuicConfig(&quic.Config{
-				Allow0RTT: func(net.Addr) bool { return true },
+				Allow0RTT: true,
 				Tracer:    newTracer(func() logging.ConnectionTracer { return tracer }),
 			}),
 		)
@@ -595,7 +595,7 @@ var _ = Describe("0-RTT", func() {
 			"localhost:0",
 			tlsConf,
 			getQuicConfig(&quic.Config{
-				Allow0RTT: func(net.Addr) bool { return false }, // application rejects 0-RTT
+				Allow0RTT: false, // application rejects 0-RTT
 				Tracer:    newTracer(func() logging.ConnectionTracer { return tracer }),
 			}),
 		)
@@ -616,12 +616,12 @@ var _ = Describe("0-RTT", func() {
 	DescribeTable("flow control limits",
 		func(addFlowControlLimit func(*quic.Config, uint64)) {
 			tracer := newPacketTracer()
-			firstConf := getQuicConfig(&quic.Config{Allow0RTT: func(net.Addr) bool { return true }})
+			firstConf := getQuicConfig(&quic.Config{Allow0RTT: true})
 			addFlowControlLimit(firstConf, 3)
 			tlsConf, clientConf := dialAndReceiveSessionTicket(firstConf)
 
 			secondConf := getQuicConfig(&quic.Config{
-				Allow0RTT: func(net.Addr) bool { return true },
+				Allow0RTT: true,
 				Tracer:    newTracer(func() logging.ConnectionTracer { return tracer }),
 			})
 			addFlowControlLimit(secondConf, 100)
@@ -774,7 +774,7 @@ var _ = Describe("0-RTT", func() {
 			"localhost:0",
 			tlsConf,
 			getQuicConfig(&quic.Config{
-				Allow0RTT: func(net.Addr) bool { return true },
+				Allow0RTT: true,
 				Tracer:    newTracer(func() logging.ConnectionTracer { return tracer }),
 			}),
 		)
