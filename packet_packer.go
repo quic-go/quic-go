@@ -298,6 +298,7 @@ func (p *packetPacker) packConnectionClose(
 		if encLevel == protocol.Encryption1RTT {
 			ap, ack, err := p.appendShortHeaderPacket(buffer, connID, oneRTTPacketNumber, oneRTTPacketNumberLen, keyPhase, payloads[i], paddingLen, sealers[i], false, v)
 			if err != nil {
+				buffer.Release()
 				return nil, err
 			}
 			packet.shortHdrPacket = &shortHeaderPacket{
@@ -445,6 +446,7 @@ func (p *packetPacker) PackCoalescedPacket(onlyAck bool, v protocol.VersionNumbe
 		padding := p.initialPaddingLen(initialPayload.frames, size)
 		cont, err := p.appendLongHeaderPacket(buffer, initialHdr, initialPayload, padding, protocol.EncryptionInitial, initialSealer, v)
 		if err != nil {
+			buffer.Release()
 			return nil, err
 		}
 		packet.longHdrPackets = append(packet.longHdrPackets, cont)
@@ -452,6 +454,7 @@ func (p *packetPacker) PackCoalescedPacket(onlyAck bool, v protocol.VersionNumbe
 	if handshakePayload.length > 0 {
 		cont, err := p.appendLongHeaderPacket(buffer, handshakeHdr, handshakePayload, 0, protocol.EncryptionHandshake, handshakeSealer, v)
 		if err != nil {
+			buffer.Release()
 			return nil, err
 		}
 		packet.longHdrPackets = append(packet.longHdrPackets, cont)
@@ -459,12 +462,14 @@ func (p *packetPacker) PackCoalescedPacket(onlyAck bool, v protocol.VersionNumbe
 	if zeroRTTPayload.length > 0 {
 		longHdrPacket, err := p.appendLongHeaderPacket(buffer, zeroRTTHdr, zeroRTTPayload, 0, protocol.Encryption0RTT, zeroRTTSealer, v)
 		if err != nil {
+			buffer.Release()
 			return nil, err
 		}
 		packet.longHdrPackets = append(packet.longHdrPackets, longHdrPacket)
 	} else if oneRTTPayload.length > 0 {
 		ap, ack, err := p.appendShortHeaderPacket(buffer, connID, oneRTTPacketNumber, oneRTTPacketNumberLen, kp, oneRTTPayload, 0, oneRTTSealer, false, v)
 		if err != nil {
+			buffer.Release()
 			return nil, err
 		}
 		packet.shortHdrPacket = &shortHeaderPacket{
@@ -496,6 +501,7 @@ func (p *packetPacker) PackPacket(onlyAck bool, now time.Time, v protocol.Versio
 	buffer := getPacketBuffer()
 	ap, ack, err := p.appendShortHeaderPacket(buffer, connID, pn, pnLen, kp, pl, 0, sealer, false, v)
 	if err != nil {
+		buffer.Release()
 		return shortHeaderPacket{}, nil, err
 	}
 	return shortHeaderPacket{
@@ -708,6 +714,7 @@ func (p *packetPacker) MaybePackProbePacket(encLevel protocol.EncryptionLevel, v
 		packet := &coalescedPacket{buffer: buffer}
 		ap, ack, err := p.appendShortHeaderPacket(buffer, connID, pn, pnLen, kp, pl, 0, s, false, v)
 		if err != nil {
+			buffer.Release()
 			return nil, err
 		}
 		packet.shortHdrPacket = &shortHeaderPacket{
@@ -756,6 +763,7 @@ func (p *packetPacker) MaybePackProbePacket(encLevel protocol.EncryptionLevel, v
 
 	longHdrPacket, err := p.appendLongHeaderPacket(buffer, hdr, pl, padding, encLevel, sealer, v)
 	if err != nil {
+		buffer.Release()
 		return nil, err
 	}
 	packet.longHdrPackets = []*longHeaderPacket{longHdrPacket}
@@ -770,6 +778,7 @@ func (p *packetPacker) PackMTUProbePacket(ping ackhandler.Frame, size protocol.B
 	buffer := getPacketBuffer()
 	s, err := p.cryptoSetup.Get1RTTSealer()
 	if err != nil {
+		buffer.Release()
 		return shortHeaderPacket{}, nil, err
 	}
 	connID := p.getDestConnID()
