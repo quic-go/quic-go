@@ -28,34 +28,25 @@ import (
 	gmtypes "github.com/onsi/gomega/types"
 )
 
-type mockAddr struct {
-	addr string
-}
+type mockAddr struct{ addr string }
 
-func (ma *mockAddr) Network() string {
-	return "udp"
-}
-
-func (ma *mockAddr) String() string {
-	return ma.addr
-}
+func (ma *mockAddr) Network() string { return "udp" }
+func (ma *mockAddr) String() string  { return ma.addr }
 
 type mockAddrListener struct {
-	*mockquic.MockEarlyListener
+	*MockQUICEarlyListener
 	addr *mockAddr
 }
 
 func (m *mockAddrListener) Addr() net.Addr {
-	_ = m.MockEarlyListener.Addr()
+	_ = m.MockQUICEarlyListener.Addr()
 	return m.addr
 }
 
 func newMockAddrListener(addr string) *mockAddrListener {
 	return &mockAddrListener{
-		MockEarlyListener: mockquic.NewMockEarlyListener(mockCtrl),
-		addr: &mockAddr{
-			addr: addr,
-		},
+		MockQUICEarlyListener: NewMockQUICEarlyListener(mockCtrl),
+		addr:                  &mockAddr{addr: addr},
 	}
 }
 
@@ -791,20 +782,20 @@ var _ = Describe("Server", func() {
 			s.QuicConfig = &quic.Config{Versions: []protocol.VersionNumber{protocol.VersionDraft29}}
 		})
 
-		var ln1 quic.EarlyListener
-		var ln2 quic.EarlyListener
+		var ln1 QUICEarlyListener
+		var ln2 QUICEarlyListener
 		expected := http.Header{
 			"Alt-Svc": {`h3-29=":443"; ma=2592000`},
 		}
 
-		addListener := func(addr string, ln *quic.EarlyListener) {
+		addListener := func(addr string, ln *QUICEarlyListener) {
 			mln := newMockAddrListener(addr)
 			mln.EXPECT().Addr()
 			*ln = mln
 			s.addListener(ln)
 		}
 
-		removeListener := func(ln *quic.EarlyListener) {
+		removeListener := func(ln *QUICEarlyListener) {
 			s.removeListener(ln)
 		}
 
@@ -951,7 +942,7 @@ var _ = Describe("Server", func() {
 
 		It("sets the GetConfigForClient callback if no tls.Config is given", func() {
 			var receivedConf *tls.Config
-			quicListenAddr = func(addr string, tlsConf *tls.Config, _ *quic.Config) (quic.EarlyListener, error) {
+			quicListenAddr = func(addr string, tlsConf *tls.Config, _ *quic.Config) (QUICEarlyListener, error) {
 				receivedConf = tlsConf
 				return nil, errors.New("listen err")
 			}
@@ -1021,7 +1012,7 @@ var _ = Describe("Server", func() {
 		It("serves a packet conn", func() {
 			ln := newMockAddrListener(":443")
 			conn := &net.UDPConn{}
-			quicListen = func(c net.PacketConn, tlsConf *tls.Config, config *quic.Config) (quic.EarlyListener, error) {
+			quicListen = func(c net.PacketConn, tlsConf *tls.Config, config *quic.Config) (QUICEarlyListener, error) {
 				Expect(c).To(Equal(conn))
 				return ln, nil
 			}
@@ -1052,12 +1043,12 @@ var _ = Describe("Server", func() {
 		It("serves two packet conns", func() {
 			ln1 := newMockAddrListener(":443")
 			ln2 := newMockAddrListener(":8443")
-			lns := make(chan quic.EarlyListener, 2)
+			lns := make(chan QUICEarlyListener, 2)
 			lns <- ln1
 			lns <- ln2
 			conn1 := &net.UDPConn{}
 			conn2 := &net.UDPConn{}
-			quicListen = func(c net.PacketConn, tlsConf *tls.Config, config *quic.Config) (quic.EarlyListener, error) {
+			quicListen = func(c net.PacketConn, tlsConf *tls.Config, config *quic.Config) (QUICEarlyListener, error) {
 				return <-lns, nil
 			}
 
@@ -1111,7 +1102,7 @@ var _ = Describe("Server", func() {
 		It("serves a listener", func() {
 			var called int32
 			ln := newMockAddrListener(":443")
-			quicListen = func(conn net.PacketConn, tlsConf *tls.Config, config *quic.Config) (quic.EarlyListener, error) {
+			quicListen = func(conn net.PacketConn, tlsConf *tls.Config, config *quic.Config) (QUICEarlyListener, error) {
 				atomic.StoreInt32(&called, 1)
 				return ln, nil
 			}
@@ -1142,10 +1133,10 @@ var _ = Describe("Server", func() {
 			var called int32
 			ln1 := newMockAddrListener(":443")
 			ln2 := newMockAddrListener(":8443")
-			lns := make(chan quic.EarlyListener, 2)
+			lns := make(chan QUICEarlyListener, 2)
 			lns <- ln1
 			lns <- ln2
-			quicListen = func(c net.PacketConn, tlsConf *tls.Config, config *quic.Config) (quic.EarlyListener, error) {
+			quicListen = func(c net.PacketConn, tlsConf *tls.Config, config *quic.Config) (QUICEarlyListener, error) {
 				atomic.StoreInt32(&called, 1)
 				return <-lns, nil
 			}
@@ -1225,7 +1216,7 @@ var _ = Describe("Server", func() {
 		It("uses the quic.Config to start the QUIC server", func() {
 			conf := &quic.Config{HandshakeIdleTimeout: time.Nanosecond}
 			var receivedConf *quic.Config
-			quicListenAddr = func(addr string, _ *tls.Config, config *quic.Config) (quic.EarlyListener, error) {
+			quicListenAddr = func(addr string, _ *tls.Config, config *quic.Config) (QUICEarlyListener, error) {
 				receivedConf = config
 				return nil, errors.New("listen err")
 			}
@@ -1241,7 +1232,7 @@ var _ = Describe("Server", func() {
 
 	It("errors when listening fails", func() {
 		testErr := errors.New("listen error")
-		quicListenAddr = func(addr string, tlsConf *tls.Config, config *quic.Config) (quic.EarlyListener, error) {
+		quicListenAddr = func(addr string, tlsConf *tls.Config, config *quic.Config) (QUICEarlyListener, error) {
 			return nil, testErr
 		}
 		fullpem, privkey := testdata.GetCertificatePaths()
@@ -1251,7 +1242,7 @@ var _ = Describe("Server", func() {
 	It("supports H3_DATAGRAM", func() {
 		s.EnableDatagrams = true
 		var receivedConf *quic.Config
-		quicListenAddr = func(addr string, _ *tls.Config, config *quic.Config) (quic.EarlyListener, error) {
+		quicListenAddr = func(addr string, _ *tls.Config, config *quic.Config) (QUICEarlyListener, error) {
 			receivedConf = config
 			return nil, errors.New("listen err")
 		}

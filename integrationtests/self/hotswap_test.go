@@ -18,14 +18,14 @@ import (
 )
 
 type listenerWrapper struct {
-	quic.EarlyListener
+	http3.QUICEarlyListener
 	listenerClosed bool
 	count          int32
 }
 
 func (ln *listenerWrapper) Close() error {
 	ln.listenerClosed = true
-	return ln.EarlyListener.Close()
+	return ln.QUICEarlyListener.Close()
 }
 
 func (ln *listenerWrapper) Faker() *fakeClosingListener {
@@ -91,7 +91,7 @@ var _ = Describe("HTTP3 Server hotswap test", func() {
 
 		tlsConf := http3.ConfigureTLSConfig(getTLSConfig())
 		quicln, err := quic.ListenAddrEarly("0.0.0.0:0", tlsConf, getQuicConfig(nil))
-		ln = &listenerWrapper{EarlyListener: quicln}
+		ln = &listenerWrapper{QUICEarlyListener: quicln}
 		Expect(err).NotTo(HaveOccurred())
 		port = strconv.Itoa(ln.Addr().(*net.UDPAddr).Port)
 	})

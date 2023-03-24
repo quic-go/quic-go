@@ -1051,16 +1051,16 @@ var _ = Describe("Server", func() {
 
 	Context("server accepting connections that haven't completed the handshake", func() {
 		var (
-			serv *earlyServer
+			serv *EarlyListener
 			phm  *MockPacketHandlerManager
 		)
 
 		BeforeEach(func() {
-			ln, err := ListenEarly(conn, tlsConf, nil)
+			var err error
+			serv, err = ListenEarly(conn, tlsConf, nil)
 			Expect(err).ToNot(HaveOccurred())
-			serv = ln.(*earlyServer)
 			phm = NewMockPacketHandlerManager(mockCtrl)
-			serv.connHandler = phm
+			serv.baseServer.connHandler = phm
 		})
 
 		AfterEach(func() {
@@ -1081,7 +1081,7 @@ var _ = Describe("Server", func() {
 			}()
 
 			ready := make(chan struct{})
-			serv.newConn = func(
+			serv.baseServer.newConn = func(
 				_ sendConn,
 				runner connRunner,
 				_ protocol.ConnectionID,
@@ -1111,7 +1111,7 @@ var _ = Describe("Server", func() {
 				fn()
 				return true
 			})
-			serv.handleInitialImpl(
+			serv.baseServer.handleInitialImpl(
 				&receivedPacket{buffer: getPacketBuffer()},
 				&wire.Header{DestConnectionID: protocol.ParseConnectionID([]byte{1, 2, 3, 4, 5, 6, 7, 8})},
 			)
@@ -1123,7 +1123,7 @@ var _ = Describe("Server", func() {
 		It("rejects new connection attempts if the accept queue is full", func() {
 			senderAddr := &net.UDPAddr{IP: net.IPv4(1, 2, 3, 4), Port: 42}
 
-			serv.newConn = func(
+			serv.baseServer.newConn = func(
 				_ sendConn,
 				runner connRunner,
 				_ protocol.ConnectionID,
@@ -1158,10 +1158,10 @@ var _ = Describe("Server", func() {
 				return true
 			}).Times(protocol.MaxAcceptQueueSize)
 			for i := 0; i < protocol.MaxAcceptQueueSize; i++ {
-				serv.handlePacket(getInitialWithRandomDestConnID())
+				serv.baseServer.handlePacket(getInitialWithRandomDestConnID())
 			}
 
-			Eventually(func() int32 { return atomic.LoadInt32(&serv.connQueueLen) }).Should(BeEquivalentTo(protocol.MaxAcceptQueueSize))
+			Eventually(func() int32 { return atomic.LoadInt32(&serv.baseServer.connQueueLen) }).Should(BeEquivalentTo(protocol.MaxAcceptQueueSize))
 			// make sure there are no Write calls on the packet conn
 			time.Sleep(50 * time.Millisecond)
 
@@ -1177,7 +1177,7 @@ var _ = Describe("Server", func() {
 				Expect(rejectHdr.SrcConnectionID).To(Equal(hdr.DestConnectionID))
 				return len(b), nil
 			})
-			serv.handlePacket(p)
+			serv.baseServer.handlePacket(p)
 			Eventually(done).Should(BeClosed())
 		})
 
@@ -1186,7 +1186,7 @@ var _ = Describe("Server", func() {
 			ctx, cancel := context.WithCancel(context.Background())
 			connCreated := make(chan struct{})
 			conn := NewMockQUICConn(mockCtrl)
-			serv.newConn = func(
+			serv.baseServer.newConn = func(
 				_ sendConn,
 				runner connRunner,
 				_ protocol.ConnectionID,
@@ -1218,7 +1218,7 @@ var _ = Describe("Server", func() {
 				fn()
 				return true
 			})
-			serv.handlePacket(p)
+			serv.baseServer.handlePacket(p)
 			// make sure there are no Write calls on the packet conn
 			time.Sleep(50 * time.Millisecond)
 			Eventually(connCreated).Should(BeClosed())
@@ -1243,7 +1243,7 @@ var _ = Describe("Server", func() {
 
 	Context("0-RTT", func() {
 		var (
-			serv   *earlyServer
+			serv   *baseServer
 			phm    *MockPacketHandlerManager
 			tracer *mocklogging.MockTracer
 		)
@@ -1252,8 +1252,8 @@ var _ = Describe("Server", func() {
 			tracer = mocklogging.NewMockTracer(mockCtrl)
 			ln, err := ListenEarly(conn, tlsConf, &Config{Tracer: tracer})
 			Expect(err).ToNot(HaveOccurred())
-			serv = ln.(*earlyServer)
 			phm = NewMockPacketHandlerManager(mockCtrl)
+			serv = ln.baseServer
 			serv.connHandler = phm
 		})
 

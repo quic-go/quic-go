@@ -99,7 +99,7 @@ var _ = Describe("0-RTT", func() {
 	}
 
 	transfer0RTTData := func(
-		ln quic.EarlyListener,
+		ln *quic.EarlyListener,
 		proxyPort int,
 		clientTLSConf *tls.Config,
 		clientConf *quic.Config,
@@ -147,7 +147,7 @@ var _ = Describe("0-RTT", func() {
 	}
 
 	check0RTTRejected := func(
-		ln quic.EarlyListener,
+		ln *quic.EarlyListener,
 		proxyPort int,
 		clientConf *tls.Config,
 	) {

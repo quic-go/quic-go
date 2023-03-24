@@ -345,14 +345,3 @@ type ConnectionState struct {
 	SupportsDatagrams bool
 	Version           VersionNumber
 }
-
-// An EarlyListener listens for incoming QUIC connections,
-// and returns them before the handshake completes.
-type EarlyListener interface {
-	// Close the server. All active connections will be closed.
-	Close() error
-	// Addr returns the local network addr that the server is listening on.
-	Addr() net.Addr
-	// Accept returns new early connections. It should be called in a loop.
-	Accept(context.Context) (EarlyConnection, error)
-}
