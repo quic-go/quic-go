@@ -96,7 +96,7 @@ func (c *client) RoundTrip(req *http.Request) (*http.Response, error) {
 		return nil, c.dialErr
 	}
 	if req.Method != MethodGet0RTT {
-		<-c.conn.HandshakeComplete().Done()
+		<-c.conn.HandshakeComplete()
 	}
 	return c.doRequest(req)
 }

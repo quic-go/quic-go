@@ -1834,9 +1834,9 @@ var _ = Describe("Connection", func() {
 			conn.run()
 		}()
 		handshakeCtx := conn.HandshakeComplete()
-		Consistently(handshakeCtx.Done()).ShouldNot(BeClosed())
+		Consistently(handshakeCtx).ShouldNot(BeClosed())
 		close(finishHandshake)
-		Eventually(handshakeCtx.Done()).Should(BeClosed())
+		Eventually(handshakeCtx).Should(BeClosed())
 		// make sure the go routine returns
 		streamManager.EXPECT().CloseWithError(gomock.Any())
 		expectReplaceWithClosed()
@@ -1865,7 +1865,7 @@ var _ = Describe("Connection", func() {
 		}()
 
 		handshakeCtx := conn.HandshakeComplete()
-		Consistently(handshakeCtx.Done()).ShouldNot(BeClosed())
+		Consistently(handshakeCtx).ShouldNot(BeClosed())
 		close(finishHandshake)
 		var frames []*ackhandler.Frame
 		Eventually(func() []*ackhandler.Frame {
@@ -1908,10 +1908,10 @@ var _ = Describe("Connection", func() {
 			conn.run()
 		}()
 		handshakeCtx := conn.HandshakeComplete()
-		Consistently(handshakeCtx.Done()).ShouldNot(BeClosed())
+		Consistently(handshakeCtx).ShouldNot(BeClosed())
 		mconn.EXPECT().Write(gomock.Any())
 		conn.closeLocal(errors.New("handshake error"))
-		Consistently(handshakeCtx.Done()).ShouldNot(BeClosed())
+		Consistently(handshakeCtx).ShouldNot(BeClosed())
 		Eventually(conn.Context().Done()).Should(BeClosed())
 	})
 

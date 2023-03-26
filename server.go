@@ -536,7 +536,7 @@ func (s *baseServer) handleNewConn(conn quicConn) {
 	} else {
 		// wait until the handshake is complete (or fails)
 		select {
-		case <-conn.HandshakeComplete().Done():
+		case <-conn.HandshakeComplete():
 		case <-connCtx.Done():
 			return
 		}

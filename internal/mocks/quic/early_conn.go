@@ -110,10 +110,10 @@ func (mr *MockEarlyConnectionMockRecorder) Context() *gomock.Call {
 }
 
 // HandshakeComplete mocks base method.
-func (m *MockEarlyConnection) HandshakeComplete() context.Context {
+func (m *MockEarlyConnection) HandshakeComplete() <-chan struct{} {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "HandshakeComplete")
-	ret0, _ := ret[0].(context.Context)
+	ret0, _ := ret[0].(<-chan struct{})
 	return ret0
 }
 

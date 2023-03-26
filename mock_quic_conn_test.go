@@ -123,10 +123,10 @@ func (mr *MockQuicConnMockRecorder) GetVersion() *gomock.Call {
 }
 
 // HandshakeComplete mocks base method.
-func (m *MockQuicConn) HandshakeComplete() context.Context {
+func (m *MockQuicConn) HandshakeComplete() <-chan struct{} {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "HandshakeComplete")
-	ret0, _ := ret[0].(context.Context)
+	ret0, _ := ret[0].(<-chan struct{})
 	return ret0
 }
 

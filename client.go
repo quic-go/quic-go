@@ -325,7 +325,7 @@ func (c *client) dial(ctx context.Context) error {
 	case <-earlyConnChan:
 		// ready to send 0-RTT data
 		return nil
-	case <-c.conn.HandshakeComplete().Done():
+	case <-c.conn.HandshakeComplete():
 		// handshake successfully completed
 		return nil
 	}

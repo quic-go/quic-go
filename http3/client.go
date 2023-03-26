@@ -266,7 +266,7 @@ func (c *client) RoundTripOpt(req *http.Request, opt RoundTripOpt) (*http.Respon
 	} else {
 		// wait for the handshake to complete
 		select {
-		case <-conn.HandshakeComplete().Done():
+		case <-conn.HandshakeComplete():
 		case <-req.Context().Done():
 			return nil, req.Context().Err()
 		}
@@ -449,7 +449,7 @@ func (c *client) HandshakeComplete() bool {
 		return false
 	}
 	select {
-	case <-(*conn).HandshakeComplete().Done():
+	case <-(*conn).HandshakeComplete():
 		return true
 	default:
 		return false

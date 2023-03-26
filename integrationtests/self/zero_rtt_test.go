@@ -142,7 +142,7 @@ var _ = Describe("0-RTT", func() {
 				_, err = str.Write(testdata)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(str.Close()).To(Succeed())
-				<-conn.HandshakeComplete().Done()
+				<-conn.HandshakeComplete()
 				Expect(conn.ConnectionState().TLS.Used0RTT).To(BeTrue())
 				io.ReadAll(str) // wait for the EOF from the server to arrive before closing the conn
 				conn.CloseWithError(0, "")
@@ -302,7 +302,7 @@ var _ = Describe("0-RTT", func() {
 				Expect(firstStr.Close()).To(Succeed())
 
 				// wait for the handshake to complete
-				Eventually(conn.HandshakeComplete().Done()).Should(BeClosed())
+				Eventually(conn.HandshakeComplete()).Should(BeClosed())
 				str, err := conn.OpenUniStream()
 				Expect(err).ToNot(HaveOccurred())
 				_, err = str.Write(PRData)
