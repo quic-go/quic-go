@@ -57,6 +57,10 @@ var ConnectionTracingKey = connTracingCtxKey{}
 
 type connTracingCtxKey struct{}
 
+// QUICVersionContextKey can be used to find out the QUIC version of a TLS handshake from the
+// context returned by tls.Config.ClientHelloInfo.Context.
+var QUICVersionContextKey = handshake.QUICVersionContextKey
+
 // Stream is the interface implemented by QUIC streams
 // In addition to the errors listed on the Connection,
 // calls to stream functions can return a StreamError if the stream is canceled.
