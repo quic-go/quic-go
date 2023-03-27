@@ -11,6 +11,31 @@ import (
 	"github.com/quic-go/quic-go/quicvarint"
 )
 
+const (
+	pingFrameType               = 0x1
+	ackFrameType                = 0x2
+	ackECNFrameType             = 0x3
+	resetStreamFrameType        = 0x4
+	stopSendingFrameType        = 0x5
+	cryptoFrameType             = 0x6
+	newTokenFrameType           = 0x7
+	maxDataFrameType            = 0x10
+	maxStreamDataFrameType      = 0x11
+	bidiMaxStreamsFrameType     = 0x12
+	uniMaxStreamsFrameType      = 0x13
+	dataBlockedFrameType        = 0x14
+	streamDataBlockedFrameType  = 0x15
+	bidiStreamBlockedFrameType  = 0x16
+	uniStreamBlockedFrameType   = 0x17
+	newConnectionIDFrameType    = 0x18
+	retireConnectionIDFrameType = 0x19
+	pathChallengeFrameType      = 0x1a
+	pathResponseFrameType       = 0x1b
+	connectionCloseFrameType    = 0x1c
+	applicationCloseFrameType   = 0x1d
+	handshakeDoneFrameType      = 0x1e
+)
+
 type frameParser struct {
 	r bytes.Reader // cached bytes.Reader, so we don't have to repeatedly allocate them
 
@@ -73,45 +98,45 @@ func (p *frameParser) parseFrame(r *bytes.Reader, typ uint64, encLevel protocol.
 		frame, err = parseStreamFrame(r, typ, v)
 	} else {
 		switch typ {
-		case 0x1:
+		case pingFrameType:
 			frame = &PingFrame{}
-		case 0x2, 0x3:
+		case ackFrameType, ackECNFrameType:
 			ackDelayExponent := p.ackDelayExponent
 			if encLevel != protocol.Encryption1RTT {
 				ackDelayExponent = protocol.DefaultAckDelayExponent
 			}
 			frame, err = parseAckFrame(r, typ, ackDelayExponent, v)
-		case 0x4:
+		case resetStreamFrameType:
 			frame, err = parseResetStreamFrame(r, v)
-		case 0x5:
+		case stopSendingFrameType:
 			frame, err = parseStopSendingFrame(r, v)
-		case 0x6:
+		case cryptoFrameType:
 			frame, err = parseCryptoFrame(r, v)
-		case 0x7:
+		case newTokenFrameType:
 			frame, err = parseNewTokenFrame(r, v)
-		case 0x10:
+		case maxDataFrameType:
 			frame, err = parseMaxDataFrame(r, v)
-		case 0x11:
+		case maxStreamDataFrameType:
 			frame, err = parseMaxStreamDataFrame(r, v)
-		case 0x12, 0x13:
+		case bidiMaxStreamsFrameType, uniMaxStreamsFrameType:
 			frame, err = parseMaxStreamsFrame(r, typ, v)
-		case 0x14:
+		case dataBlockedFrameType:
 			frame, err = parseDataBlockedFrame(r, v)
-		case 0x15:
+		case streamDataBlockedFrameType:
 			frame, err = parseStreamDataBlockedFrame(r, v)
-		case 0x16, 0x17:
+		case bidiStreamBlockedFrameType, uniStreamBlockedFrameType:
 			frame, err = parseStreamsBlockedFrame(r, typ, v)
-		case 0x18:
+		case newConnectionIDFrameType:
 			frame, err = parseNewConnectionIDFrame(r, v)
-		case 0x19:
+		case retireConnectionIDFrameType:
 			frame, err = parseRetireConnectionIDFrame(r, v)
-		case 0x1a:
+		case pathChallengeFrameType:
 			frame, err = parsePathChallengeFrame(r, v)
-		case 0x1b:
+		case pathResponseFrameType:
 			frame, err = parsePathResponseFrame(r, v)
-		case 0x1c, 0x1d:
+		case connectionCloseFrameType, applicationCloseFrameType:
 			frame, err = parseConnectionCloseFrame(r, typ, v)
-		case 0x1e:
+		case handshakeDoneFrameType:
 			frame = &HandshakeDoneFrame{}
 		case 0x30, 0x31:
 			if p.supportsDatagrams {

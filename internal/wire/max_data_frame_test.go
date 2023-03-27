@@ -47,7 +47,7 @@ var _ = Describe("MAX_DATA frame", func() {
 			}
 			b, err := f.Append(nil, protocol.Version1)
 			Expect(err).ToNot(HaveOccurred())
-			expected := []byte{0x10}
+			expected := []byte{maxDataFrameType}
 			expected = append(expected, encodeVarInt(0xdeadbeefcafe)...)
 			Expect(b).To(Equal(expected))
 		})

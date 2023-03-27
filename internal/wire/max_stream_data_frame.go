@@ -30,7 +30,7 @@ func parseMaxStreamDataFrame(r *bytes.Reader, _ protocol.VersionNumber) (*MaxStr
 }
 
 func (f *MaxStreamDataFrame) Append(b []byte, version protocol.VersionNumber) ([]byte, error) {
-	b = append(b, 0x11)
+	b = append(b, maxStreamDataFrameType)
 	b = quicvarint.Append(b, uint64(f.StreamID))
 	b = quicvarint.Append(b, uint64(f.MaximumStreamData))
 	return b, nil

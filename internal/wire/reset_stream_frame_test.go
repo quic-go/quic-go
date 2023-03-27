@@ -47,7 +47,7 @@ var _ = Describe("RESET_STREAM frame", func() {
 			}
 			b, err := frame.Append(nil, protocol.Version1)
 			Expect(err).ToNot(HaveOccurred())
-			expected := []byte{0x4}
+			expected := []byte{resetStreamFrameType}
 			expected = append(expected, encodeVarInt(0x1337)...)
 			expected = append(expected, encodeVarInt(0xcafe)...)
 			expected = append(expected, encodeVarInt(0x11223344decafbad)...)

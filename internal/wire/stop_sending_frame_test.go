@@ -46,7 +46,7 @@ var _ = Describe("STOP_SENDING frame", func() {
 			}
 			b, err := frame.Append(nil, protocol.Version1)
 			Expect(err).ToNot(HaveOccurred())
-			expected := []byte{0x5}
+			expected := []byte{stopSendingFrameType}
 			expected = append(expected, encodeVarInt(0xdeadbeefcafe)...)
 			expected = append(expected, encodeVarInt(0xdecafbad)...)
 			Expect(b).To(Equal(expected))

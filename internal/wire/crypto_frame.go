@@ -39,7 +39,7 @@ func parseCryptoFrame(r *bytes.Reader, _ protocol.VersionNumber) (*CryptoFrame, 
 }
 
 func (f *CryptoFrame) Append(b []byte, _ protocol.VersionNumber) ([]byte, error) {
-	b = append(b, 0x6)
+	b = append(b, cryptoFrameType)
 	b = quicvarint.Append(b, uint64(f.Offset))
 	b = quicvarint.Append(b, uint64(len(f.Data)))
 	b = append(b, f.Data...)

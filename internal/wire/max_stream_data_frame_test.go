@@ -51,7 +51,7 @@ var _ = Describe("MAX_STREAM_DATA frame", func() {
 				StreamID:          0xdecafbad,
 				MaximumStreamData: 0xdeadbeefcafe42,
 			}
-			expected := []byte{0x11}
+			expected := []byte{maxStreamDataFrameType}
 			expected = append(expected, encodeVarInt(0xdecafbad)...)
 			expected = append(expected, encodeVarInt(0xdeadbeefcafe42)...)
 			b, err := f.Append(nil, protocol.Version1)

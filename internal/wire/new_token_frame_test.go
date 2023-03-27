@@ -51,7 +51,7 @@ var _ = Describe("NEW_TOKEN frame", func() {
 			f := &NewTokenFrame{Token: []byte(token)}
 			b, err := f.Append(nil, protocol.VersionWhatever)
 			Expect(err).ToNot(HaveOccurred())
-			expected := []byte{0x7}
+			expected := []byte{newTokenFrameType}
 			expected = append(expected, encodeVarInt(uint64(len(token)))...)
 			expected = append(expected, token...)
 			Expect(b).To(Equal(expected))
