@@ -7,9 +7,9 @@ please bring it to our attention right away!
 
 ## Reporting a Vulnerability
 
-If you find a vulnerability that may affect live deployments -- for example, by
-exposing a remote execution exploit -- please **send your report privately** to
-martenseemann@gmail.com and lucas@clemente.io. Please **DO NOT file a public issue**.
+If you find a vulnerability that may affect live deployments -- for example, by exposing
+a remote execution exploit -- please [**report privately**](https://github.com/quic-go/quic-go/security/advisories/new).
+Please **DO NOT file a public issue**.
 
 If the issue is an implementation weakness that cannot be immediately exploited or
 something not yet deployed, just discuss it openly.
