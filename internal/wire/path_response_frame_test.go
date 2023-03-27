@@ -13,7 +13,7 @@ import (
 var _ = Describe("PATH_RESPONSE frame", func() {
 	Context("when parsing", func() {
 		It("accepts sample frame", func() {
-			b := bytes.NewReader([]byte{0x1b, 1, 2, 3, 4, 5, 6, 7, 8})
+			b := bytes.NewReader([]byte{1, 2, 3, 4, 5, 6, 7, 8})
 			f, err := parsePathResponseFrame(b, protocol.VersionWhatever)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(b.Len()).To(BeZero())
@@ -21,11 +21,11 @@ var _ = Describe("PATH_RESPONSE frame", func() {
 		})
 
 		It("errors on EOFs", func() {
-			data := []byte{0x1b, 1, 2, 3, 4, 5, 6, 7, 8}
+			data := []byte{1, 2, 3, 4, 5, 6, 7, 8}
 			_, err := parsePathResponseFrame(bytes.NewReader(data), protocol.Version1)
 			Expect(err).NotTo(HaveOccurred())
 			for i := range data {
-				_, err := parsePathResponseFrame(bytes.NewReader(data[0:i]), protocol.Version1)
+				_, err := parsePathResponseFrame(bytes.NewReader(data[:i]), protocol.Version1)
 				Expect(err).To(MatchError(io.EOF))
 			}
 		})

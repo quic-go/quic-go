@@ -18,10 +18,6 @@ type NewConnectionIDFrame struct {
 }
 
 func parseNewConnectionIDFrame(r *bytes.Reader, _ protocol.VersionNumber) (*NewConnectionIDFrame, error) {
-	if _, err := r.ReadByte(); err != nil {
-		return nil, err
-	}
-
 	seq, err := quicvarint.Read(r)
 	if err != nil {
 		return nil, err

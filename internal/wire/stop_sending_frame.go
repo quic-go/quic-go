@@ -16,10 +16,6 @@ type StopSendingFrame struct {
 
 // parseStopSendingFrame parses a STOP_SENDING frame
 func parseStopSendingFrame(r *bytes.Reader, _ protocol.VersionNumber) (*StopSendingFrame, error) {
-	if _, err := r.ReadByte(); err != nil {
-		return nil, err
-	}
-
 	streamID, err := quicvarint.Read(r)
 	if err != nil {
 		return nil, err

@@ -15,9 +15,6 @@ type NewTokenFrame struct {
 }
 
 func parseNewTokenFrame(r *bytes.Reader, _ protocol.VersionNumber) (*NewTokenFrame, error) {
-	if _, err := r.ReadByte(); err != nil {
-		return nil, err
-	}
 	tokenLen, err := quicvarint.Read(r)
 	if err != nil {
 		return nil, err

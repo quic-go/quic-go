@@ -13,9 +13,6 @@ type PathChallengeFrame struct {
 }
 
 func parsePathChallengeFrame(r *bytes.Reader, _ protocol.VersionNumber) (*PathChallengeFrame, error) {
-	if _, err := r.ReadByte(); err != nil {
-		return nil, err
-	}
 	frame := &PathChallengeFrame{}
 	if _, err := io.ReadFull(r, frame.Data[:]); err != nil {
 		if err == io.ErrUnexpectedEOF {
