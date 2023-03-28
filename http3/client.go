@@ -234,7 +234,7 @@ func (c *client) Close() error {
 	if conn == nil {
 		return nil
 	}
-	return (*conn).CloseWithError(quic.ApplicationErrorCode(ErrrNoError), "")
+	return (*conn).CloseWithError(quic.ApplicationErrorCode(ErrNoError), "")
 }
 
 func (c *client) maxHeaderBytes() uint64 {

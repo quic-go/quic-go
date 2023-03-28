@@ -9,7 +9,7 @@ import (
 type ErrCode quic.ApplicationErrorCode
 
 const (
-	ErrrNoError             ErrCode = 0x100
+	ErrNoError              ErrCode = 0x100
 	ErrGeneralProtocolError ErrCode = 0x101
 	ErrInternalError        ErrCode = 0x102
 	ErrStreamCreationError  ErrCode = 0x103
@@ -31,7 +31,7 @@ const (
 
 func (e ErrCode) String() string {
 	switch e {
-	case ErrrNoError:
+	case ErrNoError:
 		return "H3_NO_ERROR"
 	case ErrGeneralProtocolError:
 		return "H3_GENERAL_PROTOCOL_ERROR"

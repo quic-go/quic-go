@@ -632,7 +632,7 @@ var _ = Describe("Server", func() {
 				done := make(chan struct{})
 				str.EXPECT().Context().Return(reqContext)
 				str.EXPECT().Write(gomock.Any()).DoAndReturn(responseBuf.Write).AnyTimes()
-				str.EXPECT().CancelRead(quic.StreamErrorCode(ErrrNoError))
+				str.EXPECT().CancelRead(quic.StreamErrorCode(ErrNoError))
 				str.EXPECT().Close().Do(func() { close(done) })
 
 				s.handleConn(conn)
@@ -755,7 +755,7 @@ var _ = Describe("Server", func() {
 			str.EXPECT().Write(gomock.Any()).DoAndReturn(func(p []byte) (int, error) {
 				return len(p), nil
 			}).AnyTimes()
-			str.EXPECT().CancelRead(quic.StreamErrorCode(ErrrNoError))
+			str.EXPECT().CancelRead(quic.StreamErrorCode(ErrNoError))
 
 			serr := s.handleRequest(conn, str, qpackDecoder, nil)
 			Expect(serr.err).ToNot(HaveOccurred())
@@ -778,7 +778,7 @@ var _ = Describe("Server", func() {
 			str.EXPECT().Write(gomock.Any()).DoAndReturn(func(p []byte) (int, error) {
 				return len(p), nil
 			}).AnyTimes()
-			str.EXPECT().CancelRead(quic.StreamErrorCode(ErrrNoError))
+			str.EXPECT().CancelRead(quic.StreamErrorCode(ErrNoError))
 
 			serr := s.handleRequest(conn, str, qpackDecoder, nil)
 			Expect(serr.err).ToNot(HaveOccurred())
@@ -1207,7 +1207,7 @@ var _ = Describe("Server", func() {
 				<-testDone
 				return nil, errors.New("test done")
 			}).MaxTimes(1)
-			conn.EXPECT().AcceptStream(gomock.Any()).Return(nil, &quic.ApplicationError{ErrorCode: quic.ApplicationErrorCode(ErrrNoError)})
+			conn.EXPECT().AcceptStream(gomock.Any()).Return(nil, &quic.ApplicationError{ErrorCode: quic.ApplicationErrorCode(ErrNoError)})
 			s.ServeQUICConn(conn)
 			close(testDone)
 		})

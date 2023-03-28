@@ -442,7 +442,7 @@ func (s *Server) handleConn(conn quic.Connection) error {
 		str, err := conn.AcceptStream(context.Background())
 		if err != nil {
 			var appErr *quic.ApplicationError
-			if errors.As(err, &appErr) && appErr.ErrorCode == quic.ApplicationErrorCode(ErrrNoError) {
+			if errors.As(err, &appErr) && appErr.ErrorCode == quic.ApplicationErrorCode(ErrNoError) {
 				return nil
 			}
 			return fmt.Errorf("accepting stream failed: %w", err)
@@ -622,7 +622,7 @@ func (s *Server) handleRequest(conn quic.Connection, str quic.Stream, decoder *q
 		r.WriteHeader(http.StatusOK)
 	}
 	// If the EOF was read by the handler, CancelRead() is a no-op.
-	str.CancelRead(quic.StreamErrorCode(ErrrNoError))
+	str.CancelRead(quic.StreamErrorCode(ErrNoError))
 	return requestError{}
 }
 
