@@ -19,6 +19,10 @@ import (
 // It's a package-level variable to allow modifying it for testing purposes.
 var KeyUpdateInterval uint64 = protocol.KeyUpdateInterval
 
+// FirstKeyUpdateInterval is the maximum number of packets we send or receive before initiating the first key update.
+// It's a package-level variable to allow modifying it for testing purposes.
+var FirstKeyUpdateInterval uint64 = 100
+
 type updatableAEAD struct {
 	suite *qtls.CipherSuiteTLS13
 
@@ -283,6 +287,12 @@ func (a *updatableAEAD) updateAllowed() bool {
 func (a *updatableAEAD) shouldInitiateKeyUpdate() bool {
 	if !a.updateAllowed() {
 		return false
+	}
+	// Initiate the first key update shortly after the handshake, in order to exercise the key update mechanism.
+	if a.keyPhase == 0 {
+		if a.numRcvdWithCurrentKey >= FirstKeyUpdateInterval || a.numSentWithCurrentKey >= FirstKeyUpdateInterval {
+			return true
+		}
 	}
 	if a.numRcvdWithCurrentKey >= KeyUpdateInterval {
 		a.logger.Debugf("Received %d packets with current key phase. Initiating key update to the next key phase: %d", a.numRcvdWithCurrentKey, a.keyPhase+1)

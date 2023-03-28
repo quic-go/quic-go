@@ -51,12 +51,14 @@ func (t *keyUpdateConnTracer) ReceivedShortHeaderPacket(hdr *logging.ShortHeader
 }
 
 var _ = Describe("Key Update tests", func() {
-	var server quic.Listener
+	It("downloads a large file", func() {
+		origKeyUpdateInterval := handshake.KeyUpdateInterval
+		defer func() { handshake.KeyUpdateInterval = origKeyUpdateInterval }()
+		handshake.KeyUpdateInterval = 1 // update keys as frequently as possible
 
-	runServer := func() {
-		var err error
-		server, err = quic.ListenAddr("localhost:0", getTLSConfig(), nil)
+		server, err := quic.ListenAddr("localhost:0", getTLSConfig(), nil)
 		Expect(err).ToNot(HaveOccurred())
+		defer server.Close()
 
 		go func() {
 			defer GinkgoRecover()
@@ -68,14 +70,7 @@ var _ = Describe("Key Update tests", func() {
 			_, err = str.Write(PRDataLong)
 			Expect(err).ToNot(HaveOccurred())
 		}()
-	}
 
-	It("downloads a large file", func() {
-		origKeyUpdateInterval := handshake.KeyUpdateInterval
-		defer func() { handshake.KeyUpdateInterval = origKeyUpdateInterval }()
-		handshake.KeyUpdateInterval = 1 // update keys as frequently as possible
-
-		runServer()
 		conn, err := quic.DialAddr(
 			fmt.Sprintf("localhost:%d", server.Addr().(*net.UDPAddr).Port),
 			getTLSClientConfig(),
