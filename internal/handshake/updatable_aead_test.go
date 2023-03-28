@@ -283,11 +283,16 @@ var _ = Describe("Updatable AEAD", func() {
 
 							Context("initiating key updates", func() {
 								const keyUpdateInterval = 20
+								var origKeyUpdateInterval uint64
 
 								BeforeEach(func() {
-									Expect(server.keyUpdateInterval).To(BeEquivalentTo(protocol.KeyUpdateInterval))
-									server.keyUpdateInterval = keyUpdateInterval
+									origKeyUpdateInterval = KeyUpdateInterval
+									KeyUpdateInterval = keyUpdateInterval
 									server.SetHandshakeConfirmed()
+								})
+
+								AfterEach(func() {
+									KeyUpdateInterval = origKeyUpdateInterval
 								})
 
 								It("initiates a key update after sealing the maximum number of packets, for the first update", func() {
