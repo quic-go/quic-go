@@ -408,8 +408,7 @@ readLoop:
 func (h *cryptoSetup) checkEncryptionLevel(msgType messageType, encLevel protocol.EncryptionLevel) error {
 	var expected protocol.EncryptionLevel
 	switch msgType {
-	case typeClientHello,
-		typeServerHello:
+	case typeClientHello, typeServerHello:
 		expected = protocol.EncryptionInitial
 	case typeEncryptedExtensions,
 		typeCertificate,
