@@ -1,10 +1,17 @@
 FROM martenseemann/quic-network-simulator-endpoint:latest AS builder
 
+ARG TARGETPLATFORM
+RUN echo "TARGETPLATFORM: ${TARGETPLATFORM}"
+
 RUN apt-get update && apt-get install -y wget tar git
 
-RUN wget https://dl.google.com/go/go1.20.linux-amd64.tar.gz && \
-  tar xfz go1.20.linux-amd64.tar.gz && \
-  rm go1.20.linux-amd64.tar.gz
+ENV GOVERSION=1.20.2
+
+RUN platform=$(echo ${TARGETPLATFORM} | tr '/' '-') && \
+  filename="go${GOVERSION}.${platform}.tar.gz" && \
+  wget https://dl.google.com/go/${filename} && \
+  tar xfz ${filename} && \
+  rm ${filename}
 
 ENV PATH="/go/bin:${PATH}"
 
