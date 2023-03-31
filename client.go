@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/tls"
 	"errors"
-	"fmt"
 	"net"
 
 	"github.com/quic-go/quic-go/internal/protocol"
@@ -134,15 +133,6 @@ func newClient(pconn net.PacketConn, remoteAddr net.Addr, config *Config, tlsCon
 		tlsConf = &tls.Config{}
 	} else {
 		tlsConf = tlsConf.Clone()
-	}
-
-	// check that all versions are actually supported
-	if config != nil {
-		for _, v := range config.Versions {
-			if !protocol.IsValidVersion(v) {
-				return nil, fmt.Errorf("%s is not a valid QUIC version", v)
-			}
-		}
 	}
 
 	srcConnID, err := config.ConnectionIDGenerator.GenerateConnectionID()

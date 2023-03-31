@@ -2,6 +2,7 @@ package quic
 
 import (
 	"errors"
+	"fmt"
 	"net"
 	"time"
 
@@ -28,6 +29,12 @@ func validateConfig(config *Config) error {
 	}
 	if config.MaxIncomingUniStreams > 1<<60 {
 		return errors.New("invalid value for Config.MaxIncomingUniStreams")
+	}
+	// check that all QUIC versions are actually supported
+	for _, v := range config.Versions {
+		if !protocol.IsValidVersion(v) {
+			return fmt.Errorf("invalid QUIC version: %s", v)
+		}
 	}
 	return nil
 }

@@ -114,7 +114,7 @@ var _ = Describe("Server", func() {
 	It("errors when the Config contains an invalid version", func() {
 		version := protocol.VersionNumber(0x1234)
 		_, err := Listen(nil, tlsConf, &Config{Versions: []protocol.VersionNumber{version}})
-		Expect(err).To(MatchError("0x1234 is not a valid QUIC version"))
+		Expect(err).To(MatchError("invalid QUIC version: 0x1234"))
 	})
 
 	It("fills in default values if options are not set in the Config", func() {

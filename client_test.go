@@ -366,12 +366,9 @@ var _ = Describe("Client", func() {
 			})
 
 			It("errors when the Config contains an invalid version", func() {
-				manager := NewMockPacketHandlerManager(mockCtrl)
-				mockMultiplexer.EXPECT().AddConn(packetConn, gomock.Any(), gomock.Any(), gomock.Any()).Return(manager, nil)
-
 				version := protocol.VersionNumber(0x1234)
 				_, err := Dial(context.Background(), packetConn, nil, tlsConf, &Config{Versions: []protocol.VersionNumber{version}})
-				Expect(err).To(MatchError("0x1234 is not a valid QUIC version"))
+				Expect(err).To(MatchError("invalid QUIC version: 0x1234"))
 			})
 
 			It("disables bidirectional streams", func() {

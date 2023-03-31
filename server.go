@@ -234,11 +234,6 @@ func listen(conn net.PacketConn, tlsConf *tls.Config, config *Config, acceptEarl
 		return nil, err
 	}
 	config = populateServerConfig(config)
-	for _, v := range config.Versions {
-		if !protocol.IsValidVersion(v) {
-			return nil, fmt.Errorf("%s is not a valid QUIC version", v)
-		}
-	}
 
 	connHandler, err := getMultiplexer().AddConn(conn, config.ConnectionIDGenerator.ConnectionIDLen(), config.StatelessResetKey, config.Tracer)
 	if err != nil {
