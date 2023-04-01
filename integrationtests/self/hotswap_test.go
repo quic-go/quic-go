@@ -2,7 +2,6 @@ package self_test
 
 import (
 	"context"
-	"crypto/tls"
 	"io"
 	"net"
 	"net/http"
@@ -12,7 +11,6 @@ import (
 
 	"github.com/quic-go/quic-go"
 	"github.com/quic-go/quic-go/http3"
-	"github.com/quic-go/quic-go/internal/testdata"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -84,17 +82,14 @@ var _ = Describe("HTTP3 Server hotswap test", func() {
 
 		server1 = &http3.Server{
 			Handler:    mux1,
-			TLSConfig:  testdata.GetTLSConfig(),
 			QuicConfig: getQuicConfig(nil),
 		}
-
 		server2 = &http3.Server{
 			Handler:    mux2,
-			TLSConfig:  testdata.GetTLSConfig(),
 			QuicConfig: getQuicConfig(nil),
 		}
 
-		tlsConf := http3.ConfigureTLSConfig(testdata.GetTLSConfig())
+		tlsConf := http3.ConfigureTLSConfig(getTLSConfig())
 		quicln, err := quic.ListenAddrEarly("0.0.0.0:0", tlsConf, getQuicConfig(nil))
 		ln = &listenerWrapper{EarlyListener: quicln}
 		Expect(err).NotTo(HaveOccurred())
@@ -108,9 +103,7 @@ var _ = Describe("HTTP3 Server hotswap test", func() {
 	BeforeEach(func() {
 		client = &http.Client{
 			Transport: &http3.RoundTripper{
-				TLSClientConfig: &tls.Config{
-					RootCAs: testdata.GetRootCA(),
-				},
+				TLSClientConfig:    getTLSClientConfig(),
 				DisableCompression: true,
 				QuicConfig:         getQuicConfig(&quic.Config{MaxIdleTimeout: 10 * time.Second}),
 			},

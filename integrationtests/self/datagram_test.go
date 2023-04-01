@@ -107,7 +107,6 @@ var _ = Describe("Datagram test", func() {
 		conn, err := quic.Dial(
 			clientConn,
 			raddr,
-			fmt.Sprintf("localhost:%d", proxy.LocalPort()),
 			getTLSClientConfig(),
 			getQuicConfig(&quic.Config{EnableDatagrams: true}),
 		)
@@ -143,7 +142,6 @@ var _ = Describe("Datagram test", func() {
 		conn, err := quic.Dial(
 			clientConn,
 			raddr,
-			fmt.Sprintf("localhost:%d", proxy.LocalPort()),
 			getTLSClientConfig(),
 			getQuicConfig(&quic.Config{EnableDatagrams: true}),
 		)
@@ -161,7 +159,6 @@ var _ = Describe("Datagram test", func() {
 		conn, err := quic.Dial(
 			clientConn,
 			raddr,
-			fmt.Sprintf("localhost:%d", proxy.LocalPort()),
 			getTLSClientConfig(),
 			getQuicConfig(&quic.Config{EnableDatagrams: true}),
 		)

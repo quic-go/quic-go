@@ -486,7 +486,6 @@ var _ = Describe("Timeout tests", func() {
 				conn, err := quic.Dial(
 					&faultyConn{PacketConn: conn, MaxPackets: maxPackets},
 					ln.Addr(),
-					"localhost",
 					getTLSClientConfig(),
 					getQuicConfig(&quic.Config{DisablePathMTUDiscovery: true}),
 				)

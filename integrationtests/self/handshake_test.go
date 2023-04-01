@@ -152,11 +152,12 @@ var _ = Describe("Handshake tests", func() {
 			runServer(getTLSConfig())
 			conn, err := net.ListenUDP("udp", nil)
 			Expect(err).ToNot(HaveOccurred())
+			conf := getTLSClientConfig()
+			conf.ServerName = "foo.bar"
 			_, err = quic.Dial(
 				conn,
 				server.Addr(),
-				"foo.bar",
-				getTLSClientConfig(),
+				conf,
 				getQuicConfig(nil),
 			)
 			Expect(err).To(HaveOccurred())
@@ -222,13 +223,7 @@ var _ = Describe("Handshake tests", func() {
 			remoteAddr := fmt.Sprintf("localhost:%d", server.Addr().(*net.UDPAddr).Port)
 			raddr, err := net.ResolveUDPAddr("udp", remoteAddr)
 			Expect(err).ToNot(HaveOccurred())
-			return quic.Dial(
-				pconn,
-				raddr,
-				remoteAddr,
-				getTLSClientConfig(),
-				nil,
-			)
+			return quic.Dial(pconn, raddr, getTLSClientConfig(), nil)
 		}
 
 		BeforeEach(func() {

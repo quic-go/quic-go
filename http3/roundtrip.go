@@ -273,6 +273,6 @@ func (r *RoundTripper) makeDialer() func(ctx context.Context, addr string, tlsCf
 		if err != nil {
 			return nil, err
 		}
-		return quicDialer(ctx, r.udpConn, udpAddr, addr, tlsCfg, cfg)
+		return quicDialer(ctx, r.udpConn, udpAddr, tlsCfg, cfg)
 	}
 }

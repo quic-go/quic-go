@@ -149,7 +149,6 @@ var _ = Describe("MITM test", func() {
 				conn, err := quic.Dial(
 					clientUDPConn,
 					raddr,
-					fmt.Sprintf("localhost:%d", proxyPort),
 					getTLSClientConfig(),
 					getQuicConfig(&quic.Config{ConnectionIDLength: connIDLen}),
 				)
@@ -193,7 +192,6 @@ var _ = Describe("MITM test", func() {
 			conn, err := quic.Dial(
 				clientUDPConn,
 				raddr,
-				fmt.Sprintf("localhost:%d", proxyPort),
 				getTLSClientConfig(),
 				getQuicConfig(&quic.Config{ConnectionIDLength: connIDLen}),
 			)
@@ -308,7 +306,6 @@ var _ = Describe("MITM test", func() {
 			_, err = quic.Dial(
 				clientUDPConn,
 				raddr,
-				fmt.Sprintf("localhost:%d", proxyPort),
 				getTLSClientConfig(),
 				getQuicConfig(&quic.Config{
 					ConnectionIDLength:   connIDLen,

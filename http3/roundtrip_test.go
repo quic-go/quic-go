@@ -322,7 +322,7 @@ var _ = Describe("RoundTripper", func() {
 	})
 
 	Context("reusing udpconn", func() {
-		var originalDialer func(ctx context.Context, pconn net.PacketConn, remoteAddr net.Addr, host string, tlsConf *tls.Config, config *quic.Config) (quic.EarlyConnection, error)
+		var originalDialer func(ctx context.Context, pconn net.PacketConn, remoteAddr net.Addr, tlsConf *tls.Config, config *quic.Config) (quic.EarlyConnection, error)
 		var req1, req2 *http.Request
 
 		BeforeEach(func() {
@@ -356,7 +356,7 @@ var _ = Describe("RoundTripper", func() {
 
 		It("reuses udpconn in different hosts", func() {
 			Expect(rt.udpConn).To(BeNil())
-			quicDialer = func(_ context.Context, pconn net.PacketConn, _ net.Addr, _ string, _ *tls.Config, _ *quic.Config) (quic.EarlyConnection, error) {
+			quicDialer = func(_ context.Context, pconn net.PacketConn, _ net.Addr, _ *tls.Config, _ *quic.Config) (quic.EarlyConnection, error) {
 				conn := mockquic.NewMockEarlyConnection(mockCtrl)
 				conn.EXPECT().LocalAddr().Return(pconn.LocalAddr())
 				return conn, nil
