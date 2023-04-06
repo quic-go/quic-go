@@ -251,9 +251,10 @@ var _ = Describe("Transport", func() {
 		packetChan := make(chan packetToRead)
 		conn := newMockPacketConn(packetChan)
 		tr := Transport{
-			Conn: conn,
+			Conn:              conn,
+			StatelessResetKey: &StatelessResetKey{1, 2, 3, 4},
 		}
-		tr.init(&Config{ConnectionIDLength: connID.Len(), StatelessResetKey: &StatelessResetKey{1, 2, 3, 4}})
+		tr.init(&Config{ConnectionIDLength: connID.Len()})
 		defer tr.Close()
 		phm := NewMockPacketHandlerManager(mockCtrl)
 		tr.init(&Config{})

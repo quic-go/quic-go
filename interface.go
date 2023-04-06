@@ -314,9 +314,6 @@ type Config struct {
 	// If not set, it will default to 100.
 	// If set to a negative value, it doesn't allow any unidirectional streams.
 	MaxIncomingUniStreams int64
-	// The StatelessResetKey is used to generate stateless reset tokens.
-	// If no key is configured, sending of stateless resets is disabled.
-	StatelessResetKey *StatelessResetKey
 	// KeepAlivePeriod defines whether this peer will periodically send a packet to keep the connection alive.
 	// If set to 0, then no keep alive is sent. Otherwise, the keep alive is sent on that period (or at most
 	// every half of MaxIdleTimeout, whichever is smaller).

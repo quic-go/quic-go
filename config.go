@@ -137,7 +137,6 @@ func populateConfig(config *Config, defaultConnIDLen int) *Config {
 		MaxIncomingUniStreams:            maxIncomingUniStreams,
 		ConnectionIDLength:               conIDLen,
 		ConnectionIDGenerator:            connIDGenerator,
-		StatelessResetKey:                config.StatelessResetKey,
 		TokenStore:                       config.TokenStore,
 		EnableDatagrams:                  config.EnableDatagrams,
 		DisablePathMTUDiscovery:          config.DisablePathMTUDiscovery,

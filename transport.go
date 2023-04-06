@@ -207,7 +207,6 @@ func (t *Transport) init(conf *Config) error {
 			return
 		}
 
-		t.StatelessResetKey = conf.StatelessResetKey
 		t.Tracer = conf.Tracer
 		t.ConnectionIDLength = conf.ConnectionIDLength
 		t.ConnectionIDGenerator = conf.ConnectionIDGenerator

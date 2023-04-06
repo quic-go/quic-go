@@ -24,15 +24,15 @@ var _ = Describe("Stateless Resets", func() {
 		It(fmt.Sprintf("sends and recognizes stateless resets, for %d byte connection IDs", connIDLen), func() {
 			var statelessResetKey quic.StatelessResetKey
 			rand.Read(statelessResetKey[:])
-			serverConfig := getQuicConfig(&quic.Config{StatelessResetKey: &statelessResetKey})
 
 			c, err := net.ListenUDP("udp", nil)
 			Expect(err).ToNot(HaveOccurred())
 			tr := &quic.Transport{
-				Conn: c,
+				Conn:              c,
+				StatelessResetKey: &statelessResetKey,
 			}
 			defer tr.Close()
-			ln, err := tr.Listen(getTLSConfig(), serverConfig)
+			ln, err := tr.Listen(getTLSConfig(), getQuicConfig(nil))
 			Expect(err).ToNot(HaveOccurred())
 			serverPort := ln.Addr().(*net.UDPAddr).Port
 
@@ -90,7 +90,7 @@ var _ = Describe("Stateless Resets", func() {
 				StatelessResetKey: &statelessResetKey,
 			}
 			defer tr2.Close()
-			ln2, err := tr2.Listen(getTLSConfig(), serverConfig)
+			ln2, err := tr2.Listen(getTLSConfig(), getQuicConfig(nil))
 			Expect(err).ToNot(HaveOccurred())
 			drop.Store(false)
 
