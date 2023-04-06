@@ -35,7 +35,11 @@ var _ = Describe("Connection ID lengths tests", func() {
 	randomConnIDLen := func() int { return 4 + int(mrand.Int31n(15)) }
 
 	runServer := func(conf *quic.Config) *quic.Listener {
-		GinkgoWriter.Write([]byte(fmt.Sprintf("Using %d byte connection ID for the server\n", conf.ConnectionIDLength)))
+		if conf.ConnectionIDGenerator != nil {
+			GinkgoWriter.Write([]byte(fmt.Sprintf("Using %d byte connection ID generator for the server\n", conf.ConnectionIDGenerator.ConnectionIDLen())))
+		} else {
+			GinkgoWriter.Write([]byte(fmt.Sprintf("Using %d byte connection ID for the server\n", conf.ConnectionIDLength)))
+		}
 		ln, err := quic.ListenAddr("localhost:0", getTLSConfig(), conf)
 		Expect(err).ToNot(HaveOccurred())
 		go func() {
@@ -59,7 +63,11 @@ var _ = Describe("Connection ID lengths tests", func() {
 	}
 
 	runClient := func(addr net.Addr, conf *quic.Config) {
-		GinkgoWriter.Write([]byte(fmt.Sprintf("Using %d byte connection ID for the client\n", conf.ConnectionIDLength)))
+		if conf.ConnectionIDGenerator != nil {
+			GinkgoWriter.Write([]byte(fmt.Sprintf("Using %d byte connection ID generator for the client\n", conf.ConnectionIDGenerator.ConnectionIDLen())))
+		} else {
+			GinkgoWriter.Write([]byte(fmt.Sprintf("Using %d byte connection ID for the client\n", conf.ConnectionIDLength)))
+		}
 		cl, err := quic.DialAddr(
 			context.Background(),
 			fmt.Sprintf("localhost:%d", addr.(*net.UDPAddr).Port),

@@ -1,15 +1,12 @@
 package quic
 
 import (
-	"bytes"
 	"context"
 	"crypto/rand"
 	"crypto/tls"
 	"errors"
 	"net"
 	"reflect"
-	"runtime/pprof"
-	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -24,16 +21,9 @@ import (
 	"github.com/quic-go/quic-go/logging"
 
 	"github.com/golang/mock/gomock"
-
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 )
-
-func areServersRunning() bool {
-	var b bytes.Buffer
-	pprof.Lookup("goroutine").WriteTo(&b, 1)
-	return strings.Contains(b.String(), "quic-go.(*baseServer).run")
-}
 
 var _ = Describe("Server", func() {
 	var (
@@ -96,13 +86,17 @@ var _ = Describe("Server", func() {
 	BeforeEach(func() {
 		conn = NewMockPacketConn(mockCtrl)
 		conn.EXPECT().LocalAddr().Return(&net.UDPAddr{}).AnyTimes()
-		conn.EXPECT().ReadFrom(gomock.Any()).Do(func(_ []byte) { <-(make(chan struct{})) }).MaxTimes(1)
+		wait := make(chan struct{})
+		conn.EXPECT().ReadFrom(gomock.Any()).DoAndReturn(func(_ []byte) (int, net.Addr, error) {
+			<-wait
+			return 0, nil, errors.New("done")
+		}).MaxTimes(1)
+		conn.EXPECT().SetReadDeadline(gomock.Any()).Do(func(time.Time) {
+			close(wait)
+			conn.EXPECT().SetReadDeadline(time.Time{})
+		}).MaxTimes(1)
 		tlsConf = testdata.GetTLSConfig()
 		tlsConf.NextProtos = []string{"proto1"}
-	})
-
-	AfterEach(func() {
-		Eventually(areServersRunning).Should(BeFalse())
 	})
 
 	It("errors when no tls.Config is given", func() {
@@ -178,6 +172,7 @@ var _ = Describe("Server", func() {
 
 	Context("server accepting connections that completed the handshake", func() {
 		var (
+			ln     *Listener
 			serv   *baseServer
 			phm    *MockPacketHandlerManager
 			tracer *mocklogging.MockTracer
@@ -185,7 +180,8 @@ var _ = Describe("Server", func() {
 
 		BeforeEach(func() {
 			tracer = mocklogging.NewMockTracer(mockCtrl)
-			ln, err := Listen(conn, tlsConf, &Config{Tracer: tracer})
+			var err error
+			ln, err = Listen(conn, tlsConf, &Config{Tracer: tracer})
 			Expect(err).ToNot(HaveOccurred())
 			serv = ln.baseServer
 			phm = NewMockPacketHandlerManager(mockCtrl)
@@ -193,8 +189,7 @@ var _ = Describe("Server", func() {
 		})
 
 		AfterEach(func() {
-			phm.EXPECT().CloseServer().MaxTimes(1)
-			serv.Close()
+			ln.Close()
 		})
 
 		Context("handling packets", func() {
@@ -753,8 +748,7 @@ var _ = Describe("Server", func() {
 				Consistently(done).ShouldNot(BeClosed())
 
 				// make the go routine return
-				phm.EXPECT().CloseServer()
-				conn.EXPECT().getPerspective().MaxTimes(2) // once for every conn ID
+				conn.EXPECT().getPerspective().MaxTimes(2) // initOnce for every conn ID
 				Expect(serv.Close()).To(Succeed())
 				Eventually(done).Should(BeClosed())
 			})
@@ -968,6 +962,7 @@ var _ = Describe("Server", func() {
 
 				serv.setCloseError(testErr)
 				Eventually(done).Should(BeClosed())
+				serv.onClose() // shutdown
 			})
 
 			It("returns immediately, if an error occurred before", func() {
@@ -977,6 +972,7 @@ var _ = Describe("Server", func() {
 					_, err := serv.Accept(context.Background())
 					Expect(err).To(MatchError(testErr))
 				}
+				serv.onClose() // shutdown
 			})
 
 			It("returns when the context is canceled", func() {
@@ -1064,7 +1060,6 @@ var _ = Describe("Server", func() {
 		})
 
 		AfterEach(func() {
-			phm.EXPECT().CloseServer().MaxTimes(1)
 			serv.Close()
 		})
 
@@ -1234,8 +1229,7 @@ var _ = Describe("Server", func() {
 			Consistently(done).ShouldNot(BeClosed())
 
 			// make the go routine return
-			phm.EXPECT().CloseServer()
-			conn.EXPECT().getPerspective().MaxTimes(2) // once for every conn ID
+			conn.EXPECT().getPerspective().MaxTimes(2) // initOnce for every conn ID
 			Expect(serv.Close()).To(Succeed())
 			Eventually(done).Should(BeClosed())
 		})

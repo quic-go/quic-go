@@ -24,6 +24,7 @@ var _ = Describe("early data", func() {
 			getQuicConfig(nil),
 		)
 		Expect(err).ToNot(HaveOccurred())
+		defer ln.Close()
 		done := make(chan struct{})
 		go func() {
 			defer GinkgoRecover()

@@ -88,11 +88,14 @@ var _ = Describe("Unidirectional Streams", func() {
 	})
 
 	It(fmt.Sprintf("server opening %d streams to a client", numStreams), func() {
+		done := make(chan struct{})
 		go func() {
 			defer GinkgoRecover()
+			defer close(done)
 			conn, err := server.Accept(context.Background())
 			Expect(err).ToNot(HaveOccurred())
 			runSendingPeer(conn)
+			<-conn.Context().Done()
 		}()
 
 		client, err := quic.DialAddr(
@@ -103,6 +106,7 @@ var _ = Describe("Unidirectional Streams", func() {
 		)
 		Expect(err).ToNot(HaveOccurred())
 		runReceivingPeer(client)
+		client.CloseWithError(0, "")
 	})
 
 	It(fmt.Sprintf("client and server opening %d streams each and sending data to the peer", numStreams), func() {

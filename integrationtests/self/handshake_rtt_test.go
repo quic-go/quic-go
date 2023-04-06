@@ -62,13 +62,14 @@ var _ = Describe("Handshake RTT tests", func() {
 
 		runProxy(ln.Addr())
 		startTime := time.Now()
-		_, err = quic.DialAddr(
+		conn, err := quic.DialAddr(
 			context.Background(),
 			fmt.Sprintf("localhost:%d", proxy.LocalAddr().(*net.UDPAddr).Port),
 			getTLSClientConfig(),
 			getQuicConfig(nil),
 		)
 		Expect(err).ToNot(HaveOccurred())
+		defer conn.CloseWithError(0, "")
 		expectDurationInRTTs(startTime, 2)
 	})
 
@@ -79,13 +80,14 @@ var _ = Describe("Handshake RTT tests", func() {
 
 		runProxy(ln.Addr())
 		startTime := time.Now()
-		_, err = quic.DialAddr(
+		conn, err := quic.DialAddr(
 			context.Background(),
 			fmt.Sprintf("localhost:%d", proxy.LocalAddr().(*net.UDPAddr).Port),
 			getTLSClientConfig(),
 			getQuicConfig(nil),
 		)
 		Expect(err).ToNot(HaveOccurred())
+		defer conn.CloseWithError(0, "")
 		expectDurationInRTTs(startTime, 1)
 	})
 
@@ -97,13 +99,14 @@ var _ = Describe("Handshake RTT tests", func() {
 
 		runProxy(ln.Addr())
 		startTime := time.Now()
-		_, err = quic.DialAddr(
+		conn, err := quic.DialAddr(
 			context.Background(),
 			fmt.Sprintf("localhost:%d", proxy.LocalAddr().(*net.UDPAddr).Port),
 			getTLSClientConfig(),
 			getQuicConfig(nil),
 		)
 		Expect(err).ToNot(HaveOccurred())
+		defer conn.CloseWithError(0, "")
 		expectDurationInRTTs(startTime, 2)
 	})
 
@@ -131,6 +134,7 @@ var _ = Describe("Handshake RTT tests", func() {
 			getQuicConfig(nil),
 		)
 		Expect(err).ToNot(HaveOccurred())
+		defer conn.CloseWithError(0, "")
 		str, err := conn.AcceptUniStream(context.Background())
 		Expect(err).ToNot(HaveOccurred())
 		data, err := io.ReadAll(str)
@@ -166,6 +170,7 @@ var _ = Describe("Handshake RTT tests", func() {
 			getQuicConfig(nil),
 		)
 		Expect(err).ToNot(HaveOccurred())
+		defer conn.CloseWithError(0, "")
 		str, err := conn.AcceptUniStream(context.Background())
 		Expect(err).ToNot(HaveOccurred())
 		data, err := io.ReadAll(str)

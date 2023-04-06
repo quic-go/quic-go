@@ -22,12 +22,11 @@ var _ = Describe("Datagram test", func() {
 	const num = 100
 
 	var (
-		proxy                  *quicproxy.QuicProxy
 		serverConn, clientConn *net.UDPConn
 		dropped, total         int32
 	)
 
-	startServerAndProxy := func(enableDatagram, expectDatagramSupport bool) {
+	startServerAndProxy := func(enableDatagram, expectDatagramSupport bool) (port int, closeFn func()) {
 		addr, err := net.ResolveUDPAddr("udp", "localhost:0")
 		Expect(err).ToNot(HaveOccurred())
 		serverConn, err = net.ListenUDP("udp", addr)
@@ -39,8 +38,10 @@ var _ = Describe("Datagram test", func() {
 		)
 		Expect(err).ToNot(HaveOccurred())
 
+		accepted := make(chan struct{})
 		go func() {
 			defer GinkgoRecover()
+			defer close(accepted)
 			conn, err := ln.Accept(context.Background())
 			Expect(err).ToNot(HaveOccurred())
 
@@ -67,7 +68,7 @@ var _ = Describe("Datagram test", func() {
 		}()
 
 		serverPort := ln.Addr().(*net.UDPAddr).Port
-		proxy, err = quicproxy.NewQuicProxy("localhost:0", &quicproxy.Opts{
+		proxy, err := quicproxy.NewQuicProxy("localhost:0", &quicproxy.Opts{
 			RemoteAddr: fmt.Sprintf("localhost:%d", serverPort),
 			// drop 10% of Short Header packets sent from the server
 			DropPacket: func(dir quicproxy.Direction, packet []byte) bool {
@@ -87,6 +88,11 @@ var _ = Describe("Datagram test", func() {
 			},
 		})
 		Expect(err).ToNot(HaveOccurred())
+		return proxy.LocalPort(), func() {
+			Eventually(accepted).Should(BeClosed())
+			proxy.Close()
+			ln.Close()
+		}
 	}
 
 	BeforeEach(func() {
@@ -96,13 +102,10 @@ var _ = Describe("Datagram test", func() {
 		Expect(err).ToNot(HaveOccurred())
 	})
 
-	AfterEach(func() {
-		Expect(proxy.Close()).To(Succeed())
-	})
-
 	It("sends datagrams", func() {
-		startServerAndProxy(true, true)
-		raddr, err := net.ResolveUDPAddr("udp", fmt.Sprintf("localhost:%d", proxy.LocalPort()))
+		proxyPort, close := startServerAndProxy(true, true)
+		defer close()
+		raddr, err := net.ResolveUDPAddr("udp", fmt.Sprintf("localhost:%d", proxyPort))
 		Expect(err).ToNot(HaveOccurred())
 		conn, err := quic.Dial(
 			context.Background(),
@@ -117,6 +120,7 @@ var _ = Describe("Datagram test", func() {
 		for {
 			// Close the connection if no message is received for 100 ms.
 			timer := time.AfterFunc(scaleDuration(100*time.Millisecond), func() {
+				fmt.Println("closing conn")
 				conn.CloseWithError(0, "")
 			})
 			if _, err := conn.ReceiveMessage(); err != nil {
@@ -134,11 +138,12 @@ var _ = Describe("Datagram test", func() {
 			BeNumerically(">", expVal*9/10),
 			BeNumerically("<", num),
 		))
+		Eventually(conn.Context().Done).Should(BeClosed())
 	})
 
 	It("server can disable datagram", func() {
-		startServerAndProxy(false, true)
-		raddr, err := net.ResolveUDPAddr("udp", fmt.Sprintf("localhost:%d", proxy.LocalPort()))
+		proxyPort, close := startServerAndProxy(false, true)
+		raddr, err := net.ResolveUDPAddr("udp", fmt.Sprintf("localhost:%d", proxyPort))
 		Expect(err).ToNot(HaveOccurred())
 		conn, err := quic.Dial(
 			context.Background(),
@@ -150,13 +155,13 @@ var _ = Describe("Datagram test", func() {
 		Expect(err).ToNot(HaveOccurred())
 		Expect(conn.ConnectionState().SupportsDatagrams).To(BeFalse())
 
+		close()
 		conn.CloseWithError(0, "")
-		<-time.After(10 * time.Millisecond)
 	})
 
 	It("client can disable datagram", func() {
-		startServerAndProxy(false, true)
-		raddr, err := net.ResolveUDPAddr("udp", fmt.Sprintf("localhost:%d", proxy.LocalPort()))
+		proxyPort, close := startServerAndProxy(false, true)
+		raddr, err := net.ResolveUDPAddr("udp", fmt.Sprintf("localhost:%d", proxyPort))
 		Expect(err).ToNot(HaveOccurred())
 		conn, err := quic.Dial(
 			context.Background(),
@@ -169,7 +174,8 @@ var _ = Describe("Datagram test", func() {
 		Expect(conn.ConnectionState().SupportsDatagrams).To(BeFalse())
 
 		Expect(conn.SendMessage([]byte{0})).To(HaveOccurred())
+
+		close()
 		conn.CloseWithError(0, "")
-		<-time.After(10 * time.Millisecond)
 	})
 })

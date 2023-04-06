@@ -5,28 +5,22 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"errors"
-	"fmt"
 	"hash"
 	"io"
-	"log"
 	"net"
-	"os"
-	"strconv"
-	"strings"
 	"sync"
 	"time"
 
 	"github.com/quic-go/quic-go/internal/protocol"
 	"github.com/quic-go/quic-go/internal/utils"
-	"github.com/quic-go/quic-go/internal/wire"
-	"github.com/quic-go/quic-go/logging"
 )
 
-// rawConn is a connection that allow reading of a receivedPacket.
+// rawConn is a connection that allow reading of a receivedPackeh.
 type rawConn interface {
 	ReadPacket() (*receivedPacket, error)
 	WritePacket(b []byte, addr net.Addr, oob []byte) (int, error)
 	LocalAddr() net.Addr
+	SetReadDeadline(time.Time) error
 	io.Closer
 }
 
@@ -36,113 +30,49 @@ type closePacket struct {
 	info    *packetInfo
 }
 
-// The packetHandlerMap stores packetHandlers, identified by connection ID.
-// It is used:
-// * by the server to store connections
-// * when multiplexing outgoing connections to store clients
+type unknownPacketHandler interface {
+	handlePacket(*receivedPacket)
+	setCloseError(error)
+}
+
+var errListenerAlreadySet = errors.New("listener already set")
+
 type packetHandlerMap struct {
-	mutex sync.Mutex
-
-	conn      rawConn
-	connIDLen int
-
-	closeQueue chan closePacket
-
+	mutex       sync.Mutex
 	handlers    map[protocol.ConnectionID]packetHandler
 	resetTokens map[protocol.StatelessResetToken] /* stateless reset token */ packetHandler
-	server      unknownPacketHandler
 
-	listening chan struct{} // is closed when listen returns
 	closed    bool
+	closeChan chan struct{}
+
+	enqueueClosePacket func(closePacket)
 
 	deleteRetiredConnsAfter time.Duration
 
-	statelessResetEnabled bool
-	statelessResetMutex   sync.Mutex
-	statelessResetHasher  hash.Hash
+	statelessResetMutex  sync.Mutex
+	statelessResetHasher hash.Hash
 
-	tracer logging.Tracer
 	logger utils.Logger
 }
 
 var _ packetHandlerManager = &packetHandlerMap{}
 
-func setReceiveBuffer(c net.PacketConn, logger utils.Logger) error {
-	conn, ok := c.(interface{ SetReadBuffer(int) error })
-	if !ok {
-		return errors.New("connection doesn't allow setting of receive buffer size. Not a *net.UDPConn?")
-	}
-	size, err := inspectReadBuffer(c)
-	if err != nil {
-		return fmt.Errorf("failed to determine receive buffer size: %w", err)
-	}
-	if size >= protocol.DesiredReceiveBufferSize {
-		logger.Debugf("Conn has receive buffer of %d kiB (wanted: at least %d kiB)", size/1024, protocol.DesiredReceiveBufferSize/1024)
-		return nil
-	}
-	if err := conn.SetReadBuffer(protocol.DesiredReceiveBufferSize); err != nil {
-		return fmt.Errorf("failed to increase receive buffer size: %w", err)
-	}
-	newSize, err := inspectReadBuffer(c)
-	if err != nil {
-		return fmt.Errorf("failed to determine receive buffer size: %w", err)
-	}
-	if newSize == size {
-		return fmt.Errorf("failed to increase receive buffer size (wanted: %d kiB, got %d kiB)", protocol.DesiredReceiveBufferSize/1024, newSize/1024)
-	}
-	if newSize < protocol.DesiredReceiveBufferSize {
-		return fmt.Errorf("failed to sufficiently increase receive buffer size (was: %d kiB, wanted: %d kiB, got: %d kiB)", size/1024, protocol.DesiredReceiveBufferSize/1024, newSize/1024)
-	}
-	logger.Debugf("Increased receive buffer size to %d kiB", newSize/1024)
-	return nil
-}
-
-// only print warnings about the UDP receive buffer size once
-var receiveBufferWarningOnce sync.Once
-
-func newPacketHandlerMap(
-	c net.PacketConn,
-	connIDLen int,
-	statelessResetKey *StatelessResetKey,
-	tracer logging.Tracer,
-	logger utils.Logger,
-) (packetHandlerManager, error) {
-	if err := setReceiveBuffer(c, logger); err != nil {
-		if !strings.Contains(err.Error(), "use of closed network connection") {
-			receiveBufferWarningOnce.Do(func() {
-				if disable, _ := strconv.ParseBool(os.Getenv("QUIC_GO_DISABLE_RECEIVE_BUFFER_WARNING")); disable {
-					return
-				}
-				log.Printf("%s. See https://github.com/quic-go/quic-go/wiki/UDP-Receive-Buffer-Size for details.", err)
-			})
-		}
-	}
-	conn, err := wrapConn(c)
-	if err != nil {
-		return nil, err
-	}
-	m := &packetHandlerMap{
-		conn:                    conn,
-		connIDLen:               connIDLen,
-		listening:               make(chan struct{}),
+func newPacketHandlerMap(key *StatelessResetKey, enqueueClosePacket func(closePacket), logger utils.Logger) *packetHandlerMap {
+	h := &packetHandlerMap{
+		closeChan:               make(chan struct{}),
 		handlers:                make(map[protocol.ConnectionID]packetHandler),
 		resetTokens:             make(map[protocol.StatelessResetToken]packetHandler),
 		deleteRetiredConnsAfter: protocol.RetiredConnectionIDDeleteTimeout,
-		closeQueue:              make(chan closePacket, 4),
-		statelessResetEnabled:   statelessResetKey != nil,
-		tracer:                  tracer,
+		enqueueClosePacket:      enqueueClosePacket,
 		logger:                  logger,
 	}
-	if m.statelessResetEnabled {
-		m.statelessResetHasher = hmac.New(sha256.New, statelessResetKey[:])
+	if key != nil {
+		h.statelessResetHasher = hmac.New(sha256.New, key[:])
 	}
-	go m.listen()
-	go m.runCloseQueue()
-
-	if logger.Debug() {
-		go m.logUsage()
+	if h.logger.Debug() {
+		go h.logUsage()
 	}
-	return m, nil
+	return h
 }
 
 func (h *packetHandlerMap) logUsage() {
@@ -150,7 +80,7 @@ func (h *packetHandlerMap) logUsage() {
 	var printedZero bool
 	for {
 		select {
-		case <-h.listening:
+		case <-h.closeChan:
 			return
 		case <-ticker.C:
 		}
@@ -233,12 +163,7 @@ func (h *packetHandlerMap) ReplaceWithClosed(ids []protocol.ConnectionID, pers p
 	if connClosePacket != nil {
 		handler = newClosedLocalConn(
 			func(addr net.Addr, info *packetInfo) {
-				select {
-				case h.closeQueue <- closePacket{payload: connClosePacket, addr: addr, info: info}:
-				default:
-					// Oops, we're backlogged.
-					// Just drop the packet, sending CONNECTION_CLOSE copies is best effort anyway.
-				}
+				h.enqueueClosePacket(closePacket{payload: connClosePacket, addr: addr, info: info})
 			},
 			pers,
 			h.logger,
@@ -265,17 +190,6 @@ func (h *packetHandlerMap) ReplaceWithClosed(ids []protocol.ConnectionID, pers p
 	})
 }
 
-func (h *packetHandlerMap) runCloseQueue() {
-	for {
-		select {
-		case <-h.listening:
-			return
-		case p := <-h.closeQueue:
-			h.conn.WritePacket(p.payload, p.addr, p.info.OOB())
-		}
-	}
-}
-
 func (h *packetHandlerMap) AddResetToken(token protocol.StatelessResetToken, handler packetHandler) {
 	h.mutex.Lock()
 	h.resetTokens[token] = handler
@@ -288,19 +202,16 @@ func (h *packetHandlerMap) RemoveResetToken(token protocol.StatelessResetToken) 
 	h.mutex.Unlock()
 }
 
-func (h *packetHandlerMap) SetServer(s unknownPacketHandler) {
+func (h *packetHandlerMap) GetByResetToken(token protocol.StatelessResetToken) (packetHandler, bool) {
 	h.mutex.Lock()
-	h.server = s
-	h.mutex.Unlock()
+	defer h.mutex.Unlock()
+
+	handler, ok := h.resetTokens[token]
+	return handler, ok
 }
 
 func (h *packetHandlerMap) CloseServer() {
 	h.mutex.Lock()
-	if h.server == nil {
-		h.mutex.Unlock()
-		return
-	}
-	h.server = nil
 	var wg sync.WaitGroup
 	for _, handler := range h.handlers {
 		if handler.getPerspective() == protocol.PerspectiveServer {
@@ -316,22 +227,15 @@ func (h *packetHandlerMap) CloseServer() {
 	wg.Wait()
 }
 
-// Destroy closes the underlying connection and waits until listen() has returned.
-// It does not close active connections.
-func (h *packetHandlerMap) Destroy() error {
-	if err := h.conn.Close(); err != nil {
-		return err
-	}
-	<-h.listening // wait until listening returns
-	return nil
-}
-
-func (h *packetHandlerMap) close(e error) error {
+func (h *packetHandlerMap) Close(e error) {
 	h.mutex.Lock()
+
 	if h.closed {
 		h.mutex.Unlock()
-		return nil
+		return
 	}
+
+	close(h.closeChan)
 
 	var wg sync.WaitGroup
 	for _, handler := range h.handlers {
@@ -341,89 +245,14 @@ func (h *packetHandlerMap) close(e error) error {
 			wg.Done()
 		}(handler)
 	}
-
-	if h.server != nil {
-		h.server.setCloseError(e)
-	}
 	h.closed = true
 	h.mutex.Unlock()
 	wg.Wait()
-	return getMultiplexer().RemoveConn(h.conn)
-}
-
-func (h *packetHandlerMap) listen() {
-	defer close(h.listening)
-	for {
-		p, err := h.conn.ReadPacket()
-		//nolint:staticcheck // SA1019 ignore this!
-		// TODO: This code is used to ignore wsa errors on Windows.
-		// Since net.Error.Temporary is deprecated as of Go 1.18, we should find a better solution.
-		// See https://github.com/quic-go/quic-go/issues/1737 for details.
-		if nerr, ok := err.(net.Error); ok && nerr.Temporary() {
-			h.logger.Debugf("Temporary error reading from conn: %w", err)
-			continue
-		}
-		if err != nil {
-			h.close(err)
-			return
-		}
-		h.handlePacket(p)
-	}
-}
-
-func (h *packetHandlerMap) handlePacket(p *receivedPacket) {
-	connID, err := wire.ParseConnectionID(p.data, h.connIDLen)
-	if err != nil {
-		h.logger.Debugf("error parsing connection ID on packet from %s: %s", p.remoteAddr, err)
-		if h.tracer != nil {
-			h.tracer.DroppedPacket(p.remoteAddr, logging.PacketTypeNotDetermined, p.Size(), logging.PacketDropHeaderParseError)
-		}
-		p.buffer.MaybeRelease()
-		return
-	}
-
-	h.mutex.Lock()
-	defer h.mutex.Unlock()
-
-	if isStatelessReset := h.maybeHandleStatelessReset(p.data); isStatelessReset {
-		return
-	}
-	if handler, ok := h.handlers[connID]; ok {
-		handler.handlePacket(p)
-		return
-	}
-	if !wire.IsLongHeaderPacket(p.data[0]) {
-		go h.maybeSendStatelessReset(p, connID)
-		return
-	}
-	if h.server == nil { // no server set
-		h.logger.Debugf("received a packet with an unexpected connection ID %s", connID)
-		return
-	}
-	h.server.handlePacket(p)
-}
-
-func (h *packetHandlerMap) maybeHandleStatelessReset(data []byte) bool {
-	// stateless resets are always short header packets
-	if wire.IsLongHeaderPacket(data[0]) {
-		return false
-	}
-	if len(data) < 17 /* type byte + 16 bytes for the reset token */ {
-		return false
-	}
-
-	token := *(*protocol.StatelessResetToken)(data[len(data)-16:])
-	if sess, ok := h.resetTokens[token]; ok {
-		h.logger.Debugf("Received a stateless reset with token %#x. Closing connection.", token)
-		go sess.destroy(&StatelessResetError{Token: token})
-		return true
-	}
-	return false
 }
 
 func (h *packetHandlerMap) GetStatelessResetToken(connID protocol.ConnectionID) protocol.StatelessResetToken {
 	var token protocol.StatelessResetToken
-	if !h.statelessResetEnabled {
+	if h.statelessResetHasher == nil {
 		// Return a random stateless reset token.
 		// This token will be sent in the server's transport parameters.
 		// By using a random token, an off-path attacker won't be able to disrupt the connection.
@@ -436,25 +265,4 @@ func (h *packetHandlerMap) GetStatelessResetToken(connID protocol.ConnectionID) 
 	h.statelessResetHasher.Reset()
 	h.statelessResetMutex.Unlock()
 	return token
-}
-
-func (h *packetHandlerMap) maybeSendStatelessReset(p *receivedPacket, connID protocol.ConnectionID) {
-	defer p.buffer.Release()
-	if !h.statelessResetEnabled {
-		return
-	}
-	// Don't send a stateless reset in response to very small packets.
-	// This includes packets that could be stateless resets.
-	if len(p.data) <= protocol.MinStatelessResetSize {
-		return
-	}
-	token := h.GetStatelessResetToken(connID)
-	h.logger.Debugf("Sending stateless reset to %s (connection ID: %s). Token: %#x", p.remoteAddr, connID, token)
-	data := make([]byte, protocol.MinStatelessResetSize-16, protocol.MinStatelessResetSize)
-	rand.Read(data)
-	data[0] = (data[0] & 0x7f) | 0x40
-	data = append(data, token[:]...)
-	if _, err := h.conn.WritePacket(data, p.remoteAddr, p.info.OOB()); err != nil {
-		h.logger.Debugf("Error sending Stateless Reset: %s", err)
-	}
 }

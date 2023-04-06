@@ -94,6 +94,8 @@ var _ = Describe("Bidirectional streams", func() {
 		)
 		Expect(err).ToNot(HaveOccurred())
 		runSendingPeer(client)
+		client.CloseWithError(0, "")
+		<-conn.Context().Done()
 	})
 
 	It(fmt.Sprintf("server opening %d streams to a client", numStreams), func() {
@@ -149,5 +151,6 @@ var _ = Describe("Bidirectional streams", func() {
 		runReceivingPeer(client)
 		<-done1
 		<-done2
+		client.CloseWithError(0, "")
 	})
 })

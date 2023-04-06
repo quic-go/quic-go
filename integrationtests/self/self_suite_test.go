@@ -199,8 +199,16 @@ func areHandshakesRunning() bool {
 	return strings.Contains(b.String(), "RunHandshake")
 }
 
+func areTransportsRunning() bool {
+	var b bytes.Buffer
+	pprof.Lookup("goroutine").WriteTo(&b, 1)
+	return strings.Contains(b.String(), "quic-go.(*Transport).listen")
+}
+
 var _ = AfterEach(func() {
 	Expect(areHandshakesRunning()).To(BeFalse())
+	Eventually(areTransportsRunning).Should(BeFalse())
+
 	if debugLog() {
 		logFile, err := os.Create(logFileName)
 		Expect(err).ToNot(HaveOccurred())

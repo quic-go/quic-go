@@ -2,7 +2,6 @@ package self_test
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"math/rand"
 	"net"
@@ -27,7 +26,13 @@ var _ = Describe("Stateless Resets", func() {
 			rand.Read(statelessResetKey[:])
 			serverConfig := getQuicConfig(&quic.Config{StatelessResetKey: &statelessResetKey})
 
-			ln, err := quic.ListenAddr("localhost:0", getTLSConfig(), serverConfig)
+			c, err := net.ListenUDP("udp", nil)
+			Expect(err).ToNot(HaveOccurred())
+			tr := &quic.Transport{
+				Conn: c,
+			}
+			defer tr.Close()
+			ln, err := tr.Listen(getTLSConfig(), serverConfig)
 			Expect(err).ToNot(HaveOccurred())
 			serverPort := ln.Addr().(*net.UDPAddr).Port
 
@@ -42,7 +47,8 @@ var _ = Describe("Stateless Resets", func() {
 				_, err = str.Write([]byte("foobar"))
 				Expect(err).ToNot(HaveOccurred())
 				<-closeServer
-				ln.Close()
+				Expect(ln.Close()).To(Succeed())
+				Expect(tr.Close()).To(Succeed())
 			}()
 
 			var drop atomic.Bool
@@ -77,11 +83,14 @@ var _ = Describe("Stateless Resets", func() {
 			close(closeServer)
 			time.Sleep(100 * time.Millisecond)
 
-			ln2, err := quic.ListenAddr(
-				fmt.Sprintf("localhost:%d", serverPort),
-				getTLSConfig(),
-				serverConfig,
-			)
+			// We need to create a new Transport here, since the old one is still sending out
+			// CONNECTION_CLOSE packets for (recently) closed connections).
+			tr2 := &quic.Transport{
+				Conn:              c,
+				StatelessResetKey: &statelessResetKey,
+			}
+			defer tr2.Close()
+			ln2, err := tr2.Listen(getTLSConfig(), serverConfig)
 			Expect(err).ToNot(HaveOccurred())
 			drop.Store(false)
 
@@ -100,8 +109,7 @@ var _ = Describe("Stateless Resets", func() {
 				_, serr = str.Read([]byte{0})
 			}
 			Expect(serr).To(HaveOccurred())
-			statelessResetErr := &quic.StatelessResetError{}
-			Expect(errors.As(serr, &statelessResetErr)).To(BeTrue())
+			Expect(serr).To(BeAssignableToTypeOf(&quic.StatelessResetError{}))
 			Expect(ln2.Close()).To(Succeed())
 			Eventually(acceptStopped).Should(BeClosed())
 		})

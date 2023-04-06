@@ -114,7 +114,7 @@ var _ = Describe("Handshake tests", func() {
 					context.Background(),
 					fmt.Sprintf("localhost:%d", ln.Addr().(*net.UDPAddr).Port),
 					getTLSClientConfig(),
-					nil,
+					getQuicConfig(nil),
 				)
 				Expect(err).ToNot(HaveOccurred())
 				str, err := conn.AcceptStream(context.Background())
@@ -223,13 +223,14 @@ var _ = Describe("Handshake tests", func() {
 		var (
 			server *quic.Listener
 			pconn  net.PacketConn
+			dialer *quic.Transport
 		)
 
 		dial := func() (quic.Connection, error) {
 			remoteAddr := fmt.Sprintf("localhost:%d", server.Addr().(*net.UDPAddr).Port)
 			raddr, err := net.ResolveUDPAddr("udp", remoteAddr)
 			Expect(err).ToNot(HaveOccurred())
-			return quic.Dial(context.Background(), pconn, raddr, getTLSClientConfig(), nil)
+			return dialer.Dial(context.Background(), raddr, getTLSClientConfig(), getQuicConfig(nil))
 		}
 
 		BeforeEach(func() {
@@ -243,11 +244,13 @@ var _ = Describe("Handshake tests", func() {
 			Expect(err).ToNot(HaveOccurred())
 			pconn, err = net.ListenUDP("udp", laddr)
 			Expect(err).ToNot(HaveOccurred())
+			dialer = &quic.Transport{Conn: pconn}
 		})
 
 		AfterEach(func() {
 			Expect(server.Close()).To(Succeed())
 			Expect(pconn.Close()).To(Succeed())
+			Expect(dialer.Close()).To(Succeed())
 		})
 
 		It("rejects new connection attempts if connections don't get accepted", func() {
@@ -366,6 +369,7 @@ var _ = Describe("Handshake tests", func() {
 		It("uses tokens provided in NEW_TOKEN frames", func() {
 			server, err := quic.ListenAddr("localhost:0", getTLSConfig(), serverConfig)
 			Expect(err).ToNot(HaveOccurred())
+			defer server.Close()
 
 			// dial the first connection and receive the token
 			go func() {

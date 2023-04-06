@@ -20,7 +20,7 @@ import (
 )
 
 // ErrServerClosed is returned by the Listener or EarlyListener's Accept method after a call to Close.
-var ErrServerClosed = errors.New("quic: Server closed")
+var ErrServerClosed = errors.New("quic: server closed")
 
 // packetHandler handles packets
 type packetHandler interface {
@@ -30,18 +30,13 @@ type packetHandler interface {
 	getPerspective() protocol.Perspective
 }
 
-type unknownPacketHandler interface {
-	handlePacket(*receivedPacket)
-	setCloseError(error)
-}
-
 type packetHandlerManager interface {
 	Get(protocol.ConnectionID) (packetHandler, bool)
+	GetByResetToken(protocol.StatelessResetToken) (packetHandler, bool)
 	AddWithConnID(protocol.ConnectionID, protocol.ConnectionID, func() packetHandler) bool
-	Destroy() error
-	connRunner
-	SetServer(unknownPacketHandler)
+	Close(error)
 	CloseServer()
+	connRunner
 }
 
 type quicConn interface {
@@ -70,13 +65,11 @@ type baseServer struct {
 	config  *Config
 
 	conn rawConn
-	// If the server is started with ListenAddr, we create a packet conn.
-	// If it is started with Listen, we take a packet conn as a parameter.
-	createdPacketConn bool
 
 	tokenGenerator *handshake.TokenGenerator
 
 	connHandler packetHandlerManager
+	onClose     func()
 
 	receivedPackets chan *receivedPacket
 
@@ -113,8 +106,6 @@ type baseServer struct {
 
 	logger utils.Logger
 }
-
-var _ unknownPacketHandler = &baseServer{}
 
 // A Listener listens for incoming QUIC connections.
 // It returns connections once the handshake has completed.
@@ -166,37 +157,36 @@ func (l *EarlyListener) Addr() net.Addr {
 // The tls.Config must not be nil and must contain a certificate configuration.
 // The quic.Config may be nil, in that case the default values will be used.
 func ListenAddr(addr string, tlsConf *tls.Config, config *Config) (*Listener, error) {
-	s, err := listenAddr(addr, tlsConf, config, false)
+	conn, err := listenUDP(addr)
 	if err != nil {
 		return nil, err
 	}
-	return &Listener{baseServer: s}, nil
+	return (&Transport{
+		Conn:        conn,
+		createdConn: true,
+		isSingleUse: true,
+	}).Listen(tlsConf, config)
 }
 
 // ListenAddrEarly works like ListenAddr, but it returns connections before the handshake completes.
 func ListenAddrEarly(addr string, tlsConf *tls.Config, config *Config) (*EarlyListener, error) {
-	s, err := listenAddr(addr, tlsConf, config, true)
+	conn, err := listenUDP(addr)
 	if err != nil {
 		return nil, err
 	}
-	return &EarlyListener{baseServer: s}, nil
+	return (&Transport{
+		Conn:        conn,
+		createdConn: true,
+		isSingleUse: true,
+	}).ListenEarly(tlsConf, config)
 }
 
-func listenAddr(addr string, tlsConf *tls.Config, config *Config, acceptEarly bool) (*baseServer, error) {
+func listenUDP(addr string) (*net.UDPConn, error) {
 	udpAddr, err := net.ResolveUDPAddr("udp", addr)
 	if err != nil {
 		return nil, err
 	}
-	conn, err := net.ListenUDP("udp", udpAddr)
-	if err != nil {
-		return nil, err
-	}
-	serv, err := listen(conn, tlsConf, config, acceptEarly)
-	if err != nil {
-		return nil, err
-	}
-	serv.createdPacketConn = true
-	return serv, nil
+	return net.ListenUDP("udp", udpAddr)
 }
 
 // Listen listens for QUIC connections on a given net.PacketConn. If the
@@ -210,45 +200,23 @@ func listenAddr(addr string, tlsConf *tls.Config, config *Config, acceptEarly bo
 // Furthermore, it must define an application control (using NextProtos).
 // The quic.Config may be nil, in that case the default values will be used.
 func Listen(conn net.PacketConn, tlsConf *tls.Config, config *Config) (*Listener, error) {
-	s, err := listen(conn, tlsConf, config, false)
-	if err != nil {
-		return nil, err
-	}
-	return &Listener{baseServer: s}, nil
+	tr := &Transport{Conn: conn, isSingleUse: true}
+	return tr.Listen(tlsConf, config)
 }
 
 // ListenEarly works like Listen, but it returns connections before the handshake completes.
 func ListenEarly(conn net.PacketConn, tlsConf *tls.Config, config *Config) (*EarlyListener, error) {
-	s, err := listen(conn, tlsConf, config, true)
-	if err != nil {
-		return nil, err
-	}
-	return &EarlyListener{baseServer: s}, nil
+	tr := &Transport{Conn: conn, isSingleUse: true}
+	return tr.ListenEarly(tlsConf, config)
 }
 
-func listen(conn net.PacketConn, tlsConf *tls.Config, config *Config, acceptEarly bool) (*baseServer, error) {
-	if tlsConf == nil {
-		return nil, errors.New("quic: tls.Config not set")
-	}
-	if err := validateConfig(config); err != nil {
-		return nil, err
-	}
-	config = populateServerConfig(config)
-
-	connHandler, err := getMultiplexer().AddConn(conn, config.ConnectionIDGenerator.ConnectionIDLen(), config.StatelessResetKey, config.Tracer)
-	if err != nil {
-		return nil, err
-	}
+func newServer(conn rawConn, connHandler packetHandlerManager, tlsConf *tls.Config, config *Config, onClose func(), acceptEarly bool) (*baseServer, error) {
 	tokenGenerator, err := handshake.NewTokenGenerator(rand.Reader)
 	if err != nil {
 		return nil, err
 	}
-	c, err := wrapConn(conn)
-	if err != nil {
-		return nil, err
-	}
 	s := &baseServer{
-		conn:             c,
+		conn:             conn,
 		tlsConf:          tlsConf,
 		config:           config,
 		tokenGenerator:   tokenGenerator,
@@ -260,12 +228,12 @@ func listen(conn net.PacketConn, tlsConf *tls.Config, config *Config, acceptEarl
 		newConn:          newConnection,
 		logger:           utils.DefaultLogger.WithPrefix("server"),
 		acceptEarlyConns: acceptEarly,
+		onClose:          onClose,
 	}
 	if acceptEarly {
 		s.zeroRTTQueues = map[protocol.ConnectionID]*zeroRTTQueue{}
 	}
 	go s.run()
-	connHandler.SetServer(s)
 	s.logger.Debugf("Listening for %s connections on %s", conn.LocalAddr().Network(), conn.LocalAddr().String())
 	return s, nil
 }
@@ -317,18 +285,12 @@ func (s *baseServer) Close() error {
 	if s.serverError == nil {
 		s.serverError = ErrServerClosed
 	}
-	// If the server was started with ListenAddr, we created the packet conn.
-	// We need to close it in order to make the go routine reading from that conn return.
-	createdPacketConn := s.createdPacketConn
 	s.closed = true
 	close(s.errorChan)
 	s.mutex.Unlock()
 
 	<-s.running
-	s.connHandler.CloseServer()
-	if createdPacketConn {
-		return s.connHandler.Destroy()
-	}
+	s.onClose()
 	return nil
 }
 

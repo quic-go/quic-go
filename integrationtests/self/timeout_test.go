@@ -473,6 +473,7 @@ var _ = Describe("Timeout tests", func() {
 				}),
 			)
 			Expect(err).ToNot(HaveOccurred())
+			defer ln.Close()
 
 			serverErrChan := make(chan error, 1)
 			go func() {
