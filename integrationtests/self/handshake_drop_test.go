@@ -81,6 +81,7 @@ var _ = Describe("Handshake drop tests", func() {
 				serverConnChan <- conn
 			}()
 			conn, err := quic.DialAddr(
+				context.Background(),
 				fmt.Sprintf("localhost:%d", proxy.LocalPort()),
 				getTLSClientConfig(),
 				getQuicConfig(&quic.Config{
@@ -118,6 +119,7 @@ var _ = Describe("Handshake drop tests", func() {
 				serverConnChan <- conn
 			}()
 			conn, err := quic.DialAddr(
+				context.Background(),
 				fmt.Sprintf("localhost:%d", proxy.LocalPort()),
 				getTLSClientConfig(),
 				getQuicConfig(&quic.Config{
@@ -150,6 +152,7 @@ var _ = Describe("Handshake drop tests", func() {
 				serverConnChan <- conn
 			}()
 			conn, err := quic.DialAddr(
+				context.Background(),
 				fmt.Sprintf("localhost:%d", proxy.LocalPort()),
 				getTLSClientConfig(),
 				getQuicConfig(&quic.Config{

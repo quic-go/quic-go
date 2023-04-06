@@ -90,7 +90,7 @@ type client struct {
 
 func (c *client) RoundTrip(req *http.Request) (*http.Response, error) {
 	c.once.Do(func() {
-		c.conn, c.dialErr = quic.DialAddrEarly(c.hostname, c.tlsConf, c.quicConf)
+		c.conn, c.dialErr = quic.DialAddrEarly(context.Background(), c.hostname, c.tlsConf, c.quicConf)
 	})
 	if c.dialErr != nil {
 		return nil, c.dialErr

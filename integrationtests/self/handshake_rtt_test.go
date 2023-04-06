@@ -63,6 +63,7 @@ var _ = Describe("Handshake RTT tests", func() {
 		runProxy(ln.Addr())
 		startTime := time.Now()
 		_, err = quic.DialAddr(
+			context.Background(),
 			fmt.Sprintf("localhost:%d", proxy.LocalAddr().(*net.UDPAddr).Port),
 			getTLSClientConfig(),
 			getQuicConfig(nil),
@@ -79,6 +80,7 @@ var _ = Describe("Handshake RTT tests", func() {
 		runProxy(ln.Addr())
 		startTime := time.Now()
 		_, err = quic.DialAddr(
+			context.Background(),
 			fmt.Sprintf("localhost:%d", proxy.LocalAddr().(*net.UDPAddr).Port),
 			getTLSClientConfig(),
 			getQuicConfig(nil),
@@ -96,6 +98,7 @@ var _ = Describe("Handshake RTT tests", func() {
 		runProxy(ln.Addr())
 		startTime := time.Now()
 		_, err = quic.DialAddr(
+			context.Background(),
 			fmt.Sprintf("localhost:%d", proxy.LocalAddr().(*net.UDPAddr).Port),
 			getTLSClientConfig(),
 			getQuicConfig(nil),
@@ -122,6 +125,7 @@ var _ = Describe("Handshake RTT tests", func() {
 		runProxy(ln.Addr())
 		startTime := time.Now()
 		conn, err := quic.DialAddr(
+			context.Background(),
 			fmt.Sprintf("localhost:%d", proxy.LocalAddr().(*net.UDPAddr).Port),
 			getTLSClientConfig(),
 			getQuicConfig(nil),
@@ -156,6 +160,7 @@ var _ = Describe("Handshake RTT tests", func() {
 		runProxy(ln.Addr())
 		startTime := time.Now()
 		conn, err := quic.DialAddr(
+			context.Background(),
 			fmt.Sprintf("localhost:%d", proxy.LocalAddr().(*net.UDPAddr).Port),
 			getTLSClientConfig(),
 			getQuicConfig(nil),

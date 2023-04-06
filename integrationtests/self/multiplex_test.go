@@ -36,6 +36,7 @@ var _ = Describe("Multiplexing", func() {
 
 	dial := func(pconn net.PacketConn, addr net.Addr) {
 		conn, err := quic.Dial(
+			context.Background(),
 			pconn,
 			addr,
 			getTLSClientConfig(),

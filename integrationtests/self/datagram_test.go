@@ -105,6 +105,7 @@ var _ = Describe("Datagram test", func() {
 		raddr, err := net.ResolveUDPAddr("udp", fmt.Sprintf("localhost:%d", proxy.LocalPort()))
 		Expect(err).ToNot(HaveOccurred())
 		conn, err := quic.Dial(
+			context.Background(),
 			clientConn,
 			raddr,
 			getTLSClientConfig(),
@@ -140,6 +141,7 @@ var _ = Describe("Datagram test", func() {
 		raddr, err := net.ResolveUDPAddr("udp", fmt.Sprintf("localhost:%d", proxy.LocalPort()))
 		Expect(err).ToNot(HaveOccurred())
 		conn, err := quic.Dial(
+			context.Background(),
 			clientConn,
 			raddr,
 			getTLSClientConfig(),
@@ -157,6 +159,7 @@ var _ = Describe("Datagram test", func() {
 		raddr, err := net.ResolveUDPAddr("udp", fmt.Sprintf("localhost:%d", proxy.LocalPort()))
 		Expect(err).ToNot(HaveOccurred())
 		conn, err := quic.Dial(
+			context.Background(),
 			clientConn,
 			raddr,
 			getTLSClientConfig(),

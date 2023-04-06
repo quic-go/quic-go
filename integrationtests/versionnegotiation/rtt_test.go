@@ -1,6 +1,7 @@
 package versionnegotiation
 
 import (
+	"context"
 	"time"
 
 	"github.com/quic-go/quic-go"
@@ -43,6 +44,7 @@ var _ = Describe("Handshake RTT tests", func() {
 
 		startTime := time.Now()
 		_, err = quic.DialAddr(
+			context.Background(),
 			proxy.LocalAddr().String(),
 			getTLSClientConfig(),
 			maybeAddQlogTracer(&quic.Config{Versions: protocol.SupportedVersions[1:2]}),

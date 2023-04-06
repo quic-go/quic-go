@@ -77,6 +77,7 @@ var _ = Describe("Unidirectional Streams", func() {
 		}()
 
 		client, err := quic.DialAddr(
+			context.Background(),
 			serverAddr,
 			getTLSClientConfig(),
 			getQuicConfig(nil),
@@ -95,6 +96,7 @@ var _ = Describe("Unidirectional Streams", func() {
 		}()
 
 		client, err := quic.DialAddr(
+			context.Background(),
 			serverAddr,
 			getTLSClientConfig(),
 			getQuicConfig(nil),
@@ -121,6 +123,7 @@ var _ = Describe("Unidirectional Streams", func() {
 		}()
 
 		client, err := quic.DialAddr(
+			context.Background(),
 			serverAddr,
 			getTLSClientConfig(),
 			getQuicConfig(nil),

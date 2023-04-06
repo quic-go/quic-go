@@ -111,6 +111,7 @@ var _ = Describe("Handshake tests", func() {
 				}()
 
 				conn, err := quic.DialAddr(
+					context.Background(),
 					fmt.Sprintf("localhost:%d", ln.Addr().(*net.UDPAddr).Port),
 					getTLSClientConfig(),
 					nil,
@@ -131,6 +132,7 @@ var _ = Describe("Handshake tests", func() {
 		It("accepts the certificate", func() {
 			runServer(getTLSConfig())
 			_, err := quic.DialAddr(
+				context.Background(),
 				fmt.Sprintf("localhost:%d", server.Addr().(*net.UDPAddr).Port),
 				getTLSClientConfig(),
 				getQuicConfig(nil),
@@ -141,6 +143,7 @@ var _ = Describe("Handshake tests", func() {
 		It("works with a long certificate chain", func() {
 			runServer(getTLSConfigWithLongCertChain())
 			_, err := quic.DialAddr(
+				context.Background(),
 				fmt.Sprintf("localhost:%d", server.Addr().(*net.UDPAddr).Port),
 				getTLSClientConfig(),
 				getQuicConfig(nil),
@@ -155,6 +158,7 @@ var _ = Describe("Handshake tests", func() {
 			conf := getTLSClientConfig()
 			conf.ServerName = "foo.bar"
 			_, err = quic.Dial(
+				context.Background(),
 				conn,
 				server.Addr(),
 				conf,
@@ -173,6 +177,7 @@ var _ = Describe("Handshake tests", func() {
 			runServer(tlsConf)
 
 			conn, err := quic.DialAddr(
+				context.Background(),
 				fmt.Sprintf("localhost:%d", server.Addr().(*net.UDPAddr).Port),
 				getTLSClientConfig(),
 				getQuicConfig(nil),
@@ -201,6 +206,7 @@ var _ = Describe("Handshake tests", func() {
 			tlsConf := getTLSClientConfig()
 			tlsConf.ServerName = "foo.bar"
 			_, err := quic.DialAddr(
+				context.Background(),
 				fmt.Sprintf("localhost:%d", server.Addr().(*net.UDPAddr).Port),
 				tlsConf,
 				getQuicConfig(nil),
@@ -223,7 +229,7 @@ var _ = Describe("Handshake tests", func() {
 			remoteAddr := fmt.Sprintf("localhost:%d", server.Addr().(*net.UDPAddr).Port)
 			raddr, err := net.ResolveUDPAddr("udp", remoteAddr)
 			Expect(err).ToNot(HaveOccurred())
-			return quic.Dial(pconn, raddr, getTLSClientConfig(), nil)
+			return quic.Dial(context.Background(), pconn, raddr, getTLSClientConfig(), nil)
 		}
 
 		BeforeEach(func() {
@@ -324,6 +330,7 @@ var _ = Describe("Handshake tests", func() {
 			}()
 
 			conn, err := quic.DialAddr(
+				context.Background(),
 				fmt.Sprintf("localhost:%d", ln.Addr().(*net.UDPAddr).Port),
 				getTLSClientConfig(),
 				nil,
@@ -342,6 +349,7 @@ var _ = Describe("Handshake tests", func() {
 			tlsConf := getTLSClientConfig()
 			tlsConf.NextProtos = []string{"foobar"}
 			_, err := quic.DialAddr(
+				context.Background(),
 				fmt.Sprintf("localhost:%d", server.Addr().(*net.UDPAddr).Port),
 				tlsConf,
 				nil,
@@ -371,6 +379,7 @@ var _ = Describe("Handshake tests", func() {
 			tokenStore := newTokenStore(gets, puts)
 			quicConf := getQuicConfig(&quic.Config{TokenStore: tokenStore})
 			conn, err := quic.DialAddr(
+				context.Background(),
 				fmt.Sprintf("localhost:%d", server.Addr().(*net.UDPAddr).Port),
 				getTLSClientConfig(),
 				quicConf,
@@ -390,6 +399,7 @@ var _ = Describe("Handshake tests", func() {
 				Expect(err).ToNot(HaveOccurred())
 			}()
 			conn, err = quic.DialAddr(
+				context.Background(),
 				fmt.Sprintf("localhost:%d", server.Addr().(*net.UDPAddr).Port),
 				getTLSClientConfig(),
 				quicConf,
@@ -410,6 +420,7 @@ var _ = Describe("Handshake tests", func() {
 			defer server.Close()
 
 			_, err = quic.DialAddr(
+				context.Background(),
 				fmt.Sprintf("localhost:%d", server.Addr().(*net.UDPAddr).Port),
 				getTLSClientConfig(),
 				nil,
@@ -441,6 +452,7 @@ var _ = Describe("Handshake tests", func() {
 		tlsConf := getTLSClientConfig()
 		tlsConf.NextProtos = []string{""}
 		_, err = quic.DialAddr(
+			context.Background(),
 			fmt.Sprintf("localhost:%d", ln.LocalAddr().(*net.UDPAddr).Port),
 			tlsConf,
 			nil,

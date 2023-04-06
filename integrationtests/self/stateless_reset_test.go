@@ -56,6 +56,7 @@ var _ = Describe("Stateless Resets", func() {
 			defer proxy.Close()
 
 			conn, err := quic.DialAddr(
+				context.Background(),
 				fmt.Sprintf("localhost:%d", proxy.LocalPort()),
 				getTLSClientConfig(),
 				getQuicConfig(&quic.Config{

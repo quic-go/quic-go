@@ -36,7 +36,7 @@ func BenchmarkHandshake(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		c, err := quic.Dial(conn, ln.Addr(), tlsClientConfig, nil)
+		c, err := quic.Dial(context.Background(), conn, ln.Addr(), tlsClientConfig, nil)
 		if err != nil {
 			b.Fatal(err)
 		}
@@ -71,7 +71,7 @@ func BenchmarkStreamChurn(b *testing.B) {
 		}
 	}()
 
-	c, err := quic.DialAddr(fmt.Sprintf("localhost:%d", ln.Addr().(*net.UDPAddr).Port), tlsClientConfig, nil)
+	c, err := quic.DialAddr(context.Background(), fmt.Sprintf("localhost:%d", ln.Addr().(*net.UDPAddr).Port), tlsClientConfig, nil)
 	if err != nil {
 		b.Fatal(err)
 	}

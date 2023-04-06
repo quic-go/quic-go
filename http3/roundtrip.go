@@ -17,7 +17,7 @@ import (
 )
 
 // declare this as a variable, such that we can it mock it in the tests
-var quicDialer = quic.DialEarlyContext
+var quicDialer = quic.DialEarly
 
 type roundTripCloser interface {
 	RoundTripOpt(*http.Request, RoundTripOpt) (*http.Response, error)

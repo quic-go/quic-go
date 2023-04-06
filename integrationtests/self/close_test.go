@@ -44,6 +44,7 @@ var _ = Describe("Connection ID lengths tests", func() {
 		defer proxy.Close()
 
 		conn, err := quic.DialAddr(
+			context.Background(),
 			fmt.Sprintf("localhost:%d", proxy.LocalPort()),
 			getTLSClientConfig(),
 			getQuicConfig(nil),

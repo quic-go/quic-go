@@ -46,36 +46,20 @@ var generateConnectionIDForInitial = protocol.GenerateConnectionIDForInitial
 
 // DialAddr establishes a new QUIC connection to a server.
 // It uses a new UDP connection and closes this connection when the QUIC connection is closed.
-func DialAddr(addr string, tlsConf *tls.Config, config *Config) (Connection, error) {
-	return DialAddrContext(context.Background(), addr, tlsConf, config)
+// The hostname for SNI is taken from the given address.
+func DialAddr(ctx context.Context, addr string, tlsConf *tls.Config, config *Config) (Connection, error) {
+	return dialAddrContext(ctx, addr, tlsConf, config, false)
 }
 
 // DialAddrEarly establishes a new 0-RTT QUIC connection to a server.
 // It uses a new UDP connection and closes this connection when the QUIC connection is closed.
-func DialAddrEarly(addr string, tlsConf *tls.Config, config *Config) (EarlyConnection, error) {
-	return DialAddrEarlyContext(context.Background(), addr, tlsConf, config)
-}
-
-// DialAddrEarlyContext establishes a new 0-RTT QUIC connection to a server using provided context.
-// See DialAddrEarly for details
-func DialAddrEarlyContext(
-	ctx context.Context,
-	addr string,
-	tlsConf *tls.Config,
-	config *Config,
-) (EarlyConnection, error) {
+func DialAddrEarly(ctx context.Context, addr string, tlsConf *tls.Config, config *Config) (EarlyConnection, error) {
 	conn, err := dialAddrContext(ctx, addr, tlsConf, config, true)
 	if err != nil {
 		return nil, err
 	}
 	utils.Logger.WithPrefix(utils.DefaultLogger, "client").Debugf("Returning early connection")
 	return conn, nil
-}
-
-// DialAddrContext establishes a new QUIC connection to a server using the provided context.
-// See DialAddr for details.
-func DialAddrContext(ctx context.Context, addr string, tlsConf *tls.Config, config *Config) (Connection, error) {
-	return dialAddrContext(ctx, addr, tlsConf, config, false)
 }
 
 func dialAddrContext(ctx context.Context, addr string, tlsConf *tls.Config, config *Config, use0RTT bool) (quicConn, error) {
@@ -98,28 +82,16 @@ func dialAddrContext(ctx context.Context, addr string, tlsConf *tls.Config, conf
 // The same PacketConn can be used for multiple calls to Dial and Listen.
 // QUIC connection IDs are used for demultiplexing the different connections.
 // The tls.Config must define an application protocol (using NextProtos).
-func Dial(pconn net.PacketConn, addr net.Addr, tlsConf *tls.Config, config *Config) (Connection, error) {
-	return dialContext(context.Background(), pconn, addr, tlsConf, config, false, false)
+func Dial(ctx context.Context, pconn net.PacketConn, addr net.Addr, tlsConf *tls.Config, config *Config) (Connection, error) {
+	return dialContext(ctx, pconn, addr, tlsConf, config, false, false)
 }
 
 // DialEarly establishes a new 0-RTT QUIC connection to a server using a net.PacketConn.
 // The same PacketConn can be used for multiple calls to Dial and Listen,
 // QUIC connection IDs are used for demultiplexing the different connections.
 // The tls.Config must define an application protocol (using NextProtos).
-func DialEarly(pconn net.PacketConn, addr net.Addr, tlsConf *tls.Config, config *Config) (EarlyConnection, error) {
-	return DialEarlyContext(context.Background(), pconn, addr, tlsConf, config)
-}
-
-// DialEarlyContext establishes a new 0-RTT QUIC connection to a server using a net.PacketConn using the provided context.
-// See DialEarly for details.
-func DialEarlyContext(ctx context.Context, pconn net.PacketConn, addr net.Addr, tlsConf *tls.Config, config *Config) (EarlyConnection, error) {
+func DialEarly(ctx context.Context, pconn net.PacketConn, addr net.Addr, tlsConf *tls.Config, config *Config) (EarlyConnection, error) {
 	return dialContext(ctx, pconn, addr, tlsConf, config, true, false)
-}
-
-// DialContext establishes a new QUIC connection to a server using a net.PacketConn using the provided context.
-// See Dial for details.
-func DialContext(ctx context.Context, pconn net.PacketConn, addr net.Addr, tlsConf *tls.Config, config *Config) (Connection, error) {
-	return dialContext(ctx, pconn, addr, tlsConf, config, false, false)
 }
 
 func dialContext(ctx context.Context, pconn net.PacketConn, addr net.Addr, tlsConf *tls.Config, config *Config, use0RTT bool, createdPacketConn bool) (quicConn, error) {

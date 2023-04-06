@@ -37,7 +37,7 @@ var defaultQuicConfig = &quic.Config{
 
 type dialFunc func(ctx context.Context, addr string, tlsCfg *tls.Config, cfg *quic.Config) (quic.EarlyConnection, error)
 
-var dialAddr = quic.DialAddrEarlyContext
+var dialAddr dialFunc = quic.DialAddrEarly
 
 type roundTripperOpts struct {
 	DisableCompression bool

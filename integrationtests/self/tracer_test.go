@@ -80,6 +80,7 @@ var _ = Describe("Handshake tests", func() {
 			defer ln.Close()
 
 			conn, err := quic.DialAddr(
+				context.Background(),
 				fmt.Sprintf("localhost:%d", ln.Addr().(*net.UDPAddr).Port),
 				getTLSClientConfig(),
 				quicClientConf,

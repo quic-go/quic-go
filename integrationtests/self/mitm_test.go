@@ -147,6 +147,7 @@ var _ = Describe("MITM test", func() {
 				raddr, err := net.ResolveUDPAddr("udp", fmt.Sprintf("localhost:%d", proxyPort))
 				Expect(err).ToNot(HaveOccurred())
 				conn, err := quic.Dial(
+					context.Background(),
 					clientUDPConn,
 					raddr,
 					getTLSClientConfig(),
@@ -190,6 +191,7 @@ var _ = Describe("MITM test", func() {
 			raddr, err := net.ResolveUDPAddr("udp", fmt.Sprintf("localhost:%d", proxyPort))
 			Expect(err).ToNot(HaveOccurred())
 			conn, err := quic.Dial(
+				context.Background(),
 				clientUDPConn,
 				raddr,
 				getTLSClientConfig(),
@@ -304,6 +306,7 @@ var _ = Describe("MITM test", func() {
 			raddr, err := net.ResolveUDPAddr("udp", fmt.Sprintf("localhost:%d", proxyPort))
 			Expect(err).ToNot(HaveOccurred())
 			_, err = quic.Dial(
+				context.Background(),
 				clientUDPConn,
 				raddr,
 				getTLSClientConfig(),

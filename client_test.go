@@ -128,7 +128,7 @@ var _ = Describe("Client", func() {
 				conn.EXPECT().HandshakeComplete().Return(make(chan struct{}))
 				return conn
 			}
-			_, err := DialAddr("localhost:17890", tlsConf, &Config{HandshakeIdleTimeout: time.Millisecond})
+			_, err := DialAddr(context.Background(), "localhost:17890", tlsConf, &Config{HandshakeIdleTimeout: time.Millisecond})
 			Expect(err).ToNot(HaveOccurred())
 			Eventually(remoteAddrChan).Should(Receive(Equal("127.0.0.1:17890")))
 		})
@@ -163,7 +163,7 @@ var _ = Describe("Client", func() {
 				return conn
 			}
 			tracer.EXPECT().StartedConnection(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any())
-			s, err := Dial(packetConn, addr, tlsConf, config)
+			s, err := Dial(context.Background(), packetConn, addr, tlsConf, config)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(s).ToNot(BeNil())
 			Eventually(run).Should(BeClosed())
@@ -203,7 +203,7 @@ var _ = Describe("Client", func() {
 				defer GinkgoRecover()
 				defer close(done)
 				tracer.EXPECT().StartedConnection(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any())
-				s, err := DialEarly(packetConn, addr, tlsConf, config)
+				s, err := DialEarly(context.Background(), packetConn, addr, tlsConf, config)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(s).ToNot(BeNil())
 			}()
@@ -239,7 +239,7 @@ var _ = Describe("Client", func() {
 				return conn
 			}
 			tracer.EXPECT().StartedConnection(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any())
-			_, err := Dial(packetConn, addr, tlsConf, config)
+			_, err := Dial(context.Background(), packetConn, addr, tlsConf, config)
 			Expect(err).To(MatchError(testErr))
 		})
 
@@ -277,7 +277,7 @@ var _ = Describe("Client", func() {
 			go func() {
 				defer GinkgoRecover()
 				tracer.EXPECT().StartedConnection(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any())
-				_, err := DialContext(ctx, packetConn, addr, tlsConf, config)
+				_, err := Dial(ctx, packetConn, addr, tlsConf, config)
 				Expect(err).To(MatchError(context.Canceled))
 				close(dialed)
 			}()
@@ -323,7 +323,7 @@ var _ = Describe("Client", func() {
 			done := make(chan struct{})
 			go func() {
 				defer GinkgoRecover()
-				_, err := DialAddr("localhost:1337", tlsConf, nil)
+				_, err := DialAddr(context.Background(), "localhost:1337", tlsConf, nil)
 				Expect(err).ToNot(HaveOccurred())
 				close(done)
 			}()
@@ -370,7 +370,7 @@ var _ = Describe("Client", func() {
 				mockMultiplexer.EXPECT().AddConn(packetConn, gomock.Any(), gomock.Any(), gomock.Any()).Return(manager, nil)
 
 				version := protocol.VersionNumber(0x1234)
-				_, err := Dial(packetConn, nil, tlsConf, &Config{Versions: []protocol.VersionNumber{version}})
+				_, err := Dial(context.Background(), packetConn, nil, tlsConf, &Config{Versions: []protocol.VersionNumber{version}})
 				Expect(err).To(MatchError("0x1234 is not a valid QUIC version"))
 			})
 
@@ -442,7 +442,7 @@ var _ = Describe("Client", func() {
 				conn.EXPECT().HandshakeComplete().Return(make(chan struct{}))
 				return conn
 			}
-			_, err := Dial(packetConn, addr, tlsConf, config)
+			_, err := Dial(context.Background(), packetConn, addr, tlsConf, config)
 			Expect(err).ToNot(HaveOccurred())
 			Eventually(c).Should(BeClosed())
 			Expect(cconn.(*spconn).PacketConn).To(Equal(packetConn))
@@ -492,7 +492,7 @@ var _ = Describe("Client", func() {
 
 			config := &Config{Tracer: config.Tracer, Versions: []protocol.VersionNumber{protocol.Version1}, ConnectionIDGenerator: &mockConnIDGenerator{ConnID: connID}}
 			tracer.EXPECT().StartedConnection(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any())
-			_, err := DialAddr("localhost:7890", tlsConf, config)
+			_, err := DialAddr(context.Background(), "localhost:7890", tlsConf, config)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(counter).To(Equal(2))
 		})
