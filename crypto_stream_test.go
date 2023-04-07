@@ -171,7 +171,7 @@ var _ = Describe("Crypto Stream", func() {
 		})
 
 		It("respects the maximum size", func() {
-			frameHeaderLen := (&wire.CryptoFrame{}).Length(protocol.VersionWhatever)
+			frameHeaderLen := (&wire.CryptoFrame{}).Length(protocol.Version1)
 			_, err := str.Write([]byte("foobar"))
 			Expect(err).ToNot(HaveOccurred())
 			f := str.PopCryptoFrame(frameHeaderLen + 3)

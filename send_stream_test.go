@@ -43,7 +43,7 @@ var _ = Describe("Send Stream", func() {
 			StreamID:       streamID,
 			Offset:         offset,
 			DataLenPresent: true,
-		}).Length(protocol.VersionWhatever)
+		}).Length(protocol.Version1)
 	}
 
 	waitForWrite := func() {

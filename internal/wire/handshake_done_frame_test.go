@@ -11,14 +11,14 @@ var _ = Describe("HANDSHAKE_DONE frame", func() {
 	Context("when writing", func() {
 		It("writes a sample frame", func() {
 			frame := HandshakeDoneFrame{}
-			b, err := frame.Append(nil, protocol.VersionWhatever)
+			b, err := frame.Append(nil, protocol.Version1)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(b).To(Equal([]byte{handshakeDoneFrameType}))
 		})
 
 		It("has the correct min length", func() {
 			frame := HandshakeDoneFrame{}
-			Expect(frame.Length(protocol.VersionWhatever)).To(Equal(protocol.ByteCount(1)))
+			Expect(frame.Length(protocol.Version1)).To(Equal(protocol.ByteCount(1)))
 		})
 	})
 })

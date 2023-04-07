@@ -18,7 +18,7 @@ var _ = Describe("NEW_TOKEN frame", func() {
 			data := encodeVarInt(uint64(len(token)))
 			data = append(data, token...)
 			b := bytes.NewReader(data)
-			f, err := parseNewTokenFrame(b, protocol.VersionWhatever)
+			f, err := parseNewTokenFrame(b, protocol.Version1)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(string(f.Token)).To(Equal(token))
 			Expect(b.Len()).To(BeZero())
@@ -27,7 +27,7 @@ var _ = Describe("NEW_TOKEN frame", func() {
 		It("rejects empty tokens", func() {
 			data := encodeVarInt(0)
 			b := bytes.NewReader(data)
-			_, err := parseNewTokenFrame(b, protocol.VersionWhatever)
+			_, err := parseNewTokenFrame(b, protocol.Version1)
 			Expect(err).To(MatchError("token must not be empty"))
 		})
 
@@ -36,10 +36,10 @@ var _ = Describe("NEW_TOKEN frame", func() {
 			data := encodeVarInt(uint64(len(token)))
 			data = append(data, token...)
 			r := bytes.NewReader(data)
-			_, err := parseNewTokenFrame(r, protocol.VersionWhatever)
+			_, err := parseNewTokenFrame(r, protocol.Version1)
 			Expect(err).NotTo(HaveOccurred())
 			for i := range data {
-				_, err := parseNewTokenFrame(bytes.NewReader(data[:i]), protocol.VersionWhatever)
+				_, err := parseNewTokenFrame(bytes.NewReader(data[:i]), protocol.Version1)
 				Expect(err).To(MatchError(io.EOF))
 			}
 		})
@@ -49,7 +49,7 @@ var _ = Describe("NEW_TOKEN frame", func() {
 		It("writes a sample frame", func() {
 			token := "Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat."
 			f := &NewTokenFrame{Token: []byte(token)}
-			b, err := f.Append(nil, protocol.VersionWhatever)
+			b, err := f.Append(nil, protocol.Version1)
 			Expect(err).ToNot(HaveOccurred())
 			expected := []byte{newTokenFrameType}
 			expected = append(expected, encodeVarInt(uint64(len(token)))...)
@@ -59,7 +59,7 @@ var _ = Describe("NEW_TOKEN frame", func() {
 
 		It("has the correct min length", func() {
 			frame := &NewTokenFrame{Token: []byte("foobar")}
-			Expect(frame.Length(protocol.VersionWhatever)).To(Equal(1 + quicvarint.Len(6) + 6))
+			Expect(frame.Length(protocol.Version1)).To(Equal(1 + quicvarint.Len(6) + 6))
 		})
 	})
 })
