@@ -99,7 +99,7 @@ var _ = Describe("Crypto Setup TLS", func() {
 			&utils.RTTStats{},
 			nil,
 			utils.DefaultLogger.WithPrefix("server"),
-			protocol.VersionTLS,
+			protocol.Version1,
 		)
 
 		done := make(chan struct{})
@@ -145,7 +145,7 @@ var _ = Describe("Crypto Setup TLS", func() {
 			&utils.RTTStats{},
 			nil,
 			utils.DefaultLogger.WithPrefix("client"),
-			protocol.VersionTLS,
+			protocol.Version1,
 		)
 
 		done := make(chan struct{})
@@ -181,7 +181,7 @@ var _ = Describe("Crypto Setup TLS", func() {
 			&utils.RTTStats{},
 			nil,
 			utils.DefaultLogger.WithPrefix("server"),
-			protocol.VersionTLS,
+			protocol.Version1,
 		)
 
 		done := make(chan struct{})
@@ -222,7 +222,7 @@ var _ = Describe("Crypto Setup TLS", func() {
 			&utils.RTTStats{},
 			nil,
 			utils.DefaultLogger.WithPrefix("server"),
-			protocol.VersionTLS,
+			protocol.Version1,
 		)
 
 		done := make(chan struct{})
@@ -257,7 +257,7 @@ var _ = Describe("Crypto Setup TLS", func() {
 			&utils.RTTStats{},
 			nil,
 			utils.DefaultLogger.WithPrefix("server"),
-			protocol.VersionTLS,
+			protocol.Version1,
 		)
 
 		done := make(chan struct{})
@@ -375,7 +375,7 @@ var _ = Describe("Crypto Setup TLS", func() {
 				clientRTTStats,
 				nil,
 				utils.DefaultLogger.WithPrefix("client"),
-				protocol.VersionTLS,
+				protocol.Version1,
 			)
 
 			var allow0RTT func() bool
@@ -406,7 +406,7 @@ var _ = Describe("Crypto Setup TLS", func() {
 				serverRTTStats,
 				nil,
 				utils.DefaultLogger.WithPrefix("server"),
-				protocol.VersionTLS,
+				protocol.Version1,
 			)
 
 			handshake(client, cChunkChan, server, sChunkChan)
@@ -476,7 +476,7 @@ var _ = Describe("Crypto Setup TLS", func() {
 				&utils.RTTStats{},
 				nil,
 				utils.DefaultLogger.WithPrefix("client"),
-				protocol.VersionTLS,
+				protocol.Version1,
 			)
 
 			done := make(chan struct{})
@@ -519,7 +519,7 @@ var _ = Describe("Crypto Setup TLS", func() {
 				&utils.RTTStats{},
 				nil,
 				utils.DefaultLogger.WithPrefix("client"),
-				protocol.VersionTLS,
+				protocol.Version1,
 			)
 
 			sChunkChan, sInitialStream, sHandshakeStream := initStreams()
@@ -545,7 +545,7 @@ var _ = Describe("Crypto Setup TLS", func() {
 				&utils.RTTStats{},
 				nil,
 				utils.DefaultLogger.WithPrefix("server"),
-				protocol.VersionTLS,
+				protocol.Version1,
 			)
 
 			done := make(chan struct{})
@@ -579,7 +579,7 @@ var _ = Describe("Crypto Setup TLS", func() {
 					&utils.RTTStats{},
 					nil,
 					utils.DefaultLogger.WithPrefix("client"),
-					protocol.VersionTLS,
+					protocol.Version1,
 				)
 
 				sChunkChan, sInitialStream, sHandshakeStream := initStreams()
@@ -600,7 +600,7 @@ var _ = Describe("Crypto Setup TLS", func() {
 					&utils.RTTStats{},
 					nil,
 					utils.DefaultLogger.WithPrefix("server"),
-					protocol.VersionTLS,
+					protocol.Version1,
 				)
 
 				done := make(chan struct{})
@@ -638,7 +638,7 @@ var _ = Describe("Crypto Setup TLS", func() {
 					&utils.RTTStats{},
 					nil,
 					utils.DefaultLogger.WithPrefix("client"),
-					protocol.VersionTLS,
+					protocol.Version1,
 				)
 
 				sChunkChan, sInitialStream, sHandshakeStream := initStreams()
@@ -659,7 +659,7 @@ var _ = Describe("Crypto Setup TLS", func() {
 					&utils.RTTStats{},
 					nil,
 					utils.DefaultLogger.WithPrefix("server"),
-					protocol.VersionTLS,
+					protocol.Version1,
 				)
 
 				done := make(chan struct{})

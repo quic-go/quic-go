@@ -90,7 +90,7 @@ func main() {
 		utils.NewRTTStats(),
 		nil,
 		utils.DefaultLogger.WithPrefix("client"),
-		protocol.VersionTLS,
+		protocol.Version1,
 	)
 
 	sChunkChan, sInitialStream, sHandshakeStream := initStreams()
@@ -109,7 +109,7 @@ func main() {
 		utils.NewRTTStats(),
 		nil,
 		utils.DefaultLogger.WithPrefix("server"),
-		protocol.VersionTLS,
+		protocol.Version1,
 	)
 
 	serverHandshakeCompleted := make(chan struct{})

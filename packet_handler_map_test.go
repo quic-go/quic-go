@@ -40,7 +40,7 @@ var _ = Describe("Packet Handler Map", func() {
 				Type:             t,
 				DestConnectionID: connID,
 				Length:           length,
-				Version:          protocol.VersionTLS,
+				Version:          protocol.Version1,
 			},
 			PacketNumberLen: protocol.PacketNumberLen2,
 		}).Append(nil, protocol.Version1)

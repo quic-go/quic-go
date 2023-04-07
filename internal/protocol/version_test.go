@@ -11,16 +11,11 @@ var _ = Describe("Version", func() {
 	}
 
 	It("says if a version is valid", func() {
-		Expect(IsValidVersion(VersionTLS)).To(BeTrue())
 		Expect(IsValidVersion(VersionUnknown)).To(BeFalse())
 		Expect(IsValidVersion(VersionDraft29)).To(BeTrue())
 		Expect(IsValidVersion(Version1)).To(BeTrue())
 		Expect(IsValidVersion(Version2)).To(BeTrue())
 		Expect(IsValidVersion(1234)).To(BeFalse())
-	})
-
-	It("versions don't have reserved version numbers", func() {
-		Expect(isReservedVersion(VersionTLS)).To(BeFalse())
 	})
 
 	It("has the right string representation", func() {

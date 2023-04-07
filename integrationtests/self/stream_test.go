@@ -23,7 +23,7 @@ var _ = Describe("Bidirectional streams", func() {
 		qconf      *quic.Config
 	)
 
-	for _, v := range []protocol.VersionNumber{protocol.VersionTLS} {
+	for _, v := range []protocol.VersionNumber{protocol.Version1} {
 		version := v
 
 		Context(fmt.Sprintf("with QUIC %s", version), func() {

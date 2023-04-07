@@ -427,7 +427,7 @@ var _ = Describe("Tracing", func() {
 							DestConnectionID: protocol.ParseConnectionID([]byte{1, 2, 3, 4, 5, 6, 7, 8}),
 							SrcConnectionID:  protocol.ParseConnectionID([]byte{4, 3, 2, 1}),
 							Length:           1337,
-							Version:          protocol.VersionTLS,
+							Version:          protocol.Version1,
 						},
 						PacketNumber: 1337,
 					},
@@ -493,7 +493,7 @@ var _ = Describe("Tracing", func() {
 							SrcConnectionID:  protocol.ParseConnectionID([]byte{4, 3, 2, 1}),
 							Token:            []byte{0xde, 0xad, 0xbe, 0xef},
 							Length:           1234,
-							Version:          protocol.VersionTLS,
+							Version:          protocol.Version1,
 						},
 						PacketNumber: 1337,
 					},
@@ -562,7 +562,7 @@ var _ = Describe("Tracing", func() {
 						DestConnectionID: protocol.ParseConnectionID([]byte{1, 2, 3, 4, 5, 6, 7, 8}),
 						SrcConnectionID:  protocol.ParseConnectionID([]byte{4, 3, 2, 1}),
 						Token:            []byte{0xde, 0xad, 0xbe, 0xef},
-						Version:          protocol.VersionTLS,
+						Version:          protocol.Version1,
 					},
 				)
 				entry := exportAndParseSingle()
