@@ -417,6 +417,9 @@ func (h *packetHandlerMap) handlePacket(p *receivedPacket) {
 	}
 	if wire.Is0RTTPacket(p.data) {
 		if h.numZeroRTTEntries >= protocol.Max0RTTQueues {
+			if h.tracer != nil {
+				h.tracer.DroppedPacket(p.remoteAddr, logging.PacketType0RTT, p.Size(), logging.PacketDropDOSPrevention)
+			}
 			return
 		}
 		h.numZeroRTTEntries++
