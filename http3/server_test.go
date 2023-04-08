@@ -272,7 +272,7 @@ var _ = Describe("Server", func() {
 				buf := bytes.NewBuffer(quicvarint.Append(nil, 0x41))
 				unknownStr := mockquic.NewMockStream(mockCtrl)
 				unknownStr.EXPECT().Read(gomock.Any()).DoAndReturn(buf.Read).AnyTimes()
-				unknownStr.EXPECT().CancelWrite(quic.StreamErrorCode(errorRequestIncomplete))
+				unknownStr.EXPECT().CancelWrite(quic.StreamErrorCode(ErrCodeRequestIncomplete))
 				conn.EXPECT().AcceptStream(gomock.Any()).Return(unknownStr, nil)
 				conn.EXPECT().AcceptStream(gomock.Any()).Return(nil, errors.New("done"))
 				conn.EXPECT().AcceptUniStream(gomock.Any()).DoAndReturn(func(context.Context) (quic.ReceiveStream, error) {
@@ -295,7 +295,7 @@ var _ = Describe("Server", func() {
 				buf := bytes.NewBuffer(quicvarint.Append(nil, 0x41))
 				unknownStr := mockquic.NewMockStream(mockCtrl)
 				unknownStr.EXPECT().Read(gomock.Any()).DoAndReturn(buf.Read).AnyTimes()
-				unknownStr.EXPECT().CancelWrite(quic.StreamErrorCode(errorRequestIncomplete))
+				unknownStr.EXPECT().CancelWrite(quic.StreamErrorCode(ErrCodeRequestIncomplete))
 				conn.EXPECT().AcceptStream(gomock.Any()).Return(unknownStr, nil)
 				conn.EXPECT().AcceptStream(gomock.Any()).Return(nil, errors.New("done"))
 				conn.EXPECT().AcceptUniStream(gomock.Any()).DoAndReturn(func(context.Context) (quic.ReceiveStream, error) {
@@ -406,7 +406,7 @@ var _ = Describe("Server", func() {
 				buf := bytes.NewBuffer(quicvarint.Append(nil, 0x54))
 				unknownStr := mockquic.NewMockStream(mockCtrl)
 				unknownStr.EXPECT().Read(gomock.Any()).DoAndReturn(buf.Read).AnyTimes()
-				unknownStr.EXPECT().CancelRead(quic.StreamErrorCode(errorStreamCreationError))
+				unknownStr.EXPECT().CancelRead(quic.StreamErrorCode(ErrCodeStreamCreationError))
 
 				conn.EXPECT().AcceptUniStream(gomock.Any()).DoAndReturn(func(context.Context) (quic.ReceiveStream, error) {
 					return unknownStr, nil
@@ -483,7 +483,7 @@ var _ = Describe("Server", func() {
 				str := mockquic.NewMockStream(mockCtrl)
 				str.EXPECT().Read(gomock.Any()).DoAndReturn(buf.Read).AnyTimes()
 				done := make(chan struct{})
-				str.EXPECT().CancelRead(quic.StreamErrorCode(errorStreamCreationError)).Do(func(code quic.StreamErrorCode) {
+				str.EXPECT().CancelRead(quic.StreamErrorCode(ErrCodeStreamCreationError)).Do(func(code quic.StreamErrorCode) {
 					close(done)
 				})
 
@@ -514,7 +514,7 @@ var _ = Describe("Server", func() {
 				done := make(chan struct{})
 				conn.EXPECT().CloseWithError(gomock.Any(), gomock.Any()).Do(func(code quic.ApplicationErrorCode, _ string) {
 					defer GinkgoRecover()
-					Expect(code).To(BeEquivalentTo(errorMissingSettings))
+					Expect(code).To(BeEquivalentTo(ErrCodeMissingSettings))
 					close(done)
 				})
 				s.handleConn(conn)
@@ -537,7 +537,7 @@ var _ = Describe("Server", func() {
 				done := make(chan struct{})
 				conn.EXPECT().CloseWithError(gomock.Any(), gomock.Any()).Do(func(code quic.ApplicationErrorCode, _ string) {
 					defer GinkgoRecover()
-					Expect(code).To(BeEquivalentTo(errorFrameError))
+					Expect(code).To(BeEquivalentTo(ErrCodeFrameError))
 					close(done)
 				})
 				s.handleConn(conn)
@@ -560,7 +560,7 @@ var _ = Describe("Server", func() {
 				done := make(chan struct{})
 				conn.EXPECT().CloseWithError(gomock.Any(), gomock.Any()).Do(func(code quic.ApplicationErrorCode, _ string) {
 					defer GinkgoRecover()
-					Expect(code).To(BeEquivalentTo(errorStreamCreationError))
+					Expect(code).To(BeEquivalentTo(ErrCodeStreamCreationError))
 					close(done)
 				})
 				s.handleConn(conn)
@@ -585,7 +585,7 @@ var _ = Describe("Server", func() {
 				done := make(chan struct{})
 				conn.EXPECT().CloseWithError(gomock.Any(), gomock.Any()).Do(func(code quic.ApplicationErrorCode, reason string) {
 					defer GinkgoRecover()
-					Expect(code).To(BeEquivalentTo(errorSettingsError))
+					Expect(code).To(BeEquivalentTo(ErrCodeSettingsError))
 					Expect(reason).To(Equal("missing QUIC Datagram support"))
 					close(done)
 				})
@@ -632,7 +632,7 @@ var _ = Describe("Server", func() {
 				done := make(chan struct{})
 				str.EXPECT().Context().Return(reqContext)
 				str.EXPECT().Write(gomock.Any()).DoAndReturn(responseBuf.Write).AnyTimes()
-				str.EXPECT().CancelRead(quic.StreamErrorCode(errorNoError))
+				str.EXPECT().CancelRead(quic.StreamErrorCode(ErrCodeNoError))
 				str.EXPECT().Close().Do(func() { close(done) })
 
 				s.handleConn(conn)
@@ -674,7 +674,7 @@ var _ = Describe("Server", func() {
 				setRequest(append(requestData, b...))
 				done := make(chan struct{})
 				str.EXPECT().Write(gomock.Any()).DoAndReturn(responseBuf.Write).AnyTimes()
-				str.EXPECT().CancelWrite(quic.StreamErrorCode(errorFrameError)).Do(func(quic.StreamErrorCode) { close(done) })
+				str.EXPECT().CancelWrite(quic.StreamErrorCode(ErrCodeFrameError)).Do(func(quic.StreamErrorCode) { close(done) })
 
 				s.handleConn(conn)
 				Eventually(done).Should(BeClosed())
@@ -689,7 +689,7 @@ var _ = Describe("Server", func() {
 				testErr := errors.New("stream reset")
 				done := make(chan struct{})
 				str.EXPECT().Read(gomock.Any()).Return(0, testErr)
-				str.EXPECT().CancelWrite(quic.StreamErrorCode(errorRequestIncomplete)).Do(func(quic.StreamErrorCode) { close(done) })
+				str.EXPECT().CancelWrite(quic.StreamErrorCode(ErrCodeRequestIncomplete)).Do(func(quic.StreamErrorCode) { close(done) })
 
 				s.handleConn(conn)
 				Consistently(handlerCalled).ShouldNot(BeClosed())
@@ -709,7 +709,7 @@ var _ = Describe("Server", func() {
 
 				done := make(chan struct{})
 				conn.EXPECT().CloseWithError(gomock.Any(), gomock.Any()).Do(func(code quic.ApplicationErrorCode, _ string) {
-					Expect(code).To(Equal(quic.ApplicationErrorCode(errorFrameUnexpected)))
+					Expect(code).To(Equal(quic.ApplicationErrorCode(ErrCodeFrameUnexpected)))
 					close(done)
 				})
 				s.handleConn(conn)
@@ -733,7 +733,7 @@ var _ = Describe("Server", func() {
 					return len(p), nil
 				}).AnyTimes()
 				done := make(chan struct{})
-				str.EXPECT().CancelWrite(quic.StreamErrorCode(errorFrameError)).Do(func(quic.StreamErrorCode) { close(done) })
+				str.EXPECT().CancelWrite(quic.StreamErrorCode(ErrCodeFrameError)).Do(func(quic.StreamErrorCode) { close(done) })
 
 				s.handleConn(conn)
 				Eventually(done).Should(BeClosed())
@@ -755,7 +755,7 @@ var _ = Describe("Server", func() {
 			str.EXPECT().Write(gomock.Any()).DoAndReturn(func(p []byte) (int, error) {
 				return len(p), nil
 			}).AnyTimes()
-			str.EXPECT().CancelRead(quic.StreamErrorCode(errorNoError))
+			str.EXPECT().CancelRead(quic.StreamErrorCode(ErrCodeNoError))
 
 			serr := s.handleRequest(conn, str, qpackDecoder, nil)
 			Expect(serr.err).ToNot(HaveOccurred())
@@ -778,7 +778,7 @@ var _ = Describe("Server", func() {
 			str.EXPECT().Write(gomock.Any()).DoAndReturn(func(p []byte) (int, error) {
 				return len(p), nil
 			}).AnyTimes()
-			str.EXPECT().CancelRead(quic.StreamErrorCode(errorNoError))
+			str.EXPECT().CancelRead(quic.StreamErrorCode(ErrCodeNoError))
 
 			serr := s.handleRequest(conn, str, qpackDecoder, nil)
 			Expect(serr.err).ToNot(HaveOccurred())
@@ -1207,7 +1207,7 @@ var _ = Describe("Server", func() {
 				<-testDone
 				return nil, errors.New("test done")
 			}).MaxTimes(1)
-			conn.EXPECT().AcceptStream(gomock.Any()).Return(nil, &quic.ApplicationError{ErrorCode: quic.ApplicationErrorCode(errorNoError)})
+			conn.EXPECT().AcceptStream(gomock.Any()).Return(nil, &quic.ApplicationError{ErrorCode: quic.ApplicationErrorCode(ErrCodeNoError)})
 			s.ServeQUICConn(conn)
 			close(testDone)
 		})
