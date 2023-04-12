@@ -267,7 +267,7 @@ var _ = Describe("Server", func() {
 					return true
 				})
 				tracer.EXPECT().TracerForConnection(gomock.Any(), protocol.PerspectiveServer, protocol.ParseConnectionID([]byte{0xde, 0xad, 0xc0, 0xde}))
-				conn := NewMockQuicConn(mockCtrl)
+				conn := NewMockQUICConn(mockCtrl)
 				serv.newConn = func(
 					_ sendConn,
 					_ connRunner,
@@ -463,7 +463,7 @@ var _ = Describe("Server", func() {
 				})
 				tracer.EXPECT().TracerForConnection(gomock.Any(), protocol.PerspectiveServer, protocol.ParseConnectionID([]byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}))
 
-				conn := NewMockQuicConn(mockCtrl)
+				conn := NewMockQUICConn(mockCtrl)
 				serv.newConn = func(
 					_ sendConn,
 					_ connRunner,
@@ -542,7 +542,7 @@ var _ = Describe("Server", func() {
 				) quicConn {
 					<-acceptConn
 					atomic.AddUint32(&counter, 1)
-					conn := NewMockQuicConn(mockCtrl)
+					conn := NewMockQUICConn(mockCtrl)
 					conn.EXPECT().handlePacket(gomock.Any()).MaxTimes(1)
 					conn.EXPECT().run().MaxTimes(1)
 					conn.EXPECT().Context().Return(context.Background()).MaxTimes(1)
@@ -574,7 +574,7 @@ var _ = Describe("Server", func() {
 
 			It("only creates a single connection for a duplicate Initial", func() {
 				var createdConn bool
-				conn := NewMockQuicConn(mockCtrl)
+				conn := NewMockQUICConn(mockCtrl)
 				serv.newConn = func(
 					_ sendConn,
 					runner connRunner,
@@ -622,7 +622,7 @@ var _ = Describe("Server", func() {
 					_ utils.Logger,
 					_ protocol.VersionNumber,
 				) quicConn {
-					conn := NewMockQuicConn(mockCtrl)
+					conn := NewMockQUICConn(mockCtrl)
 					conn.EXPECT().handlePacket(gomock.Any())
 					conn.EXPECT().run()
 					conn.EXPECT().Context().Return(context.Background())
@@ -673,7 +673,7 @@ var _ = Describe("Server", func() {
 				p := getInitial(protocol.ParseConnectionID([]byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}))
 				ctx, cancel := context.WithCancel(context.Background())
 				connCreated := make(chan struct{})
-				conn := NewMockQuicConn(mockCtrl)
+				conn := NewMockQUICConn(mockCtrl)
 				serv.newConn = func(
 					_ sendConn,
 					runner connRunner,
@@ -961,7 +961,7 @@ var _ = Describe("Server", func() {
 			})
 
 			It("accepts new connections when the handshake completes", func() {
-				conn := NewMockQuicConn(mockCtrl)
+				conn := NewMockQUICConn(mockCtrl)
 
 				done := make(chan struct{})
 				go func() {
@@ -1034,7 +1034,7 @@ var _ = Describe("Server", func() {
 		})
 
 		It("accepts new connections when they become ready", func() {
-			conn := NewMockQuicConn(mockCtrl)
+			conn := NewMockQUICConn(mockCtrl)
 
 			done := make(chan struct{})
 			go func() {
@@ -1107,7 +1107,7 @@ var _ = Describe("Server", func() {
 			) quicConn {
 				ready := make(chan struct{})
 				close(ready)
-				conn := NewMockQuicConn(mockCtrl)
+				conn := NewMockQUICConn(mockCtrl)
 				conn.EXPECT().handlePacket(gomock.Any())
 				conn.EXPECT().run()
 				conn.EXPECT().earlyConnReady().Return(ready)
@@ -1148,7 +1148,7 @@ var _ = Describe("Server", func() {
 			p := getInitial(protocol.ParseConnectionID([]byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}))
 			ctx, cancel := context.WithCancel(context.Background())
 			connCreated := make(chan struct{})
-			conn := NewMockQuicConn(mockCtrl)
+			conn := NewMockQUICConn(mockCtrl)
 			serv.newConn = func(
 				_ sendConn,
 				runner connRunner,
