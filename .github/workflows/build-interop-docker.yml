@@ -1,8 +1,8 @@
 name: Build interop Docker image
-on: 
+on:
   push:
     branches: [ interop ]
-  
+
 jobs:
   interop:
     runs-on: ubuntu-latest

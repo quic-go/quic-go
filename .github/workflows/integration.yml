@@ -4,6 +4,10 @@ on:
     tags: [v*]
   pull_request:
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}-${{ github.event_name == 'push' && github.sha || '' }}
+  cancel-in-progress: true
+
 jobs:
   integration:
     strategy:
