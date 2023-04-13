@@ -23,7 +23,6 @@ jobs:
       - uses: actions/checkout@v3
       - uses: actions/setup-go@v3
         with:
-          stable: '!contains(${{ matrix.go }}, "beta") && !contains(${{ matrix.go }}, "rc")'
           go-version: ${{ matrix.go }}
       - run: go version
       - name: set qlogger
