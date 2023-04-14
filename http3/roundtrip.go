@@ -110,7 +110,6 @@ func (r *RoundTripper) RoundTripOpt(req *http.Request, opt RoundTripOpt) (*http.
 		closeRequestBody(req)
 		return nil, errors.New("http3: nil Request.URL")
 	}
-	// check Scheme before Host so the error message is comprehensible
 	if req.URL.Scheme != "https" {
 		closeRequestBody(req)
 		return nil, fmt.Errorf("http3: unsupported protocol scheme: %s", req.URL.Scheme)
