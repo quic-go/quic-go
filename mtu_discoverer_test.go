@@ -19,7 +19,7 @@ var _ = Describe("MTU Discoverer", func() {
 	)
 
 	var (
-		d             mtuDiscoverer
+		d             *mtuFinder
 		rttStats      *utils.RTTStats
 		now           time.Time
 		discoveredMTU protocol.ByteCount
@@ -29,9 +29,9 @@ var _ = Describe("MTU Discoverer", func() {
 		rttStats = &utils.RTTStats{}
 		rttStats.SetInitialRTT(rtt)
 		Expect(rttStats.SmoothedRTT()).To(Equal(rtt))
-		d = newMTUDiscoverer(rttStats, startMTU, maxMTU, func(s protocol.ByteCount) { discoveredMTU = s })
+		d = newMTUDiscoverer(rttStats, startMTU, func(s protocol.ByteCount) { discoveredMTU = s })
+		d.Start(maxMTU)
 		now = time.Now()
-		_ = discoveredMTU
 	})
 
 	It("only allows a probe 5 RTTs after the handshake completes", func() {
@@ -77,13 +77,21 @@ var _ = Describe("MTU Discoverer", func() {
 		Expect(d.ShouldSendProbe(t.Add(10 * rtt))).To(BeFalse())
 	})
 
+	It("doesn't do discovery before being started", func() {
+		d := newMTUDiscoverer(rttStats, startMTU, func(s protocol.ByteCount) {})
+		for i := 0; i < 5; i++ {
+			Expect(d.ShouldSendProbe(time.Now())).To(BeFalse())
+		}
+	})
+
 	It("finds the MTU", func() {
 		const rep = 3000
 		var maxDiff protocol.ByteCount
 		for i := 0; i < rep; i++ {
 			max := protocol.ByteCount(rand.Intn(int(3000-startMTU))) + startMTU + 1
 			currentMTU := startMTU
-			d := newMTUDiscoverer(rttStats, startMTU, max, func(s protocol.ByteCount) { currentMTU = s })
+			d := newMTUDiscoverer(rttStats, startMTU, func(s protocol.ByteCount) { currentMTU = s })
+			d.Start(max)
 			now := time.Now()
 			realMTU := protocol.ByteCount(rand.Intn(int(max-startMTU))) + startMTU
 			t := now.Add(mtuProbeDelay * rtt)
