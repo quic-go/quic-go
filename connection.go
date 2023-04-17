@@ -523,6 +523,14 @@ func (s *connection) preSetup() {
 
 	s.windowUpdateQueue = newWindowUpdateQueue(s.streamsMap, s.connFlowController, s.framer.QueueControlFrame)
 	s.datagramQueue = newDatagramQueue(s.scheduleSending, s.logger)
+	s.mtuDiscoverer = newMTUDiscoverer(
+		s.rttStats,
+		getMaxPacketSize(s.conn.RemoteAddr()),
+		func(size protocol.ByteCount) {
+			s.sentPacketHandler.SetMaxDatagramSize(size)
+			s.packer.SetMaxPacketSize(size)
+		},
+	)
 	s.connState.Version = s.version
 }
 
@@ -805,16 +813,7 @@ func (s *connection) handleHandshakeConfirmed() {
 		if maxPacketSize == 0 {
 			maxPacketSize = protocol.MaxByteCount
 		}
-		maxPacketSize = utils.Min(maxPacketSize, protocol.MaxPacketBufferSize)
-		s.mtuDiscoverer = newMTUDiscoverer(
-			s.rttStats,
-			getMaxPacketSize(s.conn.RemoteAddr()),
-			maxPacketSize,
-			func(size protocol.ByteCount) {
-				s.sentPacketHandler.SetMaxDatagramSize(size)
-				s.packer.SetMaxPacketSize(size)
-			},
-		)
+		s.mtuDiscoverer.Start(utils.Min(maxPacketSize, protocol.MaxPacketBufferSize))
 	}
 }
 
