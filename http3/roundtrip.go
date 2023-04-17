@@ -110,6 +110,10 @@ func (r *RoundTripper) RoundTripOpt(req *http.Request, opt RoundTripOpt) (*http.
 		closeRequestBody(req)
 		return nil, errors.New("http3: nil Request.URL")
 	}
+	if req.URL.Scheme != "https" {
+		closeRequestBody(req)
+		return nil, fmt.Errorf("http3: unsupported protocol scheme: %s", req.URL.Scheme)
+	}
 	if req.URL.Host == "" {
 		closeRequestBody(req)
 		return nil, errors.New("http3: no Host in request URL")
@@ -117,10 +121,6 @@ func (r *RoundTripper) RoundTripOpt(req *http.Request, opt RoundTripOpt) (*http.
 	if req.Header == nil {
 		closeRequestBody(req)
 		return nil, errors.New("http3: nil Request.Header")
-	}
-	if req.URL.Scheme != "https" {
-		closeRequestBody(req)
-		return nil, fmt.Errorf("http3: unsupported protocol scheme: %s", req.URL.Scheme)
 	}
 	for k, vv := range req.Header {
 		if !httpguts.ValidHeaderFieldName(k) {
