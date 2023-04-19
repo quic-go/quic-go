@@ -6,6 +6,8 @@ import (
 	"encoding/binary"
 	"io"
 	mrand "math/rand"
+	"testing"
+	"time"
 
 	"github.com/quic-go/quic-go/internal/protocol"
 
@@ -489,3 +491,17 @@ var _ = Describe("Header Parsing", func() {
 		Expect((&Header{Type: protocol.PacketTypeHandshake}).PacketType()).To(Equal("Handshake"))
 	})
 })
+
+func BenchmarkIs0RTTPacket(b *testing.B) {
+	random := mrand.New(mrand.NewSource(time.Now().UnixNano()))
+	packets := make([][]byte, 1024)
+	for i := 0; i < len(packets); i++ {
+		packets[i] = make([]byte, random.Intn(256))
+		random.Read(packets[i])
+	}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		Is0RTTPacket(packets[i%len(packets)])
+	}
+}
