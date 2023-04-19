@@ -43,7 +43,7 @@ var _ = Describe("Packet Handler Map", func() {
 				Version:          protocol.VersionTLS,
 			},
 			PacketNumberLen: protocol.PacketNumberLen2,
-		}).Append(nil, protocol.VersionWhatever)
+		}).Append(nil, protocol.Version1)
 		Expect(err).ToNot(HaveOccurred())
 		return b
 	}

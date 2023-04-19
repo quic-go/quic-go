@@ -12,7 +12,6 @@ var _ = Describe("Version", func() {
 
 	It("says if a version is valid", func() {
 		Expect(IsValidVersion(VersionTLS)).To(BeTrue())
-		Expect(IsValidVersion(VersionWhatever)).To(BeFalse())
 		Expect(IsValidVersion(VersionUnknown)).To(BeFalse())
 		Expect(IsValidVersion(VersionDraft29)).To(BeTrue())
 		Expect(IsValidVersion(Version1)).To(BeTrue())
@@ -25,7 +24,6 @@ var _ = Describe("Version", func() {
 	})
 
 	It("has the right string representation", func() {
-		Expect(VersionWhatever.String()).To(Equal("whatever"))
 		Expect(VersionUnknown.String()).To(Equal("unknown"))
 		Expect(VersionDraft29.String()).To(Equal("draft-29"))
 		Expect(Version1.String()).To(Equal("v1"))

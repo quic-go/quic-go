@@ -18,12 +18,11 @@ const (
 
 // The version numbers, making grepping easier
 const (
-	VersionTLS      VersionNumber = 0x1
-	VersionWhatever VersionNumber = math.MaxUint32 - 1 // for when the version doesn't matter
-	VersionUnknown  VersionNumber = math.MaxUint32
-	VersionDraft29  VersionNumber = 0xff00001d
-	Version1        VersionNumber = 0x1
-	Version2        VersionNumber = 0x6b3343cf
+	VersionTLS     VersionNumber = 0x1
+	VersionUnknown VersionNumber = math.MaxUint32
+	VersionDraft29 VersionNumber = 0xff00001d
+	Version1       VersionNumber = 0x1
+	Version2       VersionNumber = 0x6b3343cf
 )
 
 // SupportedVersions lists the versions that the server supports
@@ -43,8 +42,6 @@ func (vn VersionNumber) String() string {
 	}
 	//nolint:exhaustive
 	switch vn {
-	case VersionWhatever:
-		return "whatever"
 	case VersionUnknown:
 		return "unknown"
 	case VersionDraft29:
