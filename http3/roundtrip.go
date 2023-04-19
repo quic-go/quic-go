@@ -269,10 +269,14 @@ func isNotToken(r rune) bool {
 // makeDialer makes a QUIC dialer using r.udpConn.
 func (r *RoundTripper) makeDialer() func(ctx context.Context, addr string, tlsCfg *tls.Config, cfg *quic.Config) (quic.EarlyConnection, error) {
 	return func(ctx context.Context, addr string, tlsCfg *tls.Config, cfg *quic.Config) (quic.EarlyConnection, error) {
-		udpAddr, err := net.ResolveUDPAddr("udp", addr)
+		// Don't use net.ResolveUDPAddr here.
+		// Due to a standard library bug (https://github.com/golang/go/issues/28666) that function prefers IPv4 over IPv6.
+		// net.Dial prefers IPv6 over IPv4.
+		// See https://github.com/quic-go/quic-go/issues/3755 for discussion.
+		udpAddr, err := net.Dial("udp", addr)
 		if err != nil {
 			return nil, err
 		}
-		return quicDialer(ctx, r.udpConn, udpAddr, addr, tlsCfg, cfg)
+		return quicDialer(ctx, r.udpConn, udpAddr.RemoteAddr(), addr, tlsCfg, cfg)
 	}
 }
