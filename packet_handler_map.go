@@ -19,6 +19,8 @@ type connCapabilities struct {
 	// This connection has the Don't Fragment (DF) bit set.
 	// This means it makes to run DPLPMTUD.
 	DF bool
+	// GSO (Generic Segmentation Offload) supported
+	GSO bool
 }
 
 // rawConn is a connection that allow reading of a receivedPackeh.

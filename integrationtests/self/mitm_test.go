@@ -25,7 +25,7 @@ var _ = Describe("MITM test", func() {
 	const connIDLen = 6 // explicitly set the connection ID length, so the proxy can parse it
 
 	var (
-		serverUDPConn, clientUDPConn *net.UDPConn
+		serverUDPConn, clientUDPConn net.PacketConn
 		serverConn                   quic.Connection
 		serverConfig                 *quic.Config
 	)
@@ -33,7 +33,9 @@ var _ = Describe("MITM test", func() {
 	startServerAndProxy := func(delayCb quicproxy.DelayCallback, dropCb quicproxy.DropCallback) (proxyPort int, closeFn func()) {
 		addr, err := net.ResolveUDPAddr("udp", "localhost:0")
 		Expect(err).ToNot(HaveOccurred())
-		serverUDPConn, err = net.ListenUDP("udp", addr)
+		c, err := net.ListenUDP("udp", addr)
+		Expect(err).ToNot(HaveOccurred())
+		serverUDPConn, err = quic.OptimizeConn(c)
 		Expect(err).ToNot(HaveOccurred())
 		tr := &quic.Transport{
 			Conn:               serverUDPConn,
@@ -75,7 +77,9 @@ var _ = Describe("MITM test", func() {
 		serverConfig = getQuicConfig(nil)
 		addr, err := net.ResolveUDPAddr("udp", "localhost:0")
 		Expect(err).ToNot(HaveOccurred())
-		clientUDPConn, err = net.ListenUDP("udp", addr)
+		c, err := net.ListenUDP("udp", addr)
+		Expect(err).ToNot(HaveOccurred())
+		clientUDPConn, err = quic.OptimizeConn(c)
 		Expect(err).ToNot(HaveOccurred())
 	})
 
