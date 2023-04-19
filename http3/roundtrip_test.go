@@ -19,8 +19,6 @@ import (
 	. "github.com/onsi/gomega"
 )
 
-//go:generate sh -c "./../mockgen_private.sh http3 mock_roundtripcloser_test.go github.com/quic-go/quic-go/http3 roundTripCloser"
-
 type mockBody struct {
 	reader   bytes.Reader
 	readErr  error

@@ -1631,7 +1631,7 @@ var _ = Describe("Connection", func() {
 		})
 
 		It("sends a Path MTU probe packet", func() {
-			mtuDiscoverer := NewMockMtuDiscoverer(mockCtrl)
+			mtuDiscoverer := NewMockMTUDiscoverer(mockCtrl)
 			conn.mtuDiscoverer = mtuDiscoverer
 			conn.config.DisablePathMTUDiscovery = false
 			sph.EXPECT().SentPacket(gomock.Any())
