@@ -33,7 +33,7 @@ const (
 var defaultQuicConfig = &quic.Config{
 	MaxIncomingStreams: -1, // don't allow the server to create bidirectional streams
 	KeepAlivePeriod:    10 * time.Second,
-	Versions:           []protocol.VersionNumber{protocol.VersionTLS},
+	Versions:           []protocol.VersionNumber{protocol.Version1},
 }
 
 type dialFunc func(ctx context.Context, addr string, tlsCfg *tls.Config, cfg *quic.Config) (quic.EarlyConnection, error)

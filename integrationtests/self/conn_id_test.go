@@ -79,10 +79,10 @@ var _ = Describe("Connection ID lengths tests", func() {
 	It("downloads a file using a 0-byte connection ID for the client", func() {
 		serverConf := getQuicConfig(&quic.Config{
 			ConnectionIDLength: randomConnIDLen(),
-			Versions:           []protocol.VersionNumber{protocol.VersionTLS},
+			Versions:           []protocol.VersionNumber{protocol.Version1},
 		})
 		clientConf := getQuicConfig(&quic.Config{
-			Versions: []protocol.VersionNumber{protocol.VersionTLS},
+			Versions: []protocol.VersionNumber{protocol.Version1},
 		})
 
 		ln := runServer(serverConf)
@@ -93,11 +93,11 @@ var _ = Describe("Connection ID lengths tests", func() {
 	It("downloads a file when both client and server use a random connection ID length", func() {
 		serverConf := getQuicConfig(&quic.Config{
 			ConnectionIDLength: randomConnIDLen(),
-			Versions:           []protocol.VersionNumber{protocol.VersionTLS},
+			Versions:           []protocol.VersionNumber{protocol.Version1},
 		})
 		clientConf := getQuicConfig(&quic.Config{
 			ConnectionIDLength: randomConnIDLen(),
-			Versions:           []protocol.VersionNumber{protocol.VersionTLS},
+			Versions:           []protocol.VersionNumber{protocol.Version1},
 		})
 
 		ln := runServer(serverConf)
@@ -107,11 +107,11 @@ var _ = Describe("Connection ID lengths tests", func() {
 
 	It("downloads a file when both client and server use a custom connection ID generator", func() {
 		serverConf := getQuicConfig(&quic.Config{
-			Versions:              []protocol.VersionNumber{protocol.VersionTLS},
+			Versions:              []protocol.VersionNumber{protocol.Version1},
 			ConnectionIDGenerator: &connIDGenerator{length: randomConnIDLen()},
 		})
 		clientConf := getQuicConfig(&quic.Config{
-			Versions:              []protocol.VersionNumber{protocol.VersionTLS},
+			Versions:              []protocol.VersionNumber{protocol.Version1},
 			ConnectionIDGenerator: &connIDGenerator{length: randomConnIDLen()},
 		})
 

@@ -8,7 +8,7 @@ import (
 	"github.com/quic-go/quic-go/internal/wire"
 )
 
-const version = protocol.VersionTLS
+const version = protocol.Version1
 
 // PrefixLen is the number of bytes used for configuration
 const PrefixLen = 1

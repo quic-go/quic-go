@@ -76,8 +76,8 @@ var _ = Describe("Handshake RTT tests", func() {
 	var clientConfig *quic.Config
 
 	BeforeEach(func() {
-		serverConfig.Versions = []protocol.VersionNumber{protocol.VersionTLS}
-		clientConfig = getQuicConfig(&quic.Config{Versions: []protocol.VersionNumber{protocol.VersionTLS}})
+		serverConfig.Versions = []protocol.VersionNumber{protocol.Version1}
+		clientConfig = getQuicConfig(&quic.Config{Versions: []protocol.VersionNumber{protocol.Version1}})
 		clientConfig := getTLSClientConfig()
 		clientConfig.InsecureSkipVerify = true
 	})

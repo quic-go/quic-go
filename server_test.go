@@ -49,7 +49,7 @@ var _ = Describe("Server", func() {
 			Header:          *hdr,
 			PacketNumber:    0x42,
 			PacketNumberLen: protocol.PacketNumberLen4,
-		}).Append(buf.Data, protocol.VersionTLS)
+		}).Append(buf.Data, protocol.Version1)
 		Expect(err).ToNot(HaveOccurred())
 		n := len(buf.Data)
 		buf.Data = append(buf.Data, p...)
@@ -71,7 +71,7 @@ var _ = Describe("Server", func() {
 			Type:             protocol.PacketTypeInitial,
 			SrcConnectionID:  protocol.ParseConnectionID([]byte{5, 4, 3, 2, 1}),
 			DestConnectionID: destConnID,
-			Version:          protocol.VersionTLS,
+			Version:          protocol.Version1,
 		}
 		p := getPacket(hdr, make([]byte, protocol.MinInitialPacketSize))
 		p.buffer = getPacketBuffer()
@@ -131,7 +131,7 @@ var _ = Describe("Server", func() {
 	})
 
 	It("setups with the right values", func() {
-		supportedVersions := []protocol.VersionNumber{protocol.VersionTLS}
+		supportedVersions := []protocol.VersionNumber{protocol.Version1}
 		requireAddrVal := func(net.Addr) bool { return true }
 		config := Config{
 			Versions:                 supportedVersions,
@@ -247,7 +247,7 @@ var _ = Describe("Server", func() {
 					Type:             protocol.PacketTypeInitial,
 					SrcConnectionID:  protocol.ParseConnectionID([]byte{5, 4, 3, 2, 1}),
 					DestConnectionID: protocol.ParseConnectionID([]byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}),
-					Version:          protocol.VersionTLS,
+					Version:          protocol.Version1,
 					Token:            retryToken,
 				}
 				p := getPacket(hdr, make([]byte, protocol.MinInitialPacketSize))
@@ -413,7 +413,7 @@ var _ = Describe("Server", func() {
 					Type:             protocol.PacketTypeInitial,
 					SrcConnectionID:  protocol.ParseConnectionID([]byte{5, 4, 3, 2, 1}),
 					DestConnectionID: protocol.ParseConnectionID([]byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}),
-					Version:          protocol.VersionTLS,
+					Version:          protocol.Version1,
 				}
 				packet := getPacket(hdr, make([]byte, protocol.MinInitialPacketSize))
 				raddr := &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 1337}
@@ -444,7 +444,7 @@ var _ = Describe("Server", func() {
 					Type:             protocol.PacketTypeInitial,
 					SrcConnectionID:  protocol.ParseConnectionID([]byte{5, 4, 3, 2, 1}),
 					DestConnectionID: protocol.ParseConnectionID([]byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}),
-					Version:          protocol.VersionTLS,
+					Version:          protocol.Version1,
 				}
 				p := getPacket(hdr, make([]byte, protocol.MinInitialPacketSize))
 				run := make(chan struct{})
@@ -779,7 +779,7 @@ var _ = Describe("Server", func() {
 					SrcConnectionID:  protocol.ParseConnectionID([]byte{5, 4, 3, 2, 1}),
 					DestConnectionID: protocol.ParseConnectionID([]byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}),
 					Token:            token,
-					Version:          protocol.VersionTLS,
+					Version:          protocol.Version1,
 				}
 				packet := getPacket(hdr, make([]byte, protocol.MinInitialPacketSize))
 				packet.data = append(packet.data, []byte("coalesced packet")...) // add some garbage to simulate a coalesced packet
@@ -817,7 +817,7 @@ var _ = Describe("Server", func() {
 					SrcConnectionID:  protocol.ParseConnectionID([]byte{5, 4, 3, 2, 1}),
 					DestConnectionID: protocol.ParseConnectionID([]byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}),
 					Token:            token,
-					Version:          protocol.VersionTLS,
+					Version:          protocol.Version1,
 				}
 				packet := getPacket(hdr, make([]byte, protocol.MinInitialPacketSize))
 				packet.remoteAddr = raddr
@@ -850,7 +850,7 @@ var _ = Describe("Server", func() {
 					SrcConnectionID:  protocol.ParseConnectionID([]byte{5, 4, 3, 2, 1}),
 					DestConnectionID: protocol.ParseConnectionID([]byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}),
 					Token:            token,
-					Version:          protocol.VersionTLS,
+					Version:          protocol.Version1,
 				}
 				packet := getPacket(hdr, make([]byte, protocol.MinInitialPacketSize))
 				packet.data[len(packet.data)-10] ^= 0xff // corrupt the packet
@@ -881,7 +881,7 @@ var _ = Describe("Server", func() {
 					SrcConnectionID:  protocol.ParseConnectionID([]byte{5, 4, 3, 2, 1}),
 					DestConnectionID: protocol.ParseConnectionID([]byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}),
 					Token:            token,
-					Version:          protocol.VersionTLS,
+					Version:          protocol.Version1,
 				}
 				packet := getPacket(hdr, make([]byte, protocol.MinInitialPacketSize))
 				packet.remoteAddr = raddr
@@ -906,7 +906,7 @@ var _ = Describe("Server", func() {
 					SrcConnectionID:  protocol.ParseConnectionID([]byte{5, 4, 3, 2, 1}),
 					DestConnectionID: protocol.ParseConnectionID([]byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}),
 					Token:            token,
-					Version:          protocol.VersionTLS,
+					Version:          protocol.Version1,
 				}
 				packet := getPacket(hdr, make([]byte, protocol.MinInitialPacketSize))
 				packet.data[len(packet.data)-10] ^= 0xff // corrupt the packet

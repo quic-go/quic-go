@@ -45,13 +45,15 @@ const (
 )
 
 func versionToALPN(v protocol.VersionNumber) string {
-	if v == protocol.Version1 || v == protocol.Version2 {
+	//nolint:exhaustive // These are all the versions we care about.
+	switch v {
+	case protocol.Version1, protocol.Version2:
 		return NextProtoH3
-	}
-	if v == protocol.VersionTLS || v == protocol.VersionDraft29 {
+	case protocol.VersionDraft29:
 		return NextProtoH3Draft29
+	default:
+		return ""
 	}
-	return ""
 }
 
 // ConfigureTLSConfig creates a new tls.Config which can be used

@@ -54,7 +54,7 @@ var _ = Describe("Client", func() {
 		tracer = mocklogging.NewMockConnectionTracer(mockCtrl)
 		tr := mocklogging.NewMockTracer(mockCtrl)
 		tr.EXPECT().TracerForConnection(gomock.Any(), protocol.PerspectiveClient, gomock.Any()).Return(tracer).MaxTimes(1)
-		config = &Config{Tracer: tr, Versions: []protocol.VersionNumber{protocol.VersionTLS}}
+		config = &Config{Tracer: tr, Versions: []protocol.VersionNumber{protocol.Version1}}
 		Eventually(areConnsRunning).Should(BeFalse())
 		addr = &net.UDPAddr{IP: net.IPv4(192, 168, 100, 200), Port: 1337}
 		packetConn = NewMockPacketConn(mockCtrl)
@@ -62,7 +62,7 @@ var _ = Describe("Client", func() {
 		cl = &client{
 			srcConnID:  connID,
 			destConnID: connID,
-			version:    protocol.VersionTLS,
+			version:    protocol.Version1,
 			sconn:      newSendPconn(packetConn, addr),
 			tracer:     tracer,
 			logger:     utils.DefaultLogger,
@@ -510,7 +510,7 @@ var _ = Describe("Client", func() {
 			manager.EXPECT().Add(connID, gomock.Any())
 			mockMultiplexer.EXPECT().AddConn(packetConn, gomock.Any(), gomock.Any(), gomock.Any()).Return(manager, nil)
 
-			config := &Config{Versions: []protocol.VersionNumber{protocol.VersionTLS}, ConnectionIDGenerator: &mockConnIDGenerator{ConnID: connID}}
+			config := &Config{Versions: []protocol.VersionNumber{protocol.Version1}, ConnectionIDGenerator: &mockConnIDGenerator{ConnID: connID}}
 			c := make(chan struct{})
 			var cconn sendConn
 			var version protocol.VersionNumber
@@ -588,7 +588,7 @@ var _ = Describe("Client", func() {
 				return conn
 			}
 
-			config := &Config{Tracer: config.Tracer, Versions: []protocol.VersionNumber{protocol.VersionTLS}, ConnectionIDGenerator: &mockConnIDGenerator{ConnID: connID}}
+			config := &Config{Tracer: config.Tracer, Versions: []protocol.VersionNumber{protocol.Version1}, ConnectionIDGenerator: &mockConnIDGenerator{ConnID: connID}}
 			tracer.EXPECT().StartedConnection(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any())
 			_, err := DialAddr("localhost:7890", tlsConf, config)
 			Expect(err).ToNot(HaveOccurred())

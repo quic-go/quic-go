@@ -387,7 +387,7 @@ func runHandshake(runConfig [confLen]byte, messageConfig uint8, clientConf *tls.
 		utils.NewRTTStats(),
 		nil,
 		utils.DefaultLogger.WithPrefix("client"),
-		protocol.VersionTLS,
+		protocol.Version1,
 	)
 
 	var allow0RTT func() bool
@@ -408,7 +408,7 @@ func runHandshake(runConfig [confLen]byte, messageConfig uint8, clientConf *tls.
 		utils.NewRTTStats(),
 		nil,
 		utils.DefaultLogger.WithPrefix("server"),
-		protocol.VersionTLS,
+		protocol.Version1,
 	)
 
 	if len(data) == 0 {
