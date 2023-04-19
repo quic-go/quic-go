@@ -66,7 +66,7 @@ func wrapConn(pc net.PacketConn) (interface {
 	return newConn(c, supportsDF)
 }
 
-// The basicConn is the most trivial implementation of a connection.
+// The basicConn is the most trivial implementation of a rawConn.
 // It reads a single packet from the underlying net.PacketConn.
 // It is used when
 // * the net.PacketConn is not a OOBCapablePacketConn, and
