@@ -33,8 +33,7 @@ func wrapConn(pc net.PacketConn) (rawConn, error) {
 
 		if _, ok := pc.LocalAddr().(*net.UDPAddr); ok {
 			// Only set DF on sockets that we expect to be able to handle that configuration.
-			err = setDF(rawConn)
-			if err != nil {
+			if err := setDF(rawConn); err != nil {
 				return nil, err
 			}
 		}
@@ -47,7 +46,7 @@ func wrapConn(pc net.PacketConn) (rawConn, error) {
 	return newConn(c)
 }
 
-// The basicConn is the most trivial implementation of a connection.
+// The basicConn is the most trivial implementation of a rawConn.
 // It reads a single packet from the underlying net.PacketConn.
 // It is used when
 // * the net.PacketConn is not a OOBCapablePacketConn, and
@@ -78,3 +77,5 @@ func (c *basicConn) ReadPacket() (*receivedPacket, error) {
 func (c *basicConn) WritePacket(b []byte, addr net.Addr, _ []byte) (n int, err error) {
 	return c.PacketConn.WriteTo(b, addr)
 }
+
+func (c *basicConn) SupportsGSO() bool { return false }

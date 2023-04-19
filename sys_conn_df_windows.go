@@ -40,7 +40,13 @@ func setDF(rawConn syscall.RawConn) error {
 	return nil
 }
 
+func maybeSetGSO(syscall.RawConn) bool {
+	return false
+}
+
 func isMsgSizeErr(err error) bool {
 	// https://docs.microsoft.com/en-us/windows/win32/winsock/windows-sockets-error-codes-2
 	return errors.Is(err, windows.WSAEMSGSIZE)
 }
+
+func appendUDPSegmentSizeMsg(b []byte, _ int) []byte { return b }

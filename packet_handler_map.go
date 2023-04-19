@@ -22,6 +22,9 @@ type rawConn interface {
 	LocalAddr() net.Addr
 	SetReadDeadline(time.Time) error
 	io.Closer
+
+	// SupportsGSO says if GSO (Generic Segmentation Offload) is supported.
+	SupportsGSO() bool
 }
 
 type closePacket struct {
