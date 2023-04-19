@@ -14,6 +14,7 @@ import (
 	"github.com/quic-go/quic-go"
 	quicproxy "github.com/quic-go/quic-go/integrationtests/tools/proxy"
 	"github.com/quic-go/quic-go/internal/protocol"
+	"github.com/quic-go/quic-go/internal/wire"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -272,6 +273,26 @@ var _ = Describe("Handshake drop tests", func() {
 					})
 				}
 			}
+		})
+
+		It("establishes a connection when the ClientHello is larger than 1 MTU (e.g. post-quantum)", func() {
+			origAdditionalTransportParametersClient := wire.AdditionalTransportParametersClient
+			defer func() {
+				wire.AdditionalTransportParametersClient = origAdditionalTransportParametersClient
+			}()
+			b := make([]byte, 2500) // the ClientHello will now span across 3 packets
+			mrand.New(mrand.NewSource(GinkgoRandomSeed())).Read(b)
+			wire.AdditionalTransportParametersClient = map[uint64][]byte{
+				uint64(27 + 31*mrand.Intn(100)): b,
+			}
+
+			startListenerAndProxy(func(d quicproxy.Direction, _ []byte) bool {
+				if d == quicproxy.DirectionOutgoing {
+					return false
+				}
+				return mrand.Intn(3) == 0
+			}, false, false, version)
+			clientSpeaksFirst.run(version)
 		})
 	}
 })

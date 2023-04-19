@@ -17,6 +17,12 @@ import (
 	"github.com/quic-go/quic-go/quicvarint"
 )
 
+// AdditionalTransportParametersClient are additional transport parameters that will be added
+// to the client's transport parameters.
+// This is not intended for production use, but _only_ to increase the size of the ClientHello beyond
+// the usual size of less than 1 MTU.
+var AdditionalTransportParametersClient map[uint64][]byte
+
 const transportParameterMarshalingVersion = 1
 
 func init() {
@@ -402,6 +408,15 @@ func (p *TransportParameters) Marshal(pers protocol.Perspective) []byte {
 	if p.MaxDatagramFrameSize != protocol.InvalidByteCount {
 		b = p.marshalVarintParam(b, maxDatagramFrameSizeParameterID, uint64(p.MaxDatagramFrameSize))
 	}
+
+	if pers == protocol.PerspectiveClient && len(AdditionalTransportParametersClient) > 0 {
+		for k, v := range AdditionalTransportParametersClient {
+			b = quicvarint.Append(b, k)
+			b = quicvarint.Append(b, uint64(len(v)))
+			b = append(b, v...)
+		}
+	}
+
 	return b
 }
 

@@ -125,6 +125,22 @@ var _ = Describe("Transport Parameters", func() {
 		Expect(p.MaxDatagramFrameSize).To(Equal(params.MaxDatagramFrameSize))
 	})
 
+	It("marshals additional transport parameters (used for testing large ClientHellos)", func() {
+		origAdditionalTransportParametersClient := AdditionalTransportParametersClient
+		defer func() {
+			AdditionalTransportParametersClient = origAdditionalTransportParametersClient
+		}()
+		AdditionalTransportParametersClient = map[uint64][]byte{1337: []byte("foobar")}
+
+		result := quicvarint.Append([]byte{}, 1337)
+		result = quicvarint.Append(result, 6)
+		result = append(result, []byte("foobar")...)
+
+		params := &TransportParameters{}
+		Expect(bytes.Contains(params.Marshal(protocol.PerspectiveClient), result)).To(BeTrue())
+		Expect(bytes.Contains(params.Marshal(protocol.PerspectiveServer), result)).To(BeFalse())
+	})
+
 	It("doesn't marshal a retry_source_connection_id, if no Retry was performed", func() {
 		data := (&TransportParameters{
 			StatelessResetToken:     &protocol.StatelessResetToken{},
