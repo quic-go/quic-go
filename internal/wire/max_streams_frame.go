@@ -14,14 +14,9 @@ type MaxStreamsFrame struct {
 	MaxStreamNum protocol.StreamNum
 }
 
-func parseMaxStreamsFrame(r *bytes.Reader, _ protocol.VersionNumber) (*MaxStreamsFrame, error) {
-	typeByte, err := r.ReadByte()
-	if err != nil {
-		return nil, err
-	}
-
+func parseMaxStreamsFrame(r *bytes.Reader, typ uint64, _ protocol.VersionNumber) (*MaxStreamsFrame, error) {
 	f := &MaxStreamsFrame{}
-	switch typeByte {
+	switch typ {
 	case 0x12:
 		f.Type = protocol.StreamTypeBidi
 	case 0x13:

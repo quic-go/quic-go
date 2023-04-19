@@ -13,8 +13,7 @@ import (
 var _ = Describe("NEW_CONNECTION_ID frame", func() {
 	Context("when parsing", func() {
 		It("accepts a sample frame", func() {
-			data := []byte{0x19}
-			data = append(data, encodeVarInt(0xdeadbeef)...) // sequence number
+			data := encodeVarInt(0xdeadbeef) // sequence number
 			b := bytes.NewReader(data)
 			frame, err := parseRetireConnectionIDFrame(b, protocol.Version1)
 			Expect(err).ToNot(HaveOccurred())
@@ -22,12 +21,11 @@ var _ = Describe("NEW_CONNECTION_ID frame", func() {
 		})
 
 		It("errors on EOFs", func() {
-			data := []byte{0x18}
-			data = append(data, encodeVarInt(0xdeadbeef)...) // sequence number
+			data := encodeVarInt(0xdeadbeef) // sequence number
 			_, err := parseRetireConnectionIDFrame(bytes.NewReader(data), protocol.Version1)
 			Expect(err).NotTo(HaveOccurred())
 			for i := range data {
-				_, err := parseRetireConnectionIDFrame(bytes.NewReader(data[0:i]), protocol.Version1)
+				_, err := parseRetireConnectionIDFrame(bytes.NewReader(data[:i]), protocol.Version1)
 				Expect(err).To(MatchError(io.EOF))
 			}
 		})

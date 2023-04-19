@@ -14,10 +14,6 @@ type MaxStreamDataFrame struct {
 }
 
 func parseMaxStreamDataFrame(r *bytes.Reader, _ protocol.VersionNumber) (*MaxStreamDataFrame, error) {
-	if _, err := r.ReadByte(); err != nil {
-		return nil, err
-	}
-
 	sid, err := quicvarint.Read(r)
 	if err != nil {
 		return nil, err

@@ -14,14 +14,9 @@ type StreamsBlockedFrame struct {
 	StreamLimit protocol.StreamNum
 }
 
-func parseStreamsBlockedFrame(r *bytes.Reader, _ protocol.VersionNumber) (*StreamsBlockedFrame, error) {
-	typeByte, err := r.ReadByte()
-	if err != nil {
-		return nil, err
-	}
-
+func parseStreamsBlockedFrame(r *bytes.Reader, typ uint64, _ protocol.VersionNumber) (*StreamsBlockedFrame, error) {
 	f := &StreamsBlockedFrame{}
-	switch typeByte {
+	switch typ {
 	case 0x16:
 		f.Type = protocol.StreamTypeBidi
 	case 0x17:

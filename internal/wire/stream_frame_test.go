@@ -14,12 +14,11 @@ import (
 var _ = Describe("STREAM frame", func() {
 	Context("when parsing", func() {
 		It("parses a frame with OFF bit", func() {
-			data := []byte{0x8 ^ 0x4}
-			data = append(data, encodeVarInt(0x12345)...)    // stream ID
+			data := encodeVarInt(0x12345)                    // stream ID
 			data = append(data, encodeVarInt(0xdecafbad)...) // offset
 			data = append(data, []byte("foobar")...)
 			r := bytes.NewReader(data)
-			frame, err := parseStreamFrame(r, protocol.Version1)
+			frame, err := parseStreamFrame(r, 0x8^0x4, protocol.Version1)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(frame.StreamID).To(Equal(protocol.StreamID(0x12345)))
 			Expect(frame.Data).To(Equal([]byte("foobar")))
@@ -29,12 +28,11 @@ var _ = Describe("STREAM frame", func() {
 		})
 
 		It("respects the LEN when parsing the frame", func() {
-			data := []byte{0x8 ^ 0x2}
-			data = append(data, encodeVarInt(0x12345)...) // stream ID
-			data = append(data, encodeVarInt(4)...)       // data length
+			data := encodeVarInt(0x12345)           // stream ID
+			data = append(data, encodeVarInt(4)...) // data length
 			data = append(data, []byte("foobar")...)
 			r := bytes.NewReader(data)
-			frame, err := parseStreamFrame(r, protocol.Version1)
+			frame, err := parseStreamFrame(r, 0x8^0x2, protocol.Version1)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(frame.StreamID).To(Equal(protocol.StreamID(0x12345)))
 			Expect(frame.Data).To(Equal([]byte("foob")))
@@ -44,11 +42,10 @@ var _ = Describe("STREAM frame", func() {
 		})
 
 		It("parses a frame with FIN bit", func() {
-			data := []byte{0x8 ^ 0x1}
-			data = append(data, encodeVarInt(9)...) // stream ID
+			data := encodeVarInt(9) // stream ID
 			data = append(data, []byte("foobar")...)
 			r := bytes.NewReader(data)
-			frame, err := parseStreamFrame(r, protocol.Version1)
+			frame, err := parseStreamFrame(r, 0x8^0x1, protocol.Version1)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(frame.StreamID).To(Equal(protocol.StreamID(9)))
 			Expect(frame.Data).To(Equal([]byte("foobar")))
@@ -58,11 +55,10 @@ var _ = Describe("STREAM frame", func() {
 		})
 
 		It("allows empty frames", func() {
-			data := []byte{0x8 ^ 0x4}
-			data = append(data, encodeVarInt(0x1337)...)  // stream ID
+			data := encodeVarInt(0x1337)                  // stream ID
 			data = append(data, encodeVarInt(0x12345)...) // offset
 			r := bytes.NewReader(data)
-			f, err := parseStreamFrame(r, protocol.Version1)
+			f, err := parseStreamFrame(r, 0x8^0x4, protocol.Version1)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(f.StreamID).To(Equal(protocol.StreamID(0x1337)))
 			Expect(f.Offset).To(Equal(protocol.ByteCount(0x12345)))
@@ -71,35 +67,33 @@ var _ = Describe("STREAM frame", func() {
 		})
 
 		It("rejects frames that overflow the maximum offset", func() {
-			data := []byte{0x8 ^ 0x4}
-			data = append(data, encodeVarInt(0x12345)...)                         // stream ID
+			data := encodeVarInt(0x12345)                                         // stream ID
 			data = append(data, encodeVarInt(uint64(protocol.MaxByteCount-5))...) // offset
 			data = append(data, []byte("foobar")...)
 			r := bytes.NewReader(data)
-			_, err := parseStreamFrame(r, protocol.Version1)
+			_, err := parseStreamFrame(r, 0x8^0x4, protocol.Version1)
 			Expect(err).To(MatchError("stream data overflows maximum offset"))
 		})
 
 		It("rejects frames that claim to be longer than the packet size", func() {
-			data := []byte{0x8 ^ 0x2}
-			data = append(data, encodeVarInt(0x12345)...)                                // stream ID
+			data := encodeVarInt(0x12345)                                                // stream ID
 			data = append(data, encodeVarInt(uint64(protocol.MaxPacketBufferSize)+1)...) // data length
 			data = append(data, make([]byte, protocol.MaxPacketBufferSize+1)...)
 			r := bytes.NewReader(data)
-			_, err := parseStreamFrame(r, protocol.Version1)
+			_, err := parseStreamFrame(r, 0x8^0x2, protocol.Version1)
 			Expect(err).To(Equal(io.EOF))
 		})
 
 		It("errors on EOFs", func() {
-			data := []byte{0x8 ^ 0x4 ^ 0x2}
-			data = append(data, encodeVarInt(0x12345)...)    // stream ID
+			typ := uint64(0x8 ^ 0x4 ^ 0x2)
+			data := encodeVarInt(0x12345)                    // stream ID
 			data = append(data, encodeVarInt(0xdecafbad)...) // offset
 			data = append(data, encodeVarInt(6)...)          // data length
 			data = append(data, []byte("foobar")...)
-			_, err := parseStreamFrame(bytes.NewReader(data), protocol.Version1)
+			_, err := parseStreamFrame(bytes.NewReader(data), typ, protocol.Version1)
 			Expect(err).NotTo(HaveOccurred())
 			for i := range data {
-				_, err := parseStreamFrame(bytes.NewReader(data[0:i]), protocol.Version1)
+				_, err = parseStreamFrame(bytes.NewReader(data[:i]), typ, protocol.Version1)
 				Expect(err).To(HaveOccurred())
 			}
 		})
@@ -107,11 +101,10 @@ var _ = Describe("STREAM frame", func() {
 
 	Context("using the buffer", func() {
 		It("uses the buffer for long STREAM frames", func() {
-			data := []byte{0x8}
-			data = append(data, encodeVarInt(0x12345)...) // stream ID
+			data := encodeVarInt(0x12345) // stream ID
 			data = append(data, bytes.Repeat([]byte{'f'}, protocol.MinStreamFrameBufferSize)...)
 			r := bytes.NewReader(data)
-			frame, err := parseStreamFrame(r, protocol.Version1)
+			frame, err := parseStreamFrame(r, 0x8, protocol.Version1)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(frame.StreamID).To(Equal(protocol.StreamID(0x12345)))
 			Expect(frame.Data).To(Equal(bytes.Repeat([]byte{'f'}, protocol.MinStreamFrameBufferSize)))
@@ -123,11 +116,10 @@ var _ = Describe("STREAM frame", func() {
 		})
 
 		It("doesn't use the buffer for short STREAM frames", func() {
-			data := []byte{0x8}
-			data = append(data, encodeVarInt(0x12345)...) // stream ID
+			data := encodeVarInt(0x12345) // stream ID
 			data = append(data, bytes.Repeat([]byte{'f'}, protocol.MinStreamFrameBufferSize-1)...)
 			r := bytes.NewReader(data)
-			frame, err := parseStreamFrame(r, protocol.Version1)
+			frame, err := parseStreamFrame(r, 0x8, protocol.Version1)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(frame.StreamID).To(Equal(protocol.StreamID(0x12345)))
 			Expect(frame.Data).To(Equal(bytes.Repeat([]byte{'f'}, protocol.MinStreamFrameBufferSize-1)))

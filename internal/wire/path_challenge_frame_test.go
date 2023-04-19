@@ -13,7 +13,7 @@ import (
 var _ = Describe("PATH_CHALLENGE frame", func() {
 	Context("when parsing", func() {
 		It("accepts sample frame", func() {
-			b := bytes.NewReader([]byte{0x1a, 1, 2, 3, 4, 5, 6, 7, 8})
+			b := bytes.NewReader([]byte{1, 2, 3, 4, 5, 6, 7, 8})
 			f, err := parsePathChallengeFrame(b, protocol.VersionWhatever)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(b.Len()).To(BeZero())
@@ -21,11 +21,12 @@ var _ = Describe("PATH_CHALLENGE frame", func() {
 		})
 
 		It("errors on EOFs", func() {
-			data := []byte{0x1a, 1, 2, 3, 4, 5, 6, 7, 8}
-			_, err := parsePathChallengeFrame(bytes.NewReader(data), protocol.Version1)
-			Expect(err).NotTo(HaveOccurred())
+			data := []byte{1, 2, 3, 4, 5, 6, 7, 8}
+			b := bytes.NewReader(data)
+			_, err := parsePathChallengeFrame(b, protocol.Version1)
+			Expect(err).ToNot(HaveOccurred())
 			for i := range data {
-				_, err := parsePathChallengeFrame(bytes.NewReader(data[0:i]), protocol.Version1)
+				_, err := parsePathChallengeFrame(bytes.NewReader(data[:i]), protocol.Version1)
 				Expect(err).To(MatchError(io.EOF))
 			}
 		})

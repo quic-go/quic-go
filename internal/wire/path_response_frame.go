@@ -13,9 +13,6 @@ type PathResponseFrame struct {
 }
 
 func parsePathResponseFrame(r *bytes.Reader, _ protocol.VersionNumber) (*PathResponseFrame, error) {
-	if _, err := r.ReadByte(); err != nil {
-		return nil, err
-	}
 	frame := &PathResponseFrame{}
 	if _, err := io.ReadFull(r, frame.Data[:]); err != nil {
 		if err == io.ErrUnexpectedEOF {

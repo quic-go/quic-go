@@ -15,10 +15,6 @@ type CryptoFrame struct {
 }
 
 func parseCryptoFrame(r *bytes.Reader, _ protocol.VersionNumber) (*CryptoFrame, error) {
-	if _, err := r.ReadByte(); err != nil {
-		return nil, err
-	}
-
 	frame := &CryptoFrame{}
 	offset, err := quicvarint.Read(r)
 	if err != nil {

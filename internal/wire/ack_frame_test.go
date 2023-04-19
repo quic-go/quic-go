@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/quic-go/quic-go/internal/protocol"
+	"github.com/quic-go/quic-go/quicvarint"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -15,13 +16,12 @@ import (
 var _ = Describe("ACK Frame (for IETF QUIC)", func() {
 	Context("parsing", func() {
 		It("parses an ACK frame without any ranges", func() {
-			data := []byte{0x2}
-			data = append(data, encodeVarInt(100)...) // largest acked
-			data = append(data, encodeVarInt(0)...)   // delay
-			data = append(data, encodeVarInt(0)...)   // num blocks
-			data = append(data, encodeVarInt(10)...)  // first ack block
+			data := encodeVarInt(100)                // largest acked
+			data = append(data, encodeVarInt(0)...)  // delay
+			data = append(data, encodeVarInt(0)...)  // num blocks
+			data = append(data, encodeVarInt(10)...) // first ack block
 			b := bytes.NewReader(data)
-			frame, err := parseAckFrame(b, protocol.AckDelayExponent, protocol.Version1)
+			frame, err := parseAckFrame(b, 0x2, protocol.AckDelayExponent, protocol.Version1)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(frame.LargestAcked()).To(Equal(protocol.PacketNumber(100)))
 			Expect(frame.LowestAcked()).To(Equal(protocol.PacketNumber(90)))
@@ -30,13 +30,12 @@ var _ = Describe("ACK Frame (for IETF QUIC)", func() {
 		})
 
 		It("parses an ACK frame that only acks a single packet", func() {
-			data := []byte{0x2}
-			data = append(data, encodeVarInt(55)...) // largest acked
-			data = append(data, encodeVarInt(0)...)  // delay
-			data = append(data, encodeVarInt(0)...)  // num blocks
-			data = append(data, encodeVarInt(0)...)  // first ack block
+			data := encodeVarInt(55)                // largest acked
+			data = append(data, encodeVarInt(0)...) // delay
+			data = append(data, encodeVarInt(0)...) // num blocks
+			data = append(data, encodeVarInt(0)...) // first ack block
 			b := bytes.NewReader(data)
-			frame, err := parseAckFrame(b, protocol.AckDelayExponent, protocol.Version1)
+			frame, err := parseAckFrame(b, 0x2, protocol.AckDelayExponent, protocol.Version1)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(frame.LargestAcked()).To(Equal(protocol.PacketNumber(55)))
 			Expect(frame.LowestAcked()).To(Equal(protocol.PacketNumber(55)))
@@ -45,13 +44,12 @@ var _ = Describe("ACK Frame (for IETF QUIC)", func() {
 		})
 
 		It("accepts an ACK frame that acks all packets from 0 to largest", func() {
-			data := []byte{0x2}
-			data = append(data, encodeVarInt(20)...) // largest acked
+			data := encodeVarInt(20)                 // largest acked
 			data = append(data, encodeVarInt(0)...)  // delay
 			data = append(data, encodeVarInt(0)...)  // num blocks
 			data = append(data, encodeVarInt(20)...) // first ack block
 			b := bytes.NewReader(data)
-			frame, err := parseAckFrame(b, protocol.AckDelayExponent, protocol.Version1)
+			frame, err := parseAckFrame(b, 0x2, protocol.AckDelayExponent, protocol.Version1)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(frame.LargestAcked()).To(Equal(protocol.PacketNumber(20)))
 			Expect(frame.LowestAcked()).To(Equal(protocol.PacketNumber(0)))
@@ -60,26 +58,23 @@ var _ = Describe("ACK Frame (for IETF QUIC)", func() {
 		})
 
 		It("rejects an ACK frame that has a first ACK block which is larger than LargestAcked", func() {
-			data := []byte{0x2}
-			data = append(data, encodeVarInt(20)...) // largest acked
+			data := encodeVarInt(20)                 // largest acked
 			data = append(data, encodeVarInt(0)...)  // delay
 			data = append(data, encodeVarInt(0)...)  // num blocks
 			data = append(data, encodeVarInt(21)...) // first ack block
-			b := bytes.NewReader(data)
-			_, err := parseAckFrame(b, protocol.AckDelayExponent, protocol.Version1)
+			_, err := parseAckFrame(bytes.NewReader(data), 0x2, protocol.AckDelayExponent, protocol.Version1)
 			Expect(err).To(MatchError("invalid first ACK range"))
 		})
 
 		It("parses an ACK frame that has a single block", func() {
-			data := []byte{0x2}
-			data = append(data, encodeVarInt(1000)...) // largest acked
-			data = append(data, encodeVarInt(0)...)    // delay
-			data = append(data, encodeVarInt(1)...)    // num blocks
-			data = append(data, encodeVarInt(100)...)  // first ack block
-			data = append(data, encodeVarInt(98)...)   // gap
-			data = append(data, encodeVarInt(50)...)   // ack block
+			data := encodeVarInt(1000)                // largest acked
+			data = append(data, encodeVarInt(0)...)   // delay
+			data = append(data, encodeVarInt(1)...)   // num blocks
+			data = append(data, encodeVarInt(100)...) // first ack block
+			data = append(data, encodeVarInt(98)...)  // gap
+			data = append(data, encodeVarInt(50)...)  // ack block
 			b := bytes.NewReader(data)
-			frame, err := parseAckFrame(b, protocol.AckDelayExponent, protocol.Version1)
+			frame, err := parseAckFrame(b, 0x2, protocol.AckDelayExponent, protocol.Version1)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(frame.LargestAcked()).To(Equal(protocol.PacketNumber(1000)))
 			Expect(frame.LowestAcked()).To(Equal(protocol.PacketNumber(750)))
@@ -92,17 +87,16 @@ var _ = Describe("ACK Frame (for IETF QUIC)", func() {
 		})
 
 		It("parses an ACK frame that has a multiple blocks", func() {
-			data := []byte{0x2}
-			data = append(data, encodeVarInt(100)...) // largest acked
-			data = append(data, encodeVarInt(0)...)   // delay
-			data = append(data, encodeVarInt(2)...)   // num blocks
-			data = append(data, encodeVarInt(0)...)   // first ack block
-			data = append(data, encodeVarInt(0)...)   // gap
-			data = append(data, encodeVarInt(0)...)   // ack block
-			data = append(data, encodeVarInt(1)...)   // gap
-			data = append(data, encodeVarInt(1)...)   // ack block
+			data := encodeVarInt(100)               // largest acked
+			data = append(data, encodeVarInt(0)...) // delay
+			data = append(data, encodeVarInt(2)...) // num blocks
+			data = append(data, encodeVarInt(0)...) // first ack block
+			data = append(data, encodeVarInt(0)...) // gap
+			data = append(data, encodeVarInt(0)...) // ack block
+			data = append(data, encodeVarInt(1)...) // gap
+			data = append(data, encodeVarInt(1)...) // ack block
 			b := bytes.NewReader(data)
-			frame, err := parseAckFrame(b, protocol.AckDelayExponent, protocol.Version1)
+			frame, err := parseAckFrame(b, 0x2, protocol.AckDelayExponent, protocol.Version1)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(frame.LargestAcked()).To(Equal(protocol.PacketNumber(100)))
 			Expect(frame.LowestAcked()).To(Equal(protocol.PacketNumber(94)))
@@ -125,20 +119,21 @@ var _ = Describe("ACK Frame (for IETF QUIC)", func() {
 			Expect(err).ToNot(HaveOccurred())
 			for i := uint8(0); i < 8; i++ {
 				r := bytes.NewReader(b)
-				frame, err := parseAckFrame(r, protocol.AckDelayExponent+i, protocol.Version1)
+				typ, err := quicvarint.Read(r)
+				Expect(err).ToNot(HaveOccurred())
+				frame, err := parseAckFrame(r, typ, protocol.AckDelayExponent+i, protocol.Version1)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(frame.DelayTime).To(Equal(delayTime * (1 << i)))
 			}
 		})
 
 		It("gracefully handles overflows of the delay time", func() {
-			data := []byte{0x2}
-			data = append(data, encodeVarInt(100)...)              // largest acked
+			data := encodeVarInt(100)                              // largest acked
 			data = append(data, encodeVarInt(math.MaxUint64/5)...) // delay
 			data = append(data, encodeVarInt(0)...)                // num blocks
 			data = append(data, encodeVarInt(0)...)                // first ack block
 			b := bytes.NewReader(data)
-			frame, err := parseAckFrame(b, protocol.AckDelayExponent, protocol.Version1)
+			frame, err := parseAckFrame(b, 0x2, protocol.AckDelayExponent, protocol.Version1)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(frame.DelayTime).To(BeNumerically(">", 0))
 			// The maximum encodable duration is ~292 years.
@@ -146,25 +141,24 @@ var _ = Describe("ACK Frame (for IETF QUIC)", func() {
 		})
 
 		It("errors on EOF", func() {
-			data := []byte{0x2}
-			data = append(data, encodeVarInt(1000)...) // largest acked
-			data = append(data, encodeVarInt(0)...)    // delay
-			data = append(data, encodeVarInt(1)...)    // num blocks
-			data = append(data, encodeVarInt(100)...)  // first ack block
-			data = append(data, encodeVarInt(98)...)   // gap
-			data = append(data, encodeVarInt(50)...)   // ack block
-			_, err := parseAckFrame(bytes.NewReader(data), protocol.AckDelayExponent, protocol.Version1)
+			const typ = 0x2
+			data := encodeVarInt(1000)                // largest acked
+			data = append(data, encodeVarInt(0)...)   // delay
+			data = append(data, encodeVarInt(1)...)   // num blocks
+			data = append(data, encodeVarInt(100)...) // first ack block
+			data = append(data, encodeVarInt(98)...)  // gap
+			data = append(data, encodeVarInt(50)...)  // ack block
+			_, err := parseAckFrame(bytes.NewReader(data), typ, protocol.AckDelayExponent, protocol.Version1)
 			Expect(err).NotTo(HaveOccurred())
 			for i := range data {
-				_, err := parseAckFrame(bytes.NewReader(data[0:i]), protocol.AckDelayExponent, protocol.Version1)
+				_, err := parseAckFrame(bytes.NewReader(data[:i]), typ, protocol.AckDelayExponent, protocol.Version1)
 				Expect(err).To(MatchError(io.EOF))
 			}
 		})
 
 		Context("ACK_ECN", func() {
 			It("parses", func() {
-				data := []byte{0x3}
-				data = append(data, encodeVarInt(100)...)        // largest acked
+				data := encodeVarInt(100)                        // largest acked
 				data = append(data, encodeVarInt(0)...)          // delay
 				data = append(data, encodeVarInt(0)...)          // num blocks
 				data = append(data, encodeVarInt(10)...)         // first ack block
@@ -172,7 +166,7 @@ var _ = Describe("ACK Frame (for IETF QUIC)", func() {
 				data = append(data, encodeVarInt(0x12345)...)    // ECT(1)
 				data = append(data, encodeVarInt(0x12345678)...) // ECN-CE
 				b := bytes.NewReader(data)
-				frame, err := parseAckFrame(b, protocol.AckDelayExponent, protocol.Version1)
+				frame, err := parseAckFrame(b, 0x3, protocol.AckDelayExponent, protocol.Version1)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(frame.LargestAcked()).To(Equal(protocol.PacketNumber(100)))
 				Expect(frame.LowestAcked()).To(Equal(protocol.PacketNumber(90)))
@@ -181,8 +175,8 @@ var _ = Describe("ACK Frame (for IETF QUIC)", func() {
 			})
 
 			It("errors on EOF", func() {
-				data := []byte{0x3}
-				data = append(data, encodeVarInt(1000)...)       // largest acked
+				const typ = 0x3
+				data := encodeVarInt(1000)                       // largest acked
 				data = append(data, encodeVarInt(0)...)          // delay
 				data = append(data, encodeVarInt(1)...)          // num blocks
 				data = append(data, encodeVarInt(100)...)        // first ack block
@@ -191,10 +185,10 @@ var _ = Describe("ACK Frame (for IETF QUIC)", func() {
 				data = append(data, encodeVarInt(0x42)...)       // ECT(0)
 				data = append(data, encodeVarInt(0x12345)...)    // ECT(1)
 				data = append(data, encodeVarInt(0x12345678)...) // ECN-CE
-				_, err := parseAckFrame(bytes.NewReader(data), protocol.AckDelayExponent, protocol.Version1)
+				_, err := parseAckFrame(bytes.NewReader(data), typ, protocol.AckDelayExponent, protocol.Version1)
 				Expect(err).NotTo(HaveOccurred())
 				for i := range data {
-					_, err := parseAckFrame(bytes.NewReader(data[0:i]), protocol.AckDelayExponent, protocol.Version1)
+					_, err = parseAckFrame(bytes.NewReader(data[:i]), typ, protocol.AckDelayExponent, protocol.Version1)
 					Expect(err).To(MatchError(io.EOF))
 				}
 			})
@@ -246,7 +240,9 @@ var _ = Describe("ACK Frame (for IETF QUIC)", func() {
 			Expect(err).ToNot(HaveOccurred())
 			Expect(b).To(HaveLen(int(f.Length(protocol.Version1))))
 			r := bytes.NewReader(b)
-			frame, err := parseAckFrame(r, protocol.AckDelayExponent, protocol.Version1)
+			typ, err := quicvarint.Read(r)
+			Expect(err).ToNot(HaveOccurred())
+			frame, err := parseAckFrame(r, typ, protocol.AckDelayExponent, protocol.Version1)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(frame).To(Equal(f))
 			Expect(frame.HasMissingRanges()).To(BeFalse())
@@ -262,7 +258,9 @@ var _ = Describe("ACK Frame (for IETF QUIC)", func() {
 			Expect(err).ToNot(HaveOccurred())
 			Expect(b).To(HaveLen(int(f.Length(protocol.Version1))))
 			r := bytes.NewReader(b)
-			frame, err := parseAckFrame(r, protocol.AckDelayExponent, protocol.Version1)
+			typ, err := quicvarint.Read(r)
+			Expect(err).ToNot(HaveOccurred())
+			frame, err := parseAckFrame(r, typ, protocol.AckDelayExponent, protocol.Version1)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(frame).To(Equal(f))
 			Expect(frame.HasMissingRanges()).To(BeFalse())
@@ -281,7 +279,9 @@ var _ = Describe("ACK Frame (for IETF QUIC)", func() {
 			Expect(err).ToNot(HaveOccurred())
 			Expect(b).To(HaveLen(int(f.Length(protocol.Version1))))
 			r := bytes.NewReader(b)
-			frame, err := parseAckFrame(r, protocol.AckDelayExponent, protocol.Version1)
+			typ, err := quicvarint.Read(r)
+			Expect(err).ToNot(HaveOccurred())
+			frame, err := parseAckFrame(r, typ, protocol.AckDelayExponent, protocol.Version1)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(frame).To(Equal(f))
 			Expect(frame.HasMissingRanges()).To(BeTrue())
@@ -302,7 +302,9 @@ var _ = Describe("ACK Frame (for IETF QUIC)", func() {
 			Expect(err).ToNot(HaveOccurred())
 			Expect(b).To(HaveLen(int(f.Length(protocol.Version1))))
 			r := bytes.NewReader(b)
-			frame, err := parseAckFrame(r, protocol.AckDelayExponent, protocol.Version1)
+			typ, err := quicvarint.Read(r)
+			Expect(err).ToNot(HaveOccurred())
+			frame, err := parseAckFrame(r, typ, protocol.AckDelayExponent, protocol.Version1)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(frame).To(Equal(f))
 			Expect(frame.HasMissingRanges()).To(BeTrue())
@@ -324,7 +326,9 @@ var _ = Describe("ACK Frame (for IETF QUIC)", func() {
 			Expect(len(b)).To(BeNumerically(">", protocol.MaxAckFrameSize-5))
 			Expect(len(b)).To(BeNumerically("<=", protocol.MaxAckFrameSize))
 			r := bytes.NewReader(b)
-			frame, err := parseAckFrame(r, protocol.AckDelayExponent, protocol.Version1)
+			typ, err := quicvarint.Read(r)
+			Expect(err).ToNot(HaveOccurred())
+			frame, err := parseAckFrame(r, typ, protocol.AckDelayExponent, protocol.Version1)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(frame.HasMissingRanges()).To(BeTrue())
 			Expect(r.Len()).To(BeZero())

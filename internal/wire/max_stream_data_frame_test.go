@@ -2,6 +2,7 @@ package wire
 
 import (
 	"bytes"
+	"io"
 
 	"github.com/quic-go/quic-go/internal/protocol"
 	"github.com/quic-go/quic-go/quicvarint"
@@ -13,8 +14,7 @@ import (
 var _ = Describe("MAX_STREAM_DATA frame", func() {
 	Context("parsing", func() {
 		It("accepts sample frame", func() {
-			data := []byte{0x11}
-			data = append(data, encodeVarInt(0xdeadbeef)...) // Stream ID
+			data := encodeVarInt(0xdeadbeef)                 // Stream ID
 			data = append(data, encodeVarInt(0x12345678)...) // Offset
 			b := bytes.NewReader(data)
 			frame, err := parseMaxStreamDataFrame(b, protocol.Version1)
@@ -25,14 +25,14 @@ var _ = Describe("MAX_STREAM_DATA frame", func() {
 		})
 
 		It("errors on EOFs", func() {
-			data := []byte{0x11}
-			data = append(data, encodeVarInt(0xdeadbeef)...) // Stream ID
+			data := encodeVarInt(0xdeadbeef)                 // Stream ID
 			data = append(data, encodeVarInt(0x12345678)...) // Offset
-			_, err := parseMaxStreamDataFrame(bytes.NewReader(data), protocol.Version1)
+			b := bytes.NewReader(data)
+			_, err := parseMaxStreamDataFrame(b, protocol.Version1)
 			Expect(err).NotTo(HaveOccurred())
 			for i := range data {
-				_, err := parseMaxStreamDataFrame(bytes.NewReader(data[0:i]), protocol.Version1)
-				Expect(err).To(HaveOccurred())
+				_, err := parseMaxStreamDataFrame(bytes.NewReader(data[:i]), protocol.Version1)
+				Expect(err).To(MatchError(io.EOF))
 			}
 		})
 	})

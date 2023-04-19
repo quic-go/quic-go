@@ -2,6 +2,7 @@ package wire
 
 import (
 	"bytes"
+	"io"
 
 	"github.com/quic-go/quic-go/internal/protocol"
 	"github.com/quic-go/quic-go/quicvarint"
@@ -14,8 +15,7 @@ var _ = Describe("NEW_TOKEN frame", func() {
 	Context("parsing", func() {
 		It("accepts a sample frame", func() {
 			token := "Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua."
-			data := []byte{0x7}
-			data = append(data, encodeVarInt(uint64(len(token)))...)
+			data := encodeVarInt(uint64(len(token)))
 			data = append(data, token...)
 			b := bytes.NewReader(data)
 			f, err := parseNewTokenFrame(b, protocol.VersionWhatever)
@@ -25,8 +25,7 @@ var _ = Describe("NEW_TOKEN frame", func() {
 		})
 
 		It("rejects empty tokens", func() {
-			data := []byte{0x7}
-			data = append(data, encodeVarInt(uint64(0))...)
+			data := encodeVarInt(0)
 			b := bytes.NewReader(data)
 			_, err := parseNewTokenFrame(b, protocol.VersionWhatever)
 			Expect(err).To(MatchError("token must not be empty"))
@@ -34,14 +33,14 @@ var _ = Describe("NEW_TOKEN frame", func() {
 
 		It("errors on EOFs", func() {
 			token := "Lorem ipsum dolor sit amet, consectetur adipiscing elit"
-			data := []byte{0x7}
-			data = append(data, encodeVarInt(uint64(len(token)))...)
+			data := encodeVarInt(uint64(len(token)))
 			data = append(data, token...)
-			_, err := parseNewTokenFrame(bytes.NewReader(data), protocol.VersionWhatever)
+			r := bytes.NewReader(data)
+			_, err := parseNewTokenFrame(r, protocol.VersionWhatever)
 			Expect(err).NotTo(HaveOccurred())
 			for i := range data {
-				_, err := parseNewTokenFrame(bytes.NewReader(data[0:i]), protocol.VersionWhatever)
-				Expect(err).To(HaveOccurred())
+				_, err := parseNewTokenFrame(bytes.NewReader(data[:i]), protocol.VersionWhatever)
+				Expect(err).To(MatchError(io.EOF))
 			}
 		})
 	})

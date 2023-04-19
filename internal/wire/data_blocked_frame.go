@@ -13,9 +13,6 @@ type DataBlockedFrame struct {
 }
 
 func parseDataBlockedFrame(r *bytes.Reader, _ protocol.VersionNumber) (*DataBlockedFrame, error) {
-	if _, err := r.ReadByte(); err != nil {
-		return nil, err
-	}
 	offset, err := quicvarint.Read(r)
 	if err != nil {
 		return nil, err

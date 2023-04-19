@@ -13,10 +13,6 @@ type RetireConnectionIDFrame struct {
 }
 
 func parseRetireConnectionIDFrame(r *bytes.Reader, _ protocol.VersionNumber) (*RetireConnectionIDFrame, error) {
-	if _, err := r.ReadByte(); err != nil {
-		return nil, err
-	}
-
 	seq, err := quicvarint.Read(r)
 	if err != nil {
 		return nil, err
