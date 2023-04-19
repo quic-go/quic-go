@@ -10,6 +10,7 @@ import (
 
 	"github.com/quic-go/quic-go"
 	"github.com/quic-go/quic-go/http3"
+	"github.com/quic-go/quic-go/internal/qtls"
 	"github.com/quic-go/quic-go/interop/http09"
 	"github.com/quic-go/quic-go/interop/utils"
 	"github.com/quic-go/quic-go/qlog"
@@ -64,7 +65,8 @@ func main() {
 	case "versionnegotiation", "handshake", "retry", "transfer", "resumption", "multiconnect":
 		err = runHTTP09Server(quicConf)
 	case "chacha20":
-		tlsConf.CipherSuites = []uint16{tls.TLS_CHACHA20_POLY1305_SHA256}
+		reset := qtls.SetCipherSuite(tls.TLS_CHACHA20_POLY1305_SHA256)
+		defer reset()
 		err = runHTTP09Server(quicConf)
 	case "http3":
 		err = runHTTP3Server(quicConf)
