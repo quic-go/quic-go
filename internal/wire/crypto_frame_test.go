@@ -47,7 +47,7 @@ var _ = Describe("CRYPTO frame", func() {
 			}
 			b, err := f.Append(nil, protocol.Version1)
 			Expect(err).ToNot(HaveOccurred())
-			expected := []byte{0x6}
+			expected := []byte{cryptoFrameType}
 			expected = append(expected, encodeVarInt(0x123456)...) // offset
 			expected = append(expected, encodeVarInt(6)...)        // length
 			expected = append(expected, []byte("foobar")...)

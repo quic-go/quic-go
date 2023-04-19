@@ -17,15 +17,12 @@ func parseDataBlockedFrame(r *bytes.Reader, _ protocol.VersionNumber) (*DataBloc
 	if err != nil {
 		return nil, err
 	}
-	return &DataBlockedFrame{
-		MaximumData: protocol.ByteCount(offset),
-	}, nil
+	return &DataBlockedFrame{MaximumData: protocol.ByteCount(offset)}, nil
 }
 
 func (f *DataBlockedFrame) Append(b []byte, version protocol.VersionNumber) ([]byte, error) {
-	b = append(b, 0x14)
-	b = quicvarint.Append(b, uint64(f.MaximumData))
-	return b, nil
+	b = append(b, dataBlockedFrameType)
+	return quicvarint.Append(b, uint64(f.MaximumData)), nil
 }
 
 // Length of a written frame

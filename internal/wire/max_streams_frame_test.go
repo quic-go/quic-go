@@ -17,7 +17,7 @@ var _ = Describe("MAX_STREAMS frame", func() {
 		It("accepts a frame for a bidirectional stream", func() {
 			data := encodeVarInt(0xdecaf)
 			b := bytes.NewReader(data)
-			f, err := parseMaxStreamsFrame(b, 0x12, protocol.VersionWhatever)
+			f, err := parseMaxStreamsFrame(b, bidiMaxStreamsFrameType, protocol.VersionWhatever)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(f.Type).To(Equal(protocol.StreamTypeBidi))
 			Expect(f.MaxStreamNum).To(BeEquivalentTo(0xdecaf))
@@ -27,7 +27,7 @@ var _ = Describe("MAX_STREAMS frame", func() {
 		It("accepts a frame for a bidirectional stream", func() {
 			data := encodeVarInt(0xdecaf)
 			b := bytes.NewReader(data)
-			f, err := parseMaxStreamsFrame(b, 0x13, protocol.VersionWhatever)
+			f, err := parseMaxStreamsFrame(b, uniMaxStreamsFrameType, protocol.VersionWhatever)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(f.Type).To(Equal(protocol.StreamTypeUni))
 			Expect(f.MaxStreamNum).To(BeEquivalentTo(0xdecaf))
@@ -87,7 +87,7 @@ var _ = Describe("MAX_STREAMS frame", func() {
 			}
 			b, err := f.Append(nil, protocol.VersionWhatever)
 			Expect(err).ToNot(HaveOccurred())
-			expected := []byte{0x12}
+			expected := []byte{bidiMaxStreamsFrameType}
 			expected = append(expected, encodeVarInt(0xdeadbeef)...)
 			Expect(b).To(Equal(expected))
 		})
@@ -99,7 +99,7 @@ var _ = Describe("MAX_STREAMS frame", func() {
 			}
 			b, err := f.Append(nil, protocol.VersionWhatever)
 			Expect(err).ToNot(HaveOccurred())
-			expected := []byte{0x13}
+			expected := []byte{uniMaxStreamsFrameType}
 			expected = append(expected, encodeVarInt(0xdecafbad)...)
 			Expect(b).To(Equal(expected))
 		})

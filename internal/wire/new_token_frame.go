@@ -33,7 +33,7 @@ func parseNewTokenFrame(r *bytes.Reader, _ protocol.VersionNumber) (*NewTokenFra
 }
 
 func (f *NewTokenFrame) Append(b []byte, _ protocol.VersionNumber) ([]byte, error) {
-	b = append(b, 0x7)
+	b = append(b, newTokenFrameType)
 	b = quicvarint.Append(b, uint64(len(f.Token)))
 	b = append(b, f.Token...)
 	return b, nil

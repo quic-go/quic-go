@@ -74,7 +74,7 @@ var _ = Describe("NEW_CONNECTION_ID frame", func() {
 			}
 			b, err := frame.Append(nil, protocol.Version1)
 			Expect(err).ToNot(HaveOccurred())
-			expected := []byte{0x18}
+			expected := []byte{newConnectionIDFrameType}
 			expected = append(expected, encodeVarInt(0x1337)...)
 			expected = append(expected, encodeVarInt(0x42)...)
 			expected = append(expected, 6)

@@ -24,7 +24,7 @@ func parsePathChallengeFrame(r *bytes.Reader, _ protocol.VersionNumber) (*PathCh
 }
 
 func (f *PathChallengeFrame) Append(b []byte, _ protocol.VersionNumber) ([]byte, error) {
-	b = append(b, 0x1a)
+	b = append(b, pathChallengeFrameType)
 	b = append(b, f.Data[:]...)
 	return b, nil
 }

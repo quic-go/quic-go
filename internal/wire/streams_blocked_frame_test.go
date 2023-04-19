@@ -17,7 +17,7 @@ var _ = Describe("STREAMS_BLOCKED frame", func() {
 		It("accepts a frame for bidirectional streams", func() {
 			expected := encodeVarInt(0x1337)
 			b := bytes.NewReader(expected)
-			f, err := parseStreamsBlockedFrame(b, 0x16, protocol.VersionWhatever)
+			f, err := parseStreamsBlockedFrame(b, bidiStreamBlockedFrameType, protocol.VersionWhatever)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(f.Type).To(Equal(protocol.StreamTypeBidi))
 			Expect(f.StreamLimit).To(BeEquivalentTo(0x1337))
@@ -27,7 +27,7 @@ var _ = Describe("STREAMS_BLOCKED frame", func() {
 		It("accepts a frame for unidirectional streams", func() {
 			expected := encodeVarInt(0x7331)
 			b := bytes.NewReader(expected)
-			f, err := parseStreamsBlockedFrame(b, 0x17, protocol.VersionWhatever)
+			f, err := parseStreamsBlockedFrame(b, uniStreamBlockedFrameType, protocol.VersionWhatever)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(f.Type).To(Equal(protocol.StreamTypeUni))
 			Expect(f.StreamLimit).To(BeEquivalentTo(0x7331))
@@ -37,10 +37,10 @@ var _ = Describe("STREAMS_BLOCKED frame", func() {
 		It("errors on EOFs", func() {
 			data := encodeVarInt(0x12345678)
 			b := bytes.NewReader(data)
-			_, err := parseStreamsBlockedFrame(b, 0x16, protocol.Version1)
+			_, err := parseStreamsBlockedFrame(b, bidiStreamBlockedFrameType, protocol.Version1)
 			Expect(err).ToNot(HaveOccurred())
 			for i := range data {
-				_, err := parseStreamsBlockedFrame(bytes.NewReader(data[:i]), 0x16, protocol.Version1)
+				_, err := parseStreamsBlockedFrame(bytes.NewReader(data[:i]), bidiStreamBlockedFrameType, protocol.Version1)
 				Expect(err).To(MatchError(io.EOF))
 			}
 		})
@@ -87,7 +87,7 @@ var _ = Describe("STREAMS_BLOCKED frame", func() {
 			}
 			b, err := f.Append(nil, protocol.VersionWhatever)
 			Expect(err).ToNot(HaveOccurred())
-			expected := []byte{0x16}
+			expected := []byte{bidiStreamBlockedFrameType}
 			expected = append(expected, encodeVarInt(0xdeadbeefcafe)...)
 			Expect(b).To(Equal(expected))
 		})
@@ -99,7 +99,7 @@ var _ = Describe("STREAMS_BLOCKED frame", func() {
 			}
 			b, err := f.Append(nil, protocol.VersionWhatever)
 			Expect(err).ToNot(HaveOccurred())
-			expected := []byte{0x17}
+			expected := []byte{uniStreamBlockedFrameType}
 			expected = append(expected, encodeVarInt(0xdeadbeefcafe)...)
 			Expect(b).To(Equal(expected))
 		})

@@ -36,7 +36,7 @@ var _ = Describe("NEW_CONNECTION_ID frame", func() {
 			frame := &RetireConnectionIDFrame{SequenceNumber: 0x1337}
 			b, err := frame.Append(nil, protocol.Version1)
 			Expect(err).ToNot(HaveOccurred())
-			expected := []byte{0x19}
+			expected := []byte{retireConnectionIDFrameType}
 			expected = append(expected, encodeVarInt(0x1337)...)
 			Expect(b).To(Equal(expected))
 		})

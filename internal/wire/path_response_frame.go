@@ -24,7 +24,7 @@ func parsePathResponseFrame(r *bytes.Reader, _ protocol.VersionNumber) (*PathRes
 }
 
 func (f *PathResponseFrame) Append(b []byte, _ protocol.VersionNumber) ([]byte, error) {
-	b = append(b, 0x1b)
+	b = append(b, pathResponseFrameType)
 	b = append(b, f.Data[:]...)
 	return b, nil
 }

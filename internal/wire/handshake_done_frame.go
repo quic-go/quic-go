@@ -8,7 +8,7 @@ import (
 type HandshakeDoneFrame struct{}
 
 func (f *HandshakeDoneFrame) Append(b []byte, _ protocol.VersionNumber) ([]byte, error) {
-	return append(b, 0x1e), nil
+	return append(b, handshakeDoneFrameType), nil
 }
 
 // Length of a written frame

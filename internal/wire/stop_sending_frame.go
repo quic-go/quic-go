@@ -37,7 +37,7 @@ func (f *StopSendingFrame) Length(_ protocol.VersionNumber) protocol.ByteCount {
 }
 
 func (f *StopSendingFrame) Append(b []byte, _ protocol.VersionNumber) ([]byte, error) {
-	b = append(b, 0x5)
+	b = append(b, stopSendingFrameType)
 	b = quicvarint.Append(b, uint64(f.StreamID))
 	b = quicvarint.Append(b, uint64(f.ErrorCode))
 	return b, nil
