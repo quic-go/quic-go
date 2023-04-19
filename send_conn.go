@@ -25,11 +25,18 @@ type sconn struct {
 var _ sendConn = &sconn{}
 
 func newSendConn(c rawConn, remote net.Addr, info *packetInfo) *sconn {
+	oob := info.OOB()
+	if c.capabilities().GSO {
+		// add 32 bytes, so we can add the UDP_SEGMENT msg
+		l := len(oob)
+		oob = append(oob, make([]byte, 32)...)
+		oob = oob[:l]
+	}
 	return &sconn{
 		rawConn:    c,
 		remoteAddr: remote,
 		info:       info,
-		oob:        info.OOB(),
+		oob:        oob,
 	}
 }
 

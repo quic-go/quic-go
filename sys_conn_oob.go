@@ -62,7 +62,7 @@ type oobConn struct {
 	messages []ipv4.Message
 	buffers  [batchSize]*packetBuffer
 
-	supportsDF bool
+	cap connCapabilities
 }
 
 var _ rawConn = &oobConn{}
@@ -124,6 +124,10 @@ func newConn(c OOBCapablePacketConn, supportsDF bool) (*oobConn, error) {
 		bc = ipv4.NewPacketConn(c)
 	}
 
+	// Try enabling GSO.
+	// This will only succeed on Linux, and only for kernels > 4.18.
+	supportsGSO := maybeSetGSO(rawConn)
+
 	msgs := make([]ipv4.Message, batchSize)
 	for i := range msgs {
 		// preallocate the [][]byte
@@ -134,8 +138,9 @@ func newConn(c OOBCapablePacketConn, supportsDF bool) (*oobConn, error) {
 		batchConn:            bc,
 		messages:             msgs,
 		readPos:              batchSize,
-		supportsDF:           supportsDF,
 	}
+	oobConn.cap.DF = supportsDF
+	oobConn.cap.GSO = supportsGSO
 	for i := 0; i < batchSize; i++ {
 		oobConn.messages[i].OOB = make([]byte, oobBufferSize)
 	}
@@ -232,13 +237,26 @@ func (c *oobConn) ReadPacket() (*receivedPacket, error) {
 	}, nil
 }
 
+// WriteTo (re)implements the net.PacketConn method.
+// This is needed for users who call OptimizeConn to be able to send (non-QUIC) packets on the underlying connection.
+// With GSO enabled, this would otherwise not be needed, as the kernel requires the UDP_SEGMENT message to be set.
+func (c *oobConn) WriteTo(p []byte, addr net.Addr) (int, error) {
+	return c.WritePacket(p, addr, nil)
+}
+
+// WritePacket writes a new packet.
+// If the connection supports GSO (and we activated GSO support before),
+// it appends the UDP_SEGMENT size message to oob.
 func (c *oobConn) WritePacket(b []byte, addr net.Addr, oob []byte) (n int, err error) {
+	if c.cap.GSO {
+		oob = appendUDPSegmentSizeMsg(oob, len(b))
+	}
 	n, _, err = c.OOBCapablePacketConn.WriteMsgUDP(b, oob, addr.(*net.UDPAddr))
 	return n, err
 }
 
 func (c *oobConn) capabilities() connCapabilities {
-	return connCapabilities{DF: c.supportsDF}
+	return c.cap
 }
 
 func (info *packetInfo) OOB() []byte {

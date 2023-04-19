@@ -691,12 +691,12 @@ runLoop:
 
 	s.cryptoStreamHandler.Close()
 	<-handshaking
+	s.sendQueue.Close() // close the send queue before sending the CONNECTION_CLOSE
 	s.handleCloseError(&closeErr)
 	if e := (&errCloseForRecreating{}); !errors.As(closeErr.err, &e) && s.tracer != nil {
 		s.tracer.Close()
 	}
 	s.logger.Infof("Connection %s closed.", s.logID)
-	s.sendQueue.Close()
 	s.timer.Stop()
 	return closeErr.err
 }

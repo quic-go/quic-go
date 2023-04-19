@@ -2,7 +2,9 @@
 
 package quic
 
-import "syscall"
+import (
+	"syscall"
+)
 
 func setDF(syscall.RawConn) (bool, error) {
 	// no-op on unsupported platforms
