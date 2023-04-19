@@ -4,15 +4,15 @@ import (
 	"crypto/rand"
 	"crypto/tls"
 	"fmt"
+	"testing"
 	"time"
-
-	"github.com/golang/mock/gomock"
 
 	mocklogging "github.com/quic-go/quic-go/internal/mocks/logging"
 	"github.com/quic-go/quic-go/internal/protocol"
 	"github.com/quic-go/quic-go/internal/qerr"
 	"github.com/quic-go/quic-go/internal/utils"
 
+	"github.com/golang/mock/gomock"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 )
@@ -282,16 +282,25 @@ var _ = Describe("Updatable AEAD", func() {
 							})
 
 							Context("initiating key updates", func() {
+								const firstKeyUpdateInterval = 5
 								const keyUpdateInterval = 20
+								var origKeyUpdateInterval, origFirstKeyUpdateInterval uint64
 
 								BeforeEach(func() {
-									Expect(server.keyUpdateInterval).To(BeEquivalentTo(protocol.KeyUpdateInterval))
-									server.keyUpdateInterval = keyUpdateInterval
+									origKeyUpdateInterval = KeyUpdateInterval
+									origFirstKeyUpdateInterval = FirstKeyUpdateInterval
+									KeyUpdateInterval = keyUpdateInterval
+									FirstKeyUpdateInterval = firstKeyUpdateInterval
 									server.SetHandshakeConfirmed()
 								})
 
+								AfterEach(func() {
+									KeyUpdateInterval = origKeyUpdateInterval
+									FirstKeyUpdateInterval = origFirstKeyUpdateInterval
+								})
+
 								It("initiates a key update after sealing the maximum number of packets, for the first update", func() {
-									for i := 0; i < keyUpdateInterval; i++ {
+									for i := 0; i < firstKeyUpdateInterval; i++ {
 										pn := protocol.PacketNumber(i)
 										Expect(server.KeyPhase()).To(Equal(protocol.KeyPhaseZero))
 										server.Seal(nil, msg, pn, ad)
@@ -323,7 +332,7 @@ var _ = Describe("Updatable AEAD", func() {
 
 								It("errors if the peer acknowledges a packet sent in the next key phase using the old key phase", func() {
 									// First make sure that we update our keys.
-									for i := 0; i < keyUpdateInterval; i++ {
+									for i := 0; i < firstKeyUpdateInterval; i++ {
 										pn := protocol.PacketNumber(i)
 										Expect(server.KeyPhase()).To(Equal(protocol.KeyPhaseZero))
 										server.Seal(nil, msg, pn, ad)
@@ -331,7 +340,7 @@ var _ = Describe("Updatable AEAD", func() {
 									serverTracer.EXPECT().UpdatedKey(protocol.KeyPhase(1), false)
 									Expect(server.KeyPhase()).To(Equal(protocol.KeyPhaseOne))
 									// Now that our keys are updated, send a packet using the new keys.
-									const nextPN = keyUpdateInterval + 1
+									const nextPN = firstKeyUpdateInterval + 1
 									server.Seal(nil, msg, nextPN, ad)
 									// We haven't decrypted any packet in the new key phase yet.
 									// This means that the ACK must have been sent in the old key phase.
@@ -343,7 +352,7 @@ var _ = Describe("Updatable AEAD", func() {
 
 								It("doesn't error before actually sending a packet in the new key phase", func() {
 									// First make sure that we update our keys.
-									for i := 0; i < keyUpdateInterval; i++ {
+									for i := 0; i < firstKeyUpdateInterval; i++ {
 										pn := protocol.PacketNumber(i)
 										Expect(server.KeyPhase()).To(Equal(protocol.KeyPhaseZero))
 										server.Seal(nil, msg, pn, ad)
@@ -361,7 +370,7 @@ var _ = Describe("Updatable AEAD", func() {
 								})
 
 								It("initiates a key update after opening the maximum number of packets, for the first update", func() {
-									for i := 0; i < keyUpdateInterval; i++ {
+									for i := 0; i < firstKeyUpdateInterval; i++ {
 										pn := protocol.PacketNumber(i)
 										Expect(server.KeyPhase()).To(Equal(protocol.KeyPhaseZero))
 										encrypted := client.Seal(nil, msg, pn, ad)
@@ -394,7 +403,7 @@ var _ = Describe("Updatable AEAD", func() {
 
 								It("drops keys 3 PTOs after a key update", func() {
 									now := time.Now()
-									for i := 0; i < keyUpdateInterval; i++ {
+									for i := 0; i < firstKeyUpdateInterval; i++ {
 										pn := protocol.PacketNumber(i)
 										Expect(server.KeyPhase()).To(Equal(protocol.KeyPhaseZero))
 										server.Seal(nil, msg, pn, ad)
@@ -430,7 +439,7 @@ var _ = Describe("Updatable AEAD", func() {
 									data1 := client.Seal(nil, msg, 1, ad)
 									_, err := server.Open(nil, data1, now, 1, protocol.KeyPhaseZero, ad)
 									Expect(err).ToNot(HaveOccurred())
-									for i := 0; i < keyUpdateInterval; i++ {
+									for i := 0; i < firstKeyUpdateInterval; i++ {
 										pn := protocol.PacketNumber(i)
 										Expect(server.KeyPhase()).To(Equal(protocol.KeyPhaseZero))
 										server.Seal(nil, msg, pn, ad)
@@ -446,7 +455,7 @@ var _ = Describe("Updatable AEAD", func() {
 								})
 
 								It("drops keys early when the peer forces initiates a key update within the 3 PTO period", func() {
-									for i := 0; i < keyUpdateInterval; i++ {
+									for i := 0; i < firstKeyUpdateInterval; i++ {
 										pn := protocol.PacketNumber(i)
 										Expect(server.KeyPhase()).To(Equal(protocol.KeyPhaseZero))
 										server.Seal(nil, msg, pn, ad)
@@ -483,7 +492,7 @@ var _ = Describe("Updatable AEAD", func() {
 								It("drops keys early when we initiate another key update within the 3 PTO period", func() {
 									server.SetHandshakeConfirmed()
 									// send so many packets that we initiate the first key update
-									for i := 0; i < keyUpdateInterval; i++ {
+									for i := 0; i < firstKeyUpdateInterval; i++ {
 										pn := protocol.PacketNumber(i)
 										Expect(server.KeyPhase()).To(Equal(protocol.KeyPhaseZero))
 										server.Seal(nil, msg, pn, ad)
@@ -525,3 +534,60 @@ var _ = Describe("Updatable AEAD", func() {
 		})
 	}
 })
+
+func getClientAndServer() (client, server *updatableAEAD) {
+	trafficSecret1 := make([]byte, 16)
+	trafficSecret2 := make([]byte, 16)
+	rand.Read(trafficSecret1)
+	rand.Read(trafficSecret2)
+
+	cs := cipherSuites[0]
+	rttStats := utils.NewRTTStats()
+	client = newUpdatableAEAD(rttStats, nil, utils.DefaultLogger, protocol.Version1)
+	server = newUpdatableAEAD(rttStats, nil, utils.DefaultLogger, protocol.Version1)
+	client.SetReadKey(cs, trafficSecret2)
+	client.SetWriteKey(cs, trafficSecret1)
+	server.SetReadKey(cs, trafficSecret1)
+	server.SetWriteKey(cs, trafficSecret2)
+	return
+}
+
+func BenchmarkPacketEncryption(b *testing.B) {
+	client, _ := getClientAndServer()
+	const l = 1200
+	src := make([]byte, l)
+	rand.Read(src)
+	ad := make([]byte, 32)
+	rand.Read(ad)
+
+	for i := 0; i < b.N; i++ {
+		src = client.Seal(src[:0], src[:l], protocol.PacketNumber(i), ad)
+	}
+}
+
+func BenchmarkPacketDecryption(b *testing.B) {
+	client, server := getClientAndServer()
+	const l = 1200
+	src := make([]byte, l)
+	dst := make([]byte, l)
+	rand.Read(src)
+	ad := make([]byte, 32)
+	rand.Read(ad)
+	src = client.Seal(src[:0], src[:l], 1337, ad)
+
+	for i := 0; i < b.N; i++ {
+		if _, err := server.Open(dst[:0], src, time.Time{}, 1337, protocol.KeyPhaseZero, ad); err != nil {
+			b.Fatalf("opening failed: %v", err)
+		}
+	}
+}
+
+func BenchmarkRollKeys(b *testing.B) {
+	client, _ := getClientAndServer()
+	for i := 0; i < b.N; i++ {
+		client.rollKeys()
+	}
+	if int(client.keyPhase) != b.N {
+		b.Fatal("didn't roll keys often enough")
+	}
+}

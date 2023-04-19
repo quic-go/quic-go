@@ -89,7 +89,7 @@ func runTestcase(testcase string) error {
 	switch testcase {
 	case "handshake", "transfer", "retry":
 	case "keyupdate":
-		handshake.KeyUpdateInterval = 100
+		handshake.FirstKeyUpdateInterval = 100
 	case "chacha20":
 		reset := qtls.SetCipherSuite(tls.TLS_CHACHA20_POLY1305_SHA256)
 		defer reset()
