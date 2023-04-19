@@ -11,6 +11,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/quic-go/quic-go/quicvarint"
+
 	"github.com/quic-go/quic-go"
 	quicproxy "github.com/quic-go/quic-go/integrationtests/tools/proxy"
 	"github.com/quic-go/quic-go/internal/protocol"
@@ -283,7 +285,8 @@ var _ = Describe("Handshake drop tests", func() {
 			b := make([]byte, 2500) // the ClientHello will now span across 3 packets
 			mrand.New(mrand.NewSource(GinkgoRandomSeed())).Read(b)
 			wire.AdditionalTransportParametersClient = map[uint64][]byte{
-				uint64(27 + 31*mrand.Intn(100)): b,
+				// Avoid random collisions with the greased transport parameters.
+				uint64(27+31*(1000+mrand.Int63()/31)) % quicvarint.Max: b,
 			}
 
 			startListenerAndProxy(func(d quicproxy.Direction, _ []byte) bool {
