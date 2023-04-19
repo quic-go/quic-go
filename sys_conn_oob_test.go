@@ -216,7 +216,7 @@ var _ = Describe("OOB Conn Test", func() {
 				Expect(ms).To(HaveLen(batchSize))
 				for i := 0; i < numMsgRead; i++ {
 					Expect(ms[i].Buffers).To(HaveLen(1))
-					Expect(ms[i].Buffers[0]).To(HaveLen(int(protocol.MaxPacketBufferSize)))
+					Expect(ms[i].Buffers[0]).To(HaveLen(protocol.MaxPacketBufferSize))
 					data := []byte(fmt.Sprintf("message %d", counter))
 					counter++
 					ms[i].Buffers[0] = data
