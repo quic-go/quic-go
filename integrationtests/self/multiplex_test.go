@@ -137,7 +137,6 @@ var _ = Describe("Multiplexing", func() {
 			Expect(err).ToNot(HaveOccurred())
 			defer conn.Close()
 			tr := &quic.Transport{Conn: conn}
-
 			server, err := tr.Listen(
 				getTLSConfig(),
 				getQuicConfig(nil),

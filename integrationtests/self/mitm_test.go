@@ -35,7 +35,11 @@ var _ = Describe("MITM test", func() {
 		Expect(err).ToNot(HaveOccurred())
 		serverUDPConn, err = net.ListenUDP("udp", addr)
 		Expect(err).ToNot(HaveOccurred())
-		ln, err := quic.Listen(serverUDPConn, getTLSConfig(), serverConfig)
+		tr := &quic.Transport{
+			Conn:               serverUDPConn,
+			ConnectionIDLength: connIDLen,
+		}
+		ln, err := tr.Listen(getTLSConfig(), serverConfig)
 		Expect(err).ToNot(HaveOccurred())
 		done := make(chan struct{})
 		go func() {
@@ -68,7 +72,7 @@ var _ = Describe("MITM test", func() {
 	}
 
 	BeforeEach(func() {
-		serverConfig = getQuicConfig(&quic.Config{ConnectionIDLength: connIDLen})
+		serverConfig = getQuicConfig(nil)
 		addr, err := net.ResolveUDPAddr("udp", "localhost:0")
 		Expect(err).ToNot(HaveOccurred())
 		clientUDPConn, err = net.ListenUDP("udp", addr)
@@ -146,12 +150,15 @@ var _ = Describe("MITM test", func() {
 				defer closeFn()
 				raddr, err := net.ResolveUDPAddr("udp", fmt.Sprintf("localhost:%d", proxyPort))
 				Expect(err).ToNot(HaveOccurred())
-				conn, err := quic.Dial(
+				tr := &quic.Transport{
+					Conn:               clientUDPConn,
+					ConnectionIDLength: connIDLen,
+				}
+				conn, err := tr.Dial(
 					context.Background(),
-					clientUDPConn,
 					raddr,
 					getTLSClientConfig(),
-					getQuicConfig(&quic.Config{ConnectionIDLength: connIDLen}),
+					getQuicConfig(nil),
 				)
 				Expect(err).ToNot(HaveOccurred())
 				str, err := conn.AcceptUniStream(context.Background())
@@ -190,12 +197,15 @@ var _ = Describe("MITM test", func() {
 			defer closeFn()
 			raddr, err := net.ResolveUDPAddr("udp", fmt.Sprintf("localhost:%d", proxyPort))
 			Expect(err).ToNot(HaveOccurred())
-			conn, err := quic.Dial(
+			tr := &quic.Transport{
+				Conn:               clientUDPConn,
+				ConnectionIDLength: connIDLen,
+			}
+			conn, err := tr.Dial(
 				context.Background(),
-				clientUDPConn,
 				raddr,
 				getTLSClientConfig(),
-				getQuicConfig(&quic.Config{ConnectionIDLength: connIDLen}),
+				getQuicConfig(nil),
 			)
 			Expect(err).ToNot(HaveOccurred())
 			str, err := conn.AcceptUniStream(context.Background())
@@ -302,20 +312,20 @@ var _ = Describe("MITM test", func() {
 		const rtt = 20 * time.Millisecond
 
 		runTest := func(delayCb quicproxy.DelayCallback) (closeFn func(), err error) {
-			proxyPort, closeFn := startServerAndProxy(delayCb, nil)
+			proxyPort, serverCloseFn := startServerAndProxy(delayCb, nil)
 			raddr, err := net.ResolveUDPAddr("udp", fmt.Sprintf("localhost:%d", proxyPort))
 			Expect(err).ToNot(HaveOccurred())
-			_, err = quic.Dial(
+			tr := &quic.Transport{
+				Conn:               clientUDPConn,
+				ConnectionIDLength: connIDLen,
+			}
+			_, err = tr.Dial(
 				context.Background(),
-				clientUDPConn,
 				raddr,
 				getTLSClientConfig(),
-				getQuicConfig(&quic.Config{
-					ConnectionIDLength:   connIDLen,
-					HandshakeIdleTimeout: 2 * time.Second,
-				}),
+				getQuicConfig(&quic.Config{HandshakeIdleTimeout: 2 * time.Second}),
 			)
-			return closeFn, err
+			return func() { tr.Close(); serverCloseFn() }, err
 		}
 
 		// fails immediately because client connection closes when it can't find compatible version

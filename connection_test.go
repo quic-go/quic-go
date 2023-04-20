@@ -113,6 +113,7 @@ var _ = Describe("Connection", func() {
 			clientDestConnID,
 			destConnID,
 			srcConnID,
+			&protocol.DefaultConnectionIDGenerator{},
 			protocol.StatelessResetToken{},
 			populateServerConfig(&Config{DisablePathMTUDiscovery: true}),
 			nil, // tls.Config
@@ -2015,8 +2016,6 @@ var _ = Describe("Connection", func() {
 			packer.EXPECT().HandleTransportParameters(params)
 			packer.EXPECT().PackCoalescedPacket(false, conn.version).MaxTimes(3)
 			Expect(conn.earlyConnReady()).ToNot(BeClosed())
-			connRunner.EXPECT().GetStatelessResetToken(gomock.Any()).Times(2)
-			connRunner.EXPECT().Add(gomock.Any(), conn).Times(2)
 			tracer.EXPECT().ReceivedTransportParameters(params)
 			conn.handleTransportParameters(params)
 			Expect(conn.earlyConnReady()).To(BeClosed())
@@ -2378,7 +2377,7 @@ var _ = Describe("Client Connection", func() {
 	}
 
 	BeforeEach(func() {
-		quicConf = populateClientConfig(&Config{}, true)
+		quicConf = populateConfig(&Config{})
 		tlsConf = nil
 	})
 
@@ -2402,6 +2401,7 @@ var _ = Describe("Client Connection", func() {
 			connRunner,
 			destConnID,
 			protocol.ParseConnectionID([]byte{1, 2, 3, 4, 5, 6, 7, 8}),
+			&protocol.DefaultConnectionIDGenerator{},
 			quicConf,
 			tlsConf,
 			42, // initial packet number

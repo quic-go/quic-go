@@ -244,7 +244,7 @@ var _ = Describe("Handshake tests", func() {
 			Expect(err).ToNot(HaveOccurred())
 			pconn, err = net.ListenUDP("udp", laddr)
 			Expect(err).ToNot(HaveOccurred())
-			dialer = &quic.Transport{Conn: pconn}
+			dialer = &quic.Transport{Conn: pconn, ConnectionIDLength: 4}
 		})
 
 		AfterEach(func() {
@@ -303,7 +303,7 @@ var _ = Describe("Handshake tests", func() {
 			// This should free one spot in the queue.
 			Expect(firstConn.CloseWithError(0, ""))
 			Eventually(firstConn.Context().Done()).Should(BeClosed())
-			time.Sleep(scaleDuration(20 * time.Millisecond))
+			time.Sleep(scaleDuration(200 * time.Millisecond))
 
 			// dial again, and expect that this dial succeeds
 			_, err = dial()

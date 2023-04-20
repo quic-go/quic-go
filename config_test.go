@@ -142,18 +142,18 @@ var _ = Describe("Config", func() {
 			var calledAddrValidation bool
 			c1 := &Config{}
 			c1.RequireAddressValidation = func(net.Addr) bool { calledAddrValidation = true; return true }
-			c2 := populateConfig(c1, protocol.DefaultConnectionIDLength)
+			c2 := populateConfig(c1)
 			c2.RequireAddressValidation(&net.UDPAddr{})
 			Expect(calledAddrValidation).To(BeTrue())
 		})
 
 		It("copies non-function fields", func() {
 			c := configWithNonZeroNonFunctionFields()
-			Expect(populateConfig(c, protocol.DefaultConnectionIDLength)).To(Equal(c))
+			Expect(populateConfig(c)).To(Equal(c))
 		})
 
 		It("populates empty fields with default values", func() {
-			c := populateConfig(&Config{}, protocol.DefaultConnectionIDLength)
+			c := populateConfig(&Config{})
 			Expect(c.Versions).To(Equal(protocol.SupportedVersions))
 			Expect(c.HandshakeIdleTimeout).To(Equal(protocol.DefaultHandshakeIdleTimeout))
 			Expect(c.InitialStreamReceiveWindow).To(BeEquivalentTo(protocol.DefaultInitialMaxStreamData))
@@ -168,18 +168,7 @@ var _ = Describe("Config", func() {
 
 		It("populates empty fields with default values, for the server", func() {
 			c := populateServerConfig(&Config{})
-			Expect(c.ConnectionIDLength).To(Equal(protocol.DefaultConnectionIDLength))
 			Expect(c.RequireAddressValidation).ToNot(BeNil())
-		})
-
-		It("sets a default connection ID length if we didn't create the conn, for the client", func() {
-			c := populateClientConfig(&Config{}, false)
-			Expect(c.ConnectionIDLength).To(Equal(protocol.DefaultConnectionIDLength))
-		})
-
-		It("doesn't set a default connection ID length if we created the conn, for the client", func() {
-			c := populateClientConfig(&Config{}, true)
-			Expect(c.ConnectionIDLength).To(BeZero())
 		})
 	})
 })

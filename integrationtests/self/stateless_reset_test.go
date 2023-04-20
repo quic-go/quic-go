@@ -28,8 +28,9 @@ var _ = Describe("Stateless Resets", func() {
 			c, err := net.ListenUDP("udp", nil)
 			Expect(err).ToNot(HaveOccurred())
 			tr := &quic.Transport{
-				Conn:              c,
-				StatelessResetKey: &statelessResetKey,
+				Conn:               c,
+				StatelessResetKey:  &statelessResetKey,
+				ConnectionIDLength: connIDLen,
 			}
 			defer tr.Close()
 			ln, err := tr.Listen(getTLSConfig(), getQuicConfig(nil))
@@ -61,14 +62,21 @@ var _ = Describe("Stateless Resets", func() {
 			Expect(err).ToNot(HaveOccurred())
 			defer proxy.Close()
 
-			conn, err := quic.DialAddr(
+			addr, err := net.ResolveUDPAddr("udp", "localhost:0")
+			Expect(err).ToNot(HaveOccurred())
+			udpConn, err := net.ListenUDP("udp", addr)
+			Expect(err).ToNot(HaveOccurred())
+			defer udpConn.Close()
+			cl := &quic.Transport{
+				Conn:               udpConn,
+				ConnectionIDLength: connIDLen,
+			}
+			defer cl.Close()
+			conn, err := cl.Dial(
 				context.Background(),
-				fmt.Sprintf("localhost:%d", proxy.LocalPort()),
+				&net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: proxy.LocalPort()},
 				getTLSClientConfig(),
-				getQuicConfig(&quic.Config{
-					ConnectionIDLength: connIDLen,
-					MaxIdleTimeout:     2 * time.Second,
-				}),
+				getQuicConfig(&quic.Config{MaxIdleTimeout: 2 * time.Second}),
 			)
 			Expect(err).ToNot(HaveOccurred())
 			str, err := conn.AcceptStream(context.Background())
@@ -86,8 +94,9 @@ var _ = Describe("Stateless Resets", func() {
 			// We need to create a new Transport here, since the old one is still sending out
 			// CONNECTION_CLOSE packets for (recently) closed connections).
 			tr2 := &quic.Transport{
-				Conn:              c,
-				StatelessResetKey: &statelessResetKey,
+				Conn:               c,
+				ConnectionIDLength: connIDLen,
+				StatelessResetKey:  &statelessResetKey,
 			}
 			defer tr2.Close()
 			ln2, err := tr2.Listen(getTLSConfig(), getQuicConfig(nil))

@@ -25,8 +25,9 @@ type client struct {
 	tlsConf *tls.Config
 	config  *Config
 
-	srcConnID  protocol.ConnectionID
-	destConnID protocol.ConnectionID
+	connIDGenerator ConnectionIDGenerator
+	srcConnID       protocol.ConnectionID
+	destConnID      protocol.ConnectionID
 
 	initialPacketNumber  protocol.PacketNumber
 	hasNegotiatedVersion bool
@@ -133,6 +134,7 @@ func setupTransport(c net.PacketConn, tlsConf *tls.Config, createdPacketConn boo
 func dial(
 	ctx context.Context,
 	conn net.PacketConn,
+	connIDGenerator ConnectionIDGenerator,
 	packetHandlers packetHandlerManager,
 	addr net.Addr,
 	tlsConf *tls.Config,
@@ -141,7 +143,7 @@ func dial(
 	use0RTT bool,
 	createdPacketConn bool,
 ) (quicConn, error) {
-	c, err := newClient(conn, addr, config, tlsConf, onClose, use0RTT, createdPacketConn)
+	c, err := newClient(conn, addr, connIDGenerator, config, tlsConf, onClose, use0RTT, createdPacketConn)
 	if err != nil {
 		return nil, err
 	}
@@ -164,14 +166,23 @@ func dial(
 	return c.conn, nil
 }
 
-func newClient(pconn net.PacketConn, remoteAddr net.Addr, config *Config, tlsConf *tls.Config, onClose func(), use0RTT, createdPacketConn bool) (*client, error) {
+func newClient(
+	pconn net.PacketConn,
+	remoteAddr net.Addr,
+	connIDGenerator ConnectionIDGenerator,
+	config *Config,
+	tlsConf *tls.Config,
+	onClose func(),
+	use0RTT bool,
+	createdPacketConn bool,
+) (*client, error) {
 	if tlsConf == nil {
 		tlsConf = &tls.Config{}
 	} else {
 		tlsConf = tlsConf.Clone()
 	}
 
-	srcConnID, err := config.ConnectionIDGenerator.GenerateConnectionID()
+	srcConnID, err := connIDGenerator.GenerateConnectionID()
 	if err != nil {
 		return nil, err
 	}
@@ -180,6 +191,7 @@ func newClient(pconn net.PacketConn, remoteAddr net.Addr, config *Config, tlsCon
 		return nil, err
 	}
 	c := &client{
+		connIDGenerator:   connIDGenerator,
 		srcConnID:         srcConnID,
 		destConnID:        destConnID,
 		sconn:             newSendPconn(pconn, remoteAddr),
@@ -203,6 +215,7 @@ func (c *client) dial(ctx context.Context) error {
 		c.packetHandlers,
 		c.destConnID,
 		c.srcConnID,
+		c.connIDGenerator,
 		c.config,
 		c.tlsConf,
 		c.initialPacketNumber,

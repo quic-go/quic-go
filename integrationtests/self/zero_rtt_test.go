@@ -101,6 +101,7 @@ var _ = Describe("0-RTT", func() {
 	transfer0RTTData := func(
 		ln *quic.EarlyListener,
 		proxyPort int,
+		connIDLen int,
 		clientTLSConf *tls.Config,
 		clientConf *quic.Config,
 		testdata []byte, // data to transfer
@@ -125,13 +126,35 @@ var _ = Describe("0-RTT", func() {
 		if clientConf == nil {
 			clientConf = getQuicConfig(nil)
 		}
-		conn, err := quic.DialAddrEarly(
-			context.Background(),
-			fmt.Sprintf("localhost:%d", proxyPort),
-			clientTLSConf,
-			clientConf,
-		)
-		Expect(err).ToNot(HaveOccurred())
+		var conn quic.EarlyConnection
+		if connIDLen == 0 {
+			var err error
+			conn, err = quic.DialAddrEarly(
+				context.Background(),
+				fmt.Sprintf("localhost:%d", proxyPort),
+				clientTLSConf,
+				clientConf,
+			)
+			Expect(err).ToNot(HaveOccurred())
+		} else {
+			addr, err := net.ResolveUDPAddr("udp", "localhost:0")
+			Expect(err).ToNot(HaveOccurred())
+			udpConn, err := net.ListenUDP("udp", addr)
+			Expect(err).ToNot(HaveOccurred())
+			defer udpConn.Close()
+			tr := &quic.Transport{
+				Conn:               udpConn,
+				ConnectionIDLength: connIDLen,
+			}
+			defer tr.Close()
+			conn, err = tr.DialEarly(
+				context.Background(),
+				&net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: proxyPort},
+				clientTLSConf,
+				clientConf,
+			)
+			Expect(err).ToNot(HaveOccurred())
+		}
 		defer conn.CloseWithError(0, "")
 		str, err := conn.OpenStream()
 		Expect(err).ToNot(HaveOccurred())
@@ -212,8 +235,9 @@ var _ = Describe("0-RTT", func() {
 			transfer0RTTData(
 				ln,
 				proxy.LocalPort(),
+				connIDLen,
 				clientTLSConf,
-				getQuicConfig(&quic.Config{ConnectionIDLength: connIDLen}),
+				getQuicConfig(nil),
 				PRData,
 			)
 
@@ -373,7 +397,7 @@ var _ = Describe("0-RTT", func() {
 		Expect(err).ToNot(HaveOccurred())
 		defer proxy.Close()
 
-		transfer0RTTData(ln, proxy.LocalPort(), clientConf, nil, PRData)
+		transfer0RTTData(ln, proxy.LocalPort(), protocol.DefaultConnectionIDLength, clientConf, nil, PRData)
 
 		num0RTT := atomic.LoadUint32(&num0RTTPackets)
 		numDropped := atomic.LoadUint32(&num0RTTDropped)
@@ -448,7 +472,7 @@ var _ = Describe("0-RTT", func() {
 		Expect(err).ToNot(HaveOccurred())
 		defer proxy.Close()
 
-		transfer0RTTData(ln, proxy.LocalPort(), clientConf, nil, GeneratePRData(5000)) // ~5 packets
+		transfer0RTTData(ln, proxy.LocalPort(), protocol.DefaultConnectionIDLength, clientConf, nil, GeneratePRData(5000)) // ~5 packets
 
 		mutex.Lock()
 		defer mutex.Unlock()
@@ -768,7 +792,7 @@ var _ = Describe("0-RTT", func() {
 		Expect(err).ToNot(HaveOccurred())
 		defer proxy.Close()
 
-		transfer0RTTData(ln, proxy.LocalPort(), clientConf, nil, PRData)
+		transfer0RTTData(ln, proxy.LocalPort(), protocol.DefaultConnectionIDLength, clientConf, nil, PRData)
 
 		Expect(tracer.getRcvdLongHeaderPackets()[0].hdr.Type).To(Equal(protocol.PacketTypeInitial))
 		zeroRTTPackets := get0RTTPackets(tracer.getRcvdLongHeaderPackets())

@@ -68,8 +68,9 @@ type baseServer struct {
 
 	tokenGenerator *handshake.TokenGenerator
 
-	connHandler packetHandlerManager
-	onClose     func()
+	connIDGenerator ConnectionIDGenerator
+	connHandler     packetHandlerManager
+	onClose         func()
 
 	receivedPackets chan *receivedPacket
 
@@ -85,6 +86,7 @@ type baseServer struct {
 		protocol.ConnectionID, /* client dest connection ID */
 		protocol.ConnectionID, /* destination connection ID */
 		protocol.ConnectionID, /* source connection ID */
+		ConnectionIDGenerator,
 		protocol.StatelessResetToken,
 		*Config,
 		*tls.Config,
@@ -210,7 +212,7 @@ func ListenEarly(conn net.PacketConn, tlsConf *tls.Config, config *Config) (*Ear
 	return tr.ListenEarly(tlsConf, config)
 }
 
-func newServer(conn rawConn, connHandler packetHandlerManager, tlsConf *tls.Config, config *Config, onClose func(), acceptEarly bool) (*baseServer, error) {
+func newServer(conn rawConn, connHandler packetHandlerManager, connIDGenerator ConnectionIDGenerator, tlsConf *tls.Config, config *Config, onClose func(), acceptEarly bool) (*baseServer, error) {
 	tokenGenerator, err := handshake.NewTokenGenerator(rand.Reader)
 	if err != nil {
 		return nil, err
@@ -220,6 +222,7 @@ func newServer(conn rawConn, connHandler packetHandlerManager, tlsConf *tls.Conf
 		tlsConf:          tlsConf,
 		config:           config,
 		tokenGenerator:   tokenGenerator,
+		connIDGenerator:  connIDGenerator,
 		connHandler:      connHandler,
 		connQueue:        make(chan quicConn),
 		errorChan:        make(chan struct{}),
@@ -574,7 +577,7 @@ func (s *baseServer) handleInitialImpl(p *receivedPacket, hdr *wire.Header) erro
 		return nil
 	}
 
-	connID, err := s.config.ConnectionIDGenerator.GenerateConnectionID()
+	connID, err := s.connIDGenerator.GenerateConnectionID()
 	if err != nil {
 		return err
 	}
@@ -603,6 +606,7 @@ func (s *baseServer) handleInitialImpl(p *receivedPacket, hdr *wire.Header) erro
 			hdr.DestConnectionID,
 			hdr.SrcConnectionID,
 			connID,
+			s.connIDGenerator,
 			s.connHandler.GetStatelessResetToken(connID),
 			s.config,
 			s.tlsConf,
@@ -669,7 +673,7 @@ func (s *baseServer) sendRetry(remoteAddr net.Addr, hdr *wire.Header, info *pack
 	// Log the Initial packet now.
 	// If no Retry is sent, the packet will be logged by the connection.
 	(&wire.ExtendedHeader{Header: *hdr}).Log(s.logger)
-	srcConnID, err := s.config.ConnectionIDGenerator.GenerateConnectionID()
+	srcConnID, err := s.connIDGenerator.GenerateConnectionID()
 	if err != nil {
 		return err
 	}

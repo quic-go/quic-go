@@ -242,18 +242,6 @@ type Config struct {
 	// The QUIC versions that can be negotiated.
 	// If not set, it uses all versions available.
 	Versions []VersionNumber
-	// The length of the connection ID in bytes.
-	// It can be 0, or any value between 4 and 18.
-	// If not set, the interpretation depends on where the Config is used:
-	// If used for dialing an address, a 0 byte connection ID will be used.
-	// If used for a server, or dialing on a packet conn, a 4 byte connection ID will be used.
-	// When dialing on a packet conn, the ConnectionIDLength value must be the same for every Dial call.
-	ConnectionIDLength int
-	// An optional ConnectionIDGenerator to be used for ConnectionIDs generated during the lifecycle of a QUIC connection.
-	// The goal is to give some control on how connection IDs, which can be useful in some scenarios, in particular for servers.
-	// By default, if not provided, random connection IDs with the length given by ConnectionIDLength is used.
-	// Otherwise, if one is provided, then ConnectionIDLength is ignored.
-	ConnectionIDGenerator ConnectionIDGenerator
 	// HandshakeIdleTimeout is the idle timeout before completion of the handshake.
 	// Specifically, if we don't receive any packet from the peer within this time, the connection attempt is aborted.
 	// If this value is zero, the timeout is set to 5 seconds.

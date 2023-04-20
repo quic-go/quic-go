@@ -59,6 +59,9 @@ type Transport struct {
 	// Set in init.
 	// If no ConnectionIDGenerator is set, this is the ConnectionIDLength.
 	connIDLen int
+	// Set in init.
+	// If no ConnectionIDGenerator is set, this is set to a default.
+	connIDGenerator ConnectionIDGenerator
 
 	server unknownPacketHandler
 
@@ -92,10 +95,10 @@ func (t *Transport) Listen(tlsConf *tls.Config, conf *Config) (*Listener, error)
 		return nil, errListenerAlreadySet
 	}
 	conf = populateServerConfig(conf)
-	if err := t.init(conf); err != nil {
+	if err := t.init(conf, true); err != nil {
 		return nil, err
 	}
-	s, err := newServer(t.conn, t.handlerMap, tlsConf, conf, t.closeServer, false)
+	s, err := newServer(t.conn, t.handlerMap, t.connIDGenerator, tlsConf, conf, t.closeServer, false)
 	if err != nil {
 		return nil, err
 	}
@@ -121,10 +124,10 @@ func (t *Transport) ListenEarly(tlsConf *tls.Config, conf *Config) (*EarlyListen
 		return nil, errListenerAlreadySet
 	}
 	conf = populateServerConfig(conf)
-	if err := t.init(conf); err != nil {
+	if err := t.init(conf, true); err != nil {
 		return nil, err
 	}
-	s, err := newServer(t.conn, t.handlerMap, tlsConf, conf, t.closeServer, true)
+	s, err := newServer(t.conn, t.handlerMap, t.connIDGenerator, tlsConf, conf, t.closeServer, true)
 	if err != nil {
 		return nil, err
 	}
@@ -137,15 +140,15 @@ func (t *Transport) Dial(ctx context.Context, addr net.Addr, tlsConf *tls.Config
 	if err := validateConfig(conf); err != nil {
 		return nil, err
 	}
-	conf = populateClientConfig(conf, t.createdConn)
-	if err := t.init(conf); err != nil {
+	conf = populateConfig(conf)
+	if err := t.init(conf, false); err != nil {
 		return nil, err
 	}
 	var onClose func()
 	if t.isSingleUse {
 		onClose = func() { t.Close() }
 	}
-	return dial(ctx, t.Conn, t.handlerMap, addr, tlsConf, conf, onClose, false, t.createdConn)
+	return dial(ctx, t.Conn, t.connIDGenerator, t.handlerMap, addr, tlsConf, conf, onClose, false, t.createdConn)
 }
 
 // DialEarly dials a new connection, attempting to use 0-RTT if possible.
@@ -153,15 +156,15 @@ func (t *Transport) DialEarly(ctx context.Context, addr net.Addr, tlsConf *tls.C
 	if err := validateConfig(conf); err != nil {
 		return nil, err
 	}
-	conf = populateClientConfig(conf, t.createdConn)
-	if err := t.init(conf); err != nil {
+	conf = populateConfig(conf)
+	if err := t.init(conf, false); err != nil {
 		return nil, err
 	}
 	var onClose func()
 	if t.isSingleUse {
 		onClose = func() { t.Close() }
 	}
-	return dial(ctx, t.Conn, t.handlerMap, addr, tlsConf, conf, onClose, true, t.createdConn)
+	return dial(ctx, t.Conn, t.connIDGenerator, t.handlerMap, addr, tlsConf, conf, onClose, true, t.createdConn)
 }
 
 func setReceiveBuffer(c net.PacketConn, logger utils.Logger) error {
@@ -197,7 +200,7 @@ func setReceiveBuffer(c net.PacketConn, logger utils.Logger) error {
 // only print warnings about the UDP receive buffer size once
 var receiveBufferWarningOnce sync.Once
 
-func (t *Transport) init(conf *Config) error {
+func (t *Transport) init(conf *Config, isServer bool) error {
 	t.initOnce.Do(func() {
 		getMultiplexer().AddConn(t.Conn)
 
@@ -208,9 +211,6 @@ func (t *Transport) init(conf *Config) error {
 		}
 
 		t.Tracer = conf.Tracer
-		t.ConnectionIDLength = conf.ConnectionIDLength
-		t.ConnectionIDGenerator = conf.ConnectionIDGenerator
-
 		t.logger = utils.DefaultLogger // TODO: make this configurable
 		t.conn = conn
 		t.handlerMap = newPacketHandlerMap(t.StatelessResetKey, t.enqueueClosePacket, t.logger)
@@ -219,9 +219,15 @@ func (t *Transport) init(conf *Config) error {
 		t.closeQueue = make(chan closePacket, 4)
 
 		if t.ConnectionIDGenerator != nil {
+			t.connIDGenerator = t.ConnectionIDGenerator
 			t.connIDLen = t.ConnectionIDGenerator.ConnectionIDLen()
 		} else {
-			t.connIDLen = t.ConnectionIDLength
+			connIDLen := t.ConnectionIDLength
+			if t.ConnectionIDLength == 0 && (!t.isSingleUse || isServer) {
+				connIDLen = protocol.DefaultConnectionIDLength
+			}
+			t.connIDLen = connIDLen
+			t.connIDGenerator = &protocol.DefaultConnectionIDGenerator{ConnLen: t.connIDLen}
 		}
 
 		go t.listen(conn)

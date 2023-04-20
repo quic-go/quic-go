@@ -61,7 +61,7 @@ var _ = Describe("Transport", func() {
 	It("handles packets for different packet handlers on the same packet conn", func() {
 		packetChan := make(chan packetToRead)
 		tr := &Transport{Conn: newMockPacketConn(packetChan)}
-		tr.init(&Config{})
+		tr.init(&Config{}, true)
 		phm := NewMockPacketHandlerManager(mockCtrl)
 		tr.handlerMap = phm
 		connID1 := protocol.ParseConnectionID([]byte{1, 2, 3, 4, 5, 6, 7, 8})
@@ -126,9 +126,10 @@ var _ = Describe("Transport", func() {
 		packetChan := make(chan packetToRead)
 		tracer := mocklogging.NewMockTracer(mockCtrl)
 		tr := &Transport{
-			Conn: newMockPacketConn(packetChan),
+			Conn:               newMockPacketConn(packetChan),
+			ConnectionIDLength: 10,
 		}
-		tr.init(&Config{Tracer: tracer, ConnectionIDLength: 10})
+		tr.init(&Config{Tracer: tracer}, true)
 		dropped := make(chan struct{})
 		tracer.EXPECT().DroppedPacket(addr, logging.PacketTypeNotDetermined, protocol.ByteCount(4), logging.PacketDropHeaderParseError).Do(func(net.Addr, logging.PacketType, protocol.ByteCount, logging.PacketDropReason) { close(dropped) })
 		packetChan <- packetToRead{
@@ -147,7 +148,7 @@ var _ = Describe("Transport", func() {
 		tr := Transport{Conn: newMockPacketConn(packetChan)}
 		defer tr.Close()
 		phm := NewMockPacketHandlerManager(mockCtrl)
-		tr.init(&Config{})
+		tr.init(&Config{}, true)
 		tr.handlerMap = phm
 
 		done := make(chan struct{})
@@ -165,7 +166,7 @@ var _ = Describe("Transport", func() {
 		tr := Transport{Conn: newMockPacketConn(packetChan)}
 		defer tr.Close()
 		phm := NewMockPacketHandlerManager(mockCtrl)
-		tr.init(&Config{})
+		tr.init(&Config{}, true)
 		tr.handlerMap = phm
 
 		tempErr := deadlineError{}
@@ -183,11 +184,13 @@ var _ = Describe("Transport", func() {
 	It("handles short header packets resets", func() {
 		connID := protocol.ParseConnectionID([]byte{2, 3, 4, 5})
 		packetChan := make(chan packetToRead)
-		tr := Transport{Conn: newMockPacketConn(packetChan)}
-		tr.init(&Config{ConnectionIDLength: connID.Len()})
+		tr := Transport{
+			Conn:               newMockPacketConn(packetChan),
+			ConnectionIDLength: connID.Len(),
+		}
+		tr.init(&Config{}, true)
 		defer tr.Close()
 		phm := NewMockPacketHandlerManager(mockCtrl)
-		tr.init(&Config{})
 		tr.handlerMap = phm
 
 		var token protocol.StatelessResetToken
@@ -218,10 +221,9 @@ var _ = Describe("Transport", func() {
 		connID := protocol.ParseConnectionID([]byte{2, 3, 4, 5})
 		packetChan := make(chan packetToRead)
 		tr := Transport{Conn: newMockPacketConn(packetChan)}
-		tr.init(&Config{ConnectionIDLength: connID.Len()})
+		tr.init(&Config{}, true)
 		defer tr.Close()
 		phm := NewMockPacketHandlerManager(mockCtrl)
-		tr.init(&Config{})
 		tr.handlerMap = phm
 
 		var token protocol.StatelessResetToken
@@ -251,13 +253,13 @@ var _ = Describe("Transport", func() {
 		packetChan := make(chan packetToRead)
 		conn := newMockPacketConn(packetChan)
 		tr := Transport{
-			Conn:              conn,
-			StatelessResetKey: &StatelessResetKey{1, 2, 3, 4},
+			Conn:               conn,
+			StatelessResetKey:  &StatelessResetKey{1, 2, 3, 4},
+			ConnectionIDLength: connID.Len(),
 		}
-		tr.init(&Config{ConnectionIDLength: connID.Len()})
+		tr.init(&Config{}, true)
 		defer tr.Close()
 		phm := NewMockPacketHandlerManager(mockCtrl)
-		tr.init(&Config{})
 		tr.handlerMap = phm
 
 		var b []byte
