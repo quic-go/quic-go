@@ -6,6 +6,7 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"flag"
+	"fmt"
 	"log"
 	mrand "math/rand"
 	"os"
@@ -18,6 +19,7 @@ import (
 
 	"github.com/quic-go/quic-go"
 	"github.com/quic-go/quic-go/integrationtests/tools"
+	"github.com/quic-go/quic-go/internal/protocol"
 	"github.com/quic-go/quic-go/internal/utils"
 	"github.com/quic-go/quic-go/internal/wire"
 	"github.com/quic-go/quic-go/logging"
@@ -80,13 +82,15 @@ func (b *syncedBuffer) Reset() {
 }
 
 var (
-	logFileName string // the log file set in the ginkgo flags
-	logBufOnce  sync.Once
-	logBuf      *syncedBuffer
+	logFileName  string // the log file set in the ginkgo flags
+	logBufOnce   sync.Once
+	logBuf       *syncedBuffer
+	versionParam string
 
 	qlogTracer logging.Tracer
 	enableQlog bool
 
+	version            quic.VersionNumber
 	tlsConfig          *tls.Config
 	tlsConfigLongChain *tls.Config
 	tlsClientConfig    *tls.Config
@@ -96,6 +100,7 @@ var (
 // to set call ginkgo -- -logfile=log.txt
 func init() {
 	flag.StringVar(&logFileName, "logfile", "", "log file")
+	flag.StringVar(&versionParam, "version", "1", "QUIC version")
 	flag.BoolVar(&enableQlog, "qlog", false, "enable qlog")
 
 	ca, caPrivateKey, err := tools.GenerateCA()
@@ -133,6 +138,18 @@ var _ = BeforeSuite(func() {
 	if enableQlog {
 		qlogTracer = tools.NewQlogger(GinkgoWriter)
 	}
+	switch versionParam {
+	case "1":
+		version = quic.Version1
+	case "2":
+		version = quic.Version2
+	case "draft29":
+		version = quic.VersionDraft29
+	default:
+		Fail(fmt.Sprintf("unknown QUIC version: %s", versionParam))
+	}
+	fmt.Printf("Using QUIC version: %s\n", version)
+	protocol.SupportedVersions = []quic.VersionNumber{version}
 })
 
 func getTLSConfig() *tls.Config {

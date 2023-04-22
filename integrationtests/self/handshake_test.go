@@ -128,101 +128,88 @@ var _ = Describe("Handshake tests", func() {
 	})
 
 	Context("Certificate validation", func() {
-		for _, v := range protocol.SupportedVersions {
-			version := v
+		It("accepts the certificate", func() {
+			runServer(getTLSConfig())
+			_, err := quic.DialAddr(
+				fmt.Sprintf("localhost:%d", server.Addr().(*net.UDPAddr).Port),
+				getTLSClientConfig(),
+				getQuicConfig(nil),
+			)
+			Expect(err).ToNot(HaveOccurred())
+		})
 
-			Context(fmt.Sprintf("using %s", version), func() {
-				var clientConfig *quic.Config
+		It("works with a long certificate chain", func() {
+			runServer(getTLSConfigWithLongCertChain())
+			_, err := quic.DialAddr(
+				fmt.Sprintf("localhost:%d", server.Addr().(*net.UDPAddr).Port),
+				getTLSClientConfig(),
+				getQuicConfig(nil),
+			)
+			Expect(err).ToNot(HaveOccurred())
+		})
 
-				BeforeEach(func() {
-					serverConfig.Versions = []protocol.VersionNumber{version}
-					clientConfig = getQuicConfig(&quic.Config{Versions: []protocol.VersionNumber{version}})
-				})
+		It("errors if the server name doesn't match", func() {
+			runServer(getTLSConfig())
+			conn, err := net.ListenUDP("udp", nil)
+			Expect(err).ToNot(HaveOccurred())
+			_, err = quic.Dial(
+				conn,
+				server.Addr(),
+				"foo.bar",
+				getTLSClientConfig(),
+				getQuicConfig(nil),
+			)
+			Expect(err).To(HaveOccurred())
+			var transportErr *quic.TransportError
+			Expect(errors.As(err, &transportErr)).To(BeTrue())
+			Expect(transportErr.ErrorCode.IsCryptoError()).To(BeTrue())
+			Expect(transportErr.Error()).To(ContainSubstring("x509: certificate is valid for localhost, not foo.bar"))
+		})
 
-				It("accepts the certificate", func() {
-					runServer(getTLSConfig())
-					_, err := quic.DialAddr(
-						fmt.Sprintf("localhost:%d", server.Addr().(*net.UDPAddr).Port),
-						getTLSClientConfig(),
-						clientConfig,
-					)
-					Expect(err).ToNot(HaveOccurred())
-				})
+		It("fails the handshake if the client fails to provide the requested client cert", func() {
+			tlsConf := getTLSConfig()
+			tlsConf.ClientAuth = tls.RequireAndVerifyClientCert
+			runServer(tlsConf)
 
-				It("works with a long certificate chain", func() {
-					runServer(getTLSConfigWithLongCertChain())
-					_, err := quic.DialAddr(
-						fmt.Sprintf("localhost:%d", server.Addr().(*net.UDPAddr).Port),
-						getTLSClientConfig(),
-						getQuicConfig(&quic.Config{Versions: []protocol.VersionNumber{version}}),
-					)
-					Expect(err).ToNot(HaveOccurred())
-				})
+			conn, err := quic.DialAddr(
+				fmt.Sprintf("localhost:%d", server.Addr().(*net.UDPAddr).Port),
+				getTLSClientConfig(),
+				getQuicConfig(nil),
+			)
+			// Usually, the error will occur after the client already finished the handshake.
+			// However, there's a race condition here. The server's CONNECTION_CLOSE might be
+			// received before the connection is returned, so we might already get the error while dialing.
+			if err == nil {
+				errChan := make(chan error)
+				go func() {
+					defer GinkgoRecover()
+					_, err := conn.AcceptStream(context.Background())
+					errChan <- err
+				}()
+				Eventually(errChan).Should(Receive(&err))
+			}
+			Expect(err).To(HaveOccurred())
+			var transportErr *quic.TransportError
+			Expect(errors.As(err, &transportErr)).To(BeTrue())
+			Expect(transportErr.ErrorCode.IsCryptoError()).To(BeTrue())
+			Expect(transportErr.Error()).To(ContainSubstring("tls: bad certificate"))
+		})
 
-				It("errors if the server name doesn't match", func() {
-					runServer(getTLSConfig())
-					conn, err := net.ListenUDP("udp", nil)
-					Expect(err).ToNot(HaveOccurred())
-					_, err = quic.Dial(
-						conn,
-						server.Addr(),
-						"foo.bar",
-						getTLSClientConfig(),
-						clientConfig,
-					)
-					Expect(err).To(HaveOccurred())
-					var transportErr *quic.TransportError
-					Expect(errors.As(err, &transportErr)).To(BeTrue())
-					Expect(transportErr.ErrorCode.IsCryptoError()).To(BeTrue())
-					Expect(transportErr.Error()).To(ContainSubstring("x509: certificate is valid for localhost, not foo.bar"))
-				})
-
-				It("fails the handshake if the client fails to provide the requested client cert", func() {
-					tlsConf := getTLSConfig()
-					tlsConf.ClientAuth = tls.RequireAndVerifyClientCert
-					runServer(tlsConf)
-
-					conn, err := quic.DialAddr(
-						fmt.Sprintf("localhost:%d", server.Addr().(*net.UDPAddr).Port),
-						getTLSClientConfig(),
-						clientConfig,
-					)
-					// Usually, the error will occur after the client already finished the handshake.
-					// However, there's a race condition here. The server's CONNECTION_CLOSE might be
-					// received before the connection is returned, so we might already get the error while dialing.
-					if err == nil {
-						errChan := make(chan error)
-						go func() {
-							defer GinkgoRecover()
-							_, err := conn.AcceptStream(context.Background())
-							errChan <- err
-						}()
-						Eventually(errChan).Should(Receive(&err))
-					}
-					Expect(err).To(HaveOccurred())
-					var transportErr *quic.TransportError
-					Expect(errors.As(err, &transportErr)).To(BeTrue())
-					Expect(transportErr.ErrorCode.IsCryptoError()).To(BeTrue())
-					Expect(transportErr.Error()).To(ContainSubstring("tls: bad certificate"))
-				})
-
-				It("uses the ServerName in the tls.Config", func() {
-					runServer(getTLSConfig())
-					tlsConf := getTLSClientConfig()
-					tlsConf.ServerName = "foo.bar"
-					_, err := quic.DialAddr(
-						fmt.Sprintf("localhost:%d", server.Addr().(*net.UDPAddr).Port),
-						tlsConf,
-						clientConfig,
-					)
-					Expect(err).To(HaveOccurred())
-					var transportErr *quic.TransportError
-					Expect(errors.As(err, &transportErr)).To(BeTrue())
-					Expect(transportErr.ErrorCode.IsCryptoError()).To(BeTrue())
-					Expect(transportErr.Error()).To(ContainSubstring("x509: certificate is valid for localhost, not foo.bar"))
-				})
-			})
-		}
+		It("uses the ServerName in the tls.Config", func() {
+			runServer(getTLSConfig())
+			tlsConf := getTLSClientConfig()
+			tlsConf.ServerName = "foo.bar"
+			_, err := quic.DialAddr(
+				fmt.Sprintf("localhost:%d", server.Addr().(*net.UDPAddr).Port),
+				tlsConf,
+				getQuicConfig(nil),
+			)
+			Expect(err).To(HaveOccurred())
+			var transportErr *quic.TransportError
+			Expect(errors.As(err, &transportErr)).To(BeTrue())
+			Expect(transportErr.ErrorCode.IsCryptoError()).To(BeTrue())
+			Expect(transportErr.Error()).To(ContainSubstring("x509: certificate is valid for localhost, not foo.bar"))
+		})
 	})
 
 	Context("rate limiting", func() {

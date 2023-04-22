@@ -15,7 +15,6 @@ import (
 
 	"github.com/quic-go/quic-go"
 	quicproxy "github.com/quic-go/quic-go/integrationtests/tools/proxy"
-	"github.com/quic-go/quic-go/internal/protocol"
 	"github.com/quic-go/quic-go/internal/wire"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -27,7 +26,7 @@ var directions = []quicproxy.Direction{quicproxy.DirectionIncoming, quicproxy.Di
 
 type applicationProtocol struct {
 	name string
-	run  func(protocol.VersionNumber)
+	run  func()
 }
 
 var _ = Describe("Handshake drop tests", func() {
@@ -39,11 +38,10 @@ var _ = Describe("Handshake drop tests", func() {
 	data := GeneratePRData(5000)
 	const timeout = 2 * time.Minute
 
-	startListenerAndProxy := func(dropCallback quicproxy.DropCallback, doRetry bool, longCertChain bool, version protocol.VersionNumber) {
+	startListenerAndProxy := func(dropCallback quicproxy.DropCallback, doRetry bool, longCertChain bool) {
 		conf := getQuicConfig(&quic.Config{
 			MaxIdleTimeout:           timeout,
 			HandshakeIdleTimeout:     timeout,
-			Versions:                 []protocol.VersionNumber{version},
 			RequireAddressValidation: func(net.Addr) bool { return doRetry },
 		})
 		var tlsConf *tls.Config
@@ -68,7 +66,7 @@ var _ = Describe("Handshake drop tests", func() {
 
 	clientSpeaksFirst := &applicationProtocol{
 		name: "client speaks first",
-		run: func(version protocol.VersionNumber) {
+		run: func() {
 			serverConnChan := make(chan quic.Connection)
 			go func() {
 				defer GinkgoRecover()
@@ -88,7 +86,6 @@ var _ = Describe("Handshake drop tests", func() {
 				getQuicConfig(&quic.Config{
 					MaxIdleTimeout:       timeout,
 					HandshakeIdleTimeout: timeout,
-					Versions:             []protocol.VersionNumber{version},
 				}),
 			)
 			Expect(err).ToNot(HaveOccurred())
@@ -107,7 +104,7 @@ var _ = Describe("Handshake drop tests", func() {
 
 	serverSpeaksFirst := &applicationProtocol{
 		name: "server speaks first",
-		run: func(version protocol.VersionNumber) {
+		run: func() {
 			serverConnChan := make(chan quic.Connection)
 			go func() {
 				defer GinkgoRecover()
@@ -126,7 +123,6 @@ var _ = Describe("Handshake drop tests", func() {
 				getQuicConfig(&quic.Config{
 					MaxIdleTimeout:       timeout,
 					HandshakeIdleTimeout: timeout,
-					Versions:             []protocol.VersionNumber{version},
 				}),
 			)
 			Expect(err).ToNot(HaveOccurred())
@@ -145,7 +141,7 @@ var _ = Describe("Handshake drop tests", func() {
 
 	nobodySpeaks := &applicationProtocol{
 		name: "nobody speaks",
-		run: func(version protocol.VersionNumber) {
+		run: func() {
 			serverConnChan := make(chan quic.Connection)
 			go func() {
 				defer GinkgoRecover()
@@ -159,7 +155,6 @@ var _ = Describe("Handshake drop tests", func() {
 				getQuicConfig(&quic.Config{
 					MaxIdleTimeout:       timeout,
 					HandshakeIdleTimeout: timeout,
-					Versions:             []protocol.VersionNumber{version},
 				}),
 			)
 			Expect(err).ToNot(HaveOccurred())
@@ -176,106 +171,100 @@ var _ = Describe("Handshake drop tests", func() {
 		Expect(proxy.Close()).To(Succeed())
 	})
 
-	for _, v := range protocol.SupportedVersions {
-		version := v
+	for _, d := range directions {
+		direction := d
 
-		Context(fmt.Sprintf("with QUIC version %s", version), func() {
-			for _, d := range directions {
-				direction := d
+		for _, dr := range []bool{true, false} {
+			doRetry := dr
+			desc := "when using Retry"
+			if !dr {
+				desc = "when not using Retry"
+			}
 
-				for _, dr := range []bool{true, false} {
-					doRetry := dr
-					desc := "when using Retry"
-					if !dr {
-						desc = "when not using Retry"
-					}
+			Context(desc, func() {
+				for _, lcc := range []bool{false, true} {
+					longCertChain := lcc
 
-					Context(desc, func() {
-						for _, lcc := range []bool{false, true} {
-							longCertChain := lcc
+					Context(fmt.Sprintf("using a long certificate chain: %t", longCertChain), func() {
+						for _, a := range []*applicationProtocol{clientSpeaksFirst, serverSpeaksFirst, nobodySpeaks} {
+							app := a
 
-							Context(fmt.Sprintf("using a long certificate chain: %t", longCertChain), func() {
-								for _, a := range []*applicationProtocol{clientSpeaksFirst, serverSpeaksFirst, nobodySpeaks} {
-									app := a
+							Context(app.name, func() {
+								It(fmt.Sprintf("establishes a connection when the first packet is lost in %s direction", direction), func() {
+									var incoming, outgoing int32
+									startListenerAndProxy(func(d quicproxy.Direction, _ []byte) bool {
+										var p int32
+										//nolint:exhaustive
+										switch d {
+										case quicproxy.DirectionIncoming:
+											p = atomic.AddInt32(&incoming, 1)
+										case quicproxy.DirectionOutgoing:
+											p = atomic.AddInt32(&outgoing, 1)
+										}
+										return p == 1 && d.Is(direction)
+									}, doRetry, longCertChain)
+									app.run()
+								})
 
-									Context(app.name, func() {
-										It(fmt.Sprintf("establishes a connection when the first packet is lost in %s direction", direction), func() {
-											var incoming, outgoing int32
-											startListenerAndProxy(func(d quicproxy.Direction, _ []byte) bool {
-												var p int32
-												//nolint:exhaustive
-												switch d {
-												case quicproxy.DirectionIncoming:
-													p = atomic.AddInt32(&incoming, 1)
-												case quicproxy.DirectionOutgoing:
-													p = atomic.AddInt32(&outgoing, 1)
+								It(fmt.Sprintf("establishes a connection when the second packet is lost in %s direction", direction), func() {
+									var incoming, outgoing int32
+									startListenerAndProxy(func(d quicproxy.Direction, _ []byte) bool {
+										var p int32
+										//nolint:exhaustive
+										switch d {
+										case quicproxy.DirectionIncoming:
+											p = atomic.AddInt32(&incoming, 1)
+										case quicproxy.DirectionOutgoing:
+											p = atomic.AddInt32(&outgoing, 1)
+										}
+										return p == 2 && d.Is(direction)
+									}, doRetry, longCertChain)
+									app.run()
+								})
+
+								It(fmt.Sprintf("establishes a connection when 1/3 of the packets are lost in %s direction", direction), func() {
+									const maxSequentiallyDropped = 10
+									var mx sync.Mutex
+									var incoming, outgoing int
+
+									startListenerAndProxy(func(d quicproxy.Direction, _ []byte) bool {
+										drop := mrand.Int63n(int64(3)) == 0
+
+										mx.Lock()
+										defer mx.Unlock()
+										// never drop more than 10 consecutive packets
+										if d.Is(quicproxy.DirectionIncoming) {
+											if drop {
+												incoming++
+												if incoming > maxSequentiallyDropped {
+													drop = false
 												}
-												return p == 1 && d.Is(direction)
-											}, doRetry, longCertChain, version)
-											app.run(version)
-										})
-
-										It(fmt.Sprintf("establishes a connection when the second packet is lost in %s direction", direction), func() {
-											var incoming, outgoing int32
-											startListenerAndProxy(func(d quicproxy.Direction, _ []byte) bool {
-												var p int32
-												//nolint:exhaustive
-												switch d {
-												case quicproxy.DirectionIncoming:
-													p = atomic.AddInt32(&incoming, 1)
-												case quicproxy.DirectionOutgoing:
-													p = atomic.AddInt32(&outgoing, 1)
+											}
+											if !drop {
+												incoming = 0
+											}
+										}
+										if d.Is(quicproxy.DirectionOutgoing) {
+											if drop {
+												outgoing++
+												if outgoing > maxSequentiallyDropped {
+													drop = false
 												}
-												return p == 2 && d.Is(direction)
-											}, doRetry, longCertChain, version)
-											app.run(version)
-										})
-
-										It(fmt.Sprintf("establishes a connection when 1/3 of the packets are lost in %s direction", direction), func() {
-											const maxSequentiallyDropped = 10
-											var mx sync.Mutex
-											var incoming, outgoing int
-
-											startListenerAndProxy(func(d quicproxy.Direction, _ []byte) bool {
-												drop := mrand.Int63n(int64(3)) == 0
-
-												mx.Lock()
-												defer mx.Unlock()
-												// never drop more than 10 consecutive packets
-												if d.Is(quicproxy.DirectionIncoming) {
-													if drop {
-														incoming++
-														if incoming > maxSequentiallyDropped {
-															drop = false
-														}
-													}
-													if !drop {
-														incoming = 0
-													}
-												}
-												if d.Is(quicproxy.DirectionOutgoing) {
-													if drop {
-														outgoing++
-														if outgoing > maxSequentiallyDropped {
-															drop = false
-														}
-													}
-													if !drop {
-														outgoing = 0
-													}
-												}
-												return drop
-											}, doRetry, longCertChain, version)
-											app.run(version)
-										})
-									})
-								}
+											}
+											if !drop {
+												outgoing = 0
+											}
+										}
+										return drop
+									}, doRetry, longCertChain)
+									app.run()
+								})
 							})
 						}
 					})
 				}
-			}
-		})
+			})
+		}
 
 		It("establishes a connection when the ClientHello is larger than 1 MTU (e.g. post-quantum)", func() {
 			origAdditionalTransportParametersClient := wire.AdditionalTransportParametersClient
@@ -294,8 +283,8 @@ var _ = Describe("Handshake drop tests", func() {
 					return false
 				}
 				return mrand.Intn(3) == 0
-			}, false, false, version)
-			clientSpeaksFirst.run(version)
+			}, false, false)
+			clientSpeaksFirst.run()
 		})
 	}
 })
