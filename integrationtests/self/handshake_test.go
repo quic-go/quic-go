@@ -10,19 +10,13 @@ import (
 	"time"
 
 	"github.com/quic-go/quic-go"
-	"github.com/quic-go/quic-go/integrationtests/tools/israce"
 	"github.com/quic-go/quic-go/internal/protocol"
 	"github.com/quic-go/quic-go/internal/qerr"
 	"github.com/quic-go/quic-go/internal/qtls"
-	"github.com/quic-go/quic-go/logging"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 )
-
-type versioner interface {
-	GetVersion() protocol.VersionNumber
-}
 
 type tokenStore struct {
 	store quic.TokenStore
@@ -48,31 +42,6 @@ func (c *tokenStore) Put(key string, token *quic.ClientToken) {
 func (c *tokenStore) Pop(key string) *quic.ClientToken {
 	c.gets <- key
 	return c.store.Pop(key)
-}
-
-type versionNegotiationTracer struct {
-	logging.NullConnectionTracer
-
-	loggedVersions                 bool
-	receivedVersionNegotiation     bool
-	chosen                         logging.VersionNumber
-	clientVersions, serverVersions []logging.VersionNumber
-}
-
-var _ logging.ConnectionTracer = &versionNegotiationTracer{}
-
-func (t *versionNegotiationTracer) NegotiatedVersion(chosen logging.VersionNumber, clientVersions, serverVersions []logging.VersionNumber) {
-	if t.loggedVersions {
-		Fail("only expected one call to NegotiatedVersions")
-	}
-	t.loggedVersions = true
-	t.chosen = chosen
-	t.clientVersions = clientVersions
-	t.serverVersions = serverVersions
-}
-
-func (t *versionNegotiationTracer) ReceivedVersionNegotiationPacket(dest, src logging.ArbitraryLenConnectionID, _ []logging.VersionNumber) {
-	t.receivedVersionNegotiation = true
 }
 
 var _ = Describe("Handshake tests", func() {
@@ -110,79 +79,6 @@ var _ = Describe("Handshake tests", func() {
 				}
 			}
 		}()
-	}
-
-	if !israce.Enabled {
-		Context("Version Negotiation", func() {
-			var supportedVersions []protocol.VersionNumber
-
-			BeforeEach(func() {
-				supportedVersions = protocol.SupportedVersions
-				protocol.SupportedVersions = append(protocol.SupportedVersions, []protocol.VersionNumber{7, 8, 9, 10}...)
-			})
-
-			AfterEach(func() {
-				protocol.SupportedVersions = supportedVersions
-			})
-
-			It("when the server supports more versions than the client", func() {
-				expectedVersion := protocol.SupportedVersions[0]
-				// the server doesn't support the highest supported version, which is the first one the client will try
-				// but it supports a bunch of versions that the client doesn't speak
-				serverConfig.Versions = []protocol.VersionNumber{7, 8, protocol.SupportedVersions[0], 9}
-				serverTracer := &versionNegotiationTracer{}
-				serverConfig.Tracer = newTracer(func() logging.ConnectionTracer { return serverTracer })
-				runServer(getTLSConfig())
-				defer server.Close()
-				clientTracer := &versionNegotiationTracer{}
-				conn, err := quic.DialAddr(
-					fmt.Sprintf("localhost:%d", server.Addr().(*net.UDPAddr).Port),
-					getTLSClientConfig(),
-					getQuicConfig(&quic.Config{Tracer: newTracer(func() logging.ConnectionTracer { return clientTracer })}),
-				)
-				Expect(err).ToNot(HaveOccurred())
-				Expect(conn.(versioner).GetVersion()).To(Equal(expectedVersion))
-				Expect(conn.CloseWithError(0, "")).To(Succeed())
-				Expect(clientTracer.chosen).To(Equal(expectedVersion))
-				Expect(clientTracer.receivedVersionNegotiation).To(BeFalse())
-				Expect(clientTracer.clientVersions).To(Equal(protocol.SupportedVersions))
-				Expect(clientTracer.serverVersions).To(BeEmpty())
-				Expect(serverTracer.chosen).To(Equal(expectedVersion))
-				Expect(serverTracer.serverVersions).To(Equal(serverConfig.Versions))
-				Expect(serverTracer.clientVersions).To(BeEmpty())
-			})
-
-			It("when the client supports more versions than the server supports", func() {
-				expectedVersion := protocol.SupportedVersions[0]
-				// the server doesn't support the highest supported version, which is the first one the client will try
-				// but it supports a bunch of versions that the client doesn't speak
-				serverConfig.Versions = supportedVersions
-				serverTracer := &versionNegotiationTracer{}
-				serverConfig.Tracer = newTracer(func() logging.ConnectionTracer { return serverTracer })
-				runServer(getTLSConfig())
-				defer server.Close()
-				clientVersions := []protocol.VersionNumber{7, 8, 9, protocol.SupportedVersions[0], 10}
-				clientTracer := &versionNegotiationTracer{}
-				conn, err := quic.DialAddr(
-					fmt.Sprintf("localhost:%d", server.Addr().(*net.UDPAddr).Port),
-					getTLSClientConfig(),
-					getQuicConfig(&quic.Config{
-						Versions: clientVersions,
-						Tracer:   newTracer(func() logging.ConnectionTracer { return clientTracer }),
-					}),
-				)
-				Expect(err).ToNot(HaveOccurred())
-				Expect(conn.(versioner).GetVersion()).To(Equal(protocol.SupportedVersions[0]))
-				Expect(conn.CloseWithError(0, "")).To(Succeed())
-				Expect(clientTracer.chosen).To(Equal(expectedVersion))
-				Expect(clientTracer.receivedVersionNegotiation).To(BeTrue())
-				Expect(clientTracer.clientVersions).To(Equal(clientVersions))
-				Expect(clientTracer.serverVersions).To(ContainElements(supportedVersions)) // may contain greased versions
-				Expect(serverTracer.chosen).To(Equal(expectedVersion))
-				Expect(serverTracer.serverVersions).To(Equal(serverConfig.Versions))
-				Expect(serverTracer.clientVersions).To(BeEmpty())
-			})
-		})
 	}
 
 	Context("using different cipher suites", func() {

@@ -23,13 +23,15 @@ jobs:
         run: echo "QLOGFLAG=-- -qlog" >> $GITHUB_ENV
       - name: Run tests
         run: |
-          go run github.com/onsi/ginkgo/v2/ginkgo -r -v -randomize-all -randomize-suites -trace -skip-package self integrationtests
+          go run github.com/onsi/ginkgo/v2/ginkgo -r -v -randomize-all -randomize-suites -trace -skip-package self,versionnegotiation integrationtests
+          go run github.com/onsi/ginkgo/v2/ginkgo -r -v -randomize-all -randomize-suites -trace integrationtests/versionnegotiation ${{ env.QLOGFLAG }}
           go run github.com/onsi/ginkgo/v2/ginkgo -r -v -randomize-all -randomize-suites -trace integrationtests/self ${{ env.QLOGFLAG }}
       - name: Run tests (32 bit)
         env:
           GOARCH: 386
         run: |
-          go run github.com/onsi/ginkgo/v2/ginkgo -r -v -randomize-all -randomize-suites -trace -skip-package self integrationtests
+          go run github.com/onsi/ginkgo/v2/ginkgo -r -v -randomize-all -randomize-suites -trace -skip-package self,versionnegotiation integrationtests
+          go run github.com/onsi/ginkgo/v2/ginkgo -r -v -randomize-all -randomize-suites -trace integrationtests/versionnegotiation ${{ env.QLOGFLAG }}
           go run github.com/onsi/ginkgo/v2/ginkgo -r -v -randomize-all -randomize-suites -trace integrationtests/self ${{ env.QLOGFLAG }}
       - name: save qlogs
         if: ${{ always() && env.DEBUG == 'true' }}
