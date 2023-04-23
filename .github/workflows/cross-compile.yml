@@ -19,4 +19,5 @@ jobs:
       - name: Install dependencies
         run: go build example/main.go
       - name: Run cross compilation
-        run: .github/workflows/cross-compile.sh
+        # run in parallel on as many cores as are available on the machine
+        run: go tool dist list | xargs -I % -P "$(nproc)" .github/workflows/cross-compile.sh %
