@@ -239,6 +239,9 @@ type ConnectionIDGenerator interface {
 
 // Config contains all configuration data needed for a QUIC server or client.
 type Config struct {
+	// GetConfigForClient is called for incoming connections.
+	// If the error is not nil, the connection attempt is refused.
+	GetConfigForClient func(info *ClientHelloInfo) (*Config, error)
 	// The QUIC versions that can be negotiated.
 	// If not set, it uses all versions available.
 	Versions []VersionNumber
@@ -322,6 +325,10 @@ type Config struct {
 	// Enable QUIC datagram support (RFC 9221).
 	EnableDatagrams bool
 	Tracer          logging.Tracer
+}
+
+type ClientHelloInfo struct {
+	RemoteAddr net.Addr
 }
 
 // ConnectionState records basic details about a QUIC connection

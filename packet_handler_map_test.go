@@ -62,14 +62,14 @@ var _ = Describe("Packet Handler Map", func() {
 		var called bool
 		connID1 := protocol.ParseConnectionID([]byte{1, 2, 3, 4})
 		connID2 := protocol.ParseConnectionID([]byte{4, 3, 2, 1})
-		Expect(m.AddWithConnID(connID1, connID2, func() packetHandler {
+		Expect(m.AddWithConnID(connID1, connID2, func() (packetHandler, bool) {
 			called = true
-			return NewMockPacketHandler(mockCtrl)
+			return NewMockPacketHandler(mockCtrl), true
 		})).To(BeTrue())
 		Expect(called).To(BeTrue())
-		Expect(m.AddWithConnID(connID1, protocol.ParseConnectionID([]byte{1, 2, 3}), func() packetHandler {
+		Expect(m.AddWithConnID(connID1, protocol.ParseConnectionID([]byte{1, 2, 3}), func() (packetHandler, bool) {
 			Fail("didn't expect the constructor to be executed")
-			return nil
+			return nil, false
 		})).To(BeFalse())
 	})
 

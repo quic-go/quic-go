@@ -33,7 +33,7 @@ type packetHandler interface {
 type packetHandlerManager interface {
 	Get(protocol.ConnectionID) (packetHandler, bool)
 	GetByResetToken(protocol.StatelessResetToken) (packetHandler, bool)
-	AddWithConnID(protocol.ConnectionID, protocol.ConnectionID, func() packetHandler) bool
+	AddWithConnID(protocol.ConnectionID, protocol.ConnectionID, func() (packetHandler, bool)) bool
 	Close(error)
 	CloseServer()
 	connRunner
@@ -584,7 +584,7 @@ func (s *baseServer) handleInitialImpl(p *receivedPacket, hdr *wire.Header) erro
 	s.logger.Debugf("Changing connection ID to %s.", connID)
 	var conn quicConn
 	tracingID := nextConnTracingID()
-	if added := s.connHandler.AddWithConnID(hdr.DestConnectionID, connID, func() packetHandler {
+	if added := s.connHandler.AddWithConnID(hdr.DestConnectionID, connID, func() (packetHandler, bool) {
 		var tracer logging.ConnectionTracer
 		if s.config.Tracer != nil {
 			// Use the same connection ID that is passed to the client's GetLogWriter callback.
@@ -598,6 +598,15 @@ func (s *baseServer) handleInitialImpl(p *receivedPacket, hdr *wire.Header) erro
 				connID,
 			)
 		}
+		config := s.config
+		if s.config.GetConfigForClient != nil {
+			conf, err := s.config.GetConfigForClient(&ClientHelloInfo{RemoteAddr: p.remoteAddr})
+			if err != nil {
+				s.logger.Debugf("Rejecting new connection due to GetConfigForClient callback")
+				return nil, false
+			}
+			config = populateConfig(conf)
+		}
 		conn = s.newConn(
 			newSendConn(s.conn, p.remoteAddr, p.info),
 			s.connHandler,
@@ -608,7 +617,7 @@ func (s *baseServer) handleInitialImpl(p *receivedPacket, hdr *wire.Header) erro
 			connID,
 			s.connIDGenerator,
 			s.connHandler.GetStatelessResetToken(connID),
-			s.config,
+			config,
 			s.tlsConf,
 			s.tokenGenerator,
 			clientAddrIsValid,
@@ -626,10 +635,14 @@ func (s *baseServer) handleInitialImpl(p *receivedPacket, hdr *wire.Header) erro
 			delete(s.zeroRTTQueues, hdr.DestConnectionID)
 		}
 
-		return conn
+		return conn, true
 	}); !added {
-		// TODO: don't just drop the packet
-		// Properly reject the connection attempt.
+		go func() {
+			defer p.buffer.Release()
+			if err := s.sendConnectionRefused(p.remoteAddr, hdr, p.info); err != nil {
+				s.logger.Debugf("Error rejecting connection: %s", err)
+			}
+		}()
 		return nil
 	}
 	go conn.run()

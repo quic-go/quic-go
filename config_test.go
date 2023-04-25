@@ -1,6 +1,7 @@
 package quic
 
 import (
+	"errors"
 	"fmt"
 	"net"
 	"reflect"
@@ -45,7 +46,7 @@ var _ = Describe("Config", func() {
 			}
 
 			switch fn := typ.Field(i).Name; fn {
-			case "RequireAddressValidation", "GetLogWriter", "AllowConnectionWindowIncrease", "Allow0RTT":
+			case "GetConfigForClient", "RequireAddressValidation", "GetLogWriter", "AllowConnectionWindowIncrease", "Allow0RTT":
 				// Can't compare functions.
 			case "Versions":
 				f.Set(reflect.ValueOf([]VersionNumber{1, 2, 3}))
@@ -108,6 +109,7 @@ var _ = Describe("Config", func() {
 		It("clones function fields", func() {
 			var calledAddrValidation, calledAllowConnectionWindowIncrease bool
 			c1 := &Config{
+				GetConfigForClient:            func(info *ClientHelloInfo) (*Config, error) { return nil, errors.New("nope") },
 				AllowConnectionWindowIncrease: func(Connection, uint64) bool { calledAllowConnectionWindowIncrease = true; return true },
 				RequireAddressValidation:      func(net.Addr) bool { calledAddrValidation = true; return true },
 			}
@@ -116,6 +118,8 @@ var _ = Describe("Config", func() {
 			Expect(calledAddrValidation).To(BeTrue())
 			c2.AllowConnectionWindowIncrease(nil, 1234)
 			Expect(calledAllowConnectionWindowIncrease).To(BeTrue())
+			_, err := c2.GetConfigForClient(&ClientHelloInfo{})
+			Expect(err).To(MatchError("nope"))
 		})
 
 		It("clones non-function fields", func() {
@@ -164,6 +168,7 @@ var _ = Describe("Config", func() {
 			Expect(c.MaxIncomingUniStreams).To(BeEquivalentTo(protocol.DefaultMaxIncomingUniStreams))
 			Expect(c.DisableVersionNegotiationPackets).To(BeFalse())
 			Expect(c.DisablePathMTUDiscovery).To(BeFalse())
+			Expect(c.GetConfigForClient).To(BeNil())
 		})
 
 		It("populates empty fields with default values, for the server", func() {

@@ -436,6 +436,72 @@ var _ = Describe("Handshake tests", func() {
 		})
 	})
 
+	Context("GetConfigForClient", func() {
+		It("uses the quic.Config returned by GetConfigForClient", func() {
+			serverConfig.EnableDatagrams = false
+			var calledFrom net.Addr
+			serverConfig.GetConfigForClient = func(info *quic.ClientHelloInfo) (*quic.Config, error) {
+				conf := serverConfig.Clone()
+				conf.EnableDatagrams = true
+				calledFrom = info.RemoteAddr
+				return getQuicConfig(conf), nil
+			}
+			ln, err := quic.ListenAddr("localhost:0", getTLSConfig(), serverConfig)
+			Expect(err).ToNot(HaveOccurred())
+
+			done := make(chan struct{})
+			go func() {
+				defer GinkgoRecover()
+				_, err := ln.Accept(context.Background())
+				Expect(err).ToNot(HaveOccurred())
+				close(done)
+			}()
+
+			conn, err := quic.DialAddr(
+				context.Background(),
+				fmt.Sprintf("localhost:%d", ln.Addr().(*net.UDPAddr).Port),
+				getTLSClientConfig(),
+				getQuicConfig(&quic.Config{EnableDatagrams: true}),
+			)
+			Expect(err).ToNot(HaveOccurred())
+			defer conn.CloseWithError(0, "")
+			cs := conn.ConnectionState()
+			Expect(cs.SupportsDatagrams).To(BeTrue())
+			Eventually(done).Should(BeClosed())
+			Expect(ln.Close()).To(Succeed())
+			Expect(calledFrom.(*net.UDPAddr).Port).To(Equal(conn.LocalAddr().(*net.UDPAddr).Port))
+		})
+
+		It("rejects the connection attempt if GetConfigForClient errors", func() {
+			serverConfig.EnableDatagrams = false
+			serverConfig.GetConfigForClient = func(info *quic.ClientHelloInfo) (*quic.Config, error) {
+				return nil, errors.New("rejected")
+			}
+			ln, err := quic.ListenAddr("localhost:0", getTLSConfig(), serverConfig)
+			Expect(err).ToNot(HaveOccurred())
+			defer ln.Close()
+
+			done := make(chan struct{})
+			go func() {
+				defer GinkgoRecover()
+				_, err := ln.Accept(context.Background())
+				Expect(err).To(HaveOccurred()) // we don't expect to accept any connection
+				close(done)
+			}()
+
+			_, err = quic.DialAddr(
+				context.Background(),
+				fmt.Sprintf("localhost:%d", ln.Addr().(*net.UDPAddr).Port),
+				getTLSClientConfig(),
+				getQuicConfig(&quic.Config{EnableDatagrams: true}),
+			)
+			Expect(err).To(HaveOccurred())
+			var transportErr *quic.TransportError
+			Expect(errors.As(err, &transportErr)).To(BeTrue())
+			Expect(transportErr.ErrorCode).To(Equal(qerr.ConnectionRefused))
+		})
+	})
+
 	It("doesn't send any packets when generating the ClientHello fails", func() {
 		ln, err := net.ListenUDP("udp", nil)
 		Expect(err).ToNot(HaveOccurred())

@@ -61,7 +61,7 @@ func (mr *MockPacketHandlerManagerMockRecorder) AddResetToken(arg0, arg1 interfa
 }
 
 // AddWithConnID mocks base method.
-func (m *MockPacketHandlerManager) AddWithConnID(arg0, arg1 protocol.ConnectionID, arg2 func() packetHandler) bool {
+func (m *MockPacketHandlerManager) AddWithConnID(arg0, arg1 protocol.ConnectionID, arg2 func() (packetHandler, bool)) bool {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "AddWithConnID", arg0, arg1, arg2)
 	ret0, _ := ret[0].(bool)
