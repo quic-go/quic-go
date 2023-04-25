@@ -12,10 +12,7 @@ import (
 )
 
 type client struct {
-	sconn sendConn
-	// If the client is created with DialAddr, we create a packet conn.
-	// If it is started with Dial, we take a packet conn as a parameter.
-	createdPacketConn bool
+	sendConn sendConn
 
 	use0RTT bool
 
@@ -133,17 +130,15 @@ func setupTransport(c net.PacketConn, tlsConf *tls.Config, createdPacketConn boo
 
 func dial(
 	ctx context.Context,
-	conn net.PacketConn,
+	conn sendConn,
 	connIDGenerator ConnectionIDGenerator,
 	packetHandlers packetHandlerManager,
-	addr net.Addr,
 	tlsConf *tls.Config,
 	config *Config,
 	onClose func(),
 	use0RTT bool,
-	createdPacketConn bool,
 ) (quicConn, error) {
-	c, err := newClient(conn, addr, connIDGenerator, config, tlsConf, onClose, use0RTT, createdPacketConn)
+	c, err := newClient(conn, connIDGenerator, config, tlsConf, onClose, use0RTT)
 	if err != nil {
 		return nil, err
 	}
@@ -158,7 +153,7 @@ func dial(
 		)
 	}
 	if c.tracer != nil {
-		c.tracer.StartedConnection(c.sconn.LocalAddr(), c.sconn.RemoteAddr(), c.srcConnID, c.destConnID)
+		c.tracer.StartedConnection(c.sendConn.LocalAddr(), c.sendConn.RemoteAddr(), c.srcConnID, c.destConnID)
 	}
 	if err := c.dial(ctx); err != nil {
 		return nil, err
@@ -166,16 +161,7 @@ func dial(
 	return c.conn, nil
 }
 
-func newClient(
-	pconn net.PacketConn,
-	remoteAddr net.Addr,
-	connIDGenerator ConnectionIDGenerator,
-	config *Config,
-	tlsConf *tls.Config,
-	onClose func(),
-	use0RTT bool,
-	createdPacketConn bool,
-) (*client, error) {
+func newClient(sendConn sendConn, connIDGenerator ConnectionIDGenerator, config *Config, tlsConf *tls.Config, onClose func(), use0RTT bool) (*client, error) {
 	if tlsConf == nil {
 		tlsConf = &tls.Config{}
 	} else {
@@ -191,27 +177,26 @@ func newClient(
 		return nil, err
 	}
 	c := &client{
-		connIDGenerator:   connIDGenerator,
-		srcConnID:         srcConnID,
-		destConnID:        destConnID,
-		sconn:             newSendPconn(pconn, remoteAddr),
-		createdPacketConn: createdPacketConn,
-		use0RTT:           use0RTT,
-		onClose:           onClose,
-		tlsConf:           tlsConf,
-		config:            config,
-		version:           config.Versions[0],
-		handshakeChan:     make(chan struct{}),
-		logger:            utils.DefaultLogger.WithPrefix("client"),
+		connIDGenerator: connIDGenerator,
+		srcConnID:       srcConnID,
+		destConnID:      destConnID,
+		sendConn:        sendConn,
+		use0RTT:         use0RTT,
+		onClose:         onClose,
+		tlsConf:         tlsConf,
+		config:          config,
+		version:         config.Versions[0],
+		handshakeChan:   make(chan struct{}),
+		logger:          utils.DefaultLogger.WithPrefix("client"),
 	}
 	return c, nil
 }
 
 func (c *client) dial(ctx context.Context) error {
-	c.logger.Infof("Starting new connection to %s (%s -> %s), source connection ID %s, destination connection ID %s, version %s", c.tlsConf.ServerName, c.sconn.LocalAddr(), c.sconn.RemoteAddr(), c.srcConnID, c.destConnID, c.version)
+	c.logger.Infof("Starting new connection to %s (%s -> %s), source connection ID %s, destination connection ID %s, version %s", c.tlsConf.ServerName, c.sendConn.LocalAddr(), c.sendConn.RemoteAddr(), c.srcConnID, c.destConnID, c.version)
 
 	c.conn = newClientConnection(
-		c.sconn,
+		c.sendConn,
 		c.packetHandlers,
 		c.destConnID,
 		c.srcConnID,

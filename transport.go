@@ -148,7 +148,7 @@ func (t *Transport) Dial(ctx context.Context, addr net.Addr, tlsConf *tls.Config
 	if t.isSingleUse {
 		onClose = func() { t.Close() }
 	}
-	return dial(ctx, t.Conn, t.connIDGenerator, t.handlerMap, addr, tlsConf, conf, onClose, false, t.createdConn)
+	return dial(ctx, newSendConn(t.conn, addr, nil), t.connIDGenerator, t.handlerMap, tlsConf, conf, onClose, false)
 }
 
 // DialEarly dials a new connection, attempting to use 0-RTT if possible.
@@ -164,7 +164,7 @@ func (t *Transport) DialEarly(ctx context.Context, addr net.Addr, tlsConf *tls.C
 	if t.isSingleUse {
 		onClose = func() { t.Close() }
 	}
-	return dial(ctx, t.Conn, t.connIDGenerator, t.handlerMap, addr, tlsConf, conf, onClose, true, t.createdConn)
+	return dial(ctx, newSendConn(t.conn, addr, nil), t.connIDGenerator, t.handlerMap, tlsConf, conf, onClose, true)
 }
 
 func setReceiveBuffer(c net.PacketConn, logger utils.Logger) error {

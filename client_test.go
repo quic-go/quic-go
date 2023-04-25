@@ -26,8 +26,7 @@ func (n nullMultiplexer) RemoveConn(indexableConn) error { return nil }
 var _ = Describe("Client", func() {
 	var (
 		cl              *client
-		packetConn      *MockPacketConn
-		addr            net.Addr
+		packetConn      *MockSendConn
 		connID          protocol.ConnectionID
 		origMultiplexer multiplexer
 		tlsConf         *tls.Config
@@ -62,14 +61,14 @@ var _ = Describe("Client", func() {
 		tr.EXPECT().TracerForConnection(gomock.Any(), protocol.PerspectiveClient, gomock.Any()).Return(tracer).MaxTimes(1)
 		config = &Config{Tracer: tr, Versions: []protocol.VersionNumber{protocol.Version1}}
 		Eventually(areConnsRunning).Should(BeFalse())
-		addr = &net.UDPAddr{IP: net.IPv4(192, 168, 100, 200), Port: 1337}
-		packetConn = NewMockPacketConn(mockCtrl)
+		packetConn = NewMockSendConn(mockCtrl)
 		packetConn.EXPECT().LocalAddr().Return(&net.UDPAddr{}).AnyTimes()
+		packetConn.EXPECT().RemoteAddr().Return(&net.UDPAddr{}).AnyTimes()
 		cl = &client{
 			srcConnID:  connID,
 			destConnID: connID,
 			version:    protocol.Version1,
-			sconn:      newSendPconn(packetConn, addr),
+			sendConn:   packetConn,
 			tracer:     tracer,
 			logger:     utils.DefaultLogger,
 		}
@@ -134,7 +133,7 @@ var _ = Describe("Client", func() {
 				conn.EXPECT().HandshakeComplete().Return(c)
 				return conn
 			}
-			cl, err := newClient(packetConn, addr, &protocol.DefaultConnectionIDGenerator{}, populateConfig(config), tlsConf, nil, false, false)
+			cl, err := newClient(packetConn, &protocol.DefaultConnectionIDGenerator{}, populateConfig(config), tlsConf, nil, false)
 			Expect(err).ToNot(HaveOccurred())
 			cl.packetHandlers = manager
 			Expect(cl).ToNot(BeNil())
@@ -171,7 +170,7 @@ var _ = Describe("Client", func() {
 				return conn
 			}
 
-			cl, err := newClient(packetConn, addr, &protocol.DefaultConnectionIDGenerator{}, populateConfig(config), tlsConf, nil, true, false)
+			cl, err := newClient(packetConn, &protocol.DefaultConnectionIDGenerator{}, populateConfig(config), tlsConf, nil, true)
 			Expect(err).ToNot(HaveOccurred())
 			cl.packetHandlers = manager
 			Expect(cl).ToNot(BeNil())
@@ -207,7 +206,7 @@ var _ = Describe("Client", func() {
 				return conn
 			}
 			var closed bool
-			cl, err := newClient(packetConn, addr, &protocol.DefaultConnectionIDGenerator{}, populateConfig(config), tlsConf, func() { closed = true }, true, false)
+			cl, err := newClient(packetConn, &protocol.DefaultConnectionIDGenerator{}, populateConfig(config), tlsConf, func() { closed = true }, true)
 			Expect(err).ToNot(HaveOccurred())
 			cl.packetHandlers = manager
 			Expect(cl).ToNot(BeNil())
@@ -266,7 +265,6 @@ var _ = Describe("Client", func() {
 		It("creates new connections with the right parameters", func() {
 			config := &Config{Versions: []protocol.VersionNumber{protocol.Version1}}
 			c := make(chan struct{})
-			var cconn sendConn
 			var version protocol.VersionNumber
 			var conf *Config
 			done := make(chan struct{})
@@ -286,7 +284,6 @@ var _ = Describe("Client", func() {
 				_ utils.Logger,
 				versionP protocol.VersionNumber,
 			) quicConn {
-				cconn = connP
 				version = versionP
 				conf = configP
 				close(c)
@@ -298,15 +295,16 @@ var _ = Describe("Client", func() {
 				close(done)
 				return conn
 			}
+			packetConn := NewMockPacketConn(mockCtrl)
 			packetConn.EXPECT().ReadFrom(gomock.Any()).DoAndReturn(func([]byte) (int, net.Addr, error) {
 				<-done
 				return 0, nil, errors.New("closed")
 			})
+			packetConn.EXPECT().LocalAddr()
 			packetConn.EXPECT().SetReadDeadline(gomock.Any()).AnyTimes()
-			_, err := Dial(context.Background(), packetConn, addr, tlsConf, config)
+			_, err := Dial(context.Background(), packetConn, &net.UDPAddr{}, tlsConf, config)
 			Expect(err).ToNot(HaveOccurred())
 			Eventually(c).Should(BeClosed())
-			Expect(cconn.(*spconn).PacketConn).To(Equal(packetConn))
 			Expect(version).To(Equal(config.Versions[0]))
 			Expect(conf.Versions).To(Equal(config.Versions))
 		})
