@@ -1255,7 +1255,6 @@ var _ = Describe("Server", func() {
 			serv = ln.(*earlyServer)
 			phm = NewMockPacketHandlerManager(mockCtrl)
 			serv.connHandler = phm
-			serv.zeroRTTQueueDuration = time.Hour
 		})
 
 		AfterEach(func() {
@@ -1383,23 +1382,73 @@ var _ = Describe("Server", func() {
 		})
 
 		It("drops queues after a while", func() {
-			serv.zeroRTTQueueDuration = time.Millisecond
+			now := time.Now()
+
 			connID := protocol.ParseConnectionID([]byte{1, 2, 3, 4, 5, 6, 7, 8})
 			p := getPacket(&wire.Header{
 				Type:             protocol.PacketType0RTT,
 				DestConnectionID: connID,
 				Version:          serv.config.Versions[0],
 			}, make([]byte, 200))
-			got := make(chan struct{})
-			phm.EXPECT().Get(connID).Do(func(protocol.ConnectionID) { close(got) })
+			p.rcvTime = now
+
+			connID2 := protocol.ParseConnectionID([]byte{1, 2, 3, 4, 5, 6, 7, 9})
+			p2Time := now.Add(protocol.Max0RTTQueueingDuration / 2)
+			p2 := getPacket(&wire.Header{
+				Type:             protocol.PacketType0RTT,
+				DestConnectionID: connID2,
+				Version:          serv.config.Versions[0],
+			}, make([]byte, 300))
+			p2.rcvTime = p2Time // doesn't trigger the cleanup of the first packet
+
+			dropped1 := make(chan struct{})
+			dropped2 := make(chan struct{})
+			// need to register the call before handling the packet to avoid race condition
+			gomock.InOrder(
+				tracer.EXPECT().DroppedPacket(p.remoteAddr, logging.PacketType0RTT, p.Size(), logging.PacketDropDOSPrevention).Do(func(net.Addr, logging.PacketType, protocol.ByteCount, logging.PacketDropReason) {
+					close(dropped1)
+				}),
+				tracer.EXPECT().DroppedPacket(p2.remoteAddr, logging.PacketType0RTT, p2.Size(), logging.PacketDropDOSPrevention).Do(func(net.Addr, logging.PacketType, protocol.ByteCount, logging.PacketDropReason) {
+					close(dropped2)
+				}),
+			)
+
+			phm.EXPECT().Get(connID)
 			serv.handlePacket(p)
-			<-got
-			// TODO: use the tracer call
-			Eventually(func() int {
-				serv.mutex.Lock()
-				defer serv.mutex.Unlock()
-				return len(serv.zeroRTTQueues)
-			}).Should(BeZero())
+
+			// There's no cleanup Go routine.
+			// Cleanup is triggered when new packets are received.
+
+			phm.EXPECT().Get(connID2)
+			serv.handlePacket(p2)
+			// make sure no cleanup is executed
+			Consistently(dropped1, 50*time.Millisecond).ShouldNot(BeClosed())
+
+			// There's no cleanup Go routine.
+			// Cleanup is triggered when new packets are received.
+			connID3 := protocol.ParseConnectionID([]byte{1, 2, 3, 4, 5, 6, 7, 0})
+			p3 := getPacket(&wire.Header{
+				Type:             protocol.PacketType0RTT,
+				DestConnectionID: connID3,
+				Version:          serv.config.Versions[0],
+			}, make([]byte, 200))
+			p3.rcvTime = now.Add(protocol.Max0RTTQueueingDuration + time.Nanosecond) // now triggers the cleanup
+			phm.EXPECT().Get(connID3)
+			serv.handlePacket(p3)
+			Eventually(dropped1).Should(BeClosed())
+			Consistently(dropped2, 50*time.Millisecond).ShouldNot(BeClosed())
+
+			// make sure the second packet is also cleaned up
+			connID4 := protocol.ParseConnectionID([]byte{1, 2, 3, 4, 5, 6, 7, 1})
+			p4 := getPacket(&wire.Header{
+				Type:             protocol.PacketType0RTT,
+				DestConnectionID: connID4,
+				Version:          serv.config.Versions[0],
+			}, make([]byte, 200))
+			p4.rcvTime = p2Time.Add(protocol.Max0RTTQueueingDuration + time.Nanosecond) // now triggers the cleanup
+			phm.EXPECT().Get(connID4)
+			serv.handlePacket(p4)
+			Eventually(dropped2).Should(BeClosed())
 		})
 	})
 })
