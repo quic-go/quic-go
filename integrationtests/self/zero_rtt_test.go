@@ -7,7 +7,6 @@ import (
 	"io"
 	mrand "math/rand"
 	"net"
-	"sort"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -214,7 +213,7 @@ var _ = Describe("0-RTT", func() {
 				ln,
 				proxy.LocalPort(),
 				clientTLSConf,
-				&quic.Config{ConnectionIDLength: connIDLen},
+				getQuicConfig(&quic.Config{ConnectionIDLength: connIDLen}),
 				PRData,
 			)
 
@@ -237,8 +236,7 @@ var _ = Describe("0-RTT", func() {
 			Expect(num0RTT).ToNot(BeZero())
 			zeroRTTPackets := get0RTTPackets(tracer.getRcvdLongHeaderPackets())
 			Expect(len(zeroRTTPackets)).To(BeNumerically(">", 10))
-			sort.Slice(zeroRTTPackets, func(i, j int) bool { return zeroRTTPackets[i] < zeroRTTPackets[j] })
-			Expect(zeroRTTPackets[0]).To(Equal(protocol.PacketNumber(0)))
+			Expect(zeroRTTPackets).To(ContainElement(protocol.PacketNumber(0)))
 		})
 	}
 
