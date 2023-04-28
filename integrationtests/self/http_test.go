@@ -35,6 +35,8 @@ func (b neverEnding) Read(p []byte) (n int, err error) {
 	return len(p), nil
 }
 
+const deadlineDelay = 250 * time.Millisecond
+
 var _ = Describe("HTTP tests", func() {
 	var (
 		mux            *http.ServeMux
@@ -385,10 +387,13 @@ var _ = Describe("HTTP tests", func() {
 			})
 
 			It("supports read deadlines", Focus, func() {
+				if !go120 {
+					Skip("This test requires Go 1.20+")
+				}
+
 				mux.HandleFunc("/read-deadline", func(w http.ResponseWriter, r *http.Request) {
 					defer GinkgoRecover()
-					rc := http.NewResponseController(w)
-					err := rc.SetReadDeadline(time.Now().Add(time.Second))
+					err := SetReadDeadline(w, time.Now().Add(deadlineDelay))
 					Expect(err).ToNot(HaveOccurred())
 
 					body, err := io.ReadAll(r.Body)
@@ -398,35 +403,38 @@ var _ = Describe("HTTP tests", func() {
 					w.Write([]byte("ok"))
 				})
 
-				expectedEnd := time.Now().Add(time.Second)
+				expectedEnd := time.Now().Add(deadlineDelay)
 				resp, err := client.Post("https://localhost:"+port+"/read-deadline", "text/plain", neverEnding('a'))
 				Expect(err).ToNot(HaveOccurred())
 				Expect(resp.StatusCode).To(Equal(200))
 
-				body, err := io.ReadAll(gbytes.TimeoutReader(resp.Body, 2*time.Second))
+				body, err := io.ReadAll(gbytes.TimeoutReader(resp.Body, 2*deadlineDelay))
 				Expect(err).ToNot(HaveOccurred())
 				Expect(time.Now().After(expectedEnd)).To(BeTrue())
 				Expect(string(body)).To(Equal("ok"))
 			})
 
 			It("supports write deadlines", Focus, func() {
+				if !go120 {
+					Skip("This test requires Go 1.20+")
+				}
+
 				mux.HandleFunc("/write-deadline", func(w http.ResponseWriter, r *http.Request) {
 					defer GinkgoRecover()
-					rc := http.NewResponseController(w)
-					err := rc.SetWriteDeadline(time.Now().Add(time.Second))
+					err := SetWriteDeadline(w, time.Now().Add(deadlineDelay))
 					Expect(err).ToNot(HaveOccurred())
 
 					_, err = io.Copy(w, neverEnding('a'))
 					Expect(err).To(MatchError(os.ErrDeadlineExceeded))
 				})
 
-				expectedEnd := time.Now().Add(time.Second)
+				expectedEnd := time.Now().Add(deadlineDelay)
 
 				resp, err := client.Get("https://localhost:" + port + "/write-deadline")
 				Expect(err).ToNot(HaveOccurred())
 				Expect(resp.StatusCode).To(Equal(200))
 
-				body, err := io.ReadAll(gbytes.TimeoutReader(resp.Body, 2*time.Second))
+				body, err := io.ReadAll(gbytes.TimeoutReader(resp.Body, 2*deadlineDelay))
 				Expect(err).ToNot(HaveOccurred())
 				Expect(time.Now().After(expectedEnd)).To(BeTrue())
 				Expect(string(body)).To(ContainSubstring("aa"))
