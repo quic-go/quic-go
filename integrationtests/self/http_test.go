@@ -11,6 +11,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"os"
 	"strconv"
 	"time"
 
@@ -24,6 +25,15 @@ import (
 	. "github.com/onsi/gomega"
 	"github.com/onsi/gomega/gbytes"
 )
+
+type neverEnding byte
+
+func (b neverEnding) Read(p []byte) (n int, err error) {
+	for i := range p {
+		p[i] = byte(b)
+	}
+	return len(p), nil
+}
 
 var _ = Describe("HTTP tests", func() {
 	var (
@@ -372,6 +382,54 @@ var _ = Describe("HTTP tests", func() {
 				repl, err := io.ReadAll(str)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(repl).To(Equal(data))
+			})
+
+			It("supports read deadlines", Focus, func() {
+				mux.HandleFunc("/read-deadline", func(w http.ResponseWriter, r *http.Request) {
+					defer GinkgoRecover()
+					rc := http.NewResponseController(w)
+					err := rc.SetReadDeadline(time.Now().Add(time.Second))
+					Expect(err).ToNot(HaveOccurred())
+
+					body, err := io.ReadAll(r.Body)
+					Expect(err).To(MatchError(os.ErrDeadlineExceeded))
+					Expect(body).To(ContainSubstring("aa"))
+
+					w.Write([]byte("ok"))
+				})
+
+				expectedEnd := time.Now().Add(time.Second)
+				resp, err := client.Post("https://localhost:"+port+"/read-deadline", "text/plain", neverEnding('a'))
+				Expect(err).ToNot(HaveOccurred())
+				Expect(resp.StatusCode).To(Equal(200))
+
+				body, err := io.ReadAll(gbytes.TimeoutReader(resp.Body, 2*time.Second))
+				Expect(err).ToNot(HaveOccurred())
+				Expect(time.Now().After(expectedEnd)).To(BeTrue())
+				Expect(string(body)).To(Equal("ok"))
+			})
+
+			It("supports write deadlines", Focus, func() {
+				mux.HandleFunc("/write-deadline", func(w http.ResponseWriter, r *http.Request) {
+					defer GinkgoRecover()
+					rc := http.NewResponseController(w)
+					err := rc.SetWriteDeadline(time.Now().Add(time.Second))
+					Expect(err).ToNot(HaveOccurred())
+
+					_, err = io.Copy(w, neverEnding('a'))
+					Expect(err).To(MatchError(os.ErrDeadlineExceeded))
+				})
+
+				expectedEnd := time.Now().Add(time.Second)
+
+				resp, err := client.Get("https://localhost:" + port + "/write-deadline")
+				Expect(err).ToNot(HaveOccurred())
+				Expect(resp.StatusCode).To(Equal(200))
+
+				body, err := io.ReadAll(gbytes.TimeoutReader(resp.Body, 2*time.Second))
+				Expect(err).ToNot(HaveOccurred())
+				Expect(time.Now().After(expectedEnd)).To(BeTrue())
+				Expect(string(body)).To(ContainSubstring("aa"))
 			})
 
 			if version != protocol.VersionDraft29 {
