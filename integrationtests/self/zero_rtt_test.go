@@ -223,7 +223,7 @@ var _ = Describe("0-RTT", func() {
 				tlsConf,
 				getQuicConfig(&quic.Config{
 					Allow0RTT: true,
-					Tracer:    newTracer(func() logging.ConnectionTracer { return tracer }),
+					Tracer:    newTracer(tracer),
 				}),
 			)
 			Expect(err).ToNot(HaveOccurred())
@@ -277,7 +277,7 @@ var _ = Describe("0-RTT", func() {
 			tlsConf,
 			getQuicConfig(&quic.Config{
 				Allow0RTT: true,
-				Tracer:    newTracer(func() logging.ConnectionTracer { return tracer }),
+				Tracer:    newTracer(tracer),
 			}),
 		)
 		Expect(err).ToNot(HaveOccurred())
@@ -359,7 +359,7 @@ var _ = Describe("0-RTT", func() {
 			tlsConf,
 			getQuicConfig(&quic.Config{
 				Allow0RTT: true,
-				Tracer:    newTracer(func() logging.ConnectionTracer { return tracer }),
+				Tracer:    newTracer(tracer),
 			}),
 		)
 		Expect(err).ToNot(HaveOccurred())
@@ -435,7 +435,7 @@ var _ = Describe("0-RTT", func() {
 			getQuicConfig(&quic.Config{
 				RequireAddressValidation: func(net.Addr) bool { return true },
 				Allow0RTT:                true,
-				Tracer:                   newTracer(func() logging.ConnectionTracer { return tracer }),
+				Tracer:                   newTracer(tracer),
 			}),
 		)
 		Expect(err).ToNot(HaveOccurred())
@@ -496,7 +496,7 @@ var _ = Describe("0-RTT", func() {
 			getQuicConfig(&quic.Config{
 				MaxIncomingUniStreams: maxStreams + 1,
 				Allow0RTT:             true,
-				Tracer:                newTracer(func() logging.ConnectionTracer { return tracer }),
+				Tracer:                newTracer(tracer),
 			}),
 		)
 		Expect(err).ToNot(HaveOccurred())
@@ -541,7 +541,7 @@ var _ = Describe("0-RTT", func() {
 			getQuicConfig(&quic.Config{
 				MaxIncomingStreams: maxStreams - 1,
 				Allow0RTT:          true,
-				Tracer:             newTracer(func() logging.ConnectionTracer { return tracer }),
+				Tracer:             newTracer(tracer),
 			}),
 		)
 		Expect(err).ToNot(HaveOccurred())
@@ -569,7 +569,7 @@ var _ = Describe("0-RTT", func() {
 			tlsConf,
 			getQuicConfig(&quic.Config{
 				Allow0RTT: true,
-				Tracer:    newTracer(func() logging.ConnectionTracer { return tracer }),
+				Tracer:    newTracer(tracer),
 			}),
 		)
 		Expect(err).ToNot(HaveOccurred())
@@ -596,7 +596,7 @@ var _ = Describe("0-RTT", func() {
 			tlsConf,
 			getQuicConfig(&quic.Config{
 				Allow0RTT: false, // application rejects 0-RTT
-				Tracer:    newTracer(func() logging.ConnectionTracer { return tracer }),
+				Tracer:    newTracer(tracer),
 			}),
 		)
 		Expect(err).ToNot(HaveOccurred())
@@ -622,7 +622,7 @@ var _ = Describe("0-RTT", func() {
 
 			secondConf := getQuicConfig(&quic.Config{
 				Allow0RTT: true,
-				Tracer:    newTracer(func() logging.ConnectionTracer { return tracer }),
+				Tracer:    newTracer(tracer),
 			})
 			addFlowControlLimit(secondConf, 100)
 			ln, err := quic.ListenAddrEarly(
@@ -699,7 +699,7 @@ var _ = Describe("0-RTT", func() {
 				tlsConf,
 				getQuicConfig(&quic.Config{
 					MaxIncomingUniStreams: 1,
-					Tracer:                newTracer(func() logging.ConnectionTracer { return tracer }),
+					Tracer:                newTracer(tracer),
 				}),
 			)
 			Expect(err).ToNot(HaveOccurred())
@@ -775,7 +775,7 @@ var _ = Describe("0-RTT", func() {
 			tlsConf,
 			getQuicConfig(&quic.Config{
 				Allow0RTT: true,
-				Tracer:    newTracer(func() logging.ConnectionTracer { return tracer }),
+				Tracer:    newTracer(tracer),
 			}),
 		)
 		Expect(err).ToNot(HaveOccurred())

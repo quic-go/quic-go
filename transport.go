@@ -95,10 +95,10 @@ func (t *Transport) Listen(tlsConf *tls.Config, conf *Config) (*Listener, error)
 		return nil, errListenerAlreadySet
 	}
 	conf = populateServerConfig(conf)
-	if err := t.init(conf, true); err != nil {
+	if err := t.init(true); err != nil {
 		return nil, err
 	}
-	s, err := newServer(t.conn, t.handlerMap, t.connIDGenerator, tlsConf, conf, t.closeServer, false)
+	s, err := newServer(t.conn, t.handlerMap, t.connIDGenerator, tlsConf, conf, t.Tracer, t.closeServer, false)
 	if err != nil {
 		return nil, err
 	}
@@ -124,10 +124,10 @@ func (t *Transport) ListenEarly(tlsConf *tls.Config, conf *Config) (*EarlyListen
 		return nil, errListenerAlreadySet
 	}
 	conf = populateServerConfig(conf)
-	if err := t.init(conf, true); err != nil {
+	if err := t.init(true); err != nil {
 		return nil, err
 	}
-	s, err := newServer(t.conn, t.handlerMap, t.connIDGenerator, tlsConf, conf, t.closeServer, true)
+	s, err := newServer(t.conn, t.handlerMap, t.connIDGenerator, tlsConf, conf, t.Tracer, t.closeServer, true)
 	if err != nil {
 		return nil, err
 	}
@@ -141,7 +141,7 @@ func (t *Transport) Dial(ctx context.Context, addr net.Addr, tlsConf *tls.Config
 		return nil, err
 	}
 	conf = populateConfig(conf)
-	if err := t.init(conf, false); err != nil {
+	if err := t.init(false); err != nil {
 		return nil, err
 	}
 	var onClose func()
@@ -157,7 +157,7 @@ func (t *Transport) DialEarly(ctx context.Context, addr net.Addr, tlsConf *tls.C
 		return nil, err
 	}
 	conf = populateConfig(conf)
-	if err := t.init(conf, false); err != nil {
+	if err := t.init(false); err != nil {
 		return nil, err
 	}
 	var onClose func()
@@ -200,7 +200,7 @@ func setReceiveBuffer(c net.PacketConn, logger utils.Logger) error {
 // only print warnings about the UDP receive buffer size once
 var receiveBufferWarningOnce sync.Once
 
-func (t *Transport) init(conf *Config, isServer bool) error {
+func (t *Transport) init(isServer bool) error {
 	t.initOnce.Do(func() {
 		getMultiplexer().AddConn(t.Conn)
 
@@ -210,7 +210,6 @@ func (t *Transport) init(conf *Config, isServer bool) error {
 			return
 		}
 
-		t.Tracer = conf.Tracer
 		t.logger = utils.DefaultLogger // TODO: make this configurable
 		t.conn = conn
 		t.handlerMap = newPacketHandlerMap(t.StatelessResetKey, t.enqueueClosePacket, t.logger)

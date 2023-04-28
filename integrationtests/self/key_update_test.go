@@ -75,7 +75,9 @@ var _ = Describe("Key Update tests", func() {
 			context.Background(),
 			fmt.Sprintf("localhost:%d", server.Addr().(*net.UDPAddr).Port),
 			getTLSClientConfig(),
-			getQuicConfig(&quic.Config{Tracer: newTracer(func() logging.ConnectionTracer { return &keyUpdateConnTracer{} })}),
+			getQuicConfig(&quic.Config{Tracer: func(context.Context, logging.Perspective, quic.ConnectionID) logging.ConnectionTracer {
+				return &keyUpdateConnTracer{}
+			}}),
 		)
 		Expect(err).ToNot(HaveOccurred())
 		str, err := conn.AcceptUniStream(context.Background())

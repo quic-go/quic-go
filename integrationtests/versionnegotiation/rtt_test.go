@@ -47,7 +47,7 @@ var _ = Describe("Handshake RTT tests", func() {
 			context.Background(),
 			proxy.LocalAddr().String(),
 			getTLSClientConfig(),
-			maybeAddQlogTracer(&quic.Config{Versions: protocol.SupportedVersions[1:2]}),
+			maybeAddQLOGTracer(&quic.Config{Versions: protocol.SupportedVersions[1:2]}),
 		)
 		Expect(err).To(HaveOccurred())
 		expectDurationInRTTs(startTime, 1)

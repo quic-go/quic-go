@@ -146,11 +146,7 @@ func dial(
 
 	c.tracingID = nextConnTracingID()
 	if c.config.Tracer != nil {
-		c.tracer = c.config.Tracer.TracerForConnection(
-			context.WithValue(ctx, ConnectionTracingKey, c.tracingID),
-			protocol.PerspectiveClient,
-			c.destConnID,
-		)
+		c.tracer = c.config.Tracer(context.WithValue(ctx, ConnectionTracingKey, c.tracingID), protocol.PerspectiveClient, c.destConnID)
 	}
 	if c.tracer != nil {
 		c.tracer.StartedConnection(c.sendConn.LocalAddr(), c.sendConn.RemoteAddr(), c.srcConnID, c.destConnID)

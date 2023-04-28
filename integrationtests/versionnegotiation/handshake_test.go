@@ -85,7 +85,9 @@ var _ = Describe("Handshake tests", func() {
 			serverConfig := &quic.Config{}
 			serverConfig.Versions = []protocol.VersionNumber{7, 8, protocol.SupportedVersions[0], 9}
 			serverTracer := &versionNegotiationTracer{}
-			serverConfig.Tracer = newTracer(func() logging.ConnectionTracer { return serverTracer })
+			serverConfig.Tracer = func(context.Context, logging.Perspective, quic.ConnectionID) logging.ConnectionTracer {
+				return serverTracer
+			}
 			server, cl := startServer(getTLSConfig(), serverConfig)
 			defer cl()
 			clientTracer := &versionNegotiationTracer{}
@@ -93,7 +95,9 @@ var _ = Describe("Handshake tests", func() {
 				context.Background(),
 				fmt.Sprintf("localhost:%d", server.Addr().(*net.UDPAddr).Port),
 				getTLSClientConfig(),
-				maybeAddQlogTracer(&quic.Config{Tracer: newTracer(func() logging.ConnectionTracer { return clientTracer })}),
+				maybeAddQLOGTracer(&quic.Config{Tracer: func(ctx context.Context, perspective logging.Perspective, id quic.ConnectionID) logging.ConnectionTracer {
+					return clientTracer
+				}}),
 			)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(conn.(versioner).GetVersion()).To(Equal(expectedVersion))
@@ -111,10 +115,12 @@ var _ = Describe("Handshake tests", func() {
 			expectedVersion := protocol.SupportedVersions[0]
 			// the server doesn't support the highest supported version, which is the first one the client will try
 			// but it supports a bunch of versions that the client doesn't speak
+			serverTracer := &versionNegotiationTracer{}
 			serverConfig := &quic.Config{}
 			serverConfig.Versions = supportedVersions
-			serverTracer := &versionNegotiationTracer{}
-			serverConfig.Tracer = newTracer(func() logging.ConnectionTracer { return serverTracer })
+			serverConfig.Tracer = func(context.Context, logging.Perspective, quic.ConnectionID) logging.ConnectionTracer {
+				return serverTracer
+			}
 			server, cl := startServer(getTLSConfig(), serverConfig)
 			defer cl()
 			clientVersions := []protocol.VersionNumber{7, 8, 9, protocol.SupportedVersions[0], 10}
@@ -123,9 +129,11 @@ var _ = Describe("Handshake tests", func() {
 				context.Background(),
 				fmt.Sprintf("localhost:%d", server.Addr().(*net.UDPAddr).Port),
 				getTLSClientConfig(),
-				maybeAddQlogTracer(&quic.Config{
+				maybeAddQLOGTracer(&quic.Config{
 					Versions: clientVersions,
-					Tracer:   newTracer(func() logging.ConnectionTracer { return clientTracer }),
+					Tracer: func(context.Context, logging.Perspective, quic.ConnectionID) logging.ConnectionTracer {
+						return clientTracer
+					},
 				}),
 			)
 			Expect(err).ToNot(HaveOccurred())

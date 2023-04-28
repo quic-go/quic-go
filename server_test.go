@@ -170,7 +170,7 @@ var _ = Describe("Server", func() {
 
 	Context("server accepting connections that completed the handshake", func() {
 		var (
-			ln     *Listener
+			tr     *Transport
 			serv   *baseServer
 			phm    *MockPacketHandlerManager
 			tracer *mocklogging.MockTracer
@@ -178,8 +178,8 @@ var _ = Describe("Server", func() {
 
 		BeforeEach(func() {
 			tracer = mocklogging.NewMockTracer(mockCtrl)
-			var err error
-			ln, err = Listen(conn, tlsConf, &Config{Tracer: tracer})
+			tr = &Transport{Conn: conn, Tracer: tracer}
+			ln, err := tr.Listen(tlsConf, nil)
 			Expect(err).ToNot(HaveOccurred())
 			serv = ln.baseServer
 			phm = NewMockPacketHandlerManager(mockCtrl)
@@ -187,7 +187,7 @@ var _ = Describe("Server", func() {
 		})
 
 		AfterEach(func() {
-			ln.Close()
+			tr.Close()
 		})
 
 		Context("handling packets", func() {
@@ -276,7 +276,6 @@ var _ = Describe("Server", func() {
 					_, ok := fn()
 					return ok
 				})
-				tracer.EXPECT().TracerForConnection(gomock.Any(), protocol.PerspectiveServer, protocol.ParseConnectionID([]byte{0xde, 0xad, 0xc0, 0xde}))
 				conn := NewMockQUICConn(mockCtrl)
 				serv.newConn = func(
 					_ sendConn,
@@ -478,7 +477,6 @@ var _ = Describe("Server", func() {
 						return ok
 					}),
 				)
-				tracer.EXPECT().TracerForConnection(gomock.Any(), protocol.PerspectiveServer, protocol.ParseConnectionID([]byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}))
 
 				conn := NewMockQUICConn(mockCtrl)
 				serv.newConn = func(
@@ -537,7 +535,6 @@ var _ = Describe("Server", func() {
 					_, ok := fn()
 					return ok
 				}).AnyTimes()
-				tracer.EXPECT().TracerForConnection(gomock.Any(), protocol.PerspectiveServer, gomock.Any()).AnyTimes()
 
 				acceptConn := make(chan struct{})
 				var counter uint32 // to be used as an atomic, so we query it in Eventually
@@ -665,7 +662,6 @@ var _ = Describe("Server", func() {
 					_, ok := fn()
 					return ok
 				}).Times(protocol.MaxAcceptQueueSize)
-				tracer.EXPECT().TracerForConnection(gomock.Any(), protocol.PerspectiveServer, gomock.Any()).Times(protocol.MaxAcceptQueueSize)
 
 				var wg sync.WaitGroup
 				wg.Add(protocol.MaxAcceptQueueSize)
@@ -737,7 +733,6 @@ var _ = Describe("Server", func() {
 					_, ok := fn()
 					return ok
 				})
-				tracer.EXPECT().TracerForConnection(gomock.Any(), protocol.PerspectiveServer, gomock.Any())
 
 				serv.handlePacket(p)
 				// make sure there are no Write calls on the packet conn
@@ -1062,6 +1057,7 @@ var _ = Describe("Server", func() {
 					return ok
 				})
 				done := make(chan struct{})
+				tracer.EXPECT().SentPacket(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any())
 				conn.EXPECT().WriteTo(gomock.Any(), gomock.Any()).DoAndReturn(func(b []byte, _ net.Addr) (int, error) {
 					defer close(done)
 					rejectHdr := parseHeader(b)
@@ -1119,7 +1115,6 @@ var _ = Describe("Server", func() {
 					_, ok := fn()
 					return ok
 				})
-				tracer.EXPECT().TracerForConnection(gomock.Any(), protocol.PerspectiveServer, gomock.Any())
 				serv.handleInitialImpl(
 					&receivedPacket{buffer: getPacketBuffer()},
 					&wire.Header{DestConnectionID: protocol.ParseConnectionID([]byte{1, 2, 3, 4, 5, 6, 7, 8})},
@@ -1326,6 +1321,7 @@ var _ = Describe("Server", func() {
 
 	Context("0-RTT", func() {
 		var (
+			tr     *Transport
 			serv   *baseServer
 			phm    *MockPacketHandlerManager
 			tracer *mocklogging.MockTracer
@@ -1333,7 +1329,8 @@ var _ = Describe("Server", func() {
 
 		BeforeEach(func() {
 			tracer = mocklogging.NewMockTracer(mockCtrl)
-			ln, err := ListenEarly(conn, tlsConf, &Config{Tracer: tracer})
+			tr = &Transport{Conn: conn, Tracer: tracer}
+			ln, err := tr.ListenEarly(tlsConf, nil)
 			Expect(err).ToNot(HaveOccurred())
 			phm = NewMockPacketHandlerManager(mockCtrl)
 			serv = ln.baseServer
@@ -1342,7 +1339,7 @@ var _ = Describe("Server", func() {
 
 		AfterEach(func() {
 			phm.EXPECT().CloseServer().MaxTimes(1)
-			serv.Close()
+			tr.Close()
 		})
 
 		It("passes packets to existing connections", func() {
@@ -1425,7 +1422,6 @@ var _ = Describe("Server", func() {
 				return conn
 			}
 
-			tracer.EXPECT().TracerForConnection(gomock.Any(), gomock.Any(), gomock.Any())
 			phm.EXPECT().Get(connID)
 			phm.EXPECT().AddWithConnID(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(func(_, _ protocol.ConnectionID, fn func() (packetHandler, bool)) bool {
 				phm.EXPECT().GetStatelessResetToken(gomock.Any())

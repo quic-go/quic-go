@@ -27,7 +27,7 @@ var _ = Describe("Packetization", func() {
 			getTLSConfig(),
 			getQuicConfig(&quic.Config{
 				DisablePathMTUDiscovery: true,
-				Tracer:                  newTracer(func() logging.ConnectionTracer { return serverTracer }),
+				Tracer:                  newTracer(serverTracer),
 			}),
 		)
 		Expect(err).ToNot(HaveOccurred())
@@ -50,7 +50,7 @@ var _ = Describe("Packetization", func() {
 			getTLSClientConfig(),
 			getQuicConfig(&quic.Config{
 				DisablePathMTUDiscovery: true,
-				Tracer:                  newTracer(func() logging.ConnectionTracer { return clientTracer }),
+				Tracer:                  newTracer(clientTracer),
 			}),
 		)
 		Expect(err).ToNot(HaveOccurred())

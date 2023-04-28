@@ -1,14 +1,15 @@
 package quic
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"net"
 	"reflect"
 	"time"
 
-	mocklogging "github.com/quic-go/quic-go/internal/mocks/logging"
 	"github.com/quic-go/quic-go/internal/protocol"
+	"github.com/quic-go/quic-go/logging"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -46,7 +47,7 @@ var _ = Describe("Config", func() {
 			}
 
 			switch fn := typ.Field(i).Name; fn {
-			case "GetConfigForClient", "RequireAddressValidation", "GetLogWriter", "AllowConnectionWindowIncrease":
+			case "GetConfigForClient", "RequireAddressValidation", "GetLogWriter", "AllowConnectionWindowIncrease", "Tracer":
 				// Can't compare functions.
 			case "Versions":
 				f.Set(reflect.ValueOf([]VersionNumber{1, 2, 3}))
@@ -88,8 +89,6 @@ var _ = Describe("Config", func() {
 				f.Set(reflect.ValueOf(true))
 			case "Allow0RTT":
 				f.Set(reflect.ValueOf(true))
-			case "Tracer":
-				f.Set(reflect.ValueOf(mocklogging.NewMockTracer(mockCtrl)))
 			default:
 				Fail(fmt.Sprintf("all fields must be accounted for, but saw unknown field %q", fn))
 			}
@@ -109,11 +108,15 @@ var _ = Describe("Config", func() {
 
 	Context("cloning", func() {
 		It("clones function fields", func() {
-			var calledAddrValidation, calledAllowConnectionWindowIncrease bool
+			var calledAddrValidation, calledAllowConnectionWindowIncrease, calledTracer bool
 			c1 := &Config{
 				GetConfigForClient:            func(info *ClientHelloInfo) (*Config, error) { return nil, errors.New("nope") },
 				AllowConnectionWindowIncrease: func(Connection, uint64) bool { calledAllowConnectionWindowIncrease = true; return true },
 				RequireAddressValidation:      func(net.Addr) bool { calledAddrValidation = true; return true },
+				Tracer: func(context.Context, logging.Perspective, ConnectionID) logging.ConnectionTracer {
+					calledTracer = true
+					return nil
+				},
 			}
 			c2 := c1.Clone()
 			c2.RequireAddressValidation(&net.UDPAddr{})
@@ -122,6 +125,8 @@ var _ = Describe("Config", func() {
 			Expect(calledAllowConnectionWindowIncrease).To(BeTrue())
 			_, err := c2.GetConfigForClient(&ClientHelloInfo{})
 			Expect(err).To(MatchError("nope"))
+			c2.Tracer(context.Background(), logging.PerspectiveClient, protocol.ConnectionID{})
+			Expect(calledTracer).To(BeTrue())
 		})
 
 		It("clones non-function fields", func() {

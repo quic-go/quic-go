@@ -56,10 +56,12 @@ var _ = Describe("Client", func() {
 		connID = protocol.ParseConnectionID([]byte{0, 0, 0, 0, 0, 0, 0x13, 0x37})
 		originalClientConnConstructor = newClientConnection
 		tracer = mocklogging.NewMockConnectionTracer(mockCtrl)
-		tr := mocklogging.NewMockTracer(mockCtrl)
-		tr.EXPECT().DroppedPacket(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
-		tr.EXPECT().TracerForConnection(gomock.Any(), protocol.PerspectiveClient, gomock.Any()).Return(tracer).MaxTimes(1)
-		config = &Config{Tracer: tr, Versions: []protocol.VersionNumber{protocol.Version1}}
+		config = &Config{
+			Tracer: func(ctx context.Context, perspective logging.Perspective, id ConnectionID) logging.ConnectionTracer {
+				return tracer
+			},
+			Versions: []protocol.VersionNumber{protocol.Version1},
+		}
 		Eventually(areConnsRunning).Should(BeFalse())
 		packetConn = NewMockSendConn(mockCtrl)
 		packetConn.EXPECT().LocalAddr().Return(&net.UDPAddr{}).AnyTimes()

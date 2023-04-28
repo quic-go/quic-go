@@ -2,7 +2,6 @@ package qlog
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
 	"errors"
 	"io"
@@ -51,17 +50,6 @@ type entry struct {
 }
 
 var _ = Describe("Tracing", func() {
-	Context("tracer", func() {
-		It("returns nil when there's no io.WriteCloser", func() {
-			t := NewTracer(func(logging.Perspective, []byte) io.WriteCloser { return nil })
-			Expect(t.TracerForConnection(
-				context.Background(),
-				logging.PerspectiveClient,
-				protocol.ParseConnectionID([]byte{1, 2, 3, 4}),
-			)).To(BeNil())
-		})
-	})
-
 	It("stops writing when encountering an error", func() {
 		buf := &bytes.Buffer{}
 		t := NewConnectionTracer(
@@ -88,9 +76,8 @@ var _ = Describe("Tracing", func() {
 
 		BeforeEach(func() {
 			buf = &bytes.Buffer{}
-			t := NewTracer(func(logging.Perspective, []byte) io.WriteCloser { return nopWriteCloser(buf) })
-			tracer = t.TracerForConnection(
-				context.Background(),
+			tracer = NewConnectionTracer(
+				nopWriteCloser(buf),
 				logging.PerspectiveServer,
 				protocol.ParseConnectionID([]byte{0xde, 0xad, 0xbe, 0xef}),
 			)

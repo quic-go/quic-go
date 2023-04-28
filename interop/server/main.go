@@ -13,7 +13,6 @@ import (
 	"github.com/quic-go/quic-go/internal/qtls"
 	"github.com/quic-go/quic-go/interop/http09"
 	"github.com/quic-go/quic-go/interop/utils"
-	"github.com/quic-go/quic-go/qlog"
 )
 
 var tlsConf *tls.Config
@@ -38,16 +37,10 @@ func main() {
 
 	testcase := os.Getenv("TESTCASE")
 
-	getLogWriter, err := utils.GetQLOGWriter()
-	if err != nil {
-		fmt.Println(err.Error())
-		os.Exit(1)
-	}
-	// a quic.Config that doesn't do a Retry
 	quicConf := &quic.Config{
 		RequireAddressValidation: func(net.Addr) bool { return testcase == "retry" },
 		Allow0RTT:                testcase == "zerortt",
-		Tracer:                   qlog.NewTracer(getLogWriter),
+		Tracer:                   utils.NewQLOGConnectionTracer,
 	}
 	cert, err := tls.LoadX509KeyPair("/certs/cert.pem", "/certs/priv.key")
 	if err != nil {

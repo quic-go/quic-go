@@ -201,7 +201,7 @@ var _ = Describe("Timeout tests", func() {
 				getTLSClientConfig(),
 				getQuicConfig(&quic.Config{
 					MaxIdleTimeout:          idleTimeout,
-					Tracer:                  newTracer(func() logging.ConnectionTracer { return tr }),
+					Tracer:                  newTracer(tr),
 					DisablePathMTUDiscovery: true,
 				}),
 			)
