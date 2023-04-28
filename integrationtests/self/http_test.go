@@ -386,14 +386,14 @@ var _ = Describe("HTTP tests", func() {
 				Expect(repl).To(Equal(data))
 			})
 
-			It("supports read deadlines", Focus, func() {
+			It("supports read deadlines", func() {
 				if !go120 {
 					Skip("This test requires Go 1.20+")
 				}
 
 				mux.HandleFunc("/read-deadline", func(w http.ResponseWriter, r *http.Request) {
 					defer GinkgoRecover()
-					err := SetReadDeadline(w, time.Now().Add(deadlineDelay))
+					err := setReadDeadline(w, time.Now().Add(deadlineDelay))
 					Expect(err).ToNot(HaveOccurred())
 
 					body, err := io.ReadAll(r.Body)
@@ -414,14 +414,14 @@ var _ = Describe("HTTP tests", func() {
 				Expect(string(body)).To(Equal("ok"))
 			})
 
-			It("supports write deadlines", Focus, func() {
+			It("supports write deadlines", func() {
 				if !go120 {
 					Skip("This test requires Go 1.20+")
 				}
 
 				mux.HandleFunc("/write-deadline", func(w http.ResponseWriter, r *http.Request) {
 					defer GinkgoRecover()
-					err := SetWriteDeadline(w, time.Now().Add(deadlineDelay))
+					err := setWriteDeadline(w, time.Now().Add(deadlineDelay))
 					Expect(err).ToNot(HaveOccurred())
 
 					_, err = io.Copy(w, neverEnding('a'))
