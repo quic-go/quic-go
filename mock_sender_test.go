@@ -8,6 +8,7 @@ import (
 	reflect "reflect"
 
 	gomock "github.com/golang/mock/gomock"
+	protocol "github.com/quic-go/quic-go/internal/protocol"
 )
 
 // MockSender is a mock of Sender interface.
@@ -74,15 +75,15 @@ func (mr *MockSenderMockRecorder) Run() *gomock.Call {
 }
 
 // Send mocks base method.
-func (m *MockSender) Send(arg0 *packetBuffer) {
+func (m *MockSender) Send(arg0 *packetBuffer, arg1 protocol.ByteCount) {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "Send", arg0)
+	m.ctrl.Call(m, "Send", arg0, arg1)
 }
 
 // Send indicates an expected call of Send.
-func (mr *MockSenderMockRecorder) Send(arg0 interface{}) *gomock.Call {
+func (mr *MockSenderMockRecorder) Send(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Send", reflect.TypeOf((*MockSender)(nil).Send), arg0)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Send", reflect.TypeOf((*MockSender)(nil).Send), arg0, arg1)
 }
 
 // WouldBlock mocks base method.

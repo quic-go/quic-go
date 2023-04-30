@@ -1792,15 +1792,19 @@ func (s *connection) triggerSending() error {
 
 func (s *connection) sendPackets() error {
 	now := time.Now()
+	// Path MTU Discovery
+	// Can't use GSO, since we need to send a single packet that's larger than our current maximum size.
+	// Performance-wise, this doesn't matter, since we only send a very small (<10) number of
+	// MTU probe packets per connection.
 	if s.handshakeConfirmed && s.mtuDiscoverer != nil && s.mtuDiscoverer.ShouldSendProbe(now) {
 		ping, size := s.mtuDiscoverer.GetPing()
-		p, buffer, err := s.packer.PackMTUProbePacket(ping, size, now, s.version)
+		p, buf, err := s.packer.PackMTUProbePacket(ping, size, now, s.version)
 		if err != nil {
 			return err
 		}
-		s.logShortHeaderPacket(p.DestConnID, p.Ack, p.Frames, p.StreamFrames, p.PacketNumber, p.PacketNumberLen, p.KeyPhase, buffer.Len(), false)
+		s.logShortHeaderPacket(p.DestConnID, p.Ack, p.Frames, p.StreamFrames, p.PacketNumber, p.PacketNumberLen, p.KeyPhase, buf.Len(), false)
 		s.registerPackedShortHeaderPacket(p.Packet, now)
-		s.sendQueue.Send(buffer)
+		s.sendQueue.Send(buf, buf.Len())
 		// This is kind of a hack. We need to trigger sending again somehow.
 		s.pacingDeadline = deadlineSendImmediately
 		return nil
@@ -1827,21 +1831,28 @@ func (s *connection) sendPackets() error {
 		return nil
 	}
 
+	if s.conn.capabilities().GSO {
+		return s.sendPacketsWithGSO(now)
+	}
+	return s.sendPacketsWithoutGSO(now)
+}
+
+func (s *connection) sendPacketsWithoutGSO(now time.Time) error {
 	for {
 		buf := getPacketBuffer()
-		sent, err := s.appendPacket(buf, now)
-		if err != nil || !sent {
+		if _, err := s.appendPacket(buf, s.mtuDiscoverer.CurrentSize(), now); err != nil {
+			if err == errNothingToPack {
+				buf.Release()
+				return nil
+			}
 			return err
 		}
+
+		s.sendQueue.Send(buf, buf.Len())
+
 		if s.sendQueue.WouldBlock() {
 			return nil
 		}
-		// Prioritize receiving of packets over sending out more packets.
-		if len(s.receivedPackets) > 0 {
-			s.pacingDeadline = deadlineSendImmediately
-			return nil
-		}
-
 		sendMode := s.sentPacketHandler.SendMode()
 		if sendMode == ackhandler.SendPacingLimited {
 			s.resetPacingDeadline()
@@ -1850,6 +1861,66 @@ func (s *connection) sendPackets() error {
 		if sendMode != ackhandler.SendAny {
 			return nil
 		}
+		// Prioritize receiving of packets over sending out more packets.
+		if len(s.receivedPackets) > 0 {
+			s.pacingDeadline = deadlineSendImmediately
+			return nil
+		}
+	}
+}
+
+func (s *connection) sendPacketsWithGSO(now time.Time) error {
+	buf := getLargePacketBuffer()
+	maxSize := s.mtuDiscoverer.CurrentSize()
+
+	for {
+		var dontSendMore bool
+		size, err := s.appendPacket(buf, maxSize, now)
+		if err != nil {
+			if err != errNothingToPack {
+				return err
+			}
+			if buf.Len() == 0 {
+				buf.Release()
+				return nil
+			}
+			dontSendMore = true
+		}
+
+		if !dontSendMore {
+			sendMode := s.sentPacketHandler.SendMode()
+			if sendMode == ackhandler.SendPacingLimited {
+				s.resetPacingDeadline()
+			}
+			if sendMode != ackhandler.SendAny {
+				dontSendMore = true
+			}
+		}
+
+		// Append another packet if
+		// 1. The congestion controller and pacer allow sending more
+		// 2. The last packet appended was a full-size packet
+		// 3. We still have enough space for another full-size packet in the buffer
+		if !dontSendMore && size == maxSize && buf.Len()+maxSize <= buf.Cap() {
+			continue
+		}
+
+		s.sendQueue.Send(buf, maxSize)
+
+		if dontSendMore {
+			return nil
+		}
+		if s.sendQueue.WouldBlock() {
+			return nil
+		}
+
+		// Prioritize receiving of packets over sending out more packets.
+		if len(s.receivedPackets) > 0 {
+			s.pacingDeadline = deadlineSendImmediately
+			return nil
+		}
+
+		buf = getLargePacketBuffer()
 	}
 }
 
@@ -1875,16 +1946,16 @@ func (s *connection) maybeSendAckOnlyPacket() error {
 	}
 
 	now := time.Now()
-	p, buffer, err := s.packer.PackAckOnlyPacket(s.mtuDiscoverer.CurrentSize(), s.version)
+	p, buf, err := s.packer.PackAckOnlyPacket(s.mtuDiscoverer.CurrentSize(), s.version)
 	if err != nil {
 		if err == errNothingToPack {
 			return nil
 		}
 		return err
 	}
-	s.logShortHeaderPacket(p.DestConnID, p.Ack, p.Frames, p.StreamFrames, p.PacketNumber, p.PacketNumberLen, p.KeyPhase, buffer.Len(), false)
+	s.logShortHeaderPacket(p.DestConnID, p.Ack, p.Frames, p.StreamFrames, p.PacketNumber, p.PacketNumberLen, p.KeyPhase, buf.Len(), false)
 	s.registerPackedShortHeaderPacket(p.Packet, now)
-	s.sendQueue.Send(buffer)
+	s.sendQueue.Send(buf, buf.Len())
 	return nil
 }
 
@@ -1930,18 +2001,18 @@ func (s *connection) sendProbePacket(encLevel protocol.EncryptionLevel) error {
 	return nil
 }
 
-func (s *connection) appendPacket(buf *packetBuffer, now time.Time) (bool, error) {
-	p, err := s.packer.AppendPacket(buf, s.mtuDiscoverer.CurrentSize(), s.version)
+// appendPacket appends a new packet to the given packetBuffer.
+// If there was nothing to pack, the returned size is 0.
+func (s *connection) appendPacket(buf *packetBuffer, maxSize protocol.ByteCount, now time.Time) (protocol.ByteCount, error) {
+	startLen := buf.Len()
+	p, err := s.packer.AppendPacket(buf, maxSize, s.version)
 	if err != nil {
-		if err == errNothingToPack {
-			return false, nil
-		}
-		return false, err
+		return 0, err
 	}
-	s.logShortHeaderPacket(p.DestConnID, p.Ack, p.Frames, p.StreamFrames, p.PacketNumber, p.PacketNumberLen, p.KeyPhase, buf.Len(), false)
+	size := buf.Len() - startLen
+	s.logShortHeaderPacket(p.DestConnID, p.Ack, p.Frames, p.StreamFrames, p.PacketNumber, p.PacketNumberLen, p.KeyPhase, size, false)
 	s.registerPackedShortHeaderPacket(p.Packet, now)
-	s.sendQueue.Send(buf)
-	return true, nil
+	return size, nil
 }
 
 func (s *connection) registerPackedShortHeaderPacket(p *ackhandler.Packet, now time.Time) {
@@ -1968,7 +2039,7 @@ func (s *connection) sendPackedCoalescedPacket(packet *coalescedPacket, now time
 		s.sentPacketHandler.SentPacket(p.Packet)
 	}
 	s.connIDManager.SentPacket()
-	s.sendQueue.Send(packet.buffer)
+	s.sendQueue.Send(packet.buffer, packet.buffer.Len())
 }
 
 func (s *connection) sendConnectionClose(e error) ([]byte, error) {
@@ -1990,7 +2061,7 @@ func (s *connection) sendConnectionClose(e error) ([]byte, error) {
 		return nil, err
 	}
 	s.logCoalescedPacket(packet)
-	return packet.buffer.Data, s.conn.Write(packet.buffer.Data)
+	return packet.buffer.Data, s.conn.Write(packet.buffer.Data, packet.buffer.Len())
 }
 
 func (s *connection) logLongHeaderPacket(p *longHeaderPacket) {
