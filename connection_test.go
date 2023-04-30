@@ -1621,7 +1621,6 @@ var _ = Describe("Connection", func() {
 			conn.config.DisablePathMTUDiscovery = false
 			sph.EXPECT().SentPacket(gomock.Any())
 			sph.EXPECT().SendMode().Return(ackhandler.SendAny)
-			sph.EXPECT().SendMode().Return(ackhandler.SendNone)
 			written := make(chan struct{}, 1)
 			sender.EXPECT().WouldBlock().AnyTimes()
 			sender.EXPECT().Send(gomock.Any()).DoAndReturn(func(p *packetBuffer) { written <- struct{}{} })
