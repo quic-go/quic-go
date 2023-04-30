@@ -16,6 +16,10 @@ const (
 	SendPTOHandshake
 	// SendPTOAppData means that an Application data probe packet should be sent
 	SendPTOAppData
+	// SendPacingLimited means that the pacer doesn't allow sending of a packet right now,
+	// but will do in a little while.
+	// The timestamp when sending is allowed again can be obtained via the SentPacketHandler.TimeUntilSend.
+	SendPacingLimited
 	// SendAny means that any packet should be sent
 	SendAny
 )

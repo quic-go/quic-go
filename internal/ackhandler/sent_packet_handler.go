@@ -758,6 +758,9 @@ func (h *sentPacketHandler) SendMode() SendMode {
 		}
 		return SendAck
 	}
+	if !h.congestion.HasPacingBudget() {
+		return SendPacingLimited
+	}
 	return SendAny
 }
 
