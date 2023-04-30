@@ -1256,7 +1256,6 @@ var _ = Describe("Connection", func() {
 			conn.sentPacketHandler = sph
 			fc := mocks.NewMockConnectionFlowController(mockCtrl)
 			fc.EXPECT().IsNewlyBlocked().Return(true, protocol.ByteCount(1337))
-			fc.EXPECT().IsNewlyBlocked()
 			p, buffer := getShortHeaderPacket(1)
 			packer.EXPECT().PackPacket(false, gomock.Any(), gomock.Any(), conn.version).Return(p, buffer, nil)
 			packer.EXPECT().PackPacket(false, gomock.Any(), gomock.Any(), conn.version).Return(shortHeaderPacket{}, nil, errNothingToPack).AnyTimes()
