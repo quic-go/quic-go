@@ -1805,6 +1805,27 @@ func (s *connection) sendPackets() error {
 		return nil
 	}
 
+	if isBlocked, offset := s.connFlowController.IsNewlyBlocked(); isBlocked {
+		s.framer.QueueControlFrame(&wire.DataBlockedFrame{MaximumData: offset})
+	}
+	s.windowUpdateQueue.QueueAll()
+
+	if !s.handshakeConfirmed {
+		packet, err := s.packer.PackCoalescedPacket(false, s.mtuDiscoverer.CurrentSize(), s.version)
+		if err != nil || packet == nil {
+			return err
+		}
+		s.sentFirstPacket = true
+		s.sendPackedCoalescedPacket(packet, now)
+		sendMode := s.sentPacketHandler.SendMode()
+		if sendMode == ackhandler.SendPacingLimited {
+			s.resetPacingDeadline()
+		} else if sendMode == ackhandler.SendAny {
+			s.pacingDeadline = deadlineSendImmediately
+		}
+		return nil
+	}
+
 	for {
 		sent, err := s.sendPacket(now)
 		if err != nil || !sent {
@@ -1821,17 +1842,21 @@ func (s *connection) sendPackets() error {
 
 		sendMode := s.sentPacketHandler.SendMode()
 		if sendMode == ackhandler.SendPacingLimited {
-			deadline := s.sentPacketHandler.TimeUntilSend()
-			if deadline.IsZero() {
-				deadline = deadlineSendImmediately
-			}
-			s.pacingDeadline = deadline
+			s.resetPacingDeadline()
 			return nil
 		}
 		if sendMode != ackhandler.SendAny {
 			return nil
 		}
 	}
+}
+
+func (s *connection) resetPacingDeadline() {
+	deadline := s.sentPacketHandler.TimeUntilSend()
+	if deadline.IsZero() {
+		deadline = deadlineSendImmediately
+	}
+	s.pacingDeadline = deadline
 }
 
 func (s *connection) maybeSendAckOnlyPacket() error {
@@ -1903,20 +1928,6 @@ func (s *connection) sendProbePacket(encLevel protocol.EncryptionLevel) error {
 }
 
 func (s *connection) sendPacket(now time.Time) (bool, error) {
-	if isBlocked, offset := s.connFlowController.IsNewlyBlocked(); isBlocked {
-		s.framer.QueueControlFrame(&wire.DataBlockedFrame{MaximumData: offset})
-	}
-	s.windowUpdateQueue.QueueAll()
-
-	if !s.handshakeConfirmed {
-		packet, err := s.packer.PackCoalescedPacket(false, s.mtuDiscoverer.CurrentSize(), s.version)
-		if err != nil || packet == nil {
-			return false, err
-		}
-		s.sentFirstPacket = true
-		s.sendPackedCoalescedPacket(packet, now)
-		return true, nil
-	}
 	p, buffer, err := s.packer.PackPacket(false, now, s.mtuDiscoverer.CurrentSize(), s.version)
 	if err != nil {
 		if err == errNothingToPack {
