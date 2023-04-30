@@ -1,6 +1,7 @@
 package congestion
 
 import (
+	"math/rand"
 	"time"
 
 	"github.com/quic-go/quic-go/internal/protocol"
@@ -127,5 +128,14 @@ var _ = Describe("Pacer", func() {
 		bandwidth = uint64(1e6 * initialMaxDatagramSize)
 		Expect(p.TimeUntilSend()).To(Equal(t.Add(protocol.MinPacingDelay)))
 		Expect(p.Budget(t.Add(protocol.MinPacingDelay))).To(Equal(protocol.ByteCount(protocol.MinPacingDelay) * initialMaxDatagramSize * 1e6 / 1e9))
+	})
+
+	It("protects against overflows", func() {
+		p = newPacer(func() Bandwidth { return infBandwidth })
+		t := time.Now()
+		p.SentPacket(t, initialMaxDatagramSize)
+		for i := 0; i < 1e5; i++ {
+			Expect(p.Budget(t.Add(time.Duration(rand.Int63())))).To(BeNumerically(">=", 0))
+		}
 	})
 })
