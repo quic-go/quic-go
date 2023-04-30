@@ -614,8 +614,8 @@ var _ = Describe("Connection", func() {
 			cryptoSetup.EXPECT().Close()
 			conn.sentPacketHandler = sph
 			p, buffer := getShortHeaderPacket(1)
-			packer.EXPECT().PackPacket(false, gomock.Any(), gomock.Any(), conn.version).Return(p, buffer, nil)
-			packer.EXPECT().PackPacket(false, gomock.Any(), gomock.Any(), conn.version).Return(shortHeaderPacket{}, nil, errNothingToPack).AnyTimes()
+			packer.EXPECT().PackPacket(gomock.Any(), conn.version).Return(p, buffer, nil)
+			packer.EXPECT().PackPacket(gomock.Any(), conn.version).Return(shortHeaderPacket{}, nil, errNothingToPack).AnyTimes()
 			runConn()
 			conn.queueControlFrame(&wire.PingFrame{})
 			conn.scheduleSending()
@@ -1209,8 +1209,8 @@ var _ = Describe("Connection", func() {
 			conn.sentPacketHandler = sph
 			runConn()
 			p, buffer := getShortHeaderPacket(1)
-			packer.EXPECT().PackPacket(false, gomock.Any(), gomock.Any(), conn.version).Return(p, buffer, nil)
-			packer.EXPECT().PackPacket(false, gomock.Any(), gomock.Any(), conn.version).Return(shortHeaderPacket{}, nil, errNothingToPack).AnyTimes()
+			packer.EXPECT().PackPacket(gomock.Any(), conn.version).Return(p, buffer, nil)
+			packer.EXPECT().PackPacket(gomock.Any(), conn.version).Return(shortHeaderPacket{}, nil, errNothingToPack).AnyTimes()
 			sent := make(chan struct{})
 			sender.EXPECT().WouldBlock().AnyTimes()
 			sender.EXPECT().Send(gomock.Any()).Do(func(packet *packetBuffer) { close(sent) })
@@ -1227,7 +1227,7 @@ var _ = Describe("Connection", func() {
 		It("doesn't send packets if there's nothing to send", func() {
 			conn.handshakeConfirmed = true
 			runConn()
-			packer.EXPECT().PackPacket(false, gomock.Any(), gomock.Any(), conn.version).Return(shortHeaderPacket{}, nil, errNothingToPack).AnyTimes()
+			packer.EXPECT().PackPacket(gomock.Any(), conn.version).Return(shortHeaderPacket{}, nil, errNothingToPack).AnyTimes()
 			conn.receivedPacketHandler.ReceivedPacket(0x035e, protocol.ECNNon, protocol.Encryption1RTT, time.Now(), true)
 			conn.scheduleSending()
 			time.Sleep(50 * time.Millisecond) // make sure there are no calls to mconn.Write()
@@ -1257,8 +1257,8 @@ var _ = Describe("Connection", func() {
 			fc := mocks.NewMockConnectionFlowController(mockCtrl)
 			fc.EXPECT().IsNewlyBlocked().Return(true, protocol.ByteCount(1337))
 			p, buffer := getShortHeaderPacket(1)
-			packer.EXPECT().PackPacket(false, gomock.Any(), gomock.Any(), conn.version).Return(p, buffer, nil)
-			packer.EXPECT().PackPacket(false, gomock.Any(), gomock.Any(), conn.version).Return(shortHeaderPacket{}, nil, errNothingToPack).AnyTimes()
+			packer.EXPECT().PackPacket(gomock.Any(), conn.version).Return(p, buffer, nil)
+			packer.EXPECT().PackPacket(gomock.Any(), conn.version).Return(shortHeaderPacket{}, nil, errNothingToPack).AnyTimes()
 			conn.connFlowController = fc
 			runConn()
 			sent := make(chan struct{})
@@ -1397,9 +1397,9 @@ var _ = Describe("Connection", func() {
 			sph.EXPECT().SendMode().Return(ackhandler.SendPacingLimited)
 			sph.EXPECT().TimeUntilSend().Return(time.Now().Add(time.Hour))
 			p, buffer := getShortHeaderPacket(10)
-			packer.EXPECT().PackPacket(false, gomock.Any(), gomock.Any(), conn.version).Return(p, buffer, nil)
+			packer.EXPECT().PackPacket(gomock.Any(), conn.version).Return(p, buffer, nil)
 			p, buffer = getShortHeaderPacket(11)
-			packer.EXPECT().PackPacket(false, gomock.Any(), gomock.Any(), conn.version).Return(p, buffer, nil)
+			packer.EXPECT().PackPacket(gomock.Any(), conn.version).Return(p, buffer, nil)
 			sender.EXPECT().WouldBlock().AnyTimes()
 			sender.EXPECT().Send(gomock.Any()).Times(2)
 			go func() {
@@ -1415,8 +1415,8 @@ var _ = Describe("Connection", func() {
 			sph.EXPECT().SentPacket(gomock.Any())
 			sph.EXPECT().SendMode().Return(ackhandler.SendAny).Times(2)
 			p, buffer := getShortHeaderPacket(10)
-			packer.EXPECT().PackPacket(false, gomock.Any(), gomock.Any(), conn.version).Return(p, buffer, nil)
-			packer.EXPECT().PackPacket(false, gomock.Any(), gomock.Any(), conn.version).Return(shortHeaderPacket{}, nil, errNothingToPack)
+			packer.EXPECT().PackPacket(gomock.Any(), conn.version).Return(p, buffer, nil)
+			packer.EXPECT().PackPacket(gomock.Any(), conn.version).Return(shortHeaderPacket{}, nil, errNothingToPack)
 			sender.EXPECT().WouldBlock().AnyTimes()
 			sender.EXPECT().Send(gomock.Any())
 			go func() {
@@ -1433,7 +1433,7 @@ var _ = Describe("Connection", func() {
 			sph.EXPECT().TimeUntilSend().Return(time.Now().Add(time.Hour))
 			sph.EXPECT().SendMode().Return(ackhandler.SendPacingLimited)
 			p, buffer := getShortHeaderPacket(10)
-			packer.EXPECT().PackPacket(true, gomock.Any(), gomock.Any(), conn.version).Return(p, buffer, nil)
+			packer.EXPECT().PackAckOnlyPacket(gomock.Any(), conn.version).Return(p, buffer, nil)
 
 			sender.EXPECT().WouldBlock().AnyTimes()
 			sender.EXPECT().Send(gomock.Any())
@@ -1453,7 +1453,7 @@ var _ = Describe("Connection", func() {
 			sph.EXPECT().SendMode().Return(ackhandler.SendAny)
 			sph.EXPECT().SendMode().Return(ackhandler.SendAck)
 			p, buffer := getShortHeaderPacket(100)
-			packer.EXPECT().PackPacket(false, gomock.Any(), gomock.Any(), conn.version).Return(p, buffer, nil)
+			packer.EXPECT().PackPacket(gomock.Any(), conn.version).Return(p, buffer, nil)
 			sender.EXPECT().WouldBlock().AnyTimes()
 			sender.EXPECT().Send(gomock.Any())
 			go func() {
@@ -1471,12 +1471,12 @@ var _ = Describe("Connection", func() {
 			p2, buffer2 := getShortHeaderPacket(101)
 			gomock.InOrder(
 				sph.EXPECT().SendMode().Return(ackhandler.SendAny),
-				packer.EXPECT().PackPacket(false, gomock.Any(), gomock.Any(), conn.version).Return(p1, buffer1, nil),
+				packer.EXPECT().PackPacket(gomock.Any(), conn.version).Return(p1, buffer1, nil),
 				sph.EXPECT().SentPacket(gomock.Any()),
 				sph.EXPECT().SendMode().Return(ackhandler.SendPacingLimited),
 				sph.EXPECT().TimeUntilSend().Return(time.Now().Add(pacingDelay)),
 				sph.EXPECT().SendMode().Return(ackhandler.SendAny),
-				packer.EXPECT().PackPacket(false, gomock.Any(), gomock.Any(), conn.version).Return(p2, buffer2, nil),
+				packer.EXPECT().PackPacket(gomock.Any(), conn.version).Return(p2, buffer2, nil),
 				sph.EXPECT().SentPacket(gomock.Any()),
 				sph.EXPECT().SendMode().Return(ackhandler.SendPacingLimited),
 				sph.EXPECT().TimeUntilSend().Return(time.Now().Add(time.Hour)),
@@ -1502,7 +1502,7 @@ var _ = Describe("Connection", func() {
 			sph.EXPECT().TimeUntilSend().Return(time.Now().Add(time.Hour))
 			for pn := protocol.PacketNumber(1000); pn < 1003; pn++ {
 				p, buffer := getShortHeaderPacket(pn)
-				packer.EXPECT().PackPacket(false, gomock.Any(), gomock.Any(), conn.version).Return(p, buffer, nil)
+				packer.EXPECT().PackPacket(gomock.Any(), conn.version).Return(p, buffer, nil)
 			}
 			written := make(chan struct{}, 3)
 			sender.EXPECT().WouldBlock().AnyTimes()
@@ -1533,8 +1533,8 @@ var _ = Describe("Connection", func() {
 			sph.EXPECT().SentPacket(gomock.Any())
 			sph.EXPECT().SendMode().Return(ackhandler.SendAny).AnyTimes()
 			p, buffer := getShortHeaderPacket(1000)
-			packer.EXPECT().PackPacket(false, gomock.Any(), gomock.Any(), conn.version).Return(p, buffer, nil)
-			packer.EXPECT().PackPacket(false, gomock.Any(), gomock.Any(), conn.version).Return(shortHeaderPacket{}, nil, errNothingToPack)
+			packer.EXPECT().PackPacket(gomock.Any(), conn.version).Return(p, buffer, nil)
+			packer.EXPECT().PackPacket(gomock.Any(), conn.version).Return(shortHeaderPacket{}, nil, errNothingToPack)
 			sender.EXPECT().Send(gomock.Any()).DoAndReturn(func(p *packetBuffer) { close(written) })
 			available <- struct{}{}
 			Eventually(written).Should(BeClosed())
@@ -1556,8 +1556,8 @@ var _ = Describe("Connection", func() {
 			})
 			sph.EXPECT().SendMode().Return(ackhandler.SendAny).AnyTimes()
 			p, buffer := getShortHeaderPacket(1000)
-			packer.EXPECT().PackPacket(false, gomock.Any(), gomock.Any(), conn.version).Return(p, buffer, nil)
-			packer.EXPECT().PackPacket(false, gomock.Any(), gomock.Any(), conn.version).Return(shortHeaderPacket{}, nil, errNothingToPack)
+			packer.EXPECT().PackPacket(gomock.Any(), conn.version).Return(p, buffer, nil)
+			packer.EXPECT().PackPacket(gomock.Any(), conn.version).Return(shortHeaderPacket{}, nil, errNothingToPack)
 			sender.EXPECT().Send(gomock.Any()).DoAndReturn(func(p *packetBuffer) { close(written) })
 
 			conn.scheduleSending()
@@ -1570,7 +1570,7 @@ var _ = Describe("Connection", func() {
 			sph.EXPECT().SentPacket(gomock.Any())
 			sph.EXPECT().SendMode().Return(ackhandler.SendAny)
 			p, buffer := getShortHeaderPacket(1000)
-			packer.EXPECT().PackPacket(false, gomock.Any(), gomock.Any(), conn.version).Return(p, buffer, nil)
+			packer.EXPECT().PackPacket(gomock.Any(), conn.version).Return(p, buffer, nil)
 			written := make(chan struct{}, 1)
 			sender.EXPECT().WouldBlock()
 			sender.EXPECT().WouldBlock().Return(true).Times(2)
@@ -1591,8 +1591,8 @@ var _ = Describe("Connection", func() {
 			sph.EXPECT().SendMode().Return(ackhandler.SendAny).AnyTimes()
 			sender.EXPECT().WouldBlock().AnyTimes()
 			p, buffer = getShortHeaderPacket(1001)
-			packer.EXPECT().PackPacket(false, gomock.Any(), gomock.Any(), conn.version).Return(p, buffer, nil)
-			packer.EXPECT().PackPacket(false, gomock.Any(), gomock.Any(), conn.version).Return(shortHeaderPacket{}, nil, errNothingToPack)
+			packer.EXPECT().PackPacket(gomock.Any(), conn.version).Return(p, buffer, nil)
+			packer.EXPECT().PackPacket(gomock.Any(), conn.version).Return(shortHeaderPacket{}, nil, errNothingToPack)
 			sender.EXPECT().Send(gomock.Any()).DoAndReturn(func(p *packetBuffer) { written <- struct{}{} })
 			available <- struct{}{}
 			Eventually(written).Should(Receive())
@@ -1605,7 +1605,7 @@ var _ = Describe("Connection", func() {
 		It("doesn't set a pacing timer when there is no data to send", func() {
 			sph.EXPECT().SendMode().Return(ackhandler.SendAny).AnyTimes()
 			sender.EXPECT().WouldBlock().AnyTimes()
-			packer.EXPECT().PackPacket(false, gomock.Any(), gomock.Any(), conn.version).Return(shortHeaderPacket{}, nil, errNothingToPack)
+			packer.EXPECT().PackPacket(gomock.Any(), conn.version).Return(shortHeaderPacket{}, nil, errNothingToPack)
 			// don't EXPECT any calls to mconn.Write()
 			go func() {
 				defer GinkgoRecover()
@@ -1676,8 +1676,8 @@ var _ = Describe("Connection", func() {
 			sph.EXPECT().SentPacket(gomock.Any())
 			conn.sentPacketHandler = sph
 			p, buffer := getShortHeaderPacket(1)
-			packer.EXPECT().PackPacket(false, gomock.Any(), gomock.Any(), conn.version).Return(p, buffer, nil)
-			packer.EXPECT().PackPacket(false, gomock.Any(), gomock.Any(), conn.version).Return(shortHeaderPacket{}, nil, errNothingToPack)
+			packer.EXPECT().PackPacket(gomock.Any(), conn.version).Return(p, buffer, nil)
+			packer.EXPECT().PackPacket(gomock.Any(), conn.version).Return(shortHeaderPacket{}, nil, errNothingToPack)
 
 			go func() {
 				defer GinkgoRecover()
@@ -1696,8 +1696,8 @@ var _ = Describe("Connection", func() {
 
 		It("sets the timer to the ack timer", func() {
 			p, buffer := getShortHeaderPacket(1234)
-			packer.EXPECT().PackPacket(false, gomock.Any(), gomock.Any(), conn.version).Return(p, buffer, nil)
-			packer.EXPECT().PackPacket(false, gomock.Any(), gomock.Any(), conn.version).Return(shortHeaderPacket{}, nil, errNothingToPack)
+			packer.EXPECT().PackPacket(gomock.Any(), conn.version).Return(p, buffer, nil)
+			packer.EXPECT().PackPacket(gomock.Any(), conn.version).Return(shortHeaderPacket{}, nil, errNothingToPack)
 			sph := mockackhandler.NewMockSentPacketHandler(mockCtrl)
 			sph.EXPECT().GetLossDetectionTimeout().AnyTimes()
 			sph.EXPECT().SendMode().Return(ackhandler.SendAny).AnyTimes()
@@ -1912,14 +1912,14 @@ var _ = Describe("Connection", func() {
 		conn.sentPacketHandler = sph
 		done := make(chan struct{})
 		connRunner.EXPECT().Retire(clientDestConnID)
-		packer.EXPECT().PackPacket(false, gomock.Any(), gomock.Any(), conn.version).DoAndReturn(func(_ bool, _ time.Time, _ protocol.ByteCount, v protocol.VersionNumber) (shortHeaderPacket, *packetBuffer, error) {
+		packer.EXPECT().PackPacket(gomock.Any(), conn.version).DoAndReturn(func(_ protocol.ByteCount, v protocol.VersionNumber) (shortHeaderPacket, *packetBuffer, error) {
 			frames, _ := conn.framer.AppendControlFrames(nil, protocol.MaxByteCount, v)
 			Expect(frames).ToNot(BeEmpty())
 			Expect(frames[0].Frame).To(BeEquivalentTo(&wire.HandshakeDoneFrame{}))
 			defer close(done)
 			return shortHeaderPacket{Packet: &ackhandler.Packet{}}, getPacketBuffer(), nil
 		})
-		packer.EXPECT().PackPacket(false, gomock.Any(), gomock.Any(), conn.version).Return(shortHeaderPacket{}, nil, errNothingToPack).AnyTimes()
+		packer.EXPECT().PackPacket(gomock.Any(), conn.version).Return(shortHeaderPacket{}, nil, errNothingToPack).AnyTimes()
 		go func() {
 			defer GinkgoRecover()
 			cryptoSetup.EXPECT().RunHandshake()

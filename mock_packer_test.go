@@ -52,6 +52,22 @@ func (mr *MockPackerMockRecorder) MaybePackProbePacket(arg0, arg1, arg2 interfac
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MaybePackProbePacket", reflect.TypeOf((*MockPacker)(nil).MaybePackProbePacket), arg0, arg1, arg2)
 }
 
+// PackAckOnlyPacket mocks base method.
+func (m *MockPacker) PackAckOnlyPacket(arg0 protocol.ByteCount, arg1 protocol.VersionNumber) (shortHeaderPacket, *packetBuffer, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "PackAckOnlyPacket", arg0, arg1)
+	ret0, _ := ret[0].(shortHeaderPacket)
+	ret1, _ := ret[1].(*packetBuffer)
+	ret2, _ := ret[2].(error)
+	return ret0, ret1, ret2
+}
+
+// PackAckOnlyPacket indicates an expected call of PackAckOnlyPacket.
+func (mr *MockPackerMockRecorder) PackAckOnlyPacket(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PackAckOnlyPacket", reflect.TypeOf((*MockPacker)(nil).PackAckOnlyPacket), arg0, arg1)
+}
+
 // PackApplicationClose mocks base method.
 func (m *MockPacker) PackApplicationClose(arg0 *qerr.ApplicationError, arg1 protocol.ByteCount, arg2 protocol.VersionNumber) (*coalescedPacket, error) {
 	m.ctrl.T.Helper()
@@ -114,9 +130,9 @@ func (mr *MockPackerMockRecorder) PackMTUProbePacket(arg0, arg1, arg2, arg3 inte
 }
 
 // PackPacket mocks base method.
-func (m *MockPacker) PackPacket(arg0 bool, arg1 time.Time, arg2 protocol.ByteCount, arg3 protocol.VersionNumber) (shortHeaderPacket, *packetBuffer, error) {
+func (m *MockPacker) PackPacket(arg0 protocol.ByteCount, arg1 protocol.VersionNumber) (shortHeaderPacket, *packetBuffer, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "PackPacket", arg0, arg1, arg2, arg3)
+	ret := m.ctrl.Call(m, "PackPacket", arg0, arg1)
 	ret0, _ := ret[0].(shortHeaderPacket)
 	ret1, _ := ret[1].(*packetBuffer)
 	ret2, _ := ret[2].(error)
@@ -124,9 +140,9 @@ func (m *MockPacker) PackPacket(arg0 bool, arg1 time.Time, arg2 protocol.ByteCou
 }
 
 // PackPacket indicates an expected call of PackPacket.
-func (mr *MockPackerMockRecorder) PackPacket(arg0, arg1, arg2, arg3 interface{}) *gomock.Call {
+func (mr *MockPackerMockRecorder) PackPacket(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PackPacket", reflect.TypeOf((*MockPacker)(nil).PackPacket), arg0, arg1, arg2, arg3)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PackPacket", reflect.TypeOf((*MockPacker)(nil).PackPacket), arg0, arg1)
 }
 
 // SetToken mocks base method.
