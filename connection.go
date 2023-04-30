@@ -1739,7 +1739,7 @@ func (s *connection) triggerSending() error {
 	sendMode := s.sentPacketHandler.SendMode()
 	//nolint:exhaustive // No need to handle pacing limited here.
 	switch sendMode {
-	case ackhandler.SendAny: // fast path
+	case ackhandler.SendAny:
 		return s.sendPackets()
 	case ackhandler.SendNone:
 		return nil
@@ -1791,8 +1791,22 @@ func (s *connection) triggerSending() error {
 }
 
 func (s *connection) sendPackets() error {
+	now := time.Now()
+	if s.handshakeConfirmed && s.mtuDiscoverer != nil && s.mtuDiscoverer.ShouldSendProbe(now) {
+		ping, size := s.mtuDiscoverer.GetPing()
+		p, buffer, err := s.packer.PackMTUProbePacket(ping, size, now, s.version)
+		if err != nil {
+			return err
+		}
+		s.logShortHeaderPacket(p.DestConnID, p.Ack, p.Frames, p.StreamFrames, p.PacketNumber, p.PacketNumberLen, p.KeyPhase, buffer.Len(), false)
+		s.sendPackedShortHeaderPacket(buffer, p.Packet, now)
+		// This is kind of a hack. We need to trigger sending again somehow.
+		s.pacingDeadline = deadlineSendImmediately
+		return nil
+	}
+
 	for {
-		sent, err := s.sendPacket()
+		sent, err := s.sendPacket(now)
 		if err != nil || !sent {
 			return err
 		}
@@ -1888,13 +1902,12 @@ func (s *connection) sendProbePacket(encLevel protocol.EncryptionLevel) error {
 	return nil
 }
 
-func (s *connection) sendPacket() (bool, error) {
+func (s *connection) sendPacket(now time.Time) (bool, error) {
 	if isBlocked, offset := s.connFlowController.IsNewlyBlocked(); isBlocked {
 		s.framer.QueueControlFrame(&wire.DataBlockedFrame{MaximumData: offset})
 	}
 	s.windowUpdateQueue.QueueAll()
 
-	now := time.Now()
 	if !s.handshakeConfirmed {
 		packet, err := s.packer.PackCoalescedPacket(false, s.mtuDiscoverer.CurrentSize(), s.version)
 		if err != nil || packet == nil {
@@ -1902,15 +1915,6 @@ func (s *connection) sendPacket() (bool, error) {
 		}
 		s.sentFirstPacket = true
 		s.sendPackedCoalescedPacket(packet, now)
-		return true, nil
-	} else if s.mtuDiscoverer != nil && s.mtuDiscoverer.ShouldSendProbe(now) {
-		ping, size := s.mtuDiscoverer.GetPing()
-		p, buffer, err := s.packer.PackMTUProbePacket(ping, size, now, s.version)
-		if err != nil {
-			return false, err
-		}
-		s.logShortHeaderPacket(p.DestConnID, p.Ack, p.Frames, p.StreamFrames, p.PacketNumber, p.PacketNumberLen, p.KeyPhase, buffer.Len(), false)
-		s.sendPackedShortHeaderPacket(buffer, p.Packet, now)
 		return true, nil
 	}
 	p, buffer, err := s.packer.PackPacket(false, now, s.mtuDiscoverer.CurrentSize(), s.version)
