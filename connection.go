@@ -679,7 +679,7 @@ runLoop:
 			sendQueueAvailable = s.sendQueue.Available()
 			continue
 		}
-		if err := s.sendPackets(); err != nil {
+		if err := s.triggerSending(); err != nil {
 			s.closeLocal(err)
 		}
 		if s.sendQueue.WouldBlock() {
@@ -1733,11 +1733,78 @@ func (s *connection) applyTransportParameters() {
 	}
 }
 
-func (s *connection) sendPackets() error {
+func (s *connection) triggerSending() error {
 	s.pacingDeadline = time.Time{}
 
-	var sentPacket bool // only used in for packets sent in send mode SendAny
+	sendMode := s.sentPacketHandler.SendMode()
+	//nolint:exhaustive // No need to handle pacing limited here.
+	switch sendMode {
+	case ackhandler.SendAny: // fast path
+		return s.sendPackets()
+	case ackhandler.SendNone:
+		return nil
+	case ackhandler.SendPacingLimited:
+		deadline := s.sentPacketHandler.TimeUntilSend()
+		if deadline.IsZero() {
+			deadline = deadlineSendImmediately
+		}
+		s.pacingDeadline = deadline
+		// Allow sending of an ACK if we're pacing limit.
+		// This makes sure that a peer that is mostly receiving data (and thus has an inaccurate cwnd estimate)
+		// sends enough ACKs to allow its peer to utilize the bandwidth.
+		fallthrough
+	case ackhandler.SendAck:
+		// We can at most send a single ACK only packet.
+		// There will only be a new ACK after receiving new packets.
+		// SendAck is only returned when we're congestion limited, so we don't need to set the pacinggs timer.
+		return s.maybeSendAckOnlyPacket()
+	case ackhandler.SendPTOInitial:
+		if err := s.sendProbePacket(protocol.EncryptionInitial); err != nil {
+			return err
+		}
+		if s.sendQueue.WouldBlock() {
+			s.scheduleSending()
+			return nil
+		}
+		return s.triggerSending()
+	case ackhandler.SendPTOHandshake:
+		if err := s.sendProbePacket(protocol.EncryptionHandshake); err != nil {
+			return err
+		}
+		if s.sendQueue.WouldBlock() {
+			s.scheduleSending()
+			return nil
+		}
+		return s.triggerSending()
+	case ackhandler.SendPTOAppData:
+		if err := s.sendProbePacket(protocol.Encryption1RTT); err != nil {
+			return err
+		}
+		if s.sendQueue.WouldBlock() {
+			s.scheduleSending()
+			return nil
+		}
+		return s.triggerSending()
+	default:
+		return fmt.Errorf("BUG: invalid send mode %d", sendMode)
+	}
+}
+
+func (s *connection) sendPackets() error {
 	for {
+		sent, err := s.sendPacket()
+		if err != nil || !sent {
+			return err
+		}
+		if s.sendQueue.WouldBlock() {
+			return nil
+		}
+		// Prioritize receiving of packets over sending out more packets.
+		if len(s.receivedPackets) > 0 {
+			s.pacingDeadline = deadlineSendImmediately
+			return nil
+		}
+
 		sendMode := s.sentPacketHandler.SendMode()
 		if sendMode == ackhandler.SendPacingLimited {
 			deadline := s.sentPacketHandler.TimeUntilSend()
@@ -1745,56 +1812,9 @@ func (s *connection) sendPackets() error {
 				deadline = deadlineSendImmediately
 			}
 			s.pacingDeadline = deadline
-			// Allow sending of an ACK if we're pacing limit (if we haven't sent out a packet yet).
-			// This makes sure that a peer that is mostly receiving data (and thus has an inaccurate cwnd estimate)
-			// sends enough ACKs to allow its peer to utilize the bandwidth.
-			if sentPacket {
-				return nil
-			}
-			sendMode = ackhandler.SendAck
-		}
-		//nolint:exhaustive // No need to handle pacing limited here.
-		switch sendMode {
-		case ackhandler.SendNone:
-			return nil
-		case ackhandler.SendAck:
-			// If we already sent packets, and the send mode switches to SendAck,
-			// as we've just become congestion limited.
-			// There's no need to try to send an ACK at this moment.
-			if sentPacket {
-				return nil
-			}
-			// We can at most send a single ACK only packet.
-			// There will only be a new ACK after receiving new packets.
-			// SendAck is only returned when we're congestion limited, so we don't need to set the pacinggs timer.
-			return s.maybeSendAckOnlyPacket()
-		case ackhandler.SendPTOInitial:
-			if err := s.sendProbePacket(protocol.EncryptionInitial); err != nil {
-				return err
-			}
-		case ackhandler.SendPTOHandshake:
-			if err := s.sendProbePacket(protocol.EncryptionHandshake); err != nil {
-				return err
-			}
-		case ackhandler.SendPTOAppData:
-			if err := s.sendProbePacket(protocol.Encryption1RTT); err != nil {
-				return err
-			}
-		case ackhandler.SendAny:
-			sent, err := s.sendPacket()
-			if err != nil || !sent {
-				return err
-			}
-			sentPacket = true
-		default:
-			return fmt.Errorf("BUG: invalid send mode %d", sendMode)
-		}
-		// Prioritize receiving of packets over sending out more packets.
-		if len(s.receivedPackets) > 0 {
-			s.pacingDeadline = deadlineSendImmediately
 			return nil
 		}
-		if s.sendQueue.WouldBlock() {
+		if sendMode != ackhandler.SendAny {
 			return nil
 		}
 	}
