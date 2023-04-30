@@ -1848,7 +1848,7 @@ func (s *connection) maybeSendAckOnlyPacket() error {
 	}
 
 	now := time.Now()
-	p, buffer, err := s.packer.PackPacket(true, now, s.mtuDiscoverer.CurrentSize(), s.version)
+	p, buffer, err := s.packer.PackAckOnlyPacket(s.mtuDiscoverer.CurrentSize(), s.version)
 	if err != nil {
 		if err == errNothingToPack {
 			return nil
@@ -1903,7 +1903,7 @@ func (s *connection) sendProbePacket(encLevel protocol.EncryptionLevel) error {
 }
 
 func (s *connection) sendPacket(now time.Time) (bool, error) {
-	p, buffer, err := s.packer.PackPacket(false, now, s.mtuDiscoverer.CurrentSize(), s.version)
+	p, buffer, err := s.packer.PackPacket(s.mtuDiscoverer.CurrentSize(), s.version)
 	if err != nil {
 		if err == errNothingToPack {
 			return false, nil
