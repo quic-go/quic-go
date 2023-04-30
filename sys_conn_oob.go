@@ -5,6 +5,7 @@ package quic
 import (
 	"encoding/binary"
 	"errors"
+	"fmt"
 	"net"
 	"syscall"
 	"time"
@@ -241,15 +242,19 @@ func (c *oobConn) ReadPacket() (*receivedPacket, error) {
 // This is needed for users who call OptimizeConn to be able to send (non-QUIC) packets on the underlying connection.
 // With GSO enabled, this would otherwise not be needed, as the kernel requires the UDP_SEGMENT message to be set.
 func (c *oobConn) WriteTo(p []byte, addr net.Addr) (int, error) {
-	return c.WritePacket(p, addr, nil)
+	return c.WritePacket(p, uint16(len(p)), addr, nil)
 }
 
 // WritePacket writes a new packet.
 // If the connection supports GSO (and we activated GSO support before),
 // it appends the UDP_SEGMENT size message to oob.
-func (c *oobConn) WritePacket(b []byte, addr net.Addr, oob []byte) (n int, err error) {
+// Callers are advised to make sure that oob has a sufficient capacity,
+// such that appending the UDP_SEGMENT size message doesn't cause an allocation.
+func (c *oobConn) WritePacket(b []byte, packetSize uint16, addr net.Addr, oob []byte) (n int, err error) {
 	if c.cap.GSO {
-		oob = appendUDPSegmentSizeMsg(oob, len(b))
+		oob = appendUDPSegmentSizeMsg(oob, packetSize)
+	} else if uint16(len(b)) != packetSize {
+		panic(fmt.Sprintf("inconsistent length. got: %d. expected %d", packetSize, len(b)))
 	}
 	n, _, err = c.OOBCapablePacketConn.WriteMsgUDP(b, oob, addr.(*net.UDPAddr))
 	return n, err

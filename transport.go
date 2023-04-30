@@ -221,7 +221,7 @@ func (t *Transport) runCloseQueue() {
 		case <-t.listening:
 			return
 		case p := <-t.closeQueue:
-			t.conn.WritePacket(p.payload, p.addr, p.info.OOB())
+			t.conn.WritePacket(p.payload, uint16(len(p.payload)), p.addr, p.info.OOB())
 		}
 	}
 }
@@ -374,7 +374,7 @@ func (t *Transport) maybeSendStatelessReset(p *receivedPacket, connID protocol.C
 	rand.Read(data)
 	data[0] = (data[0] & 0x7f) | 0x40
 	data = append(data, token[:]...)
-	if _, err := t.conn.WritePacket(data, p.remoteAddr, p.info.OOB()); err != nil {
+	if _, err := t.conn.WritePacket(data, uint16(len(data)), p.remoteAddr, p.info.OOB()); err != nil {
 		t.logger.Debugf("Error sending Stateless Reset: %s", err)
 	}
 }
