@@ -1726,7 +1726,7 @@ func (s *connection) sendPackets() error {
 	var sentPacket bool // only used in for packets sent in send mode SendAny
 	for {
 		sendMode := s.sentPacketHandler.SendMode()
-		if sendMode == ackhandler.SendAny && !s.sentPacketHandler.HasPacingBudget() {
+		if sendMode == ackhandler.SendPacingLimited {
 			deadline := s.sentPacketHandler.TimeUntilSend()
 			if deadline.IsZero() {
 				deadline = deadlineSendImmediately
@@ -1740,6 +1740,7 @@ func (s *connection) sendPackets() error {
 			}
 			sendMode = ackhandler.SendAck
 		}
+		//nolint:exhaustive // No need to handle pacing limited here.
 		switch sendMode {
 		case ackhandler.SendNone:
 			return nil
