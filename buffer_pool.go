@@ -51,9 +51,8 @@ func (b *packetBuffer) Release() {
 }
 
 // Len returns the length of Data
-func (b *packetBuffer) Len() protocol.ByteCount {
-	return protocol.ByteCount(len(b.Data))
-}
+func (b *packetBuffer) Len() protocol.ByteCount { return protocol.ByteCount(len(b.Data)) }
+func (b *packetBuffer) Cap() protocol.ByteCount { return protocol.ByteCount(cap(b.Data)) }
 
 func (b *packetBuffer) putBack() {
 	if cap(b.Data) == protocol.MaxPacketBufferSize {

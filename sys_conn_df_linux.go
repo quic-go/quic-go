@@ -60,7 +60,7 @@ func isMsgSizeErr(err error) bool {
 	return errors.Is(err, unix.EMSGSIZE)
 }
 
-func appendUDPSegmentSizeMsg(b []byte, size int) []byte {
+func appendUDPSegmentSizeMsg(b []byte, size uint16) []byte {
 	startLen := len(b)
 	const dataLen = 2 // payload is a uint16
 	b = append(b, make([]byte, unix.CmsgSpace(dataLen))...)
@@ -71,6 +71,6 @@ func appendUDPSegmentSizeMsg(b []byte, size int) []byte {
 
 	// UnixRights uses the private `data` method, but I *think* this achieves the same goal.
 	offset := startLen + unix.CmsgSpace(0)
-	*(*uint16)(unsafe.Pointer(&b[offset])) = uint16(size)
+	*(*uint16)(unsafe.Pointer(&b[offset])) = size
 	return b
 }
