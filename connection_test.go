@@ -1771,6 +1771,7 @@ var _ = Describe("Connection", func() {
 		sph.EXPECT().GetLossDetectionTimeout().AnyTimes()
 		sph.EXPECT().SendMode().Return(ackhandler.SendAny).AnyTimes()
 		sph.EXPECT().TimeUntilSend().Return(time.Now()).AnyTimes()
+		sph.EXPECT().HasPacingBudget().Return(true).AnyTimes()
 		gomock.InOrder(
 			sph.EXPECT().SentPacket(gomock.Any()).Do(func(p *ackhandler.Packet) {
 				Expect(p.EncryptionLevel).To(Equal(protocol.EncryptionInitial))

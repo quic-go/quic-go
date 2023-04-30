@@ -1739,7 +1739,7 @@ func (s *connection) sendPackets() error {
 	var sentPacket bool // only used in for packets sent in send mode SendAny
 	for {
 		sendMode := s.sentPacketHandler.SendMode()
-		if sendMode == ackhandler.SendAny && s.handshakeComplete && !s.sentPacketHandler.HasPacingBudget() {
+		if sendMode == ackhandler.SendAny && !s.sentPacketHandler.HasPacingBudget() {
 			deadline := s.sentPacketHandler.TimeUntilSend()
 			if deadline.IsZero() {
 				deadline = deadlineSendImmediately
