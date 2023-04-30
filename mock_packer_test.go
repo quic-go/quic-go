@@ -37,6 +37,21 @@ func (m *MockPacker) EXPECT() *MockPackerMockRecorder {
 	return m.recorder
 }
 
+// AppendPacket mocks base method.
+func (m *MockPacker) AppendPacket(arg0 *packetBuffer, arg1 protocol.ByteCount, arg2 protocol.VersionNumber) (shortHeaderPacket, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "AppendPacket", arg0, arg1, arg2)
+	ret0, _ := ret[0].(shortHeaderPacket)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// AppendPacket indicates an expected call of AppendPacket.
+func (mr *MockPackerMockRecorder) AppendPacket(arg0, arg1, arg2 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AppendPacket", reflect.TypeOf((*MockPacker)(nil).AppendPacket), arg0, arg1, arg2)
+}
+
 // MaybePackProbePacket mocks base method.
 func (m *MockPacker) MaybePackProbePacket(arg0 protocol.EncryptionLevel, arg1 protocol.ByteCount, arg2 protocol.VersionNumber) (*coalescedPacket, error) {
 	m.ctrl.T.Helper()
@@ -127,22 +142,6 @@ func (m *MockPacker) PackMTUProbePacket(arg0 ackhandler.Frame, arg1 protocol.Byt
 func (mr *MockPackerMockRecorder) PackMTUProbePacket(arg0, arg1, arg2, arg3 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PackMTUProbePacket", reflect.TypeOf((*MockPacker)(nil).PackMTUProbePacket), arg0, arg1, arg2, arg3)
-}
-
-// PackPacket mocks base method.
-func (m *MockPacker) PackPacket(arg0 protocol.ByteCount, arg1 protocol.VersionNumber) (shortHeaderPacket, *packetBuffer, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "PackPacket", arg0, arg1)
-	ret0, _ := ret[0].(shortHeaderPacket)
-	ret1, _ := ret[1].(*packetBuffer)
-	ret2, _ := ret[2].(error)
-	return ret0, ret1, ret2
-}
-
-// PackPacket indicates an expected call of PackPacket.
-func (mr *MockPackerMockRecorder) PackPacket(arg0, arg1 interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PackPacket", reflect.TypeOf((*MockPacker)(nil).PackPacket), arg0, arg1)
 }
 
 // SetToken mocks base method.

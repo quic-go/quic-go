@@ -1799,7 +1799,8 @@ func (s *connection) sendPackets() error {
 			return err
 		}
 		s.logShortHeaderPacket(p.DestConnID, p.Ack, p.Frames, p.StreamFrames, p.PacketNumber, p.PacketNumberLen, p.KeyPhase, buffer.Len(), false)
-		s.sendPackedShortHeaderPacket(buffer, p.Packet, now)
+		s.registerPackedShortHeaderPacket(p.Packet, now)
+		s.sendQueue.Send(buffer)
 		// This is kind of a hack. We need to trigger sending again somehow.
 		s.pacingDeadline = deadlineSendImmediately
 		return nil
@@ -1827,7 +1828,8 @@ func (s *connection) sendPackets() error {
 	}
 
 	for {
-		sent, err := s.sendPacket(now)
+		buf := getPacketBuffer()
+		sent, err := s.appendPacket(buf, now)
 		if err != nil || !sent {
 			return err
 		}
@@ -1881,7 +1883,8 @@ func (s *connection) maybeSendAckOnlyPacket() error {
 		return err
 	}
 	s.logShortHeaderPacket(p.DestConnID, p.Ack, p.Frames, p.StreamFrames, p.PacketNumber, p.PacketNumberLen, p.KeyPhase, buffer.Len(), false)
-	s.sendPackedShortHeaderPacket(buffer, p.Packet, now)
+	s.registerPackedShortHeaderPacket(p.Packet, now)
+	s.sendQueue.Send(buffer)
 	return nil
 }
 
@@ -1927,27 +1930,27 @@ func (s *connection) sendProbePacket(encLevel protocol.EncryptionLevel) error {
 	return nil
 }
 
-func (s *connection) sendPacket(now time.Time) (bool, error) {
-	p, buffer, err := s.packer.PackPacket(s.mtuDiscoverer.CurrentSize(), s.version)
+func (s *connection) appendPacket(buf *packetBuffer, now time.Time) (bool, error) {
+	p, err := s.packer.AppendPacket(buf, s.mtuDiscoverer.CurrentSize(), s.version)
 	if err != nil {
 		if err == errNothingToPack {
 			return false, nil
 		}
 		return false, err
 	}
-	s.logShortHeaderPacket(p.DestConnID, p.Ack, p.Frames, p.StreamFrames, p.PacketNumber, p.PacketNumberLen, p.KeyPhase, buffer.Len(), false)
-	s.sendPackedShortHeaderPacket(buffer, p.Packet, now)
+	s.logShortHeaderPacket(p.DestConnID, p.Ack, p.Frames, p.StreamFrames, p.PacketNumber, p.PacketNumberLen, p.KeyPhase, buf.Len(), false)
+	s.registerPackedShortHeaderPacket(p.Packet, now)
+	s.sendQueue.Send(buf)
 	return true, nil
 }
 
-func (s *connection) sendPackedShortHeaderPacket(buffer *packetBuffer, p *ackhandler.Packet, now time.Time) {
+func (s *connection) registerPackedShortHeaderPacket(p *ackhandler.Packet, now time.Time) {
 	if s.firstAckElicitingPacketAfterIdleSentTime.IsZero() && (len(p.StreamFrames) > 0 || ackhandler.HasAckElicitingFrames(p.Frames)) {
 		s.firstAckElicitingPacketAfterIdleSentTime = now
 	}
 
 	s.sentPacketHandler.SentPacket(p)
 	s.connIDManager.SentPacket()
-	s.sendQueue.Send(buffer)
 }
 
 func (s *connection) sendPackedCoalescedPacket(packet *coalescedPacket, now time.Time) {
