@@ -49,4 +49,4 @@ func isMsgSizeErr(err error) bool {
 	return errors.Is(err, windows.WSAEMSGSIZE)
 }
 
-func appendUDPSegmentSizeMsg(b []byte, _ int) []byte { return b }
+func appendUDPSegmentSizeMsg(b []byte, _ uint16) []byte { return b }

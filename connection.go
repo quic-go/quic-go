@@ -1766,13 +1766,13 @@ func (s *connection) sendPackets() error {
 	now := time.Now()
 	if s.handshakeConfirmed && !s.config.DisablePathMTUDiscovery && s.mtuDiscoverer.ShouldSendProbe(now) {
 		ping, size := s.mtuDiscoverer.GetPing()
-		p, buffer, err := s.packer.PackMTUProbePacket(ping, size, now, s.version)
+		p, buf, err := s.packer.PackMTUProbePacket(ping, size, now, s.version)
 		if err != nil {
 			return err
 		}
-		s.logShortHeaderPacket(p.DestConnID, p.Ack, p.Frames, p.PacketNumber, p.PacketNumberLen, p.KeyPhase, buffer.Len(), false)
-		s.registerPackedShortHeaderPacket(buffer, p.Packet, now)
-		s.sendQueue.Send(buffer)
+		s.logShortHeaderPacket(p.DestConnID, p.Ack, p.Frames, p.PacketNumber, p.PacketNumberLen, p.KeyPhase, buf.Len(), false)
+		s.registerPackedShortHeaderPacket(buf, p.Packet, now)
+		s.sendQueue.Send(buf, buf.Len())
 		return nil
 	}
 
@@ -1797,11 +1797,52 @@ func (s *connection) sendPackets() error {
 		return nil
 	}
 
+	var buf *packetBuffer
+	supportsGSO := s.conn.SupportsGSO()
+	if supportsGSO {
+		buf = getLargePacketBuffer()
+	} else {
+		buf = getPacketBuffer()
+	}
+	maxSize := s.mtuDiscoverer.CurrentSize()
+
 	for {
-		buf := getPacketBuffer()
-		sent, err := s.appendPacket(buf, now)
-		if err != nil || !sent {
+		_, size, err := s.appendPacket(buf, maxSize, now)
+		if err != nil {
 			return err
+		}
+
+		var dontSendMore bool
+		sendMode := s.sentPacketHandler.SendMode()
+		if sendMode == ackhandler.SendPacingLimited {
+			s.resetPacingDeadline()
+			dontSendMore = true
+		}
+		if sendMode != ackhandler.SendAny {
+			dontSendMore = true
+		}
+
+		// Append another packet if
+		// 1. GSO is supported
+		// 2. The congestion controller and pacer allow sending more
+		// 3. The last packet appended was a full-size packet
+		// 4. We still have enough space for another full-size packet in the buffer
+		if supportsGSO && !dontSendMore && size == maxSize && buf.Len()+maxSize <= buf.Cap() {
+			continue
+		}
+
+		if buf.Len() == 0 {
+			buf.MaybeRelease()
+			return nil
+		}
+
+		sendSize := maxSize
+		if !supportsGSO {
+			sendSize = buf.Len()
+		}
+		s.sendQueue.Send(buf, sendSize)
+		if dontSendMore {
+			return nil
 		}
 		if s.sendQueue.WouldBlock() {
 			return nil
@@ -1812,13 +1853,10 @@ func (s *connection) sendPackets() error {
 			return nil
 		}
 
-		sendMode := s.sentPacketHandler.SendMode()
-		if sendMode == ackhandler.SendPacingLimited {
-			s.resetPacingDeadline()
-			return nil
-		}
-		if sendMode != ackhandler.SendAny {
-			return nil
+		if supportsGSO {
+			buf = getLargePacketBuffer()
+		} else {
+			buf = getPacketBuffer()
 		}
 	}
 }
@@ -1845,16 +1883,16 @@ func (s *connection) maybeSendAckOnlyPacket() error {
 	}
 
 	now := time.Now()
-	p, buffer, err := s.packer.PackAckOnlyPacket(s.mtuDiscoverer.CurrentSize(), s.version)
+	p, buf, err := s.packer.PackAckOnlyPacket(s.mtuDiscoverer.CurrentSize(), s.version)
 	if err != nil {
 		if err == errNothingToPack {
 			return nil
 		}
 		return err
 	}
-	s.logShortHeaderPacket(p.DestConnID, p.Ack, p.Frames, p.PacketNumber, p.PacketNumberLen, p.KeyPhase, buffer.Len(), false)
-	s.registerPackedShortHeaderPacket(buffer, p.Packet, now)
-	s.sendQueue.Send(buffer)
+	s.logShortHeaderPacket(p.DestConnID, p.Ack, p.Frames, p.PacketNumber, p.PacketNumberLen, p.KeyPhase, buf.Len(), false)
+	s.registerPackedShortHeaderPacket(buf, p.Packet, now)
+	s.sendQueue.Send(buf, buf.Len())
 	return nil
 }
 
@@ -1900,18 +1938,19 @@ func (s *connection) sendProbePacket(encLevel protocol.EncryptionLevel) error {
 	return nil
 }
 
-func (s *connection) appendPacket(buf *packetBuffer, now time.Time) (bool, error) {
-	p, err := s.packer.AppendPacket(buf, s.mtuDiscoverer.CurrentSize(), s.version)
+func (s *connection) appendPacket(buf *packetBuffer, maxSize protocol.ByteCount, now time.Time) (bool, protocol.ByteCount, error) {
+	startLen := buf.Len()
+	p, err := s.packer.AppendPacket(buf, maxSize, s.version)
 	if err != nil {
 		if err == errNothingToPack {
-			return false, nil
+			return false, 0, nil
 		}
-		return false, err
+		return false, 0, err
 	}
-	s.logShortHeaderPacket(p.DestConnID, p.Ack, p.Frames, p.PacketNumber, p.PacketNumberLen, p.KeyPhase, buf.Len(), false)
+	size := buf.Len() - startLen
+	s.logShortHeaderPacket(p.DestConnID, p.Ack, p.Frames, p.PacketNumber, p.PacketNumberLen, p.KeyPhase, size, false)
 	s.registerPackedShortHeaderPacket(buf, p.Packet, now)
-	s.sendQueue.Send(buf)
-	return true, nil
+	return true, size, nil
 }
 
 func (s *connection) registerPackedShortHeaderPacket(buffer *packetBuffer, p *ackhandler.Packet, now time.Time) {
@@ -1938,7 +1977,7 @@ func (s *connection) sendPackedCoalescedPacket(packet *coalescedPacket, now time
 		s.sentPacketHandler.SentPacket(p.Packet)
 	}
 	s.connIDManager.SentPacket()
-	s.sendQueue.Send(packet.buffer)
+	s.sendQueue.Send(packet.buffer, packet.buffer.Len())
 }
 
 func (s *connection) sendConnectionClose(e error) ([]byte, error) {
@@ -1960,7 +1999,7 @@ func (s *connection) sendConnectionClose(e error) ([]byte, error) {
 		return nil, err
 	}
 	s.logCoalescedPacket(packet)
-	return packet.buffer.Data, s.conn.Write(packet.buffer.Data)
+	return packet.buffer.Data, s.conn.Write(packet.buffer.Data, packet.buffer.Len())
 }
 
 func (s *connection) logLongHeaderPacket(p *longHeaderPacket) {

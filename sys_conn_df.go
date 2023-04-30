@@ -21,4 +21,4 @@ func isMsgSizeErr(err error) bool {
 	return false
 }
 
-func appendUDPSegmentSizeMsg(b []byte, _ int) []byte { return b }
+func appendUDPSegmentSizeMsg(b []byte, _ uint16) []byte { return b }

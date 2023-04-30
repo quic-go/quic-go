@@ -726,7 +726,7 @@ func (s *baseServer) sendRetry(remoteAddr net.Addr, hdr *wire.Header, info *pack
 	if s.tracer != nil {
 		s.tracer.SentPacket(remoteAddr, &replyHdr.Header, protocol.ByteCount(len(buf.Data)), nil)
 	}
-	_, err = s.conn.WritePacket(buf.Data, remoteAddr, info.OOB())
+	_, err = s.conn.WritePacket(buf.Data, uint16(len(buf.Data)), remoteAddr, info.OOB())
 	return err
 }
 
@@ -803,7 +803,7 @@ func (s *baseServer) sendError(remoteAddr net.Addr, hdr *wire.Header, sealer han
 	if s.tracer != nil {
 		s.tracer.SentPacket(remoteAddr, &replyHdr.Header, protocol.ByteCount(len(b.Data)), []logging.Frame{ccf})
 	}
-	_, err = s.conn.WritePacket(b.Data, remoteAddr, info.OOB())
+	_, err = s.conn.WritePacket(b.Data, uint16(len(b.Data)), remoteAddr, info.OOB())
 	return err
 }
 
@@ -814,7 +814,7 @@ func (s *baseServer) sendVersionNegotiationPacket(remote net.Addr, src, dest pro
 	if s.tracer != nil {
 		s.tracer.SentVersionNegotiationPacket(remote, src, dest, s.config.Versions)
 	}
-	if _, err := s.conn.WritePacket(data, remote, oob); err != nil {
+	if _, err := s.conn.WritePacket(data, uint16(len(data)), remote, oob); err != nil {
 		s.logger.Debugf("Error sending Version Negotiation: %s", err)
 	}
 }
