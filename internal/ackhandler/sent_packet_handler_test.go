@@ -599,12 +599,14 @@ var _ = Describe("SentPacketHandler", func() {
 				SendTime:        time.Now(),
 			})
 			cong.EXPECT().CanSend(protocol.ByteCount(42)).Return(true)
+			cong.EXPECT().HasPacingBudget().Return(true)
 			handler.SendMode()
 		})
 
 		It("allows sending of ACKs when congestion limited", func() {
 			handler.ReceivedPacket(protocol.EncryptionHandshake)
 			cong.EXPECT().CanSend(gomock.Any()).Return(true)
+			cong.EXPECT().HasPacingBudget().Return(true)
 			Expect(handler.SendMode()).To(Equal(SendAny))
 			cong.EXPECT().CanSend(gomock.Any()).Return(false)
 			Expect(handler.SendMode()).To(Equal(SendAck))
@@ -613,6 +615,7 @@ var _ = Describe("SentPacketHandler", func() {
 		It("allows sending of ACKs when we're keeping track of MaxOutstandingSentPackets packets", func() {
 			handler.ReceivedPacket(protocol.EncryptionHandshake)
 			cong.EXPECT().CanSend(gomock.Any()).Return(true).AnyTimes()
+			cong.EXPECT().HasPacingBudget().Return(true).AnyTimes()
 			cong.EXPECT().OnPacketSent(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
 			for i := protocol.PacketNumber(0); i < protocol.MaxOutstandingSentPackets; i++ {
 				Expect(handler.SendMode()).To(Equal(SendAny))
@@ -889,6 +892,7 @@ var _ = Describe("SentPacketHandler", func() {
 
 	Context("amplification limit, for the server", func() {
 		It("limits the window to 3x the bytes received, to avoid amplification attacks", func() {
+			now := time.Now()
 			handler.ReceivedPacket(protocol.EncryptionInitial) // receiving an Initial packet doesn't validate the client's address
 			handler.ReceivedBytes(200)
 			handler.SentPacket(&Packet{
@@ -896,7 +900,7 @@ var _ = Describe("SentPacketHandler", func() {
 				Length:          599,
 				EncryptionLevel: protocol.EncryptionInitial,
 				Frames:          []Frame{{Frame: &wire.PingFrame{}}},
-				SendTime:        time.Now(),
+				SendTime:        now,
 			})
 			Expect(handler.SendMode()).To(Equal(SendAny))
 			handler.SentPacket(&Packet{
@@ -904,7 +908,7 @@ var _ = Describe("SentPacketHandler", func() {
 				Length:          1,
 				EncryptionLevel: protocol.EncryptionInitial,
 				Frames:          []Frame{{Frame: &wire.PingFrame{}}},
-				SendTime:        time.Now(),
+				SendTime:        now,
 			})
 			Expect(handler.SendMode()).To(Equal(SendNone))
 		})

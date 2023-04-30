@@ -63,20 +63,6 @@ func (mr *MockSentPacketHandlerMockRecorder) GetLossDetectionTimeout() *gomock.C
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetLossDetectionTimeout", reflect.TypeOf((*MockSentPacketHandler)(nil).GetLossDetectionTimeout))
 }
 
-// HasPacingBudget mocks base method.
-func (m *MockSentPacketHandler) HasPacingBudget() bool {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "HasPacingBudget")
-	ret0, _ := ret[0].(bool)
-	return ret0
-}
-
-// HasPacingBudget indicates an expected call of HasPacingBudget.
-func (mr *MockSentPacketHandlerMockRecorder) HasPacingBudget() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HasPacingBudget", reflect.TypeOf((*MockSentPacketHandler)(nil).HasPacingBudget))
-}
-
 // OnLossDetectionTimeout mocks base method.
 func (m *MockSentPacketHandler) OnLossDetectionTimeout() error {
 	m.ctrl.T.Helper()
