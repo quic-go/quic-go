@@ -22,7 +22,7 @@ func randomDuration(min, max time.Duration) time.Duration {
 var _ = Describe("Drop Tests", func() {
 	var (
 		proxy *quicproxy.QuicProxy
-		ln    quic.Listener
+		ln    *quic.Listener
 	)
 
 	startListenerAndProxy := func(dropCallback quicproxy.DropCallback) {

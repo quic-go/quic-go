@@ -114,33 +114,72 @@ type baseServer struct {
 	logger utils.Logger
 }
 
-var (
-	_ Listener             = &baseServer{}
-	_ unknownPacketHandler = &baseServer{}
-)
+var _ unknownPacketHandler = &baseServer{}
 
-type earlyServer struct{ *baseServer }
+// A Listener listens for incoming QUIC connections.
+// It returns connections once the handshake has completed.
+type Listener struct {
+	baseServer *baseServer
+}
 
-var _ EarlyListener = &earlyServer{}
+// Accept returns new connections. It should be called in a loop.
+func (l *Listener) Accept(ctx context.Context) (Connection, error) {
+	return l.baseServer.Accept(ctx)
+}
 
-func (s *earlyServer) Accept(ctx context.Context) (EarlyConnection, error) {
-	return s.baseServer.accept(ctx)
+// Close the server. All active connections will be closed.
+func (l *Listener) Close() error {
+	return l.baseServer.Close()
+}
+
+// Addr returns the local network address that the server is listening on.
+func (l *Listener) Addr() net.Addr {
+	return l.baseServer.Addr()
+}
+
+// An EarlyListener listens for incoming QUIC connections, and returns them before the handshake completes.
+// For connections that don't use 0-RTT, this allows the server to send 0.5-RTT data.
+// This data is encrypted with forward-secure keys, however, the client's identity has not yet been verified.
+// For connection using 0-RTT, this allows the server to accept and respond to streams that the client opened in the
+// 0-RTT data it sent. Note that at this point during the handshake, the live-ness of the
+// client has not yet been confirmed, and the 0-RTT data could have been replayed by an attacker.
+type EarlyListener struct {
+	baseServer *baseServer
+}
+
+// Accept returns a new connections. It should be called in a loop.
+func (l *EarlyListener) Accept(ctx context.Context) (EarlyConnection, error) {
+	return l.baseServer.accept(ctx)
+}
+
+// Close the server. All active connections will be closed.
+func (l *EarlyListener) Close() error {
+	return l.baseServer.Close()
+}
+
+// Addr returns the local network addr that the server is listening on.
+func (l *EarlyListener) Addr() net.Addr {
+	return l.baseServer.Addr()
 }
 
 // ListenAddr creates a QUIC server listening on a given address.
 // The tls.Config must not be nil and must contain a certificate configuration.
 // The quic.Config may be nil, in that case the default values will be used.
-func ListenAddr(addr string, tlsConf *tls.Config, config *Config) (Listener, error) {
-	return listenAddr(addr, tlsConf, config, false)
+func ListenAddr(addr string, tlsConf *tls.Config, config *Config) (*Listener, error) {
+	s, err := listenAddr(addr, tlsConf, config, false)
+	if err != nil {
+		return nil, err
+	}
+	return &Listener{baseServer: s}, nil
 }
 
 // ListenAddrEarly works like ListenAddr, but it returns connections before the handshake completes.
-func ListenAddrEarly(addr string, tlsConf *tls.Config, config *Config) (EarlyListener, error) {
+func ListenAddrEarly(addr string, tlsConf *tls.Config, config *Config) (*EarlyListener, error) {
 	s, err := listenAddr(addr, tlsConf, config, true)
 	if err != nil {
 		return nil, err
 	}
-	return &earlyServer{s}, nil
+	return &EarlyListener{baseServer: s}, nil
 }
 
 func listenAddr(addr string, tlsConf *tls.Config, config *Config, acceptEarly bool) (*baseServer, error) {
@@ -170,17 +209,21 @@ func listenAddr(addr string, tlsConf *tls.Config, config *Config, acceptEarly bo
 // The tls.Config must not be nil and must contain a certificate configuration.
 // Furthermore, it must define an application control (using NextProtos).
 // The quic.Config may be nil, in that case the default values will be used.
-func Listen(conn net.PacketConn, tlsConf *tls.Config, config *Config) (Listener, error) {
-	return listen(conn, tlsConf, config, false)
+func Listen(conn net.PacketConn, tlsConf *tls.Config, config *Config) (*Listener, error) {
+	s, err := listen(conn, tlsConf, config, false)
+	if err != nil {
+		return nil, err
+	}
+	return &Listener{baseServer: s}, nil
 }
 
 // ListenEarly works like Listen, but it returns connections before the handshake completes.
-func ListenEarly(conn net.PacketConn, tlsConf *tls.Config, config *Config) (EarlyListener, error) {
+func ListenEarly(conn net.PacketConn, tlsConf *tls.Config, config *Config) (*EarlyListener, error) {
 	s, err := listen(conn, tlsConf, config, true)
 	if err != nil {
 		return nil, err
 	}
-	return &earlyServer{s}, nil
+	return &EarlyListener{baseServer: s}, nil
 }
 
 func listen(conn net.PacketConn, tlsConf *tls.Config, config *Config, acceptEarly bool) (*baseServer, error) {

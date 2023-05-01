@@ -32,7 +32,7 @@ type applicationProtocol struct {
 var _ = Describe("Handshake drop tests", func() {
 	var (
 		proxy *quicproxy.QuicProxy
-		ln    quic.Listener
+		ln    *quic.Listener
 	)
 
 	data := GeneratePRData(5000)

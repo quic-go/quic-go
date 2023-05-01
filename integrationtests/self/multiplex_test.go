@@ -14,7 +14,7 @@ import (
 )
 
 var _ = Describe("Multiplexing", func() {
-	runServer := func(ln quic.Listener) {
+	runServer := func(ln *quic.Listener) {
 		go func() {
 			defer GinkgoRecover()
 			for {
@@ -52,7 +52,7 @@ var _ = Describe("Multiplexing", func() {
 	}
 
 	Context("multiplexing clients on the same conn", func() {
-		getListener := func() quic.Listener {
+		getListener := func() *quic.Listener {
 			ln, err := quic.ListenAddr(
 				"localhost:0",
 				getTLSConfig(),

@@ -2,7 +2,6 @@ package mocks
 
 //go:generate sh -c "go run github.com/golang/mock/mockgen -package mockquic -destination quic/stream.go github.com/quic-go/quic-go Stream"
 //go:generate sh -c "go run github.com/golang/mock/mockgen -package mockquic -destination quic/early_conn_tmp.go github.com/quic-go/quic-go EarlyConnection && sed 's/qtls.ConnectionState/quic.ConnectionState/g' quic/early_conn_tmp.go > quic/early_conn.go && rm quic/early_conn_tmp.go && go run golang.org/x/tools/cmd/goimports -w quic/early_conn.go"
-//go:generate sh -c "go run github.com/golang/mock/mockgen -package mockquic -destination quic/early_listener.go github.com/quic-go/quic-go EarlyListener"
 //go:generate sh -c "go run github.com/golang/mock/mockgen -package mocklogging -destination logging/tracer.go github.com/quic-go/quic-go/logging Tracer"
 //go:generate sh -c "go run github.com/golang/mock/mockgen -package mocklogging -destination logging/connection_tracer.go github.com/quic-go/quic-go/logging ConnectionTracer"
 //go:generate sh -c "go run github.com/golang/mock/mockgen -package mocks -destination short_header_sealer.go github.com/quic-go/quic-go/internal/handshake ShortHeaderSealer"

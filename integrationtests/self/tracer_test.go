@@ -61,7 +61,7 @@ var _ = Describe("Handshake tests", func() {
 			quicClientConf := addTracers(protocol.PerspectiveClient, getQuicConfig(nil))
 			quicServerConf := addTracers(protocol.PerspectiveServer, getQuicConfig(nil))
 
-			serverChan := make(chan quic.Listener)
+			serverChan := make(chan *quic.Listener)
 			go func() {
 				defer GinkgoRecover()
 				ln, err := quic.ListenAddr("localhost:0", getTLSConfig(), quicServerConf)

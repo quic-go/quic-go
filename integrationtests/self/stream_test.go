@@ -16,7 +16,7 @@ var _ = Describe("Bidirectional streams", func() {
 	const numStreams = 300
 
 	var (
-		server     quic.Listener
+		server     *quic.Listener
 		serverAddr string
 	)
 

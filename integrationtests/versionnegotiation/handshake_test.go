@@ -45,7 +45,7 @@ func (t *versionNegotiationTracer) ReceivedVersionNegotiationPacket(dest, src lo
 }
 
 var _ = Describe("Handshake tests", func() {
-	startServer := func(tlsConf *tls.Config, conf *quic.Config) (quic.Listener, func()) {
+	startServer := func(tlsConf *tls.Config, conf *quic.Config) (*quic.Listener, func()) {
 		server, err := quic.ListenAddr("localhost:0", tlsConf, conf)
 		Expect(err).ToNot(HaveOccurred())
 
