@@ -2,7 +2,6 @@ package self_test
 
 import (
 	"context"
-	"fmt"
 	"io"
 	"net"
 	"runtime"
@@ -37,9 +36,9 @@ var _ = Describe("Multiplexing", func() {
 
 	dial := func(pconn net.PacketConn, addr net.Addr) {
 		conn, err := quic.Dial(
+			context.Background(),
 			pconn,
 			addr,
-			fmt.Sprintf("localhost:%d", addr.(*net.UDPAddr).Port),
 			getTLSClientConfig(),
 			getQuicConfig(nil),
 		)

@@ -44,6 +44,7 @@ func init() {
 	root := x509.NewCertPool()
 	root.AddCert(ca)
 	tlsClientConfig = &tls.Config{
+		ServerName: "localhost",
 		RootCAs:    root,
 		NextProtos: []string{tools.ALPN},
 	}

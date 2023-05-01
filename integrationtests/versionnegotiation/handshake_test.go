@@ -69,7 +69,7 @@ var _ = Describe("Handshake tests", func() {
 	var supportedVersions []protocol.VersionNumber
 
 	BeforeEach(func() {
-		supportedVersions = protocol.SupportedVersions
+		supportedVersions = append([]quic.VersionNumber{}, protocol.SupportedVersions...)
 		protocol.SupportedVersions = append(protocol.SupportedVersions, []protocol.VersionNumber{7, 8, 9, 10}...)
 	})
 
@@ -90,6 +90,7 @@ var _ = Describe("Handshake tests", func() {
 			defer cl()
 			clientTracer := &versionNegotiationTracer{}
 			conn, err := quic.DialAddr(
+				context.Background(),
 				fmt.Sprintf("localhost:%d", server.Addr().(*net.UDPAddr).Port),
 				getTLSClientConfig(),
 				maybeAddQlogTracer(&quic.Config{Tracer: newTracer(func() logging.ConnectionTracer { return clientTracer })}),
@@ -119,6 +120,7 @@ var _ = Describe("Handshake tests", func() {
 			clientVersions := []protocol.VersionNumber{7, 8, 9, protocol.SupportedVersions[0], 10}
 			clientTracer := &versionNegotiationTracer{}
 			conn, err := quic.DialAddr(
+				context.Background(),
 				fmt.Sprintf("localhost:%d", server.Addr().(*net.UDPAddr).Port),
 				getTLSClientConfig(),
 				maybeAddQlogTracer(&quic.Config{

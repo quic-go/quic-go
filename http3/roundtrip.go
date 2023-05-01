@@ -17,7 +17,7 @@ import (
 )
 
 // declare this as a variable, such that we can it mock it in the tests
-var quicDialer = quic.DialEarlyContext
+var quicDialer = quic.DialEarly
 
 type roundTripCloser interface {
 	RoundTripOpt(*http.Request, RoundTripOpt) (*http.Response, error)
@@ -273,6 +273,6 @@ func (r *RoundTripper) makeDialer() func(ctx context.Context, addr string, tlsCf
 		if err != nil {
 			return nil, err
 		}
-		return quicDialer(ctx, r.udpConn, udpAddr, addr, tlsCfg, cfg)
+		return quicDialer(ctx, r.udpConn, udpAddr, tlsCfg, cfg)
 	}
 }

@@ -54,6 +54,7 @@ var _ = Describe("Timeout tests", func() {
 		errChan := make(chan error)
 		go func() {
 			_, err := quic.DialAddr(
+				context.Background(),
 				"localhost:12345",
 				getTLSClientConfig(),
 				getQuicConfig(&quic.Config{HandshakeIdleTimeout: 10 * time.Millisecond}),
@@ -70,7 +71,7 @@ var _ = Describe("Timeout tests", func() {
 		defer cancel()
 		errChan := make(chan error)
 		go func() {
-			_, err := quic.DialAddrContext(
+			_, err := quic.DialAddr(
 				ctx,
 				"localhost:12345",
 				getTLSClientConfig(),
@@ -89,7 +90,7 @@ var _ = Describe("Timeout tests", func() {
 		defer cancel()
 		errChan := make(chan error)
 		go func() {
-			_, err := quic.DialAddrEarlyContext(
+			_, err := quic.DialAddrEarly(
 				ctx,
 				"localhost:12345",
 				getTLSClientConfig(),
@@ -135,6 +136,7 @@ var _ = Describe("Timeout tests", func() {
 		defer proxy.Close()
 
 		conn, err := quic.DialAddr(
+			context.Background(),
 			fmt.Sprintf("localhost:%d", proxy.LocalPort()),
 			getTLSClientConfig(),
 			getQuicConfig(&quic.Config{DisablePathMTUDiscovery: true, MaxIdleTimeout: idleTimeout}),
@@ -194,6 +196,7 @@ var _ = Describe("Timeout tests", func() {
 
 			tr := newPacketTracer()
 			conn, err := quic.DialAddr(
+				context.Background(),
 				fmt.Sprintf("localhost:%d", server.Addr().(*net.UDPAddr).Port),
 				getTLSClientConfig(),
 				getQuicConfig(&quic.Config{
@@ -273,6 +276,7 @@ var _ = Describe("Timeout tests", func() {
 			}()
 
 			conn, err := quic.DialAddr(
+				context.Background(),
 				fmt.Sprintf("localhost:%d", proxy.LocalPort()),
 				getTLSClientConfig(),
 				getQuicConfig(&quic.Config{MaxIdleTimeout: idleTimeout, DisablePathMTUDiscovery: true}),
@@ -341,6 +345,7 @@ var _ = Describe("Timeout tests", func() {
 		defer proxy.Close()
 
 		conn, err := quic.DialAddr(
+			context.Background(),
 			fmt.Sprintf("localhost:%d", proxy.LocalPort()),
 			getTLSClientConfig(),
 			getQuicConfig(&quic.Config{
@@ -423,6 +428,7 @@ var _ = Describe("Timeout tests", func() {
 			go func() {
 				defer GinkgoRecover()
 				conn, err := quic.DialAddr(
+					context.Background(),
 					fmt.Sprintf("localhost:%d", ln.Addr().(*net.UDPAddr).Port),
 					getTLSClientConfig(),
 					getQuicConfig(&quic.Config{
@@ -484,9 +490,9 @@ var _ = Describe("Timeout tests", func() {
 			go func() {
 				defer GinkgoRecover()
 				conn, err := quic.Dial(
+					context.Background(),
 					&faultyConn{PacketConn: conn, MaxPackets: maxPackets},
 					ln.Addr(),
-					"localhost",
 					getTLSClientConfig(),
 					getQuicConfig(&quic.Config{DisablePathMTUDiscovery: true}),
 				)

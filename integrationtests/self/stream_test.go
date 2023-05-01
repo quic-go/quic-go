@@ -87,6 +87,7 @@ var _ = Describe("Bidirectional streams", func() {
 		}()
 
 		client, err := quic.DialAddr(
+			context.Background(),
 			serverAddr,
 			getTLSClientConfig(),
 			getQuicConfig(nil),
@@ -105,6 +106,7 @@ var _ = Describe("Bidirectional streams", func() {
 		}()
 
 		client, err := quic.DialAddr(
+			context.Background(),
 			serverAddr,
 			getTLSClientConfig(),
 			getQuicConfig(nil),
@@ -132,6 +134,7 @@ var _ = Describe("Bidirectional streams", func() {
 		}()
 
 		client, err := quic.DialAddr(
+			context.Background(),
 			serverAddr,
 			getTLSClientConfig(),
 			getQuicConfig(nil),

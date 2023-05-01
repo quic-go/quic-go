@@ -73,6 +73,7 @@ var _ = Describe("Stream Cancellations", func() {
 		It("downloads when the client immediately cancels most streams", func() {
 			serverCanceledCounterChan := runServer(PRData)
 			conn, err := quic.DialAddr(
+				context.Background(),
 				fmt.Sprintf("localhost:%d", server.Addr().(*net.UDPAddr).Port),
 				getTLSClientConfig(),
 				getQuicConfig(&quic.Config{MaxIncomingUniStreams: numStreams / 2}),
@@ -124,6 +125,7 @@ var _ = Describe("Stream Cancellations", func() {
 			serverCanceledCounterChan := runServer(PRData)
 
 			conn, err := quic.DialAddr(
+				context.Background(),
 				fmt.Sprintf("localhost:%d", server.Addr().(*net.UDPAddr).Port),
 				getTLSClientConfig(),
 				getQuicConfig(&quic.Config{MaxIncomingUniStreams: numStreams / 2}),
@@ -174,6 +176,7 @@ var _ = Describe("Stream Cancellations", func() {
 			serverCanceledCounterChan := runServer(make([]byte, 100)) // make sure the FIN is sent with the STREAM frame
 
 			conn, err := quic.DialAddr(
+				context.Background(),
 				fmt.Sprintf("localhost:%d", server.Addr().(*net.UDPAddr).Port),
 				getTLSClientConfig(),
 				getQuicConfig(&quic.Config{MaxIncomingUniStreams: numStreams / 2}),
@@ -221,6 +224,7 @@ var _ = Describe("Stream Cancellations", func() {
 	Context("canceling the write side", func() {
 		runClient := func(server quic.Listener) int32 /* number of canceled streams */ {
 			conn, err := quic.DialAddr(
+				context.Background(),
 				fmt.Sprintf("localhost:%d", server.Addr().(*net.UDPAddr).Port),
 				getTLSClientConfig(),
 				getQuicConfig(&quic.Config{MaxIncomingUniStreams: numStreams / 2}),
@@ -366,6 +370,7 @@ var _ = Describe("Stream Cancellations", func() {
 			}()
 
 			conn, err := quic.DialAddr(
+				context.Background(),
 				fmt.Sprintf("localhost:%d", server.Addr().(*net.UDPAddr).Port),
 				getTLSClientConfig(),
 				getQuicConfig(&quic.Config{MaxIncomingUniStreams: numStreams / 2}),
@@ -451,6 +456,7 @@ var _ = Describe("Stream Cancellations", func() {
 			}()
 
 			conn, err := quic.DialAddr(
+				context.Background(),
 				fmt.Sprintf("localhost:%d", server.Addr().(*net.UDPAddr).Port),
 				getTLSClientConfig(),
 				getQuicConfig(&quic.Config{MaxIncomingUniStreams: numStreams / 2}),
@@ -529,6 +535,7 @@ var _ = Describe("Stream Cancellations", func() {
 			}()
 
 			conn, err := quic.DialAddr(
+				context.Background(),
 				fmt.Sprintf("localhost:%d", server.Addr().(*net.UDPAddr).Port),
 				getTLSClientConfig(),
 				getQuicConfig(&quic.Config{MaxIncomingUniStreams: numStreams / 3}),
@@ -614,6 +621,7 @@ var _ = Describe("Stream Cancellations", func() {
 			}()
 
 			conn, err := quic.DialAddr(
+				context.Background(),
 				fmt.Sprintf("localhost:%d", server.Addr().(*net.UDPAddr).Port),
 				getTLSClientConfig(),
 				getQuicConfig(&quic.Config{MaxIncomingUniStreams: maxIncomingStreams}),
@@ -707,6 +715,7 @@ var _ = Describe("Stream Cancellations", func() {
 		}()
 
 		conn, err := quic.DialAddr(
+			context.Background(),
 			fmt.Sprintf("localhost:%d", server.Addr().(*net.UDPAddr).Port),
 			getTLSClientConfig(),
 			getQuicConfig(&quic.Config{}),

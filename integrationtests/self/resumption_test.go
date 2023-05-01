@@ -58,6 +58,7 @@ var _ = Describe("TLS session resumption", func() {
 		tlsConf := getTLSClientConfig()
 		tlsConf.ClientSessionCache = cache
 		conn, err := quic.DialAddr(
+			context.Background(),
 			fmt.Sprintf("localhost:%d", server.Addr().(*net.UDPAddr).Port),
 			tlsConf,
 			nil,
@@ -72,6 +73,7 @@ var _ = Describe("TLS session resumption", func() {
 		Expect(serverConn.ConnectionState().TLS.DidResume).To(BeFalse())
 
 		conn, err = quic.DialAddr(
+			context.Background(),
 			fmt.Sprintf("localhost:%d", server.Addr().(*net.UDPAddr).Port),
 			tlsConf,
 			nil,
@@ -98,6 +100,7 @@ var _ = Describe("TLS session resumption", func() {
 		tlsConf := getTLSClientConfig()
 		tlsConf.ClientSessionCache = cache
 		conn, err := quic.DialAddr(
+			context.Background(),
 			fmt.Sprintf("localhost:%d", server.Addr().(*net.UDPAddr).Port),
 			tlsConf,
 			nil,
@@ -111,6 +114,7 @@ var _ = Describe("TLS session resumption", func() {
 		Expect(serverConn.ConnectionState().TLS.DidResume).To(BeFalse())
 
 		conn, err = quic.DialAddr(
+			context.Background(),
 			fmt.Sprintf("localhost:%d", server.Addr().(*net.UDPAddr).Port),
 			tlsConf,
 			nil,

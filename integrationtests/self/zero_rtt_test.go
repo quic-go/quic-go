@@ -86,6 +86,7 @@ var _ = Describe("0-RTT", func() {
 		puts := make(chan string, 100)
 		clientConf.ClientSessionCache = newClientSessionCache(gets, puts)
 		conn, err := quic.DialAddr(
+			context.Background(),
 			fmt.Sprintf("localhost:%d", proxy.LocalPort()),
 			clientConf,
 			getQuicConfig(nil),
@@ -126,6 +127,7 @@ var _ = Describe("0-RTT", func() {
 			clientConf = getQuicConfig(nil)
 		}
 		conn, err := quic.DialAddrEarly(
+			context.Background(),
 			fmt.Sprintf("localhost:%d", proxyPort),
 			clientTLSConf,
 			clientConf,
@@ -151,6 +153,7 @@ var _ = Describe("0-RTT", func() {
 		clientConf *tls.Config,
 	) {
 		conn, err := quic.DialAddrEarly(
+			context.Background(),
 			fmt.Sprintf("localhost:%d", proxyPort),
 			clientConf,
 			getQuicConfig(nil),
@@ -280,6 +283,7 @@ var _ = Describe("0-RTT", func() {
 		defer proxy.Close()
 
 		conn, err := quic.DialAddrEarly(
+			context.Background(),
 			fmt.Sprintf("localhost:%d", proxy.LocalPort()),
 			clientConf,
 			getQuicConfig(nil),
@@ -479,6 +483,7 @@ var _ = Describe("0-RTT", func() {
 		defer proxy.Close()
 
 		conn, err := quic.DialAddrEarly(
+			context.Background(),
 			fmt.Sprintf("localhost:%d", proxy.LocalPort()),
 			clientConf,
 			getQuicConfig(nil),
@@ -609,6 +614,7 @@ var _ = Describe("0-RTT", func() {
 			defer proxy.Close()
 
 			conn, err := quic.DialAddrEarly(
+				context.Background(),
 				fmt.Sprintf("localhost:%d", proxy.LocalPort()),
 				clientConf,
 				getQuicConfig(nil),
@@ -680,6 +686,7 @@ var _ = Describe("0-RTT", func() {
 			defer proxy.Close()
 
 			conn, err := quic.DialAddrEarly(
+				context.Background(),
 				fmt.Sprintf("localhost:%d", proxy.LocalPort()),
 				clientConf,
 				getQuicConfig(nil),

@@ -97,6 +97,7 @@ var _ = Describe("Drop Tests", func() {
 				}()
 
 				conn, err := quic.DialAddr(
+					context.Background(),
 					fmt.Sprintf("localhost:%d", proxy.LocalPort()),
 					getTLSClientConfig(),
 					getQuicConfig(nil),
