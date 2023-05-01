@@ -36,6 +36,7 @@ type unknownPacketHandler interface {
 }
 
 type packetHandlerManager interface {
+	Get(protocol.ConnectionID) (packetHandler, bool)
 	AddWithConnID(protocol.ConnectionID, protocol.ConnectionID, func() packetHandler) bool
 	Destroy() error
 	connRunner
@@ -52,6 +53,11 @@ type quicConn interface {
 	run() error
 	destroy(error)
 	shutdown()
+}
+
+type zeroRTTQueue struct {
+	packets    []*receivedPacket
+	expiration time.Time
 }
 
 // A Listener of QUIC
@@ -73,6 +79,9 @@ type baseServer struct {
 	connHandler packetHandlerManager
 
 	receivedPackets chan *receivedPacket
+
+	nextZeroRTTCleanup time.Time
+	zeroRTTQueues      map[protocol.ConnectionID]*zeroRTTQueue // only initialized if acceptEarlyConns == true
 
 	// set as a member, so they can be set in the tests
 	newConn func(
@@ -214,6 +223,9 @@ func listen(conn net.PacketConn, tlsConf *tls.Config, config *Config, acceptEarl
 		logger:           utils.DefaultLogger.WithPrefix("server"),
 		acceptEarlyConns: acceptEarly,
 	}
+	if acceptEarly {
+		s.zeroRTTQueues = map[protocol.ConnectionID]*zeroRTTQueue{}
+	}
 	go s.run()
 	connHandler.SetServer(s)
 	s.logger.Debugf("Listening for %s connections on %s", conn.LocalAddr().Network(), conn.LocalAddr().String())
@@ -310,6 +322,10 @@ func (s *baseServer) handlePacket(p *receivedPacket) {
 }
 
 func (s *baseServer) handlePacketImpl(p *receivedPacket) bool /* is the buffer still in use? */ {
+	if !s.nextZeroRTTCleanup.IsZero() && p.rcvTime.After(s.nextZeroRTTCleanup) {
+		defer s.cleanupZeroRTTQueues(p.rcvTime)
+	}
+
 	if wire.IsVersionNegotiationPacket(p.data) {
 		s.logger.Debugf("Dropping Version Negotiation packet.")
 		if s.config.Tracer != nil {
@@ -344,6 +360,17 @@ func (s *baseServer) handlePacketImpl(p *receivedPacket) bool /* is the buffer s
 		}
 		return false
 	}
+
+	if wire.Is0RTTPacket(p.data) {
+		if !s.acceptEarlyConns {
+			if s.config.Tracer != nil {
+				s.config.Tracer.DroppedPacket(p.remoteAddr, logging.PacketType0RTT, p.Size(), logging.PacketDropUnexpectedPacket)
+			}
+			return false
+		}
+		return s.handle0RTTPacket(p)
+	}
+
 	// If we're creating a new connection, the packet will be passed to the connection.
 	// The header will then be parsed again.
 	hdr, _, _, err := wire.ParsePacket(p.data)
@@ -383,6 +410,74 @@ func (s *baseServer) handlePacketImpl(p *receivedPacket) bool /* is the buffer s
 	return true
 }
 
+func (s *baseServer) handle0RTTPacket(p *receivedPacket) bool {
+	connID, err := wire.ParseConnectionID(p.data, 0)
+	if err != nil {
+		if s.config.Tracer != nil {
+			s.config.Tracer.DroppedPacket(p.remoteAddr, logging.PacketType0RTT, p.Size(), logging.PacketDropHeaderParseError)
+		}
+		return false
+	}
+
+	// check again if we might have a connection now
+	if handler, ok := s.connHandler.Get(connID); ok {
+		handler.handlePacket(p)
+		return true
+	}
+
+	if q, ok := s.zeroRTTQueues[connID]; ok {
+		if len(q.packets) >= protocol.Max0RTTQueueLen {
+			if s.config.Tracer != nil {
+				s.config.Tracer.DroppedPacket(p.remoteAddr, logging.PacketType0RTT, p.Size(), logging.PacketDropDOSPrevention)
+			}
+			return false
+		}
+		q.packets = append(q.packets, p)
+		return true
+	}
+
+	if len(s.zeroRTTQueues) >= protocol.Max0RTTQueues {
+		if s.config.Tracer != nil {
+			s.config.Tracer.DroppedPacket(p.remoteAddr, logging.PacketType0RTT, p.Size(), logging.PacketDropDOSPrevention)
+		}
+		return false
+	}
+	queue := &zeroRTTQueue{packets: make([]*receivedPacket, 1, 8)}
+	queue.packets[0] = p
+	expiration := p.rcvTime.Add(protocol.Max0RTTQueueingDuration)
+	queue.expiration = expiration
+	if s.nextZeroRTTCleanup.IsZero() || s.nextZeroRTTCleanup.After(expiration) {
+		s.nextZeroRTTCleanup = expiration
+	}
+	s.zeroRTTQueues[connID] = queue
+	return true
+}
+
+func (s *baseServer) cleanupZeroRTTQueues(now time.Time) {
+	// Iterate over all queues to find those that are expired.
+	// This is ok since we're placing a pretty low limit on the number of queues.
+	var nextCleanup time.Time
+	for connID, q := range s.zeroRTTQueues {
+		if q.expiration.After(now) {
+			if nextCleanup.IsZero() || nextCleanup.After(q.expiration) {
+				nextCleanup = q.expiration
+			}
+			continue
+		}
+		for _, p := range q.packets {
+			if s.config.Tracer != nil {
+				s.config.Tracer.DroppedPacket(p.remoteAddr, logging.PacketType0RTT, p.Size(), logging.PacketDropDOSPrevention)
+			}
+			p.buffer.Release()
+		}
+		delete(s.zeroRTTQueues, connID)
+		if s.logger.Debug() {
+			s.logger.Debugf("Removing 0-RTT queue for %s.", connID)
+		}
+	}
+	s.nextZeroRTTCleanup = nextCleanup
+}
+
 // validateToken returns false if:
 //   - address is invalid
 //   - token is expired
@@ -412,6 +507,14 @@ func (s *baseServer) handleInitialImpl(p *receivedPacket, hdr *wire.Header) erro
 		return errors.New("too short connection ID")
 	}
 
+	// The server queues packets for a while, and we might already have established a connection by now.
+	// This results in a second check in the connection map.
+	// That's ok since it's not the hot path (it's only taken by some Initial and 0-RTT packets).
+	if handler, ok := s.connHandler.Get(hdr.DestConnectionID); ok {
+		handler.handlePacket(p)
+		return nil
+	}
+
 	var (
 		token          *handshake.Token
 		retrySrcConnID *protocol.ConnectionID
@@ -429,7 +532,6 @@ func (s *baseServer) handleInitialImpl(p *receivedPacket, hdr *wire.Header) erro
 	}
 
 	clientAddrIsValid := s.validateToken(token, p.remoteAddr)
-
 	if token != nil && !clientAddrIsValid {
 		// For invalid and expired non-retry tokens, we don't send an INVALID_TOKEN error.
 		// We just ignore them, and act as if there was no token on this packet at all.
@@ -450,6 +552,8 @@ func (s *baseServer) handleInitialImpl(p *receivedPacket, hdr *wire.Header) erro
 		}
 	}
 	if token == nil && s.config.RequireAddressValidation(p.remoteAddr) {
+		// Retry invalidates all 0-RTT packets sent.
+		delete(s.zeroRTTQueues, hdr.DestConnectionID)
 		go func() {
 			defer p.buffer.Release()
 			if err := s.sendRetry(p.remoteAddr, hdr, p.info); err != nil {
@@ -510,8 +614,18 @@ func (s *baseServer) handleInitialImpl(p *receivedPacket, hdr *wire.Header) erro
 			hdr.Version,
 		)
 		conn.handlePacket(p)
+
+		if q, ok := s.zeroRTTQueues[hdr.DestConnectionID]; ok {
+			for _, p := range q.packets {
+				conn.handlePacket(p)
+			}
+			delete(s.zeroRTTQueues, hdr.DestConnectionID)
+		}
+
 		return conn
 	}); !added {
+		// TODO: don't just drop the packet
+		// Properly reject the connection attempt.
 		return nil
 	}
 	go conn.run()
