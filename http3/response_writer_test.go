@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"io"
 	"net/http"
+	"time"
 
 	mockquic "github.com/quic-go/quic-go/internal/mocks/quic"
 	"github.com/quic-go/quic-go/internal/utils"
@@ -25,6 +26,8 @@ var _ = Describe("Response Writer", func() {
 		strBuf = &bytes.Buffer{}
 		str := mockquic.NewMockStream(mockCtrl)
 		str.EXPECT().Write(gomock.Any()).DoAndReturn(strBuf.Write).AnyTimes()
+		str.EXPECT().SetReadDeadline(gomock.Any()).Return(nil).AnyTimes()
+		str.EXPECT().SetWriteDeadline(gomock.Any()).Return(nil).AnyTimes()
 		rw = newResponseWriter(str, nil, utils.DefaultLogger)
 	})
 
@@ -155,5 +158,10 @@ var _ = Describe("Response Writer", func() {
 
 		fields := decodeHeader(strBuf)
 		Expect(fields).To(HaveKeyWithValue("content-type", []string{"text/html; charset=utf-8"}))
+	})
+
+	It(`is compatible with "net/http".ResponseController`, func() {
+		Expect(rw.SetReadDeadline(time.Now().Add(1 * time.Second))).To(BeNil())
+		Expect(rw.SetWriteDeadline(time.Now().Add(1 * time.Second))).To(BeNil())
 	})
 })
