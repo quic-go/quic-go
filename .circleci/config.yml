@@ -28,11 +28,17 @@ jobs:
           name: "Run self integration tests"
           command: go run github.com/onsi/ginkgo/v2/ginkgo -v -randomize-all -trace integrationtests/self
       - run:
+          name: "Run version negotiation tests"
+          command: go run github.com/onsi/ginkgo/v2/ginkgo -v -randomize-all -trace integrationtests/versionnegotiation
+      - run:
           name: "Run self integration tests with race detector"
           command: go run github.com/onsi/ginkgo/v2/ginkgo -race -v -randomize-all -trace integrationtests/self
       - run:
           name: "Run self integration tests with qlog"
           command: go run github.com/onsi/ginkgo/v2/ginkgo -v -randomize-all -trace integrationtests/self -- -qlog
+      - run:
+          name: "Run version negotiation tests with qlog"
+          command: go run github.com/onsi/ginkgo/v2/ginkgo -v -randomize-all -trace integrationtests/versionnegotiation -- -qlog
   go119:
     <<: *test
   go120:

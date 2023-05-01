@@ -1,20 +1,13 @@
 package self_test
 
 import (
-	"bufio"
 	"bytes"
 	"context"
-	"crypto"
-	"crypto/rand"
-	"crypto/rsa"
 	"crypto/tls"
 	"crypto/x509"
-	"crypto/x509/pkix"
 	"flag"
 	"fmt"
-	"io"
 	"log"
-	"math/big"
 	mrand "math/rand"
 	"os"
 	"runtime/pprof"
@@ -24,19 +17,18 @@ import (
 	"testing"
 	"time"
 
-	"golang.org/x/crypto/ed25519"
-
 	"github.com/quic-go/quic-go"
+	"github.com/quic-go/quic-go/integrationtests/tools"
+	"github.com/quic-go/quic-go/internal/protocol"
 	"github.com/quic-go/quic-go/internal/utils"
 	"github.com/quic-go/quic-go/internal/wire"
 	"github.com/quic-go/quic-go/logging"
-	"github.com/quic-go/quic-go/qlog"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 )
 
-const alpn = "quic-go integration tests"
+const alpn = tools.ALPN
 
 const (
 	dataLen     = 500 * 1024       // 500 KB
@@ -90,28 +82,32 @@ func (b *syncedBuffer) Reset() {
 }
 
 var (
-	logFileName string // the log file set in the ginkgo flags
-	logBufOnce  sync.Once
-	logBuf      *syncedBuffer
-	enableQlog  bool
+	logFileName  string // the log file set in the ginkgo flags
+	logBufOnce   sync.Once
+	logBuf       *syncedBuffer
+	versionParam string
 
+	qlogTracer logging.Tracer
+	enableQlog bool
+
+	version            quic.VersionNumber
 	tlsConfig          *tls.Config
 	tlsConfigLongChain *tls.Config
 	tlsClientConfig    *tls.Config
-	quicConfigTracer   logging.Tracer
 )
 
 // read the logfile command line flag
 // to set call ginkgo -- -logfile=log.txt
 func init() {
 	flag.StringVar(&logFileName, "logfile", "", "log file")
+	flag.StringVar(&versionParam, "version", "1", "QUIC version")
 	flag.BoolVar(&enableQlog, "qlog", false, "enable qlog")
 
-	ca, caPrivateKey, err := generateCA()
+	ca, caPrivateKey, err := tools.GenerateCA()
 	if err != nil {
 		panic(err)
 	}
-	leafCert, leafPrivateKey, err := generateLeafCert(ca, caPrivateKey)
+	leafCert, leafPrivateKey, err := tools.GenerateLeafCert(ca, caPrivateKey)
 	if err != nil {
 		panic(err)
 	}
@@ -122,7 +118,7 @@ func init() {
 		}},
 		NextProtos: []string{alpn},
 	}
-	tlsConfLongChain, err := generateTLSConfigWithLongCertChain(ca, caPrivateKey)
+	tlsConfLongChain, err := tools.GenerateTLSConfigWithLongCertChain(ca, caPrivateKey)
 	if err != nil {
 		panic(err)
 	}
@@ -140,125 +136,21 @@ var _ = BeforeSuite(func() {
 	mrand.Seed(GinkgoRandomSeed())
 
 	if enableQlog {
-		quicConfigTracer = qlog.NewTracer(func(p logging.Perspective, connectionID []byte) io.WriteCloser {
-			role := "server"
-			if p == logging.PerspectiveClient {
-				role = "client"
-			}
-			filename := fmt.Sprintf("log_%x_%s.qlog", connectionID, role)
-			fmt.Fprintf(GinkgoWriter, "Creating %s.\n", filename)
-			f, err := os.Create(filename)
-			Expect(err).ToNot(HaveOccurred())
-			bw := bufio.NewWriter(f)
-			return utils.NewBufferedWriteCloser(bw, f)
-		})
+		qlogTracer = tools.NewQlogger(GinkgoWriter)
 	}
+	switch versionParam {
+	case "1":
+		version = quic.Version1
+	case "2":
+		version = quic.Version2
+	case "draft29":
+		version = quic.VersionDraft29
+	default:
+		Fail(fmt.Sprintf("unknown QUIC version: %s", versionParam))
+	}
+	fmt.Printf("Using QUIC version: %s\n", version)
+	protocol.SupportedVersions = []quic.VersionNumber{version}
 })
-
-func generateCA() (*x509.Certificate, crypto.PrivateKey, error) {
-	certTempl := &x509.Certificate{
-		SerialNumber:          big.NewInt(2019),
-		Subject:               pkix.Name{},
-		NotBefore:             time.Now(),
-		NotAfter:              time.Now().Add(24 * time.Hour),
-		IsCA:                  true,
-		ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth, x509.ExtKeyUsageServerAuth},
-		KeyUsage:              x509.KeyUsageDigitalSignature | x509.KeyUsageCertSign,
-		BasicConstraintsValid: true,
-	}
-	pub, priv, err := ed25519.GenerateKey(rand.Reader)
-	if err != nil {
-		return nil, nil, err
-	}
-	caBytes, err := x509.CreateCertificate(rand.Reader, certTempl, certTempl, pub, priv)
-	if err != nil {
-		return nil, nil, err
-	}
-	ca, err := x509.ParseCertificate(caBytes)
-	if err != nil {
-		return nil, nil, err
-	}
-	return ca, priv, nil
-}
-
-func generateLeafCert(ca *x509.Certificate, caPriv crypto.PrivateKey) (*x509.Certificate, crypto.PrivateKey, error) {
-	certTempl := &x509.Certificate{
-		SerialNumber: big.NewInt(1),
-		DNSNames:     []string{"localhost"},
-		NotBefore:    time.Now(),
-		NotAfter:     time.Now().Add(24 * time.Hour),
-		ExtKeyUsage:  []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth, x509.ExtKeyUsageServerAuth},
-		KeyUsage:     x509.KeyUsageDigitalSignature,
-	}
-	pub, priv, err := ed25519.GenerateKey(rand.Reader)
-	if err != nil {
-		return nil, nil, err
-	}
-	certBytes, err := x509.CreateCertificate(rand.Reader, certTempl, ca, pub, caPriv)
-	if err != nil {
-		return nil, nil, err
-	}
-	cert, err := x509.ParseCertificate(certBytes)
-	if err != nil {
-		return nil, nil, err
-	}
-	return cert, priv, nil
-}
-
-// getTLSConfigWithLongCertChain generates a tls.Config that uses a long certificate chain.
-// The Root CA used is the same as for the config returned from getTLSConfig().
-func generateTLSConfigWithLongCertChain(ca *x509.Certificate, caPrivateKey crypto.PrivateKey) (*tls.Config, error) {
-	const chainLen = 7
-	certTempl := &x509.Certificate{
-		SerialNumber:          big.NewInt(2019),
-		Subject:               pkix.Name{},
-		NotBefore:             time.Now(),
-		NotAfter:              time.Now().Add(24 * time.Hour),
-		IsCA:                  true,
-		ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth, x509.ExtKeyUsageServerAuth},
-		KeyUsage:              x509.KeyUsageDigitalSignature | x509.KeyUsageCertSign,
-		BasicConstraintsValid: true,
-	}
-
-	lastCA := ca
-	lastCAPrivKey := caPrivateKey
-	privKey, err := rsa.GenerateKey(rand.Reader, 2048)
-	if err != nil {
-		return nil, err
-	}
-	certs := make([]*x509.Certificate, chainLen)
-	for i := 0; i < chainLen; i++ {
-		caBytes, err := x509.CreateCertificate(rand.Reader, certTempl, lastCA, &privKey.PublicKey, lastCAPrivKey)
-		if err != nil {
-			return nil, err
-		}
-		ca, err := x509.ParseCertificate(caBytes)
-		if err != nil {
-			return nil, err
-		}
-		certs[i] = ca
-		lastCA = ca
-		lastCAPrivKey = privKey
-	}
-	leafCert, leafPrivateKey, err := generateLeafCert(lastCA, lastCAPrivKey)
-	if err != nil {
-		return nil, err
-	}
-
-	rawCerts := make([][]byte, chainLen+1)
-	for i, cert := range certs {
-		rawCerts[chainLen-i] = cert.Raw
-	}
-	rawCerts[0] = leafCert.Raw
-
-	return &tls.Config{
-		Certificates: []tls.Certificate{{
-			Certificate: rawCerts,
-			PrivateKey:  leafPrivateKey,
-		}},
-		NextProtos: []string{alpn},
-	}, nil
-}
 
 func getTLSConfig() *tls.Config {
 	return tlsConfig.Clone()
@@ -278,10 +170,12 @@ func getQuicConfig(conf *quic.Config) *quic.Config {
 	} else {
 		conf = conf.Clone()
 	}
-	if conf.Tracer == nil {
-		conf.Tracer = quicConfigTracer
-	} else if quicConfigTracer != nil {
-		conf.Tracer = logging.NewMultiplexedTracer(quicConfigTracer, conf.Tracer)
+	if enableQlog {
+		if conf.Tracer == nil {
+			conf.Tracer = qlogTracer
+		} else if qlogTracer != nil {
+			conf.Tracer = logging.NewMultiplexedTracer(qlogTracer, conf.Tracer)
+		}
 	}
 	return conf
 }
