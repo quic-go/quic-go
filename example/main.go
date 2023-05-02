@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"context"
 	"crypto/md5"
 	"errors"
 	"flag"
@@ -162,15 +163,15 @@ func main() {
 	handler := setupHandler(*www)
 	quicConf := &quic.Config{}
 	if *enableQlog {
-		quicConf.Tracer = qlog.NewTracer(func(_ logging.Perspective, connID []byte) io.WriteCloser {
+		quicConf.Tracer = func(ctx context.Context, p logging.Perspective, connID quic.ConnectionID) logging.ConnectionTracer {
 			filename := fmt.Sprintf("server_%x.qlog", connID)
 			f, err := os.Create(filename)
 			if err != nil {
 				log.Fatal(err)
 			}
 			log.Printf("Creating qlog file %s.\n", filename)
-			return utils.NewBufferedWriteCloser(bufio.NewWriter(f), f)
-		})
+			return qlog.NewConnectionTracer(utils.NewBufferedWriteCloser(bufio.NewWriter(f), f), p, connID)
+		}
 	}
 
 	var wg sync.WaitGroup

@@ -34,10 +34,9 @@ var _ = Describe("Multiplexing", func() {
 		}()
 	}
 
-	dial := func(pconn net.PacketConn, addr net.Addr) {
-		conn, err := quic.Dial(
+	dial := func(tr *quic.Transport, addr net.Addr) {
+		conn, err := tr.Dial(
 			context.Background(),
-			pconn,
 			addr,
 			getTLSClientConfig(),
 			getQuicConfig(nil),
@@ -72,17 +71,18 @@ var _ = Describe("Multiplexing", func() {
 			conn, err := net.ListenUDP("udp", addr)
 			Expect(err).ToNot(HaveOccurred())
 			defer conn.Close()
+			tr := &quic.Transport{Conn: conn}
 
 			done1 := make(chan struct{})
 			done2 := make(chan struct{})
 			go func() {
 				defer GinkgoRecover()
-				dial(conn, server.Addr())
+				dial(tr, server.Addr())
 				close(done1)
 			}()
 			go func() {
 				defer GinkgoRecover()
-				dial(conn, server.Addr())
+				dial(tr, server.Addr())
 				close(done2)
 			}()
 			timeout := 30 * time.Second
@@ -106,17 +106,18 @@ var _ = Describe("Multiplexing", func() {
 			conn, err := net.ListenUDP("udp", addr)
 			Expect(err).ToNot(HaveOccurred())
 			defer conn.Close()
+			tr := &quic.Transport{Conn: conn}
 
 			done1 := make(chan struct{})
 			done2 := make(chan struct{})
 			go func() {
 				defer GinkgoRecover()
-				dial(conn, server1.Addr())
+				dial(tr, server1.Addr())
 				close(done1)
 			}()
 			go func() {
 				defer GinkgoRecover()
-				dial(conn, server2.Addr())
+				dial(tr, server2.Addr())
 				close(done2)
 			}()
 			timeout := 30 * time.Second
@@ -135,9 +136,8 @@ var _ = Describe("Multiplexing", func() {
 			conn, err := net.ListenUDP("udp", addr)
 			Expect(err).ToNot(HaveOccurred())
 			defer conn.Close()
-
-			server, err := quic.Listen(
-				conn,
+			tr := &quic.Transport{Conn: conn}
+			server, err := tr.Listen(
 				getTLSConfig(),
 				getQuicConfig(nil),
 			)
@@ -146,7 +146,7 @@ var _ = Describe("Multiplexing", func() {
 			done := make(chan struct{})
 			go func() {
 				defer GinkgoRecover()
-				dial(conn, server.Addr())
+				dial(tr, server.Addr())
 				close(done)
 			}()
 			timeout := 30 * time.Second
@@ -165,15 +165,16 @@ var _ = Describe("Multiplexing", func() {
 			conn1, err := net.ListenUDP("udp", addr1)
 			Expect(err).ToNot(HaveOccurred())
 			defer conn1.Close()
+			tr1 := &quic.Transport{Conn: conn1}
 
 			addr2, err := net.ResolveUDPAddr("udp", "localhost:0")
 			Expect(err).ToNot(HaveOccurred())
 			conn2, err := net.ListenUDP("udp", addr2)
 			Expect(err).ToNot(HaveOccurred())
 			defer conn2.Close()
+			tr2 := &quic.Transport{Conn: conn2}
 
-			server1, err := quic.Listen(
-				conn1,
+			server1, err := tr1.Listen(
 				getTLSConfig(),
 				getQuicConfig(nil),
 			)
@@ -181,8 +182,7 @@ var _ = Describe("Multiplexing", func() {
 			runServer(server1)
 			defer server1.Close()
 
-			server2, err := quic.Listen(
-				conn2,
+			server2, err := tr2.Listen(
 				getTLSConfig(),
 				getQuicConfig(nil),
 			)
@@ -194,12 +194,12 @@ var _ = Describe("Multiplexing", func() {
 			done2 := make(chan struct{})
 			go func() {
 				defer GinkgoRecover()
-				dial(conn2, server1.Addr())
+				dial(tr2, server1.Addr())
 				close(done1)
 			}()
 			go func() {
 				defer GinkgoRecover()
-				dial(conn1, server2.Addr())
+				dial(tr1, server2.Addr())
 				close(done2)
 			}()
 			timeout := 30 * time.Second

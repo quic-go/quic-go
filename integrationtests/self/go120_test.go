@@ -7,7 +7,7 @@ import (
 	"time"
 )
 
-var go120 = true
+const go120 = true
 
 func setReadDeadline(w http.ResponseWriter, deadline time.Time) error {
 	rc := http.NewResponseController(w)

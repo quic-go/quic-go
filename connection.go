@@ -240,6 +240,7 @@ var newConnection = func(
 	clientDestConnID protocol.ConnectionID,
 	destConnID protocol.ConnectionID,
 	srcConnID protocol.ConnectionID,
+	connIDGenerator ConnectionIDGenerator,
 	statelessResetToken protocol.StatelessResetToken,
 	conf *Config,
 	tlsConf *tls.Config,
@@ -283,7 +284,7 @@ var newConnection = func(
 		runner.Retire,
 		runner.ReplaceWithClosed,
 		s.queueControlFrame,
-		s.config.ConnectionIDGenerator,
+		connIDGenerator,
 	)
 	s.preSetup()
 	s.ctx, s.ctxCancel = context.WithCancel(context.WithValue(context.Background(), ConnectionTracingKey, tracingID))
@@ -323,10 +324,6 @@ var newConnection = func(
 	if s.tracer != nil {
 		s.tracer.SentTransportParameters(params)
 	}
-	var allow0RTT func() bool
-	if conf.Allow0RTT != nil {
-		allow0RTT = func() bool { return conf.Allow0RTT(conn.RemoteAddr()) }
-	}
 	cs := handshake.NewCryptoSetupServer(
 		initialStream,
 		handshakeStream,
@@ -344,7 +341,7 @@ var newConnection = func(
 			},
 		},
 		tlsConf,
-		allow0RTT,
+		conf.Allow0RTT,
 		s.rttStats,
 		tracer,
 		logger,
@@ -363,6 +360,7 @@ var newClientConnection = func(
 	runner connRunner,
 	destConnID protocol.ConnectionID,
 	srcConnID protocol.ConnectionID,
+	connIDGenerator ConnectionIDGenerator,
 	conf *Config,
 	tlsConf *tls.Config,
 	initialPacketNumber protocol.PacketNumber,
@@ -402,7 +400,7 @@ var newClientConnection = func(
 		runner.Retire,
 		runner.ReplaceWithClosed,
 		s.queueControlFrame,
-		s.config.ConnectionIDGenerator,
+		connIDGenerator,
 	)
 	s.preSetup()
 	s.ctx, s.ctxCancel = context.WithCancel(context.WithValue(context.Background(), ConnectionTracingKey, tracingID))

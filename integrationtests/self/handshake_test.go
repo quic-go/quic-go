@@ -114,7 +114,7 @@ var _ = Describe("Handshake tests", func() {
 					context.Background(),
 					fmt.Sprintf("localhost:%d", ln.Addr().(*net.UDPAddr).Port),
 					getTLSClientConfig(),
-					nil,
+					getQuicConfig(nil),
 				)
 				Expect(err).ToNot(HaveOccurred())
 				str, err := conn.AcceptStream(context.Background())
@@ -223,13 +223,14 @@ var _ = Describe("Handshake tests", func() {
 		var (
 			server *quic.Listener
 			pconn  net.PacketConn
+			dialer *quic.Transport
 		)
 
 		dial := func() (quic.Connection, error) {
 			remoteAddr := fmt.Sprintf("localhost:%d", server.Addr().(*net.UDPAddr).Port)
 			raddr, err := net.ResolveUDPAddr("udp", remoteAddr)
 			Expect(err).ToNot(HaveOccurred())
-			return quic.Dial(context.Background(), pconn, raddr, getTLSClientConfig(), nil)
+			return dialer.Dial(context.Background(), raddr, getTLSClientConfig(), getQuicConfig(nil))
 		}
 
 		BeforeEach(func() {
@@ -243,11 +244,13 @@ var _ = Describe("Handshake tests", func() {
 			Expect(err).ToNot(HaveOccurred())
 			pconn, err = net.ListenUDP("udp", laddr)
 			Expect(err).ToNot(HaveOccurred())
+			dialer = &quic.Transport{Conn: pconn, ConnectionIDLength: 4}
 		})
 
 		AfterEach(func() {
 			Expect(server.Close()).To(Succeed())
 			Expect(pconn.Close()).To(Succeed())
+			Expect(dialer.Close()).To(Succeed())
 		})
 
 		It("rejects new connection attempts if connections don't get accepted", func() {
@@ -300,7 +303,7 @@ var _ = Describe("Handshake tests", func() {
 			// This should free one spot in the queue.
 			Expect(firstConn.CloseWithError(0, ""))
 			Eventually(firstConn.Context().Done()).Should(BeClosed())
-			time.Sleep(scaleDuration(20 * time.Millisecond))
+			time.Sleep(scaleDuration(200 * time.Millisecond))
 
 			// dial again, and expect that this dial succeeds
 			_, err = dial()
@@ -366,6 +369,7 @@ var _ = Describe("Handshake tests", func() {
 		It("uses tokens provided in NEW_TOKEN frames", func() {
 			server, err := quic.ListenAddr("localhost:0", getTLSConfig(), serverConfig)
 			Expect(err).ToNot(HaveOccurred())
+			defer server.Close()
 
 			// dial the first connection and receive the token
 			go func() {
@@ -429,6 +433,72 @@ var _ = Describe("Handshake tests", func() {
 			var transportErr *quic.TransportError
 			Expect(errors.As(err, &transportErr)).To(BeTrue())
 			Expect(transportErr.ErrorCode).To(Equal(quic.InvalidToken))
+		})
+	})
+
+	Context("GetConfigForClient", func() {
+		It("uses the quic.Config returned by GetConfigForClient", func() {
+			serverConfig.EnableDatagrams = false
+			var calledFrom net.Addr
+			serverConfig.GetConfigForClient = func(info *quic.ClientHelloInfo) (*quic.Config, error) {
+				conf := serverConfig.Clone()
+				conf.EnableDatagrams = true
+				calledFrom = info.RemoteAddr
+				return getQuicConfig(conf), nil
+			}
+			ln, err := quic.ListenAddr("localhost:0", getTLSConfig(), serverConfig)
+			Expect(err).ToNot(HaveOccurred())
+
+			done := make(chan struct{})
+			go func() {
+				defer GinkgoRecover()
+				_, err := ln.Accept(context.Background())
+				Expect(err).ToNot(HaveOccurred())
+				close(done)
+			}()
+
+			conn, err := quic.DialAddr(
+				context.Background(),
+				fmt.Sprintf("localhost:%d", ln.Addr().(*net.UDPAddr).Port),
+				getTLSClientConfig(),
+				getQuicConfig(&quic.Config{EnableDatagrams: true}),
+			)
+			Expect(err).ToNot(HaveOccurred())
+			defer conn.CloseWithError(0, "")
+			cs := conn.ConnectionState()
+			Expect(cs.SupportsDatagrams).To(BeTrue())
+			Eventually(done).Should(BeClosed())
+			Expect(ln.Close()).To(Succeed())
+			Expect(calledFrom.(*net.UDPAddr).Port).To(Equal(conn.LocalAddr().(*net.UDPAddr).Port))
+		})
+
+		It("rejects the connection attempt if GetConfigForClient errors", func() {
+			serverConfig.EnableDatagrams = false
+			serverConfig.GetConfigForClient = func(info *quic.ClientHelloInfo) (*quic.Config, error) {
+				return nil, errors.New("rejected")
+			}
+			ln, err := quic.ListenAddr("localhost:0", getTLSConfig(), serverConfig)
+			Expect(err).ToNot(HaveOccurred())
+			defer ln.Close()
+
+			done := make(chan struct{})
+			go func() {
+				defer GinkgoRecover()
+				_, err := ln.Accept(context.Background())
+				Expect(err).To(HaveOccurred()) // we don't expect to accept any connection
+				close(done)
+			}()
+
+			_, err = quic.DialAddr(
+				context.Background(),
+				fmt.Sprintf("localhost:%d", ln.Addr().(*net.UDPAddr).Port),
+				getTLSClientConfig(),
+				getQuicConfig(&quic.Config{EnableDatagrams: true}),
+			)
+			Expect(err).To(HaveOccurred())
+			var transportErr *quic.TransportError
+			Expect(errors.As(err, &transportErr)).To(BeTrue())
+			Expect(transportErr.ErrorCode).To(Equal(qerr.ConnectionRefused))
 		})
 	})
 

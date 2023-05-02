@@ -660,6 +660,7 @@ var _ = Describe("Stream Cancellations", func() {
 			getQuicConfig(&quic.Config{MaxIncomingStreams: maxIncomingStreams, MaxIdleTimeout: 10 * time.Second}),
 		)
 		Expect(err).ToNot(HaveOccurred())
+		defer server.Close()
 
 		var wg sync.WaitGroup
 		wg.Add(2 * 4 * maxIncomingStreams)

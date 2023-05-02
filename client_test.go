@@ -18,13 +18,16 @@ import (
 	. "github.com/onsi/gomega"
 )
 
+type nullMultiplexer struct{}
+
+func (n nullMultiplexer) AddConn(indexableConn)          {}
+func (n nullMultiplexer) RemoveConn(indexableConn) error { return nil }
+
 var _ = Describe("Client", func() {
 	var (
 		cl              *client
-		packetConn      *MockPacketConn
-		addr            net.Addr
+		packetConn      *MockSendConn
 		connID          protocol.ConnectionID
-		mockMultiplexer *MockMultiplexer
 		origMultiplexer multiplexer
 		tlsConf         *tls.Config
 		tracer          *mocklogging.MockConnectionTracer
@@ -35,6 +38,7 @@ var _ = Describe("Client", func() {
 			runner connRunner,
 			destConnID protocol.ConnectionID,
 			srcConnID protocol.ConnectionID,
+			connIDGenerator ConnectionIDGenerator,
 			conf *Config,
 			tlsConf *tls.Config,
 			initialPacketNumber protocol.PacketNumber,
@@ -52,26 +56,28 @@ var _ = Describe("Client", func() {
 		connID = protocol.ParseConnectionID([]byte{0, 0, 0, 0, 0, 0, 0x13, 0x37})
 		originalClientConnConstructor = newClientConnection
 		tracer = mocklogging.NewMockConnectionTracer(mockCtrl)
-		tr := mocklogging.NewMockTracer(mockCtrl)
-		tr.EXPECT().TracerForConnection(gomock.Any(), protocol.PerspectiveClient, gomock.Any()).Return(tracer).MaxTimes(1)
-		config = &Config{Tracer: tr, Versions: []protocol.VersionNumber{protocol.Version1}}
+		config = &Config{
+			Tracer: func(ctx context.Context, perspective logging.Perspective, id ConnectionID) logging.ConnectionTracer {
+				return tracer
+			},
+			Versions: []protocol.VersionNumber{protocol.Version1},
+		}
 		Eventually(areConnsRunning).Should(BeFalse())
-		addr = &net.UDPAddr{IP: net.IPv4(192, 168, 100, 200), Port: 1337}
-		packetConn = NewMockPacketConn(mockCtrl)
+		packetConn = NewMockSendConn(mockCtrl)
 		packetConn.EXPECT().LocalAddr().Return(&net.UDPAddr{}).AnyTimes()
+		packetConn.EXPECT().RemoteAddr().Return(&net.UDPAddr{}).AnyTimes()
 		cl = &client{
 			srcConnID:  connID,
 			destConnID: connID,
 			version:    protocol.Version1,
-			sconn:      newSendPconn(packetConn, addr),
+			sendConn:   packetConn,
 			tracer:     tracer,
 			logger:     utils.DefaultLogger,
 		}
 		getMultiplexer() // make the sync.Once execute
-		// replace the clientMuxer. getClientMultiplexer will now return the MockMultiplexer
-		mockMultiplexer = NewMockMultiplexer(mockCtrl)
+		// replace the clientMuxer. getMultiplexer will now return the nullMultiplexer
 		origMultiplexer = connMuxer
-		connMuxer = mockMultiplexer
+		connMuxer = &nullMultiplexer{}
 	})
 
 	AfterEach(func() {
@@ -100,50 +106,17 @@ var _ = Describe("Client", func() {
 			generateConnectionIDForInitial = origGenerateConnectionIDForInitial
 		})
 
-		It("resolves the address", func() {
-			manager := NewMockPacketHandlerManager(mockCtrl)
-			manager.EXPECT().Add(gomock.Any(), gomock.Any())
-			manager.EXPECT().Destroy()
-			mockMultiplexer.EXPECT().AddConn(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(manager, nil)
-
-			remoteAddrChan := make(chan string, 1)
-			newClientConnection = func(
-				sconn sendConn,
-				_ connRunner,
-				_ protocol.ConnectionID,
-				_ protocol.ConnectionID,
-				_ *Config,
-				_ *tls.Config,
-				_ protocol.PacketNumber,
-				_ bool,
-				_ bool,
-				_ logging.ConnectionTracer,
-				_ uint64,
-				_ utils.Logger,
-				_ protocol.VersionNumber,
-			) quicConn {
-				remoteAddrChan <- sconn.RemoteAddr().String()
-				conn := NewMockQUICConn(mockCtrl)
-				conn.EXPECT().run()
-				conn.EXPECT().HandshakeComplete().Return(make(chan struct{}))
-				return conn
-			}
-			_, err := DialAddr(context.Background(), "localhost:17890", tlsConf, &Config{HandshakeIdleTimeout: time.Millisecond})
-			Expect(err).ToNot(HaveOccurred())
-			Eventually(remoteAddrChan).Should(Receive(Equal("127.0.0.1:17890")))
-		})
-
 		It("returns after the handshake is complete", func() {
 			manager := NewMockPacketHandlerManager(mockCtrl)
 			manager.EXPECT().Add(gomock.Any(), gomock.Any())
-			mockMultiplexer.EXPECT().AddConn(packetConn, gomock.Any(), gomock.Any(), gomock.Any()).Return(manager, nil)
 
 			run := make(chan struct{})
 			newClientConnection = func(
 				_ sendConn,
-				runner connRunner,
+				_ connRunner,
 				_ protocol.ConnectionID,
 				_ protocol.ConnectionID,
+				_ ConnectionIDGenerator,
 				_ *Config,
 				_ *tls.Config,
 				_ protocol.PacketNumber,
@@ -162,18 +135,17 @@ var _ = Describe("Client", func() {
 				conn.EXPECT().HandshakeComplete().Return(c)
 				return conn
 			}
-			tracer.EXPECT().StartedConnection(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any())
-			s, err := Dial(context.Background(), packetConn, addr, tlsConf, config)
+			cl, err := newClient(packetConn, &protocol.DefaultConnectionIDGenerator{}, populateConfig(config), tlsConf, nil, false)
 			Expect(err).ToNot(HaveOccurred())
-			Expect(s).ToNot(BeNil())
+			cl.packetHandlers = manager
+			Expect(cl).ToNot(BeNil())
+			Expect(cl.dial(context.Background())).To(Succeed())
 			Eventually(run).Should(BeClosed())
 		})
 
 		It("returns early connections", func() {
 			manager := NewMockPacketHandlerManager(mockCtrl)
 			manager.EXPECT().Add(gomock.Any(), gomock.Any())
-			mockMultiplexer.EXPECT().AddConn(packetConn, gomock.Any(), gomock.Any(), gomock.Any()).Return(manager, nil)
-
 			readyChan := make(chan struct{})
 			done := make(chan struct{})
 			newClientConnection = func(
@@ -181,6 +153,7 @@ var _ = Describe("Client", func() {
 				runner connRunner,
 				_ protocol.ConnectionID,
 				_ protocol.ConnectionID,
+				_ ConnectionIDGenerator,
 				_ *Config,
 				_ *tls.Config,
 				_ protocol.PacketNumber,
@@ -193,29 +166,23 @@ var _ = Describe("Client", func() {
 			) quicConn {
 				Expect(enable0RTT).To(BeTrue())
 				conn := NewMockQUICConn(mockCtrl)
-				conn.EXPECT().run().Do(func() { <-done })
+				conn.EXPECT().run().Do(func() { close(done) })
 				conn.EXPECT().HandshakeComplete().Return(make(chan struct{}))
 				conn.EXPECT().earlyConnReady().Return(readyChan)
 				return conn
 			}
 
-			go func() {
-				defer GinkgoRecover()
-				defer close(done)
-				tracer.EXPECT().StartedConnection(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any())
-				s, err := DialEarly(context.Background(), packetConn, addr, tlsConf, config)
-				Expect(err).ToNot(HaveOccurred())
-				Expect(s).ToNot(BeNil())
-			}()
-			Consistently(done).ShouldNot(BeClosed())
-			close(readyChan)
+			cl, err := newClient(packetConn, &protocol.DefaultConnectionIDGenerator{}, populateConfig(config), tlsConf, nil, true)
+			Expect(err).ToNot(HaveOccurred())
+			cl.packetHandlers = manager
+			Expect(cl).ToNot(BeNil())
+			Expect(cl.dial(context.Background())).To(Succeed())
 			Eventually(done).Should(BeClosed())
 		})
 
 		It("returns an error that occurs while waiting for the handshake to complete", func() {
 			manager := NewMockPacketHandlerManager(mockCtrl)
 			manager.EXPECT().Add(gomock.Any(), gomock.Any())
-			mockMultiplexer.EXPECT().AddConn(packetConn, gomock.Any(), gomock.Any(), gomock.Any()).Return(manager, nil)
 
 			testErr := errors.New("early handshake error")
 			newClientConnection = func(
@@ -223,6 +190,7 @@ var _ = Describe("Client", func() {
 				_ connRunner,
 				_ protocol.ConnectionID,
 				_ protocol.ConnectionID,
+				_ ConnectionIDGenerator,
 				_ *Config,
 				_ *tls.Config,
 				_ protocol.PacketNumber,
@@ -236,142 +204,36 @@ var _ = Describe("Client", func() {
 				conn := NewMockQUICConn(mockCtrl)
 				conn.EXPECT().run().Return(testErr)
 				conn.EXPECT().HandshakeComplete().Return(make(chan struct{}))
+				conn.EXPECT().earlyConnReady().Return(make(chan struct{}))
 				return conn
 			}
-			tracer.EXPECT().StartedConnection(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any())
-			_, err := Dial(context.Background(), packetConn, addr, tlsConf, config)
-			Expect(err).To(MatchError(testErr))
-		})
-
-		It("closes the connection when the context is canceled", func() {
-			manager := NewMockPacketHandlerManager(mockCtrl)
-			manager.EXPECT().Add(gomock.Any(), gomock.Any())
-			mockMultiplexer.EXPECT().AddConn(packetConn, gomock.Any(), gomock.Any(), gomock.Any()).Return(manager, nil)
-
-			connRunning := make(chan struct{})
-			defer close(connRunning)
-			conn := NewMockQUICConn(mockCtrl)
-			conn.EXPECT().run().Do(func() {
-				<-connRunning
-			})
-			conn.EXPECT().HandshakeComplete().Return(make(chan struct{}))
-			newClientConnection = func(
-				_ sendConn,
-				_ connRunner,
-				_ protocol.ConnectionID,
-				_ protocol.ConnectionID,
-				_ *Config,
-				_ *tls.Config,
-				_ protocol.PacketNumber,
-				_ bool,
-				_ bool,
-				_ logging.ConnectionTracer,
-				_ uint64,
-				_ utils.Logger,
-				_ protocol.VersionNumber,
-			) quicConn {
-				return conn
-			}
-			ctx, cancel := context.WithCancel(context.Background())
-			dialed := make(chan struct{})
-			go func() {
-				defer GinkgoRecover()
-				tracer.EXPECT().StartedConnection(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any())
-				_, err := Dial(ctx, packetConn, addr, tlsConf, config)
-				Expect(err).To(MatchError(context.Canceled))
-				close(dialed)
-			}()
-			Consistently(dialed).ShouldNot(BeClosed())
-			conn.EXPECT().shutdown()
-			cancel()
-			Eventually(dialed).Should(BeClosed())
-		})
-
-		It("closes the connection when it was created by DialAddr", func() {
-			manager := NewMockPacketHandlerManager(mockCtrl)
-			mockMultiplexer.EXPECT().AddConn(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(manager, nil)
-			manager.EXPECT().Add(gomock.Any(), gomock.Any())
-
-			var sconn sendConn
-			run := make(chan struct{})
-			connCreated := make(chan struct{})
-			conn := NewMockQUICConn(mockCtrl)
-			newClientConnection = func(
-				connP sendConn,
-				_ connRunner,
-				_ protocol.ConnectionID,
-				_ protocol.ConnectionID,
-				_ *Config,
-				_ *tls.Config,
-				_ protocol.PacketNumber,
-				_ bool,
-				_ bool,
-				_ logging.ConnectionTracer,
-				_ uint64,
-				_ utils.Logger,
-				_ protocol.VersionNumber,
-			) quicConn {
-				sconn = connP
-				close(connCreated)
-				return conn
-			}
-			conn.EXPECT().run().Do(func() {
-				<-run
-			})
-			conn.EXPECT().HandshakeComplete().Return(make(chan struct{}))
-
-			done := make(chan struct{})
-			go func() {
-				defer GinkgoRecover()
-				_, err := DialAddr(context.Background(), "localhost:1337", tlsConf, nil)
-				Expect(err).ToNot(HaveOccurred())
-				close(done)
-			}()
-
-			Eventually(connCreated).Should(BeClosed())
-
-			// check that the connection is not closed
-			Expect(sconn.Write([]byte("foobar"))).To(Succeed())
-
-			manager.EXPECT().Destroy()
-			close(run)
-			time.Sleep(50 * time.Millisecond)
-
-			Eventually(done).Should(BeClosed())
+			var closed bool
+			cl, err := newClient(packetConn, &protocol.DefaultConnectionIDGenerator{}, populateConfig(config), tlsConf, func() { closed = true }, true)
+			Expect(err).ToNot(HaveOccurred())
+			cl.packetHandlers = manager
+			Expect(cl).ToNot(BeNil())
+			Expect(cl.dial(context.Background())).To(MatchError(testErr))
+			Expect(closed).To(BeTrue())
 		})
 
 		Context("quic.Config", func() {
 			It("setups with the right values", func() {
-				srk := &StatelessResetKey{'f', 'o', 'o', 'b', 'a', 'r'}
 				tokenStore := NewLRUTokenStore(10, 4)
 				config := &Config{
 					HandshakeIdleTimeout:  1337 * time.Minute,
 					MaxIdleTimeout:        42 * time.Hour,
 					MaxIncomingStreams:    1234,
 					MaxIncomingUniStreams: 4321,
-					ConnectionIDLength:    13,
-					StatelessResetKey:     srk,
 					TokenStore:            tokenStore,
 					EnableDatagrams:       true,
 				}
-				c := populateClientConfig(config, false)
+				c := populateConfig(config)
 				Expect(c.HandshakeIdleTimeout).To(Equal(1337 * time.Minute))
 				Expect(c.MaxIdleTimeout).To(Equal(42 * time.Hour))
 				Expect(c.MaxIncomingStreams).To(BeEquivalentTo(1234))
 				Expect(c.MaxIncomingUniStreams).To(BeEquivalentTo(4321))
-				Expect(c.ConnectionIDLength).To(Equal(13))
-				Expect(c.StatelessResetKey).To(Equal(srk))
 				Expect(c.TokenStore).To(Equal(tokenStore))
 				Expect(c.EnableDatagrams).To(BeTrue())
-			})
-
-			It("errors when the Config contains an invalid version", func() {
-				manager := NewMockPacketHandlerManager(mockCtrl)
-				mockMultiplexer.EXPECT().AddConn(packetConn, gomock.Any(), gomock.Any(), gomock.Any()).Return(manager, nil)
-
-				version := protocol.VersionNumber(0x1234)
-				_, err := Dial(context.Background(), packetConn, nil, tlsConf, &Config{Versions: []protocol.VersionNumber{version}})
-				Expect(err).To(MatchError("0x1234 is not a valid QUIC version"))
 			})
 
 			It("disables bidirectional streams", func() {
@@ -379,7 +241,7 @@ var _ = Describe("Client", func() {
 					MaxIncomingStreams:    -1,
 					MaxIncomingUniStreams: 4321,
 				}
-				c := populateClientConfig(config, false)
+				c := populateConfig(config)
 				Expect(c.MaxIncomingStreams).To(BeZero())
 				Expect(c.MaxIncomingUniStreams).To(BeEquivalentTo(4321))
 			})
@@ -389,18 +251,13 @@ var _ = Describe("Client", func() {
 					MaxIncomingStreams:    1234,
 					MaxIncomingUniStreams: -1,
 				}
-				c := populateClientConfig(config, false)
+				c := populateConfig(config)
 				Expect(c.MaxIncomingStreams).To(BeEquivalentTo(1234))
 				Expect(c.MaxIncomingUniStreams).To(BeZero())
 			})
 
-			It("uses 0-byte connection IDs when dialing an address", func() {
-				c := populateClientConfig(&Config{}, true)
-				Expect(c.ConnectionIDLength).To(BeZero())
-			})
-
 			It("fills in default values if options are not set in the Config", func() {
-				c := populateClientConfig(&Config{}, false)
+				c := populateConfig(&Config{})
 				Expect(c.Versions).To(Equal(protocol.SupportedVersions))
 				Expect(c.HandshakeIdleTimeout).To(Equal(protocol.DefaultHandshakeIdleTimeout))
 				Expect(c.MaxIdleTimeout).To(Equal(protocol.DefaultIdleTimeout))
@@ -408,20 +265,17 @@ var _ = Describe("Client", func() {
 		})
 
 		It("creates new connections with the right parameters", func() {
-			manager := NewMockPacketHandlerManager(mockCtrl)
-			manager.EXPECT().Add(connID, gomock.Any())
-			mockMultiplexer.EXPECT().AddConn(packetConn, gomock.Any(), gomock.Any(), gomock.Any()).Return(manager, nil)
-
-			config := &Config{Versions: []protocol.VersionNumber{protocol.Version1}, ConnectionIDGenerator: &mockConnIDGenerator{ConnID: connID}}
+			config := &Config{Versions: []protocol.VersionNumber{protocol.Version1}}
 			c := make(chan struct{})
-			var cconn sendConn
 			var version protocol.VersionNumber
 			var conf *Config
+			done := make(chan struct{})
 			newClientConnection = func(
 				connP sendConn,
 				_ connRunner,
 				_ protocol.ConnectionID,
 				_ protocol.ConnectionID,
+				_ ConnectionIDGenerator,
 				configP *Config,
 				_ *tls.Config,
 				_ protocol.PacketNumber,
@@ -432,7 +286,6 @@ var _ = Describe("Client", func() {
 				_ utils.Logger,
 				versionP protocol.VersionNumber,
 			) quicConn {
-				cconn = connP
 				version = versionP
 				conf = configP
 				close(c)
@@ -440,28 +293,32 @@ var _ = Describe("Client", func() {
 				conn := NewMockQUICConn(mockCtrl)
 				conn.EXPECT().run()
 				conn.EXPECT().HandshakeComplete().Return(make(chan struct{}))
+				conn.EXPECT().destroy(gomock.Any())
+				close(done)
 				return conn
 			}
-			_, err := Dial(context.Background(), packetConn, addr, tlsConf, config)
+			packetConn := NewMockPacketConn(mockCtrl)
+			packetConn.EXPECT().ReadFrom(gomock.Any()).DoAndReturn(func([]byte) (int, net.Addr, error) {
+				<-done
+				return 0, nil, errors.New("closed")
+			})
+			packetConn.EXPECT().LocalAddr()
+			packetConn.EXPECT().SetReadDeadline(gomock.Any()).AnyTimes()
+			_, err := Dial(context.Background(), packetConn, &net.UDPAddr{}, tlsConf, config)
 			Expect(err).ToNot(HaveOccurred())
 			Eventually(c).Should(BeClosed())
-			Expect(cconn.(*spconn).PacketConn).To(Equal(packetConn))
 			Expect(version).To(Equal(config.Versions[0]))
 			Expect(conf.Versions).To(Equal(config.Versions))
 		})
 
 		It("creates a new connections after version negotiation", func() {
-			manager := NewMockPacketHandlerManager(mockCtrl)
-			manager.EXPECT().Add(connID, gomock.Any()).Times(2)
-			manager.EXPECT().Destroy()
-			mockMultiplexer.EXPECT().AddConn(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(manager, nil)
-
 			var counter int
 			newClientConnection = func(
 				_ sendConn,
-				_ connRunner,
+				runner connRunner,
 				_ protocol.ConnectionID,
-				_ protocol.ConnectionID,
+				connID protocol.ConnectionID,
+				_ ConnectionIDGenerator,
 				configP *Config,
 				_ *tls.Config,
 				pn protocol.PacketNumber,
@@ -477,20 +334,24 @@ var _ = Describe("Client", func() {
 				if counter == 0 {
 					Expect(pn).To(BeZero())
 					Expect(hasNegotiatedVersion).To(BeFalse())
-					conn.EXPECT().run().Return(&errCloseForRecreating{
-						nextPacketNumber: 109,
-						nextVersion:      789,
+					conn.EXPECT().run().DoAndReturn(func() error {
+						runner.Remove(connID)
+						return &errCloseForRecreating{
+							nextPacketNumber: 109,
+							nextVersion:      789,
+						}
 					})
 				} else {
 					Expect(pn).To(Equal(protocol.PacketNumber(109)))
 					Expect(hasNegotiatedVersion).To(BeTrue())
 					conn.EXPECT().run()
+					conn.EXPECT().destroy(gomock.Any())
 				}
 				counter++
 				return conn
 			}
 
-			config := &Config{Tracer: config.Tracer, Versions: []protocol.VersionNumber{protocol.Version1}, ConnectionIDGenerator: &mockConnIDGenerator{ConnID: connID}}
+			config := &Config{Tracer: config.Tracer, Versions: []protocol.VersionNumber{protocol.Version1}}
 			tracer.EXPECT().StartedConnection(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any())
 			_, err := DialAddr(context.Background(), "localhost:7890", tlsConf, config)
 			Expect(err).ToNot(HaveOccurred())
@@ -498,15 +359,3 @@ var _ = Describe("Client", func() {
 		})
 	})
 })
-
-type mockConnIDGenerator struct {
-	ConnID protocol.ConnectionID
-}
-
-func (m *mockConnIDGenerator) GenerateConnectionID() (protocol.ConnectionID, error) {
-	return m.ConnID, nil
-}
-
-func (m *mockConnIDGenerator) ConnectionIDLen() int {
-	return m.ConnID.Len()
-}

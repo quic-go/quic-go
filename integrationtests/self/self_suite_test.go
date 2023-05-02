@@ -87,7 +87,7 @@ var (
 	logBuf       *syncedBuffer
 	versionParam string
 
-	qlogTracer logging.Tracer
+	qlogTracer func(context.Context, logging.Perspective, quic.ConnectionID) logging.ConnectionTracer
 	enableQlog bool
 
 	version            quic.VersionNumber
@@ -175,7 +175,13 @@ func getQuicConfig(conf *quic.Config) *quic.Config {
 		if conf.Tracer == nil {
 			conf.Tracer = qlogTracer
 		} else if qlogTracer != nil {
-			conf.Tracer = logging.NewMultiplexedTracer(qlogTracer, conf.Tracer)
+			origTracer := conf.Tracer
+			conf.Tracer = func(ctx context.Context, p logging.Perspective, connID quic.ConnectionID) logging.ConnectionTracer {
+				return logging.NewMultiplexedConnectionTracer(
+					qlogTracer(ctx, p, connID),
+					origTracer(ctx, p, connID),
+				)
+			}
 		}
 	}
 	return conf
@@ -199,8 +205,16 @@ func areHandshakesRunning() bool {
 	return strings.Contains(b.String(), "RunHandshake")
 }
 
+func areTransportsRunning() bool {
+	var b bytes.Buffer
+	pprof.Lookup("goroutine").WriteTo(&b, 1)
+	return strings.Contains(b.String(), "quic-go.(*Transport).listen")
+}
+
 var _ = AfterEach(func() {
 	Expect(areHandshakesRunning()).To(BeFalse())
+	Eventually(areTransportsRunning).Should(BeFalse())
+
 	if debugLog() {
 		logFile, err := os.Create(logFileName)
 		Expect(err).ToNot(HaveOccurred())
@@ -224,19 +238,8 @@ func scaleDuration(d time.Duration) time.Duration {
 	return time.Duration(scaleFactor) * d
 }
 
-type tracer struct {
-	logging.NullTracer
-	createNewConnTracer func() logging.ConnectionTracer
-}
-
-var _ logging.Tracer = &tracer{}
-
-func newTracer(c func() logging.ConnectionTracer) logging.Tracer {
-	return &tracer{createNewConnTracer: c}
-}
-
-func (t *tracer) TracerForConnection(context.Context, logging.Perspective, logging.ConnectionID) logging.ConnectionTracer {
-	return t.createNewConnTracer()
+func newTracer(tracer logging.ConnectionTracer) func(context.Context, logging.Perspective, quic.ConnectionID) logging.ConnectionTracer {
+	return func(context.Context, logging.Perspective, quic.ConnectionID) logging.ConnectionTracer { return tracer }
 }
 
 type packet struct {

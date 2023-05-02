@@ -2,7 +2,6 @@ package self_test
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"math/rand"
 	"net"
@@ -25,9 +24,16 @@ var _ = Describe("Stateless Resets", func() {
 		It(fmt.Sprintf("sends and recognizes stateless resets, for %d byte connection IDs", connIDLen), func() {
 			var statelessResetKey quic.StatelessResetKey
 			rand.Read(statelessResetKey[:])
-			serverConfig := getQuicConfig(&quic.Config{StatelessResetKey: &statelessResetKey})
 
-			ln, err := quic.ListenAddr("localhost:0", getTLSConfig(), serverConfig)
+			c, err := net.ListenUDP("udp", nil)
+			Expect(err).ToNot(HaveOccurred())
+			tr := &quic.Transport{
+				Conn:               c,
+				StatelessResetKey:  &statelessResetKey,
+				ConnectionIDLength: connIDLen,
+			}
+			defer tr.Close()
+			ln, err := tr.Listen(getTLSConfig(), getQuicConfig(nil))
 			Expect(err).ToNot(HaveOccurred())
 			serverPort := ln.Addr().(*net.UDPAddr).Port
 
@@ -42,7 +48,8 @@ var _ = Describe("Stateless Resets", func() {
 				_, err = str.Write([]byte("foobar"))
 				Expect(err).ToNot(HaveOccurred())
 				<-closeServer
-				ln.Close()
+				Expect(ln.Close()).To(Succeed())
+				Expect(tr.Close()).To(Succeed())
 			}()
 
 			var drop atomic.Bool
@@ -55,14 +62,21 @@ var _ = Describe("Stateless Resets", func() {
 			Expect(err).ToNot(HaveOccurred())
 			defer proxy.Close()
 
-			conn, err := quic.DialAddr(
+			addr, err := net.ResolveUDPAddr("udp", "localhost:0")
+			Expect(err).ToNot(HaveOccurred())
+			udpConn, err := net.ListenUDP("udp", addr)
+			Expect(err).ToNot(HaveOccurred())
+			defer udpConn.Close()
+			cl := &quic.Transport{
+				Conn:               udpConn,
+				ConnectionIDLength: connIDLen,
+			}
+			defer cl.Close()
+			conn, err := cl.Dial(
 				context.Background(),
-				fmt.Sprintf("localhost:%d", proxy.LocalPort()),
+				&net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: proxy.LocalPort()},
 				getTLSClientConfig(),
-				getQuicConfig(&quic.Config{
-					ConnectionIDLength: connIDLen,
-					MaxIdleTimeout:     2 * time.Second,
-				}),
+				getQuicConfig(&quic.Config{MaxIdleTimeout: 2 * time.Second}),
 			)
 			Expect(err).ToNot(HaveOccurred())
 			str, err := conn.AcceptStream(context.Background())
@@ -77,11 +91,15 @@ var _ = Describe("Stateless Resets", func() {
 			close(closeServer)
 			time.Sleep(100 * time.Millisecond)
 
-			ln2, err := quic.ListenAddr(
-				fmt.Sprintf("localhost:%d", serverPort),
-				getTLSConfig(),
-				serverConfig,
-			)
+			// We need to create a new Transport here, since the old one is still sending out
+			// CONNECTION_CLOSE packets for (recently) closed connections).
+			tr2 := &quic.Transport{
+				Conn:               c,
+				ConnectionIDLength: connIDLen,
+				StatelessResetKey:  &statelessResetKey,
+			}
+			defer tr2.Close()
+			ln2, err := tr2.Listen(getTLSConfig(), getQuicConfig(nil))
 			Expect(err).ToNot(HaveOccurred())
 			drop.Store(false)
 
@@ -100,8 +118,7 @@ var _ = Describe("Stateless Resets", func() {
 				_, serr = str.Read([]byte{0})
 			}
 			Expect(serr).To(HaveOccurred())
-			statelessResetErr := &quic.StatelessResetError{}
-			Expect(errors.As(serr, &statelessResetErr)).To(BeTrue())
+			Expect(serr).To(BeAssignableToTypeOf(&quic.StatelessResetError{}))
 			Expect(ln2.Close()).To(Succeed())
 			Eventually(acceptStopped).Should(BeClosed())
 		})

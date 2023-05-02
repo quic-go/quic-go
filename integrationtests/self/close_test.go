@@ -24,6 +24,7 @@ var _ = Describe("Connection ID lengths tests", func() {
 			}),
 		)
 		Expect(err).ToNot(HaveOccurred())
+		defer server.Close()
 
 		var drop atomic.Bool
 		dropped := make(chan []byte, 100)
@@ -50,6 +51,7 @@ var _ = Describe("Connection ID lengths tests", func() {
 			getQuicConfig(nil),
 		)
 		Expect(err).ToNot(HaveOccurred())
+		defer conn.CloseWithError(0, "")
 
 		sconn, err := server.Accept(context.Background())
 		Expect(err).ToNot(HaveOccurred())

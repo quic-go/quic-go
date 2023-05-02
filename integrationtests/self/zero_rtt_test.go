@@ -54,7 +54,7 @@ var _ = Describe("0-RTT", func() {
 		if serverConf == nil {
 			serverConf = getQuicConfig(nil)
 		}
-		serverConf.Allow0RTT = func(addr net.Addr) bool { return true }
+		serverConf.Allow0RTT = true
 		ln, err := quic.ListenAddrEarly(
 			"localhost:0",
 			tlsConf,
@@ -101,6 +101,7 @@ var _ = Describe("0-RTT", func() {
 	transfer0RTTData := func(
 		ln *quic.EarlyListener,
 		proxyPort int,
+		connIDLen int,
 		clientTLSConf *tls.Config,
 		clientConf *quic.Config,
 		testdata []byte, // data to transfer
@@ -125,13 +126,35 @@ var _ = Describe("0-RTT", func() {
 		if clientConf == nil {
 			clientConf = getQuicConfig(nil)
 		}
-		conn, err := quic.DialAddrEarly(
-			context.Background(),
-			fmt.Sprintf("localhost:%d", proxyPort),
-			clientTLSConf,
-			clientConf,
-		)
-		Expect(err).ToNot(HaveOccurred())
+		var conn quic.EarlyConnection
+		if connIDLen == 0 {
+			var err error
+			conn, err = quic.DialAddrEarly(
+				context.Background(),
+				fmt.Sprintf("localhost:%d", proxyPort),
+				clientTLSConf,
+				clientConf,
+			)
+			Expect(err).ToNot(HaveOccurred())
+		} else {
+			addr, err := net.ResolveUDPAddr("udp", "localhost:0")
+			Expect(err).ToNot(HaveOccurred())
+			udpConn, err := net.ListenUDP("udp", addr)
+			Expect(err).ToNot(HaveOccurred())
+			defer udpConn.Close()
+			tr := &quic.Transport{
+				Conn:               udpConn,
+				ConnectionIDLength: connIDLen,
+			}
+			defer tr.Close()
+			conn, err = tr.DialEarly(
+				context.Background(),
+				&net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: proxyPort},
+				clientTLSConf,
+				clientConf,
+			)
+			Expect(err).ToNot(HaveOccurred())
+		}
 		defer conn.CloseWithError(0, "")
 		str, err := conn.OpenStream()
 		Expect(err).ToNot(HaveOccurred())
@@ -199,8 +222,8 @@ var _ = Describe("0-RTT", func() {
 				"localhost:0",
 				tlsConf,
 				getQuicConfig(&quic.Config{
-					Allow0RTT: func(addr net.Addr) bool { return true },
-					Tracer:    newTracer(func() logging.ConnectionTracer { return tracer }),
+					Allow0RTT: true,
+					Tracer:    newTracer(tracer),
 				}),
 			)
 			Expect(err).ToNot(HaveOccurred())
@@ -212,8 +235,9 @@ var _ = Describe("0-RTT", func() {
 			transfer0RTTData(
 				ln,
 				proxy.LocalPort(),
+				connIDLen,
 				clientTLSConf,
-				getQuicConfig(&quic.Config{ConnectionIDLength: connIDLen}),
+				getQuicConfig(nil),
 				PRData,
 			)
 
@@ -252,8 +276,8 @@ var _ = Describe("0-RTT", func() {
 			"localhost:0",
 			tlsConf,
 			getQuicConfig(&quic.Config{
-				Allow0RTT: func(net.Addr) bool { return true },
-				Tracer:    newTracer(func() logging.ConnectionTracer { return tracer }),
+				Allow0RTT: true,
+				Tracer:    newTracer(tracer),
 			}),
 		)
 		Expect(err).ToNot(HaveOccurred())
@@ -334,8 +358,8 @@ var _ = Describe("0-RTT", func() {
 			"localhost:0",
 			tlsConf,
 			getQuicConfig(&quic.Config{
-				Allow0RTT: func(net.Addr) bool { return true },
-				Tracer:    newTracer(func() logging.ConnectionTracer { return tracer }),
+				Allow0RTT: true,
+				Tracer:    newTracer(tracer),
 			}),
 		)
 		Expect(err).ToNot(HaveOccurred())
@@ -373,7 +397,7 @@ var _ = Describe("0-RTT", func() {
 		Expect(err).ToNot(HaveOccurred())
 		defer proxy.Close()
 
-		transfer0RTTData(ln, proxy.LocalPort(), clientConf, nil, PRData)
+		transfer0RTTData(ln, proxy.LocalPort(), protocol.DefaultConnectionIDLength, clientConf, nil, PRData)
 
 		num0RTT := atomic.LoadUint32(&num0RTTPackets)
 		numDropped := atomic.LoadUint32(&num0RTTDropped)
@@ -410,8 +434,8 @@ var _ = Describe("0-RTT", func() {
 			tlsConf,
 			getQuicConfig(&quic.Config{
 				RequireAddressValidation: func(net.Addr) bool { return true },
-				Allow0RTT:                func(net.Addr) bool { return true },
-				Tracer:                   newTracer(func() logging.ConnectionTracer { return tracer }),
+				Allow0RTT:                true,
+				Tracer:                   newTracer(tracer),
 			}),
 		)
 		Expect(err).ToNot(HaveOccurred())
@@ -448,7 +472,7 @@ var _ = Describe("0-RTT", func() {
 		Expect(err).ToNot(HaveOccurred())
 		defer proxy.Close()
 
-		transfer0RTTData(ln, proxy.LocalPort(), clientConf, nil, GeneratePRData(5000)) // ~5 packets
+		transfer0RTTData(ln, proxy.LocalPort(), protocol.DefaultConnectionIDLength, clientConf, nil, GeneratePRData(5000)) // ~5 packets
 
 		mutex.Lock()
 		defer mutex.Unlock()
@@ -471,8 +495,8 @@ var _ = Describe("0-RTT", func() {
 			tlsConf,
 			getQuicConfig(&quic.Config{
 				MaxIncomingUniStreams: maxStreams + 1,
-				Allow0RTT:             func(net.Addr) bool { return true },
-				Tracer:                newTracer(func() logging.ConnectionTracer { return tracer }),
+				Allow0RTT:             true,
+				Tracer:                newTracer(tracer),
 			}),
 		)
 		Expect(err).ToNot(HaveOccurred())
@@ -516,8 +540,8 @@ var _ = Describe("0-RTT", func() {
 			tlsConf,
 			getQuicConfig(&quic.Config{
 				MaxIncomingStreams: maxStreams - 1,
-				Allow0RTT:          func(net.Addr) bool { return true },
-				Tracer:             newTracer(func() logging.ConnectionTracer { return tracer }),
+				Allow0RTT:          true,
+				Tracer:             newTracer(tracer),
 			}),
 		)
 		Expect(err).ToNot(HaveOccurred())
@@ -544,8 +568,8 @@ var _ = Describe("0-RTT", func() {
 			"localhost:0",
 			tlsConf,
 			getQuicConfig(&quic.Config{
-				Allow0RTT: func(net.Addr) bool { return true },
-				Tracer:    newTracer(func() logging.ConnectionTracer { return tracer }),
+				Allow0RTT: true,
+				Tracer:    newTracer(tracer),
 			}),
 		)
 		Expect(err).ToNot(HaveOccurred())
@@ -571,8 +595,8 @@ var _ = Describe("0-RTT", func() {
 			"localhost:0",
 			tlsConf,
 			getQuicConfig(&quic.Config{
-				Allow0RTT: func(net.Addr) bool { return false }, // application rejects 0-RTT
-				Tracer:    newTracer(func() logging.ConnectionTracer { return tracer }),
+				Allow0RTT: false, // application rejects 0-RTT
+				Tracer:    newTracer(tracer),
 			}),
 		)
 		Expect(err).ToNot(HaveOccurred())
@@ -592,13 +616,13 @@ var _ = Describe("0-RTT", func() {
 	DescribeTable("flow control limits",
 		func(addFlowControlLimit func(*quic.Config, uint64)) {
 			tracer := newPacketTracer()
-			firstConf := getQuicConfig(&quic.Config{Allow0RTT: func(net.Addr) bool { return true }})
+			firstConf := getQuicConfig(&quic.Config{Allow0RTT: true})
 			addFlowControlLimit(firstConf, 3)
 			tlsConf, clientConf := dialAndReceiveSessionTicket(firstConf)
 
 			secondConf := getQuicConfig(&quic.Config{
-				Allow0RTT: func(net.Addr) bool { return true },
-				Tracer:    newTracer(func() logging.ConnectionTracer { return tracer }),
+				Allow0RTT: true,
+				Tracer:    newTracer(tracer),
 			})
 			addFlowControlLimit(secondConf, 100)
 			ln, err := quic.ListenAddrEarly(
@@ -675,7 +699,7 @@ var _ = Describe("0-RTT", func() {
 				tlsConf,
 				getQuicConfig(&quic.Config{
 					MaxIncomingUniStreams: 1,
-					Tracer:                newTracer(func() logging.ConnectionTracer { return tracer }),
+					Tracer:                newTracer(tracer),
 				}),
 			)
 			Expect(err).ToNot(HaveOccurred())
@@ -750,8 +774,8 @@ var _ = Describe("0-RTT", func() {
 			"localhost:0",
 			tlsConf,
 			getQuicConfig(&quic.Config{
-				Allow0RTT: func(net.Addr) bool { return true },
-				Tracer:    newTracer(func() logging.ConnectionTracer { return tracer }),
+				Allow0RTT: true,
+				Tracer:    newTracer(tracer),
 			}),
 		)
 		Expect(err).ToNot(HaveOccurred())
@@ -768,7 +792,7 @@ var _ = Describe("0-RTT", func() {
 		Expect(err).ToNot(HaveOccurred())
 		defer proxy.Close()
 
-		transfer0RTTData(ln, proxy.LocalPort(), clientConf, nil, PRData)
+		transfer0RTTData(ln, proxy.LocalPort(), protocol.DefaultConnectionIDLength, clientConf, nil, PRData)
 
 		Expect(tracer.getRcvdLongHeaderPackets()[0].hdr.Type).To(Equal(protocol.PacketTypeInitial))
 		zeroRTTPackets := get0RTTPackets(tracer.getRcvdLongHeaderPackets())

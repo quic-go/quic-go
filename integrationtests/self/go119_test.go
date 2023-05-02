@@ -8,10 +8,9 @@ import (
 	"time"
 )
 
-var (
-	go120           = false
-	errNotSupported = errors.New("not supported")
-)
+const go120 = false
+
+var errNotSupported = errors.New("not supported")
 
 func setReadDeadline(w http.ResponseWriter, deadline time.Time) error {
 	return errNotSupported

@@ -27,12 +27,12 @@ var _ = Describe("Packetization", func() {
 			getTLSConfig(),
 			getQuicConfig(&quic.Config{
 				DisablePathMTUDiscovery: true,
-				Tracer:                  newTracer(func() logging.ConnectionTracer { return serverTracer }),
+				Tracer:                  newTracer(serverTracer),
 			}),
 		)
 		Expect(err).ToNot(HaveOccurred())
-		serverAddr := fmt.Sprintf("localhost:%d", server.Addr().(*net.UDPAddr).Port)
 		defer server.Close()
+		serverAddr := fmt.Sprintf("localhost:%d", server.Addr().(*net.UDPAddr).Port)
 
 		proxy, err := quicproxy.NewQuicProxy("localhost:0", &quicproxy.Opts{
 			RemoteAddr: serverAddr,
@@ -50,10 +50,11 @@ var _ = Describe("Packetization", func() {
 			getTLSClientConfig(),
 			getQuicConfig(&quic.Config{
 				DisablePathMTUDiscovery: true,
-				Tracer:                  newTracer(func() logging.ConnectionTracer { return clientTracer }),
+				Tracer:                  newTracer(clientTracer),
 			}),
 		)
 		Expect(err).ToNot(HaveOccurred())
+		defer conn.CloseWithError(0, "")
 
 		go func() {
 			defer GinkgoRecover()

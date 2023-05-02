@@ -58,7 +58,7 @@ func TestQuicVersionNegotiation(t *testing.T) {
 	RunSpecs(t, "Version Negotiation Suite")
 }
 
-func maybeAddQlogTracer(c *quic.Config) *quic.Config {
+func maybeAddQLOGTracer(c *quic.Config) *quic.Config {
 	if c == nil {
 		c = &quic.Config{}
 	}
@@ -69,22 +69,13 @@ func maybeAddQlogTracer(c *quic.Config) *quic.Config {
 	if c.Tracer == nil {
 		c.Tracer = qlogger
 	} else if qlogger != nil {
-		c.Tracer = logging.NewMultiplexedTracer(qlogger, c.Tracer)
+		origTracer := c.Tracer
+		c.Tracer = func(ctx context.Context, p logging.Perspective, connID quic.ConnectionID) logging.ConnectionTracer {
+			return logging.NewMultiplexedConnectionTracer(
+				qlogger(ctx, p, connID),
+				origTracer(ctx, p, connID),
+			)
+		}
 	}
 	return c
-}
-
-type tracer struct {
-	logging.NullTracer
-	createNewConnTracer func() logging.ConnectionTracer
-}
-
-var _ logging.Tracer = &tracer{}
-
-func newTracer(c func() logging.ConnectionTracer) logging.Tracer {
-	return &tracer{createNewConnTracer: c}
-}
-
-func (t *tracer) TracerForConnection(context.Context, logging.Perspective, logging.ConnectionID) logging.ConnectionTracer {
-	return t.createNewConnTracer()
 }

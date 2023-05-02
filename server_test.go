@@ -1,15 +1,12 @@
 package quic
 
 import (
-	"bytes"
 	"context"
 	"crypto/rand"
 	"crypto/tls"
 	"errors"
 	"net"
 	"reflect"
-	"runtime/pprof"
-	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -24,16 +21,9 @@ import (
 	"github.com/quic-go/quic-go/logging"
 
 	"github.com/golang/mock/gomock"
-
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 )
-
-func areServersRunning() bool {
-	var b bytes.Buffer
-	pprof.Lookup("goroutine").WriteTo(&b, 1)
-	return strings.Contains(b.String(), "quic-go.(*baseServer).run")
-}
 
 var _ = Describe("Server", func() {
 	var (
@@ -96,13 +86,17 @@ var _ = Describe("Server", func() {
 	BeforeEach(func() {
 		conn = NewMockPacketConn(mockCtrl)
 		conn.EXPECT().LocalAddr().Return(&net.UDPAddr{}).AnyTimes()
-		conn.EXPECT().ReadFrom(gomock.Any()).Do(func(_ []byte) { <-(make(chan struct{})) }).MaxTimes(1)
+		wait := make(chan struct{})
+		conn.EXPECT().ReadFrom(gomock.Any()).DoAndReturn(func(_ []byte) (int, net.Addr, error) {
+			<-wait
+			return 0, nil, errors.New("done")
+		}).MaxTimes(1)
+		conn.EXPECT().SetReadDeadline(gomock.Any()).Do(func(time.Time) {
+			close(wait)
+			conn.EXPECT().SetReadDeadline(time.Time{})
+		}).MaxTimes(1)
 		tlsConf = testdata.GetTLSConfig()
 		tlsConf.NextProtos = []string{"proto1"}
-	})
-
-	AfterEach(func() {
-		Eventually(areServersRunning).Should(BeFalse())
 	})
 
 	It("errors when no tls.Config is given", func() {
@@ -114,7 +108,7 @@ var _ = Describe("Server", func() {
 	It("errors when the Config contains an invalid version", func() {
 		version := protocol.VersionNumber(0x1234)
 		_, err := Listen(nil, tlsConf, &Config{Versions: []protocol.VersionNumber{version}})
-		Expect(err).To(MatchError("0x1234 is not a valid QUIC version"))
+		Expect(err).To(MatchError("invalid QUIC version: 0x1234"))
 	})
 
 	It("fills in default values if options are not set in the Config", func() {
@@ -138,7 +132,6 @@ var _ = Describe("Server", func() {
 			HandshakeIdleTimeout:     1337 * time.Hour,
 			MaxIdleTimeout:           42 * time.Minute,
 			KeepAlivePeriod:          5 * time.Second,
-			StatelessResetKey:        &StatelessResetKey{'f', 'o', 'o', 'b', 'a', 'r'},
 			RequireAddressValidation: requireAddrVal,
 		}
 		ln, err := Listen(conn, tlsConf, &config)
@@ -150,7 +143,6 @@ var _ = Describe("Server", func() {
 		Expect(server.config.MaxIdleTimeout).To(Equal(42 * time.Minute))
 		Expect(reflect.ValueOf(server.config.RequireAddressValidation)).To(Equal(reflect.ValueOf(requireAddrVal)))
 		Expect(server.config.KeepAlivePeriod).To(Equal(5 * time.Second))
-		Expect(server.config.StatelessResetKey).To(Equal(&StatelessResetKey{'f', 'o', 'o', 'b', 'a', 'r'}))
 		// stop the listener
 		Expect(ln.Close()).To(Succeed())
 	})
@@ -178,6 +170,7 @@ var _ = Describe("Server", func() {
 
 	Context("server accepting connections that completed the handshake", func() {
 		var (
+			tr     *Transport
 			serv   *baseServer
 			phm    *MockPacketHandlerManager
 			tracer *mocklogging.MockTracer
@@ -185,7 +178,8 @@ var _ = Describe("Server", func() {
 
 		BeforeEach(func() {
 			tracer = mocklogging.NewMockTracer(mockCtrl)
-			ln, err := Listen(conn, tlsConf, &Config{Tracer: tracer})
+			tr = &Transport{Conn: conn, Tracer: tracer}
+			ln, err := tr.Listen(tlsConf, nil)
 			Expect(err).ToNot(HaveOccurred())
 			serv = ln.baseServer
 			phm = NewMockPacketHandlerManager(mockCtrl)
@@ -193,8 +187,7 @@ var _ = Describe("Server", func() {
 		})
 
 		AfterEach(func() {
-			phm.EXPECT().CloseServer().MaxTimes(1)
-			serv.Close()
+			tr.Close()
 		})
 
 		Context("handling packets", func() {
@@ -274,16 +267,15 @@ var _ = Describe("Server", func() {
 				var newConnID protocol.ConnectionID
 
 				phm.EXPECT().Get(connID)
-				phm.EXPECT().AddWithConnID(connID, gomock.Any(), gomock.Any()).DoAndReturn(func(_, c protocol.ConnectionID, fn func() packetHandler) bool {
+				phm.EXPECT().AddWithConnID(connID, gomock.Any(), gomock.Any()).DoAndReturn(func(_, c protocol.ConnectionID, fn func() (packetHandler, bool)) bool {
 					newConnID = c
 					phm.EXPECT().GetStatelessResetToken(gomock.Any()).DoAndReturn(func(c protocol.ConnectionID) protocol.StatelessResetToken {
 						newConnID = c
 						return token
 					})
-					fn()
-					return true
+					_, ok := fn()
+					return ok
 				})
-				tracer.EXPECT().TracerForConnection(gomock.Any(), protocol.PerspectiveServer, protocol.ParseConnectionID([]byte{0xde, 0xad, 0xc0, 0xde}))
 				conn := NewMockQUICConn(mockCtrl)
 				serv.newConn = func(
 					_ sendConn,
@@ -293,6 +285,7 @@ var _ = Describe("Server", func() {
 					clientDestConnID protocol.ConnectionID,
 					destConnID protocol.ConnectionID,
 					srcConnID protocol.ConnectionID,
+					_ ConnectionIDGenerator,
 					tokenP protocol.StatelessResetToken,
 					_ *Config,
 					_ *tls.Config,
@@ -474,17 +467,16 @@ var _ = Describe("Server", func() {
 				var newConnID protocol.ConnectionID
 				gomock.InOrder(
 					phm.EXPECT().Get(connID),
-					phm.EXPECT().AddWithConnID(protocol.ParseConnectionID([]byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}), gomock.Any(), gomock.Any()).DoAndReturn(func(_, c protocol.ConnectionID, fn func() packetHandler) bool {
+					phm.EXPECT().AddWithConnID(protocol.ParseConnectionID([]byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}), gomock.Any(), gomock.Any()).DoAndReturn(func(_, c protocol.ConnectionID, fn func() (packetHandler, bool)) bool {
 						newConnID = c
 						phm.EXPECT().GetStatelessResetToken(gomock.Any()).DoAndReturn(func(c protocol.ConnectionID) protocol.StatelessResetToken {
 							newConnID = c
 							return token
 						})
-						fn()
-						return true
+						_, ok := fn()
+						return ok
 					}),
 				)
-				tracer.EXPECT().TracerForConnection(gomock.Any(), protocol.PerspectiveServer, protocol.ParseConnectionID([]byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}))
 
 				conn := NewMockQUICConn(mockCtrl)
 				serv.newConn = func(
@@ -495,6 +487,7 @@ var _ = Describe("Server", func() {
 					clientDestConnID protocol.ConnectionID,
 					destConnID protocol.ConnectionID,
 					srcConnID protocol.ConnectionID,
+					_ ConnectionIDGenerator,
 					tokenP protocol.StatelessResetToken,
 					_ *Config,
 					_ *tls.Config,
@@ -537,12 +530,11 @@ var _ = Describe("Server", func() {
 
 			It("drops packets if the receive queue is full", func() {
 				phm.EXPECT().Get(gomock.Any()).AnyTimes()
-				phm.EXPECT().AddWithConnID(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(func(_, _ protocol.ConnectionID, fn func() packetHandler) bool {
+				phm.EXPECT().AddWithConnID(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(func(_, _ protocol.ConnectionID, fn func() (packetHandler, bool)) bool {
 					phm.EXPECT().GetStatelessResetToken(gomock.Any())
-					fn()
-					return true
+					_, ok := fn()
+					return ok
 				}).AnyTimes()
-				tracer.EXPECT().TracerForConnection(gomock.Any(), protocol.PerspectiveServer, gomock.Any()).AnyTimes()
 
 				acceptConn := make(chan struct{})
 				var counter uint32 // to be used as an atomic, so we query it in Eventually
@@ -554,6 +546,7 @@ var _ = Describe("Server", func() {
 					_ protocol.ConnectionID,
 					_ protocol.ConnectionID,
 					_ protocol.ConnectionID,
+					_ ConnectionIDGenerator,
 					_ protocol.StatelessResetToken,
 					_ *Config,
 					_ *tls.Config,
@@ -598,7 +591,6 @@ var _ = Describe("Server", func() {
 
 			It("only creates a single connection for a duplicate Initial", func() {
 				var createdConn bool
-				conn := NewMockQUICConn(mockCtrl)
 				serv.newConn = func(
 					_ sendConn,
 					runner connRunner,
@@ -607,6 +599,7 @@ var _ = Describe("Server", func() {
 					_ protocol.ConnectionID,
 					_ protocol.ConnectionID,
 					_ protocol.ConnectionID,
+					_ ConnectionIDGenerator,
 					_ protocol.StatelessResetToken,
 					_ *Config,
 					_ *tls.Config,
@@ -618,15 +611,19 @@ var _ = Describe("Server", func() {
 					_ protocol.VersionNumber,
 				) quicConn {
 					createdConn = true
-					return conn
+					return NewMockQUICConn(mockCtrl)
 				}
 
 				connID := protocol.ParseConnectionID([]byte{1, 2, 3, 4, 5, 6, 7, 8, 9})
 				p := getInitial(connID)
 				phm.EXPECT().Get(connID)
 				phm.EXPECT().AddWithConnID(connID, gomock.Any(), gomock.Any()).Return(false)
+				tracer.EXPECT().SentPacket(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any())
+				done := make(chan struct{})
+				conn.EXPECT().WriteTo(gomock.Any(), gomock.Any()).Do(func([]byte, net.Addr) { close(done) })
 				Expect(serv.handlePacketImpl(p)).To(BeTrue())
 				Expect(createdConn).To(BeFalse())
+				Eventually(done).Should(BeClosed())
 			})
 
 			It("rejects new connection attempts if the accept queue is full", func() {
@@ -638,6 +635,7 @@ var _ = Describe("Server", func() {
 					_ protocol.ConnectionID,
 					_ protocol.ConnectionID,
 					_ protocol.ConnectionID,
+					_ ConnectionIDGenerator,
 					_ protocol.StatelessResetToken,
 					_ *Config,
 					_ *tls.Config,
@@ -659,12 +657,11 @@ var _ = Describe("Server", func() {
 				}
 
 				phm.EXPECT().Get(gomock.Any()).Times(protocol.MaxAcceptQueueSize + 1)
-				phm.EXPECT().AddWithConnID(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(func(_, _ protocol.ConnectionID, fn func() packetHandler) bool {
+				phm.EXPECT().AddWithConnID(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(func(_, _ protocol.ConnectionID, fn func() (packetHandler, bool)) bool {
 					phm.EXPECT().GetStatelessResetToken(gomock.Any())
-					fn()
-					return true
+					_, ok := fn()
+					return ok
 				}).Times(protocol.MaxAcceptQueueSize)
-				tracer.EXPECT().TracerForConnection(gomock.Any(), protocol.PerspectiveServer, gomock.Any()).Times(protocol.MaxAcceptQueueSize)
 
 				var wg sync.WaitGroup
 				wg.Add(protocol.MaxAcceptQueueSize)
@@ -709,6 +706,7 @@ var _ = Describe("Server", func() {
 					_ protocol.ConnectionID,
 					_ protocol.ConnectionID,
 					_ protocol.ConnectionID,
+					_ ConnectionIDGenerator,
 					_ protocol.StatelessResetToken,
 					_ *Config,
 					_ *tls.Config,
@@ -730,12 +728,11 @@ var _ = Describe("Server", func() {
 				}
 
 				phm.EXPECT().Get(gomock.Any())
-				phm.EXPECT().AddWithConnID(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(func(_, _ protocol.ConnectionID, fn func() packetHandler) bool {
+				phm.EXPECT().AddWithConnID(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(func(_, _ protocol.ConnectionID, fn func() (packetHandler, bool)) bool {
 					phm.EXPECT().GetStatelessResetToken(gomock.Any())
-					fn()
-					return true
+					_, ok := fn()
+					return ok
 				})
-				tracer.EXPECT().TracerForConnection(gomock.Any(), protocol.PerspectiveServer, gomock.Any())
 
 				serv.handlePacket(p)
 				// make sure there are no Write calls on the packet conn
@@ -753,8 +750,7 @@ var _ = Describe("Server", func() {
 				Consistently(done).ShouldNot(BeClosed())
 
 				// make the go routine return
-				phm.EXPECT().CloseServer()
-				conn.EXPECT().getPerspective().MaxTimes(2) // once for every conn ID
+				conn.EXPECT().getPerspective().MaxTimes(2) // initOnce for every conn ID
 				Expect(serv.Close()).To(Succeed())
 				Eventually(done).Should(BeClosed())
 			})
@@ -794,7 +790,7 @@ var _ = Describe("Server", func() {
 
 				done := make(chan struct{})
 				phm.EXPECT().Get(gomock.Any())
-				phm.EXPECT().AddWithConnID(gomock.Any(), gomock.Any(), gomock.Any()).Do(func(_, _ protocol.ConnectionID, _ func() packetHandler) { close(done) })
+				phm.EXPECT().AddWithConnID(gomock.Any(), gomock.Any(), gomock.Any()).Do(func(_, _ protocol.ConnectionID, _ func() (packetHandler, bool)) { close(done) })
 				serv.handlePacket(packet)
 				Eventually(done).Should(BeClosed())
 			})
@@ -968,6 +964,7 @@ var _ = Describe("Server", func() {
 
 				serv.setCloseError(testErr)
 				Eventually(done).Should(BeClosed())
+				serv.onClose() // shutdown
 			})
 
 			It("returns immediately, if an error occurred before", func() {
@@ -977,6 +974,7 @@ var _ = Describe("Server", func() {
 					_, err := serv.Accept(context.Background())
 					Expect(err).To(MatchError(testErr))
 				}
+				serv.onClose() // shutdown
 			})
 
 			It("returns when the context is canceled", func() {
@@ -991,6 +989,85 @@ var _ = Describe("Server", func() {
 
 				Consistently(done).ShouldNot(BeClosed())
 				cancel()
+				Eventually(done).Should(BeClosed())
+			})
+
+			It("uses the config returned by GetConfigClient", func() {
+				conn := NewMockQUICConn(mockCtrl)
+
+				conf := &Config{MaxIncomingStreams: 1234}
+				serv.config = populateServerConfig(&Config{GetConfigForClient: func(*ClientHelloInfo) (*Config, error) { return conf, nil }})
+				done := make(chan struct{})
+				go func() {
+					defer GinkgoRecover()
+					s, err := serv.Accept(context.Background())
+					Expect(err).ToNot(HaveOccurred())
+					Expect(s).To(Equal(conn))
+					close(done)
+				}()
+
+				handshakeChan := make(chan struct{})
+				serv.newConn = func(
+					_ sendConn,
+					_ connRunner,
+					_ protocol.ConnectionID,
+					_ *protocol.ConnectionID,
+					_ protocol.ConnectionID,
+					_ protocol.ConnectionID,
+					_ protocol.ConnectionID,
+					_ ConnectionIDGenerator,
+					_ protocol.StatelessResetToken,
+					conf *Config,
+					_ *tls.Config,
+					_ *handshake.TokenGenerator,
+					_ bool,
+					_ logging.ConnectionTracer,
+					_ uint64,
+					_ utils.Logger,
+					_ protocol.VersionNumber,
+				) quicConn {
+					Expect(conf.MaxIncomingStreams).To(BeEquivalentTo(1234))
+					conn.EXPECT().handlePacket(gomock.Any())
+					conn.EXPECT().HandshakeComplete().Return(handshakeChan)
+					conn.EXPECT().run().Do(func() {})
+					conn.EXPECT().Context().Return(context.Background())
+					return conn
+				}
+				phm.EXPECT().Get(gomock.Any())
+				phm.EXPECT().AddWithConnID(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(func(_, _ protocol.ConnectionID, fn func() (packetHandler, bool)) bool {
+					phm.EXPECT().GetStatelessResetToken(gomock.Any())
+					_, ok := fn()
+					return ok
+				})
+				serv.handleInitialImpl(
+					&receivedPacket{buffer: getPacketBuffer()},
+					&wire.Header{DestConnectionID: protocol.ParseConnectionID([]byte{1, 2, 3, 4, 5, 6, 7, 8})},
+				)
+				Consistently(done).ShouldNot(BeClosed())
+				close(handshakeChan) // complete the handshake
+				Eventually(done).Should(BeClosed())
+			})
+
+			It("rejects a connection attempt when GetConfigClient returns an error", func() {
+				serv.config = populateServerConfig(&Config{GetConfigForClient: func(*ClientHelloInfo) (*Config, error) { return nil, errors.New("rejected") }})
+
+				phm.EXPECT().Get(gomock.Any())
+				phm.EXPECT().AddWithConnID(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(func(_, _ protocol.ConnectionID, fn func() (packetHandler, bool)) bool {
+					_, ok := fn()
+					return ok
+				})
+				done := make(chan struct{})
+				tracer.EXPECT().SentPacket(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any())
+				conn.EXPECT().WriteTo(gomock.Any(), gomock.Any()).DoAndReturn(func(b []byte, _ net.Addr) (int, error) {
+					defer close(done)
+					rejectHdr := parseHeader(b)
+					Expect(rejectHdr.Type).To(Equal(protocol.PacketTypeInitial))
+					return len(b), nil
+				})
+				serv.handleInitialImpl(
+					&receivedPacket{buffer: getPacketBuffer()},
+					&wire.Header{DestConnectionID: protocol.ParseConnectionID([]byte{1, 2, 3, 4, 5, 6, 7, 8}), Version: protocol.Version1},
+				)
 				Eventually(done).Should(BeClosed())
 			})
 
@@ -1015,6 +1092,7 @@ var _ = Describe("Server", func() {
 					_ protocol.ConnectionID,
 					_ protocol.ConnectionID,
 					_ protocol.ConnectionID,
+					_ ConnectionIDGenerator,
 					_ protocol.StatelessResetToken,
 					_ *Config,
 					_ *tls.Config,
@@ -1032,12 +1110,11 @@ var _ = Describe("Server", func() {
 					return conn
 				}
 				phm.EXPECT().Get(gomock.Any())
-				phm.EXPECT().AddWithConnID(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(func(_, _ protocol.ConnectionID, fn func() packetHandler) bool {
+				phm.EXPECT().AddWithConnID(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(func(_, _ protocol.ConnectionID, fn func() (packetHandler, bool)) bool {
 					phm.EXPECT().GetStatelessResetToken(gomock.Any())
-					fn()
-					return true
+					_, ok := fn()
+					return ok
 				})
-				tracer.EXPECT().TracerForConnection(gomock.Any(), protocol.PerspectiveServer, gomock.Any())
 				serv.handleInitialImpl(
 					&receivedPacket{buffer: getPacketBuffer()},
 					&wire.Header{DestConnectionID: protocol.ParseConnectionID([]byte{1, 2, 3, 4, 5, 6, 7, 8})},
@@ -1064,7 +1141,6 @@ var _ = Describe("Server", func() {
 		})
 
 		AfterEach(func() {
-			phm.EXPECT().CloseServer().MaxTimes(1)
 			serv.Close()
 		})
 
@@ -1089,6 +1165,7 @@ var _ = Describe("Server", func() {
 				_ protocol.ConnectionID,
 				_ protocol.ConnectionID,
 				_ protocol.ConnectionID,
+				_ ConnectionIDGenerator,
 				_ protocol.StatelessResetToken,
 				_ *Config,
 				_ *tls.Config,
@@ -1106,10 +1183,10 @@ var _ = Describe("Server", func() {
 				return conn
 			}
 			phm.EXPECT().Get(gomock.Any())
-			phm.EXPECT().AddWithConnID(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(func(_, _ protocol.ConnectionID, fn func() packetHandler) bool {
+			phm.EXPECT().AddWithConnID(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(func(_, _ protocol.ConnectionID, fn func() (packetHandler, bool)) bool {
 				phm.EXPECT().GetStatelessResetToken(gomock.Any())
-				fn()
-				return true
+				_, ok := fn()
+				return ok
 			})
 			serv.baseServer.handleInitialImpl(
 				&receivedPacket{buffer: getPacketBuffer()},
@@ -1131,6 +1208,7 @@ var _ = Describe("Server", func() {
 				_ protocol.ConnectionID,
 				_ protocol.ConnectionID,
 				_ protocol.ConnectionID,
+				_ ConnectionIDGenerator,
 				_ protocol.StatelessResetToken,
 				_ *Config,
 				_ *tls.Config,
@@ -1152,10 +1230,10 @@ var _ = Describe("Server", func() {
 			}
 
 			phm.EXPECT().Get(gomock.Any()).AnyTimes()
-			phm.EXPECT().AddWithConnID(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(func(_, _ protocol.ConnectionID, fn func() packetHandler) bool {
+			phm.EXPECT().AddWithConnID(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(func(_, _ protocol.ConnectionID, fn func() (packetHandler, bool)) bool {
 				phm.EXPECT().GetStatelessResetToken(gomock.Any())
-				fn()
-				return true
+				_, ok := fn()
+				return ok
 			}).Times(protocol.MaxAcceptQueueSize)
 			for i := 0; i < protocol.MaxAcceptQueueSize; i++ {
 				serv.baseServer.handlePacket(getInitialWithRandomDestConnID())
@@ -1194,6 +1272,7 @@ var _ = Describe("Server", func() {
 				_ protocol.ConnectionID,
 				_ protocol.ConnectionID,
 				_ protocol.ConnectionID,
+				_ ConnectionIDGenerator,
 				_ protocol.StatelessResetToken,
 				_ *Config,
 				_ *tls.Config,
@@ -1213,10 +1292,10 @@ var _ = Describe("Server", func() {
 			}
 
 			phm.EXPECT().Get(gomock.Any())
-			phm.EXPECT().AddWithConnID(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(func(_, _ protocol.ConnectionID, fn func() packetHandler) bool {
+			phm.EXPECT().AddWithConnID(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(func(_, _ protocol.ConnectionID, fn func() (packetHandler, bool)) bool {
 				phm.EXPECT().GetStatelessResetToken(gomock.Any())
-				fn()
-				return true
+				_, ok := fn()
+				return ok
 			})
 			serv.baseServer.handlePacket(p)
 			// make sure there are no Write calls on the packet conn
@@ -1234,8 +1313,7 @@ var _ = Describe("Server", func() {
 			Consistently(done).ShouldNot(BeClosed())
 
 			// make the go routine return
-			phm.EXPECT().CloseServer()
-			conn.EXPECT().getPerspective().MaxTimes(2) // once for every conn ID
+			conn.EXPECT().getPerspective().MaxTimes(2) // initOnce for every conn ID
 			Expect(serv.Close()).To(Succeed())
 			Eventually(done).Should(BeClosed())
 		})
@@ -1243,6 +1321,7 @@ var _ = Describe("Server", func() {
 
 	Context("0-RTT", func() {
 		var (
+			tr     *Transport
 			serv   *baseServer
 			phm    *MockPacketHandlerManager
 			tracer *mocklogging.MockTracer
@@ -1250,7 +1329,8 @@ var _ = Describe("Server", func() {
 
 		BeforeEach(func() {
 			tracer = mocklogging.NewMockTracer(mockCtrl)
-			ln, err := ListenEarly(conn, tlsConf, &Config{Tracer: tracer})
+			tr = &Transport{Conn: conn, Tracer: tracer}
+			ln, err := tr.ListenEarly(tlsConf, nil)
 			Expect(err).ToNot(HaveOccurred())
 			phm = NewMockPacketHandlerManager(mockCtrl)
 			serv = ln.baseServer
@@ -1259,7 +1339,7 @@ var _ = Describe("Server", func() {
 
 		AfterEach(func() {
 			phm.EXPECT().CloseServer().MaxTimes(1)
-			serv.Close()
+			tr.Close()
 		})
 
 		It("passes packets to existing connections", func() {
@@ -1317,6 +1397,7 @@ var _ = Describe("Server", func() {
 				_ protocol.ConnectionID,
 				_ protocol.ConnectionID,
 				_ protocol.ConnectionID,
+				_ ConnectionIDGenerator,
 				_ protocol.StatelessResetToken,
 				_ *Config,
 				_ *tls.Config,
@@ -1341,12 +1422,11 @@ var _ = Describe("Server", func() {
 				return conn
 			}
 
-			tracer.EXPECT().TracerForConnection(gomock.Any(), gomock.Any(), gomock.Any())
 			phm.EXPECT().Get(connID)
-			phm.EXPECT().AddWithConnID(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(func(_, _ protocol.ConnectionID, fn func() packetHandler) bool {
+			phm.EXPECT().AddWithConnID(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(func(_, _ protocol.ConnectionID, fn func() (packetHandler, bool)) bool {
 				phm.EXPECT().GetStatelessResetToken(gomock.Any())
-				fn()
-				return true
+				_, ok := fn()
+				return ok
 			})
 			serv.handlePacket(initial)
 			Eventually(called).Should(BeClosed())

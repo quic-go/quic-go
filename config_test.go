@@ -1,13 +1,15 @@
 package quic
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"net"
 	"reflect"
 	"time"
 
-	mocklogging "github.com/quic-go/quic-go/internal/mocks/logging"
 	"github.com/quic-go/quic-go/internal/protocol"
+	"github.com/quic-go/quic-go/logging"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -45,7 +47,7 @@ var _ = Describe("Config", func() {
 			}
 
 			switch fn := typ.Field(i).Name; fn {
-			case "RequireAddressValidation", "GetLogWriter", "AllowConnectionWindowIncrease", "Allow0RTT":
+			case "GetConfigForClient", "RequireAddressValidation", "GetLogWriter", "AllowConnectionWindowIncrease", "Tracer":
 				// Can't compare functions.
 			case "Versions":
 				f.Set(reflect.ValueOf([]VersionNumber{1, 2, 3}))
@@ -85,8 +87,8 @@ var _ = Describe("Config", func() {
 				f.Set(reflect.ValueOf(true))
 			case "DisablePathMTUDiscovery":
 				f.Set(reflect.ValueOf(true))
-			case "Tracer":
-				f.Set(reflect.ValueOf(mocklogging.NewMockTracer(mockCtrl)))
+			case "Allow0RTT":
+				f.Set(reflect.ValueOf(true))
 			default:
 				Fail(fmt.Sprintf("all fields must be accounted for, but saw unknown field %q", fn))
 			}
@@ -106,16 +108,25 @@ var _ = Describe("Config", func() {
 
 	Context("cloning", func() {
 		It("clones function fields", func() {
-			var calledAddrValidation, calledAllowConnectionWindowIncrease bool
+			var calledAddrValidation, calledAllowConnectionWindowIncrease, calledTracer bool
 			c1 := &Config{
+				GetConfigForClient:            func(info *ClientHelloInfo) (*Config, error) { return nil, errors.New("nope") },
 				AllowConnectionWindowIncrease: func(Connection, uint64) bool { calledAllowConnectionWindowIncrease = true; return true },
 				RequireAddressValidation:      func(net.Addr) bool { calledAddrValidation = true; return true },
+				Tracer: func(context.Context, logging.Perspective, ConnectionID) logging.ConnectionTracer {
+					calledTracer = true
+					return nil
+				},
 			}
 			c2 := c1.Clone()
 			c2.RequireAddressValidation(&net.UDPAddr{})
 			Expect(calledAddrValidation).To(BeTrue())
 			c2.AllowConnectionWindowIncrease(nil, 1234)
 			Expect(calledAllowConnectionWindowIncrease).To(BeTrue())
+			_, err := c2.GetConfigForClient(&ClientHelloInfo{})
+			Expect(err).To(MatchError("nope"))
+			c2.Tracer(context.Background(), logging.PerspectiveClient, protocol.ConnectionID{})
+			Expect(calledTracer).To(BeTrue())
 		})
 
 		It("clones non-function fields", func() {
@@ -142,18 +153,18 @@ var _ = Describe("Config", func() {
 			var calledAddrValidation bool
 			c1 := &Config{}
 			c1.RequireAddressValidation = func(net.Addr) bool { calledAddrValidation = true; return true }
-			c2 := populateConfig(c1, protocol.DefaultConnectionIDLength)
+			c2 := populateConfig(c1)
 			c2.RequireAddressValidation(&net.UDPAddr{})
 			Expect(calledAddrValidation).To(BeTrue())
 		})
 
 		It("copies non-function fields", func() {
 			c := configWithNonZeroNonFunctionFields()
-			Expect(populateConfig(c, protocol.DefaultConnectionIDLength)).To(Equal(c))
+			Expect(populateConfig(c)).To(Equal(c))
 		})
 
 		It("populates empty fields with default values", func() {
-			c := populateConfig(&Config{}, protocol.DefaultConnectionIDLength)
+			c := populateConfig(&Config{})
 			Expect(c.Versions).To(Equal(protocol.SupportedVersions))
 			Expect(c.HandshakeIdleTimeout).To(Equal(protocol.DefaultHandshakeIdleTimeout))
 			Expect(c.InitialStreamReceiveWindow).To(BeEquivalentTo(protocol.DefaultInitialMaxStreamData))
@@ -164,22 +175,12 @@ var _ = Describe("Config", func() {
 			Expect(c.MaxIncomingUniStreams).To(BeEquivalentTo(protocol.DefaultMaxIncomingUniStreams))
 			Expect(c.DisableVersionNegotiationPackets).To(BeFalse())
 			Expect(c.DisablePathMTUDiscovery).To(BeFalse())
+			Expect(c.GetConfigForClient).To(BeNil())
 		})
 
 		It("populates empty fields with default values, for the server", func() {
 			c := populateServerConfig(&Config{})
-			Expect(c.ConnectionIDLength).To(Equal(protocol.DefaultConnectionIDLength))
 			Expect(c.RequireAddressValidation).ToNot(BeNil())
-		})
-
-		It("sets a default connection ID length if we didn't create the conn, for the client", func() {
-			c := populateClientConfig(&Config{}, false)
-			Expect(c.ConnectionIDLength).To(Equal(protocol.DefaultConnectionIDLength))
-		})
-
-		It("doesn't set a default connection ID length if we created the conn, for the client", func() {
-			c := populateClientConfig(&Config{}, true)
-			Expect(c.ConnectionIDLength).To(BeZero())
 		})
 	})
 })
