@@ -40,9 +40,8 @@ func setDF(rawConn syscall.RawConn) error {
 	return nil
 }
 
-func maybeSetGSO(syscall.RawConn) bool {
-	return false
-}
+func maybeSetGSO(syscall.RawConn) bool { return false }
+func maybeSetGRO(syscall.RawConn) bool { return false }
 
 func isMsgSizeErr(err error) bool {
 	// https://docs.microsoft.com/en-us/windows/win32/winsock/windows-sockets-error-codes-2

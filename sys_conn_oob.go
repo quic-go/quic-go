@@ -127,6 +127,9 @@ func newConn(c OOBCapablePacketConn) (*oobConn, error) {
 	// Try enabling GSO.
 	// This will only succeed on Linux, and only for kernels > 4.18.
 	supportsGSO := maybeSetGSO(rawConn)
+	if ok := maybeSetGRO(rawConn); !ok {
+		panic("failed to enable GRO")
+	}
 
 	msgs := make([]ipv4.Message, batchSize)
 	for i := range msgs {
@@ -151,10 +154,11 @@ func (c *oobConn) ReadPacket() (*receivedPacket, error) {
 		c.messages = c.messages[:batchSize]
 		// replace buffers data buffers up to the packet that has been consumed during the last ReadBatch call
 		for i := uint8(0); i < c.readPos; i++ {
-			buffer := getPacketBuffer()
-			buffer.Data = buffer.Data[:protocol.MaxPacketBufferSize]
+			buffer := getLargePacketBuffer()
+			buffer.Data = buffer.Data[:protocol.MaxLargePacketBufferSize]
 			c.buffers[i] = buffer
 			c.messages[i].Buffers[0] = c.buffers[i].Data
+			c.messages[i].Flags = syscall.MSG_WAITALL | syscall.MSG_MORE
 		}
 		c.readPos = 0
 
@@ -198,9 +202,10 @@ func (c *oobConn) ReadPacket() (*receivedPacket, error) {
 					copy(ip, body)
 				}
 				destIP = net.IP(ip)
+			default:
+				panic("unknown type")
 			}
-		}
-		if hdr.Level == unix.IPPROTO_IPV6 {
+		} else if hdr.Level == unix.IPPROTO_IPV6 {
 			switch hdr.Type {
 			case unix.IPV6_TCLASS:
 				ecn = protocol.ECN(body[0] & ecnMask)
@@ -215,7 +220,12 @@ func (c *oobConn) ReadPacket() (*receivedPacket, error) {
 					destIP = net.IP(ip)
 					ifIndex = binary.LittleEndian.Uint32(body[16:])
 				}
+			default:
+				panic("unknown type")
 			}
+		} else {
+			fmt.Println(hdr)
+			panic("unknown header")
 		}
 		data = remainder
 	}
@@ -225,6 +235,9 @@ func (c *oobConn) ReadPacket() (*receivedPacket, error) {
 			addr:    destIP,
 			ifIndex: ifIndex,
 		}
+	}
+	if msg.N > 1500 {
+		panic("found")
 	}
 	return &receivedPacket{
 		remoteAddr: msg.Addr,

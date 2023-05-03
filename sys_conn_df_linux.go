@@ -13,8 +13,12 @@ import (
 	"github.com/quic-go/quic-go/internal/utils"
 )
 
-// UDP_SEGMENT controls GSO (Generic Segmentation Offload)
-const UDP_SEGMENT = 103
+const (
+	// UDP_SEGMENT controls GSO (Generic Segmentation Offload)
+	UDP_SEGMENT = 103
+	// UDP_GRO controls GRO (Generic Receive Offload)
+	UDP_GRO = 104
+)
 
 func setDF(rawConn syscall.RawConn) error {
 	// Enabling IP_MTU_DISCOVER will force the kernel to return "sendto: message too long"
@@ -48,6 +52,20 @@ func maybeSetGSO(rawConn syscall.RawConn) bool {
 	}
 	if setErr != nil {
 		log.Println("failed to enable GSO")
+		return false
+	}
+	return true
+}
+
+func maybeSetGRO(rawConn syscall.RawConn) bool {
+	var setErr error
+	if err := rawConn.Control(func(fd uintptr) {
+		setErr = unix.SetsockoptInt(int(fd), syscall.IPPROTO_UDP, UDP_GRO, 1)
+	}); err != nil {
+		setErr = err
+	}
+	if setErr != nil {
+		log.Println("failed to enable GRO")
 		return false
 	}
 	return true
