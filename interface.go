@@ -198,7 +198,7 @@ type EarlyConnection interface {
 
 	// HandshakeComplete blocks until the handshake completes (or fails).
 	// For the client, data sent before completion of the handshake is encrypted with 0-RTT keys.
-	// For the serfer, data sent before completion of the handshake is encrypted with 1-RTT keys,
+	// For the server, data sent before completion of the handshake is encrypted with 1-RTT keys,
 	// however the client's identity is only verified once the handshake completes.
 	HandshakeComplete() <-chan struct{}
 
