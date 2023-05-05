@@ -30,10 +30,8 @@ type Transport struct {
 	// A single net.PacketConn can only be handled by one Transport.
 	// Bad things will happen if passed to multiple Transports.
 	//
-	// If the connection satisfies the OOBCapablePacketConn interface
-	// (as a net.UDPConn does), ECN and packet info support will be enabled.
-	// In this case, optimized syscalls might be used, skipping the
-	// ReadFrom and WriteTo calls to read / write packets.
+	// If not done by the user, the connection is passed through OptimizeConn to enable a number of optimizations.
+	// After passing the connection to the Transport, its invalid to call ReadFrom and WriteTo.
 	Conn net.PacketConn
 
 	// The length of the connection ID in bytes.
@@ -180,11 +178,18 @@ func (t *Transport) init(isServer bool) error {
 	t.initOnce.Do(func() {
 		getMultiplexer().AddConn(t.Conn)
 
-		conn, err := wrapConn(t.Conn)
-		if err != nil {
-			t.initErr = err
-			return
+		var conn rawConn
+		if c, ok := t.Conn.(rawConn); ok {
+			conn = c
+		} else {
+			var err error
+			conn, err = wrapConn(t.Conn)
+			if err != nil {
+				t.initErr = err
+				return
+			}
 		}
+		t.conn = conn
 
 		t.logger = utils.DefaultLogger // TODO: make this configurable
 		t.conn = conn
