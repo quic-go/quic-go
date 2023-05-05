@@ -2,7 +2,13 @@
 
 package quic
 
-import "golang.org/x/sys/unix"
+import (
+	"errors"
+	"fmt"
+	"syscall"
+
+	"golang.org/x/sys/unix"
+)
 
 const msgTypeIPTOS = unix.IP_TOS
 
@@ -23,11 +29,11 @@ func forceSetReceiveBuffer(c interface{}, bytes int) error {
 		SyscallConn() (syscall.RawConn, error)
 	})
 	if !ok {
-		return 0, errors.New("doesn't have a SyscallConn")
+		return errors.New("doesn't have a SyscallConn")
 	}
 	rawConn, err := conn.SyscallConn()
 	if err != nil {
-		return 0, fmt.Errorf("couldn't get syscall.RawConn: %w", err)
+		return fmt.Errorf("couldn't get syscall.RawConn: %w", err)
 	}
 	var serr error
 	if err := rawConn.Control(func(fd uintptr) {

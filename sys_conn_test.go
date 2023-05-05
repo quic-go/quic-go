@@ -40,14 +40,15 @@ var _ = Describe("Can change the receive buffer size", func() {
 		}
 		c, err := net.ListenPacket("udp", "127.0.0.1:0")
 		Expect(err).ToNot(HaveOccurred())
-		forceSetReceiveBuffer(c, 2048)
+		forceSetReceiveBuffer(c, 256<<10)
+
 		size, err := inspectReadBuffer(c)
 		Expect(err).ToNot(HaveOccurred())
-		Expect(size).To(Equal(2048))
+		Expect(size).To(Equal(512 << 10))
 
-		forceSetReceiveBuffer(c, 4096)
+		forceSetReceiveBuffer(c, 512<<10)
 		size, err = inspectReadBuffer(c)
 		Expect(err).ToNot(HaveOccurred())
-		Expect(size).To(Equal(4096))
+		Expect(size).To(Equal(1024 << 10))
 	})
 })
