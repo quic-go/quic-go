@@ -19,13 +19,13 @@ const (
 	IPV6_DONTFRAG   = 14
 )
 
-func setDF(rawConn syscall.RawConn) error {
+func setDF(rawConn syscall.RawConn) (bool, error) {
 	var errDFIPv4, errDFIPv6 error
 	if err := rawConn.Control(func(fd uintptr) {
 		errDFIPv4 = windows.SetsockoptInt(windows.Handle(fd), windows.IPPROTO_IP, IP_DONTFRAGMENT, 1)
 		errDFIPv6 = windows.SetsockoptInt(windows.Handle(fd), windows.IPPROTO_IPV6, IPV6_DONTFRAG, 1)
 	}); err != nil {
-		return err
+		return false, err
 	}
 	switch {
 	case errDFIPv4 == nil && errDFIPv6 == nil:
@@ -35,9 +35,9 @@ func setDF(rawConn syscall.RawConn) error {
 	case errDFIPv4 != nil && errDFIPv6 == nil:
 		utils.DefaultLogger.Debugf("Setting DF for IPv6.")
 	case errDFIPv4 != nil && errDFIPv6 != nil:
-		return errors.New("setting DF failed for both IPv4 and IPv6")
+		return false, errors.New("setting DF failed for both IPv4 and IPv6")
 	}
-	return nil
+	return true, nil
 }
 
 func isMsgSizeErr(err error) bool {

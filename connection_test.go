@@ -2387,6 +2387,7 @@ var _ = Describe("Client Connection", func() {
 		mconn = NewMockSendConn(mockCtrl)
 		mconn.EXPECT().RemoteAddr().Return(&net.UDPAddr{}).AnyTimes()
 		mconn.EXPECT().LocalAddr().Return(&net.UDPAddr{}).AnyTimes()
+		mconn.EXPECT().capabilities().AnyTimes()
 		if tlsConf == nil {
 			tlsConf = &tls.Config{}
 		}

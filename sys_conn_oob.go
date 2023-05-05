@@ -61,11 +61,13 @@ type oobConn struct {
 	// Packets received from the kernel, but not yet returned by ReadPacket().
 	messages []ipv4.Message
 	buffers  [batchSize]*packetBuffer
+
+	supportsDF bool
 }
 
 var _ rawConn = &oobConn{}
 
-func newConn(c OOBCapablePacketConn) (*oobConn, error) {
+func newConn(c OOBCapablePacketConn, supportsDF bool) (*oobConn, error) {
 	rawConn, err := c.SyscallConn()
 	if err != nil {
 		return nil, err
@@ -132,6 +134,7 @@ func newConn(c OOBCapablePacketConn) (*oobConn, error) {
 		batchConn:            bc,
 		messages:             msgs,
 		readPos:              batchSize,
+		supportsDF:           supportsDF,
 	}
 	for i := 0; i < batchSize; i++ {
 		oobConn.messages[i].OOB = make([]byte, oobBufferSize)
@@ -232,6 +235,10 @@ func (c *oobConn) ReadPacket() (*receivedPacket, error) {
 func (c *oobConn) WritePacket(b []byte, addr net.Addr, oob []byte) (n int, err error) {
 	n, _, err = c.OOBCapablePacketConn.WriteMsgUDP(b, oob, addr.(*net.UDPAddr))
 	return n, err
+}
+
+func (c *oobConn) capabilities() connCapabilities {
+	return connCapabilities{DF: c.supportsDF}
 }
 
 func (info *packetInfo) OOB() []byte {
