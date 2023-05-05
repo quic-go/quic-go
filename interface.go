@@ -314,8 +314,9 @@ type Config struct {
 	// every half of MaxIdleTimeout, whichever is smaller).
 	KeepAlivePeriod time.Duration
 	// DisablePathMTUDiscovery disables Path MTU Discovery (RFC 8899).
-	// Packets will then be at most 1252 (IPv4) / 1232 (IPv6) bytes in size.
-	// Note that if Path MTU discovery is causing issues on your system, please open a new issue
+	// This allows the sending of QUIC packets that fully utilize the available MTU of the path.
+	// Path MTU discovery is only available on systems that allow setting of the Don't Fragment (DF) bit.
+	// If unavailable or disabled, packets will be at most 1252 (IPv4) / 1232 (IPv6) bytes in size.
 	DisablePathMTUDiscovery bool
 	// DisableVersionNegotiationPackets disables the sending of Version Negotiation packets.
 	// This can be useful if version information is exchanged out-of-band.
