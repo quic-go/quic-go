@@ -15,6 +15,12 @@ import (
 	"github.com/quic-go/quic-go/internal/utils"
 )
 
+type connCapabilities struct {
+	// This connection has the Don't Fragment (DF) bit set.
+	// This means it makes to run DPLPMTUD.
+	DF bool
+}
+
 // rawConn is a connection that allow reading of a receivedPackeh.
 type rawConn interface {
 	ReadPacket() (*receivedPacket, error)
@@ -22,6 +28,8 @@ type rawConn interface {
 	LocalAddr() net.Addr
 	SetReadDeadline(time.Time) error
 	io.Closer
+
+	capabilities() connCapabilities
 }
 
 type closePacket struct {

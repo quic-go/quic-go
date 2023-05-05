@@ -8,8 +8,8 @@ import (
 	"golang.org/x/sys/windows"
 )
 
-func newConn(c OOBCapablePacketConn) (rawConn, error) {
-	return &basicConn{PacketConn: c}, nil
+func newConn(c OOBCapablePacketConn, supportsDF bool) (rawConn, error) {
+	return &basicConn{PacketConn: c, supportsDF: supportsDF}, nil
 }
 
 func inspectReadBuffer(c syscall.RawConn) (int, error) {

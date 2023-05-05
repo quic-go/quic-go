@@ -89,3 +89,17 @@ func (mr *MockSendConnMockRecorder) Write(arg0 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Write", reflect.TypeOf((*MockSendConn)(nil).Write), arg0)
 }
+
+// capabilities mocks base method.
+func (m *MockSendConn) capabilities() connCapabilities {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "capabilities")
+	ret0, _ := ret[0].(connCapabilities)
+	return ret0
+}
+
+// capabilities indicates an expected call of capabilities.
+func (mr *MockSendConnMockRecorder) capabilities() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "capabilities", reflect.TypeOf((*MockSendConn)(nil).capabilities))
+}

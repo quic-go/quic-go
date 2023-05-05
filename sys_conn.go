@@ -25,6 +25,7 @@ func wrapConn(pc net.PacketConn) (rawConn, error) {
 	conn, ok := pc.(interface {
 		SyscallConn() (syscall.RawConn, error)
 	})
+	var supportsDF bool
 	if ok {
 		rawConn, err := conn.SyscallConn()
 		if err != nil {
@@ -33,7 +34,8 @@ func wrapConn(pc net.PacketConn) (rawConn, error) {
 
 		if _, ok := pc.LocalAddr().(*net.UDPAddr); ok {
 			// Only set DF on sockets that we expect to be able to handle that configuration.
-			err = setDF(rawConn)
+			var err error
+			supportsDF, err = setDF(rawConn)
 			if err != nil {
 				return nil, err
 			}
@@ -42,9 +44,9 @@ func wrapConn(pc net.PacketConn) (rawConn, error) {
 	c, ok := pc.(OOBCapablePacketConn)
 	if !ok {
 		utils.DefaultLogger.Infof("PacketConn is not a net.UDPConn. Disabling optimizations possible on UDP connections.")
-		return &basicConn{PacketConn: pc}, nil
+		return &basicConn{PacketConn: pc, supportsDF: supportsDF}, nil
 	}
-	return newConn(c)
+	return newConn(c, supportsDF)
 }
 
 // The basicConn is the most trivial implementation of a connection.
@@ -54,6 +56,7 @@ func wrapConn(pc net.PacketConn) (rawConn, error) {
 // * when the OS doesn't support OOB.
 type basicConn struct {
 	net.PacketConn
+	supportsDF bool
 }
 
 var _ rawConn = &basicConn{}
@@ -78,3 +81,5 @@ func (c *basicConn) ReadPacket() (*receivedPacket, error) {
 func (c *basicConn) WritePacket(b []byte, addr net.Addr, _ []byte) (n int, err error) {
 	return c.PacketConn.WriteTo(b, addr)
 }
+
+func (c *basicConn) capabilities() connCapabilities { return connCapabilities{DF: c.supportsDF} }
