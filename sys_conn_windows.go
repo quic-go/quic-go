@@ -37,3 +37,5 @@ func inspectReadBuffer(c net.PacketConn) (int, error) {
 }
 
 func (i *packetInfo) OOB() []byte { return nil }
+
+func forceSetReceiveBuffer(c interface{}, bytes int) error { return nil }

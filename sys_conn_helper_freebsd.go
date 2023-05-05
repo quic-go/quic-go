@@ -19,3 +19,5 @@ const (
 )
 
 const batchSize = 8
+
+func forceSetReceiveBuffer(c interface{}, bytes int) error { return nil }

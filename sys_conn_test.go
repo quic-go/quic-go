@@ -2,6 +2,7 @@ package quic
 
 import (
 	"net"
+	"runtime"
 	"time"
 
 	"github.com/quic-go/quic-go/internal/protocol"
@@ -29,5 +30,24 @@ var _ = Describe("Basic Conn Test", func() {
 		Expect(p.data).To(Equal([]byte("foobar")))
 		Expect(p.rcvTime).To(BeTemporally("~", time.Now(), scaleDuration(100*time.Millisecond)))
 		Expect(p.remoteAddr).To(Equal(addr))
+	})
+})
+
+var _ = Describe("Can change the receive buffer size", func() {
+	It("Force a change (if we have CAP_NET_ADMIN)", func() {
+		if runtime.GOOS != "linux" {
+			return // Only an option on linux
+		}
+		c, err := net.ListenPacket("udp", "127.0.0.1:0")
+		Expect(err).ToNot(HaveOccurred())
+		forceSetReceiveBuffer(c, 2048)
+		size, err := inspectReadBuffer(c)
+		Expect(err).ToNot(HaveOccurred())
+		Expect(size).To(Equal(2048))
+
+		forceSetReceiveBuffer(c, 4096)
+		size, err = inspectReadBuffer(c)
+		Expect(err).ToNot(HaveOccurred())
+		Expect(size).To(Equal(4096))
 	})
 })

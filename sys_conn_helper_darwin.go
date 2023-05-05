@@ -19,3 +19,5 @@ const (
 // ReadBatch only returns a single packet on OSX,
 // see https://godoc.org/golang.org/x/net/ipv4#PacketConn.ReadBatch.
 const batchSize = 1
+
+func forceSetReceiveBuffer(c interface{}, bytes int) error { return nil }
