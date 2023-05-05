@@ -15,13 +15,30 @@ import (
 type OOBCapablePacketConn interface {
 	net.PacketConn
 	SyscallConn() (syscall.RawConn, error)
+	SetReadBuffer(int) error
 	ReadMsgUDP(b, oob []byte) (n, oobn, flags int, addr *net.UDPAddr, err error)
 	WriteMsgUDP(b, oob []byte, addr *net.UDPAddr) (n, oobn int, err error)
 }
 
 var _ OOBCapablePacketConn = &net.UDPConn{}
 
-func wrapConn(pc net.PacketConn) (rawConn, error) {
+// OptimizeConn takes a net.PacketConn and attempts to enable various optimizations that will improve QUIC performance:
+//  1. It enables the Don't Fragment (DF) bit on the IP header.
+//     This allows us to do DPLPMTUD (Path MTU Discovery).
+//  2. It enables reading of the ECN bits from the IP header.
+//     This allows the remote node to speed up its loss detection and recovery.
+//  3. It uses batched syscalls (recvmmsg) to more efficiently receive packets from the socket.
+//
+// For this to work, the connection needs to implement the OOBCapablePacketConn interface (as a *net.UDPConn does).
+func OptimizeConn(c net.PacketConn) (net.PacketConn, error) {
+	return wrapConn(c)
+}
+
+func wrapConn(pc net.PacketConn) (interface {
+	net.PacketConn
+	rawConn
+}, error,
+) {
 	conn, ok := pc.(interface {
 		SyscallConn() (syscall.RawConn, error)
 	})

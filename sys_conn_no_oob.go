@@ -4,7 +4,7 @@ package quic
 
 import "net"
 
-func newConn(c net.PacketConn, supportsDF bool) (rawConn, error) {
+func newConn(c net.PacketConn, supportsDF bool) (*basicConn, error) {
 	return &basicConn{PacketConn: c, supportsDF: supportsDF}, nil
 }
 
