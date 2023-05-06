@@ -6,6 +6,7 @@ import (
 	"math"
 	"math/rand"
 	"net"
+	"testing"
 	"time"
 
 	"github.com/quic-go/quic-go/internal/protocol"
@@ -613,3 +614,71 @@ var _ = Describe("Transport Parameters", func() {
 		})
 	})
 })
+
+func getRandomTransportParams(seed int64) *TransportParameters {
+	random := rand.New(rand.NewSource(seed))
+	b1 := make([]byte, random.Intn(20)+1)
+	random.Read(b1)
+	b2 := make([]byte, random.Intn(20)+1)
+	random.Read(b2)
+	b3 := make([]byte, random.Intn(20)+1)
+	random.Read(b3)
+	origDestConnID := protocol.ParseConnectionID(b1)
+	initialSrcConnID := protocol.ParseConnectionID(b2)
+	rcid := protocol.ParseConnectionID(b3)
+	var statelessResetToken protocol.StatelessResetToken
+	random.Read(statelessResetToken[:])
+	return &TransportParameters{
+		InitialMaxStreamDataBidiLocal:   protocol.ByteCount(random.Int63n(quicvarint.Max)),
+		InitialMaxStreamDataBidiRemote:  protocol.ByteCount(random.Int63n(quicvarint.Max)),
+		InitialMaxStreamDataUni:         protocol.ByteCount(random.Int63n(quicvarint.Max)),
+		InitialMaxData:                  protocol.ByteCount(random.Int63n(quicvarint.Max)),
+		MaxBidiStreamNum:                protocol.StreamNum(random.Int63n(quicvarint.Max)),
+		MaxUniStreamNum:                 protocol.StreamNum(random.Int63n(quicvarint.Max)),
+		MaxIdleTimeout:                  time.Duration(random.Intn(1e6)) * time.Millisecond,
+		OriginalDestinationConnectionID: origDestConnID,
+		InitialSourceConnectionID:       initialSrcConnID,
+		RetrySourceConnectionID:         &rcid,
+		AckDelayExponent:                uint8(random.Intn(20)),
+		MaxAckDelay:                     time.Duration(random.Intn(1e6)) * time.Millisecond,
+		StatelessResetToken:             &statelessResetToken,
+		ActiveConnectionIDLimit:         uint64(random.Int63n(quicvarint.Max-2) + 2),
+		MaxDatagramFrameSize:            protocol.ByteCount(random.Int63n(quicvarint.Max)),
+	}
+}
+
+func FuzzTransportParametersUnmarshal(f *testing.F) {
+	f.Add(getRandomTransportParams(1).Marshal(protocol.PerspectiveServer), true)
+	f.Add(getRandomTransportParams(2).Marshal(protocol.PerspectiveClient), false)
+
+	f.Fuzz(func(t *testing.T, data []byte, sentByServer bool) {
+		var tp TransportParameters
+		pers := protocol.PerspectiveClient
+		if sentByServer {
+			pers = protocol.PerspectiveServer
+		}
+		if err := tp.Unmarshal(data, pers); err != nil {
+			return
+		}
+		b := tp.Marshal(pers)
+		if err := tp.Unmarshal(b, pers); err != nil {
+			t.Fatalf("roundtrip failed: %s", err)
+		}
+	})
+}
+
+func FuzzTransportParametersForSessionTicketUnmarshal(f *testing.F) {
+	f.Add(getRandomTransportParams(3).MarshalForSessionTicket([]byte(nil)))
+
+	f.Fuzz(func(t *testing.T, data []byte) {
+		var tp TransportParameters
+		if err := tp.UnmarshalFromSessionTicket(bytes.NewReader(data)); err != nil {
+			return
+		}
+		var b []byte
+		b = tp.MarshalForSessionTicket(b)
+		if err := tp.UnmarshalFromSessionTicket(bytes.NewReader(b)); err != nil {
+			t.Fatalf("roundtrip failed: %s", err)
+		}
+	})
+}
