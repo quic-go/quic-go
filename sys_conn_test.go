@@ -2,6 +2,7 @@ package quic
 
 import (
 	"net"
+	"os"
 	"runtime"
 	"time"
 
@@ -36,19 +37,26 @@ var _ = Describe("Basic Conn Test", func() {
 var _ = Describe("Can change the receive buffer size", func() {
 	It("Force a change (if we have CAP_NET_ADMIN)", func() {
 		if runtime.GOOS != "linux" {
-			return // Only an option on linux
+			Skip("Only an option on linux")
 		}
+
+		if os.Getuid() != 0 {
+			Skip("Must be root to force change the receive buffer size")
+		}
+
 		c, err := net.ListenPacket("udp", "127.0.0.1:0")
 		Expect(err).ToNot(HaveOccurred())
 		forceSetReceiveBuffer(c, 256<<10)
 
 		size, err := inspectReadBuffer(c)
 		Expect(err).ToNot(HaveOccurred())
+		//  The kernel doubles this value (to allow space for bookkeeping overhead)
 		Expect(size).To(Equal(512 << 10))
 
 		forceSetReceiveBuffer(c, 512<<10)
 		size, err = inspectReadBuffer(c)
 		Expect(err).ToNot(HaveOccurred())
+		//  The kernel doubles this value (to allow space for bookkeeping overhead)
 		Expect(size).To(Equal(1024 << 10))
 	})
 })
