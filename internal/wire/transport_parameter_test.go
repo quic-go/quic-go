@@ -289,15 +289,16 @@ var _ = Describe("Transport Parameters", func() {
 		Expect(float32(dataLen) / num).To(BeNumerically("~", float32(defaultLen)/num+float32(entryLen), 1))
 	})
 
-	It("sets the default value for the ack_delay_exponent, when no value was sent", func() {
+	It("sets the default value for the ack_delay_exponent and max_active_connection_id_limit, when no values were sent", func() {
 		data := (&TransportParameters{
 			AckDelayExponent:        protocol.DefaultAckDelayExponent,
 			StatelessResetToken:     &protocol.StatelessResetToken{},
-			ActiveConnectionIDLimit: 2,
+			ActiveConnectionIDLimit: protocol.DefaultActiveConnectionIDLimit,
 		}).Marshal(protocol.PerspectiveServer)
 		p := &TransportParameters{}
 		Expect(p.Unmarshal(data, protocol.PerspectiveServer)).To(Succeed())
 		Expect(p.AckDelayExponent).To(BeEquivalentTo(protocol.DefaultAckDelayExponent))
+		Expect(p.ActiveConnectionIDLimit).To(BeEquivalentTo(protocol.DefaultActiveConnectionIDLimit))
 	})
 
 	It("errors when the varint value has the wrong length", func() {
