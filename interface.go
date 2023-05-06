@@ -187,6 +187,9 @@ type Connection interface {
 	SendMessage([]byte) error
 	// ReceiveMessage gets a message received in a datagram, as specified in RFC 9221.
 	ReceiveMessage() ([]byte, error)
+
+	// SetIdleTimeout sets this connection's idle timeout.
+	SetIdleTimeout(time.Duration)
 }
 
 // An EarlyConnection is a connection that is handshaking.

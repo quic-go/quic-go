@@ -2176,6 +2176,11 @@ func (s *connection) ReceiveMessage() ([]byte, error) {
 	return s.datagramQueue.Receive()
 }
 
+func (s *connection) SetIdleTimeout(timeout time.Duration) {
+	s.idleTimeout = timeout
+	s.maybeResetTimer()
+}
+
 func (s *connection) LocalAddr() net.Addr {
 	return s.conn.LocalAddr()
 }
