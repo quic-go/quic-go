@@ -312,9 +312,14 @@ var newConnection = func(
 		DisableActiveMigration:          true,
 		StatelessResetToken:             &statelessResetToken,
 		OriginalDestinationConnectionID: origDestConnID,
-		ActiveConnectionIDLimit:         protocol.MaxActiveConnectionIDs,
-		InitialSourceConnectionID:       srcConnID,
-		RetrySourceConnectionID:         retrySrcConnID,
+		// For interoperability with quic-go versions before May 2023, this value must be set to a value
+		// different from protocol.DefaultActiveConnectionIDLimit.
+		// If set to the default value, it will be omitted from the transport parameters, which will make
+		// old quic-go versions interpret it as 0, instead of the default value of 2.
+		// See https://github.com/quic-go/quic-go/pull/3806.
+		ActiveConnectionIDLimit:   protocol.MaxActiveConnectionIDs,
+		InitialSourceConnectionID: srcConnID,
+		RetrySourceConnectionID:   retrySrcConnID,
 	}
 	if s.config.EnableDatagrams {
 		params.MaxDatagramFrameSize = protocol.MaxDatagramFrameSize
@@ -426,8 +431,13 @@ var newClientConnection = func(
 		MaxAckDelay:                    protocol.MaxAckDelayInclGranularity,
 		AckDelayExponent:               protocol.AckDelayExponent,
 		DisableActiveMigration:         true,
-		ActiveConnectionIDLimit:        protocol.MaxActiveConnectionIDs,
-		InitialSourceConnectionID:      srcConnID,
+		// For interoperability with quic-go versions before May 2023, this value must be set to a value
+		// different from protocol.DefaultActiveConnectionIDLimit.
+		// If set to the default value, it will be omitted from the transport parameters, which will make
+		// old quic-go versions interpret it as 0, instead of the default value of 2.
+		// See https://github.com/quic-go/quic-go/pull/3806.
+		ActiveConnectionIDLimit:   protocol.MaxActiveConnectionIDs,
+		InitialSourceConnectionID: srcConnID,
 	}
 	if s.config.EnableDatagrams {
 		params.MaxDatagramFrameSize = protocol.MaxDatagramFrameSize
