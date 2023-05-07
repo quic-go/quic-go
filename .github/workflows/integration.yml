@@ -31,6 +31,10 @@ jobs:
         run: go run github.com/onsi/ginkgo/v2/ginkgo -r -v -randomize-all -randomize-suites -trace integrationtests/self -- -version=1 ${{ env.QLOGFLAG }}
       - name: Run self tests, using QUIC v2
         run: go run github.com/onsi/ginkgo/v2/ginkgo -r -v -randomize-all -randomize-suites -trace integrationtests/self -- -version=2 ${{ env.QLOGFLAG }}
+      - name: Run set tests, with GSO disabled
+        env:
+          QUIC_GO_DISABLE_GSO: true
+        run: go run github.com/onsi/ginkgo/v2/ginkgo -r -v -randomize-all -randomize-suites -trace integrationtests/self -- -version=1 ${{ env.QLOGFLAG }}
       - name: Run tests (32 bit)
         env:
           GOARCH: 386
