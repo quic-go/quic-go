@@ -5,6 +5,8 @@ package quic
 import (
 	"errors"
 	"log"
+	"os"
+	"strconv"
 	"syscall"
 	"unsafe"
 
@@ -42,6 +44,11 @@ func setDF(rawConn syscall.RawConn) (bool, error) {
 }
 
 func maybeSetGSO(rawConn syscall.RawConn) bool {
+	disable, _ := strconv.ParseBool(os.Getenv("QUIC_GO_DISABLE_GSO"))
+	if disable {
+		return false
+	}
+
 	var setErr error
 	if err := rawConn.Control(func(fd uintptr) {
 		setErr = unix.SetsockoptInt(int(fd), syscall.IPPROTO_UDP, UDP_SEGMENT, 1)
