@@ -42,6 +42,17 @@ func inspectReadBuffer(c syscall.RawConn) (int, error) {
 	return size, serr
 }
 
+func inspectWriteBuffer(c syscall.RawConn) (int, error) {
+	var size int
+	var serr error
+	if err := c.Control(func(fd uintptr) {
+		size, serr = unix.GetsockoptInt(int(fd), unix.SOL_SOCKET, unix.SO_SNDBUF)
+	}); err != nil {
+		return 0, err
+	}
+	return size, serr
+}
+
 type oobConn struct {
 	OOBCapablePacketConn
 	batchConn batchConn

@@ -31,3 +31,13 @@ func forceSetReceiveBuffer(c syscall.RawConn, bytes int) error {
 	}
 	return serr
 }
+
+func forceSetSendBuffer(c syscall.RawConn, bytes int) error {
+	var serr error
+	if err := c.Control(func(fd uintptr) {
+		serr = unix.SetsockoptInt(int(fd), unix.SOL_SOCKET, unix.SO_SNDBUFFORCE, bytes)
+	}); err != nil {
+		return err
+	}
+	return serr
+}
