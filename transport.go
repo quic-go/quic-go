@@ -9,7 +9,6 @@ import (
 	"log"
 	"net"
 	"os"
-	"runtime"
 	"strconv"
 	"strings"
 	"sync"
@@ -181,20 +180,17 @@ func setReceiveBuffer(c net.PacketConn, logger utils.Logger) error {
 		logger.Debugf("Conn has receive buffer of %d kiB (wanted: at least %d kiB)", size/1024, protocol.DesiredReceiveBufferSize/1024)
 		return nil
 	}
-	if err := conn.SetReadBuffer(protocol.DesiredReceiveBufferSize); err != nil {
-		return fmt.Errorf("failed to increase receive buffer size: %w", err)
-	}
+	// Ignore the error. We check if we succeeded by querying the buffer size afterward.
+	_ = conn.SetReadBuffer(protocol.DesiredReceiveBufferSize)
 	newSize, err := inspectReadBuffer(c)
-
-	if runtime.GOOS == "linux" && (newSize == size || newSize < protocol.DesiredReceiveBufferSize) {
+	if newSize < protocol.DesiredReceiveBufferSize {
 		// Try again with RCVBUFFORCE on Linux
-		forceSetReceiveBuffer(c, protocol.DesiredReceiveBufferSize)
+		_ = forceSetReceiveBuffer(c, protocol.DesiredReceiveBufferSize)
 		newSize, err = inspectReadBuffer(c)
 		if err != nil {
 			return fmt.Errorf("failed to determine receive buffer size: %w", err)
 		}
 	}
-
 	if err != nil {
 		return fmt.Errorf("failed to determine receive buffer size: %w", err)
 	}
