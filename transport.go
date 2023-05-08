@@ -270,7 +270,7 @@ func (t *Transport) close(e error) {
 }
 
 // only print warnings about the UDP receive buffer size once
-var receiveBufferWarningOnce sync.Once
+var setBufferWarningOnce sync.Once
 
 func (t *Transport) listen(conn rawConn) {
 	defer close(t.listening)
@@ -278,7 +278,17 @@ func (t *Transport) listen(conn rawConn) {
 
 	if err := setReceiveBuffer(t.Conn, t.logger); err != nil {
 		if !strings.Contains(err.Error(), "use of closed network connection") {
-			receiveBufferWarningOnce.Do(func() {
+			setBufferWarningOnce.Do(func() {
+				if disable, _ := strconv.ParseBool(os.Getenv("QUIC_GO_DISABLE_RECEIVE_BUFFER_WARNING")); disable {
+					return
+				}
+				log.Printf("%s. See https://github.com/quic-go/quic-go/wiki/UDP-Receive-Buffer-Size for details.", err)
+			})
+		}
+	}
+	if err := setSendBuffer(t.Conn, t.logger); err != nil {
+		if !strings.Contains(err.Error(), "use of closed network connection") {
+			setBufferWarningOnce.Do(func() {
 				if disable, _ := strconv.ParseBool(os.Getenv("QUIC_GO_DISABLE_RECEIVE_BUFFER_WARNING")); disable {
 					return
 				}
