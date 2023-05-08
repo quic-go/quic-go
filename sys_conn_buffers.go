@@ -4,7 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
-	"sync"
+	"syscall"
 
 	"github.com/quic-go/quic-go/internal/protocol"
 	"github.com/quic-go/quic-go/internal/utils"
@@ -15,7 +15,26 @@ func setReceiveBuffer(c net.PacketConn, logger utils.Logger) error {
 	if !ok {
 		return errors.New("connection doesn't allow setting of receive buffer size. Not a *net.UDPConn?")
 	}
-	size, err := inspectReadBuffer(c)
+
+	var syscallConn syscall.RawConn
+	if sc, ok := c.(interface {
+		SyscallConn() (syscall.RawConn, error)
+	}); ok {
+		var err error
+		syscallConn, err = sc.SyscallConn()
+		if err != nil {
+			syscallConn = nil
+		}
+	}
+	// The connection has a SetReadBuffer method, but we couldn't obtain a syscall.RawConn.
+	// This shouldn't happen for a net.UDPConn, but is possible if the connection just implements the
+	// net.PacketConn interface and the SetReadBuffer method.
+	// We have no way of checking if increasing the buffer size actually worked.
+	if syscallConn == nil {
+		return conn.SetReadBuffer(protocol.DesiredReceiveBufferSize)
+	}
+
+	size, err := inspectReadBuffer(syscallConn)
 	if err != nil {
 		return fmt.Errorf("failed to determine receive buffer size: %w", err)
 	}
@@ -25,11 +44,11 @@ func setReceiveBuffer(c net.PacketConn, logger utils.Logger) error {
 	}
 	// Ignore the error. We check if we succeeded by querying the buffer size afterward.
 	_ = conn.SetReadBuffer(protocol.DesiredReceiveBufferSize)
-	newSize, err := inspectReadBuffer(c)
+	newSize, err := inspectReadBuffer(syscallConn)
 	if newSize < protocol.DesiredReceiveBufferSize {
 		// Try again with RCVBUFFORCE on Linux
-		_ = forceSetReceiveBuffer(c, protocol.DesiredReceiveBufferSize)
-		newSize, err = inspectReadBuffer(c)
+		_ = forceSetReceiveBuffer(syscallConn, protocol.DesiredReceiveBufferSize)
+		newSize, err = inspectReadBuffer(syscallConn)
 		if err != nil {
 			return fmt.Errorf("failed to determine receive buffer size: %w", err)
 		}
