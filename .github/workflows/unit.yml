@@ -20,6 +20,16 @@ jobs:
         env:
           TIMESCALE_FACTOR: 10
         run: go run github.com/onsi/ginkgo/v2/ginkgo -r -v -cover -randomize-all -randomize-suites -trace -skip-package integrationtests
+      - name: Run tests as root
+        if: ${{ matrix.os == 'ubuntu' }}
+        env:
+          TIMESCALE_FACTOR: 10
+          FILE: sys_conn_helper_linux_test.go
+        run: |
+          test -f $FILE # make sure the file actually exists
+          go run github.com/onsi/ginkgo/v2/ginkgo build -cover -tags root .
+          sudo ./quic-go.test -ginkgo.v -ginkgo.trace -ginkgo.randomize-all -ginkgo.focus-file=$FILE -test.coverprofile coverage-root.txt
+          rm quic-go.test
       - name: Run tests (32 bit)
         if: ${{ matrix.os != 'macos' }} # can't run 32 bit tests on OSX.
         env:
@@ -34,5 +44,5 @@ jobs:
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v3
         with:
-          file: coverage.txt
+          files: coverage.txt coverage-root.txt
           env_vars: OS=${{ matrix.os }}, GO=${{ matrix.go }}
