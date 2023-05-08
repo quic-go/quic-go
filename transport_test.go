@@ -235,13 +235,16 @@ var _ = Describe("Transport", func() {
 		Expect(err).ToNot(HaveOccurred())
 		b = append(b, token[:]...)
 		conn := NewMockPacketHandler(mockCtrl)
+		destroyed := make(chan struct{})
 		gomock.InOrder(
 			phm.EXPECT().GetByResetToken(token).Return(conn, true),
 			conn.EXPECT().destroy(gomock.Any()).Do(func(err error) {
 				Expect(err).To(MatchError(&StatelessResetError{Token: token}))
+				close(destroyed)
 			}),
 		)
 		packetChan <- packetToRead{data: b}
+		Eventually(destroyed).Should(BeClosed())
 
 		// shutdown
 		phm.EXPECT().Close(gomock.Any())
