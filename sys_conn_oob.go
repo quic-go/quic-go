@@ -264,6 +264,11 @@ func (c *oobConn) capabilities() connCapabilities {
 	return c.cap
 }
 
+type packetInfo struct {
+	addr    net.IP
+	ifIndex uint32
+}
+
 func (info *packetInfo) OOB() []byte {
 	if info == nil {
 		return nil

@@ -61,11 +61,6 @@ type cryptoStreamHandler interface {
 	ConnectionState() handshake.ConnectionState
 }
 
-type packetInfo struct {
-	addr    net.IP
-	ifIndex uint32
-}
-
 type receivedPacket struct {
 	buffer *packetBuffer
 
