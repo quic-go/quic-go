@@ -12,18 +12,21 @@ import (
 )
 
 const (
-	// same for both IPv4 and IPv6 on Windows
+	// IP_DONTFRAGMENT controls the Don't Fragment (DF) bit.
+	//
+	// It's the same code point for both IPv4 and IPv6 on Windows.
 	// https://microsoft.github.io/windows-docs-rs/doc/windows/Win32/Networking/WinSock/constant.IP_DONTFRAG.html
 	// https://microsoft.github.io/windows-docs-rs/doc/windows/Win32/Networking/WinSock/constant.IPV6_DONTFRAG.html
+	//
+	//nolint:stylecheck
 	IP_DONTFRAGMENT = 14
-	IPV6_DONTFRAG   = 14
 )
 
 func setDF(rawConn syscall.RawConn) (bool, error) {
 	var errDFIPv4, errDFIPv6 error
 	if err := rawConn.Control(func(fd uintptr) {
 		errDFIPv4 = windows.SetsockoptInt(windows.Handle(fd), windows.IPPROTO_IP, IP_DONTFRAGMENT, 1)
-		errDFIPv6 = windows.SetsockoptInt(windows.Handle(fd), windows.IPPROTO_IPV6, IPV6_DONTFRAG, 1)
+		errDFIPv6 = windows.SetsockoptInt(windows.Handle(fd), windows.IPPROTO_IPV6, IP_DONTFRAGMENT, 1)
 	}); err != nil {
 		return false, err
 	}
