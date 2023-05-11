@@ -1791,7 +1791,7 @@ func (s *connection) sendPackets() error {
 	s.windowUpdateQueue.QueueAll()
 
 	if !s.handshakeConfirmed {
-		packet, err := s.packer.PackCoalescedPacket(false, s.mtuDiscoverer.CurrentSize(), s.version)
+		packet, err := s.packer.PackCoalescedPacket(false, s.mtuDiscoverer.CurrentSize(), now, s.version)
 		if err != nil || packet == nil {
 			return err
 		}
@@ -1908,8 +1908,9 @@ func (s *connection) resetPacingDeadline() {
 }
 
 func (s *connection) maybeSendAckOnlyPacket() error {
+	now := time.Now()
 	if !s.handshakeConfirmed {
-		packet, err := s.packer.PackCoalescedPacket(true, s.mtuDiscoverer.CurrentSize(), s.version)
+		packet, err := s.packer.PackCoalescedPacket(true, s.mtuDiscoverer.CurrentSize(), now, s.version)
 		if err != nil {
 			return err
 		}
@@ -1920,8 +1921,7 @@ func (s *connection) maybeSendAckOnlyPacket() error {
 		return nil
 	}
 
-	now := time.Now()
-	p, buf, err := s.packer.PackAckOnlyPacket(s.mtuDiscoverer.CurrentSize(), s.version)
+	p, buf, err := s.packer.PackAckOnlyPacket(s.mtuDiscoverer.CurrentSize(), now, s.version)
 	if err != nil {
 		if err == errNothingToPack {
 			return nil
@@ -1935,6 +1935,7 @@ func (s *connection) maybeSendAckOnlyPacket() error {
 }
 
 func (s *connection) sendProbePacket(encLevel protocol.EncryptionLevel) error {
+	now := time.Now()
 	// Queue probe packets until we actually send out a packet,
 	// or until there are no more packets to queue.
 	var packet *coalescedPacket
@@ -1943,7 +1944,7 @@ func (s *connection) sendProbePacket(encLevel protocol.EncryptionLevel) error {
 			break
 		}
 		var err error
-		packet, err = s.packer.MaybePackProbePacket(encLevel, s.mtuDiscoverer.CurrentSize(), s.version)
+		packet, err = s.packer.MaybePackProbePacket(encLevel, s.mtuDiscoverer.CurrentSize(), now, s.version)
 		if err != nil {
 			return err
 		}
@@ -1964,7 +1965,7 @@ func (s *connection) sendProbePacket(encLevel protocol.EncryptionLevel) error {
 			panic("unexpected encryption level")
 		}
 		var err error
-		packet, err = s.packer.MaybePackProbePacket(encLevel, s.mtuDiscoverer.CurrentSize(), s.version)
+		packet, err = s.packer.MaybePackProbePacket(encLevel, s.mtuDiscoverer.CurrentSize(), now, s.version)
 		if err != nil {
 			return err
 		}
@@ -1972,7 +1973,7 @@ func (s *connection) sendProbePacket(encLevel protocol.EncryptionLevel) error {
 	if packet == nil || (len(packet.longHdrPackets) == 0 && packet.shortHdrPacket == nil) {
 		return fmt.Errorf("connection BUG: couldn't pack %s probe packet", encLevel)
 	}
-	s.sendPackedCoalescedPacket(packet, time.Now())
+	s.sendPackedCoalescedPacket(packet, now)
 	return nil
 }
 
@@ -1980,7 +1981,7 @@ func (s *connection) sendProbePacket(encLevel protocol.EncryptionLevel) error {
 // If there was nothing to pack, the returned size is 0.
 func (s *connection) appendPacket(buf *packetBuffer, maxSize protocol.ByteCount, now time.Time) (protocol.ByteCount, error) {
 	startLen := buf.Len()
-	p, err := s.packer.AppendPacket(buf, maxSize, s.version)
+	p, err := s.packer.AppendPacket(buf, maxSize, now, s.version)
 	if err != nil {
 		return 0, err
 	}
@@ -2023,14 +2024,14 @@ func (s *connection) sendConnectionClose(e error) ([]byte, error) {
 	var transportErr *qerr.TransportError
 	var applicationErr *qerr.ApplicationError
 	if errors.As(e, &transportErr) {
-		packet, err = s.packer.PackConnectionClose(transportErr, s.mtuDiscoverer.CurrentSize(), s.version)
+		packet, err = s.packer.PackConnectionClose(transportErr, s.mtuDiscoverer.CurrentSize(), time.Now(), s.version)
 	} else if errors.As(e, &applicationErr) {
-		packet, err = s.packer.PackApplicationClose(applicationErr, s.mtuDiscoverer.CurrentSize(), s.version)
+		packet, err = s.packer.PackApplicationClose(applicationErr, s.mtuDiscoverer.CurrentSize(), time.Now(), s.version)
 	} else {
 		packet, err = s.packer.PackConnectionClose(&qerr.TransportError{
 			ErrorCode:    qerr.InternalError,
 			ErrorMessage: fmt.Sprintf("connection BUG: unspecified error type (msg: %s)", e.Error()),
-		}, s.mtuDiscoverer.CurrentSize(), s.version)
+		}, s.mtuDiscoverer.CurrentSize(), time.Now(), s.version)
 	}
 	if err != nil {
 		return nil, err
