@@ -3,6 +3,7 @@
 package quic
 
 import (
+	"net"
 	"syscall"
 
 	"golang.org/x/sys/windows"
@@ -32,6 +33,10 @@ func inspectWriteBuffer(c syscall.RawConn) (int, error) {
 		return 0, err
 	}
 	return size, serr
+}
+
+type packetInfo struct {
+	addr net.IP
 }
 
 func (i *packetInfo) OOB() []byte { return nil }
