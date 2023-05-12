@@ -455,6 +455,7 @@ var _ = Describe("Timeout tests", func() {
 			case serverErr := <-serverErrChan:
 				Expect(serverErr).To(HaveOccurred())
 				Expect(serverErr.Error()).To(ContainSubstring(io.ErrClosedPipe.Error()))
+				defer ln.Close()
 			default:
 				Expect(ln.Close()).To(Succeed())
 				Eventually(serverErrChan).Should(Receive())
