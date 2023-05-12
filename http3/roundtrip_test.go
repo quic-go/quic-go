@@ -8,6 +8,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"sync/atomic"
 	"time"
 
 	"github.com/quic-go/quic-go"
@@ -304,10 +305,10 @@ var _ = Describe("RoundTripper", func() {
 
 	Context("closing", func() {
 		It("closes", func() {
-			rt.clients = make(map[string]roundTripCloser)
+			rt.clients = make(map[string]*roundTripCloserWithCount)
 			cl := NewMockRoundTripCloser(mockCtrl)
 			cl.EXPECT().Close()
-			rt.clients["foo.bar"] = cl
+			rt.clients["foo.bar"] = &roundTripCloserWithCount{cl, atomic.Int64{}}
 			err := rt.Close()
 			Expect(err).ToNot(HaveOccurred())
 			Expect(len(rt.clients)).To(BeZero())
@@ -318,6 +319,53 @@ var _ = Describe("RoundTripper", func() {
 			err := rt.Close()
 			Expect(err).ToNot(HaveOccurred())
 			Expect(len(rt.clients)).To(BeZero())
+		})
+
+		It("closes idle connections", func() {
+			Expect(len(rt.clients)).To(Equal(0))
+			req1, err := http.NewRequest("GET", "https://site1.com", nil)
+			Expect(err).ToNot(HaveOccurred())
+			req2, err := http.NewRequest("GET", "https://site2.com", nil)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(req1.Host).ToNot(Equal(req2.Host))
+			ctx1, cancel1 := context.WithCancel(context.Background())
+			ctx2, cancel2 := context.WithCancel(context.Background())
+			req1 = req1.WithContext(ctx1)
+			req2 = req2.WithContext(ctx2)
+			roundTripCalled := make(chan struct{})
+			reqFinished := make(chan struct{})
+			rt.newClient = func(hostname string, tlsConf *tls.Config, opts *roundTripperOpts, conf *quic.Config, dialer dialFunc) (roundTripCloser, error) {
+				cl := NewMockRoundTripCloser(mockCtrl)
+				cl.EXPECT().Close()
+				cl.EXPECT().RoundTripOpt(gomock.Any(), gomock.Any()).DoAndReturn(func(r *http.Request, _ RoundTripOpt) (*http.Response, error) {
+					roundTripCalled <- struct{}{}
+					<-r.Context().Done()
+					return nil, nil
+				})
+				return cl, nil
+			}
+			go func() {
+				rt.RoundTrip(req1)
+				reqFinished <- struct{}{}
+			}()
+			go func() {
+				rt.RoundTrip(req2)
+				reqFinished <- struct{}{}
+			}()
+			<-roundTripCalled
+			<-roundTripCalled
+			// Both two requests are started.
+			Expect(len(rt.clients)).To(Equal(2))
+			cancel1()
+			<-reqFinished
+			// req1 is finished
+			rt.CloseIdleConnections()
+			Expect(len(rt.clients)).To(Equal(1))
+			cancel2()
+			<-reqFinished
+			// all requests are finished
+			rt.CloseIdleConnections()
+			Expect(len(rt.clients)).To(Equal(0))
 		})
 	})
 
