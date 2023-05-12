@@ -375,11 +375,12 @@ var _ = Describe("HTTP tests", func() {
 	})
 
 	It("serves other QUIC connections", func() {
-		if version == protocol.VersionDraft29 {
-			Skip("This test only works on RFC versions")
-		}
 		tlsConf := getTLSConfig()
-		tlsConf.NextProtos = []string{"h3"}
+		if version == protocol.VersionDraft29 {
+			tlsConf.NextProtos = []string{http3.NextProtoH3Draft29}
+		} else {
+			tlsConf.NextProtos = []string{http3.NextProtoH3}
+		}
 		ln, err := quic.ListenAddr("localhost:0", tlsConf, nil)
 		Expect(err).ToNot(HaveOccurred())
 		defer ln.Close()
