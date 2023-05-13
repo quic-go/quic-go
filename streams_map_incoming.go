@@ -35,6 +35,10 @@ type incomingStreamsMap[T incomingStream] struct {
 	queueMaxStreamID func(*wire.MaxStreamsFrame)
 
 	closeErr error
+
+	// used for caching. Map access can be expensive
+	cachedLastStreamNum protocol.StreamNum
+	cachedLastStream    T
 }
 
 func newIncomingStreamsMap[T incomingStream](
@@ -44,15 +48,16 @@ func newIncomingStreamsMap[T incomingStream](
 	queueControlFrame func(wire.Frame),
 ) *incomingStreamsMap[T] {
 	return &incomingStreamsMap[T]{
-		newStreamChan:      make(chan struct{}, 1),
-		streamType:         streamType,
-		streams:            make(map[protocol.StreamNum]incomingStreamEntry[T]),
-		maxStream:          protocol.StreamNum(maxStreams),
-		maxNumStreams:      maxStreams,
-		newStream:          newStream,
-		nextStreamToOpen:   1,
-		nextStreamToAccept: 1,
-		queueMaxStreamID:   func(f *wire.MaxStreamsFrame) { queueControlFrame(f) },
+		newStreamChan:       make(chan struct{}, 1),
+		streamType:          streamType,
+		streams:             make(map[protocol.StreamNum]incomingStreamEntry[T]),
+		maxStream:           protocol.StreamNum(maxStreams),
+		maxNumStreams:       maxStreams,
+		newStream:           newStream,
+		nextStreamToOpen:    1,
+		nextStreamToAccept:  1,
+		queueMaxStreamID:    func(f *wire.MaxStreamsFrame) { queueControlFrame(f) },
+		cachedLastStreamNum: protocol.InvalidStreamNum,
 	}
 }
 
@@ -100,6 +105,14 @@ func (m *incomingStreamsMap[T]) AcceptStream(ctx context.Context) (T, error) {
 
 func (m *incomingStreamsMap[T]) GetOrOpenStream(num protocol.StreamNum) (T, error) {
 	m.mutex.RLock()
+	// Fast path. The last call to GetOrOpenStream was for the same stream number,
+	// so we can skip the map lookup.
+	if num == m.cachedLastStreamNum {
+		s := m.cachedLastStream
+		m.mutex.RUnlock()
+		return s, nil
+	}
+
 	if num > m.maxStream {
 		m.mutex.RUnlock()
 		return *new(T), streamError{
@@ -115,6 +128,8 @@ func (m *incomingStreamsMap[T]) GetOrOpenStream(num protocol.StreamNum) (T, erro
 		// If the stream was already queued for deletion, and is just waiting to be accepted, don't return it.
 		if entry, ok := m.streams[num]; ok && !entry.shouldDelete {
 			s = entry.stream
+			m.cachedLastStream = s
+			m.cachedLastStreamNum = num
 		}
 		m.mutex.RUnlock()
 		return s, nil
@@ -146,6 +161,9 @@ func (m *incomingStreamsMap[T]) DeleteStream(num protocol.StreamNum) error {
 }
 
 func (m *incomingStreamsMap[T]) deleteStream(num protocol.StreamNum) error {
+	m.cachedLastStreamNum = protocol.InvalidStreamNum
+	m.cachedLastStream = *new(T)
+
 	if _, ok := m.streams[num]; !ok {
 		return streamError{
 			message: "tried to delete unknown incoming stream %d",

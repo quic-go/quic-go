@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"math/rand"
+	"testing"
 	"time"
 
 	"github.com/quic-go/quic-go/internal/protocol"
@@ -308,3 +309,37 @@ var _ = Describe("Streams Map (incoming)", func() {
 		})
 	})
 })
+
+var Str *mockGenericStream
+
+func BenchmarkStreamsMapIncomingRepeatedAccess(b *testing.B) {
+	const numStreams = 500
+	m := newIncomingStreamsMap(
+		protocol.StreamTypeBidi,
+		func(num protocol.StreamNum) *mockGenericStream {
+			return &mockGenericStream{num: num}
+		},
+		numStreams,
+		func(frame wire.Frame) {},
+	)
+	for i := 0; i < numStreams; i++ {
+		if _, err := m.GetOrOpenStream(protocol.StreamNum(i)); err != nil {
+			b.Fatalf("failed to open stream: %s", err)
+		}
+	}
+	b.ResetTimer()
+
+	var str, lastStream *mockGenericStream
+	for i := 0; i < b.N; i++ {
+		var err error
+		str, err = m.GetOrOpenStream(numStreams / 2)
+		if err != nil {
+			b.Fatalf("failed to get stream: %s", err)
+		}
+		if i > 0 && str != lastStream {
+			b.Fatalf("got wrong stream (%v vs %v)", str, lastStream)
+		}
+		Str = str
+		lastStream = str
+	}
+}
