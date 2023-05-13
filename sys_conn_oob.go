@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"net/netip"
 	"syscall"
 	"time"
 
@@ -173,8 +174,7 @@ func (c *oobConn) ReadPacket() (receivedPacket, error) {
 
 	data := msg.OOB[:msg.NN]
 	var ecn protocol.ECN
-	var destIP net.IP
-	var ifIndex uint32
+	var info *packetInfo
 	for len(data) > 0 {
 		hdr, body, remainder, err := unix.ParseOneSocketControlMessage(data)
 		if err != nil {
@@ -191,15 +191,16 @@ func (c *oobConn) ReadPacket() (receivedPacket, error) {
 				// 	struct in_addr ipi_addr;     /* Header Destination
 				// 									address */
 				// };
-				ip := make([]byte, 4)
+				info = &packetInfo{}
+				var ip [4]byte
 				if len(body) == 12 {
-					ifIndex = binary.LittleEndian.Uint32(body)
-					copy(ip, body[8:12])
+					copy(ip[:], body[8:12])
+					info.ifIndex = binary.LittleEndian.Uint32(body)
 				} else if len(body) == 4 {
 					// FreeBSD
-					copy(ip, body)
+					copy(ip[:], body)
 				}
-				destIP = net.IP(ip)
+				info.addr = netip.AddrFrom4(ip)
 			}
 		}
 		if hdr.Level == unix.IPPROTO_IPV6 {
@@ -212,21 +213,16 @@ func (c *oobConn) ReadPacket() (receivedPacket, error) {
 				// 	unsigned int    ipi6_ifindex; /* send/recv interface index */
 				// };
 				if len(body) == 20 {
-					ip := make([]byte, 16)
-					copy(ip, body[:16])
-					destIP = net.IP(ip)
-					ifIndex = binary.LittleEndian.Uint32(body[16:])
+					var ip [16]byte
+					copy(ip[:], body[:16])
+					info = &packetInfo{
+						addr:    netip.AddrFrom16(ip),
+						ifIndex: binary.LittleEndian.Uint32(body[16:]),
+					}
 				}
 			}
 		}
 		data = remainder
-	}
-	var info *packetInfo
-	if destIP != nil {
-		info = &packetInfo{
-			addr:    destIP,
-			ifIndex: ifIndex,
-		}
 	}
 	return receivedPacket{
 		remoteAddr: msg.Addr,
@@ -265,7 +261,7 @@ func (c *oobConn) capabilities() connCapabilities {
 }
 
 type packetInfo struct {
-	addr    net.IP
+	addr    netip.Addr
 	ifIndex uint32
 }
 
@@ -273,24 +269,26 @@ func (info *packetInfo) OOB() []byte {
 	if info == nil {
 		return nil
 	}
-	if ip4 := info.addr.To4(); ip4 != nil {
+	if info.addr.Is4() {
+		ip := info.addr.As4()
 		// struct in_pktinfo {
 		// 	unsigned int   ipi_ifindex;  /* Interface index */
 		// 	struct in_addr ipi_spec_dst; /* Local address */
 		// 	struct in_addr ipi_addr;     /* Header Destination address */
 		// };
 		cm := ipv4.ControlMessage{
-			Src:     ip4,
+			Src:     ip[:],
 			IfIndex: int(info.ifIndex),
 		}
 		return cm.Marshal()
-	} else if len(info.addr) == 16 {
+	} else if info.addr.Is6() {
+		ip := info.addr.As16()
 		// struct in6_pktinfo {
 		// 	struct in6_addr ipi6_addr;    /* src/dst IPv6 address */
 		// 	unsigned int    ipi6_ifindex; /* send/recv interface index */
 		// };
 		cm := ipv6.ControlMessage{
-			Src:     info.addr,
+			Src:     ip[:],
 			IfIndex: int(info.ifIndex),
 		}
 		return cm.Marshal()
