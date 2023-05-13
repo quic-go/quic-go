@@ -162,17 +162,17 @@ func (mr *MockSentPacketHandlerMockRecorder) ResetForRetry() *gomock.Call {
 }
 
 // SendMode mocks base method.
-func (m *MockSentPacketHandler) SendMode() ackhandler.SendMode {
+func (m *MockSentPacketHandler) SendMode(arg0 time.Time) ackhandler.SendMode {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "SendMode")
+	ret := m.ctrl.Call(m, "SendMode", arg0)
 	ret0, _ := ret[0].(ackhandler.SendMode)
 	return ret0
 }
 
 // SendMode indicates an expected call of SendMode.
-func (mr *MockSentPacketHandlerMockRecorder) SendMode() *gomock.Call {
+func (mr *MockSentPacketHandlerMockRecorder) SendMode(arg0 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SendMode", reflect.TypeOf((*MockSentPacketHandler)(nil).SendMode))
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SendMode", reflect.TypeOf((*MockSentPacketHandler)(nil).SendMode), arg0)
 }
 
 // SentPacket mocks base method.
