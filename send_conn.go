@@ -60,7 +60,7 @@ func (c *sconn) LocalAddr() net.Addr {
 	if c.info != nil {
 		if udpAddr, ok := addr.(*net.UDPAddr); ok {
 			addrCopy := *udpAddr
-			addrCopy.IP = c.info.addr
+			addrCopy.IP = c.info.addr.AsSlice()
 			addr = &addrCopy
 		}
 	}
