@@ -173,7 +173,7 @@ type connection struct {
 	oneRTTStream        cryptoStream // only set for the server
 	cryptoStreamHandler cryptoStreamHandler
 
-	receivedPackets  chan *receivedPacket
+	receiveQueue     receiveQueue
 	sendingScheduled chan struct{}
 
 	closeOnce sync.Once
@@ -504,7 +504,7 @@ func (s *connection) preSetup() {
 		s.perspective,
 	)
 	s.framer = newFramer(s.streamsMap)
-	s.receivedPackets = make(chan *receivedPacket, protocol.MaxConnUnprocessedPackets)
+	s.receiveQueue = *newReceiveQueue(s.tracer)
 	s.closeChan = make(chan closeError, 1)
 	s.sendingScheduled = make(chan struct{}, 1)
 	s.handshakeCtx, s.handshakeCtxCancel = context.WithCancel(context.Background())
@@ -596,40 +596,39 @@ runLoop:
 				// We do all the interesting stuff after the switch statement, so
 				// nothing to see here.
 			case <-sendQueueAvailable:
-			case firstPacket := <-s.receivedPackets:
-				wasProcessed := s.handlePacketImpl(firstPacket)
-				// Don't set timers and send packets if the packet made us close the connection.
-				select {
-				case closeErr = <-s.closeChan:
-					break runLoop
-				default:
-				}
+			case <-s.receiveQueue.Chan():
+				const maxBatchSize = 128
+				batchProcessingSize := 1
 				if s.handshakeComplete {
 					// Now process all packets in the receivedPackets channel.
 					// Limit the number of packets to the length of the receivedPackets channel,
 					// so we eventually get a chance to send out an ACK when receiving a lot of packets.
-					numPackets := len(s.receivedPackets)
-				receiveLoop:
-					for i := 0; i < numPackets; i++ {
-						select {
-						case p := <-s.receivedPackets:
-							if processed := s.handlePacketImpl(p); processed {
-								wasProcessed = true
-							}
-							select {
-							case closeErr = <-s.closeChan:
-								break runLoop
-							default:
-							}
-						default:
-							break receiveLoop
+					batchProcessingSize = maxBatchSize
+				}
+				var processedAtLeastOnePacket bool
+			receiveLoop:
+				for i := 0; i < batchProcessingSize; i++ {
+					p := s.receiveQueue.Pop()
+					if p == nil {
+						if i == 0 {
+							continue runLoop
 						}
+						break receiveLoop
+					}
+					if processed := s.handlePacketImpl(p); processed {
+						processedAtLeastOnePacket = true
+					}
+					// Don't set timers and send packets if the packet made us close the connection.
+					select {
+					case closeErr = <-s.closeChan:
+						break runLoop
+					default:
 					}
 				}
 				// Only reset the timers if this packet was actually processed.
 				// This avoids modifying any state when handling undecryptable packets,
 				// which could be injected by an attacker.
-				if !wasProcessed {
+				if !processedAtLeastOnePacket {
 					continue
 				}
 			case <-s.handshakeCompleteChan:
@@ -1332,17 +1331,7 @@ func (s *connection) handleFrame(f wire.Frame, encLevel protocol.EncryptionLevel
 }
 
 // handlePacket is called by the server with a new packet
-func (s *connection) handlePacket(p *receivedPacket) {
-	// Discard packets once the amount of queued packets is larger than
-	// the channel size, protocol.MaxConnUnprocessedPackets
-	select {
-	case s.receivedPackets <- p:
-	default:
-		if s.tracer != nil {
-			s.tracer.DroppedPacket(logging.PacketTypeNotDetermined, p.Size(), logging.PacketDropDOSPrevention)
-		}
-	}
-}
+func (s *connection) handlePacket(p *receivedPacket) { s.receiveQueue.Add(p) }
 
 func (s *connection) handleConnectionCloseFrame(frame *wire.ConnectionCloseFrame) {
 	if frame.IsApplicationError {
@@ -1837,7 +1826,7 @@ func (s *connection) sendPacketsWithoutGSO(now time.Time) error {
 			return nil
 		}
 		// Prioritize receiving of packets over sending out more packets.
-		if len(s.receivedPackets) > 0 {
+		if s.receiveQueue.HasPackets() {
 			s.pacingDeadline = deadlineSendImmediately
 			return nil
 		}
@@ -1890,7 +1879,7 @@ func (s *connection) sendPacketsWithGSO(now time.Time) error {
 		}
 
 		// Prioritize receiving of packets over sending out more packets.
-		if len(s.receivedPackets) > 0 {
+		if s.receiveQueue.HasPackets() {
 			s.pacingDeadline = deadlineSendImmediately
 			return nil
 		}
