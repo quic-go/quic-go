@@ -31,7 +31,7 @@ var _ = Describe("Server", func() {
 		tlsConf *tls.Config
 	)
 
-	getPacket := func(hdr *wire.Header, p []byte) *receivedPacket {
+	getPacket := func(hdr *wire.Header, p []byte) receivedPacket {
 		buf := getPacketBuffer()
 		hdr.Length = 4 + protocol.ByteCount(len(p)) + 16
 		var err error
@@ -48,14 +48,14 @@ var _ = Describe("Server", func() {
 		_ = sealer.Seal(data[n:n], data[n:], 0x42, data[:n])
 		data = data[:len(data)+16]
 		sealer.EncryptHeader(data[n:n+16], &data[0], data[n-4:n])
-		return &receivedPacket{
+		return receivedPacket{
 			remoteAddr: &net.UDPAddr{IP: net.IPv4(4, 5, 6, 7), Port: 456},
 			data:       data,
 			buffer:     buf,
 		}
 	}
 
-	getInitial := func(destConnID protocol.ConnectionID) *receivedPacket {
+	getInitial := func(destConnID protocol.ConnectionID) receivedPacket {
 		senderAddr := &net.UDPAddr{IP: net.IPv4(1, 2, 3, 4), Port: 42}
 		hdr := &wire.Header{
 			Type:             protocol.PacketTypeInitial,
@@ -69,7 +69,7 @@ var _ = Describe("Server", func() {
 		return p
 	}
 
-	getInitialWithRandomDestConnID := func() *receivedPacket {
+	getInitialWithRandomDestConnID := func() receivedPacket {
 		b := make([]byte, 10)
 		_, err := rand.Read(b)
 		Expect(err).ToNot(HaveOccurred())
@@ -236,7 +236,7 @@ var _ = Describe("Server", func() {
 				conn := NewMockPacketHandler(mockCtrl)
 				phm.EXPECT().Get(connID).Return(conn, true)
 				handled := make(chan struct{})
-				conn.EXPECT().handlePacket(p).Do(func(*receivedPacket) { close(handled) })
+				conn.EXPECT().handlePacket(p).Do(func(receivedPacket) { close(handled) })
 				serv.handlePacket(p)
 				Eventually(handled).Should(BeClosed())
 			})
@@ -385,7 +385,7 @@ var _ = Describe("Server", func() {
 				tracer.EXPECT().DroppedPacket(raddr, logging.PacketTypeVersionNegotiation, protocol.ByteCount(len(data)), logging.PacketDropUnexpectedPacket).Do(func(net.Addr, logging.PacketType, protocol.ByteCount, logging.PacketDropReason) {
 					close(done)
 				})
-				serv.handlePacket(&receivedPacket{
+				serv.handlePacket(receivedPacket{
 					remoteAddr: raddr,
 					data:       data,
 					buffer:     getPacketBuffer(),
@@ -1040,7 +1040,7 @@ var _ = Describe("Server", func() {
 					return ok
 				})
 				serv.handleInitialImpl(
-					&receivedPacket{buffer: getPacketBuffer()},
+					receivedPacket{buffer: getPacketBuffer()},
 					&wire.Header{DestConnectionID: protocol.ParseConnectionID([]byte{1, 2, 3, 4, 5, 6, 7, 8})},
 				)
 				Consistently(done).ShouldNot(BeClosed())
@@ -1065,7 +1065,7 @@ var _ = Describe("Server", func() {
 					return len(b), nil
 				})
 				serv.handleInitialImpl(
-					&receivedPacket{buffer: getPacketBuffer()},
+					receivedPacket{buffer: getPacketBuffer()},
 					&wire.Header{DestConnectionID: protocol.ParseConnectionID([]byte{1, 2, 3, 4, 5, 6, 7, 8}), Version: protocol.Version1},
 				)
 				Eventually(done).Should(BeClosed())
@@ -1116,7 +1116,7 @@ var _ = Describe("Server", func() {
 					return ok
 				})
 				serv.handleInitialImpl(
-					&receivedPacket{buffer: getPacketBuffer()},
+					receivedPacket{buffer: getPacketBuffer()},
 					&wire.Header{DestConnectionID: protocol.ParseConnectionID([]byte{1, 2, 3, 4, 5, 6, 7, 8})},
 				)
 				Consistently(done).ShouldNot(BeClosed())
@@ -1189,7 +1189,7 @@ var _ = Describe("Server", func() {
 				return ok
 			})
 			serv.baseServer.handleInitialImpl(
-				&receivedPacket{buffer: getPacketBuffer()},
+				receivedPacket{buffer: getPacketBuffer()},
 				&wire.Header{DestConnectionID: protocol.ParseConnectionID([]byte{1, 2, 3, 4, 5, 6, 7, 8})},
 			)
 			Consistently(done).ShouldNot(BeClosed())
@@ -1352,7 +1352,7 @@ var _ = Describe("Server", func() {
 			conn := NewMockPacketHandler(mockCtrl)
 			phm.EXPECT().Get(connID).Return(conn, true)
 			handled := make(chan struct{})
-			conn.EXPECT().handlePacket(p).Do(func(*receivedPacket) { close(handled) })
+			conn.EXPECT().handlePacket(p).Do(func(receivedPacket) { close(handled) })
 			serv.handlePacket(p)
 			Eventually(handled).Should(BeClosed())
 		})
@@ -1360,7 +1360,7 @@ var _ = Describe("Server", func() {
 		It("queues 0-RTT packets, up to Max0RTTQueueSize", func() {
 			connID := protocol.ParseConnectionID([]byte{1, 2, 3, 4, 5, 6, 7, 8})
 
-			var zeroRTTPackets []*receivedPacket
+			var zeroRTTPackets []receivedPacket
 
 			for i := 0; i < protocol.Max0RTTQueueLen; i++ {
 				p := getPacket(&wire.Header{

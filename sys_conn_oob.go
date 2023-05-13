@@ -148,7 +148,7 @@ func newConn(c OOBCapablePacketConn, supportsDF bool) (*oobConn, error) {
 	return oobConn, nil
 }
 
-func (c *oobConn) ReadPacket() (*receivedPacket, error) {
+func (c *oobConn) ReadPacket() (receivedPacket, error) {
 	if len(c.messages) == int(c.readPos) { // all messages read. Read the next batch of messages.
 		c.messages = c.messages[:batchSize]
 		// replace buffers data buffers up to the packet that has been consumed during the last ReadBatch call
@@ -162,7 +162,7 @@ func (c *oobConn) ReadPacket() (*receivedPacket, error) {
 
 		n, err := c.batchConn.ReadBatch(c.messages, 0)
 		if n == 0 || err != nil {
-			return nil, err
+			return receivedPacket{}, err
 		}
 		c.messages = c.messages[:n]
 	}
@@ -178,7 +178,7 @@ func (c *oobConn) ReadPacket() (*receivedPacket, error) {
 	for len(data) > 0 {
 		hdr, body, remainder, err := unix.ParseOneSocketControlMessage(data)
 		if err != nil {
-			return nil, err
+			return receivedPacket{}, err
 		}
 		if hdr.Level == unix.IPPROTO_IP {
 			switch hdr.Type {
@@ -228,7 +228,7 @@ func (c *oobConn) ReadPacket() (*receivedPacket, error) {
 			ifIndex: ifIndex,
 		}
 	}
-	return &receivedPacket{
+	return receivedPacket{
 		remoteAddr: msg.Addr,
 		rcvTime:    time.Now(),
 		data:       msg.Buffers[0][:msg.N],

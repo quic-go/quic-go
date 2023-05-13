@@ -74,7 +74,7 @@ type Transport struct {
 	conn rawConn
 
 	closeQueue          chan closePacket
-	statelessResetQueue chan *receivedPacket
+	statelessResetQueue chan receivedPacket
 
 	listening   chan struct{} // is closed when listen returns
 	closed      bool
@@ -197,7 +197,7 @@ func (t *Transport) init(isServer bool) error {
 		t.listening = make(chan struct{})
 
 		t.closeQueue = make(chan closePacket, 4)
-		t.statelessResetQueue = make(chan *receivedPacket, 4)
+		t.statelessResetQueue = make(chan receivedPacket, 4)
 
 		if t.ConnectionIDGenerator != nil {
 			t.connIDGenerator = t.ConnectionIDGenerator
@@ -339,7 +339,7 @@ func (t *Transport) listen(conn rawConn) {
 	}
 }
 
-func (t *Transport) handlePacket(p *receivedPacket) {
+func (t *Transport) handlePacket(p receivedPacket) {
 	connID, err := wire.ParseConnectionID(p.data, t.connIDLen)
 	if err != nil {
 		t.logger.Debugf("error parsing connection ID on packet from %s: %s", p.remoteAddr, err)
@@ -371,7 +371,7 @@ func (t *Transport) handlePacket(p *receivedPacket) {
 	t.server.handlePacket(p)
 }
 
-func (t *Transport) maybeSendStatelessReset(p *receivedPacket) {
+func (t *Transport) maybeSendStatelessReset(p receivedPacket) {
 	if t.StatelessResetKey == nil {
 		p.buffer.Release()
 		return
@@ -392,7 +392,7 @@ func (t *Transport) maybeSendStatelessReset(p *receivedPacket) {
 	}
 }
 
-func (t *Transport) sendStatelessReset(p *receivedPacket) {
+func (t *Transport) sendStatelessReset(p receivedPacket) {
 	defer p.buffer.Release()
 
 	connID, err := wire.ParseConnectionID(p.data, t.connIDLen)

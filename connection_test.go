@@ -592,7 +592,7 @@ var _ = Describe("Connection", func() {
 				tracer.EXPECT().Close(),
 			)
 			// don't EXPECT any calls to packer.PackPacket()
-			conn.handlePacket(&receivedPacket{
+			conn.handlePacket(receivedPacket{
 				rcvTime:    time.Now(),
 				remoteAddr: &net.UDPAddr{},
 				buffer:     getPacketBuffer(),
@@ -654,20 +654,20 @@ var _ = Describe("Connection", func() {
 			conn.unpacker = unpacker
 		})
 
-		getShortHeaderPacket := func(connID protocol.ConnectionID, pn protocol.PacketNumber, data []byte) *receivedPacket {
+		getShortHeaderPacket := func(connID protocol.ConnectionID, pn protocol.PacketNumber, data []byte) receivedPacket {
 			b, err := wire.AppendShortHeader(nil, connID, pn, protocol.PacketNumberLen2, protocol.KeyPhaseOne)
 			Expect(err).ToNot(HaveOccurred())
-			return &receivedPacket{
+			return receivedPacket{
 				data:    append(b, data...),
 				buffer:  getPacketBuffer(),
 				rcvTime: time.Now(),
 			}
 		}
 
-		getLongHeaderPacket := func(extHdr *wire.ExtendedHeader, data []byte) *receivedPacket {
+		getLongHeaderPacket := func(extHdr *wire.ExtendedHeader, data []byte) receivedPacket {
 			b, err := extHdr.Append(nil, conn.version)
 			Expect(err).ToNot(HaveOccurred())
-			return &receivedPacket{
+			return receivedPacket{
 				data:    append(b, data...),
 				buffer:  getPacketBuffer(),
 				rcvTime: time.Now(),
@@ -693,7 +693,7 @@ var _ = Describe("Connection", func() {
 				conn.config.Versions,
 			)
 			tracer.EXPECT().DroppedPacket(logging.PacketTypeVersionNegotiation, protocol.ByteCount(len(b)), logging.PacketDropUnexpectedPacket)
-			Expect(conn.handlePacketImpl(&receivedPacket{
+			Expect(conn.handlePacketImpl(receivedPacket{
 				data:   b,
 				buffer: getPacketBuffer(),
 			})).To(BeFalse())
@@ -1036,7 +1036,7 @@ var _ = Describe("Connection", func() {
 			packet := getLongHeaderPacket(hdr, nil)
 			tracer.EXPECT().BufferedPacket(logging.PacketTypeHandshake, packet.Size())
 			Expect(conn.handlePacketImpl(packet)).To(BeFalse())
-			Expect(conn.undecryptablePackets).To(Equal([]*receivedPacket{packet}))
+			Expect(conn.undecryptablePackets).To(Equal([]receivedPacket{packet}))
 		})
 
 		Context("updating the remote address", func() {
@@ -1053,7 +1053,7 @@ var _ = Describe("Connection", func() {
 			BeforeEach(func() {
 				tracer.EXPECT().StartedConnection(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).MaxTimes(1)
 			})
-			getPacketWithLength := func(connID protocol.ConnectionID, length protocol.ByteCount) (int /* header length */, *receivedPacket) {
+			getPacketWithLength := func(connID protocol.ConnectionID, length protocol.ByteCount) (int /* header length */, receivedPacket) {
 				hdr := &wire.ExtendedHeader{
 					Header: wire.Header{
 						Type:             protocol.PacketTypeHandshake,
@@ -1612,7 +1612,7 @@ var _ = Describe("Connection", func() {
 			sender.EXPECT().WouldBlock().AnyTimes()
 			sph.EXPECT().SentPacket(gomock.Any()).Do(func(*ackhandler.Packet) {
 				sph.EXPECT().ReceivedBytes(gomock.Any())
-				conn.handlePacket(&receivedPacket{buffer: getPacketBuffer()})
+				conn.handlePacket(receivedPacket{buffer: getPacketBuffer()})
 			})
 			sph.EXPECT().SendMode().Return(ackhandler.SendAny).AnyTimes()
 			expectAppendPacket(packer, shortHeaderPacket{Packet: &ackhandler.Packet{PacketNumber: 10}}, []byte("packet10"))
@@ -2316,7 +2316,7 @@ var _ = Describe("Connection", func() {
 		})
 		// Nothing here should block
 		for i := protocol.PacketNumber(0); i < protocol.MaxConnUnprocessedPackets+1; i++ {
-			conn.handlePacket(&receivedPacket{data: []byte("foobar")})
+			conn.handlePacket(receivedPacket{data: []byte("foobar")})
 		}
 		Eventually(done).Should(BeClosed())
 	})
@@ -2398,10 +2398,10 @@ var _ = Describe("Client Connection", func() {
 	srcConnID := protocol.ParseConnectionID([]byte{1, 2, 3, 4, 5, 6, 7, 8})
 	destConnID := protocol.ParseConnectionID([]byte{8, 7, 6, 5, 4, 3, 2, 1})
 
-	getPacket := func(hdr *wire.ExtendedHeader, data []byte) *receivedPacket {
+	getPacket := func(hdr *wire.ExtendedHeader, data []byte) receivedPacket {
 		b, err := hdr.Append(nil, conn.version)
 		Expect(err).ToNot(HaveOccurred())
-		return &receivedPacket{
+		return receivedPacket{
 			data:   append(b, data...),
 			buffer: getPacketBuffer(),
 		}
@@ -2519,7 +2519,7 @@ var _ = Describe("Client Connection", func() {
 			SrcConnectionID:  destConnID,
 		}
 		tracer.EXPECT().ReceivedLongHeaderPacket(gomock.Any(), gomock.Any(), gomock.Any())
-		Expect(conn.handleLongHeaderPacket(&receivedPacket{buffer: getPacketBuffer()}, hdr)).To(BeTrue())
+		Expect(conn.handleLongHeaderPacket(receivedPacket{buffer: getPacketBuffer()}, hdr)).To(BeTrue())
 	})
 
 	It("handles HANDSHAKE_DONE frames", func() {
@@ -2580,13 +2580,13 @@ var _ = Describe("Client Connection", func() {
 	})
 
 	Context("handling Version Negotiation", func() {
-		getVNP := func(versions ...protocol.VersionNumber) *receivedPacket {
+		getVNP := func(versions ...protocol.VersionNumber) receivedPacket {
 			b := wire.ComposeVersionNegotiation(
 				protocol.ArbitraryLenConnectionID(srcConnID.Bytes()),
 				protocol.ArbitraryLenConnectionID(destConnID.Bytes()),
 				versions,
 			)
-			return &receivedPacket{
+			return receivedPacket{
 				data:   b,
 				buffer: getPacketBuffer(),
 			}
@@ -2892,18 +2892,18 @@ var _ = Describe("Client Connection", func() {
 	Context("handling potentially injected packets", func() {
 		var unpacker *MockUnpacker
 
-		getPacket := func(extHdr *wire.ExtendedHeader, data []byte) *receivedPacket {
+		getPacket := func(extHdr *wire.ExtendedHeader, data []byte) receivedPacket {
 			b, err := extHdr.Append(nil, conn.version)
 			Expect(err).ToNot(HaveOccurred())
-			return &receivedPacket{
+			return receivedPacket{
 				data:   append(b, data...),
 				buffer: getPacketBuffer(),
 			}
 		}
 
 		// Convert an already packed raw packet into a receivedPacket
-		wrapPacket := func(packet []byte) *receivedPacket {
-			return &receivedPacket{
+		wrapPacket := func(packet []byte) receivedPacket {
+			return receivedPacket{
 				data:   packet,
 				buffer: getPacketBuffer(),
 			}

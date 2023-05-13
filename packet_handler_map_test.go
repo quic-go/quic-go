@@ -129,7 +129,7 @@ var _ = Describe("Packet Handler Map", func() {
 		Expect(ok).To(BeTrue())
 		Expect(h).ToNot(Equal(handler))
 		addr := &net.UDPAddr{IP: net.IPv4(1, 2, 3, 4), Port: 1234}
-		h.handlePacket(&receivedPacket{remoteAddr: addr})
+		h.handlePacket(receivedPacket{remoteAddr: addr})
 		Expect(closePackets).To(HaveLen(1))
 		Expect(closePackets[0].addr).To(Equal(addr))
 		Expect(closePackets[0].payload).To(Equal([]byte("foobar")))
@@ -152,7 +152,7 @@ var _ = Describe("Packet Handler Map", func() {
 		Expect(ok).To(BeTrue())
 		Expect(h).ToNot(Equal(handler))
 		addr := &net.UDPAddr{IP: net.IPv4(1, 2, 3, 4), Port: 1234}
-		h.handlePacket(&receivedPacket{remoteAddr: addr})
+		h.handlePacket(receivedPacket{remoteAddr: addr})
 		Expect(closePackets).To(BeEmpty())
 
 		time.Sleep(dur)
