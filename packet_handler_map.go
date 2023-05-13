@@ -39,7 +39,7 @@ type rawConn interface {
 type closePacket struct {
 	payload []byte
 	addr    net.Addr
-	info    *packetInfo
+	info    packetInfo
 }
 
 type unknownPacketHandler interface {
@@ -177,7 +177,7 @@ func (h *packetHandlerMap) ReplaceWithClosed(ids []protocol.ConnectionID, pers p
 	var handler packetHandler
 	if connClosePacket != nil {
 		handler = newClosedLocalConn(
-			func(addr net.Addr, info *packetInfo) {
+			func(addr net.Addr, info packetInfo) {
 				h.enqueueClosePacket(closePacket{payload: connClosePacket, addr: addr, info: info})
 			},
 			pers,

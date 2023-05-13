@@ -16,13 +16,13 @@ type closedLocalConn struct {
 	perspective protocol.Perspective
 	logger      utils.Logger
 
-	sendPacket func(net.Addr, *packetInfo)
+	sendPacket func(net.Addr, packetInfo)
 }
 
 var _ packetHandler = &closedLocalConn{}
 
 // newClosedLocalConn creates a new closedLocalConn and runs it.
-func newClosedLocalConn(sendPacket func(net.Addr, *packetInfo), pers protocol.Perspective, logger utils.Logger) packetHandler {
+func newClosedLocalConn(sendPacket func(net.Addr, packetInfo), pers protocol.Perspective, logger utils.Logger) packetHandler {
 	return &closedLocalConn{
 		sendPacket:  sendPacket,
 		perspective: pers,

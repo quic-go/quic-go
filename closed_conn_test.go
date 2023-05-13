@@ -21,7 +21,7 @@ var _ = Describe("Closed local connection", func() {
 	It("repeats the packet containing the CONNECTION_CLOSE frame", func() {
 		written := make(chan net.Addr, 1)
 		conn := newClosedLocalConn(
-			func(addr net.Addr, _ *packetInfo) { written <- addr },
+			func(addr net.Addr, _ packetInfo) { written <- addr },
 			protocol.PerspectiveClient,
 			utils.DefaultLogger,
 		)

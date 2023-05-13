@@ -70,7 +70,7 @@ type receivedPacket struct {
 
 	ecn protocol.ECN
 
-	info *packetInfo
+	info packetInfo // only valid if the contained IP address is valid
 }
 
 func (p *receivedPacket) Size() protocol.ByteCount { return protocol.ByteCount(len(p.data)) }
