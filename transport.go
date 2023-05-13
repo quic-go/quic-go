@@ -326,7 +326,7 @@ func (t *Transport) listen(conn rawConn) {
 	}
 }
 
-func (t *Transport) handlePacket(p *receivedPacket) {
+func (t *Transport) handlePacket(p receivedPacket) {
 	connID, err := wire.ParseConnectionID(p.data, t.connIDLen)
 	if err != nil {
 		t.logger.Debugf("error parsing connection ID on packet from %s: %s", p.remoteAddr, err)
@@ -358,7 +358,7 @@ func (t *Transport) handlePacket(p *receivedPacket) {
 	t.server.handlePacket(p)
 }
 
-func (t *Transport) maybeSendStatelessReset(p *receivedPacket, connID protocol.ConnectionID) {
+func (t *Transport) maybeSendStatelessReset(p receivedPacket, connID protocol.ConnectionID) {
 	defer p.buffer.Release()
 	if t.StatelessResetKey == nil {
 		return

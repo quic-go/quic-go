@@ -30,7 +30,7 @@ func newClosedLocalConn(sendPacket func(net.Addr, *packetInfo), pers protocol.Pe
 	}
 }
 
-func (c *closedLocalConn) handlePacket(p *receivedPacket) {
+func (c *closedLocalConn) handlePacket(p receivedPacket) {
 	c.counter++
 	// exponential backoff
 	// only send a CONNECTION_CLOSE for the 1st, 2nd, 4th, 8th, 16th, ... packet arriving
@@ -58,7 +58,7 @@ func newClosedRemoteConn(pers protocol.Perspective) packetHandler {
 	return &closedRemoteConn{perspective: pers}
 }
 
-func (s *closedRemoteConn) handlePacket(*receivedPacket)         {}
+func (s *closedRemoteConn) handlePacket(receivedPacket)          {}
 func (s *closedRemoteConn) shutdown()                            {}
 func (s *closedRemoteConn) destroy(error)                        {}
 func (s *closedRemoteConn) getPerspective() protocol.Perspective { return s.perspective }

@@ -25,7 +25,7 @@ type connCapabilities struct {
 
 // rawConn is a connection that allow reading of a receivedPackeh.
 type rawConn interface {
-	ReadPacket() (*receivedPacket, error)
+	ReadPacket() (receivedPacket, error)
 	// The size parameter is used for GSO.
 	// If GSO is not support, len(b) must be equal to size.
 	WritePacket(b []byte, size uint16, addr net.Addr, oob []byte) (int, error)
@@ -43,7 +43,7 @@ type closePacket struct {
 }
 
 type unknownPacketHandler interface {
-	handlePacket(*receivedPacket)
+	handlePacket(receivedPacket)
 	setCloseError(error)
 }
 
