@@ -64,17 +64,17 @@ func (mr *MockSendAlgorithmWithDebugInfosMockRecorder) GetCongestionWindow() *go
 }
 
 // HasPacingBudget mocks base method.
-func (m *MockSendAlgorithmWithDebugInfos) HasPacingBudget() bool {
+func (m *MockSendAlgorithmWithDebugInfos) HasPacingBudget(arg0 time.Time) bool {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "HasPacingBudget")
+	ret := m.ctrl.Call(m, "HasPacingBudget", arg0)
 	ret0, _ := ret[0].(bool)
 	return ret0
 }
 
 // HasPacingBudget indicates an expected call of HasPacingBudget.
-func (mr *MockSendAlgorithmWithDebugInfosMockRecorder) HasPacingBudget() *gomock.Call {
+func (mr *MockSendAlgorithmWithDebugInfosMockRecorder) HasPacingBudget(arg0 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HasPacingBudget", reflect.TypeOf((*MockSendAlgorithmWithDebugInfos)(nil).HasPacingBudget))
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HasPacingBudget", reflect.TypeOf((*MockSendAlgorithmWithDebugInfos)(nil).HasPacingBudget), arg0)
 }
 
 // InRecovery mocks base method.

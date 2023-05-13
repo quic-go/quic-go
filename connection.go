@@ -1717,12 +1717,13 @@ func (s *connection) applyTransportParameters() {
 
 func (s *connection) triggerSending() error {
 	s.pacingDeadline = time.Time{}
+	now := time.Now()
 
-	sendMode := s.sentPacketHandler.SendMode()
+	sendMode := s.sentPacketHandler.SendMode(now)
 	//nolint:exhaustive // No need to handle pacing limited here.
 	switch sendMode {
 	case ackhandler.SendAny:
-		return s.sendPackets()
+		return s.sendPackets(now)
 	case ackhandler.SendNone:
 		return nil
 	case ackhandler.SendPacingLimited:
@@ -1739,9 +1740,9 @@ func (s *connection) triggerSending() error {
 		// We can at most send a single ACK only packet.
 		// There will only be a new ACK after receiving new packets.
 		// SendAck is only returned when we're congestion limited, so we don't need to set the pacinggs timer.
-		return s.maybeSendAckOnlyPacket()
+		return s.maybeSendAckOnlyPacket(now)
 	case ackhandler.SendPTOInitial:
-		if err := s.sendProbePacket(protocol.EncryptionInitial); err != nil {
+		if err := s.sendProbePacket(protocol.EncryptionInitial, now); err != nil {
 			return err
 		}
 		if s.sendQueue.WouldBlock() {
@@ -1750,7 +1751,7 @@ func (s *connection) triggerSending() error {
 		}
 		return s.triggerSending()
 	case ackhandler.SendPTOHandshake:
-		if err := s.sendProbePacket(protocol.EncryptionHandshake); err != nil {
+		if err := s.sendProbePacket(protocol.EncryptionHandshake, now); err != nil {
 			return err
 		}
 		if s.sendQueue.WouldBlock() {
@@ -1759,7 +1760,7 @@ func (s *connection) triggerSending() error {
 		}
 		return s.triggerSending()
 	case ackhandler.SendPTOAppData:
-		if err := s.sendProbePacket(protocol.Encryption1RTT); err != nil {
+		if err := s.sendProbePacket(protocol.Encryption1RTT, now); err != nil {
 			return err
 		}
 		if s.sendQueue.WouldBlock() {
@@ -1772,8 +1773,7 @@ func (s *connection) triggerSending() error {
 	}
 }
 
-func (s *connection) sendPackets() error {
-	now := time.Now()
+func (s *connection) sendPackets(now time.Time) error {
 	// Path MTU Discovery
 	// Can't use GSO, since we need to send a single packet that's larger than our current maximum size.
 	// Performance-wise, this doesn't matter, since we only send a very small (<10) number of
@@ -1804,7 +1804,7 @@ func (s *connection) sendPackets() error {
 		}
 		s.sentFirstPacket = true
 		s.sendPackedCoalescedPacket(packet, now)
-		sendMode := s.sentPacketHandler.SendMode()
+		sendMode := s.sentPacketHandler.SendMode(now)
 		if sendMode == ackhandler.SendPacingLimited {
 			s.resetPacingDeadline()
 		} else if sendMode == ackhandler.SendAny {
@@ -1835,7 +1835,7 @@ func (s *connection) sendPacketsWithoutGSO(now time.Time) error {
 		if s.sendQueue.WouldBlock() {
 			return nil
 		}
-		sendMode := s.sentPacketHandler.SendMode()
+		sendMode := s.sentPacketHandler.SendMode(now)
 		if sendMode == ackhandler.SendPacingLimited {
 			s.resetPacingDeadline()
 			return nil
@@ -1870,7 +1870,7 @@ func (s *connection) sendPacketsWithGSO(now time.Time) error {
 		}
 
 		if !dontSendMore {
-			sendMode := s.sentPacketHandler.SendMode()
+			sendMode := s.sentPacketHandler.SendMode(now)
 			if sendMode == ackhandler.SendPacingLimited {
 				s.resetPacingDeadline()
 			}
@@ -1914,8 +1914,7 @@ func (s *connection) resetPacingDeadline() {
 	s.pacingDeadline = deadline
 }
 
-func (s *connection) maybeSendAckOnlyPacket() error {
-	now := time.Now()
+func (s *connection) maybeSendAckOnlyPacket(now time.Time) error {
 	if !s.handshakeConfirmed {
 		packet, err := s.packer.PackCoalescedPacket(true, s.mtuDiscoverer.CurrentSize(), now, s.version)
 		if err != nil {
@@ -1941,8 +1940,7 @@ func (s *connection) maybeSendAckOnlyPacket() error {
 	return nil
 }
 
-func (s *connection) sendProbePacket(encLevel protocol.EncryptionLevel) error {
-	now := time.Now()
+func (s *connection) sendProbePacket(encLevel protocol.EncryptionLevel, now time.Time) error {
 	// Queue probe packets until we actually send out a packet,
 	// or until there are no more packets to queue.
 	var packet *coalescedPacket

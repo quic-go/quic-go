@@ -719,7 +719,7 @@ func (h *sentPacketHandler) PopPacketNumber(encLevel protocol.EncryptionLevel) p
 	return h.getPacketNumberSpace(encLevel).pns.Pop()
 }
 
-func (h *sentPacketHandler) SendMode() SendMode {
+func (h *sentPacketHandler) SendMode(now time.Time) SendMode {
 	numTrackedPackets := h.appDataPackets.history.Len()
 	if h.initialPackets != nil {
 		numTrackedPackets += h.initialPackets.history.Len()
@@ -758,7 +758,7 @@ func (h *sentPacketHandler) SendMode() SendMode {
 		}
 		return SendAck
 	}
-	if !h.congestion.HasPacingBudget() {
+	if !h.congestion.HasPacingBudget(now) {
 		return SendPacingLimited
 	}
 	return SendAny
@@ -766,10 +766,6 @@ func (h *sentPacketHandler) SendMode() SendMode {
 
 func (h *sentPacketHandler) TimeUntilSend() time.Time {
 	return h.congestion.TimeUntilSend(h.bytesInFlight)
-}
-
-func (h *sentPacketHandler) HasPacingBudget() bool {
-	return h.congestion.HasPacingBudget()
 }
 
 func (h *sentPacketHandler) SetMaxDatagramSize(s protocol.ByteCount) {
