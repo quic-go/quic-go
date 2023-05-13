@@ -19,7 +19,7 @@ import (
 )
 
 var _ = Describe("OOB Conn Test", func() {
-	runServer := func(network, address string) (*net.UDPConn, <-chan *receivedPacket) {
+	runServer := func(network, address string) (*net.UDPConn, <-chan receivedPacket) {
 		addr, err := net.ResolveUDPAddr(network, address)
 		Expect(err).ToNot(HaveOccurred())
 		udpConn, err := net.ListenUDP(network, addr)
@@ -28,7 +28,7 @@ var _ = Describe("OOB Conn Test", func() {
 		Expect(err).ToNot(HaveOccurred())
 		Expect(oobConn.capabilities().DF).To(BeTrue())
 
-		packetChan := make(chan *receivedPacket)
+		packetChan := make(chan receivedPacket)
 		go func() {
 			defer GinkgoRecover()
 			for {
@@ -69,7 +69,7 @@ var _ = Describe("OOB Conn Test", func() {
 				},
 			)
 
-			var p *receivedPacket
+			var p receivedPacket
 			Eventually(packetChan).Should(Receive(&p))
 			Expect(p.rcvTime).To(BeTemporally("~", time.Now(), scaleDuration(20*time.Millisecond)))
 			Expect(p.data).To(Equal([]byte("foobar")))
@@ -89,7 +89,7 @@ var _ = Describe("OOB Conn Test", func() {
 				},
 			)
 
-			var p *receivedPacket
+			var p receivedPacket
 			Eventually(packetChan).Should(Receive(&p))
 			Expect(p.rcvTime).To(BeTemporally("~", time.Now(), scaleDuration(20*time.Millisecond)))
 			Expect(p.data).To(Equal([]byte("foobar")))
@@ -111,7 +111,7 @@ var _ = Describe("OOB Conn Test", func() {
 				},
 			)
 
-			var p *receivedPacket
+			var p receivedPacket
 			Eventually(packetChan).Should(Receive(&p))
 			Expect(utils.IsIPv4(p.remoteAddr.(*net.UDPAddr).IP)).To(BeTrue())
 			Expect(p.ecn).To(Equal(protocol.ECNCE))
@@ -149,7 +149,7 @@ var _ = Describe("OOB Conn Test", func() {
 			addr.IP = ip
 			sentFrom := sendPacket("udp4", addr)
 
-			var p *receivedPacket
+			var p receivedPacket
 			Eventually(packetChan).Should(Receive(&p))
 			Expect(p.rcvTime).To(BeTemporally("~", time.Now(), scaleDuration(20*time.Millisecond)))
 			Expect(p.data).To(Equal([]byte("foobar")))
@@ -167,7 +167,7 @@ var _ = Describe("OOB Conn Test", func() {
 			addr.IP = ip
 			sentFrom := sendPacket("udp6", addr)
 
-			var p *receivedPacket
+			var p receivedPacket
 			Eventually(packetChan).Should(Receive(&p))
 			Expect(p.rcvTime).To(BeTemporally("~", time.Now(), scaleDuration(20*time.Millisecond)))
 			Expect(p.data).To(Equal([]byte("foobar")))
@@ -185,7 +185,7 @@ var _ = Describe("OOB Conn Test", func() {
 			ip4 := net.ParseIP("127.0.0.1").To4()
 			sendPacket("udp4", &net.UDPAddr{IP: ip4, Port: port})
 
-			var p *receivedPacket
+			var p receivedPacket
 			Eventually(packetChan).Should(Receive(&p))
 			Expect(utils.IsIPv4(p.remoteAddr.(*net.UDPAddr).IP)).To(BeTrue())
 			Expect(p.info).To(Not(BeNil()))

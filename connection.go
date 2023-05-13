@@ -185,8 +185,8 @@ type connection struct {
 	handshakeCtx       context.Context
 	handshakeCtxCancel context.CancelFunc
 
-	undecryptablePackets          []*receivedPacket // undecryptable packets, waiting for a change in encryption level
-	undecryptablePacketsToProcess []*receivedPacket
+	undecryptablePackets          []receivedPacket // undecryptable packets, waiting for a change in encryption level
+	undecryptablePacketsToProcess []receivedPacket
 
 	clientHelloWritten    <-chan *wire.TransportParameters
 	earlyConnReadyChan    chan struct{}
@@ -608,8 +608,8 @@ runLoop:
 				var processedAtLeastOnePacket bool
 			receiveLoop:
 				for i := 0; i < batchProcessingSize; i++ {
-					p := s.receiveQueue.Pop()
-					if p == nil {
+					p, ok := s.receiveQueue.Pop()
+					if !ok {
 						if i == 0 {
 							continue runLoop
 						}
@@ -800,7 +800,7 @@ func (s *connection) handleHandshakeConfirmed() {
 	}
 }
 
-func (s *connection) handlePacketImpl(rp *receivedPacket) bool {
+func (s *connection) handlePacketImpl(rp receivedPacket) bool {
 	s.sentPacketHandler.ReceivedBytes(rp.Size())
 
 	if wire.IsVersionNegotiationPacket(rp.data) {
@@ -816,7 +816,7 @@ func (s *connection) handlePacketImpl(rp *receivedPacket) bool {
 	for len(data) > 0 {
 		var destConnID protocol.ConnectionID
 		if counter > 0 {
-			p = p.Clone()
+			p = *(p.Clone())
 			p.data = data
 
 			var err error
@@ -889,7 +889,7 @@ func (s *connection) handlePacketImpl(rp *receivedPacket) bool {
 	return processed
 }
 
-func (s *connection) handleShortHeaderPacket(p *receivedPacket, destConnID protocol.ConnectionID) bool {
+func (s *connection) handleShortHeaderPacket(p receivedPacket, destConnID protocol.ConnectionID) bool {
 	var wasQueued bool
 
 	defer func() {
@@ -940,7 +940,7 @@ func (s *connection) handleShortHeaderPacket(p *receivedPacket, destConnID proto
 	return true
 }
 
-func (s *connection) handleLongHeaderPacket(p *receivedPacket, hdr *wire.Header) bool /* was the packet successfully processed */ {
+func (s *connection) handleLongHeaderPacket(p receivedPacket, hdr *wire.Header) bool /* was the packet successfully processed */ {
 	var wasQueued bool
 
 	defer func() {
@@ -997,7 +997,7 @@ func (s *connection) handleLongHeaderPacket(p *receivedPacket, hdr *wire.Header)
 	return true
 }
 
-func (s *connection) handleUnpackError(err error, p *receivedPacket, pt logging.PacketType) (wasQueued bool) {
+func (s *connection) handleUnpackError(err error, p receivedPacket, pt logging.PacketType) (wasQueued bool) {
 	switch err {
 	case handshake.ErrKeysDropped:
 		if s.tracer != nil {
@@ -1099,7 +1099,7 @@ func (s *connection) handleRetryPacket(hdr *wire.Header, data []byte) bool /* wa
 	return true
 }
 
-func (s *connection) handleVersionNegotiationPacket(p *receivedPacket) {
+func (s *connection) handleVersionNegotiationPacket(p receivedPacket) {
 	if s.perspective == protocol.PerspectiveServer || // servers never receive version negotiation packets
 		s.receivedFirstPacket || s.versionNegotiated { // ignore delayed / duplicated version negotiation packets
 		if s.tracer != nil {
@@ -1331,7 +1331,7 @@ func (s *connection) handleFrame(f wire.Frame, encLevel protocol.EncryptionLevel
 }
 
 // handlePacket is called by the server with a new packet
-func (s *connection) handlePacket(p *receivedPacket) { s.receiveQueue.Add(p) }
+func (s *connection) handlePacket(p receivedPacket) { s.receiveQueue.Add(p) }
 
 func (s *connection) handleConnectionCloseFrame(frame *wire.ConnectionCloseFrame) {
 	if frame.IsApplicationError {
@@ -2191,7 +2191,7 @@ func (s *connection) scheduleSending() {
 
 // tryQueueingUndecryptablePacket queues a packet for which we're missing the decryption keys.
 // The logging.PacketType is only used for logging purposes.
-func (s *connection) tryQueueingUndecryptablePacket(p *receivedPacket, pt logging.PacketType) {
+func (s *connection) tryQueueingUndecryptablePacket(p receivedPacket, pt logging.PacketType) {
 	if s.handshakeComplete {
 		panic("shouldn't queue undecryptable packets after handshake completion")
 	}

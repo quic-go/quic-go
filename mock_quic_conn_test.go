@@ -309,7 +309,7 @@ func (mr *MockQUICConnMockRecorder) getPerspective() *gomock.Call {
 }
 
 // handlePacket mocks base method.
-func (m *MockQUICConn) handlePacket(arg0 *receivedPacket) {
+func (m *MockQUICConn) handlePacket(arg0 receivedPacket) {
 	m.ctrl.T.Helper()
 	m.ctrl.Call(m, "handlePacket", arg0)
 }

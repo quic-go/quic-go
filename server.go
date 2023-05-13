@@ -24,7 +24,7 @@ var ErrServerClosed = errors.New("quic: server closed")
 
 // packetHandler handles packets
 type packetHandler interface {
-	handlePacket(*receivedPacket)
+	handlePacket(receivedPacket)
 	shutdown()
 	destroy(error)
 	getPerspective() protocol.Perspective
@@ -42,7 +42,7 @@ type packetHandlerManager interface {
 type quicConn interface {
 	EarlyConnection
 	earlyConnReady() <-chan struct{}
-	handlePacket(*receivedPacket)
+	handlePacket(receivedPacket)
 	GetVersion() protocol.VersionNumber
 	getPerspective() protocol.Perspective
 	run() error
@@ -51,7 +51,7 @@ type quicConn interface {
 }
 
 type zeroRTTQueue struct {
-	packets    []*receivedPacket
+	packets    []receivedPacket
 	expiration time.Time
 }
 
@@ -72,7 +72,7 @@ type baseServer struct {
 	connHandler     packetHandlerManager
 	onClose         func()
 
-	receivedPackets chan *receivedPacket
+	receivedPackets chan receivedPacket
 
 	nextZeroRTTCleanup time.Time
 	zeroRTTQueues      map[protocol.ConnectionID]*zeroRTTQueue // only initialized if acceptEarlyConns == true
@@ -238,7 +238,7 @@ func newServer(
 		connQueue:        make(chan quicConn),
 		errorChan:        make(chan struct{}),
 		running:          make(chan struct{}),
-		receivedPackets:  make(chan *receivedPacket, protocol.MaxServerUnprocessedPackets),
+		receivedPackets:  make(chan receivedPacket, protocol.MaxServerUnprocessedPackets),
 		newConn:          newConnection,
 		tracer:           tracer,
 		logger:           utils.DefaultLogger.WithPrefix("server"),
@@ -325,7 +325,7 @@ func (s *baseServer) Addr() net.Addr {
 	return s.conn.LocalAddr()
 }
 
-func (s *baseServer) handlePacket(p *receivedPacket) {
+func (s *baseServer) handlePacket(p receivedPacket) {
 	select {
 	case s.receivedPackets <- p:
 	default:
@@ -336,7 +336,7 @@ func (s *baseServer) handlePacket(p *receivedPacket) {
 	}
 }
 
-func (s *baseServer) handlePacketImpl(p *receivedPacket) bool /* is the buffer still in use? */ {
+func (s *baseServer) handlePacketImpl(p receivedPacket) bool /* is the buffer still in use? */ {
 	if !s.nextZeroRTTCleanup.IsZero() && p.rcvTime.After(s.nextZeroRTTCleanup) {
 		defer s.cleanupZeroRTTQueues(p.rcvTime)
 	}
@@ -425,7 +425,7 @@ func (s *baseServer) handlePacketImpl(p *receivedPacket) bool /* is the buffer s
 	return true
 }
 
-func (s *baseServer) handle0RTTPacket(p *receivedPacket) bool {
+func (s *baseServer) handle0RTTPacket(p receivedPacket) bool {
 	connID, err := wire.ParseConnectionID(p.data, 0)
 	if err != nil {
 		if s.tracer != nil {
@@ -457,7 +457,7 @@ func (s *baseServer) handle0RTTPacket(p *receivedPacket) bool {
 		}
 		return false
 	}
-	queue := &zeroRTTQueue{packets: make([]*receivedPacket, 1, 8)}
+	queue := &zeroRTTQueue{packets: make([]receivedPacket, 1, 8)}
 	queue.packets[0] = p
 	expiration := p.rcvTime.Add(protocol.Max0RTTQueueingDuration)
 	queue.expiration = expiration
@@ -513,7 +513,7 @@ func (s *baseServer) validateToken(token *handshake.Token, addr net.Addr) bool {
 	return true
 }
 
-func (s *baseServer) handleInitialImpl(p *receivedPacket, hdr *wire.Header) error {
+func (s *baseServer) handleInitialImpl(p receivedPacket, hdr *wire.Header) error {
 	if len(hdr.Token) == 0 && hdr.DestConnectionID.Len() < protocol.MinConnectionIDLenInitial {
 		p.buffer.Release()
 		if s.tracer != nil {
@@ -730,12 +730,12 @@ func (s *baseServer) sendRetry(remoteAddr net.Addr, hdr *wire.Header, info *pack
 	return err
 }
 
-func (s *baseServer) maybeSendInvalidToken(p *receivedPacket, hdr *wire.Header) error {
-	// Only send INVALID_TOKEN if we can unprotect the packet.
-	// This makes sure that we won't send it for packets that were corrupted.
+func (s *baseServer) maybeSendInvalidToken(p receivedPacket, hdr *wire.Header) error {
 	sealer, opener := handshake.NewInitialAEAD(hdr.DestConnectionID, protocol.PerspectiveServer, hdr.Version)
 	data := p.data[:hdr.ParsedLen()+hdr.Length]
 	extHdr, err := unpackLongHeader(opener, hdr, data, hdr.Version)
+	// Only send INVALID_TOKEN if we can unprotect the packet.
+	// This makes sure that we won't send it for packets that were corrupted.
 	if err != nil {
 		if s.tracer != nil {
 			s.tracer.DroppedPacket(p.remoteAddr, logging.PacketTypeInitial, p.Size(), logging.PacketDropHeaderParseError)
@@ -745,10 +745,10 @@ func (s *baseServer) maybeSendInvalidToken(p *receivedPacket, hdr *wire.Header) 
 	}
 	hdrLen := extHdr.ParsedLen()
 	if _, err := opener.Open(data[hdrLen:hdrLen], data[hdrLen:], extHdr.PacketNumber, data[:hdrLen]); err != nil {
-		// don't return the error here. Just drop the packet.
 		if s.tracer != nil {
 			s.tracer.DroppedPacket(p.remoteAddr, logging.PacketTypeInitial, p.Size(), logging.PacketDropPayloadDecryptError)
 		}
+		// don't return the error here. Just drop the packet.
 		return nil
 	}
 	if s.logger.Debug() {
