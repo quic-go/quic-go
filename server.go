@@ -632,7 +632,7 @@ func (s *baseServer) handleInitialImpl(p receivedPacket, hdr *wire.Header) error
 			tracer = config.Tracer(context.WithValue(context.Background(), ConnectionTracingKey, tracingID), protocol.PerspectiveServer, connID)
 		}
 		conn = s.newConn(
-			newSendConn(s.conn, p.remoteAddr, p.info),
+			newSendConnWithPacketInfo(s.conn, p.remoteAddr, p.info),
 			s.connHandler,
 			origDestConnID,
 			retrySrcConnID,
@@ -706,7 +706,7 @@ func (s *baseServer) handleNewConn(conn quicConn) {
 	}
 }
 
-func (s *baseServer) sendRetry(remoteAddr net.Addr, hdr *wire.Header, info *packetInfo) error {
+func (s *baseServer) sendRetry(remoteAddr net.Addr, hdr *wire.Header, info packetInfo) error {
 	// Log the Initial packet now.
 	// If no Retry is sent, the packet will be logged by the connection.
 	(&wire.ExtendedHeader{Header: *hdr}).Log(s.logger)
@@ -795,13 +795,13 @@ func (s *baseServer) maybeSendInvalidToken(p receivedPacket) {
 	}
 }
 
-func (s *baseServer) sendConnectionRefused(remoteAddr net.Addr, hdr *wire.Header, info *packetInfo) error {
+func (s *baseServer) sendConnectionRefused(remoteAddr net.Addr, hdr *wire.Header, info packetInfo) error {
 	sealer, _ := handshake.NewInitialAEAD(hdr.DestConnectionID, protocol.PerspectiveServer, hdr.Version)
 	return s.sendError(remoteAddr, hdr, sealer, qerr.ConnectionRefused, info)
 }
 
 // sendError sends the error as a response to the packet received with header hdr
-func (s *baseServer) sendError(remoteAddr net.Addr, hdr *wire.Header, sealer handshake.LongHeaderSealer, errorCode qerr.TransportErrorCode, info *packetInfo) error {
+func (s *baseServer) sendError(remoteAddr net.Addr, hdr *wire.Header, sealer handshake.LongHeaderSealer, errorCode qerr.TransportErrorCode, info packetInfo) error {
 	b := getPacketBuffer()
 	defer b.Release()
 

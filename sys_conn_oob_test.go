@@ -154,7 +154,7 @@ var _ = Describe("OOB Conn Test", func() {
 			Expect(p.rcvTime).To(BeTemporally("~", time.Now(), scaleDuration(20*time.Millisecond)))
 			Expect(p.data).To(Equal([]byte("foobar")))
 			Expect(p.remoteAddr).To(Equal(sentFrom))
-			Expect(p.info).To(Not(BeNil()))
+			Expect(p.info.addr.IsValid()).To(BeTrue())
 			Expect(net.IP(p.info.addr.AsSlice())).To(Equal(ip))
 		})
 

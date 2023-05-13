@@ -19,7 +19,7 @@ var _ = Describe("Connection (for sending packets)", func() {
 		packetConn = NewMockPacketConn(mockCtrl)
 		rawConn, err := wrapConn(packetConn)
 		Expect(err).ToNot(HaveOccurred())
-		c = newSendConn(rawConn, addr, nil)
+		c = newSendConnWithPacketInfo(rawConn, addr, packetInfo{})
 	})
 
 	It("writes", func() {

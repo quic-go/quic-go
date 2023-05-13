@@ -173,8 +173,12 @@ func (c *oobConn) ReadPacket() (receivedPacket, error) {
 	c.readPos++
 
 	data := msg.OOB[:msg.NN]
-	var ecn protocol.ECN
-	var info *packetInfo
+	p := receivedPacket{
+		remoteAddr: msg.Addr,
+		rcvTime:    time.Now(),
+		data:       msg.Buffers[0][:msg.N],
+		buffer:     buffer,
+	}
 	for len(data) > 0 {
 		hdr, body, remainder, err := unix.ParseOneSocketControlMessage(data)
 		if err != nil {
@@ -183,7 +187,7 @@ func (c *oobConn) ReadPacket() (receivedPacket, error) {
 		if hdr.Level == unix.IPPROTO_IP {
 			switch hdr.Type {
 			case msgTypeIPTOS:
-				ecn = protocol.ECN(body[0] & ecnMask)
+				p.ecn = protocol.ECN(body[0] & ecnMask)
 			case msgTypeIPv4PKTINFO:
 				// struct in_pktinfo {
 				// 	unsigned int   ipi_ifindex;  /* Interface index */
@@ -191,22 +195,21 @@ func (c *oobConn) ReadPacket() (receivedPacket, error) {
 				// 	struct in_addr ipi_addr;     /* Header Destination
 				// 									address */
 				// };
-				info = &packetInfo{}
 				var ip [4]byte
 				if len(body) == 12 {
 					copy(ip[:], body[8:12])
-					info.ifIndex = binary.LittleEndian.Uint32(body)
+					p.info.ifIndex = binary.LittleEndian.Uint32(body)
 				} else if len(body) == 4 {
 					// FreeBSD
 					copy(ip[:], body)
 				}
-				info.addr = netip.AddrFrom4(ip)
+				p.info.addr = netip.AddrFrom4(ip)
 			}
 		}
 		if hdr.Level == unix.IPPROTO_IPV6 {
 			switch hdr.Type {
 			case unix.IPV6_TCLASS:
-				ecn = protocol.ECN(body[0] & ecnMask)
+				p.ecn = protocol.ECN(body[0] & ecnMask)
 			case msgTypeIPv6PKTINFO:
 				// struct in6_pktinfo {
 				// 	struct in6_addr ipi6_addr;    /* src/dst IPv6 address */
@@ -215,23 +218,14 @@ func (c *oobConn) ReadPacket() (receivedPacket, error) {
 				if len(body) == 20 {
 					var ip [16]byte
 					copy(ip[:], body[:16])
-					info = &packetInfo{
-						addr:    netip.AddrFrom16(ip),
-						ifIndex: binary.LittleEndian.Uint32(body[16:]),
-					}
+					p.info.addr = netip.AddrFrom16(ip)
+					p.info.ifIndex = binary.LittleEndian.Uint32(body[16:])
 				}
 			}
 		}
 		data = remainder
 	}
-	return receivedPacket{
-		remoteAddr: msg.Addr,
-		rcvTime:    time.Now(),
-		data:       msg.Buffers[0][:msg.N],
-		ecn:        ecn,
-		info:       info,
-		buffer:     buffer,
-	}, nil
+	return p, nil
 }
 
 // WriteTo (re)implements the net.PacketConn method.
