@@ -1825,7 +1825,7 @@ func (s *connection) maybeSendAckOnlyPacket() error {
 		}
 		return err
 	}
-	s.logShortHeaderPacket(p.DestConnID, p.Ack, p.Frames, p.PacketNumber, p.PacketNumberLen, p.KeyPhase, buffer.Len(), false)
+	s.logShortHeaderPacket(p.DestConnID, p.Ack, p.Frames, p.StreamFrames, p.PacketNumber, p.PacketNumberLen, p.KeyPhase, buffer.Len(), false)
 	s.sendPackedShortHeaderPacket(buffer, p.Packet, now)
 	return nil
 }
@@ -1893,7 +1893,7 @@ func (s *connection) sendPacket() (bool, error) {
 		if err != nil {
 			return false, err
 		}
-		s.logShortHeaderPacket(p.DestConnID, p.Ack, p.Frames, p.PacketNumber, p.PacketNumberLen, p.KeyPhase, buffer.Len(), false)
+		s.logShortHeaderPacket(p.DestConnID, p.Ack, p.Frames, p.StreamFrames, p.PacketNumber, p.PacketNumberLen, p.KeyPhase, buffer.Len(), false)
 		s.sendPackedShortHeaderPacket(buffer, p.Packet, now)
 		return true, nil
 	}
@@ -1904,13 +1904,13 @@ func (s *connection) sendPacket() (bool, error) {
 		}
 		return false, err
 	}
-	s.logShortHeaderPacket(p.DestConnID, p.Ack, p.Frames, p.PacketNumber, p.PacketNumberLen, p.KeyPhase, buffer.Len(), false)
+	s.logShortHeaderPacket(p.DestConnID, p.Ack, p.Frames, p.StreamFrames, p.PacketNumber, p.PacketNumberLen, p.KeyPhase, buffer.Len(), false)
 	s.sendPackedShortHeaderPacket(buffer, p.Packet, now)
 	return true, nil
 }
 
 func (s *connection) sendPackedShortHeaderPacket(buffer *packetBuffer, p *ackhandler.Packet, now time.Time) {
-	if s.firstAckElicitingPacketAfterIdleSentTime.IsZero() && ackhandler.HasAckElicitingFrames(p.Frames) {
+	if s.firstAckElicitingPacketAfterIdleSentTime.IsZero() && (len(p.StreamFrames) > 0 || ackhandler.HasAckElicitingFrames(p.Frames)) {
 		s.firstAckElicitingPacketAfterIdleSentTime = now
 	}
 
@@ -1989,6 +1989,7 @@ func (s *connection) logShortHeaderPacket(
 	destConnID protocol.ConnectionID,
 	ackFrame *wire.AckFrame,
 	frames []*ackhandler.Frame,
+	streamFrames []ackhandler.StreamFrame,
 	pn protocol.PacketNumber,
 	pnLen protocol.PacketNumberLen,
 	kp protocol.KeyPhaseBit,
@@ -2004,15 +2005,21 @@ func (s *connection) logShortHeaderPacket(
 		if ackFrame != nil {
 			wire.LogFrame(s.logger, ackFrame, true)
 		}
-		for _, frame := range frames {
-			wire.LogFrame(s.logger, frame.Frame, true)
+		for _, f := range frames {
+			wire.LogFrame(s.logger, f.Frame, true)
+		}
+		for _, f := range streamFrames {
+			wire.LogFrame(s.logger, f.Frame, true)
 		}
 	}
 
 	// tracing
 	if s.tracer != nil {
-		fs := make([]logging.Frame, 0, len(frames))
+		fs := make([]logging.Frame, 0, len(frames)+len(streamFrames))
 		for _, f := range frames {
+			fs = append(fs, logutils.ConvertFrame(f.Frame))
+		}
+		for _, f := range streamFrames {
 			fs = append(fs, logutils.ConvertFrame(f.Frame))
 		}
 		var ack *logging.AckFrame
@@ -2042,6 +2049,7 @@ func (s *connection) logCoalescedPacket(packet *coalescedPacket) {
 				packet.shortHdrPacket.DestConnID,
 				packet.shortHdrPacket.Ack,
 				packet.shortHdrPacket.Frames,
+				packet.shortHdrPacket.StreamFrames,
 				packet.shortHdrPacket.PacketNumber,
 				packet.shortHdrPacket.PacketNumberLen,
 				packet.shortHdrPacket.KeyPhase,
@@ -2060,7 +2068,7 @@ func (s *connection) logCoalescedPacket(packet *coalescedPacket) {
 		s.logLongHeaderPacket(p)
 	}
 	if p := packet.shortHdrPacket; p != nil {
-		s.logShortHeaderPacket(p.DestConnID, p.Ack, p.Frames, p.PacketNumber, p.PacketNumberLen, p.KeyPhase, p.Length, true)
+		s.logShortHeaderPacket(p.DestConnID, p.Ack, p.Frames, p.StreamFrames, p.PacketNumber, p.PacketNumberLen, p.KeyPhase, p.Length, true)
 	}
 }
 

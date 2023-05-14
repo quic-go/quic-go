@@ -35,15 +35,17 @@ type sealer interface {
 }
 
 type payload struct {
-	frames []*ackhandler.Frame
-	ack    *wire.AckFrame
-	length protocol.ByteCount
+	streamFrames []ackhandler.StreamFrame
+	frames       []*ackhandler.Frame
+	ack          *wire.AckFrame
+	length       protocol.ByteCount
 }
 
 type longHeaderPacket struct {
-	header *wire.ExtendedHeader
-	ack    *wire.AckFrame
-	frames []*ackhandler.Frame
+	header       *wire.ExtendedHeader
+	ack          *wire.AckFrame
+	frames       []*ackhandler.Frame
+	streamFrames []ackhandler.StreamFrame // only used for 0-RTT packets
 
 	length protocol.ByteCount
 
@@ -108,6 +110,7 @@ func (p *longHeaderPacket) ToAckHandlerPacket(now time.Time, q *retransmissionQu
 	ap.PacketNumber = p.header.PacketNumber
 	ap.LargestAcked = largestAcked
 	ap.Frames = p.frames
+	ap.StreamFrames = p.streamFrames
 	ap.Length = p.length
 	ap.EncryptionLevel = encLevel
 	ap.SendTime = now
@@ -143,7 +146,7 @@ type sealingManager interface {
 
 type frameSource interface {
 	HasData() bool
-	AppendStreamFrames([]*ackhandler.Frame, protocol.ByteCount, protocol.VersionNumber) ([]*ackhandler.Frame, protocol.ByteCount)
+	AppendStreamFrames([]ackhandler.StreamFrame, protocol.ByteCount, protocol.VersionNumber) ([]ackhandler.StreamFrame, protocol.ByteCount)
 	AppendControlFrames([]*ackhandler.Frame, protocol.ByteCount, protocol.VersionNumber) ([]*ackhandler.Frame, protocol.ByteCount)
 }
 
@@ -595,7 +598,7 @@ func (p *packetPacker) maybeGetAppDataPacket(maxPayloadSize protocol.ByteCount, 
 	pl := p.composeNextPacket(maxPayloadSize, onlyAck, ackAllowed, v)
 
 	// check if we have anything to send
-	if len(pl.frames) == 0 {
+	if len(pl.frames) == 0 && len(pl.streamFrames) == 0 {
 		if pl.ack == nil {
 			return payload{}
 		}
@@ -629,7 +632,7 @@ func (p *packetPacker) composeNextPacket(maxFrameSize protocol.ByteCount, onlyAc
 		return payload{}
 	}
 
-	pl := payload{frames: make([]*ackhandler.Frame, 0, 1)}
+	pl := payload{streamFrames: make([]ackhandler.StreamFrame, 0, 1)}
 
 	hasData := p.framer.HasData()
 	hasRetransmission := p.retransmissionQueue.HasAppData()
@@ -684,7 +687,7 @@ func (p *packetPacker) composeNextPacket(maxFrameSize protocol.ByteCount, onlyAc
 		pl.frames, lengthAdded = p.framer.AppendControlFrames(pl.frames, maxFrameSize-pl.length, v)
 		pl.length += lengthAdded
 
-		pl.frames, lengthAdded = p.framer.AppendStreamFrames(pl.frames, maxFrameSize-pl.length, v)
+		pl.streamFrames, lengthAdded = p.framer.AppendStreamFrames(pl.streamFrames, maxFrameSize-pl.length, v)
 		pl.length += lengthAdded
 	}
 	return pl
@@ -842,10 +845,11 @@ func (p *packetPacker) appendLongHeaderPacket(buffer *packetBuffer, header *wire
 	buffer.Data = buffer.Data[:len(buffer.Data)+len(raw)]
 
 	return &longHeaderPacket{
-		header: header,
-		ack:    pl.ack,
-		frames: pl.frames,
-		length: protocol.ByteCount(len(raw)),
+		header:       header,
+		ack:          pl.ack,
+		frames:       pl.frames,
+		streamFrames: pl.streamFrames,
+		length:       protocol.ByteCount(len(raw)),
 	}, nil
 }
 
@@ -907,6 +911,7 @@ func (p *packetPacker) appendShortHeaderPacket(
 	ap.PacketNumber = pn
 	ap.LargestAcked = largestAcked
 	ap.Frames = pl.frames
+	ap.StreamFrames = pl.streamFrames
 	ap.Length = protocol.ByteCount(len(raw))
 	ap.EncryptionLevel = protocol.Encryption1RTT
 	ap.SendTime = time.Now()
@@ -927,9 +932,16 @@ func (p *packetPacker) appendPacketPayload(raw []byte, pl payload, paddingLen pr
 	if paddingLen > 0 {
 		raw = append(raw, make([]byte, paddingLen)...)
 	}
-	for _, frame := range pl.frames {
+	for _, f := range pl.frames {
 		var err error
-		raw, err = frame.Append(raw, v)
+		raw, err = f.Append(raw, v)
+		if err != nil {
+			return nil, err
+		}
+	}
+	for _, f := range pl.streamFrames {
+		var err error
+		raw, err = f.Frame.Append(raw, v)
 		if err != nil {
 			return nil, err
 		}

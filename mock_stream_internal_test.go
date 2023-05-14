@@ -258,12 +258,13 @@ func (mr *MockStreamIMockRecorder) hasData() *gomock.Call {
 }
 
 // popStreamFrame mocks base method.
-func (m *MockStreamI) popStreamFrame(arg0 protocol.ByteCount, arg1 protocol.VersionNumber) (*ackhandler.Frame, bool) {
+func (m *MockStreamI) popStreamFrame(arg0 protocol.ByteCount, arg1 protocol.VersionNumber) (ackhandler.StreamFrame, bool, bool) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "popStreamFrame", arg0, arg1)
-	ret0, _ := ret[0].(*ackhandler.Frame)
+	ret0, _ := ret[0].(ackhandler.StreamFrame)
 	ret1, _ := ret[1].(bool)
-	return ret0, ret1
+	ret2, _ := ret[2].(bool)
+	return ret0, ret1, ret2
 }
 
 // popStreamFrame indicates an expected call of popStreamFrame.

@@ -243,7 +243,7 @@ func (h *sentPacketHandler) SentPacket(p *Packet) {
 	}
 
 	pnSpace.largestSent = p.PacketNumber
-	isAckEliciting := len(p.Frames) > 0
+	isAckEliciting := len(p.StreamFrames) > 0 || len(p.Frames) > 0
 
 	if isAckEliciting {
 		pnSpace.lastAckElicitingPacketTime = p.SendTime
@@ -423,6 +423,9 @@ func (h *sentPacketHandler) detectAndRemoveAckedPackets(ack *wire.AckFrame, encL
 			if f.OnAcked != nil {
 				f.OnAcked(f.Frame)
 			}
+		}
+		for _, f := range p.StreamFrames {
+			f.Handler.OnAcked(f.Frame)
 		}
 		if err := pnSpace.history.Remove(p.PacketNumber); err != nil {
 			return nil, err
@@ -790,12 +793,16 @@ func (h *sentPacketHandler) QueueProbePacket(encLevel protocol.EncryptionLevel) 
 }
 
 func (h *sentPacketHandler) queueFramesForRetransmission(p *Packet) {
-	if len(p.Frames) == 0 {
+	if len(p.Frames) == 0 && len(p.StreamFrames) == 0 {
 		panic("no frames")
 	}
 	for _, f := range p.Frames {
 		f.OnLost(f.Frame)
 	}
+	for _, f := range p.StreamFrames {
+		f.Handler.OnLost(f.Frame)
+	}
+	p.StreamFrames = nil
 	p.Frames = nil
 }
 
