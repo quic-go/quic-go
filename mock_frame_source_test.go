@@ -36,10 +36,10 @@ func (m *MockFrameSource) EXPECT() *MockFrameSourceMockRecorder {
 }
 
 // AppendControlFrames mocks base method.
-func (m *MockFrameSource) AppendControlFrames(arg0 []*ackhandler.Frame, arg1 protocol.ByteCount, arg2 protocol.VersionNumber) ([]*ackhandler.Frame, protocol.ByteCount) {
+func (m *MockFrameSource) AppendControlFrames(arg0 []ackhandler.Frame, arg1 protocol.ByteCount, arg2 protocol.VersionNumber) ([]ackhandler.Frame, protocol.ByteCount) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "AppendControlFrames", arg0, arg1, arg2)
-	ret0, _ := ret[0].([]*ackhandler.Frame)
+	ret0, _ := ret[0].([]ackhandler.Frame)
 	ret1, _ := ret[1].(protocol.ByteCount)
 	return ret0, ret1
 }

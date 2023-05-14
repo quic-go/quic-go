@@ -15,7 +15,7 @@ type framer interface {
 	HasData() bool
 
 	QueueControlFrame(wire.Frame)
-	AppendControlFrames([]*ackhandler.Frame, protocol.ByteCount, protocol.VersionNumber) ([]*ackhandler.Frame, protocol.ByteCount)
+	AppendControlFrames([]ackhandler.Frame, protocol.ByteCount, protocol.VersionNumber) ([]ackhandler.Frame, protocol.ByteCount)
 
 	AddActiveStream(protocol.StreamID)
 	AppendStreamFrames([]ackhandler.StreamFrame, protocol.ByteCount, protocol.VersionNumber) ([]ackhandler.StreamFrame, protocol.ByteCount)
@@ -63,7 +63,7 @@ func (f *framerI) QueueControlFrame(frame wire.Frame) {
 	f.controlFrameMutex.Unlock()
 }
 
-func (f *framerI) AppendControlFrames(frames []*ackhandler.Frame, maxLen protocol.ByteCount, v protocol.VersionNumber) ([]*ackhandler.Frame, protocol.ByteCount) {
+func (f *framerI) AppendControlFrames(frames []ackhandler.Frame, maxLen protocol.ByteCount, v protocol.VersionNumber) ([]ackhandler.Frame, protocol.ByteCount) {
 	var length protocol.ByteCount
 	f.controlFrameMutex.Lock()
 	for len(f.controlFrames) > 0 {
@@ -72,9 +72,7 @@ func (f *framerI) AppendControlFrames(frames []*ackhandler.Frame, maxLen protoco
 		if length+frameLen > maxLen {
 			break
 		}
-		af := ackhandler.GetFrame()
-		af.Frame = frame
-		frames = append(frames, af)
+		frames = append(frames, ackhandler.Frame{Frame: frame})
 		length += frameLen
 		f.controlFrames = f.controlFrames[:len(f.controlFrames)-1]
 	}

@@ -1988,7 +1988,7 @@ func (s *connection) logLongHeaderPacket(p *longHeaderPacket) {
 func (s *connection) logShortHeaderPacket(
 	destConnID protocol.ConnectionID,
 	ackFrame *wire.AckFrame,
-	frames []*ackhandler.Frame,
+	frames []ackhandler.Frame,
 	streamFrames []ackhandler.StreamFrame,
 	pn protocol.PacketNumber,
 	pnLen protocol.PacketNumberLen,
