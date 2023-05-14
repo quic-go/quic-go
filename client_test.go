@@ -293,7 +293,7 @@ var _ = Describe("Client", func() {
 				conn := NewMockQUICConn(mockCtrl)
 				conn.EXPECT().run()
 				conn.EXPECT().HandshakeComplete().Return(make(chan struct{}))
-				conn.EXPECT().destroy(gomock.Any())
+				conn.EXPECT().destroy(gomock.Any()).MaxTimes(1)
 				close(done)
 				return conn
 			}
