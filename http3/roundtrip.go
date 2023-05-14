@@ -211,8 +211,7 @@ func (r *RoundTripper) getClient(hostname string, onlyCached bool) (rtc *roundTr
 		if err != nil {
 			return nil, false, err
 		}
-		client = new(roundTripCloserWithCount)
-		client.roundTripCloser = c
+		client = &roundTripCloserWithCount{roundTripCloser: c}
 		r.clients[hostname] = client
 	} else if client.HandshakeComplete() {
 		isReused = true
