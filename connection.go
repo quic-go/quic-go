@@ -1280,11 +1280,11 @@ func (s *connection) handleFrames(
 		}
 		if log != nil {
 			frames = append(frames, logutils.ConvertFrame(frame))
-			// An error occurred handling a previous frame.
-			// Don't handle the current frame.
-			if handleErr != nil {
-				continue
-			}
+		}
+		// An error occurred handling a previous frame.
+		// Don't handle the current frame.
+		if handleErr != nil {
+			continue
 		}
 		if err := s.handleFrame(frame, encLevel, destConnID); err != nil {
 			if log == nil {
@@ -1314,7 +1314,6 @@ func (s *connection) handleFrame(f wire.Frame, encLevel protocol.EncryptionLevel
 		err = s.handleStreamFrame(frame)
 	case *wire.AckFrame:
 		err = s.handleAckFrame(frame, encLevel)
-		wire.PutAckFrame(frame)
 	case *wire.ConnectionCloseFrame:
 		s.handleConnectionCloseFrame(frame)
 	case *wire.ResetStreamFrame:

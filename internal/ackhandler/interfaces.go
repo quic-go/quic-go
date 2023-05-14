@@ -11,7 +11,9 @@ import (
 type SentPacketHandler interface {
 	// SentPacket may modify the packet
 	SentPacket(packet *Packet)
-	ReceivedAck(ackFrame *wire.AckFrame, encLevel protocol.EncryptionLevel, recvTime time.Time) (bool /* 1-RTT packet acked */, error)
+	// ReceivedAck processes an ACK frame.
+	// It does not store a copy of the frame.
+	ReceivedAck(f *wire.AckFrame, encLevel protocol.EncryptionLevel, recvTime time.Time) (bool /* 1-RTT packet acked */, error)
 	ReceivedBytes(protocol.ByteCount)
 	DropPackets(protocol.EncryptionLevel)
 	ResetForRetry() error
