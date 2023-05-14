@@ -1261,7 +1261,11 @@ func (s *connection) handleFrames(
 ) (isAckEliciting bool, _ error) {
 	// Only used for tracing.
 	// If we're not tracing, this slice will always remain empty.
-	var frames []wire.Frame
+	var frames []logging.Frame
+	if log != nil {
+		frames = make([]logging.Frame, 0, 4)
+	}
+	var handleErr error
 	for len(data) > 0 {
 		l, frame, err := s.frameParser.ParseNext(data, encLevel, s.version)
 		if err != nil {
@@ -1274,27 +1278,27 @@ func (s *connection) handleFrames(
 		if ackhandler.IsFrameAckEliciting(frame) {
 			isAckEliciting = true
 		}
-		// Only process frames now if we're not logging.
-		// If we're logging, we need to make sure that the packet_received event is logged first.
-		if log == nil {
-			if err := s.handleFrame(frame, encLevel, destConnID); err != nil {
+		if log != nil {
+			frames = append(frames, logutils.ConvertFrame(frame))
+			// An error occurred handling a previous frame.
+			// Don't handle the current frame.
+			if handleErr != nil {
+				continue
+			}
+		}
+		if err := s.handleFrame(frame, encLevel, destConnID); err != nil {
+			if log == nil {
 				return false, err
 			}
-		} else {
-			frames = append(frames, frame)
+			// If we're logging, we need to keep parsing (but not handling) all frames.
+			handleErr = err
 		}
 	}
 
 	if log != nil {
-		fs := make([]logging.Frame, len(frames))
-		for i, frame := range frames {
-			fs[i] = logutils.ConvertFrame(frame)
-		}
-		log(fs)
-		for _, frame := range frames {
-			if err := s.handleFrame(frame, encLevel, destConnID); err != nil {
-				return false, err
-			}
+		log(frames)
+		if handleErr != nil {
+			return false, handleErr
 		}
 	}
 	return
