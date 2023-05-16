@@ -5,17 +5,13 @@ import (
 	"time"
 
 	"github.com/quic-go/quic-go/internal/protocol"
-	"github.com/quic-go/quic-go/internal/utils"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 )
 
 var _ = Describe("SentPacketHistory", func() {
-	var (
-		hist     *sentPacketHistory
-		rttStats *utils.RTTStats
-	)
+	var hist *sentPacketHistory
 
 	expectInHistory := func(packetNumbers []protocol.PacketNumber) {
 		var mapLen int
@@ -48,8 +44,7 @@ var _ = Describe("SentPacketHistory", func() {
 	}
 
 	BeforeEach(func() {
-		rttStats = utils.NewRTTStats()
-		hist = newSentPacketHistory(rttStats)
+		hist = newSentPacketHistory()
 	})
 
 	It("saves sent packets", func() {
@@ -228,38 +223,31 @@ var _ = Describe("SentPacketHistory", func() {
 	})
 
 	Context("deleting old packets", func() {
-		const pto = 3 * time.Second
-
-		BeforeEach(func() {
-			rttStats.UpdateRTT(time.Second, 0, time.Time{})
-			Expect(rttStats.PTO(false)).To(Equal(pto))
-		})
-
 		It("deletes old packets after 3 PTOs", func() {
 			now := time.Now()
-			hist.SentAckElicitingPacket(&Packet{PacketNumber: 10, SendTime: now.Add(-3 * pto), declaredLost: true})
+			hist.SentAckElicitingPacket(&Packet{PacketNumber: 10, SendTime: now, declaredLost: true})
 			expectInHistory([]protocol.PacketNumber{10})
-			hist.DeleteOldPackets(now.Add(-time.Nanosecond))
+			hist.DeletePacketsBefore(now)
 			expectInHistory([]protocol.PacketNumber{10})
-			hist.DeleteOldPackets(now)
+			hist.DeletePacketsBefore(now.Add(time.Nanosecond))
 			expectInHistory([]protocol.PacketNumber{})
 		})
 
 		It("doesn't delete a packet if it hasn't been declared lost yet", func() {
 			now := time.Now()
-			hist.SentAckElicitingPacket(&Packet{PacketNumber: 10, SendTime: now.Add(-3 * pto), declaredLost: true})
-			hist.SentAckElicitingPacket(&Packet{PacketNumber: 11, SendTime: now.Add(-3 * pto), declaredLost: false})
+			hist.SentAckElicitingPacket(&Packet{PacketNumber: 10, SendTime: now, declaredLost: true})
+			hist.SentAckElicitingPacket(&Packet{PacketNumber: 11, SendTime: now, declaredLost: false})
 			expectInHistory([]protocol.PacketNumber{10, 11})
-			hist.DeleteOldPackets(now)
+			hist.DeletePacketsBefore(now.Add(time.Nanosecond))
 			expectInHistory([]protocol.PacketNumber{11})
 		})
 
 		It("deletes skipped packets", func() {
 			now := time.Now()
-			hist.SentAckElicitingPacket(&Packet{PacketNumber: 10, SendTime: now.Add(-3 * pto)})
+			hist.SentAckElicitingPacket(&Packet{PacketNumber: 10, SendTime: now})
 			expectInHistory([]protocol.PacketNumber{10})
 			Expect(hist.Len()).To(Equal(11))
-			hist.DeleteOldPackets(now)
+			hist.DeletePacketsBefore(now.Add(time.Nanosecond))
 			expectInHistory([]protocol.PacketNumber{10}) // the packet was not declared lost
 			Expect(hist.Len()).To(Equal(1))
 		})
