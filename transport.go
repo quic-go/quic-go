@@ -66,7 +66,8 @@ type Transport struct {
 
 	conn rawConn
 
-	closeQueue chan closePacket
+	closeQueue          chan closePacket
+	statelessResetQueue chan sendStatelessResetArgs
 
 	listening   chan struct{} // is closed when listen returns
 	closed      bool
@@ -182,6 +183,7 @@ func (t *Transport) init(isServer bool) error {
 		t.listening = make(chan struct{})
 
 		t.closeQueue = make(chan closePacket, 4)
+		t.statelessResetQueue = make(chan sendStatelessResetArgs, 4)
 
 		if t.ConnectionIDGenerator != nil {
 			t.connIDGenerator = t.ConnectionIDGenerator
@@ -196,7 +198,7 @@ func (t *Transport) init(isServer bool) error {
 		}
 
 		go t.listen(conn)
-		go t.runCloseQueue()
+		go t.runSendQueue()
 	})
 	return t.initErr
 }
@@ -210,13 +212,15 @@ func (t *Transport) enqueueClosePacket(p closePacket) {
 	}
 }
 
-func (t *Transport) runCloseQueue() {
+func (t *Transport) runSendQueue() {
 	for {
 		select {
 		case <-t.listening:
 			return
 		case p := <-t.closeQueue:
 			t.conn.WritePacket(p.payload, p.addr, p.info.OOB())
+		case s := <-t.statelessResetQueue:
+			t.sendStatelessReset(s.addr, s.info, s.connID)
 		}
 	}
 }
@@ -340,7 +344,7 @@ func (t *Transport) handlePacket(p *receivedPacket) {
 		return
 	}
 	if !wire.IsLongHeaderPacket(p.data[0]) {
-		go t.maybeSendStatelessReset(p, connID)
+		t.maybeSendStatelessReset(p, connID)
 		return
 	}
 
@@ -363,13 +367,22 @@ func (t *Transport) maybeSendStatelessReset(p *receivedPacket, connID protocol.C
 	if len(p.data) <= protocol.MinStatelessResetSize {
 		return
 	}
+
+	select {
+	case t.statelessResetQueue <- sendStatelessResetArgs{addr: p.remoteAddr, info: p.info, connID: connID}:
+	default:
+		// it's fine to not send a stateless reset when we're busy
+	}
+}
+
+func (t *Transport) sendStatelessReset(addr net.Addr, info *packetInfo, connID protocol.ConnectionID) {
 	token := t.handlerMap.GetStatelessResetToken(connID)
-	t.logger.Debugf("Sending stateless reset to %s (connection ID: %s). Token: %#x", p.remoteAddr, connID, token)
+	t.logger.Debugf("Sending stateless reset to %s (connection ID: %s). Token: %#x", addr, connID, token)
 	data := make([]byte, protocol.MinStatelessResetSize-16, protocol.MinStatelessResetSize)
 	rand.Read(data)
 	data[0] = (data[0] & 0x7f) | 0x40
 	data = append(data, token[:]...)
-	if _, err := t.conn.WritePacket(data, p.remoteAddr, p.info.OOB()); err != nil {
+	if _, err := t.conn.WritePacket(data, addr, info.OOB()); err != nil {
 		t.logger.Debugf("Error sending Stateless Reset: %s", err)
 	}
 }
@@ -390,4 +403,10 @@ func (t *Transport) maybeHandleStatelessReset(data []byte) bool {
 		return true
 	}
 	return false
+}
+
+type sendStatelessResetArgs struct {
+	addr   net.Addr
+	info   *packetInfo
+	connID ConnectionID
 }
