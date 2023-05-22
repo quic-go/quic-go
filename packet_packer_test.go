@@ -316,6 +316,12 @@ var _ = Describe("Packet packer", func() {
 				Expect(p.longHdrPackets[0].EncryptionLevel()).To(Equal(protocol.Encryption0RTT))
 				Expect(p.longHdrPackets[0].frames).To(Equal([]*ackhandler.Frame{cf}))
 			})
+
+			It("doesn't add an ACK-only 0-RTT packet", func() { // ACK frames cannot be sent in 0-RTT packets
+				p, err := packer.PackCoalescedPacket(true, protocol.Version1)
+				Expect(err).ToNot(HaveOccurred())
+				Expect(p).To(BeNil())
+			})
 		})
 
 		Context("packing CONNECTION_CLOSE", func() {
