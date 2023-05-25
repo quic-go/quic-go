@@ -1,4 +1,6 @@
-package handshake
+//go:build go1.21
+
+package qtls
 
 import (
 	"crypto"

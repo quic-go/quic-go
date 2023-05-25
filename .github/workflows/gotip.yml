@@ -16,7 +16,7 @@ jobs:
         run: |
           git clone --depth=1 https://go.googlesource.com/go $HOME/gotip
           cd $HOME/gotip/src
-          git fetch https://go.googlesource.com/go refs/changes/15/498215/1 && git checkout FETCH_HEAD
+          git fetch https://go.googlesource.com/go refs/changes/35/499235/3 && git checkout FETCH_HEAD
           ./make.bash
           echo "GOROOT=$HOME/gotip" >> $GITHUB_ENV
           echo "$HOME/gotip/bin:$PATH" >> $GITHUB_PATH
@@ -26,3 +26,5 @@ jobs:
         run: echo "QLOGFLAG= -qlog" >> $GITHUB_ENV
       - name: Run self tests, using QUIC v1
         run: go run github.com/onsi/ginkgo/v2/ginkgo -r -v -randomize-all -randomize-suites -trace integrationtests/self -- -version=1 ${{ env.QLOGFLAG }}
+      - name: Run self tests, using QUIC v1, with race detector
+        run: go run github.com/onsi/ginkgo/v2/ginkgo -race -r -v -randomize-all -randomize-suites -trace integrationtests/self -- -version=1 ${{ env.QLOGFLAG }}

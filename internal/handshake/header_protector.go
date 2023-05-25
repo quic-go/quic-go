@@ -32,7 +32,7 @@ func newHeaderProtector(suite *cipherSuite, trafficSecret []byte, isLongHeader b
 	case tls.TLS_CHACHA20_POLY1305_SHA256:
 		return newChaChaHeaderProtector(suite, trafficSecret, isLongHeader, hkdfLabel)
 	default:
-		panic(fmt.Sprintf("Invalid cipher suite id: %d", suite))
+		panic(fmt.Sprintf("Invalid cipher suite id: %d", suite.ID))
 	}
 }
 

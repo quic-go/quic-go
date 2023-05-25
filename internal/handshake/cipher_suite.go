@@ -10,6 +10,8 @@ import (
 	"golang.org/x/crypto/chacha20poly1305"
 )
 
+// These cipher suite implementations are copied from the standard library crypto/tls package.
+
 const aeadNonceLength = 12
 
 type cipherSuite struct {

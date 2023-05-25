@@ -68,6 +68,7 @@ func (m *cryptoStreamManager) GetPostHandshakeData(maxSize protocol.ByteCount) *
 }
 
 func (m *cryptoStreamManager) Drop(encLevel protocol.EncryptionLevel) error {
+	//nolint:exhaustive // 1-RTT keys should never get dropped.
 	switch encLevel {
 	case protocol.EncryptionInitial:
 		return m.initialStream.Finish()

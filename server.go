@@ -226,6 +226,8 @@ func newServer(
 	onClose func(),
 	acceptEarly bool,
 ) (*baseServer, error) {
+	tlsConf = tlsConf.Clone()
+	tlsConf.MinVersion = tls.VersionTLS13
 	tokenGenerator, err := handshake.NewTokenGenerator(rand.Reader)
 	if err != nil {
 		return nil, err

@@ -10,9 +10,9 @@ import (
 	"time"
 
 	"github.com/quic-go/quic-go"
-	"github.com/quic-go/quic-go/internal/handshake"
 	"github.com/quic-go/quic-go/internal/protocol"
 	"github.com/quic-go/quic-go/internal/qerr"
+	"github.com/quic-go/quic-go/internal/qtls"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -91,7 +91,7 @@ var _ = Describe("Handshake tests", func() {
 			suiteID := id
 
 			It(fmt.Sprintf("using %s", name), func() {
-				reset := handshake.SetCipherSuite(suiteID)
+				reset := qtls.SetCipherSuite(suiteID)
 				defer reset()
 
 				tlsConf := getTLSConfig()
@@ -198,7 +198,10 @@ var _ = Describe("Handshake tests", func() {
 			var transportErr *quic.TransportError
 			Expect(errors.As(err, &transportErr)).To(BeTrue())
 			Expect(transportErr.ErrorCode.IsCryptoError()).To(BeTrue())
-			Expect(transportErr.Error()).To(ContainSubstring("tls: certificate required"))
+			Expect(transportErr.Error()).To(Or(
+				ContainSubstring("tls: certificate required"),
+				ContainSubstring("tls: bad certificate"),
+			))
 		})
 
 		It("uses the ServerName in the tls.Config", func() {

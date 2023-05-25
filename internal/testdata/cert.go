@@ -31,6 +31,7 @@ func GetTLSConfig() *tls.Config {
 		panic(err)
 	}
 	return &tls.Config{
+		MinVersion:   tls.VersionTLS13,
 		Certificates: []tls.Certificate{cert},
 	}
 }
