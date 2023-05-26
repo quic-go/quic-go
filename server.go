@@ -755,8 +755,7 @@ func (s *baseServer) enqueueInvalidToken(p *receivedPacket) {
 
 func (s *baseServer) maybeSendInvalidToken(p *receivedPacket) {
 	defer p.buffer.Release()
-	// If we're creating a new connection, the packet will be passed to the connection.
-	// The header will then be parsed again.
+
 	hdr, _, _, err := wire.ParsePacket(p.data)
 	if err != nil {
 		if s.tracer != nil {
@@ -775,12 +774,10 @@ func (s *baseServer) maybeSendInvalidToken(p *receivedPacket) {
 		if s.tracer != nil {
 			s.tracer.DroppedPacket(p.remoteAddr, logging.PacketTypeInitial, p.Size(), logging.PacketDropHeaderParseError)
 		}
-		// don't return the error here. Just drop the packet.
 		return
 	}
 	hdrLen := extHdr.ParsedLen()
 	if _, err := opener.Open(data[hdrLen:hdrLen], data[hdrLen:], extHdr.PacketNumber, data[:hdrLen]); err != nil {
-		// don't return the error here. Just drop the packet.
 		if s.tracer != nil {
 			s.tracer.DroppedPacket(p.remoteAddr, logging.PacketTypeInitial, p.Size(), logging.PacketDropPayloadDecryptError)
 		}
