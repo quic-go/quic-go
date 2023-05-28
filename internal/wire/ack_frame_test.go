@@ -170,6 +170,9 @@ var _ = Describe("ACK Frame (for IETF QUIC)", func() {
 				Expect(frame.LargestAcked()).To(Equal(protocol.PacketNumber(100)))
 				Expect(frame.LowestAcked()).To(Equal(protocol.PacketNumber(90)))
 				Expect(frame.HasMissingRanges()).To(BeFalse())
+				Expect(frame.ECT0).To(BeEquivalentTo(0x42))
+				Expect(frame.ECT1).To(BeEquivalentTo(0x12345))
+				Expect(frame.ECNCE).To(BeEquivalentTo(0x12345678))
 				Expect(b.Len()).To(BeZero())
 			})
 
