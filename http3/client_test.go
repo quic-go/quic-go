@@ -90,8 +90,8 @@ var _ = Describe("Client", func() {
 		Expect(dialAddrCalled).To(BeTrue())
 	})
 
-	It("set ServerName in the tls.Config, if not set", func() {
-		host := "foo.bar"
+	It("sets the ServerName in the tls.Config, if not set", func() {
+		const host = "foo.bar"
 		dialCalled := false
 		dialFunc := func(ctx context.Context, addr string, tlsCfg *tls.Config, cfg *quic.Config) (quic.EarlyConnection, error) {
 			Expect(tlsCfg.ServerName).To(Equal(host))

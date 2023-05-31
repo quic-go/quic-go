@@ -99,7 +99,6 @@ func newClient(hostname string, tlsConf *tls.Config, opts *roundTripperOpts, con
 			// It's ok if net.SplitHostPort returns an error - it could be a hostname/IP address without a port.
 			sni = hostname
 		}
-
 		tlsConf.ServerName = sni
 	}
 	// Replace existing ALPNs by H3
