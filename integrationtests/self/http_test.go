@@ -107,7 +107,7 @@ var _ = Describe("HTTP tests", func() {
 
 	BeforeEach(func() {
 		rt = &http3.RoundTripper{
-			TLSClientConfig:    getTLSClientConfig(),
+			TLSClientConfig:    getTLSClientConfigWithoutServerName(),
 			DisableCompression: true,
 			QuicConfig:         getQuicConfig(&quic.Config{MaxIdleTimeout: 10 * time.Second}),
 		}
@@ -119,6 +119,21 @@ var _ = Describe("HTTP tests", func() {
 		Expect(err).ToNot(HaveOccurred())
 		Expect(resp.StatusCode).To(Equal(200))
 		body, err := io.ReadAll(gbytes.TimeoutReader(resp.Body, 3*time.Second))
+		Expect(err).ToNot(HaveOccurred())
+		Expect(string(body)).To(Equal("Hello, World!\n"))
+	})
+
+	It("request to server with two different servrname", func() {
+		resp, err := client.Get("https://localhost:" + port + "/hello")
+		Expect(err).ToNot(HaveOccurred())
+		Expect(resp.StatusCode).To(Equal(200))
+		body, err := io.ReadAll(gbytes.TimeoutReader(resp.Body, 3*time.Second))
+		Expect(err).ToNot(HaveOccurred())
+		Expect(string(body)).To(Equal("Hello, World!\n"))
+		resp, err = client.Get("https://127.0.0.1:" + port + "/hello")
+		Expect(err).ToNot(HaveOccurred())
+		Expect(resp.StatusCode).To(Equal(200))
+		body, err = io.ReadAll(gbytes.TimeoutReader(resp.Body, 3*time.Second))
 		Expect(err).ToNot(HaveOccurred())
 		Expect(string(body)).To(Equal("Hello, World!\n"))
 	})
