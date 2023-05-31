@@ -40,6 +40,7 @@ var _ = Describe("HTTP tests", func() {
 	var (
 		mux            *http.ServeMux
 		client         *http.Client
+		rt             *http3.RoundTripper
 		server         *http3.Server
 		stoppedServing chan struct{}
 		port           string
@@ -99,18 +100,18 @@ var _ = Describe("HTTP tests", func() {
 	})
 
 	AfterEach(func() {
+		rt.Close()
 		Expect(server.Close()).NotTo(HaveOccurred())
 		Eventually(stoppedServing).Should(BeClosed())
 	})
 
 	BeforeEach(func() {
-		client = &http.Client{
-			Transport: &http3.RoundTripper{
-				TLSClientConfig:    getTLSClientConfig(),
-				DisableCompression: true,
-				QuicConfig:         getQuicConfig(&quic.Config{MaxIdleTimeout: 10 * time.Second}),
-			},
+		rt = &http3.RoundTripper{
+			TLSClientConfig:    getTLSClientConfig(),
+			DisableCompression: true,
+			QuicConfig:         getQuicConfig(&quic.Config{MaxIdleTimeout: 10 * time.Second}),
 		}
+		client = &http.Client{Transport: rt}
 	})
 
 	It("downloads a hello", func() {
