@@ -10,6 +10,7 @@ import (
 
 	"github.com/quic-go/quic-go/internal/protocol"
 	"github.com/quic-go/quic-go/logging"
+	"github.com/quic-go/quic-go/quicvarint"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -22,15 +23,33 @@ var _ = Describe("Config", func() {
 		})
 
 		It("validates a config with normal values", func() {
-			Expect(validateConfig(populateServerConfig(&Config{}))).To(Succeed())
+			conf := populateServerConfig(&Config{
+				MaxIncomingStreams:     5,
+				MaxStreamReceiveWindow: 10,
+			})
+			Expect(validateConfig(conf)).To(Succeed())
+			Expect(conf.MaxIncomingStreams).To(BeEquivalentTo(5))
+			Expect(conf.MaxStreamReceiveWindow).To(BeEquivalentTo(10))
 		})
 
-		It("errors on too large values for MaxIncomingStreams", func() {
-			Expect(validateConfig(&Config{MaxIncomingStreams: 1<<60 + 1})).To(MatchError("invalid value for Config.MaxIncomingStreams"))
+		It("clips too large values for the stream limits", func() {
+			conf := &Config{
+				MaxIncomingStreams:    1<<60 + 1,
+				MaxIncomingUniStreams: 1<<60 + 2,
+			}
+			Expect(validateConfig(conf)).To(Succeed())
+			Expect(conf.MaxIncomingStreams).To(BeEquivalentTo(int64(1 << 60)))
+			Expect(conf.MaxIncomingUniStreams).To(BeEquivalentTo(int64(1 << 60)))
 		})
 
-		It("errors on too large values for MaxIncomingUniStreams", func() {
-			Expect(validateConfig(&Config{MaxIncomingUniStreams: 1<<60 + 1})).To(MatchError("invalid value for Config.MaxIncomingUniStreams"))
+		It("clips too large values for the flow control windows", func() {
+			conf := &Config{
+				MaxStreamReceiveWindow:     quicvarint.Max + 1,
+				MaxConnectionReceiveWindow: quicvarint.Max + 2,
+			}
+			Expect(validateConfig(conf)).To(Succeed())
+			Expect(conf.MaxStreamReceiveWindow).To(BeEquivalentTo(uint64(quicvarint.Max)))
+			Expect(conf.MaxConnectionReceiveWindow).To(BeEquivalentTo(uint64(quicvarint.Max)))
 		})
 	})
 
