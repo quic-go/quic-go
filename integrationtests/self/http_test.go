@@ -106,7 +106,7 @@ var _ = Describe("HTTP tests", func() {
 	})
 
 	AfterEach(func() {
-		rt.Close()
+		Expect(rt.Close()).NotTo(HaveOccurred())
 		Expect(server.Close()).NotTo(HaveOccurred())
 		Eventually(stoppedServing).Should(BeClosed())
 	})
