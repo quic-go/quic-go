@@ -90,6 +90,22 @@ var _ = Describe("Client", func() {
 		Expect(dialAddrCalled).To(BeTrue())
 	})
 
+	It("sets the ServerName in the tls.Config, if not set", func() {
+		const host = "foo.bar"
+		dialCalled := false
+		dialFunc := func(ctx context.Context, addr string, tlsCfg *tls.Config, cfg *quic.Config) (quic.EarlyConnection, error) {
+			Expect(tlsCfg.ServerName).To(Equal(host))
+			dialCalled = true
+			return nil, errors.New("test done")
+		}
+		client, err := newClient(host, nil, &roundTripperOpts{}, nil, dialFunc)
+		Expect(err).ToNot(HaveOccurred())
+		req, err := http.NewRequest("GET", "https://foo.bar", nil)
+		Expect(err).ToNot(HaveOccurred())
+		client.RoundTripOpt(req, RoundTripOpt{})
+		Expect(dialCalled).To(BeTrue())
+	})
+
 	It("uses the TLS config and QUIC config", func() {
 		tlsConf := &tls.Config{
 			ServerName: "foo.bar",
