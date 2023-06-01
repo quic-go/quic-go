@@ -160,8 +160,7 @@ func (l *EarlyListener) Addr() net.Addr {
 }
 
 // ListenAddr creates a QUIC server listening on a given address.
-// The tls.Config must not be nil and must contain a certificate configuration.
-// The quic.Config may be nil, in that case the default values will be used.
+// See Listen for more details.
 func ListenAddr(addr string, tlsConf *tls.Config, config *Config) (*Listener, error) {
 	conn, err := listenUDP(addr)
 	if err != nil {
@@ -195,16 +194,19 @@ func listenUDP(addr string) (*net.UDPConn, error) {
 	return net.ListenUDP("udp", udpAddr)
 }
 
-// Listen listens for QUIC connections on a given net.PacketConn. If the
-// PacketConn satisfies the OOBCapablePacketConn interface (as a net.UDPConn
-// does), ECN and packet info support will be enabled. In this case, ReadMsgUDP
-// and WriteMsgUDP will be used instead of ReadFrom and WriteTo to read/write
-// packets. A single net.PacketConn only be used for a single call to Listen.
-// The PacketConn can be used for simultaneous calls to Dial. QUIC connection
-// IDs are used for demultiplexing the different connections.
+// Listen listens for QUIC connections on a given net.PacketConn.
+// If the PacketConn satisfies the OOBCapablePacketConn interface (as a net.UDPConn does),
+// ECN and packet info support will be enabled. In this case, ReadMsgUDP and WriteMsgUDP
+// will be used instead of ReadFrom and WriteTo to read/write packets.
+// A single net.PacketConn can only be used for a single call to Listen.
+//
 // The tls.Config must not be nil and must contain a certificate configuration.
 // Furthermore, it must define an application control (using NextProtos).
 // The quic.Config may be nil, in that case the default values will be used.
+//
+// This is a convenience function. More advanced use cases should instantiate a Transport,
+// which offers configuration options for a more fine-grained control of the connection establishment,
+// including reusing the underlying UDP socket for outgoing QUIC connections.
 func Listen(conn net.PacketConn, tlsConf *tls.Config, config *Config) (*Listener, error) {
 	tr := &Transport{Conn: conn, isSingleUse: true}
 	return tr.Listen(tlsConf, config)
