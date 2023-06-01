@@ -98,7 +98,7 @@ var _ = Describe("HTTP3 Server hotswap test", func() {
 	})
 
 	AfterEach(func() {
-		rt.Close()
+		Expect(rt.Close()).NotTo(HaveOccurred())
 		Expect(ln.Close()).NotTo(HaveOccurred())
 	})
 

@@ -239,7 +239,12 @@ func (r *RoundTripper) Close() error {
 	}
 	r.clients = nil
 	if r.transport != nil {
-		r.transport.Close()
+		if err := r.transport.Close(); err != nil {
+			return err
+		}
+		if err := r.transport.Conn.Close(); err != nil {
+			return err
+		}
 		r.transport = nil
 	}
 	return nil
