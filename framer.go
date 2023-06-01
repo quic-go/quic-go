@@ -6,6 +6,7 @@ import (
 
 	"github.com/quic-go/quic-go/internal/ackhandler"
 	"github.com/quic-go/quic-go/internal/protocol"
+	"github.com/quic-go/quic-go/internal/utils/ringbuffer"
 	"github.com/quic-go/quic-go/internal/wire"
 	"github.com/quic-go/quic-go/quicvarint"
 )
@@ -28,7 +29,7 @@ type framerI struct {
 	streamGetter streamGetter
 
 	activeStreams map[protocol.StreamID]struct{}
-	streamQueue   []protocol.StreamID
+	streamQueue   ringbuffer.RingBuffer[protocol.StreamID]
 
 	controlFrameMutex sync.Mutex
 	controlFrames     []wire.Frame
@@ -45,7 +46,7 @@ func newFramer(streamGetter streamGetter) framer {
 
 func (f *framerI) HasData() bool {
 	f.mutex.Lock()
-	hasData := len(f.streamQueue) > 0
+	hasData := !f.streamQueue.Empty()
 	f.mutex.Unlock()
 	if hasData {
 		return true
@@ -84,7 +85,7 @@ func (f *framerI) AppendControlFrames(frames []*ackhandler.Frame, maxLen protoco
 func (f *framerI) AddActiveStream(id protocol.StreamID) {
 	f.mutex.Lock()
 	if _, ok := f.activeStreams[id]; !ok {
-		f.streamQueue = append(f.streamQueue, id)
+		f.streamQueue.PushBack(id)
 		f.activeStreams[id] = struct{}{}
 	}
 	f.mutex.Unlock()
@@ -95,13 +96,12 @@ func (f *framerI) AppendStreamFrames(frames []*ackhandler.Frame, maxLen protocol
 	var lastFrame *ackhandler.Frame
 	f.mutex.Lock()
 	// pop STREAM frames, until less than MinStreamFrameSize bytes are left in the packet
-	numActiveStreams := len(f.streamQueue)
+	numActiveStreams := f.streamQueue.Len()
 	for i := 0; i < numActiveStreams; i++ {
 		if protocol.MinStreamFrameSize+length > maxLen {
 			break
 		}
-		id := f.streamQueue[0]
-		f.streamQueue = f.streamQueue[1:]
+		id := f.streamQueue.PopFront()
 		// This should never return an error. Better check it anyway.
 		// The stream will only be in the streamQueue, if it enqueued itself there.
 		str, err := f.streamGetter.GetOrOpenSendStream(id)
@@ -117,7 +117,7 @@ func (f *framerI) AppendStreamFrames(frames []*ackhandler.Frame, maxLen protocol
 		remainingLen += quicvarint.Len(uint64(remainingLen))
 		frame, hasMoreData := str.popStreamFrame(remainingLen, v)
 		if hasMoreData { // put the stream back in the queue (at the end)
-			f.streamQueue = append(f.streamQueue, id)
+			f.streamQueue.PushBack(id)
 		} else { // no more data to send. Stream is not active any more
 			delete(f.activeStreams, id)
 		}
@@ -146,7 +146,7 @@ func (f *framerI) Handle0RTTRejection() error {
 	defer f.mutex.Unlock()
 
 	f.controlFrameMutex.Lock()
-	f.streamQueue = f.streamQueue[:0]
+	f.streamQueue.Clear()
 	for id := range f.activeStreams {
 		delete(f.activeStreams, id)
 	}
