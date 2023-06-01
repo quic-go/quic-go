@@ -1,15 +1,19 @@
 package ringbuffer
 
+// A RingBuffer is a ring buffer.
+// It acts as a heap that doesn't cause any allocations.
 type RingBuffer[T any] struct {
 	ring             []T
 	headPos, tailPos int
 	full             bool
 }
 
+// Init preallocs a buffer with a certain size.
 func (r *RingBuffer[T]) Init(size int) {
 	r.ring = make([]T, size)
 }
 
+// Len returns the number of elements in the ring buffer.
 func (r *RingBuffer[T]) Len() int {
 	if r.full {
 		return len(r.ring)
@@ -20,10 +24,13 @@ func (r *RingBuffer[T]) Len() int {
 	return r.tailPos - r.headPos + len(r.ring)
 }
 
+// Empty says if the ring buffer is empty.
 func (r *RingBuffer[T]) Empty() bool {
 	return !r.full && r.headPos == r.tailPos
 }
 
+// PushBack adds a new element.
+// If the ring buffer is full, its capacity is increased first.
 func (r *RingBuffer[T]) PushBack(t T) {
 	if r.full || len(r.ring) == 0 {
 		r.grow()
@@ -38,6 +45,9 @@ func (r *RingBuffer[T]) PushBack(t T) {
 	}
 }
 
+// PopFront returns the next element.
+// It must not be called when the buffer is empty, that means that
+// callers might need to check if there are elements in the buffer first.
 func (r *RingBuffer[T]) PopFront() T {
 	if r.Empty() {
 		panic("github.com/quic-go/quic-go/internal/utils/ringbuffer: pop from an empty queue")
@@ -66,6 +76,7 @@ func (r *RingBuffer[T]) grow() {
 	r.headPos, r.tailPos, r.full = 0, len(oldRing), false
 }
 
+// Clear removes all elements.
 func (r *RingBuffer[T]) Clear() {
 	var zeroValue T
 	for i := range r.ring {
