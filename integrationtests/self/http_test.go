@@ -40,6 +40,7 @@ var _ = Describe("HTTP tests", func() {
 	var (
 		mux            *http.ServeMux
 		client         *http.Client
+		rt             *http3.RoundTripper
 		server         *http3.Server
 		stoppedServing chan struct{}
 		port           string
@@ -77,6 +78,12 @@ var _ = Describe("HTTP tests", func() {
 			w.Write(body) // don't check the error here. Stream may be reset.
 		})
 
+		mux.HandleFunc("/remoteAddr", func(w http.ResponseWriter, r *http.Request) {
+			defer GinkgoRecover()
+			w.Header().Set("X-RemoteAddr", r.RemoteAddr)
+			w.WriteHeader(http.StatusOK)
+		})
+
 		server = &http3.Server{
 			Handler:    mux,
 			TLSConfig:  getTLSConfig(),
@@ -99,18 +106,18 @@ var _ = Describe("HTTP tests", func() {
 	})
 
 	AfterEach(func() {
+		rt.Close()
 		Expect(server.Close()).NotTo(HaveOccurred())
 		Eventually(stoppedServing).Should(BeClosed())
 	})
 
 	BeforeEach(func() {
-		client = &http.Client{
-			Transport: &http3.RoundTripper{
-				TLSClientConfig:    getTLSClientConfig(),
-				DisableCompression: true,
-				QuicConfig:         getQuicConfig(&quic.Config{MaxIdleTimeout: 10 * time.Second}),
-			},
+		rt = &http3.RoundTripper{
+			TLSClientConfig:    getTLSClientConfigWithoutServerName(),
+			DisableCompression: true,
+			QuicConfig:         getQuicConfig(&quic.Config{MaxIdleTimeout: 10 * time.Second}),
 		}
+		client = &http.Client{Transport: rt}
 	})
 
 	It("downloads a hello", func() {
@@ -120,6 +127,20 @@ var _ = Describe("HTTP tests", func() {
 		body, err := io.ReadAll(gbytes.TimeoutReader(resp.Body, 3*time.Second))
 		Expect(err).ToNot(HaveOccurred())
 		Expect(string(body)).To(Equal("Hello, World!\n"))
+	})
+
+	It("requests to different servers with the same udpconn", func() {
+		resp, err := client.Get("https://localhost:" + port + "/remoteAddr")
+		Expect(err).ToNot(HaveOccurred())
+		Expect(resp.StatusCode).To(Equal(200))
+		addr1 := resp.Header.Get("X-RemoteAddr")
+		Expect(addr1).ToNot(Equal(""))
+		resp, err = client.Get("https://127.0.0.1:" + port + "/remoteAddr")
+		Expect(err).ToNot(HaveOccurred())
+		Expect(resp.StatusCode).To(Equal(200))
+		addr2 := resp.Header.Get("X-RemoteAddr")
+		Expect(addr2).ToNot(Equal(""))
+		Expect(addr1).To(Equal(addr2))
 	})
 
 	It("downloads concurrently", func() {

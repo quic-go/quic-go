@@ -61,6 +61,7 @@ var _ = Describe("HTTP3 Server hotswap test", func() {
 		mux1    *http.ServeMux
 		mux2    *http.ServeMux
 		client  *http.Client
+		rt      *http3.RoundTripper
 		server1 *http3.Server
 		server2 *http3.Server
 		ln      *listenerWrapper
@@ -97,17 +98,17 @@ var _ = Describe("HTTP3 Server hotswap test", func() {
 	})
 
 	AfterEach(func() {
+		rt.Close()
 		Expect(ln.Close()).NotTo(HaveOccurred())
 	})
 
 	BeforeEach(func() {
-		client = &http.Client{
-			Transport: &http3.RoundTripper{
-				TLSClientConfig:    getTLSClientConfig(),
-				DisableCompression: true,
-				QuicConfig:         getQuicConfig(&quic.Config{MaxIdleTimeout: 10 * time.Second}),
-			},
+		rt = &http3.RoundTripper{
+			TLSClientConfig:    getTLSClientConfig(),
+			DisableCompression: true,
+			QuicConfig:         getQuicConfig(&quic.Config{MaxIdleTimeout: 10 * time.Second}),
 		}
+		client = &http.Client{Transport: rt}
 	})
 
 	It("hotswap works", func() {

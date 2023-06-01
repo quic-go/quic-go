@@ -90,10 +90,11 @@ var (
 	qlogTracer func(context.Context, logging.Perspective, quic.ConnectionID) logging.ConnectionTracer
 	enableQlog bool
 
-	version            quic.VersionNumber
-	tlsConfig          *tls.Config
-	tlsConfigLongChain *tls.Config
-	tlsClientConfig    *tls.Config
+	version                          quic.VersionNumber
+	tlsConfig                        *tls.Config
+	tlsConfigLongChain               *tls.Config
+	tlsClientConfig                  *tls.Config
+	tlsClientConfigWithoutServerName *tls.Config
 )
 
 // read the logfile command line flag
@@ -131,6 +132,10 @@ func init() {
 		RootCAs:    root,
 		NextProtos: []string{alpn},
 	}
+	tlsClientConfigWithoutServerName = &tls.Config{
+		RootCAs:    root,
+		NextProtos: []string{alpn},
+	}
 }
 
 var _ = BeforeSuite(func() {
@@ -163,6 +168,10 @@ func getTLSConfigWithLongCertChain() *tls.Config {
 
 func getTLSClientConfig() *tls.Config {
 	return tlsClientConfig.Clone()
+}
+
+func getTLSClientConfigWithoutServerName() *tls.Config {
+	return tlsClientConfigWithoutServerName.Clone()
 }
 
 func getQuicConfig(conf *quic.Config) *quic.Config {
