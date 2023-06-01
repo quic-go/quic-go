@@ -78,6 +78,12 @@ var _ = Describe("HTTP tests", func() {
 			w.Write(body) // don't check the error here. Stream may be reset.
 		})
 
+		mux.HandleFunc("/remoteAddr", func(w http.ResponseWriter, r *http.Request) {
+			defer GinkgoRecover()
+			w.Header().Set("X-RemoteAddr", r.RemoteAddr)
+			w.WriteHeader(http.StatusOK)
+		})
+
 		server = &http3.Server{
 			Handler:    mux,
 			TLSConfig:  getTLSConfig(),
@@ -123,19 +129,18 @@ var _ = Describe("HTTP tests", func() {
 		Expect(string(body)).To(Equal("Hello, World!\n"))
 	})
 
-	It("request to server with two different servrname", func() {
-		resp, err := client.Get("https://localhost:" + port + "/hello")
+	It("requests to different servers with the same udpconn", func() {
+		resp, err := client.Get("https://localhost:" + port + "/remoteAddr")
 		Expect(err).ToNot(HaveOccurred())
 		Expect(resp.StatusCode).To(Equal(200))
-		body, err := io.ReadAll(gbytes.TimeoutReader(resp.Body, 3*time.Second))
-		Expect(err).ToNot(HaveOccurred())
-		Expect(string(body)).To(Equal("Hello, World!\n"))
-		resp, err = client.Get("https://127.0.0.1:" + port + "/hello")
+		addr1 := resp.Header.Get("X-RemoteAddr")
+		Expect(addr1).ToNot(Equal(""))
+		resp, err = client.Get("https://127.0.0.1:" + port + "/remoteAddr")
 		Expect(err).ToNot(HaveOccurred())
 		Expect(resp.StatusCode).To(Equal(200))
-		body, err = io.ReadAll(gbytes.TimeoutReader(resp.Body, 3*time.Second))
-		Expect(err).ToNot(HaveOccurred())
-		Expect(string(body)).To(Equal("Hello, World!\n"))
+		addr2 := resp.Header.Get("X-RemoteAddr")
+		Expect(addr2).ToNot(Equal(""))
+		Expect(addr1).To(Equal(addr2))
 	})
 
 	It("downloads concurrently", func() {

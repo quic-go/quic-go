@@ -17,8 +17,6 @@ import (
 	"github.com/quic-go/quic-go"
 )
 
-// declare this as a variable, such that we can it mock it in the tests
-
 type roundTripCloser interface {
 	RoundTripOpt(*http.Request, RoundTripOpt) (*http.Response, error)
 	HandshakeComplete() bool
