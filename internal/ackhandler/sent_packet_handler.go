@@ -136,16 +136,6 @@ func newSentPacketHandler(
 	}
 }
 
-func (h *sentPacketHandler) DropPackets(encLevel protocol.EncryptionLevel) {
-	if h.perspective == protocol.PerspectiveClient && encLevel == protocol.EncryptionInitial {
-		// This function is called when the crypto setup seals a Handshake packet.
-		// If this Handshake packet is coalesced behind an Initial packet, we would drop the Initial packet number space
-		// before SentPacket() was called for that Initial packet.
-		return
-	}
-	h.dropPackets(encLevel)
-}
-
 func (h *sentPacketHandler) removeFromBytesInFlight(p *Packet) {
 	if p.includedInBytesInFlight {
 		if p.Length > h.bytesInFlight {
@@ -156,7 +146,7 @@ func (h *sentPacketHandler) removeFromBytesInFlight(p *Packet) {
 	}
 }
 
-func (h *sentPacketHandler) dropPackets(encLevel protocol.EncryptionLevel) {
+func (h *sentPacketHandler) DropPackets(encLevel protocol.EncryptionLevel) {
 	// The server won't await address validation after the handshake is confirmed.
 	// This applies even if we didn't receive an ACK for a Handshake packet.
 	if h.perspective == protocol.PerspectiveClient && encLevel == protocol.EncryptionHandshake {
@@ -165,6 +155,10 @@ func (h *sentPacketHandler) dropPackets(encLevel protocol.EncryptionLevel) {
 	// remove outstanding packets from bytes_in_flight
 	if encLevel == protocol.EncryptionInitial || encLevel == protocol.EncryptionHandshake {
 		pnSpace := h.getPacketNumberSpace(encLevel)
+		// We might already have dropped this packet number space.
+		if pnSpace == nil {
+			return
+		}
 		pnSpace.history.Iterate(func(p *Packet) (bool, error) {
 			h.removeFromBytesInFlight(p)
 			return true, nil
@@ -230,10 +224,6 @@ func (h *sentPacketHandler) packetsInFlight() int {
 
 func (h *sentPacketHandler) SentPacket(p *Packet) {
 	h.bytesSent += p.Length
-	// For the client, drop the Initial packet number space when the first Handshake packet is sent.
-	if h.perspective == protocol.PerspectiveClient && p.EncryptionLevel == protocol.EncryptionHandshake && h.initialPackets != nil {
-		h.dropPackets(protocol.EncryptionInitial)
-	}
 	isAckEliciting := h.sentPacketImpl(p)
 	if isAckEliciting {
 		h.getPacketNumberSpace(p.EncryptionLevel).history.SentAckElicitingPacket(p)
@@ -854,6 +844,12 @@ func (h *sentPacketHandler) ResetForRetry() error {
 }
 
 func (h *sentPacketHandler) SetHandshakeConfirmed() {
+	if h.initialPackets != nil {
+		panic("didn't drop initial correctly")
+	}
+	if h.handshakePackets != nil {
+		panic("didn't drop handshake correctly")
+	}
 	h.handshakeConfirmed = true
 	// We don't send PTOs for application data packets before the handshake completes.
 	// Make sure the timer is armed now, if necessary.

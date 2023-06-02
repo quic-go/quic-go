@@ -78,17 +78,12 @@ var _ = Describe("Crypto Setup TLS", func() {
 	})
 
 	It("handles qtls errors occurring before during ClientHello generation", func() {
-		_, sInitialStream, sHandshakeStream := initStreams()
 		tlsConf := testdata.GetTLSConfig()
 		tlsConf.InsecureSkipVerify = true
 		tlsConf.NextProtos = []string{""}
-		cl, _ := NewCryptoSetupClient(
-			sInitialStream,
-			sHandshakeStream,
-			nil,
+		cl := NewCryptoSetupClient(
 			protocol.ConnectionID{},
 			&wire.TransportParameters{},
-			NewMockHandshakeRunner(mockCtrl),
 			tlsConf,
 			false,
 			&utils.RTTStats{},
@@ -104,16 +99,10 @@ var _ = Describe("Crypto Setup TLS", func() {
 	})
 
 	It("errors when a message is received at the wrong encryption level", func() {
-		_, sInitialStream, sHandshakeStream := initStreams()
-		runner := NewMockHandshakeRunner(mockCtrl)
 		var token protocol.StatelessResetToken
 		server := NewCryptoSetupServer(
-			sInitialStream,
-			sHandshakeStream,
-			nil,
 			protocol.ConnectionID{},
 			&wire.TransportParameters{StatelessResetToken: &token},
-			runner,
 			testdata.GetTLSConfig(),
 			false,
 			&utils.RTTStats{},

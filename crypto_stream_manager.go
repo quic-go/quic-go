@@ -3,12 +3,14 @@ package quic
 import (
 	"fmt"
 
+	"github.com/quic-go/quic-go/internal/handshake"
 	"github.com/quic-go/quic-go/internal/protocol"
 	"github.com/quic-go/quic-go/internal/wire"
 )
 
 type cryptoDataHandler interface {
 	HandleMessage([]byte, protocol.EncryptionLevel) error
+	NextEvent() handshake.Event
 }
 
 type cryptoStreamManager struct {
