@@ -438,7 +438,7 @@ func (h *cryptoSetupClient) getTags() (map[Tag][]byte, error) {
 	}
 
 	versionTag := make([]byte, 4)
-	binary.BigEndian.PutUint32(versionTag, uint32(h.initialVersion))
+	binary.BigEndian.PutUint32(versionTag, uint32(protocol.Version43))
 	tags[TagVER] = versionTag
 
 	if len(h.stk) > 0 {
