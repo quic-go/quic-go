@@ -800,7 +800,7 @@ func (s *connection) handleHandshakeConfirmed() {
 	s.sentPacketHandler.SetHandshakeConfirmed()
 	s.cryptoStreamHandler.SetHandshakeConfirmed()
 
-	if !s.config.DisablePathMTUDiscovery {
+	if !s.config.DisablePathMTUDiscovery && s.conn.capabilities().DF {
 		maxPacketSize := s.peerParams.MaxUDPPayloadSize
 		if maxPacketSize == 0 {
 			maxPacketSize = protocol.MaxByteCount
@@ -1887,7 +1887,7 @@ func (s *connection) sendPacket() (bool, error) {
 		s.sentFirstPacket = true
 		s.sendPackedCoalescedPacket(packet, now)
 		return true, nil
-	} else if !s.config.DisablePathMTUDiscovery && s.mtuDiscoverer.ShouldSendProbe(now) {
+	} else if s.mtuDiscoverer != nil && s.mtuDiscoverer.ShouldSendProbe(now) {
 		ping, size := s.mtuDiscoverer.GetPing()
 		p, buffer, err := s.packer.PackMTUProbePacket(ping, size, now, s.version)
 		if err != nil {
