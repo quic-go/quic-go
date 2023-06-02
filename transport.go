@@ -20,6 +20,12 @@ import (
 	"github.com/quic-go/quic-go/logging"
 )
 
+// The Transport is the central point to manage incoming and outgoing QUIC connections.
+// QUIC demultiplexes connections based on their QUIC Connection IDs, not based on the 4-tuple.
+// This means that a single UDP socket can be used for listening for incoming connections, as well as
+// for dialing an arbitrary number of outgoing connections.
+// A Transport handles a single net.PacketConn, and offers a range of configuration options
+// compared to the simple helper functions like Listen and Dial that this package provides.
 type Transport struct {
 	// A single net.PacketConn can only be handled by one Transport.
 	// Bad things will happen if passed to multiple Transports.
@@ -44,6 +50,9 @@ type Transport struct {
 
 	// The StatelessResetKey is used to generate stateless reset tokens.
 	// If no key is configured, sending of stateless resets is disabled.
+	// It is highly recommended to configure a stateless reset key, as stateless resets
+	// allow the peer to quickly recover from crashes and reboots of this node.
+	// See section 10.3 of RFC 9000 for details.
 	StatelessResetKey *StatelessResetKey
 
 	// A Tracer traces events that don't belong to a single QUIC connection.
