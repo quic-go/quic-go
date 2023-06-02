@@ -276,17 +276,21 @@ type Config struct {
 	// If the application is consuming data quickly enough, the flow control auto-tuning algorithm
 	// will increase the window up to MaxStreamReceiveWindow.
 	// If this value is zero, it will default to 512 KB.
+	// Values larger than the maximum varint (quicvarint.Max) will be clipped to that value.
 	InitialStreamReceiveWindow uint64
 	// MaxStreamReceiveWindow is the maximum stream-level flow control window for receiving data.
 	// If this value is zero, it will default to 6 MB.
+	// Values larger than the maximum varint (quicvarint.Max) will be clipped to that value.
 	MaxStreamReceiveWindow uint64
 	// InitialConnectionReceiveWindow is the initial size of the stream-level flow control window for receiving data.
 	// If the application is consuming data quickly enough, the flow control auto-tuning algorithm
 	// will increase the window up to MaxConnectionReceiveWindow.
 	// If this value is zero, it will default to 512 KB.
+	// Values larger than the maximum varint (quicvarint.Max) will be clipped to that value.
 	InitialConnectionReceiveWindow uint64
 	// MaxConnectionReceiveWindow is the connection-level flow control window for receiving data.
 	// If this value is zero, it will default to 15 MB.
+	// Values larger than the maximum varint (quicvarint.Max) will be clipped to that value.
 	MaxConnectionReceiveWindow uint64
 	// AllowConnectionWindowIncrease is called every time the connection flow controller attempts
 	// to increase the connection flow control window.
@@ -296,14 +300,14 @@ type Config struct {
 	// in this callback.
 	AllowConnectionWindowIncrease func(conn Connection, delta uint64) bool
 	// MaxIncomingStreams is the maximum number of concurrent bidirectional streams that a peer is allowed to open.
-	// Values above 2^60 are invalid.
 	// If not set, it will default to 100.
 	// If set to a negative value, it doesn't allow any bidirectional streams.
+	// Values larger than 2^60 will be clipped to that value.
 	MaxIncomingStreams int64
 	// MaxIncomingUniStreams is the maximum number of concurrent unidirectional streams that a peer is allowed to open.
-	// Values above 2^60 are invalid.
 	// If not set, it will default to 100.
 	// If set to a negative value, it doesn't allow any unidirectional streams.
+	// Values larger than 2^60 will be clipped to that value.
 	MaxIncomingUniStreams int64
 	// KeepAlivePeriod defines whether this peer will periodically send a packet to keep the connection alive.
 	// If set to 0, then no keep alive is sent. Otherwise, the keep alive is sent on that period (or at most
