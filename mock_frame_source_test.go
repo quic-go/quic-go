@@ -51,10 +51,10 @@ func (mr *MockFrameSourceMockRecorder) AppendControlFrames(arg0, arg1, arg2 inte
 }
 
 // AppendStreamFrames mocks base method.
-func (m *MockFrameSource) AppendStreamFrames(arg0 []*ackhandler.Frame, arg1 protocol.ByteCount, arg2 protocol.VersionNumber) ([]*ackhandler.Frame, protocol.ByteCount) {
+func (m *MockFrameSource) AppendStreamFrames(arg0 []ackhandler.StreamFrame, arg1 protocol.ByteCount, arg2 protocol.VersionNumber) ([]ackhandler.StreamFrame, protocol.ByteCount) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "AppendStreamFrames", arg0, arg1, arg2)
-	ret0, _ := ret[0].([]*ackhandler.Frame)
+	ret0, _ := ret[0].([]ackhandler.StreamFrame)
 	ret1, _ := ret[1].(protocol.ByteCount)
 	return ret0, ret1
 }

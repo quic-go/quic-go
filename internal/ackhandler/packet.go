@@ -11,6 +11,7 @@ import (
 type Packet struct {
 	SendTime        time.Time
 	PacketNumber    protocol.PacketNumber
+	StreamFrames    []StreamFrame
 	Frames          []*Frame
 	LargestAcked    protocol.PacketNumber // InvalidPacketNumber if the packet doesn't contain an ACK
 	Length          protocol.ByteCount
@@ -32,6 +33,7 @@ var packetPool = sync.Pool{New: func() any { return &Packet{} }}
 func GetPacket() *Packet {
 	p := packetPool.Get().(*Packet)
 	p.PacketNumber = 0
+	p.StreamFrames = nil
 	p.Frames = nil
 	p.LargestAcked = 0
 	p.Length = 0
@@ -51,5 +53,6 @@ func putPacket(p *Packet) {
 		putFrame(f)
 	}
 	p.Frames = nil
+	p.StreamFrames = nil
 	packetPool.Put(p)
 }

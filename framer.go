@@ -18,7 +18,7 @@ type framer interface {
 	AppendControlFrames([]*ackhandler.Frame, protocol.ByteCount, protocol.VersionNumber) ([]*ackhandler.Frame, protocol.ByteCount)
 
 	AddActiveStream(protocol.StreamID)
-	AppendStreamFrames([]*ackhandler.Frame, protocol.ByteCount, protocol.VersionNumber) ([]*ackhandler.Frame, protocol.ByteCount)
+	AppendStreamFrames([]ackhandler.StreamFrame, protocol.ByteCount, protocol.VersionNumber) ([]ackhandler.StreamFrame, protocol.ByteCount)
 
 	Handle0RTTRejection() error
 }
@@ -91,9 +91,9 @@ func (f *framerI) AddActiveStream(id protocol.StreamID) {
 	f.mutex.Unlock()
 }
 
-func (f *framerI) AppendStreamFrames(frames []*ackhandler.Frame, maxLen protocol.ByteCount, v protocol.VersionNumber) ([]*ackhandler.Frame, protocol.ByteCount) {
+func (f *framerI) AppendStreamFrames(frames []ackhandler.StreamFrame, maxLen protocol.ByteCount, v protocol.VersionNumber) ([]ackhandler.StreamFrame, protocol.ByteCount) {
+	startLen := len(frames)
 	var length protocol.ByteCount
-	var lastFrame *ackhandler.Frame
 	f.mutex.Lock()
 	// pop STREAM frames, until less than MinStreamFrameSize bytes are left in the packet
 	numActiveStreams := f.streamQueue.Len()
@@ -115,28 +115,27 @@ func (f *framerI) AppendStreamFrames(frames []*ackhandler.Frame, maxLen protocol
 		// Therefore, we can pretend to have more bytes available when popping
 		// the STREAM frame (which will always have the DataLen set).
 		remainingLen += quicvarint.Len(uint64(remainingLen))
-		frame, hasMoreData := str.popStreamFrame(remainingLen, v)
+		frame, ok, hasMoreData := str.popStreamFrame(remainingLen, v)
 		if hasMoreData { // put the stream back in the queue (at the end)
 			f.streamQueue.PushBack(id)
-		} else { // no more data to send. Stream is not active any more
+		} else { // no more data to send. Stream is not active
 			delete(f.activeStreams, id)
 		}
-		// The frame can be nil
+		// The frame can be "nil"
 		// * if the receiveStream was canceled after it said it had data
 		// * the remaining size doesn't allow us to add another STREAM frame
-		if frame == nil {
+		if !ok {
 			continue
 		}
 		frames = append(frames, frame)
-		length += frame.Length(v)
-		lastFrame = frame
+		length += frame.Frame.Length(v)
 	}
 	f.mutex.Unlock()
-	if lastFrame != nil {
-		lastFrameLen := lastFrame.Length(v)
+	if len(frames) > startLen {
+		l := frames[len(frames)-1].Frame.Length(v)
 		// account for the smaller size of the last STREAM frame
-		lastFrame.Frame.(*wire.StreamFrame).DataLenPresent = false
-		length += lastFrame.Length(v) - lastFrameLen
+		frames[len(frames)-1].Frame.DataLenPresent = false
+		length += frames[len(frames)-1].Frame.Length(v) - l
 	}
 	return frames, length
 }

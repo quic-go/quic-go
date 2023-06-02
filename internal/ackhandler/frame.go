@@ -27,3 +27,11 @@ func putFrame(f *Frame) {
 	f.OnAcked = nil
 	framePool.Put(f)
 }
+
+type StreamFrame struct {
+	Frame   *wire.StreamFrame
+	Handler interface {
+		OnLost(*wire.StreamFrame)
+		OnAcked(*wire.StreamFrame)
+	}
+}
