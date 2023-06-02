@@ -64,7 +64,7 @@ var _ = Describe("Framer", func() {
 			ping := &wire.PingFrame{}
 			mdf := &wire.MaxDataFrame{MaximumData: 0x42}
 			framer.QueueControlFrame(mdf)
-			frames, length := framer.AppendControlFrames([]*ackhandler.Frame{{Frame: ping}}, 1000, protocol.Version1)
+			frames, length := framer.AppendControlFrames([]ackhandler.Frame{{Frame: ping}}, 1000, protocol.Version1)
 			Expect(frames).To(HaveLen(2))
 			Expect(frames[0].Frame).To(Equal(ping))
 			Expect(frames[1].Frame).To(Equal(mdf))

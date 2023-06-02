@@ -29,7 +29,7 @@ var _ = Describe("ack-eliciting frames", func() {
 		})
 
 		It("HasAckElicitingFrames works for "+fName, func() {
-			Expect(HasAckElicitingFrames([]*Frame{{Frame: f}})).To(Equal(e))
+			Expect(HasAckElicitingFrames([]Frame{{Frame: f}})).To(Equal(e))
 		})
 	}
 })
