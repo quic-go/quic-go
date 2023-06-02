@@ -3,12 +3,14 @@ package quic
 import (
 	"fmt"
 
+	"github.com/quic-go/quic-go/internal/handshake"
 	"github.com/quic-go/quic-go/internal/protocol"
 	"github.com/quic-go/quic-go/internal/wire"
 )
 
 type cryptoDataHandler interface {
 	HandleMessage([]byte, protocol.EncryptionLevel) error
+	NextEvent() handshake.Event
 }
 
 type cryptoStreamManager struct {
@@ -74,8 +76,6 @@ func (m *cryptoStreamManager) Drop(encLevel protocol.EncryptionLevel) error {
 		return m.initialStream.Finish()
 	case protocol.EncryptionHandshake:
 		return m.handshakeStream.Finish()
-	case protocol.Encryption0RTT:
-		return nil
 	default:
 		panic(fmt.Sprintf("dropped unexpected encryption level: %s", encLevel))
 	}
