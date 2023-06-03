@@ -20,7 +20,7 @@ type SentPacketHandler interface {
 	SetHandshakeConfirmed()
 
 	// The SendMode determines if and what kind of packets can be sent.
-	SendMode() SendMode
+	SendMode(now time.Time) SendMode
 	// TimeUntilSend is the time when the next packet should be sent.
 	// It is used for pacing packets.
 	TimeUntilSend() time.Time
