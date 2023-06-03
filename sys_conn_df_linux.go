@@ -4,12 +4,21 @@ package quic
 
 import (
 	"errors"
+	"log"
+	"os"
+	"strconv"
 	"syscall"
+	"unsafe"
 
 	"golang.org/x/sys/unix"
 
 	"github.com/quic-go/quic-go/internal/utils"
 )
+
+// UDP_SEGMENT controls GSO (Generic Segmentation Offload)
+//
+//nolint:stylecheck
+const UDP_SEGMENT = 103
 
 func setDF(rawConn syscall.RawConn) (bool, error) {
 	// Enabling IP_MTU_DISCOVER will force the kernel to return "sendto: message too long"
@@ -34,7 +43,41 @@ func setDF(rawConn syscall.RawConn) (bool, error) {
 	return true, nil
 }
 
+func maybeSetGSO(rawConn syscall.RawConn) bool {
+	disable, _ := strconv.ParseBool(os.Getenv("QUIC_GO_DISABLE_GSO"))
+	if disable {
+		return false
+	}
+
+	var setErr error
+	if err := rawConn.Control(func(fd uintptr) {
+		setErr = unix.SetsockoptInt(int(fd), syscall.IPPROTO_UDP, UDP_SEGMENT, 1)
+	}); err != nil {
+		setErr = err
+	}
+	if setErr != nil {
+		log.Println("failed to enable GSO")
+		return false
+	}
+	return true
+}
+
 func isMsgSizeErr(err error) bool {
 	// https://man7.org/linux/man-pages/man7/udp.7.html
 	return errors.Is(err, unix.EMSGSIZE)
+}
+
+func appendUDPSegmentSizeMsg(b []byte, size uint16) []byte {
+	startLen := len(b)
+	const dataLen = 2 // payload is a uint16
+	b = append(b, make([]byte, unix.CmsgSpace(dataLen))...)
+	h := (*unix.Cmsghdr)(unsafe.Pointer(&b[startLen]))
+	h.Level = syscall.IPPROTO_UDP
+	h.Type = UDP_SEGMENT
+	h.SetLen(unix.CmsgLen(dataLen))
+
+	// UnixRights uses the private `data` method, but I *think* this achieves the same goal.
+	offset := startLen + unix.CmsgSpace(0)
+	*(*uint16)(unsafe.Pointer(&b[offset])) = size
+	return b
 }
