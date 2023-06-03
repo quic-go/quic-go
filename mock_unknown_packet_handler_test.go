@@ -34,7 +34,7 @@ func (m *MockUnknownPacketHandler) EXPECT() *MockUnknownPacketHandlerMockRecorde
 }
 
 // handlePacket mocks base method.
-func (m *MockUnknownPacketHandler) handlePacket(arg0 *receivedPacket) {
+func (m *MockUnknownPacketHandler) handlePacket(arg0 receivedPacket) {
 	m.ctrl.T.Helper()
 	m.ctrl.Call(m, "handlePacket", arg0)
 }

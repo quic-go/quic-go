@@ -61,7 +61,7 @@ func (mr *MockPacketHandlerMockRecorder) getPerspective() *gomock.Call {
 }
 
 // handlePacket mocks base method.
-func (m *MockPacketHandler) handlePacket(arg0 *receivedPacket) {
+func (m *MockPacketHandler) handlePacket(arg0 receivedPacket) {
 	m.ctrl.T.Helper()
 	m.ctrl.Call(m, "handlePacket", arg0)
 }

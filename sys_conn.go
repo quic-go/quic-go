@@ -79,16 +79,16 @@ type basicConn struct {
 
 var _ rawConn = &basicConn{}
 
-func (c *basicConn) ReadPacket() (*receivedPacket, error) {
+func (c *basicConn) ReadPacket() (receivedPacket, error) {
 	buffer := getPacketBuffer()
 	// The packet size should not exceed protocol.MaxPacketBufferSize bytes
 	// If it does, we only read a truncated packet, which will then end up undecryptable
 	buffer.Data = buffer.Data[:protocol.MaxPacketBufferSize]
 	n, addr, err := c.PacketConn.ReadFrom(buffer.Data)
 	if err != nil {
-		return nil, err
+		return receivedPacket{}, err
 	}
-	return &receivedPacket{
+	return receivedPacket{
 		remoteAddr: addr,
 		rcvTime:    time.Now(),
 		data:       buffer.Data[:n],
