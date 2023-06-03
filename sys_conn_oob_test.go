@@ -154,8 +154,8 @@ var _ = Describe("OOB Conn Test", func() {
 			Expect(p.rcvTime).To(BeTemporally("~", time.Now(), scaleDuration(20*time.Millisecond)))
 			Expect(p.data).To(Equal([]byte("foobar")))
 			Expect(p.remoteAddr).To(Equal(sentFrom))
-			Expect(p.info).To(Not(BeNil()))
-			Expect(p.info.addr.To4()).To(Equal(ip))
+			Expect(p.info.addr.IsValid()).To(BeTrue())
+			Expect(net.IP(p.info.addr.AsSlice())).To(Equal(ip))
 		})
 
 		It("reads packet info on IPv6", func() {
@@ -173,7 +173,7 @@ var _ = Describe("OOB Conn Test", func() {
 			Expect(p.data).To(Equal([]byte("foobar")))
 			Expect(p.remoteAddr).To(Equal(sentFrom))
 			Expect(p.info).To(Not(BeNil()))
-			Expect(p.info.addr).To(Equal(ip))
+			Expect(net.IP(p.info.addr.AsSlice())).To(Equal(ip))
 		})
 
 		It("reads packet info on a connection that supports both IPv4 and IPv6", func() {
@@ -182,14 +182,16 @@ var _ = Describe("OOB Conn Test", func() {
 			port := conn.LocalAddr().(*net.UDPAddr).Port
 
 			// IPv4
-			ip4 := net.ParseIP("127.0.0.1").To4()
+			ip4 := net.ParseIP("127.0.0.1")
 			sendPacket("udp4", &net.UDPAddr{IP: ip4, Port: port})
 
 			var p receivedPacket
 			Eventually(packetChan).Should(Receive(&p))
 			Expect(utils.IsIPv4(p.remoteAddr.(*net.UDPAddr).IP)).To(BeTrue())
 			Expect(p.info).To(Not(BeNil()))
-			Expect(p.info.addr.To4()).To(Equal(ip4))
+			Expect(p.info.addr.Is4In6() || p.info.addr.Is4()).To(BeTrue())
+			ip := p.info.addr.As4()
+			Expect(net.IP(ip[:])).To(Equal(ip4.To4()))
 
 			// IPv6
 			ip6 := net.ParseIP("::1")
@@ -198,7 +200,7 @@ var _ = Describe("OOB Conn Test", func() {
 			Eventually(packetChan).Should(Receive(&p))
 			Expect(utils.IsIPv4(p.remoteAddr.(*net.UDPAddr).IP)).To(BeFalse())
 			Expect(p.info).To(Not(BeNil()))
-			Expect(p.info.addr).To(Equal(ip6))
+			Expect(net.IP(p.info.addr.AsSlice())).To(Equal(ip6))
 		})
 	})
 
