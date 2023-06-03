@@ -11,4 +11,8 @@ func newConn(c net.PacketConn, supportsDF bool) (*basicConn, error) {
 func inspectReadBuffer(any) (int, error)  { return 0, nil }
 func inspectWriteBuffer(any) (int, error) { return 0, nil }
 
+type packetInfo struct {
+	addr net.IP
+}
+
 func (i *packetInfo) OOB() []byte { return nil }
