@@ -827,18 +827,16 @@ func (p *packetPacker) appendLongHeaderPacket(buffer *packetBuffer, header *wire
 	}
 	payloadOffset := protocol.ByteCount(len(raw))
 
-	pn := p.pnManager.PopPacketNumber(encLevel)
-	if pn != header.PacketNumber {
-		return nil, errors.New("packetPacker BUG: Peeked and Popped packet numbers do not match")
-	}
-
 	raw, err = p.appendPacketPayload(raw, pl, paddingLen, v)
 	if err != nil {
 		return nil, err
 	}
-	raw = p.encryptPacket(raw, sealer, pn, payloadOffset, pnLen)
+	raw = p.encryptPacket(raw, sealer, header.PacketNumber, payloadOffset, pnLen)
 	buffer.Data = buffer.Data[:len(buffer.Data)+len(raw)]
 
+	if pn := p.pnManager.PopPacketNumber(encLevel); pn != header.PacketNumber {
+		return nil, fmt.Errorf("packetPacker BUG: Peeked and Popped packet numbers do not match: expected %d, got %d", pn, header.PacketNumber)
+	}
 	return &longHeaderPacket{
 		header:       header,
 		ack:          pl.ack,
@@ -875,10 +873,6 @@ func (p *packetPacker) appendShortHeaderPacket(
 	}
 	payloadOffset := protocol.ByteCount(len(raw))
 
-	if pn != p.pnManager.PopPacketNumber(protocol.Encryption1RTT) {
-		return nil, nil, errors.New("packetPacker BUG: Peeked and Popped packet numbers do not match")
-	}
-
 	raw, err = p.appendPacketPayload(raw, pl, paddingLen, v)
 	if err != nil {
 		return nil, nil, err
@@ -913,6 +907,9 @@ func (p *packetPacker) appendShortHeaderPacket(
 	ap.SendTime = now
 	ap.IsPathMTUProbePacket = isMTUProbePacket
 
+	if newPN := p.pnManager.PopPacketNumber(protocol.Encryption1RTT); newPN != pn {
+		return nil, nil, fmt.Errorf("packetPacker BUG: Peeked and Popped packet numbers do not match: expected %d, got %d", pn, newPN)
+	}
 	return ap, pl.ack, nil
 }
 
