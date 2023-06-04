@@ -237,6 +237,39 @@ func (h *sentPacketHandler) SentPacket(
 	size protocol.ByteCount,
 	isPathMTUProbePacket bool,
 ) {
+	h.bytesSent += size
+	// For the client, drop the Initial packet number space when the first Handshake packet is sent.
+	if h.perspective == protocol.PerspectiveClient && encLevel == protocol.EncryptionHandshake && h.initialPackets != nil {
+		h.dropPackets(protocol.EncryptionInitial)
+	}
+
+	pnSpace := h.getPacketNumberSpace(encLevel)
+	if h.logger.Debug() && pnSpace.history.HasOutstandingPackets() {
+		for p := utils.Max(0, pnSpace.largestSent+1); p < pn; p++ {
+			h.logger.Debugf("Skipping packet number %d", p)
+		}
+	}
+
+	pnSpace.largestSent = pn
+	isAckEliciting := len(streamFrames) > 0 || len(frames) > 0
+
+	if isAckEliciting {
+		pnSpace.lastAckElicitingPacketTime = t
+		h.bytesInFlight += size
+		if h.numProbesToSend > 0 {
+			h.numProbesToSend--
+		}
+	}
+	h.congestion.OnPacketSent(t, h.bytesInFlight, pn, size, isAckEliciting)
+
+	if !isAckEliciting {
+		pnSpace.history.SentNonAckElicitingPacket(pn)
+		if !h.peerCompletedAddressValidation {
+			h.setLossDetectionTimer()
+		}
+		return
+	}
+
 	p := getPacket()
 	p.SendTime = t
 	p.PacketNumber = pn
@@ -246,40 +279,13 @@ func (h *sentPacketHandler) SentPacket(
 	p.StreamFrames = streamFrames
 	p.Frames = frames
 	p.IsPathMTUProbePacket = isPathMTUProbePacket
+	p.includedInBytesInFlight = true
 
-	h.bytesSent += p.Length
-	// For the client, drop the Initial packet number space when the first Handshake packet is sent.
-	if h.perspective == protocol.PerspectiveClient && p.EncryptionLevel == protocol.EncryptionHandshake && h.initialPackets != nil {
-		h.dropPackets(protocol.EncryptionInitial)
-	}
-
-	pnSpace := h.getPacketNumberSpace(p.EncryptionLevel)
-	pnSpace.largestSent = p.PacketNumber
-	isAckEliciting := len(p.StreamFrames) > 0 || len(p.Frames) > 0
-
-	if isAckEliciting {
-		pnSpace.lastAckElicitingPacketTime = p.SendTime
-		p.includedInBytesInFlight = true
-		h.bytesInFlight += p.Length
-		if h.numProbesToSend > 0 {
-			h.numProbesToSend--
-		}
-	}
-	h.congestion.OnPacketSent(p.SendTime, h.bytesInFlight, p.PacketNumber, p.Length, isAckEliciting)
-
-	if isAckEliciting {
-		pnSpace.history.SentAckElicitingPacket(p)
-	} else {
-		pnSpace.history.SentNonAckElicitingPacket(p.PacketNumber)
-		putPacket(p)
-		p = nil //nolint:ineffassign // This is just to be on the safe side.
-	}
-	if h.tracer != nil && isAckEliciting {
+	pnSpace.history.SentAckElicitingPacket(p)
+	if h.tracer != nil {
 		h.tracer.UpdatedMetrics(h.rttStats, h.congestion.GetCongestionWindow(), h.bytesInFlight, h.packetsInFlight())
 	}
-	if isAckEliciting || !h.peerCompletedAddressValidation {
-		h.setLossDetectionTimer()
-	}
+	h.setLossDetectionTimer()
 }
 
 func (h *sentPacketHandler) getPacketNumberSpace(encLevel protocol.EncryptionLevel) *packetNumberSpace {
