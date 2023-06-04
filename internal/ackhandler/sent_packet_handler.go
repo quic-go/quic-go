@@ -592,19 +592,23 @@ func (h *sentPacketHandler) detectLostPackets(now time.Time, encLevel protocol.E
 		var packetLost bool
 		if p.SendTime.Before(lostSendTime) {
 			packetLost = true
-			if h.logger.Debug() {
-				h.logger.Debugf("\tlost packet %d (time threshold)", p.PacketNumber)
-			}
-			if h.tracer != nil {
-				h.tracer.LostPacket(p.EncryptionLevel, p.PacketNumber, logging.PacketLossTimeThreshold)
+			if !p.skippedPacket {
+				if h.logger.Debug() {
+					h.logger.Debugf("\tlost packet %d (time threshold)", p.PacketNumber)
+				}
+				if h.tracer != nil {
+					h.tracer.LostPacket(p.EncryptionLevel, p.PacketNumber, logging.PacketLossTimeThreshold)
+				}
 			}
 		} else if pnSpace.largestAcked >= p.PacketNumber+packetThreshold {
 			packetLost = true
-			if h.logger.Debug() {
-				h.logger.Debugf("\tlost packet %d (reordering threshold)", p.PacketNumber)
-			}
-			if h.tracer != nil {
-				h.tracer.LostPacket(p.EncryptionLevel, p.PacketNumber, logging.PacketLossReorderingThreshold)
+			if !p.skippedPacket {
+				if h.logger.Debug() {
+					h.logger.Debugf("\tlost packet %d (reordering threshold)", p.PacketNumber)
+				}
+				if h.tracer != nil {
+					h.tracer.LostPacket(p.EncryptionLevel, p.PacketNumber, logging.PacketLossReorderingThreshold)
+				}
 			}
 		} else if pnSpace.lossTime.IsZero() {
 			// Note: This conditional is only entered once per call
