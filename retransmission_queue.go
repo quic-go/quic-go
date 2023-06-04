@@ -3,6 +3,8 @@ package quic
 import (
 	"fmt"
 
+	"github.com/quic-go/quic-go/internal/ackhandler"
+
 	"github.com/quic-go/quic-go/internal/protocol"
 	"github.com/quic-go/quic-go/internal/wire"
 )
@@ -126,4 +128,37 @@ func (q *retransmissionQueue) DropPackets(encLevel protocol.EncryptionLevel) {
 	default:
 		panic(fmt.Sprintf("unexpected encryption level: %s", encLevel))
 	}
+}
+
+func (q *retransmissionQueue) InitialAckHandler() ackhandler.FrameHandler {
+	return (*retransmissionQueueInitialAckHandler)(q)
+}
+
+func (q *retransmissionQueue) HandshakeAckHandler() ackhandler.FrameHandler {
+	return (*retransmissionQueueHandshakeAckHandler)(q)
+}
+
+func (q *retransmissionQueue) AppDataAckHandler() ackhandler.FrameHandler {
+	return (*retransmissionQueueAppDataAckHandler)(q)
+}
+
+type retransmissionQueueInitialAckHandler retransmissionQueue
+
+func (q *retransmissionQueueInitialAckHandler) OnAcked(wire.Frame) {}
+func (q *retransmissionQueueInitialAckHandler) OnLost(f wire.Frame) {
+	(*retransmissionQueue)(q).AddInitial(f)
+}
+
+type retransmissionQueueHandshakeAckHandler retransmissionQueue
+
+func (q *retransmissionQueueHandshakeAckHandler) OnAcked(wire.Frame) {}
+func (q *retransmissionQueueHandshakeAckHandler) OnLost(f wire.Frame) {
+	(*retransmissionQueue)(q).AddHandshake(f)
+}
+
+type retransmissionQueueAppDataAckHandler retransmissionQueue
+
+func (q *retransmissionQueueAppDataAckHandler) OnAcked(wire.Frame) {}
+func (q *retransmissionQueueAppDataAckHandler) OnLost(f wire.Frame) {
+	(*retransmissionQueue)(q).AddAppData(f)
 }

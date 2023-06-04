@@ -43,14 +43,14 @@ var _ = Describe("MTU Discoverer", func() {
 	It("doesn't allow a probe if another probe is still in flight", func() {
 		ping, _ := d.GetPing()
 		Expect(d.ShouldSendProbe(now.Add(10 * rtt))).To(BeFalse())
-		ping.OnLost(ping.Frame)
+		ping.Handler.OnLost(ping.Frame)
 		Expect(d.ShouldSendProbe(now.Add(10 * rtt))).To(BeTrue())
 	})
 
 	It("tries a lower size when a probe is lost", func() {
 		ping, size := d.GetPing()
 		Expect(size).To(Equal(protocol.ByteCount(1500)))
-		ping.OnLost(ping.Frame)
+		ping.Handler.OnLost(ping.Frame)
 		_, size = d.GetPing()
 		Expect(size).To(Equal(protocol.ByteCount(1250)))
 	})
@@ -58,7 +58,7 @@ var _ = Describe("MTU Discoverer", func() {
 	It("tries a higher size and calls the callback when a probe is acknowledged", func() {
 		ping, size := d.GetPing()
 		Expect(size).To(Equal(protocol.ByteCount(1500)))
-		ping.OnAcked(ping.Frame)
+		ping.Handler.OnAcked(ping.Frame)
 		Expect(discoveredMTU).To(Equal(protocol.ByteCount(1500)))
 		_, size = d.GetPing()
 		Expect(size).To(Equal(protocol.ByteCount(1750)))
@@ -69,7 +69,7 @@ var _ = Describe("MTU Discoverer", func() {
 		t := now.Add(5 * rtt)
 		for d.ShouldSendProbe(t) {
 			ping, size := d.GetPing()
-			ping.OnAcked(ping.Frame)
+			ping.Handler.OnAcked(ping.Frame)
 			sizes = append(sizes, size)
 			t = t.Add(5 * rtt)
 		}
@@ -104,9 +104,9 @@ var _ = Describe("MTU Discoverer", func() {
 
 				ping, size := d.GetPing()
 				if size <= realMTU {
-					ping.OnAcked(ping.Frame)
+					ping.Handler.OnAcked(ping.Frame)
 				} else {
-					ping.OnLost(ping.Frame)
+					ping.Handler.OnLost(ping.Frame)
 				}
 				t = t.Add(mtuProbeDelay * rtt)
 			}

@@ -37,6 +37,13 @@ type payload struct {
 	length       protocol.ByteCount
 }
 
+type nullFrameHandler struct{}
+
+func (n nullFrameHandler) OnAcked(wire.Frame) {}
+func (n nullFrameHandler) OnLost(wire.Frame)  {}
+
+var doNothingFrameHandler ackhandler.FrameHandler = &nullFrameHandler{}
+
 type longHeaderPacket struct {
 	header       *wire.ExtendedHeader
 	ack          *wire.AckFrame
@@ -88,17 +95,17 @@ func (p *longHeaderPacket) ToAckHandlerPacket(now time.Time, q *retransmissionQu
 	}
 	encLevel := p.EncryptionLevel()
 	for i := range p.frames {
-		if p.frames[i].OnLost != nil {
+		if p.frames[i].Handler != nil {
 			continue
 		}
 		//nolint:exhaustive // Short header packets are handled separately.
 		switch encLevel {
 		case protocol.EncryptionInitial:
-			p.frames[i].OnLost = q.AddInitial
+			p.frames[i].Handler = q.InitialAckHandler()
 		case protocol.EncryptionHandshake:
-			p.frames[i].OnLost = q.AddHandshake
+			p.frames[i].Handler = q.HandshakeAckHandler()
 		case protocol.Encryption0RTT:
-			p.frames[i].OnLost = q.AddAppData
+			p.frames[i].Handler = q.AppDataAckHandler()
 		}
 	}
 
@@ -605,8 +612,8 @@ func (p *packetPacker) maybeGetAppDataPacket(maxPayloadSize protocol.ByteCount, 
 		if p.numNonAckElicitingAcks >= protocol.MaxNonAckElicitingAcks {
 			ping := &wire.PingFrame{}
 			pl.frames = append(pl.frames, ackhandler.Frame{
-				Frame:  ping,
-				OnLost: func(wire.Frame) {}, // don't retransmit the PING frame when it is lost
+				Frame:   ping,
+				Handler: doNothingFrameHandler, // don't retransmit the PING frame when it is lost
 			})
 			pl.length += ping.Length(v)
 			p.numNonAckElicitingAcks = 0
@@ -649,8 +656,9 @@ func (p *packetPacker) composeNextPacket(maxFrameSize protocol.ByteCount, onlyAc
 			size := f.Length(v)
 			if size <= maxFrameSize-pl.length {
 				pl.frames = append(pl.frames, ackhandler.Frame{
-					Frame:  f,
-					OnLost: func(wire.Frame) {}, // set it to a no-op. Then we won't set the default callback, which would retransmit the frame.
+					Frame: f,
+					// Set it to a no-op. Then we won't set the default callback, which would retransmit the frame.
+					Handler: doNothingFrameHandler,
 				})
 				pl.length += size
 				p.datagramQueue.Pop()
@@ -891,10 +899,10 @@ func (p *packetPacker) appendShortHeaderPacket(
 		largestAcked = pl.ack.LargestAcked()
 	}
 	for i := range pl.frames {
-		if pl.frames[i].OnLost != nil {
+		if pl.frames[i].Handler != nil {
 			continue
 		}
-		pl.frames[i].OnLost = p.retransmissionQueue.AddAppData
+		pl.frames[i].Handler = p.retransmissionQueue.AppDataAckHandler()
 	}
 
 	ap := ackhandler.GetPacket()

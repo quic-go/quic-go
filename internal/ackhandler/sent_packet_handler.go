@@ -413,12 +413,14 @@ func (h *sentPacketHandler) detectAndRemoveAckedPackets(ack *wire.AckFrame, encL
 		}
 
 		for _, f := range p.Frames {
-			if f.OnAcked != nil {
-				f.OnAcked(f.Frame)
+			if f.Handler != nil {
+				f.Handler.OnAcked(f.Frame)
 			}
 		}
 		for _, f := range p.StreamFrames {
-			f.Handler.OnAcked(f.Frame)
+			if f.Handler != nil {
+				f.Handler.OnAcked(f.Frame)
+			}
 		}
 		if err := pnSpace.history.Remove(p.PacketNumber); err != nil {
 			return nil, err
@@ -795,10 +797,14 @@ func (h *sentPacketHandler) queueFramesForRetransmission(p *Packet) {
 		panic("no frames")
 	}
 	for _, f := range p.Frames {
-		f.OnLost(f.Frame)
+		if f.Handler != nil {
+			f.Handler.OnLost(f.Frame)
+		}
 	}
 	for _, f := range p.StreamFrames {
-		f.Handler.OnLost(f.Frame)
+		if f.Handler != nil {
+			f.Handler.OnLost(f.Frame)
+		}
 	}
 	p.StreamFrames = nil
 	p.Frames = nil

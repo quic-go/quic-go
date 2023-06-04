@@ -16,6 +16,22 @@ import (
 	. "github.com/onsi/gomega"
 )
 
+type customFrameHandler struct {
+	onLost, onAcked func(wire.Frame)
+}
+
+func (h *customFrameHandler) OnLost(f wire.Frame) {
+	if h.onLost != nil {
+		h.onLost(f)
+	}
+}
+
+func (h *customFrameHandler) OnAcked(f wire.Frame) {
+	if h.onAcked != nil {
+		h.onAcked(f)
+	}
+}
+
 var _ = Describe("SentPacketHandler", func() {
 	var (
 		handler     *sentPacketHandler
@@ -57,7 +73,9 @@ var _ = Describe("SentPacketHandler", func() {
 		}
 		if len(p.Frames) == 0 {
 			p.Frames = []Frame{
-				{Frame: &wire.PingFrame{}, OnLost: func(wire.Frame) { lostPackets = append(lostPackets, p.PacketNumber) }},
+				{Frame: &wire.PingFrame{}, Handler: &customFrameHandler{
+					onLost: func(wire.Frame) { lostPackets = append(lostPackets, p.PacketNumber) },
+				}},
 			}
 		}
 		return p
@@ -280,9 +298,12 @@ var _ = Describe("SentPacketHandler", func() {
 				handler.SentPacket(ackElicitingPacket(&Packet{
 					PacketNumber: 10,
 					Frames: []Frame{{
-						Frame: ping, OnAcked: func(f wire.Frame) {
-							Expect(f).To(Equal(ping))
-							acked = true
+						Frame: ping,
+						Handler: &customFrameHandler{
+							onAcked: func(f wire.Frame) {
+								Expect(f).To(Equal(ping))
+								acked = true
+							},
 						},
 					}},
 				}))
@@ -431,20 +452,20 @@ var _ = Describe("SentPacketHandler", func() {
 					{
 						PacketNumber:    10,
 						LargestAcked:    100,
-						Frames:          []Frame{{Frame: &streamFrame, OnLost: func(wire.Frame) {}}},
+						Frames:          []Frame{{Frame: &streamFrame}},
 						Length:          1,
 						EncryptionLevel: protocol.Encryption1RTT,
 					},
 					{
 						PacketNumber:    11,
 						LargestAcked:    200,
-						Frames:          []Frame{{Frame: &streamFrame, OnLost: func(wire.Frame) {}}},
+						Frames:          []Frame{{Frame: &streamFrame}},
 						Length:          1,
 						EncryptionLevel: protocol.Encryption1RTT,
 					},
 					{
 						PacketNumber:    12,
-						Frames:          []Frame{{Frame: &streamFrame, OnLost: func(wire.Frame) {}}},
+						Frames:          []Frame{{Frame: &streamFrame}},
 						Length:          1,
 						EncryptionLevel: protocol.Encryption1RTT,
 					},
@@ -504,7 +525,7 @@ var _ = Describe("SentPacketHandler", func() {
 			handler.SentPacket(&Packet{
 				PacketNumber:    1,
 				Length:          42,
-				Frames:          []Frame{{Frame: &wire.PingFrame{}, OnLost: func(wire.Frame) {}}},
+				Frames:          []Frame{{Frame: &wire.PingFrame{}}},
 				EncryptionLevel: protocol.Encryption1RTT,
 			})
 		})
@@ -551,7 +572,12 @@ var _ = Describe("SentPacketHandler", func() {
 				PacketNumber:         1,
 				SendTime:             time.Now().Add(-time.Hour),
 				IsPathMTUProbePacket: true,
-				Frames:               []Frame{{Frame: &wire.PingFrame{}, OnLost: func(wire.Frame) { mtuPacketDeclaredLost = true }}},
+				Frames: []Frame{
+					{
+						Frame:   &wire.PingFrame{},
+						Handler: &customFrameHandler{onLost: func(wire.Frame) { mtuPacketDeclaredLost = true }},
+					},
+				},
 			}))
 			handler.SentPacket(ackElicitingPacket(&Packet{PacketNumber: 2}))
 			// lose packet 1, but don't EXPECT any calls to OnPacketLost()
@@ -756,7 +782,10 @@ var _ = Describe("SentPacketHandler", func() {
 				PacketNumber: handler.PopPacketNumber(protocol.Encryption1RTT),
 				SendTime:     time.Now().Add(-time.Hour),
 				Frames: []Frame{
-					{Frame: &wire.PingFrame{}, OnLost: func(wire.Frame) { lostPackets = append(lostPackets, 1) }},
+					{
+						Frame:   &wire.PingFrame{},
+						Handler: &customFrameHandler{onLost: func(wire.Frame) { lostPackets = append(lostPackets, 1) }},
+					},
 				},
 			}))
 			Expect(handler.OnLossDetectionTimeout()).To(Succeed())
@@ -1148,7 +1177,12 @@ var _ = Describe("SentPacketHandler", func() {
 				PacketNumber:         1,
 				SendTime:             now.Add(-3 * time.Second),
 				IsPathMTUProbePacket: true,
-				Frames:               []Frame{{Frame: &wire.PingFrame{}, OnLost: func(wire.Frame) { mtuPacketDeclaredLost = true }}},
+				Frames: []Frame{
+					{
+						Frame:   &wire.PingFrame{},
+						Handler: &customFrameHandler{onLost: func(wire.Frame) { mtuPacketDeclaredLost = true }},
+					},
+				},
 			}))
 			handler.SentPacket(ackElicitingPacket(&Packet{PacketNumber: 2, SendTime: now.Add(-3 * time.Second)}))
 			ack := &wire.AckFrame{AckRanges: []wire.AckRange{{Smallest: 2, Largest: 2}}}
@@ -1335,7 +1369,10 @@ var _ = Describe("SentPacketHandler", func() {
 				PacketNumber:    13,
 				EncryptionLevel: protocol.EncryptionInitial,
 				Frames: []Frame{
-					{Frame: &wire.CryptoFrame{Data: []byte("foobar")}, OnLost: func(wire.Frame) { lostInitial = true }},
+					{
+						Frame:   &wire.CryptoFrame{Data: []byte("foobar")},
+						Handler: &customFrameHandler{onLost: func(wire.Frame) { lostInitial = true }},
+					},
 				},
 				Length: 100,
 			})
@@ -1344,7 +1381,10 @@ var _ = Describe("SentPacketHandler", func() {
 				PacketNumber:    pn,
 				EncryptionLevel: protocol.Encryption0RTT,
 				Frames: []Frame{
-					{Frame: &wire.StreamFrame{Data: []byte("foobar")}, OnLost: func(wire.Frame) { lost0RTT = true }},
+					{
+						Frame:   &wire.StreamFrame{Data: []byte("foobar")},
+						Handler: &customFrameHandler{onLost: func(wire.Frame) { lost0RTT = true }},
+					},
 				},
 				Length: 999,
 			})
