@@ -142,28 +142,6 @@ func (h *sentPacketHistory) HasOutstandingPackets() bool {
 	return h.numOutstanding > 0
 }
 
-func (h *sentPacketHistory) DeleteBefore(t time.Time) {
-	for i, p := range h.packets {
-		if p == nil {
-			continue
-		}
-		if !p.SendTime.Before(t) {
-			break
-		}
-		if !p.declaredLost {
-			continue
-		}
-		if p.outstanding() {
-			h.numOutstanding--
-			if h.numOutstanding < 0 {
-				panic("negative number of outstanding packets")
-			}
-		}
-		h.packets[i] = nil
-	}
-	h.cleanupStart()
-}
-
 // delete all nil entries at the beginning of the packets slice
 func (h *sentPacketHistory) cleanupStart() {
 	for i, p := range h.packets {
@@ -194,5 +172,8 @@ func (h *sentPacketHistory) DeclareLost(pn protocol.PacketNumber) {
 			panic("negative number of outstanding packets")
 		}
 	}
-	p.declaredLost = true
+	h.packets[idx] = nil
+	if idx == 0 {
+		h.cleanupStart()
+	}
 }

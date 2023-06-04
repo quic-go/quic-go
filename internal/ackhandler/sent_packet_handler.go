@@ -356,7 +356,6 @@ func (h *sentPacketHandler) ReceivedAck(ack *wire.AckFrame, encLevel protocol.En
 		h.tracer.UpdatedMetrics(h.rttStats, h.congestion.GetCongestionWindow(), h.bytesInFlight, h.packetsInFlight())
 	}
 
-	pnSpace.history.DeleteBefore(rcvTime.Add(-3 * h.rttStats.PTO(false)))
 	h.setLossDetectionTimer()
 	return acked1RTTPacket, nil
 }
@@ -589,9 +588,6 @@ func (h *sentPacketHandler) detectLostPackets(now time.Time, encLevel protocol.E
 		if p.PacketNumber > pnSpace.largestAcked {
 			return false, nil
 		}
-		if p.declaredLost || p.skippedPacket {
-			return true, nil
-		}
 
 		var packetLost bool
 		if p.SendTime.Before(lostSendTime) {
@@ -620,11 +616,13 @@ func (h *sentPacketHandler) detectLostPackets(now time.Time, encLevel protocol.E
 		}
 		if packetLost {
 			pnSpace.history.DeclareLost(p.PacketNumber)
-			// the bytes in flight need to be reduced no matter if the frames in this packet will be retransmitted
-			h.removeFromBytesInFlight(p)
-			h.queueFramesForRetransmission(p)
-			if !p.IsPathMTUProbePacket {
-				h.congestion.OnPacketLost(p.PacketNumber, p.Length, priorInFlight)
+			if !p.skippedPacket {
+				// the bytes in flight need to be reduced no matter if the frames in this packet will be retransmitted
+				h.removeFromBytesInFlight(p)
+				h.queueFramesForRetransmission(p)
+				if !p.IsPathMTUProbePacket {
+					h.congestion.OnPacketLost(p.PacketNumber, p.Length, priorInFlight)
+				}
 			}
 		}
 		return true, nil

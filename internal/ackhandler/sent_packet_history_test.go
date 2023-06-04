@@ -287,25 +287,4 @@ var _ = Describe("SentPacketHistory", func() {
 			Expect(hist.HasOutstandingPackets()).To(BeFalse())
 		})
 	})
-
-	Context("deleting old packets", func() {
-		It("deletes old packets after 3 PTOs", func() {
-			now := time.Now()
-			hist.SentAckElicitingPacket(&Packet{PacketNumber: 10, SendTime: now, declaredLost: true})
-			expectInHistory([]protocol.PacketNumber{10})
-			hist.DeleteBefore(now)
-			expectInHistory([]protocol.PacketNumber{10})
-			hist.DeleteBefore(now.Add(time.Nanosecond))
-			expectInHistory([]protocol.PacketNumber{})
-		})
-
-		It("doesn't delete a packet if it hasn't been declared lost yet", func() {
-			now := time.Now()
-			hist.SentAckElicitingPacket(&Packet{PacketNumber: 10, SendTime: now, declaredLost: true})
-			hist.SentAckElicitingPacket(&Packet{PacketNumber: 11, SendTime: now, declaredLost: false})
-			expectInHistory([]protocol.PacketNumber{10, 11})
-			hist.DeleteBefore(now.Add(time.Nanosecond))
-			expectInHistory([]protocol.PacketNumber{11})
-		})
-	})
 })
