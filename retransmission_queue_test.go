@@ -89,6 +89,13 @@ var _ = Describe("Retransmission queue", func() {
 			Expect(q.HasInitialData()).To(BeFalse())
 			Expect(q.GetInitialFrame(protocol.MaxByteCount, protocol.Version1)).To(BeNil())
 		})
+
+		It("retransmits a frame", func() {
+			f := &wire.MaxDataFrame{MaximumData: 0x42}
+			q.InitialAckHandler().OnLost(f)
+			Expect(q.HasInitialData()).To(BeTrue())
+			Expect(q.GetInitialFrame(protocol.MaxByteCount, protocol.Version1)).To(Equal(f))
+		})
 	})
 
 	Context("Handshake data", func() {
@@ -165,6 +172,13 @@ var _ = Describe("Retransmission queue", func() {
 			Expect(q.HasHandshakeData()).To(BeFalse())
 			Expect(q.GetHandshakeFrame(protocol.MaxByteCount, protocol.Version1)).To(BeNil())
 		})
+
+		It("retransmits a frame", func() {
+			f := &wire.MaxDataFrame{MaximumData: 0x42}
+			q.HandshakeAckHandler().OnLost(f)
+			Expect(q.HasHandshakeData()).To(BeTrue())
+			Expect(q.GetHandshakeFrame(protocol.MaxByteCount, protocol.Version1)).To(Equal(f))
+		})
 	})
 
 	Context("Application data", func() {
@@ -180,6 +194,13 @@ var _ = Describe("Retransmission queue", func() {
 			Expect(q.GetAppDataFrame(f.Length(protocol.Version1)-1, protocol.Version1)).To(BeNil())
 			Expect(q.GetAppDataFrame(f.Length(protocol.Version1), protocol.Version1)).To(Equal(f))
 			Expect(q.HasAppData()).To(BeFalse())
+		})
+
+		It("retransmits a frame", func() {
+			f := &wire.MaxDataFrame{MaximumData: 0x42}
+			q.AppDataAckHandler().OnLost(f)
+			Expect(q.HasAppData()).To(BeTrue())
+			Expect(q.GetAppDataFrame(protocol.MaxByteCount, protocol.Version1)).To(Equal(f))
 		})
 	})
 })

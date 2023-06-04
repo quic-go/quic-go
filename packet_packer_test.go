@@ -789,7 +789,7 @@ var _ = Describe("Packet packer", func() {
 					for _, f := range p.Frames {
 						if _, ok := f.Frame.(*wire.PingFrame); ok {
 							hasPing = true
-							Expect(f.OnLost).ToNot(BeNil()) // make sure the PING is not retransmitted if lost
+							Expect(f.Handler.OnLost).ToNot(BeNil()) // make sure the PING is not retransmitted if lost
 						}
 					}
 					Expect(hasPing).To(BeTrue())
@@ -835,7 +835,7 @@ var _ = Describe("Packet packer", func() {
 					for _, f := range p.Frames {
 						if _, ok := f.Frame.(*wire.PingFrame); ok {
 							hasPing = true
-							Expect(f.OnLost).ToNot(BeNil()) // make sure the PING is not retransmitted if lost
+							Expect(f.Handler.OnLost).ToNot(BeNil()) // make sure the PING is not retransmitted if lost
 						}
 					}
 					Expect(hasPing).To(BeTrue())
@@ -1507,26 +1507,4 @@ var _ = Describe("Converting to ackhandler.Packet", func() {
 		p := packet.ToAckHandlerPacket(time.Now(), nil)
 		Expect(p.LargestAcked).To(Equal(protocol.InvalidPacketNumber))
 	})
-
-	DescribeTable(
-		"doesn't overwrite the OnLost callback, if it is set",
-		func(hdr wire.Header) {
-			var pingLost bool
-			packet := &longHeaderPacket{
-				header: &wire.ExtendedHeader{Header: hdr},
-				frames: []ackhandler.Frame{
-					{Frame: &wire.MaxDataFrame{}},
-					{Frame: &wire.PingFrame{}, OnLost: func(wire.Frame) { pingLost = true }},
-				},
-			}
-			p := packet.ToAckHandlerPacket(time.Now(), newRetransmissionQueue())
-			Expect(p.Frames).To(HaveLen(2))
-			Expect(p.Frames[0].OnLost).ToNot(BeNil())
-			p.Frames[1].OnLost(nil)
-			Expect(pingLost).To(BeTrue())
-		},
-		Entry(protocol.EncryptionInitial.String(), wire.Header{Type: protocol.PacketTypeInitial}),
-		Entry(protocol.EncryptionHandshake.String(), wire.Header{Type: protocol.PacketTypeHandshake}),
-		Entry(protocol.Encryption0RTT.String(), wire.Header{Type: protocol.PacketType0RTT}),
-	)
 })

@@ -940,7 +940,7 @@ var _ = Describe("Send Stream", func() {
 				DataLenPresent: false,
 			}
 			mockSender.EXPECT().onHasStreamData(streamID)
-			str.OnLost(f)
+			(*sendStreamAckHandler)(str).OnLost(f)
 			frame, ok, _ := str.popStreamFrame(protocol.MaxByteCount, protocol.Version1)
 			Expect(ok).To(BeTrue())
 			Expect(frame).ToNot(BeNil())
@@ -958,7 +958,7 @@ var _ = Describe("Send Stream", func() {
 				DataLenPresent: false,
 			}
 			mockSender.EXPECT().onHasStreamData(streamID)
-			str.OnLost(sf)
+			(*sendStreamAckHandler)(str).OnLost(sf)
 			frame, ok, hasMoreData := str.popStreamFrame(sf.Length(protocol.Version1)-3, protocol.Version1)
 			Expect(ok).To(BeTrue())
 			Expect(frame).ToNot(BeNil())
@@ -984,7 +984,7 @@ var _ = Describe("Send Stream", func() {
 				DataLenPresent: false,
 			}
 			mockSender.EXPECT().onHasStreamData(streamID)
-			str.OnLost(f)
+			(*sendStreamAckHandler)(str).OnLost(f)
 			_, ok, hasMoreData := str.popStreamFrame(2, protocol.Version1)
 			Expect(ok).To(BeFalse())
 			Expect(hasMoreData).To(BeTrue())

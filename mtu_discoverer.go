@@ -43,10 +43,10 @@ func getMaxPacketSize(addr net.Addr) protocol.ByteCount {
 
 type mtuFinder struct {
 	lastProbeTime time.Time
-	probeInFlight bool
 	mtuIncreased  func(protocol.ByteCount)
 
 	rttStats *utils.RTTStats
+	inFlight protocol.ByteCount // the size of the probe packet currently in flight. InvalidByteCount if none is in flight
 	current  protocol.ByteCount
 	max      protocol.ByteCount // the maximum value, as advertised by the peer (or our maximum size buffer)
 }
@@ -55,6 +55,7 @@ var _ mtuDiscoverer = &mtuFinder{}
 
 func newMTUDiscoverer(rttStats *utils.RTTStats, start protocol.ByteCount, mtuIncreased func(protocol.ByteCount)) *mtuFinder {
 	return &mtuFinder{
+		inFlight:     protocol.InvalidByteCount,
 		current:      start,
 		rttStats:     rttStats,
 		mtuIncreased: mtuIncreased,
@@ -74,7 +75,7 @@ func (f *mtuFinder) ShouldSendProbe(now time.Time) bool {
 	if f.max == 0 || f.lastProbeTime.IsZero() {
 		return false
 	}
-	if f.probeInFlight || f.done() {
+	if f.inFlight != protocol.InvalidByteCount || f.done() {
 		return false
 	}
 	return !now.Before(f.lastProbeTime.Add(mtuProbeDelay * f.rttStats.SmoothedRTT()))
@@ -83,21 +84,36 @@ func (f *mtuFinder) ShouldSendProbe(now time.Time) bool {
 func (f *mtuFinder) GetPing() (ackhandler.Frame, protocol.ByteCount) {
 	size := (f.max + f.current) / 2
 	f.lastProbeTime = time.Now()
-	f.probeInFlight = true
+	f.inFlight = size
 	return ackhandler.Frame{
-		Frame: &wire.PingFrame{},
-		OnLost: func(wire.Frame) {
-			f.probeInFlight = false
-			f.max = size
-		},
-		OnAcked: func(wire.Frame) {
-			f.probeInFlight = false
-			f.current = size
-			f.mtuIncreased(size)
-		},
+		Frame:   &wire.PingFrame{},
+		Handler: (*mtuFinderAckHandler)(f),
 	}, size
 }
 
 func (f *mtuFinder) CurrentSize() protocol.ByteCount {
 	return f.current
+}
+
+type mtuFinderAckHandler mtuFinder
+
+var _ ackhandler.FrameHandler = &mtuFinderAckHandler{}
+
+func (h *mtuFinderAckHandler) OnAcked(wire.Frame) {
+	size := h.inFlight
+	if size == protocol.InvalidByteCount {
+		panic("OnAcked callback called although there's no MTU probe packet in flight")
+	}
+	h.inFlight = protocol.InvalidByteCount
+	h.current = size
+	h.mtuIncreased(size)
+}
+
+func (h *mtuFinderAckHandler) OnLost(wire.Frame) {
+	size := h.inFlight
+	if size == protocol.InvalidByteCount {
+		panic("OnLost callback called although there's no MTU probe packet in flight")
+	}
+	h.max = size
+	h.inFlight = protocol.InvalidByteCount
 }
