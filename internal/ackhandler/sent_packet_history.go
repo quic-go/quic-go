@@ -2,7 +2,6 @@ package ackhandler
 
 import (
 	"fmt"
-	"time"
 
 	"github.com/quic-go/quic-go/internal/protocol"
 )
@@ -22,8 +21,25 @@ func newSentPacketHistory() *sentPacketHistory {
 	}
 }
 
-func (h *sentPacketHistory) SentNonAckElicitingPacket(pn protocol.PacketNumber, encLevel protocol.EncryptionLevel, t time.Time) {
-	h.maybeAddSkippedPacketsBefore(pn, encLevel, t)
+func (h *sentPacketHistory) checkSequentialPacketNumberUse(pn protocol.PacketNumber) {
+	if h.highestPacketNumber != protocol.InvalidPacketNumber {
+		if pn != h.highestPacketNumber+1 {
+			panic("non-sequential packet number use")
+		}
+	}
+}
+
+func (h *sentPacketHistory) SkippedPacket(pn protocol.PacketNumber) {
+	h.checkSequentialPacketNumberUse(pn)
+	h.highestPacketNumber = pn
+	h.packets = append(h.packets, &Packet{
+		PacketNumber:  pn,
+		skippedPacket: true,
+	})
+}
+
+func (h *sentPacketHistory) SentNonAckElicitingPacket(pn protocol.PacketNumber) {
+	h.checkSequentialPacketNumberUse(pn)
 	h.highestPacketNumber = pn
 	if len(h.packets) > 0 {
 		h.packets = append(h.packets, nil)
@@ -31,29 +47,11 @@ func (h *sentPacketHistory) SentNonAckElicitingPacket(pn protocol.PacketNumber, 
 }
 
 func (h *sentPacketHistory) SentAckElicitingPacket(p *Packet) {
-	h.maybeAddSkippedPacketsBefore(p.PacketNumber, p.EncryptionLevel, p.SendTime)
+	h.checkSequentialPacketNumberUse(p.PacketNumber)
+	h.highestPacketNumber = p.PacketNumber
 	h.packets = append(h.packets, p)
 	if p.outstanding() {
 		h.numOutstanding++
-	}
-	h.highestPacketNumber = p.PacketNumber
-}
-
-func (h *sentPacketHistory) maybeAddSkippedPacketsBefore(pn protocol.PacketNumber, encLevel protocol.EncryptionLevel, t time.Time) {
-	if pn <= h.highestPacketNumber {
-		panic("non-sequential packet number use")
-	}
-	var start protocol.PacketNumber
-	if h.highestPacketNumber != protocol.InvalidPacketNumber {
-		start = h.highestPacketNumber + 1
-	}
-	for p := start; p < pn; p++ {
-		h.packets = append(h.packets, &Packet{
-			PacketNumber:    p,
-			EncryptionLevel: encLevel,
-			SendTime:        t,
-			skippedPacket:   true,
-		})
 	}
 }
 

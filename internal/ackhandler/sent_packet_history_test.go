@@ -55,15 +55,17 @@ var _ = Describe("SentPacketHistory", func() {
 
 	It("saves non-ack-eliciting packets", func() {
 		now := time.Now()
-		hist.SentNonAckElicitingPacket(0, protocol.Encryption1RTT, now)
+		hist.SentNonAckElicitingPacket(0)
 		hist.SentAckElicitingPacket(&Packet{PacketNumber: 1, SendTime: now})
-		hist.SentNonAckElicitingPacket(2, protocol.Encryption1RTT, now)
+		hist.SentNonAckElicitingPacket(2)
 		hist.SentAckElicitingPacket(&Packet{PacketNumber: 3, SendTime: now})
 		expectInHistory([]protocol.PacketNumber{1, 3})
 	})
 
 	It("saves sent packets, with skipped packet number", func() {
+		hist.SkippedPacket(0)
 		hist.SentAckElicitingPacket(&Packet{PacketNumber: 1})
+		hist.SkippedPacket(2)
 		hist.SentAckElicitingPacket(&Packet{PacketNumber: 3})
 		hist.SentAckElicitingPacket(&Packet{PacketNumber: 4})
 		expectInHistory([]protocol.PacketNumber{1, 3, 4})
@@ -72,7 +74,8 @@ var _ = Describe("SentPacketHistory", func() {
 
 	It("doesn't save non-ack-eliciting packets", func() {
 		hist.SentAckElicitingPacket(&Packet{PacketNumber: 1})
-		hist.SentNonAckElicitingPacket(3, protocol.EncryptionLevel(0), time.Time{})
+		hist.SkippedPacket(2)
+		hist.SentNonAckElicitingPacket(3)
 		hist.SentAckElicitingPacket(&Packet{PacketNumber: 4})
 		expectInHistory([]protocol.PacketNumber{1, 4})
 	})
@@ -103,6 +106,7 @@ var _ = Describe("SentPacketHistory", func() {
 
 		It("doesn't regard path MTU packets as outstanding", func() {
 			hist.SentAckElicitingPacket(&Packet{PacketNumber: 2})
+			hist.SkippedPacket(3)
 			hist.SentAckElicitingPacket(&Packet{PacketNumber: 4, IsPathMTUProbePacket: true})
 			front := hist.FirstOutstanding()
 			Expect(front).ToNot(BeNil())
@@ -119,8 +123,11 @@ var _ = Describe("SentPacketHistory", func() {
 		expectInHistory([]protocol.PacketNumber{0, 1, 3})
 	})
 
-	It("also remove skipped packets before the removed packet", func() {
+	It("also removes skipped packets before the removed packet", func() {
+		hist.SkippedPacket(0)
 		hist.SentAckElicitingPacket(&Packet{PacketNumber: 1})
+		hist.SkippedPacket(2)
+		hist.SkippedPacket(3)
 		hist.SentAckElicitingPacket(&Packet{PacketNumber: 4})
 		expectSkippedInHistory([]protocol.PacketNumber{0, 2, 3})
 		Expect(hist.Remove(4)).To(Succeed())
@@ -131,15 +138,23 @@ var _ = Describe("SentPacketHistory", func() {
 		expectSkippedInHistory(nil)
 	})
 
+	It("panics on non-sequential packet number use", func() {
+		hist.SentAckElicitingPacket(&Packet{PacketNumber: 100})
+		Expect(func() { hist.SentAckElicitingPacket(&Packet{PacketNumber: 102}) }).To(Panic())
+	})
+
 	It("removes and adds packets", func() {
 		hist.SentAckElicitingPacket(&Packet{PacketNumber: 0})
 		hist.SentAckElicitingPacket(&Packet{PacketNumber: 1})
+		hist.SkippedPacket(2)
+		hist.SkippedPacket(3)
 		hist.SentAckElicitingPacket(&Packet{PacketNumber: 4})
-		hist.SentAckElicitingPacket(&Packet{PacketNumber: 8})
+		hist.SkippedPacket(5)
+		hist.SentAckElicitingPacket(&Packet{PacketNumber: 6})
 		Expect(hist.Remove(0)).To(Succeed())
 		Expect(hist.Remove(1)).To(Succeed())
-		hist.SentAckElicitingPacket(&Packet{PacketNumber: 9})
-		expectInHistory([]protocol.PacketNumber{4, 8, 9})
+		hist.SentAckElicitingPacket(&Packet{PacketNumber: 7})
+		expectInHistory([]protocol.PacketNumber{4, 6, 7})
 	})
 
 	It("removes the last packet, then adds more", func() {
@@ -161,8 +176,14 @@ var _ = Describe("SentPacketHistory", func() {
 
 	Context("iterating", func() {
 		BeforeEach(func() {
+			hist.SkippedPacket(0)
 			hist.SentAckElicitingPacket(&Packet{PacketNumber: 1})
+			hist.SkippedPacket(2)
+			hist.SkippedPacket(3)
 			hist.SentAckElicitingPacket(&Packet{PacketNumber: 4})
+			hist.SkippedPacket(5)
+			hist.SkippedPacket(6)
+			hist.SkippedPacket(7)
 			hist.SentAckElicitingPacket(&Packet{PacketNumber: 8})
 		})
 
