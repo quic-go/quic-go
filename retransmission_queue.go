@@ -23,7 +23,23 @@ func newRetransmissionQueue() *retransmissionQueue {
 	return &retransmissionQueue{}
 }
 
-func (q *retransmissionQueue) AddInitial(f wire.Frame) {
+// AddPing queues a ping.
+// It is used when a probe packet needs to be sent
+func (q *retransmissionQueue) AddPing(encLevel protocol.EncryptionLevel) {
+	//nolint:exhaustive // Cannot send probe packets for 0-RTT.
+	switch encLevel {
+	case protocol.EncryptionInitial:
+		q.addInitial(&wire.PingFrame{})
+	case protocol.EncryptionHandshake:
+		q.addHandshake(&wire.PingFrame{})
+	case protocol.Encryption1RTT:
+		q.addAppData(&wire.PingFrame{})
+	default:
+		panic("unexpected encryption level")
+	}
+}
+
+func (q *retransmissionQueue) addInitial(f wire.Frame) {
 	if cf, ok := f.(*wire.CryptoFrame); ok {
 		q.initialCryptoData = append(q.initialCryptoData, cf)
 		return
@@ -31,7 +47,7 @@ func (q *retransmissionQueue) AddInitial(f wire.Frame) {
 	q.initial = append(q.initial, f)
 }
 
-func (q *retransmissionQueue) AddHandshake(f wire.Frame) {
+func (q *retransmissionQueue) addHandshake(f wire.Frame) {
 	if cf, ok := f.(*wire.CryptoFrame); ok {
 		q.handshakeCryptoData = append(q.handshakeCryptoData, cf)
 		return
@@ -51,7 +67,7 @@ func (q *retransmissionQueue) HasAppData() bool {
 	return len(q.appData) > 0
 }
 
-func (q *retransmissionQueue) AddAppData(f wire.Frame) {
+func (q *retransmissionQueue) addAppData(f wire.Frame) {
 	if _, ok := f.(*wire.StreamFrame); ok {
 		panic("STREAM frames are handled with their respective streams.")
 	}
@@ -146,19 +162,19 @@ type retransmissionQueueInitialAckHandler retransmissionQueue
 
 func (q *retransmissionQueueInitialAckHandler) OnAcked(wire.Frame) {}
 func (q *retransmissionQueueInitialAckHandler) OnLost(f wire.Frame) {
-	(*retransmissionQueue)(q).AddInitial(f)
+	(*retransmissionQueue)(q).addInitial(f)
 }
 
 type retransmissionQueueHandshakeAckHandler retransmissionQueue
 
 func (q *retransmissionQueueHandshakeAckHandler) OnAcked(wire.Frame) {}
 func (q *retransmissionQueueHandshakeAckHandler) OnLost(f wire.Frame) {
-	(*retransmissionQueue)(q).AddHandshake(f)
+	(*retransmissionQueue)(q).addHandshake(f)
 }
 
 type retransmissionQueueAppDataAckHandler retransmissionQueue
 
 func (q *retransmissionQueueAppDataAckHandler) OnAcked(wire.Frame) {}
 func (q *retransmissionQueueAppDataAckHandler) OnLost(f wire.Frame) {
-	(*retransmissionQueue)(q).AddAppData(f)
+	(*retransmissionQueue)(q).addAppData(f)
 }

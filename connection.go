@@ -1971,17 +1971,7 @@ func (s *connection) sendProbePacket(encLevel protocol.EncryptionLevel, now time
 		}
 	}
 	if packet == nil {
-		//nolint:exhaustive // Cannot send probe packets for 0-RTT.
-		switch encLevel {
-		case protocol.EncryptionInitial:
-			s.retransmissionQueue.AddInitial(&wire.PingFrame{})
-		case protocol.EncryptionHandshake:
-			s.retransmissionQueue.AddHandshake(&wire.PingFrame{})
-		case protocol.Encryption1RTT:
-			s.retransmissionQueue.AddAppData(&wire.PingFrame{})
-		default:
-			panic("unexpected encryption level")
-		}
+		s.retransmissionQueue.AddPing(encLevel)
 		var err error
 		packet, err = s.packer.MaybePackProbePacket(encLevel, s.mtuDiscoverer.CurrentSize(), s.version)
 		if err != nil {
