@@ -37,8 +37,10 @@ var _ = Describe("SentPacketHandler", func() {
 	})
 
 	getPacket := func(pn protocol.PacketNumber, encLevel protocol.EncryptionLevel) *Packet {
-		if el, ok := handler.getPacketNumberSpace(encLevel).history.packetMap[pn]; ok {
-			return el.Value
+		for _, p := range handler.getPacketNumberSpace(encLevel).history.packets {
+			if p != nil && p.PacketNumber == pn {
+				return p
+			}
 		}
 		return nil
 	}
@@ -97,7 +99,7 @@ var _ = Describe("SentPacketHandler", func() {
 		})
 		ExpectWithOffset(1, length).To(Equal(len(expected)))
 		for _, p := range expected {
-			ExpectWithOffset(2, pnSpace.history.packetMap).To(HaveKey(p))
+			ExpectWithOffset(2, getPacket(p, encLevel)).ToNot(BeNil())
 		}
 	}
 
@@ -242,7 +244,7 @@ var _ = Describe("SentPacketHandler", func() {
 				ExpectWithOffset(1, length+len(lostPackets)).To(Equal(len(expected)))
 			expectedLoop:
 				for _, p := range expected {
-					if _, ok := pnSpace.history.packetMap[p]; ok {
+					if getPacket(p, encLevel) != nil {
 						continue
 					}
 					for _, lostP := range lostPackets {

@@ -38,7 +38,7 @@ type packetNumberSpace struct {
 	largestSent  protocol.PacketNumber
 }
 
-func newPacketNumberSpace(initialPN protocol.PacketNumber, skipPNs bool, rttStats *utils.RTTStats) *packetNumberSpace {
+func newPacketNumberSpace(initialPN protocol.PacketNumber, skipPNs bool) *packetNumberSpace {
 	var pns packetNumberGenerator
 	if skipPNs {
 		pns = newSkippingPacketNumberGenerator(initialPN, protocol.SkipPacketInitialPeriod, protocol.SkipPacketMaxPeriod)
@@ -46,7 +46,7 @@ func newPacketNumberSpace(initialPN protocol.PacketNumber, skipPNs bool, rttStat
 		pns = newSequentialPacketNumberGenerator(initialPN)
 	}
 	return &packetNumberSpace{
-		history:      newSentPacketHistory(rttStats),
+		history:      newSentPacketHistory(),
 		pns:          pns,
 		largestSent:  protocol.InvalidPacketNumber,
 		largestAcked: protocol.InvalidPacketNumber,
@@ -125,9 +125,9 @@ func newSentPacketHandler(
 	return &sentPacketHandler{
 		peerCompletedAddressValidation: pers == protocol.PerspectiveServer,
 		peerAddressValidated:           pers == protocol.PerspectiveClient || clientAddressValidated,
-		initialPackets:                 newPacketNumberSpace(initialPN, false, rttStats),
-		handshakePackets:               newPacketNumberSpace(0, false, rttStats),
-		appDataPackets:                 newPacketNumberSpace(0, true, rttStats),
+		initialPackets:                 newPacketNumberSpace(initialPN, false),
+		handshakePackets:               newPacketNumberSpace(0, false),
+		appDataPackets:                 newPacketNumberSpace(0, true),
 		rttStats:                       rttStats,
 		congestion:                     congestion,
 		perspective:                    pers,
@@ -356,7 +356,6 @@ func (h *sentPacketHandler) ReceivedAck(ack *wire.AckFrame, encLevel protocol.En
 		h.tracer.UpdatedMetrics(h.rttStats, h.congestion.GetCongestionWindow(), h.bytesInFlight, h.packetsInFlight())
 	}
 
-	pnSpace.history.DeleteOldPackets(rcvTime)
 	h.setLossDetectionTimer()
 	return acked1RTTPacket, nil
 }
@@ -589,9 +588,6 @@ func (h *sentPacketHandler) detectLostPackets(now time.Time, encLevel protocol.E
 		if p.PacketNumber > pnSpace.largestAcked {
 			return false, nil
 		}
-		if p.declaredLost || p.skippedPacket {
-			return true, nil
-		}
 
 		var packetLost bool
 		if p.SendTime.Before(lostSendTime) {
@@ -619,12 +615,14 @@ func (h *sentPacketHandler) detectLostPackets(now time.Time, encLevel protocol.E
 			pnSpace.lossTime = lossTime
 		}
 		if packetLost {
-			p = pnSpace.history.DeclareLost(p)
-			// the bytes in flight need to be reduced no matter if the frames in this packet will be retransmitted
-			h.removeFromBytesInFlight(p)
-			h.queueFramesForRetransmission(p)
-			if !p.IsPathMTUProbePacket {
-				h.congestion.OnPacketLost(p.PacketNumber, p.Length, priorInFlight)
+			pnSpace.history.DeclareLost(p.PacketNumber)
+			if !p.skippedPacket {
+				// the bytes in flight need to be reduced no matter if the frames in this packet will be retransmitted
+				h.removeFromBytesInFlight(p)
+				h.queueFramesForRetransmission(p)
+				if !p.IsPathMTUProbePacket {
+					h.congestion.OnPacketLost(p.PacketNumber, p.Length, priorInFlight)
+				}
 			}
 		}
 		return true, nil
@@ -780,7 +778,7 @@ func (h *sentPacketHandler) QueueProbePacket(encLevel protocol.EncryptionLevel) 
 	// TODO: don't declare the packet lost here.
 	// Keep track of acknowledged frames instead.
 	h.removeFromBytesInFlight(p)
-	pnSpace.history.DeclareLost(p)
+	pnSpace.history.DeclareLost(p.PacketNumber)
 	return true
 }
 
@@ -833,8 +831,8 @@ func (h *sentPacketHandler) ResetForRetry() error {
 			h.tracer.UpdatedMetrics(h.rttStats, h.congestion.GetCongestionWindow(), h.bytesInFlight, h.packetsInFlight())
 		}
 	}
-	h.initialPackets = newPacketNumberSpace(h.initialPackets.pns.Pop(), false, h.rttStats)
-	h.appDataPackets = newPacketNumberSpace(h.appDataPackets.pns.Pop(), true, h.rttStats)
+	h.initialPackets = newPacketNumberSpace(h.initialPackets.pns.Pop(), false)
+	h.appDataPackets = newPacketNumberSpace(h.appDataPackets.pns.Pop(), true)
 	oldAlarm := h.alarm
 	h.alarm = time.Time{}
 	if h.tracer != nil {
