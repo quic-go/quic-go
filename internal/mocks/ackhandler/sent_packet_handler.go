@@ -176,15 +176,15 @@ func (mr *MockSentPacketHandlerMockRecorder) SendMode(arg0 interface{}) *gomock.
 }
 
 // SentPacket mocks base method.
-func (m *MockSentPacketHandler) SentPacket(arg0 *ackhandler.Packet) {
+func (m *MockSentPacketHandler) SentPacket(arg0 time.Time, arg1, arg2 protocol.PacketNumber, arg3 []ackhandler.StreamFrame, arg4 []ackhandler.Frame, arg5 protocol.EncryptionLevel, arg6 protocol.ByteCount, arg7 bool) {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "SentPacket", arg0)
+	m.ctrl.Call(m, "SentPacket", arg0, arg1, arg2, arg3, arg4, arg5, arg6, arg7)
 }
 
 // SentPacket indicates an expected call of SentPacket.
-func (mr *MockSentPacketHandlerMockRecorder) SentPacket(arg0 interface{}) *gomock.Call {
+func (mr *MockSentPacketHandlerMockRecorder) SentPacket(arg0, arg1, arg2, arg3, arg4, arg5, arg6, arg7 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SentPacket", reflect.TypeOf((*MockSentPacketHandler)(nil).SentPacket), arg0)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SentPacket", reflect.TypeOf((*MockSentPacketHandler)(nil).SentPacket), arg0, arg1, arg2, arg3, arg4, arg5, arg6, arg7)
 }
 
 // SetHandshakeConfirmed mocks base method.
