@@ -10,7 +10,6 @@ import (
 
 	"github.com/Psiphon-Labs/quic-go"
 	quicproxy "github.com/Psiphon-Labs/quic-go/integrationtests/tools/proxy"
-	"github.com/Psiphon-Labs/quic-go/internal/protocol"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -53,35 +52,6 @@ var _ = Describe("Handshake RTT tests", func() {
 		))
 	}
 
-	It("fails when there's no matching version, after 1 RTT", func() {
-		if len(protocol.SupportedVersions) == 1 {
-			Skip("Test requires at least 2 supported versions.")
-		}
-		serverConfig.Versions = protocol.SupportedVersions[:1]
-		ln, err := quic.ListenAddr("localhost:0", serverTLSConfig, serverConfig)
-		Expect(err).ToNot(HaveOccurred())
-		defer ln.Close()
-
-		runProxy(ln.Addr())
-		startTime := time.Now()
-		_, err = quic.DialAddr(
-			proxy.LocalAddr().String(),
-			getTLSClientConfig(),
-			getQuicConfig(&quic.Config{Versions: protocol.SupportedVersions[1:2]}),
-		)
-		Expect(err).To(HaveOccurred())
-		expectDurationInRTTs(startTime, 1)
-	})
-
-	var clientConfig *quic.Config
-
-	BeforeEach(func() {
-		serverConfig.Versions = []protocol.VersionNumber{protocol.VersionTLS}
-		clientConfig = getQuicConfig(&quic.Config{Versions: []protocol.VersionNumber{protocol.VersionTLS}})
-		clientConfig := getTLSClientConfig()
-		clientConfig.InsecureSkipVerify = true
-	})
-
 	// 1 RTT for verifying the source address
 	// 1 RTT for the TLS handshake
 	It("is forward-secure after 2 RTTs", func() {
@@ -92,12 +62,14 @@ var _ = Describe("Handshake RTT tests", func() {
 
 		runProxy(ln.Addr())
 		startTime := time.Now()
-		_, err = quic.DialAddr(
+		conn, err := quic.DialAddr(
+			context.Background(),
 			fmt.Sprintf("localhost:%d", proxy.LocalAddr().(*net.UDPAddr).Port),
 			getTLSClientConfig(),
-			clientConfig,
+			getQuicConfig(nil),
 		)
 		Expect(err).ToNot(HaveOccurred())
+		defer conn.CloseWithError(0, "")
 		expectDurationInRTTs(startTime, 2)
 	})
 
@@ -108,12 +80,14 @@ var _ = Describe("Handshake RTT tests", func() {
 
 		runProxy(ln.Addr())
 		startTime := time.Now()
-		_, err = quic.DialAddr(
+		conn, err := quic.DialAddr(
+			context.Background(),
 			fmt.Sprintf("localhost:%d", proxy.LocalAddr().(*net.UDPAddr).Port),
 			getTLSClientConfig(),
-			clientConfig,
+			getQuicConfig(nil),
 		)
 		Expect(err).ToNot(HaveOccurred())
+		defer conn.CloseWithError(0, "")
 		expectDurationInRTTs(startTime, 1)
 	})
 
@@ -125,12 +99,14 @@ var _ = Describe("Handshake RTT tests", func() {
 
 		runProxy(ln.Addr())
 		startTime := time.Now()
-		_, err = quic.DialAddr(
+		conn, err := quic.DialAddr(
+			context.Background(),
 			fmt.Sprintf("localhost:%d", proxy.LocalAddr().(*net.UDPAddr).Port),
 			getTLSClientConfig(),
-			clientConfig,
+			getQuicConfig(nil),
 		)
 		Expect(err).ToNot(HaveOccurred())
+		defer conn.CloseWithError(0, "")
 		expectDurationInRTTs(startTime, 2)
 	})
 
@@ -138,6 +114,7 @@ var _ = Describe("Handshake RTT tests", func() {
 		ln, err := quic.ListenAddr("localhost:0", serverTLSConfig, serverConfig)
 		Expect(err).ToNot(HaveOccurred())
 		go func() {
+			defer GinkgoRecover()
 			conn, err := ln.Accept(context.Background())
 			Expect(err).ToNot(HaveOccurred())
 			str, err := conn.OpenUniStream()
@@ -151,11 +128,13 @@ var _ = Describe("Handshake RTT tests", func() {
 		runProxy(ln.Addr())
 		startTime := time.Now()
 		conn, err := quic.DialAddr(
+			context.Background(),
 			fmt.Sprintf("localhost:%d", proxy.LocalAddr().(*net.UDPAddr).Port),
 			getTLSClientConfig(),
-			clientConfig,
+			getQuicConfig(nil),
 		)
 		Expect(err).ToNot(HaveOccurred())
+		defer conn.CloseWithError(0, "")
 		str, err := conn.AcceptUniStream(context.Background())
 		Expect(err).ToNot(HaveOccurred())
 		data, err := io.ReadAll(str)
@@ -168,6 +147,7 @@ var _ = Describe("Handshake RTT tests", func() {
 		ln, err := quic.ListenAddrEarly("localhost:0", serverTLSConfig, serverConfig)
 		Expect(err).ToNot(HaveOccurred())
 		go func() {
+			defer GinkgoRecover()
 			conn, err := ln.Accept(context.Background())
 			Expect(err).ToNot(HaveOccurred())
 			// Check the ALPN now. This is probably what an application would do.
@@ -184,11 +164,13 @@ var _ = Describe("Handshake RTT tests", func() {
 		runProxy(ln.Addr())
 		startTime := time.Now()
 		conn, err := quic.DialAddr(
+			context.Background(),
 			fmt.Sprintf("localhost:%d", proxy.LocalAddr().(*net.UDPAddr).Port),
 			getTLSClientConfig(),
-			clientConfig,
+			getQuicConfig(nil),
 		)
 		Expect(err).ToNot(HaveOccurred())
+		defer conn.CloseWithError(0, "")
 		str, err := conn.AcceptUniStream(context.Background())
 		Expect(err).ToNot(HaveOccurred())
 		data, err := io.ReadAll(str)

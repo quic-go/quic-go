@@ -11,7 +11,7 @@ import (
 	"github.com/Psiphon-Labs/quic-go/internal/wire"
 )
 
-const version = protocol.VersionTLS
+const version = protocol.Version1
 
 func getRandomData(l int) []byte {
 	b := make([]byte, l)

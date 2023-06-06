@@ -14,8 +14,7 @@ import (
 var _ = Describe("RESET_STREAM frame", func() {
 	Context("when parsing", func() {
 		It("accepts sample frame", func() {
-			data := []byte{0x4}
-			data = append(data, encodeVarInt(0xdeadbeef)...)  // stream ID
+			data := encodeVarInt(0xdeadbeef)                  // stream ID
 			data = append(data, encodeVarInt(0x1337)...)      // error code
 			data = append(data, encodeVarInt(0x987654321)...) // byte offset
 			b := bytes.NewReader(data)
@@ -27,14 +26,13 @@ var _ = Describe("RESET_STREAM frame", func() {
 		})
 
 		It("errors on EOFs", func() {
-			data := []byte{0x4}
-			data = append(data, encodeVarInt(0xdeadbeef)...)  // stream ID
+			data := encodeVarInt(0xdeadbeef)                  // stream ID
 			data = append(data, encodeVarInt(0x1337)...)      // error code
 			data = append(data, encodeVarInt(0x987654321)...) // byte offset
 			_, err := parseResetStreamFrame(bytes.NewReader(data), protocol.Version1)
 			Expect(err).NotTo(HaveOccurred())
 			for i := range data {
-				_, err := parseResetStreamFrame(bytes.NewReader(data[0:i]), protocol.Version1)
+				_, err := parseResetStreamFrame(bytes.NewReader(data[:i]), protocol.Version1)
 				Expect(err).To(HaveOccurred())
 			}
 		})
@@ -49,7 +47,7 @@ var _ = Describe("RESET_STREAM frame", func() {
 			}
 			b, err := frame.Append(nil, protocol.Version1)
 			Expect(err).ToNot(HaveOccurred())
-			expected := []byte{0x4}
+			expected := []byte{resetStreamFrameType}
 			expected = append(expected, encodeVarInt(0x1337)...)
 			expected = append(expected, encodeVarInt(0xcafe)...)
 			expected = append(expected, encodeVarInt(0x11223344decafbad)...)

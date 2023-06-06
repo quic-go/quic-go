@@ -14,11 +14,10 @@ import (
 var _ = Describe("STREAM frame", func() {
 	Context("when parsing", func() {
 		It("parses a frame containing a length", func() {
-			data := []byte{0x30 ^ 0x1}
-			data = append(data, encodeVarInt(0x6)...) // length
+			data := encodeVarInt(0x6) // length
 			data = append(data, []byte("foobar")...)
 			r := bytes.NewReader(data)
-			frame, err := parseDatagramFrame(r, protocol.Version1)
+			frame, err := parseDatagramFrame(r, 0x30^0x1, protocol.Version1)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(frame.Data).To(Equal([]byte("foobar")))
 			Expect(frame.DataLenPresent).To(BeTrue())
@@ -26,10 +25,9 @@ var _ = Describe("STREAM frame", func() {
 		})
 
 		It("parses a frame without length", func() {
-			data := []byte{0x30}
-			data = append(data, []byte("Lorem ipsum dolor sit amet")...)
+			data := []byte("Lorem ipsum dolor sit amet")
 			r := bytes.NewReader(data)
-			frame, err := parseDatagramFrame(r, protocol.Version1)
+			frame, err := parseDatagramFrame(r, 0x30, protocol.Version1)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(frame.Data).To(Equal([]byte("Lorem ipsum dolor sit amet")))
 			Expect(frame.DataLenPresent).To(BeFalse())
@@ -37,22 +35,21 @@ var _ = Describe("STREAM frame", func() {
 		})
 
 		It("errors when the length is longer than the rest of the frame", func() {
-			data := []byte{0x30 ^ 0x1}
-			data = append(data, encodeVarInt(0x6)...) // length
+			data := encodeVarInt(0x6) // length
 			data = append(data, []byte("fooba")...)
 			r := bytes.NewReader(data)
-			_, err := parseDatagramFrame(r, protocol.Version1)
+			_, err := parseDatagramFrame(r, 0x30^0x1, protocol.Version1)
 			Expect(err).To(MatchError(io.EOF))
 		})
 
 		It("errors on EOFs", func() {
-			data := []byte{0x30 ^ 0x1}
-			data = append(data, encodeVarInt(6)...) // length
+			const typ = 0x30 ^ 0x1
+			data := encodeVarInt(6) // length
 			data = append(data, []byte("foobar")...)
-			_, err := parseDatagramFrame(bytes.NewReader(data), protocol.Version1)
+			_, err := parseDatagramFrame(bytes.NewReader(data), typ, protocol.Version1)
 			Expect(err).NotTo(HaveOccurred())
 			for i := range data {
-				_, err := parseDatagramFrame(bytes.NewReader(data[0:i]), protocol.Version1)
+				_, err = parseDatagramFrame(bytes.NewReader(data[0:i]), typ, protocol.Version1)
 				Expect(err).To(MatchError(io.EOF))
 			}
 		})

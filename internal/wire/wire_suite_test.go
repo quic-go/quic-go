@@ -1,7 +1,6 @@
 package wire
 
 import (
-	"bytes"
 	"encoding/binary"
 	"testing"
 
@@ -18,9 +17,7 @@ func TestWire(t *testing.T) {
 }
 
 func encodeVarInt(i uint64) []byte {
-	b := &bytes.Buffer{}
-	quicvarint.Write(b, i)
-	return b.Bytes()
+	return quicvarint.Append(nil, i)
 }
 
 func appendVersion(data []byte, v protocol.VersionNumber) []byte {

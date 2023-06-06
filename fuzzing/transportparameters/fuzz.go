@@ -39,7 +39,7 @@ func fuzzTransportParameters(data []byte, isServer bool) int {
 	_ = tp.String()
 
 	tp2 := &wire.TransportParameters{}
-	if err := tp2.Unmarshal(tp.Marshal(perspective), perspective); err != nil {
+	if err := tp2.Unmarshal(tp.Marshal(perspective, nil), perspective); err != nil {
 		fmt.Printf("%#v\n", tp)
 		panic(err)
 	}

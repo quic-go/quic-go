@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"io"
 	"net/http"
+	"time"
 
 	mockquic "github.com/Psiphon-Labs/quic-go/internal/mocks/quic"
 	"github.com/Psiphon-Labs/quic-go/internal/utils"
@@ -25,6 +26,8 @@ var _ = Describe("Response Writer", func() {
 		strBuf = &bytes.Buffer{}
 		str := mockquic.NewMockStream(mockCtrl)
 		str.EXPECT().Write(gomock.Any()).DoAndReturn(strBuf.Write).AnyTimes()
+		str.EXPECT().SetReadDeadline(gomock.Any()).Return(nil).AnyTimes()
+		str.EXPECT().SetWriteDeadline(gomock.Any()).Return(nil).AnyTimes()
 		rw = newResponseWriter(str, nil, utils.DefaultLogger)
 	})
 
@@ -146,5 +149,19 @@ var _ = Describe("Response Writer", func() {
 		n, err := rw.Write([]byte("foobar"))
 		Expect(n).To(BeZero())
 		Expect(err).To(MatchError(http.ErrBodyNotAllowed))
+	})
+
+	It("first call to Write sniffs if Content-Type is not set", func() {
+		n, err := rw.Write([]byte("<html></html>"))
+		Expect(n).To(Equal(13))
+		Expect(err).ToNot(HaveOccurred())
+
+		fields := decodeHeader(strBuf)
+		Expect(fields).To(HaveKeyWithValue("content-type", []string{"text/html; charset=utf-8"}))
+	})
+
+	It(`is compatible with "net/http".ResponseController`, func() {
+		Expect(rw.SetReadDeadline(time.Now().Add(1 * time.Second))).To(BeNil())
+		Expect(rw.SetWriteDeadline(time.Now().Add(1 * time.Second))).To(BeNil())
 	})
 })

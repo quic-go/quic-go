@@ -1,8 +1,6 @@
 package wire
 
 import (
-	"bytes"
-
 	"github.com/Psiphon-Labs/quic-go/internal/protocol"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -10,31 +8,17 @@ import (
 )
 
 var _ = Describe("HANDSHAKE_DONE frame", func() {
-	Context("when parsing", func() {
-		It("accepts sample frame", func() {
-			b := bytes.NewReader([]byte{0x1e})
-			_, err := parseHandshakeDoneFrame(b, protocol.VersionWhatever)
-			Expect(err).ToNot(HaveOccurred())
-			Expect(b.Len()).To(BeZero())
-		})
-
-		It("errors on EOFs", func() {
-			_, err := parseHandshakeDoneFrame(bytes.NewReader(nil), protocol.VersionWhatever)
-			Expect(err).To(HaveOccurred())
-		})
-	})
-
 	Context("when writing", func() {
 		It("writes a sample frame", func() {
 			frame := HandshakeDoneFrame{}
-			b, err := frame.Append(nil, protocol.VersionWhatever)
+			b, err := frame.Append(nil, protocol.Version1)
 			Expect(err).ToNot(HaveOccurred())
-			Expect(b).To(Equal([]byte{0x1e}))
+			Expect(b).To(Equal([]byte{handshakeDoneFrameType}))
 		})
 
 		It("has the correct min length", func() {
 			frame := HandshakeDoneFrame{}
-			Expect(frame.Length(protocol.VersionWhatever)).To(Equal(protocol.ByteCount(1)))
+			Expect(frame.Length(protocol.Version1)).To(Equal(protocol.ByteCount(1)))
 		})
 	})
 })

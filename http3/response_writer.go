@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/Psiphon-Labs/quic-go"
 	"github.com/Psiphon-Labs/quic-go/internal/utils"
@@ -15,6 +16,7 @@ import (
 
 type responseWriter struct {
 	conn        quic.Connection
+	str         quic.Stream
 	bufferedStr *bufio.Writer
 	buf         []byte
 
@@ -36,6 +38,7 @@ func newResponseWriter(str quic.Stream, conn quic.Connection, logger utils.Logge
 		header:      http.Header{},
 		buf:         make([]byte, 16),
 		conn:        conn,
+		str:         str,
 		bufferedStr: bufio.NewWriter(str),
 		logger:      logger,
 	}
@@ -80,10 +83,26 @@ func (w *responseWriter) WriteHeader(status int) {
 }
 
 func (w *responseWriter) Write(p []byte) (int, error) {
+	bodyAllowed := bodyAllowedForStatus(w.status)
 	if !w.headerWritten {
+		// If body is not allowed, we don't need to (and we can't) sniff the content type.
+		if bodyAllowed {
+			// If no content type, apply sniffing algorithm to body.
+			// We can't use `w.header.Get` here since if the Content-Type was set to nil, we shoundn't do sniffing.
+			_, haveType := w.header["Content-Type"]
+
+			// If the Transfer-Encoding or Content-Encoding was set and is non-blank,
+			// we shouldn't sniff the body.
+			hasTE := w.header.Get("Transfer-Encoding") != ""
+			hasCE := w.header.Get("Content-Encoding") != ""
+			if !hasCE && !haveType && !hasTE && len(p) > 0 {
+				w.header.Set("Content-Type", http.DetectContentType(p))
+			}
+		}
 		w.WriteHeader(http.StatusOK)
+		bodyAllowed = true
 	}
-	if !bodyAllowedForStatus(w.status) {
+	if !bodyAllowed {
 		return 0, http.ErrBodyNotAllowed
 	}
 	df := &dataFrame{Length: uint64(len(p))}
@@ -103,6 +122,14 @@ func (w *responseWriter) Flush() {
 
 func (w *responseWriter) StreamCreator() StreamCreator {
 	return w.conn
+}
+
+func (w *responseWriter) SetReadDeadline(deadline time.Time) error {
+	return w.str.SetReadDeadline(deadline)
+}
+
+func (w *responseWriter) SetWriteDeadline(deadline time.Time) error {
+	return w.str.SetWriteDeadline(deadline)
 }
 
 // copied from http2/http2.go

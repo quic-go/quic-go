@@ -74,7 +74,7 @@ func main() {
 			if rand.Int()%2 == 0 {
 				pers = protocol.PerspectiveClient
 			}
-			data = tp.Marshal(pers)
+			data = tp.Marshal(pers, nil)
 		} else {
 			data = tp.MarshalForSessionTicket(nil)
 		}
