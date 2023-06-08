@@ -18,9 +18,9 @@ import (
 	"github.com/Psiphon-Labs/quic-go/http3"
 	"github.com/Psiphon-Labs/quic-go/internal/handshake"
 	"github.com/Psiphon-Labs/quic-go/internal/protocol"
+	"github.com/Psiphon-Labs/quic-go/internal/qtls"
 	"github.com/Psiphon-Labs/quic-go/interop/http09"
 	"github.com/Psiphon-Labs/quic-go/interop/utils"
-	"github.com/Psiphon-Labs/quic-go/qlog"
 )
 
 var errUnsupported = errors.New("unsupported test case")
@@ -64,14 +64,7 @@ func runTestcase(testcase string) error {
 	flag.Parse()
 	urls := flag.Args()
 
-	getLogWriter, err := utils.GetQLOGWriter()
-	if err != nil {
-		return err
-	}
-	quicConf := &quic.Config{
-		Tracer:   qlog.NewTracer(getLogWriter),
-		Versions: []quic.VersionNumber{quic.VersionDraft29},
-	}
+	quicConf := &quic.Config{Tracer: utils.NewQLOGConnectionTracer}
 
 	if testcase == "http3" {
 		r := &http3.RoundTripper{
@@ -91,9 +84,10 @@ func runTestcase(testcase string) error {
 	switch testcase {
 	case "handshake", "transfer", "retry":
 	case "keyupdate":
-		handshake.KeyUpdateInterval = 100
+		handshake.FirstKeyUpdateInterval = 100
 	case "chacha20":
-		tlsConf.CipherSuites = []uint16{tls.TLS_CHACHA20_POLY1305_SHA256}
+		reset := qtls.SetCipherSuite(tls.TLS_CHACHA20_POLY1305_SHA256)
+		defer reset()
 	case "multiconnect":
 		return runMultiConnectTest(r, urls)
 	case "versionnegotiation":

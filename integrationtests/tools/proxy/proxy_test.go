@@ -31,7 +31,7 @@ var _ = Describe("QUIC Proxy", func() {
 		hdr := wire.ExtendedHeader{
 			Header: wire.Header{
 				Type:             protocol.PacketTypeInitial,
-				Version:          protocol.VersionTLS,
+				Version:          protocol.Version1,
 				Length:           4 + protocol.ByteCount(len(payload)),
 				DestConnectionID: protocol.ParseConnectionID([]byte{0xde, 0xad, 0xbe, 0xef, 0, 0, 0x13, 0x37}),
 				SrcConnectionID:  protocol.ParseConnectionID([]byte{0xde, 0xad, 0xbe, 0xef, 0, 0, 0x13, 0x37}),
@@ -49,7 +49,7 @@ var _ = Describe("QUIC Proxy", func() {
 		hdr, data, _, err := wire.ParsePacket(b)
 		ExpectWithOffset(1, err).ToNot(HaveOccurred())
 		Expect(hdr.Type).To(Equal(protocol.PacketTypeInitial))
-		extHdr, err := hdr.ParseExtended(bytes.NewReader(data), protocol.VersionTLS)
+		extHdr, err := hdr.ParseExtended(bytes.NewReader(data), protocol.Version1)
 		ExpectWithOffset(1, err).ToNot(HaveOccurred())
 		return extHdr.PacketNumber
 	}

@@ -95,11 +95,11 @@ var _ = Describe("Crypto Setup TLS", func() {
 			&wire.TransportParameters{StatelessResetToken: &token},
 			runner,
 			testdata.GetTLSConfig(),
-			nil,
+			false,
 			&utils.RTTStats{},
 			nil,
 			utils.DefaultLogger.WithPrefix("server"),
-			protocol.VersionTLS,
+			protocol.Version1,
 		)
 
 		done := make(chan struct{})
@@ -141,11 +141,13 @@ var _ = Describe("Crypto Setup TLS", func() {
 			&wire.TransportParameters{},
 			runner,
 			tlsConf,
+			nil,
+			nil,
 			false,
 			&utils.RTTStats{},
 			nil,
 			utils.DefaultLogger.WithPrefix("client"),
-			protocol.VersionTLS,
+			protocol.Version1,
 		)
 
 		done := make(chan struct{})
@@ -177,11 +179,11 @@ var _ = Describe("Crypto Setup TLS", func() {
 			&wire.TransportParameters{StatelessResetToken: &token},
 			runner,
 			testdata.GetTLSConfig(),
-			nil,
+			false,
 			&utils.RTTStats{},
 			nil,
 			utils.DefaultLogger.WithPrefix("server"),
-			protocol.VersionTLS,
+			protocol.Version1,
 		)
 
 		done := make(chan struct{})
@@ -218,11 +220,11 @@ var _ = Describe("Crypto Setup TLS", func() {
 			&wire.TransportParameters{StatelessResetToken: &token},
 			runner,
 			serverConf,
-			nil,
+			false,
 			&utils.RTTStats{},
 			nil,
 			utils.DefaultLogger.WithPrefix("server"),
-			protocol.VersionTLS,
+			protocol.Version1,
 		)
 
 		done := make(chan struct{})
@@ -253,11 +255,11 @@ var _ = Describe("Crypto Setup TLS", func() {
 			&wire.TransportParameters{StatelessResetToken: &token},
 			NewMockHandshakeRunner(mockCtrl),
 			serverConf,
-			nil,
+			false,
 			&utils.RTTStats{},
 			nil,
 			utils.DefaultLogger.WithPrefix("server"),
-			protocol.VersionTLS,
+			protocol.Version1,
 		)
 
 		done := make(chan struct{})
@@ -371,17 +373,15 @@ var _ = Describe("Crypto Setup TLS", func() {
 				clientTransportParameters,
 				cRunner,
 				clientConf,
+				nil,
+				nil,
 				enable0RTT,
 				clientRTTStats,
 				nil,
 				utils.DefaultLogger.WithPrefix("client"),
-				protocol.VersionTLS,
+				protocol.Version1,
 			)
 
-			var allow0RTT func() bool
-			if enable0RTT {
-				allow0RTT = func() bool { return true }
-			}
 			var sHandshakeComplete bool
 			sChunkChan, sInitialStream, sHandshakeStream := initStreams()
 			sErrChan := make(chan error, 1)
@@ -402,11 +402,11 @@ var _ = Describe("Crypto Setup TLS", func() {
 				serverTransportParameters,
 				sRunner,
 				serverConf,
-				allow0RTT,
+				enable0RTT,
 				serverRTTStats,
 				nil,
 				utils.DefaultLogger.WithPrefix("server"),
-				protocol.VersionTLS,
+				protocol.Version1,
 			)
 
 			handshake(client, cChunkChan, server, sChunkChan)
@@ -472,11 +472,13 @@ var _ = Describe("Crypto Setup TLS", func() {
 				&wire.TransportParameters{},
 				runner,
 				&tls.Config{InsecureSkipVerify: true},
+				nil,
+				nil,
 				false,
 				&utils.RTTStats{},
 				nil,
 				utils.DefaultLogger.WithPrefix("client"),
-				protocol.VersionTLS,
+				protocol.Version1,
 			)
 
 			done := make(chan struct{})
@@ -515,11 +517,13 @@ var _ = Describe("Crypto Setup TLS", func() {
 				cTransportParameters,
 				cRunner,
 				clientConf,
+				nil,
+				nil,
 				false,
 				&utils.RTTStats{},
 				nil,
 				utils.DefaultLogger.WithPrefix("client"),
-				protocol.VersionTLS,
+				protocol.Version1,
 			)
 
 			sChunkChan, sInitialStream, sHandshakeStream := initStreams()
@@ -541,11 +545,11 @@ var _ = Describe("Crypto Setup TLS", func() {
 				sTransportParameters,
 				sRunner,
 				serverConf,
-				nil,
+				false,
 				&utils.RTTStats{},
 				nil,
 				utils.DefaultLogger.WithPrefix("server"),
-				protocol.VersionTLS,
+				protocol.Version1,
 			)
 
 			done := make(chan struct{})
@@ -575,11 +579,13 @@ var _ = Describe("Crypto Setup TLS", func() {
 					&wire.TransportParameters{ActiveConnectionIDLimit: 2},
 					cRunner,
 					clientConf,
+					nil,
+					nil,
 					false,
 					&utils.RTTStats{},
 					nil,
 					utils.DefaultLogger.WithPrefix("client"),
-					protocol.VersionTLS,
+					protocol.Version1,
 				)
 
 				sChunkChan, sInitialStream, sHandshakeStream := initStreams()
@@ -596,11 +602,11 @@ var _ = Describe("Crypto Setup TLS", func() {
 					&wire.TransportParameters{ActiveConnectionIDLimit: 2, StatelessResetToken: &token},
 					sRunner,
 					serverConf,
-					nil,
+					false,
 					&utils.RTTStats{},
 					nil,
 					utils.DefaultLogger.WithPrefix("server"),
-					protocol.VersionTLS,
+					protocol.Version1,
 				)
 
 				done := make(chan struct{})
@@ -634,11 +640,13 @@ var _ = Describe("Crypto Setup TLS", func() {
 					&wire.TransportParameters{ActiveConnectionIDLimit: 2},
 					cRunner,
 					clientConf,
+					nil,
+					nil,
 					false,
 					&utils.RTTStats{},
 					nil,
 					utils.DefaultLogger.WithPrefix("client"),
-					protocol.VersionTLS,
+					protocol.Version1,
 				)
 
 				sChunkChan, sInitialStream, sHandshakeStream := initStreams()
@@ -655,11 +663,11 @@ var _ = Describe("Crypto Setup TLS", func() {
 					&wire.TransportParameters{ActiveConnectionIDLimit: 2, StatelessResetToken: &token},
 					sRunner,
 					serverConf,
-					nil,
+					false,
 					&utils.RTTStats{},
 					nil,
 					utils.DefaultLogger.WithPrefix("server"),
-					protocol.VersionTLS,
+					protocol.Version1,
 				)
 
 				done := make(chan struct{})

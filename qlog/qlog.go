@@ -2,7 +2,6 @@ package qlog
 
 import (
 	"bytes"
-	"context"
 	"fmt"
 	"io"
 	"log"
@@ -48,26 +47,6 @@ func init() {
 }
 
 const eventChanSize = 50
-
-type tracer struct {
-	logging.NullTracer
-
-	getLogWriter func(p logging.Perspective, connectionID []byte) io.WriteCloser
-}
-
-var _ logging.Tracer = &tracer{}
-
-// NewTracer creates a new qlog tracer.
-func NewTracer(getLogWriter func(p logging.Perspective, connectionID []byte) io.WriteCloser) logging.Tracer {
-	return &tracer{getLogWriter: getLogWriter}
-}
-
-func (t *tracer) TracerForConnection(_ context.Context, p logging.Perspective, odcid protocol.ConnectionID) logging.ConnectionTracer {
-	if w := t.getLogWriter(p, odcid.Bytes()); w != nil {
-		return NewConnectionTracer(w, p, odcid)
-	}
-	return nil
-}
 
 type connectionTracer struct {
 	mutex sync.Mutex

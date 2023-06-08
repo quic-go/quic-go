@@ -2,7 +2,6 @@ package qlog
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
 	"errors"
 	"io"
@@ -51,17 +50,6 @@ type entry struct {
 }
 
 var _ = Describe("Tracing", func() {
-	Context("tracer", func() {
-		It("returns nil when there's no io.WriteCloser", func() {
-			t := NewTracer(func(logging.Perspective, []byte) io.WriteCloser { return nil })
-			Expect(t.TracerForConnection(
-				context.Background(),
-				logging.PerspectiveClient,
-				protocol.ParseConnectionID([]byte{1, 2, 3, 4}),
-			)).To(BeNil())
-		})
-	})
-
 	It("stops writing when encountering an error", func() {
 		buf := &bytes.Buffer{}
 		t := NewConnectionTracer(
@@ -88,9 +76,8 @@ var _ = Describe("Tracing", func() {
 
 		BeforeEach(func() {
 			buf = &bytes.Buffer{}
-			t := NewTracer(func(logging.Perspective, []byte) io.WriteCloser { return nopWriteCloser(buf) })
-			tracer = t.TracerForConnection(
-				context.Background(),
+			tracer = NewConnectionTracer(
+				nopWriteCloser(buf),
 				logging.PerspectiveServer,
 				protocol.ParseConnectionID([]byte{0xde, 0xad, 0xbe, 0xef}),
 			)
@@ -245,9 +232,8 @@ var _ = Describe("Tracing", func() {
 				Expect(entry.Time).To(BeTemporally("~", time.Now(), scaleDuration(10*time.Millisecond)))
 				Expect(entry.Name).To(Equal("transport:connection_closed"))
 				ev := entry.Event
-				Expect(ev).To(HaveLen(2))
-				Expect(ev).To(HaveKeyWithValue("owner", "remote"))
-				Expect(ev).To(HaveKeyWithValue("trigger", "version_negotiation"))
+				Expect(ev).To(HaveLen(1))
+				Expect(ev).To(HaveKeyWithValue("trigger", "version_mismatch"))
 			})
 
 			It("records application errors", func() {
@@ -428,7 +414,7 @@ var _ = Describe("Tracing", func() {
 							DestConnectionID: protocol.ParseConnectionID([]byte{1, 2, 3, 4, 5, 6, 7, 8}),
 							SrcConnectionID:  protocol.ParseConnectionID([]byte{4, 3, 2, 1}),
 							Length:           1337,
-							Version:          protocol.VersionTLS,
+							Version:          protocol.Version1,
 						},
 						PacketNumber: 1337,
 					},
@@ -494,7 +480,7 @@ var _ = Describe("Tracing", func() {
 							SrcConnectionID:  protocol.ParseConnectionID([]byte{4, 3, 2, 1}),
 							Token:            []byte{0xde, 0xad, 0xbe, 0xef},
 							Length:           1234,
-							Version:          protocol.VersionTLS,
+							Version:          protocol.Version1,
 						},
 						PacketNumber: 1337,
 					},
@@ -563,7 +549,7 @@ var _ = Describe("Tracing", func() {
 						DestConnectionID: protocol.ParseConnectionID([]byte{1, 2, 3, 4, 5, 6, 7, 8}),
 						SrcConnectionID:  protocol.ParseConnectionID([]byte{4, 3, 2, 1}),
 						Token:            []byte{0xde, 0xad, 0xbe, 0xef},
-						Version:          protocol.VersionTLS,
+						Version:          protocol.Version1,
 					},
 				)
 				entry := exportAndParseSingle()

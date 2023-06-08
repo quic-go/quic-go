@@ -1,7 +1,6 @@
 package logging
 
 import (
-	"context"
 	"errors"
 	"net"
 	"time"
@@ -35,46 +34,6 @@ var _ = Describe("Tracing", func() {
 				tr1 = NewMockTracer(mockCtrl)
 				tr2 = NewMockTracer(mockCtrl)
 				tracer = NewMultiplexedTracer(tr1, tr2)
-			})
-
-			It("multiplexes the TracerForConnection call", func() {
-				ctx := context.Background()
-				connID := protocol.ParseConnectionID([]byte{1, 2, 3})
-				tr1.EXPECT().TracerForConnection(ctx, PerspectiveClient, connID)
-				tr2.EXPECT().TracerForConnection(ctx, PerspectiveClient, connID)
-				tracer.TracerForConnection(ctx, PerspectiveClient, connID)
-			})
-
-			It("uses multiple connection tracers", func() {
-				ctx := context.Background()
-				ctr1 := NewMockConnectionTracer(mockCtrl)
-				ctr2 := NewMockConnectionTracer(mockCtrl)
-				connID := protocol.ParseConnectionID([]byte{1, 2, 3})
-				tr1.EXPECT().TracerForConnection(ctx, PerspectiveServer, connID).Return(ctr1)
-				tr2.EXPECT().TracerForConnection(ctx, PerspectiveServer, connID).Return(ctr2)
-				tr := tracer.TracerForConnection(ctx, PerspectiveServer, connID)
-				ctr1.EXPECT().LossTimerCanceled()
-				ctr2.EXPECT().LossTimerCanceled()
-				tr.LossTimerCanceled()
-			})
-
-			It("handles tracers that return a nil ConnectionTracer", func() {
-				ctx := context.Background()
-				ctr1 := NewMockConnectionTracer(mockCtrl)
-				connID := protocol.ParseConnectionID([]byte{1, 2, 3, 4})
-				tr1.EXPECT().TracerForConnection(ctx, PerspectiveServer, connID).Return(ctr1)
-				tr2.EXPECT().TracerForConnection(ctx, PerspectiveServer, connID)
-				tr := tracer.TracerForConnection(ctx, PerspectiveServer, connID)
-				ctr1.EXPECT().LossTimerCanceled()
-				tr.LossTimerCanceled()
-			})
-
-			It("returns nil when all tracers return a nil ConnectionTracer", func() {
-				ctx := context.Background()
-				connID := protocol.ParseConnectionID([]byte{1, 2, 3, 4, 5})
-				tr1.EXPECT().TracerForConnection(ctx, PerspectiveClient, connID)
-				tr2.EXPECT().TracerForConnection(ctx, PerspectiveClient, connID)
-				Expect(tracer.TracerForConnection(ctx, PerspectiveClient, connID)).To(BeNil())
 			})
 
 			It("traces the PacketSent event", func() {

@@ -28,47 +28,25 @@ import (
 	gmtypes "github.com/onsi/gomega/types"
 )
 
-type mockConn struct {
-	net.Conn
-	version protocol.VersionNumber
-}
+type mockAddr struct{ addr string }
 
-func newMockConn(version protocol.VersionNumber) net.Conn {
-	return &mockConn{version: version}
-}
-
-func (c *mockConn) GetQUICVersion() protocol.VersionNumber {
-	return c.version
-}
-
-type mockAddr struct {
-	addr string
-}
-
-func (ma *mockAddr) Network() string {
-	return "udp"
-}
-
-func (ma *mockAddr) String() string {
-	return ma.addr
-}
+func (ma *mockAddr) Network() string { return "udp" }
+func (ma *mockAddr) String() string  { return ma.addr }
 
 type mockAddrListener struct {
-	*mockquic.MockEarlyListener
+	*MockQUICEarlyListener
 	addr *mockAddr
 }
 
 func (m *mockAddrListener) Addr() net.Addr {
-	_ = m.MockEarlyListener.Addr()
+	_ = m.MockQUICEarlyListener.Addr()
 	return m.addr
 }
 
 func newMockAddrListener(addr string) *mockAddrListener {
 	return &mockAddrListener{
-		MockEarlyListener: mockquic.NewMockEarlyListener(mockCtrl),
-		addr: &mockAddr{
-			addr: addr,
-		},
+		MockQUICEarlyListener: NewMockQUICEarlyListener(mockCtrl),
+		addr:                  &mockAddr{addr: addr},
 	}
 }
 
@@ -260,8 +238,7 @@ var _ = Describe("Server", func() {
 					return true, nil
 				}
 
-				buf := &bytes.Buffer{}
-				quicvarint.Write(buf, 0x41)
+				buf := bytes.NewBuffer(quicvarint.Append(nil, 0x41))
 				unknownStr := mockquic.NewMockStream(mockCtrl)
 				unknownStr.EXPECT().Read(gomock.Any()).DoAndReturn(buf.Read).AnyTimes()
 				conn.EXPECT().AcceptStream(gomock.Any()).Return(unknownStr, nil)
@@ -283,11 +260,10 @@ var _ = Describe("Server", func() {
 					return false, nil
 				}
 
-				buf := &bytes.Buffer{}
-				quicvarint.Write(buf, 0x41)
+				buf := bytes.NewBuffer(quicvarint.Append(nil, 0x41))
 				unknownStr := mockquic.NewMockStream(mockCtrl)
 				unknownStr.EXPECT().Read(gomock.Any()).DoAndReturn(buf.Read).AnyTimes()
-				unknownStr.EXPECT().CancelWrite(quic.StreamErrorCode(errorRequestIncomplete))
+				unknownStr.EXPECT().CancelWrite(quic.StreamErrorCode(ErrCodeRequestIncomplete))
 				conn.EXPECT().AcceptStream(gomock.Any()).Return(unknownStr, nil)
 				conn.EXPECT().AcceptStream(gomock.Any()).Return(nil, errors.New("done"))
 				conn.EXPECT().AcceptUniStream(gomock.Any()).DoAndReturn(func(context.Context) (quic.ReceiveStream, error) {
@@ -307,11 +283,10 @@ var _ = Describe("Server", func() {
 					return false, errors.New("error in hijacker")
 				}
 
-				buf := &bytes.Buffer{}
-				quicvarint.Write(buf, 0x41)
+				buf := bytes.NewBuffer(quicvarint.Append(nil, 0x41))
 				unknownStr := mockquic.NewMockStream(mockCtrl)
 				unknownStr.EXPECT().Read(gomock.Any()).DoAndReturn(buf.Read).AnyTimes()
-				unknownStr.EXPECT().CancelWrite(quic.StreamErrorCode(errorRequestIncomplete))
+				unknownStr.EXPECT().CancelWrite(quic.StreamErrorCode(ErrCodeRequestIncomplete))
 				conn.EXPECT().AcceptStream(gomock.Any()).Return(unknownStr, nil)
 				conn.EXPECT().AcceptStream(gomock.Any()).Return(nil, errors.New("done"))
 				conn.EXPECT().AcceptUniStream(gomock.Any()).DoAndReturn(func(context.Context) (quic.ReceiveStream, error) {
@@ -373,8 +348,7 @@ var _ = Describe("Server", func() {
 					return true
 				}
 
-				buf := &bytes.Buffer{}
-				quicvarint.Write(buf, 0x54)
+				buf := bytes.NewBuffer(quicvarint.Append(nil, 0x54))
 				unknownStr := mockquic.NewMockStream(mockCtrl)
 				unknownStr.EXPECT().Read(gomock.Any()).DoAndReturn(buf.Read).AnyTimes()
 				conn.EXPECT().AcceptUniStream(gomock.Any()).DoAndReturn(func(context.Context) (quic.ReceiveStream, error) {
@@ -420,11 +394,10 @@ var _ = Describe("Server", func() {
 					return false
 				}
 
-				buf := &bytes.Buffer{}
-				quicvarint.Write(buf, 0x54)
+				buf := bytes.NewBuffer(quicvarint.Append(nil, 0x54))
 				unknownStr := mockquic.NewMockStream(mockCtrl)
 				unknownStr.EXPECT().Read(gomock.Any()).DoAndReturn(buf.Read).AnyTimes()
-				unknownStr.EXPECT().CancelRead(quic.StreamErrorCode(errorStreamCreationError))
+				unknownStr.EXPECT().CancelRead(quic.StreamErrorCode(ErrCodeStreamCreationError))
 
 				conn.EXPECT().AcceptUniStream(gomock.Any()).DoAndReturn(func(context.Context) (quic.ReceiveStream, error) {
 					return unknownStr, nil
@@ -480,8 +453,7 @@ var _ = Describe("Server", func() {
 				}
 
 				It(fmt.Sprintf("ignores the QPACK %s streams", name), func() {
-					buf := &bytes.Buffer{}
-					quicvarint.Write(buf, streamType)
+					buf := bytes.NewBuffer(quicvarint.Append(nil, streamType))
 					str := mockquic.NewMockStream(mockCtrl)
 					str.EXPECT().Read(gomock.Any()).DoAndReturn(buf.Read).AnyTimes()
 
@@ -498,12 +470,11 @@ var _ = Describe("Server", func() {
 			}
 
 			It("reset streams other than the control stream and the QPACK streams", func() {
-				buf := &bytes.Buffer{}
-				quicvarint.Write(buf, 1337)
+				buf := bytes.NewBuffer(quicvarint.Append(nil, 0o1337))
 				str := mockquic.NewMockStream(mockCtrl)
 				str.EXPECT().Read(gomock.Any()).DoAndReturn(buf.Read).AnyTimes()
 				done := make(chan struct{})
-				str.EXPECT().CancelRead(quic.StreamErrorCode(errorStreamCreationError)).Do(func(code quic.StreamErrorCode) {
+				str.EXPECT().CancelRead(quic.StreamErrorCode(ErrCodeStreamCreationError)).Do(func(code quic.StreamErrorCode) {
 					close(done)
 				})
 
@@ -534,7 +505,7 @@ var _ = Describe("Server", func() {
 				done := make(chan struct{})
 				conn.EXPECT().CloseWithError(gomock.Any(), gomock.Any()).Do(func(code quic.ApplicationErrorCode, _ string) {
 					defer GinkgoRecover()
-					Expect(code).To(BeEquivalentTo(errorMissingSettings))
+					Expect(code).To(BeEquivalentTo(ErrCodeMissingSettings))
 					close(done)
 				})
 				s.handleConn(conn)
@@ -557,7 +528,7 @@ var _ = Describe("Server", func() {
 				done := make(chan struct{})
 				conn.EXPECT().CloseWithError(gomock.Any(), gomock.Any()).Do(func(code quic.ApplicationErrorCode, _ string) {
 					defer GinkgoRecover()
-					Expect(code).To(BeEquivalentTo(errorFrameError))
+					Expect(code).To(BeEquivalentTo(ErrCodeFrameError))
 					close(done)
 				})
 				s.handleConn(conn)
@@ -580,7 +551,7 @@ var _ = Describe("Server", func() {
 				done := make(chan struct{})
 				conn.EXPECT().CloseWithError(gomock.Any(), gomock.Any()).Do(func(code quic.ApplicationErrorCode, _ string) {
 					defer GinkgoRecover()
-					Expect(code).To(BeEquivalentTo(errorStreamCreationError))
+					Expect(code).To(BeEquivalentTo(ErrCodeStreamCreationError))
 					close(done)
 				})
 				s.handleConn(conn)
@@ -605,7 +576,7 @@ var _ = Describe("Server", func() {
 				done := make(chan struct{})
 				conn.EXPECT().CloseWithError(gomock.Any(), gomock.Any()).Do(func(code quic.ApplicationErrorCode, reason string) {
 					defer GinkgoRecover()
-					Expect(code).To(BeEquivalentTo(errorSettingsError))
+					Expect(code).To(BeEquivalentTo(ErrCodeSettingsError))
 					Expect(reason).To(Equal("missing QUIC Datagram support"))
 					close(done)
 				})
@@ -652,7 +623,7 @@ var _ = Describe("Server", func() {
 				done := make(chan struct{})
 				str.EXPECT().Context().Return(reqContext)
 				str.EXPECT().Write(gomock.Any()).DoAndReturn(responseBuf.Write).AnyTimes()
-				str.EXPECT().CancelRead(quic.StreamErrorCode(errorNoError))
+				str.EXPECT().CancelRead(quic.StreamErrorCode(ErrCodeNoError))
 				str.EXPECT().Close().Do(func() { close(done) })
 
 				s.handleConn(conn)
@@ -694,7 +665,7 @@ var _ = Describe("Server", func() {
 				setRequest(append(requestData, b...))
 				done := make(chan struct{})
 				str.EXPECT().Write(gomock.Any()).DoAndReturn(responseBuf.Write).AnyTimes()
-				str.EXPECT().CancelWrite(quic.StreamErrorCode(errorFrameError)).Do(func(quic.StreamErrorCode) { close(done) })
+				str.EXPECT().CancelWrite(quic.StreamErrorCode(ErrCodeFrameError)).Do(func(quic.StreamErrorCode) { close(done) })
 
 				s.handleConn(conn)
 				Eventually(done).Should(BeClosed())
@@ -709,7 +680,7 @@ var _ = Describe("Server", func() {
 				testErr := errors.New("stream reset")
 				done := make(chan struct{})
 				str.EXPECT().Read(gomock.Any()).Return(0, testErr)
-				str.EXPECT().CancelWrite(quic.StreamErrorCode(errorRequestIncomplete)).Do(func(quic.StreamErrorCode) { close(done) })
+				str.EXPECT().CancelWrite(quic.StreamErrorCode(ErrCodeRequestIncomplete)).Do(func(quic.StreamErrorCode) { close(done) })
 
 				s.handleConn(conn)
 				Consistently(handlerCalled).ShouldNot(BeClosed())
@@ -729,7 +700,7 @@ var _ = Describe("Server", func() {
 
 				done := make(chan struct{})
 				conn.EXPECT().CloseWithError(gomock.Any(), gomock.Any()).Do(func(code quic.ApplicationErrorCode, _ string) {
-					Expect(code).To(Equal(quic.ApplicationErrorCode(errorFrameUnexpected)))
+					Expect(code).To(Equal(quic.ApplicationErrorCode(ErrCodeFrameUnexpected)))
 					close(done)
 				})
 				s.handleConn(conn)
@@ -753,7 +724,7 @@ var _ = Describe("Server", func() {
 					return len(p), nil
 				}).AnyTimes()
 				done := make(chan struct{})
-				str.EXPECT().CancelWrite(quic.StreamErrorCode(errorFrameError)).Do(func(quic.StreamErrorCode) { close(done) })
+				str.EXPECT().CancelWrite(quic.StreamErrorCode(ErrCodeFrameError)).Do(func(quic.StreamErrorCode) { close(done) })
 
 				s.handleConn(conn)
 				Eventually(done).Should(BeClosed())
@@ -775,7 +746,7 @@ var _ = Describe("Server", func() {
 			str.EXPECT().Write(gomock.Any()).DoAndReturn(func(p []byte) (int, error) {
 				return len(p), nil
 			}).AnyTimes()
-			str.EXPECT().CancelRead(quic.StreamErrorCode(errorNoError))
+			str.EXPECT().CancelRead(quic.StreamErrorCode(ErrCodeNoError))
 
 			serr := s.handleRequest(conn, str, qpackDecoder, nil)
 			Expect(serr.err).ToNot(HaveOccurred())
@@ -798,7 +769,7 @@ var _ = Describe("Server", func() {
 			str.EXPECT().Write(gomock.Any()).DoAndReturn(func(p []byte) (int, error) {
 				return len(p), nil
 			}).AnyTimes()
-			str.EXPECT().CancelRead(quic.StreamErrorCode(errorNoError))
+			str.EXPECT().CancelRead(quic.StreamErrorCode(ErrCodeNoError))
 
 			serr := s.handleRequest(conn, str, qpackDecoder, nil)
 			Expect(serr.err).ToNot(HaveOccurred())
@@ -811,20 +782,20 @@ var _ = Describe("Server", func() {
 			s.QuicConfig = &quic.Config{Versions: []protocol.VersionNumber{protocol.VersionDraft29}}
 		})
 
-		var ln1 quic.EarlyListener
-		var ln2 quic.EarlyListener
+		var ln1 QUICEarlyListener
+		var ln2 QUICEarlyListener
 		expected := http.Header{
 			"Alt-Svc": {`h3-29=":443"; ma=2592000`},
 		}
 
-		addListener := func(addr string, ln *quic.EarlyListener) {
+		addListener := func(addr string, ln *QUICEarlyListener) {
 			mln := newMockAddrListener(addr)
 			mln.EXPECT().Addr()
 			*ln = mln
 			s.addListener(ln)
 		}
 
-		removeListener := func(ln *quic.EarlyListener) {
+		removeListener := func(ln *QUICEarlyListener) {
 			s.removeListener(ln)
 		}
 
@@ -947,31 +918,87 @@ var _ = Describe("Server", func() {
 	})
 
 	Context("ConfigureTLSConfig", func() {
-		var tlsConf *tls.Config
-		var ch *tls.ClientHelloInfo
-
-		BeforeEach(func() {
-			tlsConf = &tls.Config{}
-			ch = &tls.ClientHelloInfo{}
-		})
-
 		It("advertises v1 by default", func() {
-			tlsConf = ConfigureTLSConfig(tlsConf)
-			Expect(tlsConf.GetConfigForClient).NotTo(BeNil())
-
-			config, err := tlsConf.GetConfigForClient(ch)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(config.NextProtos).To(Equal([]string{NextProtoH3}))
+			conf := ConfigureTLSConfig(testdata.GetTLSConfig())
+			ln, err := quic.ListenAddr("localhost:0", conf, &quic.Config{Versions: []quic.VersionNumber{quic.Version1}})
+			Expect(err).ToNot(HaveOccurred())
+			defer ln.Close()
+			c, err := quic.DialAddr(context.Background(), ln.Addr().String(), &tls.Config{InsecureSkipVerify: true, NextProtos: []string{NextProtoH3}}, nil)
+			Expect(err).ToNot(HaveOccurred())
+			defer c.CloseWithError(0, "")
+			Expect(c.ConnectionState().TLS.ConnectionState.NegotiatedProtocol).To(Equal(NextProtoH3))
 		})
 
 		It("advertises h3-29 for draft-29", func() {
-			tlsConf = ConfigureTLSConfig(tlsConf)
-			Expect(tlsConf.GetConfigForClient).NotTo(BeNil())
+			conf := ConfigureTLSConfig(testdata.GetTLSConfig())
+			ln, err := quic.ListenAddr("localhost:0", conf, &quic.Config{Versions: []quic.VersionNumber{quic.VersionDraft29}})
+			Expect(err).ToNot(HaveOccurred())
+			defer ln.Close()
+			c, err := quic.DialAddr(context.Background(), ln.Addr().String(), &tls.Config{InsecureSkipVerify: true, NextProtos: []string{NextProtoH3Draft29}}, nil)
+			Expect(err).ToNot(HaveOccurred())
+			defer c.CloseWithError(0, "")
+			Expect(c.ConnectionState().TLS.ConnectionState.NegotiatedProtocol).To(Equal(NextProtoH3Draft29))
+		})
 
-			ch.Conn = newMockConn(protocol.VersionDraft29)
-			config, err := tlsConf.GetConfigForClient(ch)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(config.NextProtos).To(Equal([]string{NextProtoH3Draft29}))
+		It("sets the GetConfigForClient callback if no tls.Config is given", func() {
+			var receivedConf *tls.Config
+			quicListenAddr = func(addr string, tlsConf *tls.Config, _ *quic.Config) (QUICEarlyListener, error) {
+				receivedConf = tlsConf
+				return nil, errors.New("listen err")
+			}
+			Expect(s.ListenAndServe()).To(HaveOccurred())
+			Expect(receivedConf).ToNot(BeNil())
+		})
+
+		It("sets the ALPN for tls.Configs returned by the tls.GetConfigForClient", func() {
+			tlsConf := &tls.Config{
+				GetConfigForClient: func(ch *tls.ClientHelloInfo) (*tls.Config, error) {
+					c := testdata.GetTLSConfig()
+					c.NextProtos = []string{"foo", "bar"}
+					return c, nil
+				},
+			}
+
+			ln, err := quic.ListenAddr("localhost:0", ConfigureTLSConfig(tlsConf), &quic.Config{Versions: []quic.VersionNumber{quic.Version1}})
+			Expect(err).ToNot(HaveOccurred())
+			defer ln.Close()
+			c, err := quic.DialAddr(context.Background(), ln.Addr().String(), &tls.Config{InsecureSkipVerify: true, NextProtos: []string{NextProtoH3}}, nil)
+			Expect(err).ToNot(HaveOccurred())
+			defer c.CloseWithError(0, "")
+			Expect(c.ConnectionState().TLS.ConnectionState.NegotiatedProtocol).To(Equal(NextProtoH3))
+		})
+
+		It("works if GetConfigForClient returns a nil tls.Config", func() {
+			tlsConf := testdata.GetTLSConfig()
+			tlsConf.GetConfigForClient = func(*tls.ClientHelloInfo) (*tls.Config, error) { return nil, nil }
+
+			ln, err := quic.ListenAddr("localhost:0", ConfigureTLSConfig(tlsConf), &quic.Config{Versions: []quic.VersionNumber{quic.Version1}})
+			Expect(err).ToNot(HaveOccurred())
+			defer ln.Close()
+			c, err := quic.DialAddr(context.Background(), ln.Addr().String(), &tls.Config{InsecureSkipVerify: true, NextProtos: []string{NextProtoH3}}, nil)
+			Expect(err).ToNot(HaveOccurred())
+			defer c.CloseWithError(0, "")
+			Expect(c.ConnectionState().TLS.ConnectionState.NegotiatedProtocol).To(Equal(NextProtoH3))
+		})
+
+		It("sets the ALPN for tls.Configs returned by the tls.GetConfigForClient, if it returns a static tls.Config", func() {
+			tlsClientConf := testdata.GetTLSConfig()
+			tlsClientConf.NextProtos = []string{"foo", "bar"}
+			tlsConf := &tls.Config{
+				GetConfigForClient: func(ch *tls.ClientHelloInfo) (*tls.Config, error) {
+					return tlsClientConf, nil
+				},
+			}
+
+			ln, err := quic.ListenAddr("localhost:0", ConfigureTLSConfig(tlsConf), &quic.Config{Versions: []quic.VersionNumber{quic.Version1}})
+			Expect(err).ToNot(HaveOccurred())
+			defer ln.Close()
+			c, err := quic.DialAddr(context.Background(), ln.Addr().String(), &tls.Config{InsecureSkipVerify: true, NextProtos: []string{NextProtoH3}}, nil)
+			Expect(err).ToNot(HaveOccurred())
+			defer c.CloseWithError(0, "")
+			Expect(c.ConnectionState().TLS.ConnectionState.NegotiatedProtocol).To(Equal(NextProtoH3))
+			// check that the original config was not modified
+			Expect(tlsClientConf.NextProtos).To(Equal([]string{"foo", "bar"}))
 		})
 	})
 
@@ -985,7 +1012,7 @@ var _ = Describe("Server", func() {
 		It("serves a packet conn", func() {
 			ln := newMockAddrListener(":443")
 			conn := &net.UDPConn{}
-			quicListen = func(c net.PacketConn, tlsConf *tls.Config, config *quic.Config) (quic.EarlyListener, error) {
+			quicListen = func(c net.PacketConn, tlsConf *tls.Config, config *quic.Config) (QUICEarlyListener, error) {
 				Expect(c).To(Equal(conn))
 				return ln, nil
 			}
@@ -1016,12 +1043,12 @@ var _ = Describe("Server", func() {
 		It("serves two packet conns", func() {
 			ln1 := newMockAddrListener(":443")
 			ln2 := newMockAddrListener(":8443")
-			lns := make(chan quic.EarlyListener, 2)
+			lns := make(chan QUICEarlyListener, 2)
 			lns <- ln1
 			lns <- ln2
 			conn1 := &net.UDPConn{}
 			conn2 := &net.UDPConn{}
-			quicListen = func(c net.PacketConn, tlsConf *tls.Config, config *quic.Config) (quic.EarlyListener, error) {
+			quicListen = func(c net.PacketConn, tlsConf *tls.Config, config *quic.Config) (QUICEarlyListener, error) {
 				return <-lns, nil
 			}
 
@@ -1075,7 +1102,7 @@ var _ = Describe("Server", func() {
 		It("serves a listener", func() {
 			var called int32
 			ln := newMockAddrListener(":443")
-			quicListen = func(conn net.PacketConn, tlsConf *tls.Config, config *quic.Config) (quic.EarlyListener, error) {
+			quicListen = func(conn net.PacketConn, tlsConf *tls.Config, config *quic.Config) (QUICEarlyListener, error) {
 				atomic.StoreInt32(&called, 1)
 				return ln, nil
 			}
@@ -1106,10 +1133,10 @@ var _ = Describe("Server", func() {
 			var called int32
 			ln1 := newMockAddrListener(":443")
 			ln2 := newMockAddrListener(":8443")
-			lns := make(chan quic.EarlyListener, 2)
+			lns := make(chan QUICEarlyListener, 2)
 			lns <- ln1
 			lns <- ln2
-			quicListen = func(c net.PacketConn, tlsConf *tls.Config, config *quic.Config) (quic.EarlyListener, error) {
+			quicListen = func(c net.PacketConn, tlsConf *tls.Config, config *quic.Config) (QUICEarlyListener, error) {
 				atomic.StoreInt32(&called, 1)
 				return <-lns, nil
 			}
@@ -1171,7 +1198,7 @@ var _ = Describe("Server", func() {
 				<-testDone
 				return nil, errors.New("test done")
 			}).MaxTimes(1)
-			conn.EXPECT().AcceptStream(gomock.Any()).Return(nil, &quic.ApplicationError{ErrorCode: quic.ApplicationErrorCode(errorNoError)})
+			conn.EXPECT().AcceptStream(gomock.Any()).Return(nil, &quic.ApplicationError{ErrorCode: quic.ApplicationErrorCode(ErrCodeNoError)})
 			s.ServeQUICConn(conn)
 			close(testDone)
 		})
@@ -1186,125 +1213,16 @@ var _ = Describe("Server", func() {
 			Expect(s.Close()).To(Succeed())
 		})
 
-		checkGetConfigForClientVersions := func(conf *tls.Config) {
-			c, err := conf.GetConfigForClient(&tls.ClientHelloInfo{Conn: newMockConn(protocol.VersionDraft29)})
-			ExpectWithOffset(1, err).ToNot(HaveOccurred())
-			ExpectWithOffset(1, c.NextProtos).To(Equal([]string{NextProtoH3Draft29}))
-			c, err = conf.GetConfigForClient(&tls.ClientHelloInfo{Conn: newMockConn(protocol.Version1)})
-			ExpectWithOffset(1, err).ToNot(HaveOccurred())
-			ExpectWithOffset(1, c.NextProtos).To(Equal([]string{NextProtoH3}))
-		}
-
 		It("uses the quic.Config to start the QUIC server", func() {
 			conf := &quic.Config{HandshakeIdleTimeout: time.Nanosecond}
 			var receivedConf *quic.Config
-			quicListenAddr = func(addr string, _ *tls.Config, config *quic.Config) (quic.EarlyListener, error) {
+			quicListenAddr = func(addr string, _ *tls.Config, config *quic.Config) (QUICEarlyListener, error) {
 				receivedConf = config
 				return nil, errors.New("listen err")
 			}
 			s.QuicConfig = conf
 			Expect(s.ListenAndServe()).To(HaveOccurred())
 			Expect(receivedConf).To(Equal(conf))
-		})
-
-		It("sets the GetConfigForClient and replaces the ALPN token to the tls.Config, if the GetConfigForClient callback is not set", func() {
-			tlsConf := &tls.Config{
-				ClientAuth: tls.RequireAndVerifyClientCert,
-				NextProtos: []string{"foo", "bar"},
-			}
-			var receivedConf *tls.Config
-			quicListenAddr = func(addr string, tlsConf *tls.Config, _ *quic.Config) (quic.EarlyListener, error) {
-				receivedConf = tlsConf
-				return nil, errors.New("listen err")
-			}
-			s.TLSConfig = tlsConf
-			Expect(s.ListenAndServe()).To(HaveOccurred())
-			Expect(receivedConf.NextProtos).To(BeEmpty())
-			Expect(receivedConf.ClientAuth).To(BeZero())
-			// make sure the original tls.Config was not modified
-			Expect(tlsConf.NextProtos).To(Equal([]string{"foo", "bar"}))
-			// make sure that the config returned from the GetConfigForClient callback sets the fields of the original config
-			conf, err := receivedConf.GetConfigForClient(&tls.ClientHelloInfo{})
-			Expect(err).ToNot(HaveOccurred())
-			Expect(conf.ClientAuth).To(Equal(tls.RequireAndVerifyClientCert))
-			checkGetConfigForClientVersions(receivedConf)
-		})
-
-		It("sets the GetConfigForClient callback if no tls.Config is given", func() {
-			var receivedConf *tls.Config
-			quicListenAddr = func(addr string, tlsConf *tls.Config, _ *quic.Config) (quic.EarlyListener, error) {
-				receivedConf = tlsConf
-				return nil, errors.New("listen err")
-			}
-			Expect(s.ListenAndServe()).To(HaveOccurred())
-			Expect(receivedConf).ToNot(BeNil())
-			checkGetConfigForClientVersions(receivedConf)
-		})
-
-		It("sets the ALPN for tls.Configs returned by the tls.GetConfigForClient", func() {
-			tlsConf := &tls.Config{
-				GetConfigForClient: func(ch *tls.ClientHelloInfo) (*tls.Config, error) {
-					return &tls.Config{
-						ClientAuth: tls.RequireAndVerifyClientCert,
-						NextProtos: []string{"foo", "bar"},
-					}, nil
-				},
-			}
-
-			var receivedConf *tls.Config
-			quicListenAddr = func(addr string, conf *tls.Config, _ *quic.Config) (quic.EarlyListener, error) {
-				receivedConf = conf
-				return nil, errors.New("listen err")
-			}
-			s.TLSConfig = tlsConf
-			Expect(s.ListenAndServe()).To(HaveOccurred())
-			// check that the original config was not modified
-			conf, err := tlsConf.GetConfigForClient(&tls.ClientHelloInfo{})
-			Expect(err).ToNot(HaveOccurred())
-			Expect(conf.NextProtos).To(Equal([]string{"foo", "bar"}))
-			// check that the config returned by the GetConfigForClient callback uses the returned config
-			conf, err = receivedConf.GetConfigForClient(&tls.ClientHelloInfo{})
-			Expect(err).ToNot(HaveOccurred())
-			Expect(conf.ClientAuth).To(Equal(tls.RequireAndVerifyClientCert))
-			checkGetConfigForClientVersions(receivedConf)
-		})
-
-		It("sets the ALPN for tls.Configs returned by the tls.GetConfigForClient, if it returns a static tls.Config", func() {
-			tlsClientConf := &tls.Config{NextProtos: []string{"foo", "bar"}}
-			tlsConf := &tls.Config{
-				GetConfigForClient: func(ch *tls.ClientHelloInfo) (*tls.Config, error) {
-					return tlsClientConf, nil
-				},
-			}
-
-			var receivedConf *tls.Config
-			quicListenAddr = func(addr string, conf *tls.Config, _ *quic.Config) (quic.EarlyListener, error) {
-				receivedConf = conf
-				return nil, errors.New("listen err")
-			}
-			s.TLSConfig = tlsConf
-			Expect(s.ListenAndServe()).To(HaveOccurred())
-			// check that the original config was not modified
-			conf, err := tlsConf.GetConfigForClient(&tls.ClientHelloInfo{})
-			Expect(err).ToNot(HaveOccurred())
-			Expect(conf.NextProtos).To(Equal([]string{"foo", "bar"}))
-			checkGetConfigForClientVersions(receivedConf)
-		})
-
-		It("works if GetConfigForClient returns a nil tls.Config", func() {
-			tlsConf := &tls.Config{GetConfigForClient: func(*tls.ClientHelloInfo) (*tls.Config, error) { return nil, nil }}
-
-			var receivedConf *tls.Config
-			quicListenAddr = func(addr string, conf *tls.Config, _ *quic.Config) (quic.EarlyListener, error) {
-				receivedConf = conf
-				return nil, errors.New("listen err")
-			}
-			s.TLSConfig = tlsConf
-			Expect(s.ListenAndServe()).To(HaveOccurred())
-			conf, err := receivedConf.GetConfigForClient(&tls.ClientHelloInfo{})
-			Expect(err).ToNot(HaveOccurred())
-			Expect(conf).ToNot(BeNil())
-			checkGetConfigForClientVersions(receivedConf)
 		})
 	})
 
@@ -1314,7 +1232,7 @@ var _ = Describe("Server", func() {
 
 	It("errors when listening fails", func() {
 		testErr := errors.New("listen error")
-		quicListenAddr = func(addr string, tlsConf *tls.Config, config *quic.Config) (quic.EarlyListener, error) {
+		quicListenAddr = func(addr string, tlsConf *tls.Config, config *quic.Config) (QUICEarlyListener, error) {
 			return nil, testErr
 		}
 		fullpem, privkey := testdata.GetCertificatePaths()
@@ -1324,7 +1242,7 @@ var _ = Describe("Server", func() {
 	It("supports H3_DATAGRAM", func() {
 		s.EnableDatagrams = true
 		var receivedConf *quic.Config
-		quicListenAddr = func(addr string, _ *tls.Config, config *quic.Config) (quic.EarlyListener, error) {
+		quicListenAddr = func(addr string, _ *tls.Config, config *quic.Config) (QUICEarlyListener, error) {
 			receivedConf = config
 			return nil, errors.New("listen err")
 		}

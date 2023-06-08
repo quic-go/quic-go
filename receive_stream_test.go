@@ -682,7 +682,7 @@ var _ = Describe("Receive Stream", func() {
 			})
 
 			It("doesn't do anything when it was closed for shutdown", func() {
-				str.closeForShutdown(nil)
+				str.closeForShutdown(errors.New("shutdown"))
 				err := str.handleResetStreamFrame(rst)
 				Expect(err).ToNot(HaveOccurred())
 			})

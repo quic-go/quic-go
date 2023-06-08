@@ -86,11 +86,13 @@ func main() {
 			RootCAs:            testdata.GetRootCA(),
 			ClientSessionCache: tls.NewLRUClientSessionCache(1),
 		},
+		nil,
+		nil,
 		false,
 		utils.NewRTTStats(),
 		nil,
 		utils.DefaultLogger.WithPrefix("client"),
-		protocol.VersionTLS,
+		protocol.Version1,
 	)
 
 	sChunkChan, sInitialStream, sHandshakeStream := initStreams()
@@ -105,11 +107,11 @@ func main() {
 		&wire.TransportParameters{ActiveConnectionIDLimit: 2},
 		runner,
 		config,
-		nil,
+		false,
 		utils.NewRTTStats(),
 		nil,
 		utils.DefaultLogger.WithPrefix("server"),
-		protocol.VersionTLS,
+		protocol.Version1,
 	)
 
 	serverHandshakeCompleted := make(chan struct{})

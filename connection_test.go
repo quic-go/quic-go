@@ -113,6 +113,7 @@ var _ = Describe("Connection", func() {
 			clientDestConnID,
 			destConnID,
 			srcConnID,
+			&protocol.DefaultConnectionIDGenerator{},
 			protocol.StatelessResetToken{},
 			populateServerConfig(&Config{DisablePathMTUDiscovery: true}),
 			nil, // tls.Config
@@ -121,7 +122,7 @@ var _ = Describe("Connection", func() {
 			tracer,
 			1234,
 			utils.DefaultLogger,
-			protocol.VersionTLS,
+			protocol.Version1,
 		).(*connection)
 		streamManager = NewMockStreamManager(mockCtrl)
 		conn.streamsMap = streamManager
@@ -1053,7 +1054,7 @@ var _ = Describe("Connection", func() {
 						Type:             protocol.PacketTypeHandshake,
 						DestConnectionID: connID,
 						SrcConnectionID:  destConnID,
-						Version:          protocol.VersionTLS,
+						Version:          protocol.Version1,
 						Length:           length,
 					},
 					PacketNumberLen: protocol.PacketNumberLen3,
@@ -1631,7 +1632,7 @@ var _ = Describe("Connection", func() {
 		})
 
 		It("sends a Path MTU probe packet", func() {
-			mtuDiscoverer := NewMockMtuDiscoverer(mockCtrl)
+			mtuDiscoverer := NewMockMTUDiscoverer(mockCtrl)
 			conn.mtuDiscoverer = mtuDiscoverer
 			conn.config.DisablePathMTUDiscovery = false
 			sph.EXPECT().SentPacket(gomock.Any())
@@ -1834,9 +1835,9 @@ var _ = Describe("Connection", func() {
 			conn.run()
 		}()
 		handshakeCtx := conn.HandshakeComplete()
-		Consistently(handshakeCtx.Done()).ShouldNot(BeClosed())
+		Consistently(handshakeCtx).ShouldNot(BeClosed())
 		close(finishHandshake)
-		Eventually(handshakeCtx.Done()).Should(BeClosed())
+		Eventually(handshakeCtx).Should(BeClosed())
 		// make sure the go routine returns
 		streamManager.EXPECT().CloseWithError(gomock.Any())
 		expectReplaceWithClosed()
@@ -1865,7 +1866,7 @@ var _ = Describe("Connection", func() {
 		}()
 
 		handshakeCtx := conn.HandshakeComplete()
-		Consistently(handshakeCtx.Done()).ShouldNot(BeClosed())
+		Consistently(handshakeCtx).ShouldNot(BeClosed())
 		close(finishHandshake)
 		var frames []*ackhandler.Frame
 		Eventually(func() []*ackhandler.Frame {
@@ -1908,10 +1909,10 @@ var _ = Describe("Connection", func() {
 			conn.run()
 		}()
 		handshakeCtx := conn.HandshakeComplete()
-		Consistently(handshakeCtx.Done()).ShouldNot(BeClosed())
+		Consistently(handshakeCtx).ShouldNot(BeClosed())
 		mconn.EXPECT().Write(gomock.Any())
 		conn.closeLocal(errors.New("handshake error"))
-		Consistently(handshakeCtx.Done()).ShouldNot(BeClosed())
+		Consistently(handshakeCtx).ShouldNot(BeClosed())
 		Eventually(conn.Context().Done()).Should(BeClosed())
 	})
 
@@ -2015,8 +2016,6 @@ var _ = Describe("Connection", func() {
 			packer.EXPECT().HandleTransportParameters(params)
 			packer.EXPECT().PackCoalescedPacket(false, conn.version).MaxTimes(3)
 			Expect(conn.earlyConnReady()).ToNot(BeClosed())
-			connRunner.EXPECT().GetStatelessResetToken(gomock.Any()).Times(2)
-			connRunner.EXPECT().Add(gomock.Any(), conn).Times(2)
 			tracer.EXPECT().ReceivedTransportParameters(params)
 			conn.handleTransportParameters(params)
 			Expect(conn.earlyConnReady()).To(BeClosed())
@@ -2378,7 +2377,7 @@ var _ = Describe("Client Connection", func() {
 	}
 
 	BeforeEach(func() {
-		quicConf = populateClientConfig(&Config{}, true)
+		quicConf = populateConfig(&Config{})
 		tlsConf = nil
 	})
 
@@ -2402,6 +2401,7 @@ var _ = Describe("Client Connection", func() {
 			connRunner,
 			destConnID,
 			protocol.ParseConnectionID([]byte{1, 2, 3, 4, 5, 6, 7, 8}),
+			&protocol.DefaultConnectionIDGenerator{},
 			quicConf,
 			tlsConf,
 			42, // initial packet number
@@ -2410,7 +2410,7 @@ var _ = Describe("Client Connection", func() {
 			tracer,
 			1234,
 			utils.DefaultLogger,
-			protocol.VersionTLS,
+			protocol.Version1,
 		).(*connection)
 		packer = NewMockPacker(mockCtrl)
 		conn.packer = packer

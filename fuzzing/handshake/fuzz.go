@@ -383,17 +383,15 @@ func runHandshake(runConfig [confLen]byte, messageConfig uint8, clientConf *tls.
 		clientTP,
 		runner,
 		clientConf,
+		nil,
+		nil,
 		enable0RTTClient,
 		utils.NewRTTStats(),
 		nil,
 		utils.DefaultLogger.WithPrefix("client"),
-		protocol.VersionTLS,
+		protocol.Version1,
 	)
 
-	var allow0RTT func() bool
-	if enable0RTTServer {
-		allow0RTT = func() bool { return true }
-	}
 	sChunkChan, sInitialStream, sHandshakeStream := initStreams()
 	server = handshake.NewCryptoSetupServer(
 		sInitialStream,
@@ -404,11 +402,11 @@ func runHandshake(runConfig [confLen]byte, messageConfig uint8, clientConf *tls.
 		serverTP,
 		runner,
 		serverConf,
-		allow0RTT,
+		enable0RTTServer,
 		utils.NewRTTStats(),
 		nil,
 		utils.DefaultLogger.WithPrefix("server"),
-		protocol.VersionTLS,
+		protocol.Version1,
 	)
 
 	if len(data) == 0 {

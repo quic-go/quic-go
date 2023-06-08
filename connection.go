@@ -240,6 +240,7 @@ var newConnection = func(
 	clientDestConnID protocol.ConnectionID,
 	destConnID protocol.ConnectionID,
 	srcConnID protocol.ConnectionID,
+	connIDGenerator ConnectionIDGenerator,
 	statelessResetToken protocol.StatelessResetToken,
 	conf *Config,
 	tlsConf *tls.Config,
@@ -283,7 +284,7 @@ var newConnection = func(
 		runner.Retire,
 		runner.ReplaceWithClosed,
 		s.queueControlFrame,
-		s.config.ConnectionIDGenerator,
+		connIDGenerator,
 	)
 	s.preSetup()
 	s.ctx, s.ctxCancel = context.WithCancel(context.WithValue(context.Background(), ConnectionTracingKey, tracingID))
@@ -318,9 +319,14 @@ var newConnection = func(
 		DisableActiveMigration:          true,
 		StatelessResetToken:             &statelessResetToken,
 		OriginalDestinationConnectionID: origDestConnID,
-		ActiveConnectionIDLimit:         protocol.MaxActiveConnectionIDs,
-		InitialSourceConnectionID:       srcConnID,
-		RetrySourceConnectionID:         retrySrcConnID,
+		// For interoperability with quic-go versions before May 2023, this value must be set to a value
+		// different from protocol.DefaultActiveConnectionIDLimit.
+		// If set to the default value, it will be omitted from the transport parameters, which will make
+		// old quic-go versions interpret it as 0, instead of the default value of 2.
+		// See https://github.com/Psiphon-Labs/quic-go/pull/3806.
+		ActiveConnectionIDLimit:   protocol.MaxActiveConnectionIDs,
+		InitialSourceConnectionID: srcConnID,
+		RetrySourceConnectionID:   retrySrcConnID,
 	}
 	if s.config.EnableDatagrams {
 		params.MaxDatagramFrameSize = protocol.MaxDatagramFrameSize
@@ -329,10 +335,6 @@ var newConnection = func(
 	}
 	if s.tracer != nil {
 		s.tracer.SentTransportParameters(params)
-	}
-	var allow0RTT func() bool
-	if conf.Allow0RTT != nil {
-		allow0RTT = func() bool { return conf.Allow0RTT(conn.RemoteAddr()) }
 	}
 	cs := handshake.NewCryptoSetupServer(
 		initialStream,
@@ -351,7 +353,7 @@ var newConnection = func(
 			},
 		},
 		tlsConf,
-		allow0RTT,
+		conf.Allow0RTT,
 		s.rttStats,
 		tracer,
 		logger,
@@ -387,6 +389,7 @@ var newClientConnection = func(
 	runner connRunner,
 	destConnID protocol.ConnectionID,
 	srcConnID protocol.ConnectionID,
+	connIDGenerator ConnectionIDGenerator,
 	conf *Config,
 	tlsConf *tls.Config,
 	initialPacketNumber protocol.PacketNumber,
@@ -426,7 +429,7 @@ var newClientConnection = func(
 		runner.Retire,
 		runner.ReplaceWithClosed,
 		s.queueControlFrame,
-		s.config.ConnectionIDGenerator,
+		connIDGenerator,
 	)
 	s.preSetup()
 	s.ctx, s.ctxCancel = context.WithCancel(context.WithValue(context.Background(), ConnectionTracingKey, tracingID))
@@ -455,8 +458,13 @@ var newClientConnection = func(
 		MaxAckDelay:                    protocol.MaxAckDelayInclGranularity,
 		AckDelayExponent:               protocol.AckDelayExponent,
 		DisableActiveMigration:         true,
-		ActiveConnectionIDLimit:        protocol.MaxActiveConnectionIDs,
-		InitialSourceConnectionID:      srcConnID,
+		// For interoperability with quic-go versions before May 2023, this value must be set to a value
+		// different from protocol.DefaultActiveConnectionIDLimit.
+		// If set to the default value, it will be omitted from the transport parameters, which will make
+		// old quic-go versions interpret it as 0, instead of the default value of 2.
+		// See https://github.com/Psiphon-Labs/quic-go/pull/3806.
+		ActiveConnectionIDLimit:   protocol.MaxActiveConnectionIDs,
+		InitialSourceConnectionID: srcConnID,
 	}
 	if s.config.EnableDatagrams {
 		params.MaxDatagramFrameSize = protocol.MaxDatagramFrameSize
@@ -745,8 +753,8 @@ func (s *connection) earlyConnReady() <-chan struct{} {
 	return s.earlyConnReadyChan
 }
 
-func (s *connection) HandshakeComplete() context.Context {
-	return s.handshakeCtx
+func (s *connection) HandshakeComplete() <-chan struct{} {
+	return s.handshakeCtx.Done()
 }
 
 func (s *connection) Context() context.Context {
@@ -1726,6 +1734,7 @@ func (s *connection) handleTransportParameters(params *wire.TransportParameters)
 			ErrorCode:    qerr.TransportParameterError,
 			ErrorMessage: err.Error(),
 		})
+		return
 	}
 	s.peerParams = params
 	// On the client side we have to wait for handshake completion.
@@ -2093,6 +2102,21 @@ func (s *connection) logShortHeaderPacket(
 
 func (s *connection) logCoalescedPacket(packet *coalescedPacket) {
 	if s.logger.Debug() {
+		// There's a short period between dropping both Initial and Handshake keys and completion of the handshake,
+		// during which we might call PackCoalescedPacket but just pack a short header packet.
+		if len(packet.longHdrPackets) == 0 && packet.shortHdrPacket != nil {
+			s.logShortHeaderPacket(
+				packet.shortHdrPacket.DestConnID,
+				packet.shortHdrPacket.Ack,
+				packet.shortHdrPacket.Frames,
+				packet.shortHdrPacket.PacketNumber,
+				packet.shortHdrPacket.PacketNumberLen,
+				packet.shortHdrPacket.KeyPhase,
+				packet.shortHdrPacket.Length,
+				false,
+			)
+			return
+		}
 		if len(packet.longHdrPackets) > 1 {
 			s.logger.Debugf("-> Sending coalesced packet (%d parts, %d bytes) for connection %s", len(packet.longHdrPackets), packet.buffer.Len(), s.logID)
 		} else {
@@ -2246,7 +2270,7 @@ func (s *connection) GetVersion() protocol.VersionNumber {
 }
 
 func (s *connection) NextConnection() Connection {
-	<-s.HandshakeComplete().Done()
+	<-s.HandshakeComplete()
 	s.streamsMap.UseResetMaps()
 	return s
 }

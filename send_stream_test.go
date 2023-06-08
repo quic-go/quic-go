@@ -43,7 +43,7 @@ var _ = Describe("Send Stream", func() {
 			StreamID:       streamID,
 			Offset:         offset,
 			DataLenPresent: true,
-		}).Length(protocol.VersionWhatever)
+		}).Length(protocol.Version1)
 	}
 
 	waitForWrite := func() {
@@ -1000,6 +1000,7 @@ var _ = Describe("Send Stream", func() {
 			}()
 			waitForWrite()
 			f, _ := str.popStreamFrame(100, protocol.Version1)
+			Eventually(done).Should(BeClosed())
 			Expect(f).ToNot(BeNil())
 			gomock.InOrder(
 				mockSender.EXPECT().queueControlFrame(gomock.Any()),

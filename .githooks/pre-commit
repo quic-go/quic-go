@@ -13,6 +13,14 @@ for f in $(git diff --cached --name-only); do
 	fi
 done
 
+pushd ./integrationtests/gomodvendor > /dev/null
+go mod tidy
+if [[ -n $(git diff --name-only -- "go.mod" "go.sum") ]]; then
+  echo "go.mod / go.sum in integrationtests/gomodvendor not tidied"
+  errored=true
+fi
+popd > /dev/null
+
 # Check that all Go files are properly gofumpt-ed.
 output=$(gofumpt -d $(git diff --cached --name-only -- '*.go'))
 if [ -n "$output" ]; then

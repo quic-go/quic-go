@@ -14,13 +14,12 @@ var _ = Describe("CONNECTION_CLOSE Frame", func() {
 	Context("when parsing", func() {
 		It("accepts sample frame containing a QUIC error code", func() {
 			reason := "No recent network activity."
-			data := []byte{0x1c}
-			data = append(data, encodeVarInt(0x19)...)
+			data := encodeVarInt(0x19)
 			data = append(data, encodeVarInt(0x1337)...)              // frame type
 			data = append(data, encodeVarInt(uint64(len(reason)))...) // reason phrase length
 			data = append(data, []byte(reason)...)
 			b := bytes.NewReader(data)
-			frame, err := parseConnectionCloseFrame(b, protocol.Version1)
+			frame, err := parseConnectionCloseFrame(b, connectionCloseFrameType, protocol.Version1)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(frame.IsApplicationError).To(BeFalse())
 			Expect(frame.ErrorCode).To(BeEquivalentTo(0x19))
@@ -31,12 +30,11 @@ var _ = Describe("CONNECTION_CLOSE Frame", func() {
 
 		It("accepts sample frame containing an application error code", func() {
 			reason := "The application messed things up."
-			data := []byte{0x1d}
-			data = append(data, encodeVarInt(0xcafe)...)
+			data := encodeVarInt(0xcafe)
 			data = append(data, encodeVarInt(uint64(len(reason)))...) // reason phrase length
 			data = append(data, reason...)
 			b := bytes.NewReader(data)
-			frame, err := parseConnectionCloseFrame(b, protocol.Version1)
+			frame, err := parseConnectionCloseFrame(b, applicationCloseFrameType, protocol.Version1)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(frame.IsApplicationError).To(BeTrue())
 			Expect(frame.ErrorCode).To(BeEquivalentTo(0xcafe))
@@ -45,37 +43,35 @@ var _ = Describe("CONNECTION_CLOSE Frame", func() {
 		})
 
 		It("rejects long reason phrases", func() {
-			data := []byte{0x1c}
-			data = append(data, encodeVarInt(0xcafe)...)
+			data := encodeVarInt(0xcafe)
 			data = append(data, encodeVarInt(0x42)...)   // frame type
 			data = append(data, encodeVarInt(0xffff)...) // reason phrase length
-			b := bytes.NewReader(data)
-			_, err := parseConnectionCloseFrame(b, protocol.Version1)
+			_, err := parseConnectionCloseFrame(bytes.NewReader(data), connectionCloseFrameType, protocol.Version1)
 			Expect(err).To(MatchError(io.EOF))
 		})
 
 		It("errors on EOFs", func() {
 			reason := "No recent network activity."
-			data := []byte{0x1c}
-			data = append(data, encodeVarInt(0x19)...)
+			data := encodeVarInt(0x19)
 			data = append(data, encodeVarInt(0x1337)...)              // frame type
 			data = append(data, encodeVarInt(uint64(len(reason)))...) // reason phrase length
 			data = append(data, []byte(reason)...)
-			_, err := parseConnectionCloseFrame(bytes.NewReader(data), protocol.Version1)
+			b := bytes.NewReader(data)
+			_, err := parseConnectionCloseFrame(b, connectionCloseFrameType, protocol.Version1)
 			Expect(err).NotTo(HaveOccurred())
 			for i := range data {
-				_, err := parseConnectionCloseFrame(bytes.NewReader(data[0:i]), protocol.Version1)
-				Expect(err).To(HaveOccurred())
+				b := bytes.NewReader(data[:i])
+				_, err = parseConnectionCloseFrame(b, connectionCloseFrameType, protocol.Version1)
+				Expect(err).To(MatchError(io.EOF))
 			}
 		})
 
 		It("parses a frame without a reason phrase", func() {
-			data := []byte{0x1c}
-			data = append(data, encodeVarInt(0xcafe)...)
+			data := encodeVarInt(0xcafe)
 			data = append(data, encodeVarInt(0x42)...) // frame type
 			data = append(data, encodeVarInt(0)...)
 			b := bytes.NewReader(data)
-			frame, err := parseConnectionCloseFrame(b, protocol.Version1)
+			frame, err := parseConnectionCloseFrame(b, connectionCloseFrameType, protocol.Version1)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(frame.ReasonPhrase).To(BeEmpty())
 			Expect(b.Len()).To(BeZero())
@@ -90,7 +86,7 @@ var _ = Describe("CONNECTION_CLOSE Frame", func() {
 			}
 			b, err := frame.Append(nil, protocol.Version1)
 			Expect(err).ToNot(HaveOccurred())
-			expected := []byte{0x1c}
+			expected := []byte{connectionCloseFrameType}
 			expected = append(expected, encodeVarInt(0xbeef)...)
 			expected = append(expected, encodeVarInt(0x12345)...) // frame type
 			expected = append(expected, encodeVarInt(0)...)       // reason phrase length
@@ -104,7 +100,7 @@ var _ = Describe("CONNECTION_CLOSE Frame", func() {
 			}
 			b, err := frame.Append(nil, protocol.Version1)
 			Expect(err).ToNot(HaveOccurred())
-			expected := []byte{0x1c}
+			expected := []byte{connectionCloseFrameType}
 			expected = append(expected, encodeVarInt(0xdead)...)
 			expected = append(expected, encodeVarInt(0)...) // frame type
 			expected = append(expected, encodeVarInt(6)...) // reason phrase length
@@ -120,7 +116,7 @@ var _ = Describe("CONNECTION_CLOSE Frame", func() {
 			}
 			b, err := frame.Append(nil, protocol.Version1)
 			Expect(err).ToNot(HaveOccurred())
-			expected := []byte{0x1d}
+			expected := []byte{applicationCloseFrameType}
 			expected = append(expected, encodeVarInt(0xdead)...)
 			expected = append(expected, encodeVarInt(6)...) // reason phrase length
 			expected = append(expected, []byte("foobar")...)

@@ -148,8 +148,7 @@ func (e eventConnectionClosed) MarshalJSONObject(enc *gojay.Encoder) {
 		enc.StringKey("connection_code", transportError(transportErr.ErrorCode).String())
 		enc.StringKey("reason", transportErr.ErrorMessage)
 	case errors.As(e.e, &versionNegotiationErr):
-		enc.StringKey("owner", ownerRemote.String())
-		enc.StringKey("trigger", "version_negotiation")
+		enc.StringKey("trigger", "version_mismatch")
 	}
 }
 

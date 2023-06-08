@@ -20,7 +20,7 @@ var _ = Describe("Stream Cancellations", func() {
 	const numStreams = 80
 
 	Context("canceling the read side", func() {
-		var server quic.Listener
+		var server *quic.Listener
 
 		// The server accepts a single connection, and then opens numStreams unidirectional streams.
 		// On each of these streams, it (tries to) write PRData.
@@ -73,6 +73,7 @@ var _ = Describe("Stream Cancellations", func() {
 		It("downloads when the client immediately cancels most streams", func() {
 			serverCanceledCounterChan := runServer(PRData)
 			conn, err := quic.DialAddr(
+				context.Background(),
 				fmt.Sprintf("localhost:%d", server.Addr().(*net.UDPAddr).Port),
 				getTLSClientConfig(),
 				getQuicConfig(&quic.Config{MaxIncomingUniStreams: numStreams / 2}),
@@ -124,6 +125,7 @@ var _ = Describe("Stream Cancellations", func() {
 			serverCanceledCounterChan := runServer(PRData)
 
 			conn, err := quic.DialAddr(
+				context.Background(),
 				fmt.Sprintf("localhost:%d", server.Addr().(*net.UDPAddr).Port),
 				getTLSClientConfig(),
 				getQuicConfig(&quic.Config{MaxIncomingUniStreams: numStreams / 2}),
@@ -170,10 +172,11 @@ var _ = Describe("Stream Cancellations", func() {
 
 		It("allows concurrent Read and CancelRead calls", func() {
 			// This test is especially valuable when run with race detector,
-			// see https://github.com/quic-go/quic-go/issues/3239.
+			// see https://github.com/Psiphon-Labs/quic-go/issues/3239.
 			serverCanceledCounterChan := runServer(make([]byte, 100)) // make sure the FIN is sent with the STREAM frame
 
 			conn, err := quic.DialAddr(
+				context.Background(),
 				fmt.Sprintf("localhost:%d", server.Addr().(*net.UDPAddr).Port),
 				getTLSClientConfig(),
 				getQuicConfig(&quic.Config{MaxIncomingUniStreams: numStreams / 2}),
@@ -219,8 +222,9 @@ var _ = Describe("Stream Cancellations", func() {
 	})
 
 	Context("canceling the write side", func() {
-		runClient := func(server quic.Listener) int32 /* number of canceled streams */ {
+		runClient := func(server *quic.Listener) int32 /* number of canceled streams */ {
 			conn, err := quic.DialAddr(
+				context.Background(),
 				fmt.Sprintf("localhost:%d", server.Addr().(*net.UDPAddr).Port),
 				getTLSClientConfig(),
 				getQuicConfig(&quic.Config{MaxIncomingUniStreams: numStreams / 2}),
@@ -366,6 +370,7 @@ var _ = Describe("Stream Cancellations", func() {
 			}()
 
 			conn, err := quic.DialAddr(
+				context.Background(),
 				fmt.Sprintf("localhost:%d", server.Addr().(*net.UDPAddr).Port),
 				getTLSClientConfig(),
 				getQuicConfig(&quic.Config{MaxIncomingUniStreams: numStreams / 2}),
@@ -451,6 +456,7 @@ var _ = Describe("Stream Cancellations", func() {
 			}()
 
 			conn, err := quic.DialAddr(
+				context.Background(),
 				fmt.Sprintf("localhost:%d", server.Addr().(*net.UDPAddr).Port),
 				getTLSClientConfig(),
 				getQuicConfig(&quic.Config{MaxIncomingUniStreams: numStreams / 2}),
@@ -529,6 +535,7 @@ var _ = Describe("Stream Cancellations", func() {
 			}()
 
 			conn, err := quic.DialAddr(
+				context.Background(),
 				fmt.Sprintf("localhost:%d", server.Addr().(*net.UDPAddr).Port),
 				getTLSClientConfig(),
 				getQuicConfig(&quic.Config{MaxIncomingUniStreams: numStreams / 3}),
@@ -614,6 +621,7 @@ var _ = Describe("Stream Cancellations", func() {
 			}()
 
 			conn, err := quic.DialAddr(
+				context.Background(),
 				fmt.Sprintf("localhost:%d", server.Addr().(*net.UDPAddr).Port),
 				getTLSClientConfig(),
 				getQuicConfig(&quic.Config{MaxIncomingUniStreams: maxIncomingStreams}),
@@ -652,6 +660,7 @@ var _ = Describe("Stream Cancellations", func() {
 			getQuicConfig(&quic.Config{MaxIncomingStreams: maxIncomingStreams, MaxIdleTimeout: 10 * time.Second}),
 		)
 		Expect(err).ToNot(HaveOccurred())
+		defer server.Close()
 
 		var wg sync.WaitGroup
 		wg.Add(2 * 4 * maxIncomingStreams)
@@ -707,6 +716,7 @@ var _ = Describe("Stream Cancellations", func() {
 		}()
 
 		conn, err := quic.DialAddr(
+			context.Background(),
 			fmt.Sprintf("localhost:%d", server.Addr().(*net.UDPAddr).Port),
 			getTLSClientConfig(),
 			getQuicConfig(&quic.Config{}),

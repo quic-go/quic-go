@@ -2,6 +2,7 @@ package handshake
 
 import (
 	"bytes"
+	"context"
 	"crypto/tls"
 	"errors"
 	"fmt"
@@ -20,6 +21,10 @@ import (
 	"github.com/Psiphon-Labs/quic-go/logging"
 	"github.com/Psiphon-Labs/quic-go/quicvarint"
 )
+
+type quicVersionContextKey struct{}
+
+var QUICVersionContextKey = &quicVersionContextKey{}
 
 // TLS unexpected_message alert
 const alertUnexpectedMessage uint8 = 10
@@ -65,30 +70,25 @@ const clientSessionStateRevision = 3
 
 type conn struct {
 	localAddr, remoteAddr net.Addr
-	version               protocol.VersionNumber
-}
-
-var _ ConnWithVersion = &conn{}
-
-func newConn(local, remote net.Addr, version protocol.VersionNumber) ConnWithVersion {
-	return &conn{
-		localAddr:  local,
-		remoteAddr: remote,
-		version:    version,
-	}
 }
 
 var _ net.Conn = &conn{}
 
-func (c *conn) Read([]byte) (int, error)               { return 0, nil }
-func (c *conn) Write([]byte) (int, error)              { return 0, nil }
-func (c *conn) Close() error                           { return nil }
-func (c *conn) RemoteAddr() net.Addr                   { return c.remoteAddr }
-func (c *conn) LocalAddr() net.Addr                    { return c.localAddr }
-func (c *conn) SetReadDeadline(time.Time) error        { return nil }
-func (c *conn) SetWriteDeadline(time.Time) error       { return nil }
-func (c *conn) SetDeadline(time.Time) error            { return nil }
-func (c *conn) GetQUICVersion() protocol.VersionNumber { return c.version }
+func newConn(local, remote net.Addr) net.Conn {
+	return &conn{
+		localAddr:  local,
+		remoteAddr: remote,
+	}
+}
+
+func (c *conn) Read([]byte) (int, error)         { return 0, nil }
+func (c *conn) Write([]byte) (int, error)        { return 0, nil }
+func (c *conn) Close() error                     { return nil }
+func (c *conn) RemoteAddr() net.Addr             { return c.remoteAddr }
+func (c *conn) LocalAddr() net.Addr              { return c.localAddr }
+func (c *conn) SetReadDeadline(time.Time) error  { return nil }
+func (c *conn) SetWriteDeadline(time.Time) error { return nil }
+func (c *conn) SetDeadline(time.Time) error      { return nil }
 
 type cryptoSetup struct {
 	tlsConf   *tls.Config
@@ -117,7 +117,7 @@ type cryptoSetup struct {
 	clientHelloWritten     bool
 	clientHelloWrittenChan chan struct{} // is closed as soon as the ClientHello is written
 	zeroRTTParametersChan  chan<- *wire.TransportParameters
-	allow0RTT              func() bool
+	allow0RTT              bool
 
 	rttStats *utils.RTTStats
 
@@ -204,7 +204,7 @@ func NewCryptoSetupClient(
 	cs.extraConf.ClientHelloPRNG = clientHelloPRNG
 	cs.extraConf.GetClientHelloRandom = getClientHelloRandom
 
-	cs.conn = qtls.Client(newConn(localAddr, remoteAddr, version), cs.tlsConf, cs.extraConf)
+	cs.conn = qtls.Client(newConn(localAddr, remoteAddr), cs.tlsConf, cs.extraConf)
 	return cs, clientHelloWritten
 }
 
@@ -218,7 +218,7 @@ func NewCryptoSetupServer(
 	tp *wire.TransportParameters,
 	runner handshakeRunner,
 	tlsConf *tls.Config,
-	allow0RTT func() bool,
+	allow0RTT bool,
 	rttStats *utils.RTTStats,
 	tracer logging.ConnectionTracer,
 	logger utils.Logger,
@@ -231,7 +231,7 @@ func NewCryptoSetupServer(
 		tp,
 		runner,
 		tlsConf,
-		allow0RTT != nil,
+		allow0RTT,
 		rttStats,
 		tracer,
 		logger,
@@ -241,8 +241,7 @@ func NewCryptoSetupServer(
 		// [Psiphon]
 		nil,
 	)
-	cs.allow0RTT = allow0RTT
-	cs.conn = qtls.Server(newConn(localAddr, remoteAddr, version), cs.tlsConf, cs.extraConf)
+	cs.conn = qtls.Server(newConn(localAddr, remoteAddr), cs.tlsConf, cs.extraConf)
 	return cs
 }
 
@@ -278,6 +277,7 @@ func newCryptoSetup(
 		readEncLevel:              protocol.EncryptionInitial,
 		writeEncLevel:             protocol.EncryptionInitial,
 		runner:                    runner,
+		allow0RTT:                 enable0RTT,
 		ourParams:                 tp,
 		paramsChan:                extHandler.TransportParameters(),
 		rttStats:                  rttStats,
@@ -288,7 +288,7 @@ func newCryptoSetup(
 		alertChan:                 make(chan uint8),
 		clientHelloWrittenChan:    make(chan struct{}),
 		zeroRTTParametersChan:     zeroRTTParametersChan,
-		messageChan:               make(chan []byte, 100),
+		messageChan:               make(chan []byte, 1),
 		isReadingHandshakeMessage: make(chan struct{}),
 		closeChan:                 make(chan struct{}),
 		version:                   version,
@@ -332,7 +332,7 @@ func (h *cryptoSetup) RunHandshake() {
 	handshakeErrChan := make(chan error, 1)
 	go func() {
 		defer close(h.handshakeDone)
-		if err := h.conn.Handshake(); err != nil {
+		if err := h.conn.HandshakeContext(context.WithValue(context.Background(), QUICVersionContextKey, h.version)); err != nil {
 			handshakeErrChan <- err
 			return
 		}
@@ -393,8 +393,15 @@ func (h *cryptoSetup) HandleMessage(data []byte, encLevel protocol.EncryptionLev
 		h.onError(alertUnexpectedMessage, err.Error())
 		return false
 	}
-	h.messageChan <- data
+	if encLevel != protocol.Encryption1RTT {
+		select {
+		case h.messageChan <- data:
+		case <-h.handshakeDone: // handshake errored, nobody is going to consume this message
+			return false
+		}
+	}
 	if encLevel == protocol.Encryption1RTT {
+		h.messageChan <- data
 		h.handlePostHandshakeMessage()
 		return false
 	}
@@ -426,8 +433,7 @@ readLoop:
 func (h *cryptoSetup) checkEncryptionLevel(msgType messageType, encLevel protocol.EncryptionLevel) error {
 	var expected protocol.EncryptionLevel
 	switch msgType {
-	case typeClientHello,
-		typeServerHello:
+	case typeClientHello, typeServerHello:
 		expected = protocol.EncryptionInitial
 	case typeEncryptedExtensions,
 		typeCertificate,
@@ -522,7 +528,7 @@ func (h *cryptoSetup) accept0RTT(sessionTicketData []byte) bool {
 		h.logger.Debugf("Transport parameters changed. Rejecting 0-RTT.")
 		return false
 	}
-	if !h.allow0RTT() {
+	if !h.allow0RTT {
 		h.logger.Debugf("0-RTT not allowed. Rejecting 0-RTT.")
 		return false
 	}

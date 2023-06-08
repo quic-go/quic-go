@@ -40,7 +40,7 @@ type Server struct {
 	QuicConfig *quic.Config
 
 	mutex    sync.Mutex
-	listener quic.EarlyListener
+	listener *quic.EarlyListener
 }
 
 // Close closes the server.

@@ -15,10 +15,9 @@ import (
 var _ = Describe("STREAMS_BLOCKED frame", func() {
 	Context("parsing", func() {
 		It("accepts a frame for bidirectional streams", func() {
-			expected := []byte{0x16}
-			expected = append(expected, encodeVarInt(0x1337)...)
+			expected := encodeVarInt(0x1337)
 			b := bytes.NewReader(expected)
-			f, err := parseStreamsBlockedFrame(b, protocol.VersionWhatever)
+			f, err := parseStreamsBlockedFrame(b, bidiStreamBlockedFrameType, protocol.Version1)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(f.Type).To(Equal(protocol.StreamTypeBidi))
 			Expect(f.StreamLimit).To(BeEquivalentTo(0x1337))
@@ -26,10 +25,9 @@ var _ = Describe("STREAMS_BLOCKED frame", func() {
 		})
 
 		It("accepts a frame for unidirectional streams", func() {
-			expected := []byte{0x17}
-			expected = append(expected, encodeVarInt(0x7331)...)
+			expected := encodeVarInt(0x7331)
 			b := bytes.NewReader(expected)
-			f, err := parseStreamsBlockedFrame(b, protocol.VersionWhatever)
+			f, err := parseStreamsBlockedFrame(b, uniStreamBlockedFrameType, protocol.Version1)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(f.Type).To(Equal(protocol.StreamTypeUni))
 			Expect(f.StreamLimit).To(BeEquivalentTo(0x7331))
@@ -37,12 +35,12 @@ var _ = Describe("STREAMS_BLOCKED frame", func() {
 		})
 
 		It("errors on EOFs", func() {
-			data := []byte{0x16}
-			data = append(data, encodeVarInt(0x12345678)...)
-			_, err := parseStreamsBlockedFrame(bytes.NewReader(data), protocol.Version1)
+			data := encodeVarInt(0x12345678)
+			b := bytes.NewReader(data)
+			_, err := parseStreamsBlockedFrame(b, bidiStreamBlockedFrameType, protocol.Version1)
 			Expect(err).ToNot(HaveOccurred())
 			for i := range data {
-				_, err := parseStreamsBlockedFrame(bytes.NewReader(data[:i]), protocol.Version1)
+				_, err := parseStreamsBlockedFrame(bytes.NewReader(data[:i]), bidiStreamBlockedFrameType, protocol.Version1)
 				Expect(err).To(MatchError(io.EOF))
 			}
 		})
@@ -55,9 +53,12 @@ var _ = Describe("STREAMS_BLOCKED frame", func() {
 					Type:        streamType,
 					StreamLimit: protocol.MaxStreamCount,
 				}
-				b, err := f.Append(nil, protocol.VersionWhatever)
+				b, err := f.Append(nil, protocol.Version1)
 				Expect(err).ToNot(HaveOccurred())
-				frame, err := parseStreamsBlockedFrame(bytes.NewReader(b), protocol.VersionWhatever)
+				r := bytes.NewReader(b)
+				typ, err := quicvarint.Read(r)
+				Expect(err).ToNot(HaveOccurred())
+				frame, err := parseStreamsBlockedFrame(r, typ, protocol.Version1)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(frame).To(Equal(f))
 			})
@@ -67,9 +68,12 @@ var _ = Describe("STREAMS_BLOCKED frame", func() {
 					Type:        streamType,
 					StreamLimit: protocol.MaxStreamCount + 1,
 				}
-				b, err := f.Append(nil, protocol.VersionWhatever)
+				b, err := f.Append(nil, protocol.Version1)
 				Expect(err).ToNot(HaveOccurred())
-				_, err = parseStreamsBlockedFrame(bytes.NewReader(b), protocol.VersionWhatever)
+				r := bytes.NewReader(b)
+				typ, err := quicvarint.Read(r)
+				Expect(err).ToNot(HaveOccurred())
+				_, err = parseStreamsBlockedFrame(r, typ, protocol.Version1)
 				Expect(err).To(MatchError(fmt.Sprintf("%d exceeds the maximum stream count", protocol.MaxStreamCount+1)))
 			})
 		}
@@ -81,9 +85,9 @@ var _ = Describe("STREAMS_BLOCKED frame", func() {
 				Type:        protocol.StreamTypeBidi,
 				StreamLimit: 0xdeadbeefcafe,
 			}
-			b, err := f.Append(nil, protocol.VersionWhatever)
+			b, err := f.Append(nil, protocol.Version1)
 			Expect(err).ToNot(HaveOccurred())
-			expected := []byte{0x16}
+			expected := []byte{bidiStreamBlockedFrameType}
 			expected = append(expected, encodeVarInt(0xdeadbeefcafe)...)
 			Expect(b).To(Equal(expected))
 		})
@@ -93,9 +97,9 @@ var _ = Describe("STREAMS_BLOCKED frame", func() {
 				Type:        protocol.StreamTypeUni,
 				StreamLimit: 0xdeadbeefcafe,
 			}
-			b, err := f.Append(nil, protocol.VersionWhatever)
+			b, err := f.Append(nil, protocol.Version1)
 			Expect(err).ToNot(HaveOccurred())
-			expected := []byte{0x17}
+			expected := []byte{uniStreamBlockedFrameType}
 			expected = append(expected, encodeVarInt(0xdeadbeefcafe)...)
 			Expect(b).To(Equal(expected))
 		})
