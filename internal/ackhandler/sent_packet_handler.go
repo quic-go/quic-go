@@ -75,7 +75,7 @@ type sentPacketHandler struct {
 	// Only applies to the application-data packet number space.
 	lowestNotConfirmedAcked protocol.PacketNumber
 
-	ackedPackets []*Packet // to avoid allocations in detectAndRemoveAckedPackets
+	ackedPackets []*packet // to avoid allocations in detectAndRemoveAckedPackets
 
 	bytesInFlight protocol.ByteCount
 
@@ -146,7 +146,7 @@ func (h *sentPacketHandler) DropPackets(encLevel protocol.EncryptionLevel) {
 	h.dropPackets(encLevel)
 }
 
-func (h *sentPacketHandler) removeFromBytesInFlight(p *Packet) {
+func (h *sentPacketHandler) removeFromBytesInFlight(p *packet) {
 	if p.includedInBytesInFlight {
 		if p.Length > h.bytesInFlight {
 			panic("negative bytes_in_flight")
@@ -165,7 +165,7 @@ func (h *sentPacketHandler) dropPackets(encLevel protocol.EncryptionLevel) {
 	// remove outstanding packets from bytes_in_flight
 	if encLevel == protocol.EncryptionInitial || encLevel == protocol.EncryptionHandshake {
 		pnSpace := h.getPacketNumberSpace(encLevel)
-		pnSpace.history.Iterate(func(p *Packet) (bool, error) {
+		pnSpace.history.Iterate(func(p *packet) (bool, error) {
 			h.removeFromBytesInFlight(p)
 			return true, nil
 		})
@@ -182,7 +182,7 @@ func (h *sentPacketHandler) dropPackets(encLevel protocol.EncryptionLevel) {
 		// and not when the client drops 0-RTT keys when the handshake completes.
 		// When 0-RTT is rejected, all application data sent so far becomes invalid.
 		// Delete the packets from the history and remove them from bytes_in_flight.
-		h.appDataPackets.history.Iterate(func(p *Packet) (bool, error) {
+		h.appDataPackets.history.Iterate(func(p *packet) (bool, error) {
 			if p.EncryptionLevel != protocol.Encryption0RTT && !p.skippedPacket {
 				return false, nil
 			}
@@ -228,40 +228,64 @@ func (h *sentPacketHandler) packetsInFlight() int {
 	return packetsInFlight
 }
 
-func (h *sentPacketHandler) SentPacket(p *Packet) {
-	h.bytesSent += p.Length
+func (h *sentPacketHandler) SentPacket(
+	t time.Time,
+	pn, largestAcked protocol.PacketNumber,
+	streamFrames []StreamFrame,
+	frames []Frame,
+	encLevel protocol.EncryptionLevel,
+	size protocol.ByteCount,
+	isPathMTUProbePacket bool,
+) {
+	h.bytesSent += size
 	// For the client, drop the Initial packet number space when the first Handshake packet is sent.
-	if h.perspective == protocol.PerspectiveClient && p.EncryptionLevel == protocol.EncryptionHandshake && h.initialPackets != nil {
+	if h.perspective == protocol.PerspectiveClient && encLevel == protocol.EncryptionHandshake && h.initialPackets != nil {
 		h.dropPackets(protocol.EncryptionInitial)
 	}
 
-	pnSpace := h.getPacketNumberSpace(p.EncryptionLevel)
-	pnSpace.largestSent = p.PacketNumber
-	isAckEliciting := len(p.StreamFrames) > 0 || len(p.Frames) > 0
+	pnSpace := h.getPacketNumberSpace(encLevel)
+	if h.logger.Debug() && pnSpace.history.HasOutstandingPackets() {
+		for p := utils.Max(0, pnSpace.largestSent+1); p < pn; p++ {
+			h.logger.Debugf("Skipping packet number %d", p)
+		}
+	}
+
+	pnSpace.largestSent = pn
+	isAckEliciting := len(streamFrames) > 0 || len(frames) > 0
 
 	if isAckEliciting {
-		pnSpace.lastAckElicitingPacketTime = p.SendTime
-		p.includedInBytesInFlight = true
-		h.bytesInFlight += p.Length
+		pnSpace.lastAckElicitingPacketTime = t
+		h.bytesInFlight += size
 		if h.numProbesToSend > 0 {
 			h.numProbesToSend--
 		}
 	}
-	h.congestion.OnPacketSent(p.SendTime, h.bytesInFlight, p.PacketNumber, p.Length, isAckEliciting)
+	h.congestion.OnPacketSent(t, h.bytesInFlight, pn, size, isAckEliciting)
 
-	if isAckEliciting {
-		pnSpace.history.SentAckElicitingPacket(p)
-	} else {
-		pnSpace.history.SentNonAckElicitingPacket(p.PacketNumber)
-		putPacket(p)
-		p = nil //nolint:ineffassign // This is just to be on the safe side.
+	if !isAckEliciting {
+		pnSpace.history.SentNonAckElicitingPacket(pn)
+		if !h.peerCompletedAddressValidation {
+			h.setLossDetectionTimer()
+		}
+		return
 	}
-	if h.tracer != nil && isAckEliciting {
+
+	p := getPacket()
+	p.SendTime = t
+	p.PacketNumber = pn
+	p.EncryptionLevel = encLevel
+	p.Length = size
+	p.LargestAcked = largestAcked
+	p.StreamFrames = streamFrames
+	p.Frames = frames
+	p.IsPathMTUProbePacket = isPathMTUProbePacket
+	p.includedInBytesInFlight = true
+
+	pnSpace.history.SentAckElicitingPacket(p)
+	if h.tracer != nil {
 		h.tracer.UpdatedMetrics(h.rttStats, h.congestion.GetCongestionWindow(), h.bytesInFlight, h.packetsInFlight())
 	}
-	if isAckEliciting || !h.peerCompletedAddressValidation {
-		h.setLossDetectionTimer()
-	}
+	h.setLossDetectionTimer()
 }
 
 func (h *sentPacketHandler) getPacketNumberSpace(encLevel protocol.EncryptionLevel) *packetNumberSpace {
@@ -359,13 +383,13 @@ func (h *sentPacketHandler) GetLowestPacketNotConfirmedAcked() protocol.PacketNu
 }
 
 // Packets are returned in ascending packet number order.
-func (h *sentPacketHandler) detectAndRemoveAckedPackets(ack *wire.AckFrame, encLevel protocol.EncryptionLevel) ([]*Packet, error) {
+func (h *sentPacketHandler) detectAndRemoveAckedPackets(ack *wire.AckFrame, encLevel protocol.EncryptionLevel) ([]*packet, error) {
 	pnSpace := h.getPacketNumberSpace(encLevel)
 	h.ackedPackets = h.ackedPackets[:0]
 	ackRangeIndex := 0
 	lowestAcked := ack.LowestAcked()
 	largestAcked := ack.LargestAcked()
-	err := pnSpace.history.Iterate(func(p *Packet) (bool, error) {
+	err := pnSpace.history.Iterate(func(p *packet) (bool, error) {
 		// Ignore packets below the lowest acked
 		if p.PacketNumber < lowestAcked {
 			return true, nil
@@ -580,7 +604,7 @@ func (h *sentPacketHandler) detectLostPackets(now time.Time, encLevel protocol.E
 	lostSendTime := now.Add(-lossDelay)
 
 	priorInFlight := h.bytesInFlight
-	return pnSpace.history.Iterate(func(p *Packet) (bool, error) {
+	return pnSpace.history.Iterate(func(p *packet) (bool, error) {
 		if p.PacketNumber > pnSpace.largestAcked {
 			return false, nil
 		}
@@ -792,7 +816,7 @@ func (h *sentPacketHandler) QueueProbePacket(encLevel protocol.EncryptionLevel) 
 	return true
 }
 
-func (h *sentPacketHandler) queueFramesForRetransmission(p *Packet) {
+func (h *sentPacketHandler) queueFramesForRetransmission(p *packet) {
 	if len(p.Frames) == 0 && len(p.StreamFrames) == 0 {
 		panic("no frames")
 	}
@@ -813,7 +837,7 @@ func (h *sentPacketHandler) queueFramesForRetransmission(p *Packet) {
 func (h *sentPacketHandler) ResetForRetry() error {
 	h.bytesInFlight = 0
 	var firstPacketSendTime time.Time
-	h.initialPackets.history.Iterate(func(p *Packet) (bool, error) {
+	h.initialPackets.history.Iterate(func(p *packet) (bool, error) {
 		if firstPacketSendTime.IsZero() {
 			firstPacketSendTime = p.SendTime
 		}
@@ -825,7 +849,7 @@ func (h *sentPacketHandler) ResetForRetry() error {
 	})
 	// All application data packets sent at this point are 0-RTT packets.
 	// In the case of a Retry, we can assume that the server dropped all of them.
-	h.appDataPackets.history.Iterate(func(p *Packet) (bool, error) {
+	h.appDataPackets.history.Iterate(func(p *packet) (bool, error) {
 		if !p.declaredLost && !p.skippedPacket {
 			h.queueFramesForRetransmission(p)
 		}

@@ -7,7 +7,7 @@ import (
 )
 
 type sentPacketHistory struct {
-	packets []*Packet
+	packets []*packet
 
 	numOutstanding int
 
@@ -16,7 +16,7 @@ type sentPacketHistory struct {
 
 func newSentPacketHistory() *sentPacketHistory {
 	return &sentPacketHistory{
-		packets:             make([]*Packet, 0, 32),
+		packets:             make([]*packet, 0, 32),
 		highestPacketNumber: protocol.InvalidPacketNumber,
 	}
 }
@@ -32,7 +32,7 @@ func (h *sentPacketHistory) checkSequentialPacketNumberUse(pn protocol.PacketNum
 func (h *sentPacketHistory) SkippedPacket(pn protocol.PacketNumber) {
 	h.checkSequentialPacketNumberUse(pn)
 	h.highestPacketNumber = pn
-	h.packets = append(h.packets, &Packet{
+	h.packets = append(h.packets, &packet{
 		PacketNumber:  pn,
 		skippedPacket: true,
 	})
@@ -46,7 +46,7 @@ func (h *sentPacketHistory) SentNonAckElicitingPacket(pn protocol.PacketNumber) 
 	}
 }
 
-func (h *sentPacketHistory) SentAckElicitingPacket(p *Packet) {
+func (h *sentPacketHistory) SentAckElicitingPacket(p *packet) {
 	h.checkSequentialPacketNumberUse(p.PacketNumber)
 	h.highestPacketNumber = p.PacketNumber
 	h.packets = append(h.packets, p)
@@ -56,7 +56,7 @@ func (h *sentPacketHistory) SentAckElicitingPacket(p *Packet) {
 }
 
 // Iterate iterates through all packets.
-func (h *sentPacketHistory) Iterate(cb func(*Packet) (cont bool, err error)) error {
+func (h *sentPacketHistory) Iterate(cb func(*packet) (cont bool, err error)) error {
 	for _, p := range h.packets {
 		if p == nil {
 			continue
@@ -73,7 +73,7 @@ func (h *sentPacketHistory) Iterate(cb func(*Packet) (cont bool, err error)) err
 }
 
 // FirstOutstanding returns the first outstanding packet.
-func (h *sentPacketHistory) FirstOutstanding() *Packet {
+func (h *sentPacketHistory) FirstOutstanding() *packet {
 	if !h.HasOutstandingPackets() {
 		return nil
 	}

@@ -8,7 +8,7 @@ import (
 )
 
 // A Packet is a packet
-type Packet struct {
+type packet struct {
 	SendTime        time.Time
 	PacketNumber    protocol.PacketNumber
 	StreamFrames    []StreamFrame
@@ -24,14 +24,14 @@ type Packet struct {
 	skippedPacket           bool
 }
 
-func (p *Packet) outstanding() bool {
+func (p *packet) outstanding() bool {
 	return !p.declaredLost && !p.skippedPacket && !p.IsPathMTUProbePacket
 }
 
-var packetPool = sync.Pool{New: func() any { return &Packet{} }}
+var packetPool = sync.Pool{New: func() any { return &packet{} }}
 
-func GetPacket() *Packet {
-	p := packetPool.Get().(*Packet)
+func getPacket() *packet {
+	p := packetPool.Get().(*packet)
 	p.PacketNumber = 0
 	p.StreamFrames = nil
 	p.Frames = nil
@@ -48,7 +48,7 @@ func GetPacket() *Packet {
 
 // We currently only return Packets back into the pool when they're acknowledged (not when they're lost).
 // This simplifies the code, and gives the vast majority of the performance benefit we can gain from using the pool.
-func putPacket(p *Packet) {
+func putPacket(p *packet) {
 	p.Frames = nil
 	p.StreamFrames = nil
 	packetPool.Put(p)
