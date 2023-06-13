@@ -1,4 +1,4 @@
-# A QUIC implementation in pure Go
+# A QUIC implementation in pure Go （try）
 
 <img src="docs/quic.png" width=303 height=124>
 
