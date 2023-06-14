@@ -274,6 +274,14 @@ func (s *Server) ServeListener(ln QUICEarlyListener) error {
 var errServerWithoutTLSConfig = errors.New("use of http3.Server without TLSConfig")
 
 func (s *Server) serveConn(tlsConf *tls.Config, conn net.PacketConn) error {
+	err := s.serveC(tlsConf, conn)
+	// replace quic package specific error with net/http equivalent ones
+	if err == quic.ErrServerClosed {
+		err = http.ErrServerClosed
+	}
+	return err
+}
+func (s *Server) serveC(tlsConf *tls.Config, conn net.PacketConn) error {
 	if tlsConf == nil {
 		return errServerWithoutTLSConfig
 	}
