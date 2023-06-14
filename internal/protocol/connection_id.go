@@ -57,15 +57,10 @@ func ParseConnectionID(b []byte) ConnectionID {
 	return c
 }
 
+// [Psiphon]
 // GenerateConnectionIDForInitial generates a connection ID for the Initial packet.
-// It uses a length randomly chosen between 8 and 20 bytes.
 func GenerateConnectionIDForInitial() (ConnectionID, error) {
-	r := make([]byte, 1)
-	if _, err := rand.Read(r); err != nil {
-		return ConnectionID{}, err
-	}
-	l := MinConnectionIDLenInitial + int(r[0])%(maxConnectionIDLen-MinConnectionIDLenInitial+1)
-	return GenerateConnectionID(l)
+	return GenerateConnectionID(MinConnectionIDLenInitial)
 }
 
 // ReadConnectionID reads a connection ID of length len from the given io.Reader.
