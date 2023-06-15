@@ -54,7 +54,7 @@ var _ = Describe("Client", func() {
 
 	It("rejects quic.Configs that allow multiple QUIC versions", func() {
 		qconf := &quic.Config{
-			Versions: []quic.VersionNumber{protocol.VersionDraft29, protocol.Version1},
+			Versions: []quic.VersionNumber{protocol.Version2, protocol.Version1},
 		}
 		_, err := newClient("localhost:1337", nil, &roundTripperOpts{}, qconf, nil)
 		Expect(err).To(MatchError("can only use a single QUIC version for dialing a HTTP/3 connection"))

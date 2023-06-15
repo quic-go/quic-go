@@ -12,7 +12,7 @@ var _ = Describe("Version", func() {
 
 	It("says if a version is valid", func() {
 		Expect(IsValidVersion(VersionUnknown)).To(BeFalse())
-		Expect(IsValidVersion(VersionDraft29)).To(BeTrue())
+		Expect(IsValidVersion(versionDraft29)).To(BeFalse())
 		Expect(IsValidVersion(Version1)).To(BeTrue())
 		Expect(IsValidVersion(Version2)).To(BeTrue())
 		Expect(IsValidVersion(1234)).To(BeFalse())
@@ -20,7 +20,7 @@ var _ = Describe("Version", func() {
 
 	It("has the right string representation", func() {
 		Expect(VersionUnknown.String()).To(Equal("unknown"))
-		Expect(VersionDraft29.String()).To(Equal("draft-29"))
+		Expect(versionDraft29.String()).To(Equal("draft-29"))
 		Expect(Version1.String()).To(Equal("v1"))
 		Expect(Version2.String()).To(Equal("v2"))
 		// check with unsupported version numbers from the wiki

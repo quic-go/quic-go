@@ -25,9 +25,6 @@ jobs:
         run: |
           go run github.com/onsi/ginkgo/v2/ginkgo -r -v -randomize-all -randomize-suites -trace -skip-package self,versionnegotiation integrationtests
           go run github.com/onsi/ginkgo/v2/ginkgo -r -v -randomize-all -randomize-suites -trace integrationtests/versionnegotiation -- ${{ env.QLOGFLAG }}
-      - name: Run self tests, using draft-29
-        if: success() || failure() # run this step even if the previous one failed
-        run: go run github.com/onsi/ginkgo/v2/ginkgo -r -v -randomize-all -randomize-suites -trace integrationtests/self -- -version=draft29 ${{ env.QLOGFLAG }}
       - name: Run self tests, using QUIC v1
         if: success() || failure() # run this step even if the previous one failed
         run: go run github.com/onsi/ginkgo/v2/ginkgo -r -v -randomize-all -randomize-suites -trace integrationtests/self -- -version=1 ${{ env.QLOGFLAG }}

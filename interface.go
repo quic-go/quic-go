@@ -19,10 +19,9 @@ type StreamID = protocol.StreamID
 type VersionNumber = protocol.VersionNumber
 
 const (
-	// VersionDraft29 is IETF QUIC draft-29
-	VersionDraft29 = protocol.VersionDraft29
 	// Version1 is RFC 9000
 	Version1 = protocol.Version1
+	// Version2 is RFC 9369
 	Version2 = protocol.Version2
 )
 

@@ -12,10 +12,6 @@ In addition to these base RFCs, it also implements the following RFCs:
 * Datagram Packetization Layer Path MTU Discovery (DPLPMTUD, [RFC 8899](https://datatracker.ietf.org/doc/html/rfc8899))
 * QUIC Version 2 ([RFC 9369](https://datatracker.ietf.org/doc/html/rfc9369))
 
-In addition to the RFCs listed above, it currently implements the [IETF QUIC draft-29](https://tools.ietf.org/html/draft-ietf-quic-transport-29). Support for draft-29 will eventually be dropped, as it is phased out of the ecosystem.
-
-This repository provides both a QUIC implementation, located in the `quic` package, as well as an HTTP/3 implementation, located in the `http3` package.
-
 ## Using QUIC
 
 ### Running a Server

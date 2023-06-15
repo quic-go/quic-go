@@ -12,8 +12,8 @@ import (
 var _ = Describe("Retry Integrity Check", func() {
 	It("calculates retry integrity tags", func() {
 		connID := protocol.ParseConnectionID([]byte{1, 2, 3, 4})
-		fooTag := GetRetryIntegrityTag([]byte("foo"), connID, protocol.VersionDraft29)
-		barTag := GetRetryIntegrityTag([]byte("bar"), connID, protocol.VersionDraft29)
+		fooTag := GetRetryIntegrityTag([]byte("foo"), connID, protocol.Version1)
+		barTag := GetRetryIntegrityTag([]byte("bar"), connID, protocol.Version1)
 		Expect(fooTag).ToNot(BeNil())
 		Expect(barTag).ToNot(BeNil())
 		Expect(*fooTag).ToNot(Equal(*barTag))
@@ -34,10 +34,6 @@ var _ = Describe("Retry Integrity Check", func() {
 			connID := protocol.ParseConnectionID(splitHexString("0x8394c8f03e515708"))
 			Expect(GetRetryIntegrityTag(data[:len(data)-16], connID, version)[:]).To(Equal(data[len(data)-16:]))
 		},
-		Entry("draft-29",
-			protocol.VersionDraft29,
-			splitHexString("ffff00001d0008f067a5502a4262b574 6f6b656ed16926d81f6f9ca2953a8aa4 575e1e49"),
-		),
 		Entry("v1",
 			protocol.Version1,
 			splitHexString("ff000000010008f067a5502a4262b574 6f6b656e04a265ba2eff4d829058fb3f 0f2496ba"),
