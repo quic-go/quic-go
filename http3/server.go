@@ -281,6 +281,7 @@ func (s *Server) serveConn(tlsConf *tls.Config, conn net.PacketConn) error {
 	}
 	return err
 }
+
 func (s *Server) serveC(tlsConf *tls.Config, conn net.PacketConn) error {
 	if tlsConf == nil {
 		return errServerWithoutTLSConfig
