@@ -105,7 +105,7 @@ var _ = Describe("Timeout tests", func() {
 	})
 
 	It("returns net.Error timeout errors when an idle timeout occurs", func() {
-		const idleTimeout = 100 * time.Millisecond
+		const idleTimeout = 500 * time.Millisecond
 
 		server, err := quic.ListenAddr(
 			"localhost:0",
@@ -173,7 +173,7 @@ var _ = Describe("Timeout tests", func() {
 		var idleTimeout time.Duration
 
 		BeforeEach(func() {
-			idleTimeout = scaleDuration(100 * time.Millisecond)
+			idleTimeout = scaleDuration(500 * time.Millisecond)
 		})
 
 		It("times out after inactivity", func() {
@@ -315,7 +315,7 @@ var _ = Describe("Timeout tests", func() {
 	})
 
 	It("does not time out if keepalive is set", func() {
-		const idleTimeout = 100 * time.Millisecond
+		const idleTimeout = 500 * time.Millisecond
 
 		server, err := quic.ListenAddr(
 			"localhost:0",
