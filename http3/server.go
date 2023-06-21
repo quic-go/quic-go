@@ -62,8 +62,6 @@ func versionToALPN(v protocol.VersionNumber) string {
 	switch v {
 	case protocol.Version1, protocol.Version2:
 		return NextProtoH3
-	case protocol.VersionDraft29:
-		return NextProtoH3Draft29
 	default:
 		return ""
 	}

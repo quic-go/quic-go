@@ -5,10 +5,7 @@ import (
 	"github.com/quic-go/quic-go/internal/qtls"
 )
 
-const (
-	quicTLSExtensionTypeOldDrafts = 0xffa5
-	quicTLSExtensionType          = 0x39
-)
+const quicTLSExtensionType = 0x39
 
 type extensionHandler struct {
 	ourParams  []byte
@@ -22,16 +19,12 @@ type extensionHandler struct {
 var _ tlsExtensionHandler = &extensionHandler{}
 
 // newExtensionHandler creates a new extension handler
-func newExtensionHandler(params []byte, pers protocol.Perspective, v protocol.VersionNumber) tlsExtensionHandler {
-	et := uint16(quicTLSExtensionType)
-	if v == protocol.VersionDraft29 {
-		et = quicTLSExtensionTypeOldDrafts
-	}
+func newExtensionHandler(params []byte, pers protocol.Perspective) tlsExtensionHandler {
 	return &extensionHandler{
 		ourParams:     params,
 		paramsChan:    make(chan []byte),
 		perspective:   pers,
-		extensionType: et,
+		extensionType: quicTLSExtensionType,
 	}
 }
 

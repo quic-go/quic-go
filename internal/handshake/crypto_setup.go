@@ -240,7 +240,7 @@ func newCryptoSetup(
 		tracer.UpdatedKeyFromTLS(protocol.EncryptionInitial, protocol.PerspectiveClient)
 		tracer.UpdatedKeyFromTLS(protocol.EncryptionInitial, protocol.PerspectiveServer)
 	}
-	extHandler := newExtensionHandler(tp.Marshal(perspective), perspective, version)
+	extHandler := newExtensionHandler(tp.Marshal(perspective), perspective)
 	zeroRTTParametersChan := make(chan *wire.TransportParameters, 1)
 	cs := &cryptoSetup{
 		tlsConf:                   tlsConf,

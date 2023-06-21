@@ -47,7 +47,7 @@ var _ = Describe("Updatable AEAD", func() {
 		),
 	)
 
-	for _, ver := range []protocol.VersionNumber{protocol.VersionDraft29, protocol.Version1, protocol.Version2} {
+	for _, ver := range []protocol.VersionNumber{protocol.Version1, protocol.Version2} {
 		v := ver
 
 		Context(fmt.Sprintf("using version %s", v), func() {
