@@ -244,7 +244,7 @@ func (t *Transport) runSendQueue() {
 func (t *Transport) Close() error {
 	t.close(errors.New("closing"))
 	if t.createdConn {
-		if err := t.conn.Close(); err != nil {
+		if err := t.Conn.Close(); err != nil {
 			return err
 		}
 	} else if t.conn != nil {
