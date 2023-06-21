@@ -291,4 +291,20 @@ var _ = Describe("Transport", func() {
 		close(packetChan)
 		tr.Close()
 	})
+
+	It("closes uninitialized Transport and closes underlying PacketConn", func() {
+		packetChan := make(chan packetToRead)
+		pconn := newMockPacketConn(packetChan)
+
+		tr := &Transport{
+			Conn:        pconn,
+			createdConn: true, // owns pconn
+		}
+		// NO init
+
+		// shutdown
+		close(packetChan)
+		pconn.EXPECT().Close()
+		Expect(tr.Close()).To(Succeed())
+	})
 })
