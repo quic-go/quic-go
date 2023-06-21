@@ -31,7 +31,8 @@ type Transport struct {
 	// Bad things will happen if passed to multiple Transports.
 	//
 	// If not done by the user, the connection is passed through OptimizeConn to enable a number of optimizations.
-	// After passing the connection to the Transport, its invalid to call ReadFrom and WriteTo.
+	// After passing the connection to the Transport, it's invalid to call ReadFrom on the connection.
+	// Calling WriteTo is only valid on the connection returned by OptimizeConn.
 	Conn net.PacketConn
 
 	// The length of the connection ID in bytes.
