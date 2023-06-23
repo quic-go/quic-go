@@ -220,8 +220,6 @@ type connection struct {
 	logID  string
 	tracer logging.ConnectionTracer
 	logger utils.Logger
-
-	disableGSO bool
 }
 
 var (
