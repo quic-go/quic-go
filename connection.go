@@ -220,6 +220,8 @@ type connection struct {
 	logID  string
 	tracer logging.ConnectionTracer
 	logger utils.Logger
+
+	disableGSO bool
 }
 
 var (
@@ -1834,7 +1836,8 @@ func (s *connection) sendPackets(now time.Time) error {
 		return nil
 	}
 
-	if s.conn.capabilities().GSO {
+	// assert(s.config!=nil)
+	if s.conn.capabilities().GSO && !s.config.DisableGSO {
 		return s.sendPacketsWithGSO(now)
 	}
 	return s.sendPacketsWithoutGSO(now)
