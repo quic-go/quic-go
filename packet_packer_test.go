@@ -3,9 +3,10 @@ package quic
 import (
 	"bytes"
 	"fmt"
-	"math/rand"
 	"net"
 	"time"
+
+	"golang.org/x/exp/rand"
 
 	"github.com/quic-go/quic-go/internal/ackhandler"
 	"github.com/quic-go/quic-go/internal/handshake"
@@ -84,7 +85,7 @@ var _ = Describe("Packet packer", func() {
 	}
 
 	BeforeEach(func() {
-		rand.Seed(GinkgoRandomSeed())
+		rand.Seed(uint64(GinkgoRandomSeed()))
 		retransmissionQueue = newRetransmissionQueue()
 		mockSender := NewMockStreamSender(mockCtrl)
 		mockSender.EXPECT().onHasStreamData(gomock.Any()).AnyTimes()

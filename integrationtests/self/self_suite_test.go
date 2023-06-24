@@ -8,7 +8,6 @@ import (
 	"flag"
 	"fmt"
 	"log"
-	mrand "math/rand"
 	"os"
 	"runtime/pprof"
 	"strconv"
@@ -139,8 +138,6 @@ func init() {
 }
 
 var _ = BeforeSuite(func() {
-	mrand.Seed(GinkgoRandomSeed())
-
 	if enableQlog {
 		qlogTracer = tools.NewQlogger(GinkgoWriter)
 	}

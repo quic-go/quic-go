@@ -8,6 +8,8 @@ import (
 	"runtime"
 	"time"
 
+	"golang.org/x/exp/rand"
+
 	"github.com/golang/mock/gomock"
 	"github.com/quic-go/quic-go/internal/ackhandler"
 	"github.com/quic-go/quic-go/internal/mocks"
@@ -1169,7 +1171,7 @@ var _ = Describe("Send Stream", func() {
 			mockFC.EXPECT().AddBytesSent(gomock.Any()).AnyTimes()
 
 			data := make([]byte, dataLen)
-			_, err := mrand.Read(data)
+			_, err := rand.Read(data)
 			Expect(err).ToNot(HaveOccurred())
 			done := make(chan struct{})
 			go func() {
