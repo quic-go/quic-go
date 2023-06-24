@@ -1,6 +1,6 @@
 module github.com/quic-go/quic-go
 
-go 1.19
+go 1.20
 
 require (
 	github.com/francoispqt/gojay v1.2.13

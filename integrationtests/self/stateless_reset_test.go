@@ -2,8 +2,8 @@ package self_test
 
 import (
 	"context"
+	"crypto/rand"
 	"fmt"
-	"math/rand"
 	"net"
 	"sync/atomic"
 	"time"

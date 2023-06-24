@@ -1,8 +1,8 @@
 package handshake
 
 import (
+	"crypto/rand"
 	"fmt"
-	"math/rand"
 
 	"github.com/quic-go/quic-go/internal/protocol"
 

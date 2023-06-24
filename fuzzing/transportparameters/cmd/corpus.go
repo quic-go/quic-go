@@ -3,9 +3,10 @@ package main
 import (
 	"log"
 	"math"
-	"math/rand"
 	"net"
 	"time"
+
+	"golang.org/x/exp/rand"
 
 	"github.com/quic-go/quic-go/fuzzing/internal/helper"
 	"github.com/quic-go/quic-go/fuzzing/transportparameters"

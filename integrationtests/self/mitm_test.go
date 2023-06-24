@@ -6,10 +6,11 @@ import (
 	"fmt"
 	"io"
 	"math"
-	mrand "math/rand"
 	"net"
 	"sync/atomic"
 	"time"
+
+	"golang.org/x/exp/rand"
 
 	"github.com/quic-go/quic-go"
 	quicproxy "github.com/quic-go/quic-go/integrationtests/tools/proxy"
@@ -110,17 +111,17 @@ var _ = Describe("MITM test", func() {
 							Type:             hdr.Type,
 							Version:          hdr.Version,
 						},
-						PacketNumber:    protocol.PacketNumber(mrand.Int31n(math.MaxInt32 / 4)),
-						PacketNumberLen: protocol.PacketNumberLen(mrand.Int31n(4) + 1),
+						PacketNumber:    protocol.PacketNumber(rand.Int31n(math.MaxInt32 / 4)),
+						PacketNumberLen: protocol.PacketNumberLen(rand.Int31n(4) + 1),
 					}
 
 					for i := 0; i < numPackets; i++ {
-						payloadLen := mrand.Int31n(100)
-						replyHdr.Length = protocol.ByteCount(mrand.Int31n(payloadLen + 1))
+						payloadLen := rand.Int31n(100)
+						replyHdr.Length = protocol.ByteCount(rand.Int31n(payloadLen + 1))
 						b, err := replyHdr.Append(nil, hdr.Version)
 						Expect(err).ToNot(HaveOccurred())
 						r := make([]byte, payloadLen)
-						mrand.Read(r)
+						rand.Read(r)
 						b = append(b, r...)
 						if _, err := conn.WriteTo(b, remoteAddr); err != nil {
 							return
@@ -135,11 +136,11 @@ var _ = Describe("MITM test", func() {
 						Expect(err).To(MatchError(wire.ErrInvalidReservedBits))
 					}
 					for i := 0; i < numPackets; i++ {
-						b, err := wire.AppendShortHeader(nil, connID, pn, pnLen, protocol.KeyPhaseBit(mrand.Intn(2)))
+						b, err := wire.AppendShortHeader(nil, connID, pn, pnLen, protocol.KeyPhaseBit(rand.Intn(2)))
 						Expect(err).ToNot(HaveOccurred())
-						payloadLen := mrand.Int31n(100)
+						payloadLen := rand.Int31n(100)
 						r := make([]byte, payloadLen)
-						mrand.Read(r)
+						rand.Read(r)
 						b = append(b, r...)
 						if _, err := conn.WriteTo(b, remoteAddr); err != nil {
 							return
@@ -272,9 +273,9 @@ var _ = Describe("MITM test", func() {
 					defer GinkgoRecover()
 					if dir == quicproxy.DirectionIncoming {
 						atomic.AddInt32(&numPackets, 1)
-						if mrand.Intn(interval) == 0 {
-							pos := mrand.Intn(len(raw))
-							raw[pos] = byte(mrand.Intn(256))
+						if rand.Intn(interval) == 0 {
+							pos := rand.Intn(len(raw))
+							raw[pos] = byte(rand.Intn(256))
 							_, err := clientUDPConn.WriteTo(raw, serverUDPConn.LocalAddr())
 							Expect(err).ToNot(HaveOccurred())
 							atomic.AddInt32(&numCorrupted, 1)
@@ -292,9 +293,9 @@ var _ = Describe("MITM test", func() {
 					defer GinkgoRecover()
 					if dir == quicproxy.DirectionOutgoing {
 						atomic.AddInt32(&numPackets, 1)
-						if mrand.Intn(interval) == 0 {
-							pos := mrand.Intn(len(raw))
-							raw[pos] = byte(mrand.Intn(256))
+						if rand.Intn(interval) == 0 {
+							pos := rand.Intn(len(raw))
+							raw[pos] = byte(rand.Intn(256))
 							_, err := serverUDPConn.WriteTo(raw, clientUDPConn.LocalAddr())
 							Expect(err).ToNot(HaveOccurred())
 							atomic.AddInt32(&numCorrupted, 1)
