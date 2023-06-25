@@ -23,6 +23,8 @@ type responseWriter struct {
 	header        http.Header
 	status        int // status code passed to WriteHeader
 	headerWritten bool
+	contentLen    int64 // if handler set valid Content-Length header
+	numWritten    int64 // bytes written
 
 	logger utils.Logger
 }
@@ -55,6 +57,20 @@ func (w *responseWriter) WriteHeader(status int) {
 
 	if status < 100 || status >= 200 {
 		w.headerWritten = true
+		// add Date header
+		if _, ok := w.header["Date"]; !ok {
+			w.header.Set("Date", time.Now().UTC().Format(http.TimeFormat))
+		}
+		// Content-Length checking
+		if clen := w.header.Get("Content-Length"); clen != "" {
+			if cl, err := strconv.ParseInt(clen, 10, 64); err == nil {
+				w.contentLen = cl
+			} else {
+				// emit a warning for malformed Content-Length and remove it
+				w.logger.Errorf("Malformed Content-Length %s", clen)
+				w.header.Del("Content-Length")
+			}
+		}
 	}
 	w.status = status
 
@@ -105,19 +121,30 @@ func (w *responseWriter) Write(p []byte) (int, error) {
 	if !bodyAllowed {
 		return 0, http.ErrBodyNotAllowed
 	}
+	if w.contentLen != 0 && w.numWritten > w.contentLen {
+		return 0, http.ErrContentLength
+	}
 	df := &dataFrame{Length: uint64(len(p))}
 	w.buf = w.buf[:0]
 	w.buf = df.Append(w.buf)
 	if _, err := w.bufferedStr.Write(w.buf); err != nil {
 		return 0, err
 	}
-	return w.bufferedStr.Write(p)
+	n, err := w.bufferedStr.Write(p)
+	w.numWritten += int64(n)
+	return n, err
+}
+
+func (w *responseWriter) FlushError() error {
+	if err := w.bufferedStr.Flush(); err != nil {
+		w.logger.Errorf("could not flush to stream: %s", err.Error())
+		return err
+	}
+	return nil
 }
 
 func (w *responseWriter) Flush() {
-	if err := w.bufferedStr.Flush(); err != nil {
-		w.logger.Errorf("could not flush to stream: %s", err.Error())
-	}
+	w.FlushError()
 }
 
 func (w *responseWriter) StreamCreator() StreamCreator {
