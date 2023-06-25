@@ -5,17 +5,9 @@ package quic
 import "golang.org/x/sys/unix"
 
 const (
-	msgTypeIPTOS = unix.IP_RECVTOS
-)
-
-const (
-	ipv4RECVPKTINFO = 0x7
-	ipv6RECVPKTINFO = 0x24
-)
-
-const (
+	msgTypeIPTOS       = unix.IP_RECVTOS
+	ipv4RECVPKTINFO    = 0x7
 	msgTypeIPv4PKTINFO = 0x7
-	msgTypeIPv6PKTINFO = 0x2e
 )
 
 const batchSize = 8
