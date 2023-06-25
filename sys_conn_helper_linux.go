@@ -9,9 +9,8 @@ import (
 )
 
 const (
-	msgTypeIPTOS       = unix.IP_TOS
-	ipv4RECVPKTINFO    = unix.IP_PKTINFO
-	msgTypeIPv4PKTINFO = unix.IP_PKTINFO
+	msgTypeIPTOS = unix.IP_TOS
+	ipv4PKTINFO  = unix.IP_PKTINFO
 )
 
 const batchSize = 8 // needs to smaller than MaxUint8 (otherwise the type of oobConn.readPos has to be changed)
