@@ -152,9 +152,10 @@ const MaxNumAckRanges = 32
 // Example: For a packet pacing delay of 200μs, we would send 5 packets at once, wait for 1ms, and so forth.
 const MinPacingDelay = time.Millisecond
 
+// [Psiphon]
 // DefaultConnectionIDLength is the connection ID length that is used for multiplexed connections
 // if no other value is configured.
-const DefaultConnectionIDLength = 4
+const DefaultConnectionIDLength = 8
 
 // MaxActiveConnectionIDs is the number of connection IDs that we're storing.
 const MaxActiveConnectionIDs = 4
