@@ -87,7 +87,7 @@ func newConn(c OOBCapablePacketConn, supportsDF bool) (*oobConn, error) {
 		errECNIPv6 = unix.SetsockoptInt(int(fd), unix.IPPROTO_IPV6, unix.IPV6_RECVTCLASS, 1)
 
 		if needsPacketInfo {
-			errPIIPv4 = unix.SetsockoptInt(int(fd), unix.IPPROTO_IP, ipv4RECVPKTINFO, 1)
+			errPIIPv4 = unix.SetsockoptInt(int(fd), unix.IPPROTO_IP, ipv4PKTINFO, 1)
 			errPIIPv6 = unix.SetsockoptInt(int(fd), unix.IPPROTO_IPV6, unix.IPV6_RECVPKTINFO, 1)
 		}
 	}); err != nil {
@@ -188,7 +188,7 @@ func (c *oobConn) ReadPacket() (receivedPacket, error) {
 			switch hdr.Type {
 			case msgTypeIPTOS:
 				p.ecn = protocol.ECN(body[0] & ecnMask)
-			case msgTypeIPv4PKTINFO:
+			case ipv4PKTINFO:
 				// struct in_pktinfo {
 				// 	unsigned int   ipi_ifindex;  /* Interface index */
 				// 	struct in_addr ipi_spec_dst; /* Local address */

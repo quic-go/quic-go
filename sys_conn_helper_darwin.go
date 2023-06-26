@@ -5,9 +5,8 @@ package quic
 import "golang.org/x/sys/unix"
 
 const (
-	msgTypeIPTOS       = unix.IP_RECVTOS
-	ipv4RECVPKTINFO    = unix.IP_RECVPKTINFO
-	msgTypeIPv4PKTINFO = unix.IP_PKTINFO
+	msgTypeIPTOS = unix.IP_RECVTOS
+	ipv4PKTINFO  = unix.IP_RECVPKTINFO
 )
 
 // ReadBatch only returns a single packet on OSX,
