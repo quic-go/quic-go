@@ -2078,12 +2078,18 @@ func (s *connection) logLongHeaderPacket(p *longHeaderPacket) {
 		for _, frame := range p.frames {
 			wire.LogFrame(s.logger, frame.Frame, true)
 		}
+		for _, frame := range p.streamFrames {
+			wire.LogFrame(s.logger, frame.Frame, true)
+		}
 	}
 
 	// tracing
 	if s.tracer != nil {
 		frames := make([]logging.Frame, 0, len(p.frames))
 		for _, f := range p.frames {
+			frames = append(frames, logutils.ConvertFrame(f.Frame))
+		}
+		for _, f := range p.streamFrames {
 			frames = append(frames, logutils.ConvertFrame(f.Frame))
 		}
 		var ack *logging.AckFrame
