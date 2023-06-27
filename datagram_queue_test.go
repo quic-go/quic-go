@@ -1,6 +1,7 @@
 package quic
 
 import (
+	"context"
 	"errors"
 
 	"github.com/quic-go/quic-go/internal/utils"
@@ -81,10 +82,10 @@ var _ = Describe("Datagram Queue", func() {
 		It("receives DATAGRAM frames", func() {
 			queue.HandleDatagramFrame(&wire.DatagramFrame{Data: []byte("foo")})
 			queue.HandleDatagramFrame(&wire.DatagramFrame{Data: []byte("bar")})
-			data, err := queue.Receive()
+			data, err := queue.Receive(context.Background())
 			Expect(err).ToNot(HaveOccurred())
 			Expect(data).To(Equal([]byte("foo")))
-			data, err = queue.Receive()
+			data, err = queue.Receive(context.Background())
 			Expect(err).ToNot(HaveOccurred())
 			Expect(data).To(Equal([]byte("bar")))
 		})
@@ -93,7 +94,7 @@ var _ = Describe("Datagram Queue", func() {
 			c := make(chan []byte, 1)
 			go func() {
 				defer GinkgoRecover()
-				data, err := queue.Receive()
+				data, err := queue.Receive(context.Background())
 				Expect(err).ToNot(HaveOccurred())
 				c <- data
 			}()
@@ -103,11 +104,25 @@ var _ = Describe("Datagram Queue", func() {
 			Eventually(c).Should(Receive(Equal([]byte("foobar"))))
 		})
 
+		It("blocks until context is done", func() {
+			ctx, cancel := context.WithCancel(context.Background())
+			errChan := make(chan error)
+			go func() {
+				defer GinkgoRecover()
+				_, err := queue.Receive(ctx)
+				errChan <- err
+			}()
+
+			Consistently(errChan).ShouldNot(Receive())
+			cancel()
+			Eventually(errChan).Should(Receive(Equal(context.Canceled)))
+		})
+
 		It("closes", func() {
 			errChan := make(chan error, 1)
 			go func() {
 				defer GinkgoRecover()
-				_, err := queue.Receive()
+				_, err := queue.Receive(context.Background())
 				errChan <- err
 			}()
 
