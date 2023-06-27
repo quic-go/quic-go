@@ -103,6 +103,7 @@ var _ = Describe("Datagram Queue", func() {
 			queue.HandleDatagramFrame(&wire.DatagramFrame{Data: []byte("foobar")})
 			Eventually(c).Should(Receive(Equal([]byte("foobar"))))
 		})
+
 		It("blocks until context is done", func() {
 			ctx, cancel := context.WithCancel(context.Background())
 			errChan := make(chan error)
@@ -116,6 +117,7 @@ var _ = Describe("Datagram Queue", func() {
 			cancel()
 			Eventually(errChan).Should(Receive(Equal(context.Canceled)))
 		})
+
 		It("closes", func() {
 			errChan := make(chan error, 1)
 			go func() {
