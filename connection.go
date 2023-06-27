@@ -2302,11 +2302,11 @@ func (s *connection) SendMessage(p []byte) error {
 	return s.datagramQueue.AddAndWait(f)
 }
 
-func (s *connection) ReceiveMessage() ([]byte, error) {
+func (s *connection) ReceiveMessage(ctx context.Context) ([]byte, error) {
 	if !s.config.EnableDatagrams {
 		return nil, errors.New("datagram support disabled")
 	}
-	return s.datagramQueue.Receive()
+	return s.datagramQueue.Receive(ctx)
 }
 
 func (s *connection) LocalAddr() net.Addr {

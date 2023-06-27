@@ -212,18 +212,18 @@ func (mr *MockEarlyConnectionMockRecorder) OpenUniStreamSync(arg0 interface{}) *
 }
 
 // ReceiveMessage mocks base method.
-func (m *MockEarlyConnection) ReceiveMessage() ([]byte, error) {
+func (m *MockEarlyConnection) ReceiveMessage(arg0 context.Context) ([]byte, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ReceiveMessage")
+	ret := m.ctrl.Call(m, "ReceiveMessage", arg0)
 	ret0, _ := ret[0].([]byte)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // ReceiveMessage indicates an expected call of ReceiveMessage.
-func (mr *MockEarlyConnectionMockRecorder) ReceiveMessage() *gomock.Call {
+func (mr *MockEarlyConnectionMockRecorder) ReceiveMessage(arg0 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReceiveMessage", reflect.TypeOf((*MockEarlyConnection)(nil).ReceiveMessage))
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReceiveMessage", reflect.TypeOf((*MockEarlyConnection)(nil).ReceiveMessage), arg0)
 }
 
 // RemoteAddr mocks base method.
