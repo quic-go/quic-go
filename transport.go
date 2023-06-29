@@ -187,6 +187,7 @@ func (t *Transport) init(isServer bool) error {
 			conn, err = wrapConn(t.Conn)
 			if err != nil {
 				t.initErr = err
+				getMultiplexer().RemoveConn(t.Conn)
 				return
 			}
 		}
