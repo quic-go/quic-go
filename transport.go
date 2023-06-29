@@ -177,8 +177,6 @@ func (t *Transport) DialEarly(ctx context.Context, addr net.Addr, tlsConf *tls.C
 
 func (t *Transport) init(isServer bool) error {
 	t.initOnce.Do(func() {
-		getMultiplexer().AddConn(t.Conn)
-
 		var conn rawConn
 		if c, ok := t.Conn.(rawConn); ok {
 			conn = c
@@ -187,7 +185,6 @@ func (t *Transport) init(isServer bool) error {
 			conn, err = wrapConn(t.Conn)
 			if err != nil {
 				t.initErr = err
-				getMultiplexer().RemoveConn(t.Conn)
 				return
 			}
 		}
@@ -213,6 +210,7 @@ func (t *Transport) init(isServer bool) error {
 			t.connIDGenerator = &protocol.DefaultConnectionIDGenerator{ConnLen: t.connIDLen}
 		}
 
+		getMultiplexer().AddConn(t.Conn)
 		go t.listen(conn)
 		go t.runSendQueue()
 	})
