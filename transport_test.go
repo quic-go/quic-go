@@ -309,7 +309,7 @@ var _ = Describe("Transport", func() {
 		Expect(tr.Close()).To(Succeed())
 	})
 
-	It("removes underlying PacketConn from multiplexer after (*Transport).init failed", func() {
+	It("doesn't add the PacketConn to the multiplexer if (*Transport).init fails", func() {
 		packetChan := make(chan packetToRead)
 		pconn := newMockPacketConn(packetChan)
 		syscallconn := &mockSyscallConn{pconn}
