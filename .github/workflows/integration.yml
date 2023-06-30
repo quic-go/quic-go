@@ -31,10 +31,10 @@ jobs:
       - name: Run self tests, using QUIC v2
         if: success() || failure() # run this step even if the previous one failed
         run: go run github.com/onsi/ginkgo/v2/ginkgo -r -v -randomize-all -randomize-suites -trace integrationtests/self -- -version=2 ${{ env.QLOGFLAG }}
-      - name: Run set tests, with GSO disabled
+      - name: Run set tests, with GSO enabled
         if: success() || failure() # run this step even if the previous one failed
         env:
-          QUIC_GO_DISABLE_GSO: true
+          QUIC_GO_ENABLE_GSO: true
         run: go run github.com/onsi/ginkgo/v2/ginkgo -r -v -randomize-all -randomize-suites -trace integrationtests/self -- -version=1 ${{ env.QLOGFLAG }}
       - name: Run tests (32 bit)
         if: success() || failure() # run this step even if the previous one failed
