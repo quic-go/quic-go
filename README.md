@@ -220,7 +220,8 @@ quic-go always aims to support the latest two Go releases.
 
 ### Dependency on forked crypto/tls
 
-Since the standard library didn't provide any QUIC APIs before the Go 1.21 release, we had to fork crypto/tls to add the required APIs ourselves: [qtls for Go 1.20](https://github.com/quic-go/qtls-go1-20) and [qtls for Go 1.19](https://github.com/quic-go/qtls-go1-19). This had led to a lot of pain in the Go ecosystem, and we're happy that we can rely on Go 1.21 going forward.
+Since the standard library didn't provide any QUIC APIs before the Go 1.21 release, we had to fork crypto/tls to add the required APIs ourselves: [qtls for Go 1.20](https://github.com/quic-go/qtls-go1-20).
+This had led to a lot of pain in the Go ecosystem, and we're happy that we can rely on Go 1.21 going forward.
 
 ## Contributing
 

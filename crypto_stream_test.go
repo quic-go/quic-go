@@ -1,7 +1,6 @@
 package quic
 
 import (
-	"crypto/rand"
 	"fmt"
 
 	"github.com/quic-go/quic-go/internal/protocol"
@@ -12,16 +11,6 @@ import (
 	. "github.com/onsi/gomega"
 )
 
-func createHandshakeMessage(len int) []byte {
-	msg := make([]byte, 4+len)
-	rand.Read(msg[:1]) // random message type
-	msg[1] = uint8(len >> 16)
-	msg[2] = uint8(len >> 8)
-	msg[3] = uint8(len)
-	rand.Read(msg[4:])
-	return msg
-}
-
 var _ = Describe("Crypto Stream", func() {
 	var str cryptoStream
 
@@ -31,21 +20,11 @@ var _ = Describe("Crypto Stream", func() {
 
 	Context("handling incoming data", func() {
 		It("handles in-order CRYPTO frames", func() {
-			msg := createHandshakeMessage(6)
-			err := str.HandleCryptoFrame(&wire.CryptoFrame{Data: msg})
-			Expect(err).ToNot(HaveOccurred())
-			Expect(str.GetCryptoData()).To(Equal(msg))
+			Expect(str.HandleCryptoFrame(&wire.CryptoFrame{Data: []byte("foo")})).To(Succeed())
+			Expect(str.GetCryptoData()).To(Equal([]byte("foo")))
 			Expect(str.GetCryptoData()).To(BeNil())
-		})
-
-		It("handles multiple messages in one CRYPTO frame", func() {
-			msg1 := createHandshakeMessage(6)
-			msg2 := createHandshakeMessage(10)
-			msg := append(append([]byte{}, msg1...), msg2...)
-			err := str.HandleCryptoFrame(&wire.CryptoFrame{Data: msg})
-			Expect(err).ToNot(HaveOccurred())
-			Expect(str.GetCryptoData()).To(Equal(msg1))
-			Expect(str.GetCryptoData()).To(Equal(msg2))
+			Expect(str.HandleCryptoFrame(&wire.CryptoFrame{Data: []byte("bar"), Offset: 3})).To(Succeed())
+			Expect(str.GetCryptoData()).To(Equal([]byte("bar")))
 			Expect(str.GetCryptoData()).To(BeNil())
 		})
 
@@ -59,42 +38,17 @@ var _ = Describe("Crypto Stream", func() {
 			}))
 		})
 
-		It("handles messages split over multiple CRYPTO frames", func() {
-			msg := createHandshakeMessage(6)
-			err := str.HandleCryptoFrame(&wire.CryptoFrame{
-				Data: msg[:4],
-			})
-			Expect(err).ToNot(HaveOccurred())
-			Expect(str.GetCryptoData()).To(BeNil())
-			err = str.HandleCryptoFrame(&wire.CryptoFrame{
-				Offset: 4,
-				Data:   msg[4:],
-			})
-			Expect(err).ToNot(HaveOccurred())
-			Expect(str.GetCryptoData()).To(Equal(msg))
-			Expect(str.GetCryptoData()).To(BeNil())
-		})
-
 		It("handles out-of-order CRYPTO frames", func() {
-			msg := createHandshakeMessage(6)
-			err := str.HandleCryptoFrame(&wire.CryptoFrame{
-				Offset: 4,
-				Data:   msg[4:],
-			})
-			Expect(err).ToNot(HaveOccurred())
-			Expect(str.GetCryptoData()).To(BeNil())
-			err = str.HandleCryptoFrame(&wire.CryptoFrame{
-				Data: msg[:4],
-			})
-			Expect(err).ToNot(HaveOccurred())
-			Expect(str.GetCryptoData()).To(Equal(msg))
+			Expect(str.HandleCryptoFrame(&wire.CryptoFrame{Offset: 3, Data: []byte("bar")})).To(Succeed())
+			Expect(str.HandleCryptoFrame(&wire.CryptoFrame{Data: []byte("foo")})).To(Succeed())
+			Expect(str.GetCryptoData()).To(Equal([]byte("foobar")))
 			Expect(str.GetCryptoData()).To(BeNil())
 		})
 
 		Context("finishing", func() {
 			It("errors if there's still data to read after finishing", func() {
 				Expect(str.HandleCryptoFrame(&wire.CryptoFrame{
-					Data:   createHandshakeMessage(5),
+					Data:   []byte("foobar"),
 					Offset: 10,
 				})).To(Succeed())
 				Expect(str.Finish()).To(MatchError(&qerr.TransportError{
@@ -120,7 +74,7 @@ var _ = Describe("Crypto Stream", func() {
 			It("rejects new crypto data after finishing", func() {
 				Expect(str.Finish()).To(Succeed())
 				Expect(str.HandleCryptoFrame(&wire.CryptoFrame{
-					Data: createHandshakeMessage(5),
+					Data: []byte("foo"),
 				})).To(MatchError(&qerr.TransportError{
 					ErrorCode:    qerr.ProtocolViolation,
 					ErrorMessage: "received crypto data after change of encryption level",
@@ -128,15 +82,14 @@ var _ = Describe("Crypto Stream", func() {
 			})
 
 			It("ignores crypto data below the maximum offset received before finishing", func() {
-				msg := createHandshakeMessage(15)
 				Expect(str.HandleCryptoFrame(&wire.CryptoFrame{
-					Data: msg,
+					Data: []byte("foobar"),
 				})).To(Succeed())
-				Expect(str.GetCryptoData()).To(Equal(msg))
+				Expect(str.GetCryptoData()).To(Equal([]byte("foobar")))
 				Expect(str.Finish()).To(Succeed())
 				Expect(str.HandleCryptoFrame(&wire.CryptoFrame{
-					Offset: protocol.ByteCount(len(msg) - 6),
-					Data:   []byte("foobar"),
+					Offset: 2,
+					Data:   []byte("foo"),
 				})).To(Succeed())
 			})
 		})

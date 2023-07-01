@@ -2,6 +2,7 @@ package quic
 
 import (
 	"context"
+	"crypto/tls"
 	"errors"
 	"io"
 	"net"
@@ -336,12 +337,14 @@ type ClientHelloInfo struct {
 // ConnectionState records basic details about a QUIC connection
 type ConnectionState struct {
 	// TLS contains information about the TLS connection state, incl. the tls.ConnectionState.
-	TLS handshake.ConnectionState
+	TLS tls.ConnectionState
 	// SupportsDatagrams says if support for QUIC datagrams (RFC 9221) was negotiated.
 	// This requires both nodes to support and enable the datagram extensions (via Config.EnableDatagrams).
 	// If datagram support was negotiated, datagrams can be sent and received using the
 	// SendMessage and ReceiveMessage methods on the Connection.
 	SupportsDatagrams bool
+	// Used0RTT says if 0-RTT resumption was used.
+	Used0RTT bool
 	// Version is the QUIC version of the QUIC connection.
 	Version VersionNumber
 }

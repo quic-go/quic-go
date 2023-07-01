@@ -11,7 +11,6 @@ import (
 	"log"
 	"math"
 	mrand "math/rand"
-	"sync"
 	"time"
 
 	"github.com/quic-go/quic-go/fuzzing/internal/helper"
@@ -157,39 +156,24 @@ func initStreams() (chan chunk, *stream /* initial */, *stream /* handshake */) 
 type handshakeRunner interface {
 	OnReceivedParams(*wire.TransportParameters)
 	OnHandshakeComplete()
-	OnError(error)
+	OnReceivedReadKeys()
 	DropKeys(protocol.EncryptionLevel)
 }
 
 type runner struct {
-	sync.Mutex
-	errored        bool
-	client, server *handshake.CryptoSetup
+	handshakeComplete chan<- struct{}
 }
 
 var _ handshakeRunner = &runner{}
 
-func newRunner(client, server *handshake.CryptoSetup) *runner {
-	return &runner{client: client, server: server}
+func newRunner(handshakeComplete chan<- struct{}) *runner {
+	return &runner{handshakeComplete: handshakeComplete}
 }
 
 func (r *runner) OnReceivedParams(*wire.TransportParameters) {}
-func (r *runner) OnHandshakeComplete()                       {}
-func (r *runner) OnError(err error) {
-	r.Lock()
-	defer r.Unlock()
-	if r.errored {
-		return
-	}
-	r.errored = true
-	(*r.client).Close()
-	(*r.server).Close()
-}
-
-func (r *runner) Errored() bool {
-	r.Lock()
-	defer r.Unlock()
-	return r.errored
+func (r *runner) OnReceivedReadKeys()                        {}
+func (r *runner) OnHandshakeComplete() {
+	close(r.handshakeComplete)
 }
 func (r *runner) DropKeys(protocol.EncryptionLevel) {}
 
@@ -270,6 +254,7 @@ func Fuzz(data []byte) int {
 	}
 
 	clientConf := &tls.Config{
+		MinVersion: tls.VersionTLS13,
 		ServerName: "localhost",
 		NextProtos: []string{alpn},
 		RootCAs:    certPool,
@@ -287,6 +272,7 @@ func Fuzz(data []byte) int {
 
 func runHandshake(runConfig [confLen]byte, messageConfig uint8, clientConf *tls.Config, data []byte) int {
 	serverConf := &tls.Config{
+		MinVersion:       tls.VersionTLS13,
 		Certificates:     []tls.Certificate{*cert},
 		NextProtos:       []string{alpn},
 		SessionTicketKey: sessionTicketKey,
@@ -373,15 +359,14 @@ func runHandshake(runConfig [confLen]byte, messageConfig uint8, clientConf *tls.
 
 	cChunkChan, cInitialStream, cHandshakeStream := initStreams()
 	var client, server handshake.CryptoSetup
-	runner := newRunner(&client, &server)
+	clientHandshakeCompleted := make(chan struct{})
 	client, _ = handshake.NewCryptoSetupClient(
 		cInitialStream,
 		cHandshakeStream,
+		nil,
 		protocol.ConnectionID{},
-		nil,
-		nil,
 		clientTP,
-		runner,
+		newRunner(clientHandshakeCompleted),
 		clientConf,
 		enable0RTTClient,
 		utils.NewRTTStats(),
@@ -390,15 +375,15 @@ func runHandshake(runConfig [confLen]byte, messageConfig uint8, clientConf *tls.
 		protocol.Version1,
 	)
 
+	serverHandshakeCompleted := make(chan struct{})
 	sChunkChan, sInitialStream, sHandshakeStream := initStreams()
 	server = handshake.NewCryptoSetupServer(
 		sInitialStream,
 		sHandshakeStream,
+		nil,
 		protocol.ConnectionID{},
-		nil,
-		nil,
 		serverTP,
-		runner,
+		newRunner(serverHandshakeCompleted),
 		serverConf,
 		enable0RTTServer,
 		utils.NewRTTStats(),
@@ -411,17 +396,13 @@ func runHandshake(runConfig [confLen]byte, messageConfig uint8, clientConf *tls.
 		return -1
 	}
 
-	serverHandshakeCompleted := make(chan struct{})
-	go func() {
-		defer close(serverHandshakeCompleted)
-		server.RunHandshake()
-	}()
+	if err := client.StartHandshake(); err != nil {
+		log.Fatal(err)
+	}
 
-	clientHandshakeCompleted := make(chan struct{})
-	go func() {
-		defer close(clientHandshakeCompleted)
-		client.RunHandshake()
-	}()
+	if err := server.StartHandshake(); err != nil {
+		log.Fatal(err)
+	}
 
 	done := make(chan struct{})
 	go func() {
@@ -441,7 +422,9 @@ messageLoop:
 				b = data
 				encLevel = maxEncLevel(server, messageToReplaceEncLevel)
 			}
-			server.HandleMessage(b, encLevel)
+			if err := server.HandleMessage(b, encLevel); err != nil {
+				break messageLoop
+			}
 		case c := <-sChunkChan:
 			b := c.data
 			encLevel := c.encLevel
@@ -450,11 +433,10 @@ messageLoop:
 				b = data
 				encLevel = maxEncLevel(client, messageToReplaceEncLevel)
 			}
-			client.HandleMessage(b, encLevel)
+			if err := client.HandleMessage(b, encLevel); err != nil {
+				break messageLoop
+			}
 		case <-done: // test done
-			break messageLoop
-		}
-		if runner.Errored() {
 			break messageLoop
 		}
 	}
@@ -462,9 +444,6 @@ messageLoop:
 	<-done
 	_ = client.ConnectionState()
 	_ = server.ConnectionState()
-	if runner.Errored() {
-		return 0
-	}
 
 	sealer, err := client.Get1RTTSealer()
 	if err != nil {

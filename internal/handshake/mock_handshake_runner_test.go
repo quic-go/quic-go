@@ -47,18 +47,6 @@ func (mr *MockHandshakeRunnerMockRecorder) DropKeys(arg0 interface{}) *gomock.Ca
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DropKeys", reflect.TypeOf((*MockHandshakeRunner)(nil).DropKeys), arg0)
 }
 
-// OnError mocks base method.
-func (m *MockHandshakeRunner) OnError(arg0 error) {
-	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "OnError", arg0)
-}
-
-// OnError indicates an expected call of OnError.
-func (mr *MockHandshakeRunnerMockRecorder) OnError(arg0 interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "OnError", reflect.TypeOf((*MockHandshakeRunner)(nil).OnError), arg0)
-}
-
 // OnHandshakeComplete mocks base method.
 func (m *MockHandshakeRunner) OnHandshakeComplete() {
 	m.ctrl.T.Helper()
@@ -81,4 +69,16 @@ func (m *MockHandshakeRunner) OnReceivedParams(arg0 *wire.TransportParameters) {
 func (mr *MockHandshakeRunnerMockRecorder) OnReceivedParams(arg0 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "OnReceivedParams", reflect.TypeOf((*MockHandshakeRunner)(nil).OnReceivedParams), arg0)
+}
+
+// OnReceivedReadKeys mocks base method.
+func (m *MockHandshakeRunner) OnReceivedReadKeys() {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "OnReceivedReadKeys")
+}
+
+// OnReceivedReadKeys indicates an expected call of OnReceivedReadKeys.
+func (mr *MockHandshakeRunnerMockRecorder) OnReceivedReadKeys() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "OnReceivedReadKeys", reflect.TypeOf((*MockHandshakeRunner)(nil).OnReceivedReadKeys))
 }

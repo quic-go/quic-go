@@ -7,7 +7,6 @@ import (
 	"golang.org/x/crypto/hkdf"
 
 	"github.com/quic-go/quic-go/internal/protocol"
-	"github.com/quic-go/quic-go/internal/qtls"
 )
 
 var (
@@ -29,12 +28,7 @@ func getSalt(v protocol.VersionNumber) []byte {
 	return quicSaltV1
 }
 
-var initialSuite = &qtls.CipherSuiteTLS13{
-	ID:     tls.TLS_AES_128_GCM_SHA256,
-	KeyLen: 16,
-	AEAD:   qtls.AEADAESGCMTLS13,
-	Hash:   crypto.SHA256,
-}
+var initialSuite = getCipherSuite(tls.TLS_AES_128_GCM_SHA256)
 
 // NewInitialAEAD creates a new AEAD for Initial encryption / decryption.
 func NewInitialAEAD(connID protocol.ConnectionID, pers protocol.Perspective, v protocol.VersionNumber) (LongHeaderSealer, LongHeaderOpener) {
@@ -50,8 +44,8 @@ func NewInitialAEAD(connID protocol.ConnectionID, pers protocol.Perspective, v p
 	myKey, myIV := computeInitialKeyAndIV(mySecret, v)
 	otherKey, otherIV := computeInitialKeyAndIV(otherSecret, v)
 
-	encrypter := qtls.AEADAESGCMTLS13(myKey, myIV)
-	decrypter := qtls.AEADAESGCMTLS13(otherKey, otherIV)
+	encrypter := initialSuite.AEAD(myKey, myIV)
+	decrypter := initialSuite.AEAD(otherKey, otherIV)
 
 	return newLongHeaderSealer(encrypter, newHeaderProtector(initialSuite, mySecret, true, v)),
 		newLongHeaderOpener(decrypter, newAESHeaderProtector(initialSuite, otherSecret, true, hkdfHeaderProtectionLabel(v)))

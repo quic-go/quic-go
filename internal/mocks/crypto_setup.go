@@ -10,7 +10,6 @@ import (
 	gomock "github.com/golang/mock/gomock"
 	handshake "github.com/quic-go/quic-go/internal/handshake"
 	protocol "github.com/quic-go/quic-go/internal/protocol"
-	qtls "github.com/quic-go/quic-go/internal/qtls"
 )
 
 // MockCryptoSetup is a mock of CryptoSetup interface.
@@ -63,10 +62,10 @@ func (mr *MockCryptoSetupMockRecorder) Close() *gomock.Call {
 }
 
 // ConnectionState mocks base method.
-func (m *MockCryptoSetup) ConnectionState() qtls.ConnectionState {
+func (m *MockCryptoSetup) ConnectionState() handshake.ConnectionState {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ConnectionState")
-	ret0, _ := ret[0].(qtls.ConnectionState)
+	ret0, _ := ret[0].(handshake.ConnectionState)
 	return ret0
 }
 
@@ -212,10 +211,10 @@ func (mr *MockCryptoSetupMockRecorder) GetSessionTicket() *gomock.Call {
 }
 
 // HandleMessage mocks base method.
-func (m *MockCryptoSetup) HandleMessage(arg0 []byte, arg1 protocol.EncryptionLevel) bool {
+func (m *MockCryptoSetup) HandleMessage(arg0 []byte, arg1 protocol.EncryptionLevel) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "HandleMessage", arg0, arg1)
-	ret0, _ := ret[0].(bool)
+	ret0, _ := ret[0].(error)
 	return ret0
 }
 
@@ -223,18 +222,6 @@ func (m *MockCryptoSetup) HandleMessage(arg0 []byte, arg1 protocol.EncryptionLev
 func (mr *MockCryptoSetupMockRecorder) HandleMessage(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HandleMessage", reflect.TypeOf((*MockCryptoSetup)(nil).HandleMessage), arg0, arg1)
-}
-
-// RunHandshake mocks base method.
-func (m *MockCryptoSetup) RunHandshake() {
-	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "RunHandshake")
-}
-
-// RunHandshake indicates an expected call of RunHandshake.
-func (mr *MockCryptoSetupMockRecorder) RunHandshake() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RunHandshake", reflect.TypeOf((*MockCryptoSetup)(nil).RunHandshake))
 }
 
 // SetHandshakeConfirmed mocks base method.
@@ -261,4 +248,18 @@ func (m *MockCryptoSetup) SetLargest1RTTAcked(arg0 protocol.PacketNumber) error 
 func (mr *MockCryptoSetupMockRecorder) SetLargest1RTTAcked(arg0 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetLargest1RTTAcked", reflect.TypeOf((*MockCryptoSetup)(nil).SetLargest1RTTAcked), arg0)
+}
+
+// StartHandshake mocks base method.
+func (m *MockCryptoSetup) StartHandshake() error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "StartHandshake")
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// StartHandshake indicates an expected call of StartHandshake.
+func (mr *MockCryptoSetupMockRecorder) StartHandshake() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "StartHandshake", reflect.TypeOf((*MockCryptoSetup)(nil).StartHandshake))
 }

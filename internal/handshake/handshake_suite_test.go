@@ -6,8 +6,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/quic-go/quic-go/internal/qtls"
-
 	"github.com/golang/mock/gomock"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -41,8 +39,8 @@ func splitHexString(s string) (slice []byte) {
 	return
 }
 
-var cipherSuites = []*qtls.CipherSuiteTLS13{
-	qtls.CipherSuiteTLS13ByID(tls.TLS_AES_128_GCM_SHA256),
-	qtls.CipherSuiteTLS13ByID(tls.TLS_AES_256_GCM_SHA384),
-	qtls.CipherSuiteTLS13ByID(tls.TLS_CHACHA20_POLY1305_SHA256),
+var cipherSuites = []*cipherSuite{
+	getCipherSuite(tls.TLS_AES_128_GCM_SHA256),
+	getCipherSuite(tls.TLS_AES_256_GCM_SHA384),
+	getCipherSuite(tls.TLS_CHACHA20_POLY1305_SHA256),
 }
