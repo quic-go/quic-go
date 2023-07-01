@@ -3,8 +3,9 @@ package quic
 import (
 	"context"
 	"errors"
-	"math/rand"
 	"time"
+
+	"golang.org/x/exp/rand"
 
 	"github.com/quic-go/quic-go/internal/protocol"
 	"github.com/quic-go/quic-go/internal/wire"
@@ -274,7 +275,7 @@ var _ = Describe("Streams Map (incoming)", func() {
 		BeforeEach(func() { maxNumStreams = num })
 
 		It("opens and accepts streams", func() {
-			rand.Seed(GinkgoRandomSeed())
+			rand.Seed(uint64(GinkgoRandomSeed()))
 			ids := make([]protocol.StreamNum, num)
 			for i := 0; i < num; i++ {
 				ids[i] = protocol.StreamNum(i + 1)
