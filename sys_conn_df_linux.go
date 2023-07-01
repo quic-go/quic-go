@@ -44,8 +44,8 @@ func setDF(rawConn syscall.RawConn) (bool, error) {
 }
 
 func maybeSetGSO(rawConn syscall.RawConn) bool {
-	disable, _ := strconv.ParseBool(os.Getenv("QUIC_GO_DISABLE_GSO"))
-	if disable {
+	enable, _ := strconv.ParseBool(os.Getenv("QUIC_GO_ENABLE_GSO"))
+	if !enable {
 		return false
 	}
 
