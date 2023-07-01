@@ -3,6 +3,8 @@
 package quic
 
 import (
+	"encoding/binary"
+	"net/netip"
 	"syscall"
 
 	"golang.org/x/sys/unix"
@@ -33,4 +35,16 @@ func forceSetSendBuffer(c syscall.RawConn, bytes int) error {
 		return err
 	}
 	return serr
+}
+
+func parseIPv4PktInfo(body []byte) (ip netip.Addr, ifIndex uint32, ok bool) {
+	// struct in_pktinfo {
+	// 	unsigned int   ipi_ifindex;  /* Interface index */
+	// 	struct in_addr ipi_spec_dst; /* Local address */
+	// 	struct in_addr ipi_addr;     /* Header Destination address */
+	// };
+	if len(body) != 12 {
+		return netip.Addr{}, 0, false
+	}
+	return netip.AddrFrom4(*(*[4]byte)(body[8:12])), binary.LittleEndian.Uint32(body), true
 }
