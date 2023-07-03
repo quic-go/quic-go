@@ -331,12 +331,14 @@ func (p *packetPacker) PackCoalescedPacket(onlyAck bool, maxPacketSize protocol.
 		initialHdr, initialPayload = p.maybeGetCryptoPacket(maxPacketSize-protocol.ByteCount(initialSealer.Overhead()), protocol.EncryptionInitial, onlyAck, true, v)
 		if initialPayload.length > 0 {
 			size += p.longHeaderPacketLength(initialHdr, initialPayload, v) + protocol.ByteCount(initialSealer.Overhead())
+		}
 
-			if size >= maxPacketSize-protocol.MinCoalescedPacketSize {
-				ping := ackhandler.Frame{Frame: &wire.PingFrame{}}
-				initialPayload.frames = append(initialPayload.frames, ping)
-				initialPayload.length += ping.Frame.Length(v)
-			}
+		// Add a PING frame to Initial packets, if they don't contain any other frames.
+		// This is not strictly necessary, but it helps speed up the handshake.
+		if !onlyAck && len(initialPayload.frames) == 0 && initialPayload.ack != nil {
+			ping := ackhandler.Frame{Frame: &wire.PingFrame{}}
+			initialPayload.frames = append(initialPayload.frames, ping)
+			initialPayload.length += ping.Frame.Length(v)
 		}
 	}
 	// Add a Handshake packet.
