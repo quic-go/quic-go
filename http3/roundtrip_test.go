@@ -118,6 +118,7 @@ var _ = Describe("RoundTripper", func() {
 					return &http.Response{Request: req}, nil
 				}).Times(2)
 				cl.EXPECT().HandshakeComplete().Return(true)
+				cl.EXPECT().IsClosed().Return(false)
 				return cl, nil
 			}
 			rsp1, err := rt.RoundTrip(req1)
@@ -146,7 +147,7 @@ var _ = Describe("RoundTripper", func() {
 			Expect(count).To(Equal(2))
 		})
 
-		It("recreates a client when a request times out", func() {
+		It("retry with a new client when an existing request times out", func() {
 			var reqCount int
 			cl1 := NewMockRoundTripCloser(mockCtrl)
 			cl1.EXPECT().RoundTripOpt(gomock.Any(), gomock.Any()).DoAndReturn(func(req *http.Request, _ RoundTripOpt) (*http.Response, error) {
@@ -176,6 +177,67 @@ var _ = Describe("RoundTripper", func() {
 			rsp1, err := rt.RoundTrip(req1)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(rsp1.Request.RemoteAddr).To(Equal(req1.RemoteAddr))
+			// existing reusable one times out
+			cl1.EXPECT().IsClosed().Return(false)
+			rsp2, err := rt.RoundTrip(req2)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(rsp2.Request.RemoteAddr).To(Equal(req2.RemoteAddr))
+		})
+
+		It("creates a new client when an existing request is staled", func() {
+			cl1 := NewMockRoundTripCloser(mockCtrl)
+			cl1.EXPECT().RoundTripOpt(gomock.Any(), gomock.Any()).DoAndReturn(func(req *http.Request, _ RoundTripOpt) (*http.Response, error) {
+				// the first request is successful...
+				Expect(req.URL).To(Equal(req1.URL))
+				// ... after that, the connection is closed by remote in the background
+				cl1.EXPECT().IsClosed().Return(true)
+				return &http.Response{Request: req}, nil
+			}).Times(1)
+			cl1.EXPECT().HandshakeComplete().Return(true)
+			cl2 := NewMockRoundTripCloser(mockCtrl)
+			cl2.EXPECT().RoundTripOpt(gomock.Any(), gomock.Any()).DoAndReturn(func(req *http.Request, _ RoundTripOpt) (*http.Response, error) {
+				Expect(req.URL).To(Equal(req2.URL))
+				return &http.Response{Request: req}, nil
+			})
+
+			var count int
+			rt.newClient = func(string, *tls.Config, *roundTripperOpts, *quic.Config, dialFunc) (roundTripCloser, error) {
+				count++
+				if count == 1 {
+					return cl1, nil
+				}
+				return cl2, nil
+			}
+			rsp1, err := rt.RoundTrip(req1)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(rsp1.Request.RemoteAddr).To(Equal(req1.RemoteAddr))
+			rsp2, err := rt.RoundTrip(req2)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(rsp2.Request.RemoteAddr).To(Equal(req2.RemoteAddr))
+		})
+
+		It("creates a new client when the previous request is unresolved", func() {
+			cl1 := NewMockRoundTripCloser(mockCtrl)
+			cl1.EXPECT().RoundTripOpt(gomock.Any(), gomock.Any()).DoAndReturn(func(req *http.Request, _ RoundTripOpt) (*http.Response, error) {
+				Expect(req.URL).To(Equal(req1.URL))
+				return nil, &qerr.HandshakeTimeoutError{}
+			}).Times(1)
+			cl2 := NewMockRoundTripCloser(mockCtrl)
+			cl2.EXPECT().RoundTripOpt(gomock.Any(), gomock.Any()).DoAndReturn(func(req *http.Request, _ RoundTripOpt) (*http.Response, error) {
+				Expect(req.URL).To(Equal(req2.URL))
+				return &http.Response{Request: req}, nil
+			})
+
+			var count int
+			rt.newClient = func(string, *tls.Config, *roundTripperOpts, *quic.Config, dialFunc) (roundTripCloser, error) {
+				count++
+				if count == 1 {
+					return cl1, nil
+				}
+				return cl2, nil
+			}
+			_, err := rt.RoundTrip(req1)
+			Expect(err).To(HaveOccurred())
 			rsp2, err := rt.RoundTrip(req2)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(rsp2.Request.RemoteAddr).To(Equal(req2.RemoteAddr))
@@ -204,23 +266,26 @@ var _ = Describe("RoundTripper", func() {
 				cl.EXPECT().RoundTripOpt(gomock.Any(), gomock.Any()).DoAndReturn(func(req *http.Request, _ RoundTripOpt) (*http.Response, error) {
 					reqs <- struct{}{}
 					<-wait
-					return nil, &qerr.IdleTimeoutError{}
+					return &http.Response{Request: req}, nil
 				}).Times(2)
-				cl.EXPECT().HandshakeComplete()
+				cl.EXPECT().HandshakeComplete().Return(true)
+				cl.EXPECT().IsClosed().Return(false)
 				return cl, nil
 			}
 			done := make(chan struct{}, 2)
 			go func() {
 				defer GinkgoRecover()
 				defer func() { done <- struct{}{} }()
-				_, err := rt.RoundTrip(req1)
-				Expect(err).To(MatchError(&qerr.IdleTimeoutError{}))
+				rsp1, err := rt.RoundTrip(req1)
+				Expect(err).ToNot(HaveOccurred())
+				Expect(rsp1.Request.RemoteAddr).To(Equal(req1.RemoteAddr))
 			}()
 			go func() {
 				defer GinkgoRecover()
 				defer func() { done <- struct{}{} }()
-				_, err := rt.RoundTrip(req2)
-				Expect(err).To(MatchError(&qerr.IdleTimeoutError{}))
+				rsp2, err := rt.RoundTrip(req2)
+				Expect(err).ToNot(HaveOccurred())
+				Expect(rsp2.Request.RemoteAddr).To(Equal(req2.RemoteAddr))
 			}()
 			// wait for both requests to be issued
 			Eventually(reqs).Should(Receive())

@@ -245,6 +245,16 @@ func (c *client) Close() error {
 	return (*conn).CloseWithError(quic.ApplicationErrorCode(ErrCodeNoError), "")
 }
 
+func (c *client) IsClosed() bool {
+	conn := c.conn.Load()
+	b := false
+	if conn != nil {
+		b = (*conn).Context().Err() != nil
+	}
+	c.logger.Infof("Connection closed: %v", b)
+	return b
+}
+
 func (c *client) maxHeaderBytes() uint64 {
 	if c.opts.MaxHeaderBytes <= 0 {
 		return defaultMaxResponseHeaderBytes
