@@ -273,7 +273,7 @@ var _ = Describe("MITM test", func() {
 					defer GinkgoRecover()
 					if dir == quicproxy.DirectionIncoming {
 						atomic.AddInt32(&numPackets, 1)
-						if rand.Intn(interval) == 0 {
+						if rand.Intn(interval) == 0 || atomic.LoadInt32(&numPackets) == 1 { // at leat once
 							pos := rand.Intn(len(raw))
 							raw[pos] = byte(rand.Intn(256))
 							_, err := clientUDPConn.WriteTo(raw, serverUDPConn.LocalAddr())
@@ -293,7 +293,7 @@ var _ = Describe("MITM test", func() {
 					defer GinkgoRecover()
 					if dir == quicproxy.DirectionOutgoing {
 						atomic.AddInt32(&numPackets, 1)
-						if rand.Intn(interval) == 0 {
+						if rand.Intn(interval) == 0 || atomic.LoadInt32(&numPackets) == 1 { // at leat once
 							pos := rand.Intn(len(raw))
 							raw[pos] = byte(rand.Intn(256))
 							_, err := serverUDPConn.WriteTo(raw, clientUDPConn.LocalAddr())

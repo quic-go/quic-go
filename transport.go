@@ -195,7 +195,6 @@ func (t *Transport) init(isServer bool) error {
 		t.conn = conn
 
 		t.logger = utils.DefaultLogger // TODO: make this configurable
-		t.conn = conn
 		t.handlerMap = newPacketHandlerMap(t.StatelessResetKey, t.enqueueClosePacket, t.logger)
 		t.listening = make(chan struct{})
 
