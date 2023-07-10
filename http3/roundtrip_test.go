@@ -193,7 +193,6 @@ var _ = Describe("RoundTripper", func() {
 				cl1.EXPECT().IsClosed().Return(true)
 				return &http.Response{Request: req}, nil
 			}).Times(1)
-			cl1.EXPECT().HandshakeComplete().Return(true)
 			cl2 := NewMockRoundTripCloser(mockCtrl)
 			cl2.EXPECT().RoundTripOpt(gomock.Any(), gomock.Any()).DoAndReturn(func(req *http.Request, _ RoundTripOpt) (*http.Response, error) {
 				Expect(req.URL).To(Equal(req2.URL))

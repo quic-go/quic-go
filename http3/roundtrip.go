@@ -178,13 +178,14 @@ func (r *RoundTripper) getClient(hostname string, onlyCached bool) (rtc *roundTr
 		if onlyCached {
 			return nil, false, ErrNoCachedConn
 		}
-	} else if client.HandshakeComplete() && !client.IsClosed() {
-		isReused = true
-	} else {
+	} else if client.IsClosed() {
+		client = nil
 		delete(r.clients, hostname)
+	} else if client.HandshakeComplete() {
+		isReused = true
 	}
 
-	if !isReused {
+	if client == nil {
 		var err error
 		newCl := newClient
 		if r.newClient != nil {
