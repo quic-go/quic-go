@@ -195,6 +195,21 @@ var _ = Describe("MITM test", func() {
 				}
 				runTest(delayCb)
 			})
+
+			It("downloads a message when very large packets are injected towards the client", func() {
+				delayCb := func(dir quicproxy.Direction, raw []byte) time.Duration {
+					if dir == quicproxy.DirectionOutgoing {
+						defer GinkgoRecover()
+						go func() {
+							b := make([]byte, 1480)
+							rand.Read(b)
+							serverUDPConn.WriteTo(b, clientUDPConn.LocalAddr())
+						}()
+					}
+					return rtt / 2
+				}
+				runTest(delayCb)
+			})
 		})
 
 		runTest := func(dropCb quicproxy.DropCallback) {
