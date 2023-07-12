@@ -15,6 +15,7 @@ import (
 
 func setDF(rawConn syscall.RawConn) (bool, error) {
 	// Setting DF bit is only supported from macOS11
+	// https://github.com/chromium/chromium/blob/117.0.5881.2/net/socket/udp_socket_posix.cc#L555
 	if supportsDF, err := isAtLeastMacOS11(); !supportsDF || err != nil {
 		return false, err
 	}
