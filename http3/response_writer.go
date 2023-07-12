@@ -114,10 +114,16 @@ func (w *responseWriter) Write(p []byte) (int, error) {
 	return w.bufferedStr.Write(p)
 }
 
-func (w *responseWriter) Flush() {
+func (w *responseWriter) FlushError() error {
 	if err := w.bufferedStr.Flush(); err != nil {
 		w.logger.Errorf("could not flush to stream: %s", err.Error())
+		return err
 	}
+	return nil
+}
+
+func (w *responseWriter) Flush() {
+	w.FlushError()
 }
 
 func (w *responseWriter) StreamCreator() StreamCreator {
