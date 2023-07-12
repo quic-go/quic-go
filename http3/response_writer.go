@@ -23,6 +23,8 @@ type responseWriter struct {
 	header        http.Header
 	status        int // status code passed to WriteHeader
 	headerWritten bool
+	contentLen    int64 // if handler set valid Content-Length header
+	numWritten    int64 // bytes written
 
 	logger utils.Logger
 }
@@ -60,6 +62,16 @@ func (w *responseWriter) WriteHeader(status int) {
 		// Can be disabled by setting the Date header to nil.
 		if _, ok := w.header["Date"]; !ok {
 			w.header.Set("Date", time.Now().UTC().Format(http.TimeFormat))
+		}
+		// Content-Length checking
+		if clen := w.header.Get("Content-Length"); clen != "" {
+			if cl, err := strconv.ParseInt(clen, 10, 64); err == nil {
+				w.contentLen = cl
+			} else {
+				// emit a warning for malformed Content-Length and remove it
+				w.logger.Errorf("Malformed Content-Length %s", clen)
+				w.header.Del("Content-Length")
+			}
 		}
 	}
 	w.status = status
@@ -111,6 +123,12 @@ func (w *responseWriter) Write(p []byte) (int, error) {
 	if !bodyAllowed {
 		return 0, http.ErrBodyNotAllowed
 	}
+
+	w.numWritten += int64(len(p))
+	if w.contentLen != 0 && w.numWritten > w.contentLen {
+		return 0, http.ErrContentLength
+	}
+
 	df := &dataFrame{Length: uint64(len(p))}
 	w.buf = w.buf[:0]
 	w.buf = df.Append(w.buf)
