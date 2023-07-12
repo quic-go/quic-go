@@ -55,7 +55,9 @@ func (w *responseWriter) WriteHeader(status int) {
 
 	if status < 100 || status >= 200 {
 		w.headerWritten = true
-		// add Date header
+		// Add Date header.
+		// This is what the standard library does.
+		// Can be disabled by setting the Date header to nil.
 		if _, ok := w.header["Date"]; !ok {
 			w.header.Set("Date", time.Now().UTC().Format(http.TimeFormat))
 		}
