@@ -14,13 +14,9 @@ import (
 )
 
 func setDF(rawConn syscall.RawConn) (bool, error) {
-	uname := &unix.Utsname{}
-	err := unix.Uname(uname)
-	if err != nil {
+	// Setting DF bit is only supported from macOS11
+	if supportsDF, err := isAtLeastMacOS11(); !supportsDF || err != nil {
 		return false, err
-	}
-	if !isAtLeastOS11(uname) {
-		return false, nil
 	}
 
 	// Enabling IP_DONTFRAG will force the kernel to return "sendto: message too long"
@@ -39,8 +35,10 @@ func setDF(rawConn syscall.RawConn) (bool, error) {
 		utils.DefaultLogger.Debugf("Setting DF for IPv4.")
 	case errDFIPv4 != nil && errDFIPv6 == nil:
 		utils.DefaultLogger.Debugf("Setting DF for IPv6.")
-		// On macOS DF bit for IPv4 cannot be set on dual-stack listeners.
-		// Better to be safe here.
+		// On macOS, the syscall for setting DF bit for IPv4 fails on dual-stack listeners.
+		// Treat the connection as not having DF enabled, even though the DF bit will be set
+		// when used for IPv6.
+		// See https://github.com/quic-go/quic-go/issues/3793 for details.
 		return false, nil
 	case errDFIPv4 != nil && errDFIPv6 != nil:
 		return false, errors.New("setting DF failed for both IPv4 and IPv6")
@@ -52,16 +50,22 @@ func isMsgSizeErr(err error) bool {
 	return errors.Is(err, unix.EMSGSIZE)
 }
 
-func isAtLeastOS11(uname *unix.Utsname) bool {
+func isAtLeastMacOS11() (bool, error) {
+	uname := &unix.Utsname{}
+	err := unix.Uname(uname)
+	if err != nil {
+		return false, err
+	}
+
 	release := string(uname.Release[:])
 	if idx := strings.Index(release, "."); idx != -1 {
 		version, err := strconv.Atoi(release[:idx])
 		if err != nil {
-			return false
+			return false, err
 		}
 		// Darwin version 20 is macOS version 11
 		// https://en.wikipedia.org/wiki/Darwin_(operating_system)#Darwin_20_onwards
-		return version >= 20
+		return version >= 20, nil
 	}
-	return false
+	return false, nil
 }
