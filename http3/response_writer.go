@@ -120,8 +120,12 @@ func (w *responseWriter) Write(p []byte) (int, error) {
 	return w.bufferedStr.Write(p)
 }
 
+func (w *responseWriter) FlushError() error {
+	return w.bufferedStr.Flush()
+}
+
 func (w *responseWriter) Flush() {
-	if err := w.bufferedStr.Flush(); err != nil {
+	if err := w.FlushError(); err != nil {
 		w.logger.Errorf("could not flush to stream: %s", err.Error())
 	}
 }
