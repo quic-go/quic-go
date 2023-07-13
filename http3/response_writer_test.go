@@ -167,4 +167,15 @@ var _ = Describe("Response Writer", func() {
 		Expect(rw.SetReadDeadline(time.Now().Add(1 * time.Second))).To(BeNil())
 		Expect(rw.SetWriteDeadline(time.Now().Add(1 * time.Second))).To(BeNil())
 	})
+
+	It(`checks Content-Length header`, func() {
+		rw.Header().Set("Content-Length", "6")
+		n, err := rw.Write([]byte("foobar"))
+		Expect(n).To(Equal(6))
+		Expect(err).To(BeNil())
+
+		n, err = rw.Write([]byte("foobar"))
+		Expect(n).To(Equal(0))
+		Expect(err).To(Equal(http.ErrContentLength))
+	})
 })
