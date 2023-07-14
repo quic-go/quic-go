@@ -230,13 +230,6 @@ func (c *oobConn) ReadPacket() (receivedPacket, error) {
 	return p, nil
 }
 
-// WriteTo (re)implements the net.PacketConn method.
-// This is needed for users who call OptimizeConn to be able to send (non-QUIC) packets on the underlying connection.
-// With GSO enabled, this would otherwise not be needed, as the kernel requires the UDP_SEGMENT message to be set.
-func (c *oobConn) WriteTo(p []byte, addr net.Addr) (int, error) {
-	return c.WritePacket(p, uint16(len(p)), addr, nil)
-}
-
 // WritePacket writes a new packet.
 // If the connection supports GSO (and we activated GSO support before),
 // it appends the UDP_SEGMENT size message to oob.

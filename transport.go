@@ -26,9 +26,16 @@ type Transport struct {
 	// A single net.PacketConn can only be handled by one Transport.
 	// Bad things will happen if passed to multiple Transports.
 	//
-	// If not done by the user, the connection is passed through OptimizeConn to enable a number of optimizations.
-	// After passing the connection to the Transport, it's invalid to call ReadFrom on the connection.
-	// Calling WriteTo is only valid on the connection returned by OptimizeConn.
+	// A number of optimizations will be enabled if the connections implements the OOBCapablePacketConn interface,
+	// as a *net.UDPConn does.
+	// 1. It enables the Don't Fragment (DF) bit on the IP header.
+	//    This is required to run DPLPMTUD (Path MTU Discovery, RFC 8899).
+	// 2. It enables reading of the ECN bits from the IP header.
+	//    This allows the remote node to speed up its loss detection and recovery.
+	// 3. It uses batched syscalls (recvmmsg) to more efficiently receive packets from the socket.
+	// 4. It uses Generic Segmentation Offload (GSO) to efficiently send batches of packets (on Linux).
+	//
+	// After passing the connection to the Transport, it's invalid to call ReadFrom or WriteTo on the connection.
 	Conn net.PacketConn
 
 	// The length of the connection ID in bytes.
@@ -215,6 +222,12 @@ func (t *Transport) init(isServer bool) error {
 		go t.runSendQueue()
 	})
 	return t.initErr
+}
+
+// WriteTo sends a packet on the underlying connection.
+// It must not be called before either Listen, ListenEarly, Dial or DialEarly has been called.
+func (t *Transport) WriteTo(b []byte, addr net.Addr) (int, error) {
+	return t.conn.WritePacket(b, uint16(len(b)), addr, nil)
 }
 
 func (t *Transport) enqueueClosePacket(p closePacket) {
