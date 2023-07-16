@@ -96,12 +96,13 @@ func requestFromHeaders(headers []qpack.HeaderField) (*http.Request, error) {
 
 	var contentLength int64
 	if len(contentLengthStr) > 0 {
-		cl, err := strconv.ParseInt(contentLengthStr, 10, 64)
+		// use ParseUint instead of ParseInt, so that parsing fails on negative values
+		cl, err := strconv.ParseUint(contentLengthStr, 10, 63)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("invalid content length: %w", err)
 		}
 		httpHeaders.Set("Content-Length", contentLengthStr)
-		contentLength = cl
+		contentLength = int64(cl)
 	}
 
 	return &http.Request{

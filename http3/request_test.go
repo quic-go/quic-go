@@ -66,6 +66,18 @@ var _ = Describe("Request", func() {
 		Expect(err).To(MatchError(`invalid header field value for content: "\n"`))
 	})
 
+	It("rejects negative Content-Length values", func() {
+		headers := []qpack.HeaderField{
+			{Name: ":path", Value: "/foo"},
+			{Name: ":authority", Value: "quic.clemente.io"},
+			{Name: ":method", Value: "GET"},
+			{Name: "content-length", Value: "-42"},
+		}
+		_, err := requestFromHeaders(headers)
+		Expect(err).To(HaveOccurred())
+		Expect(err.Error()).To(ContainSubstring("invalid content length"))
+	})
+
 	It("parses path with leading double slashes", func() {
 		headers := []qpack.HeaderField{
 			{Name: ":path", Value: "//foo"},
