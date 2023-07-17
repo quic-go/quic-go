@@ -22,6 +22,9 @@ func requestFromHeaders(headers []qpack.HeaderField) (*http.Request, error) {
 		if strings.ToLower(h.Name) != h.Name {
 			return nil, fmt.Errorf("header field is not lower-case: %s", h.Name)
 		}
+		if !httpguts.ValidHeaderFieldValue(h.Value) {
+			return nil, fmt.Errorf("invalid header field value for %s: %q", h.Name, h.Value)
+		}
 		switch h.Name {
 		case ":path":
 			path = h.Value
