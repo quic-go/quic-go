@@ -178,6 +178,8 @@ type Connection interface {
 	// The error string will be sent to the peer.
 	CloseWithError(ApplicationErrorCode, string) error
 	// Context returns a context that is cancelled when the connection is closed.
+	// The cancellation cause is set to the error that caused the connection to
+	// close, or `context.Canceled` in case the listener is closed first.
 	Context() context.Context
 	// ConnectionState returns basic details about the QUIC connection.
 	// Warning: This API should not be considered stable and might change soon.
