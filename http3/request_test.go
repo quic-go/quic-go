@@ -66,6 +66,17 @@ var _ = Describe("Request", func() {
 		Expect(err).To(MatchError(`invalid header field value for content: "\n"`))
 	})
 
+	It("rejects pseudo header fields after regular header fields", func() {
+		headers := []qpack.HeaderField{
+			{Name: ":path", Value: "/foo"},
+			{Name: "content-length", Value: "42"},
+			{Name: ":authority", Value: "quic.clemente.io"},
+			{Name: ":method", Value: "GET"},
+		}
+		_, err := requestFromHeaders(headers)
+		Expect(err).To(MatchError("received pseudo header :authority after a regular header field"))
+	})
+
 	It("rejects negative Content-Length values", func() {
 		headers := []qpack.HeaderField{
 			{Name: ":path", Value: "/foo"},
