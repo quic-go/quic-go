@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"sync"
 	"time"
 
 	"github.com/quic-go/quic-go"
@@ -801,6 +802,29 @@ var _ = Describe("Client", func() {
 				hfs := decodeHeader(strBuf)
 				Expect(hfs).To(HaveKeyWithValue(":method", "POST"))
 				Expect(hfs).To(HaveKeyWithValue(":path", "/upload"))
+			})
+
+			It("doesn't send more bytes than allowed by http.Request.ContentLength", func() {
+				req.ContentLength = 7
+				var once sync.Once
+				done := make(chan struct{})
+				gomock.InOrder(
+					str.EXPECT().CancelWrite(gomock.Any()).Do(func(c quic.StreamErrorCode) {
+						once.Do(func() {
+							Expect(c).To(Equal(quic.StreamErrorCode(ErrCodeRequestCanceled)))
+							close(done)
+						})
+					}).AnyTimes(),
+					str.EXPECT().Close().MaxTimes(1),
+					str.EXPECT().CancelWrite(gomock.Any()).AnyTimes(),
+				)
+				str.EXPECT().Read(gomock.Any()).DoAndReturn(func([]byte) (int, error) {
+					<-done
+					return 0, errors.New("done")
+				})
+				cl.RoundTripOpt(req, RoundTripOpt{})
+				Expect(strBuf.String()).To(ContainSubstring("request"))
+				Expect(strBuf.String()).ToNot(ContainSubstring("request body"))
 			})
 
 			It("returns the error that occurred when reading the body", func() {
