@@ -164,3 +164,23 @@ func hostnameFromRequest(req *http.Request) string {
 	}
 	return ""
 }
+
+func responseFromHeaders(headerFields []qpack.HeaderField) (*http.Response, error) {
+	hdr, err := parseHeaders(headerFields, false)
+	if err != nil {
+		return nil, err
+	}
+	rsp := &http.Response{
+		Proto:         "HTTP/3.0",
+		ProtoMajor:    3,
+		Header:        hdr.Headers,
+		ContentLength: hdr.ContentLength,
+	}
+	status, err := strconv.Atoi(hdr.Status)
+	if err != nil {
+		return nil, fmt.Errorf("invalid status code: %w", err)
+	}
+	rsp.StatusCode = status
+	rsp.Status = hdr.Status + " " + http.StatusText(status)
+	return rsp, nil
+}
