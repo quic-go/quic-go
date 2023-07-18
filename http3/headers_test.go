@@ -89,6 +89,32 @@ var _ = Describe("Request", func() {
 		Expect(err.Error()).To(ContainSubstring("invalid content length"))
 	})
 
+	It("rejects multiple Content-Length headers, if they differ", func() {
+		headers := []qpack.HeaderField{
+			{Name: ":path", Value: "/foo"},
+			{Name: ":authority", Value: "quic.clemente.io"},
+			{Name: ":method", Value: "GET"},
+			{Name: "content-length", Value: "42"},
+			{Name: "content-length", Value: "1337"},
+		}
+		_, err := requestFromHeaders(headers)
+		Expect(err).To(MatchError("contradicting content lengths (42 and 1337)"))
+	})
+
+	It("deduplicates multiple Content-Length headers, if they're the same", func() {
+		headers := []qpack.HeaderField{
+			{Name: ":path", Value: "/foo"},
+			{Name: ":authority", Value: "quic.clemente.io"},
+			{Name: ":method", Value: "GET"},
+			{Name: "content-length", Value: "42"},
+			{Name: "content-length", Value: "42"},
+		}
+		req, err := requestFromHeaders(headers)
+		Expect(err).ToNot(HaveOccurred())
+		Expect(req.ContentLength).To(Equal(int64(42)))
+		Expect(req.Header.Get("Content-Length")).To(Equal("42"))
+	})
+
 	It("rejects pseudo header fields defined for responses", func() {
 		headers := []qpack.HeaderField{
 			{Name: ":path", Value: "/foo"},
