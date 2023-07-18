@@ -26,23 +26,18 @@ func requestFromHeaders(headers []qpack.HeaderField) (*http.Request, error) {
 		if !httpguts.ValidHeaderFieldValue(h.Value) {
 			return nil, fmt.Errorf("invalid header field value for %s: %q", h.Name, h.Value)
 		}
-		if h.Name == "content-length" {
-			contentLengthStr = h.Value
-			readFirstRegularHeader = true
-			continue
-		}
-		if !h.IsPseudo() {
+		if h.IsPseudo() {
+			if readFirstRegularHeader {
+				// all pseudo headers must appear before regular header fields, see section 4.3 of RFC 9114
+				return nil, fmt.Errorf("received pseudo header %s after a regular header field", h.Name)
+			}
+		} else {
 			if !httpguts.ValidHeaderFieldName(h.Name) {
 				return nil, fmt.Errorf("invalid header field name: %q", h.Name)
 			}
 			readFirstRegularHeader = true
-			httpHeaders.Add(h.Name, h.Value)
-			continue
 		}
-		// all pseudo headers must appear before regular header fields, see section 4.3 of RFC 9114
-		if readFirstRegularHeader {
-			return nil, fmt.Errorf("received pseudo header %s after a regular header field", h.Name)
-		}
+
 		switch h.Name {
 		case ":path":
 			path = h.Value
@@ -54,7 +49,12 @@ func requestFromHeaders(headers []qpack.HeaderField) (*http.Request, error) {
 			protocol = h.Value
 		case ":scheme":
 			scheme = h.Value
+		case "content-length":
+			contentLengthStr = h.Value
 		default:
+			if !h.IsPseudo() {
+				httpHeaders.Add(h.Name, h.Value)
+			}
 		}
 	}
 
