@@ -850,7 +850,7 @@ var _ = Describe("Send Stream", func() {
 				str.CancelWrite(1234)
 				Expect(str.Context().Done()).To(BeClosed())
 				Expect(context.Cause(str.Context())).To(BeAssignableToTypeOf(&StreamError{}))
-				Expect(context.Cause(str.Context())).To(HaveField("ErrorCode", StreamErrorCode(1234)))
+				Expect(context.Cause(str.Context()).(*StreamError).ErrorCode).To(Equal(StreamErrorCode(1234)))
 			})
 
 			It("doesn't allow further calls to Write", func() {
