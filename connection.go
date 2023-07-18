@@ -1667,6 +1667,17 @@ func (s *connection) handleTransportParameters(params *wire.TransportParameters)
 		})
 		return
 	}
+
+	// validate that the new value of the max_datagram_frame_size transport parameter sent by
+	// the server in the handshake is greater than or equal to the stored value
+	if s.perspective == protocol.PerspectiveClient && s.peerParams != nil && s.peerParams.MaxDatagramFrameSize > params.MaxDatagramFrameSize {
+		s.closeLocal(&qerr.TransportError{
+			ErrorCode:    qerr.ProtocolViolation,
+			ErrorMessage: "new peer max_datagram_frame_size is smaller than stored value",
+		})
+		return
+	}
+
 	s.peerParams = params
 	// On the client side we have to wait for handshake completion.
 	// During a 0-RTT connection, we are only allowed to use the new transport parameters for 1-RTT packets.

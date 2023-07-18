@@ -2918,6 +2918,25 @@ var _ = Describe("Client Connection", func() {
 			})))
 		})
 
+		It("errors if the transport parameters contain a max_datagram_frame_size smaller than the currently stored value", func() {
+			conn.perspective = protocol.PerspectiveClient
+			conn.peerParams = &wire.TransportParameters{
+				MaxDatagramFrameSize: 1200,
+			}
+			params := &wire.TransportParameters{
+				OriginalDestinationConnectionID: destConnID,
+				InitialSourceConnectionID:       destConnID,
+				MaxDatagramFrameSize:            900,
+			}
+			expectClose(false)
+			tracer.EXPECT().ReceivedTransportParameters(params)
+			conn.handleTransportParameters(params)
+			Eventually(errChan).Should(Receive(MatchError(&qerr.TransportError{
+				ErrorCode:    qerr.ProtocolViolation,
+				ErrorMessage: "new peer max_datagram_frame_size is smaller than stored value",
+			})))
+		})
+
 		It("errors if the transport parameters contain a wrong original_destination_connection_id", func() {
 			conn.origDestConnID = protocol.ParseConnectionID([]byte{0xde, 0xad, 0xbe, 0xef})
 			params := &wire.TransportParameters{
