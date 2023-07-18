@@ -395,6 +395,7 @@ var _ = Describe("Connection", func() {
 			}
 			Expect(conn.handleFrame(ccf, protocol.Encryption1RTT, protocol.ConnectionID{})).To(Succeed())
 			Eventually(conn.Context().Done()).Should(BeClosed())
+			Expect(context.Cause(conn.Context())).To(MatchError(testErr))
 		})
 
 		It("errors on HANDSHAKE_DONE frames", func() {
@@ -499,6 +500,7 @@ var _ = Describe("Connection", func() {
 			conn.CloseWithError(0x1337, "test error")
 			Eventually(areConnsRunning).Should(BeFalse())
 			Expect(conn.Context().Done()).To(BeClosed())
+			Expect(context.Cause(conn.Context())).To(MatchError(expectedErr))
 		})
 
 		It("includes the frame type in transport-level close frames", func() {
@@ -566,6 +568,7 @@ var _ = Describe("Connection", func() {
 			tracer.EXPECT().Close()
 			conn.shutdown()
 			Eventually(returned).Should(BeClosed())
+			Expect(context.Cause(conn.Context())).To(MatchError(context.Canceled))
 		})
 
 		It("doesn't send any more packets after receiving a CONNECTION_CLOSE", func() {
@@ -2010,19 +2013,21 @@ var _ = Describe("Connection", func() {
 		tracer.EXPECT().Close()
 		conn.shutdown()
 		Eventually(done).Should(BeClosed())
+		Expect(context.Cause(conn.Context())).To(MatchError(context.Canceled))
 	})
 
 	It("passes errors to the connection runner", func() {
 		testErr := errors.New("handshake error")
+		expectedErr := &qerr.ApplicationError{
+			ErrorCode:    0x1337,
+			ErrorMessage: testErr.Error(),
+		}
 		done := make(chan struct{})
 		go func() {
 			defer GinkgoRecover()
 			cryptoSetup.EXPECT().StartHandshake().MaxTimes(1)
 			err := conn.run()
-			Expect(err).To(MatchError(&qerr.ApplicationError{
-				ErrorCode:    0x1337,
-				ErrorMessage: testErr.Error(),
-			}))
+			Expect(err).To(MatchError(expectedErr))
 			close(done)
 		}()
 		streamManager.EXPECT().CloseWithError(gomock.Any())
@@ -2034,6 +2039,7 @@ var _ = Describe("Connection", func() {
 		tracer.EXPECT().Close()
 		Expect(conn.CloseWithError(0x1337, testErr.Error())).To(Succeed())
 		Eventually(done).Should(BeClosed())
+		Expect(context.Cause(conn.Context())).To(MatchError(expectedErr))
 	})
 
 	Context("transport parameters", func() {

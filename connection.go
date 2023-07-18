@@ -176,7 +176,7 @@ type connection struct {
 	closeChan chan closeError
 
 	ctx                context.Context
-	ctxCancel          context.CancelFunc
+	ctxCancel          context.CancelCauseFunc
 	handshakeCtx       context.Context
 	handshakeCtxCancel context.CancelFunc
 
@@ -283,7 +283,7 @@ var newConnection = func(
 		connIDGenerator,
 	)
 	s.preSetup()
-	s.ctx, s.ctxCancel = context.WithCancel(context.WithValue(context.Background(), ConnectionTracingKey, tracingID))
+	s.ctx, s.ctxCancel = context.WithCancelCause(context.WithValue(context.Background(), ConnectionTracingKey, tracingID))
 	s.sentPacketHandler, s.receivedPacketHandler = ackhandler.NewAckHandler(
 		0,
 		getMaxPacketSize(s.conn.RemoteAddr()),
@@ -404,7 +404,7 @@ var newClientConnection = func(
 		connIDGenerator,
 	)
 	s.preSetup()
-	s.ctx, s.ctxCancel = context.WithCancel(context.WithValue(context.Background(), ConnectionTracingKey, tracingID))
+	s.ctx, s.ctxCancel = context.WithCancelCause(context.WithValue(context.Background(), ConnectionTracingKey, tracingID))
 	s.sentPacketHandler, s.receivedPacketHandler = ackhandler.NewAckHandler(
 		initialPacketNumber,
 		getMaxPacketSize(s.conn.RemoteAddr()),
@@ -525,7 +525,10 @@ func (s *connection) preSetup() {
 
 // run the connection main loop
 func (s *connection) run() error {
-	defer s.ctxCancel()
+	var closeErr closeError
+	defer func() {
+		s.ctxCancel(closeErr.err)
+	}()
 
 	s.timer = *newTimer()
 
@@ -552,10 +555,7 @@ func (s *connection) run() error {
 		}
 	}
 
-	var (
-		closeErr           closeError
-		sendQueueAvailable <-chan struct{}
-	)
+	var sendQueueAvailable <-chan struct{}
 
 runLoop:
 	for {
