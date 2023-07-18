@@ -33,6 +33,17 @@ var _ = Describe("Request", func() {
 		Expect(req.RequestURI).To(Equal("/foo"))
 	})
 
+	It("rejects upper-case fields", func() {
+		headers := []qpack.HeaderField{
+			{Name: ":path", Value: "/foo"},
+			{Name: ":authority", Value: "quic.clemente.io"},
+			{Name: ":method", Value: "GET"},
+			{Name: "Content-Length", Value: "42"},
+		}
+		_, err := requestFromHeaders(headers)
+		Expect(err).To(MatchError("header field is not lower-case: Content-Length"))
+	})
+
 	It("parses path with leading double slashes", func() {
 		headers := []qpack.HeaderField{
 			{Name: ":path", Value: "//foo"},

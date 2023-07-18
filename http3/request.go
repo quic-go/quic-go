@@ -2,6 +2,7 @@ package http3
 
 import (
 	"errors"
+	"fmt"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -15,6 +16,10 @@ func requestFromHeaders(headers []qpack.HeaderField) (*http.Request, error) {
 
 	httpHeaders := http.Header{}
 	for _, h := range headers {
+		// field names need to be lowercase, see section 4.2 of RFC 9114
+		if strings.ToLower(h.Name) != h.Name {
+			return nil, fmt.Errorf("header field is not lower-case: %s", h.Name)
+		}
 		switch h.Name {
 		case ":path":
 			path = h.Value
