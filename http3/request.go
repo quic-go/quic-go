@@ -8,6 +8,8 @@ import (
 	"strconv"
 	"strings"
 
+	"golang.org/x/net/http/httpguts"
+
 	"github.com/quic-go/qpack"
 )
 
@@ -35,6 +37,9 @@ func requestFromHeaders(headers []qpack.HeaderField) (*http.Request, error) {
 			contentLengthStr = h.Value
 		default:
 			if !h.IsPseudo() {
+				if !httpguts.ValidHeaderFieldName(h.Name) {
+					return nil, fmt.Errorf("invalid header field name: %q", h.Name)
+				}
 				httpHeaders.Add(h.Name, h.Value)
 			}
 		}
