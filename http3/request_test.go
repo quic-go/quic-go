@@ -55,6 +55,17 @@ var _ = Describe("Request", func() {
 		Expect(err).To(MatchError(`invalid header field name: "@"`))
 	})
 
+	It("rejects invalid field values", func() {
+		headers := []qpack.HeaderField{
+			{Name: ":path", Value: "/foo"},
+			{Name: ":authority", Value: "quic.clemente.io"},
+			{Name: ":method", Value: "GET"},
+			{Name: "content", Value: "\n"},
+		}
+		_, err := requestFromHeaders(headers)
+		Expect(err).To(MatchError(`invalid header field value for content: "\n"`))
+	})
+
 	It("parses path with leading double slashes", func() {
 		headers := []qpack.HeaderField{
 			{Name: ":path", Value: "//foo"},
