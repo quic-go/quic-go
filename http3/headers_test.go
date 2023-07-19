@@ -317,6 +317,14 @@ var _ = Describe("Response", func() {
 		Expect(err).To(MatchError("received pseudo header :status after a regular header field"))
 	})
 
+	It("rejects response with no status field", func() {
+		headers := []qpack.HeaderField{
+			{Name: "content-length", Value: "42"},
+		}
+		_, err := responseFromHeaders(headers)
+		Expect(err).To(MatchError("missing status field"))
+	})
+
 	It("rejects invalid status codes", func() {
 		headers := []qpack.HeaderField{
 			{Name: ":status", Value: "foobar"},

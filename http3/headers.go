@@ -177,6 +177,9 @@ func responseFromHeaders(headerFields []qpack.HeaderField) (*http.Response, erro
 	if err != nil {
 		return nil, err
 	}
+	if hdr.Status == "" {
+		return nil, errors.New("missing status field")
+	}
 	rsp := &http.Response{
 		Proto:         "HTTP/3.0",
 		ProtoMajor:    3,
