@@ -106,7 +106,7 @@ func (t *Transport) Listen(tlsConf *tls.Config, conf *Config) (*Listener, error)
 		return nil, errListenerAlreadySet
 	}
 	conf = populateServerConfig(conf)
-	if err := t.init(true); err != nil {
+	if err := t.init(false); err != nil {
 		return nil, err
 	}
 	s, err := newServer(t.conn, t.handlerMap, t.connIDGenerator, tlsConf, conf, t.Tracer, t.closeServer, false)
@@ -135,7 +135,7 @@ func (t *Transport) ListenEarly(tlsConf *tls.Config, conf *Config) (*EarlyListen
 		return nil, errListenerAlreadySet
 	}
 	conf = populateServerConfig(conf)
-	if err := t.init(true); err != nil {
+	if err := t.init(false); err != nil {
 		return nil, err
 	}
 	s, err := newServer(t.conn, t.handlerMap, t.connIDGenerator, tlsConf, conf, t.Tracer, t.closeServer, true)
@@ -152,7 +152,7 @@ func (t *Transport) Dial(ctx context.Context, addr net.Addr, tlsConf *tls.Config
 		return nil, err
 	}
 	conf = populateConfig(conf)
-	if err := t.init(false); err != nil {
+	if err := t.init(t.isSingleUse); err != nil {
 		return nil, err
 	}
 	var onClose func()
@@ -170,7 +170,7 @@ func (t *Transport) DialEarly(ctx context.Context, addr net.Addr, tlsConf *tls.C
 		return nil, err
 	}
 	conf = populateConfig(conf)
-	if err := t.init(false); err != nil {
+	if err := t.init(t.isSingleUse); err != nil {
 		return nil, err
 	}
 	var onClose func()
@@ -182,7 +182,7 @@ func (t *Transport) DialEarly(ctx context.Context, addr net.Addr, tlsConf *tls.C
 	return dial(ctx, newSendConn(t.conn, addr), t.connIDGenerator, t.handlerMap, tlsConf, conf, onClose, true)
 }
 
-func (t *Transport) init(isServer bool) error {
+func (t *Transport) init(allowZeroLengthConnIDs bool) error {
 	t.initOnce.Do(func() {
 		var conn rawConn
 		if c, ok := t.Conn.(rawConn); ok {
@@ -210,7 +210,7 @@ func (t *Transport) init(isServer bool) error {
 			t.connIDLen = t.ConnectionIDGenerator.ConnectionIDLen()
 		} else {
 			connIDLen := t.ConnectionIDLength
-			if t.ConnectionIDLength == 0 && (!t.isSingleUse || isServer) {
+			if t.ConnectionIDLength == 0 && !allowZeroLengthConnIDs {
 				connIDLen = protocol.DefaultConnectionIDLength
 			}
 			t.connIDLen = connIDLen
@@ -225,8 +225,10 @@ func (t *Transport) init(isServer bool) error {
 }
 
 // WriteTo sends a packet on the underlying connection.
-// It must not be called before either Listen, ListenEarly, Dial or DialEarly has been called.
 func (t *Transport) WriteTo(b []byte, addr net.Addr) (int, error) {
+	if err := t.init(false); err != nil {
+		return 0, err
+	}
 	return t.conn.WritePacket(b, uint16(len(b)), addr, nil)
 }
 
