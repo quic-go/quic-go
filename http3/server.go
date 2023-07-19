@@ -573,8 +573,7 @@ func (s *Server) handleRequest(conn quic.Connection, str quic.Stream, decoder *q
 	}
 	req, err := requestFromHeaders(hfs)
 	if err != nil {
-		// TODO: use the right error code
-		return newStreamError(ErrCodeGeneralProtocolError, err)
+		return newStreamError(ErrCodeMessageError, err)
 	}
 
 	connState := conn.ConnectionState().TLS
