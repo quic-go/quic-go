@@ -426,7 +426,15 @@ func (c *client) doRequest(req *http.Request, conn quic.EarlyConnection, str qui
 	connState := conn.ConnectionState().TLS
 	res.TLS = &connState
 	res.Request = req
-	respBody := newResponseBody(hstr, conn, reqDone)
+	// Check that the server doesn't send more data in DATA frames than indicated by the Content-Length header (if set).
+	// See section 4.1.2 of RFC 9114.
+	var httpStr Stream
+	if _, ok := req.Header["Content-Length"]; ok && req.ContentLength >= 0 {
+		httpStr = newLengthLimitedStream(hstr, req.ContentLength)
+	} else {
+		httpStr = hstr
+	}
+	respBody := newResponseBody(httpStr, conn, reqDone)
 
 	// Rules for when to set Content-Length are defined in https://tools.ietf.org/html/rfc7230#section-3.3.2.
 	_, hasTransferEncoding := res.Header["Transfer-Encoding"]
