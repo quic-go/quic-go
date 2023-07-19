@@ -2,6 +2,7 @@ package quic
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"io"
 	mrand "math/rand"
@@ -318,6 +319,7 @@ var _ = Describe("Send Stream", func() {
 			Expect(str.Context().Done()).ToNot(BeClosed())
 			Expect(str.Close()).To(Succeed())
 			Expect(str.Context().Done()).To(BeClosed())
+			Expect(context.Cause(str.Context())).To(MatchError(context.Canceled))
 		})
 
 		Context("flow control blocking", func() {
@@ -668,6 +670,7 @@ var _ = Describe("Send Stream", func() {
 				Expect(str.Context().Done()).ToNot(BeClosed())
 				str.closeForShutdown(testErr)
 				Expect(str.Context().Done()).To(BeClosed())
+				Expect(context.Cause(str.Context())).To(MatchError(testErr))
 			})
 		})
 	})
@@ -846,6 +849,8 @@ var _ = Describe("Send Stream", func() {
 				Expect(str.Context().Done()).ToNot(BeClosed())
 				str.CancelWrite(1234)
 				Expect(str.Context().Done()).To(BeClosed())
+				Expect(context.Cause(str.Context())).To(BeAssignableToTypeOf(&StreamError{}))
+				Expect(context.Cause(str.Context()).(*StreamError).ErrorCode).To(Equal(StreamErrorCode(1234)))
 			})
 
 			It("doesn't allow further calls to Write", func() {

@@ -122,6 +122,8 @@ type SendStream interface {
 	// The Context is canceled as soon as the write-side of the stream is closed.
 	// This happens when Close() or CancelWrite() is called, or when the peer
 	// cancels the read-side of their stream.
+	// The cancellation cause is set to the error that caused the stream to
+	// close, or `context.Canceled` in case the stream is closed without error.
 	Context() context.Context
 	// SetWriteDeadline sets the deadline for future Write calls
 	// and any currently-blocked Write call.
