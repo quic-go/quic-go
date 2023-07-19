@@ -262,3 +262,51 @@ var _ = Describe("Request", func() {
 		})
 	})
 })
+
+var _ = Describe("Response", func() {
+	It("populates responses", func() {
+		headers := []qpack.HeaderField{
+			{Name: ":status", Value: "200"},
+			{Name: "content-length", Value: "42"},
+		}
+		rsp, err := responseFromHeaders(headers)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(rsp.Proto).To(Equal("HTTP/3.0"))
+		Expect(rsp.ProtoMajor).To(Equal(3))
+		Expect(rsp.ProtoMinor).To(BeZero())
+		Expect(rsp.ContentLength).To(Equal(int64(42)))
+		Expect(rsp.Header).To(HaveLen(1))
+		Expect(rsp.Header.Get("Content-Length")).To(Equal("42"))
+		Expect(rsp.Body).To(BeNil())
+		Expect(rsp.StatusCode).To(BeEquivalentTo(200))
+		Expect(rsp.Status).To(Equal("200 OK"))
+	})
+
+	It("rejects pseudo header fields after regular header fields", func() {
+		headers := []qpack.HeaderField{
+			{Name: "content-length", Value: "42"},
+			{Name: ":status", Value: "200"},
+		}
+		_, err := responseFromHeaders(headers)
+		Expect(err).To(MatchError("received pseudo header :status after a regular header field"))
+	})
+
+	It("rejects invalid status codes", func() {
+		headers := []qpack.HeaderField{
+			{Name: ":status", Value: "foobar"},
+			{Name: "content-length", Value: "42"},
+		}
+		_, err := responseFromHeaders(headers)
+		Expect(err).To(HaveOccurred())
+		Expect(err.Error()).To(ContainSubstring("invalid status code"))
+	})
+
+	It("rejects pseudo header fields defined for requests", func() {
+		headers := []qpack.HeaderField{
+			{Name: ":status", Value: "404"},
+			{Name: ":method", Value: "GET"},
+		}
+		_, err := responseFromHeaders(headers)
+		Expect(err).To(MatchError("invalid response pseudo header: :method"))
+	})
+})
