@@ -44,6 +44,17 @@ var _ = Describe("Request", func() {
 		Expect(err).To(MatchError("header field is not lower-case: Content-Length"))
 	})
 
+	It("rejects unknown pseudo headers", func() {
+		headers := []qpack.HeaderField{
+			{Name: ":path", Value: "/foo"},
+			{Name: ":authority", Value: "quic.clemente.io"},
+			{Name: ":method", Value: "GET"},
+			{Name: ":foo", Value: "bar"},
+		}
+		_, err := requestFromHeaders(headers)
+		Expect(err).To(MatchError("unknown pseudo header: :foo"))
+	})
+
 	It("rejects invalid field names", func() {
 		headers := []qpack.HeaderField{
 			{Name: ":path", Value: "/foo"},

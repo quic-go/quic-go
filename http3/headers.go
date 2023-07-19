@@ -60,6 +60,8 @@ func parseHeaders(headers []qpack.HeaderField, isRequest bool) (header, error) {
 			case ":status":
 				hdr.Status = h.Value
 				isResponsePseudoHeader = true
+			default:
+				return header{}, fmt.Errorf("unknown pseudo header: %s", h.Name)
 			}
 			if isRequest && isResponsePseudoHeader {
 				return header{}, fmt.Errorf("invalid request pseudo header: %s", h.Name)
