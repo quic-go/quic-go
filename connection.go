@@ -1668,8 +1668,8 @@ func (s *connection) handleTransportParameters(params *wire.TransportParameters)
 		return
 	}
 
-	// validate that the new value of the max_datagram_frame_size transport parameter sent by
-	// the server in the handshake is greater than or equal to the stored value
+	// RFC 9221 requires the client to check that the server didn't decrease the
+	// max_datagram_frame_size transport parameter when doing a 0-RTT resumption.
 	if s.perspective == protocol.PerspectiveClient && s.peerParams != nil && s.peerParams.MaxDatagramFrameSize > params.MaxDatagramFrameSize {
 		s.closeLocal(&qerr.TransportError{
 			ErrorCode:    qerr.ProtocolViolation,
