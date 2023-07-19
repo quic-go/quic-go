@@ -26,9 +26,16 @@ type Transport struct {
 	// A single net.PacketConn can only be handled by one Transport.
 	// Bad things will happen if passed to multiple Transports.
 	//
-	// If not done by the user, the connection is passed through OptimizeConn to enable a number of optimizations.
-	// After passing the connection to the Transport, it's invalid to call ReadFrom on the connection.
-	// Calling WriteTo is only valid on the connection returned by OptimizeConn.
+	// A number of optimizations will be enabled if the connections implements the OOBCapablePacketConn interface,
+	// as a *net.UDPConn does.
+	// 1. It enables the Don't Fragment (DF) bit on the IP header.
+	//    This is required to run DPLPMTUD (Path MTU Discovery, RFC 8899).
+	// 2. It enables reading of the ECN bits from the IP header.
+	//    This allows the remote node to speed up its loss detection and recovery.
+	// 3. It uses batched syscalls (recvmmsg) to more efficiently receive packets from the socket.
+	// 4. It uses Generic Segmentation Offload (GSO) to efficiently send batches of packets (on Linux).
+	//
+	// After passing the connection to the Transport, it's invalid to call ReadFrom or WriteTo on the connection.
 	Conn net.PacketConn
 
 	// The length of the connection ID in bytes.
@@ -99,7 +106,7 @@ func (t *Transport) Listen(tlsConf *tls.Config, conf *Config) (*Listener, error)
 		return nil, errListenerAlreadySet
 	}
 	conf = populateServerConfig(conf)
-	if err := t.init(true); err != nil {
+	if err := t.init(false); err != nil {
 		return nil, err
 	}
 	s, err := newServer(t.conn, t.handlerMap, t.connIDGenerator, tlsConf, conf, t.Tracer, t.closeServer, false)
@@ -128,7 +135,7 @@ func (t *Transport) ListenEarly(tlsConf *tls.Config, conf *Config) (*EarlyListen
 		return nil, errListenerAlreadySet
 	}
 	conf = populateServerConfig(conf)
-	if err := t.init(true); err != nil {
+	if err := t.init(false); err != nil {
 		return nil, err
 	}
 	s, err := newServer(t.conn, t.handlerMap, t.connIDGenerator, tlsConf, conf, t.Tracer, t.closeServer, true)
@@ -145,7 +152,7 @@ func (t *Transport) Dial(ctx context.Context, addr net.Addr, tlsConf *tls.Config
 		return nil, err
 	}
 	conf = populateConfig(conf)
-	if err := t.init(false); err != nil {
+	if err := t.init(t.isSingleUse); err != nil {
 		return nil, err
 	}
 	var onClose func()
@@ -163,7 +170,7 @@ func (t *Transport) DialEarly(ctx context.Context, addr net.Addr, tlsConf *tls.C
 		return nil, err
 	}
 	conf = populateConfig(conf)
-	if err := t.init(false); err != nil {
+	if err := t.init(t.isSingleUse); err != nil {
 		return nil, err
 	}
 	var onClose func()
@@ -175,7 +182,7 @@ func (t *Transport) DialEarly(ctx context.Context, addr net.Addr, tlsConf *tls.C
 	return dial(ctx, newSendConn(t.conn, addr), t.connIDGenerator, t.handlerMap, tlsConf, conf, onClose, true)
 }
 
-func (t *Transport) init(isServer bool) error {
+func (t *Transport) init(allowZeroLengthConnIDs bool) error {
 	t.initOnce.Do(func() {
 		var conn rawConn
 		if c, ok := t.Conn.(rawConn); ok {
@@ -203,7 +210,7 @@ func (t *Transport) init(isServer bool) error {
 			t.connIDLen = t.ConnectionIDGenerator.ConnectionIDLen()
 		} else {
 			connIDLen := t.ConnectionIDLength
-			if t.ConnectionIDLength == 0 && (!t.isSingleUse || isServer) {
+			if t.ConnectionIDLength == 0 && !allowZeroLengthConnIDs {
 				connIDLen = protocol.DefaultConnectionIDLength
 			}
 			t.connIDLen = connIDLen
@@ -215,6 +222,14 @@ func (t *Transport) init(isServer bool) error {
 		go t.runSendQueue()
 	})
 	return t.initErr
+}
+
+// WriteTo sends a packet on the underlying connection.
+func (t *Transport) WriteTo(b []byte, addr net.Addr) (int, error) {
+	if err := t.init(false); err != nil {
+		return 0, err
+	}
+	return t.conn.WritePacket(b, uint16(len(b)), addr, nil)
 }
 
 func (t *Transport) enqueueClosePacket(p closePacket) {
