@@ -30,7 +30,7 @@ type header struct {
 
 func parseHeaders(headers []qpack.HeaderField, isRequest bool) (header, error) {
 	hdr := header{Headers: make(http.Header, len(headers))}
-	var readFirstRegularHeader bool
+	var readFirstRegularHeader, readContentLength bool
 	var contentLengthStr string
 	for _, h := range headers {
 		// field names need to be lowercase, see section 4.2 of RFC 9114
@@ -74,7 +74,14 @@ func parseHeaders(headers []qpack.HeaderField, isRequest bool) (header, error) {
 			readFirstRegularHeader = true
 			switch h.Name {
 			case "content-length":
-				contentLengthStr = h.Value
+				// Ignore duplicate Content-Length headers.
+				// Fail if the duplicates differ.
+				if !readContentLength {
+					readContentLength = true
+					contentLengthStr = h.Value
+				} else if contentLengthStr != h.Value {
+					return header{}, fmt.Errorf("contradicting content lengths (%s and %s)", contentLengthStr, h.Value)
+				}
 			default:
 				hdr.Headers.Add(h.Name, h.Value)
 			}
