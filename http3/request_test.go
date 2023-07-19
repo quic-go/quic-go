@@ -10,7 +10,7 @@ import (
 )
 
 var _ = Describe("Request", func() {
-	It("populates request", func() {
+	It("populates requests", func() {
 		headers := []qpack.HeaderField{
 			{Name: ":path", Value: "/foo"},
 			{Name: ":authority", Value: "quic.clemente.io"},
@@ -87,6 +87,17 @@ var _ = Describe("Request", func() {
 		_, err := requestFromHeaders(headers)
 		Expect(err).To(HaveOccurred())
 		Expect(err.Error()).To(ContainSubstring("invalid content length"))
+	})
+
+	It("rejects pseudo header fields defined for responses", func() {
+		headers := []qpack.HeaderField{
+			{Name: ":path", Value: "/foo"},
+			{Name: ":authority", Value: "quic.clemente.io"},
+			{Name: ":method", Value: "GET"},
+			{Name: ":status", Value: "404"},
+		}
+		_, err := requestFromHeaders(headers)
+		Expect(err).To(MatchError("invalid request pseudo header: :status"))
 	})
 
 	It("parses path with leading double slashes", func() {
