@@ -296,6 +296,13 @@ type Config struct {
 	// If this value is zero, it will default to 15 MB.
 	// Values larger than the maximum varint (quicvarint.Max) will be clipped to that value.
 	MaxConnectionReceiveWindow uint64
+	// MaxUDPPayloadSize limits the size of UDP payloads that the endpoint is willing to receive.
+	// QUIC connections start sending packets around 1280 bytes during the handshake,
+	// and then run DPLPMTUD to determine the PMTU, up to provided MaxUDPPayloadSize, supported by the link.
+	// If this value is zero, it will default to 65527.
+	// Values larger than the maximum varint (quicvarint.Max) will be clipped to that value.
+	// Values below 1200 are invalid and will fail to connect.
+	MaxUDPPayloadSize uint64
 	// AllowConnectionWindowIncrease is called every time the connection flow controller attempts
 	// to increase the connection flow control window.
 	// If set, the caller can prevent an increase of the window. Typically, it would do so to
@@ -321,6 +328,7 @@ type Config struct {
 	// This allows the sending of QUIC packets that fully utilize the available MTU of the path.
 	// Path MTU discovery is only available on systems that allow setting of the Don't Fragment (DF) bit.
 	// If unavailable or disabled, packets will be at most 1252 (IPv4) / 1232 (IPv6) bytes in size.
+	// Otherwise, the packets will be at most MaxUDPPayloadSize bytes in size.
 	DisablePathMTUDiscovery bool
 	// DisableVersionNegotiationPackets disables the sending of Version Negotiation packets.
 	// This can be useful if version information is exchanged out-of-band.

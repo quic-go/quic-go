@@ -96,6 +96,10 @@ func populateConfig(config *Config) *Config {
 	if maxConnectionReceiveWindow == 0 {
 		maxConnectionReceiveWindow = protocol.DefaultMaxReceiveConnectionFlowControlWindow
 	}
+	maxUDPPayloadSize := config.MaxUDPPayloadSize
+	if maxUDPPayloadSize == 0 {
+		maxUDPPayloadSize = protocol.DefaultMaxUDPPayloadSize
+	}
 	maxIncomingStreams := config.MaxIncomingStreams
 	if maxIncomingStreams == 0 {
 		maxIncomingStreams = protocol.DefaultMaxIncomingStreams
@@ -123,6 +127,7 @@ func populateConfig(config *Config) *Config {
 		InitialConnectionReceiveWindow:   initialConnectionReceiveWindow,
 		MaxConnectionReceiveWindow:       maxConnectionReceiveWindow,
 		AllowConnectionWindowIncrease:    config.AllowConnectionWindowIncrease,
+		MaxUDPPayloadSize:                maxUDPPayloadSize,
 		MaxIncomingStreams:               maxIncomingStreams,
 		MaxIncomingUniStreams:            maxIncomingUniStreams,
 		TokenStore:                       config.TokenStore,

@@ -111,6 +111,7 @@ func (p *TransportParameters) unmarshal(r *bytes.Reader, sentBy protocol.Perspec
 		readActiveConnectionIDLimit         bool
 	)
 
+	p.MaxUDPPayloadSize = protocol.DefaultMaxUDPPayloadSize
 	p.AckDelayExponent = protocol.DefaultAckDelayExponent
 	p.MaxAckDelay = protocol.DefaultMaxAckDelay
 	p.MaxDatagramFrameSize = protocol.InvalidByteCount
@@ -352,8 +353,8 @@ func (p *TransportParameters) Marshal(pers protocol.Perspective) []byte {
 	b = p.marshalVarintParam(b, initialMaxStreamsUniParameterID, uint64(p.MaxUniStreamNum))
 	// idle_timeout
 	b = p.marshalVarintParam(b, maxIdleTimeoutParameterID, uint64(p.MaxIdleTimeout/time.Millisecond))
-	// max_packet_size
-	b = p.marshalVarintParam(b, maxUDPPayloadSizeParameterID, uint64(protocol.MaxPacketBufferSize))
+	// max_udp_payload_size
+	b = p.marshalVarintParam(b, maxUDPPayloadSizeParameterID, uint64(p.MaxUDPPayloadSize))
 	// max_ack_delay
 	// Only send it if is different from the default value.
 	if p.MaxAckDelay != protocol.DefaultMaxAckDelay {
@@ -489,8 +490,8 @@ func (p *TransportParameters) String() string {
 		logString += "RetrySourceConnectionID: %s, "
 		logParams = append(logParams, p.RetrySourceConnectionID)
 	}
-	logString += "InitialMaxStreamDataBidiLocal: %d, InitialMaxStreamDataBidiRemote: %d, InitialMaxStreamDataUni: %d, InitialMaxData: %d, MaxBidiStreamNum: %d, MaxUniStreamNum: %d, MaxIdleTimeout: %s, AckDelayExponent: %d, MaxAckDelay: %s, ActiveConnectionIDLimit: %d"
-	logParams = append(logParams, []interface{}{p.InitialMaxStreamDataBidiLocal, p.InitialMaxStreamDataBidiRemote, p.InitialMaxStreamDataUni, p.InitialMaxData, p.MaxBidiStreamNum, p.MaxUniStreamNum, p.MaxIdleTimeout, p.AckDelayExponent, p.MaxAckDelay, p.ActiveConnectionIDLimit}...)
+	logString += "MaxUDPPayloadSize: %d, InitialMaxStreamDataBidiLocal: %d, InitialMaxStreamDataBidiRemote: %d, InitialMaxStreamDataUni: %d, InitialMaxData: %d, MaxBidiStreamNum: %d, MaxUniStreamNum: %d, MaxIdleTimeout: %s, AckDelayExponent: %d, MaxAckDelay: %s, ActiveConnectionIDLimit: %d"
+	logParams = append(logParams, []interface{}{p.MaxUDPPayloadSize, p.InitialMaxStreamDataBidiLocal, p.InitialMaxStreamDataBidiRemote, p.InitialMaxStreamDataUni, p.InitialMaxData, p.MaxBidiStreamNum, p.MaxUniStreamNum, p.MaxIdleTimeout, p.AckDelayExponent, p.MaxAckDelay, p.ActiveConnectionIDLimit}...)
 	if p.StatelessResetToken != nil { // the client never sends a stateless reset token
 		logString += ", StatelessResetToken: %#x"
 		logParams = append(logParams, *p.StatelessResetToken)
