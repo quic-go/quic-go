@@ -64,8 +64,7 @@ func (w *responseWriter) WriteHeader(status int) {
 			w.header.Set("Date", time.Now().UTC().Format(http.TimeFormat))
 		}
 		// Content-Length checking
-		// use ParseUint instead of ParseInt, as negative values are invalid and will
-		// be discarded with a warning
+		// use ParseUint instead of ParseInt, as negative values are invalid
 		if clen := w.header.Get("Content-Length"); clen != "" {
 			if cl, err := strconv.ParseUint(clen, 10, 63); err == nil {
 				w.contentLen = int64(cl)
