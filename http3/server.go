@@ -579,7 +579,16 @@ func (s *Server) handleRequest(conn quic.Connection, str quic.Stream, decoder *q
 	connState := conn.ConnectionState().TLS
 	req.TLS = &connState
 	req.RemoteAddr = conn.RemoteAddr().String()
-	body := newRequestBody(newStream(str, onFrameError))
+
+	// Check that the client doesn't send more data in DATA frames than indicated by the Content-Length header (if set).
+	// See section 4.1.2 of RFC 9114.
+	var httpStr Stream
+	if _, ok := req.Header["Content-Length"]; ok && req.ContentLength >= 0 {
+		httpStr = newLengthLimitedStream(newStream(str, onFrameError), req.ContentLength)
+	} else {
+		httpStr = newStream(str, onFrameError)
+	}
+	body := newRequestBody(httpStr)
 	req.Body = body
 
 	if s.logger.Debug() {
