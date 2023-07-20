@@ -3,6 +3,7 @@ package http3
 import (
 	"bufio"
 	"bytes"
+	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
@@ -55,7 +56,12 @@ func (w *responseWriter) WriteHeader(status int) {
 		return
 	}
 
-	if status < 100 || status >= 200 {
+	// http status must be 3 digits
+	if status < 100 || status > 999 {
+		panic(fmt.Sprintf("invalid WriteHeader code %v", status))
+	}
+
+	if status >= 200 {
 		w.headerWritten = true
 		// Add Date header.
 		// This is what the standard library does.
