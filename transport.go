@@ -330,6 +330,10 @@ func (t *Transport) listen(conn rawConn) {
 			continue
 		}
 		if err != nil {
+			// Windows returns an error when receiving a UDP datagram that doesn't fit into the provided buffer.
+			if isRecvMsgSizeErr(err) {
+				continue
+			}
 			t.close(err)
 			return
 		}
