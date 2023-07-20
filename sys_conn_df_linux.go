@@ -57,10 +57,12 @@ func maybeSetGSO(rawConn syscall.RawConn) bool {
 	return true
 }
 
-func isMsgSizeErr(err error) bool {
+func isSendMsgSizeErr(err error) bool {
 	// https://man7.org/linux/man-pages/man7/udp.7.html
 	return errors.Is(err, unix.EMSGSIZE)
 }
+
+func isRecvMsgSizeErr(err error) bool { return false }
 
 func appendUDPSegmentSizeMsg(b []byte, size uint16) []byte {
 	startLen := len(b)

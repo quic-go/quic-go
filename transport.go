@@ -340,6 +340,9 @@ func (t *Transport) listen(conn rawConn) {
 			continue
 		}
 		if err != nil {
+			if isRecvMsgSizeErr(err) {
+				continue
+			}
 			t.close(err)
 			return
 		}
