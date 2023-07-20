@@ -64,9 +64,10 @@ func (w *responseWriter) WriteHeader(status int) {
 			w.header.Set("Date", time.Now().UTC().Format(http.TimeFormat))
 		}
 		// Content-Length checking
+		// use ParseUint instead of ParseInt, as negative values are invalid
 		if clen := w.header.Get("Content-Length"); clen != "" {
-			if cl, err := strconv.ParseInt(clen, 10, 64); err == nil {
-				w.contentLen = cl
+			if cl, err := strconv.ParseUint(clen, 10, 63); err == nil {
+				w.contentLen = int64(cl)
 			} else {
 				// emit a warning for malformed Content-Length and remove it
 				w.logger.Errorf("Malformed Content-Length %s", clen)
