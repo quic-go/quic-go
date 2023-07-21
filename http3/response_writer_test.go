@@ -11,9 +11,6 @@ import (
 
 	"github.com/golang/mock/gomock"
 	"github.com/quic-go/qpack"
-
-	. "github.com/onsi/ginkgo/v2"
-	. "github.com/onsi/gomega"
 )
 
 var _ = Describe("Response Writer", func() {
@@ -177,5 +174,10 @@ var _ = Describe("Response Writer", func() {
 		n, err = rw.Write([]byte("foobar"))
 		Expect(n).To(Equal(0))
 		Expect(err).To(Equal(http.ErrContentLength))
+	})
+
+	It(`panics when writing invalid status`, func() {
+		Expect(func() { rw.WriteHeader(99) }).To(Panic())
+		Expect(func() { rw.WriteHeader(1000) }).To(Panic())
 	})
 })
