@@ -47,9 +47,11 @@ func setDF(rawConn syscall.RawConn) (bool, error) {
 	return true, nil
 }
 
-func isMsgSizeErr(err error) bool {
+func isSendMsgSizeErr(err error) bool {
 	return errors.Is(err, unix.EMSGSIZE)
 }
+
+func isRecvMsgSizeErr(error) bool { return false }
 
 func isAtLeastMacOS11() (bool, error) {
 	uname := &unix.Utsname{}
