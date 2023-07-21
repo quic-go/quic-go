@@ -178,4 +178,9 @@ var _ = Describe("Response Writer", func() {
 		Expect(n).To(Equal(0))
 		Expect(err).To(Equal(http.ErrContentLength))
 	})
+
+	It(`panics when writing invalid status`, func() {
+		Expect(func() { rw.WriteHeader(99) }).To(Panic())
+		Expect(func() { rw.WriteHeader(1000) }).To(Panic())
+	})
 })
