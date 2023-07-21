@@ -87,8 +87,4 @@ var _ = Describe("Crypto Stream Manager", func() {
 		handshakeStream.EXPECT().Finish()
 		Expect(csm.Drop(protocol.EncryptionHandshake)).To(Succeed())
 	})
-
-	It("no-ops when dropping 0-RTT", func() {
-		Expect(csm.Drop(protocol.Encryption0RTT)).To(Succeed())
-	})
 })

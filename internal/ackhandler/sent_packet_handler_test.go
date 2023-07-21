@@ -130,6 +130,13 @@ var _ = Describe("SentPacketHandler", func() {
 		ExpectWithOffset(1, handler.rttStats.SmoothedRTT()).To(Equal(rtt))
 	}
 
+	// setHandshakeConfirmed drops both Initial and Handshake packets and then confirms the handshake
+	setHandshakeConfirmed := func() {
+		handler.DropPackets(protocol.EncryptionInitial)
+		handler.DropPackets(protocol.EncryptionHandshake)
+		handler.SetHandshakeConfirmed()
+	}
+
 	Context("registering sent packets", func() {
 		It("accepts two consecutive packets", func() {
 			sentPacket(ackElicitingPacket(&packet{PacketNumber: 1, EncryptionLevel: protocol.EncryptionHandshake}))
@@ -705,7 +712,7 @@ var _ = Describe("SentPacketHandler", func() {
 
 		It("implements exponential backoff", func() {
 			handler.peerAddressValidated = true
-			handler.SetHandshakeConfirmed()
+			setHandshakeConfirmed()
 			sendTime := time.Now().Add(-time.Hour)
 			sentPacket(ackElicitingPacket(&packet{PacketNumber: 1, SendTime: sendTime}))
 			timeout := handler.GetLossDetectionTimeout().Sub(sendTime)
@@ -729,7 +736,7 @@ var _ = Describe("SentPacketHandler", func() {
 		It("reset the PTO count when receiving an ACK", func() {
 			handler.ReceivedPacket(protocol.EncryptionHandshake)
 			now := time.Now()
-			handler.SetHandshakeConfirmed()
+			setHandshakeConfirmed()
 			sentPacket(ackElicitingPacket(&packet{PacketNumber: 1, SendTime: now.Add(-time.Minute)}))
 			sentPacket(ackElicitingPacket(&packet{PacketNumber: 2, SendTime: now.Add(-time.Minute)}))
 			handler.appDataPackets.pns.(*skippingPacketNumberGenerator).next = 3
@@ -770,7 +777,7 @@ var _ = Describe("SentPacketHandler", func() {
 			Expect(handler.ptoCount).To(BeEquivalentTo(1))
 			Expect(handler.SendMode(time.Now())).To(Equal(SendPTOHandshake))
 			Expect(handler.GetLossDetectionTimeout()).To(Equal(sendTimeHandshake.Add(handler.rttStats.PTO(false) << 1)))
-			handler.SetHandshakeConfirmed()
+			setHandshakeConfirmed()
 			handler.DropPackets(protocol.EncryptionHandshake)
 			// PTO timer based on the 1-RTT packet
 			Expect(handler.GetLossDetectionTimeout()).To(Equal(sendTimeAppData.Add(handler.rttStats.PTO(true)))) // no backoff. PTO count = 0
@@ -780,7 +787,7 @@ var _ = Describe("SentPacketHandler", func() {
 
 		It("allows two 1-RTT PTOs", func() {
 			handler.ReceivedPacket(protocol.EncryptionHandshake)
-			handler.SetHandshakeConfirmed()
+			setHandshakeConfirmed()
 			var lostPackets []protocol.PacketNumber
 			sentPacket(ackElicitingPacket(&packet{
 				PacketNumber: handler.PopPacketNumber(protocol.Encryption1RTT),
@@ -802,7 +809,7 @@ var _ = Describe("SentPacketHandler", func() {
 
 		It("only counts ack-eliciting packets as probe packets", func() {
 			handler.ReceivedPacket(protocol.EncryptionHandshake)
-			handler.SetHandshakeConfirmed()
+			setHandshakeConfirmed()
 			sentPacket(ackElicitingPacket(&packet{
 				PacketNumber: handler.PopPacketNumber(protocol.Encryption1RTT),
 				SendTime:     time.Now().Add(-time.Hour),
@@ -821,7 +828,7 @@ var _ = Describe("SentPacketHandler", func() {
 
 		It("gets two probe packets if PTO expires", func() {
 			handler.ReceivedPacket(protocol.EncryptionHandshake)
-			handler.SetHandshakeConfirmed()
+			setHandshakeConfirmed()
 			sentPacket(ackElicitingPacket(&packet{PacketNumber: handler.PopPacketNumber(protocol.Encryption1RTT)}))
 			sentPacket(ackElicitingPacket(&packet{PacketNumber: handler.PopPacketNumber(protocol.Encryption1RTT)}))
 
@@ -869,7 +876,7 @@ var _ = Describe("SentPacketHandler", func() {
 			Expect(handler.OnLossDetectionTimeout()).To(Succeed())
 			Expect(handler.GetLossDetectionTimeout()).To(BeZero())
 			Expect(handler.SendMode(time.Now())).To(Equal(SendAny))
-			handler.SetHandshakeConfirmed()
+			setHandshakeConfirmed()
 			Expect(handler.GetLossDetectionTimeout()).ToNot(BeZero())
 			Expect(handler.OnLossDetectionTimeout()).To(Succeed())
 			Expect(handler.SendMode(time.Now())).To(Equal(SendPTOAppData))
@@ -877,7 +884,7 @@ var _ = Describe("SentPacketHandler", func() {
 
 		It("resets the send mode when it receives an acknowledgement after queueing probe packets", func() {
 			handler.ReceivedPacket(protocol.EncryptionHandshake)
-			handler.SetHandshakeConfirmed()
+			setHandshakeConfirmed()
 			pn := handler.PopPacketNumber(protocol.Encryption1RTT)
 			sentPacket(ackElicitingPacket(&packet{PacketNumber: pn, SendTime: time.Now().Add(-time.Hour)}))
 			updateRTT(time.Second)
@@ -902,7 +909,7 @@ var _ = Describe("SentPacketHandler", func() {
 
 		It("doesn't set the PTO timer for Path MTU probe packets", func() {
 			handler.ReceivedPacket(protocol.EncryptionHandshake)
-			handler.SetHandshakeConfirmed()
+			setHandshakeConfirmed()
 			updateRTT(time.Second)
 			sentPacket(ackElicitingPacket(&packet{PacketNumber: 5, SendTime: time.Now(), IsPathMTUProbePacket: true}))
 			Expect(handler.GetLossDetectionTimeout()).To(BeZero())
@@ -1021,6 +1028,7 @@ var _ = Describe("SentPacketHandler", func() {
 			// Now receive an ACK for a Handshake packet.
 			// This tells the client that the server completed address validation.
 			sentPacket(handshakePacket(&packet{PacketNumber: 1}))
+			handler.DropPackets(protocol.EncryptionInitial) // sending a Handshake packet drops the Initial packet number space
 			_, err = handler.ReceivedAck(
 				&wire.AckFrame{AckRanges: []wire.AckRange{{Smallest: 1, Largest: 1}}},
 				protocol.EncryptionHandshake,
@@ -1040,7 +1048,8 @@ var _ = Describe("SentPacketHandler", func() {
 			)
 			Expect(err).ToNot(HaveOccurred())
 
-			sentPacket(handshakePacketNonAckEliciting(&packet{PacketNumber: 1})) // also drops Initial packets
+			sentPacket(handshakePacketNonAckEliciting(&packet{PacketNumber: 1}))
+			handler.DropPackets(protocol.EncryptionInitial) // sending a Handshake packet drops the Initial packet number space
 			Expect(handler.GetLossDetectionTimeout()).ToNot(BeZero())
 			Expect(handler.OnLossDetectionTimeout()).To(Succeed())
 			Expect(handler.SendMode(time.Now())).To(Equal(SendPTOHandshake))
@@ -1075,7 +1084,7 @@ var _ = Describe("SentPacketHandler", func() {
 			)
 			Expect(err).ToNot(HaveOccurred())
 			sentPacket(handshakePacketNonAckEliciting(&packet{PacketNumber: 1, SendTime: time.Now()}))
-			Expect(handler.initialPackets).To(BeNil())
+			handler.DropPackets(protocol.EncryptionInitial) // sending a Handshake packet drops the Initial packet number space
 
 			pto := handler.rttStats.PTO(false)
 			Expect(pto).ToNot(BeZero())
@@ -1233,39 +1242,6 @@ var _ = Describe("SentPacketHandler", func() {
 			Expect(handler.bytesInFlight).To(Equal(protocol.ByteCount(10)))
 			Expect(handler.initialPackets).To(BeNil())
 			Expect(handler.handshakePackets.history.Len()).ToNot(BeZero())
-		})
-
-		Context("deleting Initials", func() {
-			BeforeEach(func() { perspective = protocol.PerspectiveClient })
-
-			It("deletes Initials, as a client", func() {
-				for i := 0; i < 6; i++ {
-					sentPacket(ackElicitingPacket(&packet{
-						PacketNumber:    handler.PopPacketNumber(protocol.EncryptionInitial),
-						EncryptionLevel: protocol.EncryptionInitial,
-						Length:          1,
-					}))
-				}
-				Expect(handler.bytesInFlight).To(Equal(protocol.ByteCount(6)))
-				handler.DropPackets(protocol.EncryptionInitial)
-				// DropPackets should be ignored for clients and the Initial packet number space.
-				// It has to be possible to send another Initial packets after this function was called.
-				sentPacket(ackElicitingPacket(&packet{
-					PacketNumber:    handler.PopPacketNumber(protocol.EncryptionInitial),
-					EncryptionLevel: protocol.EncryptionInitial,
-					Length:          1,
-				}))
-				Expect(handler.bytesInFlight).To(Equal(protocol.ByteCount(7)))
-				// Sending a Handshake packet triggers dropping of Initials.
-				sentPacket(ackElicitingPacket(&packet{
-					PacketNumber:    handler.PopPacketNumber(protocol.EncryptionHandshake),
-					EncryptionLevel: protocol.EncryptionHandshake,
-				}))
-				Expect(handler.bytesInFlight).To(Equal(protocol.ByteCount(1)))
-				Expect(lostPackets).To(BeEmpty()) // frames must not be queued for retransmission
-				Expect(handler.initialPackets).To(BeNil())
-				Expect(handler.handshakePackets.history.Len()).ToNot(BeZero())
-			})
 		})
 
 		It("deletes Handshake packets", func() {

@@ -13,70 +13,12 @@ import (
 	"github.com/quic-go/quic-go/internal/wire"
 )
 
-type chunk struct {
-	data     []byte
-	encLevel protocol.EncryptionLevel
-}
-
-type stream struct {
-	chunkChan chan<- chunk
-	encLevel  protocol.EncryptionLevel
-}
-
-func (s *stream) Write(b []byte) (int, error) {
-	data := append([]byte{}, b...)
-	select {
-	case s.chunkChan <- chunk{data: data, encLevel: s.encLevel}:
-	default:
-		panic("chunkChan too small")
-	}
-	return len(b), nil
-}
-
-func initStreams() (chan chunk, *stream /* initial */, *stream /* handshake */) {
-	chunkChan := make(chan chunk, 10)
-	initialStream := &stream{chunkChan: chunkChan, encLevel: protocol.EncryptionInitial}
-	handshakeStream := &stream{chunkChan: chunkChan, encLevel: protocol.EncryptionHandshake}
-	return chunkChan, initialStream, handshakeStream
-}
-
-type handshakeRunner interface {
-	OnReceivedParams(*wire.TransportParameters)
-	OnHandshakeComplete()
-	OnReceivedReadKeys()
-	DropKeys(protocol.EncryptionLevel)
-}
-
-type runner struct {
-	handshakeComplete chan<- struct{}
-}
-
-var _ handshakeRunner = &runner{}
-
-func newRunner(handshakeComplete chan<- struct{}) *runner {
-	return &runner{handshakeComplete: handshakeComplete}
-}
-
-func (r *runner) OnReceivedParams(*wire.TransportParameters) {}
-func (r *runner) OnReceivedReadKeys()                        {}
-func (r *runner) OnHandshakeComplete() {
-	close(r.handshakeComplete)
-}
-func (r *runner) DropKeys(protocol.EncryptionLevel) {}
-
 const alpn = "fuzz"
 
 func main() {
-	cChunkChan, cInitialStream, cHandshakeStream := initStreams()
-	var client, server handshake.CryptoSetup
-	clientHandshakeCompleted := make(chan struct{})
-	client, _ = handshake.NewCryptoSetupClient(
-		cInitialStream,
-		cHandshakeStream,
-		nil,
+	client := handshake.NewCryptoSetupClient(
 		protocol.ConnectionID{},
 		&wire.TransportParameters{ActiveConnectionIDLimit: 2},
-		newRunner(clientHandshakeCompleted),
 		&tls.Config{
 			MinVersion:         tls.VersionTLS13,
 			ServerName:         "localhost",
@@ -91,17 +33,11 @@ func main() {
 		protocol.Version1,
 	)
 
-	sChunkChan, sInitialStream, sHandshakeStream := initStreams()
 	config := testdata.GetTLSConfig()
 	config.NextProtos = []string{alpn}
-	serverHandshakeCompleted := make(chan struct{})
-	server = handshake.NewCryptoSetupServer(
-		sInitialStream,
-		sHandshakeStream,
-		nil,
+	server := handshake.NewCryptoSetupServer(
 		protocol.ConnectionID{},
 		&wire.TransportParameters{ActiveConnectionIDLimit: 2},
-		newRunner(serverHandshakeCompleted),
 		config,
 		false,
 		utils.NewRTTStats(),
@@ -118,29 +54,55 @@ func main() {
 		log.Fatal(err)
 	}
 
-	done := make(chan struct{})
-	go func() {
-		<-serverHandshakeCompleted
-		<-clientHandshakeCompleted
-		close(done)
-	}()
-
+	var clientHandshakeComplete, serverHandshakeComplete bool
 	var messages [][]byte
-messageLoop:
 	for {
-		select {
-		case c := <-cChunkChan:
-			messages = append(messages, c.data)
-			if err := server.HandleMessage(c.data, c.encLevel); err != nil {
-				log.Fatal(err)
+	clientLoop:
+		for {
+			ev := client.NextEvent()
+			//nolint:exhaustive // only need to process a few events
+			switch ev.Kind {
+			case handshake.EventNoEvent:
+				break clientLoop
+			case handshake.EventWriteInitialData:
+				messages = append(messages, ev.Data)
+				if err := server.HandleMessage(ev.Data, protocol.EncryptionInitial); err != nil {
+					log.Fatal(err)
+				}
+			case handshake.EventWriteHandshakeData:
+				messages = append(messages, ev.Data)
+				if err := server.HandleMessage(ev.Data, protocol.EncryptionHandshake); err != nil {
+					log.Fatal(err)
+				}
+			case handshake.EventHandshakeComplete:
+				clientHandshakeComplete = true
 			}
-		case c := <-sChunkChan:
-			messages = append(messages, c.data)
-			if err := client.HandleMessage(c.data, c.encLevel); err != nil {
-				log.Fatal(err)
+		}
+
+	serverLoop:
+		for {
+			ev := server.NextEvent()
+			//nolint:exhaustive // only need to process a few events
+			switch ev.Kind {
+			case handshake.EventNoEvent:
+				break serverLoop
+			case handshake.EventWriteInitialData:
+				messages = append(messages, ev.Data)
+				if err := client.HandleMessage(ev.Data, protocol.EncryptionInitial); err != nil {
+					log.Fatal(err)
+				}
+			case handshake.EventWriteHandshakeData:
+				messages = append(messages, ev.Data)
+				if err := client.HandleMessage(ev.Data, protocol.EncryptionHandshake); err != nil {
+					log.Fatal(err)
+				}
+			case handshake.EventHandshakeComplete:
+				serverHandshakeComplete = true
 			}
-		case <-done:
-			break messageLoop
+		}
+
+		if serverHandshakeComplete && clientHandshakeComplete {
+			break
 		}
 	}
 

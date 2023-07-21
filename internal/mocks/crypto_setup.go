@@ -75,6 +75,18 @@ func (mr *MockCryptoSetupMockRecorder) ConnectionState() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ConnectionState", reflect.TypeOf((*MockCryptoSetup)(nil).ConnectionState))
 }
 
+// DiscardInitialKeys mocks base method.
+func (m *MockCryptoSetup) DiscardInitialKeys() {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "DiscardInitialKeys")
+}
+
+// DiscardInitialKeys indicates an expected call of DiscardInitialKeys.
+func (mr *MockCryptoSetupMockRecorder) DiscardInitialKeys() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DiscardInitialKeys", reflect.TypeOf((*MockCryptoSetup)(nil).DiscardInitialKeys))
+}
+
 // Get0RTTOpener mocks base method.
 func (m *MockCryptoSetup) Get0RTTOpener() (handshake.LongHeaderOpener, error) {
 	m.ctrl.T.Helper()
@@ -222,6 +234,20 @@ func (m *MockCryptoSetup) HandleMessage(arg0 []byte, arg1 protocol.EncryptionLev
 func (mr *MockCryptoSetupMockRecorder) HandleMessage(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HandleMessage", reflect.TypeOf((*MockCryptoSetup)(nil).HandleMessage), arg0, arg1)
+}
+
+// NextEvent mocks base method.
+func (m *MockCryptoSetup) NextEvent() handshake.Event {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "NextEvent")
+	ret0, _ := ret[0].(handshake.Event)
+	return ret0
+}
+
+// NextEvent indicates an expected call of NextEvent.
+func (mr *MockCryptoSetupMockRecorder) NextEvent() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NextEvent", reflect.TypeOf((*MockCryptoSetup)(nil).NextEvent))
 }
 
 // SetHandshakeConfirmed mocks base method.

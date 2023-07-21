@@ -53,16 +53,40 @@ type ShortHeaderSealer interface {
 	KeyPhase() protocol.KeyPhaseBit
 }
 
-type handshakeRunner interface {
-	OnReceivedParams(*wire.TransportParameters)
-	OnHandshakeComplete()
-	OnReceivedReadKeys()
-	DropKeys(protocol.EncryptionLevel)
-}
-
 type ConnectionState struct {
 	tls.ConnectionState
 	Used0RTT bool
+}
+
+// EventKind is the kind of handshake event.
+type EventKind uint8
+
+const (
+	// EventNoEvent signals that there are no new handshake events
+	EventNoEvent EventKind = iota + 1
+	// EventWriteInitialData contains new CRYPTO data to send at the Initial encryption level
+	EventWriteInitialData
+	// EventWriteHandshakeData contains new CRYPTO data to send at the Handshake encryption level
+	EventWriteHandshakeData
+	// EventReceivedReadKeys signals that new decryption keys are available.
+	// It doesn't say which encryption level those keys are for.
+	EventReceivedReadKeys
+	// EventDiscard0RTTKeys signals that the Handshake keys were discarded.
+	EventDiscard0RTTKeys
+	// EventReceivedTransportParameters contains the transport parameters sent by the peer.
+	EventReceivedTransportParameters
+	// EventRestoredTransportParameters contains the transport parameters restored from the session ticket.
+	// It is only used for the client.
+	EventRestoredTransportParameters
+	// EventHandshakeComplete signals that the TLS handshake was completed.
+	EventHandshakeComplete
+)
+
+// Event is a handshake event.
+type Event struct {
+	Kind                EventKind
+	Data                []byte
+	TransportParameters *wire.TransportParameters
 }
 
 // CryptoSetup handles the handshake and protecting / unprotecting packets
@@ -73,7 +97,10 @@ type CryptoSetup interface {
 	GetSessionTicket() ([]byte, error)
 
 	HandleMessage([]byte, protocol.EncryptionLevel) error
+	NextEvent() Event
+
 	SetLargest1RTTAcked(protocol.PacketNumber) error
+	DiscardInitialKeys()
 	SetHandshakeConfirmed()
 	ConnectionState() ConnectionState
 
