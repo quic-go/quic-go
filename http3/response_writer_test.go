@@ -9,8 +9,11 @@ import (
 	mockquic "github.com/quic-go/quic-go/internal/mocks/quic"
 	"github.com/quic-go/quic-go/internal/utils"
 
-	. "github.com/onsi/ginkgo/v2"
-	. "github.com/onsi/gomega"
+    "github.com/golang/mock/gomock"
+	"github.com/quic-go/qpack"
+
+	"github.com/golang/mock/gomock"
+	"github.com/quic-go/qpack"
 )
 
 var _ = Describe("Response Writer", func() {
