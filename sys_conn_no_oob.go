@@ -7,7 +7,7 @@ import (
 	"net/netip"
 )
 
-func newConn(c net.PacketConn, supportsDF bool) (*basicConn, error) {
+func newConn(c net.PacketConn, supportsDF, _ bool) (*basicConn, error) {
 	return &basicConn{PacketConn: c, supportsDF: supportsDF}, nil
 }
 

@@ -9,7 +9,7 @@ import (
 	"golang.org/x/sys/windows"
 )
 
-func newConn(c OOBCapablePacketConn, supportsDF bool) (*basicConn, error) {
+func newConn(c OOBCapablePacketConn, supportsDF, _ bool) (*basicConn, error) {
 	return &basicConn{PacketConn: c, supportsDF: supportsDF}, nil
 }
 

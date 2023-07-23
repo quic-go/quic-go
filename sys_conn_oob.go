@@ -71,7 +71,7 @@ type oobConn struct {
 
 var _ rawConn = &oobConn{}
 
-func newConn(c OOBCapablePacketConn, supportsDF bool) (*oobConn, error) {
+func newConn(c OOBCapablePacketConn, supportsDF, enableGSO bool) (*oobConn, error) {
 	rawConn, err := c.SyscallConn()
 	if err != nil {
 		return nil, err
@@ -130,7 +130,10 @@ func newConn(c OOBCapablePacketConn, supportsDF bool) (*oobConn, error) {
 
 	// Try enabling GSO.
 	// This will only succeed on Linux, and only for kernels > 4.18.
-	supportsGSO := maybeSetGSO(rawConn)
+	var supportsGSO bool
+	if enableGSO {
+		supportsGSO = maybeSetGSO(rawConn)
+	}
 
 	msgs := make([]ipv4.Message, batchSize)
 	for i := range msgs {

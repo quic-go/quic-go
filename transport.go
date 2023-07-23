@@ -57,6 +57,10 @@ type Transport struct {
 	// See section 10.3 of RFC 9000 for details.
 	StatelessResetKey *StatelessResetKey
 
+	// Disable GSO disables the use of Generic Segmentation Offload (GSO).
+	// GSO is an optimization available on Linux that allows sending multiple packets with a single syscall.
+	DisableGSO bool
+
 	// A Tracer traces events that don't belong to a single QUIC connection.
 	Tracer logging.Tracer
 
@@ -189,7 +193,7 @@ func (t *Transport) init(allowZeroLengthConnIDs bool) error {
 			conn = c
 		} else {
 			var err error
-			conn, err = wrapConn(t.Conn)
+			conn, err = wrapConn(t.Conn, !t.DisableGSO)
 			if err != nil {
 				t.initErr = err
 				return
