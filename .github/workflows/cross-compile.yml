@@ -4,7 +4,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        go: [ "1.20.x", "1.21.0-rc.2" ]
+        go: [ "1.20.x", "1.21.0-rc.3" ]
     runs-on: ${{ fromJSON(vars['CROSS_COMPILE_RUNNER_UBUNTU'] || '"ubuntu-latest"') }}
     name: "Cross Compilation (Go ${{matrix.go}})"
     steps:
