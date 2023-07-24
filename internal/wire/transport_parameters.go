@@ -482,15 +482,14 @@ func (p *TransportParameters) ValidFor0RTT(saved *TransportParameters) bool {
 }
 
 // ValidForUpdate checks that the newly received transport parameters do not contain any redueced limit when resuming a 0-RTT connection
-func (p *TransportParameters) ValidForUpdate(new *TransportParameters) bool {
-	// TODO: check max_datagram_frame_size as well when it is saved in session ticket for 0-RTT
-	return new.ActiveConnectionIDLimit >= p.ActiveConnectionIDLimit &&
-		new.InitialMaxData >= p.InitialMaxData &&
-		new.InitialMaxStreamDataBidiLocal >= p.InitialMaxStreamDataBidiLocal &&
-		new.InitialMaxStreamDataBidiRemote >= p.InitialMaxStreamDataBidiRemote &&
-		new.InitialMaxStreamDataUni >= p.InitialMaxStreamDataUni &&
-		new.MaxBidiStreamNum >= p.MaxBidiStreamNum &&
-		new.MaxUniStreamNum >= p.MaxUniStreamNum
+func (p *TransportParameters) ValidForUpdate(saved *TransportParameters) bool {
+	return p.ActiveConnectionIDLimit >= saved.ActiveConnectionIDLimit &&
+		p.InitialMaxData >= saved.InitialMaxData &&
+		p.InitialMaxStreamDataBidiLocal >= saved.InitialMaxStreamDataBidiLocal &&
+		p.InitialMaxStreamDataBidiRemote >= saved.InitialMaxStreamDataBidiRemote &&
+		p.InitialMaxStreamDataUni >= saved.InitialMaxStreamDataUni &&
+		p.MaxBidiStreamNum >= saved.MaxBidiStreamNum &&
+		p.MaxUniStreamNum >= saved.MaxUniStreamNum
 }
 
 // String returns a string representation, intended for logging.

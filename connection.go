@@ -1666,7 +1666,7 @@ func (s *connection) handleTransportParameters(params *wire.TransportParameters)
 		}
 	}
 
-	if s.perspective == protocol.PerspectiveClient && s.peerParams != nil && s.ConnectionState().Used0RTT && !s.peerParams.ValidForUpdate(params) {
+	if s.perspective == protocol.PerspectiveClient && s.peerParams != nil && s.ConnectionState().Used0RTT && !params.ValidForUpdate(s.peerParams) {
 		return &qerr.TransportError{
 			ErrorCode:    qerr.ProtocolViolation,
 			ErrorMessage: "server sent reduced limits after accepting 0-RTT data",
