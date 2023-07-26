@@ -7,6 +7,7 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"net/url"
 	"sync/atomic"
 	"time"
 
@@ -326,6 +327,56 @@ var _ = Describe("RoundTripper", func() {
 			_, err := rt.RoundTrip(req)
 			Expect(err).To(MatchError("http3: invalid method \"foobär\""))
 			Expect(req.Body.(*mockBody).closed).To(BeTrue())
+		})
+
+		It("rejects non-masque requests with an invalid scheme", func() {
+			req.URL.Scheme = "htttp"
+			_, err := rt.RoundTrip(req)
+			Expect(err).To(MatchError("http3: unsupported protocol scheme: htttp"))
+		})
+
+		It("allows requests with a masque scheme", func() {
+			testErr := errors.New("test err")
+			req, err := http.NewRequest("CONNECT-UDP", "masque://quic.clemente.io/file1.html", nil)
+			rt.newClient = func(string, *tls.Config, *roundTripperOpts, *quic.Config, dialFunc) (roundTripCloser, error) {
+				cl := NewMockRoundTripCloser(mockCtrl)
+				cl.EXPECT().RoundTripOpt(gomock.Any(), gomock.Any()).Return(nil, testErr)
+				return cl, nil
+			}
+			_, err = rt.RoundTrip(req)
+			Expect(err).To(MatchError(testErr))
+		})
+
+		It("sets DontCloseRequestStream on proxy methods", func() {
+			req.Body = &mockBody{}
+			req, err := http.NewRequest("CONNECT-UDP", "masque://quic.clemente.io/file1.html", nil)
+			rt.newClient = func(hostname string, tlsConf *tls.Config, opts *roundTripperOpts, conf *quic.Config, dialer dialFunc) (roundTripCloser, error) {
+				cl := NewMockRoundTripCloser(mockCtrl)
+				cl.EXPECT().RoundTripOpt(gomock.Any(), gomock.Any()).DoAndReturn(func(r *http.Request, opt RoundTripOpt) (*http.Response, error) {
+					Expect(opt.DontCloseRequestStream).To(BeTrue())
+					return nil, nil
+				})
+				return cl, nil
+			}
+			_, err = rt.RoundTrip(req)
+			Expect(err).ToNot(HaveOccurred())
+		})
+
+		It("properly sets hostname on proxy methods", func() {
+			testErr := errors.New("test err")
+			req, err := http.NewRequest("CONNECT-UDP", "masque://quic.clemente.io/file1.html", nil)
+			Expect(err).ToNot(HaveOccurred())
+			proxyURL, err := url.Parse("https://proxy-host:443")
+			Expect(err).ToNot(HaveOccurred())
+			rt.Proxy = http.ProxyURL(proxyURL)
+			rt.newClient = func(hostname string, tlsConf *tls.Config, opts *roundTripperOpts, conf *quic.Config, dialer dialFunc) (roundTripCloser, error) {
+				Expect(hostname).To(Equal("proxy-host:443"))
+				cl := NewMockRoundTripCloser(mockCtrl)
+				cl.EXPECT().RoundTripOpt(gomock.Any(), gomock.Any()).Return(nil, testErr)
+				return cl, nil
+			}
+			_, err = rt.RoundTrip(req)
+			Expect(err).To(MatchError(testErr))
 		})
 	})
 

@@ -15,6 +15,7 @@ import (
 // When a stream is taken over, it's the caller's responsibility to close the stream.
 type HTTPStreamer interface {
 	HTTPStream() Stream
+	HTTPConnection() quic.Connection
 }
 
 type StreamCreator interface {
@@ -56,6 +57,10 @@ func newRequestBody(str Stream) *body {
 func (r *body) HTTPStream() Stream {
 	r.wasHijacked = true
 	return r.str
+}
+
+func (r *body) HTTPConnection() quic.Connection {
+	return nil
 }
 
 func (r *body) wasStreamHijacked() bool {
@@ -133,4 +138,8 @@ func (r *hijackableBody) Close() error {
 
 func (r *hijackableBody) HTTPStream() Stream {
 	return r.str
+}
+
+func (r *hijackableBody) HTTPConnection() quic.Connection {
+	return r.conn
 }

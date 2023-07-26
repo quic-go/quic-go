@@ -8,6 +8,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/url"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -83,6 +84,17 @@ type RoundTripper struct {
 	// Zero means to use a default limit.
 	MaxResponseHeaderBytes int64
 
+	// Proxy specifies a function to return a proxy for a given
+	// Request. If the function returns a non-nil error, the
+	// request is aborted with the provided error.
+	//
+	// The proxy type is determined by the URL scheme. "http",
+	// "https", and "socks5" are supported. If the scheme is empty,
+	// "http" is assumed.
+	//
+	// If Proxy is nil or returns a nil *URL, no proxy is used.
+	Proxy func(*http.Request) (*url.URL, error)
+
 	newClient func(hostname string, tlsConf *tls.Config, opts *roundTripperOpts, conf *quic.Config, dialer dialFunc) (roundTripCloser, error) // so we can mock it in tests
 	clients   map[string]*roundTripCloserWithCount
 	transport *quic.Transport
@@ -112,7 +124,7 @@ func (r *RoundTripper) RoundTripOpt(req *http.Request, opt RoundTripOpt) (*http.
 		closeRequestBody(req)
 		return nil, errors.New("http3: nil Request.URL")
 	}
-	if req.URL.Scheme != "https" {
+	if req.URL.Scheme != "https" && req.URL.Scheme != "masque" {
 		closeRequestBody(req)
 		return nil, fmt.Errorf("http3: unsupported protocol scheme: %s", req.URL.Scheme)
 	}
@@ -140,7 +152,20 @@ func (r *RoundTripper) RoundTripOpt(req *http.Request, opt RoundTripOpt) (*http.
 		return nil, fmt.Errorf("http3: invalid method %q", req.Method)
 	}
 
-	hostname := authorityAddr("https", hostnameFromRequest(req))
+	if validProxyMethod(req.Method) {
+		opt.DontCloseRequestStream = true
+	}
+
+	hostname := ""
+	if r.Proxy != nil {
+		if proxyURI, _ := r.Proxy(req); proxyURI != nil {
+			hostname = authorityAddr("https", proxyURI.Host)
+		}
+	}
+	if hostname == "" {
+		hostname = authorityAddr("https", hostnameFromRequest(req))
+	}
+
 	cl, isReused, err := r.getClient(hostname, opt.OnlyCachedConn)
 	if err != nil {
 		return nil, err
@@ -254,6 +279,10 @@ func closeRequestBody(req *http.Request) {
 	if req.Body != nil {
 		req.Body.Close()
 	}
+}
+
+func validProxyMethod(method string) bool {
+	return method == http.MethodConnect || method == "CONNECT-UDP"
 }
 
 func validMethod(method string) bool {

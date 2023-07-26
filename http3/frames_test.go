@@ -128,12 +128,25 @@ var _ = Describe("Frames", func() {
 		})
 
 		Context("HTTP Datagrams", func() {
-			It("reads the SETTINGS_H3_DATAGRAM value", func() {
+			It("reads the rfc SETTINGS_H3_DATAGRAM value", func() {
 				settings := quicvarint.Append(nil, settingDatagram)
 				settings = quicvarint.Append(settings, 1)
 				data := quicvarint.Append(nil, 4) // type byte
 				data = quicvarint.Append(data, uint64(len(settings)))
 				data = append(data, settings...)
+				f, err := parseNextFrame(bytes.NewReader(data), nil)
+				Expect(err).ToNot(HaveOccurred())
+				Expect(f).To(BeAssignableToTypeOf(&settingsFrame{}))
+				sf := f.(*settingsFrame)
+				Expect(sf.Datagram).To(BeTrue())
+			})
+
+			It("reads the draft03 SETTINGS_H3_DATAGRAM value", func() {
+				settingsDraft03 := quicvarint.Append(nil, settingDatagramDraft03)
+				settingsDraft03 = quicvarint.Append(settingsDraft03, 1)
+				data := quicvarint.Append(nil, 4) // type byte
+				data = quicvarint.Append(data, uint64(len(settingsDraft03)))
+				data = append(data, settingsDraft03...)
 				f, err := parseNextFrame(bytes.NewReader(data), nil)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(f).To(BeAssignableToTypeOf(&settingsFrame{}))
