@@ -88,7 +88,10 @@ func (f *headersFrame) Append(b []byte) []byte {
 	return quicvarint.Append(b, f.Length)
 }
 
-const settingDatagram = 0xffd277
+// This value is used when the client negotiates with a HTTP server
+// to use H3 datagram on top of QUIC datagram.
+// Source: https://github.com/h2o/h2o/blob/398ea25c008f3b1b1beb48a14d6ca61c8bb0aaa7/include/h2o/http3_common.h#L53
+const settingDatagram = 0x276
 
 type settingsFrame struct {
 	Datagram bool
