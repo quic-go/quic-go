@@ -93,10 +93,15 @@ const (
 	settingExtendedConnect = 0x8
 	// HTTP Datagrams, RFC 9297
 	settingDatagram = 0x33
+	// For backwards compatibility with the draft datagram RFC
+	// https://datatracker.ietf.org/doc/draft-ietf-masque-connect-udp/03/
+	// https://datatracker.ietf.org/doc/html/draft-schinazi-masque-h3-datagram#name-http-settings-parameter
+	settingDatagramDraft03 = 0x276
 )
 
 type settingsFrame struct {
 	Datagram        bool // HTTP Datagrams, RFC 9297
+	DatagramDraft03 bool // HTTP Datagrams, RFC 9297
 	ExtendedConnect bool // Extended CONNECT, RFC 9220
 
 	Other map[uint64]uint64 // all settings that we don't explicitly recognize
@@ -115,7 +120,7 @@ func parseSettingsFrame(r io.Reader, l uint64) (*settingsFrame, error) {
 	}
 	frame := &settingsFrame{}
 	b := bytes.NewReader(buf)
-	var readDatagram, readExtendedConnect bool
+	var readDatagram, readDatagramDraft03, readExtendedConnect bool
 	for b.Len() > 0 {
 		id, err := quicvarint.Read(b)
 		if err != nil { // should not happen. We allocated the whole frame already.
@@ -143,6 +148,15 @@ func parseSettingsFrame(r io.Reader, l uint64) (*settingsFrame, error) {
 			readDatagram = true
 			if val != 0 && val != 1 {
 				return nil, fmt.Errorf("invalid value for SETTINGS_H3_DATAGRAM: %d", val)
+			}
+			frame.Datagram = val == 1
+		case settingDatagramDraft03:
+			if readDatagramDraft03 {
+				return nil, fmt.Errorf("duplicate setting: %d", id)
+			}
+			readDatagramDraft03 = true
+			if val != 0 && val != 1 {
+				return nil, fmt.Errorf("invalid value for Draft03 SETTINGS_H3_DATAGRAM: %d", val)
 			}
 			frame.Datagram = val == 1
 		default:
@@ -173,6 +187,8 @@ func (f *settingsFrame) Append(b []byte) []byte {
 	b = quicvarint.Append(b, uint64(l))
 	if f.Datagram {
 		b = quicvarint.Append(b, settingDatagram)
+		b = quicvarint.Append(b, 1)
+		b = quicvarint.Append(b, settingDatagramDraft03)
 		b = quicvarint.Append(b, 1)
 	}
 	if f.ExtendedConnect {

@@ -273,7 +273,7 @@ func (c *client) RoundTripOpt(req *http.Request, opt RoundTripOpt) (*http.Respon
 }
 
 func (c *client) roundTripOpt(req *http.Request, opt RoundTripOpt) (*http.Response, error) {
-	if authorityAddr("https", hostnameFromRequest(req)) != c.hostname {
+	if !validProxyMethod(req.Method) && authorityAddr("https", hostnameFromRequest(req)) != c.hostname {
 		return nil, fmt.Errorf("http3 client BUG: RoundTripOpt called for the wrong client (expected %s, got %s)", c.hostname, req.Host)
 	}
 
@@ -459,7 +459,7 @@ func (c *client) doRequest(req *http.Request, conn quic.EarlyConnection, str qui
 	_, hasTransferEncoding := res.Header["Transfer-Encoding"]
 	isInformational := res.StatusCode >= 100 && res.StatusCode < 200
 	isNoContent := res.StatusCode == http.StatusNoContent
-	isSuccessfulConnect := req.Method == http.MethodConnect && res.StatusCode >= 200 && res.StatusCode < 300
+	isSuccessfulConnect := validProxyMethod(req.Method) && res.StatusCode >= 200 && res.StatusCode < 300
 	if !hasTransferEncoding && !isInformational && !isNoContent && !isSuccessfulConnect {
 		res.ContentLength = -1
 		if clens, ok := res.Header["Content-Length"]; ok && len(clens) == 1 {
