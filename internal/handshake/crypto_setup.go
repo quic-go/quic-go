@@ -250,6 +250,14 @@ func (h *cryptoSetup) handleEvent(ev qtls.QUICEvent) (done bool, err error) {
 		h.rejected0RTT()
 		return false, nil
 	case qtls.QUICWriteData:
+		// [UQUIC] debug
+		// if ev.Level == qtls.QUICEncryptionLevelInitial {
+		// 	fmt.Printf("Init: %x\n", ev.Data)
+		// } else if ev.Level == qtls.QUICEncryptionLevelHandshake {
+		// 	fmt.Printf("HS: %x\n", ev.Data)
+		// } else {
+		// 	fmt.Printf("APP: %x\n", ev.Data)
+		// }
 		h.WriteRecord(ev.Level, ev.Data)
 		return false, nil
 	case qtls.QUICHandshakeDone:

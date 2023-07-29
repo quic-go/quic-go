@@ -109,6 +109,8 @@ func populateConfig(config *Config) *Config {
 		maxIncomingUniStreams = 0
 	}
 
+	// [UQUIC] TODO: reverse populate config from TransportParameters
+
 	return &Config{
 		GetConfigForClient:               config.GetConfigForClient,
 		Versions:                         versions,
@@ -131,5 +133,23 @@ func populateConfig(config *Config) *Config {
 		DisableVersionNegotiationPackets: config.DisableVersionNegotiationPackets,
 		Allow0RTT:                        config.Allow0RTT,
 		Tracer:                           config.Tracer,
+
+		// [UQUIC]
+		SrcConnIDLength:        config.SrcConnIDLength,
+		DestConnIDLength:       config.DestConnIDLength,
+		InitPacketNumber:       config.InitPacketNumber,
+		TransportParameters:    config.TransportParameters,
+		InitPacketNumberLength: config.InitPacketNumberLength,
 	}
 }
+
+const (
+	// PacketNumberLen1 is a packet number length of 1 byte
+	PacketNumberLen1 protocol.PacketNumberLen = 1
+	// PacketNumberLen2 is a packet number length of 2 bytes
+	PacketNumberLen2 protocol.PacketNumberLen = 2
+	// PacketNumberLen3 is a packet number length of 3 bytes
+	PacketNumberLen3 protocol.PacketNumberLen = 3
+	// PacketNumberLen4 is a packet number length of 4 bytes
+	PacketNumberLen4 protocol.PacketNumberLen = 4
+)

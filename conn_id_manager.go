@@ -35,6 +35,8 @@ type connIDManager struct {
 	addStatelessResetToken    func(protocol.StatelessResetToken)
 	removeStatelessResetToken func(protocol.StatelessResetToken)
 	queueControlFrame         func(wire.Frame)
+
+	connectionIDLimit uint64 // [UQUIC] custom Connection ID limit
 }
 
 func newConnIDManager(
@@ -59,7 +61,13 @@ func (h *connIDManager) Add(f *wire.NewConnectionIDFrame) error {
 	if err := h.add(f); err != nil {
 		return err
 	}
-	if h.queue.Len() >= protocol.MaxActiveConnectionIDs {
+
+	connIDLimit := h.connectionIDLimit
+	if connIDLimit == 0 {
+		connIDLimit = protocol.MaxActiveConnectionIDs
+	}
+
+	if uint64(h.queue.Len()) >= connIDLimit {
 		return &qerr.TransportError{ErrorCode: qerr.ConnectionIDLimitError}
 	}
 	return nil
@@ -181,6 +189,11 @@ func (h *connIDManager) SetStatelessResetToken(token protocol.StatelessResetToke
 	}
 	h.activeStatelessResetToken = &token
 	h.addStatelessResetToken(token)
+}
+
+// [UQUIC]
+func (h *connIDManager) SetConnectionIDLimit(limit uint64) {
+	h.connectionIDLimit = limit
 }
 
 func (h *connIDManager) SentPacket() {

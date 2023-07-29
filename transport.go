@@ -152,6 +152,12 @@ func (t *Transport) Dial(ctx context.Context, addr net.Addr, tlsConf *tls.Config
 		return nil, err
 	}
 	conf = populateConfig(conf)
+
+	// [UQUIC]
+	if conf.SrcConnIDLength != 0 {
+		t.ConnectionIDGenerator = &protocol.DefaultConnectionIDGenerator{ConnLen: conf.SrcConnIDLength}
+	}
+
 	if err := t.init(t.isSingleUse); err != nil {
 		return nil, err
 	}
@@ -170,6 +176,12 @@ func (t *Transport) DialEarly(ctx context.Context, addr net.Addr, tlsConf *tls.C
 		return nil, err
 	}
 	conf = populateConfig(conf)
+
+	// [UQUIC]
+	if conf.SrcConnIDLength != 0 {
+		t.ConnectionIDGenerator = &protocol.DefaultConnectionIDGenerator{ConnLen: conf.SrcConnIDLength}
+	}
+
 	if err := t.init(t.isSingleUse); err != nil {
 		return nil, err
 	}

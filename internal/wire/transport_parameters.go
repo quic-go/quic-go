@@ -15,6 +15,7 @@ import (
 	"github.com/quic-go/quic-go/internal/qerr"
 	"github.com/quic-go/quic-go/internal/utils"
 	"github.com/quic-go/quic-go/quicvarint"
+	"github.com/quic-go/quic-go/transportparameters"
 )
 
 // AdditionalTransportParametersClient are additional transport parameters that will be added
@@ -88,6 +89,9 @@ type TransportParameters struct {
 	ActiveConnectionIDLimit uint64
 
 	MaxDatagramFrameSize protocol.ByteCount
+
+	// only used internally
+	ClientOverride transportparameters.TransportParameters // [UQUIC]
 }
 
 // Unmarshal the transport parameters
@@ -325,6 +329,13 @@ func (p *TransportParameters) readNumericTransportParameter(
 
 // Marshal the transport parameters
 func (p *TransportParameters) Marshal(pers protocol.Perspective) []byte {
+	// [UQUIC]
+	if p.ClientOverride != nil {
+		fmt.Println("ClientOverride!!")
+		return p.ClientOverride.Marshal()
+	}
+	// [/UQUIC]
+
 	// Typical Transport Parameters consume around 110 bytes, depending on the exact values,
 	// especially the lengths of the Connection IDs.
 	// Allocate 256 bytes, so we won't have to grow the slice in any case.
@@ -501,4 +512,48 @@ func (p *TransportParameters) String() string {
 	}
 	logString += "}"
 	return fmt.Sprintf(logString, logParams...)
+}
+
+func (tp *TransportParameters) PopulateFromUQUIC(quicparams transportparameters.TransportParameters) {
+	for pIdx, param := range quicparams {
+		switch param.ID() {
+		case uint64(maxIdleTimeoutParameterID):
+			tp.MaxIdleTimeout = time.Duration(param.(transportparameters.MaxIdleTimeout)) * time.Millisecond
+		case uint64(initialMaxDataParameterID):
+			tp.InitialMaxData = protocol.ByteCount(param.(transportparameters.InitialMaxData))
+		case uint64(initialMaxStreamDataBidiLocalParameterID):
+			tp.InitialMaxStreamDataBidiLocal = protocol.ByteCount(param.(transportparameters.InitialMaxStreamDataBidiLocal))
+		case uint64(initialMaxStreamDataBidiRemoteParameterID):
+			tp.InitialMaxStreamDataBidiRemote = protocol.ByteCount(param.(transportparameters.InitialMaxStreamDataBidiRemote))
+		case uint64(initialMaxStreamDataUniParameterID):
+			tp.InitialMaxStreamDataUni = protocol.ByteCount(param.(transportparameters.InitialMaxStreamDataUni))
+		case uint64(initialMaxStreamsBidiParameterID):
+			tp.MaxBidiStreamNum = protocol.StreamNum(param.(transportparameters.InitialMaxStreamsBidi))
+		case uint64(initialMaxStreamsUniParameterID):
+			tp.MaxUniStreamNum = protocol.StreamNum(param.(transportparameters.InitialMaxStreamsUni))
+		case uint64(maxAckDelayParameterID):
+			tp.MaxAckDelay = time.Duration(param.(transportparameters.MaxAckDelay)) * time.Millisecond
+		case uint64(disableActiveMigrationParameterID):
+			tp.DisableActiveMigration = true
+		case uint64(activeConnectionIDLimitParameterID):
+			tp.ActiveConnectionIDLimit = uint64(param.(transportparameters.ActiveConnectionIDLimit))
+		case uint64(initialSourceConnectionIDParameterID):
+			srcConnIDOverride, ok := param.(transportparameters.InitialSourceConnectionID)
+			if ok {
+				if len(srcConnIDOverride) > 0 { // when nil/empty, will leave default srcConnID
+					tp.InitialSourceConnectionID = protocol.ParseConnectionID(srcConnIDOverride)
+				} else {
+					// reversely populate the transport parameter, for it must be written to network
+					quicparams[pIdx] = transportparameters.InitialSourceConnectionID(tp.InitialSourceConnectionID.Bytes())
+				}
+			}
+		case uint64(maxDatagramFrameSizeParameterID):
+			tp.MaxDatagramFrameSize = protocol.ByteCount(param.(transportparameters.MaxDatagramFrameSize))
+		default:
+			// ignore unknown parameters
+			continue
+		}
+	}
+
+	tp.ClientOverride = quicparams
 }

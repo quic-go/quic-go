@@ -41,6 +41,7 @@ type client struct {
 
 // make it possible to mock connection ID for initial generation in the tests
 var generateConnectionIDForInitial = protocol.GenerateConnectionIDForInitial
+var generateConnectionIDForInitialWithLength = protocol.GenerateConnectionIDForInitialWithLen
 
 // DialAddr establishes a new QUIC connection to a server.
 // It resolves the address, and then creates a new UDP connection to dial the QUIC server.
@@ -169,11 +170,25 @@ func newClient(sendConn sendConn, connIDGenerator ConnectionIDGenerator, config 
 		tlsConf = tlsConf.Clone()
 	}
 
+	// // [UQUIC]
+	// if config.SrcConnIDLength != 0 {
+	// 	connIDLen := config.SrcConnIDLength
+	// 	connIDGenerator = &protocol.DefaultConnectionIDGenerator{ConnLen: connIDLen}
+	// }
+
 	srcConnID, err := connIDGenerator.GenerateConnectionID()
 	if err != nil {
 		return nil, err
 	}
-	destConnID, err := generateConnectionIDForInitial()
+
+	var destConnID protocol.ConnectionID
+	// [UQUIC]
+	if config.DestConnIDLength > 0 {
+		destConnID, err = generateConnectionIDForInitialWithLength(config.DestConnIDLength)
+	} else {
+		destConnID, err = generateConnectionIDForInitial()
+	}
+	// [/UQUIC]
 	if err != nil {
 		return nil, err
 	}
@@ -189,6 +204,8 @@ func newClient(sendConn sendConn, connIDGenerator ConnectionIDGenerator, config 
 		version:         config.Versions[0],
 		handshakeChan:   make(chan struct{}),
 		logger:          utils.DefaultLogger.WithPrefix("client"),
+
+		initialPacketNumber: protocol.PacketNumber(config.InitPacketNumber), // [UQUIC]
 	}
 	return c, nil
 }
