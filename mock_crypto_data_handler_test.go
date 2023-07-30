@@ -8,6 +8,7 @@ import (
 	reflect "reflect"
 
 	gomock "github.com/golang/mock/gomock"
+	handshake "github.com/quic-go/quic-go/internal/handshake"
 	protocol "github.com/quic-go/quic-go/internal/protocol"
 )
 
@@ -35,10 +36,10 @@ func (m *MockCryptoDataHandler) EXPECT() *MockCryptoDataHandlerMockRecorder {
 }
 
 // HandleMessage mocks base method.
-func (m *MockCryptoDataHandler) HandleMessage(arg0 []byte, arg1 protocol.EncryptionLevel) bool {
+func (m *MockCryptoDataHandler) HandleMessage(arg0 []byte, arg1 protocol.EncryptionLevel) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "HandleMessage", arg0, arg1)
-	ret0, _ := ret[0].(bool)
+	ret0, _ := ret[0].(error)
 	return ret0
 }
 
@@ -46,4 +47,18 @@ func (m *MockCryptoDataHandler) HandleMessage(arg0 []byte, arg1 protocol.Encrypt
 func (mr *MockCryptoDataHandlerMockRecorder) HandleMessage(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HandleMessage", reflect.TypeOf((*MockCryptoDataHandler)(nil).HandleMessage), arg0, arg1)
+}
+
+// NextEvent mocks base method.
+func (m *MockCryptoDataHandler) NextEvent() handshake.Event {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "NextEvent")
+	ret0, _ := ret[0].(handshake.Event)
+	return ret0
+}
+
+// NextEvent indicates an expected call of NextEvent.
+func (mr *MockCryptoDataHandlerMockRecorder) NextEvent() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NextEvent", reflect.TypeOf((*MockCryptoDataHandler)(nil).NextEvent))
 }

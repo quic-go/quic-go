@@ -6,10 +6,11 @@ import (
 	"fmt"
 	"io"
 	"math"
-	mrand "math/rand"
 	"net"
 	"sync/atomic"
 	"time"
+
+	"golang.org/x/exp/rand"
 
 	"github.com/quic-go/quic-go"
 	quicproxy "github.com/quic-go/quic-go/integrationtests/tools/proxy"
@@ -25,9 +26,10 @@ var _ = Describe("MITM test", func() {
 	const connIDLen = 6 // explicitly set the connection ID length, so the proxy can parse it
 
 	var (
-		serverUDPConn, clientUDPConn net.PacketConn
-		serverConn                   quic.Connection
-		serverConfig                 *quic.Config
+		clientUDPConn                    net.PacketConn
+		serverTransport, clientTransport *quic.Transport
+		serverConn                       quic.Connection
+		serverConfig                     *quic.Config
 	)
 
 	startServerAndProxy := func(delayCb quicproxy.DelayCallback, dropCb quicproxy.DropCallback) (proxyPort int, closeFn func()) {
@@ -35,13 +37,11 @@ var _ = Describe("MITM test", func() {
 		Expect(err).ToNot(HaveOccurred())
 		c, err := net.ListenUDP("udp", addr)
 		Expect(err).ToNot(HaveOccurred())
-		serverUDPConn, err = quic.OptimizeConn(c)
-		Expect(err).ToNot(HaveOccurred())
-		tr := &quic.Transport{
-			Conn:               serverUDPConn,
+		serverTransport = &quic.Transport{
+			Conn:               c,
 			ConnectionIDLength: connIDLen,
 		}
-		ln, err := tr.Listen(getTLSConfig(), serverConfig)
+		ln, err := serverTransport.Listen(getTLSConfig(), serverConfig)
 		Expect(err).ToNot(HaveOccurred())
 		done := make(chan struct{})
 		go func() {
@@ -68,7 +68,7 @@ var _ = Describe("MITM test", func() {
 		return proxy.LocalPort(), func() {
 			proxy.Close()
 			ln.Close()
-			serverUDPConn.Close()
+			serverTransport.Close()
 			<-done
 		}
 	}
@@ -77,10 +77,12 @@ var _ = Describe("MITM test", func() {
 		serverConfig = getQuicConfig(nil)
 		addr, err := net.ResolveUDPAddr("udp", "localhost:0")
 		Expect(err).ToNot(HaveOccurred())
-		c, err := net.ListenUDP("udp", addr)
+		clientUDPConn, err = net.ListenUDP("udp", addr)
 		Expect(err).ToNot(HaveOccurred())
-		clientUDPConn, err = quic.OptimizeConn(c)
-		Expect(err).ToNot(HaveOccurred())
+		clientTransport = &quic.Transport{
+			Conn:               clientUDPConn,
+			ConnectionIDLength: connIDLen,
+		}
 	})
 
 	Context("unsuccessful attacks", func() {
@@ -89,12 +91,13 @@ var _ = Describe("MITM test", func() {
 			// Test shutdown is tricky due to the proxy. Just wait for a bit.
 			time.Sleep(50 * time.Millisecond)
 			Expect(clientUDPConn.Close()).To(Succeed())
+			Expect(clientTransport.Close()).To(Succeed())
 		})
 
 		Context("injecting invalid packets", func() {
 			const rtt = 20 * time.Millisecond
 
-			sendRandomPacketsOfSameType := func(conn net.PacketConn, remoteAddr net.Addr, raw []byte) {
+			sendRandomPacketsOfSameType := func(conn *quic.Transport, remoteAddr net.Addr, raw []byte) {
 				defer GinkgoRecover()
 				const numPackets = 10
 				ticker := time.NewTicker(rtt / numPackets)
@@ -110,17 +113,17 @@ var _ = Describe("MITM test", func() {
 							Type:             hdr.Type,
 							Version:          hdr.Version,
 						},
-						PacketNumber:    protocol.PacketNumber(mrand.Int31n(math.MaxInt32 / 4)),
-						PacketNumberLen: protocol.PacketNumberLen(mrand.Int31n(4) + 1),
+						PacketNumber:    protocol.PacketNumber(rand.Int31n(math.MaxInt32 / 4)),
+						PacketNumberLen: protocol.PacketNumberLen(rand.Int31n(4) + 1),
 					}
 
 					for i := 0; i < numPackets; i++ {
-						payloadLen := mrand.Int31n(100)
-						replyHdr.Length = protocol.ByteCount(mrand.Int31n(payloadLen + 1))
+						payloadLen := rand.Int31n(100)
+						replyHdr.Length = protocol.ByteCount(rand.Int31n(payloadLen + 1))
 						b, err := replyHdr.Append(nil, hdr.Version)
 						Expect(err).ToNot(HaveOccurred())
 						r := make([]byte, payloadLen)
-						mrand.Read(r)
+						rand.Read(r)
 						b = append(b, r...)
 						if _, err := conn.WriteTo(b, remoteAddr); err != nil {
 							return
@@ -135,11 +138,11 @@ var _ = Describe("MITM test", func() {
 						Expect(err).To(MatchError(wire.ErrInvalidReservedBits))
 					}
 					for i := 0; i < numPackets; i++ {
-						b, err := wire.AppendShortHeader(nil, connID, pn, pnLen, protocol.KeyPhaseBit(mrand.Intn(2)))
+						b, err := wire.AppendShortHeader(nil, connID, pn, pnLen, protocol.KeyPhaseBit(rand.Intn(2)))
 						Expect(err).ToNot(HaveOccurred())
-						payloadLen := mrand.Int31n(100)
+						payloadLen := rand.Int31n(100)
 						r := make([]byte, payloadLen)
-						mrand.Read(r)
+						rand.Read(r)
 						b = append(b, r...)
 						if _, err := conn.WriteTo(b, remoteAddr); err != nil {
 							return
@@ -154,11 +157,7 @@ var _ = Describe("MITM test", func() {
 				defer closeFn()
 				raddr, err := net.ResolveUDPAddr("udp", fmt.Sprintf("localhost:%d", proxyPort))
 				Expect(err).ToNot(HaveOccurred())
-				tr := &quic.Transport{
-					Conn:               clientUDPConn,
-					ConnectionIDLength: connIDLen,
-				}
-				conn, err := tr.Dial(
+				conn, err := clientTransport.Dial(
 					context.Background(),
 					raddr,
 					getTLSClientConfig(),
@@ -177,7 +176,7 @@ var _ = Describe("MITM test", func() {
 				delayCb := func(dir quicproxy.Direction, raw []byte) time.Duration {
 					if dir == quicproxy.DirectionIncoming {
 						defer GinkgoRecover()
-						go sendRandomPacketsOfSameType(clientUDPConn, serverUDPConn.LocalAddr(), raw)
+						go sendRandomPacketsOfSameType(clientTransport, serverTransport.Conn.LocalAddr(), raw)
 					}
 					return rtt / 2
 				}
@@ -188,7 +187,7 @@ var _ = Describe("MITM test", func() {
 				delayCb := func(dir quicproxy.Direction, raw []byte) time.Duration {
 					if dir == quicproxy.DirectionOutgoing {
 						defer GinkgoRecover()
-						go sendRandomPacketsOfSameType(serverUDPConn, clientUDPConn.LocalAddr(), raw)
+						go sendRandomPacketsOfSameType(serverTransport, clientTransport.Conn.LocalAddr(), raw)
 					}
 					return rtt / 2
 				}
@@ -201,11 +200,7 @@ var _ = Describe("MITM test", func() {
 			defer closeFn()
 			raddr, err := net.ResolveUDPAddr("udp", fmt.Sprintf("localhost:%d", proxyPort))
 			Expect(err).ToNot(HaveOccurred())
-			tr := &quic.Transport{
-				Conn:               clientUDPConn,
-				ConnectionIDLength: connIDLen,
-			}
-			conn, err := tr.Dial(
+			conn, err := clientTransport.Dial(
 				context.Background(),
 				raddr,
 				getTLSClientConfig(),
@@ -225,7 +220,7 @@ var _ = Describe("MITM test", func() {
 				dropCb := func(dir quicproxy.Direction, raw []byte) bool {
 					defer GinkgoRecover()
 					if dir == quicproxy.DirectionIncoming {
-						_, err := clientUDPConn.WriteTo(raw, serverUDPConn.LocalAddr())
+						_, err := clientTransport.WriteTo(raw, serverTransport.Conn.LocalAddr())
 						Expect(err).ToNot(HaveOccurred())
 					}
 					return false
@@ -237,7 +232,7 @@ var _ = Describe("MITM test", func() {
 				dropCb := func(dir quicproxy.Direction, raw []byte) bool {
 					defer GinkgoRecover()
 					if dir == quicproxy.DirectionOutgoing {
-						_, err := serverUDPConn.WriteTo(raw, clientUDPConn.LocalAddr())
+						_, err := serverTransport.WriteTo(raw, clientTransport.Conn.LocalAddr())
 						Expect(err).ToNot(HaveOccurred())
 					}
 					return false
@@ -272,10 +267,10 @@ var _ = Describe("MITM test", func() {
 					defer GinkgoRecover()
 					if dir == quicproxy.DirectionIncoming {
 						atomic.AddInt32(&numPackets, 1)
-						if mrand.Intn(interval) == 0 {
-							pos := mrand.Intn(len(raw))
-							raw[pos] = byte(mrand.Intn(256))
-							_, err := clientUDPConn.WriteTo(raw, serverUDPConn.LocalAddr())
+						if rand.Intn(interval) == 0 {
+							pos := rand.Intn(len(raw))
+							raw[pos] = byte(rand.Intn(256))
+							_, err := clientTransport.WriteTo(raw, serverTransport.Conn.LocalAddr())
 							Expect(err).ToNot(HaveOccurred())
 							atomic.AddInt32(&numCorrupted, 1)
 							return true
@@ -292,10 +287,10 @@ var _ = Describe("MITM test", func() {
 					defer GinkgoRecover()
 					if dir == quicproxy.DirectionOutgoing {
 						atomic.AddInt32(&numPackets, 1)
-						if mrand.Intn(interval) == 0 {
-							pos := mrand.Intn(len(raw))
-							raw[pos] = byte(mrand.Intn(256))
-							_, err := serverUDPConn.WriteTo(raw, clientUDPConn.LocalAddr())
+						if rand.Intn(interval) == 0 {
+							pos := rand.Intn(len(raw))
+							raw[pos] = byte(rand.Intn(256))
+							_, err := serverTransport.WriteTo(raw, clientTransport.Conn.LocalAddr())
 							Expect(err).ToNot(HaveOccurred())
 							atomic.AddInt32(&numCorrupted, 1)
 							return true
@@ -319,17 +314,13 @@ var _ = Describe("MITM test", func() {
 			proxyPort, serverCloseFn := startServerAndProxy(delayCb, nil)
 			raddr, err := net.ResolveUDPAddr("udp", fmt.Sprintf("localhost:%d", proxyPort))
 			Expect(err).ToNot(HaveOccurred())
-			tr := &quic.Transport{
-				Conn:               clientUDPConn,
-				ConnectionIDLength: connIDLen,
-			}
-			_, err = tr.Dial(
+			_, err = clientTransport.Dial(
 				context.Background(),
 				raddr,
 				getTLSClientConfig(),
 				getQuicConfig(&quic.Config{HandshakeIdleTimeout: 2 * time.Second}),
 			)
-			return func() { tr.Close(); serverCloseFn() }, err
+			return func() { clientTransport.Close(); serverCloseFn() }, err
 		}
 
 		// fails immediately because client connection closes when it can't find compatible version
@@ -355,7 +346,7 @@ var _ = Describe("MITM test", func() {
 					)
 
 					// Send the packet
-					_, err = serverUDPConn.WriteTo(packet, clientUDPConn.LocalAddr())
+					_, err = serverTransport.WriteTo(packet, clientTransport.Conn.LocalAddr())
 					Expect(err).ToNot(HaveOccurred())
 					close(done)
 				}
@@ -392,7 +383,7 @@ var _ = Describe("MITM test", func() {
 					fakeSrcConnID := protocol.ParseConnectionID([]byte{0x12, 0x12, 0x12, 0x12, 0x12, 0x12, 0x12, 0x12})
 					retryPacket := testutils.ComposeRetryPacket(fakeSrcConnID, hdr.SrcConnectionID, hdr.DestConnectionID, []byte("token"), hdr.Version)
 
-					_, err = serverUDPConn.WriteTo(retryPacket, clientUDPConn.LocalAddr())
+					_, err = serverTransport.WriteTo(retryPacket, clientTransport.Conn.LocalAddr())
 					Expect(err).ToNot(HaveOccurred())
 				}
 				return rtt / 2
@@ -422,7 +413,7 @@ var _ = Describe("MITM test", func() {
 					defer close(done)
 					injected = true
 					initialPacket := testutils.ComposeInitialPacket(hdr.DestConnectionID, hdr.SrcConnectionID, hdr.Version, hdr.DestConnectionID, nil)
-					_, err = serverUDPConn.WriteTo(initialPacket, clientUDPConn.LocalAddr())
+					_, err = serverTransport.WriteTo(initialPacket, clientTransport.Conn.LocalAddr())
 					Expect(err).ToNot(HaveOccurred())
 				}
 				return rtt
@@ -452,7 +443,7 @@ var _ = Describe("MITM test", func() {
 					// Fake Initial with ACK for packet 2 (unsent)
 					ack := &wire.AckFrame{AckRanges: []wire.AckRange{{Smallest: 2, Largest: 2}}}
 					initialPacket := testutils.ComposeInitialPacket(hdr.DestConnectionID, hdr.SrcConnectionID, hdr.Version, hdr.DestConnectionID, []wire.Frame{ack})
-					_, err = serverUDPConn.WriteTo(initialPacket, clientUDPConn.LocalAddr())
+					_, err = serverTransport.WriteTo(initialPacket, clientTransport.Conn.LocalAddr())
 					Expect(err).ToNot(HaveOccurred())
 				}
 				return rtt

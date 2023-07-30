@@ -65,8 +65,9 @@ var _ = Describe("Response Writer", func() {
 	It("writes status", func() {
 		rw.WriteHeader(http.StatusTeapot)
 		fields := decodeHeader(strBuf)
-		Expect(fields).To(HaveLen(1))
+		Expect(fields).To(HaveLen(2))
 		Expect(fields).To(HaveKeyWithValue(":status", []string{"418"}))
+		Expect(fields).To(HaveKey("date"))
 	})
 
 	It("writes headers", func() {
@@ -116,8 +117,9 @@ var _ = Describe("Response Writer", func() {
 		rw.WriteHeader(http.StatusOK)
 		rw.WriteHeader(http.StatusInternalServerError)
 		fields := decodeHeader(strBuf)
-		Expect(fields).To(HaveLen(1))
+		Expect(fields).To(HaveLen(2))
 		Expect(fields).To(HaveKeyWithValue(":status", []string{"200"}))
+		Expect(fields).To(HaveKey("date"))
 	})
 
 	It("allows calling WriteHeader() several times when using the 103 status code", func() {
@@ -137,8 +139,9 @@ var _ = Describe("Response Writer", func() {
 
 		// According to the spec, headers sent in the informational response must also be included in the final response
 		fields = decodeHeader(strBuf)
-		Expect(fields).To(HaveLen(2))
+		Expect(fields).To(HaveLen(3))
 		Expect(fields).To(HaveKeyWithValue(":status", []string{"200"}))
+		Expect(fields).To(HaveKey("date"))
 		Expect(fields).To(HaveKeyWithValue("link", []string{"</style.css>; rel=preload; as=style", "</script.js>; rel=preload; as=script"}))
 
 		Expect(getData(strBuf)).To(Equal([]byte("foobar")))
@@ -163,5 +166,21 @@ var _ = Describe("Response Writer", func() {
 	It(`is compatible with "net/http".ResponseController`, func() {
 		Expect(rw.SetReadDeadline(time.Now().Add(1 * time.Second))).To(BeNil())
 		Expect(rw.SetWriteDeadline(time.Now().Add(1 * time.Second))).To(BeNil())
+	})
+
+	It(`checks Content-Length header`, func() {
+		rw.Header().Set("Content-Length", "6")
+		n, err := rw.Write([]byte("foobar"))
+		Expect(n).To(Equal(6))
+		Expect(err).To(BeNil())
+
+		n, err = rw.Write([]byte("foobar"))
+		Expect(n).To(Equal(0))
+		Expect(err).To(Equal(http.ErrContentLength))
+	})
+
+	It(`panics when writing invalid status`, func() {
+		Expect(func() { rw.WriteHeader(99) }).To(Panic())
+		Expect(func() { rw.WriteHeader(1000) }).To(Panic())
 	})
 })

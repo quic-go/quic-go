@@ -59,6 +59,13 @@ var _ = Describe("Request Writer", func() {
 		Expect(headerFields).ToNot(HaveKey("accept-encoding"))
 	})
 
+	It("rejects invalid host headers", func() {
+		req, err := http.NewRequest(http.MethodGet, "https://quic.clemente.io/index.html?foo=bar", nil)
+		Expect(err).ToNot(HaveOccurred())
+		req.Host = "foo@bar" // @ is invalid
+		Expect(rw.WriteRequestHeader(str, req, false)).To(MatchError("http3: invalid Host header"))
+	})
+
 	It("sends cookies", func() {
 		req, err := http.NewRequest(http.MethodGet, "https://quic.clemente.io/", nil)
 		Expect(err).ToNot(HaveOccurred())

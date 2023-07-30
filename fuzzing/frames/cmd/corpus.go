@@ -2,8 +2,9 @@ package main
 
 import (
 	"log"
-	"math/rand"
 	"time"
+
+	"golang.org/x/exp/rand"
 
 	"github.com/quic-go/quic-go"
 	"github.com/quic-go/quic-go/fuzzing/internal/helper"

@@ -2,11 +2,14 @@ package quic
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"io"
 	mrand "math/rand"
 	"runtime"
 	"time"
+
+	"golang.org/x/exp/rand"
 
 	"github.com/golang/mock/gomock"
 	"github.com/quic-go/quic-go/internal/ackhandler"
@@ -316,6 +319,7 @@ var _ = Describe("Send Stream", func() {
 			Expect(str.Context().Done()).ToNot(BeClosed())
 			Expect(str.Close()).To(Succeed())
 			Expect(str.Context().Done()).To(BeClosed())
+			Expect(context.Cause(str.Context())).To(MatchError(context.Canceled))
 		})
 
 		Context("flow control blocking", func() {
@@ -666,6 +670,7 @@ var _ = Describe("Send Stream", func() {
 				Expect(str.Context().Done()).ToNot(BeClosed())
 				str.closeForShutdown(testErr)
 				Expect(str.Context().Done()).To(BeClosed())
+				Expect(context.Cause(str.Context())).To(MatchError(testErr))
 			})
 		})
 	})
@@ -844,6 +849,8 @@ var _ = Describe("Send Stream", func() {
 				Expect(str.Context().Done()).ToNot(BeClosed())
 				str.CancelWrite(1234)
 				Expect(str.Context().Done()).To(BeClosed())
+				Expect(context.Cause(str.Context())).To(BeAssignableToTypeOf(&StreamError{}))
+				Expect(context.Cause(str.Context()).(*StreamError).ErrorCode).To(Equal(StreamErrorCode(1234)))
 			})
 
 			It("doesn't allow further calls to Write", func() {
@@ -1169,7 +1176,7 @@ var _ = Describe("Send Stream", func() {
 			mockFC.EXPECT().AddBytesSent(gomock.Any()).AnyTimes()
 
 			data := make([]byte, dataLen)
-			_, err := mrand.Read(data)
+			_, err := rand.Read(data)
 			Expect(err).ToNot(HaveOccurred())
 			done := make(chan struct{})
 			go func() {

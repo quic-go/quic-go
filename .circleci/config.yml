@@ -1,11 +1,5 @@
 version: 2.1
 executors:
-  test-go119:
-    docker:
-      - image: "cimg/go:1.19"
-    environment:
-      runrace: true
-      TIMESCALE_FACTOR: 3
   test-go120:
     docker:
       - image: "cimg/go:1.20"
@@ -15,7 +9,7 @@ executors:
  
 jobs:
   "test": &test
-    executor: test-go119
+    executor: test-go120
     steps:
       - checkout
       - run:
@@ -39,14 +33,10 @@ jobs:
       - run:
           name: "Run version negotiation tests with qlog"
           command: go run github.com/onsi/ginkgo/v2/ginkgo -v -randomize-all -trace integrationtests/versionnegotiation -- -qlog
-  go119:
-    <<: *test
   go120:
     <<: *test
-    executor: test-go120
 
 workflows:
   workflow:
     jobs:
-      - go119
       - go120

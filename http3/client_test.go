@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"sync"
 	"time"
 
 	"github.com/quic-go/quic-go"
@@ -636,18 +637,6 @@ var _ = Describe("Client", func() {
 		)
 		testDone := make(chan struct{})
 
-		getHeadersFrame := func(headers map[string]string) []byte {
-			headerBuf := &bytes.Buffer{}
-			enc := qpack.NewEncoder(headerBuf)
-			for name, value := range headers {
-				Expect(enc.WriteField(qpack.HeaderField{Name: name, Value: value})).To(Succeed())
-			}
-			Expect(enc.Close()).To(Succeed())
-			b := (&headersFrame{Length: uint64(headerBuf.Len())}).Append(nil)
-			b = append(b, headerBuf.Bytes()...)
-			return b
-		}
-
 		decodeHeader := func(str io.Reader) map[string]string {
 			fields := make(map[string]string)
 			decoder := qpack.NewDecoder(nil)
@@ -803,6 +792,29 @@ var _ = Describe("Client", func() {
 				Expect(hfs).To(HaveKeyWithValue(":path", "/upload"))
 			})
 
+			It("doesn't send more bytes than allowed by http.Request.ContentLength", func() {
+				req.ContentLength = 7
+				var once sync.Once
+				done := make(chan struct{})
+				gomock.InOrder(
+					str.EXPECT().CancelWrite(gomock.Any()).Do(func(c quic.StreamErrorCode) {
+						once.Do(func() {
+							Expect(c).To(Equal(quic.StreamErrorCode(ErrCodeRequestCanceled)))
+							close(done)
+						})
+					}).AnyTimes(),
+					str.EXPECT().Close().MaxTimes(1),
+					str.EXPECT().CancelWrite(gomock.Any()).AnyTimes(),
+				)
+				str.EXPECT().Read(gomock.Any()).DoAndReturn(func([]byte) (int, error) {
+					<-done
+					return 0, errors.New("done")
+				})
+				cl.RoundTripOpt(req, RoundTripOpt{})
+				Expect(strBuf.String()).To(ContainSubstring("request"))
+				Expect(strBuf.String()).ToNot(ContainSubstring("request body"))
+			})
+
 			It("returns the error that occurred when reading the body", func() {
 				req.Body.(*mockBody).readErr = errors.New("testErr")
 				done := make(chan struct{})
@@ -825,26 +837,6 @@ var _ = Describe("Client", func() {
 				Eventually(closed).Should(BeClosed())
 			})
 
-			It("sets the Content-Length", func() {
-				done := make(chan struct{})
-				b := getHeadersFrame(map[string]string{
-					":status":        "200",
-					"Content-Length": "1337",
-				})
-				b = (&dataFrame{Length: 0x6}).Append(b)
-				b = append(b, []byte("foobar")...)
-				r := bytes.NewReader(b)
-				str.EXPECT().Close().Do(func() { close(done) })
-				conn.EXPECT().ConnectionState().Return(quic.ConnectionState{})
-				str.EXPECT().CancelWrite(gomock.Any()).MaxTimes(1) // when reading the response errors
-				// the response body is sent asynchronously, while already reading the response
-				str.EXPECT().Read(gomock.Any()).DoAndReturn(r.Read).AnyTimes()
-				req, err := cl.RoundTripOpt(req, RoundTripOpt{})
-				Expect(err).ToNot(HaveOccurred())
-				Expect(req.ContentLength).To(BeEquivalentTo(1337))
-				Eventually(done).Should(BeClosed())
-			})
-
 			It("closes the connection when the first frame is not a HEADERS frame", func() {
 				b := (&dataFrame{Length: 0x42}).Append(nil)
 				conn.EXPECT().CloseWithError(quic.ApplicationErrorCode(ErrCodeFrameUnexpected), gomock.Any())
@@ -854,6 +846,24 @@ var _ = Describe("Client", func() {
 				str.EXPECT().Read(gomock.Any()).DoAndReturn(r.Read).AnyTimes()
 				_, err := cl.RoundTripOpt(req, RoundTripOpt{})
 				Expect(err).To(MatchError("expected first frame to be a HEADERS frame"))
+				Eventually(closed).Should(BeClosed())
+			})
+
+			It("cancels the stream when parsing the headers fails", func() {
+				headerBuf := &bytes.Buffer{}
+				enc := qpack.NewEncoder(headerBuf)
+				Expect(enc.WriteField(qpack.HeaderField{Name: ":method", Value: "GET"})).To(Succeed()) // not a valid response pseudo header
+				Expect(enc.Close()).To(Succeed())
+				b := (&headersFrame{Length: uint64(headerBuf.Len())}).Append(nil)
+				b = append(b, headerBuf.Bytes()...)
+
+				r := bytes.NewReader(b)
+				str.EXPECT().CancelWrite(quic.StreamErrorCode(ErrCodeMessageError))
+				closed := make(chan struct{})
+				str.EXPECT().Close().Do(func() { close(closed) })
+				str.EXPECT().Read(gomock.Any()).DoAndReturn(r.Read).AnyTimes()
+				_, err := cl.RoundTripOpt(req, RoundTripOpt{})
+				Expect(err).To(HaveOccurred())
 				Eventually(closed).Should(BeClosed())
 			})
 

@@ -11,7 +11,6 @@ import (
 	"log"
 	"math"
 	mrand "math/rand"
-	"sync"
 	"time"
 
 	"github.com/quic-go/quic-go/fuzzing/internal/helper"
@@ -127,72 +126,6 @@ func getClientAuth(rand uint8) tls.ClientAuthType {
 	}
 }
 
-type chunk struct {
-	data     []byte
-	encLevel protocol.EncryptionLevel
-}
-
-type stream struct {
-	chunkChan chan<- chunk
-	encLevel  protocol.EncryptionLevel
-}
-
-func (s *stream) Write(b []byte) (int, error) {
-	data := append([]byte{}, b...)
-	select {
-	case s.chunkChan <- chunk{data: data, encLevel: s.encLevel}:
-	default:
-		panic("chunkChan too small")
-	}
-	return len(b), nil
-}
-
-func initStreams() (chan chunk, *stream /* initial */, *stream /* handshake */) {
-	chunkChan := make(chan chunk, 10)
-	initialStream := &stream{chunkChan: chunkChan, encLevel: protocol.EncryptionInitial}
-	handshakeStream := &stream{chunkChan: chunkChan, encLevel: protocol.EncryptionHandshake}
-	return chunkChan, initialStream, handshakeStream
-}
-
-type handshakeRunner interface {
-	OnReceivedParams(*wire.TransportParameters)
-	OnHandshakeComplete()
-	OnError(error)
-	DropKeys(protocol.EncryptionLevel)
-}
-
-type runner struct {
-	sync.Mutex
-	errored        bool
-	client, server *handshake.CryptoSetup
-}
-
-var _ handshakeRunner = &runner{}
-
-func newRunner(client, server *handshake.CryptoSetup) *runner {
-	return &runner{client: client, server: server}
-}
-
-func (r *runner) OnReceivedParams(*wire.TransportParameters) {}
-func (r *runner) OnHandshakeComplete()                       {}
-func (r *runner) OnError(err error) {
-	r.Lock()
-	defer r.Unlock()
-	if r.errored {
-		return
-	}
-	r.errored = true
-	(*r.client).Close()
-	(*r.server).Close()
-}
-
-func (r *runner) Errored() bool {
-	r.Lock()
-	defer r.Unlock()
-	return r.errored
-}
-func (r *runner) DropKeys(protocol.EncryptionLevel) {}
-
 const (
 	alpn      = "fuzzing"
 	alpnWrong = "wrong"
@@ -206,28 +139,6 @@ func toEncryptionLevel(n uint8) protocol.EncryptionLevel {
 		return protocol.EncryptionHandshake
 	case 2:
 		return protocol.Encryption1RTT
-	}
-}
-
-func maxEncLevel(cs handshake.CryptoSetup, encLevel protocol.EncryptionLevel) protocol.EncryptionLevel {
-	//nolint:exhaustive
-	switch encLevel {
-	case protocol.EncryptionInitial:
-		return protocol.EncryptionInitial
-	case protocol.EncryptionHandshake:
-		// Handshake opener not available. We can't possibly read a Handshake handshake message.
-		if opener, err := cs.GetHandshakeOpener(); err != nil || opener == nil {
-			return protocol.EncryptionInitial
-		}
-		return protocol.EncryptionHandshake
-	case protocol.Encryption1RTT:
-		// 1-RTT opener not available. We can't possibly read a post-handshake message.
-		if opener, err := cs.Get1RTTOpener(); err != nil || opener == nil {
-			return maxEncLevel(cs, protocol.EncryptionHandshake)
-		}
-		return protocol.Encryption1RTT
-	default:
-		panic("unexpected encryption level")
 	}
 }
 
@@ -270,6 +181,7 @@ func Fuzz(data []byte) int {
 	}
 
 	clientConf := &tls.Config{
+		MinVersion: tls.VersionTLS13,
 		ServerName: "localhost",
 		NextProtos: []string{alpn},
 		RootCAs:    certPool,
@@ -287,6 +199,7 @@ func Fuzz(data []byte) int {
 
 func runHandshake(runConfig [confLen]byte, messageConfig uint8, clientConf *tls.Config, data []byte) int {
 	serverConf := &tls.Config{
+		MinVersion:       tls.VersionTLS13,
 		Certificates:     []tls.Certificate{*cert},
 		NextProtos:       []string{alpn},
 		SessionTicketKey: sessionTicketKey,
@@ -371,17 +284,13 @@ func runHandshake(runConfig [confLen]byte, messageConfig uint8, clientConf *tls.
 	messageToReplace := messageConfig % 32
 	messageToReplaceEncLevel := toEncryptionLevel(messageConfig >> 6)
 
-	cChunkChan, cInitialStream, cHandshakeStream := initStreams()
-	var client, server handshake.CryptoSetup
-	runner := newRunner(&client, &server)
-	client, _ = handshake.NewCryptoSetupClient(
-		cInitialStream,
-		cHandshakeStream,
+	if len(data) == 0 {
+		return -1
+	}
+
+	client := handshake.NewCryptoSetupClient(
 		protocol.ConnectionID{},
-		nil,
-		nil,
 		clientTP,
-		runner,
 		clientConf,
 		enable0RTTClient,
 		utils.NewRTTStats(),
@@ -389,16 +298,13 @@ func runHandshake(runConfig [confLen]byte, messageConfig uint8, clientConf *tls.
 		utils.DefaultLogger.WithPrefix("client"),
 		protocol.Version1,
 	)
+	if err := client.StartHandshake(); err != nil {
+		log.Fatal(err)
+	}
 
-	sChunkChan, sInitialStream, sHandshakeStream := initStreams()
-	server = handshake.NewCryptoSetupServer(
-		sInitialStream,
-		sHandshakeStream,
+	server := handshake.NewCryptoSetupServer(
 		protocol.ConnectionID{},
-		nil,
-		nil,
 		serverTP,
-		runner,
 		serverConf,
 		enable0RTTServer,
 		utils.NewRTTStats(),
@@ -406,65 +312,71 @@ func runHandshake(runConfig [confLen]byte, messageConfig uint8, clientConf *tls.
 		utils.DefaultLogger.WithPrefix("server"),
 		protocol.Version1,
 	)
-
-	if len(data) == 0 {
-		return -1
+	if err := server.StartHandshake(); err != nil {
+		log.Fatal(err)
 	}
 
-	serverHandshakeCompleted := make(chan struct{})
-	go func() {
-		defer close(serverHandshakeCompleted)
-		server.RunHandshake()
-	}()
-
-	clientHandshakeCompleted := make(chan struct{})
-	go func() {
-		defer close(clientHandshakeCompleted)
-		client.RunHandshake()
-	}()
-
-	done := make(chan struct{})
-	go func() {
-		<-serverHandshakeCompleted
-		<-clientHandshakeCompleted
-		close(done)
-	}()
-
-messageLoop:
+	var clientHandshakeComplete, serverHandshakeComplete bool
 	for {
-		select {
-		case c := <-cChunkChan:
-			b := c.data
-			encLevel := c.encLevel
-			if len(b) > 0 && b[0] == messageToReplace {
-				fmt.Printf("replacing %s message to the server with %s\n", messageType(b[0]), messageType(data[0]))
-				b = data
-				encLevel = maxEncLevel(server, messageToReplaceEncLevel)
+	clientLoop:
+		for {
+			var processedEvent bool
+			ev := client.NextEvent()
+			//nolint:exhaustive // only need to process a few events
+			switch ev.Kind {
+			case handshake.EventNoEvent:
+				if !processedEvent && !clientHandshakeComplete { // handshake stuck
+					return 1
+				}
+				break clientLoop
+			case handshake.EventWriteInitialData, handshake.EventWriteHandshakeData:
+				msg := ev.Data
+				if msg[0] == messageToReplace {
+					fmt.Printf("replacing %s message to the server with %s at %s\n", messageType(msg[0]), messageType(data[0]), messageToReplaceEncLevel)
+					msg = data
+				}
+				if err := server.HandleMessage(msg, messageToReplaceEncLevel); err != nil {
+					return 1
+				}
+			case handshake.EventHandshakeComplete:
+				clientHandshakeComplete = true
 			}
-			server.HandleMessage(b, encLevel)
-		case c := <-sChunkChan:
-			b := c.data
-			encLevel := c.encLevel
-			if len(b) > 0 && b[0] == messageToReplace {
-				fmt.Printf("replacing %s message to the client with %s\n", messageType(b[0]), messageType(data[0]))
-				b = data
-				encLevel = maxEncLevel(client, messageToReplaceEncLevel)
-			}
-			client.HandleMessage(b, encLevel)
-		case <-done: // test done
-			break messageLoop
+			processedEvent = true
 		}
-		if runner.Errored() {
-			break messageLoop
+
+	serverLoop:
+		for {
+			var processedEvent bool
+			ev := server.NextEvent()
+			//nolint:exhaustive // only need to process a few events
+			switch ev.Kind {
+			case handshake.EventNoEvent:
+				if !processedEvent && !serverHandshakeComplete { // handshake stuck
+					return 1
+				}
+				break serverLoop
+			case handshake.EventWriteInitialData, handshake.EventWriteHandshakeData:
+				msg := ev.Data
+				if msg[0] == messageToReplace {
+					fmt.Printf("replacing %s message to the client with %s at %s\n", messageType(msg[0]), messageType(data[0]), messageToReplaceEncLevel)
+					msg = data
+				}
+				if err := client.HandleMessage(msg, messageToReplaceEncLevel); err != nil {
+					return 1
+				}
+			case handshake.EventHandshakeComplete:
+				serverHandshakeComplete = true
+			}
+			processedEvent = true
+		}
+
+		if serverHandshakeComplete && clientHandshakeComplete {
+			break
 		}
 	}
 
-	<-done
 	_ = client.ConnectionState()
 	_ = server.ConnectionState()
-	if runner.Errored() {
-		return 0
-	}
 
 	sealer, err := client.Get1RTTSealer()
 	if err != nil {

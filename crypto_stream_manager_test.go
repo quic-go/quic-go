@@ -1,12 +1,9 @@
 package quic
 
 import (
-	"errors"
-
 	"github.com/quic-go/quic-go/internal/protocol"
 	"github.com/quic-go/quic-go/internal/wire"
 
-	"github.com/golang/mock/gomock"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 )
@@ -35,9 +32,7 @@ var _ = Describe("Crypto Stream Manager", func() {
 		initialStream.EXPECT().GetCryptoData().Return([]byte("foobar"))
 		initialStream.EXPECT().GetCryptoData()
 		cs.EXPECT().HandleMessage([]byte("foobar"), protocol.EncryptionInitial)
-		encLevelChanged, err := csm.HandleCryptoFrame(cf, protocol.EncryptionInitial)
-		Expect(err).ToNot(HaveOccurred())
-		Expect(encLevelChanged).To(BeFalse())
+		Expect(csm.HandleCryptoFrame(cf, protocol.EncryptionInitial)).To(Succeed())
 	})
 
 	It("passes messages to the handshake stream", func() {
@@ -46,9 +41,7 @@ var _ = Describe("Crypto Stream Manager", func() {
 		handshakeStream.EXPECT().GetCryptoData().Return([]byte("foobar"))
 		handshakeStream.EXPECT().GetCryptoData()
 		cs.EXPECT().HandleMessage([]byte("foobar"), protocol.EncryptionHandshake)
-		encLevelChanged, err := csm.HandleCryptoFrame(cf, protocol.EncryptionHandshake)
-		Expect(err).ToNot(HaveOccurred())
-		Expect(encLevelChanged).To(BeFalse())
+		Expect(csm.HandleCryptoFrame(cf, protocol.EncryptionHandshake)).To(Succeed())
 	})
 
 	It("passes messages to the 1-RTT stream", func() {
@@ -57,9 +50,7 @@ var _ = Describe("Crypto Stream Manager", func() {
 		oneRTTStream.EXPECT().GetCryptoData().Return([]byte("foobar"))
 		oneRTTStream.EXPECT().GetCryptoData()
 		cs.EXPECT().HandleMessage([]byte("foobar"), protocol.Encryption1RTT)
-		encLevelChanged, err := csm.HandleCryptoFrame(cf, protocol.Encryption1RTT)
-		Expect(err).ToNot(HaveOccurred())
-		Expect(encLevelChanged).To(BeFalse())
+		Expect(csm.HandleCryptoFrame(cf, protocol.Encryption1RTT)).To(Succeed())
 	})
 
 	It("doesn't call the message handler, if there's no message", func() {
@@ -67,9 +58,7 @@ var _ = Describe("Crypto Stream Manager", func() {
 		handshakeStream.EXPECT().HandleCryptoFrame(cf)
 		handshakeStream.EXPECT().GetCryptoData() // don't return any data to handle
 		// don't EXPECT any calls to HandleMessage()
-		encLevelChanged, err := csm.HandleCryptoFrame(cf, protocol.EncryptionHandshake)
-		Expect(err).ToNot(HaveOccurred())
-		Expect(encLevelChanged).To(BeFalse())
+		Expect(csm.HandleCryptoFrame(cf, protocol.EncryptionHandshake)).To(Succeed())
 	})
 
 	It("processes all messages", func() {
@@ -80,40 +69,22 @@ var _ = Describe("Crypto Stream Manager", func() {
 		handshakeStream.EXPECT().GetCryptoData()
 		cs.EXPECT().HandleMessage([]byte("foo"), protocol.EncryptionHandshake)
 		cs.EXPECT().HandleMessage([]byte("bar"), protocol.EncryptionHandshake)
-		encLevelChanged, err := csm.HandleCryptoFrame(cf, protocol.EncryptionHandshake)
-		Expect(err).ToNot(HaveOccurred())
-		Expect(encLevelChanged).To(BeFalse())
-	})
-
-	It("finishes the crypto stream, when the crypto setup is done with this encryption level", func() {
-		cf := &wire.CryptoFrame{Data: []byte("foobar")}
-		gomock.InOrder(
-			handshakeStream.EXPECT().HandleCryptoFrame(cf),
-			handshakeStream.EXPECT().GetCryptoData().Return([]byte("foobar")),
-			cs.EXPECT().HandleMessage([]byte("foobar"), protocol.EncryptionHandshake).Return(true),
-			handshakeStream.EXPECT().Finish(),
-		)
-		encLevelChanged, err := csm.HandleCryptoFrame(cf, protocol.EncryptionHandshake)
-		Expect(err).ToNot(HaveOccurred())
-		Expect(encLevelChanged).To(BeTrue())
-	})
-
-	It("returns errors that occur when finishing a stream", func() {
-		testErr := errors.New("test error")
-		cf := &wire.CryptoFrame{Data: []byte("foobar")}
-		gomock.InOrder(
-			handshakeStream.EXPECT().HandleCryptoFrame(cf),
-			handshakeStream.EXPECT().GetCryptoData().Return([]byte("foobar")),
-			cs.EXPECT().HandleMessage([]byte("foobar"), protocol.EncryptionHandshake).Return(true),
-			handshakeStream.EXPECT().Finish().Return(testErr),
-		)
-		_, err := csm.HandleCryptoFrame(cf, protocol.EncryptionHandshake)
-		Expect(err).To(MatchError(err))
+		Expect(csm.HandleCryptoFrame(cf, protocol.EncryptionHandshake)).To(Succeed())
 	})
 
 	It("errors for unknown encryption levels", func() {
-		_, err := csm.HandleCryptoFrame(&wire.CryptoFrame{}, 42)
+		err := csm.HandleCryptoFrame(&wire.CryptoFrame{}, 42)
 		Expect(err).To(HaveOccurred())
 		Expect(err.Error()).To(ContainSubstring("received CRYPTO frame with unexpected encryption level"))
+	})
+
+	It("drops Initial", func() {
+		initialStream.EXPECT().Finish()
+		Expect(csm.Drop(protocol.EncryptionInitial)).To(Succeed())
+	})
+
+	It("drops Handshake", func() {
+		handshakeStream.EXPECT().Finish()
+		Expect(csm.Drop(protocol.EncryptionHandshake)).To(Succeed())
 	})
 })
