@@ -97,7 +97,9 @@ func (c *sconn) Write(p []byte, size protocol.ByteCount) error {
 
 func (c *sconn) capabilities() connCapabilities {
 	capabilities := c.rawConn.capabilities()
-	capabilities.GSO = !c.gotGSOError
+	if capabilities.GSO {
+		capabilities.GSO = !c.gotGSOError
+	}
 	return capabilities
 }
 

@@ -52,6 +52,18 @@ func parseIPv4PktInfo(body []byte) (ip netip.Addr, ifIndex uint32, ok bool) {
 	return netip.AddrFrom4(*(*[4]byte)(body[8:12])), binary.LittleEndian.Uint32(body), true
 }
 
+// isGSOSupported tests if the kernel supports GSO.
+// Sending with GSO might still fail later on, if the interface doesn't support it (see isGSOError).
+func isGSOSupported(conn syscall.RawConn) bool {
+	var serr error
+	if err := conn.Control(func(fd uintptr) {
+		_, serr = unix.GetsockoptInt(int(fd), unix.IPPROTO_UDP, unix.UDP_SEGMENT)
+	}); err != nil {
+		return false
+	}
+	return serr == nil
+}
+
 func appendUDPSegmentSizeMsg(b []byte, size uint16) []byte {
 	startLen := len(b)
 	const dataLen = 2 // payload is a uint16

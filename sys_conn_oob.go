@@ -137,8 +137,11 @@ func newConn(c OOBCapablePacketConn, supportsDF bool) (*oobConn, error) {
 		batchConn:            bc,
 		messages:             msgs,
 		readPos:              batchSize,
+		cap: connCapabilities{
+			DF:  supportsDF,
+			GSO: isGSOSupported(rawConn),
+		},
 	}
-	oobConn.cap.DF = supportsDF
 	for i := 0; i < batchSize; i++ {
 		oobConn.messages[i].OOB = make([]byte, oobBufferSize)
 	}

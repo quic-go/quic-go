@@ -60,8 +60,8 @@ var _ = Describe("Connection (for sending packets)", func() {
 					Expect(oob).To(Equal(msg))
 					return 0, errGSO
 				}),
-				rawConn.EXPECT().WritePacket([]byte("foo"), remoteAddr, []byte{}).Return(3, nil),
-				rawConn.EXPECT().WritePacket([]byte("bar"), remoteAddr, []byte{}).Return(3, nil),
+				rawConn.EXPECT().WritePacket([]byte("foo"), remoteAddr, gomock.Len(0)).Return(3, nil),
+				rawConn.EXPECT().WritePacket([]byte("bar"), remoteAddr, gomock.Len(0)).Return(3, nil),
 			)
 			Expect(c.Write([]byte("foobar"), 3)).To(Succeed())
 			Expect(c.capabilities().GSO).To(BeFalse()) // GSO support is now disabled
@@ -75,7 +75,7 @@ var _ = Describe("Connection (for sending packets)", func() {
 			rawConn.EXPECT().LocalAddr()
 			rawConn.EXPECT().capabilities()
 			c := newSendConn(rawConn, remoteAddr, packetInfo{}, utils.DefaultLogger)
-			rawConn.EXPECT().WritePacket([]byte("foobar"), remoteAddr, nil)
+			rawConn.EXPECT().WritePacket([]byte("foobar"), remoteAddr, gomock.Len(0))
 			Expect(c.Write([]byte("foobar"), 6)).To(Succeed())
 		})
 	}
