@@ -1519,7 +1519,6 @@ func (s *connection) handleHandshakeEvents() error {
 		case handshake.EventDiscard0RTTKeys:
 			err = s.dropEncryptionLevel(protocol.Encryption0RTT)
 		case handshake.EventWriteInitialData:
-			// fmt.Printf("write initial data: %x\n", ev.Data) // [UQUIC] debug
 			_, err = s.initialStream.Write(ev.Data)
 		case handshake.EventWriteHandshakeData:
 			_, err = s.handshakeStream.Write(ev.Data)

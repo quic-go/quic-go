@@ -109,8 +109,6 @@ func populateConfig(config *Config) *Config {
 		maxIncomingUniStreams = 0
 	}
 
-	// [UQUIC] TODO: reverse populate config from TransportParameters
-
 	return &Config{
 		GetConfigForClient:               config.GetConfigForClient,
 		Versions:                         versions,

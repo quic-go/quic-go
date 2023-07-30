@@ -331,7 +331,6 @@ func (p *TransportParameters) readNumericTransportParameter(
 func (p *TransportParameters) Marshal(pers protocol.Perspective) []byte {
 	// [UQUIC]
 	if p.ClientOverride != nil {
-		fmt.Println("ClientOverride!!")
 		return p.ClientOverride.Marshal()
 	}
 	// [/UQUIC]

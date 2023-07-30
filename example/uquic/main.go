@@ -171,7 +171,7 @@ func main() {
 		Transport: roundTripper,
 	}
 
-	addr := "https://quic.tlsfingerprint.io/qfp/?beautify=true"
+	addr := "https://quic.tlsfingerprint.io/qfp/"
 	// addr := "https://www.cloudflare.com"
 
 	rsp, err := hclient.Get(addr)

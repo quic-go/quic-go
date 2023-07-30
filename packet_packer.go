@@ -540,10 +540,6 @@ func (p *packetPacker) maybeGetCryptoPacket(maxPacketSize protocol.ByteCount, en
 		}
 	} else if s.HasData() {
 		cf := s.PopCryptoFrame(maxPacketSize)
-		if encLevel == protocol.EncryptionInitial {
-			fmt.Printf("PopCryptoFrame for Initial: %x...\n", cf.Data[:5])
-			// fmt.Printf("Offset: %d\n", cf.Offset)
-		}
 		pl.frames = []ackhandler.Frame{{Frame: cf, Handler: handler}}
 		pl.length += cf.Length(v)
 	}
