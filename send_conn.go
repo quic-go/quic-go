@@ -46,6 +46,15 @@ func newSendConn(c rawConn, remote net.Addr, info packetInfo, logger utils.Logge
 	}
 
 	oob := info.OOB()
+	if remoteUDPAddr, ok := remote.(*net.UDPAddr); ok {
+		if remoteUDPAddr.IP.To4() != nil {
+			fmt.Println("using ECN on v4")
+			oob = appendIPv4ECNMsg(oob, protocol.ECT1)
+		} else {
+			fmt.Println("using ECN on v6")
+			oob = appendIPv6ECNMsg(oob, protocol.ECT1)
+		}
+	}
 	// add 32 bytes, so we can add the UDP_SEGMENT msg
 	l := len(oob)
 	oob = append(oob, make([]byte, 32)...)
