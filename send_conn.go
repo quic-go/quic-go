@@ -3,6 +3,7 @@ package quic
 import (
 	"net"
 
+	"github.com/quic-go/quic-go/internal/protocol"
 	"github.com/quic-go/quic-go/internal/utils"
 )
 
@@ -42,10 +43,16 @@ func newSendConn(c rawConn, remote net.Addr, info packetInfo, logger utils.Logge
 	}
 
 	oob := info.OOB()
-	// add 32 bytes, so we can add the UDP_SEGMENT msg
+	if remoteUDPAddr, ok := remote.(*net.UDPAddr); ok {
+		if remoteUDPAddr.IP.To4() != nil {
+			oob = appendIPv4ECNMsg(oob, protocol.ECT1)
+		} else {
+			oob = appendIPv6ECNMsg(oob, protocol.ECT1)
+		}
+	}
+	// increase oob slice capacity, so we can add the UDP_SEGMENT and ECN control messages without allocating
 	l := len(oob)
-	oob = append(oob, make([]byte, 32)...)
-	oob = oob[:l]
+	oob = append(oob, make([]byte, 64)...)[:l]
 	return &sconn{
 		rawConn:       c,
 		localAddr:     localAddr,

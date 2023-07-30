@@ -11,6 +11,7 @@ import (
 	"sync"
 	"syscall"
 	"time"
+	"unsafe"
 
 	"golang.org/x/net/ipv4"
 	"golang.org/x/net/ipv6"
@@ -278,4 +279,33 @@ func (info *packetInfo) OOB() []byte {
 		return cm.Marshal()
 	}
 	return nil
+}
+
+func appendIPv4ECNMsg(b []byte, val protocol.ECN) []byte {
+	startLen := len(b)
+	b = append(b, make([]byte, unix.CmsgSpace(ecnIPv4DataLen))...)
+	h := (*unix.Cmsghdr)(unsafe.Pointer(&b[startLen]))
+	h.Level = syscall.IPPROTO_IP
+	h.Type = unix.IP_TOS
+	h.SetLen(unix.CmsgLen(ecnIPv4DataLen))
+
+	// UnixRights uses the private `data` method, but I *think* this achieves the same goal.
+	offset := startLen + unix.CmsgSpace(0)
+	b[offset] = uint8(val)
+	return b
+}
+
+func appendIPv6ECNMsg(b []byte, val protocol.ECN) []byte {
+	startLen := len(b)
+	const dataLen = 4
+	b = append(b, make([]byte, unix.CmsgSpace(dataLen))...)
+	h := (*unix.Cmsghdr)(unsafe.Pointer(&b[startLen]))
+	h.Level = syscall.IPPROTO_IPV6
+	h.Type = unix.IPV6_TCLASS
+	h.SetLen(unix.CmsgLen(dataLen))
+
+	// UnixRights uses the private `data` method, but I *think* this achieves the same goal.
+	offset := startLen + unix.CmsgSpace(0)
+	b[offset] = uint8(val)
+	return b
 }

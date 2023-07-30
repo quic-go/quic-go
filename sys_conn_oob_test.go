@@ -139,6 +139,42 @@ var _ = Describe("OOB Conn Test", func() {
 			Expect(utils.IsIPv4(p.remoteAddr.(*net.UDPAddr).IP)).To(BeFalse())
 			Expect(p.ecn).To(Equal(protocol.ECT1))
 		})
+
+		It("sends packets with ECN on IPv4", func() {
+			conn, packetChan := runServer("udp4", "localhost:0")
+			defer conn.Close()
+
+			c, err := net.ListenUDP("udp4", nil)
+			Expect(err).ToNot(HaveOccurred())
+			defer c.Close()
+
+			for _, val := range []protocol.ECN{protocol.ECNNon, protocol.ECT1, protocol.ECT0, protocol.ECNCE} {
+				_, _, err = c.WriteMsgUDP([]byte("foobar"), appendIPv4ECNMsg([]byte{}, val), conn.LocalAddr().(*net.UDPAddr))
+				Expect(err).ToNot(HaveOccurred())
+				var p receivedPacket
+				Eventually(packetChan).Should(Receive(&p))
+				Expect(p.data).To(Equal([]byte("foobar")))
+				Expect(p.ecn).To(Equal(val))
+			}
+		})
+
+		It("sends packets with ECN on IPv6", func() {
+			conn, packetChan := runServer("udp6", "[::1]:0")
+			defer conn.Close()
+
+			c, err := net.ListenUDP("udp6", nil)
+			Expect(err).ToNot(HaveOccurred())
+			defer c.Close()
+
+			for _, val := range []protocol.ECN{protocol.ECNNon, protocol.ECT1, protocol.ECT0, protocol.ECNCE} {
+				_, _, err = c.WriteMsgUDP([]byte("foobar"), appendIPv6ECNMsg([]byte{}, val), conn.LocalAddr().(*net.UDPAddr))
+				Expect(err).ToNot(HaveOccurred())
+				var p receivedPacket
+				Eventually(packetChan).Should(Receive(&p))
+				Expect(p.data).To(Equal([]byte("foobar")))
+				Expect(p.ecn).To(Equal(val))
+			}
+		})
 	})
 
 	Context("Packet Info conn", func() {

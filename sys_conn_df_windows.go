@@ -8,6 +8,7 @@ import (
 
 	"golang.org/x/sys/windows"
 
+	"github.com/quic-go/quic-go/internal/protocol"
 	"github.com/quic-go/quic-go/internal/utils"
 )
 
@@ -52,3 +53,6 @@ func isRecvMsgSizeErr(err error) bool {
 	// https://docs.microsoft.com/en-us/windows/win32/winsock/windows-sockets-error-codes-2
 	return errors.Is(err, windows.WSAEMSGSIZE)
 }
+
+func appendIPv4ECNMsg([]byte, protocol.ECN) []byte { return nil }
+func appendIPv6ECNMsg([]byte, protocol.ECN) []byte { return nil }
