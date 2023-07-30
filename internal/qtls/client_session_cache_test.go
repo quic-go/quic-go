@@ -1,11 +1,10 @@
-//go:build go1.21
-
 package qtls
 
 import (
 	"fmt"
-	tls "github.com/refraction-networking/utls"
 	"net"
+
+	tls "github.com/refraction-networking/utls"
 
 	"github.com/quic-go/quic-go/internal/testdata"
 

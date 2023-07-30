@@ -1,13 +1,12 @@
-//go:build go1.21
-
 package qtls
 
 import (
 	"crypto"
 	"crypto/cipher"
 	"fmt"
-	tls "github.com/refraction-networking/utls"
 	"unsafe"
+
+	tls "github.com/refraction-networking/utls"
 )
 
 type cipherSuiteTLS13 struct {
