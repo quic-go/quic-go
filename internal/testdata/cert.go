@@ -1,11 +1,12 @@
 package testdata
 
 import (
-	"crypto/tls"
 	"crypto/x509"
 	"os"
 	"path"
 	"runtime"
+
+	tls "github.com/refraction-networking/utls"
 )
 
 var certPath string

@@ -2,7 +2,6 @@ package http09
 
 import (
 	"context"
-	"crypto/tls"
 	"errors"
 	"io"
 	"log"
@@ -10,6 +9,8 @@ import (
 	"net/http"
 	"strings"
 	"sync"
+
+	tls "github.com/refraction-networking/utls"
 
 	"golang.org/x/net/idna"
 

@@ -3,10 +3,11 @@ package handshake
 import (
 	"crypto"
 	"crypto/cipher"
-	"crypto/tls"
 	"encoding/binary"
 	"fmt"
 	"time"
+
+	tls "github.com/refraction-networking/utls"
 
 	"github.com/quic-go/quic-go/internal/protocol"
 	"github.com/quic-go/quic-go/internal/qerr"

@@ -4,14 +4,14 @@ package qtls
 
 import (
 	"bytes"
-	"crypto/tls"
 	"fmt"
+	tls "github.com/refraction-networking/utls"
 
 	"github.com/quic-go/quic-go/internal/protocol"
 )
 
 type (
-	QUICConn            = tls.QUICConn
+	QUICConn            = tls.UQUICConn // [UQUIC]
 	QUICConfig          = tls.QUICConfig
 	QUICEvent           = tls.QUICEvent
 	QUICEventKind       = tls.QUICEventKind
@@ -37,8 +37,21 @@ const (
 	QUICHandshakeDone               = tls.QUICHandshakeDone
 )
 
-func QUICServer(config *QUICConfig) *QUICConn { return tls.QUICServer(config) }
-func QUICClient(config *QUICConfig) *QUICConn { return tls.QUICClient(config) }
+func QUICServer(config *QUICConfig) *QUICConn { return nil } // [UQUIC]
+
+// [UQUIC]
+func QUICClient(config *QUICConfig) *QUICConn {
+	return tls.UQUICClient(config, tls.HelloGolang)
+}
+
+// [UQUIC]
+func UQUICClient(config *QUICConfig, clientHelloSpec *tls.ClientHelloSpec) *QUICConn {
+	uqc := tls.UQUICClient(config, tls.HelloCustom)
+	if err := uqc.ApplyPreset(clientHelloSpec); err != nil {
+		panic(err)
+	}
+	return uqc
+}
 
 func SetupConfigForServer(qconf *QUICConfig, _ bool, getData func() []byte, accept0RTT func([]byte) bool) {
 	conf := qconf.TLSConfig

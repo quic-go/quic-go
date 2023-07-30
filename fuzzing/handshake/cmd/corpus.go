@@ -1,8 +1,9 @@
 package main
 
 import (
-	"crypto/tls"
 	"log"
+
+	tls "github.com/refraction-networking/utls"
 
 	fuzzhandshake "github.com/quic-go/quic-go/fuzzing/handshake"
 	"github.com/quic-go/quic-go/fuzzing/internal/helper"

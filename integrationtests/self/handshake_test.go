@@ -2,12 +2,13 @@ package self_test
 
 import (
 	"context"
-	"crypto/tls"
 	"errors"
 	"fmt"
 	"io"
 	"net"
 	"time"
+
+	tls "github.com/refraction-networking/utls"
 
 	"github.com/quic-go/quic-go"
 	"github.com/quic-go/quic-go/internal/protocol"

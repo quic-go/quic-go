@@ -3,13 +3,14 @@ package quic
 import (
 	"context"
 	"crypto/rand"
-	"crypto/tls"
 	"errors"
 	"net"
 	"reflect"
 	"sync"
 	"sync/atomic"
 	"time"
+
+	tls "github.com/refraction-networking/utls"
 
 	"github.com/quic-go/quic-go/internal/handshake"
 	mocklogging "github.com/quic-go/quic-go/internal/mocks/logging"

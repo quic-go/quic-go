@@ -2,7 +2,6 @@ package self_test
 
 import (
 	"context"
-	"crypto/tls"
 	"fmt"
 	"io"
 	mrand "math/rand"
@@ -10,6 +9,8 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	tls "github.com/refraction-networking/utls"
 
 	"github.com/quic-go/quic-go/quicvarint"
 

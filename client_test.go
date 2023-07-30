@@ -2,10 +2,11 @@ package quic
 
 import (
 	"context"
-	"crypto/tls"
 	"errors"
 	"net"
 	"time"
+
+	tls "github.com/refraction-networking/utls"
 
 	mocklogging "github.com/quic-go/quic-go/internal/mocks/logging"
 	"github.com/quic-go/quic-go/internal/protocol"

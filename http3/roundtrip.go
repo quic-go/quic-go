@@ -2,7 +2,6 @@ package http3
 
 import (
 	"context"
-	"crypto/tls"
 	"errors"
 	"fmt"
 	"io"
@@ -11,6 +10,8 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+
+	tls "github.com/refraction-networking/utls"
 
 	"golang.org/x/net/http/httpguts"
 
@@ -87,6 +88,9 @@ type RoundTripper struct {
 	newClient func(hostname string, tlsConf *tls.Config, opts *roundTripperOpts, conf *quic.Config, dialer dialFunc) (roundTripCloser, error) // so we can mock it in tests
 	clients   map[string]*roundTripCloserWithCount
 	transport *quic.Transport
+
+	// [UQUIC]
+	ClientHelloSpec *tls.ClientHelloSpec
 }
 
 // RoundTripOpt are options for the Transport.RoundTripOpt method.
@@ -189,7 +193,10 @@ func (r *RoundTripper) getClient(hostname string, onlyCached bool) (rtc *roundTr
 				if err != nil {
 					return nil, false, err
 				}
-				r.transport = &quic.Transport{Conn: udpConn}
+				r.transport = &quic.Transport{
+					Conn:            udpConn,
+					ClientHelloSpec: r.ClientHelloSpec,
+				}
 			}
 			dial = r.makeDialer()
 		}

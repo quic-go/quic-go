@@ -1,8 +1,9 @@
 package testdata
 
 import (
-	"crypto/tls"
 	"io"
+
+	tls "github.com/refraction-networking/utls"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"

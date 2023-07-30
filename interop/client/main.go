@@ -1,7 +1,6 @@
 package main
 
 import (
-	"crypto/tls"
 	"errors"
 	"flag"
 	"fmt"
@@ -11,6 +10,8 @@ import (
 	"os"
 	"strings"
 	"time"
+
+	tls "github.com/refraction-networking/utls"
 
 	"golang.org/x/sync/errgroup"
 

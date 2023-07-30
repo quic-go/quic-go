@@ -4,13 +4,14 @@ import (
 	"context"
 	"crypto/rand"
 	"crypto/rsa"
-	"crypto/tls"
 	"crypto/x509"
 	"encoding/pem"
 	"fmt"
 	"io"
 	"log"
 	"math/big"
+
+	tls "github.com/refraction-networking/utls"
 
 	"github.com/quic-go/quic-go"
 )

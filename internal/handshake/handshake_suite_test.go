@@ -1,10 +1,11 @@
 package handshake
 
 import (
-	"crypto/tls"
 	"encoding/hex"
 	"strings"
 	"testing"
+
+	tls "github.com/refraction-networking/utls"
 
 	"github.com/golang/mock/gomock"
 

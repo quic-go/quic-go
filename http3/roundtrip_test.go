@@ -3,12 +3,13 @@ package http3
 import (
 	"bytes"
 	"context"
-	"crypto/tls"
 	"errors"
 	"io"
 	"net/http"
 	"sync/atomic"
 	"time"
+
+	tls "github.com/refraction-networking/utls"
 
 	"github.com/quic-go/quic-go"
 	"github.com/quic-go/quic-go/internal/qerr"

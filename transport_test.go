@@ -3,11 +3,12 @@ package quic
 import (
 	"bytes"
 	"crypto/rand"
-	"crypto/tls"
 	"errors"
 	"net"
 	"syscall"
 	"time"
+
+	tls "github.com/refraction-networking/utls"
 
 	mocklogging "github.com/quic-go/quic-go/internal/mocks/logging"
 	"github.com/quic-go/quic-go/internal/protocol"

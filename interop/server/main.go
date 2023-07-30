@@ -1,12 +1,13 @@
 package main
 
 import (
-	"crypto/tls"
 	"fmt"
 	"log"
 	"net"
 	"net/http"
 	"os"
+
+	tls "github.com/refraction-networking/utls"
 
 	"github.com/quic-go/quic-go"
 	"github.com/quic-go/quic-go/http3"

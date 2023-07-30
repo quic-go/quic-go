@@ -3,7 +3,6 @@ package handshake
 import (
 	"crypto/rand"
 	"crypto/rsa"
-	"crypto/tls"
 	"crypto/x509"
 	"errors"
 	"fmt"
@@ -12,6 +11,8 @@ import (
 	"math"
 	mrand "math/rand"
 	"time"
+
+	tls "github.com/refraction-networking/utls"
 
 	"github.com/quic-go/quic-go/fuzzing/internal/helper"
 	"github.com/quic-go/quic-go/internal/handshake"

@@ -3,12 +3,13 @@ package handshake
 import (
 	"bytes"
 	"context"
-	"crypto/tls"
 	"errors"
 	"fmt"
 	"sync"
 	"sync/atomic"
 	"time"
+
+	tls "github.com/refraction-networking/utls"
 
 	"github.com/quic-go/quic-go/internal/protocol"
 	"github.com/quic-go/quic-go/internal/qerr"
@@ -96,6 +97,41 @@ func NewCryptoSetupClient(
 	cs.tlsConf = tlsConf
 
 	cs.conn = qtls.QUICClient(quicConf)
+	cs.conn.SetTransportParameters(cs.ourParams.Marshal(protocol.PerspectiveClient))
+
+	return cs
+}
+
+// [UQUIC]
+// NewUCryptoSetupClient creates a new crypto setup for the client with UTLS
+func NewUCryptoSetupClient(
+	connID protocol.ConnectionID,
+	tp *wire.TransportParameters,
+	tlsConf *tls.Config,
+	enable0RTT bool,
+	rttStats *utils.RTTStats,
+	tracer logging.ConnectionTracer,
+	logger utils.Logger,
+	version protocol.VersionNumber,
+	chs *tls.ClientHelloSpec,
+) CryptoSetup {
+	cs := newCryptoSetup(
+		connID,
+		tp,
+		rttStats,
+		tracer,
+		logger,
+		protocol.PerspectiveClient,
+		version,
+	)
+
+	tlsConf = tlsConf.Clone()
+	tlsConf.MinVersion = tls.VersionTLS13
+	quicConf := &qtls.QUICConfig{TLSConfig: tlsConf}
+	qtls.SetupConfigForClient(quicConf, cs.marshalDataForSessionState, cs.handleDataFromSessionState)
+	cs.tlsConf = tlsConf
+
+	cs.conn = qtls.UQUICClient(quicConf, chs)
 	cs.conn.SetTransportParameters(cs.ourParams.Marshal(protocol.PerspectiveClient))
 
 	return cs

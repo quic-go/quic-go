@@ -2,7 +2,6 @@ package http3
 
 import (
 	"context"
-	"crypto/tls"
 	"errors"
 	"fmt"
 	"io"
@@ -12,6 +11,10 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	ctls "crypto/tls"
+
+	tls "github.com/refraction-networking/utls"
 
 	"github.com/quic-go/quic-go"
 	"github.com/quic-go/quic-go/internal/protocol"
@@ -424,7 +427,25 @@ func (c *client) doRequest(req *http.Request, conn quic.EarlyConnection, str qui
 		return nil, newStreamError(ErrCodeMessageError, err)
 	}
 	connState := conn.ConnectionState().TLS
-	res.TLS = &connState
+
+	// [UQUIC] copy utls.ConnectionState to crypto/tls.ConnectionState
+	cryptoConnState := &ctls.ConnectionState{
+		Version:                     connState.Version,
+		HandshakeComplete:           connState.HandshakeComplete,
+		DidResume:                   connState.DidResume,
+		CipherSuite:                 connState.CipherSuite,
+		NegotiatedProtocol:          connState.NegotiatedProtocol,
+		NegotiatedProtocolIsMutual:  connState.NegotiatedProtocolIsMutual,
+		ServerName:                  connState.ServerName,
+		PeerCertificates:            connState.PeerCertificates,
+		VerifiedChains:              connState.VerifiedChains,
+		SignedCertificateTimestamps: connState.SignedCertificateTimestamps,
+		OCSPResponse:                connState.OCSPResponse,
+		TLSUnique:                   connState.TLSUnique,
+	}
+	res.TLS = cryptoConnState
+	// [/UQUIC]
+
 	res.Request = req
 	// Check that the server doesn't send more data in DATA frames than indicated by the Content-Length header (if set).
 	// See section 4.1.2 of RFC 9114.

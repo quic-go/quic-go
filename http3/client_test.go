@@ -4,13 +4,14 @@ import (
 	"bytes"
 	"compress/gzip"
 	"context"
-	"crypto/tls"
 	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"sync"
 	"time"
+
+	tls "github.com/refraction-networking/utls"
 
 	"github.com/quic-go/quic-go"
 	mockquic "github.com/quic-go/quic-go/internal/mocks/quic"

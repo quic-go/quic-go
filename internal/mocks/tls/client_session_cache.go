@@ -5,7 +5,7 @@
 package mocktls
 
 import (
-	tls "crypto/tls"
+	tls "github.com/refraction-networking/utls"
 	reflect "reflect"
 
 	gomock "github.com/golang/mock/gomock"

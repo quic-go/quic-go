@@ -2,9 +2,10 @@ package versionnegotiation
 
 import (
 	"context"
-	"crypto/tls"
 	"fmt"
 	"net"
+
+	tls "github.com/refraction-networking/utls"
 
 	"github.com/quic-go/quic-go"
 	"github.com/quic-go/quic-go/integrationtests/tools/israce"

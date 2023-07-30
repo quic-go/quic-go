@@ -4,8 +4,8 @@ package self_test
 
 import (
 	"context"
-	"crypto/tls"
 	"fmt"
+	tls "github.com/refraction-networking/utls"
 	"io"
 	mrand "math/rand"
 	"net"

@@ -3,11 +3,12 @@ package handshake
 import (
 	"crypto/rand"
 	"crypto/rsa"
-	"crypto/tls"
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"math/big"
 	"time"
+
+	tls "github.com/refraction-networking/utls"
 
 	mocktls "github.com/quic-go/quic-go/internal/mocks/tls"
 	"github.com/quic-go/quic-go/internal/protocol"

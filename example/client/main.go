@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"bytes"
 	"context"
-	"crypto/tls"
 	"crypto/x509"
 	"flag"
 	"fmt"
@@ -13,6 +12,8 @@ import (
 	"net/http"
 	"os"
 	"sync"
+
+	tls "github.com/refraction-networking/utls"
 
 	"github.com/quic-go/quic-go"
 	"github.com/quic-go/quic-go/http3"

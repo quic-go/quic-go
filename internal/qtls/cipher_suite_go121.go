@@ -5,8 +5,8 @@ package qtls
 import (
 	"crypto"
 	"crypto/cipher"
-	"crypto/tls"
 	"fmt"
+	tls "github.com/refraction-networking/utls"
 	"unsafe"
 )
 

@@ -3,11 +3,12 @@ package quic
 import (
 	"context"
 	"crypto/rand"
-	"crypto/tls"
 	"errors"
 	"net"
 	"sync"
 	"time"
+
+	tls "github.com/refraction-networking/utls"
 
 	"github.com/quic-go/quic-go/internal/wire"
 
@@ -86,6 +87,8 @@ type Transport struct {
 	isSingleUse bool // was created for a single server or client, i.e. by calling quic.Listen or quic.Dial
 
 	logger utils.Logger
+
+	ClientHelloSpec *tls.ClientHelloSpec // [UQUIC]
 }
 
 // Listen starts listening for incoming QUIC connections.
@@ -157,6 +160,7 @@ func (t *Transport) Dial(ctx context.Context, addr net.Addr, tlsConf *tls.Config
 	if conf.SrcConnIDLength != 0 {
 		t.ConnectionIDGenerator = &protocol.DefaultConnectionIDGenerator{ConnLen: conf.SrcConnIDLength}
 	}
+	// [/UQUIC]
 
 	if err := t.init(t.isSingleUse); err != nil {
 		return nil, err
@@ -167,6 +171,10 @@ func (t *Transport) Dial(ctx context.Context, addr net.Addr, tlsConf *tls.Config
 	}
 	tlsConf = tlsConf.Clone()
 	tlsConf.MinVersion = tls.VersionTLS13
+
+	if t.ClientHelloSpec != nil { // [UQUIC]
+		return dialWithCHS(ctx, newSendConn(t.conn, addr), t.connIDGenerator, t.handlerMap, tlsConf, conf, onClose, false, t.ClientHelloSpec)
+	}
 	return dial(ctx, newSendConn(t.conn, addr), t.connIDGenerator, t.handlerMap, tlsConf, conf, onClose, false)
 }
 
@@ -181,6 +189,7 @@ func (t *Transport) DialEarly(ctx context.Context, addr net.Addr, tlsConf *tls.C
 	if conf.SrcConnIDLength != 0 {
 		t.ConnectionIDGenerator = &protocol.DefaultConnectionIDGenerator{ConnLen: conf.SrcConnIDLength}
 	}
+	// [/UQUIC]
 
 	if err := t.init(t.isSingleUse); err != nil {
 		return nil, err
@@ -191,6 +200,10 @@ func (t *Transport) DialEarly(ctx context.Context, addr net.Addr, tlsConf *tls.C
 	}
 	tlsConf = tlsConf.Clone()
 	tlsConf.MinVersion = tls.VersionTLS13
+
+	if t.ClientHelloSpec != nil { // [UQUIC]
+		return dialWithCHS(ctx, newSendConn(t.conn, addr), t.connIDGenerator, t.handlerMap, tlsConf, conf, onClose, false, t.ClientHelloSpec)
+	}
 	return dial(ctx, newSendConn(t.conn, addr), t.connIDGenerator, t.handlerMap, tlsConf, conf, onClose, true)
 }
 

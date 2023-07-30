@@ -3,7 +3,7 @@
 package qtls
 
 import (
-	"crypto/tls"
+	tls "github.com/refraction-networking/utls"
 )
 
 type clientSessionCache struct {

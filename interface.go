@@ -2,11 +2,12 @@ package quic
 
 import (
 	"context"
-	"crypto/tls"
 	"errors"
 	"io"
 	"net"
 	"time"
+
+	tls "github.com/refraction-networking/utls"
 
 	"github.com/quic-go/quic-go/internal/handshake"
 	"github.com/quic-go/quic-go/internal/protocol"

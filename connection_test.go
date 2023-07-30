@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"crypto/rand"
-	"crypto/tls"
 	"errors"
 	"fmt"
 	"io"
@@ -12,6 +11,8 @@ import (
 	"runtime/pprof"
 	"strings"
 	"time"
+
+	tls "github.com/refraction-networking/utls"
 
 	"github.com/quic-go/quic-go/internal/ackhandler"
 	"github.com/quic-go/quic-go/internal/handshake"

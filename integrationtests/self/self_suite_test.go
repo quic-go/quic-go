@@ -3,7 +3,6 @@ package self_test
 import (
 	"bytes"
 	"context"
-	"crypto/tls"
 	"crypto/x509"
 	"flag"
 	"fmt"
@@ -15,6 +14,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	tls "github.com/refraction-networking/utls"
 
 	"github.com/quic-go/quic-go"
 	"github.com/quic-go/quic-go/integrationtests/tools"

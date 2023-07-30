@@ -3,8 +3,8 @@
 package qtls
 
 import (
-	"crypto/tls"
 	"fmt"
+	tls "github.com/refraction-networking/utls"
 	"net"
 
 	"github.com/quic-go/quic-go/internal/testdata"
