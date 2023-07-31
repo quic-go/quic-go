@@ -6,12 +6,12 @@ replace github.com/refraction-networking/utls => ../utls
 
 require (
 	github.com/francoispqt/gojay v1.2.13
+	github.com/gaukas/clienthellod v0.4.0
 	github.com/golang/mock v1.6.0
 	github.com/onsi/ginkgo/v2 v2.9.5
 	github.com/onsi/gomega v1.27.6
 	github.com/quic-go/qpack v0.4.0
-	github.com/quic-go/qtls-go1-20 v0.3.0
-	github.com/refraction-networking/utls v0.0.0-00010101000000-000000000000
+	github.com/refraction-networking/utls v1.3.2
 	golang.org/x/crypto v0.10.0
 	golang.org/x/exp v0.0.0-20221205204356-47842c84f3db
 	golang.org/x/net v0.11.0
@@ -21,10 +21,11 @@ require (
 
 require (
 	github.com/andybalholm/brotli v1.0.5 // indirect
-	github.com/gaukas/godicttls v0.0.3 // indirect
+	github.com/gaukas/godicttls v0.0.4 // indirect
 	github.com/go-logr/logr v1.2.4 // indirect
 	github.com/go-task/slim-sprig v0.0.0-20230315185526-52ccab3ef572 // indirect
 	github.com/google/go-cmp v0.5.9 // indirect
+	github.com/google/gopacket v1.1.19 // indirect
 	github.com/google/pprof v0.0.0-20210407192527-94a9f03dee38 // indirect
 	github.com/klauspost/compress v1.16.6 // indirect
 	golang.org/x/mod v0.10.0 // indirect
