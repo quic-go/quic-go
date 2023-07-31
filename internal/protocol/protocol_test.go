@@ -22,4 +22,12 @@ var _ = Describe("Protocol", func() {
 		Expect(ECN(0b00000001)).To(Equal(ECT1))
 		Expect(ECN(0b00000011)).To(Equal(ECNCE))
 	})
+
+	It("has a string representation for ECN", func() {
+		Expect(ECNNon.String()).To(Equal("Not-ECT"))
+		Expect(ECT0.String()).To(Equal("ECT(0)"))
+		Expect(ECT1.String()).To(Equal("ECT(1)"))
+		Expect(ECNCE.String()).To(Equal("CE"))
+		Expect(ECN(42).String()).To(Equal("invalid ECN value: 42"))
+	})
 })
