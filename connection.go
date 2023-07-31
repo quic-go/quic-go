@@ -397,39 +397,31 @@ var newClientConnection = func(
 	s.mtuDiscoverer = newMTUDiscoverer(s.rttStats, getMaxPacketSize(s.conn.RemoteAddr()), s.sentPacketHandler.SetMaxDatagramSize)
 	oneRTTStream := newCryptoStream()
 
-	var params *wire.TransportParameters
-	if s.config.TransportParameters != nil {
-		params = &wire.TransportParameters{
-			InitialSourceConnectionID: srcConnID,
-		}
-		params.PopulateFromUQUIC(s.config.TransportParameters)
-		s.connIDManager.SetConnectionIDLimit(params.ActiveConnectionIDLimit)
-	} else {
-		params = &wire.TransportParameters{
-			InitialMaxStreamDataBidiRemote: protocol.ByteCount(s.config.InitialStreamReceiveWindow),
-			InitialMaxStreamDataBidiLocal:  protocol.ByteCount(s.config.InitialStreamReceiveWindow),
-			InitialMaxStreamDataUni:        protocol.ByteCount(s.config.InitialStreamReceiveWindow),
-			InitialMaxData:                 protocol.ByteCount(s.config.InitialConnectionReceiveWindow),
-			MaxIdleTimeout:                 s.config.MaxIdleTimeout,
-			MaxBidiStreamNum:               protocol.StreamNum(s.config.MaxIncomingStreams),
-			MaxUniStreamNum:                protocol.StreamNum(s.config.MaxIncomingUniStreams),
-			MaxAckDelay:                    protocol.MaxAckDelayInclGranularity,
-			AckDelayExponent:               protocol.AckDelayExponent,
-			DisableActiveMigration:         true,
-			// For interoperability with quic-go versions before May 2023, this value must be set to a value
-			// different from protocol.DefaultActiveConnectionIDLimit.
-			// If set to the default value, it will be omitted from the transport parameters, which will make
-			// old quic-go versions interpret it as 0, instead of the default value of 2.
-			// See https://github.com/quic-go/quic-go/pull/3806.
-			ActiveConnectionIDLimit:   protocol.MaxActiveConnectionIDs,
-			InitialSourceConnectionID: srcConnID,
-		}
-		if s.config.EnableDatagrams {
-			params.MaxDatagramFrameSize = protocol.MaxDatagramFrameSize
-		} else {
-			params.MaxDatagramFrameSize = protocol.InvalidByteCount
-		}
+	params := &wire.TransportParameters{
+		InitialMaxStreamDataBidiRemote: protocol.ByteCount(s.config.InitialStreamReceiveWindow),
+		InitialMaxStreamDataBidiLocal:  protocol.ByteCount(s.config.InitialStreamReceiveWindow),
+		InitialMaxStreamDataUni:        protocol.ByteCount(s.config.InitialStreamReceiveWindow),
+		InitialMaxData:                 protocol.ByteCount(s.config.InitialConnectionReceiveWindow),
+		MaxIdleTimeout:                 s.config.MaxIdleTimeout,
+		MaxBidiStreamNum:               protocol.StreamNum(s.config.MaxIncomingStreams),
+		MaxUniStreamNum:                protocol.StreamNum(s.config.MaxIncomingUniStreams),
+		MaxAckDelay:                    protocol.MaxAckDelayInclGranularity,
+		AckDelayExponent:               protocol.AckDelayExponent,
+		DisableActiveMigration:         true,
+		// For interoperability with quic-go versions before May 2023, this value must be set to a value
+		// different from protocol.DefaultActiveConnectionIDLimit.
+		// If set to the default value, it will be omitted from the transport parameters, which will make
+		// old quic-go versions interpret it as 0, instead of the default value of 2.
+		// See https://github.com/quic-go/quic-go/pull/3806.
+		ActiveConnectionIDLimit:   protocol.MaxActiveConnectionIDs,
+		InitialSourceConnectionID: srcConnID,
 	}
+	if s.config.EnableDatagrams {
+		params.MaxDatagramFrameSize = protocol.MaxDatagramFrameSize
+	} else {
+		params.MaxDatagramFrameSize = protocol.InvalidByteCount
+	}
+
 	if s.tracer != nil {
 		s.tracer.SentTransportParameters(params)
 	}
@@ -529,38 +521,52 @@ var newUClientConnection = func(
 	oneRTTStream := newCryptoStream()
 
 	var params *wire.TransportParameters
-	if s.config.TransportParameters != nil {
-		params = &wire.TransportParameters{
-			InitialSourceConnectionID: srcConnID,
-		}
-		params.PopulateFromUQUIC(s.config.TransportParameters)
-		s.connIDManager.SetConnectionIDLimit(params.ActiveConnectionIDLimit)
-	} else {
-		params = &wire.TransportParameters{
-			InitialMaxStreamDataBidiRemote: protocol.ByteCount(s.config.InitialStreamReceiveWindow),
-			InitialMaxStreamDataBidiLocal:  protocol.ByteCount(s.config.InitialStreamReceiveWindow),
-			InitialMaxStreamDataUni:        protocol.ByteCount(s.config.InitialStreamReceiveWindow),
-			InitialMaxData:                 protocol.ByteCount(s.config.InitialConnectionReceiveWindow),
-			MaxIdleTimeout:                 s.config.MaxIdleTimeout,
-			MaxBidiStreamNum:               protocol.StreamNum(s.config.MaxIncomingStreams),
-			MaxUniStreamNum:                protocol.StreamNum(s.config.MaxIncomingUniStreams),
-			MaxAckDelay:                    protocol.MaxAckDelayInclGranularity,
-			AckDelayExponent:               protocol.AckDelayExponent,
-			DisableActiveMigration:         true,
-			// For interoperability with quic-go versions before May 2023, this value must be set to a value
-			// different from protocol.DefaultActiveConnectionIDLimit.
-			// If set to the default value, it will be omitted from the transport parameters, which will make
-			// old quic-go versions interpret it as 0, instead of the default value of 2.
-			// See https://github.com/quic-go/quic-go/pull/3806.
-			ActiveConnectionIDLimit:   protocol.MaxActiveConnectionIDs,
-			InitialSourceConnectionID: srcConnID,
-		}
-		if s.config.EnableDatagrams {
-			params.MaxDatagramFrameSize = protocol.MaxDatagramFrameSize
-		} else {
-			params.MaxDatagramFrameSize = protocol.InvalidByteCount
+	// params := &wire.TransportParameters{
+	// 	InitialMaxStreamDataBidiRemote: protocol.ByteCount(s.config.InitialStreamReceiveWindow),
+	// 	InitialMaxStreamDataBidiLocal:  protocol.ByteCount(s.config.InitialStreamReceiveWindow),
+	// 	InitialMaxStreamDataUni:        protocol.ByteCount(s.config.InitialStreamReceiveWindow),
+	// 	InitialMaxData:                 protocol.ByteCount(s.config.InitialConnectionReceiveWindow),
+	// 	MaxIdleTimeout:                 s.config.MaxIdleTimeout,
+	// 	MaxBidiStreamNum:               protocol.StreamNum(s.config.MaxIncomingStreams),
+	// 	MaxUniStreamNum:                protocol.StreamNum(s.config.MaxIncomingUniStreams),
+	// 	MaxAckDelay:                    protocol.MaxAckDelayInclGranularity,
+	// 	AckDelayExponent:               protocol.AckDelayExponent,
+	// 	DisableActiveMigration:         true,
+	// 	// For interoperability with quic-go versions before May 2023, this value must be set to a value
+	// 	// different from protocol.DefaultActiveConnectionIDLimit.
+	// 	// If set to the default value, it will be omitted from the transport parameters, which will make
+	// 	// old quic-go versions interpret it as 0, instead of the default value of 2.
+	// 	// See https://github.com/quic-go/quic-go/pull/3806.
+	// 	ActiveConnectionIDLimit:   protocol.MaxActiveConnectionIDs,
+	// 	InitialSourceConnectionID: srcConnID,
+	// }
+	// if s.config.EnableDatagrams {
+	// 	params.MaxDatagramFrameSize = protocol.MaxDatagramFrameSize
+	// } else {
+	// 	params.MaxDatagramFrameSize = protocol.InvalidByteCount
+	// }
+
+	// [UQUIC] iterate over all Extensions to set the TransportParameters
+	var tpSet bool
+FOR_EACH_TLS_EXTENSION:
+	for _, ext := range chs.Extensions {
+		switch ext := ext.(type) {
+		case *tls.QUICTransportParametersExtension:
+			params = &wire.TransportParameters{
+				InitialSourceConnectionID: srcConnID,
+			}
+			params.PopulateFromUQUIC(ext.TransportParameters)
+			s.connIDManager.SetConnectionIDLimit(params.ActiveConnectionIDLimit)
+			tpSet = true
+			break FOR_EACH_TLS_EXTENSION
+		default:
+			continue FOR_EACH_TLS_EXTENSION
 		}
 	}
+	if !tpSet {
+		panic("applied ClientHelloSpec must contain a QUICTransportParametersExtension to proceed")
+	}
+
 	if s.tracer != nil {
 		s.tracer.SentTransportParameters(params)
 	}

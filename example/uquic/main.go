@@ -12,8 +12,6 @@ import (
 
 	quic "github.com/quic-go/quic-go"
 	"github.com/quic-go/quic-go/http3"
-
-	qtp "github.com/quic-go/quic-go/transportparameters"
 )
 
 func getCHS() *tls.ClientHelloSpec {
@@ -99,7 +97,37 @@ func getCHS() *tls.ClientHelloSpec {
 			&tls.FakeRecordSizeLimitExtension{
 				Limit: 0x4001,
 			},
-			&tls.QUICTransportParametersExtension{},
+			&tls.QUICTransportParametersExtension{
+				TransportParameters: tls.TransportParameters{
+					tls.InitialMaxStreamDataBidiRemote(0x100000),
+					tls.InitialMaxStreamsBidi(16),
+					tls.MaxDatagramFrameSize(1200),
+					tls.MaxIdleTimeout(30000),
+					tls.ActiveConnectionIDLimit(8),
+					&tls.GREASEQUICBit{},
+					&tls.VersionInformation{
+						ChoosenVersion: tls.VERSION_1,
+						AvailableVersions: []uint32{
+							tls.VERSION_GREASE,
+							tls.VERSION_1,
+						},
+						LegacyID: true,
+					},
+					tls.InitialMaxStreamsUni(16),
+					&tls.GREASE{
+						IdOverride: 0xff02de1a,
+						ValueOverride: []byte{
+							0x43, 0xe8,
+						},
+					},
+					tls.InitialMaxStreamDataBidiLocal(0xc00000),
+					tls.InitialMaxStreamDataUni(0x100000),
+					tls.InitialSourceConnectionID([]byte{}),
+					tls.MaxAckDelay(20),
+					tls.InitialMaxData(0x1800000),
+					&tls.DisableActiveMigration{},
+				},
+			},
 			&tls.UtlsPaddingExtension{
 				GetPaddingLen: tls.BoringPaddingStyle,
 			},
@@ -129,35 +157,6 @@ func main() {
 		InitPacketNumber:       0,
 		InitPacketNumberLength: quic.PacketNumberLen1, // currently only affects the initial packet number
 		// Versions: []quic.VersionNumber{quic.Version2},
-		TransportParameters: qtp.TransportParameters{
-			qtp.InitialMaxStreamDataBidiRemote(0x100000),
-			qtp.InitialMaxStreamsBidi(16),
-			qtp.MaxDatagramFrameSize(1200),
-			qtp.MaxIdleTimeout(30000),
-			qtp.ActiveConnectionIDLimit(8),
-			&qtp.GREASEQUICBit{},
-			&qtp.VersionInformation{
-				ChoosenVersion: qtp.VERSION_1,
-				AvailableVersions: []uint32{
-					qtp.VERSION_GREASE,
-					qtp.VERSION_1,
-				},
-				LegacyID: true,
-			},
-			qtp.InitialMaxStreamsUni(16),
-			&qtp.GREASE{
-				IdOverride: 0xff02de1a,
-				ValueOverride: []byte{
-					0x43, 0xe8,
-				},
-			},
-			qtp.InitialMaxStreamDataBidiLocal(0xc00000),
-			qtp.InitialMaxStreamDataUni(0x100000),
-			qtp.InitialSourceConnectionID([]byte{}),
-			qtp.MaxAckDelay(20),
-			qtp.InitialMaxData(0x1800000),
-			&qtp.DisableActiveMigration{},
-		},
 	}
 
 	roundTripper := &http3.RoundTripper{

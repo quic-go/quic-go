@@ -806,18 +806,26 @@ func (p *packetPacker) appendLongHeaderPacketExternalPadding(buffer *packetBuffe
 	header.Length = pnLen + protocol.ByteCount(sealer.Overhead()) + pl.length
 
 	startLen := len(buffer.Data)
-	raw := buffer.Data[startLen:]
+	raw := buffer.Data[startLen:] // [UQUIC] raw is a sub-slice of buffer.Data, whose len < size
 	raw, err := header.Append(raw, v)
 	if err != nil {
 		return nil, err
 	}
+
+	fmt.Printf("Pre-Payload: %x\n", raw)
+
 	payloadOffset := protocol.ByteCount(len(raw))
-	raw, err = p.appendPacketPayload(raw, pl, 0, v)
+	raw, err = p.appendCustomInitialPacketPayload(raw, pl, 0, v)
 	if err != nil {
 		return nil, err
 	}
+
+	fmt.Printf("Pre-Encryption: %x\n", raw)
+
 	raw = p.encryptPacket(raw, sealer, header.PacketNumber, payloadOffset, pnLen)
 	buffer.Data = buffer.Data[:len(buffer.Data)+len(raw)]
+
+	fmt.Printf("Post-Encryption: %x\n", raw)
 
 	// [UQUIC]
 	// append zero to buffer.Data until 1200 bytes
@@ -914,6 +922,44 @@ func (p *packetPacker) appendPacketPayload(raw []byte, pl payload, paddingLen pr
 		if err != nil {
 			return nil, err
 		}
+	}
+
+	if payloadSize := protocol.ByteCount(len(raw)-payloadOffset) - paddingLen; payloadSize != pl.length {
+		return nil, fmt.Errorf("PacketPacker BUG: payload size inconsistent (expected %d, got %d bytes)", pl.length, payloadSize)
+	}
+	return raw, nil
+}
+
+func (p *packetPacker) appendCustomInitialPacketPayload(raw []byte, pl payload, paddingLen protocol.ByteCount, v protocol.VersionNumber) ([]byte, error) {
+	payloadOffset := len(raw)
+
+	// [UQUIC] ignores the default ACK/PADDING frame and uses its own frames
+	// if pl.ack != nil {
+	// 	var err error
+	// 	raw, err = pl.ack.Append(raw, v)
+	// 	if err != nil {
+	// 		return nil, err
+	// 	}
+	// }
+	// if paddingLen > 0 {
+	// 	raw = append(raw, make([]byte, paddingLen)...)
+	// }
+
+	for _, f := range pl.frames {
+		var err error
+		raw, err = f.Frame.Append(raw, v)
+		if err != nil {
+			return nil, err
+		}
+		fmt.Printf("UQUIC: appending frame %v\n", f)
+	}
+	for _, f := range pl.streamFrames {
+		var err error
+		raw, err = f.Frame.Append(raw, v)
+		if err != nil {
+			return nil, err
+		}
+		fmt.Printf("UQUIC: appending stream frame %v\n", f)
 	}
 
 	if payloadSize := protocol.ByteCount(len(raw)-payloadOffset) - paddingLen; payloadSize != pl.length {

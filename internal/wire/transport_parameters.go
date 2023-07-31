@@ -15,7 +15,7 @@ import (
 	"github.com/quic-go/quic-go/internal/qerr"
 	"github.com/quic-go/quic-go/internal/utils"
 	"github.com/quic-go/quic-go/quicvarint"
-	"github.com/quic-go/quic-go/transportparameters"
+	tls "github.com/refraction-networking/utls"
 )
 
 // AdditionalTransportParametersClient are additional transport parameters that will be added
@@ -91,7 +91,7 @@ type TransportParameters struct {
 	MaxDatagramFrameSize protocol.ByteCount
 
 	// only used internally
-	ClientOverride transportparameters.TransportParameters // [UQUIC]
+	ClientOverride tls.TransportParameters // [UQUIC]
 }
 
 // Unmarshal the transport parameters
@@ -513,41 +513,41 @@ func (p *TransportParameters) String() string {
 	return fmt.Sprintf(logString, logParams...)
 }
 
-func (tp *TransportParameters) PopulateFromUQUIC(quicparams transportparameters.TransportParameters) {
+func (tp *TransportParameters) PopulateFromUQUIC(quicparams tls.TransportParameters) {
 	for pIdx, param := range quicparams {
 		switch param.ID() {
 		case uint64(maxIdleTimeoutParameterID):
-			tp.MaxIdleTimeout = time.Duration(param.(transportparameters.MaxIdleTimeout)) * time.Millisecond
+			tp.MaxIdleTimeout = time.Duration(param.(tls.MaxIdleTimeout)) * time.Millisecond
 		case uint64(initialMaxDataParameterID):
-			tp.InitialMaxData = protocol.ByteCount(param.(transportparameters.InitialMaxData))
+			tp.InitialMaxData = protocol.ByteCount(param.(tls.InitialMaxData))
 		case uint64(initialMaxStreamDataBidiLocalParameterID):
-			tp.InitialMaxStreamDataBidiLocal = protocol.ByteCount(param.(transportparameters.InitialMaxStreamDataBidiLocal))
+			tp.InitialMaxStreamDataBidiLocal = protocol.ByteCount(param.(tls.InitialMaxStreamDataBidiLocal))
 		case uint64(initialMaxStreamDataBidiRemoteParameterID):
-			tp.InitialMaxStreamDataBidiRemote = protocol.ByteCount(param.(transportparameters.InitialMaxStreamDataBidiRemote))
+			tp.InitialMaxStreamDataBidiRemote = protocol.ByteCount(param.(tls.InitialMaxStreamDataBidiRemote))
 		case uint64(initialMaxStreamDataUniParameterID):
-			tp.InitialMaxStreamDataUni = protocol.ByteCount(param.(transportparameters.InitialMaxStreamDataUni))
+			tp.InitialMaxStreamDataUni = protocol.ByteCount(param.(tls.InitialMaxStreamDataUni))
 		case uint64(initialMaxStreamsBidiParameterID):
-			tp.MaxBidiStreamNum = protocol.StreamNum(param.(transportparameters.InitialMaxStreamsBidi))
+			tp.MaxBidiStreamNum = protocol.StreamNum(param.(tls.InitialMaxStreamsBidi))
 		case uint64(initialMaxStreamsUniParameterID):
-			tp.MaxUniStreamNum = protocol.StreamNum(param.(transportparameters.InitialMaxStreamsUni))
+			tp.MaxUniStreamNum = protocol.StreamNum(param.(tls.InitialMaxStreamsUni))
 		case uint64(maxAckDelayParameterID):
-			tp.MaxAckDelay = time.Duration(param.(transportparameters.MaxAckDelay)) * time.Millisecond
+			tp.MaxAckDelay = time.Duration(param.(tls.MaxAckDelay)) * time.Millisecond
 		case uint64(disableActiveMigrationParameterID):
 			tp.DisableActiveMigration = true
 		case uint64(activeConnectionIDLimitParameterID):
-			tp.ActiveConnectionIDLimit = uint64(param.(transportparameters.ActiveConnectionIDLimit))
+			tp.ActiveConnectionIDLimit = uint64(param.(tls.ActiveConnectionIDLimit))
 		case uint64(initialSourceConnectionIDParameterID):
-			srcConnIDOverride, ok := param.(transportparameters.InitialSourceConnectionID)
+			srcConnIDOverride, ok := param.(tls.InitialSourceConnectionID)
 			if ok {
 				if len(srcConnIDOverride) > 0 { // when nil/empty, will leave default srcConnID
 					tp.InitialSourceConnectionID = protocol.ParseConnectionID(srcConnIDOverride)
 				} else {
 					// reversely populate the transport parameter, for it must be written to network
-					quicparams[pIdx] = transportparameters.InitialSourceConnectionID(tp.InitialSourceConnectionID.Bytes())
+					quicparams[pIdx] = tls.InitialSourceConnectionID(tp.InitialSourceConnectionID.Bytes())
 				}
 			}
 		case uint64(maxDatagramFrameSizeParameterID):
-			tp.MaxDatagramFrameSize = protocol.ByteCount(param.(transportparameters.MaxDatagramFrameSize))
+			tp.MaxDatagramFrameSize = protocol.ByteCount(param.(tls.MaxDatagramFrameSize))
 		default:
 			// ignore unknown parameters
 			continue

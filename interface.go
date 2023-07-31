@@ -12,7 +12,6 @@ import (
 	"github.com/quic-go/quic-go/internal/handshake"
 	"github.com/quic-go/quic-go/internal/protocol"
 	"github.com/quic-go/quic-go/logging"
-	"github.com/quic-go/quic-go/transportparameters"
 )
 
 // The StreamID is the ID of a QUIC stream.
@@ -336,11 +335,10 @@ type Config struct {
 	Tracer          func(context.Context, logging.Perspective, ConnectionID) logging.ConnectionTracer
 
 	// TransportParameters override other transport parameters set by the Config.
-	TransportParameters    transportparameters.TransportParameters // [UQUIC]
-	SrcConnIDLength        int                                     // [UQUIC]
-	DestConnIDLength       int                                     // [UQUIC]
-	InitPacketNumber       uint64                                  // [UQUIC]
-	InitPacketNumberLength protocol.PacketNumberLen                // [UQUIC]
+	SrcConnIDLength        int             // [UQUIC]
+	DestConnIDLength       int             // [UQUIC]
+	InitPacketNumber       uint64          // [UQUIC]
+	InitPacketNumberLength PacketNumberLen // [UQUIC]
 }
 
 type ClientHelloInfo struct {
