@@ -697,7 +697,7 @@ var _ = Describe("Transport Parameters", func() {
 
 			It("doesn't reject the parameters if the ActiveConnectionIDLimit increased", func() {
 				p.ActiveConnectionIDLimit = saved.ActiveConnectionIDLimit + 1
-				Expect(p.ValidForUpdate(saved)).To(BeFalse())
+				Expect(p.ValidForUpdate(saved)).To(BeTrue())
 			})
 		})
 	})

@@ -481,7 +481,8 @@ func (p *TransportParameters) ValidFor0RTT(saved *TransportParameters) bool {
 		p.ActiveConnectionIDLimit == saved.ActiveConnectionIDLimit
 }
 
-// ValidForUpdate checks that the newly received transport parameters do not contain any redueced limit when resuming a 0-RTT connection
+// ValidForUpdate checks that the new transport parameters don't reduce limits after resuming a 0-RTT connection.
+// It is only used on the client side.
 func (p *TransportParameters) ValidForUpdate(saved *TransportParameters) bool {
 	return p.ActiveConnectionIDLimit >= saved.ActiveConnectionIDLimit &&
 		p.InitialMaxData >= saved.InitialMaxData &&
