@@ -62,10 +62,12 @@ func (h *connIDManager) Add(f *wire.NewConnectionIDFrame) error {
 		return err
 	}
 
+	// [UQUIC]
 	connIDLimit := h.connectionIDLimit
 	if connIDLimit == 0 {
 		connIDLimit = protocol.MaxActiveConnectionIDs
 	}
+	// [/UQUIC]
 
 	if uint64(h.queue.Len()) >= connIDLimit {
 		return &qerr.TransportError{ErrorCode: qerr.ConnectionIDLimitError}
@@ -189,11 +191,6 @@ func (h *connIDManager) SetStatelessResetToken(token protocol.StatelessResetToke
 	}
 	h.activeStatelessResetToken = &token
 	h.addStatelessResetToken(token)
-}
-
-// [UQUIC]
-func (h *connIDManager) SetConnectionIDLimit(limit uint64) {
-	h.connectionIDLimit = limit
 }
 
 func (h *connIDManager) SentPacket() {

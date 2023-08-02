@@ -332,11 +332,6 @@ func (p *packetPacker) PackCoalescedPacket(onlyAck bool, maxPacketSize protocol.
 		if initialPayload.length > 0 {
 			size += p.longHeaderPacketLength(initialHdr, initialPayload, v) + protocol.ByteCount(initialSealer.Overhead())
 		}
-
-		// // [UQUIC]
-		// if len(initialPayload.frames) > 0 {
-		// 	fmt.Printf("onlyAck: %t, PackCoalescedPacket: %v\n", onlyAck, initialPayload.frames[0].Frame)
-		// }
 	}
 
 	// Add a Handshake packet.
@@ -401,24 +396,12 @@ func (p *packetPacker) PackCoalescedPacket(onlyAck bool, maxPacketSize protocol.
 		longHdrPackets: make([]*longHeaderPacket, 0, 3),
 	}
 	if initialPayload.length > 0 {
-		if onlyAck || len(initialPayload.frames) == 0 {
-			// padding := p.initialPaddingLen(initialPayload.frames, size, maxPacketSize)
-			// cont, err := p.appendLongHeaderPacket(buffer, initialHdr, initialPayload, padding, protocol.EncryptionInitial, initialSealer, v)
-			// if err != nil {
-			// 	return nil, err
-			// }
-			// packet.longHdrPackets = append(packet.longHdrPackets, cont)
-			return nil, nil // [UQUIC] not to send the ACK frame for Initial
-		} else { // [UQUIC]
-			cont, err := p.appendLongHeaderPacketExternalPadding(buffer, initialHdr, initialPayload, protocol.EncryptionInitial, initialSealer, v)
-			if err != nil {
-				return nil, err
-			}
-
-			// fmt.Printf("!onlyAck buffer: %v\n", buffer.Data)
-
-			packet.longHdrPackets = append(packet.longHdrPackets, cont)
+		padding := p.initialPaddingLen(initialPayload.frames, size, maxPacketSize)
+		cont, err := p.appendLongHeaderPacket(buffer, initialHdr, initialPayload, padding, protocol.EncryptionInitial, initialSealer, v)
+		if err != nil {
+			return nil, err
 		}
+		packet.longHdrPackets = append(packet.longHdrPackets, cont)
 	}
 	if handshakePayload.length > 0 {
 		cont, err := p.appendLongHeaderPacket(buffer, handshakeHdr, handshakePayload, 0, protocol.EncryptionHandshake, handshakeSealer, v)
@@ -688,7 +671,6 @@ func (p *packetPacker) MaybePackProbePacket(encLevel protocol.EncryptionLevel, m
 			return nil, err
 		}
 		hdr, pl = p.maybeGetCryptoPacket(maxPacketSize-protocol.ByteCount(sealer.Overhead()), protocol.EncryptionInitial, false, true, v)
-		fmt.Printf("MaybePackProbePacket: %x\n", pl.frames[0])
 	case protocol.EncryptionHandshake:
 		var err error
 		sealer, err = p.cryptoSetup.GetHandshakeSealer()
@@ -768,10 +750,6 @@ func (p *packetPacker) appendLongHeaderPacket(buffer *packetBuffer, header *wire
 	}
 	paddingLen += padding
 
-	if encLevel == protocol.EncryptionInitial {
-		paddingLen = 0
-	}
-
 	header.Length = pnLen + protocol.ByteCount(sealer.Overhead()) + pl.length + paddingLen
 
 	startLen := len(buffer.Data)
@@ -787,49 +765,6 @@ func (p *packetPacker) appendLongHeaderPacket(buffer *packetBuffer, header *wire
 	}
 	raw = p.encryptPacket(raw, sealer, header.PacketNumber, payloadOffset, pnLen)
 	buffer.Data = buffer.Data[:len(buffer.Data)+len(raw)]
-
-	if pn := p.pnManager.PopPacketNumber(encLevel); pn != header.PacketNumber {
-		return nil, fmt.Errorf("packetPacker BUG: Peeked and Popped packet numbers do not match: expected %d, got %d", pn, header.PacketNumber)
-	}
-	return &longHeaderPacket{
-		header:       header,
-		ack:          pl.ack,
-		frames:       pl.frames,
-		streamFrames: pl.streamFrames,
-		length:       protocol.ByteCount(len(raw)),
-	}, nil
-}
-
-// [UQUIC]
-func (p *packetPacker) appendLongHeaderPacketExternalPadding(buffer *packetBuffer, header *wire.ExtendedHeader, pl payload, encLevel protocol.EncryptionLevel, sealer sealer, v protocol.VersionNumber) (*longHeaderPacket, error) {
-	pnLen := protocol.ByteCount(header.PacketNumberLen)
-	header.Length = pnLen + protocol.ByteCount(sealer.Overhead()) + pl.length
-
-	startLen := len(buffer.Data)
-	raw := buffer.Data[startLen:] // [UQUIC] raw is a sub-slice of buffer.Data, whose len < size
-	raw, err := header.Append(raw, v)
-	if err != nil {
-		return nil, err
-	}
-
-	fmt.Printf("Pre-Payload: %x\n", raw)
-
-	payloadOffset := protocol.ByteCount(len(raw))
-	raw, err = p.appendCustomInitialPacketPayload(raw, pl, 0, v)
-	if err != nil {
-		return nil, err
-	}
-
-	fmt.Printf("Pre-Encryption: %x\n", raw)
-
-	raw = p.encryptPacket(raw, sealer, header.PacketNumber, payloadOffset, pnLen)
-	buffer.Data = buffer.Data[:len(buffer.Data)+len(raw)]
-
-	fmt.Printf("Post-Encryption: %x\n", raw)
-
-	// [UQUIC]
-	// append zero to buffer.Data until 1200 bytes
-	buffer.Data = append(buffer.Data, make([]byte, 1357-len(buffer.Data))...)
 
 	if pn := p.pnManager.PopPacketNumber(encLevel); pn != header.PacketNumber {
 		return nil, fmt.Errorf("packetPacker BUG: Peeked and Popped packet numbers do not match: expected %d, got %d", pn, header.PacketNumber)
@@ -922,44 +857,6 @@ func (p *packetPacker) appendPacketPayload(raw []byte, pl payload, paddingLen pr
 		if err != nil {
 			return nil, err
 		}
-	}
-
-	if payloadSize := protocol.ByteCount(len(raw)-payloadOffset) - paddingLen; payloadSize != pl.length {
-		return nil, fmt.Errorf("PacketPacker BUG: payload size inconsistent (expected %d, got %d bytes)", pl.length, payloadSize)
-	}
-	return raw, nil
-}
-
-func (p *packetPacker) appendCustomInitialPacketPayload(raw []byte, pl payload, paddingLen protocol.ByteCount, v protocol.VersionNumber) ([]byte, error) {
-	payloadOffset := len(raw)
-
-	// [UQUIC] ignores the default ACK/PADDING frame and uses its own frames
-	// if pl.ack != nil {
-	// 	var err error
-	// 	raw, err = pl.ack.Append(raw, v)
-	// 	if err != nil {
-	// 		return nil, err
-	// 	}
-	// }
-	// if paddingLen > 0 {
-	// 	raw = append(raw, make([]byte, paddingLen)...)
-	// }
-
-	for _, f := range pl.frames {
-		var err error
-		raw, err = f.Frame.Append(raw, v)
-		if err != nil {
-			return nil, err
-		}
-		fmt.Printf("UQUIC: appending frame %v\n", f)
-	}
-	for _, f := range pl.streamFrames {
-		var err error
-		raw, err = f.Frame.Append(raw, v)
-		if err != nil {
-			return nil, err
-		}
-		fmt.Printf("UQUIC: appending stream frame %v\n", f)
 	}
 
 	if payloadSize := protocol.ByteCount(len(raw)-payloadOffset) - paddingLen; payloadSize != pl.length {

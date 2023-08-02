@@ -96,8 +96,6 @@ type sentPacketHandler struct {
 
 	tracer logging.ConnectionTracer
 	logger utils.Logger
-
-	initialPacketNumberLength protocol.PacketNumberLen // [UQUIC]
 }
 
 var (
@@ -135,12 +133,6 @@ func newSentPacketHandler(
 		perspective:                    pers,
 		tracer:                         tracer,
 		logger:                         logger,
-	}
-}
-
-func SetInitialPacketNumberLength(h SentPacketHandler, pnLen protocol.PacketNumberLen) {
-	if sph, ok := h.(*sentPacketHandler); ok {
-		sph.initialPacketNumberLength = pnLen
 	}
 }
 
@@ -724,11 +716,6 @@ func (h *sentPacketHandler) PeekPacketNumber(encLevel protocol.EncryptionLevel) 
 	pnSpace := h.getPacketNumberSpace(encLevel)
 	pn := pnSpace.pns.Peek()
 	// See section 17.1 of RFC 9000.
-
-	// [UQUIC] This kinda breaks PN length mimicry.
-	if encLevel == protocol.EncryptionInitial && h.initialPacketNumberLength != 0 {
-		return pn, h.initialPacketNumberLength
-	}
 
 	return pn, protocol.GetPacketNumberLengthForHeader(pn, pnSpace.largestAcked)
 }

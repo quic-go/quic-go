@@ -88,9 +88,6 @@ type RoundTripper struct {
 	newClient func(hostname string, tlsConf *tls.Config, opts *roundTripperOpts, conf *quic.Config, dialer dialFunc) (roundTripCloser, error) // so we can mock it in tests
 	clients   map[string]*roundTripCloserWithCount
 	transport *quic.Transport
-
-	// [UQUIC]
-	ClientHelloSpec *tls.ClientHelloSpec
 }
 
 // RoundTripOpt are options for the Transport.RoundTripOpt method.
@@ -194,8 +191,7 @@ func (r *RoundTripper) getClient(hostname string, onlyCached bool) (rtc *roundTr
 					return nil, false, err
 				}
 				r.transport = &quic.Transport{
-					Conn:            udpConn,
-					ClientHelloSpec: r.ClientHelloSpec,
+					Conn: udpConn,
 				}
 			}
 			dial = r.makeDialer()

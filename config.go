@@ -131,12 +131,6 @@ func populateConfig(config *Config) *Config {
 		DisableVersionNegotiationPackets: config.DisableVersionNegotiationPackets,
 		Allow0RTT:                        config.Allow0RTT,
 		Tracer:                           config.Tracer,
-
-		// [UQUIC]
-		SrcConnIDLength:        config.SrcConnIDLength,
-		DestConnIDLength:       config.DestConnIDLength,
-		InitPacketNumber:       config.InitPacketNumber,
-		InitPacketNumberLength: config.InitPacketNumberLength,
 	}
 }
 

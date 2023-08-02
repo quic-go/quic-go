@@ -333,12 +333,6 @@ type Config struct {
 	// Enable QUIC datagram support (RFC 9221).
 	EnableDatagrams bool
 	Tracer          func(context.Context, logging.Perspective, ConnectionID) logging.ConnectionTracer
-
-	// TransportParameters override other transport parameters set by the Config.
-	SrcConnIDLength        int             // [UQUIC]
-	DestConnIDLength       int             // [UQUIC]
-	InitPacketNumber       uint64          // [UQUIC]
-	InitPacketNumberLength PacketNumberLen // [UQUIC]
 }
 
 type ClientHelloInfo struct {

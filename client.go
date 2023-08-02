@@ -38,8 +38,6 @@ type client struct {
 	tracer    logging.ConnectionTracer
 	tracingID uint64
 	logger    utils.Logger
-
-	chs *tls.ClientHelloSpec // [UQUIC]
 }
 
 // make it possible to mock connection ID for initial generation in the tests
@@ -167,41 +165,6 @@ func dial(
 	return c.conn, nil
 }
 
-func dialWithCHS(
-	ctx context.Context,
-	conn sendConn,
-	connIDGenerator ConnectionIDGenerator,
-	packetHandlers packetHandlerManager,
-	tlsConf *tls.Config,
-	config *Config,
-	onClose func(),
-	use0RTT bool,
-	chs *tls.ClientHelloSpec,
-) (quicConn, error) {
-	c, err := newClient(conn, connIDGenerator, config, tlsConf, onClose, use0RTT)
-	if err != nil {
-		return nil, err
-	}
-	c.packetHandlers = packetHandlers
-
-	c.tracingID = nextConnTracingID()
-	if c.config.Tracer != nil {
-		c.tracer = c.config.Tracer(context.WithValue(ctx, ConnectionTracingKey, c.tracingID), protocol.PerspectiveClient, c.destConnID)
-	}
-	if c.tracer != nil {
-		c.tracer.StartedConnection(c.sendConn.LocalAddr(), c.sendConn.RemoteAddr(), c.srcConnID, c.destConnID)
-	}
-
-	// [UQUIC]
-	c.chs = chs
-	// [/UQUIC]
-
-	if err := c.dial(ctx); err != nil {
-		return nil, err
-	}
-	return c.conn, nil
-}
-
 func newClient(sendConn sendConn, connIDGenerator ConnectionIDGenerator, config *Config, tlsConf *tls.Config, onClose func(), use0RTT bool) (*client, error) {
 	if tlsConf == nil {
 		tlsConf = &tls.Config{}
@@ -209,25 +172,12 @@ func newClient(sendConn sendConn, connIDGenerator ConnectionIDGenerator, config 
 		tlsConf = tlsConf.Clone()
 	}
 
-	// // [UQUIC]
-	// if config.SrcConnIDLength != 0 {
-	// 	connIDLen := config.SrcConnIDLength
-	// 	connIDGenerator = &protocol.DefaultConnectionIDGenerator{ConnLen: connIDLen}
-	// }
-
 	srcConnID, err := connIDGenerator.GenerateConnectionID()
 	if err != nil {
 		return nil, err
 	}
 
-	var destConnID protocol.ConnectionID
-	// [UQUIC]
-	if config.DestConnIDLength > 0 {
-		destConnID, err = generateConnectionIDForInitialWithLength(config.DestConnIDLength)
-	} else {
-		destConnID, err = generateConnectionIDForInitial()
-	}
-	// [/UQUIC]
+	destConnID, err := generateConnectionIDForInitial()
 	if err != nil {
 		return nil, err
 	}
@@ -243,8 +193,6 @@ func newClient(sendConn sendConn, connIDGenerator ConnectionIDGenerator, config 
 		version:         config.Versions[0],
 		handshakeChan:   make(chan struct{}),
 		logger:          utils.DefaultLogger.WithPrefix("client"),
-
-		initialPacketNumber: protocol.PacketNumber(config.InitPacketNumber), // [UQUIC]
 	}
 	return c, nil
 }
@@ -252,45 +200,22 @@ func newClient(sendConn sendConn, connIDGenerator ConnectionIDGenerator, config 
 func (c *client) dial(ctx context.Context) error {
 	c.logger.Infof("Starting new connection to %s (%s -> %s), source connection ID %s, destination connection ID %s, version %s", c.tlsConf.ServerName, c.sendConn.LocalAddr(), c.sendConn.RemoteAddr(), c.srcConnID, c.destConnID, c.version)
 
-	// [UQUIC]
-	if c.chs == nil {
-		c.conn = newClientConnection(
-			c.sendConn,
-			c.packetHandlers,
-			c.destConnID,
-			c.srcConnID,
-			c.connIDGenerator,
-			c.config,
-			c.tlsConf,
-			c.initialPacketNumber,
-			c.use0RTT,
-			c.hasNegotiatedVersion,
-			c.tracer,
-			c.tracingID,
-			c.logger,
-			c.version,
-		)
-	} else {
-		// [UQUIC]: use custom version of the connection
-		c.conn = newUClientConnection(
-			c.sendConn,
-			c.packetHandlers,
-			c.destConnID,
-			c.srcConnID,
-			c.connIDGenerator,
-			c.config,
-			c.tlsConf,
-			c.initialPacketNumber,
-			c.use0RTT,
-			c.hasNegotiatedVersion,
-			c.tracer,
-			c.tracingID,
-			c.logger,
-			c.version,
-			c.chs,
-		)
-	}
-	// [/UQUIC]
+	c.conn = newClientConnection(
+		c.sendConn,
+		c.packetHandlers,
+		c.destConnID,
+		c.srcConnID,
+		c.connIDGenerator,
+		c.config,
+		c.tlsConf,
+		c.initialPacketNumber,
+		c.use0RTT,
+		c.hasNegotiatedVersion,
+		c.tracer,
+		c.tracingID,
+		c.logger,
+		c.version,
+	)
 
 	c.packetHandlers.Add(c.srcConnID, c.conn)
 

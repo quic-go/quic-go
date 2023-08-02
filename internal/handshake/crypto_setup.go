@@ -102,41 +102,6 @@ func NewCryptoSetupClient(
 	return cs
 }
 
-// [UQUIC]
-// NewUCryptoSetupClient creates a new crypto setup for the client with UTLS
-func NewUCryptoSetupClient(
-	connID protocol.ConnectionID,
-	tp *wire.TransportParameters,
-	tlsConf *tls.Config,
-	enable0RTT bool,
-	rttStats *utils.RTTStats,
-	tracer logging.ConnectionTracer,
-	logger utils.Logger,
-	version protocol.VersionNumber,
-	chs *tls.ClientHelloSpec,
-) CryptoSetup {
-	cs := newCryptoSetup(
-		connID,
-		tp,
-		rttStats,
-		tracer,
-		logger,
-		protocol.PerspectiveClient,
-		version,
-	)
-
-	tlsConf = tlsConf.Clone()
-	tlsConf.MinVersion = tls.VersionTLS13
-	quicConf := &qtls.QUICConfig{TLSConfig: tlsConf}
-	qtls.SetupConfigForClient(quicConf, cs.marshalDataForSessionState, cs.handleDataFromSessionState)
-	cs.tlsConf = tlsConf
-
-	cs.conn = qtls.UQUICClient(quicConf, chs)
-	// cs.conn.SetTransportParameters(cs.ourParams.Marshal(protocol.PerspectiveClient)) // [UQUIC] doesn't require this
-
-	return cs
-}
-
 // NewCryptoSetupServer creates a new crypto setup for the server
 func NewCryptoSetupServer(
 	connID protocol.ConnectionID,
@@ -281,6 +246,7 @@ func (h *cryptoSetup) handleEvent(ev qtls.QUICEvent) (done bool, err error) {
 		return false, h.handleTransportParameters(ev.Data)
 	case qtls.QUICTransportParametersRequired:
 		h.conn.SetTransportParameters(h.ourParams.Marshal(h.perspective))
+		// [UQUIC] doesn't expect this and may fail
 		return false, nil
 	case qtls.QUICRejectedEarlyData:
 		h.rejected0RTT()

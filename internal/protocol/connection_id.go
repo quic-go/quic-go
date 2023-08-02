@@ -68,11 +68,6 @@ func GenerateConnectionIDForInitial() (ConnectionID, error) {
 	return GenerateConnectionID(l)
 }
 
-// [UQUIC]
-func GenerateConnectionIDForInitialWithLen(l int) (ConnectionID, error) {
-	return GenerateConnectionID(l)
-}
-
 // ReadConnectionID reads a connection ID of length len from the given io.Reader.
 // It returns io.EOF if there are not enough bytes to read.
 func ReadConnectionID(r io.Reader, l int) (ConnectionID, error) {
