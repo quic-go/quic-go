@@ -3035,6 +3035,40 @@ var _ = Describe("Client Connection", func() {
 				ErrorMessage: "expected original_destination_connection_id to equal deadbeef, is decafbad",
 			})))
 		})
+
+		It("errors if the transport parameters contain reduced limits after knowing 0-RTT data is accepted by the server", func() {
+			conn.perspective = protocol.PerspectiveClient
+			conn.peerParams = &wire.TransportParameters{
+				ActiveConnectionIDLimit:        3,
+				InitialMaxData:                 0x5000,
+				InitialMaxStreamDataBidiLocal:  0x5000,
+				InitialMaxStreamDataBidiRemote: 1000,
+				InitialMaxStreamDataUni:        1000,
+				MaxBidiStreamNum:               500,
+				MaxUniStreamNum:                500,
+			}
+			params := &wire.TransportParameters{
+				OriginalDestinationConnectionID: destConnID,
+				InitialSourceConnectionID:       destConnID,
+				ActiveConnectionIDLimit:         3,
+				InitialMaxData:                  0x5000,
+				InitialMaxStreamDataBidiLocal:   0x5000,
+				InitialMaxStreamDataBidiRemote:  1000,
+				InitialMaxStreamDataUni:         1000,
+				MaxBidiStreamNum:                300,
+				MaxUniStreamNum:                 300,
+			}
+			expectClose(false, true)
+			processed := make(chan struct{})
+			tracer.EXPECT().ReceivedTransportParameters(params).Do(func(*wire.TransportParameters) { close(processed) })
+			cryptoSetup.EXPECT().ConnectionState().Return(handshake.ConnectionState{Used0RTT: true})
+			paramsChan <- params
+			Eventually(processed).Should(BeClosed())
+			Eventually(errChan).Should(Receive(MatchError(&qerr.TransportError{
+				ErrorCode:    qerr.ProtocolViolation,
+				ErrorMessage: "server sent reduced limits after accepting 0-RTT data",
+			})))
+		})
 	})
 
 	Context("handling potentially injected packets", func() {

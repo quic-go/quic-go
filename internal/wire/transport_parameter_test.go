@@ -612,5 +612,93 @@ var _ = Describe("Transport Parameters", func() {
 				Expect(p.ValidFor0RTT(saved)).To(BeFalse())
 			})
 		})
+
+		Context("client checks the parameters after successfully sending 0-RTT data", func() {
+			var p TransportParameters
+			saved := &TransportParameters{
+				InitialMaxStreamDataBidiLocal:  1,
+				InitialMaxStreamDataBidiRemote: 2,
+				InitialMaxStreamDataUni:        3,
+				InitialMaxData:                 4,
+				MaxBidiStreamNum:               5,
+				MaxUniStreamNum:                6,
+				ActiveConnectionIDLimit:        7,
+			}
+
+			BeforeEach(func() {
+				p = *saved
+				Expect(p.ValidForUpdate(saved)).To(BeTrue())
+			})
+
+			It("rejects the parameters if the InitialMaxStreamDataBidiLocal was reduced", func() {
+				p.InitialMaxStreamDataBidiLocal = saved.InitialMaxStreamDataBidiLocal - 1
+				Expect(p.ValidForUpdate(saved)).To(BeFalse())
+			})
+
+			It("doesn't reject the parameters if the InitialMaxStreamDataBidiLocal was increased", func() {
+				p.InitialMaxStreamDataBidiLocal = saved.InitialMaxStreamDataBidiLocal + 1
+				Expect(p.ValidForUpdate(saved)).To(BeTrue())
+			})
+
+			It("rejects the parameters if the InitialMaxStreamDataBidiRemote was reduced", func() {
+				p.InitialMaxStreamDataBidiRemote = saved.InitialMaxStreamDataBidiRemote - 1
+				Expect(p.ValidForUpdate(saved)).To(BeFalse())
+			})
+
+			It("doesn't reject the parameters if the InitialMaxStreamDataBidiRemote was increased", func() {
+				p.InitialMaxStreamDataBidiRemote = saved.InitialMaxStreamDataBidiRemote + 1
+				Expect(p.ValidForUpdate(saved)).To(BeTrue())
+			})
+
+			It("rejects the parameters if the InitialMaxStreamDataUni was reduced", func() {
+				p.InitialMaxStreamDataUni = saved.InitialMaxStreamDataUni - 1
+				Expect(p.ValidForUpdate(saved)).To(BeFalse())
+			})
+
+			It("doesn't reject the parameters if the InitialMaxStreamDataUni was increased", func() {
+				p.InitialMaxStreamDataUni = saved.InitialMaxStreamDataUni + 1
+				Expect(p.ValidForUpdate(saved)).To(BeTrue())
+			})
+
+			It("rejects the parameters if the InitialMaxData was reduced", func() {
+				p.InitialMaxData = saved.InitialMaxData - 1
+				Expect(p.ValidForUpdate(saved)).To(BeFalse())
+			})
+
+			It("doesn't reject the parameters if the InitialMaxData was increased", func() {
+				p.InitialMaxData = saved.InitialMaxData + 1
+				Expect(p.ValidForUpdate(saved)).To(BeTrue())
+			})
+
+			It("rejects the parameters if the MaxBidiStreamNum was reduced", func() {
+				p.MaxBidiStreamNum = saved.MaxBidiStreamNum - 1
+				Expect(p.ValidForUpdate(saved)).To(BeFalse())
+			})
+
+			It("doesn't reject the parameters if the MaxBidiStreamNum was increased", func() {
+				p.MaxBidiStreamNum = saved.MaxBidiStreamNum + 1
+				Expect(p.ValidForUpdate(saved)).To(BeTrue())
+			})
+
+			It("rejects the parameters if the MaxUniStreamNum reduced", func() {
+				p.MaxUniStreamNum = saved.MaxUniStreamNum - 1
+				Expect(p.ValidForUpdate(saved)).To(BeFalse())
+			})
+
+			It("doesn't reject the parameters if the MaxUniStreamNum was increased", func() {
+				p.MaxUniStreamNum = saved.MaxUniStreamNum + 1
+				Expect(p.ValidForUpdate(saved)).To(BeTrue())
+			})
+
+			It("rejects the parameters if the ActiveConnectionIDLimit reduced", func() {
+				p.ActiveConnectionIDLimit = saved.ActiveConnectionIDLimit - 1
+				Expect(p.ValidForUpdate(saved)).To(BeFalse())
+			})
+
+			It("doesn't reject the parameters if the ActiveConnectionIDLimit increased", func() {
+				p.ActiveConnectionIDLimit = saved.ActiveConnectionIDLimit + 1
+				Expect(p.ValidForUpdate(saved)).To(BeTrue())
+			})
+		})
 	})
 })
