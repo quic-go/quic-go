@@ -454,6 +454,10 @@ func (p *TransportParameters) MarshalForSessionTicket(b []byte) []byte {
 	b = p.marshalVarintParam(b, initialMaxStreamsBidiParameterID, uint64(p.MaxBidiStreamNum))
 	// initial_max_uni_streams
 	b = p.marshalVarintParam(b, initialMaxStreamsUniParameterID, uint64(p.MaxUniStreamNum))
+	// max_datagram_frame_size
+	if p.MaxDatagramFrameSize != protocol.InvalidByteCount {
+		b = p.marshalVarintParam(b, maxDatagramFrameSizeParameterID, uint64(p.MaxDatagramFrameSize))
+	}
 	// active_connection_id_limit
 	return p.marshalVarintParam(b, activeConnectionIDLimitParameterID, p.ActiveConnectionIDLimit)
 }
@@ -478,7 +482,8 @@ func (p *TransportParameters) ValidFor0RTT(saved *TransportParameters) bool {
 		p.InitialMaxData >= saved.InitialMaxData &&
 		p.MaxBidiStreamNum >= saved.MaxBidiStreamNum &&
 		p.MaxUniStreamNum >= saved.MaxUniStreamNum &&
-		p.ActiveConnectionIDLimit == saved.ActiveConnectionIDLimit
+		p.ActiveConnectionIDLimit == saved.ActiveConnectionIDLimit &&
+		p.MaxDatagramFrameSize >= saved.MaxDatagramFrameSize
 }
 
 // ValidForUpdate checks that the new transport parameters don't reduce limits after resuming a 0-RTT connection.
@@ -490,7 +495,8 @@ func (p *TransportParameters) ValidForUpdate(saved *TransportParameters) bool {
 		p.InitialMaxStreamDataBidiRemote >= saved.InitialMaxStreamDataBidiRemote &&
 		p.InitialMaxStreamDataUni >= saved.InitialMaxStreamDataUni &&
 		p.MaxBidiStreamNum >= saved.MaxBidiStreamNum &&
-		p.MaxUniStreamNum >= saved.MaxUniStreamNum
+		p.MaxUniStreamNum >= saved.MaxUniStreamNum &&
+		p.MaxDatagramFrameSize >= saved.MaxDatagramFrameSize
 }
 
 // String returns a string representation, intended for logging.

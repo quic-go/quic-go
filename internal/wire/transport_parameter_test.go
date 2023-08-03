@@ -503,6 +503,7 @@ var _ = Describe("Transport Parameters", func() {
 				MaxBidiStreamNum:               protocol.StreamNum(getRandomValueUpTo(int64(protocol.MaxStreamCount))),
 				MaxUniStreamNum:                protocol.StreamNum(getRandomValueUpTo(int64(protocol.MaxStreamCount))),
 				ActiveConnectionIDLimit:        2 + getRandomValueUpTo(math.MaxInt64-2),
+				MaxDatagramFrameSize:           protocol.ByteCount(getRandomValueUpTo(int64(protocol.MaxDatagramFrameSize))),
 			}
 			Expect(params.ValidFor0RTT(params)).To(BeTrue())
 			b := params.MarshalForSessionTicket(nil)
@@ -515,6 +516,7 @@ var _ = Describe("Transport Parameters", func() {
 			Expect(tp.MaxBidiStreamNum).To(Equal(params.MaxBidiStreamNum))
 			Expect(tp.MaxUniStreamNum).To(Equal(params.MaxUniStreamNum))
 			Expect(tp.ActiveConnectionIDLimit).To(Equal(params.ActiveConnectionIDLimit))
+			Expect(tp.MaxDatagramFrameSize).To(Equal(params.MaxDatagramFrameSize))
 		})
 
 		It("rejects the parameters if it can't parse them", func() {
@@ -540,6 +542,7 @@ var _ = Describe("Transport Parameters", func() {
 				MaxBidiStreamNum:               5,
 				MaxUniStreamNum:                6,
 				ActiveConnectionIDLimit:        7,
+				MaxDatagramFrameSize:           1000,
 			}
 
 			BeforeEach(func() {
@@ -611,6 +614,16 @@ var _ = Describe("Transport Parameters", func() {
 				p.ActiveConnectionIDLimit = 0
 				Expect(p.ValidFor0RTT(saved)).To(BeFalse())
 			})
+
+			It("accepts the parameters if the MaxDatagramFrameSize was increased", func() {
+				p.MaxDatagramFrameSize = saved.MaxDatagramFrameSize + 1
+				Expect(p.ValidFor0RTT(saved)).To(BeTrue())
+			})
+
+			It("rejects the parameters if the MaxDatagramFrameSize reduced", func() {
+				p.MaxDatagramFrameSize = saved.MaxDatagramFrameSize - 1
+				Expect(p.ValidFor0RTT(saved)).To(BeFalse())
+			})
 		})
 
 		Context("client checks the parameters after successfully sending 0-RTT data", func() {
@@ -623,6 +636,7 @@ var _ = Describe("Transport Parameters", func() {
 				MaxBidiStreamNum:               5,
 				MaxUniStreamNum:                6,
 				ActiveConnectionIDLimit:        7,
+				MaxDatagramFrameSize:           1000,
 			}
 
 			BeforeEach(func() {
@@ -697,6 +711,16 @@ var _ = Describe("Transport Parameters", func() {
 
 			It("doesn't reject the parameters if the ActiveConnectionIDLimit increased", func() {
 				p.ActiveConnectionIDLimit = saved.ActiveConnectionIDLimit + 1
+				Expect(p.ValidForUpdate(saved)).To(BeTrue())
+			})
+
+			It("rejects the parameters if the MaxDatagramFrameSize reduced", func() {
+				p.MaxDatagramFrameSize = saved.MaxDatagramFrameSize - 1
+				Expect(p.ValidForUpdate(saved)).To(BeFalse())
+			})
+
+			It("doesn't reject the parameters if the MaxDatagramFrameSize increased", func() {
+				p.MaxDatagramFrameSize = saved.MaxDatagramFrameSize + 1
 				Expect(p.ValidForUpdate(saved)).To(BeTrue())
 			})
 		})
