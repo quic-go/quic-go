@@ -824,7 +824,7 @@ var _ = Describe("0-RTT", func() {
 		defer proxy.Close()
 
 		// second connection
-		var sentMessage = GeneratePRData(100)
+		sentMessage := GeneratePRData(100)
 		var receivedMessage []byte
 		received := make(chan struct{})
 		go func() {
