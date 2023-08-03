@@ -8,7 +8,7 @@ require (
 	github.com/onsi/ginkgo/v2 v2.9.5
 	github.com/onsi/gomega v1.27.6
 	github.com/quic-go/qpack v0.4.0
-	github.com/quic-go/qtls-go1-20 v0.3.0
+	github.com/quic-go/qtls-go1-20 v0.3.1
 	golang.org/x/crypto v0.4.0
 	golang.org/x/exp v0.0.0-20221205204356-47842c84f3db
 	golang.org/x/net v0.10.0
