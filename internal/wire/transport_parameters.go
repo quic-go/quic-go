@@ -481,6 +481,18 @@ func (p *TransportParameters) ValidFor0RTT(saved *TransportParameters) bool {
 		p.ActiveConnectionIDLimit == saved.ActiveConnectionIDLimit
 }
 
+// ValidForUpdate checks that the new transport parameters don't reduce limits after resuming a 0-RTT connection.
+// It is only used on the client side.
+func (p *TransportParameters) ValidForUpdate(saved *TransportParameters) bool {
+	return p.ActiveConnectionIDLimit >= saved.ActiveConnectionIDLimit &&
+		p.InitialMaxData >= saved.InitialMaxData &&
+		p.InitialMaxStreamDataBidiLocal >= saved.InitialMaxStreamDataBidiLocal &&
+		p.InitialMaxStreamDataBidiRemote >= saved.InitialMaxStreamDataBidiRemote &&
+		p.InitialMaxStreamDataUni >= saved.InitialMaxStreamDataUni &&
+		p.MaxBidiStreamNum >= saved.MaxBidiStreamNum &&
+		p.MaxUniStreamNum >= saved.MaxUniStreamNum
+}
+
 // String returns a string representation, intended for logging.
 func (p *TransportParameters) String() string {
 	logString := "&wire.TransportParameters{OriginalDestinationConnectionID: %s, InitialSourceConnectionID: %s, "

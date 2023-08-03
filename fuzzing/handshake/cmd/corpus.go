@@ -3,6 +3,7 @@ package main
 import (
 	"crypto/tls"
 	"log"
+	"net"
 
 	fuzzhandshake "github.com/quic-go/quic-go/fuzzing/handshake"
 	"github.com/quic-go/quic-go/fuzzing/internal/helper"
@@ -37,6 +38,8 @@ func main() {
 	config.NextProtos = []string{alpn}
 	server := handshake.NewCryptoSetupServer(
 		protocol.ConnectionID{},
+		&net.UDPAddr{IP: net.IPv6loopback, Port: 1234},
+		&net.UDPAddr{IP: net.IPv6loopback, Port: 4321},
 		&wire.TransportParameters{ActiveConnectionIDLimit: 2},
 		config,
 		false,
