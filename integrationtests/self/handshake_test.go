@@ -140,7 +140,7 @@ var _ = Describe("Handshake tests", func() {
 			Expect(err).ToNot(HaveOccurred())
 		})
 
-		It("has the right local and remote address on the ClientHelloInfo.Conn", func() {
+		It("has the right local and remote address on the tls.Config.GetConfigForClient ClientHelloInfo.Conn", func() {
 			var local, remote net.Addr
 			done := make(chan struct{})
 			tlsConf := &tls.Config{
@@ -150,6 +150,30 @@ var _ = Describe("Handshake tests", func() {
 					remote = info.Conn.RemoteAddr()
 					return getTLSConfig(), nil
 				},
+			}
+			runServer(tlsConf)
+			conn, err := quic.DialAddr(
+				context.Background(),
+				fmt.Sprintf("localhost:%d", server.Addr().(*net.UDPAddr).Port),
+				getTLSClientConfig(),
+				getQuicConfig(nil),
+			)
+			Expect(err).ToNot(HaveOccurred())
+			Eventually(done).Should(BeClosed())
+			Expect(server.Addr()).To(Equal(local))
+			Expect(conn.LocalAddr().(*net.UDPAddr).Port).To(Equal(remote.(*net.UDPAddr).Port))
+		})
+
+		It("has the right local and remote address on the tls.Config.GetCertificate ClientHelloInfo.Conn", func() {
+			var local, remote net.Addr
+			done := make(chan struct{})
+			tlsConf := getTLSConfig()
+			tlsConf.GetCertificate = func(info *tls.ClientHelloInfo) (*tls.Certificate, error) {
+				defer close(done)
+				local = info.Conn.LocalAddr()
+				remote = info.Conn.RemoteAddr()
+				cert := tlsConf.Certificates[0]
+				return &cert, nil
 			}
 			runServer(tlsConf)
 			conn, err := quic.DialAddr(
