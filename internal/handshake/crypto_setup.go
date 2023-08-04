@@ -664,8 +664,9 @@ func (h *cryptoSetup) ConnectionState() ConnectionState {
 }
 
 func wrapError(err error) error {
+	// alert 80 is an internal error
 	if alertErr := qtls.AlertError(0); errors.As(err, &alertErr) && alertErr != 80 {
-		return qerr.NewLocalCryptoError(uint8(alertErr), err.Error())
+		return qerr.NewLocalCryptoError(uint8(alertErr), err)
 	}
 	return &qerr.TransportError{ErrorCode: qerr.InternalError, ErrorMessage: err.Error()}
 }
