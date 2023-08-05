@@ -4,8 +4,9 @@ import (
 	"bytes"
 	"fmt"
 	"math"
-	"math/rand"
 	"time"
+
+	"golang.org/x/exp/rand"
 
 	"github.com/quic-go/quic-go/internal/utils"
 	"github.com/quic-go/quic-go/internal/utils/tree"
